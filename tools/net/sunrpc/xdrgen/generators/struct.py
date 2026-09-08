@@ -12,8 +12,31 @@ from xdr_ast import _XdrBasic, _XdrString
 from xdr_ast import _XdrFixedLengthOpaque, _XdrVariableLengthOpaque
 from xdr_ast import _XdrFixedLengthArray, _XdrVariableLengthArray
 from xdr_ast import _XdrOptionalData, _XdrStruct, _XdrDeclaration
-from xdr_ast import public_apis, get_header_name
+from xdr_ast import public_apis, get_header_name, aggregate_members
 from xdr_ast import pages_members, pages_member_maxsize, pages_member_is_decoded
+
+
+def aggregate_hook_base(struct_name: str) -> str:
+    """Return the application hook base name for a struct's aggregate members.
+
+    The pragma header name prefixes it so two programs that share a
+    type name (nfs_acl2 vs nfs_acl3) derive distinct external hook
+    symbols. All marked members of one struct share a hook set; the
+    cursor's member_id tells them apart.
+    """
+    return "_".join((get_header_name(), struct_name))
+
+
+def aggregate_member_symbol(struct_name: str, member_name: str) -> str:
+    """Return the symbolic member id for one marked aggregate member.
+
+    The generated framing sets the cursor's member_id to this constant
+    and the hooks compare against it. The enum in aggregate_hooks.j2
+    assigns the values implicitly in field order, so a hook that
+    compared against the bare integer would silently bind to the
+    wrong member once the specification's members were reordered.
+    """
+    return "_".join((aggregate_hook_base(struct_name), member_name)).upper()
 
 
 def emit_struct_declaration(environment: Environment, node: _XdrStruct) -> None:
@@ -21,6 +44,26 @@ def emit_struct_declaration(environment: Environment, node: _XdrStruct) -> None:
     if node.name in public_apis:
         template = get_jinja2_template(environment, "declaration", "close")
         print(template.render(name=node.name))
+    marked = [
+        field
+        for field in node.fields
+        if (node.name, field.name) in aggregate_members
+    ]
+    if marked:
+        template = get_jinja2_template(
+            environment, "declaration", "aggregate_hooks"
+        )
+        print(
+            template.render(
+                hook=aggregate_hook_base(node.name),
+                c_type=kernel_c_type(marked[0].spec),
+                classifier=marked[0].spec.c_classifier,
+                members=[
+                    aggregate_member_symbol(node.name, field.name)
+                    for field in marked
+                ],
+            )
+        )
 
 
 def emit_struct_member_definition(
@@ -113,6 +156,28 @@ def emit_struct_member_decoder(
             )
         )
         return
+    if isinstance(field, _XdrVariableLengthArray) and (
+        (struct_name, field.name) in aggregate_members
+    ):
+        if peer != "server":
+            raise NotImplementedError(
+                "pragma aggregate is server-side only; "
+                + peer
+                + " generation is not yet supported"
+            )
+        template = get_jinja2_template(environment, "decoder", "aggregate_array")
+        print(
+            template.render(
+                name=field.name,
+                type=field.spec.type_name,
+                c_type=kernel_c_type(field.spec),
+                classifier=field.spec.c_classifier,
+                maxsize=field.maxsize,
+                hook=aggregate_hook_base(struct_name),
+                member_sym=aggregate_member_symbol(struct_name, field.name),
+            )
+        )
+        return
     if isinstance(field, _XdrBasic):
         template = get_jinja2_template(environment, "decoder", field.template)
         print(
@@ -198,6 +263,28 @@ def emit_struct_member_encoder(
     peer: str,
 ) -> None:
     """Emit an encoder for one field in an XDR struct"""
+    if isinstance(field, _XdrVariableLengthArray) and (
+        (struct_name, field.name) in aggregate_members
+    ):
+        if peer != "server":
+            raise NotImplementedError(
+                "pragma aggregate is server-side only; "
+                + peer
+                + " generation is not yet supported"
+            )
+        template = get_jinja2_template(environment, "encoder", "aggregate_array")
+        print(
+            template.render(
+                name=field.name,
+                type=field.spec.type_name,
+                c_type=kernel_c_type(field.spec),
+                classifier=field.spec.c_classifier,
+                maxsize=field.maxsize,
+                hook=aggregate_hook_base(struct_name),
+                member_sym=aggregate_member_symbol(struct_name, field.name),
+            )
+        )
+        return
     if (struct_name, field.name) in pages_members:
         if peer != "server":
             raise NotImplementedError(
