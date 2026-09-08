@@ -609,6 +609,41 @@ static inline void svcxdr_encode_opaque_pages(struct svc_rqst *rqstp,
 }
 
 /**
+ * svcxdr_encode_opaque_payload - Encode a page-resident opaque data item
+ * @xdr: xdr_stream to be updated
+ * @len: number of octets of content in the data item
+ *
+ * Context: Process context. @xdr must have been initialized by
+ *	    svcxdr_init_encode() and still be positioned in the reply
+ *	    head.
+ *
+ * Return:
+ *   %true: Success
+ *   %false: The reply head cannot hold the length prefix and XDR
+ *   padding, or the transport could not accommodate the result payload
+ */
+static inline bool svcxdr_encode_opaque_payload(struct xdr_stream *xdr, u32 len)
+{
+	struct svc_rqst *rqstp = svcxdr_rqst(xdr);
+	struct xdr_buf *buf = xdr->buf;
+
+	/*
+	 * The length prefix and any pad word must land in the reply
+	 * head. A prefix that spills into the first Reply page lands
+	 * on the payload itself, and xdr_write_pages() BUGs when the
+	 * pad word does not fit.
+	 */
+	if ((xdr->end - xdr->p) * XDR_UNIT < XDR_UNIT + xdr_pad_size(len))
+		return false;
+	if (xdr_stream_encode_u32(xdr, len) < 0)
+		return false;
+	svcxdr_encode_opaque_pages(rqstp, xdr, buf->pages, buf->page_base, len);
+	if (svc_encode_result_payload(rqstp, buf->head->iov_len, len) < 0)
+		return false;
+	return true;
+}
+
+/**
  * svcxdr_set_auth_slack -
  * @rqstp: RPC transaction
  * @slack: buffer space to reserve for the transaction's security flavor
