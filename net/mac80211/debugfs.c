@@ -462,6 +462,7 @@ static const char *hw_flag_names[] = {
 	FLAG(HANDLES_QUIET_CSA),
 	FLAG(STRICT),
 	FLAG(SUPPORTS_NDP_BLOCKACK),
+	FLAG(TX_NO_PUSHBACK),
 #undef FLAG
 };
 

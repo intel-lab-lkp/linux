@@ -3086,6 +3086,12 @@ struct ieee80211_txq {
  * @IEEE80211_HW_SUPPORTS_NDP_BLOCKACK: HW can transmit/receive S1G NDP
  *	BlockAck frames.
  *
+ * @IEEE80211_HW_TX_NO_PUSHBACK: The driver hands every frame it dequeues
+ *	to the hardware at once, and the hardware picks the station it serves
+ *	next, so the order in which mac80211 schedules the queues does not
+ *	reach the air. mac80211 then applies the airtime weight to the
+ *	airtime queue limit instead.
+ *
  * @NUM_IEEE80211_HW_FLAGS: number of hardware flags, used for sizing arrays
  */
 enum ieee80211_hw_flags {
@@ -3147,6 +3153,7 @@ enum ieee80211_hw_flags {
 	IEEE80211_HW_HANDLES_QUIET_CSA,
 	IEEE80211_HW_STRICT,
 	IEEE80211_HW_SUPPORTS_NDP_BLOCKACK,
+	IEEE80211_HW_TX_NO_PUSHBACK,
 
 	/* keep last, obviously */
 	NUM_IEEE80211_HW_FLAGS
