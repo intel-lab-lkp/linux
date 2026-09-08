@@ -5301,10 +5301,16 @@ struct intel_engine_cs *
 intel_guc_lookup_engine(struct intel_guc *guc, u8 guc_class, u8 instance)
 {
 	struct intel_gt *gt = guc_to_gt(guc);
-	u8 engine_class = guc_class_to_engine_class(guc_class);
+	u8 engine_class;
 
-	/* Class index is checked in class converter */
-	GEM_BUG_ON(instance > MAX_ENGINE_INSTANCE);
+	/*
+	 * Both indices come from the GuC, so range check them here rather than
+	 * relying on the debug-only assertions in the class converter.
+	 */
+	if (guc_class > GUC_LAST_ENGINE_CLASS || instance > MAX_ENGINE_INSTANCE)
+		return NULL;
+
+	engine_class = guc_class_to_engine_class(guc_class);
 
 	return gt->engine_class[engine_class][instance];
 }
