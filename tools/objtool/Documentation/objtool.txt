@@ -334,8 +334,7 @@ the objtool maintainers.
 
    The call from foo() to bar() doesn't return, but bar() is incorrectly
    annotated.  A noreturn function must be marked __noreturn in both its
-   declaration and its definition, and must have a NORETURN() annotation
-   in tools/objtool/noreturns.h.
+   declaration and its definition.
 
 
 4. file.o: warning: objtool: func(): can't find starting instruction
@@ -393,9 +392,8 @@ the objtool maintainers.
    reasons for this:
 
    a) funcA()'s last instruction is a call to a "noreturn" function like
-      panic().  In this case the noreturn function needs to be added to
-      objtool's hard-coded global_noreturns array.  Feel free to bug the
-      objtool maintainer, or you can submit a patch.
+      panic(), and objtool doesn't know that function never returns.  See
+      warning 3 above.
 
    b) funcA() uses the unreachable() annotation in a section of code
       that is actually reachable.
