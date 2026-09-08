@@ -259,13 +259,35 @@ The first marks the opaque data member of struct READ3resok; the
 second marks the path arm of union readlinkres, where path is
 "typedef string path<NFS_MAXPATHLEN>".
 
+Whether the directive drives the encoder or the decoder follows
+from how the containing type is used. A server decodes arguments
+and encodes results, so the directive on a member of a result type
+(such as READ3resok) marks a payload to encode by reference, while
+the directive on a member of an argument type (such as the data
+member of an NFS WRITE argument) marks a payload to decode in place.
+
+An argument type here is the struct named as an RPC procedure
+argument, any aggregate reachable from it, and any typedef alias of
+either; a result type is defined the same way. A decoded member
+and an encoded one take different C representations, so a marked
+type that is reachable from both an argument and a result is
+rejected. The directive on a union arm of an argument type is
+rejected as well:
+the union generator emits only the ordinary copying decoder, so a
+page-resident union arm needs generator support that does not yet
+exist.
+
 The emitted encoder reads only the marked member's length field to
 determine how many octets of page content to insert; the member's
-data pointer is not read. The server and client manage payload
-pages differently, so this directive applies only to server-side
-code generation, and so far only to the encoding direction.
-Decode-side handling of a page-resident argument (for example, the
-payload of an NFS WRITE) remains hand-coded.
+data pointer is not read. The emitted decoder reads the length
+prefix and captures the payload octets by reference, leaving them in
+the pages of the Receive buffer. A decoded page-resident member is
+represented as a struct xdr_buf so that a later stage can hand the
+payload to the server's file system without a copy.
+
+The server and client manage payload pages differently, so this
+directive applies only to server-side code generation. Client-side
+handling of a page-resident member remains future work.
 
 
 Future Work
@@ -282,8 +304,8 @@ Add more pragma directives:
   * @skip -- do not decode, but rather skip, the specified argument
     field
 
-Extend pragma pages to the decoding direction and to
-client-side code generation
+Extend pragma pages to client-side code generation, and to union
+arms of RPC procedure arguments
 
 Enable something like a #include to dynamically insert the content
 of other specification files
