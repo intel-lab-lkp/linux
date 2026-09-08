@@ -427,25 +427,23 @@ static void dma_i915_sw_fence_wake(struct dma_fence *dma,
 
 static void timer_i915_sw_fence_wake(struct timer_list *t)
 {
+	char driver[64] = "";
+	char timeline[64] = "";
 	struct i915_sw_dma_fence_cb_timer *cb = timer_container_of(cb, t,
 								   timer);
 	struct i915_sw_fence *fence;
-	const char __rcu *timeline;
-	const char __rcu *driver;
 
 	fence = xchg(&cb->base.fence, NULL);
 	if (!fence)
 		return;
 
-	rcu_read_lock();
-	driver = dma_fence_driver_name(cb->dma);
-	timeline = dma_fence_timeline_name(cb->dma);
+	dma_fence_driver_name(cb->dma, driver, 64);
+	dma_fence_timeline_name(cb->dma, timeline, 64);
 	pr_notice("Asynchronous wait on fence %s:%s:%llx timed out (hint:%ps)\n",
 		  rcu_dereference(driver),
 		  rcu_dereference(timeline),
 		  cb->dma->seqno,
 		  i915_sw_fence_debug_hint(fence));
-	rcu_read_unlock();
 
 	i915_sw_fence_set_error_once(fence, -ETIMEDOUT);
 	i915_sw_fence_complete(fence);
