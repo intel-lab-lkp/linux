@@ -19,6 +19,7 @@
 #include "jfs_unicode.h"
 #include "jfs_debug.h"
 #include "jfs_dmap.h"
+#include "jfs_superblock.h"
 
 
 struct inode *jfs_iget(struct super_block *sb, unsigned long ino)
@@ -50,6 +51,11 @@ struct inode *jfs_iget(struct super_block *sb, unsigned long ino)
 			inode->i_op = &page_symlink_inode_operations;
 			inode_nohighmem(inode);
 			inode->i_mapping->a_ops = &jfs_aops;
+		} else if (inode->i_size < 0) {
+			jfs_error(inode->i_sb, "symlink inode has invalid i_size %lld\n",
+				  inode->i_size);
+			iget_failed(inode);
+			return ERR_PTR(-EIO);
 		} else {
 			inode->i_op = &jfs_fast_symlink_inode_operations;
 			inode->i_link = JFS_IP(inode)->i_inline;
