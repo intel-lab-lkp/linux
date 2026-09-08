@@ -73,7 +73,7 @@ void xen_force_evtchn_callback(void);
 
 void xen_pv_pre_suspend(void);
 void xen_pv_post_suspend(int suspend_cancelled);
-void xen_start_kernel(struct start_info *si);
+void __noreturn xen_start_kernel(struct start_info *si);
 
 void set_pte_mfn(unsigned long vaddr, unsigned long pfn, pgprot_t flags);
 void xen_init_mmu_ops(void);
