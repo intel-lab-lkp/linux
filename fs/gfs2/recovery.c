@@ -48,6 +48,8 @@ int gfs2_replay_read_block(struct gfs2_jdesc *jd, unsigned int blk,
 	}
 
 	*bh = gfs2_meta_ra(gl, dblock, extlen);
+	if (!*bh)
+		error = -EIO;
 
 	return error;
 }
