@@ -32,6 +32,7 @@ TEST_PROGS := \
 
 TEST_FILES := \
 	gro_lib.py \
+	psp_lib.py \
 # end of TEST_FILES
 
 # YNL files, must be before "include ..lib.mk"
