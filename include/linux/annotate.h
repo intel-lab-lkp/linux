@@ -3,6 +3,7 @@
 #define _LINUX_ANNOTATE_H
 
 #include <linux/objtool_types.h>
+#include <linux/stringify.h>
 
 #ifdef CONFIG_OBJTOOL
 
@@ -104,6 +105,12 @@
  * control the EFI code.
  */
 #define ANNOTATE_NOCFI_SYM(sym)		asm(ASM_ANNOTATE_LABEL(sym, ANNOTYPE_NOCFI))
+
+/*
+ * Treat a function as returnable by its callers despite objtool classifying it
+ * as noreturn.
+ */
+#define ANNOTATE_IGNORE_NORETURN(sym)	asm(ASM_ANNOTATE_LABEL(sym, ANNOTYPE_IGNORE_NORETURN))
 
 /*
  * Annotate a special section entry.  This emables livepatch module generation

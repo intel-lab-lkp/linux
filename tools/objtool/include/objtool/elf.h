@@ -99,6 +99,7 @@ struct symbol {
 	u8 dont_correlate    : 1;
 	u8 fake		     : 1;
 	u8 _noreturn         : 1;
+	u8 ignore_noreturn   : 1;
 	struct list_head pv_target;
 	struct reloc *relocs;
 	struct section *group_sec;
