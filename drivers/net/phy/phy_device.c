@@ -1734,6 +1734,19 @@ static bool phy_drv_supports_irq(const struct phy_driver *phydrv)
 	return phydrv->config_intr && phydrv->handle_interrupt;
 }
 
+/* Give back what phy_probe() took, from the bus that owns the number, but
+ * not while phy_link_change marks a consumer: it skipped
+ * phy_request_interrupt() on the value it saw, so phy_disconnect() would
+ * free an interrupt nobody requested.
+ */
+static void phy_restore_probe_irq(struct phy_device *phydev)
+{
+	if (phydev->phy_link_change || phydev->irq != PHY_POLL)
+		return;
+
+	phydev->irq = phydev->mdio.bus->irq[phydev->mdio.addr];
+}
+
 /**
  * phy_attach_direct - attach a network device to a given PHY device pointer
  * @dev: network device to attach
@@ -1896,6 +1909,7 @@ error:
 
 error_module_put:
 	module_put(d->driver->owner);
+	phy_restore_probe_irq(phydev);
 	phydev->is_genphy_driven = 0;
 	d->driver = NULL;
 error_put_device:
@@ -3820,6 +3834,8 @@ out:
 	if (!phydev->is_on_sfp_module)
 		phy_led_triggers_unregister(phydev);
 
+	phy_restore_probe_irq(phydev);
+
 	/* Re-assert the reset signal on error */
 	phy_device_reset(phydev, 1);
 
@@ -3847,6 +3863,8 @@ static int phy_remove(struct device *dev)
 
 	if (phydev->drv && phydev->drv->remove)
 		phydev->drv->remove(phydev);
+
+	phy_restore_probe_irq(phydev);
 
 	/* Assert the reset signal */
 	phy_device_reset(phydev, 1);
