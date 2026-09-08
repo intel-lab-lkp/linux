@@ -1486,9 +1486,7 @@ SYM_CODE_START(entry_SYSCALL32_ignore)
 SYM_CODE_END(entry_SYSCALL32_ignore)
 
 .pushsection .text, "ax"
-	__FUNC_ALIGN
-SYM_CODE_START_NOALIGN(rewind_stack_and_make_dead)
-	UNWIND_HINT_FUNC
+SYM_FUNC_START(rewind_stack_and_make_dead)
 	/* Prevent any naive code from trying to unwind to our caller. */
 	xorl	%ebp, %ebp
 
@@ -1497,7 +1495,8 @@ SYM_CODE_START_NOALIGN(rewind_stack_and_make_dead)
 	UNWIND_HINT_REGS
 
 	call	make_task_dead
-SYM_CODE_END(rewind_stack_and_make_dead)
+SYM_FUNC_END(rewind_stack_and_make_dead)
+STACK_FRAME_NON_STANDARD_FP(rewind_stack_and_make_dead)
 .popsection
 
 /*
