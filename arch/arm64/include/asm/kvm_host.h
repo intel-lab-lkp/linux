@@ -316,6 +316,7 @@ enum kvm_arm_vm_flavor {
 	VM_NVHE,
 	VM_VHE,
 	VM_PKVM,		/* Normal guests on PKVM */
+	MARKER(__VM_CONFIDENTIAL),
 	VM_PROTECTED_PKVM,	/* Protected VM */
 	VM_REALM,		/* CCA */
 	VM_FLAVOR_MAX,
@@ -1524,9 +1525,11 @@ struct kvm *kvm_arch_alloc_vm(void);
 
 #define __KVM_HAVE_ARCH_FLUSH_REMOTE_TLBS_RANGE
 
+#define kvm_vm_is_confidential(kvm)	((kvm)->arch.vm_flavor >= __VM_CONFIDENTIAL)
 #define kvm_vm_is_protected(kvm)	((kvm)->arch.vm_flavor == VM_PROTECTED_PKVM)
 #define kvm_vm_is_realm(kvm)		((kvm)->arch.vm_flavor == VM_REALM)
 
+#define vcpu_is_confidential(vcpu)	kvm_vm_is_confidential((vcpu)->kvm)
 #define vcpu_is_protected(vcpu)		kvm_vm_is_protected((vcpu)->kvm)
 #define vcpu_is_rec(vcpu)		kvm_vm_is_realm((vcpu)->kvm)
 
