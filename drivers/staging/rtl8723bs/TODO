@@ -1,7 +1,10 @@
 TODO:
-- find and remove any code for other chips that is left over
-- convert any remaining unusual variable types
-- checkpatch.pl fixes - most of the remaining ones are lines too long. Many
-  of them will require refactoring
-- merge Realtek's bugfixes and new features into the driver
-- switch to use MAC80211
+- Partial: remove remaining code for other chips that is left over. Unused
+  non-8723B AMPDU burst enum values and unused 8188E ODM fields have been
+  removed, but more legacy code remains.
+- Partial: convert unusual variable types. The channel control APIs and rate
+  helpers now use kernel fixed-width types, but more legacy types remain.
+- Partial checkpatch.pl fixes: several overlong callback and scan-list lines
+  have been wrapped, but many warnings remain and will require refactoring.
+- Merge Realtek's bugfixes and new features into the driver.
+- Switch to use MAC80211.
