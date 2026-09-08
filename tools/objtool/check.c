@@ -219,94 +219,112 @@ static bool is_rust_noreturn(const struct symbol *func)
 		str_ends_with(func->name, "_fail"));
 }
 
-/*
- * This checks to see if the given function is a "noreturn" function.
- *
- * For global functions which are outside the scope of this object file, we
- * have to keep a manual list of them.
- *
- * For local functions, we have to detect them manually by simply looking for
- * the lack of a return instruction.
- */
-static bool __dead_end_function(struct objtool_file *file, struct symbol *func,
-				int recursion)
+static bool is_listed_noreturn(struct symbol *func)
 {
-	int i;
-	struct instruction *insn;
-	bool empty = true;
-
 #define NORETURN(func) __stringify(func),
 	static const char * const global_noreturns[] = {
 #include "noreturns.h"
 	};
 #undef NORETURN
 
-	if (!func)
+	if (is_local_sym(func))
 		return false;
 
-	if (!is_local_sym(func)) {
-		if (is_rust_noreturn(func))
+	if (is_rust_noreturn(func))
+		return true;
+
+	for (int i = 0; i < ARRAY_SIZE(global_noreturns); i++)
+		if (!strcmp(func->name, global_noreturns[i]))
 			return true;
 
-		for (i = 0; i < ARRAY_SIZE(global_noreturns); i++)
-			if (!strcmp(func->name, global_noreturns[i]))
-				return true;
-	}
+	return false;
+}
+
+/*
+ * Use this rather than reading sym->_noreturn directly: the noreturn status
+ * lives on the primary alias, and ANNOTATE_IGNORE_NORETURN() overrides it.
+ */
+static bool is_noreturn(struct symbol *func)
+{
+	func = func->alias->pfunc;
+
+	if (is_listed_noreturn(func))
+		return true;
+
+	return func->_noreturn;
+}
+
+static bool might_return(struct objtool_file *file, struct symbol *func)
+{
+	struct instruction *insn;
+	struct symbol *dest;
 
 	if (is_weak_sym(func))
-		return false;
-
-	if (!func->len)
-		return false;
-
-	insn = find_insn(file, func->sec, func->offset);
-	if (!insn || !insn_func(insn))
-		return false;
+		return true;
 
 	func_for_each_insn(file, func, insn) {
-		empty = false;
-
 		if (insn->type == INSN_RETURN)
-			return false;
-	}
-
-	if (empty)
-		return false;
-
-	/*
-	 * A function can have sibling calls instead of a return.  It's only a
-	 * dead end if *all* the sibling call targets are dead ends.
-	 */
-	func_for_each_insn(file, func, insn) {
-		struct symbol *dest;
+			return true;
 
 		if (!is_sibling_call(insn))
 			continue;
 
 		dest = insn_call_dest(insn);
-		if (!dest)
-			/* call to another file */
-			return false;
-
-		if (recursion == 5) {
-			/*
-			 * Infinite recursion: two functions have sibling
-			 * calls to each other.  This is a very rare case.
-			 * It means they aren't dead ends.
-			 */
-			return false;
-		}
-
-		if (!__dead_end_function(file, dest, recursion+1))
-			return false;
+		if (!dest || !is_noreturn(dest))
+			return true;
 	}
 
-	return true;
+	return false;
 }
 
-static bool dead_end_function(struct objtool_file *file, struct symbol *func)
+static void detect_noreturns(struct objtool_file *file)
 {
-	return __dead_end_function(file, func, 0);
+	struct symbol *func, *dest;
+	struct instruction *insn;
+	bool changed;
+
+	/* Mark all functions guilty until proven innocent */
+	for_each_sym(file->elf, func) {
+
+		/* Aliases and cold subfunctions inherit the parent's verdict */
+		if (!is_func_sym(func) || is_undef_sym(func) ||
+		    is_prefix_func(func) || func->embedded_insn ||
+		    func != func->alias->pfunc)
+			continue;
+
+		insn = find_insn(file, func->sec, func->offset);
+		if (!insn || insn_func(insn) != func)
+			continue;
+
+		func->_noreturn = 1;
+	}
+
+	/*
+	 * A function's noreturn status depends on those of its sibling call
+	 * destinations, which may not be settled yet.  Keep clearing the
+	 * noreturn bit for known cases until it stops spreading.
+	 */
+	do {
+		changed = false;
+
+		for_each_sym(file->elf, func) {
+			if (!func->_noreturn || !might_return(file, func))
+				continue;
+
+			func->_noreturn = 0;
+			changed = true;
+		}
+	} while (changed);
+
+	/* Now mark the dead end call sites */
+	for_each_insn(file, insn) {
+		if (insn->type != INSN_CALL)
+			continue;
+
+		dest = insn_call_dest(insn);
+		if (dest && is_noreturn(dest))
+			insn->dead_end = true;
+	}
 }
 
 static void init_cfi_state(struct cfi_state *cfi)
@@ -1421,9 +1439,6 @@ static int annotate_call_site(struct objtool_file *file,
 	if (insn->type == INSN_CALL && !insn->sec->init &&
 	    !insn->_call_dest->embedded_insn)
 		list_add_tail(&insn->call_node, &file->call_list);
-
-	if (!sibling && dead_end_function(file, sym))
-		insn->dead_end = true;
 
 	return 0;
 }
@@ -2669,6 +2684,17 @@ int decode_file(struct objtool_file *file)
 	if (add_jump_table_alts(file))
 		return -1;
 
+	/*
+	 * Must be after add_jump_table_alts(), which affects sibling call
+	 * detection (jump table branches vs indirect sibling calls).
+	 *
+	 * The dead end marks are read by validate_branch() -- reached from
+	 * both validate_functions() and validate_noinstr_sections() -- and by
+	 * validate_unret().
+	 */
+	if (validate_branch_enabled() || opts.noinstr || opts.unret)
+		detect_noreturns(file);
+
 	if (read_unwind_hints(file))
 		return -1;
 
@@ -2676,8 +2702,7 @@ int decode_file(struct objtool_file *file)
 	mark_holes(file);
 
 	/*
-	 * Must be after add_call_destinations() such that it can override
-	 * dead_end_function() marks.
+	 * Must be after detect_noreturns() so it can override dead_end marks.
 	 */
 	if (read_annotate(file, __annotate_late))
 		return -1;
