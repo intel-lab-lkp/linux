@@ -6,5 +6,6 @@ doctests_kernel_generated.rs
 doctests_kernel_generated_kunit.c
 uapi_generated.rs
 exports_*_generated.h
+intrinsics_annotate_generated.c
 doc/
 test/
