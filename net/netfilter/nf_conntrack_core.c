@@ -2241,7 +2241,12 @@ static int nf_confirm_cthelper(struct sk_buff *skb, struct nf_conn *ct,
 
 	if (test_bit(IPS_SEQ_ADJUST_BIT, &ct->status) &&
 	    !nf_is_loopback_packet(skb)) {
-		if (nf_ct_seq_adjust(skb, ct, ctinfo, protoff) < 0) {
+		int ret = nf_ct_seq_adjust(skb, ct, ctinfo, protoff);
+
+		if (ret == -EINVAL) {
+			NF_CT_STAT_INC_ATOMIC(nf_ct_net(ct), invalid);
+			return NF_DROP;
+		} else if (ret < 0) {
 			NF_CT_STAT_INC_ATOMIC(nf_ct_net(ct), drop);
 			return NF_DROP;
 		}
