@@ -561,6 +561,65 @@ out_unlock:
 
 CONFIGFS_ATTR(nvmet_ns_, device_path);
 
+#ifdef CONFIG_BLK_CGROUP
+static ssize_t nvmet_ns_cgroup_path_show(struct config_item *item, char *page)
+{
+	struct nvmet_ns *ns = to_nvmet_ns(item);
+	struct nvmet_subsys *subsys = ns->subsys;
+	ssize_t ret;
+
+	/* Against a concurrent store, which frees the old string. */
+	mutex_lock(&subsys->lock);
+	ret = snprintf(page, PAGE_SIZE, "%s\n",
+		       ns->cgroup_path ? ns->cgroup_path : "");
+	mutex_unlock(&subsys->lock);
+
+	return ret;
+}
+
+static ssize_t nvmet_ns_cgroup_path_store(struct config_item *item,
+		const char *page, size_t count)
+{
+	struct nvmet_ns *ns = to_nvmet_ns(item);
+	struct nvmet_subsys *subsys = ns->subsys;
+	size_t len;
+	int ret;
+
+	mutex_lock(&subsys->lock);
+	ret = -EBUSY;
+	if (ns->enabled)
+		goto out_unlock;
+
+	len = strcspn(page, "\n");
+	if (!len) {
+		/* An empty write clears the association. */
+		kfree(ns->cgroup_path);
+		ns->cgroup_path = NULL;
+		mutex_unlock(&subsys->lock);
+		return count;
+	}
+
+	ret = -EINVAL;
+	if (page[0] != '/' || len >= PATH_MAX)
+		goto out_unlock;
+
+	kfree(ns->cgroup_path);
+	ret = -ENOMEM;
+	ns->cgroup_path = kmemdup_nul(page, len, GFP_KERNEL);
+	if (!ns->cgroup_path)
+		goto out_unlock;
+
+	mutex_unlock(&subsys->lock);
+	return count;
+
+out_unlock:
+	mutex_unlock(&subsys->lock);
+	return ret;
+}
+
+CONFIGFS_ATTR(nvmet_ns_, cgroup_path);
+#endif /* CONFIG_BLK_CGROUP */
+
 #ifdef CONFIG_PCI_P2PDMA
 static ssize_t nvmet_ns_p2pmem_show(struct config_item *item, char *page)
 {
@@ -833,6 +892,9 @@ static struct configfs_attribute *nvmet_ns_attrs[] = {
 	&nvmet_ns_attr_buffered_io,
 	&nvmet_ns_attr_revalidate_size,
 	&nvmet_ns_attr_resv_enable,
+#ifdef CONFIG_BLK_CGROUP
+	&nvmet_ns_attr_cgroup_path,
+#endif
 #ifdef CONFIG_PCI_P2PDMA
 	&nvmet_ns_attr_p2pmem,
 #endif

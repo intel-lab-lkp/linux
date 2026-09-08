@@ -18,6 +18,7 @@
 #include <linux/configfs.h>
 #include <linux/rcupdate.h>
 #include <linux/blkdev.h>
+#include <linux/kthread.h>
 #include <linux/radix-tree.h>
 #include <linux/t10-pi.h>
 #include <linux/kfifo.h>
@@ -114,6 +115,15 @@ struct nvmet_ns {
 	bool			enabled;
 	struct nvmet_subsys	*subsys;
 	const char		*device_path;
+#ifdef CONFIG_BLK_CGROUP
+	const char		*cgroup_path;
+	/*
+	 * Resolved from ->cgroup_path when the namespace is enabled and
+	 * released when it is disabled, so it has the same lifetime and
+	 * visibility rules as ->bdev and ->file.
+	 */
+	struct cgroup_subsys_state *blkcg_css;
+#endif
 
 	struct config_group	device_group;
 	struct config_group	group;
@@ -731,6 +741,66 @@ void nvmet_execute_identify_ns_zns(struct nvmet_req *req);
 void nvmet_bdev_execute_zone_mgmt_recv(struct nvmet_req *req);
 void nvmet_bdev_execute_zone_mgmt_send(struct nvmet_req *req);
 void nvmet_bdev_execute_zone_append(struct nvmet_req *req);
+
+#ifdef CONFIG_BLK_CGROUP
+/*
+ * Charge @bio to the cgroup configured for @ns.  The association travels with
+ * the bio as the block layer remaps and clones it, so an io.max line naming a
+ * device below the namespace applies to this I/O too.
+ */
+static inline void nvmet_blkcg_set_bio(struct nvmet_ns *ns, struct bio *bio)
+{
+	if (ns->blkcg_css)
+		bio_associate_blkg_from_css(bio, ns->blkcg_css);
+}
+
+/*
+ * Charge the I/O of a helper that allocates its bios internally, where there
+ * is no bio for nvmet to associate: the block layer's discard, write zeroes
+ * and flush helpers, and the file backend's ->read_iter and ->write_iter.
+ * Those bios are allocated in the calling thread and take the cgroup from its
+ * kthread association, the mechanism the loop driver uses for the same reason.
+ *
+ * kthread_associate_blkcg() stores the association in the calling kernel
+ * thread, which is only the right thing to do when that thread is executing
+ * this command: in_task() rules out an interrupt, where current has nothing
+ * to do with the command, and PF_KTHREAD rules out a user task, whose own
+ * association must not be taken over.
+ *
+ * The return value of begin() decides whether end() clears the association
+ * again, so that the two can never disagree.  end() must not look at the
+ * namespace: once the bracketed call returns the request may already have
+ * been completed and freed.  kthread_associate_blkcg() replaces rather than
+ * stacks, so these brackets must not nest; no command needs more than one.
+ */
+static inline bool nvmet_blkcg_begin(struct nvmet_ns *ns)
+{
+	if (!ns->blkcg_css || !in_task() || !(current->flags & PF_KTHREAD))
+		return false;
+
+	kthread_associate_blkcg(ns->blkcg_css);
+	return true;
+}
+
+static inline void nvmet_blkcg_end(bool associated)
+{
+	if (associated)
+		kthread_associate_blkcg(NULL);
+}
+#else
+static inline void nvmet_blkcg_set_bio(struct nvmet_ns *ns, struct bio *bio)
+{
+}
+
+static inline bool nvmet_blkcg_begin(struct nvmet_ns *ns)
+{
+	return false;
+}
+
+static inline void nvmet_blkcg_end(bool associated)
+{
+}
+#endif /* CONFIG_BLK_CGROUP */
 
 static inline u32 nvmet_rw_data_len(struct nvmet_req *req)
 {

@@ -350,3 +350,56 @@ Description:
 		Shows or sets the NQN of the discovery subsystem. The
 		value must be unique and not duplicate any existing
 		subsystem name.
+
+What:		/config/nvmet/subsystems/NAME/namespaces/NSID/cgroup_path
+Date:		September 2026
+KernelVersion:	7.4
+Contact:	Peng Yu <yupeng0921@gmail.com>
+Description:
+		Shows or sets the path of the cgroup v2 group whose io
+		controller the I/O of this namespace is associated with,
+		given relative to the root of the cgroup v2 hierarchy (for
+		example "/nvmet/user1").  Cgroup I/O policies such as io.max
+		then apply to that I/O, and keep applying to it as it is
+		split and remapped further down the stack.
+
+		The value must begin with '/'; anything else is rejected with
+		EINVAL.  The namespace must be disabled before the attribute
+		can be changed, otherwise the write fails with EBUSY.
+		Writing an empty line clears the association.
+
+		The path is resolved when the namespace is enabled, in the
+		cgroup namespace of the process writing to "enable".
+		Enabling fails if the path does not resolve, or if
+		buffered_io is set: buffered writes are handed to writeback,
+		where there is nothing left to charge them to.
+
+		This file always reports the path that was written; the group
+		actually charged can be an ancestor of it.  If the io
+		controller is not enabled in the named group, the association
+		is made with the closest ancestor where it is, which may be
+		the root group.  That is resolved once, when the namespace is
+		enabled, so enabling the controller afterwards changes
+		nothing until the namespace is disabled and enabled again.
+
+		Removing the group while the namespace is enabled does not
+		stop the I/O or leak anything, but the limits stop applying:
+		the I/O charged per bio spills to the closest group that is
+		still alive, and the I/O charged through the executing thread
+		spills to the root group.
+
+		Part of the I/O is charged through the thread that executes
+		the command rather than per bio, because the target does not
+		allocate those bios itself: discard and write zeroes for a
+		block device backed namespace, the flush issued when
+		Namespace Write Protect is set, and all I/O of a file backed
+		namespace.  That only works where a kernel thread is what
+		executes the command, which the tcp, rdma, loop and pci-epf
+		transports always arrange; where a transport hands the
+		command to something else, that I/O is charged to whichever
+		group the executing context belongs to instead.  For a file
+		backed namespace the file system may also do part of the work
+		for a request in its own threads, which is not charged
+		either.
+
+		Only available when CONFIG_BLK_CGROUP is enabled.
