@@ -317,6 +317,10 @@ class NlAttrs:
 
         while offset < len(msg):
             attr = NlAttr(msg, offset)
+            if attr.full_len < 4:
+                raise YnlException(
+                    f'Malformed attribute at offset {offset}: '
+                    f'length {attr.payload_len} is shorter than the header')
             offset += attr.full_len
             self.attrs.append(attr)
 
