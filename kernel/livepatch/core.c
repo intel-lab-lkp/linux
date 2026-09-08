@@ -342,14 +342,17 @@ int klp_apply_section_relocs(struct module *pmod, Elf_Shdr *sechdrs,
 					secndx, objname, true);
 }
 
-static int klp_write_object_relocs(struct klp_patch *patch,
-				   struct klp_object *obj,
-				   bool apply)
+static int klp_write_object_relocs_limited(struct klp_patch *patch,
+					   struct klp_object *obj,
+					   bool apply, int limit)
 {
 	int i, ret;
 	struct klp_modinfo *info = patch->mod->klp_info;
 
-	for (i = 1; i < info->hdr.e_shnum; i++) {
+	if (!limit || limit > info->hdr.e_shnum)
+		limit = info->hdr.e_shnum;
+
+	for (i = 1; i < limit; i++) {
 		Elf_Shdr *sec = info->sechdrs + i;
 
 		if (!(sec->sh_flags & SHF_RELA_LIVEPATCH))
@@ -359,11 +362,21 @@ static int klp_write_object_relocs(struct klp_patch *patch,
 					       info->secstrings,
 					       patch->mod->core_kallsyms.strtab,
 					       info->symndx, i, obj->name, apply);
-		if (ret)
+		if (ret) {
+			if (apply)
+				klp_write_object_relocs_limited(patch, obj, false, i);
 			return ret;
+		}
 	}
 
 	return 0;
+}
+
+static int klp_write_object_relocs(struct klp_patch *patch,
+				   struct klp_object *obj,
+				   bool apply)
+{
+	return klp_write_object_relocs_limited(patch, obj, apply, 0);
 }
 
 static int klp_apply_object_relocs(struct klp_patch *patch,
