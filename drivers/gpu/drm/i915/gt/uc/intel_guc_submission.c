@@ -5065,6 +5065,18 @@ int intel_guc_deregister_done_process_msg(struct intel_guc *guc,
 	if (unlikely(!ce))
 		return -EPROTO;
 
+	/*
+	 * A deregister H2G is only ever sent for a context that has been put in
+	 * one of these two states first, so anything else means this G2H does
+	 * not correspond to an outstanding request of ours.
+	 */
+	if (unlikely(!context_wait_for_deregister_to_register(ce) &&
+		     !context_destroyed(ce))) {
+		guc_err(guc, "Unexpected deregister done, ctx_id %u sched_state 0x%x\n",
+			ctx_id, ce->guc_state.sched_state);
+		return -EPROTO;
+	}
+
 	trace_intel_context_deregister_done(ce);
 
 #ifdef CONFIG_DRM_I915_SELFTEST
