@@ -588,8 +588,14 @@ config NOINSTR_VALIDATION
 	select OBJTOOL
 	default y
 
-# For when objtool defers its work to the linked image (vmlinux.o or module.o)
-# rather than running on individual translation units.
+# Objtool reverse-engineers the control flow graph
+config OBJTOOL_CONTROL_FLOW
+	def_bool y
+	depends on OBJTOOL
+	depends on UNWINDER_ORC || STACK_VALIDATION || HAVE_UACCESS_VALIDATION
+
+# Objtool defers its work to the linked image (vmlinux.o or module.o) rather
+# than running on individual translation units.
 config OBJTOOL_DEFERRED
 	def_bool y
 	depends on OBJTOOL
