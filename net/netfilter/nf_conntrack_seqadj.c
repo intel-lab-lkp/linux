@@ -117,23 +117,21 @@ static void nf_ct_sack_block_adjust(struct sk_buff *skb,
 }
 
 /* TCP SACK sequence number adjustment */
-static unsigned int nf_ct_sack_adjust(struct sk_buff *skb,
-				      unsigned int protoff,
-				      struct nf_conn *ct,
-				      enum ip_conntrack_info ctinfo)
+static int nf_ct_sack_adjust(struct sk_buff *skb, unsigned int protoff,
+			     struct nf_conn *ct, enum ip_conntrack_info ctinfo)
 {
 	struct tcphdr *tcph = (void *)skb->data + protoff;
 	struct nf_conn_seqadj *seqadj = nfct_seqadj(ct);
 	unsigned int dir, optoff, optend;
 
 	if (!seqadj)
-		return 0;
+		return -ENOSPC;
 
 	optoff = protoff + sizeof(struct tcphdr);
 	optend = protoff + tcph->doff * 4;
 
 	if (skb_ensure_writable(skb, optend))
-		return 0;
+		return -ENOMEM;
 
 	tcph = (void *)skb->data + protoff;
 	dir = CTINFO2DIR(ctinfo);
@@ -144,7 +142,7 @@ static unsigned int nf_ct_sack_adjust(struct sk_buff *skb,
 
 		switch (op[0]) {
 		case TCPOPT_EOL:
-			return 1;
+			return 0;
 		case TCPOPT_NOP:
 			optoff++;
 			continue;
@@ -153,7 +151,7 @@ static unsigned int nf_ct_sack_adjust(struct sk_buff *skb,
 			if (optoff + 1 == optend ||
 			    optoff + op[1] > optend ||
 			    op[1] < 2)
-				return 0;
+				return -EINVAL;
 			if (op[0] == TCPOPT_SACK &&
 			    op[1] >= 2+TCPOLEN_SACK_PERBLOCK &&
 			    ((op[1] - 2) % TCPOLEN_SACK_PERBLOCK) == 0)
@@ -163,10 +161,10 @@ static unsigned int nf_ct_sack_adjust(struct sk_buff *skb,
 			optoff += op[1];
 		}
 	}
-	return 1;
+	return 0;
 }
 
-/* TCP sequence number adjustment.  Returns 1 on success, 0 on failure */
+/* TCP sequence number adjustment.  Returns 0 on success, -err on failure */
 int nf_ct_seq_adjust(struct sk_buff *skb,
 		     struct nf_conn *ct, enum ip_conntrack_info ctinfo,
 		     unsigned int protoff)
@@ -177,16 +175,16 @@ int nf_ct_seq_adjust(struct sk_buff *skb,
 	s32 seqoff, ackoff;
 	struct nf_conn_seqadj *seqadj = nfct_seqadj(ct);
 	struct nf_ct_seqadj *this_way, *other_way;
-	int res = 1;
+	int res = 0;
 
 	if (!seqadj)
-		return 0;
+		return -ENOSPC;
 
 	this_way  = &seqadj->seq[dir];
 	other_way = &seqadj->seq[!dir];
 
 	if (skb_ensure_writable(skb, protoff + sizeof(*tcph)))
-		return 0;
+		return -ENOMEM;
 
 	tcph = (void *)skb->data + protoff;
 	spin_lock_bh(&ct->lock);

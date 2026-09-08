@@ -76,7 +76,7 @@ int nf_ct_helper(struct sk_buff *skb, struct nf_conn *ct,
 	 * addresses and/or port numbers in the text-based control connection.
 	 */
 	if (test_bit(IPS_SEQ_ADJUST_BIT, &ct->status) &&
-	    !nf_ct_seq_adjust(skb, ct, ctinfo, protoff))
+	    nf_ct_seq_adjust(skb, ct, ctinfo, protoff) < 0)
 		return NF_DROP;
 	return NF_ACCEPT;
 }
