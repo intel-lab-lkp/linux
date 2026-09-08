@@ -11,6 +11,7 @@ Laptop Drivers
    asus-laptop
    disk-shock-protection
    lg-laptop
+   qcom-ec
    samsung-galaxybook
    sony-laptop
    sonypi
