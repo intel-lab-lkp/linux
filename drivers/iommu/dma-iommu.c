@@ -37,6 +37,7 @@
 
 #include "dma-iommu.h"
 #include "iommu-pages.h"
+#include "iommu-priv.h"
 
 struct iommu_dma_msi_page {
 	struct list_head	list;
@@ -2247,6 +2248,7 @@ int iommu_dma_sw_msi(struct iommu_domain *domain, struct msi_desc *desc,
 {
 	struct device *dev = msi_desc_to_dev(desc);
 	const struct iommu_dma_msi_page *msi_page;
+	int ret;
 
 	if (!has_msi_cookie(domain)) {
 		msi_desc_set_iommu_msi_iova(desc, 0, 0);
@@ -2254,6 +2256,11 @@ int iommu_dma_sw_msi(struct iommu_domain *domain, struct msi_desc *desc,
 	}
 
 	iommu_group_mutex_assert(dev);
+
+	ret = __iommu_deferred_attach(dev, domain);
+	if (ret)
+		return ret;
+
 	msi_page = iommu_dma_get_msi_page(dev, msi_addr, domain);
 	if (!msi_page)
 		return -ENOMEM;

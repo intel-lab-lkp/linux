@@ -2214,19 +2214,15 @@ out_unlock:
 }
 EXPORT_SYMBOL_GPL(iommu_attach_device);
 
-int iommu_deferred_attach(struct device *dev, struct iommu_domain *domain)
+/* Caller must hold dev->iommu_group->mutex */
+int __iommu_deferred_attach(struct device *dev, struct iommu_domain *domain)
 {
 	struct group_device *gdev;
 
-	/*
-	 * This is called on the dma mapping fast path so avoid locking. This is
-	 * racy, but we have an expectation that the driver will setup its DMAs
-	 * inside probe while being single threaded to avoid racing.
-	 */
 	if (!dev->iommu || !dev->iommu->attach_deferred)
 		return 0;
 
-	guard(mutex)(&dev->iommu_group->mutex);
+	lockdep_assert_held(&dev->iommu_group->mutex);
 
 	gdev = __dev_to_gdev(dev);
 	if (WARN_ON(!gdev))
@@ -2242,6 +2238,21 @@ int iommu_deferred_attach(struct device *dev, struct iommu_domain *domain)
 	if (gdev->blocked)
 		return -EBUSY;
 	return __iommu_attach_device(domain, dev, NULL);
+}
+
+int iommu_deferred_attach(struct device *dev, struct iommu_domain *domain)
+{
+	/*
+	 * This is called on the dma mapping fast path so avoid locking. This is
+	 * racy, but we have an expectation that the driver will setup its DMAs
+	 * inside probe while being single threaded to avoid racing.
+	 */
+	if (!dev->iommu || !dev->iommu->attach_deferred)
+		return 0;
+
+	guard(mutex)(&dev->iommu_group->mutex);
+
+	return __iommu_deferred_attach(dev, domain);
 }
 
 void iommu_detach_device(struct iommu_domain *domain, struct device *dev)
