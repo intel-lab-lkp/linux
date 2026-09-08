@@ -1352,38 +1352,70 @@ def check_aggregate_directives(root: "Specification") -> None:
                     meta,
                 )
             field = fields[marked[1]]
-            # Only the counted-array framing is generated, so any other
-            # member form would emit hook prototypes that nothing calls.
-            if not isinstance(field, _XdrVariableLengthArray):
+            # Any other member form would emit hook prototypes that
+            # nothing calls.
+            if not isinstance(
+                field, (_XdrVariableLengthArray, _XdrOptionalData)
+            ):
                 raise XdrSemanticError(
-                    f"'{value.name}.{marked[1]}' is not a variable-length"
-                    " array",
+                    f"'{value.name}.{marked[1]}' is neither a"
+                    " variable-length array nor an optional-data list",
                     meta,
                 )
-            # The generated decoder hands each element to the ordinary
-            # element decoder from a zero-filled local, so a nested
-            # variable-length array or optional-data member, which that
-            # decoder fills through a pointer the caller was to supply,
-            # would be written through NULL.
-            nested = _unsized_member(field.spec.type_name, named_types, set())
-            if nested is not None:
-                raise XdrSemanticError(
-                    f"'{value.name}.{marked[1]}' has element type"
-                    f" '{field.spec.type_name}', which reaches the"
-                    f" variable-length or optional-data member '{nested}';"
-                    " the aggregate decoder has no storage for it",
-                    meta,
+            if isinstance(field, _XdrVariableLengthArray):
+                # The generated decoder hands each element to the
+                # ordinary element decoder from a zero-filled local, so
+                # a nested variable-length array or optional-data
+                # member, which that decoder fills through a pointer
+                # the caller was to supply, would be written through
+                # NULL.
+                nested = _unsized_member(
+                    field.spec.type_name, named_types, set()
                 )
-            # The decoder hands the wire count to the begin hook before
-            # any element is decoded, and a begin hook may size storage
-            # from it, so the count needs a bound the framing enforces.
-            if field.maxsize == "0":
-                raise XdrSemanticError(
-                    f"'{value.name}.{marked[1]}' declares no maximum size;"
-                    " the aggregate decoder hands the element count to"
-                    " the begin hook unbounded",
-                    meta,
-                )
+                if nested is not None:
+                    raise XdrSemanticError(
+                        f"'{value.name}.{marked[1]}' has element type"
+                        f" '{field.spec.type_name}', which reaches the"
+                        f" variable-length or optional-data member"
+                        f" '{nested}'; the aggregate decoder has no"
+                        " storage for it",
+                        meta,
+                    )
+                # The decoder hands the wire count to the begin hook
+                # before any element is decoded, and a begin hook may
+                # size storage from it, so the count needs a bound the
+                # framing enforces.
+                if field.maxsize == "0":
+                    raise XdrSemanticError(
+                        f"'{value.name}.{marked[1]}' declares no maximum"
+                        " size; the aggregate decoder hands the element"
+                        " count to the begin hook unbounded",
+                        meta,
+                    )
+            else:
+                # The optional-data encoder passes each element by
+                # address and closes the list by encoding NULL, so the
+                # element codec must be one that takes a pointer and
+                # writes the value-follows framing itself.
+                if not isinstance(
+                    named_types.get(field.spec.type_name), _XdrPointer
+                ):
+                    raise XdrSemanticError(
+                        f"'{value.name}.{marked[1]}' has element type"
+                        f" '{field.spec.type_name}', which is not a pointer"
+                        " type; an optional-data aggregate needs an element"
+                        " codec that writes the value-follows framing",
+                        meta,
+                    )
+                # The emitted optional-data decoder fails outright, so
+                # an argument type carrying one could never be decoded.
+                if value.name in argument_types:
+                    raise XdrSemanticError(
+                        f"'{value.name}' is reachable from an RPC argument,"
+                        f" and the optional-data aggregate '{marked[1]}'"
+                        " cannot be decoded",
+                        meta,
+                    )
             if element_type is None:
                 element_type = field.spec.type_name
             elif field.spec.type_name != element_type:
