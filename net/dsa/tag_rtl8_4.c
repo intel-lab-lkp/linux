@@ -128,6 +128,19 @@ static void rtl8_4_write_tag(struct sk_buff *skb, struct net_device *dev,
 static struct sk_buff *rtl8_4_tag_xmit(struct sk_buff *skb,
 				       struct net_device *dev)
 {
+	/* If the skb has a hardware-accelerated VLAN tag (skb->vlan_tci set),
+	 * push it into the payload before prepending the DSA CPU tag.
+	 * Otherwise the upstream NIC (e.g. imx-dwmac with tx-vlan-offload
+	 * fixed:on) will insert the 802.1Q header *after* the CPU tag,
+	 * producing [8100 VID][8899 CPU tag] on the wire instead of the
+	 * correct [8899 CPU tag][8100 VID].
+	 */
+	if (skb_vlan_tag_present(skb)) {
+		skb = __vlan_hwaccel_push_inside(skb);
+		if (!skb)
+			return NULL;
+	}
+
 	skb_push(skb, RTL8_4_TAG_LEN);
 
 	dsa_alloc_etype_header(skb, RTL8_4_TAG_LEN);
