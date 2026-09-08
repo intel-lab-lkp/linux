@@ -26,6 +26,7 @@
  */
 
 #include <drm/drm_print.h>
+#include <drm/intel/display_parent_interface.h>
 #include <drm/intel/intel_gmd_interrupt_regs.h>
 #include <drm/intel/intel_gmd_misc_regs.h>
 #include <drm/intel/mchbar_regs.h>
@@ -203,10 +204,8 @@ static void skl_init_clock_gating(struct drm_i915_private *i915)
 	intel_display_init_clock_gating(i915->display);
 }
 
-static void bdw_init_clock_gating(struct drm_i915_private *i915)
+static void bdw_restore_gt_clock_gating(struct drm_i915_private *i915)
 {
-	intel_display_init_clock_gating(i915->display);
-
 	/* WaSwitchSolVfFArbitrationPriority:bdw */
 	intel_uncore_rmw(&i915->uncore, GAM_ECOCHK, 0, HSW_ECOCHK_ARB_PRIO_SOL);
 
@@ -224,8 +223,6 @@ static void bdw_init_clock_gating(struct drm_i915_private *i915)
 	/* WaProgramL3SqcReg1Default:bdw */
 	gen8_set_l3sqc_credits(i915, 30, 2);
 
-	intel_pch_init_clock_gating(i915->display);
-
 	/* WaDisableDopClockGating:bdw
 	 *
 	 * Also see the CHICKEN2 write in bdw_init_workarounds() to disable DOP
@@ -234,16 +231,30 @@ static void bdw_init_clock_gating(struct drm_i915_private *i915)
 	intel_uncore_rmw(&i915->uncore, GEN6_UCGCTL1, 0, GEN6_EU_TCUNIT_CLOCK_GATE_DISABLE);
 }
 
-static void hsw_init_clock_gating(struct drm_i915_private *i915)
+static void bdw_init_clock_gating(struct drm_i915_private *i915)
 {
 	intel_display_init_clock_gating(i915->display);
 
+	bdw_restore_gt_clock_gating(i915);
+
+	intel_pch_init_clock_gating(i915->display);
+}
+
+static void hsw_restore_gt_clock_gating(struct drm_i915_private *i915)
+{
 	/* This is required by WaCatErrorRejectionIssue:hsw */
 	intel_uncore_rmw(&i915->uncore, GEN7_SQ_CHICKEN_MBCUNIT_CONFIG,
 			 0, GEN7_SQ_CHICKEN_MBCUNIT_SQINTMOB);
 
 	/* WaSwitchSolVfFArbitrationPriority:hsw */
 	intel_uncore_rmw(&i915->uncore, GAM_ECOCHK, 0, HSW_ECOCHK_ARB_PRIO_SOL);
+}
+
+static void hsw_init_clock_gating(struct drm_i915_private *i915)
+{
+	intel_display_init_clock_gating(i915->display);
+
+	hsw_restore_gt_clock_gating(i915);
 
 	intel_pch_init_clock_gating(i915->display);
 }
@@ -447,6 +458,20 @@ void intel_clock_gating_init(struct drm_device *drm)
 
 	i915->clock_gating_funcs->init_clock_gating(i915);
 }
+
+static void intel_clock_gating_restore_gt(struct drm_device *drm)
+{
+	struct drm_i915_private *i915 = to_i915(drm);
+
+	if (IS_BROADWELL(i915))
+		bdw_restore_gt_clock_gating(i915);
+	else if (IS_HASWELL(i915))
+		hsw_restore_gt_clock_gating(i915);
+}
+
+const struct intel_display_clock_gating_interface i915_display_clock_gating_interface = {
+	.restore_gt = intel_clock_gating_restore_gt,
+};
 
 static void nop_init_clock_gating(struct drm_i915_private *i915)
 {

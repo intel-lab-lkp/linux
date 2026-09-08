@@ -745,6 +745,7 @@ static bool vgpu_active(struct drm_device *drm)
 
 static const struct intel_display_parent_interface parent = {
 	.bo = &i915_display_bo_interface,
+	.clock_gating = &i915_display_clock_gating_interface,
 	.dpt = &i915_display_dpt_interface,
 	.dsb = &i915_display_dsb_interface,
 	.fb_pin = &i915_display_fb_pin_interface,

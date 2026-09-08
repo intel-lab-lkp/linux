@@ -65,6 +65,10 @@ struct intel_display_bo_interface {
 #endif
 };
 
+struct intel_display_clock_gating_interface {
+	void (*restore_gt)(struct drm_device *drm);
+};
+
 struct intel_display_dpt_interface {
 	struct intel_dpt *(*create)(struct drm_gem_object *obj, size_t size);
 	void (*destroy)(struct intel_dpt *dpt);
@@ -249,6 +253,9 @@ struct intel_display_wa_interface {
 struct intel_display_parent_interface {
 	/** @bo: BO interface */
 	const struct intel_display_bo_interface *bo;
+
+	/** @clock_gating: Clock gating interface. Optional. */
+	const struct intel_display_clock_gating_interface *clock_gating;
 
 	/** @dpt: DPT interface. Optional. */
 	const struct intel_display_dpt_interface *dpt;

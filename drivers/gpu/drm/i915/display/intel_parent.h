@@ -22,6 +22,9 @@ struct intel_panic;
 struct intel_stolen_node;
 struct iosys_map;
 
+/* clock_gating */
+void intel_parent_clock_gating_restore_gt(struct intel_display *display);
+
 /* dpt */
 struct intel_dpt *intel_parent_dpt_create(struct intel_display *display,
 					  struct drm_gem_object *obj, size_t size);

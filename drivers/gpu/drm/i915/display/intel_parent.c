@@ -24,6 +24,15 @@
 #include "intel_display_core.h"
 #include "intel_parent.h"
 
+/* clock_gating */
+void intel_parent_clock_gating_restore_gt(struct intel_display *display)
+{
+	if (drm_WARN_ON_ONCE(display->drm, !display->parent->clock_gating))
+		return;
+
+	display->parent->clock_gating->restore_gt(display->drm);
+}
+
 /* dpt */
 struct intel_dpt *intel_parent_dpt_create(struct intel_display *display,
 					  struct drm_gem_object *obj, size_t size)

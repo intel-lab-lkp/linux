@@ -11,4 +11,6 @@ struct drm_device;
 void intel_clock_gating_init(struct drm_device *drm);
 void intel_clock_gating_hooks_init(struct drm_device *drm);
 
+extern const struct intel_display_clock_gating_interface i915_display_clock_gating_interface;
+
 #endif /* __INTEL_CLOCK_GATING_H__ */
