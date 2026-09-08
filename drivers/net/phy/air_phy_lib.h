@@ -62,7 +62,7 @@ int air_phy_write_page(struct phy_device *phydev, int page);
 struct firmware;
 
 int air_fw_write_buf(struct mdio_device *mdiodev, u32 address,
-		     const struct firmware *fw);
-int air_en8811h_wait_mcu_ready(struct mdio_device *mdiodev);
+		     const struct firmware *fw, bool nested);
+int air_en8811h_wait_mcu_ready(struct mdio_device *mdiodev, bool nested);
 
 #endif /* __AIR_PHY_LIB_H */

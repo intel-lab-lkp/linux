@@ -272,8 +272,17 @@ static int __air_mdio_restore_page(struct mdio_device *mdiodev,
 	return ret;
 }
 
+/* Nested when the caller already holds the bus this chip hangs below. */
+static void air_mdiodev_lock(struct mdio_device *mdiodev, bool nested)
+{
+	if (nested)
+		mdiodev_lock_nested(mdiodev);
+	else
+		mdiodev_lock(mdiodev);
+}
+
 int air_fw_write_buf(struct mdio_device *mdiodev, u32 address,
-		     const struct firmware *fw)
+		     const struct firmware *fw, bool nested)
 {
 	size_t chunk, done = 0;
 	int saved_page, ret;
@@ -287,7 +296,7 @@ int air_fw_write_buf(struct mdio_device *mdiodev, u32 address,
 	while (done < fw->size) {
 		chunk = min_t(size_t, fw->size - done, AIR_FW_CHUNK_BYTES);
 
-		mdiodev_lock(mdiodev);
+		air_mdiodev_lock(mdiodev, nested);
 
 		saved_page = __air_mdio_select_page(mdiodev,
 						    AIR_PHY_PAGE_EXTENDED_4);
@@ -313,11 +322,12 @@ int air_fw_write_buf(struct mdio_device *mdiodev, u32 address,
 EXPORT_SYMBOL_GPL(air_fw_write_buf);
 
 static int air_mdio_buckpbus_reg_read(struct mdio_device *mdiodev,
-				      u32 pbus_address, u32 *pbus_data)
+				      u32 pbus_address, u32 *pbus_data,
+				      bool nested)
 {
 	int saved_page, ret;
 
-	mdiodev_lock(mdiodev);
+	air_mdiodev_lock(mdiodev, nested);
 
 	saved_page = __air_mdio_select_page(mdiodev, AIR_PHY_PAGE_EXTENDED_4);
 	if (saved_page < 0) {
@@ -333,11 +343,12 @@ static int air_mdio_buckpbus_reg_read(struct mdio_device *mdiodev,
 }
 
 static int air_mdio_buckpbus_reg_write(struct mdio_device *mdiodev,
-				       u32 pbus_address, u32 pbus_data)
+				       u32 pbus_address, u32 pbus_data,
+				       bool nested)
 {
 	int saved_page, ret;
 
-	mdiodev_lock(mdiodev);
+	air_mdiodev_lock(mdiodev, nested);
 
 	saved_page = __air_mdio_select_page(mdiodev, AIR_PHY_PAGE_EXTENDED_4);
 	if (saved_page < 0) {
@@ -354,11 +365,12 @@ static int air_mdio_buckpbus_reg_write(struct mdio_device *mdiodev,
 }
 
 static int air_mdio_buckpbus_reg_modify(struct mdio_device *mdiodev,
-					u32 pbus_address, u32 mask, u32 set)
+					u32 pbus_address, u32 mask, u32 set,
+					bool nested)
 {
 	int saved_page, ret;
 
-	mdiodev_lock(mdiodev);
+	air_mdiodev_lock(mdiodev, nested);
 
 	saved_page = __air_mdio_select_page(mdiodev, AIR_PHY_PAGE_EXTENDED_4);
 	if (saved_page < 0) {
@@ -399,20 +411,20 @@ static int __air_mmd_read(struct mdio_device *mdiodev, u16 devad, u16 regnum)
 	return __mdiobus_read(bus, addr, MII_MMD_DATA);
 }
 
-static int air_mmd_status_read(struct mdio_device *mdiodev)
+static int air_mmd_status_read(struct mdio_device *mdiodev, bool nested)
 {
 	int ret;
 
-	mdiodev_lock(mdiodev);
+	air_mdiodev_lock(mdiodev, nested);
 	ret = __air_mmd_read(mdiodev, MDIO_MMD_VEND1, EN8811H_PHY_FW_STATUS);
 	mdiodev_unlock(mdiodev);
 
 	return ret;
 }
 
-int air_en8811h_mcu_running(struct mdio_device *mdiodev)
+int air_en8811h_mcu_running(struct mdio_device *mdiodev, bool nested)
 {
-	int ret = air_mmd_status_read(mdiodev);
+	int ret = air_mmd_status_read(mdiodev, nested);
 
 	if (ret < 0)
 		return ret;
@@ -421,12 +433,12 @@ int air_en8811h_mcu_running(struct mdio_device *mdiodev)
 }
 EXPORT_SYMBOL_GPL(air_en8811h_mcu_running);
 
-int air_en8811h_wait_mcu_ready(struct mdio_device *mdiodev)
+int air_en8811h_wait_mcu_ready(struct mdio_device *mdiodev, bool nested)
 {
 	int ret, reg_value;
 
 	ret = air_mdio_buckpbus_reg_write(mdiodev, EN8811H_FW_CTRL_1,
-					  EN8811H_FW_CTRL_1_FINISH);
+					  EN8811H_FW_CTRL_1_FINISH, nested);
 	if (ret)
 		return ret;
 
@@ -436,7 +448,7 @@ int air_en8811h_wait_mcu_ready(struct mdio_device *mdiodev)
 	ret = read_poll_timeout(air_mmd_status_read, reg_value,
 				reg_value < 0 ||
 				reg_value == EN8811H_PHY_READY,
-				20000, 7500000, true, mdiodev);
+				20000, 7500000, true, mdiodev, nested);
 	if (reg_value < 0)
 		return reg_value;
 	if (ret) {
@@ -448,19 +460,20 @@ int air_en8811h_wait_mcu_ready(struct mdio_device *mdiodev)
 }
 EXPORT_SYMBOL_GPL(air_en8811h_wait_mcu_ready);
 
-int air_en8811h_fw_download(struct mdio_device *mdiodev, u32 *fw_version)
+int air_en8811h_fw_download(struct mdio_device *mdiodev, u32 *fw_version,
+			    bool nested)
 {
 	const struct firmware *fw1, *fw2;
 	struct device *dev = &mdiodev->dev;
 	int ret;
 
-	ret = air_en8811h_mcu_running(mdiodev);
+	ret = air_en8811h_mcu_running(mdiodev, nested);
 	if (ret < 0)
 		return ret;
 
 	if (ret) {
 		ret = air_mdio_buckpbus_reg_read(mdiodev, EN8811H_FW_VERSION,
-						 fw_version);
+						 fw_version, nested);
 		if (ret < 0)
 			return ret;
 
@@ -478,35 +491,36 @@ int air_en8811h_fw_download(struct mdio_device *mdiodev, u32 *fw_version)
 		goto air_fw_download_rel1;
 
 	ret = air_mdio_buckpbus_reg_write(mdiodev, EN8811H_FW_CTRL_1,
-					  EN8811H_FW_CTRL_1_START);
+					  EN8811H_FW_CTRL_1_START, nested);
 	if (ret < 0)
 		goto air_fw_download_out;
 
 	ret = air_mdio_buckpbus_reg_modify(mdiodev, EN8811H_FW_CTRL_2,
 					   EN8811H_FW_CTRL_2_LOADING,
-					   EN8811H_FW_CTRL_2_LOADING);
+					   EN8811H_FW_CTRL_2_LOADING, nested);
 	if (ret < 0)
 		goto air_fw_download_out;
 
-	ret = air_fw_write_buf(mdiodev, AIR_FW_ADDR_DM, fw1);
+	ret = air_fw_write_buf(mdiodev, AIR_FW_ADDR_DM, fw1, nested);
 	if (ret < 0)
 		goto air_fw_download_out;
 
-	ret = air_fw_write_buf(mdiodev, AIR_FW_ADDR_DSP, fw2);
+	ret = air_fw_write_buf(mdiodev, AIR_FW_ADDR_DSP, fw2, nested);
 	if (ret < 0)
 		goto air_fw_download_out;
 
 	ret = air_mdio_buckpbus_reg_modify(mdiodev, EN8811H_FW_CTRL_2,
-					   EN8811H_FW_CTRL_2_LOADING, 0);
+					   EN8811H_FW_CTRL_2_LOADING, 0,
+					   nested);
 	if (ret < 0)
 		goto air_fw_download_out;
 
-	ret = air_en8811h_wait_mcu_ready(mdiodev);
+	ret = air_en8811h_wait_mcu_ready(mdiodev, nested);
 	if (ret < 0)
 		goto air_fw_download_out;
 
 	ret = air_mdio_buckpbus_reg_read(mdiodev, EN8811H_FW_VERSION,
-					 fw_version);
+					 fw_version, nested);
 	if (ret < 0)
 		goto air_fw_download_out;
 
