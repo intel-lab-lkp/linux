@@ -62,6 +62,15 @@ static void free_sect_attrs(struct module_sect_attrs *sect_attrs)
 	kfree(sect_attrs);
 }
 
+/*
+ * .data..percpu has a separate allocation per CPU and no single
+ * address to report.
+ */
+static bool sect_visible(const struct load_info *info, unsigned int i)
+{
+	return !sect_empty(&info->sechdrs[i]) && i != info->index.pcpu;
+}
+
 static int add_sect_attrs(struct module *mod, const struct load_info *info)
 {
 	struct module_sect_attrs *sect_attrs;
@@ -72,7 +81,7 @@ static int add_sect_attrs(struct module *mod, const struct load_info *info)
 
 	/* Count loaded sections and allocate structures */
 	for (i = 0; i < info->hdr->e_shnum; i++)
-		if (!sect_empty(&info->sechdrs[i]))
+		if (sect_visible(info, i))
 			nloaded++;
 	sect_attrs = kzalloc_flex(*sect_attrs, attrs, nloaded);
 	if (!sect_attrs)
@@ -92,7 +101,7 @@ static int add_sect_attrs(struct module *mod, const struct load_info *info)
 	for (i = 0; i < info->hdr->e_shnum; i++) {
 		Elf_Shdr *sec = &info->sechdrs[i];
 
-		if (sect_empty(sec))
+		if (!sect_visible(info, i))
 			continue;
 		sysfs_bin_attr_init(sattr);
 		sattr->attr.name =
@@ -181,7 +190,7 @@ static int add_notes_attrs(struct module *mod, const struct load_info *info)
 
 	nattr = &notes_attrs->attrs[0];
 	for (loaded = i = 0; i < info->hdr->e_shnum; ++i) {
-		if (sect_empty(&info->sechdrs[i]))
+		if (!sect_visible(info, i))
 			continue;
 		if (info->sechdrs[i].sh_type == SHT_NOTE) {
 			sysfs_bin_attr_init(nattr);
