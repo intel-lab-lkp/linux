@@ -37,10 +37,12 @@ struct elf_funcs {
 	uint64_t (*shdr_offset)(Elf_Shdr *shdr);
 	uint64_t (*shdr_size)(Elf_Shdr *shdr);
 	uint64_t (*shdr_entsize)(Elf_Shdr *shdr);
+	uint64_t (*shdr_flags)(Elf_Shdr *shdr);
 	uint32_t (*shdr_link)(Elf_Shdr *shdr);
 	uint32_t (*shdr_name)(Elf_Shdr *shdr);
 	uint32_t (*shdr_type)(Elf_Shdr *shdr);
 	uint8_t (*sym_type)(Elf_Sym *sym);
+	uint8_t (*sym_bind)(Elf_Sym *sym);
 	uint32_t (*sym_name)(Elf_Sym *sym);
 	uint64_t (*sym_value)(Elf_Sym *sym);
 	uint16_t (*sym_shndx)(Elf_Sym *sym);
@@ -143,6 +145,7 @@ SHDR_ADDR(addr)
 SHDR_ADDR(offset)
 SHDR_ADDR(size)
 SHDR_ADDR(entsize)
+SHDR_ADDR(flags)
 
 SHDR_WORD(link)
 SHDR_WORD(name)
@@ -209,6 +212,21 @@ static inline uint8_t sym32_type(Elf_Sym *sym)
 static inline uint8_t sym_type(Elf_Sym *sym)
 {
 	return elf_parser.sym_type(sym);
+}
+
+static inline uint8_t sym64_bind(Elf_Sym *sym)
+{
+	return ELF64_ST_BIND(sym->e64.st_info);
+}
+
+static inline uint8_t sym32_bind(Elf_Sym *sym)
+{
+	return ELF32_ST_BIND(sym->e32.st_info);
+}
+
+static inline uint8_t sym_bind(Elf_Sym *sym)
+{
+	return elf_parser.sym_bind(sym);
 }
 
 SYM_ADDR(value)
@@ -298,6 +316,7 @@ static inline void w8le(uint64_t val, uint64_t *x)
 }
 
 void *elf_map(char const *fname, size_t *size, uint32_t types);
+void *elf_map_ro(char const *fname, size_t *size, uint32_t types);
 void elf_unmap(void *addr, size_t size);
 int elf_map_machine(void *addr);
 int elf_map_long_size(void *addr);
