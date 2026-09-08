@@ -122,7 +122,7 @@ struct vsec_feature_dependency {
 struct intel_vsec_platform_info {
 	struct device *parent;
 	struct intel_vsec_header **headers;
-	const struct vsec_feature_dependency *deps;
+	const struct vsec_feature_dependency *deps __counted_by_ptr(num_deps);
 	u32 (*acpi_disc)[PMT_DISC_DWORDS];
 	enum intel_vsec_disc_source src;
 	void *priv_data;
