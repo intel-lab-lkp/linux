@@ -991,6 +991,14 @@ int rmi_driver_suspend(struct rmi_device *rmi_dev, bool enable_wake)
 {
 	int retval;
 
+	/*
+	 * The transport driver registers rmi_dev before this driver has bound
+	 * to it, so a PM transition can reach here while the driver data does
+	 * not exist yet. There is nothing to suspend in that case.
+	 */
+	if (!dev_get_drvdata(&rmi_dev->dev))
+		return 0;
+
 	retval = rmi_suspend_functions(rmi_dev);
 	if (retval)
 		dev_warn(&rmi_dev->dev, "Failed to suspend functions: %d\n",
@@ -1004,6 +1012,9 @@ EXPORT_SYMBOL_GPL(rmi_driver_suspend);
 int rmi_driver_resume(struct rmi_device *rmi_dev, bool clear_wake)
 {
 	int retval;
+
+	if (!dev_get_drvdata(&rmi_dev->dev))
+		return 0;
 
 	rmi_enable_irq(rmi_dev, clear_wake);
 
