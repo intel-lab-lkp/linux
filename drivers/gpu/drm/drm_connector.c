@@ -21,6 +21,7 @@
  */
 
 #include <drm/drm_auth.h>
+#include <drm/drm_backlight.h>
 #include <drm/drm_connector.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_edid.h>
@@ -315,6 +316,8 @@ static int drm_connector_init_only(struct drm_device *dev,
 	if (drm_core_check_feature(dev, DRIVER_ATOMIC)) {
 		drm_object_attach_property(&connector->base, config->prop_crtc_id, 0);
 	}
+
+	drm_backlight_connector_init(connector);
 
 	connector->debugfs_entry = NULL;
 out_put_type_id:
@@ -773,6 +776,7 @@ void drm_connector_cleanup(struct drm_connector *connector)
 	struct drm_device *dev = connector->dev;
 	struct drm_display_mode *mode, *t;
 
+	drm_backlight_connector_cleanup(connector);
 	/* The connector should have been removed from userspace long before
 	 * it is finally destroyed.
 	 */
@@ -944,6 +948,8 @@ EXPORT_SYMBOL(drm_connector_dynamic_register);
 void drm_connector_unregister(struct drm_connector *connector)
 {
 	mutex_lock(&connector->mutex);
+	drm_backlight_unregister(connector);
+
 	if (connector->registration_state != DRM_CONNECTOR_REGISTERED) {
 		mutex_unlock(&connector->mutex);
 		return;
@@ -1532,6 +1538,56 @@ EXPORT_SYMBOL(drm_hdmi_connector_get_output_format_name);
  * 	Summarizing: Only set "DPMS" when the connector is known to be enabled,
  * 	assume that a successful SETCONFIG call also sets "DPMS" to on, and
  * 	never read back the value of "DPMS" because it can be incorrect.
+ * LUMINANCE:
+ * 	Atomic, per-connector range property for controlling the backlight
+ * 	brightness level of the connector's display. It provides unified access
+ * 	to the display backlight through the atomic modeset path, replacing the
+ * 	legacy sysfs interface for brightness control.
+ *
+ * 	The property value is an unsigned integer. Its valid range is baked in
+ * 	when a backlight backend is linked to the connector and reflects the
+ * 	backend's capabilities:
+ *
+ * 	- Range 1-N: Normal operation for a backend that cannot guarantee a full
+ * 	  off state. 1 is the minimum *visible* brightness and N is the backend
+ * 	  maximum. Drivers are expected never to program a duty cycle of 0 for a
+ * 	  value of 1.
+ * 	- Range 0-N: Used when the backend can also fully turn the panel off, so
+ * 	  0 is a normal in-range value.
+ *
+ * 	Value 0 is always accepted, even when the advertised range starts at 1:
+ * 	it is the sentinel used to turn the backlight off when the connector is
+ * 	powered down (DPMS off). Turning the backlight off this way may power the
+ * 	panel down entirely; unlike programming a legacy sysfs duty cycle of 0,
+ * 	this can stop vblank/pageflip events until the connector is enabled
+ * 	again, so luminance-aware clients must not rely on such events while the
+ * 	connector is off.
+ *
+ * 	Connectors without a linked backend do not expose this property at all.
+ *
+ * 	For atomic drivers the value is stored in &drm_connector_state.luminance
+ * 	and applied to the hardware from the atomic commit path once the
+ * 	connector is enabled. When DPMS transitions to OFF the backlight is set
+ * 	to 0; when it transitions back to ON the committed luminance is restored.
+ * 	Reading the property returns the last committed value (or the hardware's
+ * 	current state for backends that support reading brightness back).
+ *
+ * 	The property is created by the DRM core when a driver links a backlight
+ * 	backend with drm_backlight_link(); drivers do not create it directly.
+ *
+ * 	Client Capability:
+ * 		User-space must set the DRM_CLIENT_CAP_LUMINANCE client capability
+ * 		to 1 before using this property. When this capability is enabled,
+ * 		the legacy sysfs backlight interface is inhibited to prevent
+ * 		conflicts between multiple clients trying to control the same
+ * 		backlight. This ensures that only luminance-aware clients control
+ * 		the backlight through the DRM atomic interface.
+ *
+ * 		Legacy clients that do not set this capability should continue
+ * 		using the sysfs interface (if available).
+ *
+ * 	Note: This property can be set through the MODE_ATOMIC ioctl as part of
+ * 	the atomic state.
  * panel_type:
  * 	Immutable enum property to indicate the type of connected panel.
  * 	Possible values are "unknown" (default), "OLED", and "LCD".

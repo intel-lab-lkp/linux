@@ -391,6 +391,17 @@ struct drm_mode_config {
 	struct drm_modeset_acquire_ctx *acquire_ctx;
 
 	/**
+	 * @luminance_clients:
+	 *
+	 * Number of open DRM clients that have enabled
+	 * &DRM_CLIENT_CAP_LUMINANCE and thereby inhibited legacy sysfs
+	 * backlight control device-wide. Connectors linked while this is
+	 * non-zero inherit the inhibit so hotplugged outputs stay consistent.
+	 * Managed and serialized by the DRM backlight helpers.
+	 */
+	unsigned int luminance_clients;
+
+	/**
 	 * @idr_mutex:
 	 *
 	 * Mutex for KMS ID allocation and management. Protects both @object_idr
