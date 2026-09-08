@@ -177,6 +177,7 @@
 #include <linux/timer.h>
 #include <linux/time64.h>
 #include <linux/parser.h>
+#include <linux/blk-iocost.h>
 #include <linux/sched/signal.h>
 #include <asm/local.h>
 #include <asm/local64.h>
@@ -445,6 +446,7 @@ struct ioc {
 	int				autop_idx;
 	bool				user_qos_params:1;
 	bool				user_cost_model:1;
+	bool				bpf_cost_model;
 };
 
 struct iocg_pcpu_stat {
@@ -2577,6 +2579,23 @@ out:
 static u64 calc_vtime_cost(struct bio *bio, struct ioc_gq *iocg, bool is_merge)
 {
 	u64 cost;
+
+#ifdef CONFIG_BLK_CGROUP_IOCOST_BPF
+	struct ioc *ioc = iocg->ioc;
+
+	if (READ_ONCE(ioc->bpf_cost_model)) {
+		u64 bpf_cost;
+
+		if (iocost_bpf_calc_cost(bio_op(bio),
+					 bio->bi_iter.bi_size,
+					 bio->bi_iter.bi_sector,
+					 iocg->cursor,
+					 iocg_to_blkg(iocg)->blkcg->css.id,
+					 is_merge ? IOCOST_COST_F_MERGE : 0,
+					 &bpf_cost))
+			return bpf_cost;
+	}
+#endif
 
 	calc_vtime_cost_builtin(bio, iocg, is_merge, &cost);
 	return cost;
