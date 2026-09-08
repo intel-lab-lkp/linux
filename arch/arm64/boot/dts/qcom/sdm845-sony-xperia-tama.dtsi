@@ -415,6 +415,15 @@
 	status = "okay";
 };
 
+/*
+ * Modem requires ta-service for initialization.
+ */
+&mss_pil {
+	firmware-name = "qcom/sdm845/Sony/tama/mba.mbn",
+			"qcom/sdm845/Sony/tama/modem.mbn";
+	status = "okay";
+};
+
 &cdsp_pas {
 	firmware-name = "qcom/sdm845/Sony/tama/cdsp.mbn";
 	status = "okay";
