@@ -743,14 +743,22 @@ static void vub300_inactivity_timer_expired(struct timer_list *t)
 {				/* softirq */
 	struct vub300_mmc_host *vub300 = timer_container_of(vub300, t,
 							    inactivity_timer);
-	if (!vub300->interface) {
-		kref_put(&vub300->kref, vub300_delete);
-	} else if (vub300->cmd) {
-		mod_timer(&vub300->inactivity_timer, jiffies + HZ);
-	} else {
+	if (!vub300->cmd)
 		vub300_queue_dead_work(vub300);
-		mod_timer(&vub300->inactivity_timer, jiffies + HZ);
-	}
+
+	mod_timer(&vub300->inactivity_timer, jiffies + HZ);
+}
+
+/*
+ * Stop the inactivity timer and drop the reference that ->probe() took on its
+ * behalf.  Must be called from process context: once timer_shutdown_sync() has
+ * returned the timer can neither run nor be rearmed by the mod_timer() calls
+ * made from the command and dead work threads.
+ */
+static void vub300_stop_inactivity_timer(struct vub300_mmc_host *vub300)
+{
+	timer_shutdown_sync(&vub300->inactivity_timer);
+	kref_put(&vub300->kref, vub300_delete);
 }
 
 static int vub300_response_error(u8 error_code)
@@ -2350,6 +2358,7 @@ static int vub300_probe(struct usb_interface *interface,
 
 err_stop_io:
 	vub300->interface = NULL;
+	vub300_stop_inactivity_timer(vub300);
 	kref_put(&vub300->kref, vub300_delete);
 
 	return retval;
@@ -2384,6 +2393,7 @@ static void vub300_disconnect(struct usb_interface *interface)
 			usb_set_intfdata(interface, NULL);
 			/* prevent more I/O from starting */
 			vub300->interface = NULL;
+			vub300_stop_inactivity_timer(vub300);
 			mmc_remove_host(mmc);
 			kref_put(&vub300->kref, vub300_delete);
 			pr_info("USB vub300 remote SDIO host controller[%d]"
