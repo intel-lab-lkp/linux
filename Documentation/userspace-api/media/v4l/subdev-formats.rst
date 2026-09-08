@@ -2821,7 +2821,7 @@ organization is given as an example for the first pixel only.
     \tiny
     \setlength{\tabcolsep}{2pt}
 
-.. tabularcolumns:: |p{6.0cm}|p{0.7cm}|p{0.3cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|
+.. tabularcolumns:: |p{6.0cm}|p{0.7cm}|p{0.3cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|p{0.22cm}|
 
 .. _v4l2-mbus-pixelcode-bayer:
 
@@ -2834,10 +2834,18 @@ organization is given as an example for the first pixel only.
     * - Identifier
       - Code
       -
-      - :cspan:`19` Data organization
+      - :cspan:`27` Data organization
     * -
       -
       - Bit
+      - 27
+      - 26
+      - 25
+      - 24
+      - 23
+      - 22
+      - 21
+      - 20
       - 19
       - 18
       - 17
@@ -2862,6 +2870,14 @@ organization is given as an example for the first pixel only.
 
       - MEDIA_BUS_FMT_SBGGR8_1X8
       - 0x3001
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       -
       -
       -
@@ -2900,6 +2916,14 @@ organization is given as an example for the first pixel only.
       -
       -
       -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       - g\ :sub:`7`
       - g\ :sub:`6`
       - g\ :sub:`5`
@@ -2912,6 +2936,14 @@ organization is given as an example for the first pixel only.
 
       - MEDIA_BUS_FMT_SGRBG8_1X8
       - 0x3002
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       -
       -
       -
@@ -2950,6 +2982,14 @@ organization is given as an example for the first pixel only.
       -
       -
       -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       - r\ :sub:`7`
       - r\ :sub:`6`
       - r\ :sub:`5`
@@ -2962,6 +3002,14 @@ organization is given as an example for the first pixel only.
 
       - MEDIA_BUS_FMT_SBGGR10_ALAW8_1X8
       - 0x3015
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       -
       -
       -
@@ -3000,6 +3048,14 @@ organization is given as an example for the first pixel only.
       -
       -
       -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       - g\ :sub:`7`
       - g\ :sub:`6`
       - g\ :sub:`5`
@@ -3012,6 +3068,14 @@ organization is given as an example for the first pixel only.
 
       - MEDIA_BUS_FMT_SGRBG10_ALAW8_1X8
       - 0x3017
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       -
       -
       -
@@ -3050,6 +3114,14 @@ organization is given as an example for the first pixel only.
       -
       -
       -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       - r\ :sub:`7`
       - r\ :sub:`6`
       - r\ :sub:`5`
@@ -3062,6 +3134,14 @@ organization is given as an example for the first pixel only.
 
       - MEDIA_BUS_FMT_SBGGR10_DPCM8_1X8
       - 0x300b
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       -
       -
       -
@@ -3100,6 +3180,14 @@ organization is given as an example for the first pixel only.
       -
       -
       -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       - g\ :sub:`7`
       - g\ :sub:`6`
       - g\ :sub:`5`
@@ -3112,6 +3200,14 @@ organization is given as an example for the first pixel only.
 
       - MEDIA_BUS_FMT_SGRBG10_DPCM8_1X8
       - 0x3009
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       -
       -
       -
@@ -3150,6 +3246,14 @@ organization is given as an example for the first pixel only.
       -
       -
       -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       - r\ :sub:`7`
       - r\ :sub:`6`
       - r\ :sub:`5`
@@ -3175,6 +3279,14 @@ organization is given as an example for the first pixel only.
       -
       -
       -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       - 0
       - 0
       - 0
@@ -3184,6 +3296,14 @@ organization is given as an example for the first pixel only.
       - b\ :sub:`9`
       - b\ :sub:`8`
     * -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       -
       -
       -
@@ -3223,6 +3343,14 @@ organization is given as an example for the first pixel only.
       -
       -
       -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       - b\ :sub:`7`
       - b\ :sub:`6`
       - b\ :sub:`5`
@@ -3232,6 +3360,14 @@ organization is given as an example for the first pixel only.
       - b\ :sub:`1`
       - b\ :sub:`0`
     * -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       -
       -
       -
@@ -3271,6 +3407,14 @@ organization is given as an example for the first pixel only.
       -
       -
       -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       - b\ :sub:`9`
       - b\ :sub:`8`
       - b\ :sub:`7`
@@ -3280,6 +3424,14 @@ organization is given as an example for the first pixel only.
       - b\ :sub:`3`
       - b\ :sub:`2`
     * -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       -
       -
       -
@@ -3319,6 +3471,14 @@ organization is given as an example for the first pixel only.
       -
       -
       -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       - b\ :sub:`1`
       - b\ :sub:`0`
       - 0
@@ -3328,6 +3488,14 @@ organization is given as an example for the first pixel only.
       - 0
       - 0
     * -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       -
       -
       -
@@ -3365,6 +3533,14 @@ organization is given as an example for the first pixel only.
       -
       -
       -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       - b\ :sub:`9`
       - b\ :sub:`8`
       - b\ :sub:`7`
@@ -3379,6 +3555,14 @@ organization is given as an example for the first pixel only.
 
       - MEDIA_BUS_FMT_SGBRG10_1X10
       - 0x300e
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       -
       -
       -
@@ -3415,6 +3599,14 @@ organization is given as an example for the first pixel only.
       -
       -
       -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       - g\ :sub:`9`
       - g\ :sub:`8`
       - g\ :sub:`7`
@@ -3429,6 +3621,14 @@ organization is given as an example for the first pixel only.
 
       - MEDIA_BUS_FMT_SRGGB10_1X10
       - 0x300f
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       -
       -
       -
@@ -3463,6 +3663,14 @@ organization is given as an example for the first pixel only.
       -
       -
       -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       - b\ :sub:`11`
       - b\ :sub:`10`
       - b\ :sub:`9`
@@ -3479,6 +3687,14 @@ organization is given as an example for the first pixel only.
 
       - MEDIA_BUS_FMT_SGBRG12_1X12
       - 0x3010
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       -
       -
       -
@@ -3513,6 +3729,14 @@ organization is given as an example for the first pixel only.
       -
       -
       -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       - g\ :sub:`11`
       - g\ :sub:`10`
       - g\ :sub:`9`
@@ -3529,6 +3753,14 @@ organization is given as an example for the first pixel only.
 
       - MEDIA_BUS_FMT_SRGGB12_1X12
       - 0x3012
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       -
       -
       -
@@ -3561,6 +3793,14 @@ organization is given as an example for the first pixel only.
       -
       -
       -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       - b\ :sub:`13`
       - b\ :sub:`12`
       - b\ :sub:`11`
@@ -3579,6 +3819,14 @@ organization is given as an example for the first pixel only.
 
       - MEDIA_BUS_FMT_SGBRG14_1X14
       - 0x301a
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       -
       -
       -
@@ -3611,6 +3859,14 @@ organization is given as an example for the first pixel only.
       -
       -
       -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       - g\ :sub:`13`
       - g\ :sub:`12`
       - g\ :sub:`11`
@@ -3629,6 +3885,14 @@ organization is given as an example for the first pixel only.
 
       - MEDIA_BUS_FMT_SRGGB14_1X14
       - 0x301c
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       -
       -
       -
@@ -3659,6 +3923,14 @@ organization is given as an example for the first pixel only.
       -
       -
       -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       - b\ :sub:`15`
       - b\ :sub:`14`
       - b\ :sub:`13`
@@ -3679,6 +3951,14 @@ organization is given as an example for the first pixel only.
 
       - MEDIA_BUS_FMT_SGBRG16_1X16
       - 0x301e
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       -
       -
       -
@@ -3709,6 +3989,14 @@ organization is given as an example for the first pixel only.
       -
       -
       -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       - g\ :sub:`15`
       - g\ :sub:`14`
       - g\ :sub:`13`
@@ -3729,6 +4017,14 @@ organization is given as an example for the first pixel only.
 
       - MEDIA_BUS_FMT_SRGGB16_1X16
       - 0x3020
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       -
       -
       -
@@ -3755,6 +4051,14 @@ organization is given as an example for the first pixel only.
       - MEDIA_BUS_FMT_SBGGR20_1X20
       - 0x3021
       -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       - b\ :sub:`19`
       - b\ :sub:`18`
       - b\ :sub:`17`
@@ -3779,6 +4083,14 @@ organization is given as an example for the first pixel only.
 
       - MEDIA_BUS_FMT_SGBRG20_1X20
       - 0x3022
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       -
       - g\ :sub:`19`
       - g\ :sub:`18`
@@ -3805,6 +4117,14 @@ organization is given as an example for the first pixel only.
       - MEDIA_BUS_FMT_SGRBG20_1X20
       - 0x3023
       -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       - g\ :sub:`19`
       - g\ :sub:`18`
       - g\ :sub:`17`
@@ -3829,6 +4149,14 @@ organization is given as an example for the first pixel only.
 
       - MEDIA_BUS_FMT_SRGGB20_1X20
       - 0x3024
+      -
+      -
+      -
+      -
+      -
+      -
+      -
+      -
       -
       - r\ :sub:`19`
       - r\ :sub:`18`
