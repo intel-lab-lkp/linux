@@ -2105,9 +2105,23 @@ IO Interface Files
 	are defined.
 
 	  =====		================================
-	  ctrl		"auto" or "user"
+	  ctrl		"auto", "user" or "bpf"
 	  model		The cost model in use - "linear"
 	  =====		================================
+
+	When "ctrl" is "bpf" (only available when
+	CONFIG_BLK_CGROUP_IOCOST_BPF is enabled), cost calculation for
+	the device is dispatched to the BPF program registered against
+	the iocost_model_ops struct_ops.  Writing "bpf" fails with -EINVAL
+	until such a program is registered, and at most one program can
+	be registered system-wide.  The model is called with scalar
+	arguments (operation, size, sector, cgroup cursor, css id of the
+	issuing cgroup, flags; see include/linux/blk-iocost.h for their
+	meaning) and returns a cost in vtime units, clamped by the kernel
+	to 1 second of device time per IO.  A return value of 0 delegates
+	the IO back to the builtin linear formula, so a model which only
+	handles some IO types cannot make the rest free.  Devices which
+	don't opt in keep the builtin linear model unchanged.
 
 	When "ctrl" is "auto", the kernel may change all parameters
 	dynamically.  When "ctrl" is set to "user" or any other
