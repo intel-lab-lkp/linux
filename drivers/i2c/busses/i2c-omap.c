@@ -1376,13 +1376,13 @@ omap_i2c_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, omap);
 	init_completion(&omap->cmd_complete);
 
-	pm_runtime_enable(omap->dev);
+	devm_pm_runtime_enable(omap->dev);
 	pm_runtime_set_autosuspend_delay(omap->dev, OMAP_I2C_PM_TIMEOUT);
 	pm_runtime_use_autosuspend(omap->dev);
 
 	r = pm_runtime_resume_and_get(omap->dev);
 	if (r < 0)
-		goto err_disable_pm;
+		return r;
 
 	/*
 	 * Read the Rev hi bit-[15:14] ie scheme this is 1 indicates ver2.
@@ -1496,9 +1496,6 @@ err_unuse_clocks:
 	omap_i2c_write_reg(omap, OMAP_I2C_CON_REG, 0);
 err_put_pm:
 	pm_runtime_put_sync(omap->dev);
-err_disable_pm:
-	pm_runtime_dont_use_autosuspend(omap->dev);
-	pm_runtime_disable(&pdev->dev);
 
 	return r;
 }
@@ -1519,9 +1516,7 @@ static void omap_i2c_remove(struct platform_device *pdev)
 	else
 		omap_i2c_write_reg(omap, OMAP_I2C_CON_REG, 0);
 
-	pm_runtime_dont_use_autosuspend(&pdev->dev);
 	pm_runtime_put_sync(&pdev->dev);
-	pm_runtime_disable(&pdev->dev);
 }
 
 static int omap_i2c_runtime_suspend(struct device *dev)
