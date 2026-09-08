@@ -91,6 +91,15 @@ struct mshv_mem_region {
 	u32 hv_map_flags;
 	/* True until a checked hypervisor unmap has completed. */
 	bool mapping_may_exist;
+	/*
+	 * SNP host access is tracked per 4K page. The four bitmaps are one
+	 * contiguous allocation rooted at host_access_read.
+	 */
+	unsigned long *host_access_read;
+	unsigned long *host_access_write;
+	unsigned long *host_access_exclusive;
+	unsigned long *host_access_uncertain;
+	u64 host_nonbaseline_pages;
 	struct mshv_partition *partition;
 	enum mshv_region_type mreg_type;
 	struct mmu_interval_notifier mreg_mni;
@@ -99,6 +108,42 @@ struct mshv_mem_region {
 	bool faults_blocked;
 	bool mni_registered;
 	struct page *mreg_pages[];
+};
+
+enum mshv_host_access_state {
+	MSHV_HOST_ACCESS_READ = BIT(0),
+	MSHV_HOST_ACCESS_WRITE = BIT(1),
+	MSHV_HOST_ACCESS_EXCLUSIVE = BIT(2),
+	MSHV_HOST_ACCESS_UNCERTAIN = BIT(3),
+};
+
+#define MSHV_HOST_ACCESS_BASELINE \
+	(MSHV_HOST_ACCESS_READ | MSHV_HOST_ACCESS_WRITE)
+
+#define MSHV_USER_PAGE_BATCH_SIZE	4096
+
+struct mshv_host_access_page {
+	struct page *page;
+	struct mshv_mem_region *region;
+	u64 index;
+};
+
+struct mshv_host_access_result {
+	u64 completed;
+	int error;
+	bool uncertain;
+};
+
+enum mshv_snp_teardown_phase {
+	MSHV_SNP_TEARDOWN_UNMAP,
+	MSHV_SNP_TEARDOWN_ISOLATION,
+	MSHV_SNP_TEARDOWN_RESTORE,
+};
+
+struct mshv_snp_teardown_ops {
+	int (*unmap)(void *data);
+	int (*isolation)(void *data);
+	int (*restore)(void *data);
 };
 
 struct mshv_irq_ack_notifier {
@@ -164,6 +209,12 @@ do { \
 #define pt_crit(p, fmt, ...)	pt_devprintk(crit, p, fmt, ##__VA_ARGS__)
 #define pt_alert(p, fmt, ...)	pt_devprintk(alert, p, fmt, ##__VA_ARGS__)
 #define pt_err(p, fmt, ...)	pt_devprintk(err, p, fmt, ##__VA_ARGS__)
+#define pt_err_ratelimited(p, fmt, ...) \
+do { \
+	const struct mshv_partition *__pt = (p); \
+	dev_err_ratelimited(__pt->pt_module_dev, pt_fmt(fmt), __pt->pt_id, \
+			    ##__VA_ARGS__); \
+} while (0)
 #define pt_warn(p, fmt, ...)	pt_devprintk(warn, p, fmt, ##__VA_ARGS__)
 #define pt_notice(p, fmt, ...)	pt_devprintk(notice, p, fmt, ##__VA_ARGS__)
 #define pt_info(p, fmt, ...)	pt_devprintk(info, p, fmt, ##__VA_ARGS__)
@@ -338,8 +389,17 @@ int hv_unmap_stats_page(enum hv_stats_object_type type,
 			struct hv_stats_page *page_addr,
 			const union hv_stats_object_identity *identity);
 int hv_call_modify_spa_host_access(u64 partition_id, struct page **pages,
-				   u64 page_struct_count, u32 host_access,
-				   u32 flags, u8 acquire);
+				   u64 page_struct_count, u64 *completed_pages,
+				   bool *completion_uncertain,
+				   u32 host_access, u32 flags, bool acquire);
+void mshv_modify_host_access(u64 partition_id, struct page **pages,
+			     u64 page_count, u32 host_access, u32 flags,
+			     bool acquire, struct mshv_host_access_result *result);
+int mshv_validate_host_access_flags(u32 flags, bool acquire);
+u64 mshv_host_access_partition_id(u64 partition_id, u32 flags);
+int mshv_repcomp_to_page_count(u64 repcomp, u64 rep_count,
+			       unsigned int page_shift,
+			       u64 *completed_pages);
 int hv_call_get_partition_property_ex(u64 partition_id, u64 property_code, u64 arg,
 				      void *property_value, size_t property_value_sz);
 
@@ -376,6 +436,23 @@ extern u8 * __percpu *hv_synic_eventring_tail;
 
 struct mshv_mem_region *mshv_region_create(u64 guest_pfn, u64 nr_pages,
 					   u64 uaddr, u32 flags);
+int mshv_region_host_access_init(struct mshv_mem_region *region);
+int mshv_region_check_duplicate_pfns(struct mshv_mem_region *region);
+u8 mshv_region_host_access_get(const struct mshv_mem_region *region, u64 index);
+void mshv_region_host_access_set(struct mshv_mem_region *region, u64 index,
+				 u8 state);
+u8 mshv_make_host_access_state(u8 old_state, u32 host_access, u32 flags);
+int mshv_apply_region_host_access(struct mshv_mem_region *region,
+				  u64 index, u64 count, u32 host_access,
+				  u32 flags,
+				  struct mshv_host_access_result *result);
+int mshv_apply_host_access(struct mshv_host_access_page *host_pages,
+			   u64 count, u32 host_access, u32 flags,
+			   struct mshv_host_access_result *result);
+bool mshv_region_host_access_is_baseline(const struct mshv_mem_region *region);
+bool mshv_u64_array_has_duplicates(u64 *values, u64 count);
+int mshv_run_snp_teardown(const struct mshv_snp_teardown_ops *ops, void *data,
+			  enum mshv_snp_teardown_phase *failed_phase);
 int mshv_region_share(struct mshv_mem_region *region);
 int mshv_region_unshare(struct mshv_mem_region *region);
 int mshv_region_map(struct mshv_mem_region *region);
@@ -387,6 +464,11 @@ int mshv_region_get(struct mshv_mem_region *region);
 bool mshv_region_handle_gfn_fault(struct mshv_mem_region *region, u64 gfn);
 void mshv_region_movable_fini(struct mshv_mem_region *region);
 bool mshv_region_movable_init(struct mshv_mem_region *region);
+
+int hv_call_set_partition_property(u64 partition_id, u64 property_code,
+				   u64 property_value,
+				   void (*completion_handler)(void *, u64 *),
+				   void *completion_data);
 
 #ifdef HV_SUPPORTS_SEV_SNP_GUESTS
 int hv_call_import_isolated_pages(u64 partition_id, u64 *pages,
