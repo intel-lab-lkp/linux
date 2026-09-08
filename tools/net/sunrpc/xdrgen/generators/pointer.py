@@ -13,6 +13,7 @@ from xdr_ast import _XdrFixedLengthOpaque, _XdrVariableLengthOpaque
 from xdr_ast import _XdrFixedLengthArray, _XdrVariableLengthArray
 from xdr_ast import _XdrOptionalData, _XdrPointer, _XdrDeclaration
 from xdr_ast import public_apis, get_header_name
+from xdr_ast import pages_members, pages_member_maxsize
 
 
 def emit_pointer_declaration(environment: Environment, node: _XdrPointer) -> None:
@@ -176,8 +177,24 @@ def emit_pointer_member_encoder(
     environment: Environment,
     field: _XdrDeclaration,
     struct_name: str,
+    peer: str,
 ) -> None:
     """Emit an encoder for one field in a XDR pointer"""
+    if (struct_name, field.name) in pages_members:
+        if peer != "server":
+            raise NotImplementedError(
+                "pragma pages is server-side encode-only; "
+                + peer
+                + " generation is not yet supported"
+            )
+        template = get_jinja2_template(environment, "encoder", "pages_opaque")
+        print(
+            template.render(
+                name=field.name,
+                maxsize=pages_member_maxsize(field),
+            )
+        )
+        return
     if isinstance(field, _XdrBasic):
         template = get_jinja2_template(environment, "encoder", field.template)
         print(
@@ -239,13 +256,15 @@ def emit_pointer_member_encoder(
         )
 
 
-def emit_pointer_encoder(environment: Environment, node: _XdrPointer) -> None:
+def emit_pointer_encoder(
+    environment: Environment, node: _XdrPointer, peer: str
+) -> None:
     """Emit one encoder function for an XDR pointer type"""
     template = get_jinja2_template(environment, "encoder", "open")
     print(template.render(name=node.name))
 
     for field in node.fields[0:-1]:
-        emit_pointer_member_encoder(environment, field, node.name)
+        emit_pointer_member_encoder(environment, field, node.name, peer)
 
     template = get_jinja2_template(environment, "encoder", "close")
     print(template.render())
@@ -285,7 +304,7 @@ class XdrPointerGenerator(SourceGenerator):
 
     def emit_encoder(self, node: _XdrPointer) -> None:
         """Emit one encoder function for an XDR pointer type"""
-        emit_pointer_encoder(self.environment, node)
+        emit_pointer_encoder(self.environment, node, self.peer)
 
     def emit_maxsize(self, node: _XdrPointer) -> None:
         """Emit one maxsize macro for an XDR pointer type"""
