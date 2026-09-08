@@ -1934,7 +1934,8 @@ int rc_register_device(struct rc_dev *dev)
 			goto out_raw;
 	}
 
-	dev->registered = true;
+	scoped_guard(mutex, &dev->lock)
+		dev->registered = true;
 
 	rc = device_add(&dev->dev);
 	if (rc)
@@ -1982,6 +1983,8 @@ out_lirc:
 out_dev:
 	device_del(&dev->dev);
 out_rx_free:
+	scoped_guard(mutex, &dev->lock)
+		dev->registered = false;
 	ir_free_table(&dev->rc_map);
 out_raw:
 	ida_free(&rc_ida, minor);
