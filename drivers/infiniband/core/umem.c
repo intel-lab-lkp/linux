@@ -329,7 +329,20 @@ struct ib_umem *ib_umem_get_desc(struct ib_device *device,
 				 const struct ib_uverbs_buffer_desc *desc,
 				 int access)
 {
-	return __ib_umem_get_desc_dir(device, desc, access, DMA_BIDIRECTIONAL);
+	/*
+	 * Derive the DMA direction from the IB access flags.  If the caller
+	 * grants no write access (local or remote), the NIC may only read the
+	 * pages - use DMA_TO_DEVICE so that platforms with a write-enforcing
+	 * IOMMU (e.g. CoCo / SMMU with SMMU_CB_ARC_FAULT_ENABLE) can enforce
+	 * the restriction.
+	 *
+	 * Where the IOMMU does not enforce direction (most x86 bare-metal
+	 * deployments today) this has no security effect, but is still the
+	 * correct semantic declaration and costs nothing.
+	 */
+	return __ib_umem_get_desc_dir(device, desc, access,
+				      ib_access_writable(access) ?
+				      DMA_BIDIRECTIONAL : DMA_TO_DEVICE);
 }
 EXPORT_SYMBOL(ib_umem_get_desc);
 
@@ -482,7 +495,9 @@ struct ib_umem *ib_umem_get_attr(struct ib_device *device,
 				 u16 attr_id, size_t size, int access)
 {
 	return ib_umem_get_from_attrs(device, attrs, attr_id, NULL, size,
-				      access, DMA_BIDIRECTIONAL);
+				      access,
+				      ib_access_writable(access) ?
+				      DMA_BIDIRECTIONAL : DMA_TO_DEVICE);
 }
 EXPORT_SYMBOL(ib_umem_get_attr);
 
@@ -521,7 +536,9 @@ struct ib_umem *ib_umem_get_attr_or_va(struct ib_device *device,
 				       int access)
 {
 	return ib_umem_get_from_attrs_or_va(device, attrs, attr_id, NULL, addr,
-					    size, access, DMA_BIDIRECTIONAL);
+					    size, access,
+					    ib_access_writable(access) ?
+					    DMA_BIDIRECTIONAL : DMA_TO_DEVICE);
 }
 EXPORT_SYMBOL(ib_umem_get_attr_or_va);
 
