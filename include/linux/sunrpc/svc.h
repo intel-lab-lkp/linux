@@ -644,6 +644,39 @@ static inline bool svcxdr_encode_opaque_payload(struct xdr_stream *xdr, u32 len)
 }
 
 /**
+ * svcxdr_decode_opaque_payload - Decode a page-resident opaque data item
+ * @xdr: xdr_stream to be decoded
+ * @payload: on success, describes the octets of the data item's content
+ * @maxlen: largest data item length the caller will accept, or zero for
+ *	    no limit
+ *
+ * A bulk payload such as the content of an NFS WRITE request resides in
+ * the pages of the Receive buffer. Rather than copy it, set @payload to
+ * describe the item's content in place.
+ *
+ * Context: Process context. @xdr must have been initialized by
+ *	    svcxdr_init_decode().
+ *
+ * Return:
+ *   %true: @payload describes the item in place and @xdr has advanced
+ *	    past it
+ *   %false: a bounds error occurred, or the length prefix exceeds
+ *	     @maxlen; @payload is undefined
+ */
+static inline bool svcxdr_decode_opaque_payload(struct xdr_stream *xdr,
+						struct xdr_buf *payload,
+						u32 maxlen)
+{
+	u32 len;
+
+	if (xdr_stream_decode_u32(xdr, &len) < 0)
+		return false;
+	if (maxlen && len > maxlen)
+		return false;
+	return xdr_stream_subsegment(xdr, payload, len);
+}
+
+/**
  * svcxdr_set_auth_slack -
  * @rqstp: RPC transaction
  * @slack: buffer space to reserve for the transaction's security flavor
