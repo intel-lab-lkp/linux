@@ -105,4 +105,16 @@ config EC_QCOM_HAMOA
 	  This driver supports Hamoa/Purwa/Glymur reference devices and read-only
 	  fan speed and temperature monitoring on the Lenovo Yoga Slim 7x.
 
+config EC_QCOM_HAMOA_KUNIT_TEST
+	bool "Tests for the Qualcomm EC driver" if !KUNIT_ALL_TESTS
+	depends on EC_QCOM_HAMOA && KUNIT && OF
+	depends on EC_QCOM_HAMOA=m || KUNIT=y
+	default KUNIT_ALL_TESTS
+	help
+	  Test the Qualcomm EC driver's sensor transactions and read-only
+	  callbacks using a simulated I2C adapter. No physical EC is accessed.
+	  Run these tests in a disposable test kernel, for example under QEMU.
+
+	  If unsure, say N.
+
 endif # ARM64_PLATFORM_DEVICES

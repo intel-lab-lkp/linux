@@ -22442,6 +22442,7 @@ L:	linux-arm-msm@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/embedded-controller/qcom,hamoa-crd-ec.yaml
 F:	Documentation/hwmon/qcom-ec.rst
+F:	drivers/platform/arm64/qcom-hamoa-ec-test.c
 F:	drivers/platform/arm64/qcom-hamoa-ec.c
 
 QUALCOMM HEXAGON ARCHITECTURE
