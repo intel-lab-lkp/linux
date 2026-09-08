@@ -43,4 +43,7 @@ struct intel_dip {
 	u16 emp_as_sdp_tl;
 };
 
+void intel_dip_sdp_tl_compute_config_late(struct intel_crtc_state *crtc_state);
+void intel_dip_sdp_transmission_line_get_config(struct intel_crtc_state *crtc_state);
+
 #endif /* __INTEL_DIP_H__ */
