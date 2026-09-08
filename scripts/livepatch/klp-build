@@ -600,7 +600,7 @@ copy_orig_objects() {
 	xtrace_save "copying original objects"
 	for _file in "${files[@]}"; do
 		local rel_file="${_file/.ko/.o}"
-		local file="$PWD/$rel_file"
+		local file="$PWD/${_file/%.ko/.ko.o}"
 		local orig_file="$ORIG_DIR/$rel_file"
 		local orig_dir="$(dirname "$orig_file")"
 
@@ -636,7 +636,7 @@ copy_patched_objects() {
 	xtrace_save "copying changed objects"
 	for _file in "${files[@]}"; do
 		local rel_file="${_file/.ko/.o}"
-		local file="$PWD/$rel_file"
+		local file="$PWD/${_file/%.ko/.ko.o}"
 		local orig_file="$ORIG_DIR/$rel_file"
 		local patched_file="$PATCHED_DIR/$rel_file"
 		local patched_dir="$(dirname "$patched_file")"
