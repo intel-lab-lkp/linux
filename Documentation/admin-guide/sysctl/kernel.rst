@@ -1690,6 +1690,20 @@ entry will default to 2 instead of 0.
 = =============================================================
 
 
+vmware_record_panic_msg
+=======================
+
+Controls whether panic kmsg data is written to the host's ``vmware.log``.
+This setting does not control the separate VMware guest-crash event.
+
+= ==============================================================
+0 Do not write panic kmsg data to ``vmware.log``. This is the
+  default for encrypted guests.
+1 Write panic kmsg data to ``vmware.log``. This is the default for
+  ordinary guests.
+= ==============================================================
+
+
 warn_limit
 ==========
 

@@ -31,6 +31,7 @@
 #include <linux/efi.h>
 #include <linux/reboot.h>
 #include <linux/static_call.h>
+#include <linux/sysctl.h>
 #include <linux/wordpart.h>
 #include <linux/sched/cputime.h>
 #include <asm/div64.h>
@@ -255,6 +256,19 @@ static int vmware_log_rpc(const char *buffer, size_t length)
 }
 
 static struct page *vmware_panic_page;
+static int vmware_record_panic_msg;
+
+static const struct ctl_table vmware_panic_sysctls[] = {
+	{
+		.procname	= "vmware_record_panic_msg",
+		.data		= &vmware_record_panic_msg,
+		.maxlen		= sizeof(vmware_record_panic_msg),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
+};
 
 static void vmware_panic_log_dump(struct kmsg_dumper *dumper,
 				  struct kmsg_dump_detail *detail)
@@ -262,6 +276,9 @@ static void vmware_panic_log_dump(struct kmsg_dumper *dumper,
 	struct kmsg_dump_iter iter;
 	char *buffer = page_address(vmware_panic_page);
 	size_t length = 0;
+
+	if (!READ_ONCE(vmware_record_panic_msg))
+		return;
 
 	memcpy(buffer, VMWARE_LOG_PREFIX, VMWARE_LOG_PREFIX_LEN);
 	kmsg_dump_rewind(&iter);
@@ -283,6 +300,9 @@ static int __init vmware_panic_log_init(void)
 	if (!hypervisor_is_type(X86_HYPER_VMWARE))
 		return 0;
 
+	vmware_record_panic_msg =
+		!cc_platform_has(CC_ATTR_GUEST_MEM_ENCRYPT);
+
 	vmware_panic_page = alloc_page(GFP_KERNEL);
 	if (!vmware_panic_page) {
 		pr_err("failed to allocate panic log buffer\n");
@@ -295,6 +315,9 @@ static int __init vmware_panic_log_init(void)
 		__free_page(vmware_panic_page);
 		vmware_panic_page = NULL;
 	}
+	if (vmware_panic_page && IS_ENABLED(CONFIG_SYSCTL) &&
+	    !register_sysctl("kernel", vmware_panic_sysctls))
+		pr_err("failed to register panic log sysctl\n");
 
 	return 0;
 }
