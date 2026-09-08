@@ -812,6 +812,13 @@ static int vm_module_tags_populate(void)
 				     next_page, PAGE_SHIFT) < 0) {
 			release_pages_arg arg = { .pages = next_page };
 
+			/*
+			 * vmap_pages_range() only runs once all pages were
+			 * allocated, and it may have installed some mappings
+			 * before failing. Undo them.
+			 */
+			if (nr == more_pages)
+				vunmap_range(phys_end, phys_end + (nr << PAGE_SHIFT));
 			/* Clean up and error out */
 			release_pages(arg, nr);
 			return -ENOMEM;
@@ -955,6 +962,7 @@ unlock:
 		return ret;
 
 	if (module_tags.size < offset + size) {
+		unsigned long prev_size = module_tags.size;
 		int grow_res;
 
 		module_tags.size = offset + size;
@@ -969,6 +977,8 @@ unlock:
 			shutdown_mem_profiling(true);
 			pr_err("Failed to allocate memory for allocation tags in the module %s. Memory allocation profiling is disabled!\n",
 			       mod->name);
+			release_module_tags(mod, false);
+			module_tags.size = prev_size;
 			return ERR_PTR(grow_res);
 		}
 	}
