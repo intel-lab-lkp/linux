@@ -18,6 +18,9 @@
 #include <linux/export.h>
 #include <trace/events/kvm.h>
 
+#define KVM_IRQ_ROUTING_ENTRIES_PER_CHUNK	\
+	(PAGE_SIZE / sizeof(struct kvm_kernel_irq_routing_entry))
+
 int kvm_irq_map_gsi(struct kvm *kvm,
 		    struct kvm_kernel_irq_routing_entry *entries, int gsi)
 {
@@ -107,11 +110,13 @@ static void free_irq_routing_table(struct kvm_irq_routing_table *rt)
 		struct kvm_kernel_irq_routing_entry *e;
 		struct hlist_node *n;
 
-		hlist_for_each_entry_safe(e, n, &rt->map[i], link) {
+		hlist_for_each_entry_safe(e, n, &rt->map[i], link)
 			hlist_del(&e->link);
-			kfree(e);
-		}
 	}
+
+	for (i = 0; i < rt->nr_entry_chunks; ++i)
+		kfree(rt->entry_chunks[i]);
+	kvfree(rt->entry_chunks);
 
 	kfree(rt);
 }
@@ -170,9 +175,11 @@ int kvm_set_irq_routing(struct kvm *kvm,
 			unsigned nr,
 			unsigned flags)
 {
+	struct kvm_kernel_irq_routing_entry **chunks = NULL;
 	struct kvm_irq_routing_table *new, *old;
 	struct kvm_kernel_irq_routing_entry *e;
 	u32 i, j, nr_rt_entries = 0;
+	u32 nr_chunks;
 	int r;
 
 	for (i = 0; i < nr; ++i) {
@@ -183,6 +190,13 @@ int kvm_set_irq_routing(struct kvm *kvm,
 
 	nr_rt_entries += 1;
 
+	/*
+	 * The chunks hold the routing entries, so they are sized by the number
+	 * of entries passed in by the caller, not by nr_rt_entries, which is
+	 * the size of the GSI map.
+	 */
+	nr_chunks = DIV_ROUND_UP(nr, KVM_IRQ_ROUTING_ENTRIES_PER_CHUNK);
+
 	new = kzalloc_flex(*new, map, nr_rt_entries, GFP_KERNEL_ACCOUNT);
 	if (!new)
 		return -ENOMEM;
@@ -192,26 +206,54 @@ int kvm_set_irq_routing(struct kvm *kvm,
 		for (j = 0; j < KVM_IRQCHIP_NUM_PINS; j++)
 			new->chip[i][j] = -1;
 
-	for (i = 0; i < nr; ++i) {
-		r = -ENOMEM;
-		e = kzalloc_obj(*e, GFP_KERNEL_ACCOUNT);
-		if (!e)
+	r = -ENOMEM;
+	if (nr_chunks) {
+		chunks = kvzalloc_objs(*chunks, nr_chunks, GFP_KERNEL_ACCOUNT);
+		if (!chunks)
 			goto out;
+
+		new->entry_chunks = chunks;
+		new->nr_entry_chunks = nr_chunks;
+	}
+
+	for (i = 0; i < nr; ++i) {
+		u32 idx = i / KVM_IRQ_ROUTING_ENTRIES_PER_CHUNK;
+		u32 off = i % KVM_IRQ_ROUTING_ENTRIES_PER_CHUNK;
+
+		r = -ENOMEM;
+		if (!chunks[idx]) {
+			struct kvm_kernel_irq_routing_entry *chunk;
+			/*
+			 * A chunk is only entered at its first entry, so nr - i
+			 * is the number of entries left for this chunk; the last
+			 * chunk is short.
+			 */
+			u32 cnt = min_t(u32, nr - i,
+					KVM_IRQ_ROUTING_ENTRIES_PER_CHUNK);
+
+			chunk = kzalloc_objs(*chunk, cnt, GFP_KERNEL_ACCOUNT);
+			if (!chunk)
+				goto out;
+
+			chunks[idx] = chunk;
+		}
+
+		e = chunks[idx] + off;
 
 		r = -EINVAL;
 		switch (ue->type) {
 		case KVM_IRQ_ROUTING_MSI:
 			if (ue->flags & ~KVM_MSI_VALID_DEVID)
-				goto free_entry;
+				goto out;
 			break;
 		default:
 			if (ue->flags)
-				goto free_entry;
+				goto out;
 			break;
 		}
 		r = setup_routing_entry(kvm, new, e, ue);
 		if (r)
-			goto free_entry;
+			goto out;
 		++ue;
 	}
 
@@ -228,8 +270,6 @@ int kvm_set_irq_routing(struct kvm *kvm,
 	r = 0;
 	goto out;
 
-free_entry:
-	kfree(e);
 out:
 	free_irq_routing_table(new);
 
