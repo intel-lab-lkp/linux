@@ -151,6 +151,12 @@ static inline int stack_depot_early_init(void)	{ return 0; }
  * access. This flag does not imply %STACK_DEPOT_FLAG_CAN_ALLOC and is mutually
  * exclusive with %STACK_DEPOT_FLAG_GET.
  *
+ * When trie storage is enabled, persistent non-refcounted saves use trie
+ * storage. Constrained callers first look up an existing stack, then make one
+ * best-effort insertion attempt without allocating. NMI callers stop after the
+ * lookup. Other callers that cannot spin use trylocks and fail if a required
+ * lock is unavailable. Trie failures do not fall back to hash storage.
+ *
  * If the provided stack trace comes from the interrupt context, only the part
  * up to the interrupt entry is saved.
  *
@@ -159,7 +165,7 @@ static inline int stack_depot_early_init(void)	{ return 0; }
  *          this is the case for contexts where neither %GFP_ATOMIC nor
  *          %GFP_NOWAIT can be used (NMI, raw_spin_lock).
  *
- * Return: Handle of the stack struct stored in depot, 0 on failure
+ * Return: Handle of the stack trace stored in depot, 0 on failure
  */
 depot_stack_handle_t stack_depot_save_flags(unsigned long *entries,
 					    unsigned int nr_entries,
@@ -175,6 +181,10 @@ depot_stack_handle_t stack_depot_save_flags(unsigned long *entries,
  *
  * Does not increment the refcount on the saved stack trace; see
  * stack_depot_save_flags() for more details.
+ *
+ * When trie storage is enabled, this can return trie-backed handles. Use
+ * stack_depot_fetch_into(), stack_depot_print(), or stack_depot_snprint() for
+ * backend-independent access to the stack contents.
  *
  * Context: Contexts where allocations via alloc_pages() are allowed;
  *          see stack_depot_save_flags() for more details.
@@ -199,8 +209,13 @@ struct stack_record *__stack_depot_get_stack_record(depot_stack_handle_t handle)
 /**
  * stack_depot_fetch - Fetch a stack trace from stack depot
  *
- * @handle:	Stack depot handle returned from stack_depot_save()
+ * @handle:	Hash-backed stack depot handle
  * @entries:	Pointer to store the address of the stack trace
+ *
+ * This helper returns a pointer to stackdepot-owned contiguous storage for
+ * legacy hash-backed handles. Callers that need backend-independent access to
+ * stack contents should use stack_depot_fetch_into(), stack_depot_print(), or
+ * stack_depot_snprint(). Passing a trie-backed handle is invalid and may WARN.
  *
  * Return: Number of frames for the fetched stack
  */
@@ -270,8 +285,8 @@ int stack_depot_snprint(depot_stack_handle_t handle, char *buf, size_t size,
  *
  * Drop a reference acquired by stack_depot_save_flags() with
  * %STACK_DEPOT_FLAG_GET. Calling this for a handle saved without
- * %STACK_DEPOT_FLAG_GET is invalid; persistent handles are owned by stack depot
- * for the lifetime of the system.
+ * %STACK_DEPOT_FLAG_GET is invalid; persistent handles, including trie-backed
+ * handles, are owned by stack depot for the lifetime of the system.
  *
  * The stack trace is evicted once the number of stack_depot_put() calls matches
  * the number of successful stack_depot_save_flags() calls with
