@@ -229,7 +229,7 @@ err_out:
 
 /*
  * Query the Dimm performance stats from PHYP and copy them (if returned) to
- * provided struct papr_scm_perf_stats instance 'stats' that can hold atleast
+ * provided struct papr_scm_perf_stats instance 'stats' that can hold at least
  * (num_stats + header) bytes.
  * - If buff_stats == NULL the return value is the size in bytes of the buffer
  * needed to hold all supported performance-statistics.
@@ -790,7 +790,7 @@ static int papr_pdsm_health(struct papr_scm_priv *p,
 	if (rc)
 		goto out;
 
-	/* Always fetch upto date dimm health data ignoring cached values */
+	/* Always fetch up to date dimm health data ignoring cached values */
 	rc = __drc_pmem_query_health(p);
 	if (rc) {
 		mutex_unlock(&p->health_mutex);

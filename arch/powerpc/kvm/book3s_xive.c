@@ -1230,7 +1230,7 @@ static int xive_target_interrupt(struct kvm *kvm,
  * allow queue overflows, we implement the following rules:
  *
  *  - Unless it was never enabled (or we run out of capacity)
- *    an interrupt is always targetted at a valid server/queue
+ *    an interrupt is always targeted at a valid server/queue
  *    pair even when "masked" by the guest. This pair tends to
  *    be the last one used but it can be changed under some
  *    circumstances. That allows us to separate targetting
@@ -1309,7 +1309,7 @@ int kvmppc_xive_set_xive(struct kvm *kvm, u32 irq, u32 server,
 	 * xive_lock_for_unmask will not actually unmask, this will
 	 * be done later by xive_finish_unmask() once the targetting
 	 * has been done, so we don't try to unmask an interrupt
-	 * that hasn't yet been targetted.
+	 * that hasn't yet been targeted.
 	 */
 	if (priority == MASKED)
 		xive_lock_and_mask(xive, sb, state);
@@ -1406,7 +1406,7 @@ int kvmppc_xive_int_on(struct kvm *kvm, u32 irq)
 	pr_devel("int_on(irq=0x%x)\n", irq);
 
 	/*
-	 * Check if interrupt was not targetted
+	 * Check if interrupt was not targeted
 	 */
 	if (state->act_priority == MASKED) {
 		pr_devel("int_on on untargetted interrupt\n");
@@ -1615,7 +1615,7 @@ int kvmppc_xive_set_mapped(struct kvm *kvm, unsigned long guest_irq,
 
 	/*
 	 * Configure the IRQ to match the existing configuration of
-	 * the IPI if it was already targetted. Otherwise this will
+	 * the IPI if it was already targeted. Otherwise this will
 	 * mask the interrupt in a lossy way (act_priority is 0xff)
 	 * which is fine for a never started interrupt.
 	 */

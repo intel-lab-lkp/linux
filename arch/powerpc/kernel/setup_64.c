@@ -540,7 +540,7 @@ void smp_release_cpus(void)
  * Initialize some remaining members of the ppc64_caches and systemcfg
  * structures
  * (at least until we get rid of them completely). This is mostly some
- * cache informations about the CPU that will be used by cache flush
+ * cache information about the CPU that will be used by cache flush
  * routines and/or provided to userland
  */
 

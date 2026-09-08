@@ -165,7 +165,7 @@ do {								\
 
 /*
  * This does an atomic 128 byte aligned load from userspace.
- * Upto caller to do enable_kernel_vmx() before calling!
+ * Up to caller to do enable_kernel_vmx() before calling!
  */
 #define __get_user_atomic_128_aligned(kaddr, uaddr, err)		\
 	__asm__ __volatile__(				\

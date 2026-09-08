@@ -1546,7 +1546,7 @@ static int init_nest_pmu_ref(void)
 
 	/*
 	 * Loop to init the per_cpu "local_nest_imc_refc" with the proper
-	 * "nest_imc_refc" index. This makes get_nest_pmu_ref() alot simple.
+	 * "nest_imc_refc" index. This makes get_nest_pmu_ref() a lot simple.
 	 */
 	for_each_possible_cpu(cpu) {
 		nid = cpu_to_node(cpu);

@@ -258,7 +258,7 @@
 
 /* asm fragments for mul and div */
 
-/* umul_ppmm(high_prod, low_prod, multipler, multiplicand) multiplies two
+/* umul_ppmm(high_prod, low_prod, multiplier, multiplicand) multiplies two
  * UWtype integers MULTIPLER and MULTIPLICAND, and generates a two UWtype
  * word product in HIGH_PROD and LOW_PROD.
  */

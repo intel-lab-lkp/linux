@@ -874,7 +874,7 @@ kernel_dbg_exc:
 	bl	unknown_exception
 	b	interrupt_return
 
-/* Embedded Hypervisor priviledged  */
+/* Embedded Hypervisor privileged  */
 	START_EXCEPTION(ehpriv);
 	NORMAL_EXCEPTION_PROLOG(0x320, BOOKE_INTERRUPT_HV_PRIV,
 			        PROLOG_ADDITION_NONE)

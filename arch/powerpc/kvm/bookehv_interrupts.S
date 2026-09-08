@@ -133,7 +133,7 @@ END_BTB_FLUSH_SECTION
 
 	/*
 	 * We don't use external PID support. lwepx faults would need to be
-	 * handled by KVM and this implies aditional code in DO_KVM (for
+	 * handled by KVM and this implies additional code in DO_KVM (for
 	 * DTB_MISS, DSI and LRAT) to check ESR[EPID] and EPLC[EGS] which
 	 * is too intrusive for the host. Get last instuction in
 	 * kvmppc_get_last_inst().

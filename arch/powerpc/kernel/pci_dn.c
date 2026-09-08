@@ -406,7 +406,7 @@ void *pci_traverse_device_nodes(struct device_node *start,
 	struct device_node *dn, *nextdn;
 	void *ret;
 
-	/* We started with a phb, iterate all childs */
+	/* We started with a phb, iterate all children */
 	for (dn = start->child; dn; dn = nextdn) {
 		const __be32 *classp;
 		u32 class = 0;
