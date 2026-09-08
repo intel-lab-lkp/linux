@@ -227,7 +227,7 @@ def emit_union_pages_arm_encoder(
         return False
     if peer != "server":
         raise NotImplementedError(
-            "pragma pages is server-side encode-only; "
+            "pragma pages is server-side only; "
             + peer
             + " generation is not yet supported"
         )
