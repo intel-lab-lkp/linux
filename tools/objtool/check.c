@@ -266,8 +266,22 @@ static bool might_return(struct objtool_file *file, struct symbol *func)
 		if (insn->type == INSN_RETURN)
 			return true;
 
-		if (!is_sibling_call(insn))
+		if (!is_sibling_call(insn)) {
+			/*
+			 * Assume a jump into a non-function eventually returns
+			 * to the original caller one way or another, e.g., the
+			 * jump in srso_alias_untrain_ret().
+			 *
+			 * .altinstr_aux is an exception, cpu_feature_enabled()
+			 * jumps there and then right back.
+			 */
+			if (is_static_jump(insn) && insn->jump_dest &&
+			    !insn_func(insn->jump_dest) &&
+			    strcmp(insn->jump_dest->sec->name, ".altinstr_aux"))
+				return true;
+
 			continue;
+		}
 
 		dest = insn_call_dest(insn);
 		if (!dest || !is_noreturn(dest))
