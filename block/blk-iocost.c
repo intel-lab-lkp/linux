@@ -3465,7 +3465,8 @@ static u64 ioc_cost_model_prfill(struct seq_file *sf,
 	seq_printf(sf, "%s ctrl=%s model=linear "
 		   "rbps=%llu rseqiops=%llu rrandiops=%llu "
 		   "wbps=%llu wseqiops=%llu wrandiops=%llu\n",
-		   dname, ioc->user_cost_model ? "user" : "auto",
+		   dname, ioc->bpf_cost_model ? "bpf" :
+			   ioc->user_cost_model ? "user" : "auto",
 		   u[I_LCOEF_RBPS], u[I_LCOEF_RSEQIOPS], u[I_LCOEF_RRANDIOPS],
 		   u[I_LCOEF_WBPS], u[I_LCOEF_WSEQIOPS], u[I_LCOEF_WRANDIOPS]);
 	spin_unlock_irq(&ioc->lock);
@@ -3505,7 +3506,7 @@ static ssize_t ioc_cost_model_write(struct kernfs_open_file *of, char *input,
 	unsigned int memflags;
 	struct ioc *ioc;
 	u64 u[NR_I_LCOEFS];
-	bool user;
+	bool user, bpf;
 	char *body, *p;
 	int ret;
 
@@ -3536,6 +3537,7 @@ static ssize_t ioc_cost_model_write(struct kernfs_open_file *of, char *input,
 	spin_lock_irq(&ioc->lock);
 	memcpy(u, ioc->params.i_lcoefs, sizeof(u));
 	user = ioc->user_cost_model;
+	bpf = ioc->bpf_cost_model;
 
 	ret = -EINVAL;
 
@@ -3551,11 +3553,20 @@ static ssize_t ioc_cost_model_write(struct kernfs_open_file *of, char *input,
 		switch (match_token(p, cost_ctrl_tokens, args)) {
 		case COST_CTRL:
 			match_strlcpy(buf, &args[0], sizeof(buf));
-			if (!strcmp(buf, "auto"))
+			if (!strcmp(buf, "auto")) {
 				user = false;
-			else if (!strcmp(buf, "user"))
+				bpf = false;
+			} else if (!strcmp(buf, "user")) {
 				user = true;
-			else
+				bpf = false;
+#ifdef CONFIG_BLK_CGROUP_IOCOST_BPF
+			} else if (!strcmp(buf, "bpf")) {
+				if (!iocost_bpf_model_registered())
+					goto unlock;
+				user = false;
+				bpf = true;
+#endif
+			} else
 				goto unlock;
 			continue;
 		case COST_MODEL:
@@ -3580,6 +3591,7 @@ static ssize_t ioc_cost_model_write(struct kernfs_open_file *of, char *input,
 	} else {
 		ioc->user_cost_model = false;
 	}
+	WRITE_ONCE(ioc->bpf_cost_model, bpf);
 	ioc_refresh_params(ioc, true);
 
 	ret = 0;
