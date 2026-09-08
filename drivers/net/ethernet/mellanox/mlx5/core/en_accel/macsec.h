@@ -9,6 +9,7 @@
 #include <linux/mlx5/driver.h>
 #include <net/macsec.h>
 #include <net/dst_metadata.h>
+#include "en_accel/flow_tag.h"
 #include "lib/macsec_fs.h"
 
 struct mlx5e_priv;
@@ -31,7 +32,8 @@ static inline bool mlx5e_macsec_skb_is_offload(struct sk_buff *skb)
 
 static inline bool mlx5e_macsec_is_rx_flow(struct mlx5_cqe64 *cqe)
 {
-	return MLX5_MACSEC_METADATA_MARKER(be32_to_cpu(cqe->ft_metadata));
+	return mlx5e_accel_flow_tag_proto(cqe) ==
+		MLX5E_ACCEL_FLOW_TAG_PROTO_MACSEC;
 }
 
 void mlx5e_macsec_offload_handle_rx_skb(struct net_device *netdev, struct sk_buff *skb,

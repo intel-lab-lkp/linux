@@ -8,6 +8,7 @@
 #include <linux/mlx5/macsec.h>
 #include "fs_core.h"
 #include "lib/macsec_fs.h"
+#include "en_accel/flow_tag.h"
 #include "mlx5_core.h"
 
 /* MACsec TX flow steering */
@@ -44,9 +45,6 @@
 #define MLX5_MACSEC_SECTAG_TCI_SC_FIELD_BIT (0x1 << MLX5_MACSEC_SECTAG_TCI_SC_FIELD_OFFSET)
 #define MLX5_SECTAG_HEADER_SIZE_WITHOUT_SCI 0x8
 #define MLX5_SECTAG_HEADER_SIZE_WITH_SCI (MLX5_SECTAG_HEADER_SIZE_WITHOUT_SCI + MACSEC_SCI_LEN)
-
-/* MACsec fs_id handling for steering */
-#define macsec_fs_set_rx_fs_id(fs_id) ((fs_id) | BIT(30))
 
 struct mlx5_sectag_header {
 	__be16 ethertype;
@@ -1757,11 +1755,10 @@ macsec_fs_rx_add_rule(struct mlx5_macsec_fs *macsec_fs,
 	rx_tables = &rx_fs->tables;
 	ft_crypto = &rx_tables->ft_crypto;
 
-	/* Set bit[31 - 30] macsec marker - 0x01 */
 	/* Set bit[15-0] fs id */
 	MLX5_SET(set_action_in, action, action_type, MLX5_ACTION_TYPE_SET);
 	MLX5_SET(set_action_in, action, field, MLX5_ACTION_IN_FIELD_METADATA_REG_B);
-	MLX5_SET(set_action_in, action, data, macsec_fs_set_rx_fs_id(fs_id));
+	MLX5_SET(set_action_in, action, data, fs_id);
 	MLX5_SET(set_action_in, action, offset, 0);
 	MLX5_SET(set_action_in, action, length, 32);
 
@@ -1777,6 +1774,11 @@ macsec_fs_rx_add_rule(struct mlx5_macsec_fs *macsec_fs,
 
 	/* Rx crypto table with SCI rule */
 	macsec_fs_rx_setup_fte(spec, &flow_act, attrs, true);
+
+	spec->flow_context.flags |= FLOW_CONTEXT_HAS_TAG;
+	spec->flow_context.flow_tag =
+		FIELD_PREP(MLX5E_ACCEL_FLOW_TAG_PROTO_MASK,
+			   MLX5E_ACCEL_FLOW_TAG_PROTO_MACSEC);
 
 	flow_act.modify_hdr = modify_hdr;
 	flow_act.action = MLX5_FLOW_CONTEXT_ACTION_FWD_DEST |
@@ -1802,6 +1804,11 @@ macsec_fs_rx_add_rule(struct mlx5_macsec_fs *macsec_fs,
 		memset(&flow_act, 0, sizeof(flow_act));
 
 		macsec_fs_rx_setup_fte(spec, &flow_act, attrs, false);
+
+		spec->flow_context.flags |= FLOW_CONTEXT_HAS_TAG;
+		spec->flow_context.flow_tag =
+			FIELD_PREP(MLX5E_ACCEL_FLOW_TAG_PROTO_MASK,
+				   MLX5E_ACCEL_FLOW_TAG_PROTO_MACSEC);
 
 		flow_act.modify_hdr = modify_hdr;
 		flow_act.action = MLX5_FLOW_CONTEXT_ACTION_FWD_DEST |
@@ -2160,8 +2167,8 @@ static int mlx5_macsec_fs_add_roce_rule_rx(struct mlx5_macsec_fs *macsec_fs, u32
 
 	spec->match_criteria_enable |= MLX5_MATCH_MISC_PARAMETERS_2;
 	MLX5_SET_TO_ONES(fte_match_param, spec->match_criteria, misc_parameters_2.metadata_reg_c_5);
-	MLX5_SET(fte_match_param, spec->match_value, misc_parameters_2.metadata_reg_c_5,
-		 macsec_fs_set_rx_fs_id(fs_id));
+	MLX5_SET(fte_match_param, spec->match_value,
+		 misc_parameters_2.metadata_reg_c_5, fs_id);
 	flow_act.action = MLX5_FLOW_CONTEXT_ACTION_ALLOW;
 	new_rule = mlx5_add_flow_rules(rx_fs->roce.ft_macsec_op_check, spec, &flow_act,
 				       NULL, 0);
