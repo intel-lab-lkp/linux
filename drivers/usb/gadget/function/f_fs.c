@@ -307,6 +307,7 @@ static void ffs_ep0_complete(struct usb_ep *ep, struct usb_request *req)
 {
 	struct ffs_data *ffs = req->context;
 
+	ffs->ep0req_queued = false;
 	complete(&ffs->ep0req_completion);
 }
 
@@ -338,9 +339,12 @@ static int __ffs_ep0_queue_wait(struct ffs_data *ffs, char *data, size_t len)
 
 	reinit_completion(&ffs->ep0req_completion);
 
+	ffs->ep0req_queued = true;
 	ret = usb_ep_queue(ffs->gadget->ep0, req, GFP_ATOMIC);
-	if (ret < 0)
+	if (ret < 0) {
+		ffs->ep0req_queued = false;
 		return ret;
+	}
 
 	ret = wait_for_completion_interruptible(&ffs->ep0req_completion);
 	if (ret) {
@@ -2389,8 +2393,9 @@ static int functionfs_bind(struct ffs_data *ffs, struct usb_composite_dev *cdev)
 static void functionfs_unbind(struct ffs_data *ffs)
 {
 	if (!WARN_ON(!ffs->gadget)) {
-		/* dequeue before freeing ep0req */
-		usb_ep_dequeue(ffs->gadget->ep0, ffs->ep0req);
+		/* dequeue before freeing ep0req, but only if it's actually queued */
+		if (ffs->ep0req_queued)
+			usb_ep_dequeue(ffs->gadget->ep0, ffs->ep0req);
 		mutex_lock(&ffs->mutex);
 		usb_ep_free_request(ffs->gadget->ep0, ffs->ep0req);
 		ffs->ep0req = NULL;

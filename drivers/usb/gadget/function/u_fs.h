@@ -172,6 +172,7 @@ struct ffs_data {
 	 */
 	struct usb_request		*ep0req;		/* P: mutex */
 	struct completion		ep0req_completion;	/* P: mutex */
+	bool				ep0req_queued;		/* P: mutex */
 
 	/* reference counter */
 	refcount_t			ref;
