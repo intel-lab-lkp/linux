@@ -304,7 +304,7 @@ static __init int efivar_ssdt_load(void)
 		}
 
 		limit = min(EFIVAR_SSDT_NAME_MAX, name_size);
-		ucs2_as_utf8(utf8_name, name, limit - 1);
+		ucs2_as_utf8(utf8_name, name, limit);
 		if (strncmp(utf8_name, efivar_ssdt, limit) != 0)
 			continue;
 

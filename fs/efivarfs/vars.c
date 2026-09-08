@@ -237,7 +237,7 @@ efivar_get_utf8name(const efi_char16_t *name16, efi_guid_t *vendor)
 	if (!name)
 		return NULL;
 
-	ucs2_as_utf8(name, name16, len);
+	ucs2_as_utf8(name, name16, len + 1);
 
 	name[len] = '-';
 
@@ -264,8 +264,7 @@ efivar_validate(efi_guid_t vendor, efi_char16_t *var_name, u8 *data,
 	if (!utf8_name)
 		return false;
 
-	ucs2_as_utf8(utf8_name, var_name, utf8_size);
-	utf8_name[utf8_size] = '\0';
+	ucs2_as_utf8(utf8_name, var_name, utf8_size + 1);
 
 	for (i = 0; variable_validate[i].name[0] != '\0'; i++) {
 		const char *name = variable_validate[i].name;
