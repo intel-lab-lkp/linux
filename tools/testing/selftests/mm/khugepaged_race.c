@@ -194,6 +194,11 @@ static void *mremapper_fn(void *arg)
 			   MREMAP_MAYMOVE | MREMAP_FIXED, mremap_area);
 		if (p == MAP_FAILED)
 			ksft_exit_fail_perror("mremap() back");
+		/* The move back unmapped the scratch address: claim it again */
+		if (mmap(mremap_scratch, hpage_pmd_size, PROT_NONE,
+			MAP_ANONYMOUS | MAP_PRIVATE | MAP_FIXED_NOREPLACE,
+			-1, 0) != (void *)mremap_scratch)
+			ksft_exit_fail_perror("mmap() mremap scratch");
 		usleep(rand_r(&seed) % 2000);
 	}
 	return NULL;
