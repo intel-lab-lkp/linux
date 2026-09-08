@@ -403,6 +403,18 @@
 	};
 };
 
+&slpi_pas {
+	firmware-name = "qcom/sdm845/Sony/tama/slpi.mbn";
+	status = "okay";
+};
+
+&ipa {
+	qcom,gsi-loader = "self";
+	memory-region = <&ipa_fw_mem>;
+	firmware-name = "qcom/sdm845/Sony/tama/ipa_fws.mbn";
+	status = "okay";
+};
+
 &cdsp_pas {
 	firmware-name = "qcom/sdm845/Sony/tama/cdsp.mbn";
 	status = "okay";
