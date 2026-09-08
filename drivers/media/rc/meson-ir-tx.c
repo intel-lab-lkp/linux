@@ -76,11 +76,24 @@ struct meson_irtx {
 	unsigned long clk_rate;
 };
 
-static void meson_irtx_set_mod(struct meson_irtx *ir)
+static bool meson_irtx_calc_mod(unsigned long clk_rate, u32 carrier,
+				u32 duty_cycle, unsigned int *pulse_cnt,
+				unsigned int *space_cnt)
 {
-	unsigned int cnt = DIV_ROUND_CLOSEST(ir->clk_rate, ir->carrier);
-	unsigned int pulse_cnt = DIV_ROUND_CLOSEST(cnt * ir->duty_cycle, 100);
-	unsigned int space_cnt = cnt - pulse_cnt;
+	unsigned int cnt;
+
+	cnt = DIV_ROUND_CLOSEST(clk_rate, carrier);
+	*pulse_cnt = DIV_ROUND_CLOSEST(cnt * duty_cycle, 100);
+	*space_cnt = cnt - *pulse_cnt;
+
+	return *pulse_cnt >= 1 && *pulse_cnt <= 65536 &&
+	       *space_cnt >= 1 && *space_cnt <= 65536;
+}
+
+static void meson_irtx_write_mod(struct meson_irtx *ir, unsigned int pulse_cnt,
+				 unsigned int space_cnt)
+{
+	unsigned int cnt = pulse_cnt + space_cnt;
 
 	dev_dbg(ir->dev, "F_mod = %uHz, T_mod = %luns, duty_cycle = %u%%\n",
 		ir->carrier, NSEC_PER_SEC / ir->clk_rate * cnt,
@@ -90,8 +103,10 @@ static void meson_irtx_set_mod(struct meson_irtx *ir)
 	       ir->reg_base + IRB_ADDR1);
 }
 
-static void meson_irtx_setup(struct meson_irtx *ir, unsigned int clk_nr)
+static int meson_irtx_setup(struct meson_irtx *ir, unsigned int clk_nr)
 {
+	unsigned int pulse_cnt, space_cnt;
+
 	/*
 	 * Disable the TX, set modulator clock tick and set initialize
 	 * output to be high. Set up carrier frequency and duty cycle. Then
@@ -100,13 +115,18 @@ static void meson_irtx_setup(struct meson_irtx *ir, unsigned int clk_nr)
 	 */
 	writel(~IRB_ENABLE & (IRB_MOD_CLK(clk_nr) | IRB_INIT_HIGH),
 	       ir->reg_base + IRB_ADDR0);
-	meson_irtx_set_mod(ir);
+	if (!meson_irtx_calc_mod(ir->clk_rate, ir->carrier, ir->duty_cycle,
+				 &pulse_cnt, &space_cnt))
+		return -EINVAL;
+	meson_irtx_write_mod(ir, pulse_cnt, space_cnt);
 	writel(readl(ir->reg_base + IRB_ADDR0) & ~IRB_INIT_HIGH,
 	       ir->reg_base + IRB_ADDR0);
 	writel(IRB_FIFO_IRQ_ENABLE | MIRTX_FIFO_THD,
 	       ir->reg_base + IRB_ADDR3);
 	writel(readl(ir->reg_base + IRB_ADDR0) | IRB_ENABLE,
 	       ir->reg_base + IRB_ADDR0);
+
+	return 0;
 }
 
 static u32 meson_irtx_prepare_pulse(struct meson_irtx *ir, unsigned int time)
@@ -215,12 +235,17 @@ static irqreturn_t meson_irtx_irqhandler(int irq, void *data)
 static int meson_irtx_set_carrier(struct rc_dev *rc, u32 carrier)
 {
 	struct meson_irtx *ir = rc->priv;
+	unsigned int pulse_cnt, space_cnt;
 
-	if (carrier == 0)
+	if (!carrier)
+		return -EINVAL;
+
+	if (!meson_irtx_calc_mod(ir->clk_rate, carrier, ir->duty_cycle,
+				 &pulse_cnt, &space_cnt))
 		return -EINVAL;
 
 	ir->carrier = carrier;
-	meson_irtx_set_mod(ir);
+	meson_irtx_write_mod(ir, pulse_cnt, space_cnt);
 
 	return 0;
 }
@@ -228,9 +253,14 @@ static int meson_irtx_set_carrier(struct rc_dev *rc, u32 carrier)
 static int meson_irtx_set_duty_cycle(struct rc_dev *rc, u32 duty_cycle)
 {
 	struct meson_irtx *ir = rc->priv;
+	unsigned int pulse_cnt, space_cnt;
+
+	if (!meson_irtx_calc_mod(ir->clk_rate, ir->carrier, duty_cycle,
+				 &pulse_cnt, &space_cnt))
+		return -EINVAL;
 
 	ir->duty_cycle = duty_cycle;
-	meson_irtx_set_mod(ir);
+	meson_irtx_write_mod(ir, pulse_cnt, space_cnt);
 
 	return 0;
 }
@@ -337,7 +367,11 @@ static int meson_irtx_probe(struct platform_device *pdev)
 	if (ret)
 		return dev_err_probe(dev, ret, "modulator clock setup failed\n");
 
-	meson_irtx_setup(ir, clk_nr);
+	ret = meson_irtx_setup(ir, clk_nr);
+	if (ret)
+		return dev_err_probe(dev, ret,
+				     "carrier %u, duty_cycle %u%% not supported at clk_rate %luHz\n",
+				     ir->carrier, ir->duty_cycle, ir->clk_rate);
 
 	ret = devm_request_irq(dev, irq,
 			       meson_irtx_irqhandler,
