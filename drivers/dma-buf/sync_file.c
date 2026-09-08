@@ -131,22 +131,21 @@ EXPORT_SYMBOL(sync_file_get_fence);
  */
 char *sync_file_get_name(struct sync_file *sync_file, char *buf, int len)
 {
+	char driver[64] = "";
+	char timeline[64] = "";
+
 	if (sync_file->user_name[0]) {
 		strscpy(buf, sync_file->user_name, len);
 	} else {
 		struct dma_fence *fence = sync_file->fence;
-		const char __rcu *timeline;
-		const char __rcu *driver;
 
-		rcu_read_lock();
-		driver = dma_fence_driver_name(fence);
-		timeline = dma_fence_timeline_name(fence);
+		dma_fence_driver_name(fence, driver, 64);
+		dma_fence_timeline_name(fence, timeline, 64);
 		snprintf(buf, len, "%s-%s%llu-%lld",
-			 rcu_dereference(driver),
-			 rcu_dereference(timeline),
+			 driver,
+			 timeline,
 			 fence->context,
 			 fence->seqno);
-		rcu_read_unlock();
 	}
 
 	return buf;
@@ -268,17 +267,15 @@ err_put_fd:
 static int sync_fill_fence_info(struct dma_fence *fence,
 				 struct sync_fence_info *info)
 {
-	const char __rcu *timeline;
-	const char __rcu *driver;
+	char timeline[64];
+	char driver[64];
 
-	rcu_read_lock();
+	dma_fence_driver_name(fence, driver, 64);
+	dma_fence_timeline_name(fence, timeline, 64);
 
-	driver = dma_fence_driver_name(fence);
-	timeline = dma_fence_timeline_name(fence);
-
-	strscpy(info->obj_name, rcu_dereference(timeline),
+	strscpy(info->obj_name, timeline,
 		sizeof(info->obj_name));
-	strscpy(info->driver_name, rcu_dereference(driver),
+	strscpy(info->driver_name, driver,
 		sizeof(info->driver_name));
 
 	info->status = dma_fence_get_status(fence);
@@ -286,8 +283,6 @@ static int sync_fill_fence_info(struct dma_fence *fence,
 		dma_fence_is_signaled(fence) ?
 			ktime_to_ns(dma_fence_timestamp(fence)) :
 			ktime_set(0, 0);
-
-	rcu_read_unlock();
 
 	return info->status;
 }

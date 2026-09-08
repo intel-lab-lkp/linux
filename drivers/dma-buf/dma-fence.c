@@ -26,6 +26,9 @@ EXPORT_TRACEPOINT_SYMBOL(dma_fence_signaled);
 
 static struct dma_fence dma_fence_stub;
 
+void dma_fence_driver_name_locked(struct dma_fence *fence, char *buff, unsigned short len);
+void dma_fence_timeline_name_locked(struct dma_fence *fence, char *buff, unsigned short len);
+
 /*
  * fence context counter: each execution context should have its own
  * fence context, this allows checking if fences belong to the same
@@ -336,7 +339,7 @@ void __dma_fence_might_wait(void)
 #endif
 
 /**
- * dma_fence_signal_timestamp_locked - signal completion of a fence
+ * dma_fence_signal_timestamp_locked_full - signal completion of a fence
  * @fence: the fence to signal
  * @timestamp: fence signal timestamp in kernel's CLOCK_MONOTONIC time domain
  *
@@ -350,10 +353,9 @@ void __dma_fence_might_wait(void)
  * Unlike dma_fence_signal_timestamp(), this function must be called with
  * &dma_fence.lock held.
  */
-void dma_fence_signal_timestamp_locked(struct dma_fence *fence,
+void dma_fence_signal_timestamp_locked_full(struct dma_fence *fence,
 				      ktime_t timestamp)
 {
-	const struct dma_fence_ops *ops;
 	struct dma_fence_cb *cur, *tmp;
 	struct list_head cb_list;
 
@@ -364,15 +366,6 @@ void dma_fence_signal_timestamp_locked(struct dma_fence *fence,
 		return;
 
 	trace_dma_fence_signaled(fence);
-
-	/*
-	 * When neither a release nor a wait operation is specified set the ops
-	 * pointer to NULL to allow the fence structure to become independent
-	 * from who originally issued it.
-	 */
-	ops = rcu_dereference_protected(fence->ops, true);
-	if (!ops->release && !ops->wait)
-		RCU_INIT_POINTER(fence->ops, NULL);
 
 	/* Stash the cb_list before replacing it with the timestamp */
 	list_replace(&fence->cb_list, &cb_list);
@@ -385,7 +378,6 @@ void dma_fence_signal_timestamp_locked(struct dma_fence *fence,
 		cur->func(fence, cur);
 	}
 }
-EXPORT_SYMBOL(dma_fence_signal_timestamp_locked);
 
 /**
  * dma_fence_signal_timestamp - signal completion of a fence
@@ -401,16 +393,25 @@ EXPORT_SYMBOL(dma_fence_signal_timestamp_locked);
  */
 void dma_fence_signal_timestamp(struct dma_fence *fence, ktime_t timestamp)
 {
-	unsigned long flags;
+	unsigned long flags, flags_full;
 
 	if (WARN_ON(!fence))
 		return;
 
+	dma_fence_lock_full(fence, &flags_full);
 	dma_fence_lock_irqsave(fence, flags);
-	dma_fence_signal_timestamp_locked(fence, timestamp);
+
+	dma_fence_signal_timestamp_locked_full(fence, timestamp);
+
 	dma_fence_unlock_irqrestore(fence, flags);
+	dma_fence_unlock_full(fence, &flags_full);
 }
 EXPORT_SYMBOL(dma_fence_signal_timestamp);
+
+void dma_fence_signal_locked_full(struct dma_fence *fence)
+{
+	dma_fence_signal_timestamp_locked_full(fence, ktime_get());
+}
 
 /**
  * dma_fence_signal_locked - signal completion of a fence
@@ -427,7 +428,11 @@ EXPORT_SYMBOL(dma_fence_signal_timestamp);
  */
 void dma_fence_signal_locked(struct dma_fence *fence)
 {
-	dma_fence_signal_timestamp_locked(fence, ktime_get());
+	unsigned long flags;
+
+	dma_fence_lock_full(fence, &flags);
+	dma_fence_signal_locked_full(fence);
+	dma_fence_unlock_full(fence, &flags);
 }
 EXPORT_SYMBOL(dma_fence_signal_locked);
 
@@ -487,7 +492,7 @@ EXPORT_SYMBOL(dma_fence_check_and_signal);
  */
 void dma_fence_signal(struct dma_fence *fence)
 {
-	unsigned long flags;
+	unsigned long flags, flags_full;
 	bool tmp;
 
 	if (WARN_ON(!fence))
@@ -495,9 +500,13 @@ void dma_fence_signal(struct dma_fence *fence)
 
 	tmp = dma_fence_begin_signalling();
 
+	dma_fence_lock_full(fence, &flags_full);
 	dma_fence_lock_irqsave(fence, flags);
-	dma_fence_signal_timestamp_locked(fence, ktime_get());
+
+	dma_fence_signal_timestamp_locked_full(fence, ktime_get());
+
 	dma_fence_unlock_irqrestore(fence, flags);
+	dma_fence_unlock_full(fence, &flags_full);
 
 	dma_fence_end_signalling(tmp);
 }
@@ -524,7 +533,6 @@ EXPORT_SYMBOL(dma_fence_signal);
 signed long
 dma_fence_wait_timeout(struct dma_fence *fence, bool intr, signed long timeout)
 {
-	const struct dma_fence_ops *ops;
 	signed long ret;
 
 	if (WARN_ON(timeout < 0))
@@ -532,24 +540,16 @@ dma_fence_wait_timeout(struct dma_fence *fence, bool intr, signed long timeout)
 
 	might_sleep();
 
+	// TODO: what could we do about wait_timeout?
+
 	__dma_fence_might_wait();
 
 	dma_fence_enable_signaling(fence);
 
-	rcu_read_lock();
-	ops = rcu_dereference(fence->ops);
 	trace_dma_fence_wait_start(fence);
-	if (ops && ops->wait) {
-		/*
-		 * Implementing the wait ops is deprecated and not supported for
-		 * issuers of fences who need their lifetime to be independent
-		 * of their module after they signal, so it is ok to use the
-		 * ops outside the RCU protected section.
-		 */
-		rcu_read_unlock();
-		ret = ops->wait(fence, intr, timeout);
+	if (fence->ops->wait) {
+		ret = fence->ops->wait(fence, intr, timeout);
 	} else {
-		rcu_read_unlock();
 		ret = dma_fence_default_wait(fence, intr, timeout);
 	}
 	if (trace_dma_fence_wait_end_enabled()) {
@@ -570,26 +570,26 @@ EXPORT_SYMBOL(dma_fence_wait_timeout);
  */
 void dma_fence_release(struct kref *kref)
 {
+	unsigned long flags;
+	char driver[64] = "";
+	char timeline[64] = "";
 	struct dma_fence *fence =
 		container_of(kref, struct dma_fence, refcount);
-	const struct dma_fence_ops *ops;
 
-	rcu_read_lock();
 	trace_dma_fence_destroy(fence);
+
+	dma_fence_lock_full(fence, &flags);
 
 	if (!list_empty(&fence->cb_list) &&
 	    !dma_fence_test_signaled_flag(fence)) {
-		const char __rcu *timeline;
-		const char __rcu *driver;
 		unsigned long flags;
 
-		driver = dma_fence_driver_name(fence);
-		timeline = dma_fence_timeline_name(fence);
+		dma_fence_driver_name_locked(fence, driver, 64);
+		dma_fence_timeline_name_locked(fence, timeline, 64);
 
 		WARN(1,
 		     "Fence %s:%s:%llx:%llx released with pending signals!\n",
-		     rcu_dereference(driver), rcu_dereference(timeline),
-		     fence->context, fence->seqno);
+		     driver, timeline, fence->context, fence->seqno);
 
 		/*
 		 * Failed to signal before release, likely a refcounting issue.
@@ -600,16 +600,19 @@ void dma_fence_release(struct kref *kref)
 		 */
 		dma_fence_lock_irqsave(fence, flags);
 		fence->error = -EDEADLK;
-		dma_fence_signal_locked(fence);
+		dma_fence_signal_locked_full(fence);
 		dma_fence_unlock_irqrestore(fence, flags);
 	}
 
-	ops = rcu_dereference(fence->ops);
-	if (ops && ops->release)
-		ops->release(fence);
+	dma_fence_unlock_full(fence, &flags);
+
+	// TODO: could then run into unloaded driver. Do we want to keep RCU
+	// just for the two deprecated callbacks?
+
+	if (fence->ops->release)
+		fence->ops->release(fence);
 	else
 		dma_fence_free(fence);
-	rcu_read_unlock();
 }
 EXPORT_SYMBOL(dma_fence_release);
 
@@ -622,13 +625,12 @@ EXPORT_SYMBOL(dma_fence_release);
  */
 void dma_fence_free(struct dma_fence *fence)
 {
-	kfree_rcu(fence, rcu);
+	kfree(fence);
 }
 EXPORT_SYMBOL(dma_fence_free);
 
 static bool __dma_fence_enable_signaling(struct dma_fence *fence)
 {
-	const struct dma_fence_ops *ops;
 	bool was_set;
 
 	dma_fence_assert_held(fence);
@@ -639,18 +641,14 @@ static bool __dma_fence_enable_signaling(struct dma_fence *fence)
 	if (dma_fence_test_signaled_flag(fence))
 		return false;
 
-	rcu_read_lock();
-	ops = rcu_dereference(fence->ops);
-	if (!was_set && ops && ops->enable_signaling) {
+	if (!was_set && fence->ops->enable_signaling) {
 		trace_dma_fence_enable_signal(fence);
 
-		if (!ops->enable_signaling(fence)) {
-			rcu_read_unlock();
-			dma_fence_signal_locked(fence);
+		if (!fence->ops->enable_signaling(fence)) {
+			dma_fence_signal_locked_full(fence);
 			return false;
 		}
 	}
-	rcu_read_unlock();
 
 	return true;
 }
@@ -665,11 +663,15 @@ static bool __dma_fence_enable_signaling(struct dma_fence *fence)
  */
 void dma_fence_enable_signaling(struct dma_fence *fence)
 {
-	unsigned long flags;
+	unsigned long flags, flags_full;
 
+	dma_fence_lock_full(fence, &flags_full);
 	dma_fence_lock_irqsave(fence, flags);
+
 	__dma_fence_enable_signaling(fence);
+
 	dma_fence_unlock_irqrestore(fence, flags);
+	dma_fence_unlock_full(fence, &flags_full);
 }
 EXPORT_SYMBOL(dma_fence_enable_signaling);
 
@@ -698,15 +700,18 @@ EXPORT_SYMBOL(dma_fence_enable_signaling);
 int dma_fence_add_callback(struct dma_fence *fence, struct dma_fence_cb *cb,
 			   dma_fence_func_t func)
 {
-	unsigned long flags;
+	unsigned long flags, flags_full;
 	int ret = 0;
 
 	if (WARN_ON(!fence || !func))
 		return -EINVAL;
 
+	dma_fence_lock_full(fence, &flags_full);
+
 	if (dma_fence_test_signaled_flag(fence)) {
 		INIT_LIST_HEAD(&cb->node);
-		return -ENOENT;
+		ret = -ENOENT;
+		goto out;
 	}
 
 	dma_fence_lock_irqsave(fence, flags);
@@ -718,6 +723,8 @@ int dma_fence_add_callback(struct dma_fence *fence, struct dma_fence_cb *cb,
 		ret = -ENOENT;
 	}
 	dma_fence_unlock_irqrestore(fence, flags);
+out:
+	dma_fence_unlock_full(fence, &flags_full);
 
 	return ret;
 }
@@ -737,12 +744,16 @@ EXPORT_SYMBOL(dma_fence_add_callback);
  */
 int dma_fence_get_status(struct dma_fence *fence)
 {
-	unsigned long flags;
+	unsigned long flags, flags_full;
 	int status;
 
+	dma_fence_lock_full(fence, &flags_full);
 	dma_fence_lock_irqsave(fence, flags);
-	status = dma_fence_get_status_locked(fence);
+
+	status = dma_fence_get_status_locked_full(fence);
+
 	dma_fence_unlock_irqrestore(fence, flags);
+	dma_fence_unlock_full(fence, &flags_full);
 
 	return status;
 }
@@ -769,14 +780,18 @@ EXPORT_SYMBOL(dma_fence_get_status);
 bool
 dma_fence_remove_callback(struct dma_fence *fence, struct dma_fence_cb *cb)
 {
-	unsigned long flags;
+	unsigned long flags, flags_full;
 	bool ret;
 
+	dma_fence_lock_full(fence, &flags_full);
 	dma_fence_lock_irqsave(fence, flags);
+
 	ret = !list_empty(&cb->node);
 	if (ret)
 		list_del_init(&cb->node);
+
 	dma_fence_unlock_irqrestore(fence, flags);
+	dma_fence_unlock_full(fence, &flags_full);
 
 	return ret;
 }
@@ -1019,13 +1034,17 @@ EXPORT_SYMBOL(dma_fence_wait_any_timeout);
  */
 void dma_fence_set_deadline(struct dma_fence *fence, ktime_t deadline)
 {
-	const struct dma_fence_ops *ops;
+	unsigned long flags;
 
-	rcu_read_lock();
-	ops = rcu_dereference(fence->ops);
-	if (ops && ops->set_deadline && !dma_fence_is_signaled(fence))
-		ops->set_deadline(fence, deadline);
-	rcu_read_unlock();
+	dma_fence_lock_full(fence, &flags);
+	if (dma_fence_is_signaled_locked_full(fence))
+		goto out;
+
+	if (fence->ops->set_deadline && !dma_fence_is_signaled_locked_full(fence))
+		fence->ops->set_deadline(fence, deadline);
+
+out:
+	dma_fence_unlock_full(fence, &flags);
 }
 EXPORT_SYMBOL(dma_fence_set_deadline);
 
@@ -1038,23 +1057,24 @@ EXPORT_SYMBOL(dma_fence_set_deadline);
  */
 void dma_fence_describe(struct dma_fence *fence, struct seq_file *seq)
 {
-	const char __rcu *timeline = (const char __rcu *)"";
-	const char __rcu *driver = (const char __rcu *)"";
+	unsigned long flags;
+	char timeline[64] = "";
+	char driver[64] = "";
 	const char *signaled = "";
 
-	rcu_read_lock();
+	dma_fence_lock_full(fence, &flags);
 
-	if (!dma_fence_is_signaled(fence)) {
-		timeline = dma_fence_timeline_name(fence);
-		driver = dma_fence_driver_name(fence);
+	if (!dma_fence_is_signaled_locked_full(fence)) {
+		dma_fence_timeline_name_locked(fence, timeline, 64);
+		dma_fence_driver_name_locked(fence, driver, 64);
 		signaled = "un";
 	}
+
+	dma_fence_unlock_full(fence, &flags);
 
 	seq_printf(seq, "%llu:%llu %s %s %ssignalled\n",
 		   fence->context, fence->seqno, timeline, driver,
 		   signaled);
-
-	rcu_read_unlock();
 }
 EXPORT_SYMBOL(dma_fence_describe);
 
@@ -1064,6 +1084,7 @@ __dma_fence_init(struct dma_fence *fence, const struct dma_fence_ops *ops,
 {
 	BUG_ON(!ops || !ops->get_driver_name || !ops->get_timeline_name);
 
+	spin_lock_init(&fence->full_lock);
 	kref_init(&fence->refcount);
 	/*
 	 * While it is counter intuitive to protect a constant function pointer
@@ -1144,6 +1165,16 @@ dma_fence_init64(struct dma_fence *fence, const struct dma_fence_ops *ops,
 }
 EXPORT_SYMBOL(dma_fence_init64);
 
+void dma_fence_driver_name_locked(struct dma_fence *fence, char *buff, unsigned short len)
+{
+	if (dma_fence_test_signaled_flag(fence)) {
+		strscpy(buff, "detached-driver", len);
+	} else {
+		strscpy(buff, fence->ops->get_driver_name(fence), len);
+	}
+}
+
+
 /**
  * dma_fence_driver_name - Access the driver name
  * @fence: the fence to query
@@ -1164,18 +1195,29 @@ EXPORT_SYMBOL(dma_fence_init64);
  * The pointer MUST be both queried and USED ONLY WITHIN a SINGLE block guarded
  * by the &rcu_read_lock and &rcu_read_unlock pair.
  */
-const char __rcu *dma_fence_driver_name(struct dma_fence *fence)
+void dma_fence_driver_name(struct dma_fence *fence, char *buff, unsigned short len)
 {
-	const struct dma_fence_ops *ops;
+	unsigned long flags;
 
-	/* RCU protection is required for safe access to returned string */
-	ops = rcu_dereference(fence->ops);
-	if (ops)
-		return (const char __rcu *)ops->get_driver_name(fence);
-	else
-		return (const char __rcu *)"detached-driver";
+	if (len == 0)
+		return;
+
+	dma_fence_lock_full(fence, &flags);
+	dma_fence_driver_name_locked(fence, buff, len);
+	dma_fence_unlock_full(fence, &flags);
 }
 EXPORT_SYMBOL(dma_fence_driver_name);
+
+void dma_fence_timeline_name_locked(struct dma_fence *fence, char *buff, unsigned short len)
+{
+	if (dma_fence_test_signaled_flag(fence)) {
+		strscpy(buff, "detached-drivers-timeline", len);
+	} else {
+		strscpy(buff, fence->ops->get_timeline_name(fence), len);
+	}
+}
+
+
 
 /**
  * dma_fence_timeline_name - Access the timeline name
@@ -1197,15 +1239,15 @@ EXPORT_SYMBOL(dma_fence_driver_name);
  * The pointer MUST be both queried and USED ONLY WITHIN a SINGLE block guarded
  * by the &rcu_read_lock and &rcu_read_unlock pair.
  */
-const char __rcu *dma_fence_timeline_name(struct dma_fence *fence)
+void dma_fence_timeline_name(struct dma_fence *fence, char *buff, unsigned short len)
 {
-	const struct dma_fence_ops *ops;
+	unsigned long flags;
 
-	/* RCU protection is required for safe access to returned string */
-	ops = rcu_dereference(fence->ops);
-	if (ops)
-		return (const char __rcu *)ops->get_timeline_name(fence);
-	else
-		return (const char __rcu *)"signaled-timeline";
+	if (len == 0)
+		return;
+
+	dma_fence_lock_full(fence, &flags);
+	dma_fence_timeline_name_locked(fence, buff, len);
+	dma_fence_unlock_full(fence, &flags);
 }
 EXPORT_SYMBOL(dma_fence_timeline_name);

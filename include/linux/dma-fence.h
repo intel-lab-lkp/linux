@@ -30,9 +30,9 @@ struct seq_file;
 
 /**
  * struct dma_fence - software synchronization primitive
+ * @full_lock: INTERNAL lock which must never be taken manually by API users!
  * @refcount: refcount for this fence
  * @ops: dma_fence_ops associated with this fence
- * @rcu: used for releasing fence with kfree_rcu
  * @cb_list: list of all callbacks to call
  * @extern_lock: external spin_lock_irqsave used for locking (deprecated)
  * @inline_lock: alternative internal spin_lock_irqsave used for locking
@@ -68,11 +68,12 @@ struct seq_file;
  * been completed, or never called at all.
  */
 struct dma_fence {
+	spinlock_t full_lock;
 	union {
 		spinlock_t *extern_lock;
 		spinlock_t inline_lock;
 	};
-	const struct dma_fence_ops __rcu *ops;
+	const struct dma_fence_ops *ops;
 	/*
 	 * We clear the callback list on kref_put so that by the time we
 	 * release the fence it is unused. No one should be adding to the
@@ -93,8 +94,6 @@ struct dma_fence {
 		struct list_head cb_list;
 		/* @cb_list replaced by @timestamp on dma_fence_signal() */
 		ktime_t timestamp;
-		/* @timestamp replaced by @rcu on dma_fence_release() */
-		struct rcu_head rcu;
 	};
 	u64 context;
 	u64 seqno;
@@ -415,6 +414,16 @@ static inline spinlock_t *dma_fence_spinlock(struct dma_fence *fence)
 #define dma_fence_unlock_irqrestore(fence, flags)	\
 	spin_unlock_irqrestore(dma_fence_spinlock(fence), flags)
 
+static void dma_fence_lock_full(struct dma_fence *fence, unsigned long *flags)
+{
+	spin_lock_irqsave(&fence->full_lock, *flags);
+}
+
+static void dma_fence_unlock_full(struct dma_fence *fence, unsigned long *flags)
+{
+	spin_unlock_irqrestore(&fence->full_lock, *flags);
+}
+
 /**
  * dma_fence_assert_held - lockdep assertion that fence is locked
  * @fence: the fence which should be locked
@@ -439,8 +448,9 @@ void dma_fence_signal(struct dma_fence *fence);
 bool dma_fence_check_and_signal(struct dma_fence *fence);
 bool dma_fence_check_and_signal_locked(struct dma_fence *fence);
 void dma_fence_signal_locked(struct dma_fence *fence);
+void dma_fence_signal_locked_full(struct dma_fence *fence);
 void dma_fence_signal_timestamp(struct dma_fence *fence, ktime_t timestamp);
-void dma_fence_signal_timestamp_locked(struct dma_fence *fence, ktime_t timestamp);
+void dma_fence_signal_timestamp_locked_full(struct dma_fence *fence, ktime_t timestamp);
 signed long dma_fence_default_wait(struct dma_fence *fence,
 				   bool intr, signed long timeout);
 int dma_fence_add_callback(struct dma_fence *fence,
@@ -470,8 +480,9 @@ void dma_fence_enable_signaling(struct dma_fence *fence);
  * between signalling the fence and freeing the said data.
  *
  */
-const char __rcu *dma_fence_driver_name(struct dma_fence *fence);
-const char __rcu *dma_fence_timeline_name(struct dma_fence *fence);
+void dma_fence_driver_name(struct dma_fence *fence, char *buff, unsigned short len);
+void dma_fence_timeline_name(struct dma_fence *fence, char *buff, unsigned short len);
+;
 
 /*
  * dma_fence_test_signaled_flag - Only check whether a fence is signaled yet.
@@ -510,19 +521,36 @@ dma_fence_test_signaled_flag(struct dma_fence *fence)
 static inline bool
 dma_fence_is_signaled_locked(struct dma_fence *fence)
 {
-	const struct dma_fence_ops *ops;
+	unsigned long flags;
+	bool ret = false;
 
+	dma_fence_lock_full(fence, &flags);
+
+	if (dma_fence_test_signaled_flag(fence)) {
+		ret = true;
+		goto out;
+	}
+
+	if (fence->ops->signaled && fence->ops->signaled(fence)) {
+		dma_fence_signal_locked(fence);
+		ret = true;
+	}
+
+out:
+	dma_fence_unlock_full(fence, &flags);
+	return ret;
+}
+
+static inline bool
+dma_fence_is_signaled_locked_full(struct dma_fence *fence)
+{
 	if (dma_fence_test_signaled_flag(fence))
 		return true;
 
-	rcu_read_lock();
-	ops = rcu_dereference(fence->ops);
-	if (ops && ops->signaled && ops->signaled(fence)) {
-		rcu_read_unlock();
-		dma_fence_signal_locked(fence);
+	if (fence->ops->signaled && fence->ops->signaled(fence)) {
+		dma_fence_signal_locked_full(fence);
 		return true;
 	}
-	rcu_read_unlock();
 
 	return false;
 }
@@ -546,21 +574,24 @@ dma_fence_is_signaled_locked(struct dma_fence *fence)
 static inline bool
 dma_fence_is_signaled(struct dma_fence *fence)
 {
-	const struct dma_fence_ops *ops;
+	unsigned long flags;
+	bool ret = false;
 
-	if (dma_fence_test_signaled_flag(fence))
-		return true;
+	dma_fence_lock_full(fence, &flags);
 
-	rcu_read_lock();
-	ops = rcu_dereference(fence->ops);
-	if (ops && ops->signaled && ops->signaled(fence)) {
-		rcu_read_unlock();
-		dma_fence_signal(fence);
-		return true;
+	if (dma_fence_test_signaled_flag(fence)) {
+		ret = true;
+		goto out;
 	}
-	rcu_read_unlock();
 
-	return false;
+	if (fence->ops->signaled && fence->ops->signaled(fence)) {
+		dma_fence_signal(fence);
+		ret = true;
+	}
+
+out:
+	dma_fence_unlock_full(fence, &flags);
+	return ret;
 }
 
 /**
@@ -656,12 +687,25 @@ static inline struct dma_fence *dma_fence_later(struct dma_fence *f1,
  * been signaled without an error condition, or a negative error code
  * if the fence has been completed in err.
  */
-static inline int dma_fence_get_status_locked(struct dma_fence *fence)
+static inline int dma_fence_get_status_locked_full(struct dma_fence *fence)
 {
-	if (dma_fence_is_signaled_locked(fence))
+	if (dma_fence_is_signaled_locked_full(fence))
 		return fence->error ?: 1;
 	else
 		return 0;
+}
+
+static inline int dma_fence_get_status_locked(struct dma_fence *fence)
+{
+	unsigned long flags;
+	int ret = 0;
+
+	dma_fence_lock_full(fence, &flags);
+	if (dma_fence_is_signaled_locked_full(fence))
+		ret = fence->error ?: 1;
+	dma_fence_unlock_full(fence, &flags);
+
+	return ret;
 }
 
 int dma_fence_get_status(struct dma_fence *fence);
@@ -763,7 +807,7 @@ extern const struct dma_fence_ops dma_fence_chain_ops;
  */
 static inline bool dma_fence_is_array(struct dma_fence *fence)
 {
-	return rcu_access_pointer(fence->ops) == &dma_fence_array_ops;
+	return fence->ops == &dma_fence_array_ops;
 }
 
 /**
@@ -774,7 +818,7 @@ static inline bool dma_fence_is_array(struct dma_fence *fence)
  */
 static inline bool dma_fence_is_chain(struct dma_fence *fence)
 {
-	return rcu_access_pointer(fence->ops) == &dma_fence_chain_ops;
+	return fence->ops == &dma_fence_chain_ops;
 }
 
 /**
