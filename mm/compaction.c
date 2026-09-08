@@ -2168,9 +2168,13 @@ static isolate_migrate_t isolate_migratepages(struct compact_control *cc)
 static bool kswapd_is_running(pg_data_t *pgdat)
 {
 	bool running;
-
+	int i;
 	pgdat_kswapd_lock(pgdat);
-	running = pgdat->kswapd && task_is_running(pgdat->kswapd);
+	for (i = 0; i < MAX_KSWAPD_THREADS; ++i) {
+		running = pgdat->kswapd[i] && task_is_running(pgdat->kswapd[i]);
+		if (running)
+			break;
+	}
 	pgdat_kswapd_unlock(pgdat);
 
 	return running;
