@@ -2065,8 +2065,8 @@ void rc_unregister_device(struct rc_dev *dev)
 	if (dev->driver_type == RC_DRIVER_IR_RAW)
 		ir_raw_event_unregister(dev);
 
-	timer_delete_sync(&dev->timer_keyup);
-	timer_delete_sync(&dev->timer_repeat);
+	timer_shutdown_sync(&dev->timer_keyup);
+	timer_shutdown_sync(&dev->timer_repeat);
 
 	rc_free_rx_device(dev);
 
