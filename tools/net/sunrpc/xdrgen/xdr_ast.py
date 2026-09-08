@@ -20,13 +20,25 @@ structs = set()
 pass_by_reference = set()
 
 # (type_name, member_name) pairs marked "pragma pages": the member's
-# content resides in the pages of the Reply buffer, so the emitted
-# encoder inserts those pages by reference instead of copying.
+# content resides in the pages of the Receive or Reply buffer, so
+# the emitted codec captures or inserts those pages by reference
+# instead of copying.
 pages_members = set()
 
 # The same pairs, keyed to the directive's identifier node so a
 # diagnostic can point at the directive rather than at the type.
 pages_member_meta = {}
+
+# Names of types reachable from an RPC procedure argument, closed over
+# the types their members reach. A "pragma pages" member of one is
+# decoded in place rather than encoded by reference, and the two need
+# different C representations; see pages_member_is_decoded().
+argument_types = set()
+
+# Names of types reachable from an RPC procedure result, closed the
+# same way. A marked member of a type in both sets would need both
+# representations at once, so the front end rejects it.
+result_types = set()
 
 # Typedefs of a variable-length opaque or string, mapped to the length
 # bound. A "pragma pages" member declared through one ("path data;"
@@ -470,6 +482,20 @@ def pages_member_maxsize(field: _XdrDeclaration):
     return None
 
 
+def pages_member_is_decoded(struct_name: str, member_name: str) -> bool:
+    """Return True when a "pragma pages" member is decoded in place.
+
+    A server decodes arguments and encodes results. A page-resident
+    member of an argument type is decoded from the pages of the
+    Receive buffer into an xdr_buf that captures the content by
+    reference; one of a result type is encoded from the Reply buffer's
+    pages and keeps the ordinary opaque or string representation.
+    """
+    return (struct_name, member_name) in pages_members and (
+        struct_name in argument_types
+    )
+
+
 @dataclass
 class _XdrCaseSpec(_XdrAst):
     """One case in an XDR union"""
@@ -783,6 +809,8 @@ class ParseToAst(Transformer):
         argument = children[2]
         number = children[3].value
 
+        argument_types.add(argument.type_name)
+        result_types.add(result.type_name)
         return _RpcProcedure(
             ident.symbol,
             number,
@@ -1062,7 +1090,7 @@ def check_pages_directives(root: "Specification") -> None:
     Run in the front end so the diagnostic carries the directive's own
     source position rather than surfacing as a traceback from whichever
     emitter reaches the member. A directive that binds to nothing would
-    otherwise degrade silently to the copying encoder.
+    otherwise degrade silently to the copying codec.
     """
     payloads = {}
     resolved = set()
@@ -1091,6 +1119,26 @@ def check_pages_directives(root: "Specification") -> None:
                     f"union arm '{type_name}.{marked[1]}' is declared"
                     " directly as a string and carries no length field;"
                     " declare it through a typedef instead",
+                    meta,
+                )
+            # A decoded member and an encoded one take different C
+            # representations, and a type carries only one.
+            if type_name in argument_types and type_name in result_types:
+                raise XdrSemanticError(
+                    f"'{type_name}' is reachable from both an RPC"
+                    " argument and an RPC result; a page-resident"
+                    " member needs distinct argument and result types",
+                    meta,
+                )
+            # The union generator does not consult
+            # pages_member_is_decoded(), so a marked arm would reach the
+            # copying decoder and pull the payload through the bounded
+            # scratch buffer.
+            if isinstance(container, _XdrUnion) and type_name in argument_types:
+                raise XdrSemanticError(
+                    f"union arm '{type_name}.{marked[1]}' cannot be"
+                    " decoded in place; declare a page-resident member"
+                    " of an argument type in a struct instead",
                     meta,
                 )
             if pages_member_maxsize(field) is None:
@@ -1198,12 +1246,66 @@ def _check_pages_containment(root: "Specification", payloads: dict) -> None:
             )
 
 
+def _referenced_type_names(value) -> set:
+    """Return the type names an aggregate references through its
+    members."""
+    if isinstance(value, (_XdrStruct, _XdrPointer)):
+        fields = value.fields
+    elif isinstance(value, _XdrUnion):
+        fields = [case.arm for case in value.cases]
+        if value.default:
+            fields.append(value.default.arm)
+    else:
+        return set()
+    names = set()
+    for field in fields:
+        spec = getattr(field, "spec", None)
+        if spec is not None:
+            names.add(spec.type_name)
+    return names
+
+
+def _expand_procedure_types(root: "Specification") -> None:
+    """Close argument_types and result_types over the types reachable
+    from an RPC argument or result.
+
+    A "pragma pages" member decoded in place can sit in a struct nested
+    within an argument type (symlinkdata3 within SYMLINK3args), so the
+    top-level argument types alone do not suffice.
+    """
+    references = {}
+    for definition in root.definitions:
+        value = definition.value
+        name = getattr(value, "name", None)
+        if name is not None:
+            references[name] = _referenced_type_names(value)
+        elif isinstance(value, _XdrTypedef):
+            # An argument named through an alias reaches whatever
+            # aggregate the alias resolves to.
+            declaration = value.declaration
+            spec = getattr(declaration, "spec", None)
+            if spec is not None:
+                references[declaration.name] = {spec.type_name}
+
+    for types in (argument_types, result_types):
+        worklist = list(types)
+        while worklist:
+            for referenced in references.get(worklist.pop(), ()):
+                if referenced in references and referenced not in types:
+                    types.add(referenced)
+                    worklist.append(referenced)
+
+
 def transform_parse_tree(parse_tree):
     """Transform productions into an abstract syntax tree"""
     ast = transformer.transform(parse_tree)
     ast.definitions = _merge_consecutive_passthru(ast.definitions)
     check_duplicate_definitions(ast)
     check_rpc_number_range(ast)
+    # The pages checks consult argument_types and result_types, so
+    # close those sets over the nested aggregates before the
+    # directives are validated.
+    _expand_procedure_types(ast)
     check_pages_directives(ast)
     return ast
 
