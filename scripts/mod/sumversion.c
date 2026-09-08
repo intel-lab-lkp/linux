@@ -249,7 +249,7 @@ static int parse_comment(const char *file, unsigned long len)
 /* FIXME: Handle .s files differently (eg. # starts comments) --RR */
 static bool stop_char[256];
 
-static void init_stop_chars(void)
+static void sumversion_init(void)
 {
 	static bool done;
 	int chr;
@@ -274,7 +274,7 @@ static int parse_file(const char *fname, struct md4_ctx *md)
 	len = strlen(file);
 	if (!len)
 		goto out_file;
-	init_stop_chars();
+	sumversion_init();
 	buf = xmalloc(len); /* File output buffer. */
 
 	for (i = 0; i < len; i++) {
