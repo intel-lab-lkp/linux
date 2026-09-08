@@ -174,6 +174,34 @@ TRACE_EVENT(mm_vmscan_wakeup_kswapd,
 		show_gfp_flags(__entry->gfp_flags))
 );
 
+TRACE_EVENT(mm_vmscan_kswapd_threads_to_wake,
+
+	TP_PROTO(int nid, int threads_to_wake, int node_cpus,
+		 int avg_idle_cores),
+
+	TP_ARGS(nid, threads_to_wake, node_cpus, avg_idle_cores),
+
+	TP_STRUCT__entry(
+		__field(int,	nid)
+		__field(int,	threads_to_wake)
+		__field(int,	node_cpus)
+		__field(int,	avg_idle_cores)
+	),
+
+	TP_fast_assign(
+		__entry->nid			= nid;
+		__entry->threads_to_wake	= threads_to_wake;
+		__entry->node_cpus		= node_cpus;
+		__entry->avg_idle_cores		= avg_idle_cores;
+	),
+
+	TP_printk("nid=%d threads_to_wake=%d node_cpus=%d avg_idle_cores=%d",
+		  __entry->nid,
+		  __entry->threads_to_wake,
+		  __entry->node_cpus,
+		  __entry->avg_idle_cores)
+);
+
 DECLARE_EVENT_CLASS(mm_vmscan_direct_reclaim_begin_template,
 
 	TP_PROTO(gfp_t gfp_flags, int order, struct mem_cgroup *memcg),

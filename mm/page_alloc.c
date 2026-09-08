@@ -6615,9 +6615,9 @@ static int min_free_kbytes_sysctl_handler(const struct ctl_table *table, int wri
 	return 0;
 }
 
-static int kswapd_threads_sysctl_handler(const struct ctl_table *table,
-					 int write, void __user *buffer,
-					 size_t *length, loff_t *ppos)
+static int max_kswapds_per_node_sysctl_handler(const struct ctl_table *table,
+					       int write, void __user *buffer,
+					       size_t *length, loff_t *ppos)
 {
 	int rc;
 
@@ -6626,7 +6626,7 @@ static int kswapd_threads_sysctl_handler(const struct ctl_table *table,
 		return rc;
 
 	if (write)
-		update_kswapd_threads();
+		update_max_kswapds_per_node();
 
 	return 0;
 }
@@ -6794,11 +6794,11 @@ static const struct ctl_table page_alloc_sysctl_table[] = {
 		.extra1		= SYSCTL_ZERO,
 	},
 	{
-		.procname       = "kswapd_threads",
-		.data           = &kswapd_threads,
-		.maxlen         = sizeof(kswapd_threads),
+		.procname       = "max_kswapds_per_node",
+		.data           = &max_kswapds_per_node,
+		.maxlen         = sizeof(max_kswapds_per_node),
 		.mode           = 0644,
-		.proc_handler   = kswapd_threads_sysctl_handler,
+		.proc_handler   = max_kswapds_per_node_sysctl_handler,
 		.extra1         = SYSCTL_ONE,
 		.extra2         = &max_kswapd_threads,
 	},
