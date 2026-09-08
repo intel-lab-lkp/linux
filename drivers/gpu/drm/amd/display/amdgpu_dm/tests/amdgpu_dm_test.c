@@ -158,15 +158,19 @@ static void dm_test_vblank_get_counter_no_stream(struct kunit *test)
 static void dm_test_crtc_get_scanoutpos_invalid_crtc(struct kunit *test)
 {
 	struct amdgpu_device *adev = dm_kunit_alloc_adev(test);
-	u32 vbl = 0;
-	u32 position = 0;
+	u32 vbl_start = 0;
+	u32 vbl_end = 0;
+	u32 vpos = 0;
+	u32 hpos = 0;
 
 	adev->mode_info.num_crtc = 1;
 
-	KUNIT_EXPECT_EQ(test, dm_crtc_get_scanoutpos(adev, -1, &vbl, &position),
-			-EINVAL);
-	KUNIT_EXPECT_EQ(test, dm_crtc_get_scanoutpos(adev, 1, &vbl, &position),
-			-EINVAL);
+	KUNIT_EXPECT_EQ(test, dm_crtc_get_scanoutpos(adev, -1,
+						     &vbl_start, &vbl_end,
+						     &vpos, &hpos), -EINVAL);
+	KUNIT_EXPECT_EQ(test, dm_crtc_get_scanoutpos(adev, 1,
+						     &vbl_start, &vbl_end,
+						     &vpos, &hpos), -EINVAL);
 }
 
 /**
@@ -177,8 +181,10 @@ static void dm_test_crtc_get_scanoutpos_no_stream(struct kunit *test)
 {
 	struct amdgpu_device *adev = dm_kunit_alloc_adev(test);
 	struct amdgpu_crtc *acrtc;
-	u32 vbl = 0;
-	u32 position = 0;
+	u32 vbl_start = 0;
+	u32 vbl_end = 0;
+	u32 vpos = 0;
+	u32 hpos = 0;
 
 	acrtc = kunit_kzalloc(test, sizeof(*acrtc), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, acrtc);
@@ -186,9 +192,13 @@ static void dm_test_crtc_get_scanoutpos_no_stream(struct kunit *test)
 	adev->mode_info.num_crtc = 1;
 	adev->mode_info.crtcs[0] = acrtc;
 
-	KUNIT_EXPECT_EQ(test, dm_crtc_get_scanoutpos(adev, 0, &vbl, &position), 0);
-	KUNIT_EXPECT_EQ(test, vbl, 0U);
-	KUNIT_EXPECT_EQ(test, position, 0U);
+	KUNIT_EXPECT_EQ(test, dm_crtc_get_scanoutpos(adev, 0,
+						     &vbl_start, &vbl_end,
+						     &vpos, &hpos), 0);
+	KUNIT_EXPECT_EQ(test, vbl_start, 0U);
+	KUNIT_EXPECT_EQ(test, vbl_end, 0U);
+	KUNIT_EXPECT_EQ(test, vpos, 0U);
+	KUNIT_EXPECT_EQ(test, hpos, 0U);
 }
 
 /**
@@ -1211,14 +1221,20 @@ static void dm_test_crtc_get_scanoutpos_unmapped_stream(struct kunit *test)
 {
 	struct amdgpu_device *adev = dm_kunit_alloc_adev(test);
 	struct dc *dc = dm_kunit_alloc_dc_with_ctx(test);
-	u32 vbl = 0xdeadbeef;
-	u32 position = 0xdeadbeef;
+	u32 vbl_start = 0xdeadbeef;
+	u32 vbl_end = 0xdeadbeef;
+	u32 vpos = 0xdeadbeef;
+	u32 hpos = 0xdeadbeef;
 
 	dm_test_crtc_with_stream(test, adev, dc);
 
-	KUNIT_EXPECT_EQ(test, dm_crtc_get_scanoutpos(adev, 0, &vbl, &position), 0);
-	KUNIT_EXPECT_EQ(test, vbl, 0U);
-	KUNIT_EXPECT_EQ(test, position, 0U);
+	KUNIT_EXPECT_EQ(test, dm_crtc_get_scanoutpos(adev, 0,
+						     &vbl_start, &vbl_end,
+						     &vpos, &hpos), 0);
+	KUNIT_EXPECT_EQ(test, vbl_start, 0U);
+	KUNIT_EXPECT_EQ(test, vbl_end, 0U);
+	KUNIT_EXPECT_EQ(test, vpos, 0U);
+	KUNIT_EXPECT_EQ(test, hpos, 0U);
 }
 
 /**
@@ -1229,14 +1245,16 @@ static void dm_test_crtc_get_scanoutpos_exits_idle(struct kunit *test)
 {
 	struct amdgpu_device *adev = dm_kunit_alloc_adev(test);
 	struct dc *dc = dm_kunit_alloc_dc_with_ctx(test);
-	u32 vbl = 0;
-	u32 position = 0;
+	u32 vbl_start = 0, vbl_end = 0;
+	u32 vpos = 0, hpos = 0;
 
 	dm_test_crtc_with_stream(test, adev, dc);
 	dc->caps.ips_support = true;
 	dc->idle_optimizations_allowed = true;
 
-	KUNIT_EXPECT_EQ(test, dm_crtc_get_scanoutpos(adev, 0, &vbl, &position), 0);
+	KUNIT_EXPECT_EQ(test, dm_crtc_get_scanoutpos(adev, 0,
+						     &vbl_start, &vbl_end,
+						     &vpos, &hpos), 0);
 }
 
 static struct drm_atomic_commit *dm_test_alloc_commit(struct kunit *test,

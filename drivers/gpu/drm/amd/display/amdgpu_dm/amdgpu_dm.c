@@ -186,10 +186,13 @@ STATIC_IFN_KUNIT u32 dm_vblank_get_counter(struct amdgpu_device *adev, int crtc)
 }
 EXPORT_IF_KUNIT(dm_vblank_get_counter);
 
-STATIC_IFN_KUNIT int dm_crtc_get_scanoutpos(struct amdgpu_device *adev, int crtc,
-					    u32 *vbl, u32 *position)
+STATIC_IFN_KUNIT int dm_crtc_get_scanoutpos(struct amdgpu_device *adev,
+					    int crtc,
+					    u32 *vbl_start,
+					    u32 *vbl_end,
+					    u32 *vpos,
+					    u32 *hpos)
 {
-	u32 v_blank_start = 0, v_blank_end = 0, h_position = 0, v_position = 0;
 	struct amdgpu_crtc *acrtc = NULL;
 	struct dc *dc = adev->dm.dc;
 
@@ -207,18 +210,16 @@ STATIC_IFN_KUNIT int dm_crtc_get_scanoutpos(struct amdgpu_device *adev, int crtc
 	if (dc && dc->caps.ips_support && dc->idle_optimizations_allowed)
 		dc_allow_idle_optimizations(dc, false);
 
-	/*
-	 * TODO rework base driver to use values directly.
-	 * for now parse it back into reg-format
-	 */
-	dc_stream_get_scanoutpos(acrtc->dm_irq_params.stream,
-				 &v_blank_start,
-				 &v_blank_end,
-				 &h_position,
-				 &v_position);
-
-	*position = v_position | (h_position << 16);
-	*vbl = v_blank_start | (v_blank_end << 16);
+	if (!dc_stream_get_scanoutpos(acrtc->dm_irq_params.stream,
+				      vbl_start,
+				      vbl_end,
+				      hpos,
+				      vpos)) {
+		*vbl_start = 0;
+		*vbl_end = 0;
+		*vpos = 0;
+		*hpos = 0;
+	}
 
 	return 0;
 }

@@ -204,14 +204,26 @@ static void dce_v8_0_page_flip(struct amdgpu_device *adev,
 	RREG32(mmGRPH_PRIMARY_SURFACE_ADDRESS + amdgpu_crtc->crtc_offset);
 }
 
-static int dce_v8_0_crtc_get_scanoutpos(struct amdgpu_device *adev, int crtc,
-					u32 *vbl, u32 *position)
+static int dce_v8_0_crtc_get_scanoutpos(struct amdgpu_device *adev,
+					int crtc,
+					u32 *vbl_start,
+					u32 *vbl_end,
+					u32 *vpos,
+					u32 *hpos)
 {
+	u32 vbl, position;
+
 	if ((crtc < 0) || (crtc >= adev->mode_info.num_crtc))
 		return -EINVAL;
 
-	*vbl = RREG32(mmCRTC_V_BLANK_START_END + crtc_offsets[crtc]);
-	*position = RREG32(mmCRTC_STATUS_POSITION + crtc_offsets[crtc]);
+	vbl = RREG32(mmCRTC_V_BLANK_START_END + crtc_offsets[crtc]);
+	position = RREG32(mmCRTC_STATUS_POSITION + crtc_offsets[crtc]);
+
+	*vbl_start = vbl & 0x1fff;
+	*vbl_end = (vbl >> 16) & 0x1fff;
+
+	*vpos = position & 0x1fff;
+	*hpos = (position >> 16) & 0x1fff;
 
 	return 0;
 }

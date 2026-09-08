@@ -1167,7 +1167,8 @@ int dm_set_powergating_state(struct amdgpu_ip_block *ip_block,
 void dm_bandwidth_update(struct amdgpu_device *adev);
 u32 dm_vblank_get_counter(struct amdgpu_device *adev, int crtc);
 int dm_crtc_get_scanoutpos(struct amdgpu_device *adev, int crtc,
-			   u32 *vbl, u32 *position);
+			   u32 *vbl_start, u32 *vbl_end,
+			   u32 *vpos, u32 *hpos);
 struct dm_atomic_state *dm_atomic_get_new_state(struct drm_atomic_commit *state);
 struct drm_private_state *dm_atomic_duplicate_state(struct drm_private_obj *obj);
 void dm_atomic_destroy_state(struct drm_private_obj *obj,

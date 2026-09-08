@@ -277,8 +277,12 @@ struct amdgpu_display_funcs {
 	/* pageflipping */
 	void (*page_flip)(struct amdgpu_device *adev,
 			  int crtc_id, u64 crtc_base, bool async);
-	int (*page_flip_get_scanoutpos)(struct amdgpu_device *adev, int crtc,
-					u32 *vbl, u32 *position);
+	int (*page_flip_get_scanoutpos)(struct amdgpu_device *adev,
+					int crtc,
+					u32 *vbl_start,
+					u32 *vbl_end,
+					u32 *vpos,
+					u32 *hpos);
 	/* display topology setup */
 	void (*add_encoder)(struct amdgpu_device *adev,
 			    uint32_t encoder_enum,

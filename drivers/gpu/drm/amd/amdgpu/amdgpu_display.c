@@ -1762,7 +1762,8 @@ int amdgpu_display_get_crtc_scanoutpos(struct drm_device *dev,
 			int *hpos, ktime_t *stime, ktime_t *etime,
 			const struct drm_display_mode *mode)
 {
-	u32 vbl = 0, position = 0;
+	u32 scan_vbl_start = 0, scan_vbl_end = 0;
+	u32 scan_vpos = 0, scan_hpos = 0;
 	int vbl_start, vbl_end, vtotal, ret = 0;
 	bool in_vbl = true;
 
@@ -1774,8 +1775,14 @@ int amdgpu_display_get_crtc_scanoutpos(struct drm_device *dev,
 	if (stime)
 		*stime = ktime_get();
 
-	if (amdgpu_display_page_flip_get_scanoutpos(adev, pipe, &vbl, &position) == 0)
+	if (amdgpu_display_page_flip_get_scanoutpos(adev, pipe,
+						    &scan_vbl_start, &scan_vbl_end,
+						    &scan_vpos, &scan_hpos) == 0) {
 		ret |= DRM_SCANOUTPOS_VALID;
+	}
+
+	*vpos = scan_vpos;
+	*hpos = scan_hpos;
 
 	/* Get optional system timestamp after query. */
 	if (etime)
@@ -1783,16 +1790,11 @@ int amdgpu_display_get_crtc_scanoutpos(struct drm_device *dev,
 
 	/* preempt_enable_rt() should go right here in PREEMPT_RT patchset. */
 
-	/* Decode into vertical and horizontal scanout position. */
-	*vpos = position & 0x1fff;
-	*hpos = (position >> 16) & 0x1fff;
-
 	/* Valid vblank area boundaries from gpu retrieved? */
-	if (vbl > 0) {
-		/* Yes: Decode. */
+	if (scan_vbl_start || scan_vbl_end) {
 		ret |= DRM_SCANOUTPOS_ACCURATE;
-		vbl_start = vbl & 0x1fff;
-		vbl_end = (vbl >> 16) & 0x1fff;
+		vbl_start = scan_vbl_start;
+		vbl_end = scan_vbl_end;
 	} else {
 		/* No: Fake something reasonable which gives at least ok results. */
 		vbl_start = mode->crtc_vdisplay;
