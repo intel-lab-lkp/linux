@@ -6288,7 +6288,15 @@ static void mlx5e_nic_disable(struct mlx5e_priv *priv)
 
 static int mlx5e_update_nic_rx(struct mlx5e_priv *priv)
 {
-	return mlx5e_refresh_tirs(priv->mdev, false, false);
+	int err;
+
+	err = mlx5e_refresh_tirs(priv->mdev, false, false);
+	if (err)
+		return err;
+
+	mlx5e_accel_update_rx(priv);
+
+	return 0;
 }
 
 static const struct mlx5e_profile mlx5e_nic_profile = {
