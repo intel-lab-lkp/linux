@@ -305,7 +305,15 @@ static bool __dead_end_function(struct objtool_file *file, struct symbol *func,
 
 static bool dead_end_function(struct objtool_file *file, struct symbol *func)
 {
-	return __dead_end_function(file, func, 0);
+	if (!func)
+		return false;
+
+	if (!func->dead_end_known) {
+		func->dead_end = __dead_end_function(file, func, 0);
+		func->dead_end_known = 1;
+	}
+
+	return func->dead_end;
 }
 
 static void init_cfi_state(struct cfi_state *cfi)

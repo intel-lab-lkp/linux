@@ -59,6 +59,8 @@ struct section {
 	const char *name;
 	int idx;
 	bool _changed, text, rodata, noinstr, init, truncate;
+	bool hashed, sorted;
+	unsigned int *reloc_cache;
 	struct reloc *relocs;
 	unsigned long nr_alloc_relocs;
 	struct section *twin;
@@ -98,6 +100,8 @@ struct symbol {
 	u8 klp		     : 1;
 	u8 dont_correlate    : 1;
 	u8 fake		     : 1;
+	u8 dead_end_known    : 1;
+	u8 dead_end	     : 1;
 	struct list_head pv_target;
 	struct reloc *relocs;
 	struct section *group_sec;

@@ -316,17 +316,116 @@ struct symbol *find_global_symbol_by_name(const struct elf *elf, const char *nam
 	return NULL;
 }
 
-/* If there are multiple matches, return the first one in the range */
-struct reloc *find_reloc_by_dest_range(const struct elf *elf, struct section *sec,
+static bool is_dwarf_section(struct section *sec)
+{
+	return !strncmp(sec->name, ".debug_", 7);
+}
+
+/* Cache relocations at a 64 byte granularity. */
+#define RELOC_CACHE_INDEX_SHIFT	6
+
+static unsigned long reloc_cache_index(unsigned long offset)
+{
+	return offset >> RELOC_CACHE_INDEX_SHIFT;
+}
+
+static unsigned int reloc_cache_nr_windows(const struct section *rsec)
+{
+	const unsigned long size = sec_size(rsec->base);
+
+	return (size >> RELOC_CACHE_INDEX_SHIFT) + 1;
+}
+
+static int init_reloc_cache(struct section *rsec)
+{
+	const unsigned int nr_relocs = sec_num_entries(rsec);
+	const unsigned int nr_windows = reloc_cache_nr_windows(rsec);
+	unsigned int reloc_idx, next_cache_idx = 0;
+
+	rsec->reloc_cache = malloc(nr_windows * sizeof(unsigned int));
+	if (!rsec->reloc_cache) {
+		ERROR_GLIBC("malloc");
+		return -1;
+	}
+
+	/* Populate relocation indexes reloc cache index -> reloc index. */
+	for (reloc_idx = 0; reloc_idx < nr_relocs; reloc_idx++) {
+		struct reloc *reloc = &rsec->relocs[reloc_idx];
+		const unsigned long offset = reloc_offset(reloc);
+		const unsigned long cache_idx = reloc_cache_index(offset);
+
+		if (cache_idx >= nr_windows)
+			break;
+
+		while (next_cache_idx <= cache_idx)
+			rsec->reloc_cache[next_cache_idx++] = reloc_idx;
+	}
+
+	while (next_cache_idx < nr_windows)
+		rsec->reloc_cache[next_cache_idx++] = nr_relocs;
+
+	rsec->sorted = true;
+	return 0;
+}
+
+static void free_reloc_cache(struct section *rsec)
+{
+	free(rsec->reloc_cache);
+	rsec->reloc_cache = NULL;
+	rsec->sorted = false;
+}
+
+static struct reloc *find_reloc_sorted(struct section *rsec,
 				       unsigned long offset, unsigned int len)
 {
-	struct reloc *reloc, *r = NULL;
-	struct section *rsec;
-	unsigned long o;
+	struct reloc *relocs = rsec->relocs;
+	const unsigned int nr_relocs = sec_num_entries(rsec);
+	const unsigned long cache_idx = reloc_cache_index(offset);
+	unsigned int reloc_idx, i;
 
-	rsec = sec->rsec;
-	if (!rsec)
+	if (cache_idx >= reloc_cache_nr_windows(rsec))
 		return NULL;
+
+	reloc_idx = rsec->reloc_cache[cache_idx];
+
+	/*
+	 * Scan through all relocations covered by cache entry to find the
+	 * first at or after offset. Relocations are sorted by offset.
+	 */
+	for (i = reloc_idx; i < nr_relocs; i++) {
+		struct reloc *reloc = &relocs[i];
+		const unsigned long curr_offset = reloc_offset(reloc);
+
+		if (curr_offset >= offset)
+			break;
+
+		reloc_idx++;
+	}
+
+	/* Nothing found, or the first candidate lies beyond the range. */
+	if (reloc_idx >= nr_relocs ||
+	    reloc_offset(&relocs[reloc_idx]) >= offset + len)
+		return NULL;
+
+	/* If there are duplicate entries, return the last. */
+	for (i = reloc_idx; i < nr_relocs - 1; i++) {
+		struct reloc *reloc = &relocs[i];
+		struct reloc *next_reloc = &relocs[i + 1];
+
+		if (reloc_offset(next_reloc) != reloc_offset(reloc))
+			break;
+		reloc_idx++;
+	}
+
+	return &relocs[reloc_idx];
+}
+
+/* Not indexed, so look it up in the hash. */
+static struct reloc *find_reloc_hash(const struct elf *elf, struct section *rsec,
+				     unsigned long offset, unsigned int len)
+{
+	unsigned long o;
+	struct reloc *reloc, *r = NULL;
 
 	for_offset_range(o, offset, offset + len) {
 		elf_hash_for_each_possible(elf, reloc, reloc, hash,
@@ -347,14 +446,48 @@ struct reloc *find_reloc_by_dest_range(const struct elf *elf, struct section *se
 	return r;
 }
 
+/* Should never be invoked, provided as a backstop. */
+static struct reloc *find_reloc_linear(struct section *rsec,
+				       unsigned long offset, unsigned int len)
+{
+	struct reloc *reloc, *first = NULL;
+
+	WARN("%s: linear scan for sec %s with %u relocs at offset %lu len %u",
+	     __func__, rsec->name, sec_num_entries(rsec), offset, len);
+
+	for_each_reloc(rsec, reloc) {
+		if (reloc_offset(reloc) < offset ||
+		    reloc_offset(reloc) >= offset + len)
+			continue;
+
+		if (!first || reloc_offset(reloc) < reloc_offset(first))
+			first = reloc;
+	}
+
+	return first;
+}
+
+/* If there are multiple matches, return the first one in the range. */
+struct reloc *find_reloc_by_dest_range(const struct elf *elf, struct section *sec,
+				       unsigned long offset, unsigned int len)
+{
+	struct section *rsec = sec->rsec;
+
+	if (!rsec)
+		return NULL;
+
+	if (rsec->sorted)
+		return find_reloc_sorted(rsec, offset, len);
+
+	if (rsec->hashed)
+		return find_reloc_hash(elf, rsec, offset, len);
+
+	return find_reloc_linear(rsec, offset, len);
+}
+
 struct reloc *find_reloc_by_dest(const struct elf *elf, struct section *sec, unsigned long offset)
 {
 	return find_reloc_by_dest_range(elf, sec, offset, 1);
-}
-
-static bool is_dwarf_section(struct section *sec)
-{
-	return !strncmp(sec->name, ".debug_", 7);
 }
 
 static int read_sections(struct elf *elf)
@@ -1071,7 +1204,8 @@ struct reloc *elf_init_reloc(struct elf *elf, struct section *rsec,
 	set_reloc_type(elf, reloc, type);
 	set_reloc_addend(elf, reloc, addend);
 
-	elf_hash_add(reloc, &reloc->hash, reloc_hash(reloc));
+	if (rsec->hashed)
+		elf_hash_add(reloc, &reloc->hash, reloc_hash(reloc));
 	set_sym_next_reloc(reloc, sym->relocs);
 	sym->relocs = reloc;
 
@@ -1123,17 +1257,43 @@ struct reloc *elf_init_reloc_data_sym(struct elf *elf, struct section *sec,
 			      elf_data_rela_type(elf));
 }
 
+static u64 raw_reloc_offset(const struct section *rsec, unsigned int idx)
+{
+	const void *entry = rsec->data->d_buf + idx * rsec->sh.sh_entsize;
+
+	if (rsec->sh.sh_entsize < sizeof(Elf64_Rel))
+		return ((const Elf32_Rela *)entry)->r_offset;
+
+	return ((const Elf64_Rela *)entry)->r_offset;
+}
+
+static bool reloc_sec_in_order(struct section *rsec)
+{
+	const unsigned int nr_relocs = sec_num_entries(rsec);
+	u64 prev_offset = 0;
+	unsigned int i;
+
+	for (i = 0; i < nr_relocs; i++) {
+		/* Called before relocs exist, so look at raw entry. */
+		const u64 offset = raw_reloc_offset(rsec, i);
+
+		if (offset < prev_offset)
+			return false;
+		prev_offset = offset;
+	}
+
+	return true;
+}
+
 static int read_relocs(struct elf *elf)
 {
-	unsigned long nr_reloc, max_reloc = 0;
+	unsigned long nr_reloc, max_reloc = 0, nr_hashed = 0;
 	struct section *rsec;
 	struct reloc *reloc;
 	unsigned int symndx;
 	struct symbol *sym;
+	bool hashed;
 	int i;
-
-	if (!elf_alloc_hash(reloc, elf->num_relocs))
-		return -1;
 
 	list_for_each_entry(rsec, &elf->sections, list) {
 		if (!is_reloc_sec(rsec))
@@ -1146,6 +1306,28 @@ static int read_relocs(struct elf *elf)
 		}
 
 		rsec->base->rsec = rsec;
+
+		/* DWARF relocs are never looked up. */
+		if (is_dwarf_section(rsec->base))
+			continue;
+		if (reloc_sec_in_order(rsec)) {
+			rsec->sorted = true;
+			continue;
+		}
+
+		rsec->hashed = true;
+		nr_hashed += sec_num_entries(rsec);
+	}
+
+	/* Read mostly, so avoid collisions and keep the hash sparse. */
+	if (!elf_alloc_hash(reloc, nr_hashed * OFFSET_STRIDE))
+		return -1;
+
+	list_for_each_entry(rsec, &elf->sections, list) {
+		if (!is_reloc_sec(rsec))
+			continue;
+
+		hashed = rsec->hashed;
 
 		/* nr_alloc_relocs=0: libelf owns d_buf */
 		rsec->nr_alloc_relocs = 0;
@@ -1168,18 +1350,23 @@ static int read_relocs(struct elf *elf)
 				return -1;
 			}
 
-			elf_hash_add(reloc, &reloc->hash, reloc_hash(reloc));
+			if (hashed)
+				elf_hash_add(reloc, &reloc->hash, reloc_hash(reloc));
 			set_sym_next_reloc(reloc, sym->relocs);
 			sym->relocs = reloc;
 
 			nr_reloc++;
 		}
 		max_reloc = max(max_reloc, nr_reloc);
+
+		if (rsec->sorted && init_reloc_cache(rsec))
+			return -1;
 	}
 
 	if (opts.stats) {
 		printf("max_reloc: %lu\n", max_reloc);
 		printf("num_relocs: %lu\n", elf->num_relocs);
+		printf("num_relocs_hashed: %lu\n", nr_hashed);
 		printf("reloc_bits: %d\n", elf->reloc_bits);
 	}
 
@@ -1541,6 +1728,26 @@ add:
 	return sec;
 }
 
+/* A relocation was appended, abandon relocation cache and use hash instead. */
+static void copy_reloc_cache_to_hash(struct elf *elf, struct section *rsec,
+				     unsigned int nr_relocs)
+{
+	unsigned int i;
+
+	if (rsec->hashed)
+		return;
+
+	if (rsec->sorted)
+		free_reloc_cache(rsec);
+
+	for (i = 0; i < nr_relocs; i++) {
+		struct reloc *reloc = &rsec->relocs[i];
+
+		elf_hash_add(reloc, &reloc->hash, reloc_hash(reloc));
+	}
+	rsec->hashed = true;
+}
+
 static int elf_alloc_reloc(struct elf *elf, struct section *rsec)
 {
 	struct reloc *old_relocs, *old_relocs_end, *new_relocs;
@@ -1592,6 +1799,7 @@ static int elf_alloc_reloc(struct elf *elf, struct section *rsec)
 	}
 
 	rsec->nr_alloc_relocs = nr_alloc;
+	copy_reloc_cache_to_hash(elf, rsec, nr_relocs_old);
 
 	old_relocs = rsec->relocs;
 	new_relocs = calloc(nr_alloc, sizeof(struct reloc));
