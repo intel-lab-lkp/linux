@@ -684,7 +684,7 @@ static int mana_set_channels(struct net_device *ndev,
 	struct mana_port_context *apc = netdev_priv(ndev);
 	unsigned int new_count = channels->combined_count;
 	struct mana_port_context *scratch;
-	struct mana_qset newq, oldq;
+	struct mana_qset newq, oldq, freshq;
 	int err;
 
 	if (new_count < 1 || new_count > apc->max_queues) {
@@ -767,19 +767,33 @@ static int mana_set_channels(struct net_device *ndev,
 		goto free_scratch;
 	}
 
-	err = mana_alloc_qset(apc, scratch, new_count, apc->rx_queue_size,
-			      apc->tx_queue_size, apc->priv_flags,
-			      apc->configured_mtu, apc->bpf_prog, &newq);
+	err = mana_grow_qset(apc, scratch, new_count, &newq, &freshq);
 	if (err)
 		goto free_scratch;
 
 	err = mana_publish_qset(apc, &newq, &oldq);
 	if (err) {
-		mana_free_qset(scratch, &newq);
+		/* Free only the new queues, then discard the merged containers.
+		 */
+		mana_free_qset(scratch, &freshq);
+		mana_discard_grow(&newq);
 		goto free_scratch;
 	}
 
-	mana_free_qset(scratch, &oldq);
+	/* Wait for ndo_select_queue() readers of oldq.indir_table. All queues
+	 * are now live in newq; free only the old and fresh containers.
+	 */
+	synchronize_net();
+
+	kfree(oldq.tx_qp);
+	kfree(oldq.rxqs);
+	kfree(oldq.indir_table);
+	kfree(oldq.rxobj_table);
+	kfree(freshq.tx_qp);
+	kfree(freshq.rxqs);
+
+	/* No retirement runs to publish the new queues' debugfs nodes. */
+	mana_qset_debugfs_publish(apc);
 
 free_scratch:
 	mana_publish_close_if_needed(apc);
@@ -856,7 +870,7 @@ static int mana_set_ringparam(struct net_device *ndev,
 		goto clear_flag;
 	}
 
-	err = mana_alloc_qset(apc, scratch, apc->num_queues, new_rx, new_tx,
+	err = mana_alloc_qset(apc, scratch, new_rx, new_tx,
 			      apc->priv_flags, apc->configured_mtu,
 			      apc->bpf_prog, &newq);
 	if (err) {
@@ -876,7 +890,6 @@ static int mana_set_ringparam(struct net_device *ndev,
 	mana_free_qset(scratch, &oldq);
 
 free_scratch:
-	/* Release unpublished queues before closing their shared EQ pool. */
 	mana_publish_close_if_needed(apc);
 	mana_qset_scratch_free(scratch);
 clear_flag:
@@ -946,7 +959,7 @@ static int mana_set_priv_flags(struct net_device *ndev, u32 priv_flags)
 		goto clear_flag;
 	}
 
-	err = mana_alloc_qset(apc, scratch, apc->num_queues, apc->rx_queue_size,
+	err = mana_alloc_qset(apc, scratch, apc->rx_queue_size,
 			      apc->tx_queue_size, priv_flags,
 			      apc->configured_mtu, apc->bpf_prog, &newq);
 	if (err)
