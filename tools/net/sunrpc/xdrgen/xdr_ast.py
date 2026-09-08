@@ -19,6 +19,15 @@ public_apis = []
 structs = set()
 pass_by_reference = set()
 
+# (type_name, member_name) pairs whose variable-length array member is
+# marked "pragma aggregate" -- codec emission streams the member through
+# application hooks instead of iterating a materialized C array.
+aggregate_members = set()
+
+# Source position of each "pragma aggregate" marker, so a directive
+# that cannot be honored is reported where it was written.
+aggregate_member_meta = {}
+
 # (type_name, member_name) pairs marked "pragma pages": the member's
 # content resides in the pages of the Receive or Reply buffer, so
 # the emitted codec captures or inserts those pages by reference
@@ -853,6 +862,15 @@ class ParseToAst(Transformer):
                 header_name = children[1].symbol
             case "public_directive":
                 public_apis.append(children[1].symbol)
+            case "aggregate_directive":
+                if children[2] is None:
+                    raise XdrSemanticError(
+                        "pragma aggregate requires a type name and a member name",
+                        children[1],
+                    )
+                marked = (children[1].symbol, children[2].symbol)
+                aggregate_members.add(marked)
+                aggregate_member_meta[marked] = children[2]
             case "pages_directive":
                 if children[2] is None:
                     raise XdrSemanticError(
@@ -1246,6 +1264,145 @@ def _check_pages_containment(root: "Specification", payloads: dict) -> None:
             )
 
 
+def _named_type_definitions(root: "Specification") -> dict:
+    """Return the specification's named type definitions, keyed by
+    the name a member's type specifier refers to."""
+    named = {}
+    for definition in root.definitions:
+        value = definition.value
+        if isinstance(value, _XdrTypedef):
+            named[value.declaration.name] = value
+        elif isinstance(value, (_XdrStruct, _XdrUnion, _XdrPointer)):
+            named[value.name] = value
+    return named
+
+
+def _unsized_member(type_name: str, named_types: dict, seen: set):
+    """Return "<type>.<member>" for the first variable-length array or
+    optional-data member reachable from TYPE_NAME, or None when the
+    type's storage is entirely inline."""
+    if type_name in seen:
+        return None
+    seen.add(type_name)
+    value = named_types.get(type_name)
+    if isinstance(value, _XdrTypedef):
+        declaration = value.declaration
+        if isinstance(declaration, (_XdrVariableLengthArray, _XdrOptionalData)):
+            return declaration.name
+        spec = getattr(declaration, "spec", None)
+        if spec is None:
+            return None
+        return _unsized_member(spec.type_name, named_types, seen)
+    if isinstance(value, _XdrStruct):
+        fields = value.fields
+    elif isinstance(value, _XdrPointer):
+        # The trailing self-reference is list framing the element
+        # decoder does not decode, so it needs no storage.
+        fields = value.fields[0:-1]
+    elif isinstance(value, _XdrUnion):
+        fields = [case.arm for case in value.cases]
+        if value.default:
+            fields.append(value.default.arm)
+    else:
+        return None
+    for field in fields:
+        if isinstance(field, (_XdrVariableLengthArray, _XdrOptionalData)):
+            return f"{type_name}.{field.name}"
+        spec = getattr(field, "spec", None)
+        if spec is None:
+            continue
+        found = _unsized_member(spec.type_name, named_types, seen)
+        if found is not None:
+            return found
+    return None
+
+
+def check_aggregate_directives(root: "Specification") -> None:
+    """Reject a "pragma aggregate" directive that cannot be honored.
+
+    As with the pages checks, this runs in the front end so a directive
+    naming a missing type or member, or a member with no hook-driven
+    codec, is reported at its own source position. Left to the
+    emitters, an unbound directive would degrade silently to the
+    materializing codec, and a malformed one would surface as a
+    traceback from whichever emitter reached it.
+    """
+    if aggregate_members and header_name == "none":
+        raise XdrSemanticError(
+            "pragma aggregate derives its external hook symbols from the"
+            " pragma header name, which this specification does not set",
+            aggregate_member_meta.get(min(aggregate_members)),
+        )
+
+    named_types = _named_type_definitions(root)
+    resolved = set()
+    for definition in root.definitions:
+        value = definition.value
+        if not isinstance(value, _XdrStruct):
+            continue
+        fields = dict((field.name, field) for field in value.fields)
+        element_type = None
+        for marked in sorted(aggregate_members):
+            if marked[0] != value.name:
+                continue
+            meta = aggregate_member_meta.get(marked)
+            if marked[1] not in fields:
+                raise XdrSemanticError(
+                    f"type '{value.name}' has no member '{marked[1]}'",
+                    meta,
+                )
+            field = fields[marked[1]]
+            # Only the counted-array framing is generated, so any other
+            # member form would emit hook prototypes that nothing calls.
+            if not isinstance(field, _XdrVariableLengthArray):
+                raise XdrSemanticError(
+                    f"'{value.name}.{marked[1]}' is not a variable-length"
+                    " array",
+                    meta,
+                )
+            # The generated decoder hands each element to the ordinary
+            # element decoder from a zero-filled local, so a nested
+            # variable-length array or optional-data member, which that
+            # decoder fills through a pointer the caller was to supply,
+            # would be written through NULL.
+            nested = _unsized_member(field.spec.type_name, named_types, set())
+            if nested is not None:
+                raise XdrSemanticError(
+                    f"'{value.name}.{marked[1]}' has element type"
+                    f" '{field.spec.type_name}', which reaches the"
+                    f" variable-length or optional-data member '{nested}';"
+                    " the aggregate decoder has no storage for it",
+                    meta,
+                )
+            # The decoder hands the wire count to the begin hook before
+            # any element is decoded, and a begin hook may size storage
+            # from it, so the count needs a bound the framing enforces.
+            if field.maxsize == "0":
+                raise XdrSemanticError(
+                    f"'{value.name}.{marked[1]}' declares no maximum size;"
+                    " the aggregate decoder hands the element count to"
+                    " the begin hook unbounded",
+                    meta,
+                )
+            if element_type is None:
+                element_type = field.spec.type_name
+            elif field.spec.type_name != element_type:
+                raise XdrSemanticError(
+                    f"'{value.name}.{marked[1]}' has element type"
+                    f" '{field.spec.type_name}', but '{value.name}' already"
+                    f" marks a member of element type '{element_type}';"
+                    " one hook set serves all of a type's marked members",
+                    meta,
+                )
+            resolved.add(marked)
+
+    for marked in sorted(aggregate_members - resolved):
+        raise XdrSemanticError(
+            f"pragma aggregate names unknown struct '{marked[0]}'",
+            aggregate_member_meta.get(marked),
+        )
+
+
 def _referenced_type_names(value) -> set:
     """Return the type names an aggregate references through its
     members."""
@@ -1307,6 +1464,7 @@ def transform_parse_tree(parse_tree):
     # directives are validated.
     _expand_procedure_types(ast)
     check_pages_directives(ast)
+    check_aggregate_directives(ast)
     return ast
 
 

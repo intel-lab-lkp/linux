@@ -29,6 +29,25 @@ typedef struct {
 	u8 *data;
 } opaque;
 
+/*
+ * Cursor a hook-driven aggregate codec hands to its application hooks,
+ * one element at a time, in place of a materialized C array. The
+ * generated framing owns it. @xdr is the RPC layer's stream; @ctx is
+ * that stream's xdrgen_ctx, the svc_rqst on the server. @index is
+ * the current element and @count the wire array length: a decoder
+ * fills @count from the wire before the begin hook runs, an
+ * encoder's begin hook sets it. @member_id selects among a type's
+ * marked members. The begin/item/end contract is under "Pragma
+ * aggregate" in tools/net/sunrpc/xdrgen/README.
+ */
+struct xdrgen_aggregate_cursor {
+	struct xdr_stream	*xdr;
+	u32			index;
+	u32			count;
+	unsigned int		member_id;
+	void			*ctx;
+};
+
 #define XDR_void		(0)
 #define XDR_bool		(1)
 #define XDR_short		(1)

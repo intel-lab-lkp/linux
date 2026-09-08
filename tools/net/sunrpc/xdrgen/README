@@ -147,8 +147,72 @@ Pragmas
 -------
 
 Pragma directives specify exceptions to the normal generation of
-encoding and decoding functions. Currently one directive is
-implemented: "public".
+encoding and decoding functions. The directives are described
+below.
+
+Pragma aggregate
+------ ---------
+
+  pragma aggregate <struct> <member> ;
+
+A variable-length array member is normally encoded and decoded by
+staging it in a C array and walking that array. When the application
+object is not that array -- for instance when the member is a wire
+projection of a different in-kernel structure -- building it is
+wasted work. This directive marks such a member so that xdrgen emits a
+codec that owns only the wire framing (the length prefix, the bound
+check, and the per-element codec) and drives the application
+through begin/item/end hooks, processing one element at a time with
+no staged array. The marked member must be a variable-length
+array member of a struct; xdrgen rejects a directive naming
+anything else, and generates the codec for the server side only.
+The generated decoder hands each element to the ordinary element
+decoder from a local variable, so the element type may not contain
+a variable-length array or an optional-data member at any depth;
+xdrgen rejects a directive whose element type does. The array must
+declare a maximum size: the decoder hands the wire count to the
+begin hook before it decodes any element, and only the declared
+bound limits that count. xdrgen rejects a directive naming an
+unbounded array.
+
+For example:
+
+  pragma aggregate secattr aclent;
+  pragma aggregate secattr dfaclent;
+
+The hooks are supplied by hand. Their names derive from the pragma
+header and the containing struct, so that two programs sharing a
+type name resolve to distinct symbols. All marked members of one
+struct share a hook set; the cursor's member_id field selects the
+member:
+
+  nfs_acl2_secattr_encode_begin()
+  nfs_acl2_secattr_encode()
+  nfs_acl2_secattr_encode_end()
+  nfs_acl2_secattr_decode_begin()
+  nfs_acl2_secattr_decode()
+  nfs_acl2_secattr_decode_end()
+
+A decoder fills the cursor's count from the wire before calling the
+begin hook; an encoder's begin hook sets that count, and the framing
+then bound-checks it and emits the length prefix. Once a begin hook
+has succeeded its end hook runs, so that it can release what begin
+took; the end hook receives the running success flag.
+
+For each marked member xdrgen emits an enumeration constant -- the
+pragma header, struct, and member joined by underscores and
+upper-cased -- in the generated header, and the generated framing
+initializes the cursor's member_id with it. The hooks compare
+member_id against these constants rather than bare integers:
+
+  NFS_ACL2_SECATTR_ACLENT
+  NFS_ACL2_SECATTR_DFACLENT
+
+The hooks reach their application state through the xdr_stream's
+xdrgen_ctx pointer: svcxdr_init_decode() and svcxdr_init_encode()
+bind it to the svc_rqst, and the generated framing copies it into
+the cursor's ctx field, from which a hook reaches rq_argp or
+rq_resp. xdrgen emits the hook prototypes in the generated header.
 
 Pragma big_endian
 ------ ----------
