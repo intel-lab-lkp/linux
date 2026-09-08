@@ -512,25 +512,14 @@ static void free_kernel_qp(struct erdma_qp *qp)
 	vfree(qp->kern_qp.swr_tbl);
 	vfree(qp->kern_qp.rwr_tbl);
 
-	if (qp->kern_qp.sq_buf)
-		dma_free_coherent(&dev->pdev->dev,
-				  qp->attrs.sq_size << SQEBB_SHIFT,
-				  qp->kern_qp.sq_buf,
-				  qp->kern_qp.sq_buf_dma_addr);
-
-	if (qp->kern_qp.sq_dbrec)
-		dma_pool_free(dev->db_pool, qp->kern_qp.sq_dbrec,
-			      qp->kern_qp.sq_dbrec_dma);
-
-	if (qp->kern_qp.rq_buf)
-		dma_free_coherent(&dev->pdev->dev,
-				  qp->attrs.rq_size << RQE_SHIFT,
-				  qp->kern_qp.rq_buf,
-				  qp->kern_qp.rq_buf_dma_addr);
-
-	if (qp->kern_qp.rq_dbrec)
-		dma_pool_free(dev->db_pool, qp->kern_qp.rq_dbrec,
-			      qp->kern_qp.rq_dbrec_dma);
+	dma_free_coherent(&dev->pdev->dev, qp->attrs.sq_size << SQEBB_SHIFT,
+			  qp->kern_qp.sq_buf, qp->kern_qp.sq_buf_dma_addr);
+	dma_pool_free(dev->db_pool, qp->kern_qp.sq_dbrec,
+		      qp->kern_qp.sq_dbrec_dma);
+	dma_free_coherent(&dev->pdev->dev, qp->attrs.rq_size << RQE_SHIFT,
+			  qp->kern_qp.rq_buf, qp->kern_qp.rq_buf_dma_addr);
+	dma_pool_free(dev->db_pool, qp->kern_qp.rq_dbrec,
+		      qp->kern_qp.rq_dbrec_dma);
 }
 
 static int init_kernel_qp(struct erdma_dev *dev, struct erdma_qp *qp,
@@ -551,36 +540,51 @@ static int init_kernel_qp(struct erdma_dev *dev, struct erdma_qp *qp,
 	kqp->hw_rq_db = dev->func_bar + ERDMA_BAR_RQDB_SPACE_OFFSET;
 
 	kqp->swr_tbl = vmalloc_array(qp->attrs.sq_size, sizeof(u64));
+	if (!kqp->swr_tbl)
+		return -ENOMEM;
+
 	kqp->rwr_tbl = vmalloc_array(qp->attrs.rq_size, sizeof(u64));
-	if (!kqp->swr_tbl || !kqp->rwr_tbl)
-		goto err_out;
+	if (!kqp->rwr_tbl)
+		goto err_free_swr_tbl;
 
 	size = qp->attrs.sq_size << SQEBB_SHIFT;
 	kqp->sq_buf = dma_alloc_coherent(&dev->pdev->dev, size,
 					 &kqp->sq_buf_dma_addr, GFP_KERNEL);
 	if (!kqp->sq_buf)
-		goto err_out;
+		goto err_free_rwr_tbl;
 
 	kqp->sq_dbrec =
 		dma_pool_zalloc(dev->db_pool, GFP_KERNEL, &kqp->sq_dbrec_dma);
 	if (!kqp->sq_dbrec)
-		goto err_out;
+		goto err_free_sq_buf;
 
 	size = qp->attrs.rq_size << RQE_SHIFT;
 	kqp->rq_buf = dma_alloc_coherent(&dev->pdev->dev, size,
 					 &kqp->rq_buf_dma_addr, GFP_KERNEL);
 	if (!kqp->rq_buf)
-		goto err_out;
+		goto err_free_sq_dbrec;
 
 	kqp->rq_dbrec =
 		dma_pool_zalloc(dev->db_pool, GFP_KERNEL, &kqp->rq_dbrec_dma);
 	if (!kqp->rq_dbrec)
-		goto err_out;
+		goto err_free_rq_buf;
 
 	return 0;
 
-err_out:
-	free_kernel_qp(qp);
+err_free_rq_buf:
+	dma_free_coherent(&dev->pdev->dev, size, kqp->rq_buf,
+			  kqp->rq_buf_dma_addr);
+err_free_sq_dbrec:
+	dma_pool_free(dev->db_pool, kqp->sq_dbrec, kqp->sq_dbrec_dma);
+err_free_sq_buf:
+	size = qp->attrs.sq_size << SQEBB_SHIFT;
+	dma_free_coherent(&dev->pdev->dev, size, kqp->sq_buf,
+			  kqp->sq_buf_dma_addr);
+err_free_rwr_tbl:
+	vfree(kqp->rwr_tbl);
+err_free_swr_tbl:
+	vfree(kqp->swr_tbl);
+
 	return -ENOMEM;
 }
 
