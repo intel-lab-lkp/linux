@@ -790,8 +790,8 @@ void vfio_pci_core_disable(struct vfio_pci_core_device *vdev)
 	 */
 	if (vdev->reset_works) {
 		bridge = pci_upstream_bridge(pdev);
-		if (bridge && !pci_dev_trylock(bridge))
-			goto out_restore_state;
+		if (bridge)
+			pci_dev_lock(bridge);
 		if (pci_dev_trylock(pdev)) {
 			if (!__pci_reset_function_locked(pdev))
 				vdev->needs_reset = false;
@@ -801,7 +801,6 @@ void vfio_pci_core_disable(struct vfio_pci_core_device *vdev)
 			pci_dev_unlock(bridge);
 	}
 
-out_restore_state:
 	pci_restore_state(pdev);
 out:
 	pci_disable_device(pdev);
