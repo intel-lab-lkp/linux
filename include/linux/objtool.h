@@ -4,6 +4,7 @@
 
 #include <linux/objtool_types.h>
 #include <linux/annotate.h>
+#include <linux/compiler.h>
 
 #ifdef CONFIG_OBJTOOL
 
@@ -30,9 +31,11 @@
  *
  * For more information, see tools/objtool/Documentation/objtool.txt.
  */
-#define STACK_FRAME_NON_STANDARD(func) \
-	static void __used __section(".discard.func_stack_frame_non_standard") \
-		*__func_stack_frame_non_standard_##func = func
+#define STACK_FRAME_NON_STANDARD(func)					\
+	__ADDRESSABLE(func);						\
+	asm(".pushsection .discard.func_stack_frame_non_standard\n\t"	\
+	    ".long " #func " - .\n\t"					\
+	    ".popsection")
 
 /*
  * STACK_FRAME_NON_STANDARD_FP() is a frame-pointer-specific function ignore
@@ -91,8 +94,8 @@
 .endm
 
 .macro STACK_FRAME_NON_STANDARD func:req
-	.pushsection .discard.func_stack_frame_non_standard, "aw"
-	.quad \func
+	.pushsection .discard.func_stack_frame_non_standard, ""
+	.long \func - .
 	.popsection
 .endm
 
