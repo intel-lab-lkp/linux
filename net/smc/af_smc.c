@@ -310,7 +310,15 @@ static int __smc_release(struct smc_sock *smc)
 		smc_restore_fallback_changes(smc);
 	}
 
-	sk->sk_prot->unhash(sk);
+	/* Fallback sockets never call smc_conn_free(), so unhash directly.
+	 * Non-fallback sockets use smc_conn_unhash() so that the conn->unhashed
+	 * flag keeps the unhash exactly once even when smc_conn_free() already ran
+	 * first (e.g. via smc_conn_kill()).
+	 */
+	if (smc->use_fallback)
+		sk->sk_prot->unhash(sk);
+	else
+		smc_conn_unhash(&smc->conn);
 
 	if (sk->sk_state == SMC_CLOSED) {
 		if (smc->clcsock) {

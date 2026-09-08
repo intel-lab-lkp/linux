@@ -1251,6 +1251,20 @@ static void smc_buf_unuse(struct smc_connection *conn,
 	}
 }
 
+/* unhash the socket once; owns the single unhash for all non-fallback paths.
+ * Every caller holds lock_sock for this socket, so conn->unhashed is protected
+ * by that lock and no separate synchronisation is needed.
+ */
+void smc_conn_unhash(struct smc_connection *conn)
+{
+	struct smc_sock *smc = container_of(conn, struct smc_sock, conn);
+
+	if (!conn->unhashed) {
+		conn->unhashed = 1;
+		smc->sk.sk_prot->unhash(&smc->sk);
+	}
+}
+
 /* remove a finished connection from its link group */
 void smc_conn_free(struct smc_connection *conn)
 {
@@ -1263,6 +1277,11 @@ void smc_conn_free(struct smc_connection *conn)
 		return;
 
 	conn->freed = 1;
+	/* Unhash before dropping lgr/lnk refs so the diag reader, which
+	 * iterates under the socket hash read_lock, cannot see a connection whose
+	 * lgr or lnk is being freed concurrently.
+	 */
+	smc_conn_unhash(conn);
 	if (!smc_conn_lgr_valid(conn))
 		/* Connection has already unregistered from
 		 * link group.
@@ -2053,6 +2072,7 @@ create:
 	if (!conn->lgr->is_smcd)
 		smcr_link_hold(conn->lnk); /* link_put in smc_conn_free() */
 	conn->freed = 0;
+	conn->unhashed = 0;
 	conn->local_tx_ctrl.common.type = SMC_CDC_MSG_TYPE;
 	conn->local_tx_ctrl.len = SMC_WR_TX_SIZE;
 	conn->urg_state = SMC_URG_READ;

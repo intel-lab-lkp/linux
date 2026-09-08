@@ -279,6 +279,7 @@ struct smc_connection {
 	u64			peer_token;	/* SMC-D token of peer */
 	u8			killed;		/* abnormal termination */
 	u8			freed;		/* normal termination */
+	u8			unhashed;	/* removed from sock hash */
 	u8			out_of_sync;	/* out of sync with peer */
 };
 
