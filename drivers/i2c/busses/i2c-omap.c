@@ -31,6 +31,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/property.h>
+#include <linux/bitfield.h>
 
 /* I2C controller revisions */
 #define OMAP_I2C_OMAP1_REV_2		0x20
@@ -97,8 +98,10 @@ enum {
 /* I2C Buffer Configuration Register (OMAP_I2C_BUF): */
 #define OMAP_I2C_BUF_RDMA_EN	BIT(15)	/* RX DMA channel enable */
 #define OMAP_I2C_BUF_RXFIF_CLR	BIT(14)	/* RX FIFO Clear */
+#define OMAP_I2C_BUF_RXTRSH	GENMASK(13, 8)	/* RX FIFO Threshold */
 #define OMAP_I2C_BUF_XDMA_EN	BIT(7)	/* TX DMA channel enable */
 #define OMAP_I2C_BUF_TXFIF_CLR	BIT(6)	/* TX FIFO Clear */
+#define OMAP_I2C_BUF_TXTRSH	GENMASK(5, 0)	/* TX FIFO Threshold */
 
 /* I2C Configuration Register (OMAP_I2C_CON): */
 #define OMAP_I2C_CON_EN		BIT(15)	/* I2C module enable */
@@ -602,12 +605,14 @@ static void omap_i2c_resize_fifo(struct omap_i2c_dev *omap, u8 size, bool is_rx)
 
 	if (is_rx) {
 		/* Clear RX Threshold */
-		buf &= ~(0x3f << 8);
-		buf |= ((omap->threshold - 1) << 8) | OMAP_I2C_BUF_RXFIF_CLR;
+		buf &= ~OMAP_I2C_BUF_RXTRSH;
+		buf |= FIELD_PREP(OMAP_I2C_BUF_RXTRSH, (omap->threshold - 1));
+		buf |= OMAP_I2C_BUF_RXFIF_CLR;
 	} else {
 		/* Clear TX Threshold */
-		buf &= ~0x3f;
-		buf |= (omap->threshold - 1) | OMAP_I2C_BUF_TXFIF_CLR;
+		buf &= ~OMAP_I2C_BUF_TXTRSH;
+		buf |= FIELD_PREP(OMAP_I2C_BUF_TXTRSH, (omap->threshold - 1));
+		buf |= OMAP_I2C_BUF_TXFIF_CLR;
 	}
 
 	omap_i2c_write_reg(omap, OMAP_I2C_BUF_REG, buf);
