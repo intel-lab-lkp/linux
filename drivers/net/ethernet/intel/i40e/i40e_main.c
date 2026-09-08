@@ -11084,6 +11084,11 @@ static void i40e_rebuild(struct i40e_pf *pf, bool reinit, bool lock_acquired)
 	i40e_add_filter_to_drop_tx_flow_control_frames(&pf->hw,
 						       pf->main_vsi_seid);
 
+	/* Reprogram the filters the reset cleared before the queues start.
+	 * Avoid the wait for the service task, best effort.
+	 */
+	i40e_sync_vsi_filters(vsi);
+
 	/* restart the VSIs that were rebuilt and running before the reset */
 	i40e_pf_unquiesce_all_vsi(pf);
 
@@ -11115,6 +11120,11 @@ end_core_reset:
 clear_recovery:
 	clear_bit(__I40E_RESET_RECOVERY_PENDING, pf->state);
 	clear_bit(__I40E_TIMEOUT_RECOVERY_PENDING, pf->state);
+
+	/* i40e_service_event_schedule() may have been called with
+	 * the RESET bits still set, requeue now that we cleared them.
+	 */
+	i40e_service_event_schedule(pf);
 }
 
 /**
