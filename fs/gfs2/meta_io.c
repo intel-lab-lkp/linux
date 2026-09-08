@@ -199,6 +199,8 @@ struct buffer_head *gfs2_meta_new(struct gfs2_glock *gl, u64 blkno)
 {
 	struct buffer_head *bh;
 	bh = gfs2_getbuf(gl, blkno, CREATE);
+	if (!bh)
+		return NULL;
 	meta_prep_new(bh);
 	return bh;
 }
@@ -268,12 +270,13 @@ int gfs2_meta_read(struct gfs2_glock *gl, u64 blkno, int flags,
 	struct buffer_head *bh, *bhs[2];
 	int num = 0;
 
-	if (gfs2_withdrawn(sdp)) {
-		*bhp = NULL;
-		return -EIO;
-	}
+	if (gfs2_withdrawn(sdp))
+		goto error;
 
-	*bhp = bh = gfs2_getbuf(gl, blkno, CREATE);
+	bh = gfs2_getbuf(gl, blkno, CREATE);
+	if (!bh)
+		goto error;
+	*bhp = bh;
 
 	lock_buffer(bh);
 	if (buffer_uptodate(bh)) {
@@ -286,6 +289,8 @@ int gfs2_meta_read(struct gfs2_glock *gl, u64 blkno, int flags,
 
 	if (rahead) {
 		bh = gfs2_getbuf(gl, blkno + 1, CREATE);
+		if (!bh)
+			goto error;
 
 		lock_buffer(bh);
 		if (buffer_uptodate(bh)) {
@@ -307,11 +312,14 @@ int gfs2_meta_read(struct gfs2_glock *gl, u64 blkno, int flags,
 		if (tr && test_bit(TR_TOUCHED, &tr->tr_flags))
 			gfs2_io_error_bh(sdp, bh);
 		brelse(bh);
-		*bhp = NULL;
-		return -EIO;
+		goto error;
 	}
 
 	return 0;
+
+error:
+	*bhp = NULL;
+	return -EIO;
 }
 
 /**
@@ -494,6 +502,8 @@ struct buffer_head *gfs2_meta_ra(struct gfs2_glock *gl, u64 dblock, u32 extlen)
 		extlen = max_ra;
 
 	first_bh = gfs2_getbuf(gl, dblock, CREATE);
+	if (!first_bh)
+		return NULL;
 
 	if (buffer_uptodate(first_bh))
 		goto out;
@@ -504,6 +514,8 @@ struct buffer_head *gfs2_meta_ra(struct gfs2_glock *gl, u64 dblock, u32 extlen)
 
 	while (extlen) {
 		bh = gfs2_getbuf(gl, dblock, CREATE);
+		if (!bh)
+			continue;
 
 		bh_readahead(bh, REQ_RAHEAD | REQ_META | REQ_PRIO);
 		brelse(bh);
