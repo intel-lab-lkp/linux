@@ -182,7 +182,13 @@ no count: each element is prefixed by a value-follows TRUE and the
 sequence is closed by a FALSE, which the framing writes after the
 last element. The element type must therefore be a pointer type,
 whose codec owns that framing; xdrgen rejects any other element
-type. For the optional-data form xdrgen generates a working
+type. That form has no count to loop on, so its encoder pulls
+elements until the item hook returns false. False ends the list
+rather than failing the encode: a producer stops when its source
+is exhausted or when a reply budget fills. A producer that stops
+for an error records it in its own state and either fails the
+encode from the end hook or reports it in the procedure status.
+For the optional-data form xdrgen generates a working
 encoder only; the decoder it emits fails without consuming the
 list, so xdrgen also rejects the directive when the struct is
 reachable from an RPC argument.
@@ -208,7 +214,7 @@ member:
 For a variable-length array, a decoder fills the cursor's count from
 the wire before calling the begin hook, and an encoder's begin hook
 sets that count for the framing to bound-check and emit. An
-optional-data list's encoder begin hook sets the count as well; its
+optional-data list's encoder does not read the count and its
 decoder never fills it. Once a begin hook
 has succeeded its end hook runs, so that it can release what begin
 took; the end hook receives the running success flag.
