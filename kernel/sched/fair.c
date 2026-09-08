@@ -38,6 +38,7 @@
 #include <linux/sched/cond_resched.h>
 #include <linux/sched/cputime.h>
 #include <linux/sched/isolation.h>
+#include <linux/sched/numa_balancing.h>
 #include <linux/sched/nohz.h>
 #include <linux/sched/prio.h>
 #include <linux/static_call.h>
@@ -1712,6 +1713,7 @@ static int get_pref_llc(struct task_struct *p, struct mm_struct *mm)
 		 * conflict only exists for a short period of time.
 		 */
 		if (static_branch_likely(&sched_numa_balancing) &&
+		    task_numa_sched_snapshot_enabled(p) &&
 		    p->numa_preferred_nid >= 0 &&
 		    cpu_to_node(mm_sched_cpu) != p->numa_preferred_nid)
 			mm_sched_llc = -1;
@@ -1806,6 +1808,9 @@ static void get_scan_cpumasks(cpumask_var_t cpus, struct task_struct *p)
 	int cpu, curr_cpu, nid, pref_nid;
 
 	if (!static_branch_likely(&sched_numa_balancing))
+		goto out;
+
+	if (!task_numa_sched_snapshot_enabled(p))
 		goto out;
 
 	cpu = READ_ONCE(p->mm->sc_stat.cpu);
@@ -2387,14 +2392,22 @@ static unsigned int task_scan_max(struct task_struct *p)
 
 static void account_numa_enqueue(struct rq *rq, struct task_struct *p)
 {
-	rq->nr_numa_running += (p->numa_preferred_nid != NUMA_NO_NODE);
-	rq->nr_preferred_running += (p->numa_preferred_nid == task_node(p));
+	bool enabled = task_numa_sched_snapshot_enabled(p);
+
+	rq->nr_numa_running += enabled &&
+				 p->numa_preferred_nid != NUMA_NO_NODE;
+	rq->nr_preferred_running += enabled &&
+				     p->numa_preferred_nid == task_node(p);
 }
 
 static void account_numa_dequeue(struct rq *rq, struct task_struct *p)
 {
-	rq->nr_numa_running -= (p->numa_preferred_nid != NUMA_NO_NODE);
-	rq->nr_preferred_running -= (p->numa_preferred_nid == task_node(p));
+	bool enabled = task_numa_sched_snapshot_enabled(p);
+
+	rq->nr_numa_running -= enabled &&
+				 p->numa_preferred_nid != NUMA_NO_NODE;
+	rq->nr_preferred_running -= enabled &&
+				     p->numa_preferred_nid == task_node(p);
 }
 
 /* Shared or private faults. */
@@ -3084,6 +3097,9 @@ static bool task_numa_compare(struct task_numa_env *env,
 		else
 			goto unlock;
 	}
+
+	if (!task_numa_sched_snapshot_enabled(cur))
+		goto unlock;
 
 	/* Skip this swap candidate if cannot move to the source cpu. */
 	if (!cpumask_test_cpu(env->src_cpu, cur->cpus_ptr))
@@ -3992,6 +4008,9 @@ void task_numa_fault(int last_cpupid, int mem_node, int pages, int flags)
 	if (!static_branch_likely(&sched_numa_balancing))
 		return;
 
+	if (!task_numa_sched_snapshot_enabled(p))
+		return;
+
 	/* for example, ksmd faulting in a user's mm */
 	if (!p->mm)
 		return;
@@ -4436,6 +4455,9 @@ static void task_tick_numa(struct rq *rq, struct task_struct *curr)
 	if (!curr->mm || (curr->flags & (PF_EXITING | PF_KTHREAD)) || work->next != work)
 		return;
 
+	if (!task_numa_sched_snapshot_enabled(curr))
+		return;
+
 	/*
 	 * Using runtime rather than walltime has the dual advantage that
 	 * we (mostly) drive the selection from busy threads and that the
@@ -4461,6 +4483,9 @@ static void update_scan_period(struct task_struct *p, int new_cpu)
 	int dst_nid = cpu_to_node(new_cpu);
 
 	if (!static_branch_likely(&sched_numa_balancing))
+		return;
+
+	if (!task_numa_sched_snapshot_enabled(p))
 		return;
 
 	if (!p->mm || !p->numa_faults || (p->flags & PF_EXITING))
@@ -10473,6 +10498,9 @@ static long migrate_degrades_locality(struct task_struct *p, struct lb_env *env)
 	int src_nid, dst_nid, dist;
 
 	if (!static_branch_likely(&sched_numa_balancing))
+		return 0;
+
+	if (!task_numa_sched_snapshot_enabled(p))
 		return 0;
 
 	if (!p->numa_faults || !(env->sd->flags & SD_NUMA))

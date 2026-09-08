@@ -180,6 +180,14 @@ struct signal_struct {
 #ifdef CONFIG_SCHED_AUTOGROUP
 	struct autogroup *autogroup;
 #endif
+#ifdef CONFIG_NUMA_BALANCING
+	/*
+	 * Thread-group automatic NUMA balancing mode configured through prctl().
+	 * Scheduler hot paths use task_struct::numa_balancing_sched_enabled as
+	 * their per-task runqueue accounting snapshot.
+	 */
+	bool numa_balancing_enabled;
+#endif
 	/*
 	 * Cumulative resource counters for dead threads in the group,
 	 * and for reaped dead child processes forked by this group.

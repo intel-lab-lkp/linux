@@ -41,6 +41,9 @@ static struct signal_struct init_signals = {
 		.cputime_atomic	= INIT_CPUTIME_ATOMIC,
 	},
 #endif
+#ifdef CONFIG_NUMA_BALANCING
+	.numa_balancing_enabled = true,
+#endif
 	INIT_CPU_TIMERS(init_signals)
 	.pids = {
 		[PIDTYPE_PID]	= &init_struct_pid,
@@ -224,6 +227,7 @@ struct task_struct init_task __aligned(L1_CACHE_BYTES) = {
 	.vtime.state	= VTIME_SYS,
 #endif
 #ifdef CONFIG_NUMA_BALANCING
+	.numa_balancing_sched_enabled = true,
 	.numa_preferred_nid = NUMA_NO_NODE,
 	.numa_group	= NULL,
 	.numa_faults	= NULL,

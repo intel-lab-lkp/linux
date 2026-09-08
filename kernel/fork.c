@@ -2496,6 +2496,14 @@ __latent_entropy struct task_struct *copy_process(
 
 	/* No more failure paths after this point. */
 
+#ifdef CONFIG_NUMA_BALANCING
+	p->numa_balancing_sched_enabled =
+		READ_ONCE(current->signal->numa_balancing_enabled);
+	if (!(clone_flags & CLONE_THREAD))
+		p->signal->numa_balancing_enabled =
+			p->numa_balancing_sched_enabled;
+#endif
+
 	/*
 	 * Copy seccomp details explicitly here, in case they were changed
 	 * before holding sighand lock.

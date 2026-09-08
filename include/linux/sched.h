@@ -1382,6 +1382,12 @@ struct task_struct {
 	short				pref_node_fork;
 #endif
 #ifdef CONFIG_NUMA_BALANCING
+	/*
+	 * Scheduler snapshot of signal_struct::numa_balancing_enabled. It is
+	 * updated with sched_change for runqueue NUMA accounting; the
+	 * user-visible process mode lives in signal_struct.
+	 */
+	bool				numa_balancing_sched_enabled;
 	int				numa_scan_seq;
 	unsigned int			numa_scan_period;
 	unsigned int			numa_scan_period_max;

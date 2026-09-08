@@ -36,6 +36,7 @@
 #include <linux/sched/isolation.h>
 #include <linux/sched/loadavg.h>
 #include <linux/sched/mm.h>
+#include <linux/sched/numa_balancing.h>
 #include <linux/sched/nohz.h>
 #include <linux/sched/rseq_api.h>
 #include <linux/sched/rt.h>
@@ -603,6 +604,8 @@ int task_llc(const struct task_struct *p)
  *				p->se.load, p->rt_priority,
  *				p->dl.dl_{runtime, deadline, period, flags, bw, density}
  *  - sched_setnuma():		p->numa_preferred_nid
+ *  - task_numa_balancing_set_current():	p->signal->numa_balancing_enabled,
+ *					p->numa_balancing_sched_enabled
  *  - sched_move_task():	p->sched_task_group
  *  - uclamp_update_active()	p->uclamp*
  *
@@ -8259,6 +8262,42 @@ void sched_setnuma(struct task_struct *p, int nid)
 	guard(task_rq_lock)(p);
 	scoped_guard (sched_change, p, DEQUEUE_SAVE)
 		p->numa_preferred_nid = nid;
+}
+
+static void sched_numa_balancing_change_task(struct task_struct *p, bool enabled)
+{
+	guard(task_rq_lock)(p);
+	scoped_guard (sched_change, p, DEQUEUE_SAVE)
+		WRITE_ONCE(p->numa_balancing_sched_enabled, enabled);
+}
+
+int task_numa_balancing_set_current(bool enabled)
+{
+	static DEFINE_MUTEX(task_numa_balancing_mutex);
+	struct task_struct *t;
+	unsigned long flags;
+	bool old_enabled;
+
+	guard(mutex)(&task_numa_balancing_mutex);
+
+	if (WARN_ON_ONCE(!lock_task_sighand(current, &flags)))
+		return -ESRCH;
+
+	old_enabled = current->signal->numa_balancing_enabled;
+	if (old_enabled != enabled)
+		WRITE_ONCE(current->signal->numa_balancing_enabled, enabled);
+
+	unlock_task_sighand(current, &flags);
+
+	if (old_enabled != enabled) {
+		sched_numa_balancing_change_task(current, enabled);
+		read_lock(&tasklist_lock);
+		for_other_threads(current, t)
+			sched_numa_balancing_change_task(t, enabled);
+		read_unlock(&tasklist_lock);
+	}
+
+	return 0;
 }
 #endif /* CONFIG_NUMA_BALANCING */
 

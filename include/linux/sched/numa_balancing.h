@@ -8,6 +8,7 @@
  */
 
 #include <linux/sched.h>
+#include <linux/sched/signal.h>
 
 #define TNF_MIGRATED	0x01
 #define TNF_NO_GROUP	0x02
@@ -30,6 +31,22 @@ extern void task_numa_fault(int last_node, int node, int pages, int flags);
 extern pid_t task_numa_group_id(struct task_struct *p);
 extern void set_numabalancing_state(bool enabled);
 extern void task_numa_free(struct task_struct *p, bool final);
+static inline bool task_numa_sched_snapshot_enabled(struct task_struct *p)
+{
+	return READ_ONCE(p->numa_balancing_sched_enabled);
+}
+
+static inline bool task_numa_process_mode_enabled(struct task_struct *p)
+{
+	return READ_ONCE(p->signal->numa_balancing_enabled);
+}
+
+int task_numa_balancing_set_current(bool enabled);
+
+static inline int task_numa_balancing_get_current(void)
+{
+	return task_numa_process_mode_enabled(current);
+}
 bool should_numa_migrate_memory(struct task_struct *p, struct folio *folio,
 				int src_nid, int dst_cpu);
 #else
@@ -46,6 +63,26 @@ static inline void set_numabalancing_state(bool enabled)
 }
 static inline void task_numa_free(struct task_struct *p, bool final)
 {
+}
+
+static inline bool task_numa_sched_snapshot_enabled(struct task_struct *p)
+{
+	return false;
+}
+
+static inline bool task_numa_process_mode_enabled(struct task_struct *p)
+{
+	return false;
+}
+
+static inline int task_numa_balancing_set_current(bool enabled)
+{
+	return -EINVAL;
+}
+
+static inline int task_numa_balancing_get_current(void)
+{
+	return -EINVAL;
 }
 static inline bool should_numa_migrate_memory(struct task_struct *p,
 				struct folio *folio, int src_nid, int dst_cpu)
