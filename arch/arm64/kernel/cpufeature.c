@@ -2501,6 +2501,13 @@ test_has_mpam(const struct arm64_cpu_capabilities *entry, int scope)
 	return (read_sysreg_s(SYS_MPAM1_EL1) & MPAM1_EL1_MPAMEN);
 }
 
+static bool
+test_has_mpam_sysregs(const struct arm64_cpu_capabilities *entry, int __unused)
+{
+	/* The registers exist whether or not firmware enabled MPAM. */
+	return detect_ftr_has_mpam();
+}
+
 static void
 cpu_enable_mpam(const struct arm64_cpu_capabilities *entry)
 {
@@ -3115,6 +3122,12 @@ static const struct arm64_cpu_capabilities arm64_features[] = {
 		.capability = ARM64_MPAM,
 		.matches = test_has_mpam,
 		.cpu_enable = cpu_enable_mpam,
+	},
+	{
+		.desc = "Memory Partitioning And Monitoring system registers",
+		.type = ARM64_CPUCAP_SYSTEM_FEATURE,
+		.capability = ARM64_MPAM_SYSREGS,
+		.matches = test_has_mpam_sysregs,
 	},
 	{
 		.desc = "Memory Partitioning And Monitoring Virtualisation",
