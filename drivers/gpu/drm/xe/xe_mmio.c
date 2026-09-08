@@ -7,6 +7,7 @@
 
 #include <linux/delay.h>
 #include <linux/io-64-nonatomic-lo-hi.h>
+#include <linux/math64.h>
 #include <linux/minmax.h>
 #include <linux/pci.h>
 
@@ -349,11 +350,23 @@ static int __xe_mmio_wait32(struct xe_mmio *mmio, struct xe_reg reg, u32 mask, u
 		if (ktime_after(ktime_add_us(cur, wait), end))
 			wait = ktime_us_delta(end, cur);
 
-		if (atomic)
-			udelay(wait);
-		else
-			usleep_range(wait, wait << 1);
-		wait <<= 1;
+#define __XE_MMIO_WAIT_MAX_INLOOP_100MS (100 * USEC_PER_MSEC)
+		if (atomic) {
+			if (wait <= MAX_UDELAY_MS * USEC_PER_MSEC)
+				udelay(wait);
+			else
+				mdelay(div64_s64(wait, USEC_PER_MSEC));
+		} else {
+			usleep_range(wait, wait + (wait >> 2)); /* range till wait + 25% */
+		}
+		/*
+		 * As we keep doubling the wait time for every check that fails, cap the
+		 * in-loop delay-or-sleep to less than 2x 100 milliseconds to prevent from
+		 * expanding 'wait' into exponentially longer wait times per loop that
+		 * end up delaying the next completion check way later than tolerable.
+		 */
+		wait = wait < __XE_MMIO_WAIT_MAX_INLOOP_100MS >> 1 ?
+		       wait << 1 : __XE_MMIO_WAIT_MAX_INLOOP_100MS;
 	}
 
 	if (ret != 0) {
