@@ -1488,7 +1488,7 @@ static void *thread_proc(void *mem)
 	return NULL;
 }
 
-static void transact_test(int page_size)
+static void transact_test(void)
 {
 	unsigned int i, count, extra_pages;
 	unsigned int c;
@@ -1652,6 +1652,9 @@ int main(int __attribute__((unused)) argc, char *argv[])
 
 	ksft_print_header();
 
+	page_size = getpagesize();
+	hpage_size = read_pmd_pagesize();
+
 	if (init_uffd())
 		ksft_exit_skip("Failed to initialize userfaultfd\n");
 
@@ -1659,9 +1662,6 @@ int main(int __attribute__((unused)) argc, char *argv[])
 		ksft_print_msg("HugeTLB test will be skipped\n");
 
 	ksft_set_plan(119);
-
-	page_size = getpagesize();
-	hpage_size = read_pmd_pagesize();
 
 	pagemap_fd = open(PAGEMAP, O_RDONLY);
 	if (pagemap_fd < 0)
@@ -1822,7 +1822,7 @@ int main(int __attribute__((unused)) argc, char *argv[])
 	mprotect_tests();
 
 	/* 13. Transact test */
-	transact_test(page_size);
+	transact_test();
 
 	/* 14. Sanity testing */
 	sanity_tests();
