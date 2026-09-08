@@ -1636,3 +1636,30 @@ int bnge_hwrm_port_qstats(struct bnge_dev *bd, u8 flags)
 
 	return bnge_hwrm_req_send(bd, req);
 }
+
+int bnge_hwrm_cfa_adv_flow_mgnt_qcaps(struct bnge_dev *bd)
+{
+	struct hwrm_cfa_adv_flow_mgnt_qcaps_output *resp;
+	struct hwrm_cfa_adv_flow_mgnt_qcaps_input *req;
+	u32 flags;
+	int rc;
+
+	rc = bnge_hwrm_req_init(bd, req, HWRM_CFA_ADV_FLOW_MGNT_QCAPS);
+	if (rc)
+		return rc;
+
+	resp = bnge_hwrm_req_hold(bd, req);
+	rc = bnge_hwrm_req_send(bd, req);
+	if (rc)
+		goto err_hwrm_drop;
+
+	flags = le32_to_cpu(resp->flags);
+
+	if (flags &
+	    CFA_ADV_FLOW_MGNT_QCAPS_RESP_FLAGS_NTUPLE_FLOW_RX_EXT_IP_PROTO_SUPPORTED)
+		bd->fw_cap |= BNGE_FW_CAP_CFA_NTUPLE_RX_EXT_IP_PROTO;
+
+err_hwrm_drop:
+	bnge_hwrm_req_drop(bd, req);
+	return rc;
+}
