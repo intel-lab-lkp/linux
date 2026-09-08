@@ -61,10 +61,6 @@ int __init omap_i2c_add_bus(struct omap_i2c_bus_platform_data *pdata,
 		       OMAP_I2C_FLAG_16BIT_DATA_REG |
 		       OMAP_I2C_FLAG_ALWAYS_ARMXOR_CLK;
 
-	/* how the cpu bus is wired up differs for 7xx only */
-
-	pdata->flags |= OMAP_I2C_FLAG_BUS_SHIFT_2;
-
 	pdev->dev.platform_data = pdata;
 
 	return platform_device_register(pdev);
