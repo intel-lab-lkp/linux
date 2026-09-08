@@ -476,7 +476,7 @@ static int libipw_michael_mic_verify(struct sk_buff *skb, int keyidx,
 	struct libipw_tkip_data *tkey = priv;
 	u8 mic[8];
 
-	if (!tkey->key_set)
+	if (!tkey->key_set || skb->len < hdr_len + 8)
 		return -1;
 
 	michael_mic(&tkey->key[24], (struct ieee80211_hdr *)skb->data,
