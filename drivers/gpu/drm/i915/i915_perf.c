@@ -4728,7 +4728,7 @@ int i915_perf_add_config_ioctl(struct drm_device *dev, void *data,
 		drm_dbg(&perf->i915->drm,
 			"Failed to create sysfs entry for OA config\n");
 		err = oa_config->id;
-		goto sysfs_err;
+		goto remove_sysfs;
 	}
 	id = oa_config->id;
 
@@ -4738,6 +4738,8 @@ int i915_perf_add_config_ioctl(struct drm_device *dev, void *data,
 
 	return id;
 
+remove_sysfs:
+	sysfs_remove_group(perf->metrics_kobj, &oa_config->sysfs_metric);
 sysfs_err:
 	mutex_unlock(&perf->metrics_lock);
 reg_err:
