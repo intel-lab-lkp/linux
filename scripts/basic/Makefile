@@ -2,7 +2,7 @@
 #
 # fixdep: used to generate dependency information during build process
 
-hostprogs-always-y	+= fixdep
+hostprogs-always-y	+= fixdep depcheck
 
 # randstruct: the seed is needed before building the gcc-plugin or
 # before running a Clang kernel build.
