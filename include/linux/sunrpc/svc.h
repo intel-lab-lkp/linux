@@ -532,6 +532,8 @@ static inline void svc_reserve_auth(struct svc_rqst *rqstp, int space)
  * svcxdr_init_decode - Prepare an xdr_stream for Call decoding
  * @rqstp: controlling server RPC transaction context
  *
+ * The stream records @rqstp, so a codec running on it reaches the
+ * transaction with svcxdr_rqst().
  */
 static inline void svcxdr_init_decode(struct svc_rqst *rqstp)
 {
@@ -544,12 +546,15 @@ static inline void svcxdr_init_decode(struct svc_rqst *rqstp)
 
 	xdr_init_decode(xdr, buf, argv->iov_base, NULL);
 	xdr_set_scratch_folio(xdr, rqstp->rq_scratch_folio);
+	xdr->xdrgen_ctx = rqstp;
 }
 
 /**
  * svcxdr_init_encode - Prepare an xdr_stream for svc Reply encoding
  * @rqstp: controlling server RPC transaction context
  *
+ * The stream records @rqstp, so a codec running on it reaches the
+ * transaction with svcxdr_rqst().
  */
 static inline void svcxdr_init_encode(struct svc_rqst *rqstp)
 {
@@ -567,7 +572,19 @@ static inline void svcxdr_init_encode(struct svc_rqst *rqstp)
 	xdr->page_ptr = buf->pages - 1;
 	buf->buflen = PAGE_SIZE * (rqstp->rq_page_end - buf->pages);
 	xdr->rqst = NULL;
-	xdr->xdrgen_ctx = NULL;
+	xdr->xdrgen_ctx = rqstp;
+}
+
+/**
+ * svcxdr_rqst - Retrieve the transaction bound to an xdr_stream
+ * @xdr: stream to query
+ *
+ * Return: the controlling svc_rqst when @xdr was initialized by
+ * svcxdr_init_decode() or svcxdr_init_encode(), otherwise NULL.
+ */
+static inline struct svc_rqst *svcxdr_rqst(struct xdr_stream *xdr)
+{
+	return xdr->xdrgen_ctx;
 }
 
 /**
