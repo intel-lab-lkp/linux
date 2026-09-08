@@ -866,12 +866,19 @@ static int _test_cmd_get_hw_info(int fd, __u32 device_id, __u32 data_type,
 		}
 	}
 
+	/*
+	 * When data_len is smaller than sizeof(*info), GCC warns about
+	 * out-of-bounds access.  The runtime data_len checks make this safe.
+	 */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds"
 	if (info) {
 		if (data_len >= offsetofend(struct iommu_test_hw_info, test_reg))
 			assert(info->test_reg == IOMMU_HW_INFO_SELFTEST_REGVAL);
 		if (data_len >= offsetofend(struct iommu_test_hw_info, flags))
 			assert(!info->flags);
 	}
+#pragma GCC diagnostic pop
 
 	if (max_pasid)
 		*max_pasid = cmd.out_max_pasid_log2;
