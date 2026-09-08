@@ -2533,8 +2533,8 @@ static void calc_vtime_cost_builtin(struct bio *bio, struct ioc_gq *iocg,
 	u64 seek_pages = 0;
 	u64 cost = 0;
 
-	/* Can't calculate cost for empty bio */
-	if (!bio->bi_iter.bi_size)
+	/* Dataless WRITE|REQ_PREFLUSH (standalone flush) is priced below */
+	if (!bio->bi_iter.bi_size && !(bio->bi_opf & REQ_PREFLUSH))
 		goto out;
 
 	switch (bio_op(bio)) {
@@ -2544,6 +2544,15 @@ static void calc_vtime_cost_builtin(struct bio *bio, struct ioc_gq *iocg,
 		coef_page	= ioc->params.lcoefs[LCOEF_RPAGE];
 		break;
 	case REQ_OP_WRITE:
+		if (!bio->bi_iter.bi_size) {
+			/*
+			 * dataless WRITE|REQ_PREFLUSH: standalone flush;
+			 * at least one page so fast profiles still charge
+			 */
+			cost = max(ioc->params.lcoefs[LCOEF_WRANDIO],
+				   ioc->params.lcoefs[LCOEF_WPAGE]);
+			goto out;
+		}
 		coef_seqio	= ioc->params.lcoefs[LCOEF_WSEQIO];
 		coef_randio	= ioc->params.lcoefs[LCOEF_WRANDIO];
 		coef_page	= ioc->params.lcoefs[LCOEF_WPAGE];
