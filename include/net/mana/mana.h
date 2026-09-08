@@ -102,7 +102,7 @@ struct mana_stats_rx {
 	u64 pkt_len0_err;
 	u64 coalesced_cqe[MANA_CQE_COAL_PKTS_8 - 1];
 	struct u64_stats_sync syncp;
-};
+} ____cacheline_aligned_in_smp;
 
 struct mana_stats_tx {
 	u64 packets;
@@ -117,7 +117,7 @@ struct mana_stats_tx {
 	u64 csum_partial;
 	u64 mana_map_err;
 	struct u64_stats_sync syncp;
-};
+} ____cacheline_aligned_in_smp;
 
 struct mana_txq {
 	struct gdma_queue *gdma_sq;
@@ -148,7 +148,7 @@ struct mana_txq {
 	/* Suppress completion wakeups on the replacement's netdev queue. */
 	bool retiring;
 
-	struct mana_stats_tx stats;
+	struct mana_stats_tx *stats;
 };
 
 /* skb data and frags dma mappings */
@@ -410,7 +410,16 @@ struct mana_rxq {
 
 	u32 buf_index;
 
-	struct mana_stats_rx stats;
+	/* Port-owned live slot; use mana_rxq_stats() to select the writer's
+	 * slot.
+	 */
+	struct mana_stats_rx *stats;
+
+	/* Set under RTNL before another queue takes over this index. */
+	bool retiring;
+
+	/* Folded under RTNL after drain-stat writers quiesce. */
+	struct mana_stats_rx drain_stats;
 
 	struct bpf_prog __rcu *bpf_prog;
 	struct xdp_rxq_info xdp_rxq;
@@ -613,6 +622,14 @@ struct mana_port_context {
 	unsigned int max_queues;
 	unsigned int num_queues;
 
+	/* Port-lifetime arrays with max_queues slots. Live RX queues write
+	 * rxq_stats[]; teardown and rollback fold drain_stats into
+	 * rxq_stats_ret[] under RTNL. Readers sum both.
+	 */
+	struct mana_stats_rx *rxq_stats;
+	struct mana_stats_rx *rxq_stats_ret;
+	struct mana_stats_tx *txq_stats;
+
 	unsigned int rx_queue_size;
 	unsigned int tx_queue_size;
 
@@ -714,6 +731,11 @@ int mana_detach(struct net_device *ndev, bool from_close);
 struct mana_port_context *
 mana_qset_scratch_alloc(struct mana_port_context *apc);
 void mana_qset_scratch_free(struct mana_port_context *scratch);
+static inline struct mana_stats_rx *mana_rxq_stats(struct mana_rxq *rxq)
+{
+	return READ_ONCE(rxq->retiring) ? &rxq->drain_stats : rxq->stats;
+}
+
 int mana_alloc_qset(struct mana_port_context *apc,
 		    struct mana_port_context *scratch, unsigned int num_queues,
 		    unsigned int rx_queue_size, unsigned int tx_queue_size,
