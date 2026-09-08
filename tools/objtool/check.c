@@ -274,30 +274,31 @@ static bool __dead_end_function(struct objtool_file *file, struct symbol *func,
 		return false;
 
 	/*
-	 * A function can have a sibling call instead of a return.  In that
-	 * case, the function's dead-end status depends on whether the target
-	 * of the sibling call returns.
+	 * A function can have sibling calls instead of a return.  It's only a
+	 * dead end if *all* the sibling call targets are dead ends.
 	 */
 	func_for_each_insn(file, func, insn) {
-		if (is_sibling_call(insn)) {
-			struct instruction *dest = insn->jump_dest;
+		struct symbol *dest;
 
-			if (!dest)
-				/* sibling call to another file */
-				return false;
+		if (!is_sibling_call(insn))
+			continue;
 
-			/* local sibling call */
-			if (recursion == 5) {
-				/*
-				 * Infinite recursion: two functions have
-				 * sibling calls to each other.  This is a very
-				 * rare case.  It means they aren't dead ends.
-				 */
-				return false;
-			}
+		dest = insn_call_dest(insn);
+		if (!dest)
+			/* call to another file */
+			return false;
 
-			return __dead_end_function(file, insn_func(dest), recursion+1);
+		if (recursion == 5) {
+			/*
+			 * Infinite recursion: two functions have sibling
+			 * calls to each other.  This is a very rare case.
+			 * It means they aren't dead ends.
+			 */
+			return false;
 		}
+
+		if (!__dead_end_function(file, dest, recursion+1))
+			return false;
 	}
 
 	return true;
