@@ -748,6 +748,8 @@ enum sev_cmd_id {
 	KVM_SEV_SNP_LAUNCH_UPDATE,
 	KVM_SEV_SNP_LAUNCH_FINISH,
 	KVM_SEV_SNP_ENABLE_REQ_CERTS,
+	KVM_SEV_SNP_GET_VCPU_STATE,
+	KVM_SEV_SNP_SET_VCPU_STATE,
 
 	KVM_SEV_NR_MAX,
 };
@@ -902,6 +904,16 @@ struct kvm_sev_snp_launch_update {
 	__u16 flags;
 	__u32 pad1;
 	__u64 pad2[4];
+};
+
+#define KVM_SEV_SNP_VCPU_STATE_VMSA_VALID	_BITULL(0)
+#define KVM_SEV_SNP_VCPU_STATE_GHCB_VALID	_BITULL(1)
+
+struct kvm_sev_snp_vcpu_state {
+	__u64 valid_fields;
+	__u64 vmsa_gpa;
+	__u64 ghcb_gpa;
+	__u64 pad[5];
 };
 
 #define KVM_SEV_SNP_ID_BLOCK_SIZE	96

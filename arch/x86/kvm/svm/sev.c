@@ -2520,6 +2520,8 @@ static int snp_launch_update(struct kvm *kvm, struct kvm_sev_cmd *argp)
 	return 0;
 }
 
+static int sev_snp_install_guest_vmsa(struct vcpu_svm *svm, gpa_t gpa);
+
 static int snp_launch_update_vmsa(struct kvm *kvm, struct kvm_sev_cmd *argp)
 {
 	struct kvm_sev_info *sev = to_kvm_sev_info(kvm);
@@ -2583,6 +2585,89 @@ protect_vcpu:
 out:
 	kvm_unlock_all_vcpus(kvm);
 	return ret;
+}
+
+static int snp_get_vcpu_state(struct kvm_vcpu *vcpu,
+			      struct kvm_sev_cmd *argp)
+{
+	struct vcpu_svm *svm = to_svm(vcpu);
+	struct kvm *kvm = vcpu->kvm;
+	struct kvm_sev_snp_vcpu_state state = {};
+
+	if (!is_sev_snp_guest(vcpu))
+		return -ENOTTY;
+	if (!to_kvm_sev_info(kvm)->snp_context)
+		return -EINVAL;
+
+	guard(mutex)(&svm->sev_es.snp_vmsa_mutex);
+
+	if (VALID_PAGE(svm->sev_es.snp_guest_vmsa_gpa) &&
+	    VALID_PAGE(svm->vmcb->control.vmsa_pa)) {
+		state.vmsa_gpa = svm->sev_es.snp_guest_vmsa_gpa;
+		state.valid_fields |= KVM_SEV_SNP_VCPU_STATE_VMSA_VALID;
+	}
+
+	if (VALID_PAGE(svm->vmcb->control.ghcb_gpa)) {
+		state.ghcb_gpa = svm->vmcb->control.ghcb_gpa;
+		state.valid_fields |= KVM_SEV_SNP_VCPU_STATE_GHCB_VALID;
+	}
+
+	if (copy_to_user(u64_to_user_ptr(argp->data), &state, sizeof(state)))
+		return -EFAULT;
+
+	return 0;
+}
+
+static int snp_set_vcpu_state(struct kvm_vcpu *vcpu,
+			      struct kvm_sev_cmd *argp)
+{
+	struct vcpu_svm *svm = to_svm(vcpu);
+	struct kvm *kvm = vcpu->kvm;
+	struct kvm_sev_info *sev = to_kvm_sev_info(kvm);
+	struct kvm_sev_snp_vcpu_state state;
+	int ret;
+
+	if (!is_sev_snp_guest(vcpu))
+		return -ENOTTY;
+	if (!sev->snp_direct_vmsa)
+		return -EINVAL;
+	if (!sev->snp_context || kvm->arch.pre_fault_allowed)
+		return -EINVAL;
+
+	if (copy_from_user(&state, u64_to_user_ptr(argp->data), sizeof(state)))
+		return -EFAULT;
+
+	if (memchr_inv(state.pad, 0, sizeof(state.pad)) ||
+	    state.valid_fields & ~(KVM_SEV_SNP_VCPU_STATE_VMSA_VALID |
+				   KVM_SEV_SNP_VCPU_STATE_GHCB_VALID))
+		return -EINVAL;
+
+	if (state.valid_fields & KVM_SEV_SNP_VCPU_STATE_VMSA_VALID) {
+		if (!PAGE_ALIGNED(state.vmsa_gpa) ||
+		    !page_address_valid(vcpu, state.vmsa_gpa) ||
+		    IS_ALIGNED(state.vmsa_gpa, PMD_SIZE))
+			return -EINVAL;
+	}
+
+	guard(mutex)(&svm->sev_es.snp_vmsa_mutex);
+
+	if (state.valid_fields & KVM_SEV_SNP_VCPU_STATE_VMSA_VALID) {
+		ret = sev_snp_install_guest_vmsa(svm, state.vmsa_gpa);
+		if (ret)
+			return ret;
+	} else {
+		svm->sev_es.snp_has_guest_vmsa = true;
+		svm->sev_es.snp_guest_vmsa_gpa = INVALID_PAGE;
+		svm->vmcb->control.vmsa_pa = INVALID_PAGE;
+	}
+
+	if (state.valid_fields & KVM_SEV_SNP_VCPU_STATE_GHCB_VALID)
+		svm->vmcb->control.ghcb_gpa = state.ghcb_gpa;
+	else
+		svm->vmcb->control.ghcb_gpa = INVALID_PAGE;
+
+	vmcb_mark_all_dirty(svm->vmcb);
+	return 0;
 }
 
 static int snp_launch_finish(struct kvm *kvm, struct kvm_sev_cmd *argp)
@@ -2779,6 +2864,35 @@ int sev_mem_enc_ioctl(struct kvm *kvm, void __user *argp)
 		r = -EFAULT;
 
 	return r;
+}
+
+int sev_vcpu_mem_enc_ioctl(struct kvm_vcpu *vcpu, void __user *argp)
+{
+	struct kvm_sev_cmd sev_cmd;
+	int ret;
+
+	if (!sev_enabled)
+		return -ENOTTY;
+	if (!argp)
+		return -EINVAL;
+	if (copy_from_user(&sev_cmd, argp, sizeof(sev_cmd)))
+		return -EFAULT;
+
+	switch (sev_cmd.id) {
+	case KVM_SEV_SNP_GET_VCPU_STATE:
+		ret = snp_get_vcpu_state(vcpu, &sev_cmd);
+		break;
+	case KVM_SEV_SNP_SET_VCPU_STATE:
+		ret = snp_set_vcpu_state(vcpu, &sev_cmd);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (copy_to_user(argp, &sev_cmd, sizeof(sev_cmd)))
+		return -EFAULT;
+
+	return ret;
 }
 
 int sev_mem_enc_register_region(struct kvm *kvm,
@@ -4053,6 +4167,56 @@ static int snp_begin_psc(struct vcpu_svm *svm)
 	}
 
 	return snp_do_psc(svm);
+}
+
+/*
+ * Install a guest-owned VMSA.  The caller must serialize against AP creation
+ * and destruction with snp_vmsa_mutex.
+ */
+static int sev_snp_install_guest_vmsa(struct vcpu_svm *svm, gpa_t gpa)
+{
+	struct kvm *kvm = svm->vcpu.kvm;
+	struct kvm_memory_slot *slot;
+	unsigned long mmu_seq;
+	struct page *page;
+	kvm_pfn_t pfn;
+	gfn_t gfn;
+	int idx;
+	int ret;
+
+	lockdep_assert_held(&svm->sev_es.snp_vmsa_mutex);
+
+	gfn = gpa_to_gfn(gpa);
+	idx = srcu_read_lock(&kvm->srcu);
+	slot = gfn_to_memslot(kvm, gfn);
+	if (!slot) {
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
+	mmu_seq = kvm->mmu_invalidate_seq;
+	/* Pairs with the smp_wmb() in kvm_mmu_invalidate_end(). */
+	smp_rmb();
+
+	/* Guest-owned VMSAs are backed by guest_memfd private memory. */
+	ret = kvm_gmem_get_pfn(kvm, slot, gfn, &pfn, &page, NULL);
+	if (ret)
+		goto out_unlock;
+
+	read_lock(&kvm->mmu_lock);
+	if (mmu_invalidate_retry_gfn(kvm, mmu_seq, gfn)) {
+		ret = -EAGAIN;
+	} else {
+		svm->sev_es.snp_has_guest_vmsa = true;
+		WRITE_ONCE(svm->sev_es.snp_guest_vmsa_gpa, gpa);
+		svm->vmcb->control.vmsa_pa = pfn_to_hpa(pfn);
+	}
+	read_unlock(&kvm->mmu_lock);
+
+	kvm_release_page_clean(page);
+out_unlock:
+	srcu_read_unlock(&kvm->srcu, idx);
+	return ret;
 }
 
 static void __sev_snp_reload_vmsa(struct kvm_vcpu *vcpu, gpa_t gpa)
