@@ -155,6 +155,10 @@ STUBCOPY_FLAGS-$(CONFIG_LOONGARCH)	+= --prefix-alloc-sections=.init \
 					   --prefix-symbols=__efistub_
 STUBCOPY_RELOC-$(CONFIG_LOONGARCH)	:= R_LARCH_MARK_LA
 
+# Drop the section created by __ADDRESSABLE() so it doesn't get prefixed.
+# Its job is already done.
+STUBCOPY_FLAGS-y			+= --remove-section=.discard.addressable
+
 $(obj)/%.stub.o: $(obj)/%.o FORCE
 	$(call if_changed,stubcopy)
 
