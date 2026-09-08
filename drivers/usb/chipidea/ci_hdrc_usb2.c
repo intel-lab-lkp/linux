@@ -12,6 +12,7 @@
 #include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
+#include <linux/reset.h>
 #include <linux/usb/chipidea.h>
 #include <linux/usb/hcd.h>
 #include <linux/usb/ulpi.h>
@@ -21,6 +22,7 @@
 struct ci_hdrc_usb2_priv {
 	struct platform_device	*ci_pdev;
 	struct clk		*clk;
+	struct reset_control	*reset;
 };
 
 static const struct ci_hdrc_platform_data ci_default_pdata = {
@@ -74,6 +76,11 @@ static int ci_hdrc_usb2_probe(struct platform_device *pdev)
 	if (IS_ERR(priv->clk))
 		return dev_err_probe(dev, PTR_ERR(priv->clk),
 				     "failed to get or enable the clock\n");
+
+	priv->reset = devm_reset_control_get_optional_exclusive_deasserted(dev, NULL);
+	if (IS_ERR(priv->reset))
+		return dev_err_probe(dev, PTR_ERR(priv->reset),
+				     "failed to get or deassert the reset control\n");
 
 	ci_pdata->name = dev_name(dev);
 
