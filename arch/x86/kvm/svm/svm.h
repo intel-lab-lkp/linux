@@ -121,6 +121,7 @@ struct kvm_sev_info {
 	struct mutex guest_req_mutex; /* Must acquire before using bounce buffers */
 	cpumask_var_t have_run_cpus; /* CPUs that have done VMRUN for this VM. */
 	bool snp_certs_enabled;	/* SNP certificate-fetching support. */
+	bool snp_direct_vmsa;	/* Userspace provides and measures VMSA pages. */
 };
 #endif
 

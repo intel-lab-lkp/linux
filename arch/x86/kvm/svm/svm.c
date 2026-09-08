@@ -5325,6 +5325,27 @@ static void *svm_alloc_apic_backing_page(struct kvm_vcpu *vcpu)
 	return page_address(page);
 }
 
+static int svm_enable_vm_cap(struct kvm *kvm, struct kvm_enable_cap *cap)
+{
+	switch (cap->cap) {
+#ifdef CONFIG_KVM_AMD_SEV
+	case KVM_CAP_SNP_DIRECT_VMSA:
+		if (memchr_inv(cap->args, 0, sizeof(cap->args)) ||
+		    kvm->arch.vm_type != KVM_X86_SNP_VM)
+			return -EINVAL;
+
+		guard(mutex)(&kvm->lock);
+		if (kvm->created_vcpus)
+			return -EINVAL;
+
+		to_kvm_sev_info(kvm)->snp_direct_vmsa = true;
+		return 0;
+#endif
+	default:
+		return -EINVAL;
+	}
+}
+
 struct kvm_x86_ops svm_x86_ops __initdata = {
 	.name = KBUILD_MODNAME,
 
@@ -5345,6 +5366,7 @@ struct kvm_x86_ops svm_x86_ops __initdata = {
 	.vm_init = svm_vm_init,
 	.vm_pre_destroy = avic_vm_pre_destroy,
 	.vm_destroy = svm_vm_destroy,
+	.enable_vm_cap = svm_enable_vm_cap,
 
 	.prepare_switch_to_guest = svm_prepare_switch_to_guest,
 	.vcpu_load = svm_vcpu_load,

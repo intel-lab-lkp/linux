@@ -2404,6 +2404,9 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 	case KVM_CAP_VM_TYPES:
 		r = kvm_caps.supported_vm_types;
 		break;
+	case KVM_CAP_SNP_DIRECT_VMSA:
+		r = !!(kvm_caps.supported_vm_types & BIT(KVM_X86_SNP_VM));
+		break;
 	case KVM_CAP_READONLY_MEM:
 		r = kvm ? kvm_arch_has_readonly_mem(kvm) : 1;
 		break;
@@ -4212,6 +4215,8 @@ disable_exits_unlock:
 	}
 	default:
 		r = -EINVAL;
+		if (kvm_x86_ops.enable_vm_cap)
+			r = kvm_x86_call(enable_vm_cap)(kvm, cap);
 		break;
 	}
 	return r;

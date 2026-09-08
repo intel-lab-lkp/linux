@@ -1519,6 +1519,7 @@ struct kvm_x86_ops {
 	int (*vm_init)(struct kvm *kvm);
 	void (*vm_destroy)(struct kvm *kvm);
 	void (*vm_pre_destroy)(struct kvm *kvm);
+	int (*enable_vm_cap)(struct kvm *kvm, struct kvm_enable_cap *cap);
 
 	/* Create, but do not attach this VCPU */
 	int (*vcpu_precreate)(struct kvm *kvm);

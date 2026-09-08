@@ -2524,8 +2524,15 @@ static int snp_launch_update_vmsa(struct kvm *kvm, struct kvm_sev_cmd *argp)
 
 	kvm_for_each_vcpu(i, vcpu, kvm) {
 		struct vcpu_svm *svm = to_svm(vcpu);
-		u64 pfn = __pa(svm->sev_es.vmsa) >> PAGE_SHIFT;
+		u64 pfn;
 
+		if (sev->snp_direct_vmsa) {
+			if (!svm->sev_es.snp_has_guest_vmsa)
+				svm->vmcb->control.vmsa_pa = INVALID_PAGE;
+			goto protect_vcpu;
+		}
+
+		pfn = __pa(svm->sev_es.vmsa) >> PAGE_SHIFT;
 		ret = sev_es_sync_vmsa(svm);
 		if (ret)
 			goto out;
@@ -2545,6 +2552,7 @@ static int snp_launch_update_vmsa(struct kvm *kvm, struct kvm_sev_cmd *argp)
 			goto out;
 		}
 
+protect_vcpu:
 		svm->vcpu.arch.guest_state_protected = true;
 		/*
 		 * SEV-ES (and thus SNP) guest mandates LBR Virtualization to
@@ -3559,6 +3567,9 @@ void sev_free_vcpu(struct kvm_vcpu *vcpu)
 	 * a guest-owned page. Transition the page to hypervisor state before
 	 * releasing it back to the system.
 	 */
+	if (!svm->sev_es.vmsa)
+		goto skip_vmsa_free;
+
 	if (is_sev_snp_guest(vcpu)) {
 		u64 pfn = __pa(svm->sev_es.vmsa) >> PAGE_SHIFT;
 
@@ -4056,13 +4067,9 @@ static void __sev_snp_reload_vmsa(struct kvm_vcpu *vcpu, gpa_t gpa)
 	vmcb_mark_all_dirty(svm->vmcb);
 
 	/*
-	 * From this point forward, the VMSA will always be a guest-mapped page
-	 * rather than the initial one allocated by KVM in svm->sev_es.vmsa. In
-	 * theory, svm->sev_es.vmsa could be free'd and cleaned up here, but
-	 * that involves cleanups like flushing caches, which would ideally be
-	 * handled during teardown rather than guest boot.  Deferring that also
-	 * allows the existing logic for SEV-ES VMSAs to be re-used with
-	 * minimal SNP-specific changes.
+	 * From this point forward, the VMSA will always be a guest-mapped page.
+	 * If KVM allocated an initial VMSA, keep it until teardown to defer
+	 * cache flushing and other cleanup out of the guest boot path.
 	 */
 	svm->sev_es.snp_has_guest_vmsa = true;
 
@@ -4929,12 +4936,15 @@ void sev_init_vmcb(struct vcpu_svm *svm, bool init_event)
 int sev_vcpu_create(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
+	struct kvm_sev_info *sev = to_kvm_sev_info(vcpu->kvm);
 	struct page *vmsa_page;
 
 	mutex_init(&svm->sev_es.snp_vmsa_mutex);
 
 	if (!is_sev_es_guest(vcpu))
 		return 0;
+	if (is_sev_snp_guest(vcpu) && sev->snp_direct_vmsa)
+		goto init_vmsa_state;
 
 	/*
 	 * SEV-ES guests require a separate (from the VMCB) VMSA page used to
@@ -4945,6 +4955,8 @@ int sev_vcpu_create(struct kvm_vcpu *vcpu)
 		return -ENOMEM;
 
 	svm->sev_es.vmsa = page_address(vmsa_page);
+
+init_vmsa_state:
 	svm->sev_es.snp_pending_vmsa_gpa = INVALID_PAGE;
 	svm->sev_es.snp_guest_vmsa_gpa = INVALID_PAGE;
 
