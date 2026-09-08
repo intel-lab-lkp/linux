@@ -863,6 +863,16 @@ scheme's execution.
   completely tried to be applied.
 - ``max_nr_snapshots``: Upper limit of ``nr_snapshots``.
 
+``qt_exceeds`` is increased for schemes with set quotas when the quota is found
+full at a quota reset interval boundary.  While the quotas are unset,
+``qt_exceeds`` never increased.  However, a zero effective size quota does not
+always mean the quotas are unset, if the ``temporal`` :ref:`auto-tuning
+algorithm <damon_design_damos_quotas_auto_tuning>` is used, the effective size
+quota is set to zero once the goal is [over-]achieved.  Since a set quota of
+zero effective size is always considered full, ``qt_exceeds`` keeps being
+increased once per quota reset interval in that case, until the goal is
+under-achieved again.
+
 "A scheme is tried to be applied to a region" means DAMOS core logic determined
 the region is eligible to apply the scheme's :ref:`action
 <damon_design_damos_action>`.  The :ref:`access pattern
