@@ -1,0 +1,16 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (C) 2021-2026 Marek Vasut
+ */
+/dts-v1/;
+/plugin/;
+
+#include "imx8mn-vhip4-evalboard-v1-overlay-dt050btft-common.dtsi"
+
+&sn65dsi83_in {
+	data-lanes = <1 2>;
+};
+
+&mipi_dsi_bridge1_out {
+	data-lanes = <1 2>;
+};
