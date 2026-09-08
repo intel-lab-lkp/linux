@@ -5053,9 +5053,20 @@ static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_commit *state)
 			old_crtc_state = drm_atomic_get_old_crtc_state(state, &acrtc->base);
 		}
 
+		/*
+		 * Apply the LUMINANCE property first: a brightness-only commit
+		 * does not pull the CRTC into the atomic state (so new_crtc_state
+		 * is NULL), and a modeset is skipped below - in both cases the
+		 * backlight must still follow the requested luminance.
+		 */
+		drm_atomic_helper_connector_apply_luminance(new_con_state);
+
 		/* Skip any modesets/resets */
-		if (!acrtc || drm_atomic_crtc_needs_modeset(new_crtc_state))
+		if (!acrtc || !new_crtc_state ||
+		    drm_atomic_crtc_needs_modeset(new_crtc_state))
 			continue;
+
+		drm_connector_update_privacy_screen(new_con_state);
 
 		dm_new_crtc_state = to_dm_crtc_state(new_crtc_state);
 		dm_old_crtc_state = to_dm_crtc_state(old_crtc_state);
@@ -5136,8 +5147,6 @@ static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_commit *state)
 					    &stream_update);
 		mutex_unlock(&dm->dc_lock);
 		kfree(dummy_updates);
-
-		drm_connector_update_privacy_screen(new_con_state);
 	}
 
 	/**
