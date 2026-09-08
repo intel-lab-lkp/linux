@@ -755,6 +755,8 @@ M:	Aleksei Sviridkin <f@lex.la>
 L:	netdev@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/net/airoha,en8811h-mcu.yaml
+F:	drivers/net/mdio/mdio-airoha-en8811h.c
+F:	include/linux/mdio/mdio-airoha-en8811h.h
 
 AIROHA ETHERNET DRIVER
 M:	Lorenzo Bianconi <lorenzo@kernel.org>
