@@ -7,6 +7,7 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
+#include <linux/bitops.h>
 #include <linux/goldfish.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
@@ -35,16 +36,14 @@ static void goldfish_pic_cascade(struct irq_desc *desc)
 {
 	struct goldfish_pic_data *gfpic = irq_desc_get_handler_data(desc);
 	struct irq_chip *host_chip = irq_desc_get_chip(desc);
-	u32 pending, hwirq;
+	unsigned long pending;
+	u32 hwirq;
 
 	chained_irq_enter(host_chip, desc);
 
 	pending = gf_ioread32(gfpic->base + GFPIC_REG_IRQ_PENDING);
-	while (pending) {
-		hwirq = __fls(pending);
+	for_each_set_bit(hwirq, &pending, GFPIC_NR_IRQS)
 		generic_handle_domain_irq(gfpic->irq_domain, hwirq);
-		pending &= ~(1 << hwirq);
-	}
 
 	chained_irq_exit(host_chip, desc);
 }
