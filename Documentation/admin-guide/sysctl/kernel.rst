@@ -754,6 +754,22 @@ different types of memory (represented as different NUMA nodes) to
 place the hot pages in the fast memory.  This is implemented based on
 unmapping and page fault too.
 
+The ``PR_SET_NUMA_BALANCING`` and ``PR_GET_NUMA_BALANCING`` prctl(2)
+operations can be used by a process to opt out of automatic NUMA balancing
+or re-enable participation for the whole thread group.  Any thread in the
+thread group may change the process setting.  The setting is inherited by
+fork(2), is shared by threads created with clone(2) ``CLONE_THREAD`` and is
+preserved across execve(2).  The global ``numa_balancing`` sysctl remains
+the top-level control: a process-level enable does not turn automatic NUMA
+balancing on when it is disabled system-wide.  Memory policy still applies,
+so the process setting does not make VMAs participate when their policy
+prevents automatic NUMA balancing.
+
+Disabling the process setting stops scheduling new periodic NUMA scans for
+that process. Existing NUMA hinting PTEs and already queued work are not
+actively cleared and may still drain naturally as the disabled state takes
+effect.
+
 numa_balancing_promote_rate_limit_MBps
 ======================================
 

@@ -188,6 +188,7 @@ read the file /proc/PID/status::
   HugetlbPages:          0 kB
   CoreDumping:    0
   THP_enabled:	  1
+  NumaB_mode:     enabled
   Threads:        1
   SigQ:   0/28578
   SigPnd: 0000000000000000
@@ -274,6 +275,11 @@ It's slow but very precise.
  THP_enabled                 process is allowed to use THP (returns 0 when
                              PR_SET_THP_DISABLE is set on the process to disable
                              THP completely, not just partially)
+ NumaB_mode                  process automatic NUMA balancing mode:
+                             enabled or disabled when supported, otherwise
+                             unsupported; the effective behavior also depends
+                             on the global numa_balancing sysctl and memory
+                             policy
  Threads                     number of threads
  SigQ                        number of signals queued/max. number for queue
  SigPnd                      bitmap of pending signals for the thread
