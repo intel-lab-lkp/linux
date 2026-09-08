@@ -151,6 +151,9 @@ struct ov08x40_mode {
 	/* Exposure calculation */
 	u16 exposure_margin;
 	u16 exposure_shift;
+
+	/* Analogue crop programmed by reg_list */
+	struct v4l2_rect crop;
 };
 
 static const struct ov08x40_reg ov08x40_global_regs[] = {
@@ -1183,6 +1186,10 @@ static const char * const ov08x40_test_pattern_menu[] = {
 #define OV08X40_LINK_FREQ_749MHZ	749000000ULL
 #define OV08X40_SCLK_96MHZ		96000000ULL
 #define OV08X40_XVCLK			19200000
+
+/* Full pixel array, from X/Y_ADDR_START..END in the register lists */
+#define OV08X40_NATIVE_WIDTH		3872
+#define OV08X40_NATIVE_HEIGHT		2432
 #define OV08X40_DATA_LANES		4
 
 /*
@@ -1235,6 +1242,12 @@ static const struct ov08x40_mode supported_modes[] = {
 		.link_freq_index = OV08X40_LINK_FREQ_400MHZ_INDEX,
 		.exposure_shift = 1,
 		.exposure_margin = OV08X40_EXPOSURE_MAX_MARGIN,
+		.crop = {
+			.left = 0,
+			.top = 0,
+			.width = 3872,
+			.height = 2432,
+		},
 	},
 	{
 		.width = 3856,
@@ -1250,6 +1263,12 @@ static const struct ov08x40_mode supported_modes[] = {
 		.link_freq_index = OV08X40_LINK_FREQ_400MHZ_INDEX,
 		.exposure_shift = 1,
 		.exposure_margin = OV08X40_EXPOSURE_MAX_MARGIN,
+		.crop = {
+			.left = 0,
+			.top = 112,
+			.width = 3872,
+			.height = 2208,
+		},
 	},
 
 	{
@@ -1266,6 +1285,12 @@ static const struct ov08x40_mode supported_modes[] = {
 		.link_freq_index = OV08X40_LINK_FREQ_400MHZ_INDEX,
 		.exposure_shift = 0,
 		.exposure_margin = OV08X40_EXPOSURE_BIN_MAX_MARGIN,
+		.crop = {
+			.left = 0,
+			.top = 0,
+			.width = 3872,
+			.height = 2432,
+		},
 	},
 	{
 		.width = 3856,
@@ -1281,6 +1306,12 @@ static const struct ov08x40_mode supported_modes[] = {
 		.link_freq_index = OV08X40_LINK_FREQ_749MHZ_INDEX,
 		.exposure_shift = 1,
 		.exposure_margin = OV08X40_EXPOSURE_MAX_MARGIN,
+		.crop = {
+			.left = 0,
+			.top = 112,
+			.width = 3872,
+			.height = 2208,
+		},
 	},
 	{
 		.width = 1928,
@@ -1296,6 +1327,12 @@ static const struct ov08x40_mode supported_modes[] = {
 		.link_freq_index = OV08X40_LINK_FREQ_749MHZ_INDEX,
 		.exposure_shift = 0,
 		.exposure_margin = OV08X40_EXPOSURE_MAX_MARGIN,
+		.crop = {
+			.left = 0,
+			.top = 120,
+			.width = 3872,
+			.height = 2192,
+		},
 	},
 };
 
@@ -2055,10 +2092,60 @@ static const struct v4l2_subdev_video_ops ov08x40_video_ops = {
 	.s_stream = ov08x40_set_stream,
 };
 
+static const struct v4l2_rect *
+__ov08x40_get_pad_crop(struct ov08x40 *ov08x,
+		       struct v4l2_subdev_state *sd_state, unsigned int pad,
+		       enum v4l2_subdev_format_whence which)
+{
+	const struct v4l2_mbus_framefmt *fmt;
+	const struct ov08x40_mode *mode;
+
+	if (which == V4L2_SUBDEV_FORMAT_ACTIVE)
+		return &ov08x->cur_mode->crop;
+
+	fmt = v4l2_subdev_state_get_format(sd_state, pad);
+	mode = v4l2_find_nearest_size_conditional(supported_modes,
+						  ARRAY_SIZE(supported_modes),
+						  width, height,
+						  fmt->width, fmt->height,
+						  filter_by_mipi_lanes, ov08x);
+
+	return &mode->crop;
+}
+
+static int ov08x40_get_selection(struct v4l2_subdev *sd,
+				 struct v4l2_subdev_state *sd_state,
+				 struct v4l2_subdev_selection *sel)
+{
+	struct ov08x40 *ov08x = to_ov08x40(sd);
+
+	switch (sel->target) {
+	case V4L2_SEL_TGT_CROP:
+		mutex_lock(&ov08x->mutex);
+		sel->r = *__ov08x40_get_pad_crop(ov08x, sd_state, sel->pad,
+						 sel->which);
+		mutex_unlock(&ov08x->mutex);
+
+		return 0;
+	case V4L2_SEL_TGT_NATIVE_SIZE:
+	case V4L2_SEL_TGT_CROP_BOUNDS:
+	case V4L2_SEL_TGT_CROP_DEFAULT:
+		sel->r.left = 0;
+		sel->r.top = 0;
+		sel->r.width = OV08X40_NATIVE_WIDTH;
+		sel->r.height = OV08X40_NATIVE_HEIGHT;
+
+		return 0;
+	}
+
+	return -EINVAL;
+}
+
 static const struct v4l2_subdev_pad_ops ov08x40_pad_ops = {
 	.enum_mbus_code = ov08x40_enum_mbus_code,
 	.get_fmt = ov08x40_get_pad_format,
 	.set_fmt = ov08x40_set_pad_format,
+	.get_selection = ov08x40_get_selection,
 	.enum_frame_size = ov08x40_enum_frame_size,
 };
 
