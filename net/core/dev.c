@@ -3145,6 +3145,8 @@ EXPORT_SYMBOL(netdev_set_tc_queue);
 
 int netdev_set_num_tc(struct net_device *dev, u8 num_tc)
 {
+	int i;
+
 	if (num_tc > TC_MAX_QUEUE)
 		return -EINVAL;
 
@@ -3152,6 +3154,14 @@ int netdev_set_num_tc(struct net_device *dev, u8 num_tc)
 	netif_reset_xps_queues_gt(dev, 0);
 #endif
 	netdev_unbind_all_sb_channels(dev);
+
+	/* Drop the mappings the new num_tc no longer covers. */
+	for (i = num_tc; i < TC_MAX_QUEUE; i++)
+		WRITE_ONCE(dev->tc_to_txq[i].combined, 0);
+	for (i = 0; i <= TC_BITMASK; i++) {
+		if (READ_ONCE(dev->prio_tc_map[i]) >= num_tc)
+			WRITE_ONCE(dev->prio_tc_map[i], 0);
+	}
 
 	WRITE_ONCE(dev->num_tc, num_tc);
 	return 0;
