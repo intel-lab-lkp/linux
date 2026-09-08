@@ -1733,6 +1733,7 @@ static int ip_set_dump(struct sk_buff *skb, const struct nfnl_info *info,
 			.start = ip_set_dump_start,
 			.dump = ip_set_dump_do,
 			.done = ip_set_dump_done,
+			.module = THIS_MODULE,
 		};
 		return netlink_dump_start(info->sk, skb, info->nlh, &c);
 	}

@@ -1680,6 +1680,7 @@ static int ctnetlink_get_conntrack(struct sk_buff *skb,
 			.start = ctnetlink_start,
 			.dump = ctnetlink_dump_table,
 			.done = ctnetlink_done,
+			.module = THIS_MODULE,
 			.data = (void *)cda,
 		};
 
@@ -1824,6 +1825,7 @@ static int ctnetlink_get_ct_dying(struct sk_buff *skb,
 	if (info->nlh->nlmsg_flags & NLM_F_DUMP) {
 		struct netlink_dump_control c = {
 			.dump = ctnetlink_dump_dying,
+			.module = THIS_MODULE,
 		};
 		return netlink_dump_start(info->sk, skb, info->nlh, &c);
 	}
@@ -1838,6 +1840,7 @@ static int ctnetlink_get_ct_unconfirmed(struct sk_buff *skb,
 	if (info->nlh->nlmsg_flags & NLM_F_DUMP) {
 		struct netlink_dump_control c = {
 			.dump = ctnetlink_dump_unconfirmed,
+			.module = THIS_MODULE,
 		};
 		return netlink_dump_start(info->sk, skb, info->nlh, &c);
 	}
@@ -2553,6 +2556,7 @@ static int ctnetlink_stat_ct_cpu(struct sk_buff *skb,
 	if (info->nlh->nlmsg_flags & NLM_F_DUMP) {
 		struct netlink_dump_control c = {
 			.dump = ctnetlink_ct_stat_cpu_dump,
+			.module = THIS_MODULE,
 		};
 		return netlink_dump_start(info->sk, skb, info->nlh, &c);
 	}
@@ -3276,6 +3280,7 @@ static int ctnetlink_dump_exp_ct(struct net *net, struct sock *ctnl,
 		.dump = ctnetlink_exp_ct_dump_table,
 		.start = ctnetlink_dump_exp_ct_start,
 		.done = ctnetlink_dump_exp_ct_done,
+		.module = THIS_MODULE,
 	};
 
 	err = ctnetlink_parse_tuple(cda, &tuple, CTA_EXPECT_MASTER,
@@ -3325,6 +3330,7 @@ static int ctnetlink_get_expect(struct sk_buff *skb,
 		else {
 			struct netlink_dump_control c = {
 				.dump = ctnetlink_exp_dump_table,
+				.module = THIS_MODULE,
 			};
 			return netlink_dump_start(info->sk, skb, info->nlh, &c);
 		}
@@ -3746,6 +3752,7 @@ static int ctnetlink_stat_exp_cpu(struct sk_buff *skb,
 	if (info->nlh->nlmsg_flags & NLM_F_DUMP) {
 		struct netlink_dump_control c = {
 			.dump = ctnetlink_exp_stat_cpu_dump,
+			.module = THIS_MODULE,
 		};
 		return netlink_dump_start(info->sk, skb, info->nlh, &c);
 	}

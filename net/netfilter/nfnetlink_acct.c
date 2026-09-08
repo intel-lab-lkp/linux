@@ -284,6 +284,7 @@ static int nfnl_acct_get(struct sk_buff *skb, const struct nfnl_info *info,
 			.dump = nfnl_acct_dump,
 			.start = nfnl_acct_start,
 			.done = nfnl_acct_done,
+			.module = THIS_MODULE,
 			.data = (void *)tb[NFACCT_FILTER],
 		};
 

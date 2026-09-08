@@ -277,6 +277,7 @@ static int cttimeout_get_timeout(struct sk_buff *skb,
 	if (info->nlh->nlmsg_flags & NLM_F_DUMP) {
 		struct netlink_dump_control c = {
 			.dump = ctnl_timeout_dump,
+			.module = THIS_MODULE,
 		};
 		return netlink_dump_start(info->sk, skb, info->nlh, &c);
 	}
