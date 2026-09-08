@@ -387,6 +387,10 @@ static void ethosu_remove(struct platform_device *pdev)
 
 	drm_dev_unregister(&ethosudev->base);
 	ethosu_job_fini(ethosudev);
+
+	if (pm_runtime_get_if_active(&pdev->dev))
+		pm_runtime_put_sync_suspend(&pdev->dev);
+
 	if (ethosudev->sram)
 		gen_pool_free(ethosudev->srampool, (unsigned long)ethosudev->sram,
 			      ethosudev->npu_info.sram_size);
