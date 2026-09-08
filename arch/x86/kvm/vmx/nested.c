@@ -5121,21 +5121,28 @@ void __nested_vmx_vmexit(struct kvm_vcpu *vcpu, u32 vm_exit_reason,
 	if (likely(!vmx->fail)) {
 		sync_vmcs02_to_vmcs12(vcpu, vmcs12);
 
-		if (vm_exit_reason != -1)
+		if (vm_exit_reason != -1) {
 			prepare_vmcs12(vcpu, vmcs12, vm_exit_reason,
 				       exit_intr_info, exit_qualification,
 				       exit_insn_len);
 
-		/*
-		 * Must happen outside of sync_vmcs02_to_vmcs12() as it will
-		 * also be used to capture vmcs12 cache as part of
-		 * capturing nVMX state for snapshot (migration).
-		 *
-		 * Otherwise, this flush will dirty guest memory at a
-		 * point it is already assumed by user-space to be
-		 * immutable.
-		 */
-		nested_flush_cached_shadow_vmcs12(vcpu, vmcs12);
+			/*
+			 * Must happen outside of sync_vmcs02_to_vmcs12() as it will
+			 * also be used to capture vmcs12 cache as part of
+			 * capturing nVMX state for snapshot (migration).
+			 *
+			 * Otherwise, this flush will dirty guest memory at a
+			 * point it is already assumed by user-space to be
+			 * immutable.
+			 *
+			 * Do not flush when vm_exit_reason == -1 (e.g. forced exit
+			 * on vCPU teardown or SMM entry). On teardown, KVM may run
+			 * with current->mm == NULL on a borrowed lazy TLB mm,
+			 * where writing guest memory would corrupt an unrelated
+			 * task. Nothing can observe the flush in that case anyway.
+			 */
+			nested_flush_cached_shadow_vmcs12(vcpu, vmcs12);
+		}
 	} else {
 		/*
 		 * The only expected VM-instruction error is "VM entry with
