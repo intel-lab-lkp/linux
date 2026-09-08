@@ -428,7 +428,7 @@ extern struct xmit_frame *alloc_mgtxmitframe(struct xmit_priv *pxmitpriv);
 
 u8 networktype_to_raid_ex(struct adapter *adapter, struct sta_info *psta);
 
-void get_rate_set(struct adapter *padapter, unsigned char *pbssrate, int *bssrate_len);
+void get_rate_set(struct adapter *padapter, u8 *pbssrate, int *bssrate_len);
 void set_mcs_rate_by_mask(u8 *mcs_set, u32 mask);
 void update_basic_rate_table(struct adapter *padapter, u8 *mBratesOS);
 void update_basic_rate_table_soft_ap(u8 *bssrateset, u32 bssratelen);
@@ -446,8 +446,8 @@ void rtw_set_oper_choffset(struct adapter *adapter, u8 offset);
 u8 rtw_get_center_ch(u8 channel, u8 chnl_bw, u8 chnl_offset);
 unsigned long rtw_get_on_cur_ch_time(struct adapter *adapter);
 
-void set_channel_bwmode(struct adapter *padapter, unsigned char channel, unsigned char channel_offset, unsigned short bwmode);
-void r8723bs_select_channel(struct adapter *padapter, unsigned char channel);
+void set_channel_bwmode(struct adapter *padapter, u8 channel, u8 channel_offset, u16 bwmode);
+void r8723bs_select_channel(struct adapter *padapter, u8 channel);
 
 unsigned int decide_wait_for_beacon_timeout(unsigned int bcn_interval);
 
@@ -508,7 +508,7 @@ void set_sta_rate(struct adapter *padapter, struct sta_info *psta);
 
 unsigned int receive_disconnect(struct adapter *padapter, unsigned char *MacAddr, unsigned short reason);
 
-unsigned char get_highest_rate_idx(u32 mask);
+u8 get_highest_rate_idx(u32 mask);
 int support_short_GI(struct adapter *padapter, struct HT_caps_element *pHT_caps, u8 bwmode);
 unsigned int is_ap_in_tkip(struct adapter *padapter);
 
