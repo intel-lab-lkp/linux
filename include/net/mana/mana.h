@@ -143,6 +143,11 @@ struct mana_txq {
 
 	bool napi_initialized;
 
+	u32 reset_gen;
+
+	/* Suppress completion wakeups on the replacement's netdev queue. */
+	bool retiring;
+
 	struct mana_stats_tx stats;
 };
 
@@ -537,6 +542,12 @@ struct mana_context {
 	u8 bm_hostmode;
 
 	struct mana_ethtool_hc_stats hc_stats;
+
+	/* Generation of successful resets issued by mana_drain_txqs(), under
+	 * RTNL.
+	 */
+	u32 reset_gen;
+
 	struct workqueue_struct *per_port_queue_reset_wq;
 	/* Workqueue for querying hardware stats */
 	struct delayed_work gf_stats_work;
@@ -661,6 +672,23 @@ struct mana_port_context {
 	u32 steer_cqe_coalescing;
 };
 
+struct mana_qset {
+	struct mana_eq		*eqs;
+	struct mana_tx_qp	**tx_qp;
+	struct mana_rxq		**rxqs;
+
+	u32			*indir_table;
+	u32			indir_table_sz;
+	mana_handle_t		*rxobj_table;
+	mana_handle_t		default_rxobj;
+
+	unsigned int		num_queues;
+	unsigned int		rx_queue_size;
+	unsigned int		tx_queue_size;
+	u32			priv_flags;
+
+};
+
 netdev_tx_t mana_start_xmit(struct sk_buff *skb, struct net_device *ndev);
 int mana_config_rss(struct mana_port_context *ac, enum TRI_STATE rx,
 		    bool update_hash, bool update_tab);
@@ -669,6 +697,14 @@ int mana_disable_vport_rx(struct mana_port_context *apc);
 int mana_alloc_queues(struct net_device *ndev);
 int mana_attach(struct net_device *ndev);
 int mana_detach(struct net_device *ndev, bool from_close);
+
+struct mana_port_context *
+mana_qset_scratch_alloc(struct mana_port_context *apc);
+void mana_qset_scratch_free(struct mana_port_context *scratch);
+int mana_alloc_qset(struct mana_port_context *scratch, unsigned int num_queues,
+		    unsigned int rx_queue_size, unsigned int tx_queue_size,
+		    u32 priv_flags, struct mana_qset *out);
+void mana_free_qset(struct mana_port_context *scratch, struct mana_qset *qset);
 
 void mana_dim_change(struct mana_cq *cq, bool enable);
 
@@ -685,6 +721,8 @@ u32 mana_run_xdp(struct net_device *ndev, struct mana_rxq *rxq,
 		 struct xdp_buff *xdp, void *buf_va, uint pkt_len);
 struct bpf_prog *mana_xdp_get(struct mana_port_context *apc);
 void mana_chn_setxdp(struct mana_port_context *apc, struct bpf_prog *prog);
+struct bpf_prog *mana_chn_xdp_peek(struct mana_port_context *apc);
+void mana_chn_xdp_release(struct bpf_prog *prog, unsigned int num_queues);
 int mana_bpf(struct net_device *ndev, struct netdev_bpf *bpf);
 int mana_query_gf_stats(struct mana_context *ac);
 int mana_query_link_cfg(struct mana_port_context *apc);

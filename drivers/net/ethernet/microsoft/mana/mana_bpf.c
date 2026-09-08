@@ -265,3 +265,27 @@ int mana_bpf(struct net_device *ndev, struct netdev_bpf *bpf)
 
 	return ret;
 }
+
+struct bpf_prog *mana_chn_xdp_peek(struct mana_port_context *apc)
+{
+	ASSERT_RTNL();
+
+	if (!apc->rxqs || !apc->rxqs[0])
+		return NULL;
+
+	return rtnl_dereference(apc->rxqs[0]->bpf_prog);
+}
+
+/* Keep the per-queue program pointers until RX polling stops. */
+void mana_chn_xdp_release(struct bpf_prog *prog, unsigned int num_queues)
+{
+	unsigned int i;
+
+	ASSERT_RTNL();
+
+	if (!prog)
+		return;
+
+	for (i = 0; i < num_queues; i++)
+		bpf_prog_put(prog);
+}
