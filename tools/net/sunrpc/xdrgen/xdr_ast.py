@@ -1131,12 +1131,16 @@ def check_pages_directives(root: "Specification") -> None:
             field, container = members[marked[1]]
             # A union arm declared directly as a string is generated as
             # a char *, with no length field for the page encoder to
-            # read; inside a struct it becomes a { len, data } object.
-            if isinstance(container, _XdrUnion) and isinstance(field, _XdrString):
+            # read, and the union generator has no arm representation
+            # for a direct opaque at all; inside a struct either
+            # becomes a { len, data } object.
+            if isinstance(container, _XdrUnion) and isinstance(
+                field, (_XdrString, _XdrVariableLengthOpaque)
+            ):
                 raise XdrSemanticError(
                     f"union arm '{type_name}.{marked[1]}' is declared"
-                    " directly as a string and carries no length field;"
-                    " declare it through a typedef instead",
+                    " directly as a string or opaque; declare it through"
+                    " a typedef instead",
                     meta,
                 )
             # A decoded member and an encoded one take different C
