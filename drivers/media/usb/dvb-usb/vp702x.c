@@ -330,43 +330,35 @@ static int vp702x_frontend_attach(struct dvb_usb_adapter *adap)
 	return 0;
 }
 
+static int vp702x_priv_init(struct dvb_usb_device *d)
+{
+	struct vp702x_device_state *st = d->priv;
+
+	mutex_init(&st->buf_mutex);
+	st->buf_len = 16;
+	st->buf = kmalloc(st->buf_len, GFP_KERNEL);
+	if (!st->buf)
+		return -ENOMEM;
+
+	return 0;
+}
+
+static void vp702x_priv_destroy(struct dvb_usb_device *d)
+{
+	struct vp702x_device_state *st = d->priv;
+
+	kfree(st->buf);
+	st->buf = NULL;
+	mutex_destroy(&st->buf_mutex);
+}
+
 static struct dvb_usb_device_properties vp702x_properties;
 
 static int vp702x_usb_probe(struct usb_interface *intf,
-		const struct usb_device_id *id)
+			    const struct usb_device_id *id)
 {
-	struct dvb_usb_device *d;
-	struct vp702x_device_state *st;
-	int ret;
-
-	ret = dvb_usb_device_init(intf, &vp702x_properties,
-				   THIS_MODULE, &d, adapter_nr);
-	if (ret)
-		goto out;
-
-	st = d->priv;
-	st->buf_len = 16;
-	st->buf = kmalloc(st->buf_len, GFP_KERNEL);
-	if (!st->buf) {
-		ret = -ENOMEM;
-		dvb_usb_device_exit(intf);
-		goto out;
-	}
-	mutex_init(&st->buf_mutex);
-
-out:
-	return ret;
-
-}
-
-static void vp702x_usb_disconnect(struct usb_interface *intf)
-{
-	struct dvb_usb_device *d = usb_get_intfdata(intf);
-	struct vp702x_device_state *st = d->priv;
-	mutex_lock(&st->buf_mutex);
-	kfree(st->buf);
-	mutex_unlock(&st->buf_mutex);
-	dvb_usb_device_exit(intf);
+	return dvb_usb_device_init(intf, &vp702x_properties,
+				   THIS_MODULE, NULL, adapter_nr);
 }
 
 enum {
@@ -390,6 +382,8 @@ static struct dvb_usb_device_properties vp702x_properties = {
 	.no_reconnect        = 1,
 
 	.size_of_priv     = sizeof(struct vp702x_device_state),
+	.priv_init        = vp702x_priv_init,
+	.priv_destroy     = vp702x_priv_destroy,
 
 	.num_adapters = 1,
 	.adapter = {
@@ -443,7 +437,7 @@ static struct dvb_usb_device_properties vp702x_properties = {
 static struct usb_driver vp702x_usb_driver = {
 	.name		= "dvb_usb_vp702x",
 	.probe		= vp702x_usb_probe,
-	.disconnect	= vp702x_usb_disconnect,
+	.disconnect	= dvb_usb_device_exit,
 	.id_table	= vp702x_usb_table,
 };
 
