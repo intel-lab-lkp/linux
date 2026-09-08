@@ -459,13 +459,20 @@ static bool gfs2_jhead_folio_search(struct gfs2_jdesc *jd,
  * our references to the folio.
  */
 
-static void gfs2_jhead_process_page(struct gfs2_jdesc *jd, unsigned long index,
-				    struct gfs2_log_header_host *head,
-				    bool *done)
+static int gfs2_jhead_process_page(struct gfs2_jdesc *jd, unsigned long index,
+				   struct gfs2_log_header_host *head,
+				   bool *done)
 {
+	struct gfs2_sbd *sdp = GFS2_SB(jd->jd_inode);
 	struct folio *folio;
 
 	folio = filemap_get_folio(jd->jd_inode->i_mapping, index);
+
+	/* This should not happen (see comment above), but check just in case */
+	if (IS_ERR(folio)) {
+		fs_err(sdp, "Error %ld getting folio.\n", PTR_ERR(folio));
+		return -EIO;
+	}
 
 	folio_wait_locked(folio);
 	if (!folio_test_uptodate(folio))
@@ -476,6 +483,7 @@ static void gfs2_jhead_process_page(struct gfs2_jdesc *jd, unsigned long index,
 
 	/* filemap_get_folio() and the earlier filemap_grab_folio() */
 	folio_put_refs(folio, 2);
+	return 0;
 }
 
 static struct bio *gfs2_chain_bio(struct bio *prev, unsigned int nr_iovecs,
@@ -572,7 +580,9 @@ block_added:
 				continue;
 			}
 
-			gfs2_jhead_process_page(jd, blocks_read >> shift, head, &done);
+			ret = gfs2_jhead_process_page(jd, blocks_read >> shift, head, &done);
+			if (ret)
+				goto error;
 			blocks_read += PAGE_SIZE >> bsize_shift;
 			if (done)
 				goto out;  /* found */
@@ -583,7 +593,9 @@ out:
 	if (bio)
 		submit_bio(bio);
 	while (blocks_read < block) {
-		gfs2_jhead_process_page(jd, blocks_read >> shift, head, &done);
+		ret = gfs2_jhead_process_page(jd, blocks_read >> shift, head, &done);
+		if (ret)
+			goto error;
 		blocks_read += PAGE_SIZE >> bsize_shift;
 	}
 
@@ -592,6 +604,7 @@ out:
 
 	truncate_inode_pages(mapping, 0);
 
+error:
 	return ret;
 }
 
