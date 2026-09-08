@@ -2,6 +2,7 @@
 /* Copyright (c) 2026 Tao Cui */
 #include <test_progs.h>
 #include "iocost_model.skel.h"
+#include "iocost_ms.skel.h"
 
 /*
  * Switch a device to ctrl=bpf through io.cost.model and verify the
@@ -121,4 +122,34 @@ void serial_test_iocost_model(void)
 		ASSERT_OK(switch_to_bpf(dev), "switch_and_readback");
 
 	iocost_model__destroy(skel);
+}
+
+/*
+ * Same check for the multi-stream example model.  Only one model can
+ * be registered at a time, so this test must run separately from
+ * test_iocost_model; both are serial.
+ */
+void serial_test_iocost_model_streams(void)
+{
+	struct iocost_ms *skel;
+	char *dev;
+	int err;
+
+	dev = getenv("IOCOST_TEST_DEV");
+	if (!dev || geteuid() != 0) {
+		test__skip();
+		return;
+	}
+	if (!ASSERT_TRUE(dev_has_iocost(), "iocost_mounted"))
+		return;
+
+	skel = iocost_ms__open_and_load();
+	if (!ASSERT_OK_PTR(skel, "skel_open_load"))
+		return;
+
+	err = iocost_ms__attach(skel);
+	if (ASSERT_OK(err, "attach"))
+		ASSERT_OK(switch_to_bpf(dev), "switch_and_readback");
+
+	iocost_ms__destroy(skel);
 }
