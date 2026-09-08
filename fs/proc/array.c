@@ -425,6 +425,21 @@ static inline void task_thp_status(struct seq_file *m, struct mm_struct *mm)
 	seq_printf(m, "THP_enabled:\t%d\n", thp_enabled);
 }
 
+#ifdef CONFIG_NUMA_BALANCING
+static inline void task_numa_balancing_status(struct seq_file *m,
+					      struct task_struct *task)
+{
+	seq_printf(m, "NumaB_mode:\t%s\n",
+		   task_numa_balancing_mode_name(task));
+}
+#else
+static inline void task_numa_balancing_status(struct seq_file *m,
+					      struct task_struct *task)
+{
+	seq_puts(m, "NumaB_mode:\tunsupported\n");
+}
+#endif
+
 static inline void task_untag_mask(struct seq_file *m, struct mm_struct *mm)
 {
 	seq_printf(m, "untag_mask:\t%#lx\n", mm_untag_mask(mm));
@@ -453,6 +468,7 @@ int proc_pid_status(struct seq_file *m, struct pid_namespace *ns,
 		task_untag_mask(m, mm);
 		mmput(mm);
 	}
+	task_numa_balancing_status(m, task);
 	task_sig(m, task);
 	task_cap(m, task);
 	task_seccomp(m, task);

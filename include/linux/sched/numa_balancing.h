@@ -47,6 +47,11 @@ static inline int task_numa_balancing_get_current(void)
 {
 	return task_numa_process_mode_enabled(current);
 }
+
+static inline const char *task_numa_balancing_mode_name(struct task_struct *p)
+{
+	return task_numa_process_mode_enabled(p) ? "enabled" : "disabled";
+}
 bool should_numa_migrate_memory(struct task_struct *p, struct folio *folio,
 				int src_nid, int dst_cpu);
 #else
