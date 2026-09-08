@@ -594,6 +594,9 @@ int x86_pmu_hw_config(struct perf_event *event)
 		/* There's no sense in having PEBS for non sampling events: */
 		if (!is_sampling_event(event))
 			return -EINVAL;
+
+		if (!x86_pmu_allow_sample_user_stack(event, false))
+			return -EINVAL;
 	}
 	/*
 	 * check that PEBS LBR correction does not conflict with

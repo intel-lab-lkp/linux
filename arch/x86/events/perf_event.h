@@ -1274,6 +1274,25 @@ static inline bool is_counter_pair(struct hw_perf_event *hwc)
 	return hwc->flags & PERF_X86_EVENT_PAIR;
 }
 
+static inline bool
+x86_pmu_allow_sample_user_stack(struct perf_event *event, bool ibs)
+{
+	if (!(event->attr.sample_type & PERF_SAMPLE_STACK_USER))
+		return true;
+
+	/*
+	 * PERF_SAMPLE_STACK_USER needs to return the user stack and
+	 * user registers to user space when the PMI exits. Since the skid
+	 * from the PEBS/IBS sample and PMI delivery, the PEBS/IBS register
+	 * snapshot (especially IP/SP/BP) can diverge from the user stack
+	 * at PMI return. That mismatch breaks DWARF unwinding.
+	 *
+	 * Therefore, disable precise sampling for PERF_SAMPLE_STACK_USER
+	 * and permit only PMI-based sampling for this case.
+	 */
+	return !(event->attr.precise_ip || ibs);
+}
+
 static inline void __x86_pmu_enable_event(struct hw_perf_event *hwc,
 					  u64 enable_mask)
 {
