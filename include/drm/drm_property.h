@@ -189,6 +189,16 @@ struct drm_property {
 	struct drm_device *dev;
 
 	/**
+	 * @is_luminance:
+	 *
+	 * True for the per-connector LUMINANCE range property. Such a property
+	 * additionally accepts the value 0 (to turn the display off) even when
+	 * its minimum is 1. This is a kernel-internal flag and is not exposed
+	 * to userspace.
+	 */
+	bool is_luminance;
+
+	/**
 	 * @enum_list:
 	 *
 	 * List of &drm_prop_enum_list structures with the symbolic names for
