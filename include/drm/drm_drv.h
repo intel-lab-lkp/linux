@@ -118,6 +118,13 @@ enum drm_driver_feature {
 	 */
 	DRIVER_CURSOR_HOTSPOT           = BIT(9),
 
+	/**
+	 * @DRIVER_CONNECTOR_LUMINANCE:
+	 *
+	 * Driver supports luminance control on a per connector basis.
+	 */
+	DRIVER_CONNECTOR_LUMINANCE           = BIT(10),
+
 	/* IMPORTANT: Below are all the legacy flags, add new ones above. */
 
 	/**
