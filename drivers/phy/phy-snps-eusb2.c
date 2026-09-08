@@ -21,7 +21,7 @@
 #define FSEL_20_MHZ_VAL			(0x1)
 #define FSEL_24_MHZ_VAL			(0x2)
 #define FSEL_26_MHZ_VAL			(0x3)
-#define FSEL_48_MHZ_VAL			(0x2)
+#define FSEL_48_MHZ_VAL			(0x6)
 
 #define EXYNOS_USB_PHY_CFG_PLLCFG0	(0x8)
 #define PHY_CFG_PLL_FB_DIV_19_8_MASK	GENMASK(19, 8)
