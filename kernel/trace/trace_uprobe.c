@@ -408,6 +408,11 @@ static int unregister_trace_uprobe(struct trace_uprobe *tu)
 		return ret;
 
 unreg:
+	if (tu->uprobe) {
+		uprobe_unregister_nosync(tu->uprobe, &tu->consumer);
+		tu->uprobe = NULL;
+		uprobe_unregister_sync();
+	}
 	dyn_event_remove(&tu->devent);
 	trace_probe_unlink(&tu->tp);
 	free_trace_uprobe(tu);
