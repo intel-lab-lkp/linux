@@ -155,7 +155,7 @@ class MaintainersParser:
                 ename = m.group(2)
 
                 entry = os.path.relpath(self.base_dir + fname, self.app_dir)
-                entry = entry.removesuffix(".rst")
+                entry = entry[:-4] if entry.endswith(".rst") else entry
 
                 if entry.startswith("../"):
                     html = KERNELDOC_URL + ename + ".html"
