@@ -12,6 +12,7 @@
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/kthread.h>
 #include <linux/module.h>
 #include <linux/prandom.h>
@@ -153,6 +154,47 @@ static atomic_t watchdog_reset_pending;
 /* Number of attempts to read the watchdog */
 #define WATCHDOG_FREQ_RETRIES		3
 
+/*
+ * Number of consecutive frequency skew detections required before a
+ * clocksource is marked unstable. A single skew sample can be caused by a
+ * transient disturbance of the watchdog clocksource itself (e.g. HPET/PMTMR
+ * hiccups) or by a rare readout artefact that slips past the readout window
+ * check. Requiring several consecutive skew samples adds hysteresis and
+ * greatly reduces the chance of demoting an otherwise healthy clocksource
+ * (typically the TSC) by mistake. A single good sample clears the count.
+ *
+ * Can be tuned via the "clocksource.wd_freq_skew_confirm" module parameter
+ * (also as a kernel command line option). Clamped to [1, 16]; 1 restores the
+ * legacy "single skew kills" behaviour.
+ */
+#define WATCHDOG_FREQ_SKEW_CONFIRM_DEFAULT	3
+#define WATCHDOG_FREQ_SKEW_CONFIRM_MAX		16
+
+static unsigned int wd_freq_skew_confirm = WATCHDOG_FREQ_SKEW_CONFIRM_DEFAULT;
+
+static int wd_freq_skew_confirm_set(const char *val, const struct kernel_param *kp)
+{
+	unsigned int n;
+	int ret;
+
+	ret = kstrtouint(val, 0, &n);
+	if (ret)
+		return ret;
+	if (n < 1 || n > WATCHDOG_FREQ_SKEW_CONFIRM_MAX)
+		return -EINVAL;
+	*((unsigned int *)kp->arg) = n;
+	return 0;
+}
+
+static const struct kernel_param_ops wd_freq_skew_confirm_ops = {
+	.set = wd_freq_skew_confirm_set,
+	.get = param_get_uint,
+};
+module_param_cb(wd_freq_skew_confirm, &wd_freq_skew_confirm_ops,
+		&wd_freq_skew_confirm, 0644);
+MODULE_PARM_DESC(wd_freq_skew_confirm,
+		 "Consecutive frequency skew samples required to mark a clocksource unstable (1-16, default 3)");
+
 /* Five reads local and remote for inter CPU skew detection */
 #define WATCHDOG_REMOTE_MAX_SEQ		10
 
@@ -248,6 +290,7 @@ enum wd_result {
 	WD_FREQ_NO_WATCHDOG,
 	WD_FREQ_TIMEOUT,
 	WD_FREQ_RESET,
+	WD_FREQ_SKEW_PENDING,
 	WD_FREQ_SKEWED,
 	WD_CPU_TIMEOUT,
 	WD_CPU_SKEWED,
@@ -509,8 +552,21 @@ static bool watchdog_check_freq(struct clocksource *cs, bool reset_pending)
 		 * value of the maximum delta plus the watchdog readout
 		 * time.
 		 */
-		if (abs(wd_delta - cs_delta) < (max_delta >> ppm_shift) + wd_seq)
+		if (abs(wd_delta - cs_delta) < (max_delta >> ppm_shift) + wd_seq) {
+			/* Good sample: clear any pending skew streak. */
+			cs->wd_skew_count = 0;
 			return true;
+		}
+
+		/*
+		 * Skew detected. Require several consecutive skew samples
+		 * before demoting the clocksource to avoid marking a healthy
+		 * clocksource unstable due to a transient watchdog glitch.
+		 */
+		if (++cs->wd_skew_count < READ_ONCE(wd_freq_skew_confirm)) {
+			watchdog_data.result = WD_FREQ_SKEW_PENDING;
+			return false;
+		}
 
 		watchdog_data.result = WD_FREQ_SKEWED;
 		return false;
@@ -520,6 +576,7 @@ static bool watchdog_check_freq(struct clocksource *cs, bool reset_pending)
 	return false;
 
 reset:
+	cs->wd_skew_count = 0;
 	cs->flags |= CLOCK_SOURCE_WATCHDOG;
 	watchdog_data.result = WD_FREQ_RESET;
 	return false;
@@ -584,6 +641,14 @@ static void watchdog_print_freq_skew(struct clocksource *cs)
 	pr_warn("Clocksource %20s interval: %16lluns\n", cs->name, watchdog_data.cs_delta);
 }
 
+static void watchdog_print_freq_skew_pending(struct clocksource *cs)
+{
+	if (!__ratelimit(&ratelimit_state))
+		return;
+	pr_info("Clocksource %s frequency skew observed (%u/%u), deferring demotion\n",
+		cs->name, cs->wd_skew_count, READ_ONCE(wd_freq_skew_confirm));
+}
+
 static void watchdog_handle_remote_timeout(struct clocksource *cs)
 {
 	pr_info_once("Watchdog remote CPU %u read timed out\n", watchdog_data.curr_cpu);
@@ -621,6 +686,15 @@ static void watchdog_check_result(struct clocksource *cs)
 		 * Nothing to do when the reference timestamps were reset
 		 * or no watchdog clocksource registered.
 		 */
+		return;
+
+	case WD_FREQ_SKEW_PENDING:
+		/*
+		 * Skew detected but the consecutive confirmation threshold
+		 * has not been reached yet. Keep observing; do not demote and
+		 * do not enable high-res based on this cycle.
+		 */
+		watchdog_print_freq_skew_pending(cs);
 		return;
 
 	case WD_FREQ_SKEWED:
