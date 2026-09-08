@@ -596,3 +596,7 @@ module_i2c_driver(qcom_ec_i2c_driver);
 
 MODULE_DESCRIPTION("QCOM Hamoa Embedded Controller");
 MODULE_LICENSE("GPL");
+
+#if IS_ENABLED(CONFIG_EC_QCOM_HAMOA_KUNIT_TEST)
+#include "qcom-hamoa-ec-test.c"
+#endif
