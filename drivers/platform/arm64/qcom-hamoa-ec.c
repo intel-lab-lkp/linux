@@ -9,6 +9,7 @@
 #include <linux/device.h>
 #include <linux/dev_printk.h>
 #include <linux/err.h>
+#include <linux/hwmon.h>
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
@@ -16,10 +17,13 @@
 #include <linux/pm.h>
 #include <linux/slab.h>
 #include <linux/thermal.h>
+#include <linux/unaligned.h>
 
 #define EC_SCI_EVT_READ_CMD	0x05
 #define EC_FW_VERSION_CMD	0x0e
+#define EC_FAN_RPM_QUERY_CMD	0x22
 #define EC_MODERN_STANDBY_CMD	0x23
+#define EC_THERMISTOR1_CMD	0x29
 #define EC_FAN_DBG_CONTROL_CMD	0x30
 #define EC_SCI_EVT_CONTROL_CMD	0x35
 #define EC_THERMAL_CAP_CMD	0x42
@@ -76,12 +80,125 @@ struct qcom_ec_cooling_dev {
 	u8 state;
 };
 
+struct qcom_ec_variant {
+	bool monitor_only;
+};
+
 struct qcom_ec {
+	const struct qcom_ec_variant *variant;
 	struct qcom_ec_cooling_dev *ec_cdev;
 	struct qcom_ec_thermal_cap thermal_cap;
 	struct qcom_ec_version version;
 	struct i2c_client *client;
 };
+
+/* FC22 in the Slim 7x DSDT: command, fan ID; count, little-endian RPM. */
+static int qcom_ec_read_fan_rpm(struct qcom_ec *ec, long *val)
+{
+	struct i2c_client *client = ec->client;
+	u8 request[] = { EC_FAN_RPM_QUERY_CMD, 1 };
+	u8 response[3];
+	struct i2c_msg messages[] = {
+		{
+			.addr = client->addr,
+			.len = sizeof(request),
+			.buf = request,
+		}, {
+			.addr = client->addr,
+			.flags = I2C_M_RD,
+			.len = sizeof(response),
+			.buf = response,
+		},
+	};
+	int ret;
+
+	ret = i2c_transfer(client->adapter, messages, ARRAY_SIZE(messages));
+	if (ret < 0)
+		return ret;
+	if (ret != ARRAY_SIZE(messages))
+		return -EIO;
+	if (response[0] != sizeof(response) - 1)
+		return -EPROTO;
+
+	*val = get_unaligned_le16(&response[1]);
+
+	return 0;
+}
+
+static umode_t qcom_ec_hwmon_is_visible(const void *data, enum hwmon_sensor_types type,
+					u32 attr, int channel)
+{
+	if (channel)
+		return 0;
+	if ((type == hwmon_fan && attr == hwmon_fan_input) ||
+	    (type == hwmon_temp && attr == hwmon_temp_input))
+		return 0444;
+
+	return 0;
+}
+
+static int qcom_ec_hwmon_read(struct device *dev, enum hwmon_sensor_types type,
+			      u32 attr, int channel, long *val)
+{
+	struct qcom_ec *ec = dev_get_drvdata(dev);
+	int ret;
+
+	if (channel)
+		return -EOPNOTSUPP;
+
+	if (type == hwmon_fan && attr == hwmon_fan_input)
+		return qcom_ec_read_fan_rpm(ec, val);
+
+	if (type != hwmon_temp || attr != hwmon_temp_input)
+		return -EOPNOTSUPP;
+
+	/* FC29/TZ39 report degrees Celsius, or 0xff if unavailable. */
+	ret = i2c_smbus_read_byte_data(ec->client, EC_THERMISTOR1_CMD);
+	if (ret < 0)
+		return ret;
+	if (ret == 0xff)
+		return -ENODATA;
+
+	*val = ret * 1000;
+
+	return 0;
+}
+
+static const struct hwmon_ops qcom_ec_hwmon_ops = {
+	.is_visible = qcom_ec_hwmon_is_visible,
+	.read = qcom_ec_hwmon_read,
+};
+
+static const struct hwmon_channel_info * const qcom_ec_hwmon_info[] = {
+	HWMON_CHANNEL_INFO(fan, HWMON_F_INPUT),
+	HWMON_CHANNEL_INFO(temp, HWMON_T_INPUT),
+	NULL,
+};
+
+static const struct hwmon_chip_info qcom_ec_hwmon_chip_info = {
+	.ops = &qcom_ec_hwmon_ops,
+	.info = qcom_ec_hwmon_info,
+};
+
+static int qcom_ec_hwmon_probe(struct qcom_ec *ec)
+{
+	struct device *dev = &ec->client->dev;
+	struct device *hwmon;
+	long rpm;
+	int ret;
+
+	if (!i2c_check_functionality(ec->client->adapter,
+				     I2C_FUNC_I2C | I2C_FUNC_SMBUS_READ_BYTE_DATA))
+		return -EOPNOTSUPP;
+
+	ret = qcom_ec_read_fan_rpm(ec, &rpm);
+	if (ret)
+		return dev_err_probe(dev, ret, "Failed to read fan RPM\n");
+
+	hwmon = devm_hwmon_device_register_with_info(dev, "qcom_ec", ec,
+						     &qcom_ec_hwmon_chip_info, NULL);
+	return PTR_ERR_OR_ZERO(hwmon);
+}
 
 static int qcom_ec_read(struct qcom_ec *ec, u8 cmd, u8 resp_len, u8 *resp)
 {
@@ -331,6 +448,10 @@ static const struct thermal_cooling_device_ops qcom_ec_thermal_ops = {
 static int qcom_ec_resume(struct device *dev)
 {
 	struct i2c_client *client = to_i2c_client(dev);
+	struct qcom_ec *ec = i2c_get_clientdata(client);
+
+	if (ec->variant->monitor_only)
+		return 0;
 
 	return i2c_smbus_write_byte_data(client, EC_MODERN_STANDBY_CMD,
 					 EC_MODERN_STANDBY_EXIT);
@@ -339,6 +460,10 @@ static int qcom_ec_resume(struct device *dev)
 static int qcom_ec_suspend(struct device *dev)
 {
 	struct i2c_client *client = to_i2c_client(dev);
+	struct qcom_ec *ec = i2c_get_clientdata(client);
+
+	if (ec->variant->monitor_only)
+		return 0;
 
 	return i2c_smbus_write_byte_data(client, EC_MODERN_STANDBY_CMD,
 					 EC_MODERN_STANDBY_ENTER);
@@ -356,13 +481,23 @@ static int qcom_ec_probe(struct i2c_client *client)
 		return -ENOMEM;
 
 	ec->client = client;
+	ec->variant = i2c_get_match_data(client);
+	if (!ec->variant)
+		return -ENODEV;
+	i2c_set_clientdata(client, ec);
+
+	/*
+	 * The Slim 7x does not implement the reference-board capability command.
+	 * Its firmware controls cooling autonomously. Only expose its legacy
+	 * sensors; do not enable SCI, fan debug control or standby notifications.
+	 */
+	if (ec->variant->monitor_only)
+		return qcom_ec_hwmon_probe(ec);
 
 	ret = devm_request_threaded_irq(dev, client->irq, NULL, qcom_ec_irq,
 					IRQF_ONESHOT, "qcom_ec", ec);
 	if (ret < 0)
 		return ret;
-
-	i2c_set_clientdata(client, ec);
 
 	ret = qcom_ec_read_fw_version(dev);
 	if (ret < 0)
@@ -410,6 +545,9 @@ static void qcom_ec_remove(struct i2c_client *client)
 	struct device *dev = &client->dev;
 	int ret;
 
+	if (ec->variant->monitor_only)
+		return;
+
 	ret = qcom_ec_sci_evt_control(dev, false);
 	if (ret < 0)
 		dev_err(dev, "Failed to disable SCI events: %d\n", ret);
@@ -421,14 +559,21 @@ static void qcom_ec_remove(struct i2c_client *client)
 	}
 }
 
+static const struct qcom_ec_variant qcom_ec_reference = {};
+
+static const struct qcom_ec_variant qcom_ec_slim7x = {
+	.monitor_only = true,
+};
+
 static const struct of_device_id qcom_ec_of_match[] = {
-	{ .compatible = "qcom,hamoa-crd-ec" },
+	{ .compatible = "lenovo,yoga-slim7x-ec", .data = &qcom_ec_slim7x },
+	{ .compatible = "qcom,hamoa-crd-ec", .data = &qcom_ec_reference },
 	{}
 };
 MODULE_DEVICE_TABLE(of, qcom_ec_of_match);
 
 static const struct i2c_device_id qcom_ec_i2c_id_table[] = {
-	{ "qcom-hamoa-ec", },
+	{ "qcom-hamoa-ec", (kernel_ulong_t)&qcom_ec_reference },
 	{}
 };
 MODULE_DEVICE_TABLE(i2c, qcom_ec_i2c_id_table);
