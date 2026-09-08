@@ -809,7 +809,8 @@
 			resets = <&cpg 624>;
 			reset-names = "pwr";
 			max-link-speed = <4>;
-			msi-parent = <&its>;
+			msi-parent = <&its 0>;
+			msi-map = <0x0 &its 0x0 0x10000>;
 			num-lanes = <2>;
 			#address-cells = <3>;
 			#size-cells = <2>;
@@ -857,7 +858,8 @@
 			resets = <&cpg 625>;
 			reset-names = "pwr";
 			max-link-speed = <4>;
-			msi-parent = <&its>;
+			msi-parent = <&its 0>;
+			msi-map = <0x0 &its 0x0 0x10000>;
 			num-lanes = <2>;
 			#address-cells = <3>;
 			#size-cells = <2>;
@@ -2165,6 +2167,7 @@
 				reg = <0x0 0x40000 0x0 0x20000>;
 				dma-noncoherent;
 				msi-controller;
+				#msi-cells = <1>;
 			};
 		};
 
