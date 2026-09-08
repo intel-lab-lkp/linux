@@ -7,6 +7,7 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
+#include <linux/goldfish.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/irqchip.h>
@@ -38,7 +39,7 @@ static void goldfish_pic_cascade(struct irq_desc *desc)
 
 	chained_irq_enter(host_chip, desc);
 
-	pending = readl(gfpic->base + GFPIC_REG_IRQ_PENDING);
+	pending = gf_ioread32(gfpic->base + GFPIC_REG_IRQ_PENDING);
 	while (pending) {
 		hwirq = __fls(pending);
 		generic_handle_domain_irq(gfpic->irq_domain, hwirq);
@@ -51,6 +52,16 @@ static void goldfish_pic_cascade(struct irq_desc *desc)
 static const struct irq_domain_ops goldfish_irq_domain_ops = {
 	.xlate = irq_domain_xlate_onecell,
 };
+
+static u32 gfpic_read(void __iomem *addr)
+{
+	return gf_ioread32(addr);
+}
+
+static void gfpic_write(u32 val, void __iomem *addr)
+{
+	gf_iowrite32(val, addr);
+}
 
 static int __init goldfish_pic_of_init(struct device_node *of_node,
 				       struct device_node *parent)
@@ -82,7 +93,7 @@ static int __init goldfish_pic_of_init(struct device_node *of_node,
 	}
 
 	/* Mask interrupts. */
-	writel(1, gfpic->base + GFPIC_REG_IRQ_DISABLE_ALL);
+	gf_iowrite32(1, gfpic->base + GFPIC_REG_IRQ_DISABLE_ALL);
 
 	gc = irq_alloc_generic_chip("GFPIC", 1, GFPIC_IRQ_BASE, gfpic->base,
 				    handle_level_irq);
@@ -91,6 +102,9 @@ static int __init goldfish_pic_of_init(struct device_node *of_node,
 		ret = -ENOMEM;
 		goto out_iounmap;
 	}
+
+	gc->reg_readl = gfpic_read;
+	gc->reg_writel = gfpic_write;
 
 	ct = gc->chip_types;
 	ct->regs.enable = GFPIC_REG_IRQ_ENABLE;
