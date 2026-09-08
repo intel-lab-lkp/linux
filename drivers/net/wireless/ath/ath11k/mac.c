@@ -10494,6 +10494,7 @@ static int __ath11k_mac_register(struct ath11k *ar)
 
 	ieee80211_hw_set(ar->hw, SIGNAL_DBM);
 	ieee80211_hw_set(ar->hw, SUPPORTS_PS);
+	ieee80211_hw_set(ar->hw, TX_NO_PUSHBACK);
 	ieee80211_hw_set(ar->hw, SUPPORTS_DYNAMIC_PS);
 	ieee80211_hw_set(ar->hw, MFP_CAPABLE);
 	ieee80211_hw_set(ar->hw, REPORTS_TX_ACK_STATUS);
