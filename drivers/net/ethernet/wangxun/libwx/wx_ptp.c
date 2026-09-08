@@ -139,12 +139,16 @@ static int wx_ptp_settime64(struct ptp_clock_info *ptp,
  */
 static void wx_ptp_clear_tx_timestamp(struct wx *wx)
 {
+	struct sk_buff *skb;
+
+	spin_lock_bh(&wx->ptp_tx_lock);
 	rd32ptp(wx, WX_TSC_1588_STMPH);
-	if (wx->ptp_tx_skb) {
-		dev_kfree_skb_any(wx->ptp_tx_skb);
-		wx->ptp_tx_skb = NULL;
-	}
+	skb = wx->ptp_tx_skb;
+	wx->ptp_tx_skb = NULL;
 	clear_bit_unlock(WX_STATE_PTP_TX_IN_PROGRESS, wx->state);
+	spin_unlock_bh(&wx->ptp_tx_lock);
+
+	dev_kfree_skb_any(skb);
 }
 
 /**
@@ -174,50 +178,43 @@ static void wx_ptp_convert_to_hwtstamp(struct wx *wx,
 	hwtstamp->hwtstamp = ns_to_ktime(ns);
 }
 
-/**
- * wx_ptp_tx_hwtstamp - utility function which checks for TX time stamp
- * @wx: the private board struct
- *
- * if the timestamp is valid, we convert it into the timecounter ns
- * value, then store that result into the shhwtstamps structure which
- * is passed up the network stack
- */
-static void wx_ptp_tx_hwtstamp(struct wx *wx)
-{
-	struct skb_shared_hwtstamps shhwtstamps;
-	struct sk_buff *skb = wx->ptp_tx_skb;
-	u64 regval = 0;
-
-	regval |= (u64)rd32ptp(wx, WX_TSC_1588_STMPL);
-	regval |= (u64)rd32ptp(wx, WX_TSC_1588_STMPH) << 32;
-
-	wx_ptp_convert_to_hwtstamp(wx, &shhwtstamps, regval);
-
-	wx->ptp_tx_skb = NULL;
-	clear_bit_unlock(WX_STATE_PTP_TX_IN_PROGRESS, wx->state);
-	skb_tstamp_tx(skb, &shhwtstamps);
-	dev_kfree_skb_any(skb);
-	wx->tx_hwtstamp_pkts++;
-}
-
 static int wx_ptp_tx_hwtstamp_work(struct wx *wx)
 {
+	struct skb_shared_hwtstamps shhwtstamps;
+	struct sk_buff *skb;
 	u32 tsynctxctl;
+	u64 regval = 0;
+
+	spin_lock_bh(&wx->ptp_tx_lock);
 
 	/* we have to have a valid skb to poll for a timestamp */
 	if (!wx->ptp_tx_skb) {
-		wx_ptp_clear_tx_timestamp(wx);
+		rd32ptp(wx, WX_TSC_1588_STMPH);
+		clear_bit_unlock(WX_STATE_PTP_TX_IN_PROGRESS, wx->state);
+		spin_unlock_bh(&wx->ptp_tx_lock);
 		return 0;
 	}
 
 	/* stop polling once we have a valid timestamp */
 	tsynctxctl = rd32ptp(wx, WX_TSC_1588_CTL);
-	if (tsynctxctl & WX_TSC_1588_CTL_VALID) {
-		wx_ptp_tx_hwtstamp(wx);
-		return 0;
+	if (!(tsynctxctl & WX_TSC_1588_CTL_VALID)) {
+		spin_unlock_bh(&wx->ptp_tx_lock);
+		return -1;
 	}
 
-	return -1;
+	regval |= (u64)rd32ptp(wx, WX_TSC_1588_STMPL);
+	regval |= (u64)rd32ptp(wx, WX_TSC_1588_STMPH) << 32;
+	wx_ptp_convert_to_hwtstamp(wx, &shhwtstamps, regval);
+	skb = wx->ptp_tx_skb;
+	wx->ptp_tx_skb = NULL;
+	clear_bit_unlock(WX_STATE_PTP_TX_IN_PROGRESS, wx->state);
+	spin_unlock_bh(&wx->ptp_tx_lock);
+
+	skb_tstamp_tx(skb, &shhwtstamps);
+	dev_kfree_skb_any(skb);
+	wx->tx_hwtstamp_pkts++;
+
+	return 0;
 }
 
 /**
@@ -296,24 +293,30 @@ static void wx_ptp_rx_hang(struct wx *wx)
  */
 static void wx_ptp_tx_hang(struct wx *wx)
 {
-	bool timeout = time_is_before_jiffies(wx->ptp_tx_start +
-					      WX_PTP_TX_TIMEOUT);
+	struct sk_buff *skb = NULL;
 
-	if (!wx->ptp_tx_skb)
-		return;
-
-	if (!test_bit(WX_STATE_PTP_TX_IN_PROGRESS, wx->state))
-		return;
+	spin_lock_bh(&wx->ptp_tx_lock);
 
 	/* If we haven't received a timestamp within the timeout, it is
 	 * reasonable to assume that it will never occur, so we can unlock the
 	 * timestamp bit when this occurs.
 	 */
-	if (timeout) {
-		wx_ptp_clear_tx_timestamp(wx);
-		wx->tx_hwtstamp_timeouts++;
-		dev_warn(&wx->pdev->dev, "clearing Tx timestamp hang\n");
+	if (wx->ptp_tx_skb &&
+	    test_bit(WX_STATE_PTP_TX_IN_PROGRESS, wx->state) &&
+	    time_is_before_jiffies(wx->ptp_tx_start + WX_PTP_TX_TIMEOUT)) {
+		rd32ptp(wx, WX_TSC_1588_STMPH);
+		skb = wx->ptp_tx_skb;
+		wx->ptp_tx_skb = NULL;
+		clear_bit_unlock(WX_STATE_PTP_TX_IN_PROGRESS, wx->state);
 	}
+	spin_unlock_bh(&wx->ptp_tx_lock);
+
+	if (!skb)
+		return;
+
+	dev_kfree_skb_any(skb);
+	wx->tx_hwtstamp_timeouts++;
+	dev_warn(&wx->pdev->dev, "clearing Tx timestamp hang\n");
 }
 
 static long wx_ptp_do_aux_work(struct ptp_clock_info *ptp)

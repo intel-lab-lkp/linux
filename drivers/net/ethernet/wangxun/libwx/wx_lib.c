@@ -1612,6 +1612,7 @@ static netdev_tx_t wx_xmit_frame_ring(struct sk_buff *skb,
 {
 	struct wx *wx = netdev_priv(tx_ring->netdev);
 	u16 count = TXD_USE_COUNT(skb_headlen(skb));
+	struct sk_buff *ptp_tx_skb = NULL;
 	struct wx_tx_buffer *first;
 	u8 hdr_len = 0, ptype;
 	unsigned short f;
@@ -1649,6 +1650,7 @@ static netdev_tx_t wx_xmit_frame_ring(struct sk_buff *skb,
 
 	if (unlikely(skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP) &&
 	    wx->ptp_clock) {
+		spin_lock_bh(&wx->ptp_tx_lock);
 		if (wx->tstamp_config.tx_type == HWTSTAMP_TX_ON &&
 		    !test_and_set_bit_lock(WX_STATE_PTP_TX_IN_PROGRESS,
 					   wx->state)) {
@@ -1659,6 +1661,7 @@ static netdev_tx_t wx_xmit_frame_ring(struct sk_buff *skb,
 		} else {
 			wx->tx_hwtstamp_skipped++;
 		}
+		spin_unlock_bh(&wx->ptp_tx_lock);
 	}
 
 	/* record initial flags and protocol */
@@ -1685,10 +1688,17 @@ out_drop:
 	first->skb = NULL;
 cleanup_tx_tstamp:
 	if (unlikely(tx_flags & WX_TX_FLAGS_TSTAMP)) {
-		dev_kfree_skb_any(wx->ptp_tx_skb);
-		wx->ptp_tx_skb = NULL;
+		spin_lock_bh(&wx->ptp_tx_lock);
+		if (wx->ptp_tx_skb == skb) {
+			ptp_tx_skb = wx->ptp_tx_skb;
+			wx->ptp_tx_skb = NULL;
+			clear_bit_unlock(WX_STATE_PTP_TX_IN_PROGRESS,
+					 wx->state);
+		}
+		spin_unlock_bh(&wx->ptp_tx_lock);
+
+		dev_kfree_skb_any(ptp_tx_skb);
 		wx->tx_hwtstamp_errors++;
-		clear_bit_unlock(WX_STATE_PTP_TX_IN_PROGRESS, wx->state);
 	}
 
 	return NETDEV_TX_OK;

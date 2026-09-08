@@ -1430,6 +1430,7 @@ struct wx {
 	unsigned long last_overflow_check;
 	unsigned long last_rx_ptp_check;
 	unsigned long ptp_tx_start;
+	spinlock_t ptp_tx_lock; /* protects ptp_tx_skb and ptp_tx_start */
 	seqlock_t hw_tc_lock; /* seqlock for ptp */
 	struct cyclecounter hw_cc;
 	struct timecounter hw_tc;
