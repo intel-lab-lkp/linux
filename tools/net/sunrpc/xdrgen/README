@@ -163,17 +163,29 @@ wasted work. This directive marks such a member so that xdrgen emits a
 codec that owns only the wire framing (the length prefix, the bound
 check, and the per-element codec) and drives the application
 through begin/item/end hooks, processing one element at a time with
-no staged array. The marked member must be a variable-length
-array member of a struct; xdrgen rejects a directive naming
-anything else, and generates the codec for the server side only.
-The generated decoder hands each element to the ordinary element
-decoder from a local variable, so the element type may not contain
-a variable-length array or an optional-data member at any depth;
-xdrgen rejects a directive whose element type does. The array must
-declare a maximum size: the decoder hands the wire count to the
-begin hook before it decodes any element, and only the declared
-bound limits that count. xdrgen rejects a directive naming an
-unbounded array.
+no staged array. The marked member must be a struct member
+declared either as a variable-length array or as an optional-data
+list ("type *name"); xdrgen rejects a directive naming anything
+else, and generates the codec for the server side only.
+
+The two forms differ only in framing. A variable-length array
+carries a u32 element count, so the framing writes that count and
+bound-checks it. Its generated decoder hands each element to the
+ordinary element decoder from a local variable, so the element
+type may not contain a variable-length array or an optional-data
+member at any depth; xdrgen rejects a directive whose element type
+does. The array must declare a maximum size: the decoder hands the
+wire count to the begin hook before it decodes any element, and
+only the declared bound limits that count. xdrgen rejects a
+directive naming an unbounded array. An optional-data list carries
+no count: each element is prefixed by a value-follows TRUE and the
+sequence is closed by a FALSE, which the framing writes after the
+last element. The element type must therefore be a pointer type,
+whose codec owns that framing; xdrgen rejects any other element
+type. For the optional-data form xdrgen generates a working
+encoder only; the decoder it emits fails without consuming the
+list, so xdrgen also rejects the directive when the struct is
+reachable from an RPC argument.
 
 For example:
 
@@ -193,9 +205,11 @@ member:
   nfs_acl2_secattr_decode()
   nfs_acl2_secattr_decode_end()
 
-A decoder fills the cursor's count from the wire before calling the
-begin hook; an encoder's begin hook sets that count, and the framing
-then bound-checks it and emits the length prefix. Once a begin hook
+For a variable-length array, a decoder fills the cursor's count from
+the wire before calling the begin hook, and an encoder's begin hook
+sets that count for the framing to bound-check and emit. An
+optional-data list's encoder begin hook sets the count as well; its
+decoder never fills it. Once a begin hook
 has succeeded its end hook runs, so that it can release what begin
 took; the end hook receives the running success flag.
 
