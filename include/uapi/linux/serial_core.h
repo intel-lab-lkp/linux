@@ -234,6 +234,9 @@
 /* Sunplus UART */
 #define PORT_SUNPLUS	123
 
+/* WK2xxx SPI to UART bridge */
+#define PORT_WK2XXX	124
+
 /* Generic type identifier for ports which type is not important to userspace. */
 #define PORT_GENERIC	(-1)
 
