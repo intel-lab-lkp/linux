@@ -7,6 +7,8 @@
 
 #include <linux/delay.h>
 #include <linux/io-64-nonatomic-lo-hi.h>
+#include <linux/math.h>
+#include <linux/math64.h>
 #include <linux/minmax.h>
 #include <linux/pci.h>
 
@@ -320,6 +322,30 @@ u64 xe_mmio_read64_2x32(struct xe_mmio *mmio, struct xe_reg reg)
 	return (u64)udw << 32 | ldw;
 }
 
+/**
+ * __div_round_up64() - alternative to DIV_ROUND_UP for use by __xe_mmio_wait32
+ * @dividend: 64 bit positive number to divide
+ * @divisor: 64 bit positive divisor
+ *
+ * DIV_ROUND_UP() relies on plain '/' and '%' operators, which for 64-bit
+ * operands on a 32-bit CPU get turned into calls to libgcc's __divdi3()/
+ * __moddi3(), routines the kernel does not link against. Provide a
+ * do_div()-based equivalent that works for signed 64-bit inputs on any
+ * architecture.
+ *
+ * Returns: rounded up division result
+ */
+static inline s64 __div_round_up64(s64 dividend, s64 divisor)
+{
+	u64 abs_dividend = abs(dividend);
+	u64 abs_divisor = abs(divisor);
+	u64 result = abs_dividend + abs_divisor - 1;
+
+	do_div(result, abs_divisor);
+	/* dont check for negative values as local caller only uses positive numbers */
+	return (s64)result;
+}
+
 static int __xe_mmio_wait32(struct xe_mmio *mmio, struct xe_reg reg, u32 mask, u32 val,
 			    u32 timeout_us, u32 *out_val, bool atomic, bool expect_match)
 {
@@ -349,11 +375,25 @@ static int __xe_mmio_wait32(struct xe_mmio *mmio, struct xe_reg reg, u32 mask, u
 		if (ktime_after(ktime_add_us(cur, wait), end))
 			wait = ktime_us_delta(end, cur);
 
-		if (atomic)
-			udelay(wait);
-		else
-			usleep_range(wait, wait << 1);
-		wait <<= 1;
+#define __XE_MMIO_WAIT_MAX_INLOOP_100MS (100 * USEC_PER_MSEC)
+		if (atomic) {
+			if (wait <= MAX_UDELAY_MS * USEC_PER_MSEC)
+				udelay(wait);
+			else if (BITS_PER_LONG == 32)
+				mdelay(DIV_ROUND_UP(wait, USEC_PER_MSEC));
+			else
+				mdelay(__div_round_up64(wait, USEC_PER_MSEC));
+		} else {
+			usleep_range(wait, wait + (wait >> 2)); /* range till wait + 25% */
+		}
+		/*
+		 * As we keep doubling the wait time for every check that fails, cap the
+		 * in-loop delay-or-sleep to less than 2x 100 milliseconds to prevent from
+		 * expanding 'wait' into exponentially longer wait times per loop that
+		 * end up delaying the next completion check way later than tolerable.
+		 */
+		wait = wait < __XE_MMIO_WAIT_MAX_INLOOP_100MS >> 1 ?
+		       wait << 1 : __XE_MMIO_WAIT_MAX_INLOOP_100MS;
 	}
 
 	if (ret != 0) {
