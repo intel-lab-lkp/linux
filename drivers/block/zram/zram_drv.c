@@ -208,18 +208,19 @@ static bool zram_can_store_page(struct zram *zram)
 	return !zram->limit_pages || alloced_pages <= zram->limit_pages;
 }
 
-#if PAGE_SIZE != 4096
+/*
+ * A whole-page bvec is required for the full-page fast paths, which
+ * consume bv_page outright and ignore bv_offset/bv_len.  The queue's
+ * logical_block_size == PAGE_SIZE only constrains a bio's starting
+ * sector and total size -- individual bvec lengths are not constrained
+ * by any queue limit, and ITER_BVEC direct I/O submitters pass the
+ * caller's bio_vec array through as-is (bio_iov_bvec_set()), so
+ * sub-page segments reach us on every PAGE_SIZE.
+ */
 static inline bool is_partial_io(struct bio_vec *bvec)
 {
 	return bvec->bv_len != PAGE_SIZE;
 }
-#define ZRAM_PARTIAL_IO		1
-#else
-static inline bool is_partial_io(struct bio_vec *bvec)
-{
-	return false;
-}
-#endif
 
 #if defined CONFIG_ZRAM_WRITEBACK || defined CONFIG_ZRAM_MULTI_COMP
 struct zram_pp_slot {
@@ -1507,11 +1508,8 @@ static int read_from_bdev(struct zram *zram, struct page *page,
 			  struct bio *parent)
 {
 	atomic64_inc(&zram->stats.bd_reads);
-	if (!parent) {
-		if (WARN_ON_ONCE(!IS_ENABLED(ZRAM_PARTIAL_IO)))
-			return -EIO;
+	if (!parent)
 		return read_from_bdev_sync(zram, page, index, blk_idx);
-	}
 	return read_from_bdev_async(zram, page, index, blk_idx, parent);
 }
 #else
@@ -2729,11 +2727,11 @@ static void zram_bio_read(struct zram *zram, struct bio *bio)
 {
 	unsigned long start_time = bio_start_io_acct(bio);
 	struct bvec_iter iter = bio->bi_iter;
+	loff_t pos = (loff_t)iter.bi_sector << SECTOR_SHIFT;
 
 	do {
-		unsigned long index = iter.bi_sector >> SECTORS_PER_PAGE_SHIFT;
-		u32 offset = (iter.bi_sector & (SECTORS_PER_PAGE - 1)) <<
-				SECTOR_SHIFT;
+		unsigned long index = pos >> PAGE_SHIFT;
+		u32 offset = pos & (PAGE_SIZE - 1);
 		struct bio_vec bv = bio_iter_iovec(bio, iter);
 
 		bv.bv_len = min_t(u32, bv.bv_len, PAGE_SIZE - offset);
@@ -2749,6 +2747,7 @@ static void zram_bio_read(struct zram *zram, struct bio *bio)
 		mark_slot_accessed(zram, index);
 		slot_unlock(zram, index);
 
+		pos += bv.bv_len;
 		bio_advance_iter_single(bio, &iter, bv.bv_len);
 	} while (iter.bi_size);
 
@@ -2760,11 +2759,11 @@ static void zram_bio_write(struct zram *zram, struct bio *bio)
 {
 	unsigned long start_time = bio_start_io_acct(bio);
 	struct bvec_iter iter = bio->bi_iter;
+	loff_t pos = (loff_t)iter.bi_sector << SECTOR_SHIFT;
 
 	do {
-		unsigned long index = iter.bi_sector >> SECTORS_PER_PAGE_SHIFT;
-		u32 offset = (iter.bi_sector & (SECTORS_PER_PAGE - 1)) <<
-				SECTOR_SHIFT;
+		unsigned long index = pos >> PAGE_SHIFT;
+		u32 offset = pos & (PAGE_SIZE - 1);
 		struct bio_vec bv = bio_iter_iovec(bio, iter);
 
 		bv.bv_len = min_t(u32, bv.bv_len, PAGE_SIZE - offset);
@@ -2779,6 +2778,7 @@ static void zram_bio_write(struct zram *zram, struct bio *bio)
 		mark_slot_accessed(zram, index);
 		slot_unlock(zram, index);
 
+		pos += bv.bv_len;
 		bio_advance_iter_single(bio, &iter, bv.bv_len);
 	} while (iter.bi_size);
 
