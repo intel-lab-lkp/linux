@@ -33,16 +33,22 @@ extern u16 user_irqvec_fixup[];
 
 static int m68k_first_user_vec;
 
+static void m68k_irq_eoi(struct irq_data *data)
+{
+}
+
 static struct irq_chip auto_irq_chip = {
 	.name		= "auto",
 	.irq_startup	= m68k_irq_startup,
 	.irq_shutdown	= m68k_irq_shutdown,
+	.irq_eoi	= m68k_irq_eoi,
 };
 
 static struct irq_chip user_irq_chip = {
 	.name		= "user",
 	.irq_startup	= m68k_irq_startup,
 	.irq_shutdown	= m68k_irq_shutdown,
+	.irq_eoi	= m68k_irq_eoi,
 };
 
 /*
