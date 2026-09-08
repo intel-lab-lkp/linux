@@ -8,20 +8,20 @@
 #include <drv_types.h>
 #include <hal_com_h2c.h>
 
-static unsigned char ARTHEROS_OUI1[] = {0x00, 0x03, 0x7f};
-static unsigned char ARTHEROS_OUI2[] = {0x00, 0x13, 0x74};
+static u8 ARTHEROS_OUI1[] = {0x00, 0x03, 0x7f};
+static u8 ARTHEROS_OUI2[] = {0x00, 0x13, 0x74};
 
-static unsigned char BROADCOM_OUI1[] = {0x00, 0x10, 0x18};
-static unsigned char BROADCOM_OUI2[] = {0x00, 0x0a, 0xf7};
-static unsigned char BROADCOM_OUI3[] = {0x00, 0x05, 0xb5};
+static u8 BROADCOM_OUI1[] = {0x00, 0x10, 0x18};
+static u8 BROADCOM_OUI2[] = {0x00, 0x0a, 0xf7};
+static u8 BROADCOM_OUI3[] = {0x00, 0x05, 0xb5};
 
-static unsigned char CISCO_OUI[] = {0x00, 0x40, 0x96};
-static unsigned char MARVELL_OUI[] = {0x00, 0x50, 0x43};
-static unsigned char RALINK_OUI[] = {0x00, 0x0c, 0x43};
-static unsigned char REALTEK_OUI[] = {0x00, 0xe0, 0x4c};
-static unsigned char AIRGOCAP_OUI[] = {0x00, 0x0a, 0xf5};
-static unsigned char RSN_TKIP_CIPHER[4] = {0x00, 0x0f, 0xac, 0x02};
-static unsigned char WPA_TKIP_CIPHER[4] = {0x00, 0x50, 0xf2, 0x02};
+static u8 CISCO_OUI[] = {0x00, 0x40, 0x96};
+static u8 MARVELL_OUI[] = {0x00, 0x50, 0x43};
+static u8 RALINK_OUI[] = {0x00, 0x0c, 0x43};
+static u8 REALTEK_OUI[] = {0x00, 0xe0, 0x4c};
+static u8 AIRGOCAP_OUI[] = {0x00, 0x0a, 0xf5};
+static u8 RSN_TKIP_CIPHER[4] = {0x00, 0x0f, 0xac, 0x02};
+static u8 WPA_TKIP_CIPHER[4] = {0x00, 0x50, 0xf2, 0x02};
 
 /* define WAIT_FOR_BCN_TO_MIN	(3000) */
 #define WAIT_FOR_BCN_TO_MIN	(6000)
@@ -75,8 +75,8 @@ u8 networktype_to_raid_ex(struct adapter *adapter, struct sta_info *psta)
 	return raid;
 }
 
-unsigned char ratetbl_val_2wifirate(unsigned char rate);
-unsigned char ratetbl_val_2wifirate(unsigned char rate)
+u8 ratetbl_val_2wifirate(u8 rate);
+u8 ratetbl_val_2wifirate(u8 rate)
 {
 	switch (rate & 0x7f) {
 	case 0:
@@ -108,11 +108,11 @@ unsigned char ratetbl_val_2wifirate(unsigned char rate)
 	}
 }
 
-int is_basicrate(struct adapter *padapter, unsigned char rate);
-int is_basicrate(struct adapter *padapter, unsigned char rate)
+int is_basicrate(struct adapter *padapter, u8 rate);
+int is_basicrate(struct adapter *padapter, u8 rate)
 {
 	int i;
-	unsigned char val;
+	u8 val;
 	struct mlme_ext_priv *pmlmeext = &padapter->mlmeextpriv;
 
 	for (i = 0; i < NumRates; i++) {
@@ -126,12 +126,12 @@ int is_basicrate(struct adapter *padapter, unsigned char rate)
 	return false;
 }
 
-unsigned int ratetbl2rateset(struct adapter *padapter, unsigned char *rateset);
-unsigned int ratetbl2rateset(struct adapter *padapter, unsigned char *rateset)
+u32 ratetbl2rateset(struct adapter *padapter, u8 *rateset);
+u32 ratetbl2rateset(struct adapter *padapter, u8 *rateset)
 {
 	int i;
-	unsigned char rate;
-	unsigned int	len = 0;
+	u8 rate;
+	u32 len = 0;
 	struct mlme_ext_priv *pmlmeext = &padapter->mlmeextpriv;
 
 	for (i = 0; i < NumRates; i++) {
@@ -158,9 +158,9 @@ unsigned int ratetbl2rateset(struct adapter *padapter, unsigned char *rateset)
 	return len;
 }
 
-void get_rate_set(struct adapter *padapter, unsigned char *pbssrate, int *bssrate_len)
+void get_rate_set(struct adapter *padapter, u8 *pbssrate, int *bssrate_len)
 {
-	unsigned char supportedrates[NumRates];
+	u8 supportedrates[NumRates];
 
 	memset(supportedrates, 0, NumRates);
 	*bssrate_len = ratetbl2rateset(padapter, supportedrates);
@@ -294,7 +294,7 @@ inline unsigned long rtw_get_on_cur_ch_time(struct adapter *adapter)
 		return 0;
 }
 
-void r8723bs_select_channel(struct adapter *padapter, unsigned char channel)
+void r8723bs_select_channel(struct adapter *padapter, u8 channel)
 {
 	if (mutex_lock_interruptible(&(adapter_to_dvobj(padapter)->setch_mutex)))
 		return;
@@ -307,7 +307,7 @@ void r8723bs_select_channel(struct adapter *padapter, unsigned char channel)
 	mutex_unlock(&(adapter_to_dvobj(padapter)->setch_mutex));
 }
 
-void set_channel_bwmode(struct adapter *padapter, unsigned char channel, unsigned char channel_offset, unsigned short bwmode)
+void set_channel_bwmode(struct adapter *padapter, u8 channel, u8 channel_offset, u16 bwmode)
 {
 	u8 center_ch, chnl_offset80 = HAL_PRIME_CHNL_OFFSET_DONT_CARE;
 
@@ -1360,10 +1360,10 @@ int support_short_GI(struct adapter *padapter, struct HT_caps_element *pHT_caps,
 		return _FAIL;
 }
 
-unsigned char get_highest_rate_idx(u32 mask)
+u8 get_highest_rate_idx(u32 mask)
 {
 	int i;
-	unsigned char rate_idx = 0;
+	u8 rate_idx = 0;
 
 	for (i = 31; i >= 0; i--) {
 		if (mask & BIT(i)) {
