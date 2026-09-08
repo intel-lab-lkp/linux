@@ -41,6 +41,8 @@ struct opts {
 	bool mnop;
 	bool module;
 	bool no_unreachable;
+	const char *noreturns_read;
+	const char *noreturns_write;
 	const char *output;
 	bool sec_address;
 	bool stats;
