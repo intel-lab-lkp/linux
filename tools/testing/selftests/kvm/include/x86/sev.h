@@ -100,6 +100,30 @@ static inline u64 snp_default_policy(void)
 	__TEST_ASSERT_VM_VCPU_IOCTL(!ret, #cmd,	ret, vm);		\
 })
 
+static inline int __vcpu_sev_ioctl(struct kvm_vcpu *vcpu, u32 cmd, void *arg)
+{
+	union {
+		struct kvm_sev_cmd c;
+		unsigned long raw;
+	} sev_cmd = { .c = {
+		.id = cmd,
+		.data = (u64)arg,
+		.sev_fd = vcpu->vm->arch.sev_fd,
+	} };
+	int ret;
+
+	ret = __vcpu_ioctl(vcpu, KVM_MEMORY_ENCRYPT_OP, &sev_cmd.raw);
+	return ret ?: sev_cmd.c.error;
+}
+
+#define vcpu_sev_ioctl(vcpu, cmd, arg)				\
+({								\
+	struct kvm_vcpu *__vcpu = (vcpu);				\
+	int ret = __vcpu_sev_ioctl(__vcpu, cmd, arg);		\
+								\
+	__TEST_ASSERT_VM_VCPU_IOCTL(!ret, #cmd, ret, __vcpu->vm);	\
+})
+
 void sev_vm_init(struct kvm_vm *vm);
 void sev_es_vm_init(struct kvm_vm *vm);
 void snp_vm_init(struct kvm_vm *vm);
@@ -142,6 +166,31 @@ static inline void snp_launch_update_data(struct kvm_vm *vm, gpa_t gpa,
 	};
 
 	vm_sev_ioctl(vm, KVM_SEV_SNP_LAUNCH_UPDATE, &update_data);
+}
+
+static inline void snp_launch_update_vmsa(struct kvm_vm *vm, gpa_t gpa,
+					  void *vmsa)
+{
+	vm_mem_set_private(vm, gpa, PAGE_SIZE);
+	snp_launch_update_data(vm, gpa, (u64)vmsa, PAGE_SIZE,
+			       KVM_SEV_SNP_PAGE_TYPE_VMSA);
+}
+
+static inline void snp_get_vcpu_state(struct kvm_vcpu *vcpu,
+				      struct kvm_sev_snp_vcpu_state *state)
+{
+	vcpu_sev_ioctl(vcpu, KVM_SEV_SNP_GET_VCPU_STATE, state);
+}
+
+static inline void snp_set_vcpu_state(struct kvm_vcpu *vcpu, gpa_t vmsa_gpa)
+{
+	struct kvm_sev_snp_vcpu_state state = {
+		.vmsa_gpa = vmsa_gpa,
+		.valid_fields = KVM_SEV_SNP_VCPU_STATE_VMSA_VALID |
+				KVM_SEV_SNP_VCPU_STATE_GHCB_VALID,
+	};
+
+	vcpu_sev_ioctl(vcpu, KVM_SEV_SNP_SET_VCPU_STATE, &state);
 }
 
 static inline void sev_dbg_crypt_memory(struct kvm_vm *vm, unsigned int cmd,
