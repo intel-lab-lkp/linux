@@ -1930,8 +1930,8 @@ static int erdma_init_user_cq(struct erdma_ucontext *ctx, struct erdma_cq *cq,
 	struct erdma_dev *dev = to_edev(cq->ibcq.device);
 
 	ret = get_mtt_entries(dev, &cq->user_cq.qbuf_mem, ureq->qbuf_va,
-			      ureq->qbuf_len, 0, ureq->qbuf_va, SZ_64M - SZ_4K,
-			      true);
+			      ureq->qbuf_len, IB_ACCESS_LOCAL_WRITE,
+			      ureq->qbuf_va, SZ_64M - SZ_4K, true);
 	if (ret)
 		return ret;
 
