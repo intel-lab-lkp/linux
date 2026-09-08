@@ -161,8 +161,8 @@ static int erdma_poll_one_cqe(struct erdma_cq *cq, struct ib_wc *wc)
 	if (qtype == ERDMA_CQE_QTYPE_SQ) {
 		id_table = kern_qp->swr_tbl;
 		depth = qp->attrs.sq_size;
-		wqe_hdr = get_queue_entry(qp->kern_qp.sq_buf, wqe_idx,
-					  qp->attrs.sq_size, SQEBB_SHIFT);
+		wqe_hdr = erdma_kmem_get_entry(&qp->kern_qp.sq_mem, wqe_idx,
+					       qp->attrs.sq_size, SQEBB_SHIFT);
 		kern_qp->sq_ci =
 			FIELD_GET(ERDMA_SQE_HDR_WQEBB_CNT_MASK, *wqe_hdr) +
 			wqe_idx + 1;
