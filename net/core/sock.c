@@ -1571,10 +1571,25 @@ set_sndbuf:
 		break;
 
 	case SO_PASSPIDFD:
-		if (sk_is_unix(sk))
+		if (sk_is_unix(sk)) {
+			/* Mutually exclusive with SO_PASSPIDFD_THREAD. */
 			sk->sk_scm_pidfd = valbool;
-		else
+			if (valbool)
+				sk->sk_scm_pidfd_thread = 0;
+		} else {
 			ret = -EOPNOTSUPP;
+		}
+		break;
+
+	case SO_PASSPIDFD_THREAD:
+		if (sk_is_unix(sk)) {
+			/* Mutually exclusive with SO_PASSPIDFD. */
+			sk->sk_scm_pidfd_thread = valbool;
+			if (valbool)
+				sk->sk_scm_pidfd = 0;
+		} else {
+			ret = -EOPNOTSUPP;
+		}
 		break;
 
 	case SO_PASSRIGHTS:
@@ -1890,6 +1905,13 @@ int sk_getsockopt(struct sock *sk, int level, int optname,
 			return -EOPNOTSUPP;
 
 		v.val = sk->sk_scm_pidfd;
+		break;
+
+	case SO_PASSPIDFD_THREAD:
+		if (!sk_is_unix(sk))
+			return -EOPNOTSUPP;
+
+		v.val = sk->sk_scm_pidfd_thread;
 		break;
 
 	case SO_PASSRIGHTS:

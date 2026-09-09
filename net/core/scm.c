@@ -499,9 +499,13 @@ static bool scm_has_secdata(struct sock *sk)
 }
 #endif
 
-static void scm_pidfd_recv(struct msghdr *msg, struct scm_cookie *scm)
+static void scm_pidfd_recv(struct sock *sk, struct msghdr *msg,
+			   struct scm_cookie *scm)
 {
+	enum pid_type type = sk->sk_scm_pidfd_thread ? PIDTYPE_PID : PIDTYPE_TGID;
+	struct pid *pid = scm->pid[type];
 	struct file *pidfd_file = NULL;
+	unsigned int flags = PIDFD_STALE;
 	int len, pidfd;
 
 	/* put_cmsg() doesn't return an error if CMSG is truncated,
@@ -517,10 +521,13 @@ static void scm_pidfd_recv(struct msghdr *msg, struct scm_cookie *scm)
 		return;
 	}
 
-	if (!scm->pid[PIDTYPE_TGID])
+	if (!pid)
 		return;
 
-	pidfd = pidfd_prepare(scm->pid[PIDTYPE_TGID], PIDFD_STALE, &pidfd_file);
+	if (type == PIDTYPE_PID)
+		flags |= PIDFD_THREAD;
+
+	pidfd = pidfd_prepare(pid, flags, &pidfd_file);
 
 	if (put_cmsg(msg, SOL_SOCKET, SCM_PIDFD, sizeof(int), &pidfd)) {
 		if (pidfd_file) {
@@ -539,7 +546,7 @@ static bool __scm_recv_common(struct sock *sk, struct msghdr *msg,
 			      struct scm_cookie *scm, int flags)
 {
 	if (!msg->msg_control) {
-		if (sk->sk_scm_credentials || sk->sk_scm_pidfd ||
+		if (sk->sk_scm_credentials || sk_scm_pidfd_wanted(sk) ||
 		    scm->fp || scm_has_secdata(sk))
 			msg->msg_flags |= MSG_CTRUNC;
 
@@ -586,8 +593,8 @@ void scm_recv_unix(struct socket *sock, struct msghdr *msg,
 		scm_detach_fds(msg, scm, READ_ONCE(u->scm_rights_notrunc));
 	}
 
-	if (sock->sk->sk_scm_pidfd)
-		scm_pidfd_recv(msg, scm);
+	if (sk_scm_pidfd_wanted(sock->sk))
+		scm_pidfd_recv(sock->sk, msg, scm);
 
 	scm_destroy_cred(scm);
 }
