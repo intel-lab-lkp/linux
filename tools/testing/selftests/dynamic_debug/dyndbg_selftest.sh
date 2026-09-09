@@ -324,9 +324,20 @@ function FT_basic_queries {
     ddcmd "file $f +l"  "$f"
     ddcmd "file $f -m"  "$f"
     ddcmd "file $f =_"  "$f"
+}
 
-    # multi-query commands split on ; on a single line
+function FT_multi_query {
+    v_echo "${GREEN}# MULTI_QUERY_TESTS ${NC}"
+    if [ $LACK_DD_BUILTIN -eq 1 ]; then
+	echo "SKIP - test requires dynamic_debug built into kernel"
+	return
+    fi
+    local f='kernel/params.c'
+    ddcmd =_ # zero everything
+
+    # multi-query commands on a single line, split on ;/@ respectively
     ddcmd "file $f +mf ; file $f func parse_args +sl" "$f"
+    ddcmd "file $f -f @ file $f func parse_args -l"   "$f"
 
     # verify multi-cmd input, newline separated, with embedded comments
     ddcmd =_ # reset before multiline query to capture full transition
@@ -503,7 +514,7 @@ function FT_test_classes {
     verify_control_slice '\[test_dynamic_debug\]'
 
     # 2. Verify state transition and live-printing end-to-end via ddcmd_load!
-    ddcmd_load "class D2_CORE +pmf;class D2_KMS +pls;class D2_ATOMIC +pml" \
+    ddcmd_load "class,D2_CORE,+pmf;class,D2_KMS,+pls;class,D2_ATOMIC,+pml" \
         '\[test_dynamic_debug\]' \
         "/sys/module/test_dynamic_debug/parameters/do_classes" "1"
 
@@ -601,6 +612,7 @@ builtin_tests=(
     FT_path_module_queries
     FT_hyphen_underscore
     FT_comma_terminators
+    FT_multi_query
 )
 
 # Modular Feature Tests (Require CONFIG_MODULES=y and test_dynamic_debug*.ko available)
@@ -670,14 +682,15 @@ function GOLDEN_RECORDS {
 #K= d8eb8f226860aa558fb8a98097f05be9 FT_basic_queries.2
 #K= 6a86bb9209a3a0492bc6c2d29f4d5e52 FT_basic_queries.3
 #K= 90804574a5336971465f92d6cc3aa7fb FT_basic_queries.4
-#K= f2b4f24fece9c55f5a5d28323c2019f8 FT_basic_queries.5
-#K= 8c2dd1164fbcefb721345ce62a864a37 FT_basic_queries.6
-#K= 4542e1e5e7eadcbe8f90a9c934635618 FT_basic_queries.7
 #K= 78ad5b168d9db27931dfe7dac93143bf FT_comma_terminators.1
 #K= 4a8d6e0468d14659030ef523c6e5a184 FT_comma_terminators.2
 #K= 3c445fb23d701041e920a2a6d2b022c7 FT_comma_terminators.3
 #K= 68b329da9893e34099c7d8ad5cb9c940 FT_comma_terminators.4
 #K= c745b8f58c0557edca58d5a224a09190 FT_comma_terminators.5
+#K= f2b4f24fece9c55f5a5d28323c2019f8 FT_multi_query.1
+#K= cce9c41c3ac297e910c3ee3b10852cb3 FT_multi_query.2
+#K= 8c2dd1164fbcefb721345ce62a864a37 FT_multi_query.3
+#K= 4542e1e5e7eadcbe8f90a9c934635618 FT_multi_query.4
 #K= 8146f6f983c3a76783c89b78b892ed48 FT_test_classes.1
 #K= a15ec4843acd721fbdfddc0b512c8032 FT_test_classes.2
 #K= 20d4545f9753e677e72e3adf52527fd3 FT_test_classes.3
