@@ -919,6 +919,7 @@ unregister_notifier:
 power_off:
 	mipid02_set_power_off(&client->dev);
 entity_cleanup:
+	v4l2_subdev_cleanup(&bridge->sd);
 	media_entity_cleanup(&bridge->sd.entity);
 
 	return ret;
@@ -937,6 +938,7 @@ static void mipid02_remove(struct i2c_client *client)
 	if (!pm_runtime_status_suspended(&client->dev))
 		mipid02_set_power_off(&client->dev);
 	pm_runtime_set_suspended(&client->dev);
+	v4l2_subdev_cleanup(&bridge->sd);
 	media_entity_cleanup(&bridge->sd.entity);
 }
 
