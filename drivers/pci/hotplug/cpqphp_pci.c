@@ -100,7 +100,9 @@ int cpqhp_configure_device(struct controller *ctrl, struct pci_func *func)
 	}
 
 	if (func->pci_dev->hdr_type == PCI_HEADER_TYPE_BRIDGE) {
-		pci_hp_add_bridge(func->pci_dev);
+		if (pci_hp_add_bridge(func->pci_dev))
+			err("bus/device/function %x/%x/%x: pci_hp_add_bridge() failed\n",
+			    func->bus, func->device, func->function);
 		child = func->pci_dev->subordinate;
 		if (child)
 			pci_bus_add_devices(child);

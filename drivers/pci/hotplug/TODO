@@ -14,8 +14,6 @@ cpqphp:
 * A large portion of cpqphp_ctrl.c and cpqphp_pci.c concerns resource
   management.  Doesn't this duplicate functionality in the core?
 
-* Returned code from pci_hp_add_bridge() is not checked.
-
 ibmphp:
 
 * Implementations of hotplug_slot_ops callbacks such as get_adapter_present()
