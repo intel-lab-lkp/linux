@@ -46,6 +46,7 @@ void fsnotify_group_stop_queueing(struct fsnotify_group *group)
  * the group reference.
  * Note that another thread calling fsnotify_clear_marks_by_group() may still
  * hold a ref to the group.
+ * The caller must hold a reference and exclude new marks.
  */
 void fsnotify_destroy_group(struct fsnotify_group *group)
 {
@@ -67,19 +68,22 @@ void fsnotify_destroy_group(struct fsnotify_group *group)
 	 */
 	wait_event(group->notification_waitq, !atomic_read(&group->user_waits));
 
-	/*
-	 * Wait until all marks get really destroyed. We could actually destroy
-	 * them ourselves instead of waiting for worker to do it, however that
-	 * would be racy as worker can already be processing some marks before
-	 * we even entered fsnotify_destroy_group().
-	 */
-	fsnotify_wait_marks_destroyed();
+	/* Even detached marks hold a group reference until final destruction. */
+	if (refcount_read(&group->refcnt) == 1) {
+		/*
+		 * Pair the refcount read and this barrier with the release
+		 * decrement in fsnotify_put_group() (refcount_dec_and_test()),
+		 * ordering mark destruction before subsequent group teardown.
+		 */
+		smp_mb();
+	} else {
+		fsnotify_wait_marks_destroyed();
+	}
 
 	/*
-	 * Since we have waited for fsnotify_mark_srcu in
-	 * fsnotify_mark_destroy_list() there can be no outstanding event
-	 * notification against this group. So clearing the notification queue
-	 * of all events is reliable now.
+	 * Mark destruction waits for fsnotify_mark_srcu, so there can be no
+	 * outstanding event notification against this group. Clearing the
+	 * notification queue of all events is reliable now.
 	 */
 	fsnotify_flush_notify(group);
 
