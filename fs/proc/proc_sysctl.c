@@ -206,9 +206,7 @@ static void init_header(struct ctl_table_header *head,
 	head->node = node;
 	INIT_HLIST_HEAD(&head->inodes);
 	if (node) {
-		const struct ctl_table *entry;
-
-		list_for_each_table_entry(entry, head) {
+		for (size_t i = 0; i < head->ctl_table_size; i++) {
 			node->header = head;
 			node++;
 		}
