@@ -24,6 +24,7 @@
 #include <linux/ioport.h>
 #include <linux/delay.h>
 #include <linux/migrate.h>
+#include <linux/buffer_head.h>
 #include <linux/page-isolation.h>
 #include <linux/pfn.h>
 #include <linux/suspend.h>
@@ -2094,6 +2095,9 @@ int offline_pages(unsigned long start_pfn, unsigned long nr_pages,
 					  PB_ISOLATE_MODE_MEM_OFFLINE);
 
 	} while (ret);
+
+	/* Remove any instances of the freed pages from per-cpu fbatches. */
+	lru_add_drain_all();
 
 	/* Mark all sections offline and remove free pages from the buddy. */
 	managed_pages = __offline_isolated_pages(start_pfn, end_pfn);
