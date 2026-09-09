@@ -56,6 +56,9 @@ patternProperties:
       reg:
         maxItems: 1
 
+      clock-frequency:
+        default: 2500000
+
     required:
       - reg
 
@@ -70,6 +73,43 @@ patternProperties:
 required:
   - compatible
   - reg
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - realtek,rtl8380-mdio
+              - realtek,rtl8381-mdio
+              - realtek,rtl8382-mdio
+    then:
+      patternProperties:
+        '^mdio-bus@[0-3]$':
+          properties:
+            clock-frequency:
+              enum: [2500000, 10000000]
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - realtek,rtl8391-mdio
+              - realtek,rtl8392-mdio
+              - realtek,rtl8393-mdio
+              - realtek,rtl9301-mdio
+              - realtek,rtl9302b-mdio
+              - realtek,rtl9302c-mdio
+              - realtek,rtl9303-mdio
+              - realtek,rtl9311-mdio
+              - realtek,rtl9312-mdio
+              - realtek,rtl9313-mdio
+    then:
+      patternProperties:
+        '^mdio-bus@[0-3]$':
+          properties:
+            clock-frequency:
+              enum: [1250000, 2500000, 5000000]
 
 unevaluatedProperties: false
 
