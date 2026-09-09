@@ -567,6 +567,17 @@ static void stub_recv_cmd_submit(struct stub_device *sdev,
 		}
 
 		usbip_pack_pdu(pdu, priv->urbs[0], USBIP_CMD_SUBMIT, 0);
+		/*
+		 * number_of_packets is set to -1 by the sender when the transfer is
+		 * not isochronous.
+		 * usbip_pack_pdu() copies this wire value into urb->number_of_packets
+		 * unconditionally, instead of using the correct value in np which was
+		 * used to allocate the urb above. For a non-isochronous transfer this
+		 * leaves number_of_packets at -1 which downstream consumers of this urb
+		 * like host-controller drivers use to allocate iso_frame_desc storage.
+		 * Restore it to what the urb was actually allocated for.
+		 */
+		priv->urbs[0]->number_of_packets = np;
 	} else {
 		for_each_sg(sgl, sg, nents, i) {
 			priv->urbs[i] = usb_alloc_urb(0, GFP_KERNEL);
@@ -579,6 +590,8 @@ static void stub_recv_cmd_submit(struct stub_device *sdev,
 			usbip_pack_pdu(pdu, priv->urbs[i], USBIP_CMD_SUBMIT, 0);
 			priv->urbs[i]->transfer_buffer = sg_virt(sg);
 			priv->urbs[i]->transfer_buffer_length = sg->length;
+			/* see comment about number_of_packets above */
+			priv->urbs[i]->number_of_packets = 0;
 		}
 		priv->sgl = sgl;
 	}
