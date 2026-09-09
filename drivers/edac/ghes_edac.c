@@ -499,6 +499,10 @@ unlock:
 	/* Not needed anymore */
 	kfree(ghes_hw.dimms);
 	ghes_hw.dimms = NULL;
+	if (system_scanned) {
+		system_scanned = false;
+		ghes_hw.num_dimms = 0;
+	}
 
 	mutex_unlock(&ghes_reg_mutex);
 
