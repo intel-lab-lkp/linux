@@ -152,7 +152,8 @@ void sof_print_oops_and_stack(struct snd_sof_dev *sdev, const char *level,
 	dev_printk(level, sdev->dev, "trace point: %#010x\n", tracep_code);
 
 out:
-	dev_printk(level, sdev->dev, "panic at %s:%d\n", panic_info->filename,
+	dev_printk(level, sdev->dev, "panic at %.*s:%d\n",
+		   SOF_TRACE_FILENAME_SIZE, panic_info->filename,
 		   panic_info->linenum);
 	sof_oops(sdev, level, oops);
 	sof_stack(sdev, level, oops, stack, stack_words);
