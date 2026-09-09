@@ -37,7 +37,7 @@ cable to 13V, 18V or off.
 Usually, a satellite antenna subsystems require that the digital TV
 device to send a DC voltage to feed power to the LNBf. Depending on the
 LNBf type, the polarization or the intermediate frequency (IF) of the
-LNBf can controlled by the voltage level. Other devices (for example,
+LNBf can controlled by the voltage level. Other devices for example,
 the ones that implement DISEqC and multipoint LNBf's don't need to
 control the voltage level, provided that either 13V or 18V is sent to
 power up the LNBf.
