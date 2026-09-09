@@ -99,6 +99,17 @@
 		regulator-always-on;
 	};
 
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		sdhi1_aof_pool: sdhi1-aof-pool@200000000 {
+			compatible = "restricted-dma-pool";
+			reg = <0x2 0x00000000 0x0 0x08000000>;
+		};
+	};
+
 	vqmmc_sdhi1: regulator-vccq-sdhi1 {
 		compatible = "regulator-gpio";
 		regulator-name = "SDHI1 VccQ";
@@ -128,6 +139,10 @@
 		#clock-cells = <0>;
 		clock-frequency = <12000000>;
 	};
+};
+
+&aof_sdhi1_bus {
+	dma-ranges = <0x0 0x00000000 0x2 0x00000000  0x1 0x00000000>;
 };
 
 &audio_extal_clk {
@@ -542,6 +557,7 @@
 };
 
 &sdhi1 {
+	memory-region = <&sdhi1_aof_pool>;
 	pinctrl-0 = <&sdhi1_pins>;
 	pinctrl-1 = <&sdhi1_pins>;
 	pinctrl-names = "default", "state_uhs";
