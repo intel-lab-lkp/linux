@@ -1125,6 +1125,7 @@ static int imx415_subdev_init(struct imx415 *sensor)
 
 static void imx415_subdev_cleanup(struct imx415 *sensor)
 {
+	v4l2_subdev_cleanup(&sensor->subdev);
 	media_entity_cleanup(&sensor->subdev.entity);
 	v4l2_ctrl_handler_free(&sensor->ctrls);
 }
