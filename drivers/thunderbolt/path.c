@@ -31,6 +31,17 @@ static void tb_dump_hop(const struct tb_path_hop *hop, const struct tb_regs_hop 
 		    regs->unknown1, regs->unknown2, regs->unknown3);
 }
 
+static struct tb_port *tb_path_hop_out_port(struct tb_switch *sw,
+					    const struct tb_regs_hop *hop)
+{
+	if (hop->out_port > sw->config.max_port_number) {
+		tb_sw_warn(sw, "hop refers to non-existent port %u\n",
+			   hop->out_port);
+		return NULL;
+	}
+	return &sw->ports[hop->out_port];
+}
+
 static struct tb_port *tb_path_find_dst_port(struct tb_port *src, int src_hopid,
 					     int dst_hopid)
 {
@@ -54,7 +65,9 @@ static struct tb_port *tb_path_find_dst_port(struct tb_port *src, int src_hopid,
 		if (!hop.enable)
 			return NULL;
 
-		out_port = &sw->ports[hop.out_port];
+		out_port = tb_path_hop_out_port(sw, &hop);
+		if (!out_port)
+			return NULL;
 		hopid = hop.next_hop;
 		port = out_port->remote;
 	}
@@ -141,7 +154,9 @@ struct tb_path *tb_path_discover(struct tb_port *src, int src_hopid,
 		if (!hop.enable)
 			break;
 
-		out_port = &sw->ports[hop.out_port];
+		out_port = tb_path_hop_out_port(sw, &hop);
+		if (!out_port)
+			return NULL;
 		if (last)
 			*last = out_port;
 
@@ -178,11 +193,13 @@ struct tb_path *tb_path_discover(struct tb_port *src, int src_hopid,
 			goto err;
 		}
 
+		out_port = tb_path_hop_out_port(sw, &hop);
+		if (!out_port)
+			goto err;
+		next_hop = hop.next_hop;
+
 		if (alloc_hopid && tb_port_alloc_in_hopid(p, h, h) < 0)
 			goto err;
-
-		out_port = &sw->ports[hop.out_port];
-		next_hop = hop.next_hop;
 
 		if (alloc_hopid &&
 		    tb_port_alloc_out_hopid(out_port, next_hop, next_hop) < 0) {
