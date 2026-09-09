@@ -1953,6 +1953,7 @@ err_power_off:
 	pm_runtime_put_noidle(dev);
 	ov8858_power_off(ov8858);
 err_clean_entity:
+	v4l2_subdev_cleanup(sd);
 	media_entity_cleanup(&sd->entity);
 err_free_handler:
 	v4l2_ctrl_handler_free(&ov8858->ctrl_handler);
@@ -1966,6 +1967,7 @@ static void ov8858_remove(struct i2c_client *client)
 	struct ov8858 *ov8858 = sd_to_ov8858(sd);
 
 	v4l2_async_unregister_subdev(sd);
+	v4l2_subdev_cleanup(sd);
 	media_entity_cleanup(&sd->entity);
 	v4l2_ctrl_handler_free(&ov8858->ctrl_handler);
 
