@@ -337,6 +337,16 @@ static int atcrtc_probe(struct platform_device *pdev)
 	return devm_rtc_register_device(atcrtc_dev->rtc_dev);
 }
 
+static void atcrtc_remove(struct platform_device *pdev)
+{
+	struct atcrtc_dev *atcrtc_dev = platform_get_drvdata(pdev);
+
+	dev_pm_clear_wake_irq(&pdev->dev);
+	device_init_wakeup(&pdev->dev, false);
+	devm_free_irq(&pdev->dev, atcrtc_dev->alarm_irq, atcrtc_dev);
+	cancel_work_sync(&atcrtc_dev->rtc_work);
+}
+
 static int atcrtc_resume(struct device *dev)
 {
 	struct atcrtc_dev *rtc = dev_get_drvdata(dev);
@@ -372,6 +382,7 @@ static struct platform_driver atcrtc_platform_driver = {
 		.pm = pm_sleep_ptr(&atcrtc_pm_ops),
 	},
 	.probe = atcrtc_probe,
+	.remove = atcrtc_remove,
 };
 
 module_platform_driver(atcrtc_platform_driver);
