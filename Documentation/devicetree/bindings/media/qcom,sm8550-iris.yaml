@@ -98,10 +98,10 @@ required:
   - interconnect-names
   - resets
   - reset-names
-  - iommus
   - dma-coherent
 
 allOf:
+  - $ref: qcom,venus-common.yaml#
   - if:
       properties:
         compatible:
@@ -150,70 +150,86 @@ examples:
     #include <dt-bindings/power/qcom-rpmpd.h>
     #include <dt-bindings/power/qcom,rpmhpd.h>
 
-    video-codec@aa00000 {
-        compatible = "qcom,sm8550-iris";
-        reg = <0x0aa00000 0xf0000>;
-        interrupts = <GIC_SPI 174 IRQ_TYPE_LEVEL_HIGH>;
+    soc {
+        #address-cells = <2>;
+        #size-cells = <2>;
 
-        power-domains = <&videocc VIDEO_CC_MVS0C_GDSC>,
-                        <&videocc VIDEO_CC_MVS0_GDSC>,
-                        <&rpmhpd RPMHPD_MXC>,
-                        <&rpmhpd RPMHPD_MMCX>;
-        power-domain-names = "venus", "vcodec0", "mxc", "mmcx";
+        video-codec@aa00000 {
+            compatible = "qcom,sm8550-iris";
+            reg = <0x0 0x0aa00000 0x0 0xf0000>;
+            interrupts = <GIC_SPI 174 IRQ_TYPE_LEVEL_HIGH>;
 
-        clocks = <&gcc GCC_VIDEO_AXI0_CLK>,
-                 <&videocc VIDEO_CC_MVS0C_CLK>,
-                 <&videocc VIDEO_CC_MVS0_CLK>;
-        clock-names = "iface", "core", "vcodec0_core";
+            power-domains = <&videocc VIDEO_CC_MVS0C_GDSC>,
+                            <&videocc VIDEO_CC_MVS0_GDSC>,
+                            <&rpmhpd RPMHPD_MXC>,
+                            <&rpmhpd RPMHPD_MMCX>;
+            power-domain-names = "venus", "vcodec0", "mxc", "mmcx";
 
-        interconnects = <&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ALWAYS
-                         &config_noc SLAVE_VENUS_CFG QCOM_ICC_TAG_ALWAYS>,
-                        <&mmss_noc MASTER_VIDEO QCOM_ICC_TAG_ALWAYS
-                         &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ALWAYS>;
-        interconnect-names = "cpu-cfg", "video-mem";
+            clocks = <&gcc GCC_VIDEO_AXI0_CLK>,
+                     <&videocc VIDEO_CC_MVS0C_CLK>,
+                     <&videocc VIDEO_CC_MVS0_CLK>;
+            clock-names = "iface", "core", "vcodec0_core";
 
-        memory-region = <&video_mem>;
+            interconnects = <&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ALWAYS
+                             &config_noc SLAVE_VENUS_CFG QCOM_ICC_TAG_ALWAYS>,
+                            <&mmss_noc MASTER_VIDEO QCOM_ICC_TAG_ALWAYS
+                             &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ALWAYS>;
+            interconnect-names = "cpu-cfg", "video-mem";
 
-        resets = <&gcc GCC_VIDEO_AXI0_CLK_ARES>;
-        reset-names = "bus";
+            memory-region = <&video_mem>;
 
-        iommus = <&apps_smmu 0x1940 0x0000>,
-                 <&apps_smmu 0x1947 0x0000>;
-        dma-coherent;
+            resets = <&gcc GCC_VIDEO_AXI0_CLK_ARES>;
+            reset-names = "bus";
 
-        operating-points-v2 = <&iris_opp_table>;
+            dma-coherent;
 
-        iris_opp_table: opp-table {
-            compatible = "operating-points-v2";
+            operating-points-v2 = <&iris_opp_table>;
 
-            opp-240000000 {
-                opp-hz = /bits/ 64 <240000000>;
-                required-opps = <&rpmhpd_opp_svs>,
-                                <&rpmhpd_opp_low_svs>;
+            #address-cells = <1>;
+            #size-cells = <1>;
+            dma-ranges = <0x0 0x0 0x0 0xe0000000>;
+
+            non-pixel {
+                iommus = <&apps_smmu 0x1940 0x0>;
+                iommu-ranges = <0x25800000 0xba800000>;
             };
 
-            opp-338000000 {
-                opp-hz = /bits/ 64 <338000000>;
-                required-opps = <&rpmhpd_opp_svs>,
-                                <&rpmhpd_opp_svs>;
+            pixel {
+                iommus = <&apps_smmu 0x1947 0x0>;
             };
 
-            opp-366000000 {
-                opp-hz = /bits/ 64 <366000000>;
-                required-opps = <&rpmhpd_opp_svs_l1>,
-                                <&rpmhpd_opp_svs_l1>;
-            };
+            iris_opp_table: opp-table {
+                compatible = "operating-points-v2";
 
-            opp-444000000 {
-                opp-hz = /bits/ 64 <444000000>;
-                required-opps = <&rpmhpd_opp_turbo>,
-                                <&rpmhpd_opp_turbo>;
-            };
+                opp-240000000 {
+                    opp-hz = /bits/ 64 <240000000>;
+                    required-opps = <&rpmhpd_opp_svs>,
+                                    <&rpmhpd_opp_low_svs>;
+                };
 
-            opp-533333334 {
-                opp-hz = /bits/ 64 <533333334>;
-                required-opps = <&rpmhpd_opp_turbo_l1>,
-                                <&rpmhpd_opp_turbo_l1>;
+                opp-338000000 {
+                    opp-hz = /bits/ 64 <338000000>;
+                    required-opps = <&rpmhpd_opp_svs>,
+                                    <&rpmhpd_opp_svs>;
+                };
+
+                opp-366000000 {
+                    opp-hz = /bits/ 64 <366000000>;
+                    required-opps = <&rpmhpd_opp_svs_l1>,
+                                    <&rpmhpd_opp_svs_l1>;
+                };
+
+                opp-444000000 {
+                    opp-hz = /bits/ 64 <444000000>;
+                    required-opps = <&rpmhpd_opp_turbo>,
+                                    <&rpmhpd_opp_turbo>;
+                };
+
+                opp-533333334 {
+                    opp-hz = /bits/ 64 <533333334>;
+                    required-opps = <&rpmhpd_opp_turbo_l1>,
+                                    <&rpmhpd_opp_turbo_l1>;
+                };
             };
         };
     };
