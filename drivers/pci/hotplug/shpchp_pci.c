@@ -48,8 +48,9 @@ int shpchp_configure_device(struct slot *p_slot)
 	}
 
 	for_each_pci_bridge(dev, parent) {
-		if (PCI_SLOT(dev->devfn) == p_slot->device)
-			pci_hp_add_bridge(dev);
+		if (PCI_SLOT(dev->devfn) == p_slot->device &&
+		    pci_hp_add_bridge(dev))
+			ctrl_err(ctrl, "pci_hp_add_bridge(%s) failed\n", pci_name(dev));
 	}
 
 	pci_assign_unassigned_bridge_resources(bridge);
