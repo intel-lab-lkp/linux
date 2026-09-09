@@ -36,6 +36,8 @@ struct ccu_mux_config {
 struct ccu_div_config {
 	u8 shift;
 	u8 width;
+	/* Parent indices which bypass the divider; zero means no bypass. */
+	u32 bypass;
 };
 
 struct ccu_mix {
@@ -193,6 +195,22 @@ CCU_MUX_DIV_GATE_SPLIT_FC_DEFINE(_name, _parents, _reg_ctrl, _reg_ctrl, _mshift,
 			      _mask_fc, _muxshift, _muxwidth, _flags)		\
 static struct ccu_mix _name = {							\
 	.div	= CCU_DIV_INIT(_mshift, _mwidth),				\
+	.mux	= CCU_MUX_INIT(_muxshift, _muxwidth),				\
+	.common = {								\
+		.reg_ctrl	= _reg_ctrl,					\
+		.reg_fc		= _reg_ctrl,					\
+		.mask_fc	= _mask_fc,					\
+		CCU_MIX_INITHW_PARENTS(_name, _parents,				\
+				       spacemit_ccu_mux_div_ops, _flags),	\
+	},									\
+}
+
+#define CCU_MUX_DIV_BYPASS_FC_DEFINE(_name, _parents, _reg_ctrl,		\
+				     _mshift, _mwidth, _mask_fc,		\
+				     _muxshift, _muxwidth, _flags,		\
+				     _bypass)					\
+static struct ccu_mix _name = {							\
+	.div	= { .shift = _mshift, .width = _mwidth, .bypass = _bypass },	\
 	.mux	= CCU_MUX_INIT(_muxshift, _muxwidth),				\
 	.common = {								\
 		.reg_ctrl	= _reg_ctrl,					\

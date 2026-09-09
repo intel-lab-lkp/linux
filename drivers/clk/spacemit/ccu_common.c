@@ -30,6 +30,18 @@ static int spacemit_ccu_register(struct device *dev,
 
 	clk_data->num = data->num;
 
+	/* Internal muxes have no binding IDs but must precede their children. */
+	for (i = 0; i < data->num_internal; i++) {
+		struct clk_hw *hw = data->internal_hws[i];
+		struct ccu_common *common = hw_to_ccu_common(hw);
+
+		common->regmap = regmap;
+		common->lock_regmap = lock_regmap;
+		ret = devm_clk_hw_register(dev, hw);
+		if (ret)
+			return ret;
+	}
+
 	for (i = 0; i < data->num; i++) {
 		struct clk_hw *hw = data->hws[i];
 		struct ccu_common *common;

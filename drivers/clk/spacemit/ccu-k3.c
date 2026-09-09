@@ -587,52 +587,64 @@ static const struct clk_parent_data cpu_c0_clk_parents[] = {
 	CCU_PARENT_HW(pll1_d5_491p52),
 	CCU_PARENT_HW(pll1_d4_614p4),
 	CCU_PARENT_HW(pll2_d3),
-	CCU_PARENT_HW(pll3_d2),
+	{ .index = -1 }, /* Leave selector 4 unmodeled, as in the BSP. */
 	CCU_PARENT_HW(pll1_d2_1228p8),
 	CCU_PARENT_HW(pll2_d2),
 	CCU_PARENT_HW(pll3_d1),
 };
-CCU_MUX_DIV_FC_DEFINE(cpu_c0_core_clk, cpu_c0_clk_parents, APMU_CPU_C0_CLK_CTRL,
-		      3, 3, BIT(12), 0, 3, CLK_IS_CRITICAL);
+CCU_MUX_DIV_BYPASS_FC_DEFINE(cpu_c0_core_clk, cpu_c0_clk_parents, APMU_CPU_C0_CLK_CTRL,
+			     3, 3, BIT(12), 0, 3, CLK_IS_CRITICAL, GENMASK(7, 4));
+
+static const struct clk_parent_data cpu_c1_pll_src_parents[] = {
+	CCU_PARENT_HW(pll4_d1),
+	CCU_PARENT_HW(pll3_d1),
+};
+CCU_MUX_DEFINE(cpu_c1_pll_src, cpu_c1_pll_src_parents, APMU_CPU_C1_CLK_CTRL, 13, 1, 0);
 
 static const struct clk_parent_data cpu_c1_clk_parents[] = {
 	CCU_PARENT_HW(pll1_d3_819p2),
 	CCU_PARENT_HW(pll1_d5_491p52),
 	CCU_PARENT_HW(pll1_d4_614p4),
 	CCU_PARENT_HW(pll2_d3),
-	CCU_PARENT_HW(pll4_d2),
+	{ .index = -1 }, /* Leave selector 4 unmodeled, as in the BSP. */
 	CCU_PARENT_HW(pll1_d2_1228p8),
 	CCU_PARENT_HW(pll2_d2),
-	CCU_PARENT_HW(pll4_d1),
+	CCU_PARENT_HW(cpu_c1_pll_src),
 };
-CCU_MUX_DIV_FC_DEFINE(cpu_c1_core_clk, cpu_c1_clk_parents, APMU_CPU_C1_CLK_CTRL,
-		      3, 3, BIT(12), 0, 3, CLK_IS_CRITICAL);
+CCU_MUX_DIV_BYPASS_FC_DEFINE(cpu_c1_core_clk, cpu_c1_clk_parents, APMU_CPU_C1_CLK_CTRL,
+			     3, 3, BIT(12), 0, 3, CLK_IS_CRITICAL, GENMASK(7, 4));
 
 static const struct clk_parent_data cpu_c2_clk_parents[] = {
 	CCU_PARENT_HW(pll1_d3_819p2),
 	CCU_PARENT_HW(pll1_d5_491p52),
 	CCU_PARENT_HW(pll1_d4_614p4),
 	CCU_PARENT_HW(pll2_d3),
-	CCU_PARENT_HW(pll5_d2),
+	{ .index = -1 }, /* Leave selector 4 unmodeled, as in the BSP. */
 	CCU_PARENT_HW(pll1_d2_1228p8),
 	CCU_PARENT_HW(pll2_d2),
 	CCU_PARENT_HW(pll5_d1),
 };
-CCU_MUX_DIV_FC_DEFINE(cpu_c2_core_clk, cpu_c2_clk_parents, APMU_CPU_C2_CLK_CTRL,
-		      3, 3, BIT(12), 0, 3, CLK_IS_CRITICAL);
+CCU_MUX_DIV_BYPASS_FC_DEFINE(cpu_c2_core_clk, cpu_c2_clk_parents, APMU_CPU_C2_CLK_CTRL,
+			     3, 3, BIT(12), 0, 3, CLK_IS_CRITICAL, GENMASK(7, 4));
+
+static const struct clk_parent_data cpu_c3_pll_src_parents[] = {
+	CCU_PARENT_HW(pll8_d1),
+	CCU_PARENT_HW(pll5_d1),
+};
+CCU_MUX_DEFINE(cpu_c3_pll_src, cpu_c3_pll_src_parents, APMU_CPU_C3_CLK_CTRL, 13, 1, 0);
 
 static const struct clk_parent_data cpu_c3_clk_parents[] = {
 	CCU_PARENT_HW(pll1_d3_819p2),
 	CCU_PARENT_HW(pll1_d5_491p52),
 	CCU_PARENT_HW(pll1_d4_614p4),
 	CCU_PARENT_HW(pll2_d3),
-	CCU_PARENT_HW(pll8_d2),
+	{ .index = -1 }, /* Leave selector 4 unmodeled, as in the BSP. */
 	CCU_PARENT_HW(pll1_d2_1228p8),
 	CCU_PARENT_HW(pll2_d2),
-	CCU_PARENT_HW(pll8_d1),
+	CCU_PARENT_HW(cpu_c3_pll_src),
 };
-CCU_MUX_DIV_FC_DEFINE(cpu_c3_core_clk, cpu_c3_clk_parents, APMU_CPU_C3_CLK_CTRL,
-		      3, 3, BIT(12), 0, 3, CLK_IS_CRITICAL);
+CCU_MUX_DIV_BYPASS_FC_DEFINE(cpu_c3_core_clk, cpu_c3_clk_parents, APMU_CPU_C3_CLK_CTRL,
+			     3, 3, BIT(12), 0, 3, CLK_IS_CRITICAL, GENMASK(7, 4));
 
 static const struct clk_parent_data ccic2phy_parents[] = {
 	CCU_PARENT_HW(pll1_d24_102p4),
@@ -1447,10 +1459,17 @@ static struct clk_hw *k3_ccu_apmu_hws[] = {
 	[CLK_APMU_ISIM_VCLK3]		= &isim_vclk_out3.common.hw,
 };
 
+static struct clk_hw *k3_ccu_apmu_internal_hws[] = {
+	&cpu_c1_pll_src.common.hw,
+	&cpu_c3_pll_src.common.hw,
+};
+
 static const struct spacemit_ccu_data k3_ccu_apmu_data = {
 	.reset_name	= "k3-apmu-reset",
 	.hws		= k3_ccu_apmu_hws,
 	.num		= ARRAY_SIZE(k3_ccu_apmu_hws),
+	.internal_hws	= k3_ccu_apmu_internal_hws,
+	.num_internal	= ARRAY_SIZE(k3_ccu_apmu_internal_hws),
 };
 
 static struct clk_hw *k3_ccu_dciu_hws[] = {

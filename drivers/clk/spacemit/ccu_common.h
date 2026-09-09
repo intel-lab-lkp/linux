@@ -43,6 +43,8 @@ struct spacemit_ccu_data {
 	const char *reset_name;
 	struct clk_hw **hws;
 	size_t num;
+	struct clk_hw **internal_hws;
+	size_t num_internal;
 };
 
 #define ccu_read(c, reg)						\
