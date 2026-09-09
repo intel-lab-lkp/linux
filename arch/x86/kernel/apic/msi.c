@@ -136,8 +136,14 @@ msi_set_affinity(struct irq_data *irqd, const struct cpumask *mask, bool force)
 	 * underlying vector store. It's just checking the local APIC's
 	 * IRR.
 	 */
-	if (lapic_vector_set_in_irr(cfg->vector))
-		irq_data_get_irq_chip(irqd)->irq_retrigger(irqd);
+	if (lapic_vector_set_in_irr(cfg->vector)) {
+		struct irq_chip *chip = irq_data_get_irq_chip(irqd);
+
+		if (chip->irq_retrigger)
+			chip->irq_retrigger(irqd);
+		else
+			irq_chip_retrigger_hierarchy(irqd);
+	}
 
 	return ret;
 }
