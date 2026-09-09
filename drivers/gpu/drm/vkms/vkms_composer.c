@@ -36,10 +36,10 @@ static u16 pre_mul_blend_channel(u16 src, u16 dst, u16 alpha)
  * The pixels [@x_start;@x_start+@pixel_count) in stage_buffer are blended at
  * [@x_start;@x_start+@pixel_count) in output_buffer.
  *
- * The current DRM assumption is that pixel color values have been already
- * pre-multiplied with the alpha channel values. See more
- * drm_plane_create_blend_mode_property(). Also, this formula assumes a
- * completely opaque background.
+ * vkms only implements the pre-multiplied blend mode (see
+ * drm_plane_create_blend_mode_property()), so the pixel color values are
+ * expected to be already pre-multiplied with the alpha channel values.
+ * Also, this formula assumes a completely opaque background.
  */
 static void pre_mul_alpha_blend(const struct line_buffer *stage_buffer,
 				struct line_buffer *output_buffer, int x_start, int pixel_count)
