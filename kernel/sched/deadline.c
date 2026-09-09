@@ -2873,11 +2873,15 @@ static void put_prev_task_dl(struct rq *rq, struct task_struct *p, struct task_s
  *
  * NOTE: This function can be called remotely by the tick offload that
  * goes along full dynticks. Therefore no local assumption can be made
- * and everything must be accessed through the @rq and @curr passed in
- * parameters.
+ * and all state must be accessed through @rq.
  */
-static void task_tick_dl(struct rq *rq, struct task_struct *p, int queued)
+static void task_tick_dl(struct rq *rq, int queued)
 {
+	struct task_struct *p = rq->donor;
+
+	if (p->sched_class != &dl_sched_class)
+		return;
+
 	update_curr_dl(rq);
 
 	update_dl_rq_load_avg(rq_clock_pelt(rq), rq, 1);

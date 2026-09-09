@@ -532,12 +532,12 @@ dequeue_task_idle(struct rq *rq, struct task_struct *p, int flags)
  *
  * NOTE: This function can be called remotely by the tick offload that
  * goes along full dynticks. Therefore no local assumption can be made
- * and everything must be accessed through the @rq and @curr passed in
- * parameters.
+ * and all state must be accessed through @rq.
  */
-static void task_tick_idle(struct rq *rq, struct task_struct *curr, int queued)
+static void task_tick_idle(struct rq *rq, int queued)
 {
-	update_curr_idle(rq);
+	if (rq->donor->sched_class == &idle_sched_class)
+		update_curr_idle(rq);
 }
 
 static void switching_to_idle(struct rq *rq, struct task_struct *p)
