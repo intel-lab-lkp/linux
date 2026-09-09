@@ -126,6 +126,8 @@ static int __hfs_ext_write_extent(struct inode *inode, struct hfs_find_data *fd)
 	} else {
 		if (res)
 			return res;
+		if (fd->entrylength != sizeof(hfs_extent_rec))
+			return -EIO;
 		hfs_bnode_write(fd->bnode, HFS_I(inode)->cached_extents, fd->entryoffset, fd->entrylength);
 		HFS_I(inode)->flags &= ~HFS_FLG_EXT_DIRTY;
 	}
