@@ -1672,11 +1672,16 @@ j1939_session *j1939_xtp_rx_rts_session_new(struct j1939_priv *priv,
 	session->pkt.total = (len + 6) / 7;
 	session->pkt.block = 0xff;
 	if (skcb.addr.type != J1939_ETP) {
-		if (dat[3] != session->pkt.total)
-			netdev_alert(priv->ndev, "%s: 0x%p: strange total, %u != %u\n",
-				     __func__, session, session->pkt.total,
-				     dat[3]);
-		session->pkt.total = dat[3];
+		if (dat[3] != session->pkt.total) {
+			netdev_warn_once(priv->ndev,
+					 "%s: 0x%p: packet count mismatch, calc %u != RTS %u, abort\n",
+					 __func__, session,
+					 session->pkt.total, dat[3]);
+			j1939_xtp_tx_abort(priv, &skcb, true,
+					   J1939_XTP_ABORT_FAULT, pgn);
+			j1939_session_put(session);
+			return NULL;
+		}
 		session->pkt.block = min(dat[3], dat[4]);
 	}
 
