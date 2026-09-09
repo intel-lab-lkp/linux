@@ -820,7 +820,14 @@ static struct page *get_mergeable_page(struct ksm_rmap_item *rmap_item)
 	struct folio_walk fw;
 	struct folio *folio;
 
-	mmap_read_lock(mm);
+	/*
+	 * We trylock because we don't want ksmd to wait for an mm that is
+	 * busy changing its memory layout: we prefer to skip this page and
+	 * let the next full scan retry it, like the folio trylock in
+	 * try_to_merge_one_page().
+	 */
+	if (!mmap_read_trylock(mm))
+		return NULL;
 	vma = find_mergeable_vma(mm, addr);
 	if (!vma)
 		goto out;
