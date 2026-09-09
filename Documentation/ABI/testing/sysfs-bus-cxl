@@ -303,6 +303,7 @@ What:		/sys/bus/cxl/devices/decoderX.Y/cap_pmem
 What:		/sys/bus/cxl/devices/decoderX.Y/cap_ram
 What:		/sys/bus/cxl/devices/decoderX.Y/cap_type2
 What:		/sys/bus/cxl/devices/decoderX.Y/cap_type3
+What:		/sys/bus/cxl/devices/decoderX.Y/cap_back_invalidate
 Date:		June, 2021
 KernelVersion:	v5.14
 Contact:	linux-cxl@vger.kernel.org
@@ -311,8 +312,9 @@ Description:
 		represents a fixed memory window identified by platform
 		firmware. A fixed window may only support a subset of memory
 		types. The 'cap_*' attributes indicate whether persistent
-		memory, volatile memory, accelerator memory, and / or expander
-		memory may be mapped behind this decoder's memory window.
+		memory, volatile memory, accelerator memory, expander memory,
+		and / or back-invalidate (HDM-DB) memory may be mapped behind
+		this decoder's memory window.
 
 
 What:		/sys/bus/cxl/devices/decoderX.Y/target_type
@@ -431,6 +433,17 @@ Description:
 		EBUSY is returned if the region name written does not match the
 		current cached value.
 
+
+What:		/sys/bus/cxl/devices/decoderX.Y/back_invalidate
+Date:		September, 2026
+KernelVersion:	v7.4
+Contact:	linux-cxl@vger.kernel.org
+Description:
+		(RO) Shows '1' if this endpoint decoder is currently configured
+		for HDM-DB (device-managed coherency with back-invalidate).
+		The HDM-DB state is inherited from the region the decoder is
+		attached to, which is in turn set from the chosen root
+		decoder's CFMWS BI restriction (see cap_back_invalidate).
 
 What:		/sys/bus/cxl/devices/decoderX.Y/delete_region
 Date:		May, 2022
