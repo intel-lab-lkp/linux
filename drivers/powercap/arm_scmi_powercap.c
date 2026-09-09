@@ -2,7 +2,7 @@
 /*
  * SCMI Powercap support.
  *
- * Copyright (C) 2022 ARM Ltd.
+ * Copyright (C) 2022-2026 ARM Ltd.
  */
 
 #include <linux/device.h>
@@ -491,7 +491,7 @@ static int scmi_powercap_register_zone(struct scmi_powercap_root *pr,
 
 	z = powercap_register_zone(&spz->zone, scmi_top_pcntrl, spz->info->name,
 				   parent ? &parent->zone : NULL,
-				   &zone_ops, 1, &constraint_ops);
+				   &zone_ops, spz->info->num_cpli, &constraint_ops);
 	if (!IS_ERR(z)) {
 		spz->height = scmi_powercap_get_zone_height(spz);
 		spz->registered = true;
@@ -648,6 +648,13 @@ static int scmi_powercap_probe(struct scmi_device *sdev)
 		 * parent_id is assured to point to another valid domain.
 		 */
 		spz->info = powercap_ops->info_get(ph, i);
+
+		if (spz->info->num_cpli > MAX_CONSTRAINTS_PER_ZONE) {
+			dev_err(dev, "Powercap domain %s has too many constraints: %u > %u\n",
+				spz->info->name, spz->info->num_cpli,
+				MAX_CONSTRAINTS_PER_ZONE);
+			return -EINVAL;
+		}
 
 		spz->dev = dev;
 		spz->ph = ph;
