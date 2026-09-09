@@ -27,6 +27,7 @@ always-$(CONFIG_RUST) += exports_bindings_generated.h exports_kernel_generated.h
 
 always-$(CONFIG_RUST) += uapi/uapi_generated.rs
 obj-$(CONFIG_RUST) += uapi.o
+always-$(CONFIG_RUST) += exports_uapi_generated.h
 
 ifdef CONFIG_RUST_BUILD_ASSERT_ALLOW
 obj-$(CONFIG_RUST) += build_error.o
@@ -575,7 +576,8 @@ $(obj)/exports_core_generated.h: $(obj)/core.o FORCE
 # in the crate where they are defined. Other helpers, called from non-inline
 # functions, may not be exported, in principle. However, in general, the Rust
 # compiler does not guarantee codegen will be performed for a non-inline
-# function either. Therefore, we export all symbols from helpers and bindings.
+# function either. Therefore, we export all symbols from helpers, bindings and
+# uapi.
 # In the future, this may be revisited to reduce the number of exports after
 # the compiler is informed about the places codegen is required.
 $(obj)/exports_helpers_generated.h: $(obj)/helpers/helpers.o FORCE
@@ -585,6 +587,9 @@ $(obj)/exports_bindings_generated.h: $(obj)/bindings.o FORCE
 	$(call if_changed,exports)
 
 $(obj)/exports_kernel_generated.h: $(obj)/kernel.o FORCE
+	$(call if_changed,exports)
+
+$(obj)/exports_uapi_generated.h: $(obj)/uapi.o FORCE
 	$(call if_changed,exports)
 
 quiet_cmd_rustc_procmacrolibrary = $(if $(skip_clippy),RUSTC,$(RUSTC_OR_CLIPPY_QUIET)) PL $@
