@@ -304,11 +304,12 @@ void lru_add_drain_all(void);
 
 enum lru_cache_drained {
 	LRU_CACHE_NOT_DRAINED,
-	LRU_CACHE_DRAINED,
-	LRU_CACHE_DRAINED_ALL,
 };
-void lru_cache_drain_for_folio(const struct folio *folio,
-		unsigned int extra_refs, enum lru_cache_drained *drained);
+static inline void lru_cache_drain_for_folio(const struct folio *folio,
+		unsigned int extra_refs, enum lru_cache_drained *drained)
+{
+	/* Temporary stub for callers' build independent of mm/fbatch series */
+}
 
 /* linux/mm/folio-compat.c */
 void mark_page_accessed(struct page *page);
