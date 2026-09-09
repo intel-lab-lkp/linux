@@ -591,7 +591,7 @@ builtin_tests=(
     FT_grammar_errs
     FT_basic_queries
     #FT_path_module_queries
-    #FT_hyphen_underscore
+    FT_hyphen_underscore
 )
 
 # Modular Feature Tests (Require CONFIG_MODULES=y and test_dynamic_debug*.ko available)
