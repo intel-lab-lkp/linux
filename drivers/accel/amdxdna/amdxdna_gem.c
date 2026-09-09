@@ -13,6 +13,7 @@
 #include <linux/dma-buf.h>
 #include <linux/dma-direct.h>
 #include <linux/iosys-map.h>
+#include <linux/mm.h>
 #include <linux/pagemap.h>
 #include <linux/vmalloc.h>
 
@@ -490,16 +491,10 @@ static int amdxdna_insert_pages(struct amdxdna_gem_obj *abo,
 {
 	struct amdxdna_dev *xdna = to_xdna_dev(to_gobj(abo)->dev);
 	unsigned long num_pages = vma_pages(vma);
-	unsigned long offset = 0;
+	unsigned long i;
 	int ret;
 
-	if (!is_import_bo(abo)) {
-		ret = drm_gem_shmem_mmap(&abo->base, vma);
-		if (ret) {
-			XDNA_ERR(xdna, "Failed shmem mmap %d", ret);
-			return ret;
-		}
-	} else {
+	if (is_import_bo(abo)) {
 		vma->vm_private_data = NULL;
 		vma->vm_ops = NULL;
 		ret = dma_buf_mmap(abo->dma_buf, vma, 0);
@@ -508,23 +503,33 @@ static int amdxdna_insert_pages(struct amdxdna_gem_obj *abo,
 			return ret;
 		}
 
+		amdxdna_mark_mapp_invalid(abo, vma);
+
 		/* Drop the reference drm_gem_mmap_obj() acquired.*/
 		drm_gem_object_put(to_gobj(abo));
+		return 0;
 	}
 
-	do {
-		vm_fault_t fault_ret;
+	ret = drm_gem_shmem_mmap(&abo->base, vma);
+	if (ret) {
+		XDNA_ERR(xdna, "Failed shmem mmap %d", ret);
+		return ret;
+	}
 
-		fault_ret = handle_mm_fault(vma, vma->vm_start + offset,
-					    FAULT_FLAG_WRITE, NULL);
-		if (fault_ret & VM_FAULT_ERROR) {
-			XDNA_ERR(xdna, "Fault in page failed");
-			amdxdna_mark_mapp_invalid(abo, vma);
-			break;
+	for (i = 0; i < num_pages; i++) {
+
+		ret = remap_pfn_range(vma, vma->vm_start + (i << PAGE_SHIFT),
+				      page_to_pfn(abo->base.pages[vma->vm_pgoff + i]),
+				      PAGE_SIZE, vma->vm_page_prot);
+		if (ret) {
+			if (i > 0)
+				zap_special_vma_range(vma, vma->vm_start, i << PAGE_SHIFT);
+			dma_resv_lock(to_gobj(abo)->resv, NULL);
+			drm_gem_shmem_put_pages_locked(&abo->base);
+			dma_resv_unlock(to_gobj(abo)->resv);
+			return ret;
 		}
-
-		offset += PAGE_SIZE;
-	} while (--num_pages);
+	}
 
 	return 0;
 }
