@@ -1043,62 +1043,46 @@ static int dqinit_needed(struct inode *inode, int type)
 	return 0;
 }
 
-/* This routine is guarded by s_umount semaphore */
-static int add_dquot_ref(struct super_block *sb, int type)
+static int add_dquot_ref_inode_iter_cb(struct inode *inode, void *data)
 {
-	struct inode *inode, *old_inode = NULL;
+	int type = *(int *)data;
+	int err = 0;
+	struct super_block *sb = inode->i_sb;
 #ifdef CONFIG_QUOTA_DEBUG
 	int reserved = 0;
 #endif
-	int err = 0;
 
-	spin_lock(&sb->s_inode_list_lock);
-	list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
-		spin_lock(&inode->i_lock);
-		if ((inode_state_read(inode) & (I_FREEING | I_WILL_FREE | I_NEW)) ||
-		    !atomic_read(&inode->i_writecount) ||
-		    !dqinit_needed(inode, type)) {
-			spin_unlock(&inode->i_lock);
-			continue;
-		}
-		__iget(inode);
+	if (!atomic_read(&inode->i_writecount) ||
+	    !dqinit_needed(inode, type)) {
 		spin_unlock(&inode->i_lock);
-		spin_unlock(&sb->s_inode_list_lock);
-
-#ifdef CONFIG_QUOTA_DEBUG
-		if (unlikely(inode_get_rsv_space(inode) > 0))
-			reserved = 1;
-#endif
-		iput(old_inode);
-		err = __dquot_initialize(inode, type);
-		if (err) {
-			iput(inode);
-			goto out;
-		}
-
-		/*
-		 * We hold a reference to 'inode' so it couldn't have been
-		 * removed from s_inodes list while we dropped the
-		 * s_inode_list_lock. We cannot iput the inode now as we can be
-		 * holding the last reference and we cannot iput it under
-		 * s_inode_list_lock. So we keep the reference and iput it
-		 * later.
-		 */
-		old_inode = inode;
-		cond_resched();
-		spin_lock(&sb->s_inode_list_lock);
+		return 0;
 	}
+
+	__iget(inode);
+	spin_unlock(&inode->i_lock);
 	spin_unlock(&sb->s_inode_list_lock);
-	iput(old_inode);
-out:
+
 #ifdef CONFIG_QUOTA_DEBUG
-	if (reserved) {
-		quota_error(sb, "Writes happened before quota was turned on "
-			"thus quota information is probably inconsistent. "
-			"Please run quotacheck(8)");
-	}
+	if (unlikely(inode_get_rsv_space(inode) > 0))
+		reserved = 1;
 #endif
+	err = __dquot_initialize(inode, type);
+#ifdef CONFIG_QUOTA_DEBUG
+	if (reserved)
+		quota_error(sb, "Writes happened before quota was turned "
+			    "on thus quota information is probably "
+			    "inconsistent. Please run quotacheck(8)");
+#endif
+	iput(inode);
+	spin_lock(&sb->s_inode_list_lock);
 	return err;
+}
+
+/* This routine is guarded by s_umount semaphore */
+static int add_dquot_ref(struct super_block *sb, int type)
+{
+	return sb_for_each_inodes(sb, INODE_ITER_NORMAL,
+				  add_dquot_ref_inode_iter_cb, &type);
 }
 
 static void remove_dquot_ref(struct super_block *sb, int type)
