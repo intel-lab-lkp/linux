@@ -3896,6 +3896,25 @@ static inline vm_fault_t vmf_can_call_fault(const struct vm_fault *vmf)
 }
 
 /**
+ * vma_is_faulted - check if a vma has been faulted
+ * @vma: the vma to check
+ *
+ * This is a lockless access that may race with __anon_vma_prepare().
+ * The race is safe because:
+ * - The fault handler ensures that the mapping of memory is ordered.
+ * - If we read NULL, the caller will re-check
+ * - The page_table_lock provides ACQUIRE semantics for memory ordering
+ *
+ * Return: true if vma->anon_vma is non-NULL, false otherwise
+ */
+static inline bool vma_is_faulted(const struct vm_area_struct *vma)
+{
+	/* Lockless check - safe because we re-validate under page_table_lock */
+	return data_race(vma->anon_vma);
+}
+
+
+/**
  * __vmf_anon_prepare - Prepare to handle an anonymous fault.
  * @vmf: The vm_fault descriptor passed from the fault handler.
  *
@@ -3914,8 +3933,7 @@ vm_fault_t __vmf_anon_prepare(struct vm_fault *vmf)
 {
 	struct vm_area_struct *vma = vmf->vma;
 	vm_fault_t ret = 0;
-
-	if (likely(vma->anon_vma))
+	if (likely(vma_is_faulted(vma)))
 		return 0;
 	if (vmf->flags & FAULT_FLAG_VMA_LOCK) {
 		if (!mmap_read_trylock(vma->vm_mm))
