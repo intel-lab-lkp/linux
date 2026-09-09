@@ -43,6 +43,7 @@
 #include <linux/dma-buf.h>
 #include <linux/dma-fence-array.h>
 #include <linux/pci-p2pdma.h>
+#include <linux/pm_runtime.h>
 
 static const struct dma_buf_attach_ops amdgpu_dma_buf_attach_ops;
 
@@ -189,14 +190,25 @@ static struct sg_table *amdgpu_dma_buf_map(struct dma_buf_attachment *attach,
 		/* move buffer into GTT or VRAM */
 		struct ttm_operation_ctx ctx = { false, false };
 		unsigned int domains = AMDGPU_GEM_DOMAIN_GTT;
+		int pm_ref = 0;
 
 		if (bo->preferred_domains & AMDGPU_GEM_DOMAIN_VRAM &&
 		    attach->peer2peer) {
-			bo->flags |= AMDGPU_GEM_CREATE_CPU_ACCESS_REQUIRED;
-			domains |= AMDGPU_GEM_DOMAIN_VRAM;
+			/*
+			 * Only migrate into VRAM while the exporter is held
+			 * awake.  A negative return means runtime PM is
+			 * disabled, so it cannot suspend either.
+			 */
+			pm_ref = pm_runtime_get_if_active(adev_to_drm(adev)->dev);
+			if (pm_ref) {
+				bo->flags |= AMDGPU_GEM_CREATE_CPU_ACCESS_REQUIRED;
+				domains |= AMDGPU_GEM_DOMAIN_VRAM;
+			}
 		}
 		amdgpu_bo_placement_from_domain(bo, domains);
 		r = ttm_bo_validate(&bo->tbo, &bo->placement, &ctx);
+		if (pm_ref > 0)
+			pm_runtime_put_autosuspend(adev_to_drm(adev)->dev);
 		if (r)
 			return ERR_PTR(r);
 	}
