@@ -146,6 +146,7 @@ config PM_SLEEP_SMP
 	def_bool y
 	depends on SMP
 	depends on ARCH_SUSPEND_POSSIBLE || ARCH_HIBERNATION_POSSIBLE
+	depends on PPC_PSERIES || PPC_PMAC || PPC_POWERNV || FSL_SOC_BOOKE if PPC
 	depends on PM_SLEEP
 	select HOTPLUG_CPU
 
