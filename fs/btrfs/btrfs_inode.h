@@ -100,6 +100,15 @@ enum {
 	 */
 	BTRFS_INODE_COW_WRITE_ERROR,
 	/*
+	 * DIO writes take the VFS inode lock in shared mode rather than
+	 * exclusive like other writing operations. We want to hold the lock on
+	 * the src inode shared for reflink, but that does still need to be
+	 * exclusive with DIO writes. Therefore, note such reflink src holders
+	 * on the inode. If a DIO write sees this bit set, it should take the
+	 * VFS inode lock exclusive.
+	 */
+	BTRFS_INODE_REFLINK_SRC,
+	/*
 	 * Indicate this is a directory that points to a subvolume for which
 	 * there is no root reference item. That's a case like the following:
 	 *

@@ -943,6 +943,16 @@ loff_t btrfs_remap_file_range(struct file *src_file, loff_t off,
 	} else {
 		lock_two_nondirectories(&src_inode->vfs_inode, &dst_inode->vfs_inode);
 		btrfs_double_mmap_lock(src_inode, dst_inode);
+
+		/*
+		 * Reflink is a read operation on the src inode and a write on
+		 * the dst, so lock them accordingly. One wrinkle is that direct
+		 * writes try to take inode->i_rwsem shared so we must do an
+		 * acquire exclusive; set bit; downgrade to shared dance to
+		 * synchronize with that one weird writer.
+		 */
+		set_bit(BTRFS_INODE_REFLINK_SRC, &src_inode->runtime_flags);
+		downgrade_write(&src_inode->vfs_inode.i_rwsem);
 	}
 
 	ret = btrfs_remap_file_range_prep(src_file, off, dst_file, destoff,
@@ -960,8 +970,9 @@ out_unlock:
 		btrfs_inode_unlock(src_inode, BTRFS_ILOCK_MMAP);
 	} else {
 		btrfs_double_mmap_unlock(src_inode, dst_inode);
-		unlock_two_nondirectories(&src_inode->vfs_inode,
-					  &dst_inode->vfs_inode);
+		clear_bit(BTRFS_INODE_REFLINK_SRC, &src_inode->runtime_flags);
+		inode_unlock_shared(&src_inode->vfs_inode);
+		inode_unlock(&dst_inode->vfs_inode);
 	}
 
 	/*
