@@ -9,6 +9,7 @@
 #include <linux/component.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/timer.h>
 
 #include <drm/drm_print.h>
 
@@ -497,7 +498,17 @@ static void vc4_v3d_unbind(struct device *dev, struct device *master,
 	struct drm_device *drm = data;
 	struct vc4_dev *vc4 = to_vc4_dev(drm);
 
+	/* Kill the timer, then reset_work: vc4_irq_reset() re-enables it. */
+	if (vc4->gen == VC4_GEN_4) {
+		timer_shutdown_sync(&vc4->hangcheck.timer);
+		cancel_work_sync(&vc4->hangcheck.reset_work);
+	}
+
 	vc4_irq_uninstall(drm);
+
+	/* Nothing can queue job_done_work any more; drain it. */
+	if (vc4->gen == VC4_GEN_4)
+		cancel_work_sync(&vc4->job_done_work);
 
 	/* Disable the binner's overflow memory address, so the next
 	 * driver probe (if any) doesn't try to reuse our old
