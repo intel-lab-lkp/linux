@@ -9,6 +9,8 @@
 #include <linux/kernel.h>
 #include <linux/phy.h>
 #include <linux/oa_tc6.h>
+#include <linux/gpio/consumer.h>
+#include <linux/delay.h>
 
 #define DRV_NAME			"lan8650"
 
@@ -41,6 +43,7 @@ struct lan865x_priv {
 	struct net_device *netdev;
 	struct spi_device *spi;
 	struct oa_tc6 *tc6;
+	struct gpio_desc *reset_gpio;
 };
 
 static int lan865x_set_hw_macaddr_low_bytes(struct oa_tc6 *tc6, const u8 *mac)
@@ -345,6 +348,24 @@ static int lan865x_probe(struct spi_device *spi)
 	priv->spi = spi;
 	spi_set_drvdata(spi, priv);
 	INIT_WORK(&priv->multicast_work, lan865x_multicast_work_handler);
+
+	priv->reset_gpio = devm_gpiod_get_optional(&spi->dev, "reset",
+						   GPIOD_OUT_LOW);
+	if (IS_ERR(priv->reset_gpio)) {
+		ret = dev_err_probe(&spi->dev, PTR_ERR(priv->reset_gpio),
+				    "Failed to get reset GPIO\n");
+		goto free_netdev;
+	}
+
+	if (priv->reset_gpio) {
+		/* Assert hardware reset for 10 us (datasheet specifies min 5 us)
+		 * and allow 1 ms settle time for crystal oscillator startup.
+		 */
+		gpiod_set_value_cansleep(priv->reset_gpio, 1);
+		fsleep(10);
+		gpiod_set_value_cansleep(priv->reset_gpio, 0);
+		fsleep(1000);
+	}
 
 	priv->tc6 = oa_tc6_init(spi, netdev, NULL);
 	if (!priv->tc6) {
