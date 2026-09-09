@@ -725,21 +725,37 @@ out_free:
 
 static bool isw_prepare_wbs_switch(struct bdi_writeback *new_wb,
 				   struct inode_switch_wbs_context *isw,
-				   struct list_head *list, int *nr)
+				   struct list_head *list, bool rotate, int *nr)
 {
-	struct inode *inode;
+	struct inode *inode, *tmp;
+	LIST_HEAD(scanned);
+	bool full = false;
 
-	list_for_each_entry(inode, list, i_io_list) {
+	list_for_each_entry_safe(inode, tmp, list, i_io_list) {
+		/*
+		 * Rotate scanned inodes to the tail so the next scan resumes
+		 * at unscanned ones instead of re-walking an ever-growing
+		 * prefix of prepared and skipped inodes.  b_dirty_time is
+		 * expiry-ordered and so must not be rotated.
+		 */
+		if (rotate)
+			list_move_tail(&inode->i_io_list, &scanned);
+
 		if (!inode_prepare_wbs_switch(inode, new_wb))
 			continue;
 
 		isw->inodes[*nr] = inode;
 		(*nr)++;
 
-		if (*nr >= WB_MAX_INODES_PER_ISW - 1)
-			return true;
+		if (*nr >= WB_MAX_INODES_PER_ISW - 1) {
+			full = true;
+			break;
+		}
 	}
-	return false;
+	if (rotate)
+		list_splice_tail(&scanned, list);
+
+	return full;
 }
 
 /**
@@ -747,8 +763,9 @@ static bool isw_prepare_wbs_switch(struct bdi_writeback *new_wb,
  * @wb: target wb
  *
  * Switch all inodes attached to @wb to a nearest living ancestor's wb in order
- * to eventually release the dying @wb.  Returns %true if not all inodes were
- * switched and the function has to be restarted.
+ * to eventually release the dying @wb.  Returns %true if the scan stopped
+ * early after making progress; the caller should call again to continue
+ * draining.
  */
 bool cleanup_offline_cgwb(struct bdi_writeback *wb)
 {
@@ -783,13 +800,13 @@ bool cleanup_offline_cgwb(struct bdi_writeback *wb)
 	 * bandwidth restrictions, as writeback of inode metadata is not
 	 * accounted for.
 	 */
-	restart = isw_prepare_wbs_switch(new_wb, isw, &wb->b_attached, &nr);
+	restart = isw_prepare_wbs_switch(new_wb, isw, &wb->b_attached, true, &nr);
 	if (!restart)
 		restart = isw_prepare_wbs_switch(new_wb, isw, &wb->b_dirty_time,
-						 &nr);
+						 false, &nr);
 	spin_unlock(&wb->list_lock);
 
-	/* no attached inodes? bail out */
+	/* nothing to switch? bail out */
 	if (nr == 0) {
 		atomic_dec(&isw_nr_in_flight);
 		wb_put(new_wb);
