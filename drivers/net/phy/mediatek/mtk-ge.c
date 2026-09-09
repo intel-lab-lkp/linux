@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0+
+#include <linux/of.h>
 #include <linux/bitfield.h>
 #include <linux/module.h>
 #include <linux/phy.h>
@@ -62,8 +63,68 @@ static void mtk_gephy_config_init(struct phy_device *phydev)
 		       FIELD_PREP(MTK_MCC_NEARECHO_OFFSET_MASK, 0x3));
 }
 
+static bool mt7530_phy_is_en751221_companion(struct phy_device *phydev)
+{
+	struct device *parent = phydev->mdio.bus->parent;
+
+	return parent && parent->of_node &&
+	       of_device_is_compatible(parent->of_node, "econet,en751221");
+}
+
+/*
+ * The EcoNet reference implementation applies additional tuning to
+ * the PHYs of the multi-chip module MT7530.
+ */
+static int mt7530_phy_en751221_config_init(struct phy_device *phydev)
+{
+	int ret;
+
+	ret = genphy_soft_reset(phydev);
+	if (ret)
+		return ret;
+
+	/* Clause 22 local data. */
+	ret = phy_write(phydev, MII_CTRL1000, 0x1e00);
+	if (ret < 0)
+		return ret;
+
+	ret = phy_write_paged(phydev, MTK_PHY_PAGE_EXTENDED_1, 0x14, 0x3a04);
+	if (ret < 0)
+		return ret;
+
+	/* Clause 45 global/local data from mt7530GePhyCfgLoad(E3.0). */
+	ret = phy_write_mmd(phydev, MDIO_MMD_VEND2, 0x0417, 0x7775);
+	if (ret < 0)
+		return ret;
+
+	ret = phy_write_mmd(phydev, MDIO_MMD_VEND1, 0x00a6, 0x0350);
+	if (ret < 0)
+		return ret;
+
+	ret = phy_write_mmd(phydev, MDIO_MMD_VEND1, 0x0012, 0xd210);
+	if (ret < 0)
+		return ret;
+
+	/* Vendor profile disables 100/1000BASE-T EEE advertisement. */
+	ret = phy_write_mmd(phydev, MDIO_MMD_AN, 0x003c, 0x0000);
+	if (ret < 0)
+		return ret;
+
+	phydev_info(phydev, "EN751221 companion MT7530 E3.0 PHY profile loaded\n");
+
+	return 0;
+}
+
 static int mt7530_phy_config_init(struct phy_device *phydev)
 {
+	int ret;
+
+	if (mt7530_phy_is_en751221_companion(phydev)) {
+		ret = mt7530_phy_en751221_config_init(phydev);
+		if (ret)
+			return ret;
+	}
+
 	mtk_gephy_config_init(phydev);
 
 	/* Increase post_update_timer */
