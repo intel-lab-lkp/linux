@@ -1190,6 +1190,12 @@ struct intel_crtc_state {
 	bool has_sel_update;
 	bool enable_psr2_sel_fetch;
 	bool enable_psr2_su_region_et;
+	/*
+	 * Commit time directive rather than a piece of pipe state: drop the
+	 * stale selective fetch enable bits as selective fetch is turned off.
+	 * Not compared by the state checker.
+	 */
+	bool clear_psr2_sel_fetch;
 	bool req_psr2_sdp_prior_scanline;
 	bool has_panel_replay;
 	bool link_off_after_as_sdp_when_pr_active;
