@@ -2348,10 +2348,12 @@ int ata_pci_sff_activate_host(struct ata_host *host,
 
 	rc = ata_host_register(host, sht);
 out:
-	if (rc == 0)
+	if (rc == 0) {
 		devres_remove_group(dev, NULL);
-	else
+	} else {
 		devres_release_group(dev, NULL);
+		ata_host_undo_start(host);
+	}
 
 	return rc;
 }

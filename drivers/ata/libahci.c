@@ -2723,11 +2723,20 @@ static int ahci_host_activate_multi_irqs(struct ata_host *host,
 				0, pp->irq_desc, host->ports[i]);
 
 		if (rc)
-			return rc;
+			goto undo_start;
 		ata_port_desc_misc(host->ports[i], irq);
 	}
 
-	return ata_host_register(host, sht);
+	rc = ata_host_register(host, sht);
+	if (rc)
+		goto undo_start;
+
+	return 0;
+
+undo_start:
+	ata_host_undo_start(host);
+
+	return rc;
 }
 
 /**
