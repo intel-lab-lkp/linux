@@ -108,10 +108,13 @@ static int check_exec_fault(int rights)
 static int test(void)
 {
 	struct sigaction segv_act, trap_act;
+	bool hash_mmu;
 	int i;
 
 	/* Skip the test if the CPU doesn't support Radix */
 	SKIP_IF(!have_hwcap2(PPC_FEATURE2_ARCH_3_00));
+
+	FAIL_IF(using_hash_mmu(&hash_mmu));
 
 	/* Check if pkeys are supported */
 	pkeys_supported = pkeys_unsupported() == 0;
@@ -167,13 +170,17 @@ static int test(void)
 	 * Read an instruction word from the address when the page
 	 * is execute only. This should generate an access fault.
 	 */
-	fault_code = -1;
-	remaining_faults = 1;
-	printf("Testing read on --x, should fault...");
-	FAIL_IF(mprotect(insns, pgsize, PROT_EXEC) != 0);
-	i = *fault_addr;
-	FAIL_IF(remaining_faults != 0 || !is_fault_expected(fault_code));
-	printf("ok!\n");
+	if (!hash_mmu) {
+		fault_code = -1;
+		remaining_faults = 1;
+		printf("Testing read on --x, should fault...");
+		FAIL_IF(mprotect(insns, pgsize, PROT_EXEC) != 0);
+		i = *fault_addr;
+		FAIL_IF(remaining_faults != 0 || !is_fault_expected(fault_code));
+		printf("ok!\n");
+	} else {
+		printf("Testing read on --x, skipped on Hash MMU\n");
+	}
 
 	/*
 	 * Write an instruction word to the address when the page
