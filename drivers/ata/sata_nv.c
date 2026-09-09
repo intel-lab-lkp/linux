@@ -2415,7 +2415,11 @@ static int nv_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 
 	pci_set_master(pdev);
-	return ata_pci_sff_activate_host(host, ipriv->irq_handler, ipriv->sht);
+	rc = ata_pci_sff_activate_host(host, ipriv->irq_handler, ipriv->sht);
+	if (rc && host->ops->host_stop)
+		host->ops->host_stop(host);
+
+	return rc;
 }
 
 #ifdef CONFIG_PM_SLEEP
