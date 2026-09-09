@@ -72,6 +72,23 @@ static netdev_tx_t loopback_xmit(struct sk_buff *skb,
 {
 	int len;
 
+	/* The skb_orphan() below will run the skb's destructor, which
+	 * for AF_PACKET TX-ring senders marks the slot as TP_STATUS_AVAILABLE
+	 * again, even though it still has zerocopy frags pointing to it that
+	 * will only be copied later in the receive path's
+	 * skb_orphan_frags_rx(). As such, if the receive path gets deferred,
+	 * for example by RPS steering the packet to another CPU, this creates
+	 * a race where userspace may fill in new data into the frag before the
+	 * old data gets copied out.
+	 *
+	 * Take a kernel-private copy.
+	 */
+	if (unlikely(skb_orphan_frags_rx(skb, GFP_ATOMIC))) {
+		dev_core_stats_tx_dropped_inc(dev);
+		kfree_skb_reason(skb, SKB_DROP_REASON_SKB_UCOPY_FAULT);
+		return NETDEV_TX_OK;
+	}
+
 	skb_tx_timestamp(skb);
 
 	/* do not fool net_timestamp_check() with various clock bases */
