@@ -1579,6 +1579,19 @@ static void __free_pages_ok(struct page *page, unsigned int order,
 		free_one_page(zone, page, pfn, order, fpi_flags);
 }
 
+/* Flag the frames an earlier kernel recorded as bad. */
+static void __meminit poison_block(struct page *page, unsigned int order)
+{
+	unsigned long i, nr_pages = 1UL << order;
+
+	for (i = 0; i < nr_pages; i++) {
+		struct page *p = page + i;
+
+		if (range_contains_poisoned_memory(page_to_phys(p), PAGE_SIZE))
+			hwpoison_boot_page(p);
+	}
+}
+
 void __meminit __free_pages_core(struct page *page, unsigned int order,
 		enum meminit_context context)
 {
@@ -1611,6 +1624,18 @@ void __meminit __free_pages_core(struct page *page, unsigned int order,
 
 		/* memblock adjusts totalram_pages() manually. */
 		atomic_long_add(nr_pages, &page_zone(page)->managed_pages);
+	}
+
+	/* First: a block parked by __free_unaccepted() never returns here. */
+	if (range_contains_poisoned_memory(page_to_phys(page),
+					   PAGE_SIZE << order)) {
+		poison_block(page, order);
+		/*
+		 * TODO: free the frames in the block that are not poisoned.
+		 * They stay out of the allocator and still count in
+		 * managed_pages, so a unit costs up to a block.
+		 */
+		return;
 	}
 
 	if (page_contains_unaccepted(page, order)) {
