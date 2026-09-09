@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0
 
+DD_MODNAME := power
+
 ifeq ($(CONFIG_DYNAMIC_DEBUG), y)
 CFLAGS_swap.o                   := -DDEBUG
 CFLAGS_snapshot.o               := -DDEBUG

@@ -23,6 +23,32 @@ modname_flags  = -DKBUILD_MODNAME=$(call name-fix,$(modname)) \
 		 -D__KBUILD_MODNAME=$(call name-fix-token,$(modname))
 modfile_flags  = -DKBUILD_MODFILE=$(call stringify,$(modfile))
 
+# Dynamic debug subsystem modname with clean heuristic and override support
+dd_modname_override = $(strip $(firstword $(DD_MODNAME_$(target-stem).o) \
+					  $(DD_MODNAME)))
+dd_obj := $(strip $(filter-out .,\
+		$(patsubst drivers/%,%,\
+		$(patsubst arch/$(SRCARCH)/%,%,\
+		$(patsubst arch/%/,%,$(obj))))))
+dd_modname_default = $(strip $(if $(filter $(notdir $(obj)),$(__modname)),\
+			 $(__modname),\
+			 $(if $(filter main core common util init snapshot \
+				       process,$(__modname)),\
+			     $(dd_obj),\
+			     $(if $(word 2,$(__modname)),\
+				 $(dd_obj),\
+				 $(if $(dd_obj),$(dd_obj),$(__modname))))))
+dd_modname = $(strip $(or $(dd_modname_override),\
+			  $(dd_modname_default),\
+			  $(__modname)))
+dd-name-subst = $(subst $(comma),_,$(subst -,_,$(strip $1)))
+dd-name-fix-token = $(subst $(space),_,$(call dd-name-subst,$1))
+dd_tok = $(call dd-name-fix-token,$(dd_modname))
+dd_modname_flags = $(if $(dd_modname),\
+	-DKBUILD_DD_MODNAME=$(call stringify,$(dd_tok)))
+
+modfile_flags += $(dd_modname_flags)
+
 _c_flags       = $(filter-out $(CFLAGS_REMOVE_$(target-stem).o), \
                      $(filter-out $(ccflags-remove-y), \
                          $(KBUILD_CPPFLAGS) $(KBUILD_CFLAGS) $(ccflags-y)) \
