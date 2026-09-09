@@ -1605,6 +1605,12 @@ struct block_device_operations {
 	 * driver.
 	 */
 	int (*alternative_gpt_sector)(struct gendisk *disk, sector_t *sector);
+	/*
+	 * Called after disk->open_mutex is released in the bdev_release() path.
+	 * Used by loop devices that need to perform synchronization without
+	 * holding disk->open_mutex. This operation has to be idempotent.
+	 */
+	void (*post_release)(struct gendisk *disk);
 };
 
 #ifdef CONFIG_COMPAT
