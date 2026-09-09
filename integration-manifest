@@ -1,0 +1,42 @@
+drm drm-fixes df2908090cda368b01ff43709f51890076c56157
+	Linux 7.3-rc2
+drm-misc drm-misc-fixes ed761e0693950fcb4f6b0f60387a3961b972adf3
+	drm/bridge: tc358768: Enforce input bus flags via atomic_check
+drm-rust drm-rust-fixes cee9395acd8043be0644b25c34bfa86623f2b935
+	Linux 7.3-rc1
+drm-intel drm-intel-fixes df2908090cda368b01ff43709f51890076c56157
+	Linux 7.3-rc2
+drm-xe drm-xe-fixes df2908090cda368b01ff43709f51890076c56157
+	Linux 7.3-rc2
+drm-amdgpu drm-amdgpu-fixes 13af55f71399f5e562f6cb59ad413476e513c4d4
+	drm/amdgpu/userq: fix struct drm_amdgpu_info_device padding for 32bit compile
+drm drm-next f5c6fdfa1f4460c5714cd4996c6aa280d25399ca
+	Merge tag 'drm-intel-next-2026-09-03' of https://gitlab.freedesktop.org/drm/i915/kernel into drm-next
+drm-misc drm-misc-next-fixes 271e90eb5f9ff34951647e5ed33c1775eebcca50
+	drm: use drm_warn() in validate_blend_mode_for_alpha_formats()
+drm-rust drm-rust-next-fixes 4c9ba407018e8deb06dbc643112bac8f40404f95
+	gpu: nova-core: falcon: use I/O projection to check transfer bounds
+drm-intel drm-intel-next-fixes 65b92bc671db7c222f8de1146c88e40fe8764d95
+	Merge tag 'drm-xe-next-fixes-2026-08-13' of https://gitlab.freedesktop.org/drm/xe/kernel into drm-next
+drm-xe drm-xe-next-fixes cee9395acd8043be0644b25c34bfa86623f2b935
+	Linux 7.3-rc1
+drm-amdgpu drm-amdgpu-next-fixes 1ff8d3e3165fd077faa4259fd232bdddcd30249f
+	Merge tag 'drm-xe-next-fixes-2026-08-20' of https://gitlab.freedesktop.org/drm/xe/kernel into drm-next
+drm-misc drm-misc-next dfd2bd7af66564b349a84a2c6a951ea3286a53cf
+	drm/bridge: lontium: Drop redundant vendor prefix from I2C device name
+drm-rust drm-rust-next 10186439b81f4d0a3c7581a3a012847fba6d140e
+	Merge tag 'rust-dma-7.4-rc1' of git://git.kernel.org/pub/scm/linux/kernel/git/driver-core/driver-core into drm-rust-next
+drm-intel drm-intel-next 4bda5543b3c6697ca435e89aeea655eea9087f96
+	drm/i915/bios: remove VS/PE-O warning
+drm-intel drm-intel-gt-next 18ec6327d3456f5d8a9b55832d376935d2eb3577
+	drm/i915/selftest: Fix a typo in alloc_workqueue call
+drm-xe drm-xe-next 73ae70cf843f93904bb02f8f213b50acfbb84ce7
+	drm/xe: convert PCI barrier mmap to use xe_mmio_gem
+drm-amdgpu drm-amdgpu-next 4f9ab6eb259437701991c2af3fbd666f2fbc4e19
+	Documentation: add initial UALink Documentation
+drm-intel topic/core-for-CI 3cf6ff1708aeb3154fa0117b430031abfe7f7ff0
+	Revert "lockdep: Enable PROVE_RAW_LOCK_NESTING with PROVE_LOCKING."
+drm-xe topic/xe-for-CI b275cb3f07a7ab3ef3bd419db86bd42fa95dcedb
+	topic/xe-for-CI: Define GuC firmware for NVL-P
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
