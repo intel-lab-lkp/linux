@@ -314,6 +314,7 @@ static void xe_i2c_remove(void *data)
 		i2c_unregister_device(i2c->client[i]);
 
 	bus_unregister_notifier(&i2c_bus_type, &i2c->bus_notifier);
+	cancel_work_sync(&i2c->work);
 	xe_i2c_unregister_adapter(i2c);
 	xe_i2c_remove_irq(i2c);
 }
