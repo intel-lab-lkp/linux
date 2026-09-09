@@ -1109,6 +1109,8 @@ static bool ddebug_class_in_range(const int class_id, const struct ddebug_class_
 
 static bool ddebug_user_class_in_range(const int class_id, const struct ddebug_class_user *cli)
 {
+	if (!cli || !cli->map)
+		return false;
 	int base = cli->map->base + cli->offset;
 	return (class_id >= base && class_id < base + cli->map->length);
 }
@@ -1270,14 +1272,12 @@ static void ddebug_sync_classbits(const struct kernel_param *kp, const char *mod
 	switch (dcp->map->map_type) {
 	case DD_CLASS_TYPE_DISJOINT_BITS:
 		val = READ_ONCE(*dcp->bits);
-		ddebug_class_param_clamp_input(&val, kp);
 		new_bits = val;
 		v2pr_info("  %s: classbits: 0x%x\n", KP_NAME(kp), new_bits);
 		ddebug_apply_class_bitmap(dcp, &new_bits, 0UL, modname);
 		break;
 	case DD_CLASS_TYPE_LEVEL_NUM:
 		val = READ_ONCE(*dcp->lvl);
-		ddebug_class_param_clamp_input(&val, kp);
 		new_bits = CLASSMAP_BITMASK(val);
 		v2pr_info("  %s: lvl:%d bits:0x%x\n", KP_NAME(kp), val, new_bits);
 		ddebug_apply_class_bitmap(dcp, &new_bits, 0UL, modname);
@@ -1309,6 +1309,9 @@ static void ddebug_match_apply_kparam(const struct kernel_param *kp,
 static void ddebug_apply_params(const struct ddebug_class_map *cm, const char *mod_name)
 {
 	const struct kernel_param *kp;
+
+	if (!cm)
+		return;
 #if IS_ENABLED(CONFIG_MODULES)
 	int i;
 
