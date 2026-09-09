@@ -11,7 +11,7 @@
  * Many thanks to Arjan van de Ven, Thomas Gleixner, Steven Rostedt and
  * David Howells for suggestions and improvements.
  *
- *  - Adaptive spinning for mutexes by Peter Zijlstra. (Ported to mainline
+ *  - Adaptive spinning for mutexes by Peter Zijlstra. Ported to mainline
  *    from the -rt tree, where it was originally implemented for rtmutexes
  *    by Steven Rostedt, based on work by Gregory Haskins, Peter Morreale
  *    and Sven Dietrich.

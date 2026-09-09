@@ -143,7 +143,7 @@ fixup_rt_mutex_waiters(struct rt_mutex_base *lock, bool acquire_lock)
 	 * lock->owner still has the waiters bit set, otherwise the
 	 * following can happen:
 	 *
-	 * CPU 0	CPU 1		CPU2
+	 * CPU 0	CPU 1		CPU 2
 	 * l->owner=T1
 	 *		rt_mutex_lock(l)
 	 *		lock(l->lock)
@@ -172,14 +172,14 @@ fixup_rt_mutex_waiters(struct rt_mutex_base *lock, bool acquire_lock)
 	 *				 unlock(l->lock)
 	 *		lock(l->lock)
 	 *		fixup_rt_mutex_waiters()
-	 *		  if (wait_list_empty(l) {
+	 *		  if (wait_list_empty(l)) {
 	 *		    l->owner = owner
 	 *		    owner = l->owner & ~HAS_WAITERS;
 	 *		      ==> l->owner = T1
 	 *		  }
 	 *				lock(l->lock)
 	 * rt_mutex_unlock(l)		fixup_rt_mutex_waiters()
-	 *				  if (wait_list_empty(l) {
+	 *				  if (wait_list_empty(l)) {
 	 *				    owner = l->owner & ~HAS_WAITERS;
 	 * cmpxchg(l->owner, T1, NULL)
 	 *  ===> Success (l->owner = NULL)
