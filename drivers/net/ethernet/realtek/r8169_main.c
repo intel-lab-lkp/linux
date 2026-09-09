@@ -3037,6 +3037,16 @@ static void rtl_disable_exit_l1(struct rtl8169_private *tp)
 
 static void rtl_enable_ltr(struct rtl8169_private *tp)
 {
+	u16 ctl2;
+
+	/* The chip must not issue LTR messages unless the platform enabled
+	 * LTR on the whole path up to the root port. The PCI core discovers
+	 * that in pci_configure_ltr() and reflects it in LTR Mechanism Enable.
+	 */
+	pcie_capability_read_word(tp->pci_dev, PCI_EXP_DEVCTL2, &ctl2);
+	if (!(ctl2 & PCI_EXP_DEVCTL2_LTR_EN))
+		return;
+
 	switch (tp->mac_version) {
 	case RTL_GIGA_MAC_VER_80:
 		r8168_mac_ocp_write(tp, 0xcdd0, 0x9003);
