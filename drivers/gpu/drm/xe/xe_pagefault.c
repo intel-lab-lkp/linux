@@ -17,6 +17,7 @@
 #include "xe_log.h"
 #include "xe_pagefault.h"
 #include "xe_pagefault_types.h"
+#include "xe_pm.h"
 #include "xe_svm.h"
 #include "xe_trace_bo.h"
 #include "xe_vm.h"
@@ -252,12 +253,13 @@ static int xe_pagefault_service(struct xe_pagefault *pf)
 	struct xe_vma *vma = NULL;
 	int err;
 	bool atomic;
+	u32 asid = FIELD_GET(XE_PAGEFAULT_ASID_MASK, pf->consumer.id);
 
 	/* Producer flagged this fault to be nacked */
 	if (pf->consumer.fault_type_level == XE_PAGEFAULT_TYPE_LEVEL_NACK)
 		return -EFAULT;
 
-	vm = xe_pagefault_asid_to_vm(xe, pf->consumer.asid);
+	vm = xe_pagefault_asid_to_vm(xe, asid);
 	if (IS_ERR(vm))
 		return PTR_ERR(vm);
 
@@ -374,7 +376,7 @@ static bool xe_pagefault_match(struct xe_pagefault *pf, u64 start,
 {
 	struct xe_device *xe = gt_to_xe(pf->gt);
 	u64 page_addr = pf->consumer.page_addr;
-	u32 pf_asid = pf->consumer.asid;
+	u32 pf_asid = FIELD_GET(XE_PAGEFAULT_ASID_MASK, pf->consumer.id);
 
 	xe_assert(xe, pf->consumer.alloc_state !=
 		  XE_PAGEFAULT_ALLOC_STATE_FREE);
@@ -499,7 +501,7 @@ static bool xe_pagefault_queue_pop(struct xe_pagefault_queue *pf_queue,
 		align = SZ_4K;
 	pf_work->cache.start = ALIGN_DOWN(lpf->consumer.page_addr, align);
 	pf_work->cache.end = pf_work->cache.start + align;
-	pf_work->cache.asid = lpf->consumer.asid;
+	pf_work->cache.asid = FIELD_GET(XE_PAGEFAULT_ASID_MASK, lpf->consumer.id);
 	pf_work->cache.pf = lpf;
 	lpf->consumer.alloc_state = XE_PAGEFAULT_ALLOC_STATE_ACTIVE;
 
@@ -545,14 +547,16 @@ static void xe_pagefault_print(struct xe_pagefault *pf)
 	u8 engine_class = FIELD_GET(XE_PAGEFAULT_ENGINE_CLASS_MASK,
 				    pf->consumer.engine_class_instance);
 
-	xe_gt_info(pf->gt, "\n\tASID: %d\n"
+	xe_gt_info(pf->gt, "\n\tASID: %lu\n"
 		   "\tFaulted Address: 0x%08x%08x\n"
 		   "\tFaultType: %lu\n"
 		   "\tAccessType: %lu\n"
 		   "\tFaultLevel: %lu\n"
 		   "\tEngineClass: %d %s\n"
-		   "\tEngineInstance: %lu\n",
-		   pf->consumer.asid,
+		   "\tEngineInstance: %lu\n"
+		   "\tSRCID: 0x%02lx\n",
+		   FIELD_GET(XE_PAGEFAULT_ASID_MASK,
+			     pf->consumer.id),
 		   upper_32_bits(pf->consumer.page_addr),
 		   lower_32_bits(pf->consumer.page_addr),
 		   FIELD_GET(XE_PAGEFAULT_TYPE_MASK,
@@ -564,7 +568,9 @@ static void xe_pagefault_print(struct xe_pagefault *pf)
 		   engine_class,
 		   xe_hw_engine_class_to_str(engine_class),
 		   FIELD_GET(XE_PAGEFAULT_ENGINE_INSTANCE_MASK,
-			     pf->consumer.engine_class_instance));
+			     pf->consumer.engine_class_instance),
+		   FIELD_GET(XE_PAGEFAULT_SRCID_MASK,
+			     pf->consumer.id));
 }
 
 static void xe_pagefault_save_to_vm(struct xe_device *xe, struct xe_pagefault *pf)
@@ -577,7 +583,8 @@ static void xe_pagefault_save_to_vm(struct xe_device *xe, struct xe_pagefault *p
 	 * mode, return VM anyways.
 	 */
 	down_read(&xe->usm.lock);
-	vm = xa_load(&xe->usm.asid_to_vm, pf->consumer.asid);
+	vm = xa_load(&xe->usm.asid_to_vm,
+		     FIELD_GET(XE_PAGEFAULT_ASID_MASK, pf->consumer.id));
 	if (vm)
 		xe_vm_get(vm);
 	else
@@ -604,6 +611,13 @@ static void xe_pagefault_queue_work(struct work_struct *w)
 	u64 cache_start = XE_PAGEFAULT_CACHE_START_INVALID, cache_end = 0;
 	u32 cache_asid = 0;
 
+	/*
+	 * A live VM holds a PM reference, but a torn-down VM does not.
+	 * Guard the entire worker loop to safely drain stale faults and
+	 * prevent autosuspends from desyncing batched CT flushes.
+	 */
+	guard(xe_pm_runtime)(xe);
+
 #define USM_QUEUE_MAX_RUNTIME_MS      20
 	threshold = jiffies + msecs_to_jiffies(USM_QUEUE_MAX_RUNTIME_MS);
 
@@ -611,7 +625,7 @@ static void xe_pagefault_queue_work(struct work_struct *w)
 		const struct xe_pagefault_ops *ops = pf->producer.ops;
 		void *private = pf->producer.private;
 		struct xe_gt *gt = pf->gt;
-		u32 asid = pf->consumer.asid;
+		u32 asid = FIELD_GET(XE_PAGEFAULT_ASID_MASK, pf->consumer.id);
 		int err = 0;
 		bool invalidated = false;
 
