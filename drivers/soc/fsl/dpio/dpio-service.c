@@ -205,6 +205,8 @@ struct dpaa2_io *dpaa2_io_create(const struct dpaa2_io_desc *desc,
  */
 void dpaa2_io_down(struct dpaa2_io *d)
 {
+	cancel_work_sync(&d->rx_dim.work);
+
 	spin_lock(&dpio_list_lock);
 	dpio_by_cpu[d->dpio_desc.cpu] = NULL;
 	list_del(&d->node);
