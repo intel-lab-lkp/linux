@@ -598,6 +598,14 @@ static int ipc3_fw_parse_ext_data(struct snd_sof_dev *sdev, u32 offset)
 	ext_hdr = ext_data;
 
 	while (ext_hdr->hdr.cmd == SOF_IPC_FW_READY) {
+		/* bound hdr.size to avoid heap overflow/underflow */
+		if (ext_hdr->hdr.size < sizeof(*ext_hdr) ||
+		   ext_hdr->hdr.size > PAGE_SIZE) {
+			dev_err(sdev->dev, "invalid ext data size 0x%x\n",
+				ext_hdr->hdr.size);
+			ret = -EINVAL;
+			break;
+		}
 		/* read in ext structure */
 		snd_sof_dsp_block_read(sdev, SOF_FW_BLK_TYPE_SRAM,
 				       offset + sizeof(*ext_hdr),
