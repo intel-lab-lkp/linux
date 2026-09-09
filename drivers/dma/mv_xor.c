@@ -181,6 +181,7 @@ static void mv_chan_start_new_chain(struct mv_xor_chan *mv_chan,
 	dev_dbg(mv_chan_to_devp(mv_chan), "%s %d: sw_desc %p\n",
 		__func__, __LINE__, sw_desc);
 
+	dma_wmb();
 	/* set the hardware chain */
 	mv_chan_set_next_descriptor(mv_chan, sw_desc->async_tx.phys);
 
@@ -409,6 +410,7 @@ mv_xor_tx_submit(struct dma_async_tx_descriptor *tx)
 
 		/* fix up the hardware chain */
 		mv_desc_set_next_desc(old_chain_tail, sw_desc->async_tx.phys);
+		dma_wmb();
 
 		/* if the channel is not busy */
 		if (!mv_chan_is_busy(mv_chan)) {
