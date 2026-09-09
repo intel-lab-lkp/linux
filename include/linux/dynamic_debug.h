@@ -56,6 +56,10 @@ struct _ddebug {
 #define _DPRINTK_FLAGS_INCL_TID		(1<<4)
 #define _DPRINTK_FLAGS_INCL_SOURCENAME	(1<<5)
 #define _DPRINTK_FLAGS_INCL_STACK	(1<<6)
+#define _DPRINTK_FLAGS_COUNT		(1<<7)
+
+#define _DPRINTK_FLAGS_ENABLED (_DPRINTK_FLAGS_PRINT | _DPRINTK_FLAGS_COUNT)
+#define _DPRINTK_FLAGS_ACTIVE  (_DPRINTK_FLAGS_PRINT)
 
 #define _DPRINTK_FLAGS_INCL_ANY		\
 	(_DPRINTK_FLAGS_INCL_MODNAME | _DPRINTK_FLAGS_INCL_FUNCNAME |\
@@ -403,13 +407,19 @@ void __dynamic_ibdev_dbg(struct _ddebug *descriptor,
 
 #ifdef DEBUG
 #define DYNAMIC_DEBUG_BRANCH(descriptor) \
-	likely(descriptor.flags & _DPRINTK_FLAGS_PRINT)
+	likely(descriptor.flags & _DPRINTK_FLAGS_ENABLED)
 #else
 #define DYNAMIC_DEBUG_BRANCH(descriptor) \
-	unlikely(descriptor.flags & _DPRINTK_FLAGS_PRINT)
+	unlikely(descriptor.flags & _DPRINTK_FLAGS_ENABLED)
 #endif
 
 #endif /* CONFIG_JUMP_LABEL */
+
+void ddebug_increment_call_count(void);
+#define DYNAMIC_DEBUG_COUNT(descriptor) {			\
+	if (unlikely(descriptor.flags & _DPRINTK_FLAGS_COUNT))	\
+		ddebug_increment_call_count();			\
+	}
 
 /*
  * Factory macros: ($prefix)dynamic_func_call($suffix)
@@ -422,11 +432,15 @@ void __dynamic_ibdev_dbg(struct _ddebug *descriptor,
  * (|_cls):	adds in _DPRINT_CLASS_DFLT as needed
  * (|_no_desc):	former gets callsite descriptor as 1st arg (for prdbgs)
  */
+
 #define __dynamic_func_call_cls(id, cls, fmt, func, ...) do {	\
 	DEFINE_DYNAMIC_DEBUG_METADATA_CLS(id, cls, fmt);	\
 	if (DYNAMIC_DEBUG_BRANCH(id)) {				\
-		func(&id, ##__VA_ARGS__);			\
-		__dynamic_dump_stack(id);			\
+		DYNAMIC_DEBUG_COUNT(id);			\
+		if (id.flags & _DPRINTK_FLAGS_ACTIVE) {		\
+			func(&id, ##__VA_ARGS__);		\
+			__dynamic_dump_stack(id);		\
+		}						\
 	}							\
 } while (0)
 #define __dynamic_func_call(id, fmt, func, ...)				\
@@ -436,8 +450,11 @@ void __dynamic_ibdev_dbg(struct _ddebug *descriptor,
 #define __dynamic_func_call_cls_no_desc(id, cls, fmt, func, ...) do {	\
 	DEFINE_DYNAMIC_DEBUG_METADATA_CLS(id, cls, fmt);		\
 	if (DYNAMIC_DEBUG_BRANCH(id)) {					\
-		func(__VA_ARGS__);					\
-		__dynamic_dump_stack(id);				\
+		DYNAMIC_DEBUG_COUNT(id);				\
+		if (id.flags & _DPRINTK_FLAGS_ACTIVE) {			\
+			func(__VA_ARGS__);				\
+			__dynamic_dump_stack(id);			\
+		}							\
 	}								\
 } while (0)
 #define __dynamic_func_call_no_desc(id, fmt, func, ...)			\
