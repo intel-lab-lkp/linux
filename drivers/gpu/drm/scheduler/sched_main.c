@@ -1203,6 +1203,10 @@ static void drm_sched_cancel_remaining_jobs(struct drm_gpu_scheduler *sched)
  * is implemented, all jobs will be canceled through it and afterwards cleaned
  * up through &struct drm_sched_backend_ops.free_job. If cancel_job is not
  * implemented, memory could leak.
+ *
+ * The scheduler fences timeline name is returned protected by the signaled
+ * status and RCU, so an RCU grace period is necessary between signaling the
+ * last scheduler fence and tearing down the scheduler who originated it.
  */
 void drm_sched_fini(struct drm_gpu_scheduler *sched)
 {
