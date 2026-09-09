@@ -162,8 +162,8 @@ static int ndfc_chip_init(struct ndfc_controller *ndfc,
 		return -ENODEV;
 	nand_set_flash_node(chip, flash_np);
 
-	mtd->name = kasprintf(GFP_KERNEL, "%s.%pOFn", dev_name(&ndfc->ofdev->dev),
-			      flash_np);
+	mtd->name = devm_kasprintf(&ndfc->ofdev->dev, GFP_KERNEL, "%s.%pOFn",
+				   dev_name(&ndfc->ofdev->dev), flash_np);
 	if (!mtd->name) {
 		ret = -ENOMEM;
 		goto err;
@@ -177,8 +177,6 @@ static int ndfc_chip_init(struct ndfc_controller *ndfc,
 
 err:
 	of_node_put(flash_np);
-	if (ret)
-		kfree(mtd->name);
 	return ret;
 }
 
@@ -246,7 +244,6 @@ static void ndfc_remove(struct platform_device *ofdev)
 	ret = mtd_device_unregister(mtd);
 	WARN_ON(ret);
 	nand_cleanup(chip);
-	kfree(mtd->name);
 }
 
 static const struct of_device_id ndfc_match[] = {
