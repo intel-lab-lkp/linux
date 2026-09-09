@@ -18,7 +18,7 @@
 #include "notify.h"
 
 /* Updated only after ALL the mandatory features for that version are merged */
-#define SCMI_PROTOCOL_SUPPORTED_VERSION		0x20000
+#define SCMI_PROTOCOL_SUPPORTED_VERSION		0x30000
 
 #define CPL0	0
 
@@ -156,7 +156,8 @@ struct scmi_powercap_cap_changed_notify_payld {
 	__le32 agent_id;
 	__le32 domain_id;
 	__le32 power_cap;
-	__le32 pai;
+	__le32 avg_ivl;
+	__le32 cpli;
 };
 
 struct scmi_powercap_meas_changed_notify_payld {
@@ -319,6 +320,7 @@ iter_powercap_cpls_process_response(const struct scmi_protocol_handle *ph,
 	const struct scmi_msg_resp_powercap_cpc *r = response;
 	struct scmi_cpls_priv *p = priv;
 	struct scmi_powercap_cpl_info *cpl;
+	int ret;
 
 	cpl = &p->cpli[st->desc_index + st->loop_idx];
 
@@ -328,16 +330,27 @@ iter_powercap_cpls_process_response(const struct scmi_protocol_handle *ph,
 	cpl->min_power_cap = le32_to_cpu(r->desc[st->loop_idx].min_power_cap);
 	cpl->max_power_cap = le32_to_cpu(r->desc[st->loop_idx].max_power_cap);
 	cpl->power_cap_step = le32_to_cpu(r->desc[st->loop_idx].power_cap_step);
-	if (!cpl->power_cap_step && cpl->min_power_cap != cpl->max_power_cap)
-		return -EINVAL;
+
+	ret = scmi_powercap_validate(cpl->min_power_cap,
+				     cpl->max_power_cap,
+				     cpl->power_cap_step,
+				     cpl->cap_config);
+
+	if (ret)
+		return ret;
 
 	cpl->min_avg_ivl = le32_to_cpu(r->desc[st->loop_idx].min_cai);
 	cpl->max_avg_ivl = le32_to_cpu(r->desc[st->loop_idx].max_cai);
 	cpl->avg_ivl_step = le32_to_cpu(r->desc[st->loop_idx].cai_step);
-	if (!cpl->avg_ivl_step && cpl->min_avg_ivl != cpl->max_avg_ivl)
-		return -EINVAL;
-
 	cpl->avg_ivl_config = cpl->min_avg_ivl != cpl->max_avg_ivl;
+
+	ret = scmi_powercap_validate(cpl->min_avg_ivl,
+				     cpl->max_avg_ivl,
+				     cpl->avg_ivl_step,
+				     cpl->avg_ivl_config);
+
+	if (ret)
+		return ret;
 
 	strscpy(cpl->name, r->desc[st->loop_idx].name, SCMI_SHORT_NAME_MAX_SIZE);
 
@@ -1349,14 +1362,20 @@ scmi_powercap_fill_custom_report(const struct scmi_protocol_handle *ph,
 		const struct scmi_powercap_cap_changed_notify_payld *p = payld;
 		struct scmi_powercap_cap_changed_report *r = report;
 
-		if (sizeof(*p) != payld_sz)
+		if (payld_sz < offsetofend(struct scmi_powercap_cap_changed_notify_payld,
+		    avg_ivl))
 			break;
 
 		r->timestamp = timestamp;
 		r->agent_id = le32_to_cpu(p->agent_id);
 		r->domain_id = le32_to_cpu(p->domain_id);
 		r->power_cap = le32_to_cpu(p->power_cap);
-		r->pai = le32_to_cpu(p->pai);
+		r->avg_ivl = le32_to_cpu(p->avg_ivl);
+		if (payld_sz >= offsetofend(struct scmi_powercap_cap_changed_notify_payld,
+		    cpli))
+			r->cpli = le32_to_cpu(p->cpli);
+		else
+			r->cpli = 0;
 		*src_id = r->domain_id;
 		rep = r;
 		break;
