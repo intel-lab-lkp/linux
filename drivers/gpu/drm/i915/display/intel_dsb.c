@@ -1025,6 +1025,14 @@ void intel_dsb_wait(struct intel_dsb *dsb)
 			  dsb_error_int_status(display) | DSB_PROG_INT_STATUS);
 }
 
+bool intel_dsb_supported(struct intel_display *display)
+{
+	if (!display->params.enable_dsb)
+		return false;
+
+	return HAS_DSB(display);
+}
+
 /**
  * intel_dsb_prepare() - Allocate, pin and map the DSB command buffer.
  * @state: the atomic state
@@ -1049,10 +1057,7 @@ struct intel_dsb *intel_dsb_prepare(struct intel_atomic_state *state,
 	struct intel_dsb *dsb;
 	unsigned int size;
 
-	if (!HAS_DSB(display))
-		return NULL;
-
-	if (!display->params.enable_dsb)
+	if (!intel_dsb_supported(display))
 		return NULL;
 
 	dsb = kzalloc_obj(*dsb);
