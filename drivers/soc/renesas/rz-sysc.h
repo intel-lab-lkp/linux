@@ -13,6 +13,18 @@
 #include <linux/types.h>
 
 /**
+ * struct rz_aof_unit - RZ AOF unit description
+ * @base: MMIO base of the master IP (low 32 bits; all < 4G)
+ * @index: index of SYS_AOFn (0-based)
+ * @addr_bits: address width of the master IP (35 or 36 bits)
+ */
+struct rz_aof_unit {
+	u32 base;
+	u8 index;
+	u8 addr_bits;
+};
+
+/**
  * struct rz_syc_soc_id_init_data - RZ SYSC SoC identification initialization data
  * @family: RZ SoC family
  * @id: RZ SoC expected ID
@@ -21,6 +33,10 @@
  * @specific_id_mask: SYSC SoC ID specific ID mask
  * @print_id: print SoC-specific extended device identification
  * @pwrrdy_pwrseq: has pwrrdy register controlled through power sequencer
+ * @aof_units: array of AOF units for this SoC, or NULL if it has none
+ * @num_aof_units: number of entries in @aof_units
+ * @aof_base: offset of SYS_AOF0 from the SYSC base; ignored if @aof_units is NULL
+ *            (this offset is SoC-specific, unlike the fixed inter-register stride)
  */
 struct rz_sysc_soc_id_init_data {
 	const char * const family;
@@ -31,7 +47,13 @@ struct rz_sysc_soc_id_init_data {
 	void (*print_id)(struct device *dev, void __iomem *sysc_base,
 			 struct soc_device_attribute *soc_dev_attr);
 	bool pwrrdy_pwrseq;
+	const struct rz_aof_unit *aof_units;
+	unsigned int num_aof_units;
+	u32 aof_base;
 };
+
+#define SYS_AOF_STRIDE			0x0004
+#define SYS_AOF_OFFSET(aof_base, n)	((aof_base) + ((n) * SYS_AOF_STRIDE))
 
 /**
  * struct rz_sysc_init_data - RZ SYSC initialization data

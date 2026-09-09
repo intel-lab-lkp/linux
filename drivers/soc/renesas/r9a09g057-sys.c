@@ -82,6 +82,12 @@ static void rzv2h_sys_print_id(struct device *dev,
 		dev_warn(dev, "CA55 PLL is not set to 1.7GHz\n");
 }
 
+static const struct rz_aof_unit rzv2h_aof_units[] = {
+	{ .base = 0x15c00000, .index = 16, .addr_bits = 35 }, /* SDHI0 -> SYS_AOF16 */
+	{ .base = 0x15c10000, .index = 17, .addr_bits = 35 }, /* SDHI1 -> SYS_AOF17 */
+	{ .base = 0x15c20000, .index = 18, .addr_bits = 35 }, /* SDHI2 -> SYS_AOF18 */
+};
+
 static const struct rz_sysc_soc_id_init_data rzv2h_sys_soc_id_init_data __initconst = {
 	.family = "RZ/V2H",
 	.id = 0x847a447,
@@ -89,6 +95,9 @@ static const struct rz_sysc_soc_id_init_data rzv2h_sys_soc_id_init_data __initco
 	.revision_mask = GENMASK(31, 28),
 	.specific_id_mask = GENMASK(27, 0),
 	.print_id = rzv2h_sys_print_id,
+	.aof_units = rzv2h_aof_units,
+	.num_aof_units = ARRAY_SIZE(rzv2h_aof_units),
+	.aof_base = 0x0500,
 };
 
 static bool rzv2h_regmap_readable_writeable_reg(unsigned int reg)
