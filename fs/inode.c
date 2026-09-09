@@ -69,6 +69,15 @@ const struct address_space_operations empty_aops = {
 };
 EXPORT_SYMBOL(empty_aops);
 
+struct inode_iter {
+	struct list_head	iters_node;	/* sb->s_inodes_iters */
+	struct list_head	*next;		/* next node going to iterate */
+	unsigned int flags;
+	inode_iter_cb func;
+	void *data;
+	int ret;
+};
+
 static DEFINE_PER_CPU(unsigned long, nr_inodes);
 static DEFINE_PER_CPU(unsigned long, nr_unused);
 
@@ -641,12 +650,96 @@ void inode_sb_list_add(struct inode *inode)
 }
 EXPORT_SYMBOL_GPL(inode_sb_list_add);
 
+static void inode_sb_iter_start(struct super_block *sb, struct inode_iter *it,
+				unsigned int flags, inode_iter_cb fn, void *data)
+{
+	it->flags = flags;
+	it->func = fn;
+	it->data = data;
+	it->ret = 0;
+	spin_lock(&sb->s_inode_list_lock);
+	it->next = sb->s_inodes.next;
+	list_add(&it->iters_node, &sb->s_inodes_iters);
+}
+
+static void inode_sb_iter_end(struct inode_iter *it, struct super_block *sb)
+{
+	list_del(&it->iters_node);
+	spin_unlock(&sb->s_inode_list_lock);
+}
+
+static bool inode_sb_iter_next(struct inode_iter *it, struct super_block *sb)
+{
+	struct inode *inode = NULL;
+	int ret;
+
+	while (!inode && it->next != &sb->s_inodes) {
+		inode = list_entry(it->next, struct inode, i_sb_list);
+		if (it->flags & INODE_ITER_UNUSED) {
+			if (icount_read_once(inode)) {
+				it->next = it->next->next;
+				continue;
+			}
+
+			spin_lock(&inode->i_lock);
+			if (icount_read(inode)) {
+				spin_unlock(&inode->i_lock);
+				it->next = it->next->next;
+				continue;
+			}
+		} else {
+			spin_lock(&inode->i_lock);
+		}
+
+		if ((it->flags & INODE_ITER_NORMAL) &&
+		    (inode_state_read(inode) & (I_NEW | I_FREEING | I_WILL_FREE))) {
+			spin_unlock(&inode->i_lock);
+			it->next = it->next->next;
+			continue;
+		}
+
+		it->next = it->next->next;
+		ret = it->func(inode, it->data);
+		if (ret) {
+			it->ret = ret;
+			return false;
+		}
+
+		if (need_resched()) {
+			spin_unlock(&sb->s_inode_list_lock);
+			cond_resched();
+			spin_lock(&sb->s_inode_list_lock);
+		}
+	}
+
+	return it->next == &sb->s_inodes ? false : true;
+}
+
+int sb_for_each_inodes(struct super_block *sb, unsigned int flags,
+		       inode_iter_cb fn, void *data)
+{
+	struct inode_iter it;
+
+	inode_sb_iter_start(sb, &it, flags, fn, data);
+	while (inode_sb_iter_next(&it, sb))
+		;
+	inode_sb_iter_end(&it, sb);
+
+	return it.ret;
+}
+EXPORT_SYMBOL(sb_for_each_inodes);
+
 static inline void inode_sb_list_del(struct inode *inode)
 {
 	struct super_block *sb = inode->i_sb;
+	struct inode_iter *it;
 
 	if (!list_empty(&inode->i_sb_list)) {
 		spin_lock(&sb->s_inode_list_lock);
+		list_for_each_entry(it, &sb->s_inodes_iters, iters_node) {
+			if (it->next == &inode->i_sb_list)
+				it->next = inode->i_sb_list.next;
+		}
 		list_del_init(&inode->i_sb_list);
 		spin_unlock(&sb->s_inode_list_lock);
 	}

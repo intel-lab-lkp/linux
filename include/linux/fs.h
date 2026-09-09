@@ -870,6 +870,21 @@ struct inode {
 	void			*i_private; /* fs or device private pointer */
 } __randomize_layout;
 
+enum inode_iter_flags_enum {
+	INODE_ITER_NORMAL = (1U << 1),  /* Exclude inodes with (I_NEW | I_FREEING | I_WILL_FREE). */
+	INODE_ITER_UNUSED = (1U << 2),  /* Only return inodes with (i_count == 0). */
+};
+
+/*
+ *                             start          end
+ *  inode->i_lock              locked         unlocked
+ *  sb->s_inode_list_lock      locked         locked
+ */
+typedef int (*inode_iter_cb) (struct inode *, void *);
+
+int sb_for_each_inodes(struct super_block *sb, unsigned int flags,
+		       inode_iter_cb fn, void *data);
+
 /*
  * i_state handling
  *
