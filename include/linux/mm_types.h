@@ -85,6 +85,8 @@ struct page {
 	 * WARNING: bit 0 of the first word is used for PageTail(). That
 	 * means the other users of this union MUST NOT use the bit to
 	 * avoid collision and false-positive PageTail().
+	 * Bit 1 of the first word is used by page_is_pfmemalloc().
+	 * Bit 1 of the first word (lru_next) is also used by folio_add_lru().
 	 */
 	union {
 		struct {	/* Page cache and anonymous pages */
@@ -410,10 +412,8 @@ struct folio {
 			union {
 				struct list_head lru;
 	/* private: avoid cluttering the output */
-				/* For the Unevictable "LRU list" slot */
 				struct {
-					/* Avoid compound_info */
-					void *__filler;
+					unsigned long lru_next;
 	/* public: */
 					unsigned int mlock_count;
 	/* private: */

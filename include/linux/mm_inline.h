@@ -343,6 +343,29 @@ static inline void folio_migrate_refs(struct folio *new, const struct folio *old
 }
 #endif /* CONFIG_LRU_GEN */
 
+enum {
+	LRU_NEXT_NEVER_TAIL = 0,	/* Used by a tail's compound_head */
+	LRU_NEXT_BATCHED = 1,		/* Not used by any aligned pointer */
+	NR_LRU_NEXT_FLAGS
+};
+
+static __always_inline
+bool lru_add_del_folio(struct folio *folio)
+{
+	unsigned long lru_next = READ_ONCE(folio->lru_next);
+
+	/* BUG_ON(folio_test_lru(folio) && folio_ref_count(folio)); */
+	if (!(lru_next & BIT(LRU_NEXT_BATCHED)))
+		return false;
+
+	WRITE_ONCE(folio->lru.next, LIST_POISON1);
+	/* BUG_ON(folio->lru_next & BIT(LRU_NEXT_BATCHED)); */
+
+	/* Ensure folio->lru_next visible when folio_set_lru() called later */
+	smp_mb__before_atomic();
+	return true;
+}
+
 static __always_inline
 void lruvec_add_folio(struct lruvec *lruvec, struct folio *folio)
 {
@@ -383,6 +406,8 @@ void lruvec_del_folio(struct lruvec *lruvec, struct folio *folio)
 	VM_WARN_ON_ONCE_FOLIO(!folio_matches_lruvec(folio, lruvec), folio);
 
 	if (lru_gen_del_folio(lruvec, folio, false))
+		return;
+	if (lru_add_del_folio(folio))
 		return;
 
 	if (lru != LRU_UNEVICTABLE)
