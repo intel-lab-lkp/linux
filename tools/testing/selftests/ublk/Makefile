@@ -7,7 +7,9 @@ endif
 
 LDLIBS += -lpthread -lm -luring
 
-TEST_PROGS := test_generic_02.sh
+TEST_PROGS := test_cli_01.sh
+
+TEST_PROGS += test_generic_02.sh
 TEST_PROGS += test_generic_03.sh
 TEST_PROGS += test_generic_06.sh
 TEST_PROGS += test_generic_07.sh

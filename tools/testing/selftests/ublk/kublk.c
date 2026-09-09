@@ -2525,6 +2525,11 @@ int main(int argc, char *argv[])
 	while (i < argc && ctx.nr_files < MAX_BACK_FILES) {
 		ctx.files[ctx.nr_files++] = argv[i++];
 	}
+	if (i < argc) {
+		fprintf(stderr, "too many backing files (maximum is %d)\n",
+			MAX_BACK_FILES);
+		return -EINVAL;
+	}
 
 	ops = ublk_find_tgt(ctx.tgt_type);
 	if (ops && ops->parse_cmd_line) {
