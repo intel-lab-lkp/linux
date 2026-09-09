@@ -210,7 +210,7 @@ static struct ip6_tnl *vti6_tnl_create(struct net *net, struct __ip6_tnl_parm *p
 			goto failed;
 		strscpy(name, p->name, IFNAMSIZ);
 	} else {
-		sprintf(name, "ip6_vti%%d");
+		strscpy(name, "ip6_vti%d", IFNAMSIZ);
 	}
 
 	dev = alloc_netdev(sizeof(*t), name, NET_NAME_UNKNOWN, vti6_dev_setup);

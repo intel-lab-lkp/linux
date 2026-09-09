@@ -692,7 +692,7 @@ static struct net_device *ip6mr_reg_vif(struct net *net, struct mr_table *mrt)
 	char name[IFNAMSIZ];
 
 	if (mrt->id == RT6_TABLE_DFLT)
-		sprintf(name, "pim6reg");
+		strscpy(name, "pim6reg", IFNAMSIZ);
 	else
 		sprintf(name, "pim6reg%u", mrt->id);
 
