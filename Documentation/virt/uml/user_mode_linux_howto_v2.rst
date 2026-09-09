@@ -580,7 +580,7 @@ https://github.com/virtualsquare/sshlirp
    ``vec0:transport=vde,vnl=vxvde://234.0.0.1``
 
 connect to a local area cloud (all the UML nodes using the same
-multicast address running on hosts in the same multicast domain (LAN)
+multicast address) running on hosts in the same multicast domain (LAN)
 will be automagically connected together to a virtual LAN.
 
 ***********
