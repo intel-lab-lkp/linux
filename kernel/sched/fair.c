@@ -15086,13 +15086,15 @@ static void task_tick_fair(struct rq *rq, int queued)
 		return;
 
 	/* Update state owned by the execution context. */
-	if (curr->sched_class == &fair_sched_class &&
-	    static_branch_unlikely(&sched_numa_balancing))
-		task_tick_numa(rq, curr);
+	if (curr->sched_class == &fair_sched_class) {
+		if (static_branch_unlikely(&sched_numa_balancing))
+			task_tick_numa(rq, curr);
 
+		task_tick_cache(rq, curr);
+	}
+
+	/* Update state owned by the scheduling context. */
 	if (donor->sched_class == &fair_sched_class) {
-		task_tick_cache(rq, donor);
-
 		update_misfit_status(donor, rq);
 		check_update_overutilized_status(task_rq(donor));
 
