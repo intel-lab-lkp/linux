@@ -1576,7 +1576,7 @@ static void amd_iommu_flush_tlb_all(struct amd_iommu *iommu)
 	iommu_completion_wait(iommu);
 }
 
-static void amd_iommu_flush_tlb_domid(struct amd_iommu *iommu, u32 dom_id)
+void amd_iommu_flush_tlb_domid(struct amd_iommu *iommu, u32 dom_id)
 {
 	struct iommu_cmd cmd;
 

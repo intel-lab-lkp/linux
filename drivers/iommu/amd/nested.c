@@ -265,6 +265,8 @@ static void nested_domain_free(struct iommu_domain *dom)
 	struct guest_domain_mapping_info *curr;
 	struct nested_domain *ndom __free(kfree) = to_ndomain(dom);
 	struct amd_iommu_viommu *aviommu = ndom->viommu;
+	struct amd_iommu *iommu = container_of(aviommu->core.iommu_dev,
+					       struct amd_iommu, iommu);
 
 	xa_lock_irqsave(&aviommu->gdomid_array, irqflags);
 
@@ -287,6 +289,13 @@ static void nested_domain_free(struct iommu_domain *dom)
 	/* success */
 	pr_debug("%s: Free gdom_id=%#x, hdom_id=%#x\n",
 		__func__, ndom->gdom_id, curr->hdom_id);
+
+	/*
+	 * Flush any TLB entries still tagged with this hdom_id before
+	 * returning it to the global pool, so that a future owner of the
+	 * ID can not hit stale stage-2 translations.
+	 */
+	amd_iommu_flush_tlb_domid(iommu, curr->hdom_id);
 
 	amd_iommu_pdom_id_free(ndom->gdom_info->hdom_id);
 	kfree(curr);
