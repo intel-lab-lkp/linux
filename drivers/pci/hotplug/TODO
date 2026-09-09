@@ -1,9 +1,5 @@
 Contributions are solicited in particular to remedy the following issues:
 
-cpcihp:
-
-* Returned code from pci_hp_add_bridge() is not checked.
-
 cpqphp:
 
 * The driver spawns a kthread cpqhp_event_thread() which is woken by the
