@@ -437,7 +437,7 @@ static int ext4_destroy_inline_data_nolock(handle_t *handle,
 {
 	struct ext4_inode_info *ei = EXT4_I(inode);
 	struct ext4_xattr_ibody_find is = {
-		.s = { .not_found = 0, },
+		.s = { .not_found = -ENODATA, },
 	};
 	struct ext4_xattr_info i = {
 		.name_index = EXT4_XATTR_INDEX_SYSTEM,
