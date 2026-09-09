@@ -590,6 +590,9 @@ struct sched_entity {
 	u64				sum_exec_runtime;
 	u64				prev_sum_exec_runtime;
 	u64				vruntime;
+#ifdef CONFIG_SCHED_CORE
+	u64				core_sched_start;
+#endif
 	/* Approximated virtual lag: */
 	s64				vlag;
 	/* 'Protected' deadline, to give out minimum quantums: */

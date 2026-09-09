@@ -6502,6 +6502,10 @@ set_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
 	}
 
 	se->prev_sum_exec_runtime = se->sum_exec_runtime;
+#ifdef CONFIG_SCHED_CORE
+	if (entity_is_task(se))
+		se->core_sched_start = se->exec_start;
+#endif
 }
 
 static bool __dequeue_task(struct rq *rq, struct task_struct *p, int flags);
@@ -14788,14 +14792,13 @@ static void rq_offline_fair(struct rq *rq)
 static inline bool
 __entity_slice_used(struct sched_entity *se, int min_nr_tasks)
 {
-	u64 rtime = se->sum_exec_runtime - se->prev_sum_exec_runtime;
-	u64 slice = se->slice;
+	u64 rtime = se->exec_start - se->core_sched_start;
 
-	return (rtime * min_nr_tasks > slice);
+	return (rtime * min_nr_tasks > se->slice);
 }
 
 #define MIN_NR_TASKS_DURING_FORCEIDLE	2
-static inline void task_tick_core(struct rq *rq, struct task_struct *curr)
+static inline void task_tick_core(struct rq *rq, struct task_struct *donor)
 {
 	if (!sched_core_enabled(rq))
 		return;
@@ -14815,7 +14818,7 @@ static inline void task_tick_core(struct rq *rq, struct task_struct *curr)
 	 * if we need to give up the CPU.
 	 */
 	if (rq->core->core_forceidle_count && rq->cfs.h_nr_queued == 1 &&
-	    __entity_slice_used(&curr->se, MIN_NR_TASKS_DURING_FORCEIDLE))
+	    __entity_slice_used(&donor->se, MIN_NR_TASKS_DURING_FORCEIDLE))
 		resched_curr(rq);
 }
 
@@ -15049,7 +15052,7 @@ static int task_is_throttled_fair(struct task_struct *p, int cpu)
 	return throttled_hierarchy(cfs_rq);
 }
 #else /* !CONFIG_SCHED_CORE: */
-static inline void task_tick_core(struct rq *rq, struct task_struct *curr) {}
+static inline void task_tick_core(struct rq *rq, struct task_struct *donor) {}
 #endif /* !CONFIG_SCHED_CORE */
 
 /*
