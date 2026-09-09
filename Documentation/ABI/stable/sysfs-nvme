@@ -451,3 +451,15 @@ Contact:	Hannes Reinecke <hare@suse.de>
 Description:
 		Shows the subsystem type. Possible values: "discovery",
 		"nvm", "reserved".
+
+What:		/sys/class/nvme/nvmeX/tcp_queues/<qid>/io_cpu
+Date:		September 2026
+KernelVersion:	7.4
+Contact:	Saravanan D <saravanand@crusoe.ai>
+Description:
+		(RW) The CPU that runs the socket work for I/O queue <qid>
+		of an NVMe over TCP controller, selected by the driver at
+		connect time. Writing a CPU number overrides the selection
+		and persists across reconnects. Writing -1 reverts to the
+		driver's selection. Reads show the current CPU, or -1 when
+		the queue is unbound.

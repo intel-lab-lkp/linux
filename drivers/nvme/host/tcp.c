@@ -93,6 +93,7 @@ enum nvme_tcp_queue_flags {
 	NVME_TCP_Q_LIVE		= 1,
 	NVME_TCP_Q_POLLING	= 2,
 	NVME_TCP_Q_IO_CPU_SET	= 3,
+	NVME_TCP_Q_IO_CPU_USER	= 4,
 };
 
 enum nvme_tcp_recv_state {
@@ -102,6 +103,17 @@ enum nvme_tcp_recv_state {
 };
 
 struct nvme_tcp_ctrl;
+struct nvme_tcp_queue;
+
+/*
+ * Allocated per registration and freed by its kobject release, so a
+ * reconnect never reuses a kobject whose release is still pending.
+ */
+struct nvme_tcp_queue_kobj {
+	struct kobject		kobj;
+	struct nvme_tcp_queue	*queue;
+};
+
 struct nvme_tcp_queue {
 	struct socket		*sock;
 	struct work_struct	io_work;
@@ -141,6 +153,8 @@ struct nvme_tcp_queue {
 	int                     tls_err;
 	struct page_frag_cache	pf_cache;
 
+	struct nvme_tcp_queue_kobj *qkobj;
+
 	void (*state_change)(struct sock *);
 	void (*data_ready)(struct sock *);
 	void (*write_space)(struct sock *);
@@ -171,7 +185,10 @@ struct nvme_tcp_ctrl {
 	struct delayed_work	connect_work;
 	struct nvme_tcp_request async_req;
 	u32			io_queues[HCTX_MAX_TYPES];
+	struct kobject		*queues_kobj;
 };
+
+static void nvme_tcp_unregister_queue_sysfs(struct nvme_tcp_queue *queue);
 
 static struct workqueue_struct *nvme_tcp_wq;
 static const struct blk_mq_ops nvme_tcp_mq_ops;
@@ -1497,6 +1514,8 @@ static void nvme_tcp_free_queue(struct nvme_ctrl *nctrl, int qid)
 	if (!test_and_clear_bit(NVME_TCP_Q_ALLOCATED, &queue->flags))
 		return;
 
+	nvme_tcp_unregister_queue_sysfs(queue);
+
 	page_frag_cache_drain(&queue->pf_cache);
 
 	/**
@@ -1716,8 +1735,18 @@ static void nvme_tcp_set_queue_io_cpu(struct nvme_tcp_queue *queue)
 	unsigned int *mq_map = NULL;
 	int cpu, min_queues = INT_MAX, io_cpu;
 
+	lockdep_assert_held(&queue->queue_lock);
+
 	if (wq_unbound)
 		goto out;
+
+	/* A user assigned io_cpu is kept across reconnects */
+	if (test_bit(NVME_TCP_Q_IO_CPU_USER, &queue->flags) &&
+	    queue->io_cpu != WORK_CPU_UNBOUND) {
+		if (!test_and_set_bit(NVME_TCP_Q_IO_CPU_SET, &queue->flags))
+			atomic_inc(&nvme_tcp_cpu_queues[queue->io_cpu]);
+		goto out;
+	}
 
 	if (nvme_tcp_default_queue(queue))
 		mq_map = set->map[HCTX_TYPE_DEFAULT].mq_map;
@@ -1836,6 +1865,118 @@ static int nvme_tcp_start_tls(struct nvme_ctrl *nctrl,
 	return ret;
 }
 
+static struct nvme_tcp_queue *nvme_tcp_kobj_to_queue(struct kobject *kobj)
+{
+	return container_of(kobj, struct nvme_tcp_queue_kobj, kobj)->queue;
+}
+
+static ssize_t io_cpu_show(struct kobject *kobj, struct kobj_attribute *attr,
+			   char *buf)
+{
+	struct nvme_tcp_queue *queue = nvme_tcp_kobj_to_queue(kobj);
+	int io_cpu = READ_ONCE(queue->io_cpu);
+
+	return sysfs_emit(buf, "%d\n",
+			  io_cpu == WORK_CPU_UNBOUND ? -1 : io_cpu);
+}
+
+static ssize_t io_cpu_store(struct kobject *kobj, struct kobj_attribute *attr,
+			    const char *buf, size_t count)
+{
+	struct nvme_tcp_queue *queue = nvme_tcp_kobj_to_queue(kobj);
+	int cpu, old;
+	int ret;
+
+	ret = kstrtoint(buf, 0, &cpu);
+	if (ret)
+		return ret;
+	if (cpu != -1 &&
+	    ((unsigned int)cpu >= nr_cpu_ids || !cpu_online(cpu)))
+		return -EINVAL;
+
+	mutex_lock(&queue->queue_lock);
+	if (!test_bit(NVME_TCP_Q_ALLOCATED, &queue->flags)) {
+		mutex_unlock(&queue->queue_lock);
+		return -ENODEV;
+	}
+	if (cpu == -1) {
+		if (test_and_clear_bit(NVME_TCP_Q_IO_CPU_USER, &queue->flags)) {
+			if (test_and_clear_bit(NVME_TCP_Q_IO_CPU_SET,
+					       &queue->flags))
+				atomic_dec(&nvme_tcp_cpu_queues[queue->io_cpu]);
+			WRITE_ONCE(queue->io_cpu, WORK_CPU_UNBOUND);
+			/* a queue that is not live gets its pick at start */
+			if (test_bit(NVME_TCP_Q_LIVE, &queue->flags))
+				nvme_tcp_set_queue_io_cpu(queue);
+		}
+	} else {
+		old = xchg(&queue->io_cpu, cpu);
+		set_bit(NVME_TCP_Q_IO_CPU_USER, &queue->flags);
+		if (test_bit(NVME_TCP_Q_IO_CPU_SET, &queue->flags)) {
+			atomic_dec(&nvme_tcp_cpu_queues[old]);
+			atomic_inc(&nvme_tcp_cpu_queues[cpu]);
+		}
+	}
+	mutex_unlock(&queue->queue_lock);
+
+	return count;
+}
+
+static struct kobj_attribute nvme_tcp_io_cpu_attr =
+	__ATTR(io_cpu, 0644, io_cpu_show, io_cpu_store);
+
+static struct attribute *nvme_tcp_queue_attrs[] = {
+	&nvme_tcp_io_cpu_attr.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(nvme_tcp_queue);
+
+static void nvme_tcp_queue_kobj_release(struct kobject *kobj)
+{
+	kfree(container_of(kobj, struct nvme_tcp_queue_kobj, kobj));
+}
+
+static const struct kobj_type nvme_tcp_queue_ktype = {
+	.sysfs_ops	= &kobj_sysfs_ops,
+	.release	= nvme_tcp_queue_kobj_release,
+	.default_groups	= nvme_tcp_queue_groups,
+};
+
+static void nvme_tcp_register_queue_sysfs(struct nvme_tcp_queue *queue)
+{
+	struct nvme_tcp_ctrl *ctrl = queue->ctrl;
+	struct nvme_tcp_queue_kobj *qkobj;
+
+	if (!ctrl->queues_kobj)
+		ctrl->queues_kobj = kobject_create_and_add("tcp_queues",
+							   &ctrl->ctrl.device->kobj);
+	if (!ctrl->queues_kobj)
+		return;
+
+	qkobj = kzalloc_obj(*qkobj);
+	if (!qkobj)
+		return;
+
+	qkobj->queue = queue;
+	if (kobject_init_and_add(&qkobj->kobj, &nvme_tcp_queue_ktype,
+				 ctrl->queues_kobj, "%d",
+				 nvme_tcp_queue_id(queue))) {
+		kobject_put(&qkobj->kobj);
+		return;
+	}
+	queue->qkobj = qkobj;
+}
+
+static void nvme_tcp_unregister_queue_sysfs(struct nvme_tcp_queue *queue)
+{
+	struct nvme_tcp_queue_kobj *qkobj = queue->qkobj;
+
+	if (!qkobj)
+		return;
+	queue->qkobj = NULL;
+	kobject_put(&qkobj->kobj);
+}
+
 static int nvme_tcp_alloc_queue(struct nvme_ctrl *nctrl, int qid,
 				key_serial_t pskid)
 {
@@ -1906,7 +2047,8 @@ static int nvme_tcp_alloc_queue(struct nvme_ctrl *nctrl, int qid,
 
 	queue->sock->sk->sk_allocation = GFP_ATOMIC;
 	queue->sock->sk->sk_use_task_frag = false;
-	queue->io_cpu = WORK_CPU_UNBOUND;
+	if (!test_bit(NVME_TCP_Q_IO_CPU_USER, &queue->flags))
+		queue->io_cpu = WORK_CPU_UNBOUND;
 	queue->request = NULL;
 	queue->data_remaining = 0;
 	queue->ddgst_remaining = 0;
@@ -1974,6 +2116,9 @@ static int nvme_tcp_alloc_queue(struct nvme_ctrl *nctrl, int qid,
 
 	set_bit(NVME_TCP_Q_ALLOCATED, &queue->flags);
 
+	if (qid)
+		nvme_tcp_register_queue_sysfs(queue);
+
 	return 0;
 
 err_init_connect:
@@ -2022,10 +2167,9 @@ static void nvme_tcp_stop_queue_nowait(struct nvme_ctrl *nctrl, int qid)
 	if (!test_bit(NVME_TCP_Q_ALLOCATED, &queue->flags))
 		return;
 
+	mutex_lock(&queue->queue_lock);
 	if (test_and_clear_bit(NVME_TCP_Q_IO_CPU_SET, &queue->flags))
 		atomic_dec(&nvme_tcp_cpu_queues[queue->io_cpu]);
-
-	mutex_lock(&queue->queue_lock);
 	if (test_and_clear_bit(NVME_TCP_Q_LIVE, &queue->flags))
 		__nvme_tcp_stop_queue(queue);
 	/* Stopping the queue will disable TLS */
@@ -2085,7 +2229,9 @@ static int nvme_tcp_start_queue(struct nvme_ctrl *nctrl, int idx)
 	nvme_tcp_setup_sock_ops(queue);
 
 	if (idx) {
+		mutex_lock(&queue->queue_lock);
 		nvme_tcp_set_queue_io_cpu(queue);
+		mutex_unlock(&queue->queue_lock);
 		ret = nvmf_connect_io_queue(nctrl, idx);
 	} else
 		ret = nvmf_connect_admin_queue(nctrl);
@@ -2650,6 +2796,7 @@ static void nvme_tcp_free_ctrl(struct nvme_ctrl *nctrl)
 
 	nvmf_free_options(nctrl->opts);
 free_ctrl:
+	kobject_put(ctrl->queues_kobj);
 	kfree(ctrl->queues);
 	kfree(ctrl);
 }
