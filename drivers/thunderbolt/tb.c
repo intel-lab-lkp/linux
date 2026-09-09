@@ -2756,6 +2756,11 @@ static void tb_handle_dp_bandwidth_request(struct work_struct *work)
 		goto unlock;
 	}
 
+	if (ev->port > sw->config.max_port_number) {
+		tb_sw_warn(sw, "bandwidth request from non-existent port %u\n",
+			   ev->port);
+		goto put_sw;
+	}
 	in = &sw->ports[ev->port];
 	if (!tb_port_is_dpin(in)) {
 		tb_port_warn(in, "bandwidth request to non-DP IN adapter\n");
