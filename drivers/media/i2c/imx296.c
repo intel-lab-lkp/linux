@@ -870,6 +870,7 @@ static int imx296_subdev_init(struct imx296 *sensor)
 
 static void imx296_subdev_cleanup(struct imx296 *sensor)
 {
+	v4l2_subdev_cleanup(&sensor->subdev);
 	media_entity_cleanup(&sensor->subdev.entity);
 	v4l2_ctrl_handler_free(&sensor->ctrls);
 }
