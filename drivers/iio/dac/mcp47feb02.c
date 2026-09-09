@@ -978,8 +978,7 @@ static int mcp47feb02_parse_fw(struct iio_dev *indio_dev,
 
 		ret = fwnode_property_read_string(child, "label", &data->labels[reg]);
 		if (ret)
-			return dev_err_probe(dev, ret, "%pfw: invalid label\n",
-					     fwnode_get_name(child));
+			dev_err(dev, "%pfw: invalid label\n", child);
 
 		chanspec.address = reg;
 		chanspec.channel = reg;
