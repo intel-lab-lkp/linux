@@ -1396,6 +1396,7 @@ static void
 j1939_xtp_rx_eoma_one(struct j1939_session *session, struct sk_buff *skb)
 {
 	struct j1939_sk_buff_cb *skcb = j1939_skb_to_cb(skb);
+	unsigned int expected_total;
 	const u8 *dat;
 	int len;
 
@@ -1411,9 +1412,22 @@ j1939_xtp_rx_eoma_one(struct j1939_session *session, struct sk_buff *skb)
 
 	if (session->total_message_size != len) {
 		netdev_warn_once(session->priv->ndev,
-				 "%s: 0x%p: Incorrect size. Expected: %i; got: %i.\n",
+				 "%s: 0x%p: EOMA size mismatch, expected %u got %d\n",
 				 __func__, session, session->total_message_size,
 				 len);
+		if (!session->transmission)
+			goto out_session_cancel;
+	}
+
+	if (!session->transmission) {
+		expected_total = (session->total_message_size + 6) / 7;
+		if (session->pkt.rx < expected_total) {
+			netdev_warn_once(session->priv->ndev,
+					 "%s: 0x%p: EOMA but only %u/%u data packets rx'd\n",
+					 __func__, session,
+					 session->pkt.rx, expected_total);
+			goto out_session_cancel;
+		}
 	}
 
 	netdev_dbg(session->priv->ndev, "%s: 0x%p\n", __func__, session);
@@ -1422,6 +1436,16 @@ j1939_xtp_rx_eoma_one(struct j1939_session *session, struct sk_buff *skb)
 	j1939_session_timers_cancel(session);
 	/* transmitted without problems */
 	j1939_session_completed(session);
+	return;
+
+ out_session_cancel:
+	/* Don't touch timers if the session is already aborting;
+	 * cancelling the deactivation timer here would leak the session.
+	 */
+	if (session->state >= J1939_SESSION_WAITING_ABORT)
+		return;
+	j1939_session_timers_cancel(session);
+	j1939_session_cancel(session, J1939_XTP_ABORT_FAULT);
 }
 
 static void
