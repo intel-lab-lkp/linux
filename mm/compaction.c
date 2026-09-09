@@ -1113,7 +1113,7 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 		if (!folio_test_lru(folio))
 			goto isolate_fail_put;
 
-		is_unevictable = folio_test_unevictable(folio);
+		is_unevictable = !folio_evictable(folio);
 
 		/* Compaction might skip unevictable pages but CMA takes them */
 		if (!(mode & ISOLATE_UNEVICTABLE) && is_unevictable)
