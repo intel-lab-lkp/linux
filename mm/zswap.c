@@ -1487,6 +1487,9 @@ bool zswap_store(struct folio *folio)
 	VM_WARN_ON_ONCE(!folio_test_locked(folio));
 	VM_WARN_ON_ONCE(!folio_test_swapcache(folio));
 
+	if (zswap_never_enabled())
+		return false;
+
 	if (!zswap_enabled)
 		goto check_old;
 
@@ -1544,15 +1547,10 @@ check_old:
 	if (!ret) {
 		unsigned type = swp_type(swp);
 		pgoff_t offset = swp_offset(swp);
-		struct zswap_entry *entry;
-		struct xarray *tree;
 
-		for (index = 0; index < nr_pages; ++index) {
-			tree = swap_zswap_tree(swp_entry(type, offset + index));
-			entry = xa_erase(tree, offset + index);
-			if (entry)
-				zswap_entry_free(entry);
-		}
+		for (index = 0; index < nr_pages; ++index)
+			zswap_invalidate(swp_entry(type, offset + index));
+
 	}
 
 	return ret;
