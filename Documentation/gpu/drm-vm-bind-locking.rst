@@ -170,7 +170,7 @@ submission is therefore preceded with a re-validation section:
            validate_gem_bo(&gpu_vm_bo->gem_bo);
 
            // The following list iteration needs the Gem object's
-           // dma_resv to be held (it protects the gpu_vm_bo's list of
+           // dma_resv to be held. It protects the gpu_vm_bo's list of
            // gpu_vmas, but since local gem objects share the gpu_vm's
            // dma_resv, it is already held at this point.
            for_each_gpu_vma_of_gpu_vm_bo(&gpu_vm_bo, &gpu_vma)
