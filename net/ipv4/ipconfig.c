@@ -367,11 +367,11 @@ set_sockaddr(struct sockaddr_in *sin, __be32 addr, __be16 port)
 static int __init ic_setup_if(void)
 {
 	struct ifreq ir;
-	struct sockaddr_in *sin = (void *) &ir.ifr_ifru.ifru_addr;
+	struct sockaddr_in *sin = (void *) &ir.ifr_addr;
 	int err;
 
 	memset(&ir, 0, sizeof(ir));
-	strcpy(ir.ifr_ifrn.ifrn_name, ic_dev->dev->name);
+	strcpy(ir.ifr_name, ic_dev->dev->name);
 	set_sockaddr(sin, ic_myaddr, 0);
 	if ((err = devinet_ioctl(&init_net, SIOCSIFADDR, &ir)) < 0) {
 		pr_err("IP-Config: Unable to set interface address (%d)\n",
