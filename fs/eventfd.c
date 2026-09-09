@@ -102,6 +102,9 @@ static void eventfd_free(struct kref *kref)
  */
 void eventfd_ctx_put(struct eventfd_ctx *ctx)
 {
+	if (!ctx)
+		return;
+
 	kref_put(&ctx->kref, eventfd_free);
 }
 EXPORT_SYMBOL_GPL(eventfd_ctx_put);
