@@ -890,7 +890,8 @@ static ssize_t gb_camera_debugfs_capabilities(struct gb_camera *gcam,
 	for (i = 0; i < size; i += 16) {
 		unsigned int nbytes = min_t(unsigned int, size - i, 16);
 
-		buffer->length += sprintf(buffer->data + buffer->length,
+		buffer->length += scnprintf(buffer->data + buffer->length,
+				  PAGE_SIZE - buffer->length,
 					  "%*ph\n", nbytes, caps + i);
 	}
 
@@ -973,12 +974,13 @@ static ssize_t gb_camera_debugfs_configure_streams(struct gb_camera *gcam,
 	if (ret < 0)
 		goto done;
 
-	buffer->length = sprintf(buffer->data, "%u;%u;", nstreams, flags);
+	buffer->length = scnprintf(buffer->data, PAGE_SIZE, "%u;%u;", nstreams, flags);
 
 	for (i = 0; i < nstreams; ++i) {
 		struct gb_camera_stream_config *stream = &streams[i];
 
-		buffer->length += sprintf(buffer->data + buffer->length,
+		buffer->length += scnprintf(buffer->data + buffer->length,
+				  PAGE_SIZE - buffer->length,
 					  "%u;%u;%u;%u;%u;%u;%u;",
 					  stream->width, stream->height,
 					  stream->format, stream->vc,
@@ -1046,7 +1048,7 @@ static ssize_t gb_camera_debugfs_flush(struct gb_camera *gcam,
 	if (ret < 0)
 		return ret;
 
-	buffer->length = sprintf(buffer->data, "%u", req_id);
+	buffer->length = scnprintf(buffer->data, PAGE_SIZE, "%u", req_id);
 
 	return len;
 }
