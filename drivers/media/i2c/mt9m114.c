@@ -1482,6 +1482,7 @@ error:
 
 static void mt9m114_pa_cleanup(struct mt9m114 *sensor)
 {
+	v4l2_subdev_cleanup(&sensor->pa.sd);
 	v4l2_ctrl_handler_free(&sensor->pa.hdl);
 	media_entity_cleanup(&sensor->pa.sd.entity);
 }
@@ -2208,6 +2209,7 @@ error:
 
 static void mt9m114_ifp_cleanup(struct mt9m114 *sensor)
 {
+	v4l2_subdev_cleanup(&sensor->ifp.sd);
 	v4l2_ctrl_handler_free(&sensor->ifp.hdl);
 	media_entity_cleanup(&sensor->ifp.sd.entity);
 }
