@@ -52,6 +52,7 @@ static inline void jffs2_init_inode_info(struct jffs2_inode_info *f)
 {
 	f->highest_version = 0;
 	f->fragtree = RB_ROOT;
+	f->inocache = NULL;
 	f->metadata = NULL;
 	f->dents = NULL;
 	f->target = NULL;
