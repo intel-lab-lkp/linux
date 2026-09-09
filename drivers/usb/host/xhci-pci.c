@@ -684,10 +684,16 @@ int xhci_pci_common_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	dma_set_max_seg_size(&dev->dev, UINT_MAX);
 
 	if (dev->vendor == PCI_VENDOR_ID_TI &&
-	    dev->device == PCI_DEVICE_ID_TI_TUSB73X0)
+	    dev->device == PCI_DEVICE_ID_TI_TUSB73X0) {
+		u32 pwron_polarity = 0;
+
 		if (device_property_read_bool(&dev->dev, "ti,pwron-active-high"))
-			pci_clear_and_set_config_dword(dev, TUSB73X0_USB_CTRL, 0,
-						       TUSB73X0_PWRON_POLARITY);
+			pwron_polarity = TUSB73X0_PWRON_POLARITY;
+
+		pci_clear_and_set_config_dword(dev, TUSB73X0_USB_CTRL,
+					       TUSB73X0_PWRON_POLARITY,
+					       pwron_polarity);
+	}
 
 	return 0;
 
