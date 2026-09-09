@@ -85,6 +85,55 @@ static void cppc_ffh_csr_write(void *write_data)
 	data->ret.error = -EINVAL;
 }
 
+struct cppc_ffh_ctr {
+	struct sbi_cppc_data data;
+	u64 type;
+};
+
+struct cppc_ffh_fb_ctrs_data {
+	struct cppc_ffh_ctr first;
+	struct cppc_ffh_ctr second;
+};
+
+static void cppc_ffh_read_fb_ctrs(void *read_data)
+{
+	struct cppc_ffh_fb_ctrs_data *data = read_data;
+
+	if (data->first.type == FFH_CPPC_SBI)
+		sbi_cppc_read(&data->first.data);
+	else
+		cppc_ffh_csr_read(&data->first.data);
+
+	if (data->second.type == FFH_CPPC_SBI)
+		sbi_cppc_read(&data->second.data);
+	else
+		cppc_ffh_csr_read(&data->second.data);
+}
+
+static int cppc_ffh_ctr_errno(const struct cppc_ffh_ctr *ctr)
+{
+	if (!ctr->data.ret.error)
+		return 0;
+
+	return ctr->type == FFH_CPPC_SBI ?
+	       sbi_err_map_linux_errno(ctr->data.ret.error) :
+	       ctr->data.ret.error;
+}
+
+static int cppc_ffh_read_on_cpu(int cpu, smp_call_func_t func, void *data)
+{
+	if (irqs_disabled()) {
+		/* Remote reads require IPIs, which are unsafe with IRQs disabled. */
+		if (WARN_ON_ONCE(cpu != smp_processor_id()))
+			return -EPERM;
+
+		func(data);
+		return 0;
+	}
+
+	return smp_call_function_single(cpu, func, data, 1);
+}
+
 /*
  * Refer to drivers/acpi/cppc_acpi.c for the description of the functions
  * below.
@@ -97,9 +146,7 @@ bool cpc_ffh_supported(void)
 int cpc_read_ffh(int cpu, struct cpc_reg *reg, u64 *val)
 {
 	struct sbi_cppc_data data;
-
-	if (WARN_ON_ONCE(irqs_disabled()))
-		return -EPERM;
+	int ret;
 
 	if (FFH_CPPC_TYPE(reg->address) == FFH_CPPC_SBI) {
 		if (!cppc_ext_present)
@@ -107,7 +154,9 @@ int cpc_read_ffh(int cpu, struct cpc_reg *reg, u64 *val)
 
 		data.reg = FFH_CPPC_SBI_REG(reg->address);
 
-		smp_call_function_single(cpu, sbi_cppc_read, &data, 1);
+		ret = cppc_ffh_read_on_cpu(cpu, sbi_cppc_read, &data);
+		if (ret)
+			return ret;
 
 		*val = data.ret.value;
 
@@ -115,7 +164,9 @@ int cpc_read_ffh(int cpu, struct cpc_reg *reg, u64 *val)
 	} else if (FFH_CPPC_TYPE(reg->address) == FFH_CPPC_CSR) {
 		data.reg = FFH_CPPC_CSR_NUM(reg->address);
 
-		smp_call_function_single(cpu, cppc_ffh_csr_read, &data, 1);
+		ret = cppc_ffh_read_on_cpu(cpu, cppc_ffh_csr_read, &data);
+		if (ret)
+			return ret;
 
 		*val = data.ret.value;
 
@@ -123,6 +174,47 @@ int cpc_read_ffh(int cpu, struct cpc_reg *reg, u64 *val)
 	}
 
 	return -EINVAL;
+}
+
+int cpc_read_ffh_fb_ctrs(int cpu, struct cpc_reg *reg1, u64 *val1,
+			 struct cpc_reg *reg2, u64 *val2)
+{
+	struct cppc_ffh_fb_ctrs_data data;
+	int ret;
+
+	data.first.type = FFH_CPPC_TYPE(reg1->address);
+	data.second.type = FFH_CPPC_TYPE(reg2->address);
+
+	if ((data.first.type != FFH_CPPC_SBI && data.first.type != FFH_CPPC_CSR) ||
+	    (data.second.type != FFH_CPPC_SBI && data.second.type != FFH_CPPC_CSR))
+		return -EINVAL;
+
+	if ((data.first.type == FFH_CPPC_SBI || data.second.type == FFH_CPPC_SBI) &&
+	    !cppc_ext_present)
+		return -EINVAL;
+
+	data.first.data.reg = data.first.type == FFH_CPPC_SBI ?
+			      FFH_CPPC_SBI_REG(reg1->address) :
+			      FFH_CPPC_CSR_NUM(reg1->address);
+	data.second.data.reg = data.second.type == FFH_CPPC_SBI ?
+			       FFH_CPPC_SBI_REG(reg2->address) :
+			       FFH_CPPC_CSR_NUM(reg2->address);
+
+	ret = cppc_ffh_read_on_cpu(cpu, cppc_ffh_read_fb_ctrs, &data);
+	if (ret)
+		return ret;
+
+	ret = cppc_ffh_ctr_errno(&data.first);
+	if (ret)
+		return ret;
+	ret = cppc_ffh_ctr_errno(&data.second);
+	if (ret)
+		return ret;
+
+	*val1 = data.first.data.ret.value;
+	*val2 = data.second.data.ret.value;
+
+	return 0;
 }
 
 int cpc_write_ffh(int cpu, struct cpc_reg *reg, u64 val)
