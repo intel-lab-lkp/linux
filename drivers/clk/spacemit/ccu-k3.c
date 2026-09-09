@@ -55,25 +55,77 @@ static const struct ccu_pll_rate_tbl pll8_rate_tbl[] = {
 
 CCU_PLLA_DEFINE(pll1, pll1_rate_tbl, APBS_PLL1_SWCR1, APBS_PLL1_SWCR2, APBS_PLL1_SWCR3,
 		MPMU_POSR, POSR_PLL1_LOCK, CLK_SET_RATE_GATE);
-CCU_PLLA_DEFINE(pll2, pll2_rate_tbl, APBS_PLL2_SWCR1, APBS_PLL2_SWCR2, APBS_PLL2_SWCR3,
-		MPMU_POSR, POSR_PLL2_LOCK, CLK_SET_RATE_GATE);
-CCU_PLLA_DEFINE(pll3, pll3_rate_tbl, APBS_PLL3_SWCR1, APBS_PLL3_SWCR2, APBS_PLL3_SWCR3,
-		MPMU_POSR, POSR_PLL3_LOCK, CLK_SET_RATE_GATE);
-CCU_PLLA_DEFINE(pll4, pll4_rate_tbl, APBS_PLL4_SWCR1, APBS_PLL4_SWCR2, APBS_PLL4_SWCR3,
-		MPMU_POSR, POSR_PLL4_LOCK, CLK_SET_RATE_GATE);
-CCU_PLLA_DEFINE(pll5, pll5_rate_tbl, APBS_PLL5_SWCR1, APBS_PLL5_SWCR2, APBS_PLL5_SWCR3,
-		MPMU_POSR, POSR_PLL5_LOCK, CLK_SET_RATE_GATE);
-CCU_PLLA_DEFINE(pll6, pll6_rate_tbl, APBS_PLL6_SWCR1, APBS_PLL6_SWCR2, APBS_PLL6_SWCR3,
-		MPMU_POSR, POSR_PLL6_LOCK, CLK_SET_RATE_GATE);
-CCU_PLLA_DEFINE(pll7, pll7_rate_tbl, APBS_PLL7_SWCR1, APBS_PLL7_SWCR2, APBS_PLL7_SWCR3,
-		MPMU_POSR, POSR_PLL7_LOCK, CLK_SET_RATE_GATE);
-CCU_PLLA_DEFINE(pll8, pll8_rate_tbl, APBS_PLL8_SWCR1, APBS_PLL8_SWCR2, APBS_PLL8_SWCR3,
-		MPMU_POSR, POSR_PLL8_LOCK, CLK_SET_RATE_GATE);
 
-CCU_FACTOR_GATE_DEFINE(pll1_d2, CCU_PARENT_HW(pll1), APBS_PLL1_SWCR2, BIT(1), 2, 1);
+/* PLLs without a managed CPU path require all output gates to be off. */
+static const struct ccu_pll_sync idle_pll_sync = {
+	.safe_pll = &pll1,
+};
+
+/* Park the secondary cluster first when it shares the primary cluster PLL. */
+static const struct ccu_pll_cpu_mux pll3_cpu_muxes[] = {
+	{ APMU_CPU_C1_CLK_CTRL, BIT(13) | GENMASK(2, 0), BIT(13) | 7 },
+	{ APMU_CPU_C0_CLK_CTRL, GENMASK(2, 0), 7 },
+};
+
+static const struct ccu_pll_cpu_mux pll4_cpu_muxes[] = {
+	{ APMU_CPU_C1_CLK_CTRL, BIT(13) | GENMASK(2, 0), 7 },
+};
+
+static const struct ccu_pll_cpu_mux pll5_cpu_muxes[] = {
+	{ APMU_CPU_C3_CLK_CTRL, BIT(13) | GENMASK(2, 0), BIT(13) | 7 },
+	{ APMU_CPU_C2_CLK_CTRL, GENMASK(2, 0), 7 },
+};
+
+static const struct ccu_pll_cpu_mux pll8_cpu_muxes[] = {
+	{ APMU_CPU_C3_CLK_CTRL, BIT(13) | GENMASK(2, 0), 7 },
+};
+
+#define K3_CPU_PLL_SYNC(_pll)							\
+static const struct ccu_pll_sync _pll##_sync = {				\
+	.safe_pll = &pll1,							\
+	.apmu_compatible = "spacemit,k3-syscon-apmu",				\
+	.muxes = _pll##_cpu_muxes,						\
+	.num_muxes = ARRAY_SIZE(_pll##_cpu_muxes),				\
+	.cpu_outputs = BIT(0),							\
+	.safe_sel = 5,								\
+	.slow_sel = 1,								\
+	.reg_safe_gate = MPMU_ACGR,						\
+}
+
+K3_CPU_PLL_SYNC(pll3);
+K3_CPU_PLL_SYNC(pll4);
+K3_CPU_PLL_SYNC(pll5);
+K3_CPU_PLL_SYNC(pll8);
+
+CCU_PLLA_SYNC_DEFINE(pll2, pll2_rate_tbl, APBS_PLL2_SWCR1, APBS_PLL2_SWCR2,
+		     APBS_PLL2_SWCR3, MPMU_POSR, POSR_PLL2_LOCK,
+		     CLK_SET_RATE_GATE, &idle_pll_sync);
+CCU_PLLA_SYNC_DEFINE(pll3, pll3_rate_tbl, APBS_PLL3_SWCR1, APBS_PLL3_SWCR2,
+		     APBS_PLL3_SWCR3, MPMU_POSR, POSR_PLL3_LOCK,
+		     CLK_SET_RATE_GATE, &pll3_sync);
+CCU_PLLA_SYNC_DEFINE(pll4, pll4_rate_tbl, APBS_PLL4_SWCR1, APBS_PLL4_SWCR2,
+		     APBS_PLL4_SWCR3, MPMU_POSR, POSR_PLL4_LOCK,
+		     CLK_SET_RATE_GATE, &pll4_sync);
+CCU_PLLA_SYNC_DEFINE(pll5, pll5_rate_tbl, APBS_PLL5_SWCR1, APBS_PLL5_SWCR2,
+		     APBS_PLL5_SWCR3, MPMU_POSR, POSR_PLL5_LOCK,
+		     CLK_SET_RATE_GATE, &pll5_sync);
+CCU_PLLA_SYNC_DEFINE(pll6, pll6_rate_tbl, APBS_PLL6_SWCR1, APBS_PLL6_SWCR2,
+		     APBS_PLL6_SWCR3, MPMU_POSR, POSR_PLL6_LOCK,
+		     CLK_SET_RATE_GATE, &idle_pll_sync);
+CCU_PLLA_SYNC_DEFINE(pll7, pll7_rate_tbl, APBS_PLL7_SWCR1, APBS_PLL7_SWCR2,
+		     APBS_PLL7_SWCR3, MPMU_POSR, POSR_PLL7_LOCK,
+		     CLK_SET_RATE_GATE, &idle_pll_sync);
+CCU_PLLA_SYNC_DEFINE(pll8, pll8_rate_tbl, APBS_PLL8_SWCR1, APBS_PLL8_SWCR2,
+		     APBS_PLL8_SWCR3, MPMU_POSR, POSR_PLL8_LOCK,
+		     CLK_SET_RATE_GATE, &pll8_sync);
+
+/* A failed CPU FC handshake must not lose either fallback clock. */
+CCU_FACTOR_GATE_FLAGS_DEFINE(pll1_d2, CCU_PARENT_HW(pll1), APBS_PLL1_SWCR2, BIT(1), 2, 1,
+			     CLK_IS_CRITICAL);
 CCU_FACTOR_GATE_DEFINE(pll1_d3, CCU_PARENT_HW(pll1), APBS_PLL1_SWCR2, BIT(2), 3, 1);
 CCU_FACTOR_GATE_DEFINE(pll1_d4, CCU_PARENT_HW(pll1), APBS_PLL1_SWCR2, BIT(3), 4, 1);
-CCU_FACTOR_GATE_DEFINE(pll1_d5, CCU_PARENT_HW(pll1), APBS_PLL1_SWCR2, BIT(4), 5, 1);
+CCU_FACTOR_GATE_FLAGS_DEFINE(pll1_d5, CCU_PARENT_HW(pll1), APBS_PLL1_SWCR2, BIT(4), 5, 1,
+			     CLK_IS_CRITICAL);
 CCU_FACTOR_GATE_DEFINE(pll1_d6, CCU_PARENT_HW(pll1), APBS_PLL1_SWCR2, BIT(5), 6, 1);
 CCU_FACTOR_GATE_DEFINE(pll1_d7, CCU_PARENT_HW(pll1), APBS_PLL1_SWCR2, BIT(6), 7, 1);
 CCU_FACTOR_GATE_FLAGS_DEFINE(pll1_d8, CCU_PARENT_HW(pll1), APBS_PLL1_SWCR2, BIT(7), 8, 1,
@@ -178,7 +230,7 @@ CCU_FACTOR_DEFINE(pll1_d3072_0p8, CCU_PARENT_HW(pll1_d384_6p4), 8, 1);
 CCU_GATE_DEFINE(pll1_d6_409p6, CCU_PARENT_HW(pll1_d6), MPMU_ACGR, BIT(0), 0);
 CCU_FACTOR_GATE_DEFINE(pll1_d12_204p8, CCU_PARENT_HW(pll1_d6), MPMU_ACGR, BIT(5), 2, 1);
 
-CCU_GATE_DEFINE(pll1_d5_491p52, CCU_PARENT_HW(pll1_d5), MPMU_ACGR, BIT(21), 0);
+CCU_GATE_DEFINE(pll1_d5_491p52, CCU_PARENT_HW(pll1_d5), MPMU_ACGR, BIT(21), CLK_IS_CRITICAL);
 CCU_FACTOR_GATE_DEFINE(pll1_d10_245p76, CCU_PARENT_HW(pll1_d5), MPMU_ACGR, BIT(18), 2, 1);
 
 CCU_GATE_DEFINE(pll1_d4_614p4, CCU_PARENT_HW(pll1_d4), MPMU_ACGR, BIT(15), 0);
@@ -187,7 +239,7 @@ CCU_FACTOR_GATE_DEFINE(pll1_d78_31p5, CCU_PARENT_HW(pll1_d4), MPMU_ACGR, BIT(6),
 
 CCU_GATE_DEFINE(pll1_d3_819p2, CCU_PARENT_HW(pll1_d3), MPMU_ACGR, BIT(14), 0);
 
-CCU_GATE_DEFINE(pll1_d2_1228p8, CCU_PARENT_HW(pll1_d2), MPMU_ACGR, BIT(16), 0);
+CCU_GATE_DEFINE(pll1_d2_1228p8, CCU_PARENT_HW(pll1_d2), MPMU_ACGR, BIT(16), CLK_IS_CRITICAL);
 
 static const struct clk_parent_data apb_parents[] = {
 	CCU_PARENT_HW(pll1_d96_25p6),

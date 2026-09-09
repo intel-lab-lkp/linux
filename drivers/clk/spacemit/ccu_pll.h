@@ -46,9 +46,29 @@ struct ccu_pll_rate_tbl {
 
 struct ccu_pll_config {
 	const struct ccu_pll_rate_tbl *rate_tbl;
+	const struct ccu_pll_sync *sync;
 	u32 tbl_num;
 	u32 reg_lock;
 	u32 mask_lock;
+};
+
+/* A CPU mux selection which consumes this PLL. */
+struct ccu_pll_cpu_mux {
+	u32 reg;
+	u32 mask;
+	u32 value;
+};
+
+/* Only CPU-exclusive outputs may remain gated on during synchronization. */
+struct ccu_pll_sync {
+	struct ccu_pll *safe_pll;
+	const char *apmu_compatible;
+	const struct ccu_pll_cpu_mux *muxes;
+	u32 num_muxes;
+	u32 cpu_outputs;
+	u32 safe_sel;
+	u32 slow_sel;
+	u32 reg_safe_gate;
 };
 
 #define CCU_PLL_RATE(_rate, _swcr1, _swcr3) \
@@ -71,12 +91,13 @@ struct ccu_pll {
 	struct ccu_pll_config	config;
 };
 
-#define CCU_PLL_CONFIG(_table, _reg_lock, _mask_lock) \
+#define CCU_PLL_CONFIG(_table, _reg_lock, _mask_lock, _sync)			\
 	{									\
 		.rate_tbl	= _table,					\
 		.tbl_num	= ARRAY_SIZE(_table),				\
 		.reg_lock	= (_reg_lock),					\
 		.mask_lock	= (_mask_lock),					\
+		.sync		= _sync,					\
 	}
 
 #define CCU_PLL_COMMON_HWINIT(_name, _ops, _flags)				\
@@ -89,9 +110,9 @@ struct ccu_pll {
 	})
 
 #define CCU_PLL_X_DEFINE(_name, _table, _reg_swcr1, _reg_swcr2, _reg_swcr3,	\
-		       _reg_lock, _mask_lock, _ops, _flags)			\
+			 _reg_lock, _mask_lock, _ops, _flags, _sync)		\
 static struct ccu_pll _name = {							\
-	.config	= CCU_PLL_CONFIG(_table, _reg_lock, _mask_lock),		\
+	.config	= CCU_PLL_CONFIG(_table, _reg_lock, _mask_lock, _sync),		\
 	.common = {								\
 		.reg_swcr1	= _reg_swcr1,					\
 		.reg_swcr2	= _reg_swcr2,					\
@@ -103,12 +124,22 @@ static struct ccu_pll _name = {							\
 #define CCU_PLL_DEFINE(_name, _table, _reg_swcr1, _reg_swcr3, _reg_lock,	\
 		       _mask_lock, _flags)					\
 	CCU_PLL_X_DEFINE(_name, _table, _reg_swcr1, 0, _reg_swcr3,		\
-		       _reg_lock, _mask_lock, &spacemit_ccu_pll_ops, _flags)
+		       _reg_lock, _mask_lock, &spacemit_ccu_pll_ops, _flags, NULL)
+
+#define CCU_PLL_SYNC_DEFINE(_name, _table, _reg_swcr1, _reg_swcr2,		\
+			    _reg_swcr3, _reg_lock, _mask_lock, _flags, _sync)	\
+	CCU_PLL_X_DEFINE(_name, _table, _reg_swcr1, _reg_swcr2, _reg_swcr3,	\
+		       _reg_lock, _mask_lock, &spacemit_ccu_pll_ops, _flags, _sync)
 
 #define CCU_PLLA_DEFINE(_name, _table, _reg_swcr1, _reg_swcr2, _reg_swcr3,	\
-		       _reg_lock, _mask_lock, _flags)				\
+			_reg_lock, _mask_lock, _flags)				\
 	CCU_PLL_X_DEFINE(_name, _table, _reg_swcr1, _reg_swcr2, _reg_swcr3,	\
-		       _reg_lock, _mask_lock, &spacemit_ccu_plla_ops, _flags)
+		       _reg_lock, _mask_lock, &spacemit_ccu_plla_ops, _flags, NULL)
+
+#define CCU_PLLA_SYNC_DEFINE(_name, _table, _reg_swcr1, _reg_swcr2,		\
+			     _reg_swcr3, _reg_lock, _mask_lock, _flags, _sync)	\
+	CCU_PLL_X_DEFINE(_name, _table, _reg_swcr1, _reg_swcr2, _reg_swcr3,	\
+		       _reg_lock, _mask_lock, &spacemit_ccu_plla_ops, _flags, _sync)
 
 static inline struct ccu_pll *hw_to_ccu_pll(struct clk_hw *hw)
 {

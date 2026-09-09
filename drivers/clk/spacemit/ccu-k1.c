@@ -41,17 +41,47 @@ static const struct ccu_pll_rate_tbl pll3_rate_tbl[] = {
 	CCU_PLL_RATE(3200000000UL, 0x0050dd67, 0x43eaaaab),
 };
 
-CCU_PLL_DEFINE(pll1, pll1_rate_tbl, APBS_PLL1_SWCR1, APBS_PLL1_SWCR3, MPMU_POSR, POSR_PLL1_LOCK,
-	       CLK_SET_RATE_GATE);
-CCU_PLL_DEFINE(pll2, pll2_rate_tbl, APBS_PLL2_SWCR1, APBS_PLL2_SWCR3, MPMU_POSR, POSR_PLL2_LOCK,
-	       CLK_SET_RATE_GATE);
-CCU_PLL_DEFINE(pll3, pll3_rate_tbl, APBS_PLL3_SWCR1, APBS_PLL3_SWCR3, MPMU_POSR, POSR_PLL3_LOCK,
-	       CLK_SET_RATE_GATE);
+/* PLL1 supplies the fallback and must retain its firmware configuration. */
+CCU_PLL_SYNC_DEFINE(pll1, pll1_rate_tbl, APBS_PLL1_SWCR1, APBS_PLL1_SWCR2,
+		    APBS_PLL1_SWCR3, MPMU_POSR, POSR_PLL1_LOCK,
+		    CLK_SET_RATE_GATE, NULL);
 
-CCU_FACTOR_GATE_DEFINE(pll1_d2, CCU_PARENT_HW(pll1), APBS_PLL1_SWCR2, BIT(1), 2, 1);
+static const struct ccu_pll_sync pll2_sync = {
+	.safe_pll = &pll1,
+};
+
+static const struct ccu_pll_cpu_mux pll3_cpu_muxes[] = {
+	{ APMU_CPU_C1_CLK_CTRL, GENMASK(2, 0), 5 },
+	{ APMU_CPU_C1_CLK_CTRL, GENMASK(2, 0), 7 },
+	{ APMU_CPU_C0_CLK_CTRL, GENMASK(2, 0), 5 },
+	{ APMU_CPU_C0_CLK_CTRL, GENMASK(2, 0), 7 },
+};
+
+static const struct ccu_pll_sync pll3_sync = {
+	.safe_pll = &pll1,
+	.apmu_compatible = "spacemit,k1-syscon-apmu",
+	.muxes = pll3_cpu_muxes,
+	.num_muxes = ARRAY_SIZE(pll3_cpu_muxes),
+	.cpu_outputs = GENMASK(2, 0),
+	.safe_sel = 4,
+	.slow_sel = 3,
+	.reg_safe_gate = MPMU_ACGR,
+};
+
+CCU_PLL_SYNC_DEFINE(pll2, pll2_rate_tbl, APBS_PLL2_SWCR1, APBS_PLL2_SWCR2,
+		    APBS_PLL2_SWCR3, MPMU_POSR, POSR_PLL2_LOCK,
+		    CLK_SET_RATE_GATE, &pll2_sync);
+CCU_PLL_SYNC_DEFINE(pll3, pll3_rate_tbl, APBS_PLL3_SWCR1, APBS_PLL3_SWCR2,
+		    APBS_PLL3_SWCR3, MPMU_POSR, POSR_PLL3_LOCK,
+		    CLK_SET_RATE_GATE, &pll3_sync);
+
+/* A failed CPU FC handshake must not lose either fallback clock. */
+CCU_FACTOR_GATE_FLAGS_DEFINE(pll1_d2, CCU_PARENT_HW(pll1), APBS_PLL1_SWCR2, BIT(1), 2, 1,
+			     CLK_IS_CRITICAL);
 CCU_FACTOR_GATE_DEFINE(pll1_d3, CCU_PARENT_HW(pll1), APBS_PLL1_SWCR2, BIT(2), 3, 1);
 CCU_FACTOR_GATE_DEFINE(pll1_d4, CCU_PARENT_HW(pll1), APBS_PLL1_SWCR2, BIT(3), 4, 1);
-CCU_FACTOR_GATE_DEFINE(pll1_d5, CCU_PARENT_HW(pll1), APBS_PLL1_SWCR2, BIT(4), 5, 1);
+CCU_FACTOR_GATE_FLAGS_DEFINE(pll1_d5, CCU_PARENT_HW(pll1), APBS_PLL1_SWCR2, BIT(4), 5, 1,
+			     CLK_IS_CRITICAL);
 CCU_FACTOR_GATE_DEFINE(pll1_d6, CCU_PARENT_HW(pll1), APBS_PLL1_SWCR2, BIT(5), 6, 1);
 CCU_FACTOR_GATE_DEFINE(pll1_d7, CCU_PARENT_HW(pll1), APBS_PLL1_SWCR2, BIT(6), 7, 1);
 CCU_FACTOR_GATE_FLAGS_DEFINE(pll1_d8, CCU_PARENT_HW(pll1), APBS_PLL1_SWCR2, BIT(7), 8, 1,
@@ -111,7 +141,7 @@ CCU_FACTOR_DEFINE(pll1_d3072_0p8, CCU_PARENT_HW(pll1_d384_6p4), 8, 1);
 CCU_GATE_DEFINE(pll1_d6_409p6, CCU_PARENT_HW(pll1_d6), MPMU_ACGR, BIT(0), 0);
 CCU_FACTOR_GATE_DEFINE(pll1_d12_204p8, CCU_PARENT_HW(pll1_d6), MPMU_ACGR, BIT(5), 2, 1);
 
-CCU_GATE_DEFINE(pll1_d5_491p52, CCU_PARENT_HW(pll1_d5), MPMU_ACGR, BIT(21), 0);
+CCU_GATE_DEFINE(pll1_d5_491p52, CCU_PARENT_HW(pll1_d5), MPMU_ACGR, BIT(21), CLK_IS_CRITICAL);
 CCU_FACTOR_GATE_DEFINE(pll1_d10_245p76, CCU_PARENT_HW(pll1_d5), MPMU_ACGR, BIT(18), 2, 1);
 
 CCU_GATE_DEFINE(pll1_d4_614p4, CCU_PARENT_HW(pll1_d4), MPMU_ACGR, BIT(15), 0);
@@ -120,7 +150,7 @@ CCU_FACTOR_GATE_DEFINE(pll1_d78_31p5, CCU_PARENT_HW(pll1_d4), MPMU_ACGR, BIT(6),
 
 CCU_GATE_DEFINE(pll1_d3_819p2, CCU_PARENT_HW(pll1_d3), MPMU_ACGR, BIT(14), 0);
 
-CCU_GATE_DEFINE(pll1_d2_1228p8, CCU_PARENT_HW(pll1_d2), MPMU_ACGR, BIT(16), 0);
+CCU_GATE_DEFINE(pll1_d2_1228p8, CCU_PARENT_HW(pll1_d2), MPMU_ACGR, BIT(16), CLK_IS_CRITICAL);
 
 CCU_GATE_DEFINE(slow_uart, CCU_PARENT_NAME(osc), MPMU_ACGR, BIT(1), CLK_IGNORE_UNUSED);
 CCU_DDN_DEFINE(slow_uart1_14p74, pll1_d16_153p6, MPMU_SUCCR, 16, 13, 0, 13, 2, 0);
