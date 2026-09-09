@@ -4,8 +4,10 @@
  * Copyright (c) 2024-2025 Haylen Chu <heylenay@4d2.org>
  */
 
+#include <linux/bitfield.h>
 #include <linux/clk-provider.h>
 #include <linux/math.h>
+#include <linux/math64.h>
 #include <linux/regmap.h>
 
 #include "ccu_common.h"
@@ -14,11 +16,23 @@
 #define PLL_TIMEOUT_US		3000
 #define PLL_DELAY_US		5
 
+#define PLL_SWCR1_PREDIV	GENMASK(13, 12)
+#define PLL_SWCR1_INTERNAL	BIT(29)
+#define PLL_SWCR3_INT		GENMASK(30, 24)
+#define PLL_SWCR3_FRAC		GENMASK(23, 0)
+
 #define PLL_SWCR3_EN		((u32)BIT(31))
 #define PLL_SWCR3_MASK		GENMASK(30, 0)
 
 #define PLLA_SWCR2_EN		((u32)BIT(16))
 #define PLLA_SWCR2_MASK		GENMASK(15, 8)
+
+#define PLLA_SWCR1_USER_MODE	BIT(25)
+#define PLLA_SWCR1_INT		GENMASK(22, 16)
+#define PLLA_SWCR1_REFSEL	GENMASK(15, 14)
+#define PLLA_SWCR1_FRAC		GENMASK(13, 0)
+#define PLLA_SWCR3_PREDIV	GENMASK(21, 20)
+#define PLL_FRAC_BITS		22
 
 static const struct ccu_pll_rate_tbl *ccu_pll_lookup_best_rate(struct ccu_pll *pll,
 							       unsigned long rate)
@@ -115,17 +129,78 @@ static int ccu_pll_set_rate(struct clk_hw *hw, unsigned long rate,
 	return 0;
 }
 
+static int ccu_pll_get_params(struct ccu_pll *pll,
+			      struct ccu_pll_rate_tbl *params, bool plla)
+{
+	struct ccu_common *common = &pll->common;
+	int ret;
+
+	ret = regmap_read(common->regmap, common->reg_swcr1, &params->swcr1);
+	if (ret)
+		return ret;
+	params->swcr2 = 0;
+	if (plla) {
+		ret = regmap_read(common->regmap, common->reg_swcr2, &params->swcr2);
+		if (ret)
+			return ret;
+	}
+	return regmap_read(common->regmap, common->reg_swcr3, &params->swcr3);
+}
+
+static unsigned long ccu_pll_calc_rate(const struct ccu_pll_rate_tbl *params,
+				      unsigned long parent_rate)
+{
+	u32 swcr1 = params->swcr1, swcr3 = params->swcr3, prediv;
+	s64 divider;
+	u64 rate;
+
+	/* The programmed divider is not used in internal configuration mode. */
+	if (swcr1 & PLL_SWCR1_INTERNAL)
+		return 0;
+
+	prediv = FIELD_GET(PLL_SWCR1_PREDIV, swcr1) + 1;
+	divider = (s64)FIELD_GET(PLL_SWCR3_INT, swcr3) << PLL_FRAC_BITS;
+	/* The 24-bit fractional code is signed, with an LSB of 2^-22. */
+	divider += sign_extend32(FIELD_GET(PLL_SWCR3_FRAC, swcr3), 23);
+	if (divider <= 0)
+		return 0;
+
+	/* Fvco = Fref * Npre * (Nint + Nfrac). */
+	rate = (u64)parent_rate * prediv * divider;
+	return DIV_ROUND_CLOSEST_ULL(rate, BIT_ULL(PLL_FRAC_BITS));
+}
+
+static unsigned long ccu_plla_calc_rate(const struct ccu_pll_rate_tbl *params,
+				       unsigned long parent_rate)
+{
+	u32 swcr1 = params->swcr1, swcr2 = params->swcr2;
+	u32 swcr3 = params->swcr3, prediv, frac;
+	u64 divider, rate;
+
+	/* Decode the software-controlled mode described by the PLL calculator. */
+	if (!(swcr1 & PLLA_SWCR1_USER_MODE) ||
+	    (swcr1 & PLLA_SWCR1_REFSEL))
+		return 0;
+
+	prediv = FIELD_GET(PLLA_SWCR3_PREDIV, swcr3) + 1;
+	frac = FIELD_GET(PLLA_SWCR1_FRAC, swcr1) << 8;
+	frac |= FIELD_GET(PLLA_SWCR2_MASK, swcr2);
+	divider = (u64)FIELD_GET(PLLA_SWCR1_INT, swcr1) << PLL_FRAC_BITS;
+	divider += frac;
+
+	/* Fvco = Fref * Npre * (Nint + Nfrac), with an unsigned fraction. */
+	rate = (u64)parent_rate * prediv * divider;
+	return DIV_ROUND_CLOSEST_ULL(rate, BIT_ULL(PLL_FRAC_BITS));
+}
+
 static unsigned long ccu_pll_recalc_rate(struct clk_hw *hw,
 					 unsigned long parent_rate)
 {
-	struct ccu_pll *pll = hw_to_ccu_pll(hw);
-	const struct ccu_pll_rate_tbl *entry;
+	struct ccu_pll_rate_tbl params;
 
-	entry = ccu_pll_lookup_matched_entry(pll);
-
-	WARN_ON_ONCE(!entry);
-
-	return entry ? entry->rate : 0;
+	if (ccu_pll_get_params(hw_to_ccu_pll(hw), &params, false))
+		return 0;
+	return ccu_pll_calc_rate(&params, parent_rate);
 }
 
 static int ccu_pll_determine_rate(struct clk_hw *hw,
@@ -232,14 +307,11 @@ static int ccu_plla_set_rate(struct clk_hw *hw, unsigned long rate,
 static unsigned long ccu_plla_recalc_rate(struct clk_hw *hw,
 					  unsigned long parent_rate)
 {
-	struct ccu_pll *pll = hw_to_ccu_pll(hw);
-	const struct ccu_pll_rate_tbl *entry;
+	struct ccu_pll_rate_tbl params;
 
-	entry = ccu_plla_lookup_matched_entry(pll);
-
-	WARN_ON_ONCE(!entry);
-
-	return entry ? entry->rate : 0;
+	if (ccu_pll_get_params(hw_to_ccu_pll(hw), &params, true))
+		return 0;
+	return ccu_plla_calc_rate(&params, parent_rate);
 }
 
 static int ccu_plla_init(struct clk_hw *hw)
