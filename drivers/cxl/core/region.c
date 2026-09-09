@@ -1843,6 +1843,20 @@ err:
 	return rc;
 }
 
+static bool cxled_committed_bi(struct cxl_endpoint_decoder *cxled)
+{
+	struct cxl_port *port = cxled_to_port(cxled);
+	struct cxl_hdm *cxlhdm = dev_get_drvdata(&port->dev);
+	u32 ctrl;
+
+	if (!cxlhdm || !cxlhdm->regs.hdm_decoder)
+		return false;
+
+	ctrl = readl(cxlhdm->regs.hdm_decoder +
+		     CXL_HDM_DECODER0_CTRL_OFFSET(cxled->cxld.id));
+	return FIELD_GET(CXL_HDM_DECODER0_CTRL_BI, ctrl);
+}
+
 static const char *cxl_coherency_name(enum cxl_decoder_type type, bool bi)
 {
 	if (type == CXL_DECODER_HOSTONLYMEM)
@@ -2151,6 +2165,24 @@ static int cxl_region_attach(struct cxl_region *cxlr,
 		dev_warn(&cxlr->dev, "%s:%s HDM is host-only coherent\n",
 			 dev_name(&cxlmd->dev), dev_name(&cxled->cxld.dev));
 		return -ENXIO;
+	}
+
+	/* a committed decoder cannot inherit the region's flavor */
+	if (cxled->state == CXL_DECODER_STATE_AUTO) {
+		bool bi = cxled_committed_bi(cxled);
+		const char *have, *want;
+
+		have = cxl_coherency_name(cxled->cxld.target_type, bi);
+		want = cxl_coherency_name(cxlr->type,
+					  cxl_root_decoder_is_bi(cxlrd));
+		if (cxled->cxld.target_type != cxlr->type ||
+		    bi != cxl_root_decoder_is_bi(cxlrd)) {
+			dev_err(&cxlr->dev,
+				"%s:%s coherency model mismatch: %s vs %s\n",
+				dev_name(&cxlmd->dev),
+				dev_name(&cxled->cxld.dev), have, want);
+			return -ENXIO;
+		}
 	}
 
 	if (!cxled->dpa_res) {
@@ -3812,9 +3844,25 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 	struct cxl_dev_state *cxlds = cxlmd->cxlds;
 	int rc, part = READ_ONCE(cxled->part);
 	struct cxl_region *cxlr;
+	unsigned long need;
 
 	if (part < 0)
 		return ERR_PTR(-EBUSY);
+
+	/*
+	 * A committed decoder defines the region built from it, so no
+	 * attach check can find its coherency model wrong. Only the
+	 * window's restrictions can, on the BI and range type axes.
+	 */
+	need = cxled->cxld.target_type == CXL_DECODER_DEVMEM ?
+	       CXL_DECODER_F_DEVMEM : CXL_DECODER_F_HOSTONLY;
+	if (cxled_committed_bi(cxled) != cxl_root_decoder_is_bi(cxlrd) ||
+	    !(cxlrd->cxlsd.cxld.flags & need)) {
+		dev_err(&cxlrd->cxlsd.cxld.dev,
+			"%s:%s coherency model not permitted by the window\n",
+			dev_name(&cxlmd->dev), dev_name(&cxled->cxld.dev));
+		return ERR_PTR(-ENXIO);
+	}
 
 	do {
 		cxlr = __create_region(cxlrd, cxlds->part[part].mode,

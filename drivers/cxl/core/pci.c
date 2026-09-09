@@ -1085,6 +1085,29 @@ static int __cxl_bi_commit_decoder(struct device *dev, void __iomem *bi)
 				    scale, base);
 }
 
+/* Committed, or no explicit commit required */
+static bool cxl_bi_decoder_committed(void __iomem *bi)
+{
+	u32 caps = readl(bi + CXL_BI_DECODER_CAPS_OFFSET);
+	u32 sts = readl(bi + CXL_BI_DECODER_STATUS_OFFSET);
+
+	if (!FIELD_GET(CXL_BI_DECODER_CAPS_EXPLICIT_COMMIT_REQ, caps))
+		return true;
+
+	return FIELD_GET(CXL_BI_DECODER_STATUS_BI_COMMITTED, sts);
+}
+
+static bool cxl_bi_rt_committed(void __iomem *bi)
+{
+	u32 caps = readl(bi + CXL_BI_RT_CAPS_OFFSET);
+	u32 sts = readl(bi + CXL_BI_RT_STATUS_OFFSET);
+
+	if (!FIELD_GET(CXL_BI_RT_CAPS_EXPLICIT_COMMIT_REQ, caps))
+		return true;
+
+	return FIELD_GET(CXL_BI_RT_STATUS_BI_COMMITTED, sts);
+}
+
 static int cxl_bi_commit_dport(struct cxl_dport *dport)
 {
 	struct cxl_port *port = dport->port;
@@ -1108,7 +1131,7 @@ static int cxl_bi_commit_dport(struct cxl_dport *dport)
  * below it.
  */
 static int __cxl_bi_ctrl_dport(struct cxl_dport *dport, bool enable,
-			       bool direct)
+			       bool direct, bool *adopt)
 {
 	void __iomem *bi = dport->regs.bi_decoder;
 	struct cxl_port *port = dport->port;
@@ -1140,6 +1163,20 @@ static int __cxl_bi_ctrl_dport(struct cxl_dport *dport, bool enable,
 		       CXL_BI_DECODER_CTRL_BI_ENABLE;
 
 	value = (ctrl | set) & ~clr;
+
+	/*
+	 * Adopt this level as firmware left it: nothing below it that
+	 * firmware did not account for, nothing this driver has routed
+	 * through it, the value this walk would write already in place,
+	 * and the decoder (and route table) committed.
+	 */
+	if (*adopt && !dport->nr_bi && value == ctrl &&
+	    cxl_bi_decoder_committed(bi) &&
+	    (!port->regs.bi_rt || cxl_bi_rt_committed(port->regs.bi_rt)))
+		goto done;
+	/* firmware did not bring this level up, so nothing above may */
+	*adopt = false;
+
 	if (value != ctrl)
 		writel(value, bi + CXL_BI_DECODER_CTRL_OFFSET);
 
@@ -1153,19 +1190,21 @@ static int __cxl_bi_ctrl_dport(struct cxl_dport *dport, bool enable,
 		}
 		return rc;
 	}
+done:
 	dport->nr_bi++;
 
 	return 0;
 }
 
-static int cxl_bi_ctrl_dport_enable(struct cxl_dport *dport, bool direct)
+static int cxl_bi_ctrl_dport_enable(struct cxl_dport *dport, bool direct,
+				    bool *adopt)
 {
-	return __cxl_bi_ctrl_dport(dport, true, direct);
+	return __cxl_bi_ctrl_dport(dport, true, direct, adopt);
 }
 
 static int cxl_bi_ctrl_dport_disable(struct cxl_dport *dport)
 {
-	return __cxl_bi_ctrl_dport(dport, false, false);
+	return __cxl_bi_ctrl_dport(dport, false, false, NULL);
 }
 
 static int __cxl_bi_ctrl_endpoint(struct cxl_dev_state *cxlds, bool enable)
@@ -1181,11 +1220,11 @@ static int __cxl_bi_ctrl_endpoint(struct cxl_dev_state *cxlds, bool enable)
 
 	if (enable) {
 		if (FIELD_GET(CXL_BI_DECODER_CTRL_BI_ENABLE, ctrl)) {
-			if (cxlds->bi)
-				return 0;
-			dev_err(cxlds->dev,
-				"BI already enabled in hardware\n");
-			return -EBUSY;
+			/* adopt firmware enabled */
+			if (!cxlds->bi)
+				dev_dbg(cxlds->dev,
+					"adopting firmware-enabled BI\n");
+			goto done;
 		}
 		val = ctrl | CXL_BI_DECODER_CTRL_BI_ENABLE;
 	} else {
@@ -1200,11 +1239,11 @@ static int __cxl_bi_ctrl_endpoint(struct cxl_dev_state *cxlds, bool enable)
 	}
 
 	writel(val, bi + CXL_BI_DECODER_CTRL_OFFSET);
-	cxlds->bi = enable;
 
 	dev_dbg(cxlds->dev, "BI requests %s\n",
 		str_enabled_disabled(enable));
-
+done:
+	cxlds->bi = enable;
 	return 0;
 }
 
@@ -1262,14 +1301,26 @@ static void cxl_bi_dealloc(void *data)
 static int cxl_bi_enable_path(struct cxl_dev_state *cxlds,
 			      struct cxl_port *port, struct cxl_dport *dport)
 {
+	struct cxl_port *endpoint = cxlds->cxlmd->endpoint;
 	struct cxl_dport *dport_iter, *failed;
 	struct cxl_port *port_iter;
+	bool adopt;
 	int rc;
+
+	/*
+	 * Adoption is a path property, not a per-dport one: only when
+	 * firmware enabled the device itself does a dport's committed
+	 * state cover this device's BI-ID.
+	 */
+	adopt = FIELD_GET(CXL_BI_DECODER_CTRL_BI_ENABLE,
+			  readl(endpoint->regs.bi_decoder +
+				CXL_BI_DECODER_CTRL_OFFSET));
 
 	port_iter = port;
 	dport_iter = dport;
 	while (!is_cxl_root(port_iter)) {
-		rc = cxl_bi_ctrl_dport_enable(dport_iter, dport_iter == dport);
+		rc = cxl_bi_ctrl_dport_enable(dport_iter, dport_iter == dport,
+					      &adopt);
 		if (rc)
 			goto err_rollback;
 
