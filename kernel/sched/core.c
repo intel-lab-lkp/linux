@@ -6768,6 +6768,14 @@ static bool try_to_block_task(struct rq *rq, struct task_struct *p,
 		return false;
 	}
 
+	/*
+	 * Proxy execution can keep a mutex-blocked task on the runqueue, so it
+	 * may not pass through ENQUEUE_WAKEUP, which normally resets the RT
+	 * watchdog interval.
+	 */
+	if (sched_proxy_exec() && p->rt.timeout)
+		p->rt.timeout = 0;
+
 	p->is_blocked = 1;
 
 	/*
@@ -7242,6 +7250,16 @@ pick_again:
 	} else {
 		rq_set_donor(rq, next);
 	}
+
+	/*
+	 * End a previous RT proxy watchdog interval once neither context is
+	 * in the RT class. Preserve the interval for an RT-policy task that is
+	 * temporarily PI-boosted into the DL class.
+	 */
+	if (sched_proxy_exec() && !task_has_rt_policy(next) &&
+	    !rt_prio(next->prio) &&
+	    !rt_prio(rq->donor->prio) && next->rt.timeout)
+		next->rt.timeout = 0;
 
 picked:
 	clear_tsk_need_resched(prev);

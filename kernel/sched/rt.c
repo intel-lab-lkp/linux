@@ -2542,15 +2542,23 @@ static void task_tick_rt(struct rq *rq, int queued)
 	struct task_struct *p = rq->donor;
 	struct sched_rt_entity *rt_se;
 
-	if (p->sched_class != &rt_sched_class)
+	if (p->sched_class != &rt_sched_class) {
+		/*
+		 * The RT callback can also be dispatched for an RT execution
+		 * context whose scheduling context belongs to another class.
+		 * Keep the watchdog tied to the task whose runtime is advancing.
+		 */
+		if (rq->curr->sched_class == &rt_sched_class)
+			watchdog(rq, rq->curr);
 		return;
+	}
 
 	rt_se = &p->rt;
 
 	update_curr_rt(rq);
 	update_rt_rq_load_avg(rq_clock_pelt(rq), rq, 1);
 
-	watchdog(rq, p);
+	watchdog(rq, rq->curr);
 
 	/*
 	 * RR tasks need a special form of time-slice management.
