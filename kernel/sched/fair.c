@@ -10043,39 +10043,42 @@ preempt:
 	resched_curr_lazy(rq);
 }
 
-struct task_struct *pick_task_fair(struct rq *rq, struct rq_flags *rf)
-	__must_hold(__rq_lockp(rq))
+static struct task_struct *pick_task_fair_rq(struct rq *rq)
 {
 	struct cfs_rq *cfs_rq = &rq->cfs;
 	struct sched_entity *se;
+
+	while (cfs_rq->h_nr_queued) {
+		/* Might not have done put_prev_entity() */
+		if (cfs_rq->curr && cfs_rq->curr->on_rq)
+			update_curr_eevdf(cfs_rq);
+
+		se = pick_next_entity(rq, true);
+		if (se)
+			return task_of(se);
+	}
+
+	return NULL;
+}
+
+struct task_struct *pick_task_fair(struct rq *rq, struct rq_flags *rf)
+	__must_hold(__rq_lockp(rq))
+{
 	struct task_struct *p;
 	int new_tasks;
 
-again:
-	if (!cfs_rq->h_nr_queued)
-		goto idle;
+	do {
+		p = pick_task_fair_rq(rq);
+		if (p)
+			return p;
 
-	/* Might not have done put_prev_entity() */
-	if (cfs_rq->curr && cfs_rq->curr->on_rq)
-		update_curr_eevdf(cfs_rq);
+		if (sched_core_enabled(rq))
+			return NULL;
 
-	se = pick_next_entity(rq, true);
-	if (!se)
-		goto again;
+		new_tasks = sched_balance_newidle(rq, rf);
+	} while (new_tasks > 0);
 
-	p = task_of(se);
-	return p;
-
-idle:
-	if (sched_core_enabled(rq))
-		return NULL;
-
-	new_tasks = sched_balance_newidle(rq, rf);
-	if (new_tasks < 0)
-		return RETRY_TASK;
-	if (new_tasks > 0)
-		goto again;
-	return NULL;
+	return new_tasks ? RETRY_TASK : NULL;
 }
 
 static struct task_struct *
