@@ -461,6 +461,20 @@ static int stub_recv_xbuff(struct usbip_device *ud, struct stub_priv *priv)
 	return ret;
 }
 
+/*
+ * number_of_packets is set to -1 by the USB/IP sender when the transfer
+ * is not isochronous.
+ * usbip_pack_pdu() copies this value into urb->number_of_packets.
+ * Leaving the number_of_packets at -1 can lead to
+ * downstream consumers of this urb (e.g. host-controller drivers)
+ * to allocate negative iso_frame_desc storage.
+ * Set it to what the urb was actually allocated for.
+ */
+static inline void stub_fixup_urb_number_of_packets(struct urb *urb, int np)
+{
+	urb->number_of_packets = np;
+}
+
 static void stub_recv_cmd_submit(struct stub_device *sdev,
 				 struct usbip_header *pdu)
 {
@@ -567,6 +581,7 @@ static void stub_recv_cmd_submit(struct stub_device *sdev,
 		}
 
 		usbip_pack_pdu(pdu, priv->urbs[0], USBIP_CMD_SUBMIT, 0);
+		stub_fixup_urb_number_of_packets(priv->urbs[0], np);
 	} else {
 		for_each_sg(sgl, sg, nents, i) {
 			priv->urbs[i] = usb_alloc_urb(0, GFP_KERNEL);
@@ -579,6 +594,7 @@ static void stub_recv_cmd_submit(struct stub_device *sdev,
 			usbip_pack_pdu(pdu, priv->urbs[i], USBIP_CMD_SUBMIT, 0);
 			priv->urbs[i]->transfer_buffer = sg_virt(sg);
 			priv->urbs[i]->transfer_buffer_length = sg->length;
+			stub_fixup_urb_number_of_packets(priv->urbs[i], 0);
 		}
 		priv->sgl = sgl;
 	}
