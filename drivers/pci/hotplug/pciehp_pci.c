@@ -59,7 +59,8 @@ int pciehp_configure_device(struct controller *ctrl)
 	}
 
 	for_each_pci_bridge(dev, parent)
-		pci_hp_add_bridge(dev);
+		if (pci_hp_add_bridge(dev))
+			ctrl_err(ctrl, "pci_hp_add_bridge(%s) failed\n", pci_name(dev));
 
 	pci_assign_unassigned_bridge_resources(bridge);
 	pcie_bus_configure_settings(parent);
