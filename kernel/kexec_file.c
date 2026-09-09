@@ -142,6 +142,8 @@ void kimage_file_post_load_cleanup(struct kimage *image)
 	kfree(image->image_loader_data);
 	image->image_loader_data = NULL;
 
+	crash_dm_crypt_cleanup(image);
+
 	kexec_file_dbg_print = false;
 }
 
