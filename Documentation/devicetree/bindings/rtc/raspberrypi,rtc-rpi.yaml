@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/rtc/raspberrypi,rtc-rpi.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Raspberry Pi firmware RTC
+
+maintainers:
+  - Jonathan Bell <jonathan@raspberrypi.com>
+
+description: |
+  Raspberry Pi RTC from the DA9091 accessed through the Raspberry Pi firmware
+  property interface.
+
+properties:
+  compatible:
+    const: raspberrypi,rpi-rtc
+
+  firmware:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      Phandle to the Raspberry Pi firmware device.
+
+  trickle-charge-microvolt:
+    description:
+      RTC backup battery trickle-charge voltage. A value of 0 disables
+      trickle charging.
+    anyOf:
+      - const: 0
+      - minimum: 1300000
+        maximum: 4400000
+
+required:
+  - compatible
+  - firmware
+
+additionalProperties: false
+
+examples:
+  - |
+    rtc {
+        compatible = "raspberrypi,rpi-rtc";
+        firmware = <&firmware>;
+        status = "okay";
+        trickle-charge-microvolt = <0>;
+    };
