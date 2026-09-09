@@ -176,7 +176,7 @@ ath12k_dp_mon_fill_rx_rate(struct ath12k_pdev_dp *dp_pdev,
 			break;
 		}
 		rx_status->encoding = RX_ENC_EHT;
-		rx_status->he_gi = ath12k_he_gi_to_nl80211_he_gi(sgi);
+		rx_status->eht.gi = ath12k_mac_eht_gi_to_nl80211_eht_gi(sgi);
 		break;
 	default:
 		ath12k_dbg(ab, ATH12K_DBG_DATA,
