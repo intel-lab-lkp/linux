@@ -102,6 +102,13 @@
 		startup-delay-us = <150000>;
 		enable-active-high;
 	};
+
+	rpi_rtc: rpi-rtc {
+		compatible = "raspberrypi,rpi-rtc";
+		firmware = <&firmware>;
+		status = "okay";
+		trickle-charge-microvolt = <0>;
+	};
 };
 
 &pinctrl {
