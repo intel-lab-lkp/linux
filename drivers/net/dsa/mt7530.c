@@ -2404,7 +2404,7 @@ mt7530_free_mdio_irq(struct mt7530_priv *priv)
 	}
 }
 
-static int
+int
 mt7530_setup_mdio(struct mt7530_priv *priv)
 {
 	struct device_node *mnp, *np = priv->dev->of_node;
@@ -2413,6 +2413,10 @@ mt7530_setup_mdio(struct mt7530_priv *priv)
 	struct mii_bus *bus;
 	static int idx;
 	int ret = 0;
+
+	/* Already done */
+	if (priv->child_bus)
+		return 0;
 
 	mnp = of_get_child_by_name(np, "mdio");
 
@@ -2455,6 +2459,7 @@ out:
 	of_node_put(mnp);
 	return ret;
 }
+EXPORT_SYMBOL_GPL(mt7530_setup_mdio);
 
 static int
 mt7530_setup(struct dsa_switch *ds)
