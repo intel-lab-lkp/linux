@@ -96,7 +96,7 @@ scmi_powercap_set_root_children_enable_state(struct scmi_powercap_root *pr, bool
 		if (!scmi_powercap_is_control_type_child(spz))
 			continue;
 
-		if (!spz->info->powercap_cap_config)
+		if (!spz->info->cpli[0].cap_config)
 			continue;
 
 		ret = powercap_ops->cap_enable_get(spz->ph, spz->info->id,
