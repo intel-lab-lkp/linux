@@ -346,6 +346,7 @@ static inline void folio_migrate_refs(struct folio *new, const struct folio *old
 enum {
 	LRU_NEXT_NEVER_TAIL = 0,	/* Used by a tail's compound_head */
 	LRU_NEXT_BATCHED = 1,		/* Not used by any aligned pointer */
+	LRU_NEXT_ACTIVATE,
 	NR_LRU_NEXT_FLAGS
 };
 
@@ -357,6 +358,9 @@ bool lru_add_del_folio(struct folio *folio)
 	/* BUG_ON(folio_test_lru(folio) && folio_ref_count(folio)); */
 	if (!(lru_next & BIT(LRU_NEXT_BATCHED)))
 		return false;
+
+	if (lru_next & BIT(LRU_NEXT_ACTIVATE))
+		folio_set_active(folio);
 
 	WRITE_ONCE(folio->lru.next, LIST_POISON1);
 	/* BUG_ON(folio->lru_next & BIT(LRU_NEXT_BATCHED)); */
