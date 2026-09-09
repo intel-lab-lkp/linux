@@ -4113,7 +4113,8 @@ err_assert_reset:
 err_disable_regulators:
 	regulator_bulk_disable(cfg->num_vregs, qmp->vregs);
 err_decrement_count:
-	qmp->init_count--;
+	if (!force)
+		qmp->init_count--;
 
 	return ret;
 }
