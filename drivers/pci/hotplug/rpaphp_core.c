@@ -252,8 +252,11 @@ static int rpaphp_check_drc_props_v2(struct device_node *dn, char *drc_name,
 		/* Found it */
 		if (my_index >= drc.drc_index_start && my_index <= drc.last_drc_index) {
 			int index = my_index - drc.drc_index_start;
-			sprintf(cell_drc_name, "%s%d", drc.drc_name_prefix,
-				drc.drc_name_suffix_start + index);
+
+			if (snprintf(cell_drc_name, sizeof(cell_drc_name), "%s%u",
+				     drc.drc_name_prefix,
+				     drc.drc_name_suffix_start + index) >= sizeof(cell_drc_name))
+				return -EINVAL;
 			break;
 		}
 	}
@@ -355,7 +358,9 @@ static int rpaphp_drc_info_add_slot(struct device_node *dn)
 	if (!is_php_type(drc.drc_type))
 		return 0;
 
-	sprintf(drc_name, "%s%d", drc.drc_name_prefix, drc.drc_name_suffix_start);
+	if (snprintf(drc_name, sizeof(drc_name), "%s%u", drc.drc_name_prefix,
+		     drc.drc_name_suffix_start) >= sizeof(drc_name))
+		return -EINVAL;
 
 	slot = alloc_slot_struct(dn, drc.drc_index_start, drc_name, drc.drc_power_domain);
 	if (!slot)
