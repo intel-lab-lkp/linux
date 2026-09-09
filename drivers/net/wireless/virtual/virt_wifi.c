@@ -557,7 +557,6 @@ static int virt_wifi_newlink(struct net_device *dev,
 	}
 
 	eth_hw_addr_inherit(dev, priv->lowerdev);
-	netif_stacked_transfer_operstate(priv->lowerdev, dev);
 
 	dev->ieee80211_ptr = kzalloc_obj(*dev->ieee80211_ptr);
 
@@ -582,6 +581,8 @@ static int virt_wifi_newlink(struct net_device *dev,
 			err);
 		goto unregister_netdev;
 	}
+
+	netif_stacked_transfer_operstate(priv->lowerdev, dev);
 
 	dev->priv_destructor = virt_wifi_net_device_destructor;
 	priv->being_deleted = false;
