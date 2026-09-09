@@ -36,6 +36,7 @@ struct gpio_rcar_info {
 	bool has_both_edge_trigger;
 	bool has_always_in;
 	bool has_inen;
+	bool has_layout_gen5;
 };
 
 struct gpio_rcar_priv {
@@ -49,31 +50,48 @@ struct gpio_rcar_priv {
 	struct gpio_rcar_bank_info bank_info;
 };
 
-#define IOINTSEL	0x00	/* General IO/Interrupt Switching Register */
-#define INOUTSEL	0x04	/* General Input/Output Switching Register */
-#define OUTDT		0x08	/* General Output Register */
-#define INDT		0x0c	/* General Input Register */
-#define INTDT		0x10	/* Interrupt Display Register */
-#define INTCLR		0x14	/* Interrupt Clear Register */
-#define INTMSK		0x18	/* Interrupt Mask Register */
-#define MSKCLR		0x1c	/* Interrupt Mask Clear Register */
-#define POSNEG		0x20	/* Positive/Negative Logic Select Register */
-#define EDGLEVEL	0x24	/* Edge/level Select Register */
-#define OUTDTSEL	0x40	/* Output Data Select Register */
-#define BOTHEDGE	0x4c	/* One Edge/Both Edge Select Register */
-#define INEN		0x50	/* General Input Enable Register */
+enum {
+	IOINTSEL = 0,	/* General IO/Interrupt Switching Register */
+	INOUTSEL,	/* General Input/Output Switching Register */
+	OUTDT,		/* General Output Register */
+	INDT,		/* General Input Register */
+	INTDT,		/* Interrupt Display Register */
+	INTCLR,		/* Interrupt Clear Register */
+	INTMSK,		/* Interrupt Mask Register */
+	MSKCLR,		/* Interrupt Mask Clear Register */
+	POSNEG,		/* Positive/Negative Logic Select Register */
+	EDGLEVEL,	/* Edge/level Select Register */
+	OUTDTSEL,	/* Output Data Select Register */
+	BOTHEDGE,	/* One Edge/Both Edge Select Register */
+	INEN,		/* General Input Enable Register */
+	REG_COUNT
+};
 
 #define RCAR_MAX_GPIO_PER_BANK		32
 
+static volatile void __iomem *gpio_rcar_remap_offset(struct gpio_rcar_priv *p, int offs)
+{
+	const u32 offsetmap[2][REG_COUNT] = {
+		/* Gen1..Gen4 */
+		{ 0x00, 0x04, 0x08, 0x0c, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x40, 0x4c, 0x50 },
+		/* Gen5 */
+		{ 0x00, 0x04, 0x08, 0x1c, 0x80, 0x84, 0x88, 0x8c, 0x90, 0x94, 0x0c, 0xbc, 0x18 },
+	};
+
+	BUILD_BUG_ON(offs < 0 || offs >= REG_COUNT);
+
+	return p->base + offsetmap[p->info.has_layout_gen5][offs];
+}
+
 static inline u32 gpio_rcar_read(struct gpio_rcar_priv *p, int offs)
 {
-	return ioread32(p->base + offs);
+	return ioread32(gpio_rcar_remap_offset(p, offs));
 }
 
 static inline void gpio_rcar_write(struct gpio_rcar_priv *p, int offs,
 				   u32 value)
 {
-	iowrite32(value, p->base + offs);
+	iowrite32(value, gpio_rcar_remap_offset(p, offs));
 }
 
 static void gpio_rcar_modify_bit(struct gpio_rcar_priv *p, int offs,
@@ -399,6 +417,7 @@ static const struct gpio_rcar_info gpio_rcar_info_gen1 = {
 	.has_both_edge_trigger = false,
 	.has_always_in = false,
 	.has_inen = false,
+	.has_layout_gen5 = false,
 };
 
 static const struct gpio_rcar_info gpio_rcar_info_gen2 = {
@@ -406,6 +425,7 @@ static const struct gpio_rcar_info gpio_rcar_info_gen2 = {
 	.has_both_edge_trigger = true,
 	.has_always_in = false,
 	.has_inen = false,
+	.has_layout_gen5 = false,
 };
 
 static const struct gpio_rcar_info gpio_rcar_info_gen3 = {
@@ -413,6 +433,7 @@ static const struct gpio_rcar_info gpio_rcar_info_gen3 = {
 	.has_both_edge_trigger = true,
 	.has_always_in = true,
 	.has_inen = false,
+	.has_layout_gen5 = false,
 };
 
 static const struct gpio_rcar_info gpio_rcar_info_gen4 = {
@@ -420,6 +441,15 @@ static const struct gpio_rcar_info gpio_rcar_info_gen4 = {
 	.has_both_edge_trigger = true,
 	.has_always_in = true,
 	.has_inen = true,
+	.has_layout_gen5 = false,
+};
+
+static const struct gpio_rcar_info gpio_rcar_info_gen5 = {
+	.has_outdtsel = true,
+	.has_both_edge_trigger = true,
+	.has_always_in = true,
+	.has_inen = true,
+	.has_layout_gen5 = true,
 };
 
 static const struct of_device_id gpio_rcar_of_table[] = {
@@ -438,6 +468,9 @@ static const struct of_device_id gpio_rcar_of_table[] = {
 	}, {
 		.compatible = "renesas,rcar-gen4-gpio",
 		.data = &gpio_rcar_info_gen4,
+	}, {
+		.compatible = "renesas,rcar-gen5-gpio",
+		.data = &gpio_rcar_info_gen5,
 	}, {
 		.compatible = "renesas,gpio-rcar",
 		.data = &gpio_rcar_info_gen1,
