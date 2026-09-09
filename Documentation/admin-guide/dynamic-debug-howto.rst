@@ -78,11 +78,12 @@ Command Language Reference
 ==========================
 
 At the basic lexical level, a command is a sequence of words separated
-by spaces or tabs.  So these are all equivalent::
+by spaces, tabs, or commas.  So these are all equivalent::
 
   :#> ddcmd file svcsock.c line 1603 +p
   :#> ddcmd "file svcsock.c line 1603 +p"
   :#> ddcmd '  file   svcsock.c     line  1603 +p  '
+  :#> ddcmd file,svcsock.c,line,1603,+p
 
 Command submissions are bounded by a write() system call.
 Multiple commands can be written together, separated by ``;`` or ``\n``::
@@ -176,6 +177,7 @@ module
 	module */main	   # any subsystem ending in main
         module main	   # simple modname, selects same as above
 	module drm*	   # both drm, drm_kms_helper
+	module,sunrpc	   # with ',' as token separator
 
 format
     The given string is searched for in the dynamic debug format
