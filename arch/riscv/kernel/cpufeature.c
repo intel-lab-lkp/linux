@@ -1217,7 +1217,6 @@ void __init riscv_user_isa_enable(void)
 		pr_warn("Zicbop disabled as it is unavailable on some harts\n");
 }
 
-#ifdef CONFIG_RISCV_ALTERNATIVE
 /*
  * Alternative patch sites consider 48 bits when determining when to patch
  * the old instruction sequence with the new. These bits are broken into a
@@ -1306,4 +1305,3 @@ void __init_or_module riscv_cpufeature_patch_func(struct alt_entry *begin,
 		mutex_unlock(&text_mutex);
 	}
 }
-#endif
