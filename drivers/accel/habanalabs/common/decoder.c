@@ -85,6 +85,16 @@ static void dec_abnrm_intr_work(struct work_struct *work)
 
 void hl_dec_fini(struct hl_device *hdev)
 {
+	struct asic_fixed_properties *prop = &hdev->asic_prop;
+	int i;
+
+	if (!hdev->dec)
+		return;
+
+	/* interrupts are gone, but a queued work item may still be pending */
+	for (i = 0; i < prop->max_dec; i++)
+		cancel_work_sync(&hdev->dec[i].abnrm_intr_work);
+
 	kfree(hdev->dec);
 }
 
@@ -119,7 +129,8 @@ int hl_dec_init(struct hl_device *hdev)
 	return 0;
 
 err_dec_fini:
-	hl_dec_fini(hdev);
+	/* No interrupt was requested yet, so no work could be queued. */
+	kfree(hdev->dec);
 
 	return rc;
 }
