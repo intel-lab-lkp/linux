@@ -8124,7 +8124,7 @@ F:	Documentation/devicetree/bindings/display/bridge/chipone,icn6211.yaml
 F:	drivers/gpu/drm/bridge/chipone-icn6211.c
 
 DRM DRIVER FOR EBBG FT8719 PANEL
-M:	Joel Selvaraj <jo@jsfamily.in>
+M:	Joel Selvaraj <foss@joelselvaraj.com>
 S:	Maintained
 T:	git https://gitlab.freedesktop.org/drm/misc/kernel.git
 F:	Documentation/devicetree/bindings/display/panel/ebbg,ft8719.yaml
