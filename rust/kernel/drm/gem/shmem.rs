@@ -145,6 +145,7 @@ impl<T: DriverObject> Object<T> {
         // SAFETY: `drm_gem_shmem_vm_ops` is a valid, static const on the C side.
         vm_ops: unsafe { &raw const bindings::drm_gem_shmem_vm_ops },
         evict: None,
+        handle_free: None,
     };
 
     /// Return a raw pointer to the embedded drm_gem_shmem_object.
