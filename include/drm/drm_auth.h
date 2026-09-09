@@ -81,6 +81,17 @@ struct drm_master {
 	struct drm_master *lessor;
 
 	/**
+	 * @lease_master:
+	 *
+	 * Active independently opened client of an exposed lease, or NULL.
+	 * The original anonymous lease file does not participate in this
+	 * arbitration. Protected by &drm_device.master_mutex, with READ_ONCE()
+	 * for current-master checks. This pointer is only compared, never
+	 * dereferenced, and is cleared before the client is freed.
+	 */
+	struct drm_file *lease_master;
+
+	/**
 	 * @lessee_id:
 	 *
 	 * ID for lessees. Owners (i.e. @lessor is NULL) always have ID 0.

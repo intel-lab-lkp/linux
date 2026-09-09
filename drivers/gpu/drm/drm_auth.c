@@ -55,6 +55,11 @@
  * implicitly through closing/opening the primary device node. See also
  * drm_is_current_master().
  *
+ * Independently opened clients of an exposed lease share its &drm_master.
+ * Only &drm_master.lease_master is current within that lease, provided the
+ * lessor is current on the physical device. The original anonymous lease
+ * file retains its existing authority outside this local arbitration.
+ *
  * Clients can authenticate against the current master (if it matches their own)
  * using the GETMAGIC and AUTHMAGIC IOCTLs. Together with exchanging masters,
  * this allows controlled access to the device for an entire group of mutually
@@ -66,7 +71,13 @@ static bool drm_is_current_master_locked(struct drm_file *fpriv)
 	lockdep_assert_once(lockdep_is_held(&fpriv->master_lookup_lock) ||
 			    lockdep_is_held(&fpriv->minor->dev->master_mutex));
 
-	return fpriv->is_master && drm_lease_owner(fpriv->master) == fpriv->minor->dev->master;
+	if (!fpriv->is_master)
+		return false;
+	if (fpriv->lease_file &&
+	    READ_ONCE(fpriv->master->lease_master) != fpriv)
+		return false;
+
+	return drm_lease_owner(fpriv->master) == fpriv->minor->dev->master;
 }
 
 /**
@@ -242,6 +253,23 @@ drm_master_check_perm(struct drm_device *dev, struct drm_file *file_priv)
 	return 0;
 }
 
+static int drm_set_lease_master(struct drm_file *file_priv)
+{
+	struct drm_device *dev = file_priv->minor->dev;
+	struct drm_master *master = file_priv->master;
+
+	lockdep_assert_held_once(&dev->master_mutex);
+
+	if (drm_lease_owner(master) != dev->master)
+		return -EINVAL;
+	if (master->lease_master && master->lease_master != file_priv)
+		return -EBUSY;
+
+	WRITE_ONCE(master->lease_master, file_priv);
+	file_priv->was_master = true;
+	return 0;
+}
+
 int drm_setmaster_ioctl(struct drm_device *dev, void *data,
 			struct drm_file *file_priv)
 {
@@ -252,6 +280,9 @@ int drm_setmaster_ioctl(struct drm_device *dev, void *data,
 	ret = drm_master_check_perm(dev, file_priv);
 	if (ret)
 		return ret;
+
+	if (file_priv->lease_file)
+		return drm_set_lease_master(file_priv);
 
 	if (drm_is_current_master_locked(file_priv))
 		return ret;
@@ -296,6 +327,13 @@ int drm_dropmaster_ioctl(struct drm_device *dev, void *data,
 	if (ret)
 		return ret;
 
+	if (file_priv->lease_file) {
+		if (file_priv->master->lease_master != file_priv)
+			return -EINVAL;
+		WRITE_ONCE(file_priv->master->lease_master, NULL);
+		return 0;
+	}
+
 	if (!drm_is_current_master_locked(file_priv))
 		return -EINVAL;
 
@@ -323,7 +361,17 @@ int drm_master_open(struct drm_file *file_priv)
 	 * any master object for render clients
 	 */
 	guard(mutex)(&dev->master_mutex);
-	if (!dev->master) {
+	if (file_priv->lease_file) {
+		struct drm_file *lease_priv = file_priv->lease_file->private_data;
+
+		spin_lock(&file_priv->master_lookup_lock);
+		file_priv->master = drm_master_get(lease_priv->master);
+		file_priv->is_master = true;
+		file_priv->authenticated = true;
+		spin_unlock(&file_priv->master_lookup_lock);
+		/* Busy or inactive leases can still be opened as non-master. */
+		drm_set_lease_master(file_priv);
+	} else if (!dev->master) {
 		ret = drm_new_set_master(dev, file_priv);
 	} else {
 		spin_lock(&file_priv->master_lookup_lock);
@@ -344,13 +392,20 @@ void drm_master_release(struct drm_file *file_priv)
 	if (file_priv->magic)
 		idr_remove(&file_priv->master->magic_map, file_priv->magic);
 
+	if (file_priv->lease_file) {
+		if (master->lease_master == file_priv)
+			WRITE_ONCE(master->lease_master, NULL);
+		goto out;
+	}
+
 	if (!drm_is_current_master_locked(file_priv))
 		goto out;
 
 	if (dev->master && dev->master == file_priv->master)
 		drm_drop_master(dev, file_priv);
 out:
-	if (drm_core_check_feature(dev, DRIVER_MODESET) && file_priv->is_master) {
+	if (drm_core_check_feature(dev, DRIVER_MODESET) &&
+	    file_priv->is_master && !file_priv->lease_file) {
 		/* Revoke any leases held by this or lessees, but only if
 		 * this is the "real" master
 		 */

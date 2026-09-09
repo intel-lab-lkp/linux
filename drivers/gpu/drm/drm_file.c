@@ -268,6 +268,9 @@ void drm_file_free(struct drm_file *file)
 
 	drm_prime_destroy_file_private(&file->prime);
 
+	if (file->lease_file)
+		fput(file->lease_file);
+
 	WARN_ON(!list_empty(&file->event_list));
 
 	put_pid(rcu_access_pointer(file->pid));
@@ -308,12 +311,15 @@ static int drm_cpu_valid(void)
  *
  * \param filp file pointer.
  * \param minor acquired minor-object.
+ * \param lease_file original lease file, or NULL for an ordinary open.
  * \return zero on success or a negative number on failure.
  *
  * Creates and initializes a drm_file structure for the file private data in \p
  * filp and add it into the double linked list in \p dev.
  */
-int drm_open_helper(struct file *filp, struct drm_minor *minor)
+static int drm_open_helper_with_lease(struct file *filp,
+				      struct drm_minor *minor,
+				      struct file *lease_file)
 {
 	struct drm_device *dev = minor->dev;
 	struct drm_file *priv;
@@ -336,6 +342,8 @@ int drm_open_helper(struct file *filp, struct drm_minor *minor)
 	if (IS_ERR(priv))
 		return PTR_ERR(priv);
 
+	if (lease_file)
+		priv->lease_file = get_file(lease_file);
 	if (drm_is_primary_client(priv)) {
 		ret = drm_master_open(priv);
 		if (ret) {
@@ -354,6 +362,48 @@ int drm_open_helper(struct file *filp, struct drm_minor *minor)
 	return 0;
 }
 
+int drm_open_helper(struct file *filp, struct drm_minor *minor)
+{
+	return drm_open_helper_with_lease(filp, minor, NULL);
+}
+
+/* Consumes the minor reference, including on error. */
+static int drm_open_minor(struct file *filp, struct drm_minor *minor,
+			  struct file *lease_file)
+{
+	struct drm_device *dev = minor->dev;
+	int ret;
+
+	if (drm_dev_needs_global_mutex(dev))
+		mutex_lock(&drm_global_mutex);
+
+	atomic_fetch_inc(&dev->open_count);
+	filp->f_mapping = dev->anon_inode->i_mapping;
+
+	ret = drm_open_helper_with_lease(filp, minor, lease_file);
+	if (ret)
+		atomic_dec(&dev->open_count);
+
+	if (drm_dev_needs_global_mutex(dev))
+		mutex_unlock(&drm_global_mutex);
+	if (ret)
+		drm_minor_release(minor);
+
+	return ret;
+}
+
+int drm_open_lease(struct file *filp, struct file *lease_file)
+{
+	struct drm_file *lease_priv = lease_file->private_data;
+	struct drm_minor *minor;
+
+	minor = drm_minor_acquire(&drm_minors_xa, lease_priv->minor->index);
+	if (IS_ERR(minor))
+		return PTR_ERR(minor);
+
+	return drm_open_minor(filp, minor, lease_file);
+}
+
 /**
  * drm_open - open method for DRM file
  * @inode: device inode
@@ -368,38 +418,13 @@ int drm_open_helper(struct file *filp, struct drm_minor *minor)
  */
 int drm_open(struct inode *inode, struct file *filp)
 {
-	struct drm_device *dev;
 	struct drm_minor *minor;
-	int retcode;
 
 	minor = drm_minor_acquire(&drm_minors_xa, iminor(inode));
 	if (IS_ERR(minor))
 		return PTR_ERR(minor);
 
-	dev = minor->dev;
-	if (drm_dev_needs_global_mutex(dev))
-		mutex_lock(&drm_global_mutex);
-
-	atomic_fetch_inc(&dev->open_count);
-
-	/* share address_space across all char-devs of a single device */
-	filp->f_mapping = dev->anon_inode->i_mapping;
-
-	retcode = drm_open_helper(filp, minor);
-	if (retcode)
-		goto err_undo;
-
-	if (drm_dev_needs_global_mutex(dev))
-		mutex_unlock(&drm_global_mutex);
-
-	return 0;
-
-err_undo:
-	atomic_dec(&dev->open_count);
-	if (drm_dev_needs_global_mutex(dev))
-		mutex_unlock(&drm_global_mutex);
-	drm_minor_release(minor);
-	return retcode;
+	return drm_open_minor(filp, minor, NULL);
 }
 EXPORT_SYMBOL(drm_open);
 

@@ -48,6 +48,71 @@ DRM Display Resource Leasing
 .. kernel-doc:: drivers/gpu/drm/drm_lease.c
    :doc: drm leasing
 
+Exposing a lease as a device
+----------------------------
+
+By default, lease creation returns an anonymous file descriptor.
+Passing ``O_CREAT`` in ``drm_mode_create_lease.flags``
+also registers the lease as a DRM class device.
+The libdrm wrapper can be used as follows::
+
+    uint32_t lessee_id;
+    int lease_fd;
+
+    lease_fd = drmModeCreateLease(lessor_fd, object_ids, object_count,
+                                  O_CLOEXEC | O_CREAT, &lessee_id);
+    if (lease_fd < 0)
+            /* Handle the error. */
+
+The device is a child of the primary DRM device.
+Its name contains the primary node and the lessee ID.
+For example, lessee 1 of ``card0`` is exposed as ``/dev/dri/card0-lease-1``.
+Its uevent contains ``DEVTYPE=drm_lease``,
+allowing device managers to distinguish it from a DRM primary node.
+
+Opening the device creates an independent DRM file context for the same lease.
+Client capabilities, GEM and sync object handles, and event queues
+are private to each open and are cleaned up when that file is released.
+The DRM master and leased display resources are shared.
+Each open device file keeps the original lease file alive,
+and closing an independently opened client does not revoke the lease.
+The node remains until the last reference to the lease file is closed.
+Revoking the lease removes its objects,
+but leaves the device registered while references remain open.
+If the underlying DRM device is unregistered,
+the lease device node is removed immediately.
+Existing opens retain their usual DRM unplug semantics.
+
+Only one independently opened client can be current master of a lease.
+The first open becomes master if the lessor is current master.
+``DROP_MASTER`` relinquishes this role without revoking the lease,
+and ``SET_MASTER`` acquires it if no other client holds it.
+Closing the active client also relinquishes the role;
+existing clients must use ``SET_MASTER`` to acquire it.
+The usual master permission checks apply.
+This arbitration does not change the physical device's master
+or the active clients of other leases.
+
+The original anonymous lease file retains its existing master semantics
+and does not participate in this arbitration.
+It must remain with the trusted lease broker rather than being handed
+to a session that needs suspendable modesetting access.
+All clients still depend on the lessor being current master.
+
+Connector hotplug changes generate ``HOTPLUG=1`` change uevents
+for both the exposed lease and primary node.
+A device manager can expose it for seat assignment with a rule such as::
+
+    SUBSYSTEM=="drm", ENV{DEVTYPE}=="drm_lease", \
+      ENV{ID_FOR_SEAT}="drm-lease-$kernel", TAG+="seat", \
+      TAG+="master-of-seat"
+
+An exposed lease inherits the physical device's path information.
+Its name also matches ``card*``.
+Rules which create ``dri/by-path/*-card`` links
+should therefore require ``DEVTYPE=drm_minor``,
+so that a lease does not replace its primary node's link.
+
 Open-Source Userspace Requirements
 ==================================
 

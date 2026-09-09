@@ -228,8 +228,9 @@ struct drm_file {
 	/**
 	 * @is_master:
 	 *
-	 * This client is the creator of @master. Protected by struct
-	 * &drm_device.master_mutex.
+	 * This client is the creator of @master,
+	 * or an independently opened client of an exposed lease.
+	 * Protected by struct &drm_device.master_mutex.
 	 *
 	 * See also the :ref:`section on primary nodes and authentication
 	 * <drm_primary_node>`.
@@ -322,6 +323,16 @@ struct drm_file {
 
 	/** @filp: Pointer to the core file structure. */
 	struct file *filp;
+
+	/**
+	 * @lease_file:
+	 *
+	 * Reference to the original lease file for an independently opened
+	 * exposed lease client. Keeps the lease alive without sharing its
+	 * per-file resources. This client must not revoke the lease on close.
+	 * NULL for ordinary DRM files, including the original lease file.
+	 */
+	struct file *lease_file;
 
 	/**
 	 * @driver_priv:
