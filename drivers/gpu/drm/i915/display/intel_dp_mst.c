@@ -1451,6 +1451,13 @@ static int mst_connector_get_ddc_modes(struct drm_connector *_connector)
 
 	ret = intel_connector_update_modes(&connector->base, drm_edid);
 
+	/*
+	 * Re-evaluate PCON DSC passthrough capability now that the MST
+	 * connector's EDID has been parsed and display_info.hdmi.dsc_cap
+	 * is populated.
+	 */
+	intel_dp_pcon_set_dsc_passthrough_cap(intel_dp);
+
 	drm_edid_free(drm_edid);
 
 	if (intel_dp_tunnel_uhbr_lanes_wa_setup(intel_dp)) {
