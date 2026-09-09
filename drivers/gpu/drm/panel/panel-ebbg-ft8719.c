@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022 Joel Selvaraj <jo@jsfamily.in>
+ * Copyright (c) 2022 Joel Selvaraj <foss@joelselvaraj.com>
  * Generated with linux-mdss-dsi-panel-driver-generator from vendor device tree:
  * Copyright (c) 2013, The Linux Foundation. All rights reserved.
  */
@@ -242,6 +242,6 @@ static struct mipi_dsi_driver ebbg_ft8719_driver = {
 };
 module_mipi_dsi_driver(ebbg_ft8719_driver);
 
-MODULE_AUTHOR("Joel Selvaraj <jo@jsfamily.in>");
+MODULE_AUTHOR("Joel Selvaraj <foss@joelselvaraj.com>");
 MODULE_DESCRIPTION("DRM driver for EBBG FT8719 video dsi panel");
 MODULE_LICENSE("GPL v2");
