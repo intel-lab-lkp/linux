@@ -690,7 +690,8 @@ static int ibm_configure_device(struct pci_func *func)
 		}
 	}
 	if (!(flag) && (func->dev->hdr_type == PCI_HEADER_TYPE_BRIDGE)) {
-		pci_hp_add_bridge(func->dev);
+		if (pci_hp_add_bridge(func->dev))
+			err("pci_hp_add_bridge(%s) failed\n", pci_name(func->dev));
 		child = func->dev->subordinate;
 		if (child)
 			pci_bus_add_devices(child);

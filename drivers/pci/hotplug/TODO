@@ -37,8 +37,6 @@ ibmphp:
 * A large portion of ibmphp_res.c and ibmphp_pci.c concerns resource
   management.  Doesn't this duplicate functionality in the core?
 
-* Returned code from pci_hp_add_bridge() is not checked.
-
 shpchp:
 
 * The hardirq handler shpc_isr() queues events on a workqueue.  It can be
