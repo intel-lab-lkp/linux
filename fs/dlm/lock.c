@@ -1554,9 +1554,17 @@ static int find_lkb(struct dlm_ls *ls, uint32_t lkid, struct dlm_lkb **lkb_ret)
 		/* check if lkb is still part of lkbxa under lkbxa_lock as
 		 * the lkb_ref is tight to the lkbxa data structure, see
 		 * __put_lkb().
+		 *
+		 * _create_lkb() publishes the lkb in lkbxa before
+		 * attach_lkb() gives it an rsb, so a lkid that comes from
+		 * outside can name a lkb that is still being built. Every
+		 * caller here dereferences lkb->lkb_resource, so treat such
+		 * a lkb as not found. Once an rsb has been seen it stays
+		 * attached, as detach_lkb() only runs from __put_lkb() on
+		 * the last reference and we are about to take one.
 		 */
 		read_lock_bh(&ls->ls_lkbxa_lock);
-		if (kref_read(&lkb->lkb_ref))
+		if (kref_read(&lkb->lkb_ref) && lkb->lkb_resource)
 			kref_get(&lkb->lkb_ref);
 		else
 			lkb = NULL;
