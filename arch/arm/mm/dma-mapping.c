@@ -663,6 +663,9 @@ static void dma_cache_maint_page(phys_addr_t phys, size_t size,
 		} else {
 			phys += offset;
 			vaddr = phys_to_virt(phys);
+			if (IS_ENABLED(CONFIG_HIGHMEM) &&
+			    len > (unsigned long)high_memory - (unsigned long)vaddr)
+				len = PAGE_SIZE - offset;
 			op(vaddr, len, dir);
 		}
 		offset = 0;
