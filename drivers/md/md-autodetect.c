@@ -213,7 +213,7 @@ static void __init md_setup_drive(struct md_setup_args *args)
 				(1 << MD_DISK_ACTIVE) | (1 << MD_DISK_SYNC);
 		}
 
-		md_add_new_disk(mddev, &dinfo);
+		md_add_new_disk(mddev, &dinfo, NULL);
 	}
 
 	if (!err)

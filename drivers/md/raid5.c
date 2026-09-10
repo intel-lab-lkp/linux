@@ -7288,6 +7288,9 @@ static ssize_t
 raid5_store_skip_copy(struct mddev *mddev, const char *page, size_t len)
 {
 	struct r5conf *conf;
+	struct request_queue *q = NULL;
+	struct queue_limits lim;
+	struct queue_limits *limp = NULL;
 	unsigned long new;
 	int err;
 
@@ -7297,23 +7300,33 @@ raid5_store_skip_copy(struct mddev *mddev, const char *page, size_t len)
 		return -EINVAL;
 	new = !!new;
 
+	/* q->limits_lock nests outside both, see md_start_sync() */
+	if (!mddev_is_dm(mddev)) {
+		q = mddev->gendisk->queue;
+		lim = queue_limits_start_update(q);
+		limp = &lim;
+	}
+
 	err = mddev_suspend_and_lock(mddev);
-	if (err)
+	if (err) {
+		if (limp)
+			queue_limits_cancel_update(q);
 		return err;
+	}
 	conf = mddev->private;
 	if (!conf)
 		err = -ENODEV;
 	else if (new != conf->skip_copy) {
-		struct request_queue *q = mddev->gendisk->queue;
-		struct queue_limits lim = queue_limits_start_update(q);
-
 		conf->skip_copy = new;
-		if (new)
-			lim.features |= BLK_FEAT_STABLE_WRITES;
-		else
-			lim.features &= ~BLK_FEAT_STABLE_WRITES;
-		err = queue_limits_commit_update(q, &lim);
+		if (limp) {
+			if (new)
+				limp->features |= BLK_FEAT_STABLE_WRITES;
+			else
+				limp->features &= ~BLK_FEAT_STABLE_WRITES;
+		}
 	}
+	if (limp)
+		err = queue_limits_commit_update(q, limp) ?: err;
 	mddev_unlock_and_resume(mddev);
 	return err ?: len;
 }

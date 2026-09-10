@@ -2983,7 +2983,7 @@ rewrite:
 }
 EXPORT_SYMBOL(md_update_sb);
 
-static int add_bound_rdev(struct md_rdev *rdev)
+static int add_bound_rdev(struct md_rdev *rdev, struct queue_limits *lim)
 {
 	struct mddev *mddev = rdev->mddev;
 	int err = 0;
@@ -2996,7 +2996,7 @@ static int add_bound_rdev(struct md_rdev *rdev)
 		 */
 		super_types[mddev->major_version].
 			validate_super(mddev, NULL/*freshest*/, rdev);
-		err = mddev->pers->hot_add_disk(mddev, rdev, NULL);
+		err = mddev->pers->hot_add_disk(mddev, rdev, lim);
 		if (err) {
 			md_kick_rdev_from_array(rdev);
 			return err;
@@ -3119,7 +3119,7 @@ state_store(struct md_rdev *rdev, const char *buf, size_t len,
 	} else if (cmd_match(buf, "remove")) {
 		if (rdev->mddev->pers) {
 			clear_bit(Blocked, &rdev->flags);
-			remove_and_add_spares(rdev->mddev, rdev, NULL);
+			remove_and_add_spares(rdev->mddev, rdev, lim);
 		}
 		if (rdev->raid_disk >= 0)
 			err = -EBUSY;
@@ -3238,7 +3238,7 @@ state_store(struct md_rdev *rdev, const char *buf, size_t len,
 			if (!mddev_is_clustered(rdev->mddev) ||
 			    (err = mddev->cluster_ops->gather_bitmaps(rdev)) == 0) {
 				clear_bit(Faulty, &rdev->flags);
-				err = add_bound_rdev(rdev);
+				err = add_bound_rdev(rdev, lim);
 			}
 		} else
 			err = -EBUSY;
@@ -3325,7 +3325,7 @@ slot_store(struct md_rdev *rdev, const char *buf, size_t len,
 		if (rdev->mddev->pers->hot_remove_disk == NULL)
 			return -EINVAL;
 		clear_bit(Blocked, &rdev->flags);
-		remove_and_add_spares(rdev->mddev, rdev, NULL);
+		remove_and_add_spares(rdev->mddev, rdev, lim);
 		if (rdev->raid_disk >= 0)
 			return -EBUSY;
 		set_bit(MD_RECOVERY_NEEDED, &rdev->mddev->recovery);
@@ -3356,7 +3356,7 @@ slot_store(struct md_rdev *rdev, const char *buf, size_t len,
 		clear_bit(In_sync, &rdev->flags);
 		clear_bit(Bitmap_sync, &rdev->flags);
 		err = rdev->mddev->pers->hot_add_disk(rdev->mddev, rdev,
-						     NULL);
+						     lim);
 		if (err) {
 			rdev->raid_disk = -1;
 			return err;
@@ -3762,6 +3762,9 @@ rdev_attr_store(struct kobject *kobj, struct attribute *attr,
 	struct rdev_sysfs_entry *entry = container_of(attr, struct rdev_sysfs_entry, attr);
 	struct md_rdev *rdev = container_of(kobj, struct md_rdev, kobj);
 	struct kernfs_node *kn = NULL;
+	struct request_queue *q = NULL;
+	struct queue_limits lim;
+	struct queue_limits *limp = NULL;
 	bool suspend = false;
 	ssize_t rv;
 	struct mddev *mddev = READ_ONCE(rdev->mddev);
@@ -3782,14 +3785,40 @@ rdev_attr_store(struct kobject *kobj, struct attribute *attr,
 			suspend = true;
 	}
 
+	/*
+	 * These can add a leg back, which stacks its limits; the other
+	 * state_store() values never reach ->hot_add_disk().  q->limits_lock
+	 * nests outside the lock and the suspend, see md_start_sync().
+	 */
+	if ((entry->store == slot_store ||
+	     (entry->store == state_store &&
+	      (cmd_match(page, "remove") || cmd_match(page, "re-add")))) &&
+	    !mddev_is_dm(mddev)) {
+		q = mddev->gendisk->queue;
+		lim = queue_limits_start_update(q);
+		limp = &lim;
+	}
+
 	rv = suspend ? mddev_suspend_and_lock(mddev) : mddev_lock(mddev);
 	if (!rv) {
 		if (rdev->mddev == NULL)
 			rv = -ENODEV;
 		else
-			rv = entry->store(rdev, page, length, NULL);
+			rv = entry->store(rdev, page, length, limp);
+		/* apply the limits before the array takes I/O again */
+		if (limp) {
+			int err = queue_limits_commit_update(q, limp);
+
+			limp = NULL;
+			if (err && rv >= 0)
+				rv = err;
+		}
 		suspend ? mddev_unlock_and_resume(mddev) : mddev_unlock(mddev);
 	}
+
+	/* only reached when the lock failed, so nothing was stacked */
+	if (limp)
+		queue_limits_cancel_update(q);
 
 	if (kn)
 		sysfs_unbreak_active_protection(kn);
@@ -7575,7 +7604,8 @@ static int get_disk_info(struct mddev *mddev, void __user * arg)
 	return 0;
 }
 
-int md_add_new_disk(struct mddev *mddev, struct mdu_disk_info_s *info)
+int md_add_new_disk(struct mddev *mddev, struct mdu_disk_info_s *info,
+		    struct queue_limits *lim)
 {
 	struct md_rdev *rdev;
 	dev_t dev = MKDEV(info->major,info->minor);
@@ -7723,11 +7753,11 @@ int md_add_new_disk(struct mddev *mddev, struct mdu_disk_info_s *info)
 				if (err)
 					mddev->cluster_ops->add_new_disk_cancel(mddev);
 				else
-					err = add_bound_rdev(rdev);
+					err = add_bound_rdev(rdev, lim);
 			}
 
 		} else if (!err)
-			err = add_bound_rdev(rdev);
+			err = add_bound_rdev(rdev, lim);
 
 		return err;
 	}
@@ -7780,7 +7810,8 @@ int md_add_new_disk(struct mddev *mddev, struct mdu_disk_info_s *info)
 	return 0;
 }
 
-static int hot_remove_disk(struct mddev *mddev, dev_t dev)
+static int hot_remove_disk(struct mddev *mddev, dev_t dev,
+			   struct queue_limits *lim)
 {
 	struct md_rdev *rdev;
 
@@ -7795,7 +7826,7 @@ static int hot_remove_disk(struct mddev *mddev, dev_t dev)
 		goto kick_rdev;
 
 	clear_bit(Blocked, &rdev->flags);
-	remove_and_add_spares(mddev, rdev, NULL);
+	remove_and_add_spares(mddev, rdev, lim);
 
 	if (rdev->raid_disk >= 0)
 		goto busy;
@@ -8380,6 +8411,22 @@ static inline int md_ioctl_valid(unsigned int cmd)
 	}
 }
 
+/*
+ * Commands that can reach ->hot_add_disk().  ADD_NEW_DISK only does so for a
+ * journal device or a personality without ->hot_remove_disk, but that depends
+ * on disk info still in user memory here, so it is included as a whole.
+ */
+static bool md_ioctl_may_add_disk(unsigned int cmd)
+{
+	switch (cmd) {
+	case ADD_NEW_DISK:
+	case HOT_REMOVE_DISK:
+		return true;
+	default:
+		return false;
+	}
+}
+
 static bool md_ioctl_need_suspend(unsigned int cmd)
 {
 	switch (cmd) {
@@ -8435,6 +8482,9 @@ static int md_ioctl(struct block_device *bdev, blk_mode_t mode,
 	unsigned int noio_flags = 0;
 	void __user *argp = (void __user *)arg;
 	struct mddev *mddev = NULL;
+	struct request_queue *q = NULL;
+	struct queue_limits lim;
+	struct queue_limits *limp = NULL;
 	bool suspend;
 
 	err = md_ioctl_valid(cmd);
@@ -8485,11 +8535,20 @@ static int md_ioctl(struct block_device *bdev, blk_mode_t mode,
 	if (!md_is_rdwr(mddev))
 		flush_work(&mddev->sync_work);
 
+	/* q->limits_lock nests outside both, see md_start_sync() */
+	if (md_ioctl_may_add_disk(cmd) && !mddev_is_dm(mddev)) {
+		q = mddev->gendisk->queue;
+		lim = queue_limits_start_update(q);
+		limp = &lim;
+	}
+
 	suspend = md_ioctl_need_suspend(cmd);
 	err = suspend ? mddev_suspend_and_lock(mddev) : mddev_lock(mddev);
 	if (err) {
 		pr_debug("md: ioctl lock interrupted, reason %d, cmd %d\n",
 			 err, cmd);
+		if (limp)
+			queue_limits_cancel_update(q);
 		goto out;
 	}
 	if (suspend)
@@ -8531,7 +8590,7 @@ static int md_ioctl(struct block_device *bdev, blk_mode_t mode,
 		goto unlock;
 
 	case HOT_REMOVE_DISK:
-		err = hot_remove_disk(mddev, new_decode_dev(arg));
+		err = hot_remove_disk(mddev, new_decode_dev(arg), limp);
 		goto unlock;
 
 	case ADD_NEW_DISK:
@@ -8547,7 +8606,7 @@ static int md_ioctl(struct block_device *bdev, blk_mode_t mode,
 				/* Need to clear read-only for this */
 				break;
 			else
-				err = md_add_new_disk(mddev, &info);
+				err = md_add_new_disk(mddev, &info, limp);
 			goto unlock;
 		}
 		break;
@@ -8585,7 +8644,7 @@ static int md_ioctl(struct block_device *bdev, blk_mode_t mode,
 		if (copy_from_user(&info, argp, sizeof(info)))
 			err = -EFAULT;
 		else
-			err = md_add_new_disk(mddev, &info);
+			err = md_add_new_disk(mddev, &info, limp);
 		goto unlock;
 	}
 
@@ -8617,6 +8676,9 @@ unlock:
 	if (mddev->hold_active == UNTIL_IOCTL &&
 	    err != -EINVAL)
 		mddev->hold_active = 0;
+
+	if (limp)
+		err = queue_limits_commit_update(q, limp) ?: err;
 
 	if (suspend) {
 		memalloc_noio_restore(noio_flags);
@@ -10346,6 +10408,9 @@ static bool md_choose_sync_action(struct mddev *mddev, int *spares,
 static void md_start_sync(struct work_struct *ws)
 {
 	struct mddev *mddev = container_of(ws, struct mddev, sync_work);
+	struct request_queue *q = NULL;
+	struct queue_limits lim;
+	struct queue_limits *limp = NULL;
 	int spares = 0;
 	bool suspend = false;
 	unsigned int noio_flags = 0;
@@ -10357,6 +10422,17 @@ static void md_start_sync(struct work_struct *ws)
 	 */
 	if ((mddev->reshape_position == MaxSector || !md_is_rdwr(mddev)) &&
 	    md_spares_need_change(mddev)) {
+		/*
+		 * Adding a spare below stacks its limits, which needs
+		 * q->limits_lock.  Take it before suspending: its holder
+		 * waits in blk_mq_freeze_queue() for I/O that
+		 * mddev->suspended holds back, so the other order deadlocks.
+		 */
+		if (!mddev_is_dm(mddev)) {
+			q = mddev->gendisk->queue;
+			lim = queue_limits_start_update(q);
+			limp = &lim;
+		}
 		suspend = true;
 		mddev_suspend(mddev, false);
 		noio_flags = memalloc_noio_save();
@@ -10371,6 +10447,12 @@ static void md_start_sync(struct work_struct *ws)
 	if (!suspend && (mddev->reshape_position == MaxSector || !md_is_rdwr(mddev)) &&
 	    md_spares_need_change(mddev)) {
 		mddev_unlock(mddev);
+		/* see above: q->limits_lock nests outside both */
+		if (!mddev_is_dm(mddev)) {
+			q = mddev->gendisk->queue;
+			lim = queue_limits_start_update(q);
+			limp = &lim;
+		}
 		mddev_suspend_and_lock_nointr(mddev);
 		suspend = true;
 		noio_flags = memalloc_noio_save();
@@ -10384,11 +10466,11 @@ static void md_start_sync(struct work_struct *ws)
 		 * As we only add devices that are already in-sync, we can
 		 * activate the spares immediately.
 		 */
-		remove_and_add_spares(mddev, NULL, NULL);
+		remove_and_add_spares(mddev, NULL, limp);
 		goto not_running;
 	}
 
-	if (!md_choose_sync_action(mddev, &spares, NULL))
+	if (!md_choose_sync_action(mddev, &spares, limp))
 		goto not_running;
 
 	if (!mddev->pers->sync_request)
@@ -10419,6 +10501,8 @@ static void md_start_sync(struct work_struct *ws)
 	 *     https://bugzilla.kernel.org/show_bug.cgi?id=218200
 	 * Therefore, use __mddev_resume(mddev, false).
 	 */
+	if (limp && queue_limits_commit_update(q, limp))
+		pr_err("%s: could not apply queue limits\n", mdname(mddev));
 	if (suspend) {
 		memalloc_noio_restore(noio_flags);
 		__mddev_resume(mddev, false);
@@ -10441,6 +10525,8 @@ not_running:
 	 *     https://bugzilla.kernel.org/show_bug.cgi?id=218200
 	 * Therefore, use __mddev_resume(mddev, false).
 	 */
+	if (limp && queue_limits_commit_update(q, limp))
+		pr_err("%s: could not apply queue limits\n", mdname(mddev));
 	if (suspend) {
 		memalloc_noio_restore(noio_flags);
 		__mddev_resume(mddev, false);
