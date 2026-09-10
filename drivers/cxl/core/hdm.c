@@ -87,36 +87,26 @@ static void parse_hdm_decoder_caps(struct cxl_hdm *cxlhdm)
 		cxlhdm->iw_cap_mask |= BIT(16);
 }
 
-static bool __cxl_pci_hdm_decoder_count_match(struct pci_dev *pdev,
-					      int decoder_count)
-{
-	struct cxl_hdm_info *info;
-	bool match = true;
-
-	down_read(&cxl_rwsem.dpa);
-	info = pdev->hdm;
-	if (info) {
-		if (info->decoder_count != decoder_count) {
-			pci_warn(pdev,
-				 "CXL HDM cache decoder count mismatch: cached=%d hdm=%d\n",
-				 info->decoder_count, decoder_count);
-			match = false;
-		}
-	}
-	up_read(&cxl_rwsem.dpa);
-
-	return match;
-}
-
 static bool cxl_pci_hdm_decoder_count_match(struct cxl_hdm *cxlhdm)
 {
 	struct pci_dev *pdev __free(pci_dev_put) =
 		cxl_port_get_uport_pci_dev(cxlhdm->port);
+	struct cxl_hdm_info *info;
 
 	if (!pdev)
 		return true;
 
-	return __cxl_pci_hdm_decoder_count_match(pdev, cxlhdm->decoder_count);
+	guard(rwsem_read)(&cxl_rwsem.dpa);
+	info = pdev->hdm;
+	if (!info)
+		return true;
+	if (info->decoder_count == cxlhdm->decoder_count)
+		return true;
+
+	pci_warn(pdev,
+		 "CXL HDM cache decoder count mismatch: cached=%d hdm=%d\n",
+		 info->decoder_count, cxlhdm->decoder_count);
+	return false;
 }
 
 static void cxl_hdm_save_decoder_info(struct cxl_hdm *cxlhdm,
@@ -126,9 +116,16 @@ static void cxl_hdm_save_decoder_info(struct cxl_hdm *cxlhdm,
 		cxl_port_get_uport_pci_dev(cxlhdm->port);
 	struct cxl_decoder_settings *settings;
 	struct cxl_hdm_info *info;
+	u32 global_ctrl = 0;
+	bool has_hdm_decoder;
 
 	if (!pdev)
 		return;
+
+	has_hdm_decoder = !!cxlhdm->regs.hdm_decoder;
+	if (has_hdm_decoder)
+		global_ctrl = readl(cxlhdm->regs.hdm_decoder +
+				    CXL_HDM_DECODER_CTRL_OFFSET);
 
 	guard(rwsem_write)(&cxl_rwsem.dpa);
 	info = pdev->hdm;
@@ -139,6 +136,10 @@ static void cxl_hdm_save_decoder_info(struct cxl_hdm *cxlhdm,
 	*settings = (struct cxl_decoder_settings) {
 		.id = cxld->id,
 	};
+
+	if (has_hdm_decoder)
+		info->global_ctrl = global_ctrl;
+
 	if (cxld->flags & CXL_DECODER_F_ENABLE)
 		cxl_decoder_snapshot(cxld, settings);
 }
