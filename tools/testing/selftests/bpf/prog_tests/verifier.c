@@ -94,6 +94,7 @@
 #include "verifier_scalar_ids.skel.h"
 #include "verifier_sdiv.skel.h"
 #include "verifier_search_pruning.skel.h"
+#include "verifier_skb_ext.skel.h"
 #include "verifier_sock.skel.h"
 #include "verifier_sock_addr.skel.h"
 #include "verifier_sockmap_mutate.skel.h"
@@ -256,6 +257,7 @@ void test_verifier_runtime_jit(void)          { RUN(verifier_runtime_jit); }
 void test_verifier_scalar_ids(void)           { RUN(verifier_scalar_ids); }
 void test_verifier_sdiv(void)                 { RUN(verifier_sdiv); }
 void test_verifier_search_pruning(void)       { RUN(verifier_search_pruning); }
+void test_verifier_skb_ext(void)              { RUN(verifier_skb_ext); }
 void test_verifier_sock(void)                 { RUN(verifier_sock); }
 void test_verifier_sock_addr(void)            { RUN(verifier_sock_addr); }
 void test_verifier_sockmap_mutate(void)       { RUN(verifier_sockmap_mutate); }

@@ -16,6 +16,7 @@
 #define DUMMY_NAME "dum0"
 #define TAP_NETNS "xdp_context_tuntap"
 #define LWT_NETNS "xdp_context_lwt"
+#define SKB_EXT_NETNS "skb_ext_tuntap"
 
 #define TEST_PAYLOAD_LEN 32
 static const __u8 test_payload[TEST_PAYLOAD_LEN] = {
@@ -331,10 +332,11 @@ close:
 	netns_free(tx_ns);
 }
 
-static void test_tuntap(struct bpf_program *xdp_prog,
-			struct bpf_program *tc_prio_1_prog,
-			struct bpf_program *tc_prio_2_prog,
-			bool *test_pass)
+static void __test_tuntap(const char *nsname,
+			  struct bpf_program *xdp_prog,
+			  struct bpf_program *tc_prio_1_prog,
+			  struct bpf_program *tc_prio_2_prog,
+			  bool *test_pass)
 {
 	LIBBPF_OPTS(bpf_tc_hook, tc_hook, .attach_point = BPF_TC_INGRESS);
 	LIBBPF_OPTS(bpf_tc_opts, tc_opts, .handle = 1, .priority = 1);
@@ -345,7 +347,7 @@ static void test_tuntap(struct bpf_program *xdp_prog,
 
 	*test_pass = false;
 
-	ns = netns_new(TAP_NETNS, true);
+	ns = netns_new(nsname, true);
 	if (!ASSERT_OK_PTR(ns, "create and open ns"))
 		return;
 
@@ -394,6 +396,15 @@ close:
 	if (tap_fd >= 0)
 		close(tap_fd);
 	netns_free(ns);
+}
+
+static void test_tuntap(struct bpf_program *xdp_prog,
+			struct bpf_program *tc_prio_1_prog,
+			struct bpf_program *tc_prio_2_prog,
+			bool *test_pass)
+{
+	__test_tuntap(TAP_NETNS, xdp_prog, tc_prio_1_prog, tc_prio_2_prog,
+		      test_pass);
 }
 
 /* Write a packet to a tap dev and copy it to ingress of a dummy dev */
@@ -690,6 +701,58 @@ void test_xdp_context_lwt_encap(void)
 		test_lwt_encap(skel, LWT_ENCAP_SEG6);
 	if (test__start_subtest("ioam6_encap"))
 		test_lwt_encap(skel, LWT_ENCAP_IOAM6);
+
+	test_xdp_meta__destroy(skel);
+}
+
+static void test_skb_ext_tuntap(struct bpf_program *tc_prio_1_prog,
+				struct bpf_program *tc_prio_2_prog,
+				bool *test_pass)
+{
+	__test_tuntap(SKB_EXT_NETNS, NULL /* xdp */, tc_prio_1_prog,
+		      tc_prio_2_prog, test_pass);
+}
+
+void test_skb_ext_basic(void)
+{
+	struct test_xdp_meta *skel = NULL;
+
+	skel = test_xdp_meta__open_and_load();
+	if (!ASSERT_OK_PTR(skel, "open and load skeleton"))
+		return;
+
+	if (test__start_subtest("tc_write_read"))
+		test_skb_ext_tuntap(skel->progs.tc_skb_ext_write,
+				    skel->progs.tc_skb_ext_read,
+				    &skel->bss->test_pass);
+	if (test__start_subtest("tc_write_clone_read"))
+		test_skb_ext_tuntap(skel->progs.tc_skb_ext_write,
+				    skel->progs.tc_skb_ext_clone_read,
+				    &skel->bss->test_pass);
+	if (test__start_subtest("tc_write_slice_read"))
+		test_skb_ext_tuntap(skel->progs.tc_skb_ext_write,
+				    skel->progs.tc_skb_ext_slice_read,
+				    &skel->bss->test_pass);
+	if (test__start_subtest("tc_slice_write_read"))
+		test_skb_ext_tuntap(skel->progs.tc_skb_ext_slice_write,
+				    skel->progs.tc_skb_ext_read,
+				    &skel->bss->test_pass);
+	if (test__start_subtest("tc_no_alloc"))
+		test_skb_ext_tuntap(skel->progs.tc_skb_ext_no_alloc,
+				    NULL, /* tc prio 2 */
+				    &skel->bss->test_pass);
+	if (test__start_subtest("tc_invalid_flags"))
+		test_skb_ext_tuntap(skel->progs.tc_skb_ext_invalid_flags,
+				    NULL, /* tc prio 2 */
+				    &skel->bss->test_pass);
+	if (test__start_subtest("tc_rdonly"))
+		test_skb_ext_tuntap(skel->progs.tc_skb_ext_rdonly,
+				    NULL, /* tc prio 2 */
+				    &skel->bss->test_pass);
+	if (test__start_subtest("tc_double_alloc"))
+		test_skb_ext_tuntap(skel->progs.tc_skb_ext_double_alloc,
+				    NULL, /* tc prio 2 */
+				    &skel->bss->test_pass);
 
 	test_xdp_meta__destroy(skel);
 }
