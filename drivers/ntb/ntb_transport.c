@@ -949,6 +949,13 @@ static void ntb_transport_schedule_qp_link(struct ntb_transport_qp *qp,
 		schedule_delayed_work(&qp->link_work, delay);
 }
 
+static bool ntb_transport_rx_idle(struct ntb_transport_qp *qp)
+{
+	guard(spinlock_irqsave)(&qp->ntb_rx_q_lock);
+
+	return list_empty(&qp->rx_post_q);
+}
+
 static void ntb_qp_link_cleanup(struct ntb_transport_qp *qp)
 {
 	struct ntb_transport_ctx *nt = qp->transport;
@@ -959,6 +966,17 @@ static void ntb_qp_link_cleanup(struct ntb_transport_qp *qp)
 	disable_delayed_work_sync(&qp->link_work);
 	ntb_transport_set_qp_active(qp, false);
 	tasklet_kill(&qp->rxc_db_work);
+	/*
+	 * Some DMA engines lack terminate/synchronize ops (e.g. IOAT), and
+	 * DMA_COMPLETION_NO_ORDER rules out cookie-based waits.
+	 *
+	 * Waiting for rx_post_q to empty suffices: ntb_complete_rxc() finishes
+	 * its MW accesses before removing each entry under ntb_rx_q_lock.
+	 * qp->active is false and rxc_db_work is stopped, so no new RX DMA
+	 * can be submitted.
+	 */
+	while (!ntb_transport_rx_idle(qp))
+		fsleep(1000);
 
 	ntb_qp_link_down_reset(qp);
 
