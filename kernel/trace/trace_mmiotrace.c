@@ -143,16 +143,13 @@ static ssize_t mmio_read(struct trace_iterator *iter, struct file *filp,
 		if (!overrun_detected)
 			pr_warn("mmiotrace has lost events\n");
 		overrun_detected = true;
-		goto print_out;
 	}
 
-	if (!hiter || !hiter->dev)
-		return 0;
+	if (hiter && hiter->dev) {
+		mmio_print_pcidev(s, hiter->dev);
+		hiter->dev = pci_get_device(PCI_ANY_ID, PCI_ANY_ID, hiter->dev);
+	}
 
-	mmio_print_pcidev(s, hiter->dev);
-	hiter->dev = pci_get_device(PCI_ANY_ID, PCI_ANY_ID, hiter->dev);
-
-print_out:
 	ret = trace_seq_to_user(s, ubuf, cnt);
 	return (ret == -EBUSY) ? 0 : ret;
 }
