@@ -312,6 +312,7 @@ definitions:
     entries:
       -
         name: forwarding
+        value: 1
       -
         name: mc-forwarding
       -
