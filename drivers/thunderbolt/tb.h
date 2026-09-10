@@ -585,14 +585,19 @@ static inline u64 tb_route(const struct tb_switch *sw)
 	return ((u64) sw->config.route_hi) << 32 | sw->config.route_lo;
 }
 
+static inline struct tb_port *tb_switch_port(struct tb_switch *sw, u8 port)
+{
+	if (WARN_ON(port > sw->config.max_port_number))
+		return NULL;
+	return &sw->ports[port];
+}
+
 static inline struct tb_port *tb_port_at(u64 route, struct tb_switch *sw)
 {
 	u8 port;
 
 	port = route >> (sw->config.depth * 8);
-	if (WARN_ON(port > sw->config.max_port_number))
-		return NULL;
-	return &sw->ports[port];
+	return tb_switch_port(sw, port);
 }
 
 static inline const char *tb_width_name(enum tb_link_width width)

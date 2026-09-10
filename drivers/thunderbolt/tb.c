@@ -2756,7 +2756,9 @@ static void tb_handle_dp_bandwidth_request(struct work_struct *work)
 		goto unlock;
 	}
 
-	in = &sw->ports[ev->port];
+	in = tb_switch_port(sw, ev->port);
+	if (!in)
+		goto put_sw;
 	if (!tb_port_is_dpin(in)) {
 		tb_port_warn(in, "bandwidth request to non-DP IN adapter\n");
 		goto put_sw;
