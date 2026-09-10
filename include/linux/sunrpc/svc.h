@@ -315,6 +315,9 @@ struct svc_rqst {
 	unsigned int		bc_to_retries;
 	unsigned int		rq_status_counter; /* RPC processing counter */
 	void			*rq_private;	/* For use by the service thread */
+
+	svc_ack_cookie_t	rq_ack_cookie;	/* zero when no reply-ack
+						 * tracking is requested */
 };
 
 /* bits for rq_flags */

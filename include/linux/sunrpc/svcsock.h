@@ -41,6 +41,16 @@ struct svc_sock {
 
 	struct page_frag_cache  sk_frag_cache;
 
+	/* TCP reply-ACK tracking (single-threaded send path) */
+#define SVC_ACK_RING_BITS	6
+#define SVC_ACK_RING_SIZE	(1 << SVC_ACK_RING_BITS)
+	struct {
+		u32		ae_pos;		/* write_seq after send */
+		svc_ack_cookie_t ae_cookie;	/* opaque DRC cookie */
+	}			sk_ack_ring[SVC_ACK_RING_SIZE];
+	unsigned int		sk_ack_head;
+	unsigned int		sk_ack_tail;
+
 	struct completion	sk_handshake_done;
 
 	/* received data */

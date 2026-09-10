@@ -289,12 +289,14 @@ nfsd_cache_bucket_find(__be32 xid, struct nfsd_net *nn)
 }
 
 /*
- * The generation match keeps a stale cookie from acknowledging a
- * later entry that reuses the same XID and transport. The walk
- * starts at the MRU end of the bucket LRU, where the entry for a
- * just-sent reply sits. The visit cap bounds the time spent under
- * cache_lock when a client packs the bucket; an entry missed under
- * the cap is left to the other eviction reasons.
+ * The generation match keeps a stale cookie from acknowledging a later
+ * entry that reuses the same XID and transport.
+ *
+ * Average bucket occupancy is small (TARGET_BUCKET_SIZE), so a linear walk
+ * of the bucket LRU beats an rb-tree lookup. The walk starts at the MRU
+ * end, where the entry for a just-sent reply sits. The visit cap bounds
+ * the time spent under cache_lock when a client packs the bucket; an entry
+ * missed under the cap is left to the other eviction reasons.
  */
 static void nfsd_reply_ack(void *data, const svc_ack_cookie_t *cookie,
 			   bool delivered)
@@ -723,6 +725,7 @@ void nfsd_cache_update(struct svc_rqst *rqstp, struct nfsd_cacherep *rp,
 	rp->c_ack_gen = nfsd_cache_next_ack_gen();
 	rp->c_type = cachetype;
 	rp->c_state = RC_DONE;
+	rqstp->rq_ack_cookie = nfsd_cache_ack_cookie(rp);
 	spin_unlock(&b->cache_lock);
 	return;
 }

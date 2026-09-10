@@ -28,6 +28,7 @@
 #include <linux/file.h>
 #include <linux/freezer.h>
 #include <linux/bvec.h>
+#include <linux/circ_buf.h>
 
 #include <net/sock.h>
 #include <net/checksum.h>
@@ -36,6 +37,7 @@
 #include <net/udp.h>
 #include <net/tcp.h>
 #include <net/tcp_states.h>
+#include <net/tls.h>
 #include <net/tls_prot.h>
 #include <net/handshake.h>
 #include <linux/uaccess.h>
@@ -88,6 +90,7 @@ static void		svc_sock_free(struct svc_xprt *);
 static struct svc_xprt *svc_create_socket(struct svc_serv *, int,
 					  struct net *, struct sockaddr *,
 					  int, int);
+
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
 static struct lock_class_key svc_key[2];
 static struct lock_class_key svc_slock_key[2];
@@ -376,6 +379,45 @@ static void svc_data_ready(struct sock *sk)
 			return;
 		if (!test_and_set_bit(XPT_DATA, &svsk->sk_xprt.xpt_flags))
 			svc_xprt_enqueue(&svsk->sk_xprt);
+	}
+}
+
+/*
+ * Report as delivered each recorded reply that the peer's cumulative ACK
+ * now covers.
+ */
+static void svc_tcp_ack_drain(struct svc_sock *svsk)
+{
+	struct svc_serv *serv = svsk->sk_xprt.xpt_server;
+	u32 snd_una = READ_ONCE(tcp_sk(svsk->sk_sk)->snd_una);
+
+	while (svsk->sk_ack_head != svsk->sk_ack_tail) {
+		unsigned int idx = svsk->sk_ack_tail &
+				   (SVC_ACK_RING_SIZE - 1);
+
+		if (after(svsk->sk_ack_ring[idx].ae_pos, snd_una))
+			break;
+		svc_reply_acked(serv,
+				&svsk->sk_ack_ring[idx].ae_cookie, true);
+		svsk->sk_ack_tail++;
+	}
+}
+
+/*
+ * Once the socket is freed, acknowledgments for replies still in the ring
+ * can no longer be observed.
+ */
+static void svc_tcp_ack_purge(struct svc_sock *svsk)
+{
+	struct svc_serv *serv = svsk->sk_xprt.xpt_server;
+
+	while (svsk->sk_ack_head != svsk->sk_ack_tail) {
+		unsigned int idx = svsk->sk_ack_tail &
+				   (SVC_ACK_RING_SIZE - 1);
+
+		svc_reply_acked(serv,
+				&svsk->sk_ack_ring[idx].ae_cookie, false);
+		svsk->sk_ack_tail++;
 	}
 }
 
@@ -1392,6 +1434,19 @@ out:
 	return ret;
 }
 
+/*
+ * tls_sw_sendmsg() can return the full plaintext count with part of a
+ * record still waiting for socket write space, leaving write_seq short
+ * of the reply. The TLS layer keeps that record as partially_sent_record
+ * until it is pushed.
+ */
+static bool svc_tcp_reply_queued(struct svc_sock *svsk)
+{
+	if (!test_bit(XPT_TLS_SESSION, &svsk->sk_xprt.xpt_flags))
+		return true;
+	return !READ_ONCE(tls_get_ctx(svsk->sk_sk)->partially_sent_record);
+}
+
 /**
  * svc_tcp_sendto - Send out a reply on a TCP socket
  * @rqstp: completed svc_rqst
@@ -1420,10 +1475,32 @@ static int svc_tcp_sendto(struct svc_rqst *rqstp)
 	trace_svcsock_tcp_send(xprt, sent);
 	if (sent < 0 || sent != (xdr->len + sizeof(marker)))
 		goto out_close;
+
+	svc_tcp_ack_drain(svsk);
+	if (svc_ack_cookie_present(&rqstp->rq_ack_cookie)) {
+		if (svc_tcp_reply_queued(svsk) &&
+		    CIRC_SPACE(svsk->sk_ack_head, svsk->sk_ack_tail,
+			       SVC_ACK_RING_SIZE) > 0) {
+			unsigned int idx = svsk->sk_ack_head &
+					   (SVC_ACK_RING_SIZE - 1);
+
+			svsk->sk_ack_ring[idx].ae_pos =
+				tcp_sk(svsk->sk_sk)->write_seq;
+			svsk->sk_ack_ring[idx].ae_cookie =
+				rqstp->rq_ack_cookie;
+			svsk->sk_ack_head++;
+		} else {
+			svc_reply_acked(xprt->xpt_server, &rqstp->rq_ack_cookie,
+					false);
+		}
+	}
+
 	mutex_unlock(&xprt->xpt_mutex);
 	return sent;
 
 out_notconn:
+	if (svc_ack_cookie_present(&rqstp->rq_ack_cookie))
+		svc_reply_acked(xprt->xpt_server, &rqstp->rq_ack_cookie, false);
 	mutex_unlock(&xprt->xpt_mutex);
 	return -ENOTCONN;
 out_close:
@@ -1431,6 +1508,8 @@ out_close:
 		  xprt->xpt_server->sv_name,
 		  (sent < 0) ? "got error" : "sent",
 		  sent, xdr->len + sizeof(marker));
+	if (svc_ack_cookie_present(&rqstp->rq_ack_cookie))
+		svc_reply_acked(xprt->xpt_server, &rqstp->rq_ack_cookie, false);
 	svc_xprt_deferred_close(xprt);
 	mutex_unlock(&xprt->xpt_mutex);
 	return -EAGAIN;
@@ -1487,6 +1566,7 @@ static bool svc_tcp_init(struct svc_sock *svsk, struct svc_serv *serv)
 		return false;
 	set_bit(XPT_CACHE_AUTH, &svsk->sk_xprt.xpt_flags);
 	set_bit(XPT_CONG_CTRL, &svsk->sk_xprt.xpt_flags);
+	set_bit(XPT_REPLY_ACK, &svsk->sk_xprt.xpt_flags);
 	if (sk->sk_state == TCP_LISTEN) {
 		strcpy(svsk->sk_xprt.xpt_remotebuf, "listener");
 		set_bit(XPT_LISTENER, &svsk->sk_xprt.xpt_flags);
@@ -1592,6 +1672,9 @@ static struct svc_sock *svc_setup_socket(struct svc_serv *serv,
 			return ERR_PTR(err);
 		}
 	}
+
+	svsk->sk_ack_head = 0;
+	svsk->sk_ack_tail = 0;
 
 	svsk->sk_sock = sock;
 	svsk->sk_sk = inet;
@@ -1809,6 +1892,8 @@ static void svc_sock_free(struct svc_xprt *xprt)
 	struct socket *sock = svsk->sk_sock;
 
 	trace_svcsock_free(svsk, sock);
+
+	svc_tcp_ack_purge(svsk);
 
 	tls_handshake_cancel(sock->sk);
 	if (sock->file)
