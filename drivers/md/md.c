@@ -10885,7 +10885,14 @@ static void check_sb_changes(struct mddev *mddev, struct md_rdev *rdev)
 					rdev2->saved_raid_disk = -1;
 				else
 					rdev2->saved_raid_disk = role;
-				ret = remove_and_add_spares(mddev, rdev2, NULL);
+				/*
+				 * reconfig_mutex is held, so q->limits_lock
+				 * cannot be taken here.  The device is
+				 * already a member, its limits are stacked,
+				 * so add it without touching them.
+				 */
+				ret = remove_and_add_spares(mddev, rdev2,
+							    MDDEV_STACK_SKIP);
 				pr_info("Activated spare: %pg\n",
 					rdev2->bdev);
 				/* wakeup mddev->thread here, so array could
