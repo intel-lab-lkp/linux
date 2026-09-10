@@ -727,13 +727,18 @@ static int csi2dc_probe(struct platform_device *pdev)
 	ret = v4l2_async_register_subdev(&csi2dc->csi2dc_sd);
 	if (ret) {
 		dev_err(csi2dc->dev, "failed to register the subdevice\n");
-		goto csi2dc_probe_cleanup_notifier;
+		goto csi2dc_probe_disable_pm;
 	}
 
 	dev_info(dev, "Microchip CSI2DC version %x\n", ver);
 
 	return 0;
 
+csi2dc_probe_disable_pm:
+	pm_runtime_disable(dev);
+	if (!pm_runtime_status_suspended(dev))
+		csi2dc_power(csi2dc, false);
+	pm_runtime_set_suspended(dev);
 csi2dc_probe_cleanup_notifier:
 	v4l2_async_nf_cleanup(&csi2dc->notifier);
 csi2dc_probe_cleanup_entity:
@@ -746,12 +751,15 @@ static void csi2dc_remove(struct platform_device *pdev)
 {
 	struct csi2dc_device *csi2dc = platform_get_drvdata(pdev);
 
-	pm_runtime_disable(&pdev->dev);
-
 	v4l2_async_unregister_subdev(&csi2dc->csi2dc_sd);
 	v4l2_async_nf_unregister(&csi2dc->notifier);
 	v4l2_async_nf_cleanup(&csi2dc->notifier);
 	media_entity_cleanup(&csi2dc->csi2dc_sd.entity);
+
+	pm_runtime_disable(&pdev->dev);
+	if (!pm_runtime_status_suspended(&pdev->dev))
+		csi2dc_power(csi2dc, false);
+	pm_runtime_set_suspended(&pdev->dev);
 }
 
 static int __maybe_unused csi2dc_runtime_suspend(struct device *dev)
