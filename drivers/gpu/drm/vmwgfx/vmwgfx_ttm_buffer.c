@@ -189,6 +189,11 @@ static int vmw_ttm_map_dma(struct vmw_ttm_tt *vmw_tt)
 	case vmw_dma_map_bind:
 	case vmw_dma_map_populate:
 		if (vmw_tt->dma_ttm.page_flags  & TTM_TT_FLAG_EXTERNAL) {
+			/*
+			 * The exporter has already mapped its sg_table for
+			 * this device in dma_buf_map_attachment(). Use it as
+			 * it is: it is not ours to map, unmap or free.
+			 */
 			vsgt->sgt = vmw_tt->dma_ttm.sg;
 		} else {
 			vsgt->sgt = &vmw_tt->sgt;
@@ -199,11 +204,11 @@ static int vmw_ttm_map_dma(struct vmw_ttm_tt *vmw_tt)
 				GFP_KERNEL);
 			if (ret)
 				goto out_sg_alloc_fail;
-		}
 
-		ret = vmw_ttm_map_for_dma(vmw_tt);
-		if (unlikely(ret != 0))
-			goto out_map_fail;
+			ret = vmw_ttm_map_for_dma(vmw_tt);
+			if (unlikely(ret != 0))
+				goto out_map_fail;
+		}
 
 		break;
 	default:
@@ -236,6 +241,13 @@ static void vmw_ttm_unmap_dma(struct vmw_ttm_tt *vmw_tt)
 
 	if (!vmw_tt->vsgt.sgt)
 		return;
+
+	if (vmw_tt->dma_ttm.page_flags & TTM_TT_FLAG_EXTERNAL) {
+		/* The mapping and the table belong to the exporter. */
+		vmw_tt->vsgt.sgt = NULL;
+		vmw_tt->mapped = false;
+		return;
+	}
 
 	switch (dev_priv->map_mode) {
 	case vmw_dma_map_bind:
