@@ -4769,12 +4769,12 @@ static netdev_tx_t stmmac_xmit(struct sk_buff *skb, struct net_device *dev)
 	unsigned int nopaged_len = skb_headlen(skb);
 	u32 queue = skb_get_queue_mapping(skb);
 	int nfrags = skb_shinfo(skb)->nr_frags;
-	unsigned int first_entry, tx_packets;
+	unsigned int first_entry, entry, tx_packets;
 	struct stmmac_txq_stats *txq_stats;
 	struct dma_desc *desc, *first_desc;
 	struct stmmac_tx_queue *tx_q;
 	int i, csum_insertion = 0;
-	int entry, first_tx;
+	int first_tx, ret;
 	dma_addr_t dma_addr;
 	u32 sdu_len;
 
@@ -4832,9 +4832,10 @@ static netdev_tx_t stmmac_xmit(struct sk_buff *skb, struct net_device *dev)
 	csum_insertion = skb->ip_summed == CHECKSUM_PARTIAL;
 
 	if (unlikely(is_jumbo)) {
-		entry = stmmac_jumbo_frm(priv, tx_q, skb, csum_insertion);
-		if (unlikely(entry < 0) && (entry != -EINVAL))
+		ret = stmmac_jumbo_frm(priv, tx_q, skb, csum_insertion);
+		if (unlikely(ret < 0) && (ret != -EINVAL))
 			goto dma_map_err;
+		entry = ret;
 	} else {
 		bool last_segment = (nfrags == 0);
 
@@ -4984,6 +4985,26 @@ static netdev_tx_t stmmac_xmit(struct sk_buff *skb, struct net_device *dev)
 
 dma_map_err:
 	netdev_err(priv->dev, "Tx DMA map failed\n");
+
+	/* entry points one past the last descriptor written for this frame:
+	 * on failure it is the descriptor whose DMA mapping failed, so walk
+	 * from first_entry up to, but not including, entry.  Reset cur_tx
+	 * unconditionally as both stmmac_vlan_insert() and stmmac_jumbo_frm()
+	 * may have advanced it, and release the VLAN context descriptor.
+	 */
+	while (first_entry != entry) {
+		desc = stmmac_get_tx_desc(priv, tx_q, first_entry);
+		stmmac_release_tx_desc(priv, desc, priv->descriptor_mode);
+		stmmac_free_tx_buffer(priv, &priv->dma_conf, queue, first_entry);
+		first_entry = STMMAC_NEXT_ENTRY(first_entry,
+						priv->dma_conf.dma_tx_size);
+	}
+
+	tx_q->cur_tx = first_tx;
+	if (has_vlan) {
+		desc = stmmac_get_tx_desc(priv, tx_q, first_tx);
+		stmmac_release_tx_desc(priv, desc, priv->descriptor_mode);
+	}
 max_sdu_err:
 	dev_kfree_skb(skb);
 	priv->xstats.tx_dropped++;
