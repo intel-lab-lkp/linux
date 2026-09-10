@@ -181,6 +181,7 @@ static struct oxp_hid_cfg {
 	struct led_classdev_mc *led_mc;
 	struct hid_device *hdev;
 	struct mutex cfg_mutex; /*ensure single synchronous output report*/
+	struct mutex rgb_mutex; /*serialize complete RGB transactions*/
 	u8 rgb_brightness;
 	u8 gamepad_mode;
 	u8 rumble_intensity;
@@ -1074,6 +1075,8 @@ static ssize_t oxp_rgb_status_show(void)
 	u16 up = get_usage_page(drvdata.hdev);
 	u8 *data;
 
+	guard(mutex)(&drvdata.rgb_mutex);
+
 	switch (up) {
 	case GEN1_USAGE_PAGE:
 		data = (u8[1]) { OXP_GET_PROPERTY };
@@ -1191,6 +1194,8 @@ static ssize_t enabled_store(struct device *dev, struct device_attribute *attr,
 		return ret;
 	val = ret;
 
+	guard(mutex)(&drvdata.rgb_mutex);
+
 	ret = oxp_rgb_status_store(val, drvdata.rgb_speed,
 				   drvdata.rgb_brightness);
 	if (ret)
@@ -1243,6 +1248,8 @@ static ssize_t effect_store(struct device *dev, struct device_attribute *attr,
 		return ret;
 
 	val = ret;
+
+	guard(mutex)(&drvdata.rgb_mutex);
 
 	ret = oxp_rgb_status_store(drvdata.rgb_en, drvdata.rgb_speed,
 				   drvdata.rgb_brightness);
@@ -1302,6 +1309,8 @@ static ssize_t speed_store(struct device *dev, struct device_attribute *attr,
 	if (val > 9)
 		return -EINVAL;
 
+	guard(mutex)(&drvdata.rgb_mutex);
+
 	ret = oxp_rgb_status_store(drvdata.rgb_en, val, drvdata.rgb_brightness);
 	if (ret)
 		return ret;
@@ -1339,6 +1348,8 @@ static void oxp_rgb_queue_fn(struct work_struct *work)
 	unsigned int brightness = drvdata.led_mc->led_cdev.brightness;
 	u8 val = 4 * brightness / max_brightness;
 	int ret;
+
+	guard(mutex)(&drvdata.rgb_mutex);
 
 	if (drvdata.rgb_brightness != val) {
 		ret = oxp_rgb_status_store(drvdata.rgb_en, drvdata.rgb_speed, val);
@@ -1470,6 +1481,7 @@ static int oxp_cfg_probe(struct hid_device *hdev, u16 up)
 
 	hid_set_drvdata(hdev, &drvdata);
 	mutex_init(&drvdata.cfg_mutex);
+	mutex_init(&drvdata.rgb_mutex);
 	drvdata.hdev = hdev;
 
 	if (up == GEN2_USAGE_PAGE && oxp_hybrid_mcu_device())
