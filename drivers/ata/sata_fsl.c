@@ -1493,7 +1493,7 @@ static int sata_fsl_probe(struct platform_device *ofdev)
 	retval = ata_host_activate(host, irq, sata_fsl_interrupt,
 				   SATA_FSL_IRQ_FLAG, &sata_fsl_sht);
 	if (retval)
-		return retval;
+		goto error_exit_with_cleanup;
 
 	host_priv->intr_coalescing.show = fsl_sata_intr_coalescing_show;
 	host_priv->intr_coalescing.store = fsl_sata_intr_coalescing_store;
