@@ -2632,7 +2632,7 @@ static int bind_rdev_to_array(struct md_rdev *rdev, struct mddev *mddev)
 		sysfs_get_dirent_safe(rdev->kobj.sd, "bad_blocks");
 
 	list_add_rcu(&rdev->same_set, &mddev->disks);
-	bd_link_disk_holder(rdev->bdev, mddev->gendisk);
+	/* the holder is linked with the open, see md_link_rdev_holder() */
 
 	return 0;
 
@@ -2648,6 +2648,23 @@ void md_autodetect_dev(dev_t dev);
 /* just for claiming the bdev */
 static struct md_rdev claim_rdev;
 
+/*
+ * bd_link_disk_holder() takes the leg's disk->open_mutex, so the link is
+ * made with the open, before the array is locked.  bd_unlink_disk_holder()
+ * only takes blk_holder_mutex, so dropping it is safe under any lock.
+ */
+static void md_link_rdev_holder(struct md_rdev *rdev, struct mddev *mddev)
+{
+	if (!bd_link_disk_holder(rdev->bdev, mddev->gendisk))
+		set_bit(HolderLinked, &rdev->flags);
+}
+
+static void md_unlink_rdev_holder(struct md_rdev *rdev, struct mddev *mddev)
+{
+	if (test_and_clear_bit(HolderLinked, &rdev->flags))
+		bd_unlink_disk_holder(rdev->bdev, mddev->gendisk);
+}
+
 static void export_rdev(struct md_rdev *rdev)
 {
 	pr_debug("md: export_rdev(%pg)\n", rdev->bdev);
@@ -2661,11 +2678,18 @@ static void export_rdev(struct md_rdev *rdev)
 	kobject_put(&rdev->kobj);
 }
 
+/* release a leg that was linked before the array was locked */
+static void md_export_rdev(struct mddev *mddev, struct md_rdev *rdev)
+{
+	md_unlink_rdev_holder(rdev, mddev);
+	export_rdev(rdev);
+}
+
 static void md_kick_rdev_from_array(struct md_rdev *rdev)
 {
 	struct mddev *mddev = rdev->mddev;
 
-	bd_unlink_disk_holder(rdev->bdev, rdev->mddev->gendisk);
+	md_unlink_rdev_holder(rdev, rdev->mddev);
 	list_del_rcu(&rdev->same_set);
 	pr_debug("md: unbind<%pg>\n", rdev->bdev);
 	mddev_destroy_serial_pool(rdev->mddev, rdev);
@@ -4974,9 +4998,11 @@ new_dev_store(struct mddev *mddev, const char *buf, size_t len)
 	if (IS_ERR(rdev))
 		return PTR_ERR(rdev);
 
+	md_link_rdev_holder(rdev, mddev);
+
 	err = mddev_suspend_and_lock(mddev);
 	if (err) {
-		export_rdev(rdev);
+		md_export_rdev(mddev, rdev);
 		return err;
 	}
 	noio_flags = memalloc_noio_save();
@@ -5003,7 +5029,7 @@ new_dev_store(struct mddev *mddev, const char *buf, size_t len)
 	err = bind_rdev_to_array(rdev, mddev);
  out:
 	if (err)
-		export_rdev(rdev);
+		md_export_rdev(mddev, rdev);
 	memalloc_noio_restore(noio_flags);
 	mddev_unlock_and_resume(mddev);
 	if (!err)
@@ -7519,6 +7545,10 @@ static void autorun_devices(int part)
 			limp = &lim;
 		}
 
+		/* link before locking, see md_link_rdev_holder() */
+		rdev_for_each_list(rdev, tmp, &candidates)
+			md_link_rdev_holder(rdev, mddev);
+
 		if (mddev_suspend_and_lock(mddev)) {
 			pr_warn("md: %s locked, cannot run\n", mdname(mddev));
 			if (limp) {
@@ -7538,7 +7568,7 @@ static void autorun_devices(int part)
 			rdev_for_each_list(rdev, tmp, &candidates) {
 				list_del_init(&rdev->same_set);
 				if (bind_rdev_to_array(rdev, mddev))
-					export_rdev(rdev);
+					md_export_rdev(mddev, rdev);
 			}
 			autorun_array(mddev, limp);
 			if (limp && queue_limits_commit_update(q, limp))
@@ -7552,7 +7582,7 @@ static void autorun_devices(int part)
 		 */
 		rdev_for_each_list(rdev, tmp, &candidates) {
 			list_del_init(&rdev->same_set);
-			export_rdev(rdev);
+			md_export_rdev(mddev, rdev);
 		}
 		mddev_put(mddev);
 	}
@@ -7730,7 +7760,7 @@ int md_add_new_disk(struct mddev *mddev, struct mdu_disk_info_s *info,
 	     nd->minor_version != mddev->minor_version)) {
 		pr_warn("%s: array reconfigured while opening %pg\n",
 			mdname(mddev), nd->rdev->bdev);
-		export_rdev(nd->rdev);
+		md_export_rdev(mddev, nd->rdev);
 		nd->rdev = NULL;
 		return -EBUSY;
 	}
@@ -7763,13 +7793,13 @@ int md_add_new_disk(struct mddev *mddev, struct mdu_disk_info_s *info,
 				pr_warn("md: %pg has different UUID to %pg\n",
 					rdev->bdev,
 					rdev0->bdev);
-				export_rdev(rdev);
+				md_export_rdev(mddev, rdev);
 				return -EINVAL;
 			}
 		}
 		err = bind_rdev_to_array(rdev, mddev);
 		if (err)
-			export_rdev(rdev);
+			md_export_rdev(mddev, rdev);
 		return err;
 	}
 
@@ -7806,7 +7836,7 @@ int md_add_new_disk(struct mddev *mddev, struct mdu_disk_info_s *info,
 			/* This was a hot-add request, but events doesn't
 			 * match, so reject it.
 			 */
-			export_rdev(rdev);
+			md_export_rdev(mddev, rdev);
 			return -EINVAL;
 		}
 
@@ -7832,7 +7862,7 @@ int md_add_new_disk(struct mddev *mddev, struct mdu_disk_info_s *info,
 				}
 			}
 			if (has_journal || mddev->bitmap) {
-				export_rdev(rdev);
+				md_export_rdev(mddev, rdev);
 				return -EBUSY;
 			}
 			set_bit(Journal, &rdev->flags);
@@ -7847,7 +7877,7 @@ int md_add_new_disk(struct mddev *mddev, struct mdu_disk_info_s *info,
 				/* --add initiated by this node */
 				err = mddev->cluster_ops->add_new_disk(mddev, rdev);
 				if (err) {
-					export_rdev(rdev);
+					md_export_rdev(mddev, rdev);
 					return err;
 				}
 			}
@@ -7857,7 +7887,7 @@ int md_add_new_disk(struct mddev *mddev, struct mdu_disk_info_s *info,
 		err = bind_rdev_to_array(rdev, mddev);
 
 		if (err)
-			export_rdev(rdev);
+			md_export_rdev(mddev, rdev);
 
 		if (mddev_is_clustered(mddev)) {
 			if (info->state & (1 << MD_DISK_CANDIDATE)) {
@@ -7919,7 +7949,7 @@ int md_add_new_disk(struct mddev *mddev, struct mdu_disk_info_s *info,
 
 		err = bind_rdev_to_array(rdev, mddev);
 		if (err) {
-			export_rdev(rdev);
+			md_export_rdev(mddev, rdev);
 			return err;
 		}
 	}
@@ -8031,7 +8061,7 @@ static int hot_add_disk(struct mddev *mddev, struct md_new_disk *nd)
 	return 0;
 
 abort_export:
-	export_rdev(rdev);
+	md_export_rdev(mddev, rdev);
 	return err;
 }
 
@@ -8577,15 +8607,18 @@ int md_import_new_disk(struct mddev *mddev, struct mdu_disk_info_s *info,
 		return err;
 	}
 
+	/* link the holder here too, for the same reason */
+	md_link_rdev_holder(rdev, mddev);
+
 	nd->rdev = rdev;
 	return 0;
 }
 
 /* release a leg md_add_new_disk() did not take ownership of */
-void md_put_new_disk(struct md_new_disk *nd)
+void md_put_new_disk(struct mddev *mddev, struct md_new_disk *nd)
 {
 	if (nd->rdev) {
-		export_rdev(nd->rdev);
+		md_export_rdev(mddev, nd->rdev);
 		nd->rdev = NULL;
 	}
 }
@@ -8717,6 +8750,7 @@ static int md_ioctl(struct block_device *bdev, blk_mode_t mode,
 			err = -EINVAL;
 			goto out;
 		}
+		md_link_rdev_holder(nd.rdev, mddev);
 	}
 
 	/* q->limits_lock nests outside both, see md_start_sync() */
@@ -8864,7 +8898,7 @@ unlock:
 
 out:
 	/* a leg we opened but nothing took ownership of */
-	md_put_new_disk(&nd);
+	md_put_new_disk(mddev, &nd);
 
 	if (cmd == STOP_ARRAY_RO || (err && cmd == STOP_ARRAY))
 		clear_bit(MD_CLOSING, &mddev->flags);

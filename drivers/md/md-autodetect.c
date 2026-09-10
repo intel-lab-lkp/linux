@@ -231,7 +231,7 @@ static void __init md_setup_drive(struct md_setup_args *args)
 		mddev_lock_nointr(mddev);
 
 		md_add_new_disk(mddev, &dinfo, &nd, NULL);
-		md_put_new_disk(&nd);
+		md_put_new_disk(mddev, &nd);
 	}
 
 	/*

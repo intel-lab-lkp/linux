@@ -294,6 +294,11 @@ enum flag_bits {
 				 * serial bios.
 				 */
 	Nonrot,			/* non-rotational device (SSD) */
+	HolderLinked,		/* bd_link_disk_holder() succeeded for this
+				 * leg.  The link is made before the array is
+				 * locked, as it takes disk->open_mutex,
+				 * see md_import_new_disk().
+				 */
 };
 
 static inline int is_badblock(struct md_rdev *rdev, sector_t s, sector_t sectors,
@@ -1069,7 +1074,7 @@ struct md_new_disk {
 
 int md_import_new_disk(struct mddev *mddev, struct mdu_disk_info_s *info,
 		       struct md_new_disk *nd);
-void md_put_new_disk(struct md_new_disk *nd);
+void md_put_new_disk(struct mddev *mddev, struct md_new_disk *nd);
 int md_add_new_disk(struct mddev *mddev, struct mdu_disk_info_s *info,
 		    struct md_new_disk *nd, struct queue_limits *lim);
 int do_md_run(struct mddev *mddev, struct queue_limits *lim);
