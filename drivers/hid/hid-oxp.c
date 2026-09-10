@@ -23,6 +23,7 @@
 #include "hid-ids.h"
 
 #define OXP_PACKET_SIZE 64
+#define OXP_STATUS_HEADER_SIZE 6
 
 #define GEN1_MESSAGE_ID	0xff
 #define GEN2_MESSAGE_ID	0x3f
@@ -318,6 +319,9 @@ static int oxp_hid_raw_event_gen_1(struct hid_device *hdev,
 	struct led_classdev_mc *led_mc = drvdata.led_mc;
 	struct oxp_gen_1_rgb_report *rgb_rep;
 
+	if (size < sizeof(*rgb_rep))
+		return 0;
+
 	if (data[1] != OXP_FID_GEN1_RGB_REPLY)
 		return 0;
 
@@ -391,6 +395,9 @@ static int oxp_hid_raw_event_gen_2(struct hid_device *hdev,
 	struct led_classdev_mc *led_mc = drvdata.led_mc;
 	struct oxp_gen_2_rgb_report *rgb_rep;
 
+	if (size < OXP_STATUS_HEADER_SIZE)
+		return 0;
+
 	if (data[0] != OXP_FID_GEN2_STATUS_EVENT)
 		return 0;
 
@@ -403,6 +410,8 @@ static int oxp_hid_raw_event_gen_2(struct hid_device *hdev,
 	}
 
 	if (data[3] != OXP_GET_PROPERTY)
+		return 0;
+	if (size < sizeof(*rgb_rep))
 		return 0;
 
 	rgb_rep = (struct oxp_gen_2_rgb_report *)data;
@@ -435,7 +444,7 @@ static int oxp_hid_raw_event(struct hid_device *hdev, struct hid_report *report,
 {
 	u16 up = get_usage_page(hdev);
 
-	dev_dbg(&hdev->dev, "raw event data: [%*ph]\n", OXP_PACKET_SIZE, data);
+	dev_dbg(&hdev->dev, "raw event data: [%*ph]\n", size, data);
 
 	switch (up) {
 	case GEN1_USAGE_PAGE:
