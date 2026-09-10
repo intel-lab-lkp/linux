@@ -138,6 +138,8 @@ smk_bu_tsk_to_obj(struct task_struct *tsk, const struct task_smack *tsp,
 	char acc[SMK_NUM_ACCESS_TYPE + 1];
 	char comm[TASK_COMM_LEN];
 
+	strscpy_pad(comm, tsk);
+
 	if (rc <= 0)
 		return rc;
 	if (rc > SMACK_UNCONFINED_OBJECT)
@@ -147,7 +149,7 @@ smk_bu_tsk_to_obj(struct task_struct *tsk, const struct task_smack *tsp,
 
 	pr_info("Smack %s: (%s %s %s) %s %s\n", smk_bu_mess[rc],
 		smk_of_task(tsp)->smk_known, oskp->smk_known,
-		acc, get_task_comm(comm, tsk), note);
+		acc, comm, note);
 	return 0;
 #else
 	return rc;
