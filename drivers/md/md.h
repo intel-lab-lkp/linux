@@ -1051,8 +1051,27 @@ struct mdu_disk_info_s;
 extern int mdp_major;
 void md_autostart_arrays(int part);
 int md_set_array_info(struct mddev *mddev, struct mdu_array_info_s *info);
+/*
+ * A leg opened before the array was locked, with the mddev fields that
+ * selected the branch and the superblock format.  Opening takes
+ * disk->open_mutex, which must not nest inside reconfig_mutex; the fields
+ * are read unlocked and md_add_new_disk() rechecks them.
+ */
+struct md_new_disk {
+	struct md_rdev *rdev;
+	bool stacks;		/* the add can reach ->hot_add_disk() */
+	bool have_pers;
+	bool have_raid_disks;
+	int persistent;
+	int major_version;
+	int minor_version;
+};
+
+int md_import_new_disk(struct mddev *mddev, struct mdu_disk_info_s *info,
+		       struct md_new_disk *nd);
+void md_put_new_disk(struct md_new_disk *nd);
 int md_add_new_disk(struct mddev *mddev, struct mdu_disk_info_s *info,
-		    struct queue_limits *lim);
+		    struct md_new_disk *nd, struct queue_limits *lim);
 int do_md_run(struct mddev *mddev, struct queue_limits *lim);
 #define MDDEV_STACK_INTEGRITY	(1u << 0)
 int mddev_stack_rdev_limits(struct mddev *mddev, struct queue_limits *lim,

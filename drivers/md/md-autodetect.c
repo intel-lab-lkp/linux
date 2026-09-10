@@ -208,6 +208,7 @@ static void __init md_setup_drive(struct md_setup_args *args)
 			.major	= MAJOR(devices[i]),
 			.minor	= MINOR(devices[i]),
 		};
+		struct md_new_disk nd;
 
 		if (args->level != LEVEL_NONE) {
 			dinfo.number = i;
@@ -216,7 +217,21 @@ static void __init md_setup_drive(struct md_setup_args *args)
 				(1 << MD_DISK_ACTIVE) | (1 << MD_DISK_SYNC);
 		}
 
-		md_add_new_disk(mddev, &dinfo, NULL);
+		/*
+		 * Opening a leg takes disk->open_mutex, which must not nest
+		 * inside reconfig_mutex, see md_import_new_disk().  Drop the
+		 * array lock around it; this is __init and the array is not
+		 * reachable yet, so nothing else can touch it in between.
+		 */
+		mddev_unlock(mddev);
+		if (md_import_new_disk(mddev, &dinfo, &nd)) {
+			mddev_lock_nointr(mddev);
+			continue;
+		}
+		mddev_lock_nointr(mddev);
+
+		md_add_new_disk(mddev, &dinfo, &nd, NULL);
+		md_put_new_disk(&nd);
 	}
 
 	/*
