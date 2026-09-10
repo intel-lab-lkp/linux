@@ -58,6 +58,36 @@ enum {
 	SP_TASK_STARTING,	/* Task has started but not added to idle yet */
 };
 
+/*
+ * Opaque reply-acknowledgment cookie; field contents are
+ * upper-layer-specific. An all-zero cookie marks a reply that is
+ * not tracked. Cookies are copied by value under each consumer's
+ * own serialization and no field is accessed atomically.
+ */
+typedef struct {
+	u64	id;
+	u32	gen;
+} svc_ack_cookie_t;
+
+/**
+ * svc_ack_cookie_present - report whether a reply-ack cookie is populated
+ * @cookie: cookie to test
+ *
+ * Return: true when the upper layer requested tracking for the reply.
+ */
+static inline bool svc_ack_cookie_present(const svc_ack_cookie_t *cookie)
+{
+	return cookie->id != 0 || cookie->gen != 0;
+}
+
+/*
+ * Callback to report the fate of a reply's acknowledgment to an
+ * upper layer. @delivered is true when the transport has confirmed
+ * that the reply reached the client, and false when the transport
+ * has stopped tracking the reply and no confirmation will follow.
+ */
+typedef void (*svc_ack_fn_t)(void *data, const svc_ack_cookie_t *cookie,
+			     bool delivered);
 
 /*
  * RPC service.
@@ -96,6 +126,9 @@ struct svc_serv {
 						 * connection */
 	bool			sv_bc_enabled;	/* service uses backchannel */
 #endif /* CONFIG_SUNRPC_BACKCHANNEL */
+
+	svc_ack_fn_t		sv_reply_ack;
+	void			*sv_reply_ack_data;
 };
 
 /* This is used by pool_stats to find and lock an svc */
@@ -105,6 +138,21 @@ struct svc_info {
 };
 
 void svc_destroy(struct svc_serv **svcp);
+
+/**
+ * svc_reply_acked - report the fate of a reply's acknowledgment
+ * @serv: RPC service
+ * @cookie: opaque identifier for the reply
+ * @delivered: true if the reply reached the client, false if the
+ *	       transport will not report on this reply
+ */
+static inline void svc_reply_acked(struct svc_serv *serv,
+				   const svc_ack_cookie_t *cookie,
+				   bool delivered)
+{
+	if (serv->sv_reply_ack)
+		serv->sv_reply_ack(serv->sv_reply_ack_data, cookie, delivered);
+}
 
 /*
  * Maximum payload size supported by a kernel RPC server.

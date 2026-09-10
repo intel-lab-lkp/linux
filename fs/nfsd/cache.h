@@ -36,8 +36,11 @@ struct nfsd_cacherep {
 	struct list_head	c_lru;
 	unsigned char		c_state,	/* unused, inprog, done */
 				c_type,		/* status, buffer */
-				c_secure : 1;	/* req came from port < 1024 */
+				c_secure : 1,	/* req came from port < 1024 */
+				c_acked : 1,	/* reply delivery confirmed */
+				c_ack_pending : 1; /* transport will report */
 	unsigned int		c_xprt;		/* svc_xprt that carried req */
+	u32			c_ack_gen;	/* uniquifies the ack cookie */
 	unsigned long		c_timestamp;
 	union {
 		struct kvec	u_vec;
@@ -80,10 +83,11 @@ enum {
 /* Checksum this amount of the request */
 #define RC_CSUMLEN		(256U)
 
+svc_ack_cookie_t nfsd_cache_ack_cookie(const struct nfsd_cacherep *rp);
 int	nfsd_drc_slab_create(void);
 void	nfsd_drc_slab_free(void);
-int	nfsd_reply_cache_init(struct nfsd_net *);
-void	nfsd_reply_cache_shutdown(struct nfsd_net *);
+int	nfsd_reply_cache_init(struct nfsd_net *, struct svc_serv *);
+void	nfsd_reply_cache_shutdown(struct nfsd_net *, struct svc_serv *);
 int	nfsd_cache_lookup(struct svc_rqst *rqstp, unsigned int start,
 			  unsigned int len, struct nfsd_cacherep **cacherep);
 void	nfsd_cache_update(struct svc_rqst *rqstp, struct nfsd_cacherep *rp,

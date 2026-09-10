@@ -1594,8 +1594,42 @@ DEFINE_EVENT(nfsd_drc_entry_class, nfsd_drc_##name,		\
 	),							\
 	TP_ARGS(nn, rp))
 
+DEFINE_NFSD_DRC_ENTRY_EVENT(evict_acked);
 DEFINE_NFSD_DRC_ENTRY_EVENT(evict_pressure);
 DEFINE_NFSD_DRC_ENTRY_EVENT(evict_expired);
+
+TRACE_EVENT(nfsd_drc_reply_acked,
+	TP_PROTO(
+		const struct nfsd_net *nn,
+		unsigned int num_drc_entries,
+		u32 xid,
+		unsigned int xprt,
+		bool delivered,
+		bool found
+	),
+	TP_ARGS(nn, num_drc_entries, xid, xprt, delivered, found),
+	TP_STRUCT__entry(
+		__field(unsigned long long, boot_time)
+		__field(unsigned int, num_drc_entries)
+		__field(u32, xid)
+		__field(unsigned int, xprt)
+		__field(bool, delivered)
+		__field(bool, found)
+	),
+	TP_fast_assign(
+		__entry->boot_time = nn->boot_time;
+		__entry->num_drc_entries = num_drc_entries;
+		__entry->xid = xid;
+		__entry->xprt = xprt;
+		__entry->delivered = delivered;
+		__entry->found = found;
+	),
+	TP_printk("boot_time=%16llx entries=%u xid=0x%08x xprt=%u %s %s",
+		__entry->boot_time, __entry->num_drc_entries,
+		__entry->xid, __entry->xprt,
+		__entry->delivered ? "delivered" : "untracked",
+		__entry->found ? "found" : "stale")
+);
 
 TRACE_EVENT(nfsd_cb_args,
 	TP_PROTO(

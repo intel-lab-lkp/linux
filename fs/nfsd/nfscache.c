@@ -39,12 +39,15 @@ struct nfsd_drc_bucket {
 };
 
 static struct kmem_cache	*drc_slab;
+static atomic_t			drc_ack_gen;
 
 static int	nfsd_cache_append(struct svc_rqst *rqstp, struct kvec *vec);
 static unsigned long nfsd_reply_cache_count(struct shrinker *shrink,
 					    struct shrink_control *sc);
 static unsigned long nfsd_reply_cache_scan(struct shrinker *shrink,
 					   struct shrink_control *sc);
+static void	nfsd_reply_ack(void *data, const svc_ack_cookie_t *cookie,
+			       bool delivered);
 
 /*
  * Put a cap on the size of the DRC based on the amount of available
@@ -110,6 +113,9 @@ nfsd_cacherep_alloc(struct svc_rqst *rqstp, __wsum csum,
 		rp->c_key.k_len = rqstp->rq_arg.len;
 		rp->c_key.k_csum = csum;
 		rp->c_xprt = rqstp->rq_xprt->xpt_id;
+		rp->c_acked = 0;
+		rp->c_ack_pending = 0;
+		rp->c_ack_gen = 0;
 	}
 	return rp;
 }
@@ -119,6 +125,27 @@ static void nfsd_cacherep_free(struct nfsd_cacherep *rp)
 	if (rp->c_type == RC_REPLBUFF)
 		kfree(rp->c_replvec.iov_base);
 	kmem_cache_free(drc_slab, rp);
+}
+
+/*
+ * Zero is reserved so a populated cookie never compares equal to
+ * the all-zero cookie that marks an untracked reply.
+ */
+static u32 nfsd_cache_next_ack_gen(void)
+{
+	u32 gen = atomic_inc_return(&drc_ack_gen);
+
+	if (!gen)
+		gen = atomic_inc_return(&drc_ack_gen);
+	return gen;
+}
+
+svc_ack_cookie_t nfsd_cache_ack_cookie(const struct nfsd_cacherep *rp)
+{
+	return (svc_ack_cookie_t){
+		.id = ((u64)rp->c_xprt << 32) | (__force u32)rp->c_key.k_xid,
+		.gen = rp->c_ack_gen,
+	};
 }
 
 static unsigned long
@@ -179,7 +206,7 @@ void nfsd_drc_slab_free(void)
 	kmem_cache_destroy(drc_slab);
 }
 
-int nfsd_reply_cache_init(struct nfsd_net *nn)
+int nfsd_reply_cache_init(struct nfsd_net *nn, struct svc_serv *serv)
 {
 	unsigned int hashsize;
 	unsigned int i;
@@ -210,6 +237,9 @@ int nfsd_reply_cache_init(struct nfsd_net *nn)
 	}
 	nn->drc_hashsize = hashsize;
 
+	serv->sv_reply_ack = nfsd_reply_ack;
+	serv->sv_reply_ack_data = nn;
+
 	shrinker_register(nn->nfsd_reply_cache_shrinker);
 
 	return 0;
@@ -219,7 +249,7 @@ out_shrinker:
 	return -ENOMEM;
 }
 
-void nfsd_reply_cache_shutdown(struct nfsd_net *nn)
+void nfsd_reply_cache_shutdown(struct nfsd_net *nn, struct svc_serv *serv)
 {
 	struct nfsd_cacherep *rp;
 	unsigned int i;
@@ -239,6 +269,8 @@ void nfsd_reply_cache_shutdown(struct nfsd_net *nn)
 	nn->drc_hashtbl = NULL;
 	nn->drc_hashsize = 0;
 
+	serv->sv_reply_ack = NULL;
+	serv->sv_reply_ack_data = NULL;
 }
 
 static void
@@ -257,6 +289,50 @@ nfsd_cache_bucket_find(__be32 xid, struct nfsd_net *nn)
 }
 
 /*
+ * The generation match keeps a stale cookie from acknowledging a
+ * later entry that reuses the same XID and transport. The walk
+ * starts at the MRU end of the bucket LRU, where the entry for a
+ * just-sent reply sits. The visit cap bounds the time spent under
+ * cache_lock when a client packs the bucket; an entry missed under
+ * the cap is left to the other eviction reasons.
+ */
+static void nfsd_reply_ack(void *data, const svc_ack_cookie_t *cookie,
+			   bool delivered)
+{
+	struct nfsd_net *nn = data;
+	__be32 xid = (__force __be32)(u32)cookie->id;
+	unsigned int xpt_id = cookie->id >> 32;
+	unsigned int visited = 0;
+	struct nfsd_drc_bucket *b;
+	struct nfsd_cacherep *rp;
+	bool found = false;
+
+	b = nfsd_cache_bucket_find(xid, nn);
+	spin_lock(&b->cache_lock);
+	list_for_each_entry_reverse(rp, &b->lru_head, c_lru) {
+		if (++visited > 4 * TARGET_BUCKET_SIZE)
+			break;
+		if (rp->c_key.k_xid != xid)
+			continue;
+		if (rp->c_xprt != xpt_id)
+			continue;
+		if (rp->c_ack_gen != cookie->gen)
+			continue;
+		if (delivered)
+			rp->c_acked = 1;
+		rp->c_ack_pending = 0;
+		found = true;
+		break;
+	}
+	spin_unlock(&b->cache_lock);
+	if (trace_nfsd_drc_reply_acked_enabled())
+		trace_nfsd_drc_reply_acked(nn,
+					   atomic_read(&nn->num_drc_entries),
+					   be32_to_cpu(xid), xpt_id, delivered,
+					   found);
+}
+
+/*
  * Remove and return no more than @max evictable entries in bucket @b,
  * visiting at most 4 * @max entries. @max must not be zero.
  */
@@ -272,6 +348,10 @@ nfsd_prune_bucket_locked(struct nfsd_net *nn, struct nfsd_drc_bucket *b,
 
 	/* The bucket LRU is ordered oldest-first. */
 	list_for_each_entry_safe(rp, tmp, &b->lru_head, c_lru) {
+		if (rp->c_state == RC_DONE && rp->c_acked) {
+			trace_nfsd_drc_evict_acked(nn, rp);
+			goto evict;
+		}
 		if (atomic_read(&nn->num_drc_entries) > nn->max_drc_entries) {
 			trace_nfsd_drc_evict_pressure(nn, rp);
 			goto evict;
@@ -639,6 +719,8 @@ void nfsd_cache_update(struct svc_rqst *rqstp, struct nfsd_cacherep *rp,
 	nfsd_stats_drc_mem_usage_add(nn, bufsize);
 	lru_put_end(b, rp);
 	rp->c_secure = test_bit(RQ_SECURE, &rqstp->rq_flags);
+	rp->c_ack_pending = test_bit(XPT_REPLY_ACK, &rqstp->rq_xprt->xpt_flags);
+	rp->c_ack_gen = nfsd_cache_next_ack_gen();
 	rp->c_type = cachetype;
 	rp->c_state = RC_DONE;
 	spin_unlock(&b->cache_lock);

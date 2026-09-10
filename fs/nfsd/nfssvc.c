@@ -389,7 +389,7 @@ static int nfsd_startup_net(struct net *net, const struct cred *cred)
 	if (ret)
 		goto out_lockd;
 
-	ret = nfsd_reply_cache_init(nn);
+	ret = nfsd_reply_cache_init(nn, nn->nfsd_serv);
 	if (ret)
 		goto out_filecache;
 
@@ -404,7 +404,7 @@ static int nfsd_startup_net(struct net *net, const struct cred *cred)
 	return 0;
 
 out_reply_cache:
-	nfsd_reply_cache_shutdown(nn);
+	nfsd_reply_cache_shutdown(nn, nn->nfsd_serv);
 out_filecache:
 	nfsd_file_cache_shutdown_net(net);
 out_lockd:
@@ -417,7 +417,7 @@ out_socks:
 	return ret;
 }
 
-static void nfsd_shutdown_net(struct net *net)
+static void nfsd_shutdown_net(struct net *net, struct svc_serv *serv)
 {
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
 
@@ -427,7 +427,7 @@ static void nfsd_shutdown_net(struct net *net)
 
 		nfsd_export_flush(net);
 		nfs4_state_shutdown_net(net);
-		nfsd_reply_cache_shutdown(nn);
+		nfsd_reply_cache_shutdown(nn, serv);
 		nfsd_file_cache_shutdown_net(net);
 		if (test_bit(NFSD_NET_LOCKD_UP, &nn->flags)) {
 			lockd_down(net);
@@ -539,7 +539,7 @@ void nfsd_destroy_serv(struct net *net)
 	 * other initialization has been done except the rpcb information.
 	 */
 	svc_xprt_destroy_all(serv, net, true);
-	nfsd_shutdown_net(net);
+	nfsd_shutdown_net(net, serv);
 	svc_destroy(&serv);
 }
 
