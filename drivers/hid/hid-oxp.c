@@ -1240,6 +1240,7 @@ static DEVICE_ATTR_RO(enabled_index);
 static ssize_t effect_store(struct device *dev, struct device_attribute *attr,
 			    const char *buf, size_t count)
 {
+	u8 old_effect;
 	int ret;
 	u8 val;
 
@@ -1250,15 +1251,21 @@ static ssize_t effect_store(struct device *dev, struct device_attribute *attr,
 	val = ret;
 
 	guard(mutex)(&drvdata.rgb_mutex);
+	old_effect = drvdata.rgb_effect;
+	drvdata.rgb_effect = val;
 
 	ret = oxp_rgb_status_store(drvdata.rgb_en, drvdata.rgb_speed,
 				   drvdata.rgb_brightness);
-	if (ret)
+	if (ret) {
+		drvdata.rgb_effect = old_effect;
 		return ret;
+	}
 
 	ret = oxp_rgb_effect_set(val);
-	if (ret)
+	if (ret) {
+		drvdata.rgb_effect = old_effect;
 		return ret;
+	}
 
 	return count;
 }
