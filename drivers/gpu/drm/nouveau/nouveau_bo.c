@@ -578,6 +578,7 @@ int nouveau_bo_pin_locked(struct nouveau_bo *nvbo, uint32_t domain, bool contig)
 				      "0x%08x vs 0x%08x\n", bo,
 				 bo->resource->mem_type, domain);
 			ret = -EBUSY;
+			goto out;
 		}
 		ttm_bo_pin(&nvbo->bo);
 		goto out;
