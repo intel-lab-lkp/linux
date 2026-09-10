@@ -2492,6 +2492,11 @@ recover_user_blocks:
 		spin_lock(&sbi->stat_lock);
 		sbi->user_block_count += shrunk_blocks;
 		spin_unlock(&sbi->stat_lock);
+	} else if (test_opt(sbi, RESERVE_SHRINK)) {
+		spin_lock(&sbi->stat_lock);
+		F2FS_OPTION(sbi).reserve_shrink_blocks = 0;
+		clear_opt(sbi, RESERVE_SHRINK);
+		spin_unlock(&sbi->stat_lock);
 	}
 out_err:
 	f2fs_up_write_trace(&sbi->cp_global_sem, &clc);

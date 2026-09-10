@@ -591,9 +591,18 @@ out:
 	}
 #endif
 	if (a->struct_type == RESERVED_BLOCKS) {
+		unsigned long limit;
+
 		spin_lock(&sbi->stat_lock);
-		if (t > (unsigned long)(sbi->user_block_count -
-				F2FS_OPTION(sbi).root_reserved_blocks)) {
+		limit = sbi->user_block_count -
+				F2FS_OPTION(sbi).root_reserved_blocks;
+		if (test_opt(sbi, RESERVE_SHRINK)) {
+			if (limit > F2FS_OPTION(sbi).reserve_shrink_blocks)
+				limit -= F2FS_OPTION(sbi).reserve_shrink_blocks;
+			else
+				limit = 0;
+		}
+		if (t > limit) {
 			spin_unlock(&sbi->stat_lock);
 			return -EINVAL;
 		}
