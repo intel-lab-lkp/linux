@@ -5062,6 +5062,9 @@ enum skb_ext_id {
 #if IS_ENABLED(CONFIG_CAN)
 	SKB_EXT_CAN,
 #endif
+#if IS_ENABLED(CONFIG_BPF_SKB_EXT)
+	SKB_EXT_BPF,
+#endif
 	SKB_EXT_NUM, /* must be last */
 };
 
@@ -5153,6 +5156,13 @@ static inline bool skb_has_extensions(struct sk_buff *skb)
 {
 	return unlikely(skb->active_extensions);
 }
+
+/* True if the extension block is shared with cloned skbs */
+static inline bool skb_ext_shared(const struct sk_buff *skb)
+{
+	return skb->active_extensions &&
+	       refcount_read(&skb->extensions->refcnt) != 1;
+}
 #else
 static inline void __skb_ext_put(struct skb_ext *ext) {}
 static inline void skb_ext_put(struct sk_buff *skb) {}
@@ -5161,6 +5171,7 @@ static inline void skb_ext_del(struct sk_buff *skb, int unused) {}
 static inline void __skb_ext_copy(struct sk_buff *d, const struct sk_buff *s) {}
 static inline void skb_ext_copy(struct sk_buff *dst, const struct sk_buff *s) {}
 static inline bool skb_has_extensions(struct sk_buff *skb) { return false; }
+static inline bool skb_ext_shared(const struct sk_buff *skb) { return false; }
 #endif /* CONFIG_SKB_EXTENSIONS */
 
 static inline void nf_reset_ct(struct sk_buff *skb)
