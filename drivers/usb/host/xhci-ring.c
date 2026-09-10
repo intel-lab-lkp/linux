@@ -58,6 +58,7 @@
 #include <linux/string_choices.h>
 #include <linux/dma-mapping.h>
 #include <linux/bitfield.h>
+#include <linux/unaligned.h>
 
 #include "xhci.h"
 #include "xhci-trace.h"
@@ -3837,7 +3838,6 @@ int xhci_queue_ctrl_tx(struct xhci_hcd *xhci, gfp_t mem_flags,
 	start_cycle = ep_ring->cycle_state;
 
 	/* Queue setup TRB - see section 6.4.1.2.1 */
-	/* FIXME better way to translate setup_packet into two u32 fields? */
 	setup = (struct usb_ctrlrequest *) urb->setup_packet;
 	field = 0;
 	field |= TRB_IDT | TRB_TYPE(TRB_SETUP);
@@ -3855,8 +3855,8 @@ int xhci_queue_ctrl_tx(struct xhci_hcd *xhci, gfp_t mem_flags,
 	}
 
 	queue_trb(xhci, ep_ring, true,
-		  setup->bRequestType | setup->bRequest << 8 | le16_to_cpu(setup->wValue) << 16,
-		  le16_to_cpu(setup->wIndex) | le16_to_cpu(setup->wLength) << 16,
+		  get_unaligned_le32(setup),
+		  get_unaligned_le32((u8 *)setup + sizeof(u32)),
 		  TRB_LEN(8) | TRB_INTR_TARGET(0),
 		  /* Immediate data in pointer */
 		  field);
