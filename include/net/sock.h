@@ -2312,6 +2312,17 @@ static inline void sk_gso_disable(struct sock *sk)
 	sk->sk_route_caps &= ~NETIF_F_GSO_MASK;
 }
 
+static inline bool sk_has_validate_xmit_skb(const struct sock *sk)
+{
+#ifdef CONFIG_SOCK_VALIDATE_XMIT
+	return !!sk->sk_validate_xmit_skb;
+#else
+	return false;
+#endif
+}
+
+bool sk_has_decrypt_user(const struct sock *sk);
+
 static inline int skb_do_copy_data_nocache(struct sock *sk, struct sk_buff *skb,
 					   struct iov_iter *from, char *to,
 					   int copy, int offset)
