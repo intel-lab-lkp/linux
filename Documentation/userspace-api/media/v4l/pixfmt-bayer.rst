@@ -35,3 +35,4 @@ orders. See also `the Wikipedia article on Bayer filter
     pixfmt-srggb16
     pixfmt-srggb20
     pixfmt-srggb24
+    pixfmt-srggb28
