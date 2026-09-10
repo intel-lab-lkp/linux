@@ -58,6 +58,7 @@ definitions:
     name: vlan-protocols
     type: enum
     enum-name:
+    name-prefix: eth-p-
     entries:
       -
         name: 8021q
@@ -305,6 +306,8 @@ definitions:
   -
     name: ipv4-devconf
     enum-name:
+    name-prefix: ipv4-devconf-
+    header: linux/ip.h
     type: enum
     entries:
       -
@@ -376,6 +379,8 @@ definitions:
   -
     name: ipv6-devconf
     enum-name:
+    name-prefix: devconf-
+    header: linux/ipv6.h
     type: enum
     entries:
       -
@@ -501,6 +506,8 @@ definitions:
   -
     name: ifla-icmp6-stats
     enum-name:
+    name-prefix: icmp6-mib-
+    header: linux/snmp.h
     type: enum
     entries:
       -
@@ -520,6 +527,8 @@ definitions:
   -
     name: ifla-inet6-stats
     enum-name:
+    name-prefix: ipstats-mib-
+    header: linux/snmp.h
     type: enum
     entries:
       -
@@ -640,6 +649,8 @@ definitions:
     name: vlan-flags
     type: flags
     enum-name:
+    name-prefix: vlan-flag-
+    header: linux/if_vlan.h
     entries:
       - reorder-hdr
       - gvrp
@@ -727,6 +738,8 @@ definitions:
     name: ifla-vf-link-state-enum
     type: enum
     enum-name:
+    name-prefix: ifla-vf-link-state-
+    header: linux/if_link.h
     entries:
       - auto
       - enable
@@ -794,6 +807,7 @@ definitions:
     name: rtext-filter
     type: flags
     enum-name:
+    name-prefix: rtext-filter-
     entries:
       - vf
       - brvlan
@@ -806,7 +820,8 @@ definitions:
   -
     name: netkit-policy
     type: enum
-    enum-name:
+    enum-name: netkit-action
+    name-prefix: netkit-
     entries:
       -
         name: forward
@@ -818,6 +833,7 @@ definitions:
     name: netkit-mode
     type: enum
     enum-name: netkit-mode
+    name-prefix: netkit-
     entries:
       - name: l2
       - name: l3
@@ -825,7 +841,8 @@ definitions:
   -
     name: netkit-scrub
     type: enum
-    enum-name:
+    enum-name: netkit-scrub
+    name-prefix: netkit-scrub-
     entries:
       - name: none
       - name: default
@@ -833,13 +850,14 @@ definitions:
     name: netkit-pairing
     type: enum
     enum-name: netkit-pairing
+    name-prefix: netkit-device-
     entries:
       - name: pair
       - name: single
   -
     name: ovpn-mode
     enum-name: ovpn-mode
-    name-prefix: ovpn-mode
+    name-prefix: ovpn-mode-
     type: enum
     entries:
       - p2p
@@ -848,6 +866,7 @@ definitions:
     name: br-stp-mode
     type: enum
     enum-name: br-stp-mode
+    name-prefix: br-stp-mode-
     entries:
       - auto
       - user

@@ -5,8 +5,8 @@
  * Author: Hideaki YOSHIFUJI <yoshfuji@linux-ipv6.org>
  */
 
-#ifndef _LINUX_SNMP_H
-#define _LINUX_SNMP_H
+#ifndef _UAPI_LINUX_SNMP_H
+#define _UAPI_LINUX_SNMP_H
 
 /* ipstats mib definitions */
 /*
@@ -372,4 +372,4 @@ enum
 	__LINUX_MIB_TLSMAX
 };
 
-#endif	/* _LINUX_SNMP_H */
+#endif	/* _UAPI_LINUX_SNMP_H */
