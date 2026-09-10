@@ -20,6 +20,10 @@
 	model = "FriendlyElec CM3588 NAS";
 	compatible = "friendlyarm,cm3588-nas", "friendlyarm,cm3588", "rockchip,rk3588";
 
+	aliases {
+		ethernet0 = &rtl_eth0;
+	};
+
 	adc_key_recovery: adc-key-recovery {
 		compatible = "adc-keys";
 		io-channels = <&saradc 1>;
@@ -510,6 +514,23 @@
 	reset-gpios = <&gpio4 RK_PA2 GPIO_ACTIVE_HIGH>;
 	vpcie3v3-supply = <&vcc_3v3_m2_d>;
 	status = "okay";
+};
+
+&pcie2x1l2 {
+	/* on-board RTL8125 2.5GbE NIC */
+	pcie@0,0 {
+		reg = <0x400000 0 0 0 0>;
+		#address-cells = <3>;
+		#size-cells = <2>;
+		ranges;
+		device_type = "pci";
+		bus-range = <0x40 0x4f>;
+
+		rtl_eth0: ethernet@0,0 {
+			compatible = "pci10ec,8125";
+			reg = <0x410000 0 0 0 0>;
+		};
+	};
 };
 
 &pcie30phy {
