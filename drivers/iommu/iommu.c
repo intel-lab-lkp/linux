@@ -535,9 +535,17 @@ static int iommu_init_device(struct device *dev)
 	}
 	dev->iommu->iommu_dev = iommu_dev;
 
+	if (iommu_using_t0_stream(dev)) {
+		/*
+		 * After probe the iommu has to leave the T=1 stream in BLOCKING,
+		 * while the T=0 stream will go through the physical path.
+		 */
+		iommu_tdisp_enter_t0(dev);
+	}
+
 	ret = iommu_device_link(iommu_dev, dev);
 	if (ret)
-		goto err_release;
+		goto err_tdisp_t0;
 
 	group = ops->device_group(dev);
 	if (WARN_ON_ONCE(group == NULL))
@@ -555,7 +563,9 @@ static int iommu_init_device(struct device *dev)
 
 err_unlink:
 	iommu_device_unlink(iommu_dev, dev);
-err_release:
+err_tdisp_t0:
+	if (iommu_using_t0_stream(dev))
+		iommu_tdisp_exit_t0(dev);
 	if (ops->release_device)
 		ops->release_device(dev);
 err_module_put:
@@ -572,6 +582,9 @@ static void iommu_deinit_device(struct device *dev)
 	const struct iommu_ops *ops = dev_iommu_ops(dev);
 
 	lockdep_assert_held(&group->mutex);
+
+	if (iommu_using_t0_stream(dev))
+		iommu_tdisp_exit_t0(dev);
 
 	iommu_device_unlink(dev->iommu->iommu_dev, dev);
 

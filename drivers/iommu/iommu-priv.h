@@ -8,6 +8,25 @@
 #include <linux/iommu-debug-pagealloc.h>
 #include <linux/msi.h>
 
+#ifdef CONFIG_ARCH_HAS_CC_PLATFORM
+void iommu_tdisp_enter_t0(struct device *dev);
+void iommu_tdisp_exit_t0(struct device *dev);
+#else
+static inline void iommu_tdisp_enter_t0(struct device *dev)
+{
+}
+
+static inline void iommu_tdisp_exit_t0(struct device *dev)
+{
+}
+#endif
+
+static inline bool iommu_using_t0_stream(struct device *dev)
+{
+	return dev->iommu->iommu_dev->confidential &&
+	       !dev->iommu->tdisp_t1;
+}
+
 static inline const struct iommu_ops *dev_iommu_ops(struct device *dev)
 {
 	/*
