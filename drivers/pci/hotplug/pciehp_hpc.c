@@ -28,6 +28,8 @@
 #include "../pci.h"
 #include "pciehp.h"
 
+#define PCIEHP_LINK_UP_TIMEOUT_MS	3000
+
 static const struct dmi_system_id inband_presence_disabled_dmi_table[] = {
 	/*
 	 * Match all Dell systems, as some Dell systems have inband
@@ -291,10 +293,15 @@ static void pcie_wait_for_presence(struct pci_dev *pdev)
 int pciehp_check_link_status(struct controller *ctrl)
 {
 	struct pci_dev *pdev = ctrl_dev(ctrl);
+	unsigned int timeout_ms = PCIE_LINK_RETRAIN_TIMEOUT_MS;
 	bool found;
 	u16 lnk_status, linksta2;
 
-	if (!pcie_wait_for_link(pdev, true)) {
+	/* Account for power sequencing and reset hold time when enabling a slot. */
+	if (POWER_CTRL(ctrl))
+		timeout_ms = PCIEHP_LINK_UP_TIMEOUT_MS;
+
+	if (!pcie_wait_for_link_timeout(pdev, true, 100, timeout_ms)) {
 		ctrl_info(ctrl, "Slot(%s): No link\n", slot_name(ctrl));
 		return -1;
 	}

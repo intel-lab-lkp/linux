@@ -4564,12 +4564,14 @@ static int pci_pm_reset(struct pci_dev *dev, bool probe)
  * @pdev: Device whose link to wait for.
  * @use_lt: Use the LT bit if TRUE, or the DLLLA bit if FALSE.
  * @active: Waiting for active or inactive?
+ * @timeout_ms: Link status polling timeout in milliseconds
  *
  * Return 0 if successful, or -ETIMEDOUT if status has not changed within
- * PCIE_LINK_RETRAIN_TIMEOUT_MS milliseconds.
+ * @timeout_ms milliseconds.
  */
 static int pcie_wait_for_link_status(struct pci_dev *pdev,
-				     bool use_lt, bool active)
+				     bool use_lt, bool active,
+				     unsigned int timeout_ms)
 {
 	u16 lnksta_mask, lnksta_match;
 	unsigned long end_jiffies;
@@ -4578,7 +4580,7 @@ static int pcie_wait_for_link_status(struct pci_dev *pdev,
 	lnksta_mask = use_lt ? PCI_EXP_LNKSTA_LT : PCI_EXP_LNKSTA_DLLLA;
 	lnksta_match = active ? lnksta_mask : 0;
 
-	end_jiffies = jiffies + msecs_to_jiffies(PCIE_LINK_RETRAIN_TIMEOUT_MS);
+	end_jiffies = jiffies + msecs_to_jiffies(timeout_ms);
 	do {
 		pcie_capability_read_word(pdev, PCI_EXP_LNKSTA, &lnksta);
 		if ((lnksta & lnksta_mask) == lnksta_match)
@@ -4617,7 +4619,8 @@ int pcie_retrain_link(struct pci_dev *pdev, bool use_lt)
 	 * avoid LTSSM race as recommended in Implementation Note at the end
 	 * of PCIe r6.1 sec 7.5.3.7.
 	 */
-	rc = pcie_wait_for_link_status(pdev, true, false);
+	rc = pcie_wait_for_link_status(pdev, true, false,
+				       PCIE_LINK_RETRAIN_TIMEOUT_MS);
 	if (rc)
 		return rc;
 
@@ -4631,7 +4634,8 @@ int pcie_retrain_link(struct pci_dev *pdev, bool use_lt)
 		pcie_capability_clear_word(pdev, PCI_EXP_LNKCTL, PCI_EXP_LNKCTL_RL);
 	}
 
-	rc = pcie_wait_for_link_status(pdev, use_lt, !use_lt);
+	rc = pcie_wait_for_link_status(pdev, use_lt, !use_lt,
+				       PCIE_LINK_RETRAIN_TIMEOUT_MS);
 
 	/*
 	 * Clear LBMS after a manual retrain so that the bit can be used
@@ -4655,24 +4659,27 @@ int pcie_retrain_link(struct pci_dev *pdev, bool use_lt)
 }
 
 /**
- * pcie_wait_for_link_delay - Wait until link is active or inactive
+ * pcie_wait_for_link_timeout - Wait for link with a specified polling timeout
  * @pdev: Bridge device
  * @active: waiting for active or inactive?
  * @delay: Delay to wait after link has become active (in ms)
+ * @timeout_ms: Link status polling timeout in milliseconds
  *
- * Use this to wait till link becomes active or inactive.
+ * The timeout covers initial link status polling, not the additional delays
+ * or failed-link recovery.  Without link active reporting, wait for timeout_ms
+ * plus delay instead of polling.
  */
-static bool pcie_wait_for_link_delay(struct pci_dev *pdev, bool active,
-				     int delay)
+bool pcie_wait_for_link_timeout(struct pci_dev *pdev, bool active, int delay,
+			       unsigned int timeout_ms)
 {
 	int rc;
 
 	/*
 	 * Some controllers might not implement link active reporting. In this
-	 * case, we wait for 1000 ms + any delay requested by the caller.
+	 * case, wait for timeout_ms plus any delay requested by the caller.
 	 */
 	if (!pdev->link_active_reporting) {
-		msleep(PCIE_LINK_RETRAIN_TIMEOUT_MS + delay);
+		msleep(timeout_ms + delay);
 		return true;
 	}
 
@@ -4687,7 +4694,7 @@ static bool pcie_wait_for_link_delay(struct pci_dev *pdev, bool active,
 	 */
 	if (active)
 		msleep(20);
-	rc = pcie_wait_for_link_status(pdev, false, active);
+	rc = pcie_wait_for_link_status(pdev, false, active, timeout_ms);
 	if (active) {
 		if (rc)
 			rc = pcie_failed_link_retrain(pdev);
@@ -4702,6 +4709,13 @@ static bool pcie_wait_for_link_delay(struct pci_dev *pdev, bool active,
 		return false;
 
 	return true;
+}
+
+static bool pcie_wait_for_link_delay(struct pci_dev *pdev, bool active,
+				     int delay)
+{
+	return pcie_wait_for_link_timeout(pdev, active, delay,
+					  PCIE_LINK_RETRAIN_TIMEOUT_MS);
 }
 
 /**
