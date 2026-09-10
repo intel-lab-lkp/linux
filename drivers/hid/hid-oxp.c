@@ -334,8 +334,8 @@ static int oxp_hid_raw_event_gen_1(struct hid_device *hdev,
 	drvdata.rgb_en = rgb_rep->enabled == 0 ? OXP_FEAT_DISABLED :
 						 OXP_FEAT_ENABLED;
 	drvdata.rgb_brightness = rgb_rep->brightness;
-	led_mc->led_cdev.brightness = rgb_rep->brightness / 4 *
-				      led_mc->led_cdev.max_brightness;
+	led_mc->led_cdev.brightness = rgb_rep->brightness *
+				      led_mc->led_cdev.max_brightness / 4;
 	/* If monocolor had less than 100% brightness on the previous boot,
 	 * there will be no reliable way to determine the real intensity.
 	 * Since intensity scaling is used with a hardware brightness set at max,
@@ -423,8 +423,8 @@ static int oxp_hid_raw_event_gen_2(struct hid_device *hdev,
 	drvdata.rgb_en = rgb_rep->enabled == 0 ? OXP_FEAT_DISABLED :
 						 OXP_FEAT_ENABLED;
 	drvdata.rgb_brightness = rgb_rep->brightness;
-	led_mc->led_cdev.brightness = rgb_rep->brightness / 4 *
-				      led_mc->led_cdev.max_brightness;
+	led_mc->led_cdev.brightness = rgb_rep->brightness *
+				      led_mc->led_cdev.max_brightness / 4;
 	/* If monocolor had less than 100% brightness on the previous boot,
 	 * there will be no reliable way to determine the real intensity.
 	 * Since intensity scaling is used with a hardware brightness set at max,
