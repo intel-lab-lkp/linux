@@ -376,6 +376,7 @@ static int rpaphp_drc_add_slot(struct device_node *dn)
 {
 	struct slot *slot;
 	int retval = 0;
+	int first_error = 0;
 	int i;
 	const __be32 *indexes, *names, *types, *power_domains;
 	char *name, *type;
@@ -407,16 +408,18 @@ static int rpaphp_drc_add_slot(struct device_node *dn)
 		if (!retval)
 			retval = rpaphp_register_slot(slot);
 
-		if (retval)
+		if (retval) {
+			if (!first_error)
+				first_error = retval;
 			dealloc_slot_struct(slot);
+		}
 
 		name += strlen(name) + 1;
 		type += strlen(type) + 1;
 	}
-	dbg("%s - Exit: rc[%d]\n", __func__, retval);
+	dbg("%s - Exit: rc[%d]\n", __func__, first_error);
 
-	/* XXX FIXME: reports a failure only if last entry in loop failed */
-	return retval;
+	return first_error;
 }
 
 /**
