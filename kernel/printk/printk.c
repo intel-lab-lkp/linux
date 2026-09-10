@@ -94,6 +94,13 @@ static DEFINE_MUTEX(console_mutex);
  * and also provides serialization for console printing.
  */
 static DEFINE_SEMAPHORE(console_sem, 1);
+
+/*
+ * Number of blocking console_sem waiters. This does not include spinning
+ * printk waiters - they bypass the semaphore wait list.
+ */
+static atomic_t console_sem_waiters = ATOMIC_INIT(0);
+
 HLIST_HEAD(console_list);
 EXPORT_SYMBOL_GPL(console_list);
 DEFINE_STATIC_SRCU(console_srcu);
@@ -311,7 +318,9 @@ EXPORT_SYMBOL(console_srcu_read_unlock);
  * macros instead of functions so that _RET_IP_ contains useful information.
  */
 #define down_console_sem() do { \
+	atomic_inc(&console_sem_waiters);\
 	down(&console_sem);\
+	atomic_dec(&console_sem_waiters);\
 	mutex_acquire(&console_lock_dep_map, 0, 0, _RET_IP_);\
 } while (0)
 
@@ -2002,7 +2011,8 @@ static int console_trylock_spinning(void)
 	raw_spin_lock(&console_owner_lock);
 	owner = READ_ONCE(console_owner);
 	waiter = READ_ONCE(console_waiter);
-	if (!waiter && owner && owner != current) {
+	if (!waiter && owner && owner != current &&
+	    !atomic_read(&console_sem_waiters)) {
 		WRITE_ONCE(console_waiter, true);
 		spin = true;
 	}
@@ -3329,16 +3339,22 @@ fail:
  * console_lock, in which case the caller is no longer holding the
  * console_lock. Otherwise it is set to false.
  *
+ * @yield_to_waiter is set by a caller if there is a blocking console_sem
+ * waiter, in which case the console_lock will be released rather than
+ * being handed over to the next printk waiter.
+ *
  * Returns true when there was at least one usable console and all messages
  * were flushed to all usable consoles. A returned false informs the caller
  * that everything was not flushed (either there were no usable consoles or
  * another context has taken over printing or it is a panic situation and this
- * is not the panic CPU). Regardless the reason, the caller should assume it
- * is not useful to immediately try again.
+ * is not the panic CPU or there is a blocking console_lock waiter). Regardless
+ * the reason, the caller should assume it is not useful to immediately try
+ * again.
  *
  * Requires the console_lock.
  */
-static bool console_flush_all(bool do_cond_resched, u64 *next_seq, bool *handover)
+static bool console_flush_all(bool do_cond_resched, u64 *next_seq, bool *handover,
+			      bool yield_to_waiter)
 {
 	bool try_again;
 	bool ret;
@@ -3349,6 +3365,14 @@ static bool console_flush_all(bool do_cond_resched, u64 *next_seq, bool *handove
 	do {
 		ret = console_flush_one_record(do_cond_resched, next_seq,
 					       handover, &try_again);
+
+		/*
+		 * If there's a blocking console_lock waiter, and we're not
+		 * in panic, then yield to that waiter.
+		 */
+		if (!panic_in_progress() && try_again && yield_to_waiter &&
+		    atomic_read(&console_sem_waiters))
+			return false;
 	} while (try_again);
 
 	return ret;
@@ -3377,7 +3401,8 @@ static void __console_flush_and_unlock(void)
 	do {
 		console_may_schedule = 0;
 
-		flushed = console_flush_all(do_cond_resched, &next_seq, &handover);
+		flushed = console_flush_all(do_cond_resched, &next_seq, &handover,
+					    true);
 		if (!handover)
 			__console_unlock();
 
@@ -3563,7 +3588,7 @@ void console_flush_on_panic(enum con_flush_mode mode)
 
 	/* Flush legacy consoles once allowed, even when dangerous. */
 	if (legacy_allow_panic_sync)
-		console_flush_all(false, &next_seq, &handover);
+		console_flush_all(false, &next_seq, &handover, false);
 }
 
 /*
@@ -3990,7 +4015,7 @@ static u64 get_init_console_seq(struct console *newcon, bool bootcon_registered)
 			 * Flush all consoles and set the console to start at
 			 * the next unprinted sequence number.
 			 */
-			if (!console_flush_all(true, &init_seq, &handover)) {
+			if (!console_flush_all(true, &init_seq, &handover, false)) {
 				/*
 				 * Flushing failed. Just choose the lowest
 				 * sequence of the enabled boot consoles.
