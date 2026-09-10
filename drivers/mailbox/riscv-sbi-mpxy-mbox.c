@@ -12,6 +12,7 @@
 #include <linux/irqchip/riscv-imsic.h>
 #include <linux/mailbox_controller.h>
 #include <linux/mailbox/riscv-rpmi-message.h>
+#include <linux/mailbox/riscv-sbi-mpxy-mbox.h>
 #include <linux/minmax.h>
 #include <linux/mm.h>
 #include <linux/module.h>
@@ -718,6 +719,65 @@ static const struct mbox_chan_ops mpxy_mbox_ops = {
 	.startup = mpxy_mbox_startup,
 	.shutdown = mpxy_mbox_shutdown,
 };
+
+/**
+ * riscv_sbi_mpxy_mbox_call() - Send an RPMI message directly on an MPXY channel
+ * @chan: SBI MPXY mailbox channel owned by the caller
+ * @msg: RPMI message of type RPMI_MBOX_MSG_TYPE_SEND_WITH_RESPONSE or
+ *       RPMI_MBOX_MSG_TYPE_SEND_WITHOUT_RESPONSE
+ *
+ * An SBI MPXY message send is not queued anywhere: it is an ecall executed
+ * on the calling hart, using the calling hart's shared memory, which only
+ * returns once the SBI implementation has processed the message. For some
+ * message protocols that processing is unbounded because it runs on the
+ * calling hart itself, for example when the SBI implementation forwards
+ * the message to another supervisor domain and switches the hart to it
+ * until it responds (the RPMI TEE service group's TEE_CALL does this).
+ *
+ * Such messages must not go through mbox_send_message(): the mailbox core
+ * invokes the controller send_data() callback with the channel spinlock
+ * held and interrupts disabled, which would serialize all harts on a single
+ * lock and keep interrupts disabled on the calling hart for the whole
+ * duration of the call.
+ *
+ * This helper bypasses the mailbox core queue and channel lock and performs
+ * the transfer directly in the calling context. Only local interrupts are
+ * disabled around the ecall, because the per-hart shared memory can be used
+ * from hard interrupt context through mbox_send_message() by other clients.
+ * Calls from different harts run concurrently since each hart has its own
+ * shared memory.
+ *
+ * The caller must own @chan through mbox_request_channel() (or a variant of
+ * it) so that no other client can use the channel, and must not use
+ * mbox_send_message() on it concurrently.
+ *
+ * Return: 0 on success or a negative error code.
+ */
+int riscv_sbi_mpxy_mbox_call(struct mbox_chan *chan,
+			     struct rpmi_mbox_message *msg)
+{
+	struct mpxy_mbox_channel *mchan;
+	unsigned long flags;
+
+	if (!chan || !chan->cl || !chan->mbox || !msg)
+		return -EINVAL;
+	if (chan->mbox->ops != &mpxy_mbox_ops)
+		return -EINVAL;
+	if (msg->type != RPMI_MBOX_MSG_TYPE_SEND_WITH_RESPONSE &&
+	    msg->type != RPMI_MBOX_MSG_TYPE_SEND_WITHOUT_RESPONSE)
+		return -EINVAL;
+
+	mchan = chan->con_priv;
+	if (mchan->attrs.msg_proto_id != SBI_MPXY_MSGPROTO_RPMI_ID)
+		return -EOPNOTSUPP;
+
+	local_irq_save(flags);
+	mpxy_mbox_send_rpmi_data(mchan, msg);
+	local_irq_restore(flags);
+
+	return msg->error;
+}
+EXPORT_SYMBOL_GPL(riscv_sbi_mpxy_mbox_call);
 
 /* ====== MPXY platform driver ===== */
 
