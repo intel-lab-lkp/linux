@@ -1464,6 +1464,20 @@ optee_config_shm_memremap(optee_invoke_fn *invoke_fn, void **memremaped_shm)
 	return rc;
 }
 
+/*
+ * struct optee_smc_conduit - conduit used to invoke the SMC ABI
+ * @init:	probes the conduit and returns the function invoking the
+ *		SMC ABI through it, or an ERR_PTR() on failure
+ *
+ * The SMC ABI is defined in terms of register arguments and return values
+ * (see optee_smc.h) but does not depend on how they reach secure world. A
+ * conduit is selected by the compatible string of the OP-TEE firmware node.
+ */
+struct optee_smc_conduit {
+	optee_invoke_fn *(*init)(struct device *dev);
+};
+
+#ifdef CONFIG_HAVE_ARM_SMCCC
 /* Simple wrapper functions to be able to use a function pointer */
 static void optee_smccc_smc(unsigned long a0, unsigned long a1,
 			    unsigned long a2, unsigned long a3,
@@ -1483,7 +1497,7 @@ static void optee_smccc_hvc(unsigned long a0, unsigned long a1,
 	arm_smccc_hvc(a0, a1, a2, a3, a4, a5, a6, a7, res);
 }
 
-static optee_invoke_fn *get_invoke_func(struct device *dev)
+static optee_invoke_fn *optee_smccc_conduit_init(struct device *dev)
 {
 	const char *method;
 
@@ -1502,6 +1516,11 @@ static optee_invoke_fn *get_invoke_func(struct device *dev)
 	pr_warn("invalid \"method\" property: %s\n", method);
 	return ERR_PTR(-EINVAL);
 }
+
+static const struct optee_smc_conduit optee_smccc_conduit = {
+	.init = optee_smccc_conduit_init,
+};
+#endif
 
 /* optee_remove - Device Removal Routine
  * @pdev: platform device information struct
@@ -1728,6 +1747,7 @@ static int optee_protmem_pool_init(struct optee *optee)
 
 static int optee_probe(struct platform_device *pdev)
 {
+	const struct optee_smc_conduit *conduit;
 	optee_invoke_fn *invoke_fn;
 	struct tee_shm_pool *pool = ERR_PTR(-EINVAL);
 	struct optee *optee = NULL;
@@ -1741,7 +1761,11 @@ static int optee_probe(struct platform_device *pdev)
 	u32 sec_caps;
 	int rc;
 
-	invoke_fn = get_invoke_func(&pdev->dev);
+	conduit = device_get_match_data(&pdev->dev);
+	if (!conduit)
+		return -ENODEV;
+
+	invoke_fn = conduit->init(&pdev->dev);
 	if (IS_ERR(invoke_fn))
 		return PTR_ERR(invoke_fn);
 
@@ -1956,7 +1980,9 @@ err_free_shm_pool:
 }
 
 static const struct of_device_id optee_dt_match[] = {
-	{ .compatible = "linaro,optee-tz" },
+#ifdef CONFIG_HAVE_ARM_SMCCC
+	{ .compatible = "linaro,optee-tz", .data = &optee_smccc_conduit },
+#endif
 	{},
 };
 MODULE_DEVICE_TABLE(of, optee_dt_match);
