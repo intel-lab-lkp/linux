@@ -1093,7 +1093,7 @@ struct task_struct {
 	/* Real parent process: */
 	struct task_struct __rcu	*real_parent;
 
-	/* Recipient of SIGCHLD, wait4() reports: */
+	/* Recipient of SIGCHLD, wait4() reports: ->real_parent or ptracer */
 	struct task_struct __rcu	*parent;
 
 	/*
