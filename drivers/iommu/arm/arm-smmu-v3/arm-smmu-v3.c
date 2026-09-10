@@ -2441,14 +2441,26 @@ static irqreturn_t arm_smmu_priq_thread(int irq, void *dev)
 	struct arm_smmu_queue *q = &smmu->priq.q;
 	struct arm_smmu_ll_queue *llq = &q->llq;
 	u64 evt[PRIQ_ENT_DWORDS];
+	bool overflow = false;
 
 	do {
 		while (!queue_remove_raw(q, evt))
 			arm_smmu_handle_ppr(smmu, evt);
 
-		if (queue_sync_prod_in(q) == -EOVERFLOW)
+		if (queue_sync_prod_in(q) == -EOVERFLOW) {
 			dev_err(smmu->dev, "PRIQ overflow detected -- requests lost\n");
+			overflow = true;
+		}
 	} while (!queue_empty(llq));
+
+	/*
+	 * Discard the partial faults after the drain, so any group with its
+	 * LAST-page entry visible in the queue gets assembled beforehand. An
+	 * active overflow condition inhibits new entries from being written
+	 * to the PRI queue, until it gets acknowledged below.
+	 */
+	if (overflow)
+		iopf_queue_discard_partial(smmu->evtq.iopf);
 
 	/* Sync our overflow flag, as we believe we're up to speed */
 	queue_sync_cons_ovf(q);
