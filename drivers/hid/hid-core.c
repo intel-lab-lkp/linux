@@ -2738,6 +2738,18 @@ static int hid_bus_match(struct device *dev, const struct device_driver *drv)
 	return hid_match_device(hdev, hdrv) != NULL;
 }
 
+static void hid_bus_shutdown(struct device *dev)
+{
+	struct hid_driver *hdrv;
+
+	if (!dev->driver)
+		return;
+
+	hdrv = to_hid_driver(dev->driver);
+	if (hdrv->shutdown)
+		hdrv->shutdown(to_hid_device(dev));
+}
+
 /**
  * hid_compare_device_paths - check if both devices share the same path
  * @hdev_a: hid device
@@ -3012,6 +3024,7 @@ const struct bus_type hid_bus_type = {
 	.match		= hid_bus_match,
 	.probe		= hid_device_probe,
 	.remove		= hid_device_remove,
+	.shutdown	= hid_bus_shutdown,
 	.uevent		= hid_uevent,
 };
 EXPORT_SYMBOL(hid_bus_type);
