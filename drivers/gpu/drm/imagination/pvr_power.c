@@ -428,6 +428,37 @@ err_drm_dev_exit:
 }
 
 int
+pvr_power_system_suspend(struct device *dev)
+{
+	struct platform_device *plat_dev = to_platform_device(dev);
+	struct drm_device *drm_dev = platform_get_drvdata(plat_dev);
+
+	/*
+	 * A device that has been lost cannot be talked to, and there is
+	 * nothing left to power down. pvr_power_device_suspend() answers
+	 * -EIO for it, which the PM core turns into a failed system suspend
+	 * for the whole machine -- and because nothing clears the condition,
+	 * it would fail that way on every subsequent attempt.
+	 */
+	if (drm_dev_is_unplugged(drm_dev))
+		return 0;
+
+	return pm_runtime_force_suspend(dev);
+}
+
+int
+pvr_power_system_resume(struct device *dev)
+{
+	struct platform_device *plat_dev = to_platform_device(dev);
+	struct drm_device *drm_dev = platform_get_drvdata(plat_dev);
+
+	if (drm_dev_is_unplugged(drm_dev))
+		return 0;
+
+	return pm_runtime_force_resume(dev);
+}
+
+int
 pvr_power_device_idle(struct device *dev)
 {
 	struct platform_device *plat_dev = to_platform_device(dev);

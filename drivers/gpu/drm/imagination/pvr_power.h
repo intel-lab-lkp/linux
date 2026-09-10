@@ -20,6 +20,9 @@ int pvr_power_device_suspend(struct device *dev);
 int pvr_power_device_resume(struct device *dev);
 int pvr_power_device_idle(struct device *dev);
 
+int pvr_power_system_suspend(struct device *dev);
+int pvr_power_system_resume(struct device *dev);
+
 int pvr_power_reset(struct pvr_device *pvr_dev, bool hard_reset);
 
 static __always_inline int
