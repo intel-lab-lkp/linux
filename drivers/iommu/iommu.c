@@ -17,6 +17,7 @@
 #include <linux/slab.h>
 #include <linux/errno.h>
 #include <linux/host1x_context_bus.h>
+#include <linux/dma-mapping.h>
 #include <linux/iommu.h>
 #include <linux/iommufd.h>
 #include <linux/idr.h>
@@ -312,6 +313,25 @@ int iommu_device_register(struct iommu_device *iommu,
 	return err;
 }
 EXPORT_SYMBOL_GPL(iommu_device_register);
+
+/**
+ * iommu_device_set_confidential - Mark an IOMMU instance as confidential
+ * @iommu: the IOMMU instance
+ * @hwdev: the struct device of @iommu, whose own DMA reaches private memory
+ *
+ * Declare that @iommu runs inside a confidential VM
+ *
+ * Call this before @iommu makes any DMA allocation of its own, and not merely
+ * before iommu_device_register(). Queues and tables allocated any earlier land
+ * in shared memory that the hypervisor can read.
+ */
+void iommu_device_set_confidential(struct iommu_device *iommu,
+				   struct device *hwdev)
+{
+	iommu->confidential = true;
+	dma_set_cc_private(hwdev, true);
+}
+EXPORT_SYMBOL_GPL(iommu_device_set_confidential);
 
 void iommu_device_unregister(struct iommu_device *iommu)
 {

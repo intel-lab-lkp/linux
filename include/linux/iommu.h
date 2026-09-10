@@ -822,6 +822,8 @@ struct iommu_domain_ops {
  * @singleton_group: Used internally for drivers that have only one group
  * @max_pasids: number of supported PASIDs
  * @ready: set once iommu_device_register() has completed successfully
+ * @confidential: this instance runs inside a confidential VM. Set by the driver
+ *                before any dma allocation.
  */
 struct iommu_device {
 	struct list_head list;
@@ -831,6 +833,7 @@ struct iommu_device {
 	struct iommu_group *singleton_group;
 	u32 max_pasids;
 	bool ready;
+	bool confidential;
 };
 
 /**
@@ -890,6 +893,8 @@ struct dev_iommu {
 int iommu_device_register(struct iommu_device *iommu,
 			  const struct iommu_ops *ops,
 			  struct device *hwdev);
+void iommu_device_set_confidential(struct iommu_device *iommu,
+				   struct device *hwdev);
 void iommu_device_unregister(struct iommu_device *iommu);
 int  iommu_device_sysfs_add(struct iommu_device *iommu,
 			    struct device *parent,
@@ -1421,6 +1426,11 @@ static inline int iommu_device_register(struct iommu_device *iommu,
 					struct device *hwdev)
 {
 	return -ENODEV;
+}
+
+static inline void iommu_device_set_confidential(struct iommu_device *iommu,
+						 struct device *hwdev)
+{
 }
 
 static inline struct iommu_device *dev_to_iommu_device(struct device *dev)
