@@ -23,7 +23,7 @@ CPU. It is simply a CPU that can execute housekeeping work. There must
 always be at least one online housekeeping CPU at any time. The CPUs that
 are not	isolated are automatically assigned as housekeeping.
 
-Housekeeping is currently divided in four features described
+Housekeeping is currently divided in five features described
 by the ``enum hk_type type``:
 
 1.	HK_TYPE_DOMAIN matches the work moved away by scheduler domain
@@ -43,6 +43,10 @@ by the ``enum hk_type type``:
 	isolation performed through ``isolcpus=domain`` only. It is similar
 	to HK_TYPE_DOMAIN except it ignores the isolation performed by
 	cpusets.
+
+5.	HK_TYPE_MANAGED_IRQ_STRICT matches the multiqueue block devices and
+	managed IRQs strictly restricted to housekeeping CPUs through
+	``isolcpus=managed_irq_strict``.
 
 
 Housekeeping cpumasks
