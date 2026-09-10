@@ -7,6 +7,51 @@
 
 __u64 flags;
 
+SEC("tc")
+__description("skb_ext slice is invalidated by bpf_clone_redirect")
+__failure
+int skb_ext_stale_slice_after_clone_redirect(struct __sk_buff *ctx)
+{
+	struct bpf_dynptr meta;
+	__u8 *slice;
+
+	if (bpf_dynptr_from_skb_ext(ctx, 0, BPF_SKB_EXT_F_CREATE, &meta))
+		return 0;
+
+	slice = bpf_dynptr_slice_rdwr(&meta, 0, NULL, 8);
+	if (!slice)
+		return 0;
+
+	bpf_clone_redirect(ctx, 1, 0);
+
+	/* Stale: the clone shares the ext block the slice points into. */
+	*slice = 0;
+
+	return 0;
+}
+
+SEC("tc")
+__description("skb_ext slice is invalidated when ext is re-opened with F_CREATE")
+__failure
+int skb_ext_stale_slice_after_recreate(struct __sk_buff *ctx)
+{
+	struct bpf_dynptr d1, d2;
+	__u8 *slice;
+
+	if (bpf_dynptr_from_skb_ext(ctx, 0, 0, &d1))
+		return 0;
+
+	slice = bpf_dynptr_slice(&d1, 0, NULL, 8);
+	if (!slice)
+		return 0;
+
+	/* May COW the ext block, leaving the slice pointing at the old one. */
+	if (bpf_dynptr_from_skb_ext(ctx, 0, BPF_SKB_EXT_F_CREATE, &d2))
+		return 0;
+
+	return *slice;
+}
+
 SEC("tp_btf/kfree_skb")
 __description("F_CREATE is rejected in tracing programs")
 __failure __msg("is not allowed in lsm/tracing programs")

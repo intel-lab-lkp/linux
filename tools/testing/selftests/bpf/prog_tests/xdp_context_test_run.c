@@ -713,6 +713,178 @@ static void test_skb_ext_tuntap(struct bpf_program *tc_prio_1_prog,
 		      tc_prio_2_prog, test_pass);
 }
 
+/*
+ * Test if skb_ext survives skb clone (via tc mirred).
+ * dummy_prog runs on the clone (dummy ingress).
+ */
+static void test_mirred_clone_ext(struct test_xdp_meta *skel,
+				  struct bpf_program *dummy_prog)
+{
+	LIBBPF_OPTS(bpf_tc_hook, tc_hook, .attach_point = BPF_TC_INGRESS);
+	LIBBPF_OPTS(bpf_tc_opts, tc_opts, .handle = 1, .priority = 1);
+	struct netns_obj *ns = NULL;
+	int dummy_ifindex;
+	int tap_ifindex;
+	int tap_fd = -1;
+	int ret;
+
+	skel->bss->write_done = false;
+	skel->bss->test_pass = false;
+
+	ns = netns_new("mirred_clone", true);
+	if (!ASSERT_OK_PTR(ns, "netns_new"))
+		return;
+
+	/* Dummy dev: attach reader */
+	SYS(close, "ip link add name " DUMMY_NAME " type dummy");
+	SYS(close, "ip link set dev " DUMMY_NAME " up");
+
+	dummy_ifindex = if_nametoindex(DUMMY_NAME);
+	if (!ASSERT_GT(dummy_ifindex, 0, "dummy_ifindex"))
+		goto close;
+
+	tc_hook.ifindex = dummy_ifindex;
+	ret = bpf_tc_hook_create(&tc_hook);
+	if (!ASSERT_OK(ret, "dummy_hook_create"))
+		goto close;
+
+	tc_opts.prog_fd = bpf_program__fd(dummy_prog);
+	ret = bpf_tc_attach(&tc_hook, &tc_opts);
+	if (!ASSERT_OK(ret, "dummy_attach"))
+		goto close;
+
+	/* TAP dev: attach writer + mirred to dummy */
+	tap_fd = open_tuntap(TAP_NAME, true);
+	if (!ASSERT_GE(tap_fd, 0, "open_tuntap"))
+		goto close;
+
+	SYS(close, "ip link set dev " TAP_NAME " up");
+
+	tap_ifindex = if_nametoindex(TAP_NAME);
+	if (!ASSERT_GT(tap_ifindex, 0, "tap_ifindex"))
+		goto close;
+
+	tc_hook.ifindex = tap_ifindex;
+	ret = bpf_tc_hook_create(&tc_hook);
+	if (!ASSERT_OK(ret, "tap_hook_create"))
+		goto close;
+
+	tc_opts.prog_id = 0;
+	tc_opts.prog_fd = bpf_program__fd(skel->progs.tc_skb_ext_write);
+	ret = bpf_tc_attach(&tc_hook, &tc_opts);
+	if (!ASSERT_OK(ret, "tap_attach"))
+		goto close;
+
+	SYS(close, "tc filter add dev " TAP_NAME " ingress "
+		   "protocol all matchall "
+		   "action mirred ingress mirror dev " DUMMY_NAME);
+
+	ret = write_test_packet(tap_fd);
+	if (!ASSERT_OK(ret, "write_test_packet"))
+		goto close;
+
+	ASSERT_TRUE(skel->bss->write_done, "write_done");
+	ASSERT_TRUE(skel->bss->test_pass, "test_pass");
+
+close:
+	if (tap_fd >= 0)
+		close(tap_fd);
+	netns_free(ns);
+}
+
+static void test_mirred_clone_ext_cow(struct test_xdp_meta *skel)
+{
+	struct bpf_link *tp_link;
+
+	skel->bss->clone_cow_done = false;
+	tp_link = bpf_program__attach(skel->progs.tp_kfree_skb_cow_check);
+	if (!ASSERT_OK_PTR(tp_link, "attach_tp"))
+		return;
+
+	test_mirred_clone_ext(skel, skel->progs.tc_skb_ext_clone_redir_cow);
+	bpf_link__destroy(tp_link);
+}
+
+/*
+ * Writer clones via bpf_clone_redirect() from the prog itself to loopback
+ * whose netem qdisc delays the clone, so it stays queued and keeps sharing
+ * the ext block while the prog writes again. When the qdisc finally leaks
+ * the clone back to lo ingress, the reader there must still see the
+ * clone-time snapshot.
+ */
+static void test_clone_redir_ext_write_after(struct test_xdp_meta *skel,
+					     struct bpf_program *writer)
+{
+	LIBBPF_OPTS(bpf_tc_hook, tc_hook, .attach_point = BPF_TC_INGRESS);
+	LIBBPF_OPTS(bpf_tc_opts, tc_opts, .handle = 1, .priority = 1);
+	struct netns_obj *ns = NULL;
+	int tap_ifindex;
+	int tap_fd = -1;
+	int ret, i;
+
+	skel->bss->test_pass = false;
+	skel->bss->write_blocked = false;
+
+	ns = netns_new("clone_redir_ext", true);
+	if (!ASSERT_OK_PTR(ns, "netns_new"))
+		return;
+
+	/* Redirect target: lo held back by netem delay */
+	SYS(close, "ip link set dev lo up");
+	SYS(close, "tc qdisc add dev lo root netem delay 50ms");
+
+	/* Reader on the clone: lo ingress */
+	tc_hook.ifindex = if_nametoindex("lo");
+	ret = bpf_tc_hook_create(&tc_hook);
+	if (!ASSERT_OK(ret, "lo_hook_create"))
+		goto close;
+
+	tc_opts.prog_fd = bpf_program__fd(skel->progs.tc_skb_ext_read);
+	ret = bpf_tc_attach(&tc_hook, &tc_opts);
+	if (!ASSERT_OK(ret, "lo_attach"))
+		goto close;
+
+	/* TAP dev: attach writer which clone_redirects to lo */
+	tap_fd = open_tuntap(TAP_NAME, true);
+	if (!ASSERT_GE(tap_fd, 0, "open_tuntap"))
+		goto close;
+
+	SYS(close, "ip link set dev " TAP_NAME " up");
+
+	tap_ifindex = if_nametoindex(TAP_NAME);
+	if (!ASSERT_GE(tap_ifindex, 0, "tap_ifindex"))
+		goto close;
+
+	skel->bss->clone_redir_ifindex = tc_hook.ifindex;
+
+	tc_hook.ifindex = tap_ifindex;
+	ret = bpf_tc_hook_create(&tc_hook);
+	if (!ASSERT_OK(ret, "tap_hook_create"))
+		goto close;
+
+	tc_opts.prog_id = 0;
+	tc_opts.prog_fd = bpf_program__fd(writer);
+	ret = bpf_tc_attach(&tc_hook, &tc_opts);
+	if (!ASSERT_OK(ret, "tap_attach"))
+		goto close;
+
+	ret = write_test_packet(tap_fd);
+	if (!ASSERT_OK(ret, "write_test_packet"))
+		goto close;
+
+	ASSERT_TRUE(skel->bss->write_blocked, "write_blocked");
+
+	/* Clone arrives after the netem delay; poll every 10 msec up to 1 sec */
+	for (i = 0; i < 100 && !skel->bss->test_pass; i++)
+		usleep(10000);
+	ASSERT_TRUE(skel->bss->test_pass, "test_pass");
+
+close:
+	if (tap_fd >= 0)
+		close(tap_fd);
+	netns_free(ns);
+}
+
 void test_skb_ext_basic(void)
 {
 	struct test_xdp_meta *skel = NULL;
@@ -753,6 +925,16 @@ void test_skb_ext_basic(void)
 		test_skb_ext_tuntap(skel->progs.tc_skb_ext_double_alloc,
 				    NULL, /* tc prio 2 */
 				    &skel->bss->test_pass);
+	if (test__start_subtest("clone_ext_read"))
+		test_mirred_clone_ext(skel, skel->progs.tc_skb_ext_read);
+	if (test__start_subtest("clone_ext_cow"))
+		test_mirred_clone_ext_cow(skel);
+	if (test__start_subtest("clone_redir_ext_write_after"))
+		test_clone_redir_ext_write_after(skel,
+						 skel->progs.tc_skb_ext_write_after_clone_redir);
+	if (test__start_subtest("clone_redir_ext_slice_write_after"))
+		test_clone_redir_ext_write_after(skel,
+						 skel->progs.tc_skb_ext_slice_write_after_clone_redir);
 
 	test_xdp_meta__destroy(skel);
 }

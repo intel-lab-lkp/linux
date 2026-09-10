@@ -3,6 +3,7 @@
 
 #include <bpf/bpf_endian.h>
 #include <bpf/bpf_helpers.h>
+#include <bpf/bpf_tracing.h>
 #include <errno.h>
 
 #include "bpf_kfuncs.h"
@@ -690,6 +691,8 @@ out:
 	return TC_ACT_SHOT;
 }
 
+bool write_done;
+
 /* Write to skb_ext using bpf_dynptr_write helper */
 SEC("tc")
 int tc_skb_ext_write(struct __sk_buff *ctx)
@@ -703,6 +706,7 @@ int tc_skb_ext_write(struct __sk_buff *ctx)
 	if (bpf_dynptr_write(&meta, 0, (void *)meta_want, ARRAY_SIZE(meta_want), 0))
 		return TC_ACT_SHOT;
 
+	write_done = true;
 	return TC_ACT_UNSPEC;
 }
 
@@ -871,6 +875,128 @@ int tc_skb_ext_double_alloc(struct __sk_buff *ctx)
 		return TC_ACT_SHOT;
 
 	test_pass = true;
+	return TC_ACT_UNSPEC;
+}
+
+static const __u8 meta_zero[META_SIZE] = {};
+
+bool clone_cow_done;
+
+/*
+ * Overwrite skb_ext on the clone via F_CREATE (COW) -- must not affect original.
+ * Runs on the dummy ingress (clone side), synchronously during tc mirred.
+ */
+SEC("tc")
+int tc_skb_ext_clone_redir_cow(struct __sk_buff *ctx)
+{
+	struct bpf_dynptr meta;
+
+	if (bpf_dynptr_from_skb_ext(ctx, 0, BPF_SKB_EXT_F_CREATE, &meta))
+		return TC_ACT_SHOT;
+
+	/* Zero out the clone's ext -- must not affect original */
+	if (bpf_dynptr_write(&meta, 0, (void *)meta_zero, META_SIZE, 0))
+		return TC_ACT_SHOT;
+
+	clone_cow_done = true;
+	return TC_ACT_SHOT;
+}
+
+/*
+ * Verify COW isolation at kfree_skb time: once clone_cow_done is set,
+ * check that the original skb still has meta_want.
+ */
+SEC("tp_btf/kfree_skb")
+int BPF_PROG(tp_kfree_skb_cow_check, struct sk_buff *skb)
+{
+	__u8 meta_have[META_SIZE];
+	struct bpf_dynptr meta;
+
+	if (!clone_cow_done)
+		return 0;
+
+	if (bpf_dynptr_from_skb_ext((struct __sk_buff *)skb, 0, 0, &meta))
+		return 0;
+	if (bpf_dynptr_read(meta_have, META_SIZE, &meta, 0, 0))
+		return 0;
+	if (!check_metadata(meta_have))
+		return 0;
+
+	test_pass = true;
+	return 0;
+}
+
+__u32 clone_redir_ifindex;
+bool write_blocked;
+
+/*
+ * Write skb_ext, clone the skb to a delayed qdisc so the clone keeps the ext
+ * block shared, then try to write to the same dynptr again. The write must fail
+ * with -EBUSY. Re-acquiring the dynptr with F_CREATE COWs the block and
+ * succeeds.
+ */
+SEC("tc")
+int tc_skb_ext_write_after_clone_redir(struct __sk_buff *ctx)
+{
+	struct bpf_dynptr meta;
+
+	if (!is_test_packet_tc(ctx))
+		return TC_ACT_UNSPEC;
+	if (bpf_dynptr_from_skb_ext(ctx, 0, BPF_SKB_EXT_F_CREATE, &meta))
+		return TC_ACT_SHOT;
+	if (bpf_dynptr_write(&meta, 0, (void *)meta_want, META_SIZE, 0))
+		return TC_ACT_SHOT;
+
+	if (bpf_clone_redirect(ctx, clone_redir_ifindex, 0 /* egress */))
+		return TC_ACT_SHOT;
+
+	/* ext now shared with the queued clone -- write must fail */
+	if (bpf_dynptr_write(&meta, 0, (void *)meta_zero, META_SIZE, 0) != -EBUSY)
+		return TC_ACT_SHOT;
+
+	/* Re-acquiring COWs the block -- write must succeed */
+	if (bpf_dynptr_from_skb_ext(ctx, 0, BPF_SKB_EXT_F_CREATE, &meta))
+		return TC_ACT_SHOT;
+	if (bpf_dynptr_write(&meta, 0, (void *)meta_zero, META_SIZE, 0))
+		return TC_ACT_SHOT;
+
+	write_blocked = true;
+	return TC_ACT_UNSPEC;
+}
+
+/*
+ * Same as above but using bpf_dynptr_slice_rdwr.
+ */
+SEC("tc")
+int tc_skb_ext_slice_write_after_clone_redir(struct __sk_buff *ctx)
+{
+	struct bpf_dynptr meta;
+	void *slice;
+
+	if (!is_test_packet_tc(ctx))
+		return TC_ACT_UNSPEC;
+	if (bpf_dynptr_from_skb_ext(ctx, 0, BPF_SKB_EXT_F_CREATE, &meta))
+		return TC_ACT_SHOT;
+	if (bpf_dynptr_write(&meta, 0, (void *)meta_want, META_SIZE, 0))
+		return TC_ACT_SHOT;
+
+	if (bpf_clone_redirect(ctx, clone_redir_ifindex, 0 /* egress */))
+		return TC_ACT_SHOT;
+
+	/* ext now shared with the queued clone -- slice must fail */
+	slice = bpf_dynptr_slice_rdwr(&meta, 0, NULL, META_SIZE);
+	if (slice)
+		return TC_ACT_SHOT;
+
+	/* Re-acquiring COWs the block -- slice must succeed */
+	if (bpf_dynptr_from_skb_ext(ctx, 0, BPF_SKB_EXT_F_CREATE, &meta))
+		return TC_ACT_SHOT;
+	slice = bpf_dynptr_slice_rdwr(&meta, 0, NULL, META_SIZE);
+	if (!slice)
+		return TC_ACT_SHOT;
+	__builtin_memcpy(slice, meta_zero, META_SIZE);
+
+	write_blocked = true;
 	return TC_ACT_UNSPEC;
 }
 
