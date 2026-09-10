@@ -9,6 +9,7 @@
 #include <linux/node.h>
 #include <linux/ioport.h>
 #include <linux/range.h>
+#include <linux/errno.h>
 #include <cxl/mailbox.h>
 
 /**
@@ -165,6 +166,7 @@ struct cxl_hdm_info {
 #ifdef CONFIG_CXL_RESET
 void pci_cxl_hdm_init(struct pci_dev *pdev);
 void pci_cxl_hdm_release(struct pci_dev *pdev);
+int cxl_reset_function(struct pci_dev *pdev, bool probe);
 #else
 static inline void pci_cxl_hdm_init(struct pci_dev *pdev)
 {
@@ -172,6 +174,11 @@ static inline void pci_cxl_hdm_init(struct pci_dev *pdev)
 
 static inline void pci_cxl_hdm_release(struct pci_dev *pdev)
 {
+}
+
+static inline int cxl_reset_function(struct pci_dev *pdev, bool probe)
+{
+	return -ENOTTY;
 }
 #endif
 
