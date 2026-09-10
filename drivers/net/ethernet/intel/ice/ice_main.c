@@ -4920,7 +4920,9 @@ void ice_deinit_dev(struct ice_pf *pf)
 
 static void ice_init_features(struct ice_pf *pf)
 {
+	u16 code = ICE_AQC_HEALTH_STATUS_INFO_LOSS_OF_LOCK;
 	struct device *dev = ice_pf_to_dev(pf);
+	int err;
 
 	if (ice_is_safe_mode(pf))
 		return;
@@ -4933,6 +4935,15 @@ static void ice_init_features(struct ice_pf *pf)
 	 */
 	mutex_init(&pf->dplls.lock);
 
+	/* pf->dplls.health_notify_rwsem drains in-flight unmanaged dpll
+	 * health-status notifications on teardown. It must be initialized
+	 * exactly once here, not inside ice_dpll_init_unmanaged(), because
+	 * pf and pf->dplls survive devlink reload: re-initializing it on
+	 * every reload would reset it out from under a reader/writer still
+	 * using it from a previous load.
+	 */
+	init_rwsem(&pf->dplls.health_notify_rwsem);
+
 	/* initialize DDP driven features */
 	if (test_bit(ICE_FLAG_PTP_SUPPORTED, pf->flags))
 		ice_ptp_init(pf);
@@ -4940,8 +4951,28 @@ static void ice_init_features(struct ice_pf *pf)
 	if (ice_is_feature_supported(pf, ICE_F_GNSS))
 		ice_gnss_init(pf);
 
+	/* Initialize unmanaged DPLL detection. Check the cheap, purely local
+	 * conditions first and only issue the health-status-code AQ command
+	 * when they all hold, instead of doing an unconditional round trip
+	 * to firmware on hardware that can never support this mode.
+	 * ice_cgu_get_num_pins() also doubles as an E835 exclusion: E835
+	 * device IDs share ICE_MAC_E830 with true E830 parts but have no
+	 * entry in ice_cgu_get_pin_desc()'s switch, so it returns 0 pins
+	 * for them.
+	 */
+	pf->dplls.unmanaged = false;
+	if (pf->hw.mac_type == ICE_MAC_E830 &&
+	    ice_cgu_get_num_pins(&pf->hw, true) &&
+	    ice_is_unmanaged_cgu_in_netlist(&pf->hw)) {
+		err = ice_is_health_status_code_supported(&pf->hw, code,
+							  &pf->dplls.unmanaged);
+		if (err)
+			pf->dplls.unmanaged = false;
+	}
+
 	if (ice_is_feature_supported(pf, ICE_F_CGU) ||
-	    ice_is_feature_supported(pf, ICE_F_PHY_RCLK))
+	    ice_is_feature_supported(pf, ICE_F_PHY_RCLK) ||
+	    pf->dplls.unmanaged)
 		ice_dpll_init(pf);
 
 	/* Note: Flow director init failure is non-fatal to load */
