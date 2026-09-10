@@ -320,7 +320,13 @@ static void mhi_mbim_rx(struct mhi_mbim_context *mbim, struct sk_buff *skb)
 				continue;
 
 			skb_put(skbn, dgram_len);
-			skb_copy_bits(skb, dgram_offset, skbn->data, dgram_len);
+			if (skb_copy_bits(skb, dgram_offset, skbn->data, dgram_len)) {
+				dev_kfree_skb_any(skbn);
+				u64_stats_update_begin(&link->rx_syncp);
+				u64_stats_inc(&link->rx_errors);
+				u64_stats_update_end(&link->rx_syncp);
+				continue;
+			}
 
 			switch (skbn->data[0] & 0xf0) {
 			case 0x40:
