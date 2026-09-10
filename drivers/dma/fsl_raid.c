@@ -212,10 +212,8 @@ static void fsl_re_dequeue(struct tasklet_struct *t)
 /* Per Job Ring interrupt handler */
 static irqreturn_t fsl_re_isr(int irq, void *data)
 {
-	struct fsl_re_chan *re_chan;
+	struct fsl_re_chan *re_chan = data;
 	u32 irqstate, status;
-
-	re_chan = dev_get_drvdata((struct device *)data);
 
 	irqstate = in_be32(&re_chan->jrregs->jr_interrupt_status);
 	if (!irqstate)
@@ -653,9 +651,10 @@ static int fsl_re_chan_probe(struct platform_device *ofdev,
 	chan_ofdev = of_platform_device_create(np, NULL, dev);
 	if (!chan_ofdev) {
 		dev_err(dev, "Not able to create ofdev for jr %d\n", q);
-		ret = -EINVAL;
-		goto err_free;
+		return -EINVAL;
 	}
+
+	chandev = &chan_ofdev->dev;
 
 	/* read reg property from dts */
 	rc = of_property_read_u32(np, "reg", &ptr);
@@ -677,14 +676,13 @@ static int fsl_re_chan_probe(struct platform_device *ofdev,
 
 	snprintf(chan->name, sizeof(chan->name), "re_jr%02d", q);
 
-	chandev = &chan_ofdev->dev;
 	tasklet_setup(&chan->irqtask, fsl_re_dequeue);
 
-	ret = request_irq(chan->irq, fsl_re_isr, 0, chan->name, chandev);
+	ret = request_irq(chan->irq, fsl_re_isr, 0, chan->name, chan);
 	if (ret) {
 		dev_err(dev, "Unable to register interrupt for JR %d\n", q);
 		ret = -EINVAL;
-		goto err_free;
+		goto err_free_tasklet;
 	}
 
 	re_priv->re_jrs[q] = chan;
@@ -704,7 +702,7 @@ static int fsl_re_chan_probe(struct platform_device *ofdev,
 	if (!chan->inb_ring_virt_addr) {
 		dev_err(dev, "No dma memory for inb_ring_virt_addr\n");
 		ret = -ENOMEM;
-		goto err_free;
+		goto err_free_irq;
 	}
 
 	chan->oub_ring_virt_addr = dma_pool_alloc(chan->re_dev->hw_desc_pool,
@@ -746,7 +744,12 @@ static int fsl_re_chan_probe(struct platform_device *ofdev,
 err_free_1:
 	dma_pool_free(chan->re_dev->hw_desc_pool, chan->inb_ring_virt_addr,
 		      chan->inb_phys_addr);
+err_free_irq:
+	free_irq(chan->irq, chan);
+err_free_tasklet:
+	tasklet_kill(&chan->irqtask);
 err_free:
+	of_platform_device_destroy(chandev, NULL);
 	return ret;
 }
 
@@ -852,6 +855,8 @@ static int fsl_re_probe(struct platform_device *ofdev)
 
 static void fsl_re_remove_chan(struct fsl_re_chan *chan)
 {
+	free_irq(chan->irq, chan);
+
 	tasklet_kill(&chan->irqtask);
 
 	dma_pool_free(chan->re_dev->hw_desc_pool, chan->inb_ring_virt_addr,
@@ -859,6 +864,8 @@ static void fsl_re_remove_chan(struct fsl_re_chan *chan)
 
 	dma_pool_free(chan->re_dev->hw_desc_pool, chan->oub_ring_virt_addr,
 		      chan->oub_phys_addr);
+
+	of_platform_device_destroy(chan->dev, NULL);
 }
 
 static void fsl_re_remove(struct platform_device *ofdev)
