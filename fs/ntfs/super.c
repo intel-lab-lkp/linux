@@ -357,6 +357,7 @@ void ntfs_handle_error(struct super_block *sb)
  * @vol:	ntfs volume on which to modify the flags
  * @set_bits:	bits to set in the volume information flags
  * @clear_bits:	bits to clear in the volume information flags
+ * @nowait:	do not wait for the $Volume mrec_lock
  *
  * Internal function.  You probably want to use ntfs_{set,clear}_volume_flags()
  * instead (see below).
@@ -368,19 +369,33 @@ void ntfs_handle_error(struct super_block *sb)
  * All bit manipulation is done on CPU-endian values, and the result is
  * converted back to little-endian before storing it.
  *
+ * When @nowait is set, the call must not sleep: the mrec_lock is acquired
+ * with mutex_trylock() and a contended lock fails with -EAGAIN, the search
+ * context is allocated with GFP_ATOMIC and exhausted memory fails with
+ * -EAGAIN, and a $Volume inode carrying an attribute list, whose extent
+ * mapping could block, is rejected with -EAGAIN as well.  The remaining
+ * transition work is non-blocking: the mft record of $Volume stays mapped
+ * for the lifetime of the mount, so the attribute lookup is an in-memory
+ * scan, and marking the record dirty does not submit I/O.
+ *
  * Return 0 on success and -errno on error.
  */
 static int ntfs_write_volume_flags(struct ntfs_volume *vol,
 		const __le16 set_bits, const __le16 clear_bits,
-		const bool skip_if_errors)
+		const bool skip_if_errors, const bool nowait)
 {
 	struct ntfs_inode *ni = NTFS_I(vol->vol_ino);
 	struct volume_information *vi;
-	struct ntfs_attr_search_ctx *ctx;
+	struct ntfs_attr_search_ctx *ctx = NULL;
 	u16 flags;
 	int err;
 
-	mutex_lock(&ni->mrec_lock);
+	if (nowait) {
+		if (!mutex_trylock(&ni->mrec_lock))
+			return -EAGAIN;
+	} else {
+		mutex_lock(&ni->mrec_lock);
+	}
 
 	if (skip_if_errors && NVolErrors(vol))
 		goto done;
@@ -394,16 +409,28 @@ static int ntfs_write_volume_flags(struct ntfs_volume *vol,
 	if (le16_to_cpu(vol->vol_flags) == flags)
 		goto done;
 
-	ctx = ntfs_attr_get_search_ctx(ni, NULL);
+	/*
+	 * The nowait path must not sleep past this point either.  An
+	 * attribute list on $Volume would make ntfs_attr_lookup() map
+	 * extent mft records, which can block; sane volumes never have
+	 * one, so refuse such a volume instead of risking the sleep.
+	 */
+	if (nowait && NInoAttrList(ni)) {
+		err = -EAGAIN;
+		goto out_unlock;
+	}
+
+	ctx = ntfs_attr_get_search_ctx_gfp(ni, NULL,
+			nowait ? GFP_ATOMIC : GFP_NOFS);
 	if (!ctx) {
-		err = -ENOMEM;
-		goto put_unm_err_out;
+		err = nowait ? -EAGAIN : -ENOMEM;
+		goto out_unlock;
 	}
 
 	err = ntfs_attr_lookup(AT_VOLUME_INFORMATION, NULL, 0, 0, 0, NULL, 0,
 			ctx);
 	if (err)
-		goto put_unm_err_out;
+		goto out_unlock;
 
 	vi = (struct volume_information *)((u8 *)ctx->attr +
 			le16_to_cpu(ctx->attr->data.resident.value_offset));
@@ -414,10 +441,19 @@ done:
 	mutex_unlock(&ni->mrec_lock);
 	ntfs_debug("Done.");
 	return 0;
-put_unm_err_out:
+out_unlock:
 	if (ctx)
 		ntfs_attr_put_search_ctx(ctx);
 	mutex_unlock(&ni->mrec_lock);
+	/*
+	 * -EAGAIN from the NOWAIT path means that the operation would
+	 *  have to sleep.  It is an expected result, not a filesystem
+	 *  error, so do not pass it to ntfs_error().
+	 */
+	if (nowait && err == -EAGAIN) {
+		ntfs_debug("Failed with error code %i.", -err);
+		return err;
+	}
 	ntfs_error(vol->sb, "Failed with error code %i.", -err);
 	return err;
 }
@@ -435,7 +471,32 @@ put_unm_err_out:
  */
 int ntfs_set_volume_flags(struct ntfs_volume *vol, __le16 flags)
 {
-	return ntfs_write_volume_flags(vol, flags, 0, false);
+	return ntfs_write_volume_flags(vol, flags, 0, false, false);
+}
+
+/*
+ * ntfs_set_volume_flags_nowait - set bits without sleeping
+ * @vol:	ntfs volume on which to modify the flags
+ * @flags:	flags to set on the volume
+ *
+ * Same as ntfs_set_volume_flags(), except that the call does not sleep.
+ * Contended mrec_lock, exhausted atomic memory and an attribute list on
+ * $Volume (whose extent mapping could block) each fail with -EAGAIN; see
+ * ntfs_write_volume_flags() for why the remaining path is non-blocking.
+ * For callers servicing an IOCB_NOWAIT request, which must fail with
+ * -EAGAIN rather than sleep.  That -EAGAIN is an expected retry signal
+ * rather than a filesystem error, so it is not reported through
+ * ntfs_error() and never triggers the errors= handling.
+ *
+ * A failure means the flags were NOT set; such callers should fail the
+ * request rather than proceed with the modification.
+ *
+ * Return 0 on success, -EAGAIN when the operation would have to sleep and
+ * -errno on other errors.
+ */
+int ntfs_set_volume_flags_nowait(struct ntfs_volume *vol, __le16 flags)
+{
+	return ntfs_write_volume_flags(vol, flags, 0, false, true);
 }
 
 /*
@@ -451,7 +512,7 @@ int ntfs_set_volume_flags(struct ntfs_volume *vol, __le16 flags)
  */
 int ntfs_clear_volume_flags(struct ntfs_volume *vol, __le16 flags)
 {
-	return ntfs_write_volume_flags(vol, 0, flags, false);
+	return ntfs_write_volume_flags(vol, 0, flags, false, false);
 }
 
 /*
@@ -464,7 +525,7 @@ int ntfs_clear_volume_flags(struct ntfs_volume *vol, __le16 flags)
  */
 static int ntfs_clear_volume_dirty_if_no_errors(struct ntfs_volume *vol)
 {
-	return ntfs_write_volume_flags(vol, 0, VOLUME_IS_DIRTY, true);
+	return ntfs_write_volume_flags(vol, 0, VOLUME_IS_DIRTY, true, false);
 }
 
 int ntfs_write_volume_label(struct ntfs_volume *vol, char *label)
