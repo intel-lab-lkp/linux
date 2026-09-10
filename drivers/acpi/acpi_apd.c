@@ -82,12 +82,12 @@ static int fch_misc_setup(struct apd_private_data *pdata)
 		return -ENOENT;
 
 	if (!acpi_dev_get_property(adev, "clk-name", ACPI_TYPE_STRING, &obj)) {
-		clk_data->name = devm_kzalloc(&adev->dev, obj->string.length,
+		clk_data->name = devm_kzalloc(&adev->dev, obj->string.length + 1,
 					      GFP_KERNEL);
 		if (!clk_data->name)
 			return -ENOMEM;
 
-		strscpy(clk_data->name, obj->string.pointer, obj->string.length);
+		strscpy(clk_data->name, obj->string.pointer, obj->string.length + 1);
 	} else {
 		/* Set default name to mclk if entry missing in firmware */
 		clk_data->name = "mclk";
