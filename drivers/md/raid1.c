@@ -1898,7 +1898,8 @@ static bool raid1_remove_conf(struct r1conf *conf, int disk)
 	return true;
 }
 
-static int raid1_add_disk(struct mddev *mddev, struct md_rdev *rdev)
+static int raid1_add_disk(struct mddev *mddev, struct md_rdev *rdev,
+			  struct queue_limits *lim)
 {
 	struct r1conf *conf = mddev->private;
 	int err = -EEXIST;
@@ -1923,7 +1924,12 @@ static int raid1_add_disk(struct mddev *mddev, struct md_rdev *rdev)
 	for (mirror = first; mirror <= last; mirror++) {
 		p = conf->mirrors + mirror;
 		if (!p->rdev) {
-			err = mddev_stack_new_rdev(mddev, rdev);
+			if (lim == MDDEV_STACK_SKIP)
+				err = 0;
+			else if (lim)
+				err = mddev_stack_rdev_into(mddev, rdev, lim);
+			else
+				err = mddev_stack_new_rdev(mddev, rdev);
 			if (err)
 				return err;
 

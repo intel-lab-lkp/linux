@@ -2095,7 +2095,8 @@ static int raid10_spare_active(struct mddev *mddev)
 	return count;
 }
 
-static int raid10_add_disk(struct mddev *mddev, struct md_rdev *rdev)
+static int raid10_add_disk(struct mddev *mddev, struct md_rdev *rdev,
+			   struct queue_limits *lim)
 {
 	struct r10conf *conf = mddev->private;
 	int err = -EEXIST;
@@ -2130,7 +2131,12 @@ static int raid10_add_disk(struct mddev *mddev, struct md_rdev *rdev)
 			continue;
 		}
 
-		err = mddev_stack_new_rdev(mddev, rdev);
+		if (lim == MDDEV_STACK_SKIP)
+			err = 0;
+		else if (lim)
+			err = mddev_stack_rdev_into(mddev, rdev, lim);
+		else
+			err = mddev_stack_new_rdev(mddev, rdev);
 		if (err)
 			return err;
 		p->head_position = 0;
@@ -2147,7 +2153,12 @@ static int raid10_add_disk(struct mddev *mddev, struct md_rdev *rdev)
 		clear_bit(In_sync, &rdev->flags);
 		set_bit(Replacement, &rdev->flags);
 		rdev->raid_disk = repl_slot;
-		err = mddev_stack_new_rdev(mddev, rdev);
+		if (lim == MDDEV_STACK_SKIP)
+			err = 0;
+		else if (lim)
+			err = mddev_stack_rdev_into(mddev, rdev, lim);
+		else
+			err = mddev_stack_new_rdev(mddev, rdev);
 		if (err)
 			return err;
 		conf->fullsync = 1;
@@ -4484,7 +4495,7 @@ out:
 		rdev_for_each(rdev, mddev)
 			if (rdev->raid_disk < 0 &&
 			    !test_bit(Faulty, &rdev->flags)) {
-				if (raid10_add_disk(mddev, rdev) == 0) {
+				if (raid10_add_disk(mddev, rdev, NULL) == 0) {
 					if (rdev->raid_disk >=
 					    conf->prev.raid_disks)
 						set_bit(In_sync, &rdev->flags);

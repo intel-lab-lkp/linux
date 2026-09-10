@@ -65,10 +65,15 @@ static sector_t linear_size(struct mddev *mddev, sector_t sectors, int raid_disk
 	return array_sectors;
 }
 
-static int linear_set_limits(struct mddev *mddev)
+static int linear_set_limits(struct mddev *mddev,
+			     struct queue_limits *caller_lim)
 {
 	struct queue_limits lim;
 	int err;
+
+	/* the caller can neither stack nor take q->limits_lock */
+	if (caller_lim == MDDEV_STACK_SKIP)
+		return 0;
 
 	md_init_stacking_limits(&lim);
 	lim.features |= BLK_FEAT_NOWAIT;
@@ -82,10 +87,20 @@ static int linear_set_limits(struct mddev *mddev)
 	if (err)
 		return err;
 
+	/*
+	 * The caller owns an update and commits it itself; taking
+	 * q->limits_lock here would take it a second time.
+	 */
+	if (caller_lim) {
+		*caller_lim = lim;
+		return 0;
+	}
+
 	return queue_limits_set(mddev->gendisk->queue, &lim);
 }
 
-static struct linear_conf *linear_conf(struct mddev *mddev, int raid_disks)
+static struct linear_conf *linear_conf(struct mddev *mddev, int raid_disks,
+				       struct queue_limits *lim)
 {
 	struct linear_conf *conf;
 	struct md_rdev *rdev;
@@ -151,7 +166,7 @@ static struct linear_conf *linear_conf(struct mddev *mddev, int raid_disks)
 			conf->disks[i].rdev->sectors;
 
 	if (!mddev_is_dm(mddev)) {
-		ret = linear_set_limits(mddev);
+		ret = linear_set_limits(mddev, lim);
 		if (ret)
 			goto out;
 	}
@@ -171,7 +186,7 @@ static int linear_run(struct mddev *mddev)
 	if (md_check_no_bitmap(mddev))
 		return -EINVAL;
 
-	conf = linear_conf(mddev, mddev->raid_disks);
+	conf = linear_conf(mddev, mddev->raid_disks, NULL);
 	if (IS_ERR(conf))
 		return PTR_ERR(conf);
 
@@ -186,7 +201,8 @@ static int linear_run(struct mddev *mddev)
 	return ret;
 }
 
-static int linear_add(struct mddev *mddev, struct md_rdev *rdev)
+static int linear_add(struct mddev *mddev, struct md_rdev *rdev,
+		      struct queue_limits *lim)
 {
 	/* Adding a drive to a linear array allows the array to grow.
 	 * It is permitted if the new drive has a matching superblock
@@ -204,7 +220,7 @@ static int linear_add(struct mddev *mddev, struct md_rdev *rdev)
 	rdev->raid_disk = rdev->saved_raid_disk;
 	rdev->saved_raid_disk = -1;
 
-	newconf = linear_conf(mddev, mddev->raid_disks + 1);
+	newconf = linear_conf(mddev, mddev->raid_disks + 1, lim);
 	if (IS_ERR(newconf))
 		return PTR_ERR(newconf);
 
