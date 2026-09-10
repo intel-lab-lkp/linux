@@ -33,8 +33,9 @@ OBJS=$(patsubst %,%-user.o,${GENS})
 SPECS_PATHS=$(wildcard $(SPECS_DIR)/*.yaml)
 SPECS=$(patsubst $(SPECS_DIR)/%.yaml,%,${SPECS_PATHS})
 RSTS=$(patsubst %,%.rst,${SPECS})
+LINTS=$(patsubst %,%-lint,${SPECS})
 
-all: protos.a $(HDRS) $(SRCS) $(KHDRS) $(KSRCS) $(UAPI) $(RSTS)
+all: protos.a $(HDRS) $(SRCS) $(KHDRS) $(KSRCS) $(UAPI) $(RSTS) $(LINTS)
 
 protos.a: $(OBJS)
 	@echo -e "\tAR $@"
@@ -56,11 +57,29 @@ protos.a: $(OBJS)
 	@echo -e "\tGEN_RST $@"
 	@$(TOOL_RST) -o $@ -i $<
 
+%-linter.c: $(SPECS_DIR)/%.yaml $(TOOL) ../linter/linter.h
+	@echo -e "\tGEN $@"
+	@$(TOOL) --mode user --linter --spec $< -o $@ $(YNL_GEN_ARG_$*)
+
+%-linter.h: %-linter.c ../linter/gen-h.sh
+	@echo -e "\tGEN $@"
+	@../linter/gen-h.sh $(CFLAGS) $(CFLAGS_$*) < $< > $@
+
+%-linter: %-linter.c %-linter.h ../linter/linter.h
+	@echo -e "\tCC $@"
+	@$(CC) $(CFLAGS) $(CFLAGS_$*) -include $*-linter.h -o $@ $<
+
+%-lint: %-linter
+	@echo -e "\tLINT $@"
+	@./$< $*
+
+lint: $(LINTS)
+
 clean:
 	rm -f *.o
 
 distclean: clean
-	rm -f *.c *.h *.a *.rst
+	rm -f *.c *.h *.a *.rst *-linter
 
 regen:
 	@../ynl-regen.sh
@@ -68,7 +87,7 @@ regen:
 install-headers: $(HDRS)
 	@echo -e "\tINSTALL generated headers"
 	@$(INSTALL) -d $(DESTDIR)$(includedir)/ynl
-	@$(INSTALL) -m 0644 *.h $(DESTDIR)$(includedir)/ynl/
+	@$(INSTALL) -m 0644 $(KHDRS) $(DESTDIR)$(includedir)/ynl/
 
 install-rsts: $(RSTS)
 	@echo -e "\tINSTALL generated docs"
@@ -84,5 +103,5 @@ install-specs:
 
 install: install-headers install-rsts install-specs
 
-.PHONY: all clean distclean regen install install-headers install-rsts install-specs
+.PHONY: all clean distclean regen install install-headers install-rsts install-specs lint
 .DEFAULT_GOAL: all

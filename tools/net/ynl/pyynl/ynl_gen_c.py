@@ -1688,6 +1688,8 @@ class CodeWriter:
         self.close_out_file()
 
     def close_out_file(self):
+        if self._block_end:
+            self._out.write('\t' * self._ind + '}\n')
         if self._out == os.sys.stdout:
             return
         # Avoid modifying the file if contents didn't change
@@ -2082,6 +2084,30 @@ def put_enum_to_str(_family, cw, enum):
     cw.nl()
 
     _put_enum_to_str_helper(cw, enum.render_name, map_name, 'value', enum=enum)
+
+
+def put_enum_to_linter(family, cw, enum):
+    name_pfx = enum.get('name-prefix', f"{family.ident_name}-{enum['name']}-")
+    max_name = c_upper(name_pfx + 'max')
+    map_name = f'{enum.render_name}_entries'
+    cw.block_start(line=f"static const struct enum_entry {map_name}[] =")
+    val = 0
+    for entry in enum.entries.values():
+        val = entry.user_value()
+        c_name = entry.c_name
+        cw.p(f'#if defined({c_name}) || defined(LINTER_HAS_{c_name})')
+        cw.p(f'YNL_ENUM_ENTRY("{entry.name}", {c_name}, {val}),')
+        cw.p('#else')
+        cw.p(f'YNL_ENUM_BAD_ENTRY("{entry.name}", {c_name}, {val}),')
+        cw.p('#endif')
+    cw.p(f'#if defined({max_name}) || defined(LINTER_HAS_{max_name})')
+    cw.p(f'YNL_ENUM_SENTINAL({max_name}, {val}),')
+    cw.p('#endif')
+    cw.p('{},')
+    cw.block_end(line=';')
+    cw.nl()
+    enum_type = enum['type'].upper()
+    return f'{{"{enum.name}", &{map_name}[0], YNL_{enum_type}}},'
 
 
 def put_local_vars(struct):
@@ -3462,6 +3488,7 @@ def main():
     parser.add_argument('--spec', dest='spec', type=str, required=True)
     parser.add_argument('--header', dest='header', action='store_true', default=None)
     parser.add_argument('--source', dest='header', action='store_false')
+    parser.add_argument('--linter', dest='linter', action='store_true')
     parser.add_argument('--user-header', nargs='+', default=[])
     parser.add_argument('--cmp-out', action='store_true', default=None,
                         help='Do not overwrite the output file if the new output is identical to the old')
@@ -3470,8 +3497,10 @@ def main():
     parser.add_argument('--function-prefix', dest='fn_prefix', type=str)
     args = parser.parse_args()
 
+    if args.linter:
+        args.header = False
     if args.header is None:
-        parser.error("--header or --source is required")
+        parser.error("--header, --source or --linter is required")
 
     exclude_ops = [re.compile(expr) for expr in args.exclude_op]
 
@@ -3494,17 +3523,19 @@ def main():
         cw.p(f'// SPDX-License-Identifier: {parsed.license}')
     cw.p("/* Do not edit directly, auto-generated from: */")
     cw.p(f"/*\t{spec_kernel} */")
-    cw.p(f"/* YNL-GEN {args.mode} {'header' if args.header else 'source'} */")
-    if args.exclude_op or args.user_header or args.fn_prefix:
-        line = ''
-        if args.user_header:
-            line += ' --user-header '.join([''] + args.user_header)
-        if args.exclude_op:
-            line += ' --exclude-op '.join([''] + args.exclude_op)
-        if args.fn_prefix:
-            line += f' --function-prefix {args.fn_prefix}'
-        cw.p(f'/* YNL-ARG{line} */')
-    cw.p('/* To regenerate run: tools/net/ynl/ynl-regen.sh */')
+    if not args.linter:
+        ynl_arg = 'header' if args.header else 'source'
+        cw.p(f"/* YNL-GEN {args.mode} {ynl_arg} */")
+        if args.exclude_op or args.user_header or args.fn_prefix:
+            line = ''
+            if args.user_header:
+                line += ' --user-header '.join([''] + args.user_header)
+            if args.exclude_op:
+                line += ' --exclude-op '.join([''] + args.exclude_op)
+            if args.fn_prefix:
+                line += f' --function-prefix {args.fn_prefix}'
+            cw.p(f'/* YNL-ARG{line} */')
+        cw.p('/* To regenerate run: tools/net/ynl/ynl-regen.sh */')
     cw.nl()
 
     if args.mode == 'uapi':
@@ -3539,6 +3570,8 @@ def main():
             cw.p('#include <linux/types.h>')
             if family_contains_bitfield32(parsed):
                 cw.p('#include <linux/netlink.h>')
+        elif args.linter:
+            cw.p('#include "../linter/linter.h"')
         else:
             cw.p(f'#include "{hdr_file}"')
             cw.p('#include "ynl.h"')
@@ -3690,6 +3723,21 @@ def main():
                     cw.nl()
                     print_wrapped_type(ri)
             cw.nl()
+        elif args.linter:
+            enum_sets = []
+            for name, const in parsed.consts.items():
+                if isinstance(const, EnumSet):
+                    enum_sets.append(put_enum_to_linter(parsed, cw, const))
+            cw.nl()
+            cw.block_start(line="static const struct enum_set enums[] =")
+            for enum_set in enum_sets:
+                cw.p(enum_set)
+            cw.p('{},')
+            cw.block_end(line=';')
+            cw.nl()
+            cw.write_func('int', 'main',
+                          args=['const int argc', 'const char **argv'],
+                          body=['return linter_run(argc, argv, &enums[0]);'])
         else:
             cw.p('/* Enums */')
             put_op_name(parsed, cw)

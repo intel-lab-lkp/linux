@@ -1,3 +1,6 @@
 *-user.c
 *-user.h
+*-linter.c
+*-linter.h
+*-linter
 *.rst
