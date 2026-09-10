@@ -40,6 +40,7 @@
 #include <linux/compat.h>
 #include <linux/fs.h>
 #include <linux/wait_bit.h>
+#include <linux/io_uring.h>
 #include <linux/path.h>
 #include <linux/timekeeping.h>
 #include <linux/sysctl.h>
@@ -576,8 +577,10 @@ static bool coredump_close_files(struct core_state *core_state)
 	}
 
 	/* Use the dumper's real creds not the overridden ones. */
-	scoped_with_creds(current_real_cred())
+	scoped_with_creds(current_real_cred()) {
+		io_uring_task_cancel();
 		switch_files_struct(current, files);
+	}
 
 	coredump_wait_inactive(core_state);
 	return true;

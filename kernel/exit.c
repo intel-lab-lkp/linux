@@ -452,6 +452,7 @@ static void coredump_task_exit(struct task_struct *tsk,
 		/* Pairs with the release in coredump_close_files(). */
 		if (smp_load_acquire(&self.files)) {
 			__set_current_state(TASK_RUNNING);
+			io_uring_task_cancel();
 			switch_files_struct(tsk, no_free_ptr(self.files));
 			atomic_dec_and_wake_up(&core_state->threads_remaining);
 			continue;
