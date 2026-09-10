@@ -37,6 +37,7 @@
 #define RSI_ERROR_STATE		UL(2)
 #define RSI_INCOMPLETE		UL(3)
 #define RSI_ERROR_UNKNOWN	UL(4)
+#define RSI_ERROR_DEVICE	UL(5)
 
 #define SMC_RSI_FID(n)		ARM_SMCCC_CALL_VAL(ARM_SMCCC_FAST_CALL,      \
 						   ARM_SMCCC_SMC_64,         \
@@ -190,4 +191,23 @@ struct realm_config {
  */
 #define SMC_RSI_HOST_CALL			SMC_RSI_FID(0x199)
 
+/*
+ * Get information about a VSMMU.
+ *
+ * arg1 == Base IPA of the VSMMU
+ * ret0 == Status / error
+ * ret1 == Top IPA of the VSMMU
+ */
+#define SMC_RSI_VSMMU_GET_INFO			SMC_RSI_FID(0x19A)
+
+#define RSI_ARCH_DEV_SMMUV3			UL(0)
+
+/*
+ * Activate an architectural device.
+ *
+ * arg1 == Base IPA of the architectural device
+ * arg2 == Architectural device type
+ * ret0 == Status / error
+ */
+#define SMC_RSI_ARCH_DEV_ACTIVATE		SMC_RSI_FID(0x19B)
 #endif /* __LINUX_ARM_SMCCC_RSI_H_ */

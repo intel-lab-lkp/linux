@@ -237,4 +237,26 @@ static inline unsigned long rsi_attestation_token_continue(phys_addr_t granule,
 	return res.a0;
 }
 
+static inline unsigned long rsi_vsmmu_get_info(phys_addr_t addr,
+					       phys_addr_t *top)
+{
+	struct arm_smccc_res res;
+
+	arm_smccc_1_1_invoke(SMC_RSI_VSMMU_GET_INFO, addr, &res);
+	if (res.a0 == RSI_SUCCESS && top)
+		*top = res.a1;
+
+	return res.a0;
+}
+
+static inline unsigned long rsi_arch_dev_activate(phys_addr_t base,
+						  unsigned long dev_type)
+{
+	struct arm_smccc_res res;
+
+	arm_smccc_1_1_invoke(SMC_RSI_ARCH_DEV_ACTIVATE, base, dev_type, &res);
+
+	return res.a0;
+}
+
 #endif /* __LINUX_ARM_RSI_CMDS_H_ */
