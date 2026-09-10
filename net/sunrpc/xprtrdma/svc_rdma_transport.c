@@ -189,7 +189,10 @@ static struct svcxprt_rdma *svc_rdma_create_xprt(struct svc_serv *serv,
 	if (!cma_xprt)
 		return NULL;
 
-	svc_xprt_init(net, &svc_rdma_class, &cma_xprt->sc_xprt, serv);
+	if (!svc_xprt_init(net, &svc_rdma_class, &cma_xprt->sc_xprt, serv)) {
+		kfree(cma_xprt);
+		return NULL;
+	}
 	INIT_LIST_HEAD(&cma_xprt->sc_accept_q);
 	INIT_LIST_HEAD(&cma_xprt->sc_rq_dto_q);
 	INIT_LIST_HEAD(&cma_xprt->sc_read_complete_q);
