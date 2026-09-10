@@ -25,8 +25,8 @@
 #include "hid-ids.h"
 
 #define OXP_PACKET_SIZE 64
-#define OXP_STATUS_HEADER_SIZE 6
-#define OXP_STATUS_ACK 0x20
+#define OXP_GEN2_EVENT_HEADER_SIZE 6
+#define OXP_GEN2_RGB_ACK 0x20
 
 #define GEN1_MESSAGE_ID	0xff
 #define GEN2_MESSAGE_ID	0x3f
@@ -214,19 +214,20 @@ struct oxp_hid_cfg {
 	struct oxp_bmap_page_1 *bmap_1;
 	struct oxp_bmap_page_2 *bmap_2;
 	bool gen2_work_initialized;
-	bool bmap_page_3;
 	u8 rumble_intensity;
+	bool bmap_page_3;
 	u8 gamepad_mode;
 	u8 bmap_format;
 
 	/* RGB state */
 	struct oxp_rgb_led *rgb_leds;
-	spinlock_t rgb_reply_lock;
+	spinlock_t rgb_reply_lock; /* Protect pending RGB acknowledgment state. */
 	struct mutex rgb_mutex; /*serialize complete RGB transactions*/
 	bool rgb_reply_pending;
 	u8 rgb_reply_command;
 	u8 rgb_reply_zone;
 	u8 rgb_led_count;
+	bool x2_rgb;
 };
 
 enum oxp_gamepad_mode_index {
@@ -315,6 +316,15 @@ struct oxp_gen_1_rgb_report {
 	u8 blue;
 } __packed;
 
+struct oxp_gen_2_event_header {
+	u8 report_id;
+	u8 message_id;
+	u8 padding;
+	u8 command;
+	u8 zone;
+	u8 status;
+} __packed;
+
 struct oxp_gen_2_rgb_report {
 	u8 report_id;
 	u8 header_id;
@@ -329,6 +339,21 @@ struct oxp_gen_2_rgb_report {
 	u8 blue;
 	u8 padding_12[3];
 	u8 effect;
+} __packed;
+
+struct oxp_rgb_color {
+	u8 red;
+	u8 green;
+	u8 blue;
+} __packed;
+
+struct oxp_gen_3_rgb_color_report {
+	u8 effect;
+	u8 zone;
+	u8 mode;
+	struct oxp_rgb_color colors[18];
+	u8 final_red;
+	u8 final_green;
 } __packed;
 
 enum oxp_rgb_type {
@@ -361,10 +386,11 @@ struct oxp_attr {
 };
 
 struct quirk_entry {
-	bool hybrid_mcu;
-	bool bmap_page_3;
 	u8 cfg_interface_num;
+	bool bmap_page_3;
+	bool hybrid_mcu;
 	u8 bmap_format;
+	bool x2_rgb;
 };
 
 static u16 get_usage_page(struct hid_device *hdev)
@@ -443,6 +469,51 @@ static int oxp_gen_2_property_out(struct oxp_hid_cfg *cfg,
 static int oxp_set_buttons(struct oxp_hid_cfg *cfg);
 static int oxp_rumble_intensity_set(struct oxp_hid_cfg *cfg, u8 intensity);
 
+static int oxp_rgb_status_store(struct oxp_rgb_led *led, u8 enabled, u8 speed,
+				u8 brightness);
+static int oxp_rgb_effect_set(struct oxp_rgb_led *led, u8 effect);
+
+static void oxp_rgb_restore(struct oxp_hid_cfg *cfg)
+{
+	struct oxp_rgb_full_state *state;
+	struct oxp_rgb_led *led;
+	int ret;
+	int i;
+
+	if (!cfg->x2_rgb)
+		return;
+
+	guard(mutex)(&cfg->rgb_mutex);
+	for (i = 0; i < cfg->rgb_led_count; i++) {
+		led = &cfg->rgb_leds[i];
+		switch (led->type) {
+		case OXP_RGB_FULL:
+			state = led->state;
+			if (state->effect == OXP_UNKNOWN)
+				break;
+
+			ret = oxp_rgb_status_store(led, state->enabled,
+						   state->speed,
+						   state->brightness);
+			if (ret) {
+				dev_err(&cfg->hdev->dev,
+					"Error: Failed to restore RGB status: %i\n",
+					ret);
+				break;
+			}
+			if (state->enabled == OXP_FEAT_DISABLED)
+				break;
+
+			ret = oxp_rgb_effect_set(led, state->effect);
+			if (ret)
+				dev_err(&cfg->hdev->dev,
+					"Error: Failed to restore RGB effect: %i\n",
+					ret);
+			break;
+		}
+	}
+}
+
 static void oxp_mcu_init_fn(struct work_struct *work)
 {
 	struct oxp_hid_cfg *cfg = container_of(to_delayed_work(work),
@@ -459,27 +530,62 @@ static void oxp_mcu_init_fn(struct work_struct *work)
 		dev_err(&cfg->hdev->dev,
 			"Error: Failed to set button mapping: %i\n", ret);
 
-	/* Cycle the gamepad mode */
-	ret = oxp_gen_2_property_out(cfg, OXP_FID_GEN2_TOGGLE_MODE, gp_mode_data, 3);
+	/* Cycle the gamepad mode before restoring lighting. */
+	ret = oxp_gen_2_property_out(cfg, OXP_FID_GEN2_TOGGLE_MODE,
+				     gp_mode_data, sizeof(gp_mode_data));
 	if (ret)
 		dev_err(&cfg->hdev->dev,
 			"Error: Failed to set gamepad mode: %i\n", ret);
 
-	/* Remainder only applies for xinput mode */
+	if (cfg->gamepad_mode != OXP_GP_MODE_DEBUG) {
+		gp_mode_data[0] = OXP_GP_MODE_XINPUT;
+		ret = oxp_gen_2_property_out(cfg, OXP_FID_GEN2_TOGGLE_MODE,
+					     gp_mode_data, sizeof(gp_mode_data));
+		if (ret)
+			dev_err(&cfg->hdev->dev,
+				"Error: Failed to set gamepad mode: %i\n", ret);
+	}
+
+	/* The final mode change must precede the single RGB restore. */
+	oxp_rgb_restore(cfg);
 	if (cfg->gamepad_mode == OXP_GP_MODE_DEBUG)
 		return;
 
-	gp_mode_data[0] = OXP_GP_MODE_XINPUT;
-	ret = oxp_gen_2_property_out(cfg, OXP_FID_GEN2_TOGGLE_MODE, gp_mode_data, 3);
-	if (ret)
-		dev_err(&cfg->hdev->dev,
-			"Error: Failed to set gamepad mode: %i\n", ret);
-
-	/* Set vibration level */
 	ret = oxp_rumble_intensity_set(cfg, cfg->rumble_intensity);
 	if (ret)
 		dev_err(&cfg->hdev->dev,
 			"Error: Failed to set rumble intensity: %i\n", ret);
+}
+
+static bool oxp_gen_2_rgb_event(struct oxp_hid_cfg *cfg,
+				const struct oxp_gen_2_event_header *header)
+{
+	bool solicited = false;
+
+	if (header->status == OXP_GEN2_RGB_ACK) {
+		scoped_guard(spinlock_irqsave, &cfg->rgb_reply_lock) {
+			if (cfg->rgb_reply_pending &&
+			    header->command == cfg->rgb_reply_command &&
+			    header->zone == cfg->rgb_reply_zone) {
+				cfg->rgb_reply_pending = false;
+				solicited = true;
+			}
+		}
+		if (solicited)
+			return true;
+	}
+
+	/* A color-write acknowledgment must not be treated as an MCU reset. */
+	if (header->command != OXP_EFFECT_MONO_TRUE)
+		return false;
+
+	/* An unsolicited event is sent after the MCU resets on resume. */
+	if (READ_ONCE(cfg->gen2_work_initialized) &&
+	    !READ_ONCE(cfg->suspended) && !READ_ONCE(cfg->removing))
+		mod_delayed_work(system_dfl_wq, &cfg->oxp_mcu_init,
+				 msecs_to_jiffies(50));
+
+	return true;
 }
 
 static int oxp_hid_raw_event_gen_2(struct hid_device *hdev,
@@ -489,62 +595,35 @@ static int oxp_hid_raw_event_gen_2(struct hid_device *hdev,
 	struct oxp_hid_cfg *cfg = hid_get_drvdata(hdev);
 	struct oxp_rgb_led *led = oxp_rgb_led_by_type(cfg, OXP_RGB_FULL);
 	struct oxp_rgb_full_state *state = oxp_rgb_full_state(led);
+	struct oxp_gen_2_event_header *header = (void *)data;
 	struct oxp_gen_2_rgb_report *rgb_rep;
-	struct led_classdev_mc *led_mc;
-	bool solicited = false;
 
-	if (size < OXP_STATUS_HEADER_SIZE)
+	if (size < OXP_GEN2_EVENT_HEADER_SIZE)
 		return 0;
-
-	if (data[0] != OXP_FID_GEN2_STATUS_EVENT)
+	if (header->report_id != OXP_FID_GEN2_STATUS_EVENT)
 		return 0;
-
-	/* A monocolor acknowledgment is not an MCU reset notification. */
-	if (data[5] == OXP_STATUS_ACK) {
-		scoped_guard(spinlock_irqsave, &cfg->rgb_reply_lock) {
-			if (cfg->rgb_reply_pending &&
-			    data[3] == cfg->rgb_reply_command &&
-			    data[4] == cfg->rgb_reply_zone) {
-				cfg->rgb_reply_pending = false;
-				solicited = true;
-			}
-		}
-		if (solicited)
-			return 0;
-	}
-
-	/* Sent ~6s after resume event, indicating the MCU has fully reset.
-	 * Re-apply our settings after this has been received.
-	 */
-	if (data[3] == OXP_EFFECT_MONO_TRUE) {
-		if (READ_ONCE(cfg->gen2_work_initialized) &&
-		    !READ_ONCE(cfg->suspended) &&
-		    !READ_ONCE(cfg->removing))
-			mod_delayed_work(system_dfl_wq, &cfg->oxp_mcu_init,
-					 msecs_to_jiffies(50));
+	if (oxp_gen_2_rgb_event(cfg, header))
 		return 0;
-	}
-
-	if (data[3] != OXP_GET_PROPERTY)
+	if (header->command != OXP_GET_PROPERTY)
 		return 0;
 	if (size < sizeof(*rgb_rep) || !state)
 		return 0;
 
-	led_mc = &led->mc_cdev;
 	rgb_rep = (struct oxp_gen_2_rgb_report *)data;
 	if (rgb_rep->enabled > OXP_FEAT_ENABLED || rgb_rep->speed > 9 ||
 	    rgb_rep->brightness > 4)
 		return 0;
 
-	/* Ensure we save monocolor as the list value */
+	/* Ensure we save monocolor as the list value. */
 	state->effect = rgb_rep->effect == OXP_EFFECT_MONO_TRUE ?
 			OXP_EFFECT_MONO_LIST : rgb_rep->effect;
 	state->speed = rgb_rep->speed;
 	state->enabled = rgb_rep->enabled == 0 ? OXP_FEAT_DISABLED :
-					       OXP_FEAT_ENABLED;
+						  OXP_FEAT_ENABLED;
 	state->brightness = rgb_rep->brightness;
-	led_mc->led_cdev.brightness = rgb_rep->brightness *
-				      led_mc->led_cdev.max_brightness / 4;
+	led->mc_cdev.led_cdev.brightness = rgb_rep->brightness *
+						led->mc_cdev.led_cdev.max_brightness;
+	led->mc_cdev.led_cdev.brightness /= 4;
 	/* If monocolor had less than 100% brightness on the previous boot,
 	 * there will be no reliable way to determine the real intensity.
 	 * Since intensity scaling is used with a hardware brightness set at max,
@@ -552,9 +631,52 @@ static int oxp_hid_raw_event_gen_2(struct hid_device *hdev,
 	 * prevent successive boots from lowering the brightness further.
 	 * Brightness will be "wrong" but the effect will remain the same visually.
 	 */
-	led_mc->subled_info[0].intensity = rgb_rep->red;
-	led_mc->subled_info[1].intensity = rgb_rep->green;
-	led_mc->subled_info[2].intensity = rgb_rep->blue;
+	led->mc_cdev.subled_info[0].intensity = rgb_rep->red;
+	led->mc_cdev.subled_info[1].intensity = rgb_rep->green;
+	led->mc_cdev.subled_info[2].intensity = rgb_rep->blue;
+
+	return 0;
+}
+
+static int oxp_hid_raw_event_gen_3(struct oxp_hid_cfg *cfg,
+				   struct hid_report *report, u8 *data,
+				   int size)
+{
+	struct oxp_rgb_led *led = oxp_rgb_led_by_type(cfg, OXP_RGB_FULL);
+	struct oxp_rgb_full_state *state = oxp_rgb_full_state(led);
+	struct oxp_gen_2_event_header *header = (void *)data;
+	struct oxp_gen_2_rgb_report *rgb_rep;
+
+	if (size < OXP_GEN2_EVENT_HEADER_SIZE)
+		return 0;
+	if (header->report_id != OXP_FID_GEN2_STATUS_EVENT)
+		return 0;
+	if (oxp_gen_2_rgb_event(cfg, header))
+		return 0;
+	if (header->command != OXP_GET_PROPERTY)
+		return 0;
+	if (size < sizeof(*rgb_rep) || !state)
+		return 0;
+
+	rgb_rep = (struct oxp_gen_2_rgb_report *)data;
+	if (rgb_rep->enabled > OXP_FEAT_ENABLED || rgb_rep->speed > 9 ||
+	    rgb_rep->brightness > 4)
+		return 0;
+
+	/* Gen3 status replies do not report the current effect or RGB color. */
+	state->speed = rgb_rep->speed;
+	state->enabled = rgb_rep->enabled == 0 ? OXP_FEAT_DISABLED :
+						  OXP_FEAT_ENABLED;
+	/*
+	 * Monocolor uses scaled channels at maximum hardware brightness.
+	 * Retain the requested brightness rather than replacing it with 100%.
+	 */
+	if (state->effect != OXP_EFFECT_MONO_LIST) {
+		state->brightness = rgb_rep->brightness;
+		led->mc_cdev.led_cdev.brightness = rgb_rep->brightness *
+						led->mc_cdev.led_cdev.max_brightness;
+		led->mc_cdev.led_cdev.brightness /= 4;
+	}
 
 	return 0;
 }
@@ -574,6 +696,9 @@ static int oxp_hid_raw_event(struct hid_device *hdev, struct hid_report *report,
 	case GEN1_USAGE_PAGE:
 		return oxp_hid_raw_event_gen_1(hdev, report, data, size);
 	case GEN2_USAGE_PAGE:
+		/* X2/Gen3 controllers share the Gen2 HID usage page. */
+		if (cfg->x2_rgb)
+			return oxp_hid_raw_event_gen_3(cfg, report, data, size);
 		return oxp_hid_raw_event_gen_2(hdev, report, data, size);
 	default:
 		break;
@@ -584,9 +709,11 @@ static int oxp_hid_raw_event(struct hid_device *hdev, struct hid_report *report,
 
 static int mcu_property_out(struct oxp_hid_cfg *cfg, u8 *header,
 			    size_t header_size, u8 *data, size_t data_size,
-			    u8 *footer, size_t footer_size)
+			    u8 *footer, size_t footer_size, bool expect_rgb_ack)
 {
 	unsigned char *dmabuf __free(kfree) = kzalloc(OXP_PACKET_SIZE, GFP_KERNEL);
+	u8 rgb_command = 0;
+	u8 rgb_zone = 0;
 	bool rgb_write;
 	int ret;
 
@@ -602,13 +729,21 @@ static int mcu_property_out(struct oxp_hid_cfg *cfg, u8 *header,
 	if (READ_ONCE(cfg->suspended))
 		return -EHOSTDOWN;
 
+	/*
+	 * Track legacy monocolor replies to distinguish them from MCU resets.
+	 * Only Gen3's known acknowledgment protocol makes a missing reply an
+	 * error; retain transport-only success semantics for older controllers.
+	 */
 	rgb_write = header_size && data_size > 1 &&
 		    header[0] == OXP_FID_GEN2_STATUS_EVENT &&
-		    data[0] == OXP_EFFECT_MONO_TRUE;
+		    data[0] != OXP_GET_PROPERTY &&
+		    (expect_rgb_ack || data[0] == OXP_EFFECT_MONO_TRUE);
 	if (rgb_write) {
+		rgb_command = data[0];
+		rgb_zone = data[1];
 		scoped_guard(spinlock_irqsave, &cfg->rgb_reply_lock) {
-			cfg->rgb_reply_command = data[0];
-			cfg->rgb_reply_zone = data[1];
+			cfg->rgb_reply_command = rgb_command;
+			cfg->rgb_reply_zone = rgb_zone;
 			cfg->rgb_reply_pending = true;
 		}
 	}
@@ -628,7 +763,13 @@ static int mcu_property_out(struct oxp_hid_cfg *cfg, u8 *header,
 
 	if (rgb_write) {
 		scoped_guard(spinlock_irqsave, &cfg->rgb_reply_lock) {
-			cfg->rgb_reply_pending = false;
+			if (cfg->rgb_reply_pending &&
+			    cfg->rgb_reply_command == rgb_command &&
+			    cfg->rgb_reply_zone == rgb_zone) {
+				if (!ret && expect_rgb_ack)
+					ret = -ETIMEDOUT;
+				cfg->rgb_reply_pending = false;
+			}
 		}
 	}
 
@@ -642,7 +783,8 @@ static int oxp_gen_1_property_out(struct oxp_hid_cfg *cfg,
 	u8 header[] = { fid, GEN1_MESSAGE_ID };
 	size_t header_size = ARRAY_SIZE(header);
 
-	return mcu_property_out(cfg, header, header_size, data, data_size, NULL, 0);
+	return mcu_property_out(cfg, header, header_size, data, data_size,
+				NULL, 0, false);
 }
 
 static int oxp_gen_2_property_out(struct oxp_hid_cfg *cfg,
@@ -655,7 +797,65 @@ static int oxp_gen_2_property_out(struct oxp_hid_cfg *cfg,
 	size_t footer_size = ARRAY_SIZE(footer);
 
 	return mcu_property_out(cfg, header, header_size, data, data_size, footer,
-				footer_size);
+				footer_size, false);
+}
+
+static const u8 oxp_x2_rgb_zones[] = { 0x01, 0x02, 0x07 };
+
+static int oxp_gen_3_property_out(struct oxp_hid_cfg *cfg, u8 *data,
+				  u8 data_size)
+{
+	u8 header[] = { OXP_FID_GEN2_STATUS_EVENT, GEN2_MESSAGE_ID, 0x01 };
+	u8 footer[] = { GEN2_MESSAGE_ID, OXP_FID_GEN2_STATUS_EVENT };
+	size_t header_size = ARRAY_SIZE(header);
+	size_t footer_size = ARRAY_SIZE(footer);
+
+	return mcu_property_out(cfg, header, header_size, data, data_size,
+				footer, footer_size, true);
+}
+
+static int oxp_gen_3_rgb_property_out(struct oxp_hid_cfg *cfg, u8 *data,
+				      u8 data_size)
+{
+	int first_err;
+	int attempt;
+	int ret;
+	int i;
+
+	/*
+	 * Each zone is addressed independently. Complete the pass even if one
+	 * write fails so the remaining ring zones still receive the setting.
+	 * Retry the full pass once to keep their requested settings identical.
+	 */
+	for (attempt = 0; attempt < 2; attempt++) {
+		first_err = 0;
+		for (i = 0; i < ARRAY_SIZE(oxp_x2_rgb_zones); i++) {
+			data[1] = oxp_x2_rgb_zones[i];
+			ret = oxp_gen_3_property_out(cfg, data, data_size);
+			if (ret && !first_err)
+				first_err = ret;
+		}
+		if (!first_err)
+			return 0;
+	}
+
+	return first_err;
+}
+
+static void oxp_gen_3_rgb_fill_color(struct oxp_gen_3_rgb_color_report *report,
+				     u8 command, u8 zone, u8 red, u8 green,
+				     u8 blue)
+{
+	int i;
+
+	memset(report, 0, sizeof(*report));
+	report->effect = command;
+	report->zone = zone;
+	report->mode = 0x02;
+	for (i = 0; i < ARRAY_SIZE(report->colors); i++)
+		report->colors[i] = (struct oxp_rgb_color) { red, green, blue };
+	report->final_red = red;
+	report->final_green = green;
 }
 
 static ssize_t gamepad_mode_store(struct device *dev,
@@ -1206,6 +1406,20 @@ static const struct attribute_group oxp_cfg_attrs_group = {
 	.attrs = oxp_cfg_attrs,
 };
 
+static int oxp_gen_3_rgb_status_store(struct oxp_rgb_led *led, u8 enabled,
+				      u8 speed, u8 brightness)
+{
+	struct oxp_rgb_full_state *state = oxp_rgb_full_state(led);
+	u8 data[6] = { OXP_SET_PROPERTY, 0x00, 0x02, enabled, speed, brightness };
+
+	if (!state)
+		return -ENODEV;
+	if (state->effect == OXP_EFFECT_MONO_LIST)
+		data[5] = 0x04;
+
+	return oxp_gen_3_rgb_property_out(led->cfg, data, sizeof(data));
+}
+
 static int oxp_rgb_status_store(struct oxp_rgb_led *led, u8 enabled, u8 speed,
 				u8 brightness)
 {
@@ -1213,6 +1427,11 @@ static int oxp_rgb_status_store(struct oxp_rgb_led *led, u8 enabled, u8 speed,
 	struct oxp_hid_cfg *cfg = led->cfg;
 	u16 up = get_usage_page(cfg->hdev);
 	u8 *data;
+
+	if (!state)
+		return -ENODEV;
+	if (cfg->x2_rgb)
+		return oxp_gen_3_rgb_status_store(led, enabled, speed, brightness);
 
 	/* Always default to max brightness and use intensity scaling when in
 	 * monocolor mode.
@@ -1233,13 +1452,25 @@ static int oxp_rgb_status_store(struct oxp_rgb_led *led, u8 enabled, u8 speed,
 	}
 }
 
+static int oxp_gen_3_rgb_status_show(struct oxp_hid_cfg *cfg)
+{
+	u8 data[3] = { OXP_GET_PROPERTY, 0x07, 0x02 };
+
+	return oxp_gen_3_property_out(cfg, data, sizeof(data));
+}
+
 static ssize_t oxp_rgb_status_show(struct oxp_rgb_led *led)
 {
 	struct oxp_hid_cfg *cfg = led->cfg;
 	u16 up = get_usage_page(cfg->hdev);
 	u8 *data;
 
+	if (!oxp_rgb_full_state(led))
+		return -ENODEV;
+
 	guard(mutex)(&cfg->rgb_mutex);
+	if (cfg->x2_rgb)
+		return oxp_gen_3_rgb_status_show(cfg);
 
 	switch (up) {
 	case GEN1_USAGE_PAGE:
@@ -1253,6 +1484,22 @@ static ssize_t oxp_rgb_status_show(struct oxp_rgb_led *led)
 	}
 }
 
+static int oxp_gen_3_rgb_color_set(struct oxp_rgb_led *led)
+{
+	struct led_classdev_mc *mc_cdev = &led->mc_cdev;
+	struct oxp_gen_3_rgb_color_report color_report;
+	u8 brightness = mc_cdev->led_cdev.brightness;
+
+	led_mc_calc_color_components(mc_cdev, brightness);
+	oxp_gen_3_rgb_fill_color(&color_report, OXP_EFFECT_MONO_TRUE, 0x00,
+				 mc_cdev->subled_info[0].brightness,
+				 mc_cdev->subled_info[1].brightness,
+				 mc_cdev->subled_info[2].brightness);
+
+	return oxp_gen_3_rgb_property_out(led->cfg, (u8 *)&color_report,
+					  sizeof(color_report));
+}
+
 static int oxp_rgb_color_set(struct oxp_rgb_led *led)
 {
 	struct led_classdev_mc *led_mc = &led->mc_cdev;
@@ -1263,6 +1510,9 @@ static int oxp_rgb_color_set(struct oxp_rgb_led *led)
 	size_t size;
 	u8 *data;
 	int i;
+
+	if (cfg->x2_rgb)
+		return oxp_gen_3_rgb_color_set(led);
 
 	led_mc_calc_color_components(led_mc, br);
 	red = led_mc->subled_info[0].brightness;
@@ -1281,6 +1531,7 @@ static int oxp_rgb_color_set(struct oxp_rgb_led *led)
 		}
 		return oxp_gen_1_property_out(cfg, OXP_FID_GEN1_RGB_SET, data, size);
 	case GEN2_USAGE_PAGE:
+		/* Preserve the legacy payload and its two zero bytes before the footer. */
 		size = 57;
 		data = (u8[57]) { OXP_EFFECT_MONO_TRUE, 0x00, 0x02 };
 
@@ -1295,6 +1546,29 @@ static int oxp_rgb_color_set(struct oxp_rgb_led *led)
 	}
 }
 
+static int oxp_gen_3_rgb_effect_set(struct oxp_rgb_led *led, u8 effect)
+{
+	struct oxp_rgb_full_state *state = oxp_rgb_full_state(led);
+	u8 data[3] = { effect, 0x00, 0x02 };
+	int ret;
+
+	if (!state)
+		return -ENODEV;
+
+	if (effect > OXP_UNKNOWN && effect < OXP_EFFECT_MONO_LIST)
+		ret = oxp_gen_3_rgb_property_out(led->cfg, data, sizeof(data));
+	else if (effect == OXP_EFFECT_MONO_LIST)
+		ret = oxp_gen_3_rgb_color_set(led);
+	else
+		return -EINVAL;
+
+	if (ret)
+		return ret;
+
+	state->effect = effect;
+	return 0;
+}
+
 static int oxp_rgb_effect_set(struct oxp_rgb_led *led, u8 effect)
 {
 	struct oxp_rgb_full_state *state = oxp_rgb_full_state(led);
@@ -1302,6 +1576,11 @@ static int oxp_rgb_effect_set(struct oxp_rgb_led *led, u8 effect)
 	u16 up = get_usage_page(cfg->hdev);
 	u8 *data;
 	int ret;
+
+	if (!state)
+		return -ENODEV;
+	if (cfg->x2_rgb)
+		return oxp_gen_3_rgb_effect_set(led, effect);
 
 	switch (effect) {
 	case OXP_EFFECT_AURORA:
@@ -1586,6 +1865,54 @@ static void oxp_rgb_full_queue(struct oxp_rgb_led *led,
 			"Error: Failed to write RGB color: %i\n", ret);
 }
 
+static void oxp_gen_3_rgb_queue(struct oxp_rgb_led *led,
+				struct oxp_rgb_full_state *state)
+{
+	unsigned int max_brightness = led->mc_cdev.led_cdev.max_brightness;
+	u8 old_effect;
+	unsigned int brightness = led->mc_cdev.led_cdev.brightness;
+	u8 enabled = brightness ? OXP_FEAT_ENABLED : OXP_FEAT_DISABLED;
+	struct oxp_hid_cfg *cfg = led->cfg;
+	u8 val = 4 * brightness / max_brightness;
+	int ret;
+
+	guard(mutex)(&cfg->rgb_mutex);
+	old_effect = state->effect;
+
+	if (!brightness) {
+		ret = oxp_gen_3_rgb_status_store(led, OXP_FEAT_DISABLED, 5, 0);
+		if (ret) {
+			dev_err(led->mc_cdev.led_cdev.dev,
+				"Error: Failed to disable RGB: %i\n", ret);
+			return;
+		}
+
+		state->enabled = OXP_FEAT_DISABLED;
+		state->brightness = 0;
+		state->speed = 5;
+		return;
+	}
+
+	/* Gen3 standard LED writes select solid color and follow brightness/off. */
+	state->effect = OXP_EFFECT_MONO_LIST;
+	ret = oxp_gen_3_rgb_status_store(led, enabled, 5, val);
+	if (ret) {
+		state->effect = old_effect;
+		dev_err(led->mc_cdev.led_cdev.dev,
+			"Error: Failed to write RGB status: %i\n", ret);
+		return;
+	}
+
+	state->enabled = enabled;
+	state->brightness = val;
+	state->speed = 5;
+
+	ret = oxp_gen_3_rgb_effect_set(led, OXP_EFFECT_MONO_LIST);
+	if (ret)
+		dev_err(led->mc_cdev.led_cdev.dev,
+			"Error: Failed to write RGB color: %i\n", ret);
+}
+
 static void oxp_rgb_queue_fn(struct work_struct *work)
 {
 	struct oxp_rgb_led *led = container_of(to_delayed_work(work),
@@ -1597,7 +1924,10 @@ static void oxp_rgb_queue_fn(struct work_struct *work)
 
 	switch (led->type) {
 	case OXP_RGB_FULL:
-		oxp_rgb_full_queue(led, oxp_rgb_full_state(led));
+		if (cfg->x2_rgb)
+			oxp_gen_3_rgb_queue(led, led->state);
+		else
+			oxp_rgb_full_queue(led, led->state);
 		break;
 	}
 }
@@ -1751,9 +2081,10 @@ static struct quirk_entry quirk_hybrid_mcu = {
 	.hybrid_mcu = true,
 };
 
-static struct quirk_entry quirk_x2_bmap = {
+static struct quirk_entry quirk_x2 = {
 	.bmap_format = OXP_BMAP_FORMAT_X2,
 	.bmap_page_3 = true,
+	.x2_rgb = true,
 	.cfg_interface_num = 2,
 };
 
@@ -1788,7 +2119,7 @@ static const struct dmi_system_id oxp_quirk_list[] = {
 			DMI_EXACT_MATCH(DMI_SYS_VENDOR, "ONE-NETBOOK"),
 			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "ONEXPLAYER 3"),
 		},
-		.driver_data = &quirk_x2_bmap,
+		.driver_data = &quirk_x2,
 	},
 	{
 		.ident = "OneXPlayer X2 Mini Pro",
@@ -1796,7 +2127,7 @@ static const struct dmi_system_id oxp_quirk_list[] = {
 			DMI_EXACT_MATCH(DMI_SYS_VENDOR, "ONE-NETBOOK"),
 			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "ONEXPLAYER X2Mini PRO"),
 		},
-		.driver_data = &quirk_x2_bmap,
+		.driver_data = &quirk_x2,
 	},
 	{},
 };
@@ -1868,6 +2199,7 @@ static int oxp_cfg_probe(struct hid_device *hdev, u16 up,
 		return -ENOMEM;
 
 	cfg->hdev = hdev;
+	cfg->x2_rgb = quirks && quirks->x2_rgb;
 	mutex_init(&cfg->cfg_mutex);
 	mutex_init(&cfg->rgb_mutex);
 	spin_lock_init(&cfg->rgb_reply_lock);
