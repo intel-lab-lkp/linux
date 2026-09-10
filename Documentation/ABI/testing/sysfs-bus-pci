@@ -153,6 +153,31 @@ Description:
 		"default" enables all supported reset methods in the
 		default ordering.
 
+		If present, "cxl_reset" selects CXL Reset for CXL Type 2
+		devices that advertise CXL Reset and CXL Reset Memory Clear
+		support.  The method is only listed for single-function devices,
+		and reset is rejected if the device has enabled VFs, so CXL Reset
+		cannot affect another PCI function.
+
+		When reset is triggered through the reset attribute, the generic
+		PCI reset path calls the device driver's reset_prepare() callback,
+		when provided, and disables PCI I/O, memory decoding, and bus
+		mastering before invoking this method.
+		The method then rejects the operation if cached HDM state is
+		unavailable or an affected HDM range cannot be exclusively
+		reserved.  It does not offline memory or revoke mappings; CXL.mem
+		users are expected to retain conflicting iomem resources while
+		access to an affected range remains active.
+
+		Before issuing CXL Reset, the kernel invalidates CPU caches for
+		affected HDM ranges where supported, disables CXL.cache, initiates
+		cache write-back where supported, and blocks IOMMU translations
+		where applicable.  After reset, it restores PCI config state needed
+		to access HDM MMIO, cached HDM decoder state, and the CXL Device
+		DVSEC Cache and Mem Enable controls before completing PCI reset
+		recovery.  "cxl_reset" requests CXL Reset Memory Clear so that a
+		successful generic PCI reset does not preserve tenant memory.
+
 What:		/sys/bus/pci/devices/.../reset
 Date:		July 2009
 Contact:	Michael S. Tsirkin <mst@redhat.com>
