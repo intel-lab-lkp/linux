@@ -1487,9 +1487,11 @@ static void ntb_transport_free(struct ntb_client *self, struct ntb_dev *ndev)
 
 	debugfs_remove_recursive(nt->debugfs_node_dir);
 
-	ntb_transport_link_cleanup(nt);
-	cancel_work_sync(&nt->link_cleanup);
-	cancel_delayed_work_sync(&nt->link_work);
+	/* Stop transport work before clients release their QPs. */
+	disable_delayed_work_sync(&nt->link_work);
+	disable_work_sync(&nt->link_cleanup);
+
+	ntb_bus_remove(nt);
 
 	qp_bitmap_alloc = nt->qp_bitmap & ~nt->qp_bitmap_free;
 
@@ -1500,10 +1502,9 @@ static void ntb_transport_free(struct ntb_client *self, struct ntb_dev *ndev)
 			ntb_transport_free_queue(qp);
 	}
 
+	ntb_transport_link_cleanup(nt);
 	ntb_link_disable(ndev);
 	ntb_clear_ctx(ndev);
-
-	ntb_bus_remove(nt);
 
 	for (i = nt->mw_count; i--; ) {
 		ntb_free_mw(nt, i);
