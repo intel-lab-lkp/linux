@@ -424,6 +424,9 @@ static inline void reg_pair_from_64(u32 *reg0, u32 *reg1, u64 val)
 /* Registration of the ABIs */
 int optee_smc_abi_register(void);
 void optee_smc_abi_unregister(void);
+#if IS_ENABLED(CONFIG_OPTEE_RPMI_CONDUIT)
+optee_invoke_fn *optee_rpmi_conduit_init(struct device *dev);
+#endif
 int optee_ffa_abi_register(void);
 void optee_ffa_abi_unregister(void);
 

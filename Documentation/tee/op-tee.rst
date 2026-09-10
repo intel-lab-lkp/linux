@@ -4,13 +4,23 @@
 OP-TEE (Open Portable Trusted Execution Environment)
 ====================================================
 
-The OP-TEE driver handles OP-TEE [1] based TEEs. Currently it is only the ARM
-TrustZone based OP-TEE solution that is supported.
+The OP-TEE driver handles OP-TEE [1] based TEEs. The ARM TrustZone based
+OP-TEE solution and OP-TEE running as an isolated supervisor domain on
+RISC-V are supported.
 
 Lowest level of communication with OP-TEE builds on ARM SMC Calling
 Convention (SMCCC) [2], which is the foundation for OP-TEE's SMC interface
 [3] used internally by the driver. Stacked on top of that is OP-TEE Message
 Protocol [4].
+
+On RISC-V the SMC interface is unchanged but its register arguments and
+return values are carried by the TEE_CALL service of the TEE service group
+of the RISC-V Platform Management Interface (RPMI) [7], sent to the M-mode
+firmware on an SBI Message Proxy (MPXY) channel [8]. The M-mode firmware
+switches the calling hart to the OP-TEE domain until OP-TEE responds, so a
+call behaves like an SMC: it runs on the calling hart and returns when
+OP-TEE completes, requests an RPC or yields on a foreign interrupt. The
+message layout is described in drivers/tee/optee/optee_rpmi.h.
 
 OP-TEE SMC interface provides the basic functions required by SMCCC and some
 additional functions specific for OP-TEE. The most interesting functions are:
@@ -164,3 +174,7 @@ References
     "TEE Client API Specification v1.0" and click download.
 
 [6] https://trustedfirmware-a.readthedocs.io/en/latest/threat_model/threat_model.html
+
+[7] https://github.com/riscv-non-isa/riscv-rpmi/releases
+
+[8] https://github.com/riscv-non-isa/riscv-sbi-doc/releases

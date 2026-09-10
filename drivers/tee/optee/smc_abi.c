@@ -1522,6 +1522,12 @@ static const struct optee_smc_conduit optee_smccc_conduit = {
 };
 #endif
 
+#if IS_ENABLED(CONFIG_OPTEE_RPMI_CONDUIT)
+static const struct optee_smc_conduit optee_rpmi_conduit = {
+	.init = optee_rpmi_conduit_init,
+};
+#endif
+
 /* optee_remove - Device Removal Routine
  * @pdev: platform device information struct
  *
@@ -1982,6 +1988,9 @@ err_free_shm_pool:
 static const struct of_device_id optee_dt_match[] = {
 #ifdef CONFIG_HAVE_ARM_SMCCC
 	{ .compatible = "linaro,optee-tz", .data = &optee_smccc_conduit },
+#endif
+#if IS_ENABLED(CONFIG_OPTEE_RPMI_CONDUIT)
+	{ .compatible = "linaro,optee-rpmi", .data = &optee_rpmi_conduit },
 #endif
 	{},
 };
