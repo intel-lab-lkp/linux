@@ -1405,24 +1405,30 @@ static int em28xx_vb2_setup(struct em28xx *dev)
 	q->buf_struct_size = sizeof(struct em28xx_buffer);
 	q->ops = &em28xx_video_qops;
 	q->mem_ops = &vb2_vmalloc_memops;
+	q->lock = &v4l2->vb_queue_lock;
 
 	rc = vb2_queue_init(q);
 	if (rc < 0)
 		return rc;
 
-	/* Setup Videobuf2 for VBI capture */
-	q = &v4l2->vb_vbiq;
-	q->type = V4L2_BUF_TYPE_VBI_CAPTURE;
-	q->io_modes = VB2_READ | VB2_MMAP | VB2_USERPTR;
-	q->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
-	q->drv_priv = dev;
-	q->buf_struct_size = sizeof(struct em28xx_buffer);
-	q->ops = &em28xx_vbi_qops;
-	q->mem_ops = &vb2_vmalloc_memops;
+	/* Setup Videobuf2 for VBI capture if supported */
+	if (em28xx_vbi_supported(dev)) {
+		q = &v4l2->vb_vbiq;
+		q->type = V4L2_BUF_TYPE_VBI_CAPTURE;
+		q->io_modes = VB2_READ | VB2_MMAP | VB2_USERPTR;
+		q->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
+		q->drv_priv = dev;
+		q->buf_struct_size = sizeof(struct em28xx_buffer);
+		q->ops = &em28xx_vbi_qops;
+		q->mem_ops = &vb2_vmalloc_memops;
+		q->lock = &v4l2->vb_vbi_queue_lock;
 
-	rc = vb2_queue_init(q);
-	if (rc < 0)
-		return rc;
+		rc = vb2_queue_init(q);
+		if (rc < 0) {
+			vb2_queue_release(&v4l2->vb_vidq);
+			return rc;
+		}
+	}
 
 	return 0;
 }
