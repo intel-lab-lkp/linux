@@ -224,7 +224,7 @@ struct kvmppc_gs_buff_info {
 
 /**
  * struct kvmppc_gs_header - serialized guest state buffer header
- * @nelem: count of guest state elements in the buffer
+ * @nelems: count of guest state elements in the buffer
  * @data: start of the stream of elements in the buffer
  */
 struct kvmppc_gs_header {
@@ -779,6 +779,7 @@ static inline u64 kvmppc_gse_get_u64(const struct kvmppc_gs_elem *gse)
 /**
  * kvmppc_gse_get_vector128() - return the data of a vector element
  * @gse: guest state element
+ * @v: output vector in host endianness
  */
 static inline void kvmppc_gse_get_vector128(const struct kvmppc_gs_elem *gse,
 					    vector128 *v)
@@ -849,7 +850,7 @@ struct kvmppc_gs_elem *kvmppc_gsp_lookup(struct kvmppc_gs_parser *gsp,
 /**
  * kvmppc_gsp_for_each - iterate the <guest state IDs, guest state element>
  * pairs
- * @gsp: guest state buffer bitmap
+ * @gsp: guest state parser
  * @iden: current guest state ID
  * @gse: guest state element
  */
@@ -866,9 +867,8 @@ struct kvmppc_gs_elem *kvmppc_gsp_lookup(struct kvmppc_gs_parser *gsp,
 /**
  * kvmppc_gsm_for_each - iterate the guest state IDs included in a guest state
  * message
- * @gsp: guest state buffer bitmap
+ * @gsm: guest state message
  * @iden: current guest state ID
- * @gse: guest state element
  */
 #define kvmppc_gsm_for_each(gsm, iden)                            \
 	for (iden = kvmppc_gsbm_next(&gsm->bitmap, 0); iden != 0; \
@@ -908,10 +908,9 @@ static inline bool kvmppc_gsm_includes(struct kvmppc_gs_msg *gsm, u16 iden)
 }
 
 /**
- * kvmppc_gsm_includes - indicate all guest state IDs should be included when
+ * kvmppc_gsm_include_all - indicate all guest state IDs should be included when
  * serializing
  * @gsm: guest state message
- * @iden: guest state ID
  */
 static inline void kvmppc_gsm_include_all(struct kvmppc_gs_msg *gsm)
 {
@@ -919,7 +918,7 @@ static inline void kvmppc_gsm_include_all(struct kvmppc_gs_msg *gsm)
 }
 
 /**
- * kvmppc_gsm_include - clear the guest state IDs that should be included when
+ * kvmppc_gsm_reset - clear the guest state IDs that should be included when
  * serializing
  * @gsm: guest state message
  */
@@ -958,7 +957,7 @@ static inline int kvmppc_gsb_receive_data(struct kvmppc_gs_buff *gsb,
 }
 
 /**
- * kvmppc_gsb_recv - receive a single guest state ID
+ * kvmppc_gsb_receive_datum - receive a single guest state ID
  * @gsb: guest state buffer
  * @gsm: guest state message
  * @iden: guest state identity
@@ -998,7 +997,7 @@ static inline int kvmppc_gsb_send_data(struct kvmppc_gs_buff *gsb,
 }
 
 /**
- * kvmppc_gsb_recv - send a single guest state ID
+ * kvmppc_gsb_send_datum - send a single guest state ID
  * @gsb: guest state buffer
  * @gsm: guest state message
  * @iden: guest state identity
