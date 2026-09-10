@@ -671,6 +671,7 @@ void mddev_put(struct mddev *mddev)
 
 static void md_safemode_timeout(struct timer_list *t);
 static void md_start_sync(struct work_struct *ws);
+static void md_io_opt_work(struct work_struct *ws);
 
 static void active_io_release(struct percpu_ref *ref)
 {
@@ -794,6 +795,7 @@ int mddev_init(struct mddev *mddev)
 	mddev->level = LEVEL_NONE;
 
 	INIT_WORK(&mddev->sync_work, md_start_sync);
+	INIT_WORK(&mddev->io_opt_work, md_io_opt_work);
 	INIT_WORK(&mddev->del_work, mddev_delayed_delete);
 
 	return 0;
@@ -6330,20 +6332,51 @@ int mddev_stack_rdev_into(struct mddev *mddev, struct md_rdev *rdev,
 EXPORT_SYMBOL_GPL(mddev_stack_rdev_into);
 
 /* update the optimal I/O size after a reshape */
-void mddev_update_io_opt(struct mddev *mddev, unsigned int nr_stripes)
+static void md_io_opt_work(struct work_struct *ws)
 {
+	struct mddev *mddev = container_of(ws, struct mddev, io_opt_work);
+	struct request_queue *q = mddev->gendisk->queue;
 	struct queue_limits lim;
 
+	/*
+	 * Nothing is held here, so take q->limits_lock in the order the rest
+	 * of md uses: before the suspend, see md_start_sync().
+	 */
+	lim = queue_limits_start_update(q);
+	if (mddev_suspend(mddev, false) < 0) {
+		queue_limits_cancel_update(q);
+		return;
+	}
+	lim.io_opt = lim.io_min * READ_ONCE(mddev->io_opt_nr_stripes);
+	if (queue_limits_commit_update(q, &lim))
+		pr_err("%s: could not apply queue limits\n", mdname(mddev));
+	mddev_resume(mddev);
+}
+
+void mddev_update_io_opt(struct mddev *mddev, unsigned int nr_stripes,
+			 struct queue_limits *lim)
+{
 	if (mddev_is_dm(mddev))
 		return;
 
-	/* don't bother updating io_opt if we can't suspend the array */
-	if (mddev_suspend(mddev, false) < 0)
+	/*
+	 * With an update owned by the caller just change it in place; it is
+	 * committed, and the array resumed, by whoever started it.  Taking
+	 * q->limits_lock here would nest it inside reconfig_mutex and the
+	 * suspend, which deadlocks, see md_start_sync().
+	 */
+	if (lim) {
+		lim->io_opt = lim->io_min * nr_stripes;
 		return;
-	lim = queue_limits_start_update(mddev->gendisk->queue);
-	lim.io_opt = lim.io_min * nr_stripes;
-	queue_limits_commit_update(mddev->gendisk->queue, &lim);
-	mddev_resume(mddev);
+	}
+
+	/*
+	 * Called from the sync thread, which md_reap_sync_thread() waits for
+	 * with reconfig_mutex held, so q->limits_lock cannot be taken here
+	 * either.  Hand it to a work item that holds neither.
+	 */
+	WRITE_ONCE(mddev->io_opt_nr_stripes, nr_stripes);
+	queue_work(md_misc_wq, &mddev->io_opt_work);
 }
 EXPORT_SYMBOL_GPL(mddev_update_io_opt);
 
@@ -7139,6 +7172,8 @@ static void __md_stop(struct mddev *mddev)
 {
 	struct md_personality *pers = mddev->pers;
 
+	/* the deferred io_opt update suspends the array, so let it finish */
+	flush_work(&mddev->io_opt_work);
 	mddev_detach(mddev);
 	md_bitmap_destroy(mddev);
 	spin_lock(&mddev->lock);

@@ -554,6 +554,10 @@ struct mddev {
 	/* used for register new sync thread */
 	struct work_struct sync_work;
 
+	/* deferred io_opt update, see mddev_update_io_opt() */
+	struct work_struct	io_opt_work;
+	unsigned int		io_opt_nr_stripes;
+
 	/* "lock" protects:
 	 *   flush_bio transition from NULL to !NULL
 	 *   rdev superblocks, events
@@ -1056,7 +1060,8 @@ int mddev_stack_rdev_into(struct mddev *mddev, struct md_rdev *rdev,
  * is added with the array's current limits.
  */
 #define MDDEV_STACK_SKIP	((struct queue_limits *)ERR_PTR(-EAGAIN))
-void mddev_update_io_opt(struct mddev *mddev, unsigned int nr_stripes);
+void mddev_update_io_opt(struct mddev *mddev, unsigned int nr_stripes,
+			 struct queue_limits *lim);
 
 extern const struct block_device_operations md_fops;
 
