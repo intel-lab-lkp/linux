@@ -1088,7 +1088,6 @@ static ssize_t oxp_rgb_status_show(void)
 
 static int oxp_rgb_color_set(void)
 {
-	u8 max_br = drvdata.led_mc->led_cdev.max_brightness;
 	u8 br = drvdata.led_mc->led_cdev.brightness;
 	u16 up = get_usage_page(drvdata.hdev);
 	u8 green, red, blue;
@@ -1096,9 +1095,10 @@ static int oxp_rgb_color_set(void)
 	u8 *data;
 	int i;
 
-	red = br * drvdata.led_mc->subled_info[0].intensity / max_br;
-	green = br * drvdata.led_mc->subled_info[1].intensity / max_br;
-	blue = br * drvdata.led_mc->subled_info[2].intensity / max_br;
+	led_mc_calc_color_components(drvdata.led_mc, br);
+	red = drvdata.led_mc->subled_info[0].brightness;
+	green = drvdata.led_mc->subled_info[1].brightness;
+	blue = drvdata.led_mc->subled_info[2].brightness;
 
 	switch (up) {
 	case GEN1_USAGE_PAGE:
@@ -1383,16 +1383,19 @@ static struct mc_subled oxp_rgb_subled_info[] = {
 	{
 		.color_index = LED_COLOR_ID_RED,
 		.intensity = 0x24,
+		.max_intensity = 0xff,
 		.channel = 0x1,
 	},
 	{
 		.color_index = LED_COLOR_ID_GREEN,
 		.intensity = 0x22,
+		.max_intensity = 0xff,
 		.channel = 0x2,
 	},
 	{
 		.color_index = LED_COLOR_ID_BLUE,
 		.intensity = 0x99,
+		.max_intensity = 0xff,
 		.channel = 0x3,
 	},
 };
