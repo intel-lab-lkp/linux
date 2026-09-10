@@ -504,7 +504,7 @@ static void prepare_msrs(void *info)
 static void do_inject(void)
 {
 	unsigned int cpu = i_mce.extcpu;
-	struct mce_hw_err err;
+	struct mce_hw_err err = {};
 	u64 mcg_status = 0;
 	u8 b = i_mce.bank;
 
