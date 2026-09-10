@@ -13,6 +13,7 @@ struct cxl_rwsem cxl_rwsem = {
 	.region = __RWSEM_INITIALIZER(cxl_rwsem.region),
 	.dpa = __RWSEM_INITIALIZER(cxl_rwsem.dpa),
 };
+EXPORT_SYMBOL_FOR_MODULES(cxl_rwsem, "cxl_core");
 
 static void cxld_set_interleave(struct cxl_decoder_settings *settings, u32 *ctrl)
 {
@@ -105,8 +106,10 @@ int cxl_commit_start(void __iomem *hdm, struct cxl_decoder_settings *settings)
 	lockdep_assert_held(&cxl_rwsem.dpa);
 	return setup_hw_decoder(hdm, settings);
 }
+EXPORT_SYMBOL_FOR_MODULES(cxl_commit_start, "cxl_core");
 
 int cxl_commit_wait(void __iomem *hdm, struct cxl_decoder_settings *settings)
 {
 	return cxld_await_commit(hdm, settings->id);
 }
+EXPORT_SYMBOL_FOR_MODULES(cxl_commit_wait, "cxl_core");
