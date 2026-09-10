@@ -2726,17 +2726,30 @@ static int ahci_host_activate_multi_irqs(struct ata_host *host,
 				0, pp->irq_desc, host->ports[i]);
 
 		if (rc)
-			return rc;
+			goto undo_start;
 		ata_port_desc_misc(host->ports[i], irq);
 	}
 
-	return ata_host_register(host, sht);
+	rc = ata_host_register(host, sht);
+	if (rc)
+		goto undo_start;
+
+	return 0;
+
+undo_start:
+	ata_host_undo_start(host);
+
+	return rc;
 }
 
 /**
  *	ahci_host_activate - start AHCI host, request IRQs and register it
  *	@host: target ATA host
  *	@sht: scsi_host_template to use when registering the host
+ *
+ *	On failure, the ports are stopped again and the devres action
+ *	registered by ata_host_start() is dropped without calling
+ *	->host_stop(), so releasing the host resources is left to the caller.
  *
  *	LOCKING:
  *	Inherited from calling layer (may sleep).
