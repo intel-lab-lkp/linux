@@ -640,6 +640,37 @@ static void do_rmpopt_work(struct work_struct *work)
 	on_each_cpu_mask(cpu_primary_thread_mask, rmpopt_scan_range, NULL, true);
 }
 
+/*
+ * Delay, in milliseconds, before the RMP re-optimization pass runs after an SNP
+ * guest is torn down, passed as the delay to mod_delayed_work().  This coalesces
+ * a burst of teardowns into a single scan and gives each guest's pages time to
+ * be converted back to the shared, hypervisor-owned state.  The 10 second value
+ * is a heuristic trading re-optimization latency against scanning too eagerly.
+ */
+#define RMPOPT_WORK_TIMEOUT	(10 * MSEC_PER_SEC)
+
+/*
+ * Perform RMP optimizations on memory freed by terminating guests.  The scan
+ * is deferred, so it normally runs after sev_gmem_invalidate() has converted
+ * this guest's pages back to shared, and picks them up then.  A very large
+ * guest whose conversion has not finished by then is picked up by a later
+ * teardown's scan.
+ */
+void snp_rmpopt_all_physmem(void)
+{
+	if (!rmpopt_capable())
+		return;
+
+	guard(mutex)(&rmpopt_wq_mutex);
+
+	if (!rmpopt_wq)
+		return;
+
+	mod_delayed_work(rmpopt_wq, &rmpopt_delayed_work,
+			 msecs_to_jiffies(RMPOPT_WORK_TIMEOUT));
+}
+EXPORT_SYMBOL_FOR_MODULES(snp_rmpopt_all_physmem, "kvm-amd");
+
 void snp_setup_rmpopt(void)
 {
 	u64 rmpopt_base;
