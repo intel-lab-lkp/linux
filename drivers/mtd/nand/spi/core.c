@@ -485,6 +485,7 @@ static int spinand_read_from_cache_op(struct spinand_device *spinand,
 
 	if (req->datalen) {
 		buf = spinand->databuf;
+		spinand->cache_valid = false;
 		if (!req->continuous)
 			nbytes = nanddev_page_size(nand);
 		else
@@ -558,6 +559,13 @@ static int spinand_read_from_cache_op(struct spinand_device *spinand,
 		else
 			memcpy(req->oobbuf.in, spinand->oobbuf + req->ooboffs,
 			       req->ooblen);
+	}
+
+	if (req->datalen && !req->continuous && req->mode != MTD_OPS_RAW) {
+		spinand->cur_target_cache = req->pos.target;
+		spinand->cur_block_cache = req->pos.eraseblock;
+		spinand->cur_page_cache = req->pos.page;
+		spinand->cache_valid = true;
 	}
 
 	return 0;
@@ -764,7 +772,12 @@ int spinand_read_page(struct spinand_device *spinand,
 	if (ret)
 		return ret;
 
-	return nand_ecc_finish_io_req(nand, (struct nand_page_io_req *)req);
+	ret = nand_ecc_finish_io_req(nand, (struct nand_page_io_req *)req);
+	if (ret > 0 && req->datalen && !req->continuous && req->mode != MTD_OPS_RAW)
+		memcpy(spinand->databuf + req->dataoffs, req->databuf.in,
+		       req->datalen);
+
+	return ret;
 }
 
 /**
@@ -833,6 +846,20 @@ static int spinand_mtd_regular_page_read(struct mtd_info *mtd, loff_t from,
 		if (disable_ecc)
 			iter.req.mode = MTD_OPS_RAW;
 
+		if (spinand->cache_valid && !disable_ecc &&
+		    !iter.req.ooblen &&
+		    iter.req.pos.target == spinand->cur_target_cache &&
+		    iter.req.pos.eraseblock == spinand->cur_block_cache &&
+		    iter.req.pos.page == spinand->cur_page_cache) {
+			if (iter.req.datalen)
+				memcpy(iter.req.databuf.in,
+				       spinand->databuf + iter.req.dataoffs,
+				       iter.req.datalen);
+			ops->retlen += iter.req.datalen;
+			ops->oobretlen += iter.req.ooblen;
+			continue;
+		}
+
 		ret = spinand_select_target(spinand, iter.req.pos.target);
 		if (ret)
 			break;
@@ -841,6 +868,9 @@ read_retry:
 		ret = spinand_read_page(spinand, &iter.req);
 		if (ret < 0 && ret != -EBADMSG)
 			break;
+
+		if (ret == -EBADMSG)
+			spinand->cache_valid = false;
 
 		if (ret == -EBADMSG && spinand->set_read_retry) {
 			if (spinand->read_retries && (++retry_mode <= spinand->read_retries)) {
@@ -1064,6 +1094,8 @@ static int spinand_mtd_write(struct mtd_info *mtd, loff_t to,
 		if (ret)
 			break;
 
+		spinand->cache_valid = false;
+
 		ret = spinand_write_page(spinand, &iter.req);
 		if (ret)
 			break;
@@ -1187,6 +1219,11 @@ static int spinand_erase(struct nand_device *nand, const struct nand_pos *pos)
 
 	if (!ret && (status & STATUS_ERASE_FAILED))
 		ret = -EIO;
+
+	if (spinand->cache_valid &&
+	    spinand->cur_target_cache == pos->target &&
+	    spinand->cur_block_cache == pos->eraseblock)
+		spinand->cache_valid = false;
 
 	return ret;
 }
@@ -2026,6 +2063,7 @@ static void spinand_cleanup(struct spinand_device *spinand)
 	nanddev_ecc_engine_cleanup(nand);
 	nanddev_cleanup(nand);
 	spinand_manufacturer_cleanup(spinand);
+	spinand->cache_valid = false;
 	kfree(spinand->databuf);
 	kfree(spinand->scratchbuf);
 }
@@ -2045,6 +2083,7 @@ static int spinand_probe(struct spi_mem *mem)
 	spi_mem_set_drvdata(mem, spinand);
 	spinand_set_of_node(spinand, mem->spi->dev.of_node);
 	mutex_init(&spinand->lock);
+	spinand->cache_valid = false;
 	mtd = spinand_to_mtd(spinand);
 	mtd->dev.parent = &mem->spi->dev;
 
