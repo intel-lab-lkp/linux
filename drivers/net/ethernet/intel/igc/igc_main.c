@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0
 /* Copyright (c)  2018 Intel Corporation */
 
+#include <linux/acpi.h>
+#include <linux/hex.h>
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/if_vlan.h>
@@ -7133,6 +7135,58 @@ static enum hrtimer_restart igc_qbv_scheduling_timer(struct hrtimer *timer)
 	return HRTIMER_NORESTART;
 }
 
+static bool igc_get_acpi_mac_passthru(u8 *mac)
+{
+	static const struct {
+		const char *name;
+		acpi_object_type type;
+		u32 length;
+	} sources[] = {
+		{ "\\_SB.AMAC", ACPI_TYPE_BUFFER, 23 },
+		{ "\\MACA",     ACPI_TYPE_STRING, 22 },
+	};
+	struct acpi_buffer buffer;
+	union acpi_object *obj;
+	bool mac_found = false;
+	acpi_status status;
+	u8 buf[ETH_ALEN];
+	int i;
+
+	if (!IS_ENABLED(CONFIG_ACPI))
+		return false;
+
+	for (i = 0; i < ARRAY_SIZE(sources) && !mac_found; i++) {
+		buffer.length = ACPI_ALLOCATE_BUFFER;
+		buffer.pointer = NULL;
+
+		status = acpi_evaluate_object(NULL, (char *)sources[i].name,
+					      NULL, &buffer);
+		if (ACPI_FAILURE(status))
+			continue;
+
+		obj = buffer.pointer;
+		if (!obj || obj->type != sources[i].type ||
+		    obj->string.length != sources[i].length ||
+		    !obj->string.pointer)
+			goto free_obj;
+
+		if (strncmp(obj->string.pointer, "_AUXMAC_#", 9) ||
+		    obj->string.pointer[21] != '#')
+			goto free_obj;
+
+		if (hex2bin(buf, obj->string.pointer + 9, ETH_ALEN) ||
+		    !is_valid_ether_addr(buf))
+			goto free_obj;
+
+		ether_addr_copy(mac, buf);
+		mac_found = true;
+free_obj:
+		ACPI_FREE(obj);
+	}
+
+	return mac_found;
+}
+
 /**
  * igc_probe - Device Initialization Routine
  * @pdev: PCI device information struct
@@ -7299,6 +7353,22 @@ static int igc_probe(struct pci_dev *pdev,
 		/* copy the MAC address out of the NVM */
 		if (hw->mac.ops.read_mac_addr(hw))
 			dev_err(&pdev->dev, "NVM Read Error\n");
+
+		/* For devices behind a Thunderbolt/USB4 dock, look for a
+		 * system-provided MAC in the ACPI table
+		 */
+		if (pci_is_thunderbolt_attached(pdev) &&
+		    igc_get_acpi_mac_passthru(hw->mac.addr)) {
+			/* Set the permanent MAC address. Leave blank if invalid to
+			 * reflect there is something wrong with the NVM MAC.
+			 */
+			if (is_valid_ether_addr(hw->mac.perm_addr))
+				ether_addr_copy(netdev->perm_addr, hw->mac.perm_addr);
+			netdev->addr_assign_type = NET_ADDR_STOLEN;
+			dev_info(&pdev->dev,
+				 "Using ACPI pass-thru MAC addr %pM\n",
+				 hw->mac.addr);
+		}
 	}
 
 	eth_hw_addr_set(netdev, hw->mac.addr);
