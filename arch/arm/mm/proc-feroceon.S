@@ -391,7 +391,6 @@ SYM_TYPED_FUNC_START(feroceon_dma_map_area)
 	add	r1, r1, r0
 	cmp	r2, #DMA_TO_DEVICE
 	beq	feroceon_dma_clean_range
-	bcs	feroceon_dma_inv_range
 	b	feroceon_dma_flush_range
 SYM_FUNC_END(feroceon_dma_map_area)
 
@@ -405,7 +404,6 @@ SYM_TYPED_FUNC_START(feroceon_range_dma_map_area)
 	add	r1, r1, r0
 	cmp	r2, #DMA_TO_DEVICE
 	beq	feroceon_range_dma_clean_range
-	bcs	feroceon_range_dma_inv_range
 	b	feroceon_range_dma_flush_range
 SYM_FUNC_END(feroceon_range_dma_map_area)
 

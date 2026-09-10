@@ -350,7 +350,6 @@ SYM_TYPED_FUNC_START(arm1020_dma_map_area)
 	add	r1, r1, r0
 	cmp	r2, #DMA_TO_DEVICE
 	beq	arm1020_dma_clean_range
-	bcs	arm1020_dma_inv_range
 	b	arm1020_dma_flush_range
 SYM_FUNC_END(arm1020_dma_map_area)
 

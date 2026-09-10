@@ -390,7 +390,6 @@ SYM_TYPED_FUNC_START(xscale_dma_map_area)
 	add	r1, r1, r0
 	cmp	r2, #DMA_TO_DEVICE
 	beq	xscale_dma_clean_range
-	bcs	xscale_dma_inv_range
 	b	xscale_dma_flush_range
 SYM_FUNC_END(xscale_dma_map_area)
 
