@@ -131,6 +131,8 @@ static void __sev_firmware_shutdown(struct sev_device *sev, bool panic);
 
 static int snp_shutdown_on_panic(struct notifier_block *nb,
 				 unsigned long reason, void *arg);
+static int __sev_do_snp_platform_status(struct sev_user_data_snp_status *status,
+					int *error);
 
 static struct notifier_block snp_panic_notifier = {
 	.notifier_call = snp_shutdown_on_panic,
@@ -1261,19 +1263,12 @@ static int snp_get_platform_data(struct sev_device *sev, int *error)
 {
 	struct sev_data_snp_feature_info snp_feat_info;
 	struct snp_feature_info *feat_info;
-	struct sev_data_snp_addr buf;
 	struct page *page;
 	int rc;
 
-	/*
-	 * This function is expected to be called before SNP is
-	 * initialized.
-	 */
-	if (sev->snp_initialized)
-		return -EINVAL;
-
-	buf.address = __psp_pa(&sev->snp_plat_status);
-	rc = sev_do_cmd(SEV_CMD_SNP_PLATFORM_STATUS, &buf, error);
+	mutex_lock(&sev_cmd_mutex);
+	rc = __sev_do_snp_platform_status(&sev->snp_plat_status, error);
+	mutex_unlock(&sev_cmd_mutex);
 	if (rc) {
 		dev_err(sev->dev, "SNP PLATFORM_STATUS command failed, ret = %d, error = %#x\n",
 			rc, *error);
@@ -1302,17 +1297,46 @@ static int snp_get_platform_data(struct sev_device *sev, int *error)
 		return -ENOMEM;
 
 	feat_info = page_address(page);
+
+	/* If SNP is initialized, transition to use a firmware-owned page */
+	if (sev->snp_initialized) {
+		if (rmp_mark_pages_firmware(__pa(feat_info), 1, false)) {
+			*error = SEV_RET_NO_FW_CALL;
+			rc = -EFAULT;
+			goto free_page;
+		}
+	}
+
 	snp_feat_info.length = sizeof(snp_feat_info);
 	snp_feat_info.ecx_in = 0;
 	snp_feat_info.feature_info_paddr = __psp_pa(feat_info);
 
 	rc = sev_do_cmd(SEV_CMD_SNP_FEATURE_INFO, &snp_feat_info, error);
+
+	/*
+	 * The feature_info page will be in reclaim state on success, or left
+	 * in firmware state on failure. Transition the pages back to
+	 * Hypervisor-owned state.
+	 *
+	 * snp_reclaim_pages() has already pinned the page via snp_leak_pages()
+	 * if it could not do so, which keeps it away from the allocator. The
+	 * reference taken here is dropped either way.
+	 */
+	if (sev->snp_initialized) {
+		if (snp_reclaim_pages(__pa(feat_info), 1, false)) {
+			*error = SEV_RET_NO_FW_CALL;
+			rc = -EFAULT;
+			goto free_page;
+		}
+	}
+
 	if (!rc)
 		sev->snp_feat_info_0 = *feat_info;
 	else
 		dev_err(sev->dev, "SNP FEATURE_INFO command failed, ret = %d, error = %#x\n",
 			rc, *error);
 
+free_page:
 	__free_page(page);
 
 	return rc;
