@@ -827,10 +827,10 @@ definitions:
     name-prefix: netkit-
     entries:
       -
-        name: forward
+        name: pass
         value: 0
       -
-        name: blackhole
+        name: drop
         value: 2
   -
     name: netkit-mode
