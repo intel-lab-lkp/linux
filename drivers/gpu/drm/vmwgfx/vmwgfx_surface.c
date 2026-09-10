@@ -16,7 +16,10 @@
 #include "device_include/svga3d_surfacedefs.h"
 
 #include <drm/drm_dumb_buffers.h>
+#include <drm/drm_prime.h>
 #include <drm/ttm/ttm_placement.h>
+
+#include <linux/dma-buf.h>
 
 #define SVGA3D_FLAGS_64(upper32, lower32) (((uint64_t)upper32 << 32) | lower32)
 
@@ -931,33 +934,37 @@ u32 vmw_lookup_surface_handle_for_buffer(struct vmw_private *vmw,
 
 static int vmw_buffer_prime_to_surface_base(struct vmw_private *dev_priv,
 					    struct drm_file *file_priv,
-					    u32 fd, u32 *handle,
+					    u32 fd,
 					    struct ttm_base_object **base_p)
 {
 	struct ttm_base_object *base;
-	struct vmw_bo *bo;
+	struct dma_buf *dma_buf;
 	struct ttm_object_file *tfile = vmw_fpriv(file_priv)->tfile;
 	struct vmw_user_surface *user_srf;
 	int ret;
 
-	ret = drm_gem_prime_fd_to_handle(&dev_priv->drm, file_priv, fd, handle);
-	if (ret) {
-		drm_warn(&dev_priv->drm,
-			 "Wasn't able to find user buffer for fd = %u.\n", fd);
-		return ret;
+	dma_buf = dma_buf_get(fd);
+	if (IS_ERR(dma_buf))
+		return PTR_ERR(dma_buf);
+
+	/*
+	 * Only buffers exported by this device can have a user surface.
+	 * Look the buffer up through the dma-buf, which holds a reference
+	 * to it, instead of importing the fd into file_priv: the GEM handle
+	 * that would create is never returned to userspace, so nothing
+	 * would release it (or a foreign dma-buf) until the file is closed.
+	 */
+	if (!drm_gem_is_prime_exported_dma_buf(&dev_priv->drm, dma_buf)) {
+		ret = -EINVAL;
+		goto out;
 	}
 
-	ret = vmw_user_bo_lookup(file_priv, *handle, &bo);
-	if (ret) {
-		drm_warn(&dev_priv->drm,
-			 "Wasn't able to lookup user buffer for handle = %u.\n", *handle);
-		return ret;
-	}
-
-	user_srf = vmw_lookup_user_surface_for_buffer(dev_priv, bo, *handle);
-	if (WARN_ON(!user_srf)) {
-		drm_warn(&dev_priv->drm,
-			 "User surface fd %d (handle %d) is null.\n", fd, *handle);
+	user_srf = vmw_lookup_user_surface_for_buffer(dev_priv,
+						      to_vmw_bo(dma_buf->priv),
+						      fd);
+	if (!user_srf) {
+		drm_dbg_driver(&dev_priv->drm,
+			       "No user surface for buffer fd %d.\n", fd);
 		ret = -EINVAL;
 		goto out;
 	}
@@ -966,13 +973,15 @@ static int vmw_buffer_prime_to_surface_base(struct vmw_private *dev_priv,
 	ret = ttm_ref_object_add(tfile, base, NULL, false);
 	if (ret) {
 		drm_warn(&dev_priv->drm,
-			 "Couldn't add an object ref for the buffer (%d).\n", *handle);
+			 "Couldn't add an object ref for buffer fd %d (%d).\n",
+			 fd, ret);
+		ttm_base_object_unref(&base);
 		goto out;
 	}
 
 	*base_p = base;
 out:
-	vmw_user_bo_unref(&bo);
+	dma_buf_put(dma_buf);
 
 	return ret;
 }
@@ -996,7 +1005,6 @@ vmw_surface_handle_reference(struct vmw_private *dev_priv,
 			return vmw_buffer_prime_to_surface_base(dev_priv,
 								file_priv,
 								u_handle,
-								&handle,
 								base_p);
 	} else {
 		handle = u_handle;
