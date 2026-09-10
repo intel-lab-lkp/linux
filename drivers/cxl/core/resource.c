@@ -894,6 +894,24 @@ static int cxl_pci_target_reset_prepare(struct pci_dev *pdev,
 	return 0;
 }
 
+int cxl_restore_state_after_pci_reset(struct pci_dev *pdev)
+{
+	u16 command;
+	int rc;
+
+	device_lock_assert(&pdev->dev);
+	guard(rwsem_write)(&cxl_rwsem.region);
+
+	cxl_restore_pci_state_for_hdm_restore(pdev, &command);
+	rc = cxl_restore_state(pdev);
+	if (rc) {
+		cxl_reset_save_disabled_state(pdev);
+		return rc;
+	}
+
+	return cxl_reset_save_restored_state(pdev, command);
+}
+
 static void cxl_hdm_range_context_init(struct cxl_hdm_range_context *ctx)
 {
 	INIT_LIST_HEAD(&ctx->ranges);
