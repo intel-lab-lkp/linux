@@ -416,10 +416,17 @@ static int pn533_acr122_poweron_rdr(struct pn533_usb_phy *phy)
 		return rc;
 	}
 
-	wait_for_completion(&arg.done);
+	/* device may never reply: don't hang probe(), bound the wait */
+	if (!wait_for_completion_timeout(&arg.done, msecs_to_jiffies(5000))) {
+		usb_kill_urb(phy->in_urb); /* waits for the handler, so &arg can't outlive us */
+		nfc_err(&phy->udev->dev, "Reader poweron response timeout\n");
+		rc = -ETIMEDOUT;
+	} else {
+		rc = arg.rc;
+	}
 	phy->in_urb->context = cntx; /* restore context */
 
-	return arg.rc;
+	return rc;
 }
 
 static void pn533_out_complete(struct urb *urb)
