@@ -11,9 +11,11 @@
 
 #include <linux/acpi.h>
 #include <linux/acpi_iort.h>
+#include <linux/arm-rsi-cmds.h>
 #include <linux/bitops.h>
 #include <linux/crash_dump.h>
 #include <linux/delay.h>
+#include <linux/dma-mapping.h>
 #include <linux/err.h>
 #include <linux/interrupt.h>
 #include <linux/io-pgtable.h>
@@ -5507,6 +5509,53 @@ err_remove:
 	return ERR_PTR(ret);
 }
 
+static void arm_smmu_clear_realm_private(void *dev)
+{
+	dma_set_cc_private(dev, false);
+}
+
+static int arm_smmu_probe_realm_vsmmu(struct arm_smmu_device *smmu,
+				      const struct resource *res)
+{
+	struct device *dev = smmu->dev;
+	unsigned long rsi_ret;
+	phys_addr_t top;
+
+	/*
+	 * Currently the driver does not support a T=0 SMMU inside a realm. For
+	 * instance it does not make the page table allocations into shared
+	 * memory. If we are in a realm reject any SMMU that is not T=1.
+	 */
+	rsi_ret = rsi_vsmmu_get_info(res->start, &top);
+	if (rsi_ret != RSI_SUCCESS) {
+		dev_err(dev, "RSI_VSMMU_GET_INFO failed for %pr: %lu\n", res,
+			rsi_ret);
+		return -ENODEV;
+	}
+
+	if (top != res->end + 1) {
+		dev_err(dev, "VSMMU range %pr ends at %pa\n", res, &top);
+		return -EINVAL;
+	}
+
+	rsi_ret = rsi_arch_dev_activate(res->start, RSI_ARCH_DEV_SMMUV3);
+	if (rsi_ret != RSI_SUCCESS) {
+		dev_err(dev, "RSI_ARCH_DEV_ACTIVATE failed for %pr: %lu\n", res,
+			rsi_ret);
+		return -EIO;
+	}
+
+	/*
+	 * Once activated, the SMMU DMA follows DEV_FLAG_DMA_CC_PRIVATE so its
+	 * queues and tables are allocated from private memory, not the SWIOTLB
+	 * shared pool. It only translates for a device we've requested the RMM
+	 * to put into T=1.
+	 */
+	iommu_device_set_confidential(&smmu->iommu, dev);
+
+	return devm_add_action_or_reset(dev, arm_smmu_clear_realm_private, dev);
+}
+
 static int arm_smmu_device_probe(struct platform_device *pdev)
 {
 	int irq, ret;
@@ -5541,6 +5590,12 @@ static int arm_smmu_device_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 	ioaddr = res->start;
+
+	if (is_realm_world()) {
+		ret = arm_smmu_probe_realm_vsmmu(smmu, res);
+		if (ret)
+			return ret;
+	}
 
 	/*
 	 * Don't map the IMPLEMENTATION DEFINED regions, since they may contain
