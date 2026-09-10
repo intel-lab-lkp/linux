@@ -224,7 +224,7 @@ void kvm_riscv_local_tlb_sanitize(struct kvm_vcpu *vcpu)
 	 * entries by VMID whenever underlying Host CPU changes for a VCPU.
 	 */
 
-	vmid = READ_ONCE(vcpu->kvm->arch.vmid.vmid);
+	vmid = kvm_riscv_gstage_vmid_hwid(atomic_long_read(&vcpu->kvm->arch.vmid.id));
 	kvm_riscv_local_hfence_gvma_vmid_all(vmid);
 
 	/*
@@ -244,7 +244,7 @@ void kvm_riscv_fence_i_process(struct kvm_vcpu *vcpu)
 void kvm_riscv_tlb_flush_process(struct kvm_vcpu *vcpu)
 {
 	struct kvm_vmid *v = &vcpu->kvm->arch.vmid;
-	unsigned long vmid = READ_ONCE(v->vmid);
+	unsigned long vmid = kvm_riscv_gstage_vmid_hwid(atomic_long_read(&v->id));
 
 	if (kvm_riscv_nacl_available())
 		nacl_hfence_gvma_vmid_all(nacl_shmem(), vmid);
@@ -255,7 +255,7 @@ void kvm_riscv_tlb_flush_process(struct kvm_vcpu *vcpu)
 void kvm_riscv_hfence_vvma_all_process(struct kvm_vcpu *vcpu)
 {
 	struct kvm_vmid *v = &vcpu->kvm->arch.vmid;
-	unsigned long vmid = READ_ONCE(v->vmid);
+	unsigned long vmid = kvm_riscv_gstage_vmid_hwid(atomic_long_read(&v->id));
 
 	if (kvm_riscv_nacl_available())
 		nacl_hfence_vvma_all(nacl_shmem(), vmid);
@@ -533,6 +533,7 @@ int kvm_arch_flush_remote_tlbs_range(struct kvm *kvm, gfn_t gfn, u64 nr_pages)
 {
 	kvm_riscv_hfence_gvma_vmid_gpa(kvm, -1UL, 0,
 				       gfn << PAGE_SHIFT, nr_pages << PAGE_SHIFT,
-				       PAGE_SHIFT, READ_ONCE(kvm->arch.vmid.vmid));
+				       PAGE_SHIFT, kvm_riscv_gstage_vmid_hwid(
+						atomic_long_read(&kvm->arch.vmid.id)));
 	return 0;
 }

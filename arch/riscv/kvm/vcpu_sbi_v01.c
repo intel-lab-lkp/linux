@@ -88,14 +88,16 @@ static int kvm_sbi_ext_v01_handler(struct kvm_vcpu *vcpu, struct kvm_run *run,
 		if (cp->a7 == SBI_EXT_0_1_REMOTE_FENCE_I)
 			kvm_riscv_fence_i(vcpu->kvm, hbase, hmask);
 		else if (cp->a7 == SBI_EXT_0_1_REMOTE_SFENCE_VMA) {
-			vmid = READ_ONCE(vcpu->kvm->arch.vmid.vmid);
+			vmid = kvm_riscv_gstage_vmid_hwid(
+				   atomic_long_read(&vcpu->kvm->arch.vmid.id));
 			if (cp->a1 == 0 && cp->a2 == 0)
 				kvm_riscv_hfence_vvma_all(vcpu->kvm, hbase, hmask, vmid);
 			else
 				kvm_riscv_hfence_vvma_gva(vcpu->kvm, hbase, hmask, cp->a1,
 							  cp->a2, PAGE_SHIFT, vmid);
 		} else {
-			vmid = READ_ONCE(vcpu->kvm->arch.vmid.vmid);
+			vmid = kvm_riscv_gstage_vmid_hwid(
+				   atomic_long_read(&vcpu->kvm->arch.vmid.id));
 			if (cp->a1 == 0 && cp->a2 == 0)
 				kvm_riscv_hfence_vvma_asid_all(vcpu->kvm, hbase, hmask,
 							       cp->a3, vmid);
