@@ -1104,10 +1104,16 @@ static void ntb_transport_link_work(struct work_struct *work)
 	/* Publish the link only after every QP has been set up. */
 	smp_store_release(&nt->link_is_up, true);
 
+	/*
+	 * Prevent both sides from missing each other's flag. Pairs with
+	 * the barrier in ntb_transport_link_up().
+	 */
+	smp_mb();
+
 	for (i = 0; i < nt->qp_count; i++) {
 		struct ntb_transport_qp *qp = &nt->qp_vec[i];
 
-		if (qp->client_ready)
+		if (READ_ONCE(qp->client_ready))
 			ntb_transport_schedule_qp_link(qp, 0);
 	}
 
@@ -2401,7 +2407,10 @@ void ntb_transport_link_up(struct ntb_transport_qp *qp)
 	if (!qp)
 		return;
 
-	qp->client_ready = true;
+	WRITE_ONCE(qp->client_ready, true);
+
+	/* Pairs with the barrier in ntb_transport_link_work(). */
+	smp_mb();
 
 	ntb_transport_schedule_qp_link(qp, 0);
 }
