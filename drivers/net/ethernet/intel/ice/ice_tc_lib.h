@@ -139,11 +139,32 @@ enum ice_eswitch_fltr_direction {
 	ICE_ESWITCH_FLTR_EGRESS,
 };
 
+/**
+ * struct ice_tc_sw_fltr - filter presented to the driver but not offloaded
+ * @node: node in the pf->tc_sw_fltr_list
+ * @cookie: unique filter identifier from the offload request
+ * @filter_dev: device the filter was requested on
+ * @prio: TC priority, lower value is evaluated first
+ * @direction: block direction the filter was requested for
+ * @is_drop: the filter carries a drop action
+ */
+struct ice_tc_sw_fltr {
+	struct hlist_node node;
+	unsigned long cookie;
+	struct net_device *filter_dev;
+	u32 prio;
+	enum ice_eswitch_fltr_direction direction;
+	bool is_drop;
+};
+
 struct ice_tc_flower_fltr {
 	struct hlist_node tc_flower_node;
 
 	/* cookie becomes filter_rule_id if rule is added successfully */
 	unsigned long cookie;
+
+	struct net_device *filter_dev;
+	u32 prio;
 
 	/* add_adv_rule returns information like recipe ID, rule_id. Store
 	 * those values since they are needed to remove advanced rule
