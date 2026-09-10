@@ -37,7 +37,6 @@
 enum ppc_adma_init_code {
 	PPC_ADMA_INIT_OK = 0,
 	PPC_ADMA_INIT_MEMRES,
-	PPC_ADMA_INIT_MEMREG,
 	PPC_ADMA_INIT_ALLOC,
 	PPC_ADMA_INIT_COHERENT,
 	PPC_ADMA_INIT_CHANNEL,
@@ -49,7 +48,6 @@ enum ppc_adma_init_code {
 static char *ppc_adma_errors[] = {
 	[PPC_ADMA_INIT_OK] = "ok",
 	[PPC_ADMA_INIT_MEMRES] = "failed to get memory resource",
-	[PPC_ADMA_INIT_MEMREG] = "failed to request memory region",
 	[PPC_ADMA_INIT_ALLOC] = "failed to allocate memory for adev "
 				"structure",
 	[PPC_ADMA_INIT_COHERENT] = "failed to allocate coherent memory for "
@@ -4003,7 +4001,6 @@ static void ppc440spe_adma_release_irqs(struct ppc440spe_adma_device *adev,
 static int ppc440spe_adma_probe(struct platform_device *ofdev)
 {
 	struct device_node *np = ofdev->dev.of_node;
-	struct resource res;
 	struct ppc440spe_adma_device *adev;
 	struct ppc440spe_adma_chan *chan;
 	struct ppc_dma_chan_ref *ref, *_ref;
@@ -4046,28 +4043,12 @@ static int ppc440spe_adma_probe(struct platform_device *ofdev)
 		pool_size <<= 2;
 	}
 
-	if (of_address_to_resource(np, 0, &res)) {
-		dev_err(&ofdev->dev, "failed to get memory resource\n");
-		initcode = PPC_ADMA_INIT_MEMRES;
-		ret = -ENODEV;
-		goto out;
-	}
-
-	if (!request_mem_region(res.start, resource_size(&res),
-				dev_driver_string(&ofdev->dev))) {
-		dev_err(&ofdev->dev, "failed to request memory region %pR\n",
-			&res);
-		initcode = PPC_ADMA_INIT_MEMREG;
-		ret = -EBUSY;
-		goto out;
-	}
-
 	/* create a device */
 	adev = kzalloc_obj(*adev);
 	if (!adev) {
 		initcode = PPC_ADMA_INIT_ALLOC;
 		ret = -ENOMEM;
-		goto err_adev_alloc;
+		goto out;
 	}
 
 	adev->id = id;
@@ -4087,10 +4068,10 @@ static int ppc440spe_adma_probe(struct platform_device *ofdev)
 	dev_dbg(&ofdev->dev, "allocated descriptor pool virt 0x%p phys 0x%llx\n",
 		adev->dma_desc_pool_virt, (u64)adev->dma_desc_pool);
 
-	regs = ioremap(res.start, resource_size(&res));
-	if (!regs) {
-		dev_err(&ofdev->dev, "failed to ioremap regs!\n");
-		ret = -ENOMEM;
+	regs = devm_platform_ioremap_resource(ofdev, 0);
+	if (IS_ERR(regs)) {
+		ret = PTR_ERR(regs);
+		initcode = PPC_ADMA_INIT_MEMRES;
 		goto err_regs_alloc;
 	}
 
@@ -4127,7 +4108,7 @@ static int ppc440spe_adma_probe(struct platform_device *ofdev)
 	if (!chan) {
 		initcode = PPC_ADMA_INIT_CHANNEL;
 		ret = -ENOMEM;
-		goto err_chan_alloc;
+		goto err_regs_alloc;
 	}
 
 	spin_lock_init(&chan->lock);
@@ -4206,19 +4187,12 @@ err_ref_alloc:
 	}
 err_page_alloc:
 	kfree(chan);
-err_chan_alloc:
-	if (adev->id == PPC440SPE_XOR_ID)
-		iounmap(adev->xor_reg);
-	else
-		iounmap(adev->dma_reg);
 err_regs_alloc:
 	dma_free_coherent(adev->dev, adev->pool_size,
 			  adev->dma_desc_pool_virt,
 			  adev->dma_desc_pool);
 err_dma_alloc:
 	kfree(adev);
-err_adev_alloc:
-	release_mem_region(res.start, resource_size(&res));
 out:
 	if (id < PPC440SPE_ADMA_ENGINES_NUM)
 		ppc440spe_adma_devices[id] = initcode;
@@ -4232,8 +4206,6 @@ out:
 static void ppc440spe_adma_remove(struct platform_device *ofdev)
 {
 	struct ppc440spe_adma_device *adev = platform_get_drvdata(ofdev);
-	struct device_node *np = ofdev->dev.of_node;
-	struct resource res;
 	struct dma_chan *chan, *_chan;
 	struct ppc_dma_chan_ref *ref, *_ref;
 	struct ppc440spe_adma_chan *ppc440spe_chan;
@@ -4270,12 +4242,6 @@ static void ppc440spe_adma_remove(struct platform_device *ofdev)
 
 	dma_free_coherent(adev->dev, adev->pool_size,
 			  adev->dma_desc_pool_virt, adev->dma_desc_pool);
-	if (adev->id == PPC440SPE_XOR_ID)
-		iounmap(adev->xor_reg);
-	else
-		iounmap(adev->dma_reg);
-	of_address_to_resource(np, 0, &res);
-	release_mem_region(res.start, resource_size(&res));
 	kfree(adev);
 }
 
