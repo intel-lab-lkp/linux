@@ -607,9 +607,9 @@ static void oxp_set_defaults_bmap_2(struct oxp_bmap_page_2 *bmap)
 	bmap->btn_dright.button_idx = BUTTON_DRIGHT;
 	bmap->btn_dright.mapping_idx = 15;
 	bmap->btn_m1.button_idx = BUTTON_M1;
-	bmap->btn_m1.mapping_idx = 48; /* KEY_F15 */
+	bmap->btn_m1.mapping_idx = 47; /* KEY_F15 */
 	bmap->btn_m2.button_idx = BUTTON_M2;
-	bmap->btn_m2.mapping_idx = 49; /* KEY_F16 */
+	bmap->btn_m2.mapping_idx = 48; /* KEY_F16 */
 }
 
 static void oxp_page_fill_data(char *buf, const struct oxp_button_idx *buttons,
