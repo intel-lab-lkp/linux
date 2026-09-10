@@ -1781,7 +1781,7 @@ static int spinand_detect(struct spinand_device *spinand)
 static int spinand_configure_chip(struct spinand_device *spinand)
 {
 	bool odtr = false, quad_enable = false;
-	int ret;
+	int ret = 0;
 
 	if (spinand->odtr_op_templates.read_cache &&
 	    spinand->odtr_op_templates.write_cache &&
@@ -1808,16 +1808,21 @@ static int spinand_configure_chip(struct spinand_device *spinand)
 	}
 
 try_ssdr:
+	/*
+	 * Only touch the QE bit on chips that actually have one. On other
+	 * chips bit 0 of the configuration register may have a different
+	 * meaning (e.g. H-DIS on the Winbond W25N02KV).
+	 */
 	if (spinand->flags & SPINAND_HAS_QE_BIT) {
 		if (spinand->ssdr_op_templates.read_cache->data.buswidth == 4 ||
 		    spinand->ssdr_op_templates.write_cache->data.buswidth == 4 ||
 		    spinand->ssdr_op_templates.update_cache->data.buswidth == 4)
 			quad_enable = true;
-	}
 
-	ret = spinand_init_quad_enable(spinand, quad_enable);
-	if (ret)
-		return ret;
+		ret = spinand_init_quad_enable(spinand, quad_enable);
+		if (ret)
+			return ret;
+	}
 
 	if (spinand->configure_chip) {
 		ret = spinand->configure_chip(spinand, SSDR);
