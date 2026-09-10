@@ -23,6 +23,7 @@
 #include <linux/of.h>
 #include <linux/regmap.h>
 #include <linux/string.h>
+#include <linux/watchdog.h>
 
 #include <dt-bindings/rtc/pcf85363-tsr.h>
 
@@ -147,6 +148,22 @@
 #define PCF85363_SEC_MASK	0x7F
 #define PCF85363_TS_READ_RETRIES	3
 
+#define WD_TIMEOUT_SHIFT        2
+#define WD_CLKSEL_MASK  GENMASK(1, 0)
+#define WD_CLKSEL_0_25HZ        0x00
+#define WD_CLKSEL_1HZ   0x01
+#define WD_CLKSEL_4HZ   0x02
+#define WD_CLKSEL_16HZ  0x03
+#define WD_MODE_REPEAT	BIT(7)
+
+#define WD_DEFAULT_TIMEOUT  10
+#define WD_TIMEOUT_MIN	1
+#define WD_COUNT_MAX	0x1F
+/* Longest guaranteed timeout at the 0.25 Hz step (WDR=31, one count margin). */
+#define WD_TIMEOUT_MAX	120
+/* Longest timeout served by the 1 Hz step (WDR=31, one count margin). */
+#define WD_TIMEOUT_1HZ_MAX	30
+
 /* Cached timestamp; the flag is cleared once the value is copied here. */
 struct pcf85363_ts {
 	bool valid;
@@ -167,6 +184,13 @@ struct pcf85363 {
 struct pcf85x63_config {
 	struct regmap_config regmap;
 	unsigned int num_nvram;
+};
+
+struct pcf85363_watchdog {
+	struct watchdog_device wdd;
+	struct pcf85363 *pcf85363;
+	u8 timeout_val;
+	u8 clock_sel;
 };
 
 /*
@@ -483,12 +507,13 @@ static irqreturn_t pcf85363_rtc_handle_irq(int irq, void *dev_id)
 		return IRQ_NONE;
 
 	if (flags) {
-		dev_dbg(&pcf85363->rtc->dev, "IRQ flags: 0x%02x%s%s%s%s%s\n",
+		dev_dbg(&pcf85363->rtc->dev, "IRQ flags: 0x%02x%s%s%s%s%s%s\n",
 			flags, (flags & FLAGS_A1F) ? " [A1F]" : "",
 			(flags & FLAGS_TSR1F) ? " [TSR1F]" : "",
 			(flags & FLAGS_TSR2F) ? " [TSR2F]" : "",
 			(flags & FLAGS_TSR3F) ? " [TSR3F]" : "",
-			(flags & FLAGS_BSF) ? " [BSF]" : "");
+			(flags & FLAGS_BSF) ? " [BSF]" : "",
+			(flags & FLAGS_WDF) ? " [WDF]" : "");
 	}
 
 	if (flags & FLAGS_A1F) {
@@ -509,6 +534,15 @@ static irqreturn_t pcf85363_rtc_handle_irq(int irq, void *dev_id)
 		 * These are our interrupt sources even if servicing them hit
 		 * an I/O error, so acknowledge the interrupt either way.
 		 */
+		handled = true;
+	}
+
+	if (flags & FLAGS_WDF) {
+		dev_warn_ratelimited(&pcf85363->rtc->dev,
+				     "watchdog timer expired\n");
+		if (pcf85363_clear_flags(pcf85363, FLAGS_WDF))
+			dev_err(&pcf85363->rtc->dev,
+				"failed to clear watchdog flag\n");
 		handled = true;
 	}
 
@@ -690,6 +724,153 @@ static const struct pcf85x63_config pcf_85363_config = {
 	},
 	.num_nvram = 2
 };
+
+/*
+ * Program the watchdog counter (WDR) so the reported timeout is never
+ * shorter than requested: the first period after a reload lasts between
+ * WDR and WDR-1 counts, so add one count of margin. Timeouts up to 30 s
+ * use the 1 Hz step (1 s/count); longer ones the 0.25 Hz step (4 s/count).
+ */
+static void pcf85363_wdt_select_clock(struct pcf85363_watchdog *wd)
+{
+	unsigned int timeout = wd->wdd.timeout;
+
+	if (timeout <= WD_TIMEOUT_1HZ_MAX) {
+		wd->clock_sel = WD_CLKSEL_1HZ;
+		wd->timeout_val = timeout + 1;
+		wd->wdd.timeout = timeout;
+	} else {
+		wd->clock_sel = WD_CLKSEL_0_25HZ;
+		wd->timeout_val = DIV_ROUND_UP(timeout, 4) + 1;
+		wd->wdd.timeout = DIV_ROUND_UP(timeout, 4) * 4;
+	}
+}
+
+/* Repeat mode restarts the watchdog automatically after each period. */
+static int pcf85363_wdt_reload(struct pcf85363_watchdog *wd)
+{
+	u8 val;
+
+	val = WD_MODE_REPEAT |
+	      ((wd->timeout_val & WD_COUNT_MAX) << WD_TIMEOUT_SHIFT) |
+	      (wd->clock_sel & WD_CLKSEL_MASK);
+
+	return regmap_write(wd->pcf85363->regmap, CTRL_WDOG, val);
+}
+
+static int pcf85363_wdt_start(struct watchdog_device *wdd)
+{
+	struct pcf85363_watchdog *wd = watchdog_get_drvdata(wdd);
+	int ret;
+
+	/* Route WDF to INTA; alarm-only, the chip has no reset output. */
+	ret = regmap_update_bits(wd->pcf85363->regmap, CTRL_INTA_EN,
+				 INT_WDIE, INT_WDIE);
+	if (ret)
+		return ret;
+
+	ret = pcf85363_wdt_reload(wd);
+	if (ret)
+		regmap_update_bits(wd->pcf85363->regmap, CTRL_INTA_EN,
+				   INT_WDIE, 0);
+
+	return ret;
+}
+
+static int pcf85363_wdt_stop(struct watchdog_device *wdd)
+{
+	struct pcf85363_watchdog *wd = watchdog_get_drvdata(wdd);
+	int ret;
+
+	/* Halt the counter first so a failed disable cannot leave it armed. */
+	ret = regmap_write(wd->pcf85363->regmap, CTRL_WDOG, 0);
+	if (ret)
+		return ret;
+
+	return regmap_update_bits(wd->pcf85363->regmap, CTRL_INTA_EN,
+				  INT_WDIE, 0);
+}
+
+static int pcf85363_wdt_ping(struct watchdog_device *wdd)
+{
+	struct pcf85363_watchdog *wd = watchdog_get_drvdata(wdd);
+	int ret;
+
+	ret = pcf85363_clear_flags(wd->pcf85363, FLAGS_WDF);
+	if (ret)
+		return ret;
+
+	return pcf85363_wdt_reload(wd);
+}
+
+static int pcf85363_wdt_set_timeout(struct watchdog_device *wdd,
+				    unsigned int timeout)
+{
+	struct pcf85363_watchdog *wd = watchdog_get_drvdata(wdd);
+
+	wdd->timeout = timeout;
+
+	pcf85363_wdt_select_clock(wd);
+
+	/*
+	 * Programming the counter with a non-zero value starts it, so only
+	 * reprogram when the watchdog is already running; the core keeps the
+	 * new timeout for the next start otherwise.
+	 */
+	if (!watchdog_active(wdd))
+		return 0;
+
+	return pcf85363_wdt_reload(wd);
+}
+
+static const struct watchdog_info pcf85363_wdt_info = {
+	.identity = "PCF85363 Watchdog",
+	.options = WDIOF_KEEPALIVEPING | WDIOF_SETTIMEOUT | WDIOF_ALARMONLY,
+};
+
+static const struct watchdog_ops pcf85363_wdt_ops = {
+	.owner = THIS_MODULE,
+	.start = pcf85363_wdt_start,
+	.stop = pcf85363_wdt_stop,
+	.ping = pcf85363_wdt_ping,
+	.set_timeout = pcf85363_wdt_set_timeout,
+};
+
+static int pcf85363_watchdog_init(struct device *dev, struct pcf85363 *pcf85363)
+{
+	struct pcf85363_watchdog *wd;
+	int ret;
+
+	if (!IS_ENABLED(CONFIG_WATCHDOG))
+		return 0;
+
+	wd = devm_kzalloc(dev, sizeof(*wd), GFP_KERNEL);
+	if (!wd)
+		return -ENOMEM;
+
+	wd->pcf85363 = pcf85363;
+
+	wd->wdd.info = &pcf85363_wdt_info;
+	wd->wdd.ops = &pcf85363_wdt_ops;
+	wd->wdd.min_timeout = WD_TIMEOUT_MIN;
+	wd->wdd.max_timeout = WD_TIMEOUT_MAX;
+	wd->wdd.timeout = WD_DEFAULT_TIMEOUT;
+	wd->wdd.parent = dev;
+	wd->wdd.status = WATCHDOG_NOWAYOUT_INIT_STATUS;
+
+	/* Fixed default timeout; userspace can change it via WDIOC_SETTIMEOUT. */
+	pcf85363_wdt_select_clock(wd);
+
+	ret = pcf85363_clear_flags(pcf85363, FLAGS_WDF);
+	if (ret) {
+		dev_err(dev, "failed to clear WDF:%d\n", ret);
+		return ret;
+	}
+
+	watchdog_set_drvdata(&wd->wdd, wd);
+
+	return devm_watchdog_register_device(dev, &wd->wdd);
+}
 
 /* Six BCD bytes; bit 7 of the seconds byte is reserved, not time data. */
 static ssize_t pcf85363_format_timestamp(const u8 *regs, char *buf)
@@ -943,6 +1124,17 @@ static int pcf85363_probe(struct i2c_client *client)
 		/* Without an interrupt line the alarm cannot be delivered. */
 		clear_bit(RTC_FEATURE_ALARM, pcf85363->rtc->features);
 	}
+
+	/*
+	 * Watchdog expiry is only signalled via INTA (no reset output), so it
+	 * needs an interrupt line to be usable.
+	 */
+	if (irq_a > 0) {
+		ret = pcf85363_watchdog_init(dev, pcf85363);
+		if (ret)
+			return dev_err_probe(dev, ret, "Watchdog init failed\n");
+	}
+
 	if (irq_a > 0 || wakeup_source)
 		device_init_wakeup(dev, true);
 
