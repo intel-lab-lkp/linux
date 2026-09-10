@@ -51,29 +51,39 @@ int mtk_afe_add_sub_dai_control(struct snd_soc_component *component)
 	struct snd_soc_dapm_context *dapm = snd_soc_component_to_dapm(component);
 	struct mtk_base_afe *afe = snd_soc_component_get_drvdata(component);
 	struct mtk_base_afe_dai *dai;
+	int ret;
 
 	list_for_each_entry(dai, &afe->sub_dais, list) {
-		if (dai->controls)
-			snd_soc_add_component_controls(component,
-						       dai->controls,
-						       dai->num_controls);
+		if (dai->controls) {
+			ret = snd_soc_add_component_controls(component,
+							     dai->controls,
+							     dai->num_controls);
+			if (ret)
+				return ret;
+		}
 
-		if (dai->dapm_widgets)
-			snd_soc_dapm_new_controls(dapm,
-						  dai->dapm_widgets,
-						  dai->num_dapm_widgets);
+		if (dai->dapm_widgets) {
+			ret = snd_soc_dapm_new_controls(dapm,
+							dai->dapm_widgets,
+							dai->num_dapm_widgets);
+			if (ret)
+				return ret;
+		}
 	}
 	/* add routes after all widgets are added */
 	list_for_each_entry(dai, &afe->sub_dais, list) {
-		if (dai->dapm_routes)
-			snd_soc_dapm_add_routes(dapm,
-						dai->dapm_routes,
-						dai->num_dapm_routes);
+		if (dai->dapm_routes) {
+			ret = snd_soc_dapm_add_routes(dapm,
+						      dai->dapm_routes,
+						      dai->num_dapm_routes);
+			if (ret)
+				return ret;
+		}
 	}
 
-	snd_soc_dapm_new_widgets(component->card);
+	ret = snd_soc_dapm_new_widgets(component->card);
 
-	return 0;
+	return ret;
 
 }
 EXPORT_SYMBOL_GPL(mtk_afe_add_sub_dai_control);
