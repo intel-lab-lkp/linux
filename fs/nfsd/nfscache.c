@@ -48,34 +48,35 @@ static void	nfsd_reply_ack(void *data, const svc_ack_cookie_t *cookie,
 			       bool delivered);
 
 /*
- * Put a cap on the size of the DRC based on the amount of available
- * low memory in the machine.
+ * Set the size of the DRC based on the amount of available low
+ * memory in the machine.  The sizing formula scales with the
+ * square root of available pages, so growth is sub-linear:
  *
  *  64MB:    8192
- * 128MB:   11585
+ * 128MB:   11584
  * 256MB:   16384
- * 512MB:   23170
+ * 512MB:   23168
  *   1GB:   32768
- *   2GB:   46340
+ *   2GB:   46336
  *   4GB:   65536
- *   8GB:   92681
+ *   8GB:   92672
  *  16GB:  131072
+ *  32GB:  185344
+ *  64GB:  262144
+ * 128GB:  370688
+ * 256GB:  524288
+ * 512GB:  741440
+ *   1TB: 1048576
  *
- * ...with a hard cap of 256k entries. In the worst case, each entry will be
- * ~1k, so the above numbers should give a rough max of the amount of memory
- * used in k.
- *
- * XXX: these limits are per-container, so memory used will increase
- * linearly with number of containers.  Maybe that's OK.
+ * These limits are per-net-namespace, but the per-namespace
+ * shrinker reclaims entries under memory pressure.
  */
 static unsigned int
 nfsd_cache_size_limit(void)
 {
-	unsigned int limit;
 	unsigned long low_pages = totalram_pages() - totalhigh_pages();
 
-	limit = (16 * int_sqrt(low_pages)) << (PAGE_SHIFT-10);
-	return min_t(unsigned int, limit, 256*1024);
+	return (16 * int_sqrt(low_pages)) << (PAGE_SHIFT - 10);
 }
 
 /*
