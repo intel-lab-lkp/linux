@@ -115,6 +115,7 @@
 #define OSC_CAP_SEL	GENMASK(1, 0)
 #define OSC_CAP_6000	0x01
 #define OSC_CAP_12500	0x02
+#define OSC_OFFM	BIT(6)
 
 #define STOP_EN_STOP	BIT(0)
 
@@ -130,6 +131,14 @@
 #define TSR1_SHIFT      0
 #define TSR2_SHIFT      2
 #define TSR3_SHIFT      6
+
+#define OFFSET_SIGN_BIT 7
+#define OFFSET_MASK     0xFF
+/* Offset step in ppb; fast mode (OFFM=1) is scaled x10 for integer maths. */
+#define OFFSET_STEP_PPB		2170
+#define OFFSET_STEP_PPB_FAST_X10	20345
+#define OFFSET_PPB_MAX		(127 * OFFSET_STEP_PPB)
+#define OFFSET_PPB_MIN		(-128 * OFFSET_STEP_PPB)
 
 #define PCF85363_NUM_TS		3
 /* Bytes latched per timestamp register (sec, min, hour, day, mon, year). */
@@ -515,6 +524,62 @@ static irqreturn_t pcf85363_rtc_handle_irq(int irq, void *dev_id)
 	return handled ? IRQ_HANDLED : IRQ_NONE;
 }
 
+/*
+ * CTRL_OFFSET is a signed step count; the step is 2170 ppb (normal) or
+ * 2034.5 ppb (fast/OFFM, scaled x10 to keep the arithmetic integer).
+ */
+static int pcf85363_read_offset(struct device *dev, long *offset)
+{
+	struct pcf85363 *pcf85363 = dev_get_drvdata(dev);
+	unsigned int val, osc;
+	long steps;
+	int ret;
+
+	ret = regmap_read(pcf85363->regmap, CTRL_OFFSET, &val);
+	if (ret)
+		return ret;
+
+	ret = regmap_read(pcf85363->regmap, CTRL_OSCILLATOR, &osc);
+	if (ret)
+		return ret;
+
+	steps = sign_extend32(val, OFFSET_SIGN_BIT);
+
+	if (osc & OSC_OFFM)
+		*offset = steps * OFFSET_STEP_PPB_FAST_X10 / 10;
+	else
+		*offset = steps * OFFSET_STEP_PPB;
+
+	return 0;
+}
+
+static int pcf85363_set_offset(struct device *dev, long offset)
+{
+	struct pcf85363 *pcf85363 = dev_get_drvdata(dev);
+	unsigned int osc;
+	long steps;
+	int ret;
+
+	ret = regmap_read(pcf85363->regmap, CTRL_OSCILLATOR, &osc);
+	if (ret)
+		return ret;
+
+	/* Range-check before the x10 scaling so the multiply cannot overflow. */
+	if (offset > OFFSET_PPB_MAX || offset < OFFSET_PPB_MIN)
+		return -ERANGE;
+
+	if (osc & OSC_OFFM)
+		steps = DIV_ROUND_CLOSEST(offset * 10, OFFSET_STEP_PPB_FAST_X10);
+	else
+		steps = DIV_ROUND_CLOSEST(offset, OFFSET_STEP_PPB);
+
+	if (steps < -128 || steps > 127)
+		return -ERANGE;
+
+	return regmap_write(pcf85363->regmap, CTRL_OFFSET,
+			    steps & OFFSET_MASK);
+}
+
 static int pcf85363_rtc_ioctl(struct device *dev,
 			      unsigned int cmd, unsigned long arg)
 {
@@ -562,6 +627,8 @@ static const struct rtc_class_ops rtc_ops = {
 	.read_alarm	= pcf85363_rtc_read_alarm,
 	.set_alarm	= pcf85363_rtc_set_alarm,
 	.alarm_irq_enable = pcf85363_rtc_alarm_irq_enable,
+	.read_offset = pcf85363_read_offset,
+	.set_offset = pcf85363_set_offset,
 };
 
 static int pcf85363_nvram_read(void *priv, unsigned int offset, void *val,
