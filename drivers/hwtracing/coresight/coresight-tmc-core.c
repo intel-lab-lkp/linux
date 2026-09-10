@@ -980,8 +980,6 @@ static void tmc_platform_remove(struct platform_device *pdev)
 	__tmc_remove(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
 }
-
-#ifdef CONFIG_PM
 static int tmc_runtime_suspend(struct device *dev)
 {
 	struct tmc_drvdata *drvdata = dev_get_drvdata(dev);
@@ -1007,11 +1005,9 @@ static int tmc_runtime_resume(struct device *dev)
 
 	return ret;
 }
-#endif
 
-static const struct dev_pm_ops tmc_dev_pm_ops = {
-	SET_RUNTIME_PM_OPS(tmc_runtime_suspend, tmc_runtime_resume, NULL)
-};
+static DEFINE_RUNTIME_DEV_PM_OPS(tmc_dev_pm_ops,
+				 tmc_runtime_suspend, tmc_runtime_resume, NULL);
 
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id tmc_acpi_ids[] = {
@@ -1029,14 +1025,14 @@ static struct platform_driver tmc_platform_driver = {
 		.name			= "coresight-tmc-platform",
 		.acpi_match_table	= ACPI_PTR(tmc_acpi_ids),
 		.suppress_bind_attrs	= true,
-		.pm			= &tmc_dev_pm_ops,
+		.pm			= pm_ptr(&tmc_dev_pm_ops),
 	},
 };
 
 static struct amba_driver tmc_driver = {
 	.drv = {
 		.name   = "coresight-tmc",
-		.pm	= &tmc_dev_pm_ops,
+		.pm	= pm_ptr(&tmc_dev_pm_ops),
 		.suppress_bind_attrs = true,
 	},
 	.probe		= tmc_probe,

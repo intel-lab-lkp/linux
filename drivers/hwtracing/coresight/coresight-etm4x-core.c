@@ -2460,7 +2460,6 @@ static const struct amba_id etm4_ids[] = {
 
 MODULE_DEVICE_TABLE(amba, etm4_ids);
 
-#ifdef CONFIG_PM
 static int etm4_runtime_suspend(struct device *dev)
 {
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev);
@@ -2486,11 +2485,9 @@ static int etm4_runtime_resume(struct device *dev)
 
 	return ret;
 }
-#endif
 
-static const struct dev_pm_ops etm4_dev_pm_ops = {
-	SET_RUNTIME_PM_OPS(etm4_runtime_suspend, etm4_runtime_resume, NULL)
-};
+static DEFINE_RUNTIME_DEV_PM_OPS(etm4_dev_pm_ops,
+				 etm4_runtime_suspend, etm4_runtime_resume, NULL);
 
 static const struct of_device_id etm4_sysreg_match[] = {
 	{ .compatible	= "arm,coresight-etm4x-sysreg" },
@@ -2514,14 +2511,14 @@ static struct platform_driver etm4_platform_driver = {
 		.of_match_table		= etm4_sysreg_match,
 		.acpi_match_table	= ACPI_PTR(etm4x_acpi_ids),
 		.suppress_bind_attrs	= true,
-		.pm			= &etm4_dev_pm_ops,
+		.pm			= pm_ptr(&etm4_dev_pm_ops),
 	},
 };
 
 static struct amba_driver etm4x_amba_driver = {
 	.drv = {
 		.name   = "coresight-etm4x",
-		.pm	= &etm4_dev_pm_ops,
+		.pm	= pm_ptr(&etm4_dev_pm_ops),
 		.suppress_bind_attrs = true,
 	},
 	.probe		= etm4_probe_amba,

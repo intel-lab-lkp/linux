@@ -14,6 +14,7 @@
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
+#include <linux/pm_runtime.h>
 #include <linux/slab.h>
 
 #include "coresight-catu.h"
@@ -640,7 +641,6 @@ static void catu_platform_remove(struct platform_device *pdev)
 	pm_runtime_disable(&pdev->dev);
 }
 
-#ifdef CONFIG_PM
 static int catu_runtime_suspend(struct device *dev)
 {
 	struct catu_drvdata *drvdata = dev_get_drvdata(dev);
@@ -666,11 +666,9 @@ static int catu_runtime_resume(struct device *dev)
 
 	return ret;
 }
-#endif
 
-static const struct dev_pm_ops catu_dev_pm_ops = {
-	SET_RUNTIME_PM_OPS(catu_runtime_suspend, catu_runtime_resume, NULL)
-};
+static DEFINE_RUNTIME_DEV_PM_OPS(catu_dev_pm_ops,
+				 catu_runtime_suspend, catu_runtime_resume, NULL);
 
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id catu_acpi_ids[] = {
@@ -688,14 +686,14 @@ static struct platform_driver catu_platform_driver = {
 		.name			= "coresight-catu-platform",
 		.acpi_match_table	= ACPI_PTR(catu_acpi_ids),
 		.suppress_bind_attrs	= true,
-		.pm			= &catu_dev_pm_ops,
+		.pm			= pm_ptr(&catu_dev_pm_ops),
 	},
 };
 
 static struct amba_driver catu_driver = {
 	.drv = {
 		.name			= "coresight-catu",
-		.pm			= &catu_dev_pm_ops,
+		.pm			= pm_ptr(&catu_dev_pm_ops),
 		.suppress_bind_attrs	= true,
 	},
 	.probe				= catu_probe,
