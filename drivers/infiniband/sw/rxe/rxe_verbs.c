@@ -1460,6 +1460,7 @@ static const struct ib_device_ops rxe_dev_ops = {
 	.driver_id = RDMA_DRIVER_RXE,
 	.uverbs_abi_ver = RXE_UVERBS_ABI_VERSION,
 
+	.add_gid = rxe_add_gid,
 	.alloc_hw_port_stats = rxe_ib_alloc_hw_port_stats,
 	.alloc_mr = rxe_alloc_mr,
 	.alloc_mw = rxe_alloc_mw,
@@ -1475,6 +1476,7 @@ static const struct ib_device_ops rxe_dev_ops = {
 	.dealloc_mw = rxe_dealloc_mw,
 	.dealloc_pd = rxe_dealloc_pd,
 	.dealloc_ucontext = rxe_dealloc_ucontext,
+	.del_gid = rxe_del_gid,
 	.dereg_mr = rxe_dereg_mr,
 	.destroy_ah = rxe_destroy_ah,
 	.destroy_cq = rxe_destroy_cq,

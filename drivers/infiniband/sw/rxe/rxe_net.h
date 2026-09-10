@@ -12,10 +12,11 @@
 #include <linux/module.h>
 
 int rxe_net_add(const char *ibdev_name, struct net_device *ndev);
-void rxe_net_del(struct ib_device *dev);
+
+int rxe_add_gid(const struct ib_gid_attr *attr, void **context);
+int rxe_del_gid(const struct ib_gid_attr *attr, void **context);
 
 int rxe_register_notifier(void);
-int rxe_net_init(struct net_device *ndev);
 void rxe_net_exit(void);
 
 #endif /* RXE_NET_H */
