@@ -198,6 +198,8 @@ struct oxp_bmap_page_2 {
 	struct oxp_button_idx btn_m2;
 } __packed;
 
+struct oxp_rgb_led;
+
 /* Hybrid devices expose RGB and controller configuration on separate HIDs. */
 struct oxp_hid_cfg {
 	/* General HID state */
@@ -218,20 +220,13 @@ struct oxp_hid_cfg {
 	u8 bmap_format;
 
 	/* RGB state */
-	struct delayed_work oxp_rgb_queue;
-	struct mc_subled subled_info[3];
-	struct led_classdev_mc *led_mc;
-	struct led_classdev_mc cdev;
+	struct oxp_rgb_led *rgb_leds;
 	spinlock_t rgb_reply_lock;
 	struct mutex rgb_mutex; /*serialize complete RGB transactions*/
-	bool rgb_work_initialized;
 	bool rgb_reply_pending;
 	u8 rgb_reply_command;
 	u8 rgb_reply_zone;
-	u8 rgb_brightness;
-	u8 rgb_effect;
-	u8 rgb_speed;
-	u8 rgb_en;
+	u8 rgb_led_count;
 };
 
 enum oxp_gamepad_mode_index {
@@ -336,6 +331,31 @@ struct oxp_gen_2_rgb_report {
 	u8 effect;
 } __packed;
 
+enum oxp_rgb_type {
+	OXP_RGB_FULL,
+};
+
+struct oxp_rgb_full_state {
+	u8 brightness;
+	u8 enabled;
+	u8 effect;
+	u8 speed;
+};
+
+struct oxp_rgb_led {
+	struct mc_subled subled_info[3];
+	struct led_classdev_mc mc_cdev;
+	struct delayed_work work;
+	struct oxp_hid_cfg *cfg;
+	void *state;
+	u8 type;
+};
+
+struct oxp_rgb_led_desc {
+	const char *name;
+	u8 type;
+};
+
 struct oxp_attr {
 	u8 index;
 };
@@ -352,29 +372,55 @@ static u16 get_usage_page(struct hid_device *hdev)
 	return hdev->collection[0].usage >> 16;
 }
 
+static struct oxp_rgb_led *oxp_rgb_led_by_type(struct oxp_hid_cfg *cfg, u8 type)
+{
+	int i;
+
+	for (i = 0; i < cfg->rgb_led_count; i++)
+		if (cfg->rgb_leds[i].type == type)
+			return &cfg->rgb_leds[i];
+
+	return NULL;
+}
+
+static struct oxp_rgb_full_state *oxp_rgb_full_state(struct oxp_rgb_led *led)
+{
+	if (!led)
+		return NULL;
+
+	switch (led->type) {
+	case OXP_RGB_FULL:
+		return led->state;
+	}
+
+	return NULL;
+}
+
 static int oxp_hid_raw_event_gen_1(struct hid_device *hdev,
 				   struct hid_report *report, u8 *data,
 				   int size)
 {
 	struct oxp_hid_cfg *cfg = hid_get_drvdata(hdev);
-	struct led_classdev_mc *led_mc = cfg->led_mc;
+	struct oxp_rgb_led *led = oxp_rgb_led_by_type(cfg, OXP_RGB_FULL);
+	struct oxp_rgb_full_state *state = oxp_rgb_full_state(led);
 	struct oxp_gen_1_rgb_report *rgb_rep;
+	struct led_classdev_mc *led_mc;
 
-	if (size < sizeof(*rgb_rep) || !led_mc)
+	if (size < sizeof(*rgb_rep) || !state)
 		return 0;
 
 	if (data[1] != OXP_FID_GEN1_RGB_REPLY)
 		return 0;
 
+	led_mc = &led->mc_cdev;
 	rgb_rep = (struct oxp_gen_1_rgb_report *)data;
 	/* Ensure we save monocolor as the list value */
-	cfg->rgb_effect = rgb_rep->effect == OXP_EFFECT_MONO_TRUE ?
-			     OXP_EFFECT_MONO_LIST :
-			     rgb_rep->effect;
-	cfg->rgb_speed = rgb_rep->speed;
-	cfg->rgb_en = rgb_rep->enabled == 0 ? OXP_FEAT_DISABLED :
-						 OXP_FEAT_ENABLED;
-	cfg->rgb_brightness = rgb_rep->brightness;
+	state->effect = rgb_rep->effect == OXP_EFFECT_MONO_TRUE ?
+			OXP_EFFECT_MONO_LIST : rgb_rep->effect;
+	state->speed = rgb_rep->speed;
+	state->enabled = rgb_rep->enabled == 0 ? OXP_FEAT_DISABLED :
+					       OXP_FEAT_ENABLED;
+	state->brightness = rgb_rep->brightness;
 	led_mc->led_cdev.brightness = rgb_rep->brightness *
 				      led_mc->led_cdev.max_brightness / 4;
 	/* If monocolor had less than 100% brightness on the previous boot,
@@ -441,8 +487,10 @@ static int oxp_hid_raw_event_gen_2(struct hid_device *hdev,
 				   int size)
 {
 	struct oxp_hid_cfg *cfg = hid_get_drvdata(hdev);
-	struct led_classdev_mc *led_mc = cfg->led_mc;
+	struct oxp_rgb_led *led = oxp_rgb_led_by_type(cfg, OXP_RGB_FULL);
+	struct oxp_rgb_full_state *state = oxp_rgb_full_state(led);
 	struct oxp_gen_2_rgb_report *rgb_rep;
+	struct led_classdev_mc *led_mc;
 	bool solicited = false;
 
 	if (size < OXP_STATUS_HEADER_SIZE)
@@ -479,22 +527,22 @@ static int oxp_hid_raw_event_gen_2(struct hid_device *hdev,
 
 	if (data[3] != OXP_GET_PROPERTY)
 		return 0;
-	if (size < sizeof(*rgb_rep) || !led_mc)
+	if (size < sizeof(*rgb_rep) || !state)
 		return 0;
 
+	led_mc = &led->mc_cdev;
 	rgb_rep = (struct oxp_gen_2_rgb_report *)data;
 	if (rgb_rep->enabled > OXP_FEAT_ENABLED || rgb_rep->speed > 9 ||
 	    rgb_rep->brightness > 4)
 		return 0;
 
 	/* Ensure we save monocolor as the list value */
-	cfg->rgb_effect = rgb_rep->effect == OXP_EFFECT_MONO_TRUE ?
-			     OXP_EFFECT_MONO_LIST :
-			     rgb_rep->effect;
-	cfg->rgb_speed = rgb_rep->speed;
-	cfg->rgb_en = rgb_rep->enabled == 0 ? OXP_FEAT_DISABLED :
-						 OXP_FEAT_ENABLED;
-	cfg->rgb_brightness = rgb_rep->brightness;
+	state->effect = rgb_rep->effect == OXP_EFFECT_MONO_TRUE ?
+			OXP_EFFECT_MONO_LIST : rgb_rep->effect;
+	state->speed = rgb_rep->speed;
+	state->enabled = rgb_rep->enabled == 0 ? OXP_FEAT_DISABLED :
+					       OXP_FEAT_ENABLED;
+	state->brightness = rgb_rep->brightness;
 	led_mc->led_cdev.brightness = rgb_rep->brightness *
 				      led_mc->led_cdev.max_brightness / 4;
 	/* If monocolor had less than 100% brightness on the previous boot,
@@ -1158,9 +1206,11 @@ static const struct attribute_group oxp_cfg_attrs_group = {
 	.attrs = oxp_cfg_attrs,
 };
 
-static int oxp_rgb_status_store(struct oxp_hid_cfg *cfg, u8 enabled,
-				u8 speed, u8 brightness)
+static int oxp_rgb_status_store(struct oxp_rgb_led *led, u8 enabled, u8 speed,
+				u8 brightness)
 {
+	struct oxp_rgb_full_state *state = oxp_rgb_full_state(led);
+	struct oxp_hid_cfg *cfg = led->cfg;
 	u16 up = get_usage_page(cfg->hdev);
 	u8 *data;
 
@@ -1170,12 +1220,12 @@ static int oxp_rgb_status_store(struct oxp_hid_cfg *cfg, u8 enabled,
 	switch (up) {
 	case GEN1_USAGE_PAGE:
 		data = (u8[4]) { OXP_SET_PROPERTY, enabled, speed, brightness };
-		if (cfg->rgb_effect == OXP_EFFECT_MONO_LIST)
+		if (state->effect == OXP_EFFECT_MONO_LIST)
 			data[3] = 0x04;
 		return oxp_gen_1_property_out(cfg, OXP_FID_GEN1_RGB_SET, data, 4);
 	case GEN2_USAGE_PAGE:
 		data = (u8[6]) { OXP_SET_PROPERTY, 0x00, 0x02, enabled, speed, brightness };
-		if (cfg->rgb_effect == OXP_EFFECT_MONO_LIST)
+		if (state->effect == OXP_EFFECT_MONO_LIST)
 			data[5] = 0x04;
 		return oxp_gen_2_property_out(cfg, OXP_FID_GEN2_STATUS_EVENT, data, 6);
 	default:
@@ -1183,8 +1233,9 @@ static int oxp_rgb_status_store(struct oxp_hid_cfg *cfg, u8 enabled,
 	}
 }
 
-static ssize_t oxp_rgb_status_show(struct oxp_hid_cfg *cfg)
+static ssize_t oxp_rgb_status_show(struct oxp_rgb_led *led)
 {
+	struct oxp_hid_cfg *cfg = led->cfg;
 	u16 up = get_usage_page(cfg->hdev);
 	u8 *data;
 
@@ -1202,19 +1253,21 @@ static ssize_t oxp_rgb_status_show(struct oxp_hid_cfg *cfg)
 	}
 }
 
-static int oxp_rgb_color_set(struct oxp_hid_cfg *cfg)
+static int oxp_rgb_color_set(struct oxp_rgb_led *led)
 {
-	u8 br = cfg->led_mc->led_cdev.brightness;
+	struct led_classdev_mc *led_mc = &led->mc_cdev;
+	struct oxp_hid_cfg *cfg = led->cfg;
 	u16 up = get_usage_page(cfg->hdev);
+	u8 br = led_mc->led_cdev.brightness;
 	u8 green, red, blue;
 	size_t size;
 	u8 *data;
 	int i;
 
-	led_mc_calc_color_components(cfg->led_mc, br);
-	red = cfg->led_mc->subled_info[0].brightness;
-	green = cfg->led_mc->subled_info[1].brightness;
-	blue = cfg->led_mc->subled_info[2].brightness;
+	led_mc_calc_color_components(led_mc, br);
+	red = led_mc->subled_info[0].brightness;
+	green = led_mc->subled_info[1].brightness;
+	blue = led_mc->subled_info[2].brightness;
 
 	switch (up) {
 	case GEN1_USAGE_PAGE:
@@ -1242,8 +1295,10 @@ static int oxp_rgb_color_set(struct oxp_hid_cfg *cfg)
 	}
 }
 
-static int oxp_rgb_effect_set(struct oxp_hid_cfg *cfg, u8 effect)
+static int oxp_rgb_effect_set(struct oxp_rgb_led *led, u8 effect)
 {
+	struct oxp_rgb_full_state *state = oxp_rgb_full_state(led);
+	struct oxp_hid_cfg *cfg = led->cfg;
 	u16 up = get_usage_page(cfg->hdev);
 	u8 *data;
 	int ret;
@@ -1282,7 +1337,7 @@ static int oxp_rgb_effect_set(struct oxp_hid_cfg *cfg, u8 effect)
 		}
 		break;
 	case OXP_EFFECT_MONO_LIST:
-		ret = oxp_rgb_color_set(cfg);
+		ret = oxp_rgb_color_set(led);
 		break;
 	default:
 		return -EINVAL;
@@ -1291,25 +1346,30 @@ static int oxp_rgb_effect_set(struct oxp_hid_cfg *cfg, u8 effect)
 	if (ret)
 		return ret;
 
-	cfg->rgb_effect = effect;
+	state->effect = effect;
 
 	return 0;
 }
 
-static struct oxp_hid_cfg *oxp_rgb_cfg_from_dev(struct device *dev)
+static struct oxp_rgb_led *oxp_rgb_led_from_dev(struct device *dev)
 {
 	struct led_classdev *led_cdev = dev_get_drvdata(dev);
 	struct led_classdev_mc *mc_cdev = lcdev_to_mccdev(led_cdev);
 
-	return container_of(mc_cdev, struct oxp_hid_cfg, cdev);
+	return container_of(mc_cdev, struct oxp_rgb_led, mc_cdev);
 }
 
 static ssize_t enabled_store(struct device *dev, struct device_attribute *attr,
 			     const char *buf, size_t count)
 {
-	struct oxp_hid_cfg *cfg = oxp_rgb_cfg_from_dev(dev);
+	struct oxp_rgb_led *led = oxp_rgb_led_from_dev(dev);
+	struct oxp_hid_cfg *cfg = led->cfg;
+	struct oxp_rgb_full_state *state = oxp_rgb_full_state(led);
 	int ret;
 	u8 val;
+
+	if (!state)
+		return -ENODEV;
 
 	ret = sysfs_match_string(oxp_feature_en_text, buf);
 	if (ret < 0)
@@ -1318,29 +1378,32 @@ static ssize_t enabled_store(struct device *dev, struct device_attribute *attr,
 
 	guard(mutex)(&cfg->rgb_mutex);
 
-	ret = oxp_rgb_status_store(cfg, val, cfg->rgb_speed,
-				   cfg->rgb_brightness);
+	ret = oxp_rgb_status_store(led, val, state->speed, state->brightness);
 	if (ret)
 		return ret;
 
-	cfg->rgb_en = val;
+	state->enabled = val;
 	return count;
 }
 
 static ssize_t enabled_show(struct device *dev, struct device_attribute *attr,
 			    char *buf)
 {
-	struct oxp_hid_cfg *cfg = oxp_rgb_cfg_from_dev(dev);
+	struct oxp_rgb_led *led = oxp_rgb_led_from_dev(dev);
+	struct oxp_rgb_full_state *state = oxp_rgb_full_state(led);
 	int ret;
 
-	ret = oxp_rgb_status_show(cfg);
+	if (!state)
+		return -ENODEV;
+
+	ret = oxp_rgb_status_show(led);
 	if (ret)
 		return ret;
 
-	if (cfg->rgb_en >= ARRAY_SIZE(oxp_feature_en_text))
+	if (state->enabled >= ARRAY_SIZE(oxp_feature_en_text))
 		return -EINVAL;
 
-	return sysfs_emit(buf, "%s\n", oxp_feature_en_text[cfg->rgb_en]);
+	return sysfs_emit(buf, "%s\n", oxp_feature_en_text[state->enabled]);
 }
 static DEVICE_ATTR_RW(enabled);
 
@@ -1363,10 +1426,15 @@ static DEVICE_ATTR_RO(enabled_index);
 static ssize_t effect_store(struct device *dev, struct device_attribute *attr,
 			    const char *buf, size_t count)
 {
-	struct oxp_hid_cfg *cfg = oxp_rgb_cfg_from_dev(dev);
+	struct oxp_rgb_led *led = oxp_rgb_led_from_dev(dev);
+	struct oxp_hid_cfg *cfg = led->cfg;
+	struct oxp_rgb_full_state *state = oxp_rgb_full_state(led);
 	u8 old_effect;
 	int ret;
 	u8 val;
+
+	if (!state)
+		return -ENODEV;
 
 	ret = sysfs_match_string(oxp_rgb_effect_text, buf);
 	if (ret < 0)
@@ -1375,19 +1443,19 @@ static ssize_t effect_store(struct device *dev, struct device_attribute *attr,
 	val = ret;
 
 	guard(mutex)(&cfg->rgb_mutex);
-	old_effect = cfg->rgb_effect;
-	cfg->rgb_effect = val;
+	old_effect = state->effect;
+	state->effect = val;
 
-	ret = oxp_rgb_status_store(cfg, cfg->rgb_en, cfg->rgb_speed,
-				   cfg->rgb_brightness);
+	ret = oxp_rgb_status_store(led, state->enabled, state->speed,
+				   state->brightness);
 	if (ret) {
-		cfg->rgb_effect = old_effect;
+		state->effect = old_effect;
 		return ret;
 	}
 
-	ret = oxp_rgb_effect_set(cfg, val);
+	ret = oxp_rgb_effect_set(led, val);
 	if (ret) {
-		cfg->rgb_effect = old_effect;
+		state->effect = old_effect;
 		return ret;
 	}
 
@@ -1397,17 +1465,21 @@ static ssize_t effect_store(struct device *dev, struct device_attribute *attr,
 static ssize_t effect_show(struct device *dev, struct device_attribute *attr,
 			   char *buf)
 {
-	struct oxp_hid_cfg *cfg = oxp_rgb_cfg_from_dev(dev);
+	struct oxp_rgb_led *led = oxp_rgb_led_from_dev(dev);
+	struct oxp_rgb_full_state *state = oxp_rgb_full_state(led);
 	int ret;
 
-	ret = oxp_rgb_status_show(cfg);
+	if (!state)
+		return -ENODEV;
+
+	ret = oxp_rgb_status_show(led);
 	if (ret)
 		return ret;
 
-	if (cfg->rgb_effect >= ARRAY_SIZE(oxp_rgb_effect_text))
+	if (state->effect >= ARRAY_SIZE(oxp_rgb_effect_text))
 		return -EINVAL;
 
-	return sysfs_emit(buf, "%s\n", oxp_rgb_effect_text[cfg->rgb_effect]);
+	return sysfs_emit(buf, "%s\n", oxp_rgb_effect_text[state->effect]);
 }
 
 static DEVICE_ATTR_RW(effect);
@@ -1431,9 +1503,14 @@ static DEVICE_ATTR_RO(effect_index);
 static ssize_t speed_store(struct device *dev, struct device_attribute *attr,
 			   const char *buf, size_t count)
 {
-	struct oxp_hid_cfg *cfg = oxp_rgb_cfg_from_dev(dev);
+	struct oxp_rgb_led *led = oxp_rgb_led_from_dev(dev);
+	struct oxp_hid_cfg *cfg = led->cfg;
+	struct oxp_rgb_full_state *state = oxp_rgb_full_state(led);
 	int ret;
 	u8 val;
+
+	if (!state)
+		return -ENODEV;
 
 	ret = kstrtou8(buf, 10, &val);
 	if (ret)
@@ -1444,28 +1521,32 @@ static ssize_t speed_store(struct device *dev, struct device_attribute *attr,
 
 	guard(mutex)(&cfg->rgb_mutex);
 
-	ret = oxp_rgb_status_store(cfg, cfg->rgb_en, val, cfg->rgb_brightness);
+	ret = oxp_rgb_status_store(led, state->enabled, val, state->brightness);
 	if (ret)
 		return ret;
 
-	cfg->rgb_speed = val;
+	state->speed = val;
 	return count;
 }
 
 static ssize_t speed_show(struct device *dev, struct device_attribute *attr,
 			  char *buf)
 {
-	struct oxp_hid_cfg *cfg = oxp_rgb_cfg_from_dev(dev);
+	struct oxp_rgb_led *led = oxp_rgb_led_from_dev(dev);
+	struct oxp_rgb_full_state *state = oxp_rgb_full_state(led);
 	int ret;
 
-	ret = oxp_rgb_status_show(cfg);
+	if (!state)
+		return -ENODEV;
+
+	ret = oxp_rgb_status_show(led);
 	if (ret)
 		return ret;
 
-	if (cfg->rgb_speed > 9)
+	if (state->speed > 9)
 		return -EINVAL;
 
-	return sysfs_emit(buf, "%hhu\n", cfg->rgb_speed);
+	return sysfs_emit(buf, "%hhu\n", state->speed);
 }
 static DEVICE_ATTR_RW(speed);
 
@@ -1476,49 +1557,64 @@ static ssize_t speed_range_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(speed_range);
 
-static void oxp_rgb_queue_fn(struct work_struct *work)
+static void oxp_rgb_full_queue(struct oxp_rgb_led *led,
+			       struct oxp_rgb_full_state *state)
 {
-	struct oxp_hid_cfg *cfg = container_of(to_delayed_work(work),
-					      struct oxp_hid_cfg, oxp_rgb_queue);
-	unsigned int max_brightness = cfg->led_mc->led_cdev.max_brightness;
-	unsigned int brightness = cfg->led_mc->led_cdev.brightness;
+	unsigned int max_brightness = led->mc_cdev.led_cdev.max_brightness;
+	unsigned int brightness = led->mc_cdev.led_cdev.brightness;
+	struct oxp_hid_cfg *cfg = led->cfg;
 	u8 val = 4 * brightness / max_brightness;
 	int ret;
+
+	guard(mutex)(&cfg->rgb_mutex);
+
+	if (state->brightness != val) {
+		ret = oxp_rgb_status_store(led, state->enabled, state->speed, val);
+		if (ret)
+			dev_err(led->mc_cdev.led_cdev.dev,
+				"Error: Failed to write RGB Status: %i\n", ret);
+
+		state->brightness = val;
+	}
+
+	if (state->effect != OXP_EFFECT_MONO_LIST)
+		return;
+
+	ret = oxp_rgb_effect_set(led, state->effect);
+	if (ret)
+		dev_err(led->mc_cdev.led_cdev.dev,
+			"Error: Failed to write RGB color: %i\n", ret);
+}
+
+static void oxp_rgb_queue_fn(struct work_struct *work)
+{
+	struct oxp_rgb_led *led = container_of(to_delayed_work(work),
+					       struct oxp_rgb_led, work);
+	struct oxp_hid_cfg *cfg = led->cfg;
 
 	if (READ_ONCE(cfg->suspended) || READ_ONCE(cfg->removing))
 		return;
 
-	guard(mutex)(&cfg->rgb_mutex);
-
-	if (cfg->rgb_brightness != val) {
-		ret = oxp_rgb_status_store(cfg, cfg->rgb_en, cfg->rgb_speed, val);
-		if (ret)
-			dev_err(cfg->led_mc->led_cdev.dev,
-				"Error: Failed to write RGB Status: %i\n", ret);
-
-		cfg->rgb_brightness = val;
+	switch (led->type) {
+	case OXP_RGB_FULL:
+		oxp_rgb_full_queue(led, oxp_rgb_full_state(led));
+		break;
 	}
-
-	if (cfg->rgb_effect != OXP_EFFECT_MONO_LIST)
-		return;
-
-	ret = oxp_rgb_effect_set(cfg, cfg->rgb_effect);
-	if (ret)
-		dev_err(cfg->led_mc->led_cdev.dev, "Error: Failed to write RGB color: %i\n",
-			ret);
 }
 
 static void oxp_rgb_brightness_set(struct led_classdev *led_cdev,
 				   enum led_brightness brightness)
 {
 	struct led_classdev_mc *mc_cdev = lcdev_to_mccdev(led_cdev);
-	struct oxp_hid_cfg *cfg = container_of(mc_cdev, struct oxp_hid_cfg, cdev);
+	struct oxp_rgb_led *led = container_of(mc_cdev, struct oxp_rgb_led,
+					     mc_cdev);
+	struct oxp_hid_cfg *cfg = led->cfg;
 
 	if (READ_ONCE(cfg->suspended) || READ_ONCE(cfg->removing))
 		return;
 
 	led_cdev->brightness = brightness;
-	mod_delayed_work(system_dfl_wq, &cfg->oxp_rgb_queue, msecs_to_jiffies(50));
+	mod_delayed_work(system_dfl_wq, &led->work, msecs_to_jiffies(50));
 }
 
 static struct attribute *oxp_rgb_attrs[] = {
@@ -1535,37 +1631,121 @@ static const struct attribute_group oxp_rgb_attr_group = {
 	.attrs = oxp_rgb_attrs,
 };
 
-static const struct mc_subled oxp_rgb_subled_info[] = {
+static const struct oxp_rgb_led_desc oxp_rgb_led_descs[] = {
 	{
-		.color_index = LED_COLOR_ID_RED,
-		.intensity = 0x24,
-		.max_intensity = 0xff,
-		.channel = 0x1,
-	},
-	{
-		.color_index = LED_COLOR_ID_GREEN,
-		.intensity = 0x22,
-		.max_intensity = 0xff,
-		.channel = 0x2,
-	},
-	{
-		.color_index = LED_COLOR_ID_BLUE,
-		.intensity = 0x99,
-		.max_intensity = 0xff,
-		.channel = 0x3,
+		.name = "oxp:rgb:joystick_rings",
+		.type = OXP_RGB_FULL,
 	},
 };
 
-static const struct led_classdev_mc oxp_cdev_rgb = {
-	.led_cdev = {
-		.name = "oxp:rgb:joystick_rings",
-		.color = LED_COLOR_ID_RGB,
-		.brightness = 0x64,
-		.max_brightness = 0x64,
-		.brightness_set = oxp_rgb_brightness_set,
-	},
-	.num_colors = ARRAY_SIZE(oxp_rgb_subled_info),
-};
+static int oxp_rgb_led_init(struct oxp_hid_cfg *cfg, struct oxp_rgb_led *led,
+			    const struct oxp_rgb_led_desc *desc)
+{
+	struct oxp_rgb_full_state *full_state;
+	struct hid_device *hdev = cfg->hdev;
+	u8 green;
+	u8 blue;
+	u8 red;
+
+	led->cfg = cfg;
+	led->type = desc->type;
+
+	switch (led->type) {
+	case OXP_RGB_FULL:
+		full_state = devm_kzalloc(&hdev->dev, sizeof(*full_state),
+					  GFP_KERNEL);
+		if (!full_state)
+			return -ENOMEM;
+		led->state = full_state;
+		led->mc_cdev.led_cdev.brightness = 0x64;
+		red = 0x24;
+		green = 0x22;
+		blue = 0x99;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	led->subled_info[0] = (struct mc_subled) {
+		.color_index = LED_COLOR_ID_RED,
+		.intensity = red,
+		.max_intensity = 0xff,
+		.channel = 0x1,
+	};
+	led->subled_info[1] = (struct mc_subled) {
+		.color_index = LED_COLOR_ID_GREEN,
+		.intensity = green,
+		.max_intensity = 0xff,
+		.channel = 0x2,
+	};
+	led->subled_info[2] = (struct mc_subled) {
+		.color_index = LED_COLOR_ID_BLUE,
+		.intensity = blue,
+		.max_intensity = 0xff,
+		.channel = 0x3,
+	};
+	led->mc_cdev.led_cdev.name = desc->name;
+	led->mc_cdev.led_cdev.color = LED_COLOR_ID_RGB;
+	led->mc_cdev.led_cdev.max_brightness = 0x64;
+	led->mc_cdev.led_cdev.brightness_set = oxp_rgb_brightness_set;
+	led->mc_cdev.num_colors = ARRAY_SIZE(led->subled_info);
+	led->mc_cdev.subled_info = led->subled_info;
+	INIT_DELAYED_WORK(&led->work, oxp_rgb_queue_fn);
+
+	return 0;
+}
+
+static int oxp_rgb_leds_register(struct oxp_hid_cfg *cfg)
+{
+	int led_count = ARRAY_SIZE(oxp_rgb_led_descs);
+	struct hid_device *hdev = cfg->hdev;
+	struct oxp_rgb_led *led;
+	int ret;
+	int i;
+
+	cfg->rgb_leds = devm_kcalloc(&hdev->dev, led_count,
+				     sizeof(*cfg->rgb_leds), GFP_KERNEL);
+	if (!cfg->rgb_leds)
+		return -ENOMEM;
+
+	for (i = 0; i < led_count; i++) {
+		led = &cfg->rgb_leds[i];
+		ret = oxp_rgb_led_init(cfg, led, &oxp_rgb_led_descs[i]);
+		if (ret)
+			return ret;
+		cfg->rgb_led_count++;
+
+		ret = devm_led_classdev_multicolor_register(&hdev->dev,
+							    &led->mc_cdev);
+		if (ret)
+			return dev_err_probe(&hdev->dev, ret,
+					     "Failed to create RGB device\n");
+
+		ret = devm_device_add_group(led->mc_cdev.led_cdev.dev,
+					    &oxp_rgb_attr_group);
+		if (ret)
+			return dev_err_probe(led->mc_cdev.led_cdev.dev, ret,
+					     "Failed to create RGB configuration attributes\n");
+	}
+
+	return 0;
+}
+
+static void oxp_rgb_disable_works(struct oxp_hid_cfg *cfg)
+{
+	int i;
+
+	for (i = 0; i < cfg->rgb_led_count; i++)
+		disable_delayed_work_sync(&cfg->rgb_leds[i].work);
+}
+
+static void oxp_rgb_enable_works(struct oxp_hid_cfg *cfg)
+{
+	int i;
+
+	for (i = 0; i < cfg->rgb_led_count; i++)
+		enable_delayed_work(&cfg->rgb_leds[i].work);
+}
 
 static struct quirk_entry quirk_hybrid_mcu = {
 	.hybrid_mcu = true,
@@ -1644,8 +1824,7 @@ static void oxp_quiesce_work(struct oxp_hid_cfg *cfg)
 	scoped_guard(spinlock_irqsave, &cfg->rgb_reply_lock) {
 		cfg->rgb_reply_pending = false;
 	}
-	if (cfg->rgb_work_initialized)
-		disable_delayed_work_sync(&cfg->oxp_rgb_queue);
+	oxp_rgb_disable_works(cfg);
 	if (cfg->gen2_work_initialized) {
 		disable_delayed_work_sync(&cfg->oxp_btn_queue);
 		disable_delayed_work_sync(&cfg->oxp_mcu_init);
@@ -1680,6 +1859,7 @@ static int oxp_cfg_probe(struct hid_device *hdev, u16 up,
 {
 	struct oxp_bmap_page_1 *bmap_1;
 	struct oxp_bmap_page_2 *bmap_2;
+	struct oxp_rgb_led *rgb_led;
 	struct oxp_hid_cfg *cfg;
 	int ret;
 
@@ -1701,31 +1881,14 @@ static int oxp_cfg_probe(struct hid_device *hdev, u16 up,
 	if (up == GEN2_USAGE_PAGE && quirks && quirks->hybrid_mcu)
 		goto skip_rgb;
 
-	cfg->cdev = oxp_cdev_rgb;
-	memcpy(cfg->subled_info, oxp_rgb_subled_info, sizeof(cfg->subled_info));
-	cfg->cdev.subled_info = cfg->subled_info;
-	cfg->led_mc = &cfg->cdev;
-
-	INIT_DELAYED_WORK(&cfg->oxp_rgb_queue, oxp_rgb_queue_fn);
-	cfg->rgb_work_initialized = true;
-	ret = devm_led_classdev_multicolor_register(&hdev->dev, cfg->led_mc);
-	if (ret) {
-		dev_err_probe(&hdev->dev, ret,
-			      "Failed to create RGB device\n");
-		goto err_quiesce;
-	}
-
-	ret = devm_device_add_group(cfg->led_mc->led_cdev.dev,
-				    &oxp_rgb_attr_group);
-	if (ret) {
-		dev_err_probe(cfg->led_mc->led_cdev.dev, ret,
-			      "Failed to create RGB configuration attributes\n");
-		goto err_quiesce;
-	}
-
-	ret = oxp_rgb_status_show(cfg);
+	ret = oxp_rgb_leds_register(cfg);
 	if (ret)
-		dev_warn(cfg->led_mc->led_cdev.dev,
+		goto err_quiesce;
+
+	rgb_led = oxp_rgb_led_by_type(cfg, OXP_RGB_FULL);
+	ret = oxp_rgb_status_show(rgb_led);
+	if (ret)
+		dev_warn(rgb_led->mc_cdev.led_cdev.dev,
 			 "Failed to query RGB initial state: %i\n", ret);
 
 	/* Below features are only implemented in gen 2 */
@@ -1841,8 +2004,7 @@ static int __maybe_unused oxp_hid_suspend(struct hid_device *hdev,
 	scoped_guard(spinlock_irqsave, &cfg->rgb_reply_lock) {
 		cfg->rgb_reply_pending = false;
 	}
-	if (cfg->rgb_work_initialized)
-		disable_delayed_work_sync(&cfg->oxp_rgb_queue);
+	oxp_rgb_disable_works(cfg);
 	if (cfg->gen2_work_initialized) {
 		disable_delayed_work_sync(&cfg->oxp_btn_queue);
 		disable_delayed_work_sync(&cfg->oxp_mcu_init);
@@ -1860,8 +2022,7 @@ static int __maybe_unused oxp_hid_resume(struct hid_device *hdev)
 	    READ_ONCE(cfg->removing))
 		return 0;
 
-	if (cfg->rgb_work_initialized)
-		enable_delayed_work(&cfg->oxp_rgb_queue);
+	oxp_rgb_enable_works(cfg);
 	if (cfg->gen2_work_initialized) {
 		enable_delayed_work(&cfg->oxp_btn_queue);
 		enable_delayed_work(&cfg->oxp_mcu_init);
