@@ -315,8 +315,8 @@ xhci_sideband_create_interrupter(struct xhci_sideband *sb, int num_seg,
 		return -EBUSY;
 
 	sb->ir = xhci_create_secondary_interrupter(xhci_to_hcd(sb->xhci),
-						   num_seg, imod_interval,
-						   intr_num);
+						   num_seg, NULL,
+						   imod_interval, intr_num);
 	if (!sb->ir)
 		return -ENOMEM;
 
