@@ -80,6 +80,7 @@ static inline void __kselftest_memset_safe(void *s, int c, size_t n)
 #define KSELFTEST_PRIO_XFAIL   20001
 
 #define TEST_TIMEOUT_DEFAULT 30
+#define TEST_TIMEOUT_DRAIN_MS 5000
 
 /* Utilities exposed to the test definitions */
 #ifndef TH_LOG_STREAM
@@ -981,8 +982,7 @@ static void __wait_for_test(struct __test_metadata *t)
 	 */
 	int status = KSFT_FAIL << 8;
 	struct pollfd poll_child;
-	int ret, child, childfd;
-	bool timed_out = false;
+	int ret, child = 0, childfd;
 
 	childfd = syscall(__NR_pidfd_open, t->pid, 0);
 	if (childfd == -1) {
@@ -1004,9 +1004,46 @@ static void __wait_for_test(struct __test_metadata *t)
 			t->name);
 		return;
 	} else if (ret == 0) {
-		timed_out = true;
+		int elapsed_ms = 0;
+
 		/* signal process group */
 		kill(-(t->pid), SIGKILL);
+
+		/*
+		 * wait(2): "A child that terminates, but has not been waited
+		 * for becomes a "zombie"...  As long as a zombie is not removed
+		 * from the system via a wait, it will consume a slot in the
+		 * kernel process table..."  Therefore, wait for the wrapper
+		 * process to exit and only then poll whether the process group
+		 * also still exists.  Only when the process group is no longer
+		 * found are all the processes exited.
+		 */
+		for (;;) {
+			if (child != t->pid) {
+				child = waitpid(t->pid, &status, WNOHANG);
+				if (child == -1 && errno != EINTR)
+					break;
+			}
+
+			if (child == t->pid &&
+			    kill(-(t->pid), 0) == -1 && errno == ESRCH)
+				break;
+
+			if (elapsed_ms >= TEST_TIMEOUT_DRAIN_MS) {
+				fprintf(TH_LOG_STREAM,
+					"# %s: process group not reaped %dms after timeout SIGKILL (task stuck in D state?); continuing\n",
+					t->name, TEST_TIMEOUT_DRAIN_MS);
+				break;
+			}
+
+			usleep(10 * 1000);
+			elapsed_ms += 10;
+		}
+
+		t->exit_code = KSFT_FAIL;
+		fprintf(TH_LOG_STREAM,
+			"# %s: Test terminated by timeout\n", t->name);
+		return;
 	}
 	child = waitpid(t->pid, &status, WNOHANG);
 	if (child == -1 && errno != EINTR) {
@@ -1017,11 +1054,7 @@ static void __wait_for_test(struct __test_metadata *t)
 		return;
 	}
 
-	if (timed_out) {
-		t->exit_code = KSFT_FAIL;
-		fprintf(TH_LOG_STREAM,
-			"# %s: Test terminated by timeout\n", t->name);
-	} else if (WIFEXITED(status)) {
+	if (WIFEXITED(status)) {
 		if (WEXITSTATUS(status) == KSFT_SKIP ||
 		    WEXITSTATUS(status) == KSFT_XPASS ||
 		    WEXITSTATUS(status) == KSFT_XFAIL) {
