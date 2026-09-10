@@ -104,7 +104,7 @@ static int kvm_sbi_ext_rfence_handler(struct kvm_vcpu *vcpu, struct kvm_run *run
 		kvm_riscv_vcpu_pmu_incr_fw(vcpu, SBI_PMU_FW_FENCE_I_SENT);
 		break;
 	case SBI_EXT_RFENCE_REMOTE_SFENCE_VMA:
-		vmid = READ_ONCE(vcpu->kvm->arch.vmid.vmid);
+		vmid = kvm_riscv_gstage_vmid_hwid(atomic64_read(&vcpu->kvm->arch.vmid.id));
 		if ((cp->a2 == 0 && cp->a3 == 0) || cp->a3 == -1UL)
 			kvm_riscv_hfence_vvma_all(vcpu->kvm, hbase, hmask, vmid);
 		else
@@ -113,7 +113,7 @@ static int kvm_sbi_ext_rfence_handler(struct kvm_vcpu *vcpu, struct kvm_run *run
 		kvm_riscv_vcpu_pmu_incr_fw(vcpu, SBI_PMU_FW_HFENCE_VVMA_SENT);
 		break;
 	case SBI_EXT_RFENCE_REMOTE_SFENCE_VMA_ASID:
-		vmid = READ_ONCE(vcpu->kvm->arch.vmid.vmid);
+		vmid = kvm_riscv_gstage_vmid_hwid(atomic64_read(&vcpu->kvm->arch.vmid.id));
 		if ((cp->a2 == 0 && cp->a3 == 0) || cp->a3 == -1UL)
 			kvm_riscv_hfence_vvma_asid_all(vcpu->kvm, hbase, hmask,
 						       cp->a4, vmid);

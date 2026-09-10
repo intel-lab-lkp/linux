@@ -943,13 +943,13 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu)
 			continue;
 		ret = 1;
 
-		kvm_riscv_gstage_vmid_update(vcpu);
-
 		ret = kvm_riscv_check_vcpu_requests(vcpu);
 		if (ret <= 0)
 			continue;
 
 		preempt_disable();
+
+		kvm_riscv_gstage_vmid_update(vcpu);
 
 		/* Update AIA HW state before entering guest */
 		ret = kvm_riscv_vcpu_aia_update(vcpu);

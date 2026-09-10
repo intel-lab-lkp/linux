@@ -15,7 +15,7 @@
 #include <linux/sched/signal.h>
 #include <asm/kvm_mmu.h>
 #include <asm/kvm_nacl.h>
-
+#include <asm/kvm_vmid.h>
 static bool __read_mostly eager_page_split = true;
 module_param(eager_page_split, bool, 0644);
 
@@ -799,10 +799,11 @@ void kvm_riscv_mmu_free_pgd(struct kvm *kvm)
 void kvm_riscv_mmu_update_hgatp(struct kvm_vcpu *vcpu)
 {
 	struct kvm_arch *ka = &vcpu->kvm->arch;
+	u64 vmid = atomic64_read(&ka->vmid.id);
 	unsigned long hgatp = kvm_riscv_gstage_mode(ka->pgd_levels)
 			      << HGATP_MODE_SHIFT;
 
-	hgatp |= (READ_ONCE(ka->vmid.vmid) << HGATP_VMID_SHIFT) & HGATP_VMID;
+	hgatp |= (kvm_riscv_gstage_vmid_hwid(vmid) << HGATP_VMID_SHIFT) & HGATP_VMID;
 	hgatp |= (ka->pgd_phys >> PAGE_SHIFT) & HGATP_PPN;
 
 	ncsr_write(CSR_HGATP, hgatp);
