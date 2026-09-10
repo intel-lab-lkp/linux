@@ -19,6 +19,7 @@
 #include <linux/spinlock.h>
 #include <linux/sysfs.h>
 #include <linux/types.h>
+#include <linux/usb.h>
 #include <linux/workqueue.h>
 
 #include "hid-ids.h"
@@ -35,6 +36,8 @@
 
 #define OXP_MAPPING_GAMEPAD	0x01
 #define OXP_MAPPING_KEYBOARD	0x02
+#define OXP_BMAP_FORMAT_DEFAULT	0x20
+#define OXP_BMAP_FORMAT_X2	0x02
 #define OXP_FILL_PAGE_SLOT(page, btn)            \
 	{ .button_idx = (page)->btn.button_idx,  \
 	  .mapping_idx = (page)->btn.mapping_idx }
@@ -159,9 +162,9 @@ enum oxp_joybutton_index {
 	BUTTON_DRIGHT,
 	BUTTON_M1 =	0x22,
 	BUTTON_M2,
-	/* These are unused currently, reserved for future devices */
 	BUTTON_M3,
 	BUTTON_M4,
+	/* These are unused currently, reserved for future devices */
 	BUTTON_M5,
 	BUTTON_M6,
 };
@@ -209,8 +212,10 @@ struct oxp_hid_cfg {
 	struct oxp_bmap_page_1 *bmap_1;
 	struct oxp_bmap_page_2 *bmap_2;
 	bool gen2_work_initialized;
+	bool bmap_page_3;
 	u8 rumble_intensity;
 	u8 gamepad_mode;
+	u8 bmap_format;
 
 	/* RGB state */
 	struct delayed_work oxp_rgb_queue;
@@ -337,6 +342,9 @@ struct oxp_attr {
 
 struct quirk_entry {
 	bool hybrid_mcu;
+	bool bmap_page_3;
+	u8 cfg_interface_num;
+	u8 bmap_format;
 };
 
 static u16 get_usage_page(struct hid_device *hdev)
@@ -735,8 +743,17 @@ static void oxp_page_fill_data(char *buf, const struct oxp_button_idx *buttons,
 
 static int oxp_set_buttons(struct oxp_hid_cfg *cfg)
 {
-	u8 page_1[59] = { 0x02, 0x38, 0x20, 0x01, 0x01 };
-	u8 page_2[59] = { 0x02, 0x38, 0x20, 0x02, 0x01 };
+	u8 page_1[59] = { 0x02, 0x38, cfg->bmap_format, 0x01, 0x01 };
+	u8 page_2[59] = { 0x02, 0x38, cfg->bmap_format, 0x02, 0x01 };
+	u8 page_3[59] = {
+		0x02, 0x38, cfg->bmap_format, 0x03, 0x01,
+		/*
+		 * M3/M4 have no mutable sysfs mapping slots. Keep their factory
+		 * encodings, which are not entries in oxp_button_table.
+		 */
+		BUTTON_M3, OXP_MAPPING_KEYBOARD, 0x02, 0x05, 0x00, 0x00,
+		BUTTON_M4, OXP_MAPPING_GAMEPAD, 0x21, 0x00, 0x00, 0x00,
+	};
 	u16 up = get_usage_page(cfg->hdev);
 	int ret;
 
@@ -774,7 +791,11 @@ static int oxp_set_buttons(struct oxp_hid_cfg *cfg)
 	if (ret)
 		return ret;
 
-	return oxp_gen_2_property_out(cfg, OXP_FID_GEN2_KEY_STATE, page_2, ARRAY_SIZE(page_2));
+	ret = oxp_gen_2_property_out(cfg, OXP_FID_GEN2_KEY_STATE, page_2, ARRAY_SIZE(page_2));
+	if (ret || !cfg->bmap_page_3)
+		return ret;
+
+	return oxp_gen_2_property_out(cfg, OXP_FID_GEN2_KEY_STATE, page_3, ARRAY_SIZE(page_3));
 }
 
 static void oxp_reset_buttons(struct oxp_hid_cfg *cfg)
@@ -1550,7 +1571,13 @@ static struct quirk_entry quirk_hybrid_mcu = {
 	.hybrid_mcu = true,
 };
 
-static const struct dmi_system_id oxp_hybrid_mcu_list[] = {
+static struct quirk_entry quirk_x2_bmap = {
+	.bmap_format = OXP_BMAP_FORMAT_X2,
+	.bmap_page_3 = true,
+	.cfg_interface_num = 2,
+};
+
+static const struct dmi_system_id oxp_quirk_list[] = {
 	{
 		.ident = "OneXPlayer Apex",
 		.matches = {
@@ -1575,21 +1602,34 @@ static const struct dmi_system_id oxp_hybrid_mcu_list[] = {
 		},
 		.driver_data = &quirk_hybrid_mcu,
 	},
+	{
+		.ident = "OneXPlayer 3",
+		.matches = {
+			DMI_EXACT_MATCH(DMI_SYS_VENDOR, "ONE-NETBOOK"),
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "ONEXPLAYER 3"),
+		},
+		.driver_data = &quirk_x2_bmap,
+	},
+	{
+		.ident = "OneXPlayer X2 Mini Pro",
+		.matches = {
+			DMI_EXACT_MATCH(DMI_SYS_VENDOR, "ONE-NETBOOK"),
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "ONEXPLAYER X2Mini PRO"),
+		},
+		.driver_data = &quirk_x2_bmap,
+	},
 	{},
 };
 
-static bool oxp_hybrid_mcu_device(void)
+static const struct quirk_entry *oxp_get_quirks(void)
 {
 	const struct dmi_system_id *dmi_id;
-	struct quirk_entry *quirks;
 
-	dmi_id = dmi_first_match(oxp_hybrid_mcu_list);
+	dmi_id = dmi_first_match(oxp_quirk_list);
 	if (!dmi_id)
-		return false;
+		return NULL;
 
-	quirks = dmi_id->driver_data;
-
-	return quirks->hybrid_mcu;
+	return dmi_id->driver_data;
 }
 
 static void oxp_drain_output(struct oxp_hid_cfg *cfg)
@@ -1613,6 +1653,21 @@ static void oxp_quiesce_work(struct oxp_hid_cfg *cfg)
 	oxp_drain_output(cfg);
 }
 
+static bool oxp_is_cfg_interface(struct hid_device *hdev,
+				 const struct quirk_entry *quirks)
+{
+	struct usb_interface *intf;
+
+	if (!quirks || !quirks->cfg_interface_num)
+		return true;
+	if (hdev->bus != BUS_USB)
+		return false;
+
+	intf = to_usb_interface(hdev->dev.parent);
+	return intf->cur_altsetting->desc.bInterfaceNumber ==
+	       quirks->cfg_interface_num;
+}
+
 static void oxp_cfg_release(void *data)
 {
 	struct oxp_hid_cfg *cfg = data;
@@ -1620,7 +1675,8 @@ static void oxp_cfg_release(void *data)
 	hid_set_drvdata(cfg->hdev, NULL);
 }
 
-static int oxp_cfg_probe(struct hid_device *hdev, u16 up)
+static int oxp_cfg_probe(struct hid_device *hdev, u16 up,
+			 const struct quirk_entry *quirks)
 {
 	struct oxp_bmap_page_1 *bmap_1;
 	struct oxp_bmap_page_2 *bmap_2;
@@ -1642,7 +1698,7 @@ static int oxp_cfg_probe(struct hid_device *hdev, u16 up)
 	if (ret)
 		return ret;
 
-	if (up == GEN2_USAGE_PAGE && oxp_hybrid_mcu_device())
+	if (up == GEN2_USAGE_PAGE && quirks && quirks->hybrid_mcu)
 		goto skip_rgb;
 
 	cfg->cdev = oxp_cdev_rgb;
@@ -1693,6 +1749,9 @@ skip_rgb:
 
 	cfg->bmap_1 = bmap_1;
 	cfg->bmap_2 = bmap_2;
+	cfg->bmap_format = quirks && quirks->bmap_format ?
+			   quirks->bmap_format : OXP_BMAP_FORMAT_DEFAULT;
+	cfg->bmap_page_3 = quirks && quirks->bmap_page_3;
 	oxp_reset_buttons(cfg);
 	INIT_DELAYED_WORK(&cfg->oxp_btn_queue, oxp_btn_queue_fn);
 
@@ -1720,6 +1779,7 @@ err_quiesce:
 static int oxp_hid_probe(struct hid_device *hdev,
 			 const struct hid_device_id *id)
 {
+	const struct quirk_entry *quirks;
 	int ret;
 	u16 up;
 
@@ -1738,12 +1798,16 @@ static int oxp_hid_probe(struct hid_device *hdev,
 	}
 
 	up = get_usage_page(hdev);
+	quirks = oxp_get_quirks();
 	dev_dbg(&hdev->dev, "Got usage page %04x\n", up);
 
 	switch (up) {
 	case GEN1_USAGE_PAGE:
 	case GEN2_USAGE_PAGE:
-		ret = oxp_cfg_probe(hdev, up);
+		if (!oxp_is_cfg_interface(hdev, quirks))
+			return 0;
+
+		ret = oxp_cfg_probe(hdev, up, quirks);
 		if (ret) {
 			hid_hw_close(hdev);
 			hid_hw_stop(hdev);
