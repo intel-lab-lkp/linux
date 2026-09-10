@@ -5,17 +5,58 @@
 #include <linux/netdevice.h>
 
 /**
+ * struct netdev_ring_config - accepted RX/TX ring depth configuration
+ * @rx_pending:		Size of the regular RX ring.
+ * @rx_mini_pending:	Size of the RX mini ring.
+ * @rx_jumbo_pending:	Size of the RX jumbo ring.
+ * @tx_pending:		Size of the TX ring.
+ *
+ * This stores only persistent configuration values. Capability fields,
+ * such as max ring sizes, are reported by drivers but are not part of the
+ * accepted configuration.
+ *
+ * Note: these values are only used for queue-configuration validation
+ * today. Some drivers update their ring sizes without reflecting the change
+ * in @cfg. Before using the stored values for anything else, those cases
+ * need to be audited, and the core likely needs a driver notification API
+ * similar to ethtool_rxfh_context_lost().
+ */
+struct netdev_ring_config {
+	u32	rx_pending;
+	u32	rx_mini_pending;
+	u32	rx_jumbo_pending;
+	u32	tx_pending;
+};
+
+/**
  * struct netdev_config - queue-related configuration for a netdev
  * @hds_thresh:		HDS Threshold value.
  * @hds_config:		HDS value from userspace.
+ * @rings:		Accepted RX/TX ring depths.
+ *
+ * Direct values, such as @hds_thresh and @rings, hold the current
+ * accepted configuration. Drivers which use them for queue rendering
+ * must initialize them with their defaults.
  */
 struct netdev_config {
 	u32	hds_thresh;
 	u8	hds_config;
+
+	struct netdev_ring_config rings;
 };
 
+/**
+ * struct netdev_queue_config - rendered configuration for an RX queue
+ * @rx_page_size:	Size of one RX page-pool allocation.
+ * @rx_ring_size:	Effective size of the regular RX ring.
+ * @rx_mini_ring_size:	Effective size of the RX mini ring.
+ * @rx_jumbo_ring_size:	Effective size of the RX jumbo ring.
+ */
 struct netdev_queue_config {
 	u32	rx_page_size;
+	u32	rx_ring_size;
+	u32	rx_mini_ring_size;
+	u32	rx_jumbo_ring_size;
 };
 
 /* See the netdev.yaml spec for definition of each statistic */
@@ -145,10 +186,9 @@ enum {
  *
  * @ndo_validate_qcfg: (Optional) Check if queue config is supported.
  *			Called when configuration affecting a queue may be
- *			changing, either due to NIC-wide config, or config
- *			scoped to the queue at a specified index.
- *			When NIC-wide config is changed the callback will
- *			be invoked for all queues.
+ *			changing. When NIC-wide config is changed the
+ *			callback will be invoked for the defaults and all
+ *			queue overrides.
  *
  * @ndo_queue_create:	Create a new RX queue on a virtual device that will
  *			be paired with a physical device's queue via leasing.
