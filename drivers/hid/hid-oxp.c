@@ -16,6 +16,7 @@
 #include <linux/kstrtox.h>
 #include <linux/led-class-multicolor.h>
 #include <linux/mutex.h>
+#include <linux/spinlock.h>
 #include <linux/sysfs.h>
 #include <linux/types.h>
 #include <linux/workqueue.h>
@@ -24,6 +25,7 @@
 
 #define OXP_PACKET_SIZE 64
 #define OXP_STATUS_HEADER_SIZE 6
+#define OXP_STATUS_ACK 0x20
 
 #define GEN1_MESSAGE_ID	0xff
 #define GEN2_MESSAGE_ID	0x3f
@@ -185,6 +187,10 @@ struct oxp_hid_cfg {
 	struct hid_device *hdev;
 	struct mutex cfg_mutex; /*ensure single synchronous output report*/
 	struct mutex rgb_mutex; /*serialize complete RGB transactions*/
+	spinlock_t rgb_reply_lock;
+	u8 rgb_reply_command;
+	u8 rgb_reply_zone;
+	bool rgb_reply_pending;
 	u8 rgb_brightness;
 	u8 gamepad_mode;
 	u8 rumble_intensity;
@@ -193,6 +199,7 @@ struct oxp_hid_cfg {
 	u8 rgb_en;
 	bool rgb_work_initialized;
 	bool gen2_work_initialized;
+	bool suspended;
 	bool removing;
 };
 
@@ -371,7 +378,7 @@ static void oxp_mcu_init_fn(struct work_struct *work)
 	u8 gp_mode_data[3] = { OXP_GP_MODE_DEBUG, 0x01, 0x02 };
 	int ret;
 
-	if (READ_ONCE(cfg->removing))
+	if (READ_ONCE(cfg->suspended) || READ_ONCE(cfg->removing))
 		return;
 
 	/* Re-apply the button mapping */
@@ -410,6 +417,7 @@ static int oxp_hid_raw_event_gen_2(struct hid_device *hdev,
 	struct oxp_hid_cfg *cfg = hid_get_drvdata(hdev);
 	struct led_classdev_mc *led_mc = cfg->led_mc;
 	struct oxp_gen_2_rgb_report *rgb_rep;
+	bool solicited = false;
 
 	if (size < OXP_STATUS_HEADER_SIZE)
 		return 0;
@@ -417,11 +425,26 @@ static int oxp_hid_raw_event_gen_2(struct hid_device *hdev,
 	if (data[0] != OXP_FID_GEN2_STATUS_EVENT)
 		return 0;
 
+	/* A monocolor acknowledgment is not an MCU reset notification. */
+	if (data[5] == OXP_STATUS_ACK) {
+		scoped_guard(spinlock_irqsave, &cfg->rgb_reply_lock) {
+			if (cfg->rgb_reply_pending &&
+			    data[3] == cfg->rgb_reply_command &&
+			    data[4] == cfg->rgb_reply_zone) {
+				cfg->rgb_reply_pending = false;
+				solicited = true;
+			}
+		}
+		if (solicited)
+			return 0;
+	}
+
 	/* Sent ~6s after resume event, indicating the MCU has fully reset.
 	 * Re-apply our settings after this has been received.
 	 */
 	if (data[3] == OXP_EFFECT_MONO_TRUE) {
 		if (READ_ONCE(cfg->gen2_work_initialized) &&
+		    !READ_ONCE(cfg->suspended) &&
 		    !READ_ONCE(cfg->removing))
 			mod_delayed_work(system_dfl_wq, &cfg->oxp_mcu_init,
 					 msecs_to_jiffies(50));
@@ -489,6 +512,7 @@ static int mcu_property_out(struct oxp_hid_cfg *cfg, u8 *header, size_t header_s
 			    size_t data_size, u8 *footer, size_t footer_size)
 {
 	unsigned char *dmabuf __free(kfree) = kzalloc(OXP_PACKET_SIZE, GFP_KERNEL);
+	bool rgb_write;
 	int ret;
 
 	if (!dmabuf)
@@ -500,6 +524,19 @@ static int mcu_property_out(struct oxp_hid_cfg *cfg, u8 *header, size_t header_s
 	guard(mutex)(&cfg->cfg_mutex);
 	if (READ_ONCE(cfg->removing))
 		return -ENODEV;
+	if (READ_ONCE(cfg->suspended))
+		return -EHOSTDOWN;
+
+	rgb_write = header_size && data_size > 1 &&
+		    header[0] == OXP_FID_GEN2_STATUS_EVENT &&
+		    data[0] == OXP_EFFECT_MONO_TRUE;
+	if (rgb_write) {
+		scoped_guard(spinlock_irqsave, &cfg->rgb_reply_lock) {
+			cfg->rgb_reply_command = data[0];
+			cfg->rgb_reply_zone = data[1];
+			cfg->rgb_reply_pending = true;
+		}
+	}
 
 	memcpy(dmabuf, header, header_size);
 	memcpy(dmabuf + header_size, data, data_size);
@@ -509,12 +546,18 @@ static int mcu_property_out(struct oxp_hid_cfg *cfg, u8 *header, size_t header_s
 	dev_dbg(&cfg->hdev->dev, "raw data: [%*ph]\n", OXP_PACKET_SIZE, dmabuf);
 
 	ret = hid_hw_output_report(cfg->hdev, dmabuf, OXP_PACKET_SIZE);
-	if (ret < 0)
-		return ret;
-
 	/* MCU takes 200ms to be ready for another command. */
 	msleep(200);
-	return ret == OXP_PACKET_SIZE ? 0 : -EIO;
+	if (ret >= 0)
+		ret = ret == OXP_PACKET_SIZE ? 0 : -EIO;
+
+	if (rgb_write) {
+		scoped_guard(spinlock_irqsave, &cfg->rgb_reply_lock) {
+			cfg->rgb_reply_pending = false;
+		}
+	}
+
+	return ret;
 }
 
 static int oxp_gen_1_property_out(struct oxp_hid_cfg *cfg, enum oxp_function_index fid, u8 *data,
@@ -748,7 +791,7 @@ static void oxp_btn_queue_fn(struct work_struct *work)
 					      struct oxp_hid_cfg, oxp_btn_queue);
 	int ret;
 
-	if (READ_ONCE(cfg->removing))
+	if (READ_ONCE(cfg->suspended) || READ_ONCE(cfg->removing))
 		return;
 
 	ret = oxp_set_buttons(cfg);
@@ -837,7 +880,7 @@ static ssize_t map_button_store(struct device *dev,
 	default:
 		return -EINVAL;
 	}
-	if (!READ_ONCE(cfg->removing))
+	if (!READ_ONCE(cfg->suspended) && !READ_ONCE(cfg->removing))
 		mod_delayed_work(system_dfl_wq, &cfg->oxp_btn_queue,
 				 msecs_to_jiffies(50));
 	return count;
@@ -1413,7 +1456,7 @@ static void oxp_rgb_queue_fn(struct work_struct *work)
 	u8 val = 4 * brightness / max_brightness;
 	int ret;
 
-	if (READ_ONCE(cfg->removing))
+	if (READ_ONCE(cfg->suspended) || READ_ONCE(cfg->removing))
 		return;
 
 	guard(mutex)(&cfg->rgb_mutex);
@@ -1442,7 +1485,7 @@ static void oxp_rgb_brightness_set(struct led_classdev *led_cdev,
 	struct led_classdev_mc *mc_cdev = lcdev_to_mccdev(led_cdev);
 	struct oxp_hid_cfg *cfg = container_of(mc_cdev, struct oxp_hid_cfg, cdev);
 
-	if (READ_ONCE(cfg->removing))
+	if (READ_ONCE(cfg->suspended) || READ_ONCE(cfg->removing))
 		return;
 
 	led_cdev->brightness = brightness;
@@ -1554,6 +1597,9 @@ static void oxp_drain_output(struct oxp_hid_cfg *cfg)
 static void oxp_quiesce_work(struct oxp_hid_cfg *cfg)
 {
 	WRITE_ONCE(cfg->removing, true);
+	scoped_guard(spinlock_irqsave, &cfg->rgb_reply_lock) {
+		cfg->rgb_reply_pending = false;
+	}
 	if (cfg->rgb_work_initialized)
 		disable_delayed_work_sync(&cfg->oxp_rgb_queue);
 	if (cfg->gen2_work_initialized) {
@@ -1584,6 +1630,7 @@ static int oxp_cfg_probe(struct hid_device *hdev, u16 up)
 	cfg->hdev = hdev;
 	mutex_init(&cfg->cfg_mutex);
 	mutex_init(&cfg->rgb_mutex);
+	spin_lock_init(&cfg->rgb_reply_lock);
 
 	/* Clear drvdata after registered callback objects have been released. */
 	hid_set_drvdata(hdev, cfg);
@@ -1714,6 +1761,54 @@ static void oxp_hid_remove(struct hid_device *hdev)
 	hid_hw_stop(hdev);
 }
 
+static int __maybe_unused oxp_hid_suspend(struct hid_device *hdev,
+					  pm_message_t message)
+{
+	struct oxp_hid_cfg *cfg = hid_get_drvdata(hdev);
+
+	if (!cfg || PMSG_IS_AUTO(message))
+		return 0;
+
+	WRITE_ONCE(cfg->suspended, true);
+	scoped_guard(spinlock_irqsave, &cfg->rgb_reply_lock) {
+		cfg->rgb_reply_pending = false;
+	}
+	if (cfg->rgb_work_initialized)
+		disable_delayed_work_sync(&cfg->oxp_rgb_queue);
+	if (cfg->gen2_work_initialized) {
+		disable_delayed_work_sync(&cfg->oxp_btn_queue);
+		disable_delayed_work_sync(&cfg->oxp_mcu_init);
+	}
+	oxp_drain_output(cfg);
+
+	return 0;
+}
+
+static int __maybe_unused oxp_hid_resume(struct hid_device *hdev)
+{
+	struct oxp_hid_cfg *cfg = hid_get_drvdata(hdev);
+
+	if (!cfg || !READ_ONCE(cfg->suspended) ||
+	    READ_ONCE(cfg->removing))
+		return 0;
+
+	if (cfg->rgb_work_initialized)
+		enable_delayed_work(&cfg->oxp_rgb_queue);
+	if (cfg->gen2_work_initialized) {
+		enable_delayed_work(&cfg->oxp_btn_queue);
+		enable_delayed_work(&cfg->oxp_mcu_init);
+	}
+	WRITE_ONCE(cfg->suspended, false);
+	if (!cfg->gen2_work_initialized)
+		return 0;
+
+	/* Allow the controller MCU to finish rebooting before restoring state. */
+	queue_delayed_work(system_dfl_wq, &cfg->oxp_mcu_init,
+			   msecs_to_jiffies(6500));
+
+	return 0;
+}
+
 static const struct hid_device_id oxp_devices[] = {
 	{ HID_USB_DEVICE(USB_VENDOR_ID_CRSC, USB_DEVICE_ID_ONEXPLAYER_GEN1) },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_WCH, USB_DEVICE_ID_ONEXPLAYER_GEN2) },
@@ -1727,6 +1822,9 @@ static struct hid_driver hid_oxp = {
 	.probe = oxp_hid_probe,
 	.remove = oxp_hid_remove,
 	.raw_event = oxp_hid_raw_event,
+	.suspend = pm_ptr(oxp_hid_suspend),
+	.resume = pm_ptr(oxp_hid_resume),
+	.reset_resume = pm_ptr(oxp_hid_resume),
 };
 module_hid_driver(hid_oxp);
 
