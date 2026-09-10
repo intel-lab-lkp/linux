@@ -33,6 +33,30 @@
 #define GEN1_USAGE_PAGE	0xff01
 #define GEN2_USAGE_PAGE	0xff00
 
+#define OXP_MAPPING_GAMEPAD	0x01
+#define OXP_MAPPING_KEYBOARD	0x02
+#define OXP_FILL_PAGE_SLOT(page, btn)            \
+	{ .button_idx = (page)->btn.button_idx,  \
+	  .mapping_idx = (page)->btn.mapping_idx }
+
+#define OXP_GET_PROPERTY 0xfc
+#define OXP_SET_PROPERTY 0xfd
+#define OXP_EFFECT_MONO_TRUE 0xfe /* actual index for monocolor */
+
+#define OXP_DEVICE_ATTR_RW(_name, _group)                                     \
+	static ssize_t _name##_store(struct device *dev,                      \
+				     struct device_attribute *attr,           \
+				     const char *buf, size_t count)           \
+	{                                                                     \
+		return _group##_store(dev, attr, buf, count, _name.index);    \
+	}                                                                     \
+	static ssize_t _name##_show(struct device *dev,                       \
+				    struct device_attribute *attr, char *buf) \
+	{                                                                     \
+		return _group##_show(dev, attr, buf, _name.index);            \
+	}                                                                     \
+	static DEVICE_ATTR_RW(_name)
+
 enum oxp_function_index {
 	OXP_FID_GEN1_RGB_SET =		0x07,
 	OXP_FID_GEN1_RGB_REPLY =	0x0f,
@@ -41,9 +65,6 @@ enum oxp_function_index {
 	OXP_FID_GEN2_KEY_STATE =	0xb4,
 	OXP_FID_GEN2_STATUS_EVENT =	0xb8,
 };
-
-#define OXP_MAPPING_GAMEPAD	0x01
-#define OXP_MAPPING_KEYBOARD	0x02
 
 struct oxp_button_data {
 	u8 mode;
@@ -176,36 +197,37 @@ struct oxp_bmap_page_2 {
 
 /* Hybrid devices expose RGB and controller configuration on separate HIDs. */
 struct oxp_hid_cfg {
-	struct led_classdev_mc cdev;
-	struct mc_subled subled_info[3];
-	struct delayed_work oxp_rgb_queue;
-	struct delayed_work oxp_btn_queue;
-	struct oxp_bmap_page_1 *bmap_1;
-	struct oxp_bmap_page_2 *bmap_2;
-	struct delayed_work oxp_mcu_init;
-	struct led_classdev_mc *led_mc;
+	/* General HID state */
 	struct hid_device *hdev;
 	struct mutex cfg_mutex; /*ensure single synchronous output report*/
-	struct mutex rgb_mutex; /*serialize complete RGB transactions*/
+	bool suspended;
+	bool removing;
+
+	/* Gamepad state */
+	struct delayed_work oxp_btn_queue;
+	struct delayed_work oxp_mcu_init;
+	struct oxp_bmap_page_1 *bmap_1;
+	struct oxp_bmap_page_2 *bmap_2;
+	bool gen2_work_initialized;
+	u8 rumble_intensity;
+	u8 gamepad_mode;
+
+	/* RGB state */
+	struct delayed_work oxp_rgb_queue;
+	struct mc_subled subled_info[3];
+	struct led_classdev_mc *led_mc;
+	struct led_classdev_mc cdev;
 	spinlock_t rgb_reply_lock;
+	struct mutex rgb_mutex; /*serialize complete RGB transactions*/
+	bool rgb_work_initialized;
+	bool rgb_reply_pending;
 	u8 rgb_reply_command;
 	u8 rgb_reply_zone;
-	bool rgb_reply_pending;
 	u8 rgb_brightness;
-	u8 gamepad_mode;
-	u8 rumble_intensity;
 	u8 rgb_effect;
 	u8 rgb_speed;
 	u8 rgb_en;
-	bool rgb_work_initialized;
-	bool gen2_work_initialized;
-	bool suspended;
-	bool removing;
 };
-
-#define OXP_FILL_PAGE_SLOT(page, btn)            \
-	{ .button_idx = (page)->btn.button_idx,  \
-	  .mapping_idx = (page)->btn.mapping_idx }
 
 enum oxp_gamepad_mode_index {
 	OXP_GP_MODE_XINPUT = 0x00,
@@ -250,14 +272,6 @@ enum oxp_rgb_effect_index {
 	OXP_EFFECT_FOGGY,
 	OXP_EFFECT_MONO_LIST, /* placeholder for effect_index_show */
 };
-
-/* These belong to rgb_effect_index, but we want to hide them from
- * rgb_effect_text
- */
-
-#define OXP_GET_PROPERTY 0xfc
-#define OXP_SET_PROPERTY 0xfd
-#define OXP_EFFECT_MONO_TRUE 0xfe /* actual index for monocolor */
 
 static const char *const oxp_rgb_effect_text[] = {
 	[OXP_UNKNOWN] = "unknown",
@@ -319,6 +333,10 @@ struct oxp_gen_2_rgb_report {
 
 struct oxp_attr {
 	u8 index;
+};
+
+struct quirk_entry {
+	bool hybrid_mcu;
 };
 
 static u16 get_usage_page(struct hid_device *hdev)
@@ -508,8 +526,9 @@ static int oxp_hid_raw_event(struct hid_device *hdev, struct hid_report *report,
 	return 0;
 }
 
-static int mcu_property_out(struct oxp_hid_cfg *cfg, u8 *header, size_t header_size, u8 *data,
-			    size_t data_size, u8 *footer, size_t footer_size)
+static int mcu_property_out(struct oxp_hid_cfg *cfg, u8 *header,
+			    size_t header_size, u8 *data, size_t data_size,
+			    u8 *footer, size_t footer_size)
 {
 	unsigned char *dmabuf __free(kfree) = kzalloc(OXP_PACKET_SIZE, GFP_KERNEL);
 	bool rgb_write;
@@ -560,7 +579,8 @@ static int mcu_property_out(struct oxp_hid_cfg *cfg, u8 *header, size_t header_s
 	return ret;
 }
 
-static int oxp_gen_1_property_out(struct oxp_hid_cfg *cfg, enum oxp_function_index fid, u8 *data,
+static int oxp_gen_1_property_out(struct oxp_hid_cfg *cfg,
+				  enum oxp_function_index fid, u8 *data,
 				  u8 data_size)
 {
 	u8 header[] = { fid, GEN1_MESSAGE_ID };
@@ -569,7 +589,8 @@ static int oxp_gen_1_property_out(struct oxp_hid_cfg *cfg, enum oxp_function_ind
 	return mcu_property_out(cfg, header, header_size, data, data_size, NULL, 0);
 }
 
-static int oxp_gen_2_property_out(struct oxp_hid_cfg *cfg, enum oxp_function_index fid, u8 *data,
+static int oxp_gen_2_property_out(struct oxp_hid_cfg *cfg,
+				  enum oxp_function_index fid, u8 *data,
 				  u8 data_size)
 {
 	u8 header[] = { fid, GEN2_MESSAGE_ID, 0x01 };
@@ -1030,20 +1051,6 @@ static ssize_t rumble_intensity_range_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(rumble_intensity_range);
 
-#define OXP_DEVICE_ATTR_RW(_name, _group)                                     \
-	static ssize_t _name##_store(struct device *dev,                      \
-				     struct device_attribute *attr,           \
-				     const char *buf, size_t count)           \
-	{                                                                     \
-		return _group##_store(dev, attr, buf, count, _name.index);    \
-	}                                                                     \
-	static ssize_t _name##_show(struct device *dev,                       \
-				    struct device_attribute *attr, char *buf) \
-	{                                                                     \
-		return _group##_show(dev, attr, buf, _name.index);            \
-	}                                                                     \
-	static DEVICE_ATTR_RW(_name)
-
 static struct oxp_attr button_a = { BUTTON_A };
 OXP_DEVICE_ATTR_RW(button_a, map_button);
 
@@ -1130,7 +1137,8 @@ static const struct attribute_group oxp_cfg_attrs_group = {
 	.attrs = oxp_cfg_attrs,
 };
 
-static int oxp_rgb_status_store(struct oxp_hid_cfg *cfg, u8 enabled, u8 speed, u8 brightness)
+static int oxp_rgb_status_store(struct oxp_hid_cfg *cfg, u8 enabled,
+				u8 speed, u8 brightness)
 {
 	u16 up = get_usage_page(cfg->hdev);
 	u8 *data;
@@ -1538,10 +1546,6 @@ static const struct led_classdev_mc oxp_cdev_rgb = {
 	.num_colors = ARRAY_SIZE(oxp_rgb_subled_info),
 };
 
-struct quirk_entry {
-	bool hybrid_mcu;
-};
-
 static struct quirk_entry quirk_hybrid_mcu = {
 	.hybrid_mcu = true,
 };
@@ -1651,7 +1655,7 @@ static int oxp_cfg_probe(struct hid_device *hdev, u16 up)
 	ret = devm_led_classdev_multicolor_register(&hdev->dev, cfg->led_mc);
 	if (ret) {
 		dev_err_probe(&hdev->dev, ret,
-				     "Failed to create RGB device\n");
+			      "Failed to create RGB device\n");
 		goto err_quiesce;
 	}
 
@@ -1676,14 +1680,14 @@ skip_rgb:
 	bmap_1 = devm_kzalloc(&hdev->dev, sizeof(struct oxp_bmap_page_1), GFP_KERNEL);
 	if (!bmap_1) {
 		ret = dev_err_probe(&hdev->dev, -ENOMEM,
-				     "Unable to allocate button map page 1\n");
+				    "Unable to allocate button map page 1\n");
 		goto err_quiesce;
 	}
 
 	bmap_2 = devm_kzalloc(&hdev->dev, sizeof(struct oxp_bmap_page_2), GFP_KERNEL);
 	if (!bmap_2) {
 		ret = dev_err_probe(&hdev->dev, -ENOMEM,
-				     "Unable to allocate button map page 2\n");
+				    "Unable to allocate button map page 2\n");
 		goto err_quiesce;
 	}
 
@@ -1702,7 +1706,7 @@ skip_rgb:
 	ret = devm_device_add_group(&hdev->dev, &oxp_cfg_attrs_group);
 	if (ret) {
 		dev_err_probe(&hdev->dev, ret,
-				     "Failed to attach configuration attributes\n");
+			      "Failed to attach configuration attributes\n");
 		goto err_quiesce;
 	}
 
