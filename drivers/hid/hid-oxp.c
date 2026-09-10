@@ -45,6 +45,7 @@
 #define OXP_GET_PROPERTY 0xfc
 #define OXP_SET_PROPERTY 0xfd
 #define OXP_EFFECT_MONO_TRUE 0xfe /* actual index for monocolor */
+#define OXP_EFFECT_BREATHING_TRUE 0xf0
 
 #define OXP_DEVICE_ATTR_RW(_name, _group)                                     \
 	static ssize_t _name##_store(struct device *dev,                      \
@@ -358,6 +359,17 @@ struct oxp_gen_3_rgb_color_report {
 
 enum oxp_rgb_type {
 	OXP_RGB_FULL,
+	OXP_RGB_AUX,
+};
+
+enum oxp_rgb_aux_effect {
+	OXP_RGB_AUX_EFFECT_MONOCOLOR,
+	OXP_RGB_AUX_EFFECT_BREATHING,
+};
+
+static const char *const oxp_rgb_aux_effect_text[] = {
+	[OXP_RGB_AUX_EFFECT_MONOCOLOR] = "monocolor",
+	[OXP_RGB_AUX_EFFECT_BREATHING] = "breathing",
 };
 
 struct oxp_rgb_full_state {
@@ -367,18 +379,30 @@ struct oxp_rgb_full_state {
 	u8 speed;
 };
 
+struct oxp_rgb_aux_state {
+	enum led_brightness brightness;
+	bool valid;
+	u8 effect;
+	u8 green;
+	u8 blue;
+	u8 red;
+};
+
 struct oxp_rgb_led {
 	struct mc_subled subled_info[3];
 	struct led_classdev_mc mc_cdev;
 	struct delayed_work work;
 	struct oxp_hid_cfg *cfg;
+	spinlock_t state_lock; /* protects auxiliary RGB state */
 	void *state;
 	u8 type;
+	u8 zone;
 };
 
 struct oxp_rgb_led_desc {
 	const char *name;
 	u8 type;
+	u8 zone;
 };
 
 struct oxp_attr {
@@ -416,6 +440,23 @@ static struct oxp_rgb_full_state *oxp_rgb_full_state(struct oxp_rgb_led *led)
 
 	switch (led->type) {
 	case OXP_RGB_FULL:
+		return led->state;
+	case OXP_RGB_AUX:
+		return NULL;
+	}
+
+	return NULL;
+}
+
+static struct oxp_rgb_aux_state *oxp_rgb_aux_state(struct oxp_rgb_led *led)
+{
+	if (!led)
+		return NULL;
+
+	switch (led->type) {
+	case OXP_RGB_FULL:
+		return NULL;
+	case OXP_RGB_AUX:
 		return led->state;
 	}
 
@@ -473,6 +514,8 @@ static int oxp_rgb_status_store(struct oxp_rgb_led *led, u8 enabled, u8 speed,
 				u8 brightness);
 static int oxp_rgb_effect_set(struct oxp_rgb_led *led, u8 effect);
 
+static void oxp_rgb_aux_restore_locked(struct oxp_rgb_led *led);
+
 static void oxp_rgb_restore(struct oxp_hid_cfg *cfg)
 {
 	struct oxp_rgb_full_state *state;
@@ -509,6 +552,9 @@ static void oxp_rgb_restore(struct oxp_hid_cfg *cfg)
 				dev_err(&cfg->hdev->dev,
 					"Error: Failed to restore RGB effect: %i\n",
 					ret);
+			break;
+		case OXP_RGB_AUX:
+			oxp_rgb_aux_restore_locked(led);
 			break;
 		}
 	}
@@ -842,6 +888,19 @@ static int oxp_gen_3_rgb_property_out(struct oxp_hid_cfg *cfg, u8 *data,
 	return first_err;
 }
 
+static int oxp_gen_3_rgb_zone_property_out(struct oxp_hid_cfg *cfg,
+					   u8 *data, u8 data_size)
+{
+	int ret;
+
+	ret = oxp_gen_3_property_out(cfg, data, data_size);
+	/* Retry once if the write or its acknowledgment failed. */
+	if (ret)
+		ret = oxp_gen_3_property_out(cfg, data, data_size);
+
+	return ret;
+}
+
 static void oxp_gen_3_rgb_fill_color(struct oxp_gen_3_rgb_color_report *report,
 				     u8 command, u8 zone, u8 red, u8 green,
 				     u8 blue)
@@ -856,6 +915,85 @@ static void oxp_gen_3_rgb_fill_color(struct oxp_gen_3_rgb_color_report *report,
 		report->colors[i] = (struct oxp_rgb_color) { red, green, blue };
 	report->final_red = red;
 	report->final_green = green;
+}
+
+static bool oxp_rgb_aux_snapshot(struct oxp_rgb_led *led,
+				 struct oxp_rgb_aux_state *state)
+{
+	struct oxp_rgb_aux_state *cached = oxp_rgb_aux_state(led);
+
+	if (!cached)
+		return false;
+
+	scoped_guard(spinlock_irqsave, &led->state_lock) {
+		*state = *cached;
+	}
+
+	return state->valid;
+}
+
+static int oxp_rgb_aux_apply(struct oxp_rgb_led *led,
+			     const struct oxp_rgb_aux_state *state)
+{
+	struct oxp_hid_cfg *cfg = led->cfg;
+	unsigned int max_brightness = led->mc_cdev.led_cdev.max_brightness;
+	unsigned int brightness = min_t(unsigned int, state->brightness,
+						 max_brightness);
+	u8 status_data[6] = { OXP_SET_PROPERTY, led->zone, 0x02,
+			      OXP_FEAT_DISABLED, 0x05, 0x04 };
+	struct oxp_gen_3_rgb_color_report color_report;
+	u8 command;
+	u8 green;
+	u8 blue;
+	u8 red;
+	int ret;
+
+	if (brightness)
+		status_data[3] = OXP_FEAT_ENABLED;
+
+	ret = oxp_gen_3_rgb_zone_property_out(cfg, status_data,
+					      sizeof(status_data));
+	if (ret || !brightness)
+		return ret;
+
+	/* Scale each RGB channel by brightness, rounding to the nearest integer. */
+	red = ((unsigned int)state->red * brightness + max_brightness / 2) /
+	      max_brightness;
+	green = ((unsigned int)state->green * brightness + max_brightness / 2) /
+		max_brightness;
+	blue = ((unsigned int)state->blue * brightness + max_brightness / 2) /
+	       max_brightness;
+
+	switch (state->effect) {
+	case OXP_RGB_AUX_EFFECT_MONOCOLOR:
+		command = OXP_EFFECT_MONO_TRUE;
+		break;
+	case OXP_RGB_AUX_EFFECT_BREATHING:
+		command = OXP_EFFECT_BREATHING_TRUE;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	oxp_gen_3_rgb_fill_color(&color_report, command, led->zone, red, green,
+				 blue);
+	return oxp_gen_3_rgb_zone_property_out(cfg, (u8 *)&color_report,
+					       sizeof(color_report));
+}
+
+static void oxp_rgb_aux_restore_locked(struct oxp_rgb_led *led)
+{
+	struct oxp_hid_cfg *cfg = led->cfg;
+	struct oxp_rgb_aux_state state;
+	int ret;
+
+	if (!oxp_rgb_aux_snapshot(led, &state))
+		return;
+
+	ret = oxp_rgb_aux_apply(led, &state);
+	if (ret)
+		dev_err(&cfg->hdev->dev,
+			"Failed to restore RGB zone %#04x: %i\n", led->zone, ret);
 }
 
 static ssize_t gamepad_mode_store(struct device *dev,
@@ -1913,6 +2051,25 @@ static void oxp_gen_3_rgb_queue(struct oxp_rgb_led *led,
 			"Error: Failed to write RGB color: %i\n", ret);
 }
 
+static void oxp_rgb_aux_queue(struct oxp_rgb_led *led)
+{
+	struct oxp_hid_cfg *cfg = led->cfg;
+	struct oxp_rgb_aux_state state;
+	int ret;
+
+	if (!oxp_rgb_aux_snapshot(led, &state))
+		return;
+
+	guard(mutex)(&cfg->rgb_mutex);
+	if (READ_ONCE(cfg->suspended) || READ_ONCE(cfg->removing))
+		return;
+
+	ret = oxp_rgb_aux_apply(led, &state);
+	if (ret)
+		dev_err(led->mc_cdev.led_cdev.dev,
+			"Failed to write RGB zone %#04x: %i\n", led->zone, ret);
+}
+
 static void oxp_rgb_queue_fn(struct work_struct *work)
 {
 	struct oxp_rgb_led *led = container_of(to_delayed_work(work),
@@ -1929,6 +2086,9 @@ static void oxp_rgb_queue_fn(struct work_struct *work)
 		else
 			oxp_rgb_full_queue(led, led->state);
 		break;
+	case OXP_RGB_AUX:
+		oxp_rgb_aux_queue(led);
+		break;
 	}
 }
 
@@ -1937,15 +2097,111 @@ static void oxp_rgb_brightness_set(struct led_classdev *led_cdev,
 {
 	struct led_classdev_mc *mc_cdev = lcdev_to_mccdev(led_cdev);
 	struct oxp_rgb_led *led = container_of(mc_cdev, struct oxp_rgb_led,
-					     mc_cdev);
+					       mc_cdev);
 	struct oxp_hid_cfg *cfg = led->cfg;
+	struct oxp_rgb_aux_state *state;
 
-	if (READ_ONCE(cfg->suspended) || READ_ONCE(cfg->removing))
+	if (READ_ONCE(cfg->removing))
 		return;
 
-	led_cdev->brightness = brightness;
+	switch (led->type) {
+	case OXP_RGB_FULL:
+		if (READ_ONCE(cfg->suspended))
+			return;
+		led_cdev->brightness = brightness;
+		break;
+	case OXP_RGB_AUX:
+		state = led->state;
+		led_cdev->brightness = brightness;
+		scoped_guard(spinlock_irqsave, &led->state_lock) {
+			state->brightness = brightness;
+			state->red = led->subled_info[0].intensity;
+			state->green = led->subled_info[1].intensity;
+			state->blue = led->subled_info[2].intensity;
+			state->valid = true;
+		}
+		if (READ_ONCE(cfg->suspended))
+			return;
+		break;
+	default:
+		return;
+	}
+
 	mod_delayed_work(system_dfl_wq, &led->work, msecs_to_jiffies(50));
 }
+
+static ssize_t oxp_rgb_aux_effect_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	struct oxp_rgb_led *led = oxp_rgb_led_from_dev(dev);
+	struct oxp_hid_cfg *cfg = led->cfg;
+	struct oxp_rgb_aux_state *state = oxp_rgb_aux_state(led);
+	int ret;
+
+	if (!state || READ_ONCE(cfg->removing))
+		return -ENODEV;
+
+	ret = sysfs_match_string(oxp_rgb_aux_effect_text, buf);
+	if (ret < 0)
+		return ret;
+
+	scoped_guard(spinlock_irqsave, &led->state_lock) {
+		state->effect = ret;
+		state->valid = true;
+	}
+
+	if (!READ_ONCE(cfg->suspended) && !READ_ONCE(cfg->removing))
+		mod_delayed_work(system_dfl_wq, &led->work,
+				 msecs_to_jiffies(50));
+
+	return count;
+}
+
+static ssize_t oxp_rgb_aux_effect_show(struct device *dev,
+				       struct device_attribute *attr, char *buf)
+{
+	struct oxp_rgb_led *led = oxp_rgb_led_from_dev(dev);
+	struct oxp_hid_cfg *cfg = led->cfg;
+	struct oxp_rgb_aux_state state;
+
+	if (!oxp_rgb_aux_state(led) || READ_ONCE(cfg->removing))
+		return -ENODEV;
+
+	oxp_rgb_aux_snapshot(led, &state);
+	if (state.effect >= ARRAY_SIZE(oxp_rgb_aux_effect_text))
+		return -EINVAL;
+
+	return sysfs_emit(buf, "%s\n", oxp_rgb_aux_effect_text[state.effect]);
+}
+static DEVICE_ATTR_RW_NAMED(oxp_rgb_aux_effect, "effect");
+
+static ssize_t oxp_rgb_aux_effect_index_show(struct device *dev,
+					     struct device_attribute *attr,
+					     char *buf)
+{
+	int count = 0;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(oxp_rgb_aux_effect_text); i++)
+		count += sysfs_emit_at(buf, count, "%s ",
+				       oxp_rgb_aux_effect_text[i]);
+	if (count)
+		buf[count - 1] = '\n';
+
+	return count;
+}
+static DEVICE_ATTR_RO_NAMED(oxp_rgb_aux_effect_index, "effect_index");
+
+static struct attribute *oxp_rgb_aux_attrs[] = {
+	&dev_attr_oxp_rgb_aux_effect.attr,
+	&dev_attr_oxp_rgb_aux_effect_index.attr,
+	NULL,
+};
+
+static const struct attribute_group oxp_rgb_aux_attr_group = {
+	.attrs = oxp_rgb_aux_attrs,
+};
 
 static struct attribute *oxp_rgb_attrs[] = {
 	&dev_attr_effect.attr,
@@ -1966,12 +2222,23 @@ static const struct oxp_rgb_led_desc oxp_rgb_led_descs[] = {
 		.name = "oxp:rgb:joystick_rings",
 		.type = OXP_RGB_FULL,
 	},
+	{
+		.name = "oxp:rgb:guide_button",
+		.type = OXP_RGB_AUX,
+		.zone = 0x05,
+	},
+	{
+		.name = "oxp:rgb:rear_logo",
+		.type = OXP_RGB_AUX,
+		.zone = 0x06,
+	},
 };
 
 static int oxp_rgb_led_init(struct oxp_hid_cfg *cfg, struct oxp_rgb_led *led,
 			    const struct oxp_rgb_led_desc *desc)
 {
 	struct oxp_rgb_full_state *full_state;
+	struct oxp_rgb_aux_state *aux_state;
 	struct hid_device *hdev = cfg->hdev;
 	u8 green;
 	u8 blue;
@@ -1979,6 +2246,7 @@ static int oxp_rgb_led_init(struct oxp_hid_cfg *cfg, struct oxp_rgb_led *led,
 
 	led->cfg = cfg;
 	led->type = desc->type;
+	led->zone = desc->zone;
 
 	switch (led->type) {
 	case OXP_RGB_FULL:
@@ -1991,6 +2259,20 @@ static int oxp_rgb_led_init(struct oxp_hid_cfg *cfg, struct oxp_rgb_led *led,
 		red = 0x24;
 		green = 0x22;
 		blue = 0x99;
+		break;
+	case OXP_RGB_AUX:
+		aux_state = devm_kzalloc(&hdev->dev, sizeof(*aux_state),
+					 GFP_KERNEL);
+		if (!aux_state)
+			return -ENOMEM;
+		aux_state->red = 0xff;
+		aux_state->green = 0xff;
+		aux_state->blue = 0xff;
+		aux_state->effect = OXP_RGB_AUX_EFFECT_MONOCOLOR;
+		led->state = aux_state;
+		red = 0xff;
+		green = 0xff;
+		blue = 0xff;
 		break;
 	default:
 		return -EINVAL;
@@ -2020,6 +2302,7 @@ static int oxp_rgb_led_init(struct oxp_hid_cfg *cfg, struct oxp_rgb_led *led,
 	led->mc_cdev.led_cdev.brightness_set = oxp_rgb_brightness_set;
 	led->mc_cdev.num_colors = ARRAY_SIZE(led->subled_info);
 	led->mc_cdev.subled_info = led->subled_info;
+	spin_lock_init(&led->state_lock);
 	INIT_DELAYED_WORK(&led->work, oxp_rgb_queue_fn);
 
 	return 0;
@@ -2027,7 +2310,8 @@ static int oxp_rgb_led_init(struct oxp_hid_cfg *cfg, struct oxp_rgb_led *led,
 
 static int oxp_rgb_leds_register(struct oxp_hid_cfg *cfg)
 {
-	int led_count = ARRAY_SIZE(oxp_rgb_led_descs);
+	int led_count = cfg->x2_rgb ? ARRAY_SIZE(oxp_rgb_led_descs) : 1;
+	const struct attribute_group *attr_group;
 	struct hid_device *hdev = cfg->hdev;
 	struct oxp_rgb_led *led;
 	int ret;
@@ -2051,8 +2335,19 @@ static int oxp_rgb_leds_register(struct oxp_hid_cfg *cfg)
 			return dev_err_probe(&hdev->dev, ret,
 					     "Failed to create RGB device\n");
 
+		switch (led->type) {
+		case OXP_RGB_FULL:
+			attr_group = &oxp_rgb_attr_group;
+			break;
+		case OXP_RGB_AUX:
+			attr_group = &oxp_rgb_aux_attr_group;
+			break;
+		default:
+			return -EINVAL;
+		}
+
 		ret = devm_device_add_group(led->mc_cdev.led_cdev.dev,
-					    &oxp_rgb_attr_group);
+					    attr_group);
 		if (ret)
 			return dev_err_probe(led->mc_cdev.led_cdev.dev, ret,
 					     "Failed to create RGB configuration attributes\n");

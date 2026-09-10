@@ -1,0 +1,196 @@
+What:		/sys/class/leds/oxp:rgb:joystick_rings/effect
+What:		/sys/class/leds/oxp:rgb:guide_button/effect
+What:		/sys/class/leds/oxp:rgb:rear_logo/effect
+Date:		April 2026
+Contact:	Derek J. Clark <derekjohn.clark@gmail.com>
+Description:	Read/write attribute selecting the lighting effect for the LED.
+
+		The joystick_rings LED supports the following effect names:
+
+		``aurora``, ``birthday_cake``, ``flowing_light``,
+		``chroma_popping``, ``neon``, ``chroma_breathing``, ``dreamy``,
+		``warm_sun``, ``cyberpunk``, ``sea_foam``, ``sunset_afterglow``,
+		``colorful``, ``monster_woke``, ``green_breathing``,
+		``blue_breathing``, ``yellow_breathing``, ``teal_breathing``,
+		``purple_breathing``, ``foggy_haze``, and ``monocolor``.
+
+		The guide_button and rear_logo LEDs support ``monocolor`` and
+		``breathing``. These two LEDs were added in August 2026 and are
+		available on the ONEXPLAYER 3 and ONEXPLAYER X2 Mini Pro.
+
+		The ``monocolor`` effect displays the color selected through
+		the standard multicolor LED ``multi_intensity`` attribute.
+		The auxiliary ``breathing`` effect pulses the selected color.
+		Other joystick ring effects select firmware-defined presets.
+		The standard brightness and multicolor attributes are documented
+		in Documentation/ABI/testing/sysfs-class-led and
+		Documentation/ABI/testing/sysfs-class-led-multicolor.
+
+		Read returns the selected effect name followed by a newline.
+		The value may reflect cached driver state rather than a live
+		hardware query. The joystick_rings LED may report ``unknown``
+		when no known effect has been recorded; this is not a selectable
+		effect. Auxiliary effect writes queue the update asynchronously.
+
+What:		/sys/class/leds/oxp:rgb:joystick_rings/effect_index
+What:		/sys/class/leds/oxp:rgb:guide_button/effect_index
+What:		/sys/class/leds/oxp:rgb:rear_logo/effect_index
+Date:		April 2026
+Contact:	Derek J. Clark <derekjohn.clark@gmail.com>
+Description:	Read-only list of effect names supported by the corresponding
+		LED, separated by spaces and terminated by a newline.
+
+		The supported names are described in the effect entry above.
+		The list is specific to each LED and does not include ``unknown``.
+		The guide_button and rear_logo attributes were added in August
+		2026 and are available on the ONEXPLAYER 3 and ONEXPLAYER X2
+		Mini Pro.
+
+What:		/sys/class/leds/oxp:rgb:joystick_rings/enabled
+Date:		April 2026
+Contact:	Derek J. Clark <derekjohn.clark@gmail.com>
+Description:	Read/write enable state for the joystick ring lighting.
+
+		Write ``true`` to enable lighting or ``false`` to disable it.
+		Only these literal names are accepted, not numeric boolean
+		values. Read requests lighting status and returns the driver's
+		enable state as one of these names followed by a newline.
+
+		This attribute is not exposed for guide_button or rear_logo.
+
+What:		/sys/class/leds/oxp:rgb:joystick_rings/enabled_index
+Date:		April 2026
+Contact:	Derek J. Clark <derekjohn.clark@gmail.com>
+Description:	Read-only list of names accepted by enabled. Returns
+		``false true`` followed by a newline.
+
+What:		/sys/class/leds/oxp:rgb:joystick_rings/speed
+Date:		April 2026
+Contact:	Derek J. Clark <derekjohn.clark@gmail.com>
+Description:	Read/write firmware animation-speed setting for the joystick
+		ring lighting. Write a decimal integer from 0 through 9.
+		These are firmware levels, not a duration or frequency.
+
+		Read requests lighting status and returns the driver's speed
+		setting as a decimal integer followed by a newline.
+		This attribute is not exposed for guide_button or rear_logo.
+
+What:		/sys/class/leds/oxp:rgb:joystick_rings/speed_range
+Date:		April 2026
+Contact:	Derek J. Clark <derekjohn.clark@gmail.com>
+Description:	Read-only range of values accepted by speed. Returns ``0-9``
+		followed by a newline; both endpoints are inclusive.
+
+What:		/sys/bus/hid/devices/.../gamepad_mode
+Date:		April 2026
+Contact:	Derek J. Clark <derekjohn.clark@gmail.com>
+Description:	Read/write controller mode on the HID configuration interface
+		with usage page 0xff00 (shared by Gen2 and X2/Gen3 devices). Write one of the following names:
+
+		* ``xinput``: normal gamepad input.
+		* ``debug``: route controller events to a hidraw interface for
+		  input-mapping diagnostics instead of the xpad evdev interface.
+
+		Read returns the driver's cached mode name followed by a newline,
+		not a firmware query. The initial cached mode is ``xinput``.
+		Switching to ``xinput`` also reapplies the cached rumble intensity.
+
+		This attribute and the other controller configuration attributes
+		below are attached directly to the selected HID configuration device's
+		sysfs directory, not an input device or LED directory. They are
+		not exposed on Gen1 configuration interfaces.
+
+What:		/sys/bus/hid/devices/.../gamepad_mode_index
+Date:		April 2026
+Contact:	Derek J. Clark <derekjohn.clark@gmail.com>
+Description:	Read-only list of supported controller modes. Returns
+		``xinput debug`` followed by a newline.
+
+What:		/sys/bus/hid/devices/.../button_a
+What:		/sys/bus/hid/devices/.../button_b
+What:		/sys/bus/hid/devices/.../button_x
+What:		/sys/bus/hid/devices/.../button_y
+What:		/sys/bus/hid/devices/.../button_lb
+What:		/sys/bus/hid/devices/.../button_rb
+What:		/sys/bus/hid/devices/.../button_lt
+What:		/sys/bus/hid/devices/.../button_rt
+What:		/sys/bus/hid/devices/.../button_start
+What:		/sys/bus/hid/devices/.../button_select
+What:		/sys/bus/hid/devices/.../button_l3
+What:		/sys/bus/hid/devices/.../button_r3
+What:		/sys/bus/hid/devices/.../button_d_up
+What:		/sys/bus/hid/devices/.../button_d_down
+What:		/sys/bus/hid/devices/.../button_d_left
+What:		/sys/bus/hid/devices/.../button_d_right
+What:		/sys/bus/hid/devices/.../button_m1
+What:		/sys/bus/hid/devices/.../button_m2
+Date:		April 2026
+Contact:	Derek J. Clark <derekjohn.clark@gmail.com>
+Description:	Read/write output mapping for the named physical controller
+		button on a HID configuration device with usage page 0xff00.
+
+		Write one exact, case-sensitive mapping name from
+		button_mapping_options, such as ``BTN_A`` or ``KEY_F15``.
+		Numeric key codes, multiple names, and arbitrary key names
+		are not accepted.
+
+		Read returns the driver's cached mapping name followed by a
+		newline. Writes update that cache and queue the firmware update
+		asynchronously; successful writes do not confirm that the
+		hardware has already applied the mapping.
+
+What:		/sys/bus/hid/devices/.../button_mapping_options
+Date:		April 2026
+Contact:	Derek J. Clark <derekjohn.clark@gmail.com>
+Description:	Read-only list of output mapping names accepted by the
+		controller button attributes, separated by spaces and terminated by a
+		newline. All 18 button attributes accept the same list.
+
+		The gamepad mapping names are:
+
+		``BTN_A``, ``BTN_B``, ``BTN_X``, ``BTN_Y``, ``BTN_LB``,
+		``BTN_RB``, ``BTN_LT``, ``BTN_RT``, ``BTN_START``, ``BTN_SELECT``,
+		``BTN_L3``, ``BTN_R3``, ``DPAD_UP``, ``DPAD_DOWN``,
+		``DPAD_LEFT``, ``DPAD_RIGHT``, ``JOY_L_UP``, ``JOY_L_UP_RIGHT``,
+		``JOY_L_RIGHT``, ``JOY_L_DOWN_RIGHT``, ``JOY_L_DOWN``,
+		``JOY_L_DOWN_LEFT``, ``JOY_L_LEFT``, ``JOY_L_UP_LEFT``,
+		``JOY_R_UP``, ``JOY_R_UP_RIGHT``, ``JOY_R_RIGHT``,
+		``JOY_R_DOWN_RIGHT``, ``JOY_R_DOWN``, ``JOY_R_DOWN_LEFT``,
+		``JOY_R_LEFT``, ``JOY_R_UP_LEFT``, and ``BTN_GUIDE``.
+
+		Keyboard mapping names are ``KEY_F1`` through ``KEY_F24``.
+		There are no ``BTN_M1`` or ``BTN_M2`` output mapping names;
+		button_m1 and button_m2 select from the same options as the
+		other buttons.
+
+What:		/sys/bus/hid/devices/.../reset_buttons
+Date:		April 2026
+Contact:	Derek J. Clark <derekjohn.clark@gmail.com>
+Description:	Write-only reset of the controller's button mappings.
+		Write the decimal value ``1`` to restore the driver's default
+		mappings and send them to the controller. Other values are
+		rejected.
+
+		Main controls map to their corresponding gamepad functions;
+		M1 maps to ``KEY_F15`` and M2 to ``KEY_F16``. This resets button
+		mappings only, not lighting, rumble, or other device settings.
+		It is not a factory reset. Cached mappings are reset before
+		the firmware update and are not rolled back if that update fails.
+
+What:		/sys/bus/hid/devices/.../rumble_intensity
+Date:		April 2026
+Contact:	Derek J. Clark <derekjohn.clark@gmail.com>
+Description:	Read/write rumble-intensity level on the HID configuration
+		device with usage page 0xff00. Write a decimal integer from 0 through 5. These are
+		firmware levels, not percentages or values in physical units.
+
+		Read returns the driver's cached level as a decimal integer
+		followed by a newline. The initial cached value is 5. A write
+		sends the firmware command before updating the cached level.
+
+What:		/sys/bus/hid/devices/.../rumble_intensity_range
+Date:		April 2026
+Contact:	Derek J. Clark <derekjohn.clark@gmail.com>
+Description:	Read-only range of values accepted by the rumble_intensity
+		attribute. Returns ``0-5`` followed by a newline; both endpoints
+		are inclusive.

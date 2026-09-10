@@ -20381,6 +20381,7 @@ ONEXPLAYER HID DRIVER
 M:	Derek J. Clark <derekjohn.clark@gmail.com>
 L:	linux-input@vger.kernel.org
 S:	Maintained
+F:	Documentation/ABI/testing/sysfs-driver-hid-oxp
 F:	drivers/hid/hid-oxp.c
 
 ONEXPLAYER PLATFORM EC DRIVER
