@@ -220,6 +220,7 @@ out:
 	ctxt->sc_send_wr.num_sge = 0;
 	ctxt->sc_cur_sge_no = 0;
 	ctxt->sc_page_count = 0;
+	ctxt->sc_ack_cookie = (svc_ack_cookie_t){};
 	ctxt->sc_wr_chain = &ctxt->sc_send_wr;
 	ctxt->sc_sqecount = 1;
 
@@ -470,11 +471,17 @@ static void svc_rdma_wc_send(struct ib_cq *cq, struct ib_wc *wc)
 	if (unlikely(wc->status != IB_WC_SUCCESS))
 		goto flushed;
 
+	if (svc_ack_cookie_present(&ctxt->sc_ack_cookie))
+		svc_reply_acked(rdma->sc_xprt.xpt_server,
+				&ctxt->sc_ack_cookie, true);
 	trace_svcrdma_wc_send(&ctxt->sc_cid);
 	svc_rdma_send_ctxt_put(rdma, ctxt);
 	return;
 
 flushed:
+	if (svc_ack_cookie_present(&ctxt->sc_ack_cookie))
+		svc_reply_acked(rdma->sc_xprt.xpt_server,
+				&ctxt->sc_ack_cookie, false);
 	if (wc->status != IB_WC_WR_FLUSH_ERR)
 		trace_svcrdma_wc_send_err(wc, &ctxt->sc_cid);
 	else
@@ -1198,6 +1205,7 @@ int svc_rdma_sendto(struct svc_rqst *rqstp)
 	if (ret < 0)
 		goto put_ctxt;
 
+	sctxt->sc_ack_cookie = rqstp->rq_ack_cookie;
 	ret = svc_rdma_send_reply_msg(rdma, sctxt, rctxt, rqstp);
 	if (ret < 0)
 		goto send_err;
@@ -1206,6 +1214,12 @@ int svc_rdma_sendto(struct svc_rqst *rqstp)
 send_err:
 	if (ret != -E2BIG && ret != -EINVAL)
 		goto put_ctxt;
+
+	/* The sctxt is reused for the RDMA_ERROR message. Clear the
+	 * ack cookie so that message's Send completion does not
+	 * report the unsent reply as delivered.
+	 */
+	sctxt->sc_ack_cookie = (svc_ack_cookie_t){};
 
 	/* Send completion releases payload pages that were part
 	 * of previously posted RDMA Writes.

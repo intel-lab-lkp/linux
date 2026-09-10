@@ -248,6 +248,7 @@ struct svc_rdma_send_ctxt {
 	struct list_head	sc_write_info_list;
 	struct svc_rdma_write_info sc_reply_info;
 
+	svc_ack_cookie_t	sc_ack_cookie;
 	void			*sc_xprt_buf;
 	int			sc_page_count;
 	int			sc_cur_sge_no;
