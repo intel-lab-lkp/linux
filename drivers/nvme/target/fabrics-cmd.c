@@ -65,7 +65,7 @@ static void nvmet_execute_prop_get(struct nvmet_req *req)
 			val = ctrl->csts;
 			break;
 		case NVME_REG_CRTO:
-			val = NVME_CAP_TIMEOUT(ctrl->csts);
+			val = NVME_CAP_TIMEOUT(ctrl->cap);
 			break;
 		default:
 			status = NVME_SC_INVALID_FIELD | NVME_STATUS_DNR;
