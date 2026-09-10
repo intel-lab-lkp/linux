@@ -325,7 +325,7 @@ void unlink_anon_vmas(struct vm_area_struct *vma);
 
 static inline int anon_vma_prepare(struct vm_area_struct *vma)
 {
-	if (likely(vma->anon_vma))
+	if (likely(vma_anon_tracked(vma)))
 		return 0;
 
 	return __anon_vma_prepare(vma);
