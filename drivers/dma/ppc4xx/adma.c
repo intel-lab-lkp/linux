@@ -4156,8 +4156,22 @@ static int ppc440spe_adma_probe(struct platform_device *ofdev)
 		}
 		chan->pdest = dma_map_page(&ofdev->dev, chan->pdest_page, 0,
 					   PAGE_SIZE, DMA_BIDIRECTIONAL);
+		if (dma_mapping_error(&ofdev->dev, chan->pdest)) {
+			__free_page(chan->pdest_page);
+			__free_page(chan->qdest_page);
+			ret = -ENOMEM;
+			goto out;
+		}
 		chan->qdest = dma_map_page(&ofdev->dev, chan->qdest_page, 0,
 					   PAGE_SIZE, DMA_BIDIRECTIONAL);
+		if (dma_mapping_error(&ofdev->dev, chan->qdest)) {
+			dma_unmap_page(&ofdev->dev, chan->pdest,
+				       PAGE_SIZE, DMA_BIDIRECTIONAL);
+			__free_page(chan->pdest_page);
+			__free_page(chan->qdest_page);
+			ret = -ENOMEM;
+			goto out;
+		}
 	}
 
 	ref = kmalloc_obj(*ref);
