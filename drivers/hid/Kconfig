@@ -547,6 +547,17 @@ config HID_WALTOP
 	help
 	Support for Waltop tablets.
 
+config HID_VALVE_INDEX
+	tristate "Valve Index headset"
+	depends on USB_HID
+	help
+	  Support for the Valve Index headset. This driver works around the
+	  headset failing to provide its EDID after a DisplayPort link shutdown
+	  by rebooting the headset on resume from system suspend and at shutdown.
+
+	  To compile this driver as a module, choose M here: the module will be
+	  called hid-valve-index.
+
 config HID_VIEWSONIC
 	tristate "ViewSonic/Signotec"
 	help

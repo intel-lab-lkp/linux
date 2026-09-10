@@ -1,0 +1,12 @@
+What:		/sys/bus/hid/devices/<bus>:<vid>:<pid>.<n>/reboot
+Date:		October 2026
+Contact:	linux-input@vger.kernel.org
+Description:
+		Writing a boolean true value reboots the Valve Index headset to
+		recover its EDID service. Writing a boolean false value has no
+		effect. This file is write-only.
+
+		The Valve Index is a composite HID device. The reboot command is
+		only supported by the interface that provides the headset's 64-byte
+		output report. Writing true to this file on another interface fails
+		with -ENODEV.

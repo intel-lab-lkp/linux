@@ -156,6 +156,7 @@ obj-$(CONFIG_HID_XIAOMI)	+= hid-xiaomi.o
 obj-$(CONFIG_HID_XINMO)		+= hid-xinmo.o
 obj-$(CONFIG_HID_ZEROPLUS)	+= hid-zpff.o
 obj-$(CONFIG_HID_ZYDACRON)	+= hid-zydacron.o
+obj-$(CONFIG_HID_VALVE_INDEX)	+= hid-valve-index.o
 obj-$(CONFIG_HID_VIEWSONIC)	+= hid-viewsonic.o
 obj-$(CONFIG_HID_VRC2)		+= hid-vrc2.o
 obj-$(CONFIG_HID_HUAWEI)	+= hid-huawei.o
