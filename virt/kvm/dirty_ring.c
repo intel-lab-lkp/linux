@@ -170,9 +170,8 @@ int kvm_dirty_ring_reset(struct kvm *kvm, struct kvm_dirty_ring *ring,
 					continue;
 				}
 
-				/* Backwards visit, careful about overflows! */
-				if (delta > -BITS_PER_LONG && delta < 0 &&
-				(mask << -delta >> -delta) == mask) {
+				/* Backwards visit, but do not discard set bits. */
+				if (-(u64)delta <= __builtin_clzl(mask)) {
 					cur_offset = next_offset;
 					mask = (mask << -delta) | 1;
 					continue;
