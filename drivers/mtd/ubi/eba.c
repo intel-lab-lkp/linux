@@ -805,7 +805,7 @@ static int try_recover_peb(struct ubi_volume *vol, int pnum, int lnum,
 {
 	struct ubi_device *ubi = vol->ubi;
 	struct ubi_vid_hdr *vid_hdr;
-	int new_pnum, err, vol_id = vol->vol_id, data_size;
+	int new_pnum, err, vol_id = vol->vol_id, data_size, torture = 0;
 	uint32_t crc;
 
 	*retry = false;
@@ -843,6 +843,7 @@ static int try_recover_peb(struct ubi_volume *vol, int pnum, int lnum,
 
 	memcpy(ubi->peb_buf + offset, buf, len);
 
+	torture = 1;
 	data_size = offset + len;
 	crc = crc32(UBI_CRC32_INIT, ubi->peb_buf, data_size);
 	vid_hdr->sqnum = cpu_to_be64(ubi_next_sqnum(ubi));
@@ -872,8 +873,9 @@ out_put:
 		 * Bad luck? This physical eraseblock is bad too? Crud. Let's
 		 * try to get another one.
 		 */
-		ubi_wl_put_peb(ubi, vol_id, lnum, new_pnum, 1);
-		ubi_warn(ubi, "failed to write to PEB %d", new_pnum);
+		ubi_wl_put_peb(ubi, vol_id, lnum, new_pnum, torture);
+		if (torture)
+			ubi_warn(ubi, "failed to write to PEB %d", new_pnum);
 	}
 
 	return err;
