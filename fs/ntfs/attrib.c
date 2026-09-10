@@ -1678,20 +1678,24 @@ void ntfs_attr_reinit_search_ctx(struct ntfs_attr_search_ctx *ctx)
 }
 
 /*
- * ntfs_attr_get_search_ctx - allocate/initialize a new attribute search context
+ * ntfs_attr_get_search_ctx_gfp - allocate/initialize a new attribute search
+ * context using the given allocation flags
  * @ni:		ntfs inode with which to initialize the search context
  * @mrec:	mft record with which to initialize the search context
+ * @gfp:	allocation flags for the search context
  *
- * Allocate a new attribute search context, initialize it with @ni and @mrec,
- * and return it. Return NULL if allocation failed.
+ * Allocate a new attribute search context with kmem_cache_alloc(@gfp),
+ * initialize it with @ni and @mrec, and return it. Return NULL if allocation
+ * failed.  Callers that must not sleep, e.g. those servicing an IOCB_NOWAIT
+ * request, pass GFP_ATOMIC so the allocation cannot enter direct reclaim.
  */
-struct ntfs_attr_search_ctx *ntfs_attr_get_search_ctx(struct ntfs_inode *ni,
-		struct mft_record *mrec)
+struct ntfs_attr_search_ctx *ntfs_attr_get_search_ctx_gfp(
+		struct ntfs_inode *ni, struct mft_record *mrec, gfp_t gfp)
 {
 	struct ntfs_attr_search_ctx *ctx;
 	bool init;
 
-	ctx = kmem_cache_alloc(ntfs_attr_ctx_cache, GFP_NOFS);
+	ctx = kmem_cache_alloc(ntfs_attr_ctx_cache, gfp);
 	if (ctx) {
 		init = ntfs_attr_init_search_ctx(ctx, ni, mrec);
 		if (init == false) {
@@ -1701,6 +1705,20 @@ struct ntfs_attr_search_ctx *ntfs_attr_get_search_ctx(struct ntfs_inode *ni,
 	}
 
 	return ctx;
+}
+
+/*
+ * ntfs_attr_get_search_ctx - allocate/initialize a new attribute search context
+ * @ni:		ntfs inode with which to initialize the search context
+ * @mrec:	mft record with which to initialize the search context
+ *
+ * Allocate a new attribute search context, initialize it with @ni and @mrec,
+ * and return it. Return NULL if allocation failed.
+ */
+struct ntfs_attr_search_ctx *ntfs_attr_get_search_ctx(
+		struct ntfs_inode *ni, struct mft_record *mrec)
+{
+	return ntfs_attr_get_search_ctx_gfp(ni, mrec, GFP_NOFS);
 }
 
 /*
