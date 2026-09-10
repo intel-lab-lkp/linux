@@ -15,6 +15,7 @@
 #include <linux/fscache-cache.h>
 #include <linux/cred.h>
 #include <linux/security.h>
+#include <linux/poll.h>
 
 #define CACHEFILES_DIO_BLOCK_SIZE 4096
 
@@ -118,12 +119,22 @@ struct cachefiles_object *cachefiles_cres_object(struct netfs_cache_resources *c
 }
 
 /*
+ * Wake up the daemon polling on /dev/cachefiles.
+ */
+static inline void cachefiles_wake_poll(struct cachefiles_cache *cache,
+					__poll_t mask)
+{
+	__wake_up(&cache->daemon_pollwq, TASK_NORMAL, 0, poll_to_key(mask));
+}
+
+/*
  * note change of state for daemon
  */
-static inline void cachefiles_state_changed(struct cachefiles_cache *cache)
+static inline void cachefiles_state_changed(struct cachefiles_cache *cache,
+					    __poll_t mask)
 {
 	set_bit(CACHEFILES_STATE_CHANGED, &cache->flags);
-	wake_up_all(&cache->daemon_pollwq);
+	cachefiles_wake_poll(cache, mask);
 }
 
 /*

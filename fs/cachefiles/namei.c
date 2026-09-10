@@ -74,7 +74,7 @@ void cachefiles_unmark_inode_in_use(struct cachefiles_object *object,
 	if (!test_bit(CACHEFILES_OBJECT_USING_TMPFILE, &object->flags)) {
 		atomic_long_add(inode->i_blocks, &cache->b_released);
 		if (atomic_inc_return(&cache->f_released))
-			cachefiles_state_changed(cache);
+			cachefiles_state_changed(cache, EPOLLIN);
 	}
 }
 

@@ -255,7 +255,7 @@ int cachefiles_has_space(struct cachefiles_cache *cache,
 	    test_and_clear_bit(CACHEFILES_CULLING, &cache->flags)
 	    ) {
 		_debug("cease culling");
-		cachefiles_state_changed(cache);
+		cachefiles_state_changed(cache, EPOLLIN);
 	}
 
 	//_leave(" = 0");
@@ -275,7 +275,7 @@ stop_and_begin_cull:
 begin_cull:
 	if (!test_and_set_bit(CACHEFILES_CULLING, &cache->flags)) {
 		_debug("### CULL CACHE ###");
-		cachefiles_state_changed(cache);
+		cachefiles_state_changed(cache, EPOLLIN | EPOLLOUT);
 	}
 
 	_leave(" = %d", ret);
