@@ -26,6 +26,7 @@
 #include <linux/acct.h>
 #include <linux/tsacct_kern.h>
 #include <linux/file.h>
+#include <linux/fdtable.h>
 #include <linux/freezer.h>
 #include <linux/binfmts.h>
 #include <linux/nsproxy.h>
@@ -432,9 +433,8 @@ kill_orphaned_pgrp(struct task_struct *tsk, struct task_struct *parent)
 static void coredump_task_exit(struct task_struct *tsk,
 			       struct core_state *core_state)
 {
-	struct core_thread self;
+	struct core_thread self = { .task = tsk };
 
-	self.task = tsk;
 	if (self.task->flags & PF_SIGNALED)
 		self.next = xchg(&core_state->tasks, &self);
 	else
@@ -449,6 +449,13 @@ static void coredump_task_exit(struct task_struct *tsk,
 		set_current_state(TASK_IDLE|TASK_FREEZABLE);
 		if (!self.task) /* see coredump_finish() */
 			break;
+		/* Pairs with the release in coredump_close_files(). */
+		if (smp_load_acquire(&self.files)) {
+			__set_current_state(TASK_RUNNING);
+			switch_files_struct(tsk, no_free_ptr(self.files));
+			atomic_dec_and_wake_up(&core_state->threads_remaining);
+			continue;
+		}
 		schedule();
 	}
 	__set_current_state(TASK_RUNNING);

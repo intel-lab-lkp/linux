@@ -549,6 +549,40 @@ static int coredump_wait(int exit_code, struct core_state *core_state)
 	return core_waiters;
 }
 
+/*
+ * Allocate a new empty fdtable and switch the whole thread-group to it.
+ * Put all the old fdtables freeing up resources and locks before writing the
+ * coredump.
+ */
+static bool coredump_close_files(struct core_state *core_state)
+{
+	struct files_struct *files;
+	struct core_thread *ct;
+
+	files = alloc_files_struct();
+	if (!files)
+		return false;
+
+	for (ct = core_state->tasks; ct; ct = ct->next) {
+		/* Tasks without a table such as vhost workers can be skipped. */
+		if (!ct->task->files)
+			continue;
+		atomic_inc(&core_state->threads_remaining);
+		/* ct->files holds a reference until the thread switches to it. */
+		atomic_inc(&files->count);
+		/* Pairs with the acquire in coredump_task_exit(). */
+		smp_store_release(&ct->files, files);
+		wake_up_process(ct->task);
+	}
+
+	/* Use the dumper's real creds not the overridden ones. */
+	scoped_with_creds(current_real_cred())
+		switch_files_struct(current, files);
+
+	coredump_wait_inactive(core_state);
+	return true;
+}
+
 static void coredump_finish(enum coredump_state state)
 {
 	struct core_thread *curr, *next;
@@ -838,7 +872,8 @@ static bool coredump_sock_request(struct core_name *cn, struct coredump_params *
 		.mask			= COREDUMP_KERNEL | COREDUMP_USERSPACE |
 					  COREDUMP_REJECT | COREDUMP_WAIT |
 					  COREDUMP_RECORDS | COREDUMP_SPARSE |
-					  COREDUMP_MEMORY_TYPES,
+					  COREDUMP_MEMORY_TYPES |
+					  COREDUMP_CLOSE_FILES,
 		.size_ack		= sizeof(struct coredump_ack),
 		.memory_types		= cprm->memory_types,
 		.memory_types_mask	= COREDUMP_MEMORY_ALL,
@@ -902,6 +937,12 @@ static bool coredump_sock_request(struct core_name *cn, struct coredump_params *
 
 	/* Zero records only exist inside a record stream. */
 	if ((ack.mask & COREDUMP_SPARSE) && !(ack.mask & COREDUMP_RECORDS)) {
+		coredump_sock_mark(cprm->file, COREDUMP_MARK_CONFLICTING);
+		return false;
+	}
+
+	/* A rejected task exits right away and closes everything anyway. */
+	if ((ack.mask & COREDUMP_CLOSE_FILES) && (ack.mask & COREDUMP_REJECT)) {
 		coredump_sock_mark(cprm->file, COREDUMP_MARK_CONFLICTING);
 		return false;
 	}
@@ -1219,6 +1260,10 @@ static void do_coredump(struct core_name *cn, struct coredump_params *cprm,
 
 	/* Don't even generate the coredump. */
 	if (cprm->mask & COREDUMP_REJECT)
+		return;
+
+	if ((cprm->mask & COREDUMP_CLOSE_FILES) &&
+	    !coredump_close_files(current->signal->core_state))
 		return;
 
 	if ((cprm->mask & COREDUMP_KERNEL) && !coredump_write(cprm, binfmt))
