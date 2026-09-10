@@ -742,6 +742,8 @@ static int ath11k_ahb_hif_suspend(struct ath11k_base *ab)
 					  ATH11K_AHB_SMP2P_SMEM_VALUE_MASK, value);
 	if (ret) {
 		ath11k_err(ab, "failed to send smp2p power save enter cmd :%d\n", ret);
+		if (disable_irq_wake(wake_irq))
+			ath11k_warn(ab, "failed to disable wakeup irq on suspend failure\n");
 		return ret;
 	}
 
