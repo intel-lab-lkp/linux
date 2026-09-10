@@ -1241,17 +1241,12 @@ static int lenovo_probe_tpkbd(struct hid_device *hdev)
 	if (!hid_validate_values(hdev, HID_OUTPUT_REPORT, 3, 0, 2))
 		return -ENODEV;
 
-	ret = sysfs_create_group(&hdev->dev.kobj, &lenovo_attr_group_tpkbd);
-	if (ret)
-		hid_warn(hdev, "Could not create sysfs group: %d\n", ret);
-
 	data_pointer = devm_kzalloc(&hdev->dev,
 				    sizeof(struct lenovo_drvdata),
 				    GFP_KERNEL);
 	if (data_pointer == NULL) {
 		hid_err(hdev, "Could not allocate memory for driver data\n");
-		ret = -ENOMEM;
-		goto err;
+		return -ENOMEM;
 	}
 
 	// set same default values as windows driver
@@ -1259,6 +1254,10 @@ static int lenovo_probe_tpkbd(struct hid_device *hdev)
 	data_pointer->press_speed = 0x38;
 
 	hid_set_drvdata(hdev, data_pointer);
+
+	ret = sysfs_create_group(&hdev->dev.kobj, &lenovo_attr_group_tpkbd);
+	if (ret)
+		hid_warn(hdev, "Could not create sysfs group: %d\n", ret);
 
 	ret = lenovo_register_leds(hdev);
 	if (ret)
