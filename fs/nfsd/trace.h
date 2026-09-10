@@ -1597,6 +1597,7 @@ DEFINE_EVENT(nfsd_drc_entry_class, nfsd_drc_##name,		\
 DEFINE_NFSD_DRC_ENTRY_EVENT(evict_acked);
 DEFINE_NFSD_DRC_ENTRY_EVENT(evict_pressure);
 DEFINE_NFSD_DRC_ENTRY_EVENT(evict_expired);
+DEFINE_NFSD_DRC_ENTRY_EVENT(evict_implied_ack);
 
 TRACE_EVENT(nfsd_drc_reply_acked,
 	TP_PROTO(

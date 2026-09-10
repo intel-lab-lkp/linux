@@ -90,6 +90,36 @@ nfsd_hashsize(unsigned int limit)
 	return roundup_pow_of_two(limit / TARGET_BUCKET_SIZE);
 }
 
+/*
+ * A later request on @xprt is taken as evidence that the client
+ * received @rp's reply, because a client does not retransmit within
+ * a live connection. Only XPT_ORDERED transports qualify: a UDP
+ * client retransmits on timeout, and a datagram from any of the
+ * peers sharing the UDP svc_xprt would evict another client's reply.
+ *
+ * A pipelined client sends its next request before @rp's reply
+ * arrives, so while the transport is still going to report on that
+ * reply, wait for the report instead.
+ *
+ * c_timestamp is set after xpt_last_recv was recorded for @rp's own
+ * request, so a newer xpt_last_recv means a later request arrived.
+ */
+static bool nfsd_cacherep_implied_ack(struct svc_xprt *xprt,
+				      struct nfsd_cacherep *rp)
+{
+	unsigned long last_req;
+
+	if (!xprt || rp->c_xprt != xprt->xpt_id)
+		return false;
+	if (!test_bit(XPT_ORDERED, &xprt->xpt_flags))
+		return false;
+	if (rp->c_ack_pending)
+		return false;
+
+	last_req = READ_ONCE(xprt->xpt_last_recv);
+	return time_after(last_req, rp->c_timestamp);
+}
+
 static struct nfsd_cacherep *
 nfsd_cacherep_alloc(struct svc_rqst *rqstp, __wsum csum,
 		    struct nfsd_net *nn)
@@ -337,10 +367,14 @@ static void nfsd_reply_ack(void *data, const svc_ack_cookie_t *cookie,
 /*
  * Remove and return no more than @max evictable entries in bucket @b,
  * visiting at most 4 * @max entries. @max must not be zero.
+ *
+ * @xprt is the transport the current request arrived on, or NULL when the
+ * caller has none.
  */
 static void
 nfsd_prune_bucket_locked(struct nfsd_net *nn, struct nfsd_drc_bucket *b,
-			 unsigned int max, struct list_head *dispose)
+			 unsigned int max, struct list_head *dispose,
+			 struct svc_xprt *xprt)
 {
 	unsigned long expiry = jiffies - RC_EXPIRE;
 	struct nfsd_cacherep *rp, *tmp;
@@ -360,6 +394,11 @@ nfsd_prune_bucket_locked(struct nfsd_net *nn, struct nfsd_drc_bucket *b,
 		}
 		if (time_before_eq(rp->c_timestamp, expiry)) {
 			trace_nfsd_drc_evict_expired(nn, rp);
+			goto evict;
+		}
+		if (rp->c_state == RC_DONE &&
+		    nfsd_cacherep_implied_ack(xprt, rp)) {
+			trace_nfsd_drc_evict_implied_ack(nn, rp);
 			goto evict;
 		}
 		goto next;
@@ -426,7 +465,7 @@ nfsd_reply_cache_scan(struct shrinker *shrink, struct shrink_control *sc)
 
 		spin_lock(&b->cache_lock);
 		nfsd_prune_bucket_locked(nn, b, sc->nr_to_scan - freed,
-					 &dispose);
+					 &dispose, NULL);
 		spin_unlock(&b->cache_lock);
 
 		freed += nfsd_cacherep_dispose(&dispose);
@@ -599,7 +638,7 @@ int nfsd_cache_lookup(struct svc_rqst *rqstp, unsigned int start,
 		goto found_entry;
 	*cacherep = rp;
 	rp->c_state = RC_INPROG;
-	nfsd_prune_bucket_locked(nn, b, 3, &dispose);
+	nfsd_prune_bucket_locked(nn, b, 3, &dispose, rqstp->rq_xprt);
 	spin_unlock(&b->cache_lock);
 
 	nfsd_cacherep_dispose(&dispose);

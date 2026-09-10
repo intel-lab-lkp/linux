@@ -1932,6 +1932,7 @@ TRACE_EVENT(svc_stats_latency,
 	svc_xprt_flag(KILL_TEMP)					\
 	svc_xprt_flag(CONG_CTRL)					\
 	svc_xprt_flag(REPLY_ACK)					\
+	svc_xprt_flag(ORDERED)						\
 	svc_xprt_flag(HANDSHAKE)					\
 	svc_xprt_flag(TLS_SESSION)					\
 	svc_xprt_flag(PEER_AUTH)					\
