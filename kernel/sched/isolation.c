@@ -17,6 +17,7 @@ enum hk_flags {
 	HK_FLAG_DOMAIN		= BIT(HK_TYPE_DOMAIN),
 	HK_FLAG_MANAGED_IRQ	= BIT(HK_TYPE_MANAGED_IRQ),
 	HK_FLAG_KERNEL_NOISE	= BIT(HK_TYPE_KERNEL_NOISE),
+	HK_FLAG_MANAGED_IRQ_STRICT = BIT(HK_TYPE_MANAGED_IRQ_STRICT),
 };
 
 DEFINE_STATIC_KEY_FALSE(housekeeping_overridden);
@@ -354,6 +355,12 @@ static int __init housekeeping_isolcpus_setup(char *str)
 			continue;
 		}
 
+		if (!strncmp(str, "managed_irq_strict,", 19)) {
+			str += 19;
+			flags |= HK_FLAG_MANAGED_IRQ_STRICT;
+			continue;
+		}
+
 		/*
 		 * Skip unknown sub-parameter and validate that it is not
 		 * containing an invalid character.
@@ -373,6 +380,15 @@ static int __init housekeeping_isolcpus_setup(char *str)
 			break;
 		str++;
 	}
+
+	/*
+	 * managed_irq_strict is a strict superset of managed_irq.
+	 * Ensure that HK_FLAG_MANAGED_IRQ is also set so that subsystems
+	 * relying on managed interrupt isolation (e.g. Hyper-V VMBus channel
+	 * distribution and CPU hotplug IRQ restoration) continue to function.
+	 */
+	if (flags & HK_FLAG_MANAGED_IRQ_STRICT)
+		flags |= HK_FLAG_MANAGED_IRQ;
 
 	/* Default behaviour for isolcpus without flags */
 	if (!flags)
