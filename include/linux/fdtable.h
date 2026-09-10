@@ -100,6 +100,7 @@ static inline bool close_on_exec(unsigned int fd, const struct files_struct *fil
 struct task_struct;
 
 void put_files_struct(struct files_struct *fs);
+struct files_struct *alloc_files_struct(void);
 void switch_files_struct(struct task_struct *tsk, struct files_struct *files);
 int unshare_fd(unsigned long unshare_flags, struct files_struct **new_fdp);
 struct fd_range {
