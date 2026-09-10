@@ -2637,19 +2637,25 @@ static int ieee80211_add_station(struct wiphy *wiphy, struct wireless_dev *wdev,
 {
 	struct ieee80211_local *local = wiphy_priv(wiphy);
 	struct sta_info *sta;
-	struct ieee80211_sub_if_data *sdata;
+	struct ieee80211_sub_if_data *sdata = IEEE80211_WDEV_TO_SUB_IF(wdev);
 	int err;
 
 	lockdep_assert_wiphy(local->hw.wiphy);
 
 	if (params->vlan) {
-		sdata = IEEE80211_DEV_TO_SUB_IF(params->vlan);
+		struct ieee80211_sub_if_data *vlansdata =
+			IEEE80211_DEV_TO_SUB_IF(params->vlan);
 
-		if (sdata->vif.type != NL80211_IFTYPE_AP_VLAN &&
-		    sdata->vif.type != NL80211_IFTYPE_AP)
+		if (vlansdata->vif.type != NL80211_IFTYPE_AP_VLAN &&
+		    vlansdata->vif.type != NL80211_IFTYPE_AP)
 			return -EINVAL;
-	} else
-		sdata = IEEE80211_WDEV_TO_SUB_IF(wdev);
+
+		/* the VLAN must belong to the AP we're adding the station to */
+		if (vlansdata->bss != sdata->bss)
+			return -EINVAL;
+
+		sdata = vlansdata;
+	}
 
 	if (ether_addr_equal(mac, sdata->vif.addr))
 		return -EINVAL;
@@ -2844,6 +2850,10 @@ static int ieee80211_change_station(struct wiphy *wiphy,
 
 	if (params->vlan && params->vlan != sta->sdata->dev) {
 		vlansdata = IEEE80211_DEV_TO_SUB_IF(params->vlan);
+
+		/* the VLAN must belong to the AP the station is on */
+		if (vlansdata->bss != sdata->bss)
+			return -EINVAL;
 
 		if (params->vlan->ieee80211_ptr->use_4addr) {
 			err = ieee80211_set_sta_4addr(local, vlansdata, sta);
