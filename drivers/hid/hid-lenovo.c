@@ -1486,6 +1486,8 @@ static void lenovo_remove_tp10ubkbd(struct hid_device *hdev)
 
 static void lenovo_remove(struct hid_device *hdev)
 {
+	hid_hw_stop(hdev);
+
 	switch (hdev->product) {
 	case USB_DEVICE_ID_LENOVO_TPKBD:
 		lenovo_remove_tpkbd(hdev);
@@ -1506,8 +1508,6 @@ static void lenovo_remove(struct hid_device *hdev)
 		lenovo_remove_tp10ubkbd(hdev);
 		break;
 	}
-
-	hid_hw_stop(hdev);
 }
 
 static int lenovo_input_configured(struct hid_device *hdev,
