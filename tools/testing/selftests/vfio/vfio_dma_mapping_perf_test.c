@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
+#include <ctype.h>
 #include <limits.h>
 #include <stdio.h>
 #include <sys/mman.h>
@@ -17,7 +18,78 @@
 
 #include "kselftest_harness.h"
 
-static const char *device_bdf;
+static struct {
+	u64 size;
+	const char *device_bdf;
+} test_params = {
+	.size = SZ_1G,
+};
+
+/*
+ * Parses "[0-9]+[kmgt]?".
+ */
+static u64 parse_size(const char *size)
+{
+	int shift = 0;
+	char *scale;
+	u64 base;
+
+	VFIO_ASSERT_TRUE(size && isdigit(size[0]),
+			 "Need at least one digit in '%s'.", size);
+
+	base = strtoull(size, &scale, 0);
+
+	VFIO_ASSERT_TRUE(base != ULLONG_MAX, "Overflow parsing size!");
+
+	switch (tolower(*scale)) {
+	case 't':
+		shift = 40;
+		break;
+	case 'g':
+		shift = 30;
+		break;
+	case 'm':
+		shift = 20;
+		break;
+	case 'k':
+		shift = 10;
+		break;
+	case 'b':
+	case '\0':
+		shift = 0;
+		break;
+	default:
+		VFIO_FAIL("Unknown size letter '%c'.", *scale);
+	}
+
+	VFIO_ASSERT_TRUE((base << shift) >> shift == base,
+			 "Overflow scaling size!");
+
+	return base << shift;
+}
+
+static void opt_custom_help(void)
+{
+	fprintf(stderr,
+		"\nCustom options:\n"
+		"\t-b bytes Specify the size of the DMA region to be mapped\n"
+		"\t         and unmapped. e.g. 16M or 8G, (default: 1G)\n");
+}
+
+static int opt_custom_handler(int opt, char *optarg)
+{
+	if (opt == 'b') {
+		test_params.size = parse_size(optarg);
+		return KSFT_PASS;
+	}
+	return KSFT_FAIL;
+}
+
+static const struct test_harness_cli_opts opts = {
+	.optstring = "b:",
+	.handler = opt_custom_handler,
+	.help = opt_custom_help,
+};
 
 FIXTURE(vfio_dma_mapping_perf_test) {
 	struct iommu *iommu;
@@ -45,7 +117,7 @@ FIXTURE_VARIANT_ADD_ALL_IOMMU_MODES(anonymous_hugetlb_1gb, MAP_HUGETLB | MAP_HUG
 FIXTURE_SETUP(vfio_dma_mapping_perf_test)
 {
 	self->iommu = iommu_init(variant->iommu_mode);
-	self->device = vfio_pci_device_init(device_bdf, self->iommu);
+	self->device = vfio_pci_device_init(test_params.device_bdf, self->iommu);
 	self->iova_allocator = iova_allocator_init(self->iommu);
 }
 
@@ -58,7 +130,7 @@ FIXTURE_TEARDOWN(vfio_dma_mapping_perf_test)
 
 TEST_F(vfio_dma_mapping_perf_test, dma_map_unmap)
 {
-	const u64 size = SZ_1G;
+	const u64 size = test_params.size;
 	const int flags = variant->mmap_flags;
 	struct dma_region region;
 
@@ -115,7 +187,7 @@ FIXTURE_VARIANT_ADD_MEMFD_MODE(memfd_hugetlb_1gb,
 FIXTURE_SETUP(vfio_dma_mapping_perf_memfd_test)
 {
 	self->iommu = iommu_init(variant->iommu_mode);
-	self->device = vfio_pci_device_init(device_bdf, self->iommu);
+	self->device = vfio_pci_device_init(test_params.device_bdf, self->iommu);
 	self->iova_allocator = iova_allocator_init(self->iommu);
 }
 
@@ -156,7 +228,7 @@ static void teardown_memfd(int fd, u64 size, void *vaddr)
 
 TEST_F(vfio_dma_mapping_perf_memfd_test, dma_map_unmap_from_file)
 {
-	const u64 size = SZ_1G;
+	const u64 size = test_params.size;
 	const int mmap_flags = variant->mmap_flags;
 	struct dma_region region;
 	int fd;
@@ -186,6 +258,6 @@ TEST_F(vfio_dma_mapping_perf_memfd_test, dma_map_unmap_from_file)
 
 int main(int argc, char *argv[])
 {
-	device_bdf = vfio_selftests_get_bdf(&argc, argv);
-	return test_harness_run(argc, argv);
+	test_params.device_bdf = vfio_selftests_get_bdf(&argc, argv);
+	return test_harness_run_opts(argc, argv, &opts);
 }

@@ -54,6 +54,7 @@
 #define _GNU_SOURCE
 #endif
 #include <asm/types.h>
+#include <assert.h>
 #include <ctype.h>
 #include <errno.h>
 #include <linux/unistd.h>
@@ -75,6 +76,18 @@ static inline void __kselftest_memset_safe(void *s, int c, size_t n)
 	if (n > 0)
 		memset(s, c, n);
 }
+
+/**
+ * struct test_harness_cli_opts - Custom command-line options for test harness
+ * @optstring: getopt option string; must not conflict with harness options.
+ * @handler: Callback to handle custom options; returns KSFT_PASS or KSFT_FAIL.
+ * @help: Optional callback to print custom option help text.
+ */
+struct test_harness_cli_opts {
+	const char *optstring;
+	int (*handler)(int opt, char *optarg);
+	void (*help)(void);
+};
 
 #define KSELFTEST_PRIO_TEST    20000
 #define KSELFTEST_PRIO_XFAIL   20001
@@ -1097,11 +1110,36 @@ static void test_harness_list_tests(void)
 	}
 }
 
-static int test_harness_argv_check(int argc, char **argv)
+#define OPTSTRING_LEN 128
+
+static void optstring_append_custom(char *optstring, size_t size,
+				    const struct test_harness_cli_opts *opts)
 {
+	const char *c;
+
+	if (!opts || !opts->optstring)
+		return;
+
+	assert(strlen(optstring) + strlen(opts->optstring) < size);
+
+	for (c = opts->optstring; *c; c++) {
+		if (isalnum(*c))
+			assert(!strchr(optstring, *c));
+	}
+
+	strncat(optstring, opts->optstring, size - strlen(optstring) - 1);
+}
+
+static int test_harness_argv_check(int argc, char **argv,
+				   const struct test_harness_cli_opts *opts)
+{
+	char optstring[OPTSTRING_LEN] = "dhlF:f:V:v:t:T:r:";
 	int opt;
 
-	while ((opt = getopt(argc, argv, "dhlF:f:V:v:t:T:r:")) != -1) {
+	optstring_append_custom(optstring, sizeof(optstring), opts);
+
+	optind = 1;
+	while ((opt = getopt(argc, argv, optstring)) != -1) {
 		switch (opt) {
 		case 'f':
 		case 'F':
@@ -1118,7 +1156,6 @@ static int test_harness_argv_check(int argc, char **argv)
 			ksft_debug_enabled = true;
 			break;
 		case 'h':
-		default:
 			fprintf(stderr,
 				"Usage: %s [-h|-l|-d] [-t|-T|-v|-V|-f|-F|-r name]\n"
 				"\t-h       print help\n"
@@ -1139,7 +1176,14 @@ static int test_harness_argv_check(int argc, char **argv)
 				"include all tests from variant 'bla'\n"
 				"but not test 'foo' specify '-T foo -v bla'.\n"
 				"", argv[0]);
-			return opt == 'h' ? KSFT_SKIP : KSFT_FAIL;
+			if (opts && opts->help)
+				opts->help();
+			return KSFT_SKIP;
+		default:
+			if (opts && opts->handler &&
+			    opts->handler(opt, optarg) == KSFT_PASS)
+				break;
+			return KSFT_FAIL;
 		}
 	}
 
@@ -1149,31 +1193,39 @@ static int test_harness_argv_check(int argc, char **argv)
 static bool test_enabled(int argc, char **argv,
 			 struct __fixture_metadata *f,
 			 struct __fixture_variant_metadata *v,
-			 struct __test_metadata *t)
+			 struct __test_metadata *t,
+			 const struct test_harness_cli_opts *opts)
 {
 	unsigned int flen = 0, vlen = 0, tlen = 0;
+	char optstring[OPTSTRING_LEN] = "dF:f:V:v:t:T:r:";
 	bool has_positive = false;
 	int opt;
 
-	optind = 1;
-	while ((opt = getopt(argc, argv, "dF:f:V:v:t:T:r:")) != -1) {
-		if (opt != 'd')
-			has_positive |= islower(opt);
+	optstring_append_custom(optstring, sizeof(optstring), opts);
 
-		switch (tolower(opt)) {
+	optind = 1;
+	while ((opt = getopt(argc, argv, optstring)) != -1) {
+		switch (opt) {
 		case 't':
+		case 'T':
+			has_positive |= islower(opt);
 			if (!strcmp(t->name, optarg))
 				return islower(opt);
 			break;
 		case 'f':
+		case 'F':
+			has_positive |= islower(opt);
 			if (!strcmp(f->name, optarg))
 				return islower(opt);
 			break;
 		case 'v':
+		case 'V':
+			has_positive |= islower(opt);
 			if (!strcmp(v->name, optarg))
 				return islower(opt);
 			break;
 		case 'r':
+			has_positive = true;
 			if (!tlen) {
 				flen = strlen(f->name);
 				vlen = strlen(v->name);
@@ -1262,7 +1314,8 @@ static void __run_test(struct __fixture_metadata *f,
 			      diagnostic ? "%s" : NULL, diagnostic);
 }
 
-static int test_harness_run(int argc, char **argv)
+static int test_harness_run_opts(int argc, char **argv,
+				 const struct test_harness_cli_opts *opts)
 {
 	struct __fixture_variant_metadata no_variant = { .name = "", };
 	struct __fixture_variant_metadata *v;
@@ -1274,7 +1327,7 @@ static int test_harness_run(int argc, char **argv)
 	unsigned int count = 0;
 	unsigned int pass_count = 0;
 
-	ret = test_harness_argv_check(argc, argv);
+	ret = test_harness_argv_check(argc, argv, opts);
 	if (ret != KSFT_PASS)
 		return ret;
 
@@ -1283,7 +1336,7 @@ static int test_harness_run(int argc, char **argv)
 			unsigned int old_tests = test_count;
 
 			for (t = f->tests; t; t = t->next)
-				if (test_enabled(argc, argv, f, v, t))
+				if (test_enabled(argc, argv, f, v, t, opts))
 					test_count++;
 
 			if (old_tests != test_count)
@@ -1301,7 +1354,7 @@ static int test_harness_run(int argc, char **argv)
 	for (f = __fixture_list; f; f = f->next) {
 		for (v = f->variant ?: &no_variant; v; v = v->next) {
 			for (t = f->tests; t; t = t->next) {
-				if (!test_enabled(argc, argv, f, v, t))
+				if (!test_enabled(argc, argv, f, v, t, opts))
 					continue;
 				count++;
 				t->results = results;
@@ -1322,6 +1375,11 @@ static int test_harness_run(int argc, char **argv)
 
 	/* unreachable */
 	return KSFT_FAIL;
+}
+
+static inline int test_harness_run(int argc, char **argv)
+{
+	return test_harness_run_opts(argc, argv, NULL);
 }
 
 static void __attribute__((constructor(KSELFTEST_PRIO_TEST))) __constructor_order_first(void)
