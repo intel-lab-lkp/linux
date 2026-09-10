@@ -80,6 +80,7 @@ config ARM_SMMU_V3
 	select IOMMU_IO_PGTABLE_LPAE
 	select IOMMU_IOPF
 	select GENERIC_MSI_IRQ
+	select PCI_PRI if PCI
 	select IOMMUFD_DRIVER if IOMMUFD
 	help
 	  Support for implementations of the ARM System MMU architecture

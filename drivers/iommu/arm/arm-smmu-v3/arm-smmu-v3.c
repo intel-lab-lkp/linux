@@ -3513,6 +3513,20 @@ void arm_smmu_attach_release(struct arm_smmu_attach_state *state)
 		}
 	}
 
+	/* Same as the eventq drain above, for the hardware priq */
+	if (master_domain->using_iopf && master->pri_enabled) {
+		timed_out |= arm_smmu_wait_for_queue_drained(
+			smmu, &smmu->priq.q, false);
+		/* Ensure pending requests have reached the IOPF queue */
+		if (!timed_out) {
+			if (smmu->priq.q.irq)
+				synchronize_irq(smmu->priq.q.irq);
+			/* Pending requests might be in the combined_irq handler */
+			if (smmu->combined_irq)
+				synchronize_irq(smmu->combined_irq);
+		}
+	}
+
 	/* Lastly, flush the fault work that the drained events queued */
 	if (master_domain->using_iopf) {
 		iopf_queue_flush_dev(master->dev);
@@ -4445,6 +4459,40 @@ static int arm_smmu_master_prepare_ats(struct arm_smmu_master *master)
 	return arm_smmu_alloc_cd_tables(master);
 }
 
+static void arm_smmu_master_enable_pri(struct arm_smmu_master *master)
+{
+	struct arm_smmu_device *smmu = master->smmu;
+	struct pci_dev *pdev;
+	unsigned int reqs;
+
+	if (!(smmu->features & ARM_SMMU_FEAT_PRI) || !smmu->evtq.iopf)
+		return;
+	if (!dev_is_pci(master->dev))
+		return;
+	pdev = to_pci_dev(master->dev);
+
+	if (!pci_pri_supported(pdev))
+		return;
+
+	/* A stalling master resolves its faults without any page request */
+	if (master->stall_enabled) {
+		pci_warn(pdev, "stall enabled, skip PRI\n");
+		return;
+	}
+
+	if (master->num_streams != 1) {
+		pci_warn(pdev, "multi-SID master, skip PRI\n");
+		return;
+	}
+
+	reqs = 1 << smmu->priq.q.llq.max_n_shift;
+
+	if (!pci_reset_pri(pdev) && !pci_enable_pri(pdev, reqs))
+		master->pri_enabled = true;
+	else
+		pci_warn(pdev, "failed to enable PRI\n");
+}
+
 static struct iommu_device *arm_smmu_probe_device(struct device *dev)
 {
 	int ret;
@@ -4497,6 +4545,8 @@ static struct iommu_device *arm_smmu_probe_device(struct device *dev)
 	if (ret)
 		goto err_disable_pasid;
 
+	arm_smmu_master_enable_pri(master);
+
 	return &smmu->iommu;
 
 err_disable_pasid:
@@ -4522,6 +4572,8 @@ static void arm_smmu_release_device(struct device *dev)
 		iopf_queue_remove_device(master->smmu->evtq.iopf, dev);
 	}
 
+	if (master->pri_enabled)
+		pci_disable_pri(to_pci_dev(master->dev));
 	arm_smmu_disable_pasid(master);
 	arm_smmu_remove_master(master);
 	if (arm_smmu_cdtab_allocated(&master->cd_table))
