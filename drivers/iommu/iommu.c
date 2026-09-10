@@ -1238,6 +1238,14 @@ static int iommu_create_device_direct_mappings(struct iommu_domain *domain,
 	unsigned long pg_size;
 	int ret = 0;
 
+	/*
+	 * The direct-map reserved regions are still fine because the T=0 stream
+	 * always goes to an identity mapping. Skip them: recording the request
+	 * would only refuse the device its blocking domain.
+	 */
+	if (iommu_using_t0_stream(dev))
+		return 0;
+
 	pg_size = domain->pgsize_bitmap ? 1UL << __ffs(domain->pgsize_bitmap) : 0;
 
 	if (WARN_ON_ONCE(iommu_is_dma_domain(domain) && !pg_size))
@@ -1790,10 +1798,21 @@ __iommu_group_alloc_default_domain(struct iommu_group *group, int req_type)
 static struct iommu_domain *
 iommu_group_alloc_default_domain(struct iommu_group *group, int req_type)
 {
-	const struct iommu_ops *ops = dev_iommu_ops(iommu_group_first_dev(group));
+	struct device *first = iommu_group_first_dev(group);
+	const struct iommu_ops *ops = dev_iommu_ops(first);
 	struct iommu_domain *dom;
 
 	lockdep_assert_held(&group->mutex);
+
+	/*
+	 * When in T=0 mode the T=1 vIOMMU must always be set to BLOCKED to
+	 * release control of ATS.
+	 */
+	if (iommu_using_t0_stream(first)) {
+		if (!ops->blocked_domain)
+			return ERR_PTR(-EINVAL);
+		return ops->blocked_domain;
+	}
 
 	/*
 	 * Allow legacy drivers to specify the domain that will be the default
@@ -2397,6 +2416,10 @@ static int __iommu_attach_group(struct iommu_domain *domain,
 	dev = iommu_group_first_dev(group);
 	if (!dev_has_iommu(dev) ||
 	    !domain_iommu_ops_compatible(dev_iommu_ops(dev), domain))
+		return -EINVAL;
+
+	/* A domain cannot be attached while using the T=0 stream. */
+	if (iommu_using_t0_stream(dev))
 		return -EINVAL;
 
 	return __iommu_group_set_domain(group, domain);
@@ -3325,6 +3348,12 @@ static ssize_t iommu_group_store_type(struct iommu_group *group,
 		goto out_unlock;
 	}
 
+	/* Default domain changes are not allowed while using the T=0 stream. */
+	if (iommu_using_t0_stream(iommu_group_first_dev(group))) {
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
 	ret = iommu_setup_default_domain(group, req_type);
 	if (ret)
 		goto out_unlock;
@@ -3690,6 +3719,12 @@ int iommu_attach_device_pasid(struct iommu_domain *domain,
 		goto out_unlock;
 	}
 
+	/* PASID cannot be used on the T=0 stream. */
+	if (iommu_using_t0_stream(dev)) {
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
 	for_each_group_device(group, device) {
 		/*
 		 * Skip PASID validation for devices without PASID support
@@ -3780,6 +3815,12 @@ int iommu_replace_device_pasid(struct iommu_domain *domain,
 	 */
 	if (group->recovery_cnt) {
 		ret = -EBUSY;
+		goto out_unlock;
+	}
+
+	/* PASID cannot be used on the T=0 stream. */
+	if (iommu_using_t0_stream(dev)) {
+		ret = -EINVAL;
 		goto out_unlock;
 	}
 
@@ -4017,6 +4058,12 @@ int iommu_replace_group_handle(struct iommu_group *group,
 		return -EINVAL;
 
 	mutex_lock(&group->mutex);
+	/* Like attach, replacement is not allowed when using the T=0 stream. */
+	if (iommu_using_t0_stream(iommu_group_first_dev(group))) {
+		ret = -EINVAL;
+		goto err_unlock;
+	}
+
 	entry = iommu_make_pasid_array_entry(new_domain, handle);
 	ret = xa_reserve(&group->pasid_array, IOMMU_NO_PASID, GFP_KERNEL);
 	if (ret)
