@@ -63,6 +63,9 @@ static struct acpi_device *acpi_companion_lookup(struct device *dev)
 {
 	struct acpi_bus_type *type;
 
+	if (!dev->type)
+		return NULL;
+
 	guard(rwsem_read)(&bus_type_sem);
 
 	list_for_each_entry(type, &bus_type_list, list) {
