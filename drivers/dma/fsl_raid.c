@@ -715,15 +715,19 @@ static int fsl_re_chan_probe(struct platform_device *ofdev,
 		goto err_free_1;
 	}
 
-	/* Program the Inbound/Outbound ring base addresses and size */
+	/* Program the Inbound/Outbound ring base addresses and size.
+	 * The DMA rings are 64-bit addresses split into high/low registers.
+	 * The driver supports a 40-bit DMA mask, so the low register holds
+	 * bits [31:0] and the high register holds bits [39:32].
+	 */
 	out_be32(&chan->jrregs->inbring_base_h,
-		 chan->inb_phys_addr & FSL_RE_ADDR_BIT_MASK);
+		 upper_32_bits(chan->inb_phys_addr) & FSL_RE_ADDR_HIGH_MASK);
 	out_be32(&chan->jrregs->oubring_base_h,
-		 chan->oub_phys_addr & FSL_RE_ADDR_BIT_MASK);
+		 upper_32_bits(chan->oub_phys_addr) & FSL_RE_ADDR_HIGH_MASK);
 	out_be32(&chan->jrregs->inbring_base_l,
-		 chan->inb_phys_addr >> FSL_RE_ADDR_BIT_SHIFT);
+		 lower_32_bits(chan->inb_phys_addr));
 	out_be32(&chan->jrregs->oubring_base_l,
-		 chan->oub_phys_addr >> FSL_RE_ADDR_BIT_SHIFT);
+		 lower_32_bits(chan->oub_phys_addr));
 	out_be32(&chan->jrregs->inbring_size,
 		 FSL_RE_RING_SIZE << FSL_RE_RING_SIZE_SHIFT);
 	out_be32(&chan->jrregs->oubring_size,
