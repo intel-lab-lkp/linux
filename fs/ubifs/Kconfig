@@ -99,3 +99,19 @@ config UBIFS_FS_AUTHENTICATION
 	  different options.
 
 endif # UBIFS_FS
+
+config UBIFS_FS_KUNIT_TEST
+	bool "KUnit tests for UBIFS" if !KUNIT_ALL_TESTS
+	depends on UBIFS_FS && KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  This builds unit tests for the UBIFS file system. The tests are
+	  linked into the UBIFS module itself so that they can call
+	  non-exported functions.
+
+	  KUnit tests run during boot and output the results to the debug log
+	  in TAP format (https://testanything.org/). Only useful for kernel
+	  developers running the KUnit test harness, and not intended for
+	  inclusion into a production build.
+
+	  If unsure, say N.
