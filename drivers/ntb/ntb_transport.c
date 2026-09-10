@@ -179,6 +179,8 @@ struct ntb_transport_qp {
 	unsigned int rx_max_frame;
 	unsigned int rx_alloc_entry;
 	dma_cookie_t last_cookie;
+	/* Protect active and RX tasklet scheduling. */
+	spinlock_t rx_sched_lock;
 	struct tasklet_struct rxc_db_work;
 
 	void (*event_handler)(void *data, int status);
@@ -649,11 +651,26 @@ static int ntb_transport_setup_qp_mw(struct ntb_transport_ctx *nt,
 	return 0;
 }
 
+static void ntb_transport_set_qp_active(struct ntb_transport_qp *qp, bool active)
+{
+	guard(spinlock_irqsave)(&qp->rx_sched_lock);
+
+	qp->active = active;
+}
+
+static void ntb_transport_schedule_rxc(struct ntb_transport_qp *qp)
+{
+	guard(spinlock_irqsave)(&qp->rx_sched_lock);
+
+	if (qp->active)
+		tasklet_schedule(&qp->rxc_db_work);
+}
+
 static irqreturn_t ntb_transport_isr(int irq, void *dev)
 {
 	struct ntb_transport_qp *qp = dev;
 
-	tasklet_schedule(&qp->rxc_db_work);
+	ntb_transport_schedule_rxc(qp);
 
 	return IRQ_HANDLED;
 }
@@ -895,7 +912,7 @@ static int ntb_set_mw(struct ntb_transport_ctx *nt, int num_mw,
 static void ntb_qp_link_context_reset(struct ntb_transport_qp *qp)
 {
 	qp->link_is_up = false;
-	qp->active = false;
+	ntb_transport_set_qp_active(qp, false);
 
 	qp->tx_index = 0;
 	qp->rx_index = 0;
@@ -1159,13 +1176,12 @@ static void ntb_qp_link_work(struct work_struct *work)
 	if (val & BIT(qp->qp_num)) {
 		dev_info(&pdev->dev, "qp %d: Link Up\n", qp->qp_num);
 		qp->link_is_up = true;
-		qp->active = true;
+		ntb_transport_set_qp_active(qp, true);
 
 		if (qp->event_handler)
 			qp->event_handler(qp->cb_data, qp->link_is_up);
 
-		if (qp->active)
-			tasklet_schedule(&qp->rxc_db_work);
+		ntb_transport_schedule_rxc(qp);
 	} else {
 		ntb_transport_schedule_qp_link(qp,
 					       msecs_to_jiffies(NTB_LINK_DOWN_TIMEOUT));
@@ -1193,6 +1209,7 @@ static int ntb_transport_init_queue(struct ntb_transport_ctx *nt,
 	qp->ndev = nt->ndev;
 	qp->client_ready = false;
 	qp->event_handler = NULL;
+	spin_lock_init(&qp->rx_sched_lock);
 	ntb_qp_link_context_reset(qp);
 
 	if (mw_num < qp_count % mw_count)
@@ -1729,8 +1746,7 @@ static void ntb_transport_rxc_db(unsigned long data)
 
 	if (i == qp->rx_max_entry) {
 		/* there is more work to do */
-		if (qp->active)
-			tasklet_schedule(&qp->rxc_db_work);
+		ntb_transport_schedule_rxc(qp);
 	} else if (ntb_db_read(qp->ndev) & BIT_ULL(qp->qp_num)) {
 		/* the doorbell bit is set: clear it */
 		ntb_db_clear(qp->ndev, BIT_ULL(qp->qp_num));
@@ -1741,8 +1757,7 @@ static void ntb_transport_rxc_db(unsigned long data)
 		 * ntb_process_rxc and clearing the doorbell bit:
 		 * there might be some more work to do.
 		 */
-		if (qp->active)
-			tasklet_schedule(&qp->rxc_db_work);
+		ntb_transport_schedule_rxc(qp);
 	}
 }
 
@@ -2209,7 +2224,11 @@ void ntb_transport_free_queue(struct ntb_transport_qp *qp)
 	disable_work_sync(&qp->link_cleanup);
 	disable_delayed_work_sync(&qp->link_work);
 	qp->link_is_up = false;
-	qp->active = false;
+	ntb_transport_set_qp_active(qp, false);
+
+	qp_bit = BIT_ULL(qp->qp_num);
+	ntb_db_set_mask(qp->ndev, qp_bit);
+	tasklet_kill(&qp->rxc_db_work);
 
 	if (qp->tx_offload_thread) {
 		kthread_stop(qp->tx_offload_thread);
@@ -2250,11 +2269,6 @@ void ntb_transport_free_queue(struct ntb_transport_qp *qp)
 		dmaengine_terminate_all(chan);
 		dma_release_channel(chan);
 	}
-
-	qp_bit = BIT_ULL(qp->qp_num);
-
-	ntb_db_set_mask(qp->ndev, qp_bit);
-	tasklet_kill(&qp->rxc_db_work);
 
 	qp->cb_data = NULL;
 	qp->rx_handler = NULL;
@@ -2350,8 +2364,7 @@ int ntb_transport_rx_enqueue(struct ntb_transport_qp *qp, void *cb, void *data,
 
 	ntb_list_add(&qp->ntb_rx_q_lock, &entry->entry, &qp->rx_pend_q);
 
-	if (qp->active)
-		tasklet_schedule(&qp->rxc_db_work);
+	ntb_transport_schedule_rxc(qp);
 
 	return 0;
 }
@@ -2548,8 +2561,7 @@ static void ntb_transport_doorbell_callback(void *data, int vector)
 		qp_num = __ffs(db_bits);
 		qp = &nt->qp_vec[qp_num];
 
-		if (qp->active)
-			tasklet_schedule(&qp->rxc_db_work);
+		ntb_transport_schedule_rxc(qp);
 
 		db_bits &= ~BIT_ULL(qp_num);
 	}
