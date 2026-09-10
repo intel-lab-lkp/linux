@@ -1,0 +1,79 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/firmware/linaro,optee-rpmi.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: OP-TEE accessed through the RISC-V RPMI TEE service group
+
+maintainers:
+  - Marouene Boubakri <marouene.boubakri@oss.nxp.com>
+
+description: |
+  OP-TEE is a piece of software using hardware features to provide a Trusted
+  Execution Environment. On RISC-V, OP-TEE runs as a supervisor domain
+  isolated from the Rich Execution Environment (REE) by the M-mode firmware.
+
+  The REE reaches OP-TEE through the TEE service group of the RISC-V Platform
+  Management Interface (RPMI) [1], carried on a channel of the SBI Message
+  Proxy (MPXY) extension [2]. Each call into OP-TEE is a TEE_CALL service
+  request whose service data carries the register arguments of the OP-TEE
+  SMC ABI (drivers/tee/optee/optee_smc.h), as described in
+  drivers/tee/optee/optee_rpmi.h.
+
+  The RPMI TEE framework (the M-mode firmware) assigns an identifier to each
+  endpoint. The identifiers of the REE and of OP-TEE are required to
+  address TEE_CALL requests and are described here.
+
+  The compatible string uses the same "linaro" vendor prefix as
+  "linaro,optee-tz", which identifies the OP-TEE reference implementation.
+
+  [1] RISC-V Platform Management Interface (RPMI) v2.0 (or higher)
+      https://github.com/riscv-non-isa/riscv-rpmi/releases
+
+  [2] RISC-V Supervisor Binary Interface (SBI) v3.0 (or higher)
+      https://github.com/riscv-non-isa/riscv-sbi-doc/releases
+
+properties:
+  $nodename:
+    const: optee
+
+  compatible:
+    const: linaro,optee-rpmi
+
+  mboxes:
+    maxItems: 1
+    description:
+      SBI MPXY channel implementing the RPMI TEE service group.
+
+  riscv,rpmi-tee-sender-id:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Endpoint identifier of the REE, used as SENDER_ID of the TEE_CALL
+      requests.
+
+  riscv,rpmi-tee-target-id:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Endpoint identifier of OP-TEE, used as TARGET_ID of the TEE_CALL
+      requests.
+
+required:
+  - compatible
+  - mboxes
+  - riscv,rpmi-tee-sender-id
+  - riscv,rpmi-tee-target-id
+
+additionalProperties: false
+
+examples:
+  - |
+    firmware {
+        optee {
+            compatible = "linaro,optee-rpmi";
+            mboxes = <&mpxy_mbox 0x10 0x0>;
+            riscv,rpmi-tee-sender-id = <0>;
+            riscv,rpmi-tee-target-id = <1>;
+        };
+    };
+...
