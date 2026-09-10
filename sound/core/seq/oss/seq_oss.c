@@ -276,6 +276,9 @@ register_proc(void)
 {
 	struct snd_info_entry *entry;
 
+	pr_warn("seq-oss: kernel OSS sequencer emulation is deprecated\n");
+	pr_warn("seq-oss: Use user-space solution (alsa-oss or oss-seq-emu) instead.\n");
+
 	entry = snd_info_create_module_entry(THIS_MODULE, SNDRV_SEQ_OSS_PROCNAME, snd_seq_root);
 	if (entry == NULL)
 		return -ENOMEM;
