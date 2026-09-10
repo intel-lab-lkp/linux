@@ -230,6 +230,7 @@ bool svc_xprt_init(struct net *net, struct svc_xprt_class *xcl,
 	set_bit(XPT_BUSY, &xprt->xpt_flags);
 	xprt->xpt_net = get_net_track(net, &xprt->ns_tracker, GFP_KERNEL);
 	strcpy(xprt->xpt_remotebuf, "uninitialized");
+	xprt->xpt_last_recv = jiffies;
 
 	if (xa_alloc_cyclic(&sn->svc_xprt_ids, &id, xprt,
 			    XA_LIMIT(1, UINT_MAX), &sn->svc_xprt_id_next,
@@ -901,6 +902,8 @@ static void svc_handle_xprt(struct svc_rqst *rqstp, struct svc_xprt *xprt)
 		svc_xprt_received(xprt);
 	} else if (svc_xprt_reserve_slot(rqstp, xprt)) {
 		/* XPT_DATA|XPT_DEFERRED case: */
+		unsigned long recv_time = jiffies;
+
 		rqstp->rq_deferred = svc_deferred_dequeue(xprt);
 		if (rqstp->rq_deferred)
 			len = svc_deferred_recv(rqstp);
@@ -915,6 +918,17 @@ static void svc_handle_xprt(struct svc_rqst *rqstp, struct svc_xprt *xprt)
 		trace_svc_xdr_recvfrom(&rqstp->rq_arg);
 
 		clear_bit(XPT_OLD, &xprt->xpt_flags);
+
+		/*
+		 * A deferred request arrived before its deferral, so its
+		 * replay does not advance the timestamp. recv_time was
+		 * sampled before xpo_recvfrom() released XPT_BUSY.
+		 * time_after() keeps a slow thread from pushing the
+		 * timestamp past requests received since then.
+		 */
+		if (!rqstp->rq_deferred &&
+		    time_after(recv_time, READ_ONCE(xprt->xpt_last_recv)))
+			WRITE_ONCE(xprt->xpt_last_recv, recv_time);
 
 		rqstp->rq_chandle.defer = svc_defer;
 
