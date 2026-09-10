@@ -1,0 +1,104 @@
+// SPDX-License-Identifier: GPL-2.0+ OR MIT
+/*
+ * Copyright (C) 2024 Kontron Electronics GmbH
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+
+&{/} {
+	model = "Kontron DL i.MX93 OSM-S";
+	compatible = "kontron,imx93-bl-osm-s", "kontron,imx93-osm-s", "fsl,imx93";
+
+	backlight: backlight {
+		compatible = "pwm-backlight";
+		pwms = <&tpm3 3 50000 0>;
+		brightness-levels = <0 100>;
+		num-interpolated-steps = <100>;
+		default-brightness-level = <100>;
+	};
+
+	panel {
+		compatible = "jenson,bl-jt60050-01a", "panel-lvds";
+		backlight = <&backlight>;
+		data-mapping = "vesa-24";
+		enable-gpios = <&gpio2 29 GPIO_ACTIVE_HIGH>;
+		power-supply = <&reg_vcc_panel>;
+		height-mm = <86>;
+		width-mm = <154>;
+
+		panel-timing {
+			clock-frequency = <50000000>;
+			hactive = <1024>;
+			hback-porch = <160>;
+			hfront-porch = <160>;
+			hsync-len = <1>;
+			vactive = <600>;
+			vback-porch = <23>;
+			vfront-porch = <12>;
+			vsync-len = <1>;
+		};
+
+		port {
+			panel_in_lvds0: endpoint {
+				remote-endpoint = <&ldb_lvds_ch0>;
+			};
+		};
+	};
+};
+
+&gpio3 {
+	panel-rst-hog {
+		gpio-hog;
+		gpios = <26 GPIO_ACTIVE_LOW>;
+		output-low;
+		line-name = "panel-reset";
+	};
+
+	panel-stby-hog {
+		gpio-hog;
+		gpios = <27 GPIO_ACTIVE_HIGH>;
+		output-high;
+		line-name = "panel-standby";
+	};
+};
+
+&lcdif {
+	status = "okay";
+};
+
+&ldb_lvds_ch0 {
+	remote-endpoint = <&panel_in_lvds0>;
+};
+
+&lpi2c2 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+
+	touchscreen@5d {
+		compatible = "goodix,gt928";
+		reg = <0x5d>;
+		interrupt-parent = <&gpio2>;
+		interrupts = <22 IRQ_TYPE_LEVEL_LOW>;
+		irq-gpios = <&gpio2 22 GPIO_ACTIVE_HIGH>;
+		AVDD28-supply = <&reg_vcc_panel>;
+		VDDIO-supply = <&reg_vcc_panel>;
+		reset-gpios = <&gpio2 28 GPIO_ACTIVE_HIGH>;
+	};
+};
+
+&lvds_bridge {
+	status = "okay";
+};
+
+&media_blk_ctrl {
+	status = "okay";
+};
+
+&tpm3 {
+	status = "okay";
+};
