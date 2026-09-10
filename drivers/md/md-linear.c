@@ -178,7 +178,7 @@ out:
 	return ERR_PTR(ret);
 }
 
-static int linear_run(struct mddev *mddev)
+static int linear_run(struct mddev *mddev, struct queue_limits *lim)
 {
 	struct linear_conf *conf;
 	int ret;
@@ -186,7 +186,7 @@ static int linear_run(struct mddev *mddev)
 	if (md_check_no_bitmap(mddev))
 		return -EINVAL;
 
-	conf = linear_conf(mddev, mddev->raid_disks, NULL);
+	conf = linear_conf(mddev, mddev->raid_disks, lim);
 	if (IS_ERR(conf))
 		return PTR_ERR(conf);
 

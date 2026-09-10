@@ -3258,7 +3258,7 @@ size_check:
 	/* Keep array frozen until resume. */
 	md_frozen_sync_thread(&rs->md);
 
-	r = md_run(&rs->md);
+	r = md_run(&rs->md, NULL);
 	rs->md.in_sync = 0; /* Assume already marked dirty */
 	if (r) {
 		ti->error = "Failed to run raid array";

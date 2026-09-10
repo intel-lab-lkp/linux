@@ -3930,7 +3930,8 @@ static unsigned int raid10_nr_stripes(struct r10conf *conf)
 	return raid_disks / conf->geo.near_copies;
 }
 
-static int raid10_set_queue_limits(struct mddev *mddev)
+static int raid10_set_queue_limits(struct mddev *mddev,
+				   struct queue_limits *caller_lim)
 {
 	struct r10conf *conf = mddev->private;
 	struct queue_limits lim;
@@ -3948,10 +3949,19 @@ static int raid10_set_queue_limits(struct mddev *mddev)
 	err = mddev_stack_rdev_limits(mddev, &lim, MDDEV_STACK_INTEGRITY);
 	if (err)
 		return err;
+	/*
+	 * The caller owns an update and commits it itself; taking
+	 * q->limits_lock here would take it a second time.
+	 */
+	if (caller_lim) {
+		*caller_lim = lim;
+		return 0;
+	}
+
 	return queue_limits_set(mddev->gendisk->queue, &lim);
 }
 
-static int raid10_run(struct mddev *mddev)
+static int raid10_run(struct mddev *mddev, struct queue_limits *lim)
 {
 	struct r10conf *conf;
 	int i, disk_idx;
@@ -4020,7 +4030,7 @@ static int raid10_run(struct mddev *mddev)
 	}
 
 	if (!mddev_is_dm(conf->mddev)) {
-		int err = raid10_set_queue_limits(mddev);
+		int err = raid10_set_queue_limits(mddev, lim);
 
 		if (err) {
 			ret = err;

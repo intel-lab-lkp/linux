@@ -379,7 +379,8 @@ static void raid0_free(struct mddev *mddev, void *priv)
 	kfree(conf);
 }
 
-static int raid0_set_limits(struct mddev *mddev)
+static int raid0_set_limits(struct mddev *mddev,
+			    struct queue_limits *caller_lim)
 {
 	struct queue_limits lim;
 	int err;
@@ -398,10 +399,19 @@ static int raid0_set_limits(struct mddev *mddev)
 	err = mddev_stack_rdev_limits(mddev, &lim, MDDEV_STACK_INTEGRITY);
 	if (err)
 		return err;
+	/*
+	 * The caller owns an update and commits it itself; taking
+	 * q->limits_lock here would take it a second time.
+	 */
+	if (caller_lim) {
+		*caller_lim = lim;
+		return 0;
+	}
+
 	return queue_limits_set(mddev->gendisk->queue, &lim);
 }
 
-static int raid0_run(struct mddev *mddev)
+static int raid0_run(struct mddev *mddev, struct queue_limits *lim)
 {
 	struct r0conf *conf;
 	int ret;
@@ -414,7 +424,7 @@ static int raid0_run(struct mddev *mddev)
 		return -EINVAL;
 
 	if (!mddev_is_dm(mddev)) {
-		ret = raid0_set_limits(mddev);
+		ret = raid0_set_limits(mddev, lim);
 		if (ret)
 			return ret;
 	}

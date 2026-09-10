@@ -4105,13 +4105,30 @@ level_store(struct mddev *mddev, const char *buf, size_t len)
 	long level;
 	void *priv, *oldpriv;
 	struct md_rdev *rdev;
+	struct request_queue *q = NULL;
+	struct queue_limits lim;
+	struct queue_limits *limp = NULL;
 
 	if (slen == 0 || slen >= sizeof(clevel))
 		return -EINVAL;
 
+	/*
+	 * The new personality restacks the array's queue limits in ->run(),
+	 * and q->limits_lock has to be taken before the array is locked and
+	 * suspended, see md_start_sync().
+	 */
+	if (!mddev_is_dm(mddev)) {
+		q = mddev->gendisk->queue;
+		lim = queue_limits_start_update(q);
+		limp = &lim;
+	}
+
 	rv = mddev_suspend_and_lock(mddev);
-	if (rv)
+	if (rv) {
+		if (limp)
+			queue_limits_cancel_update(q);
 		return rv;
+	}
 	noio_flags = memalloc_noio_save();
 
 	if (mddev->pers == NULL) {
@@ -4280,7 +4297,7 @@ level_store(struct mddev *mddev, const char *buf, size_t len)
 		mddev->in_sync = 1;
 		timer_delete_sync(&mddev->safemode_timer);
 	}
-	pers->run(mddev);
+	pers->run(mddev, limp);
 	set_bit(MD_SB_CHANGE_DEVS, &mddev->sb_flags);
 	if (!mddev->thread)
 		md_update_sb(mddev, 1);
@@ -4288,6 +4305,9 @@ level_store(struct mddev *mddev, const char *buf, size_t len)
 	md_new_event();
 	rv = len;
 out_unlock:
+	/* apply the limits before the array takes I/O again */
+	if (limp)
+		rv = queue_limits_commit_update(q, limp) ?: rv;
 	memalloc_noio_restore(noio_flags);
 	mddev_unlock_and_resume(mddev);
 	return rv;
@@ -4708,6 +4728,10 @@ array_state_store(struct mddev *mddev, const char *buf, size_t len)
 {
 	int err = 0;
 	enum array_state st = match_word(buf, array_states);
+	bool starts_array, need_lim;
+	struct request_queue *q = NULL;
+	struct queue_limits lim;
+	struct queue_limits *limp = NULL;
 
 	/* No lock dependent actions */
 	switch (st) {
@@ -4753,9 +4777,39 @@ array_state_store(struct mddev *mddev, const char *buf, size_t len)
 		spin_unlock(&mddev->lock);
 		return err ?: len;
 	}
+
+	/*
+	 * These states start the array when it is not running, and ->run()
+	 * restacks its limits, so take q->limits_lock first.  Only then:
+	 * with mddev->pers set they go to md_set_readonly(), which waits for
+	 * the very work that takes the same lock.
+	 */
+	starts_array = (st == readonly || st == read_auto || st == active) &&
+		       !mddev_is_dm(mddev);
+retry:
+	need_lim = starts_array && !READ_ONCE(mddev->pers);
+	if (need_lim) {
+		q = mddev->gendisk->queue;
+		lim = queue_limits_start_update(q);
+		limp = &lim;
+	}
+
 	err = mddev_lock(mddev);
-	if (err)
+	if (err) {
+		if (limp)
+			queue_limits_cancel_update(q);
 		return err;
+	}
+
+	/* mddev->pers was read without the lock, so redo it if it changed */
+	if (need_lim != (starts_array && !mddev->pers)) {
+		mddev_unlock(mddev);
+		if (limp) {
+			queue_limits_cancel_update(q);
+			limp = NULL;
+		}
+		goto retry;
+	}
 
 	switch (st) {
 	case inactive:
@@ -4772,7 +4826,7 @@ array_state_store(struct mddev *mddev, const char *buf, size_t len)
 		else {
 			mddev->ro = MD_RDONLY;
 			set_disk_ro(mddev->gendisk, 1);
-			err = do_md_run(mddev);
+			err = do_md_run(mddev, limp);
 		}
 		break;
 	case read_auto:
@@ -4787,7 +4841,7 @@ array_state_store(struct mddev *mddev, const char *buf, size_t len)
 			}
 		} else {
 			mddev->ro = MD_AUTO_READ;
-			err = do_md_run(mddev);
+			err = do_md_run(mddev, limp);
 		}
 		break;
 	case clean:
@@ -4813,7 +4867,7 @@ array_state_store(struct mddev *mddev, const char *buf, size_t len)
 		} else {
 			mddev->ro = MD_RDWR;
 			set_disk_ro(mddev->gendisk, 0);
-			err = do_md_run(mddev);
+			err = do_md_run(mddev, limp);
 		}
 		break;
 	default:
@@ -4826,6 +4880,9 @@ array_state_store(struct mddev *mddev, const char *buf, size_t len)
 			mddev->hold_active = 0;
 		sysfs_notify_dirent_safe(mddev->sysfs_state);
 	}
+	/* apply the limits before the array takes I/O */
+	if (limp)
+		err = queue_limits_commit_update(q, limp) ?: err;
 	mddev_unlock(mddev);
 
 	if (st == readonly || st == read_auto || st == inactive ||
@@ -6763,7 +6820,7 @@ static void md_bitmap_set_none(struct mddev *mddev)
 		md_bitmap_sysfs_add(mddev);
 }
 
-int md_run(struct mddev *mddev)
+int md_run(struct mddev *mddev, struct queue_limits *lim)
 {
 	int err;
 	struct md_rdev *rdev;
@@ -6892,7 +6949,7 @@ int md_run(struct mddev *mddev)
 	if (start_readonly && md_is_rdwr(mddev))
 		mddev->ro = MD_AUTO_READ; /* read-only, but switch on first write */
 
-	err = pers->run(mddev);
+	err = pers->run(mddev, lim);
 	if (err)
 		pr_warn("md: pers->run() failed ...\n");
 	else if (pers->size(mddev, 0, 0) < mddev->array_sectors) {
@@ -6988,12 +7045,12 @@ bitmap_abort:
 }
 EXPORT_SYMBOL_GPL(md_run);
 
-int do_md_run(struct mddev *mddev)
+int do_md_run(struct mddev *mddev, struct queue_limits *lim)
 {
 	int err;
 
 	set_bit(MD_NOT_READY, &mddev->flags);
-	err = md_run(mddev);
+	err = md_run(mddev, lim);
 	if (err)
 		goto out;
 
@@ -7349,7 +7406,7 @@ static int do_md_stop(struct mddev *mddev, int mode)
 }
 
 #ifndef MODULE
-static void autorun_array(struct mddev *mddev)
+static void autorun_array(struct mddev *mddev, struct queue_limits *lim)
 {
 	struct md_rdev *rdev;
 	int err;
@@ -7364,7 +7421,7 @@ static void autorun_array(struct mddev *mddev)
 	}
 	pr_cont("\n");
 
-	err = do_md_run(mddev);
+	err = do_md_run(mddev, lim);
 	if (err) {
 		pr_warn("md: do_md_run() returned %d\n", err);
 		do_md_stop(mddev, 0);
@@ -7387,6 +7444,9 @@ static void autorun_devices(int part)
 {
 	struct md_rdev *rdev0, *rdev, *tmp;
 	struct mddev *mddev;
+	struct request_queue *q = NULL;
+	struct queue_limits lim;
+	struct queue_limits *limp = NULL;
 
 	pr_info("md: autorun ...\n");
 	while (!list_empty(&pending_raid_disks)) {
@@ -7427,12 +7487,29 @@ static void autorun_devices(int part)
 		if (IS_ERR(mddev))
 			break;
 
-		if (mddev_suspend_and_lock(mddev))
+		/*
+		 * autorun_array() runs the array, which restacks its limits;
+		 * q->limits_lock has to be taken before the array is locked
+		 * and suspended, see md_start_sync().
+		 */
+		if (!mddev_is_dm(mddev)) {
+			q = mddev->gendisk->queue;
+			lim = queue_limits_start_update(q);
+			limp = &lim;
+		}
+
+		if (mddev_suspend_and_lock(mddev)) {
 			pr_warn("md: %s locked, cannot run\n", mdname(mddev));
-		else if (mddev->raid_disks || mddev->major_version
+			if (limp) {
+				queue_limits_cancel_update(q);
+				limp = NULL;
+			}
+		} else if (mddev->raid_disks || mddev->major_version
 			 || !list_empty(&mddev->disks)) {
 			pr_warn("md: %s already running, cannot run %pg\n",
 				mdname(mddev), rdev0->bdev);
+			if (limp)
+				queue_limits_cancel_update(q);
 			mddev_unlock_and_resume(mddev);
 		} else {
 			pr_debug("md: created %s\n", mdname(mddev));
@@ -7442,9 +7519,13 @@ static void autorun_devices(int part)
 				if (bind_rdev_to_array(rdev, mddev))
 					export_rdev(rdev);
 			}
-			autorun_array(mddev);
+			autorun_array(mddev, limp);
+			if (limp && queue_limits_commit_update(q, limp))
+				pr_warn("md: %s: could not apply queue limits\n",
+					mdname(mddev));
 			mddev_unlock_and_resume(mddev);
 		}
+		limp = NULL;
 		/* on success, candidates will be empty, on error
 		 * it won't...
 		 */
@@ -8536,7 +8617,8 @@ static int md_ioctl(struct block_device *bdev, blk_mode_t mode,
 		flush_work(&mddev->sync_work);
 
 	/* q->limits_lock nests outside both, see md_start_sync() */
-	if (md_ioctl_may_add_disk(cmd) && !mddev_is_dm(mddev)) {
+	if ((md_ioctl_may_add_disk(cmd) || cmd == RUN_ARRAY) &&
+	    !mddev_is_dm(mddev)) {
 		q = mddev->gendisk->queue;
 		lim = queue_limits_start_update(q);
 		limp = &lim;
@@ -8660,7 +8742,7 @@ static int md_ioctl(struct block_device *bdev, blk_mode_t mode,
 		goto unlock;
 
 	case RUN_ARRAY:
-		err = do_md_run(mddev);
+		err = do_md_run(mddev, limp);
 		goto unlock;
 
 	case SET_BITMAP_FILE:

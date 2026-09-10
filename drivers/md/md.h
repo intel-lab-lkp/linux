@@ -760,7 +760,12 @@ struct md_personality
 	 * start up works that do NOT require md_thread. tasks that
 	 * requires md_thread should go into start()
 	 */
-	int (*run)(struct mddev *mddev);
+	/*
+	 * @lim: a queue limits update the caller owns, or NULL.  Non-NULL
+	 * means stack into it rather than take q->limits_lock, which has to
+	 * nest outside reconfig_mutex, see md_start_sync().
+	 */
+	int (*run)(struct mddev *mddev, struct queue_limits *lim);
 	/* start up works that require md threads */
 	int (*start)(struct mddev *mddev);
 	void (*free)(struct mddev *mddev, void *priv);
@@ -959,7 +964,7 @@ extern void mddev_destroy(struct mddev *mddev);
 void md_init_stacking_limits(struct queue_limits *lim);
 struct mddev *md_alloc(dev_t dev, char *name);
 void mddev_put(struct mddev *mddev);
-extern int md_run(struct mddev *mddev);
+extern int md_run(struct mddev *mddev, struct queue_limits *lim);
 extern int md_start(struct mddev *mddev);
 extern void md_stop(struct mddev *mddev);
 extern void md_stop_writes(struct mddev *mddev);
@@ -1048,7 +1053,7 @@ void md_autostart_arrays(int part);
 int md_set_array_info(struct mddev *mddev, struct mdu_array_info_s *info);
 int md_add_new_disk(struct mddev *mddev, struct mdu_disk_info_s *info,
 		    struct queue_limits *lim);
-int do_md_run(struct mddev *mddev);
+int do_md_run(struct mddev *mddev, struct queue_limits *lim);
 #define MDDEV_STACK_INTEGRITY	(1u << 0)
 int mddev_stack_rdev_limits(struct mddev *mddev, struct queue_limits *lim,
 		unsigned int flags);
