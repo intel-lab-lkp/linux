@@ -88,6 +88,8 @@ static inline s64 ntfs_attr_size(const struct attr_record *a)
 void ntfs_attr_reinit_search_ctx(struct ntfs_attr_search_ctx *ctx);
 struct ntfs_attr_search_ctx *ntfs_attr_get_search_ctx(struct ntfs_inode *ni,
 		struct mft_record *mrec);
+struct ntfs_attr_search_ctx *ntfs_attr_get_search_ctx_gfp(
+		struct ntfs_inode *ni, struct mft_record *mrec, gfp_t gfp);
 void ntfs_attr_put_search_ctx(struct ntfs_attr_search_ctx *ctx);
 int ntfs_attr_size_bounds_check(const struct ntfs_volume *vol,
 		const __le32 type, const s64 size);
