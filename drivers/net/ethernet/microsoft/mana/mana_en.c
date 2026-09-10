@@ -2925,7 +2925,14 @@ static int mana_fill_rx_oob(struct mana_recv_buf_oob *rx_oob, u32 mem_key,
 	dma_addr_t da;
 	void *va;
 
-	if (mpc->rxbufs_pre)
+	/* The pre-allocated buffers come from dev_alloc_pages(), not from the
+	 * rxq's page_pool. With a program attached any buffer can reach
+	 * __xdp_return(), which returns it to the pool the rxq registered, so
+	 * fill from the pool instead. The unused pre-allocated buffers are
+	 * released by the mana_pre_dealloc_rxbufs() every caller already runs
+	 * after mana_attach().
+	 */
+	if (mpc->rxbufs_pre && !mana_xdp_get(mpc))
 		va = mana_get_rxbuf_pre(rxq, &da);
 	else
 		va = mana_get_rxfrag(rxq, dev, &da, &from_pool, &pp_page,
