@@ -415,6 +415,10 @@ static int oxp_hid_raw_event_gen_2(struct hid_device *hdev,
 		return 0;
 
 	rgb_rep = (struct oxp_gen_2_rgb_report *)data;
+	if (rgb_rep->enabled > OXP_FEAT_ENABLED || rgb_rep->speed > 9 ||
+	    rgb_rep->brightness > 4)
+		return 0;
+
 	/* Ensure we save monocolor as the list value */
 	drvdata.rgb_effect = rgb_rep->effect == OXP_EFFECT_MONO_TRUE ?
 			     OXP_EFFECT_MONO_LIST :
