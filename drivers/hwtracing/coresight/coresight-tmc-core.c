@@ -953,17 +953,6 @@ static const struct amba_id tmc_ids[] = {
 
 MODULE_DEVICE_TABLE(amba, tmc_ids);
 
-static struct amba_driver tmc_driver = {
-	.drv = {
-		.name   = "coresight-tmc",
-		.suppress_bind_attrs = true,
-	},
-	.probe		= tmc_probe,
-	.shutdown	= tmc_shutdown,
-	.remove		= tmc_remove,
-	.id_table	= tmc_ids,
-};
-
 static int tmc_platform_probe(struct platform_device *pdev)
 {
 	struct resource *res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -1042,6 +1031,18 @@ static struct platform_driver tmc_platform_driver = {
 		.suppress_bind_attrs	= true,
 		.pm			= &tmc_dev_pm_ops,
 	},
+};
+
+static struct amba_driver tmc_driver = {
+	.drv = {
+		.name   = "coresight-tmc",
+		.pm	= &tmc_dev_pm_ops,
+		.suppress_bind_attrs = true,
+	},
+	.probe		= tmc_probe,
+	.shutdown	= tmc_shutdown,
+	.remove		= tmc_remove,
+	.id_table	= tmc_ids,
 };
 
 static int __init tmc_init(void)

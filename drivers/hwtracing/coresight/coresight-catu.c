@@ -612,16 +612,6 @@ static const struct amba_id catu_ids[] = {
 
 MODULE_DEVICE_TABLE(amba, catu_ids);
 
-static struct amba_driver catu_driver = {
-	.drv = {
-		.name			= "coresight-catu",
-		.suppress_bind_attrs	= true,
-	},
-	.probe				= catu_probe,
-	.remove				= catu_remove,
-	.id_table			= catu_ids,
-};
-
 static int catu_platform_probe(struct platform_device *pdev)
 {
 	struct resource *res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -700,6 +690,17 @@ static struct platform_driver catu_platform_driver = {
 		.suppress_bind_attrs	= true,
 		.pm			= &catu_dev_pm_ops,
 	},
+};
+
+static struct amba_driver catu_driver = {
+	.drv = {
+		.name			= "coresight-catu",
+		.pm			= &catu_dev_pm_ops,
+		.suppress_bind_attrs	= true,
+	},
+	.probe				= catu_probe,
+	.remove				= catu_remove,
+	.id_table			= catu_ids,
 };
 
 static int __init catu_init(void)

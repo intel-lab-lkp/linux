@@ -2460,16 +2460,6 @@ static const struct amba_id etm4_ids[] = {
 
 MODULE_DEVICE_TABLE(amba, etm4_ids);
 
-static struct amba_driver etm4x_amba_driver = {
-	.drv = {
-		.name   = "coresight-etm4x",
-		.suppress_bind_attrs = true,
-	},
-	.probe		= etm4_probe_amba,
-	.remove         = etm4_remove_amba,
-	.id_table	= etm4_ids,
-};
-
 #ifdef CONFIG_PM
 static int etm4_runtime_suspend(struct device *dev)
 {
@@ -2526,6 +2516,17 @@ static struct platform_driver etm4_platform_driver = {
 		.suppress_bind_attrs	= true,
 		.pm			= &etm4_dev_pm_ops,
 	},
+};
+
+static struct amba_driver etm4x_amba_driver = {
+	.drv = {
+		.name   = "coresight-etm4x",
+		.pm	= &etm4_dev_pm_ops,
+		.suppress_bind_attrs = true,
+	},
+	.probe		= etm4_probe_amba,
+	.remove         = etm4_remove_amba,
+	.id_table	= etm4_ids,
 };
 
 static int __init etm4x_init(void)
