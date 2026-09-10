@@ -283,8 +283,6 @@ SYM_FUNC_END(v6_dma_flush_range)
  */
 SYM_TYPED_FUNC_START(v6_dma_map_area)
 	add	r1, r1, r0
-	teq	r2, #DMA_FROM_DEVICE
-	beq	v6_dma_inv_range
 	b	v6_dma_clean_range
 SYM_FUNC_END(v6_dma_map_area)
 

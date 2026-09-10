@@ -681,18 +681,12 @@ void arch_sync_dma_for_device(phys_addr_t paddr, size_t size,
 {
 	dma_cache_maint_page(paddr, size, dir, dmac_map_area);
 
-	if (dir == DMA_FROM_DEVICE) {
-		outer_inv_range(paddr, paddr + size);
-	} else {
-		outer_clean_range(paddr, paddr + size);
-	}
-	/* FIXME: non-speculating: flush on bidirectional mappings? */
+	outer_clean_range(paddr, paddr + size);
 }
 
 void arch_sync_dma_for_cpu(phys_addr_t paddr, size_t size,
 			   enum dma_data_direction dir)
 {
-	/* FIXME: non-speculating: not required */
 	/* in any case, don't bother invalidating if DMA to device */
 	if (dir != DMA_TO_DEVICE) {
 		outer_inv_range(paddr, paddr + size);
