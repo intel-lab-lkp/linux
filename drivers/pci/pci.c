@@ -761,7 +761,8 @@ struct resource *pci_find_parent_resource(const struct pci_dev *dev,
 			 * not, the allocator made a mistake.
 			 */
 			if (r->flags & IORESOURCE_PREFETCH &&
-			    !(res->flags & IORESOURCE_PREFETCH))
+			    !(res->flags & IORESOURCE_PREFETCH) &&
+			    !pci_is_pcie(dev))
 				return NULL;
 
 			/*

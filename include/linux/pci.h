@@ -2684,7 +2684,7 @@ static inline void pci_vf_drivers_autoprobe(struct pci_dev *dev, bool probe) { }
  * need to calculate PCIe capability offset from raw device for some
  * reasons, please use pci_find_capability() instead.
  */
-static inline int pci_pcie_cap(struct pci_dev *dev)
+static inline int pci_pcie_cap(const struct pci_dev *dev)
 {
 	return dev->pcie_cap;
 }
@@ -2695,7 +2695,7 @@ static inline int pci_pcie_cap(struct pci_dev *dev)
  *
  * Returns: true if the PCI device is PCI Express capable, false otherwise.
  */
-static inline bool pci_is_pcie(struct pci_dev *dev)
+static inline bool pci_is_pcie(const struct pci_dev *dev)
 {
 	return pci_pcie_cap(dev);
 }
