@@ -422,6 +422,7 @@ static int netup_unidvb_dvb_init(struct netup_unidvb_dev *ndev,
 	}
 
 	for (i = 0; i < fe_count; i++) {
+		fes[i]->dvb.dvbq.lock = &ndev->vb2_lock;
 		netup_unidvb_queue_init(&ndev->dma[num], &fes[i]->dvb.dvbq);
 		snprintf(fe_name, sizeof(fe_name), "netup_fe%d", i);
 		fes[i]->dvb.name = fe_name;
@@ -802,6 +803,8 @@ static int netup_unidvb_initdev(struct pci_dev *pci_dev,
 	ndev = kzalloc_obj(*ndev);
 	if (!ndev)
 		goto dev_alloc_err;
+
+	mutex_init(&ndev->vb2_lock);
 
 	/* detect hardware revision */
 	if (pci_dev->device == NETUP_HW_REV_1_3)

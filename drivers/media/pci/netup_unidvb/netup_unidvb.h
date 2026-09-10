@@ -11,6 +11,7 @@
 
 #include <linux/pci.h>
 #include <linux/i2c.h>
+#include <linux/mutex.h>
 #include <linux/workqueue.h>
 #include <media/v4l2-common.h>
 #include <media/v4l2-device.h>
@@ -113,6 +114,8 @@ struct netup_unidvb_dev {
 	u8				*dma_virt;
 	dma_addr_t			dma_phys;
 	u32				dma_size;
+	/* protects the vb2 queues, used as vb2_queue::lock */
+	struct mutex			vb2_lock;
 	struct vb2_dvb_frontends	frontends[2];
 	struct netup_i2c		i2c[2];
 	struct workqueue_struct		*wq;
