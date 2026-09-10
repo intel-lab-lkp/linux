@@ -507,7 +507,9 @@ repeat:
 		stopper->caller = work->caller;
 		stopper->fn = fn;
 		preempt_count_inc();
+		printk_deferred_enter();
 		ret = fn(arg);
+		printk_deferred_exit();
 		if (done) {
 			if (ret)
 				done->ret = ret;
