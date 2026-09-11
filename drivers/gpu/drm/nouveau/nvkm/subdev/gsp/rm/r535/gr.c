@@ -64,24 +64,13 @@ r535_gr_promote_ctx(struct r535_gr *gr, bool golden, struct nvkm_vmm *vmm,
 	struct nvkm_subdev *subdev = &gr->base.engine.subdev;
 	struct nvkm_device *device = subdev->device;
 	NV2080_CTRL_GPU_PROMOTE_CTX_PARAMS *ctrl;
+	int ret;
 
-	ctrl = nvkm_gsp_rm_ctrl_get(&vmm->rm.device.subdevice,
-				    NV2080_CTRL_CMD_GPU_PROMOTE_CTX, sizeof(*ctrl));
-	if (WARN_ON(IS_ERR(ctrl)))
-		return PTR_ERR(ctrl);
-
-	ctrl->engineType = 1;
-	ctrl->hChanClient = vmm->rm.client.object.handle;
-	ctrl->hObject = chan->handle;
-
+	/* Allocate and map all context buffers before getting the control RPC. */
 	for (int i = 0; i < gr->ctxbuf_nr; i++) {
-		NV2080_CTRL_GPU_PROMOTE_CTX_BUFFER_ENTRY *entry =
-			&ctrl->promoteEntry[ctrl->entryCount];
 		const bool alloc = golden || !gr->ctxbuf[i].global;
-		int ret;
-
-		entry->bufferId = gr->ctxbuf[i].bufferId;
-		entry->bInitialize = gr->ctxbuf[i].init && alloc;
+		const bool nonmapped = alloc && gr->ctxbuf[i].bufferId ==
+			NV2080_CTRL_GPU_PROMOTE_CTX_BUFFER_ID_PRIV_ACCESS_MAP;
 
 		if (alloc) {
 			ret = nvkm_memory_new(device, gr->ctxbuf[i].init ?
@@ -90,10 +79,6 @@ r535_gr_promote_ctx(struct r535_gr *gr, bool golden, struct nvkm_vmm *vmm,
 					      gr->ctxbuf[i].init, &pmem[i]);
 			if (WARN_ON(ret))
 				return ret;
-
-			if (gr->ctxbuf[i].bufferId ==
-					NV2080_CTRL_GPU_PROMOTE_CTX_BUFFER_ID_PRIV_ACCESS_MAP)
-				entry->bNonmapped = 1;
 		} else {
 			if (gr->ctxbuf[i].bufferId ==
 				NV2080_CTRL_GPU_PROMOTE_CTX_BUFFER_ID_UNRESTRICTED_PRIV_ACCESS_MAP)
@@ -102,7 +87,7 @@ r535_gr_promote_ctx(struct r535_gr *gr, bool golden, struct nvkm_vmm *vmm,
 			pmem[i] = nvkm_memory_ref(gr->ctxbuf_mem[i]);
 		}
 
-		if (!entry->bNonmapped) {
+		if (!nonmapped) {
 			struct gf100_vmm_map_v0 args = {
 				.priv = 1,
 				.ro   = gr->ctxbuf[i].ro,
@@ -118,9 +103,36 @@ r535_gr_promote_ctx(struct r535_gr *gr, bool golden, struct nvkm_vmm *vmm,
 			ret = nvkm_memory_map(pmem[i], 0, vmm, pvma[i], &args, sizeof(args));
 			if (ret)
 				return ret;
-
-			entry->gpuVirtAddr = pvma[i]->addr;
 		}
+	}
+
+	ctrl = nvkm_gsp_rm_ctrl_get(&vmm->rm.device.subdevice,
+				    NV2080_CTRL_CMD_GPU_PROMOTE_CTX, sizeof(*ctrl));
+	if (WARN_ON(IS_ERR(ctrl)))
+		return PTR_ERR(ctrl);
+
+	ctrl->engineType = 1;
+	ctrl->hChanClient = vmm->rm.client.object.handle;
+	ctrl->hObject = chan->handle;
+
+	for (int i = 0; i < gr->ctxbuf_nr; i++) {
+		NV2080_CTRL_GPU_PROMOTE_CTX_BUFFER_ENTRY *entry =
+			&ctrl->promoteEntry[ctrl->entryCount];
+		const bool alloc = golden || !gr->ctxbuf[i].global;
+
+		if (!alloc && gr->ctxbuf[i].bufferId ==
+			NV2080_CTRL_GPU_PROMOTE_CTX_BUFFER_ID_UNRESTRICTED_PRIV_ACCESS_MAP)
+			continue;
+
+		entry->bufferId = gr->ctxbuf[i].bufferId;
+		entry->bInitialize = gr->ctxbuf[i].init && alloc;
+
+		if (alloc && gr->ctxbuf[i].bufferId ==
+				NV2080_CTRL_GPU_PROMOTE_CTX_BUFFER_ID_PRIV_ACCESS_MAP)
+			entry->bNonmapped = 1;
+
+		if (!entry->bNonmapped)
+			entry->gpuVirtAddr = pvma[i]->addr;
 
 		if (entry->bInitialize) {
 			entry->gpuPhysAddr = nvkm_memory_addr(pmem[i]);
