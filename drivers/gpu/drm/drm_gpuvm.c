@@ -1051,7 +1051,7 @@ static const struct drm_gem_object_funcs drm_gpuvm_object_funcs = {
  * @drm: the drivers &drm_device
  *
  * Allocates a dummy &drm_gem_object which can be passed to drm_gpuvm_init() in
- * order to serve as root GEM object providing the &drm_resv shared across
+ * order to serve as root GEM object providing the &dma_resv shared across
  * &drm_gem_objects local to a single GPUVM.
  *
  * Returns: the &drm_gem_object on success, NULL on failure
@@ -2718,7 +2718,7 @@ static const struct drm_gpuvm_ops lock_ops = {
  * @req: ptr to drm_gpuvm_map_req struct
  *
  * This function locks (drm_exec_lock_obj()) objects that will be unmapped/
- * remapped, and locks+prepares (drm_exec_prepare_object()) objects that
+ * remapped, and locks+prepares (drm_exec_prepare_obj()) objects that
  * will be newly mapped.
  *
  * The expected usage is::
