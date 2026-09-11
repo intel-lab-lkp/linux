@@ -154,7 +154,7 @@ EXPORT_SYMBOL(drm_crtc_vblank_helper_disable_vblank_timer);
  * @vblank_time: Returns the next vblank timestamp
  * @in_vblank_irq: True is called from drm_crtc_handle_vblank()
  *
- * The helper drm_crtc_helper_get_vblank_timestamp_from_timer() implements
+ * The helper drm_crtc_vblank_helper_get_vblank_timestamp_from_timer() implements
  * get_vblank_timestamp of struct drm_crtc_funcs for CRTCs that require a
  * VBLANK timer. It returns the timestamp according to the timer's expiry
  * time.
