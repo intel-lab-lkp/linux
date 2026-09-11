@@ -536,16 +536,8 @@ bool workingset_test_recent(void *shadow, bool file, bool *workingset,
 	return refault_distance <= workingset_size;
 }
 
-/**
- * workingset_refault - Evaluate the refault of a previously evicted folio.
- * @folio: The freshly allocated replacement folio.
- * @shadow: Shadow entry of the evicted folio.
- *
- * Calculates and evaluates the refault distance of the previously
- * evicted folio in the context of the node and the memcg whose memory
- * pressure caused the eviction.
- */
-void workingset_refault(struct folio *folio, void *shadow)
+static void __workingset_refault(struct folio *folio, void *shadow,
+				 bool lru_managed)
 {
 	bool file = folio_is_file_lru(folio);
 	struct mem_cgroup *memcg;
@@ -577,7 +569,16 @@ void workingset_refault(struct folio *folio, void *shadow)
 	if (!workingset_test_recent(shadow, file, &workingset, true))
 		goto out;
 
-	folio_set_active(folio);
+	/*
+	 * An LRU-managed folio may sit in a per-CPU batch, which cannot be
+	 * determined here: setting the flag would race the drain and leave it
+	 * disagreeing with the list. folio_activate() is safe, but misses the
+	 * activation for such a folio.
+	 */
+	if (lru_managed)
+		folio_activate(folio);
+	else
+		folio_set_active(folio);
 	workingset_age_nonresident(lruvec, nr);
 	mod_lruvec_state(lruvec, WORKINGSET_ACTIVATE_BASE + file, nr);
 
@@ -588,6 +589,43 @@ void workingset_refault(struct folio *folio, void *shadow)
 	}
 out:
 	mem_cgroup_put(memcg);
+}
+
+/**
+ * workingset_refault - Evaluate the refault of a previously evicted folio.
+ * @folio: The freshly allocated replacement folio.
+ * @shadow: Shadow entry of the evicted folio.
+ *
+ * Calculates and evaluates the refault distance of the previously
+ * evicted folio in the context of the node and the memcg whose memory
+ * pressure caused the eviction.
+ *
+ * Context: @folio must be locked and not on the LRU yet, the caller adds
+ * it with folio_add_lru() afterwards.
+ */
+void workingset_refault(struct folio *folio, void *shadow)
+{
+	__workingset_refault(folio, shadow, false);
+}
+
+/**
+ * workingset_refault_lru_managed - Evaluate the refault of a previously
+ * evicted folio that is already on the LRU.
+ * @folio: The folio the eviction is refaulted into.
+ * @shadow: Shadow entry of the evicted folio.
+ *
+ * Like workingset_refault(), but for a folio the caller has already added
+ * to the LRU, which has to be activated by moving it between the lists
+ * rather than by setting PG_active.
+ *
+ * The activation is best effort: a folio still sitting in a per-CPU LRU
+ * batch cannot be moved yet and is left inactive.
+ *
+ * Context: @folio must be locked and already added to the LRU.
+ */
+void workingset_refault_lru_managed(struct folio *folio, void *shadow)
+{
+	__workingset_refault(folio, shadow, true);
 }
 
 /**
