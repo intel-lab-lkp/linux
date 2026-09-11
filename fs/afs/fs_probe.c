@@ -80,6 +80,16 @@ static void afs_finished_fs_probe(struct afs_net *net, struct afs_server *server
 	bool responded = test_bit(AFS_ESTATE_RESPONDED, &estate->flags);
 
 	write_seqlock(&net->fs_lock);
+	if (test_bit(AFS_SERVER_FL_EXPIRED, &server->flags)) {
+		/* The server is being destroyed and afs_server_destroyer()
+		 * dequeues probe_link from the probe queues only once, so an
+		 * expired server must not be re-queued here: the entry would
+		 * outlive the server object and the next probe dispatcher
+		 * run would touch freed memory.
+		 */
+		write_sequnlock(&net->fs_lock);
+		return;
+	}
 	if (responded) {
 		list_add_tail(&server->probe_link, &net->fs_probe_slow);
 	} else {
