@@ -1094,7 +1094,9 @@ static void dsi_timing_setup(struct msm_dsi_host *msm_host, bool is_bonded_dsi)
 		dsi_write(msm_host, REG_DSI_ACTIVE_HSYNC,
 			DSI_ACTIVE_HSYNC_START(hs_start) |
 			DSI_ACTIVE_HSYNC_END(hs_end));
-		dsi_write(msm_host, REG_DSI_ACTIVE_VSYNC_HPOS, 0);
+		dsi_write(msm_host, REG_DSI_ACTIVE_VSYNC_HPOS,
+			DSI_ACTIVE_VSYNC_HPOS_START(hs_start) |
+			DSI_ACTIVE_VSYNC_HPOS_END(vs_end));
 		dsi_write(msm_host, REG_DSI_ACTIVE_VSYNC_VPOS,
 			DSI_ACTIVE_VSYNC_VPOS_START(vs_start) |
 			DSI_ACTIVE_VSYNC_VPOS_END(vs_end));
@@ -1168,8 +1170,10 @@ static void dsi_op_mode_config(struct msm_dsi_host *msm_host,
 					DSI_IRQ_MASK_VIDEO_DONE, 0);
 	} else {
 		if (video_mode) {
+			dsi_ctrl &= ~DSI_CTRL_CMD_MODE_EN;
 			dsi_ctrl |= DSI_CTRL_VID_MODE_EN;
 		} else {		/* command mode */
+			dsi_ctrl &= ~DSI_CTRL_VID_MODE_EN;
 			dsi_ctrl |= DSI_CTRL_CMD_MODE_EN;
 			dsi_intr_ctrl(msm_host, DSI_IRQ_MASK_CMD_MDP_DONE, 1);
 		}
