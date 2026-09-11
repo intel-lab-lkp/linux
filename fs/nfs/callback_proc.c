@@ -390,6 +390,63 @@ static __be32 nfs4_cb_notify_remove(struct cb_process_state *cps,
 	return 0;
 }
 
+static __be32 nfs4_cb_notify_add(struct cb_process_state *cps,
+				 struct dentry *parent,
+				 struct cb_notify_add *cb_add)
+{
+	struct nfs_entry entry = {
+		.cookie = cb_add->na_new_entry_cookie,
+		.name = cb_add->na_new_entry.ne_name,
+		.len = cb_add->na_new_entry.ne_namelen,
+		.eof = cb_add->na_last_entry,
+		.fh = &cb_add->na_new_entry.ne_fh,
+		.fattr = &cb_add->na_new_entry.ne_attrs,
+		.server = NFS_SERVER(d_inode(parent)),
+	};
+	struct qstr filename = QSTR_INIT(entry.name, entry.len);
+	struct dentry *dentry, *alias;
+	struct inode *inode;
+
+	if (cb_add->na_have_old_entry)
+		nfs4_cb_notify_remove(cps, parent, &cb_add->na_old_entry);
+
+	filename.hash = full_name_hash(parent, filename.name, filename.len);
+	dentry = d_lookup(parent, &filename);
+	if (!dentry) {
+		dentry = d_alloc_parallel(parent, &filename);
+		if (IS_ERR(dentry))
+			goto out;
+	}
+
+	if (!d_in_lookup(dentry)) {
+		nfs_set_verifier(dentry, parent->d_time);
+		if (!nfs_refresh_inode(d_inode(dentry), entry.fattr))
+			nfs_setsecurity(d_inode(dentry), entry.fattr);
+		goto out;
+	}
+
+	if (!entry.fh->size) {
+		d_lookup_done(dentry);
+		goto out;
+	}
+
+	nfs_set_verifier(dentry, parent->d_time);
+	inode = nfs_fhget(parent->d_sb, entry.fh, entry.fattr);
+	alias = d_splice_alias(inode, dentry);
+	d_lookup_done(dentry);
+
+	if (IS_ERR_OR_NULL(alias))
+		goto out;
+	nfs_set_verifier(alias, parent->d_time);
+	dput(dentry);
+	dentry = alias;
+
+out:
+	nfs_set_cache_invalid(parent->d_inode, NFS_INO_INVALID_DATA);
+	dput(dentry);
+	return 0;
+}
+
 __be32 nfs4_callback_notify(void *argp, void *resp,
 			    struct cb_process_state *cps)
 {
@@ -420,6 +477,10 @@ __be32 nfs4_callback_notify(void *argp, void *resp,
 		case CB_NOTIFY4_REMOVE_ENTRY:
 			res = nfs4_cb_notify_remove(cps, parent,
 						    &change->notify_remove);
+			break;
+		case CB_NOTIFY4_ADD_ENTRY:
+			res = nfs4_cb_notify_add(cps, parent,
+						 &change->notify_add);
 			break;
 		default:
 			res = htonl(NFS4ERR_NOTSUPP);

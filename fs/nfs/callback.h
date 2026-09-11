@@ -147,6 +147,12 @@ struct cb_notify_entry {
 	u32			ne_namelen;
 	const char		*ne_name;
 	struct nfs_fattr	ne_attrs;
+	struct nfs_fh		ne_fh;
+};
+
+struct cb_notify_prev_entry {
+	struct cb_notify_entry	pe_prev_entry;
+	u64			pe_prev_entry_cookie;
 };
 
 struct cb_notify_remove {
@@ -154,10 +160,21 @@ struct cb_notify_remove {
 	u64			nrm_old_entry_cookie;
 };
 
+struct cb_notify_add {
+	bool			na_have_old_entry;
+	struct cb_notify_remove	na_old_entry;
+	struct cb_notify_entry	na_new_entry;
+	bool			na_have_new_entry_cookie;
+	u64			na_new_entry_cookie;
+	bool			na_have_prev_entry;
+	bool			na_last_entry;
+};
+
 struct cb_notify_changes {
 	u32	notify_mask;
 	union {
 		struct cb_notify_remove notify_remove;
+		struct cb_notify_add	notify_add;
 	};
 };
 

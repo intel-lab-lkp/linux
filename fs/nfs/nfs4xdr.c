@@ -2013,8 +2013,11 @@ encode_get_dir_delegation(struct xdr_stream *xdr, struct compound_hdr *hdr)
 {
 	struct timespec64 ts = { 0, 0 };
 	u32 notifications[1] = { CB_NOTIFY4_REMOVE_ENTRY |
+				 CB_NOTIFY4_ADD_ENTRY |
 				 CB_NOTIFY4_GFLAG_EXTEND };
-	u32 attributes[1] = { 0 };
+	u32 child_attrs[1] = { FATTR4_WORD0_FSID | FATTR4_WORD0_FILEID |
+			       FATTR4_WORD0_TYPE | FATTR4_WORD0_FILEHANDLE };
+	u32 dir_attrs[1] = { 0 };
 	__be32 *p;
 
 	encode_op_hdr(xdr, OP_GET_DIR_DELEGATION, decode_get_dir_deleg_maxsz, hdr);
@@ -2030,10 +2033,10 @@ encode_get_dir_delegation(struct xdr_stream *xdr, struct compound_hdr *hdr)
 	xdr_encode_nfstime4(p, &ts);
 
 	/* Requested child attributes */
-	xdr_encode_bitmap4(xdr, attributes, ARRAY_SIZE(attributes));
+	xdr_encode_bitmap4(xdr, child_attrs, ARRAY_SIZE(child_attrs));
 
 	/* Requested dir attributes */
-	xdr_encode_bitmap4(xdr, attributes, ARRAY_SIZE(attributes));
+	xdr_encode_bitmap4(xdr, dir_attrs, ARRAY_SIZE(dir_attrs));
 }
 
 static void
@@ -4917,6 +4920,26 @@ static int decode_getfattr(struct xdr_stream *xdr, struct nfs_fattr *fattr,
 		const struct nfs_server *server)
 {
 	return decode_getfattr_generic(xdr, fattr, NULL, NULL, server);
+}
+
+int decode_fattr_cb(struct xdr_stream *xdr, uint32_t *bitmap,
+			     struct nfs_fattr *fattr, struct nfs_fh *fhandle)
+{
+	unsigned int savep;
+	uint32_t attrlen;
+	int status;
+
+	fattr->valid = 0;
+
+	status = decode_attr_length(xdr, &attrlen, &savep);
+	if (status < 0)
+		return status;
+
+	status = decode_getfattr_attrs(xdr, bitmap, fattr, fhandle, NULL, NULL);
+	if (status < 0)
+		return status;
+
+	return verify_attr_len(xdr, savep, attrlen);
 }
 
 /*
