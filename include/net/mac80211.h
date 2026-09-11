@@ -4594,7 +4594,7 @@ struct ieee80211_prep_tx_info {
  *	decremented, and when they reach 1 the driver must call
  *	ieee80211_csa_finish(). Drivers which use ieee80211_beacon_get()
  *	get the csa counter decremented by mac80211, but must check if it is
- *	1 using ieee80211_beacon_counter_is_complete() after the beacon has been
+ *	1 using ieee80211_beacon_cntdwn_is_complete() after the beacon has been
  *	transmitted and then call ieee80211_csa_finish().
  *	If the CSA count starts as zero or 1, this function will not be called,
  *	since there won't be any time to beacon before the switch anyway.
@@ -7867,7 +7867,7 @@ ieee80211_return_txq(struct ieee80211_hw *hw, struct ieee80211_txq *txq,
  * This function is used to check whether given txq is allowed to transmit by
  * the airtime scheduler, and can be used by drivers to access the airtime
  * fairness accounting without using the scheduling order enforced by
- * next_txq().
+ * ieee80211_next_txq().
  *
  * Returns %true if the airtime scheduler thinks the TXQ should be allowed to
  * transmit, and %false if it should be throttled. This function can also have
@@ -8169,7 +8169,7 @@ bool ieee80211_prepare_rx_omi_bw(struct ieee80211_link_sta *link_sta,
  * ieee80211_finalize_rx_omi_bw - finalize BW RX OMI update
  * @link_sta: the link STA the OMI was sent to
  *
- * See ieee80211_client_prepare_rx_omi_bw(). Context is the same here
+ * See ieee80211_prepare_rx_omi_bw(). Context is the same here
  * as well.
  */
 void ieee80211_finalize_rx_omi_bw(struct ieee80211_link_sta *link_sta);
