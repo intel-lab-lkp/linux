@@ -2965,7 +2965,7 @@ static inline u64 intel_pmu_get_status(void)
 {
 	u64 status;
 
-	rdmsrq(MSR_CORE_PERF_GLOBAL_STATUS, status);
+	status = rdmsrq(MSR_CORE_PERF_GLOBAL_STATUS);
 
 	return status;
 }
@@ -3494,7 +3494,7 @@ static void intel_pmu_enable_event_ext(struct perf_event *event)
 		else
 			new.thresh = ARCH_PEBS_THRESH_SINGLE;
 
-		rdmsrq(MSR_IA32_PEBS_INDEX, old.whole);
+		old.whole = rdmsrq(MSR_IA32_PEBS_INDEX);
 		if (new.thresh != old.thresh || !old.en) {
 			if (old.thresh == ARCH_PEBS_THRESH_MULTI && old.wr > 0) {
 				/*
@@ -6255,8 +6255,7 @@ static void intel_update_pmu_caps(struct pmu *pmu)
 		update_pmu_cap_from_perfmonext(pmu);
 
 	if (is_hybrid() && this_cpu_has(X86_FEATURE_PDCM)) {
-		rdmsrq(MSR_IA32_PERF_CAPABILITIES,
-		       hybrid(pmu, intel_cap).capabilities);
+		hybrid(pmu, intel_cap).capabilities = rdmsrq(MSR_IA32_PERF_CAPABILITIES);
 
 		/*
 		 * Restore perf_metrics on platforms with broken
@@ -6412,7 +6411,7 @@ static void intel_pmu_cpu_starting(int cpu)
 	if (!is_hybrid() && x86_pmu.intel_cap.perf_metrics) {
 		union perf_capabilities perf_cap;
 
-		rdmsrq(MSR_IA32_PERF_CAPABILITIES, perf_cap.capabilities);
+		perf_cap.capabilities = rdmsrq(MSR_IA32_PERF_CAPABILITIES);
 		if (!perf_cap.perf_metrics) {
 			x86_pmu.intel_cap.perf_metrics = 0;
 			x86_pmu.intel_ctrl &= ~GLOBAL_CTRL_EN_PERF_METRICS;
@@ -7959,7 +7958,7 @@ __init int intel_pmu_init(void)
 	if (boot_cpu_has(X86_FEATURE_PDCM)) {
 		u64 capabilities;
 
-		rdmsrq(MSR_IA32_PERF_CAPABILITIES, capabilities);
+		capabilities = rdmsrq(MSR_IA32_PERF_CAPABILITIES);
 		x86_pmu.intel_cap.capabilities = capabilities;
 	}
 
