@@ -2864,6 +2864,18 @@ static int get_nr_gens(struct lruvec *lruvec, int type)
 	return lruvec->lrugen.max_seq - lruvec->lrugen.min_seq[type] + 1;
 }
 
+/* the number of pages in a generation, summed over zones and clamped to >= 0 */
+static unsigned long lru_gen_seq_nr_pages(struct lru_gen_folio *lrugen, int gen, int type)
+{
+	int zone;
+	unsigned long size = 0;
+
+	for (zone = 0; zone < MAX_NR_ZONES; zone++)
+		size += max(READ_ONCE(lrugen->nr_pages[gen][type][zone]), 0L);
+
+	return size;
+}
+
 static bool __maybe_unused seq_is_valid(struct lruvec *lruvec)
 {
 	int type;
@@ -4290,7 +4302,7 @@ static void set_initial_priority(struct pglist_data *pgdat, struct scan_control 
 
 static unsigned long lruvec_evictable_size(struct lruvec *lruvec, int swappiness)
 {
-	int gen, type, zone;
+	int gen, type;
 	unsigned long seq, total = 0;
 	struct lru_gen_folio *lrugen = &lruvec->lrugen;
 	DEFINE_MAX_SEQ(lruvec);
@@ -4299,8 +4311,7 @@ static unsigned long lruvec_evictable_size(struct lruvec *lruvec, int swappiness
 	for_each_evictable_type(type, swappiness) {
 		for (seq = min_seq[type]; seq <= max_seq; seq++) {
 			gen = lru_gen_from_seq(seq);
-			for (zone = 0; zone < MAX_NR_ZONES; zone++)
-				total += max(READ_ONCE(lrugen->nr_pages[gen][type][zone]), 0L);
+			total += lru_gen_seq_nr_pages(lrugen, gen, type);
 		}
 	}
 
@@ -5796,18 +5807,15 @@ static int lru_gen_seq_show(struct seq_file *m, void *v)
 		seq = 0;
 
 	for (; seq <= max_seq; seq++) {
-		int type, zone;
+		int type;
 		int gen = lru_gen_from_seq(seq);
 		unsigned long birth = READ_ONCE(lruvec->lrugen.timestamps[gen]);
 
 		seq_printf(m, " %10lu %10u", seq, jiffies_to_msecs(jiffies - birth));
 
 		for (type = 0; type < ANON_AND_FILE; type++) {
-			unsigned long size = 0;
+			unsigned long size = lru_gen_seq_nr_pages(lrugen, gen, type);
 			char mark = full && seq < min_seq[type] ? 'x' : ' ';
-
-			for (zone = 0; zone < MAX_NR_ZONES; zone++)
-				size += max(READ_ONCE(lrugen->nr_pages[gen][type][zone]), 0L);
 
 			seq_printf(m, " %10lu%c", size, mark);
 		}
