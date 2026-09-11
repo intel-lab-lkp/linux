@@ -77,6 +77,8 @@ struct group_device {
 	struct list_head list;
 	struct device *dev;
 	char *name;
+	/* Membership published in sysfs; set under group->mutex */
+	bool linked;
 	/*
 	 * Device is blocked for a pending recovery while its group->domain is
 	 * retained. This can happen when:
@@ -166,6 +168,8 @@ static ssize_t iommu_group_store_type(struct iommu_group *group,
 				      const char *buf, size_t count);
 static struct group_device *iommu_group_alloc_device(struct iommu_group *group,
 						     struct device *dev);
+static int iommu_group_link_device(struct iommu_group *group,
+				   struct group_device *device);
 static void __iommu_group_free_device(struct iommu_group *group,
 				      struct group_device *grp_dev);
 static void iommu_domain_init(struct iommu_domain *domain, unsigned int type,
@@ -515,16 +519,12 @@ static int iommu_init_device(struct device *dev)
 	}
 	dev->iommu->iommu_dev = iommu_dev;
 
-	ret = iommu_device_link(iommu_dev, dev);
-	if (ret)
-		goto err_release;
-
 	group = ops->device_group(dev);
 	if (WARN_ON_ONCE(group == NULL))
 		group = ERR_PTR(-EINVAL);
 	if (IS_ERR(group)) {
 		ret = PTR_ERR(group);
-		goto err_unlink;
+		goto err_release;
 	}
 	dev->iommu_group = group;
 
@@ -533,8 +533,6 @@ static int iommu_init_device(struct device *dev)
 		dev->iommu->attach_deferred = ops->is_attach_deferred(dev);
 	return 0;
 
-err_unlink:
-	iommu_device_unlink(iommu_dev, dev);
 err_release:
 	if (ops->release_device)
 		ops->release_device(dev);
@@ -552,8 +550,6 @@ static void iommu_deinit_device(struct device *dev)
 	const struct iommu_ops *ops = dev_iommu_ops(dev);
 
 	lockdep_assert_held(&group->mutex);
-
-	iommu_device_unlink(dev->iommu->iommu_dev, dev);
 
 	/*
 	 * release_device() must stop using any attached domain on the device.
@@ -667,6 +663,11 @@ static int __iommu_probe_device(struct device *dev, struct list_head *group_list
 	 */
 	list_add_tail(&gdev->list, &group->devices);
 	WARN_ON(group->default_domain && !group->domain);
+
+	ret = iommu_group_link_device(group, gdev);
+	if (ret)
+		goto err_remove_gdev;
+
 	if (group->default_domain)
 		iommu_create_device_direct_mappings(group->default_domain, dev);
 	if (group->domain) {
@@ -729,10 +730,14 @@ static void __iommu_group_free_device(struct iommu_group *group,
 {
 	struct device *dev = grp_dev->dev;
 
-	sysfs_remove_link(group->devices_kobj, grp_dev->name);
-	sysfs_remove_link(&dev->kobj, "iommu_group");
+	if (grp_dev->linked) {
+		if (dev_has_iommu(dev))
+			iommu_device_unlink(dev->iommu->iommu_dev, dev);
+		sysfs_remove_link(group->devices_kobj, grp_dev->name);
+		sysfs_remove_link(&dev->kobj, "iommu_group");
 
-	trace_remove_device_from_group(group->id, dev);
+		trace_remove_device_from_group(group->id, dev);
+	}
 
 	/*
 	 * If the group has become empty then ownership must have been
@@ -1266,7 +1271,6 @@ out:
 static struct group_device *iommu_group_alloc_device(struct iommu_group *group,
 						     struct device *dev)
 {
-	int ret, i = 0;
 	struct group_device *device;
 
 	device = kzalloc_obj(*device);
@@ -1275,11 +1279,40 @@ static struct group_device *iommu_group_alloc_device(struct iommu_group *group,
 
 	device->dev = dev;
 
+	device->name = kasprintf(GFP_KERNEL, "%s", kobject_name(&dev->kobj));
+	if (!device->name) {
+		kfree(device);
+		dev_err(dev, "Failed to add to iommu group %d: %d\n",
+			group->id, -ENOMEM);
+		return ERR_PTR(-ENOMEM);
+	}
+
+	return device;
+}
+
+/*
+ * Publish a member's sysfs links under group->mutex.  All-or-nothing:
+ * on failure nothing is left behind and gdev->linked stays false, so
+ * __iommu_group_free_device() removes only what was published.
+ */
+static int iommu_group_link_device(struct iommu_group *group,
+				   struct group_device *device)
+{
+	struct device *dev = device->dev;
+	int ret, i = 0;
+
+	lockdep_assert_held(&group->mutex);
+
+	if (dev_has_iommu(dev)) {
+		ret = iommu_device_link(dev->iommu->iommu_dev, dev);
+		if (ret)
+			goto err_out;
+	}
+
 	ret = sysfs_create_link(&dev->kobj, &group->kobj, "iommu_group");
 	if (ret)
-		goto err_free_device;
+		goto err_unlink_iommu;
 
-	device->name = kasprintf(GFP_KERNEL, "%s", kobject_name(&dev->kobj));
 rename:
 	if (!device->name) {
 		ret = -ENOMEM;
@@ -1299,23 +1332,25 @@ rename:
 						 kobject_name(&dev->kobj), i++);
 			goto rename;
 		}
-		goto err_free_name;
+		goto err_remove_link;
 	}
+
+	device->linked = true;
 
 	trace_add_device_to_group(group->id, dev);
 
 	dev_info(dev, "Adding to iommu group %d\n", group->id);
 
-	return device;
+	return 0;
 
-err_free_name:
-	kfree(device->name);
 err_remove_link:
 	sysfs_remove_link(&dev->kobj, "iommu_group");
-err_free_device:
-	kfree(device);
+err_unlink_iommu:
+	if (dev_has_iommu(dev))
+		iommu_device_unlink(dev->iommu->iommu_dev, dev);
+err_out:
 	dev_err(dev, "Failed to add to iommu group %d: %d\n", group->id, ret);
-	return ERR_PTR(ret);
+	return ret;
 }
 
 /**
@@ -1329,15 +1364,23 @@ err_free_device:
 int iommu_group_add_device(struct iommu_group *group, struct device *dev)
 {
 	struct group_device *gdev;
+	int ret;
 
 	gdev = iommu_group_alloc_device(group, dev);
 	if (IS_ERR(gdev))
 		return PTR_ERR(gdev);
 
+	mutex_lock(&group->mutex);
+	ret = iommu_group_link_device(group, gdev);
+	if (ret) {
+		mutex_unlock(&group->mutex);
+		kfree(gdev->name);
+		kfree(gdev);
+		return ret;
+	}
+
 	iommu_group_ref_get(group);
 	dev->iommu_group = group;
-
-	mutex_lock(&group->mutex);
 	list_add_tail(&gdev->list, &group->devices);
 	mutex_unlock(&group->mutex);
 	return 0;
