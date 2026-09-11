@@ -314,7 +314,8 @@ void *swap_cache_get_shadow(swp_entry_t entry);
 void swap_cache_del_folio(struct folio *folio);
 struct folio *__swap_cache_alloc_folio(swp_entry_t target_entry, gfp_t gfp_mask,
 				       unsigned long orders, struct vm_fault *vmf,
-				       struct mempolicy *mpol, pgoff_t ilx);
+				       struct mempolicy *mpol, pgoff_t ilx,
+				       void **shadowp);
 /* Below helpers require the caller to lock and pass in the swap cluster. */
 void __swap_cache_add_folio(struct swap_cluster_info *ci,
 			    struct folio *folio, swp_entry_t entry);

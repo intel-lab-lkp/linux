@@ -409,7 +409,8 @@ void __swap_cache_replace_folio(struct swap_cluster_info *ci,
 static struct folio *__swap_cache_alloc(struct swap_cluster_info *ci,
 					swp_entry_t targ_entry, gfp_t gfp,
 					unsigned int order, struct vm_fault *vmf,
-					struct mempolicy *mpol, pgoff_t ilx)
+					struct mempolicy *mpol, pgoff_t ilx,
+					void **shadowp)
 {
 	int err;
 	swp_entry_t entry;
@@ -483,11 +484,12 @@ static struct folio *__swap_cache_alloc(struct swap_cluster_info *ci,
 
 	/* memsw uncharges swap when folio is added to swap cache */
 	memcg1_swapin(folio);
-	if (shadow)
-		workingset_refault(folio, shadow);
 
 	node_stat_mod_folio(folio, NR_FILE_PAGES, nr_pages);
 	lruvec_stat_mod_folio(folio, NR_SWAPCACHE, nr_pages);
+
+	if (shadowp)
+		*shadowp = shadow;
 
 	return folio;
 }
@@ -500,6 +502,7 @@ static struct folio *__swap_cache_alloc(struct swap_cluster_info *ci,
  * @vmf: fault information
  * @mpol: NUMA memory allocation policy to be applied
  * @ilx: NUMA interleave index, for use only when MPOL_INTERLEAVE
+ * @shadowp: Returns the shadow the allocation displaced, NULL to ignore
  *
  * Allocate a folio in the swap cache for one swap slot, typically before
  * doing IO (e.g. swap in or zswap writeback). The swap slot indicated by
@@ -515,7 +518,8 @@ static struct folio *__swap_cache_alloc(struct swap_cluster_info *ci,
  */
 struct folio *__swap_cache_alloc_folio(swp_entry_t targ_entry, gfp_t gfp,
 				       unsigned long orders, struct vm_fault *vmf,
-				       struct mempolicy *mpol, pgoff_t ilx)
+				       struct mempolicy *mpol, pgoff_t ilx,
+				       void **shadowp)
 {
 	int order, err;
 	struct folio *ret;
@@ -530,7 +534,7 @@ struct folio *__swap_cache_alloc_folio(swp_entry_t targ_entry, gfp_t gfp,
 
 	do {
 		ret = __swap_cache_alloc(ci, targ_entry, gfp, order,
-					 vmf, mpol, ilx);
+					 vmf, mpol, ilx, shadowp);
 		if (!IS_ERR(ret))
 			break;
 		err = PTR_ERR(ret);
@@ -646,16 +650,21 @@ static struct folio *swap_cache_read_folio(struct swap_io_ctx *ctx,
 		pgoff_t ilx, bool readahead)
 {
 	struct folio *folio;
+	void *shadow = NULL;
 
 	do {
 		folio = swap_cache_get_folio(entry);
 		if (folio)
 			return folio;
-		folio = __swap_cache_alloc_folio(entry, gfp, BIT(0), NULL, mpol, ilx);
+		folio = __swap_cache_alloc_folio(entry, gfp, BIT(0), NULL, mpol,
+						 ilx, &shadow);
 	} while (PTR_ERR(folio) == -EEXIST);
 
 	if (IS_ERR_OR_NULL(folio))
 		return NULL;
+
+	if (shadow)
+		workingset_refault(folio, shadow);
 
 	folio_add_lru(folio);
 	swap_read_folio(ctx, folio);
@@ -688,16 +697,21 @@ struct folio *swapin_sync(swp_entry_t entry, gfp_t gfp, unsigned long orders,
 {
 	struct swap_io_ctx ctx = {};
 	struct folio *folio;
+	void *shadow = NULL;
 
 	do {
 		folio = swap_cache_get_folio(entry);
 		if (folio)
 			return folio;
-		folio = __swap_cache_alloc_folio(entry, gfp, orders, vmf, mpol, ilx);
+		folio = __swap_cache_alloc_folio(entry, gfp, orders, vmf, mpol,
+						 ilx, &shadow);
 	} while (PTR_ERR(folio) == -EEXIST);
 
 	if (IS_ERR(folio))
 		return folio;
+
+	if (shadow)
+		workingset_refault(folio, shadow);
 
 	folio_add_lru(folio);
 	swap_read_folio(&ctx, folio);
