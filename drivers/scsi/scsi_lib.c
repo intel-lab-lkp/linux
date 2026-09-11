@@ -1960,13 +1960,7 @@ out_put_budget:
 			cmd->result = DID_NO_CONNECT << 16;
 		else
 			cmd->result = DID_ERROR << 16;
-		/*
-		 * Make sure to release all allocated resources when
-		 * we hit an error, as we will never see this command
-		 * again.
-		 */
-		if (req->rq_flags & RQF_DONTPREP)
-			scsi_mq_uninit_cmd(cmd);
+		/* blk-mq will cleanup our resources as the rq will end */
 		scsi_run_queue_async(sdev);
 		break;
 	}

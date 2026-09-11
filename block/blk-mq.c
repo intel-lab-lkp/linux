@@ -2126,6 +2126,7 @@ bool blk_mq_dispatch_rq_list(struct blk_mq_hw_ctx *hctx, struct list_head *list,
 			blk_mq_handle_dev_resource(rq, list);
 			goto out;
 		default:
+			blk_mq_cleanup_rq(rq);
 			blk_mq_end_request(rq, ret);
 		}
 	} while (!list_empty(list));
