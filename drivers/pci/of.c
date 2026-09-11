@@ -765,6 +765,10 @@ void of_pci_make_dev_node(struct pci_dev *pdev)
 	if (!ppnode)
 		return;
 
+	/* Bridge properties require a subordinate bus. */
+	if (pci_is_bridge(pdev) && !pdev->subordinate)
+		return;
+
 	if (pci_is_bridge(pdev))
 		pci_type = "pci";
 	else
