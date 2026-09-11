@@ -663,11 +663,12 @@ static int __iommu_probe_device(struct device *dev, struct list_head *group_list
 	 */
 	list_add_tail(&gdev->list, &group->devices);
 	WARN_ON(group->default_domain && !group->domain);
-
-	ret = iommu_group_link_device(group, gdev);
-	if (ret)
-		goto err_remove_gdev;
-
+	if (group->domain || group->default_domain) {
+		/* No later pass is guaranteed to publish this member. */
+		ret = iommu_group_link_device(group, gdev);
+		if (ret)
+			goto err_remove_gdev;
+	}
 	if (group->default_domain)
 		iommu_create_device_direct_mappings(group->default_domain, dev);
 	if (group->domain) {
@@ -710,19 +711,68 @@ err_put_group:
 int iommu_probe_device(struct device *dev)
 {
 	const struct iommu_ops *ops;
+	struct group_device *gdev, *own;
+	struct iommu_group *group;
 	int ret;
 
 	mutex_lock(&iommu_probe_device_lock);
+	/* Already probed; publication belongs to the creating call. */
+	if (dev->iommu_group) {
+		mutex_unlock(&iommu_probe_device_lock);
+		goto probe_finalize;
+	}
 	ret = __iommu_probe_device(dev, NULL);
+	if (!ret) {
+		/*
+		 * Not every caller pins the device, so pin the group across
+		 * the unlock.
+		 */
+		group = dev->iommu_group;
+		iommu_group_ref_get(group);
+	}
 	mutex_unlock(&iommu_probe_device_lock);
 	if (ret)
 		return ret;
 
+	mutex_lock(&group->mutex);
+	/* iommu_group_link_device() is all-or-nothing. */
+	for_each_group_device(group, gdev) {
+		if (gdev->linked)
+			continue;
+		ret = iommu_group_link_device(group, gdev);
+		if (ret)
+			goto err_remove_device;
+	}
+	mutex_unlock(&group->mutex);
+	iommu_group_put(group);
+
+probe_finalize:
 	ops = dev_iommu_ops(dev);
 	if (ops->probe_finalize)
 		ops->probe_finalize(dev);
 
 	return 0;
+
+err_remove_device:
+	/* Retried probes early-exit on membership; failure must undo it. */
+	own = NULL;
+	for_each_group_device(group, gdev) {
+		if (gdev->dev == dev) {
+			own = gdev;
+			break;
+		}
+	}
+	if (own) {
+		list_del(&own->list);
+		__iommu_group_free_device(group, own);
+		iommu_deinit_device(dev);
+	}
+	mutex_unlock(&group->mutex);
+	if (own)
+		iommu_group_put(group);	/* iommu_init_device()'s reference */
+	iommu_group_put(group);		/* the reference taken above */
+
+	return ret;
 }
 
 static void __iommu_group_free_device(struct iommu_group *group,
@@ -2011,6 +2061,16 @@ static int bus_iommu_probe(const struct bus_type *bus)
 
 		/* Remove item from the list */
 		list_del_init(&group->entry);
+
+		for_each_group_device(group, gdev) {
+			if (gdev->linked)
+				continue;
+			ret = iommu_group_link_device(group, gdev);
+			if (ret) {
+				mutex_unlock(&group->mutex);
+				return ret;
+			}
+		}
 
 		/*
 		 * We go to the trouble of deferred default domain creation so
