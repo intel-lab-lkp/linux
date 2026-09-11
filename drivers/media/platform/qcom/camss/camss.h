@@ -119,6 +119,13 @@ struct camss_resources {
 	const unsigned int tpg_num;
 	const unsigned int csid_num;
 	const unsigned int vfe_num;
+	/*
+	 * True on platforms where each CSID is wired to exactly one VFE at
+	 * the same index (csid[i] <-> vfe[i]). When set, camss_link_entities()
+	 * only creates CSID->VFE links for matching indices instead of an
+	 * all-to-all crossbar.
+	 */
+	const bool csid_vfe_fixed_pairing;
 };
 
 struct camss {
