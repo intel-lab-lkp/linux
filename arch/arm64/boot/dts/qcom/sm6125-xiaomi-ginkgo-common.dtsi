@@ -26,9 +26,28 @@
 	chassis-type = "handset";
 
 	qcom,msm-id = <QCOM_ID_SM6125 0x10000>;
+	qcom,board-id = <34 0>, <34 1>, <34 2>, <34 3>, <34 4>, <0 0>;
 
 	aliases {
 		serial0 = &uart4;
+	};
+
+	lcdb_lab: regulator-lcdb-lab {
+		compatible = "regulator-fixed";
+		regulator-name = "lcdb_lab";
+		regulator-min-microvolt = <5500000>;
+		regulator-max-microvolt = <5500000>;
+		regulator-boot-on;
+		regulator-always-on;
+	};
+
+	lcdb_ibb: regulator-lcdb-ibb {
+		compatible = "regulator-fixed";
+		regulator-name = "lcdb_ibb";
+		regulator-min-microvolt = <5500000>;
+		regulator-max-microvolt = <5500000>;
+		regulator-boot-on;
+		regulator-always-on;
 	};
 
 	chosen {
@@ -356,6 +375,13 @@
 
 &tlmm {
 	gpio-reserved-ranges = <0 4>, <30 4>;
+
+	ts_int_active: ts-int-active-state {
+		pins = "gpio88";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-pull-up;
+	};
 };
 
 &uart4 {
@@ -368,4 +394,78 @@
 
 &usb_dwc3_hs {
 	remote-endpoint = <&pmi632_hs_in>;
+};
+
+&mdss {
+	status = "okay";
+};
+
+&mdss_mdp {
+	status = "okay";
+};
+
+&mdss_dsi0_phy {
+	vdds-supply = <&vreg_l7a>;
+	status = "okay";
+};
+
+&mdss_dsi0 {
+	vdda-supply = <&vreg_l18a>;
+	status = "okay";
+
+	panel: panel@0 {
+		compatible = "tianma,fhd-video-ginkgo", "novatek,nt36672a";
+		reg = <0>;
+
+		reset-gpios = <&tlmm 90 GPIO_ACTIVE_LOW>;
+		vddio-supply = <&vreg_l9a>;
+		vddpos-supply = <&lcdb_lab>;
+		vddneg-supply = <&lcdb_ibb>;
+		backlight = <&backlight>;
+
+		port {
+			panel_in: endpoint {
+				remote-endpoint = <&mdss_dsi0_out>;
+			};
+		};
+	};
+};
+
+&mdss_dsi0_out {
+	remote-endpoint = <&panel_in>;
+	data-lanes = <0 1 2 3>;
+};
+
+&qupv3_id_0 {
+	status = "okay";
+};
+
+&i2c1 {
+	clock-frequency = <400000>;
+	status = "okay";
+
+	backlight: backlight@36 {
+		compatible = "kinetic,ktd3136";
+		reg = <0x36>;
+		enable-gpios = <&pmi632_gpios 6 GPIO_ACTIVE_HIGH>;
+		default-brightness = <2047>;
+		max-brightness = <2047>;
+	};
+};
+
+&spi2 {
+	status = "okay";
+
+	touchscreen@0 {
+		compatible = "novatek,nt36672a-spi", "novatek,nt36672a-ts";
+		reg = <0>;
+		spi-max-frequency = <4000000>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <88 IRQ_TYPE_EDGE_RISING>;
+		pinctrl-0 = <&ts_int_active>;
+		pinctrl-names = "default";
+		panel = <&panel>;
+		touchscreen-size-x = <1080>;
+		touchscreen-size-y = <2340>;
+	};
 };
