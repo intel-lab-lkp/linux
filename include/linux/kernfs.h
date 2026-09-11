@@ -156,6 +156,19 @@ enum kernfs_root_flag {
 	 * Renames must not change the parent node.
 	 */
 	KERNFS_ROOT_INVARIANT_PARENT		= 0x0010,
+
+	/*
+	 * Reserve inode numbers for this root in per-CPU batches, taking the
+	 * root's ID allocation lock out of the per-node creation path.
+	 * Best-effort: if the cache cannot be allocated the root falls back to
+	 * the locked path.  Costs up to KERNFS_INO_BATCH - 1
+	 * reserved-but-unused IDs per possible CPU per opted-in root, held as
+	 * NULL IDR entries until the root's IDR is destroyed.  Must not be
+	 * combined with KERNFS_ROOT_SUPPORT_EXPORTOP: reserved IDs are
+	 * allocated inos with no node, which the fhandle by-id lookup must not
+	 * resolve.
+	 */
+	KERNFS_ROOT_INO_BATCH			= 0x0020,
 };
 
 /* type-specific structures for kernfs_node union members */

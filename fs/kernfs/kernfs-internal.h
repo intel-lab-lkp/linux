@@ -30,6 +30,8 @@ struct kernfs_iattrs {
 	struct simple_xattr_limits xattr_limits;
 };
 
+struct kernfs_ino_cache;
+
 struct kernfs_root {
 	/* published fields */
 	struct kernfs_node	*kn;
@@ -40,6 +42,7 @@ struct kernfs_root {
 	spinlock_t		kernfs_idr_lock;	/* root->ino_idr */
 	u32			last_id_lowbits;
 	u32			id_highbits;
+	struct kernfs_ino_cache __percpu *ino_cache;
 	struct kernfs_syscall_ops *syscall_ops;
 
 	/* list of kernfs_super_info of this root, protected by kernfs_rwsem */

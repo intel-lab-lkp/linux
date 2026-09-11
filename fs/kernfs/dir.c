@@ -14,6 +14,7 @@
 #include <linux/slab.h>
 #include <linux/security.h>
 #include <linux/hash.h>
+#include <linux/local_lock.h>
 #include <linux/ns_common.h>
 
 #include "kernfs-internal.h"
@@ -27,6 +28,96 @@
  */
 static DEFINE_SPINLOCK(kernfs_pr_cont_lock);
 static char kernfs_pr_cont_buf[PATH_MAX];	/* protected by pr_cont_lock */
+
+/*
+ * Cached IDs remain reserved as NULL IDR entries until they are consumed or
+ * the owning root is destroyed.
+ */
+#define KERNFS_INO_BATCH	16
+
+struct kernfs_ino_cache {
+	local_lock_t lock;
+	int count;
+	u64 id[KERNFS_INO_BATCH];
+};
+
+static int kernfs_ino_cache_alloc(struct kernfs_root *root)
+{
+	struct kernfs_ino_cache __percpu *cache;
+	int cpu;
+
+	cache = alloc_percpu(struct kernfs_ino_cache);
+	if (!cache)
+		return -ENOMEM;
+
+	for_each_possible_cpu(cpu) {
+		struct kernfs_ino_cache *c = per_cpu_ptr(cache, cpu);
+
+		local_lock_init(&c->lock);
+		c->count = 0;
+	}
+
+	root->ino_cache = cache;
+	return 0;
+}
+
+static void kernfs_ino_cache_free(struct kernfs_root *root)
+{
+	free_percpu(root->ino_cache);
+}
+
+/*
+ * Refill this CPU's cache in place: the free space is computed under
+ * the same local lock that guards the pop, so every reserved ID lands
+ * in the cache and none is ever returned. Lock ordering is
+ * one-directional: idr_preload() returns holding the radix-tree
+ * preload local_lock, the ino_cache local_lock nests inside it, and
+ * root->kernfs_idr_lock nests inside that. idr_alloc_cyclic(GFP_ATOMIC)
+ * does not sleep and is legal under both.
+ */
+static u64 kernfs_ino_batch_refill_and_get(struct kernfs_root *root)
+{
+	struct kernfs_ino_cache *c;
+	u64 id = 0;
+
+	idr_preload(GFP_KERNEL);
+	local_lock(&root->ino_cache->lock);
+	c = this_cpu_ptr(root->ino_cache);
+	spin_lock(&root->kernfs_idr_lock);
+	while (c->count < KERNFS_INO_BATCH) {
+		int ino = idr_alloc_cyclic(&root->ino_idr, NULL, 1, 0,
+					   GFP_ATOMIC);
+
+		if (ino < 0)
+			break;
+		if (ino < root->last_id_lowbits)
+			root->id_highbits++;
+		root->last_id_lowbits = ino;
+		c->id[c->count++] = (u64)root->id_highbits << 32 | ino;
+	}
+	spin_unlock(&root->kernfs_idr_lock);
+	if (c->count)
+		id = c->id[--c->count];
+	local_unlock(&root->ino_cache->lock);
+	idr_preload_end();
+	return id;
+}
+
+static u64 kernfs_ino_batch_get(struct kernfs_root *root)
+{
+	struct kernfs_ino_cache *c;
+	u64 id = 0;
+
+	local_lock(&root->ino_cache->lock);
+	c = this_cpu_ptr(root->ino_cache);
+	if (c->count > 0)
+		id = c->id[--c->count];
+	local_unlock(&root->ino_cache->lock);
+
+	if (!id)
+		id = kernfs_ino_batch_refill_and_get(root);
+	return id;
+}
 
 #define rb_to_kn(X) rb_entry((X), struct kernfs_node, rb)
 
@@ -625,6 +716,7 @@ void kernfs_put(struct kernfs_node *kn)
 			goto repeat;
 	} else {
 		/* just released the root kn, free @root too */
+		kernfs_ino_cache_free(root);
 		idr_destroy(&root->ino_idr);
 		simple_xattr_cache_cleanup(&root->xa_cache);
 		kfree_rcu(root, rcu);
@@ -668,6 +760,28 @@ static struct kernfs_node *__kernfs_new_node(struct kernfs_root *root,
 	if (!kn)
 		goto err_out1;
 
+	if (root->ino_cache) {
+		u64 id = kernfs_ino_batch_get(root);
+
+		if (likely(id)) {
+			kn->id = id;
+			/*
+			 * The reservation cleared IDR_FREE, so this
+			 * is one count-neutral rcu_assign_pointer()
+			 * into a slot handed to exactly one caller:
+			 * nothing can concurrently remove or replace
+			 * it.  Publication matches the locked
+			 * idr_alloc() below -- count==0 makes ID
+			 * lookups refuse @kn until initialized.
+			 */
+			rcu_read_lock();
+			WARN_ON_ONCE(idr_replace(&root->ino_idr, kn,
+						 (u32)kernfs_ino(kn)));
+			rcu_read_unlock();
+			goto ino_done;
+		}
+	}
+
 	idr_preload(GFP_KERNEL);
 	spin_lock(&root->kernfs_idr_lock);
 	ret = idr_alloc_cyclic(&root->ino_idr, kn, 1, 0, GFP_ATOMIC);
@@ -682,6 +796,7 @@ static struct kernfs_node *__kernfs_new_node(struct kernfs_root *root,
 
 	kn->id = (u64)id_highbits << 32 | ret;
 
+ ino_done:
 	atomic_set(&kn->count, 1);
 	atomic_set(&kn->active, KN_DEACTIVATED_BIAS);
 	RB_CLEAR_NODE(&kn->rb);
@@ -1058,6 +1173,13 @@ struct kernfs_root *kernfs_create_root(struct kernfs_syscall_ops *scops,
 
 	root->syscall_ops = scops;
 	root->flags = flags;
+	/*
+	 * Batching is best-effort: without the cache every node takes the
+	 * locked path, so an allocation failure only needs to be visible.
+	 */
+	if (IS_ENABLED(CONFIG_SMP) && (flags & KERNFS_ROOT_INO_BATCH) &&
+	    kernfs_ino_cache_alloc(root))
+		pr_warn_once("kernfs: inode ID batching unavailable, using the locked allocation path\n");
 	root->kn = kn;
 	init_waitqueue_head(&root->deactivate_waitq);
 
