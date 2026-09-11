@@ -140,7 +140,7 @@ static int ice_vsi_alloc_q_vector(struct ice_vsi *vsi, u16 v_idx)
 		}
 	}
 
-	q_vector->irq = ice_alloc_irq(pf, vsi->irq_dyn_alloc);
+	q_vector->irq = libie_irq_alloc(&pf->irq, LIBIE_IRQ_ANY);
 	if (q_vector->irq.index < 0) {
 		err = -ENOMEM;
 		goto err_free_q_vector;
@@ -209,7 +209,7 @@ static void ice_free_q_vector(struct ice_vsi *vsi, int v_idx)
 	    ice_get_vf_ctrl_vsi(pf, vsi))
 		goto free_q_vector;
 
-	ice_free_irq(pf, q_vector->irq);
+	libie_irq_free(&pf->irq, q_vector->irq);
 
 free_q_vector:
 	kfree(q_vector);
