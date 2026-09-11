@@ -207,6 +207,18 @@ config BACKLIGHT_KTZ8866
 		Say Y to enable the backlight driver for the Kinetic KTZ8866
 		found in Xiaomi Mi Pad 5 series.
 
+config BACKLIGHT_KTD3136
+	tristate "Backlight Driver for Kinetic KTD3136"
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  Say Y to enable the backlight driver for the Kinetic Technologies
+	  KTD3136 3-channel I2C-controlled LED backlight driver found in mobile
+	  phones such as the Xiaomi Redmi Note 8.
+
+	  To compile this driver as a module, choose M here: the module will
+	  be called ktd3136-backlight.
+
 config BACKLIGHT_SY7758
 	tristate "Backlight Driver for Silergy SY7758"
 	depends on I2C
