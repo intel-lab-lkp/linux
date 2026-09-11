@@ -383,11 +383,11 @@ static bool rq_is_open(struct rq *rq, u64 enq_flags)
 		return true;
 
 	/*
-	 * %SCX_ENQ_PREEMPT clears $curr's slice if on SCX and kicks dispatch,
-	 * so allow it to avoid spuriously triggering reenq on a combined
+	 * The preemption flags clear $curr's slice if on SCX and kick dispatch,
+	 * so allow them to avoid spuriously triggering reenq on a combined
 	 * PREEMPT|IMMED insertion.
 	 */
-	if (enq_flags & SCX_ENQ_PREEMPT) {
+	if (enq_flags & (SCX_ENQ_PREEMPT | SCX_ENQ_PREEMPT_LAZY)) {
 		struct task_struct *curr = rq->curr;
 
 		/*
@@ -1577,12 +1577,16 @@ static void rq_owned_post_enq(struct scx_sched *sch, struct rq *rq,
 	if (rq->scx.flags & SCX_RQ_IN_DISPATCH)
 		return;
 
-	if ((enq_flags & SCX_ENQ_PREEMPT) && p != rq->curr &&
+	if ((enq_flags & (SCX_ENQ_PREEMPT | SCX_ENQ_PREEMPT_LAZY)) && p != rq->curr &&
 	    rq->curr->sched_class == &ext_sched_class) {
-		if (likely(scx_set_task_slice(rq->curr, 0)))
-			resched_curr(rq);
-		else
+		if (likely(scx_set_task_slice(rq->curr, 0))) {
+			if (enq_flags & SCX_ENQ_PREEMPT)
+				resched_curr(rq);
+			else
+				resched_curr_lazy(rq);
+		} else {
 			__scx_add_event(sch, SCX_EV_SLICE_DENIED, 1);
+		}
 	}
 }
 
@@ -1672,7 +1676,7 @@ static void scx_dispatch_enqueue(struct scx_sched *sch, struct rq *rq,
 			scx_error(sch, "DSQ ID 0x%016llx already had PRIQ-enqueued tasks",
 				  dsq->id);
 
-		if (enq_flags & (SCX_ENQ_HEAD | SCX_ENQ_PREEMPT)) {
+		if (enq_flags & (SCX_ENQ_HEAD | SCX_ENQ_PREEMPT | SCX_ENQ_PREEMPT_LAZY)) {
 			/* new task inserted at head - use fastpath */
 			if (dsq_insert_head(dsq, p) && !(dsq->id & SCX_DSQ_FLAG_BUILTIN))
 				rcu_assign_pointer(dsq->first_task, p);
@@ -2386,7 +2390,7 @@ void scx_move_local_task_to_local_dsq(struct scx_sched *sch, struct task_struct 
 
 	WARN_ON_ONCE(p->scx.holding_cpu >= 0);
 
-	if (enq_flags & (SCX_ENQ_HEAD | SCX_ENQ_PREEMPT))
+	if (enq_flags & (SCX_ENQ_HEAD | SCX_ENQ_PREEMPT | SCX_ENQ_PREEMPT_LAZY))
 		dsq_insert_head(dst_dsq, p);
 	else
 		list_add_tail(&p->scx.dsq_list.node, &dst_dsq->list);
@@ -3809,8 +3813,14 @@ static void task_tick_scx(struct rq *rq, struct task_struct *curr, int queued)
 	else if (SCX_HAS_OP(sch, tick))
 		SCX_CALL_OP_TASK(sch, tick, rq, curr);
 
-	if (!curr->scx.slice)
-		resched_curr(rq);
+	if (!curr->scx.slice) {
+		/* see SCX_OPS_LAZY_SLICE_EXPIRY; the slice can't be trusted while bypassing */
+		if ((sch->ops.flags & SCX_OPS_LAZY_SLICE_EXPIRY) &&
+		    !scx_bypassing(sch, cpu_of(rq)))
+			resched_curr_lazy(rq);
+		else
+			resched_curr(rq);
+	}
 }
 
 #ifdef CONFIG_EXT_GROUP_SCHED
@@ -5377,6 +5387,7 @@ static void scx_sched_free_rcu_work(struct work_struct *work)
 		free_cpumask_var(pcpu->cpus_to_kick);
 		free_cpumask_var(pcpu->cpus_to_kick_if_idle);
 		free_cpumask_var(pcpu->cpus_to_preempt);
+		free_cpumask_var(pcpu->cpus_to_preempt_lazy);
 		free_cpumask_var(pcpu->cpus_to_wait);
 
 		exit_dsq(scx_bypass_dsq(sch, cpu));
@@ -6889,6 +6900,9 @@ static void scx_dump_cpu(struct scx_sched *sch, struct seq_buf *s,
 	if (!cpumask_empty(pcpu->cpus_to_preempt))
 		scx_dump_line(&ns, "  cpus_to_preempt: %*pb",
 			      cpumask_pr_args(pcpu->cpus_to_preempt));
+	if (!cpumask_empty(pcpu->cpus_to_preempt_lazy))
+		scx_dump_line(&ns, "  preempt_lazy   : %*pb",
+			      cpumask_pr_args(pcpu->cpus_to_preempt_lazy));
 	if (!cpumask_empty(pcpu->cpus_to_wait))
 		scx_dump_line(&ns, "  cpus_to_wait   : %*pb",
 			      cpumask_pr_args(pcpu->cpus_to_wait));
@@ -7206,6 +7220,7 @@ struct scx_sched *scx_alloc_and_add_sched(struct scx_enable_cmd *cmd,
 		if (!zalloc_cpumask_var_node(&pcpu->cpus_to_kick, GFP_KERNEL, node) ||
 		    !zalloc_cpumask_var_node(&pcpu->cpus_to_kick_if_idle, GFP_KERNEL, node) ||
 		    !zalloc_cpumask_var_node(&pcpu->cpus_to_preempt, GFP_KERNEL, node) ||
+		    !zalloc_cpumask_var_node(&pcpu->cpus_to_preempt_lazy, GFP_KERNEL, node) ||
 		    !zalloc_cpumask_var_node(&pcpu->cpus_to_wait, GFP_KERNEL, node)) {
 			ret = -ENOMEM;
 			goto err_free_pcpu;
@@ -7341,6 +7356,7 @@ err_free_pcpu:
 		free_cpumask_var(pcpu->cpus_to_kick);
 		free_cpumask_var(pcpu->cpus_to_kick_if_idle);
 		free_cpumask_var(pcpu->cpus_to_preempt);
+		free_cpumask_var(pcpu->cpus_to_preempt_lazy);
 		free_cpumask_var(pcpu->cpus_to_wait);
 	}
 	for_each_possible_cpu(cpu) {
@@ -8468,10 +8484,20 @@ static bool kick_one_cpu(s32 cpu, struct scx_sched_pcpu *pcpu, struct rq *this_r
 	const struct sched_class *cur_class;
 	bool should_wait = false;
 	bool kickable;
+	bool preempt, preempt_lazy, immediate;
 	unsigned long flags;
 
 	raw_spin_rq_lock_irqsave(rq, flags);
 	cur_class = rq->curr->sched_class;
+	preempt = cpumask_test_cpu(cpu, pcpu->cpus_to_preempt);
+	preempt_lazy = cpumask_test_cpu(cpu, pcpu->cpus_to_preempt_lazy);
+	/*
+	 * A lazy-only request sits in cpus_to_preempt_lazy alone. Any other
+	 * kick for the same cpu, plain or preempting, is in cpus_to_kick and
+	 * asks for an immediate reschedule; the lazy request still clears the
+	 * slice, the immediate one still reschedules now, so both are served.
+	 */
+	immediate = !preempt_lazy || cpumask_test_cpu(cpu, pcpu->cpus_to_kick);
 
 	/*
 	 * During CPU hotplug, a CPU may depend on kicking itself to make
@@ -8485,7 +8511,7 @@ static bool kick_one_cpu(s32 cpu, struct scx_sched_pcpu *pcpu, struct rq *this_r
 		   !sched_class_above(cur_class, &ext_sched_class);
 
 	if (kickable && !scx_missing_caps(pcpu->sch, cpu, SCX_CAP_BASE)) {
-		if (cpumask_test_cpu(cpu, pcpu->cpus_to_preempt)) {
+		if (preempt || preempt_lazy) {
 			if (cur_class == &ext_sched_class) {
 				u64 caps = scx_caps_for_preempt(pcpu->sch, rq, 0);
 
@@ -8494,7 +8520,6 @@ static bool kick_one_cpu(s32 cpu, struct scx_sched_pcpu *pcpu, struct rq *this_r
 				else if (unlikely(!scx_set_task_slice(rq->curr, 0)))
 					__scx_add_event(pcpu->sch, SCX_EV_SLICE_DENIED, 1);
 			}
-			cpumask_clear_cpu(cpu, pcpu->cpus_to_preempt);
 		}
 
 		if (cpumask_test_cpu(cpu, pcpu->cpus_to_wait)) {
@@ -8506,14 +8531,20 @@ static bool kick_one_cpu(s32 cpu, struct scx_sched_pcpu *pcpu, struct rq *this_r
 			cpumask_clear_cpu(cpu, pcpu->cpus_to_wait);
 		}
 
-		resched_curr(rq);
+		if (immediate)
+			resched_curr(rq);
+		else
+			resched_curr_lazy(rq);
 	} else {
 		/* a kickable cpu was skipped solely for the missing caps */
 		if (kickable)
 			__scx_add_event(pcpu->sch, SCX_EV_SUB_KICK_DENIED, 1);
-		cpumask_clear_cpu(cpu, pcpu->cpus_to_preempt);
 		cpumask_clear_cpu(cpu, pcpu->cpus_to_wait);
 	}
+	if (preempt)
+		cpumask_clear_cpu(cpu, pcpu->cpus_to_preempt);
+	if (preempt_lazy)
+		cpumask_clear_cpu(cpu, pcpu->cpus_to_preempt_lazy);
 
 	scx_rq_lock_drop(rq);
 	raw_spin_rq_unlock_irqrestore(rq, flags);
@@ -8571,6 +8602,13 @@ static void kick_cpus_irq_workfn(struct irq_work *irq_work)
 			cpumask_clear_cpu(cpu, pcpu->cpus_to_kick);
 			cpumask_clear_cpu(cpu, pcpu->cpus_to_kick_if_idle);
 		}
+
+		/*
+		 * kick_one_cpu() clears the lazy bit of every cpu it visited
+		 * above; what remains are lazy-only requests, see scx_kick_cpu().
+		 */
+		for_each_cpu(cpu, pcpu->cpus_to_preempt_lazy)
+			kick_one_cpu(cpu, pcpu, this_rq, ksyncs);
 
 		for_each_cpu(cpu, pcpu->cpus_to_kick_if_idle) {
 			kick_one_cpu_if_idle(cpu, pcpu, this_rq);
@@ -8737,6 +8775,11 @@ static bool scx_vet_enq_flags(struct scx_sched *sch, u64 dsq_id, u64 *enq_flags)
 
 	if (unlikely(*enq_flags & __SCX_ENQ_INTERNAL_MASK)) {
 		scx_error(sch, "invalid enq_flags 0x%llx", *enq_flags);
+		return false;
+	}
+
+	if (unlikely((*enq_flags & SCX_ENQ_PREEMPT) && (*enq_flags & SCX_ENQ_PREEMPT_LAZY))) {
+		scx_error(sch, "SCX_ENQ_PREEMPT and SCX_ENQ_PREEMPT_LAZY cannot be combined");
 		return false;
 	}
 
@@ -9552,6 +9595,24 @@ void scx_kick_cpu(struct scx_sched *sch, s32 cpu, u64 flags)
 
 	if (!scx_kf_allowed_ctx(sch))
 		return;
+	if (unlikely(flags & ~(SCX_KICK_IDLE | SCX_KICK_PREEMPT | SCX_KICK_WAIT |
+			       SCX_KICK_PREEMPT_LAZY))) {
+		scx_error(sch, "invalid kick flags 0x%llx", flags);
+		return;
+	}
+	if (unlikely((flags & SCX_KICK_PREEMPT) && (flags & SCX_KICK_PREEMPT_LAZY))) {
+		scx_error(sch, "SCX_KICK_PREEMPT and SCX_KICK_PREEMPT_LAZY cannot be combined");
+		return;
+	}
+	if (unlikely((flags & SCX_KICK_PREEMPT_LAZY) && (flags & SCX_KICK_WAIT))) {
+		scx_error(sch, "SCX_KICK_PREEMPT_LAZY cannot be used with SCX_KICK_WAIT");
+		return;
+	}
+	if (unlikely((flags & SCX_KICK_IDLE) &&
+		     (flags & (SCX_KICK_PREEMPT | SCX_KICK_PREEMPT_LAZY | SCX_KICK_WAIT)))) {
+		scx_error(sch, "PREEMPT/WAIT cannot be used with SCX_KICK_IDLE");
+		return;
+	}
 
 	local_irq_save(irq_flags);
 
@@ -9577,9 +9638,6 @@ void scx_kick_cpu(struct scx_sched *sch, s32 cpu, u64 flags)
 	if (flags & SCX_KICK_IDLE) {
 		struct rq *target_rq = cpu_rq(cpu);
 
-		if (unlikely(flags & (SCX_KICK_PREEMPT | SCX_KICK_WAIT)))
-			scx_error(sch, "PREEMPT/WAIT cannot be used with SCX_KICK_IDLE");
-
 		if (raw_spin_rq_trylock(target_rq)) {
 			if (can_skip_idle_kick(target_rq)) {
 				scx_rq_lock_drop(target_rq);
@@ -9590,11 +9648,25 @@ void scx_kick_cpu(struct scx_sched *sch, s32 cpu, u64 flags)
 			raw_spin_rq_unlock(target_rq);
 		}
 		cpumask_set_cpu(cpu, pcpu->cpus_to_kick_if_idle);
+	} else if (flags & SCX_KICK_PREEMPT_LAZY) {
+		/*
+		 * Recorded in its own mask and not in cpus_to_kick, so that
+		 * kick_one_cpu() can tell a lazy-only request from one that
+		 * coincides with a plain or preempting kick. A queued immediate
+		 * preemption already clears the slice and reschedules now,
+		 * which is more than asked for; a plain kick doesn't touch the
+		 * slice, so the lazy request must stay recorded next to it.
+		 */
+		if (!cpumask_test_cpu(cpu, pcpu->cpus_to_preempt))
+			cpumask_set_cpu(cpu, pcpu->cpus_to_preempt_lazy);
 	} else {
 		cpumask_set_cpu(cpu, pcpu->cpus_to_kick);
 
-		if (flags & SCX_KICK_PREEMPT)
+		if (flags & SCX_KICK_PREEMPT) {
+			/* an immediate preemption subsumes a queued lazy one */
 			cpumask_set_cpu(cpu, pcpu->cpus_to_preempt);
+			cpumask_clear_cpu(cpu, pcpu->cpus_to_preempt_lazy);
+		}
 		if (flags & SCX_KICK_WAIT)
 			cpumask_set_cpu(cpu, pcpu->cpus_to_wait);
 	}
@@ -9636,8 +9708,9 @@ __bpf_kfunc void scx_bpf_kick_cpu(s32 cpu, u64 flags, const struct bpf_prog_aux 
  * cid-addressed equivalent of scx_bpf_kick_cpu(). An invalid @cid aborts the
  * scheduler via scx_cid_to_cpu(). Caps are enforced on the delivery path: a
  * kick is dropped if the caller lacks baseline access on @cid, and a
- * %SCX_KICK_PREEMPT degrades to a plain reschedule if the caller lacks
- * %SCX_CAP_PREEMPT for a task outside its subtree.
+ * %SCX_KICK_PREEMPT or %SCX_KICK_PREEMPT_LAZY request degrades to a plain
+ * reschedule if the caller lacks %SCX_CAP_PREEMPT for a task outside its
+ * subtree.
  */
 __bpf_kfunc void scx_bpf_kick_cid(s32 cid, u64 flags, const struct bpf_prog_aux *aux)
 {
