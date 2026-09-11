@@ -6,14 +6,9 @@
 SKIP_RC=4
 RC=0
 
-if [ -r /var/run/auditd.pid ];then
-	read pid < /var/run/auditd.pid
-	p=$(pgrep ^auditd$)
-
-	if [ "$pid" -eq "$p" ]; then
-		echo "SKIP: auditd is running"
-		exit $SKIP_RC
-	fi
+if pgrep -x auditd > /dev/null; then
+	echo "SKIP: auditd is running"
+	exit $SKIP_RC
 fi
 
 nft --version >/dev/null 2>&1 || {
