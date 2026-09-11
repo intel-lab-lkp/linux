@@ -1998,15 +1998,41 @@ static void arm_smmu_init_initial_stes(struct arm_smmu_ste *strtab,
 	}
 }
 
+/*
+ * Inherit L1 descriptor from previous kernel
+ */
+static struct arm_smmu_strtab_l2 *
+arm_smmu_inherit_l2_strtab(struct arm_smmu_device *smmu, u32 sid)
+{
+	struct arm_smmu_strtab_cfg *cfg = &smmu->strtab_cfg;
+	u64 l1d;
+
+	l1d = le64_to_cpu(cfg->l2.l1tab[arm_smmu_strtab_l1_idx(sid)].l2ptr);
+	if (!FIELD_GET(STRTAB_L1_DESC_SPAN, l1d))
+		return NULL;
+
+	return devm_memremap(smmu->dev, l1d & STRTAB_L1_DESC_L2PTR_MASK,
+			     sizeof(struct arm_smmu_strtab_l2), MEMREMAP_WB);
+}
+
 static int arm_smmu_init_l2_strtab(struct arm_smmu_device *smmu, u32 sid)
 {
 	dma_addr_t l2ptr_dma;
 	struct arm_smmu_strtab_cfg *cfg = &smmu->strtab_cfg;
 	struct arm_smmu_strtab_l2 **l2table;
+	struct arm_smmu_strtab_l2 *inherited;
 
 	l2table = &cfg->l2.l2ptrs[arm_smmu_strtab_l1_idx(sid)];
 	if (*l2table)
 		return 0;
+
+	if (is_kdump_kernel()) {
+		inherited = arm_smmu_inherit_l2_strtab(smmu, sid);
+		if (!IS_ERR_OR_NULL(inherited)) {
+			*l2table = inherited;
+			return 0;
+		}
+	}
 
 	*l2table = dmam_alloc_coherent(smmu->dev, sizeof(**l2table),
 				       &l2ptr_dma, GFP_KERNEL);
@@ -4526,6 +4552,58 @@ static int arm_smmu_init_queues(struct arm_smmu_device *smmu)
 				       PRIQ_ENT_DWORDS, "priq");
 }
 
+static u32 arm_smmu_strtab_base_cfg(struct arm_smmu_device *smmu)
+{
+	struct arm_smmu_strtab_cfg *cfg = &smmu->strtab_cfg;
+
+	if (smmu->features & ARM_SMMU_FEAT_2_LVL_STRTAB)
+		return FIELD_PREP(STRTAB_BASE_CFG_FMT,
+				  STRTAB_BASE_CFG_FMT_2LVL) |
+		       FIELD_PREP(STRTAB_BASE_CFG_LOG2SIZE,
+				  ilog2(cfg->l2.num_l1_ents) + STRTAB_SPLIT) |
+		       FIELD_PREP(STRTAB_BASE_CFG_SPLIT, STRTAB_SPLIT);
+
+	return FIELD_PREP(STRTAB_BASE_CFG_FMT, STRTAB_BASE_CFG_FMT_LINEAR) |
+	       FIELD_PREP(STRTAB_BASE_CFG_LOG2SIZE, smmu->sid_bits);
+}
+
+static void arm_smmu_inherit_strtab(struct arm_smmu_device *smmu, u32 l1size)
+{
+	struct arm_smmu_strtab_cfg *cfg = &smmu->strtab_cfg;
+	void *old;
+
+	if (!is_kdump_kernel())
+		return;
+
+	if (!(readl_relaxed(smmu->base + ARM_SMMU_CR0) & CR0_SMMUEN))
+		return;
+
+	/* Descriptors are written here without cache maintenance. */
+	if (!(smmu->features & ARM_SMMU_FEAT_COHERENCY))
+		return;
+
+	/*
+	 * Only take the table over if it has the geometry this driver is about
+	 * to program, since the descriptors are copied into a table of that
+	 * shape. Comparing against the value arm_smmu_write_strtab() would
+	 * write covers format, size and split at once.
+	 */
+	if (readl_relaxed(smmu->base + ARM_SMMU_STRTAB_BASE_CFG) !=
+	    arm_smmu_strtab_base_cfg(smmu))
+		return;
+
+	old = memremap(readq_relaxed(smmu->base + ARM_SMMU_STRTAB_BASE) &
+		       STRTAB_BASE_ADDR_MASK, l1size, MEMREMAP_WB);
+	if (!old) {
+		dev_warn(smmu->dev, "failed to map previous stream table\n");
+		return;
+	}
+
+	memcpy(cfg->l2.l1tab, old, l1size);
+	memunmap(old);
+	dev_info(smmu->dev, "inherited stream table from previous kernel\n");
+}
+
 static int arm_smmu_init_strtab_2lvl(struct arm_smmu_device *smmu)
 {
 	u32 l1size;
@@ -4555,6 +4633,8 @@ static int arm_smmu_init_strtab_2lvl(struct arm_smmu_device *smmu)
 				      sizeof(*cfg->l2.l2ptrs), GFP_KERNEL);
 	if (!cfg->l2.l2ptrs)
 		return -ENOMEM;
+
+	arm_smmu_inherit_strtab(smmu, l1size);
 
 	return 0;
 }
@@ -4821,24 +4901,16 @@ static void arm_smmu_write_strtab(struct arm_smmu_device *smmu)
 {
 	struct arm_smmu_strtab_cfg *cfg = &smmu->strtab_cfg;
 	dma_addr_t dma;
-	u32 reg;
 
-	if (smmu->features & ARM_SMMU_FEAT_2_LVL_STRTAB) {
-		reg = FIELD_PREP(STRTAB_BASE_CFG_FMT,
-				 STRTAB_BASE_CFG_FMT_2LVL) |
-		      FIELD_PREP(STRTAB_BASE_CFG_LOG2SIZE,
-				 ilog2(cfg->l2.num_l1_ents) + STRTAB_SPLIT) |
-		      FIELD_PREP(STRTAB_BASE_CFG_SPLIT, STRTAB_SPLIT);
+	if (smmu->features & ARM_SMMU_FEAT_2_LVL_STRTAB)
 		dma = cfg->l2.l1_dma;
-	} else {
-		reg = FIELD_PREP(STRTAB_BASE_CFG_FMT,
-				 STRTAB_BASE_CFG_FMT_LINEAR) |
-		      FIELD_PREP(STRTAB_BASE_CFG_LOG2SIZE, smmu->sid_bits);
+	else
 		dma = cfg->linear.ste_dma;
-	}
+
 	writeq_relaxed((dma & STRTAB_BASE_ADDR_MASK) | STRTAB_BASE_RA,
 		       smmu->base + ARM_SMMU_STRTAB_BASE);
-	writel_relaxed(reg, smmu->base + ARM_SMMU_STRTAB_BASE_CFG);
+	writel_relaxed(arm_smmu_strtab_base_cfg(smmu),
+		       smmu->base + ARM_SMMU_STRTAB_BASE_CFG);
 }
 
 static int arm_smmu_device_reset(struct arm_smmu_device *smmu)
