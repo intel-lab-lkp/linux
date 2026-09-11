@@ -37,6 +37,11 @@
 #define VIRTIO_SCSI_EVENT_LEN 8
 #define VIRTIO_SCSI_VQ_BASE 2
 
+/* Max timer resets in virtscsi_eh_timed_out() before letting real EH run. */
+#define VIRTSCSI_EH_RESET_LIMIT 5
+/* How long to let the host answer an abort/reset TMF before giving up. */
+#define VIRTSCSI_TMF_TIMEOUT (10 * HZ)
+
 static unsigned int virtscsi_poll_queues;
 module_param(virtscsi_poll_queues, uint, 0644);
 MODULE_PARM_DESC(virtscsi_poll_queues,
@@ -46,6 +51,7 @@ MODULE_PARM_DESC(virtscsi_poll_queues,
 struct virtio_scsi_cmd {
 	struct scsi_cmnd *sc;
 	struct completion *comp;
+	unsigned int eh_resets;
 	union {
 		struct virtio_scsi_cmd_req       cmd;
 		struct virtio_scsi_cmd_req_pi    cmd_pi;
@@ -586,6 +592,7 @@ static enum scsi_qc_status virtscsi_queuecommand(struct Scsi_Host *shost,
 		"cmd %p CDB: %#02x\n", sc, sc->cmnd[0]);
 
 	cmd->sc = sc;
+	cmd->eh_resets = 0;
 
 	BUG_ON(sc->cmd_len > VIRTIO_SCSI_CDB_SIZE);
 
@@ -625,7 +632,35 @@ static int virtscsi_tmf(struct virtio_scsi *vscsi, struct virtio_scsi_cmd *cmd)
 			      sizeof cmd->req.tmf, sizeof cmd->resp.tmf, true) < 0)
 		goto out;
 
-	wait_for_completion(&comp);
+	if (!wait_for_completion_timeout(&comp, VIRTSCSI_TMF_TIMEOUT)) {
+		unsigned long flags;
+		bool completed;
+
+		/*
+		 * No answer within the timeout. virtscsi_complete_free()
+		 * reads cmd->comp and calls complete() on it under
+		 * ctrl_vq.vq_lock, so take the same lock to decide, atomically
+		 * with that path, whether the completion already happened.
+		 *
+		 * If it hasn't: clear cmd->comp so a completion that arrives
+		 * after we drop the lock finds NULL and leaves this
+		 * soon-to-be-invalid stack frame alone. cmd stays queued on
+		 * the ctrl vq (a device that answers late must still be able
+		 * to find it), so it is not freed here.
+		 *
+		 * If it has: the response landed (and complete() already ran)
+		 * right as we timed out, so fall through and read it as if
+		 * wait_for_completion_timeout() had succeeded.
+		 */
+		spin_lock_irqsave(&vscsi->ctrl_vq.vq_lock, flags);
+		completed = completion_done(&comp);
+		if (!completed)
+			cmd->comp = NULL;
+		spin_unlock_irqrestore(&vscsi->ctrl_vq.vq_lock, flags);
+
+		if (!completed)
+			return FAILED;
+	}
 	if (cmd->resp.tmf.response == VIRTIO_SCSI_S_OK ||
 	    cmd->resp.tmf.response == VIRTIO_SCSI_S_FUNCTION_SUCCEEDED)
 		ret = SUCCESS;
@@ -783,13 +818,19 @@ static void virtscsi_commit_rqs(struct Scsi_Host *shost, u16 hwq)
 }
 
 /*
- * The host guarantees to respond to each command, although I/O
- * latencies might be higher than on bare metal.  Reset the timer
- * unconditionally to give the host a chance to perform EH.
+ * The host normally answers every command, so reset the timer and keep
+ * waiting. But if the transport is broken (e.g. bus mastering was turned
+ * off), no completion can ever arrive: give up after a few resets so SCSI
+ * EH fails the command instead of blocking its submitter forever.
  */
 static enum scsi_timeout_action virtscsi_eh_timed_out(struct scsi_cmnd *scmnd)
 {
-	return SCSI_EH_RESET_TIMER;
+	struct virtio_scsi_cmd *cmd = scsi_cmd_priv(scmnd);
+
+	if (++cmd->eh_resets < VIRTSCSI_EH_RESET_LIMIT)
+		return SCSI_EH_RESET_TIMER;
+
+	return SCSI_EH_NOT_HANDLED;
 }
 
 static const struct scsi_host_template virtscsi_host_template = {
