@@ -10,6 +10,9 @@
 #define GSP_PAGE_SHIFT 12
 #define GSP_PAGE_SIZE  BIT(GSP_PAGE_SHIFT)
 
+#define GSP_GCX_ENTRY_GC6_READY		BIT(0)
+#define GSP_GCX_ENTRY_GCOFF_READY	BIT(1)
+
 struct nvkm_gsp_mem {
 	struct device *dev;
 	size_t size;
