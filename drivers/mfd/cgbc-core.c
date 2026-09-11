@@ -16,6 +16,7 @@
 #include <linux/mfd/cgbc.h>
 #include <linux/mfd/core.h>
 #include <linux/module.h>
+#include <linux/platform_data/i2c-cgbc.h>
 #include <linux/platform_device.h>
 #include <linux/sysfs.h>
 
@@ -54,6 +55,35 @@
 #define CGBC_CMD_GET_FW_REV	0x21
 
 static struct platform_device *cgbc_pdev;
+
+static const struct cgbc_i2c_platform_data cgbc_i2c_gp_pdata = {
+	.name = "Congatec General Purpose I2C adapter",
+	.cgbc_bus_id = 0,
+};
+
+static const struct cgbc_i2c_platform_data cgbc_i2c_pm_pdata = {
+	.name  = "Congatec Power Management I2C adapter",
+	.cgbc_bus_id = 4,
+};
+
+static const struct mfd_cell cgbc_devs[] = {
+	{ .name = "cgbc-backlight" },
+	{ .name = "cgbc-gpio" },
+	{ .name = "cgbc-hwmon" },
+	{
+		.name = "cgbc-i2c",
+		.id = 1,
+		.platform_data = &cgbc_i2c_gp_pdata,
+		.pdata_size = sizeof(cgbc_i2c_gp_pdata),
+	},
+	{
+		.name = "cgbc-i2c",
+		.id = 2,
+		.platform_data = &cgbc_i2c_pm_pdata,
+		.pdata_size = sizeof(cgbc_i2c_pm_pdata),
+	},
+	{ .name = "cgbc-wdt" },
+};
 
 /* Wait the Board Controller is ready to receive some session commands */
 static int cgbc_wait_device(struct cgbc_device_data *cgbc)
@@ -234,15 +264,6 @@ out:
 	return ret;
 }
 EXPORT_SYMBOL_GPL(cgbc_command);
-
-static struct mfd_cell cgbc_devs[] = {
-	{ .name = "cgbc-wdt"	},
-	{ .name = "cgbc-gpio"	},
-	{ .name = "cgbc-i2c", .id = 1 },
-	{ .name = "cgbc-i2c", .id = 2 },
-	{ .name = "cgbc-hwmon"	},
-	{ .name = "cgbc-backlight" },
-};
 
 static int cgbc_map(struct cgbc_device_data *cgbc)
 {

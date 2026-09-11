@@ -6621,6 +6621,7 @@ F:	drivers/mfd/cgbc-core.c
 F:	drivers/video/backlight/cgbc_bl.c
 F:	drivers/watchdog/cgbc_wdt.c
 F:	include/linux/mfd/cgbc.h
+F:	include/linux/platform_data/i2c-cgbc.h
 
 CONSOLE SUBSYSTEM
 M:	Greg Kroah-Hartman <gregkh@linuxfoundation.org>
