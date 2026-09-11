@@ -481,7 +481,7 @@ static struct sgx_epc_page *__sgx_alloc_epc_page_from_node(int nid)
  *
  * Return:
  * - an EPC page:	A borrowed EPC pages were available.
- * - NULL:		Out of EPC pages.
+ * - ERR_PTR(-ENOMEM):	Out of EPC pages.
  */
 struct sgx_epc_page *__sgx_alloc_epc_page(void)
 {
