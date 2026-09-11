@@ -138,6 +138,7 @@ struct vfe_subdev_resources {
 	char *pd_name;
 	bool has_vbif;
 	char *vbif_name;
+	bool streams_enable;
 	const struct vfe_hw_ops *hw_ops;
 	const struct camss_formats *formats_rdi;
 	const struct camss_formats *formats_pix;
