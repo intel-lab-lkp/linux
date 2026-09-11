@@ -39,6 +39,7 @@ struct seq_file;
 extern void proc_sched_show_task(struct task_struct *p,
 				 struct pid_namespace *ns, struct seq_file *m);
 extern void proc_sched_set_task(struct task_struct *p);
+extern void sched_show_runqueues(void);
 
 /* Attach to any functions which should be ignored in wchan output. */
 #define __sched		__section(".sched.text")

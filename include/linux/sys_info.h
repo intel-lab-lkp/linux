@@ -16,6 +16,7 @@
 #define SYS_INFO_PANIC_CONSOLE_REPLAY	0x00000020
 #define SYS_INFO_ALL_BT			0x00000040
 #define SYS_INFO_BLOCKED_TASKS		0x00000080
+#define SYS_INFO_CPU_RUNQUEUES		0x00000100
 
 void sys_info(unsigned long si_mask);
 unsigned long sys_info_parse_param(char *str);

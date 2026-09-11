@@ -940,6 +940,7 @@ locks           print locks info if CONFIG_LOCKDEP is on
 ftrace          print ftrace buffer
 all_bt          print all CPUs backtrace (if available in the arch)
 blocked_tasks   print only tasks in uninterruptible (blocked) state
+cpu_runqueues   print per-CPU runqueue depth and runnable tasks
 =============   ===================================================
 
 
