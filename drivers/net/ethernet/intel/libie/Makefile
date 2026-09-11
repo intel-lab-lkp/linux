@@ -20,3 +20,7 @@ libie_fwlog-y			:= fwlog.o
 obj-$(CONFIG_LIBIE_PCI)		+= libie_pci.o
 
 libie_pci-y			:= pci.o
+
+obj-$(CONFIG_LIBIE_IRQ)		+= libie_irq.o
+
+libie_irq-y			:= irq.o
