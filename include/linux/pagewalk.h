@@ -184,6 +184,7 @@ struct folio_walk {
 	};
 	/* private */
 	spinlock_t *ptl;
+	enum page_walk_lock walk_lock;
 };
 
 struct folio *folio_walk_start(struct folio_walk *fw,
