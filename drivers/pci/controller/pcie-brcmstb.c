@@ -954,8 +954,8 @@ static void add_inbound_win(struct inbound_win *b, u8 *count, u64 size,
 	(*count)++;
 }
 
-static int brcm_pcie_get_inbound_wins(struct brcm_pcie *pcie,
-				      struct inbound_win inbound_wins[])
+static int brcm_pcie_get_ib_wins(struct brcm_pcie *pcie,
+				 struct inbound_win *ib_win)
 {
 	struct pci_host_bridge *bridge = pci_host_bridge_from_priv(pcie);
 	u64 pci_offset, cpu_addr, size = 0, tot_size = 0;
@@ -966,13 +966,6 @@ static int brcm_pcie_get_inbound_wins(struct brcm_pcie *pcie,
 	u8 n = 0;
 
 	/*
-	 * The HW registers (and PCIe) use order-1 numbering for BARs.  As such,
-	 * we have inbound_wins[0] unused and BAR1 starts at inbound_wins[1].
-	 */
-	struct inbound_win *b_begin = &inbound_wins[1];
-	struct inbound_win *b = b_begin;
-
-	/*
 	 * STB chips beside 7712 disable the first inbound window default.
 	 * Rather being mapped to system memory it is mapped to the
 	 * internal registers of the SoC.  This feature is deprecated, has
@@ -980,7 +973,7 @@ static int brcm_pcie_get_inbound_wins(struct brcm_pcie *pcie,
 	 * SoCs.
 	 */
 	if (pcie->cfg->soc_base != BCM7712)
-		add_inbound_win(b++, &n, 0, 0, 0);
+		add_inbound_win(ib_win++, &n, 0, 0, 0);
 
 	resource_list_for_each_entry(entry, &bridge->dma_ranges) {
 		u64 pcie_start = entry->res->start - entry->offset;
@@ -997,7 +990,7 @@ static int brcm_pcie_get_inbound_wins(struct brcm_pcie *pcie,
 		 * two.
 		 */
 		if (pcie->cfg->soc_base == BCM7712)
-			add_inbound_win(b++, &n, size, cpu_start, pcie_start);
+			add_inbound_win(ib_win++, &n, size, cpu_start, pcie_start);
 
 		if (n > pcie->cfg->num_inbound_wins)
 			break;
@@ -1081,44 +1074,44 @@ static int brcm_pcie_get_inbound_wins(struct brcm_pcie *pcie,
 	}
 
 	/* Enable inbound window 2, the main inbound window for STB chips */
-	add_inbound_win(b++, &n, size, cpu_addr, pci_offset);
+	add_inbound_win(ib_win++, &n, size, cpu_addr, pci_offset);
 
 	/*
 	 * Disable inbound window 3.  On some chips presents the same
 	 * window as #2 but the data appears in a settable endianness.
 	 */
-	add_inbound_win(b++, &n, 0, 0, 0);
+	add_inbound_win(ib_win++, &n, 0, 0, 0);
 
 	return n;
 }
 
 static u32 brcm_bar_reg_offset(int bar)
 {
-	if (bar <= 3)
-		return PCIE_MISC_RC_BAR1_CONFIG_LO + 8 * (bar - 1);
+	if (bar <= 2)
+		return PCIE_MISC_RC_BAR1_CONFIG_LO + 8 * bar;
 	else
-		return PCIE_MISC_RC_BAR4_CONFIG_LO + 8 * (bar - 4);
+		return PCIE_MISC_RC_BAR4_CONFIG_LO + 8 * (bar - 3);
 }
 
 static u32 brcm_ubus_reg_offset(int bar)
 {
-	if (bar <= 3)
-		return PCIE_MISC_UBUS_BAR1_CONFIG_REMAP + 8 * (bar - 1);
+	if (bar <= 2)
+		return PCIE_MISC_UBUS_BAR1_CONFIG_REMAP + 8 * bar;
 	else
-		return PCIE_MISC_UBUS_BAR4_CONFIG_REMAP + 8 * (bar - 4);
+		return PCIE_MISC_UBUS_BAR4_CONFIG_REMAP + 8 * (bar - 3);
 }
 
-static void set_inbound_win_registers(struct brcm_pcie *pcie,
-				      const struct inbound_win *inbound_wins,
-				      u8 num_inbound_wins)
+static void brcm_pcie_set_ib_win_registers(struct brcm_pcie *pcie,
+					   const struct inbound_win *ib_win,
+					   u8 num_inbound_wins)
 {
 	void __iomem *base = pcie->base;
 	int i;
 
-	for (i = 1; i <= num_inbound_wins; i++) {
-		u64 pci_offset = inbound_wins[i].pci_offset;
-		u64 cpu_addr = inbound_wins[i].cpu_addr;
-		u64 size = inbound_wins[i].size;
+	for (i = 0; i < num_inbound_wins; i++, ib_win++) {
+		u64 pci_offset = ib_win->pci_offset;
+		u64 cpu_addr = ib_win->cpu_addr;
+		u64 size = ib_win->size;
 		u32 reg_offset = brcm_bar_reg_offset(i);
 		u32 tmp = lower_32_bits(pci_offset);
 
@@ -1202,11 +1195,11 @@ static int brcm_pcie_setup(struct brcm_pcie *pcie)
 	u32p_replace_bits(&tmp, 1, PCIE_MISC_MISC_CTRL_PCIE_RCB_64B_MODE_MASK);
 	writel(tmp, base + PCIE_MISC_MISC_CTRL);
 
-	num_inbound_wins = brcm_pcie_get_inbound_wins(pcie, inbound_wins);
+	num_inbound_wins = brcm_pcie_get_ib_wins(pcie, inbound_wins);
 	if (num_inbound_wins < 0)
 		return num_inbound_wins;
 
-	set_inbound_win_registers(pcie, inbound_wins, num_inbound_wins);
+	brcm_pcie_set_ib_win_registers(pcie, inbound_wins, num_inbound_wins);
 
 	if (!brcm_pcie_rc_mode(pcie)) {
 		dev_err(pcie->dev, "PCIe RC controller misconfigured as Endpoint\n");
