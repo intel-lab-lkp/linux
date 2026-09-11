@@ -377,7 +377,6 @@ struct idpf_intr_reg {
  * @rx_itr_value: RX interrupt throttling rate
  * @rx_intr_mode: Dynamic ITR or not
  * @rx_itr_idx: RX ITR index
- * @v_idx: Vector index
  * @irq: kernel and driver irq numbers
  */
 struct idpf_q_vector {
@@ -418,15 +417,13 @@ struct idpf_q_vector {
 	__cacheline_group_end_aligned(read_write);
 
 	__cacheline_group_begin_aligned(cold);
-	u16 v_idx;
-
 	struct msi_map irq;
 	__cacheline_group_end_aligned(cold);
 };
 libeth_cacheline_set_assert(struct idpf_q_vector, 136,
 			    56 + sizeof(struct napi_struct) +
 			    2 * sizeof(struct dim),
-			    8 + sizeof(struct msi_map));
+			    sizeof(struct msi_map));
 
 struct idpf_rx_queue_stats {
 	u64_stats_t packets;

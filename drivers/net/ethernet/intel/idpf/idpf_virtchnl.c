@@ -1848,12 +1848,14 @@ idpf_prep_map_unmap_queue_set_vector_msg(u32 vport_id, void *buf,
  * idpf_send_map_unmap_queue_set_vector_msg - send virtchnl map or unmap
  *					      queue set vector message
  * @qs: set of the queues to map or unmap
+ * @info: interrupts info to map software index to firmware one
  * @map: true for map and false for unmap
  *
  * Return: 0 on success, -errno on failure.
  */
 static int
 idpf_send_map_unmap_queue_set_vector_msg(const struct idpf_queue_set *qs,
+					 const struct idpf_irq_info *info,
 					 bool map)
 {
 	struct virtchnl2_queue_vector *vqv __free(kfree) = NULL;
@@ -1893,7 +1895,7 @@ idpf_send_map_unmap_queue_set_vector_msg(const struct idpf_queue_set *qs,
 				vec = q->rxq->q_vector;
 
 			if (vec) {
-				v_idx = vec->v_idx;
+				v_idx = vec->irq.index;
 				itr_idx = vec->rx_itr_idx;
 			} else {
 				v_idx = qs->qv_rsrc->noirq_v_idx;
@@ -1913,7 +1915,7 @@ idpf_send_map_unmap_queue_set_vector_msg(const struct idpf_queue_set *qs,
 				vec = q->txq->q_vector;
 
 			if (vec) {
-				v_idx = vec->v_idx;
+				v_idx = vec->irq.index;
 				itr_idx = vec->tx_itr_idx;
 			} else {
 				v_idx = qs->qv_rsrc->noirq_v_idx;
@@ -1925,7 +1927,7 @@ idpf_send_map_unmap_queue_set_vector_msg(const struct idpf_queue_set *qs,
 		}
 
 		vqv[i].queue_id = cpu_to_le32(qid);
-		vqv[i].vector_id = cpu_to_le16(v_idx);
+		vqv[i].vector_id = cpu_to_le16(info->vectors[v_idx].idx);
 		vqv[i].itr_idx = cpu_to_le32(itr_idx);
 	}
 
@@ -1989,7 +1991,8 @@ int idpf_send_map_unmap_queue_vector_msg(struct idpf_adapter *adapter,
 	if (k != num_q)
 		return -EINVAL;
 
-	return idpf_send_map_unmap_queue_set_vector_msg(qs, map);
+	return idpf_send_map_unmap_queue_set_vector_msg(qs, &adapter->irq_info,
+							map);
 }
 
 /**

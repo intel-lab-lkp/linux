@@ -4511,8 +4511,6 @@ static int idpf_vport_intr_init_vec_idx(struct idpf_vport *vport,
 	for (i = 0; i < rsrc->num_q_vectors; i++) {
 		struct idpf_q_vector *q_vector = &rsrc->q_vectors[i];
 
-		q_vector->v_idx =
-			adapter->irq_info.vectors[rsrc->q_vector_idxs[i]].idx;
 		q_vector->irq.index = rsrc->q_vector_idxs[i];
 		q_vector->irq.virq = pci_irq_vector(adapter->pdev,
 						    q_vector->irq.index);
@@ -4520,7 +4518,7 @@ static int idpf_vport_intr_init_vec_idx(struct idpf_vport *vport,
 			return q_vector->irq.virq;
 	}
 
-	rsrc->noirq_v_idx = adapter->irq_info.vectors[rsrc->q_vector_idxs[i]].idx;
+	rsrc->noirq_v_idx = rsrc->q_vector_idxs[i];
 
 	return 0;
 }
