@@ -2143,7 +2143,7 @@ static struct cxl_region *cxl_region_alloc(struct cxl_root_decoder *cxlrd, int i
  * This is the second step of region initialization. Regions exist within an
  * address space which is mapped by a @cxlrd.
  *
- * Return: 0 if the region was added to the @cxlrd, else returns negative error
+ * Return: the new region if it was added to the @cxlrd, else an ERR_PTR() with the error
  * code. The region will be named "regionZ" where Z is the unique region number.
  */
 static struct cxl_region *devm_cxl_add_region(struct cxl_root_decoder *cxlrd,
