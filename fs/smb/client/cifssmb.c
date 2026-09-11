@@ -1954,6 +1954,15 @@ cifs_writev_callback(struct TCP_Server_Info *server, struct mid_q_entry *mid)
 		if (written > wdata->subreq.len)
 			written &= 0xFFFF;
 
+		if (written > wdata->subreq.len) {
+			/* check that the server did not write more than requested */
+			cifs_dbg(FYI, "%s: bad count %zu for length %zu\n",
+				 __func__, written, wdata->subreq.len);
+			result = smb_EIO2(smb_eio_trace_write_overlarge,
+					  written, wdata->subreq.len);
+			break;
+		}
+
 		if (written < wdata->subreq.len) {
 			result = -ENOSPC;
 		} else {
