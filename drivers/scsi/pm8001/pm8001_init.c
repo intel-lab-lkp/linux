@@ -312,7 +312,7 @@ static void pm8001_free_irq(struct pm8001_hba_info *pm8001_ha);
 static int pm8001_alloc(struct pm8001_hba_info *pm8001_ha,
 			const struct pci_device_id *ent)
 {
-	int i, count = 0, rc = 0;
+	int i, count = 0;
 	u32 ci_offset, ib_offset, ob_offset, pi_offset;
 	struct inbound_queue_table *ibq;
 	struct outbound_queue_table *obq;
@@ -323,9 +323,8 @@ static int pm8001_alloc(struct pm8001_hba_info *pm8001_ha,
 		   pm8001_ha->chip->n_phy);
 
 	/* Request Interrupt */
-	rc = pm8001_request_irq(pm8001_ha);
-	if (rc)
-		goto err_out;
+	if (pm8001_request_irq(pm8001_ha))
+		return 1;
 
 	count = pm8001_ha->max_q_num;
 	/* Queues are chosen based on the number of cores/msix availability */
@@ -446,27 +445,16 @@ static int pm8001_alloc(struct pm8001_hba_info *pm8001_ha,
 	/* Memory region for devices*/
 	pm8001_ha->devices = kzalloc(PM8001_MAX_DEVICES
 				* sizeof(struct pm8001_device), GFP_KERNEL);
-	if (!pm8001_ha->devices) {
-		rc = -ENOMEM;
-		goto err_out_nodev;
-	}
+	if (!pm8001_ha->devices)
+		goto err_out;
 	for (i = 0; i < PM8001_MAX_DEVICES; i++) {
 		pm8001_ha->devices[i].dev_type = SAS_PHY_UNUSED;
 	}
 	pm8001_ha->flags = PM8001F_INIT_TIME;
 	return 0;
 
-err_out_nodev:
-	for (i = 0; i < pm8001_ha->max_memcnt; i++) {
-		if (pm8001_ha->memoryMap.region[i].virt_ptr != NULL) {
-			dma_free_coherent(&pm8001_ha->pdev->dev,
-				(pm8001_ha->memoryMap.region[i].total_len +
-				pm8001_ha->memoryMap.region[i].alignment),
-				pm8001_ha->memoryMap.region[i].virt_ptr,
-				pm8001_ha->memoryMap.region[i].phys_addr);
-		}
-	}
 err_out:
+	pm8001_free_irq(pm8001_ha);
 	return 1;
 }
 
@@ -575,6 +563,7 @@ static struct pm8001_hba_info *pm8001_pci_alloc(struct pci_dev *pdev,
 	if (!pm8001_alloc(pm8001_ha, ent))
 		return pm8001_ha;
 failed_pci_alloc:
+	pm8001_kill_tasklet(pm8001_ha);
 	pm8001_free(pm8001_ha);
 	return NULL;
 }
