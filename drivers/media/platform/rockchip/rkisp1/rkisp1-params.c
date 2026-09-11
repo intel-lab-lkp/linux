@@ -1854,8 +1854,8 @@ rkisp1_ext_params_bdm(struct rkisp1_params *params,
 	const struct rkisp1_ext_params_bdm_config *bdm = &block->bdm;
 
 	if (bdm->header.flags & RKISP1_EXT_PARAMS_FL_BLOCK_DISABLE) {
-		rkisp1_param_clear_bits(params, RKISP1_CIF_ISP_DEMOSAIC,
-					RKISP1_CIF_ISP_DEMOSAIC_BYPASS);
+		rkisp1_param_set_bits(params, RKISP1_CIF_ISP_DEMOSAIC,
+				      RKISP1_CIF_ISP_DEMOSAIC_BYPASS);
 		return;
 	}
 
@@ -1863,8 +1863,8 @@ rkisp1_ext_params_bdm(struct rkisp1_params *params,
 
 	if ((bdm->header.flags & RKISP1_EXT_PARAMS_FL_BLOCK_ENABLE) &&
 	    !(params->enabled_blocks & BIT(bdm->header.type)))
-		rkisp1_param_set_bits(params, RKISP1_CIF_ISP_DEMOSAIC,
-				      RKISP1_CIF_ISP_DEMOSAIC_BYPASS);
+		rkisp1_param_clear_bits(params, RKISP1_CIF_ISP_DEMOSAIC,
+					RKISP1_CIF_ISP_DEMOSAIC_BYPASS);
 }
 
 static void
