@@ -63,9 +63,9 @@
  * covered here.)
  *
  * The struct &i915_audio_component is used to interact between the graphics
- * and audio drivers. The struct &i915_audio_component_ops @ops in it is
+ * and audio drivers. The struct &drm_audio_component_ops @ops in it is
  * defined in graphics driver and called in audio driver. The
- * struct &i915_audio_component_audio_ops @audio_ops is called from i915 driver.
+ * struct &drm_audio_component_audio_ops @audio_ops is called from i915 driver.
  */
 
 struct intel_audio_funcs {
