@@ -446,12 +446,32 @@ static int dsi_mgr_bridge_attach(struct drm_bridge *bridge,
 				 bridge, flags);
 }
 
+static void dsi_mgr_bridge_enable(struct drm_bridge *bridge,
+				  struct drm_atomic_commit *commit)
+{
+	int id = dsi_mgr_bridge_get_id(bridge);
+	struct msm_dsi *msm_dsi = dsi_mgr_get_dsi(id);
+	struct msm_dsi *msm_dsi1 = dsi_mgr_get_dsi(DSI_1);
+	struct mipi_dsi_host *host = msm_dsi->host;
+	bool is_bonded_dsi = IS_BONDED_DSI();
+
+	DBG("id=%d", id);
+
+	if (is_bonded_dsi && !IS_MASTER_DSI_LINK(id))
+		return;
+
+	msm_dsi_host_enable_video(host);
+	if (is_bonded_dsi && msm_dsi1)
+		msm_dsi_host_enable_video(msm_dsi1->host);
+}
+
 static const struct drm_bridge_funcs dsi_mgr_bridge_funcs = {
 	.atomic_create_state = drm_atomic_helper_bridge_create_state,
 	.atomic_destroy_state = drm_atomic_helper_bridge_destroy_state,
 	.atomic_duplicate_state = drm_atomic_helper_bridge_duplicate_state,
 	.attach = dsi_mgr_bridge_attach,
 	.atomic_pre_enable = dsi_mgr_bridge_pre_enable,
+	.atomic_enable = dsi_mgr_bridge_enable,
 	.atomic_post_disable = dsi_mgr_bridge_post_disable,
 	.mode_set = dsi_mgr_bridge_mode_set,
 	.mode_valid = dsi_mgr_bridge_mode_valid,

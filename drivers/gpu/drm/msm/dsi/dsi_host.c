@@ -2438,20 +2438,21 @@ int msm_dsi_host_enable(struct mipi_dsi_host *host)
 {
 	struct msm_dsi_host *msm_host = to_msm_dsi_host(host);
 
-	dsi_op_mode_config(msm_host,
-		!!(msm_host->mode_flags & MIPI_DSI_MODE_VIDEO), true);
+	/* Keep DSI host in command mode (VID_MODE_EN = 0) during panel init
+	 * to allow clean DCS communication without premature video engine startup.
+	 */
+	dsi_op_mode_config(msm_host, false, true);
 
-	/* TODO: clock should be turned off for command mode,
-	 * and only turned on before MDP START.
-	 * This part of code should be enabled once mdp driver support it.
-	 */
-	/* if (msm_panel->mode == MSM_DSI_CMD_MODE) {
-	 *	dsi_link_clk_disable(msm_host);
-	 *	pm_runtime_put(&msm_host->pdev->dev);
-	 * }
-	 */
 	msm_host->enabled = true;
 	return 0;
+}
+
+void msm_dsi_host_enable_video(struct mipi_dsi_host *host)
+{
+	struct msm_dsi_host *msm_host = to_msm_dsi_host(host);
+
+	if (msm_host->mode_flags & MIPI_DSI_MODE_VIDEO)
+		dsi_op_mode_config(msm_host, true, true);
 }
 
 int msm_dsi_host_disable(struct mipi_dsi_host *host)
