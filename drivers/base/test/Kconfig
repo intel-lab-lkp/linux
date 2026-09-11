@@ -24,3 +24,15 @@ config DRIVER_SWNODE_KUNIT_TEST
 	tristate "KUnit Tests for software node fw_devlink links" if !KUNIT_ALL_TESTS
 	depends on KUNIT
 	default KUNIT_ALL_TESTS
+
+config GLUE_DIR_KUNIT_TEST
+	tristate "KUnit Tests for class glue directories" if !KUNIT_ALL_TESTS
+	depends on KUNIT && SYSFS
+	default KUNIT_ALL_TESTS
+	help
+	  Enable this option to test the class glue directories the driver
+	  core places class devices under: that siblings share one, that a
+	  reaped one is created again, and that a same-named child which is
+	  not a glue directory is never mistaken for one.
+
+	  If unsure say N.

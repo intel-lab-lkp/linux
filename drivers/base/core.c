@@ -26,6 +26,7 @@
 #include <linux/of.h>
 #include <linux/of_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/rbtree.h>
 #include <linux/sched/mm.h>
 #include <linux/sched/signal.h>
 #include <linux/slab.h>
@@ -3263,6 +3264,8 @@ struct kobject *virtual_device_parent(void)
 struct class_dir {
 	struct kobject kobj;
 	const struct class *class;
+	/* in the class's glue_dirs_index, keyed by kobj.parent (gdp_mutex) */
+	struct rb_node index_node;
 };
 
 #define to_class_dir(obj) container_of(obj, struct class_dir, kobj)
@@ -3298,6 +3301,7 @@ static struct kobject *class_dir_create_and_add(struct subsys_private *sp,
 
 	dir->class = sp->class;
 	kobject_init(&dir->kobj, &class_dir_ktype);
+	RB_CLEAR_NODE(&dir->index_node);
 
 	dir->kobj.kset = &sp->glue_dirs;
 
@@ -3310,6 +3314,66 @@ static struct kobject *class_dir_create_and_add(struct subsys_private *sp,
 }
 
 static DEFINE_MUTEX(gdp_mutex);
+
+/*
+ * Glue-dir lookup index: each class's glue dirs by parent kobject, in an
+ * rbtree embedded in its subsys_private.  The glue_dirs kset remains the
+ * membership and identity authority (kobj->kset); the index replaces only
+ * the list walk in get_device_parent() and dies with the subsys_private
+ * generation that owns both.
+ */
+static int glue_dir_cmp_key(const void *key, const struct rb_node *node)
+{
+	const struct class_dir *cd = rb_entry(node, struct class_dir,
+					      index_node);
+
+	if ((unsigned long)key < (unsigned long)cd->kobj.parent)
+		return -1;
+	return (unsigned long)key > (unsigned long)cd->kobj.parent;
+}
+
+static bool glue_dir_less(struct rb_node *lhs, const struct rb_node *rhs)
+{
+	const struct class_dir *cd = rb_entry(lhs, struct class_dir,
+					      index_node);
+
+	return glue_dir_cmp_key(cd->kobj.parent, rhs) < 0;
+}
+
+static struct kobject *glue_dir_lookup(struct subsys_private *sp,
+				       struct kobject *parent_kobj)
+{
+	struct rb_node *node;
+
+	lockdep_assert_held(&gdp_mutex);
+
+	node = rb_find(parent_kobj, &sp->glue_dirs_index, glue_dir_cmp_key);
+	if (!node)
+		return NULL;
+
+	return kobject_get(&rb_entry(node, struct class_dir, index_node)->kobj);
+}
+
+static void glue_dir_index(struct subsys_private *sp, struct kobject *glue_dir)
+{
+	lockdep_assert_held(&gdp_mutex);
+
+	/* Lookup-before-create under gdp_mutex keeps keys unique. */
+	rb_add(&to_class_dir(glue_dir)->index_node, &sp->glue_dirs_index,
+	       glue_dir_less);
+}
+
+/*
+ * rb_erase() uses only recorded tree links, but glue_dir_less() keys on
+ * kobj.parent: the dir, indexed at create, leaves the index before
+ * kobject_del() clears its parent -- an indexed node's key must never mutate.
+ */
+static void glue_dir_unindex(struct subsys_private *sp,
+			     struct kobject *glue_dir)
+{
+	lockdep_assert_held(&gdp_mutex);
+	rb_erase(&to_class_dir(glue_dir)->index_node, &sp->glue_dirs_index);
+}
 
 static struct kobject *get_device_parent(struct device *dev,
 					 struct device *parent)
@@ -3338,13 +3402,7 @@ static struct kobject *get_device_parent(struct device *dev,
 		mutex_lock(&gdp_mutex);
 
 		/* find our class-directory at the parent and reference it */
-		spin_lock(&sp->glue_dirs.list_lock);
-		list_for_each_entry(k, &sp->glue_dirs.list, entry)
-			if (k->parent == parent_kobj) {
-				kobj = kobject_get(k);
-				break;
-			}
-		spin_unlock(&sp->glue_dirs.list_lock);
+		kobj = glue_dir_lookup(sp, parent_kobj);
 		if (kobj) {
 			mutex_unlock(&gdp_mutex);
 			subsys_put(sp);
@@ -3354,6 +3412,8 @@ static struct kobject *get_device_parent(struct device *dev,
 		/* or create a new class-directory at the parent device */
 		k = class_dir_create_and_add(sp, parent_kobj);
 		/* do not emit an uevent for this simple "glue" directory */
+		if (!IS_ERR(k))
+			glue_dir_index(sp, k);
 		mutex_unlock(&gdp_mutex);
 		subsys_put(sp);
 		return k;
@@ -3373,28 +3433,6 @@ static struct kobject *get_device_parent(struct device *dev,
 	if (parent)
 		return &parent->kobj;
 	return NULL;
-}
-
-static inline bool live_in_glue_dir(struct kobject *kobj,
-				    struct device *dev)
-{
-	struct subsys_private *sp;
-	bool retval;
-
-	if (!kobj || !dev->class)
-		return false;
-
-	sp = class_to_subsys(dev->class);
-	if (!sp)
-		return false;
-
-	if (kobj->kset == &sp->glue_dirs)
-		retval = true;
-	else
-		retval = false;
-
-	subsys_put(sp);
-	return retval;
 }
 
 static inline struct kobject *get_glue_dir(struct device *dev)
@@ -3426,11 +3464,19 @@ static inline bool kobject_has_children(struct kobject *kobj)
  */
 static void cleanup_glue_dir(struct device *dev, struct kobject *glue_dir)
 {
+	struct subsys_private *sp;
 	unsigned int ref;
 
 	/* see if we live in a "glue" directory */
-	if (!live_in_glue_dir(glue_dir, dev))
+	if (!glue_dir || !dev->class)
 		return;
+	sp = class_to_subsys(dev->class);
+	if (!sp)
+		return;
+	if (glue_dir->kset != &sp->glue_dirs) {
+		subsys_put(sp);
+		return;
+	}
 
 	mutex_lock(&gdp_mutex);
 	/**
@@ -3482,10 +3528,14 @@ static void cleanup_glue_dir(struct device *dev, struct kobject *glue_dir)
 	 * for glue_dir kobj is 1.
 	 */
 	ref = kref_read(&glue_dir->kref);
-	if (!kobject_has_children(glue_dir) && !--ref)
+	if (!kobject_has_children(glue_dir) && !--ref) {
+		glue_dir_unindex(sp, glue_dir);
 		kobject_del(glue_dir);
+	}
 	kobject_put(glue_dir);
 	mutex_unlock(&gdp_mutex);
+	/* outside gdp_mutex: the last put runs the class's release callback */
+	subsys_put(sp);
 }
 
 static int device_add_class_symlinks(struct device *dev)

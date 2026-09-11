@@ -11,6 +11,7 @@
  *
  */
 #include <linux/notifier.h>
+#include <linux/rbtree_types.h>
 
 /**
  * struct subsys_private - structure to hold the private to the driver core
@@ -32,6 +33,8 @@
  * @dev_root: Default device to use as the parent.
  * @glue_dirs: "glue" directory to put in-between the parent device to
  *	       avoid namespace conflicts
+ * @glue_dirs_index: the class's glue dirs by parent kobject, under gdp_mutex;
+ *		     zeroed is an empty rb_root
  * @class: pointer back to the struct class that this structure is associated
  *	   with.
  * @lock_key: Lock class key for use by the lock validator
@@ -55,6 +58,7 @@ struct subsys_private {
 	struct device *dev_root;
 
 	struct kset glue_dirs;
+	struct rb_root glue_dirs_index;
 	const struct class *class;
 
 	struct lock_class_key lock_key;
