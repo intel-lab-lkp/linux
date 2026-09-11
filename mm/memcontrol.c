@@ -757,12 +757,11 @@ static inline void memcg_rstat_updated(struct mem_cgroup *memcg, long val,
 	for (; statc_pcpu; statc_pcpu = statc->parent_pcpu) {
 		statc = this_cpu_ptr(statc_pcpu);
 		/*
-		 * If @memcg is already flushable then all its ancestors are
-		 * flushable as well and also there is no need to increase
-		 * stats_updates.
+		 * A concurrent flush may have reset an ancestor's counter.
+		 * Skip this node if flushable, but keep walking the ancestors.
 		 */
 		if (memcg_vmstats_needs_flush(statc->vmstats))
-			break;
+			continue;
 
 		stats_updates = this_cpu_add_return(statc_pcpu->stats_updates,
 						    abs(val));
