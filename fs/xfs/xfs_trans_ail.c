@@ -915,7 +915,7 @@ xfs_ail_delete_one(
 	return 0;
 }
 
-void
+bool
 xfs_trans_ail_delete(
 	struct xfs_log_item	*lip,
 	int			shutdown_type)
@@ -933,12 +933,13 @@ xfs_trans_ail_delete(
 					__func__);
 			xlog_force_shutdown(log, shutdown_type);
 		}
-		return;
+		return false;
 	}
 
 	clear_bit(XFS_LI_FAILED, &lip->li_flags);
 	tail_lsn = xfs_ail_delete_one(ailp, lip);
 	xfs_ail_update_finish(ailp, tail_lsn);	/* drops the AIL lock */
+	return true;
 }
 
 int
