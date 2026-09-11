@@ -588,7 +588,7 @@ static void squashfs_readahead(struct readahead_control *ractl)
 
 	readahead_expand(ractl, start, (len | mask) + 1);
 
-	pages = kmalloc_array(max_pages, sizeof(void *), GFP_KERNEL);
+	pages = kmalloc_objs(*pages, max_pages);
 	if (!pages)
 		return;
 

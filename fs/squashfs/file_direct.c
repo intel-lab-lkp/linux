@@ -40,7 +40,7 @@ int squashfs_readpage_block(struct folio *folio, u64 block, int bsize,
 
 	pages = end_index - start_index + 1;
 
-	page = kmalloc_array(pages, sizeof(void *), GFP_KERNEL);
+	page = kmalloc_objs(*page, pages);
 	if (page == NULL)
 		return res;
 
