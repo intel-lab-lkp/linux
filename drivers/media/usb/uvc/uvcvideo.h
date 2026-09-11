@@ -461,6 +461,7 @@ struct uvc_streaming {
 	struct usb_interface *intf;
 	int intfnum;
 	u32 maxpsize;
+	unsigned int ctrl_size;
 
 	struct uvc_streaming_header header;
 	enum v4l2_buf_type type;
