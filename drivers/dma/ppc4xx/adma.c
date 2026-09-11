@@ -4212,7 +4212,7 @@ err_chan_alloc:
 	else
 		iounmap(adev->dma_reg);
 err_regs_alloc:
-	dma_free_coherent(adev->dev, adev->pool_size,
+	dma_free_coherent(&ofdev->dev, adev->pool_size,
 			  adev->dma_desc_pool_virt,
 			  adev->dma_desc_pool);
 err_dma_alloc:
