@@ -8943,6 +8943,9 @@ static int ufs_get_device_desc(struct ufs_hba *hba)
 
 	ufs_fixup_device_setup(hba);
 
+	dev_info->timestamp_sup = dev_info->wspecversion >= 0x400 &&
+		!(hba->dev_quirks & UFS_DEVICE_QUIRK_NO_TIMESTAMP_SUPPORT);
+
 	ufshcd_wb_probe(hba, desc_buf);
 
 	ufshcd_temp_notif_probe(hba, desc_buf);
@@ -9243,14 +9246,15 @@ static void ufshcd_set_timestamp_attr(struct ufs_hba *hba)
 	u64 ts_ns;
 	int err;
 
-	if (dev_info->wspecversion < 0x400 ||
-	    hba->dev_quirks & UFS_DEVICE_QUIRK_NO_TIMESTAMP_SUPPORT)
+	if (!dev_info->timestamp_sup)
 		return;
 
 	ts_ns = ktime_get_real_ns();
 	err = ufshcd_query_attr_qword(hba, UPIU_QUERY_OPCODE_WRITE_ATTR,
 				      QUERY_ATTR_IDN_TIMESTAMP, 0, 0, &ts_ns);
-	if (err)
+	if (err == -EOPNOTSUPP)
+		dev_info->timestamp_sup = false;
+	else if (err)
 		dev_err(hba->dev, "%s: failed to set timestamp %d\n",
 			__func__, err);
 }
