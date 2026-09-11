@@ -11,6 +11,7 @@
 #include <linux/init.h>
 #include <linux/mod_devicetable.h>
 #include <asm/cpufeature.h>
+#include <asm/elf.h>
 
 /*
  * Macros imported from <asm/cpufeature.h>:
