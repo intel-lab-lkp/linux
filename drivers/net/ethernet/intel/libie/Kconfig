@@ -37,3 +37,9 @@ config LIBIE_PCI
 	help
 	  Helper functions for management of PCI resources belonging
 	  to networking devices.
+
+config LIBIE_IRQ
+	tristate
+	help
+	  Helpers used to manage irqs by drivers, take care of managing static
+	  and dynamic interrupts, using xarray to store irqs and track usage.
