@@ -58,59 +58,61 @@ static void idpf_mb_intr_reg_init(struct idpf_adapter *adapter)
 }
 
 /**
- * idpf_intr_reg_init - Initialize interrupt registers
- * @vport: virtual port structure
- * @rsrc: pointer to queue and vector resources
+ * idpf_noirq_intr_reg_init - Initialize noirq registers
+ * @adapter: adapter structure
+ * @rsrc: to store noirq register and value
+ * @idx: global software irq index used to get hardware information from
+ *	 irq_info structure
  */
-static void idpf_intr_reg_init(struct idpf_vport *vport,
-			       struct idpf_q_vec_rsrc *rsrc)
+static void idpf_noirq_intr_reg_init(struct idpf_adapter *adapter,
+				     struct idpf_q_vec_rsrc *rsrc, u16 idx)
 {
-	struct idpf_adapter *adapter = vport->adapter;
-	int num_vecs = rsrc->num_q_vectors;
-	struct libie_mmio_info *mmio;
-	u32 rx_itr, tx_itr, val;
-	int i;
+	u32 val = adapter->irq_info.vectors[idx].regs.dyn_ctl;
 
-	mmio = &adapter->ctlq_ctx.mmio_info;
-
-	for (i = 0; i < num_vecs; i++) {
-		struct idpf_q_vector *q_vector = &rsrc->q_vectors[i];
-		struct idpf_intr_reg *intr = &q_vector->intr_reg;
-		u16 vec_id = rsrc->q_vector_idxs[i];
-		struct idpf_hw_vector *v;
-		u32 spacing;
-
-		v = &adapter->irq_info.vectors[vec_id];
-
-		intr->dyn_ctl = libie_pci_get_mmio_addr(mmio, v->regs.dyn_ctl);
-		intr->dyn_ctl_intena_m = PF_GLINT_DYN_CTL_INTENA_M;
-		intr->dyn_ctl_intena_msk_m = PF_GLINT_DYN_CTL_INTENA_MSK_M;
-		intr->dyn_ctl_itridx_s = PF_GLINT_DYN_CTL_ITR_INDX_S;
-		intr->dyn_ctl_intrvl_s = PF_GLINT_DYN_CTL_INTERVAL_S;
-		intr->dyn_ctl_wb_on_itr_m = PF_GLINT_DYN_CTL_WB_ON_ITR_M;
-		intr->dyn_ctl_swint_trig_m = PF_GLINT_DYN_CTL_SWINT_TRIG_M;
-		intr->dyn_ctl_sw_itridx_ena_m =
-			PF_GLINT_DYN_CTL_SW_ITR_INDX_ENA_M;
-
-		spacing = IDPF_ITR_IDX_SPACING(v->regs.itrn_index_spacing,
-					       IDPF_PF_ITR_IDX_SPACING);
-		rx_itr = PF_GLINT_ITR_ADDR(VIRTCHNL2_ITR_IDX_0, v->regs.itrn,
-					   spacing);
-		tx_itr = PF_GLINT_ITR_ADDR(VIRTCHNL2_ITR_IDX_1, v->regs.itrn,
-					   spacing);
-		intr->rx_itr = libie_pci_get_mmio_addr(mmio, rx_itr);
-		intr->tx_itr = libie_pci_get_mmio_addr(mmio, tx_itr);
-	}
-
-	/* Data vector for NOIRQ queues */
-
-	val = adapter->irq_info.vectors[rsrc->q_vector_idxs[i]].regs.dyn_ctl;
 	rsrc->noirq_dyn_ctl =
 		libie_pci_get_mmio_addr(&adapter->ctlq_ctx.mmio_info, val);
 
 	val = PF_GLINT_DYN_CTL_WB_ON_ITR_M | PF_GLINT_DYN_CTL_INTENA_MSK_M |
 	      FIELD_PREP(PF_GLINT_DYN_CTL_ITR_INDX_M, IDPF_NO_ITR_UPDATE_IDX);
 	rsrc->noirq_dyn_ctl_ena = val;
+}
+
+/**
+ * idpf_intr_reg_init - Initialize interrupt registers
+ * @adapter: adapter structure
+ * @q_vector: q_vector in which the registers should be initialized
+ * @idx: global software irq index used to get hardware information from
+ *	 irq_info structure
+ */
+static void idpf_intr_reg_init(struct idpf_adapter *adapter,
+			       struct idpf_q_vector *q_vector, u16 idx)
+{
+	struct idpf_hw_vector *v = &adapter->irq_info.vectors[idx];
+	struct idpf_intr_reg *intr = &q_vector->intr_reg;
+	struct libie_mmio_info *mmio;
+	u32 rx_itr, tx_itr;
+	u32 spacing;
+
+	mmio = &adapter->ctlq_ctx.mmio_info;
+
+	intr->dyn_ctl = libie_pci_get_mmio_addr(mmio, v->regs.dyn_ctl);
+	intr->dyn_ctl_intena_m = PF_GLINT_DYN_CTL_INTENA_M;
+	intr->dyn_ctl_intena_msk_m = PF_GLINT_DYN_CTL_INTENA_MSK_M;
+	intr->dyn_ctl_itridx_s = PF_GLINT_DYN_CTL_ITR_INDX_S;
+	intr->dyn_ctl_intrvl_s = PF_GLINT_DYN_CTL_INTERVAL_S;
+	intr->dyn_ctl_wb_on_itr_m = PF_GLINT_DYN_CTL_WB_ON_ITR_M;
+	intr->dyn_ctl_swint_trig_m = PF_GLINT_DYN_CTL_SWINT_TRIG_M;
+	intr->dyn_ctl_sw_itridx_ena_m =
+		PF_GLINT_DYN_CTL_SW_ITR_INDX_ENA_M;
+
+	spacing = IDPF_ITR_IDX_SPACING(v->regs.itrn_index_spacing,
+				       IDPF_PF_ITR_IDX_SPACING);
+	rx_itr = PF_GLINT_ITR_ADDR(VIRTCHNL2_ITR_IDX_0, v->regs.itrn,
+				   spacing);
+	tx_itr = PF_GLINT_ITR_ADDR(VIRTCHNL2_ITR_IDX_1, v->regs.itrn,
+				   spacing);
+	intr->rx_itr = libie_pci_get_mmio_addr(mmio, rx_itr);
+	intr->tx_itr = libie_pci_get_mmio_addr(mmio, tx_itr);
 }
 
 /**
@@ -171,6 +173,7 @@ static void idpf_reg_ops_init(struct idpf_adapter *adapter)
 {
 	adapter->dev_ops.reg_ops.ctlq_reg_init = idpf_ctlq_reg_init;
 	adapter->dev_ops.reg_ops.intr_reg_init = idpf_intr_reg_init;
+	adapter->dev_ops.reg_ops.noirq_intr_reg_init = idpf_noirq_intr_reg_init;
 	adapter->dev_ops.reg_ops.mb_intr_reg_init = idpf_mb_intr_reg_init;
 	adapter->dev_ops.reg_ops.reset_reg_init = idpf_reset_reg_init;
 	adapter->dev_ops.reg_ops.trigger_reset = idpf_trigger_reset;
