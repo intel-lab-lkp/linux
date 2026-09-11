@@ -321,6 +321,9 @@ struct pcie_cfg_data {
 	int (*perst_set)(struct brcm_pcie *pcie, u32 val);
 	int (*bridge_sw_init_set)(struct brcm_pcie *pcie, u32 val);
 	int (*post_setup)(struct brcm_pcie *pcie);
+	int (*get_ib_wins)(struct brcm_pcie *pcie, struct inbound_win
+			   *inbound_wins);
+
 };
 
 struct subdev_regulators {
@@ -954,8 +957,58 @@ static void add_inbound_win(struct inbound_win *b, u8 *count, u64 size,
 	(*count)++;
 }
 
+/*
+ * This is used by newer SoCs. It configures the inbound mapping windows
+ * in accordance to the values of the dma-ranges properties.
+ */
 static int brcm_pcie_get_ib_wins(struct brcm_pcie *pcie,
 				 struct inbound_win *ib_win)
+{
+	struct pci_host_bridge *bridge = pci_host_bridge_from_priv(pcie);
+	struct resource_entry *entry;
+	u64 size;
+	u8 n = 0;
+
+	resource_list_for_each_entry(entry, &bridge->dma_ranges) {
+		u64 pcie_start = entry->res->start - entry->offset;
+		u64 cpu_start = entry->res->start;
+
+		size = resource_size(entry->res);
+		add_inbound_win(ib_win++, &n, size, cpu_start, pcie_start);
+		if (n > pcie->cfg->num_inbound_wins)
+			break;
+	}
+
+	if (!n) {
+		dev_err(pcie->dev, "DT node has no dma-ranges\n");
+		return -EINVAL;
+	}
+
+	return n;
+}
+
+/*
+ * Originally, the Broadcom STB PCIe HW played the endpoint (EP) role.  As
+ * an EP, one of its goals was to present system memory as a single
+ * contigous PCIe BAR.  So if there was two regions of system memory, say
+ * 1GB@0GB and 2GB@2GB, these two regions would be presented as a
+ * contiguous BAR that was 3GB in size and started at a PCIe offset that
+ * was configured by SW.
+ *
+ * Then the same PCIe HW was modified to also play the Root Complex (RC)
+ * role and the same internal mapping strategy was employed.  For any SoC
+ * that uses this scheme, each "BAR" is an inbound window and the PCIe HW
+ * is internally mapped and hard-wired to system memory regions.  Even
+ * though the code of the function below uses the dma-ranges properties, it
+ * is unable to configure the CPU region that is covered, but it can set
+ * the size and offset of the PCIe side of the window.
+ *
+ * Newer SoCs use the brcm_pcie_get_ib_wins() function have the freedom to
+ * configure mapping windows from any CPU region to any PCIe region,
+ * provided they follow the rules on offset alignment and size.
+ */
+static int brcm_pcie_get_ib_wins_internal_map(struct brcm_pcie *pcie,
+					      struct inbound_win *ib_win)
 {
 	struct pci_host_bridge *bridge = pci_host_bridge_from_priv(pcie);
 	u64 pci_offset, cpu_addr, size = 0, tot_size = 0;
@@ -965,33 +1018,15 @@ static int brcm_pcie_get_ib_wins(struct brcm_pcie *pcie,
 	int ret, i = 0;
 	u8 n = 0;
 
-	/*
-	 * STB chips beside 7712 disable the first inbound window default.
-	 * Rather being mapped to system memory it is mapped to the
-	 * internal registers of the SoC.  This feature is deprecated, has
-	 * security considerations, and is not implemented in our modern
-	 * SoCs.
-	 */
-	if (pcie->cfg->soc_base != BCM7712)
-		add_inbound_win(ib_win++, &n, 0, 0, 0);
+	/* By default, disable the first inbound window */
+	add_inbound_win(ib_win++, &n, 0, 0, 0);
 
 	resource_list_for_each_entry(entry, &bridge->dma_ranges) {
 		u64 pcie_start = entry->res->start - entry->offset;
-		u64 cpu_start = entry->res->start;
 
-		size = resource_size(entry->res);
-		tot_size += size;
+		tot_size += resource_size(entry->res);
 		if (pcie_start < lowest_pcie_addr)
 			lowest_pcie_addr = pcie_start;
-		/*
-		 * 7712 and newer chips may have many BARs, with each
-		 * offering a non-overlapping viewport to system memory.
-		 * That being said, each BARs size must still be a power of
-		 * two.
-		 */
-		if (pcie->cfg->soc_base == BCM7712)
-			add_inbound_win(ib_win++, &n, size, cpu_start, pcie_start);
-
 		if (n > pcie->cfg->num_inbound_wins)
 			break;
 	}
@@ -1000,14 +1035,6 @@ static int brcm_pcie_get_ib_wins(struct brcm_pcie *pcie,
 		dev_err(dev, "DT node has no dma-ranges\n");
 		return -EINVAL;
 	}
-
-	/*
-	 * 7712 and newer chips do not have an internal memory mapping system
-	 * that enables multiple memory controllers.  As such, it can return
-	 * now w/o doing special configuration.
-	 */
-	if (pcie->cfg->soc_base == BCM7712)
-		return n;
 
 	ret = of_property_read_variable_u64_array(pcie->np, "brcm,scb-sizes", pcie->memc_size, 1,
 						  PCIE_BRCM_MAX_MEMC);
@@ -1123,13 +1150,8 @@ static void brcm_pcie_set_ib_win_registers(struct brcm_pcie *pcie,
 		/* Write high */
 		writel_relaxed(upper_32_bits(pci_offset), base + reg_offset + 4);
 
-		/*
-		 * Most STB chips:
-		 *     Do nothing.
-		 * 7712:
-		 *     All of their BARs need to be set.
-		 */
-		if (pcie->cfg->soc_base == BCM7712) {
+		/* SoCs w/o fixed internal mapping can remap the cpu_addr */
+		if (pcie->cfg->get_ib_wins == brcm_pcie_get_ib_wins) {
 			/* BUS remap register settings */
 			reg_offset = brcm_ubus_reg_offset(i);
 			tmp = lower_32_bits(cpu_addr) & ~0xfff;
@@ -1195,7 +1217,7 @@ static int brcm_pcie_setup(struct brcm_pcie *pcie)
 	u32p_replace_bits(&tmp, 1, PCIE_MISC_MISC_CTRL_PCIE_RCB_64B_MODE_MASK);
 	writel(tmp, base + PCIE_MISC_MISC_CTRL);
 
-	num_inbound_wins = brcm_pcie_get_ib_wins(pcie, inbound_wins);
+	num_inbound_wins = pcie->cfg->get_ib_wins(pcie, inbound_wins);
 	if (num_inbound_wins < 0)
 		return num_inbound_wins;
 
@@ -1943,6 +1965,7 @@ static const struct pcie_cfg_data generic_cfg = {
 	.bridge_sw_init_set = brcm_pcie_bridge_sw_init_set_generic,
 	.num_inbound_wins = 3,
 	.burst_setting	= 0x2, /* 0=128B, 1=256B, 2=512B, 3=Rsvd */
+	.get_ib_wins	= brcm_pcie_get_ib_wins_internal_map,
 };
 
 static const struct pcie_cfg_data bcm2711_cfg = {
@@ -1953,6 +1976,7 @@ static const struct pcie_cfg_data bcm2711_cfg = {
 	.num_inbound_wins = 3,
 	.quirks		= CFG_QUIRK_EARLY_PERST_ASSERT,
 	.burst_setting	= 0x0, /* 0=128B, 1=256B, 2=512B, 3=Rsvd */
+	.get_ib_wins	= brcm_pcie_get_ib_wins_internal_map,
 };
 
 static const struct pcie_cfg_data bcm2712_cfg = {
@@ -1965,6 +1989,7 @@ static const struct pcie_cfg_data bcm2712_cfg = {
 		CFG_QUIRK_NO_RGR1_TIMER,
 	.num_inbound_wins = 10,
 	.burst_setting	= 0x2, /* 0=64B, 1=128B, 2=256B, 3=Rsvd */
+	.get_ib_wins	= brcm_pcie_get_ib_wins,
 };
 
 static const struct pcie_cfg_data bcm4908_cfg = {
@@ -1975,6 +2000,7 @@ static const struct pcie_cfg_data bcm4908_cfg = {
 	.num_inbound_wins = 3,
 	.quirks		= CFG_QUIRK_PERST_PCIE_REV_CUTOFF,
 	.burst_setting	= 0x0, /* 0=64B, 1=128B, 2=Rsvd, 3=Rsvd */
+	.get_ib_wins	= brcm_pcie_get_ib_wins_internal_map,
 };
 
 static const struct pcie_cfg_data bcm7278_cfg = {
@@ -1984,6 +2010,7 @@ static const struct pcie_cfg_data bcm7278_cfg = {
 	.bridge_sw_init_set = brcm_pcie_bridge_sw_init_set_7278,
 	.num_inbound_wins = 3,
 	.burst_setting	= 0x3, /* 0=Resv, 1=128B, 2=256B, 3=512B */
+	.get_ib_wins	= brcm_pcie_get_ib_wins_internal_map,
 };
 
 static const struct pcie_cfg_data bcm7425_cfg = {
@@ -1996,6 +2023,7 @@ static const struct pcie_cfg_data bcm7425_cfg = {
 		| CFG_QUIRK_OB_WIN_MAXSZ_128MB | CFG_QUIRK_32BIT_PCI_OPS,
 	.flags		= CFG_FLG_IS_BMIPS,
 	.burst_setting = 1, /* 0=128B, 1=256B, 2=Rsvd, 3=Rsvd */
+	.get_ib_wins	= brcm_pcie_get_ib_wins_internal_map,
 };
 
 static const struct pcie_cfg_data bcm7435_cfg = {
@@ -2008,6 +2036,7 @@ static const struct pcie_cfg_data bcm7435_cfg = {
 		| CFG_QUIRK_OB_WIN_MAXSZ_128MB,
 	.flags		= CFG_FLG_IS_BMIPS,
 	.burst_setting = 1, /* 0=128B, 1=256B, 2=Rsvd, 3=Rsvd */
+	.get_ib_wins	= brcm_pcie_get_ib_wins_internal_map,
 };
 
 static const struct pcie_cfg_data bcm7216_cfg = {
@@ -2018,6 +2047,7 @@ static const struct pcie_cfg_data bcm7216_cfg = {
 	.flags		= CFG_FLG_HAS_PHY | CFG_FLG_HAS_ERR_REPORT,
 	.num_inbound_wins = 3,
 	.burst_setting	= 0x3, /* 0=Resv, 1=128B, 2=256B, 3=512B */
+	.get_ib_wins	= brcm_pcie_get_ib_wins_internal_map,
 };
 
 static const struct pcie_cfg_data bcm7712_cfg = {
@@ -2028,6 +2058,7 @@ static const struct pcie_cfg_data bcm7712_cfg = {
 	.num_inbound_wins = 10,
 	.quirks		= CFG_QUIRK_NO_RGR1_TIMER,
 	.burst_setting	= 0x2, /* 0=64B, 1=128B, 2=256B, 3=Resv */
+	.get_ib_wins	= brcm_pcie_get_ib_wins,
 };
 
 static const struct of_device_id brcm_pcie_match[] = {
