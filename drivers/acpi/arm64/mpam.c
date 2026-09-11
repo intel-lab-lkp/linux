@@ -257,7 +257,8 @@ static struct platform_device * __init acpi_mpam_parse_msc(struct acpi_mpam_msc_
 		props[next_prop++] = PROPERTY_ENTRY_U32("pcc-channel",
 							tbl_msc->base_address);
 		props[next_prop++] = PROPERTY_ENTRY_U32("mpam-fb-msc-id",
-							tbl_msc->identifier);
+							tbl_msc->identifier -
+							tbl_msc->mpam_fb_offset);
 	}
 
 	acpi_mpam_parse_irqs(pdev, tbl_msc, res, &next_res);
