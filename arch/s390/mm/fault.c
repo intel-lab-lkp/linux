@@ -271,6 +271,7 @@ static void do_exception(struct pt_regs *regs, int access)
 	unsigned int flags;
 	vm_fault_t fault;
 	bool is_write;
+	bool vma_lock_retried = false;
 
 	/*
 	 * The instruction that caused the program check has
@@ -294,6 +295,7 @@ static void do_exception(struct pt_regs *regs, int access)
 		flags |= FAULT_FLAG_WRITE;
 	if (!(flags & FAULT_FLAG_USER))
 		goto lock_mmap;
+lock_vma:
 	vma = lock_vma_under_rcu(mm, address);
 	if (!vma)
 		goto lock_mmap;
@@ -317,6 +319,10 @@ static void do_exception(struct pt_regs *regs, int access)
 		if (!user_mode(regs))
 			handle_fault_error_nolock(regs, 0);
 		return;
+	}
+	if (!vma_lock_retried) {
+		vma_lock_retried = true;
+		goto lock_vma;
 	}
 lock_mmap:
 retry:
