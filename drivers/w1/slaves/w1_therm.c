@@ -1302,15 +1302,15 @@ static int read_scratchpad(struct w1_slave *sl, struct therm_info *info)
 					"w1_read_block(): returned %u instead of 9.\n",
 					nb_bytes_read);
 				ret = -EIO;
+			} else {
+				info->crc = w1_calc_crc8(info->rom, 8);
+
+				if (info->rom[8] == info->crc) {
+					info->verdict = 1;
+					ret = 0;
+				} else
+					ret = -EIO; /* CRC not checked */
 			}
-
-			info->crc = w1_calc_crc8(info->rom, 8);
-
-			if (info->rom[8] == info->crc) {
-				info->verdict = 1;
-				ret = 0;
-			} else
-				ret = -EIO; /* CRC not checked */
 		}
 
 	}
