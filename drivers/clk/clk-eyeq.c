@@ -513,21 +513,16 @@ static int eqc_probe(struct platform_device *pdev)
 	const struct eqc_match_data *data;
 	struct clk_hw_onecell_data *cells;
 	unsigned int i, clk_count;
-	struct resource *res;
 	void __iomem *base;
 	int ret;
 
+	base = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(base))
+		return PTR_ERR(base);
+
 	data = device_get_match_data(dev);
 	if (!data)
-		return 0; /* No clocks nor auxdevs, we are done. */
-
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res)
-		return -ENODEV;
-
-	base = ioremap(res->start, resource_size(res));
-	if (!base)
-		return -ENOMEM;
+		return 0; /* Early only clocks, stop here but keep resource reserved */
 
 	/* Init optional auxiliary devices. */
 	eqc_auxdev_create_optional(dev, base, data->reset_auxdev_name);
@@ -1175,6 +1170,7 @@ static const struct of_device_id eqc_match_table[] = {
 	{ .compatible = "mobileye,eyeq5-olb", .data = &eqc_eyeq5_match_data },
 	{ .compatible = "mobileye,eyeq6l-olb", .data = &eqc_eyeq6l_match_data },
 	{ .compatible = "mobileye,eyeq6lplus-olb", .data = &eqc_eyeq6lplus_match_data },
+	{ .compatible = "mobileye,eyeq6h-central-olb" /* no data, early only */ },
 	{ .compatible = "mobileye,eyeq6h-west-olb", .data = &eqc_eyeq6h_west_match_data },
 	{ .compatible = "mobileye,eyeq6h-east-olb", .data = &eqc_eyeq6h_east_match_data },
 	{ .compatible = "mobileye,eyeq6h-south-olb", .data = &eqc_eyeq6h_south_match_data },
