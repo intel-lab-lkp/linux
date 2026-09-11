@@ -170,11 +170,17 @@ struct cb_notify_add {
 	bool			na_last_entry;
 };
 
+struct cb_notify_rename {
+	struct cb_notify_remove	nrn_old_entry;
+	struct cb_notify_add	nrn_new_entry;
+};
+
 struct cb_notify_changes {
 	u32	notify_mask;
 	union {
 		struct cb_notify_remove notify_remove;
 		struct cb_notify_add	notify_add;
+		struct cb_notify_rename	notify_rename;
 	};
 };
 

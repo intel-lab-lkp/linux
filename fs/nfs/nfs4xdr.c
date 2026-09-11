@@ -2014,6 +2014,7 @@ encode_get_dir_delegation(struct xdr_stream *xdr, struct compound_hdr *hdr)
 	struct timespec64 ts = { 0, 0 };
 	u32 notifications[1] = { CB_NOTIFY4_REMOVE_ENTRY |
 				 CB_NOTIFY4_ADD_ENTRY |
+				 CB_NOTIFY4_RENAME_ENTRY |
 				 CB_NOTIFY4_GFLAG_EXTEND };
 	u32 child_attrs[1] = { FATTR4_WORD0_FSID | FATTR4_WORD0_FILEID |
 			       FATTR4_WORD0_TYPE | FATTR4_WORD0_FILEHANDLE };
