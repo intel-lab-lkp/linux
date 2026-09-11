@@ -3537,7 +3537,6 @@ void intel_get_m_n(struct intel_display *display,
 	m_n->tu = REG_FIELD_GET(TU_SIZE_MASK, intel_de_read(display, data_m_reg)) + 1;
 }
 
-static
 bool intel_display_can_bypass_m_n_limit(struct intel_display *display,
 					int m_n_ratio,
 					enum pipe pipe)
