@@ -1253,6 +1253,8 @@ patternProperties:
     description: Onion Corporation
   "^onnn,.*":
     description: ON Semiconductor Corp.
+  "^onspc,.*":
+    description: Smart Products Connection S.A.
   "^ontat,.*":
     description: On Tat Industrial Company
   "^opalkelly,.*":
