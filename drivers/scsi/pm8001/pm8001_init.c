@@ -1154,7 +1154,7 @@ static int pm8001_pci_probe(struct pci_dev *pdev,
 	pm8001_ha = pm8001_pci_alloc(pdev, ent, shost);
 	if (!pm8001_ha) {
 		rc = -ENOMEM;
-		goto err_out_free;
+		goto err_out_free_sas_ha;
 	}
 
 	PM8001_CHIP_DISP->chip_soft_rst(pm8001_ha);
@@ -1167,7 +1167,7 @@ static int pm8001_pci_probe(struct pci_dev *pdev,
 
 	rc = pm8001_init_ccb_tag(pm8001_ha);
 	if (rc)
-		goto err_out_enable;
+		goto err_out_chip;
 
 
 	PM8001_CHIP_DISP->chip_post_init(pm8001_ha);
@@ -1184,7 +1184,7 @@ static int pm8001_pci_probe(struct pci_dev *pdev,
 
 	rc = scsi_add_host(shost, &pdev->dev);
 	if (rc)
-		goto err_out_ha_free;
+		goto err_out_chip;
 
 	PM8001_CHIP_DISP->interrupt_enable(pm8001_ha, 0);
 	if (pm8001_ha->chip_id != chip_8001) {
@@ -1216,8 +1216,16 @@ static int pm8001_pci_probe(struct pci_dev *pdev,
 
 err_out_shost:
 	scsi_remove_host(pm8001_ha->shost);
+err_out_chip:
+	PM8001_CHIP_DISP->interrupt_disable(pm8001_ha, 0xFF);
+	PM8001_CHIP_DISP->chip_soft_rst(pm8001_ha);
 err_out_ha_free:
+	pm8001_free_irq(pm8001_ha);
+	pm8001_kill_tasklet(pm8001_ha);
 	pm8001_free(pm8001_ha);
+err_out_free_sas_ha:
+	kfree(sha->sas_phy);
+	kfree(sha->sas_port);
 err_out_free:
 	kfree(sha);
 err_out_free_host:
