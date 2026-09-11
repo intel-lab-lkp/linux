@@ -1226,6 +1226,8 @@ struct btrfs_ioctl_get_csums_args {
 #define BTRFS_IOC_QUOTA_RESCAN_STATUS _IOR(BTRFS_IOCTL_MAGIC, 45, \
 			       struct btrfs_ioctl_quota_rescan_args)
 #define BTRFS_IOC_QUOTA_RESCAN_WAIT _IO(BTRFS_IOCTL_MAGIC, 46)
+#define BTRFS_IOC_RENAME_DEV _IOR(BTRFS_IOCTL_MAGIC, 47, \
+				  struct btrfs_ioctl_vol_args)
 #define BTRFS_IOC_GET_FSLABEL 	FS_IOC_GETFSLABEL
 #define BTRFS_IOC_SET_FSLABEL	FS_IOC_SETFSLABEL
 #define BTRFS_IOC_GET_DEV_STATS _IOWR(BTRFS_IOCTL_MAGIC, 52, \

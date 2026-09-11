@@ -374,7 +374,7 @@ static int btrfs_parse_param(struct fs_context *fc, struct fs_parameter *param)
 		struct btrfs_device *device;
 
 		mutex_lock(&uuid_mutex);
-		device = btrfs_scan_one_device(param->string, false);
+		device = btrfs_scan_one_device(param->string, 0);
 		mutex_unlock(&uuid_mutex);
 		if (IS_ERR(device))
 			return PTR_ERR(device);
@@ -1834,10 +1834,10 @@ static int btrfs_get_tree_super(struct fs_context *fc)
 	mutex_lock(&uuid_mutex);
 
 	/*
-	 * With 'true' passed to btrfs_scan_one_device() (mount time) we expect
+	 * With BTRFS_SCAN_DEV_MOUNT passed to btrfs_scan_one_device() we expect
 	 * either a valid device or an error.
 	 */
-	device = btrfs_scan_one_device(fc->source, true);
+	device = btrfs_scan_one_device(fc->source, BTRFS_SCAN_DEV_MOUNT);
 	ASSERT(device != NULL);
 	if (IS_ERR(device)) {
 		mutex_unlock(&uuid_mutex);
@@ -2232,7 +2232,7 @@ static long btrfs_control_ioctl(struct file *file, unsigned int cmd,
 		 * Scanning outside of mount can return NULL which would turn
 		 * into 0 error code.
 		 */
-		device = btrfs_scan_one_device(vol->name, false);
+		device = btrfs_scan_one_device(vol->name, 0);
 		ret = PTR_ERR_OR_ZERO(device);
 		mutex_unlock(&uuid_mutex);
 		break;
@@ -2250,7 +2250,7 @@ static long btrfs_control_ioctl(struct file *file, unsigned int cmd,
 		 * Scanning outside of mount can return NULL which would turn
 		 * into 0 error code.
 		 */
-		device = btrfs_scan_one_device(vol->name, false);
+		device = btrfs_scan_one_device(vol->name, 0);
 		if (IS_ERR_OR_NULL(device)) {
 			mutex_unlock(&uuid_mutex);
 			ret = PTR_ERR_OR_ZERO(device);
@@ -2258,6 +2258,12 @@ static long btrfs_control_ioctl(struct file *file, unsigned int cmd,
 		}
 		ret = !(device->fs_devices->num_devices ==
 			device->fs_devices->total_devices);
+		mutex_unlock(&uuid_mutex);
+		break;
+	case BTRFS_IOC_RENAME_DEV:
+		mutex_lock(&uuid_mutex);
+		device = btrfs_scan_one_device(vol->name, BTRFS_SCAN_DEV_RENAME);
+		ret = PTR_ERR_OR_ZERO(device);
 		mutex_unlock(&uuid_mutex);
 		break;
 	case BTRFS_IOC_GET_SUPPORTED_FEATURES:
