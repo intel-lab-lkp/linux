@@ -37,6 +37,7 @@ static int jumbo_frm(struct stmmac_tx_queue *tx_q, struct sk_buff *skb,
 	len = nopaged_len - bmax;
 
 	if (nopaged_len > BUF_SIZE_8KiB) {
+		unsigned int first_entry = entry;
 
 		des2 = dma_map_single(priv->device, skb->data, bmax,
 				      DMA_TO_DEVICE);
@@ -62,8 +63,15 @@ static int jumbo_frm(struct stmmac_tx_queue *tx_q, struct sk_buff *skb,
 		des2 = dma_map_single(priv->device, skb->data + bmax, len,
 				      DMA_TO_DEVICE);
 		desc->des2 = cpu_to_le32(lower_32_bits(des2));
-		if (dma_mapping_error(priv->device, des2))
+		if (dma_mapping_error(priv->device, des2)) {
+			dma_unmap_single(priv->device,
+					 tx_q->tx_skbuff_dma[first_entry].buf,
+					 bmax, DMA_TO_DEVICE);
+			tx_q->tx_skbuff_dma[first_entry].buf = 0;
+			tx_q->tx_skbuff_dma[first_entry].len = 0;
+			tx_q->tx_skbuff_dma[first_entry].is_jumbo = false;
 			return -1;
+		}
 		tx_q->tx_skbuff_dma[entry].buf = des2;
 		tx_q->tx_skbuff_dma[entry].len = len;
 		tx_q->tx_skbuff_dma[entry].is_jumbo = true;
