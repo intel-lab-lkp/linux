@@ -343,25 +343,17 @@ static struct pci_dev *pci_iov_scan_device(struct pci_dev *dev, int id,
 	return virtfn;
 }
 
-int pci_iov_add_virtfn(struct pci_dev *dev, int id)
+static int __pci_iov_add_virtfn(struct pci_dev *dev, struct pci_bus *bus,
+				int id)
 {
-	struct pci_bus *bus;
 	struct pci_dev *virtfn;
 	struct resource *res;
 	int rc, i;
 	u64 size;
 
-	bus = virtfn_add_bus(dev->bus, pci_iov_virtfn_bus(dev, id));
-	if (!bus) {
-		rc = -ENOMEM;
-		goto failed;
-	}
-
 	virtfn = pci_iov_scan_device(dev, id, bus);
-	if (IS_ERR(virtfn)) {
-		rc = PTR_ERR(virtfn);
-		goto failed0;
-	}
+	if (IS_ERR(virtfn))
+		return PTR_ERR(virtfn);
 
 	virtfn->dev.parent = dev->dev.parent;
 	virtfn->multifunction = 0;
@@ -393,9 +385,22 @@ int pci_iov_add_virtfn(struct pci_dev *dev, int id)
 failed1:
 	pci_stop_and_remove_bus_device(virtfn);
 	pci_dev_put(dev);
-failed0:
-	virtfn_remove_bus(dev->bus, bus);
-failed:
+
+	return rc;
+}
+
+int pci_iov_add_virtfn(struct pci_dev *dev, int id)
+{
+	struct pci_bus *bus;
+	int rc;
+
+	bus = virtfn_add_bus(dev->bus, pci_iov_virtfn_bus(dev, id));
+	if (!bus)
+		return -ENOMEM;
+
+	rc = __pci_iov_add_virtfn(dev, bus, id);
+	if (rc)
+		virtfn_remove_bus(dev->bus, bus);
 
 	return rc;
 }
