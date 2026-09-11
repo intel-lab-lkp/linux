@@ -944,7 +944,7 @@ void intel_display_driver_pm_runtime_suspend_late(struct intel_display *display)
 		intel_hpd_poll_enable(display);
 }
 
-static void intel_display_driver_pm_runtime_clear_pme(struct intel_display *display)
+void intel_display_driver_pm_runtime_clear_pme(struct intel_display *display)
 {
 	intel_hpd_set_pme_capable(display, false);
 }

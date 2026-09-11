@@ -413,6 +413,15 @@ void xe_display_pm_runtime_resume(struct xe_device *xe)
 	intel_display_driver_pm_runtime_resume(display);
 }
 
+void xe_display_clear_pme_hpd(struct xe_device *xe)
+{
+	struct intel_display *display = xe->display;
+
+	if (!xe->info.probe_display)
+		return;
+
+	intel_display_driver_pm_runtime_clear_pme(display);
+}
 
 static void display_device_remove(struct drm_device *dev, void *arg)
 {

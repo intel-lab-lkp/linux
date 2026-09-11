@@ -49,6 +49,7 @@ void intel_display_driver_runtime_pm_disable(struct intel_display *display);
 void intel_display_driver_pm_runtime_suspend(struct intel_display *display);
 void intel_display_driver_pm_runtime_suspend_late(struct intel_display *display);
 void intel_display_driver_pm_runtime_resume_early(struct intel_display *display);
+void intel_display_driver_pm_runtime_clear_pme(struct intel_display *display);
 void intel_display_driver_pm_runtime_resume(struct intel_display *display);
 
 #endif /* __INTEL_DISPLAY_DRIVER_H__ */

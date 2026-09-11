@@ -663,6 +663,13 @@ int xe_pm_runtime_suspend(struct xe_device *xe)
 	return 0;
 
 out_resume:
+	/*
+	 * We need to explicitly clear the PME HPD flag in this error handler.
+	 * Normally this is set during early runtime suspend and cleared during
+	 * early runtime resume call.
+	 */
+	xe_display_clear_pme_hpd(xe);
+
 	xe_display_pm_runtime_resume(xe);
 	xe_pxp_pm_resume(xe->pxp);
 out:
