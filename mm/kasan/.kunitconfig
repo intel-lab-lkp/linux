@@ -1,0 +1,15 @@
+CONFIG_KUNIT=y
+CONFIG_KASAN=y
+CONFIG_KASAN_KUNIT_TEST=y
+
+# Additional dependencies.
+# CONFIG_KASAN_KUNIT_TEST depends on TRACEPOINTS, an invisible Kconfig
+# symbol with no prompt. CONFIG_FTRACE alone only unlocks the tracer
+# submenu; CONFIG_SCHED_TRACER is needed to actually select
+# GENERIC_TRACER -> TRACING -> TRACEPOINTS.
+CONFIG_FTRACE=y
+CONFIG_SCHED_TRACER=y
+
+# Prevent printk buffer overflows on serial consoles when running under
+# QEMU, since KASAN generates extensive reports across its test cases.
+CONFIG_LOG_BUF_SHIFT=20
