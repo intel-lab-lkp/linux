@@ -923,6 +923,46 @@ static bool file_sync_write(const struct file *file)
 	return false;
 }
 
+/*
+ * Do a single backwards pass waiting for ordered extents on the inode.
+ *
+ * Backwards is helpful because it avoids picking up concurrent appended OEs
+ * and the intent of the function is to wait on pre-existing OEs without going
+ * to the extreme of locking the ordered_tree and snapshotting its contents.
+ *
+ * This is only useful as an optimization for waiting for ordered extents outside
+ * locks. It DOES NOT ensure that the range is free of ordered extents.
+ *
+ * Returns -EIO if any waited on OE had the ORDERED_IOERR bit set and 0 otherwise.
+ */
+static int wait_existing_ordered_extents(struct btrfs_inode *inode)
+{
+	u64 orig_end = i_size_read(&inode->vfs_inode);
+	u64 end = orig_end;
+	int ret = 0;
+
+	while (true) {
+		struct btrfs_ordered_extent *ordered;
+
+		ordered = btrfs_lookup_first_ordered_extent(inode, end);
+		if (!ordered)
+			break;
+		if (ordered->file_offset > end) {
+			btrfs_put_ordered_extent(ordered);
+			break;
+		}
+		btrfs_start_ordered_extent(ordered);
+		end = ordered->file_offset;
+		if (test_bit(BTRFS_ORDERED_IOERR, &ordered->flags))
+			ret = -EIO;
+		btrfs_put_ordered_extent(ordered);
+		if (!end)
+			break;
+		end--;
+	}
+	return ret;
+}
+
 loff_t btrfs_remap_file_range(struct file *src_file, loff_t off,
 		struct file *dst_file, loff_t destoff, loff_t len,
 		unsigned int remap_flags)
@@ -937,6 +977,14 @@ loff_t btrfs_remap_file_range(struct file *src_file, loff_t off,
 
 	if (remap_flags & ~(REMAP_FILE_DEDUP | REMAP_FILE_ADVISORY))
 		return -EINVAL;
+
+	ret = filemap_flush(src_inode->vfs_inode.i_mapping);
+	if (ret < 0)
+		return ret;
+
+	ret = wait_existing_ordered_extents(src_inode);
+	if (ret < 0)
+		return ret;
 
 	if (same_inode) {
 		btrfs_inode_lock(src_inode, BTRFS_ILOCK_MMAP);
