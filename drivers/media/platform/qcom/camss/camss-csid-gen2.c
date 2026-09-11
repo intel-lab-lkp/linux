@@ -253,13 +253,8 @@ static void __csid_configure_testgen(struct csid_device *csid, u8 enable, u8 por
 	writel_relaxed(val, csid->base + CSID_TPG_CTRL);
 }
 
-static void __csid_configure_rdi_stream(struct csid_device *csid, u8 enable, u8 port, u8 vc)
+static void __csid_configure_rdi_stream(struct csid_device *csid, u8 enable, u8 port, u8 vc, u8 dt)
 {
-	/* Source pads matching RDI channels on hardware. Pad 1 -> RDI0, Pad 2 -> RDI1, etc. */
-	struct v4l2_mbus_framefmt *input_format = &csid->fmt[MSM_CSID_PAD_FIRST_SRC + port];
-	const struct csid_format_info *format = csid_get_fmt_entry(csid->res->formats->formats,
-								   csid->res->formats->nformats,
-								   input_format->code);
 	u32 val;
 
 	/*
@@ -281,7 +276,7 @@ static void __csid_configure_rdi_stream(struct csid_device *csid, u8 enable, u8 
 	val |= 1 << RDI_CFG0_TIMESTAMP_EN;
 	/* note: for non-RDI path, this should be format->decode_format */
 	val |= DECODE_FORMAT_PAYLOAD_ONLY << RDI_CFG0_DECODE_FORMAT;
-	val |= format->data_type << RDI_CFG0_DATA_TYPE;
+	val |= dt << RDI_CFG0_DATA_TYPE;
 	val |= vc << RDI_CFG0_VIRTUAL_CHANNEL;
 	val |= dt_id << RDI_CFG0_DT_ID;
 	writel_relaxed(val, csid->base + CSID_RDI_CFG0(port));
@@ -330,13 +325,58 @@ static void csid_configure_stream(struct csid_device *csid, u8 enable)
 	/* Loop through all enabled ports and configure a stream for each */
 	for (i = 0; i < MSM_CSID_MAX_SRC_STREAMS; i++)
 		if (csid->phy.en_vc & BIT(i)) {
+			/* Source pads match RDI channels: pad 1 -> RDI0, pad 2 -> RDI1, etc. */
+			struct v4l2_mbus_framefmt *input_format =
+				&csid->fmt[MSM_CSID_PAD_FIRST_SRC + i];
+			const struct csid_format_info *format =
+				csid_get_fmt_entry(csid->res->formats->formats,
+						   csid->res->formats->nformats,
+						   input_format->code);
+			u8 vc = 0;
+
 			if (tg->enabled)
 				__csid_configure_testgen(csid, enable, i, 0);
 
-			__csid_configure_rdi_stream(csid, enable, i, 0);
+			__csid_configure_rdi_stream(csid, enable, i, vc, format->data_type);
 			__csid_configure_rx(csid, &csid->phy, 0);
 			__csid_ctrl_rdi(csid, enable, i);
 		}
+}
+
+/*
+ * configure_rx - Configure the CSID Rx front-end
+ */
+static void csid_configure_rx(struct csid_device *csid)
+{
+	__csid_configure_rx(csid, &csid->phy, 0);
+}
+
+/*
+ * stream_id is used directly as the hardware RDI port index below. This
+ * assumes a 1:1 stream-to-port mapping and should be revisited once
+ * per-platform src_streams data (stream id -> hw pipe) is added.
+ */
+static void csid_enable_stream(struct csid_device *csid, u32 stream_id, u8 vc, u8 dt)
+{
+	struct csid_testgen_config *tg = &csid->testgen;
+
+	if (tg->enabled)
+		__csid_configure_testgen(csid, 1, stream_id, vc);
+
+	__csid_configure_rdi_stream(csid, 1, stream_id, vc, dt);
+	__csid_ctrl_rdi(csid, 1, stream_id);
+}
+
+static void csid_disable_stream(struct csid_device *csid, u32 stream_id)
+{
+	struct csid_testgen_config *tg = &csid->testgen;
+
+	__csid_ctrl_rdi(csid, 0, stream_id);
+
+	if (tg->enabled)
+		__csid_configure_testgen(csid, 0, stream_id, 0);
+
+	__csid_configure_rdi_stream(csid, 0, stream_id, 0, 0);
 }
 
 static int csid_configure_testgen_pattern(struct csid_device *csid, s32 val)
@@ -425,6 +465,9 @@ static void csid_subdev_init(struct csid_device *csid)
 const struct csid_hw_ops csid_ops_gen2 = {
 	.configure_stream = csid_configure_stream,
 	.configure_testgen_pattern = csid_configure_testgen_pattern,
+	.configure_rx = csid_configure_rx,
+	.enable_stream = csid_enable_stream,
+	.disable_stream = csid_disable_stream,
 	.hw_version = csid_hw_version,
 	.isr = csid_isr,
 	.reset = csid_reset,
