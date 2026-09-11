@@ -6,6 +6,8 @@
 #ifndef	__XFS_TRANS_H__
 #define	__XFS_TRANS_H__
 
+#include <linux/lockref.h>
+
 /* kernel only transaction subsystem defines */
 
 struct xlog;
@@ -46,6 +48,8 @@ struct xfs_log_item {
 	struct xfs_log_vec		*li_lv_shadow;	/* standby vector */
 	xfs_csn_t			li_seq;		/* CIL commit seq */
 	uint32_t			li_order_id;	/* CIL commit order */
+
+	struct lockref			li_ref;		/* log item reference */
 };
 
 /*
@@ -110,6 +114,9 @@ xlog_item_is_intent_done(struct xfs_log_item *lip)
 
 void	xfs_log_item_init(struct xfs_mount *mp, struct xfs_log_item *item,
 			  int type, const struct xfs_item_ops *ops);
+void	xfs_log_item_get(struct xfs_log_item *lip);
+bool	xfs_log_item_put(struct xfs_log_item *lip);
+bool	xfs_log_item_get_safe(struct xfs_log_item *lip);
 
 /*
  * Return values for the iop_push() routines.

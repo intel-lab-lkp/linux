@@ -1039,10 +1039,48 @@ xfs_log_item_init(
 	item->li_ops = ops;
 	item->li_lv = NULL;
 
+	/*
+	 * Refrain from using lockref_init as BLI refcount should be
+	 * initialized to 0 and lockref_init initializes refcount to 1
+	 */
+	spin_lock_init(&item->li_ref.lock);
+	item->li_ref.count = 0;
 	INIT_LIST_HEAD(&item->li_ail);
 	INIT_LIST_HEAD(&item->li_cil);
 	INIT_LIST_HEAD(&item->li_bio_list);
 	INIT_LIST_HEAD(&item->li_trans);
+}
+
+/*
+ * Only called when the caller knows the object is alive
+ */
+void
+xfs_log_item_get(
+	struct xfs_log_item	*lip)
+{
+	lockref_get(&lip->li_ref);
+}
+
+/*
+ * Drop a log item reference when called. Returns true if last
+ * ref with lock held. Otherwise false.
+ */
+bool
+xfs_log_item_put(
+	struct xfs_log_item	*lip)
+{
+	return lockref_put_or_lock(&lip->li_ref);
+}
+
+/*
+ * Used to lookup if item may be dying. Returns true is the object
+ * is not dead, false otherwise.
+ */
+bool
+xfs_log_item_get_safe(
+	struct xfs_log_item	*lip)
+{
+	return lockref_get_not_dead(&lip->li_ref);
 }
 
 /*
