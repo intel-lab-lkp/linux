@@ -126,10 +126,6 @@ void mce_track_storm(struct mce *mce)
 
 	local_irq_save(flags);
 
-	/* No tracking needed for banks that do not support CMCI */
-	if (storm->banks[mce->bank].poll_only)
-		goto out;
-
 	/*
 	 * When a bank is in storm mode it is polled once per second and
 	 * the history mask will record about the last minute of poll results.

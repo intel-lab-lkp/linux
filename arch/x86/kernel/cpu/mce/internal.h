@@ -84,13 +84,11 @@ static inline u32  mce_get_apei_thr_limit(void) { return 0; }
  *
  * timestamp:		Last time (in jiffies) that the bank was polled.
  * in_storm_mode:	Is this bank in storm mode?
- * poll_only:		Bank does not support CMCI, skip storm tracking.
  */
 struct storm_bank {
 	u64 history;
 	u64 timestamp;
 	bool in_storm_mode;
-	bool poll_only;
 };
 
 #define NUM_HISTORY_BITS (sizeof(u64) * BITS_PER_BYTE)
