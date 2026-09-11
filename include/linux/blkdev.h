@@ -1303,7 +1303,7 @@ static inline unsigned int bdev_max_segments(struct block_device *bdev)
 static inline unsigned short bdev_max_write_streams(struct block_device *bdev)
 {
 	if (bdev_is_partition(bdev))
-		return 0;
+		return bdev->bd_nr_write_streams;
 	return bdev_limits(bdev)->max_write_streams;
 }
 

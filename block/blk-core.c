@@ -616,7 +616,8 @@ static inline int bio_check_eod(struct bio *bio)
 }
 
 /*
- * Remap block n of partition p to block n+start(p) of the disk.
+ * Remap block n of partition p to block n+start(p) of the disk, and the
+ * write streams of partition p to the disk write streams reserved for them.
  */
 static int blk_partition_remap(struct bio *bio)
 {
@@ -629,6 +630,13 @@ static int blk_partition_remap(struct bio *bio)
 		trace_block_bio_remap(bio, p->bd_dev,
 				      bio->bi_iter.bi_sector -
 				      p->bd_start_sect);
+	}
+	if (bio->bi_write_stream && bio_op(bio) == REQ_OP_WRITE) {
+		if (unlikely(bio->bi_write_stream > p->bd_nr_write_streams))
+			return -EINVAL;
+
+		bio->bi_write_stream =
+			p->bd_write_stream_map[bio->bi_write_stream - 1];
 	}
 	bio_set_flag(bio, BIO_REMAPPED);
 	return 0;

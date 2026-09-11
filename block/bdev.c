@@ -438,6 +438,7 @@ static void bdev_free_inode(struct inode *inode)
 
 	free_percpu(bdev->bd_stats);
 	kfree(bdev->bd_meta_info);
+	kfree(bdev->bd_write_stream_map);
 	security_bdev_free(bdev);
 
 	if (!bdev_is_partition(bdev)) {

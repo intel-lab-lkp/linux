@@ -71,6 +71,9 @@ struct block_device {
 
 	struct partition_meta_info *bd_meta_info;
 	int			bd_writers;
+	/* partition write stream s is disk stream bd_write_stream_map[s - 1] */
+	u8			bd_nr_write_streams;
+	u8			*bd_write_stream_map;
 #ifdef CONFIG_SECURITY
 	void			*bd_security;
 #endif
