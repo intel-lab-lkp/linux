@@ -5,6 +5,7 @@
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
+#include <drm/drm_blend.h>
 #include <drm/drm_vblank.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
@@ -201,6 +202,11 @@ int dcss_crtc_init(struct dcss_crtc *crtc, struct drm_device *drm)
 		dev_err(dcss->dev, "failed to init crtc\n");
 		return ret;
 	}
+
+	drm_plane_create_alpha_property(&crtc->plane[0]->base);
+	drm_plane_create_blend_mode_property(&crtc->plane[0]->base,
+					     BIT(DRM_MODE_BLEND_PIXEL_NONE) |
+					     BIT(DRM_MODE_BLEND_COVERAGE));
 
 	crtc->irq = platform_get_irq_byname(pdev, "vblank");
 	if (crtc->irq < 0)

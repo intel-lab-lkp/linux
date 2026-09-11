@@ -209,6 +209,14 @@ static int dcss_plane_atomic_check(struct drm_plane *plane,
 		return -EINVAL;
 	}
 
+	/* DCSS supports either per-pixel or global alpha. Not both. */
+	if (new_plane_state->fb->format->has_alpha &&
+	    new_plane_state->pixel_blend_mode != DRM_MODE_BLEND_PIXEL_NONE &&
+	    new_plane_state->alpha != DRM_BLEND_ALPHA_OPAQUE) {
+		DRM_DEBUG_KMS("Both per-pixel and global alpha not supported.\n");
+		return -EINVAL;
+	}
+
 	return 0;
 }
 
@@ -263,7 +271,9 @@ static bool dcss_plane_needs_setup(struct drm_plane_state *state,
 	       fb->format->format != old_fb->format->format ||
 	       fb->modifier  != old_fb->modifier ||
 	       state->rotation != old_state->rotation ||
-	       state->scaling_filter != old_state->scaling_filter;
+	       state->scaling_filter != old_state->scaling_filter ||
+	       state->alpha != old_state->alpha ||
+	       state->pixel_blend_mode != old_state->pixel_blend_mode;
 }
 
 static void dcss_plane_atomic_update(struct drm_plane *plane,
@@ -336,7 +346,8 @@ static void dcss_plane_atomic_update(struct drm_plane *plane,
 	dcss_dtg_plane_pos_set(dcss->dtg, dcss_plane->ch_num,
 			       dst.x1, dst.y1, dst_w, dst_h);
 	dcss_dtg_plane_alpha_set(dcss->dtg, dcss_plane->ch_num,
-				 fb->format, new_state->alpha >> 8);
+				 fb->format, new_state->alpha >> 8,
+				 new_state->pixel_blend_mode);
 
 	if (!dcss_plane->ch_num && (new_state->alpha >> 8) == 0)
 		enable = false;
