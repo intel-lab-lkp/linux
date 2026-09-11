@@ -10,7 +10,6 @@
 
 struct idpf_adapter;
 struct idpf_netdev_priv;
-struct idpf_vec_regs;
 struct idpf_vport;
 struct idpf_vport_max_q;
 struct idpf_vport_config;
@@ -21,8 +20,6 @@ void idpf_deinit_dflt_mbx(struct idpf_adapter *adapter);
 int idpf_vc_core_init(struct idpf_adapter *adapter);
 void idpf_vc_core_deinit(struct idpf_adapter *adapter);
 
-int idpf_get_reg_intr_vecs(struct idpf_adapter *adapter,
-			   struct idpf_vec_regs *reg_vals, int num_vecs);
 int idpf_queue_reg_init(struct idpf_vport *vport,
 			struct idpf_q_vec_rsrc *rsrc,
 			struct idpf_queue_id_reg_info *chunks);
@@ -129,9 +126,6 @@ int idpf_send_delete_queues_msg(struct idpf_adapter *adapter,
 
 int idpf_vport_alloc_vec_indexes(struct idpf_vport *vport,
 				 struct idpf_q_vec_rsrc *rsrc);
-int idpf_get_vec_ids(struct idpf_adapter *adapter,
-		     u16 *vecids, int num_vecids,
-		     struct virtchnl2_vector_chunks *chunks);
 int idpf_send_alloc_vectors_msg(struct idpf_adapter *adapter, u16 num_vectors);
 int idpf_send_dealloc_vectors_msg(struct idpf_adapter *adapter);
 int idpf_send_map_unmap_queue_vector_msg(struct idpf_adapter *adapter,
