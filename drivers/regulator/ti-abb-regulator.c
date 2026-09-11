@@ -751,7 +751,6 @@ static int ti_abb_probe(struct platform_device *pdev)
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, pname);
 	if (!res) {
 		dev_dbg(dev, "Missing '%s' IO resource\n", pname);
-		ret = -ENODEV;
 		goto skip_opt;
 	}
 
@@ -770,7 +769,6 @@ static int ti_abb_probe(struct platform_device *pdev)
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, pname);
 	if (!res) {
 		dev_dbg(dev, "Missing '%s' IO resource\n", pname);
-		ret = -ENODEV;
 		goto skip_opt;
 	}
 	abb->ldo_base = devm_ioremap_resource(dev, res);
