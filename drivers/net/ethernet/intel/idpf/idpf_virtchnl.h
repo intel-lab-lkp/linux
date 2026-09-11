@@ -124,8 +124,7 @@ int idpf_send_delete_queues_msg(struct idpf_adapter *adapter,
 				struct idpf_queue_id_reg_info *chunks,
 				u32 vport_id);
 
-int idpf_vport_alloc_vec_indexes(struct idpf_vport *vport,
-				 struct idpf_q_vec_rsrc *rsrc);
+void idpf_vport_set_num_q_vectors(struct idpf_q_vec_rsrc *rsrc, u16 xdpqs);
 int idpf_send_alloc_vectors_msg(struct idpf_adapter *adapter, u16 num_vectors);
 int idpf_send_dealloc_vectors_msg(struct idpf_adapter *adapter);
 int idpf_send_map_unmap_queue_vector_msg(struct idpf_adapter *adapter,

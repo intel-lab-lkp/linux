@@ -396,14 +396,14 @@ idpf_idc_init_msix_data(struct idpf_adapter *adapter)
 	struct iidc_rdma_core_dev_info *cdev_info;
 	struct iidc_rdma_priv_dev_info *privd;
 
-	if (!adapter->rdma_msix_entries)
+	if (!adapter->rdma_irq.entries)
 		return;
 
 	cdev_info = adapter->cdev_info;
 	privd = cdev_info->iidc_priv;
 
-	privd->msix_entries = adapter->rdma_msix_entries;
-	privd->msix_count = adapter->num_rdma_msix_entries;
+	privd->msix_entries = adapter->rdma_irq.entries;
+	privd->msix_count = adapter->rdma_irq.num;
 }
 
 /**

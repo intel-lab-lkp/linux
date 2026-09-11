@@ -8,6 +8,7 @@ config IDPF
 	select DIMLIB
 	select LIBIE_CP
 	select LIBETH_XDP
+	select LIBIE_IRQ
 	help
 	  This driver supports Intel(R) Infrastructure Data Path Function
 	  devices.
