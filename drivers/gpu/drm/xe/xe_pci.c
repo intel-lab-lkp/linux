@@ -1368,10 +1368,13 @@ static int xe_pci_runtime_suspend(struct device *dev)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
 	struct xe_device *xe = pdev_to_xe_device(pdev);
+	unsigned int flags;
 	int err;
 
+	flags = memalloc_noreclaim_save();
 	xe->pme.enabled = xe->pme.capable && !xe->d3cold.allowed &&
 			  pci_enable_wake(pdev, PCI_D3hot, true) == 0;
+	memalloc_noreclaim_restore(flags);
 
 	/*
 	 * We hold an additional reference to the runtime PM to keep PF in D0
@@ -1385,7 +1388,9 @@ static int xe_pci_runtime_suspend(struct device *dev)
 	err = xe_pm_runtime_suspend(xe);
 	if (err) {
 		if (xe->pme.enabled) {
+			flags = memalloc_noreclaim_save();
 			pci_enable_wake(pdev, PCI_D3hot, false);
+			memalloc_noreclaim_restore(flags);
 			xe->pme.enabled = false;
 		}
 
