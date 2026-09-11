@@ -74,12 +74,55 @@ struct csid_phy_config {
 
 struct csid_device;
 
+/*
+ * struct csid_hw_ops - CSID hardware version specific operations
+ *
+ * configure_stream() is the legacy (non-streams-API) path and is mutually
+ * exclusive with enable_stream()/disable_stream() - a given CSID instance
+ * uses one family or the other, chosen by streams_enable.
+ *
+ * stream_id, as passed to enable_stream()/disable_stream(), is a hardware
+ * RDI/PIX port index in [0, MSM_CSID_MAX_SRC_STREAMS). It is currently
+ * always equal to pad - MSM_CSID_PAD_FIRST_SRC (multi-pad, 1:1
+ * pad-to-port mapping).
+ *
+ * configure_rx() is called once, on the transition from zero to non-zero
+ * active sink streams, strictly before the first enable_stream() call.
+ * enable_stream()/disable_stream() calls are always made under the
+ * subdev's active-state lock (core-enforced via
+ * v4l2_subdev_enable_streams()/disable_streams()), so hw_ops
+ * implementations don't need their own serialization.
+ */
 struct csid_hw_ops {
 	/*
 	 * configure_stream - Configures and starts CSID input stream
 	 * @csid: CSID device
 	 */
 	void (*configure_stream)(struct csid_device *csid, u8 enable);
+
+	/*
+	 * configure_rx - Configure the CSID Rx front-end
+	 * @csid: CSID device
+	 *
+	 * Called once, when the first stream is enabled.
+	 */
+	void (*configure_rx)(struct csid_device *csid);
+
+	/*
+	 * enable_stream - Enable a single CSID output stream
+	 * @csid: CSID device
+	 * @stream_id: stream id to enable
+	 * @vc: virtual channel to program
+	 * @dt: data type to program
+	 */
+	void (*enable_stream)(struct csid_device *csid, u32 stream_id, u8 vc, u8 dt);
+
+	/*
+	 * disable_stream - Disable a single CSID output stream
+	 * @csid: CSID device
+	 * @stream_id: stream id to disable
+	 */
+	void (*disable_stream)(struct csid_device *csid, u32 stream_id);
 
 	/*
 	 * configure_testgen_pattern - Validates and configures output pattern mode
