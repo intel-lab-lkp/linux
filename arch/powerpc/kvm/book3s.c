@@ -401,17 +401,19 @@ int kvmppc_core_prepare_to_enter(struct kvm_vcpu *vcpu)
 	if (vcpu->arch.pending_exceptions)
 		printk(KERN_EMERG "KVM: Check pending: %lx\n", vcpu->arch.pending_exceptions);
 #endif
-	priority = __ffs(*pending);
-	while (priority < BOOK3S_IRQPRIO_MAX) {
-		if (kvmppc_book3s_irqprio_deliver(vcpu, priority) &&
-		    clear_irqprio(vcpu, priority)) {
-			clear_bit(priority, &vcpu->arch.pending_exceptions);
-			break;
-		}
+	if (*pending) {
+		priority = __ffs(*pending);
+		while (priority < BOOK3S_IRQPRIO_MAX) {
+			if (kvmppc_book3s_irqprio_deliver(vcpu, priority) &&
+			    clear_irqprio(vcpu, priority)) {
+				clear_bit(priority, &vcpu->arch.pending_exceptions);
+				break;
+			}
 
-		priority = find_next_bit(pending,
-					 BITS_PER_BYTE * sizeof(*pending),
-					 priority + 1);
+			priority = find_next_bit(pending,
+						 BITS_PER_BYTE * sizeof(*pending),
+						 priority + 1);
+		}
 	}
 
 	/* Tell the guest about our interrupt status */
