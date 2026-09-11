@@ -5,8 +5,19 @@
 #define _IXD_H_
 
 #include <linux/net/intel/libie/controlq.h>
+#include <linux/net/intel/libie/irq.h>
 
 #define IXD_INIT_TASK_DELAY_JIFFIES	msecs_to_jiffies(500)
+
+/**
+ * enum ixd_flags - Whole device flags
+ * @IXD_MB_INTR_MODE: Mailbox in interrupt mode
+ * @IXD_FLAGS_NBITS: Must be last
+ */
+enum ixd_flags {
+	IXD_MB_INTR_MODE,
+	IXD_FLAGS_NBITS,
+};
 
 /**
  * struct ixd_adapter - Data structure representing a CPF
@@ -24,6 +35,11 @@
  * @vc_ver.major: Negotiated major virtchnl version
  * @vc_ver.minor: Negotiated minor virtchnl version
  * @caps: Negotiated virtchnl capabilities
+ * @mb_irq: index and virq to track mailbox
+ * @irq: libie irq for interrupts management
+ * @mb_dyn_ctl: mailbox dynamic control register address
+ * @oicr_ena: direct OICR enable register address
+ * @flags: look at enum ixd_flags for more details
  */
 struct ixd_adapter {
 	struct libie_ctlq_ctx cp_ctx;
@@ -42,6 +58,11 @@ struct ixd_adapter {
 		u32 minor;
 	} vc_ver;
 	struct virtchnl2_get_capabilities caps;
+	struct msi_map mb_irq;
+	struct libie_irq irq;
+	void __iomem *mb_dyn_ctl;
+	void __iomem *oicr_ena;
+	DECLARE_BITMAP(flags, IXD_FLAGS_NBITS);
 };
 
 /**
@@ -55,6 +76,11 @@ static inline struct device *ixd_to_dev(struct ixd_adapter *adapter)
 	return &adapter->cp_ctx.mmio_info.pdev->dev;
 }
 
+static inline struct pci_dev *ixd_to_pdev(struct ixd_adapter *adapter)
+{
+	return adapter->cp_ctx.mmio_info.pdev;
+}
+
 void ixd_ctlq_reg_init(struct ixd_adapter *adapter,
 		       struct libie_ctlq_reg *ctlq_reg_tx,
 		       struct libie_ctlq_reg *ctlq_reg_rx);
@@ -66,5 +92,7 @@ void ixd_deinit_dflt_mbx(struct ixd_adapter *adapter);
 int ixd_iomap_running_regions(struct ixd_adapter *adapter);
 bool ixd_iomap_is_not_start_region(struct libie_mmio_info *info,
 				   struct libie_pci_mmio_region *reg);
+void ixd_deinit_interrupts(struct ixd_adapter *adapter);
+void ixd_mailbox_irq_enable(struct ixd_adapter *adapter);
 
 #endif /* _IXD_H_ */
