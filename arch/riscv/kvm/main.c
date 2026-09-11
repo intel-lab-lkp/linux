@@ -16,7 +16,7 @@
 #include <asm/kvm_nacl.h>
 #include <asm/sbi.h>
 #include <asm/kvm_vcpu_vector.h>
-
+#include <asm/kvm_vmid.h>
 static DEFINE_PER_CPU(bool, kvm_riscv_virtualization_enabled);
 
 DEFINE_STATIC_KEY_FALSE(kvm_riscv_vsstage_tlb_no_gpa);
@@ -84,6 +84,7 @@ int kvm_arch_enable_virtualization_cpu(void)
 
 void kvm_arch_disable_virtualization_cpu(void)
 {
+	kvm_riscv_gstage_vmid_cpu_invalidate();
 	kvm_riscv_aia_disable();
 	kvm_riscv_csr_cleanup();
 	kvm_riscv_nacl_disable();
@@ -112,6 +113,7 @@ static int kvm_riscv_cpu_pm_notifier(struct notifier_block *self, unsigned long 
 		 * is enabled on this CPU.
 		 */
 		if (__this_cpu_read(kvm_riscv_virtualization_enabled)) {
+			kvm_riscv_gstage_vmid_cpu_invalidate();
 			kvm_riscv_aia_pm_enter();
 			kvm_riscv_csr_cleanup();
 		}
@@ -130,6 +132,7 @@ static struct notifier_block kvm_riscv_cpu_pm_nb = {
 static void kvm_riscv_teardown(void)
 {
 	kvm_riscv_aia_exit();
+	kvm_riscv_gstage_vmid_alloc_free();
 	kvm_riscv_nacl_exit();
 	kvm_riscv_v_exit();
 	kvm_unregister_perf_callbacks();
@@ -181,8 +184,15 @@ static int __init riscv_kvm_init(void)
 
 	kvm_riscv_gstage_vmid_detect();
 
+	rc = kvm_riscv_gstage_vmid_alloc_init();
+	if (rc) {
+		kvm_riscv_nacl_exit();
+		return rc;
+	}
+
 	rc = kvm_riscv_aia_init();
 	if (rc && rc != -ENODEV) {
+		kvm_riscv_gstage_vmid_alloc_free();
 		kvm_riscv_nacl_exit();
 		return rc;
 	}

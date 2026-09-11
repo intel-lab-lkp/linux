@@ -16,6 +16,7 @@ int kvm_riscv_mmu_map(struct kvm_vcpu *vcpu, struct kvm_memory_slot *memslot,
 		      struct kvm_gstage_mapping *out_map);
 int kvm_riscv_mmu_alloc_pgd(struct kvm *kvm);
 void kvm_riscv_mmu_free_pgd(struct kvm *kvm);
+void kvm_riscv_mmu_update_hgatp_vmid(struct kvm_vcpu *vcpu, u64 vmid);
 void kvm_riscv_mmu_update_hgatp(struct kvm_vcpu *vcpu);
 
 #endif

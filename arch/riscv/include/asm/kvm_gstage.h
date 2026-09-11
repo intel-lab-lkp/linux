@@ -8,7 +8,7 @@
 #define __RISCV_KVM_GSTAGE_H_
 
 #include <linux/kvm_types.h>
-
+#include <asm/kvm_vmid.h>
 struct kvm_gstage {
 	struct kvm *kvm;
 	unsigned long flags;
@@ -108,7 +108,8 @@ static inline void kvm_riscv_gstage_init(struct kvm_gstage *gstage, struct kvm *
 {
 	gstage->kvm = kvm;
 	gstage->flags = 0;
-	gstage->vmid = READ_ONCE(kvm->arch.vmid.vmid);
+	gstage->vmid =
+		kvm_riscv_gstage_vmid_hwid(atomic64_read(&kvm->arch.vmid.id));
 	gstage->pgd = kvm->arch.pgd;
 	gstage->pgd_levels = kvm->arch.pgd_levels;
 }

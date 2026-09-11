@@ -15,7 +15,7 @@
 #include <linux/sched/signal.h>
 #include <asm/kvm_mmu.h>
 #include <asm/kvm_nacl.h>
-
+#include <asm/kvm_vmid.h>
 static bool __read_mostly eager_page_split = true;
 module_param(eager_page_split, bool, 0644);
 
@@ -796,16 +796,23 @@ void kvm_riscv_mmu_free_pgd(struct kvm *kvm)
 	kvm_mmu_free_memory_cache(&kvm->arch.pgd_split_page_cache);
 }
 
-void kvm_riscv_mmu_update_hgatp(struct kvm_vcpu *vcpu)
+void kvm_riscv_mmu_update_hgatp_vmid(struct kvm_vcpu *vcpu, u64 vmid)
 {
 	struct kvm_arch *ka = &vcpu->kvm->arch;
 	unsigned long hgatp = kvm_riscv_gstage_mode(ka->pgd_levels)
 			      << HGATP_MODE_SHIFT;
 
-	hgatp |= (READ_ONCE(ka->vmid.vmid) << HGATP_VMID_SHIFT) & HGATP_VMID;
+	hgatp |= (kvm_riscv_gstage_vmid_hwid(vmid) << HGATP_VMID_SHIFT) & HGATP_VMID;
 	hgatp |= (ka->pgd_phys >> PAGE_SHIFT) & HGATP_PPN;
 
 	ncsr_write(CSR_HGATP, hgatp);
+}
+
+void kvm_riscv_mmu_update_hgatp(struct kvm_vcpu *vcpu)
+{
+	u64 vmid = atomic64_read(&vcpu->kvm->arch.vmid.id);
+
+	kvm_riscv_mmu_update_hgatp_vmid(vcpu, vmid);
 
 	if (!kvm_riscv_gstage_vmid_bits())
 		kvm_riscv_local_hfence_gvma_all();
