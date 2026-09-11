@@ -279,6 +279,7 @@ struct nfs_server {
 	void (*destroy)(struct nfs_server *);
 
 	atomic_t active; /* Keep trace of any activity to this server */
+	struct work_struct	deactivate_work; /* deferred final deactivate_super() */
 
 	/* mountd-related mount options */
 	struct sockaddr_storage	mountd_address;
