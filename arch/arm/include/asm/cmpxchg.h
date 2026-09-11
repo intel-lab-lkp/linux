@@ -167,6 +167,9 @@ static inline unsigned long __cmpxchg(volatile void *ptr, unsigned long old,
 	case 1:
 		oldval = cmpxchg_emu_u8((volatile u8 *)ptr, old, new);
 		break;
+	case 2:
+		oldval = cmpxchg_emu_u16((volatile u16 *)ptr, old, new);
+		break;
 #else /* min ARCH > ARMv6 */
 	case 1:
 		do {
