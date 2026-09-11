@@ -181,15 +181,17 @@ static bool cmci_skip_bank(int bank, u64 *val)
 		return true;
 
 	/* Skip banks in firmware first mode */
-	if (test_bit(bank, mce_banks_ce_disabled))
+	if (test_bit(bank, mce_banks_ce_disabled)) {
+		clear_bit(bank, this_cpu_ptr(mce_poll_banks));
 		return true;
+	}
 
 	rdmsrq(MSR_IA32_MCx_CTL2(bank), *val);
 
 	/* Already owned by someone else? */
 	if (*val & MCI_CTL2_CMCI_EN) {
 		clear_bit(bank, owned);
-		__clear_bit(bank, this_cpu_ptr(mce_poll_banks));
+		clear_bit(bank, this_cpu_ptr(mce_poll_banks));
 		return true;
 	}
 
