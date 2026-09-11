@@ -4621,7 +4621,7 @@ int ipv6_chk_rpl_srh_loop(struct net *net, const struct in6_addr *segs,
 		}
 
 		if (hash_found) {
-			if (found > 1 && separated) {
+			if (found && separated) {
 				ret = 1;
 				break;
 			}
