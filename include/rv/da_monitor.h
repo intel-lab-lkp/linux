@@ -16,6 +16,7 @@
 
 #include <rv/automata.h>
 #include <linux/rv.h>
+#include <rv/edge_stat.h>
 #include <linux/stringify.h>
 #include <linux/bug.h>
 #include <linux/sched.h>
@@ -112,7 +113,7 @@ static inline void da_monitor_reset(struct da_monitor *da_mon)
  */
 static inline void da_monitor_start(struct da_monitor *da_mon)
 {
-	da_mon->curr_state = model_get_initial_state();
+	da_mon->curr_state = da_state_entered(model_get_initial_state());
 	da_monitor_init_hook(da_mon);
 	/* Pairs with smp_load_acquire in da_monitoring(). */
 	smp_store_release(&da_mon->monitoring, 1);
@@ -275,6 +276,11 @@ static inline void da_monitor_reset_state_all(void)
  */
 static inline int da_monitor_init(void)
 {
+	int retval = rv_edge_stats_create(rv_this.root_d);
+
+	if (retval)
+		return retval;
+
 	da_monitor_reset_state_all();
 	return 0;
 }
@@ -286,6 +292,7 @@ static inline void da_monitor_destroy(void)
 {
 	da_monitor_reset_all();
 	da_monitor_sync_hook();
+	rv_edge_stats_remove();
 }
 
 #ifndef da_implicit_guard
@@ -683,9 +690,11 @@ static inline void da_trace_error(struct da_monitor *da_mon,
 static inline bool da_event(struct da_monitor *da_mon, enum events event, da_id_type id)
 {
 	enum states curr_state, next_state;
+	da_state_t old;
 
-	curr_state = READ_ONCE(da_mon->curr_state);
+	old = READ_ONCE(da_mon->curr_state);
 	for (int i = 0; i < MAX_DA_RETRY_RACING_EVENTS; i++) {
+		curr_state = da_state_of(old);
 		next_state = model_get_next_state(curr_state, event);
 		if (next_state == INVALID_STATE) {
 			react(curr_state, event);
@@ -693,7 +702,8 @@ static inline bool da_event(struct da_monitor *da_mon, enum events event, da_id_
 				       model_get_event_name(event), id);
 			return false;
 		}
-		if (likely(try_cmpxchg(&da_mon->curr_state, &curr_state, next_state))) {
+		if (likely(da_state_try_commit(&da_mon->curr_state, &old,
+					       next_state, event))) {
 			if (!da_monitor_event_hook(da_mon, curr_state, event, next_state, id))
 				return false;
 			da_trace_event(da_mon, model_get_state_name(curr_state),

@@ -312,7 +312,7 @@ static inline void __ha_monitor_timer_callback(struct ha_monitor *ha_mon)
 	if (unlikely(READ_ONCE(ha_mon_destroying)))
 		return;
 	/* Ensure consistent curr_state if we race with da_monitor_reset */
-	curr_state = smp_load_acquire(&ha_mon->da_mon.curr_state);
+	curr_state = da_state_of(smp_load_acquire(&ha_mon->da_mon.curr_state));
 	if (unlikely(!da_monitor_handling_event(&ha_mon->da_mon)))
 		return;
 

@@ -21,12 +21,19 @@
 #include <linux/list.h>
 #include <linux/types.h>
 
+/* Edge statistics pack the state and its entry timestamp into one word. */
+#ifdef CONFIG_RV_EDGE_STAT
+#define da_state_t	unsigned long
+#else
+#define da_state_t	unsigned int
+#endif
+
 /*
  * Deterministic automaton per-object variables.
  */
 struct da_monitor {
 	bool		monitoring;
-	unsigned int	curr_state;
+	da_state_t	curr_state;
 };
 
 #ifdef CONFIG_RV_LTL_MONITOR
