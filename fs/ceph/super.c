@@ -821,7 +821,11 @@ static struct ceph_fs_client *create_fs_client(struct ceph_mount_options *fsopt,
 					struct ceph_options *opt)
 {
 	struct ceph_fs_client *fsc;
-	int err;
+	int err, num_mon;
+
+	num_mon = opt->num_mon;
+	if (num_mon == 0 || num_mon > CEPH_MAX_MON)
+		return ERR_PTR(-EINVAL);
 
 	fsc = kzalloc_obj(*fsc);
 	if (!fsc) {
