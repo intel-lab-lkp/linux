@@ -2913,7 +2913,7 @@ void kvm_mmu_change_mmu_pages(struct kvm *kvm, unsigned long goal_nr_mmu_pages)
 		kvm_mmu_zap_oldest_mmu_pages(kvm, kvm->stat.mmu_shadow_pages -
 						  goal_nr_mmu_pages);
 
-		goal_nr_mmu_pages = kvm->stat.mmu_shadow_pages;
+		goal_nr_mmu_pages = max(kvm->stat.mmu_shadow_pages, goal_nr_mmu_pages);
 	}
 
 	kvm->arch.n_max_mmu_pages = goal_nr_mmu_pages;
