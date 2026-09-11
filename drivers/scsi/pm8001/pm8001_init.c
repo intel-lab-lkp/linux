@@ -177,6 +177,33 @@ static void pm8001_phy_init(struct pm8001_hba_info *pm8001_ha, int phy_id)
 }
 
 /**
+ * pm8001_free_ccb - free CCB resources
+ * @pm8001_ha:	our hba structure.
+ */
+static void pm8001_free_ccb(struct pm8001_hba_info *pm8001_ha)
+{
+	int i;
+
+	if (pm8001_ha->ccb_info) {
+		for (i = 0; i < pm8001_ha->ccb_count; i++) {
+			if (!pm8001_ha->ccb_info[i].buf_prd)
+				continue;
+
+			dma_free_coherent(pm8001_ha->dev,
+					  sizeof(struct pm8001_prd) *
+					  PM8001_MAX_DMA_SG,
+					  pm8001_ha->ccb_info[i].buf_prd,
+					  pm8001_ha->ccb_info[i].ccb_dma_handle);
+		}
+	}
+	kfree(pm8001_ha->ccb_info);
+	pm8001_ha->ccb_info = NULL;
+	pm8001_ha->ccb_count = 0;
+	bitmap_free(pm8001_ha->rsvd_tags);
+	pm8001_ha->rsvd_tags = NULL;
+}
+
+/**
  * pm8001_free - free hba
  * @pm8001_ha:	our hba structure.
  */
@@ -198,7 +225,8 @@ static void pm8001_free(struct pm8001_hba_info *pm8001_ha)
 	}
 	PM8001_CHIP_DISP->chip_iounmap(pm8001_ha);
 	flush_workqueue(pm8001_wq);
-	bitmap_free(pm8001_ha->rsvd_tags);
+	pm8001_free_ccb(pm8001_ha);
+	kfree(pm8001_ha->devices);
 	kfree(pm8001_ha);
 }
 
@@ -1285,8 +1313,8 @@ static int pm8001_init_ccb_tag(struct pm8001_hba_info *pm8001_ha)
 	return 0;
 
 err_out_noccb:
-	kfree(pm8001_ha->devices);
 err_out:
+	pm8001_free_ccb(pm8001_ha);
 	return -ENOMEM;
 }
 
@@ -1294,7 +1322,6 @@ static void pm8001_pci_remove(struct pci_dev *pdev)
 {
 	struct sas_ha_struct *sha = pci_get_drvdata(pdev);
 	struct pm8001_hba_info *pm8001_ha = sha->lldd_ha;
-	int i;
 
 	sas_unregister_ha(sha);
 	sas_remove_host(pm8001_ha->shost);
@@ -1305,15 +1332,6 @@ static void pm8001_pci_remove(struct pci_dev *pdev)
 	pm8001_free_irq(pm8001_ha);
 	pm8001_kill_tasklet(pm8001_ha);
 	scsi_host_put(pm8001_ha->shost);
-
-	for (i = 0; i < pm8001_ha->ccb_count; i++) {
-		dma_free_coherent(&pm8001_ha->pdev->dev,
-			sizeof(struct pm8001_prd) * PM8001_MAX_DMA_SG,
-			pm8001_ha->ccb_info[i].buf_prd,
-			pm8001_ha->ccb_info[i].ccb_dma_handle);
-	}
-	kfree(pm8001_ha->ccb_info);
-	kfree(pm8001_ha->devices);
 
 	pm8001_free(pm8001_ha);
 	kfree(sha->sas_phy);
