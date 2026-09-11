@@ -54,8 +54,7 @@ MODULE_DEVICE_TABLE(acpi, fan_device_ids);
 static int fan_get_max_state(struct thermal_cooling_device *cdev, unsigned long
 			     *state)
 {
-	struct acpi_device *device = cdev->devdata;
-	struct acpi_fan *fan = acpi_driver_data(device);
+	struct acpi_fan *fan = cdev->devdata;
 
 	if (fan->acpi4) {
 		if (fan->fif.fine_grain_ctrl)
@@ -105,9 +104,9 @@ err:
 	return ret;
 }
 
-static int fan_get_state_acpi4(struct acpi_device *device, unsigned long *state)
+static int fan_get_state_acpi4(struct acpi_fan *fan, unsigned long *state)
 {
-	struct acpi_fan *fan = acpi_driver_data(device);
+	struct acpi_device *device = fan->adev;
 	struct acpi_fan_fst fst;
 	int status, i;
 
@@ -159,13 +158,12 @@ static int fan_get_state(struct acpi_device *device, unsigned long *state)
 static int fan_get_cur_state(struct thermal_cooling_device *cdev, unsigned long
 			     *state)
 {
-	struct acpi_device *device = cdev->devdata;
-	struct acpi_fan *fan = acpi_driver_data(device);
+	struct acpi_fan *fan = cdev->devdata;
 
 	if (fan->acpi4)
-		return fan_get_state_acpi4(device, state);
+		return fan_get_state_acpi4(fan, state);
 	else
-		return fan_get_state(device, state);
+		return fan_get_state(fan->adev, state);
 }
 
 static int fan_set_state(struct acpi_device *device, unsigned long state)
@@ -177,9 +175,9 @@ static int fan_set_state(struct acpi_device *device, unsigned long state)
 				     state ? ACPI_STATE_D0 : ACPI_STATE_D3_COLD);
 }
 
-static int fan_set_state_acpi4(struct acpi_device *device, unsigned long state)
+static int fan_set_state_acpi4(struct acpi_fan *fan, unsigned long state)
 {
-	struct acpi_fan *fan = acpi_driver_data(device);
+	struct acpi_device *device = fan->adev;
 	acpi_status status;
 	u64 value = state;
 	int max_state;
@@ -213,13 +211,12 @@ static int fan_set_state_acpi4(struct acpi_device *device, unsigned long state)
 static int
 fan_set_cur_state(struct thermal_cooling_device *cdev, unsigned long state)
 {
-	struct acpi_device *device = cdev->devdata;
-	struct acpi_fan *fan = acpi_driver_data(device);
+	struct acpi_fan *fan = cdev->devdata;
 
 	if (fan->acpi4)
-		return fan_set_state_acpi4(device, state);
+		return fan_set_state_acpi4(fan, state);
 	else
-		return fan_set_state(device, state);
+		return fan_set_state(fan->adev, state);
 }
 
 static const struct thermal_cooling_device_ops fan_cooling_ops = {
@@ -565,7 +562,7 @@ static int acpi_fan_probe(struct platform_device *pdev)
 	else
 		name = acpi_device_bid(device);
 
-	cdev = thermal_cooling_device_create(&pdev->dev, name, device, &fan_cooling_ops);
+	cdev = thermal_cooling_device_create(&pdev->dev, name, fan, &fan_cooling_ops);
 	if (IS_ERR(cdev)) {
 		result = PTR_ERR(cdev);
 		goto err_end;
