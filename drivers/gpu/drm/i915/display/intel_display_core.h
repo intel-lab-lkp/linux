@@ -220,6 +220,8 @@ struct intel_hotplug {
 	 * cue to ignore the long HPDs and can be set / unset using debugfs.
 	 */
 	bool ignore_long_hpd;
+
+	bool can_generate_pme;
 };
 
 struct intel_vbt_data {

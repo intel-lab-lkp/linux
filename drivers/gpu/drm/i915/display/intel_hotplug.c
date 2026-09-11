@@ -846,6 +846,16 @@ static void i915_hpd_poll_init_work(struct work_struct *work)
 	}
 }
 
+void intel_hpd_set_pme_capable(struct intel_display *display, bool can_generate_pme)
+{
+	display->hotplug.can_generate_pme = can_generate_pme;
+}
+
+bool intel_hpd_can_generate_pme(struct intel_display *display)
+{
+	return display->hotplug.can_generate_pme;
+}
+
 /**
  * intel_hpd_poll_enable - enable polling for connectors with hpd
  * @display: display device instance

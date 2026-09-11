@@ -35,4 +35,7 @@ void intel_hpd_enable_detection_work(struct intel_display *display);
 void intel_hpd_disable_detection_work(struct intel_display *display);
 bool intel_hpd_schedule_detection(struct intel_display *display);
 
+void intel_hpd_set_pme_capable(struct intel_display *display, bool can_generate_pme);
+bool intel_hpd_can_generate_pme(struct intel_display *display);
+
 #endif /* __INTEL_HOTPLUG_H__ */
