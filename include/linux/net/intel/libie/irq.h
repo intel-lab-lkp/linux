@@ -105,5 +105,14 @@ struct msi_map libie_irq_alloc(struct libie_irq *irq, enum libie_irq_type type);
 void libie_irq_free(struct libie_irq *irq, struct msi_map map);
 int libie_irq_reserve(struct libie_irq *irq);
 void libie_put_irq(struct libie_irq *irq, unsigned int index);
+/* IPU specific functions. */
+struct virtchnl2_get_capabilities;
+struct virtchnl2_alloc_vectors;
+
+void libie_irq_destroy_info(struct libie_irq_info *info);
+int libie_irq_create_info(struct libie_irq_info *info,
+			  const struct virtchnl2_get_capabilities *caps,
+			  const struct virtchnl2_alloc_vectors *vectors,
+			  const u16 num_vectors);
 
 #endif /* __LIBIE_IRQ_H */
