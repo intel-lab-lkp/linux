@@ -392,6 +392,22 @@ static bool pci_physfn_is_probed(struct pci_dev *dev)
 #endif
 }
 
+static bool pci_probe_inline(int node)
+{
+	/* The CPU is a placement hint; an unstable raw read is fine. */
+	int cpu = raw_smp_processor_id();
+	bool ret;
+
+	if (!(current->flags & PF_WQ_WORKER) || cpu_to_node(cpu) != node)
+		return false;
+
+	rcu_read_lock();
+	ret = housekeeping_cpu(cpu, HK_TYPE_DOMAIN);
+	rcu_read_unlock();
+
+	return ret;
+}
+
 static int pci_call_probe(struct pci_driver *drv, struct pci_dev *dev,
 			  const struct pci_device_id *id)
 {
@@ -412,7 +428,7 @@ static int pci_call_probe(struct pci_driver *drv, struct pci_dev *dev,
 	 * device is probed from work_on_cpu() of the Physical device.
 	 */
 	if (node < 0 || node >= MAX_NUMNODES || !node_online(node) ||
-	    pci_physfn_is_probed(dev)) {
+	    pci_physfn_is_probed(dev) || pci_probe_inline(node)) {
 		error = local_pci_probe(&ddi);
 	} else {
 		struct pci_probe_arg arg = { .ddi = &ddi };
