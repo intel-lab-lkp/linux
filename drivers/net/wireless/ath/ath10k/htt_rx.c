@@ -2775,6 +2775,13 @@ static bool ath10k_htt_rx_proc_rx_frag_ind_hl(struct ath10k_htt *htt,
 	struct htt_resp *resp;
 	size_t tot_hdr_len;
 
+
+	/* FIX: Validate skb length before skb_pull */
+	if (skb->len < HTT_RX_FRAG_IND_INFO0_HEADER_LEN) {
+		ath10k_warn(ar, "Invalid skb len %d for RX_FRAG_IND\n", skb->len);
+		return false;
+	}
+
 	resp = (struct htt_resp *)(skb->data + HTT_RX_FRAG_IND_INFO0_HEADER_LEN);
 	skb_pull(skb, HTT_RX_FRAG_IND_INFO0_HEADER_LEN);
 	skb_trim(skb, skb->len - FCS_LEN);
@@ -2792,6 +2799,13 @@ static bool ath10k_htt_rx_proc_rx_frag_ind_hl(struct ath10k_htt *htt,
 	num_mpdu_ranges = MS(__le32_to_cpu(rx_hl->hdr.info1),
 			     HTT_RX_INDICATION_INFO1_NUM_MPDU_RANGES);
 
+	/* FIX: Validate num_mpdu_ranges */
+	if (num_mpdu_ranges > 1) {
+		ath10k_warn(ar, "Invalid num_mpdu_ranges %d\n", num_mpdu_ranges);
+		goto err;
+	}
+
+
 	tot_hdr_len = sizeof(struct htt_resp_hdr) +
 		      sizeof(rx_hl->hdr) +
 		      sizeof(rx_hl->ppdu) +
@@ -2799,9 +2813,25 @@ static bool ath10k_htt_rx_proc_rx_frag_ind_hl(struct ath10k_htt *htt,
 		      sizeof(rx_hl->fw_desc) +
 		      sizeof(struct htt_rx_indication_mpdu_range) * num_mpdu_ranges;
 
+	/* FIX: Validate tot_hdr_len against skb length */
+	if (tot_hdr_len > skb->len) {
+		ath10k_warn(ar, "Invalid tot_hdr_len %zu > skb->len %u\n",
+			    tot_hdr_len, skb->len);
+		goto err;
+	}
+
+
 	tid =  MS(rx_hl->hdr.info0, HTT_RX_INDICATION_INFO0_EXT_TID);
 	rx_desc = (struct htt_hl_rx_desc *)(skb->data + tot_hdr_len);
 	rx_desc_info = __le32_to_cpu(rx_desc->info);
+
+
+	/* FIX: Validate fw_desc.len against remaining skb length */
+	if (rx_hl->fw_desc.len > skb->len - tot_hdr_len) {
+		ath10k_warn(ar, "Invalid fw_desc.len %u > remaining skb len\n",
+			    rx_hl->fw_desc.len);
+		goto err;
+	}
 
 	hdr = (struct ieee80211_hdr *)((u8 *)rx_desc + rx_hl->fw_desc.len);
 
