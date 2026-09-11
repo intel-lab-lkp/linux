@@ -657,10 +657,7 @@ static int __iommu_probe_device(struct device *dev, struct list_head *group_list
 		goto err_put_group;
 	}
 
-	/*
-	 * The gdev must be in the list before calling
-	 * iommu_setup_default_domain()
-	 */
+	/* List the gdev first: the finaliser covers every listed member. */
 	list_add_tail(&gdev->list, &group->devices);
 	WARN_ON(group->default_domain && !group->domain);
 	if (group->domain || group->default_domain) {
@@ -676,15 +673,10 @@ static int __iommu_probe_device(struct device *dev, struct list_head *group_list
 						0);
 		if (ret)
 			goto err_remove_gdev;
-	} else if (!group->default_domain && !group_list) {
-		ret = iommu_setup_default_domain(group, 0);
-		if (ret)
-			goto err_remove_gdev;
 	} else if (!group->default_domain) {
 		/*
-		 * With a group_list argument we defer the default_domain setup
-		 * to the caller by providing a de-duplicated list of groups
-		 * that need further setup.
+		 * Defer setup to the caller draining group_list; both in-tree
+		 * callers pass one.
 		 */
 		if (list_empty(&group->entry))
 			list_add_tail(&group->entry, group_list);
@@ -713,6 +705,7 @@ int iommu_probe_device(struct device *dev)
 	const struct iommu_ops *ops;
 	struct group_device *gdev, *own;
 	struct iommu_group *group;
+	LIST_HEAD(group_list);
 	int ret;
 
 	mutex_lock(&iommu_probe_device_lock);
@@ -721,7 +714,7 @@ int iommu_probe_device(struct device *dev)
 		mutex_unlock(&iommu_probe_device_lock);
 		goto probe_finalize;
 	}
-	ret = __iommu_probe_device(dev, NULL);
+	ret = __iommu_probe_device(dev, &group_list);
 	if (!ret) {
 		/*
 		 * Not every caller pins the device, so pin the group across
@@ -735,6 +728,9 @@ int iommu_probe_device(struct device *dev)
 		return ret;
 
 	mutex_lock(&group->mutex);
+	/* Only the caller that queued the entry may unlink it. */
+	if (!list_empty(&group_list))
+		list_del_init(&group->entry);
 	/* iommu_group_link_device() is all-or-nothing. */
 	for_each_group_device(group, gdev) {
 		if (gdev->linked)
@@ -742,6 +738,20 @@ int iommu_probe_device(struct device *dev)
 		ret = iommu_group_link_device(group, gdev);
 		if (ret)
 			goto err_remove_device;
+	}
+	/*
+	 * First thread to find the group unset sets it up for every member;
+	 * binding needs a default domain, so no DMA races the window.
+	 */
+	if (!list_empty(&group->devices) &&
+	    !group->domain && !group->default_domain) {
+		ret = iommu_setup_default_domain(group, 0);
+		if (ret)
+			goto err_remove_device;
+		for_each_group_device(group, gdev)
+			if (dev_has_iommu(gdev->dev))
+				iommu_setup_dma_ops(gdev->dev,
+						    group->default_domain);
 	}
 	mutex_unlock(&group->mutex);
 	iommu_group_put(group);
@@ -765,8 +775,15 @@ err_remove_device:
 	if (own) {
 		list_del(&own->list);
 		__iommu_group_free_device(group, own);
-		iommu_deinit_device(dev);
 	}
+	/* Members left behind stay attached; give them the DMA ops owed. */
+	if (group->default_domain)
+		for_each_group_device(group, gdev)
+			if (dev_has_iommu(gdev->dev))
+				iommu_setup_dma_ops(gdev->dev,
+						    group->default_domain);
+	if (own)
+		iommu_deinit_device(dev);
 	mutex_unlock(&group->mutex);
 	if (own)
 		iommu_group_put(group);	/* iommu_init_device()'s reference */
@@ -2077,7 +2094,10 @@ static int bus_iommu_probe(const struct bus_type *bus)
 		 * that the cross-group default domain type and the setup of the
 		 * IOMMU_RESV_DIRECT will work correctly in non-hotpug scenarios.
 		 */
-		ret = iommu_setup_default_domain(group, 0);
+		ret = 0;
+		/* A hotplug probe may have finalised this group meanwhile. */
+		if (!group->default_domain)
+			ret = iommu_setup_default_domain(group, 0);
 		if (ret) {
 			mutex_unlock(&group->mutex);
 			return ret;
