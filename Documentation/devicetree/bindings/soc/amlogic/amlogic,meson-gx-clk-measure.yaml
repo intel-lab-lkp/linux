@@ -26,6 +26,12 @@ properties:
       - amlogic,s4-clk-measure
       - amlogic,a1-clk-measure
       - amlogic,t7-clk-measure
+      - amlogic,a5-clk-measure
+      - amlogic,a4-clk-measure
+      - amlogic,s7-clk-measure
+      - amlogic,s7d-clk-measure
+      - amlogic,s6-clk-measure
+      - amlogic,a9-clk-measure
 
   reg:
     maxItems: 1
