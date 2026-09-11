@@ -411,7 +411,7 @@ EXPORT_SYMBOL_GPL(usb_bulk_msg);
  *
  * Context: task context, might sleep.
  *
- * This function is just like usb_blk_msg(), except that it waits in a
+ * This function is just like usb_bulk_msg(), except that it waits in a
  * killable state and there is no limit on the timeout length.
  *
  * Return:
