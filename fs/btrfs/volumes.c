@@ -758,7 +758,7 @@ const u8 *btrfs_sb_fsid_ptr(const struct btrfs_super_block *sb)
  */
 static noinline struct btrfs_device *device_list_add(const char *path,
 			   struct btrfs_super_block *disk_super,
-			   bool *new_device_added)
+			   bool *new_device_added, bool force_rename)
 {
 	struct btrfs_device *device;
 	struct btrfs_fs_devices *fs_devices = NULL;
@@ -869,7 +869,7 @@ static noinline struct btrfs_device *device_list_add(const char *path,
 				MAJOR(path_devt), MINOR(path_devt),
 				current->comm, task_pid_nr(current));
 
-	} else if (!device->name || device->devt != path_devt) {
+	} else if (!device->name || device->devt != path_devt || force_rename) {
 		const char *old_name;
 
 		/*
@@ -882,9 +882,14 @@ static noinline struct btrfs_device *device_list_add(const char *path,
 		 *         different name. or
 		 *      b. The missing-disk-which-was-replaced, has
 		 *         reappeared now.
+		 *      c. A device scan is triggered on different soft links
+		 *         of the block device.
 		 *
-		 * We must allow 1 and 2a above. But 2b would be a spurious
-		 * and unintentional.
+		 * We must allow 1 and 2a above.
+		 * For 2c, we should only allow it when it's triggered from
+		 * BTRFS_IOC_RENAME_DEV.
+		 *
+		 * But 2b would be a spurious and unintentional.
 		 *
 		 * Further in case of 1 and 2a above, the disk at 'path'
 		 * would have missed some transaction when it was away and
@@ -1443,14 +1448,19 @@ static bool btrfs_skip_registration(struct btrfs_super_block *disk_super,
  * and we are not allowed to call set_blocksize during the scan. The superblock
  * is read via pagecache.
  *
- * With @mount_arg_dev it's a scan during mount time that will always register
+ * With BTRFS_SCAN_DEV_MOUNT it's a scan during mount time that will always register
  * the device or return an error. Multi-device and seeding devices are registered
  * in both cases.
+ *
+ * With BTRFS_SCAN_DEV_RENAME it's to force a device name update for a mounted
+ * device.
  */
 struct btrfs_device *btrfs_scan_one_device(const char *path,
-					   bool mount_arg_dev)
+					   unsigned int flags)
 {
 	struct btrfs_super_block *disk_super;
+	bool mount_arg_dev = flags & BTRFS_SCAN_DEV_MOUNT;
+	bool force_rename = flags & BTRFS_SCAN_DEV_RENAME;
 	bool new_device_added = false;
 	struct btrfs_device *device = NULL;
 	struct file *bdev_file;
@@ -1489,7 +1499,7 @@ struct btrfs_device *btrfs_scan_one_device(const char *path,
 		goto free_disk_super;
 	}
 
-	device = device_list_add(path, disk_super, &new_device_added);
+	device = device_list_add(path, disk_super, &new_device_added, force_rename);
 	if (!IS_ERR(device) && new_device_added)
 		btrfs_free_stale_devices(device->devt, device);
 
