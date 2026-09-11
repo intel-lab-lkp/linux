@@ -207,6 +207,7 @@ registered in the kernel by defining a struct pps_gen_source_info as
 follows::
 
     static const struct pps_gen_source_info pps_gen_dummy_info = {
+            .owner                  = THIS_MODULE,
             .use_system_clock       = true,
             .get_time               = pps_gen_dummy_get_time,
             .enable                 = pps_gen_dummy_enable,
