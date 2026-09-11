@@ -987,6 +987,12 @@ static void rpmh_rsc_cpu_pm_unregister(void *data)
 	cpu_pm_unregister_notifier(data);
 }
 
+static bool rpmh_rsc_no_rpmh_read(void)
+{
+	return of_machine_is_compatible("qcom,sm8150") ||
+	       of_machine_is_compatible("qcom,sc8180x");
+}
+
 static int rpmh_probe_tcs_config(struct platform_device *pdev, struct rsc_drv *drv)
 {
 	struct tcs_type_config {
@@ -1156,6 +1162,7 @@ static int rpmh_rsc_probe(struct platform_device *pdev)
 	spin_lock_init(&drv->client.cache_lock);
 	INIT_LIST_HEAD(&drv->client.cache);
 	INIT_LIST_HEAD(&drv->client.batch_cache);
+	drv->client.no_rpmh_read = rpmh_rsc_no_rpmh_read();
 
 	dev_set_drvdata(&pdev->dev, drv);
 	drv->dev = &pdev->dev;
