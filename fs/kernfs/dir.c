@@ -41,6 +41,8 @@ static bool kernfs_active(struct kernfs_node *kn)
 	return __kernfs_active(kn);
 }
 
+static void kernfs_activate_one(struct kernfs_node *kn);
+
 static bool kernfs_lockdep(struct kernfs_node *kn)
 {
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
@@ -855,17 +857,16 @@ int kernfs_add_one(struct kernfs_node *kn)
 	}
 
 	up_write(&root->kernfs_iattr_rwsem);
-	up_write(&root->kernfs_rwsem);
 
 	/*
-	 * Activate the new node unless CREATE_DEACTIVATED is requested.
-	 * If not activated here, the kernfs user is responsible for
-	 * activating the node with kernfs_activate().  A node which hasn't
-	 * been activated is not visible to userland and its removal won't
-	 * trigger deactivation.
+	 * A freshly linked node has no descendants, so activating just @kn
+	 * under the linking hold is equivalent to the kernfs_activate()
+	 * walk; CREATE_DEACTIVATED roots keep deferred activation.
 	 */
-	if (!(kernfs_root(kn)->flags & KERNFS_ROOT_CREATE_DEACTIVATED))
-		kernfs_activate(kn);
+	if (!(root->flags & KERNFS_ROOT_CREATE_DEACTIVATED))
+		kernfs_activate_one(kn);
+
+	up_write(&root->kernfs_rwsem);
 	return 0;
 
 out_unlock:
