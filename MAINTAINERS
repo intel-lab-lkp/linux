@@ -12350,6 +12350,13 @@ S:	Orphan
 F:	Documentation/devicetree/bindings/i3c/snps,dw-i3c-master.yaml
 F:	drivers/i3c/master/dw*
 
+I3C CHARACTER DEVICE DRIVER
+M:	Meagan Lloyd <meaganlloyd@linux.microsoft.com>
+S:	Supported
+F:	Documentation/userspace-api/i3c/i3cdev.rst
+F:	drivers/i3c/i3cdev.c
+F:	include/uapi/linux/i3c/i3cdev.h
+
 I3C SUBSYSTEM
 M:	Alexandre Belloni <alexandre.belloni@bootlin.com>
 R:	Frank Li <Frank.Li@nxp.com>

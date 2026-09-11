@@ -20,6 +20,18 @@ menuconfig I3C
 	  will be called i3c.
 
 if I3C
+
+config I3CDEV
+	tristate "I3C device interface"
+	depends on I3C
+	help
+	  Say Y here to include the i3cdev driver. This allows user-space to
+	  explicitly bind I3C devices to the driver in order to expose a
+	  character device interface for the I3C device under /dev/bus/i3c/.
+
+	  This support is also available as a module. If so, the module will
+	  be called i3cdev.
+
 source "drivers/i3c/master/Kconfig"
 endif # I3C
 
