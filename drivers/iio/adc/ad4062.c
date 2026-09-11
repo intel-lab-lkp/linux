@@ -1482,13 +1482,19 @@ MODULE_DEVICE_TABLE(i3c, ad4062_id_table);
 
 static int ad4062_probe(struct i3c_device *i3cdev)
 {
-	const struct i3c_device_id *id = i3c_device_match_id(i3cdev, ad4062_id_table);
-	const struct ad4062_chip_info *chip = id->data;
+	const struct i3c_device_id *id;
+	const struct ad4062_chip_info *chip;
 	struct device *dev = &i3cdev->dev;
 	struct iio_dev *indio_dev;
 	struct ad4062_state *st;
 	bool ref_sel;
 	int ret;
+
+	id = i3c_device_match_id(i3cdev, ad4062_id_table);
+	if (!id)
+		return -ENODEV;
+
+	chip = id->data;
 
 	indio_dev = devm_iio_device_alloc(dev, sizeof(*st));
 	if (!indio_dev)

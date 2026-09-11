@@ -581,6 +581,8 @@ static int p3t1085_i3c_probe(struct i3c_device *i3cdev)
 				     "Failed to register i3c regmap\n");
 
 	id = i3c_device_match_id(i3cdev, p3t1085_i3c_ids);
+	if (!id)
+		return -ENODEV;
 
 	return tmp108_common_probe(dev, regmap, "p3t1085_i3c", id->data);
 }

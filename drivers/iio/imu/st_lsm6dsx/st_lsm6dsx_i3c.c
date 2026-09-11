@@ -32,6 +32,9 @@ static int st_lsm6dsx_i3c_probe(struct i3c_device *i3cdev)
 	struct device *dev = i3cdev_to_dev(i3cdev);
 	struct regmap *regmap;
 
+	if (!id)
+		return -ENODEV;
+
 	regmap = devm_regmap_init_i3c(i3cdev, &st_lsm6dsx_i3c_regmap_config);
 	if (IS_ERR(regmap)) {
 		dev_err(dev, "Failed to register i3c regmap %ld\n", PTR_ERR(regmap));

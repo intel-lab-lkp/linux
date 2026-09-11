@@ -888,6 +888,7 @@ MODULE_DEVICE_TABLE(i3c, lm75_i3c_ids);
 static int lm75_i3c_probe(struct i3c_device *i3cdev)
 {
 	struct device *dev = i3cdev_to_dev(i3cdev);
+	const struct i3c_device_id *id;
 	const struct lm75_i3c_device *id_data;
 	struct regmap *regmap;
 
@@ -895,7 +896,11 @@ static int lm75_i3c_probe(struct i3c_device *i3cdev)
 	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);
 
-	id_data = i3c_device_match_id(i3cdev, lm75_i3c_ids)->data;
+	id = i3c_device_match_id(i3cdev, lm75_i3c_ids);
+	if (!id)
+		return -ENODEV;
+
+	id_data = id->data;
 
 	return lm75_generic_probe(dev, id_data->name, id_data->type, 0, regmap);
 }

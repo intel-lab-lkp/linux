@@ -340,9 +340,14 @@ static int i3c_device_match(struct device *dev, const struct device_driver *drv)
 	struct i3c_device *i3cdev;
 	const struct i3c_driver *i3cdrv;
 	u8 static_addr_method = 0;
+	int ret;
 
 	if (dev->type != &i3c_device_type)
 		return 0;
+
+	ret = device_match_driver_override(dev, drv);
+	if (ret >= 0)
+		return ret;
 
 	i3cdev = dev_to_i3cdev(dev);
 	i3cdrv = drv_to_i3cdrv(drv);
@@ -890,6 +895,7 @@ const struct bus_type i3c_bus_type = {
 	.probe = i3c_device_probe,
 	.remove = i3c_device_remove,
 	.shutdown = i3c_device_shutdown,
+	.driver_override = true,
 };
 EXPORT_SYMBOL_GPL(i3c_bus_type);
 
