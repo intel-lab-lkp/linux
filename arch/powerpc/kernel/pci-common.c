@@ -1046,6 +1046,15 @@ void pcibios_setup_bus_self(struct pci_bus *bus)
 		phb->controller_ops.dma_bus_setup(bus);
 }
 
+/*
+ * The pseries/powernv hooks update the shared EEH PE tree with no
+ * internal locking; serialize concurrent sibling VF additions.
+ * Removal-side updates do not take this lock: additions are
+ * drained before any unwind, and the sysfs enable and EEH paths
+ * hold pci_rescan_remove_lock.
+ */
+static DEFINE_MUTEX(pcibios_bus_add_device_lock);
+
 void pcibios_bus_add_device(struct pci_dev *dev)
 {
 	struct pci_controller *phb;
@@ -1068,8 +1077,11 @@ void pcibios_bus_add_device(struct pci_dev *dev)
 	if (ppc_md.pci_irq_fixup)
 		ppc_md.pci_irq_fixup(dev);
 
-	if (ppc_md.pcibios_bus_add_device)
+	if (ppc_md.pcibios_bus_add_device) {
+		mutex_lock(&pcibios_bus_add_device_lock);
 		ppc_md.pcibios_bus_add_device(dev);
+		mutex_unlock(&pcibios_bus_add_device_lock);
+	}
 }
 
 int pcibios_device_add(struct pci_dev *dev)
