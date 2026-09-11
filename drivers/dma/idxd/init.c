@@ -1263,6 +1263,20 @@ static void idxd_shutdown(struct pci_dev *pdev)
 	flush_workqueue(idxd->wq);
 }
 
+static void idxd_put_devices(struct idxd_device *idxd)
+{
+	int i;
+
+	for (i = 0; i < idxd->max_wqs; i++)
+		put_device(wq_confdev(idxd->wqs[i]));
+
+	for (i = 0; i < idxd->max_engines; i++)
+		put_device(engine_confdev(idxd->engines[i]));
+
+	for (i = 0; i < idxd->max_groups; i++)
+		put_device(group_confdev(idxd->groups[i]));
+}
+
 static void idxd_remove(struct pci_dev *pdev)
 {
 	struct idxd_device *idxd = pci_get_drvdata(pdev);
@@ -1284,6 +1298,7 @@ static void idxd_remove(struct pci_dev *pdev)
 	if (device_pasid_enabled(idxd))
 		idxd_disable_system_pasid(idxd);
 	pci_iounmap(pdev, idxd->reg_base);
+	idxd_put_devices(idxd);
 	put_device(idxd_confdev(idxd));
 	pci_disable_device(pdev);
 }

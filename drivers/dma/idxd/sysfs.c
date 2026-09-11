@@ -1988,21 +1988,29 @@ void idxd_unregister_devices(struct idxd_device *idxd)
 {
 	int i;
 
+	/*
+	 * Take a reference count to the idxd device to prevent the
+	 * corresponding idxd context from being freed, as the driver
+	 * still needs it for the remaining cleanup operations.
+	 */
 	for (i = 0; i < idxd->max_wqs; i++) {
 		struct idxd_wq *wq = idxd->wqs[i];
 
+		get_device(wq_confdev(wq));
 		device_unregister(wq_confdev(wq));
 	}
 
 	for (i = 0; i < idxd->max_engines; i++) {
 		struct idxd_engine *engine = idxd->engines[i];
 
+		get_device(engine_confdev(engine));
 		device_unregister(engine_confdev(engine));
 	}
 
 	for (i = 0; i < idxd->max_groups; i++) {
 		struct idxd_group *group = idxd->groups[i];
 
+		get_device(group_confdev(group));
 		device_unregister(group_confdev(group));
 	}
 }
