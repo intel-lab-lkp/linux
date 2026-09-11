@@ -83,17 +83,29 @@ MODULE_PARM_DESC(force, "force loading on processors with erratum 319");
  */
 #define AMD_I3255_STR				"3255"
 
-/*
- * PCI Device IDs for AMD's Family 17h-based SOCs.
- * Defining locally as IDs are not shared.
- */
+/* PCI Device IDs. Defining locally as IDs are not shared. */
+#define PCI_DEVICE_ID_AMD_11H_NB_MISC		0x1303
+#define PCI_DEVICE_ID_AMD_CNB17H_F3		0x1703
+#define PCI_DEVICE_ID_AMD_17H_DF_F3		0x1463
+#define PCI_DEVICE_ID_AMD_17H_M10H_DF_F3	0x15eb
+#define PCI_DEVICE_ID_AMD_17H_M30H_DF_F3	0x1493
+#define PCI_DEVICE_ID_AMD_17H_M40H_DF_F3	0x13f3
+#define PCI_DEVICE_ID_AMD_17H_M60H_DF_F3	0x144b
+#define PCI_DEVICE_ID_AMD_17H_M70H_DF_F3	0x1443
 #define PCI_DEVICE_ID_AMD_17H_M90H_DF_F3	0x1663
-
-/*
- * PCI Device IDs for AMD's Family 1Ah-based SOCs.
- * Defining locally as IDs are not shared.
- */
+#define PCI_DEVICE_ID_AMD_17H_MA0H_DF_F3	0x1727
+#define PCI_DEVICE_ID_AMD_19H_DF_F3		0x1653
+#define PCI_DEVICE_ID_AMD_19H_M10H_DF_F3	0x14b0
+#define PCI_DEVICE_ID_AMD_19H_M40H_DF_F3	0x167c
+#define PCI_DEVICE_ID_AMD_19H_M50H_DF_F3	0x166d
+#define PCI_DEVICE_ID_AMD_19H_M60H_DF_F3	0x14e3
+#define PCI_DEVICE_ID_AMD_19H_M70H_DF_F3	0x14f3
+#define PCI_DEVICE_ID_AMD_19H_M78H_DF_F3	0x12fb
+#define PCI_DEVICE_ID_AMD_1AH_M00H_DF_F3	0x12c3
+#define PCI_DEVICE_ID_AMD_1AH_M20H_DF_F3	0x16fb
 #define PCI_DEVICE_ID_AMD_1AH_M50H_DF_F3	0x12cb
+#define PCI_DEVICE_ID_AMD_1AH_M60H_DF_F3	0x124b
+#define PCI_DEVICE_ID_AMD_1AH_M70H_DF_F3	0x12bb
 #define PCI_DEVICE_ID_AMD_1AH_M80H_DF_F3	0x1243
 #define PCI_DEVICE_ID_AMD_1AH_M90H_DF_F3	0x127b
 
