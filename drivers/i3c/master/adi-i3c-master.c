@@ -412,8 +412,11 @@ static int adi_i3c_master_i3c_xfers(struct i3c_dev_desc *dev,
 
 	ret = xfer->ret;
 
-	for (i = 0; i < nxfers; i++)
+	for (i = 0; i < nxfers; i++) {
 		xfers[i].err = adi_i3c_cmd_get_err(&xfer->cmds[i]);
+		if (xfers[i].rnw)
+			xfers[i].actual_len = xfer->cmds[i].rx_len;
+	}
 
 	return ret;
 }

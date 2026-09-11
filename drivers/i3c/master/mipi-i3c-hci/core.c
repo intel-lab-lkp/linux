@@ -508,8 +508,11 @@ static int i3c_hci_i3c_xfers(struct i3c_dev_desc *dev,
 	if (ret)
 		goto out;
 	for (i = 0; i < nxfers; i++) {
-		if (i3c_xfers[i].rnw)
+		if (i3c_xfers[i].rnw) {
 			i3c_xfers[i].len = RESP_DATA_LENGTH(xfer[i].response);
+			i3c_xfers[i].actual_len = RESP_DATA_LENGTH(xfer[i].response);
+		}
+
 		if (RESP_STATUS(xfer[i].response) != RESP_SUCCESS) {
 			ret = -EIO;
 			goto out;

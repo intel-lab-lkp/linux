@@ -795,8 +795,11 @@ static int cdns_i3c_master_i3c_xfers(struct i3c_dev_desc *dev,
 
 	ret = cdns_xfer->ret;
 
-	for (i = 0; i < nxfers; i++)
+	for (i = 0; i < nxfers; i++) {
 		xfers[i].err = cdns_i3c_cmd_get_err(&cdns_xfer->cmds[i]);
+		if (xfers[i].rnw)
+			xfers[i].actual_len = cdns_xfer->cmds[i].rx_len;
+	}
 
 	cdns_i3c_master_free_xfer(cdns_xfer);
 
