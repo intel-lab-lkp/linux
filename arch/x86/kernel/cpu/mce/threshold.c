@@ -85,8 +85,10 @@ static void mce_handle_storm(unsigned int bank, bool on)
 void cmci_storm_begin(unsigned int bank)
 {
 	struct mca_storm_desc *storm = this_cpu_ptr(&storm_desc);
+	unsigned long flags;
 
-	__set_bit(bank, this_cpu_ptr(mce_poll_banks));
+	local_irq_save(flags);
+	set_bit(bank, this_cpu_ptr(mce_poll_banks));
 	storm->banks[bank].in_storm_mode = true;
 
 	/*
@@ -95,32 +97,38 @@ void cmci_storm_begin(unsigned int bank)
 	 */
 	if (++storm->stormy_bank_count == 1)
 		mce_timer_kick(true);
+	local_irq_restore(flags);
 }
 
 void cmci_storm_end(unsigned int bank)
 {
 	struct mca_storm_desc *storm = this_cpu_ptr(&storm_desc);
+	unsigned long flags;
 
+	local_irq_save(flags);
 	if (!mce_flags.amd_threshold)
-		__clear_bit(bank, this_cpu_ptr(mce_poll_banks));
+		clear_bit(bank, this_cpu_ptr(mce_poll_banks));
 	storm->banks[bank].history = 0;
 	storm->banks[bank].in_storm_mode = false;
 
 	/* If no banks left in storm mode, stop polling. */
 	if (!--storm->stormy_bank_count)
 		mce_timer_kick(false);
+	local_irq_restore(flags);
 }
 
 void mce_track_storm(struct mce *mce)
 {
 	struct mca_storm_desc *storm = this_cpu_ptr(&storm_desc);
-	unsigned long now = jiffies, delta;
+	unsigned long flags, now = jiffies, delta;
 	unsigned int shift = 1;
 	u64 history = 0;
 
+	local_irq_save(flags);
+
 	/* No tracking needed for banks that do not support CMCI */
 	if (storm->banks[mce->bank].poll_only)
-		return;
+		goto out;
 
 	/*
 	 * When a bank is in storm mode it is polled once per second and
@@ -149,15 +157,18 @@ void mce_track_storm(struct mce *mce)
 
 	if (storm->banks[mce->bank].in_storm_mode) {
 		if (history & GENMASK_ULL(STORM_END_POLL_THRESHOLD, 0))
-			return;
+			goto out;
 		printk_deferred(KERN_NOTICE "CPU%d BANK%d CMCI storm subsided\n", smp_processor_id(), mce->bank);
 		mce_handle_storm(mce->bank, false);
 		cmci_storm_end(mce->bank);
 	} else {
 		if (hweight64(history) < STORM_BEGIN_THRESHOLD)
-			return;
+			goto out;
 		printk_deferred(KERN_NOTICE "CPU%d BANK%d CMCI storm detected\n", smp_processor_id(), mce->bank);
 		mce_handle_storm(mce->bank, true);
 		cmci_storm_begin(mce->bank);
 	}
+
+out:
+	local_irq_restore(flags);
 }
