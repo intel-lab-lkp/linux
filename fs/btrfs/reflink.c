@@ -970,6 +970,7 @@ loff_t btrfs_remap_file_range(struct file *src_file, loff_t off,
 	struct btrfs_inode *src_inode = BTRFS_I(file_inode(src_file));
 	struct btrfs_inode *dst_inode = BTRFS_I(file_inode(dst_file));
 	bool same_inode = dst_inode == src_inode;
+	bool src_downgraded = false;
 	int ret;
 
 	if (btrfs_is_shutdown(src_inode->root->fs_info))
@@ -1005,6 +1006,12 @@ loff_t btrfs_remap_file_range(struct file *src_file, loff_t off,
 	if (ret < 0 || len == 0)
 		goto out_unlock;
 
+	if (!same_inode) {
+		set_bit(BTRFS_INODE_REFLINK_SRC, &src_inode->runtime_flags);
+		downgrade_write(&src_inode->vfs_inode.i_rwsem);
+		src_downgraded = true;
+	}
+
 	if (remap_flags & REMAP_FILE_DEDUP)
 		ret = btrfs_extent_same(src_inode, off, len, dst_inode, destoff);
 	else
@@ -1015,8 +1022,14 @@ out_unlock:
 		btrfs_inode_unlock(src_inode, BTRFS_ILOCK_MMAP);
 	} else {
 		btrfs_double_mmap_unlock(src_inode, dst_inode);
-		unlock_two_nondirectories(&src_inode->vfs_inode,
-					  &dst_inode->vfs_inode);
+		if (src_downgraded) {
+			clear_bit(BTRFS_INODE_REFLINK_SRC, &src_inode->runtime_flags);
+			inode_unlock_shared(&src_inode->vfs_inode);
+			inode_unlock(&dst_inode->vfs_inode);
+		} else {
+			unlock_two_nondirectories(&src_inode->vfs_inode,
+						  &dst_inode->vfs_inode);
+		}
 	}
 
 	/*
