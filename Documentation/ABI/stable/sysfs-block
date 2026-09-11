@@ -218,6 +218,25 @@ Description:
 		same as the format of /sys/block/<disk>/stat.
 
 
+What:		/sys/block/<disk>/<partition>/write_streams
+Date:		September 2026
+Contact:	Keoseong Park <keosung.park@samsung.com>
+Description:
+		[RW] Number of the disk's write streams reserved for the
+		partition. Writing N reserves N disk write streams that no
+		other partition can use and exposes them as the partition's
+		write streams 1 to N. Writing 0 gives them back. At most
+		/sys/block/<disk>/queue/max_write_streams streams, and never
+		more than 255, can be reserved on a disk. The number can
+		only be changed while the partition is not open, and a change
+		keeps the stream numbers that survive it pointing at the same
+		disk write streams. Partitions have no write streams unless
+		reserved here, and the reservation is lost when the partition
+		is removed, including by a partition table rescan. I/O to
+		the whole-disk device can use any write stream, just as it
+		can write to any sector of a partition.
+
+
 What:		/sys/block/<disk>/queue/add_random
 Date:		June 2010
 Contact:	linux-block@vger.kernel.org

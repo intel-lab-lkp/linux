@@ -178,6 +178,8 @@ struct gendisk {
 
 	struct mutex open_mutex;	/* open/close mutex */
 	unsigned open_partitions;	/* number of open partitions */
+	/* reserved by partitions, bit N = stream N (0 unused), open_mutex */
+	DECLARE_BITMAP(write_streams_reserved, U8_MAX + 1);
 
 	struct backing_dev_info	*bdi;
 	struct kobject queue_kobj;	/* the queue/ directory */
