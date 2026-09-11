@@ -229,3 +229,29 @@ For example::
    nop
    [panic]
    printk
+
+**monitors/MONITOR/stats**
+
+Present only when the kernel is built with CONFIG_RV_EDGE_STAT=y and *MONITOR*
+is a per-cpu deterministic or hybrid automaton monitor. The file exists while
+the monitor is enabled and reports how long the automaton dwells in each state
+before leaving it, timed with local_clock() and accounted per outgoing edge and
+per CPU.
+
+- The first line is a header naming the columns.
+- Each following line describes one edge on on one CPU::
+
+   cpu edge label count sum_ns max_ns
+
+   *count* is the number of times the transition was committed, *sum_ns* and
+   *max_ns* are the total and worst dwell in nanoseconds, and *label* is
+   "state:event".
+
+The counters are reset each time the monitor is enabled.
+
+For example::
+
+   # cat monitors/wip/stats
+   # cpu edge label count sum_ns max_ns
+   0 0 preemptive:preempt_disable 4210 95501200 183200
+   0 4 non_preemptive:preempt_enable 4208 3812900 42600
