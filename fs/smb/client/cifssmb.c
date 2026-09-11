@@ -1880,6 +1880,12 @@ CIFSSMBWrite(const unsigned int xid, struct cifs_io_parms *io_parms,
 	cifs_stats_inc(&tcon->stats.cifs_stats.num_writes);
 	if (rc) {
 		cifs_dbg(FYI, "Send error in write = %d\n", rc);
+	} else if (bytes_returned < (int)sizeof(WRITE_RSP)) {
+		/* check that the received response can hold a whole WRITE_RSP */
+		cifs_dbg(FYI, "%s: server returned short header. got=%d expected=%zu\n",
+			 __func__, bytes_returned, sizeof(WRITE_RSP));
+		rc = smb_EIO2(smb_eio_trace_write_rsp_short,
+			      bytes_returned, sizeof(WRITE_RSP));
 	} else {
 		*nbytes = le16_to_cpu(pSMBr->CountHigh);
 		*nbytes = (*nbytes) << 16;
@@ -1926,6 +1932,15 @@ cifs_writev_callback(struct TCP_Server_Info *server, struct mid_q_entry *mid)
 		result = cifs_check_receive(mid, tcon->ses->server, 0);
 		if (result != 0)
 			break;
+
+		if (mid->response_pdu_len < sizeof(WRITE_RSP)) {
+			/* check that the received response can hold a whole WRITE_RSP */
+			cifs_dbg(FYI, "%s: server returned short header. got=%u expected=%zu\n",
+				 __func__, mid->response_pdu_len, sizeof(WRITE_RSP));
+			result = smb_EIO2(smb_eio_trace_write_rsp_short,
+					  mid->response_pdu_len, sizeof(WRITE_RSP));
+			break;
+		}
 
 		written = le16_to_cpu(smb->CountHigh);
 		written <<= 16;
@@ -2150,6 +2165,12 @@ CIFSSMBWrite2(const unsigned int xid, struct cifs_io_parms *io_parms,
 	} else if (resp_buf_type == 0) {
 		/* presumably this can not happen, but best to be safe */
 		rc = smb_EIO1(smb_eio_trace_write_bad_buf_type, resp_buf_type);
+	} else if (rsp_iov.iov_len < sizeof(WRITE_RSP)) {
+		/* check that the received response can hold a whole WRITE_RSP */
+		cifs_dbg(FYI, "%s: server returned short header. got=%zu expected=%zu\n",
+			 __func__, rsp_iov.iov_len, sizeof(WRITE_RSP));
+		rc = smb_EIO2(smb_eio_trace_write_rsp_short,
+			      rsp_iov.iov_len, sizeof(WRITE_RSP));
 	} else {
 		WRITE_RSP *pSMBr = (WRITE_RSP *)rsp_iov.iov_base;
 		*nbytes = le16_to_cpu(pSMBr->CountHigh);
