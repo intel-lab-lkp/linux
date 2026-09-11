@@ -164,7 +164,7 @@ static inline unsigned long prep_zero_mask(unsigned long a, unsigned long bits, 
 #define FIXUP_SECTION ".fixup"
 #endif
 
-static inline unsigned long load_unaligned_zeropad(const void *addr)
+static inline unsigned long arch_load_unaligned_zeropad(const void *addr)
 {
 	unsigned long ret, offset, tmp;
 
@@ -202,5 +202,7 @@ static inline unsigned long load_unaligned_zeropad(const void *addr)
 }
 
 #undef FIXUP_SECTION
+
+#include <asm-generic/word-at-a-time-instrumented.h>
 
 #endif /* _ASM_WORD_AT_A_TIME_H */
