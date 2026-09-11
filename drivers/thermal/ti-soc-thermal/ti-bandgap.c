@@ -953,9 +953,13 @@ int ti_bandgap_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Cannot re-set clock rate. Continuing\n");
 
 	bgp->clk_rate = clk_rate;
-	if (TI_BANDGAP_HAS(bgp, CLK_CTRL))
-		clk_prepare_enable(bgp->fclock);
-
+	if (TI_BANDGAP_HAS(bgp, CLK_CTRL)) {
+		ret = clk_prepare_enable(bgp->fclock);
+		if (ret) {
+			dev_err(&pdev->dev, "failed to enable fclock\n");
+			goto put_clks;
+		}
+	}
 
 	spin_lock_init(&bgp->lock);
 	bgp->dev = &pdev->dev;
