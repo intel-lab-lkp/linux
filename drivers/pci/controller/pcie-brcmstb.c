@@ -317,6 +317,7 @@ struct pcie_cfg_data {
 	u32 flags;
 	u32 quirks;
 	u8 num_inbound_wins;
+	u8 burst_setting;
 	int (*perst_set)(struct brcm_pcie *pcie, u32 val);
 	int (*bridge_sw_init_set)(struct brcm_pcie *pcie, u32 val);
 	int (*post_setup)(struct brcm_pcie *pcie);
@@ -1153,7 +1154,7 @@ static int brcm_pcie_setup(struct brcm_pcie *pcie)
 	void __iomem *base = pcie->base;
 	struct pci_host_bridge *bridge;
 	struct resource_entry *entry;
-	u32 tmp, burst, num_lanes, num_lanes_cap;
+	u32 tmp, num_lanes, num_lanes_cap;
 	u8 num_out_wins = 0;
 	int num_inbound_wins = 0;
 	int memc, ret;
@@ -1189,27 +1190,14 @@ static int brcm_pcie_setup(struct brcm_pcie *pcie)
 	usleep_range(100, 200);
 
 	/*
-	 * SCB_MAX_BURST_SIZE is a two bit field.  For GENERIC chips it
-	 * is encoded as 0=128, 1=256, 2=512, 3=Rsvd, for BCM7278 it
-	 * is encoded as 0=Rsvd, 1=128, 2=256, 3=512.
-	 */
-	if (BFLAG(pcie, IS_BMIPS))
-		burst = 0x1; /* 256 bytes */
-	else if (pcie->cfg->soc_base == BCM2711)
-		burst = 0x0; /* 128 bytes */
-	else if (pcie->cfg->soc_base == BCM7278)
-		burst = 0x3; /* 512 bytes */
-	else
-		burst = 0x2; /* 512 bytes */
-
-	/*
 	 * Set SCB_MAX_BURST_SIZE, CFG_READ_UR_MODE, SCB_ACCESS_EN,
 	 * RCB_MPS_MODE, RCB_64B_MODE
 	 */
 	tmp = readl(base + PCIE_MISC_MISC_CTRL);
 	u32p_replace_bits(&tmp, 1, PCIE_MISC_MISC_CTRL_SCB_ACCESS_EN_MASK);
 	u32p_replace_bits(&tmp, 1, PCIE_MISC_MISC_CTRL_CFG_READ_UR_MODE_MASK);
-	u32p_replace_bits(&tmp, burst, PCIE_MISC_MISC_CTRL_MAX_BURST_SIZE_MASK);
+	u32p_replace_bits(&tmp, pcie->cfg->burst_setting,
+			  PCIE_MISC_MISC_CTRL_MAX_BURST_SIZE_MASK);
 	u32p_replace_bits(&tmp, 1, PCIE_MISC_MISC_CTRL_PCIE_RCB_MPS_MODE_MASK);
 	u32p_replace_bits(&tmp, 1, PCIE_MISC_MISC_CTRL_PCIE_RCB_64B_MODE_MASK);
 	writel(tmp, base + PCIE_MISC_MISC_CTRL);
@@ -1961,6 +1949,7 @@ static const struct pcie_cfg_data generic_cfg = {
 	.perst_set	= brcm_pcie_perst_set_generic,
 	.bridge_sw_init_set = brcm_pcie_bridge_sw_init_set_generic,
 	.num_inbound_wins = 3,
+	.burst_setting	= 0x2, /* 0=128B, 1=256B, 2=512B, 3=Rsvd */
 };
 
 static const struct pcie_cfg_data bcm2711_cfg = {
@@ -1970,6 +1959,7 @@ static const struct pcie_cfg_data bcm2711_cfg = {
 	.bridge_sw_init_set = brcm_pcie_bridge_sw_init_set_generic,
 	.num_inbound_wins = 3,
 	.quirks		= CFG_QUIRK_EARLY_PERST_ASSERT,
+	.burst_setting	= 0x0, /* 0=128B, 1=256B, 2=512B, 3=Rsvd */
 };
 
 static const struct pcie_cfg_data bcm2712_cfg = {
@@ -1981,6 +1971,7 @@ static const struct pcie_cfg_data bcm2712_cfg = {
 	.quirks		= CFG_QUIRK_AVOID_BRIDGE_SHUTDOWN |
 		CFG_QUIRK_NO_RGR1_TIMER,
 	.num_inbound_wins = 10,
+	.burst_setting	= 0x2, /* 0=64B, 1=128B, 2=256B, 3=Rsvd */
 };
 
 static const struct pcie_cfg_data bcm4908_cfg = {
@@ -1990,6 +1981,7 @@ static const struct pcie_cfg_data bcm4908_cfg = {
 	.bridge_sw_init_set = brcm_pcie_bridge_sw_init_set_generic,
 	.num_inbound_wins = 3,
 	.quirks		= CFG_QUIRK_PERST_PCIE_REV_CUTOFF,
+	.burst_setting	= 0x0, /* 0=64B, 1=128B, 2=Rsvd, 3=Rsvd */
 };
 
 static const struct pcie_cfg_data bcm7278_cfg = {
@@ -1998,6 +1990,7 @@ static const struct pcie_cfg_data bcm7278_cfg = {
 	.perst_set	= brcm_pcie_perst_set_7278,
 	.bridge_sw_init_set = brcm_pcie_bridge_sw_init_set_7278,
 	.num_inbound_wins = 3,
+	.burst_setting	= 0x3, /* 0=Resv, 1=128B, 2=256B, 3=512B */
 };
 
 static const struct pcie_cfg_data bcm7425_cfg = {
@@ -2009,6 +2002,7 @@ static const struct pcie_cfg_data bcm7425_cfg = {
 	.quirks		= CFG_QUIRK_OB_WIN_32BIT_ADDR
 		| CFG_QUIRK_OB_WIN_MAXSZ_128MB | CFG_QUIRK_32BIT_PCI_OPS,
 	.flags		= CFG_FLG_IS_BMIPS,
+	.burst_setting = 1, /* 0=128B, 1=256B, 2=Rsvd, 3=Rsvd */
 };
 
 static const struct pcie_cfg_data bcm7435_cfg = {
@@ -2020,6 +2014,7 @@ static const struct pcie_cfg_data bcm7435_cfg = {
 	.quirks		= CFG_QUIRK_OB_WIN_32BIT_ADDR
 		| CFG_QUIRK_OB_WIN_MAXSZ_128MB,
 	.flags		= CFG_FLG_IS_BMIPS,
+	.burst_setting = 1, /* 0=128B, 1=256B, 2=Rsvd, 3=Rsvd */
 };
 
 static const struct pcie_cfg_data bcm7216_cfg = {
@@ -2029,6 +2024,7 @@ static const struct pcie_cfg_data bcm7216_cfg = {
 	.bridge_sw_init_set = brcm_pcie_bridge_sw_init_set_7278,
 	.flags		= CFG_FLG_HAS_PHY | CFG_FLG_HAS_ERR_REPORT,
 	.num_inbound_wins = 3,
+	.burst_setting	= 0x3, /* 0=Resv, 1=128B, 2=256B, 3=512B */
 };
 
 static const struct pcie_cfg_data bcm7712_cfg = {
@@ -2038,6 +2034,7 @@ static const struct pcie_cfg_data bcm7712_cfg = {
 	.soc_base	= BCM7712,
 	.num_inbound_wins = 10,
 	.quirks		= CFG_QUIRK_NO_RGR1_TIMER,
+	.burst_setting	= 0x2, /* 0=64B, 1=128B, 2=256B, 3=Resv */
 };
 
 static const struct of_device_id brcm_pcie_match[] = {
