@@ -2,6 +2,7 @@
 /* Copyright (C) 2025 Intel Corporation */
 
 #include <linux/net/intel/libie/irq.h>
+#include <linux/net/intel/virtchnl2.h>
 
 /**
  * libie_irq_init - init irq for whole device
@@ -249,6 +250,97 @@ int libie_irq_reserve(struct libie_irq *irq)
 	return ent->index;
 }
 EXPORT_SYMBOL_NS_GPL(libie_irq_reserve, "LIBIE_IRQ");
+
+/**
+ * libie_irq_create_info - Save vectors information from firmware
+ * @info: parsed information is stored here
+ * @caps: virtchannel capabilities
+ * @vectors: vector information from firmware to be parsed
+ * @num_vectors: number of vectors
+ *
+ * Return: 0 on success, negative on failure.
+ */
+int libie_irq_create_info(struct libie_irq_info *info,
+			  const struct virtchnl2_get_capabilities *caps,
+			  const struct virtchnl2_alloc_vectors *vectors,
+			  const u16 num_vectors)
+{
+	const struct virtchnl2_vector_chunks *chunks = &vectors->vchunks;
+	struct libie_hw_vector *vector;
+	const int mb_vectors = 1;
+	int reg_cnt, all_vectors;
+
+	if (le16_to_cpu(vectors->num_vectors) < num_vectors)
+		return -EINVAL;
+
+	all_vectors = num_vectors + mb_vectors;
+	info->vectors = kzalloc_objs(*info->vectors, all_vectors);
+	if (!info->vectors)
+		return -ENOMEM;
+	/* Mailbox irq information are stored in different places. Fill index 0
+	 * of our vectors info with capabilities and rest with information
+	 * from vector chunks.
+	 */
+	vector = &info->vectors[0];
+	vector->idx = le16_to_cpu(caps->mailbox_vector_id);
+	vector->regs.dyn_ctl = le32_to_cpu(caps->mailbox_dyn_ctl);
+	reg_cnt = mb_vectors;
+
+	for (int i = 0; i < le16_to_cpu(chunks->num_vchunks); i++) {
+		const struct virtchnl2_vector_chunk *chunk = &chunks->vchunks[i];
+		u32 dyn_spacing, itrn_spacing;
+		struct libie_vec_regs reg_val;
+		u16 vec_id;
+
+		reg_val.dyn_ctl = le32_to_cpu(chunk->dynctl_reg_start);
+		reg_val.itrn = le32_to_cpu(chunk->itrn_reg_start);
+		reg_val.itrn_index_spacing =
+			le32_to_cpu(chunk->itrn_index_spacing);
+
+		dyn_spacing = le32_to_cpu(chunk->dynctl_reg_spacing);
+		itrn_spacing = le32_to_cpu(chunk->itrn_reg_spacing);
+		vec_id = le16_to_cpu(chunk->start_vector_id);
+
+		for (int j = 0; j < le16_to_cpu(chunk->num_vectors); j++) {
+			if (reg_cnt >= all_vectors)
+				break;
+
+			vector = &info->vectors[reg_cnt];
+
+			vector->regs = reg_val;
+			vector->idx = vec_id;
+
+			reg_val.dyn_ctl += dyn_spacing;
+			reg_val.itrn += itrn_spacing;
+
+			vec_id += 1;
+			reg_cnt += 1;
+		}
+	}
+
+	if (reg_cnt != all_vectors) {
+		kfree(info->vectors);
+		info->vectors = NULL;
+		return -EINVAL;
+	}
+
+	info->num = all_vectors;
+
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(libie_irq_create_info, "LIBIE_IRQ");
+
+/**
+ * libie_irq_destroy_info - free memory allocated during building irq_info
+ * @info: libie_irq_info struct to be freed
+ */
+void libie_irq_destroy_info(struct libie_irq_info *info)
+{
+	kfree(info->vectors);
+	info->vectors = NULL;
+	info->num = 0;
+}
+EXPORT_SYMBOL_NS_GPL(libie_irq_destroy_info, "LIBIE_IRQ");
 
 /* Module */
 
