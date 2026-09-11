@@ -947,54 +947,6 @@ idpf_vport_init_queue_reg_chunks(struct idpf_vport_config *vport_config,
 }
 
 /**
- * idpf_get_reg_intr_vecs - Get vector queue register offset
- * @adapter: adapter structure to get the vector chunks
- * @reg_vals: Register offsets to store in
- * @num_vecs: number of entries the @reg_vals array can hold
- *
- * Return: number of registers that got populated
- */
-int idpf_get_reg_intr_vecs(struct idpf_adapter *adapter,
-			   struct idpf_vec_regs *reg_vals, int num_vecs)
-{
-	struct virtchnl2_vector_chunks *chunks;
-	struct idpf_vec_regs reg_val;
-	u16 num_vchunks, num_vec;
-	int num_regs = 0, i, j;
-
-	chunks = &adapter->req_vec_chunks->vchunks;
-	num_vchunks = le16_to_cpu(chunks->num_vchunks);
-
-	for (j = 0; j < num_vchunks; j++) {
-		struct virtchnl2_vector_chunk *chunk;
-		u32 dynctl_reg_spacing;
-		u32 itrn_reg_spacing;
-
-		chunk = &chunks->vchunks[j];
-		num_vec = le16_to_cpu(chunk->num_vectors);
-		reg_val.dyn_ctl_reg = le32_to_cpu(chunk->dynctl_reg_start);
-		reg_val.itrn_reg = le32_to_cpu(chunk->itrn_reg_start);
-		reg_val.itrn_index_spacing = le32_to_cpu(chunk->itrn_index_spacing);
-
-		dynctl_reg_spacing = le32_to_cpu(chunk->dynctl_reg_spacing);
-		itrn_reg_spacing = le32_to_cpu(chunk->itrn_reg_spacing);
-
-		for (i = 0; i < num_vec && num_regs < num_vecs; i++) {
-			reg_vals[num_regs].dyn_ctl_reg = reg_val.dyn_ctl_reg;
-			reg_vals[num_regs].itrn_reg = reg_val.itrn_reg;
-			reg_vals[num_regs].itrn_index_spacing =
-						reg_val.itrn_index_spacing;
-
-			reg_val.dyn_ctl_reg += dynctl_reg_spacing;
-			reg_val.itrn_reg += itrn_reg_spacing;
-			num_regs++;
-		}
-	}
-
-	return num_regs;
-}
-
-/**
  * idpf_vport_get_q_reg - Get the queue registers for the vport
  * @reg_vals: register values needing to be set
  * @num_regs: amount we expect to fill
@@ -2325,6 +2277,83 @@ free_rx_buf:
 }
 
 /**
+ * idpf_create_vectors_info - Save vectors information from firmware
+ * @info: parsed information is stored here
+ * @caps: virtchannel capabilities
+ * @vectors: vector information from firmware to be parsed
+ * @num_vectors: number of vectors
+ *
+ * Return: 0 on success, negative on failure.
+ */
+static int idpf_create_vectors_info(struct idpf_irq_info *info,
+				    const struct virtchnl2_get_capabilities *caps,
+				    const struct virtchnl2_alloc_vectors *vectors,
+				    const u16 num_vectors)
+{
+	const struct virtchnl2_vector_chunks *chunks = &vectors->vchunks;
+	int all_vectors = num_vectors + IDPF_MBX_Q_VEC;
+	struct idpf_hw_vector *vector;
+	int reg_cnt;
+
+	if (le16_to_cpu(vectors->num_vectors) < num_vectors)
+		return -EINVAL;
+
+	info->vectors = kzalloc_objs(*info->vectors, num_vectors + IDPF_MBX_Q_VEC);
+	if (!info->vectors)
+		return -ENOMEM;
+	/* Mailbox irq information are stored in different places. Fill index 0
+	 * of our vectors info with capabilities and rest with information
+	 * from vector chunks.
+	 */
+	vector = &info->vectors[0];
+	vector->idx = le16_to_cpu(caps->mailbox_vector_id);
+	vector->regs.dyn_ctl = le32_to_cpu(caps->mailbox_dyn_ctl);
+	reg_cnt = IDPF_MBX_Q_VEC;
+
+	for (int i = 0; i < le16_to_cpu(chunks->num_vchunks); i++) {
+		const struct virtchnl2_vector_chunk *chunk = &chunks->vchunks[i];
+		u32 dyn_spacing, itrn_spacing;
+		struct idpf_vec_regs reg_val;
+		u16 vec_id;
+
+		reg_val.dyn_ctl = le32_to_cpu(chunk->dynctl_reg_start);
+		reg_val.itrn = le32_to_cpu(chunk->itrn_reg_start);
+		reg_val.itrn_index_spacing =
+			le32_to_cpu(chunk->itrn_index_spacing);
+
+		dyn_spacing = le32_to_cpu(chunk->dynctl_reg_spacing);
+		itrn_spacing = le32_to_cpu(chunk->itrn_reg_spacing);
+		vec_id = le16_to_cpu(chunk->start_vector_id);
+
+		for (int j = 0; j < le16_to_cpu(chunk->num_vectors); j++) {
+			if (reg_cnt >= all_vectors)
+				break;
+
+			vector = &info->vectors[reg_cnt];
+
+			vector->regs = reg_val;
+			vector->idx = vec_id;
+
+			reg_val.dyn_ctl += dyn_spacing;
+			reg_val.itrn += itrn_spacing;
+
+			vec_id += 1;
+			reg_cnt += 1;
+		}
+	}
+
+	if (reg_cnt != all_vectors) {
+		kfree(info->vectors);
+		info->vectors = NULL;
+		return -EINVAL;
+	}
+
+	info->num = num_vectors + IDPF_MBX_Q_VEC;
+
+	return 0;
+}
+
+/**
  * idpf_send_alloc_vectors_msg - Send virtchnl alloc vectors message
  * @adapter: Driver specific private structure
  * @num_vectors: number of vectors to be allocated
@@ -2368,11 +2397,10 @@ int idpf_send_alloc_vectors_msg(struct idpf_adapter *adapter, u16 num_vectors)
 		goto free_rx_buf;
 	}
 
-	if (le16_to_cpu(adapter->req_vec_chunks->num_vectors) < num_vectors) {
-		kfree(adapter->req_vec_chunks);
-		adapter->req_vec_chunks = NULL;
-		err = -EINVAL;
-	}
+	err = idpf_create_vectors_info(&adapter->irq_info, &adapter->caps,
+				       rcvd_vec, num_vectors);
+	if (err)
+		idpf_send_dealloc_vectors_msg(adapter);
 
 free_rx_buf:
 	libie_ctlq_release_rx_buf(&xn_params.recv_mem);
@@ -2395,6 +2423,11 @@ int idpf_send_dealloc_vectors_msg(struct idpf_adapter *adapter)
 	};
 	struct virtchnl2_vector_chunks *vcs;
 	int buf_size, err;
+
+	/* dealloc vectors can fail, but irq_info still needs to be cleaned */
+	kfree(adapter->irq_info.vectors);
+	adapter->irq_info.vectors = NULL;
+	adapter->irq_info.num = 0;
 
 	buf_size = struct_size(&ac->vchunks, vchunks,
 			       le16_to_cpu(ac->vchunks.num_vchunks));
@@ -3404,51 +3437,6 @@ int idpf_vport_init(struct idpf_vport *vport, struct idpf_vport_max_q *max_q)
 	INIT_WORK(&vport->tstamp_task, idpf_tstamp_task);
 
 	return 0;
-}
-
-/**
- * idpf_get_vec_ids - Initialize vector id from Mailbox parameters
- * @adapter: adapter structure to get the mailbox vector id
- * @vecids: Array of vector ids
- * @num_vecids: number of vector ids
- * @chunks: vector ids received over mailbox
- *
- * Will initialize the mailbox vector id which is received from the
- * get capabilities and data queue vector ids with ids received as
- * mailbox parameters.
- * Returns number of ids filled
- */
-int idpf_get_vec_ids(struct idpf_adapter *adapter,
-		     u16 *vecids, int num_vecids,
-		     struct virtchnl2_vector_chunks *chunks)
-{
-	u16 num_chunks = le16_to_cpu(chunks->num_vchunks);
-	int num_vecid_filled = 0;
-	int i, j;
-
-	vecids[num_vecid_filled] = adapter->mb_vector.v_idx;
-	num_vecid_filled++;
-
-	for (j = 0; j < num_chunks; j++) {
-		struct virtchnl2_vector_chunk *chunk;
-		u16 start_vecid, num_vec;
-
-		chunk = &chunks->vchunks[j];
-		num_vec = le16_to_cpu(chunk->num_vectors);
-		start_vecid = le16_to_cpu(chunk->start_vector_id);
-
-		for (i = 0; i < num_vec; i++) {
-			if ((num_vecid_filled + i) < num_vecids) {
-				vecids[num_vecid_filled + i] = start_vecid;
-				start_vecid++;
-			} else {
-				break;
-			}
-		}
-		num_vecid_filled = num_vecid_filled + i;
-	}
-
-	return num_vecid_filled;
 }
 
 /**
