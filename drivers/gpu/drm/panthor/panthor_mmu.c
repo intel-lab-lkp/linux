@@ -2505,6 +2505,11 @@ int panthor_vm_evict_bo_mappings_locked(struct panthor_gem_object *bo)
 		if (!mutex_trylock(&vm->op_lock))
 			return -EDEADLK;
 
+		if (panthor_sched_protm_try_block(vm->ptdev)) {
+			mutex_unlock(&vm->op_lock);
+			return -EDEADLK;
+		}
+
 		/* It can be that the vm_bo was already evicted but a new
 		 * mapping pointing to this BO got created in the meantime,
 		 * thus turning the vm_bo in partially evicted state. In that case
@@ -2540,6 +2545,7 @@ int panthor_vm_evict_bo_mappings_locked(struct panthor_gem_object *bo)
 			vma->evicted = true;
 		}
 
+		panthor_sched_protm_unblock(vm->ptdev);
 		mutex_unlock(&vm->op_lock);
 
 		if (ret)
@@ -2612,6 +2618,10 @@ static int remap_evicted_vma(struct drm_gpuvm_bo *vm_bo,
 	}
 
 	if (found) {
+		ret = panthor_sched_protm_block(vm->ptdev);
+		if (ret)
+			goto out_unlock;
+
 		vm->op_ctx = op_ctx;
 		ret = panthor_vm_lock_region(vm, evicted_vma->base.va.addr,
 					     evicted_vma->base.va.range);
@@ -2633,9 +2643,12 @@ static int remap_evicted_vma(struct drm_gpuvm_bo *vm_bo,
 			panthor_vm_unlock_region(vm);
 		}
 
+		panthor_sched_protm_unblock(vm->ptdev);
+
 		vm->op_ctx = NULL;
 	}
 
+out_unlock:
 	mutex_unlock(&vm->op_lock);
 
 out_cleanup:
@@ -2726,9 +2739,13 @@ panthor_vm_exec_op(struct panthor_vm *vm, struct panthor_vm_op_ctx *op,
 	mutex_lock(&vm->op_lock);
 	vm->op_ctx = op;
 
+	ret = panthor_sched_protm_block(vm->ptdev);
+	if (ret)
+		goto out_unlock;
+
 	ret = panthor_vm_lock_region(vm, op->va.addr, op->va.range);
 	if (ret)
-		goto out;
+		goto out_unblock;
 
 	switch (op_type) {
 	case DRM_PANTHOR_VM_BIND_OP_TYPE_MAP: {
@@ -2759,10 +2776,13 @@ panthor_vm_exec_op(struct panthor_vm *vm, struct panthor_vm_op_ctx *op,
 
 	panthor_vm_unlock_region(vm);
 
-out:
+out_unblock:
+	panthor_sched_protm_unblock(vm->ptdev);
+
 	if (ret && flag_vm_unusable_on_failure)
 		panthor_vm_declare_unusable(vm);
 
+out_unlock:
 	vm->op_ctx = NULL;
 	mutex_unlock(&vm->op_lock);
 

@@ -336,6 +336,37 @@ struct panthor_device {
 		struct list_head node;
 	} gems;
 #endif
+	/** @protm: Protected mode related data. */
+	struct {
+		/**
+		 * @lock: Lock to prevent MMU operations during protected mode.
+		 *
+		 * The MMU HW will silently ignore commands issued when the
+		 * GPU is in protected mode. It is important that we handle this
+		 * for some of the MMU HW interactions.
+		 *
+		 * Code which interacts with the MMU, typically by calling
+		 * panthor_vm_lock_region(), should therefore ensure the
+		 * scheduler is not in and will not enter protected mode first.
+		 * This is done by calling either
+		 * - panthor_sched_protm_block(), or
+		 * - panthor_sched_protm_try_block()
+		 *
+		 * Once the MMU operations have completed, call
+		 * panthor_sched_protm_unblock() to tell the scheduler that
+		 * it is safe to enter protected mode again.
+		 *
+		 * The block/unblock for MMU operations take this as reader.
+		 * The scheduler holds this as writer when switching into protm.
+		 */
+		struct rw_semaphore lock;
+
+		/** @protm_enter_count: Number of times entered protm. */
+		atomic64_t protm_enter_count;
+
+		/** @protm_exit_count: Number of times exited protm. */
+		atomic64_t protm_exit_count;
+	} protm;
 };
 
 struct panthor_gpu_usage {

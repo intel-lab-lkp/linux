@@ -60,4 +60,8 @@ u64 panthor_gpu_get_cycle_count(struct panthor_device *ptdev);
 
 int panthor_gpu_coherency_init(struct panthor_device *ptdev);
 
+u32 panthor_gpu_status(struct panthor_device *ptdev);
+
+bool panthor_gpu_protm_fault_pending(struct panthor_device *ptdev);
+
 #endif

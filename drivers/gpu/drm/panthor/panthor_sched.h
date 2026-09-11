@@ -52,4 +52,8 @@ void panthor_sched_report_fw_events(struct panthor_device *ptdev, u32 events);
 
 void panthor_fdinfo_gather_group_samples(struct drm_file *file);
 
+int panthor_sched_protm_block(struct panthor_device *ptdev);
+int panthor_sched_protm_try_block(struct panthor_device *ptdev);
+void panthor_sched_protm_unblock(struct panthor_device *ptdev);
+
 #endif

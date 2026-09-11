@@ -1067,7 +1067,9 @@ static void panthor_fw_init_global_iface(struct panthor_device *ptdev)
 					 GLB_CFG_PROGRESS_TIMER |
 					 GLB_CFG_POWEROFF_TIMER |
 					 GLB_IDLE_EN |
-					 GLB_IDLE;
+					 GLB_IDLE |
+					 GLB_PROTM_ENTER |
+					 GLB_PROTM_EXIT;
 
 	if (panthor_fw_has_glb_state(ptdev))
 		glb_iface->input->ack_irq_mask |= GLB_STATE_MASK;
@@ -1281,6 +1283,9 @@ int panthor_fw_post_reset(struct panthor_device *ptdev)
 		return ret;
 	}
 
+	atomic64_set(&ptdev->protm.protm_enter_count, 0);
+	atomic64_set(&ptdev->protm.protm_exit_count, 0);
+
 	/* We must re-initialize the global interface even on fast-reset. */
 	panthor_fw_init_global_iface(ptdev);
 	return 0;
@@ -1474,6 +1479,91 @@ static void panthor_fw_ping_work(struct work_struct *work)
 		mod_delayed_work(ptdev->reset.wq, &fw->watchdog.ping_work,
 				 msecs_to_jiffies(PING_INTERVAL_MS));
 	}
+}
+
+static bool wait_protm_enter(struct panthor_device *ptdev,
+			     long long enter_count)
+{
+	return (panthor_gpu_status(ptdev) & GPU_STATUS_PROTM_ACTIVE) ||
+	       (atomic64_read(&ptdev->protm.protm_exit_count) >= enter_count);
+}
+
+int panthor_fw_protm_enter(struct panthor_device *ptdev)
+{
+	struct panthor_fw_global_iface *glb_iface =
+		panthor_fw_get_glb_iface(ptdev);
+	u32 acked;
+	int ret;
+	long long enter_count;
+
+	/* Restart the watchdog timer, so it doesn't hit immediately
+	 * after entering protected mode, since this will cause GPU
+	 * to exit protected mode to respond to the ping request.
+	 */
+	mod_delayed_work(ptdev->reset.wq, &ptdev->fw->watchdog.ping_work,
+			 msecs_to_jiffies(PING_INTERVAL_MS));
+
+	panthor_fw_toggle_reqs(glb_iface, req, ack, GLB_PROTM_ENTER);
+	panthor_fw_ring_doorbell(ptdev, CSF_GLB_DOORBELL_ID);
+
+	ret = panthor_fw_glb_wait_acks(ptdev, GLB_PROTM_ENTER, &acked, 250);
+	if (ret) {
+		drm_err(&ptdev->base,
+			"Wait for FW protected mode acknowledge timed out");
+		return ret;
+	}
+
+	enter_count = atomic64_inc_return(&ptdev->protm.protm_enter_count);
+
+	/* Poll for the entry of protected mode.
+	 * It is possible that GPU_STATUS_PROTM_ACTIVE is set and cleared
+	 * before we check it below, so we must also check for GLB_PROTM_EXIT.
+	 * GLB_PROTM_EXIT can not be checked directly, because this could also
+	 * be handled and clear before we check below. We count number of
+	 * protm enters and exits to safely handle that case.
+	 */
+	ret = wait_event_timeout(ptdev->fw->req_waitqueue,
+				 wait_protm_enter(ptdev, enter_count),
+				 msecs_to_jiffies(500));
+	if (!ret) {
+		drm_err(&ptdev->base,
+			"Wait for GPU protected mode enter timed out");
+		return -ETIMEDOUT;
+	}
+
+	return 0;
+}
+
+int panthor_fw_protm_exit_wait(struct panthor_device *ptdev, u32 timeout_ms)
+{
+	int ret;
+
+	ret = wait_event_timeout(ptdev->fw->req_waitqueue,
+				 !(panthor_gpu_status(ptdev) &
+				   GPU_STATUS_PROTM_ACTIVE),
+				 msecs_to_jiffies(timeout_ms));
+	if (!ret)
+		return -ETIMEDOUT;
+
+	return 0;
+}
+
+int panthor_fw_protm_exit(struct panthor_device *ptdev, u32 timeout_ms)
+{
+	struct panthor_fw_global_iface *glb_iface =
+		panthor_fw_get_glb_iface(ptdev);
+	int ret;
+
+	/* Send PING request to force an exit */
+	panthor_fw_toggle_reqs(glb_iface, req, ack, GLB_PING);
+	panthor_fw_ring_doorbell(ptdev, CSF_GLB_DOORBELL_ID);
+
+	ret = panthor_fw_protm_exit_wait(ptdev, timeout_ms);
+	if (ret)
+		drm_err(&ptdev->base,
+			"Wait for GPU protected mode exit timed out");
+
+	return ret;
 }
 
 /**

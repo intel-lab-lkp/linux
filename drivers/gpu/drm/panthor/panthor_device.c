@@ -172,6 +172,7 @@ int panthor_device_init(struct panthor_device *ptdev)
 
 	ptdev->soc_data = of_device_get_match_data(ptdev->base.dev);
 
+	init_rwsem(&ptdev->protm.lock);
 	init_completion(&ptdev->unplug.done);
 	ret = drmm_mutex_init(&ptdev->base, &ptdev->unplug.lock);
 	if (ret)
