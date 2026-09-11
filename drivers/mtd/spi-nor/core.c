@@ -985,7 +985,10 @@ static int spi_nor_generic_quad_enable(struct spi_nor *nor)
 	if (!qe_mask[0] && !qe_mask[1])
 		return 0;
 
-	ret = spi_nor_read_sr1_and_sr2(nor, sr);
+	if (qe_mask[0])
+		ret = spi_nor_read_sr1(nor, sr);
+	else
+		ret = spi_nor_read_sr1_and_sr2(nor, sr);
 	if (ret)
 		return ret;
 
