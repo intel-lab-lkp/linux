@@ -64,6 +64,40 @@ struct libie_irq {
 	struct xarray entries;
 };
 
+/**
+ * struct libie_vec_regs - hardware registers related to vector
+ * @dyn_ctl: Dynamic control interrupt register offset
+ * @itrn: Interrupt Throttling Rate register offset
+ * @itrn_index_spacing: Register spacing between ITR registers of the same
+ *			vector
+ */
+struct libie_vec_regs {
+	u32 dyn_ctl;
+	u32 itrn;
+	u32 itrn_index_spacing;
+};
+
+/**
+ * struct libie_hw_vector - single hardware vector info
+ * @regs: address of irq registers
+ * @idx: hardware vector index
+ */
+struct libie_hw_vector {
+	struct libie_vec_regs regs;
+	int idx;
+};
+
+/**
+ * struct libie_irq_info - hardware data needed to setup irq
+ * @vectors: allocated during initialization store hardware information
+ *	     for all vectors that can be used on a whole device
+ * @num: amount of vectors stored here
+ */
+struct libie_irq_info {
+	struct libie_hw_vector *vectors;
+	int num;
+};
+
 int libie_irq_init(struct libie_irq *irq, struct pci_dev *pdev,
 		   int min, int max);
 void libie_irq_deinit(struct libie_irq *irq);

@@ -586,40 +586,6 @@ struct idpf_edt_caps_ilog2 {
 	     *__##iter : NULL)
 
 /**
- * struct idpf_vec_regs - hardware registers related to vector
- * @dyn_ctl: Dynamic control interrupt register offset
- * @itrn: Interrupt Throttling Rate register offset
- * @itrn_index_spacing: Register spacing between ITR registers of the same
- *			vector
- */
-struct idpf_vec_regs {
-	u32 dyn_ctl;
-	u32 itrn;
-	u32 itrn_index_spacing;
-};
-
-/**
- * struct idpf_hw_vector - single hardware vector info
- * @regs: address of irq registers
- * @idx: hardware vector index
- */
-struct idpf_hw_vector {
-	struct idpf_vec_regs regs;
-	int idx;
-};
-
-/**
- * struct idpf_irq_info - hardware data needed to setup irq
- * @vectors: allocated during initialization store hardware information
- *	     for all vectors that can be used on a whole device
- * @num: amount of vectors stored here
- */
-struct idpf_irq_info {
-	struct idpf_hw_vector *vectors;
-	int num;
-};
-
-/**
  * struct idpf_rdma_irq - RDMA interrupt vectors data
  * @entries: MSIX table shared with the RDMA auxiliary device
  * @map: libie IRQ mappings corresponding to @entries
@@ -704,7 +670,7 @@ struct idpf_adapter {
 	struct idpf_rdma_irq rdma_irq;
 	struct libie_irq irq;
 	struct virtchnl2_alloc_vectors *req_vec_chunks;
-	struct idpf_irq_info irq_info;
+	struct libie_irq_info irq_info;
 	struct idpf_q_vector mb_vector;
 	irqreturn_t (*irq_mb_handler)(int irq, void *data);
 
