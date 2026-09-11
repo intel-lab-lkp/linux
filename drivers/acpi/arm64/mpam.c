@@ -338,7 +338,7 @@ static int __init acpi_mpam_parse(void)
 		 * to enable it safely, because we cannot determine safe
 		 * system-wide partid and pmg ranges in this situation.
 		 */
-		if (tbl_msc->reserved || tbl_msc->reserved1 || tbl_msc->reserved2) {
+		if (tbl_msc->reserved || tbl_msc->reserved1) {
 			pr_err_once("Unrecognised MSC, MPAM not usable\n");
 			pr_debug("MSC.%u: reserved field set\n", tbl_msc->identifier);
 			continue;
