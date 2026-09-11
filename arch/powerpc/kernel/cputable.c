@@ -36,8 +36,12 @@ void __init set_cur_cpu_spec(struct cpu_spec *s)
 
 	t = PTRRELOC(t);
 	/*
-	 * use memcpy() instead of *t = *s so that GCC replaces it
-	 * by __memcpy() when KASAN is active
+	 * Use memcpy() instead of *t = *s because t is a PTRRELOC-adjusted
+	 * pointer and this code runs before the MMU mapping is established.
+	 * A struct assignment is a compiler-generated aggregate copy whose
+	 * implementation is not under our control in relocation-sensitive code;
+	 * memcpy() ensures the adjusted pointer is explicitly passed to the
+	 * copy routine.
 	 */
 	memcpy(t, s, sizeof(*t));
 
@@ -55,7 +59,11 @@ static struct cpu_spec * __init setup_cpu_spec(unsigned long offset,
 
 	/*
 	 * Copy everything, then do fixups. Use memcpy() instead of *t = *s
-	 * so that GCC replaces it by __memcpy() when KASAN is active
+	 * because t is a PTRRELOC-adjusted pointer and this code runs before
+	 * the MMU mapping is established. A struct assignment is a
+	 * compiler-generated aggregate copy whose implementation is not under
+	 * our control in relocation-sensitive code; memcpy() ensures the
+	 * adjusted pointer is explicitly passed to the copy routine.
 	 */
 	memcpy(t, s, sizeof(*t));
 

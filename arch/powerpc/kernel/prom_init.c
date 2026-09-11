@@ -1363,10 +1363,12 @@ static void __init prom_check_platform_support(void)
 				       "ibm,arch-vec-5-platform-support");
 
 	/*
-	 * First copy the architecture vec template
-	 *
-	 * use memcpy() instead of *vec = *vec_template so that GCC replaces it
-	 * by __memcpy() when KASAN is active
+	 * First copy the architecture vec template. Use memcpy() instead of
+	 * a struct assignment because this code runs before the MMU mapping
+	 * is established. A struct assignment is a compiler-generated
+	 * aggregate copy whose implementation is not under our control in
+	 * relocation-sensitive code; memcpy() ensures the adjusted pointer
+	 * is explicitly passed to the copy routine.
 	 */
 	memcpy(&ibm_architecture_vec, &ibm_architecture_vec_template,
 	       sizeof(ibm_architecture_vec));
