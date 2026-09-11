@@ -1926,7 +1926,21 @@ err_clk_disable:
 
 static void stm32_dma3_remove(struct platform_device *pdev)
 {
+	struct stm32_dma3_ddata *ddata = platform_get_drvdata(pdev);
+	struct dma_chan *c;
+
+	of_dma_controller_free(pdev->dev.of_node);
 	pm_runtime_disable(&pdev->dev);
+
+	list_for_each_entry(c, &ddata->dma_dev.channels, device_node) {
+		struct stm32_dma3_chan *chan = to_stm32_dma3_chan(c);
+
+		devm_free_irq(&pdev->dev, chan->irq, chan);
+	}
+
+	if (!pm_runtime_status_suspended(&pdev->dev))
+		clk_disable_unprepare(ddata->clk);
+	pm_runtime_set_suspended(&pdev->dev);
 }
 
 static int stm32_dma3_runtime_suspend(struct device *dev)
