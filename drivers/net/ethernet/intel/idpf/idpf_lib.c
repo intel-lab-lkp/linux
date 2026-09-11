@@ -305,16 +305,14 @@ rel_lock:
  */
 int idpf_intr_req(struct idpf_adapter *adapter)
 {
-	u16 num_lan_vecs, min_lan_vecs, num_rdma_vecs = 0, min_rdma_vecs = 0;
+	int num_rdma_vecs = 0, min_rdma_vecs = 0, num_lan_vecs = 0;
 	u16 default_vports = idpf_get_default_vports(adapter);
-	int num_q_vecs, total_vecs, num_vec_ids;
-	int min_vectors, actual_vecs, err;
+	int min_vectors, actual_vecs, min_lan_vecs, err;
+	int num_q_vecs, total_vecs;
 	unsigned int vector;
-	u16 *vecids;
 	int i;
 
 	total_vecs = idpf_get_reserved_vecs(adapter);
-	num_lan_vecs = total_vecs;
 	if (idpf_is_rdma_cap_ena(adapter)) {
 		num_rdma_vecs = idpf_get_reserved_rdma_vecs(adapter);
 		min_rdma_vecs = IDPF_MIN_RDMA_VEC;
@@ -376,28 +374,15 @@ int idpf_intr_req(struct idpf_adapter *adapter)
 		goto free_rdma_msix;
 	}
 
-	adapter->mb_vector.v_idx = le16_to_cpu(adapter->caps.mailbox_vector_id);
-
-	vecids = kcalloc(actual_vecs, sizeof(u16), GFP_KERNEL);
-	if (!vecids) {
-		err = -ENOMEM;
-		goto free_msix;
-	}
-
-	num_vec_ids = idpf_get_vec_ids(adapter, vecids, actual_vecs,
-				       &adapter->req_vec_chunks->vchunks);
-	if (num_vec_ids < actual_vecs) {
-		err = -EINVAL;
-		goto free_vecids;
-	}
-
 	for (vector = 0; vector < num_lan_vecs; vector++) {
-		adapter->msix_entries[vector].entry = vecids[vector];
+		adapter->msix_entries[vector].entry =
+			adapter->irq_info.vectors[vector].idx;
 		adapter->msix_entries[vector].vector =
 			pci_irq_vector(adapter->pdev, vector);
 	}
 	for (i = 0; i < num_rdma_vecs; vector++, i++) {
-		adapter->rdma_msix_entries[i].entry = vecids[vector];
+		adapter->rdma_msix_entries[i].entry =
+			adapter->irq_info.vectors[vector].idx;
 		adapter->rdma_msix_entries[i].vector =
 			pci_irq_vector(adapter->pdev, vector);
 	}
@@ -414,20 +399,17 @@ int idpf_intr_req(struct idpf_adapter *adapter)
 	/* Fill MSIX vector lifo stack with vector indexes */
 	err = idpf_init_vector_stack(adapter);
 	if (err)
-		goto free_vecids;
+		goto free_msix;
 
 	err = idpf_mb_intr_init(adapter);
 	if (err)
 		goto deinit_vec_stack;
 	idpf_mb_irq_enable(adapter);
-	kfree(vecids);
 
 	return 0;
 
 deinit_vec_stack:
 	idpf_deinit_vector_stack(adapter);
-free_vecids:
-	kfree(vecids);
 free_msix:
 	kfree(adapter->msix_entries);
 	adapter->msix_entries = NULL;
