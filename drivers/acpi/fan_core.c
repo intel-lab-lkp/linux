@@ -340,17 +340,18 @@ static int acpi_fan_dsm_init(struct device *dev)
 		},
 	};
 	struct acpi_fan *fan = dev_get_drvdata(dev);
+	acpi_handle fan_handle = fan->adev->handle;
 	union acpi_object *obj;
 	int ret = 0;
 
-	if (!acpi_check_dsm(fan->handle, &acpi_fan_microsoft_guid, 0,
+	if (!acpi_check_dsm(fan_handle, &acpi_fan_microsoft_guid, 0,
 			    BIT(ACPI_FAN_DSM_GET_TRIP_POINT_GRANULARITY) |
 			    BIT(ACPI_FAN_DSM_SET_TRIP_POINTS)))
 		return 0;
 
 	dev_info(dev, "Using Microsoft fan extensions\n");
 
-	obj = acpi_evaluate_dsm_typed(fan->handle, &acpi_fan_microsoft_guid, 0,
+	obj = acpi_evaluate_dsm_typed(fan_handle, &acpi_fan_microsoft_guid, 0,
 				      ACPI_FAN_DSM_GET_TRIP_POINT_GRANULARITY, &dummy,
 				      ACPI_TYPE_INTEGER);
 	if (!obj)
@@ -392,8 +393,8 @@ static int acpi_fan_dsm_set_trip_points(struct device *dev, u64 upper, u64 lower
 	};
 	union acpi_object *obj;
 
-	obj = acpi_evaluate_dsm(fan->handle, &acpi_fan_microsoft_guid, 0,
-				ACPI_FAN_DSM_SET_TRIP_POINTS, &in);
+	obj = acpi_evaluate_dsm(fan->adev->handle, &acpi_fan_microsoft_guid,
+				0, ACPI_FAN_DSM_SET_TRIP_POINTS, &in);
 	kfree(obj);
 
 	return 0;
@@ -503,7 +504,7 @@ static int acpi_fan_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
-	fan->handle = device->handle;
+	fan->adev = device;
 	device->driver_data = fan;
 	platform_set_drvdata(pdev, fan);
 
