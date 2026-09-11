@@ -4068,6 +4068,12 @@ QInfRetry:
 			 (struct smb_hdr *) pSMBr, &bytes_returned, 0);
 	if (rc) {
 		cifs_dbg(FYI, "Send error in QueryInfo = %d\n", rc);
+	} else if (bytes_returned < (int)sizeof(QUERY_INFORMATION_RSP)) {
+		/* check that the received response can hold a whole rsp */
+		cifs_dbg(FYI, "%s: server returned short header. got=%d expected=%zu\n",
+			 __func__, bytes_returned, sizeof(QUERY_INFORMATION_RSP));
+		rc = smb_EIO2(smb_eio_trace_qinfo_rsp_short,
+			      bytes_returned, sizeof(QUERY_INFORMATION_RSP));
 	} else if (data) {
 		struct timespec64 ts;
 		__u32 time = le32_to_cpu(pSMBr->last_write_time);

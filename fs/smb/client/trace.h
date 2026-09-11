@@ -71,6 +71,7 @@
 	EM(smb_eio_trace_qfsinfo_bcc_too_small,		"qfsinfo_bcc_too_small") \
 	EM(smb_eio_trace_qfsposixinfo_bcc_too_small,	"qfsposixinfo_bcc_too_small") \
 	EM(smb_eio_trace_qfsunixinfo_bcc_too_small,	"qfsunixinfo_bcc_too_small") \
+	EM(smb_eio_trace_qinfo_rsp_short,		"qinfo_rsp_short") \
 	EM(smb_eio_trace_qpathinfo_bcc_too_small,	"qpathinfo_bcc_too_small") \
 	EM(smb_eio_trace_qpathinfo_invalid,		"qpathinfo_invalid") \
 	EM(smb_eio_trace_qreparse_data_area,		"qreparse_data_area") \
