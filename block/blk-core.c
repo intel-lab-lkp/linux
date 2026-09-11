@@ -257,7 +257,7 @@ blk_status_t tag_to_blk_status(const char *tag)
  *
  *     This function does not cancel any asynchronous activity arising
  *     out of elevator or throttling code. That would require elevator_exit()
- *     and blkcg_exit_queue() to be called with queue lock initialized.
+ *     and blkcg_exit_disk() to be called with queue lock initialized.
  *
  */
 void blk_sync_queue(struct request_queue *q)
