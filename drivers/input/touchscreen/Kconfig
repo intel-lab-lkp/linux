@@ -701,6 +701,17 @@ config TOUCHSCREEN_NOVATEK_NVT_TS
 	  To compile this driver as a module, choose M here: the
 	  module will be called novatek-nvt-ts.
 
+config TOUCHSCREEN_NOVATEK_NT36672A_SPI
+	tristate "Novatek NT36672A SPI touchscreen support"
+	depends on SPI_MASTER
+	select FW_LOADER
+	help
+	  Say Y here if you have a Novatek NT36672A touchscreen
+	  connected over SPI.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called novatek-nt36672a-spi.
+
 config TOUCHSCREEN_IMAGIS
 	tristate "Imagis touchscreen support"
 	depends on I2C
