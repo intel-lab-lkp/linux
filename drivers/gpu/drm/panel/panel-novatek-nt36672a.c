@@ -34,7 +34,7 @@ static const char * const nt36672a_regulator_names[] = {
 	"vddneg",
 };
 
-static unsigned long const nt36672a_regulator_enable_loads[] = {
+static const unsigned long nt36672a_regulator_enable_loads[] = {
 	62000,
 	100000,
 	100000
@@ -92,18 +92,12 @@ static int nt36672a_panel_unprepare(struct drm_panel *panel)
 	if (pinfo->desc->send_deinit_cmds)
 		pinfo->desc->send_deinit_cmds(&dsi_ctx);
 
-	/* Reset error to continue with display off even if send_cmds failed */
+	/* Reset error to continue power-down even if send_cmds failed */
 	dsi_ctx.accum_err = 0;
-	mipi_dsi_dcs_set_display_off_multi(&dsi_ctx);
-	/* Reset error to continue power-down even if display off failed */
-	dsi_ctx.accum_err = 0;
-
-	/* 120ms delay required here as per DCS spec */
-	msleep(120);
 
 	mipi_dsi_dcs_enter_sleep_mode_multi(&dsi_ctx);
 
-	/* 0x3C = 60ms delay */
+	/* 60ms delay as per DCS spec */
 	msleep(60);
 
 	nt36672a_panel_power_off(panel);
@@ -120,15 +114,14 @@ static int nt36672a_panel_power_on(struct nt36672a_panel *pinfo)
 		return ret;
 
 	/*
-	 * As per downstream kernel, Reset sequence of Tianma FHD panel requires the panel to
-	 * be out of reset for 10ms, followed by being held in reset for 10ms. But for Android
-	 * AOSP, we needed to bump it upto 200ms otherwise we get white screen sometimes.
-	 * FIXME: Try to reduce this 200ms to a lesser value.
+	 * Reset sequence: 10ms out of reset, 10ms held in reset, 10ms out of reset.
 	 */
-	gpiod_set_value(pinfo->reset_gpio, 1);
-	msleep(200);
-	gpiod_set_value(pinfo->reset_gpio, 0);
-	msleep(200);
+	gpiod_set_value_cansleep(pinfo->reset_gpio, 0);
+	usleep_range(10000, 11000);
+	gpiod_set_value_cansleep(pinfo->reset_gpio, 1);
+	usleep_range(10000, 11000);
+	gpiod_set_value_cansleep(pinfo->reset_gpio, 0);
+	usleep_range(10000, 11000);
 
 	return 0;
 }
@@ -146,19 +139,41 @@ static int nt36672a_panel_prepare(struct drm_panel *panel)
 
 	mipi_dsi_dcs_exit_sleep_mode_multi(&dsi_ctx);
 
-	/* 0x46 = 70 ms delay */
-	mipi_dsi_msleep(&dsi_ctx, 70);
-
-	mipi_dsi_dcs_set_display_on_multi(&dsi_ctx);
+	/* 80 ms delay as per DCS spec / downstream timing */
+	msleep(80);
 
 	/* Send rest of the init cmds */
 	if (pinfo->desc->send_init_cmds_2)
 		pinfo->desc->send_init_cmds_2(&dsi_ctx);
 
-	mipi_dsi_msleep(&dsi_ctx, 120);
-
 	if (dsi_ctx.accum_err < 0)
-		gpiod_set_value(pinfo->reset_gpio, 0);
+		gpiod_set_value_cansleep(pinfo->reset_gpio, 0);
+
+	return dsi_ctx.accum_err;
+}
+
+static int nt36672a_panel_enable(struct drm_panel *panel)
+{
+	struct nt36672a_panel *pinfo = to_nt36672a_panel(panel);
+	struct mipi_dsi_multi_context dsi_ctx = { .dsi = pinfo->link };
+
+	mipi_dsi_dcs_set_display_on_multi(&dsi_ctx);
+
+	/* Frame settling delay */
+	msleep(20);
+
+	return dsi_ctx.accum_err;
+}
+
+static int nt36672a_panel_disable(struct drm_panel *panel)
+{
+	struct nt36672a_panel *pinfo = to_nt36672a_panel(panel);
+	struct mipi_dsi_multi_context dsi_ctx = { .dsi = pinfo->link };
+
+	mipi_dsi_dcs_set_display_off_multi(&dsi_ctx);
+
+	/* 120ms delay as per DCS spec */
+	msleep(120);
 
 	return dsi_ctx.accum_err;
 }
@@ -189,6 +204,8 @@ static int nt36672a_panel_get_modes(struct drm_panel *panel,
 static const struct drm_panel_funcs panel_funcs = {
 	.unprepare = nt36672a_panel_unprepare,
 	.prepare = nt36672a_panel_prepare,
+	.enable = nt36672a_panel_enable,
+	.disable = nt36672a_panel_disable,
 	.get_modes = nt36672a_panel_get_modes,
 };
 
@@ -404,6 +421,79 @@ static const struct nt36672a_panel_desc tianma_fhd_video_panel_desc = {
 	.send_deinit_cmds = tianma_fhd_video_send_deinit_cmds,
 };
 
+static void tianma_ginkgo_send_init_cmds(struct mipi_dsi_multi_context *dsi_ctx)
+{
+	/* Page 0x25 init */
+	mipi_dsi_dcs_write_seq_multi(dsi_ctx, 0xff, 0x25);
+	mipi_dsi_dcs_write_seq_multi(dsi_ctx, 0xfb, 0x01);
+	mipi_dsi_dcs_write_seq_multi(dsi_ctx, 0x18, 0x96);
+	mipi_dsi_dcs_write_seq_multi(dsi_ctx, 0x05, 0x04);
+
+	/* Page 0x20 init */
+	mipi_dsi_dcs_write_seq_multi(dsi_ctx, 0xff, 0x20);
+	mipi_dsi_dcs_write_seq_multi(dsi_ctx, 0xfb, 0x01);
+	mipi_dsi_dcs_write_seq_multi(dsi_ctx, 0x78, 0x01);
+
+	/* Page 0x24 init */
+	mipi_dsi_dcs_write_seq_multi(dsi_ctx, 0xff, 0x24);
+	mipi_dsi_dcs_write_seq_multi(dsi_ctx, 0xfb, 0x01);
+	mipi_dsi_dcs_write_seq_multi(dsi_ctx, 0x82, 0x13);
+	mipi_dsi_dcs_write_seq_multi(dsi_ctx, 0x84, 0x31);
+	mipi_dsi_dcs_write_seq_multi(dsi_ctx, 0x88, 0x13);
+	mipi_dsi_dcs_write_seq_multi(dsi_ctx, 0x8a, 0x31);
+	mipi_dsi_dcs_write_seq_multi(dsi_ctx, 0x8e, 0xe4);
+	mipi_dsi_dcs_write_seq_multi(dsi_ctx, 0x8f, 0x01);
+	mipi_dsi_dcs_write_seq_multi(dsi_ctx, 0x90, 0x80);
+
+	/* Page 0x26 init */
+	mipi_dsi_dcs_write_seq_multi(dsi_ctx, 0xff, 0x26);
+	mipi_dsi_dcs_write_seq_multi(dsi_ctx, 0xfb, 0x01);
+	mipi_dsi_dcs_write_seq_multi(dsi_ctx, 0xa9, 0x12);
+	mipi_dsi_dcs_write_seq_multi(dsi_ctx, 0xaa, 0x10);
+	mipi_dsi_dcs_write_seq_multi(dsi_ctx, 0xae, 0x8a);
+
+	/* Page 0x10 (User command page) */
+	mipi_dsi_dcs_write_seq_multi(dsi_ctx, 0xff, 0x10);
+}
+
+static void tianma_ginkgo_send_post_on_cmds(struct mipi_dsi_multi_context *dsi_ctx)
+{
+	mipi_dsi_dcs_write_seq_multi(dsi_ctx, 0xb0, 0x01);
+	mipi_dsi_dcs_write_seq_multi(dsi_ctx, 0x35, 0x00);
+	mipi_dsi_dcs_write_seq_multi(dsi_ctx, 0x68, 0x04, 0x03);
+	mipi_dsi_dcs_write_seq_multi(dsi_ctx, 0x51, 0xb8);
+	mipi_dsi_dcs_write_seq_multi(dsi_ctx, 0x53, 0x2c);
+	mipi_dsi_dcs_write_seq_multi(dsi_ctx, 0x55, 0x00);
+}
+
+static const struct drm_display_mode tianma_ginkgo_fhd_video_mode = {
+	.clock		= 183025,
+
+	.hdisplay	= 1080,
+	.hsync_start	= 1080 + 90,
+	.hsync_end	= 1080 + 90 + 2,
+	.htotal		= 1080 + 90 + 2 + 120,
+
+	.vdisplay	= 2340,
+	.vsync_start	= 2340 + 10,
+	.vsync_end	= 2340 + 10 + 3,
+	.vtotal		= 2340 + 10 + 3 + 8,
+
+	.type = DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED,
+};
+
+static const struct nt36672a_panel_desc tianma_ginkgo_fhd_video_panel_desc = {
+	.display_mode = &tianma_ginkgo_fhd_video_mode,
+	.panel_name = "tianma-ginkgo-fhd-video",
+	.width_mm = 67,
+	.height_mm = 145,
+	.mode_flags = MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_LPM,
+	.format = MIPI_DSI_FMT_RGB888,
+	.lanes = 4,
+	.send_init_cmds_1 = tianma_ginkgo_send_init_cmds,
+	.send_init_cmds_2 = tianma_ginkgo_send_post_on_cmds,
+};
+
 static int nt36672a_panel_add(struct nt36672a_panel *pinfo)
 {
 	struct device *dev = &pinfo->link->dev;
@@ -427,6 +517,8 @@ static int nt36672a_panel_add(struct nt36672a_panel *pinfo)
 	ret = drm_panel_of_backlight(&pinfo->base);
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to get backlight\n");
+
+	pinfo->base.prepare_prev_first = true;
 
 	drm_panel_add(&pinfo->base);
 
@@ -481,6 +573,7 @@ static void nt36672a_panel_remove(struct mipi_dsi_device *dsi)
 
 static const struct of_device_id tianma_fhd_video_of_match[] = {
 	{ .compatible = "tianma,fhd-video", .data = &tianma_fhd_video_panel_desc },
+	{ .compatible = "tianma,fhd-video-ginkgo", .data = &tianma_ginkgo_fhd_video_panel_desc },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, tianma_fhd_video_of_match);
