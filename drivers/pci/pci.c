@@ -3095,17 +3095,36 @@ static int pci_dev_check_d3cold(struct pci_dev *dev, void *data)
 }
 
 /*
+ * Serializes pci_bridge_d3_update()'s bridge_d3 read-modify-writes and
+ * their upstream propagation.  Ordering: pci_rescan_remove_lock,
+ * device_lock(any) -> pci_bridge_d3_lock -> pci_bus_sem (read); no
+ * pci_walk_bus() callback may call into this path.
+ */
+static DEFINE_MUTEX(pci_bridge_d3_lock);
+
+/**
  * pci_bridge_d3_update - Update bridge D3 capabilities
  * @dev: PCI device which is changed
  *
  * Update upstream bridge PM capabilities accordingly depending on if the
  * device PM configuration was changed or the device is being removed.  The
  * change is also propagated upstream.
+ *
+ * Context: Process context. Takes and releases pci_bridge_d3_lock.
  */
 void pci_bridge_d3_update(struct pci_dev *dev)
 {
 	struct pci_dev *bridge;
 
+	/*
+	 * Unlocked fast path; the loop condition re-evaluates both checks
+	 * under the lock.
+	 */
+	bridge = pci_upstream_bridge(dev);
+	if (!bridge || !pci_bridge_d3_possible(bridge))
+		return;
+
+	mutex_lock(&pci_bridge_d3_lock);
 	while ((bridge = pci_upstream_bridge(dev)) &&
 	       pci_bridge_d3_possible(bridge)) {
 		bool remove = !device_is_registered(&dev->dev);
@@ -3148,6 +3167,7 @@ void pci_bridge_d3_update(struct pci_dev *dev)
 		/* Propagate change to upstream bridges */
 		dev = bridge;
 	}
+	mutex_unlock(&pci_bridge_d3_lock);
 }
 
 /**
@@ -3157,6 +3177,9 @@ void pci_bridge_d3_update(struct pci_dev *dev)
  * This function can be used in drivers to enable D3cold from the device
  * they handle.  It also updates upstream PCI bridge PM capabilities
  * accordingly.
+ *
+ * Context: Process context. Takes and releases pci_bridge_d3_lock;
+ * must not be called from a pci_walk_bus() callback.
  */
 void pci_d3cold_enable(struct pci_dev *dev)
 {
@@ -3174,6 +3197,9 @@ EXPORT_SYMBOL_GPL(pci_d3cold_enable);
  * This function can be used in drivers to disable D3cold from the device
  * they handle.  It also updates upstream PCI bridge PM capabilities
  * accordingly.
+ *
+ * Context: Process context. Takes and releases pci_bridge_d3_lock;
+ * must not be called from a pci_walk_bus() callback.
  */
 void pci_d3cold_disable(struct pci_dev *dev)
 {
