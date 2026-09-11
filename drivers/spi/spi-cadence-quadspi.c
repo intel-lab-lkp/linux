@@ -1082,15 +1082,15 @@ static int cqspi_indirect_write_execute(struct cqspi_flash_pdata *f_pdata,
 	struct cqspi_st *cqspi = f_pdata->cqspi;
 	struct device *dev = &cqspi->pdev->dev;
 	void __iomem *reg_base = cqspi->iobase;
-	unsigned int remaining = n_tx;
-	unsigned int write_bytes;
+	size_t write_words;
+	size_t mod_bytes;
 	int ret;
 
 	if (!refcount_read(&cqspi->refcount))
 		return -ENODEV;
 
 	writel(to_addr, reg_base + CQSPI_REG_INDIRECTWRSTARTADDR);
-	writel(remaining, reg_base + CQSPI_REG_INDIRECTWRBYTES);
+	writel(n_tx, reg_base + CQSPI_REG_INDIRECTWRBYTES);
 
 	/* Clear all interrupts. */
 	writel(CQSPI_IRQ_STATUS_MASK, reg_base + CQSPI_REG_IRQSTATUS);
@@ -1119,36 +1119,25 @@ static int cqspi_indirect_write_execute(struct cqspi_flash_pdata *f_pdata,
 	if (cqspi->apb_ahb_hazard)
 		readl(reg_base + CQSPI_REG_INDIRECTWR);
 
-	while (remaining > 0) {
-		size_t write_words, mod_bytes;
+	write_words = n_tx / 4;
+	mod_bytes = n_tx % 4;
+	/* Write 4 bytes at a time then single bytes. */
+	if (write_words) {
+		iowrite32_rep(cqspi->ahb_base, txbuf, write_words);
+		txbuf += write_words * 4;
+	}
+	if (mod_bytes) {
+		unsigned int temp = 0xFFFFFFFF;
 
-		write_bytes = remaining;
-		write_words = write_bytes / 4;
-		mod_bytes = write_bytes % 4;
-		/* Write 4 bytes at a time then single bytes. */
-		if (write_words) {
-			iowrite32_rep(cqspi->ahb_base, txbuf, write_words);
-			txbuf += (write_words * 4);
-		}
-		if (mod_bytes) {
-			unsigned int temp = 0xFFFFFFFF;
+		memcpy(&temp, txbuf, mod_bytes);
+		iowrite32(temp, cqspi->ahb_base);
+	}
 
-			memcpy(&temp, txbuf, mod_bytes);
-			iowrite32(temp, cqspi->ahb_base);
-			txbuf += mod_bytes;
-		}
-
-		if (!wait_for_completion_timeout(&cqspi->transfer_complete,
-						 msecs_to_jiffies(CQSPI_TIMEOUT_MS))) {
-			dev_err(dev, "Indirect write timeout\n");
-			ret = -ETIMEDOUT;
-			goto failwr;
-		}
-
-		remaining -= write_bytes;
-
-		if (remaining > 0)
-			reinit_completion(&cqspi->transfer_complete);
+	if (!wait_for_completion_timeout(&cqspi->transfer_complete,
+					 msecs_to_jiffies(CQSPI_TIMEOUT_MS))) {
+		dev_err(dev, "Indirect write timeout\n");
+		ret = -ETIMEDOUT;
+		goto failwr;
 	}
 
 	/* Check indirect done status */
