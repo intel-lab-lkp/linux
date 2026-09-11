@@ -41,7 +41,7 @@ struct hid_sensor_hub_attribute_info {
  * @ready:		Completion synchronization data.
  * @usage_id:		Usage id for physical device, e.g. gyro usage id.
  * @attr_usage_id:	Usage Id of a field, e.g. X-axis for a gyro.
- * @raw_size:		Response size for a read request.
+ * @raw_size:		Response size or negative error for a read request.
  * @raw_data:		Place holder for received response.
  * @index:		Current write index into raw_data for multi-byte reads.
  * @max_raw_size:	Total buffer size for multi-byte reads; 0 for single-value reads.
