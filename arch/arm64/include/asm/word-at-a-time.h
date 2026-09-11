@@ -47,7 +47,7 @@ static inline unsigned long zero_bytemask(unsigned long bits)
  * and the next page not being mapped, take the exception and
  * return zeroes in the non-existing part.
  */
-static inline unsigned long load_unaligned_zeropad(const void *addr)
+static inline unsigned long arch_load_unaligned_zeropad(const void *addr)
 {
 	unsigned long ret;
 
@@ -65,5 +65,7 @@ static inline unsigned long load_unaligned_zeropad(const void *addr)
 
 	return ret;
 }
+
+#include <asm-generic/word-at-a-time-instrumented.h>
 
 #endif /* __ASM_WORD_AT_A_TIME_H */
