@@ -4121,6 +4121,9 @@ static int idpf_vport_intr_req_irq(struct idpf_vport *vport,
 	const char *drv_name, *if_name, *vec_name;
 	int vector, err, irq_num, vidx;
 
+	vidx = rsrc->q_vector_idxs[rsrc->num_q_vectors];
+	adapter->dev_ops.reg_ops.noirq_intr_reg_init(adapter, rsrc, vidx);
+
 	drv_name = dev_driver_string(&adapter->pdev->dev);
 	if_name = netdev_name(vport->netdev);
 
@@ -4130,6 +4133,8 @@ static int idpf_vport_intr_req_irq(struct idpf_vport *vport,
 
 		vidx = rsrc->q_vector_idxs[vector];
 		irq_num = adapter->msix_entries[vidx].vector;
+
+		adapter->dev_ops.reg_ops.intr_reg_init(adapter, q_vector, vidx);
 
 		if (q_vector->num_rxq && q_vector->num_txq)
 			vec_name = "TxRx";
@@ -4720,8 +4725,6 @@ int idpf_vport_intr_init(struct idpf_vport *vport, struct idpf_q_vec_rsrc *rsrc)
 
 	idpf_vport_intr_map_vector_to_qs(vport, rsrc);
 	idpf_vport_intr_napi_add_all(vport, rsrc);
-
-	vport->adapter->dev_ops.reg_ops.intr_reg_init(vport, rsrc);
 
 	err = idpf_vport_intr_req_irq(vport, rsrc);
 	if (err)
