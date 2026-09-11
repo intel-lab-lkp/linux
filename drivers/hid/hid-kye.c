@@ -594,7 +594,7 @@ static int kye_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		 * The manticore keyboard needs to have all the interfaces
 		 * opened at least once to be fully functional.
 		 */
-		if (hid_hw_open(hdev))
+		if (!hid_hw_open(hdev))
 			hid_hw_close(hdev);
 		break;
 	case USB_DEVICE_ID_KYE_EASYPEN_M406:
