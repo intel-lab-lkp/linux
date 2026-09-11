@@ -17,6 +17,7 @@
  * enum libie_irq_type - enum representing types of irq entries
  * @LIBIE_IRQ_STATIC: irq static allocated from kernel at driver probe
  * @LIBIE_IRQ_DYNAMIC: irq dynamic allocated during normal driver operation
+ * @LIBIE_IRQ_ANY: use when STATIC or DYNAMIC can be allocated
  * @LIBIE_IRQ_NUM_TYPES: must be the last one, used to define the array size
  *
  * Enum is used to get software irq indexes from some kind of pool. The pool is
@@ -31,6 +32,7 @@
 enum libie_irq_type {
 	LIBIE_IRQ_STATIC,
 	LIBIE_IRQ_DYNAMIC,
+	LIBIE_IRQ_ANY,
 	LIBIE_IRQ_NUM_TYPES,
 };
 

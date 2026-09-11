@@ -5,21 +5,6 @@
 #include "ice_lib.h"
 #include "ice_irq.h"
 
-/**
- * ice_init_irq_tracker - initialize interrupt tracker
- * @pf: board private structure
- * @max_vectors: maximum number of vectors that tracker can hold
- * @num_static: number of preallocated interrupts
- */
-static void
-ice_init_irq_tracker(struct ice_pf *pf, unsigned int max_vectors,
-		     unsigned int num_static)
-{
-	pf->irq_tracker.num_entries = max_vectors;
-	pf->irq_tracker.num_static = num_static;
-	xa_init_flags(&pf->irq_tracker.entries, XA_FLAGS_ALLOC);
-}
-
 static int
 ice_init_virt_irq_tracker(struct ice_pf *pf, u32 base, u32 num_entries)
 {
@@ -33,74 +18,9 @@ ice_init_virt_irq_tracker(struct ice_pf *pf, u32 base, u32 num_entries)
 	return 0;
 }
 
-/**
- * ice_deinit_irq_tracker - free xarray tracker
- * @pf: board private structure
- */
-static void ice_deinit_irq_tracker(struct ice_pf *pf)
-{
-	xa_destroy(&pf->irq_tracker.entries);
-}
-
 static void ice_deinit_virt_irq_tracker(struct ice_pf *pf)
 {
 	bitmap_free(pf->virt_irq_tracker.bm);
-}
-
-/**
- * ice_free_irq_res - free a block of resources
- * @pf: board private structure
- * @index: starting index previously returned by ice_get_res
- */
-static void ice_free_irq_res(struct ice_pf *pf, u16 index)
-{
-	struct ice_irq_entry *entry;
-
-	entry = xa_erase(&pf->irq_tracker.entries, index);
-	kfree(entry);
-}
-
-/**
- * ice_get_irq_res - get an interrupt resource
- * @pf: board private structure
- * @dyn_allowed: allow entry to be dynamically allocated
- *
- * Allocate new irq entry in the free slot of the tracker. Since xarray
- * is used, always allocate new entry at the lowest possible index. Set
- * proper allocation limit for maximum tracker entries.
- *
- * Returns allocated irq entry or NULL on failure.
- */
-static struct ice_irq_entry *ice_get_irq_res(struct ice_pf *pf,
-					     bool dyn_allowed)
-{
-	struct xa_limit limit = { .max = pf->irq_tracker.num_entries - 1,
-				  .min = 0 };
-	unsigned int num_static = pf->irq_tracker.num_static - 1;
-	struct ice_irq_entry *entry;
-	unsigned int index;
-	int ret;
-
-	entry = kzalloc_obj(*entry);
-	if (!entry)
-		return NULL;
-
-	/* only already allocated if the caller says so */
-	if (!dyn_allowed)
-		limit.max = num_static;
-
-	ret = xa_alloc(&pf->irq_tracker.entries, &index, entry, limit,
-		       GFP_KERNEL);
-
-	if (ret) {
-		kfree(entry);
-		entry = NULL;
-	} else {
-		entry->index = index;
-		entry->dynamic = index > num_static;
-	}
-
-	return entry;
 }
 
 #define ICE_RDMA_AEQ_MSIX 1
@@ -118,8 +38,7 @@ static int ice_get_default_msix_amount(struct ice_pf *pf)
  */
 void ice_clear_interrupt_scheme(struct ice_pf *pf)
 {
-	pci_free_irq_vectors(pf->pdev);
-	ice_deinit_irq_tracker(pf);
+	libie_irq_deinit(&pf->irq);
 	ice_deinit_virt_irq_tracker(pf);
 }
 
@@ -130,7 +49,7 @@ void ice_clear_interrupt_scheme(struct ice_pf *pf)
 int ice_init_interrupt_scheme(struct ice_pf *pf)
 {
 	int total_vectors = pf->hw.func_caps.common_cap.num_msix_vectors;
-	int vectors;
+	int err;
 
 	/* load default PF MSI-X range */
 	if (!pf->msix.min)
@@ -143,97 +62,15 @@ int ice_init_interrupt_scheme(struct ice_pf *pf)
 	pf->msix.total = total_vectors;
 	pf->msix.rest = total_vectors - pf->msix.max;
 
-	if (pci_msix_can_alloc_dyn(pf->pdev))
-		vectors = pf->msix.min;
-	else
-		vectors = pf->msix.max;
+	err = libie_irq_init(&pf->irq, pf->pdev, pf->msix.min, pf->msix.max);
+	if (err)
+		return err;
 
-	vectors = pci_alloc_irq_vectors(pf->pdev, pf->msix.min, vectors,
-					PCI_IRQ_MSIX);
-	if (vectors < 0)
-		return vectors;
+	err = ice_init_virt_irq_tracker(pf, pf->msix.max, pf->msix.rest);
+	if (err)
+		libie_irq_deinit(&pf->irq);
 
-	ice_init_irq_tracker(pf, pf->msix.max, vectors);
-
-	return ice_init_virt_irq_tracker(pf, pf->msix.max, pf->msix.rest);
-}
-
-/**
- * ice_alloc_irq - Allocate new interrupt vector
- * @pf: board private structure
- * @dyn_allowed: allow dynamic allocation of the interrupt
- *
- * Allocate new interrupt vector for a given owner id.
- * return struct msi_map with interrupt details and track
- * allocated interrupt appropriately.
- *
- * This function reserves new irq entry from the irq_tracker.
- * if according to the tracker information all interrupts that
- * were allocated with ice_pci_alloc_irq_vectors are already used
- * and dynamically allocated interrupts are supported then new
- * interrupt will be allocated with pci_msix_alloc_irq_at.
- *
- * Some callers may only support dynamically allocated interrupts.
- * This is indicated with dyn_allowed flag.
- *
- * On failure, return map with negative .index. The caller
- * is expected to check returned map index.
- *
- */
-struct msi_map ice_alloc_irq(struct ice_pf *pf, bool dyn_allowed)
-{
-	struct msi_map map = { .index = -ENOENT };
-	struct device *dev = ice_pf_to_dev(pf);
-	struct ice_irq_entry *entry;
-
-	entry = ice_get_irq_res(pf, dyn_allowed);
-	if (!entry)
-		return map;
-
-	if (pci_msix_can_alloc_dyn(pf->pdev) && entry->dynamic) {
-		map = pci_msix_alloc_irq_at(pf->pdev, entry->index, NULL);
-		if (map.index < 0)
-			goto exit_free_res;
-		dev_dbg(dev, "allocated new irq at index %d\n", map.index);
-	} else {
-		map.index = entry->index;
-		map.virq = pci_irq_vector(pf->pdev, map.index);
-	}
-
-	return map;
-
-exit_free_res:
-	dev_err(dev, "Could not allocate irq at idx %d\n", entry->index);
-	ice_free_irq_res(pf, entry->index);
-	return map;
-}
-
-/**
- * ice_free_irq - Free interrupt vector
- * @pf: board private structure
- * @map: map with interrupt details
- *
- * Remove allocated interrupt from the interrupt tracker. If interrupt was
- * allocated dynamically, free respective interrupt vector.
- */
-void ice_free_irq(struct ice_pf *pf, struct msi_map map)
-{
-	struct ice_irq_entry *entry;
-
-	entry = xa_load(&pf->irq_tracker.entries, map.index);
-
-	if (!entry) {
-		dev_err(ice_pf_to_dev(pf), "Failed to get MSIX interrupt entry at index %d",
-			map.index);
-		return;
-	}
-
-	dev_dbg(ice_pf_to_dev(pf), "Free irq at index %d\n", map.index);
-
-	if (entry->dynamic)
-		pci_msix_free_irq(pf->pdev, map);
-
-	ice_free_irq_res(pf, map.index);
+	return err;
 }
 
 /**
