@@ -758,8 +758,11 @@ static int omap_rtc_probe(struct platform_device *pdev)
 	else
 		rtc->clk = devm_clk_get(&pdev->dev, "int-clk");
 
-	if (!IS_ERR(rtc->clk))
-		clk_prepare_enable(rtc->clk);
+	if (!IS_ERR(rtc->clk)) {
+		ret = clk_prepare_enable(rtc->clk);
+		if (ret)
+			return ret;
+	}
 
 	rtc->base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(rtc->base)) {
