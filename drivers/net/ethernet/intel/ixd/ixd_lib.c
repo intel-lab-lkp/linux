@@ -4,6 +4,7 @@
 #include "ixd.h"
 #include "ixd_ctlq.h"
 #include "ixd_devlink.h"
+#include "ixd_lan_regs.h"
 #include "ixd_virtchnl.h"
 
 #define IXD_DFLT_MBX_Q_LEN 64
@@ -55,6 +56,125 @@ static void ixd_adapter_fill_dflt_ctlqs(struct ixd_adapter *adapter)
 				       LIBIE_CTLQ_MBX_ID);
 	adapter->asq = libie_find_ctlq(&adapter->cp_ctx, LIBIE_CTLQ_TYPE_TX,
 				       LIBIE_CTLQ_MBX_ID);
+}
+
+static irqreturn_t ixd_mailbox_irq_handler(int __always_unused irq, void *data)
+{
+	struct ixd_adapter *adapter = (struct ixd_adapter *)data;
+
+	queue_delayed_work(system_dfl_wq, &adapter->mbx_task, 0);
+
+	return IRQ_HANDLED;
+}
+
+void ixd_mailbox_irq_enable(struct ixd_adapter *adapter)
+{
+	writel(PF_GLINT_DYN_CTL_INTENA_M | PF_GLINT_DYN_CTL_ITR_INDX_M,
+	       adapter->mb_dyn_ctl);
+	writel(PF_INT_DIR_OICR_ENA_M, adapter->oicr_ena);
+}
+
+static void ixd_mailbox_irq_disable(struct ixd_adapter *adapter)
+{
+	/* Clear INTENA, keep the ITR index pointing to the no update one. */
+	writel(PF_GLINT_DYN_CTL_ITR_INDX_M, adapter->mb_dyn_ctl);
+	writel(0, adapter->oicr_ena);
+}
+
+static int ixd_mailbox_irq_regs_init(struct ixd_adapter *adapter)
+{
+	struct libie_mmio_info *mmio = &adapter->cp_ctx.mmio_info;
+	u32 dyn_ctl = le32_to_cpu(adapter->caps.mailbox_dyn_ctl);
+
+	adapter->mb_dyn_ctl = libie_pci_get_mmio_addr(mmio, dyn_ctl);
+	adapter->oicr_ena = libie_pci_get_mmio_addr(mmio, PF_INT_DIR_OICR_ENA);
+
+	if (!adapter->mb_dyn_ctl || !adapter->oicr_ena)
+		return -EINVAL;
+
+	return 0;
+}
+
+static void ixd_mailbox_irq_deinit(struct ixd_adapter *adapter)
+{
+	if (!test_and_clear_bit(IXD_MB_INTR_MODE, adapter->flags))
+		return;
+
+	ixd_mailbox_irq_disable(adapter);
+
+	/* The mailbox task re-arms the interrupt, make sure it isn't running
+	 * anymore before the irq line is freed.
+	 */
+	cancel_delayed_work_sync(&adapter->mbx_task);
+
+	kfree(free_irq(adapter->mb_irq.virq, adapter));
+	libie_irq_free(&adapter->irq, adapter->mb_irq);
+}
+
+static int ixd_mailbox_irq_init(struct ixd_adapter *adapter)
+{
+	struct msi_map *irq = &adapter->mb_irq;
+	char *name;
+	int err;
+
+	*irq = libie_irq_alloc(&adapter->irq, LIBIE_IRQ_STATIC);
+	if (irq->index < 0)
+		return irq->index;
+
+	name = kasprintf(GFP_KERNEL, "%s-%s-%d",
+			 dev_driver_string(ixd_to_dev(adapter)), "Mailbox", 0);
+	if (!name) {
+		libie_irq_free(&adapter->irq, adapter->mb_irq);
+
+		return -ENOMEM;
+	}
+
+	err = request_irq(irq->virq, ixd_mailbox_irq_handler, 0, name, adapter);
+	if (err) {
+		kfree(name);
+		libie_irq_free(&adapter->irq, adapter->mb_irq);
+		dev_err(ixd_to_dev(adapter), "IRQ request for mailbox failed, error: %d\n",
+			err);
+
+		return err;
+	}
+
+	set_bit(IXD_MB_INTR_MODE, adapter->flags);
+
+	return 0;
+}
+
+void ixd_deinit_interrupts(struct ixd_adapter *adapter)
+{
+	ixd_mailbox_irq_deinit(adapter);
+	libie_irq_deinit(&adapter->irq);
+}
+
+static int ixd_init_interrupts(struct ixd_adapter *adapter)
+{
+	struct libie_irq *irq = &adapter->irq;
+	int err;
+
+	err = libie_irq_init(irq, ixd_to_pdev(adapter), 1, 1);
+	if (err)
+		return err;
+
+	err = ixd_mailbox_irq_regs_init(adapter);
+	if (err)
+		goto free_irq;
+
+	err = ixd_mailbox_irq_init(adapter);
+	if (err)
+		goto free_irq;
+
+	ixd_mailbox_irq_enable(adapter);
+
+	return 0;
+
+free_irq:
+	libie_irq_deinit(irq);
+
+	return err;
 }
 
 /**
@@ -154,6 +274,12 @@ void ixd_init_task(struct work_struct *work)
 		adapter->init_task.vc_retries = 0;
 		adapter->init_task.success = true;
 		ixd_devlink_register(adapter);
+
+		err = ixd_init_interrupts(adapter);
+		if (err)
+			dev_err(ixd_to_dev(adapter),
+				"Failed to initialize interrupts: %d\n",
+				err);
 		return;
 	}
 
