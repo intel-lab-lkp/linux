@@ -729,10 +729,15 @@ static int cti_probe(struct amba_device *adev, const struct amba_id *id)
 	cti_desc.groups = drvdata->ctidev.con_groups;
 	cti_desc.dev = dev;
 
-	coresight_clear_self_claim_tag(&cti_desc.access);
 	drvdata->csdev = coresight_register(&cti_desc);
 	if (IS_ERR(drvdata->csdev))
 		return PTR_ERR(drvdata->csdev);
+
+	ret = coresight_init_claim_tags(drvdata->csdev);
+	if (ret) {
+		coresight_unregister(drvdata->csdev);
+		return ret;
+	}
 
 	/* add to list of CTI devices */
 	mutex_lock(&ect_mutex);

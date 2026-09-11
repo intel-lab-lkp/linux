@@ -244,7 +244,6 @@ static int funnel_probe(struct device *dev, struct resource *res)
 		drvdata->base = base;
 		desc.groups = coresight_funnel_groups;
 		desc.access = CSDEV_ACCESS_IOMEM(base);
-		coresight_clear_self_claim_tag(&desc.access);
 	}
 
 	dev_set_drvdata(dev, drvdata);
@@ -264,6 +263,12 @@ static int funnel_probe(struct device *dev, struct resource *res)
 	drvdata->csdev = coresight_register(&desc);
 	if (IS_ERR(drvdata->csdev))
 		return PTR_ERR(drvdata->csdev);
+
+	if (res) {
+		ret = coresight_init_claim_tags(drvdata->csdev);
+		if (ret)
+			coresight_unregister(drvdata->csdev);
+	}
 
 	return 0;
 }

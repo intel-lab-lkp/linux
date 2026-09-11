@@ -756,7 +756,6 @@ static void etm_init_arch_data(void *info)
 	drvdata->nr_ext_out = BMVAL(etmccr, 20, 22);
 	drvdata->nr_ctxid_cmp = BMVAL(etmccr, 24, 25);
 
-	coresight_clear_self_claim_tag_unlocked(&drvdata->csa);
 	etm_set_pwrdwn(drvdata);
 	etm_clr_pwrup(drvdata);
 	CS_LOCK(drvdata->csa.base);
@@ -851,6 +850,13 @@ static int etm_probe(struct amba_device *adev, const struct amba_id *id)
 	drvdata->csdev = coresight_register(&desc);
 	if (IS_ERR(drvdata->csdev))
 		return PTR_ERR(drvdata->csdev);
+
+	/* init the claim tag protocol - ensure run on correct cpu */
+	ret = coresight_init_claim_tags_cpu_smp(drvdata->csdev, drvdata->cpu);
+	if (ret) {
+		coresight_unregister(drvdata->csdev);
+		return ret;
+	}
 
 	ret = etm_perf_symlink(drvdata->csdev, true);
 	if (ret) {

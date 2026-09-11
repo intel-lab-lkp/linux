@@ -251,7 +251,6 @@ static int replicator_probe(struct device *dev, struct resource *res)
 		drvdata->base = base;
 		desc.groups = replicator_groups;
 		desc.access = CSDEV_ACCESS_IOMEM(base);
-		coresight_clear_self_claim_tag(&desc.access);
 	}
 
 	if (fwnode_property_present(dev_fwnode(dev),
@@ -275,6 +274,14 @@ static int replicator_probe(struct device *dev, struct resource *res)
 	drvdata->csdev = coresight_register(&desc);
 	if (IS_ERR(drvdata->csdev))
 		return PTR_ERR(drvdata->csdev);
+
+	if (res) {
+		ret = coresight_init_claim_tags(drvdata->csdev);
+		if (ret) {
+			coresight_unregister(drvdata->csdev);
+			return ret;
+		}
+	}
 
 	replicator_reset(drvdata);
 	return 0;
