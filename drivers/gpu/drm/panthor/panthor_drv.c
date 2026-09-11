@@ -1111,7 +1111,6 @@ out:
 static int panthor_ioctl_group_submit(struct drm_device *ddev, void *data,
 				      struct drm_file *file)
 {
-	struct panthor_file *pfile = file->driver_priv;
 	struct drm_panthor_group_submit *args = data;
 	struct drm_panthor_queue_submit *jobs_args;
 	struct panthor_submit_ctx ctx;
@@ -1136,8 +1135,7 @@ static int panthor_ioctl_group_submit(struct drm_device *ddev, void *data,
 		const struct drm_panthor_queue_submit *qsubmit = &jobs_args[i];
 		struct drm_sched_job *job;
 
-		job = panthor_job_create(pfile, args->group_handle, qsubmit,
-					 file->client_id);
+		job = panthor_job_create(file, args->group_handle, qsubmit);
 		if (IS_ERR(job)) {
 			ret = PTR_ERR(job);
 			goto out_cleanup_submit_ctx;
@@ -1217,19 +1215,17 @@ out_dev_exit:
 static int panthor_ioctl_group_destroy(struct drm_device *ddev, void *data,
 				       struct drm_file *file)
 {
-	struct panthor_file *pfile = file->driver_priv;
 	struct drm_panthor_group_destroy *args = data;
 
 	if (args->pad)
 		return -EINVAL;
 
-	return panthor_group_destroy(pfile, args->group_handle);
+	return panthor_group_destroy(file, args->group_handle);
 }
 
 static int panthor_ioctl_group_create(struct drm_device *ddev, void *data,
 				      struct drm_file *file)
 {
-	struct panthor_file *pfile = file->driver_priv;
 	struct drm_panthor_group_create *args = data;
 	struct drm_panthor_queue_create *queue_args;
 	int ret;
@@ -1245,7 +1241,7 @@ static int panthor_ioctl_group_create(struct drm_device *ddev, void *data,
 	if (ret)
 		goto out;
 
-	ret = panthor_group_create(pfile, args, queue_args, file->client_id);
+	ret = panthor_group_create(file, args, queue_args);
 	if (ret < 0)
 		goto out;
 	args->group_handle = ret;
@@ -1259,10 +1255,9 @@ out:
 static int panthor_ioctl_group_get_state(struct drm_device *ddev, void *data,
 					 struct drm_file *file)
 {
-	struct panthor_file *pfile = file->driver_priv;
 	struct drm_panthor_group_get_state *args = data;
 
-	return panthor_group_get_state(pfile, args);
+	return panthor_group_get_state(file, args);
 }
 
 static int panthor_ioctl_tiler_heap_create(struct drm_device *ddev, void *data,
@@ -1605,6 +1600,7 @@ panthor_open(struct drm_device *ddev, struct drm_file *file)
 	if (!pfile)
 		return -ENOMEM;
 
+	file->driver_priv = pfile;
 	pfile->ptdev = ptdev;
 	pfile->user_mmio.offset = DRM_PANTHOR_USER_MMIO_OFFSET;
 
@@ -1619,19 +1615,18 @@ panthor_open(struct drm_device *ddev, struct drm_file *file)
 #endif
 
 
-	ret = panthor_vm_pool_create(pfile);
+	ret = panthor_vm_pool_create(file);
 	if (ret)
 		goto err_free_file;
 
-	ret = panthor_group_pool_create(pfile);
+	ret = panthor_group_pool_create(file);
 	if (ret)
 		goto err_destroy_vm_pool;
 
-	file->driver_priv = pfile;
 	return 0;
 
 err_destroy_vm_pool:
-	panthor_vm_pool_destroy(pfile);
+	panthor_vm_pool_destroy(file);
 
 err_free_file:
 	kfree(pfile);
@@ -1643,8 +1638,8 @@ panthor_postclose(struct drm_device *ddev, struct drm_file *file)
 {
 	struct panthor_file *pfile = file->driver_priv;
 
-	panthor_group_pool_destroy(pfile);
-	panthor_vm_pool_destroy(pfile);
+	panthor_group_pool_destroy(file);
+	panthor_vm_pool_destroy(file);
 
 	kfree(pfile);
 }
@@ -1704,11 +1699,13 @@ static int panthor_mmap(struct file *filp, struct vm_area_struct *vma)
 }
 
 static void panthor_gpu_show_fdinfo(struct panthor_device *ptdev,
-				    struct panthor_file *pfile,
+				    struct drm_file *file,
 				    struct drm_printer *p)
 {
+	struct panthor_file *pfile = file->driver_priv;
+
 	if (ptdev->profile_mask & PANTHOR_DEVICE_PROFILING_ALL)
-		panthor_fdinfo_gather_group_samples(pfile);
+		panthor_fdinfo_gather_group_samples(file);
 
 	if (ptdev->profile_mask & PANTHOR_DEVICE_PROFILING_TIMESTAMP) {
 #ifdef CONFIG_ARM_ARCH_TIMER
@@ -1728,11 +1725,10 @@ static void panthor_gpu_show_fdinfo(struct panthor_device *ptdev,
 static void panthor_show_internal_memory_stats(struct drm_printer *p, struct drm_file *file)
 {
 	char *drv_name = file->minor->dev->driver->name;
-	struct panthor_file *pfile = file->driver_priv;
 	struct drm_memory_stats stats = {0};
 
-	panthor_fdinfo_gather_group_mem_info(pfile, &stats);
-	panthor_vm_heaps_sizes(pfile, &stats);
+	panthor_fdinfo_gather_group_mem_info(file, &stats);
+	panthor_vm_heaps_sizes(file, &stats);
 
 	drm_fdinfo_print_size(p, drv_name, "resident", "memory", stats.resident);
 	drm_fdinfo_print_size(p, drv_name, "active", "memory", stats.active);
@@ -1743,7 +1739,7 @@ static void panthor_show_fdinfo(struct drm_printer *p, struct drm_file *file)
 	struct drm_device *dev = file->minor->dev;
 	struct panthor_device *ptdev = container_of(dev, struct panthor_device, base);
 
-	panthor_gpu_show_fdinfo(ptdev, file->driver_priv, p);
+	panthor_gpu_show_fdinfo(ptdev, file, p);
 	panthor_show_internal_memory_stats(p, file);
 
 	drm_show_memory_stats(p, file);

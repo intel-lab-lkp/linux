@@ -3112,8 +3112,9 @@ void panthor_sched_post_reset(struct panthor_device *ptdev, bool reset_failed)
 	}
 }
 
-void panthor_fdinfo_gather_group_samples(struct panthor_file *pfile)
+void panthor_fdinfo_gather_group_samples(struct drm_file *file)
 {
+	struct panthor_file *pfile = file->driver_priv;
 	struct panthor_group_pool *gpool = pfile->groups;
 	struct panthor_group *group;
 	unsigned long i;
@@ -3649,11 +3650,11 @@ static void add_group_kbo_sizes(struct panthor_device *ptdev,
 
 #define MAX_GROUPS_PER_POOL		128
 
-int panthor_group_create(struct panthor_file *pfile,
+int panthor_group_create(struct drm_file *file,
 			 const struct drm_panthor_group_create *group_args,
-			 const struct drm_panthor_queue_create *queue_args,
-			 u64 drm_client_id)
+			 const struct drm_panthor_queue_create *queue_args)
 {
+	struct panthor_file *pfile = file->driver_priv;
 	struct panthor_device *ptdev = pfile->ptdev;
 	struct panthor_group_pool *gpool = pfile->groups;
 	struct panthor_scheduler *sched = ptdev->scheduler;
@@ -3748,7 +3749,8 @@ int panthor_group_create(struct panthor_file *pfile,
 		goto err_put_group;
 
 	for (i = 0; i < group_args->queues.count; i++) {
-		group->queues[i] = group_create_queue(group, &queue_args[i], drm_client_id, gid, i);
+		group->queues[i] = group_create_queue(group, &queue_args[i],
+						      file->client_id, gid, i);
 		if (IS_ERR(group->queues[i])) {
 			ret = PTR_ERR(group->queues[i]);
 			group->queues[i] = NULL;
@@ -3788,8 +3790,9 @@ err_put_group:
 	return ret;
 }
 
-int panthor_group_destroy(struct panthor_file *pfile, u32 group_handle)
+int panthor_group_destroy(struct drm_file *file, u32 group_handle)
 {
+	struct panthor_file *pfile = file->driver_priv;
 	struct panthor_group_pool *gpool = pfile->groups;
 	struct panthor_device *ptdev = pfile->ptdev;
 	struct panthor_scheduler *sched = ptdev->scheduler;
@@ -3834,9 +3837,10 @@ static struct panthor_group *group_from_handle(struct panthor_group_pool *pool,
 	return group;
 }
 
-int panthor_group_get_state(struct panthor_file *pfile,
+int panthor_group_get_state(struct drm_file *file,
 			    struct drm_panthor_group_get_state *get_state)
 {
+	struct panthor_file *pfile = file->driver_priv;
 	struct panthor_group_pool *gpool = pfile->groups;
 	struct panthor_device *ptdev = pfile->ptdev;
 	struct panthor_scheduler *sched = ptdev->scheduler;
@@ -3867,8 +3871,9 @@ int panthor_group_get_state(struct panthor_file *pfile,
 	return 0;
 }
 
-int panthor_group_pool_create(struct panthor_file *pfile)
+int panthor_group_pool_create(struct drm_file *file)
 {
+	struct panthor_file *pfile = file->driver_priv;
 	struct panthor_group_pool *gpool;
 
 	gpool = kzalloc_obj(*gpool);
@@ -3880,8 +3885,9 @@ int panthor_group_pool_create(struct panthor_file *pfile)
 	return 0;
 }
 
-void panthor_group_pool_destroy(struct panthor_file *pfile)
+void panthor_group_pool_destroy(struct drm_file *file)
 {
+	struct panthor_file *pfile = file->driver_priv;
 	struct panthor_group_pool *gpool = pfile->groups;
 	struct panthor_group *group;
 	unsigned long i;
@@ -3890,7 +3896,7 @@ void panthor_group_pool_destroy(struct panthor_file *pfile)
 		return;
 
 	xa_for_each(&gpool->xa, i, group)
-		panthor_group_destroy(pfile, i);
+		panthor_group_destroy(file, i);
 
 	xa_destroy(&gpool->xa);
 	kfree(gpool);
@@ -3905,9 +3911,10 @@ void panthor_group_pool_destroy(struct panthor_file *pfile)
  *
  */
 void
-panthor_fdinfo_gather_group_mem_info(struct panthor_file *pfile,
+panthor_fdinfo_gather_group_mem_info(struct drm_file *file,
 				     struct drm_memory_stats *stats)
 {
+	struct panthor_file *pfile = file->driver_priv;
 	struct panthor_group_pool *gpool = pfile->groups;
 	struct panthor_group *group;
 	unsigned long i;
@@ -3970,11 +3977,11 @@ struct panthor_vm *panthor_job_vm(struct drm_sched_job *sched_job)
 }
 
 struct drm_sched_job *
-panthor_job_create(struct panthor_file *pfile,
+panthor_job_create(struct drm_file *file,
 		   u16 group_handle,
-		   const struct drm_panthor_queue_submit *qsubmit,
-		   u64 drm_client_id)
+		   const struct drm_panthor_queue_submit *qsubmit)
 {
+	struct panthor_file *pfile = file->driver_priv;
 	struct panthor_group_pool *gpool = pfile->groups;
 	struct panthor_job *job;
 	u32 credits;
@@ -4045,7 +4052,7 @@ panthor_job_create(struct panthor_file *pfile,
 
 	ret = drm_sched_job_init(&job->base,
 				 &job->group->queues[job->queue_idx]->entity,
-				 credits, job->group, drm_client_id);
+				 credits, job->group, file->client_id);
 	if (ret)
 		goto err_put_job;
 
