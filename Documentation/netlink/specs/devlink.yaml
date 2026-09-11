@@ -158,7 +158,7 @@ definitions:
       -
         name: entry
   -
-    type: enum
+    type: flags
     name: resource-scope
     entries:
       -
