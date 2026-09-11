@@ -635,6 +635,10 @@ static int fprobe_fgraph_entry(struct ftrace_graph_ent *trace, struct fgraph_ops
 		}
 	}
 
+	/* Clear unused slots so fprobe_return() does not see stale headers. */
+	if (used < reserved_words)
+		memset(fgraph_data + used, 0, (reserved_words - used) * sizeof(long));
+
 	/* If any exit_handler is set, data must be used. */
 	return used != 0;
 }
