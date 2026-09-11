@@ -978,13 +978,20 @@ loff_t btrfs_remap_file_range(struct file *src_file, loff_t off,
 	if (remap_flags & ~(REMAP_FILE_DEDUP | REMAP_FILE_ADVISORY))
 		return -EINVAL;
 
-	ret = filemap_flush(src_inode->vfs_inode.i_mapping);
-	if (ret < 0)
-		return ret;
+	/*
+	 * If there are no outstanding writers, it is likely to be helpful to
+	 * flush any latent dirty pages before locking the inodes.
+	 */
+	if (atomic_read(&src_inode->vfs_inode.i_writecount) <= 0 &&
+	    !mapping_writably_mapped(src_inode->vfs_inode.i_mapping)) {
+		ret = filemap_flush(src_inode->vfs_inode.i_mapping);
+		if (ret < 0)
+			return ret;
 
-	ret = wait_existing_ordered_extents(src_inode);
-	if (ret < 0)
-		return ret;
+		ret = wait_existing_ordered_extents(src_inode);
+		if (ret < 0)
+			return ret;
+	}
 
 	if (same_inode) {
 		btrfs_inode_lock(src_inode, BTRFS_ILOCK_MMAP);
