@@ -290,6 +290,8 @@ static int hp82335_attach(struct gpib_board *board, const struct gpib_board_conf
 	}
 	hp_priv->raw_iobase = upper_iomem_base;
 	tms_priv->mmiobase = ioremap(upper_iomem_base, hp82335_upper_iomem_size);
+	if (!tms_priv->mmiobase)
+		return -ENOMEM;
 
 	retval = request_irq(config->ibirq, hp82335_interrupt, 0, DRV_NAME, board);
 	if (retval) {
