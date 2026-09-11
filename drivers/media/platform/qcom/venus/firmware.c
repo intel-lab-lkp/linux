@@ -16,6 +16,7 @@
 #include <linux/firmware/qcom/qcom_scm.h>
 #include <linux/sizes.h>
 #include <linux/soc/qcom/mdt_loader.h>
+#include <linux/string.h>
 
 #include "core.h"
 #include "firmware.h"
@@ -214,6 +215,7 @@ int venus_boot(struct venus_core *core)
 	struct device *dev = core->dev;
 	const struct venus_resources *res = core->res;
 	const char *fwpath = NULL;
+	const char *pas_backend;
 	phys_addr_t mem_phys;
 	size_t mem_size;
 	int ret;
@@ -245,6 +247,14 @@ int venus_boot(struct venus_core *core)
 		return ret;
 
 	if (core->use_tz && res->cp_size) {
+		/*
+		 * qcom_scm_mem_protect_video_var() only applies to the SCM
+		 * backend; other backends (e.g. OP-TEE) own secure memory
+		 * protection and do not service this call.
+		 */
+		pas_backend = qcom_pas_get_backend();
+		if (!pas_backend || strcmp(pas_backend, QCOM_PAS_BACKEND_SCM))
+			return ret;
 		/*
 		 * Clues for porting using downstream data:
 		 * cp_start = 0
