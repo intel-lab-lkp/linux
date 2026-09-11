@@ -98,6 +98,7 @@ static struct libie_irq_entry *libie_get_irq(struct libie_irq *irq,
 					     enum libie_irq_type type)
 {
 	struct libie_irq_entry *entry;
+	struct xa_limit limit;
 	unsigned int index;
 
 	if (!irq->pdev)
@@ -113,9 +114,26 @@ static struct libie_irq_entry *libie_get_irq(struct libie_irq *irq,
 	if (!entry)
 		return NULL;
 
-	if (xa_alloc(&irq->entries, &index, entry, irq->limits[type],
-		     GFP_KERNEL))
-		goto free_entry;
+	/* If any, first try dynamic */
+	if (type == LIBIE_IRQ_ANY)
+		limit = irq->limits[LIBIE_IRQ_DYNAMIC];
+	else
+		limit = irq->limits[type];
+
+	if (xa_alloc(&irq->entries, &index, entry, limit, GFP_KERNEL)) {
+		if (type != LIBIE_IRQ_ANY)
+			goto free_entry;
+		/* Dynamic for any type failed, try static */
+		if (xa_alloc(&irq->entries, &index, entry,
+			     irq->limits[LIBIE_IRQ_STATIC], GFP_KERNEL))
+			goto free_entry;
+
+		type = LIBIE_IRQ_STATIC;
+	}
+
+	/* If still any it is dynamic */
+	if (type == LIBIE_IRQ_ANY)
+		type = LIBIE_IRQ_DYNAMIC;
 
 	entry->index = index;
 	entry->type = type;
@@ -149,6 +167,7 @@ EXPORT_SYMBOL_NS_GPL(libie_put_irq, "LIBIE_IRQ");
  *
  * For LIBIE_IRQ_DYNAMIC function allocs new interrupt and return it.
  * For LIBIE_IRQ_STATIC function returns already allocated one.
+ * For LIBIE_IRQ_ANY first try DYNAMIC, if it failed try STATIC
  *
  * The function should be called for getting irq information (index and virq)
  * for specific irq type. Returned information should be stored to use index for
@@ -202,8 +221,9 @@ EXPORT_SYMBOL_NS_GPL(libie_irq_alloc, "LIBIE_IRQ");
  * @irq: libie_irq structure
  * @map: msi_map structure returned from libie_alloc_irq()
  *
- * In case of dynamic allocation and LIBIE_IRQ_DYNAMIC type pci_msix_free_irq()
- * is called. Otherwise only free driver irq entry related resources.
+ * In case of dynamic allocation and LIBIE_IRQ_DYNAMIC (or LIBIE_IRQ_ANY)
+ * type pci_msix_free_irq() is called. Otherwise only free driver irq entry
+ * related resources.
  *
  * It is safe to call this function with map that doesn't exist in xarray
  * as long as the map.virq is 0 or negative. It is true when libie_irq_alloc()

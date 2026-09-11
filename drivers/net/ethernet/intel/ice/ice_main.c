@@ -44,6 +44,7 @@ MODULE_IMPORT_NS("LIBETH_XDP");
 MODULE_IMPORT_NS("LIBIE");
 MODULE_IMPORT_NS("LIBIE_ADMINQ");
 MODULE_IMPORT_NS("LIBIE_FWLOG");
+MODULE_IMPORT_NS("LIBIE_IRQ");
 MODULE_LICENSE("GPL v2");
 MODULE_FIRMWARE(ICE_DDP_PKG_FILE);
 
@@ -3363,7 +3364,7 @@ static void ice_free_irq_msix_ll_ts(struct ice_pf *pf)
 	synchronize_irq(irq_num);
 	devm_free_irq(ice_pf_to_dev(pf), irq_num, pf);
 
-	ice_free_irq(pf, pf->ll_ts_irq);
+	libie_irq_free(&pf->irq, pf->ll_ts_irq);
 }
 
 /**
@@ -3384,7 +3385,7 @@ static void ice_free_irq_msix_misc(struct ice_pf *pf)
 	synchronize_irq(misc_irq_num);
 	devm_free_irq(ice_pf_to_dev(pf), misc_irq_num, pf);
 
-	ice_free_irq(pf, pf->oicr_irq);
+	libie_irq_free(&pf->irq, pf->oicr_irq);
 	if (pf->ll_ts_irq.index >= 0)
 		ice_free_irq_msix_ll_ts(pf);
 }
@@ -3453,7 +3454,7 @@ static int ice_req_irq_msix_misc(struct ice_pf *pf)
 		goto skip_req_irq;
 
 	/* reserve one vector in irq_tracker for misc interrupts */
-	irq = ice_alloc_irq(pf, false);
+	irq = libie_irq_alloc(&pf->irq, LIBIE_IRQ_STATIC);
 	if (irq.index < 0)
 		return irq.index;
 
@@ -3464,7 +3465,7 @@ static int ice_req_irq_msix_misc(struct ice_pf *pf)
 	if (err) {
 		dev_err(dev, "devm_request_threaded_irq for %s failed: %d\n",
 			pf->int_name, err);
-		ice_free_irq(pf, pf->oicr_irq);
+		libie_irq_free(&pf->irq, pf->oicr_irq);
 		return err;
 	}
 
@@ -3474,7 +3475,7 @@ static int ice_req_irq_msix_misc(struct ice_pf *pf)
 		goto skip_req_irq;
 	}
 
-	irq = ice_alloc_irq(pf, false);
+	irq = libie_irq_alloc(&pf->irq, LIBIE_IRQ_STATIC);
 	if (irq.index < 0)
 		return irq.index;
 
@@ -3484,7 +3485,7 @@ static int ice_req_irq_msix_misc(struct ice_pf *pf)
 	if (err) {
 		dev_err(dev, "devm_request_irq for %s failed: %d\n",
 			pf->int_name_ll_ts, err);
-		ice_free_irq(pf, pf->ll_ts_irq);
+		libie_irq_free(&pf->irq, pf->ll_ts_irq);
 		pf->ll_ts_irq.index = -ENOENT;
 		return err;
 	}
@@ -3969,7 +3970,7 @@ void ice_deinit_pf(struct ice_pf *pf)
 	if (pf->ptp.clock)
 		ptp_clock_unregister(pf->ptp.clock);
 
-	if (!xa_empty(&pf->irq_tracker.entries))
+	if (!xa_empty(&pf->irq.entries))
 		ice_free_irq_msix_misc(pf);
 
 	xa_destroy(&pf->dyn_ports);

@@ -236,7 +236,6 @@ static void ice_vsi_set_num_qs(struct ice_vsi *vsi)
 		break;
 	case ICE_VSI_SF:
 		vsi->num_q_vectors = 1;
-		vsi->irq_dyn_alloc = true;
 		break;
 	case ICE_VSI_VF:
 		if (vf->num_req_qs)
@@ -598,8 +597,6 @@ ice_vsi_alloc_def(struct ice_vsi *vsi, struct ice_channel *ch)
 		if (ice_vsi_alloc_arrays(vsi))
 			return -ENOMEM;
 	}
-
-	vsi->irq_dyn_alloc = pci_msix_can_alloc_dyn(vsi->back->pdev);
 
 	switch (vsi->type) {
 	case ICE_VSI_PF:

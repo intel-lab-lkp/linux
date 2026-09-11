@@ -239,7 +239,7 @@ int ice_alloc_rdma_qvector(struct iidc_rdma_core_dev_info *cdev,
 		return -EINVAL;
 
 	pf = pci_get_drvdata(cdev->pdev);
-	map = ice_alloc_irq(pf, true);
+	map = libie_irq_alloc(&pf->irq, LIBIE_IRQ_ANY);
 	if (map.index < 0)
 		return -ENOMEM;
 
@@ -268,7 +268,7 @@ void ice_free_rdma_qvector(struct iidc_rdma_core_dev_info *cdev,
 
 	map.index = entry->entry;
 	map.virq = entry->vector;
-	ice_free_irq(pf, map);
+	libie_irq_free(&pf->irq, map);
 }
 EXPORT_SYMBOL_GPL(ice_free_rdma_qvector);
 
