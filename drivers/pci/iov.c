@@ -383,35 +383,42 @@ static int __pci_iov_add_virtfn(struct pci_dev *dev, struct pci_bus *bus,
 	pci_device_add(virtfn, virtfn->bus);
 	rc = pci_iov_sysfs_link(dev, virtfn, id);
 	if (rc)
-		goto failed1;
+		return rc;
 
 	pci_bus_add_device(virtfn);
 
 	return 0;
-
-failed1:
-	pci_stop_and_remove_bus_device(virtfn);
-	pci_dev_put(dev);
-
-	return rc;
 }
 
 int pci_iov_add_virtfn(struct pci_dev *dev, int id)
 {
 	struct pci_bus *bus;
+	bool created;
 	int rc;
 
-	bus = virtfn_add_bus(dev->bus, pci_iov_virtfn_bus(dev, id), NULL);
+	bus = virtfn_add_bus(dev->bus, pci_iov_virtfn_bus(dev, id), &created);
 	if (!bus)
 		return -ENOMEM;
 
 	rc = __pci_iov_add_virtfn(dev, bus, id);
-	if (rc)
-		virtfn_remove_bus(dev->bus, bus);
+	if (rc) {
+		pci_iov_remove_virtfn(dev, id);
+		/*
+		 * Same ownership and stale-pointer rules as the
+		 * sriov_add_vfs() bus unwind.
+		 */
+		if (created) {
+			bus = pci_find_bus(pci_domain_nr(dev->bus),
+					   pci_iov_virtfn_bus(dev, id));
+			if (bus)
+				virtfn_remove_bus(dev->bus, bus);
+		}
+	}
 
 	return rc;
 }
 
+/* Unwind primitive for partial adds: a missing VF must stay a silent no-op. */
 void pci_iov_remove_virtfn(struct pci_dev *dev, int id)
 {
 	char buf[VIRTFN_ID_LEN];
@@ -681,8 +688,10 @@ static int sriov_add_vfs(struct pci_dev *dev, u16 num_vfs)
 	kvfree(buses);
 	return 0;
 failed:
-	while (i--)
+	/* VF i may be partially added: unwind ids 0..i inclusive. */
+	do {
 		pci_iov_remove_virtfn(dev, i);
+	} while (i--);
 
 remove_buses:
 	/*
