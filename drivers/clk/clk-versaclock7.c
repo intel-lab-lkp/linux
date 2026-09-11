@@ -1117,8 +1117,8 @@ static int vc7_probe(struct i2c_client *client)
 	vc7->chip_info = i2c_get_match_data(client);
 
 	vc7->pin_xin = devm_clk_get(&client->dev, "xin");
-	if (PTR_ERR(vc7->pin_xin) == -EPROBE_DEFER) {
-		return dev_err_probe(&client->dev, -EPROBE_DEFER,
+	if (IS_ERR(vc7->pin_xin)) {
+		return dev_err_probe(&client->dev, PTR_ERR(vc7->pin_xin),
 				     "xin not specified\n");
 	}
 
