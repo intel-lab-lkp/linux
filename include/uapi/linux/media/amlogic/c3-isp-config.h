@@ -247,7 +247,7 @@ enum c3_isp_params_awb_tap_points {
  * from :c:type:`c3_isp_params_block_type`
  *
  * @header: the C3 ISP parameters block header
- * @tap_point: the tap point from enum c3_isp_params_awb_tap_point
+ * @tap_point: the tap point from enum c3_isp_params_awb_tap_points
  * @satur_vald: AWB statistic over saturation control
  *		value: 0: disable, 1: enable
  * @horiz_zones_num: active number of hotizontal zones [0..32]
@@ -305,7 +305,7 @@ enum c3_isp_params_ae_tap_points {
  * @header: the C3 ISP parameters block header
  * @horiz_zones_num: active number of horizontal zones [0..17]
  * @vert_zones_num: active number of vertical zones [0..15]
- * @tap_point: the tap point from enum c3_isp_params_ae_tap_point
+ * @tap_point: the tap point from enum c3_isp_params_ae_tap_points
  * @zone_weight: array of weights for AE statistics zones [0..15]
  * @horiz_coord: the horizontal coordinate of points on the diagonal [0..2888]
  * @vert_coord: the vertical coordinate of points on the diagonal [0..2240]
@@ -342,7 +342,7 @@ enum c3_isp_params_af_tap_points {
  * from :c:type:`c3_isp_params_block_type`
  *
  * @header: the C3 ISP parameters block header
- * @tap_point: the tap point from enum c3_isp_params_af_tap_point
+ * @tap_point: the tap point from enum c3_isp_params_af_tap_points
  * @horiz_zones_num: active number of hotizontal zones [0..17]
  * @vert_zones_num: active number of vertical zones [0..15]
  * @reserved: applications must zero this array
@@ -487,7 +487,7 @@ struct c3_isp_params_blc {
  *	| | | b_gain = ...;                                               | | |
  *	| | | gb_gain = ...;                                              | | |
  *	| | +------------------ struct c3_isp_params_awb_config ----------+ | |
- *	| | | +---------- struct c3_isp_param_block_header header ------+ | | |
+ *	| | | +---------- struct c3_isp_params_block_header header -----+ | | |
  *	| | | | type = C3_ISP_PARAMS_BLOCK_AWB_CONFIG;                  | | | |
  *	| | | | flags = C3_ISP_PARAMS_BLOCK_FL_NONE;                    | | | |
  *	| | | | size = sizeof(struct c3_isp_params_awb_config)          | | | |
