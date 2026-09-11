@@ -21,6 +21,7 @@
 static void airoha_pcs_setup_scu_eth(struct airoha_pcs_priv *priv,
 				     phy_interface_t interface)
 {
+	struct device *dev = priv->dev;
 	u32 xsi_sel;
 
 	switch (interface) {
@@ -38,6 +39,12 @@ static void airoha_pcs_setup_scu_eth(struct airoha_pcs_priv *priv,
 	regmap_update_bits(priv->scu, AIROHA_SCU_SSR3,
 			   AIROHA_SCU_ETH_XSI_SEL,
 			   xsi_sel);
+
+	/* AN7583 require additional setting */
+	if (device_is_compatible(dev, "airoha,an7583-pcs-eth"))
+		regmap_update_bits(priv->scu, AIROHA_SCU_WAN_CONF,
+				   AIROHA_SCU_ETH_MAC_SEL,
+				   AIROHA_SCU_ETH_MAC_SEL_XFI);
 }
 
 static void airoha_pcs_setup_scu_pon(struct airoha_pcs_priv *priv,
@@ -71,7 +78,7 @@ static void airoha_pcs_setup_scu_pon(struct airoha_pcs_priv *priv,
 			   wan_sel);
 }
 
-static void airoha_pcs_setup_scu_pcie(struct airoha_pcs_priv *priv,
+static void an7581_pcs_setup_scu_pcie(struct airoha_pcs_priv *priv,
 				      int index, phy_interface_t interface)
 {
 	u32 xsi_sel;
@@ -111,6 +118,26 @@ static void airoha_pcs_setup_scu_pcie(struct airoha_pcs_priv *priv,
 	}
 }
 
+static void an7583_pcs_setup_scu_pcie(struct airoha_pcs_priv *priv,
+				      int index, phy_interface_t interface)
+{
+	u32 xsi_sel;
+
+	if (priv->phy)
+		return;
+
+	switch (interface) {
+	case PHY_INTERFACE_MODE_USXGMII:
+	case PHY_INTERFACE_MODE_10GBASER:
+	default:
+		xsi_sel = AIROHA_SCU_PCIE_XSI1_USXGMII;
+	}
+
+	regmap_update_bits(priv->scu, AIROHA_SCU_SSTR,
+			   AIROHA_SCU_PCIE_XSI1_SEL,
+			   xsi_sel);
+}
+
 static int airoha_pcs_setup_scu(struct airoha_pcs_priv *priv,
 				int index, phy_interface_t interface)
 {
@@ -125,7 +152,10 @@ static int airoha_pcs_setup_scu(struct airoha_pcs_priv *priv,
 		airoha_pcs_setup_scu_pon(priv, interface);
 		break;
 	case AIROHA_PCS_PCIE:
-		airoha_pcs_setup_scu_pcie(priv, index, interface);
+		if (device_is_compatible(priv->dev, "airoha,an7581-pcs-pcie"))
+			an7581_pcs_setup_scu_pcie(priv, index, interface);
+		else
+			an7583_pcs_setup_scu_pcie(priv, index, interface);
 		break;
 	case AIROHA_PCS_USB:
 		break;
@@ -146,18 +176,25 @@ static int airoha_pcs_setup_scu(struct airoha_pcs_priv *priv,
 
 static void airoha_pcs_init_usxgmii(struct airoha_pcs_priv *priv, int index)
 {
+	const struct airoha_pcs_match_data *data = priv->data;
 	struct airoha_pcs_maps *maps = &priv->maps[index];
 
 	regmap_set_bits(maps->multi_sgmii, AIROHA_PCS_MULTI_SGMII_MSG_RX_CTRL_0,
 			AIROHA_PCS_HSGMII_XFI_SEL);
 
 	/* Disable Hibernation */
-	regmap_clear_bits(maps->usxgmii_pcs, AIROHA_PCS_USXGMII_PCS_CTROL_1,
-			  AIROHA_PCS_USXGMII_SPEED_SEL_H);
+	if (data->hibernation_workaround)
+		regmap_clear_bits(maps->usxgmii_pcs, AIROHA_PCS_USXGMII_PCS_CTROL_1,
+				AIROHA_PCS_USXGMII_SPEED_SEL_H);
 
 	/* FIXME: wait Airoha */
 	/* Avoid PCS sending garbage to MAC in some HW revision (E0) */
-	regmap_write(maps->usxgmii_pcs, AIROHA_PCS_USGMII_VENDOR_DEFINE_116, 0);
+	if (data->usxgmii_ber_time_fixup)
+		regmap_write(maps->usxgmii_pcs, AIROHA_PCS_USGMII_VENDOR_DEFINE_116, 0);
+
+	if (data->usxgmii_rx_gb_out_vld_tweak)
+		regmap_clear_bits(maps->usxgmii_pcs, AN7583_PCS_USXGMII_RTL_MODIFIED,
+				  AIROHA_PCS_USXGMII_MODIFIED_RX_GB_OUT_VLD);
 }
 
 static void airoha_pcs_init_hsgmii(struct airoha_pcs_priv *priv, int index)
@@ -513,6 +550,13 @@ static int airoha_pcs_config(struct phylink_pcs *pcs, unsigned int neg_mode,
 					AIROHA_PCS_USXGMII_PCS_AN_CONTROL_7,
 					AIROHA_PCS_USXGMII_RATE_UPDATE_MODE);
 		}
+
+		if (data->usxgmii_xfi_mode_sel &&
+		    neg_mode == PHYLINK_PCS_NEG_INBAND_ENABLED)
+			regmap_set_bits(maps->usxgmii_pcs,
+					AIROHA_PCS_USXGMII_PCS_AN_CONTROL_7,
+					AIROHA_PCS_USXGMII_XFI_MODE_TX_SEL |
+					AIROHA_PCS_USXGMII_XFI_MODE_RX_SEL);
 	}
 
 	/* Clear any force bit that my be set by bootloader */
@@ -1017,10 +1061,14 @@ static int airoha_pcs_usb_alloc_maps(struct platform_device *pdev,
 	if (ret)
 		return ret;
 
+	/* For AN7583 PCS ANA is controlled by PHY driver */
+	if (device_is_compatible(&pdev->dev, "airoha,an7583-pcs-usb"))
+		return 0;
+
 	return airoha_pcs_init_named_regmap(pdev, "pcs_ana", &priv->pcs_ana);
 }
 
-static int airoha_pcs_pcie_alloc_maps(struct platform_device *pdev,
+static int an7581_pcs_pcie_alloc_maps(struct platform_device *pdev,
 				      struct airoha_pcs_priv *priv)
 {
 	struct airoha_pcs_maps *maps = priv->maps;
@@ -1085,6 +1133,60 @@ static int airoha_pcs_pcie_alloc_maps(struct platform_device *pdev,
 	return airoha_pcs_init_named_regmap(pdev, "pcs_ana", &priv->pcs_ana);
 }
 
+static int an7583_pcs_pcie_alloc_maps(struct platform_device *pdev,
+				      struct airoha_pcs_priv *priv)
+{
+	struct airoha_pcs_maps *maps = priv->maps;
+	int ret;
+
+	ret = airoha_pcs_init_named_regmap(pdev, "pcs_mac", &maps[0].pcs_mac);
+	if (ret)
+		return ret;
+
+	/* On AN7583 PCS MAC is shared by SGMII/HSGMII is provided by PCIe1 PHY
+	 * and USXGMII is provided by PCIE0 ANA and PMA.
+	 */
+	if (priv->phy) {
+		ret = airoha_pcs_init_named_regmap(pdev, "hsgmii_an0", &maps[0].hsgmii_an);
+		if (ret)
+			return ret;
+
+		ret = airoha_pcs_init_named_regmap(pdev, "hsgmii_pcs0", &maps[0].hsgmii_pcs);
+		if (ret)
+			return ret;
+
+		ret = airoha_pcs_init_named_regmap(pdev, "hsgmii_rate_adp0", &maps[0].hsgmii_rate_adp);
+		if (ret)
+			return ret;
+
+		ret = airoha_pcs_init_named_regmap(pdev, "multi_sgmii0", &maps[0].multi_sgmii);
+		if (ret)
+			return ret;
+	} else {
+		ret = airoha_pcs_init_named_regmap(pdev, "hsgmii_rate_adp1", &maps[0].hsgmii_rate_adp);
+		if (ret)
+			return ret;
+
+		ret = airoha_pcs_init_named_regmap(pdev, "multi_sgmii1", &maps[0].multi_sgmii);
+		if (ret)
+			return ret;
+
+		ret = airoha_pcs_init_named_regmap(pdev, "usxgmii1", &maps[0].usxgmii_pcs);
+		if (ret)
+			return ret;
+
+		ret = airoha_pcs_init_named_regmap(pdev, "pcs_pma", &priv->pcs_pma[0]);
+		if (ret)
+			return ret;
+
+		ret = airoha_pcs_init_named_regmap(pdev, "pcs_ana", &priv->pcs_ana);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
 static struct phylink_pcs *airoha_pcs_xlate(struct fwnode_reference_args *pcsspec,
 					    void *data)
 {
@@ -1144,14 +1246,19 @@ static int airoha_pcs_probe(struct platform_device *pdev)
 	priv->dev = dev;
 	priv->data = data;
 
-	if (data->port_type == AIROHA_PCS_USB) {
+	if (data->port_type == AIROHA_PCS_USB ||
+	    device_is_compatible(dev, "airoha,an7583-pcs-pcie")) {
 		struct phy *phy;
 
+		/* For AN7583 PCIe PCS PHY is optional */
 		phy = devm_phy_get(dev, NULL);
-		if (IS_ERR(phy))
+		if (IS_ERR(phy) &&
+		    (data->port_type == AIROHA_PCS_USB ||
+		     PTR_ERR(phy) != -ENODEV))
 			return dev_err_probe(dev, PTR_ERR(phy), "failed to get phy\n");
 
-		priv->phy = phy;
+		if (!IS_ERR(phy))
+			priv->phy = phy;
 	}
 
 	switch (data->port_type) {
@@ -1163,7 +1270,10 @@ static int airoha_pcs_probe(struct platform_device *pdev)
 
 		break;
 	case AIROHA_PCS_PCIE:
-		ret = airoha_pcs_pcie_alloc_maps(pdev, priv);
+		if (device_is_compatible(dev, "airoha,an7581-pcs-pcie"))
+			ret = an7581_pcs_pcie_alloc_maps(pdev, priv);
+		else
+			ret = an7583_pcs_pcie_alloc_maps(pdev, priv);
 		if (ret)
 			return ret;
 
@@ -1252,6 +1362,8 @@ static int airoha_pcs_probe(struct platform_device *pdev)
 static const struct airoha_pcs_match_data an7581_pcs_eth = {
 	.num_port = 1,
 	.port_type = AIROHA_PCS_ETH,
+	.hibernation_workaround = true,
+	.usxgmii_ber_time_fixup = true,
 	.alloc_regmap_fields = an7581_pcs_alloc_regmap_fields,
 	.bringup = an7581_pcs_bringup,
 	.link_up = an7581_pcs_phya_link_up,
@@ -1261,6 +1373,8 @@ static const struct airoha_pcs_match_data an7581_pcs_eth = {
 static const struct airoha_pcs_match_data an7581_pcs_pon = {
 	.num_port = 1,
 	.port_type = AIROHA_PCS_PON,
+	.hibernation_workaround = true,
+	.usxgmii_ber_time_fixup = true,
 	.alloc_regmap_fields = an7581_pcs_alloc_regmap_fields,
 	.bringup = an7581_pcs_bringup,
 	.link_up = an7581_pcs_phya_link_up,
@@ -1269,6 +1383,8 @@ static const struct airoha_pcs_match_data an7581_pcs_pon = {
 static const struct airoha_pcs_match_data an7581_pcs_pcie = {
 	.num_port = 2,
 	.port_type = AIROHA_PCS_PCIE,
+	.hibernation_workaround = true,
+	.usxgmii_ber_time_fixup = true,
 	.alloc_regmap_fields = an7581_pcs_pcie_alloc_regmap_fields,
 	.bringup = an7581_pcs_bringup,
 	.link_up = an7581_pcs_phya_link_up,
@@ -1280,11 +1396,48 @@ static const struct airoha_pcs_match_data an7581_pcs_usb = {
 	.bringup = an7581_pcs_usb_bringup,
 };
 
+static const struct airoha_pcs_match_data an7583_pcs_eth = {
+	.num_port = 1,
+	.port_type = AIROHA_PCS_ETH,
+	.usxgmii_rx_gb_out_vld_tweak = true,
+	.usxgmii_xfi_mode_sel = true,
+	.bringup = an7583_pcs_common_phya_bringup,
+	.link_up = an7583_pcs_common_phya_link_up,
+};
+
+static const struct airoha_pcs_match_data an7583_pcs_pon = {
+	.num_port = 1,
+	.port_type = AIROHA_PCS_PON,
+	.usxgmii_rx_gb_out_vld_tweak = true,
+	.usxgmii_xfi_mode_sel = true,
+	.bringup = an7583_pcs_common_phya_bringup,
+	.link_up = an7583_pcs_common_phya_link_up,
+};
+
+static const struct airoha_pcs_match_data an7583_pcs_pcie = {
+	.num_port = 1,
+	.port_type = AIROHA_PCS_PCIE,
+	.usxgmii_rx_gb_out_vld_tweak = true,
+	.usxgmii_xfi_mode_sel = true,
+	.bringup = an7583_pcs_common_phya_bringup,
+	.link_up = an7583_pcs_common_phya_link_up,
+};
+
+static const struct airoha_pcs_match_data an7583_pcs_usb = {
+	.num_port = 1,
+	.port_type = AIROHA_PCS_USB,
+	.bringup = an7583_pcs_usb_phya_bringup,
+};
+
 static const struct of_device_id airoha_pcs_of_table[] = {
 	{ .compatible = "airoha,an7581-pcs-eth", .data = &an7581_pcs_eth },
 	{ .compatible = "airoha,an7581-pcs-pon", .data = &an7581_pcs_pon },
 	{ .compatible = "airoha,an7581-pcs-pcie", .data = &an7581_pcs_pcie },
 	{ .compatible = "airoha,an7581-pcs-usb", .data = &an7581_pcs_usb },
+	{ .compatible = "airoha,an7583-pcs-eth", .data = &an7583_pcs_eth },
+	{ .compatible = "airoha,an7583-pcs-pon", .data = &an7583_pcs_pon },
+	{ .compatible = "airoha,an7583-pcs-pcie", .data = &an7583_pcs_pcie },
+	{ .compatible = "airoha,an7583-pcs-usb", .data = &an7583_pcs_usb },
 	{ /* sentinel */ },
 };
 MODULE_DEVICE_TABLE(of, airoha_pcs_of_table);

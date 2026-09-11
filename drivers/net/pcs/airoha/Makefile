@@ -5,3 +5,6 @@ pcs-airoha-objs			:= pcs-airoha-common.o
 ifdef CONFIG_PCS_AIROHA_AN7581
 pcs-airoha-objs			+= pcs-an7581.o
 endif
+ifdef CONFIG_PCS_AIROHA_AN7583
+pcs-airoha-objs			+= pcs-an7583.o
+endif
