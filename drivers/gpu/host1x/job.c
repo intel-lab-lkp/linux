@@ -575,6 +575,10 @@ static inline int copy_gathers(struct device *host, struct host1x_job *job,
 
 		/* Copy the gather */
 		gather = host1x_bo_mmap(g->bo);
+		if (IS_ERR(gather))
+			return PTR_ERR(gather);
+		if (!gather)
+			return -ENOMEM;
 		memcpy(job->gather_copy_mapped + offset, gather + g->offset,
 		       g->words * sizeof(u32));
 		host1x_bo_munmap(g->bo, gather);
