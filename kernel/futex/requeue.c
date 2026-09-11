@@ -760,7 +760,7 @@ int handle_early_requeue_pi_wakeup(struct futex_hash_bucket *hb,
  * without one, the pi logic would not know which task to boost/deboost, if
  * there was a need to.
  *
- * We call schedule in futex_wait_queue() when we enqueue and return there
+ * We call schedule in futex_do_wait() when we enqueue and return there
  * via the following--
  * 1) wakeup on uaddr2 after an atomic lock acquisition by futex_requeue()
  * 2) wakeup on uaddr2 after a requeue
