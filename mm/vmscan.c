@@ -4927,6 +4927,12 @@ static int scan_folios(unsigned long nr_to_scan, struct lruvec *lruvec,
 	trace_mm_vmscan_lru_isolate(sc->reclaim_idx, sc->order, nr_to_scan,
 				scanned, skipped, isolated,
 				type ? LRU_INACTIVE_FILE : LRU_INACTIVE_ANON);
+	trace_mm_mglru_scan_folios(lruvec,
+				   sc->reclaim_idx, sc->order, nr_to_scan,
+				   scanned, sorted, skipped, isolated,
+				   type ? LRU_INACTIVE_FILE : LRU_INACTIVE_ANON,
+				   lrugen->max_seq, tier,
+				   lrugen->min_seq[type]);
 
 	*isolatedp = isolated;
 	return scanned;
