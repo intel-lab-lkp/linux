@@ -301,7 +301,7 @@ struct idpf_fsteer_fltr {
  * @q_vectors: array of queue vectors
  * @q_vector_idxs: starting index of queue vectors
  * @num_q_vectors: number of IRQ vectors allocated
- * @noirq_v_idx: ID of the NOIRQ vector
+ * @noirq_v_idx: software IRQ index used to get hardware vector information
  * @noirq_dyn_ctl_ena: value to write to the above to enable it
  * @noirq_dyn_ctl: register to enable/disable the vector for NOIRQ queues
  * @txq_grps: array of TX queue groups
