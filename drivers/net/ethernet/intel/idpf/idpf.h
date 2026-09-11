@@ -36,6 +36,7 @@ struct idpf_rss_data;
 #define IDPF_NUM_FILTERS_PER_MSG	20
 #define IDPF_NUM_DFLT_MBX_Q		2	/* includes both TX and RX */
 #define IDPF_DFLT_MBX_Q_LEN		64
+#define IDPF_MBX_IRQ_INDEX		0
 /* maximum number of times to try before resetting mailbox */
 #define IDPF_MB_MAX_ERR			20
 #define IDPF_NUM_CHUNKS_PER_MSG(struct_sz, chunk_sz)	\
@@ -204,8 +205,8 @@ struct idpf_vport_max_q {
 struct idpf_reg_ops {
 	void (*ctlq_reg_init)(struct libie_mmio_info *mmio,
 			      struct libie_ctlq_create_info *cctlq_info);
-	int (*intr_reg_init)(struct idpf_vport *vport,
-			     struct idpf_q_vec_rsrc *rsrc);
+	void (*intr_reg_init)(struct idpf_vport *vport,
+			      struct idpf_q_vec_rsrc *rsrc);
 	void (*mb_intr_reg_init)(struct idpf_adapter *adapter);
 	void (*reset_reg_init)(struct idpf_adapter *adapter);
 	void (*trigger_reset)(struct idpf_adapter *adapter,
@@ -615,6 +616,40 @@ struct idpf_vport_config {
 	     *__##iter : NULL)
 
 /**
+ * struct idpf_vec_regs - hardware registers related to vector
+ * @dyn_ctl: Dynamic control interrupt register offset
+ * @itrn: Interrupt Throttling Rate register offset
+ * @itrn_index_spacing: Register spacing between ITR registers of the same
+ *			vector
+ */
+struct idpf_vec_regs {
+	u32 dyn_ctl;
+	u32 itrn;
+	u32 itrn_index_spacing;
+};
+
+/**
+ * struct idpf_hw_vector - single hardware vector info
+ * @regs: address of irq registers
+ * @idx: hardware vector index
+ */
+struct idpf_hw_vector {
+	struct idpf_vec_regs regs;
+	int idx;
+};
+
+/**
+ * struct idpf_irq_info - hardware data needed to setup irq
+ * @vectors: allocated during initialization store hardware information
+ *	     for all vectors that can be used on a whole device
+ * @num: amount of vectors stored here
+ */
+struct idpf_irq_info {
+	struct idpf_hw_vector *vectors;
+	int num;
+};
+
+/**
  * struct idpf_adapter - Device data struct generated on probe
  * @pdev: PCI device struct given on probe
  * @virt_ver_maj: Virtchnl version major
@@ -633,6 +668,7 @@ struct idpf_vport_config {
  * @msix_entries: MSIX table
  * @num_rdma_msix_entries: Available number of MSIX vectors for RDMA
  * @rdma_msix_entries: RDMA MSIX table
+ * @irq_info: hardware data needed to setup irq
  * @req_vec_chunks: Requested vector chunk data
  * @mb_vector: Mailbox vector data
  * @vector_stack: Stack to store the msix vector indexes
@@ -693,6 +729,7 @@ struct idpf_adapter {
 	u16 num_rdma_msix_entries;
 	struct msix_entry *rdma_msix_entries;
 	struct virtchnl2_alloc_vectors *req_vec_chunks;
+	struct idpf_irq_info irq_info;
 	struct idpf_q_vector mb_vector;
 	struct idpf_vector_lifo vector_stack;
 	irqreturn_t (*irq_mb_handler)(int irq, void *data);
