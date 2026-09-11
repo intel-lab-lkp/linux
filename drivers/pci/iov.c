@@ -7,6 +7,7 @@
  * Copyright (C) 2009 Intel Corporation, Yu Zhao <yu.zhao@intel.com>
  */
 
+#include <linux/async.h>
 #include <linux/bitfield.h>
 #include <linux/bitmap.h>
 #include <linux/bits.h>
@@ -350,6 +351,12 @@ static struct pci_dev *pci_iov_scan_device(struct pci_dev *dev, int id,
 	return virtfn;
 }
 
+/*
+ * Safe to run concurrently for distinct ids only, on pre-created buses
+ * the caller keeps alive; id 0 must complete first
+ * (pci_read_vf_config_common()).  Must not take pci_rescan_remove_lock;
+ * failures are unwound by the caller via pci_iov_remove_virtfn().
+ */
 static int __pci_iov_add_virtfn(struct pci_dev *dev, struct pci_bus *bus,
 				int id)
 {
@@ -644,11 +651,41 @@ int __weak pcibios_sriov_disable(struct pci_dev *pdev)
 	return 0;
 }
 
+/* On-stack; live until async_synchronize_full_domain() drains the workers. */
+struct sriov_add_ctx {
+	struct pci_dev *dev;
+	struct pci_bus **buses;
+	u16 num_vfs;
+	atomic_t next_id;
+	atomic_t error;
+};
+
+static void sriov_add_vf_work(void *data, async_cookie_t cookie)
+{
+	struct sriov_add_ctx *ctx = data;
+	int id;
+	int rc;
+
+	while ((id = atomic_fetch_inc(&ctx->next_id)) < ctx->num_vfs) {
+		rc = __pci_iov_add_virtfn(ctx->dev, ctx->buses[id], id);
+		if (rc)
+			atomic_cmpxchg(&ctx->error, 0, rc);
+	}
+}
+
 static int sriov_add_vfs(struct pci_dev *dev, u16 num_vfs)
 {
+	/*
+	 * EXCLUSIVE: a registered domain joins async_global_pending, so a
+	 * VF probe calling async_synchronize_full() from a worker would
+	 * self-deadlock.
+	 */
+	ASYNC_DOMAIN_EXCLUSIVE(sriov_async_domain);
+	struct sriov_add_ctx ctx;
 	unsigned long *created_buses;
 	struct pci_bus **buses;
 	struct pci_bus *bus;
+	unsigned int nr_workers;
 	unsigned int i;
 	int rc;
 
@@ -678,17 +715,48 @@ static int sriov_add_vfs(struct pci_dev *dev, u16 num_vfs)
 			__set_bit(i, created_buses);
 	}
 
-	for (i = 0; i < num_vfs; i++) {
-		rc = __pci_iov_add_virtfn(dev, buses[i], i);
-		if (rc)
-			goto failed;
+	/* Id 0 writes the shared config fields later ids read locklessly. */
+	rc = __pci_iov_add_virtfn(dev, buses[0], 0);
+	if (rc) {
+		i = 0;
+		goto failed;
+	}
+
+	ctx.dev = dev;
+	ctx.buses = buses;
+	ctx.num_vfs = num_vfs;
+	atomic_set(&ctx.next_id, 1);	/* VF0 was added above */
+	atomic_set(&ctx.error, 0);
+
+	/*
+	 * An entry async_schedule_node_domain() cannot queue (allocation
+	 * failure or async backlog) runs in the caller and drains the
+	 * remaining range -- every id is added exactly once.
+	 */
+	nr_workers = min_t(unsigned int, num_vfs - 1, num_online_cpus());
+	for (i = 0; i < nr_workers; i++)
+		async_schedule_node_domain(sriov_add_vf_work, &ctx,
+					   dev_to_node(&dev->dev),
+					   &sriov_async_domain);
+
+	async_synchronize_full_domain(&sriov_async_domain);
+
+	rc = atomic_read(&ctx.error);
+	if (rc) {
+		i = num_vfs - 1;
+		goto failed;
 	}
 
 	bitmap_free(created_buses);
 	kvfree(buses);
 	return 0;
 failed:
-	/* VF i may be partially added: unwind ids 0..i inclusive. */
+	/*
+	 * Unwind ids 0..i inclusive: i is 0 on the sync VF0 path and
+	 * num_vfs - 1 on the worker path (workers past the first failure
+	 * may have added more); pci_iov_remove_virtfn() copes with
+	 * partial and never-added ids.
+	 */
 	do {
 		pci_iov_remove_virtfn(dev, i);
 	} while (i--);
@@ -832,6 +900,11 @@ static void sriov_del_vfs(struct pci_dev *dev)
 	struct pci_sriov *iov = dev->sriov;
 	int i;
 
+	/*
+	 * Deliberately serial: the parallel-add locking arguments (and the
+	 * powerpc pcibios_bus_add_device() serialization) assume removal
+	 * never runs concurrently.
+	 */
 	for (i = 0; i < iov->num_VFs; i++)
 		pci_iov_remove_virtfn(dev, i);
 }
