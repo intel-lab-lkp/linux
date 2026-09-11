@@ -944,6 +944,22 @@ static bool ovl_lower_uuid_ok(struct ovl_fs *ofs, const uuid_t *uuid)
 	return true;
 }
 
+static bool ovl_lower_mnt_idmap_mismatch(struct ovl_fs *ofs,
+					 const struct path *path)
+{
+	unsigned int i;
+
+	for (i = 1; i < ofs->numlayer; i++) {
+		struct vfsmount *mnt = ofs->layers[i].mnt;
+
+		if (mnt->mnt_sb == path->mnt->mnt_sb &&
+		    mnt_idmap(mnt) != mnt_idmap(path->mnt))
+			return true;
+	}
+
+	return false;
+}
+
 /* Get a unique fsid for the layer */
 static int ovl_get_fsid(struct ovl_fs *ofs, const struct path *path)
 {
@@ -956,8 +972,16 @@ static int ovl_get_fsid(struct ovl_fs *ofs, const struct path *path)
 	bool warn = false;
 
 	for (i = 0; i < ofs->numfs; i++) {
-		if (ofs->fs[i].sb == sb)
+		if (ofs->fs[i].sb == sb) {
+			if ((ofs->config.index || ofs->config.nfs_export) &&
+			    ovl_lower_mnt_idmap_mismatch(ofs, path)) {
+				ofs->config.index = false;
+				ofs->config.nfs_export = false;
+				pr_warn("different idmaps in same lower fs '%pd2', falling back to index=off,nfs_export=off.\n",
+					path->dentry);
+			}
 			return i;
+		}
 	}
 
 	if (!ovl_lower_uuid_ok(ofs, uuid)) {
