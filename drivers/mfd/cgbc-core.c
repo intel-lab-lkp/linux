@@ -56,13 +56,13 @@
 
 static struct platform_device *cgbc_pdev;
 
-static const struct cgbc_i2c_platform_data cgbc_i2c_gp_pdata = {
-	.name = "Congatec General Purpose I2C adapter",
+static const struct cgbc_i2c_platform_data cgbc_i2c_i2c0_pdata = {
+	.name = "cgbc-i2c0",
 	.cgbc_bus_id = 0,
 };
 
-static const struct cgbc_i2c_platform_data cgbc_i2c_pm_pdata = {
-	.name  = "Congatec Power Management I2C adapter",
+static const struct cgbc_i2c_platform_data cgbc_i2c_ddc0_pdata = {
+	.name  = "cgbc-ddc0",
 	.cgbc_bus_id = 4,
 };
 
@@ -72,13 +72,13 @@ static const struct mfd_cell cgbc_devs[] = {
 	{ .name = "cgbc-hwmon" },
 	{
 		.name = "cgbc-i2c",
-		.platform_data = &cgbc_i2c_gp_pdata,
-		.pdata_size = sizeof(cgbc_i2c_gp_pdata),
+		.platform_data = &cgbc_i2c_i2c0_pdata,
+		.pdata_size = sizeof(cgbc_i2c_i2c0_pdata),
 	},
 	{
 		.name = "cgbc-i2c",
-		.platform_data = &cgbc_i2c_pm_pdata,
-		.pdata_size = sizeof(cgbc_i2c_pm_pdata),
+		.platform_data = &cgbc_i2c_ddc0_pdata,
+		.pdata_size = sizeof(cgbc_i2c_ddc0_pdata),
 	},
 	{ .name = "cgbc-wdt" },
 };
