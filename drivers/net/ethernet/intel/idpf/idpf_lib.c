@@ -73,7 +73,7 @@ void idpf_mb_intr_rel_irq(struct idpf_adapter *adapter)
 	if (!test_and_clear_bit(IDPF_MB_INTR_MODE, adapter->flags))
 		return;
 
-	kfree(free_irq(adapter->msix_entries[0].vector, adapter));
+	kfree(free_irq(adapter->mb_vector.irq.virq, adapter));
 	queue_delayed_work(adapter->mbx_wq, &adapter->mbx_task, 0);
 }
 
@@ -83,15 +83,10 @@ void idpf_mb_intr_rel_irq(struct idpf_adapter *adapter)
  */
 void idpf_intr_rel(struct idpf_adapter *adapter)
 {
-	if (!adapter->msix_entries)
-		return;
-
 	idpf_mb_intr_rel_irq(adapter);
 	pci_free_irq_vectors(adapter->pdev);
 	idpf_send_dealloc_vectors_msg(adapter);
 	idpf_deinit_vector_stack(adapter);
-	kfree(adapter->msix_entries);
-	adapter->msix_entries = NULL;
 	kfree(adapter->rdma_msix_entries);
 	adapter->rdma_msix_entries = NULL;
 }
@@ -130,14 +125,14 @@ static void idpf_mb_irq_enable(struct idpf_adapter *adapter)
  */
 static int idpf_mb_intr_req_irq(struct idpf_adapter *adapter)
 {
-	int irq_num, mb_vidx = 0, err;
+	struct msi_map *irq = &adapter->mb_vector.irq;
 	char *name;
+	int err;
 
-	irq_num = adapter->msix_entries[mb_vidx].vector;
 	name = kasprintf(GFP_KERNEL, "%s-%s-%d",
 			 dev_driver_string(&adapter->pdev->dev),
-			 "Mailbox", mb_vidx);
-	err = request_irq(irq_num, adapter->irq_mb_handler, 0, name, adapter);
+			 "Mailbox", irq->index);
+	err = request_irq(irq->virq, adapter->irq_mb_handler, 0, name, adapter);
 	if (err) {
 		dev_err(&adapter->pdev->dev,
 			"IRQ request for mailbox failed, error: %d\n", err);
@@ -156,6 +151,13 @@ static int idpf_mb_intr_req_irq(struct idpf_adapter *adapter)
  */
 static int idpf_mb_intr_init(struct idpf_adapter *adapter)
 {
+	struct msi_map *mb_irq = &adapter->mb_vector.irq;
+
+	mb_irq->index = IDPF_MBX_IRQ_INDEX;
+	mb_irq->virq = pci_irq_vector(adapter->pdev, mb_irq->index);
+	if (mb_irq->virq < 0)
+		return mb_irq->virq;
+
 	adapter->dev_ops.reg_ops.mb_intr_reg_init(adapter);
 	adapter->irq_mb_handler = idpf_mb_intr_clean;
 
@@ -309,7 +311,6 @@ int idpf_intr_req(struct idpf_adapter *adapter)
 	u16 default_vports = idpf_get_default_vports(adapter);
 	int min_vectors, actual_vecs, min_lan_vecs, err;
 	int num_q_vecs, total_vecs;
-	unsigned int vector;
 	int i;
 
 	total_vecs = idpf_get_reserved_vecs(adapter);
@@ -368,23 +369,12 @@ int idpf_intr_req(struct idpf_adapter *adapter)
 	}
 
 	num_lan_vecs = actual_vecs - num_rdma_vecs;
-	adapter->msix_entries = kzalloc_objs(struct msix_entry, num_lan_vecs);
-	if (!adapter->msix_entries) {
-		err = -ENOMEM;
-		goto free_rdma_msix;
-	}
 
-	for (vector = 0; vector < num_lan_vecs; vector++) {
-		adapter->msix_entries[vector].entry =
-			adapter->irq_info.vectors[vector].idx;
-		adapter->msix_entries[vector].vector =
-			pci_irq_vector(adapter->pdev, vector);
-	}
-	for (i = 0; i < num_rdma_vecs; vector++, i++) {
+	for (i = 0; i < num_rdma_vecs; i++) {
 		adapter->rdma_msix_entries[i].entry =
-			adapter->irq_info.vectors[vector].idx;
+			adapter->irq_info.vectors[num_lan_vecs + i].idx;
 		adapter->rdma_msix_entries[i].vector =
-			pci_irq_vector(adapter->pdev, vector);
+			pci_irq_vector(adapter->pdev, num_lan_vecs + i);
 	}
 
 	/* 'num_avail_msix' is used to distribute excess vectors to the vports
@@ -399,7 +389,7 @@ int idpf_intr_req(struct idpf_adapter *adapter)
 	/* Fill MSIX vector lifo stack with vector indexes */
 	err = idpf_init_vector_stack(adapter);
 	if (err)
-		goto free_msix;
+		goto free_rdma_msix;
 
 	err = idpf_mb_intr_init(adapter);
 	if (err)
@@ -410,9 +400,6 @@ int idpf_intr_req(struct idpf_adapter *adapter)
 
 deinit_vec_stack:
 	idpf_deinit_vector_stack(adapter);
-free_msix:
-	kfree(adapter->msix_entries);
-	adapter->msix_entries = NULL;
 free_rdma_msix:
 	kfree(adapter->rdma_msix_entries);
 	adapter->rdma_msix_entries = NULL;
