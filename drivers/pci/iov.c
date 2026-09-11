@@ -8,6 +8,7 @@
  */
 
 #include <linux/bitfield.h>
+#include <linux/bitmap.h>
 #include <linux/bits.h>
 #include <linux/log2.h>
 #include <linux/pci.h>
@@ -124,9 +125,13 @@ out:
 	return rc;
 }
 
-static struct pci_bus *virtfn_add_bus(struct pci_bus *bus, int busnr)
+static struct pci_bus *virtfn_add_bus(struct pci_bus *bus, int busnr,
+				      bool *created)
 {
 	struct pci_bus *child;
+
+	if (created)
+		*created = false;
 
 	if (bus->number == busnr)
 		return bus;
@@ -140,6 +145,8 @@ static struct pci_bus *virtfn_add_bus(struct pci_bus *bus, int busnr)
 		return NULL;
 
 	pci_bus_insert_busn_res(child, busnr, busnr);
+	if (created)
+		*created = true;
 
 	return child;
 }
@@ -394,7 +401,7 @@ int pci_iov_add_virtfn(struct pci_dev *dev, int id)
 	struct pci_bus *bus;
 	int rc;
 
-	bus = virtfn_add_bus(dev->bus, pci_iov_virtfn_bus(dev, id));
+	bus = virtfn_add_bus(dev->bus, pci_iov_virtfn_bus(dev, id), NULL);
 	if (!bus)
 		return -ENOMEM;
 
@@ -632,22 +639,67 @@ int __weak pcibios_sriov_disable(struct pci_dev *pdev)
 
 static int sriov_add_vfs(struct pci_dev *dev, u16 num_vfs)
 {
+	unsigned long *created_buses;
+	struct pci_bus **buses;
+	struct pci_bus *bus;
 	unsigned int i;
 	int rc;
 
-	if (dev->no_vf_scan)
+	if (!num_vfs || dev->no_vf_scan)
 		return 0;
 
+	buses = kvcalloc(num_vfs, sizeof(*buses), GFP_KERNEL);
+	if (!buses)
+		return -ENOMEM;
+
+	created_buses = bitmap_zalloc(num_vfs, GFP_KERNEL);
+	if (!created_buses) {
+		kvfree(buses);
+		return -ENOMEM;
+	}
+
 	for (i = 0; i < num_vfs; i++) {
-		rc = pci_iov_add_virtfn(dev, i);
+		bool created;
+
+		buses[i] = virtfn_add_bus(dev->bus, pci_iov_virtfn_bus(dev, i),
+					  &created);
+		if (!buses[i]) {
+			rc = -ENOMEM;
+			goto remove_buses;
+		}
+		if (created)
+			__set_bit(i, created_buses);
+	}
+
+	for (i = 0; i < num_vfs; i++) {
+		rc = __pci_iov_add_virtfn(dev, buses[i], i);
 		if (rc)
 			goto failed;
 	}
+
+	bitmap_free(created_buses);
+	kvfree(buses);
 	return 0;
 failed:
 	while (i--)
 		pci_iov_remove_virtfn(dev, i);
 
+remove_buses:
+	/*
+	 * Remove only buses this enable created: several ids can share one
+	 * bus and only the creating id is recorded; virtfn_remove_bus()
+	 * checks emptiness, not ownership.  Re-look each up by number --
+	 * the VF unwind above may already have freed it.
+	 */
+	for_each_set_bit(i, created_buses, num_vfs) {
+		bus = pci_find_bus(pci_domain_nr(dev->bus),
+				   pci_iov_virtfn_bus(dev, i));
+		if (bus)
+			virtfn_remove_bus(dev->bus, bus);
+	}
+
+	bitmap_free(created_buses);
+	kvfree(buses);
 	return rc;
 }
 
