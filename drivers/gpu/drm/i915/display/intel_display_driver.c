@@ -34,6 +34,7 @@
 #include "intel_display_driver.h"
 #include "intel_display_irq.h"
 #include "intel_display_power.h"
+#include "intel_display_rpm.h"
 #include "intel_display_types.h"
 #include "intel_display_utils.h"
 #include "intel_display_wa.h"
@@ -898,9 +899,17 @@ void intel_display_driver_runtime_pm_disable(struct intel_display *display)
 	intel_display_power_disable(display);
 }
 
+static void intel_display_driver_pm_runtime_set_pme(struct intel_display *display)
+{
+	bool pme_enabled = intel_display_rpm_pme_enabled(display);
+
+	intel_hpd_set_pme_capable(display, pme_enabled);
+}
+
 /* before irq suspend */
 void intel_display_driver_pm_runtime_suspend(struct intel_display *display)
 {
+	intel_display_driver_pm_runtime_set_pme(display);
 }
 
 /* after irq suspend */
@@ -935,9 +944,16 @@ void intel_display_driver_pm_runtime_suspend_late(struct intel_display *display)
 		intel_hpd_poll_enable(display);
 }
 
+static void intel_display_driver_pm_runtime_clear_pme(struct intel_display *display)
+{
+	intel_hpd_set_pme_capable(display, false);
+}
+
 /* before irq resume */
 void intel_display_driver_pm_runtime_resume_early(struct intel_display *display)
 {
+	intel_display_driver_pm_runtime_clear_pme(display);
+
 	intel_opregion_notify_adapter(display, PCI_D0);
 
 	intel_display_power_runtime_resume(display);
