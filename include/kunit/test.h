@@ -239,7 +239,7 @@ static inline char *kunit_status_to_ok_not_ok(enum kunit_status status)
  * that were not managed by the parameterized test, and any other teardown logic.
  *
  * Note: If you are registering a parameter array in param_init() with
- * kunit_register_param_array() then you need to pass kunit_array_gen_params()
+ * kunit_register_params_array() then you need to pass kunit_array_gen_params()
  * to this as the generator function.
  */
 #define KUNIT_CASE_PARAM_WITH_INIT(test_name, gen_params, init, exit)		\
