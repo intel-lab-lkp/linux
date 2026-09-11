@@ -132,6 +132,8 @@ dvb-usb-dib0700 cards list
      - 1554:5010
    * - Sony PlayTV
      - 1415:0003
+   * - Trek ThumbDrive Tuner
+     - 0a16:3630
    * - TechniSat AirStar TeleStick 2
      - 14f7:0004
    * - Terratec Cinergy DT USB XS Diversity/ T5
