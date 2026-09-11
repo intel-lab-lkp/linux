@@ -74,6 +74,25 @@ static DEFINE_PER_CPU(unsigned long, nr_unused);
 
 static struct kmem_cache *inode_cachep __ro_after_init;
 
+struct deferred_reclaim_queue {
+	struct list_head list;
+	spinlock_t lock;
+};
+
+/* Inodes for deferred reclaim */
+struct inode_deferred_reclaim {
+	int workers;			/* Number of parallel workers */
+	struct workqueue_struct *wq;	/* Workqueue for workers */
+	struct work_struct *work;	/* Workers */
+	/*
+	 * Queue of deferred inodes. The number of queues is the same number
+	 * as the number of workers
+	 */
+	struct deferred_reclaim_queue *queues;
+};
+
+static struct inode_deferred_reclaim deferred_reclaim;
+
 static long get_nr_inodes(void)
 {
 	int i;
@@ -919,6 +938,12 @@ again:
 }
 EXPORT_SYMBOL_GPL(evict_inodes);
 
+struct inodes_to_prune {
+	struct list_head freeable;
+	struct list_head deferred;
+	unsigned int deferred_count;
+};
+
 /*
  * Isolate the inode from the LRU in preparation for freeing it.
  *
@@ -933,7 +958,7 @@ EXPORT_SYMBOL_GPL(evict_inodes);
 static enum lru_status inode_lru_isolate(struct list_head *item,
 		struct list_lru_one *lru, void *arg)
 {
-	struct list_head *freeable = arg;
+	struct inodes_to_prune *lists = arg;
 	struct inode	*inode = container_of(item, struct inode, i_lru);
 
 	/*
@@ -950,7 +975,7 @@ static enum lru_status inode_lru_isolate(struct list_head *item,
 	 * sync, or the last page cache deletion will requeue them.
 	 */
 	if (icount_read(inode) ||
-	    (inode_state_read(inode) & ~I_REFERENCED) ||
+	    inode_state_read(inode) & ~(I_REFERENCED | I_DEFER_RECLAIM) ||
 	    !mapping_shrinkable(&inode->i_data)) {
 		list_lru_isolate(lru, &inode->i_lru);
 		spin_unlock(&inode->i_lock);
@@ -988,11 +1013,25 @@ static enum lru_status inode_lru_isolate(struct list_head *item,
 
 	WARN_ON(inode_state_read(inode) & I_NEW);
 	inode_state_set(inode, I_FREEING);
-	list_lru_isolate_move(lru, &inode->i_lru, freeable);
+	/* Inode will take long time to cleanup. Offload that to worker. */
+	if (inode_state_read(inode) & I_DEFER_RECLAIM) {
+		list_lru_isolate_move(lru, &inode->i_lru, &lists->deferred);
+		lists->deferred_count++;
+	} else {
+		list_lru_isolate_move(lru, &inode->i_lru, &lists->freeable);
+	}
 	spin_unlock(&inode->i_lock);
 
 	this_cpu_dec(nr_unused);
 	return LRU_REMOVED;
+}
+
+/* Number of inodes to process in one reclaim batch */
+#define INODE_RECLAIM_BATCH_SIZE 16
+
+static int get_deferred_sb_id(struct super_block *sb)
+{
+	return hash_ptr(sb, 32) % deferred_reclaim.workers;
 }
 
 /*
@@ -1003,14 +1042,157 @@ static enum lru_status inode_lru_isolate(struct list_head *item,
  */
 long prune_icache_sb(struct super_block *sb, struct shrink_control *sc)
 {
-	LIST_HEAD(freeable);
+	struct inodes_to_prune lists = {
+		.freeable = LIST_HEAD_INIT(lists.freeable),
+		.deferred = LIST_HEAD_INIT(lists.deferred),
+	};
 	long freed;
 
 	freed = list_lru_shrink_walk(&sb->s_inode_lru, sc,
-				     inode_lru_isolate, &freeable);
-	dispose_list(&freeable);
+				     inode_lru_isolate, &lists);
+	dispose_list(&lists.freeable);
+	if (!list_empty(&lists.deferred)) {
+		int id = get_deferred_sb_id(sb);
+		int i, wake_count;
+
+		spin_lock(&deferred_reclaim.queues[id].lock);
+		list_splice_tail(&lists.deferred,
+				 &deferred_reclaim.queues[id].list);
+		atomic_add(lists.deferred_count, &sb->s_deferred_reclaim_count);
+		spin_unlock(&deferred_reclaim.queues[id].lock);
+
+		/* Queue works to process inodes we've added to the list */
+		wake_count = (lists.deferred_count + INODE_RECLAIM_BATCH_SIZE)
+						/ INODE_RECLAIM_BATCH_SIZE;
+		if (wake_count > deferred_reclaim.workers)
+			wake_count = deferred_reclaim.workers;
+		for (i = 0; i < wake_count; i++) {
+			queue_work(deferred_reclaim.wq,
+				   &deferred_reclaim.work[id]);
+			id = (id + 1) % deferred_reclaim.workers;
+		}
+	}
 	return freed;
 }
+
+static void __get_inode_reclaim_batch(int *start, int end,
+				      struct list_head *list, int *count)
+{
+	int i;
+
+	for (i = *start; i < end; i++) {
+		if (list_empty_careful(&deferred_reclaim.queues[i].list))
+			continue;
+		spin_lock(&deferred_reclaim.queues[i].lock);
+		while (*count < INODE_RECLAIM_BATCH_SIZE &&
+		       !list_empty(&deferred_reclaim.queues[i].list)) {
+			list_move(deferred_reclaim.queues[i].list.next, list);
+			(*count)++;
+		}
+		spin_unlock(&deferred_reclaim.queues[i].lock);
+		if (*count >= INODE_RECLAIM_BATCH_SIZE)
+			break;
+	}
+	*start = i;
+}
+
+/* Move a batch of inodes from queued lists to our private list */
+static int get_inode_reclaim_batch(int *id, struct list_head *list)
+{
+	int count = 0;
+	int orig_id = *id;
+
+	__get_inode_reclaim_batch(id, deferred_reclaim.workers, list, &count);
+	if (count >= INODE_RECLAIM_BATCH_SIZE)
+		return count;
+	/* Wrap around */
+	if (orig_id > 0) {
+		*id = 0;
+		__get_inode_reclaim_batch(id, orig_id, list, &count);
+	}
+	return count;
+}
+
+
+static void inode_reclaim_deferred(struct work_struct *work)
+{
+	struct inode *inode;
+	LIST_HEAD(inode_batch);
+	/*
+	 * We start with the list corresponding to the work but rolling a dice
+	 * would work as well
+	 */
+	int id = work - deferred_reclaim.work;
+
+	while (1) {
+		if (!get_inode_reclaim_batch(&id, &inode_batch))
+			break;
+		while (!list_empty(&inode_batch)) {
+			struct super_block *sb;
+
+			/*
+			 * inode_batch list is private and I_FREEING flags
+			 * protect us from anybody else trying to remove the
+			 * inode from the LRU list. No locking needed.
+			 */
+			inode = list_first_entry(&inode_batch, struct inode,
+						 i_lru);
+			list_del_init(&inode->i_lru);
+			sb = inode->i_sb;
+			evict(inode);
+			/*
+			 * The elevated s_deferred_reclaim_count keeps sb alive
+			 * until we drop it
+			 */
+			if (atomic_dec_and_test(&sb->s_deferred_reclaim_count))
+				wake_up_var(&sb->s_deferred_reclaim_count);
+			cond_resched();
+		}
+	}
+}
+
+/* Maximum number of inode reclaim workers */
+#define MAX_RECLAIM_WORKERS 16
+
+static void __init deferred_reclaim_init(void)
+{
+	int workers = MAX_RECLAIM_WORKERS;
+	int i;
+
+	/* Scale down the number of workers for small systems */
+	if (workers > num_possible_cpus())
+		workers = num_possible_cpus();
+
+	deferred_reclaim.workers = workers;
+	deferred_reclaim.work = kmalloc_objs(struct work_struct, workers);
+	deferred_reclaim.queues =
+			kmalloc_objs(struct deferred_reclaim_queue, workers);
+	if (!deferred_reclaim.work || !deferred_reclaim.queues)
+		panic("Failed to allocate deferred inode queues");
+
+	deferred_reclaim.wq = alloc_workqueue("deferred-inodegc",
+			WQ_FREEZABLE | WQ_MEM_RECLAIM | WQ_UNBOUND,
+			workers);
+	if (!deferred_reclaim.wq)
+		panic("Failed to allocate deferred inode reclaim workqueue");
+
+	for (i = 0; i < workers; i++) {
+		INIT_WORK(&deferred_reclaim.work[i], inode_reclaim_deferred);
+		spin_lock_init(&deferred_reclaim.queues[i].lock);
+		INIT_LIST_HEAD(&deferred_reclaim.queues[i].list);
+	}
+}
+
+void mark_inode_reclaim_deferred(struct inode *inode)
+{
+	if (inode_state_read_once(inode) & I_DEFER_RECLAIM)
+		return;
+
+	spin_lock(&inode->i_lock);
+	inode_state_set(inode, I_DEFER_RECLAIM);
+	spin_unlock(&inode->i_lock);
+}
+EXPORT_SYMBOL_GPL(mark_inode_reclaim_deferred);
 
 static void __wait_on_freeing_inode(struct inode *inode, bool hash_locked, bool rcu_locked);
 static bool igrab_from_hash(struct inode *inode);
@@ -2658,6 +2840,9 @@ void __init inode_init(void)
 					 (SLAB_RECLAIM_ACCOUNT|SLAB_PANIC|
 					 SLAB_ACCOUNT),
 					 init_once);
+
+	/* Deferred inode reclaim infrastructure */
+	deferred_reclaim_init();
 
 	/* Hash may have been set up in inode_init_early */
 	if (!hashdist)

@@ -741,6 +741,7 @@ enum inode_state_flags_enum {
 	I_SYNC_QUEUED		= (1U << 17),
 	I_PINNING_NETFS_WB	= (1U << 18),
 	I_METADATA_WRITEBACK	= (1U << 19),
+	I_DEFER_RECLAIM		= (1U << 20),
 };
 
 #define I_DIRTY_INODE (I_DIRTY_SYNC | I_DIRTY_DATASYNC)
@@ -2217,6 +2218,8 @@ static inline void set_inode_metadata_writeback(struct inode *inode)
 	inode_state_set(inode, I_METADATA_WRITEBACK);
 	spin_unlock(&inode->i_lock);
 }
+
+void mark_inode_reclaim_deferred(struct inode *inode);
 
 /*
  * returns the refcount on the inode. it can change arbitrarily.

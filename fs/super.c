@@ -600,6 +600,8 @@ void deactivate_locked_super(struct super_block *s)
 	struct file_system_type *fs = s->s_type;
 	if (atomic_dec_and_test(&s->s_active)) {
 		shrinker_free(s->s_shrink);
+		wait_var_event(&s->s_deferred_reclaim_count,
+			       !atomic_read(&s->s_deferred_reclaim_count));
 		fs->kill_sb(s);
 
 		kill_super_notify(s);
