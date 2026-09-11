@@ -134,8 +134,12 @@ void ixd_ctlq_rx_task(struct work_struct *work)
 
 	adapter = container_of(work, struct ixd_adapter, mbx_task.work);
 
-	queue_delayed_work(system_dfl_wq, &adapter->mbx_task,
-			   IXD_CTLQ_RX_TASK_DELAY_JIFFIES);
+	if (test_bit(IXD_MB_INTR_MODE, adapter->flags))
+		/* Just re-enable irq in HW. */
+		ixd_mailbox_irq_enable(adapter);
+	else
+		queue_delayed_work(system_dfl_wq, &adapter->mbx_task,
+				   IXD_CTLQ_RX_TASK_DELAY_JIFFIES);
 
 	ixd_ctlq_recv_mb_msg(adapter);
 }
