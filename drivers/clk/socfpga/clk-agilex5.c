@@ -5,8 +5,9 @@
  */
 #include <linux/slab.h>
 #include <linux/clk-provider.h>
+#include <linux/io.h>
 #include <linux/of.h>
-#include <linux/platform_device.h>
+#include <linux/of_address.h>
 #include  <dt-bindings/clock/intel,agilex5-clkmgr.h>
 #include "stratix10-clk.h"
 #include "clk.h"
@@ -486,24 +487,26 @@ static int agilex5_clk_register_pll(const struct agilex5_pll_clock *clks,
 	return 0;
 }
 
-static int agilex5_clkmgr_init(struct platform_device *pdev)
+static void __init agilex5_clkmgr_init(struct device_node *np)
 {
-	struct device_node *np = pdev->dev.of_node;
-	struct device *dev = &pdev->dev;
 	struct stratix10_clock_data *clk_data;
 	void __iomem *base;
 	int i, num_clks;
 
-	base = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(base))
-		return PTR_ERR(base);
+	base = of_iomap(np, 0);
+	if (!base) {
+		pr_err("%s: failed to map clock registers\n", __func__);
+		return;
+	}
 
 	num_clks = AGILEX5_NUM_CLKS;
 
-	clk_data = devm_kzalloc(dev, struct_size(clk_data, clk_data.hws,
-				num_clks), GFP_KERNEL);
-	if (!clk_data)
-		return -ENOMEM;
+	clk_data = kzalloc(struct_size(clk_data, clk_data.hws, num_clks),
+			   GFP_KERNEL);
+	if (!clk_data) {
+		iounmap(base);
+		return;
+	}
 
 	clk_data->base = base;
 	clk_data->clk_data.num = num_clks;
@@ -527,35 +530,6 @@ static int agilex5_clkmgr_init(struct platform_device *pdev)
 				  ARRAY_SIZE(agilex5_gate_clks), clk_data);
 
 	of_clk_add_hw_provider(np, of_clk_hw_onecell_get, &clk_data->clk_data);
-	return 0;
 }
 
-static int agilex5_clkmgr_probe(struct platform_device *pdev)
-{
-	int (*probe_func)(struct platform_device *init_func);
-
-	probe_func = of_device_get_match_data(&pdev->dev);
-	if (!probe_func)
-		return -ENODEV;
-	return probe_func(pdev);
-}
-
-static const struct of_device_id agilex5_clkmgr_match_table[] = {
-	{ .compatible = "intel,agilex5-clkmgr", .data = agilex5_clkmgr_init },
-	{}
-};
-
-static struct platform_driver agilex5_clkmgr_driver = {
-	.probe		= agilex5_clkmgr_probe,
-	.driver		= {
-		.name	= "agilex5-clkmgr",
-		.suppress_bind_attrs = true,
-		.of_match_table = agilex5_clkmgr_match_table,
-	},
-};
-
-static int __init agilex5_clk_init(void)
-{
-	return platform_driver_register(&agilex5_clkmgr_driver);
-}
-core_initcall(agilex5_clk_init);
+CLK_OF_DECLARE(agilex5_clkmgr, "intel,agilex5-clkmgr", agilex5_clkmgr_init);
