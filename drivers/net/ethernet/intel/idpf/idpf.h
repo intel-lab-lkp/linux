@@ -195,6 +195,7 @@ struct idpf_vport_max_q {
  * struct idpf_reg_ops - Device specific register operation function pointers
  * @ctlq_reg_init: Mailbox control queue register initialization
  * @intr_reg_init: Traffic interrupt register initialization
+ * @noirq_intr_reg_init: Vector without interrupt register initialization
  * @mb_intr_reg_init: Mailbox interrupt register initialization
  * @reset_reg_init: Reset register initialization
  * @trigger_reset: Trigger a reset to occur
@@ -203,8 +204,10 @@ struct idpf_vport_max_q {
 struct idpf_reg_ops {
 	void (*ctlq_reg_init)(struct libie_mmio_info *mmio,
 			      struct libie_ctlq_create_info *cctlq_info);
-	void (*intr_reg_init)(struct idpf_vport *vport,
-			      struct idpf_q_vec_rsrc *rsrc);
+	void (*intr_reg_init)(struct idpf_adapter *adapter,
+			      struct idpf_q_vector *q_vector, u16 idx);
+	void (*noirq_intr_reg_init)(struct idpf_adapter *adapter,
+				    struct idpf_q_vec_rsrc *rsrc, u16 idx);
 	void (*mb_intr_reg_init)(struct idpf_adapter *adapter);
 	void (*reset_reg_init)(struct idpf_adapter *adapter);
 	void (*trigger_reset)(struct idpf_adapter *adapter,
