@@ -63,5 +63,8 @@ bool ixd_check_reset_complete(struct ixd_adapter *adapter);
 void ixd_init_task(struct work_struct *work);
 int ixd_init_dflt_mbx(struct ixd_adapter *adapter);
 void ixd_deinit_dflt_mbx(struct ixd_adapter *adapter);
+int ixd_iomap_running_regions(struct ixd_adapter *adapter);
+bool ixd_iomap_is_not_start_region(struct libie_mmio_info *info,
+				   struct libie_pci_mmio_region *reg);
 
 #endif /* _IXD_H_ */
