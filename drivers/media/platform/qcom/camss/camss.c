@@ -5000,7 +5000,10 @@ static int camss_link_entities(struct camss *camss)
 				}
 	} else {
 		for (i = 0; i < camss->res->csid_num; i++)
-			for (k = 0; k < camss->res->vfe_num; k++)
+			for (k = 0; k < camss->res->vfe_num; k++) {
+				if (camss->res->csid_vfe_fixed_pairing && i != k)
+					continue;
+
 				for (j = 0; j < camss->vfe[k].res->line_num; j++) {
 					struct v4l2_subdev *csid = &camss->csid[i].subdev;
 					struct v4l2_subdev *vfe = &camss->vfe[k].line[j].subdev;
@@ -5017,6 +5020,7 @@ static int camss_link_entities(struct camss *camss)
 						return ret;
 					}
 				}
+			}
 	}
 
 	return 0;
@@ -5666,6 +5670,7 @@ static const struct camss_resources sm8250_resources = {
 	.csiphy_num = ARRAY_SIZE(csiphy_res_8250),
 	.csid_num = ARRAY_SIZE(csid_res_8250),
 	.vfe_num = ARRAY_SIZE(vfe_res_8250),
+	.csid_vfe_fixed_pairing = true,
 };
 
 static const struct camss_resources sc8280xp_resources = {
