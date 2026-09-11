@@ -8,6 +8,7 @@
 #include <linux/kernel.h>
 #include <linux/device-id/platform.h>
 #include <linux/module.h>
+#include <linux/slab.h>
 #include <linux/smp.h>
 #include <linux/tsm.h>
 #include <linux/types.h>
