@@ -2268,8 +2268,15 @@ static void cpu_set_hyp_vector(void)
 
 static void cpu_hyp_init_context(void)
 {
+	u64 pfr0 = __read_sysreg_by_encoding(SYS_ID_AA64PFR0_EL1);
+	u64 pfr1 = __read_sysreg_by_encoding(SYS_ID_AA64PFR1_EL1);
+
 	kvm_init_host_cpu_context(host_data_ptr(host_ctxt));
 	kvm_init_host_debug_data();
+
+	/* The traps take effect without MPAMEN, which ARM64_MPAM requires. */
+	if (id_aa64pfr0_mpam(pfr0) || id_aa64pfr1_mpamfrac(pfr1))
+		host_data_set_flag(HAS_MPAM);
 
 	if (!is_kernel_in_hyp_mode())
 		cpu_init_hyp_mode();
