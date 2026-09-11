@@ -9,6 +9,7 @@
 #include <linux/file.h>
 #include <linux/device.h>
 #include <linux/cdev.h>
+#include <linux/completion.h>
 #include <linux/module.h>
 #include <linux/vfio.h>
 
@@ -83,6 +84,14 @@ struct vfio_group {
 	struct list_head		device_list;
 	struct mutex			device_lock;
 	struct list_head		vfio_next;
+	/*
+	 * Reserved on vfio.group_list while the chardev is built; published
+	 * is set when the build succeeds (failure unlinks the group) and is
+	 * accessed only under vfio.group_lock.  publish_done releases
+	 * callers that found the group mid-build.
+	 */
+	bool				published;
+	struct completion		publish_done;
 #if IS_ENABLED(CONFIG_VFIO_CONTAINER)
 	struct list_head		container_next;
 #endif

@@ -537,52 +537,157 @@ static struct vfio_group *vfio_group_alloc(struct iommu_group *iommu_group,
 	group->cdev.owner = THIS_MODULE;
 
 	refcount_set(&group->drivers, 1);
+	init_completion(&group->publish_done);
 	mutex_init(&group->group_lock);
 	spin_lock_init(&group->kvm_ref_lock);
 	INIT_LIST_HEAD(&group->device_list);
 	mutex_init(&group->device_lock);
 	group->iommu_group = iommu_group;
-	/* put in vfio_group_release() */
+	/* put in vfio_device_remove_group() or vfio_group_discard() */
 	iommu_group_ref_get(iommu_group);
 	group->type = type;
 
 	return group;
 }
 
-static struct vfio_group *vfio_create_group(struct iommu_group *iommu_group,
-		enum vfio_group_type type)
+/*
+ * Undo vfio_group_alloc() for a never-published group: the teardown tail
+ * of vfio_device_remove_group(), except that unlinking the group from
+ * vfio.group_list is the caller's job, under vfio.group_lock.
+ */
+static void vfio_group_discard(struct vfio_group *group)
+{
+	struct iommu_group *iommu_group;
+
+	/*
+	 * An unpublished group holds only vfio_group_alloc()'s reference.
+	 * On a count mismatch, leak rather than free under the other holder.
+	 */
+	if (WARN_ON(refcount_read(&group->drivers) != 1))
+		return;
+	/* No discard site leaves the group findable, so nothing can inc it. */
+	refcount_set(&group->drivers, 0);
+
+	mutex_lock(&group->group_lock);
+	WARN_ON(!list_empty(&group->device_list));
+	if (group->container)
+		vfio_group_detach_container(group);
+	iommu_group = group->iommu_group;
+	group->iommu_group = NULL;
+	mutex_unlock(&group->group_lock);
+
+	iommu_group_put(iommu_group);
+	put_device(&group->dev);
+}
+
+static bool vfio_group_has_device(struct vfio_group *group, struct device *dev)
+{
+	struct vfio_device *device;
+
+	mutex_lock(&group->device_lock);
+	list_for_each_entry(device, &group->device_list, group_next) {
+		if (device->dev == dev) {
+			mutex_unlock(&group->device_lock);
+			return true;
+		}
+	}
+	mutex_unlock(&group->device_lock);
+	return false;
+}
+
+/*
+ * vfio.group_lock is held only to claim the identity: a reserved group is
+ * linked on vfio.group_list before the lock drops, so a lookup miss proves
+ * the chardev name is free and a hit on an unpublished group waits for its
+ * builder.  Allocation, naming, and cdev_device_add() all run unlocked.
+ */
+static struct vfio_group *
+vfio_group_find_or_create(struct device *dev, struct iommu_group *iommu_group,
+			  enum vfio_group_type type)
 {
 	struct vfio_group *group;
-	struct vfio_group *ret;
+	struct vfio_group *new;
 	int err;
 
-	lockdep_assert_held(&vfio.group_lock);
-
-	group = vfio_group_alloc(iommu_group, type);
-	if (IS_ERR(group))
+retry:
+	mutex_lock(&vfio.group_lock);
+	group = vfio_group_find_from_iommu(iommu_group);
+	if (group) {
+		if (!group->published) {
+			/*
+			 * Wait unlocked and look up again -- the builder
+			 * can still fail and unlink the group.  The device
+			 * reference keeps the completion alive.
+			 */
+			get_device(&group->dev);
+			mutex_unlock(&vfio.group_lock);
+			while (!wait_for_completion_timeout(&group->publish_done,
+							    10 * HZ))
+				dev_warn(dev, "waiting for vfio group %s registration\n",
+					 dev_name(&group->dev));
+			put_device(&group->dev);
+			goto retry;
+		}
+		if (WARN_ON(vfio_group_has_device(group, dev)))
+			group = ERR_PTR(-EINVAL);
+		else
+			refcount_inc(&group->drivers);
+		mutex_unlock(&vfio.group_lock);
 		return group;
+	}
 
-	err = dev_set_name(&group->dev, "%s%d",
-			   group->type == VFIO_NO_IOMMU ? "noiommu-" : "",
+	mutex_unlock(&vfio.group_lock);
+
+	new = vfio_group_alloc(iommu_group, type);
+	if (IS_ERR(new))
+		return new;
+	err = dev_set_name(&new->dev, "%s%d",
+			   new->type == VFIO_NO_IOMMU ? "noiommu-" : "",
 			   iommu_group_id(iommu_group));
 	if (err) {
-		ret = ERR_PTR(err);
-		goto err_put;
+		vfio_group_discard(new);
+		return ERR_PTR(err);
 	}
 
-	err = cdev_device_add(&group->cdev, &group->dev);
+	mutex_lock(&vfio.group_lock);
+	if (vfio_group_find_from_iommu(iommu_group)) {
+		/* Lost the race; drop ours and take theirs. */
+		mutex_unlock(&vfio.group_lock);
+		vfio_group_discard(new);
+		goto retry;
+	}
+	list_add(&new->vfio_next, &vfio.group_list);
+	mutex_unlock(&vfio.group_lock);
+
+	/*
+	 * Hold back device_add()'s KOBJ_ADD until publication; on failure,
+	 * suppression also keeps the device_add() unwind from emitting an
+	 * unmatched KOBJ_REMOVE.
+	 */
+	dev_set_uevent_suppress(&new->dev, true);
+	err = cdev_device_add(&new->cdev, &new->dev);
 	if (err) {
-		ret = ERR_PTR(err);
-		goto err_put;
+		mutex_lock(&vfio.group_lock);
+		list_del(&new->vfio_next);
+		mutex_unlock(&vfio.group_lock);
+		complete_all(&new->publish_done);
+		vfio_group_discard(new);
+		return ERR_PTR(err);
 	}
 
-	list_add(&group->vfio_next, &vfio.group_list);
+	mutex_lock(&vfio.group_lock);
+	new->published = true;
+	mutex_unlock(&vfio.group_lock);
+	complete_all(&new->publish_done);
 
-	return group;
-
-err_put:
-	put_device(&group->dev);
-	return ret;
+	/*
+	 * Send the deferred ADD unlocked.  The caller still owns the
+	 * drivers reference, so vfio_device_remove_group() cannot reach
+	 * cdev_device_del() before the ADD is sent.
+	 */
+	dev_set_uevent_suppress(&new->dev, false);
+	kobject_uevent(&new->dev.kobj, KOBJ_ADD);
+	return new;
 }
 
 static struct vfio_group *vfio_noiommu_group_alloc(struct device *dev,
@@ -603,9 +708,11 @@ static struct vfio_group *vfio_noiommu_group_alloc(struct device *dev,
 	if (ret)
 		goto out_put_group;
 
-	mutex_lock(&vfio.group_lock);
-	group = vfio_create_group(iommu_group, type);
-	mutex_unlock(&vfio.group_lock);
+	/*
+	 * The iommu_group is fresh and private, so the lookup and builder
+	 * wait are unreachable; the shared helper is used for uniformity.
+	 */
+	group = vfio_group_find_or_create(dev, iommu_group, type);
 	if (IS_ERR(group)) {
 		ret = PTR_ERR(group);
 		goto out_remove_device;
@@ -618,21 +725,6 @@ out_remove_device:
 out_put_group:
 	iommu_group_put(iommu_group);
 	return ERR_PTR(ret);
-}
-
-static bool vfio_group_has_device(struct vfio_group *group, struct device *dev)
-{
-	struct vfio_device *device;
-
-	mutex_lock(&group->device_lock);
-	list_for_each_entry(device, &group->device_list, group_next) {
-		if (device->dev == dev) {
-			mutex_unlock(&group->device_lock);
-			return true;
-		}
-	}
-	mutex_unlock(&group->device_lock);
-	return false;
 }
 
 static struct vfio_group *vfio_group_find_or_alloc(struct device *dev)
@@ -659,17 +751,7 @@ static struct vfio_group *vfio_group_find_or_alloc(struct device *dev)
 	if (!iommu_group)
 		return ERR_PTR(-EINVAL);
 
-	mutex_lock(&vfio.group_lock);
-	group = vfio_group_find_from_iommu(iommu_group);
-	if (group) {
-		if (WARN_ON(vfio_group_has_device(group, dev)))
-			group = ERR_PTR(-EINVAL);
-		else
-			refcount_inc(&group->drivers);
-	} else {
-		group = vfio_create_group(iommu_group, VFIO_IOMMU);
-	}
-	mutex_unlock(&vfio.group_lock);
+	group = vfio_group_find_or_create(dev, iommu_group, VFIO_IOMMU);
 
 	/* The vfio_group holds a reference to the iommu_group */
 	iommu_group_put(iommu_group);
@@ -702,16 +784,16 @@ void vfio_device_remove_group(struct vfio_device *device)
 	if (group->type == VFIO_NO_IOMMU || group->type == VFIO_EMULATED_IOMMU)
 		iommu_group_remove_device(device->dev);
 
-	/* Pairs with vfio_create_group() / vfio_group_get_from_iommu() */
+	/* Pairs with vfio_group_alloc() / vfio_group_find_or_create() */
 	if (!refcount_dec_and_mutex_lock(&group->drivers, &vfio.group_lock))
 		return;
 	list_del(&group->vfio_next);
 
 	/*
-	 * We could concurrently probe another driver in the group that might
-	 * race vfio_device_remove_group() with vfio_get_group(), so we have to
-	 * ensure that the sysfs is all cleaned up under lock otherwise the
-	 * cdev_device_add() will fail due to the name aready existing.
+	 * We could concurrently probe another driver in the group racing this
+	 * removal with vfio_group_find_or_create().  The sysfs name is all
+	 * cleaned up under the lock, so once a creator's lookup misses, the
+	 * name is guaranteed free.
 	 */
 	cdev_device_del(&group->cdev, &group->dev);
 
