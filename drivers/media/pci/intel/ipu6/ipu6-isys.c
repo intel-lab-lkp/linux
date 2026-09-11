@@ -31,6 +31,7 @@
 #include <media/v4l2-async.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-fwnode.h>
+#include <media/videobuf2-core.h>
 
 #include "ipu6-bus.h"
 #include "ipu6-cpd.h"
@@ -700,6 +701,45 @@ static int isys_notifier_bound(struct v4l2_async_notifier *notifier,
 	return v4l2_device_register_subdev_nodes(&isys->v4l2_dev);
 }
 
+/* The .unbind() notifier callback when a sub-device goes away */
+static void isys_notifier_unbind(struct v4l2_async_notifier *notifier,
+				 struct v4l2_subdev *sd,
+				 struct v4l2_async_connection *asc)
+{
+	struct ipu6_isys *isys =
+		container_of(notifier, struct ipu6_isys, notifier);
+	struct sensor_async_sd *s_asd =
+		container_of(asc, struct sensor_async_sd, asc);
+	struct ipu6_isys_csi2 *csi2;
+	unsigned int i;
+
+	if (s_asd->csi2.port >= isys->pdata->ipdata->csi2.nports)
+		return;
+
+	/*
+	 * The sensor is gone, so no more frames will ever arrive on the video
+	 * nodes fed by it. Tell videobuf2, or a DQBUF already blocked in
+	 * vb2_core_dqbuf() would sleep forever: nothing else in the teardown
+	 * path wakes that queue up.
+	 *
+	 * Only queues that are actually streaming are marked. The error flag
+	 * is only cleared by __vb2_queue_cancel(), so flagging an idle queue
+	 * would leave it poisoned until the next STREAMOFF.
+	 */
+	csi2 = &isys->csi2[s_asd->csi2.port];
+	for (i = 0; i < NR_OF_CSI2_SRC_PADS; i++) {
+		struct vb2_queue *q = &csi2->av[i].aq.vbq;
+
+		if (!vb2_is_streaming(q))
+			continue;
+
+		dev_dbg(&isys->adev->auxdev.dev,
+			"%s went away while streaming on %s\n", sd->name,
+			csi2->av[i].vdev.name);
+		vb2_queue_error(q);
+	}
+}
+
 static int isys_notifier_complete(struct v4l2_async_notifier *notifier)
 {
 	struct ipu6_isys *isys =
@@ -710,6 +750,7 @@ static int isys_notifier_complete(struct v4l2_async_notifier *notifier)
 
 static const struct v4l2_async_notifier_operations isys_async_ops = {
 	.bound = isys_notifier_bound,
+	.unbind = isys_notifier_unbind,
 	.complete = isys_notifier_complete,
 };
 
