@@ -252,10 +252,7 @@ static void irq_work_run_list(struct llist_head *list)
 		irq_work_single(work);
 }
 
-/*
- * hotplug calls this through:
- *  hotplug_cfd() -> flush_smp_call_function_queue()
- */
+/* CPU hotplug calls this through smpcfd_dying_cpu() */
 void irq_work_run(void)
 {
 	irq_work_run_list(this_cpu_ptr(&raised_list));
