@@ -3186,7 +3186,29 @@ static int gsm_activate_mux(struct gsm_mux *gsm)
 	struct gsm_dlci *dlci;
 	int ret;
 
-	dlci = gsm_dlci_alloc(gsm, 0);
+	dlci = gsm->dlci[0];
+	if (dlci) {
+		/*
+		 * gsmtty_install() takes a reference on the object that
+		 * occupies the dlci[0] slot and gsmtty_cleanup() drops a
+		 * reference on the object occupying the slot at cleanup
+		 * time. Replacing the object here while such references
+		 * are still outstanding makes the cleanup reference drop
+		 * on the wrong (new) object, freeing it prematurely, and
+		 * leaks the old one. Keep the still-referenced object in
+		 * the slot and re-take the base reference that
+		 * gsm_cleanup_mux() dropped so the install and cleanup
+		 * references always balance on the same object.
+		 */
+		dlci_get(dlci);
+		dlci->dead = false;
+		dlci->adaption = gsm->adaption;
+		dlci->mtu = gsm->mtu;
+		dlci->ftype = gsm->ftype;
+		dlci->k = gsm->k;
+	} else {
+		dlci = gsm_dlci_alloc(gsm, 0);
+	}
 	if (dlci == NULL)
 		return -ENOMEM;
 
