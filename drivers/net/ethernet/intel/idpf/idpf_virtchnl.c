@@ -1905,7 +1905,7 @@ idpf_prep_map_unmap_queue_set_vector_msg(u32 vport_id, void *buf,
  */
 static int
 idpf_send_map_unmap_queue_set_vector_msg(const struct idpf_queue_set *qs,
-					 const struct idpf_irq_info *info,
+					 const struct libie_irq_info *info,
 					 bool map)
 {
 	struct virtchnl2_queue_vector *vqv __free(kfree) = NULL;
@@ -2288,14 +2288,14 @@ free_rx_buf:
  *
  * Return: 0 on success, negative on failure.
  */
-static int idpf_create_vectors_info(struct idpf_irq_info *info,
+static int idpf_create_vectors_info(struct libie_irq_info *info,
 				    const struct virtchnl2_get_capabilities *caps,
 				    const struct virtchnl2_alloc_vectors *vectors,
 				    const u16 num_vectors)
 {
 	const struct virtchnl2_vector_chunks *chunks = &vectors->vchunks;
 	int all_vectors = num_vectors + IDPF_MBX_Q_VEC;
-	struct idpf_hw_vector *vector;
+	struct libie_hw_vector *vector;
 	int reg_cnt;
 
 	if (le16_to_cpu(vectors->num_vectors) < num_vectors)
@@ -2316,7 +2316,7 @@ static int idpf_create_vectors_info(struct idpf_irq_info *info,
 	for (int i = 0; i < le16_to_cpu(chunks->num_vchunks); i++) {
 		const struct virtchnl2_vector_chunk *chunk = &chunks->vchunks[i];
 		u32 dyn_spacing, itrn_spacing;
-		struct idpf_vec_regs reg_val;
+		struct libie_vec_regs reg_val;
 		u16 vec_id;
 
 		reg_val.dyn_ctl = le32_to_cpu(chunk->dynctl_reg_start);
