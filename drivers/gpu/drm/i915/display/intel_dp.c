@@ -1275,7 +1275,7 @@ intel_dp_get_max_m_n_ratio(struct intel_display *display)
 	return 10;
 }
 
-static bool
+bool
 intel_dp_can_support_m_n(struct intel_display *display,
 			 int pixel_clock, int link_rate)
 {
