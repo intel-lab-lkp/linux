@@ -9,56 +9,85 @@
 
 static const struct net_device_ops idpf_netdev_ops;
 
-/**
- * idpf_init_vector_stack - Fill the MSIX vector stack with vector index
- * @adapter: private data struct
- *
- * Return 0 on success, error on failure
- */
-static int idpf_init_vector_stack(struct idpf_adapter *adapter)
+static int idpf_rdma_intr_init(struct idpf_adapter *adapter, u16 num)
 {
-	struct idpf_vector_lifo *stack;
-	u16 min_vec;
-	u32 i;
+	struct idpf_rdma_irq *rdma_irq = &adapter->rdma_irq;
+	int i;
 
-	mutex_lock(&adapter->vector_lock);
-	min_vec = adapter->num_msix_entries - adapter->num_avail_msix;
-	stack = &adapter->vector_stack;
-	stack->size = adapter->num_msix_entries;
-	/* set the base and top to point at start of the 'free pool' to
-	 * distribute the unused vectors on-demand basis
-	 */
-	stack->base = min_vec;
-	stack->top = min_vec;
+	if (!idpf_is_rdma_cap_ena(adapter))
+		return 0;
 
-	stack->vec_idx = kcalloc(stack->size, sizeof(u16), GFP_KERNEL);
-	if (!stack->vec_idx) {
-		mutex_unlock(&adapter->vector_lock);
+	rdma_irq->entries = kzalloc_objs(struct msix_entry, num);
+	if (!rdma_irq->entries)
+		return -ENOMEM;
+
+	rdma_irq->map = kzalloc_objs(struct msi_map, num);
+	if (!rdma_irq->map) {
+		kfree(rdma_irq->entries);
+		rdma_irq->entries = NULL;
 
 		return -ENOMEM;
 	}
 
-	for (i = 0; i < stack->size; i++)
-		stack->vec_idx[i] = i;
+	for (i = 0; i < min(IDPF_MIN_RDMA_VEC, num); i++) {
+		struct msi_map map = libie_irq_alloc(&adapter->irq,
+						     LIBIE_IRQ_STATIC);
+		if (map.index < 0) {
+			for (int j = i - 1; j >= 0; j--)
+				libie_irq_free(&adapter->irq, rdma_irq->map[j]);
 
-	mutex_unlock(&adapter->vector_lock);
+			kfree(rdma_irq->map);
+			rdma_irq->map = NULL;
+			kfree(rdma_irq->entries);
+			rdma_irq->entries = NULL;
+
+			return -EINVAL;
+		}
+
+		rdma_irq->map[i] = map;
+		rdma_irq->entries[i].entry =
+			adapter->irq_info.vectors[map.index].idx;
+		rdma_irq->entries[i].vector = map.virq;
+	}
+	for (; i < num; i++) {
+		struct msi_map map = libie_irq_alloc(&adapter->irq,
+						     LIBIE_IRQ_DYNAMIC);
+
+		/* Lower number of entries if alloc fails. */
+		if (map.index < 0)
+			break;
+
+		rdma_irq->map[i] = map;
+		rdma_irq->entries[i].entry =
+			adapter->irq_info.vectors[map.index].idx;
+		rdma_irq->entries[i].vector = map.virq;
+	}
+
+	rdma_irq->num = i;
+
+	if (i != num)
+		dev_warn(&adapter->pdev->dev,
+			 "Warning: %d RDMA vectors requested, %d granted\n",
+			 num, i);
 
 	return 0;
 }
 
-/**
- * idpf_deinit_vector_stack - zero out the MSIX vector stack
- * @adapter: private data struct
- */
-static void idpf_deinit_vector_stack(struct idpf_adapter *adapter)
+static void idpf_rdma_intr_free(struct idpf_adapter *adapter)
 {
-	struct idpf_vector_lifo *stack;
+	struct idpf_rdma_irq *rdma_irq = &adapter->rdma_irq;
 
-	mutex_lock(&adapter->vector_lock);
-	stack = &adapter->vector_stack;
-	kfree(stack->vec_idx);
-	stack->vec_idx = NULL;
-	mutex_unlock(&adapter->vector_lock);
+	if (!idpf_is_rdma_cap_ena(adapter))
+		return;
+
+	for (int i = 0; i < rdma_irq->num; i++)
+		libie_irq_free(&adapter->irq, rdma_irq->map[i]);
+
+	kfree(rdma_irq->map);
+	rdma_irq->map = NULL;
+	kfree(rdma_irq->entries);
+	rdma_irq->entries = NULL;
+	rdma_irq->num = 0;
 }
 
 /**
@@ -74,6 +103,7 @@ void idpf_mb_intr_rel_irq(struct idpf_adapter *adapter)
 		return;
 
 	kfree(free_irq(adapter->mb_vector.irq.virq, adapter));
+	libie_irq_free(&adapter->irq, adapter->mb_vector.irq);
 	queue_delayed_work(adapter->mbx_wq, &adapter->mbx_task, 0);
 }
 
@@ -84,11 +114,9 @@ void idpf_mb_intr_rel_irq(struct idpf_adapter *adapter)
 void idpf_intr_rel(struct idpf_adapter *adapter)
 {
 	idpf_mb_intr_rel_irq(adapter);
-	pci_free_irq_vectors(adapter->pdev);
+	idpf_rdma_intr_free(adapter);
+	libie_irq_deinit(&adapter->irq);
 	idpf_send_dealloc_vectors_msg(adapter);
-	idpf_deinit_vector_stack(adapter);
-	kfree(adapter->rdma_msix_entries);
-	adapter->rdma_msix_entries = NULL;
 }
 
 /**
@@ -151,152 +179,22 @@ static int idpf_mb_intr_req_irq(struct idpf_adapter *adapter)
  */
 static int idpf_mb_intr_init(struct idpf_adapter *adapter)
 {
-	struct msi_map *mb_irq = &adapter->mb_vector.irq;
+	struct idpf_q_vector *mb_vector = &adapter->mb_vector;
+	int err;
 
-	mb_irq->index = IDPF_MBX_IRQ_INDEX;
-	mb_irq->virq = pci_irq_vector(adapter->pdev, mb_irq->index);
-	if (mb_irq->virq < 0)
-		return mb_irq->virq;
+	mb_vector->irq = libie_irq_alloc(&adapter->irq, LIBIE_IRQ_STATIC);
+
+	if (mb_vector->irq.index < 0)
+		return mb_vector->irq.index;
 
 	adapter->dev_ops.reg_ops.mb_intr_reg_init(adapter);
 	adapter->irq_mb_handler = idpf_mb_intr_clean;
 
-	return idpf_mb_intr_req_irq(adapter);
-}
+	err = idpf_mb_intr_req_irq(adapter);
+	if (err)
+		libie_irq_free(&adapter->irq, mb_vector->irq);
 
-/**
- * idpf_vector_lifo_push - push MSIX vector index onto stack
- * @adapter: private data struct
- * @vec_idx: vector index to store
- */
-static int idpf_vector_lifo_push(struct idpf_adapter *adapter, u16 vec_idx)
-{
-	struct idpf_vector_lifo *stack = &adapter->vector_stack;
-
-	lockdep_assert_held(&adapter->vector_lock);
-
-	if (stack->top == stack->base) {
-		dev_err(&adapter->pdev->dev, "Exceeded the vector stack limit: %d\n",
-			stack->top);
-		return -EINVAL;
-	}
-
-	stack->vec_idx[--stack->top] = vec_idx;
-
-	return 0;
-}
-
-/**
- * idpf_vector_lifo_pop - pop MSIX vector index from stack
- * @adapter: private data struct
- */
-static int idpf_vector_lifo_pop(struct idpf_adapter *adapter)
-{
-	struct idpf_vector_lifo *stack = &adapter->vector_stack;
-
-	lockdep_assert_held(&adapter->vector_lock);
-
-	if (stack->top == stack->size) {
-		dev_err(&adapter->pdev->dev, "No interrupt vectors are available to distribute!\n");
-
-		return -EINVAL;
-	}
-
-	return stack->vec_idx[stack->top++];
-}
-
-/**
- * idpf_vector_stash - Store the vector indexes onto the stack
- * @adapter: private data struct
- * @q_vector_idxs: vector index array
- * @vec_info: info related to the number of vectors
- *
- * This function is a no-op if there are no vectors indexes to be stashed
- */
-static void idpf_vector_stash(struct idpf_adapter *adapter, u16 *q_vector_idxs,
-			      struct idpf_vector_info *vec_info)
-{
-	int i, base = 0;
-	u16 vec_idx;
-
-	lockdep_assert_held(&adapter->vector_lock);
-
-	if (!vec_info->num_curr_vecs)
-		return;
-
-	/* For default vports, no need to stash vector allocated from the
-	 * default pool onto the stack
-	 */
-	if (vec_info->default_vport)
-		base = IDPF_MIN_Q_VEC;
-
-	for (i = vec_info->num_curr_vecs - 1; i >= base ; i--) {
-		vec_idx = q_vector_idxs[i];
-		idpf_vector_lifo_push(adapter, vec_idx);
-		adapter->num_avail_msix++;
-	}
-}
-
-/**
- * idpf_req_rel_vector_indexes - Request or release MSIX vector indexes
- * @adapter: driver specific private structure
- * @q_vector_idxs: vector index array
- * @vec_info: info related to the number of vectors
- *
- * This is the core function to distribute the MSIX vectors acquired from the
- * OS. It expects the caller to pass the number of vectors required and
- * also previously allocated. First, it stashes previously allocated vector
- * indexes on to the stack and then figures out if it can allocate requested
- * vectors. It can wait on acquiring the mutex lock. If the caller passes 0 as
- * requested vectors, then this function just stashes the already allocated
- * vectors and returns 0.
- *
- * Returns actual number of vectors allocated on success, error value on failure
- * If 0 is returned, implies the stack has no vectors to allocate which is also
- * a failure case for the caller
- */
-int idpf_req_rel_vector_indexes(struct idpf_adapter *adapter,
-				u16 *q_vector_idxs,
-				struct idpf_vector_info *vec_info)
-{
-	u16 num_req_vecs, num_alloc_vecs = 0, max_vecs;
-	struct idpf_vector_lifo *stack;
-	int i, j, vecid;
-
-	mutex_lock(&adapter->vector_lock);
-	stack = &adapter->vector_stack;
-	num_req_vecs = vec_info->num_req_vecs;
-
-	/* Stash interrupt vector indexes onto the stack if required */
-	idpf_vector_stash(adapter, q_vector_idxs, vec_info);
-
-	if (!num_req_vecs)
-		goto rel_lock;
-
-	if (vec_info->default_vport) {
-		/* As IDPF_MIN_Q_VEC per default vport is put aside in the
-		 * default pool of the stack, use them for default vports
-		 */
-		j = vec_info->index * IDPF_MIN_Q_VEC + IDPF_MBX_Q_VEC;
-		for (i = 0; i < IDPF_MIN_Q_VEC; i++) {
-			q_vector_idxs[num_alloc_vecs++] = stack->vec_idx[j++];
-			num_req_vecs--;
-		}
-	}
-
-	/* Find if stack has enough vector to allocate */
-	max_vecs = min(adapter->num_avail_msix, num_req_vecs);
-
-	for (j = 0; j < max_vecs; j++) {
-		vecid = idpf_vector_lifo_pop(adapter);
-		q_vector_idxs[num_alloc_vecs++] = vecid;
-	}
-	adapter->num_avail_msix -= max_vecs;
-
-rel_lock:
-	mutex_unlock(&adapter->vector_lock);
-
-	return num_alloc_vecs;
+	return err;
 }
 
 /**
@@ -307,26 +205,24 @@ rel_lock:
  */
 int idpf_intr_req(struct idpf_adapter *adapter)
 {
-	int num_rdma_vecs = 0, min_rdma_vecs = 0, num_lan_vecs = 0;
 	u16 default_vports = idpf_get_default_vports(adapter);
-	int min_vectors, actual_vecs, min_lan_vecs, err;
-	int num_q_vecs, total_vecs;
-	int i;
+	int num_q_vecs, total_vecs, static_vecs;
+	struct libie_irq *irq = &adapter->irq;
+	int num_rdma_vecs = 0;
+	int err;
 
 	total_vecs = idpf_get_reserved_vecs(adapter);
 	if (idpf_is_rdma_cap_ena(adapter)) {
 		num_rdma_vecs = idpf_get_reserved_rdma_vecs(adapter);
-		min_rdma_vecs = IDPF_MIN_RDMA_VEC;
-
 		if (!num_rdma_vecs) {
 			/* If idpf_get_reserved_rdma_vecs is 0, vectors are
 			 * pulled from the LAN pool.
 			 */
-			num_rdma_vecs = min_rdma_vecs;
-		} else if (num_rdma_vecs < min_rdma_vecs) {
+			num_rdma_vecs = IDPF_MIN_RDMA_VEC;
+		} else if (num_rdma_vecs < IDPF_MIN_RDMA_VEC) {
 			dev_err(&adapter->pdev->dev,
 				"Not enough vectors reserved for RDMA (min: %u, current: %u)\n",
-				min_rdma_vecs, num_rdma_vecs);
+				IDPF_MIN_RDMA_VEC, num_rdma_vecs);
 			return -EINVAL;
 		}
 	}
@@ -341,70 +237,32 @@ int idpf_intr_req(struct idpf_adapter *adapter)
 		return -EAGAIN;
 	}
 
-	min_lan_vecs = IDPF_MBX_Q_VEC + IDPF_MIN_Q_VEC * default_vports;
-	min_vectors = min_lan_vecs + min_rdma_vecs;
-	actual_vecs = pci_alloc_irq_vectors(adapter->pdev, min_vectors,
-					    total_vecs, PCI_IRQ_MSIX);
-	if (actual_vecs < 0) {
-		dev_err(&adapter->pdev->dev, "Failed to allocate minimum MSIX vectors required: %d\n",
-			min_vectors);
-		err = actual_vecs;
+	static_vecs = IDPF_MBX_Q_VEC + IDPF_MIN_Q_VEC * default_vports +
+		      min(IDPF_MIN_RDMA_VEC, num_rdma_vecs);
+	err = libie_irq_init(irq, adapter->pdev, static_vecs, total_vecs);
+	if (err) {
+		dev_err(&adapter->pdev->dev, "Failed to allocate MSIX vectors: %d\n",
+			err);
+		err = -EAGAIN;
 		goto send_dealloc_vecs;
 	}
 
-	if (idpf_is_rdma_cap_ena(adapter)) {
-		if (actual_vecs < total_vecs) {
-			dev_warn(&adapter->pdev->dev,
-				 "Warning: %d vectors requested, only %d available. Defaulting to minimum (%d) for RDMA and remaining for LAN.\n",
-				 total_vecs, actual_vecs, IDPF_MIN_RDMA_VEC);
-			num_rdma_vecs = IDPF_MIN_RDMA_VEC;
-		}
-
-		adapter->rdma_msix_entries = kzalloc_objs(struct msix_entry,
-							  num_rdma_vecs);
-		if (!adapter->rdma_msix_entries) {
-			err = -ENOMEM;
-			goto free_irq;
-		}
-	}
-
-	num_lan_vecs = actual_vecs - num_rdma_vecs;
-
-	for (i = 0; i < num_rdma_vecs; i++) {
-		adapter->rdma_msix_entries[i].entry =
-			adapter->irq_info.vectors[num_lan_vecs + i].idx;
-		adapter->rdma_msix_entries[i].vector =
-			pci_irq_vector(adapter->pdev, num_lan_vecs + i);
-	}
-
-	/* 'num_avail_msix' is used to distribute excess vectors to the vports
-	 * after considering the minimum vectors required per each default
-	 * vport
-	 */
-	adapter->num_avail_msix = num_lan_vecs - min_lan_vecs;
-	adapter->num_msix_entries = num_lan_vecs;
-	if (idpf_is_rdma_cap_ena(adapter))
-		adapter->num_rdma_msix_entries = num_rdma_vecs;
-
-	/* Fill MSIX vector lifo stack with vector indexes */
-	err = idpf_init_vector_stack(adapter);
-	if (err)
-		goto free_rdma_msix;
-
 	err = idpf_mb_intr_init(adapter);
 	if (err)
-		goto deinit_vec_stack;
+		goto free_irq;
+
+	err = idpf_rdma_intr_init(adapter, num_rdma_vecs);
+	if (err)
+		goto free_mb_irq;
+
 	idpf_mb_irq_enable(adapter);
 
 	return 0;
 
-deinit_vec_stack:
-	idpf_deinit_vector_stack(adapter);
-free_rdma_msix:
-	kfree(adapter->rdma_msix_entries);
-	adapter->rdma_msix_entries = NULL;
+free_mb_irq:
+	idpf_mb_intr_rel_irq(adapter);
 free_irq:
-	pci_free_irq_vectors(adapter->pdev);
+	libie_irq_deinit(irq);
 send_dealloc_vecs:
 	idpf_send_dealloc_vectors_msg(adapter);
 
@@ -986,7 +844,7 @@ static void idpf_vport_stop(struct idpf_vport *vport, bool rtnl)
 	idpf_vport_intr_deinit(vport, rsrc);
 	idpf_xdp_rxq_info_deinit_all(rsrc);
 	idpf_vport_queues_rel(vport, rsrc);
-	idpf_vport_intr_rel(rsrc);
+	idpf_vport_intr_rel(rsrc, &adapter->irq);
 	clear_bit(IDPF_VPORT_UP, np->state);
 
 	if (rtnl)
@@ -1042,10 +900,8 @@ static void idpf_decfg_netdev(struct idpf_vport *vport)
  */
 static void idpf_vport_rel(struct idpf_vport *vport)
 {
-	struct idpf_q_vec_rsrc *rsrc = &vport->dflt_qv_rsrc;
 	struct idpf_adapter *adapter = vport->adapter;
 	struct idpf_vport_config *vport_config;
-	struct idpf_vector_info vec_info;
 	struct idpf_rss_data *rss_data;
 	struct idpf_vport_max_q max_q;
 	u16 idx = vport->idx;
@@ -1064,16 +920,6 @@ static void idpf_vport_rel(struct idpf_vport *vport)
 	max_q.max_bufq = vport_config->max_q.max_bufq;
 	max_q.max_complq = vport_config->max_q.max_complq;
 	idpf_vport_dealloc_max_qs(adapter, &max_q);
-
-	/* Release all the allocated vectors on the stack */
-	vec_info.num_req_vecs = 0;
-	vec_info.num_curr_vecs = rsrc->num_q_vectors;
-	vec_info.default_vport = vport->default_vport;
-
-	idpf_req_rel_vector_indexes(adapter, rsrc->q_vector_idxs, &vec_info);
-
-	kfree(rsrc->q_vector_idxs);
-	rsrc->q_vector_idxs = NULL;
 
 	idpf_vport_deinit_queue_reg_chunks(vport_config);
 
@@ -1196,8 +1042,8 @@ static struct idpf_vport *idpf_vport_alloc(struct idpf_adapter *adapter,
 					   struct idpf_vport_max_q *max_q)
 {
 	struct idpf_rss_data *rss_data;
-	u16 idx = adapter->next_vport;
 	struct idpf_q_vec_rsrc *rsrc;
+	u16 idx = adapter->next_vport;
 	struct idpf_vport *vport;
 	u16 num_max_q;
 	int err;
@@ -1247,13 +1093,10 @@ static struct idpf_vport *idpf_vport_alloc(struct idpf_adapter *adapter,
 
 	rsrc = &vport->dflt_qv_rsrc;
 	rsrc->dev = &adapter->pdev->dev;
-	rsrc->q_vector_idxs = kcalloc(num_max_q, sizeof(u16), GFP_KERNEL);
-	if (!rsrc->q_vector_idxs)
-		goto free_vport;
 
 	err = idpf_vport_init(vport, max_q);
 	if (err)
-		goto free_vector_idxs;
+		goto free_vport;
 
 	/* LUT and key are both initialized here. Key is not strictly dependent
 	 * on how many queues we have. If we change number of queues and soft
@@ -1264,7 +1107,7 @@ static struct idpf_vport *idpf_vport_alloc(struct idpf_adapter *adapter,
 	rss_data = &adapter->vport_config[idx]->user_config.rss_data;
 	rss_data->rss_key = kzalloc(rss_data->rss_key_size, GFP_KERNEL);
 	if (!rss_data->rss_key)
-		goto free_qreg_chunks;
+		goto deinit_vport_queues;
 
 	/* Initialize default RSS key */
 	netdev_rss_key_fill((void *)rss_data->rss_key, rss_data->rss_key_size);
@@ -1287,10 +1130,8 @@ static struct idpf_vport *idpf_vport_alloc(struct idpf_adapter *adapter,
 free_rss_key:
 	kfree(rss_data->rss_key);
 	rss_data->rss_key = NULL;
-free_qreg_chunks:
+deinit_vport_queues:
 	idpf_vport_deinit_queue_reg_chunks(adapter->vport_config[idx]);
-free_vector_idxs:
-	kfree(rsrc->q_vector_idxs);
 free_vport:
 	kfree(vport);
 
@@ -1485,6 +1326,12 @@ static int idpf_vport_open(struct idpf_vport *vport, bool rtnl)
 	/* we do not allow interface up just yet */
 	netif_carrier_off(vport->netdev);
 
+	/*
+	 * num_q_vectors can be lowered by previous open/close cycle or
+	 * error during open. Reset it back to default value. Still can be
+	 * changed when there is not enough interrupts available.
+	 */
+	idpf_vport_set_num_q_vectors(rsrc, vport->num_xdp_txq);
 	err = idpf_vport_intr_alloc(vport, rsrc);
 	if (err) {
 		dev_err(&adapter->pdev->dev, "Failed to allocate interrupts for vport %u: %d\n",
@@ -1599,7 +1446,7 @@ intr_deinit:
 queues_rel:
 	idpf_vport_queues_rel(vport, rsrc);
 intr_rel:
-	idpf_vport_intr_rel(rsrc);
+	idpf_vport_intr_rel(rsrc, &adapter->irq);
 
 err_rtnl_unlock:
 	if (rtnl)
@@ -2062,7 +1909,8 @@ int idpf_initiate_soft_reset(struct idpf_vport *vport,
 	memcpy(vport, new_vport, offsetof(struct idpf_vport, link_up));
 
 	if (reset_cause == IDPF_SR_Q_CHANGE)
-		idpf_vport_alloc_vec_indexes(vport, &vport->dflt_qv_rsrc);
+		idpf_vport_set_num_q_vectors(&vport->dflt_qv_rsrc,
+					     vport->num_xdp_txq);
 
 	err = idpf_set_real_num_queues(vport);
 	if (err)

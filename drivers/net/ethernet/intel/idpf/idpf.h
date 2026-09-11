@@ -24,6 +24,7 @@ struct idpf_rss_data;
 #include <linux/net/intel/iidc_rdma.h>
 #include <linux/net/intel/iidc_rdma_idpf.h>
 #include <linux/net/intel/libie/controlq.h>
+#include <linux/net/intel/libie/irq.h>
 #include <linux/net/intel/virtchnl2.h>
 
 #include "idpf_txrx.h"
@@ -299,7 +300,6 @@ struct idpf_fsteer_fltr {
  * struct idpf_q_vec_rsrc - handle for queue and vector resources
  * @dev: device pointer for DMA mapping
  * @q_vectors: array of queue vectors
- * @q_vector_idxs: starting index of queue vectors
  * @num_q_vectors: number of IRQ vectors allocated
  * @noirq_v_idx: software IRQ index used to get hardware vector information
  * @noirq_dyn_ctl_ena: value to write to the above to enable it
@@ -328,7 +328,6 @@ struct idpf_fsteer_fltr {
 struct idpf_q_vec_rsrc {
 	struct device		*dev;
 	struct idpf_q_vector	*q_vectors;
-	u16			*q_vector_idxs;
 	u16			num_q_vectors;
 	u16			noirq_v_idx;
 	u32			noirq_dyn_ctl_ena;
@@ -527,46 +526,6 @@ struct idpf_avail_queue_info {
 };
 
 /**
- * struct idpf_vector_info - Utility structure to pass function arguments as a
- *			     structure
- * @num_req_vecs: Vectors required based on the number of queues updated by the
- *		  user via ethtool
- * @num_curr_vecs: Current number of vectors, must be >= @num_req_vecs
- * @index: Relative starting index for vectors
- * @default_vport: Vectors are for default vport
- */
-struct idpf_vector_info {
-	u16 num_req_vecs;
-	u16 num_curr_vecs;
-	u16 index;
-	bool default_vport;
-};
-
-/**
- * struct idpf_vector_lifo - Stack to maintain vector indexes used for vector
- *			     distribution algorithm
- * @top: Points to stack top i.e. next available vector index
- * @base: Always points to start of the free pool
- * @size: Total size of the vector stack
- * @vec_idx: Array to store all the vector indexes
- *
- * Vector stack maintains all the relative vector indexes at the *adapter*
- * level. This stack is divided into 2 parts, first one is called as 'default
- * pool' and other one is called 'free pool'.  Vector distribution algorithm
- * gives priority to default vports in a way that at least IDPF_MIN_Q_VEC
- * vectors are allocated per default vport and the relative vector indexes for
- * those are maintained in default pool. Free pool contains all the unallocated
- * vector indexes which can be allocated on-demand basis. Mailbox vector index
- * is maintained in the default pool of the stack.
- */
-struct idpf_vector_lifo {
-	u16 top;
-	u16 base;
-	u16 size;
-	u16 *vec_idx;
-};
-
-/**
  * struct idpf_queue_id_reg_chunk - individual queue ID and register chunk
  * @qtail_reg_start: queue tail register offset
  * @qtail_reg_spacing: queue tail register spacing
@@ -653,6 +612,18 @@ struct idpf_irq_info {
 };
 
 /**
+ * struct idpf_rdma_irq - RDMA interrupt vectors data
+ * @entries: MSIX table shared with the RDMA auxiliary device
+ * @map: libie IRQ mappings corresponding to @entries
+ * @num: number of vectors granted for RDMA
+ */
+struct idpf_rdma_irq {
+	struct msix_entry *entries;
+	struct msi_map *map;
+	u16 num;
+};
+
+/**
  * struct idpf_adapter - Device data struct generated on probe
  * @pdev: PCI device struct given on probe
  * @virt_ver_maj: Virtchnl version major
@@ -666,14 +637,11 @@ struct idpf_irq_info {
  * @asq: Send control queue info
  * @arq: Receive control queue info
  * @xnm: Xn transaction manager
- * @num_avail_msix: Available number of MSIX vectors
- * @num_msix_entries: Number of entries in MSIX table
- * @num_rdma_msix_entries: Available number of MSIX vectors for RDMA
- * @rdma_msix_entries: RDMA MSIX table
+ * @rdma_irq: RDMA interrupt vectors data
+ * @irq: libie irq structure
  * @irq_info: hardware data needed to setup irq
  * @req_vec_chunks: Requested vector chunk data
  * @mb_vector: Mailbox vector data
- * @vector_stack: Stack to store the msix vector indexes
  * @irq_mb_handler: Handler for hard interrupt for mailbox
  * @tx_timeout_count: Number of TX timeouts that have occurred
  * @avail_queues: Device given queue limits
@@ -706,7 +674,6 @@ struct idpf_irq_info {
  * @req_tx_splitq: TX split or single queue model to request
  * @req_rx_splitq: RX split or single queue model to request
  * @vport_ctrl_lock: Lock to protect the vport control flow
- * @vector_lock: Lock to protect vector distribution
  * @queue_lock: Lock to protect queue distribution
  * @vc_buf_lock: Lock to protect virtchnl buffer
  * @ptp: Storage for PTP-related data
@@ -725,14 +692,11 @@ struct idpf_adapter {
 	struct libie_ctlq_info *asq;
 	struct libie_ctlq_info *arq;
 	struct libie_ctlq_xn_manager *xnm;
-	u16 num_avail_msix;
-	u16 num_msix_entries;
-	u16 num_rdma_msix_entries;
-	struct msix_entry *rdma_msix_entries;
+	struct idpf_rdma_irq rdma_irq;
+	struct libie_irq irq;
 	struct virtchnl2_alloc_vectors *req_vec_chunks;
 	struct idpf_irq_info irq_info;
 	struct idpf_q_vector mb_vector;
-	struct idpf_vector_lifo vector_stack;
 	irqreturn_t (*irq_mb_handler)(int irq, void *data);
 
 	u32 tx_timeout_count;
@@ -770,7 +734,6 @@ struct idpf_adapter {
 	bool req_rx_splitq;
 
 	struct mutex vport_ctrl_lock;
-	struct mutex vector_lock;
 	struct mutex queue_lock;
 	struct mutex vc_buf_lock;
 
@@ -1031,9 +994,6 @@ u16 idpf_get_max_tx_hdr_size(struct idpf_adapter *adapter);
 int idpf_initiate_soft_reset(struct idpf_vport *vport,
 			     enum idpf_vport_reset_cause reset_cause);
 void idpf_deinit_task(struct idpf_adapter *adapter);
-int idpf_req_rel_vector_indexes(struct idpf_adapter *adapter,
-				u16 *q_vector_idxs,
-				struct idpf_vector_info *vec_info);
 void idpf_set_ethtool_ops(struct net_device *netdev);
 void idpf_vport_intr_write_itr(struct idpf_q_vector *q_vector,
 			       u16 itr, bool tx);

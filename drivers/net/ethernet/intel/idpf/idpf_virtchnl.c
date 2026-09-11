@@ -2251,7 +2251,7 @@ static int idpf_create_vectors_info(struct idpf_irq_info *info,
 	if (le16_to_cpu(vectors->num_vectors) < num_vectors)
 		return -EINVAL;
 
-	info->vectors = kzalloc_objs(*info->vectors, num_vectors + IDPF_MBX_Q_VEC);
+	info->vectors = kzalloc_objs(*info->vectors, all_vectors);
 	if (!info->vectors)
 		return -ENOMEM;
 	/* Mailbox irq information are stored in different places. Fill index 0
@@ -3257,47 +3257,16 @@ void idpf_vc_core_deinit(struct idpf_adapter *adapter)
 }
 
 /**
- * idpf_vport_alloc_vec_indexes - Get relative vector indexes
- * @vport: virtual port data struct
+ * idpf_vport_set_num_q_vectors - Set the number of vectors
  * @rsrc: pointer to queue and vector resources
+ * @xdpqs: number of noirq queues (XDP)
  *
- * This function requests the vector information required for the vport and
- * stores the vector indexes received from the 'global vector distribution'
- * in the vport's queue vectors array.
- *
- * Return: 0 on success, error on failure
+ * This function set the number of q_vectors for the vport.
  */
-int idpf_vport_alloc_vec_indexes(struct idpf_vport *vport,
-				 struct idpf_q_vec_rsrc *rsrc)
+void idpf_vport_set_num_q_vectors(struct idpf_q_vec_rsrc *rsrc, u16 xdpqs)
 {
-	struct idpf_vector_info vec_info;
-	int num_alloc_vecs;
-	u32 req;
-
-	vec_info.num_curr_vecs = rsrc->num_q_vectors;
-	if (vec_info.num_curr_vecs)
-		vec_info.num_curr_vecs += IDPF_RESERVED_VECS;
-
 	/* XDPSQs are all bound to the NOIRQ vector from IDPF_RESERVED_VECS */
-	req = max(rsrc->num_txq - vport->num_xdp_txq, rsrc->num_rxq) +
-	      IDPF_RESERVED_VECS;
-	vec_info.num_req_vecs = req;
-
-	vec_info.default_vport = vport->default_vport;
-	vec_info.index = vport->idx;
-
-	num_alloc_vecs = idpf_req_rel_vector_indexes(vport->adapter,
-						     rsrc->q_vector_idxs,
-						     &vec_info);
-	if (num_alloc_vecs <= 0) {
-		dev_err(&vport->adapter->pdev->dev, "Vector distribution failed: %d\n",
-			num_alloc_vecs);
-		return -EINVAL;
-	}
-
-	rsrc->num_q_vectors = num_alloc_vecs - IDPF_RESERVED_VECS;
-
-	return 0;
+	rsrc->num_q_vectors = max(rsrc->num_txq - xdpqs, rsrc->num_rxq);
 }
 
 /**
@@ -3356,7 +3325,7 @@ int idpf_vport_init(struct idpf_vport *vport, struct idpf_vport_max_q *max_q)
 	idpf_vport_init_num_qs(vport, vport_msg, rsrc);
 	idpf_vport_calc_num_q_desc(vport, rsrc);
 	idpf_vport_calc_num_q_groups(rsrc);
-	idpf_vport_alloc_vec_indexes(vport, rsrc);
+	idpf_vport_set_num_q_vectors(rsrc, vport->num_xdp_txq);
 
 	vport->crc_enable = adapter->crc_enable;
 
