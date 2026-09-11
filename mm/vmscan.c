@@ -4151,6 +4151,27 @@ next:
 	}
 }
 
+static void trace_inc_max_seq(struct lruvec *lruvec)
+{
+	int type, gen;
+	unsigned long nr[ANON_AND_FILE][MAX_NR_GENS];
+	struct lru_gen_folio *lrugen;
+
+	if (!trace_mm_mglru_inc_max_seq_enabled())
+		return;
+
+	lrugen = &lruvec->lrugen;
+	for (type = 0; type < ANON_AND_FILE; type++)
+		for (gen = 0; gen < MAX_NR_GENS; gen++)
+			nr[type][gen] = lru_gen_seq_nr_pages(lrugen, gen, type);
+
+	trace_mm_mglru_inc_max_seq(lruvec,
+				   lrugen->max_seq,
+				   lrugen->min_seq[LRU_GEN_ANON],
+				   lrugen->min_seq[LRU_GEN_FILE],
+				   nr[LRU_GEN_ANON], nr[LRU_GEN_FILE]);
+}
+
 static bool inc_max_seq(struct lruvec *lruvec, unsigned long seq, int swappiness)
 {
 	bool success;
@@ -4210,6 +4231,8 @@ restart:
 	WRITE_ONCE(lrugen->timestamps[next], jiffies);
 	/* make sure preceding modifications appear */
 	smp_store_release(&lrugen->max_seq, lrugen->max_seq + 1);
+
+	trace_inc_max_seq(lruvec);
 unlock:
 	lruvec_unlock_irq(lruvec);
 
