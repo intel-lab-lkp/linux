@@ -237,10 +237,21 @@ static void programmable_fetch_config(struct dpu_encoder_phys *phys_enc,
 
 	vfp_fetch_lines = programmable_fetch_get_num_lines(phys_enc, timing);
 	if (vfp_fetch_lines) {
+		const struct dpu_mdss_cfg *catalog = phys_enc->dpu_kms->catalog;
+
 		vert_total = get_vertical_total(timing);
 		horiz_total = get_horizontal_total(timing);
 		vfp_fetch_start_vsync_counter =
 		    (vert_total - vfp_fetch_lines) * horiz_total + 1;
+
+		/*
+		 * SM6125 (DPU 5.4 / Trinket) quirk matching downstream
+		 * delay_prg_fetch_start = true. Throttle fetch start
+		 * to the second line after active video (VFP line 1).
+		 */
+		if (catalog && catalog->caps && catalog->caps->has_prg_fetch_delay)
+			vfp_fetch_start_vsync_counter += horiz_total;
+
 		f.enable = 1;
 		f.fetch_start = vfp_fetch_start_vsync_counter;
 	}
