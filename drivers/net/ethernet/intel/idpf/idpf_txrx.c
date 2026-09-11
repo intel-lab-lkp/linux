@@ -3890,14 +3890,18 @@ static void idpf_vport_intr_napi_dis_all(struct idpf_q_vec_rsrc *rsrc)
 /**
  * idpf_vport_intr_rel - Free memory allocated for interrupt vectors
  * @rsrc: pointer to queue and vector resources
+ * @irq: libie_irq structure to be passed to libie_irq_free()
  *
  * Free the memory allocated for interrupt vectors  associated to a vport
  */
-void idpf_vport_intr_rel(struct idpf_q_vec_rsrc *rsrc)
+void idpf_vport_intr_rel(struct idpf_q_vec_rsrc *rsrc, struct libie_irq *irq)
 {
+	libie_put_irq(irq, rsrc->noirq_v_idx);
+
 	for (u16 v_idx = 0; v_idx < rsrc->num_q_vectors; v_idx++) {
 		struct idpf_q_vector *q_vector = &rsrc->q_vectors[v_idx];
 
+		libie_irq_free(irq, q_vector->irq);
 		kfree(q_vector->xsksq);
 		q_vector->xsksq = NULL;
 		kfree(q_vector->complq);
@@ -3930,15 +3934,17 @@ static void idpf_q_vector_set_napi(struct idpf_q_vector *q_vector, bool link)
 
 /**
  * idpf_vport_intr_rel_irq - Free the IRQ association with the OS
+ * @vport: main vport structure
  * @rsrc: pointer to queue and vector resources
  */
-static void idpf_vport_intr_rel_irq(struct idpf_q_vec_rsrc *rsrc)
+static void idpf_vport_intr_rel_irq(struct idpf_vport *vport,
+				    struct idpf_q_vec_rsrc *rsrc)
 {
 	for (int vector = 0; vector < rsrc->num_q_vectors; vector++) {
 		struct idpf_q_vector *q_vector = &rsrc->q_vectors[vector];
 
 		/* free only the irqs that were actually requested */
-		if (!q_vector)
+		if (!q_vector->irq.virq)
 			continue;
 
 		idpf_q_vector_set_napi(q_vector, false);
@@ -4111,10 +4117,10 @@ static int idpf_vport_intr_req_irq(struct idpf_vport *vport,
 {
 	struct idpf_adapter *adapter = vport->adapter;
 	const char *drv_name, *if_name, *vec_name;
-	int vector, err, vidx;
+	int vector, err;
 
-	vidx = rsrc->q_vector_idxs[rsrc->num_q_vectors];
-	adapter->dev_ops.reg_ops.noirq_intr_reg_init(adapter, rsrc, vidx);
+	adapter->dev_ops.reg_ops.noirq_intr_reg_init(adapter, rsrc,
+						     rsrc->noirq_v_idx);
 
 	drv_name = dev_driver_string(&adapter->pdev->dev);
 	if_name = netdev_name(vport->netdev);
@@ -4124,9 +4130,8 @@ static int idpf_vport_intr_req_irq(struct idpf_vport *vport,
 		int virq = q_vector->irq.virq;
 		char *name;
 
-		vidx = rsrc->q_vector_idxs[vector];
-
-		adapter->dev_ops.reg_ops.intr_reg_init(adapter, q_vector, vidx);
+		adapter->dev_ops.reg_ops.intr_reg_init(adapter, q_vector,
+						       q_vector->irq.index);
 
 		if (q_vector->num_rxq && q_vector->num_txq)
 			vec_name = "TxRx";
@@ -4258,7 +4263,7 @@ void idpf_vport_intr_deinit(struct idpf_vport *vport,
 	idpf_vport_intr_napi_dis_all(rsrc);
 	idpf_vport_intr_dis_dim_all(rsrc);
 	idpf_vport_intr_napi_del_all(rsrc);
-	idpf_vport_intr_rel_irq(rsrc);
+	idpf_vport_intr_rel_irq(vport, rsrc);
 }
 
 /**
@@ -4568,31 +4573,38 @@ static void idpf_vport_intr_map_vector_to_qs(struct idpf_vport *vport,
 /**
  * idpf_vport_intr_init_vec_idx - Initialize the vector indexes
  * @vport: virtual port
- * @rsrc: pointer to queue and vector resources
+ * @tmp_irqs: place to store reserved irqs number
+ * @num_vec: number of q_vectors
  *
- * Initialize vector indexes with values returned over mailbox.
+ * Initialize vector indexes with values returned from libie_irq
  *
- * Return: 0 on success, negative on failure
+ * Return: number of initialized vectors, or negative value in case of error
  */
 static int idpf_vport_intr_init_vec_idx(struct idpf_vport *vport,
-					struct idpf_q_vec_rsrc *rsrc)
+					struct msi_map *tmp_irqs, u16 num_vec)
 {
 	struct idpf_adapter *adapter = vport->adapter;
 	int i;
 
-	for (i = 0; i < rsrc->num_q_vectors; i++) {
-		struct idpf_q_vector *q_vector = &rsrc->q_vectors[i];
+	for (i = 0; i < num_vec; i++) {
+		if (vport->default_vport && i == 0) {
+			tmp_irqs[i] = libie_irq_alloc(&adapter->irq,
+						      LIBIE_IRQ_STATIC);
+			if (tmp_irqs[i].index < 0)
+				return tmp_irqs[i].index;
+			continue;
+		}
 
-		q_vector->irq.index = rsrc->q_vector_idxs[i];
-		q_vector->irq.virq = pci_irq_vector(adapter->pdev,
-						    q_vector->irq.index);
-		if (q_vector->irq.virq < 0)
-			return q_vector->irq.virq;
+		tmp_irqs[i] = libie_irq_alloc(&adapter->irq, LIBIE_IRQ_DYNAMIC);
+		/* not crucial if there is already allocated irq */
+		if (tmp_irqs[i].index < 0) {
+			if (i == 0)
+				return tmp_irqs[i].index;
+			break;
+		}
 	}
 
-	rsrc->noirq_v_idx = rsrc->q_vector_idxs[i];
-
-	return 0;
+	return i;
 }
 
 /**
@@ -4633,17 +4645,49 @@ int idpf_vport_intr_alloc(struct idpf_vport *vport,
 {
 	u16 txqs_per_vector, rxqs_per_vector, bufqs_per_vector;
 	struct idpf_vport_user_config_data *user_config;
+	struct idpf_adapter *adapter = vport->adapter;
 	struct idpf_q_vector *q_vector;
 	struct idpf_q_coalesce *q_coal;
+	struct msi_map *tmp_irqs;
+	int irqs, i, noirq_v_idx;
 	u32 complqs_per_vector;
 	u16 idx = vport->idx;
 
-	user_config = &vport->adapter->vport_config[idx]->user_config;
+	user_config = &adapter->vport_config[idx]->user_config;
 
+	tmp_irqs = kzalloc_objs(struct msi_map, rsrc->num_q_vectors);
+	if (!tmp_irqs)
+		return -ENOMEM;
+
+	noirq_v_idx = libie_irq_reserve(&adapter->irq);
+	if (noirq_v_idx < 0) {
+		kfree(tmp_irqs);
+		return noirq_v_idx;
+	}
+
+	rsrc->noirq_v_idx = noirq_v_idx;
+
+	irqs = idpf_vport_intr_init_vec_idx(vport, tmp_irqs,
+					    rsrc->num_q_vectors);
+	if (irqs < 0) {
+		libie_put_irq(&adapter->irq, rsrc->noirq_v_idx);
+		kfree(tmp_irqs);
+		return irqs;
+	}
+
+	rsrc->num_q_vectors = irqs;
 	rsrc->q_vectors = kzalloc_objs(struct idpf_q_vector,
 				       rsrc->num_q_vectors);
-	if (!rsrc->q_vectors)
+	if (!rsrc->q_vectors) {
+		libie_put_irq(&adapter->irq, rsrc->noirq_v_idx);
+		for (i = 0; i < rsrc->num_q_vectors; i++)
+			libie_irq_free(&adapter->irq, tmp_irqs[i]);
+		kfree(tmp_irqs);
 		return -ENOMEM;
+	}
+
+	for (i = 0; i < rsrc->num_q_vectors; i++)
+		rsrc->q_vectors[i].irq = tmp_irqs[i];
 
 	txqs_per_vector = DIV_ROUND_UP(rsrc->num_txq_grp,
 				       rsrc->num_q_vectors);
@@ -4699,10 +4743,12 @@ int idpf_vport_intr_alloc(struct idpf_vport *vport,
 			goto error;
 	}
 
+	kfree(tmp_irqs);
 	return 0;
 
 error:
-	idpf_vport_intr_rel(rsrc);
+	idpf_vport_intr_rel(rsrc, &adapter->irq);
+	kfree(tmp_irqs);
 
 	return -ENOMEM;
 }
@@ -4717,10 +4763,6 @@ error:
 int idpf_vport_intr_init(struct idpf_vport *vport, struct idpf_q_vec_rsrc *rsrc)
 {
 	int err;
-
-	err = idpf_vport_intr_init_vec_idx(vport, rsrc);
-	if (err)
-		return err;
 
 	idpf_vport_intr_map_vector_to_qs(vport, rsrc);
 	idpf_vport_intr_napi_add_all(vport, rsrc);

@@ -18,6 +18,7 @@ MODULE_IMPORT_NS("LIBETH");
 MODULE_IMPORT_NS("LIBIE_CP");
 MODULE_IMPORT_NS("LIBIE_PCI");
 MODULE_IMPORT_NS("LIBETH_XDP");
+MODULE_IMPORT_NS("LIBIE_IRQ");
 MODULE_LICENSE("GPL");
 
 /**
@@ -177,7 +178,6 @@ destroy_wqs:
 	adapter->netdevs = NULL;
 
 	mutex_destroy(&adapter->vport_ctrl_lock);
-	mutex_destroy(&adapter->vector_lock);
 	mutex_destroy(&adapter->queue_lock);
 	mutex_destroy(&adapter->vc_buf_lock);
 
@@ -335,7 +335,6 @@ static int idpf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	adapter->msg_enable = netif_msg_init(-1, IDPF_AVAIL_NETIF_M);
 
 	mutex_init(&adapter->vport_ctrl_lock);
-	mutex_init(&adapter->vector_lock);
 	mutex_init(&adapter->queue_lock);
 	mutex_init(&adapter->vc_buf_lock);
 
