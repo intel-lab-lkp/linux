@@ -1050,6 +1050,7 @@ static u32 pm8001_request_msix(struct pm8001_hba_info *pm8001_ha)
 					 &pm8001_ha->irq_vector[j]);
 			}
 			pci_free_irq_vectors(pm8001_ha->pdev);
+			pm8001_ha->number_of_intr = 0;
 			break;
 		}
 	}
@@ -1087,6 +1088,12 @@ static u32 pm8001_request_irq(struct pm8001_hba_info *pm8001_ha)
 	}
 
 use_intx:
+	if (pm8001_ha->number_of_intr) {
+		pci_free_irq_vectors(pdev);
+		pm8001_ha->number_of_intr = 0;
+	}
+	pm8001_ha->max_q_num = 1;
+
 	/* Initialize the INT-X interrupt */
 	pm8001_dbg(pm8001_ha, INIT, "MSIX not supported!!!\n");
 	pm8001_ha->use_msix = false;
