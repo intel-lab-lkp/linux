@@ -729,6 +729,13 @@ static ssize_t ath10k_reg_value_write(struct file *file,
 
 	reg_addr = ar->debug.reg_addr;
 
+	/* FIX: Validate register address */
+	if (reg_addr > ar->hw_params.reg_size) {
+		ath10k_warn(ar, "Invalid register address 0x%08x\n", reg_addr);
+		ret = -EINVAL;
+		goto exit;
+	}
+
 	ret = kstrtou32_from_user(user_buf, count, 0, &reg_val);
 	if (ret)
 		goto exit;
@@ -818,6 +825,19 @@ static ssize_t ath10k_mem_value_write(struct file *file,
 		return 0;
 
 	mutex_lock(&ar->conf_mutex);
+
+	/* FIX: Validate address against memory size */
+	if (*ppos > ar->hw_params.mem_size) {
+		ath10k_warn(ar, "Invalid address 0x%08x for mem_value\n", (u32)*ppos);
+		return -EINVAL;
+	}
+
+	/* FIX: Validate size against remaining memory */
+	if (count > ar->hw_params.mem_size - *ppos) {
+		ath10k_warn(ar, "Invalid size %zu for mem_value at 0x%08x\n",
+			    count, (u32)*ppos);
+		return -EINVAL;
+	}
 
 	buf = vmalloc(count);
 	if (!buf) {
