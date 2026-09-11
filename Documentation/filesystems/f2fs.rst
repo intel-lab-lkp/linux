@@ -191,6 +191,13 @@ reserve_node=%d		 Support configuring reserved nodes which are used for
 			 gid, the default limit is 12.5% of all nodes.
 resuid=%d		 The user ID which may use the reserved blocks and nodes.
 resgid=%d		 The group ID which may use the reserved blocks and nodes.
+reserve_shrink=%d	 Support pre-reserving space for subsequent filesystem
+			 shrinkage (e.g. during partition resizing or FOTA),
+			 unit: blocks. Unlike reserve_root, allocations from
+			 this reserved space strictly reject all callers
+			 (including root / CAP_SYS_RESOURCE). Once the
+			 filesystem is successfully shrunk via resize, this
+			 value is automatically reset to 0.
 fault_injection=%d	 Enable fault injection in all supported types with
 			 specified injection rate.
 fault_type=%d		 Support configuring fault injection type, should be

@@ -145,6 +145,7 @@ enum f2fs_mount_opt {
 	 */
 	F2FS_MOUNT_LAZYTIME,
 	F2FS_MOUNT_RESERVE_NODE,
+	F2FS_MOUNT_RESERVE_SHRINK,
 };
 
 #define F2FS_OPTION(sbi)	((sbi)->mount_opt)
@@ -226,6 +227,7 @@ struct f2fs_mount_info {
 	unsigned long long opt;
 	block_t root_reserved_blocks;	/* root reserved blocks */
 	block_t root_reserved_nodes;	/* root reserved nodes */
+	block_t reserve_shrink_blocks;	/* reserve blocks for shrink */
 	kuid_t s_resuid;		/* reserved blocks for uid */
 	kgid_t s_resgid;		/* reserved blocks for gid */
 	int active_logs;		/* # of active logs */
@@ -2659,6 +2661,13 @@ static inline unsigned int get_available_block_count(struct f2fs_sb_info *sbi,
 
 	if (test_opt(sbi, RESERVE_ROOT) && !__allow_reserved_root(sbi, inode, cap))
 		avail_user_block_count -= F2FS_OPTION(sbi).root_reserved_blocks;
+
+	if (test_opt(sbi, RESERVE_SHRINK)) {
+		if (avail_user_block_count > F2FS_OPTION(sbi).reserve_shrink_blocks)
+			avail_user_block_count -= F2FS_OPTION(sbi).reserve_shrink_blocks;
+		else
+			avail_user_block_count = 0;
+	}
 
 	if (unlikely(is_sbi_flag_set(sbi, SBI_CP_DISABLED))) {
 		if (avail_user_block_count > sbi->unusable_block_count)

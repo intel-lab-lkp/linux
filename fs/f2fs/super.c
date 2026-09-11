@@ -196,6 +196,7 @@ enum {
 	Opt_data_flush,
 	Opt_reserve_root,
 	Opt_reserve_node,
+	Opt_reserve_shrink,
 	Opt_resgid,
 	Opt_resuid,
 	Opt_mode,
@@ -328,6 +329,7 @@ static const struct fs_parameter_spec f2fs_param_specs[] = {
 	fsparam_flag("data_flush", Opt_data_flush),
 	fsparam_u32("reserve_root", Opt_reserve_root),
 	fsparam_u32("reserve_node", Opt_reserve_node),
+	fsparam_u32("reserve_shrink", Opt_reserve_shrink),
 	fsparam_gid("resgid", Opt_resgid),
 	fsparam_uid("resuid", Opt_resuid),
 	fsparam_enum("mode", Opt_mode, f2fs_param_mode),
@@ -407,6 +409,7 @@ static match_table_t f2fs_checkpoint_tokens = {
 #define F2FS_SPEC_lookup_mode			(1 << 24)
 #define F2FS_SPEC_reserve_node			(1 << 25)
 #define F2FS_SPEC_resizable_tail_secno		(1 << 26)
+#define F2FS_SPEC_reserve_shrink		(1 << 27)
 
 struct f2fs_fs_context {
 	struct f2fs_mount_info info;
@@ -548,6 +551,27 @@ static inline void limit_reserve_root(struct f2fs_sb_info *sbi)
 					   F2FS_OPTION(sbi).s_resuid),
 			  from_kgid_munged(&init_user_ns,
 					   F2FS_OPTION(sbi).s_resgid));
+}
+
+static inline void limit_reserve_shrink(struct f2fs_sb_info *sbi)
+{
+	block_t block_limit;
+
+	if (!test_opt(sbi, RESERVE_SHRINK))
+		return;
+
+	block_limit = sbi->user_block_count - sbi->reserved_blocks;
+	if (test_opt(sbi, RESERVE_ROOT)) {
+		if (block_limit > F2FS_OPTION(sbi).root_reserved_blocks)
+			block_limit -= F2FS_OPTION(sbi).root_reserved_blocks;
+		else
+			block_limit = 0;
+	}
+	if (F2FS_OPTION(sbi).reserve_shrink_blocks > block_limit) {
+		F2FS_OPTION(sbi).reserve_shrink_blocks = block_limit;
+		f2fs_info(sbi, "Reduce reserved blocks for shrink = %u",
+			  F2FS_OPTION(sbi).reserve_shrink_blocks);
+	}
 }
 
 static inline void adjust_unusable_cap_perc(struct f2fs_sb_info *sbi)
@@ -952,6 +976,14 @@ static int f2fs_parse_param(struct fs_context *fc, struct fs_parameter *param)
 		ctx_set_opt(ctx, F2FS_MOUNT_RESERVE_NODE);
 		F2FS_CTX_INFO(ctx).root_reserved_nodes = result.uint_32;
 		ctx->spec_mask |= F2FS_SPEC_reserve_node;
+		break;
+	case Opt_reserve_shrink:
+		if (result.uint_32)
+			ctx_set_opt(ctx, F2FS_MOUNT_RESERVE_SHRINK);
+		else
+			ctx_clear_opt(ctx, F2FS_MOUNT_RESERVE_SHRINK);
+		F2FS_CTX_INFO(ctx).reserve_shrink_blocks = result.uint_32;
+		ctx->spec_mask |= F2FS_SPEC_reserve_shrink;
 		break;
 	case Opt_resuid:
 		F2FS_CTX_INFO(ctx).s_resuid = result.uid;
@@ -1775,6 +1807,9 @@ static void f2fs_apply_options(struct fs_context *fc, struct super_block *sb)
 	if (ctx->spec_mask & F2FS_SPEC_reserve_node)
 		F2FS_OPTION(sbi).root_reserved_nodes =
 					F2FS_CTX_INFO(ctx).root_reserved_nodes;
+	if (ctx->spec_mask & F2FS_SPEC_reserve_shrink)
+		F2FS_OPTION(sbi).reserve_shrink_blocks =
+					F2FS_CTX_INFO(ctx).reserve_shrink_blocks;
 	if (ctx->spec_mask & F2FS_SPEC_resgid)
 		F2FS_OPTION(sbi).s_resgid = F2FS_CTX_INFO(ctx).s_resgid;
 	if (ctx->spec_mask & F2FS_SPEC_resuid)
@@ -2300,6 +2335,13 @@ static int f2fs_statfs(struct dentry *dentry, struct kstatfs *buf)
 	buf->f_bfree = user_block_count - valid_user_blocks(sbi) -
 						sbi->current_reserved_blocks;
 
+	if (test_opt(sbi, RESERVE_SHRINK)) {
+		if (buf->f_bfree > F2FS_OPTION(sbi).reserve_shrink_blocks)
+			buf->f_bfree -= F2FS_OPTION(sbi).reserve_shrink_blocks;
+		else
+			buf->f_bfree = 0;
+	}
+
 	if (unlikely(buf->f_bfree <= sbi->unusable_block_count))
 		buf->f_bfree = 0;
 	else
@@ -2524,6 +2566,9 @@ static int f2fs_show_options(struct seq_file *seq, struct dentry *root)
 					F2FS_OPTION(sbi).s_resuid),
 				from_kgid_munged(&init_user_ns,
 					F2FS_OPTION(sbi).s_resgid));
+	if (test_opt(sbi, RESERVE_SHRINK))
+		seq_printf(seq, ",reserve_shrink=%u",
+				F2FS_OPTION(sbi).reserve_shrink_blocks);
 #ifdef CONFIG_F2FS_FAULT_INJECTION
 	if (test_opt(sbi, FAULT_INJECTION)) {
 		seq_printf(seq, ",fault_injection=%u",
@@ -3106,6 +3151,7 @@ skip:
 
 	adjust_pinned_area_boundary(sbi);
 	limit_reserve_root(sbi);
+	limit_reserve_shrink(sbi);
 	fc->sb_flags = (flags & ~SB_LAZYTIME) | (sb->s_flags & SB_LAZYTIME);
 
 	sbi->umount_lock_holder = NULL;
@@ -5324,6 +5370,7 @@ try_onemore:
 	sbi->current_reserved_blocks = 0;
 	sbi->alias_reserved_blocks = 0;
 	limit_reserve_root(sbi);
+	limit_reserve_shrink(sbi);
 	adjust_unusable_cap_perc(sbi);
 
 	f2fs_init_extent_cache_info(sbi);
