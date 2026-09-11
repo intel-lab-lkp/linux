@@ -2747,6 +2747,8 @@ iwl_mvm_choose_query_wakeup_reasons(struct iwl_mvm *mvm,
 
 		d3_data->status = iwl_mvm_send_wowlan_get_status(mvm, sta_id);
 	}
+	if (IS_ERR(d3_data->status))
+		d3_data->status = NULL;
 
 	if (mvm->net_detect) {
 		iwl_mvm_query_netdetect_reasons(mvm, vif, d3_data);
