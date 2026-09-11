@@ -263,6 +263,17 @@ void irq_work_run(void)
 }
 EXPORT_SYMBOL_GPL(irq_work_run);
 
+void irq_work_run_cpu(unsigned int cpu)
+{
+	if (WARN_ON_ONCE(!cpumask_test_cpu(cpu, cpu_dying_mask)))
+		return;
+
+	if (!IS_ENABLED(CONFIG_PREEMPT_RT))
+		return;
+
+	irq_work_run_list(per_cpu_ptr(&lazy_list, cpu));
+}
+
 void irq_work_tick(void)
 {
 	struct llist_head *raised = this_cpu_ptr(&raised_list);
