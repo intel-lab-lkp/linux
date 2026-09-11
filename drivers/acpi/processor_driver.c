@@ -164,7 +164,7 @@ static int __acpi_processor_start(struct acpi_device *device)
 
 	acpi_pss_perf_init(pr);
 
-	result = acpi_processor_thermal_init(pr, device);
+	result = acpi_processor_thermal_init(pr);
 	if (result)
 		goto err_power_exit;
 

@@ -235,15 +235,7 @@ static int
 processor_get_max_state(struct thermal_cooling_device *cdev,
 			unsigned long *state)
 {
-	struct acpi_device *device = cdev->devdata;
-	struct acpi_processor *pr;
-
-	if (!device)
-		return -EINVAL;
-
-	pr = acpi_driver_data(device);
-	if (!pr)
-		return -EINVAL;
+	struct acpi_processor *pr = cdev->devdata;
 
 	*state = acpi_processor_max_state(pr);
 	return 0;
@@ -253,15 +245,7 @@ static int
 processor_get_cur_state(struct thermal_cooling_device *cdev,
 			unsigned long *cur_state)
 {
-	struct acpi_device *device = cdev->devdata;
-	struct acpi_processor *pr;
-
-	if (!device)
-		return -EINVAL;
-
-	pr = acpi_driver_data(device);
-	if (!pr)
-		return -EINVAL;
+	struct acpi_processor *pr = cdev->devdata;
 
 	*cur_state = cpufreq_get_cur_state(pr->id);
 	if (pr->flags.throttling)
@@ -273,17 +257,9 @@ static int
 processor_set_cur_state(struct thermal_cooling_device *cdev,
 			unsigned long state)
 {
-	struct acpi_device *device = cdev->devdata;
-	struct acpi_processor *pr;
+	struct acpi_processor *pr = cdev->devdata;
 	int result = 0;
 	int max_pstate;
-
-	if (!device)
-		return -EINVAL;
-
-	pr = acpi_driver_data(device);
-	if (!pr)
-		return -EINVAL;
 
 	max_pstate = cpufreq_get_max_state(pr->id);
 
@@ -308,10 +284,9 @@ const struct thermal_cooling_device_ops processor_cooling_ops = {
 	.set_cur_state = processor_set_cur_state,
 };
 
-int acpi_processor_thermal_init(struct acpi_processor *pr,
-				struct acpi_device *device)
+int acpi_processor_thermal_init(struct acpi_processor *pr)
 {
-	pr->cdev = thermal_cooling_device_create(pr->dev, "Processor", device,
+	pr->cdev = thermal_cooling_device_create(pr->dev, "Processor", pr,
 						 &processor_cooling_ops);
 	if (IS_ERR(pr->cdev))
 		return PTR_ERR(pr->cdev);
