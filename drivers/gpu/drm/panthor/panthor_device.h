@@ -366,6 +366,9 @@ struct panthor_device {
 
 		/** @protm_exit_count: Number of times exited protm. */
 		atomic64_t protm_exit_count;
+
+		/** @info: Protected mode info. */
+		struct drm_panthor_protm_info info;
 	} protm;
 };
 

@@ -62,7 +62,7 @@ struct panthor_gem_debugfs {
 	} creator;
 
 	/** @flags: Combination of panthor_debugfs_gem_usage_flags flags */
-	u32 flags;
+	atomic_t flags;
 };
 
 /**
@@ -317,6 +317,11 @@ panthor_kernel_bo_vunmap(struct panthor_kernel_bo *bo)
 		bo->kmap = NULL;
 	}
 }
+
+struct panthor_kernel_bo *
+panthor_kernel_bo_import(struct panthor_device *ptdev, struct panthor_vm *vm,
+			 struct panthor_gem_object *bo,
+			 u32 vm_map_flags, u64 gpu_va, u32 vm_map_size);
 
 struct panthor_kernel_bo *
 panthor_kernel_bo_create(struct panthor_device *ptdev, struct panthor_vm *vm,

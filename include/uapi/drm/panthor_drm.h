@@ -154,6 +154,11 @@ enum drm_panthor_ioctl_id {
 	 * This is useful for imported BOs.
 	 */
 	DRM_PANTHOR_BO_QUERY_INFO,
+
+	/**
+	 * @DRM_PANTHOR_PROTM_INIT: Device-wide initialize of protected mode.
+	 */
+	DRM_PANTHOR_PROTM_INIT,
 };
 
 /**
@@ -256,6 +261,11 @@ enum drm_panthor_dev_query_type {
 
 	/** @DRM_PANTHOR_DEV_QUERY_MMU_INFO: Query MMU information. */
 	DRM_PANTHOR_DEV_QUERY_MMU_INFO,
+
+	/**
+	 * @DRM_PANTHOR_DEV_QUERY_PROTM_INFO: Query supported protected rendering information.
+	 */
+	DRM_PANTHOR_DEV_QUERY_PROTM_INFO,
 };
 
 /**
@@ -515,6 +525,51 @@ struct drm_panthor_group_priorities_info {
 
 	/** @pad: Padding fields, MBZ. */
 	__u8 pad[3];
+};
+
+/**
+ * enum drm_panthor_protm_state_flags - Describes the state of the protected mode feature.
+ *
+ * List of GPU states which can be used by the GPU to access protected memory.
+ */
+enum drm_panthor_protm_state_flags {
+	/**
+	 * @DRM_PANTHOR_PROTM_INITIALIZED: Device-wide initialization of the
+	 * protected mode feature is done.
+	 */
+	DRM_PANTHOR_PROTM_INITIALIZED = 1 << 0,
+};
+
+/**
+ * struct drm_panthor_protm_info - Protected mode info.
+ *
+ * Structure grouping all queryable information relating to protected mode.
+ */
+struct drm_panthor_protm_info {
+	/**
+	 * @state: Combination of enum drm_panthor_protm_state_flags flags.
+	 */
+	__u32 state;
+
+	/**
+	 * @fw_protected_sections_size: Size of all the protected FW sections.
+	 *
+	 * Size of the protected buffer to pass through
+	 * DRM_IOCTL_PANTHOR_PROTM_INIT.
+	 */
+	__u32 fw_protected_sections_size;
+
+	/**
+	 * @group_protected_suspend_buf_size: Size of the group suspend buffer.
+	 *
+	 * This must be used to allocate a protected BO that's big enough to use
+	 * as a protected suspend buffer when a group supports protected
+	 * rendering.
+	 */
+	__u32 group_protected_suspend_buf_size;
+
+	/** @pad: MBZ. */
+	__u32 pad;
 };
 
 /**
@@ -901,8 +956,14 @@ struct drm_panthor_group_create {
 	/** @priority: Group priority (see enum drm_panthor_group_priority). */
 	__u8 priority;
 
-	/** @pad: Padding field, MBZ. */
-	__u32 pad;
+	/**
+	 * @protected_suspend_bo_handle: BO to use as a protected suspend buffer.
+	 *
+	 * This BO must have been allocated from a protected DMA-BUF heap and
+	 * imported in panthor. It's size must be at least
+	 * drm_panthor_protm_info::group_protected_suspend_buf_size.
+	 */
+	__u32 protected_suspend_bo_handle;
 
 	/**
 	 * @compute_core_mask: Mask encoding cores that can be used for compute jobs.
@@ -1271,6 +1332,24 @@ struct drm_panthor_bo_query_info {
 };
 
 /**
+ * struct drm_panthor_protm_init - Protected mode initialization arguments.
+ */
+struct drm_panthor_protm_init {
+	/**
+	 * @fw_protected_sections_bo_handle: Handle of the BO to use for the FW protected
+	 * sections.
+	 *
+	 * This BO must have been allocated from a protected DMA-BUF heap and
+	 * imported in panthor. It's size must be at least
+	 * drm_panthor_protm_info::fw_protected_sections_size.
+	 */
+	__u32 fw_protected_sections_bo_handle;
+
+	/** @pad: MBZ. */
+	__u32 pad;
+};
+
+/**
  * DRM_IOCTL_PANTHOR() - Build a Panthor IOCTL number
  * @__access: Access type. Must be R, W or RW.
  * @__id: One of the DRM_PANTHOR_xxx id.
@@ -1320,6 +1399,8 @@ enum {
 		DRM_IOCTL_PANTHOR(WR, BO_SYNC, bo_sync),
 	DRM_IOCTL_PANTHOR_BO_QUERY_INFO =
 		DRM_IOCTL_PANTHOR(WR, BO_QUERY_INFO, bo_query_info),
+	DRM_IOCTL_PANTHOR_PROTM_INIT =
+		DRM_IOCTL_PANTHOR(WR, PROTM_INIT, protm_init),
 };
 
 #if defined(__cplusplus)

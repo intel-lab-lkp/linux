@@ -529,6 +529,8 @@ static inline int panthor_fw_resume(struct panthor_device *ptdev)
 int panthor_fw_init(struct panthor_device *ptdev);
 void panthor_fw_unplug(struct panthor_device *ptdev);
 
+int panthor_fw_protm_init(struct drm_file *file,
+			  struct drm_panthor_protm_init *args);
 int panthor_fw_protm_enter(struct panthor_device *ptdev);
 int panthor_fw_protm_exit(struct panthor_device *ptdev, u32 timeout_ms);
 int panthor_fw_protm_exit_wait(struct panthor_device *ptdev, u32 timeout_ms);
