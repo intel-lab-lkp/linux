@@ -429,8 +429,7 @@ int acpi_processor_ffh_lpi_enter(struct acpi_lpi_state *lpi);
 /* in processor_thermal.c */
 int acpi_processor_thermal_init(struct acpi_processor *pr,
 				struct acpi_device *device);
-void acpi_processor_thermal_exit(struct acpi_processor *pr,
-				 struct acpi_device *device);
+void acpi_processor_thermal_exit(struct acpi_processor *pr);
 extern const struct thermal_cooling_device_ops processor_cooling_ops;
 #ifdef CONFIG_CPU_FREQ
 void acpi_thermal_cpufreq_init(struct cpufreq_policy *policy);
