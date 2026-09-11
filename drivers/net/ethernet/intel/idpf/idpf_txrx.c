@@ -4574,42 +4574,18 @@ static void idpf_vport_intr_map_vector_to_qs(struct idpf_vport *vport,
  * @rsrc: pointer to queue and vector resources
  *
  * Initialize vector indexes with values returned over mailbox.
- *
- * Return: 0 on success, negative on failure
  */
-static int idpf_vport_intr_init_vec_idx(struct idpf_vport *vport,
-					struct idpf_q_vec_rsrc *rsrc)
+static void idpf_vport_intr_init_vec_idx(struct idpf_vport *vport,
+					 struct idpf_q_vec_rsrc *rsrc)
 {
 	struct idpf_adapter *adapter = vport->adapter;
-	struct virtchnl2_alloc_vectors *ac;
-	u16 *vecids, total_vecs;
 	int i;
 
-	ac = adapter->req_vec_chunks;
-	if (!ac) {
-		for (i = 0; i < rsrc->num_q_vectors; i++)
-			rsrc->q_vectors[i].v_idx = rsrc->q_vector_idxs[i];
-
-		rsrc->noirq_v_idx = rsrc->q_vector_idxs[i];
-
-		return 0;
-	}
-
-	total_vecs = idpf_get_reserved_vecs(adapter);
-	vecids = kcalloc(total_vecs, sizeof(u16), GFP_KERNEL);
-	if (!vecids)
-		return -ENOMEM;
-
-	idpf_get_vec_ids(adapter, vecids, total_vecs, &ac->vchunks);
-
 	for (i = 0; i < rsrc->num_q_vectors; i++)
-		rsrc->q_vectors[i].v_idx = vecids[rsrc->q_vector_idxs[i]];
+		rsrc->q_vectors[i].v_idx =
+			adapter->irq_info.vectors[rsrc->q_vector_idxs[i]].idx;
 
-	rsrc->noirq_v_idx = vecids[rsrc->q_vector_idxs[i]];
-
-	kfree(vecids);
-
-	return 0;
+	rsrc->noirq_v_idx = adapter->irq_info.vectors[rsrc->q_vector_idxs[i]].idx;
 }
 
 /**
@@ -4740,16 +4716,12 @@ int idpf_vport_intr_init(struct idpf_vport *vport, struct idpf_q_vec_rsrc *rsrc)
 {
 	int err;
 
-	err = idpf_vport_intr_init_vec_idx(vport, rsrc);
-	if (err)
-		return err;
+	idpf_vport_intr_init_vec_idx(vport, rsrc);
 
 	idpf_vport_intr_map_vector_to_qs(vport, rsrc);
 	idpf_vport_intr_napi_add_all(vport, rsrc);
 
-	err = vport->adapter->dev_ops.reg_ops.intr_reg_init(vport, rsrc);
-	if (err)
-		goto unroll_vectors_alloc;
+	vport->adapter->dev_ops.reg_ops.intr_reg_init(vport, rsrc);
 
 	err = idpf_vport_intr_req_irq(vport, rsrc);
 	if (err)
