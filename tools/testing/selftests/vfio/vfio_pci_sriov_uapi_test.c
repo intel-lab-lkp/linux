@@ -157,6 +157,63 @@ TEST_F(vfio_pci_sriov_uapi_test, override_token)
 	ASSERT_COND_VF_CREATION(ret);
 }
 
+TEST(failed_second_open_does_not_clobber_token)
+{
+	struct vfio_pci_device *pf = NULL, *pf_second_fd = NULL, *vf = NULL;
+	struct iommu *iommu;
+	int ret;
+
+	iommu = iommu_init("iommufd");
+
+	/* Create and bind PF using UUID_1 */
+	ret = device_init(pf_bdf, iommu, UUID_1, &pf);
+	ASSERT_EQ(ret, 0);
+
+	/*
+	 * Attempt to open the same PF again and bind it with a *different*
+	 * token (UUID_2).  Return value intentionally unenforced.
+	 */
+	device_init(pf_bdf, iommu, UUID_2, &pf_second_fd);
+
+	/*
+	 * Attempt to initialize a VF using the original PF token (UUID_1).
+	 * If the failed open above clobbered the PF's token (i.e. updated it to
+	 * UUID_2), this VF initialization will fail.
+	 */
+	ret = device_init(vf_bdf, iommu, UUID_1, &vf);
+	ASSERT_EQ(ret, 0);
+
+	device_cleanup(vf);
+	device_cleanup(pf_second_fd);
+	device_cleanup(pf);
+	iommu_cleanup(iommu);
+}
+
+TEST(failed_second_open_returns_ebusy)
+{
+	struct vfio_pci_device *pf = NULL, *pf_second_fd = NULL;
+	struct iommu *iommu;
+	int ret;
+
+	iommu = iommu_init("iommufd");
+
+	/* Create and bind PF using UUID_1 */
+	ret = device_init(pf_bdf, iommu, UUID_1, &pf);
+	ASSERT_EQ(ret, 0);
+
+	/*
+	 * Attempt to open the same PF again and bind it with a *different*
+	 * token (UUID_2). This must fail with EBUSY because it's a second open.
+	 * Previously failed with EINVAL.
+	 */
+	ret = device_init(pf_bdf, iommu, UUID_2, &pf_second_fd);
+	ASSERT_EQ(ret, -EBUSY);
+
+	device_cleanup(pf_second_fd);
+	device_cleanup(pf);
+	iommu_cleanup(iommu);
+}
+
 static void vf_teardown(void)
 {
 	/*
