@@ -1593,7 +1593,7 @@ static int venc_probe(struct platform_device *pdev)
 	core->dev_enc = dev;
 
 	video_set_drvdata(vdev, core);
-	pm_runtime_set_autosuspend_delay(dev, 2000);
+	pm_runtime_set_autosuspend_delay(dev, VENUS_AUTOSUSPEND_DELAY_MS);
 	pm_runtime_use_autosuspend(dev);
 	pm_runtime_enable(dev);
 

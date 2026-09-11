@@ -132,7 +132,6 @@ struct venus_hfi_device {
 static bool venus_pkt_debug;
 int venus_fw_debug = HFI_DEBUG_MSG_ERROR | HFI_DEBUG_MSG_FATAL;
 static bool venus_fw_low_power_mode = true;
-static int venus_hw_rsp_timeout = 1000;
 static bool venus_fw_coverage;
 
 static void venus_set_state(struct venus_hfi_device *hdev,
@@ -949,7 +948,7 @@ static int venus_sys_set_default_properties(struct venus_hfi_device *hdev)
 	const struct venus_resources *res = hdev->core->res;
 	int ret;
 
-	ret = venus_sys_set_debug(hdev, venus_fw_debug);
+	ret = venus_sys_set_debug(hdev, READ_ONCE(venus_fw_debug));
 	if (ret)
 		dev_warn(dev, "setting fw debug msg ON failed (%d)\n", ret);
 
@@ -985,28 +984,51 @@ static int venus_session_cmd(struct venus_inst *inst, u32 pkt_type, bool sync)
 	return venus_iface_cmdq_write(hdev, &pkt, sync);
 }
 
-static void venus_flush_debug_queue(struct venus_hfi_device *hdev)
+static int venus_flush_debug_queue(struct venus_hfi_device *hdev)
 {
 	struct device *dev = hdev->core->dev;
 	void *packet = hdev->dbg_buf;
+	int num_pkts = 0;
 
 	while (!venus_iface_dbgq_read(hdev, packet)) {
 		struct hfi_msg_sys_coverage_pkt *pkt = packet;
 
-		if (pkt->hdr.pkt_type != HFI_MSG_SYS_COV) {
-			struct hfi_msg_sys_debug_pkt *pkt = packet;
+		num_pkts++;
 
-			dev_dbg(dev, VDBGFW "%s", pkt->msg_data);
+		if (pkt->hdr.size <= sizeof(pkt->hdr))
+			continue;
+
+		if (pkt->hdr.size > IFACEQ_VAR_HUGE_PKT_SIZE)
+			continue;
+
+		if (pkt->hdr.pkt_type != HFI_MSG_SYS_COV) {
+			struct hfi_msg_sys_debug_pkt *dbg_pkt = packet;
+			u32 msg_size;
+
+			if (pkt->hdr.size <= sizeof(*dbg_pkt))
+				continue;
+
+			msg_size = min_t(u32, pkt->hdr.size - sizeof(*dbg_pkt), dbg_pkt->msg_size);
+
+			if (dbg_pkt->msg_type & (HFI_DEBUG_MSG_ERROR | HFI_DEBUG_MSG_FATAL))
+				dev_err_ratelimited(dev, VDBGFW "%.*s",
+						    (int)msg_size, dbg_pkt->msg_data);
+			else
+				dev_dbg(dev, VDBGFW "%.*s", (int)msg_size, dbg_pkt->msg_data);
 		}
 	}
+
+	return num_pkts;
 }
 
 static int venus_prepare_power_collapse(struct venus_hfi_device *hdev,
 					bool wait)
 {
-	unsigned long timeout = msecs_to_jiffies(venus_hw_rsp_timeout);
 	struct hfi_sys_pc_prep_pkt pkt;
+	unsigned long timeout;
 	int ret;
+
+	timeout = msecs_to_jiffies(READ_ONCE(hdev->core->hw_rsp_timeout));
 
 	init_completion(&hdev->pwr_collapse_prep);
 
@@ -1091,6 +1113,8 @@ static irqreturn_t venus_isr_thread(struct venus_core *core)
 {
 	struct venus_hfi_device *hdev = to_hfi_priv(core);
 	const struct venus_resources *res;
+	int num_debug_pkts;
+	int num_msg_pkts;
 	void *pkt;
 	u32 msg_ret;
 
@@ -1100,31 +1124,35 @@ static irqreturn_t venus_isr_thread(struct venus_core *core)
 	res = hdev->core->res;
 	pkt = hdev->pkt_buf;
 
+	do {
+		num_msg_pkts = 0;
 
-	while (!venus_iface_msgq_read(hdev, pkt)) {
-		msg_ret = hfi_process_msg_packet(core, pkt);
-		switch (msg_ret) {
-		case HFI_MSG_EVENT_NOTIFY:
-			venus_process_msg_sys_error(hdev, pkt);
-			break;
-		case HFI_MSG_SYS_INIT:
-			venus_hfi_core_set_resource(core, res->vmem_id,
-						    res->vmem_size,
-						    res->vmem_addr,
-						    hdev);
-			break;
-		case HFI_MSG_SYS_RELEASE_RESOURCE:
-			complete(&hdev->release_resource);
-			break;
-		case HFI_MSG_SYS_PC_PREP:
-			complete(&hdev->pwr_collapse_prep);
-			break;
-		default:
-			break;
+		while (!venus_iface_msgq_read(hdev, pkt)) {
+			msg_ret = hfi_process_msg_packet(core, pkt);
+			num_msg_pkts++;
+			switch (msg_ret) {
+			case HFI_MSG_EVENT_NOTIFY:
+				venus_process_msg_sys_error(hdev, pkt);
+				break;
+			case HFI_MSG_SYS_INIT:
+				venus_hfi_core_set_resource(core, res->vmem_id,
+							    res->vmem_size,
+							    res->vmem_addr,
+							    hdev);
+				break;
+			case HFI_MSG_SYS_RELEASE_RESOURCE:
+				complete(&hdev->release_resource);
+				break;
+			case HFI_MSG_SYS_PC_PREP:
+				complete(&hdev->pwr_collapse_prep);
+				break;
+			default:
+				break;
+			}
 		}
-	}
 
-	venus_flush_debug_queue(hdev);
+		num_debug_pkts = venus_flush_debug_queue(hdev);
+	} while (num_msg_pkts || num_debug_pkts);
 
 	return IRQ_HANDLED;
 }
@@ -1227,7 +1255,7 @@ static int venus_session_init(struct venus_inst *inst, u32 session_type,
 	struct hfi_session_init_pkt pkt;
 	int ret;
 
-	ret = venus_sys_set_debug(hdev, venus_fw_debug);
+	ret = venus_sys_set_debug(hdev, READ_ONCE(venus_fw_debug));
 	if (ret)
 		goto err;
 
@@ -1584,6 +1612,7 @@ static int venus_suspend_3xx(struct venus_core *core)
 	struct venus_hfi_device *hdev = to_hfi_priv(core);
 	struct device *dev = core->dev;
 	void __iomem *cpu_cs_base = hdev->core->cpu_cs_base;
+	unsigned int pc_delay_timeout;
 	u32 ctrl_status;
 	bool val;
 	int ret;
@@ -1612,8 +1641,10 @@ static int venus_suspend_3xx(struct venus_core *core)
 	 * 2. Send a command to prepare for power collapse.
 	 * 3. Check for WFI and PC_READY bits.
 	 */
+	pc_delay_timeout = READ_ONCE(core->pc_delay_timeout);
+
 	ret = readx_poll_timeout(venus_cpu_and_video_core_idle, hdev, val, val,
-				 1500, 100 * 1500);
+				 1500, pc_delay_timeout);
 	if (ret) {
 		dev_err(dev, "wait for cpu and video core idle fail (%d)\n", ret);
 		return ret;
@@ -1626,7 +1657,7 @@ static int venus_suspend_3xx(struct venus_core *core)
 	}
 
 	ret = readx_poll_timeout(venus_cpu_idle_and_pc_ready, hdev, val, val,
-				 1500, 100 * 1500);
+				 1500, pc_delay_timeout);
 	if (ret)
 		return ret;
 

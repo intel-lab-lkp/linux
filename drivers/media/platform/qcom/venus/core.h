@@ -23,6 +23,10 @@
 #define VDBGH	"VenusHigh: "
 #define VDBGFW	"VenusFW  : "
 
+#define VENUS_HW_RSP_TIMEOUT_MS		1000
+#define VENUS_AUTOSUSPEND_DELAY_MS	2000
+#define VENUS_PC_DELAY_TIMEOUT_US	(100 * 1500)
+
 #define VIDC_CLKS_NUM_MAX		4
 #define VIDC_VCODEC_CLKS_NUM_MAX	2
 #define VIDC_RESETS_NUM_MAX		2
@@ -169,6 +173,8 @@ struct venus_format {
  * @state:	the state of the venus core
  * @done:	a completion for sync HFI operations
  * @error:	an error returned during last HFI sync operations
+ * @hw_rsp_timeout: hardware response timeout
+ * @pc_delay_timeout: power collapse delay timeout
  * @sys_error:	an error flag that signal system error event
  * @sys_err_done: a waitqueue to wait for system error recovery end
  * @core_ops:	the core operations
@@ -230,6 +236,8 @@ struct venus_core {
 	unsigned int state;
 	struct completion done;
 	unsigned int error;
+	unsigned int hw_rsp_timeout;
+	unsigned int pc_delay_timeout;
 	unsigned long sys_error;
 	wait_queue_head_t sys_err_done;
 	const struct hfi_core_ops *core_ops;

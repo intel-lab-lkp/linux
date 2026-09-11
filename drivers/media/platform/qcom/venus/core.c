@@ -429,6 +429,8 @@ static int venus_probe(struct platform_device *pdev)
 
 	INIT_LIST_HEAD(&core->instances);
 	mutex_init(&core->lock);
+	core->hw_rsp_timeout = VENUS_HW_RSP_TIMEOUT_MS;
+	core->pc_delay_timeout = VENUS_PC_DELAY_TIMEOUT_US;
 	INIT_DELAYED_WORK(&core->work, venus_sys_error_handler);
 	init_waitqueue_head(&core->sys_err_done);
 
@@ -545,6 +547,8 @@ static void venus_remove(struct platform_device *pdev)
 	ret = hfi_core_deinit(core, true);
 	WARN_ON(ret);
 
+	venus_dbgfs_deinit(core);
+
 	venus_shutdown(core);
 	of_platform_depopulate(dev);
 
@@ -564,7 +568,6 @@ static void venus_remove(struct platform_device *pdev)
 
 	mutex_destroy(&core->pm_lock);
 	mutex_destroy(&core->lock);
-	venus_dbgfs_deinit(core);
 }
 
 static void venus_core_shutdown(struct platform_device *pdev)

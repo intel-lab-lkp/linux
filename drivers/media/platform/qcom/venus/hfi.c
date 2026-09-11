@@ -15,8 +15,6 @@
 #include "hfi_cmds.h"
 #include "hfi_venus.h"
 
-#define TIMEOUT		msecs_to_jiffies(1000)
-
 static u32 to_codec_type(u32 pixfmt)
 {
 	switch (pixfmt) {
@@ -49,6 +47,7 @@ static u32 to_codec_type(u32 pixfmt)
 
 int hfi_core_init(struct venus_core *core)
 {
+	unsigned int timeout;
 	int ret = 0;
 
 	mutex_lock(&core->lock);
@@ -62,7 +61,8 @@ int hfi_core_init(struct venus_core *core)
 	if (ret)
 		goto unlock;
 
-	ret = wait_for_completion_timeout(&core->done, TIMEOUT);
+	timeout = READ_ONCE(core->hw_rsp_timeout);
+	ret = wait_for_completion_timeout(&core->done, msecs_to_jiffies(timeout));
 	if (!ret) {
 		ret = -ETIMEDOUT;
 		goto unlock;
@@ -140,9 +140,11 @@ int hfi_core_trigger_ssr(struct venus_core *core, u32 type)
 
 static int wait_session_msg(struct venus_inst *inst)
 {
+	unsigned int timeout;
 	int ret;
 
-	ret = wait_for_completion_timeout(&inst->done, TIMEOUT);
+	timeout = READ_ONCE(inst->core->hw_rsp_timeout);
+	ret = wait_for_completion_timeout(&inst->done, msecs_to_jiffies(timeout));
 	if (!ret)
 		return -ETIMEDOUT;
 
