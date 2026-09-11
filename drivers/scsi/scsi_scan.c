@@ -32,6 +32,7 @@
 #include <linux/blkdev.h>
 #include <linux/delay.h>
 #include <linux/kthread.h>
+#include <linux/sched/signal.h>
 #include <linux/spinlock.h>
 #include <linux/async.h>
 #include <linux/slab.h>
@@ -1415,11 +1416,14 @@ static void scsi_sequential_lun_scan(struct Scsi_Host *shost,
 	 * until we reach the max, or no LUN is found and we are not
 	 * sparse_lun.
 	 */
-	for (lun = 1; lun < max_dev_lun; ++lun)
+	for (lun = 1; lun < max_dev_lun; ++lun) {
+		if (signal_pending(current))
+			break;
 		if (scsi_probe_and_add_lun(shost, starget, lun, NULL, NULL,
 				rescan, NULL) != SCSI_SCAN_LUN_PRESENT &&
 		    !sparse_lun)
 			return;
+	}
 }
 
 /**
@@ -1591,6 +1595,9 @@ retry:
 	 * the header, so start at 1 and go up to and including num_luns.
 	 */
 	for (lunp = &lun_data[1]; lunp <= &lun_data[num_luns]; lunp++) {
+		if (signal_pending(current))
+			break;
+
 		lun = scsilun_to_int(lunp);
 
 		if (lun > sdev->host->max_lun) {
@@ -1804,6 +1811,8 @@ static void __scsi_scan_target(struct Scsi_Host *shost, struct device *parent,
 	 */
 	res = scsi_probe_and_add_lun(shost, starget, 0, &bflags, NULL, rescan,
 				     NULL);
+	if (signal_pending(current))
+		goto out_reap;
 	if (res == SCSI_SCAN_LUN_PRESENT || res == SCSI_SCAN_TARGET_PRESENT) {
 		if (scsi_report_lun_scan(shost, starget, bflags, rescan) != 0)
 			/*
@@ -1876,6 +1885,8 @@ static void scsi_scan_channel(struct Scsi_Host *shost, unsigned int channel,
 
 	if (id == SCAN_WILD_CARD)
 		for (id = 0; id < shost->max_id; ++id) {
+			if (signal_pending(current))
+				break;
 			/*
 			 * XXX adapter drivers when possible (FCP, iSCSI)
 			 * could modify max_id to match the current max,
@@ -1895,7 +1906,7 @@ static void scsi_scan_channel(struct Scsi_Host *shost, unsigned int channel,
 			__scsi_scan_target(shost, &shost->shost_gendev, channel,
 					order_id, lun, rescan);
 		}
-	else
+	else if (!signal_pending(current))
 		__scsi_scan_target(shost, &shost->shost_gendev, channel,
 				id, lun, rescan);
 }
@@ -1904,6 +1915,8 @@ int scsi_scan_host_selected(struct Scsi_Host *shost, unsigned int channel,
 			    unsigned int id, u64 lun,
 			    enum scsi_scan_mode rescan)
 {
+	int ret;
+
 	SCSI_LOG_SCAN_BUS(3, shost_printk (KERN_INFO, shost,
 		"%s: <%u:%u:%llu>\n",
 		__func__, channel, id, lun));
@@ -1913,23 +1926,30 @@ int scsi_scan_host_selected(struct Scsi_Host *shost, unsigned int channel,
 	    ((lun != SCAN_WILD_CARD) && (lun >= shost->max_lun)))
 		return -EINVAL;
 
-	mutex_lock(&shost->scan_mutex);
+	ret = mutex_lock_interruptible(&shost->scan_mutex);
+	if (ret)
+		return ret;
+
 	if (!shost->async_scan)
 		scsi_complete_async_scans();
 
-	if (scsi_host_scan_allowed(shost) && scsi_autopm_get_host(shost) == 0) {
+	if (!signal_pending(current) && scsi_host_scan_allowed(shost) &&
+	    scsi_autopm_get_host(shost) == 0) {
 		if (channel == SCAN_WILD_CARD)
 			for (channel = 0; channel <= shost->max_channel;
-			     channel++)
+			     channel++) {
+				if (signal_pending(current))
+					break;
 				scsi_scan_channel(shost, channel, id, lun,
 						  rescan);
+			}
 		else
 			scsi_scan_channel(shost, channel, id, lun, rescan);
 		scsi_autopm_put_host(shost);
 	}
 	mutex_unlock(&shost->scan_mutex);
 
-	return 0;
+	return signal_pending(current) ? -EINTR : 0;
 }
 
 static void scsi_sysfs_add_devices(struct Scsi_Host *shost)
