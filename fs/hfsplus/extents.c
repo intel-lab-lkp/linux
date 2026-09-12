@@ -84,6 +84,17 @@ static u32 hfsplus_ext_lastblock(struct hfsplus_extent *ext)
 	return be32_to_cpu(ext->start_block) + be32_to_cpu(ext->block_count);
 }
 
+/* True if all eight extents of a fork are in use (no free slot left) */
+static bool hfsplus_ext_fork_full(struct hfsplus_extent *ext)
+{
+	int i;
+
+	for (i = 0; i < 8; ext++, i++)
+		if (!ext->block_count)
+			return false;
+	return true;
+}
+
 static int __hfsplus_ext_write_extent(struct inode *inode,
 		struct hfs_find_data *fd)
 {
@@ -216,6 +227,15 @@ static int hfsplus_ext_read_extent(struct inode *inode, u32 block)
 	if (block >= hip->cached_start &&
 	    block < hip->cached_start + hip->cached_blocks)
 		return 0;
+
+	/*
+	 * The extents overflow file is fully described by its own fork
+	 * extents; looking up an overflow extent for it would re-enter
+	 * hfs_find_init() on the extents tree, whose tree_lock may already
+	 * be held by the caller.
+	 */
+	if (inode->i_ino == HFSPLUS_EXT_CNID)
+		return -ENOSPC;
 
 	res = hfs_find_init(HFSPLUS_SB(inode->i_sb)->ext_tree, &fd);
 	if (!res) {
@@ -465,12 +485,29 @@ int hfsplus_file_extend(struct inode *inode, bool zeroout)
 	}
 
 	len = hip->clump_blocks;
-	start = hfsplus_block_allocate(sb, sbi->total_blocks, goal, &len);
-	if (start >= sbi->total_blocks) {
-		start = hfsplus_block_allocate(sb, goal, 0, &len);
-		if (start >= goal) {
+	if (inode->i_ino == HFSPLUS_EXT_CNID &&
+	    hip->alloc_blocks == hip->first_blocks &&
+	    hfsplus_ext_fork_full(hip->first_extents)) {
+		/*
+		 * No free slot is left in the fork, and the extents overflow
+		 * file can't record an overflow extent of its own: the only
+		 * way to grow it is a contiguous extension of the last
+		 * extent, so only accept free space starting exactly at
+		 * goal instead of allocating anywhere and having to undo it.
+		 */
+		start = hfsplus_block_allocate(sb, goal + 1, goal, &len);
+		if (start != goal) {
 			res = -ENOSPC;
 			goto out;
+		}
+	} else {
+		start = hfsplus_block_allocate(sb, sbi->total_blocks, goal, &len);
+		if (start >= sbi->total_blocks) {
+			start = hfsplus_block_allocate(sb, goal, 0, &len);
+			if (start >= goal) {
+				res = -ENOSPC;
+				goto out;
+			}
 		}
 	}
 
@@ -526,6 +563,20 @@ out:
 	return res;
 
 insert_extent:
+	/*
+	 * The fork-full precheck above keeps the extents overflow file's
+	 * own inode from ever landing here with blocks already allocated;
+	 * this is a backstop, so still free what was allocated rather
+	 * than leak it.
+	 */
+	if (inode->i_ino == HFSPLUS_EXT_CNID) {
+		if (hfsplus_block_free(sb, start, len))
+			pr_err("can't free extent: start %u, count %u\n",
+				start, len);
+		res = -ENOSPC;
+		goto out;
+	}
+
 	hfs_dbg("insert new extent\n");
 	res = hfsplus_ext_write_extent_locked(inode);
 	if (res)
