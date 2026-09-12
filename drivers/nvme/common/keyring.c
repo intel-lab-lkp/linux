@@ -194,7 +194,7 @@ EXPORT_SYMBOL_GPL(nvme_tls_psk_refresh);
  * PSKs, PSKs with hash (psk_ver 1) should be preferred to PSKs without hash
  * (psk_ver 0), and SHA-384 should be preferred to SHA-256.
  */
-static struct nvme_tls_psk_priority_list {
+static const struct nvme_tls_psk_priority_list {
 	bool generated;
 	u8 psk_ver;
 	enum nvme_tcp_tls_cipher cipher;
