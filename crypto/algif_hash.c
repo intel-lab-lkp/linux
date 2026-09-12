@@ -184,7 +184,7 @@ done:
 	err = 0;
 unlock:
 	release_sock(sk);
-	return copied ?: err;
+	return err ?: copied;
 
 unlock_free:
 	af_alg_free_sg(&ctx->sgl);
