@@ -729,19 +729,16 @@ soc_v1_0_mode2_restore_hwcontext(struct amdgpu_reset_control *reset_ctl,
 
 		amdgpu_ras_resume(tmp_adev);
 
-		if (!r) {
-			amdgpu_set_init_level(tmp_adev,
-					      AMDGPU_INIT_LEVEL_DEFAULT);
-			amdgpu_irq_gpu_reset_resume_helper(tmp_adev);
+		amdgpu_set_init_level(tmp_adev, AMDGPU_INIT_LEVEL_DEFAULT);
+		amdgpu_irq_gpu_reset_resume_helper(tmp_adev);
 
-			r = amdgpu_ib_ring_tests(tmp_adev);
-			if (r) {
-				dev_err(tmp_adev->dev,
-					"ib ring test failed (%d).\n", r);
-				r = -EAGAIN;
-				tmp_adev->asic_reset_res = r;
-				goto end;
-			}
+		r = amdgpu_ib_ring_tests(tmp_adev);
+		if (r) {
+			dev_err(tmp_adev->dev,
+				"ib ring test failed (%d).\n", r);
+			r = -EAGAIN;
+			tmp_adev->asic_reset_res = r;
+			goto end;
 		}
 	}
 
