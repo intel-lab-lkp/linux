@@ -419,6 +419,7 @@ int air_en8811h_mcu_running(struct mdio_device *mdiodev)
 
 	return ret == EN8811H_PHY_READY;
 }
+EXPORT_SYMBOL_GPL(air_en8811h_mcu_running);
 
 int air_en8811h_wait_mcu_ready(struct mdio_device *mdiodev)
 {
