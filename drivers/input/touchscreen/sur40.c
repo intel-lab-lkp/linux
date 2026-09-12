@@ -179,6 +179,7 @@ static uint gain = SUR40_GAIN_DEF;
 module_param(gain, uint, 0644);
 MODULE_PARM_DESC(gain, "set initial gain"
 	SUR40_PARAM_RANGE(SUR40_GAIN_MIN, SUR40_GAIN_MAX));
+static void sur40_video_release(struct video_device *vdev);
 
 static const struct v4l2_pix_format sur40_pix_format[] = {
 	{
@@ -750,6 +751,7 @@ static int sur40_probe(struct usb_interface *interface,
 	sur40->vdev.v4l2_dev = &sur40->v4l2;
 	sur40->vdev.lock = &sur40->lock;
 	sur40->vdev.queue = &sur40->queue;
+	sur40->vdev.release = sur40_video_release;
 	video_set_drvdata(&sur40->vdev, sur40);
 
 	/* initialize the control handler for 4 controls */
@@ -820,6 +822,16 @@ err_free_dev:
 	return error;
 }
 
+static void  sur40_video_release(struct video_device *vdev)
+{
+	struct sur40_state *sur40 = container_of(
+						vdev, struct sur40_state, vdev);
+
+	v4l2_device_unregister(&sur40->v4l2);
+	kfree(sur40->bulk_in_buffer);
+	kfree(sur40);
+}
+
 /* Unregister device & clean up. */
 static void sur40_disconnect(struct usb_interface *interface)
 {
@@ -829,10 +841,6 @@ static void sur40_disconnect(struct usb_interface *interface)
 
 	v4l2_ctrl_handler_free(&sur40->hdl);
 	video_unregister_device(&sur40->vdev);
-	v4l2_device_unregister(&sur40->v4l2);
-
-	kfree(sur40->bulk_in_buffer);
-	kfree(sur40);
 
 	usb_set_intfdata(interface, NULL);
 	dev_dbg(&interface->dev, "%s is now disconnected\n", DRIVER_DESC);
