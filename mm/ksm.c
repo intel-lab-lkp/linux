@@ -811,21 +811,20 @@ static void break_cow(struct ksm_rmap_item *rmap_item)
 	mmap_read_unlock(mm);
 }
 
-static struct page *get_mergeable_page(struct ksm_rmap_item *rmap_item)
+/*
+ * Get the page that @addr maps in @vma, with an elevated reference, or NULL
+ * when the address no longer maps an anon page.  The caller must hold a lock
+ * that stabilizes @vma: either the mmap read lock, or the vma read lock
+ * together with an mm_users reference.
+ */
+static struct page *__get_mergeable_page(struct vm_area_struct *vma,
+					 unsigned long addr, folio_walk_flags_t flags)
 {
-	struct mm_struct *mm = rmap_item->mm;
-	unsigned long addr = rmap_item->address;
-	struct vm_area_struct *vma;
-	struct page *page = NULL;
 	struct folio_walk fw;
+	struct page *page = NULL;
 	struct folio *folio;
 
-	mmap_read_lock(mm);
-	vma = find_mergeable_vma(mm, addr);
-	if (!vma)
-		goto out;
-
-	folio = folio_walk_start(&fw, vma, addr, 0);
+	folio = folio_walk_start(&fw, vma, addr, flags);
 	if (folio) {
 		if (!folio_is_zone_device(folio) &&
 		    folio_test_anon(folio)) {
@@ -834,11 +833,52 @@ static struct page *get_mergeable_page(struct ksm_rmap_item *rmap_item)
 		}
 		folio_walk_end(&fw, vma);
 	}
-out:
 	if (page) {
 		flush_anon_page(vma, page, addr);
 		flush_dcache_page(page);
 	}
+	return page;
+}
+
+static struct page *get_mergeable_page(struct ksm_rmap_item *rmap_item)
+{
+	struct mm_struct *mm = rmap_item->mm;
+	unsigned long addr = rmap_item->address;
+	struct vm_area_struct *vma;
+	struct page *page = NULL;
+
+	/*
+	 * Try the vma lock before the mmap lock, so that ksmd does not queue
+	 * behind a writer that changes the address space layout anywhere in
+	 * this mm: the vma lock only contends with modification of this very
+	 * vma.  Pin mm_users for the walk: exit_mmap() frees the page tables
+	 * under the mmap lock alone, so a vma read lock cannot keep it away,
+	 * but an mm_users reference can; the pin also stands in for the
+	 * ksm_test_exit() check of find_mergeable_vma() on this path.  Drop
+	 * it again before waiting for the mmap lock below, so that an exiting
+	 * mm is not delayed by us.
+	 */
+	if (IS_ENABLED(CONFIG_PER_VMA_LOCK) && mmget_not_zero(mm)) {
+		vma = lock_vma_under_rcu(mm, addr);
+		if (vma) {
+			if ((vma->vm_flags & VM_MERGEABLE) && vma->anon_vma)
+				page = __get_mergeable_page(vma, addr, FW_VMA_LOCKED);
+			vma_end_read(vma);
+			mmput_async(mm);
+			return page;
+		}
+		mmput_async(mm);
+	}
+
+	/*
+	 * The vma is being modified, or CONFIG_PER_VMA_LOCK is off: take the
+	 * mmap read lock as before.  We are prepared to wait rather than skip
+	 * this page, so a contended mm only slows down its own merging.
+	 */
+	mmap_read_lock(mm);
+	vma = find_mergeable_vma(mm, addr);
+	if (vma)
+		page = __get_mergeable_page(vma, addr, 0);
 	mmap_read_unlock(mm);
 	return page;
 }
