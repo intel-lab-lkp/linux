@@ -709,7 +709,7 @@ static inline void *i2c_dev_get_master_data(const struct i2c_dev_desc *dev)
  * @data: private data
  *
  * This functions allows a master controller to attach per-device private data
- * which can then be retrieved with i2c_device_get_master_data().
+ * which can then be retrieved with i2c_dev_get_master_data().
  */
 static inline void i2c_dev_set_master_data(struct i2c_dev_desc *dev,
 					   void *data)
