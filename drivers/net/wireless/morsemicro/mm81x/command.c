@@ -145,23 +145,43 @@ static int mm81x_cmd_tx(struct mm81x *mors, struct host_cmd_resp *resp,
 
 int mm81x_cmd_resp_process(struct mm81x *mors, struct sk_buff *skb)
 {
-	int length, ret = -ESRCH; /* No such process */
+	int ret = -ESRCH; /* No such process */
 	struct mm81x_skbq *cmd_q = mm81x_hif_get_tx_cmd_queue(mors);
 	struct host_cmd_resp *src_resp = (struct host_cmd_resp *)(skb->data);
 	struct sk_buff *cmd_skb = NULL;
 	struct host_cmd_resp_cb *resp_cb;
 	struct host_cmd_resp *dest_resp;
 	struct host_cmd_req *req;
+	u32 resp_len;
+	u32 length;
 	u16 message_id = 0;
 	u16 host_id = 0;
-	u16 resp_message_id = le16_to_cpu(src_resp->hdr.message_id);
-	u16 resp_host_id = le16_to_cpu(src_resp->hdr.host_id);
+	u16 resp_message_id;
+	u16 resp_host_id;
 	bool is_late_response = false;
+
+	if (skb->len < sizeof(struct host_cmd_header)) {
+		dev_err(mors->dev, "response length error [%u < %zu]",
+			skb->len, sizeof(struct host_cmd_header));
+		goto exit_free;
+	}
+
+	resp_message_id = le16_to_cpu(src_resp->hdr.message_id);
+	resp_host_id = le16_to_cpu(src_resp->hdr.host_id);
 
 	dev_dbg(mors->dev, "EVT 0x%04x:0x%04x", resp_message_id, resp_host_id);
 
 	if (!HOST_CMD_IS_RESP(src_resp)) {
 		ret = mm81x_mac_event_recv(mors, skb);
+		goto exit_free;
+	}
+
+	resp_len = le16_to_cpu(src_resp->hdr.len) +
+		   sizeof(struct host_cmd_header);
+	if (resp_len < sizeof(struct host_cmd_resp) || resp_len > skb->len) {
+		dev_err(mors->dev,
+			"response 0x%04x:%04x length error [%u in %u]",
+			resp_message_id, resp_host_id, resp_len, skb->len);
 		goto exit_free;
 	}
 
@@ -206,9 +226,7 @@ int mm81x_cmd_resp_process(struct mm81x *mors, struct sk_buff *skb)
 	dest_resp = resp_cb->dest_resp;
 	if (length >= sizeof(struct host_cmd_resp) && dest_resp) {
 		ret = 0;
-		length = min_t(int, length,
-			       le16_to_cpu(src_resp->hdr.len) +
-				       sizeof(struct host_cmd_header));
+		length = min(length, resp_len);
 		memcpy(dest_resp, src_resp, length);
 	} else {
 		ret = le32_to_cpu(src_resp->status);
