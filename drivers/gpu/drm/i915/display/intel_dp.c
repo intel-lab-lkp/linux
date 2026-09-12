@@ -2034,7 +2034,6 @@ static u16 intel_dp_dsc_max_delta_bppx16(const struct intel_connector *connector
 	return max_bpp << 4;
 }
 
-static
 u16 intel_dp_dsc_max_sink_compressed_bppx16(const struct intel_connector *connector,
 					    enum intel_output_format output_format,
 					    int bpc)

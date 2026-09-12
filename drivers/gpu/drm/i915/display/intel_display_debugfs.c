@@ -906,7 +906,17 @@ static int i915_dsc_fec_support_show(struct seq_file *m, void *data)
 	struct intel_dp *intel_dp;
 	struct drm_modeset_acquire_ctx ctx;
 	struct intel_crtc_state *crtc_state = NULL;
+	static const struct {
+		enum intel_output_format format;
+		const char *name;
+	} dsc_formats[] = {
+		{ INTEL_OUTPUT_FORMAT_RGB, "RGB" },
+		{ INTEL_OUTPUT_FORMAT_YCBCR420, "YCBCR420" },
+		{ INTEL_OUTPUT_FORMAT_YCBCR444, "YCBCR444" },
+	};
+	u8 dsc_bpc[3] = {};
 	int ret = 0;
+	int i;
 	bool try_again = false;
 
 	drm_modeset_acquire_init(&ctx, DRM_MODESET_ACQUIRE_INTERRUPTIBLE);
@@ -955,6 +965,19 @@ static int i915_dsc_fec_support_show(struct seq_file *m, void *data)
 			   drm_dp_dsc_sink_bpp_incr(connector->dp.dsc_dpcd));
 		seq_printf(m, "DSC_Sink_Max_Slice_Count: %d\n",
 			   drm_dp_dsc_sink_max_slice_count((connector->dp.dsc_dpcd), intel_dp_is_edp(intel_dp)));
+		drm_dp_dsc_sink_supported_input_bpcs(connector->dp.dsc_dpcd, dsc_bpc);
+
+		seq_puts(m, "DSC_Sink_Max_Compressed_BPP:");
+		for (i = 0; i < ARRAY_SIZE(dsc_formats); i++) {
+			u16 max_bppx16 =
+				intel_dp_dsc_max_sink_compressed_bppx16(connector,
+									dsc_formats[i].format,
+									dsc_bpc[0]);
+
+			seq_printf(m, " %s: " FXP_Q4_FMT, dsc_formats[i].name,
+				   FXP_Q4_ARGS(max_bppx16));
+		}
+		seq_putc(m, '\n');
 		seq_printf(m, "Force_DSC_Enable: %s\n",
 			   str_yes_no(intel_dp->force_dsc_en));
 		if (!intel_dp_is_edp(intel_dp))
