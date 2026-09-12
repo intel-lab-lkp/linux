@@ -190,7 +190,7 @@ static void thc_clear_state(const struct thc_device *dev)
  * @device: The pointer of device structure
  * @mem_addr: The pointer of MMIO memory address
  *
- * Return: The thc_device pointer on success, NULL on failed.
+ * Return: The thc_device pointer on success, an ERR_PTR() on failure.
  */
 struct thc_device *thc_dev_init(struct device *device, void __iomem *mem_addr)
 {
