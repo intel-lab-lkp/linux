@@ -44,7 +44,7 @@ struct drm_scanout_buffer {
 	 * to the array of pages of the scanout buffer. The panic code will use
 	 * kmap_local_page_try_from_panic() to map one page at a time to write
 	 * all the pixels. This array shouldn't be allocated from the
-	 * get_scanoutbuffer() callback.
+	 * get_scanout_buffer() callback.
 	 * The scanout buffer should be in linear format.
 	 */
 	struct page **pages;
