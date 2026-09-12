@@ -99,7 +99,7 @@
 					reg = <0>;
 
 					pmic_glink_hs_in: endpoint {
-						remote-endpoint = <&usb_1_dwc3_hs>;
+						remote-endpoint = <&eud_con>;
 					};
 				};
 
@@ -1438,15 +1438,15 @@
 	status = "okay";
 };
 
-&usb_1_dwc3_hs {
-	remote-endpoint = <&pmic_glink_hs_in>;
-};
-
 &usb_1_hsphy {
 	vdda-pll-supply = <&vdd_a_usbhs_core>;
 	vdda18-supply = <&vdd_a_usbhs_1p8>;
 	vdda33-supply = <&vdd_a_usbhs_3p1>;
 	status = "okay";
+};
+
+&eud_con {
+	remote-endpoint = <&pmic_glink_hs_in>;
 };
 
 &venus {
