@@ -324,7 +324,7 @@ struct intel_dpll_hw_state {
  * future state which would be applied by an atomic mode set (stored in
  * a struct &intel_atomic_state).
  *
- * See also intel_reserve_shared_dplls() and intel_release_shared_dplls().
+ * See also intel_dpll_reserve() and intel_dpll_release().
  */
 struct intel_dpll_state {
 	/**
