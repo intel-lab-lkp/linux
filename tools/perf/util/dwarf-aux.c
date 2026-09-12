@@ -2180,3 +2180,60 @@ Dwarf_Die *die_deref_ptr_type(Dwarf_Die *ptr_die, int offset,
 
 	return die_get_member_type(&type_die, offset, die_mem);
 }
+
+static bool __die_find_last_member(Dwarf_Die *parent_die, Dwarf_Die *die_mem)
+{
+	Dwarf_Die tmp_die;
+	bool found = false;
+
+	if (dwarf_child(parent_die, &tmp_die))
+		return false;
+
+	do {
+		if (dwarf_tag(&tmp_die) == DW_TAG_member) {
+			memcpy(die_mem, &tmp_die, sizeof(tmp_die));
+			found = true;
+		}
+	} while (dwarf_siblingof(&tmp_die, &tmp_die) == 0);
+
+	return found;
+}
+
+/**
+ * die_has_flex_array - Check if the given type has a flex-array at the end
+ * @parent_die: a pointer to type DIE
+ *
+ * This function returns %true iff @parent_die is a struct type and has an
+ * array at the end.  Note that the flex-array has no element, it should have
+ * no size and the parent size doesn't include the flex-array.  So it should
+ * locate at the offset of the parent size.
+ *
+ * For simplicity, it assumes the parent size of aligned with the flex-array.
+ */
+bool die_has_flex_array(Dwarf_Die *parent_die)
+{
+	Dwarf_Die die_mem, type_die;
+	Dwarf_Word size, loc;
+
+	if (dwarf_tag(parent_die) != DW_TAG_structure_type)
+		return false;
+
+	if (dwarf_aggregate_size(parent_die, &size) < 0)
+		return false;
+
+	/* get the member field at the end of the struct */
+	if (!__die_find_last_member(parent_die, &die_mem))
+		return false;
+
+	/* get the type of the member */
+	if (die_get_real_type(&die_mem, &type_die) == NULL)
+		return false;
+
+	if (dwarf_tag(&type_die) == DW_TAG_array_type)
+		return die_get_data_member_location(&die_mem, &loc) == 0 && loc == size;
+
+	if (dwarf_tag(&type_die) == DW_TAG_structure_type)
+		return die_has_flex_array(&type_die);
+
+	return false;
+}
