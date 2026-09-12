@@ -463,7 +463,7 @@ void free_zone_device_folio(struct folio *folio)
 		 * Reset the refcount to 1 to prepare for handing out the page
 		 * again.
 		 */
-		folio_set_count(folio, 1);
+		folio_init_count(folio);
 		break;
 
 	case MEMORY_DEVICE_FS_DAX:
@@ -520,7 +520,7 @@ void zone_device_page_init(struct page *page, struct dev_pagemap *pgmap,
 	 * memunmap_pages().
 	 */
 	WARN_ON_ONCE(!percpu_ref_tryget_many(&page_pgmap(page)->ref, 1 << order));
-	set_page_count(page, 1);
+	init_page_count(page);
 	lock_page(page);
 
 	if (order)

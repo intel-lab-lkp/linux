@@ -214,7 +214,7 @@ static bool page_handle_poison(struct page *page, bool hugepage_or_freepage, boo
 	SetPageHWPoison(page);
 	if (release)
 		put_page(page);
-	page_ref_inc(page);
+	init_page_count(page);
 	num_poisoned_pages_inc(page_to_pfn(page));
 
 	return true;
@@ -1166,7 +1166,7 @@ static int me_huge_page(struct page_state *ps, struct page *p)
 		 */
 		folio_put(folio);
 		if (__page_handle_poison(p) > 0) {
-			page_ref_inc(p);
+			init_page_count(p);
 			res = MF_RECOVERED;
 		} else {
 			res = MF_FAILED;
@@ -2132,7 +2132,7 @@ retry:
 	if (res == MF_HUGETLB_FREED) {
 		folio_unlock(folio);
 		if (__page_handle_poison(p) > 0) {
-			page_ref_inc(p);
+			init_page_count(p);
 			res = MF_RECOVERED;
 		} else {
 			res = MF_FAILED;
@@ -2462,7 +2462,7 @@ try_again:
 	case 0:
 		if (is_free_buddy_page(p)) {
 			if (take_page_off_buddy(p)) {
-				page_ref_inc(p);
+				init_page_count(p);
 				res = MF_RECOVERED;
 			} else {
 				/* We lost the race, try again */

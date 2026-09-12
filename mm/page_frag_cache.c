@@ -143,7 +143,7 @@ refill:
 			goto refill;
 		}
 
-		/* OK, page count is 0, we can safely set it */
+		/* OK, page is frozen, we can safely set count */
 		set_page_count(page, PAGE_FRAG_CACHE_MAX_SIZE + 1);
 
 		/* reset page count bias and offset to start of new frag */

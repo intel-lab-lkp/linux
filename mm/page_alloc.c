@@ -1606,8 +1606,8 @@ void __meminit __free_pages_core(struct page *page, unsigned int order,
 
 	/*
 	 * When initializing the memmap, __init_single_page() sets the refcount
-	 * of all pages to 1 ("allocated"/"not free"). We have to set the
-	 * refcount of all involved pages to 0.
+	 * of all pages to 1 ("allocated"/"not free"). We have to freeze the
+	 * refcount of all involved pages.
 	 *
 	 * Note that hotplugged memory pages are initialized to PageOffline().
 	 * Pages freed from memblock might be marked as reserved.
@@ -1617,14 +1617,14 @@ void __meminit __free_pages_core(struct page *page, unsigned int order,
 		for (loop = 0; loop < nr_pages; loop++, p++) {
 			VM_WARN_ON_ONCE(PageReserved(p));
 			__ClearPageOffline(p);
-			set_page_count(p, 0);
+			set_page_count_frozen(p);
 		}
 
 		adjust_managed_page_count(page, nr_pages);
 	} else {
 		for (loop = 0; loop < nr_pages; loop++, p++) {
 			__ClearPageReserved(p);
-			set_page_count(p, 0);
+			set_page_count_frozen(p);
 		}
 
 		/* memblock adjusts totalram_pages() manually. */
@@ -6452,7 +6452,7 @@ void free_reserved_pages(struct page *page, unsigned int order)
 
 	for (i = 0; i < nr_pages; i++) {
 		clear_page_tag_ref(page + i);
-		set_page_count(page + i, 0);
+		set_page_count_frozen(page + i);
 		ClearPageReserved(page + i);
 	}
 	adjust_managed_page_count(page, nr_pages);
