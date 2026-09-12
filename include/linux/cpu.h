@@ -19,6 +19,7 @@
 #include <linux/cpuhotplug.h>
 #include <linux/cpuhplock.h>
 #include <linux/cpu_smt.h>
+#include <linux/cpumask.h>
 
 struct device;
 struct device_node;
@@ -232,5 +233,13 @@ static inline bool cpu_attack_vector_mitigated(enum cpu_attack_vectors v)
 int arch_prctl_get_branch_landing_pad_state(struct task_struct *t, unsigned long __user *state);
 int arch_prctl_set_branch_landing_pad_state(struct task_struct *t, unsigned long state);
 int arch_prctl_lock_branch_landing_pad_state(struct task_struct *t);
+
+#ifdef CONFIG_HOTPLUG_PARALLEL_ARCH_PRIMARY
+bool __init arch_cpuhp_primary_aware(void);
+const struct cpumask *__init arch_cpuhp_get_primary_cpus(void);
+#else
+static inline bool arch_cpuhp_primary_aware(void) { return false; }
+static inline const struct cpumask *arch_cpuhp_get_primary_cpus(void) { return cpu_none_mask; }
+#endif
 
 #endif /* _LINUX_CPU_H_ */

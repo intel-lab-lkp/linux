@@ -1837,15 +1837,19 @@ static bool __init cpuhp_bringup_cpus_parallel(unsigned int ncpus)
 	if (!__cpuhp_parallel_bringup)
 		return false;
 
-	if (cpuhp_smt_aware()) {
-		const struct cpumask *pmask = cpuhp_get_primary_thread_mask();
+	if (arch_cpuhp_primary_aware() || cpuhp_smt_aware()) {
 		static struct cpumask tmp_mask __initdata;
+		const struct cpumask *pmask;
 
 		/*
 		 * X86 requires to prevent that SMT siblings stopped while
 		 * the primary thread does a microcode update for various
 		 * reasons. Bring the primary threads up first.
 		 */
+		pmask = arch_cpuhp_primary_aware() ?
+			arch_cpuhp_get_primary_cpus() :
+			cpuhp_get_primary_thread_mask();
+
 		cpumask_and(&tmp_mask, mask, pmask);
 		cpuhp_bringup_mask(&tmp_mask, ncpus, CPUHP_BP_KICK_AP);
 		cpuhp_bringup_mask(&tmp_mask, ncpus, CPUHP_ONLINE);
