@@ -1516,6 +1516,18 @@ void *io_thread(void *arg)
 			int i;
 
 			io_count++;
+
+			/*
+			 * A flush request carries no data descriptors, so the
+			 * loop below would never call do_io() for it and the
+			 * flush would be reported as completed without the
+			 * backing file ever being synced.
+			 */
+			if (req_op(req->req) == REQ_OP_FLUSH) {
+				do_io(req, NULL);
+				continue;
+			}
+
 			for (i = 0; !req->error && i < req->desc_cnt; i++)
 				do_io(req, &(req->io_desc[i]));
 
