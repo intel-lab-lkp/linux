@@ -44,14 +44,19 @@ static struct ip_vs_dest *ip_vs_twos_schedule(struct ip_vs_service *svc,
 					      const struct sk_buff *skb,
 					      struct ip_vs_iphdr *iph)
 {
-	struct ip_vs_dest *dest, *choice1 = NULL, *choice2 = NULL;
 	int rweight1, rweight2, weight1 = -1, weight2 = -1, overhead1 = 0;
+	struct ip_vs_dest *dest, *choice1 = NULL, *choice2 = NULL;
 	int overhead2, total_weight = 0, weight;
+	unsigned int num_dests;
 
 	IP_VS_DBG(6, "%s(): Scheduling...\n", __func__);
 
+	num_dests = READ_ONCE(svc->num_dests);
+
 	/* Generate a random weight between [0,sum of all weights) */
 	list_for_each_entry_rcu(dest, &svc->destinations, n_list) {
+		if (!num_dests--)
+			break;
 		if (!(dest->flags & IP_VS_DEST_F_OVERLOAD)) {
 			weight = atomic_read(&dest->weight);
 			if (weight > 0) {
@@ -74,7 +79,10 @@ static struct ip_vs_dest *ip_vs_twos_schedule(struct ip_vs_service *svc,
 	rweight2 = get_random_u32_below(total_weight);
 
 	/* Pick two weighted servers */
+	num_dests = READ_ONCE(svc->num_dests);
 	list_for_each_entry_rcu(dest, &svc->destinations, n_list) {
+		if (!num_dests--)
+			break;
 		if (dest->flags & IP_VS_DEST_F_OVERLOAD)
 			continue;
 
