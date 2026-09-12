@@ -47,7 +47,8 @@ impl Drop for DebugfsRootGuard {
 #[pin_data]
 struct NovaCoreModule {
     // Fields are dropped in declaration order, so `_driver` is dropped first,
-    // then `_debugfs_guard` clears `DEBUGFS_ROOT`.
+    // then `_debugfs_guard` clears `DEBUGFS_ROOT`. They are initialized the
+    // other way round, see `init()`.
     #[pin]
     _driver: Registration<pci::Adapter<driver::NovaCoreDriver>>,
     _debugfs_guard: DebugfsRootGuard,
@@ -61,9 +62,14 @@ impl InPlaceModule for NovaCoreModule {
         // cannot be any concurrent access to `DEBUGFS_ROOT`.
         unsafe { DEBUGFS_ROOT = Some(dir) };
 
+        // Fields are initialized in the order written here, and an initializer that fails drops
+        // what it has already built, so the guard goes first: should registration fail, its drop
+        // still takes `DEBUGFS_ROOT` down with it. Nothing would otherwise, as statics are never
+        // dropped and the module is unloaded right away, leaving a directory behind that the
+        // next load cannot create again.
         try_pin_init!(Self {
-            _driver <- Registration::new(MODULE_NAME, module),
             _debugfs_guard: DebugfsRootGuard,
+            _driver <- Registration::new(MODULE_NAME, module),
         })
     }
 }
