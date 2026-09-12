@@ -878,6 +878,18 @@ static int do_sea(unsigned long far, unsigned long esr, struct pt_regs *regs)
 		return 0;
 	}
 
+	/*
+	 * A SEA at EL1 can happen from uaccess helpers (e.g. LDXR/STLXR
+	 * on a user page mapped as Device memory, as in the futex ops)
+	 * that carry an extable fixup. Let it return -EFAULT instead of
+	 * oopsing the kernel.
+	 */
+	if (!user_mode(regs) && fixup_exception(regs, esr)) {
+		pr_warn_ratelimited("Recovered SEA at kernel uaccess, addr=%#lx, esr=%#lx\n",
+				    far, esr);
+		return 0;
+	}
+
 	if (esr & ESR_ELx_FnV) {
 		siaddr = 0;
 	} else {
