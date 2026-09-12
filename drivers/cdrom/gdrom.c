@@ -841,6 +841,7 @@ static void remove_gdrom(struct platform_device *devptr)
 	if (gdrom_major)
 		unregister_blkdev(gdrom_major, GDROM_DEV_NAME);
 	unregister_cdrom(gd.cd_info);
+	put_disk(gd.disk);
 	kfree(gd.cd_info);
 	kfree(gd.toc);
 }
