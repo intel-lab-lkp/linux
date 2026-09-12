@@ -412,7 +412,7 @@ static void drm_pagemap_shrinker_fini(void *arg)
  * The shrinker is drm_device managed and unregisters itself when
  * the drm device is removed.
  *
- * Return: %0 on success, negative error code on failure.
+ * Return: the new shrinker on success, an ERR_PTR() on failure.
  */
 struct drm_pagemap_shrinker *drm_pagemap_shrinker_create_devm(struct drm_device *drm)
 {
