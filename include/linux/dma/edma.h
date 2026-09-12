@@ -101,6 +101,27 @@ enum dw_edma_ch_irq_mode {
 	DW_EDMA_CH_IRQ_REMOTE,
 };
 
+#define DW_EDMA_CH_CONFIG_NON_LL	BIT(0)
+#define DW_EDMA_CH_CONFIG_IRQ_MODE	BIT(1)
+
+/**
+ * struct dw_edma_chan_config - dw-edma channel configuration
+ * @flags: fields selected by DW_EDMA_CH_CONFIG_*
+ * @non_ll: use HDMA non-linked-list mode
+ * @irq_mode: interrupt routing mode
+ *
+ * Pass this structure through dma_slave_config.peripheral_config. Before
+ * synchronizing a remote-routed channel, the client must stop remote
+ * programming and own every channel affected by the hardware quiesce: the
+ * entire direction for eDMA-compatible layouts, or the individual channel for
+ * native HDMA.
+ */
+struct dw_edma_chan_config {
+	u32 flags;
+	bool non_ll;
+	enum dw_edma_ch_irq_mode irq_mode;
+};
+
 /**
  * struct dw_edma_chip - representation of DesignWare eDMA controller hardware
  * @dev:		 struct device of the eDMA controller
