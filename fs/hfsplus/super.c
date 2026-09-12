@@ -400,6 +400,11 @@ static int hfsplus_reconfigure(struct fs_context *fc)
 			pr_warn("filesystem is marked journaled, leaving read-only.\n");
 			sb->s_flags |= SB_RDONLY;
 			fc->sb_flags |= SB_RDONLY;
+		} else if (sbi->ext_tree->corrupt || sbi->cat_tree->corrupt ||
+				(sbi->attr_tree && sbi->attr_tree->corrupt)) {
+			pr_warn("a b-tree fork was corrupt at mount time, leaving read-only.\n");
+			sb->s_flags |= SB_RDONLY;
+			fc->sb_flags |= SB_RDONLY;
 		}
 	}
 	return 0;
@@ -563,6 +568,10 @@ static int hfsplus_fill_super(struct super_block *sb, struct fs_context *fc)
 		atomic_set(&sbi->attr_tree_state, HFSPLUS_VALID_ATTR_TREE);
 	}
 	sb->s_xattr = hfsplus_xattr_handlers;
+
+	if (sbi->ext_tree->corrupt || sbi->cat_tree->corrupt ||
+	    (sbi->attr_tree && sbi->attr_tree->corrupt))
+		sb->s_flags |= SB_RDONLY;
 
 	inode = hfsplus_iget(sb, HFSPLUS_ALLOC_CNID);
 	if (IS_ERR(inode)) {

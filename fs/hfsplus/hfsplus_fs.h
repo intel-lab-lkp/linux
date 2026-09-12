@@ -56,6 +56,9 @@ struct hfs_btree {
 	unsigned int max_key_len;
 	unsigned int depth;
 
+	/* fork extents past the first were found corrupt at open time */
+	bool corrupt;
+
 	struct mutex tree_lock;
 
 	unsigned int pages_per_bnode;
@@ -440,6 +443,7 @@ int hfsplus_free_fork(struct super_block *sb, u32 cnid,
 		      struct hfsplus_fork_raw *fork, int type);
 int hfsplus_file_extend(struct inode *inode, bool zeroout);
 void hfsplus_file_truncate(struct inode *inode);
+int hfsplus_check_fork(struct super_block *sb, struct hfsplus_extent *ext);
 
 /* inode.c */
 extern const struct address_space_operations hfsplus_aops;

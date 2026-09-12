@@ -95,6 +95,43 @@ static bool hfsplus_ext_fork_full(struct hfsplus_extent *ext)
 	return true;
 }
 
+/*
+ * Check a fork's eight extents for the corruption a fuzzed or damaged
+ * volume header can contain: garbage in a slot that should be unused,
+ * an extent that runs past the end of the volume, or a used extent
+ * following an unused one.
+ *
+ * Returns 0 if the fork is fully consistent, 1 if only extents after
+ * the first are affected (the b-tree can still be located, so it's
+ * safe to mount read-only), or -EIO if the first extent itself is
+ * unusable.
+ */
+int hfsplus_check_fork(struct super_block *sb, struct hfsplus_extent *ext)
+{
+	struct hfsplus_sb_info *sbi = HFSPLUS_SB(sb);
+	bool seen_hole = false;
+	int i;
+
+	for (i = 0; i < 8; i++, ext++) {
+		u32 start = be32_to_cpu(ext->start_block);
+		u32 count = be32_to_cpu(ext->block_count);
+		bool bad;
+
+		if (!count) {
+			bad = start != 0;
+			seen_hole = true;
+		} else {
+			bad = seen_hole || start + count < start ||
+			      start + count > sbi->total_blocks;
+		}
+
+		if (bad)
+			return i ? 1 : -EIO;
+	}
+
+	return 0;
+}
+
 static int __hfsplus_ext_write_extent(struct inode *inode,
 		struct hfs_find_data *fd)
 {

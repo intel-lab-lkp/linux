@@ -293,6 +293,18 @@ struct hfs_btree *hfs_btree_open(struct super_block *sb, u32 id)
 		goto free_inode;
 	}
 
+	switch (hfsplus_check_fork(sb, HFSPLUS_I(tree->inode)->first_extents)) {
+	case -EIO:
+		pr_err("%s (cnid 0x%x) fork's first extent is corrupt\n",
+			hfs_btree_name(id), id);
+		goto free_inode;
+	case 1:
+		pr_warn("%s (cnid 0x%x) fork has corrupt extents, forcing read-only.\n",
+			hfs_btree_name(id), id);
+		tree->corrupt = true;
+		break;
+	}
+
 	mapping = tree->inode->i_mapping;
 	page = read_mapping_page(mapping, 0, NULL);
 	if (IS_ERR(page))
