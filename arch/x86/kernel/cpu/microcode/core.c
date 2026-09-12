@@ -869,6 +869,24 @@ static int mc_cpu_down_prep(unsigned int cpu)
 	return 0;
 }
 
+#ifdef CONFIG_HOTPLUG_PARALLEL_ARCH_PRIMARY
+
+/*
+ * Queried by the parallel bringup code to determine whether x86 provides a
+ * custom primary CPU mask for early loading.
+ */
+bool __init arch_cpuhp_primary_aware(void)
+{
+	return __max_threads_per_core > 1;
+}
+
+const struct cpumask *__init arch_cpuhp_get_primary_cpus(void)
+{
+	return cpu_primary_thread_mask;
+}
+
+#endif /* CONFIG_HOTPLUG_PARALLEL_ARCH_PRIMARY */
+
 static struct attribute *cpu_root_microcode_attrs[] = {
 #ifdef CONFIG_MICROCODE_LATE_LOADING
 	&dev_attr_reload.attr,
