@@ -555,7 +555,7 @@ static int aie2_init_exec_cu_req(struct amdxdna_gem_obj *cmd_bo, void *req,
 	void *cmd;
 
 	cmd = amdxdna_cmd_get_payload(cmd_bo, &cmd_len);
-	if (cmd_len > sizeof(cu_req->payload))
+	if (!cmd || cmd_len > sizeof(cu_req->payload))
 		return -EINVAL;
 
 	cu_req->cu_idx = amdxdna_cmd_get_cu_idx(cmd_bo);
@@ -577,7 +577,8 @@ static int aie2_init_exec_dpu_req(struct amdxdna_gem_obj *cmd_bo, void *req,
 	u32 cmd_len;
 
 	sn = amdxdna_cmd_get_payload(cmd_bo, &cmd_len);
-	if (cmd_len - sizeof(*sn) > sizeof(dpu_req->payload))
+	if (!sn || cmd_len < sizeof(*sn) ||
+	    cmd_len - sizeof(*sn) > sizeof(dpu_req->payload))
 		return -EINVAL;
 
 	dpu_req->cu_idx = amdxdna_cmd_get_cu_idx(cmd_bo);
