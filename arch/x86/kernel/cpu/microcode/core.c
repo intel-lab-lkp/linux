@@ -906,14 +906,23 @@ static int mc_cpu_down_prep(unsigned int cpu)
 /*
  * Queried by the parallel bringup code to determine whether x86 provides a
  * custom primary CPU mask for early loading.
+ *
+ * Uniform loading scope is Intel-specific, so let the vendor code determine the
+ * primary CPU selection.
  */
 bool __init arch_cpuhp_primary_aware(void)
 {
+	if (x86_cpuid_vendor() == X86_VENDOR_INTEL)
+		return intel_primary_aware();
+
 	return __max_threads_per_core > 1;
 }
 
 const struct cpumask *__init arch_cpuhp_get_primary_cpus(void)
 {
+	if (x86_cpuid_vendor() == X86_VENDOR_INTEL)
+		return intel_get_primary_cpus();
+
 	return cpu_primary_thread_mask;
 }
 

@@ -989,6 +989,76 @@ static __init bool staging_available(void)
 	return !!(val & MCU_STAGING);
 }
 
+bool __init intel_primary_aware(void)
+{
+	if (!microcode_intel_ops.use_uniform)
+		return __max_threads_per_core > 1;
+
+	switch (microcode_intel_ops.uniform_scope) {
+	case UNIFORM_SYS:
+		/*
+		 * The boot CPU performs the update for the entire system. But,
+		 * returning false would fall back to the SMT primary mask.
+		 * Return true to indicate the primary CPU clearly.
+		 */
+		return true;
+	case UNIFORM_PKG:
+		/* One primary core per package participates. */
+		return true;
+	case UNIFORM_DEFAULT:
+	case UNIFORM_CORE:
+		/*
+		 * Fallback to the legacy per-core loading, where the primary
+		 * CPU distinction matters only when SMT is on.
+		 */
+		break;
+	default:
+		/* Unknown scopes fall back to the legacy per-core scope. */
+		WARN_ON_ONCE(1);
+	}
+
+	return __max_threads_per_core > 1;
+}
+
+static struct cpumask primary_cpus __initdata;
+
+static void __init set_primary_cpus(void)
+{
+	if (!microcode_intel_ops.use_uniform) {
+		cpumask_copy(&primary_cpus, cpu_primary_thread_mask);
+		return;
+	}
+
+	switch (microcode_intel_ops.uniform_scope) {
+	case UNIFORM_SYS:
+		/*
+		 * CPU0 is guaranteed to be online and acts as the system
+		 * primary.
+		 */
+		cpumask_set_cpu(0, &primary_cpus);
+		break;
+	case UNIFORM_PKG:
+		/* One CPU per package is sufficient. */
+		cpumask_and(&primary_cpus, cpu_primary_core_mask, cpu_primary_thread_mask);
+		break;
+	case UNIFORM_DEFAULT:
+	case UNIFORM_CORE:
+	default:
+		cpumask_copy(&primary_cpus, cpu_primary_thread_mask);
+	}
+}
+
+/*
+ * The bringup code may query the mask more than once. Compute it on first use.
+ */
+const struct cpumask *__init intel_get_primary_cpus(void)
+{
+	if (cpumask_empty(&primary_cpus))
+		set_primary_cpus();
+
+	return &primary_cpus;
+}
+
 struct microcode_ops * __init init_intel_microcode(void)
 {
 	struct cpuinfo_x86 *c = &boot_cpu_data;

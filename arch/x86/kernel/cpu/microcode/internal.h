@@ -128,11 +128,15 @@ static inline void exit_amd_microcode(void) { }
 void load_ucode_intel_bsp(struct early_load_data *ed);
 void load_ucode_intel_ap(void);
 void reload_ucode_intel(void);
+bool intel_primary_aware(void);
+const struct cpumask *intel_get_primary_cpus(void);
 struct microcode_ops *init_intel_microcode(void);
 #else /* CONFIG_CPU_SUP_INTEL */
 static inline void load_ucode_intel_bsp(struct early_load_data *ed) { }
 static inline void load_ucode_intel_ap(void) { }
 static inline void reload_ucode_intel(void) { }
+static inline bool intel_primary_aware(void) { return false; }
+static inline const struct cpumask *intel_get_primary_cpus(void) { return cpu_none_mask; }
 static inline struct microcode_ops *init_intel_microcode(void) { return NULL; }
 #endif  /* !CONFIG_CPU_SUP_INTEL */
 
