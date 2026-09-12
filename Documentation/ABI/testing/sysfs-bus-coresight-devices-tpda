@@ -1,34 +1,34 @@
 What:		/sys/bus/coresight/devices/<tpda-name>/trig_async_enable
 Date:		December 2025
-KernelVersion:	6.20
+KernelVersion:	7.0
 Contact:	Jinlong Mao <jinlong.mao@oss.qualcomm.com>, Tao Zhang <tao.zhang@oss.qualcomm.com>, Jie Gan <jie.gan@oss.qualcomm.com>
 Description:
 		(RW) Enable/disable cross trigger synchronization sequence interface.
 
 What:		/sys/bus/coresight/devices/<tpda-name>/trig_flag_ts_enable
 Date:		December 2025
-KernelVersion:	6.20
+KernelVersion:	7.0
 Contact:	Jinlong Mao <jinlong.mao@oss.qualcomm.com>, Tao Zhang <tao.zhang@oss.qualcomm.com>, Jie Gan <jie.gan@oss.qualcomm.com>
 Description:
 		(RW) Enable/disable cross trigger FLAG packet request interface.
 
 What:		/sys/bus/coresight/devices/<tpda-name>/trig_freq_enable
 Date:		December 2025
-KernelVersion:	6.20
+KernelVersion:	7.0
 Contact:	Jinlong Mao <jinlong.mao@oss.qualcomm.com>, Tao Zhang <tao.zhang@oss.qualcomm.com>, Jie Gan <jie.gan@oss.qualcomm.com>
 Description:
 		(RW) Enable/disable cross trigger FREQ packet request interface.
 
 What:		/sys/bus/coresight/devices/<tpda-name>/freq_ts_enable
 Date:		December 2025
-KernelVersion:	6.20
+KernelVersion:	7.0
 Contact:	Jinlong Mao <jinlong.mao@oss.qualcomm.com>, Tao Zhang <tao.zhang@oss.qualcomm.com>, Jie Gan <jie.gan@oss.qualcomm.com>
 Description:
 		(RW) Enable/disable the timestamp for all FREQ packets.
 
 What:		/sys/bus/coresight/devices/<tpda-name>/cmbchan_mode
 Date:		December 2025
-KernelVersion:	6.20
+KernelVersion:	7.0
 Contact:	Jinlong Mao <jinlong.mao@oss.qualcomm.com>, Tao Zhang <tao.zhang@oss.qualcomm.com>, Jie Gan <jie.gan@oss.qualcomm.com>
 Description:
 		(RW) Configure the CMB/MCMB channel mode for all enabled ports.
@@ -36,7 +36,7 @@ Description:
 
 What:		/sys/bus/coresight/devices/<tpda-name>/global_flush_req
 Date:		December 2025
-KernelVersion:	6.20
+KernelVersion:	7.0
 Contact:	Jinlong Mao <jinlong.mao@oss.qualcomm.com>, Tao Zhang <tao.zhang@oss.qualcomm.com>, Jie Gan <jie.gan@oss.qualcomm.com>
 Description:
 		(RW) Set global (all ports) flush request bit. The bit remains set until a
@@ -44,7 +44,7 @@ Description:
 
 What:		/sys/bus/coresight/devices/<tpda-name>/syncr_mode
 Date:		December 2025
-KernelVersion:	6.20
+KernelVersion:	7.0
 Contact:	Jinlong Mao <jinlong.mao@oss.qualcomm.com>, Tao Zhang <tao.zhang@oss.qualcomm.com>, Jie Gan <jie.gan@oss.qualcomm.com>
 Description:
 		(RW) Set mode the of the syncr counter.
@@ -54,7 +54,7 @@ Description:
 
 What:		/sys/bus/coresight/devices/<tpda-name>/syncr_count
 Date:		December 2025
-KernelVersion:	6.20
+KernelVersion:	7.0
 Contact:	Jinlong Mao <jinlong.mao@oss.qualcomm.com>, Tao Zhang <tao.zhang@oss.qualcomm.com>, Jie Gan <jie.gan@oss.qualcomm.com>
 Description:
 		(RW) Set value the of the syncr counter.
@@ -62,7 +62,7 @@ Description:
 
 What:		/sys/bus/coresight/devices/<tpda-name>/port_flush_req
 Date:		December 2025
-KernelVersion:	6.20
+KernelVersion:	7.0
 Contact:	Jinlong Mao <jinlong.mao@oss.qualcomm.com>, Tao Zhang <tao.zhang@oss.qualcomm.com>, Jie Gan <jie.gan@oss.qualcomm.com>
 Description:
 		(RW) Configure the bit i to requests a flush operation of port i on the TPDA.
