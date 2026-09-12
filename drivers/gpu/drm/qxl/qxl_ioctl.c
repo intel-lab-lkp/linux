@@ -227,8 +227,25 @@ static int qxl_process_single_command(struct qxl_device *qdev,
 				goto out_free_bos;
 			reloc_info[i].dst_offset = reloc.dst_offset;
 		} else {
+			if (reloc.dst_offset < sizeof(union qxl_release_info) ||
+			    reloc.dst_offset >= sizeof(union qxl_release_info) +
+						cmd->command_size) {
+				ret = -EINVAL;
+				goto out_free_bos;
+			}
 			reloc_info[i].dst_bo = cmd_bo;
 			reloc_info[i].dst_offset = reloc.dst_offset + release->release_offset;
+		}
+
+		{
+			size_t write_size = reloc.reloc_type == QXL_RELOC_TYPE_BO ?
+					    sizeof(uint64_t) : sizeof(uint32_t);
+
+			if (reloc_info[i].dst_offset + write_size >
+			    reloc_info[i].dst_bo->tbo.base.size) {
+				ret = -EINVAL;
+				goto out_free_bos;
+			}
 		}
 
 		/* reserve and validate the reloc dst bo */
