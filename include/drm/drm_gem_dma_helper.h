@@ -52,7 +52,7 @@ extern const struct vm_operations_struct drm_gem_dma_vm_ops;
  * drm_gem_dma_object_free - GEM object function for drm_gem_dma_free()
  * @obj: GEM object to free
  *
- * This function wraps drm_gem_dma_free_object(). Drivers that employ the DMA helpers
+ * This function wraps drm_gem_dma_free(). Drivers that employ the DMA helpers
  * should use it as their &drm_gem_object_funcs.free handler.
  */
 static inline void drm_gem_dma_object_free(struct drm_gem_object *obj)
@@ -87,7 +87,8 @@ static inline void drm_gem_dma_object_print_info(struct drm_printer *p, unsigned
  * use it as their &drm_gem_object_funcs.get_sg_table handler.
  *
  * Returns:
- * A pointer to the scatter/gather table of pinned pages or NULL on failure.
+ * A pointer to the scatter/gather table of pinned pages on success, or
+ * an ERR_PTR() on failure.
  */
 static inline struct sg_table *drm_gem_dma_object_get_sg_table(struct drm_gem_object *obj)
 {
