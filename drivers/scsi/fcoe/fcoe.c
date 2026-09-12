@@ -375,7 +375,7 @@ static int fcoe_interface_setup(struct fcoe_interface *fcoe,
  * @netdev: The net device to create the FCoE interface on
  * @fip_mode: The mode to use for FIP
  *
- * Returns: pointer to a struct fcoe_interface or NULL on error
+ * Returns: pointer to a struct fcoe_interface or an ERR_PTR() on error
  */
 static struct fcoe_interface *fcoe_interface_create(struct net_device *netdev,
 						    enum fip_mode fip_mode)
