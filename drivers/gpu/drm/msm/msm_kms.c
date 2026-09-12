@@ -11,8 +11,10 @@
 #include <uapi/linux/sched/types.h>
 
 #include <drm/drm_drv.h>
+#include <drm/drm_framebuffer.h>
 #include <drm/drm_mode_config.h>
 #include <drm/drm_vblank.h>
+#include <drm/drm_vblank_work.h>
 #include <drm/clients/drm_client_setup.h>
 
 #include "disp/msm_disp_snapshot.h"
@@ -163,6 +165,119 @@ void msm_crtc_disable_vblank(struct drm_crtc *crtc)
 		return;
 	drm_dbg_vbl(dev, "crtc=%u\n", crtc->base.id);
 	vblank_ctrl_queue_work(priv, crtc, false);
+}
+
+struct msm_fb_unpin_work {
+	struct drm_vblank_work base;
+	struct list_head node;
+	struct msm_kms_fb_unpin *pending;
+	struct drm_framebuffer *fb;
+};
+
+static void msm_kms_fb_unpin_release(struct msm_fb_unpin_work *unpin)
+{
+	msm_framebuffer_unpin(unpin->fb);
+	drm_framebuffer_put(unpin->fb);
+	kfree(unpin);
+}
+
+static void msm_kms_fb_unpin_work(struct kthread_work *work)
+{
+	struct msm_fb_unpin_work *unpin =
+		container_of(to_drm_vblank_work(work), struct msm_fb_unpin_work,
+			     base);
+	struct msm_kms_fb_unpin *pending = unpin->pending;
+
+	spin_lock(&pending->lock);
+	if (list_empty(&unpin->node)) {
+		spin_unlock(&pending->lock);
+		return;
+	}
+	list_del_init(&unpin->node);
+	spin_unlock(&pending->lock);
+
+	msm_kms_fb_unpin_release(unpin);
+}
+
+void msm_crtc_vblank_off(struct drm_crtc *crtc)
+{
+	struct msm_drm_private *priv = crtc->dev->dev_private;
+	struct msm_kms *kms = priv->kms;
+	unsigned int idx = drm_crtc_index(crtc);
+	struct msm_kms_fb_unpin *pending;
+	struct msm_fb_unpin_work *unpin;
+
+	if (!kms || idx >= ARRAY_SIZE(kms->fb_unpin))
+		goto out;
+
+	pending = &kms->fb_unpin[idx];
+
+	/*
+	 * The crtc stops fetching here, and with it the vblanks the pending
+	 * works are waiting for, so release the framebuffers directly.
+	 */
+	for (;;) {
+		spin_lock(&pending->lock);
+		unpin = list_first_entry_or_null(&pending->fbs, typeof(*unpin),
+						 node);
+		if (unpin)
+			list_del_init(&unpin->node);
+		spin_unlock(&pending->lock);
+
+		if (!unpin)
+			break;
+
+		drm_vblank_work_cancel_sync(&unpin->base);
+		msm_kms_fb_unpin_release(unpin);
+	}
+
+out:
+	drm_crtc_vblank_off(crtc);
+}
+
+bool msm_crtc_queue_fb_unpin(struct drm_crtc *crtc, struct drm_framebuffer *fb)
+{
+	struct msm_drm_private *priv = crtc->dev->dev_private;
+	struct msm_kms *kms = priv->kms;
+	unsigned int idx = drm_crtc_index(crtc);
+	struct msm_kms_fb_unpin *pending;
+	struct msm_fb_unpin_work *unpin;
+
+	if (!kms || idx >= ARRAY_SIZE(kms->fb_unpin))
+		return false;
+
+	if (!crtc->state->active)
+		return false;
+
+	pending = &kms->fb_unpin[idx];
+
+	unpin = kzalloc_obj(*unpin);
+	if (!unpin)
+		return false;
+
+	unpin->fb = fb;
+	unpin->pending = pending;
+	drm_framebuffer_get(fb);
+
+	drm_vblank_work_init(&unpin->base, crtc, msm_kms_fb_unpin_work);
+
+	spin_lock(&pending->lock);
+	list_add_tail(&unpin->node, &pending->fbs);
+	spin_unlock(&pending->lock);
+
+	if (drm_vblank_work_schedule(&unpin->base,
+				     drm_crtc_vblank_count(crtc) + 1, true) != 1) {
+		spin_lock(&pending->lock);
+		list_del_init(&unpin->node);
+		spin_unlock(&pending->lock);
+
+		drm_framebuffer_put(fb);
+		kfree(unpin);
+
+		return false;
+	}
+
+	return true;
 }
 
 static int msm_kms_fault_handler(void *arg, unsigned long iova, int flags, void *data)
