@@ -75,10 +75,23 @@ bool arch_match_cpu_phys_id(int cpu, u64 phys_id)
 	return phys_id == (u64)cpuid_to_apicid[cpu];
 }
 
+static unsigned int __max_cores_per_package __ro_after_init = 1;
+
 static void cpu_mark_primary_thread(unsigned int cpu, unsigned int apicid)
 {
 	if (!(apicid & (__max_threads_per_core - 1)))
 		cpumask_set_cpu(cpu, &__cpu_primary_thread_mask);
+}
+
+/*
+ * Select core 0 of every package and all SMT threads of that core so that the
+ * mask stays at core granularity.
+ */
+static void cpu_mark_primary_core(unsigned int cpu, unsigned int apicid)
+{
+	if (!((apicid >> get_count_order(__max_threads_per_core)) &
+	      (__max_cores_per_package - 1)))
+		cpumask_set_cpu(cpu, &__cpu_primary_core_mask);
 }
 
 /*
@@ -505,13 +518,16 @@ void __init topology_init_possible_cpus(void)
 	pr_info("Max. logical dies:     %3u\n", cntb);
 	pr_info("Max. dies per package: %3u\n", __max_dies_per_package);
 
-	cnta = domain_weight(TOPO_CORE_DOMAIN);
-	cntb = domain_weight(TOPO_SMT_DOMAIN);
+	cntb = domain_weight(TOPO_CORE_DOMAIN);
+	__max_cores_per_package = 1U << (get_count_order(cntb) - get_count_order(cnta));
+	pr_info("Max. cores per package:%3u\n", __max_cores_per_package);
+
+	cnta = domain_weight(TOPO_SMT_DOMAIN);
 	/*
 	 * Can't use order delta here as order(cnta) can be equal
 	 * order(cntb) even if cnta != cntb.
 	 */
-	__max_threads_per_core = DIV_ROUND_UP(cntb, cnta);
+	__max_threads_per_core = DIV_ROUND_UP(cnta, cntb);
 	pr_info("Max. threads per core: %3u\n", __max_threads_per_core);
 
 	firstid = find_first_bit(apic_maps[TOPO_SMT_DOMAIN].map, MAX_LOCAL_APIC);
@@ -545,6 +561,7 @@ void __init topology_init_possible_cpus(void)
 			continue;
 
 		cpu_mark_primary_thread(cpu, apicid);
+		cpu_mark_primary_core(cpu, apicid);
 		set_cpu_present(cpu, test_bit(apicid, phys_cpu_present_map));
 	}
 }

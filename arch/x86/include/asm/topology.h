@@ -234,6 +234,9 @@ static inline unsigned int topology_amd_nodes_per_pkg(void) { return 1; }
 extern struct cpumask __cpu_primary_thread_mask;
 #define cpu_primary_thread_mask ((const struct cpumask *)&__cpu_primary_thread_mask)
 
+extern struct cpumask __cpu_primary_core_mask;
+#define cpu_primary_core_mask ((const struct cpumask *)&__cpu_primary_core_mask)
+
 /**
  * topology_is_primary_thread - Check whether CPU is the primary SMT thread
  * @cpu:	CPU to check

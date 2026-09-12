@@ -20,6 +20,15 @@ EXPORT_SYMBOL_GPL(__amd_nodes_per_pkg);
 /* CPUs which are the primary SMT threads */
 struct cpumask __cpu_primary_thread_mask __read_mostly;
 
+/*
+ * CPUs belonging to the primary core of each package
+ *
+ * To preserve core-domain granularity and to avoid the next-level primary
+ * details that cpu_primary_thread_mask can present, the mask includes all
+ * threads of each primary core.
+ */
+struct cpumask __cpu_primary_core_mask __read_mostly;
+
 void topology_set_dom(struct topo_scan *tscan, enum x86_topology_domains dom,
 		      unsigned int shift, unsigned int ncpus)
 {

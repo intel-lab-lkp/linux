@@ -605,7 +605,6 @@ static int do_stage(u64 mmio_pa)
 
 static void stage_microcode(void)
 {
-	unsigned int pkg_id = UINT_MAX;
 	int cpu, err;
 	u64 mmio_pa;
 
@@ -619,15 +618,10 @@ static void stage_microcode(void)
 
 	/*
 	 * The MMIO address is unique per package, and all the SMT
-	 * primary threads are online here. Find each MMIO space by
-	 * their package IDs to avoid duplicate staging.
+	 * primary threads are online here. Find unique MMIO space to
+	 * avoid duplicate staging.
 	 */
-	for_each_cpu(cpu, cpu_primary_thread_mask) {
-		if (topology_logical_package_id(cpu) == pkg_id)
-			continue;
-
-		pkg_id = topology_logical_package_id(cpu);
-
+	for_each_cpu_and(cpu, cpu_primary_core_mask, cpu_primary_thread_mask) {
 		err = rdmsrq_on_cpu(cpu, MSR_IA32_MCU_STAGING_MBOX_ADDR, &mmio_pa);
 		if (WARN_ON_ONCE(err))
 			return;
@@ -635,7 +629,7 @@ static void stage_microcode(void)
 		err = do_stage(mmio_pa);
 		if (err) {
 			pr_err("Error: staging failed (%d) for CPU%d at package %u.\n",
-			       err, cpu, pkg_id);
+			       err, cpu, topology_logical_package_id(cpu));
 			return;
 		}
 	}
