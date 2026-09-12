@@ -171,6 +171,7 @@ int amdxdna_cmd_set_error(struct amdxdna_gem_obj *abo,
 	struct amdxdna_client *client = job->hwctx->client;
 	struct amdxdna_cmd *cmd = amdxdna_gem_vmap(abo);
 	struct amdxdna_cmd_chain *cc = NULL;
+	size_t data_size;
 
 	if (!cmd)
 		return -ENOMEM;
@@ -192,9 +193,16 @@ int amdxdna_cmd_set_error(struct amdxdna_gem_obj *abo,
 			return -ENOMEM;
 	}
 
-	memset(cmd->data, 0xff, abo->mem.size - sizeof(*cmd));
+	if (abo->mem.size < sizeof(*cmd)) {
+		if (cc)
+			amdxdna_gem_put_obj(abo);
+		return -EINVAL;
+	}
+	data_size = abo->mem.size - sizeof(*cmd);
+
+	memset(cmd->data, 0xff, data_size);
 	if (err_data)
-		memcpy(cmd->data, err_data, min(size, abo->mem.size - sizeof(*cmd)));
+		memcpy(cmd->data, err_data, min(size, data_size));
 
 	if (cc)
 		amdxdna_gem_put_obj(abo);
