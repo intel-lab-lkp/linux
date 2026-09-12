@@ -147,10 +147,25 @@ static int mm81x_yaps_read_pkt(struct mm81x_yaps *yaps, struct sk_buff *skb)
 
 	__skb_queue_head_init(&skbq);
 
+	if (skb->len < sizeof(*hdr)) {
+		dev_err(mors->dev, "packet length error [%u < %zu]", skb->len,
+			sizeof(*hdr));
+		ret = -EIO;
+		goto exit_return_page;
+	}
+
 	hdr = (struct mm81x_skb_hdr *)skb->data;
 	if (hdr->sync != MM81X_SKB_HEADER_SYNC) {
 		dev_err(mors->dev, "sync value error [0xAA:%d], hdr.len %d",
 			hdr->sync, hdr->len);
+		ret = -EIO;
+		goto exit_return_page;
+	}
+
+	skb_len = sizeof(*hdr) + hdr->offset + le16_to_cpu(hdr->len);
+	if (skb_len > skb->len) {
+		dev_err(mors->dev, "hdr length error [%d > %u]", skb_len,
+			skb->len);
 		ret = -EIO;
 		goto exit_return_page;
 	}
@@ -185,7 +200,6 @@ static int mm81x_yaps_read_pkt(struct mm81x_yaps *yaps, struct sk_buff *skb)
 		goto exit_return_page;
 	}
 
-	skb_len = sizeof(*hdr) + hdr->offset + le16_to_cpu(hdr->len);
 	skb_bytes_remaining = mm81x_skbq_space(mq);
 
 	if (skb_len > skb_bytes_remaining) {
