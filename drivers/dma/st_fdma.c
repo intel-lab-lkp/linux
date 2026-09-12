@@ -846,8 +846,13 @@ err:
 static void st_fdma_remove(struct platform_device *pdev)
 {
 	struct st_fdma_dev *fdev = platform_get_drvdata(pdev);
+	int i;
 
 	devm_free_irq(&pdev->dev, fdev->irq, fdev);
+
+	for (i = 0; i < fdev->nr_channels; i++)
+		tasklet_kill(&fdev->chans[i].vchan.task);
+
 	st_slim_rproc_put(fdev->slim_rproc);
 	of_dma_controller_free(pdev->dev.of_node);
 }
