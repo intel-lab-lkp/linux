@@ -248,8 +248,15 @@ static int __add_member_cb(Dwarf_Die *die, void *arg)
 	else
 		die_mem = member_type;
 
-	if (dwarf_aggregate_size(&die_mem, &size) < 0)
-		size = 0;
+	if (dwarf_aggregate_size(&die_mem, &size) < 0) {
+		if (dwarf_tag(&die_mem) == DW_TAG_array_type) { /* flex-array? */
+			__die_get_real_type(&die_mem, &die_mem);
+			if (dwarf_aggregate_size(&die_mem, &size) < 0)
+				size = 0;
+		} else {
+			size = 0;
+		}
+	}
 
 	if (dwarf_attr_integrate(die, DW_AT_data_member_location, &attr)) {
 		if (dwarf_formudata(&attr, &loc) != 0) {
@@ -399,6 +406,7 @@ static struct annotated_data_type *dso__findnew_data_type(struct dso *dso,
 	result->self.type_name = type_name;
 	result->self.size = size;
 	INIT_LIST_HEAD(&result->self.children);
+	result->flex_array = die_has_flex_array(type_die);
 
 	if (symbol_conf.annotate_data_member)
 		add_member_types(result, type_die);
@@ -559,7 +567,7 @@ static enum type_match_result check_variable(struct data_loc_info *dloc,
 		return PERF_TMR_NO_SIZE;
 
 	/* Minimal sanity check */
-	if ((unsigned)offset >= size)
+	if ((unsigned)offset >= size && !die_has_flex_array(&sized_type))
 		return PERF_TMR_BAD_OFFSET;
 
 	return PERF_TMR_OK;
@@ -1168,7 +1176,7 @@ again:
 
 		/* Get the size of the actual type */
 		if (dwarf_aggregate_size(&sized_type, &size) < 0 ||
-		    (unsigned)dloc->type_offset >= size)
+		    ((unsigned)dloc->type_offset >= size && !die_has_flex_array(&sized_type)))
 			return PERF_TMR_BAD_OFFSET;
 
 		return PERF_TMR_OK;
@@ -1192,7 +1200,7 @@ again:
 
 		/* Get the size of the actual type */
 		if (dwarf_aggregate_size(type_die, &size) < 0 ||
-		    (unsigned)dloc->type_offset >= size)
+		    ((unsigned)dloc->type_offset >= size && !die_has_flex_array(type_die)))
 			return PERF_TMR_BAD_OFFSET;
 
 		return PERF_TMR_OK;
@@ -1211,7 +1219,7 @@ again:
 
 		/* Get the size of the actual type */
 		if (dwarf_aggregate_size(type_die, &size) < 0 ||
-		    (unsigned)dloc->type_offset >= size)
+		    ((unsigned)dloc->type_offset >= size && !die_has_flex_array(type_die)))
 			return PERF_TMR_BAIL_OUT;
 
 		return PERF_TMR_OK;
@@ -1839,7 +1847,7 @@ int annotated_data_type__update_samples(struct annotated_data_type *adt,
 			return -1;
 	}
 
-	if (offset < 0 || offset >= adt->self.size)
+	if (offset < 0 || (offset >= adt->self.size && !adt->flex_array))
 		return -1;
 
 	h = &adt->histograms[evsel->core.idx];
