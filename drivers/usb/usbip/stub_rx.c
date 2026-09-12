@@ -534,10 +534,10 @@ static void stub_recv_cmd_submit(struct stub_device *sdev,
 	}
 
 	/* allocate urb array */
-	priv->num_urbs = num_urbs;
 	priv->urbs = kmalloc_objs(*priv->urbs, num_urbs);
 	if (!priv->urbs)
 		goto err_urbs;
+	priv->num_urbs = num_urbs;
 
 	/* setup a urb */
 	if (support_sg) {
@@ -641,6 +641,8 @@ static void stub_recv_cmd_submit(struct stub_device *sdev,
 
 err_urb:
 	kfree(priv->urbs);
+	priv->urbs = NULL;
+	priv->num_urbs = 0;
 err_urbs:
 	kfree(buffer);
 	sgl_free(sgl);
