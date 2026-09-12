@@ -12,10 +12,11 @@ use kernel::{
     alloc::{self, AllocError},
     error::to_result,
     prelude::*,
-    transmute::AsBytes,
     types::Opaque,
     ThisModule,
 };
+
+use zerocopy::{Immutable, IntoBytes};
 
 use core::{
     mem::ManuallyDrop,
@@ -84,14 +85,22 @@ impl GenlMsg {
     #[inline]
     fn put<T>(&mut self, attrtype: c_int, value: &T) -> Result
     where
-        T: ?Sized + AsBytes,
+        T: ?Sized + IntoBytes + Immutable,
     {
         let skb = self.skb.skb.as_ptr();
-        let len = size_of_val(value);
-        let ptr = core::ptr::from_ref(value).cast::<c_void>();
-        // SAFETY: `skb` is valid by `NetlinkSkBuff` type invariants, and the provided value is
-        // readable and initialized for its `size_of` bytes.
-        to_result(unsafe { bindings::nla_put(skb, attrtype, len as c_int, ptr) })
+        let bytes = value.as_bytes();
+        // `nla_put()` takes attrlen as a plain `c_int`. If `bytes.len()`
+        // doesn't fit, an `as` cast would wrap around a negative value.
+        // Which then, would feed a huge unsigned length to `__nla_reserve()`
+        // and `skb_put()` causing it to panic via `skb_over_panic()`. So,
+        // the following check will reject it instead.
+        let len = c_int::try_from(bytes.len()).map_err(|_| EMSGSIZE)?;
+        let ptr = bytes.as_ptr().cast::<c_void>();
+        // SAFETY: `skb` is valid as per `NetlinkSkBuff` type invariants.
+        // `bytes` is a valid Rust slice, so `ptr` is readable for `len`
+        // bytes, and `T: Immutable` guarantees nothing can mutate `*value`
+        // while `nla_put()` copies it.
+        to_result(unsafe { bindings::nla_put(skb, attrtype, len, ptr) })
     }
 
     /// Puts a `u32` attribute into the message.
