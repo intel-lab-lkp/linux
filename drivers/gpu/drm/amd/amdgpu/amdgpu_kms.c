@@ -900,8 +900,7 @@ int amdgpu_info_ioctl(struct drm_device *dev, void *data, struct drm_file *filp)
 		if (info->read_mmr_reg.count > 128)
 			return -EINVAL;
 
-		regs = kmalloc_array(info->read_mmr_reg.count, sizeof(*regs),
-				     GFP_KERNEL);
+		regs = kmalloc_objs(*regs, info->read_mmr_reg.count);
 		if (!regs)
 			return -ENOMEM;
 
