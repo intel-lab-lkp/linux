@@ -3065,9 +3065,12 @@ static int dbFindLeaf(dmtree_t *tp, int l2nb, int *leafidx, bool is_ctl)
 		}
 
 		/* better have found something since the higher
-		 * levels of the tree said it was here.
+		 * levels of the tree said it was here. A corrupted tree
+		 * can claim free space at a level that no child actually
+		 * provides.
 		 */
-		assert(n < 4);
+		if (n == 4)
+			return -ENOSPC;
 	}
 	if (le32_to_cpu(tp->dmt_leafidx) >= max_idx)
 		return -ENOSPC;
