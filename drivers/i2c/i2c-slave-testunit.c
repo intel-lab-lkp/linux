@@ -265,7 +265,7 @@ static void i2c_slave_testunit_remove(struct i2c_client *client)
 {
 	struct testunit_data *tu = i2c_get_clientdata(client);
 
-	cancel_delayed_work_sync(&tu->worker);
+	disable_delayed_work_sync(&tu->worker);
 	i2c_slave_unregister(client);
 }
 
