@@ -20,6 +20,9 @@ brightness (PWM) and duration must be written to hw_pattern.
 - Min pattern duration: 22 ms
 - Max pattern duration: 5610 ms
 
+If the device tree sets max-brightness, that value replaces 255 as the
+upper limit, and a step equal to it drives the channel at full scale.
+
 The format of the hardware pattern values should be:
 "brightness duration brightness duration ..."
 
