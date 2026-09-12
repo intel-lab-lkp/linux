@@ -968,7 +968,8 @@ static void task_group_path(struct task_group *tg, char *path, int plen)
 #endif
 
 static void
-print_task(struct seq_file *m, struct rq *rq, struct task_struct *p)
+print_task(struct seq_file *m, struct rq *rq, struct task_struct *p,
+	   bool show_cgroup_path)
 {
 	if (task_current(rq, p))
 		SEQ_printf(m, ">R");
@@ -996,13 +997,15 @@ print_task(struct seq_file *m, struct rq *rq, struct task_struct *p)
 	SEQ_printf(m, "   %d      %d", task_node(p), task_numa_group_id(p));
 #endif
 #ifdef CONFIG_CGROUP_SCHED
-	SEQ_printf_task_group_path(m, task_group(p), "        %s")
+	if (show_cgroup_path)
+		SEQ_printf_task_group_path(m, task_group(p), "        %s")
 #endif
 
 	SEQ_printf(m, "\n");
 }
 
-static void print_rq(struct seq_file *m, struct rq *rq, int rq_cpu)
+static void print_rq(struct seq_file *m, struct rq *rq, int rq_cpu,
+		     bool show_cgroup_path, bool queued_only)
 {
 	struct task_struct *g, *p;
 
@@ -1010,31 +1013,36 @@ static void print_rq(struct seq_file *m, struct rq *rq, int rq_cpu)
 	SEQ_printf(m, "runnable tasks:\n");
 	SEQ_printf(m, " S            task   PID     weight       vruntime   eligible    "
 		   "deadline             slice          sum-exec      switches  "
-		   "prio         wait-time        sum-sleep       sum-block"
+		   "prio         wait-time        sum-sleep       sum-block");
 #ifdef CONFIG_NUMA_BALANCING
-		   "  node   group-id"
+	SEQ_printf(m, "  node   group-id");
 #endif
 #ifdef CONFIG_CGROUP_SCHED
-		   "  group-path"
+	if (show_cgroup_path)
+		SEQ_printf(m, "  group-path");
 #endif
-		   "\n");
+	SEQ_printf(m, "\n");
 	SEQ_printf(m, "-------------------------------------------------------"
 		   "------------------------------------------------------"
-		   "------------------------------------------------------"
+		   "------------------------------------------------------");
 #ifdef CONFIG_NUMA_BALANCING
-		   "--------------"
+	SEQ_printf(m, "--------------");
 #endif
 #ifdef CONFIG_CGROUP_SCHED
-		   "--------------"
+	if (show_cgroup_path)
+		SEQ_printf(m, "--------------");
 #endif
-		   "\n");
+	SEQ_printf(m, "\n");
 
 	rcu_read_lock();
 	for_each_process_thread(g, p) {
 		if (task_cpu(p) != rq_cpu)
 			continue;
 
-		print_task(m, rq, p);
+		if (queued_only && !task_current(rq, p) && !task_on_rq_queued(p))
+			continue;
+
+		print_task(m, rq, p, show_cgroup_path);
 	}
 	rcu_read_unlock();
 }
@@ -1234,7 +1242,7 @@ do {									\
 	print_rt_stats(m, cpu);
 	print_dl_stats(m, cpu);
 
-	print_rq(m, rq, cpu);
+	print_rq(m, rq, cpu, true, false);
 	SEQ_printf(m, "\n");
 }
 
@@ -1319,6 +1327,48 @@ void sysrq_sched_debug_show(void)
 		touch_nmi_watchdog();
 		touch_all_softlockup_watchdogs();
 		print_cpu(NULL, cpu);
+	}
+}
+
+void sched_show_runqueues(void)
+{
+	int cpu;
+
+	pr_info("CPU Runqueues:\n");
+	for_each_online_cpu(cpu) {
+		struct rq *rq = cpu_rq(cpu);
+		struct task_struct *curr;
+		unsigned int nr_running;
+		u64 nr_switches;
+		unsigned long flags;
+		bool locked;
+
+		touch_nmi_watchdog();
+		touch_all_softlockup_watchdogs();
+
+		rcu_read_lock();
+		local_irq_save(flags);
+		locked = raw_spin_rq_trylock(rq);
+		if (locked) {
+			nr_running = rq->nr_running;
+			nr_switches = rq->nr_switches;
+			curr = rcu_dereference(rq->curr);
+			raw_spin_rq_unlock(rq);
+		} else {
+			nr_running = READ_ONCE(rq->nr_running);
+			nr_switches = READ_ONCE(rq->nr_switches);
+			curr = rcu_dereference(rq->curr);
+		}
+		local_irq_restore(flags);
+
+		pr_info("cpu#%d: nr_running:%u switches:%llu curr:%s[%d]%s\n",
+			cpu, nr_running, nr_switches,
+			curr ? curr->comm : "<none>",
+			curr ? task_pid_nr(curr) : -1,
+			locked ? "" : " (contended)");
+
+		print_rq(NULL, rq, cpu, false, true);
+		rcu_read_unlock();
 	}
 }
 

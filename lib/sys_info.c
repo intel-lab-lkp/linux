@@ -22,6 +22,7 @@ static const char * const si_names[] = {
 	[ilog2(SYS_INFO_PANIC_CONSOLE_REPLAY)]	= "",
 	[ilog2(SYS_INFO_ALL_BT)]		= "all_bt",
 	[ilog2(SYS_INFO_BLOCKED_TASKS)]		= "blocked_tasks",
+	[ilog2(SYS_INFO_CPU_RUNQUEUES)]		= "cpu_runqueues",
 };
 
 /*
@@ -158,6 +159,9 @@ static void __sys_info(unsigned long si_mask)
 
 	if (si_mask & SYS_INFO_BLOCKED_TASKS)
 		show_state_filter(TASK_UNINTERRUPTIBLE);
+
+	if (si_mask & SYS_INFO_CPU_RUNQUEUES)
+		sched_show_runqueues();
 }
 
 void sys_info(unsigned long si_mask)
