@@ -3338,6 +3338,8 @@ static void damos_adjust_quota(struct damon_ctx *c, struct damos *s)
 
 	if (!c->ops.get_scheme_score)
 		return;
+	if (quota->esz == 0)
+		return;
 
 	/* Fill up the score histogram */
 	memset(c->regions_score_histogram, 0,
