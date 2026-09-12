@@ -8676,6 +8676,7 @@ static void __exit scsi_debug_exit(void)
 	sdebug_erase_all_stores(false);
 	xa_destroy(per_store_ap);
 	debugfs_remove(sdebug_debugfs_root);
+	rcu_barrier();
 }
 
 device_initcall(scsi_debug_init);
