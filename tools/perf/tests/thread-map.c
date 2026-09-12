@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
@@ -56,6 +57,39 @@ static int test__thread_map(struct test_suite *test __maybe_unused, int subtest 
 	TEST_ASSERT_VAL("wrong refcnt",
 			refcount_read(&map->refcnt) == 1);
 	perf_thread_map__put(map);
+
+	/* test numeric deduplication of TIDs */
+	map = thread_map__new_by_tid_str("123,0123,00123");
+	TEST_ASSERT_VAL("failed to alloc map", map);
+	TEST_ASSERT_VAL("wrong nr for duplicate TIDs", map->nr == 1);
+	TEST_ASSERT_VAL("wrong pid", perf_thread_map__pid(map, 0) == 123);
+	perf_thread_map__put(map);
+
+	/* test non-adjacent numeric duplicates (strlist lexicographic: 010, 011, 10) */
+	map = thread_map__new_by_tid_str("010,011,10");
+	TEST_ASSERT_VAL("failed to alloc map", map);
+	TEST_ASSERT_VAL("wrong nr for non-adjacent duplicate TIDs", map->nr == 2);
+	perf_thread_map__put(map);
+
+	/* test numeric deduplication of PIDs */
+	{
+		struct perf_thread_map *base, *dup;
+		char pid_str[64];
+
+		base = thread_map__new_by_pid(getpid());
+		TEST_ASSERT_VAL("failed to alloc baseline map", base);
+
+		snprintf(pid_str, sizeof(pid_str), "%d,0%d", getpid(), getpid());
+
+		dup = thread_map__new_str(pid_str, NULL, false);
+		TEST_ASSERT_VAL("failed to alloc duplicate pid map", dup);
+		TEST_ASSERT_VAL("wrong nr for duplicate PIDs",
+				dup->nr == base->nr);
+
+		perf_thread_map__put(dup);
+		perf_thread_map__put(base);
+	}
+
 	return 0;
 }
 
