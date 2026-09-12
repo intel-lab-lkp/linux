@@ -719,6 +719,12 @@ static bool setup_cpus(void)
 		 *
 		 * Ensure that the primary thread is online so that it is
 		 * guaranteed that all cores are updated.
+		 *
+		 * When the loading scope is extended beyond each core, it is
+		 * not strictly required to have primary threads online.
+		 * However, during such system-critical updates, offlining CPUs
+		 * besides the nosmt case isn't a sensible measure either. So,
+		 * this mandate remains considerably benign.
 		 */
 		if (!cpu_online(cpu)) {
 			if (topology_is_primary_thread(cpu) || !allow_smt_offline) {
