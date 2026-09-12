@@ -10,15 +10,20 @@
 #include <linux/types.h>
 
 struct mdio_device;
+struct mii_bus;
 
 #define EN8811H_MD32_DM			"airoha/EthMD32.dm.bin"
 #define EN8811H_MD32_DSP		"airoha/EthMD32.DSP.bin"
 
-/* Returns 1 when the firmware runs, 0 when the MD32 is still in its
+/* child_bus is the bus this chip publishes below mdiodev, or NULL.
+ *
+ * Returns 1 when the firmware runs, 0 when the MD32 is still in its
  * bootloader, and negative on a failed status read.
  */
-int air_en8811h_mcu_running(struct mdio_device *mdiodev);
+int air_en8811h_mcu_running(struct mdio_device *mdiodev,
+			    struct mii_bus *child_bus);
 /* Returns 1 when firmware was already running and was left in place. */
-int air_en8811h_fw_download(struct mdio_device *mdiodev, u32 *fw_version);
+int air_en8811h_fw_download(struct mdio_device *mdiodev, u32 *fw_version,
+			    struct mii_bus *child_bus);
 
 #endif /* __LINUX_MDIO_AIROHA_EN8811H_H */
