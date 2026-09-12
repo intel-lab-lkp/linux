@@ -23,6 +23,7 @@
 #include <linux/uio.h>
 #include <linux/io.h>
 #include <linux/mm.h>
+#include <linux/bitfield.h>
 
 #include <asm/cpu_device_id.h>
 #include <asm/cpuid/api.h>
@@ -68,6 +69,8 @@ static const char ucode_path[] = "kernel/x86/microcode/GenuineIntel.bin";
 #define MBOX_RESPONSE_SIZE	sizeof(u64)
 
 #define MBOX_XACTION_TIMEOUT_MS	(10 * MSEC_PER_SEC)
+
+#define CPUID_EDX_ARCH_CAP	BIT(29)
 
 /* Current microcode patch used in early patching on the APs. */
 static struct microcode_intel *ucode_patch_va __read_mostly;
@@ -737,10 +740,20 @@ static int __init save_builtin_microcode(void)
 }
 early_initcall(save_builtin_microcode);
 
+static __init void setup_uniform(void);
+
 /* Load microcode on BSP from initrd or builtin blobs */
 void __init load_ucode_intel_bsp(struct early_load_data *ed)
 {
 	struct ucode_cpu_info uci;
+
+	/*
+	 * The loader could be disabled during the uniform setup if any firmware
+	 * misconfiguration is found.
+	 */
+	setup_uniform();
+	if (microcode_loader_disabled())
+		return;
 
 	uci.mc = get_microcode_blob(&uci, false);
 	ed->old_rev = uci.cpu_sig.rev;
@@ -987,6 +1000,62 @@ static __init bool staging_available(void)
 
 	rdmsrq(MSR_IA32_MCU_ENUMERATION, val);
 	return !!(val & MCU_STAGING);
+}
+
+static __init void setup_uniform(void)
+{
+	u64 val;
+
+	if (native_cpuid_eax(0) < 7)
+		return;
+
+	if (!(native_cpuid_edx(7) & CPUID_EDX_ARCH_CAP))
+		return;
+
+	if (!(native_rdmsrq(MSR_IA32_ARCH_CAPABILITIES) & ARCH_CAP_MCU_ENUM))
+		return;
+
+	val = native_rdmsrq(MSR_IA32_MCU_ENUMERATION);
+	if (!(val & MCU_UNIFORM_AVAIL))
+		return;
+
+	/*
+	 * Ensure that the firmware did all the necessary steps. Any improper
+	 * configuration makes the update mechanism unusable.
+	 */
+	if (val & MCU_UNIFORM_CONFIG_REQD && !(val & MCU_UNIFORM_CONFIG_COMPLETE)) {
+		microcode_disable_loader();
+		pr_err("loading disabled: incomplete firmware configuration.\n");
+		return;
+	}
+
+	/*
+	 * Configure the uniform scope accordingly. To make it simple, treat all
+	 * scopes narrower than the package scope as per-core scope.
+	 */
+	switch (FIELD_GET(MCU_UNIFORM_SCOPE, val)) {
+	case MCU_UNIFORM_SCOPE_MODULE:
+	case MCU_UNIFORM_SCOPE_TILE:
+	case MCU_UNIFORM_SCOPE_DIE:
+		pr_info("Uniform scope is narrower than package, using core scope.\n");
+		fallthrough;
+	case MCU_UNIFORM_SCOPE_CORE:
+		microcode_intel_ops.uniform_scope = UNIFORM_CORE;
+		break;
+	case MCU_UNIFORM_SCOPE_PACKAGE:
+		microcode_intel_ops.uniform_scope = UNIFORM_PKG;
+		break;
+	case MCU_UNIFORM_SCOPE_PLATFORM:
+		microcode_intel_ops.uniform_scope = UNIFORM_SYS;
+		break;
+	default:
+		microcode_disable_loader();
+		pr_err("loading disabled: unknown uniform scope.\n");
+		return;
+	}
+
+	microcode_intel_ops.use_uniform = true;
+	pr_info("Enabled uniform feature.\n");
 }
 
 bool __init intel_primary_aware(void)

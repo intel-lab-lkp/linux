@@ -111,6 +111,11 @@ static bool amd_check_current_patch_level(void)
 	return false;
 }
 
+void __init microcode_disable_loader(void)
+{
+	dis_ucode_ldr = true;
+}
+
 bool __init microcode_loader_disabled(void)
 {
 	if (dis_ucode_ldr)

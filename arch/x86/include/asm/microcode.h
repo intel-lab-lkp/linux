@@ -21,11 +21,13 @@ void load_ucode_bsp(void);
 void load_ucode_ap(void);
 void microcode_bsp_resume(void);
 bool __init microcode_loader_disabled(void);
+void __init microcode_disable_loader(void);
 #else
 static inline void load_ucode_bsp(void)	{ }
 static inline void load_ucode_ap(void) { }
 static inline void microcode_bsp_resume(void) { }
 static inline bool __init microcode_loader_disabled(void) { return false; }
+static inline bool __init microcode_disable_loader(void) { }
 #endif
 
 extern unsigned long initrd_start_early;
