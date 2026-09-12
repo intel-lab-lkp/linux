@@ -296,6 +296,36 @@ static void reload_early_microcode(unsigned int cpu)
 static struct faux_device *microcode_fdev;
 
 #ifdef CONFIG_MICROCODE_LATE_LOADING
+
+/*
+ * Return the CPU mask corresponding to the update scope that @cpu belongs to.
+ * Unknown scopes fall back to the legacy per-core scope.
+ */
+static const struct cpumask *ucode_scope_cpumask(unsigned int cpu)
+{
+	if (!microcode_ops->use_uniform)
+		return topology_sibling_cpumask(cpu);
+
+	switch (microcode_ops->uniform_scope) {
+	case UNIFORM_PKG:
+		return topology_core_cpumask(cpu);
+	case UNIFORM_SYS:
+		return cpu_online_mask;
+	case UNIFORM_DEFAULT:
+	case UNIFORM_CORE:
+		break;
+	default:
+		WARN_ON_ONCE(1);
+	}
+
+	return topology_sibling_cpumask(cpu);
+}
+
+static inline unsigned int ucode_primary_cpu(unsigned int cpu)
+{
+	return cpumask_first(ucode_scope_cpumask(cpu));
+}
+
 /*
  * Late loading dance. Why the heavy-handed stomp_machine effort?
  *
@@ -437,7 +467,7 @@ static noinstr void load_secondary(unsigned int cpu)
 
 static void __load_primary(unsigned int cpu)
 {
-	struct cpumask *secondaries = topology_sibling_cpumask(cpu);
+	const struct cpumask *secondaries = ucode_scope_cpumask(cpu);
 	enum sibling_ctrl ctrl;
 	enum ucode_state ret;
 	unsigned int sibling;
@@ -736,11 +766,7 @@ static bool setup_cpus(void)
 			continue;
 		}
 
-		/*
-		 * Initialize the per CPU state. This is core scope for now,
-		 * but prepared to take package or system scope into account.
-		 */
-		ctrl.ctrl_cpu = cpumask_first(topology_sibling_cpumask(cpu));
+		ctrl.ctrl_cpu = ucode_primary_cpu(cpu);
 		per_cpu(ucode_ctrl, cpu) = ctrl;
 	}
 	return true;
