@@ -385,10 +385,6 @@ static int st1202_blink_set(struct led_classdev *led_cdev,
 	if (ret)
 		return ret;
 
-	ret = st1202_write_reg(chip, ST1202_ILED_REG0 + led->led_num, U8_MAX);
-	if (ret)
-		return ret;
-
 	ret = __st1202_channel_set(chip, led->led_num, true);
 	if (ret)
 		return ret;
@@ -396,6 +392,11 @@ static int st1202_blink_set(struct led_classdev *led_cdev,
 	ret = st1202_write_reg(chip, ST1202_CONFIG_REG,
 				ST1202_CONFIG_REG_PATSR | ST1202_CONFIG_REG_PATS |
 				ST1202_CONFIG_REG_PHASE_SHIFT);
+	if (ret)
+		return ret;
+
+	ret = st1202_write_reg(chip, ST1202_ILED_REG0 + led->led_num,
+				min_t(unsigned int, led_cdev->max_brightness, U8_MAX));
 	if (ret)
 		return ret;
 
