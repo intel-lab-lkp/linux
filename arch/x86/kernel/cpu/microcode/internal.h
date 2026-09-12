@@ -21,6 +21,13 @@ enum ucode_state {
 	UCODE_OFFLINE,
 };
 
+enum uniform_scope {
+	UNIFORM_DEFAULT	= 0,
+	UNIFORM_CORE,
+	UNIFORM_PKG,
+	UNIFORM_SYS,
+};
+
 struct microcode_ops {
 	enum ucode_state (*request_microcode_fw)(int cpu, struct device *dev);
 	void (*microcode_fini_cpu)(int cpu);
@@ -36,7 +43,9 @@ struct microcode_ops {
 	void			(*finalize_late_load)(int result);
 	unsigned int		nmi_safe	: 1,
 				use_nmi		: 1,
-				use_staging	: 1;
+				use_staging	: 1,
+				use_uniform	: 1;
+	enum uniform_scope	uniform_scope;
 };
 
 struct early_load_data {
