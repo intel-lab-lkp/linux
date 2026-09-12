@@ -33,11 +33,21 @@ pub(crate) const MODULE_NAME: &core::ffi::CStr = <LocalModule as kernel::ModuleM
 // TODO: Move this into per-module data once that exists.
 static mut DEBUGFS_ROOT: Option<debugfs::Dir> = None;
 
+kernel::sync::global_lock! {
+    /// Log buffers of GPUs that are gone, kept around until the module is unloaded.
+    // TODO: Move this into per-module data once that exists.
+    unsafe(uninit) static RETAINED_LOGS: Mutex<gsp::RetainedLogs> = gsp::RetainedLogs::new();
+}
+
 /// Guard that clears `DEBUGFS_ROOT` when dropped.
 struct DebugfsRootGuard;
 
 impl Drop for DebugfsRootGuard {
     fn drop(&mut self) {
+        // Retained log buffers own debugfs entries below `DEBUGFS_ROOT`, so they have to go away
+        // before it does.
+        RETAINED_LOGS.lock().clear();
+
         // SAFETY: This guard is dropped after `_driver` (due to field order),
         // so the driver is unregistered and no probe() can be running.
         unsafe { DEBUGFS_ROOT = None };
@@ -58,15 +68,25 @@ impl InPlaceModule for NovaCoreModule {
     fn init(module: &'static kernel::ThisModule) -> impl PinInit<Self, Error> {
         let dir = debugfs::Dir::new(c"nova-core");
 
+        // SAFETY: Module initialization runs exactly once, and before the driver is registered,
+        // so no probe can have touched `RETAINED_LOGS` yet.
+        unsafe { RETAINED_LOGS.init() };
+
+        // Creating the directory up front is what makes retaining possible without reaching for
+        // `DEBUGFS_ROOT` later, from the teardown path of a device.
+        if module_parameters::gsp_keep_logs.value() {
+            RETAINED_LOGS.lock().enable(&dir);
+        }
+
         // SAFETY: We are the only driver code running during init, so there
         // cannot be any concurrent access to `DEBUGFS_ROOT`.
         unsafe { DEBUGFS_ROOT = Some(dir) };
 
         // Fields are initialized in the order written here, and an initializer that fails drops
         // what it has already built, so the guard goes first: should registration fail, its drop
-        // still takes `DEBUGFS_ROOT` down with it. Nothing would otherwise, as statics are never
-        // dropped and the module is unloaded right away, leaving a directory behind that the
-        // next load cannot create again.
+        // still takes `DEBUGFS_ROOT` and the retained copies down with it. Nothing would
+        // otherwise, as statics are never dropped and the module is unloaded right away, leaving
+        // directories behind that the next load cannot create again.
         try_pin_init!(Self {
             _debugfs_guard: DebugfsRootGuard,
             _driver <- Registration::new(MODULE_NAME, module),
@@ -81,6 +101,12 @@ module! {
     description: "Nova Core GPU driver",
     license: "GPL v2",
     firmware: [],
+    params: {
+        gsp_keep_logs: bool {
+            default: false,
+            description: "Keep the GSP-RM log buffers in debugfs after their GPU is gone",
+        },
+    },
 }
 
 kernel::module_firmware!(firmware::ModInfoBuilder);
