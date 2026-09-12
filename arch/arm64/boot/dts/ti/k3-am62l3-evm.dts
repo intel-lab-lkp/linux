@@ -34,13 +34,15 @@
 	gpio_keys: gpio-keys {
 		compatible = "gpio-keys";
 		autorepeat;
-		pinctrl-names = "default";
+		pinctrl-names = "default", "wakeup";
 		pinctrl-0 = <&usr_button_pins_default>;
+		pinctrl-1 = <&usr_button_pins_wakeup>;
 
 		usr: button-usr {
 			label = "User Key";
 			linux,code = <BTN_0>;
 			gpios = <&gpio0 90 GPIO_ACTIVE_LOW>;
+			wakeup-source;
 		};
 	};
 
@@ -304,6 +306,12 @@
 	usr_button_pins_default: usr-button-default-pins {
 		pinctrl-single,pins = <
 			AM62LX_IOPAD(0x01ac, PIN_INPUT, 7) /* (E12) SPI0_D0.GPIO0_90 */
+		>;
+	};
+
+	usr_button_pins_wakeup: usr-button-wakeup-pins {
+		pinctrl-single,pins = <
+			AM62LX_IOPAD(0x01ac, PIN_INPUT | PIN_WKUP_EN, 7) /* (E12) SPI0_D0.GPIO0_90 */
 		>;
 	};
 
