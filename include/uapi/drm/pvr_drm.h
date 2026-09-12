@@ -231,7 +231,7 @@ struct drm_pvr_dev_query_quirks {
  * the user mode driver.
  *
  * When fetching this type &struct drm_pvr_ioctl_dev_query_args.type must be set
- * to %DRM_PVR_DEV_ENHANCEMENTS_GET.
+ * to %DRM_PVR_DEV_QUERY_ENHANCEMENTS_GET.
  */
 struct drm_pvr_dev_query_enhancements {
 	/**
@@ -848,8 +848,8 @@ struct drm_pvr_ioctl_create_free_list_args {
 	 * @max_num_pages * ``sizeof(__u32)``.
 	 *
 	 * The buffer object must have been created with
-	 * %DRM_PVR_BO_DEVICE_PM_FW_PROTECT set and
-	 * %DRM_PVR_BO_CPU_ALLOW_USERSPACE_ACCESS not set.
+	 * %DRM_PVR_BO_PM_FW_PROTECT set and
+	 * %DRM_PVR_BO_ALLOW_CPU_USERSPACE_ACCESS not set.
 	 */
 	__u64 free_list_gpu_addr;
 
@@ -1277,7 +1277,7 @@ struct drm_pvr_job {
 };
 
 /**
- * struct drm_pvr_ioctl_submit_jobs_args - Arguments for %DRM_IOCTL_PVR_SUBMIT_JOB
+ * struct drm_pvr_ioctl_submit_jobs_args - Arguments for %DRM_IOCTL_PVR_SUBMIT_JOBS
  *
  * If the syscall returns an error it is important to check the value of
  * @jobs.count. This indicates the index into @jobs.array where the
