@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include "string2.h"
 #include "strlist.h"
+#include "intlist.h"
 #include <string.h>
 #include <api/fs/fs.h>
 #include <linux/string.h>
@@ -163,12 +164,13 @@ static struct perf_thread_map *thread_map__new_by_pid_str(const char *pid_str)
 	int items, total_tasks = 0;
 	struct dirent **namelist = NULL;
 	int i, j = 0;
-	pid_t pid, prev_pid = INT_MAX;
+	pid_t pid;
 	struct str_node *pos;
 	struct strlist *slist = strlist__new(pid_str, NULL);
+	struct intlist *seen = intlist__new(NULL);
 
-	if (!slist)
-		return NULL;
+	if (!slist || !seen)
+		goto out;
 
 	strlist__for_each_entry(pos, slist) {
 		pid = strtol(pos->s, NULL, 10);
@@ -176,8 +178,11 @@ static struct perf_thread_map *thread_map__new_by_pid_str(const char *pid_str)
 		if (pid == INT_MIN || pid == INT_MAX)
 			goto out_free_threads;
 
-		if (pid == prev_pid)
+		if (intlist__has_entry(seen, (unsigned long)pid))
 			continue;
+
+		if (intlist__add(seen, (unsigned long)pid))
+			goto out_free_threads;
 
 		sprintf(name, "/proc/%d/task", pid);
 		items = scandir(name, &namelist, filter, NULL);
@@ -200,6 +205,7 @@ static struct perf_thread_map *thread_map__new_by_pid_str(const char *pid_str)
 	}
 
 out:
+	intlist__delete(seen);
 	strlist__delete(slist);
 	if (threads)
 		refcount_set(&threads->refcnt, 1);
@@ -219,17 +225,19 @@ struct perf_thread_map *thread_map__new_by_tid_str(const char *tid_str)
 {
 	struct perf_thread_map *threads = NULL, *nt;
 	int ntasks = 0;
-	pid_t tid, prev_tid = INT_MAX;
+	pid_t tid;
 	struct str_node *pos;
 	struct strlist *slist;
+	struct intlist *seen;
 
 	/* perf-stat expects threads to be generated even if tid not given */
 	if (!tid_str)
 		return perf_thread_map__new_dummy();
 
 	slist = strlist__new(tid_str, NULL);
-	if (!slist)
-		return NULL;
+	seen = intlist__new(NULL);
+	if (!slist || !seen)
+		goto out;
 
 	strlist__for_each_entry(pos, slist) {
 		tid = strtol(pos->s, NULL, 10);
@@ -237,8 +245,11 @@ struct perf_thread_map *thread_map__new_by_tid_str(const char *tid_str)
 		if (tid == INT_MIN || tid == INT_MAX)
 			goto out_free_threads;
 
-		if (tid == prev_tid)
+		if (intlist__has_entry(seen, (unsigned long)tid))
 			continue;
+
+		if (intlist__add(seen, (unsigned long)tid))
+			goto out_free_threads;
 
 		ntasks++;
 		nt = perf_thread_map__realloc(threads, ntasks);
@@ -251,6 +262,7 @@ struct perf_thread_map *thread_map__new_by_tid_str(const char *tid_str)
 		threads->nr = ntasks;
 	}
 out:
+	intlist__delete(seen);
 	strlist__delete(slist);
 	if (threads)
 		refcount_set(&threads->refcnt, 1);
