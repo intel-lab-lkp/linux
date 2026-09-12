@@ -34,7 +34,7 @@ MODULE_PARM_DESC(num_keyslots,
 
 static unsigned int num_prealloc_fallback_crypt_ctxs = 128;
 module_param(num_prealloc_fallback_crypt_ctxs, uint, 0);
-MODULE_PARM_DESC(num_prealloc_crypt_fallback_ctxs,
+MODULE_PARM_DESC(num_prealloc_fallback_crypt_ctxs,
 		 "Number of preallocated bio fallback crypto contexts for blk-crypto to use during crypto API fallback");
 
 struct bio_fallback_crypt_ctx {
