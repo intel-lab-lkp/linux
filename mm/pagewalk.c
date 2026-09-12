@@ -894,7 +894,11 @@ int walk_page_mapping(struct address_space *mapping, pgoff_t first_index,
  * huge_ptep_set_*, ...). Note that the page table entry stored in @fw might
  * not correspond to the first physical entry of a logical hugetlb entry.
  *
- * The mmap lock must be held in read mode.
+ * The mmap lock must be held in read mode.  Alternatively, with
+ * CONFIG_PER_VMA_LOCK and @FW_VMA_LOCKED, the vma lock may be held in read mode: the
+ * page tables of a read-locked vma cannot be torn down while the mm has
+ * users, so a caller that walks an mm other than its own must also hold a
+ * mm_users reference for the duration of the walk.
  *
  * Return: folio pointer on success, otherwise NULL.
  */
@@ -912,7 +916,10 @@ struct folio *folio_walk_start(struct folio_walk *fw,
 	pgd_t *pgdp;
 	p4d_t *p4dp;
 
-	mmap_assert_locked(vma->vm_mm);
+	if (flags & FW_VMA_LOCKED)
+		vma_assert_locked(vma);
+	else
+		mmap_assert_locked(vma->vm_mm);
 	vma_pgtable_walk_begin(vma);
 
 	if (WARN_ON_ONCE(addr < vma->vm_start || addr >= vma->vm_end))

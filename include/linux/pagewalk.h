@@ -151,6 +151,9 @@ typedef int __bitwise folio_walk_flags_t;
 /* Walk shared zeropages (small + huge) as well. */
 #define FW_ZEROPAGE			((__force folio_walk_flags_t)BIT(0))
 
+/* The caller holds the VMA read lock instead of the mmap lock. */
+#define FW_VMA_LOCKED			((__force folio_walk_flags_t)BIT(1))
+
 enum folio_walk_level {
 	FW_LEVEL_PTE,
 	FW_LEVEL_PMD,
