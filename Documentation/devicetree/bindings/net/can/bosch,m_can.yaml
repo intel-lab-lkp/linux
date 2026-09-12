@@ -16,7 +16,11 @@ allOf:
 
 properties:
   compatible:
-    const: bosch,m_can
+    oneOf:
+      - const: bosch,m_can
+      - items:
+        - const: ti,am62-mcan
+        - const: bosch,m_can
 
   reg:
     items:
