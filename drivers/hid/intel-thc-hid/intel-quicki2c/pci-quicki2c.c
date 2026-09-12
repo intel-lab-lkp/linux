@@ -380,7 +380,7 @@ exit:
  * If success, enable THC hardware interrupt.
  *
  * Return: Pointer to the quicki2c_device structure if success
- * or NULL on failure.
+ * or an ERR_PTR() on failure.
  */
 static struct quicki2c_device *quicki2c_dev_init(struct pci_dev *pdev, void __iomem *mem_addr,
 						 const struct quicki2c_ddata *ddata)
