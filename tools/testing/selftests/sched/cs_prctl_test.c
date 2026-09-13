@@ -51,6 +51,8 @@ static pid_t gettid(void)
 
 #define MAX_PROCESSES 128
 #define MAX_THREADS   128
+#define CORE_COOKIE_RETRIES	100
+#define CORE_COOKIE_RETRY_US	10000
 
 static const char USAGE[] = "cs_prctl_test [options]\n"
 "    options:\n"
@@ -112,16 +114,27 @@ static void handle_usage(int rc, char *msg)
 static unsigned long get_cs_cookie(int pid)
 {
 	unsigned long long cookie;
-	int ret;
+	int i, ret, err = 0;
 
-	ret = prctl(PR_SCHED_CORE, PR_SCHED_CORE_GET, pid, PIDTYPE_PID,
-		    (unsigned long)&cookie);
-	if (ret) {
-		printf("Not a core sched system\n");
-		return -1UL;
+	for (i = 0; i < CORE_COOKIE_RETRIES; i++) {
+		ret = prctl(PR_SCHED_CORE, PR_SCHED_CORE_GET, pid, PIDTYPE_PID,
+			    (unsigned long)&cookie);
+		if (!ret)
+			return cookie;
+
+		err = errno;
+		if (err != EBUSY)
+			break;
+
+		usleep(CORE_COOKIE_RETRY_US);
 	}
 
-	return cookie;
+	if (err == EBUSY)
+		printf("Timed out waiting for core sched cookie\n");
+	else
+		printf("Failed to get core sched cookie: %s\n", strerror(err));
+
+	return -1UL;
 }
 
 static int child_func_thread(void __attribute__((unused))*arg)
