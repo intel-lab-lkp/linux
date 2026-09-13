@@ -192,6 +192,14 @@ static const struct dmi_system_id upside_down_sensor_dmi_ids[] = {
 		},
 		.driver_data = "OVTI02E1",
 	},
+	{
+		.matches = {
+			DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Microsoft Corporation"),
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME,
+					"Surface Pro for Business 11th Edition with Intel"),
+		},
+		.driver_data = "OVTID858",
+	},
 	{} /* Terminating entry */
 };
 
