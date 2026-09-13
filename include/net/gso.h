@@ -19,9 +19,18 @@ struct skb_gso_cb {
 	int	encap_level;
 	__wsum	csum;
 	__u16	csum_start;
+	/* Number of GSO callbacks this packet already went through. */
+	u8	recursion_counter;
 };
 #define SKB_GSO_CB_OFFSET	32
 #define SKB_GSO_CB(skb) ((struct skb_gso_cb *)((skb)->cb + SKB_GSO_CB_OFFSET))
+
+#define GSO_RECURSION_LIMIT	15	/* First callback depth to reject. */
+static inline int gso_recursion_inc_test(struct sk_buff *skb)
+{
+	return ++SKB_GSO_CB(skb)->recursion_counter ==
+	       GSO_RECURSION_LIMIT;
+}
 
 static inline int skb_tnl_header_len(const struct sk_buff *inner_skb)
 {
