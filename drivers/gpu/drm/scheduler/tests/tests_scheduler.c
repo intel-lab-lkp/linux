@@ -13,6 +13,13 @@
  * logic.
  */
 
+/* We need a more generous timeout when CONFIG_HZ=100. */
+#if CONFIG_HZ < 250
+#define TIMEOUT_MULTIPLIER 15
+#else
+#define TIMEOUT_MULTIPLIER 5
+#endif
+
 static int drm_sched_scheduler_init(struct kunit *test)
 {
 	struct drm_mock_scheduler *sched;
@@ -88,7 +95,7 @@ static void drm_sched_scheduler_queue_overhead(struct kunit *test)
 
 	/* Wait with a safe margin to avoid every failing. */
 	done = drm_mock_sched_job_wait_finished(job,
-						usecs_to_jiffies(total_us) * 5);
+						usecs_to_jiffies(total_us) * TIMEOUT_MULTIPLIER);
 	end = ktime_get();
 	KUNIT_ASSERT_TRUE(test, done);
 
@@ -149,7 +156,7 @@ static void drm_sched_scheduler_ping_pong(struct kunit *test)
 
 	/* Wait with a safe margin to avoid every failing. */
 	done = drm_mock_sched_job_wait_finished(job,
-						usecs_to_jiffies(total_us) * 5);
+						usecs_to_jiffies(total_us) * TIMEOUT_MULTIPLIER);
 	end = ktime_get();
 	KUNIT_ASSERT_TRUE(test, done);
 
