@@ -365,7 +365,7 @@ static int __cold dpaa2_qdma_setup(struct fsl_mc_device *ls_dev)
 					  i, 0, &priv->rx_queue_attr[i]);
 		if (err) {
 			dev_err(dev, "dpdmai_get_rx_queue() failed\n");
-			goto exit;
+			goto err_free_ppriv;
 		}
 		ppriv->rsp_fqid = priv->rx_queue_attr[i].fqid;
 
@@ -373,7 +373,7 @@ static int __cold dpaa2_qdma_setup(struct fsl_mc_device *ls_dev)
 					  i, 0, &priv->tx_queue_attr[i]);
 		if (err) {
 			dev_err(dev, "dpdmai_get_tx_queue() failed\n");
-			goto exit;
+			goto err_free_ppriv;
 		}
 		ppriv->req_fqid = priv->tx_queue_attr[i].fqid;
 		ppriv->prio = DPAA2_QDMA_DEFAULT_PRIORITY;
@@ -382,6 +382,9 @@ static int __cold dpaa2_qdma_setup(struct fsl_mc_device *ls_dev)
 	}
 
 	return 0;
+
+err_free_ppriv:
+	kfree(priv->ppriv);
 exit:
 	dpdmai_close(priv->mc_io, 0, ls_dev->mc_handle);
 	return err;
@@ -787,6 +790,7 @@ static void dpaa2_qdma_remove(struct fsl_mc_device *ls_dev)
 	dpaa2_dpdmai_free_channels(dpaa2_qdma);
 
 	dma_async_device_unregister(&dpaa2_qdma->dma_dev);
+	kfree(priv->ppriv);
 	kfree(priv);
 	kfree(dpaa2_qdma);
 }
