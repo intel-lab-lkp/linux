@@ -394,7 +394,6 @@ static void winwing_remove(struct hid_device *hdev)
 	if (data)
 		cancel_work_sync(&data->rumble_work);
 
-	hid_hw_close(hdev);
 	hid_hw_stop(hdev);
 }
 
