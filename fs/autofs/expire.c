@@ -30,12 +30,12 @@ static int autofs_mount_busy(struct vfsmount *mnt,
 			     struct dentry *dentry, unsigned int how)
 {
 	struct dentry *top = dentry;
-	struct path path = {.mnt = mnt, .dentry = dentry};
+	struct path path;
 	int status = 1;
 
 	pr_debug("dentry %p %pd\n", dentry, dentry);
 
-	path_get(&path);
+	path_create(&path, mnt, dentry);
 
 	if (!follow_down_one(&path))
 		goto done;
