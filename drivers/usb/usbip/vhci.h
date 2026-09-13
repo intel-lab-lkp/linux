@@ -88,7 +88,7 @@ enum hub_speed {
 #define VHCI_NR_HCS 1
 #endif
 
-#define MAX_STATUS_NAME 16
+#define MAX_STATUS_NAME 18
 
 struct vhci {
 	spinlock_t lock;
