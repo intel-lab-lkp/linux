@@ -233,6 +233,7 @@ properties:
         items:
           - enum:
               - winlink,e850-96                 # WinLink E850-96
+              - samsung,a217f                   # Samsung Galaxy A21s (SM-A217F)
           - const: samsung,exynos850
 
       - description: Exynos8895 based boards
