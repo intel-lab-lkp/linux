@@ -404,6 +404,8 @@ static int brcm_usb_phy_dvr_init(struct platform_device *pdev,
 {
 	struct device *dev = &pdev->dev;
 	struct phy *gphy = NULL;
+	bool usb_20_clk_enabled = false;
+	bool usb_30_clk_enabled = false;
 	int err;
 
 	priv->usb_20_clk = of_clk_get_by_name(dn, "sw_usb");
@@ -413,15 +415,19 @@ static int brcm_usb_phy_dvr_init(struct platform_device *pdev,
 		dev_info(dev, "Clock not found in Device Tree\n");
 		priv->usb_20_clk = NULL;
 	}
-	err = clk_prepare_enable(priv->usb_20_clk);
-	if (err)
-		return err;
+	if (priv->usb_20_clk) {
+		err = clk_prepare_enable(priv->usb_20_clk);
+		if (err)
+			return err;
+		usb_20_clk_enabled = true;
+	}
 
 	if (priv->has_eohci) {
 		gphy = devm_phy_create(dev, NULL, &brcm_usb_phy_ops);
 		if (IS_ERR(gphy)) {
 			dev_err(dev, "failed to create EHCI/OHCI PHY\n");
-			return PTR_ERR(gphy);
+			err = PTR_ERR(gphy);
+			goto err_disable_clks;
 		}
 		priv->phys[BRCM_USB_PHY_2_0].phy = gphy;
 		priv->phys[BRCM_USB_PHY_2_0].id = BRCM_USB_PHY_2_0;
@@ -432,7 +438,8 @@ static int brcm_usb_phy_dvr_init(struct platform_device *pdev,
 		gphy = devm_phy_create(dev, NULL, &brcm_usb_phy_ops);
 		if (IS_ERR(gphy)) {
 			dev_err(dev, "failed to create XHCI PHY\n");
-			return PTR_ERR(gphy);
+			err = PTR_ERR(gphy);
+			goto err_disable_clks;
 		}
 		priv->phys[BRCM_USB_PHY_3_0].phy = gphy;
 		priv->phys[BRCM_USB_PHY_3_0].id = BRCM_USB_PHY_3_0;
@@ -440,21 +447,28 @@ static int brcm_usb_phy_dvr_init(struct platform_device *pdev,
 
 		priv->usb_30_clk = of_clk_get_by_name(dn, "sw_usb3");
 		if (IS_ERR(priv->usb_30_clk)) {
-			if (PTR_ERR(priv->usb_30_clk) == -EPROBE_DEFER)
-				return -EPROBE_DEFER;
+			if (PTR_ERR(priv->usb_30_clk) == -EPROBE_DEFER) {
+				err = -EPROBE_DEFER;
+				goto err_disable_clks;
+			}
 			dev_info(dev,
 				 "USB3.0 clock not found in Device Tree\n");
 			priv->usb_30_clk = NULL;
 		}
-		err = clk_prepare_enable(priv->usb_30_clk);
-		if (err)
-			return err;
+		if (priv->usb_30_clk) {
+			err = clk_prepare_enable(priv->usb_30_clk);
+			if (err)
+				goto err_disable_clks;
+			usb_30_clk_enabled = true;
+		}
 	}
 
 	priv->suspend_clk = clk_get(dev, "usb0_freerun");
 	if (IS_ERR(priv->suspend_clk)) {
-		if (PTR_ERR(priv->suspend_clk) == -EPROBE_DEFER)
-			return -EPROBE_DEFER;
+		if (PTR_ERR(priv->suspend_clk) == -EPROBE_DEFER) {
+			err = -EPROBE_DEFER;
+			goto err_disable_clks;
+		}
 		dev_err(dev, "Suspend Clock not found in Device Tree\n");
 		priv->suspend_clk = NULL;
 	}
@@ -467,7 +481,7 @@ static int brcm_usb_phy_dvr_init(struct platform_device *pdev,
 				       brcm_usb_phy_wake_isr, 0,
 				       dev_name(dev), dev);
 		if (err < 0)
-			return err;
+			goto err_disable_clks;
 		device_set_wakeup_capable(dev, 1);
 	} else {
 		dev_info(dev,
@@ -475,6 +489,14 @@ static int brcm_usb_phy_dvr_init(struct platform_device *pdev,
 	}
 
 	return 0;
+
+err_disable_clks:
+	if (usb_30_clk_enabled)
+		clk_disable_unprepare(priv->usb_30_clk);
+	if (usb_20_clk_enabled)
+		clk_disable_unprepare(priv->usb_20_clk);
+
+	return err;
 }
 
 static int brcm_usb_phy_probe(struct platform_device *pdev)
