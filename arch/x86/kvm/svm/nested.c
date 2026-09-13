@@ -93,13 +93,13 @@ static u8 nested_svm_get_insn_bytes_len(struct kvm_vcpu *vcpu, u8 max_bytes)
 }
 
 static u8 nested_svm_fetch_insn_bytes(struct kvm_vcpu *vcpu, u8 *bytes,
-				      u8 max_bytes)
+				      u8 count, u8 max_bytes)
 {
 	struct x86_exception e;
 	gva_t rip = kvm_get_linear_rip(vcpu);
-	u8 count = 0;
 
 	max_bytes = nested_svm_get_insn_bytes_len(vcpu, max_bytes);
+	count = min(count, max_bytes);
 
 	while (count < max_bytes) {
 		gva_t addr = rip + count;
@@ -123,6 +123,31 @@ static u8 nested_svm_fetch_insn_bytes(struct kvm_vcpu *vcpu, u8 *bytes,
 	}
 
 	return count;
+}
+
+static void nested_svm_prepare_synthesized_insn_bytes(struct kvm_vcpu *vcpu)
+{
+	struct vcpu_svm *svm = to_svm(vcpu);
+	struct vmcb *vmcb02 = svm->nested.vmcb02.ptr;
+	struct x86_emulate_ctxt *ctxt = vcpu->arch.emulate_ctxt;
+	u8 max_bytes = sizeof(vmcb02->control.insn_bytes);
+	u8 count;
+
+	nested_svm_invalidate_vmcb02_insn_bytes(svm);
+
+	if (!guest_cpu_cap_has(vcpu, X86_FEATURE_DECODEASSISTS))
+		return;
+
+	max_bytes = nested_svm_get_insn_bytes_len(vcpu, max_bytes);
+	count = x86_emulator_copy_insn_bytes(ctxt, kvm_rip_read(vcpu),
+					     vmcb02->control.insn_bytes, max_bytes);
+	if (!is_sev_guest(vcpu))
+		count = nested_svm_fetch_insn_bytes(vcpu,
+						    vmcb02->control.insn_bytes,
+						    count, max_bytes);
+	vmcb02->control.insn_len = count;
+
+	svm->nested.vmcb02_insn_bytes_valid = true;
 }
 
 static void nested_svm_update_vmcb12_insn_bytes(struct kvm_vcpu *vcpu,
@@ -149,6 +174,7 @@ static void nested_svm_update_vmcb12_insn_bytes(struct kvm_vcpu *vcpu,
 		vmcb12->control.insn_len =
 			nested_svm_fetch_insn_bytes(vcpu,
 						    vmcb12->control.insn_bytes,
+						    0,
 						    max_bytes);
 	else
 		nested_svm_invalidate_insn_bytes(vmcb12);
@@ -163,6 +189,8 @@ static void nested_svm_inject_npf_exit(struct kvm_vcpu *vcpu,
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
 	struct vmcb *vmcb = svm->vmcb;
+	struct x86_emulate_ctxt *ctxt = vcpu->arch.emulate_ctxt;
+	bool from_emulation = ctxt && fault == &ctxt->exception;
 	u64 fault_stage;
 
 	/*
@@ -192,6 +220,8 @@ static void nested_svm_inject_npf_exit(struct kvm_vcpu *vcpu,
 
 	if (from_hardware)
 		nested_svm_set_vmcb02_insn_bytes_valid(svm);
+	else if (from_emulation && !(fault->error_code & PFERR_FETCH_MASK))
+		nested_svm_prepare_synthesized_insn_bytes(vcpu);
 	else
 		svm->nested.vmcb02_insn_bytes_valid = false;
 	nested_svm_vmexit(svm);

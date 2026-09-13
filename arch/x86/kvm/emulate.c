@@ -913,6 +913,28 @@ static __always_inline int do_insn_fetch_bytes(struct x86_emulate_ctxt *ctxt,
 		return X86EMUL_CONTINUE;
 }
 
+/*
+ * The caller is responsible for ensuring that the fetch cache belongs to
+ * the current instruction.  Matching EIP alone does not guarantee this.
+ */
+unsigned int x86_emulator_copy_insn_bytes(struct x86_emulate_ctxt *ctxt,
+					  unsigned long eip, u8 *bytes,
+					  unsigned int max_bytes)
+{
+	unsigned int nr_bytes;
+
+	if (!ctxt || ctxt->eip != eip ||
+	    ctxt->fetch.end < ctxt->fetch.data ||
+	    ctxt->fetch.end > ctxt->fetch.data + sizeof(ctxt->fetch.data))
+		return 0;
+
+	nr_bytes = min_t(unsigned int, ctxt->fetch.end - ctxt->fetch.data,
+			 max_bytes);
+	memcpy(bytes, ctxt->fetch.data, nr_bytes);
+	return nr_bytes;
+}
+EXPORT_SYMBOL_FOR_KVM_INTERNAL(x86_emulator_copy_insn_bytes);
+
 /* Fetch next part of the instruction being emulated. */
 #define insn_fetch(_type, _ctxt)					\
 ({	_type _x;							\
