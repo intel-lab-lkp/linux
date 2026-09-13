@@ -76,6 +76,8 @@ struct symbol_conf symbol_conf = {
 	.inline_name		= true,
 	.res_sample		= 0,
 	.addr2line_timeout_ms	= 5 * 1000,
+	/* Fetching debuginfo by build ID, off via --no-debuginfod, etc */
+	.debuginfod		= true,
 };
 
 struct map_list_node {
