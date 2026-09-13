@@ -177,8 +177,9 @@ int sched_core_share_pid(unsigned int cmd, pid_t pid, enum pid_type type,
 		}
 		cookie = sched_core_clone_cookie(task);
 		if (cookie) {
-			/* XXX improve ? */
-			ptr_to_hashval((void *)cookie, &id);
+			err = ptr_to_hashval((void *)cookie, &id);
+			if (err)
+				goto out;
 		}
 		err = put_user(id, (u64 __user *)uaddr);
 		goto out;
