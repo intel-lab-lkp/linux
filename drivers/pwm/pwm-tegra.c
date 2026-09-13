@@ -346,8 +346,10 @@ static int tegra_pwm_probe(struct platform_device *pdev)
 
 	pm_runtime_enable(&pdev->dev);
 	ret = pm_runtime_resume_and_get(&pdev->dev);
-	if (ret)
+	if (ret) {
+		pm_runtime_disable(&pdev->dev);
 		return ret;
+	}
 
 	/* Set maximum frequency of the IP */
 	ret = dev_pm_opp_set_rate(&pdev->dev, ULONG_MAX);
@@ -395,7 +397,8 @@ static int tegra_pwm_probe(struct platform_device *pdev)
 	return 0;
 put_pm:
 	pm_runtime_put_sync_suspend(&pdev->dev);
-	pm_runtime_force_suspend(&pdev->dev);
+	if (pm_runtime_force_suspend(&pdev->dev))
+		pm_runtime_disable(&pdev->dev);
 	return ret;
 }
 
@@ -408,7 +411,8 @@ static void tegra_pwm_remove(struct platform_device *pdev)
 
 	reset_control_assert(pc->rst);
 
-	pm_runtime_force_suspend(&pdev->dev);
+	if (pm_runtime_force_suspend(&pdev->dev))
+		pm_runtime_disable(&pdev->dev);
 }
 
 static int __maybe_unused tegra_pwm_runtime_suspend(struct device *dev)
