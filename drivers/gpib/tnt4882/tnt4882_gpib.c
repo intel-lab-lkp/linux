@@ -1585,7 +1585,13 @@ static int ni_gpib_probe(struct pcmcia_device *link)
 
 	/* Register with Card Services */
 	curr_dev = link;
-	return ni_gpib_config(link);
+	ret = ni_gpib_config(link);
+	if (ret) {
+		kfree(info);
+		link->priv = NULL;
+	}
+
+	return ret;
 }
 
 /*
