@@ -1597,12 +1597,17 @@ SYSCALL_DEFINE1(close, unsigned int, fd)
 	if (likely(retval == 0))
 		return 0;
 
-	/* can't restart close syscall because file table entry was cleared */
-	if (retval == -ERESTARTSYS ||
+	/*
+	 * The file descriptor has already been closed, so an interrupted
+	 * close cannot be restarted safely. Do not report EINTR after the
+	 * descriptor has been detached.
+	 */
+	if (retval == -EINTR ||
+	    retval == -ERESTARTSYS ||
 	    retval == -ERESTARTNOINTR ||
 	    retval == -ERESTARTNOHAND ||
 	    retval == -ERESTART_RESTARTBLOCK)
-		retval = -EINTR;
+		retval = 0;
 
 	return retval;
 }
