@@ -180,8 +180,7 @@ static int proc_fd_link(struct dentry *dentry, struct path *path,
 
 	fd_file = fget_task(task, fd);
 	if (fd_file) {
-		*path = fd_file->f_path;
-		path_get(&fd_file->f_path);
+		path_clone(&fd_file->f_path, path);
 		ret = 0;
 		fput(fd_file);
 	}
