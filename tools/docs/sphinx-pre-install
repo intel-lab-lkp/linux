@@ -41,6 +41,13 @@ from kdoc.python_version import PythonVersion
 RECOMMENDED_VERSION = PythonVersion("3.4.3").version
 MIN_PYTHON_VERSION = PythonVersion("3.7").version
 
+# Sphinx only learned to cope with Docutils 0.22 on its 9.0.0 release, and
+# upstream chose not to backport that to the 8.2.x series:
+#     https://github.com/orgs/sphinx-doc/discussions/14055
+# So the pair below is broken for good, not just until the next point release.
+MIN_DOCUTILS_SPHINX = PythonVersion("9.0.0").version
+DOCUTILS_BREAKS_AT = PythonVersion("0.22").version
+
 
 class DepManager:
     """
@@ -490,9 +497,71 @@ class MissingCheckers(AncillaryMethods):
             self.need_sphinx = 1
             return
 
+        self.check_docutils(sphinx)
+
         # On version check mode, just assume Sphinx has all mandatory deps
         if self.version_check and self.cur_version >= RECOMMENDED_VERSION:
             sys.exit(0)
+
+    def get_docutils_version(self, cmd):
+        """
+        Get the Docutils version a sphinx-build command would use.
+
+        Docutils is a Python module rather than a program, so it has to be
+        asked of the very interpreter that runs sphinx-build: a venv and the
+        system install can hold different versions. Take it from the script's
+        shebang, falling back to the interpreter running this script.
+        """
+        python = sys.executable
+
+        try:
+            with open(cmd, "r", encoding="utf-8") as f:
+                match = re.match(r"^#!\s*(\S+)", f.readline())
+                if match:
+                    python = match.group(1)
+        except (OSError, UnicodeDecodeError):
+            pass
+
+        try:
+            result = self.run(
+                [python, "-c", "import docutils; print(docutils.__version__)"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        except (OSError, subprocess.CalledProcessError):
+            return None
+
+        match = re.match(r"^\s*([0-9]+(?:\.[0-9]+)*)", result.stdout)
+        if not match:
+            return None
+
+        return PythonVersion.parse_version(match.group(1))
+
+    def check_docutils(self, sphinx):
+        """
+        Warn when Sphinx is paired with a Docutils it cannot handle.
+
+        Sphinx declares the Docutils range it supports, but distributions
+        sometimes relax that upper bound to ship a newer Docutils. The pair
+        still builds HTML, so nothing looks wrong until pdfdocs is run and
+        the LaTeX output turns out to be broken.
+        """
+        if not self.cur_version or self.cur_version >= MIN_DOCUTILS_SPHINX:
+            return
+
+        docutils_version = self.get_docutils_version(sphinx)
+        if not docutils_version or docutils_version < DOCUTILS_BREAKS_AT:
+            return
+
+        curver = PythonVersion.ver_str(self.cur_version)
+        docver = PythonVersion.ver_str(docutils_version)
+        minver = PythonVersion.ver_str(MIN_DOCUTILS_SPHINX)
+
+        print(f"WARNING: Sphinx {curver} does not support Docutils {docver}.")
+        print(f"         Docutils 0.22 and above need Sphinx {minver} or later.")
+        print("         PDF builds are known to produce broken LaTeX with this")
+        print("         combination, even though HTML builds fine.")
 
     def catcheck(self, filename):
         """
