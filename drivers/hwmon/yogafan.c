@@ -84,12 +84,6 @@ static const struct yogafan_config xiaoxin_8bit_dual_cfg = {
 	.paths = { "\\_SB.PCI0.LPC0.EC0.FANS", "\\_SB.PCI0.LPC0.EC0.FA2S" }
 };
 
-static const struct yogafan_config yoga_pro_7_14iah10_cfg = {
-	.multiplier = 100,
-	.fan_count = 1,
-	.paths = { "\\_SB.PC00.LPCB.EC0.FANS", NULL }
-};
-
 static void apply_rllag_filter(struct yoga_fan_data *data, int idx, long raw_rpm)
 {
 	ktime_t now = ktime_get_boottime();
@@ -227,7 +221,7 @@ static const struct dmi_system_id yogafan_quirks[] = {
 			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
 			DMI_MATCH(DMI_PRODUCT_FAMILY, "Yoga Pro 7 14IAH10"),
 		},
-		.driver_data = (void *)&yoga_pro_7_14iah10_cfg,
+		.driver_data = (void *)&loq_15iax9_8bit_dual_cfg,
 	},
 	{
 		.ident = "Lenovo Yoga 7 16ARP8",
