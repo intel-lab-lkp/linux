@@ -2285,8 +2285,7 @@ static int map_files_get_link(struct dentry *dentry, struct path *path,
 	rc = -ENOENT;
 	vma = find_exact_vma(mm, vm_start, vm_end);
 	if (vma && vma->vm_file) {
-		*path = *file_user_path(vma->vm_file);
-		path_get(path);
+		path_clone(file_user_path(vma->vm_file), path);
 		rc = 0;
 	}
 	mmap_read_unlock(mm);

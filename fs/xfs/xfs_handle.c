@@ -94,8 +94,7 @@ xfs_find_handle(
 
 		if (fd_empty(f))
 			return -EBADF;
-		path = fd_file(f)->f_path;
-		path_get(&path);
+		path_clone(&fd_file(f)->f_path, &path);
 	} else {
 		error = user_path_at(AT_FDCWD, hreq->path, 0, &path);
 		if (error)

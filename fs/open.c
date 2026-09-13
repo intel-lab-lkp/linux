@@ -653,8 +653,7 @@ SYSCALL_DEFINE2(fchroot, int, fd, unsigned int, flags)
 		if (!ns_capable(current_user_ns(), CAP_SYS_CHROOT))
 			return -EPERM;
 
-		path = fd_file(f)->f_path;
-		path_get(&path);
+		path_clone(&fd_file(f)->f_path, &path);
 	}
 
 	error = security_path_chroot(&path);

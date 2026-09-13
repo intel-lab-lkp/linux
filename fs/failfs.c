@@ -13,8 +13,7 @@ static struct path failfs_root_path = {};
 
 void failfs_get_root(struct path *path)
 {
-	*path = failfs_root_path;
-	path_get(path);
+	path_clone(&failfs_root_path, path);
 }
 
 bool failfs_mnt(const struct vfsmount *mnt)

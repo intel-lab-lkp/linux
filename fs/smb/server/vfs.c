@@ -1348,8 +1348,7 @@ retry:
 	path_len = strlen(filepath);
 	remain_len = path_len;
 
-	parent_path = share_conf->vfs_path;
-	path_get(&parent_path);
+	path_clone(&share_conf->vfs_path, &parent_path);
 
 	while (d_can_lookup(parent_path.dentry)) {
 		char *filename = filepath + path_len - remain_len;

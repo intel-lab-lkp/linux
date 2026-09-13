@@ -152,8 +152,7 @@ struct vfsmount *devpts_mntget(struct file *filp, struct pts_fs_info *fsi)
 	struct path path;
 	int err = 0;
 
-	path = filp->f_path;
-	path_get(&path);
+	path_clone(&filp->f_path, &path);
 
 	/* Walk upward while the start point is a bind mount of
 	 * a single file.
@@ -184,8 +183,7 @@ struct pts_fs_info *devpts_acquire(struct file *filp)
 	struct path path;
 	struct super_block *sb;
 
-	path = filp->f_path;
-	path_get(&path);
+	path_clone(&filp->f_path, &path);
 
 	/* Has the devpts filesystem already been found? */
 	if (path.mnt->mnt_sb->s_magic != DEVPTS_SUPER_MAGIC) {

@@ -474,8 +474,7 @@ static int ovl_parse_layer(struct fs_context *fc, struct fs_parameter *param,
 		if (!buf)
 			return -ENOMEM;
 
-		layer_path = param->file->f_path;
-		path_get(&layer_path);
+		path_clone(&param->file->f_path, &layer_path);
 
 		layer_name = d_path(&layer_path, buf, PATH_MAX);
 		if (IS_ERR(layer_name))

@@ -402,8 +402,7 @@ SYSCALL_DEFINE5(file_getattr, int, dfd, const char __user *, filename,
 		if (fd_empty(f))
 			return -EBADF;
 
-		filepath = fd_file(f)->f_path;
-		path_get(&filepath);
+		path_clone(&fd_file(f)->f_path, &filepath);
 	} else {
 		error = filename_lookup(dfd, name, lookup_flags, &filepath,
 					NULL);
@@ -464,8 +463,7 @@ SYSCALL_DEFINE5(file_setattr, int, dfd, const char __user *, filename,
 		if (fd_empty(f))
 			return -EBADF;
 
-		filepath = fd_file(f)->f_path;
-		path_get(&filepath);
+		path_clone(&fd_file(f)->f_path, &filepath);
 	} else {
 		error = filename_lookup(dfd, name, lookup_flags, &filepath,
 					NULL);

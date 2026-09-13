@@ -1182,8 +1182,7 @@ static int nd_jump_root(struct nameidata *nd)
 			return -ECHILD;
 	} else {
 		path_put(&nd->path);
-		nd->path = nd->root;
-		path_get(&nd->path);
+		path_clone(&nd->root, &nd->path);
 		nd->inode = nd->path.dentry->d_inode;
 	}
 	nd->state |= ND_JUMPED;

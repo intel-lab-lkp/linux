@@ -1202,8 +1202,7 @@ static int fanotify_find_path(int dfd, const char __user *filename,
 		    !(S_ISDIR(file_inode(fd_file(f))->i_mode)))
 			return -ENOTDIR;
 
-		*path = fd_file(f)->f_path;
-		path_get(path);
+		path_clone(&fd_file(f)->f_path, path);
 		ret = 0;
 	} else {
 		unsigned int lookup_flags = 0;

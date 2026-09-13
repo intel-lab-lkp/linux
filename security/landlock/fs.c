@@ -892,8 +892,7 @@ is_access_to_paths_allowed(const struct landlock_domain *const domain,
 		child2_is_directory = d_is_dir(dentry_child2);
 	}
 
-	walker_path = *path;
-	path_get(&walker_path);
+	path_clone(&*path, &walker_path);
 	/*
 	 * We need to walk through all the hierarchy to not miss any relevant
 	 * restriction.

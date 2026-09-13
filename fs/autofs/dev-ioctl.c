@@ -200,8 +200,7 @@ static int find_autofs_mount(const char *pathname,
 	while (path.dentry == path.mnt->mnt_root) {
 		if (path.dentry->d_sb->s_magic == AUTOFS_SUPER_MAGIC) {
 			if (test(&path, data)) {
-				path_get(&path);
-				*res = path;
+				path_clone(&path, res);
 				err = 0;
 				break;
 			}

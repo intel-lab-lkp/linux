@@ -1321,8 +1321,7 @@ loop_get_status(struct loop_device *lo, struct loop_info64 *info)
 	memcpy(info->lo_file_name, lo->lo_file_name, LO_NAME_SIZE);
 
 	/* Drop lo_mutex while we call into the filesystem. */
-	path = lo->lo_backing_file->f_path;
-	path_get(&path);
+	path_clone(&lo->lo_backing_file->f_path, &path);
 	mutex_unlock(&lo->lo_mutex);
 	ret = vfs_getattr(&path, &stat, STATX_INO, AT_STATX_SYNC_AS_STAT);
 	if (!ret) {

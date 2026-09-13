@@ -42,8 +42,7 @@ static struct simple_xattr_cache pidfs_xa_cache;
 
 void pidfs_get_root(struct path *path)
 {
-	*path = pidfs_root_path;
-	path_get(path);
+	path_clone(&pidfs_root_path, path);
 }
 
 enum pidfs_attr_mask_bits {

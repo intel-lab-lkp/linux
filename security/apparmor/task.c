@@ -337,8 +337,7 @@ static const char *get_current_exe_path(char *buffer, int buffer_size)
 	exe_file = get_task_exe_file(current);
 	if (!exe_file)
 		return ERR_PTR(-ENOENT);
-	p = exe_file->f_path;
-	path_get(&p);
+	path_clone(&exe_file->f_path, &p);
 
 	if (aa_path_name(&p, FLAG_VIEW_SUBNS, buffer, &path_str, NULL, NULL))
 		path_str = ERR_PTR(-ENOMEM);

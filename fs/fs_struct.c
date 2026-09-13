@@ -120,10 +120,8 @@ struct fs_struct *copy_fs_struct(struct fs_struct *old)
 		fs->umask = old->umask;
 
 		read_seqlock_excl(&old->seq);
-		fs->root = old->root;
-		path_get(&fs->root);
-		fs->pwd = old->pwd;
-		path_get(&fs->pwd);
+		path_clone(&old->root, &fs->root);
+		path_clone(&old->pwd, &fs->pwd);
 		read_sequnlock_excl(&old->seq);
 	}
 	return fs;

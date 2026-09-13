@@ -4613,8 +4613,7 @@ SYSCALL_DEFINE5(move_mount,
 		if (fd_empty(f_to))
 			return -EBADF;
 
-		to_path = fd_file(f_to)->f_path;
-		path_get(&to_path);
+		path_clone(&fd_file(f_to)->f_path, &to_path);
 	} else {
 		lflags = 0;
 		if (flags & MOVE_MOUNT_T_SYMLINKS)

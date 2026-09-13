@@ -29,8 +29,7 @@ static struct path nsfs_root_path = {};
 
 void nsfs_get_root(struct path *path)
 {
-	*path = nsfs_root_path;
-	path_get(path);
+	path_clone(&nsfs_root_path, path);
 }
 
 static long ns_ioctl(struct file *filp, unsigned int ioctl,

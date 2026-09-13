@@ -349,8 +349,7 @@ static int get_path_from_fd(const s32 fd, struct path *const path)
 	    IS_PRIVATE(d_backing_inode(fd_file(f)->f_path.dentry)))
 		return -EBADFD;
 
-	*path = fd_file(f)->f_path;
-	path_get(path);
+	path_clone(&fd_file(f)->f_path, path);
 	return 0;
 }
 

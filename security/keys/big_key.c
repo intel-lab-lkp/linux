@@ -121,8 +121,7 @@ int big_key_preparse(struct key_preparsed_payload *prep)
 		 * later
 		 */
 		payload->data = enckey;
-		payload->path = file->f_path;
-		path_get(&payload->path);
+		path_clone(&file->f_path, &payload->path);
 		fput(file);
 		kvfree_sensitive(buf, enclen);
 	} else {

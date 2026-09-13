@@ -3233,8 +3233,7 @@ static int bpf_uprobe_multi_get_path(const union bpf_attr *attr, struct path *pa
 		CLASS(fd, f)(path_fd);
 		if (fd_empty(f))
 			return -EBADF;
-		*path = fd_file(f)->f_path;
-		path_get(path);
+		path_clone(&fd_file(f)->f_path, path);
 		return 0;
 	}
 

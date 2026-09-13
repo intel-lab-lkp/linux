@@ -173,8 +173,7 @@ static int get_path_anchor(int fd, struct path *root)
 		CLASS(fd, f)(fd);
 		if (fd_empty(f))
 			return -EBADF;
-		*root = fd_file(f)->f_path;
-		path_get(root);
+		path_clone(&fd_file(f)->f_path, root);
 		return 0;
 	}
 
