@@ -426,6 +426,13 @@ static void ipu_prg_remove(struct platform_device *pdev)
 	mutex_lock(&ipu_prg_list_mutex);
 	list_del(&prg->list);
 	mutex_unlock(&ipu_prg_list_mutex);
+
+	pm_runtime_disable(&pdev->dev);
+
+	if (!pm_runtime_status_suspended(&pdev->dev)) {
+		clk_disable_unprepare(prg->clk_axi);
+		clk_disable_unprepare(prg->clk_ipg);
+	}
 }
 
 #ifdef CONFIG_PM
