@@ -161,6 +161,10 @@ xlog_recover_buf_reorder(
 {
 	struct xfs_buf_log_format	*buf_f = item->ri_buf[0].iov_base;
 
+	/* A short region 0 is rejected by xlog_recover_buf_commit_pass1. */
+	if (!xfs_buf_log_check_iovec(&item->ri_buf[0]))
+		return XLOG_REORDER_ITEM_LIST;
+
 	if (buf_f->blf_flags & XFS_BLF_CANCEL)
 		return XLOG_REORDER_CANCEL_LIST;
 	if (buf_f->blf_flags & XFS_BLF_INODE_BUF)
