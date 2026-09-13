@@ -1102,8 +1102,7 @@ int vfs_open(const struct path *path, struct file *file)
 {
 	int ret;
 
-	file->__f_path = *path;
-	path_get(&file->f_path);
+	path_clone(path, &file->__f_path);
 	ret = do_dentry_open(file, NULL);
 	if (!ret) {
 		/*
@@ -1125,9 +1124,7 @@ int vfs_open_consume(struct path *path, struct file *file)
 {
 	int ret;
 
-	file->__f_path = *path;
-	path->mnt = NULL;
-	path->dentry = NULL;
+	path_move(path, &file->__f_path);
 	ret = do_dentry_open(file, NULL);
 	if (!ret) {
 		fsnotify_open(file);
