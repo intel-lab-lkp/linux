@@ -255,6 +255,10 @@ void rhashtable_free_and_destroy(struct rhashtable *ht,
 				 void *arg);
 void rhashtable_destroy(struct rhashtable *ht);
 
+void rhashtable_flush_and_free(struct rhashtable *ht,
+			       void (*free_fn)(void *ptr, void *arg),
+			       void *arg);
+
 struct rhash_lock_head __rcu **rht_bucket_nested(
 	const struct bucket_table *tbl, unsigned int hash);
 struct rhash_lock_head __rcu **__rht_bucket_nested(
@@ -621,6 +625,9 @@ static __always_inline struct rhash_head *__rhashtable_lookup(
 
 	BUILD_BUG_ON(!__builtin_constant_p(freq));
 	tbl = rht_dereference_rcu(ht->tbl, ht);
+	if (!tbl)
+		goto out;
+
 restart:
 	hash = rht_key_hashfn(ht, tbl, key, params);
 	bkt = rht_bucket(tbl, hash);
@@ -644,6 +651,7 @@ restart:
 	if (unlikely(tbl))
 		goto restart;
 
+out:
 	return NULL;
 }
 
@@ -759,16 +767,19 @@ static __always_inline void *__rhashtable_insert_fast(
 	};
 	struct rhash_lock_head __rcu **bkt;
 	struct rhash_head __rcu **pprev;
+	void *data = ERR_PTR(-ESTALE);
 	struct bucket_table *tbl;
 	struct rhash_head *head;
 	unsigned long flags;
 	unsigned int hash;
 	int elasticity;
-	void *data;
 
 	rcu_read_lock();
 
 	tbl = rht_dereference_rcu(ht->tbl, ht);
+	if (!tbl)
+		goto out;
+
 	hash = rht_head_hashfn(ht, tbl, obj, params);
 	elasticity = RHT_ELASTICITY;
 	bkt = rht_bucket_insert(ht, tbl, hash);
@@ -1127,11 +1138,13 @@ static __always_inline int __rhashtable_remove_fast(
 	const struct rhashtable_params params, bool rhlist)
 {
 	struct bucket_table *tbl;
-	int err;
+	int err = -ENOENT;
 
 	rcu_read_lock();
 
 	tbl = rht_dereference_rcu(ht->tbl, ht);
+	if (!tbl)
+		goto out;
 
 	/* Because we have already taken (and released) the bucket
 	 * lock in old_tbl, if we find that future_tbl is not yet
@@ -1143,6 +1156,7 @@ static __always_inline int __rhashtable_remove_fast(
 	       (tbl = rht_dereference_rcu(tbl->future_tbl, ht)))
 		;
 
+out:
 	rcu_read_unlock();
 
 	return err;
@@ -1262,11 +1276,13 @@ static __always_inline int rhashtable_replace_fast(
 	const struct rhashtable_params params)
 {
 	struct bucket_table *tbl;
-	int err;
+	int err = -ENOENT;
 
 	rcu_read_lock();
 
 	tbl = rht_dereference_rcu(ht->tbl, ht);
+	if (!tbl)
+		goto out;
 
 	/* Because we have already taken (and released) the bucket
 	 * lock in old_tbl, if we find that future_tbl is not yet
@@ -1278,6 +1294,7 @@ static __always_inline int rhashtable_replace_fast(
 	       (tbl = rht_dereference_rcu(tbl->future_tbl, ht)))
 		;
 
+out:
 	rcu_read_unlock();
 
 	return err;
@@ -1331,4 +1348,19 @@ static inline void rhltable_destroy(struct rhltable *hlt)
 	rhltable_free_and_destroy(hlt, NULL, NULL);
 }
 
+/**
+ * rhltable_flush_and_free - unlink and free all elements in the hash list table
+ * @hlt:	the hash list table to destroy
+ * @free_fn:	callback to release resources of element
+ * @arg:	pointer passed to free_fn
+ *
+ * See documentation for rhashtable_flush_and_free.
+ */
+static inline void rhltable_flush_and_free(struct rhltable *hlt,
+					   void (*free_fn)(void *ptr,
+							   void *arg),
+					   void *arg)
+{
+	rhashtable_flush_and_free(&hlt->ht, free_fn, arg);
+}
 #endif /* _LINUX_RHASHTABLE_H */
