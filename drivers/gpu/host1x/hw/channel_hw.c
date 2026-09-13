@@ -28,7 +28,7 @@ static void trace_write_gather(struct host1x_cdma *cdma, struct host1x_bo *bo,
 	if (host1x_debug_trace_cmdbuf)
 		mem = host1x_bo_mmap(bo);
 
-	if (mem) {
+	if (!IS_ERR_OR_NULL(mem)) {
 		u32 i;
 		/*
 		 * Write in batches of 128 as there seems to be a limit
