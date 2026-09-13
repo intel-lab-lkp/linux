@@ -775,6 +775,9 @@ static void anx6345_i2c_remove(struct i2c_client *client)
 
 	drm_bridge_remove(&anx6345->bridge);
 
+	if (anx6345->powered)
+		anx6345_poweroff(anx6345);
+
 	unregister_i2c_dummy_clients(anx6345);
 
 	drm_edid_free(anx6345->drm_edid);
