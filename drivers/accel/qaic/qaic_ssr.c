@@ -195,7 +195,11 @@ struct dump_file_meta {
 
 static void free_ssr_dump_info(struct ssr_crashdump *ssr_crash)
 {
-	struct ssr_dump_info *dump_info = ssr_crash->dump_info;
+	struct ssr_dump_info *dump_info;
+
+	if (!ssr_crash)
+		return;
+	dump_info = ssr_crash->dump_info;
 
 	ssr_crash->dump_info = NULL;
 	if (!dump_info)
