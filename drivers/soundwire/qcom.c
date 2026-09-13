@@ -1713,23 +1713,42 @@ err_init:
 
 static void qcom_swrm_remove(struct platform_device *pdev)
 {
-	struct qcom_swrm_ctrl *ctrl = dev_get_drvdata(&pdev->dev);
+	struct device *dev = &pdev->dev;
+	struct qcom_swrm_ctrl *ctrl = dev_get_drvdata(dev);
+	bool suspended;
+
+	pm_runtime_disable(dev);
+	suspended = pm_runtime_status_suspended(dev);
+
+	devm_free_irq(dev, ctrl->irq, ctrl);
+	if (ctrl->wake_irq > 0)
+		devm_free_irq(dev, ctrl->wake_irq, ctrl);
 
 	sdw_bus_master_delete(&ctrl->bus);
-	clk_disable_unprepare(ctrl->hclk);
+	if (!suspended)
+		clk_disable_unprepare(ctrl->hclk);
+	pm_runtime_set_suspended(dev);
 }
 
 static int __maybe_unused swrm_runtime_resume(struct device *dev)
 {
 	struct qcom_swrm_ctrl *ctrl = dev_get_drvdata(dev);
+	bool wake_irq_disabled = false;
 	int ret;
 
 	if (ctrl->wake_irq > 0) {
-		if (!irqd_irq_disabled(irq_get_irq_data(ctrl->wake_irq)))
+		if (!irqd_irq_disabled(irq_get_irq_data(ctrl->wake_irq))) {
 			disable_irq_nosync(ctrl->wake_irq);
+			wake_irq_disabled = true;
+		}
 	}
 
-	clk_prepare_enable(ctrl->hclk);
+	ret = clk_prepare_enable(ctrl->hclk);
+	if (ret) {
+		if (wake_irq_disabled)
+			enable_irq(ctrl->wake_irq);
+		return ret;
+	}
 
 	if (ctrl->clock_stop_not_supported) {
 		reinit_completion(&ctrl->enumeration);
