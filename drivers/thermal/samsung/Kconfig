@@ -4,6 +4,7 @@ config EXYNOS_THERMAL
 	depends on THERMAL_OF
 	depends on HAS_IOMEM
 	default ARCH_EXYNOS
+	select THERMAL_EMULATION
 	help
 	  If you say yes here you get support for the TMU (Thermal Management
 	  Unit) driver for Samsung Exynos series of SoCs. This driver initialises
