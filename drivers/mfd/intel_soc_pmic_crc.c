@@ -164,6 +164,13 @@ static const struct crystal_cove_config crystal_cove_config_cht_crc = {
 	.irq_chip = &crystal_cove_irq_chip,
 };
 
+static void crystal_cove_disable_irq_wake(void *data)
+{
+	struct intel_soc_pmic *pmic = data;
+
+	disable_irq_wake(pmic->irq);
+}
+
 static int crystal_cove_i2c_probe(struct i2c_client *i2c)
 {
 	const struct crystal_cove_config *config;
@@ -195,8 +202,14 @@ static int crystal_cove_i2c_probe(struct i2c_client *i2c)
 		return ret;
 
 	ret = enable_irq_wake(pmic->irq);
-	if (ret)
+	if (ret) {
 		dev_warn(dev, "Can't enable IRQ as wake source: %d\n", ret);
+	} else {
+		ret = devm_add_action_or_reset(dev,
+					       crystal_cove_disable_irq_wake, pmic);
+		if (ret)
+			return ret;
+	}
 
 	/* Add lookup table for crc-pwm */
 	pwm_add_table(crc_pwm_lookup, ARRAY_SIZE(crc_pwm_lookup));
