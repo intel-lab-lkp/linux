@@ -186,6 +186,7 @@ struct exynos_tmu_data {
  * @tmu_read: SoC-specific TMU temperature read method.
  * @tmu_set_emulation: SoC-specific TMU emulation setting method.
  * @tmu_clear_irqs: SoC-specific TMU interrupt clearing method.
+ * @tmu_ops: SoC-specific thermal zone device operations.
  */
 struct exynos_tmu_variant {
 	enum soc_type soc;
@@ -205,6 +206,7 @@ struct exynos_tmu_variant {
 	int (*tmu_read)(struct exynos_tmu_data *data);
 	void (*tmu_set_emulation)(struct exynos_tmu_data *data, int temp);
 	void (*tmu_clear_irqs)(struct exynos_tmu_data *data);
+	const struct thermal_zone_device_ops *tmu_ops;
 };
 
 /*
@@ -809,6 +811,34 @@ static void exynos4210_tmu_clear_irqs(struct exynos_tmu_data *data)
 	writel(val_irq, data->base + tmu_intclear);
 }
 
+static int exynos_set_trips(struct thermal_zone_device *tz, int low, int high)
+{
+	struct exynos_tmu_data *data = thermal_zone_device_priv(tz);
+
+	mutex_lock(&data->lock);
+	clk_enable(data->clk);
+
+	if (low > INT_MIN)
+		data->variant->tmu_set_low_temp(data, low / MCELSIUS);
+	else
+		data->variant->tmu_disable_low(data);
+	if (high < INT_MAX)
+		data->variant->tmu_set_high_temp(data, high / MCELSIUS);
+	else
+		data->variant->tmu_disable_high(data);
+
+	clk_disable(data->clk);
+	mutex_unlock(&data->lock);
+
+	return 0;
+}
+
+static const struct thermal_zone_device_ops exynos_sensor_ops = {
+	.get_temp = exynos_get_temp,
+	.set_emul_temp = exynos_tmu_set_emulation,
+	.set_trips = exynos_set_trips,
+};
+
 static const struct exynos_tmu_variant exynos3250_data = {
 	.soc = SOC_ARCH_EXYNOS3250,
 	.gain = 8,
@@ -826,6 +856,7 @@ static const struct exynos_tmu_variant exynos3250_data = {
 	.tmu_read = exynos4412_tmu_read,
 	.tmu_set_emulation = exynos4412_tmu_set_emulation,
 	.tmu_clear_irqs = exynos4210_tmu_clear_irqs,
+	.tmu_ops = &exynos_sensor_ops,
 };
 
 static const struct exynos_tmu_variant exynos4210_data = {
@@ -844,6 +875,7 @@ static const struct exynos_tmu_variant exynos4210_data = {
 	.tmu_control = exynos4210_tmu_control,
 	.tmu_read = exynos4210_tmu_read,
 	.tmu_clear_irqs = exynos4210_tmu_clear_irqs,
+	.tmu_ops = &exynos_sensor_ops,
 };
 
 static const struct exynos_tmu_variant exynos4412_data = {
@@ -863,6 +895,7 @@ static const struct exynos_tmu_variant exynos4412_data = {
 	.tmu_read = exynos4412_tmu_read,
 	.tmu_set_emulation = exynos4412_tmu_set_emulation,
 	.tmu_clear_irqs = exynos4210_tmu_clear_irqs,
+	.tmu_ops = &exynos_sensor_ops,
 };
 
 static const struct exynos_tmu_variant exynos5250_data = {
@@ -882,6 +915,7 @@ static const struct exynos_tmu_variant exynos5250_data = {
 	.tmu_read = exynos4412_tmu_read,
 	.tmu_set_emulation = exynos4412_tmu_set_emulation,
 	.tmu_clear_irqs = exynos4210_tmu_clear_irqs,
+	.tmu_ops = &exynos_sensor_ops,
 };
 
 static const struct exynos_tmu_variant exynos5260_data = {
@@ -901,6 +935,7 @@ static const struct exynos_tmu_variant exynos5260_data = {
 	.tmu_read = exynos4412_tmu_read,
 	.tmu_set_emulation = exynos4412_tmu_set_emulation,
 	.tmu_clear_irqs = exynos4210_tmu_clear_irqs,
+	.tmu_ops = &exynos_sensor_ops,
 };
 
 static const struct exynos_tmu_variant exynos5420_data = {
@@ -920,6 +955,7 @@ static const struct exynos_tmu_variant exynos5420_data = {
 	.tmu_read = exynos4412_tmu_read,
 	.tmu_set_emulation = exynos4412_tmu_set_emulation,
 	.tmu_clear_irqs = exynos4210_tmu_clear_irqs,
+	.tmu_ops = &exynos_sensor_ops,
 };
 
 static const struct exynos_tmu_variant exynos5420_triminfo_data = {
@@ -939,6 +975,7 @@ static const struct exynos_tmu_variant exynos5420_triminfo_data = {
 	.tmu_read = exynos4412_tmu_read,
 	.tmu_set_emulation = exynos4412_tmu_set_emulation,
 	.tmu_clear_irqs = exynos4210_tmu_clear_irqs,
+	.tmu_ops = &exynos_sensor_ops,
 };
 
 static const struct exynos_tmu_variant exynos5433_data = {
@@ -958,6 +995,7 @@ static const struct exynos_tmu_variant exynos5433_data = {
 	.tmu_read = exynos4412_tmu_read,
 	.tmu_set_emulation = exynos4412_tmu_set_emulation,
 	.tmu_clear_irqs = exynos4210_tmu_clear_irqs,
+	.tmu_ops = &exynos_sensor_ops,
 };
 
 static const struct exynos_tmu_variant exynos7_data = {
@@ -977,6 +1015,7 @@ static const struct exynos_tmu_variant exynos7_data = {
 	.tmu_read = exynos7_tmu_read,
 	.tmu_set_emulation = exynos4412_tmu_set_emulation,
 	.tmu_clear_irqs = exynos4210_tmu_clear_irqs,
+	.tmu_ops = &exynos_sensor_ops,
 };
 
 static const struct of_device_id exynos_tmu_match[] = {
@@ -1052,34 +1091,6 @@ static int exynos_map_dt_data(struct platform_device *pdev)
 	return 0;
 }
 
-static int exynos_set_trips(struct thermal_zone_device *tz, int low, int high)
-{
-	struct exynos_tmu_data *data = thermal_zone_device_priv(tz);
-
-	mutex_lock(&data->lock);
-	clk_enable(data->clk);
-
-	if (low > INT_MIN)
-		data->variant->tmu_set_low_temp(data, low / MCELSIUS);
-	else
-		data->variant->tmu_disable_low(data);
-	if (high < INT_MAX)
-		data->variant->tmu_set_high_temp(data, high / MCELSIUS);
-	else
-		data->variant->tmu_disable_high(data);
-
-	clk_disable(data->clk);
-	mutex_unlock(&data->lock);
-
-	return 0;
-}
-
-static const struct thermal_zone_device_ops exynos_sensor_ops = {
-	.get_temp = exynos_get_temp,
-	.set_emul_temp = exynos_tmu_set_emulation,
-	.set_trips = exynos_set_trips,
-};
-
 static int exynos_tmu_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -1144,7 +1155,7 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 	}
 
 	data->tzd = devm_thermal_of_zone_register(dev, 0, data,
-						  &exynos_sensor_ops);
+						  data->variant->tmu_ops);
 	if (IS_ERR(data->tzd))
 		ret = dev_err_probe(dev, PTR_ERR(data->tzd), "Failed to register sensor\n");
 
