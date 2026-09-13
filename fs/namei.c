@@ -4482,7 +4482,7 @@ retry:
 		 */
 	}
 	if (open_flag & O_CREAT)
-		inode_lock(dir_inode);
+		inode_lock_nested(dir_inode, I_MUTEX_PARENT);
 	else
 		inode_lock_shared(dir_inode);
 
