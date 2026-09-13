@@ -204,6 +204,7 @@ static int qxl_process_single_command(struct qxl_device *qdev,
 	for (i = 0; i < cmd->relocs_num; ++i) {
 		struct drm_qxl_reloc reloc;
 		struct drm_qxl_reloc __user *u = u64_to_user_ptr(cmd->relocs);
+		size_t write_size;
 
 		if (copy_from_user(&reloc, u + i, sizeof(reloc))) {
 			ret = -EFAULT;
@@ -220,6 +221,9 @@ static int qxl_process_single_command(struct qxl_device *qdev,
 		}
 		reloc_info[i].type = reloc.reloc_type;
 
+		write_size = reloc.reloc_type == QXL_RELOC_TYPE_BO ?
+			     sizeof(uint64_t) : sizeof(uint32_t);
+
 		if (reloc.dst_handle) {
 			ret = qxlhw_handle_to_bo(file_priv, reloc.dst_handle, release,
 						 &reloc_info[i].dst_bo);
@@ -227,8 +231,20 @@ static int qxl_process_single_command(struct qxl_device *qdev,
 				goto out_free_bos;
 			reloc_info[i].dst_offset = reloc.dst_offset;
 		} else {
+			if (reloc.dst_offset < sizeof(union qxl_release_info) ||
+			    reloc.dst_offset + write_size >
+			    sizeof(union qxl_release_info) + cmd->command_size) {
+				ret = -EINVAL;
+				goto out_free_bos;
+			}
 			reloc_info[i].dst_bo = cmd_bo;
 			reloc_info[i].dst_offset = reloc.dst_offset + release->release_offset;
+		}
+
+		if ((u64)reloc_info[i].dst_offset + write_size >
+		    reloc_info[i].dst_bo->tbo.base.size) {
+			ret = -EINVAL;
+			goto out_free_bos;
 		}
 
 		/* reserve and validate the reloc dst bo */
