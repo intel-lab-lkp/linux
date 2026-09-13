@@ -514,12 +514,19 @@ static int nt35950_probe(struct mipi_dsi_device *dsi)
 
 		ret = mipi_dsi_attach(nt->dsi[i]);
 		if (ret < 0) {
-			/* If we fail to attach to either host, we're done */
+			dev_err_probe(dev, ret,
+				      "Cannot attach to DSI%d host.\n", i);
+
+			/* Detach from all previously attached DSI hosts */
+			while (i--)
+				mipi_dsi_detach(nt->dsi[i]);
+
 			if (num_dsis == 2)
 				mipi_dsi_device_unregister(nt->dsi[1]);
 
-			return dev_err_probe(dev, ret,
-					     "Cannot attach to DSI%d host.\n", i);
+			drm_panel_remove(&nt->panel);
+
+			return ret;
 		}
 	}
 
