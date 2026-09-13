@@ -312,6 +312,9 @@ int qxl_alloc_release_reserved(struct qxl_device *qdev, unsigned long size,
 		return -EINVAL;
 	}
 
+	if (size > release_size_per_bo[cur_idx])
+		return -EINVAL;
+
 	idr_ret = qxl_release_alloc(qdev, type, release);
 	if (idr_ret < 0) {
 		if (rbo)
