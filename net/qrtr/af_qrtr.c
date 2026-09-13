@@ -393,7 +393,8 @@ static int qrtr_node_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 		mutex_unlock(&node->ep_lock);
 	}
 	/* Need to ensure that a subsequent message carries the otherwise lost
-	 * confirm_rx flag if we dropped this one */
+	 * confirm_rx flag if we dropped this one
+	 */
 	if (rc && confirm_rx)
 		qrtr_tx_flow_failed(node, to->sq_node, to->sq_port);
 
@@ -471,7 +472,7 @@ int qrtr_endpoint_post(struct qrtr_endpoint *ep, const void *data, size_t len)
 	cb = (struct qrtr_cb *)skb->cb;
 
 	/* Version field in v1 is little endian, so this works for both cases */
-	ver = *(u8*)data;
+	ver = *(u8 *)data;
 
 	switch (ver) {
 	case QRTR_PROTO_VER_1:
@@ -769,7 +770,8 @@ static void qrtr_port_remove(struct qrtr_sock *ipc)
 	xa_erase(&qrtr_ports, port);
 
 	/* Ensure that if qrtr_port_lookup() did enter the RCU read section we
-	 * wait for it to up increment the refcount */
+	 * wait for it to up increment the refcount
+	 */
 	synchronize_rcu();
 
 	__sock_put(&ipc->sk);
@@ -957,8 +959,8 @@ static int qrtr_bcast_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 static int qrtr_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 {
 	DECLARE_SOCKADDR(struct sockaddr_qrtr *, addr, msg->msg_name);
-	int (*enqueue_fn)(struct qrtr_node *, struct sk_buff *, int,
-			  struct sockaddr_qrtr *, struct sockaddr_qrtr *);
+	int (*enqueue_fn)(struct qrtr_node *node, struct sk_buff *skb, int type,
+			  struct sockaddr_qrtr *from, struct sockaddr_qrtr *to);
 	__le32 qrtr_type = cpu_to_le32(QRTR_TYPE_DATA);
 	struct qrtr_sock *ipc = qrtr_sk(sock->sk);
 	struct sock *sk = sock->sk;
