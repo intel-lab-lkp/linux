@@ -246,6 +246,7 @@ static void ohci_platform_remove(struct platform_device *dev)
 
 	pm_runtime_get_sync(&dev->dev);
 	usb_remove_hcd(hcd);
+	device_wakeup_disable(&dev->dev);
 
 	if (pdata->power_off)
 		pdata->power_off(dev);
