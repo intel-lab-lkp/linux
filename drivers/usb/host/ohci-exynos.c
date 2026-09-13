@@ -194,6 +194,7 @@ static void exynos_ohci_remove(struct platform_device *pdev)
 	pdev->dev.of_node = exynos_ohci->of_node;
 
 	usb_remove_hcd(hcd);
+	device_wakeup_disable(hcd->self.controller);
 
 	exynos_ohci_phy_disable(&pdev->dev);
 
