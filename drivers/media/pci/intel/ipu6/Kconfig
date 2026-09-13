@@ -10,6 +10,7 @@ config VIDEO_INTEL_IPU6
 	select MEDIA_CONTROLLER
 	select VIDEOBUF2_DMA_SG
 	select V4L2_FWNODE
+	imply VIDEO_INTEL_CVS
 	help
 	  This is the 6th Gen Intel Image Processing Unit, found in Intel SoCs
 	  and used for capturing images and video from camera sensors.

@@ -1680,7 +1680,6 @@ endmenu
 menu "Miscellaneous helper chips"
 	visible if !MEDIA_HIDE_ANCILLARY_SUBDRV
 
-source "drivers/media/i2c/cvs/Kconfig"
 
 config VIDEO_I2C
 	tristate "I2C transport video support"

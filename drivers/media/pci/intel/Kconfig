@@ -3,6 +3,7 @@
 source "drivers/media/pci/intel/ipu3/Kconfig"
 source "drivers/media/pci/intel/ipu6/Kconfig"
 source "drivers/media/pci/intel/ivsc/Kconfig"
+source "drivers/media/i2c/cvs/Kconfig"
 
 config IPU_BRIDGE
 	tristate "Intel IPU Bridge"
