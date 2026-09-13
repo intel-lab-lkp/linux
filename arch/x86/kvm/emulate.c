@@ -410,6 +410,9 @@ static int em_salc(struct x86_emulate_ctxt *ctxt)
 	_fault ? X86EMUL_UNHANDLEABLE : X86EMUL_CONTINUE; \
 })
 
+static u64 get_invlpg_linear_addr(struct x86_emulate_ctxt *ctxt,
+				  enum x86_intercept intercept);
+
 static int emulator_check_intercept(struct x86_emulate_ctxt *ctxt,
 				    enum x86_intercept intercept,
 				    enum x86_intercept_stage stage)
@@ -427,6 +430,7 @@ static int emulator_check_intercept(struct x86_emulate_ctxt *ctxt,
 		.src_type   = ctxt->src.type,
 		.dst_type   = ctxt->dst.type,
 		.ad_bytes   = ctxt->ad_bytes,
+		.invlpg_linear_addr = get_invlpg_linear_addr(ctxt, intercept),
 		.rip	    = ctxt->eip,
 		.next_rip   = ctxt->_eip,
 	};
@@ -700,6 +704,20 @@ bad:
 		return emulate_ss(ctxt, 0);
 	else
 		return emulate_gp(ctxt, 0);
+}
+
+static u64 get_invlpg_linear_addr(struct x86_emulate_ctxt *ctxt,
+				  enum x86_intercept intercept)
+{
+	unsigned int max_size;
+	unsigned long linear = 0;
+
+	if (intercept != x86_intercept_invlpg)
+		return 0;
+
+	__linearize(ctxt, ctxt->src.addr.mem, &max_size, 1, ctxt->mode,
+		    &linear, X86EMUL_F_INVLPG);
+	return linear;
 }
 
 static int linearize(struct x86_emulate_ctxt *ctxt,
