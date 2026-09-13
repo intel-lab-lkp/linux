@@ -2893,7 +2893,7 @@ tpacket_error:
 				continue;
 			} else {
 				status = TP_STATUS_WRONG_FORMAT;
-				err = tp_len;
+				err = len_sum ? : tp_len;
 				goto out_status;
 			}
 		}
