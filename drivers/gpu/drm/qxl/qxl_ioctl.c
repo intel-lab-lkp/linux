@@ -75,7 +75,7 @@ struct qxl_reloc_info {
 	struct qxl_bo *dst_bo;
 	uint32_t dst_offset;
 	struct qxl_bo *src_bo;
-	int src_offset;
+	uint32_t src_offset;
 };
 
 /*
@@ -259,6 +259,10 @@ static int qxl_process_single_command(struct qxl_device *qdev,
 						 &reloc_info[i].src_bo);
 			if (ret)
 				goto out_free_bos;
+			if (reloc.src_offset >= reloc_info[i].src_bo->tbo.base.size) {
+				ret = -EINVAL;
+				goto out_free_bos;
+			}
 			reloc_info[i].src_offset = reloc.src_offset;
 		} else {
 			reloc_info[i].src_bo = NULL;
