@@ -223,7 +223,7 @@ int sm750_hw_copyarea(struct lynx_accel *accel,
  * @accel: Acceleration device data
  * @src_buf: pointer to start of source buffer in system memory
  * @start_bit: Mono data can start at any bit in a byte, this value should be
- *>-----      0 to 7
+ *             0 to 7
  * @dest_base: Address of destination: offset in frame buffer
  * @dest_pitch: Pitch value of destination surface in BYTE
  * @byte_per_pixel: Color depth of destination surface
@@ -231,8 +231,8 @@ int sm750_hw_copyarea(struct lynx_accel *accel,
  * @dy: Starting y coordinate of destination surface
  * @width: width of rectangle in pixel value
  * @height: height of rectangle in pixel value
- * @fg_color: Foreground color (corresponding to a 1 in the monochrome data
- * @bg_color: Background color (corresponding to a 0 in the monochrome data
+ * @fg_color: Foreground color (corresponding to a 1 in the monochrome data)
+ * @bg_color: Background color (corresponding to a 0 in the monochrome data)
  * @rop2: ROP value
  */
 int sm750_hw_imageblit(struct lynx_accel *accel, const char *src_buf,
