@@ -6469,7 +6469,7 @@ dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 }
 
 static void
-set_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
+set_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, bool reset_core_slice)
 {
 	/* 'current' is not kept within the tree. */
 	if (se->on_rq) {
@@ -6502,6 +6502,10 @@ set_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
 	}
 
 	se->prev_sum_exec_runtime = se->sum_exec_runtime;
+#ifdef CONFIG_SCHED_CORE
+	if (reset_core_slice && entity_is_task(se))
+		rq_of(cfs_rq)->core_sched_start = se->exec_start;
+#endif
 }
 
 static bool __dequeue_task(struct rq *rq, struct task_struct *p, int flags);
@@ -14786,16 +14790,16 @@ static void rq_offline_fair(struct rq *rq)
 
 #ifdef CONFIG_SCHED_CORE
 static inline bool
-__entity_slice_used(struct sched_entity *se, int min_nr_tasks)
+__entity_slice_used(struct rq *rq, struct sched_entity *se, int min_nr_tasks)
 {
-	u64 rtime = se->sum_exec_runtime - se->prev_sum_exec_runtime;
-	u64 slice = se->slice;
+	/* exec_start advances with donor service under proxy execution. */
+	u64 rtime = se->exec_start - rq->core_sched_start;
 
-	return (rtime * min_nr_tasks > slice);
+	return (rtime * min_nr_tasks > se->slice);
 }
 
 #define MIN_NR_TASKS_DURING_FORCEIDLE	2
-static inline void task_tick_core(struct rq *rq, struct task_struct *curr)
+static inline void task_tick_core(struct rq *rq, struct task_struct *donor)
 {
 	if (!sched_core_enabled(rq))
 		return;
@@ -14815,7 +14819,7 @@ static inline void task_tick_core(struct rq *rq, struct task_struct *curr)
 	 * if we need to give up the CPU.
 	 */
 	if (rq->core->core_forceidle_count && rq->cfs.h_nr_queued == 1 &&
-	    __entity_slice_used(&curr->se, MIN_NR_TASKS_DURING_FORCEIDLE))
+	    __entity_slice_used(rq, &donor->se, MIN_NR_TASKS_DURING_FORCEIDLE))
 		resched_curr(rq);
 }
 
@@ -15049,7 +15053,7 @@ static int task_is_throttled_fair(struct task_struct *p, int cpu)
 	return throttled_hierarchy(cfs_rq);
 }
 #else /* !CONFIG_SCHED_CORE: */
-static inline void task_tick_core(struct rq *rq, struct task_struct *curr) {}
+static inline void task_tick_core(struct rq *rq, struct task_struct *donor) {}
 #endif /* !CONFIG_SCHED_CORE */
 
 /*
@@ -15257,6 +15261,11 @@ static void set_next_task_fair(struct rq *rq, struct task_struct *p, bool first)
 {
 	struct sched_entity *se = &p->se;
 	bool throttled = false;
+	/*
+	 * Reset for a new donor or reactivation, but preserve a same-donor
+	 * proxy reselect so service before an owner handoff is retained.
+	 */
+	bool reset_core_slice = !first || rq->donor != p;
 	struct cfs_rq *cfs_rq = &rq->cfs;
 	unsigned long weight = NICE_0_LOAD;
 	bool on_rq = se->on_rq;
@@ -15271,7 +15280,7 @@ static void set_next_task_fair(struct rq *rq, struct task_struct *p, bool first)
 
 		if (!IS_ENABLED(CONFIG_FAIR_GROUP_SCHED) ||
 		    !first || !cfs_rq->h_curr)
-			set_next_entity(cfs_rq, se);
+			set_next_entity(cfs_rq, se, reset_core_slice);
 
 		/* ensure bandwidth has been allocated on our new cfs_rq */
 		throttled |= account_cfs_rq_runtime(cfs_rq, 0);

@@ -1382,6 +1382,8 @@ struct rq {
 	unsigned int		core_forceidle_seq;
 	unsigned int		core_forceidle_occupation;
 	u64			core_forceidle_start;
+	/* Task-clock baseline for the current core-scheduling donor slice. */
+	u64			core_sched_start;
 	unsigned int		core_pick_in_flight;
 #endif /* CONFIG_SCHED_CORE */
 
