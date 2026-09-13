@@ -1362,6 +1362,7 @@ static int fimc_probe(struct platform_device *pdev)
 err_pm_dis:
 	pm_runtime_dont_use_autosuspend(dev);
 	pm_runtime_disable(dev);
+	clk_disable_unprepare(ctx->clocks[FIMC_CLK_LCLK]);
 	fimc_put_clocks(ctx);
 
 	return ret;
@@ -1376,6 +1377,7 @@ static void fimc_remove(struct platform_device *pdev)
 	pm_runtime_dont_use_autosuspend(dev);
 	pm_runtime_disable(dev);
 
+	clk_disable_unprepare(ctx->clocks[FIMC_CLK_LCLK]);
 	fimc_put_clocks(ctx);
 }
 
