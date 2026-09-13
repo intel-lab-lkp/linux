@@ -1910,12 +1910,17 @@ static struct dentry *__d_alloc(struct super_block *sb, const struct qstr *name)
 		return NULL;
 
 	/*
-	 * We guarantee that the inline name is always NUL-terminated.
-	 * This way the memcpy() done by the name switching in rename
-	 * will still always have a NUL at the end, even if we might
-	 * be overwriting an internal NUL character
+	 * Fully initialize the inline name buffer.  copy_name() and
+	 * swap_names() copy d_shortname in its entirety, so any
+	 * uninitialized tail would propagate to the other dentry, and
+	 * __d_lookup_rcu() may transiently read any byte of the inline
+	 * name while rename() rewrites it in place.
+	 *
+	 * This also keeps the inline name NUL-terminated: the name
+	 * switching in rename will still always have a NUL at the end,
+	 * even if we might be overwriting an internal NUL character.
 	 */
-	dentry->d_shortname.string[DNAME_INLINE_LEN-1] = 0;
+	memcpy(dentry->d_shortname.string, 0, DNAME_INLINE_LEN);
 	if (unlikely(!name)) {
 		name = &slash_name;
 		dname = dentry->d_shortname.string;
