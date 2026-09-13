@@ -1143,6 +1143,7 @@ struct local_info {
 static int ines_gpib_probe(struct pcmcia_device *link)
 {
 	struct local_info *info;
+	int ret;
 
 //	int ret, i;
 
@@ -1165,7 +1166,13 @@ static int ines_gpib_probe(struct pcmcia_device *link)
 
 	/* Register with Card Services */
 	curr_dev = link;
-	return ines_gpib_config(link);
+	ret = ines_gpib_config(link);
+	if (ret) {
+		kfree(info);
+		link->priv = NULL;
+	}
+
+	return ret;
 }
 
 /*
