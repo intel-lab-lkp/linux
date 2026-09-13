@@ -68,10 +68,9 @@ static void put_prev_task_stop(struct rq *rq, struct task_struct *prev, struct t
  *
  * NOTE: This function can be called remotely by the tick offload that
  * goes along full dynticks. Therefore no local assumption can be made
- * and everything must be accessed through the @rq and @curr passed in
- * parameters.
+ * and all state must be accessed through @rq.
  */
-static void task_tick_stop(struct rq *rq, struct task_struct *curr, int queued)
+static void task_tick_stop(struct rq *rq, int queued)
 {
 }
 

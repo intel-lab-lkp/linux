@@ -2535,12 +2535,17 @@ static inline void watchdog(struct rq *rq, struct task_struct *p) { }
  *
  * NOTE: This function can be called remotely by the tick offload that
  * goes along full dynticks. Therefore no local assumption can be made
- * and everything must be accessed through the @rq and @curr passed in
- * parameters.
+ * and all state must be accessed through @rq.
  */
-static void task_tick_rt(struct rq *rq, struct task_struct *p, int queued)
+static void task_tick_rt(struct rq *rq, int queued)
 {
-	struct sched_rt_entity *rt_se = &p->rt;
+	struct task_struct *p = rq->donor;
+	struct sched_rt_entity *rt_se;
+
+	if (p->sched_class != &rt_sched_class)
+		return;
+
+	rt_se = &p->rt;
 
 	update_curr_rt(rq);
 	update_rt_rq_load_avg(rq_clock_pelt(rq), rq, 1);

@@ -892,6 +892,22 @@ void update_rq_clock(struct rq *rq)
 	update_rq_clock_task(rq, delta);
 }
 
+/*
+ * Run the scheduling-context class first so its runtime update precedes
+ * execution-context tick work. A different execution class runs second.
+ * Same-class proxy execution gets one callback; ownership-specific work
+ * can select rq->donor or rq->curr as appropriate.
+ */
+static inline void task_tick(struct rq *rq, int queued)
+{
+	const struct sched_class *curr_class = rq->curr->sched_class;
+	const struct sched_class *donor_class = rq->donor->sched_class;
+
+	donor_class->task_tick(rq, queued);
+	if (sched_proxy_exec() && curr_class != donor_class)
+		curr_class->task_tick(rq, queued);
+}
+
 #ifdef CONFIG_SCHED_HRTICK
 /*
  * Use HR-timers to deliver accurate preemption points.
@@ -923,7 +939,7 @@ static enum hrtimer_restart hrtick(struct hrtimer *timer)
 
 	rq_lock(rq, &rf);
 	update_rq_clock(rq);
-	rq->donor->sched_class->task_tick(rq, rq->donor, 1);
+	task_tick(rq, 1);
 	rq_unlock(rq, &rf);
 
 	return HRTIMER_NORESTART;
@@ -5799,7 +5815,7 @@ void sched_tick(void)
 	if (dynamic_preempt_lazy() && tif_test_bit(TIF_NEED_RESCHED_LAZY))
 		resched_curr(rq);
 
-	donor->sched_class->task_tick(rq, donor, 0);
+	task_tick(rq, 0);
 	if (sched_feat(LATENCY_WARN))
 		resched_latency = cpu_resched_latency(rq);
 	calc_global_load_tick(rq);
@@ -5895,7 +5911,7 @@ static void sched_tick_remote(struct work_struct *work)
 				u64 delta = rq_clock_task(rq) - curr->se.exec_start;
 				WARN_ON_ONCE(delta > (u64)NSEC_PER_SEC * 30);
 			}
-			curr->sched_class->task_tick(rq, curr, 0);
+			task_tick(rq, 0);
 
 			calc_load_nohz_remote(rq);
 		}

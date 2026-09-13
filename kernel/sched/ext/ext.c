@@ -3789,9 +3789,21 @@ void scx_tick(struct rq *rq)
 	update_other_load_avgs(rq);
 }
 
-static void task_tick_scx(struct rq *rq, struct task_struct *curr, int queued)
+static void task_tick_scx(struct rq *rq, int queued)
 {
-	struct scx_sched *sch = scx_task_sched(curr);
+	struct task_struct *donor = rq->donor;
+	struct scx_sched *sch;
+
+	/*
+	 * task_tick() may also invoke this callback as the execution class
+	 * after dispatching the donor class. SCX scheduling state belongs to
+	 * the scheduling context, so there is nothing to do here unless the
+	 * donor itself belongs to sched_ext.
+	 */
+	if (donor->sched_class != &ext_sched_class)
+		return;
+
+	sch = scx_task_sched(donor);
 
 	update_curr_scx(rq);
 
@@ -3800,11 +3812,11 @@ static void task_tick_scx(struct rq *rq, struct task_struct *curr, int queued)
 	 * management.
 	 */
 	if (scx_bypassing(sch, cpu_of(rq)))
-		scx_set_task_slice(curr, 0);
+		scx_set_task_slice(donor, 0);
 	else if (SCX_HAS_OP(sch, tick))
-		SCX_CALL_OP_TASK(sch, tick, rq, curr);
+		SCX_CALL_OP_TASK(sch, tick, rq, donor);
 
-	if (!curr->scx.slice)
+	if (!donor->scx.slice)
 		resched_curr(rq);
 }
 
