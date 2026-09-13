@@ -1280,10 +1280,10 @@ static int ov772x_video_probe(struct ov772x_priv *priv)
 	/* Check and show product ID and manufacturer ID. */
 	ret = regmap_read(priv->regmap, PID, &pid);
 	if (ret < 0)
-		return ret;
+		goto done;
 	ret = regmap_read(priv->regmap, VER, &ver);
 	if (ret < 0)
-		return ret;
+		goto done;
 
 	switch (VERSION(pid, ver)) {
 	case OV7720:
@@ -1301,10 +1301,10 @@ static int ov772x_video_probe(struct ov772x_priv *priv)
 
 	ret = regmap_read(priv->regmap, MIDH, &midh);
 	if (ret < 0)
-		return ret;
+		goto done;
 	ret = regmap_read(priv->regmap, MIDL, &midl);
 	if (ret < 0)
-		return ret;
+		goto done;
 
 	dev_info(&client->dev,
 		 "%s Product ID %0x:%0x Manufacturer ID %x:%x\n",
