@@ -70,8 +70,8 @@ EXPORT_SYMBOL_GPL(backing_file_user_path);
 void backing_file_set_user_path(struct file *f, const struct path *path)
 {
 	backing_file(f)->user_path = *path;
+	path_get(path);
 }
-EXPORT_SYMBOL_GPL(backing_file_set_user_path);
 
 #ifdef CONFIG_SECURITY
 void *backing_file_security(const struct file *f)
