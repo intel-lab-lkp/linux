@@ -2745,13 +2745,13 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 		struct inode *inode = root->d_inode;
 		if (*s && unlikely(!d_can_lookup(root)))
 			return ERR_PTR(-ENOTDIR);
-		nd->path = nd->root;
 		nd->inode = inode;
 		if (flags & LOOKUP_RCU) {
+			nd->path = nd->root;
 			nd->seq = read_seqcount_begin(&nd->path.dentry->d_seq);
 			nd->root_seq = nd->seq;
 		} else {
-			path_get(&nd->path);
+			path_clone(&nd->root, &nd->path);
 		}
 		return s;
 	}
@@ -2801,23 +2801,23 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 		if (*s && unlikely(!d_can_lookup(dentry)))
 			return ERR_PTR(-ENOTDIR);
 
-		nd->path = fd_file(f)->f_path;
 		if (flags & LOOKUP_RCU) {
+			nd->path = fd_file(f)->f_path;
 			nd->inode = nd->path.dentry->d_inode;
 			nd->seq = read_seqcount_begin(&nd->path.dentry->d_seq);
 		} else {
-			path_get(&nd->path);
+			path_clone(&fd_file(f)->f_path, &nd->path);
 			nd->inode = nd->path.dentry->d_inode;
 		}
 	}
 
 	/* For scoped-lookups we need to set the root to the dirfd as well. */
 	if (unlikely(flags & LOOKUP_IS_SCOPED)) {
-		nd->root = nd->path;
 		if (flags & LOOKUP_RCU) {
+			nd->root = nd->path;
 			nd->root_seq = nd->seq;
 		} else {
-			path_get(&nd->root);
+			path_clone(&nd->path, &nd->root);
 			nd->state |= ND_ROOT_GRABBED;
 		}
 	}
