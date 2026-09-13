@@ -839,6 +839,9 @@ static int pispbe_node_buffer_prepare(struct vb2_buffer *vb)
 		void *dst = &node->pispbe->config[vb->index];
 		void *src = vb2_plane_vaddr(vb, 0);
 
+		if (!src)
+			return -ENOMEM;
+
 		memcpy(dst, src, sizeof(struct pisp_be_tiles_config));
 
 		return pisp_be_validate_config(pispbe, dst);
