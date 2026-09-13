@@ -1204,10 +1204,18 @@ static void iwl_pci_remove(struct pci_dev *pdev)
 
 static int iwl_pci_suspend(struct device *device)
 {
+	struct iwl_trans *trans = pci_get_drvdata(to_pci_dev(device));
+
 	/* Before you put code here, think about WoWLAN. You cannot check here
 	 * whether WoWLAN is enabled or not, and your code will run even if
 	 * WoWLAN is enabled - don't kill the NIC, someone may need it in Sx.
 	 */
+
+	/* Arming has to happen while the device still answers, because the
+	 * AML gates this DSM on reading the device's PCI ID out of config
+	 * space. It does not touch the NIC.
+	 */
+	iwl_trans_pcie_arm_product_reset(trans, true);
 
 	return 0;
 }
@@ -1229,6 +1237,22 @@ static int _iwl_pci_resume(struct device *device, bool restore)
 	 * PCI Tx retries from interfering with C3 CPU state.
 	 */
 	pci_write_config_byte(pdev, PCI_CFG_RETRY_TIMEOUT, 0x00);
+
+	/* Two signals that the device didn't come back from D3cold: the
+	 * platform can't deselect the mode armed in .suspend (so it can't see
+	 * the device either), and the device doesn't answer. This runs before
+	 * the op_mode test because the firmware may never have been loaded.
+	 */
+	if (trans_pcie->prod_reset_set) {
+		iwl_trans_pcie_arm_product_reset(trans, false);
+		if (trans_pcie->prod_reset_set &&
+		    PCI_POSSIBLE_ERROR(iwl_read32(trans, CSR_HW_REV))) {
+			IWL_ERR(trans, "device not responding after resume\n");
+			iwl_trans_pcie_reset(trans, IWL_RESET_MODE_PROD_RESET);
+			return 0;
+		}
+		trans_pcie->prod_reset_set = false;
+	}
 
 	if (!trans->op_mode)
 		return 0;

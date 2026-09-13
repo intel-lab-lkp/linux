@@ -495,6 +495,8 @@ struct iwl_pcie_txqs {
  * @isr_stats: interrupt statistics
  * @napi_dev: (fake) netdev for NAPI registration
  * @txqs: transport tx queues data.
+ * @prod_reset_set: the product reset mode is selected in the platform;
+ *	system suspend/resume only, so process context only
  * @me_present: WiAMT/CSME is detected as present (1), not present (0)
  *	or unknown (-1, so can still use it as a boolean safely)
  * @me_recheck_wk: worker to recheck WiAMT/CSME presence
@@ -605,6 +607,7 @@ struct iwl_trans_pcie {
 
 	struct iwl_pcie_txqs txqs;
 
+	bool prod_reset_set;
 	s8 me_present;
 	struct delayed_work me_recheck_wk;
 
@@ -657,6 +660,7 @@ bool _iwl_trans_pcie_grab_nic_access(struct iwl_trans *trans, bool silent);
 
 void iwl_trans_pcie_check_product_reset_status(struct pci_dev *pdev);
 void iwl_trans_pcie_check_product_reset_mode(struct pci_dev *pdev);
+void iwl_trans_pcie_arm_product_reset(struct iwl_trans *trans, bool arm);
 
 /*****************************************************
 * RX
