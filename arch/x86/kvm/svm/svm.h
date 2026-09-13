@@ -243,6 +243,9 @@ struct svm_nested_state {
 	 * on its side.
 	 */
 	bool force_msr_bitmap_recalc;
+
+	/* True if VMCB02 has instruction bytes for the current nested exit. */
+	bool vmcb02_insn_bytes_valid;
 };
 
 struct vcpu_sev_es_state {
