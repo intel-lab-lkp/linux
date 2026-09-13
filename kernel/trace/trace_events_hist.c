@@ -806,9 +806,12 @@ static void last_cmd_set(struct trace_event_file *file, char *str)
 		snprintf(last_cmd_loc, MAX_FILTER_STR_VAL, HIST_PREFIX "%s:%s", system, name);
 }
 
+/* Set while a field lookup may fail silently; the parse path is serialized. */
+static bool hist_err_silent;
+
 static void hist_err(struct trace_array *tr, u8 err_type, u16 err_pos)
 {
-	if (!last_cmd)
+	if (!last_cmd || hist_err_silent)
 		return;
 
 	tracing_log_err(tr, last_cmd_loc, last_cmd, err_text,
@@ -4003,7 +4006,9 @@ trace_action_create_field_var(struct hist_trigger_data *hist_data,
 	 * unqualified fields on the target event, or if qualified,
 	 * target fields that have qualified names matching the target.
 	 */
+	hist_err_silent = true;
 	field_var = create_target_field_var(hist_data, system, event, var);
+	hist_err_silent = false;
 
 	if (field_var && !IS_ERR(field_var)) {
 		save_field_var(hist_data, field_var);
