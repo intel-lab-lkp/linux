@@ -1768,17 +1768,47 @@ static enum print_line_t blk_trace_event_print(struct trace_iterator *iter,
 
 static void blk_trace_synthesize_old_trace(struct trace_iterator *iter)
 {
+	const struct blk_io_trace2 *t2 = te_blk_io_trace(iter->ent);
+	const struct blk_io_trace *t1 = (const struct blk_io_trace *)iter->ent;
 	struct trace_seq *s = &iter->seq;
-	struct blk_io_trace2 *t = (struct blk_io_trace2 *)iter->ent;
-	const int offset = offsetof(struct blk_io_trace2, sector);
-	struct blk_io_trace old = {
-		.magic	  = BLK_IO_TRACE_MAGIC | BLK_IO_TRACE_VERSION,
-		.time     = iter->ts,
-	};
+	struct blk_io_trace old;
+	const void *pdu;
 
-	trace_seq_putmem(s, &old, offset);
-	trace_seq_putmem(s, &t->sector,
-			 sizeof(old) - offset + t->pdu_len);
+	if (iter->ent_size >= sizeof(*t2)) {
+		old = (struct blk_io_trace) {
+			.sector   = t2->sector,
+			.bytes    = t2->bytes,
+			.action   = lower_32_bits(t2->action),
+			.pid      = t2->pid,
+			.device   = t2->device,
+			.cpu      = t2->cpu,
+			.error    = t2->error,
+			.pdu_len  = min_t(size_t, t2->pdu_len,
+					  iter->ent_size - sizeof(*t2)),
+		};
+		pdu = t2 + 1;
+	} else if (iter->ent_size >= sizeof(*t1)) {
+		old = (struct blk_io_trace) {
+			.sector   = t1->sector,
+			.bytes    = t1->bytes,
+			.action   = t1->action,
+			.pid      = t1->pid,
+			.device   = t1->device,
+			.cpu      = t1->cpu,
+			.error    = t1->error,
+			.pdu_len  = min_t(size_t, t1->pdu_len,
+					  iter->ent_size - sizeof(*t1)),
+		};
+		pdu = t1 + 1;
+	} else {
+		return;
+	}
+
+	old.magic = BLK_IO_TRACE_MAGIC | BLK_IO_TRACE_VERSION;
+	old.time = iter->ts;
+
+	trace_seq_putmem(s, &old, sizeof(old));
+	trace_seq_putmem(s, pdu, old.pdu_len);
 }
 
 static enum print_line_t
