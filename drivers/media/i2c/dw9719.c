@@ -150,7 +150,7 @@ static int dw9719_power_up(struct dw9719_device *dw9719, bool detect)
 
 		ret = cci_read(dw9719->regmap, DW9719_INFO, &val, NULL);
 		if (ret < 0)
-			return ret;
+			goto out;
 
 		switch (val) {
 		case DW9719_ID:
@@ -168,7 +168,8 @@ static int dw9719_power_up(struct dw9719_device *dw9719, bool detect)
 		default:
 			dev_err(dw9719->dev,
 				"Error unknown device id 0x%02llx\n", val);
-			return -ENXIO;
+			ret = -ENXIO;
+			goto out;
 		}
 
 props:
@@ -218,6 +219,7 @@ props:
 		cci_write(dw9719->regmap, DW9719_VCM_FREQ, dw9719->vcm_freq, &ret);
 	}
 
+out:
 	if (ret)
 		dw9719_power_down(dw9719);
 
