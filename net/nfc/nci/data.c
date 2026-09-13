@@ -114,6 +114,11 @@ static int nci_queue_tx_data_frags(struct nci_dev *ndev,
 		goto exit;
 	}
 
+	if (!conn_info->max_pkt_payload_len) {
+		rc = -EPROTO;
+		goto exit;
+	}
+
 	__skb_queue_head_init(&frags_q);
 
 	while (total_len) {
