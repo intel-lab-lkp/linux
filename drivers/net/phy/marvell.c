@@ -2074,6 +2074,35 @@ static int m88e1318_set_wol(struct phy_device *phydev,
 			goto error;
 	}
 
+	if (!(wol->wolopts & (WAKE_MAGIC | WAKE_PHY))) {
+		/* Fully disabled: undo the WoL interrupt setup done above,
+		 * so a later re-enable starts from a clean state.
+		 */
+		err = marvell_write_page(phydev, MII_MARVELL_COPPER_PAGE);
+		if (err < 0)
+			goto error;
+
+		err = __phy_clear_bits(phydev, MII_88E1318S_PHY_CSIER,
+				       MII_88E1318S_PHY_CSIER_WOL_EIE);
+		if (err < 0)
+			goto error;
+
+		err = marvell_write_page(phydev, MII_MARVELL_LED_PAGE);
+		if (err < 0)
+			goto error;
+
+		err = __phy_modify(phydev, MII_88E1318S_PHY_LED_TCR,
+				   MII_88E1318S_PHY_LED_TCR_FORCE_INT |
+				   MII_88E1318S_PHY_LED_TCR_INTn_ENABLE |
+				   MII_88E1318S_PHY_LED_TCR_INT_ACTIVE_LOW,
+				   phy_interrupt_is_valid(phydev) ?
+					MII_88E1318S_PHY_LED_TCR_INTn_ENABLE |
+					MII_88E1318S_PHY_LED_TCR_INT_ACTIVE_LOW :
+					0);
+		if (err < 0)
+			goto error;
+	}
+
 error:
 	return phy_restore_page(phydev, oldpage, err);
 }
