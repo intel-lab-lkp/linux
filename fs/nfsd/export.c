@@ -231,8 +231,7 @@ static inline void expkey_update(struct cache_head *cnew,
 	struct svc_expkey *new = container_of(cnew, struct svc_expkey, h);
 	struct svc_expkey *item = container_of(citem, struct svc_expkey, h);
 
-	new->ek_path = item->ek_path;
-	path_get(&item->ek_path);
+	path_clone(&item->ek_path, &new->ek_path);
 }
 
 static struct cache_head *expkey_alloc(void)
@@ -1530,8 +1529,7 @@ static void svc_export_init(struct cache_head *cnew, struct cache_head *citem)
 
 	kref_get(&item->ex_client->ref);
 	new->ex_client = item->ex_client;
-	new->ex_path = item->ex_path;
-	path_get(&item->ex_path);
+	path_clone(&item->ex_path, &new->ex_path);
 	new->ex_fslocs.locations = NULL;
 	new->ex_fslocs.locations_count = 0;
 	new->ex_fslocs.migrated = 0;

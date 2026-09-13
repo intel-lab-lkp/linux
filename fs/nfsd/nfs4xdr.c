@@ -2873,14 +2873,14 @@ static __be32 nfsd4_encode_pathname4(struct xdr_stream *xdr,
 				     const struct path *root,
 				     const struct path *path)
 {
-	struct path cur = *path;
+	struct path cur;
 	struct dentry **components = NULL;
 	unsigned int ncomponents = 0;
 	__be32 err = nfserr_jukebox;
 
 	dprintk("nfsd4_encode_components(");
 
-	path_get(&cur);
+	path_clone(path, &cur);
 	/* First walk the path up to the nfsd root, and store the
 	 * dentries/path components in an array.
 	 */
@@ -3123,11 +3123,11 @@ static __be32 fattr_handle_absent_fs(u32 *bmval0, u32 *bmval1, u32 *bmval2, u32 
 
 static int nfsd4_get_mounted_on_ino(struct svc_export *exp, u64 *pino)
 {
-	struct path path = exp->ex_path;
+	struct path path;
 	struct kstat stat;
 	int err;
 
-	path_get(&path);
+	path_clone(&exp->ex_path, &path);
 	while (follow_up(&path)) {
 		if (path.dentry != path.mnt->mnt_root)
 			break;
