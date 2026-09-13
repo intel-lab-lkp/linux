@@ -17,6 +17,8 @@
 #include <linux/iopoll.h>
 #include "regs.h"
 #include "rtl8xxxu.h"
+#include "rx-test.h"
+#include <kunit/static_stub.h>
 
 #define DRIVER_NAME "rtl8xxxu"
 
@@ -60,8 +62,7 @@ MODULE_PARM_DESC(dma_agg_pages, "Set DMA aggregation pages (range 1-127, 0 to di
 #define RTL8XXXU_TX_URB_HIGH_WATER	32
 
 static void rtl8xxxu_stop(struct ieee80211_hw *hw, bool suspend);
-static int rtl8xxxu_submit_rx_urb(struct rtl8xxxu_priv *priv,
-				  struct rtl8xxxu_rx_urb *rx_urb);
+
 
 static struct ieee80211_rate rtl8xxxu_rates[] = {
 	{ .bitrate = 10, .hw_value = DESC_RATE_1M, .flags = 0 },
@@ -5817,7 +5818,36 @@ void jaguar2_rx_parse_phystats(struct rtl8xxxu_priv *priv,
 	}
 }
 
-static void rtl8xxxu_free_rx_resources(struct rtl8xxxu_priv *priv)
+VISIBLE_IF_KUNIT struct rtl8xxxu_rx_urb *rtl8xxxu_alloc_rx_urb(void)
+{
+	KUNIT_STATIC_STUB_REDIRECT(rtl8xxxu_alloc_rx_urb);
+	return kmalloc_obj(struct rtl8xxxu_rx_urb);
+}
+EXPORT_SYMBOL_IF_KUNIT(rtl8xxxu_alloc_rx_urb);
+
+VISIBLE_IF_KUNIT struct sk_buff *rtl8xxxu_alloc_rx_skb(unsigned int size)
+{
+	KUNIT_STATIC_STUB_REDIRECT(rtl8xxxu_alloc_rx_skb, size);
+	return __netdev_alloc_skb(NULL, size, GFP_KERNEL);
+}
+EXPORT_SYMBOL_IF_KUNIT(rtl8xxxu_alloc_rx_skb);
+
+VISIBLE_IF_KUNIT int rtl8xxxu_rx_usb_submit(struct urb *urb, gfp_t flags)
+{
+	KUNIT_STATIC_STUB_REDIRECT(rtl8xxxu_rx_usb_submit, urb, flags);
+	return usb_submit_urb(urb, flags);
+}
+EXPORT_SYMBOL_IF_KUNIT(rtl8xxxu_rx_usb_submit);
+
+VISIBLE_IF_KUNIT void rtl8xxxu_schedule_rx_retry(struct rtl8xxxu_priv *priv)
+{
+	KUNIT_STATIC_STUB_REDIRECT(rtl8xxxu_schedule_rx_retry, priv);
+	queue_delayed_work(system_wq, &priv->rx_urb_retry_wq,
+			   msecs_to_jiffies(RTL8XXXU_RX_URB_RETRY_DELAY_MS));
+}
+EXPORT_SYMBOL_IF_KUNIT(rtl8xxxu_schedule_rx_retry);
+
+VISIBLE_IF_KUNIT void rtl8xxxu_free_rx_resources(struct rtl8xxxu_priv *priv)
 {
 	struct rtl8xxxu_rx_urb *rx_urb, *tmp;
 	unsigned long flags;
@@ -5838,15 +5868,16 @@ static void rtl8xxxu_free_rx_resources(struct rtl8xxxu_priv *priv)
 
 	spin_unlock_irqrestore(&priv->rx_urb_lock, flags);
 }
+EXPORT_SYMBOL_IF_KUNIT(rtl8xxxu_free_rx_resources);
 
-static int rtl8xxxu_alloc_rx_urbs(struct rtl8xxxu_priv *priv)
+VISIBLE_IF_KUNIT int rtl8xxxu_alloc_rx_urbs(struct rtl8xxxu_priv *priv)
 {
 	struct rtl8xxxu_rx_urb *rx_urb;
 	int i;
 
 	/* No RX work is active until the complete pool has been allocated. */
 	for (i = 0; i < RTL8XXXU_RX_URBS; i++) {
-		rx_urb = kmalloc_obj(struct rtl8xxxu_rx_urb);
+		rx_urb = rtl8xxxu_alloc_rx_urb();
 		if (!rx_urb)
 			return -ENOMEM;
 
@@ -5859,6 +5890,7 @@ static int rtl8xxxu_alloc_rx_urbs(struct rtl8xxxu_priv *priv)
 
 	return 0;
 }
+EXPORT_SYMBOL_IF_KUNIT(rtl8xxxu_alloc_rx_urbs);
 
 static void rtl8xxxu_queue_rx_urb(struct rtl8xxxu_priv *priv,
 				  struct rtl8xxxu_rx_urb *rx_urb)
@@ -5887,7 +5919,7 @@ static void rtl8xxxu_queue_rx_urb(struct rtl8xxxu_priv *priv,
 	spin_unlock_irqrestore(&priv->rx_urb_lock, flags);
 }
 
-static void rtl8xxxu_rx_urb_retry_work(struct work_struct *work)
+VISIBLE_IF_KUNIT void rtl8xxxu_rx_urb_retry_work(struct work_struct *work)
 {
 	struct rtl8xxxu_priv *priv = container_of(to_delayed_work(work),
 						struct rtl8xxxu_priv,
@@ -5907,6 +5939,7 @@ static void rtl8xxxu_rx_urb_retry_work(struct work_struct *work)
 
 	spin_unlock_irqrestore(&priv->rx_urb_lock, flags);
 }
+EXPORT_SYMBOL_IF_KUNIT(rtl8xxxu_rx_urb_retry_work);
 
 static void rtl8xxxu_queue_rx_urb_retry(struct rtl8xxxu_priv *priv,
 					struct rtl8xxxu_rx_urb *rx_urb)
@@ -5919,8 +5952,7 @@ static void rtl8xxxu_queue_rx_urb_retry(struct rtl8xxxu_priv *priv,
 		list_add_tail(&rx_urb->list, &priv->rx_urb_retry_list);
 		priv->rx_urb_retry_count++;
 		/* Keep normal completions from bypassing the error backoff. */
-		queue_delayed_work(system_wq, &priv->rx_urb_retry_wq,
-				   msecs_to_jiffies(RTL8XXXU_RX_URB_RETRY_DELAY_MS));
+		rtl8xxxu_schedule_rx_retry(priv);
 	} else {
 		usb_free_urb(&rx_urb->urb);
 	}
@@ -5928,7 +5960,7 @@ static void rtl8xxxu_queue_rx_urb_retry(struct rtl8xxxu_priv *priv,
 	spin_unlock_irqrestore(&priv->rx_urb_lock, flags);
 }
 
-static void rtl8xxxu_rx_urb_work(struct work_struct *work)
+VISIBLE_IF_KUNIT void rtl8xxxu_rx_urb_work(struct work_struct *work)
 {
 	struct rtl8xxxu_priv *priv;
 	struct rtl8xxxu_rx_urb *rx_urb, *tmp;
@@ -5968,8 +6000,9 @@ static void rtl8xxxu_rx_urb_work(struct work_struct *work)
 		}
 	}
 }
+EXPORT_SYMBOL_IF_KUNIT(rtl8xxxu_rx_urb_work);
 
-static int rtl8xxxu_start_rx(struct rtl8xxxu_priv *priv)
+VISIBLE_IF_KUNIT int rtl8xxxu_start_rx(struct rtl8xxxu_priv *priv)
 {
 	struct rtl8xxxu_rx_urb *rx_urb, *tmp;
 	unsigned long flags;
@@ -6006,6 +6039,7 @@ free_remaining:
 	}
 	return ret;
 }
+EXPORT_SYMBOL_IF_KUNIT(rtl8xxxu_start_rx);
 
 /*
  * The RTL8723BU/RTL8192EU vendor driver use coexistence table type
@@ -6646,7 +6680,7 @@ int rtl8xxxu_parse_rxdesc24(struct rtl8xxxu_priv *priv, struct sk_buff *skb)
 	return RX_TYPE_DATA_PKT;
 }
 
-static void rtl8xxxu_rx_complete(struct urb *urb)
+VISIBLE_IF_KUNIT void rtl8xxxu_rx_complete(struct urb *urb)
 {
 	struct rtl8xxxu_rx_urb *rx_urb =
 		container_of(urb, struct rtl8xxxu_rx_urb, urb);
@@ -6686,9 +6720,10 @@ cleanup:
 	usb_free_urb(urb);
 	dev_kfree_skb(skb);
 }
+EXPORT_SYMBOL_IF_KUNIT(rtl8xxxu_rx_complete);
 
-static int rtl8xxxu_submit_rx_urb(struct rtl8xxxu_priv *priv,
-				  struct rtl8xxxu_rx_urb *rx_urb)
+VISIBLE_IF_KUNIT int rtl8xxxu_submit_rx_urb(struct rtl8xxxu_priv *priv,
+					    struct rtl8xxxu_rx_urb *rx_urb)
 {
 	struct rtl8xxxu_fileops *fops = priv->fops;
 	struct sk_buff *skb;
@@ -6704,7 +6739,7 @@ static int rtl8xxxu_submit_rx_urb(struct rtl8xxxu_priv *priv,
 		skb_size = IEEE80211_MAX_FRAME_LEN + rx_desc_sz;
 	}
 
-	skb = __netdev_alloc_skb(NULL, skb_size, GFP_KERNEL);
+	skb = rtl8xxxu_alloc_rx_skb(skb_size);
 	if (!skb)
 		return -ENOMEM;
 
@@ -6712,7 +6747,7 @@ static int rtl8xxxu_submit_rx_urb(struct rtl8xxxu_priv *priv,
 	usb_fill_bulk_urb(&rx_urb->urb, priv->udev, priv->pipe_in, skb->data,
 			  skb_size, rtl8xxxu_rx_complete, skb);
 	usb_anchor_urb(&rx_urb->urb, &priv->rx_anchor);
-	ret = usb_submit_urb(&rx_urb->urb, GFP_ATOMIC);
+	ret = rtl8xxxu_rx_usb_submit(&rx_urb->urb, GFP_ATOMIC);
 	if (ret) {
 		usb_unanchor_urb(&rx_urb->urb);
 		dev_kfree_skb(skb);
@@ -6720,6 +6755,7 @@ static int rtl8xxxu_submit_rx_urb(struct rtl8xxxu_priv *priv,
 	}
 	return ret;
 }
+EXPORT_SYMBOL_IF_KUNIT(rtl8xxxu_submit_rx_urb);
 
 static void rtl8xxxu_int_complete(struct urb *urb)
 {

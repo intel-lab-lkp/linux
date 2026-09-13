@@ -35,3 +35,14 @@ config RTL8XXXU_UNTESTED
 	  author or reported to be working by third parties.
 
 	  Please report your results!
+
+config RTL8XXXU_KUNIT_TEST
+	tristate "KUnit tests for rtl8xxxu RX recovery" if !KUNIT_ALL_TESTS
+	depends on KUNIT && RTL8XXXU
+	default KUNIT_ALL_TESTS
+	help
+	  Exercise RX buffer ownership, startup and recovery with the real
+	  driver functions and controlled allocation and USB submission results.
+	  These tests do not require a USB adapter.
+
+	  If unsure, say N.
