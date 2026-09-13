@@ -1398,9 +1398,9 @@ static void apple_nvme_detach_genpd(struct apple_nvme *anv)
 		return;
 
 	for (i = anv->pd_count - 1; i >= 0; i--) {
-		if (anv->pd_link[i])
+		if (anv->pd_link && anv->pd_link[i])
 			device_link_del(anv->pd_link[i]);
-		if (!IS_ERR_OR_NULL(anv->pd_dev[i]))
+		if (anv->pd_dev && !IS_ERR_OR_NULL(anv->pd_dev[i]))
 			dev_pm_domain_detach(anv->pd_dev[i], true);
 	}
 }
