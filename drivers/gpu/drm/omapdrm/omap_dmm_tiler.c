@@ -769,14 +769,14 @@ static void omap_dmm_remove(struct platform_device *dev)
 
 static int omap_dmm_probe(struct platform_device *dev)
 {
-	int ret = -EFAULT, i;
+	int ret, i;
 	struct tcm_area area = {0};
 	u32 hwinfo, pat_geom;
 	struct resource *mem;
 
 	omap_dmm = kzalloc_obj(*omap_dmm);
 	if (!omap_dmm)
-		goto fail;
+		return -ENOMEM;
 
 	/* initialize lists */
 	INIT_LIST_HEAD(&omap_dmm->alloc_head);
@@ -791,7 +791,7 @@ static int omap_dmm_probe(struct platform_device *dev)
 		if (!match) {
 			dev_err(&dev->dev, "failed to find matching device node\n");
 			ret = -ENODEV;
-			goto fail;
+			goto err_free_dmm;
 		}
 
 		omap_dmm->plat_data = match->data;
@@ -801,7 +801,8 @@ static int omap_dmm_probe(struct platform_device *dev)
 	mem = platform_get_resource(dev, IORESOURCE_MEM, 0);
 	if (!mem) {
 		dev_err(&dev->dev, "failed to get base address resource\n");
-		goto fail;
+		ret = -ENODEV;
+		goto err_free_dmm;
 	}
 
 	omap_dmm->phys_base = mem->start;
@@ -809,12 +810,15 @@ static int omap_dmm_probe(struct platform_device *dev)
 
 	if (!omap_dmm->base) {
 		dev_err(&dev->dev, "failed to get dmm base address\n");
-		goto fail;
+		ret = -ENOMEM;
+		goto err_free_dmm;
 	}
 
 	omap_dmm->irq = platform_get_irq(dev, 0);
-	if (omap_dmm->irq < 0)
-		goto fail;
+	if (omap_dmm->irq < 0) {
+		ret = omap_dmm->irq;
+		goto err_unmap;
+	}
 
 	omap_dmm->dev = &dev->dev;
 
@@ -864,13 +868,13 @@ static int omap_dmm_probe(struct platform_device *dev)
 	if (!omap_dmm->dummy_page) {
 		dev_err(&dev->dev, "could not allocate dummy page\n");
 		ret = -ENOMEM;
-		goto fail;
+		goto err_workaround;
 	}
 
 	/* set dma mask for device */
 	ret = dma_set_coherent_mask(&dev->dev, DMA_BIT_MASK(32));
 	if (ret)
-		goto fail;
+		goto err_free_dummy;
 
 	omap_dmm->dummy_pa = page_to_phys(omap_dmm->dummy_page);
 
@@ -881,7 +885,7 @@ static int omap_dmm_probe(struct platform_device *dev)
 	if (!omap_dmm->refill_va) {
 		dev_err(&dev->dev, "could not allocate refill memory\n");
 		ret = -ENOMEM;
-		goto fail;
+		goto err_free_dummy;
 	}
 
 	/* alloc engines */
@@ -889,7 +893,7 @@ static int omap_dmm_probe(struct platform_device *dev)
 					 omap_dmm->num_engines);
 	if (!omap_dmm->engines) {
 		ret = -ENOMEM;
-		goto fail;
+		goto err_free_refill;
 	}
 
 	for (i = 0; i < omap_dmm->num_engines; i++) {
@@ -907,7 +911,7 @@ static int omap_dmm_probe(struct platform_device *dev)
 	omap_dmm->tcm = kzalloc_objs(*omap_dmm->tcm, omap_dmm->num_lut);
 	if (!omap_dmm->tcm) {
 		ret = -ENOMEM;
-		goto fail;
+		goto err_free_engines;
 	}
 
 	/* init containers */
@@ -921,7 +925,7 @@ static int omap_dmm_probe(struct platform_device *dev)
 		if (!omap_dmm->tcm[i]) {
 			dev_err(&dev->dev, "failed to allocate container\n");
 			ret = -ENOMEM;
-			goto fail;
+			goto err_free_tcm;
 		}
 
 		omap_dmm->tcm[i]->lut_id = i;
@@ -958,7 +962,7 @@ static int omap_dmm_probe(struct platform_device *dev)
 		dev_err(&dev->dev, "couldn't register IRQ %d, error %d\n",
 			omap_dmm->irq, ret);
 		omap_dmm->irq = -1;
-		goto fail;
+		goto err_free_tcm;
 	}
 
 	/* Enable all interrupts for each refill engine except
@@ -980,8 +984,37 @@ static int omap_dmm_probe(struct platform_device *dev)
 
 	return 0;
 
-fail:
-	omap_dmm_remove(dev);
+err_free_tcm:
+	for (i = 0; i < ARRAY_SIZE(containers); i++)
+		containers[i] = NULL;
+
+	for (i = 0; i < omap_dmm->num_lut; i++)
+		if (omap_dmm->tcm[i])
+			omap_dmm->tcm[i]->deinit(omap_dmm->tcm[i]);
+	kfree(omap_dmm->tcm);
+
+err_free_engines:
+	kfree(omap_dmm->engines);
+
+err_free_refill:
+	dma_free_wc(omap_dmm->dev,
+		    REFILL_BUFFER_SIZE * omap_dmm->num_engines,
+		    omap_dmm->refill_va, omap_dmm->refill_pa);
+
+err_free_dummy:
+	__free_page(omap_dmm->dummy_page);
+
+err_workaround:
+	if (omap_dmm->dmm_workaround)
+		dmm_workaround_uninit(omap_dmm);
+
+err_unmap:
+	iounmap(omap_dmm->base);
+
+err_free_dmm:
+	kfree(omap_dmm);
+	omap_dmm = NULL;
+
 	return ret;
 }
 
