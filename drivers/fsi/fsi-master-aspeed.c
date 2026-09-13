@@ -652,6 +652,7 @@ static void fsi_master_aspeed_remove(struct platform_device *pdev)
 
 	fsi_master_unregister(&aspeed->master);
 	clk_disable_unprepare(aspeed->clk);
+	put_device(&aspeed->master.dev);
 }
 
 static const struct of_device_id fsi_master_aspeed_match[] = {
