@@ -3022,6 +3022,244 @@ TEST_F(TSYNC, two_siblings_not_under_filter)
 	ASSERT_EQ(0, ret);  /* just us chickens */
 }
 
+#define TSYNC_PTRACE_ERRNO E2BIG
+
+struct tsync_ptrace_worker {
+	int ready_fd;
+	int trigger_fd;
+	int result_fd;
+	struct sock_fprog *prog;
+};
+
+struct tsync_ptrace_result {
+	long ret;
+	int err;
+};
+
+static ssize_t read_nointr(int fd, void *buf, size_t count)
+{
+	ssize_t ret;
+
+	do {
+		ret = read(fd, buf, count);
+	} while (ret < 0 && errno == EINTR);
+
+	return ret;
+}
+
+static ssize_t write_nointr(int fd, const void *buf, size_t count)
+{
+	ssize_t ret;
+
+	do {
+		ret = write(fd, buf, count);
+	} while (ret < 0 && errno == EINTR);
+
+	return ret;
+}
+
+static void *tsync_ptrace_worker(void *data)
+{
+	struct tsync_ptrace_worker *worker = data;
+	struct tsync_ptrace_result result = {
+		.ret = -1,
+		.err = 0,
+	};
+	char byte = '.';
+
+	if (write_nointr(worker->ready_fd, &byte, sizeof(byte)) != sizeof(byte))
+		return NULL;
+	if (read_nointr(worker->trigger_fd, &byte, sizeof(byte)) != sizeof(byte))
+		return NULL;
+
+	if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)) {
+		result.err = errno;
+	} else {
+		errno = 0;
+		result.ret = seccomp(SECCOMP_SET_MODE_FILTER,
+				     SECCOMP_FILTER_FLAG_TSYNC, worker->prog);
+		result.err = errno;
+	}
+
+	write_nointr(worker->result_fd, &result, sizeof(result));
+	return NULL;
+}
+
+/*
+ * Regression test for 4a3591287fb7 ("entry: Fix seccomp bypass after
+ * ptrace with TSYNC").  The ptrace stop is after syscall work flags were
+ * sampled, so a filter synchronized here must be observed before dispatch.
+ */
+TEST(TSYNC_during_ptrace_stop)
+{
+	struct sock_filter filter[] = {
+		BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
+			 offsetof(struct seccomp_data, nr)),
+		BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_getppid, 0, 1),
+		BPF_STMT(BPF_RET | BPF_K,
+			 SECCOMP_RET_ERRNO | TSYNC_PTRACE_ERRNO),
+		BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
+	};
+	struct sock_fprog prog = {
+		.len = (unsigned short)ARRAY_SIZE(filter),
+		.filter = filter,
+	};
+	struct tsync_ptrace_result tsync_result, syscall_result;
+	int ready_pipe[2], trigger_pipe[2], tsync_pipe[2], syscall_pipe[2];
+	struct ptrace_syscall_info syscall_info = { };
+	bool target_entry = false;
+	pid_t tracee;
+	int status, i;
+	long ret;
+	char byte = '!';
+
+	ASSERT_EQ(0, pipe(ready_pipe));
+	ASSERT_EQ(0, pipe(trigger_pipe));
+	ASSERT_EQ(0, pipe(tsync_pipe));
+	ASSERT_EQ(0, pipe(syscall_pipe));
+
+	tracee = fork();
+	ASSERT_GE(tracee, 0);
+	if (tracee == 0) {
+		struct tsync_ptrace_worker worker = {
+			.ready_fd = ready_pipe[1],
+			.trigger_fd = trigger_pipe[0],
+			.result_fd = tsync_pipe[1],
+			.prog = &prog,
+		};
+		pthread_t sibling;
+		int err;
+
+		close(trigger_pipe[1]);
+		close(tsync_pipe[0]);
+		close(syscall_pipe[0]);
+
+		if (ptrace(PTRACE_TRACEME, 0, NULL, NULL))
+			_exit(1);
+		if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0))
+			_exit(2);
+
+		err = pthread_create(&sibling, NULL, tsync_ptrace_worker,
+				     &worker);
+		if (err)
+			_exit(3);
+		if (read_nointr(ready_pipe[0], &byte, sizeof(byte)) != sizeof(byte))
+			_exit(4);
+		if (raise(SIGSTOP))
+			_exit(5);
+
+		errno = 0;
+		syscall_result.ret = syscall(__NR_getppid);
+		syscall_result.err = errno;
+
+		err = pthread_join(sibling, NULL);
+		if (err)
+			_exit(6);
+		if (write_nointr(syscall_pipe[1], &syscall_result,
+				 sizeof(syscall_result)) != sizeof(syscall_result))
+			_exit(7);
+		_exit(0);
+	}
+
+	close(ready_pipe[0]);
+	close(ready_pipe[1]);
+	close(trigger_pipe[0]);
+	close(tsync_pipe[1]);
+	close(syscall_pipe[1]);
+
+	ASSERT_EQ(tracee, waitpid(tracee, &status, 0));
+	ASSERT_TRUE(WIFSTOPPED(status)) {
+		kill(tracee, SIGKILL);
+		waitpid(tracee, NULL, 0);
+	}
+	ASSERT_EQ(SIGSTOP, WSTOPSIG(status)) {
+		kill(tracee, SIGKILL);
+		waitpid(tracee, NULL, 0);
+	}
+	ASSERT_EQ(0, ptrace(PTRACE_SETOPTIONS, tracee, NULL,
+			    PTRACE_O_TRACESYSGOOD)) {
+		kill(tracee, SIGKILL);
+		waitpid(tracee, NULL, 0);
+	}
+	ASSERT_EQ(0, ptrace(PTRACE_SYSCALL, tracee, NULL, 0)) {
+		kill(tracee, SIGKILL);
+		waitpid(tracee, NULL, 0);
+	}
+
+	for (i = 0; i < 16; i++) {
+		ASSERT_EQ(tracee, waitpid(tracee, &status, 0)) {
+			kill(tracee, SIGKILL);
+			waitpid(tracee, NULL, 0);
+		}
+		ASSERT_TRUE(WIFSTOPPED(status)) {
+			kill(tracee, SIGKILL);
+			waitpid(tracee, NULL, 0);
+		}
+		if (WSTOPSIG(status) == (SIGTRAP | 0x80)) {
+			memset(&syscall_info, 0, sizeof(syscall_info));
+			ret = ptrace(PTRACE_GET_SYSCALL_INFO, tracee,
+				     sizeof(syscall_info), &syscall_info);
+			ASSERT_GE(ret, 0) {
+				kill(tracee, SIGKILL);
+				waitpid(tracee, NULL, 0);
+			}
+			if (syscall_info.op == PTRACE_SYSCALL_INFO_ENTRY &&
+			    syscall_info.entry.nr == __NR_getppid) {
+				target_entry = true;
+				break;
+			}
+		}
+		ASSERT_EQ(0, ptrace(PTRACE_SYSCALL, tracee, NULL, 0)) {
+			kill(tracee, SIGKILL);
+			waitpid(tracee, NULL, 0);
+		}
+	}
+	ASSERT_TRUE(target_entry) {
+		kill(tracee, SIGKILL);
+		waitpid(tracee, NULL, 0);
+	}
+
+	ASSERT_EQ(sizeof(byte),
+		  write_nointr(trigger_pipe[1], &byte, sizeof(byte))) {
+		kill(tracee, SIGKILL);
+		waitpid(tracee, NULL, 0);
+	}
+	ASSERT_EQ(sizeof(tsync_result),
+		  read_nointr(tsync_pipe[0], &tsync_result,
+			      sizeof(tsync_result))) {
+		kill(tracee, SIGKILL);
+		waitpid(tracee, NULL, 0);
+	}
+	if (tsync_result.ret == -1 && tsync_result.err == ENOSYS) {
+		kill(tracee, SIGKILL);
+		waitpid(tracee, NULL, 0);
+		SKIP(return, "Kernel does not support seccomp syscall");
+	}
+	ASSERT_EQ(0, tsync_result.ret) {
+		TH_LOG("TSYNC failed: ret %ld, errno %d", tsync_result.ret,
+		       tsync_result.err);
+		kill(tracee, SIGKILL);
+		waitpid(tracee, NULL, 0);
+	}
+
+	ASSERT_EQ(0, ptrace(PTRACE_CONT, tracee, NULL, 0)) {
+		kill(tracee, SIGKILL);
+		waitpid(tracee, NULL, 0);
+	}
+	ASSERT_EQ(sizeof(syscall_result),
+		  read_nointr(syscall_pipe[0], &syscall_result,
+			      sizeof(syscall_result))) {
+		kill(tracee, SIGKILL);
+		waitpid(tracee, NULL, 0);
+	}
+	ASSERT_EQ(tracee, waitpid(tracee, &status, 0));
+	ASSERT_TRUE(WIFEXITED(status));
+	ASSERT_EQ(0, WEXITSTATUS(status));
+
+	EXPECT_EQ(-1, syscall_result.ret);
+	EXPECT_EQ(TSYNC_PTRACE_ERRNO, syscall_result.err);
+}
+
 /* Make sure restarted syscalls are seen directly as "restart_syscall". */
 TEST(syscall_restart)
 {
