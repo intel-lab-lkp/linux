@@ -944,6 +944,11 @@ static int fuse_atomic_open(struct inode *dir, struct dentry *entry,
 	struct mnt_idmap *idmap = file_mnt_idmap(file);
 	struct fuse_conn *fc = get_fuse_conn(dir);
 
+	if (O_IS_MKDIR(flags)) {
+		flags &= ~O_CREAT;
+		mode = 0;
+	}
+
 	if (fuse_is_bad(dir))
 		return -EIO;
 

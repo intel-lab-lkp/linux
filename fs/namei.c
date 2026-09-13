@@ -4535,9 +4535,6 @@ retry:
 	mode = op->mode;
 	create_error = 0;
 
-	if (create_dir && dir_inode->i_op->atomic_open)
-		open_flag &= ~O_CREAT;
-
 	if (open_flag & (O_CREAT | O_TRUNC | O_WRONLY | O_RDWR)) {
 		got_write = !mnt_want_write(nd->path.mnt);
 		/*

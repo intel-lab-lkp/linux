@@ -2121,6 +2121,11 @@ int nfs_atomic_open(struct inode *dir, struct dentry *dentry,
 	dfprintk(VFS, "NFS: atomic_open(%s/%llu), %pd\n",
 			dir->i_sb->s_id, dir->i_ino, dentry);
 
+	if (O_IS_MKDIR(open_flags)) {
+		open_flags &= ~O_CREAT;
+		mode = 0;
+	}
+
 	err = nfs_check_flags(open_flags);
 	if (err)
 		return err;
@@ -2316,6 +2321,11 @@ int nfs_atomic_open_v23(struct inode *dir, struct dentry *dentry,
 	 * handling.
 	 */
 	int error = 0;
+
+	if (O_IS_MKDIR(open_flags)) {
+		open_flags &= ~O_CREAT;
+		mode = 0;
+	}
 
 	if (dentry->d_name.len > NFS_SERVER(dir)->namelen)
 		return -ENAMETOOLONG;

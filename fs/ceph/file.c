@@ -812,6 +812,11 @@ int ceph_atomic_open(struct inode *dir, struct dentry *dentry,
 	      dir, ceph_vinop(dir), dentry, dentry,
 	      d_unhashed(dentry) ? "unhashed" : "hashed", flags, mode);
 
+	if (O_IS_MKDIR(flags)) {
+		flags &= ~O_CREAT;
+		mode = 0;
+	}
+
 	if (dentry->d_name.len > NAME_MAX)
 		return -ENAMETOOLONG;
 
