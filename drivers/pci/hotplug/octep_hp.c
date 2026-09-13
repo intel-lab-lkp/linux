@@ -66,24 +66,31 @@ struct octep_hp_controller {
 	spinlock_t hp_cmd_lock; /* Protects hp_cmd_list */
 };
 
-static void octep_hp_enable_pdev(struct octep_hp_controller *hp_ctrl,
-				 struct octep_hp_slot *hp_slot)
+static int octep_hp_enable_pdev(struct octep_hp_controller *hp_ctrl,
+				struct octep_hp_slot *hp_slot)
 {
 	guard(mutex)(&hp_ctrl->slot_lock);
 	if (hp_slot->hp_pdev) {
 		pci_dbg(hp_slot->hp_pdev, "Slot %s is already enabled\n",
 			hotplug_slot_name(&hp_slot->slot));
-		return;
+		return 0;
 	}
 
 	/* Scan the device and add it to the bus */
 	hp_slot->hp_pdev = pci_scan_single_device(hp_ctrl->pdev->bus,
 						  hp_slot->hp_devfn);
+	if (!hp_slot->hp_pdev) {
+		pci_err(hp_ctrl->pdev, "Failed to scan slot %s\n",
+			hotplug_slot_name(&hp_slot->slot));
+		return -ENODEV;
+	}
 	pci_bus_assign_resources(hp_ctrl->pdev->bus);
 	pci_bus_add_device(hp_slot->hp_pdev);
 
 	dev_dbg(&hp_slot->hp_pdev->dev, "Enabled slot %s\n",
 		hotplug_slot_name(&hp_slot->slot));
+
+	return 0;
 }
 
 static void octep_hp_disable_pdev(struct octep_hp_controller *hp_ctrl,
@@ -109,8 +116,7 @@ static int octep_hp_enable_slot(struct hotplug_slot *slot)
 	struct octep_hp_slot *hp_slot =
 		container_of(slot, struct octep_hp_slot, slot);
 
-	octep_hp_enable_pdev(hp_slot->ctrl, hp_slot);
-	return 0;
+	return octep_hp_enable_pdev(hp_slot->ctrl, hp_slot);
 }
 
 static int octep_hp_disable_slot(struct hotplug_slot *slot)
