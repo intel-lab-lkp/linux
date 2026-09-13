@@ -1181,12 +1181,15 @@ retry:
 	}
 }
 
-static void io_acct_cancel_running_work(struct io_wq_acct *acct,
+static bool io_acct_cancel_running_work(struct io_wq_acct *acct,
 					struct io_cb_cancel_data *match)
 {
+	bool ret;
+
 	raw_spin_lock(&acct->workers_lock);
-	io_acct_for_each_worker(acct, io_wq_worker_cancel, match);
+	ret = io_acct_for_each_worker(acct, io_wq_worker_cancel, match);
 	raw_spin_unlock(&acct->workers_lock);
+	return ret;
 }
 
 static void io_wq_cancel_running_work(struct io_wq *wq,
@@ -1195,7 +1198,8 @@ static void io_wq_cancel_running_work(struct io_wq *wq,
 	rcu_read_lock();
 
 	for (int i = 0; i < IO_WQ_ACCT_NR; i++)
-		io_acct_cancel_running_work(&wq->acct[i], match);
+		if (io_acct_cancel_running_work(&wq->acct[i], match))
+			break;
 
 	rcu_read_unlock();
 }
