@@ -112,6 +112,28 @@ static u32 mailbox_reg_read(struct mailbox_channel *mb_chann, u32 mbox_reg)
 	return readl(ringbuf_addr);
 }
 
+/*
+ * Firmware describes where a channel's head and tail registers live, as raw
+ * offsets into the mailbox mapping: in the management mailbox block it writes
+ * into SRAM for the management channel, and in the CREATE_CONTEXT response for
+ * a hardware context. Both helpers above add such an offset straight to
+ * mbox_base, so bound it against the size of that mapping first.
+ */
+static bool mailbox_reg_in_range(struct mailbox_channel *mb_chann, u32 mbox_reg)
+{
+	struct xdna_mailbox_res *mb_res = &mb_chann->mb->res;
+
+	/* Every access through the two helpers above is 32 bits wide. */
+	return (u64)mbox_reg + sizeof(u32) <= mb_res->mbox_size;
+}
+
+static bool mailbox_chann_res_in_range(struct mailbox_channel *mb_chann,
+				       const struct xdna_mailbox_chann_res *res)
+{
+	return mailbox_reg_in_range(mb_chann, res->mb_head_ptr_reg) &&
+	       mailbox_reg_in_range(mb_chann, res->mb_tail_ptr_reg);
+}
+
 static inline void mailbox_irq_acknowledge(struct mailbox_channel *mb_chann)
 {
 	if (mb_chann->iohub_int_addr)
@@ -515,6 +537,16 @@ xdna_mailbox_start_channel(struct mailbox_channel *mb_chann,
 
 	if (!is_power_of_2(x2i->rb_size) || !is_power_of_2(i2x->rb_size)) {
 		pr_err("Ring buf size must be power of 2\n");
+		return -EINVAL;
+	}
+
+	/* A zero iohub_int_addr means the platform has no such register. */
+	if (!mailbox_chann_res_in_range(mb_chann, x2i) ||
+	    !mailbox_chann_res_in_range(mb_chann, i2x) ||
+	    (iohub_int_addr && !mailbox_reg_in_range(mb_chann, iohub_int_addr))) {
+		dev_err(mb_chann->mb->dev,
+			"Mailbox register offset outside the %zu byte mailbox mapping\n",
+			mb_chann->mb->res.mbox_size);
 		return -EINVAL;
 	}
 
