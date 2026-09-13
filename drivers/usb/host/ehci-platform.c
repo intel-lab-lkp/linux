@@ -420,6 +420,7 @@ static void ehci_platform_remove(struct platform_device *dev)
 		quirk_poll_end(priv);
 
 	usb_remove_hcd(hcd);
+	device_wakeup_disable(hcd->self.controller);
 
 	if (pdata->power_off)
 		pdata->power_off(dev);
