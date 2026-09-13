@@ -4848,9 +4848,24 @@ out:
 }
 
 /* used for instruction fetching */
-static int kvm_fetch_guest_virt(struct x86_emulate_ctxt *ctxt,
-				gva_t addr, void *val, unsigned int bytes,
-				struct x86_exception *exception)
+int kvm_fetch_guest_virt(struct kvm_vcpu *vcpu, gva_t addr, void *val,
+			 unsigned int bytes, struct x86_exception *exception)
+{
+	u64 access = PFERR_FETCH_MASK;
+
+	if (kvm_x86_call(get_cpl)(vcpu) == 3)
+		access |= PFERR_USER_MASK;
+
+	memset(exception, 0, sizeof(*exception));
+	return kvm_read_guest_virt_helper(addr, val, bytes, vcpu, access,
+					  exception);
+}
+EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_fetch_guest_virt);
+
+static int emulator_fetch_guest_virt(struct x86_emulate_ctxt *ctxt,
+				     gva_t addr, void *val,
+				     unsigned int bytes,
+				     struct x86_exception *exception)
 {
 	struct kvm_vcpu *vcpu = emul_to_vcpu(ctxt);
 	struct kvm_pagewalk *gva_walk = &vcpu->arch.gva_walk;
@@ -5817,7 +5832,7 @@ static const struct x86_emulate_ops emulate_ops = {
 	.write_gpr           = emulator_write_gpr,
 	.read_std            = emulator_read_std,
 	.write_std           = emulator_write_std,
-	.fetch               = kvm_fetch_guest_virt,
+	.fetch               = emulator_fetch_guest_virt,
 	.read_emulated       = emulator_read_emulated,
 	.write_emulated      = emulator_write_emulated,
 	.cmpxchg_emulated    = emulator_cmpxchg_emulated,
