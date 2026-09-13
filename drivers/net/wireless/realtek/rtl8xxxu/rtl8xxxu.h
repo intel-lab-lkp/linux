@@ -1808,8 +1808,11 @@ struct rtl8xxxu_priv {
 	spinlock_t rx_urb_lock;
 	struct list_head rx_urb_pending_list;
 	int rx_urb_pending_count;
+	struct list_head rx_urb_retry_list;
+	int rx_urb_retry_count;
 	bool shutdown;
 	struct work_struct rx_urb_wq;
+	struct delayed_work rx_urb_retry_wq;
 
 	u8 mac_addr[ETH_ALEN];
 	char chip_name[8];

@@ -54,6 +54,7 @@ MODULE_PARM_DESC(dma_agg_pages, "Set DMA aggregation pages (range 1-127, 0 to di
 #define USB_VENDOR_ID_REALTEK		0x0bda
 #define RTL8XXXU_RX_URBS		32
 #define RTL8XXXU_RX_URB_PENDING_WATER	8
+#define RTL8XXXU_RX_URB_RETRY_DELAY_MS	100
 #define RTL8XXXU_TX_URBS		64
 #define RTL8XXXU_TX_URB_LOW_WATER	25
 #define RTL8XXXU_TX_URB_HIGH_WATER	32
@@ -5823,6 +5824,11 @@ static void rtl8xxxu_free_rx_resources(struct rtl8xxxu_priv *priv)
 
 	spin_lock_irqsave(&priv->rx_urb_lock, flags);
 
+	list_splice_tail_init(&priv->rx_urb_retry_list,
+			      &priv->rx_urb_pending_list);
+	priv->rx_urb_pending_count += priv->rx_urb_retry_count;
+	priv->rx_urb_retry_count = 0;
+
 	list_for_each_entry_safe(rx_urb, tmp,
 				 &priv->rx_urb_pending_list, list) {
 		list_del(&rx_urb->list);
@@ -5881,6 +5887,47 @@ static void rtl8xxxu_queue_rx_urb(struct rtl8xxxu_priv *priv,
 	spin_unlock_irqrestore(&priv->rx_urb_lock, flags);
 }
 
+static void rtl8xxxu_rx_urb_retry_work(struct work_struct *work)
+{
+	struct rtl8xxxu_priv *priv = container_of(to_delayed_work(work),
+						struct rtl8xxxu_priv,
+						rx_urb_retry_wq);
+	unsigned long flags;
+
+	spin_lock_irqsave(&priv->rx_urb_lock, flags);
+
+	if (!priv->shutdown && priv->rx_urb_retry_count) {
+		list_splice_tail_init(&priv->rx_urb_retry_list,
+				      &priv->rx_urb_pending_list);
+		priv->rx_urb_pending_count += priv->rx_urb_retry_count;
+		priv->rx_urb_retry_count = 0;
+		/* An error must not leave a small batch waiting indefinitely. */
+		schedule_work(&priv->rx_urb_wq);
+	}
+
+	spin_unlock_irqrestore(&priv->rx_urb_lock, flags);
+}
+
+static void rtl8xxxu_queue_rx_urb_retry(struct rtl8xxxu_priv *priv,
+					struct rtl8xxxu_rx_urb *rx_urb)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&priv->rx_urb_lock, flags);
+
+	if (!priv->shutdown) {
+		list_add_tail(&rx_urb->list, &priv->rx_urb_retry_list);
+		priv->rx_urb_retry_count++;
+		/* Keep normal completions from bypassing the error backoff. */
+		queue_delayed_work(system_wq, &priv->rx_urb_retry_wq,
+				   msecs_to_jiffies(RTL8XXXU_RX_URB_RETRY_DELAY_MS));
+	} else {
+		usb_free_urb(&rx_urb->urb);
+	}
+
+	spin_unlock_irqrestore(&priv->rx_urb_lock, flags);
+}
+
 static void rtl8xxxu_rx_urb_work(struct work_struct *work)
 {
 	struct rtl8xxxu_priv *priv;
@@ -5904,7 +5951,7 @@ static void rtl8xxxu_rx_urb_work(struct work_struct *work)
 		ret = rtl8xxxu_submit_rx_urb(priv, rx_urb);
 		/*
 		 * If out of memory or temporary error, put it back on the
-		 * queue and try again. Otherwise the device is dead/gone
+		 * delayed queue and try again. Otherwise the device is dead/gone
 		 * and we should drop it.
 		 */
 		switch (ret) {
@@ -5912,7 +5959,7 @@ static void rtl8xxxu_rx_urb_work(struct work_struct *work)
 			break;
 		case -ENOMEM:
 		case -EAGAIN:
-			rtl8xxxu_queue_rx_urb(priv, rx_urb);
+			rtl8xxxu_queue_rx_urb_retry(priv, rx_urb);
 			break;
 		default:
 			dev_warn(&priv->udev->dev,
@@ -5942,7 +5989,7 @@ static int rtl8xxxu_start_rx(struct rtl8xxxu_priv *priv)
 			break;
 		case -ENOMEM:
 		case -EAGAIN:
-			rtl8xxxu_queue_rx_urb(priv, rx_urb);
+			rtl8xxxu_queue_rx_urb_retry(priv, rx_urb);
 			break;
 		default:
 			usb_free_urb(&rx_urb->urb);
@@ -6618,7 +6665,20 @@ static void rtl8xxxu_rx_complete(struct urb *urb)
 		rtl8xxxu_queue_rx_urb(priv, rx_urb);
 	} else {
 		dev_dbg(dev, "%s: status %i\n",	__func__, urb->status);
-		goto cleanup;
+		switch (urb->status) {
+		case -EPROTO:
+		case -EILSEQ:
+		case -ETIME:
+		case -EOVERFLOW:
+		case -ECOMM:
+		case -ENOSR:
+			dev_kfree_skb(skb);
+			urb->context = NULL;
+			rtl8xxxu_queue_rx_urb_retry(priv, rx_urb);
+			return;
+		default:
+			goto cleanup;
+		}
 	}
 	return;
 
@@ -7549,6 +7609,7 @@ static void rtl8xxxu_stop(struct ieee80211_hw *hw, bool suspend)
 	 * it drained via rtl8xxxu_submit_rx_urb(), so a worker still running
 	 * after the kill could submit a URB that escapes it.
 	 */
+	cancel_delayed_work_sync(&priv->rx_urb_retry_wq);
 	cancel_work_sync(&priv->rx_urb_wq);
 
 	usb_kill_anchored_urbs(&priv->rx_anchor);
@@ -7861,9 +7922,11 @@ static int rtl8xxxu_probe(struct usb_interface *interface,
 	INIT_LIST_HEAD(&priv->tx_urb_free_list);
 	spin_lock_init(&priv->tx_urb_lock);
 	INIT_LIST_HEAD(&priv->rx_urb_pending_list);
+	INIT_LIST_HEAD(&priv->rx_urb_retry_list);
 	spin_lock_init(&priv->rx_urb_lock);
 	priv->shutdown = true;
 	INIT_WORK(&priv->rx_urb_wq, rtl8xxxu_rx_urb_work);
+	INIT_DELAYED_WORK(&priv->rx_urb_retry_wq, rtl8xxxu_rx_urb_retry_work);
 	INIT_DELAYED_WORK(&priv->ra_watchdog, rtl8xxxu_watchdog_callback);
 	INIT_DELAYED_WORK(&priv->update_beacon_work, rtl8xxxu_update_beacon_work_callback);
 	skb_queue_head_init(&priv->c2hcmd_queue);
