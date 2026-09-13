@@ -699,6 +699,35 @@ static __always_inline int lookup_inode_permission_may_exec(struct mnt_idmap *id
 }
 
 /**
+ * path_create - WRITEME
+ * @path: path to get the reference to
+ * @mnt: WRITEME
+ * @dentry: WRITEME
+ *
+ * Create a path object using the given vfsmount and dentry pair while incrementing
+ * the reference count on both.
+ */
+void path_create(struct path *path, struct vfsmount *mnt, struct dentry *dentry)
+{
+	path->mnt = mntget(mnt);
+	path->dentry = dget(dentry);
+}
+EXPORT_SYMBOL(path_create);
+
+/**
+ * path_clone - WRITEME
+ * @path: path to get the reference to
+ *
+ * Given a path increment the reference count to the dentry and the vfsmount.
+ */
+void path_clone(const struct path *src, struct path *dst)
+{
+	dst->mnt = mntget(src->mnt);
+	dst->dentry = dget(src->dentry);
+}
+EXPORT_SYMBOL(path_clone);
+
+/**
  * path_get - get a reference to a path
  * @path: path to get the reference to
  *

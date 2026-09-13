@@ -10,8 +10,18 @@ struct path {
 	struct dentry *dentry;
 } __randomize_layout;
 
-extern void path_get(const struct path *);
-extern void path_put(const struct path *);
+void path_create(struct path *, struct vfsmount *, struct dentry *);
+void path_clone(const struct path *, struct path *);
+void path_get(const struct path *);
+void path_put(const struct path *);
+
+static inline void path_move(struct path *src, struct path *dst)
+{
+	dst->mnt = src->mnt;
+	dst->dentry = src->dentry;
+	src->mnt = NULL;
+	src->dentry = NULL;
+}
 
 static inline int path_equal(const struct path *path1, const struct path *path2)
 {
