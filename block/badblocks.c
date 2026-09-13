@@ -496,14 +496,14 @@ static int prev_badblocks(struct badblocks *bb, struct badblocks_context *bad,
 	}
 
 	lo = 0;
-	hi = bb->count;
+	hi = bb->count - 1;
 	p = bb->page;
 
 	/* The following bisect search might be unnecessary */
 	if (BB_OFFSET(p[lo]) > s)
 		return -1;
-	if (BB_OFFSET(p[hi - 1]) <= s)
-		return hi - 1;
+	if (BB_OFFSET(p[hi]) <= s)
+		return hi;
 
 	/* Do bisect search in bad table */
 	while (hi - lo > 1) {
@@ -521,8 +521,7 @@ static int prev_badblocks(struct badblocks *bb, struct badblocks_context *bad,
 			hi = mid;
 	}
 
-	if (BB_OFFSET(p[lo]) <= s)
-		ret = lo;
+	ret = lo;
 out:
 	return ret;
 }
