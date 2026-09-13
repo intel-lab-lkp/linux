@@ -12,10 +12,11 @@ use kernel::{
     alloc::{self, AllocError},
     error::to_result,
     prelude::*,
-    transmute::AsBytes,
     types::Opaque,
     ThisModule,
 };
+
+use zerocopy::{Immutable, IntoBytes};
 
 use core::{
     mem::ManuallyDrop,
@@ -84,7 +85,7 @@ impl GenlMsg {
     #[inline]
     fn put<T>(&mut self, attrtype: c_int, value: &T) -> Result
     where
-        T: ?Sized + AsBytes,
+        T: ?Sized + IntoBytes + Immutable,
     {
         let skb = self.skb.skb.as_ptr();
         let len = size_of_val(value);
