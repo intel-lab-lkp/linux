@@ -4224,7 +4224,7 @@ int vfs_create(struct mnt_idmap *idmap, struct dentry *dentry, umode_t mode,
 		return error;
 
 	if (!dir->i_op->create)
-		return -EACCES;	/* shouldn't it be ENOSYS? */
+		return -EOPNOTSUPP;
 
 	mode = vfs_prepare_mode(idmap, dir, mode, S_IALLUGO, S_IFREG);
 	error = security_inode_create(dir, dentry, mode);
@@ -4646,13 +4646,9 @@ retry:
 		goto out_dput;
 	}
 
-	/* mimic operation missing errnos of vfs_mkdir/vfs_create */
-	if (create_dir && !dir_inode->i_op->mkdir) {
-		error = -EPERM;
-		goto out_dput;
-	}
-	if (!create_dir && !dir_inode->i_op->create) {
-		error = -EACCES;
+	if ((create_dir && !dir_inode->i_op->mkdir)
+		|| (!create_dir && !dir_inode->i_op->create)) {
+		error = -EOPNOTSUPP;
 		goto out_dput;
 	}
 
@@ -5501,7 +5497,7 @@ struct dentry *vfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 	if (error)
 		goto err;
 
-	error = -EPERM;
+	error = -EOPNOTSUPP;
 	if (!dir->i_op->mkdir)
 		goto err;
 
