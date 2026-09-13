@@ -1461,6 +1461,17 @@ static struct mpi3mr_sas_port *mpi3mr_sas_port_add(struct mpi3mr_ioc *mrioc,
 		rphy = sas_expander_alloc(port,
 		    mr_sas_port->remote_identify.device_type);
 	}
+	if (!rphy) {
+		list_for_each_entry(mr_sas_phy, &mr_sas_port->phy_list,
+				    port_siblings) {
+			sas_port_delete_phy(port, mr_sas_phy->phy);
+			mr_sas_phy->phy_belongs_to_port = 0;
+		}
+		sas_port_delete(port);
+		if (tgtdev)
+			tgtdev->dev_spec.sas_sata_inf.pend_sas_rphy_add = 0;
+		goto out_fail;
+	}
 	rphy->identify = mr_sas_port->remote_identify;
 
 	if (mrioc->current_event)
