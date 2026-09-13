@@ -1426,13 +1426,22 @@ int group_send_sig_info(int sig, struct kernel_siginfo *info,
  * control characters do (^C, ^Z etc)
  * - the caller must hold at least a readlock on tasklist_lock
  */
-int __kill_pgrp_info(int sig, struct kernel_siginfo *info, struct pid *pgrp)
+static int __kill_pgrp_info_filtered(int sig, struct kernel_siginfo *info,
+				     struct pid *pgrp, bool check_lsm)
 {
 	struct task_struct *p = NULL;
 	int ret = -ESRCH;
 
 	do_each_pid_task(pgrp, PIDTYPE_PGID, p) {
-		int err = group_send_sig_info(sig, info, p, PIDTYPE_PGID);
+		int err = 0;
+
+		if (check_lsm) {
+			rcu_read_lock();
+			err = security_task_kill(p, info, sig, NULL);
+			rcu_read_unlock();
+		}
+		if (!err)
+			err = group_send_sig_info(sig, info, p, PIDTYPE_PGID);
 		/*
 		 * If group_send_sig_info() succeeds at least once ret
 		 * becomes 0 and after that the code below has no effect.
@@ -1444,6 +1453,11 @@ int __kill_pgrp_info(int sig, struct kernel_siginfo *info, struct pid *pgrp)
 	} while_each_pid_task(pgrp, PIDTYPE_PGID, p);
 
 	return ret;
+}
+
+int __kill_pgrp_info(int sig, struct kernel_siginfo *info, struct pid *pgrp)
+{
+	return __kill_pgrp_info_filtered(sig, info, pgrp, false);
 }
 
 static int kill_pid_info_type(int sig, struct kernel_siginfo *info,
@@ -1885,6 +1899,18 @@ int kill_pgrp(struct pid *pid, int sig, int priv)
 	return kill_pgrp_info(sig, __si_special(priv), pid);
 }
 EXPORT_SYMBOL(kill_pgrp);
+
+int kill_pgrp_lsm(struct pid *pid, int sig, int priv)
+{
+	int ret;
+
+	read_lock(&tasklist_lock);
+	ret = __kill_pgrp_info_filtered(sig, __si_special(priv), pid, true);
+	read_unlock(&tasklist_lock);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(kill_pgrp_lsm);
 
 int kill_pid(struct pid *pid, int sig, int priv)
 {

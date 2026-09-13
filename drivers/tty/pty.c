@@ -187,6 +187,7 @@ static int pty_get_pktmode(struct tty_struct *tty, int __user *arg)
 /* Send a signal to the slave */
 static int pty_signal(struct tty_struct *tty, int sig)
 {
+	int ret = 0;
 	struct pid *pgrp;
 
 	if (sig != SIGINT && sig != SIGQUIT && sig != SIGTSTP)
@@ -195,10 +196,13 @@ static int pty_signal(struct tty_struct *tty, int sig)
 	if (tty->link) {
 		pgrp = tty_get_pgrp(tty->link);
 		if (pgrp)
-			kill_pgrp(pgrp, sig, 1);
+			ret = kill_pgrp_lsm(pgrp, sig, 1);
 		put_pid(pgrp);
 	}
-	return 0;
+	/* Preserve the historical success result for an empty process group. */
+	if (ret == -ESRCH)
+		return 0;
+	return ret;
 }
 
 static void pty_flush_buffer(struct tty_struct *tty)
