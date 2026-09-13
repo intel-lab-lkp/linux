@@ -45,6 +45,7 @@ struct symbol_conf {
 			force,
 			ignore_vmlinux,
 			ignore_vmlinux_buildid,
+			debuginfod,
 			show_kernel_path,
 			use_modules,
 			allow_aliases,
