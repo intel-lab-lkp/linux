@@ -1855,6 +1855,10 @@ struct sctp_association *sctp_unpack_cookie(
 	if (!sctp_auth_verify_cookie_params(ep, bear_cookie))
 		goto malformed;
 
+	if (bear_cookie->peer_addr.sa.sa_family != AF_INET &&
+	    bear_cookie->peer_addr.sa.sa_family != AF_INET6)
+		goto malformed;
+
 	/* Populate the association from the cookie.  */
 	memcpy(&retval->c, bear_cookie, sizeof(*bear_cookie));
 
