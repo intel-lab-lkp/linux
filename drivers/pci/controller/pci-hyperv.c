@@ -1240,6 +1240,16 @@ static void _hv_pcifront_read_config(struct hv_pci_dev *hpdev, int where,
 			mb();
 		}
 		spin_unlock_irqrestore(&hbus->config_lock, flags);
+
+		/*
+		 * Make sure PCI_INTERRUPT_PIN is hard-wired to 0, since it
+		 * may be read using a 32bit read, which is skipped by the
+		 * above emulation.
+		 */
+		if (where <= PCI_INTERRUPT_PIN &&
+		    PCI_INTERRUPT_PIN < (where + size))
+			*((char *)val + PCI_INTERRUPT_PIN - where) = 0;
+		}
 	} else {
 		dev_err(dev, "Attempt to read beyond a function's config space.\n");
 	}
