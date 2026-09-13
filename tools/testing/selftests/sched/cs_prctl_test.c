@@ -51,6 +51,8 @@ static pid_t gettid(void)
 
 #define MAX_PROCESSES 128
 #define MAX_THREADS   128
+#define CORE_COOKIE_RETRIES	100
+#define CORE_COOKIE_RETRY_US	10000
 
 static const char USAGE[] = "cs_prctl_test [options]\n"
 "    options:\n"
@@ -109,19 +111,43 @@ static void handle_usage(int rc, char *msg)
 	exit(rc);
 }
 
-static unsigned long get_cs_cookie(int pid)
+static int get_cs_cookie(int pid, unsigned long long *cookie)
 {
-	unsigned long long cookie;
-	int ret;
+	int i, ret, err = 0;
 
-	ret = prctl(PR_SCHED_CORE, PR_SCHED_CORE_GET, pid, PIDTYPE_PID,
-		    (unsigned long)&cookie);
-	if (ret) {
-		printf("Not a core sched system\n");
-		return -1UL;
+	for (i = 0; i < CORE_COOKIE_RETRIES; i++) {
+		ret = prctl(PR_SCHED_CORE, PR_SCHED_CORE_GET, pid, PIDTYPE_PID,
+			    (unsigned long)cookie);
+		if (!ret)
+			return 0;
+
+		err = errno;
+		if (err != EBUSY || i == CORE_COOKIE_RETRIES - 1)
+			break;
+
+		usleep(CORE_COOKIE_RETRY_US);
 	}
 
-	return cookie;
+	if (err == EBUSY)
+		printf("Timed out waiting for core sched cookie\n");
+	else
+		printf("Failed to get core sched cookie: %s\n", strerror(err));
+
+	return err;
+}
+
+static unsigned long long get_cs_cookie_or_die(int pid)
+{
+	unsigned long long cookie;
+	int err;
+
+	err = get_cs_cookie(pid, &cookie);
+	if (!err)
+		return cookie;
+
+	errno = err;
+	handle_error("get core sched cookie");
+	__builtin_unreachable();
 }
 
 static int child_func_thread(void __attribute__((unused))*arg)
@@ -202,15 +228,16 @@ void disp_processes(int num_processes, struct child_args proc[])
 {
 	int i, j;
 
-	printf("tid=%d, / tgid=%d / pgid=%d: %lx\n", gettid(), getpid(), getpgid(0),
-	       get_cs_cookie(getpid()));
+	printf("tid=%d, / tgid=%d / pgid=%d: %llx\n", gettid(), getpid(), getpgid(0),
+	       get_cs_cookie_or_die(getpid()));
 
 	for (i = 0; i < num_processes; ++i) {
-		printf("    tid=%d, / tgid=%d / pgid=%d: %lx\n", proc[i].cpid, proc[i].cpid,
-		       getpgid(proc[i].cpid), get_cs_cookie(proc[i].cpid));
+		printf("    tid=%d, / tgid=%d / pgid=%d: %llx\n", proc[i].cpid, proc[i].cpid,
+		       getpgid(proc[i].cpid), get_cs_cookie_or_die(proc[i].cpid));
 		for (j = 0; j < proc[i].num_threads; ++j) {
-			printf("        tid=%d, / tgid=%d / pgid=%d: %lx\n", proc[i].thr_tids[j],
-			       proc[i].cpid, getpgid(0), get_cs_cookie(proc[i].thr_tids[j]));
+			printf("        tid=%d, / tgid=%d / pgid=%d: %llx\n", proc[i].thr_tids[j],
+			       proc[i].cpid, getpgid(0),
+			       get_cs_cookie_or_die(proc[i].thr_tids[j]));
 		}
 	}
 	puts("\n");
@@ -280,30 +307,32 @@ int main(int argc, char *argv[])
 	create_processes(num_processes, num_threads, procs);
 	need_cleanup = 1;
 	disp_processes(num_processes, procs);
-	validate(get_cs_cookie(0) == 0);
+	validate(get_cs_cookie_or_die(0) == 0);
 
 	printf("\n## Set a cookie on entire process group\n");
 	if (_prctl(PR_SCHED_CORE, PR_SCHED_CORE_CREATE, 0, PIDTYPE_PGID, 0) < 0)
 		handle_error("core_sched create failed -- PGID");
 	disp_processes(num_processes, procs);
 
-	validate(get_cs_cookie(0) != 0);
+	validate(get_cs_cookie_or_die(0) != 0);
 
 	/* get a random process pid */
 	pidx = rand() % num_processes;
 	pid = procs[pidx].cpid;
 
-	validate(get_cs_cookie(0) == get_cs_cookie(pid));
-	validate(get_cs_cookie(0) == get_cs_cookie(procs[pidx].thr_tids[0]));
+	validate(get_cs_cookie_or_die(0) == get_cs_cookie_or_die(pid));
+	validate(get_cs_cookie_or_die(0) ==
+		 get_cs_cookie_or_die(procs[pidx].thr_tids[0]));
 
 	printf("\n## Set a new cookie on entire process/TGID [%d]\n", pid);
 	if (_prctl(PR_SCHED_CORE, PR_SCHED_CORE_CREATE, pid, PIDTYPE_TGID, 0) < 0)
 		handle_error("core_sched create failed -- TGID");
 	disp_processes(num_processes, procs);
 
-	validate(get_cs_cookie(0) != get_cs_cookie(pid));
-	validate(get_cs_cookie(pid) != 0);
-	validate(get_cs_cookie(pid) == get_cs_cookie(procs[pidx].thr_tids[0]));
+	validate(get_cs_cookie_or_die(0) != get_cs_cookie_or_die(pid));
+	validate(get_cs_cookie_or_die(pid) != 0);
+	validate(get_cs_cookie_or_die(pid) ==
+		 get_cs_cookie_or_die(procs[pidx].thr_tids[0]));
 
 	printf("\n## Copy the cookie of current/PGID[%d], to pid [%d] as PIDTYPE_PID\n",
 	       getpid(), pid);
@@ -311,9 +340,10 @@ int main(int argc, char *argv[])
 		handle_error("core_sched share to itself failed -- PID");
 	disp_processes(num_processes, procs);
 
-	validate(get_cs_cookie(0) == get_cs_cookie(pid));
-	validate(get_cs_cookie(pid) != 0);
-	validate(get_cs_cookie(pid) != get_cs_cookie(procs[pidx].thr_tids[0]));
+	validate(get_cs_cookie_or_die(0) == get_cs_cookie_or_die(pid));
+	validate(get_cs_cookie_or_die(pid) != 0);
+	validate(get_cs_cookie_or_die(pid) !=
+		 get_cs_cookie_or_die(procs[pidx].thr_tids[0]));
 
 	printf("\n## Copy cookie from a thread [%d] to current/PGID [%d] as PIDTYPE_PID\n",
 	       procs[pidx].thr_tids[0], getpid());
@@ -322,17 +352,20 @@ int main(int argc, char *argv[])
 		handle_error("core_sched share from thread failed -- PID");
 	disp_processes(num_processes, procs);
 
-	validate(get_cs_cookie(0) == get_cs_cookie(procs[pidx].thr_tids[0]));
-	validate(get_cs_cookie(pid) != get_cs_cookie(procs[pidx].thr_tids[0]));
+	validate(get_cs_cookie_or_die(0) ==
+		 get_cs_cookie_or_die(procs[pidx].thr_tids[0]));
+	validate(get_cs_cookie_or_die(pid) !=
+		 get_cs_cookie_or_die(procs[pidx].thr_tids[0]));
 
 	printf("\n## Copy cookie from current [%d] to current as pidtype PGID\n", getpid());
 	if (_prctl(PR_SCHED_CORE, PR_SCHED_CORE_SHARE_TO, 0, PIDTYPE_PGID, 0) < 0)
 		handle_error("core_sched share to self failed -- PGID");
 	disp_processes(num_processes, procs);
 
-	validate(get_cs_cookie(0) == get_cs_cookie(pid));
-	validate(get_cs_cookie(pid) != 0);
-	validate(get_cs_cookie(pid) == get_cs_cookie(procs[pidx].thr_tids[0]));
+	validate(get_cs_cookie_or_die(0) == get_cs_cookie_or_die(pid));
+	validate(get_cs_cookie_or_die(pid) != 0);
+	validate(get_cs_cookie_or_die(pid) ==
+		 get_cs_cookie_or_die(procs[pidx].thr_tids[0]));
 
 	validate(_prctl(PR_SCHED_CORE, PR_SCHED_CORE_MAX, 0, PIDTYPE_PGID, 0) < 0
 		&& errno == EINVAL);
