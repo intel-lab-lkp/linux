@@ -559,9 +559,8 @@ static struct fanotify_event *fanotify_alloc_path_event(const struct path *path,
 		return NULL;
 
 	pevent->fae.type = FANOTIFY_EVENT_TYPE_PATH;
-	pevent->path = *path;
 	*hash ^= fanotify_hash_path(path);
-	path_get(path);
+	path_clone(path, &pevent->path);
 
 	return &pevent->fae;
 }
@@ -600,10 +599,9 @@ static struct fanotify_event *fanotify_alloc_perm_event(const void *data,
 	pevent->hdr.len = 0;
 	pevent->state = FAN_EVENT_INIT;
 	pevent->watchdog_cnt = 0;
-	pevent->path = *path;
 	pevent->pos = range ? range->pos : FANOTIFY_NO_RANGE;
 	pevent->count = range ? range->count : 0;
-	path_get(path);
+	path_clone(path, &pevent->path);
 
 	return &pevent->fae;
 }
