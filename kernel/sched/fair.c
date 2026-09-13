@@ -15061,41 +15061,43 @@ static inline void task_tick_core(struct rq *rq, struct task_struct *curr) {}
  */
 static void task_tick_fair(struct rq *rq, int queued)
 {
-	struct task_struct *donor = rq->donor;
-	struct sched_entity *se;
+	struct task_struct *curr = rq->curr, *donor = rq->donor;
 
-	if (donor->sched_class != &fair_sched_class)
-		return;
+	if (donor->sched_class == &fair_sched_class) {
+		struct sched_entity *se = &donor->se;
 
-	se = &donor->se;
+		if (se->on_rq) {
+			unsigned long weight = NICE_0_LOAD;
+			struct cfs_rq *cfs_rq;
 
-	if (se->on_rq) {
-		unsigned long weight = NICE_0_LOAD;
-		struct cfs_rq *cfs_rq;
+			for_each_sched_entity(se) {
+				cfs_rq = cfs_rq_of(se);
+				entity_tick(cfs_rq, se, queued);
 
-		for_each_sched_entity(se) {
-			cfs_rq = cfs_rq_of(se);
-			entity_tick(cfs_rq, se, queued);
+				weight = __calc_prop_weight(cfs_rq, se, weight);
+			}
 
-			weight = __calc_prop_weight(cfs_rq, se, weight);
+			se = &donor->se;
+			reweight_eevdf(cfs_rq, se, weight, se->on_rq);
 		}
 
-		se = &donor->se;
-		reweight_eevdf(cfs_rq, se, weight, se->on_rq);
+		if (!queued) {
+			task_tick_cache(rq, donor);
+			update_misfit_status(donor, rq);
+			check_update_overutilized_status(task_rq(donor));
+
+			task_tick_core(rq, donor);
+		}
 	}
 
 	if (queued)
 		return;
 
-	if (static_branch_unlikely(&sched_numa_balancing))
-		task_tick_numa(rq, donor);
+	/* Update state owned by the execution context. */
+	if (curr->sched_class == &fair_sched_class &&
+	    static_branch_unlikely(&sched_numa_balancing))
+		task_tick_numa(rq, curr);
 
-	task_tick_cache(rq, donor);
-
-	update_misfit_status(donor, rq);
-	check_update_overutilized_status(task_rq(donor));
-
-	task_tick_core(rq, donor);
 }
 
 /*
