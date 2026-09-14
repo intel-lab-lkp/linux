@@ -55,14 +55,15 @@ struct dma_heap_attachment {
 #define HIGH_ORDER_GFP  (((GFP_HIGHUSER | __GFP_ZERO | __GFP_NOWARN \
 				| __GFP_NORETRY) & ~__GFP_RECLAIM) \
 				| __GFP_COMP)
-static gfp_t order_flags[] = {HIGH_ORDER_GFP, HIGH_ORDER_GFP, LOW_ORDER_GFP};
+static gfp_t order_flags[] = {HIGH_ORDER_GFP, HIGH_ORDER_GFP,
+			      HIGH_ORDER_GFP, LOW_ORDER_GFP};
 /*
- * The selection of the orders used for allocation (1MB, 64K, 4K) is designed
- * to match with the sizes often found in IOMMUs. Using order 4 pages instead
- * of order 0 pages can significantly improve the performance of many IOMMUs
- * by reducing TLB pressure and time spent updating page tables.
+ * The selection of the orders used for allocation (2MB, 1MB, 64K, 4K) is
+ * designed to match with the sizes often found in IOMMUs. Using larger order
+ * pages instead of order 0 pages can significantly improve the performance of
+ * many IOMMUs by reducing TLB pressure and time spent updating page tables.
  */
-static const unsigned int orders[] = {8, 4, 0};
+static const unsigned int orders[] = {9, 8, 4, 0};
 #define NUM_ORDERS ARRAY_SIZE(orders)
 
 static int system_heap_set_page_decrypted(struct page *page)
