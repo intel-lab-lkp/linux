@@ -403,10 +403,20 @@ static int vfe_get_output(struct vfe_line *line)
 
 	output->wm_num = 1;
 
-	wm_idx = vfe_reserve_wm(vfe, line->id);
-	if (wm_idx < 0) {
-		dev_err(vfe->camss->dev, "Can not reserve wm\n");
-		goto error_get_wm;
+	if (line->id == VFE_LINE_PIX) {
+		wm_idx = vfe_reserve_wm(vfe, line->id);
+		if (wm_idx < 0) {
+			dev_err(vfe->camss->dev, "Can not reserve wm\n");
+			goto error;
+		}
+	} else {
+		wm_idx = line->id;
+		if (vfe->wm_output_map[wm_idx] != VFE_LINE_NONE) {
+			dev_err(vfe->camss->dev, "Can not reserve wm %d\n",
+				wm_idx);
+			goto error;
+		}
+		vfe->wm_output_map[wm_idx] = line->id;
 	}
 	output->wm_idx[0] = wm_idx;
 
@@ -416,10 +426,8 @@ static int vfe_get_output(struct vfe_line *line)
 
 	return 0;
 
-error_get_wm:
-	vfe_release_wm(vfe, output->wm_idx[0]);
-	output->state = VFE_OUTPUT_OFF;
 error:
+	output->state = VFE_OUTPUT_OFF;
 	spin_unlock_irqrestore(&vfe->output_lock, flags);
 
 	return -EINVAL;
