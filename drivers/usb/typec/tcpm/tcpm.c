@@ -3891,6 +3891,9 @@ static void tcpm_pd_ctrl_request(struct tcpm_port *port,
 		case SRC_READY:
 		case SNK_READY:
 			if (port->vdm_state > VDM_STATE_READY) {
+				if (port->ams == DISCOVER_IDENTITY)
+					tcpm_update_vdm_discovery_state(port,
+									VDM_DISCOVERY_COMPLETE);
 				port->vdm_state = VDM_STATE_DONE;
 				if (tcpm_vdm_ams(port))
 					tcpm_ams_finish(port);
