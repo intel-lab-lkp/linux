@@ -943,9 +943,8 @@ int shpc_init(struct controller *ctrl, struct pci_dev *pdev)
 	if (!ctrl->creg) {
 		ctrl_err(ctrl, "Cannot remap MMIO region %lx @ %lx\n",
 			 ctrl->mmio_size, ctrl->mmio_base);
-		release_mem_region(ctrl->mmio_base, ctrl->mmio_size);
 		rc = -1;
-		goto abort;
+		goto abort_release_region;
 	}
 	ctrl_dbg(ctrl, "ctrl->creg %p\n", ctrl->creg);
 
@@ -1008,7 +1007,7 @@ int shpc_init(struct controller *ctrl, struct pci_dev *pdev)
 		if (rc) {
 			ctrl_err(ctrl, "Can't get irq %d for the hotplug controller\n",
 				 ctrl->pci_dev->irq);
-			goto abort_iounmap;
+			goto abort_disable_msi;
 		}
 	}
 	ctrl_dbg(ctrl, "HPC at %s irq=%x\n", pci_name(pdev), pdev->irq);
@@ -1041,8 +1040,11 @@ int shpc_init(struct controller *ctrl, struct pci_dev *pdev)
 	return 0;
 
 	/* We end up here for the many possible ways to fail this API.  */
-abort_iounmap:
+abort_disable_msi:
+	pci_disable_msi(pdev);
 	iounmap(ctrl->creg);
+abort_release_region:
+	release_mem_region(ctrl->mmio_base, ctrl->mmio_size);
 abort:
 	return rc;
 }
