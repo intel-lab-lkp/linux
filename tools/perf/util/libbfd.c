@@ -1,5 +1,17 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "libbfd.h"
+
+#include <errno.h>
+#include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include <fcntl.h>
+#include <pthread.h>
+
+#include <tools/dis-asm-compat.h>
+
 #include "annotate.h"
 #include "bpf-event.h"
 #include "bpf-utils.h"
@@ -11,15 +23,13 @@
 #include "symbol.h"
 #include "symbol_conf.h"
 #include "util.h"
-#include <tools/dis-asm-compat.h>
+
 #ifdef HAVE_LIBBPF_SUPPORT
 #include <bpf/bpf.h>
 #include <bpf/btf.h>
 #include <bpf/libbpf.h>
 #endif
-#include <fcntl.h>
-#include <stdio.h>
-#include <stdlib.h>
+
 #define PACKAGE "perf"
 #include <bfd.h>
 
@@ -39,13 +49,13 @@ struct a2l_data {
 	asymbol **syms;
 };
 
-static bool perf_bfd_lock(void *bfd_mutex)
+static bool perf_bfd_lock(void *bfd_mutex) NO_THREAD_SAFETY_ANALYSIS
 {
 	mutex_lock(bfd_mutex);
 	return true;
 }
 
-static bool perf_bfd_unlock(void *bfd_mutex)
+static bool perf_bfd_unlock(void *bfd_mutex) NO_THREAD_SAFETY_ANALYSIS
 {
 	mutex_unlock(bfd_mutex);
 	return true;
@@ -165,11 +175,17 @@ static struct a2l_data *addr2line_init(const char *path)
 {
 	bfd *abfd;
 	struct a2l_data *a2l = NULL;
+	char *alloc_path = strdup(path);
+
+	if (!alloc_path)
+		return NULL;
 
 	ensure_bfd_init();
-	abfd = bfd_openr(path, NULL);
-	if (abfd == NULL)
+	abfd = bfd_openr(alloc_path, NULL);
+	if (abfd == NULL) {
+		free(alloc_path);
 		return NULL;
+	}
 
 	if (!bfd_check_format(abfd, bfd_object))
 		goto out;
@@ -179,7 +195,7 @@ static struct a2l_data *addr2line_init(const char *path)
 		goto out;
 
 	a2l->abfd = abfd;
-	a2l->input = strdup(path);
+	a2l->input = alloc_path;
 	if (a2l->input == NULL)
 		goto out;
 
@@ -189,11 +205,14 @@ static struct a2l_data *addr2line_init(const char *path)
 	return a2l;
 
 out:
+	if (abfd)
+		bfd_close(abfd);
 	if (a2l) {
 		zfree((char **)&a2l->input);
 		free(a2l);
+	} else {
+		free(alloc_path);
 	}
-	bfd_close(abfd);
 	return NULL;
 }
 
@@ -210,7 +229,7 @@ static int inline_list__append_dso_a2l(struct dso *dso,
 				       struct inline_node *node,
 				       struct symbol *sym)
 {
-	struct a2l_data *a2l = dso__a2l(dso);
+	struct a2l_data *a2l = dso__a2l_libbfd(dso);
 	struct symbol *inline_sym = new_inline_sym(dso, sym, a2l->funcname);
 	char *srcline = NULL;
 
@@ -229,11 +248,11 @@ int libbfd__addr2line(const char *dso_name, u64 addr,
 	struct a2l_data *a2l;
 
 	mutex_lock(dso__lock(dso));
-	a2l = dso__a2l(dso);
+	a2l = dso__a2l_libbfd(dso);
 
 	if (!a2l) {
 		a2l = addr2line_init(dso_name);
-		dso__set_a2l(dso, a2l);
+		dso__set_a2l_libbfd(dso, a2l);
 	}
 
 	if (a2l == NULL) {
@@ -282,6 +301,8 @@ int libbfd__addr2line(const char *dso_name, u64 addr,
 	if (file) {
 		*file = a2l->filename ? strdup(a2l->filename) : NULL;
 		ret = *file ? 1 : 0;
+	} else {
+		ret = 1; /* inline frame successfully appended by bfd_find_inliner_info */
 	}
 
 	if (line)
@@ -294,14 +315,14 @@ out:
 
 void dso__free_a2l_libbfd(struct dso *dso)
 {
-	struct a2l_data *a2l = dso__a2l(dso);
+	struct a2l_data *a2l = dso__a2l_libbfd(dso);
 
 	if (!a2l)
 		return;
 
 	addr2line_cleanup(a2l);
 
-	dso__set_a2l(dso, NULL);
+	dso__set_a2l_libbfd(dso, NULL);
 }
 
 static int bfd_symbols__cmpvalue(const void *a, const void *b)
