@@ -69,6 +69,8 @@ int hv_call_withdraw_memory(u64 count, int node, u64 partition_id)
 
 		completed = hv_repcomp(status);
 
+		hv_restore_withdrawn_pages(output_page->gpa_page_list, completed);
+
 		for (i = 0; i < completed; i++)
 			__free_page(pfn_to_page(output_page->gpa_page_list[i]));
 
