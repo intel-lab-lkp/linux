@@ -87,19 +87,18 @@ static void *serial_get_stdout_devp(void)
 
 	devp = finddevice("/chosen");
 	if (devp == NULL)
-		goto err_out;
+		return NULL;
 
 	if (getprop(devp, "linux,stdout-path", path, MAX_PATH_LEN) > 0 ||
 		getprop(devp, "stdout-path", path, MAX_PATH_LEN) > 0) {
 		devp = finddevice(path);
 		if (devp == NULL)
-			goto err_out;
+			return NULL;
 
 		if ((getprop(devp, "device_type", devtype, sizeof(devtype)) > 0)
 				&& !strcmp(devtype, "serial"))
 			return devp;
 	}
-err_out:
 	return NULL;
 }
 
@@ -113,7 +112,7 @@ int serial_console_init(void)
 
 	devp = serial_get_stdout_devp();
 	if (devp == NULL)
-		goto err_out;
+		return rc;
 
 	if (dt_is_compatible(devp, "ns16550") ||
 	    dt_is_compatible(devp, "pnpPNP,501"))
@@ -134,19 +133,16 @@ int serial_console_init(void)
 		rc = opal_console_init(devp, &serial_cd);
 #endif
 
-	/* Add other serial console driver calls here */
+	if (rc)
+		return rc;
 
-	if (!rc) {
-		console_ops.open = serial_open;
-		console_ops.write = serial_write;
-		console_ops.close = serial_close;
-		console_ops.data = &serial_cd;
+	console_ops.open = serial_open;
+	console_ops.write = serial_write;
+	console_ops.close = serial_close;
+	console_ops.data = &serial_cd;
 
-		if (serial_cd.getc)
-			console_ops.edit_cmdline = serial_edit_cmdline;
+	if (serial_cd.getc)
+		console_ops.edit_cmdline = serial_edit_cmdline;
 
-		return 0;
-	}
-err_out:
-	return -1;
+	return 0;
 }
