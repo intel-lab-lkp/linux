@@ -1098,6 +1098,10 @@ enum ufshcd_mcq_opr {
  * @device_deemphasis_cap: a bitfield to indicate supported DeEmphasis dBs of device's TX lanes,
  *	cache of device M-PHY TX_HS_DeEmphasis_Setting_Capability Attribute (ID 0x12)
  * @tx_eq_params: TX Equalization settings
+ * @agg_packet: aggregated data packet cached during a read batch, or NULL
+ * @agg_packet_len: length of @agg_packet
+ * @agg_str_idx: string descriptor index per string group, indexed by
+ *	group type - UFS_AGG_GROUP_MANUFACTURER_STR
  */
 struct ufs_hba {
 	void __iomem *mmio_base;
@@ -1282,6 +1286,11 @@ struct ufs_hba {
 	u8 device_preshoot_cap;
 	u8 device_deemphasis_cap;
 	struct ufshcd_tx_eq_params tx_eq_params[UFS_HS_GEAR_MAX];
+
+	u8 *agg_packet;
+	u16 agg_packet_len;
+	u8 agg_str_idx[UFS_AGG_GROUP_PRODUCT_REV_STR -
+		       UFS_AGG_GROUP_MANUFACTURER_STR + 1];
 };
 
 /**

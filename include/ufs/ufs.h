@@ -706,6 +706,9 @@ struct ufs_dev_info {
 
 	bool hid_sup;
 
+	/* Set once the device has rejected an AGGREGATED READ query. */
+	bool agg_read_unsupported;
+
 	/* Unique device ID string (manufacturer+model+serial+version+date) */
 	char *device_id;
 	u8 rpmb_io_size;
