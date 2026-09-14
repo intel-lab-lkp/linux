@@ -194,6 +194,7 @@ static bool fallback_to_mmap_lock(struct proc_maps_private *priv,
 	return true;
 }
 
+#ifdef CONFIG_PROC_PAGE_MONITOR
 static void drop_rcu(struct proc_maps_private *priv)
 {
 	if (priv->lock_ctx.mmap_locked)
@@ -211,6 +212,7 @@ static void reacquire_rcu(struct proc_maps_private *priv)
 	/* Reinitialize the iterator. */
 	vma_iter_set(&priv->iter, priv->lock_ctx.locked_vma->vm_end);
 }
+#endif
 
 static struct vm_area_struct *proc_get_vma(struct seq_file *m, loff_t *ppos)
 {
