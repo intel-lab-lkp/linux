@@ -1231,8 +1231,12 @@ static noinstr void exc_debug_kernel(struct pt_regs *regs, unsigned long dr6)
 	 * it results in an endless recursion and stack overflow. Thus we stay
 	 * with the IDT approach, i.e., save DR7 and disable #DB.
 	 */
-	unsigned long dr7 = local_db_save();
-	irqentry_state_t irq_state = irqentry_nmi_enter(regs);
+	unsigned long dr7;
+	unsigned int dr7_seq;
+	irqentry_state_t irq_state;
+
+	local_db_save(&dr7, &dr7_seq);
+	irq_state = irqentry_nmi_enter(regs);
 	instrumentation_begin();
 
 	/*
@@ -1289,7 +1293,7 @@ out:
 	instrumentation_end();
 	irqentry_nmi_exit(regs, irq_state);
 
-	local_db_restore(dr7);
+	local_db_restore(dr7, dr7_seq);
 }
 
 static noinstr void exc_debug_user(struct pt_regs *regs, unsigned long dr6)

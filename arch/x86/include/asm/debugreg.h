@@ -19,6 +19,7 @@
 
 DECLARE_PER_CPU(unsigned long, cpu_dr7);
 DECLARE_PER_CPU(bool, cpu_dr_in_guest);
+DECLARE_PER_CPU(unsigned int, cpu_dr7_seq);
 
 #ifndef CONFIG_PARAVIRT_XXL
 /*
@@ -126,45 +127,79 @@ static __always_inline bool hw_breakpoint_active(void)
 
 extern void hw_breakpoint_restore(void);
 
-static __always_inline unsigned long local_db_save(void)
+static __always_inline void local_db_save(unsigned long *dr7,
+					  unsigned int *dr7_seq)
 {
-	unsigned long dr7;
+	bool retrying = false;
 
-	if (this_cpu_read(cpu_dr_in_guest))
-		return 0;
+	if (this_cpu_read(cpu_dr_in_guest)) {
+		*dr7 = 0;
+		*dr7_seq = 0;
+		return;
+	}
 
-	if (cpu_feature_enabled(X86_FEATURE_HYPERVISOR) && !hw_breakpoint_active())
-		return 0;
+	do {
+		/* Inner loop: get DR7 with checking cpu_dr7_seq. */
+		*dr7_seq = this_cpu_read(cpu_dr7_seq);
 
-	get_debugreg(dr7, 7);
+		if (unlikely(retrying)) {
+			*dr7 = this_cpu_read(cpu_dr7);
+		} else {
+			get_debugreg(*dr7, 7);
 
-	/* Architecturally set bit */
-	dr7 &= ~DR7_FIXED_1;
-	if (dr7)
-		set_debugreg(DR7_FIXED_1, 7);
+			/* Architecturally set bit */
+			*dr7 &= ~DR7_FIXED_1;
+		}
 
-	/*
-	 * Ensure the compiler doesn't lower the above statements into
-	 * the critical section; disabling breakpoints late would not
-	 * be good.
-	 */
-	barrier();
+		barrier();
+		if (unlikely(*dr7_seq != this_cpu_read(cpu_dr7_seq))) {
+			retrying = true;
+			continue;
+		}
 
-	return dr7;
+		/* Outer loop: clear DR7 and retry if sequence number is updated. */
+		if (*dr7)
+			set_debugreg(DR7_FIXED_1, 7);
+
+		/*
+		 * Ensure the compiler doesn't lower the above statements into
+		 * the critical section; disabling breakpoints late would not
+		 * be good.
+		 */
+		barrier();
+		retrying = true;
+	} while (unlikely(*dr7_seq != this_cpu_read(cpu_dr7_seq)));
 }
 
-static __always_inline void local_db_restore(unsigned long dr7)
+static __always_inline void local_db_restore(unsigned long dr7,
+					     unsigned int dr7_seq)
 {
+	unsigned long val;
+	unsigned int seq;
+
 	/*
 	 * Ensure the compiler doesn't raise this statement into
 	 * the critical section; enabling breakpoints early would
 	 * not be good.
 	 */
 	barrier();
+
 	if (this_cpu_read(cpu_dr_in_guest))
 		return;
-	if (dr7)
-		set_debugreg(dr7, 7);
+
+	do {
+		seq = this_cpu_read(cpu_dr7_seq);
+		if (seq == dr7_seq) {
+			if (!dr7)
+				return;
+			val = dr7;
+		} else {
+			val = this_cpu_read(cpu_dr7);
+		}
+
+		set_debugreg(val | DR7_FIXED_1, 7);
+		barrier();
+	} while (unlikely(seq != this_cpu_read(cpu_dr7_seq)));
 }
 
 #ifdef CONFIG_CPU_SUP_AMD
