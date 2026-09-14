@@ -46,7 +46,7 @@ static ssize_t i2cr_scom_read(struct file *filep, char __user *buf, size_t len, 
 
 	ret = copy_to_user(buf, &data, len);
 	if (ret)
-		return ret;
+		return -EFAULT;
 
 	return len;
 }
@@ -63,7 +63,7 @@ static ssize_t i2cr_scom_write(struct file *filep, const char __user *buf, size_
 
 	ret = copy_from_user(&data, buf, len);
 	if (ret)
-		return ret;
+		return -EFAULT;
 
 	ret = fsi_master_i2cr_write(scom->i2cr, (u32)*offset, data);
 	if (ret)
