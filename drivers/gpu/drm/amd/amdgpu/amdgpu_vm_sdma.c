@@ -90,6 +90,7 @@ static int amdgpu_vm_sdma_prepare(struct amdgpu_vm_update_params *p,
 	if (r) {
 		p->num_dw_left = 0;
 		amdgpu_job_free(p->job);
+		p->job = NULL;
 	}
 	return r;
 }
@@ -106,14 +107,24 @@ static int amdgpu_vm_sdma_prepare(struct amdgpu_vm_update_params *p,
 static int amdgpu_vm_sdma_commit(struct amdgpu_vm_update_params *p,
 				 struct dma_fence **fence)
 {
-	struct amdgpu_ib *ib = p->job->ibs;
+	struct amdgpu_ib *ib;
 	struct amdgpu_ring *ring;
 	struct dma_fence *f;
+
+	if (!p->job)
+		return 0;
+
+	ib = p->job->ibs;
+
+	if (ib->length_dw == 0) {
+		amdgpu_job_free(p->job);
+		p->job = NULL;
+		return 0;
+	}
 
 	ring = container_of(p->vm->delayed.rq->sched, struct amdgpu_ring,
 			    sched);
 
-	WARN_ON(ib->length_dw == 0);
 	amdgpu_ring_pad_ib(ring, ib);
 
 	if (p->needs_flush)
