@@ -1,0 +1,105 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/net/can/fsl,mpc5xxx-mscan.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Freescale MPC5xxx MSCAN controller
+
+maintainers:
+  - Marc Kleine-Budde <mkl@pengutronix.de>
+
+description:
+  The MSCAN controller found on Freescale MPC5200 and MPC5121 SoCs. Note that
+  the MPC5121 Rev. 1 processor is not supported.
+
+allOf:
+  - $ref: can-controller.yaml#
+
+properties:
+  compatible:
+    oneOf:
+      - items:
+          - enum:
+              - fsl,mpc5200b-mscan
+          - const: fsl,mpc5200-mscan
+      - enum:
+          - fsl,mpc5200-mscan
+          - fsl,mpc5121-mscan
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  clocks:
+    description:
+      Clocks the controller needs. On MPC5121 the driver looks up "ipg",
+      "ips", "sys", "ref" and "mclk" by name.
+    maxItems: 5
+
+  clock-names:
+    items:
+      - const: ipg
+      - const: ips
+      - const: sys
+      - const: ref
+      - const: mclk
+
+  fsl,mscan-clock-source:
+    description:
+      Clock source used for the controller. Valid values are "ip" for the IP
+      bus clock, "ref" for the reference clock (XTAL) and "sys" for the
+      system clock. "sys" is only available on MPC5121. When the property is
+      absent, an optimal clock source based on the system clock is selected,
+      falling back to the reference clock.
+    enum: [ip, ref, sys]
+
+  fsl,mscan-clock-divider:
+    description:
+      Additional clock divider for the reference and system clock sources.
+      Defaults to 1 when not specified.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 1
+
+required:
+  - compatible
+  - reg
+  - interrupts
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/clock/mpc512x-clock.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    can@1300 {
+        compatible = "fsl,mpc5121-mscan";
+        reg = <0x1300 0x80>;
+        interrupts = <12 IRQ_TYPE_LEVEL_LOW>;
+        interrupt-parent = <&ipic>;
+        clocks = <&clks MPC512x_CLK_BDLC>,
+                 <&clks MPC512x_CLK_IPS>,
+                 <&clks MPC512x_CLK_SYS>,
+                 <&clks MPC512x_CLK_REF>,
+                 <&clks MPC512x_CLK_MSCAN0_MCLK>;
+        clock-names = "ipg", "ips", "sys", "ref", "mclk";
+    };
+
+    can@1380 {
+        compatible = "fsl,mpc5121-mscan";
+        reg = <0x1380 0x80>;
+        interrupts = <13 IRQ_TYPE_LEVEL_LOW>;
+        interrupt-parent = <&ipic>;
+        clocks = <&clks MPC512x_CLK_BDLC>,
+                 <&clks MPC512x_CLK_IPS>,
+                 <&clks MPC512x_CLK_SYS>,
+                 <&clks MPC512x_CLK_REF>,
+                 <&clks MPC512x_CLK_MSCAN1_MCLK>;
+        clock-names = "ipg", "ips", "sys", "ref", "mclk";
+        fsl,mscan-clock-source = "ref";
+        fsl,mscan-clock-divider = <3>;
+    };
+...
