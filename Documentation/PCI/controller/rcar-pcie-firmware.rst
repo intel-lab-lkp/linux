@@ -7,21 +7,12 @@ Firmware of PCIe controller for Renesas R-Car V4H
 Renesas R-Car V4H (r8a779g0) has a PCIe controller, requiring a specific
 firmware download during startup.
 
-However, Renesas currently cannot distribute the firmware free of charge.
+Firmware file "rcar_gen4_pcie.bin" is distributed in the linux-firmware repository:
+https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/
+since linux-firmware.git commit
+56bb432a65bc ("rcar_gen4_pcie: add firmware for Renesas R-Car Gen4 PCIe controller")
 
-The firmware file "104_PCIe_fw_addr_data_ver1.05.txt" (note that the file name
-might be different between different datasheet revisions) can be found in the
-datasheet encoded as text, and as such, the file's content must be converted
-back to binary form. This can be achieved using the following example script:
-
-.. code-block:: sh
-
-	$ awk '/^\s*0x[0-9A-Fa-f]{4}\s+0x[0-9A-Fa-f]{4}/ { print substr($2,5,2) substr($2,3,2) }' \
-		104_PCIe_fw_addr_data_ver1.05.txt | \
-			xxd -p -r > rcar_gen4_pcie.bin
-
-Once the text content has been converted into a binary firmware file, verify
-its checksum as follows:
+Download the file and verify the file checksum as follows:
 
 .. code-block:: sh
 
