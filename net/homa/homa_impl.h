@@ -363,12 +363,24 @@ static inline bool homa_make_header_avl(struct sk_buff *skb)
 
 extern unsigned int homa_net_id;
 
+void     homa_ack_pkt(struct sk_buff *skb, struct homa_sock *hsk,
+		      struct homa_rpc *rpc);
+enum skb_drop_reason homa_add_packet(struct homa_rpc *rpc, struct sk_buff *skb);
+int      homa_copy_to_user(struct homa_rpc *rpc);
+void     homa_data_pkt(struct sk_buff *skb, struct homa_rpc *rpc);
 void     homa_destroy(struct homa *homa);
+void     homa_dispatch_pkts(struct sk_buff *skb);
+struct homa_gap *homa_gap_alloc(struct list_head *next, int start, int end);
 int      homa_init(struct homa *homa);
 void     homa_message_out_init(struct homa_rpc *rpc, int length);
+void     homa_need_ack_pkt(struct sk_buff *skb, struct homa_sock *hsk,
+			   struct homa_rpc *rpc);
 void     homa_net_destroy(struct homa_net *hnet);
 int      homa_net_init(struct homa_net *hnet, struct homa *homa);
+void     homa_request_retrans(struct homa_rpc *rpc);
 int      homa_resend_data(struct homa_rpc *rpc, int start, int end);
+void     homa_resend_pkt(struct sk_buff *skb, struct homa_rpc *rpc,
+			 struct homa_sock *hsk);
 void     homa_rpc_handoff(struct homa_rpc *rpc);
 int      homa_rpc_tx_end(struct homa_rpc *rpc);
 struct sk_buff *__homa_skb_alloc(int length);
@@ -377,6 +389,9 @@ int      homa_tx_copy_from_user(struct homa_rpc *rpc, struct iov_iter *iter,
 				bool xmit);
 struct sk_buff *homa_tx_skb_alloc(struct homa_rpc *rpc, u32 offset, u32 *end);
 int      homa_tx_skb_send(struct homa_rpc *rpc, u32 offset, u32 *end);
+void     homa_rpc_unknown_pkt(struct sk_buff *skb, struct homa_rpc *rpc);
+int      homa_wait_private(struct homa_rpc *rpc, int nonblocking);
+struct homa_rpc *homa_wait_shared(struct homa_sock *hsk, int nonblocking);
 int      homa_xmit_control(enum homa_packet_type type, void *contents,
 			   size_t length, struct homa_rpc *rpc);
 int      __homa_xmit_control(void *contents, size_t length,
