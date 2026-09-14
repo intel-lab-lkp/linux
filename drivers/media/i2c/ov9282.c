@@ -542,6 +542,29 @@ static u32 ov9282_flash_duration_to_us(struct ov9282 *ov9282, u32 value)
 }
 
 /**
+ * ov9282_update_ctrl_range_flash_duration() - Update flash_duration control range
+ * @ov9282: pointer to ov9282 device
+ *
+ * This may round up the ceiling to the microseconds representation of the
+ * next flash_duration register value to make sure one can illuminate the whole
+ * exposure time long.
+ *
+ * Return: 0 if successful, error code otherwise.
+ */
+static int ov9282_update_ctrl_range_flash_duration(struct ov9282 *ov9282)
+{
+	u32 exposure_us = ov9282_exposure_to_us(ov9282, ov9282->exp_ctrl->val);
+	u32 fd_max = ov9282_us_to_flash_duration(ov9282, exposure_us);
+	u32 fd_max_us = ov9282_flash_duration_to_us(ov9282, fd_max);
+
+	if (fd_max_us < exposure_us)
+		fd_max_us = ov9282_flash_duration_to_us(ov9282, fd_max + 1);
+
+	return __v4l2_ctrl_modify_range(ov9282->flash_duration, 0, fd_max_us,
+					1, OV9282_STROBE_FRAME_SPAN_DEFAULT);
+}
+
+/**
  * ov9282_update_controls() - Update control ranges based on streaming mode
  * @ov9282: pointer to ov9282 device
  * @mode: pointer to ov9282_mode sensor mode
@@ -555,7 +578,6 @@ static int ov9282_update_controls(struct ov9282 *ov9282,
 {
 	u32 hblank_min;
 	s64 pixel_rate;
-	u32 exposure_us;
 	u32 lpfr;
 	int ret;
 
@@ -590,9 +612,7 @@ static int ov9282_update_controls(struct ov9282 *ov9282,
 	if (ret)
 		return ret;
 
-	exposure_us = ov9282_exposure_to_us(ov9282, ov9282->exp_ctrl->val);
-	return __v4l2_ctrl_modify_range(ov9282->flash_duration, 0, exposure_us,
-					1, OV9282_STROBE_FRAME_SPAN_DEFAULT);
+	return ov9282_update_ctrl_range_flash_duration(ov9282);
 }
 
 /**
@@ -605,11 +625,9 @@ static int ov9282_update_controls(struct ov9282 *ov9282,
  */
 static int ov9282_update_exp_gain(struct ov9282 *ov9282, u32 exposure, u32 gain)
 {
-	u32 exposure_us = ov9282_exposure_to_us(ov9282, exposure);
 	int ret, ret_hold;
 
-	dev_dbg(ov9282->dev, "Set exp %u (~%u us), analog gain %u",
-		exposure, exposure_us, gain);
+	dev_dbg(ov9282->dev, "Set exp %u, analog gain %u", exposure, gain);
 
 	ret = cci_write(ov9282->regmap, OV9282_REG_HOLD, 0x01, NULL);
 	if (ret)
@@ -623,9 +641,7 @@ static int ov9282_update_exp_gain(struct ov9282 *ov9282, u32 exposure, u32 gain)
 	if (ret)
 		goto error_release_group_hold;
 
-	ret = __v4l2_ctrl_modify_range(ov9282->flash_duration,
-				       0, exposure_us, 1,
-				       OV9282_STROBE_FRAME_SPAN_DEFAULT);
+	ret = ov9282_update_ctrl_range_flash_duration(ov9282);
 
 error_release_group_hold:
 	ret_hold = cci_write(ov9282->regmap, OV9282_REG_HOLD, 0, NULL);
@@ -660,11 +676,7 @@ static int ov9282_set_ctrl(struct v4l2_ctrl *ctrl)
 		 * Ensure the flash duration range is also updated on powered
 		 * down sensors.
 		 */
-		ret = __v4l2_ctrl_modify_range(ov9282->flash_duration, 0,
-					       ov9282_exposure_to_us(ov9282,
-								     ctrl->val),
-					       1,
-					       OV9282_STROBE_FRAME_SPAN_DEFAULT);
+		ret = ov9282_update_ctrl_range_flash_duration(ov9282);
 		if (ret)
 			return ret;
 		break;
@@ -674,10 +686,7 @@ static int ov9282_set_ctrl(struct v4l2_ctrl *ctrl)
 		 * duration. Therefore recalculate the flash duration range
 		 * here.
 		 */
-		exposure = ov9282_exposure_to_us(ov9282, ov9282->exp_ctrl->val);
-		ret = __v4l2_ctrl_modify_range(ov9282->flash_duration, 0,
-					       exposure, 1,
-					       OV9282_STROBE_FRAME_SPAN_DEFAULT);
+		ret = ov9282_update_ctrl_range_flash_duration(ov9282);
 		if (ret)
 			return ret;
 		break;
