@@ -589,7 +589,7 @@ int event_trigger_init(struct event_trigger_data *data)
  * Usually used directly as the @free method in event trigger
  * implementations.
  */
-static void
+void
 event_trigger_free(struct event_trigger_data *data)
 {
 	if (WARN_ON_ONCE(data->ref <= 0))

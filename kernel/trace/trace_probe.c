@@ -20,7 +20,7 @@
 #undef C
 #define C(a, b)		b
 
-static const char *trace_probe_err_text[] = { ERRORS };
+const char *trace_probe_err_text[] = { ERRORS };
 
 static const char *reserved_field_names[] = {
 	"common_type",
