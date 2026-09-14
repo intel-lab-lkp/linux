@@ -20,11 +20,14 @@ void guest_modes_append_default(void)
 #ifdef __aarch64__
 	{
 		unsigned int limit = kvm_check_cap(KVM_CAP_ARM_VM_IPA_SIZE);
-		u32 ipa4k, ipa16k, ipa64k;
+		u32 ipa4k, ipa16k, ipa64k, va64k;
 		int i;
 
-		aarch64_get_supported_page_sizes(limit, &ipa4k, &ipa16k, &ipa64k);
+		aarch64_get_supported_page_sizes(limit, &ipa4k, &ipa16k, &ipa64k, &va64k);
 
+		guest_mode_append(VM_MODE_P52V52_4K, ipa4k >= 52);
+		guest_mode_append(VM_MODE_P52V52_16K, ipa16k >= 52);
+		guest_mode_append(VM_MODE_P52V52_64K, ipa64k >= 52 && va64k >= 52);
 		guest_mode_append(VM_MODE_P52V48_4K, ipa4k >= 52);
 		guest_mode_append(VM_MODE_P52V48_16K, ipa16k >= 52);
 		guest_mode_append(VM_MODE_P52V48_64K, ipa64k >= 52);

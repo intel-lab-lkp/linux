@@ -356,12 +356,14 @@ void aarch64_vcpu_setup(struct kvm_vcpu *vcpu, struct kvm_vcpu_init *init)
 	case VM_MODE_PXXVYY_4K:
 		TEST_FAIL("AArch64 does not support 4K sized pages "
 			  "with ANY-bit physical address ranges");
+	case VM_MODE_P52V52_64K:
 	case VM_MODE_P52V48_64K:
 	case VM_MODE_P48V48_64K:
 	case VM_MODE_P40V48_64K:
 	case VM_MODE_P36V48_64K:
 		tcr_el1 |= TCR_TG0_64K;
 		break;
+	case VM_MODE_P52V52_16K:
 	case VM_MODE_P52V48_16K:
 	case VM_MODE_P48V48_16K:
 	case VM_MODE_P40V48_16K:
@@ -369,6 +371,7 @@ void aarch64_vcpu_setup(struct kvm_vcpu *vcpu, struct kvm_vcpu_init *init)
 	case VM_MODE_P36V47_16K:
 		tcr_el1 |= TCR_TG0_16K;
 		break;
+	case VM_MODE_P52V52_4K:
 	case VM_MODE_P52V48_4K:
 	case VM_MODE_P48V48_4K:
 	case VM_MODE_P40V48_4K:
@@ -383,6 +386,9 @@ void aarch64_vcpu_setup(struct kvm_vcpu *vcpu, struct kvm_vcpu_init *init)
 
 	/* Configure output size */
 	switch (vm->mode) {
+	case VM_MODE_P52V52_4K:
+	case VM_MODE_P52V52_16K:
+	case VM_MODE_P52V52_64K:
 	case VM_MODE_P52V48_4K:
 	case VM_MODE_P52V48_16K:
 	case VM_MODE_P52V48_64K:
@@ -614,7 +620,7 @@ static u32 max_ipa_for_page_size(u32 vm_ipa, u32 gran,
 }
 
 void aarch64_get_supported_page_sizes(u32 ipa, u32 *ipa4k,
-				      u32 *ipa16k, u32 *ipa64k)
+				      u32 *ipa16k, u32 *ipa64k, u32 *va64k)
 {
 	struct kvm_vcpu_init preferred_init;
 	int kvm_fd, vm_fd, vcpu_fd, err;
@@ -651,6 +657,13 @@ void aarch64_get_supported_page_sizes(u32 ipa, u32 *ipa4k,
 	gran = FIELD_GET(ID_AA64MMFR0_EL1_TGRAN16, val);
 	*ipa16k = max_ipa_for_page_size(ipa, gran, ID_AA64MMFR0_EL1_TGRAN16_NI,
 					ID_AA64MMFR0_EL1_TGRAN16_52_BIT);
+
+	reg.id = KVM_ARM64_SYS_REG(SYS_ID_AA64MMFR2_EL1);
+	err = ioctl(vcpu_fd, KVM_GET_ONE_REG, &reg);
+	TEST_ASSERT(err == 0, KVM_IOCTL_ERROR(KVM_GET_ONE_REG, err));
+
+	*va64k = FIELD_GET(ID_AA64MMFR2_EL1_VARange, val) >=
+		ID_AA64MMFR2_EL1_VARange_52 ? 52 : 48;
 
 	close(vcpu_fd);
 	close(vm_fd);

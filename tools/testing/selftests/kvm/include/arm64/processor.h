@@ -169,7 +169,7 @@ enum {
 			   (v) == VECTOR_SYNC_LOWER_32)
 
 void aarch64_get_supported_page_sizes(u32 ipa, u32 *ipa4k,
-				      u32 *ipa16k, u32 *ipa64k);
+				      u32 *ipa16k, u32 *ipa64k, u32 *va64k);
 
 void vm_init_descriptor_tables(struct kvm_vm *vm);
 void vcpu_init_descriptor_tables(struct kvm_vcpu *vcpu);
