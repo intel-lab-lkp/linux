@@ -76,6 +76,8 @@ struct symbol_conf symbol_conf = {
 	.inline_name		= true,
 	.res_sample		= 0,
 	.addr2line_timeout_ms	= 5 * 1000,
+	/* Fetching debuginfo by build ID, off via --no-debuginfod, etc */
+	.debuginfod		= true,
 };
 
 struct map_list_node {
@@ -2533,6 +2535,16 @@ int symbol__init(struct perf_env *env)
 
 	if (symbol_conf.initialized)
 		return 0;
+
+	/*
+	 * Have DEBUGINFOD_URLS set before the threads that can take the
+	 * debuginfod fetch path, and that getenv() it, e.g. in the every
+	 * debuginfod_begin() of the other debuginfod client users, are
+	 * started: set it up here, from the .urls files in /etc/debuginfod
+	 * when it isn't set, instead of doing it lazily from the fetch
+	 * path itself, setenv() not being thread safe.
+	 */
+	debuginfod__setup_urls_env();
 
 	symbol_conf.priv_size = PERF_ALIGN(symbol_conf.priv_size, sizeof(u64));
 
