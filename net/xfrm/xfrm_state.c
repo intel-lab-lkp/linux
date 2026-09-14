@@ -780,17 +780,20 @@ EXPORT_SYMBOL_GPL(xfrm_dev_state_delete);
 void xfrm_dev_state_free(struct xfrm_state *x)
 {
 	struct xfrm_dev_offload *xso = &x->xso;
-	struct net_device *dev = READ_ONCE(xso->dev);
+	struct net_device *dev;
+
+	spin_lock_bh(&xfrm_state_dev_gc_lock);
+	dev = READ_ONCE(xso->dev);
+	if (dev && dev->xfrmdev_ops) {
+		WRITE_ONCE(xso->dev, NULL);
+		if (!hlist_unhashed(&x->dev_gclist))
+			hlist_del_init(&x->dev_gclist);
+	}
+	spin_unlock_bh(&xfrm_state_dev_gc_lock);
 
 	if (dev && dev->xfrmdev_ops) {
-		spin_lock_bh(&xfrm_state_dev_gc_lock);
-		if (!hlist_unhashed(&x->dev_gclist))
-			hlist_del(&x->dev_gclist);
-		spin_unlock_bh(&xfrm_state_dev_gc_lock);
-
 		if (dev->xfrmdev_ops->xdo_dev_state_free)
 			dev->xfrmdev_ops->xdo_dev_state_free(dev, x);
-		WRITE_ONCE(xso->dev, NULL);
 		xso->type = XFRM_DEV_OFFLOAD_UNSPECIFIED;
 		netdev_put(dev, &xso->dev_tracker);
 	}
@@ -1005,9 +1008,10 @@ restart_gc:
 	hlist_for_each_entry_safe(x, tmp, &xfrm_state_dev_gc_list, dev_gclist) {
 		xso = &x->xso;
 
-		if (xso->dev == dev) {
+		if (xso->dev == dev && xfrm_state_hold_rcu(x)) {
 			spin_unlock_bh(&xfrm_state_dev_gc_lock);
 			xfrm_dev_state_free(x);
+			xfrm_state_put(x);
 			spin_lock_bh(&xfrm_state_dev_gc_lock);
 			goto restart_gc;
 		}
