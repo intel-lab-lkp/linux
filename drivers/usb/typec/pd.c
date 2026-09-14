@@ -517,6 +517,7 @@ static int add_pdo(struct usb_power_delivery_capabilities *cap, u32 pdo, int pos
 	p->dev.parent = &cap->dev;
 	p->dev.type = type;
 	dev_set_name(&p->dev, "%u:%s", position + 1, name);
+	device_set_pm_not_required(&p->dev);
 
 	ret = device_register(&p->dev);
 	if (ret) {
@@ -579,6 +580,7 @@ usb_power_delivery_register_capabilities(struct usb_power_delivery *pd,
 	cap->dev.parent = &pd->dev;
 	cap->dev.type = &pd_capabilities_type;
 	dev_set_name(&cap->dev, "%s", cap_name[cap->role]);
+	device_set_pm_not_required(&cap->dev);
 
 	ret = device_register(&cap->dev);
 	if (ret) {
@@ -715,6 +717,7 @@ usb_power_delivery_register(struct device *parent, struct usb_power_delivery_des
 	pd->dev.type = &pd_type;
 	pd->dev.class = &pd_class;
 	dev_set_name(&pd->dev, "pd%d", pd->id);
+	device_set_pm_not_required(&pd->dev);
 
 	ret = device_register(&pd->dev);
 	if (ret) {
