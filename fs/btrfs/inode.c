@@ -2319,7 +2319,8 @@ static int run_delalloc_inline(struct btrfs_inode *inode, struct folio *locked_f
 	 */
 	btrfs_check_folio_write_protected(locked_folio);
 
-	if (btrfs_inode_can_compress(inode) &&
+	if (can_cow_file_range_inline(inode, 0, i_size, 0) &&
+	    btrfs_inode_can_compress(inode) &&
 	    inode_need_compress(inode, 0, blocksize, true)) {
 		if (inode->defrag_compress > 0 &&
 		    inode->defrag_compress < BTRFS_NR_COMPRESS_TYPES) {
@@ -2328,7 +2329,7 @@ static int run_delalloc_inline(struct btrfs_inode *inode, struct folio *locked_f
 		} else if (inode->prop_compress) {
 			compress_type = inode->prop_compress;
 		}
-		cb = btrfs_compress_bio(inode, 0, blocksize, compress_type, compress_level, 0);
+		cb = btrfs_compress_bio(inode, 0, i_size, compress_type, compress_level, 0);
 		if (IS_ERR(cb)) {
 			cb = NULL;
 			/* Just fall back to non-compressed case. */
