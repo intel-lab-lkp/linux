@@ -17,6 +17,7 @@ properties:
           - enum:
               - awinic,aw86938
           - const: awinic,aw86927
+      - const: awinic,aw8695
 
   reg:
     maxItems: 1
