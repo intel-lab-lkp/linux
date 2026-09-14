@@ -67,7 +67,7 @@ strnlen_zbb:
 	 *   a1 - Max length of string
 	 *
 	 * Clobbers
-	 *   t0, t1, t2, t3, t4
+	 *   t0, t1, t2, t3, t4, t5
 	 */
 
 	/* If maxlen is 0, return 0. */
@@ -87,9 +87,22 @@ strnlen_zbb:
 	 * Aligned boundary.  Use the address of the last valid byte
 	 * (s + count - 1) to avoid loading a word past the count
 	 * boundary in the loop below.  count == 0 is handled above.
+	 *
+	 * Saturate the boundary when s + count wraps around (very large
+	 * counts, e.g. SIZE_MAX passed by FORTIFY strcat/strlcat with a
+	 * destination whose size is unknown at compile time).  Without
+	 * this, the wrapped boundary lands before s and the pre-loop
+	 * guard below always exits, returning a truncated length.
+	 * Saturating makes the scan equivalent to strlen().
+	 *
+	 * Keep the saturation branchless so that the normal path does
+	 * not carry a taken branch that could be mispredicted.
 	 */
 	add	t4, a0, a1
 	addi	t4, t4, -1
+	sltu	t5, t4, a0	/* Did s + count wrap around? */
+	sub	t5, zero, t5	/* -1 if wrapped, 0 otherwise */
+	or	t4, t4, t5	/* Saturate to the top of the address space */
 	andi	t4, t4, -SZREG
 
 	/* Get the first word.  */
