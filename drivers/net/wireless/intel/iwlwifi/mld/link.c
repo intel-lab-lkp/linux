@@ -541,15 +541,15 @@ int iwl_mld_add_link(struct iwl_mld *mld,
 	ret = iwl_mld_add_link_to_fw(mld, bss_conf);
 	if (ret) {
 		RCU_INIT_POINTER(mld->fw_id_to_bss_conf[link->fw_id], NULL);
-		RCU_INIT_POINTER(mld_vif->link[bss_conf->link_id], NULL);
 		goto free;
 	}
 
 	return ret;
 
 free:
+	RCU_INIT_POINTER(mld_vif->link[bss_conf->link_id], NULL);
 	if (!is_deflink)
-		kfree(link);
+		kfree_rcu(link, rcu_head);
 	return ret;
 }
 
