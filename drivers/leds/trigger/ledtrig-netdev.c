@@ -389,7 +389,7 @@ static ssize_t netdev_led_attr_store(struct device *dev, const char *buf,
 {
 	struct led_netdev_data *trigger_data = led_trigger_get_drvdata(dev);
 	struct led_classdev *led_cdev = trigger_data->led_cdev;
-	unsigned long state, mode = trigger_data->mode;
+	unsigned long state, mode;
 	int ret;
 	int bit;
 
@@ -421,6 +421,16 @@ static ssize_t netdev_led_attr_store(struct device *dev, const char *buf,
 		return -EINVAL;
 	}
 
+	/*
+	 * Serialize the read-modify-write of ->mode and the dependent
+	 * ->hw_control update and set_baseline_state() against concurrent
+	 * attribute stores and netdev_trig_notify().  netdev_trig_work() must
+	 * never take this lock, otherwise the cancel_delayed_work_sync() below
+	 * would deadlock.
+	 */
+	guard(mutex)(&trigger_data->lock);
+
+	mode = trigger_data->mode;
 	if (state)
 		set_bit(bit, &mode);
 	else
@@ -510,10 +520,14 @@ static ssize_t interval_store(struct device *dev,
 
 	/* impose some basic bounds on the timer interval */
 	if (value >= 5 && value <= 10000) {
+		mutex_lock(&trigger_data->lock);
+
 		cancel_delayed_work_sync(&trigger_data->work);
 
 		atomic_set(&trigger_data->interval, msecs_to_jiffies(value));
 		set_baseline_state(trigger_data);	/* resets timer */
+
+		mutex_unlock(&trigger_data->lock);
 	}
 
 	return size;
