@@ -332,8 +332,8 @@ struct amdgpu_vm_update_funcs {
 	int (*update)(struct amdgpu_vm_update_params *p,
 		      struct amdgpu_bo_vm *bo, uint64_t pe, uint64_t addr,
 		      unsigned count, uint32_t incr, uint64_t flags);
-	int (*commit)(struct amdgpu_vm_update_params *p,
-		      struct dma_fence **fence);
+	void (*commit)(struct amdgpu_vm_update_params *p,
+		       struct dma_fence **fence);
 };
 
 struct amdgpu_vm_fault_info {
