@@ -87,9 +87,19 @@ strnlen_zbb:
 	 * Aligned boundary.  Use the address of the last valid byte
 	 * (s + count - 1) to avoid loading a word past the count
 	 * boundary in the loop below.  count == 0 is handled above.
+	 *
+	 * Saturate the boundary when s + count wraps around (very large
+	 * counts, e.g. SIZE_MAX passed by FORTIFY strcat/strlcat with a
+	 * destination whose size is unknown at compile time).  Without
+	 * this, the wrapped boundary lands before s and the pre-loop
+	 * guard below always exits, returning a truncated length.
+	 * Saturating makes the scan equivalent to strlen().
 	 */
 	add	t4, a0, a1
 	addi	t4, t4, -1
+	bgeu	t4, a0, 1f
+	li	t4, -1
+1:
 	andi	t4, t4, -SZREG
 
 	/* Get the first word.  */
