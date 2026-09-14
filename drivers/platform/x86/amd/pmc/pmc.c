@@ -671,33 +671,41 @@ static int amd_pmc_verify_czn_rtc(struct amd_pmc_dev *pdev, u32 *arg)
 	if (rc) {
 		if (rc == -ENOENT)
 			dev_dbg(pdev->dev, "no alarm pending\n");
-		return rc == -ENOENT ? 0 : rc;
+		rc = rc == -ENOENT ? 0 : rc;
+		goto out_close;
 	}
 	if (!alarm.enabled) {
 		dev_dbg(pdev->dev, "alarm not enabled\n");
-		return 0;
+		rc = 0;
+		goto out_close;
 	}
 	rc = rtc_read_time(rtc_device, &tm);
 	if (rc)
-		return rc;
+		goto out_close;
 	then = rtc_tm_to_time64(&alarm.time);
 	now = rtc_tm_to_time64(&tm);
 	duration = then-now;
 
 	/* in the past */
-	if (then < now)
-		return 0;
+	if (then < now) {
+		rc = 0;
+		goto out_close;
+	}
 
 	/* will be stored in upper 16 bits of s0i3 hint argument,
 	 * so timer wakeup from s0i3 is limited to ~18 hours or less
 	 */
-	if (duration <= 4 || duration > U16_MAX)
-		return -EINVAL;
+	if (duration <= 4 || duration > U16_MAX) {
+		rc = -EINVAL;
+		goto out_close;
+	}
 
 	*arg |= (duration << 16);
 	rc = rtc_alarm_irq_enable(rtc_device, 0);
 	pm_pr_dbg("wakeup timer programmed for %lld seconds\n", duration);
 
+out_close:
+	rtc_class_close(rtc_device);
 	return rc;
 }
 
