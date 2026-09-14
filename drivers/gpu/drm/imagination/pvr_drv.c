@@ -1469,6 +1469,9 @@ static void pvr_remove(struct platform_device *plat_dev)
 	struct drm_device *drm_dev = platform_get_drvdata(plat_dev);
 	struct pvr_device *pvr_dev = to_pvr_device(drm_dev);
 
+	/* Stop the watchdog before anything it reads is freed. */
+	pvr_watchdog_fini(pvr_dev);
+
 	/*
 	 * Unplug before freeing anything, so no ioctl is still inside
 	 * drm_dev_enter(). pvr_device_lost() may already have done it, and
@@ -1486,7 +1489,6 @@ static void pvr_remove(struct platform_device *plat_dev)
 	xa_destroy(&pvr_dev->free_list_ids);
 
 	pvr_device_fini(pvr_dev);
-	pvr_watchdog_fini(pvr_dev);
 	pvr_queue_device_fini(pvr_dev);
 	pvr_context_device_fini(pvr_dev);
 	pvr_power_domains_fini(pvr_dev);
