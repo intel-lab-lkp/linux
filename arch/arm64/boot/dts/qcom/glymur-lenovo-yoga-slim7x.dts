@@ -51,7 +51,7 @@
 	gpio-keys {
 		compatible = "gpio-keys";
 
-		pinctrl-0 = <&hall_int_n_default>;
+		pinctrl-0 = <&hall_int_n_default>, <&cam_privacy_default>;
 		pinctrl-names = "default";
 
 		switch-lid {
@@ -61,6 +61,13 @@
 			linux,code = <SW_LID>;
 			wakeup-source;
 			wakeup-event-action = <EV_ACT_DEASSERTED>;
+		};
+
+		switch-camera-privacy {
+			label = "camera privacy switch";
+			gpios = <&tlmm 99 GPIO_ACTIVE_LOW>;
+			linux,input-type = <EV_SW>;
+			linux,code = <SW_CAMERA_LENS_COVER>;
 		};
 	};
 
@@ -956,6 +963,12 @@
 		pins = "gpio3";
 		function = "gpio";
 		bias-disable;
+	};
+
+	cam_privacy_default: cam-privacy-default-state {
+		pins = "gpio99";
+		function = "gpio";
+		bias-pull-up;
 	};
 
 	edp_bl_en: edp-bl-en-state {
