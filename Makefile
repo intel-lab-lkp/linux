@@ -1206,6 +1206,10 @@ KBUILD_RUSTFLAGS += --remap-path-prefix=$(srcroot)/= --remap-path-scope=macro
 endif
 endif
 
+ifneq ($(KBUILD_RUST_THREADS),)
+KBUILD_RUSTFLAGS += -Zthreads=$(KBUILD_RUST_THREADS)
+endif
+
 # include additional Makefiles when needed
 include-y			:= scripts/Makefile.warn
 include-$(CONFIG_DEBUG_INFO)	+= scripts/Makefile.debug

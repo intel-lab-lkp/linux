@@ -134,6 +134,13 @@ See make help for the full list.
 
 Setting "V=..." takes precedence over KBUILD_VERBOSE.
 
+KBUILD_RUST_THREADS
+-------------------
+The number of threads rustc's parallel front end may use, passed to it as
+``-Zthreads``. Unset by default, as the parallel front end is not yet
+stable and its output is not reproducible. The gain levels off at 8
+threads.
+
 KBUILD_EXTMOD
 -------------
 Set the directory to look for the kernel source when building external
