@@ -266,16 +266,35 @@ Dwarf_Die *die_get_type(Dwarf_Die *vr_die, Dwarf_Die *die_mem)
 		return NULL;
 }
 
+/*
+ * The chases below cross typedefs and qualifiers to get to the type that
+ * is actually meant, and a DIE that is not what it looks like, e.g. one
+ * parsed at an offset that is not the start of a DIE in the file it was
+ * resolved in, can have a DW_AT_type that refers back to itself, which
+ * makes them spin forever: 'perf report -s type' did exactly that on the
+ * dwz compressed debug info of zlib-ng (libz.so.1), burning all of a CPU
+ * with no output while resolving a hist entry in build_tree().
+ *
+ * No sane chain is this long, so give up instead of hanging, telling about
+ * it so that the broken debug info can be looked at.
+ */
+#define MAX_TYPE_CHASE 32
+
 /* Get a type die, but skip qualifiers */
 Dwarf_Die *__die_get_real_type(Dwarf_Die *vr_die, Dwarf_Die *die_mem)
 {
-	int tag;
+	int tag, chase = 0;
 
 	do {
 		vr_die = die_get_type(vr_die, die_mem);
 		if (!vr_die)
-			break;
+			return NULL;
 		tag = dwarf_tag(vr_die);
+		if (++chase > MAX_TYPE_CHASE) {
+			pr_debug("DWARF: qualifier chase limit reached at DIE 0x%lx\n",
+				 (unsigned long)dwarf_dieoffset(vr_die));
+			return NULL;
+		}
 	} while (tag == DW_TAG_const_type ||
 		 tag == DW_TAG_restrict_type ||
 		 tag == DW_TAG_volatile_type ||
@@ -296,8 +315,15 @@ Dwarf_Die *__die_get_real_type(Dwarf_Die *vr_die, Dwarf_Die *die_mem)
  */
 Dwarf_Die *die_get_real_type(Dwarf_Die *vr_die, Dwarf_Die *die_mem)
 {
+	int chase = 0;
+
 	do {
 		vr_die = __die_get_real_type(vr_die, die_mem);
+		if (++chase > MAX_TYPE_CHASE) {
+			pr_debug("DWARF: typedef chase limit reached at DIE 0x%lx\n",
+				 vr_die ? (unsigned long)dwarf_dieoffset(vr_die) : 0);
+			return NULL;
+		}
 	} while (vr_die && dwarf_tag(vr_die) == DW_TAG_typedef);
 
 	return vr_die;
@@ -314,7 +340,7 @@ Dwarf_Die *die_get_real_type(Dwarf_Die *vr_die, Dwarf_Die *die_mem)
  */
 Dwarf_Die *die_get_pointer_type(Dwarf_Die *type_die, Dwarf_Die *die_mem)
 {
-	int tag;
+	int tag, chase = 0;
 
 	do {
 		tag = dwarf_tag(type_die);
@@ -324,6 +350,11 @@ Dwarf_Die *die_get_pointer_type(Dwarf_Die *type_die, Dwarf_Die *die_mem)
 		    tag != DW_TAG_restrict_type && tag != DW_TAG_volatile_type &&
 		    tag != DW_TAG_shared_type)
 			return NULL;
+		if (++chase > MAX_TYPE_CHASE) {
+			pr_debug("DWARF: pointer type chase limit reached at DIE 0x%lx\n",
+				 (unsigned long)dwarf_dieoffset(type_die));
+			return NULL;
+		}
 		type_die = die_get_type(type_die, die_mem);
 	} while (type_die);
 
@@ -1118,17 +1149,27 @@ Dwarf_Die *die_find_member(Dwarf_Die *st_die, const char *name,
 			      die_mem);
 }
 
-/**
- * die_get_typename_from_type - Get the name of given type DIE
- * @type_die: a type DIE
- * @buf: a strbuf for result type name
- *
- * Get the name of @type_die and stores it to @buf. Return 0 if succeeded.
- * and Return -ENOENT if failed to find type name.
- * Note that the result will stores typedef name if possible, and stores
- * "*(function_type)" if the type is a function pointer.
+/*
+ * The name of a pointer or array type is built from the name of the type
+ * it points to or holds, so the recursion below follows DW_AT_type; a
+ * garbage DIE whose DW_AT_type refers back to itself makes it recurse
+ * forever, just like the chases above, so it gets the same bound.
  */
-int die_get_typename_from_type(Dwarf_Die *type_die, struct strbuf *buf)
+static int __die_get_typename_from_type(Dwarf_Die *type_die, struct strbuf *buf,
+					int depth);
+
+static int __die_get_typename(Dwarf_Die *vr_die, struct strbuf *buf, int depth)
+{
+	Dwarf_Die type;
+
+	if (__die_get_real_type(vr_die, &type) == NULL)
+		return -ENOENT;
+
+	return __die_get_typename_from_type(&type, buf, depth);
+}
+
+static int __die_get_typename_from_type(Dwarf_Die *type_die, struct strbuf *buf,
+					int depth)
 {
 	int tag, ret;
 	const char *tmp = "";
@@ -1155,7 +1196,12 @@ int die_get_typename_from_type(Dwarf_Die *type_die, struct strbuf *buf)
 		/* Write a base name */
 		return strbuf_addf(buf, "%s%s", tmp, name ?: "");
 	}
-	ret = die_get_typename(type_die, buf);
+	if (depth >= MAX_TYPE_CHASE) {
+		pr_debug("DWARF: type name recursion limit reached at DIE 0x%lx\n",
+			 (unsigned long)dwarf_dieoffset(type_die));
+		return -ENOENT;
+	}
+	ret = __die_get_typename(type_die, buf, depth + 1);
 	if (ret < 0) {
 		/* void pointer has no type attribute */
 		if (tag == DW_TAG_pointer_type && ret == -ENOENT)
@@ -1164,6 +1210,21 @@ int die_get_typename_from_type(Dwarf_Die *type_die, struct strbuf *buf)
 		return ret;
 	}
 	return strbuf_addstr(buf, tmp);
+}
+
+/**
+ * die_get_typename_from_type - Get the name of given type DIE
+ * @type_die: a type DIE
+ * @buf: a strbuf for result type name
+ *
+ * Get the name of @type_die and stores it to @buf. Return 0 if succeeded.
+ * and Return -ENOENT if failed to find type name.
+ * Note that the result will stores typedef name if possible, and stores
+ * "*(function_type)" if the type is a function pointer.
+ */
+int die_get_typename_from_type(Dwarf_Die *type_die, struct strbuf *buf)
+{
+	return __die_get_typename_from_type(type_die, buf, 0);
 }
 
 /**
@@ -1178,12 +1239,7 @@ int die_get_typename_from_type(Dwarf_Die *type_die, struct strbuf *buf)
  */
 int die_get_typename(Dwarf_Die *vr_die, struct strbuf *buf)
 {
-	Dwarf_Die type;
-
-	if (__die_get_real_type(vr_die, &type) == NULL)
-		return -ENOENT;
-
-	return die_get_typename_from_type(&type, buf);
+	return __die_get_typename(vr_die, buf, 0);
 }
 
 /**
@@ -1632,6 +1688,22 @@ Dwarf_Die *die_find_variable_by_addr(Dwarf_Die *sc_die, Dwarf_Addr addr,
 	return result;
 }
 
+/*
+ * Whether two DIEs live in the same debug file.
+ *
+ * dwarf_dieoffset() is relative to the file the DIE is in, so this is what
+ * tells an offset that has to be resolved in the dwz alt file, where dwz
+ * moved the type, from one that belongs to the main file: dwz encodes the
+ * references into its common file as DW_FORM_GNU_ref_alt, elfutils resolves
+ * them into the alt Dwarf and the CU of the resulting DIE belongs to that
+ * other file, so comparing the Dwarf each CU belongs to settles it exactly,
+ * rather than inferring it from what happens to be at the offset.
+ */
+bool die_same_file(Dwarf_Die *die_a, Dwarf_Die *die_b)
+{
+	return dwarf_cu_getdwarf(die_a->cu) == dwarf_cu_getdwarf(die_b->cu);
+}
+
 static int __die_collect_vars_cb(Dwarf_Die *die_mem, void *arg)
 {
 	struct die_var_type **var_types = arg;
@@ -1676,6 +1748,8 @@ static int __die_collect_vars_cb(Dwarf_Die *die_mem, void *arg)
 			vt->is_reg_var_addr = true;
 
 		vt->die_off = dwarf_dieoffset(&type_die);
+		vt->die_tag = dwarf_tag(&type_die);
+		vt->from_alt = !die_same_file(die_mem, &type_die);
 		vt->addr = start;
 		vt->end = end;
 		vt->has_range = (end != 0 || start != 0);
@@ -1695,7 +1769,8 @@ static int __die_collect_vars_cb(Dwarf_Die *die_mem, void *arg)
  *
  * Save all variables and parameters in the @sc_die and save them to @var_types.
  * The @var_types is a singly-linked list containing type and location info.
- * Actual type can be retrieved using dwarf_offdie() with 'die_off' later.
+ * Actual type can be retrieved using die_get_type_die() with 'die_off',
+ * 'die_tag' and 'from_alt' later.
  *
  * Callers should free @var_types.
  */
@@ -1741,6 +1816,8 @@ static int __die_collect_global_vars_cb(Dwarf_Die *die_mem, void *arg)
 		return DIE_FIND_CB_END;
 
 	vt->die_off = dwarf_dieoffset(&type_die);
+	vt->die_tag = dwarf_tag(&type_die);
+	vt->from_alt = !die_same_file(die_mem, &type_die);
 	vt->addr = ops->number;
 	vt->end = 0;
 	vt->has_range = false;
@@ -1753,13 +1830,63 @@ static int __die_collect_global_vars_cb(Dwarf_Die *die_mem, void *arg)
 }
 
 /**
+ * die_get_type_die - Get a type DIE saved by die_collect_vars()
+ * @dbg: the main debug info
+ * @die_off: offset of the type DIE, from dwarf_dieoffset()
+ * @die_tag: tag that DIE had when the offset was saved
+ * @from_alt: whether the type DIE is in the dwz alt file
+ * @die_mem: where to store the resulting DIE
+ *
+ * See the comment in util/dwarf-aux.h: the offset is only meaningful in the
+ * file the DIE was in, which can be the dwz common file, so resolve it in
+ * the file @from_alt says it was in, the main file or its alt file, and use
+ * the DIE only when it has the @die_tag it had when the offset was saved.
+ * There is deliberately no fallback to the other file: resolving an alt
+ * file offset in the main file does not fail, it parses whatever is there
+ * as a DIE, and that is what hung 'perf report -s type'.
+ */
+Dwarf_Die *die_get_type_die(Dwarf *dbg, u64 die_off, int die_tag, bool from_alt,
+			    Dwarf_Die *die_mem)
+{
+	Dwarf *target = dbg;
+	Dwarf_Die die;
+
+	if (from_alt) {
+		/*
+		 * Deliberately no fallback to the main file when there is
+		 * no alt file, or when the offset does not resolve in it:
+		 * resolving an alt file offset in the main file does not
+		 * fail, it parses whatever is there as a DIE, and that is
+		 * what hung 'perf report -s type', see the comment in
+		 * util/dwarf-aux.h.
+		 */
+		target = dwarf_getalt(dbg);
+		if (target == NULL) {
+			pr_debug("DWARF: no alt (dwz) debug file to resolve the type DIE at offset 0x%lx in\n",
+				 (unsigned long)die_off);
+			return NULL;
+		}
+	}
+
+	if (dwarf_offdie(target, die_off, &die) && dwarf_tag(&die) == die_tag) {
+		*die_mem = die;
+		return die_mem;
+	}
+
+	pr_debug("DWARF: no DIE with tag %d at offset 0x%lx in the %s debug file\n",
+		 die_tag, (unsigned long)die_off, from_alt ? "alt" : "main");
+	return NULL;
+}
+
+/**
  * die_collect_global_vars - Save all global variables
  * @cu_die: a CU DIE
  * @var_types: a pointer to save the resulting list
  *
  * Save all global variables in the @cu_die and save them to @var_types.
  * The @var_types is a singly-linked list containing type and location info.
- * Actual type can be retrieved using dwarf_offdie() with 'die_off' later.
+ * Actual type can be retrieved using die_get_type_die() with 'die_off',
+ * 'die_tag' and 'from_alt' later.
  *
  * Callers should free @var_types.
  */
