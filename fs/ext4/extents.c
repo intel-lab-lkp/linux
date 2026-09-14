@@ -6275,7 +6275,7 @@ int ext4_ext_replay_set_iblocks(struct inode *inode)
 		map.m_len = end - cur;
 		ret = ext4_map_blocks(NULL, inode, &map, 0);
 		if (ret < 0)
-			break;
+			goto cleanup;
 		if (ret > 0)
 			numblks += ret;
 		cur = cur + map.m_len;
@@ -6333,7 +6333,7 @@ out:
 cleanup:
 	ext4_free_ext_path(path);
 	ext4_free_ext_path(path2);
-	return 0;
+	return ret;
 }
 
 int ext4_ext_clear_bb(struct inode *inode)
