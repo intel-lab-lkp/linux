@@ -87,6 +87,7 @@ struct report {
 	bool			use_gtk;
 #endif
 	bool			use_stdio;
+	bool			progress;
 	bool			show_full_info;
 	bool			show_threads;
 	bool			inverted_callchain;
@@ -1373,6 +1374,8 @@ int cmd_report(int argc, const char **argv)
 		    "Use the stdio interface"),
 	OPT_BOOLEAN(0, "weights", &symbol_conf.annotate_weight,
 			"Show or hide weight columns in annotation. Default show if non-zero."),
+	OPT_BOOLEAN(0, "progress", &report.progress,
+		    "Show progress while processing the perf.data file"),
 	OPT_BOOLEAN(0, "header", &report.header, "Show data header."),
 	OPT_BOOLEAN(0, "header-only", &report.header_only,
 		    "Show only data header."),
@@ -1764,6 +1767,14 @@ repeat:
 		setup_browser(true);
 	else
 		use_browser = 0;
+
+	/*
+	 * The TUI/GTK browsers already show progress, this is for the stdio
+	 * case, where we print the percentage of the perf.data file that was
+	 * processed so far, for each of the processing phases.
+	 */
+	if (report.progress && use_browser == 0)
+		stdio_progress__init();
 
 	if (report.data_type && use_browser == 1) {
 		symbol_conf.annotate_data_member = true;
