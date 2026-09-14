@@ -1752,6 +1752,7 @@ static int wled_probe(struct platform_device *pdev)
 	bl = devm_backlight_device_register(&pdev->dev, wled->name,
 					    &pdev->dev, wled,
 					    &wled_ops, &props);
+	platform_set_drvdata(pdev, bl);
 	return PTR_ERR_OR_ZERO(bl);
 };
 
