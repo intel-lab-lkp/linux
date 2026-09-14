@@ -216,6 +216,14 @@ core.*::
 	addr2line-timeout::
 		Sets a timeout (in milliseconds) for parsing 'addr2line'
 		output.  The default timeout is 5s.
+	debuginfod::
+		When set to 'false', disable fetching debuginfo keyed by
+		build ID from the debuginfod servers configured in
+		DEBUGINFOD_URLS.  It is on by default, can be overridden per
+		tool with the 'report.debuginfod' and 'top.debuginfod'
+		options and per invocation with --no-debuginfod; it is off
+		too when the local build-id cache is disabled, e.g.
+		'buildid.dir' set to /dev/null.
 
 tui.*, gtk.*::
 	Subcommands that can be configured here are 'top', 'report' and 'annotate'.
@@ -562,12 +570,23 @@ report.*::
 		This option can change default stat behavior with empty results.
 		If it's set true, 'perf report --stat' will not show 0 stats.
 
+	report.debuginfod::
+		Fetch debuginfo keyed by build ID from the debuginfod
+		servers configured in DEBUGINFOD_URLS, checking the local
+		debuginfod client cache first, when it is not available
+		locally.  On by default, set to 'false' to disable it for
+		'perf report', globally with 'core.debuginfod=false' or per
+		invocation with --no-debuginfod.
+
 top.*::
 	top.children::
 		Same as 'report.children'. So if it is enabled, the output of 'top'
 		command will have 'Children' overhead column as well as 'Self' overhead
 		column by default.
 		The default is 'true'.
+
+	top.debuginfod::
+		Same as 'report.debuginfod', for 'perf top'.
 
 	top.call-graph::
 		This is identical to 'call-graph.record-mode', except it is
