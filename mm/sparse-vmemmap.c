@@ -53,7 +53,7 @@ static void * __ref __earlyonly_bootmem_alloc(int node,
 				unsigned long align,
 				unsigned long goal)
 {
-	return memmap_alloc(size, align, goal, node, false);
+	return memmap_alloc(size, align, goal, node);
 }
 
 void * __meminit vmemmap_alloc_block(unsigned long size, int node)
