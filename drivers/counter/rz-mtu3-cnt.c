@@ -807,13 +807,6 @@ static struct counter_comp rz_mtu3_device_ext[] = {
 				 rz_mtu3_ext_input_phase_clock_select_enum),
 };
 
-static void rz_mtu3_cnt_pm_disable(void *data)
-{
-	struct device *dev = data;
-
-	pm_runtime_disable(dev);
-}
-
 static int rz_mtu3_cnt_probe(struct platform_device *pdev)
 {
 	struct rz_mtu3 *ddata = dev_get_drvdata(pdev->dev.parent);
@@ -834,9 +827,9 @@ static int rz_mtu3_cnt_probe(struct platform_device *pdev)
 		priv->mtu_16bit_max[i] = U16_MAX;
 
 	mutex_init(&priv->lock);
-	pm_runtime_enable(&pdev->dev);
-	ret = devm_add_action_or_reset(&pdev->dev, rz_mtu3_cnt_pm_disable, dev);
-	if (ret < 0)
+
+	ret = devm_pm_runtime_enable(dev);
+	if (ret)
 		return ret;
 
 	counter->name = dev_name(dev);
