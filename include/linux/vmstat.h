@@ -22,6 +22,7 @@ struct reclaim_stat {
 	unsigned nr_immediate;
 	unsigned nr_activate[ANON_AND_FILE];
 	unsigned nr_ref_keep;
+	unsigned nr_ref_activate;
 	unsigned nr_unmap_fail;
 	unsigned nr_lazyfree_fail;
 	unsigned nr_demoted;
