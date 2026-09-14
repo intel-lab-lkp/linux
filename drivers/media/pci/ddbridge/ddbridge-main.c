@@ -172,12 +172,16 @@ static int ddb_probe(struct pci_dev *pdev,
 	pci_set_master(pdev);
 
 	if (dma_set_mask(&pdev->dev, DMA_BIT_MASK(64)))
-		if (dma_set_mask(&pdev->dev, DMA_BIT_MASK(32)))
-			return -ENODEV;
+		if (dma_set_mask(&pdev->dev, DMA_BIT_MASK(32))) {
+			stat = -ENODEV;
+			goto fail_disable_device;
+		}
 
 	dev = vzalloc(sizeof(*dev));
-	if (!dev)
-		return -ENOMEM;
+	if (!dev) {
+		stat = -ENOMEM;
+		goto fail_disable_device;
+	}
 
 	mutex_init(&dev->mutex);
 	dev->has_dma = 1;
@@ -237,6 +241,7 @@ fail:
 
 	ddb_unmap(dev);
 	pci_set_drvdata(pdev, NULL);
+fail_disable_device:
 	pci_disable_device(pdev);
 	return stat;
 }
