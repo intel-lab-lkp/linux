@@ -31,6 +31,7 @@
 		domain_idle_states: domain-idle-states {
 			cluster_sleep_0: cluster-sleep-0 {
 				compatible = "domain-idle-state";
+				idle-state-name = "llcc-off";
 				arm,psci-suspend-param = <0x40003444>;
 				entry-latency-us = <2752>;
 				exit-latency-us = <6562>;
