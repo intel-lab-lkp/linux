@@ -73,7 +73,6 @@
  * @mtu_32bit_max: Cache for 32-bit counters
  */
 struct rz_mtu3_cnt {
-	struct clk *clk;
 	struct mutex lock;
 	struct rz_mtu3_channel *ch;
 	bool count_is_enabled[RZ_MTU3_MAX_LOGICAL_CNTR_CHANNELS];
@@ -808,34 +807,11 @@ static struct counter_comp rz_mtu3_device_ext[] = {
 				 rz_mtu3_ext_input_phase_clock_select_enum),
 };
 
-static int rz_mtu3_cnt_pm_runtime_suspend(struct device *dev)
-{
-	struct clk *const clk = dev_get_drvdata(dev);
-
-	clk_disable_unprepare(clk);
-
-	return 0;
-}
-
-static int rz_mtu3_cnt_pm_runtime_resume(struct device *dev)
-{
-	struct clk *const clk = dev_get_drvdata(dev);
-
-	clk_prepare_enable(clk);
-
-	return 0;
-}
-
-static DEFINE_RUNTIME_DEV_PM_OPS(rz_mtu3_cnt_pm_ops,
-				 rz_mtu3_cnt_pm_runtime_suspend,
-				 rz_mtu3_cnt_pm_runtime_resume, NULL);
-
 static void rz_mtu3_cnt_pm_disable(void *data)
 {
 	struct device *dev = data;
 
 	pm_runtime_disable(dev);
-	pm_runtime_set_suspended(dev);
 }
 
 static int rz_mtu3_cnt_probe(struct platform_device *pdev)
@@ -852,20 +828,16 @@ static int rz_mtu3_cnt_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	priv = counter_priv(counter);
-	priv->clk = ddata->clk;
 	priv->mtu_32bit_max = U32_MAX;
 	priv->ch = &ddata->channels[RZ_MTU3_CHAN_1];
 	for (i = 0; i < RZ_MTU3_MAX_HW_CNTR_CHANNELS; i++)
 		priv->mtu_16bit_max[i] = U16_MAX;
 
 	mutex_init(&priv->lock);
-	platform_set_drvdata(pdev, priv->clk);
-	clk_prepare_enable(priv->clk);
-	pm_runtime_set_active(&pdev->dev);
 	pm_runtime_enable(&pdev->dev);
 	ret = devm_add_action_or_reset(&pdev->dev, rz_mtu3_cnt_pm_disable, dev);
 	if (ret < 0)
-		goto disable_clock;
+		return ret;
 
 	counter->name = dev_name(dev);
 	counter->parent = dev;
@@ -879,24 +851,16 @@ static int rz_mtu3_cnt_probe(struct platform_device *pdev)
 
 	/* Register Counter device */
 	ret = devm_counter_add(dev, counter);
-	if (ret < 0) {
-		dev_err_probe(dev, ret, "Failed to add counter\n");
-		goto disable_clock;
-	}
+	if (ret < 0)
+		return dev_err_probe(dev, ret, "Failed to add counter\n");
 
 	return 0;
-
-disable_clock:
-	clk_disable_unprepare(priv->clk);
-
-	return ret;
 }
 
 static struct platform_driver rz_mtu3_cnt_driver = {
 	.probe = rz_mtu3_cnt_probe,
 	.driver = {
 		.name = "rz-mtu3-counter",
-		.pm = pm_ptr(&rz_mtu3_cnt_pm_ops),
 	},
 };
 module_platform_driver(rz_mtu3_cnt_driver);
