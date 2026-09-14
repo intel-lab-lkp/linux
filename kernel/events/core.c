@@ -1143,8 +1143,10 @@ static inline int perf_cgroup_connect(int fd, struct perf_event *event,
 		return PTR_ERR(css);
 
 	ret = perf_cgroup_ensure_storage(event, css);
-	if (ret)
+	if (ret) {
+		css_put(css);
 		return ret;
+	}
 
 	cgrp = container_of(css, struct perf_cgroup, css);
 	event->cgrp = cgrp;
