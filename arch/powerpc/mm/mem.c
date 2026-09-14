@@ -295,9 +295,11 @@ void __init arch_mm_preinit(void)
 		/*
 		 * Since the guest memory is inaccessible to the host,
 		 * devices always need to use the SWIOTLB buffer for DMA
-		 * even if dma_capable() says otherwise.
+		 * even if dma_capable() says otherwise. The hypervisor has
+		 * no addressing limitation, so the buffer may be allocated
+		 * anywhere.
 		 */
-		ppc_swiotlb_flags |= SWIOTLB_ANY;
+		ppc_swiotlb_flags &= ~SWIOTLB_INIT_ADDRESSING_LIMIT;
 	}
 
 	/*
