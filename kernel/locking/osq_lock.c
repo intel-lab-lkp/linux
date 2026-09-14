@@ -143,7 +143,7 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 	 * is implemented with a monitor-wait. vcpu_is_preempted() relies on
 	 * polling, be careful.
 	 */
-	if (smp_cond_load_relaxed(&node->locked, VAL || need_resched() ||
+	if (smp_cond_load_acquire(&node->locked, VAL || need_resched() ||
 				  vcpu_is_preempted(node_cpu(node->prev))))
 		return true;
 
@@ -224,11 +224,17 @@ void osq_unlock(struct optimistic_spin_queue *lock)
 	node = this_cpu_ptr(&osq_node);
 	next = xchg(&node->next, NULL);
 	if (next) {
+		/* The xchg() call above provides the release barrier */
 		WRITE_ONCE(next->locked, 1);
 		return;
 	}
 
 	next = osq_wait_next(lock, node, OSQ_UNLOCKED_VAL);
-	if (next)
+	if (next) {
+		/*
+		 * The xchg() call in osq_wait_next() before a non-NULL return
+		 * provides the release barrier.
+		 */
 		WRITE_ONCE(next->locked, 1);
+	}
 }
