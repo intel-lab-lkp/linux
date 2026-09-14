@@ -14,6 +14,8 @@
 #include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/bcd.h>
+#include <linux/device.h>
+#include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/regmap.h>
 
@@ -113,12 +115,24 @@
 struct pcf85363 {
 	struct rtc_device	*rtc;
 	struct regmap		*regmap;
+	/* Serialises access to the cached event state below. */
+	struct mutex		lock;
+	bool			bsf;
 };
 
 struct pcf85x63_config {
 	struct regmap_config regmap;
 	unsigned int num_nvram;
 };
+
+/*
+ * CTRL_FLAGS is write-0-to-clear, so write the complement of the mask to
+ * clear only the requested bits without disturbing the others.
+ */
+static int pcf85363_clear_flags(struct pcf85363 *pcf85363, u8 mask)
+{
+	return regmap_write(pcf85363->regmap, CTRL_FLAGS, (u8)~mask);
+}
 
 static int pcf85363_load_capacitance(struct pcf85363 *pcf85363, struct device_node *node)
 {
@@ -253,7 +267,7 @@ static int _pcf85363_rtc_alarm_irq_enable(struct pcf85363 *pcf85363, unsigned
 		return ret;
 
 	/* clear current flags */
-	return regmap_update_bits(pcf85363->regmap, CTRL_FLAGS, FLAGS_A1F, 0);
+	return pcf85363_clear_flags(pcf85363, FLAGS_A1F);
 }
 
 static int pcf85363_rtc_alarm_irq_enable(struct device *dev,
@@ -292,9 +306,40 @@ static int pcf85363_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *alrm)
 	return _pcf85363_rtc_alarm_irq_enable(pcf85363, alrm->enabled);
 }
 
+/*
+ * Latch a pending battery-switch event into the software cache. Runs from
+ * the IRQ handler and the RTC_VL_READ path, so it is seen with or without
+ * an interrupt line. BSF is cached before it is cleared so it survives
+ * re-arming. Caller must hold pcf85363->lock. Returns a negative errno on
+ * a register-access failure, otherwise the handled flag mask.
+ */
+static int pcf85363_collect_events(struct pcf85363 *pcf85363)
+{
+	unsigned int flags;
+	int handled = 0;
+	int ret;
+
+	ret = regmap_read(pcf85363->regmap, CTRL_FLAGS, &flags);
+	if (ret)
+		return ret;
+
+	if (flags & FLAGS_BSF) {
+		pcf85363->bsf = true;
+
+		ret = pcf85363_clear_flags(pcf85363, FLAGS_BSF);
+		if (ret)
+			return ret;
+
+		handled |= FLAGS_BSF;
+	}
+
+	return handled;
+}
+
 static irqreturn_t pcf85363_rtc_handle_irq(int irq, void *dev_id)
 {
 	struct pcf85363 *pcf85363 = i2c_get_clientdata(dev_id);
+	bool handled = false;
 	unsigned int flags;
 	int err;
 
@@ -302,16 +347,87 @@ static irqreturn_t pcf85363_rtc_handle_irq(int irq, void *dev_id)
 	if (err)
 		return IRQ_NONE;
 
-	if (flags & FLAGS_A1F) {
-		rtc_update_irq(pcf85363->rtc, 1, RTC_IRQF | RTC_AF);
-		regmap_update_bits(pcf85363->regmap, CTRL_FLAGS, FLAGS_A1F, 0);
-		return IRQ_HANDLED;
+	if (flags) {
+		dev_dbg(&pcf85363->rtc->dev, "IRQ flags: 0x%02x%s%s\n",
+			flags, (flags & FLAGS_A1F) ? " [A1F]" : "",
+			(flags & FLAGS_BSF) ? " [BSF]" : "");
 	}
 
-	return IRQ_NONE;
+	if (flags & FLAGS_A1F) {
+		rtc_update_irq(pcf85363->rtc, 1, RTC_IRQF | RTC_AF);
+		pcf85363_clear_flags(pcf85363, FLAGS_A1F);
+		handled = true;
+	}
+
+	if (flags & FLAGS_BSF) {
+		guard(mutex)(&pcf85363->lock);
+
+		err = pcf85363_collect_events(pcf85363);
+		if (err < 0)
+			dev_err_ratelimited(&pcf85363->rtc->dev,
+					    "failed to collect events: %d\n",
+					    err);
+		/*
+		 * This is our interrupt source even if servicing it hit an
+		 * I/O error, so acknowledge the interrupt either way.
+		 */
+		handled = true;
+	}
+
+	/*
+	 * Clear flags this handler does not service (e.g. A2F/PIF); otherwise
+	 * they hold the level-triggered INTA line asserted and storm the IRQ.
+	 */
+	if (flags & (FLAGS_A2F | FLAGS_PIF)) {
+		pcf85363_clear_flags(pcf85363, FLAGS_A2F | FLAGS_PIF);
+		handled = true;
+	}
+
+	return handled ? IRQ_HANDLED : IRQ_NONE;
+}
+
+static int pcf85363_rtc_ioctl(struct device *dev,
+			      unsigned int cmd, unsigned long arg)
+{
+	struct pcf85363 *pcf85363 = dev_get_drvdata(dev);
+	int ret;
+
+	switch (cmd) {
+	case RTC_VL_READ: {
+		u32 status = 0;
+
+		guard(mutex)(&pcf85363->lock);
+
+		/* Refresh so a poll-only setup still latches the BSF flag. */
+		ret = pcf85363_collect_events(pcf85363);
+		if (ret < 0)
+			return ret;
+
+		if (pcf85363->bsf)
+			status |= RTC_VL_BACKUP_SWITCH;
+
+		return put_user(status, (u32 __user *)arg);
+	}
+
+	case RTC_VL_CLR: {
+		guard(mutex)(&pcf85363->lock);
+
+		ret = pcf85363_clear_flags(pcf85363, FLAGS_BSF);
+		if (ret)
+			return ret;
+
+		pcf85363->bsf = false;
+
+		return 0;
+	}
+
+	default:
+		return -ENOIOCTLCMD;
+	}
 }
 
 static const struct rtc_class_ops rtc_ops = {
+	.ioctl  = pcf85363_rtc_ioctl,
 	.read_time	= pcf85363_rtc_read_time,
 	.set_time	= pcf85363_rtc_set_time,
 	.read_alarm	= pcf85363_rtc_read_alarm,
@@ -412,6 +528,10 @@ static int pcf85363_probe(struct i2c_client *client)
 	if (!pcf85363)
 		return -ENOMEM;
 
+	ret = devm_mutex_init(&client->dev, &pcf85363->lock);
+	if (ret)
+		return ret;
+
 	pcf85363->regmap = devm_regmap_init_i2c(client, &config->regmap);
 	if (IS_ERR(pcf85363->regmap)) {
 		dev_err(&client->dev, "regmap allocation failed\n");
@@ -435,17 +555,52 @@ static int pcf85363_probe(struct i2c_client *client)
 
 	wakeup_source = device_property_read_bool(&client->dev,
 						  "wakeup-source");
-	if (client->irq > 0 || wakeup_source) {
-		err = regmap_write(pcf85363->regmap, CTRL_FLAGS, 0);
-		if (err)
-			return dev_err_probe(&client->dev, err,
-					     "failed to clear flags\n");
 
-		err = regmap_update_bits(pcf85363->regmap, CTRL_PIN_IO,
+	/*
+	 * Latch and clear any battery-switch event that occurred before
+	 * probe (for example while the main supply was off) instead of
+	 * blanket clearing CTRL_FLAGS, so the cached state is preserved.
+	 */
+	scoped_guard(mutex, &pcf85363->lock) {
+		ret = pcf85363_collect_events(pcf85363);
+		if (ret < 0)
+			return dev_err_probe(&client->dev, ret,
+					     "Failed to latch boot-time events\n");
+	}
+
+	/*
+	 * Battery-backed registers can retain stale state across a power cycle.
+	 * A stale asserted flag would storm the level-triggered INTA line, so
+	 * disable only the interrupt sources and Alarm2 enables this driver
+	 * never services and clear their flags; leave the managed sources
+	 * (A1IE, BSIE) and Alarm1 for their own paths to arm. WDIE is masked
+	 * too so a bootloader-armed watchdog cannot storm INTA before the
+	 * driver is ready to service it.
+	 */
+	ret = regmap_update_bits(pcf85363->regmap, CTRL_INTA_EN,
+				 INT_WDIE | INT_A2IE | INT_OIE | INT_PIE | INT_ILP,
+				 0);
+	if (ret)
+		return dev_err_probe(&client->dev, ret,
+				     "Failed to mask unused INTA sources\n");
+
+	ret = regmap_update_bits(pcf85363->regmap, DT_ALARM_EN,
+				 ALRM_MIN_A2E | ALRM_HR_A2E | ALRM_DAY_A2E, 0);
+	if (ret)
+		return dev_err_probe(&client->dev, ret,
+				     "Failed to mask Alarm2 enables\n");
+
+	ret = pcf85363_clear_flags(pcf85363, FLAGS_A2F | FLAGS_PIF);
+	if (ret)
+		return dev_err_probe(&client->dev, ret,
+				     "Failed to clear stale flags\n");
+
+	if (client->irq > 0 || wakeup_source) {
+		ret = regmap_update_bits(pcf85363->regmap, CTRL_PIN_IO,
 					 PIN_IO_INTAPM, PIN_IO_INTA_OUT);
-		if (err)
-			return dev_err_probe(&client->dev, err,
-					     "failed to set interrupt pin mode\n");
+		if (ret)
+			return dev_err_probe(&client->dev, ret,
+					     "Failed to configure INTA pin\n");
 	}
 
 	if (client->irq > 0) {
