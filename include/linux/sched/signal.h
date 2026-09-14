@@ -76,12 +76,14 @@ struct multiprocess_signals {
 struct core_thread {
 	struct task_struct *task;
 	struct core_thread *next;
+	/* The empty table to switch to, published by the dumping thread. */
+	struct files_struct *files;
 };
 
 struct core_state {
-	atomic_t nr_threads;
-	struct core_thread dumper;
-	struct completion startup;
+	/* Threads the dumper still waits for. */
+	atomic_t threads_remaining;
+	struct core_thread *tasks;
 };
 
 /*

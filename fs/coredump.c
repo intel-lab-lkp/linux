@@ -39,6 +39,8 @@
 #include <linux/oom.h>
 #include <linux/compat.h>
 #include <linux/fs.h>
+#include <linux/wait_bit.h>
+#include <linux/io_uring.h>
 #include <linux/path.h>
 #include <linux/timekeeping.h>
 #include <linux/sysctl.h>
@@ -512,10 +514,26 @@ static int zap_threads(struct task_struct *tsk,
 		nr = zap_process(signal, exit_code);
 		clear_tsk_thread_flag(tsk, TIF_SIGPENDING);
 		tsk->flags |= PF_DUMPCORE;
-		atomic_set(&core_state->nr_threads, nr);
+		atomic_set(&core_state->threads_remaining, nr);
 	}
 	spin_unlock_irq(&tsk->sighand->siglock);
 	return nr;
+}
+
+static void coredump_wait_inactive(struct core_state *core_state)
+{
+	struct core_thread *ptr;
+
+	wait_var_event_state(&core_state->threads_remaining,
+			     !atomic_read_acquire(&core_state->threads_remaining),
+			     TASK_UNINTERRUPTIBLE | TASK_FREEZABLE);
+	/*
+	 * Wait for all the threads to become inactive, so that
+	 * all the thread context (extended register state, like
+	 * fpu etc) gets copied to the memory.
+	 */
+	for (ptr = core_state->tasks; ptr; ptr = ptr->next)
+		wait_task_inactive(ptr->task, TASK_ANY);
 }
 
 static int coredump_wait(int exit_code, struct core_state *core_state)
@@ -523,29 +541,49 @@ static int coredump_wait(int exit_code, struct core_state *core_state)
 	struct task_struct *tsk = current;
 	int core_waiters = -EBUSY;
 
-	init_completion(&core_state->startup);
-	core_state->dumper.task = tsk;
-	core_state->dumper.next = NULL;
+	core_state->tasks = NULL;
 
 	core_waiters = zap_threads(tsk, core_state, exit_code);
-	if (core_waiters > 0) {
-		struct core_thread *ptr;
-
-		wait_for_completion_state(&core_state->startup,
-					  TASK_UNINTERRUPTIBLE|TASK_FREEZABLE);
-		/*
-		 * Wait for all the threads to become inactive, so that
-		 * all the thread context (extended register state, like
-		 * fpu etc) gets copied to the memory.
-		 */
-		ptr = core_state->dumper.next;
-		while (ptr != NULL) {
-			wait_task_inactive(ptr->task, TASK_ANY);
-			ptr = ptr->next;
-		}
-	}
+	if (core_waiters > 0)
+		coredump_wait_inactive(core_state);
 
 	return core_waiters;
+}
+
+/*
+ * Allocate a new empty fdtable and switch the whole thread-group to it.
+ * Put all the old fdtables freeing up resources and locks before writing the
+ * coredump.
+ */
+static bool coredump_close_files(struct core_state *core_state)
+{
+	struct files_struct *files;
+	struct core_thread *ct;
+
+	files = alloc_files_struct();
+	if (!files)
+		return false;
+
+	for (ct = core_state->tasks; ct; ct = ct->next) {
+		/* Tasks without a table such as vhost workers can be skipped. */
+		if (!ct->task->files)
+			continue;
+		atomic_inc(&core_state->threads_remaining);
+		/* ct->files holds a reference until the thread switches to it. */
+		atomic_inc(&files->count);
+		/* Pairs with the acquire in coredump_task_exit(). */
+		smp_store_release(&ct->files, files);
+		wake_up_process(ct->task);
+	}
+
+	/* Use the dumper's real creds not the overridden ones. */
+	scoped_with_creds(current_real_cred()) {
+		io_uring_task_cancel();
+		switch_files_struct(current, files);
+	}
+
+	coredump_wait_inactive(core_state);
+	return true;
 }
 
 static void coredump_finish(enum coredump_state state)
@@ -556,7 +594,7 @@ static void coredump_finish(enum coredump_state state)
 	spin_lock_irq(&current->sighand->siglock);
 	if ((state & COREDUMP_STATE_STARTED) && !__fatal_signal_pending(current))
 		current->signal->group_exit_code |= 0x80;
-	next = current->signal->core_state->dumper.next;
+	next = current->signal->core_state->tasks;
 	current->signal->core_state = NULL;
 	spin_unlock_irq(&current->sighand->siglock);
 
@@ -837,7 +875,8 @@ static bool coredump_sock_request(struct core_name *cn, struct coredump_params *
 		.mask			= COREDUMP_KERNEL | COREDUMP_USERSPACE |
 					  COREDUMP_REJECT | COREDUMP_WAIT |
 					  COREDUMP_RECORDS | COREDUMP_SPARSE |
-					  COREDUMP_MEMORY_TYPES,
+					  COREDUMP_MEMORY_TYPES |
+					  COREDUMP_CLOSE_FILES,
 		.size_ack		= sizeof(struct coredump_ack),
 		.memory_types		= cprm->memory_types,
 		.memory_types_mask	= COREDUMP_MEMORY_ALL,
@@ -901,6 +940,12 @@ static bool coredump_sock_request(struct core_name *cn, struct coredump_params *
 
 	/* Zero records only exist inside a record stream. */
 	if ((ack.mask & COREDUMP_SPARSE) && !(ack.mask & COREDUMP_RECORDS)) {
+		coredump_sock_mark(cprm->file, COREDUMP_MARK_CONFLICTING);
+		return false;
+	}
+
+	/* A rejected task exits right away and closes everything anyway. */
+	if ((ack.mask & COREDUMP_CLOSE_FILES) && (ack.mask & COREDUMP_REJECT)) {
 		coredump_sock_mark(cprm->file, COREDUMP_MARK_CONFLICTING);
 		return false;
 	}
@@ -1218,6 +1263,10 @@ static void do_coredump(struct core_name *cn, struct coredump_params *cprm,
 
 	/* Don't even generate the coredump. */
 	if (cprm->mask & COREDUMP_REJECT)
+		return;
+
+	if ((cprm->mask & COREDUMP_CLOSE_FILES) &&
+	    !coredump_close_files(current->signal->core_state))
 		return;
 
 	if ((cprm->mask & COREDUMP_KERNEL) && !coredump_write(cprm, binfmt))
