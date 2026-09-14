@@ -723,7 +723,7 @@ static const struct cci_data cci_v2_data = {
 		.thd_dat = 22,
 		.thd_sta = 162,
 		.tbuf = 227,
-		.scl_stretch_en = 0,
+		.scl_stretch_en = 1,
 		.trdhld = 6,
 		.tsp = 3
 	},
