@@ -81,9 +81,16 @@ static ssize_t fan1_alarm_show(struct device *dev,
 
 static DEVICE_ATTR_RO(fan1_alarm);
 
+static void gpio_fan_cancel_alarm_work(void *data)
+{
+	struct gpio_fan_data *fan_data = data;
+
+	cancel_work_sync(&fan_data->alarm_work);
+}
+
 static int fan_alarm_init(struct gpio_fan_data *fan_data)
 {
-	int alarm_irq;
+	int alarm_irq, err;
 	struct device *dev = fan_data->dev;
 
 	/*
@@ -95,6 +102,17 @@ static int fan_alarm_init(struct gpio_fan_data *fan_data)
 		return 0;
 
 	INIT_WORK(&fan_data->alarm_work, fan_alarm_notify);
+
+	/*
+	 * Register before devm_request_irq() below: LIFO teardown must free
+	 * the IRQ (stopping new schedule_work() calls) before this cancels
+	 * whatever alarm_work is already queued or running.
+	 */
+	err = devm_add_action_or_reset(dev, gpio_fan_cancel_alarm_work,
+					fan_data);
+	if (err)
+		return err;
+
 	irq_set_irq_type(alarm_irq, IRQ_TYPE_EDGE_BOTH);
 	return devm_request_irq(dev, alarm_irq, fan_alarm_irq_handler,
 				IRQF_SHARED, "GPIO fan alarm", fan_data);
