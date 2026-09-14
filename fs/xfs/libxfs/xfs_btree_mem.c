@@ -73,9 +73,7 @@ xfbtree_destroy(
 
 /* Compute the number of bytes available for records. */
 static inline unsigned int
-xfbtree_rec_bytes(
-	struct xfs_mount		*mp,
-	const struct xfs_btree_ops	*ops)
+xfbtree_rec_bytes(void)
 {
 	return XMBUF_BLOCKSIZE - XFS_BTREE_LBLOCK_CRC_LEN;
 }
@@ -117,7 +115,7 @@ xfbtree_init(
 	struct xfs_buftarg		*btp,
 	const struct xfs_btree_ops	*ops)
 {
-	unsigned int			blocklen = xfbtree_rec_bytes(mp, ops);
+	unsigned int			blocklen = xfbtree_rec_bytes();
 	unsigned int			keyptr_len;
 	int				error;
 
