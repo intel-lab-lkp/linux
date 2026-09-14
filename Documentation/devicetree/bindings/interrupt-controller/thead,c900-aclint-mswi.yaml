@@ -18,6 +18,8 @@ properties:
               - sophgo,sg2044-aclint-mswi
           - const: thead,c900-aclint-mswi
       - items:
+          - const: gf,mips-p8700-aclint-mswi
+      - items:
           - enum:
               - anlogic,dr1v90-aclint-mswi
           - const: nuclei,ux900-aclint-mswi
@@ -29,12 +31,33 @@ properties:
     minItems: 1
     maxItems: 4095
 
+  riscv,hart-indexes:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 1
+    maxItems: 4095
+    description:
+      A list of hart indexes that the MSWI device uses to address each hart
+      that is mentioned in the "interrupts-extended"
+
 additionalProperties: false
 
 required:
   - compatible
   - reg
   - interrupts-extended
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: gf,mips-p8700-aclint-mswi
+    then:
+      required:
+        - riscv,hart-indexes
+    else:
+      properties:
+        riscv,hart-indexes: false
 
 examples:
   - |
@@ -45,5 +68,16 @@ examples:
                             <&cpu3intc 3>,
                             <&cpu4intc 3>;
       reg = <0x94000000 0x00010000>;
+    };
+
+  - |
+    mswi@16150000 {
+      compatible = "gf,mips-p8700-aclint-mswi";
+      reg = <0x16150000 0x4000>;
+      interrupts-extended = <&cpu1intc 3>,
+                            <&cpu2intc 3>,
+                            <&cpu3intc 3>,
+                            <&cpu4intc 3>;
+      riscv,hart-indexes = <0x0 0x1 0x10 0x11>;
     };
 ...
