@@ -150,6 +150,17 @@ static int rz_mtu3_lock_if_count_is_enabled(struct rz_mtu3_channel *const ch,
 	return 0;
 }
 
+static void rz_mtu3_set_ceiling(struct rz_mtu3_channel *const ch, int id,
+				u64 ceiling)
+{
+	if (id == RZ_MTU3_32_BIT_CH)
+		rz_mtu3_32bit_ch_write(ch, RZ_MTU3_TGRALW, ceiling);
+	else
+		rz_mtu3_16bit_ch_write(ch, RZ_MTU3_TGRA, ceiling);
+
+	rz_mtu3_8bit_ch_write(ch, RZ_MTU3_TCR, RZ_MTU3_TCR_CCLR_TGRA);
+}
+
 static int rz_mtu3_count_read(struct counter_device *counter,
 			      struct counter_count *count, u64 *val)
 {
@@ -356,15 +367,9 @@ static int rz_mtu3_count_ceiling_write(struct counter_device *counter,
 		return -EINVAL;
 	}
 
-	pm_runtime_get_sync(counter->parent);
-	if (count->id == RZ_MTU3_32_BIT_CH)
-		rz_mtu3_32bit_ch_write(ch, RZ_MTU3_TGRALW, ceiling);
-	else
-		rz_mtu3_16bit_ch_write(ch, RZ_MTU3_TGRA, ceiling);
-
-	rz_mtu3_8bit_ch_write(ch, RZ_MTU3_TCR, RZ_MTU3_TCR_CCLR_TGRA);
+	if (priv->count_is_enabled[count->id])
+		rz_mtu3_set_ceiling(ch, count->id, ceiling);
 	priv->ceiling[count->id] = ceiling;
-	pm_runtime_put(counter->parent);
 	mutex_unlock(&priv->lock);
 
 	return 0;
@@ -374,11 +379,14 @@ static void rz_mtu3_32bit_cnt_setting(struct counter_device *counter)
 {
 	struct rz_mtu3_channel *const ch1 = rz_mtu3_get_ch(counter, 0);
 	struct rz_mtu3_channel *const ch2 = rz_mtu3_get_ch(counter, 1);
+	struct rz_mtu3_cnt *const priv = counter_priv(counter);
 
 	/* Phase counting mode 1 is used as default in initialization. */
 	rz_mtu3_8bit_ch_write(ch1, RZ_MTU3_TMDR1, RZ_MTU3_TMDR1_PH_CNT_MODE_1);
 
-	rz_mtu3_8bit_ch_write(ch1, RZ_MTU3_TCR, RZ_MTU3_TCR_CCLR_TGRA);
+	rz_mtu3_set_ceiling(ch1, RZ_MTU3_32_BIT_CH,
+			    priv->ceiling[RZ_MTU3_32_BIT_CH]);
+
 	rz_mtu3_8bit_ch_write(ch1, RZ_MTU3_TIOR, RZ_MTU3_TIOR_IC_BOTH);
 
 	rz_mtu3_enable(ch1);
@@ -388,11 +396,13 @@ static void rz_mtu3_32bit_cnt_setting(struct counter_device *counter)
 static void rz_mtu3_16bit_cnt_setting(struct counter_device *counter, int id)
 {
 	struct rz_mtu3_channel *const ch = rz_mtu3_get_ch(counter, id);
+	struct rz_mtu3_cnt *const priv = counter_priv(counter);
 
 	/* Phase counting mode 1 is used as default in initialization. */
 	rz_mtu3_8bit_ch_write(ch, RZ_MTU3_TMDR1, RZ_MTU3_TMDR1_PH_CNT_MODE_1);
 
-	rz_mtu3_8bit_ch_write(ch, RZ_MTU3_TCR, RZ_MTU3_TCR_CCLR_TGRA);
+	rz_mtu3_set_ceiling(ch, id, priv->ceiling[id]);
+
 	rz_mtu3_8bit_ch_write(ch, RZ_MTU3_TIOR, RZ_MTU3_TIOR_NO_OUTPUT);
 	rz_mtu3_enable(ch);
 }
