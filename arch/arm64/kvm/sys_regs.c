@@ -1517,6 +1517,7 @@ static int set_pmcr(struct kvm_vcpu *vcpu, const struct sys_reg_desc *r,
 {
 	u8 new_n = FIELD_GET(ARMV8_PMU_PMCR_N, val);
 	struct kvm *kvm = vcpu->kvm;
+	u64 old = __vcpu_sys_reg(vcpu, r->reg);
 
 	mutex_lock(&kvm->arch.config_lock);
 
@@ -1549,7 +1550,7 @@ static int set_pmcr(struct kvm_vcpu *vcpu, const struct sys_reg_desc *r,
 		val |= ARMV8_PMU_PMCR_LC;
 
 	__vcpu_assign_sys_reg(vcpu, r->reg, val);
-	kvm_make_request(KVM_REQ_RELOAD_PMU, vcpu);
+	kvm_pmu_apply_pmcr(vcpu, old, val, true);
 
 	return 0;
 }
