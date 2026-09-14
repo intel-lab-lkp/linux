@@ -73,7 +73,7 @@ int of_request_module(const struct device_node *np)
 
 	of_modalias(np, str, size);
 	str[size - 1] = '\0';
-	ret = request_module(str);
+	ret = request_module("%s", str);
 	kfree(str);
 
 	return ret;
