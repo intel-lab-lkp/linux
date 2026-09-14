@@ -250,6 +250,14 @@ struct sched_ext_entity {
 	u64			dsq_vtime;
 
 	/*
+	 * If set, depletion of this task's slice at the scheduler tick requests
+	 * lazy instead of immediate rescheduling. Initialized from
+	 * %SCX_OPS_LAZY_SLICE_EXPIRY immediately before ops.enable() and may be
+	 * modified afterwards with scx_bpf_task_set_slice_expiry().
+	 */
+	bool			slice_expires_lazy;
+
+	/*
 	 * Out-of-band slice request from scx_bpf_task_set_slice() when the
 	 * caller does not hold the rq lock, applied under the rq lock at the
 	 * next slice consideration. One atomic64 packs the pending flag, the
