@@ -17,7 +17,7 @@
  * Test that setns(CLONE_NEWNET) points to new /proc/net content even
  * if old one is in dcache.
  *
- * FIXME /proc/net/unix is under CONFIG_UNIX which can be disabled.
+ * Skip if CONFIG_UNIX is disabled.
  */
 #undef NDEBUG
 #include <assert.h>
@@ -59,6 +59,8 @@ int main(void)
 	}
 	/* Distinguisher between two otherwise empty net namespaces. */
 	if (socket(AF_UNIX, SOCK_STREAM, 0) == -1) {
+		if (errno == EAFNOSUPPORT)
+			return 4;
 		return 1;
 	}
 
