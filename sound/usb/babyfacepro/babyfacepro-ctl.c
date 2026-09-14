@@ -2917,3 +2917,578 @@ int babyface_create_panel(struct snd_usb_babyface *chip)
 
 	return 0;
 }
+
+#define BF_EQ_Q27		(1 << 27)
+#define BF_EQ_LC_OFF		0x04000000
+#define BF_EQ_BLOCK_LEN		64
+
+/* atan(2^-i) x 2^27 (CORDIC). */
+static const s64 bf_atan_tab[28] = {
+	0x6487ED5, 0x3B58CE1, 0x1F5B760, 0xFEADD5,
+	0x7FD56F, 0x3FFAAB, 0x1FFF55, 0xFFFEB,
+	0x7FFFD, 0x40000, 0x20000, 0x10000,
+	0x8000, 0x4000, 0x2000, 0x1000,
+	0x800, 0x400, 0x200, 0x100,
+	0x80, 0x40, 0x20, 0x10,
+	0x8, 0x4, 0x2, 0x1,
+};
+
+/* ---- fixed-point helpers (Q27 in/out, s64 intermediates) ---- */
+
+/* sin/cos of an angle in [0, pi/2] (Q27).  Simultaneous CORDIC, 28
+ * iterations (~1e-8 residual).  eq_selftest.c verifies the whole
+ * pipeline against the double-precision reference.
+ */
+static void bf_sincos(s64 ang, s64 *sn, s64 *cs)
+{
+	s64 x = 0x4DBA76D;	/* 1/1.64676 x 2^27 (CORDIC gain) */
+	s64 y = 0;
+	s64 z = ang;
+	int i;
+
+	for (i = 0; i < 28; i++) {
+		s64 d = z >= 0 ? 1 : -1;
+		s64 nx = x - d * (y >> i);
+		s64 ny = y + d * (x >> i);
+
+		x = nx;
+		y = ny;
+		z -= d * bf_atan_tab[i];
+	}
+	*cs = x;
+	*sn = y;
+}
+
+/* 2^u for u in Q27, u in [-2, 2] (gain-amplitude range). */
+static s64 bf_exp2(s64 u)
+{
+	s64 n = u >> 27;
+	s64 r = u - (n << 27);
+	s64 rl = (r * 0x58B90C0 + (1 << 26)) >> 27;	/* r.ln2 */
+	s64 e = BF_EQ_Q27;
+	s64 term = BF_EQ_Q27;
+	int k;
+
+	for (k = 1; k <= 10; k++) {
+		term = div_s64((term * rl + (1 << 26)) >> 27, k);
+		e += term;
+	}
+	return n >= 0 ? e << n : e >> -n;
+}
+
+/* The 5 stored words (c0..c3 + shared c4) for one band.
+ * type: 1 bell, 2 low shelf, 3 high shelf.  freq_hz, fs in Hz;
+ * q100 = Q x 100; gain_x10 = dB x 10.  fs is the stream rate.
+ */
+void bf_eq_band_words(s32 *w, int type, s32 freq_hz, s32 q100,
+		      s32 gain_x10, s32 fs)
+{
+	s64 f = freq_hz;
+	s64 w0, c, s, alpha, A, sq;
+	s64 b0, b1, b2, a0, a1, a2;
+	s64 pi = 0x1921FB54;	/* pi, Q27 */
+	s64 hpi = 0xC90FDAA;	/* pi/2, Q27 */
+	s64 t;
+	int both = 0, cflip = 0;
+
+	if (gain_x10 == 0 || q100 <= 0) {
+		/* Inactive band: identity words (also guards the alpha
+		 * division below against the default Q=0 the controls start
+		 * with - a user setting gain before Q used to hit a kernel
+		 * divide-by-zero oops).
+		 */
+		w[0] = 0;
+		w[1] = 0;
+		w[2] = 0;
+		w[3] = 0;
+		return;
+	}
+
+	/* w0 = 2.pi.f/fs (Q27), reduced to [0, pi/2]. */
+	w0 = div_s64(f * BF_EQ_Q27, fs);
+	w0 = (w0 * 0x3243F6A9) >> 27;	/* x 2.pi */
+	t = w0;
+	if (t > pi) {
+		t -= pi;
+		both = 1;
+	}
+	if (t > hpi) {
+		t = pi - t;
+		cflip = 1;
+	}
+	bf_sincos(t, &s, &c);
+	if (both) {
+		s = -s;
+		c = -c;
+	}
+	if (cflip)
+		c = -c;
+
+	alpha = div64_s64(s * 100 + q100, 2 * (s64)q100);	/* sin(w0)/(2Q) */
+	/* A = 10^(g/40), sqrt(A): g = gain_x10/10 dB */
+	A = bf_exp2((s64)gain_x10 * 0x11021E);
+	sq = bf_exp2((s64)gain_x10 * 0x8810F);
+
+	if (type == 1) {
+		s64 ta = (alpha * A + (1 << 26)) >> 27;
+
+		b0 = BF_EQ_Q27 + ta;
+		b1 = -2 * c;
+		b2 = BF_EQ_Q27 - ta;
+		a0 = BF_EQ_Q27 + div64_s64(alpha * BF_EQ_Q27 + A / 2, A);
+		a1 = -2 * c;
+		a2 = BF_EQ_Q27 - div64_s64(alpha * BF_EQ_Q27 + A / 2, A);
+	} else {
+		s64 ap1 = A + BF_EQ_Q27;
+		s64 am1 = A - BF_EQ_Q27;
+		s64 cp0 = (am1 * c + (1 << 26)) >> 27;	/* (A-1).c */
+		s64 cp1 = (ap1 * c + (1 << 26)) >> 27;	/* (A+1).c */
+		s64 ab = (2 * sq * alpha + (1 << 26)) >> 27;
+
+		if (type == 2) {	/* low shelf */
+			b0 = (A * (ap1 - cp0 + ab) + (1 << 26)) >> 27;
+			b1 = (2 * A * (am1 - cp1) + (1 << 26)) >> 27;
+			b2 = (A * (ap1 - cp0 - ab) + (1 << 26)) >> 27;
+			a0 = ap1 + cp0 + ab;
+			a1 = -2 * (am1 + cp1);
+			a2 = ap1 + cp0 - ab;
+		} else {		/* high shelf */
+			b0 = (A * (ap1 + cp0 + ab) + (1 << 26)) >> 27;
+			b1 = (-2 * A * (am1 + cp1) + (1 << 26)) >> 27;
+			b2 = (A * (ap1 + cp0 - ab) + (1 << 26)) >> 27;
+			a0 = ap1 - cp0 + ab;
+			a1 = -2 * (am1 - cp1);
+			a2 = ap1 - cp0 - ab;
+		}
+	}
+
+	w[0] = (s32)div64_s64(a1 * BF_EQ_Q27 + a0 / 2, a0);
+	w[1] = (s32)div64_s64(a2 * BF_EQ_Q27 + a0 / 2, a0);
+	w[2] = (s32)div64_s64(b1 * BF_EQ_Q27 + b0 / 2, b0);
+	w[3] = (s32)div64_s64(b2 * BF_EQ_Q27 + b0 / 2, b0);
+	w[4] = (s32)div64_s64(b0 * BF_EQ_Q27 + a0 / 2, a0);
+}
+
+/* ---- low cut ---- */
+
+/* Slope byte: 2^n-1 (n poles) -> 6/12/18/24 dB per oct; 0 = off. */
+static u8 bf_eq_lc_slope_byte(s32 slope_db)
+{
+	switch (slope_db) {
+	case 6:  return 0x01;
+	case 12: return 0x03;
+	case 18: return 0x07;
+	case 24: return 0x0F;
+	}
+	return 0;
+}
+
+/* The 0x38 low-cut frequency word: round(K.f'.(11656)/(11656+f')) with
+ * K = 11508, f' = f x slope-compensation factor (cap_eq9 fit, 0.003%;
+ * the slope factor keeps the composite -3 dB point constant).
+ */
+static u32 bf_eq_lc_freq_raw(s32 freq_hz, s32 slope_db)
+{
+	s64 f, word;
+
+	if (freq_hz <= 0)
+		return BF_EQ_LC_OFF;
+	f = freq_hz;
+	switch (slope_db) {
+	case 6:
+		f = f * 15267 / 10000;
+		break;
+
+	case 18:
+		f = f * 8061 / 10000;
+		break;
+
+	case 24:
+		f = f * 6977 / 10000;
+		break;
+	}
+	word = (11508 * f * 11656 + (11656 + f) / 2) / (11656 + f);
+	return (u32)word;
+}
+
+/* ---- block build + bulk write ---- */
+
+static void bf_eq_build_block(u8 *b, int ch, u8 slope,
+			      const s32 bands[3][4], s32 shared, u32 lc)
+{
+	int slot, k;
+
+	memset(b, 0, BF_EQ_BLOCK_LEN);
+	b[0] = ch;
+	b[1] = slope;
+	b[2] = ch;
+	b[3] = 0x80;	/* EQ engine active */
+	for (slot = 0; slot < 3; slot++) {
+		for (k = 0; k < 4; k++) {
+			put_unaligned_le32((u32)bands[slot][k],
+					   b + 0x04 + slot * 0x10 + 4 * k);
+		}
+	}
+	put_unaligned_le32((u32)shared, b + 0x34);
+	put_unaligned_le32(lc, b + 0x38);
+}
+
+/* Upload one 64-byte block on bulk OUT ep 0x0A (interface 1). */
+static int bf_eq_upload(struct snd_usb_babyface *chip, const u8 *block)
+{
+	u8 *buf;
+	int ret, len;
+
+	/* usb_bulk_msg DMA-maps the buffer: it must not be on the stack
+	 * (usb_hcd_map_urb_for_dma returns -EAGAIN for stack buffers).
+	 */
+	buf = kmemdup(block, BF_EQ_BLOCK_LEN, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+	ret = usb_bulk_msg(chip->dev, usb_sndbulkpipe(chip->dev, 0x0a),
+			   buf, BF_EQ_BLOCK_LEN, &len, 1000);
+	kfree(buf);
+	if (ret < 0)
+		dev_err(&chip->dev->dev, "EQ bulk upload failed: %d\n", ret);
+	return ret;
+}
+
+/* Write the L+R block pair for one strip (channel base = strip x 2). */
+static int bf_eq_write_strip(struct snd_usb_babyface *chip, int strip)
+{
+	struct bf_eq_channel *e = &chip->eq[strip];
+	u8 b[BF_EQ_BLOCK_LEN];
+	s32 identity[3][4] = { { 0 }, { 0 }, { 0 } };
+	s32 shared = e->on ? e->shared : BF_EQ_Q27;
+	u32 lc = e->on ? e->lc_raw : BF_EQ_LC_OFF;
+	/* The header slope byte (b[1]) is only valid while the low cut is
+	 * engaged: a stale slope with 0x38 = off made the device apply a
+	 * garbage-frequency cut (ear-verified: "low cut off" left only
+	 * highs).  cap_eq7: byte1 = 0x00 + 0x38 = 0x04000000 when off.
+	 */
+	u8 slope = (e->on && e->lc_hz > 0) ? e->slope : 0;
+	int ch, ret;
+
+	for (ch = 0; ch < 2; ch++) {
+		bf_eq_build_block(b, strip * 2 + ch, slope,
+				  e->on ? e->words : identity, shared, lc);
+		ret = bf_eq_upload(chip, b);
+		if (ret < 0)
+			return ret;
+	}
+	return 0;
+}
+
+/* Recompute one strip's words + low cut from its params, re-upload.
+ * Lock-free by convention: every caller must already hold chip->mutex
+ * (bf_eq_put() and bf_eq_reupload() do) - asserting it here catches a
+ * future caller that forgets, instead of a silent self-deadlock.
+ */
+static void bf_eq_update_strip(struct snd_usb_babyface *chip, int strip)
+{
+	struct bf_eq_channel *e = &chip->eq[strip];
+	s32 fs = chip->rate ? chip->rate : 48000;
+	s32 last_c4 = BF_EQ_Q27;
+	int band, i;
+
+	lockdep_assert_held(&chip->mutex);
+
+	for (band = 0; band < 3; band++) {
+		s32 w[5];
+
+		bf_eq_band_words(w, e->band_type[band], e->band_freq[band],
+				 e->band_q[band], e->band_gain[band], fs);
+		for (i = 0; i < 4; i++)
+			e->words[band][i] = w[i];
+		if (e->band_type[band] && e->band_gain[band])
+			last_c4 = w[4];	/* shared scale: the last band */
+	}
+	e->shared = last_c4;
+	e->lc_raw = bf_eq_lc_freq_raw(e->lc_hz, e->slope_db);
+	e->slope = bf_eq_lc_slope_byte(e->slope_db);
+	bf_eq_write_strip(chip, strip);
+}
+
+/* Recompute + re-upload all four strips (rate change). Caller must
+ * hold chip->mutex - bf_eq_update_strip()/bf_eq_write_strip() are
+ * lock-free by convention (see bf_eq_put()) and the only caller,
+ * babyface_pcm_hw_params(), already holds the lock across the rate
+ * change; locking here too self-deadlocked it (hung-task: "blocked
+ * on a mutex likely owned by" itself, hit via regress.sh's rate
+ * sweep).
+ */
+void bf_eq_reupload(struct snd_usb_babyface *chip)
+{
+	int strip;
+
+	for (strip = 0; strip < 4; strip++)
+		bf_eq_update_strip(chip, strip);
+}
+
+/* ---- ALSA controls (4 strips x 19 controls) ---- */
+
+#define EQ_STRIP(pv)	((pv) >> 8)
+#define EQ_PARAM(pv)	((pv) & 0xff)
+/* params: 0 enable, 1-3 type, 4-6 freq, 7-9 q, 10-12 gain, 13 lc freq, 14 lc slope */
+
+static const char *const bf_eq_type_texts[] = {
+	"Off", "Bell", "Low Shelf", "High Shelf", NULL
+};
+
+static const char *const bf_eq_slope_texts[] = {
+	"6 dB/oct", "12 dB/oct", "18 dB/oct", "24 dB/oct", NULL
+};
+
+static int bf_eq_info(struct snd_kcontrol *kctl,
+		      struct snd_ctl_elem_info *uinfo)
+{
+	int param = EQ_PARAM(kctl->private_value);
+
+	if (param == 0) {
+		uinfo->type = SNDRV_CTL_ELEM_TYPE_BOOLEAN;
+		uinfo->count = 1;
+		return 0;
+	}
+	if (param == 1 || param == 2 || param == 3)
+		return snd_ctl_enum_info(uinfo, 1, 4, bf_eq_type_texts);
+	if (param == 14)
+		return snd_ctl_enum_info(uinfo, 1, 4, bf_eq_slope_texts);
+
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+	uinfo->count = 1;
+	uinfo->value.integer.min = (param == 10 || param == 11 ||
+				    param == 12) ? -240 :
+				   (param == 7 || param == 8 ||
+				    param == 9) ? 5 : 0;
+	uinfo->value.integer.max = (param == 7 || param == 8 ||
+				    param == 9) ? 1000 :
+				   (param == 10 || param == 11 ||
+				    param == 12) ? 240 : 20000;
+	uinfo->value.integer.step = 1;
+	return 0;
+}
+
+static int bf_eq_get(struct snd_kcontrol *kctl,
+		     struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_usb_babyface *chip = snd_kcontrol_chip(kctl);
+	struct bf_eq_channel *e = &chip->eq[EQ_STRIP(kctl->private_value)];
+	int param = EQ_PARAM(kctl->private_value);
+	int band = (param - 1) % 3;
+	s32 *v = NULL;
+
+	switch (param) {
+	case 0:
+		break;
+
+	case 1:
+	case 2:
+	case 3:
+		v = &e->band_type[band];
+		break;
+
+	case 4:
+	case 5:
+	case 6:
+		v = &e->band_freq[band];
+		break;
+
+	case 7:
+	case 8:
+	case 9:
+		v = &e->band_q[band];
+		break;
+
+	case 10:
+	case 11:
+	case 12:
+		v = &e->band_gain[band];
+		break;
+
+	case 13:
+		v = &e->lc_hz;
+		break;
+
+	case 14:
+		v = &e->slope_db;
+		break;
+	}
+	if (param == 0) {
+		ucontrol->value.integer.value[0] = e->on;
+	} else if (param == 14) {
+		/* Inverse of put's index->dB map: slope_db stores the raw
+		 * 6/12/18/24 dB/oct value, but an ENUMERATED control's .get
+		 * must return the enum item index (0-3), same as .put
+		 * receives - returning the raw dB value here (the bug this
+		 * replaces) fed back an out-of-range index to every ALSA
+		 * consumer (confirmed via amixer: writing index 1 read back
+		 * as value 12, not 1).
+		 */
+		s32 slope = v ? *v : 6;
+
+		ucontrol->value.enumerated.item[0] =
+			slope >= 24 ? 3 : slope >= 18 ? 2 : slope >= 12 ? 1 : 0;
+	} else if (param == 1 || param == 2 || param == 3) {
+		/* ENUMERATED band type: use the enumerated union member. */
+		ucontrol->value.enumerated.item[0] = v ? *v : 0;
+	} else {
+		ucontrol->value.integer.value[0] = v ? *v : 0;
+	}
+	return 0;
+}
+
+static int bf_eq_put(struct snd_kcontrol *kctl,
+		     struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_usb_babyface *chip = snd_kcontrol_chip(kctl);
+	int strip = EQ_STRIP(kctl->private_value);
+	int param = EQ_PARAM(kctl->private_value);
+	struct bf_eq_channel *e = &chip->eq[strip];
+	int band = (param - 1) % 3;
+	s32 nv;
+	s32 *v = NULL;
+	int ret = 0;
+
+	/* Read from the union member matching the control type: ENUMERATED
+	 * params (band type 1-3, slope 14) use .enumerated.item, everything
+	 * else (BOOL 0, INTEGER) uses .integer.value.
+	 */
+	if (param == 1 || param == 2 || param == 3 || param == 14)
+		nv = (s32)ucontrol->value.enumerated.item[0];
+	else
+		nv = (s32)ucontrol->value.integer.value[0];
+
+	/* Validate against the bounds bf_eq_info() declares.  The ALSA core
+	 * only checks these when CONFIG_SND_CTL_INPUT_VALIDATION is set, so
+	 * an out-of-range value here could otherwise reach the Q27
+	 * coefficient math (bf_eq_band_words/bf_exp2) and shift by >= width
+	 * (undefined behaviour).
+	 */
+	switch (param) {
+	case 0:
+		if (nv < 0 || nv > 1)
+			return -EINVAL;
+		break;
+	case 1:
+	case 2:
+	case 3:
+	case 14:
+		if (nv < 0 || nv > 3)
+			return -EINVAL;
+		break;
+	case 4:
+	case 5:
+	case 6:
+	case 13:
+		if (nv < 0 || nv > 20000)
+			return -EINVAL;
+		break;
+	case 7:
+	case 8:
+	case 9:
+		if (nv < 5 || nv > 1000)
+			return -EINVAL;
+		break;
+	case 10:
+	case 11:
+	case 12:
+		if (nv < -240 || nv > 240)
+			return -EINVAL;
+		break;
+	}
+
+	switch (param) {
+	case 0:
+		v = NULL;
+		break;
+
+	case 1:
+	case 2:
+	case 3:
+		v = &e->band_type[band];
+		break;
+
+	case 4:
+	case 5:
+	case 6:
+		v = &e->band_freq[band];
+		break;
+
+	case 7:
+	case 8:
+	case 9:
+		v = &e->band_q[band];
+		break;
+
+	case 10:
+	case 11:
+	case 12:
+		v = &e->band_gain[band];
+		break;
+
+	case 13:
+		v = &e->lc_hz;
+		break;
+
+	case 14:
+		v = &e->slope_db;
+		break;
+	}
+	if (param == 14)	/* slope enum items are 6/12/18/24 */
+		nv = nv == 0 ? 6 : nv == 1 ? 12 : nv == 2 ? 18 : 24;
+
+	mutex_lock(&chip->mutex);
+	if (param == 0) {
+		if (e->on != !!nv) {
+			e->on = !!nv;
+			bf_eq_update_strip(chip, strip);
+			ret = 1;
+		}
+	} else if (v && *v != nv) {
+		*v = nv;
+		bf_eq_update_strip(chip, strip);
+		ret = 1;
+	}
+	mutex_unlock(&chip->mutex);
+	return ret;
+}
+
+int babyface_create_eq(struct snd_usb_babyface *chip)
+{
+	static const char *const names[4] = { "AN1", "AN2", "AN3", "AN4" };
+	static const char *const params[] = {
+		"EQ Enable",
+		"EQ Band 1 Type", "EQ Band 2 Type", "EQ Band 3 Type",
+		"EQ Band 1 Freq", "EQ Band 2 Freq", "EQ Band 3 Freq",
+		"EQ Band 1 Q", "EQ Band 2 Q", "EQ Band 3 Q",
+		"EQ Band 1 Gain", "EQ Band 2 Gain", "EQ Band 3 Gain",
+		"EQ Low Cut Freq", "EQ Low Cut Slope",
+	};
+	int strip, i, err;
+
+	for (strip = 0; strip < 4; strip++) {
+		for (i = 0; i < 15; i++) {
+			struct snd_kcontrol *kctl;
+			char name[64];
+
+			snprintf(name, sizeof(name), "%s %s", names[strip],
+				 params[i]);
+			kctl = snd_ctl_new1(&(struct snd_kcontrol_new){
+				.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+				.name = "EQ",
+				.index = 0,
+				.info = bf_eq_info,
+				.get = bf_eq_get,
+				.put = bf_eq_put,
+				.private_value = (strip << 8) | i,
+			}, chip);
+			if (!kctl)
+				return -ENOMEM;
+			strscpy(kctl->id.name, name, sizeof(kctl->id.name));
+			err = snd_ctl_add(chip->card, kctl);
+			if (err < 0)
+				return err;
+		}
+	}
+	return 0;
+}

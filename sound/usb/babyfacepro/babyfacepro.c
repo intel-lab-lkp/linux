@@ -1086,6 +1086,7 @@ static int babyface_pcm_hw_params(struct snd_pcm_substream *subs,
 		chip->alt = r->alt;
 		chip->frame_bytes = r->frame_bytes;
 		/* The DSP EQ coefficients depend on fs: re-upload. */
+		bf_eq_reupload(chip);
 		dev_dbg(&chip->dev->dev, "rate %u Hz (alt %u)\n",
 			chip->rate, chip->alt);
 	}
@@ -1419,6 +1420,21 @@ static int babyface_probe(struct usb_interface *intf,
 		dev_err(&intf->dev, "front-panel control creation failed: %d\n", err);
 		goto error;
 	}
+
+	err = babyface_create_eq(chip);
+	if (err < 0) {
+		dev_err(&intf->dev, "EQ control creation failed: %d\n", err);
+		goto error;
+	}
+
+	/* The DSP coefficient stream (EQ, bulk ep 0x0A) lives on interface
+	 * 1, which has a single altsetting (alt 0) already active in the
+	 * default configuration - the endpoint is scheduled, no
+	 * SET_INTERFACE or interface claim is needed (the earlier
+	 * -EAGAIN was the on-stack transfer buffer, and SET_INTERFACE on
+	 * interface 1 wedged the iface-5 audio stream - playback URBs
+	 * never completed).
+	 */
 
 	err = snd_card_register(chip->card);
 	if (err < 0) {
