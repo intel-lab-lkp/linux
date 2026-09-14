@@ -3862,8 +3862,21 @@ static int spi_nor_remove(struct spi_mem *spimem)
 static void spi_nor_shutdown(struct spi_mem *spimem)
 {
 	struct spi_nor *nor = spi_mem_get_drvdata(spimem);
+	int ret;
+
+	/*
+	 * Wait for an operation started by another thread to finish.
+	 * device_shutdown() runs with MTD users still active: a busy flash
+	 * ignores the commands spi_nor_restore() issues, leaving it in
+	 * 4-byte address mode, and a restore landing mid-read changes the
+	 * chip's address width under the transfer.
+	 */
+	ret = spi_nor_prep_and_lock(nor);
+	if (ret)
+		return;
 
 	spi_nor_restore(nor);
+	spi_nor_unlock_and_unprep(nor);
 }
 
 /*
