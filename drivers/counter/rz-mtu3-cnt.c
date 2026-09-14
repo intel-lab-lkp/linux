@@ -471,21 +471,10 @@ static void rz_mtu3_terminate_counter(struct counter_device *counter, int id)
 static int rz_mtu3_count_enable_read(struct counter_device *counter,
 				     struct counter_count *count, u8 *enable)
 {
-	struct rz_mtu3_channel *const ch = rz_mtu3_get_ch(counter, count->id);
-	struct rz_mtu3_channel *const ch1 = rz_mtu3_get_ch(counter, 0);
-	struct rz_mtu3_channel *const ch2 = rz_mtu3_get_ch(counter, 1);
 	struct rz_mtu3_cnt *const priv = counter_priv(counter);
-	int ret;
 
-	ret = rz_mtu3_lock_if_count_is_enabled(ch, priv, count->id);
-	if (ret)
-		return ret;
-
-	if (count->id == RZ_MTU3_32_BIT_CH)
-		*enable = rz_mtu3_is_enabled(ch1) && rz_mtu3_is_enabled(ch2);
-	else
-		*enable = rz_mtu3_is_enabled(ch);
-
+	mutex_lock(&priv->lock);
+	*enable = priv->count_is_enabled[count->id];
 	mutex_unlock(&priv->lock);
 
 	return 0;
