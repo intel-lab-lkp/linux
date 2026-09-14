@@ -18,6 +18,7 @@
 #define DR7_FIXED_1	0x00000400
 
 DECLARE_PER_CPU(unsigned long, cpu_dr7);
+DECLARE_PER_CPU(bool, cpu_dr_in_guest);
 
 #ifndef CONFIG_PARAVIRT_XXL
 /*
@@ -129,6 +130,9 @@ static __always_inline unsigned long local_db_save(void)
 {
 	unsigned long dr7;
 
+	if (this_cpu_read(cpu_dr_in_guest))
+		return 0;
+
 	if (cpu_feature_enabled(X86_FEATURE_HYPERVISOR) && !hw_breakpoint_active())
 		return 0;
 
@@ -157,6 +161,8 @@ static __always_inline void local_db_restore(unsigned long dr7)
 	 * not be good.
 	 */
 	barrier();
+	if (this_cpu_read(cpu_dr_in_guest))
+		return;
 	if (dr7)
 		set_debugreg(dr7, 7);
 }

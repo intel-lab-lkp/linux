@@ -8318,6 +8318,9 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 
 	kvm_load_xfeatures(vcpu, true);
 
+	this_cpu_write(cpu_dr_in_guest, true);
+	barrier();
+
 	if (unlikely(vcpu->arch.switch_db_regs &&
 		     !(vcpu->arch.switch_db_regs & KVM_DEBUGREG_AUTO_SWITCH))) {
 		set_debugreg(DR7_FIXED_1, 7);
@@ -8399,6 +8402,10 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 		kvm_update_dr0123(vcpu);
 		kvm_update_dr7(vcpu);
 	}
+
+	barrier();
+	this_cpu_write(cpu_dr_in_guest, false);
+	barrier();
 
 	/*
 	 * If the guest has used debug registers, at least dr7

@@ -40,6 +40,9 @@
 DEFINE_PER_CPU(unsigned long, cpu_dr7);
 EXPORT_PER_CPU_SYMBOL(cpu_dr7);
 
+DEFINE_PER_CPU(bool, cpu_dr_in_guest);
+EXPORT_PER_CPU_SYMBOL_GPL(cpu_dr_in_guest);
+
 /* Per cpu debug address registers values */
 static DEFINE_PER_CPU(unsigned long, cpu_debugreg[HBP_NUM]);
 
@@ -101,6 +104,9 @@ int arch_install_hw_breakpoint(struct perf_event *bp)
 	int i;
 
 	lockdep_assert_irqs_disabled();
+
+	if (this_cpu_read(cpu_dr_in_guest))
+		return -EBUSY;
 
 	for (i = 0; i < HBP_NUM; i++) {
 		struct perf_event **slot = this_cpu_ptr(&bp_per_reg[i]);
@@ -315,6 +321,10 @@ static inline bool within_cpu_entry(unsigned long addr, unsigned long end)
 		 */
 		if (within_area(addr, end, (unsigned long)&per_cpu(cpu_dr7, cpu),
 				sizeof(cpu_dr7)))
+			return true;
+		if (within_area(addr, end,
+				(unsigned long)&per_cpu(cpu_dr_in_guest, cpu),
+				sizeof(cpu_dr_in_guest)))
 			return true;
 	}
 
