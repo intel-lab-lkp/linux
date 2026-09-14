@@ -557,6 +557,7 @@ static int probe_thermostat(struct i2c_client *client)
 	if (th->thread == ERR_PTR(-ENOMEM)) {
 		printk(KERN_INFO "adt746x: Kthread creation failed\n");
 		th->thread = NULL;
+		kfree(th);
 		return -ENOMEM;
 	}
 
