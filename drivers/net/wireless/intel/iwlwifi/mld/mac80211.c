@@ -2265,7 +2265,7 @@ static int iwl_mld_set_key_add(struct iwl_mld *mld,
 	if (ret) {
 		if (ptk_pn) {
 			RCU_INIT_POINTER(mld_sta->ptk_pn[keyidx], NULL);
-			kfree(ptk_pn);
+			kfree_rcu(ptk_pn, rcu_head);
 		}
 
 		return -EOPNOTSUPP;
