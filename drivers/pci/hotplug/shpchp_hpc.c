@@ -572,6 +572,7 @@ void shpchp_release_ctlr(struct controller *ctrl)
 
 	iounmap(ctrl->creg);
 	release_mem_region(ctrl->mmio_base, ctrl->mmio_size);
+	pci_disable_device(ctrl->pci_dev);
 }
 
 int shpchp_power_on_slot(struct slot *slot)
@@ -936,7 +937,7 @@ int shpc_init(struct controller *ctrl, struct pci_dev *pdev)
 	if (!request_mem_region(ctrl->mmio_base, ctrl->mmio_size, MY_NAME)) {
 		ctrl_err(ctrl, "Cannot reserve MMIO region\n");
 		rc = -1;
-		goto abort;
+		goto abort_disable_device;
 	}
 
 	ctrl->creg = ioremap(ctrl->mmio_base, ctrl->mmio_size);
@@ -1045,6 +1046,8 @@ abort_disable_msi:
 	iounmap(ctrl->creg);
 abort_release_region:
 	release_mem_region(ctrl->mmio_base, ctrl->mmio_size);
+abort_disable_device:
+	pci_disable_device(pdev);
 abort:
 	return rc;
 }
