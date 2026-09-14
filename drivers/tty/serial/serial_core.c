@@ -3358,6 +3358,17 @@ int serial_core_register_port(struct uart_driver *drv, struct uart_port *port)
 
 err_unregister_port_dev:
 	serial_base_port_device_remove(port->port_dev);
+	/*
+	 * serial_base_port_device_remove() dropped the last reference to the
+	 * port device, so leave no dangling ->port_dev behind. Restore the
+	 * state slot to the same "not registered" state that
+	 * serial_core_remove_one_port() produces on the normal path; the
+	 * line range guard also covers the -EINVAL exit of
+	 * serial_core_add_one_port() where line >= drv->nr.
+	 */
+	port->port_dev = NULL;
+	if (port->line < drv->nr && drv->state[port->line].uart_port == port)
+		drv->state[port->line].uart_port = NULL;
 
 err_unregister_ctrl_dev:
 	serial_base_ctrl_device_remove(new_ctrl_dev);
@@ -3373,10 +3384,22 @@ void serial_core_unregister_port(struct uart_driver *drv, struct uart_port *port
 {
 	struct device *phys_dev = port->dev;
 	struct serial_port_device *port_dev = port->port_dev;
-	struct serial_ctrl_device *ctrl_dev = serial_core_get_ctrl_dev(port_dev);
+	struct serial_ctrl_device *ctrl_dev;
 	int ctrl_id = port->ctrl_id;
 
+	/*
+	 * A port may be unregistered even though it was never successfully
+	 * registered (e.g. an allocation failure aborted serial_core_register_port()
+	 * part-way). Drivers like serial8250 remove ports matching on ->dev, so
+	 * those half-registered ports still reach us with port_dev == NULL. Do not
+	 * dereference it.
+	 */
+	if (!port_dev)
+		return;
+
 	guard(mutex)(&port_mutex);
+
+	ctrl_dev = serial_core_get_ctrl_dev(port_dev);
 
 	port->flags |= UPF_DEAD;
 
