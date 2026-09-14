@@ -3304,6 +3304,21 @@ static void __split_huge_pmd_locked(struct vm_area_struct *vma, pmd_t *pmd,
 			folio_add_anon_rmap_ptes(folio, page, HPAGE_PMD_NR,
 						 vma, haddr, rmap_flags);
 		}
+	} else if (pmd_is_swap_entry(*pmd)) {
+		/*
+		 * A PMD swap entry has no page, so it cannot be turned into
+		 * PTE migration entries.  page_vma_mapped_walk() never hands
+		 * one back for the folio being migrated, so this should not
+		 * happen; warn, but also force the regular split so that a
+		 * broken invariant cannot make the code below dereference the
+		 * uninitialised folio and page.
+		 */
+		VM_WARN_ON_ONCE(use_migration_entries);
+		use_migration_entries = false;
+		old_pmd = *pmd;
+		soft_dirty = pmd_swp_soft_dirty(old_pmd);
+		uffd_wp = pmd_swp_uffd(old_pmd);
+		anon_exclusive = pmd_swp_exclusive(old_pmd);
 	} else {
 		/*
 		 * Up to this point the pmd is present and huge and userland has
@@ -3440,6 +3455,25 @@ static void __split_huge_pmd_locked(struct vm_area_struct *vma, pmd_t *pmd,
 			VM_WARN_ON(!pte_none(ptep_get(pte + i)));
 			set_pte_at(mm, addr, pte + i, entry);
 		}
+	} else if (pmd_is_swap_entry(old_pmd)) {
+		const softleaf_t old_entry = softleaf_from_pmd(old_pmd);
+		pte_t pte_swp_entry;
+		swp_entry_t entry;
+
+		for (i = 0, addr = haddr; i < HPAGE_PMD_NR;
+		     i++, addr += PAGE_SIZE) {
+			entry = swp_entry(swp_type(old_entry),
+					  swp_offset(old_entry) + i);
+			pte_swp_entry = swp_entry_to_pte(entry);
+			if (soft_dirty)
+				pte_swp_entry = pte_swp_mksoft_dirty(pte_swp_entry);
+			if (uffd_wp)
+				pte_swp_entry = pte_swp_mkuffd(pte_swp_entry);
+			if (anon_exclusive)
+				pte_swp_entry = pte_swp_mkexclusive(pte_swp_entry);
+			VM_WARN_ON(!pte_none(ptep_get(pte + i)));
+			set_pte_at(mm, addr, pte + i, pte_swp_entry);
+		}
 	} else {
 		pte_t entry;
 
@@ -3467,7 +3501,7 @@ static void __split_huge_pmd_locked(struct vm_area_struct *vma, pmd_t *pmd,
 	}
 	pte_unmap(pte);
 
-	if (!pmd_is_migration_entry(*pmd))
+	if (!pmd_is_migration_entry(old_pmd) && !pmd_is_swap_entry(old_pmd))
 		folio_remove_rmap_pmd(folio, page, vma);
 	if (use_migration_entries)
 		put_page(page);
