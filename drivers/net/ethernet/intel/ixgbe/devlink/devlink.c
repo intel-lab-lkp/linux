@@ -430,7 +430,7 @@ static int ixgbe_devlink_reload_empr_start(struct devlink *devlink,
 }
 
 /*Wait for 10 sec with 0.5 sec tic. EMPR takes no less than half of a sec */
-#define IXGBE_DEVLINK_RELOAD_TIMEOUT_SEC	20
+#define IXGBE_DEVLINK_RELOAD_TIMEOUT_TICS	20
 
 /**
  * ixgbe_devlink_reload_empr_finish - finishes EMP reset
@@ -460,11 +460,11 @@ static int ixgbe_devlink_reload_empr_finish(struct devlink *devlink,
 		 * may be not cleared yet, so begin the loop with the delay
 		 * in order to not check the not updated register.
 		 */
-		mdelay(500);
+		msleep(500);
 
 		fwsm = IXGBE_READ_REG(hw, IXGBE_FWSM(hw));
 
-		if (i++ >= IXGBE_DEVLINK_RELOAD_TIMEOUT_SEC)
+		if (i++ >= IXGBE_DEVLINK_RELOAD_TIMEOUT_TICS)
 			return -ETIME;
 
 	} while (!(fwsm & IXGBE_FWSM_FW_VAL_BIT));
