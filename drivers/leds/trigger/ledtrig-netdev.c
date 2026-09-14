@@ -337,9 +337,10 @@ static ssize_t device_name_store(struct device *dev,
 		return ret;
 
 	/*
-	 * Refresh link_speed visibility, serialized against netdev_trig_notify()
-	 * which may concurrently call sysfs_update_group() on the same group
-	 * while reading supported_link_modes via netdev_trig_link_speed_visible().
+	 * Refresh link_speed attribute visibility.  This trigger owns the
+	 * group (created in activate(), removed in deactivate()), so it is only
+	 * serialized against a concurrent sysfs_update_group() in
+	 * netdev_trig_notify() by trigger_data->lock.
 	 */
 	mutex_lock(&trigger_data->lock);
 	sysfs_update_group(&dev->kobj, &netdev_trig_link_speed_attrs_group);
@@ -610,9 +611,14 @@ static const struct attribute_group netdev_trig_attrs_group = {
 	.attrs = netdev_trig_attrs,
 };
 
+/*
+ * The link_speed attribute group is not listed here: it is created and
+ * destroyed by activate() / deactivate() so that its sysfs_update_group()
+ * refreshes can never race with the LED core's device_add_groups() /
+ * device_remove_groups().
+ */
 static const struct attribute_group *netdev_trig_groups[] = {
 	&netdev_trig_attrs_group,
-	&netdev_trig_link_speed_attrs_group,
 	NULL,
 };
 
@@ -660,7 +666,12 @@ static int netdev_trig_notify(struct notifier_block *nb,
 		fallthrough;
 	case NETDEV_CHANGE:
 		get_device_state(trigger_data);
-		/* Refresh link_speed visibility */
+		/*
+		 * Refresh link_speed attribute visibility.  The group is
+		 * owned by this trigger and never touched by the LED core, so
+		 * updating it here under trigger_data->lock cannot race with
+		 * device_add_groups() / device_remove_groups().
+		 */
 		if (evt == NETDEV_CHANGE)
 			sysfs_update_group(&led_cdev->dev->kobj,
 					   &netdev_trig_link_speed_attrs_group);
@@ -784,10 +795,29 @@ static int netdev_trig_activate(struct led_classdev *led_cdev)
 
 	led_set_trigger_data(led_cdev, trigger_data);
 
+	/*
+	 * Own the link_speed attribute group here instead of listing it in
+	 * netdev_led_trigger.groups, so its later sysfs_update_group() refreshes
+	 * cannot race with the LED core's device_add_groups() /
+	 * device_remove_groups().  Create it before registering the notifier so
+	 * that a NETDEV_CHANGE cannot refresh a not-yet-created group.
+	 */
+	rc = sysfs_create_group(&led_cdev->dev->kobj,
+				&netdev_trig_link_speed_attrs_group);
+	if (rc)
+		goto err_free;
+
 	rc = register_netdevice_notifier(&trigger_data->notifier);
 	if (rc)
-		kfree(trigger_data);
+		goto err_remove_group;
 
+	return 0;
+
+err_remove_group:
+	sysfs_remove_group(&led_cdev->dev->kobj,
+			   &netdev_trig_link_speed_attrs_group);
+err_free:
+	kfree(trigger_data);
 	return rc;
 }
 
@@ -796,6 +826,13 @@ static void netdev_trig_deactivate(struct led_classdev *led_cdev)
 	struct led_netdev_data *trigger_data = led_get_trigger_data(led_cdev);
 
 	unregister_netdevice_notifier(&trigger_data->notifier);
+
+	/*
+	 * The notifier is gone, so no sysfs_update_group() can run concurrently
+	 * now; tear down the group we created in activate().
+	 */
+	sysfs_remove_group(&led_cdev->dev->kobj,
+			   &netdev_trig_link_speed_attrs_group);
 
 	cancel_delayed_work_sync(&trigger_data->work);
 
