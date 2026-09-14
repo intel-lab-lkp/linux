@@ -79,6 +79,7 @@ struct rz_mtu3_cnt {
 	u32 count[RZ_MTU3_MAX_LOGICAL_CNTR_CHANNELS];
 	u8 timer_mode[RZ_MTU3_MAX_LOGICAL_CNTR_CHANNELS];
 	bool count_is_enabled[RZ_MTU3_MAX_LOGICAL_CNTR_CHANNELS];
+	bool mtclkc_mtclkd;
 };
 
 static const enum counter_function rz_mtu3_count_functions[] = {
@@ -178,6 +179,12 @@ static void rz_mtu3_set_count(struct rz_mtu3_channel *const ch, int id,
 		rz_mtu3_32bit_ch_write(ch, RZ_MTU3_TCNTLW, count);
 	else
 		rz_mtu3_16bit_ch_write(ch, RZ_MTU3_TCNT, count);
+}
+
+static void rz_mtu3_set_phcksel(struct rz_mtu3_channel *const ch, bool enable)
+{
+	rz_mtu3_shared_reg_update_bit(ch, RZ_MTU3_TMDR3, RZ_MTU3_TMDR3_PHCKSEL,
+				      enable);
 }
 
 static int rz_mtu3_count_read(struct counter_device *counter,
@@ -388,6 +395,8 @@ static void rz_mtu3_32bit_cnt_setting(struct counter_device *counter)
 	struct rz_mtu3_channel *const ch2 = rz_mtu3_get_ch(counter, 1);
 	struct rz_mtu3_cnt *const priv = counter_priv(counter);
 
+	rz_mtu3_set_phcksel(priv->ch, priv->mtclkc_mtclkd);
+
 	rz_mtu3_8bit_ch_write(ch1, RZ_MTU3_TMDR1,
 			      priv->timer_mode[RZ_MTU3_32_BIT_CH]);
 
@@ -407,6 +416,8 @@ static void rz_mtu3_16bit_cnt_setting(struct counter_device *counter, int id)
 	struct rz_mtu3_channel *const ch = rz_mtu3_get_ch(counter, id);
 	struct rz_mtu3_cnt *const priv = counter_priv(counter);
 
+	if (id == RZ_MTU3_16_BIT_MTU2_CH)
+		rz_mtu3_set_phcksel(priv->ch, priv->mtclkc_mtclkd);
 	rz_mtu3_8bit_ch_write(ch, RZ_MTU3_TMDR1, priv->timer_mode[id]);
 	rz_mtu3_set_ceiling(ch, id, priv->ceiling[id]);
 	rz_mtu3_set_count(ch, id, priv->count[id]);
@@ -569,17 +580,13 @@ static int rz_mtu3_ext_input_phase_clock_select_get(struct counter_device *count
 						    u32 *ext_input_phase_clock_select)
 {
 	struct rz_mtu3_cnt *const priv = counter_priv(counter);
-	unsigned long tmdr;
 	int ret;
 
 	ret = rz_mtu3_lock_if_ch0_is_enabled(priv);
 	if (ret)
 		return ret;
 
-	pm_runtime_get_sync(counter->parent);
-	tmdr = rz_mtu3_shared_reg_read(priv->ch, RZ_MTU3_TMDR3);
-	pm_runtime_put(counter->parent);
-	*ext_input_phase_clock_select = test_bit(RZ_MTU3_TMDR3_PHCKSEL, &tmdr);
+	*ext_input_phase_clock_select = priv->mtclkc_mtclkd;
 	mutex_unlock(&priv->lock);
 
 	return 0;
@@ -595,11 +602,10 @@ static int rz_mtu3_ext_input_phase_clock_select_set(struct counter_device *count
 	if (ret)
 		return ret;
 
-	pm_runtime_get_sync(counter->parent);
-	rz_mtu3_shared_reg_update_bit(priv->ch, RZ_MTU3_TMDR3,
-				      RZ_MTU3_TMDR3_PHCKSEL,
-				      ext_input_phase_clock_select);
-	pm_runtime_put(counter->parent);
+	if (priv->count_is_enabled[RZ_MTU3_16_BIT_MTU2_CH] ||
+	    priv->count_is_enabled[RZ_MTU3_32_BIT_CH])
+		rz_mtu3_set_phcksel(priv->ch, ext_input_phase_clock_select);
+	priv->mtclkc_mtclkd = ext_input_phase_clock_select;
 	mutex_unlock(&priv->lock);
 
 	return 0;
@@ -629,8 +635,6 @@ static int rz_mtu3_action_read(struct counter_device *counter,
 	struct rz_mtu3_channel *const ch = rz_mtu3_get_ch(counter, count->id);
 	struct rz_mtu3_cnt *const priv = counter_priv(counter);
 	enum counter_function function;
-	bool mtclkc_mtclkd;
-	unsigned long tmdr;
 	int ret;
 
 	ret = rz_mtu3_lock_if_count_is_enabled(ch, priv, count->id);
@@ -647,10 +651,8 @@ static int rz_mtu3_action_read(struct counter_device *counter,
 	*action = COUNTER_SYNAPSE_ACTION_NONE;
 
 	if (count->id != RZ_MTU3_16_BIT_MTU1_CH) {
-		tmdr = rz_mtu3_shared_reg_read(priv->ch, RZ_MTU3_TMDR3);
-		mtclkc_mtclkd = test_bit(RZ_MTU3_TMDR3_PHCKSEL, &tmdr);
-		if ((mtclkc_mtclkd && is_signal_ab) ||
-		    (!mtclkc_mtclkd && !is_signal_ab)) {
+		if ((priv->mtclkc_mtclkd && is_signal_ab) ||
+		    (!priv->mtclkc_mtclkd && !is_signal_ab)) {
 			mutex_unlock(&priv->lock);
 			return 0;
 		}
@@ -812,6 +814,7 @@ static int rz_mtu3_cnt_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	priv = counter_priv(counter);
+	priv->mtclkc_mtclkd = true;
 	priv->ceiling[RZ_MTU3_16_BIT_MTU1_CH] = U16_MAX;
 	priv->ceiling[RZ_MTU3_16_BIT_MTU2_CH] = U16_MAX;
 	priv->ceiling[RZ_MTU3_32_BIT_CH] = U32_MAX;
