@@ -97,6 +97,10 @@ pvr_power_fw_disable(struct pvr_device *pvr_dev, bool hard_reset, bool rpm_suspe
 	if (!hard_reset) {
 		cancel_delayed_work_sync(&pvr_dev->watchdog.work);
 
+		/* The worker just cancelled may have lost the device. */
+		if (pvr_dev->lost)
+			return -EIO;
+
 		err = pvr_power_request_idle(pvr_dev);
 		if (err)
 			return err;
@@ -372,24 +376,19 @@ pvr_power_device_suspend(struct device *dev)
 	struct platform_device *plat_dev = to_platform_device(dev);
 	struct drm_device *drm_dev = platform_get_drvdata(plat_dev);
 	struct pvr_device *pvr_dev = to_pvr_device(drm_dev);
-	int err = 0;
-	int idx;
+	int err;
 
-	if (!drm_dev_enter(drm_dev, &idx))
-		return -EIO;
+	/* A lost device is left as the failed reset left it. */
+	if (pvr_dev->lost)
+		return 0;
 
 	if (READ_ONCE(pvr_dev->fw_dev.initialised)) {
 		err = pvr_power_fw_disable(pvr_dev, false, true);
 		if (err)
-			goto err_drm_dev_exit;
+			return pvr_dev->lost ? 0 : err;
 	}
 
-	err = pvr_dev->device_data->pwr_ops->power_off(pvr_dev);
-
-err_drm_dev_exit:
-	drm_dev_exit(idx);
-
-	return err;
+	return pvr_dev->device_data->pwr_ops->power_off(pvr_dev);
 }
 
 int
@@ -398,33 +397,24 @@ pvr_power_device_resume(struct device *dev)
 	struct platform_device *plat_dev = to_platform_device(dev);
 	struct drm_device *drm_dev = platform_get_drvdata(plat_dev);
 	struct pvr_device *pvr_dev = to_pvr_device(drm_dev);
-	int idx;
 	int err;
 
-	if (!drm_dev_enter(drm_dev, &idx))
-		return -EIO;
+	if (pvr_dev->lost)
+		return 0;
 
 	err = pvr_dev->device_data->pwr_ops->power_on(pvr_dev);
 	if (err)
-		goto err_drm_dev_exit;
+		return err;
 
 	if (READ_ONCE(pvr_dev->fw_dev.initialised)) {
 		err = pvr_power_fw_enable(pvr_dev, true);
-		if (err)
-			goto err_power_off;
+		if (err) {
+			pvr_dev->device_data->pwr_ops->power_off(pvr_dev);
+			return err;
+		}
 	}
 
-	drm_dev_exit(idx);
-
 	return 0;
-
-err_power_off:
-	pvr_dev->device_data->pwr_ops->power_off(pvr_dev);
-
-err_drm_dev_exit:
-	drm_dev_exit(idx);
-
-	return err;
 }
 
 int
