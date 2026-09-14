@@ -239,6 +239,8 @@ struct neigh_table {
 	struct list_head	gc_list;
 	struct list_head	managed_list;
 	spinlock_t		lock;
+	/* Serializes proxy timer rearming with teardown. */
+	spinlock_t		proxy_timer_lock;
 	unsigned long		last_rand;
 	struct neigh_statistics	__percpu *stats;
 	struct neigh_hash_table __rcu *nht;
