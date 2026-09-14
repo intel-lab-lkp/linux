@@ -726,6 +726,17 @@ void ivpu_cmdq_abort_all_jobs(struct ivpu_device *vdev, u32 ctx_id, u32 cmdq_id)
 	mutex_unlock(&vdev->submitted_jobs_lock);
 }
 
+void ivpu_context_abort_all_jobs(struct ivpu_device *vdev, u32 ctx_id)
+{
+	struct ivpu_job *job;
+	unsigned long id;
+
+	guard(mutex)(&vdev->submitted_jobs_lock);
+	xa_for_each(&vdev->submitted_jobs_xa, id, job)
+		if (job->file_priv->ctx.id == ctx_id)
+			ivpu_job_signal_and_destroy(vdev, id, DRM_IVPU_JOB_STATUS_ABORTED);
+}
+
 static int ivpu_job_submit(struct ivpu_job *job, u8 priority, u32 cmdq_id)
 {
 	struct ivpu_file_priv *file_priv = job->file_priv;

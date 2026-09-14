@@ -393,6 +393,17 @@ static void ivpu_postclose(struct drm_device *dev, struct drm_file *file)
 	ivpu_dbg(vdev, FILE, "file_priv close: ctx %u process %s pid %d\n",
 		 file_priv->ctx.id, current->comm, task_pid_nr(current));
 
+	if (pm_runtime_get_if_active(vdev->drm.dev) > 0) {
+		mutex_lock(&file_priv->lock);
+		if (file_priv->bound && !file_priv->aborted)
+			ivpu_context_abort_locked(file_priv);
+		mutex_unlock(&file_priv->lock);
+
+		ivpu_context_abort_all_jobs(vdev, file_priv->ctx.id);
+
+		ivpu_rpm_put(vdev);
+	}
+
 	ivpu_ms_cleanup(file_priv);
 	ivpu_file_priv_put(&file_priv);
 }
