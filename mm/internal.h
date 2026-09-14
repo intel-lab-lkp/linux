@@ -593,7 +593,8 @@ struct zap_details;
 void zap_vma_range_batched(struct mmu_gather *tlb,
 		struct vm_area_struct *vma, unsigned long addr,
 		unsigned long size, struct zap_details *details);
-int zap_vma_for_reaping(struct vm_area_struct *vma);
+int zap_vma_for_reaping(struct vm_area_struct *vma, unsigned long start,
+			unsigned long end);
 int folio_unmap_invalidate(struct address_space *mapping, struct folio *folio,
 			   gfp_t gfp);
 

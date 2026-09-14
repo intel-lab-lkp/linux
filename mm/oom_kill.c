@@ -503,10 +503,17 @@ static DECLARE_WAIT_QUEUE_HEAD(oom_reaper_wait);
 static struct task_struct *oom_reaper_list;
 static DEFINE_SPINLOCK(oom_reaper_lock);
 
-static bool __oom_reap_task_mm(struct mm_struct *mm)
+/*
+ * Called with mmap_lock held for read.  Returns with it still held on 0
+ * (done) or -EBUSY (part could not be reaped, try again later), and drops
+ * it only on -EAGAIN, when it was handed over to a queued writer and the
+ * caller should retake it and start over.
+ */
+static int __oom_reap_task_mm(struct mm_struct *mm)
 {
 	struct vm_area_struct *vma;
-	bool ret = true;
+	unsigned long addr, end;
+	int ret = 0;
 	MA_STATE(mas, &mm->mm_mt, ULONG_MAX, ULONG_MAX);
 
 	/*
@@ -538,8 +545,25 @@ static bool __oom_reap_task_mm(struct mm_struct *mm)
 		 * count elevated without a good reason.
 		 */
 		if (vma_is_anonymous(vma) || !(vma->vm_flags & VM_SHARED)) {
-			if (zap_vma_for_reaping(vma))
-				ret = false;
+			/*
+			 * Zap in 1G chunks and hand mmap_lock over whenever a
+			 * writer is queued on it, so it does not wait for the
+			 * whole reap.
+			 */
+			end = vma->vm_end;
+			while (end > vma->vm_start) {
+				addr = max(vma->vm_start, ALIGN_DOWN(end - 1, SZ_1G));
+				if (zap_vma_for_reaping(vma, addr, end)) {
+					ret = -EBUSY;
+					break;
+				}
+				end = addr;
+				if (!mmap_lock_is_contended(mm))
+					continue;
+
+				mmap_read_unlock(mm);
+				return -EAGAIN;
+			}
 		}
 	}
 
@@ -549,16 +573,17 @@ static bool __oom_reap_task_mm(struct mm_struct *mm)
 /*
  * Reaps the address space of the given task.
  *
- * Returns true on success and false if none or part of the address space
- * has been reclaimed and the caller should retry later.
+ * Returns 0 when done, -EAGAIN if mmap_lock was handed over to a writer
+ * and the caller should start over, and -EBUSY if none or part of the
+ * address space has been reclaimed and the caller should retry later.
  */
-static bool oom_reap_task_mm(struct task_struct *tsk, struct mm_struct *mm)
+static int oom_reap_task_mm(struct task_struct *tsk, struct mm_struct *mm)
 {
-	bool ret = true;
+	int ret = 0;
 
 	if (!mmap_read_trylock(mm)) {
 		trace_skip_task_reaping(tsk->pid);
-		return false;
+		return -EBUSY;
 	}
 
 	/*
@@ -576,7 +601,9 @@ static bool oom_reap_task_mm(struct task_struct *tsk, struct mm_struct *mm)
 
 	/* failed to reap part of the address space. Try again later */
 	ret = __oom_reap_task_mm(mm);
-	if (!ret)
+	if (ret == -EAGAIN)	/* handed the lock over, already dropped */
+		return ret;
+	if (ret)
 		goto out_finish;
 
 	pr_info("oom_reaper: reaped process %d (%s), now anon-rss:%lukB, file-rss:%lukB, shmem-rss:%lukB\n",
@@ -595,15 +622,15 @@ out_unlock:
 #define MAX_OOM_REAP_RETRIES 10
 static void oom_reap_task(struct task_struct *tsk)
 {
-	int attempts = 0;
+	int attempts = 0, ret;
 	struct mm_struct *mm = tsk->signal->oom_mm;
 
-	/* Retry the mmap_read_trylock(mm) a few times */
-	while (attempts++ < MAX_OOM_REAP_RETRIES && !oom_reap_task_mm(tsk, mm))
+	/* Retry the mmap_read_trylock(mm) a few times; handing the lock over is not an attempt */
+	while ((ret = oom_reap_task_mm(tsk, mm)) &&
+	       (ret == -EAGAIN || ++attempts < MAX_OOM_REAP_RETRIES))
 		schedule_timeout_idle(HZ/10);
 
-	if (attempts <= MAX_OOM_REAP_RETRIES ||
-	    mm_flags_test(MMF_OOM_SKIP, mm))
+	if (!ret || mm_flags_test(MMF_OOM_SKIP, mm))
 		goto done;
 
 	pr_info("oom_reaper: unable to reap pid:%d (%s)\n",
@@ -1227,6 +1254,7 @@ SYSCALL_DEFINE2(process_mrelease, int, pidfd, unsigned int, flags)
 	if (!reap)
 		goto drop_mm;
 
+again:
 	if (mmap_read_lock_killable(mm)) {
 		ret = -EINTR;
 		goto drop_mm;
@@ -1235,8 +1263,15 @@ SYSCALL_DEFINE2(process_mrelease, int, pidfd, unsigned int, flags)
 	 * Check MMF_OOM_SKIP again under mmap_read_lock protection to ensure
 	 * possible change in exit_mmap is seen
 	 */
-	if (!mm_flags_test(MMF_OOM_SKIP, mm) && !__oom_reap_task_mm(mm))
-		ret = -EAGAIN;
+	if (!mm_flags_test(MMF_OOM_SKIP, mm)) {
+		ret = __oom_reap_task_mm(mm);
+		if (ret == -EAGAIN) {	/* a writer got the lock, queue up again */
+			ret = 0;
+			goto again;
+		}
+		if (ret == -EBUSY)
+			ret = -EAGAIN;
+	}
 	mmap_read_unlock(mm);
 
 drop_mm:

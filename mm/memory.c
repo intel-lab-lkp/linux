@@ -2207,15 +2207,18 @@ static void __zap_vma_range(struct mmu_gather *tlb, struct vm_area_struct *vma,
 }
 
 /**
- * zap_vma_for_reaping - zap all page table entries in the vma without blocking
+ * zap_vma_for_reaping - zap a range of the vma without blocking
  * @vma: The vma to zap.
+ * @start: The first address to zap.
+ * @end: One past the last address to zap.
  *
- * Zap all page table entries in the vma without blocking for use by the oom
- * killer. Hugetlb vmas are not supported.
+ * Zap the page table entries in [@start, @end) of the vma without blocking
+ * for use by the oom killer. Hugetlb vmas are not supported.
  *
  * Returns: 0 on success, -EBUSY if we would have to block.
  */
-int zap_vma_for_reaping(struct vm_area_struct *vma)
+int zap_vma_for_reaping(struct vm_area_struct *vma, unsigned long start,
+			unsigned long end)
 {
 	struct zap_details details = {
 		.reaping = true,
@@ -2224,7 +2227,7 @@ int zap_vma_for_reaping(struct vm_area_struct *vma)
 	struct mmu_gather tlb;
 
 	mmu_notifier_range_init(&range, MMU_NOTIFY_CLEAR, 0, vma->vm_mm,
-				vma->vm_start, vma->vm_end);
+				start, end);
 	tlb_gather_mmu(&tlb, vma->vm_mm);
 	if (mmu_notifier_invalidate_range_start_nonblock(&range)) {
 		tlb_finish_mmu(&tlb);
