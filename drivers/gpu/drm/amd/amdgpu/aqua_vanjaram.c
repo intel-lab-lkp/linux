@@ -635,6 +635,8 @@ static ssize_t aqua_vanjaram_read_pcie_state(struct amdgpu_device *adev,
 	if (max_size < szbuf)
 		return -EOVERFLOW;
 
+	memset(buf, 0, szbuf);
+
 	pcie_regs = (struct amdgpu_regs_pcie_v1_0 *)((uint8_t *)buf +
 						     sizeof(*pcie_reg_state));
 	pcie_regs->inst_header.instance = 0;
@@ -729,6 +731,8 @@ static ssize_t aqua_vanjaram_read_xgmi_state(struct amdgpu_device *adev,
 	if (max_size < szbuf)
 		return -EOVERFLOW;
 
+	memset(buf, 0, szbuf);
+
 	p = &xgmi_reg_state->xgmi_state_regs[0];
 	for_each_inst(i, adev->aid_mask) {
 		for (j = 0; j < xgmi_inst; ++j) {
@@ -802,6 +806,8 @@ static ssize_t aqua_vanjaram_read_wafl_state(struct amdgpu_device *adev,
 
 	if (max_size < szbuf)
 		return -EOVERFLOW;
+
+	memset(buf, 0, szbuf);
 
 	p = &wafl_reg_state->wafl_state_regs[0];
 	for_each_inst(i, adev->aid_mask) {
@@ -928,6 +934,8 @@ static ssize_t aqua_vanjaram_read_usr_state(struct amdgpu_device *adev,
 							     num_smn);
 	if (max_size < szbuf)
 		return -EOVERFLOW;
+
+	memset(buf, 0, szbuf);
 
 	p = &usr_reg_state->usr_state_regs[0];
 	for_each_inst(i, adev->aid_mask) {
