@@ -4656,6 +4656,36 @@ static bool camss_is_receiver_subdev(struct camss *camss,
 }
 
 /*
+ * camss_csid_source_vc - Virtual channel behind a CSID source pad
+ * @camss: CAMSS device
+ * @sd: Subdevice to test
+ * @pad: Source pad index on @sd
+ *
+ * The CSID demultiplexes virtual channels to its source pads, source pad
+ * MSM_CSID_PAD_FIRST_SRC + n carrying virtual channel n (see the en_vc mask
+ * maintained by csid_link_setup()). Walking a pipeline upstream, this tells
+ * which virtual channel, and so which stream of a shared transmitter, the
+ * pipeline belongs to.
+ *
+ * Return the virtual channel, or -1 if @sd is not a CSID of @camss or @pad is
+ * not one of its source pads.
+ */
+int camss_csid_source_vc(struct camss *camss, struct v4l2_subdev *sd,
+			 unsigned int pad)
+{
+	unsigned int i;
+
+	if (pad < MSM_CSID_PAD_FIRST_SRC)
+		return -1;
+
+	for (i = 0; i < camss->res->csid_num; i++)
+		if (sd == &camss->csid[i].subdev)
+			return pad - MSM_CSID_PAD_FIRST_SRC;
+
+	return -1;
+}
+
+/*
  * camss_find_transmitter_pad - Find the pad of the CSI-2 transmitter
  * @camss: CAMSS device
  * @entity: Media entity in the current pipeline

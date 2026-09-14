@@ -169,6 +169,8 @@ int camss_enable_clocks(int nclocks, struct camss_clock *clock,
 void camss_disable_clocks(int nclocks, struct camss_clock *clock);
 unsigned int *camss_subdev_stream_users(struct camss *camss,
 					struct v4l2_subdev *sd);
+int camss_csid_source_vc(struct camss *camss, struct v4l2_subdev *sd,
+			 unsigned int pad);
 struct media_pad *camss_find_sensor_pad(struct media_entity *entity);
 s64 camss_get_link_freq(struct camss *camss, struct media_entity *entity,
 			unsigned int bpp, unsigned int lanes);

@@ -253,14 +253,39 @@ static int video_prepare_streaming(struct vb2_queue *q)
  * video_source_pad_streams - Streams routed to a subdev source pad
  * @sd: Streams-aware subdevice
  * @pad: Source pad index on @sd
+ * @vc: Virtual channel of the pipeline, or -1 if unknown
+ *
+ * When a transmitter aggregates several cameras onto one output, that pad
+ * carries one stream per camera and each of them is a separate pipeline here.
+ * Enabling or disabling the whole pad would start or stop every camera at
+ * once, so pick out the single stream this pipeline owns: the one the frame
+ * descriptor reports on the virtual channel the CSID demultiplexed it from.
+ * With @vc unknown, or without a frame descriptor to map it, the whole pad is
+ * returned, which is the case for a transmitter driving one camera per output
+ * pad.
  *
  * Return the mask of streams of the active routes ending on @pad.
  */
-static u64 video_source_pad_streams(struct v4l2_subdev *sd, u32 pad)
+static u64 video_source_pad_streams(struct v4l2_subdev *sd, u32 pad, int vc)
 {
 	struct v4l2_subdev_state *state;
 	struct v4l2_subdev_route *route;
+	struct v4l2_mbus_frame_desc fd;
+	u64 vc_mask = ~0ULL;
 	u64 mask = 0;
+	int ret;
+
+	if (vc >= 0) {
+		ret = v4l2_subdev_call(sd, pad, get_frame_desc, pad, &fd);
+		if (!ret && fd.type == V4L2_MBUS_FRAME_DESC_TYPE_CSI2) {
+			unsigned int i;
+
+			vc_mask = 0;
+			for (i = 0; i < fd.num_entries; i++)
+				if (fd.entry[i].bus.csi2.vc == vc)
+					vc_mask |= BIT_ULL(fd.entry[i].stream);
+		}
+	}
 
 	state = v4l2_subdev_lock_and_get_active_state(sd);
 	if (!state)
@@ -269,6 +294,8 @@ static u64 video_source_pad_streams(struct v4l2_subdev *sd, u32 pad)
 	for_each_active_route(&state->routing, route)
 		if (route->source_pad == pad)
 			mask |= BIT_ULL(route->source_stream);
+
+	mask &= vc_mask;
 
 	v4l2_subdev_unlock_state(state);
 
@@ -325,6 +352,7 @@ static int video_start_streaming(struct vb2_queue *q, unsigned int count)
 	struct media_entity *entity;
 	struct media_pad *pad;
 	struct v4l2_subdev *subdev;
+	int vc = -1;
 	int ret;
 
 	ret = video_device_pipeline_alloc_start(vdev);
@@ -350,8 +378,13 @@ static int video_start_streaming(struct vb2_queue *q, unsigned int count)
 		entity = pad->entity;
 		subdev = media_entity_to_v4l2_subdev(entity);
 
+		if (vc < 0)
+			vc = camss_csid_source_vc(video->camss, subdev,
+						  pad->index);
+
 		if (subdev->flags & V4L2_SUBDEV_FL_STREAMS) {
-			u64 mask = video_source_pad_streams(subdev, pad->index);
+			u64 mask = video_source_pad_streams(subdev, pad->index,
+							    vc);
 
 			if (!mask)
 				break;
@@ -387,6 +420,7 @@ static void video_stop_streaming(struct vb2_queue *q)
 	struct media_entity *entity;
 	struct media_pad *pad;
 	struct v4l2_subdev *subdev;
+	int vc = -1;
 	int ret;
 
 	entity = &vdev->entity;
@@ -402,8 +436,13 @@ static void video_stop_streaming(struct vb2_queue *q)
 		entity = pad->entity;
 		subdev = media_entity_to_v4l2_subdev(entity);
 
+		if (vc < 0)
+			vc = camss_csid_source_vc(video->camss, subdev,
+						  pad->index);
+
 		if (subdev->flags & V4L2_SUBDEV_FL_STREAMS) {
-			u64 mask = video_source_pad_streams(subdev, pad->index);
+			u64 mask = video_source_pad_streams(subdev, pad->index,
+							    vc);
 
 			if (!mask)
 				break;
