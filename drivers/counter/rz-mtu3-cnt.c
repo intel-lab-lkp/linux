@@ -81,6 +81,7 @@ struct rz_mtu3_cnt {
 	bool count_is_enabled[RZ_MTU3_MAX_LOGICAL_CNTR_CHANNELS];
 	bool direction[RZ_MTU3_MAX_LOGICAL_CNTR_CHANNELS];
 	bool mtclkc_mtclkd;
+	bool cascade_enable;
 };
 
 static const enum counter_function rz_mtu3_count_functions[] = {
@@ -100,44 +101,6 @@ static inline struct rz_mtu3_channel *rz_mtu3_get_ch(struct counter_device *coun
 	const size_t ch_id = rz_mtu3_get_hw_ch(id);
 
 	return &priv->ch[ch_id];
-}
-
-static bool rz_mtu3_is_counter_invalid(struct counter_device *counter, int id)
-{
-	struct rz_mtu3_cnt *const priv = counter_priv(counter);
-	unsigned long tmdr;
-
-	pm_runtime_get_sync(counter->parent);
-	tmdr = rz_mtu3_shared_reg_read(priv->ch, RZ_MTU3_TMDR3);
-	pm_runtime_put(counter->parent);
-
-	if (id == RZ_MTU3_32_BIT_CH && test_bit(RZ_MTU3_TMDR3_LWA, &tmdr))
-		return false;
-
-	if (id != RZ_MTU3_32_BIT_CH && !test_bit(RZ_MTU3_TMDR3_LWA, &tmdr))
-		return false;
-
-	return true;
-}
-
-static int rz_mtu3_lock_if_counter_is_valid(struct counter_device *counter,
-					    struct rz_mtu3_channel *const ch,
-					    struct rz_mtu3_cnt *const priv,
-					    int id)
-{
-	mutex_lock(&priv->lock);
-
-	if (ch->is_busy && !priv->count_is_enabled[id]) {
-		mutex_unlock(&priv->lock);
-		return -EINVAL;
-	}
-
-	if (rz_mtu3_is_counter_invalid(counter, id)) {
-		mutex_unlock(&priv->lock);
-		return -EBUSY;
-	}
-
-	return 0;
 }
 
 static int rz_mtu3_lock_if_count_is_enabled(struct rz_mtu3_channel *const ch,
@@ -195,17 +158,19 @@ static bool rz_mtu3_get_direction(struct rz_mtu3_channel *const ch)
 	return !!(tsr & RZ_MTU3_TSR_TCFD);
 }
 
+static void rz_mtu3_set_lwa(struct rz_mtu3_channel *const ch, bool enable)
+{
+	rz_mtu3_shared_reg_update_bit(ch, RZ_MTU3_TMDR3, RZ_MTU3_TMDR3_LWA,
+				      enable);
+}
+
 static int rz_mtu3_count_read(struct counter_device *counter,
 			      struct counter_count *count, u64 *val)
 {
 	struct rz_mtu3_channel *const ch = rz_mtu3_get_ch(counter, count->id);
 	struct rz_mtu3_cnt *const priv = counter_priv(counter);
-	int ret;
 
-	ret = rz_mtu3_lock_if_counter_is_valid(counter, ch, priv, count->id);
-	if (ret)
-		return ret;
-
+	mutex_lock(&priv->lock);
 	if (priv->count_is_enabled[count->id])
 		priv->count[count->id] = rz_mtu3_get_count(ch, count->id);
 	*val = priv->count[count->id];
@@ -219,12 +184,8 @@ static int rz_mtu3_count_write(struct counter_device *counter,
 {
 	struct rz_mtu3_channel *const ch = rz_mtu3_get_ch(counter, count->id);
 	struct rz_mtu3_cnt *const priv = counter_priv(counter);
-	int ret;
 
-	ret = rz_mtu3_lock_if_counter_is_valid(counter, ch, priv, count->id);
-	if (ret)
-		return ret;
-
+	mutex_lock(&priv->lock);
 	if (priv->count_is_enabled[count->id])
 		rz_mtu3_set_count(ch, count->id, val);
 	priv->count[count->id] = val;
@@ -343,14 +304,9 @@ static int rz_mtu3_count_ceiling_read(struct counter_device *counter,
 				      struct counter_count *count,
 				      u64 *ceiling)
 {
-	struct rz_mtu3_channel *const ch = rz_mtu3_get_ch(counter, count->id);
 	struct rz_mtu3_cnt *const priv = counter_priv(counter);
-	int ret;
 
-	ret = rz_mtu3_lock_if_counter_is_valid(counter, ch, priv, count->id);
-	if (ret)
-		return ret;
-
+	mutex_lock(&priv->lock);
 	*ceiling = priv->ceiling[count->id];
 	mutex_unlock(&priv->lock);
 	return 0;
@@ -362,11 +318,8 @@ static int rz_mtu3_count_ceiling_write(struct counter_device *counter,
 {
 	struct rz_mtu3_channel *const ch = rz_mtu3_get_ch(counter, count->id);
 	struct rz_mtu3_cnt *const priv = counter_priv(counter);
-	int ret;
 
-	ret = rz_mtu3_lock_if_counter_is_valid(counter, ch, priv, count->id);
-	if (ret)
-		return ret;
+	mutex_lock(&priv->lock);
 
 	switch (count->id) {
 	case RZ_MTU3_16_BIT_MTU1_CH:
@@ -403,6 +356,7 @@ static void rz_mtu3_32bit_cnt_setting(struct counter_device *counter)
 	struct rz_mtu3_cnt *const priv = counter_priv(counter);
 
 	rz_mtu3_set_phcksel(priv->ch, priv->mtclkc_mtclkd);
+	rz_mtu3_set_lwa(ch1, true);
 
 	rz_mtu3_8bit_ch_write(ch1, RZ_MTU3_TMDR1,
 			      priv->timer_mode[RZ_MTU3_32_BIT_CH]);
@@ -479,6 +433,7 @@ static void rz_mtu3_terminate_counter(struct counter_device *counter, int id)
 	priv->direction[id] = rz_mtu3_get_direction(ch);
 
 	if (id == RZ_MTU3_32_BIT_CH) {
+		rz_mtu3_set_lwa(ch1, false);
 		rz_mtu3_disable(ch2);
 		rz_mtu3_disable(ch1);
 		rz_mtu3_release_channel(ch2);
@@ -549,17 +504,9 @@ static int rz_mtu3_cascade_counts_enable_get(struct counter_device *counter,
 					     u8 *cascade_enable)
 {
 	struct rz_mtu3_cnt *const priv = counter_priv(counter);
-	unsigned long tmdr;
-	int ret;
 
-	ret = rz_mtu3_lock_if_ch0_is_enabled(priv);
-	if (ret)
-		return ret;
-
-	pm_runtime_get_sync(counter->parent);
-	tmdr = rz_mtu3_shared_reg_read(priv->ch, RZ_MTU3_TMDR3);
-	pm_runtime_put(counter->parent);
-	*cascade_enable = test_bit(RZ_MTU3_TMDR3_LWA, &tmdr);
+	mutex_lock(&priv->lock);
+	*cascade_enable = priv->cascade_enable;
 	mutex_unlock(&priv->lock);
 
 	return 0;
@@ -569,16 +516,9 @@ static int rz_mtu3_cascade_counts_enable_set(struct counter_device *counter,
 					     u8 cascade_enable)
 {
 	struct rz_mtu3_cnt *const priv = counter_priv(counter);
-	int ret;
 
-	ret = rz_mtu3_lock_if_ch0_is_enabled(priv);
-	if (ret)
-		return ret;
-
-	pm_runtime_get_sync(counter->parent);
-	rz_mtu3_shared_reg_update_bit(priv->ch, RZ_MTU3_TMDR3,
-				      RZ_MTU3_TMDR3_LWA, cascade_enable);
-	pm_runtime_put(counter->parent);
+	mutex_lock(&priv->lock);
+	priv->cascade_enable = cascade_enable;
 	mutex_unlock(&priv->lock);
 
 	return 0;
