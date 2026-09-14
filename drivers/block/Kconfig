@@ -372,4 +372,16 @@ config BLK_DEV_ZONED_LOOP
 
 	  If unsure, say N.
 
+config VIRTIO_BLK_INLINE_ENCRYPTION
+	tristate "Virtio block inline encryption support"
+	depends on VIRTIO_BLK && BLK_INLINE_ENCRYPTION
+	help
+	  Say 'Y or M' here will allow the virtio block driver to route crypto
+	  requests to a different operating system in a virtualized
+	  environment. This is useful to encrypt the data stored in the storage
+	  by using storage inline crypto engine. The control queue feature bit
+	  must be negotiated to enable this functionality.
+
+	  If unsure, say N.
+
 endif # BLK_DEV
