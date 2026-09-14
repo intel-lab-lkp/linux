@@ -215,6 +215,14 @@ enum scx_ops_flags {
 	 */
 	SCX_OPS_TID_TO_TASK		= 1LLU << 8,
 
+	/*
+	 * Call ops.update_idle() with idle=true when an idle CPU picks idle
+	 * again. Custom idle tracking can use this to restore an unused idle
+	 * reservation after a kick that did not dispatch a task. Automatically
+	 * enabled for cid-form schedulers.
+	 */
+	SCX_OPS_UPDATE_IDLE_TO_IDLE	= 1LLU << 9,
+
 	SCX_OPS_ALL_FLAGS		= SCX_OPS_KEEP_BUILTIN_IDLE |
 					  SCX_OPS_ENQ_LAST |
 					  SCX_OPS_ENQ_EXITING |
@@ -223,7 +231,8 @@ enum scx_ops_flags {
 					  SCX_OPS_SWITCH_PARTIAL |
 					  SCX_OPS_BUILTIN_IDLE_PER_NODE |
 					  SCX_OPS_ALWAYS_ENQ_IMMED |
-					  SCX_OPS_TID_TO_TASK,
+					  SCX_OPS_TID_TO_TASK |
+					  SCX_OPS_UPDATE_IDLE_TO_IDLE,
 
 	/* high 8 bits are internal, don't include in SCX_OPS_ALL_FLAGS */
 	__SCX_OPS_INTERNAL_MASK		= 0xffLLU << 56,
@@ -569,6 +578,14 @@ struct sched_ext_ops {
 	 *
 	 * Specify the %SCX_OPS_KEEP_BUILTIN_IDLE flag to keep the built-in idle
 	 * tracking.
+	 *
+	 * With %SCX_OPS_UPDATE_IDLE_TO_IDLE, this operation is also called with
+	 * @idle true when an idle CPU picks idle again without leaving the
+	 * idle state. The flag is automatically enabled for cid-form
+	 * schedulers. Such notifications must not restart idle accounting or
+	 * repeat actions that require an actual idle entry. Track the previous
+	 * idle state separately from availability bits cleared by idle
+	 * reservations.
 	 */
 	void (*update_idle)(s32 cpu, bool idle);
 
@@ -1026,7 +1043,7 @@ struct sched_ext_ops {
  * Differences from sched_ext_ops:
  *   - select_cpu       -> select_cid (returns cid)
  *   - dispatch         -> dispatch (cpu arg is now cid)
- *   - update_idle      -> update_idle (cpu arg is now cid)
+ *   - update_idle      -> update_idle (cid arg, also called on idle repicks)
  *   - set_cpumask      -> set_cmask (cmask instead of cpumask)
  *   - cpu_online       -> cid_online
  *   - cpu_offline      -> cid_offline

@@ -20,6 +20,9 @@ static DEFINE_STATIC_KEY_FALSE(scx_builtin_idle_enabled);
 /* Enable/disable per-node idle cpumasks */
 static DEFINE_STATIC_KEY_FALSE(scx_builtin_idle_per_node);
 
+/* Idle-to-idle notifications are a property of the root hierarchy. */
+static DEFINE_STATIC_KEY_FALSE(scx_update_idle_to_idle);
+
 /* Enable/disable LLC aware optimizations */
 static DEFINE_STATIC_KEY_FALSE(scx_selcpu_topo_llc);
 
@@ -734,13 +737,12 @@ static void update_builtin_idle(int cpu, bool idle)
 }
 
 /*
- * Notify schedulers of an idle transition on @cpu's cid, delivering to every
- * sched that holds %SCX_CAP_BASE on the cid (the root holds every cap). A real
- * transition (@do_notify) reaches all holders. A forced one (@root_renotify for
- * the root, a sub-sched's idle_renotify marker for a sub) reaches only the owed
- * scheds.
+ * Notify schedulers holding %SCX_CAP_BASE on @rq's cid (the root holds every
+ * cap). Real transitions and enabled idle repicks (@notify_all) reach all
+ * holders. A forced notification (@root_renotify for the root, a sub-sched's
+ * idle_renotify marker for a sub) reaches only the owed scheds.
  */
-static void scx_idle_notify(struct rq *rq, bool idle, bool do_notify, bool root_renotify)
+static void scx_idle_notify(struct rq *rq, bool idle, bool notify_all, bool root_renotify)
 {
 	s32 cpu = cpu_of(rq);
 	s32 cid = scx_cpu_arg(cpu);
@@ -751,7 +753,7 @@ static void scx_idle_notify(struct rq *rq, bool idle, bool do_notify, bool root_
 
 	/* with no sub-sched, only the root can be owed a notification */
 	if (!scx_has_subs()) {
-		if ((do_notify || root_renotify) &&
+		if ((notify_all || root_renotify) &&
 		    SCX_HAS_OP(root, update_idle) && !scx_bypassing(root, cpu))
 			SCX_CALL_OP(root, update_idle, rq, cid, idle);
 		return;
@@ -775,8 +777,8 @@ static void scx_idle_notify(struct rq *rq, bool idle, bool do_notify, bool root_
 			forced = true;
 		}
 #endif
-		if ((do_notify || forced) && SCX_HAS_OP(pos, update_idle) &&
-		    !scx_bypassing(pos, cpu))
+		if ((notify_all || forced) &&
+		    SCX_HAS_OP(pos, update_idle) && !scx_bypassing(pos, cpu))
 			SCX_CALL_OP(pos, update_idle, rq, cid, idle);
 		pos = scx_next_descendant_pre(pos, root);
 	}
@@ -786,21 +788,22 @@ static void scx_idle_notify(struct rq *rq, bool idle, bool do_notify, bool root_
  * Update the idle state of a CPU to @idle.
  *
  * If @do_notify is true, ops.update_idle() is invoked to notify the scx
- * scheduler of an actual idle state transition (idle to busy or vice
- * versa). If @do_notify is false, only the idle state in the idle masks is
- * refreshed without invoking ops.update_idle().
+ * scheduler of an actual idle state transition (idle to busy or vice versa). If
+ * @do_notify is false, refresh the idle masks and notify schedulers with
+ * %SCX_OPS_UPDATE_IDLE_TO_IDLE or an outstanding forced notification.
  *
  * This distinction is necessary, because an idle CPU can be "reserved" and
- * awakened via scx_bpf_pick_idle_cpu() + scx_bpf_kick_cpu(), marking it as
- * busy even if no tasks are dispatched. In this case, the CPU may return
- * to idle without a true state transition. Refreshing the idle masks
- * without invoking ops.update_idle() ensures accurate idle state tracking
- * while avoiding unnecessary updates and maintaining balanced state
- * transitions.
+ * awakened via scx_bpf_pick_idle_cpu() + scx_bpf_kick_cpu(), marking it as busy
+ * even if no tasks are dispatched. In this case, the CPU may return to idle
+ * without a true state transition. Refreshing idle tracking restores the unused
+ * reservation. Schedulers receiving repeated notifications must distinguish
+ * idle refreshes from transitions for accounting.
  */
 void __scx_update_idle(struct rq *rq, bool idle, bool do_notify)
 {
 	int cpu = cpu_of(rq);
+	u32 renotify;
+	bool notify_all;
 
 	lockdep_assert_rq_held(rq);
 
@@ -818,20 +821,19 @@ void __scx_update_idle(struct rq *rq, bool idle, bool do_notify)
 	 * An idle pick also fires it to flush a forced notify owed to a sched
 	 * that missed transitions while bypassed or on a cid it just gained.
 	 * unbypass_renotify_idle() and scx_process_sync_ecaps() arm the per-rq
-	 * gates, and scx_idle_notify() targets the owed scheds.
+	 * gates, and scx_idle_notify() targets the owed scheds. Schedulers with
+	 * SCX_OPS_UPDATE_IDLE_TO_IDLE receive every idle pick.
 	 *
 	 * This must come after the builtin idle update so that BPF schedulers
 	 * can create interlocking between ops.update_idle() and ops.enqueue() -
 	 * either enqueue() sees the idle bit or update_idle() sees the task
 	 * that enqueue() queued.
 	 */
-	if (do_notify ||
-	    (idle && (rq->scx.flags &
-		      (SCX_RQ_SUB_IDLE_RENOTIFY | SCX_RQ_ROOT_IDLE_RENOTIFY)))) {
-		bool root_renotify = rq->scx.flags & SCX_RQ_ROOT_IDLE_RENOTIFY;
-
-		rq->scx.flags &= ~(SCX_RQ_SUB_IDLE_RENOTIFY | SCX_RQ_ROOT_IDLE_RENOTIFY);
-		scx_idle_notify(rq, idle, do_notify, root_renotify);
+	notify_all = do_notify || (idle && static_branch_unlikely(&scx_update_idle_to_idle));
+	renotify = rq->scx.flags & (SCX_RQ_SUB_IDLE_RENOTIFY | SCX_RQ_ROOT_IDLE_RENOTIFY);
+	if (notify_all || (idle && renotify)) {
+		rq->scx.flags &= ~renotify;
+		scx_idle_notify(rq, idle, notify_all, renotify & SCX_RQ_ROOT_IDLE_RENOTIFY);
 	}
 }
 
@@ -869,6 +871,11 @@ void scx_idle_enable(struct sched_ext_ops *ops)
 	else
 		static_branch_disable_cpuslocked(&scx_builtin_idle_per_node);
 
+	if (ops->flags & SCX_OPS_UPDATE_IDLE_TO_IDLE)
+		static_branch_enable_cpuslocked(&scx_update_idle_to_idle);
+	else
+		static_branch_disable_cpuslocked(&scx_update_idle_to_idle);
+
 	reset_idle_masks(ops);
 }
 
@@ -876,6 +883,7 @@ void scx_idle_disable(void)
 {
 	static_branch_disable(&scx_builtin_idle_enabled);
 	static_branch_disable(&scx_builtin_idle_per_node);
+	static_branch_disable(&scx_update_idle_to_idle);
 }
 
 /********************************************************************************

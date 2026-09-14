@@ -7243,6 +7243,7 @@ struct scx_sched *scx_alloc_and_add_sched(struct scx_enable_cmd *cmd,
 	 */
 	if (cmd->is_cid_type) {
 		sch->ops_cid = *cmd->ops_cid;
+		sch->ops_cid.flags |= SCX_OPS_UPDATE_IDLE_TO_IDLE;
 		sch->is_cid_type = true;
 	} else {
 		sch->ops = *cmd->ops;
@@ -7565,7 +7566,7 @@ static void scx_root_enable_workfn(struct kthread_work *work)
 		goto err_disable;
 	}
 
-	scx_idle_enable(ops);
+	scx_idle_enable(&sch->ops);
 
 	/*
 	 * A cid-form scheduler finalizes its cid layout in ops.init_cids(),

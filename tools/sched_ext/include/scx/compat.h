@@ -214,6 +214,7 @@ static inline bool __COMPAT_struct_has_field(const char *type, const char *field
 #define SCX_OPS_ALLOW_QUEUED_WAKEUP SCX_OPS_FLAG(SCX_OPS_ALLOW_QUEUED_WAKEUP)
 #define SCX_OPS_BUILTIN_IDLE_PER_NODE SCX_OPS_FLAG(SCX_OPS_BUILTIN_IDLE_PER_NODE)
 #define SCX_OPS_ALWAYS_ENQ_IMMED SCX_OPS_FLAG(SCX_OPS_ALWAYS_ENQ_IMMED)
+#define SCX_OPS_UPDATE_IDLE_TO_IDLE SCX_OPS_FLAG(SCX_OPS_UPDATE_IDLE_TO_IDLE)
 
 #define SCX_PICK_IDLE_FLAG(name) __COMPAT_ENUM_OR_ZERO("scx_pick_idle_cpu_flags", #name)
 
@@ -273,6 +274,7 @@ static inline long scx_hotplug_seq(void)
  * - v6.19: ops.cgroup_set_idle()
  * - v7.1:  ops.sub_attach(), ops.sub_detach(), ops.sub_cgroup_id
  * - v7.3:  ops.rescue_bandwidth_ppt, ops.rescue_quantum_us
+ * - v7.3:  SCX_OPS_UPDATE_IDLE_TO_IDLE
  */
 #define __SCX_OPS_OPEN(__ops_name, __scx_name, __ops_struct) ({			\
 	struct __scx_name *__oskel;						\
