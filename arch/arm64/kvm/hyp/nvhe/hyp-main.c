@@ -539,11 +539,39 @@ out:
 	cpu_reg(host_ctxt, 1) =  ret;
 }
 
+/*
+ * With no hyp vCPU loaded for it, the host vCPU and its VM may be unpinned,
+ * and so unmapped at EL2: both are pinned from the vCPU's first run, and
+ * KVM_SET_VCPU_EVENTS can reach here before that.
+ */
+static void adjust_pc_unloaded(struct kvm_vcpu *host_vcpu)
+{
+	struct kvm *host_kvm;
+
+	if (hyp_pin_shared_mem(host_vcpu, host_vcpu + 1))
+		return;
+
+	/* The exception entry reads the VM's MTE flag. */
+	host_kvm = kern_hyp_va(host_vcpu->kvm);
+	if (!hyp_pin_shared_mem(host_kvm, host_kvm + 1)) {
+		__kvm_adjust_pc(host_vcpu);
+		hyp_unpin_shared_mem(host_kvm, host_kvm + 1);
+	}
+
+	hyp_unpin_shared_mem(host_vcpu, host_vcpu + 1);
+}
+
 static void handle___kvm_adjust_pc(struct kvm_cpu_context *host_ctxt)
 {
 	DECLARE_REG(struct kvm_vcpu *, vcpu, host_ctxt, 1);
+	struct pkvm_hyp_vcpu *hyp_vcpu;
+	struct kvm_vcpu *host_vcpu;
 
-	__kvm_adjust_pc(kern_hyp_va(vcpu));
+	host_vcpu = __get_host_hyp_vcpus(vcpu, &hyp_vcpu);
+	if (host_vcpu)
+		__kvm_adjust_pc(host_vcpu);
+	else
+		adjust_pc_unloaded(kern_hyp_va(vcpu));
 }
 
 static void handle___kvm_flush_vm_context(struct kvm_cpu_context *host_ctxt)
