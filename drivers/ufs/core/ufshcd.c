@@ -2473,10 +2473,13 @@ int ufshcd_copy_query_response(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
 	struct ufs_query_res *query_res = &hba->dev_cmd.query.response;
 
 	memcpy(&query_res->upiu_res, &lrbp->ucd_rsp_ptr->qr, QUERY_OSF_SIZE);
+	query_res->data_segment_length =
+		be16_to_cpu(lrbp->ucd_rsp_ptr->header.data_segment_length);
 
-	/* Get the descriptor */
+	/* Get the descriptor or aggregated data packet */
 	if (hba->dev_cmd.query.descriptor &&
-	    lrbp->ucd_rsp_ptr->qr.opcode == UPIU_QUERY_OPCODE_READ_DESC) {
+	    (lrbp->ucd_rsp_ptr->qr.opcode == UPIU_QUERY_OPCODE_READ_DESC ||
+	     lrbp->ucd_rsp_ptr->qr.opcode == UPIU_QUERY_OPCODE_AGGREGATED_READ)) {
 		u8 *descp = (u8 *)lrbp->ucd_rsp_ptr +
 				GENERAL_UPIU_REQUEST_SIZE;
 		u16 resp_len;

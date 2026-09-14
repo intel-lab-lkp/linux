@@ -30,6 +30,7 @@ static_assert(sizeof(struct utp_upiu_query) == 20);
  * (ALIGNED_DEVMAN_RSP_SIZE) minus the fixed UPIU header it follows.
  */
 #define QUERY_AGGREGATED_MAX_SIZE (4096 - GENERAL_UPIU_REQUEST_SIZE)
+#define QUERY_AGG_GROUP_HDR_SIZE  4
 #define QUERY_DESC_MIN_SIZE       2
 #define QUERY_DESC_HDR_SIZE       2
 #define QUERY_OSF_SIZE            (GENERAL_UPIU_REQUEST_SIZE - \
@@ -568,6 +569,48 @@ enum ufs_dev_pwr_mode {
 };
 
 #define UFS_WB_BUF_REMAIN_PERCENT(val) ((val) / 10)
+
+/* AGGREGATION TYPE field of an AGGREGATED READ query request */
+enum ufs_agg_type {
+	UFS_AGG_TYPE_ALL_FLAGS			= BIT(0),
+	UFS_AGG_TYPE_ALL_ATTRS			= BIT(1),
+	UFS_AGG_TYPE_DEVICE_DESC		= BIT(2),
+	/* Unit descriptors and the RPMB unit descriptor */
+	UFS_AGG_TYPE_UNIT_DESC			= BIT(3),
+	UFS_AGG_TYPE_INTERCONNECT_DESC	= BIT(4),
+	UFS_AGG_TYPE_STRING_DESC		= BIT(5),
+	/* Geometry descriptor and power descriptor */
+	UFS_AGG_TYPE_GEOMETRY_POWER_DESC	= BIT(6),
+	UFS_AGG_TYPE_HEALTH_DESC		= BIT(7),
+};
+
+/* Group Type field of an aggregated data packet group header. */
+enum ufs_agg_group_type {
+	UFS_AGG_GROUP_FLAGS		= 0x01,
+	UFS_AGG_GROUP_ATTRS		= 0x02,
+	/* Any descriptor with a unique IDN, i.e. all but the string ones */
+	UFS_AGG_GROUP_DESCS		= 0x03,
+	UFS_AGG_GROUP_MANUFACTURER_STR	= 0x04,
+	UFS_AGG_GROUP_PRODUCT_NAME_STR	= 0x05,
+	UFS_AGG_GROUP_OEM_ID_STR	= 0x06,
+	UFS_AGG_GROUP_SERIAL_NUMBER_STR	= 0x07,
+	UFS_AGG_GROUP_PRODUCT_REV_STR	= 0x08,
+};
+
+/**
+ * struct utp_agg_group_header - aggregated data packet group header
+ * @group_type: type of the data carried by this group, see ufs_agg_group_type
+ * @reserved: reserved
+ * @next_group_offset: byte offset from the start of the packet to the next
+ *	group; zero ends the chain
+ */
+struct utp_agg_group_header {
+	u8 group_type;
+	u8 reserved;
+	__be16 next_group_offset;
+};
+
+static_assert(sizeof(struct utp_agg_group_header) == QUERY_AGG_GROUP_HDR_SIZE);
 
 /**
  * struct utp_cmd_rsp - RESPONSE UPIU structure
