@@ -355,10 +355,8 @@ static void kthread_affine_node(void)
 	if (WARN_ON_ONCE(kthread_is_per_cpu(current)))
 		return;
 
-	if (!zalloc_cpumask_var(&affinity, GFP_KERNEL)) {
-		WARN_ON_ONCE(1);
+	if (!zalloc_cpumask_var(&affinity, GFP_KERNEL))
 		return;
-	}
 
 	mutex_lock(&kthread_affinity_lock);
 	WARN_ON_ONCE(!list_empty(&kthread->affinity_node));
