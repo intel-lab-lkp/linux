@@ -998,7 +998,7 @@ static int ieee80211_netdev_fill_forward_path(struct net_device_path_ctx *ctx,
 	local = sdata->local;
 
 	if (!local->ops->net_fill_forward_path)
-		return -EOPNOTSUPP;
+		return 1;
 
 	rcu_read_lock();
 	switch (sdata->vif.type) {

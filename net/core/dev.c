@@ -787,6 +787,8 @@ int dev_fill_forward_path(struct net_device_path_ctx *ctx,
 		ret = ctx->dev->netdev_ops->ndo_fill_forward_path(ctx, path);
 		if (ret < 0)
 			goto err_out;
+		else if (ret > 0)
+			goto out;
 
 		stack->num_paths++;
 		if (WARN_ON_ONCE(last_dev == ctx->dev))
@@ -795,7 +797,7 @@ int dev_fill_forward_path(struct net_device_path_ctx *ctx,
 
 	if (!ctx->dev)
 		return ret;
-
+out:
 	path = dev_fwd_path(stack);
 	if (!path)
 		goto err_out;
