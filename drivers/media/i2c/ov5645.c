@@ -115,7 +115,7 @@ static inline struct ov5645 *to_ov5645(struct v4l2_subdev *sd)
 
 static const struct reg_value ov5645_global_init_setting[] = {
 	{ 0x3103, 0x11 },
-	{ 0x3008, 0x42 },
+	{ OV5645_SYSTEM_CTRL0, OV5645_SYSTEM_CTRL0_STOP },
 	{ 0x3103, 0x03 },
 	{ 0x3503, 0x07 },
 	{ 0x3002, 0x1c },
@@ -198,7 +198,6 @@ static const struct reg_value ov5645_global_init_setting[] = {
 	{ 0x5a00, 0x08 },
 	{ 0x5a21, 0x00 },
 	{ 0x5a24, 0x00 },
-	{ 0x3008, 0x02 },
 	{ 0x3503, 0x00 },
 	{ 0x5180, 0xff },
 	{ 0x5181, 0xf2 },
@@ -347,8 +346,6 @@ static const struct reg_value ov5645_global_init_setting[] = {
 	{ 0x3a11, 0x60 },
 	{ 0x3a1f, 0x14 },
 	{ 0x0601, 0x02 },
-	{ 0x3008, 0x42 },
-	{ 0x3008, 0x02 },
 	{ OV5645_IO_MIPI_CTRL00, 0x40 },
 	{ OV5645_MIPI_CTRL00, 0x24 },
 	{ OV5645_PAD_OUTPUT00, 0x70 }
