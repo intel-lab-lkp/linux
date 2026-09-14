@@ -175,8 +175,11 @@ static void transfer(int fd, uint8_t const * const tx, uint8_t const * const rx,
 	}
 
 	ret = ioctl(fd, SPI_IOC_MESSAGE(effective_transfers), &tr);
-	if (ret < 1)
+	if (ret < 1) {
+		if (tx)
+			hex_dump(tx, len, 32, "TX");
 		pabort("can't send spi message");
+	}
 
 	if (verbose && tx)
 		hex_dump(tx, len, 32, "TX");
