@@ -4,7 +4,7 @@
 $id: http://devicetree.org/schemas/rtc/nxp,pcf85363.yaml#
 $schema: http://devicetree.org/meta-schemas/core.yaml#
 
-title: Philips PCF85263/PCF85363 Real Time Clock
+title: NXP PCF85263/PCF85363 Real Time Clock
 
 maintainers:
   - Alexandre Belloni <alexandre.belloni@bootlin.com>
@@ -39,6 +39,24 @@ properties:
   start-year: true
   wakeup-source: true
 
+  nxp,timestamp-mode:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    items:
+      - enum: [0, 1, 2] # TSR1: NONE, FE, LE
+        description: TSR1 mode
+      - enum: [0, 1, 2, 3, 4, 5] # TSR2: NONE, FB, LB, LV, FE, LE
+        description: TSR2 mode
+      - enum: [0, 1, 2, 3] # TSR3: NONE, FB, LB, LV
+        description: TSR3 mode
+    description: |
+      Defines timestamp modes for TSR1, TSR2, and TSR3.
+      Use macros from <dt-bindings/rtc/pcf85363-tsr.h>.
+
+      Each value corresponds to a mode constant:
+        - TSR1: NONE, FE, LE
+        - TSR2: NONE, FB, LB, LV, FE, LE
+        - TSR3: NONE, FB, LB, LV
+
 required:
   - compatible
   - reg
@@ -47,6 +65,7 @@ additionalProperties: false
 
 examples:
   - |
+    #include <dt-bindings/rtc/pcf85363-tsr.h>
     i2c {
         #address-cells = <1>;
         #size-cells = <0>;
@@ -56,5 +75,7 @@ examples:
             reg = <0x51>;
             #clock-cells = <0>;
             quartz-load-femtofarads = <12500>;
+            wakeup-source;
+            nxp,timestamp-mode = <PCF85363_TSR1_FE PCF85363_TSR2_LB PCF85363_TSR3_LV>;
         };
     };
