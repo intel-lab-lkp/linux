@@ -3442,7 +3442,27 @@ static void ext4_journalled_invalidate_folio(struct folio *folio,
 					   size_t offset,
 					   size_t length)
 {
-	WARN_ON(__ext4_journalled_invalidate_folio(folio, offset, length) < 0);
+	tid_t commit_tid;
+	int ret;
+	bool has_transaction;
+	journal_t *journal = EXT4_JOURNAL(folio->mapping->host);
+
+	while (1) {
+		ret = __ext4_journalled_invalidate_folio(folio, offset, length);
+		if (ret != -EBUSY) {
+			WARN_ON(ret < 0);
+			return;
+		}
+		has_transaction = false;
+		read_lock(&journal->j_state_lock);
+		if (journal->j_committing_transaction) {
+			commit_tid = journal->j_committing_transaction->t_tid;
+			has_transaction = true;
+		}
+		read_unlock(&journal->j_state_lock);
+		if (has_transaction)
+			jbd2_log_wait_commit(journal, commit_tid);
+	}
 }
 
 static bool ext4_release_folio(struct folio *folio, gfp_t wait)
