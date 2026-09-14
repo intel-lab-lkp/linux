@@ -363,10 +363,21 @@ static inline bool homa_make_header_avl(struct sk_buff *skb)
 
 extern unsigned int homa_net_id;
 
+void     homa_message_out_init(struct homa_rpc *rpc, int length);
+int      homa_resend_data(struct homa_rpc *rpc, int start, int end);
 void     homa_rpc_handoff(struct homa_rpc *rpc);
+int      homa_rpc_tx_end(struct homa_rpc *rpc);
+struct sk_buff *__homa_skb_alloc(int length);
+int      homa_tx_copy_from_user(struct homa_rpc *rpc, struct iov_iter *iter,
+				bool xmit);
+struct sk_buff *homa_tx_skb_alloc(struct homa_rpc *rpc, u32 offset, u32 *end);
+int      homa_tx_skb_send(struct homa_rpc *rpc, u32 offset, u32 *end);
 int      homa_xmit_control(enum homa_packet_type type, void *contents,
 			   size_t length, struct homa_rpc *rpc);
+int      __homa_xmit_control(void *contents, size_t length,
+			     struct homa_route *route, struct homa_sock *hsk);
 void     homa_xmit_data(struct homa_rpc *rpc);
+void     homa_xmit_unknown(struct sk_buff *skb, struct homa_sock *hsk);
 
 int      homa_message_in_init(struct homa_rpc *rpc, int length);
 
