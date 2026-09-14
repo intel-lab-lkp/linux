@@ -41,6 +41,17 @@ from kdoc.python_version import PythonVersion
 RECOMMENDED_VERSION = PythonVersion("3.4.3").version
 MIN_PYTHON_VERSION = PythonVersion("3.7").version
 
+# Docutils 0.22 renders large literal blocks into sphinxVerbatim rather than
+# sphinxalltt, which puts them through framed.sty.  Sphinx's size limit on
+# that path is sphinx-doc/sphinx#3099, fixed only in the 9.1.0 release:
+#     https://github.com/sphinx-doc/sphinx/issues/3099
+# Upstream ships this sort of work in a new minor rather than backporting it:
+# the Docutils 0.22 support went out as 9.0.0 after a backport to 8.2.x was
+# asked for and declined:
+#     https://github.com/orgs/sphinx-doc/discussions/14055
+MIN_DOCUTILS_SPHINX = PythonVersion("9.1.0").version
+DOCUTILS_BREAKS_AT = PythonVersion("0.22").version
+
 
 class DepManager:
     """
@@ -490,9 +501,77 @@ class MissingCheckers(AncillaryMethods):
             self.need_sphinx = 1
             return
 
+        # Check this before the version_check exit below: htmldocs invokes
+        # this script in that mode, and the warning has to reach it.
+        self.check_docutils(sphinx)
+
         # On version check mode, just assume Sphinx has all mandatory deps
         if self.version_check and self.cur_version >= RECOMMENDED_VERSION:
             sys.exit(0)
+
+    def get_docutils_version(self, cmd):
+        """
+        Get the Docutils version a sphinx-build command would use.
+
+        Docutils is a Python module rather than a program, so it has to be
+        asked of the very interpreter that runs sphinx-build: a venv and the
+        system install can hold different versions. Take it from the script's
+        shebang, falling back to the interpreter running this script.
+        """
+        python = sys.executable
+
+        try:
+            with open(cmd, "r", encoding="utf-8") as f:
+                match = re.match(r"^#!\s*(\S+)", f.readline())
+                if match:
+                    python = match.group(1)
+        except (OSError, UnicodeDecodeError):
+            pass
+
+        try:
+            result = self.run(
+                [python, "-c", "import docutils; print(docutils.__version__)"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        except (OSError, subprocess.CalledProcessError):
+            return None
+
+        match = re.match(r"^\s*([0-9]+(?:\.[0-9]+)*)", result.stdout)
+        if not match:
+            return None
+
+        return PythonVersion.parse_version(match.group(1))
+
+    def check_docutils(self, sphinx):
+        """
+        Warn when Sphinx is paired with a Docutils its LaTeX builder
+        cannot take at the sizes this documentation uses.
+
+        The pair arrives either way round: a distribution may relax the
+        upper bound Sphinx declares in order to ship a newer Docutils, and
+        Sphinx 9.0.x declares support for Docutils 0.22 itself while still
+        carrying the size limit that breaks these builds. Both still build
+        HTML, so nothing looks wrong until pdfdocs is run.
+        """
+        if not self.cur_version or self.cur_version >= MIN_DOCUTILS_SPHINX:
+            return
+
+        docutils_version = self.get_docutils_version(sphinx)
+        if not docutils_version or docutils_version < DOCUTILS_BREAKS_AT:
+            return
+
+        curver = PythonVersion.ver_str(self.cur_version)
+        docver = PythonVersion.ver_str(docutils_version)
+        minver = PythonVersion.ver_str(MIN_DOCUTILS_SPHINX)
+        breakver = PythonVersion.ver_str(DOCUTILS_BREAKS_AT)
+
+        print(f"Warning: Sphinx {curver} with Docutils {docver} produces\n" \
+              "   broken LaTeX for the large literal blocks in this\n" \
+              "   documentation: pdfdocs will fail. Building them needs\n" \
+              f"   Sphinx {minver} or later, or Docutils below {breakver}.\n" \
+              "   HTML builds are unaffected.")
 
     def catcheck(self, filename):
         """
