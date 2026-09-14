@@ -1649,6 +1649,16 @@ static int xhci_urb_enqueue(struct usb_hcd *hcd, struct urb *urb, gfp_t mem_flag
 
 	trace_xhci_urb_enqueue(urb);
 
+	/*
+	 * This camera needs at least 125 us between control transfers
+	 * when used with an Etron xHCI host.
+	 */
+	if ((xhci->quirks & XHCI_ETRON_HOST) &&
+	    usb_endpoint_xfer_control(&urb->ep->desc) &&
+	    le16_to_cpu(urb->dev->descriptor.idVendor) == 0x2bdf &&
+	    le16_to_cpu(urb->dev->descriptor.idProduct) == 0x0280)
+		udelay(125);
+
 	spin_lock_irqsave(&xhci->lock, flags);
 
 	ret = xhci_check_args(hcd, urb->dev, urb->ep,
