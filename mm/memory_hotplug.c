@@ -1937,7 +1937,7 @@ put_folio:
 		folio_put(folio);
 	}
 	if (!list_empty(&source)) {
-		nodemask_t nmask = node_states[N_MEMORY];
+		nodemask_t nmask = node_states[N_MEMORY_PUBLIC];
 		struct migration_target_control mtc = {
 			.nmask = &nmask,
 			.gfp_mask = GFP_KERNEL | __GFP_MOVABLE | __GFP_RETRY_MAYFAIL,
@@ -1953,8 +1953,8 @@ put_folio:
 
 		/*
 		 * try to allocate from a different node but reuse this node
-		 * if there are no other online nodes to be used (e.g. we are
-		 * offlining a part of the only existing node)
+		 * if there are no other public nodes to be used (e.g. we are
+		 * offlining a part of the only public node)
 		 */
 		node_clear(mtc.nid, nmask);
 		if (nodes_empty(nmask))
