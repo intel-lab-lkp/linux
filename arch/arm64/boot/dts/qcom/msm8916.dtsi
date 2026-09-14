@@ -205,7 +205,7 @@
 
 			cpu_sleep_0: cpu-sleep-0 {
 				compatible = "arm,idle-state";
-				idle-state-name = "standalone-power-collapse";
+				idle-state-name = "cpu-pc";
 				arm,psci-suspend-param = <0x40000002>;
 				entry-latency-us = <130>;
 				exit-latency-us = <150>;
@@ -218,6 +218,7 @@
 
 			cluster_ret: cluster-retention {
 				compatible = "domain-idle-state";
+				idle-state-name = "l2-gdhs";
 				arm,psci-suspend-param = <0x41000012>;
 				entry-latency-us = <500>;
 				exit-latency-us = <500>;
@@ -226,6 +227,7 @@
 
 			cluster_pwrdn: cluster-gdhs {
 				compatible = "domain-idle-state";
+				idle-state-name = "l2-pc";
 				arm,psci-suspend-param = <0x41000032>;
 				entry-latency-us = <2000>;
 				exit-latency-us = <2000>;
