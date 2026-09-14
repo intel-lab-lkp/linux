@@ -9,7 +9,7 @@ use crate::{
     block::mq::{request::RequestDataWrapper, Request},
     error::{from_result, Result},
     prelude::*,
-    sync::{aref::ARef, Refcount},
+    sync::{aref::ARef, Refcount, atomic::Relaxed},
     types::ForeignOwnable,
 };
 use core::marker::PhantomData;
@@ -27,14 +27,21 @@ type ForeignBorrowed<'a, T> = <T as ForeignOwnable>::Borrowed<'a>;
 ///
 /// [module level documentation]: kernel::block::mq
 #[macros::vtable]
-pub trait Operations: Sized {
+pub unsafe trait Operations: Sized {
     /// Data associated with the `struct request_queue` that is allocated for
     /// the `GenDisk` associated with this `Operations` implementation.
     type QueueData: ForeignOwnable;
 
     /// Called by the kernel to queue a request with the driver. If `is_last` is
     /// `false`, the driver is allowed to defer committing the request.
-    fn queue_rq(
+    ///
+    /// # Safety
+    ///
+    /// The implementor of this method must ensure that if Err is returned:
+    /// - The request has not already been completed.
+    /// - No ARef derived from the request remains anywhere.
+    /// - No reference was converted to raw or transferred to another thread.
+    unsafe fn queue_rq(
         queue_data: ForeignBorrowed<'_, Self::QueueData>,
         rq: ARef<Request<Self>>,
         is_last: bool,
@@ -113,15 +120,23 @@ impl<T: Operations> OperationsVTable<T> {
         // SAFETY: We have exclusive access and we just set the refcount above.
         unsafe { Request::start_unchecked(&rq) };
 
-        let ret = T::queue_rq(
-            queue_data,
-            rq,
-            // SAFETY: `bd` is valid as required by the safety requirement for
-            // this function.
-            unsafe { (*bd).last },
-        );
+        // SAFETY: `bd` is valid as required by the safety requirement for this function.
+        // `queue_rq` is correctly implemented to not retain or complete the request
+        // if it returns an error.
+        let ret = unsafe { T::queue_rq(
+                queue_data,
+                rq,
+                (*bd).last,
+            )
+        };
 
         if let Err(e) = ret {
+            request
+                .wrapper_ref()
+                .refcount()
+                .as_atomic()
+                .cmpxchg(1, 0, Relaxed)
+                .expect("queue_rq returned an error while retaining or completing the request");
             e.to_blk_status()
         } else {
             bindings::BLK_STS_OK as bindings::blk_status_t
