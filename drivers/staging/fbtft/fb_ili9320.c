@@ -21,7 +21,7 @@
 
 static unsigned int read_devicecode(struct fbtft_par *par)
 {
-	u8 rxbuf[8] = {0, };
+	u8 rxbuf[sizeof(u64)] = {0, };
 
 	write_reg(par, 0x0000);
 	par->fbtftops.read(par, rxbuf, 4);
