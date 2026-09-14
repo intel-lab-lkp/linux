@@ -496,6 +496,7 @@ static int rackmeter_probe(struct macio_dev* mdev,
 		goto bail_stop_dma;
 	}
 	of_node_put(np);
+	of_node_put(i2s);
 	return 0;
 
  bail_stop_dma:
