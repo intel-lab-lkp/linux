@@ -592,7 +592,19 @@ $(obj)/: $(if $(KBUILD_BUILTIN), $(targets-for-builtin)) \
 
 existing-targets := $(wildcard $(sort $(targets)))
 
--include $(foreach f,$(existing-targets),$(dir $(f)).$(notdir $(f)).cmd)
+cmd-files := $(foreach f,$(existing-targets),$(dir $(f)).$(notdir $(f)).cmd)
+
+# depcheck checks timestamps first and outputs only saved command lines of
+# up-to-date targets, falling back to .cmd files if it fails.
+depcheck := $(wildcard $(objtree)/scripts/basic/depcheck)
+
+ifneq ($(and $(depcheck),$(cmd-files)),)
+ifeq ($(shell $(depcheck) $(obj)/.depcheck.mk $(cmd-files) && echo ok),ok)
+cmd-files := $(obj)/.depcheck.mk
+endif
+endif
+
+-include $(cmd-files)
 
 # Create directories for object files if they do not exist
 obj-dirs := $(sort $(patsubst %/,%, $(dir $(targets))))
