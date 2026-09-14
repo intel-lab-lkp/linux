@@ -18,17 +18,19 @@ properties:
               - sophgo,sg2044-aclint-mtimer
           - const: thead,c900-aclint-mtimer
       - items:
+          - const: gf,mips-p8700-aclint-mtimer
+      - items:
           - enum:
               - anlogic,dr1v90-aclint-mtimer
           - const: nuclei,ux900-aclint-mtimer
 
   reg:
-    items:
-      - description: MTIMECMP Registers
+    minItems: 1
+    maxItems: 2
 
   reg-names:
-    items:
-      - const: mtimecmp
+    minItems: 1
+    maxItems: 2
 
   interrupts-extended:
     minItems: 1
@@ -42,6 +44,28 @@ required:
   - reg-names
   - interrupts-extended
 
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: gf,mips-p8700-aclint-mtimer
+    then:
+      properties:
+        reg:
+          minItems: 2
+        reg-names:
+          items:
+            - const: mtime
+            - const: mtimecmp
+    else:
+      properties:
+        reg:
+          maxItems: 1
+        reg-names:
+          items:
+            - const: mtimecmp
+
 examples:
   - |
     timer@ac000000 {
@@ -52,5 +76,16 @@ examples:
                             <&cpu4intc 7>;
       reg = <0xac000000 0x00010000>;
       reg-names = "mtimecmp";
+    };
+
+  - |
+    timer@16108050 {
+      compatible = "gf,mips-p8700-aclint-mtimer";
+      reg = <0x16108050 0x8>, <0x16154000 0x7ff8>;
+      reg-names = "mtime", "mtimecmp";
+      interrupts-extended = <&cpu1intc 7>,
+                            <&cpu2intc 7>,
+                            <&cpu3intc 7>,
+                            <&cpu4intc 7>;
     };
 ...
