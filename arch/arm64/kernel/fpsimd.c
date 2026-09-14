@@ -1316,7 +1316,7 @@ void do_sve_acc(unsigned long esr, struct pt_regs *regs)
 		return;
 	}
 
-	sve_alloc(current, true);
+	sve_alloc(current, false);
 	if (!current->thread.sve_state) {
 		force_sig(SIGKILL);
 		return;
@@ -1332,6 +1332,11 @@ void do_sve_acc(unsigned long esr, struct pt_regs *regs)
 	 * registers or memory, so we must zero all state that is not shared
 	 * with FPSIMD.
 	 *
+	 * When the state is live it stays in the registers, which
+	 * sve_flush_live() zeroes. sve_state is only read when fp_type is
+	 * FP_STATE_SVE, which is only set after sve_save_state() has written
+	 * the whole buffer, so zero it only on the path that builds it here.
+	 *
 	 * SVE traps cannot be taken from streaming mode, so there cannot be
 	 * any effective streaming mode SVE state.
 	 */
@@ -1341,6 +1346,7 @@ void do_sve_acc(unsigned long esr, struct pt_regs *regs)
 		sve_flush_live();
 		fpsimd_bind_task_to_cpu();
 	} else {
+		memset(current->thread.sve_state, 0, sve_state_size(current));
 		fpsimd_to_sve(current);
 		current->thread.fp_type = FP_STATE_SVE;
 		fpsimd_flush_task_state(current);
