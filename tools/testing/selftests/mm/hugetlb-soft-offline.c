@@ -5,6 +5,8 @@
  *   offlining failed with EOPNOTSUPP.
  * - if enable_soft_offline = 1, a hugepage should be dissolved and
  *   nr_hugepages/free_hugepages should be reduced by 1.
+ * - if enable_soft_offline = 3, HugeTLB pages should stay intact and soft
+ *   offlining failed with EOPNOTSUPP.
  *
  * The test allocates 8 default hugepages
  */
@@ -31,6 +33,9 @@
 
 #define EPREFIX " !!! "
 
+#define SOFT_OFFLINE_ENABLED		(1 << 0)
+#define SOFT_OFFLINE_SKIP_HUGETLB	(1 << 1)
+
 static int do_soft_offline(int fd, size_t len, int expect_errno)
 {
 	char *filemap = NULL;
@@ -55,6 +60,7 @@ static int do_soft_offline(int fd, size_t len, int expect_errno)
 	ksft_print_msg("Allocated %#lx bytes of hugetlb pages\n", len);
 
 	hwp_addr = filemap + len / 2;
+	errno = 0;
 	ret = madvise(hwp_addr, pagesize, MADV_SOFT_OFFLINE);
 	ksft_print_msg("MADV_SOFT_OFFLINE %p ret=%d, errno=%d\n",
 		       hwp_addr, ret, errno);
@@ -82,7 +88,7 @@ static int set_enable_soft_offline(int value)
 	char cmd[256] = {0};
 	FILE *cmdfile = NULL;
 
-	if (value != 0 && value != 1)
+	if (value < 0 || value > 3)
 		return -EINVAL;
 
 	sprintf(cmd, "echo %d > /proc/sys/vm/enable_soft_offline", value);
@@ -128,12 +134,16 @@ close:
 static void test_soft_offline_common(int enable_soft_offline)
 {
 	int fd;
-	int expect_errno = enable_soft_offline ? 0 : EOPNOTSUPP;
+	int expect_errno = 0;
 	struct statfs file_stat;
 	unsigned long hugepagesize_kb = 0;
 	unsigned long nr_hugepages_before = 0;
 	unsigned long nr_hugepages_after = 0;
 	int ret;
+
+	if (!(enable_soft_offline & SOFT_OFFLINE_ENABLED) ||
+	    (enable_soft_offline & SOFT_OFFLINE_SKIP_HUGETLB))
+		expect_errno = EOPNOTSUPP;
 
 	ksft_print_msg("Test soft-offline when enabled_soft_offline=%d\n",
 		       enable_soft_offline);
@@ -165,7 +175,7 @@ static void test_soft_offline_common(int enable_soft_offline)
 	// No need for the hugetlbfs file from now on.
 	close(fd);
 
-	if (enable_soft_offline) {
+	if (expect_errno == 0) {
 		if (nr_hugepages_before != nr_hugepages_after + 1) {
 			ksft_test_result_fail("MADV_SOFT_OFFLINE should reduced 1 hugepage\n");
 			return;
@@ -190,8 +200,9 @@ int main(int argc, char **argv)
 	if (!hugetlb_setup_default(8))
 		ksft_exit_skip("not enough hugetlb pages\n");
 
-	ksft_set_plan(2);
+	ksft_set_plan(3);
 
+	test_soft_offline_common(3);
 	test_soft_offline_common(1);
 	test_soft_offline_common(0);
 
