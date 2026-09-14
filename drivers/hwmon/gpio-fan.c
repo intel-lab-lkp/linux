@@ -47,6 +47,7 @@ struct gpio_fan_data {
 	struct gpio_desc	*alarm_gpio;
 	struct work_struct	alarm_work;
 	struct regulator	*supply;
+	bool			pm_enabled;
 };
 
 /*
@@ -528,10 +529,21 @@ static void gpio_fan_stop(void *data)
 	struct gpio_fan_data *fan_data = data;
 
 	mutex_lock(&fan_data->lock);
-	set_fan_speed(data, 0);
+	/* set_fan_speed(0) drops a PM ref; only valid once PM is enabled. */
+	if (fan_data->pm_enabled)
+		set_fan_speed(data, 0);
+	else
+		__set_fan_ctrl(fan_data, fan_data->speed[0].ctrl_val);
 	mutex_unlock(&fan_data->lock);
+}
 
-	pm_runtime_disable(fan_data->dev);
+static void gpio_fan_pm_runtime_disable(void *data)
+{
+	struct gpio_fan_data *fan_data = data;
+
+	/* Registered before pm_runtime_enable() runs; skip if it never did. */
+	if (fan_data->pm_enabled)
+		pm_runtime_disable(fan_data->dev);
 }
 
 static int gpio_fan_probe(struct platform_device *pdev)
@@ -558,6 +570,11 @@ static int gpio_fan_probe(struct platform_device *pdev)
 	if (IS_ERR(fan_data->supply))
 		return dev_err_probe(dev, PTR_ERR(fan_data->supply),
 				     "Failed to get fan-supply");
+
+	/* Register before gpio_fan_stop() so LIFO teardown runs that first. */
+	err = devm_add_action_or_reset(dev, gpio_fan_pm_runtime_disable, fan_data);
+	if (err)
+		return err;
 
 	/* Configure control GPIOs if available. */
 	if (fan_data->gpios && fan_data->num_gpios > 0) {
@@ -586,16 +603,22 @@ static int gpio_fan_probe(struct platform_device *pdev)
 			return err;
 	}
 
+	/* Lock so a racing sysfs write can't double-take a PM ref here. */
+	mutex_lock(&fan_data->lock);
 	pm_runtime_set_suspended(&pdev->dev);
 	pm_runtime_enable(&pdev->dev);
+	fan_data->pm_enabled = true;
 	/* If current GPIO state is active, mark RPM as active as well */
 	if (fan_data->speed_index > 0) {
 		int ret;
 
 		ret = pm_runtime_resume_and_get(&pdev->dev);
-		if (ret)
+		if (ret) {
+			mutex_unlock(&fan_data->lock);
 			return ret;
+		}
 	}
+	mutex_unlock(&fan_data->lock);
 
 	/* Optional cooling device register for Device tree platforms */
 	fan_data->cdev = devm_thermal_of_child_cooling_device_register(dev, np,
