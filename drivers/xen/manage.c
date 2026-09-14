@@ -7,14 +7,17 @@
 
 #include <linux/kernel.h>
 #include <linux/err.h>
+#include <linux/moduleparam.h>
 #include <linux/slab.h>
 #include <linux/reboot.h>
+#include <linux/syscalls.h>
 #include <linux/sysrq.h>
 #include <linux/stop_machine.h>
 #include <linux/suspend.h>
 #include <linux/freezer.h>
 #include <linux/syscore_ops.h>
 #include <linux/export.h>
+#include <linux/workqueue.h>
 
 #include <xen/xen.h>
 #include <xen/xenbus.h>
@@ -37,6 +40,14 @@ enum shutdown_state {
 	   the distinction when we return the reason code to them.  */
 	 SHUTDOWN_HALT = 4,
 };
+
+#undef MODULE_PARAM_PREFIX
+#define MODULE_PARAM_PREFIX "xen."
+
+static bool xen_force_shutdown;
+module_param_named(force_shutdown, xen_force_shutdown, bool, 0444);
+MODULE_PARM_DESC(force_shutdown,
+		 "Force Xen poweroff, halt and reboot requests without a userspace helper");
 
 /* Ignore multiple shutdown requests. */
 static enum shutdown_state shutting_down = SHUTDOWN_INVALID;
@@ -189,15 +200,40 @@ static int poweroff_nb(struct notifier_block *cb, unsigned long code, void *unus
 	}
 	return NOTIFY_DONE;
 }
+
+static void xen_poweroff_work_func(struct work_struct *work)
+{
+	pr_warn("Forcing Xen toolstack shutdown without userspace cleanup\n");
+	ksys_sync();
+	kernel_power_off();
+}
+
+static DECLARE_WORK(xen_poweroff_work, xen_poweroff_work_func);
+
+static void xen_reboot_work_func(struct work_struct *work)
+{
+	pr_warn("Forcing Xen toolstack reboot without userspace cleanup\n");
+	ksys_sync();
+	kernel_restart(NULL);
+}
+
+static DECLARE_WORK(xen_reboot_work, xen_reboot_work_func);
+
 static void do_poweroff(void)
 {
 	switch (system_state) {
 	case SYSTEM_BOOTING:
 	case SYSTEM_SCHEDULING:
-		orderly_poweroff(true);
+		if (xen_force_shutdown)
+			schedule_work(&xen_poweroff_work);
+		else
+			orderly_poweroff(true);
 		break;
 	case SYSTEM_RUNNING:
-		orderly_poweroff(false);
+		if (xen_force_shutdown)
+			schedule_work(&xen_poweroff_work);
+		else
+			orderly_poweroff(false);
 		break;
 	default:
 		/* Don't do it when we are halting/rebooting. */
@@ -209,7 +245,10 @@ static void do_poweroff(void)
 static void do_reboot(void)
 {
 	shutting_down = SHUTDOWN_POWEROFF; /* ? */
-	orderly_reboot();
+	if (xen_force_shutdown)
+		schedule_work(&xen_reboot_work);
+	else
+		orderly_reboot();
 }
 
 static const struct shutdown_handler shutdown_handlers[] = {

@@ -8623,6 +8623,13 @@ Kernel parameters
 			fairer and the number of possible event channels is
 			much higher. Default is on (use fifo events).
 
+	xen.force_shutdown=	[XEN]
+			Force Xen toolstack poweroff, halt and reboot requests in
+			the kernel instead of invoking a userspace helper. This can
+			cause the loss of uncommitted userspace data and should only
+			be enabled for guests without a functional userspace shutdown
+			helper. The default is off.
+
 	xirc2ps_cs=	[NET,PCMCIA]
 			Format:
 			<irq>,<irq_mask>,<io>,<full_duplex>,<do_sound>,<lockup_hack>[,<irq2>[,<irq3>[,<irq4>]]]
