@@ -146,6 +146,12 @@ static int intel_lpss_debugfs_add(struct intel_lpss *lpss)
 {
 	struct dentry *dir;
 
+	/* Exit if DebugFS is not initialized */
+	if (!intel_lpss_debugfs) {
+		lpss->debugfs = NULL;
+		return 0;
+	}
+
 	dir = debugfs_create_dir(dev_name(lpss->dev), intel_lpss_debugfs);
 	if (IS_ERR(dir))
 		return PTR_ERR(dir);
@@ -538,7 +544,15 @@ EXPORT_NS_GPL_DEV_PM_OPS(intel_lpss_pm_ops, INTEL_LPSS) = {
 
 static int __init intel_lpss_init(void)
 {
-	intel_lpss_debugfs = debugfs_create_dir("intel_lpss", NULL);
+	/*
+	 * Check whether DebugFS is initialized to
+	 * prevent unwanted dmesg messages.
+	 */
+	if (debugfs_initialized())
+		intel_lpss_debugfs = debugfs_create_dir("intel_lpss", NULL);
+	else
+		intel_lpss_debugfs = NULL;
+
 	return 0;
 }
 module_init(intel_lpss_init);
