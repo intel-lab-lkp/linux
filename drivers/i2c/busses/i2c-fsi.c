@@ -748,8 +748,11 @@ static void fsi_i2c_remove(struct fsi_device *fsi_dev)
 	struct fsi_i2c_port *port, *tmp;
 
 	list_for_each_entry_safe(port, tmp, &i2c->ports, list) {
+		struct device_node *np = port->adapter.dev.of_node;
+
 		list_del(&port->list);
 		i2c_del_adapter(&port->adapter);
+		of_node_put(np);
 		kfree(port);
 	}
 }
