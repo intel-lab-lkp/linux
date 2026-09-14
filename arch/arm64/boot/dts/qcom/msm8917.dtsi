@@ -112,6 +112,7 @@
 		domain-idle-states {
 			cluster_sleep_0: cluster-sleep-0 {
 				compatible = "domain-idle-state";
+				idle-state-name = "l2-pc";
 				arm,psci-suspend-param = <0x41000053>;
 				entry-latency-us = <700>;
 				exit-latency-us = <1000>;
@@ -124,7 +125,7 @@
 
 			cpu_sleep_0: cpu-sleep-0 {
 				compatible = "arm,idle-state";
-				idle-state-name = "standalone-power-collapse";
+				idle-state-name = "cpu-pc";
 				arm,psci-suspend-param = <0x40000003>;
 				entry-latency-us = <125>;
 				exit-latency-us = <180>;
