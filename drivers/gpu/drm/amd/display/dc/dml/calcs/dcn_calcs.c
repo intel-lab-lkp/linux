@@ -1263,10 +1263,12 @@ bool dcn_validate_bandwidth(
 						/* pipe not split previously needs split */
 						hsplit_pipe = resource_find_free_secondary_pipe_legacy(&context->res_ctx, pool, pipe);
 						ASSERT(hsplit_pipe);
-						split_stream_across_pipes(&context->res_ctx, pool, pipe, hsplit_pipe);
+						if (hsplit_pipe)
+							split_stream_across_pipes(&context->res_ctx, pool, pipe, hsplit_pipe);
 					}
 
-					dcn_bw_calc_rq_dlg_ttu(dc, v, hsplit_pipe, input_idx);
+					if (hsplit_pipe)
+						dcn_bw_calc_rq_dlg_ttu(dc, v, hsplit_pipe, input_idx);
 				} else if (hsplit_pipe && hsplit_pipe->plane_state == pipe->plane_state) {
 					/* merge previously split pipe */
 					pipe->bottom_pipe = hsplit_pipe->bottom_pipe;
