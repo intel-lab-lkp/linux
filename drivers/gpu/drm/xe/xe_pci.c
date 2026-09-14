@@ -1383,7 +1383,13 @@ static int xe_pci_runtime_suspend(struct device *dev)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
 	struct xe_device *xe = pdev_to_xe_device(pdev);
+	bool pme_enabled;
 	int err;
+
+	pme_enabled = xe->pme.capable && !xe->d3cold.allowed &&
+		      pci_enable_wake(pdev, PCI_D3hot, true) == 0;
+
+	xe_pm_update_pme_enabled(xe, pme_enabled);
 
 	/*
 	 * We hold an additional reference to the runtime PM to keep PF in D0
@@ -1395,8 +1401,14 @@ static int xe_pci_runtime_suspend(struct device *dev)
 	xe_assert(xe, !pci_num_vf(pdev));
 
 	err = xe_pm_runtime_suspend(xe);
-	if (err)
+	if (err) {
+		if (pme_enabled) {
+			pci_enable_wake(pdev, PCI_D3hot, false);
+			xe_pm_update_pme_enabled(xe, false);
+		}
+
 		return err;
+	}
 
 	pci_save_state(pdev);
 
@@ -1424,6 +1436,8 @@ static int xe_pci_runtime_resume(struct device *dev)
 		return err;
 
 	pci_restore_state(pdev);
+
+	xe_pm_update_pme_enabled(xe, false);
 
 	if (xe->d3cold.allowed) {
 		err = pci_enable_device(pdev);
