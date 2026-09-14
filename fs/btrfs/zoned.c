@@ -2502,8 +2502,11 @@ static void wait_eb_writebacks(struct btrfs_block_group *block_group)
 			continue;
 		if (eb->start >= end)
 			break;
+		if (!refcount_inc_not_zero(&eb->refs))
+			continue;
 		rcu_read_unlock();
 		wait_on_extent_buffer_writeback(eb);
+		free_extent_buffer(eb);
 		rcu_read_lock();
 	}
 	rcu_read_unlock();
