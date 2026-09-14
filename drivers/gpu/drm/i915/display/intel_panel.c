@@ -190,9 +190,10 @@ intel_panel_highest_mode(struct intel_connector *connector,
 {
 	const struct drm_display_mode *fixed_mode, *best_mode = adjusted_mode;
 
-	/* pick the fixed_mode that has the highest clock */
+	/* pick the highest clock we can seamlessly switch to */
 	list_for_each_entry(fixed_mode, &connector->panel.fixed_modes, head) {
-		if (fixed_mode->clock > best_mode->clock)
+		if (is_alt_drrs_mode(fixed_mode, adjusted_mode) &&
+		    fixed_mode->clock > best_mode->clock)
 			best_mode = fixed_mode;
 	}
 
