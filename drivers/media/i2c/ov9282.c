@@ -133,8 +133,6 @@
 #define OV9282_REG_MIN		0x00
 #define OV9282_REG_MAX		0xfffff
 
-#define OV9282_STROBE_SPAN_FACTOR	192
-
 static const char * const ov9282_supply_names[] = {
 	"avdd",		/* Analog power */
 	"dovdd",	/* Digital I/O power */
@@ -510,6 +508,42 @@ static u32 ov9282_exposure_to_us(struct ov9282 *ov9282, u32 exposure)
 }
 
 /**
+ * ov9282_us_to_flash_duration() - Convert µs to flash duration register value
+ * @ov9282: pointer to ov9282 device
+ * @value: microseconds value to convert
+ *
+ * Calculate "strobe_frame_span" increments from a given value (µs). According
+ * to the datasheet "The step width of shift and span is programmable under
+ * system clock domain.", but this is not documented further. Nonetheless the
+ * step width was found empirically to scale with the line length, so the span
+ * is counted in lines.
+ *
+ * Return: flash duration register value
+ */
+static u32 ov9282_us_to_flash_duration(struct ov9282 *ov9282, u32 value)
+{
+	return div_u64((u64)value * NSEC_PER_USEC, ov9282_line_time_ns(ov9282));
+}
+
+/**
+ * ov9282_flash_duration_to_us() - Convert flash duration register value to µs
+ * @ov9282: pointer to ov9282 device
+ * @value: flash duration register value to convert
+ *
+ * Convert a given "strobe_frame_span" increment value to microseconds. For an
+ * explanation regarding conversion factor see the documentation of
+ * ov9282_us_to_flash_duration. As the calculation there uses an integer
+ * division round up here.
+ *
+ * Return: microseconds
+ */
+static u32 ov9282_flash_duration_to_us(struct ov9282 *ov9282, u32 value)
+{
+	return DIV_ROUND_UP_ULL((u64)value * ov9282_line_time_ns(ov9282),
+				NSEC_PER_USEC);
+}
+
+/**
  * ov9282_update_controls() - Update control ranges based on streaming mode
  * @ov9282: pointer to ov9282 device
  * @mode: pointer to ov9282_mode sensor mode
@@ -583,34 +617,6 @@ error_release_group_hold:
 	ret_hold = cci_write(ov9282->regmap, OV9282_REG_HOLD, 0, NULL);
 
 	return ret ? ret : ret_hold;
-}
-
-static u32 ov9282_us_to_flash_duration(struct ov9282 *ov9282, u32 value)
-{
-	/*
-	 * Calculate "strobe_frame_span" increments from a given value (µs).
-	 * This is quite tricky as "The step width of shift and span is
-	 * programmable under system clock domain.", but it's not documented
-	 * how to program this step width (at least in the datasheet available
-	 * to the author at time of writing).
-	 * The formula below is interpolated from different modes/framerates
-	 * and should work quite well for most settings.
-	 */
-	u32 frame_width = ov9282->cur_mode->width + ov9282->hblank_ctrl->val;
-
-	return value * OV9282_STROBE_SPAN_FACTOR / frame_width;
-}
-
-static u32 ov9282_flash_duration_to_us(struct ov9282 *ov9282, u32 value)
-{
-	/*
-	 * Calculate back to microseconds from "strobe_frame_span" increments.
-	 * As the calculation in ov9282_us_to_flash_duration uses an integer
-	 * divison round up here.
-	 */
-	u32 frame_width = ov9282->cur_mode->width + ov9282->hblank_ctrl->val;
-
-	return DIV_ROUND_UP(value * frame_width, OV9282_STROBE_SPAN_FACTOR);
 }
 
 static int ov9282_set_ctrl(struct v4l2_ctrl *ctrl)
