@@ -674,6 +674,19 @@ static int ov9282_set_ctrl(struct v4l2_ctrl *ctrl)
 		if (ret)
 			return ret;
 		break;
+	case V4L2_CID_HBLANK:
+		/*
+		 * HBLANK affects the line time, which then affects the flash
+		 * duration. Therefore recalculate the flash duration range
+		 * here.
+		 */
+		exposure = ov9282_exposure_to_us(ov9282, ov9282->exp_ctrl->val);
+		ret = __v4l2_ctrl_modify_range(ov9282->flash_duration, 0,
+					       exposure, 1,
+					       OV9282_STROBE_FRAME_SPAN_DEFAULT);
+		if (ret)
+			return ret;
+		break;
 	}
 
 	/* Set controls only if sensor is in power on state */
