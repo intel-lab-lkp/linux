@@ -11,6 +11,8 @@ struct perf_mem_event {
 	u32		aux_event;
 	const char	*tag;
 	const char	*name;
+	/* Name with the swfilt software privilege filter, when supported. */
+	const char	*swfilt_name;
 	const char	*event_name;
 };
 
