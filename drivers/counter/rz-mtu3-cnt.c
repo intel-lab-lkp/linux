@@ -430,7 +430,10 @@ static int rz_mtu3_count_enable_write(struct counter_device *counter,
 		return 0;
 
 	if (enable) {
-		pm_runtime_get_sync(counter->parent);
+		ret = pm_runtime_resume_and_get(counter->parent);
+		if (ret)
+			return ret;
+
 		ret = rz_mtu3_initialize_counter(counter, count->id);
 		if (ret) {
 			pm_runtime_put(counter->parent);
