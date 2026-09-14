@@ -3852,8 +3852,14 @@ static int spi_nor_probe(struct spi_mem *spimem)
 static int spi_nor_remove(struct spi_mem *spimem)
 {
 	struct spi_nor *nor = spi_mem_get_drvdata(spimem);
+	int ret;
 
-	spi_nor_restore(nor);
+	/* As in spi_nor_shutdown(), do not restore under an operation. */
+	ret = spi_nor_prep_and_lock(nor);
+	if (!ret) {
+		spi_nor_restore(nor);
+		spi_nor_unlock_and_unprep(nor);
+	}
 
 	/* Clean up MTD stuff. */
 	return mtd_device_unregister(&nor->mtd);
