@@ -385,6 +385,9 @@ void     homa_rpc_handoff(struct homa_rpc *rpc);
 int      homa_rpc_tx_end(struct homa_rpc *rpc);
 struct sk_buff *__homa_skb_alloc(int length);
 void     homa_spin(int ns);
+void     homa_timer(struct homa *homa);
+void     homa_timer_check_rpc(struct homa_rpc *rpc);
+int      homa_timer_main(void *transport);
 int      homa_tx_copy_from_user(struct homa_rpc *rpc, struct iov_iter *iter,
 				bool xmit);
 struct sk_buff *homa_tx_skb_alloc(struct homa_rpc *rpc, u32 offset, u32 *end);
