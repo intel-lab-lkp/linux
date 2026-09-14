@@ -1786,7 +1786,64 @@ out:									\
 static DEVICE_ATTR_RO(_name)
 
 UFS_ATTRIBUTE(boot_lun_enabled, _BOOT_LU_EN);
-UFS_ATTRIBUTE(current_power_mode, _POWER_MODE);
+
+/*
+ * Per UFS spec, bCurrentPowerMode is the only attribute the device must
+ * respond to in any power mode.  Read it without waking the device to
+ * Active: restore HBA clocks via pm_runtime_get_sync(hba->dev) only
+ * (avoids triggering ufshcd_wl_runtime_resume and its START STOP UNIT),
+ * exit Hibern8 if needed so the link can carry the UPIU, then query.
+ */
+static ssize_t current_power_mode_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	u32 value;
+	int ret;
+
+	down(&hba->host_sem);
+	if (!ufshcd_is_user_access_allowed(hba)) {
+		up(&hba->host_sem);
+		return -EBUSY;
+	}
+
+	ret = pm_runtime_get_sync(hba->dev);
+	if (ret < 0) {
+		pr_warn("%s: pm_runtime_get_sync failed %d\n", __func__, ret);
+		pm_runtime_put_noidle(hba->dev);
+		up(&hba->host_sem);
+		return ret;
+	}
+	ret = 0;
+
+	ufshcd_hold(hba);
+
+	if (ufshcd_is_link_hibern8(hba)) {
+		ret = ufshcd_uic_hibern8_exit(hba);
+		if (!ret)
+			ufshcd_set_link_active(hba);
+		else
+			dev_err(hba->dev, "%s: hibern8 exit failed %d\n",
+				__func__, ret);
+	}
+
+	if (!ret)
+		ret = ufshcd_query_attr(hba, UPIU_QUERY_OPCODE_READ_ATTR,
+			QUERY_ATTR_IDN_POWER_MODE, 0, 0, &value);
+
+	ufshcd_release(hba);
+	pm_runtime_put(hba->dev);
+
+	if (ret) {
+		up(&hba->host_sem);
+		return -EINVAL;
+	}
+	ret = sysfs_emit(buf, "0x%08X\n", value);
+	up(&hba->host_sem);
+	return ret;
+}
+static DEVICE_ATTR_RO(current_power_mode);
+
 UFS_ATTRIBUTE(active_icc_level, _ACTIVE_ICC_LVL);
 UFS_ATTRIBUTE(ooo_data_enabled, _OOO_DATA_EN);
 UFS_ATTRIBUTE(bkops_status, _BKOPS_STATUS);
