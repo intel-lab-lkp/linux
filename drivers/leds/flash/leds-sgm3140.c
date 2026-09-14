@@ -273,7 +273,9 @@ static int sgm3140_probe(struct platform_device *pdev)
 		goto err;
 	}
 
-	return ret;
+	fwnode_handle_put(child_node);
+
+	return 0;
 
 err:
 	fwnode_handle_put(child_node);
