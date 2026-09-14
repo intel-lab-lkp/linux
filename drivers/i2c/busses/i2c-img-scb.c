@@ -1415,6 +1415,7 @@ static void img_i2c_remove(struct platform_device *dev)
 	pm_runtime_disable(&dev->dev);
 	if (!pm_runtime_status_suspended(&dev->dev))
 		img_i2c_runtime_suspend(&dev->dev);
+	pm_runtime_dont_use_autosuspend(&dev->dev);
 }
 
 static int img_i2c_runtime_suspend(struct device *dev)
