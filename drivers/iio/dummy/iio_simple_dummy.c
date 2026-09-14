@@ -23,7 +23,19 @@
 #include <linux/iio/sw_device.h>
 #include "iio_simple_dummy.h"
 
+static void iio_dummy_release(struct config_item *item)
+{
+	struct iio_sw_device *swd = to_iio_sw_device(item);
+
+	kfree(swd);
+}
+
+static const struct configfs_item_operations iio_dummy_item_ops = {
+	.release = iio_dummy_release,
+};
+
 static const struct config_item_type iio_dummy_type = {
+	.ct_item_ops = &iio_dummy_item_ops,
 	.ct_owner = THIS_MODULE,
 };
 
