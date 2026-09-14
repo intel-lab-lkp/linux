@@ -196,7 +196,8 @@ static const struct meson_secure_pwrc_domain_desc a9_pwrc_domains[] = {
 	SEC_PD(A9_VICP,		0),
 	SEC_PD(A9_SD_EMMC_A,	0),
 	SEC_PD(A9_SD_EMMC_B,	0),
-	SEC_PD(A9_ETH,		0),
+	/* ETH is for ethernet online wakeup, and should be always on */
+	SEC_PD(A9_ETH,		GENPD_FLAG_ALWAYS_ON),
 	SEC_PD(A9_PCIE_A,	0),
 	SEC_PD(A9_PCIE_B,	0),
 	SEC_PD(A9_NNA_4T,	0),
