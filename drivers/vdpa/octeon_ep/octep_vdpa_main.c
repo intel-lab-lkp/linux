@@ -523,13 +523,15 @@ static void octep_vdpa_remove_vf(struct pci_dev *pdev)
 	int status;
 
 	oct_hw = &mgmt_dev->oct_hw;
-	status = atomic_read(&mgmt_dev->status);
-	atomic_set(&mgmt_dev->status, OCTEP_VDPA_DEV_STATUS_UNINIT);
-
 	cancel_work_sync(&mgmt_dev->setup_task);
+	cancel_work_sync(&mgmt_dev->event_wk.work);
+
+	status = atomic_read(&mgmt_dev->status);
 	if ((status == OCTEP_VDPA_DEV_STATUS_READY) || (status == OCTEP_VDPA_DEV_STATUS_ADDED) ||
 	    (status == OCTEP_VDPA_DEV_STATUS_REMOVED))
 		vdpa_mgmtdev_unregister(&mgmt_dev->mdev);
+
+	atomic_set(&mgmt_dev->status, OCTEP_VDPA_DEV_STATUS_UNINIT);
 
 	if (oct_hw->base[OCTEP_HW_CAPS_BAR])
 		octep_iounmap_region(pdev, oct_hw->base, OCTEP_HW_CAPS_BAR);
@@ -612,6 +614,7 @@ static int octep_vdpa_dev_add(struct vdpa_mgmt_dev *mdev, const char *name,
 	return 0;
 
 vdpa_dev_put:
+	mgmt_dev->oct_vdpa = NULL;
 	put_device(&oct_vdpa->vdpa.dev);
 	return ret;
 }
@@ -619,8 +622,13 @@ vdpa_dev_put:
 static void octep_vdpa_dev_del(struct vdpa_mgmt_dev *mdev, struct vdpa_device *vdpa_dev)
 {
 	struct octep_vdpa_mgmt_dev *mgmt_dev = container_of(mdev, struct octep_vdpa_mgmt_dev, mdev);
+
+	if (atomic_cmpxchg(&mgmt_dev->status, OCTEP_VDPA_DEV_STATUS_ADDED,
+			   OCTEP_VDPA_DEV_STATUS_REMOVED) != OCTEP_VDPA_DEV_STATUS_ADDED)
+		return;
+
 	_vdpa_unregister_device(vdpa_dev);
-	atomic_set(&mgmt_dev->status, OCTEP_VDPA_DEV_STATUS_REMOVED);
+	mgmt_dev->oct_vdpa = NULL;
 }
 
 static const struct vdpa_mgmtdev_ops octep_vdpa_mgmt_dev_ops = {
@@ -653,6 +661,7 @@ static void octep_event_work(struct work_struct *work)
 	u8 event = readb(addr + OCTEP_VF_EVENT_REG(0));
 	struct vdpa_dev_set_config config = {0};
 	char name[OCTEP_VDPA_NAME_BUFSIZE];
+	struct octep_vdpa *oct_vdpa;
 	int ret = 0;
 
 	switch (event) {
@@ -663,8 +672,9 @@ static void octep_event_work(struct work_struct *work)
 		}
 		break;
 	case OCTEP_VDPA_DEV_DEL_EVENT:
-		if (atomic_read(&mgmt_dev->status) == OCTEP_VDPA_DEV_STATUS_ADDED)
-			octep_vdpa_dev_del(&mgmt_dev->mdev, &mgmt_dev->oct_vdpa->vdpa);
+		oct_vdpa = READ_ONCE(mgmt_dev->oct_vdpa);
+		if (atomic_read(&mgmt_dev->status) == OCTEP_VDPA_DEV_STATUS_ADDED && oct_vdpa)
+			octep_vdpa_dev_del(&mgmt_dev->mdev, &oct_vdpa->vdpa);
 		break;
 	default:
 		break;
