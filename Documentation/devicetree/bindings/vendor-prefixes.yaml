@@ -1722,6 +1722,8 @@ patternProperties:
     description: Thundercomm Technology Co., Ltd.
   "^thwc,.*":
     description: Shenzhen Tong Heng Wei Chuang Technology Co., Ltd.
+  "^teclast,.*":
+    description: Teclast
   "^ti,.*":
     description: Texas Instruments
   "^tianma,.*":
