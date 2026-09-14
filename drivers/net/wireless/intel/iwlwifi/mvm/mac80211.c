@@ -4385,7 +4385,7 @@ static int __iwl_mvm_mac_set_key(struct ieee80211_hw *hw,
 			key->hw_key_idx = STA_KEY_IDX_INVALID;
 			if (ptk_pn) {
 				RCU_INIT_POINTER(mvmsta->ptk_pn[keyidx], NULL);
-				kfree(ptk_pn);
+				kfree_rcu(ptk_pn, rcu_head);
 			}
 			/*
 			 * can't add key for RX, but we don't need it
