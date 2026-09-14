@@ -68,6 +68,13 @@
 #define BF_FRAMES_PER_URB_DEFAULT	256
 #define BF_NURBS_DEFAULT		8
 
+/* Front-panel poll interval default - Windows polls the 5-register
+ * status set at ~50 cycles/s (20 ms); match that.  Tunable via the
+ * panel_poll_ms module param for reviewers/distros who want a slower
+ * (or faster) rate than the Windows-matching default.
+ */
+#define BF_PANEL_POLL_MS_DEFAULT	20
+
 #define BF_WORDS_PER_FRAME		14	/* 14 x 32-bit words per frame */
 
 /* Consecutive URB errors (CRC/babble/protocol or a failed resubmit)
@@ -145,6 +152,36 @@
 #define BF_CROSS_R_FIRST		4
 #define BF_CROSS_R_LAST			22
 
+/* Front-panel readback (babyfacepro-ctl.c): 0x17 read at wIdx 0x0000 - the index
+ * the Windows driver polls (cap_buttons2.pcap).  byte0 = preamp 48V/PAD,
+ * byte1 = OUT sel + DIM/MIX bits, byte2 = IN sel + wheel counter,
+ * byte3 = button flash (see babyfacepro-ctl.c for the full layout).
+ */
+#define BF_REG_PANEL_READ		0x0000
+#define BF_PANEL_IN_SHIFT		4
+#define BF_PANEL_IN_CH12		0x04
+#define BF_PANEL_IN_CH34		0x05
+#define BF_PANEL_IN_OPT			0x06
+/* OUT selection - the gain-display-mode encoding (cap_dim.pcap);
+ * babyfacepro-ctl.c also accepts the base-mode 0x01/0x02 (cap_buttons.pcap).
+ */
+#define BF_PANEL_OUT_CH12		0x04
+#define BF_PANEL_OUT_PHONES		0x05
+#define BF_PANEL_OUT_OPT		0x06
+#define BF_PANEL_FLASH_IN		0x41
+#define BF_PANEL_FLASH_SET		0x42
+#define BF_PANEL_FLASH_MIX		0x44
+#define BF_PANEL_FLASH_OUT		0x48
+#define BF_PANEL_FLASH_SELECT		0x50
+#define BF_PANEL_FLASH_DIM		0x60
+#define BF_PANEL_BTN_NONE		0
+#define BF_PANEL_BTN_IN			1
+#define BF_PANEL_BTN_SET		2
+#define BF_PANEL_BTN_MIX		3
+#define BF_PANEL_BTN_OUT		4
+#define BF_PANEL_BTN_SELECT		5
+#define BF_PANEL_BTN_DIM		6
+
 /* Preamp state byte (0x17, wIdx 0x003F - full state, verified).
  * NOTE 2026-08-26 (cap_reflevel3.pcap): the 0x0C "base" is NOT a
  * constant - it is the Instr 3/4 REF-LEVEL bits (bits 2-3, +4dBu =
@@ -197,6 +234,16 @@
  */
 #define BF_MASTER_MINUS20_8		0xcb
 #define BF_MASTER_MINUS20_16		0x0333
+
+/* The front-panel gain/display family (0x1A, wIdx 0x000A + mic 0-3;
+ * cap_panel/cap_mix.pcap): in gain mode the wheel writes the "ADC
+ * gain" here (drives the same preamp as the GUI 0x0000+mic); in MIX
+ * (fader) mode the same registers carry the VU DISPLAY shadow -
+ * TotalMix writes the monitoring level display value (0..~31) and the
+ * card lights the input VU segments accordingly (hardware-verified
+ * 2026-08-26 live: sweeping 0x1A values moved the input VU).
+ */
+#define BF_REG_PANEL_GAIN		0x000a
 
 /* Crosspoint fader curve: 0 dB = 0x16a0, +6 dB = 0x2d41 (fader curve,
  * DIFFERENT from the master 0x4000 top - see CALIBRATION.md).
@@ -300,7 +347,43 @@ struct snd_usb_babyface {
 	int width;			/* width knob -100..+100 */
 	u16 fx_send;			/* FX send level 0..0x1000 */
 
+	/* DSP EQ (babyfacepro-ctl.c) - 4 analog-input strips, params kept in state */
+
+	/* front panel (babyfacepro-ctl.c) - 0x17 readback poll */
+	struct delayed_work panel_work;
+	unsigned int panel_poll_ms;	/* front-panel poll interval, module param */
+	u8 panel_prev[4];		/* last 0x17 snapshot */
+	bool panel_seen;		/* first snapshot taken */
+	bool panel_select_armed;	/* device SELECT cycle armed (IN switch disarms) */
+	unsigned long panel_start;	/* jiffies at panel_start (boot re-assert) */
+	int panel_button;		/* latched button event (consumed on get) */
+	int panel_wheel;		/* accumulated wheel delta (consumed on get) */
+	int panel_in;			/* enum: 0 unknown, 1 Ch1/2, 2 Ch3/4, 3 Opt */
+	int panel_out;			/* enum: 0 unknown, 1 Ch1/2, 2 Phones, 3 Opt */
+	bool panel_mix;			/* MIX engaged - HOST-latched (like TotalMix):
+					 * set by the 0x44 flash ack, NOT by the readback
+					 * 0x80 bit (the raw press has none)
+					 */
+	bool panel_dim;			/* DIM sticky (byte1 bit 0x20) */
+	bool panel_saw_fader;		/* device observed in fader mode (byte2 0x0x)
+					 * - gates the device-driven MIX exit
+					 */
+	int panel_select;		/* SELECT state: 0 L, 1 R, 2 both, 3 none
+					 * (host-tracked - not in the readback)
+					 */
+	int panel_sel_hold;		/* consecutive ticks with byte3 = 0x50
+					 * (SELECT held > 200 ms = the OUT-balance
+					 * gesture; a tap flashes only ~100-150 ms,
+					 * selhold_probe2 - no engaged bit)
+					 */
+	u16 panel_mix_raw;		/* MIX-mode monitoring level (fader raw) */
+	u8 panel_mix_disp[4];		/* MIX-mode VU display shadow per mic
+					 * (0x1A 0x000A+mic - written on change
+					 * so the input VU follows the wheel)
+					 */
+	struct snd_kcontrol *panel_kctl[7]; /* for snd_ctl_notify */
 	struct snd_kcontrol *trim_kctl[4];  /* for snd_ctl_notify */
+	struct snd_kcontrol *dim_kctl;      /* for snd_ctl_notify */
 };
 
 struct bf_saved {
@@ -366,6 +449,7 @@ int bf_xpoint_write(struct snd_usb_babyface *chip, int out, int src,
 int bf_phase_apply(struct snd_usb_babyface *chip, int mic, bool invert);
 int bf_split_apply(struct snd_usb_babyface *chip, int pb, bool split);
 int bf_trim_apply(struct snd_usb_babyface *chip, int mic, int trim_db2);
+void bf_panel_toggle_dim(struct snd_usb_babyface *chip);
 int bf_preamp_state_write(struct snd_usb_babyface *chip);
 int babyface_create_controls(struct snd_usb_babyface *chip);
 int babyface_create_xpoints(struct snd_usb_babyface *chip);
@@ -379,6 +463,10 @@ int bf_gain_max_db(int mic);
 int bf_gain_db(int mic, u8 raw);	u8 bf_gain_raw(int mic, int db);
 
 /* -- babyfacepro-ctl.c ----------------------- */
+int babyface_create_panel(struct snd_usb_babyface *chip);
+void babyface_panel_start(struct snd_usb_babyface *chip);
+void babyface_panel_stop(struct snd_usb_babyface *chip);
+void babyface_panel_work(struct work_struct *work);
 
 /* -- babyfacepro.c ------------------------ */
 void bf_state_save(struct snd_usb_babyface *chip);
