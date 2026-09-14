@@ -114,6 +114,8 @@ struct csiphy_device {
 	struct v4l2_mbus_framefmt fmt[MSM_CSIPHY_PADS_NUM];
 	const struct csiphy_subdev_resources *res;
 	struct csiphy_device_regs *regs;
+	/* Number of pipelines streaming through this CSIPHY */
+	unsigned int stream_users;
 };
 
 struct camss_subdev_resources;

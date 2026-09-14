@@ -4620,27 +4620,39 @@ struct media_pad *camss_find_sensor_pad(struct media_entity *entity)
 }
 
 /*
- * camss_is_receiver_subdev - Test whether a subdev is a CAMSS CSI-2 receiver
+ * camss_subdev_stream_users - Streaming user count of a CAMSS receiver subdev
  * @camss: CAMSS device
  * @sd: Subdevice to test
  *
- * Return true for a CSIPHY or CSID belonging to @camss, false for anything
- * else, in particular for the external subdev transmitting to them.
+ * CSIPHY and CSID are traversed by several pipelines at once when a CSI-2
+ * transmitter aggregates several cameras onto one port: every virtual channel
+ * is demultiplexed to its own RDI and forms its own pipeline. The hardware
+ * must only be started by the first of them and stopped by the last.
+ *
+ * Return a pointer to the user count of @sd if it is a CSIPHY or CSID of
+ * @camss, NULL for any other subdev, in particular for the external subdev
+ * transmitting to them.
  */
-static bool camss_is_receiver_subdev(struct camss *camss,
-				     struct v4l2_subdev *sd)
+unsigned int *camss_subdev_stream_users(struct camss *camss,
+					struct v4l2_subdev *sd)
 {
 	unsigned int i;
 
 	for (i = 0; i < camss->res->csiphy_num; i++)
 		if (sd == &camss->csiphy[i].subdev)
-			return true;
+			return &camss->csiphy[i].stream_users;
 
 	for (i = 0; i < camss->res->csid_num; i++)
 		if (sd == &camss->csid[i].subdev)
-			return true;
+			return &camss->csid[i].stream_users;
 
-	return false;
+	return NULL;
+}
+
+static bool camss_is_receiver_subdev(struct camss *camss,
+				     struct v4l2_subdev *sd)
+{
+	return camss_subdev_stream_users(camss, sd);
 }
 
 /*

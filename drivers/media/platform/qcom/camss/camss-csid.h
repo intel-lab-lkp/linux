@@ -167,6 +167,8 @@ struct csid_device {
 	struct v4l2_ctrl_handler ctrls;
 	struct v4l2_ctrl *testgen_mode;
 	const struct csid_subdev_resources *res;
+	/* Number of pipelines streaming through this CSID */
+	unsigned int stream_users;
 };
 
 struct camss_subdev_resources;

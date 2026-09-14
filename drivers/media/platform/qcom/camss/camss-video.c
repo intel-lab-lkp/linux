@@ -249,6 +249,49 @@ static int video_prepare_streaming(struct vb2_queue *q)
 	return ret;
 }
 
+/*
+ * video_subdev_set_stream - Start or stop a subdev of the pipeline
+ * @video: CAMSS video device
+ * @subdev: Subdevice to start or stop
+ * @enable: Start when true, stop when false
+ *
+ * CSIPHY and CSID are shared between pipelines when a transmitter aggregates
+ * several cameras onto one CSI-2 port. The core allows a single s_stream
+ * transition per subdev, so only forward the first start and the last stop
+ * to them. Every other subdev is driven unconditionally as before.
+ */
+static int video_subdev_set_stream(struct camss_video *video,
+				   struct v4l2_subdev *subdev, bool enable)
+{
+	struct media_device *mdev = &video->camss->media_dev;
+	unsigned int *users;
+	bool forward;
+	int ret;
+
+	users = camss_subdev_stream_users(video->camss, subdev);
+	if (!users)
+		return v4l2_subdev_call(subdev, video, s_stream, enable);
+
+	mutex_lock(&mdev->graph_mutex);
+	if (enable)
+		forward = (*users)++ == 0;
+	else
+		forward = !WARN_ON(!*users) && --(*users) == 0;
+	mutex_unlock(&mdev->graph_mutex);
+
+	if (!forward)
+		return 0;
+
+	ret = v4l2_subdev_call(subdev, video, s_stream, enable);
+	if (enable && ret < 0 && ret != -ENOIOCTLCMD) {
+		mutex_lock(&mdev->graph_mutex);
+		(*users)--;
+		mutex_unlock(&mdev->graph_mutex);
+	}
+
+	return ret;
+}
+
 static int video_start_streaming(struct vb2_queue *q, unsigned int count)
 {
 	struct camss_video *video = vb2_get_drv_priv(q);
@@ -281,7 +324,7 @@ static int video_start_streaming(struct vb2_queue *q, unsigned int count)
 		entity = pad->entity;
 		subdev = media_entity_to_v4l2_subdev(entity);
 
-		ret = v4l2_subdev_call(subdev, video, s_stream, 1);
+		ret = video_subdev_set_stream(video, subdev, true);
 		if (ret < 0 && ret != -ENOIOCTLCMD)
 			goto error;
 	}
@@ -319,8 +362,7 @@ static void video_stop_streaming(struct vb2_queue *q)
 		entity = pad->entity;
 		subdev = media_entity_to_v4l2_subdev(entity);
 
-		ret = v4l2_subdev_call(subdev, video, s_stream, 0);
-
+		ret = video_subdev_set_stream(video, subdev, false);
 		if (ret) {
 			dev_err(video->camss->dev, "Video pipeline stop failed: %d\n", ret);
 			return;
