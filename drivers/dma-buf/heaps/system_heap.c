@@ -16,12 +16,15 @@
 #include <linux/dma-heap.h>
 #include <linux/err.h>
 #include <linux/highmem.h>
+#include <linux/log2.h>
 #include <linux/mem_encrypt.h>
+#include <linux/minmax.h>
 #include <linux/mm.h>
 #include <linux/set_memory.h>
 #include <linux/module.h>
 #include <linux/pgtable.h>
 #include <linux/scatterlist.h>
+#include <linux/sizes.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 
@@ -55,15 +58,18 @@ struct dma_heap_attachment {
 #define HIGH_ORDER_GFP  (((GFP_HIGHUSER | __GFP_ZERO | __GFP_NOWARN \
 				| __GFP_NORETRY) & ~__GFP_RECLAIM) \
 				| __GFP_COMP)
-static gfp_t order_flags[] = {HIGH_ORDER_GFP, HIGH_ORDER_GFP,
-			      HIGH_ORDER_GFP, LOW_ORDER_GFP};
+#define SIZE_ORDER(sz) \
+	MIN(MAX(const_ilog2(sz) - PAGE_SHIFT, 0), MAX_PAGE_ORDER)
+
 /*
  * The selection of the orders used for allocation (2MB, 1MB, 64K, 4K) is
  * designed to match with the sizes often found in IOMMUs. Using larger order
  * pages instead of order 0 pages can significantly improve the performance of
  * many IOMMUs by reducing TLB pressure and time spent updating page tables.
  */
-static const unsigned int orders[] = {9, 8, 4, 0};
+static const unsigned int orders[] = {
+	SIZE_ORDER(SZ_2M), SIZE_ORDER(SZ_1M), SIZE_ORDER(SZ_64K), 0
+};
 #define NUM_ORDERS ARRAY_SIZE(orders)
 
 static int system_heap_set_page_decrypted(struct page *page)
@@ -384,11 +390,13 @@ static struct page *alloc_largest_available(unsigned long size,
 	gfp_t flags;
 
 	for (i = 0; i < NUM_ORDERS; i++) {
+		if (i && orders[i] == orders[i - 1])
+			continue;
 		if (size <  (PAGE_SIZE << orders[i]))
 			continue;
 		if (max_order < orders[i])
 			continue;
-		flags = order_flags[i];
+		flags = orders[i] ? HIGH_ORDER_GFP : LOW_ORDER_GFP;
 		if (mem_accounting)
 			flags |= __GFP_ACCOUNT;
 		page = alloc_pages(flags, orders[i]);
