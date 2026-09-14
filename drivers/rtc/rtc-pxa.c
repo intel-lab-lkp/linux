@@ -338,7 +338,9 @@ static int __init pxa_rtc_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
-	pxa_rtc_open(dev);
+	ret = pxa_rtc_open(dev);
+	if (ret)
+		return ret;
 
 	sa1100_rtc->rcnr = pxa_rtc->base + 0x0;
 	sa1100_rtc->rtsr = pxa_rtc->base + 0x8;
@@ -347,7 +349,7 @@ static int __init pxa_rtc_probe(struct platform_device *pdev)
 	ret = sa1100_rtc_init(pdev, sa1100_rtc);
 	if (ret) {
 		dev_err(dev, "Unable to init SA1100 RTC sub-device\n");
-		return ret;
+		goto err_release;
 	}
 
 	rtsr_clear_bits(pxa_rtc, RTSR_PIALE | RTSR_RDALE1 | RTSR_HZE);
@@ -357,12 +359,16 @@ static int __init pxa_rtc_probe(struct platform_device *pdev)
 	if (IS_ERR(pxa_rtc->rtc)) {
 		ret = PTR_ERR(pxa_rtc->rtc);
 		dev_err(dev, "Failed to register RTC device -> %d\n", ret);
-		return ret;
+		goto err_release;
 	}
 
 	device_init_wakeup(dev, true);
 
 	return 0;
+
+err_release:
+	pxa_rtc_release(dev);
+	return ret;
 }
 
 static void __exit pxa_rtc_remove(struct platform_device *pdev)
