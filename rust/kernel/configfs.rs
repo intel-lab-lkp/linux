@@ -135,8 +135,9 @@ pub struct Subsystem<Data> {
 // SAFETY: We do not provide any operations on `Subsystem`.
 unsafe impl<Data> Sync for Subsystem<Data> {}
 
-// SAFETY: Ownership of `Subsystem` can safely be transferred to other threads.
-unsafe impl<Data> Send for Subsystem<Data> {}
+// SAFETY: Ownership of `Subsystem` can safely be transferred to other threads
+// if its data can be transferred as well.
+unsafe impl<Data: Send> Send for Subsystem<Data> {}
 
 impl<Data> Subsystem<Data> {
     /// Create an initializer for a [`Subsystem`].
@@ -325,7 +326,6 @@ struct GroupOperationsVTable<Parent, Child>(PhantomData<(Parent, Child)>);
 impl<Parent, Child> GroupOperationsVTable<Parent, Child>
 where
     Parent: GroupOperations<Child = Child>,
-    Child: 'static,
 {
     /// # Safety
     ///
@@ -344,8 +344,9 @@ where
         this: *mut bindings::config_group,
         name: *const kernel::ffi::c_char,
     ) -> *mut bindings::config_group {
-        // SAFETY: By function safety requirements of this function, this call
-        // is safe.
+        // SAFETY: By function safety requirements, `this` points to a configfs
+        // group containing `Parent`. The `GroupOperations` bound guarantees
+        // that `Parent: Sync`, so it is safe to share it with this thread.
         let parent_data = unsafe { get_group_data(this) };
 
         let group_init = match Parent::make_group(
@@ -390,8 +391,9 @@ where
         this: *mut bindings::config_group,
         item: *mut bindings::config_item,
     ) {
-        // SAFETY: By function safety requirements of this function, this call
-        // is safe.
+        // SAFETY: By function safety requirements, `this` points to a configfs
+        // group containing `Parent`. The `GroupOperations` bound guarantees
+        // that `Parent: Sync`, so it is safe to share it with this thread.
         let parent_data = unsafe { get_group_data(this) };
 
         // SAFETY: By function safety requirements, `item` is embedded in a
@@ -483,12 +485,12 @@ impl<Data> ItemOperationsVTable<Subsystem<Data>, Data> {
 ///
 /// Implement this trait on structs that embed a [`Subsystem`] or a [`Group`].
 #[vtable]
-pub trait GroupOperations {
+pub trait GroupOperations: Sync {
     /// The child data object type.
     ///
     /// This group will create subgroups (subdirectories) backed by this kind of
     /// object.
-    type Child: 'static;
+    type Child: 'static + Send;
 
     /// Creates a new subgroup.
     ///
@@ -555,8 +557,10 @@ where
             // `config_group`.
             unsafe { container_of!(item, bindings::config_group, cg_item) };
 
-        // SAFETY: The function safety requirements for this function satisfy
-        // the conditions for this call.
+        // SAFETY: By function safety requirements, `c_group` points to a
+        // configfs group containing `Data`. The `AttributeOperations` bound
+        // guarantees that `Data: Sync`, so it is safe to share it with this
+        // thread.
         let data: &Data = unsafe { get_group_data(c_group) };
 
         // SAFETY: By function safety requirements, `page` is writable for `PAGE_SIZE`.
@@ -589,8 +593,10 @@ where
         // `config_group`.
             unsafe { container_of!(item, bindings::config_group, cg_item) };
 
-        // SAFETY: The function safety requirements for this function satisfy
-        // the conditions for this call.
+        // SAFETY: By function safety requirements, `c_group` points to a
+        // configfs group containing `Data`. The `AttributeOperations` bound
+        // guarantees that `Data: Sync`, so it is safe to share it with this
+        // thread.
         let data: &Data = unsafe { get_group_data(c_group) };
 
         let ret = O::store(
@@ -643,7 +649,7 @@ where
 pub trait AttributeOperations<const ID: u64 = 0> {
     /// The type of the object that contains the field that is backing the
     /// attribute for this operation.
-    type Data;
+    type Data: Sync;
 
     /// Renders the value of an attribute.
     ///
@@ -749,7 +755,6 @@ macro_rules! impl_item_type {
             ) -> Self
             where
                 Data: GroupOperations<Child = Child>,
-                Child: 'static,
             {
                 Self {
                     item_type: Opaque::new(bindings::config_item_type {
