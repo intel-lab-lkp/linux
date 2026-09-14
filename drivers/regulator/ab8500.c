@@ -456,6 +456,34 @@ static int ab8500_regulator_is_enabled(struct regulator_dev *rdev)
 		return 0;
 }
 
+static int ab8500_buck_init(struct regulator_dev *rdev,
+			    struct regulator_config *config)
+{
+	const struct regulation_constraints *constraints = rdev->constraints;
+	struct ab8500_regulator_info *info = config->driver_data;
+	bool enabled_in_dt = constraints->boot_on || constraints->always_on;
+	int enabled;
+
+	if (!config->of_node)
+		return 0;
+
+	/*
+	 * The enable field is initialized from OTP, but firmware may have
+	 * changed it before probe. Compare before applying DT constraints.
+	 */
+	enabled = ab8500_regulator_is_enabled(rdev);
+	if (enabled < 0)
+		return enabled;
+
+	if (enabled != enabled_in_dt)
+		dev_info(config->dev,
+			 "%s: OTP-initialized state is %s, DT boot-on=%u, always-on=%u\n",
+			 info->desc.name, enabled ? "enabled" : "disabled",
+			 constraints->boot_on, constraints->always_on);
+
+	return 0;
+}
+
 static unsigned int ab8500_regulator_get_optimum_mode(
 		struct regulator_dev *rdev, int input_uV,
 		int output_uV, int load_uA)
@@ -1127,6 +1155,7 @@ static struct ab8500_regulator_info
 		.desc = {
 			.name		= "BUCK-SMPS1",
 			.ops		= &ab8500_buck_ops,
+			.init_cb	= ab8500_buck_init,
 			.type		= REGULATOR_VOLTAGE,
 			.id		= AB8500_BUCK_SMPS1,
 			.owner		= THIS_MODULE,
@@ -1152,6 +1181,7 @@ static struct ab8500_regulator_info
 		.desc = {
 			.name		= "BUCK-SMPS2",
 			.ops		= &ab8500_buck_ops,
+			.init_cb	= ab8500_buck_init,
 			.type		= REGULATOR_VOLTAGE,
 			.id		= AB8500_BUCK_SMPS2,
 			.owner		= THIS_MODULE,
@@ -1177,6 +1207,7 @@ static struct ab8500_regulator_info
 		.desc = {
 			.name		= "BUCK-SMPS3",
 			.ops		= &ab8500_buck_ops,
+			.init_cb	= ab8500_buck_init,
 			.type		= REGULATOR_VOLTAGE,
 			.id		= AB8500_BUCK_SMPS3,
 			.owner		= THIS_MODULE,
@@ -1556,6 +1587,7 @@ static struct ab8500_regulator_info
 		.desc = {
 			.name		= "BUCK-SMPSA",
 			.ops		= &ab8500_buck_ops,
+			.init_cb	= ab8500_buck_init,
 			.type		= REGULATOR_VOLTAGE,
 			.id		= AB8505_BUCK_SMPSA,
 			.owner		= THIS_MODULE,
@@ -1581,6 +1613,7 @@ static struct ab8500_regulator_info
 		.desc = {
 			.name		= "BUCK-SMPSB",
 			.ops		= &ab8500_buck_ops,
+			.init_cb	= ab8500_buck_init,
 			.type		= REGULATOR_VOLTAGE,
 			.id		= AB8505_BUCK_SMPSB,
 			.owner		= THIS_MODULE,
@@ -1606,6 +1639,7 @@ static struct ab8500_regulator_info
 		.desc = {
 			.name		= "BUCK-SAFE",
 			.ops		= &ab8500_buck_ops,
+			.init_cb	= ab8500_buck_init,
 			.type		= REGULATOR_VOLTAGE,
 			.id		= AB8505_BUCK_SAFE,
 			.owner		= THIS_MODULE,
