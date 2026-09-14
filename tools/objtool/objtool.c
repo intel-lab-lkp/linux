@@ -8,6 +8,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <pthread.h>
 #include <subcmd/exec-cmd.h>
 #include <subcmd/pager.h>
 #include <linux/kernel.h>
@@ -41,6 +42,8 @@ struct objtool_file *objtool_open_read(const char *filename)
 	return &file;
 }
 
+static pthread_mutex_t pv_ops_lock = PTHREAD_MUTEX_INITIALIZER;
+
 int objtool_pv_add(struct objtool_file *f, int idx, struct symbol *func)
 {
 	if (!opts.noinstr)
@@ -59,12 +62,15 @@ int objtool_pv_add(struct objtool_file *f, int idx, struct symbol *func)
 	    !strcmp(func->name, "_paravirt_ident_64"))
 		return 0;
 
-	/* already added this function */
-	if (!list_empty(&func->pv_target))
-		return 0;
+	pthread_mutex_lock(&pv_ops_lock);
 
-	list_add(&func->pv_target, &f->pv_ops[idx].targets);
-	f->pv_ops[idx].clean = false;
+	/* already added this function */
+	if (list_empty(&func->pv_target)) {
+		list_add(&func->pv_target, &f->pv_ops[idx].targets);
+		f->pv_ops[idx].clean = false;
+	}
+
+	pthread_mutex_unlock(&pv_ops_lock);
 	return 0;
 }
 
