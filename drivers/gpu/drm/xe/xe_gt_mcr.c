@@ -711,8 +711,8 @@ static void mcr_lock(struct xe_gt *gt) __acquires(&gt->mcr_lock)
 	 * when a read to the relevant register returns 1.
 	 */
 	if (GRAPHICS_VERx100(xe) >= 1270)
-		ret = xe_mmio_wait32(&gt->mmio, STEER_SEMAPHORE, 0x1, 0x1, 10, NULL,
-				     true);
+		ret = xe_mmio_wait32_atomic(&gt->mmio, STEER_SEMAPHORE, 0x1, 0x1, 10,
+					    NULL);
 
 	xe_gt_WARN_ON_ONCE(gt, ret == -ETIMEDOUT);
 }

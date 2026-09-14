@@ -136,7 +136,7 @@ static int pxp_wait_for_session_state(struct xe_pxp *pxp, u32 id, bool in_play)
 	u32 mask = BIT(id);
 
 	return xe_mmio_wait32(&gt->mmio, KCR_SIP, mask, in_play ? mask : 0,
-			      250, NULL, false);
+			   250, NULL);
 }
 
 static void pxp_invalidate_queues(struct xe_pxp *pxp);

@@ -272,7 +272,7 @@ int xe_huc_auth(struct xe_huc *huc, enum xe_huc_auth_types type)
 	}
 
 	ret = xe_mmio_wait32(&gt->mmio, huc_auth_modes[type].reg, huc_auth_modes[type].val,
-			     huc_auth_modes[type].val, 100000, NULL, false);
+			     huc_auth_modes[type].val, 100000, NULL);
 	if (ret) {
 		xe_gt_err(gt, "HuC: firmware not verified: %pe\n", ERR_PTR(ret));
 		goto fail;

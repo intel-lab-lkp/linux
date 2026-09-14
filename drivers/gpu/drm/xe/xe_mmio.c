@@ -5,8 +5,8 @@
 
 #include "xe_mmio.h"
 
-#include <linux/delay.h>
 #include <linux/io-64-nonatomic-lo-hi.h>
+#include <linux/iopoll.h>
 #include <linux/minmax.h>
 #include <linux/pci.h>
 
@@ -320,82 +320,44 @@ u64 xe_mmio_read64_2x32(struct xe_mmio *mmio, struct xe_reg reg)
 	return (u64)udw << 32 | ldw;
 }
 
-static int __xe_mmio_wait32(struct xe_mmio *mmio, struct xe_reg reg, u32 mask, u32 val,
-			    u32 timeout_us, u32 *out_val, bool atomic, bool expect_match)
-{
-	ktime_t cur = ktime_get_raw();
-	const ktime_t end = ktime_add_us(cur, timeout_us);
-	int ret = -ETIMEDOUT;
-	s64 wait = 10;
-	u32 read;
-	bool check;
-
-	for (;;) {
-		read = xe_mmio_read32(mmio, reg);
-
-		check = (read & mask) == val;
-		if (!expect_match)
-			check = !check;
-
-		if (check) {
-			ret = 0;
-			break;
-		}
-
-		cur = ktime_get_raw();
-		if (!ktime_before(cur, end))
-			break;
-
-		if (ktime_after(ktime_add_us(cur, wait), end))
-			wait = ktime_us_delta(end, cur);
-
-		if (atomic)
-			udelay(wait);
-		else
-			usleep_range(wait, wait << 1);
-		wait <<= 1;
-	}
-
-	if (ret != 0) {
-		read = xe_mmio_read32(mmio, reg);
-
-		check = (read & mask) == val;
-		if (!expect_match)
-			check = !check;
-
-		if (check)
-			ret = 0;
-	}
-
-	if (out_val)
-		*out_val = read;
-
-	return ret;
-}
-
 /**
  * xe_mmio_wait32() - Wait for a register to match the desired masked value
  * @mmio: MMIO target
  * @reg: register to read value from
  * @mask: mask to be applied to the value read from the register
  * @val: desired value after applying the mask
- * @timeout_us: time out after this period of time. Wait logic tries to be
- * smart, applying an exponential backoff until @timeout_us is reached.
+ * @timeout_us: time out after this period of time
  * @out_val: if not NULL, points where to store the last unmasked value
- * @atomic: needs to be true if calling from an atomic context
  *
  * This function polls for the desired masked value and returns zero on success
  * or -ETIMEDOUT if timed out.
- *
- * Note that @timeout_us represents the minimum amount of time to wait before
- * giving up. The actual time taken by this function can be a little more than
- * @timeout_us for different reasons, specially in non-atomic contexts. Thus,
- * it is possible that this function succeeds even after @timeout_us has passed.
  */
 int xe_mmio_wait32(struct xe_mmio *mmio, struct xe_reg reg, u32 mask, u32 val, u32 timeout_us,
-		   u32 *out_val, bool atomic)
+		   u32 *out_val)
 {
-	return __xe_mmio_wait32(mmio, reg, mask, val, timeout_us, out_val, atomic, true);
+	u32 read;
+	int ret;
+
+	ret = poll_timeout_us(read = xe_mmio_read32(mmio, reg), (read & mask) == val,
+			      10, timeout_us, false);
+	if (out_val)
+		*out_val = read;
+
+	return ret;
+}
+
+int xe_mmio_wait32_atomic(struct xe_mmio *mmio, struct xe_reg reg, u32 mask, u32 val,
+			  u32 timeout_us, u32 *out_val)
+{
+	u32 read;
+	int ret;
+
+	ret = poll_timeout_us_atomic(read = xe_mmio_read32(mmio, reg), (read & mask) == val,
+				     10, timeout_us, false);
+	if (out_val)
+		*out_val = read;
+
+	return ret;
 }
 
 /**
@@ -406,15 +368,35 @@ int xe_mmio_wait32(struct xe_mmio *mmio, struct xe_reg reg, u32 mask, u32 val, u
  * @val: value not to be matched after applying the mask
  * @timeout_us: time out after this period of time
  * @out_val: if not NULL, points where to store the last unmasked value
- * @atomic: needs to be true if calling from an atomic context
- *
  * This function works exactly like xe_mmio_wait32() with the exception that
  * @val is expected not to be matched.
  */
 int xe_mmio_wait32_not(struct xe_mmio *mmio, struct xe_reg reg, u32 mask, u32 val, u32 timeout_us,
-		       u32 *out_val, bool atomic)
+		       u32 *out_val)
 {
-	return __xe_mmio_wait32(mmio, reg, mask, val, timeout_us, out_val, atomic, false);
+	u32 read;
+	int ret;
+
+	ret = poll_timeout_us(read = xe_mmio_read32(mmio, reg), (read & mask) != val,
+			      10, timeout_us, false);
+	if (out_val)
+		*out_val = read;
+
+	return ret;
+}
+
+int xe_mmio_wait32_not_atomic(struct xe_mmio *mmio, struct xe_reg reg, u32 mask, u32 val,
+			      u32 timeout_us, u32 *out_val)
+{
+	u32 read;
+	int ret;
+
+	ret = poll_timeout_us_atomic(read = xe_mmio_read32(mmio, reg), (read & mask) != val,
+				     10, timeout_us, false);
+	if (out_val)
+		*out_val = read;
+
+	return ret;
 }
 
 #ifdef CONFIG_PCI_IOV

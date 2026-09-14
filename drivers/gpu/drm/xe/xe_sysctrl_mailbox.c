@@ -40,7 +40,7 @@ static bool sysctrl_wait_bit_clear(struct xe_sysctrl *sc, u32 bit_mask,
 	int ret;
 
 	ret = xe_mmio_wait32_not(sc->mmio, SYSCTRL_MB_CTRL, bit_mask, bit_mask,
-				 timeout_ms * 1000, NULL, false);
+				   timeout_ms * 1000, NULL);
 
 	return ret == 0;
 }
@@ -51,7 +51,7 @@ static bool sysctrl_wait_bit_set(struct xe_sysctrl *sc, u32 bit_mask,
 	int ret;
 
 	ret = xe_mmio_wait32(sc->mmio, SYSCTRL_MB_CTRL, bit_mask, bit_mask,
-			     timeout_ms * 1000, NULL, false);
+			     timeout_ms * 1000, NULL);
 
 	return ret == 0;
 }

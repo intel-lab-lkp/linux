@@ -109,9 +109,10 @@ static int __domain_wait(struct xe_gt *gt, struct xe_force_wake_domain *domain, 
 	if (IS_SRIOV_VF(gt_to_xe(gt)))
 		return 0;
 
-	ret = xe_mmio_wait32(&gt->mmio, domain->reg_ack, domain->val, wake ? domain->val : 0,
-			     XE_FORCE_WAKE_ACK_TIMEOUT_MS * USEC_PER_MSEC,
-			     &value, true);
+	ret = xe_mmio_wait32_atomic(&gt->mmio, domain->reg_ack, domain->val,
+				    wake ? domain->val : 0,
+				    XE_FORCE_WAKE_ACK_TIMEOUT_MS * USEC_PER_MSEC,
+				    &value);
 	if (ret)
 		xe_gt_err(gt, "Force wake domain %d failed to ack %s (%pe) reg[%#x] = %#x\n",
 			  domain->id, str_wake_sleep(wake), ERR_PTR(ret),

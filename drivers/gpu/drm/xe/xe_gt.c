@@ -832,7 +832,7 @@ static int do_gt_reset(struct xe_gt *gt)
 	xe_mmio_write32(&gt->mmio, GDRST, GRDOM_FULL);
 	err = xe_mmio_wait32(&gt->mmio, GDRST, GRDOM_FULL, 0,
 			     GRDOM_RESET_TIMEOUT_MS * USEC_PER_MSEC,
-			     NULL, false);
+			   NULL);
 	if (err)
 		xe_log_err(gt, GT, err,
 			   "full graphics reset not completed in %u ms\n",

@@ -573,7 +573,7 @@ static void __xe_driver_flr(struct xe_device *xe)
 	 * is still pending (unless the HW is totally dead), but better to be
 	 * safe in case something unexpected happens
 	 */
-	ret = xe_mmio_wait32(mmio, GU_CNTL, DRIVERFLR, 0, flr_timeout, NULL, false);
+	ret = xe_mmio_wait32(mmio, GU_CNTL, DRIVERFLR, 0, flr_timeout, NULL);
 	if (ret) {
 		drm_err(&xe->drm, "Driver-FLR-prepare wait for ready failed! %d\n", ret);
 		return;
@@ -584,7 +584,7 @@ static void __xe_driver_flr(struct xe_device *xe)
 	xe_mmio_rmw32(mmio, GU_CNTL, 0, DRIVERFLR);
 
 	/* Wait for hardware teardown to complete */
-	ret = xe_mmio_wait32(mmio, GU_CNTL, DRIVERFLR, 0, flr_timeout, NULL, false);
+	ret = xe_mmio_wait32(mmio, GU_CNTL, DRIVERFLR, 0, flr_timeout, NULL);
 	if (ret) {
 		drm_err(&xe->drm, "Driver-FLR-teardown wait completion failed! %d\n", ret);
 		return;
@@ -592,7 +592,7 @@ static void __xe_driver_flr(struct xe_device *xe)
 
 	/* Wait for hardware/firmware re-init to complete */
 	ret = xe_mmio_wait32(mmio, GU_DEBUG, DRIVERFLR_STATUS, DRIVERFLR_STATUS,
-			     flr_timeout, NULL, false);
+			     flr_timeout, NULL);
 	if (ret) {
 		drm_err(&xe->drm, "Driver-FLR-reinit wait completion failed! %d\n", ret);
 		return;
@@ -1168,7 +1168,7 @@ static void tdf_request_sync(struct xe_device *xe)
 		 * transient and need to be flushed..
 		 */
 		if (xe_mmio_wait32(&gt->mmio, XE2_TDF_CTRL, TRANSIENT_FLUSH_REQUEST, 0,
-				   300, NULL, false))
+					    300, NULL))
 			xe_gt_err_once(gt, "TD flush timeout\n");
 	}
 }
@@ -1214,7 +1214,7 @@ void xe_device_l2_flush(struct xe_device *xe, bool force)
 	spin_lock(&gt->global_invl_lock);
 
 	xe_mmio_write32(&gt->mmio, XE2_GLOBAL_INVAL, 0x1);
-	if (xe_mmio_wait32(&gt->mmio, XE2_GLOBAL_INVAL, 0x1, 0x0, 1000, NULL, true))
+	if (xe_mmio_wait32_atomic(&gt->mmio, XE2_GLOBAL_INVAL, 0x1, 0x0, 1000, NULL))
 		xe_gt_err_once(gt, "Global invalidation timeout\n");
 
 	spin_unlock(&gt->global_invl_lock);

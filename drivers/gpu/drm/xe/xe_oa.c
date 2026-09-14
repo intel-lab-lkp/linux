@@ -513,14 +513,14 @@ static void xe_oa_disable(struct xe_oa_stream *stream)
 
 	xe_mmio_rmw32(mmio, __oa_regs(stream)->oa_ctrl, __oactrl_used_bits(stream), 0);
 	if (xe_mmio_wait32(mmio, __oa_regs(stream)->oa_ctrl,
-			   OAG_OACONTROL_OA_COUNTER_ENABLE, 0, 50000, NULL, false))
+			   OAG_OACONTROL_OA_COUNTER_ENABLE, 0, 50000, NULL))
 		drm_err(&stream->oa->xe->drm,
 			"wait for OA to be disabled timed out\n");
 
 	if (GRAPHICS_VERx100(stream->oa->xe) <= 1270 && GRAPHICS_VERx100(stream->oa->xe) != 1260) {
 		/* <= XE_METEORLAKE except XE_PVC */
 		xe_mmio_write32(mmio, OA_TLB_INV_CR, 1);
-		if (xe_mmio_wait32(mmio, OA_TLB_INV_CR, 1, 0, 50000, NULL, false))
+		if (xe_mmio_wait32(mmio, OA_TLB_INV_CR, 1, 0, 50000, NULL))
 			drm_err(&stream->oa->xe->drm,
 				"wait for OA tlb invalidate timed out\n");
 	}

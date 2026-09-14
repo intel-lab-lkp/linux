@@ -87,8 +87,12 @@ static int __pcode_mailbox_rw(struct xe_tile *tile, u32 mbox, u32 *data0, u32 *d
 	xe_mmio_write32(mmio, PCODE_DATA1, data1 ? *data1 : 0);
 	xe_mmio_write32(mmio, PCODE_MAILBOX, PCODE_READY | mbox);
 
-	err = xe_mmio_wait32(mmio, PCODE_MAILBOX, PCODE_READY, 0,
-			     timeout_ms * USEC_PER_MSEC, NULL, atomic);
+	if (atomic)
+		err = xe_mmio_wait32_atomic(mmio, PCODE_MAILBOX, PCODE_READY, 0,
+					    timeout_ms * USEC_PER_MSEC, NULL);
+	else
+		err = xe_mmio_wait32(mmio, PCODE_MAILBOX, PCODE_READY, 0,
+				     timeout_ms * USEC_PER_MSEC, NULL);
 	if (err)
 		return err;
 

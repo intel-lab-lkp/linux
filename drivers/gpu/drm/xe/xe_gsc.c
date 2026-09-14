@@ -196,7 +196,7 @@ static int gsc_fw_wait(struct xe_gt *gt)
 	return xe_mmio_wait32(&gt->mmio, HECI_FWSTS1(MTL_GSC_HECI1_BASE),
 			      HECI1_FWSTS1_INIT_COMPLETE,
 			      HECI1_FWSTS1_INIT_COMPLETE,
-			      500 * USEC_PER_MSEC, NULL, false);
+			   500 * USEC_PER_MSEC, NULL);
 }
 
 static int gsc_upload(struct xe_gsc *gsc)

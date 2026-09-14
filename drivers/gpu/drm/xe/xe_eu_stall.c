@@ -707,7 +707,7 @@ static int xe_eu_stall_stream_enable(struct xe_eu_stall_data_stream *stream)
 		/* Request the firmware to apply the workaround and wait for an ACK */
 		xe_mmio_write32(&gt->mmio, SWF_SCRATCHPAD(0), REQ_EUSTALL_ENABLE);
 		ret = xe_mmio_wait32(&gt->mmio, SWF_SCRATCHPAD(0), SWF_EUSTALL_MASK,
-				     ACK_EUSTALL_ENABLE, FW_WA_WAIT_TIMEOUT_US, NULL, false);
+					     ACK_EUSTALL_ENABLE, FW_WA_WAIT_TIMEOUT_US, NULL);
 		if (ret) {
 			xe_gt_err(gt, "Timeout polling for EU stall enable ACK from firmware\n");
 			xe_force_wake_put(gt_to_fw(gt), stream->fw_ref);
@@ -880,7 +880,7 @@ static int xe_eu_stall_disable_locked(struct xe_eu_stall_data_stream *stream)
 		/* Request the firmware to revert the workaround and wait for an ACK */
 		xe_mmio_write32(&gt->mmio, SWF_SCRATCHPAD(0), REQ_EUSTALL_DISABLE);
 		ret = xe_mmio_wait32(&gt->mmio, SWF_SCRATCHPAD(0), SWF_EUSTALL_MASK,
-				     ACK_EUSTALL_DISABLE, FW_WA_WAIT_TIMEOUT_US, NULL, false);
+					     ACK_EUSTALL_DISABLE, FW_WA_WAIT_TIMEOUT_US, NULL);
 		if (ret)
 			xe_gt_err(gt, "Timeout polling for EU stall disable ACK from firmware\n");
 	}

@@ -80,7 +80,7 @@ int xe_gsc_wait_for_proxy_init_done(struct xe_gsc *gsc)
 	return xe_mmio_wait32(&gt->mmio, HECI_FWSTS1(MTL_GSC_HECI1_BASE),
 			      HECI1_FWSTS1_CURRENT_STATE,
 			      HECI1_FWSTS1_PROXY_STATE_NORMAL,
-			      USEC_PER_SEC, NULL, false);
+			   USEC_PER_SEC, NULL);
 }
 
 static void __gsc_proxy_irq_rmw(struct xe_gsc *gsc, u32 clr, u32 set)

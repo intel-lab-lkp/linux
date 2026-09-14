@@ -967,13 +967,13 @@ static void guc_prevent_fw_dma_failure_on_reset(struct xe_guc *guc)
 
 	ret = xe_mmio_wait32(&gt->mmio, GUC_STATUS, GS_UKERNEL_MASK,
 			     FIELD_PREP(GS_UKERNEL_MASK, XE_GUC_LOAD_STATUS_READY),
-			     100000, &guc_status, false);
+				      100000, &guc_status);
 	if (ret)
 		xe_gt_warn(gt, "GuC not ready after disabling idle flow (GUC_STATUS: 0x%x)\n",
 			   guc_status);
 
 	ret = xe_mmio_wait32(&gt->mmio, GUC_SRAM_STATUS, GUC_SRAM_HANDLING_MASK,
-			     0, 5000, &sram_status, false);
+				      0, 5000, &sram_status);
 	if (ret)
 		xe_gt_warn(gt, "SRAM handling not complete (GUC_SRAM_STATUS: 0x%x)\n",
 			   sram_status);
@@ -996,7 +996,7 @@ int xe_guc_reset(struct xe_guc *guc)
 
 	xe_mmio_write32(mmio, GDRST, GRDOM_GUC);
 
-	ret = xe_mmio_wait32(mmio, GDRST, GRDOM_GUC, 0, 5000, &gdrst, false);
+	ret = xe_mmio_wait32(mmio, GDRST, GRDOM_GUC, 0, 5000, &gdrst);
 	if (ret) {
 		xe_gt_err(gt, "GuC reset timed out, GDRST=%#x\n", gdrst);
 		goto err_out;
@@ -1538,7 +1538,7 @@ retry:
 
 	ret = xe_mmio_wait32(mmio, reply_reg, GUC_HXG_MSG_0_ORIGIN,
 			     FIELD_PREP(GUC_HXG_MSG_0_ORIGIN, GUC_HXG_ORIGIN_GUC),
-			     50000, &header, false);
+				     50000, &header);
 	if (ret) {
 		/* scratch registers might be cleared during FLR, try once more */
 		if (!header) {
@@ -1574,7 +1574,7 @@ timeout:
 		BUILD_BUG_ON((GUC_HXG_TYPE_RESPONSE_SUCCESS ^ GUC_HXG_TYPE_RESPONSE_FAILURE) != 1);
 
 		ret = xe_mmio_wait32(mmio, reply_reg, resp_mask, resp_mask,
-				     2000000, &header, false);
+					     2000000, &header);
 
 		if (unlikely(FIELD_GET(GUC_HXG_MSG_0_ORIGIN, header) !=
 			     GUC_HXG_ORIGIN_GUC))

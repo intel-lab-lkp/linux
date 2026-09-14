@@ -27,9 +27,13 @@ bool xe_mmio_in_range(const struct xe_mmio *mmio, const struct xe_mmio_range *ra
 
 u64 xe_mmio_read64_2x32(struct xe_mmio *mmio, struct xe_reg reg);
 int xe_mmio_wait32(struct xe_mmio *mmio, struct xe_reg reg, u32 mask, u32 val,
-		   u32 timeout_us, u32 *out_val, bool atomic);
+		   u32 timeout_us, u32 *out_val);
+int xe_mmio_wait32_atomic(struct xe_mmio *mmio, struct xe_reg reg, u32 mask, u32 val,
+			  u32 timeout_us, u32 *out_val);
 int xe_mmio_wait32_not(struct xe_mmio *mmio, struct xe_reg reg, u32 mask,
-		       u32 val, u32 timeout_us, u32 *out_val, bool atomic);
+		       u32 val, u32 timeout_us, u32 *out_val);
+int xe_mmio_wait32_not_atomic(struct xe_mmio *mmio, struct xe_reg reg, u32 mask,
+			      u32 val, u32 timeout_us, u32 *out_val);
 
 static inline u32 xe_mmio_adjusted_addr(const struct xe_mmio *mmio, u32 addr)
 {
