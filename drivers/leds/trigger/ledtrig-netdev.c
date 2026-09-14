@@ -336,8 +336,14 @@ static ssize_t device_name_store(struct device *dev,
 	if (ret < 0)
 		return ret;
 
-	/* Refresh link_speed visibility */
+	/*
+	 * Refresh link_speed visibility, serialized against netdev_trig_notify()
+	 * which may concurrently call sysfs_update_group() on the same group
+	 * while reading supported_link_modes via netdev_trig_link_speed_visible().
+	 */
+	mutex_lock(&trigger_data->lock);
 	sysfs_update_group(&dev->kobj, &netdev_trig_link_speed_attrs_group);
+	mutex_unlock(&trigger_data->lock);
 
 	return size;
 }
