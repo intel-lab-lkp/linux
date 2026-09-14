@@ -843,7 +843,6 @@ static int rz_mtu3_cnt_probe(struct platform_device *pdev)
 	struct rz_mtu3 *ddata = dev_get_drvdata(pdev->dev.parent);
 	struct device *dev = &pdev->dev;
 	struct counter_device *counter;
-	struct rz_mtu3_channel *ch;
 	struct rz_mtu3_cnt *priv;
 	unsigned int i;
 	int ret;
@@ -856,12 +855,8 @@ static int rz_mtu3_cnt_probe(struct platform_device *pdev)
 	priv->clk = ddata->clk;
 	priv->mtu_32bit_max = U32_MAX;
 	priv->ch = &ddata->channels[RZ_MTU3_CHAN_1];
-	ch = &priv->ch[0];
-	for (i = 0; i < RZ_MTU3_MAX_HW_CNTR_CHANNELS; i++) {
-		ch->dev = dev;
+	for (i = 0; i < RZ_MTU3_MAX_HW_CNTR_CHANNELS; i++)
 		priv->mtu_16bit_max[i] = U16_MAX;
-		ch++;
-	}
 
 	mutex_init(&priv->lock);
 	platform_set_drvdata(pdev, priv->clk);
