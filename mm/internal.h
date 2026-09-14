@@ -24,6 +24,22 @@
 
 struct folio_batch;
 
+/*
+ * Unlike folio_contain_hwpoisoned_page(), this does not rely on the folio-level
+ * PG_has_hwpoisoned, which memory_failure() only sets after taking the folio
+ * lock and so can lag a tail-page poison.
+ */
+static inline bool folio_has_hwpoisoned_subpage(const struct folio *folio)
+{
+	long nr = folio_nr_pages(folio);
+	long i;
+
+	for (i = 0; i < nr; i++)
+		if (PageHWPoison(folio_page(folio, i)))
+			return true;
+	return false;
+}
+
 /* mm/workingset.c */
 bool workingset_test_recent(void *shadow, bool file, bool *workingset,
 			    bool flush);
