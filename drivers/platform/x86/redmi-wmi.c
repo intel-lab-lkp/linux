@@ -4,6 +4,7 @@
 #include <linux/acpi.h>
 #include <linux/bits.h>
 #include <linux/device.h>
+#include <linux/dmi.h>
 #include <linux/input.h>
 #include <linux/input/sparse-keymap.h>
 #include <linux/module.h>
@@ -68,6 +69,12 @@ static int redmi_wmi_probe(struct wmi_device *wdev, const void *context)
 {
 	struct redmi_wmi *data;
 	int err;
+
+	/* This shared GUID belongs to bitland-mifs-wmi on the WUJIE15 PRO HPT. */
+	if (dmi_match(DMI_SYS_VENDOR, "MECHREVO") &&
+	    dmi_match(DMI_PRODUCT_NAME, "WUJIE15 PRO") &&
+	    dmi_match(DMI_BOARD_NAME, "WUJIE15 Series-HPT"))
+		return -ENODEV;
 
 	/* Init dev */
 	data = devm_kzalloc(&wdev->dev, sizeof(*data), GFP_KERNEL);

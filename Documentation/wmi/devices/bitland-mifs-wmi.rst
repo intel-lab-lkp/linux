@@ -7,6 +7,37 @@ Bitland MIFS driver (bitland-mifs-wmi)
 Introduction
 ============
 
+MECHREVO WUJIE15 PRO (HPT) firmware variant
+-----------------------------------------
+
+The MECHREVO WUJIE15 PRO with board WUJIE15 Series-HPT uses a reduced
+interface. The driver selects this variant using exact system vendor,
+product name and board name matches.
+
+The supported platform profiles are low-power (raw value 2), balanced
+(1), and performance (0). There is no separate full-speed mode.
+USB-C is the only external power input on this model. Performance is
+available on external power, but not on battery. The driver queries the
+ACPI adapter's _PSR for current power presence because USB-C connector
+ONLINE state may still be stale during resume. A failed query is not
+treated as external power being present.
+On resume, a saved performance profile becomes balanced if external
+power was removed, matching the firmware's AC-loss transition.
+
+Command 0x0d returns two little-endian tachometers, EC Fan 2 followed by
+Fan 1. No third fan or CPU-temperature input is provided. GPU switching,
+RGB modes and fan boost are not exposed. Keyboard backlight brightness
+uses the normal 0 through 3 values.
+
+Unsupported GET commands can return success (0x8000) with an empty
+payload. Successful queries alone therefore do not establish the
+presence of a sensor or control; the driver uses the known capabilities.
+Supported profile and backlight SET calls are also checked for a
+firmware acknowledgment.
+
+The event GUID is shared with redmi-wmi. On this exact DMI combination,
+redmi-wmi declines binding so bitland-mifs-wmi handles the notifications.
+
 
 EC WMI interface description
 ============================
