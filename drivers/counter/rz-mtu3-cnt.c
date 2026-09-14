@@ -458,13 +458,13 @@ static void rz_mtu3_terminate_counter(struct counter_device *counter, int id)
 	struct rz_mtu3_channel *const ch2 = rz_mtu3_get_ch(counter, 1);
 
 	if (id == RZ_MTU3_32_BIT_CH) {
-		rz_mtu3_release_channel(ch2);
-		rz_mtu3_release_channel(ch1);
 		rz_mtu3_disable(ch2);
 		rz_mtu3_disable(ch1);
+		rz_mtu3_release_channel(ch2);
+		rz_mtu3_release_channel(ch1);
 	} else {
-		rz_mtu3_release_channel(ch);
 		rz_mtu3_disable(ch);
+		rz_mtu3_release_channel(ch);
 	}
 }
 
