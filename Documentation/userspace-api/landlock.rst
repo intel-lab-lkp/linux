@@ -430,6 +430,21 @@ The operations which can be scoped are:
     This limits the sending of signals to target processes which run within the
     same or a nested Landlock domain.
 
+    This scope does not cover signals delivered by the TTY layer.  A process
+    holding a PTY master, or otherwise driving a terminal, can cause the TTY
+    driver to deliver signals to processes attached to that terminal across
+    Landlock domain boundaries.  This includes ``SIGINT``, ``SIGQUIT``, and
+    ``SIGTSTP`` via the ``TIOCSIG`` :manpage:`ioctl(2)` command or the
+    corresponding control characters.  The TTY layer may also deliver
+    ``SIGWINCH``, ``SIGHUP``, and ``SIGCONT``.
+
+    These signals originate from the TTY driver in response to terminal
+    activity rather than from a :manpage:`kill(2)`-style request.  They can
+    only reach processes attached to the terminal.  To restrict this
+    interaction, control possession of the PTY master and terminal attachment.
+    For example, do not pass a PTY master to a sandboxed process if its slave
+    has processes from outside the Landlock domain attached to it.
+
 ``LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET``
     This limits the set of abstract :manpage:`unix(7)` sockets to which we can
     :manpage:`connect(2)` to socket addresses which were created by a process in
