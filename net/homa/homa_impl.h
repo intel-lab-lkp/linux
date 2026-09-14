@@ -363,11 +363,16 @@ static inline bool homa_make_header_avl(struct sk_buff *skb)
 
 extern unsigned int homa_net_id;
 
+void     homa_destroy(struct homa *homa);
+int      homa_init(struct homa *homa);
 void     homa_message_out_init(struct homa_rpc *rpc, int length);
+void     homa_net_destroy(struct homa_net *hnet);
+int      homa_net_init(struct homa_net *hnet, struct homa *homa);
 int      homa_resend_data(struct homa_rpc *rpc, int start, int end);
 void     homa_rpc_handoff(struct homa_rpc *rpc);
 int      homa_rpc_tx_end(struct homa_rpc *rpc);
 struct sk_buff *__homa_skb_alloc(int length);
+void     homa_spin(int ns);
 int      homa_tx_copy_from_user(struct homa_rpc *rpc, struct iov_iter *iter,
 				bool xmit);
 struct sk_buff *homa_tx_skb_alloc(struct homa_rpc *rpc, u32 offset, u32 *end);
