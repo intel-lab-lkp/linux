@@ -23,9 +23,11 @@ static ssize_t fuse_send_ioctl(struct fuse_mount *fm, struct fuse_args *args,
 
 	ret = fuse_simple_request(fm, args);
 
-	/* Translate ENOSYS, which shouldn't be returned from fs */
-	if (ret == -ENOSYS)
+	/* Cache request-level ENOSYS only; outarg->result is per-command. */
+	if (ret == -ENOSYS) {
+		fm->fc->no_ioctl = 1;
 		ret = -ENOTTY;
+	}
 
 	if (ret >= 0 && outarg->result == -ENOSYS)
 		outarg->result = -ENOTTY;
@@ -232,6 +234,9 @@ long fuse_do_ioctl(struct file *file, unsigned int cmd, unsigned long arg,
 	int err, i;
 	struct iov_iter ii;
 	struct fuse_args_pages ap = {};
+
+	if (fm->fc->no_ioctl)
+		return -ENOTTY;
 
 #if BITS_PER_LONG == 32
 	inarg.flags |= FUSE_IOCTL_32BIT;
@@ -490,6 +495,9 @@ static struct fuse_file *fuse_priv_ioctl_prepare(struct inode *inode)
 		return ERR_PTR(-EIO);
 
 	if (!S_ISREG(inode->i_mode) && !isdir)
+		return ERR_PTR(-ENOTTY);
+
+	if (fm->fc->no_ioctl)
 		return ERR_PTR(-ENOTTY);
 
 	return fuse_file_open(fm, get_node_id(inode), O_RDONLY, isdir);

@@ -720,6 +720,9 @@ struct fuse_conn {
 	/** @sync_init: Is synchronous FUSE_INIT allowed? */
 	unsigned int sync_init:1;
 
+	/** @no_ioctl: Is ioctl not implemented by fs? */
+	unsigned no_ioctl:1;
+
 	/** @max_stack_depth: Maximum stack depth for passthrough backing files */
 	int max_stack_depth;
 
