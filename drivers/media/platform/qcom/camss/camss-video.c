@@ -250,6 +250,32 @@ static int video_prepare_streaming(struct vb2_queue *q)
 }
 
 /*
+ * video_source_pad_streams - Streams routed to a subdev source pad
+ * @sd: Streams-aware subdevice
+ * @pad: Source pad index on @sd
+ *
+ * Return the mask of streams of the active routes ending on @pad.
+ */
+static u64 video_source_pad_streams(struct v4l2_subdev *sd, u32 pad)
+{
+	struct v4l2_subdev_state *state;
+	struct v4l2_subdev_route *route;
+	u64 mask = 0;
+
+	state = v4l2_subdev_lock_and_get_active_state(sd);
+	if (!state)
+		return 0;
+
+	for_each_active_route(&state->routing, route)
+		if (route->source_pad == pad)
+			mask |= BIT_ULL(route->source_stream);
+
+	v4l2_subdev_unlock_state(state);
+
+	return mask;
+}
+
+/*
  * video_subdev_set_stream - Start or stop a subdev of the pipeline
  * @video: CAMSS video device
  * @subdev: Subdevice to start or stop
@@ -324,6 +350,20 @@ static int video_start_streaming(struct vb2_queue *q, unsigned int count)
 		entity = pad->entity;
 		subdev = media_entity_to_v4l2_subdev(entity);
 
+		if (subdev->flags & V4L2_SUBDEV_FL_STREAMS) {
+			u64 mask = video_source_pad_streams(subdev, pad->index);
+
+			if (!mask)
+				break;
+
+			ret = v4l2_subdev_enable_streams(subdev, pad->index,
+							 mask);
+			if (ret && ret != -EALREADY)
+				goto error;
+
+			break;
+		}
+
 		ret = video_subdev_set_stream(video, subdev, true);
 		if (ret < 0 && ret != -ENOIOCTLCMD)
 			goto error;
@@ -361,6 +401,22 @@ static void video_stop_streaming(struct vb2_queue *q)
 
 		entity = pad->entity;
 		subdev = media_entity_to_v4l2_subdev(entity);
+
+		if (subdev->flags & V4L2_SUBDEV_FL_STREAMS) {
+			u64 mask = video_source_pad_streams(subdev, pad->index);
+
+			if (!mask)
+				break;
+
+			ret = v4l2_subdev_disable_streams(subdev, pad->index,
+							  mask);
+			if (ret && ret != -EALREADY)
+				dev_err(video->camss->dev,
+					"Failed to disable streams %#llx on %s:%u: %d\n",
+					mask, subdev->name, pad->index, ret);
+
+			break;
+		}
 
 		ret = video_subdev_set_stream(video, subdev, false);
 		if (ret) {
