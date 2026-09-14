@@ -137,18 +137,16 @@ const struct iomap_ops hfsplus_write_iomap_ops = {
 /*
  * hfsplus_iomap_cont_expand()
  *
- * Zero-extend the backing store from the current phys_size up to 'size'.
- * Used both by hfsplus_setattr() and by hfsplus_file_truncate().
+ * Zero the byte range [from, to) of a file that is being extended, where
+ * 'from' is the old end-of-file and 'to' the new one. Used by the extending
+ * write path, hfsplus_setattr() (truncate up) and hfsplus_file_truncate().
  */
-int hfsplus_iomap_cont_expand(struct inode *inode, loff_t size)
+int hfsplus_iomap_cont_expand(struct inode *inode, loff_t from, loff_t to)
 {
-	struct hfsplus_inode_info *hip = HFSPLUS_I(inode);
-	loff_t start = hip->phys_size;
-
-	if (size <= start)
+	if (to <= from)
 		return 0;
 
-	return iomap_zero_range(inode, start, size - start, NULL,
+	return iomap_zero_range(inode, from, to - from, NULL,
 				&hfsplus_write_iomap_ops, NULL, NULL);
 }
 

@@ -11,7 +11,7 @@ extern const struct iomap_ops hfsplus_write_iomap_ops;
 extern const struct iomap_writeback_ops hfsplus_writeback_ops;
 extern const struct iomap_dio_ops hfsplus_write_dio_ops;
 
-int hfsplus_iomap_cont_expand(struct inode *inode, loff_t size);
+int hfsplus_iomap_cont_expand(struct inode *inode, loff_t from, loff_t to);
 int hfsplus_iomap_swap_activate(struct swap_info_struct *sis,
 				struct file *file, sector_t *span);
 

@@ -212,7 +212,7 @@ static ssize_t hfsplus_file_write_iter(struct kiocb *iocb,
 		loff_t old_size = i_size_read(inode);
 
 		i_size_write(inode, iocb->ki_pos);
-		err = hfsplus_iomap_cont_expand(inode, iocb->ki_pos);
+		err = hfsplus_iomap_cont_expand(inode, old_size, iocb->ki_pos);
 		if (err) {
 			i_size_write(inode, old_size);
 			ret = err;
