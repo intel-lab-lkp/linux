@@ -21,7 +21,7 @@
 
 static bool swap_available(void)
 {
-	return get_nr_swap_pages() > 0;
+	return get_nr_swap_pages_eligible() > 0;
 }
 
 static bool can_release_pages(struct drm_i915_gem_object *obj)

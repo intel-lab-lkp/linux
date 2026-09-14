@@ -6002,14 +6002,26 @@ void __mem_cgroup_uncharge_swap(unsigned short id, unsigned int nr_pages)
 	rcu_read_unlock();
 }
 
-long mem_cgroup_get_nr_swap_pages(struct mem_cgroup *memcg)
+static long
+mem_cgroup_get_nr_swap_pages_with_limit(struct mem_cgroup *memcg,
+					long nr_swap_pages)
 {
-	long nr_swap_pages = get_nr_swap_pages();
-
 	if (!mem_cgroup_disabled() && !do_memsw_account())
 		nr_swap_pages = min(nr_swap_pages, page_counter_margin(&memcg->swap));
 
 	return nr_swap_pages;
+}
+
+long mem_cgroup_get_nr_swap_pages(struct mem_cgroup *memcg)
+{
+	return mem_cgroup_get_nr_swap_pages_with_limit(memcg,
+			get_nr_swap_pages());
+}
+
+long mem_cgroup_get_nr_swap_pages_eligible(struct mem_cgroup *memcg)
+{
+	return mem_cgroup_get_nr_swap_pages_with_limit(memcg,
+			get_nr_swap_pages_eligible());
 }
 
 /**
@@ -6042,7 +6054,7 @@ bool mem_cgroup_swap_full(struct folio *folio)
 
 	VM_BUG_ON_FOLIO(!folio_test_locked(folio), folio);
 
-	if (vm_swap_full())
+	if (folio_swap_full(folio))
 		return true;
 	if (do_memsw_account() || !folio_memcg_charged(folio))
 		return ret;

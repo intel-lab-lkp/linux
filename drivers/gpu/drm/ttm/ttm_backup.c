@@ -206,7 +206,7 @@ u64 ttm_backup_bytes_avail(void)
 	 * number also depends on shmem actually swapping out backed-up
 	 * shmem objects without too much buffering.
 	 */
-	return (u64)get_nr_swap_pages() << PAGE_SHIFT;
+	return (u64)get_nr_swap_pages_eligible() << PAGE_SHIFT;
 }
 EXPORT_SYMBOL_GPL(ttm_backup_bytes_avail);
 

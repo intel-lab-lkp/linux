@@ -203,6 +203,7 @@ static void swap_zeromap_folio_clear(struct folio *folio)
  */
 int swap_writeout(struct swap_io_ctx *ctx, struct folio *folio)
 {
+	struct swap_info_struct *sis = __swap_entry_to_info(folio->swap);
 	int ret = 0;
 
 	if (folio_free_swap(folio))
@@ -210,7 +211,9 @@ int swap_writeout(struct swap_io_ctx *ctx, struct folio *folio)
 
 	/*
 	 * Arch code may have to preserve more data than just the folio
-	 * contents, e.g. memory tags.
+	 * contents, e.g. memory tags.  Do this before refusing a retained
+	 * offload-only entry below: a later sibling swap-PTE fault can restore
+	 * swap-indexed metadata into this resident folio.
 	 */
 	ret = arch_prepare_to_swap(folio);
 	if (ret) {
@@ -229,13 +232,30 @@ int swap_writeout(struct swap_io_ctx *ctx, struct folio *folio)
 	}
 
 	/*
+	 * A folio can retain an existing swap entry after swapin.  Do not let
+	 * ordinary reclaim use an offload-only entry through that path.
+	 */
+	if ((READ_ONCE(sis->flags) & SWP_OFFLOAD_ONLY) &&
+	    !current_reclaim_allows_offload_swap()) {
+		count_vm_events(SWPOUT_OFFLOAD_REFUSED,
+				folio_nr_pages(folio));
+		folio_mark_dirty(folio);
+		return AOP_WRITEPAGE_ACTIVATE;
+	}
+
+	/*
 	 * Clear bits this folio occupies in the zeromap to prevent zero data
 	 * being read in from any previous zero writes that occupied the same
 	 * swap entries.
 	 */
 	swap_zeromap_folio_clear(folio);
 
-	if (zswap_store(folio)) {
+	/*
+	 * Zswap writeback can happen much later from pressure reclaim or its
+	 * shrinker workqueue.  Do not let it defer an offload-only backend write
+	 * beyond the proactive reclaim context which admitted the swap slot.
+	 */
+	if (!(READ_ONCE(sis->flags) & SWP_OFFLOAD_ONLY) && zswap_store(folio)) {
 		count_mthp_stat(folio_order(folio), MTHP_STAT_ZSWPOUT);
 		goto out_unlock;
 	}

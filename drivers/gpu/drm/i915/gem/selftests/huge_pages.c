@@ -1895,8 +1895,8 @@ static int igt_shrink_thp(void *arg)
 	i915_gem_context_unlock_engines(ctx);
 	/*
 	 * Nuke everything *before* we unpin the pages so we can be reasonably
-	 * sure that when later checking get_nr_swap_pages() that some random
-	 * leftover object doesn't steal the remaining swap space.
+	 * sure that when later checking get_nr_swap_pages_eligible() that some
+	 * random leftover object doesn't steal the remaining swap space.
 	 */
 	i915_gem_shrink(NULL, i915, -1UL, NULL,
 			I915_SHRINK_BOUND |
@@ -1910,7 +1910,7 @@ static int igt_shrink_thp(void *arg)
 	 * Now that the pages are *unpinned* shrinking should invoke
 	 * shmem to truncate our pages, if we have available swap.
 	 */
-	should_swap = get_nr_swap_pages() > 0;
+	should_swap = get_nr_swap_pages_eligible() > 0;
 	i915_gem_shrink(NULL, i915, -1UL, NULL,
 			I915_SHRINK_BOUND |
 			I915_SHRINK_UNBOUND |

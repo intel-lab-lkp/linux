@@ -695,7 +695,7 @@ static int shrink_test_run_device(struct xe_device *xe)
 	}
 	to_alloc = ram * 2;
 
-	ram_and_swap = ram + get_nr_swap_pages() * PAGE_SIZE;
+	ram_and_swap = ram + get_nr_swap_pages_eligible() * PAGE_SIZE;
 	if (to_alloc > ram_and_swap)
 		purgeable = to_alloc - ram_and_swap;
 	purgeable += div64_u64(purgeable, 5);

@@ -21,7 +21,7 @@ module_param(enable_eviction, bool, 0600);
 
 static bool can_swap(void)
 {
-	return enable_eviction && get_nr_swap_pages() > 0;
+	return enable_eviction && get_nr_swap_pages_eligible() > 0;
 }
 
 static bool can_block(struct shrink_control *sc)

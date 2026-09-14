@@ -1331,6 +1331,7 @@ const char * const vmstat_text[] = {
 	[I(PGPGOUT)]				= "pgpgout",
 	[I(PSWPIN)]				= "pswpin",
 	[I(PSWPOUT)]				= "pswpout",
+	[I(SWPOUT_OFFLOAD_REFUSED)]		= "swpout_offload_refused",
 
 #define OFF (NR_VM_ZONE_STAT_ITEMS + NR_VM_NUMA_EVENT_ITEMS + \
 	     NR_VM_NODE_STAT_ITEMS + NR_VM_STAT_ITEMS)

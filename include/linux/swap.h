@@ -21,10 +21,11 @@
 #define SWAP_FLAG_DISCARD	0x10000 /* enable discard for swap */
 #define SWAP_FLAG_DISCARD_ONCE	0x20000 /* discard swap area at swapon-time */
 #define SWAP_FLAG_DISCARD_PAGES 0x40000 /* discard page-clusters after use */
+#define SWAP_FLAG_OFFLOAD_ONLY  0x80000 /* only use for proactive reclaim */
 
 #define SWAP_FLAGS_VALID	(SWAP_FLAG_PRIO_MASK | SWAP_FLAG_PREFER | \
 				 SWAP_FLAG_DISCARD | SWAP_FLAG_DISCARD_ONCE | \
-				 SWAP_FLAG_DISCARD_PAGES)
+				 SWAP_FLAG_DISCARD_PAGES | SWAP_FLAG_OFFLOAD_ONLY)
 /*
  * MAX_SWAPFILES defines the maximum number of swaptypes: things which can
  * be swapped to.  The swap type and the offset into that swap type are
@@ -140,11 +141,19 @@ union swap_header {
 struct reclaim_state {
 	/* pages reclaimed outside of LRU-based reclaim */
 	unsigned long reclaimed;
+	/* this reclaim context may use offload-only swap */
+	bool allow_offload_swap;
 #ifdef CONFIG_LRU_GEN
 	/* per-thread mm walk data */
 	struct lru_gen_mm_walk *mm_walk;
 #endif
 };
+
+static inline bool current_reclaim_allows_offload_swap(void)
+{
+	return current->reclaim_state &&
+	       current->reclaim_state->allow_offload_swap;
+}
 
 /*
  * mm_account_reclaimed_pages(): account reclaimed pages outside of LRU-based
@@ -201,6 +210,7 @@ enum {
 	SWP_STABLE_WRITES = (1 << 11),	/* no overwrite PG_writeback pages */
 	SWP_SYNCHRONOUS_IO = (1 << 12),	/* synchronous IO is efficient */
 	SWP_HIBERNATION = (1 << 13),	/* pinned for hibernation */
+	SWP_OFFLOAD_ONLY = (1 << 14),	/* proactive-reclaim swap only */
 					/* add others here before... */
 };
 
@@ -389,6 +399,9 @@ static inline long get_nr_swap_pages(void)
 	return atomic_long_read(&nr_swap_pages);
 }
 
+long get_nr_swap_pages_eligible(void);
+bool folio_swap_full(struct folio *folio);
+
 extern void si_swapinfo(struct sysinfo *);
 extern int pin_hibernation_swap_type(dev_t device, sector_t offset);
 extern void unpin_hibernation_swap_type(int type);
@@ -443,9 +456,15 @@ static inline void put_swap_device(struct swap_info_struct *si)
 }
 
 #define get_nr_swap_pages()			0L
+#define get_nr_swap_pages_eligible()		0L
 #define total_swap_pages			0L
 #define total_swapcache_pages()			0UL
 #define vm_swap_full()				0
+
+static inline bool folio_swap_full(struct folio *folio)
+{
+	return false;
+}
 
 #define si_swapinfo(val) \
 	do { (val)->freeswap = (val)->totalswap = 0; } while (0)
@@ -531,6 +550,7 @@ static inline void mem_cgroup_uncharge_swap(unsigned short id, unsigned int nr_p
 
 long mem_cgroup_get_folio_swap_margin(struct folio *folio);
 extern long mem_cgroup_get_nr_swap_pages(struct mem_cgroup *memcg);
+long mem_cgroup_get_nr_swap_pages_eligible(struct mem_cgroup *memcg);
 extern bool mem_cgroup_swap_full(struct folio *folio);
 #else
 static inline int mem_cgroup_try_charge_swap(struct folio *folio)
@@ -553,9 +573,14 @@ static inline long mem_cgroup_get_nr_swap_pages(struct mem_cgroup *memcg)
 	return get_nr_swap_pages();
 }
 
+static inline long mem_cgroup_get_nr_swap_pages_eligible(struct mem_cgroup *memcg)
+{
+	return get_nr_swap_pages_eligible();
+}
+
 static inline bool mem_cgroup_swap_full(struct folio *folio)
 {
-	return vm_swap_full();
+	return folio_swap_full(folio);
 }
 #endif
 

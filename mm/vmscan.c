@@ -123,6 +123,9 @@ struct scan_control {
 	/* Proactive reclaim invoked by userspace */
 	unsigned int proactive:1;
 
+	/* This reclaim context may use offload-only swap */
+	unsigned int allow_offload_swap:1;
+
 	/*
 	 * Cgroup memory below memory.low is protected as long as we
 	 * don't threaten to OOM. If any cgroup is reclaimed at
@@ -291,14 +294,18 @@ static inline bool is_exec_file_folio(const struct folio *folio,
 }
 
 static void set_task_reclaim_state(struct task_struct *task,
-				   struct reclaim_state *rs)
+				   struct scan_control *sc)
 {
+	struct reclaim_state *rs = sc ? &sc->reclaim_state : NULL;
+
 	/* Check for an overwrite */
 	WARN_ON_ONCE(rs && task->reclaim_state);
 
 	/* Check for the nulling of an already-nulled member */
 	WARN_ON_ONCE(!rs && !task->reclaim_state);
 
+	if (rs)
+		rs->allow_offload_swap = sc->allow_offload_swap;
 	task->reclaim_state = rs;
 }
 
@@ -418,7 +425,7 @@ static inline bool can_reclaim_anon_pages(struct mem_cgroup *memcg,
 		 * And under GFP_NOIO, is there enough swapcached anon to make
 		 * scanning anon worthwhile?
 		 */
-		if (get_nr_swap_pages() > 0 &&
+		if (get_nr_swap_pages_eligible() > 0 &&
 		    !reclaimable_anon_is_low(memcg, nid, sc))
 			return true;
 	} else {
@@ -426,7 +433,7 @@ static inline bool can_reclaim_anon_pages(struct mem_cgroup *memcg,
 		 * Is the memcg below its swap limit, and under GFP_NOIO does
 		 * it have enough swapcached anon to make scanning worthwhile?
 		 */
-		if (mem_cgroup_get_nr_swap_pages(memcg) > 0 &&
+		if (mem_cgroup_get_nr_swap_pages_eligible(memcg) > 0 &&
 		    !reclaimable_anon_is_low(memcg, nid, sc))
 			return true;
 	}
@@ -2853,7 +2860,7 @@ static int get_swappiness(struct lruvec *lruvec, struct scan_control *sc)
 		return 0;
 
 	if (!can_demote(pgdat->node_id, sc, memcg) &&
-	    mem_cgroup_get_nr_swap_pages(memcg) < MIN_LRU_BATCH)
+	    mem_cgroup_get_nr_swap_pages_eligible(memcg) < MIN_LRU_BATCH)
 		return 0;
 
 	return swappiness;
@@ -5926,6 +5933,7 @@ static ssize_t lru_gen_seq_write(struct file *file, const char __user *src,
 		.reclaim_idx = MAX_NR_ZONES - 1,
 		.gfp_mask = GFP_KERNEL,
 		.proactive = true,
+		.allow_offload_swap = true,
 	};
 
 	buf = kvmalloc(len + 1, GFP_KERNEL);
@@ -5937,7 +5945,7 @@ static ssize_t lru_gen_seq_write(struct file *file, const char __user *src,
 		return -EFAULT;
 	}
 
-	set_task_reclaim_state(current, &sc.reclaim_state);
+	set_task_reclaim_state(current, &sc);
 	flags = memalloc_noreclaim_save();
 	blk_start_plug(&plug);
 	if (!set_mm_walk(NULL, true)) {
@@ -6941,7 +6949,7 @@ unsigned long try_to_free_pages(struct zonelist *zonelist, int order,
 	if (throttle_direct_reclaim(sc.gfp_mask, zonelist, nodemask))
 		return 1;
 
-	set_task_reclaim_state(current, &sc.reclaim_state);
+	set_task_reclaim_state(current, &sc);
 	trace_mm_vmscan_direct_reclaim_begin(sc.gfp_mask, order, NULL);
 
 	nr_reclaimed = do_try_to_free_pages(zonelist, &sc);
@@ -6974,6 +6982,8 @@ unsigned long try_to_free_mem_cgroup_pages(struct mem_cgroup *memcg,
 		.may_unmap = 1,
 		.may_swap = !!(reclaim_options & MEMCG_RECLAIM_MAY_SWAP),
 		.proactive = !!(reclaim_options & MEMCG_RECLAIM_PROACTIVE),
+		.allow_offload_swap =
+			!!(reclaim_options & MEMCG_RECLAIM_PROACTIVE),
 	};
 	/*
 	 * Traverse the ZONELIST_FALLBACK zonelist of the current node to put
@@ -6982,7 +6992,7 @@ unsigned long try_to_free_mem_cgroup_pages(struct mem_cgroup *memcg,
 	 */
 	struct zonelist *zonelist = node_zonelist(numa_node_id(), sc.gfp_mask);
 
-	set_task_reclaim_state(current, &sc.reclaim_state);
+	set_task_reclaim_state(current, &sc);
 	trace_mm_vmscan_memcg_reclaim_begin(sc.gfp_mask, 0, memcg);
 	noreclaim_flag = memalloc_noreclaim_save();
 
@@ -7272,7 +7282,7 @@ static int balance_pgdat(pg_data_t *pgdat, int order, int highest_zoneidx)
 
 	trace_mm_vmscan_balance_pgdat_begin(pgdat->node_id, order,
 					    highest_zoneidx);
-	set_task_reclaim_state(current, &sc.reclaim_state);
+	set_task_reclaim_state(current, &sc);
 	psi_memstall_enter(&pflags);
 	__fs_reclaim_acquire(_THIS_IP_);
 
@@ -7769,7 +7779,7 @@ unsigned long shrink_all_memory(unsigned long nr_to_reclaim)
 
 	fs_reclaim_acquire(sc.gfp_mask);
 	noreclaim_flag = memalloc_noreclaim_save();
-	set_task_reclaim_state(current, &sc.reclaim_state);
+	set_task_reclaim_state(current, &sc);
 
 	nr_reclaimed = do_try_to_free_pages(zonelist, &sc);
 
@@ -7950,7 +7960,7 @@ static unsigned long __node_reclaim(struct pglist_data *pgdat,
 	 * We need to be able to allocate from the reserves for RECLAIM_UNMAP
 	 */
 	noreclaim_flag = memalloc_noreclaim_save();
-	set_task_reclaim_state(p, &sc->reclaim_state);
+	set_task_reclaim_state(p, sc);
 
 	do {
 		shrink_node(pgdat, sc);
@@ -8136,6 +8146,7 @@ int user_proactive_reclaim(char *buf,
 				.may_unmap = 1,
 				.may_swap = 1,
 				.proactive = 1,
+				.allow_offload_swap = 1,
 			};
 
 			if (test_and_set_bit_lock(PGDAT_RECLAIM_LOCKED,
