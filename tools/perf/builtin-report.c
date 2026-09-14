@@ -134,6 +134,10 @@ static int report__config(const char *var, const char *value, void *cb)
 		symbol_conf.event_group = perf_config_bool(var, value);
 		return 0;
 	}
+	if (!strcmp(var, "report.debuginfod")) {
+		symbol_conf.debuginfod = perf_config_bool(var, value);
+		return 0;
+	}
 	if (!strcmp(var, "report.percent-limit")) {
 		double pcnt = strtof(value, NULL);
 
@@ -1346,6 +1350,8 @@ int cmd_report(int argc, const char **argv)
 		   "file", "vmlinux pathname"),
 	OPT_BOOLEAN(0, "ignore-vmlinux", &symbol_conf.ignore_vmlinux,
                     "don't load vmlinux even if found"),
+	OPT_BOOLEAN(0, "debuginfod", &symbol_conf.debuginfod,
+                    "fetch debuginfo keyed by build ID from the debuginfod servers, on by default, use --no-debuginfod to turn off"),
 	OPT_STRING(0, "kallsyms", &symbol_conf.kallsyms_name,
 		   "file", "kallsyms pathname"),
 	OPT_BOOLEAN('f', "force", &symbol_conf.force, "don't complain, do it"),

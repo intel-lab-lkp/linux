@@ -82,6 +82,14 @@ struct perf_debuginfod {
 };
 void perf_debuginfod_setup(struct perf_debuginfod *di);
 
+#ifdef HAVE_DEBUGINFOD_SUPPORT
+void debuginfod__setup_urls_env(void);
+#else
+static inline void debuginfod__setup_urls_env(void)
+{
+}
+#endif
+
 const char *perf_basename(const char *path);
 
 char *filename_with_chroot(int pid, const char *filename);

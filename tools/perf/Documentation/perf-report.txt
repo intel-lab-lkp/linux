@@ -366,6 +366,21 @@ OPTIONS
 --ignore-vmlinux::
 	Ignore vmlinux files.
 
+--debuginfod::
+--no-debuginfod::
+	Fetch debuginfo keyed by build ID from the debuginfod servers
+	configured in DEBUGINFOD_URLS, checking the local debuginfod
+	client cache first, when it is not available locally, on for
+	these commands by default.  It can be turned off per invocation
+	with --no-debuginfod, per tool with the "report.debuginfod"
+	config option or globally with "core.debuginfod" set to false.
+	While a fetch is in progress in the stdio interface, 's' skips
+	the current fetch and 'd' skips it and disables debuginfod for
+	the rest of the session, pointing at 'perf config' to make that
+	permanent.  It is disabled as well when the local build-id cache
+	is turned off, e.g. "buildid.dir" set to /dev/null, as that
+	asks for fetched files not to be kept on the box.
+
 --kallsyms=<file>::
         kallsyms pathname
 
