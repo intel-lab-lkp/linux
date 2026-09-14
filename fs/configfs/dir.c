@@ -1244,6 +1244,9 @@ int configfs_depend_item_unlocked(struct configfs_subsystem *caller_subsys,
 		return -EINVAL;
 
 	parent = target->ci_group;
+	if (!parent)
+		return -ENOENT;
+
 	/*
 	 * This may happen when someone is trying to depend root
 	 * directory of some subsystem
