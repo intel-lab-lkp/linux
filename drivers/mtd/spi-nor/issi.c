@@ -29,6 +29,24 @@ static const struct spi_nor_fixups is25lp256_fixups = {
 	.post_bfpt = is25lp256_post_bfpt_fixups,
 };
 
+static int is25wx01g_post_bfpt_fixups(struct spi_nor *nor,
+				      const struct sfdp_parameter_header *bfpt_header,
+				      const struct sfdp_bfpt *bfpt)
+{
+	/*
+	 * There is no Status Register 2 and no 35h command. And WRITE STATUS
+	 * REGISTER takes a single data byte.
+	 */
+	nor->params->opcodes.write_sr1_and_sr2 = 0;
+	nor->params->opcodes.read_sr2 = 0;
+
+	return 0;
+}
+
+static const struct spi_nor_fixups is25wx01g_fixups = {
+	.post_bfpt = is25wx01g_post_bfpt_fixups,
+};
+
 static int pm25lv_nor_late_init(struct spi_nor *nor)
 {
 	struct spi_nor_erase_map *map = &nor->params->erase_map;
@@ -120,6 +138,12 @@ static const struct flash_info issi_nor_parts[] = {
 		.id = SNOR_ID(0x9d, 0x70, 0x19),
 		.name = "is25wp256",
 		.flags = SPI_NOR_QUAD_PP,
+	}, {
+		/* is25wx01g */
+		.id = SNOR_ID(0x9d, 0x5b, 0x1b),
+		.sector_size = SZ_128K,
+		.flags = SPI_NOR_HAS_LOCK | SPI_NOR_HAS_TB |
+			 SPI_NOR_4BIT_BP | SPI_NOR_BP3_SR_BIT6,
 	}
 };
 
@@ -148,6 +172,7 @@ static const struct spi_nor_fixup issi_fixup_list[] = {
 	  .fixup_flags = SPI_NOR_4B_OPCODES },
 	{ .id = SNOR_ID(0x9d, 0x70, 0x19), .fixups = &is25lp256_fixups,
 	  .fixup_flags = SPI_NOR_4B_OPCODES },
+	{ .id = SNOR_ID(0x9d, 0x5b, 0x1b), .fixups = &is25wx01g_fixups },
 };
 
 const struct spi_nor_manufacturer spi_nor_issi = {
