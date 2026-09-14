@@ -11,6 +11,7 @@
 #include <linux/i2c.h>
 #include <linux/math.h>
 #include <linux/math64.h>
+#include <linux/minmax.h>
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
@@ -556,12 +557,15 @@ static int ov9282_update_ctrl_range_flash_duration(struct ov9282 *ov9282)
 	u32 exposure_us = ov9282_exposure_to_us(ov9282, ov9282->exp_ctrl->val);
 	u32 fd_max = ov9282_us_to_flash_duration(ov9282, exposure_us);
 	u32 fd_max_us = ov9282_flash_duration_to_us(ov9282, fd_max);
+	u32 fd_default;
 
 	if (fd_max_us < exposure_us)
 		fd_max_us = ov9282_flash_duration_to_us(ov9282, fd_max + 1);
 
+	fd_default = min_t(u32, OV9282_STROBE_FRAME_SPAN_DEFAULT, fd_max_us);
+
 	return __v4l2_ctrl_modify_range(ov9282->flash_duration, 0, fd_max_us,
-					1, OV9282_STROBE_FRAME_SPAN_DEFAULT);
+					1, fd_default);
 }
 
 /**
