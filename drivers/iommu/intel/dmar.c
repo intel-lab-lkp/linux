@@ -1344,6 +1344,43 @@ static void qi_dump_fault(struct intel_iommu *iommu, u32 fault)
 	       (unsigned long long)desc->qw1);
 }
 
+/**
+ * qi_drain_remaining_descs - drain descriptors stranded by an IQE
+ * @iommu: the affected IOMMU
+ * @wait_index: slot index of the wait descriptor of the current submission
+ * @shift: qi_shift(iommu), converts a slot index into a byte offset
+ * @options: QI_OPT_* flags of the current submission
+ *
+ * Overwrite the slots in [IQH, @wait_index) with no-op descriptors, resubmit
+ * the wait descriptor at @wait_index, and clear IQE so hardware resumes and
+ * eventually signals QI_DONE. Must be called with qi->q_lock held.
+ */
+static void qi_drain_remaining_descs(struct intel_iommu *iommu,
+				     int wait_index, int shift,
+				     unsigned long options)
+{
+	struct q_inval *qi = iommu->qi;
+	struct qi_desc desc;
+	int head_idx;
+	int cur;
+
+	head_idx = (readl(iommu->reg + DMAR_IQH_REG)) >> shift;
+
+	memset(&desc, 0, sizeof(desc));
+	desc.qw0 = QI_IWD_TYPE;
+	for (cur = head_idx; cur != wait_index; cur = (cur + 1) % QI_LENGTH)
+		memcpy(qi->desc + (cur << shift), &desc, 1 << shift);
+
+	desc.qw0 = QI_IWD_STATUS_DATA(QI_DONE) |
+			QI_IWD_STATUS_WRITE | QI_IWD_TYPE;
+	if (options & QI_OPT_WAIT_DRAIN)
+		desc.qw0 |= QI_IWD_PRQ_DRAIN;
+	desc.qw1 = virt_to_phys(&qi->desc_status[wait_index]);
+	memcpy(qi->desc + (wait_index << shift), &desc, 1 << shift);
+
+	writel(DMA_FSTS_IQE, iommu->reg + DMAR_FSTS_REG);
+}
+
 static int qi_check_fault(struct intel_iommu *iommu, int index, int wait_index)
 {
 	u32 fault;
@@ -1366,21 +1403,22 @@ static int qi_check_fault(struct intel_iommu *iommu, int index, int wait_index)
 	 * is cleared.
 	 */
 	if (fault & DMA_FSTS_IQE) {
-		head = readl(iommu->reg + DMAR_IQH_REG);
-		if ((head >> shift) == index) {
-			struct qi_desc *desc = qi->desc + head;
+		int head_idx;
 
-			/*
-			 * desc->qw2 and desc->qw3 are either reserved or
-			 * used by software as private data. We won't print
-			 * out these two qw's for security consideration.
-			 */
-			memcpy(desc, qi->desc + (wait_index << shift),
-			       1 << shift);
-			writel(DMA_FSTS_IQE, iommu->reg + DMAR_FSTS_REG);
-			pr_info("Invalidation Queue Error (IQE) cleared\n");
+		head = readl(iommu->reg + DMAR_IQH_REG);
+		head_idx = head >> shift;
+
+		/*
+		 * The faulting descriptor can be anywhere within the current
+		 * submission's range [index, wait_index]. Since the queue is
+		 * circular, this submission may wrap around QI_LENGTH
+		 * (index > wait_index in that case), so check both the
+		 * non-wrapped and wrapped cases of the range.
+		 */
+		if (index <= wait_index ?
+		    (head_idx >= index && head_idx <= wait_index) :
+		    (head_idx >= index || head_idx <= wait_index))
 			return -EINVAL;
-		}
 	}
 
 	/*
@@ -1452,7 +1490,7 @@ int qi_submit_sync(struct intel_iommu *iommu, struct qi_desc *desc,
 	int wait_index, index;
 	unsigned long flags;
 	int offset, shift;
-	int rc, i;
+	int rc = 0, fault, i;
 	u64 type;
 
 	if (!qi)
@@ -1528,9 +1566,19 @@ restart:
 		 * a deadlock where the interrupt context can wait indefinitely
 		 * for free slots in the queue.
 		 */
-		rc = qi_check_fault(iommu, index, wait_index);
-		if (rc)
+		fault = qi_check_fault(iommu, index, wait_index);
+		if (fault == -EINVAL) {
+			/*
+			 * IQE in our batch: drain the remaining descriptors
+			 * and keep polling until hardware completes.
+			 */
+			qi_drain_remaining_descs(iommu, wait_index, shift,
+						  options);
+			rc = -EINVAL;
+		} else if (fault) {
+			rc = fault;
 			break;
+		}
 
 		raw_spin_unlock(&qi->q_lock);
 		cpu_relax();
