@@ -4,7 +4,9 @@
 #include <linux/module.h>
 #include <linux/netfilter.h>
 #include <linux/rhashtable.h>
+#include <linux/etherdevice.h>
 #include <linux/netdevice.h>
+#include <net/switchdev.h>
 #include <net/ip.h>
 #include <net/ip6_route.h>
 #include <net/netfilter/nf_tables.h>
@@ -139,6 +141,8 @@ static int flow_offload_fill_route(struct flow_offload *flow,
 		memcpy(flow_tuple->out.h_source, route->tuple[dir].out.h_source,
 		       ETH_ALEN);
 		flow_tuple->out.ifidx = route->tuple[dir].out.ifindex;
+		flow_tuple->out.bridge_ifidx =
+			route->tuple[dir].out.bridge_ifindex;
 		flow_tuple->out.bridge_vid = route->tuple[dir].out.bridge_vid;
 		break;
 	case FLOW_OFFLOAD_XMIT_XFRM:
@@ -761,6 +765,94 @@ void nf_flow_table_cleanup(struct net_device *dev)
 }
 EXPORT_SYMBOL_GPL(nf_flow_table_cleanup);
 
+static struct workqueue_struct *nf_flow_fdb_del_wq;
+
+struct nf_flow_fdb_del_work {
+	struct work_struct	work;
+	struct net_device	*dev;
+	netdevice_tracker	dev_tracker;
+	u16			vid;
+	u8			addr[ETH_ALEN];
+	bool			found;
+};
+
+static bool nf_flow_tuple_fdb_match(const struct flow_offload_tuple *tuple,
+				    const struct nf_flow_fdb_del_work *fw)
+{
+	return tuple->xmit_type == FLOW_OFFLOAD_XMIT_DIRECT &&
+	       tuple->out.bridge_ifidx == fw->dev->ifindex &&
+	       tuple->out.bridge_vid == fw->vid &&
+	       ether_addr_equal(tuple->out.h_dest, fw->addr);
+}
+
+static void nf_flow_table_do_fdb_del(struct nf_flowtable *flow_table,
+				     struct flow_offload *flow, void *data)
+{
+	struct nf_flow_fdb_del_work *fw = data;
+
+	if (nf_flow_tuple_fdb_match(&flow->tuplehash[0].tuple, fw) ||
+	    nf_flow_tuple_fdb_match(&flow->tuplehash[1].tuple, fw)) {
+		flow_offload_teardown(flow);
+		fw->found = true;
+	}
+}
+
+static void nf_flow_table_fdb_del_work(struct work_struct *work)
+{
+	struct nf_flow_fdb_del_work *fw;
+	struct nf_flowtable *flowtable;
+
+	fw = container_of(work, struct nf_flow_fdb_del_work, work);
+
+	mutex_lock(&flowtable_lock);
+	list_for_each_entry(flowtable, &flowtables, list) {
+		if (!net_eq(read_pnet(&flowtable->net), dev_net(fw->dev)))
+			continue;
+
+		fw->found = false;
+		nf_flow_table_iterate(flowtable, nf_flow_table_do_fdb_del, fw);
+		if (fw->found)
+			mod_delayed_work(system_power_efficient_wq,
+					 &flowtable->gc_work, 0);
+	}
+	mutex_unlock(&flowtable_lock);
+
+	netdev_put(fw->dev, &fw->dev_tracker);
+	kfree(fw);
+}
+
+/* The bridge notifies the old port before it moves an fdb entry. Flows
+ * sending directly to that port are torn down. Skipping the teardown on
+ * allocation failure leaves the flow to age out, the same as a missed fdb
+ * update does for a switchdev driver.
+ */
+static int nf_flow_table_switchdev_event(struct notifier_block *nb,
+					 unsigned long event, void *ptr)
+{
+	struct switchdev_notifier_fdb_info *fdb_info = ptr;
+	struct nf_flow_fdb_del_work *fw;
+
+	if (event != SWITCHDEV_FDB_DEL_TO_DEVICE || fdb_info->is_local)
+		return NOTIFY_DONE;
+
+	fw = kzalloc_obj(*fw, GFP_ATOMIC);
+	if (!fw)
+		return NOTIFY_DONE;
+
+	INIT_WORK(&fw->work, nf_flow_table_fdb_del_work);
+	fw->dev = fdb_info->info.dev;
+	netdev_hold(fw->dev, &fw->dev_tracker, GFP_ATOMIC);
+	fw->vid = fdb_info->vid;
+	ether_addr_copy(fw->addr, fdb_info->addr);
+	queue_work(nf_flow_fdb_del_wq, &fw->work);
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block nf_flow_table_switchdev_nb = {
+	.notifier_call = nf_flow_table_switchdev_event,
+};
+
 void nf_flow_table_free(struct nf_flowtable *flow_table)
 {
 	mutex_lock(&flowtable_lock);
@@ -838,6 +930,16 @@ static int __init nf_flow_table_module_init(void)
 	if (ret)
 		goto out_offload;
 
+	nf_flow_fdb_del_wq = alloc_workqueue("nf_flow_fdb_del", WQ_UNBOUND, 0);
+	if (!nf_flow_fdb_del_wq) {
+		ret = -ENOMEM;
+		goto out_wq;
+	}
+
+	ret = register_switchdev_notifier(&nf_flow_table_switchdev_nb);
+	if (ret)
+		goto out_switchdev;
+
 	ret = nf_flow_register_bpf();
 	if (ret)
 		goto out_bpf;
@@ -845,6 +947,10 @@ static int __init nf_flow_table_module_init(void)
 	return 0;
 
 out_bpf:
+	unregister_switchdev_notifier(&nf_flow_table_switchdev_nb);
+out_switchdev:
+	destroy_workqueue(nf_flow_fdb_del_wq);
+out_wq:
 	nf_flow_table_offload_exit();
 out_offload:
 	unregister_pernet_subsys(&nf_flow_table_net_ops);
@@ -855,6 +961,8 @@ out_pernet:
 
 static void __exit nf_flow_table_module_exit(void)
 {
+	unregister_switchdev_notifier(&nf_flow_table_switchdev_nb);
+	destroy_workqueue(nf_flow_fdb_del_wq);
 	nf_flow_table_offload_exit();
 	unregister_pernet_subsys(&nf_flow_table_net_ops);
 	kmem_cache_destroy(flow_offload_cachep);
