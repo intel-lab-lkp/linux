@@ -126,6 +126,20 @@ static inline struct hpfs_dirent *dnode_end_de (struct dnode *dnode)
 
 /* The dir entry after dir entry de */
 
+/*
+ * A valid dirent length is at least 0x20, at most 292 and a multiple of
+ * four, as checked by hpfs_map_dnode().  de_next_de() adds length to the
+ * dirent pointer, so a length of zero would leave the pointer where it is:
+ * a dirent walk using it would then spin on the same address and read past
+ * the end of the dnode.  A length that is not a multiple of four would
+ * misalign the pointer as well.
+ */
+static inline int de_length_valid (struct hpfs_dirent *de)
+{
+  unsigned int len = le16_to_cpu(de->length);
+  return len >= 0x20 && len <= 292 && !(len & 3);
+}
+
 static inline struct hpfs_dirent *de_next_de (struct hpfs_dirent *de)
 {
   CHKCOND(le16_to_cpu(de->length)>=0x20 && le16_to_cpu(de->length)<0x800,("HPFS: de_next_de: de->length = %x\n",(unsigned)le16_to_cpu(de->length)));

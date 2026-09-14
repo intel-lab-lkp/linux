@@ -767,6 +767,18 @@ void hpfs_count_dnodes(struct super_block *s, dnode_secno dno, int *n_dnodes,
 				ptr, dno, odno);
 			return;
 		}
+		/*
+		 * de_next_de() returns de itself if the dirent length is
+		 * zero, so a corrupted dnode would make this loop spin on
+		 * one address and read past the end of the dnode.  Require
+		 * a sane length before advancing.
+		 */
+		if (!de_length_valid(de)) {
+			hpfs_brelse4(&qbh);
+			hpfs_error(s, "hpfs_count_dnodes: bad dirent length %u in dnode %08x, dno %08x",
+				(unsigned)le16_to_cpu(de->length), dno, ptr);
+			return;
+		}
 		de = de_next_de(de);
 	}
 	next_de:
@@ -779,6 +791,16 @@ void hpfs_count_dnodes(struct super_block *s, dnode_secno dno, int *n_dnodes,
 	process_de:
 	if (!de->first && !de->last && de->directory && n_subdirs) (*n_subdirs)++;
 	if (!de->first && !de->last && n_items) (*n_items)++;
+	/*
+	 * Same problem here: an invalid dirent length would make the
+	 * "next_de" loop below revisit the same address forever.
+	 */
+	if (!de_length_valid(de)) {
+		hpfs_brelse4(&qbh);
+		hpfs_error(s, "hpfs_count_dnodes: bad dirent length %u in dnode %08x",
+			(unsigned)le16_to_cpu(de->length), dno);
+		return;
+	}
 	if ((de = de_next_de(de)) < dnode_end_de(dnode)) goto next_de;
 	ptr = dno;
 	dno = le32_to_cpu(dnode->up);
