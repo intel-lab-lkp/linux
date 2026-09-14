@@ -142,6 +142,7 @@
 
 		cpu_off: cpu-sleep-0 {
 			compatible = "arm,idle-state";
+			idle-state-name = "silver-pll-pc";
 			entry-latency-us = <274>;
 			exit-latency-us = <480>;
 			min-residency-us = <3934>;
@@ -153,6 +154,7 @@
 	domain-idle-states {
 		cluster_sleep_0: cluster-sleep-0 {
 			compatible = "domain-idle-state";
+			idle-state-name = "l3-pc";
 			entry-latency-us = <584>;
 			exit-latency-us = <2332>;
 			min-residency-us = <6118>;
@@ -161,6 +163,7 @@
 
 		cluster_sleep_1: cluster-sleep-1 {
 			compatible = "domain-idle-state";
+			idle-state-name = "llcc-off";
 			entry-latency-us = <2893>;
 			exit-latency-us = <4023>;
 			min-residency-us = <9987>;
