@@ -4266,6 +4266,8 @@ bool ttwu_state_match(struct task_struct *p, unsigned int state, int *success)
  */
 int try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 {
+	/* Instrumented callees would leak coverage into current. */
+	guard(kcov_pause)();
 	guard(preempt)();
 	int cpu, success = 0;
 
