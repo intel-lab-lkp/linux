@@ -135,8 +135,9 @@ pub struct Subsystem<Data> {
 // SAFETY: We do not provide any operations on `Subsystem`.
 unsafe impl<Data> Sync for Subsystem<Data> {}
 
-// SAFETY: Ownership of `Subsystem` can safely be transferred to other threads.
-unsafe impl<Data> Send for Subsystem<Data> {}
+// SAFETY: Ownership of `Subsystem` can safely be transferred to other threads
+// if its data can be transferred as well.
+unsafe impl<Data: Send> Send for Subsystem<Data> {}
 
 impl<Data> Subsystem<Data> {
     /// Create an initializer for a [`Subsystem`].
