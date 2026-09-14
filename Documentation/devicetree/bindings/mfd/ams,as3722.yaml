@@ -1,0 +1,230 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mfd/ams,as3722.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: ams AS3722 Power Management Integrated Circuit
+
+maintainers:
+  - Laxman Dewangan <ldewangan@nvidia.com>
+
+properties:
+  compatible:
+    const: ams,as3722
+
+  reg:
+    description: I2C device address.
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  interrupt-controller: true
+
+  "#interrupt-cells":
+    const: 2
+    description: |
+      Should be set to 2 for IRQ number and flags.
+      The first cell is the IRQ number. IRQ numbers for different interrupt
+      source of AS3722 are defined at dt-bindings/mfd/as3722.h
+      The second cell is the flags, encoded as the trigger masks from
+      dt-bindings/interrupt-controller/irq.h
+
+  gpio-controller: true
+
+  "#gpio-cells":
+    const: 2
+    description:
+      The first cell is the pin number and the second cell is used to
+      specify the GPIO polarity.
+
+  ams,enable-internal-int-pullup:
+    type: boolean
+    description:
+      Boolean property, to enable internal pullup on interrupt pin. Missing
+      this will disable internal pullup on INT pin.
+
+  ams,enable-internal-i2c-pullup:
+    type: boolean
+    description:
+      Boolean property, to enable internal pullup on i2c scl/sda pins.
+      Missing this will disable internal pullup on i2c scl/sda lines.
+
+  ams,enable-ac-ok-power-on:
+    type: boolean
+    description:
+      Boolean property, to enable exit out of power off mode with AC_OK pin
+      (pin enabled in power off mode).
+
+  ams,system-power-controller:
+    type: boolean
+    description:
+      Boolean, to enable the power off functionality through this device.
+
+  pinmux:
+    type: object
+    additionalProperties: false
+    description:
+      Pin control setting at boot. Each subnode represents some desired
+      configuration for a list of pins. This configuration can include the
+      mux function to select on those pin(s), and various pin configuration
+      parameters, such as pull-up, open drain.
+
+    patternProperties:
+      "^gpio[0-9_-]+$":
+        type: object
+        $ref: /schemas/pinctrl/pinmux-node.yaml#
+        unevaluatedProperties: false
+
+        properties:
+          pins:
+            description: List of pins.
+            items:
+              enum: [gpio0, gpio1, gpio2, gpio3, gpio4, gpio5, gpio6, gpio7]
+
+          function:
+            enum: [gpio, interrupt-out, gpio-in-interrupt,
+                   vsup-vbat-low-undebounce-out, vsup-vbat-low-debounce-out,
+                   voltage-in-standby, oc-pg-sd0, oc-pg-sd6, powergood-out,
+                   pwm-in, pwm-out, clk32k-out, watchdog-in, soft-reset-in]
+
+          bias-disable: true
+          bias-pull-up: true
+          bias-pull-down: true
+          bias-high-impedance: true
+          drive-open-drain: true
+
+        required:
+          - pins
+
+  regulators:
+    type: object
+    additionalProperties: false
+    description:
+      Container for the regulator subnodes and their input supplies.
+
+    properties:
+      vsup-sd2-supply:
+        description: Input supply for SD2.
+      vsup-sd3-supply:
+        description: Input supply for SD3.
+      vsup-sd4-supply:
+        description: Input supply for SD4.
+      vsup-sd5-supply:
+        description: Input supply for SD5.
+      vin-ldo0-supply:
+        description: Input supply for LDO0.
+      vin-ldo1-6-supply:
+        description: Input supply for LDO1 and LDO6.
+      vin-ldo2-5-7-supply:
+        description: Input supply for LDO2, LDO5 and LDO7.
+      vin-ldo3-4-supply:
+        description: Input supply for LDO3 and LDO4.
+      vin-ldo9-10-supply:
+        description: Input supply for LDO9 and LDO10.
+      vin-ldo11-supply:
+        description: Input supply for LDO11.
+
+    patternProperties:
+      "^(sd[0-6]|ldo[0-79]|ldo1[01])$":
+        type: object
+        $ref: /schemas/regulator/regulator.yaml#
+        unevaluatedProperties: false
+
+        properties:
+          ams,ext-control:
+            $ref: /schemas/types.yaml#/definitions/uint32
+            enum: [0, 1, 2, 3]
+            description: |
+              External control of the rail. The option of this properties
+              will tell which external input is controlling this rail.
+              Valid values are 0, 1, 2 and 3.
+                0: There is no external control of this rail.
+                1: Rail is controlled by ENABLE1 input pin.
+                2: Rail is controlled by ENABLE2 input pin.
+                3: Rail is controlled by ENABLE3 input pin.
+              Missing this property on DT will be assumed as no external
+              control. The external control pin macros are defined at
+              dt-bindings/mfd/as3722.h
+
+          ams,enable-tracking:
+            type: boolean
+            description:
+              Enable tracking with SD1, only supported by LDO3.
+
+required:
+  - compatible
+  - reg
+  - interrupt-controller
+  - "#interrupt-cells"
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/mfd/as3722.h>
+
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        pmic@40 {
+            compatible = "ams,as3722";
+            reg = <0x40>;
+            interrupts = <GIC_SPI 86 IRQ_TYPE_LEVEL_HIGH>;
+
+            ams,system-power-controller;
+
+            interrupt-controller;
+            #interrupt-cells = <2>;
+
+            gpio-controller;
+            #gpio-cells = <2>;
+
+            pinctrl-names = "default";
+            pinctrl-0 = <&as3722_default>;
+
+            as3722_default: pinmux {
+                gpio0 {
+                    pins = "gpio0";
+                    function = "gpio";
+                    bias-pull-down;
+                };
+
+                gpio1_2_4_7 {
+                    pins = "gpio1", "gpio2", "gpio4", "gpio7";
+                    function = "gpio";
+                    bias-pull-up;
+                };
+
+                gpio3_5_6 {
+                    pins = "gpio3", "gpio5", "gpio6";
+                    bias-high-impedance;
+                };
+            };
+
+            regulators {
+                vsup-sd2-supply = <&vdd_5v0_sys>;
+                vsup-sd3-supply = <&vdd_5v0_sys>;
+                vin-ldo0-supply = <&vdd_1v35_lp0>;
+
+                sd0 {
+                    regulator-name = "vdd_cpu";
+                    regulator-min-microvolt = <700000>;
+                    regulator-max-microvolt = <1400000>;
+                    regulator-always-on;
+                    ams,ext-control = <AS3722_EXT_CONTROL_PIN_ENABLE2>;
+                };
+
+                ldo3 {
+                    regulator-name = "vdd_rtc";
+                    regulator-min-microvolt = <1200000>;
+                    regulator-max-microvolt = <1200000>;
+                    regulator-always-on;
+                    ams,enable-tracking;
+                };
+            };
+        };
+    };
