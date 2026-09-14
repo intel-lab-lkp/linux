@@ -724,6 +724,11 @@ void retire_super(struct super_block *sb)
 }
 EXPORT_SYMBOL(retire_super);
 
+static bool sb_inodes_empty(struct super_block *sb)
+{
+	return list_empty(&sb->s_inodes);
+}
+
 /**
  *	generic_shutdown_super	-	common helper for ->kill_sb()
  *	@sb: superblock to kill
@@ -774,7 +779,7 @@ void generic_shutdown_super(struct super_block *sb)
 		 */
 		fscrypt_destroy_keyring(sb);
 
-		if (CHECK_DATA_CORRUPTION(!list_empty(&sb->s_inodes), NULL,
+		if (CHECK_DATA_CORRUPTION(!sb_inodes_empty(sb), NULL,
 				"VFS: Busy inodes after unmount of %s (%s)",
 				sb->s_id, sb->s_type->name)) {
 			/*
