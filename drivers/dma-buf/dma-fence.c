@@ -1170,7 +1170,13 @@ const char __rcu *dma_fence_driver_name(struct dma_fence *fence)
 
 	/* RCU protection is required for safe access to returned string */
 	ops = rcu_dereference(fence->ops);
-	if (ops)
+
+	/*
+	 * Check both signaled state and ops pointer, we don't know which one is
+	 * loaded first and ops pointer is only set to NULL on newer
+	 * implementations.
+	 */
+	if (!dma_fence_test_signaled_flag(fence) && ops)
 		return (const char __rcu *)ops->get_driver_name(fence);
 	else
 		return (const char __rcu *)"detached-driver";
@@ -1203,7 +1209,13 @@ const char __rcu *dma_fence_timeline_name(struct dma_fence *fence)
 
 	/* RCU protection is required for safe access to returned string */
 	ops = rcu_dereference(fence->ops);
-	if (ops)
+
+	/*
+	 * Check both signaled state and ops pointer, we don't know which one is
+	 * loaded first and ops pointer is only set to NULL on newer
+	 * implementations.
+	 */
+	if (!dma_fence_test_signaled_flag(fence) && ops)
 		return (const char __rcu *)ops->get_timeline_name(fence);
 	else
 		return (const char __rcu *)"signaled-timeline";
