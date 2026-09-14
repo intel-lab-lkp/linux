@@ -6,8 +6,11 @@
 #ifndef _ARM_SMMU_QCOM_H
 #define _ARM_SMMU_QCOM_H
 
+struct qcom_scm;
+
 struct qcom_smmu {
 	struct arm_smmu_device smmu;
+	struct qcom_scm *scm;
 	const struct qcom_smmu_match_data *data;
 	bool bypass_quirk;
 	u8 bypass_cbndx;

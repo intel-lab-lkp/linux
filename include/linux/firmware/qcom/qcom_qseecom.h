@@ -10,6 +10,7 @@
 #define __QCOM_QSEECOM_H
 
 #include <linux/auxiliary_bus.h>
+#include <linux/device.h>
 #include <linux/dma-mapping.h>
 #include <linux/types.h>
 
@@ -48,7 +49,9 @@ static inline int qcom_qseecom_app_send(struct qseecom_client *client,
 					void *req, size_t req_size,
 					void *rsp, size_t rsp_size)
 {
-	return qcom_scm_qseecom_app_send(client->app_id, req, req_size, rsp, rsp_size);
+	struct qcom_scm *scm = dev_get_drvdata(client->aux_dev.dev.parent->parent);
+
+	return qcom_scm_qseecom_app_send(scm, client->app_id, req, req_size, rsp, rsp_size);
 }
 
 #endif /* __QCOM_QSEECOM_H */

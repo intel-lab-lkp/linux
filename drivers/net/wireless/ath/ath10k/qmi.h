@@ -14,6 +14,8 @@
 #define MAX_BUILD_ID_LEN			128
 #define MAX_NUM_CAL_V01			5
 
+struct qcom_scm;
+
 enum ath10k_qmi_driver_event_type {
 	ATH10K_QMI_EVENT_SERVER_ARRIVE,
 	ATH10K_QMI_EVENT_SERVER_EXIT,
@@ -90,6 +92,7 @@ enum ath10k_qmi_state {
 
 struct ath10k_qmi {
 	struct ath10k *ar;
+	struct qcom_scm *scm;
 	struct qmi_handle qmi_hdl;
 	struct sockaddr_qrtr sq;
 	struct work_struct event_work;

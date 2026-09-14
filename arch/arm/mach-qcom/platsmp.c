@@ -355,9 +355,10 @@ static int kpssv2_boot_secondary(unsigned int cpu, struct task_struct *idle)
 
 static void __init qcom_smp_prepare_cpus(unsigned int max_cpus)
 {
+	struct qcom_scm *scm = qcom_scm_get();
 	int cpu;
 
-	if (qcom_scm_set_cold_boot_addr(secondary_startup_arm)) {
+	if (!scm || qcom_scm_set_cold_boot_addr(scm, secondary_startup_arm)) {
 		for_each_present_cpu(cpu) {
 			if (cpu == smp_processor_id())
 				continue;

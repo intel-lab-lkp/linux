@@ -657,6 +657,7 @@ static int qcom_pdc_probe(struct platform_device *pdev, struct device_node *pare
 	struct irq_domain *parent_domain, *pdc_domain;
 	struct device_node *node = pdev->dev.of_node;
 	struct device *dev = &pdev->dev;
+	struct qcom_scm *scm;
 	resource_size_t res_size;
 	struct resource res;
 	u32 irq_param;
@@ -716,10 +717,11 @@ static int qcom_pdc_probe(struct platform_device *pdev, struct device_node *pare
 
 		pdc->x1e_quirk = true;
 
-		if (!qcom_scm_is_available())
+		scm = qcom_scm_get();
+		if (!scm)
 			return -EPROBE_DEFER;
 
-		ret = qcom_scm_io_writel(PDC_GPIO_INT_CTL_ENABLE, PDC_PASS_THROUGH_MODE);
+		ret = qcom_scm_io_writel(scm, PDC_GPIO_INT_CTL_ENABLE, PDC_PASS_THROUGH_MODE);
 		if (ret) {
 			pdc->mode = PDC_SECONDARY_MODE;
 			pdc->unmask_gpio = pdc_unmask_gpio_cfg;

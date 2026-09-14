@@ -53,7 +53,7 @@ static int ath10k_qmi_map_msa_permission(struct ath10k_qmi *qmi,
 		perm_count = 3;
 	}
 
-	ret = qcom_scm_assign_mem(mem_info->addr, mem_info->size,
+	ret = qcom_scm_assign_mem(qmi->scm, mem_info->addr, mem_info->size,
 				  &src_perms, dst_perms, perm_count);
 	if (ret < 0)
 		ath10k_err(ar, "failed to assign msa map permissions: %d\n", ret);
@@ -77,7 +77,7 @@ static int ath10k_qmi_unmap_msa_permission(struct ath10k_qmi *qmi,
 	dst_perms.vmid = QCOM_SCM_VMID_HLOS;
 	dst_perms.perm = QCOM_SCM_PERM_RW;
 
-	ret = qcom_scm_assign_mem(mem_info->addr, mem_info->size,
+	ret = qcom_scm_assign_mem(qmi->scm, mem_info->addr, mem_info->size,
 				  &src_perms, &dst_perms, 1);
 	if (ret < 0)
 		ath10k_err(ar, "failed to unmap msa permissions: %d\n", ret);
@@ -1091,6 +1091,14 @@ int ath10k_qmi_init(struct ath10k *ar, u32 msa_size)
 
 	if (of_property_read_bool(dev->of_node, "qcom,msa-fixed-perm"))
 		qmi->msa_fixed_perm = true;
+
+	if (!qmi->msa_fixed_perm) {
+		qmi->scm = qcom_scm_get();
+		if (!qmi->scm) {
+			ret = -EPROBE_DEFER;
+			goto err;
+		}
+	}
 
 	if (of_property_read_bool(dev->of_node, "qcom,no-msa-ready-indicator"))
 		qmi->no_msa_ready_indicator = true;

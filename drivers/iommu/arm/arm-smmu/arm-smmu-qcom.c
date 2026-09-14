@@ -591,6 +591,7 @@ static int qcom_smmu_def_domain_type(struct device *dev)
 
 static int qcom_sdm845_smmu500_reset(struct arm_smmu_device *smmu)
 {
+	struct qcom_smmu *qsmmu = to_qcom_smmu(smmu);
 	int ret;
 
 	arm_mmu500_reset(smmu);
@@ -601,7 +602,7 @@ static int qcom_sdm845_smmu500_reset(struct arm_smmu_device *smmu)
 	 * such as MTP and db845, whose firmwares implement secure monitor
 	 * call handlers to turn on/off the wait-for-safe logic.
 	 */
-	ret = qcom_scm_qsmmu500_wait_safe_toggle(0);
+	ret = qcom_scm_qsmmu500_wait_safe_toggle(qsmmu->scm, 0);
 	if (ret)
 		dev_warn(smmu->dev, "Failed to turn off SAFE logic\n");
 
@@ -668,6 +669,7 @@ static struct arm_smmu_device *qcom_smmu_create(struct arm_smmu_device *smmu,
 	const struct device_node *np = smmu->dev->of_node;
 	const struct arm_smmu_impl *impl;
 	struct qcom_smmu *qsmmu;
+	struct qcom_scm *scm;
 
 	if (!data)
 		return ERR_PTR(-EINVAL);
@@ -681,7 +683,8 @@ static struct arm_smmu_device *qcom_smmu_create(struct arm_smmu_device *smmu,
 		return smmu;
 
 	/* Check to make sure qcom_scm has finished probing */
-	if (!qcom_scm_is_available())
+	scm = qcom_scm_get();
+	if (!scm)
 		return ERR_PTR(dev_err_probe(smmu->dev, -EPROBE_DEFER,
 			"qcom_scm not ready\n"));
 
@@ -689,6 +692,7 @@ static struct arm_smmu_device *qcom_smmu_create(struct arm_smmu_device *smmu,
 	if (!qsmmu)
 		return ERR_PTR(-ENOMEM);
 
+	qsmmu->scm = scm;
 	qsmmu->smmu.impl = impl;
 	qsmmu->data = data;
 

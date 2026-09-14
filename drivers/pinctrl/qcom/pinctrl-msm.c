@@ -62,6 +62,7 @@
 struct msm_pinctrl {
 	struct device *dev;
 	struct pinctrl_dev *pctrl;
+	struct qcom_scm *scm;
 	struct gpio_chip chip;
 	struct pinctrl_desc desc;
 
@@ -1105,11 +1106,11 @@ static int msm_gpio_irq_set_type(struct irq_data *d, unsigned int type)
 		u32 addr = pctrl->phys_base[0] + reg;
 		int ret;
 
-		qcom_scm_io_readl(addr, &val);
+		qcom_scm_io_readl(pctrl->scm, addr, &val);
 		val &= ~(intr_target_mask << g->intr_target_bit);
 		val |= g->intr_target_kpss_val << g->intr_target_bit;
 
-		ret = qcom_scm_io_writel(addr, val);
+		ret = qcom_scm_io_writel(pctrl->scm, addr, val);
 		if (ret)
 			dev_err(pctrl->dev,
 				"Failed routing %lu interrupt to Apps proc",
@@ -1639,6 +1640,12 @@ int msm_pinctrl_probe(struct platform_device *pdev,
 	pctrl->desc.name = dev_name(&pdev->dev);
 	pctrl->desc.pins = pctrl->soc->pins;
 	pctrl->desc.npins = pctrl->soc->npins;
+
+	if (pctrl->intr_target_use_scm) {
+		pctrl->scm = qcom_scm_get();
+		if (!pctrl->scm)
+			return -EPROBE_DEFER;
+	}
 
 	ret = devm_pinctrl_register_and_init(&pdev->dev, &pctrl->desc,
 					     pctrl, &pctrl->pctrl);

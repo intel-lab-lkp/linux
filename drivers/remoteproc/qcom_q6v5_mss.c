@@ -178,6 +178,7 @@ struct rproc_hexagon_res {
 struct q6v5 {
 	struct device *dev;
 	struct rproc *rproc;
+	struct qcom_scm *scm;
 
 	void __iomem *reg_base;
 	void __iomem *rmb_base;
@@ -488,7 +489,7 @@ static int q6v5_xfer_mem_ownership(struct q6v5 *qproc, u64 *current_perm,
 		perms++;
 	}
 
-	return qcom_scm_assign_mem(addr, ALIGN(size, SZ_4K),
+	return qcom_scm_assign_mem(qproc->scm, addr, ALIGN(size, SZ_4K),
 				   current_perm, next, perms);
 }
 
@@ -2103,6 +2104,9 @@ static int q6v5_probe(struct platform_device *pdev)
 	qproc = rproc->priv;
 	qproc->dev = &pdev->dev;
 	qproc->rproc = rproc;
+	qproc->scm = qcom_scm_get();
+	if (desc->need_mem_protection && !qproc->scm)
+		return -EPROBE_DEFER;
 	qproc->hexagon_mdt_image = "modem.mdt";
 	ret = of_property_read_string_index(pdev->dev.of_node, "firmware-name",
 					    1, &qproc->hexagon_mdt_image);

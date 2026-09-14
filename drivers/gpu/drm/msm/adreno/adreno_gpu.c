@@ -664,14 +664,16 @@ struct drm_gem_object *adreno_fw_create_bo(struct msm_gpu *gpu,
 int adreno_hw_init(struct msm_gpu *gpu)
 {
 	struct adreno_gpu *adreno_gpu = to_adreno_gpu(gpu);
+	struct qcom_scm *scm;
 	int ret;
 
 	VERB("%s", gpu->name);
 
-	if (adreno_gpu->info->family >= ADRENO_6XX_GEN1 &&
-	    qcom_scm_set_gpu_smmu_aperture_is_available()) {
+	scm = qcom_scm_get();
+	if (scm && adreno_gpu->info->family >= ADRENO_6XX_GEN1 &&
+	    qcom_scm_set_gpu_smmu_aperture_is_available(scm)) {
 		/* We currently always use context bank 0, so hard code this */
-		ret = qcom_scm_set_gpu_smmu_aperture(0);
+		ret = qcom_scm_set_gpu_smmu_aperture(scm, 0);
 		if (ret)
 			DRM_DEV_ERROR(gpu->dev->dev, "unable to set SMMU aperture: %d\n", ret);
 	}

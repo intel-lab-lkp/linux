@@ -1202,6 +1202,7 @@ static int a6xx_gmu_secure_init(struct a6xx_gpu *a6xx_gpu)
 	struct adreno_gpu *adreno_gpu = &a6xx_gpu->base;
 	struct msm_gpu *gpu = &adreno_gpu->base;
 	struct a6xx_gmu *gmu = &a6xx_gpu->gmu;
+	struct qcom_scm *scm;
 	u32 fuse_val;
 	int ret;
 
@@ -1217,7 +1218,8 @@ static int a6xx_gmu_secure_init(struct a6xx_gpu *a6xx_gpu)
 		 * Print a warning because if you mess this up you're about to
 		 * crash horribly.
 		 */
-		if (!qcom_scm_is_available()) {
+		scm = qcom_scm_get();
+		if (!scm) {
 			dev_warn_once(gpu->dev->dev,
 				"SCM is not available, poking fuse register\n");
 			a6xx_cx_misc_write(a6xx_gpu, REG_A7XX_CX_MISC_SW_FUSE_VALUE,
@@ -1228,7 +1230,7 @@ static int a6xx_gmu_secure_init(struct a6xx_gpu *a6xx_gpu)
 			goto done;
 		}
 
-		ret = qcom_scm_gpu_init_regs(QCOM_SCM_GPU_ALWAYS_EN_REQ |
+		ret = qcom_scm_gpu_init_regs(scm, QCOM_SCM_GPU_ALWAYS_EN_REQ |
 					     QCOM_SCM_GPU_TSENSE_EN_REQ);
 		if (ret) {
 			dev_warn_once(gpu->dev->dev,

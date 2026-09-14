@@ -179,7 +179,7 @@ int __scm_smc_call(struct device *dev, const struct qcom_scm_desc *desc,
 		smc.args[i + SCM_SMC_FIRST_REG_IDX] = desc->args[i];
 
 	if (unlikely(arglen > SCM_SMC_N_REG_ARGS)) {
-		struct qcom_tzmem_pool *mempool = qcom_scm_get_tzmem_pool();
+		struct qcom_tzmem_pool *mempool = qcom_scm_get_tzmem_pool(dev);
 
 		if (!mempool)
 			return -EINVAL;

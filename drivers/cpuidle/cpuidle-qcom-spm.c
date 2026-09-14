@@ -27,11 +27,13 @@
 struct cpuidle_qcom_spm_data {
 	struct cpuidle_driver cpuidle_driver;
 	struct spm_driver_data *spm;
+	struct qcom_scm *scm;
 };
 
-static int qcom_pm_collapse(unsigned long int unused)
+static int qcom_pm_collapse(unsigned long arg)
 {
-	qcom_scm_cpu_power_down(QCOM_SCM_CPU_PWR_DOWN_L2_ON);
+	qcom_scm_cpu_power_down((struct qcom_scm *)arg,
+				    QCOM_SCM_CPU_PWR_DOWN_L2_ON);
 
 	/*
 	 * Returns here only if there was a pending interrupt and we did not
@@ -40,19 +42,19 @@ static int qcom_pm_collapse(unsigned long int unused)
 	return -1;
 }
 
-static int qcom_cpu_spc(struct spm_driver_data *drv)
+static int qcom_cpu_spc(struct cpuidle_qcom_spm_data *data)
 {
 	int ret;
 
-	spm_set_low_power_mode(drv, PM_SLEEP_MODE_SPC);
-	ret = cpu_suspend(0, qcom_pm_collapse);
+	spm_set_low_power_mode(data->spm, PM_SLEEP_MODE_SPC);
+	ret = cpu_suspend((unsigned long)data->scm, qcom_pm_collapse);
 	/*
 	 * ARM common code executes WFI without calling into our driver and
 	 * if the SPM mode is not reset, then we may accidentally power down the
 	 * cpu when we intended only to gate the cpu clock.
 	 * Ensure the state is set to standby before returning.
 	 */
-	spm_set_low_power_mode(drv, PM_SLEEP_MODE_STBY);
+	spm_set_low_power_mode(data->spm, PM_SLEEP_MODE_STBY);
 
 	return ret;
 }
@@ -63,7 +65,7 @@ static __cpuidle int spm_enter_idle_state(struct cpuidle_device *dev,
 	struct cpuidle_qcom_spm_data *data = container_of(drv, struct cpuidle_qcom_spm_data,
 							  cpuidle_driver);
 
-	return CPU_PM_CPU_IDLE_ENTER_PARAM(qcom_cpu_spc, idx, data->spm);
+	return CPU_PM_CPU_IDLE_ENTER_PARAM(qcom_cpu_spc, idx, data);
 }
 
 static struct cpuidle_driver qcom_spm_idle_driver = {
@@ -84,7 +86,8 @@ static const struct of_device_id qcom_idle_state_match[] = {
 	{ },
 };
 
-static int spm_cpuidle_register(struct device *cpuidle_dev, int cpu)
+static int spm_cpuidle_register(struct device *cpuidle_dev, struct qcom_scm *scm,
+				int cpu)
 {
 	struct platform_device *pdev;
 	struct device_node *cpu_node, *saw_node;
@@ -116,6 +119,8 @@ static int spm_cpuidle_register(struct device *cpuidle_dev, int cpu)
 	if (!data->spm)
 		return -EINVAL;
 
+	data->scm = scm;
+
 	data->cpuidle_driver = qcom_spm_idle_driver;
 	data->cpuidle_driver.cpumask = (struct cpumask *)cpumask_of(cpu);
 
@@ -129,17 +134,18 @@ static int spm_cpuidle_register(struct device *cpuidle_dev, int cpu)
 
 static int spm_cpuidle_drv_probe(struct platform_device *pdev)
 {
+	struct qcom_scm *scm = qcom_scm_get();
 	int cpu, ret;
 
-	if (!qcom_scm_is_available())
+	if (!scm)
 		return -EPROBE_DEFER;
 
-	ret = qcom_scm_set_warm_boot_addr(cpu_resume_arm);
+	ret = qcom_scm_set_warm_boot_addr(scm, cpu_resume_arm);
 	if (ret)
 		return dev_err_probe(&pdev->dev, ret, "set warm boot addr failed");
 
 	for_each_present_cpu(cpu) {
-		ret = spm_cpuidle_register(&pdev->dev, cpu);
+		ret = spm_cpuidle_register(&pdev->dev, scm, cpu);
 		if (ret && ret != -ENODEV) {
 			dev_err(&pdev->dev,
 				"Cannot register for CPU%d: %d\n", cpu, ret);

@@ -683,6 +683,7 @@ static int
 qcomtee_object_invoke_ctx_invoke(struct qcomtee_object_invoke_ctx *oic,
 				 int *result, u64 *res_type)
 {
+	struct qcomtee *qcomtee = tee_get_drvdata(oic->ctx->teedev);
 	phys_addr_t out_msg_paddr;
 	phys_addr_t in_msg_paddr;
 	int ret;
@@ -691,11 +692,12 @@ qcomtee_object_invoke_ctx_invoke(struct qcomtee_object_invoke_ctx *oic,
 	tee_shm_get_pa(oic->out_shm, 0, &out_msg_paddr);
 	tee_shm_get_pa(oic->in_shm, 0, &in_msg_paddr);
 	if (!(oic->flags & QCOMTEE_OIC_FLAG_BUSY))
-		ret = qcom_scm_qtee_invoke_smc(in_msg_paddr, oic->in_msg.size,
+		ret = qcom_scm_qtee_invoke_smc(qcomtee->scm, in_msg_paddr,
+						   oic->in_msg.size,
 					       out_msg_paddr, oic->out_msg.size,
 					       &res, res_type);
 	else
-		ret = qcom_scm_qtee_callback_response(out_msg_paddr,
+		ret = qcom_scm_qtee_callback_response(qcomtee->scm, out_msg_paddr,
 						      oic->out_msg.size,
 						      &res, res_type);
 

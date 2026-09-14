@@ -54,6 +54,7 @@ struct ocmem_config {
 struct ocmem {
 	struct device *dev;
 	const struct ocmem_config *config;
+	struct qcom_scm *scm;
 	struct resource *memory;
 	void __iomem *mmio;
 	struct clk *core_clk;
@@ -114,7 +115,7 @@ static void update_ocmem(struct ocmem *ocmem)
 	uint32_t region_mode_ctrl = 0x0;
 	int i;
 
-	if (!qcom_scm_ocmem_lock_available()) {
+	if (!qcom_scm_ocmem_lock_available(ocmem->scm)) {
 		for (i = 0; i < ocmem->config->num_regions; i++) {
 			struct ocmem_region *region = &ocmem->regions[i];
 
@@ -237,8 +238,8 @@ struct ocmem_buf *ocmem_allocate(struct ocmem *ocmem, enum ocmem_client client,
 
 	update_range(ocmem, buf, CORE_ON, WIDE_MODE);
 
-	if (qcom_scm_ocmem_lock_available()) {
-		ret = qcom_scm_ocmem_lock(QCOM_SCM_OCMEM_GRAPHICS_ID,
+	if (qcom_scm_ocmem_lock_available(ocmem->scm)) {
+		ret = qcom_scm_ocmem_lock(ocmem->scm, QCOM_SCM_OCMEM_GRAPHICS_ID,
 					  buf->offset, buf->len, WIDE_MODE);
 		if (ret) {
 			dev_err(ocmem->dev, "could not lock: %d\n", ret);
@@ -272,10 +273,10 @@ void ocmem_free(struct ocmem *ocmem, enum ocmem_client client,
 
 	update_range(ocmem, buf, CLK_OFF, MODE_DEFAULT);
 
-	if (qcom_scm_ocmem_lock_available()) {
+	if (qcom_scm_ocmem_lock_available(ocmem->scm)) {
 		int ret;
 
-		ret = qcom_scm_ocmem_unlock(QCOM_SCM_OCMEM_GRAPHICS_ID,
+		ret = qcom_scm_ocmem_unlock(ocmem->scm, QCOM_SCM_OCMEM_GRAPHICS_ID,
 					    buf->offset, buf->len);
 		if (ret)
 			dev_err(ocmem->dev, "could not unlock: %d\n", ret);
@@ -297,15 +298,16 @@ static int ocmem_dev_probe(struct platform_device *pdev)
 	int i, j, ret, num_banks;
 	struct ocmem *ocmem;
 
-	if (!qcom_scm_is_available())
-		return -EPROBE_DEFER;
-
 	ocmem = devm_kzalloc(dev, sizeof(*ocmem), GFP_KERNEL);
 	if (!ocmem)
 		return -ENOMEM;
 
 	ocmem->dev = dev;
 	ocmem->config = device_get_match_data(dev);
+
+	ocmem->scm = qcom_scm_get();
+	if (!ocmem->scm)
+		return -EPROBE_DEFER;
 
 	ocmem->core_clk = devm_clk_get_optional(dev, "core");
 	if (IS_ERR(ocmem->core_clk))
@@ -342,9 +344,9 @@ static int ocmem_dev_probe(struct platform_device *pdev)
 		return dev_err_probe(ocmem->dev, ret, "Failed to enable iface clock\n");
 	}
 
-	if (qcom_scm_restore_sec_cfg_available()) {
+	if (qcom_scm_restore_sec_cfg_available(ocmem->scm)) {
 		dev_dbg(dev, "configuring scm\n");
-		ret = qcom_scm_restore_sec_cfg(QCOM_SCM_OCMEM_DEV_ID, 0);
+		ret = qcom_scm_restore_sec_cfg(ocmem->scm, QCOM_SCM_OCMEM_DEV_ID, 0);
 		if (ret) {
 			dev_err_probe(dev, ret, "Could not enable secure configuration\n");
 			goto err_clk_disable;

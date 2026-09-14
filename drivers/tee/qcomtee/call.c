@@ -725,6 +725,13 @@ static int qcomtee_probe(struct platform_device *pdev)
 
 	qcomtee->teedev = teedev;
 	qcomtee->pool = pool;
+	qcomtee->scm = dev_get_drvdata(pdev->dev.parent);
+	if (!qcomtee->scm) {
+		err = -ENODEV;
+
+		goto err_unreg_teedev;
+	}
+
 	err = tee_device_register(qcomtee->teedev);
 	if (err)
 		goto err_unreg_teedev;

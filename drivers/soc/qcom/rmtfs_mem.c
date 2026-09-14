@@ -24,6 +24,7 @@ static dev_t qcom_rmtfs_mem_major;
 struct qcom_rmtfs_mem {
 	struct device dev;
 	struct cdev cdev;
+	struct qcom_scm *scm;
 
 	void *base;
 	phys_addr_t addr;
@@ -256,7 +257,8 @@ static int qcom_rmtfs_mem_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "failed to parse qcom,vmid\n");
 		goto remove_cdev;
 	} else if (!ret) {
-		if (!qcom_scm_is_available()) {
+		rmtfs_mem->scm = qcom_scm_get();
+		if (!rmtfs_mem->scm) {
 			ret = -EPROBE_DEFER;
 			goto remove_cdev;
 		}
@@ -270,7 +272,7 @@ static int qcom_rmtfs_mem_probe(struct platform_device *pdev)
 		}
 
 		rmtfs_mem->perms = BIT(QCOM_SCM_VMID_HLOS);
-		ret = qcom_scm_assign_mem(rmtfs_mem->addr, rmtfs_mem->size,
+		ret = qcom_scm_assign_mem(rmtfs_mem->scm, rmtfs_mem->addr, rmtfs_mem->size,
 					  &rmtfs_mem->perms, perms, num_vmids + 1);
 		if (ret < 0) {
 			dev_err(&pdev->dev, "assign memory failed\n");
@@ -299,7 +301,7 @@ static void qcom_rmtfs_mem_remove(struct platform_device *pdev)
 		perm.vmid = QCOM_SCM_VMID_HLOS;
 		perm.perm = QCOM_SCM_PERM_RW;
 
-		qcom_scm_assign_mem(rmtfs_mem->addr, rmtfs_mem->size,
+		qcom_scm_assign_mem(rmtfs_mem->scm, rmtfs_mem->addr, rmtfs_mem->size,
 				    &rmtfs_mem->perms, &perm, 1);
 	}
 

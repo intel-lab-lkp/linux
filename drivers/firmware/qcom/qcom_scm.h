@@ -82,7 +82,7 @@ int scm_legacy_call_atomic(struct device *dev, const struct qcom_scm_desc *desc,
 int scm_legacy_call(struct device *dev, const struct qcom_scm_desc *desc,
 		    struct qcom_scm_res *res);
 
-struct qcom_tzmem_pool *qcom_scm_get_tzmem_pool(void);
+struct qcom_tzmem_pool *qcom_scm_get_tzmem_pool(struct device *dev);
 int qcom_scm_shm_bridge_enable(struct device *scm_dev);
 
 #define QCOM_SCM_SVC_BOOT		0x01

@@ -22,6 +22,7 @@
  * @teedev: client device.
  * @pool: shared memory pool.
  * @ctx: driver private context.
+ * @scm: SCM handle.
  * @oic: context to use for the current driver invocation.
  * @wq: workqueue for QTEE async operations.
  * @xa_local_objects: array of objects exported to QTEE.
@@ -32,6 +33,7 @@ struct qcomtee {
 	struct tee_device *teedev;
 	struct tee_shm_pool *pool;
 	struct tee_context *ctx;
+	struct qcom_scm *scm;
 	struct qcomtee_object_invoke_ctx oic;
 	struct workqueue_struct *wq;
 	struct xarray xa_local_objects;

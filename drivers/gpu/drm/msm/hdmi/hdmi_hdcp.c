@@ -47,6 +47,7 @@ struct hdmi_hdcp_reg_data {
 
 struct hdmi_hdcp_ctrl {
 	struct hdmi *hdmi;
+	struct qcom_scm *scm;
 	u32 auth_retries;
 	bool tz_hdcp;
 	enum hdmi_hdcp_state hdcp_state;
@@ -174,7 +175,7 @@ static int msm_hdmi_hdcp_scm_wr(struct hdmi_hdcp_ctrl *hdcp_ctrl, u32 *preg,
 				scm_buf[i].val  = pdata[idx];
 				idx++;
 			}
-			ret = qcom_scm_hdcp_req(scm_buf, i, &resp);
+			ret = qcom_scm_hdcp_req(hdcp_ctrl->scm, scm_buf, i, &resp);
 
 			if (ret || resp) {
 				pr_err("%s: error: scm_call ret=%d resp=%u\n",
@@ -1379,10 +1380,11 @@ struct hdmi_hdcp_ctrl *msm_hdmi_hdcp_init(struct hdmi *hdmi)
 	INIT_WORK(&hdcp_ctrl->hdcp_reauth_work, msm_hdmi_hdcp_reauth_work);
 	init_waitqueue_head(&hdcp_ctrl->auth_event_queue);
 	hdcp_ctrl->hdmi = hdmi;
+	hdcp_ctrl->scm = qcom_scm_get();
 	hdcp_ctrl->hdcp_state = HDCP_STATE_INACTIVE;
 	hdcp_ctrl->aksv_valid = false;
 
-	if (qcom_scm_hdcp_available())
+	if (hdcp_ctrl->scm && qcom_scm_hdcp_available(hdcp_ctrl->scm))
 		hdcp_ctrl->tz_hdcp = true;
 	else
 		hdcp_ctrl->tz_hdcp = false;

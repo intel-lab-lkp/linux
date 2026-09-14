@@ -69,6 +69,7 @@ struct qcom_pas_data {
 struct qcom_pas {
 	struct device *dev;
 	struct rproc *rproc;
+	struct qcom_scm *scm;
 
 	struct qcom_q6v5 q6v5;
 
@@ -781,7 +782,8 @@ static int qcom_pas_assign_memory_region(struct qcom_pas *pas)
 		pas->region_assign_size[offset] = resource_size(&res);
 		pas->region_assign_owners[offset] = BIT(QCOM_SCM_VMID_HLOS);
 
-		ret = qcom_scm_assign_mem(pas->region_assign_phys[offset],
+		ret = qcom_scm_assign_mem(pas->scm,
+					  pas->region_assign_phys[offset],
 					  pas->region_assign_size[offset],
 					  &pas->region_assign_owners[offset],
 					  perm, perm_size);
@@ -807,7 +809,8 @@ static void qcom_pas_unassign_memory_region(struct qcom_pas *pas)
 		perm.vmid = QCOM_SCM_VMID_HLOS;
 		perm.perm = QCOM_SCM_PERM_RW;
 
-		ret = qcom_scm_assign_mem(pas->region_assign_phys[offset],
+		ret = qcom_scm_assign_mem(pas->scm,
+					  pas->region_assign_phys[offset],
 					  pas->region_assign_size[offset],
 					  &pas->region_assign_owners[offset],
 					  &perm, 1);
@@ -875,6 +878,11 @@ static int qcom_pas_probe(struct platform_device *pdev)
 	pas->region_assign_count = min_t(int, MAX_ASSIGN_COUNT, desc->region_assign_count);
 	pas->region_assign_vmid = desc->region_assign_vmid;
 	pas->region_assign_shared = desc->region_assign_shared;
+	if (pas->region_assign_idx) {
+		pas->scm = qcom_scm_get();
+		if (!pas->scm)
+			return -EPROBE_DEFER;
+	}
 	if (dtb_fw_name) {
 		pas->dtb_firmware_name = dtb_fw_name;
 		pas->dtb_pas_id = desc->dtb_pas_id;

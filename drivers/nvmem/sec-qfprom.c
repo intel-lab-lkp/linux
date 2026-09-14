@@ -17,6 +17,7 @@
 struct sec_qfprom {
 	phys_addr_t base;
 	struct device *dev;
+	struct qcom_scm *scm;
 };
 
 static int sec_qfprom_reg_read(void *context, unsigned int reg, void *_val, size_t bytes)
@@ -29,7 +30,7 @@ static int sec_qfprom_reg_read(void *context, unsigned int reg, void *_val, size
 
 	for (i = 0; i < bytes; i++, reg++) {
 		if (i == 0 || reg % 4 == 0) {
-			if (qcom_scm_io_readl(priv->base + (reg & ~3), &read_val)) {
+			if (qcom_scm_io_readl(priv->scm, priv->base + (reg & ~3), &read_val)) {
 				dev_err(priv->dev, "Couldn't access fuse register\n");
 				return -EINVAL;
 			}
@@ -72,6 +73,9 @@ static int sec_qfprom_probe(struct platform_device *pdev)
 	econfig.priv = priv;
 
 	priv->dev = dev;
+	priv->scm = qcom_scm_get();
+	if (!priv->scm)
+		return -EPROBE_DEFER;
 
 	nvmem = devm_nvmem_register(dev, &econfig);
 

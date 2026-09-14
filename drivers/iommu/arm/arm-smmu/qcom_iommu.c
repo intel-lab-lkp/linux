@@ -47,6 +47,7 @@ struct qcom_iommu_dev {
 	/* IOMMU core code handle */
 	struct iommu_device	 iommu;
 	struct device		*dev;
+	struct qcom_scm		*scm;
 	struct clk_bulk_data clks[CLK_NUM];
 	void __iomem		*local_base;
 	u32			 sec_id;
@@ -253,7 +254,8 @@ static int qcom_iommu_init_domain(struct iommu_domain *domain,
 		struct qcom_iommu_ctx *ctx = to_ctx(qcom_domain, fwspec->ids[i]);
 
 		if (!ctx->secure_init) {
-			ret = qcom_scm_restore_sec_cfg(qcom_iommu->sec_id, ctx->asid);
+			ret = qcom_scm_restore_sec_cfg(qcom_iommu->scm,
+						       qcom_iommu->sec_id, ctx->asid);
 			if (ret) {
 				dev_err(qcom_iommu->dev, "secure init failed: %d\n", ret);
 				goto out_clear_iommu;
@@ -607,7 +609,7 @@ static const struct iommu_ops qcom_iommu_ops = {
 	}
 };
 
-static int qcom_iommu_sec_ptbl_init(struct device *dev)
+static int qcom_iommu_sec_ptbl_init(struct device *dev, struct qcom_scm *scm)
 {
 	size_t psize = 0;
 	unsigned int spare = 0;
@@ -620,7 +622,7 @@ static int qcom_iommu_sec_ptbl_init(struct device *dev)
 	if (allocated)
 		return 0;
 
-	ret = qcom_scm_iommu_secure_ptbl_size(spare, &psize);
+	ret = qcom_scm_iommu_secure_ptbl_size(scm, spare, &psize);
 	if (ret) {
 		dev_err(dev, "failed to get iommu secure pgtable size (%d)\n",
 			ret);
@@ -638,7 +640,7 @@ static int qcom_iommu_sec_ptbl_init(struct device *dev)
 		return -ENOMEM;
 	}
 
-	ret = qcom_scm_iommu_secure_ptbl_init(paddr, psize, spare);
+	ret = qcom_scm_iommu_secure_ptbl_init(scm, paddr, psize, spare);
 	if (ret) {
 		dev_err(dev, "failed to init iommu pgtable (%d)\n", ret);
 		goto free_mem;
@@ -794,6 +796,9 @@ static int qcom_iommu_device_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	qcom_iommu->max_asid = max_asid;
 	qcom_iommu->dev = dev;
+	qcom_iommu->scm = qcom_scm_get();
+	if (!qcom_iommu->scm)
+		return -EPROBE_DEFER;
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (res) {
@@ -830,7 +835,7 @@ static int qcom_iommu_device_probe(struct platform_device *pdev)
 	}
 
 	if (qcom_iommu_has_secure_context(qcom_iommu)) {
-		ret = qcom_iommu_sec_ptbl_init(dev);
+		ret = qcom_iommu_sec_ptbl_init(dev, qcom_iommu->scm);
 		if (ret) {
 			dev_err(dev, "cannot init secure pg table(%d)\n", ret);
 			return ret;
@@ -900,7 +905,8 @@ static int __maybe_unused qcom_iommu_resume(struct device *dev)
 		return ret;
 
 	if (dev->pm_domain)
-		return qcom_scm_restore_sec_cfg(qcom_iommu->sec_id, 0);
+		return qcom_scm_restore_sec_cfg(qcom_iommu->scm,
+					qcom_iommu->sec_id, 0);
 
 	return ret;
 }

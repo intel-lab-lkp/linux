@@ -125,6 +125,7 @@ notsupp:
  */
 int qcom_tzmem_shm_bridge_create(phys_addr_t paddr, size_t size, u64 *handle)
 {
+	struct qcom_scm *scm = dev_get_drvdata(qcom_tzmem_dev);
 	u64 pfn_and_ns_perm, ipfn_and_s_perm, size_and_flags;
 	int ret;
 
@@ -135,7 +136,7 @@ int qcom_tzmem_shm_bridge_create(phys_addr_t paddr, size_t size, u64 *handle)
 	ipfn_and_s_perm = paddr | QCOM_SCM_PERM_RW;
 	size_and_flags = size | (1 << QCOM_SHM_BRIDGE_NUM_VM_SHIFT);
 
-	ret = qcom_scm_shm_bridge_create(pfn_and_ns_perm, ipfn_and_s_perm,
+	ret = qcom_scm_shm_bridge_create(scm, pfn_and_ns_perm, ipfn_and_s_perm,
 					 size_and_flags, QCOM_SCM_VMID_HLOS,
 					 handle);
 	if (ret) {
@@ -160,8 +161,9 @@ EXPORT_SYMBOL_GPL(qcom_tzmem_shm_bridge_create);
  */
 void qcom_tzmem_shm_bridge_delete(u64 handle)
 {
+	struct qcom_scm *scm = dev_get_drvdata(qcom_tzmem_dev);
 	if (qcom_tzmem_using_shm_bridge)
-		qcom_scm_shm_bridge_delete(handle);
+		qcom_scm_shm_bridge_delete(scm, handle);
 }
 EXPORT_SYMBOL_GPL(qcom_tzmem_shm_bridge_delete);
 

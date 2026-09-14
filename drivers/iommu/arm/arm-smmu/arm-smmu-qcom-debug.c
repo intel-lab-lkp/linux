@@ -76,19 +76,22 @@ void qcom_smmu_tlb_sync_debug(struct arm_smmu_device *smmu)
 		if (!cfg)
 			return;
 
-		ret = qcom_scm_io_readl(smmu->ioaddr + cfg->reg_offset[QCOM_SMMU_TBU_PWR_STATUS],
+		ret = qcom_scm_io_readl(qsmmu->scm, smmu->ioaddr +
+					cfg->reg_offset[QCOM_SMMU_TBU_PWR_STATUS],
 					&tbu_pwr_status);
 		if (ret)
 			dev_err(smmu->dev,
 				"Failed to read TBU power status: %d\n", ret);
 
-		ret = qcom_scm_io_readl(smmu->ioaddr + cfg->reg_offset[QCOM_SMMU_STATS_SYNC_INV_TBU_ACK],
+		ret = qcom_scm_io_readl(qsmmu->scm, smmu->ioaddr +
+					cfg->reg_offset[QCOM_SMMU_STATS_SYNC_INV_TBU_ACK],
 					&sync_inv_ack);
 		if (ret)
 			dev_err(smmu->dev,
 				"Failed to read TBU sync/inv ack status: %d\n", ret);
 
-		ret = qcom_scm_io_readl(smmu->ioaddr + cfg->reg_offset[QCOM_SMMU_MMU2QSS_AND_SAFE_WAIT_CNTR],
+		ret = qcom_scm_io_readl(qsmmu->scm, smmu->ioaddr +
+					cfg->reg_offset[QCOM_SMMU_MMU2QSS_AND_SAFE_WAIT_CNTR],
 					&sync_inv_progress);
 		if (ret)
 			dev_err(smmu->dev,

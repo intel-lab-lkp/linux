@@ -38,12 +38,13 @@ static void qseecom_client_remove(void *data)
 static int qseecom_client_register(struct platform_device *qseecom_dev,
 				   const struct qseecom_app_desc *desc)
 {
+	struct qcom_scm *scm = dev_get_drvdata(qseecom_dev->dev.parent);
 	struct qseecom_client *client;
 	u32 app_id;
 	int ret;
 
 	/* Try to find the app ID, skip device if not found */
-	ret = qcom_scm_qseecom_app_get_id(desc->app_name, &app_id);
+	ret = qcom_scm_qseecom_app_get_id(scm, desc->app_name, &app_id);
 	if (ret)
 		return ret == -ENOENT ? 0 : ret;
 

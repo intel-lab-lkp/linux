@@ -214,6 +214,7 @@ int venus_boot(struct venus_core *core)
 	struct device *dev = core->dev;
 	const struct venus_resources *res = core->res;
 	const char *fwpath = NULL;
+	struct qcom_scm *scm = NULL;
 	phys_addr_t mem_phys;
 	size_t mem_size;
 	int ret;
@@ -221,6 +222,12 @@ int venus_boot(struct venus_core *core)
 	if (!IS_ENABLED(CONFIG_QCOM_MDT_LOADER) ||
 	    (core->use_tz && !qcom_pas_is_available()))
 		return -EPROBE_DEFER;
+
+	if (core->use_tz && res->cp_size) {
+		scm = qcom_scm_get();
+		if (!scm)
+			return -EPROBE_DEFER;
+	}
 
 	ret = of_property_read_string_index(dev->of_node, "firmware-name", 0,
 					    &fwpath);
@@ -255,7 +262,8 @@ int venus_boot(struct venus_core *core)
 		 * cp_nonpixel_start = venus_sec_non_pixel/virtual-addr-pool[0]
 		 * cp_nonpixel_size = venus_sec_non_pixel/virtual-addr-pool[1]
 		 */
-		ret = qcom_scm_mem_protect_video_var(res->cp_start,
+		ret = qcom_scm_mem_protect_video_var(scm,
+							 res->cp_start,
 						     res->cp_size,
 						     res->cp_nonpixel_start,
 						     res->cp_nonpixel_size);

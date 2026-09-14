@@ -302,6 +302,7 @@ struct fastrpc_soc_data {
 };
 
 struct fastrpc_channel_ctx {
+	struct qcom_scm *scm;
 	int domain_id;
 	int sesscount;
 	int vmcount;
@@ -382,7 +383,7 @@ static void fastrpc_free_map(struct kref *ref)
 	map = container_of(ref, struct fastrpc_map, refcount);
 
 	if (map->table) {
-		if (map->attr & FASTRPC_ATTR_SECUREMAP) {
+		if (map->fl->cctx->scm && map->attr & FASTRPC_ATTR_SECUREMAP) {
 			struct qcom_scm_vmperm perm;
 			int vmid = map->fl->cctx->vmperms[0].vmid;
 			u64 src_perms = BIT(QCOM_SCM_VMID_HLOS) | BIT(vmid);
@@ -390,8 +391,8 @@ static void fastrpc_free_map(struct kref *ref)
 
 			perm.vmid = QCOM_SCM_VMID_HLOS;
 			perm.perm = QCOM_SCM_PERM_RWX;
-			err = qcom_scm_assign_mem(map->dma_addr, map->len,
-				&src_perms, &perm, 1);
+			err = qcom_scm_assign_mem(map->fl->cctx->scm, map->dma_addr,
+				map->len, &src_perms, &perm, 1);
 			if (err) {
 				dev_err(map->fl->sctx->dev,
 					"Failed to assign memory dma_addr %pad size 0x%llx err %d\n",
@@ -932,7 +933,7 @@ static int fastrpc_map_attach(struct fastrpc_user *fl, int fd,
 	map->va = sg_virt(map->table->sgl);
 	map->len = len;
 
-	if (attr & FASTRPC_ATTR_SECUREMAP) {
+	if (fl->cctx->scm && attr & FASTRPC_ATTR_SECUREMAP) {
 		/*
 		 * If subsystem VMIDs are defined in DTSI, then do
 		 * hyp_assign from HLOS to those VM(s)
@@ -945,7 +946,8 @@ static int fastrpc_map_attach(struct fastrpc_user *fl, int fd,
 		dst_perms[1].vmid = fl->cctx->vmperms[0].vmid;
 		dst_perms[1].perm = QCOM_SCM_PERM_RWX;
 		map->attr = attr;
-		err = qcom_scm_assign_mem(map->dma_addr, (u64)map->len, &src_perms, dst_perms, 2);
+		err = qcom_scm_assign_mem(fl->cctx->scm, map->dma_addr, (u64)map->len,
+				&src_perms, dst_perms, 2);
 		if (err) {
 			dev_err(sess->dev,
 				"Failed to assign memory with dma_addr %pad size 0x%llx err %d\n",
@@ -1496,7 +1498,8 @@ static int fastrpc_init_create_static_process(struct fastrpc_user *fl,
 		if (fl->cctx->vmcount) {
 			u64 src_perms = BIT(QCOM_SCM_VMID_HLOS);
 
-			err = qcom_scm_assign_mem(fl->cctx->remote_heap->dma_addr,
+			err = qcom_scm_assign_mem(fl->cctx->scm,
+							fl->cctx->remote_heap->dma_addr,
 							(u64)fl->cctx->remote_heap->size,
 							&src_perms,
 							fl->cctx->vmperms, fl->cctx->vmcount);
@@ -1551,7 +1554,8 @@ err_invoke:
 
 		dst_perms.vmid = QCOM_SCM_VMID_HLOS;
 		dst_perms.perm = QCOM_SCM_PERM_RWX;
-		err = qcom_scm_assign_mem(fl->cctx->remote_heap->dma_addr,
+		err = qcom_scm_assign_mem(fl->cctx->scm,
+						fl->cctx->remote_heap->dma_addr,
 						(u64)fl->cctx->remote_heap->size,
 						&src_perms, &dst_perms, 1);
 		if (err)
@@ -2147,7 +2151,7 @@ static int fastrpc_req_mmap(struct fastrpc_user *fl, char __user *argp)
 	if (req.flags == ADSP_MMAP_REMOTE_HEAP_ADDR && fl->cctx->vmcount) {
 		u64 src_perms = BIT(QCOM_SCM_VMID_HLOS);
 
-		err = qcom_scm_assign_mem(buf->dma_addr, (u64)buf->size,
+		err = qcom_scm_assign_mem(fl->cctx->scm, buf->dma_addr, (u64)buf->size,
 			&src_perms, fl->cctx->vmperms, fl->cctx->vmcount);
 		if (err) {
 			dev_err(fl->sctx->dev,
@@ -2540,6 +2544,7 @@ static const struct of_device_id fastrpc_poll_supported_machines[] __maybe_unuse
 static int fastrpc_rpmsg_probe(struct rpmsg_device *rpdev)
 {
 	struct device *rdev = &rpdev->dev;
+	struct qcom_scm *scm = NULL;
 	struct fastrpc_channel_ctx *data;
 	int i, err, domain_id = -1, vmcount;
 	const char *domain;
@@ -2569,13 +2574,17 @@ static int fastrpc_rpmsg_probe(struct rpmsg_device *rpdev)
 				"qcom,vmids", &vmids[0], 0, FASTRPC_MAX_VMIDS);
 	if (vmcount < 0)
 		vmcount = 0;
-	else if (!qcom_scm_is_available())
-		return -EPROBE_DEFER;
+	else {
+		scm = qcom_scm_get();
+		if (!scm)
+			return -EPROBE_DEFER;
+	}
 
 	data = kzalloc_obj(*data);
 	if (!data)
 		return -ENOMEM;
 
+	data->scm = scm;
 	if (vmcount) {
 		data->vmcount = vmcount;
 		for (i = 0; i < data->vmcount; i++) {
@@ -2592,7 +2601,7 @@ static int fastrpc_rpmsg_probe(struct rpmsg_device *rpdev)
 		if (!err) {
 			src_perms = BIT(QCOM_SCM_VMID_HLOS);
 
-			err = qcom_scm_assign_mem(res.start, resource_size(&res), &src_perms,
+			err = qcom_scm_assign_mem(scm, res.start, resource_size(&res), &src_perms,
 				    data->vmperms, data->vmcount);
 			if (err)
 				goto err_free_data;
