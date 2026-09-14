@@ -398,7 +398,7 @@
 
 		little_cpu_sleep_0: cpu-sleep-0-0 {
 			compatible = "arm,idle-state";
-			idle-state-name = "silver-power-collapse";
+			idle-state-name = "silver-pc";
 			arm,psci-suspend-param = <0x40000003>;
 			entry-latency-us = <549>;
 			exit-latency-us = <901>;
@@ -408,7 +408,7 @@
 
 		little_cpu_sleep_1: cpu-sleep-0-1 {
 			compatible = "arm,idle-state";
-			idle-state-name = "silver-rail-power-collapse";
+			idle-state-name = "silver-pll-pc";
 			arm,psci-suspend-param = <0x40000004>;
 			entry-latency-us = <702>;
 			exit-latency-us = <915>;
@@ -418,7 +418,7 @@
 
 		big_cpu_sleep_0: cpu-sleep-1-0 {
 			compatible = "arm,idle-state";
-			idle-state-name = "gold-power-collapse";
+			idle-state-name = "gold-pc";
 			arm,psci-suspend-param = <0x40000003>;
 			entry-latency-us = <523>;
 			exit-latency-us = <1244>;
@@ -428,7 +428,7 @@
 
 		big_cpu_sleep_1: cpu-sleep-1-1 {
 			compatible = "arm,idle-state";
-			idle-state-name = "gold-rail-power-collapse";
+			idle-state-name = "gold-pll-rail-pc";
 			arm,psci-suspend-param = <0x40000004>;
 			entry-latency-us = <526>;
 			exit-latency-us = <1854>;
@@ -440,6 +440,7 @@
 	domain-idle-states {
 		cluster_sleep_0: cluster-sleep-0 {
 			compatible = "domain-idle-state";
+			idle-state-name = "l3-pc";
 			arm,psci-suspend-param = <0x41000044>;
 			entry-latency-us = <2752>;
 			exit-latency-us = <3048>;
@@ -448,6 +449,7 @@
 
 		cluster_sleep_1: cluster-sleep-1 {
 			compatible = "domain-idle-state";
+			idle-state-name = "cx-ret";
 			arm,psci-suspend-param = <0x41001344>;
 			entry-latency-us = <3263>;
 			exit-latency-us = <4562>;
@@ -456,6 +458,7 @@
 
 		cluster_sleep_2: cluster-sleep-2 {
 			compatible = "domain-idle-state";
+			idle-state-name = "llcc-off";
 			arm,psci-suspend-param = <0x4100b344>;
 			entry-latency-us = <3638>;
 			exit-latency-us = <6562>;
