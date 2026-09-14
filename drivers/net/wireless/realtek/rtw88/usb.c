@@ -27,6 +27,13 @@ struct rtw_usb_txcb {
 	struct sk_buff_head tx_ack_queue;
 };
 
+struct rtw_usb_write_data_cb {
+	struct completion done;
+	struct sk_buff *skb;
+	int status;
+	bool sync;
+};
+
 static void rtw_usb_fill_tx_checksum(struct rtw_usb *rtwusb,
 				     struct sk_buff *skb, int agg_num)
 {
@@ -494,16 +501,21 @@ static void rtw_usb_tx_queue_purge(struct rtw_usb *rtwusb)
 
 static void rtw_usb_write_port_complete(struct urb *urb)
 {
-	struct sk_buff *skb = urb->context;
+	struct rtw_usb_write_data_cb *cb = urb->context;
 
-	dev_kfree_skb_any(skb);
+	cb->status = urb->status;
+	complete(&cb->done);
+	dev_kfree_skb_any(cb->skb);
+	if (!cb->sync)
+		kfree(cb);
 }
 
 static int rtw_usb_write_data(struct rtw_dev *rtwdev,
 			      struct rtw_tx_pkt_info *pkt_info,
-			      u8 *buf)
+			      u8 *buf, bool sync)
 {
 	const struct rtw_chip_info *chip = rtwdev->chip;
+	struct rtw_usb_write_data_cb *cb;
 	struct sk_buff *skb;
 	unsigned int size;
 	u8 qsel;
@@ -523,11 +535,29 @@ static int rtw_usb_write_data(struct rtw_dev *rtwdev,
 	rtw_tx_fill_tx_desc(rtwdev, pkt_info, skb);
 	rtw_tx_fill_txdesc_checksum(rtwdev, pkt_info, skb->data);
 
+	cb = kmalloc_obj(*cb, GFP_KERNEL);
+	if (!cb) {
+		dev_kfree_skb_any(skb);
+		return -ENOMEM;
+	}
+
+	init_completion(&cb->done);
+	cb->status = -EINPROGRESS;
+	cb->skb = skb;
+	cb->sync = sync;
+
 	ret = rtw_usb_write_port(rtwdev, qsel, skb,
-				 rtw_usb_write_port_complete, skb);
+				 rtw_usb_write_port_complete, cb);
 	if (unlikely(ret)) {
 		rtw_err(rtwdev, "failed to do USB write, ret=%d\n", ret);
 		dev_kfree_skb_any(skb);
+		kfree(cb);
+	} else if (sync) {
+		if (!wait_for_completion_timeout(&cb->done, secs_to_jiffies(5)))
+			ret = -ETIMEDOUT;
+		else
+			ret = cb->status;
+		kfree(cb);
 	}
 
 	return ret;
@@ -544,7 +574,12 @@ static int rtw_usb_write_data_rsvd_page(struct rtw_dev *rtwdev, u8 *buf,
 	pkt_info.offset = chip->tx_pkt_desc_sz;
 	pkt_info.ls = true;
 
-	return rtw_usb_write_data(rtwdev, &pkt_info, buf);
+	/*
+	 * Download the beacon/reserved page synchronously so that the
+	 * caller's subsequent BCN_VALID poll observes the completed
+	 * transfer instead of racing the async TX path.
+	 */
+	return rtw_usb_write_data(rtwdev, &pkt_info, buf, true);
 }
 
 static int rtw_usb_write_data_h2c(struct rtw_dev *rtwdev, u8 *buf, u32 size)
@@ -554,7 +589,7 @@ static int rtw_usb_write_data_h2c(struct rtw_dev *rtwdev, u8 *buf, u32 size)
 	pkt_info.tx_pkt_size = size;
 	pkt_info.qsel = TX_DESC_QSEL_H2C;
 
-	return rtw_usb_write_data(rtwdev, &pkt_info, buf);
+	return rtw_usb_write_data(rtwdev, &pkt_info, buf, false);
 }
 
 static u8 rtw_usb_tx_queue_mapping_to_qsel(struct sk_buff *skb)
