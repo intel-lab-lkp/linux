@@ -1,0 +1,123 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/adc/xlnx,xadc.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Xilinx XADC and System Monitor
+
+maintainers:
+  - Jonathan Cameron <jic23@kernel.org>
+
+description:
+  The Xilinx XADC is an ADC found in the 7 Series FPGAs. It has a DRP
+  interface for communication, which can be reached either through the ZYNQ
+  device configuration interface or through the axi-xadc pcore. The Xilinx
+  System Monitor is an equivalent ADC found in the UltraScale and UltraScale+
+  FPGAs, accessed through the System Management Wizard IP core.
+
+properties:
+  compatible:
+    enum:
+      - xlnx,zynq-xadc-1.00.a
+      - xlnx,axi-xadc-1.00.a
+      - xlnx,system-management-wiz-1.3
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    description: Interrupt for the XADC control interface.
+    maxItems: 1
+
+  clocks:
+    description:
+      When using the ZYNQ this is the ZYNQ PCAP clock. When using the
+      axi-xadc or the axi-system-management-wizard this is the clock that
+      feeds the AXI bus interface of the core.
+    maxItems: 1
+
+  xlnx,external-mux:
+    description:
+      External multiplexer mode. When omitted no external multiplexer is
+      assumed to be used.
+    enum: [none, single, dual]
+    default: none
+
+  xlnx,external-mux-channel:
+    description:
+      Which pair of pins is used to sample data in external multiplexer mode.
+      In single mode the valid range is 0 to 16, in dual mode 1 to 8. This
+      property is required when external multiplexer mode is used and is
+      otherwise ignored.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    minimum: 0
+    maximum: 16
+
+  xlnx,channels:
+    description:
+      Container for the external channels connected to the ADC. When this
+      node is absent no external channels are assumed to be connected.
+    type: object
+    additionalProperties: false
+
+    properties:
+      '#address-cells':
+        const: 1
+
+      '#size-cells':
+        const: 0
+
+    patternProperties:
+      "^channel@[0-9a-f]+$":
+        type: object
+        additionalProperties: false
+
+        properties:
+          reg:
+            description:
+              Pair of pins the channel is connected to. 0 is VP/VN and 1 to
+              16 are VAUXP/VAUXN pairs. Each channel number may be used at
+              most once.
+            maxItems: 1
+
+          xlnx,bipolar:
+            description: If set the channel is used in bipolar mode.
+            type: boolean
+
+        required:
+          - reg
+
+required:
+  - compatible
+  - reg
+  - clocks
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    xadc@f8007100 {
+        compatible = "xlnx,zynq-xadc-1.00.a";
+        reg = <0xf8007100 0x20>;
+        interrupts = <0 7 IRQ_TYPE_LEVEL_HIGH>;
+        interrupt-parent = <&gic>;
+        clocks = <&pcap_clk>;
+
+        xlnx,channels {
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            channel@0 {
+                reg = <0>;
+            };
+
+            channel@1 {
+                reg = <1>;
+                xlnx,bipolar;
+            };
+        };
+    };
+...
