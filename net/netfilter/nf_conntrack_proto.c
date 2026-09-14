@@ -131,35 +131,15 @@ static bool in_vrf_postrouting(const struct nf_hook_state *state)
 	return false;
 }
 
-unsigned int nf_confirm(void *priv,
-			struct sk_buff *skb,
-			const struct nf_hook_state *state)
+static bool nf_confirm_get_protoff(struct sk_buff *skb, struct net *net,
+				   struct nf_conn *ct,
+				   enum ip_conntrack_info ctinfo,
+				   unsigned int *protoffp)
 {
-	int (*helper_cb)(struct sk_buff *skb, unsigned int protoff,
-			 struct nf_conn *ct,
-			 enum ip_conntrack_info conntrackinfo);
-	const struct nf_conn_help *help;
-	enum ip_conntrack_info ctinfo;
 	unsigned int protoff;
-	struct nf_conn *ct;
-	bool seqadj_needed;
 	__be16 frag_off;
 	int start;
 	u8 pnum;
-
-	ct = nf_ct_get(skb, &ctinfo);
-	if (!ct || in_vrf_postrouting(state))
-		return NF_ACCEPT;
-
-	help = nfct_help(ct);
-
-	seqadj_needed = test_bit(IPS_SEQ_ADJUST_BIT, &ct->status) && !nf_is_loopback_packet(skb);
-	if (!help && !seqadj_needed)
-		return nf_conntrack_confirm(skb);
-
-	/* helper->help() do not expect ICMP packets */
-	if (ctinfo == IP_CT_RELATED_REPLY)
-		return nf_conntrack_confirm(skb);
 
 	switch (nf_ct_l3num(ct)) {
 	case NFPROTO_IPV4:
@@ -169,16 +149,56 @@ unsigned int nf_confirm(void *priv,
 		pnum = ipv6_hdr(skb)->nexthdr;
 		start = ipv6_skip_exthdr(skb, sizeof(struct ipv6hdr), &pnum, &frag_off);
 		if (start < 0 || (frag_off & htons(~0x7)) != 0)
-			return nf_conntrack_confirm(skb);
+			return false;
 
 		protoff = start;
 		break;
 	default:
-		return nf_conntrack_confirm(skb);
+		DEBUG_NET_WARN_ONCE(1, "helper invoked on non-IP family!");
+		return false;
 	}
+
+	*protoffp = protoff;
+	return true;
+}
+
+/**
+ * nf_ct_call_helper() - Invoke the connection tracking helper for a packet
+ * @skb:    The socket buffer containing the packet to be processed.
+ * @ct:     The connection tracking entry associated with this packet.
+ * @ctinfo: The current connection track information (state) of the packet.
+ *
+ * This function calls the l4 connection tracking helper (e.g. ftp, sip...) if
+ * one was assigned to the connection.
+ *
+ * Return: verdict (NF_ACCEPT, NF_DROP, ...)
+ */
+int nf_ct_call_helper(struct sk_buff *skb, struct nf_conn *ct,
+		      enum ip_conntrack_info ctinfo)
+{
+	struct net *net = nf_ct_net(ct);
+	const struct nf_conn_help *help;
+	bool seqadj_needed;
+	unsigned int protoff;
+
+	help = nfct_help(ct);
+
+	seqadj_needed = test_bit(IPS_SEQ_ADJUST_BIT, &ct->status) && !nf_is_loopback_packet(skb);
+	if (!help && !seqadj_needed)
+		return NF_ACCEPT;
+
+	/* helper->help() do not expect ICMP packets */
+	if (ctinfo == IP_CT_RELATED_REPLY)
+		return NF_ACCEPT;
+
+	if (!nf_confirm_get_protoff(skb, net, ct, ctinfo, &protoff))
+		return NF_ACCEPT;
 
 	if (help) {
 		const struct nf_conntrack_helper *helper;
+		int (*helper_cb)(struct sk_buff *skb, unsigned int protoff,
+				 struct nf_conn *ct,
+				 enum ip_conntrack_info conntrackinfo);
 		int ret;
 
 		/* rcu_read_lock()ed by nf_hook */
@@ -195,9 +215,46 @@ unsigned int nf_confirm(void *priv,
 	}
 
 	if (seqadj_needed &&
-	    !nf_ct_seq_adjust(skb, ct, ctinfo, protoff)) {
-		NF_CT_STAT_INC_ATOMIC(nf_ct_net(ct), drop);
+	    !nf_ct_seq_adjust(skb, ct, ctinfo, protoff))
 		return NF_DROP;
+
+	return NF_ACCEPT;
+}
+
+/**
+ * nf_confirm - Confirm (commit) a connection tracking entry
+ * @priv: Private data from the netfilter hook registration (unused)
+ * @skb: Packet
+ * @state: Netfilter hook state containing context (netns, hooknum, in/out devices)
+ *
+ * This function is invoked as the final step of the connection tracking
+ * processing pipeline. It performs two main operations:
+ *
+ * 1. Invokes the associated conntrack helper (if registered) to allow
+ *    layer 7 specific parsing and NAT mangling.
+ *
+ * 2. Commits a new conntrack entry to the conntrack hash table, making it
+ *    globally visible and enabling future packet lookups for stateful tracking.
+ *
+ * Returns: A netfilter verdict, e.g. NF_ACCEPT or NF_DROP.
+ */
+unsigned int nf_confirm(void *priv,
+			struct sk_buff *skb,
+			const struct nf_hook_state *state)
+{
+	enum ip_conntrack_info ctinfo;
+	struct nf_conn *ct;
+	int ret;
+
+	ct = nf_ct_get(skb, &ctinfo);
+	if (!ct || in_vrf_postrouting(state))
+		return NF_ACCEPT;
+
+	ret = nf_ct_call_helper(skb, ct, ctinfo);
+	if (unlikely(ret != NF_ACCEPT)) {
+		if (ret == NF_DROP)
+			NF_CT_STAT_INC_ATOMIC(state->net, drop);
+		return ret;
 	}
 
 	/* We've seen it coming out the other side: confirm it */
