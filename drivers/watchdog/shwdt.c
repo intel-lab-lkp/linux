@@ -263,18 +263,19 @@ static int sh_wdt_probe(struct platform_device *pdev)
 	dev_info(&pdev->dev, "configured with heartbeat=%d sec (nowayout=%d)\n",
 		 sh_wdt_dev.timeout, nowayout);
 
-	rc = watchdog_register_device(&sh_wdt_dev);
-	if (unlikely(rc)) {
-		dev_err(&pdev->dev, "Can't register watchdog (err=%d)\n", rc);
-		return rc;
-	}
-
 	timer_setup(&wdt->timer, sh_wdt_ping, 0);
 	wdt->timer.expires	= next_ping_period(clock_division_ratio);
 
-	dev_info(&pdev->dev, "initialized.\n");
-
 	pm_runtime_enable(&pdev->dev);
+
+	rc = watchdog_register_device(&sh_wdt_dev);
+	if (unlikely(rc)) {
+		dev_err(&pdev->dev, "Can't register watchdog (err=%d)\n", rc);
+		pm_runtime_disable(&pdev->dev);
+		return rc;
+	}
+
+	dev_info(&pdev->dev, "initialized.\n");
 
 	return 0;
 }
