@@ -511,3 +511,14 @@ bool early_is_sevsnp_guest(void)
 	}
 	return true;
 }
+
+bool sev_prepare(void)
+{
+	u64 unsupported = snp_get_unsupported_features(sev_get_status());
+	if (unsupported) {
+		error("Unsupported SEV-SNP features detected\n");
+		return true;
+	}
+
+	return false;
+}
