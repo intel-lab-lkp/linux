@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config DRM_TRIGGER5
+	tristate "MCT Trigger 5 USB display adapters"
+	depends on DRM && USB && MMU
+	select DRM_CLIENT_SELECTION
+	select DRM_GEM_SHMEM_HELPER
+	select DRM_KMS_HELPER
+	help
+	  DRM driver for USB display adapters based on the MCT Trigger 5
+	  chipset, including the StarTech USB32VGAES and USB32HDES and the
+	  j5create JUA310 and JUA350.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called trigger5.
