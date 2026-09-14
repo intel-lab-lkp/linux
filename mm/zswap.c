@@ -1587,11 +1587,14 @@ check_old:
  * @entry: base swap entry of the range
  * @nr: number of contiguous slots to check
  *
- * Context: The caller must keep the range pinned, otherwise the answer can
- * change under it.
+ * Context: Unless the caller keeps the range pinned, the answer is only a
+ * hint: zswap can store or write back a slot right after this returns. A
+ * caller that needs a stable answer must pin the range first, as
+ * __swap_cache_alloc() does by inserting the folio into the swap cache before
+ * asking.
  * Return: true if at least one slot in the range is in zswap.
  */
-static bool zswap_is_present(swp_entry_t entry, unsigned int nr)
+bool zswap_is_present(swp_entry_t entry, unsigned int nr)
 {
 	pgoff_t offset = swp_offset(entry);
 	struct xarray *tree = swap_zswap_tree(entry);
@@ -1604,6 +1607,9 @@ static bool zswap_is_present(swp_entry_t entry, unsigned int nr)
 	 * "absent" and let the caller read a stale copy from the device.
 	 */
 	BUILD_BUG_ON(SWAPFILE_CLUSTER > ZSWAP_ADDRESS_SPACE_PAGES);
+
+	if (zswap_never_enabled())
+		return false;
 
 	return xa_find(tree, &index, offset + nr - 1, XA_PRESENT);
 }
