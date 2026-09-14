@@ -992,11 +992,13 @@ static void __cxl_event_trace_record(struct cxl_memdev *cxlmd,
 
 static int cxl_clear_event_record(struct cxl_memdev_state *mds,
 				  enum cxl_event_log_type log,
-				  struct cxl_get_event_payload *get_pl)
+				  struct cxl_get_event_payload *get_pl,
+				  u16 nr_rec)
 {
 	struct cxl_mailbox *cxl_mbox = &mds->cxlds.cxl_mbox;
 	struct cxl_mbox_clear_event_payload *payload;
-	u16 total = le16_to_cpu(get_pl->record_count);
+	/* count validated by cxl_mem_get_records_log(), not re-read here */
+	u16 total = nr_rec;
 	u8 max_handles = CXL_CLEAR_EVENT_MAX_HANDLES;
 	size_t pl_size = struct_size(payload, handles, max_handles);
 	struct cxl_mbox_cmd mbox_cmd;
@@ -1070,6 +1072,7 @@ static void cxl_mem_get_records_log(struct cxl_memdev_state *mds,
 	struct cxl_get_event_payload *payload;
 	u8 log_type = type;
 	u16 nr_rec;
+	size_t max_recs;
 
 	mutex_lock(&mds->event.log_lock);
 	payload = mds->event.buf;
@@ -1093,7 +1096,20 @@ static void cxl_mem_get_records_log(struct cxl_memdev_state *mds,
 			break;
 		}
 
+		/*
+		 * The record count is device-supplied.  Never walk records[]
+		 * past the payload the device actually returned.
+		 */
+		max_recs = (mbox_cmd.size_out -
+			    offsetof(struct cxl_get_event_payload, records)) /
+			   sizeof(struct cxl_event_record_raw);
 		nr_rec = le16_to_cpu(payload->record_count);
+		if (nr_rec > max_recs) {
+			dev_warn_ratelimited(dev,
+					     "Event log '%d': device claimed %u records but the payload holds %zu\n",
+					     type, nr_rec, max_recs);
+			nr_rec = max_recs;
+		}
 		if (!nr_rec)
 			break;
 
@@ -1104,7 +1120,7 @@ static void cxl_mem_get_records_log(struct cxl_memdev_state *mds,
 		if (payload->flags & CXL_GET_EVENT_FLAG_OVERFLOW)
 			trace_cxl_overflow(cxlmd, type, payload);
 
-		rc = cxl_clear_event_record(mds, type, payload);
+		rc = cxl_clear_event_record(mds, type, payload, nr_rec);
 		if (rc) {
 			dev_err_ratelimited(dev,
 				"Event log '%d': Failed to clear events : %d",
