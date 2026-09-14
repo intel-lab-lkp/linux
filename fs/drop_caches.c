@@ -5,6 +5,7 @@
 
 #include <linux/pagemap.h>
 #include <linux/kernel.h>
+#include <linux/magic.h>
 #include <linux/mm.h>
 #include <linux/fs.h>
 #include <linux/writeback.h>
@@ -19,6 +20,9 @@ static int sysctl_drop_caches;
 static void drop_pagecache_sb(struct super_block *sb, void *unused)
 {
 	struct inode *inode, *toput_inode = NULL;
+
+	if (sb->s_magic == PROC_SUPER_MAGIC)
+		return;
 
 	spin_lock(&sb->s_inode_list_lock);
 	list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
