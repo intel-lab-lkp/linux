@@ -1967,11 +1967,14 @@ static int ntfs_sync_fs(struct super_block *sb, int wait)
 	if (!wait)
 		return 0;
 
-	/* If there are some dirty buffers in the bdev inode */
-	if (ntfs_sync_volume_dirty_state(vol)) {
-		ntfs_warning(sb, "Failed to sync dirty bit in volume information flags.  Run chkdsk.");
-		err = -EIO;
-	}
+	/*
+	 * The volume dirty bit is deliberately not cleared here: a sync
+	 * running concurrently with an in-flight modification could clear
+	 * and persist a bit that was just set, leaving the modification
+	 * on a volume that is clean on disk.  The bit is only updated at
+	 * quiescent state transitions: remounting read-only and clean
+	 * unmount.
+	 */
 	sync_inodes_sb(sb);
 	sync_blockdev(sb->s_bdev);
 	blkdev_issue_flush(sb->s_bdev);
