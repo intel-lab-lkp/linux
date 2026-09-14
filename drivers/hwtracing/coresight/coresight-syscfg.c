@@ -1173,27 +1173,21 @@ struct device *cscfg_device(void)
 /* Must have a release function or the kernel will complain on module unload */
 static void cscfg_dev_release(struct device *dev)
 {
-	mutex_lock(&cscfg_mutex);
 	kfree(cscfg_mgr);
 	cscfg_mgr = NULL;
-	mutex_unlock(&cscfg_mutex);
 }
 
 /* a device is needed to "own" some kernel elements such as sysfs entries.  */
 static int cscfg_create_device(void)
 {
 	struct device *dev;
-	int err = -ENOMEM;
-
-	mutex_lock(&cscfg_mutex);
-	if (cscfg_mgr) {
-		err = -EINVAL;
-		goto create_dev_exit_unlock;
-	}
+	int err;
 
 	cscfg_mgr = kzalloc_obj(struct cscfg_manager);
 	if (!cscfg_mgr)
-		goto create_dev_exit_unlock;
+		return -ENOMEM;
+
+	mutex_lock(&cscfg_mutex);
 
 	/* initialise the cscfg_mgr structure */
 	INIT_LIST_HEAD(&cscfg_mgr->csdev_desc_list);
@@ -1204,6 +1198,8 @@ static int cscfg_create_device(void)
 	cscfg_mgr->load_state = CSCFG_NONE;
 	raw_spin_lock_init(&cscfg_mgr->sysfs_store_lock);
 
+	mutex_unlock(&cscfg_mutex);
+
 	/* setup the device */
 	dev = cscfg_device();
 	dev->release = cscfg_dev_release;
@@ -1213,8 +1209,6 @@ static int cscfg_create_device(void)
 	if (err)
 		put_device(dev);
 
-create_dev_exit_unlock:
-	mutex_unlock(&cscfg_mutex);
 	return err;
 }
 
