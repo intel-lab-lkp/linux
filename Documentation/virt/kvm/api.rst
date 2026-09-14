@@ -3521,9 +3521,13 @@ Possible features:
 
 	    * Userspace must explicitly select a PMU implementation before
 	      initializing the PMU or configuring a PMU event filter
+	      (KVM_ARM_VCPU_PMU_V3_FIXED_COUNTERS_ONLY also satisfies the
+	      initialization requirement; event filtering remains unavailable
+	      in that mode)
 
-	    * If the PMU implements FEAT_PMUv3p4, PMMIR_EL1.SLOTS provides the
-	      hardware value of the underlying implementation
+	    * If a hardware PMU is selected and implements FEAT_PMUv3p4,
+	      PMMIR_EL1.SLOTS provides its hardware value. In fixed-counters-only
+	      mode, PMMIR_EL1 reads as zero
 
 	    * Writes to PMCR_EL0.N via KVM_SET_ONE_REG are ignored
 

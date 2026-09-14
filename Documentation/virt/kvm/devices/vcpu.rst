@@ -53,9 +53,9 @@ Returns:
 	 =======  ======================================================
 	 -EEXIST  Interrupt number already used
 	 -ENODEV  PMUv3 not supported or GIC not initialized
-	 -ENXIO   PMUv3 not supported, missing VCPU feature, missing
-                  hardware PMU, or interrupt number not set (non-GICv5
-                  guests, only)
+	 -ENXIO   PMUv3 not supported, missing VCPU feature,
+		  neither hardware PMU nor FIXED_COUNTERS_ONLY selected,
+		  or interrupt number not set (non-GICv5 guests only)
 	 -EBUSY   PMUv3 already initialized
 	 =======  ======================================================
 
@@ -64,7 +64,8 @@ virtual GIC implementation, this must be done after initializing the in-kernel
 irqchip.
 
 When the KVM_ARM_VCPU_PMU_V3_STRICT vCPU feature is enabled this must be done
-after selecting a hardware PMU.
+after selecting a hardware PMU or enabling
+KVM_ARM_VCPU_PMU_V3_FIXED_COUNTERS_ONLY.
 
 1.3 ATTRIBUTE: KVM_ARM_VCPU_PMU_V3_FILTER
 -----------------------------------------
@@ -78,7 +79,8 @@ after selecting a hardware PMU.
 	 -ENODEV  PMUv3 not supported or GIC not initialized
 	 -ENXIO   PMUv3 not properly configured or in-kernel irqchip not
 	 	  configured as required prior to calling this attribute
-	 -EBUSY   PMUv3 already initialized or a VCPU has already run
+	 -EBUSY   PMUv3 already initialized, a VCPU has already run or
+		  FIXED_COUNTERS_ONLY has already been set
 	 -EINVAL  Invalid filter range
 	 =======  ======================================================
 
@@ -123,14 +125,14 @@ after selecting a hardware PMU.
 
 :Returns:
 
-	 =======  ====================================================
+	 =======  ===========================================================
 	 -EBUSY   PMUv3 already initialized, a VCPU has already run or
-                  an event filter has already been set
+                  an event filter or FIXED_COUNTERS_ONLY has already been set
 	 -EFAULT  Error accessing the PMU identifier
 	 -ENXIO   PMU not found
 	 -ENODEV  PMUv3 not supported or GIC not initialized
 	 -ENOMEM  Could not allocate memory
-	 =======  ====================================================
+	 =======  ===========================================================
 
 Request that the VCPU uses the specified hardware PMU when creating guest events
 for the purpose of PMU emulation. The PMU identifier can be read from the "type"
@@ -171,6 +173,30 @@ KVM_ARM_VCPU_PMU_V3_SET_PMU, and will fail when no PMU has been
 explicitly selected, or the number of counters is out of range for the
 selected PMU. Selecting a new PMU cancels the effect of setting this
 attribute.
+
+1.6 ATTRIBUTE: KVM_ARM_VCPU_PMU_V3_FIXED_COUNTERS_ONLY
+------------------------------------------------------
+
+:Parameters: no additional parameter in kvm_device_attr.addr
+
+:Returns:
+
+	 =======  ==================================================
+	 -EBUSY   PMUv3 already initialized, a VCPU has already run,
+		  an event filter has already been set or
+		  a hardware PMU has already been specified
+	 -ENXIO   Attempted to get before setting
+	 -ENODEV  Attempted to set while PMUv3 not supported
+	 =======  ==================================================
+
+If set, KVM emulates PMUv3 without programmable event counters.
+
+With KVM_ARM_VCPU_PMU_V3_STRICT, enabling this attribute satisfies the
+PMU selection requirement for KVM_ARM_VCPU_PMU_V3_INIT.
+
+When this attribute is enabled, the vCPU can run on any physical CPU
+that has a PMU, regardless of the underlying implementation. This
+attribute is VM-scoped.
 
 2. GROUP: KVM_ARM_VCPU_TIMER_CTRL
 =================================
