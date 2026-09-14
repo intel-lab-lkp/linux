@@ -79,6 +79,7 @@ struct rz_mtu3_cnt {
 	u32 count[RZ_MTU3_MAX_LOGICAL_CNTR_CHANNELS];
 	u8 timer_mode[RZ_MTU3_MAX_LOGICAL_CNTR_CHANNELS];
 	bool count_is_enabled[RZ_MTU3_MAX_LOGICAL_CNTR_CHANNELS];
+	bool direction[RZ_MTU3_MAX_LOGICAL_CNTR_CHANNELS];
 	bool mtclkc_mtclkd;
 };
 
@@ -185,6 +186,13 @@ static void rz_mtu3_set_phcksel(struct rz_mtu3_channel *const ch, bool enable)
 {
 	rz_mtu3_shared_reg_update_bit(ch, RZ_MTU3_TMDR3, RZ_MTU3_TMDR3_PHCKSEL,
 				      enable);
+}
+
+static bool rz_mtu3_get_direction(struct rz_mtu3_channel *const ch)
+{
+	u8 tsr = rz_mtu3_8bit_ch_read(ch, RZ_MTU3_TSR);
+
+	return !!(tsr & RZ_MTU3_TSR_TCFD);
 }
 
 static int rz_mtu3_count_read(struct counter_device *counter,
@@ -315,18 +323,17 @@ static int rz_mtu3_count_direction_read(struct counter_device *counter,
 	struct rz_mtu3_channel *const ch = rz_mtu3_get_ch(counter, count->id);
 	struct rz_mtu3_cnt *const priv = counter_priv(counter);
 	int ret;
-	u8 tsr;
 
 	ret = rz_mtu3_lock_if_count_is_enabled(ch, priv, count->id);
 	if (ret)
 		return ret;
 
-	pm_runtime_get_sync(counter->parent);
-	tsr = rz_mtu3_8bit_ch_read(ch, RZ_MTU3_TSR);
-	pm_runtime_put(counter->parent);
+	if (priv->count_is_enabled[count->id])
+		priv->direction[count->id] = rz_mtu3_get_direction(ch);
 
-	*direction = (tsr & RZ_MTU3_TSR_TCFD) ?
+	*direction = priv->direction[count->id] ?
 		COUNTER_COUNT_DIRECTION_FORWARD : COUNTER_COUNT_DIRECTION_BACKWARD;
+
 	mutex_unlock(&priv->lock);
 
 	return 0;
@@ -469,6 +476,7 @@ static void rz_mtu3_terminate_counter(struct counter_device *counter, int id)
 	struct rz_mtu3_cnt *const priv = counter_priv(counter);
 
 	priv->count[id] = rz_mtu3_get_count(ch, id);
+	priv->direction[id] = rz_mtu3_get_direction(ch);
 
 	if (id == RZ_MTU3_32_BIT_CH) {
 		rz_mtu3_disable(ch2);
