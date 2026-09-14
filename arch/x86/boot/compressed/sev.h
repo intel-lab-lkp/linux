@@ -12,6 +12,12 @@
 
 #include <asm/shared/msr.h>
 
+enum svsm_ai_ctrl {
+	SVSM_AI_DISABLE,
+	SVSM_AI_DEREGISTER,
+	SVSM_AI_REGISTER,
+};
+
 void snp_accept_memory(phys_addr_t start, phys_addr_t end);
 u64 sev_get_status(void);
 bool early_is_sevsnp_guest(void);
