@@ -81,7 +81,7 @@ static int hns_roce_set_bond_netdev(struct hns_roce_bond_group *bond_grp,
 {
 	struct net_device *active_dev;
 	struct net_device *old_dev;
-	int i, ret = 0;
+	int i = 0, ret = 0;
 
 	if (bond_grp->tx_type == NETDEV_LAG_TX_TYPE_ACTIVEBACKUP) {
 		rcu_read_lock();
