@@ -17,6 +17,10 @@ kernel_version=`uname -r | cut -d'.' -f1,2`
 kernel_major=${kernel_version%.*}
 kernel_minor=${kernel_version#*.}
 
+# Whether this test enabled the memory controller on its cgroup parent.  Tests
+# must leave a delegation which was already present alone.
+cgroup_memory_controller_enabled=0
+
 trap INT
 
 check_prereqs()
@@ -28,6 +32,30 @@ check_prereqs()
 		echo $msg must be run as root >&2
 		exit $ksft_skip
 	fi
+}
+
+cgroup_enable_memory_controller()
+{
+	local cgroup_root=$1
+
+	if grep -qw memory "$cgroup_root/cgroup.subtree_control"; then
+		return 0
+	fi
+
+	if ! echo +memory > "$cgroup_root/cgroup.subtree_control"; then
+		return 1
+	fi
+
+	cgroup_memory_controller_enabled=1
+}
+
+cgroup_disable_memory_controller()
+{
+	local cgroup_root=$1
+
+	[ "$cgroup_memory_controller_enabled" -eq 1 ] || return 0
+	echo -memory > "$cgroup_root/cgroup.subtree_control" || return 1
+	cgroup_memory_controller_enabled=0
 }
 
 kernel_gte()
