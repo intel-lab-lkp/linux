@@ -557,6 +557,9 @@ static void handle___kvm_tlb_flush_vmid_ipa(struct kvm_cpu_context *host_ctxt)
 	DECLARE_REG(phys_addr_t, ipa, host_ctxt, 2);
 	DECLARE_REG(int, level, host_ctxt, 3);
 
+	if (unlikely(is_protected_kvm_enabled()))
+		return;
+
 	__kvm_tlb_flush_vmid_ipa(kern_hyp_va(mmu), ipa, level);
 }
 
@@ -565,6 +568,9 @@ static void handle___kvm_tlb_flush_vmid_ipa_nsh(struct kvm_cpu_context *host_ctx
 	DECLARE_REG(struct kvm_s2_mmu *, mmu, host_ctxt, 1);
 	DECLARE_REG(phys_addr_t, ipa, host_ctxt, 2);
 	DECLARE_REG(int, level, host_ctxt, 3);
+
+	if (unlikely(is_protected_kvm_enabled()))
+		return;
 
 	__kvm_tlb_flush_vmid_ipa_nsh(kern_hyp_va(mmu), ipa, level);
 }
@@ -576,12 +582,18 @@ handle___kvm_tlb_flush_vmid_range(struct kvm_cpu_context *host_ctxt)
 	DECLARE_REG(phys_addr_t, start, host_ctxt, 2);
 	DECLARE_REG(unsigned long, pages, host_ctxt, 3);
 
+	if (unlikely(is_protected_kvm_enabled()))
+		return;
+
 	__kvm_tlb_flush_vmid_range(kern_hyp_va(mmu), start, pages);
 }
 
 static void handle___kvm_tlb_flush_vmid(struct kvm_cpu_context *host_ctxt)
 {
 	DECLARE_REG(struct kvm_s2_mmu *, mmu, host_ctxt, 1);
+
+	if (unlikely(is_protected_kvm_enabled()))
+		return;
 
 	__kvm_tlb_flush_vmid(kern_hyp_va(mmu));
 }
@@ -601,6 +613,9 @@ static void handle___pkvm_tlb_flush_vmid(struct kvm_cpu_context *host_ctxt)
 static void handle___kvm_flush_cpu_context(struct kvm_cpu_context *host_ctxt)
 {
 	DECLARE_REG(struct kvm_s2_mmu *, mmu, host_ctxt, 1);
+
+	if (unlikely(is_protected_kvm_enabled()))
+		return;
 
 	__kvm_flush_cpu_context(kern_hyp_va(mmu));
 }
