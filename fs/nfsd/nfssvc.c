@@ -634,6 +634,7 @@ int nfsd_create_serv(struct net *net)
 		percpu_ref_exit(&nn->nfsd_net_ref);
 		return -ENOMEM;
 	}
+	serv->sv_reply_sent = nfsd_cache_reply_sent;
 
 	error = svc_bind(serv, net);
 	if (error < 0) {
