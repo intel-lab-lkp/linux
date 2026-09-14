@@ -2180,3 +2180,80 @@ Dwarf_Die *die_deref_ptr_type(Dwarf_Die *ptr_die, int offset,
 
 	return die_get_member_type(&type_die, offset, die_mem);
 }
+
+static bool is_flex_array_member(Dwarf_Die *mb_die)
+{
+	Dwarf_Die type_die;
+	Dwarf_Word size;
+
+	/* get the type of the member */
+	if (die_get_real_type(mb_die, &type_die) == NULL)
+		return false;
+
+	if (dwarf_tag(&type_die) != DW_TAG_array_type)
+		return false;
+
+	return dwarf_aggregate_size(&type_die, &size) < 0 || size == 0;
+}
+
+#define MAX_FLEX_ARRAY_RECURSION  256  /* arbitrary */
+
+static bool die_has_flex_array_recurse(Dwarf_Die *parent_die, int depth)
+{
+	Dwarf_Die die_mem, last_mb;
+	int tag = dwarf_tag(parent_die);
+
+	if (tag != DW_TAG_structure_type && tag != DW_TAG_union_type)
+		return false;
+
+	/* prevent infinite recursion */
+	if (depth > MAX_FLEX_ARRAY_RECURSION)
+		return false;
+
+	if (dwarf_child(parent_die, &die_mem))
+		return false;
+
+	do {
+		if (dwarf_tag(&die_mem) != DW_TAG_member)
+			continue;
+
+		if (tag == DW_TAG_union_type) {
+			if (is_flex_array_member(&die_mem))
+				return true;
+
+			if (die_get_real_type(&die_mem, &last_mb) &&
+			    die_has_flex_array_recurse(&last_mb, depth + 1))
+				return true;
+		}
+
+		if (tag == DW_TAG_structure_type)
+			memcpy(&last_mb, &die_mem, sizeof(last_mb));
+
+	} while (dwarf_siblingof(&die_mem, &die_mem) == 0);
+
+	if (tag == DW_TAG_structure_type) {
+		if (is_flex_array_member(&last_mb))
+			return true;
+
+		if (die_get_real_type(&last_mb, &die_mem))
+			return die_has_flex_array_recurse(&die_mem, depth + 1);
+	}
+
+	return false;
+}
+
+/**
+ * die_has_flex_array - Check if the given type has a flex-array at the end
+ * @parent_die: a pointer to type DIE
+ *
+ * This function returns %true iff @parent_die is a struct type and has an
+ * array at the end.  Note that the flex-array has no element, it should have
+ * no size and the parent size doesn't include the flex-array.  So it should
+ * locate at the offset of the parent size.
+ *
+ * For simplicity, it assumes the parent size of aligned with the flex-array.
+ */
+bool die_has_flex_array(Dwarf_Die *parent_die)
+{
+	return die_has_flex_array_recurse(parent_die, 0);
+}
