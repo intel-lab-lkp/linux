@@ -17,15 +17,21 @@ struct elf_funcs elf_parser;
  * Get the whole file as a programming convenience in order to avoid
  * malloc+lseek+read+free of many pieces.  If successful, then mmap
  * avoids copying unused pieces; else just read the whole file.
- * Open for both read and write.
+ * Open for both read and write if writable is true, otherwise open
+ * read-only.
  */
-static void *map_file(char const *fname, size_t *size)
+static void *map_file(char const *fname, size_t *size, bool writable)
 {
-	int fd;
+	int fd, prot = PROT_READ, flags = MAP_PRIVATE;
 	struct stat sb;
 	void *addr = NULL;
 
-	fd = open(fname, O_RDWR);
+	if (writable) {
+		prot |= PROT_WRITE;
+		flags = MAP_SHARED;
+	}
+
+	fd = open(fname, writable ? O_RDWR : O_RDONLY);
 	if (fd < 0) {
 		perror(fname);
 		return NULL;
@@ -39,7 +45,7 @@ static void *map_file(char const *fname, size_t *size)
 		goto out;
 	}
 
-	addr = mmap(0, sb.st_size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+	addr = mmap(0, sb.st_size, prot, flags, fd, 0);
 	if (addr == MAP_FAILED) {
 		fprintf(stderr, "Could not mmap file: %s\n", fname);
 		goto out;
@@ -56,6 +62,12 @@ static int elf_parse(const char *fname, void *addr, uint32_t types)
 {
 	Elf_Ehdr *ehdr = addr;
 	uint16_t type;
+
+	if (memcmp(ELFMAG, ehdr->e32.e_ident, SELFMAG) != 0 ||
+	    ehdr->e32.e_ident[EI_VERSION] != EV_CURRENT) {
+		fprintf(stderr, "unrecognized ELF file %s\n", fname);
+		return -1;
+	}
 
 	switch (ehdr->e32.e_ident[EI_DATA]) {
 	case ELFDATA2LSB:
@@ -78,12 +90,6 @@ static int elf_parse(const char *fname, void *addr, uint32_t types)
 		return -1;
 	}
 
-	if (memcmp(ELFMAG, ehdr->e32.e_ident, SELFMAG) != 0 ||
-	    ehdr->e32.e_ident[EI_VERSION] != EV_CURRENT) {
-		fprintf(stderr, "unrecognized ELF file %s\n", fname);
-		return -1;
-	}
-
 	type = elf_parser.r2(&ehdr->e32.e_type);
 	if (!((1 << type) & types)) {
 		fprintf(stderr, "Invalid ELF type file %s\n", fname);
@@ -103,7 +109,9 @@ static int elf_parse(const char *fname, void *addr, uint32_t types)
 		elf_parser.shdr_name		= shdr32_name;
 		elf_parser.shdr_type		= shdr32_type;
 		elf_parser.shdr_entsize		= shdr32_entsize;
+		elf_parser.shdr_flags		= shdr32_flags;
 		elf_parser.sym_type		= sym32_type;
+		elf_parser.sym_bind		= sym32_bind;
 		elf_parser.sym_name		= sym32_name;
 		elf_parser.sym_value		= sym32_value;
 		elf_parser.sym_shndx		= sym32_shndx;
@@ -133,7 +141,9 @@ static int elf_parse(const char *fname, void *addr, uint32_t types)
 		elf_parser.shdr_name		= shdr64_name;
 		elf_parser.shdr_type		= shdr64_type;
 		elf_parser.shdr_entsize		= shdr64_entsize;
+		elf_parser.shdr_flags		= shdr64_flags;
 		elf_parser.sym_type		= sym64_type;
+		elf_parser.sym_bind		= sym64_bind;
 		elf_parser.sym_name		= sym64_name;
 		elf_parser.sym_value		= sym64_value;
 		elf_parser.sym_shndx		= sym64_shndx;
@@ -174,12 +184,13 @@ int elf_map_long_size(void *addr)
 	return ehdr->e32.e_ident[EI_CLASS] == ELFCLASS32 ? 4 : 8;
 }
 
-void *elf_map(char const *fname, size_t *size, uint32_t types)
+static void *__elf_map(char const *fname, size_t *size, uint32_t types,
+		       bool writable)
 {
 	void *addr;
 	int ret;
 
-	addr = map_file(fname, size);
+	addr = map_file(fname, size, writable);
 	if (!addr)
 		return NULL;
 
@@ -190,6 +201,17 @@ void *elf_map(char const *fname, size_t *size, uint32_t types)
 	}
 
 	return addr;
+}
+
+void *elf_map(char const *fname, size_t *size, uint32_t types)
+{
+	return __elf_map(fname, size, types, true);
+}
+
+/* For tools that only read the file. */
+void *elf_map_ro(char const *fname, size_t *size, uint32_t types)
+{
+	return __elf_map(fname, size, types, false);
 }
 
 void elf_unmap(void *addr, size_t size)
