@@ -314,6 +314,19 @@ static const struct pwm_ops tegra_pwm_ops = {
 	.apply = tegra_pwm_apply,
 };
 
+static void tegra_pwm_cleanup(void *data)
+{
+	struct device *dev = data;
+	struct pwm_chip *chip = dev_get_drvdata(dev);
+	struct tegra_pwm_chip *pc = to_tegra_pwm_chip(chip);
+
+	if (!IS_ENABLED(CONFIG_PM) || pm_runtime_status_suspended(dev))
+		return;
+
+	clk_disable_unprepare(pc->clk);
+	pinctrl_pm_select_sleep_state(dev);
+}
+
 static int tegra_pwm_probe(struct platform_device *pdev)
 {
 	struct pwm_chip *chip;
@@ -344,7 +357,15 @@ static int tegra_pwm_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	pm_runtime_enable(&pdev->dev);
+	/* Disable runtime PM before cleaning up the hardware. */
+	ret = devm_add_action_or_reset(&pdev->dev, tegra_pwm_cleanup, &pdev->dev);
+	if (ret)
+		return ret;
+
+	ret = devm_pm_runtime_enable(&pdev->dev);
+	if (ret)
+		return ret;
+
 	ret = pm_runtime_resume_and_get(&pdev->dev);
 	if (ret)
 		return ret;
@@ -395,7 +416,6 @@ static int tegra_pwm_probe(struct platform_device *pdev)
 	return 0;
 put_pm:
 	pm_runtime_put_sync_suspend(&pdev->dev);
-	pm_runtime_force_suspend(&pdev->dev);
 	return ret;
 }
 
@@ -407,8 +427,6 @@ static void tegra_pwm_remove(struct platform_device *pdev)
 	pwmchip_remove(chip);
 
 	reset_control_assert(pc->rst);
-
-	pm_runtime_force_suspend(&pdev->dev);
 }
 
 static int __maybe_unused tegra_pwm_runtime_suspend(struct device *dev)
