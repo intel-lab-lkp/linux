@@ -275,6 +275,10 @@ static int proc_fill_super(struct super_block *s, struct fs_context *fc)
 	s->s_time_gran = 1;
 	s->s_fs_info = fs_info;
 
+	ret = proc_init_inode_shards(s);
+	if (ret)
+		return ret;
+
 	if (fs_info->pidonly == PROC_PIDONLY_ON)
 		s->s_iflags |= SB_I_RESTRICTED_VARIANT;
 
@@ -359,6 +363,8 @@ static void proc_kill_sb(struct super_block *sb)
 	struct proc_fs_info *fs_info = proc_sb_info(sb);
 
 	kill_anon_super(sb);
+	if (sb->s_inode_list_sharded)
+		kfree(sb->shards);
 	if (fs_info) {
 		put_pid_ns(fs_info->pid_ns);
 		put_cred(fs_info->mounter_cred);

@@ -65,6 +65,7 @@ static struct inode *proc_alloc_inode(struct super_block *sb)
 	ei->sysctl_entry = NULL;
 	INIT_HLIST_NODE(&ei->sibling_inodes);
 	ei->ns_ops = NULL;
+	ei->shard_idx = 0;
 	return &ei->vfs_inode;
 }
 
@@ -78,6 +79,56 @@ static void proc_free_inode(struct inode *inode)
 	if (ei->pde)
 		pde_put(ei->pde);
 	kmem_cache_free(proc_inode_cachep, PROC_I(inode));
+}
+
+static void proc_inode_list_add(struct super_block *sb, struct inode *inode)
+{
+	struct proc_fs_info *fs_info = proc_sb_info(sb);
+	struct proc_inode *ei = PROC_I(inode);
+	struct inode_shard *shard;
+	unsigned int idx, seq;
+
+	seq = atomic_fetch_inc(&fs_info->shard_seq);
+	idx = seq % sb->nr_shards;
+	ei->shard_idx = idx;
+	shard = &sb->shards[idx];
+
+	spin_lock(&shard->lock);
+	list_add(&inode->i_sb_list, &shard->list);
+	spin_unlock(&shard->lock);
+}
+
+static void proc_inode_list_del(struct super_block *sb, struct inode *inode)
+{
+	struct proc_inode *ei = PROC_I(inode);
+	struct inode_shard *shard = &sb->shards[ei->shard_idx];
+
+	spin_lock(&shard->lock);
+	list_del_init(&inode->i_sb_list);
+	spin_unlock(&shard->lock);
+}
+
+#define PROC_LIST_ALIGN	32
+int proc_init_inode_shards(struct super_block *sb)
+{
+	struct inode_shard *shards;
+	unsigned int nr_shards;
+	int i;
+
+	nr_shards = DIV_ROUND_UP(num_possible_cpus(), PROC_LIST_ALIGN);
+	shards = kcalloc(nr_shards, sizeof(*shards), GFP_KERNEL);
+	if (!shards)
+		return -ENOMEM;
+
+	for (i = 0; i < nr_shards; i++) {
+		INIT_LIST_HEAD(&shards[i].list);
+		spin_lock_init(&shards[i].lock);
+	}
+
+	sb->shards = shards;
+	sb->nr_shards = nr_shards;
+	sb->s_inode_list_sharded = true;
+	return 0;
 }
 
 static void init_once(void *foo)
@@ -191,6 +242,8 @@ const struct super_operations proc_sops = {
 	.evict_inode	= proc_evict_inode,
 	.statfs		= simple_statfs,
 	.show_options	= proc_show_options,
+	.inode_list_add	= proc_inode_list_add,
+	.inode_list_del	= proc_inode_list_del,
 };
 
 enum {BIAS = -1U<<31};
