@@ -227,6 +227,8 @@ release_led_node:
 static void ncp5623_remove(struct i2c_client *client)
 {
 	struct ncp5623 *ncp = i2c_get_clientdata(client);
+	struct fwnode_handle *mc_node =
+		dev_fwnode(ncp->mc_dev.led_cdev.dev);
 
 	mutex_lock(&ncp->lock);
 	ncp->delay = 0;
@@ -234,6 +236,7 @@ static void ncp5623_remove(struct i2c_client *client)
 
 	ncp5623_write(client, NCP5623_DIMMING_TIME_REG, 0);
 	led_classdev_multicolor_unregister(&ncp->mc_dev);
+	fwnode_handle_put(mc_node);
 	mutex_destroy(&ncp->lock);
 }
 
