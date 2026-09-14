@@ -67,6 +67,11 @@ module_param_named(sev_snp, sev_snp_enabled, bool, 0444);
 static unsigned int __ro_after_init nr_ciphertext_hiding_asids;
 module_param_named(ciphertext_hiding_asids, nr_ciphertext_hiding_asids, uint, 0444);
 
+static unsigned long esmtp_timeout_ns;
+module_param(esmtp_timeout_ns, ulong, 0644);
+MODULE_PARM_DESC(esmtp_timeout_ns,
+		 "ESMTP VMRUN sibling-wait timeout in nanoseconds (0 disables the timer)");
+
 #define AP_RESET_HOLD_NONE		0
 #define AP_RESET_HOLD_NAE_EVENT		1
 #define AP_RESET_HOLD_MSR_PROTO		2
@@ -506,7 +511,7 @@ static int __sev_guest_init(struct kvm *kvm, struct kvm_sev_cmd *argp,
 		return -EINVAL;
 
 	if (!snp_active)
-		valid_vmsa_features &= ~SVM_SEV_FEAT_SECURE_TSC;
+		valid_vmsa_features &= ~(SVM_SEV_FEAT_SECURE_TSC | SVM_SEV_FEAT_ESMTP);
 
 	if (data->vmsa_features & ~valid_vmsa_features)
 		return -EINVAL;
@@ -1020,6 +1025,15 @@ static int sev_es_sync_vmsa(struct vcpu_svm *svm)
 	save->dr6  = svm->vcpu.arch.dr6;
 
 	save->sev_features = sev->vmsa_features;
+
+	if (sev->vmsa_features & SVM_SEV_FEAT_ESMTP) {
+		save->vcpu_id = vcpu->vcpu_id;
+		/*
+		 * All vCPUs of a guest are put into one group and can be run
+		 * co-resident on the sibling thread of the same core.
+		 */
+		save->vcpu_sibling_mask = U32_MAX;
+	}
 
 	/*
 	 * Skip FPU and AVX setup with KVM_SEV_ES_INIT to avoid
@@ -3083,6 +3097,30 @@ static const char * __init sev_str_feature_state(bool is_supported, bool is_usab
 	return is_supported ? is_usable ? "enabled" : "unusable" : "disabled";
 }
 
+static bool sev_esmtp_setup_wakeup_icr(void)
+{
+	unsigned int cpu, sibling;
+	bool wrmsr_success = true;
+
+	for_each_online_cpu(cpu) {
+		for_each_cpu(sibling, topology_sibling_cpumask(cpu)) {
+			u64 icr;
+			int ret;
+
+			if (sibling == cpu)
+				continue;
+
+			icr = (u64)per_cpu(x86_cpu_to_apicid, sibling) << 32;
+			icr |= LOCAL_TIMER_VECTOR & 0xff;
+			ret = wrmsrq_safe_on_cpu(cpu, MSR_AMD64_IDLE_WAKEUP_ICR, icr);
+			if (ret)
+				wrmsr_success = false;
+		}
+	}
+
+	return wrmsr_success;
+}
+
 void __init sev_hardware_setup(void)
 {
 	unsigned int eax, ebx, ecx, edx, sev_asid_count, sev_es_asid_count;
@@ -3259,6 +3297,10 @@ out:
 
 	if (sev_snp_enabled && tsc_khz && cpu_feature_enabled(X86_FEATURE_SNP_SECURE_TSC))
 		sev_supported_vmsa_features |= SVM_SEV_FEAT_SECURE_TSC;
+
+	if (sev_snp_enabled && cpu_feature_enabled(X86_FEATURE_AMD_ESMTP) &&
+	    sev_esmtp_setup_wakeup_icr())
+		sev_supported_vmsa_features |= SVM_SEV_FEAT_ESMTP;
 }
 
 void sev_hardware_unsetup(void)
@@ -4791,6 +4833,10 @@ static void sev_es_init_vmcb(struct vcpu_svm *svm, bool init_event)
 	if (cpu_feature_enabled(X86_FEATURE_ALLOWED_SEV_FEATURES))
 		svm->vmcb->control.allowed_sev_features = sev->vmsa_features |
 							  VMCB_ALLOWED_SEV_FEATURES_VALID;
+
+	if (sev->vmsa_features & SVM_SEV_FEAT_ESMTP)
+		svm->vmcb->control.esmtp_timeout = mul_u64_u32_div(esmtp_timeout_ns,
+								   tsc_khz, 1000000);
 
 	/* Can't intercept CR register access, HV can't modify CR registers */
 	svm_clr_intercept(svm, INTERCEPT_CR0_READ);

@@ -135,6 +135,10 @@
 #define SVM_EXIT_SW				0xf0000000ull
 
 #define SVM_EXIT_ERR           -1ull
+/* Enhanced SMT Protection VM exits taken during VMRUN sibling sync */
+#define SVM_EXIT_ESMTP_ILLSIB  -5ull	/* Illegal ESMTP sibling */
+#define SVM_EXIT_ESMTP_TIMEOUT -6ull	/* ESMTP_TIMEOUT expired */
+#define SVM_EXIT_ESMTP_RETRY   -7ull	/* Internal event; retry VMRUN */
 
 #define SVM_EXIT_REASONS \
 	{ SVM_EXIT_READ_CR0,    "read_cr0" }, \
@@ -246,7 +250,10 @@
 	{ SVM_VMGEXIT_EXT_GUEST_REQUEST, "vmgexit_ext_guest_request" }, \
 	{ SVM_VMGEXIT_AP_CREATION,	"vmgexit_ap_creation" }, \
 	{ SVM_VMGEXIT_HV_FEATURES,	"vmgexit_hypervisor_feature" }, \
-	{ SVM_EXIT_ERR,         "invalid_guest_state" }
+	{ SVM_EXIT_ERR,         "invalid_guest_state" }, \
+	{ SVM_EXIT_ESMTP_ILLSIB,	"esmtp_illsib" }, \
+	{ SVM_EXIT_ESMTP_TIMEOUT,	"esmtp_timeout" }, \
+	{ SVM_EXIT_ESMTP_RETRY,		"esmtp_retry" }
 
 
 #endif /* _UAPI__SVM_H */
