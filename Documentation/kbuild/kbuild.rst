@@ -323,8 +323,47 @@ The jobs share make's jobserver with other build targets. For example::
 
     $ make -j8 ALLSOURCE_ARCHS=all tags
 
-Per-directory tag files are temporary and are removed after merging.
-Every invocation regenerates the complete tags file.
+Each directory has a cached input list and tag file: ``mm/.tags.files`` and
+``mm/.tags.zst``, for example. Out-of-tree builds mirror these paths in the
+build directory, leaving the source tree untouched. Inputs outside both trees
+are cached under ``.tags.external/`` in the build directory.
+
+Each cached tag file is sorted, carries an internal header/data prefix, and is
+compressed with ``zstd -1``. This requires zstd 1.5.6 or later (overridable
+with ``ZSTD``).
+The final merge temporarily decompresses the shards, uses ``sort -m``, and
+removes the prefixes, producing a normal uncompressed ``tags`` file without
+re-sorting unchanged directories. Temporary files are removed after merging;
+allow disk space for the decompressed shards as well as the final output.
+Obsolete shards and their input lists are removed after a successful run.
+
+The build root holds the shared ``.tags.inputs``, ``.tags.settings``,
+``.tags.shards``, ``.tags.dependencies``, and ``.tags.locations`` manifests.
+The complete source list is cached in ``.tags.inputs``. When it is unchanged,
+the per-directory lists and dependency rules are reused without regenerating
+or comparing them. Make still checks source timestamps on every invocation.
+Missing per-directory input lists are regenerated automatically.
+
+Each invocation checks the source lists, but only directories with changed
+sources, file lists, or the ctags command or version are indexed again. The
+final ``tags`` file is merged only when needed. Added and deleted sources
+and changes to architecture selection or ignored directories are detected
+automatically. ``make mrproper`` removes the cache and shared manifests.
+
+Changes to ctags configuration files or an executable replacement with the
+same command and version are not detected. After such changes, remove
+``.tags.settings`` in the build directory to force regeneration on the next
+``make tags`` invocation.
+
+Missing tag files are rebuilt automatically. Existing cache files are not
+checked for corruption on unchanged runs. If a merge reports a corrupt
+cache file, remove that file and rerun ``make tags``, or remove
+``.tags.settings`` to rebuild all cached tags.
+
+Run only one ``make tags`` invocation at a time in a given build directory.
+Concurrent invocations, including those selecting different architectures,
+are not supported. Do not run cache cleanup or ``make mrproper`` alongside
+tag generation.
 
 IGNORE_DIRS
 -----------

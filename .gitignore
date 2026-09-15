@@ -137,6 +137,7 @@ patches
 series
 
 # ctags files
+.tags.*
 tags
 !tags/
 TAGS

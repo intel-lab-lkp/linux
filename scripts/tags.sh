@@ -119,6 +119,7 @@ all_sources()
 
 all_compiled_sources()
 {
+	local file
 	{
 		echo include/generated/autoconf.h
 		# A .cmd batch with no source references is not an error.
@@ -128,7 +129,12 @@ all_compiled_sources()
 			grep -Poh "$pattern" "$@" || [ "$?" -eq 1 ]
 		' sh '(?<=^  )\S+\.([chS]|rs)(?=\s)|(?<== )\S+\.(?1)(?=$)' {} \+ |
 		awk '!a[$0]++'
-	} | xargs realpath -esq $([ -z "$KBUILD_ABS_SRCTREE" ] && echo --relative-to=.) |
+	} | while IFS= read -r file; do
+		# Old .cmd files may reference sources removed since the last build.
+		if [ -f "$file" ]; then
+			printf '%s\n' "$file"
+		fi
+	done | xargs -r realpath -esq $([ -z "$KBUILD_ABS_SRCTREE" ] && echo --relative-to=.) |
 	sort -u
 }
 
@@ -356,24 +362,81 @@ setup_tags_tmp()
 }
 
 # Let recursive make schedule directory shards using the caller's jobserver.
+# The scan is unconditional so additions and deletions are also noticed.
 parallel_tags()
 (
-	local tmp
+	local tmp file
+	# Older zstd versions mishandle hidden paths with --output-dir-mirror.
+	if ! ${ZSTD:-zstd} --version | awk '
+		match($0, /v[0-9]+\.[0-9]+\.[0-9]+/) {
+			split(substr($0, RSTART + 1, RLENGTH - 1), v, ".")
+			ok = (v[1] * 10000 + v[2] * 100 + v[3] >= 10506)
+		}
+		END { exit !ok }'; then
+		echo "make tags requires zstd 1.5.6 or later" >&2
+		exit 1
+	fi
 	setup_tags_tmp
 	# Workers inherit these capabilities instead of probing for each directory.
 	setup_ctags ${CTAGS:-ctags}
 
 	{
+		# Invalidate caches written before shards were compressed.
+		printf '%s\n' 'shard-format=distributed-zstd-v1'
+		printf '%s\n' "${CTAGS:-ctags}"
+		${CTAGS:-ctags} --version
+	} > "$tmp/settings"
+
+	{
+		# Include the generator so changes to the cache format rebuild lists.
+		cksum "$0"
 		all_target_sources | sed 's/^/s /'
 		all_kconfigs | sed 's/^/k /'
-	} | LC_ALL=C sort -u | awk -v tmp="$tmp" '
-		{
-			dir = substr($0, 3)
+	} | LC_ALL=C sort -u > "$tmp/inputs"
+
+	# A matching inventory is not sufficient if a cached input list was lost.
+	if [ -f .tags.shards ]; then
+		while IFS= read -r file; do
+			if [ ! -f "${file%.zst}.files" ]; then
+				rm -f .tags.inputs
+				break
+			fi
+		done < .tags.shards
+	fi
+
+	if ! cmp -s "$tmp/inputs" .tags.inputs ||
+	   [ ! -f .tags.shards ] || [ ! -f .tags.dependencies ]; then
+		# Publish inputs last: an interrupted update must regenerate the lists.
+		rm -f .tags.inputs
+		# Resolve source paths once so out-of-tree caches stay in the build tree.
+		sed -n 's/^[sk] //p' "$tmp/inputs" | tr '\n' '\0' |
+			xargs -0 -r realpath -e -- > "$tmp/paths"
+		awk -v tmp="$tmp" -v source_root="$(realpath "${srctree:-.}")/" \
+		    -v build_root="$(pwd -P)/" '
+		BEGIN {
+			printf "" > (tmp "/dependencies")
+			printf "" > (tmp "/lists")
+		}
+		/^[sk] / {
+			file = substr($0, 3)
+			getline path < (tmp "/paths")
+			# Prefer the more specific root when one tree contains the other.
+			if (index(path, source_root) == 1 &&
+			    (length(source_root) >= length(build_root) ||
+			     index(path, build_root) != 1))
+				path = substr(path, length(source_root) + 1)
+			else if (index(path, build_root) == 1)
+				path = substr(path, length(build_root) + 1)
+			else
+				path = ".tags.external" path
+			dir = path
 			if (!sub(/\/[^\/]*$/, "", dir))
 				dir = "."
+			base = (dir == "." ? "" : dir "/") ".tags"
 			if (!(dir in ids)) {
 				ids[dir] = ++n
-				print tmp "/" n ".tags"
+				print base ".zst"
+				print n, base ".files" > (tmp "/lists")
 			}
 			out = tmp "/" ids[dir] ".files"
 			if (out != previous) {
@@ -382,8 +445,49 @@ parallel_tags()
 				previous = out
 			}
 			print >> out
-		}' > "$tmp/shards"
-	${MAKE:-make} -f "${tree}scripts/Makefile.tags" tags_tmp="$tmp"
+			print base ".zst: " file > (tmp "/dependencies")
+		}' "$tmp/inputs" | LC_ALL=C sort > "$tmp/shards"
+	fi
+
+	# Record all locations before publishing lists so interrupted builds can
+	# still prune files left by earlier source selections.
+	if [ -f "$tmp/shards" ] || [ ! -f .tags.locations ]; then
+		{
+			for file in .tags.locations .tags.shards "$tmp/shards"; do
+				if [ -f "$file" ]; then
+					cat "$file"
+				fi
+			done
+		} | LC_ALL=C sort -u > "$tmp/locations"
+		mv "$tmp/locations" .tags.locations
+	fi
+
+	if [ -f "$tmp/lists" ]; then
+		local id dir
+		while read -r id file; do
+			dir=${file%/*}
+			if [ "$dir" != "$file" ] && [ ! -d "$dir" ]; then
+				mkdir -p "$dir"
+			fi
+			if ! cmp -s "$tmp/$id.files" "$file"; then
+				mv "$tmp/$id.files" "$file"
+			fi
+		done < "$tmp/lists"
+	fi
+	for file in settings shards dependencies; do
+		if [ -f "$tmp/$file" ] && ! cmp -s "$tmp/$file" ".tags.$file"; then
+			mv "$tmp/$file" ".tags.$file"
+		fi
+	done
+	if [ ! -f .tags.inputs ]; then
+		mv "$tmp/inputs" .tags.inputs
+	fi
+	${MAKE:-make} -f "${tree}scripts/Makefile.tags"
+	if ! cmp -s .tags.locations .tags.shards; then
+		LC_ALL=C comm -23 .tags.locations .tags.shards | remove_tag_shards
+		cp .tags.shards "$tmp/locations"
+		mv "$tmp/locations" .tags.locations
+	fi
 )
 
 merge_tags()
@@ -391,14 +495,25 @@ merge_tags()
 	local tmp
 	setup_tags_tmp
 
+	# Use only current shards, excluding directories removed since last run.
+	# Expand into the temporary directory; cleanup also covers decode failures.
+	xargs -r ${ZSTD:-zstd} -q -d --output-dir-mirror="$tmp" -- < .tags.shards
 	# Read filenames from stdin to avoid command-line length limits.
 	{
-		tr '\n' '\0' < "$1/shards"
+		sed "s|^|$tmp/|; s/\.zst$//" .tags.shards | tr '\n' '\0'
 		# sort requires at least one input, even when there are no shards.
 		printf '/dev/null\0'
 	} | LC_ALL=C sort -m -u --files0-from=- | cut -f2- > "$tmp/merged"
 	mv "$tmp/merged" tags
 )
+
+# Remove both files belonging to each listed shard, preserving path boundaries.
+remove_tag_shards()
+{
+	while IFS= read -r file; do
+		printf '%s\0' "$file" "${file%.zst}.files"
+	done | xargs -0 -r rm -f --
+}
 
 remove_struct_forward_declarations()
 {
@@ -465,7 +580,7 @@ case "$1" in
 		;;
 
 	"tags-worker")
-		tags_input=${2%.tags}
+		tags_input=${2%.zst}
 		# Never expose an incomplete shard after an error or interruption.
 		setup_tags_tmp
 		tags_flags=(-f "$tmp/tags" --sort=no --tag-relative=no)
@@ -476,14 +591,26 @@ case "$1" in
 			{
 				sub(/^!_TAG_FILE_SORTED\t0\t/, "!_TAG_FILE_SORTED\t1\t")
 				print (/^!_TAG_/ ? "0\t" : "1\t") $0
-			}' | LC_ALL=C sort --parallel=1 -u > "$tmp/sorted"
-		mv "$tmp/sorted" "$2"
+			}' | LC_ALL=C sort --parallel=1 -u |
+			${ZSTD:-zstd} -q -1 --single-thread -c > "$tmp/sorted.zst"
+		mv "$tmp/sorted.zst" "$2"
 		exit 0
 		;;
 
 	"tags-merge")
-		merge_tags "$2"
+		merge_tags
 		exit $?
+		;;
+
+	"tags-clean")
+		set -eo pipefail
+		for file in .tags.locations .tags.shards; do
+			if [ -f "$file" ]; then
+				remove_tag_shards < "$file"
+			fi
+		done
+		rm -f .tags.{inputs,settings,shards,dependencies,locations}
+		exit 0
 		;;
 
 	"TAGS")

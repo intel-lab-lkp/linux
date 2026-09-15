@@ -1810,6 +1810,7 @@ $(mrproper-dirs):
 	$(Q)$(MAKE) $(clean)=$(patsubst _mrproper_%,%,$@)
 
 mrproper: clean objtool_mrproper $(mrproper-dirs)
+	$(Q)$(BASH) $(srctree)/scripts/tags.sh tags-clean
 	$(call cmd,rmfiles)
 	@find . $(RCS_FIND_IGNORE) \
 		\( -name '*.rmeta' \) \
