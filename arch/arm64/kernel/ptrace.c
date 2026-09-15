@@ -28,6 +28,7 @@
 #include <linux/hw_breakpoint.h>
 #include <linux/regset.h>
 #include <linux/elf.h>
+#include <linux/file.h>
 #include <linux/rseq.h>
 
 #include <asm/compat.h>
@@ -2485,6 +2486,9 @@ int syscall_trace_enter(struct pt_regs *regs)
 void syscall_trace_exit(struct pt_regs *regs)
 {
 	unsigned long flags = read_thread_flags();
+
+	if (flags & _TIF_FD_SLOTS)
+		fd_slots_commit(regs);
 
 	audit_syscall_exit(regs);
 
