@@ -267,7 +267,9 @@ static int txgbevf_probe(struct pci_dev *pdev,
 	ether_addr_copy(netdev->perm_addr, wx->mac.addr);
 
 	wxvf_init_service(wx);
+	rtnl_lock();
 	err = wx_init_interrupt_scheme(wx);
+	rtnl_unlock();
 	if (err)
 		goto err_free_sw_init;
 
