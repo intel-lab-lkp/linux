@@ -1574,7 +1574,7 @@ static inline u64 sel_class_to_ino(u16 class)
 
 static inline u16 sel_ino_to_class(u64 ino)
 {
-	return (ino & SEL_INO_MASK) / (SEL_VEC_MAX + 1);
+	return div_u64(ino & SEL_INO_MASK, SEL_VEC_MAX + 1);
 }
 
 static inline u64 sel_perm_to_ino(u16 class, u32 perm)
@@ -1584,7 +1584,11 @@ static inline u64 sel_perm_to_ino(u16 class, u32 perm)
 
 static inline u32 sel_ino_to_perm(u64 ino)
 {
-	return (ino & SEL_INO_MASK) % (SEL_VEC_MAX + 1);
+	u32 rem;
+
+	div_u64_rem(ino & SEL_INO_MASK, SEL_VEC_MAX + 1, &rem);
+
+	return rem;
 }
 
 static ssize_t sel_read_class(struct file *file, char __user *buf,
