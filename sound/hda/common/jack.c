@@ -204,7 +204,7 @@ static void jack_detect_update(struct hda_codec *codec,
 	if (!jack->jack_dirty)
 		return;
 
-	if (jack->phantom_jack)
+	if (jack->phantom_jack || jack->gating_jack_only)
 		jack->pin_sense = AC_PINSENSE_PRESENCE;
 	else
 		jack->pin_sense = read_pin_sense(codec, jack->nid,
@@ -404,6 +404,68 @@ int snd_hda_jack_set_gating_jack(struct hda_codec *codec, hda_nid_t gated_nid,
 	return 0;
 }
 EXPORT_SYMBOL_GPL(snd_hda_jack_set_gating_jack);
+
+static bool is_detectable_analog_pin(struct hda_codec *codec, hda_nid_t nid)
+{
+	unsigned int wcaps = get_wcaps(codec, nid);
+
+	return get_wcaps_type(wcaps) == AC_WID_PIN &&
+		!(wcaps & AC_WCAP_DIGITAL) &&
+		get_defcfg_connect(snd_hda_codec_get_pincfg(codec, nid)) ==
+			AC_JACK_PORT_COMPLEX &&
+		is_jack_detectable(codec, nid);
+}
+
+/**
+ * snd_hda_jack_set_presence_source - Use another pin's presence detection
+ * @codec: the HDA codec
+ * @nid: pin with unreliable presence detection
+ * @source_nid: pin providing presence detection
+ *
+ * Unlike ordinary gating, this ignores @nid's own pin sense. Both pins must
+ * be jack-detectable analog pins; the target remains a normal, non-phantom
+ * jack. The source's events also invoke the target's registered callbacks.
+ * Set this up during codec probing, before jack controls are created.
+ * Chained or conflicting relationships and DisplayPort MST are not supported.
+ *
+ * Return: zero on success, -EINVAL for an unsupported relationship, or
+ * -ENOMEM if a jack-table entry cannot be allocated.
+ */
+int snd_hda_jack_set_presence_source(struct hda_codec *codec, hda_nid_t nid,
+				     hda_nid_t source_nid)
+{
+	struct hda_jack_tbl *jack, *source;
+
+	if (codec->dp_mst || !nid || !source_nid || nid == source_nid ||
+	    !is_detectable_analog_pin(codec, nid) ||
+	    !is_detectable_analog_pin(codec, source_nid))
+		return -EINVAL;
+
+	jack = snd_hda_jack_tbl_get(codec, nid);
+	source = snd_hda_jack_tbl_get(codec, source_nid);
+	if ((jack && (jack->phantom_jack || jack->gated_jack ||
+		      jack->key_report_jack ||
+		      (jack->gating_jack && jack->gating_jack != source_nid))) ||
+	    (source && (source->phantom_jack || source->gating_jack ||
+			source->key_report_jack ||
+			(source->gated_jack && source->gated_jack != nid))))
+		return -EINVAL;
+
+	if (!snd_hda_jack_tbl_new(codec, nid, 0) ||
+	    !snd_hda_jack_tbl_new(codec, source_nid, 0))
+		return -ENOMEM;
+
+	/* Allocating the source entry may have moved the jack table. */
+	jack = snd_hda_jack_tbl_get(codec, nid);
+	source = snd_hda_jack_tbl_get(codec, source_nid);
+	jack->gating_jack = source_nid;
+	jack->gating_jack_only = 1;
+	jack->jack_dirty = 1;
+	source->gated_jack = nid;
+	source->jack_dirty = 1;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(snd_hda_jack_set_presence_source);
 
 /**
  * snd_hda_jack_bind_keymap - bind keys generated from one NID to another jack.
@@ -740,6 +802,25 @@ void snd_hda_jack_unsol_event(struct hda_codec *codec, unsigned int res)
 			report_to->jack_dirty = 1;
 	} else
 		event->jack_dirty = 1;
+
+	/* A target-only event must also refresh its source's cached sense. */
+	if (event->gating_jack_only) {
+		struct hda_jack_tbl *source =
+			snd_hda_jack_tbl_get_mst(codec, event->gating_jack,
+						 event->dev_id);
+
+		if (source)
+			source->jack_dirty = 1;
+	}
+	if (event->gated_jack) {
+		struct hda_jack_tbl *gated =
+			snd_hda_jack_tbl_get_mst(codec, event->gated_jack,
+						 event->dev_id);
+
+		/* The source need not have a callback that reads its pin sense. */
+		if (gated && gated->gating_jack_only)
+			gated->jack_dirty = 1;
+	}
 
 	call_jack_callback(codec, res, event);
 	snd_hda_jack_report_sync(codec);

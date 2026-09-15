@@ -37,6 +37,7 @@ struct hda_jack_tbl {
 	unsigned int jack_detect:1;	/* capable of jack-detection? */
 	unsigned int jack_dirty:1;	/* needs to update? */
 	unsigned int phantom_jack:1;    /* a fixed, always present port? */
+	unsigned int gating_jack_only:1; /* presence comes only from the gate */
 	unsigned int block_report:1;    /* in a transitional state - do not report to userspace */
 	hda_nid_t gating_jack;		/* valid when gating jack plugged */
 	hda_nid_t gated_jack;		/* gated is dependent on this jack */
@@ -100,6 +101,9 @@ snd_hda_jack_detect_enable_callback(struct hda_codec *codec, hda_nid_t nid,
 
 int snd_hda_jack_set_gating_jack(struct hda_codec *codec, hda_nid_t gated_nid,
 				 hda_nid_t gating_nid);
+
+int snd_hda_jack_set_presence_source(struct hda_codec *codec, hda_nid_t nid,
+				     hda_nid_t source_nid);
 
 int snd_hda_jack_bind_keymap(struct hda_codec *codec, hda_nid_t key_nid,
 			     const struct hda_jack_keymap *keymap,
