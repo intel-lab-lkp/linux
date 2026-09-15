@@ -15,6 +15,15 @@
 
 #define __aligned(x) __attribute((__aligned__(x)))
 
+#ifndef __always_unused
+#define __always_unused __attribute__((__unused__))
+#endif
+
+/* Enforce static storage duration. */
+#define ASSERT_STATIC_STORAGE(name) \
+	static typeof(name) * const __always_unused \
+		name##_storage_check = &(name)
+
 /**
  * data_race - mark an expression as containing intentional data races
  *
