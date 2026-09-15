@@ -14,6 +14,7 @@
 #include <net/icmp.h>
 #include <net/ip6_route.h>
 #include <net/inet_ecn.h>
+#include <net/page_pool/helpers.h>
 #include <net/xfrm.h>
 
 #include <crypto/aead.h>
@@ -486,7 +487,10 @@ static int iptfs_skb_add_frags(struct sk_buff *skb,
 			tofrag->len -= offset;
 			offset = 0;
 		}
-		__skb_frag_ref(tofrag);
+		if (walk->pp_recycle)
+			page_pool_ref_page(skb_frag_page(tofrag));
+		else
+			__skb_frag_ref(tofrag);
 		shinfo->nr_frags++;
 		shinfo->flags |= SKBFL_SHARED_FRAG;
 
@@ -2171,7 +2175,11 @@ static void iptfs_consume_frags(struct sk_buff *to, struct sk_buff *from)
 		new_truesize = SKB_TRUESIZE(skb_end_offset(from));
 	} else {
 		iptfs_skb_head_to_frag(from, &toi->frags[toi->nr_frags]);
-		skb_frag_ref(to, toi->nr_frags++);
+		if (from->pp_recycle)
+			page_pool_ref_page(skb_frag_page(&toi->frags[toi->nr_frags]));
+		else
+			skb_frag_ref(to, toi->nr_frags);
+		toi->nr_frags++;
 		new_truesize = SKB_DATA_ALIGN(sizeof(struct sk_buff));
 	}
 
