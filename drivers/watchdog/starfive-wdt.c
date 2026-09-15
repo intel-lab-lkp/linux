@@ -429,6 +429,8 @@ static int starfive_wdt_probe(struct platform_device *pdev)
 {
 	struct starfive_wdt *wdt;
 	int ret;
+	bool pm_ref_held = false;
+	bool clocks_on = false;
 
 	wdt = devm_kzalloc(&pdev->dev, sizeof(*wdt), GFP_KERNEL);
 	if (!wdt)
@@ -449,11 +451,14 @@ static int starfive_wdt_probe(struct platform_device *pdev)
 		ret = pm_runtime_resume_and_get(&pdev->dev);
 		if (ret < 0)
 			return ret;
+		pm_ref_held = true;
+		clocks_on = true;
 	} else {
 		/* runtime PM is disabled but clocks need to be enabled */
 		ret = starfive_wdt_enable_clock(wdt);
 		if (ret)
 			return ret;
+		clocks_on = true;
 	}
 
 	ret = starfive_wdt_reset_init(&pdev->dev);
@@ -499,6 +504,9 @@ static int starfive_wdt_probe(struct platform_device *pdev)
 	if (!early_enable) {
 		if (pm_runtime_enabled(&pdev->dev)) {
 			ret = pm_runtime_put_sync(&pdev->dev);
+			pm_ref_held = false;
+			if (ret == 0)
+				clocks_on = false;
 			if (ret)
 				goto err_unregister_wdt;
 		}
@@ -509,7 +517,12 @@ static int starfive_wdt_probe(struct platform_device *pdev)
 err_unregister_wdt:
 	watchdog_unregister_device(&wdt->wdd);
 err_exit:
-	starfive_wdt_disable_clock(wdt);
+	if (pm_ref_held) {
+		if (pm_runtime_put_sync(&pdev->dev))
+			starfive_wdt_disable_clock(wdt);
+	} else if (clocks_on) {
+		starfive_wdt_disable_clock(wdt);
+	}
 	pm_runtime_disable(&pdev->dev);
 
 	return ret;
