@@ -22,6 +22,7 @@
 #ifndef _LINUX_SYSCTL_H
 #define _LINUX_SYSCTL_H
 
+#include <linux/compiler.h>
 #include <linux/list.h>
 #include <linux/rcupdate.h>
 #include <linux/wait.h>
@@ -216,7 +217,8 @@ static inline void *proc_sys_poll_event(struct ctl_table_poll *poll)
 	.wait = __WAIT_QUEUE_HEAD_INITIALIZER(name.wait) }
 
 #define DEFINE_CTL_TABLE_POLL(name)					\
-	struct ctl_table_poll name = __CTL_TABLE_POLL_INITIALIZER(name)
+	struct ctl_table_poll name = __CTL_TABLE_POLL_INITIALIZER(name);	\
+	ASSERT_STATIC_STORAGE(name)
 
 /* A sysctl table is an array of struct ctl_table: */
 struct ctl_table {
