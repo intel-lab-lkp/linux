@@ -39,7 +39,7 @@ struct virtio_gpu_submit {
 	struct virtio_gpu_device *vgdev;
 	struct sync_file *sync_file;
 	struct drm_file *file;
-	int out_fence_fd;
+	const struct fd_slot *out_fence_fd;
 	u64 fence_ctx;
 	u32 ring_idx;
 	void *buf;
@@ -340,14 +340,8 @@ static void virtio_gpu_cleanup_submit(struct virtio_gpu_submit *submit)
 	if (submit->buflist)
 		virtio_gpu_array_put_free(submit->buflist);
 
-	if (submit->out_fence_fd >= 0)
-		put_unused_fd(submit->out_fence_fd);
-
 	if (submit->out_fence)
 		dma_fence_put(&submit->out_fence->f);
-
-	if (submit->sync_file)
-		fput(submit->sync_file->file);
 }
 
 static void virtio_gpu_submit(struct virtio_gpu_submit *submit)
@@ -363,7 +357,7 @@ static void virtio_gpu_complete_submit(struct virtio_gpu_submit *submit)
 	submit->buf = NULL;
 	submit->buflist = NULL;
 	submit->sync_file = NULL;
-	submit->out_fence_fd = -1;
+	submit->out_fence_fd = NULL;
 }
 
 static int virtio_gpu_init_submit(struct virtio_gpu_submit *submit,
@@ -405,7 +399,7 @@ static int virtio_gpu_init_submit(struct virtio_gpu_submit *submit,
 	submit->out_fence = out_fence;
 	submit->fence_ctx = fence_ctx;
 	submit->ring_idx = ring_idx;
-	submit->out_fence_fd = -1;
+	submit->out_fence_fd = NULL;
 	submit->vfpriv = vfpriv;
 	submit->vgdev = vgdev;
 	submit->exbuf = exbuf;
@@ -420,15 +414,15 @@ static int virtio_gpu_init_submit(struct virtio_gpu_submit *submit,
 		return PTR_ERR(submit->buf);
 
 	if (exbuf->flags & VIRTGPU_EXECBUF_FENCE_FD_OUT) {
-		err = get_unused_fd_flags(O_CLOEXEC);
-		if (err < 0)
-			return err;
-
-		submit->out_fence_fd = err;
+		submit->out_fence_fd = fd_prepare(O_CLOEXEC);
+		if (IS_ERR(submit->out_fence_fd))
+			return PTR_ERR(submit->out_fence_fd);
 
 		submit->sync_file = sync_file_create(&out_fence->f);
 		if (!submit->sync_file)
 			return -ENOMEM;
+
+		fd_stage(submit->out_fence_fd, submit->sync_file->file);
 	}
 
 	return 0;
@@ -456,12 +450,10 @@ static int virtio_gpu_wait_in_fence(struct virtio_gpu_submit *submit)
 	return ret;
 }
 
-static void virtio_gpu_install_out_fence_fd(struct virtio_gpu_submit *submit)
+static void virtio_gpu_report_out_fence_fd(struct virtio_gpu_submit *submit)
 {
-	if (submit->sync_file) {
-		submit->exbuf->fence_fd = submit->out_fence_fd;
-		fd_install(submit->out_fence_fd, submit->sync_file->file);
-	}
+	if (submit->sync_file)
+		submit->exbuf->fence_fd = fd_prepare_fd(submit->out_fence_fd);
 }
 
 static int virtio_gpu_lock_buflist(struct virtio_gpu_submit *submit)
@@ -534,7 +526,7 @@ int virtio_gpu_execbuffer_ioctl(struct drm_device *dev, void *data,
 	 * Set up user-out data after submitting the job to optimize
 	 * the job submission path.
 	 */
-	virtio_gpu_install_out_fence_fd(&submit);
+	virtio_gpu_report_out_fence_fd(&submit);
 	virtio_gpu_process_post_deps(&submit);
 	virtio_gpu_complete_submit(&submit);
 cleanup:
