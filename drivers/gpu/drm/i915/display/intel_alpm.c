@@ -784,12 +784,21 @@ void intel_alpm_port_configure(struct intel_dp *intel_dp,
 		return;
 
 	if (intel_alpm_is_alpm_aux_less(intel_dp, crtc_state)) {
+		int lfps_cycle = get_lfps_cycle_count(crtc_state);
+		u32 lfps_cycle_val;
+
+		if (DISPLAY_VER(display) >= 35)
+			lfps_cycle_val = PORT_ALPM_LFPS_CTL_LFPS_CYCLE_COUNT_XE3LPD(lfps_cycle);
+		else
+			lfps_cycle_val = PORT_ALPM_LFPS_CTL_LFPS_CYCLE_COUNT(lfps_cycle);
+
 		alpm_ctl_val = PORT_ALPM_CTL_ALPM_AUX_LESS_ENABLE |
 			PORT_ALPM_CTL_MAX_PHY_SWING_SETUP(15) |
 			PORT_ALPM_CTL_MAX_PHY_SWING_HOLD(0) |
 			PORT_ALPM_CTL_SILENCE_PERIOD(
 				crtc_state->alpm_state.silence_period_sym_clocks);
-		lfps_ctl_val = PORT_ALPM_LFPS_CTL_LFPS_CYCLE_COUNT(get_lfps_cycle_count(crtc_state)) |
+
+		lfps_ctl_val = lfps_cycle_val |
 			PORT_ALPM_LFPS_CTL_LFPS_HALF_CYCLE_DURATION(
 				crtc_state->alpm_state.lfps_half_cycle_num_of_syms) |
 			PORT_ALPM_LFPS_CTL_FIRST_LFPS_HALF_CYCLE_DURATION(
