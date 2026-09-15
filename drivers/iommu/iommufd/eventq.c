@@ -412,9 +412,9 @@ static int iommufd_eventq_fops_release(struct inode *inode, struct file *filep)
 		.release = iommufd_eventq_fops_release,                        \
 	})
 
-static int iommufd_eventq_init(struct iommufd_eventq *eventq, char *name,
-			       struct iommufd_ctx *ictx,
-			       const struct file_operations *fops)
+static const struct fd_slot *iommufd_eventq_init(struct iommufd_eventq *eventq, char *name,
+				struct iommufd_ctx *ictx,
+				const struct file_operations *fops)
 {
 	struct file *filep;
 
@@ -425,14 +425,14 @@ static int iommufd_eventq_init(struct iommufd_eventq *eventq, char *name,
 	/* The filep is fput() by the core code during failure */
 	filep = anon_inode_getfile(name, fops, eventq, O_RDWR);
 	if (IS_ERR(filep))
-		return PTR_ERR(filep);
+		return ERR_CAST(filep);
 
 	eventq->ictx = ictx;
 	iommufd_ctx_get(eventq->ictx);
 	eventq->filep = filep;
 	refcount_inc(&eventq->obj.users);
 
-	return get_unused_fd_flags(O_CLOEXEC);
+	return fd_prepare(O_CLOEXEC);
 }
 
 static const struct file_operations iommufd_fault_fops =
@@ -442,7 +442,7 @@ int iommufd_fault_alloc(struct iommufd_ucmd *ucmd)
 {
 	struct iommu_fault_alloc *cmd = ucmd->cmd;
 	struct iommufd_fault *fault;
-	int fdno;
+	const struct fd_slot *fdno;
 	int rc;
 
 	if (cmd->flags)
@@ -458,22 +458,19 @@ int iommufd_fault_alloc(struct iommufd_ucmd *ucmd)
 
 	fdno = iommufd_eventq_init(&fault->common, "[iommufd-pgfault]",
 				   ucmd->ictx, &iommufd_fault_fops);
-	if (fdno < 0)
-		return fdno;
+	if (IS_ERR(fdno))
+		return PTR_ERR(fdno);
 
 	cmd->out_fault_id = fault->common.obj.id;
-	cmd->out_fault_fd = fdno;
+	cmd->out_fault_fd = fd_prepare_fd(fdno);
 
 	rc = iommufd_ucmd_respond(ucmd, sizeof(*cmd));
 	if (rc)
-		goto out_put_fdno;
+		return rc;
 
-	fd_install(fdno, fault->common.filep);
+	fd_stage(fdno, fault->common.filep);
 
 	return 0;
-out_put_fdno:
-	put_unused_fd(fdno);
-	return rc;
 }
 
 int iommufd_fault_iopf_handler(struct iopf_group *group)
@@ -506,7 +503,7 @@ int iommufd_veventq_alloc(struct iommufd_ucmd *ucmd)
 	struct iommu_veventq_alloc *cmd = ucmd->cmd;
 	struct iommufd_veventq *veventq;
 	struct iommufd_viommu *viommu;
-	int fdno;
+	const struct fd_slot *fdno;
 	int rc;
 
 	if (cmd->flags || cmd->__reserved ||
@@ -543,24 +540,22 @@ int iommufd_veventq_alloc(struct iommufd_ucmd *ucmd)
 
 	fdno = iommufd_eventq_init(&veventq->common, "[iommufd-viommu-event]",
 				   ucmd->ictx, &iommufd_veventq_fops);
-	if (fdno < 0) {
-		rc = fdno;
+	if (IS_ERR(fdno)) {
+		rc = PTR_ERR(fdno);
 		goto out_abort;
 	}
 
 	cmd->out_veventq_id = veventq->common.obj.id;
-	cmd->out_veventq_fd = fdno;
+	cmd->out_veventq_fd = fd_prepare_fd(fdno);
 
 	rc = iommufd_ucmd_respond(ucmd, sizeof(*cmd));
 	if (rc)
-		goto out_put_fdno;
+		goto out_abort;
 
 	iommufd_object_finalize(ucmd->ictx, &veventq->common.obj);
-	fd_install(fdno, veventq->common.filep);
+	fd_stage(fdno, veventq->common.filep);
 	goto out_unlock_veventqs;
 
-out_put_fdno:
-	put_unused_fd(fdno);
 out_abort:
 	iommufd_object_abort_and_destroy(ucmd->ictx, &veventq->common.obj);
 out_unlock_veventqs:
