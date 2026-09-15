@@ -1845,6 +1845,8 @@ patternProperties:
     description: Vishay Intertechnology, Inc
   "^visionox,.*":
     description: Visionox
+  "^vision-components,.*":
+    description: Vision Components GmbH
   "^vitesse,.*":
     description: Vitesse Semiconductor Corporation
   "^vivante,.*":
