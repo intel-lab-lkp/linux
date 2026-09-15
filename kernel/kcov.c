@@ -236,7 +236,7 @@ static void notrace write_comp_data(u64 type, u64 arg1, u64 arg2, u64 ip)
 {
 	struct task_struct *t;
 	u64 *area;
-	u64 count, start_index, end_pos, max_pos;
+	u64 count, start_index, end_pos, max_pos, tmp;
 
 	t = current;
 	if (!check_kcov_mode(KCOV_MODE_TRACE_CMP, t))
@@ -254,7 +254,9 @@ static void notrace write_comp_data(u64 type, u64 arg1, u64 arg2, u64 ip)
 	count = READ_ONCE(area[0]);
 
 	/* Every record is KCOV_WORDS_PER_CMP 64-bit words. */
-	start_index = 1 + count * KCOV_WORDS_PER_CMP;
+	if (check_mul_overflow(count, KCOV_WORDS_PER_CMP, &tmp))
+		return;
+	start_index = 1 + tmp;
 	end_pos = (start_index + KCOV_WORDS_PER_CMP) * sizeof(u64);
 	if (likely(end_pos <= max_pos)) {
 		/* See comment in __sanitizer_cov_trace_pc(). */
