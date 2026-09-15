@@ -180,6 +180,8 @@
 #define DWC3_OSTS		0xcc10
 
 #define DWC3_LLUCTL(n)		(0xd024 + ((n) * 0x80))
+#define DWC3_LLINKDBGCTRL(n)	(0xd058 + ((n) * 0x80))
+#define DWC3_LLINKDBGCTRL_RETRY_DP	BIT(31)
 
 /* Bit fields */
 

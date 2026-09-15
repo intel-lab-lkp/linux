@@ -1514,6 +1514,14 @@ int dwc3_core_init(struct dwc3 *dwc)
 		}
 	}
 
+	if (DWC3_IP_IS(DWC31) || DWC3_IP_IS(DWC32)) {
+		for (int i = 0; i < dwc->num_usb3_ports; i++) {
+			reg = dwc3_readl(dwc, DWC3_LLINKDBGCTRL(i));
+			reg |= DWC3_LLINKDBGCTRL_RETRY_DP;
+			dwc3_writel(dwc, DWC3_LLINKDBGCTRL(i), reg);
+		}
+	}
+
 	/*
 	 * STAR 9001346572: This issue affects DWC_usb31 versions 1.80a and
 	 * prior. When an active endpoint not currently cached in the host
