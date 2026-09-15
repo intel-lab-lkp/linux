@@ -92,7 +92,6 @@ static struct device *sa_k3_dev;
 
 /**
  * struct sa_cmdl_cfg - Command label configuration descriptor
- * @aalg: authentication algorithm ID
  * @enc_eng_id: Encryption Engine ID supported by the SA hardware
  * @auth_eng_id: Authentication Engine ID
  * @iv_size: Initialization Vector size
@@ -101,7 +100,6 @@ static struct device *sa_k3_dev;
  * @enc: True, if this is an encode request
  */
 struct sa_cmdl_cfg {
-	int aalg;
 	u8 enc_eng_id;
 	u8 auth_eng_id;
 	u8 iv_size;
@@ -118,8 +116,6 @@ struct sa_cmdl_cfg {
  * @hash_size: Size of digest
  * @iv_idx: iv index in psdata
  * @iv_out_size: iv out size
- * @ealg_id: Encryption Algorithm ID
- * @aalg_id: Authentication algorithm ID
  * @mci_enc: Mode Control Instruction for Encryption algorithm
  * @mci_dec: Mode Control Instruction for Decryption
  * @inv_key: Whether the encryption algorithm demands key inversion
@@ -134,8 +130,6 @@ struct algo_data {
 	u8 hash_size;
 	u8 iv_idx;
 	u8 iv_out_size;
-	u8 ealg_id;
-	u8 aalg_id;
 	u8 *mci_enc;
 	u8 *mci_dec;
 	bool inv_key;
@@ -934,7 +928,6 @@ static int sa_aes_cbc_setkey(struct crypto_skcipher *tfm, const u8 *key,
 	ad.mci_enc = mci_cbc_enc_array[key_idx];
 	ad.mci_dec = mci_cbc_dec_array[key_idx];
 	ad.inv_key = true;
-	ad.ealg_id = SA_EALG_ID_AES_CBC;
 	ad.iv_idx = 4;
 	ad.iv_out_size = 16;
 
@@ -954,7 +947,6 @@ static int sa_aes_ecb_setkey(struct crypto_skcipher *tfm, const u8 *key,
 	ad.mci_enc = mci_ecb_enc_array[key_idx];
 	ad.mci_dec = mci_ecb_dec_array[key_idx];
 	ad.inv_key = true;
-	ad.ealg_id = SA_EALG_ID_AES_ECB;
 
 	return sa_cipher_setkey(tfm, key, keylen, &ad);
 }
@@ -966,7 +958,6 @@ static int sa_3des_cbc_setkey(struct crypto_skcipher *tfm, const u8 *key,
 
 	ad.mci_enc = mci_cbc_3des_enc_array;
 	ad.mci_dec = mci_cbc_3des_dec_array;
-	ad.ealg_id = SA_EALG_ID_3DES_CBC;
 	ad.iv_idx = 6;
 	ad.iv_out_size = 8;
 
@@ -1429,7 +1420,6 @@ static int sa_sha_setup(struct sa_tfm_ctx *ctx, struct  algo_data *ad)
 
 	memset(ctx->authkey, 0, bs);
 	memset(&cfg, 0, sizeof(cfg));
-	cfg.aalg = ad->aalg_id;
 	cfg.enc_eng_id = ad->enc_eng.eng_id;
 	cfg.auth_eng_id = ad->auth_eng.eng_id;
 	cfg.iv_size = 0;
@@ -1577,7 +1567,6 @@ static int sa_sha1_cra_init(struct crypto_tfm *tfm)
 
 	sa_sha_cra_init_alg(tfm, "sha1");
 
-	ad.aalg_id = SA_AALG_ID_SHA1;
 	ad.hash_size = SHA1_DIGEST_SIZE;
 	ad.auth_ctrl = SA_AUTH_SW_CTRL_SHA1;
 
@@ -1593,7 +1582,6 @@ static int sa_sha256_cra_init(struct crypto_tfm *tfm)
 
 	sa_sha_cra_init_alg(tfm, "sha256");
 
-	ad.aalg_id = SA_AALG_ID_SHA2_256;
 	ad.hash_size = SHA256_DIGEST_SIZE;
 	ad.auth_ctrl = SA_AUTH_SW_CTRL_SHA256;
 
@@ -1609,7 +1597,6 @@ static int sa_sha512_cra_init(struct crypto_tfm *tfm)
 
 	sa_sha_cra_init_alg(tfm, "sha512");
 
-	ad.aalg_id = SA_AALG_ID_SHA2_512;
 	ad.hash_size = SHA512_DIGEST_SIZE;
 	ad.auth_ctrl = SA_AUTH_SW_CTRL_SHA512;
 
@@ -1770,12 +1757,10 @@ static int sa_aead_setkey(struct crypto_aead *authenc,
 	ad->mci_dec = mci_cbc_dec_no_iv_array[key_idx];
 	ad->inv_key = true;
 	ad->keyed_mac = true;
-	ad->ealg_id = SA_EALG_ID_AES_CBC;
 	ad->prep_iopad = sa_prepare_iopads;
 
 	memset(&cfg, 0, sizeof(cfg));
 	cfg.enc = true;
-	cfg.aalg = ad->aalg_id;
 	cfg.enc_eng_id = ad->enc_eng.eng_id;
 	cfg.auth_eng_id = ad->auth_eng.eng_id;
 	cfg.iv_size = crypto_aead_ivsize(authenc);
@@ -1831,8 +1816,6 @@ static int sa_aead_cbc_sha1_setkey(struct crypto_aead *authenc,
 {
 	struct algo_data ad = { 0 };
 
-	ad.ealg_id = SA_EALG_ID_AES_CBC;
-	ad.aalg_id = SA_AALG_ID_HMAC_SHA1;
 	ad.hash_size = SHA1_DIGEST_SIZE;
 	ad.auth_ctrl = SA_AUTH_SW_CTRL_SHA1;
 
@@ -1844,8 +1827,6 @@ static int sa_aead_cbc_sha256_setkey(struct crypto_aead *authenc,
 {
 	struct algo_data ad = { 0 };
 
-	ad.ealg_id = SA_EALG_ID_AES_CBC;
-	ad.aalg_id = SA_AALG_ID_HMAC_SHA2_256;
 	ad.hash_size = SHA256_DIGEST_SIZE;
 	ad.auth_ctrl = SA_AUTH_SW_CTRL_SHA256;
 

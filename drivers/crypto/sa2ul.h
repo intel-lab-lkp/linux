@@ -316,40 +316,6 @@ struct sa_sha_req_ctx {
 	struct ahash_request	fallback_req;
 };
 
-/* Encryption algorithms */
-enum sa_ealg_id {
-	SA_EALG_ID_NONE = 0,        /* No encryption */
-	SA_EALG_ID_NULL,            /* NULL encryption */
-	SA_EALG_ID_AES_CTR,         /* AES Counter mode */
-	SA_EALG_ID_AES_F8,          /* AES F8 mode */
-	SA_EALG_ID_AES_CBC,         /* AES CBC mode */
-	SA_EALG_ID_DES_CBC,         /* DES CBC mode */
-	SA_EALG_ID_3DES_CBC,        /* 3DES CBC mode */
-	SA_EALG_ID_CCM,             /* Counter with CBC-MAC mode */
-	SA_EALG_ID_GCM,             /* Galois Counter mode */
-	SA_EALG_ID_AES_ECB,
-	SA_EALG_ID_LAST
-};
-
-/* Authentication algorithms */
-enum sa_aalg_id {
-	SA_AALG_ID_NONE = 0,      /* No Authentication  */
-	SA_AALG_ID_NULL = SA_EALG_ID_LAST, /* NULL Authentication  */
-	SA_AALG_ID_MD5,           /* MD5 mode */
-	SA_AALG_ID_SHA1,          /* SHA1 mode */
-	SA_AALG_ID_SHA2_224,      /* 224-bit SHA2 mode */
-	SA_AALG_ID_SHA2_256,      /* 256-bit SHA2 mode */
-	SA_AALG_ID_SHA2_512,      /* 512-bit SHA2 mode */
-	SA_AALG_ID_HMAC_MD5,      /* HMAC with MD5 mode */
-	SA_AALG_ID_HMAC_SHA1,     /* HMAC with SHA1 mode */
-	SA_AALG_ID_HMAC_SHA2_224, /* HMAC with 224-bit SHA2 mode */
-	SA_AALG_ID_HMAC_SHA2_256, /* HMAC with 256-bit SHA2 mode */
-	SA_AALG_ID_GMAC,          /* Galois Message Auth. Code mode */
-	SA_AALG_ID_CMAC,          /* Cipher-based Mes. Auth. Code mode */
-	SA_AALG_ID_CBC_MAC,       /* Cipher Block Chaining */
-	SA_AALG_ID_AES_XCBC       /* AES Extended Cipher Block Chaining */
-};
-
 /**
  * struct sa_eng_info: Security accelerator engine info
  * @eng_id: Engine ID
