@@ -105,7 +105,8 @@ do { \
 }
 
 #define DEFINE_RT_MUTEX(mutexname) \
-	struct rt_mutex mutexname = __RT_MUTEX_INITIALIZER(mutexname)
+	struct rt_mutex mutexname = __RT_MUTEX_INITIALIZER(mutexname);	\
+	ASSERT_STATIC_STORAGE(mutexname)
 
 extern void __rt_mutex_init(struct rt_mutex *lock, const char *name, struct lock_class_key *key);
 
