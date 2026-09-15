@@ -864,15 +864,21 @@ ssize_t nilfs_sufile_get_suinfo(struct inode *sufile, __u64 segnum, void *buf,
 	struct the_nilfs *nilfs = sufile->i_sb->s_fs_info;
 	size_t offset;
 	void *kaddr;
-	unsigned long nsegs, segusages_per_block;
+	unsigned long nsegments, nsegs, segusages_per_block;
 	ssize_t n;
 	int ret, i, j;
 
 	down_read(&NILFS_MDT(sufile)->mi_sem);
 
+	nsegments = nilfs_sufile_get_nsegments(sufile);
+	if (segnum >= nsegments) {
+		ret = 0;
+		goto out;
+	}
+
 	segusages_per_block = nilfs_sufile_segment_usages_per_block(sufile);
 	nsegs = min_t(unsigned long,
-		      nilfs_sufile_get_nsegments(sufile) - segnum,
+		      nsegments - segnum,
 		      nsi);
 	for (i = 0; i < nsegs; i += n, segnum += n) {
 		n = min_t(unsigned long,
