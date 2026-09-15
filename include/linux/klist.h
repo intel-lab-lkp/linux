@@ -10,6 +10,7 @@
 #ifndef _LINUX_KLIST_H
 #define _LINUX_KLIST_H
 
+#include <linux/compiler.h>
 #include <linux/spinlock.h>
 #include <linux/kref.h>
 #include <linux/list.h>
@@ -29,7 +30,8 @@ struct klist {
 	  .put		= _put, }
 
 #define DEFINE_KLIST(_name, _get, _put)					\
-	struct klist _name = KLIST_INIT(_name, _get, _put)
+	struct klist _name = KLIST_INIT(_name, _get, _put);		\
+	ASSERT_STATIC_STORAGE(_name)
 
 extern void klist_init(struct klist *k, void (*get)(struct klist_node *),
 		       void (*put)(struct klist_node *));
