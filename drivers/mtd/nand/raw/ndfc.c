@@ -247,6 +247,7 @@ static void ndfc_remove(struct platform_device *ofdev)
 	WARN_ON(ret);
 	nand_cleanup(chip);
 	kfree(mtd->name);
+	iounmap(ndfc->ndfcbase);
 }
 
 static const struct of_device_id ndfc_match[] = {
