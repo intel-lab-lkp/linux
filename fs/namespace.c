@@ -4544,9 +4544,9 @@ SYSCALL_DEFINE3(fsmount, int, fs_fd, unsigned int, flags,
 
 	FD_PREPARE(fdf, (flags & FSMOUNT_CLOEXEC) ? O_CLOEXEC : 0,
 		   dentry_open(&new_path, O_PATH, fc->cred));
-	if (fdf.err) {
+	if (IS_ERR(fdf)) {
 		dissolve_on_fput(new_path.mnt);
-		return fdf.err;
+		return PTR_ERR(fdf);
 	}
 
 	/*
@@ -4554,7 +4554,7 @@ SYSCALL_DEFINE3(fsmount, int, fs_fd, unsigned int, flags,
 	 * need to unmount it, not just simply put it.
 	 */
 	fd_prepare_file(fdf)->f_mode |= FMODE_NEED_UNMOUNT;
-	return fd_publish(fdf);
+	return fd_prepare_fd(fdf);
 }
 
 static inline int vfs_move_mount(const struct path *from_path,
@@ -5198,8 +5198,8 @@ SYSCALL_DEFINE5(open_tree_attr, int, dfd, const char __user *, filename,
 		return -EINVAL;
 
 	FD_PREPARE(fdf, flags, vfs_open_tree(dfd, filename, flags));
-	if (fdf.err)
-		return fdf.err;
+	if (IS_ERR(fdf))
+		return PTR_ERR(fdf);
 
 	if (uattr) {
 		struct mount_kattr kattr = {};
@@ -5220,7 +5220,7 @@ SYSCALL_DEFINE5(open_tree_attr, int, dfd, const char __user *, filename,
 			return ret;
 	}
 
-	return fd_publish(fdf);
+	return fd_prepare_fd(fdf);
 }
 
 int show_path(struct seq_file *m, struct dentry *root)

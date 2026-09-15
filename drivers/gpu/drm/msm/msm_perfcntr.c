@@ -543,8 +543,8 @@ msm_ioctl_perfcntr_config(struct drm_device *dev, void *data, struct drm_file *f
 
 		FD_PREPARE(fdf, O_CLOEXEC,
 			   anon_inode_getfile("[msm_perfcntrs]", &stream_fops, stream, 0));
-		if (fdf.err)
-			return fdf.err;
+		if (IS_ERR(fdf))
+			return PTR_ERR(fdf);
 
 		INIT_WORK(&stream->sel_work, sel_worker);
 		kthread_init_work(&stream->sample_work, sample_worker);
@@ -564,7 +564,7 @@ msm_ioctl_perfcntr_config(struct drm_device *dev, void *data, struct drm_file *f
 
 		msm_perfcntr_resume_locked(perfcntrs->stream);
 
-		stream_fd = fd_publish(fdf);
+		stream_fd = fd_prepare_fd(fdf);
 	} else {
 		kfree(ctx->perfctx);
 		ctx->perfctx = no_free_ptr(perfctx);

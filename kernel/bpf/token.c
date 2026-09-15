@@ -169,8 +169,8 @@ int bpf_token_create(union bpf_attr *attr)
 	FD_PREPARE(fdf, O_CLOEXEC,
 		   alloc_file_pseudo(inode, path.mnt, BPF_TOKEN_INODE_NAME,
 				     O_RDWR, &bpf_token_fops));
-	if (fdf.err)
-		return fdf.err;
+	if (IS_ERR(fdf))
+		return PTR_ERR(fdf);
 
 	token = kzalloc_obj(*token, GFP_USER);
 	if (!token)
@@ -191,7 +191,7 @@ int bpf_token_create(union bpf_attr *attr)
 
 	get_user_ns(token->userns);
 	fd_prepare_file(fdf)->private_data = no_free_ptr(token);
-	return fd_publish(fdf);
+	return fd_prepare_fd(fdf);
 }
 
 int bpf_token_get_info_by_fd(struct bpf_token *token,

@@ -403,12 +403,12 @@ static int do_eventfd(unsigned int count, int flags)
 	FD_PREPARE(fdf, flags,
 		   anon_inode_getfile_fmode("[eventfd]", &eventfd_fops, ctx,
 					    flags, FMODE_NOWAIT));
-	if (fdf.err)
-		return fdf.err;
+	if (IS_ERR(fdf))
+		return PTR_ERR(fdf);
 
 	ctx->id = ida_alloc(&eventfd_ida, GFP_KERNEL);
 	retain_and_null_ptr(ctx);
-	return fd_publish(fdf);
+	return fd_prepare_fd(fdf);
 }
 
 SYSCALL_DEFINE2(eventfd2, unsigned int, count, int, flags)

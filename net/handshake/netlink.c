@@ -106,19 +106,23 @@ int handshake_nl_accept_doit(struct sk_buff *skb, struct genl_info *info)
 	err = -EAGAIN;
 	req = handshake_req_next(hn, class);
 	if (req) {
-		FD_PREPARE(fdf, O_CLOEXEC, req->hr_file);
-		if (fdf.err) {
+		/* The ack carries the error, sendmsg() succeeds: stage last. */
+		const struct fd_slot *fd = fd_prepare(O_CLOEXEC);
+
+		if (IS_ERR(fd)) {
 			fput(req->hr_file); /* drop ref from handshake_req_next() */
-			err = fdf.err;
+			err = PTR_ERR(fd);
 			goto out_complete;
 		}
 
-		err = req->hr_proto->hp_accept(req, info, fd_prepare_fd(fdf));
-		if (err)
-			goto out_complete; /* Automatic cleanup handles fput */
+		err = req->hr_proto->hp_accept(req, info, fd_prepare_fd(fd));
+		if (err) {
+			fput(req->hr_file); /* not staged, drop it by hand */
+			goto out_complete;
+		}
 
-		trace_handshake_cmd_accept(net, req, req->hr_sk, fd_prepare_fd(fdf));
-		fd_publish(fdf);
+		fd_stage(fd, req->hr_file);
+		trace_handshake_cmd_accept(net, req, req->hr_sk, fd_prepare_fd(fd));
 		return 0;
 	}
 

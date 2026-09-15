@@ -348,8 +348,8 @@ static long ns_ioctl(struct file *filp, unsigned int ioctl,
 			return ret;
 
 		FD_PREPARE(fdf, O_CLOEXEC, dentry_open(&path, O_RDONLY, current_cred()));
-		if (fdf.err)
-			return fdf.err;
+		if (IS_ERR(fdf))
+			return PTR_ERR(fdf);
 		/*
 		 * If @uinfo is passed return all information about the
 		 * mount namespace as well.
@@ -357,7 +357,7 @@ static long ns_ioctl(struct file *filp, unsigned int ioctl,
 		ret = copy_ns_info_to_user(to_mnt_ns(ns), uinfo, usize, &kinfo);
 		if (ret)
 			return ret;
-		ret = fd_publish(fdf);
+		ret = fd_prepare_fd(fdf);
 		break;
 	}
 	default:

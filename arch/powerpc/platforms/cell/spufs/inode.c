@@ -266,10 +266,10 @@ spufs_mkdir(struct inode *dir, struct dentry *dentry, unsigned int flags,
 static int spufs_context_open(const struct path *path)
 {
 	FD_PREPARE(fdf, 0, dentry_open(path, O_RDONLY, current_cred()));
-	if (fdf.err)
-		return fdf.err;
+	if (IS_ERR(fdf))
+		return PTR_ERR(fdf);
 	fd_prepare_file(fdf)->f_op = &spufs_context_fops;
-	return fd_publish(fdf);
+	return fd_prepare_fd(fdf);
 }
 
 static struct spu_context *
@@ -499,10 +499,10 @@ static int spufs_gang_open(const struct path *path)
 	 * in error path of *_open().
 	 */
 	FD_PREPARE(fdf, 0, dentry_open(path, O_RDONLY, current_cred()));
-	if (fdf.err)
-		return fdf.err;
+	if (IS_ERR(fdf))
+		return PTR_ERR(fdf);
 	fd_prepare_file(fdf)->f_op = &spufs_gang_fops;
-	return fd_publish(fdf);
+	return fd_prepare_fd(fdf);
 }
 
 static int spufs_create_gang(struct inode *inode,

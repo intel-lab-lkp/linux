@@ -724,10 +724,10 @@ static int ntsync_obj_get_fd(struct ntsync_obj *obj)
 {
 	FD_PREPARE(fdf, O_CLOEXEC,
 		   anon_inode_getfile("ntsync", &ntsync_obj_fops, obj, O_RDWR));
-	if (fdf.err)
-		return fdf.err;
+	if (IS_ERR(fdf))
+		return PTR_ERR(fdf);
 	obj->file = fd_prepare_file(fdf);
-	return fd_publish(fdf);
+	return fd_prepare_fd(fdf);
 }
 
 static int ntsync_create_sem(struct ntsync_device *dev, void __user *argp)

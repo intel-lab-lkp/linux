@@ -761,26 +761,26 @@ int fd_stage(const struct fd_slot *slot, struct file *file)
 EXPORT_SYMBOL(fd_stage);
 
 /**
- * __fd_slot_fd - the descriptor number of a prepared slot
+ * fd_prepare_fd - the descriptor number of a prepared slot
  * @slot: slot from fd_prepare()
  */
-int __fd_slot_fd(const struct fd_slot *slot)
+int fd_prepare_fd(const struct fd_slot *slot)
 {
 	return ACCESS_PRIVATE(slot, fd);
 }
-EXPORT_SYMBOL(__fd_slot_fd);
+EXPORT_SYMBOL(fd_prepare_fd);
 
 /**
- * __fd_slot_file - the file staged into a slot, to configure before install
+ * fd_prepare_file - the file staged into a slot, to configure before install
  * @slot: slot from fd_prepare()
  *
  * Returns the file handed to fd_stage(), or NULL before one is staged.
  */
-struct file *__fd_slot_file(const struct fd_slot *slot)
+struct file *fd_prepare_file(const struct fd_slot *slot)
 {
 	return ACCESS_PRIVATE(slot, file);
 }
-EXPORT_SYMBOL(__fd_slot_file);
+EXPORT_SYMBOL(fd_prepare_file);
 
 /* Install every staged file, release the slots that never got one. */
 static void fd_slots_install(struct fd_slots *slots)

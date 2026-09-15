@@ -272,8 +272,8 @@ xfs_open_by_handle(
 	path.mnt = mntget(parfilp->f_path.mnt);
 
 	FD_PREPARE(fdf, 0, dentry_open(&path, hreq->oflags, cred));
-	if (fdf.err)
-		return fdf.err;
+	if (IS_ERR(fdf))
+		return PTR_ERR(fdf);
 
 	if (S_ISREG(inode->i_mode)) {
 		struct file *filp = fd_prepare_file(fdf);
@@ -282,7 +282,7 @@ xfs_open_by_handle(
 		filp->f_mode |= FMODE_NOCMTIME;
 	}
 
-	return fd_publish(fdf);
+	return fd_prepare_fd(fdf);
 }
 
 int

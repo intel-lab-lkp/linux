@@ -257,8 +257,8 @@ static int io_create_mock_file(struct io_uring_cmd *cmd, unsigned int issue_flag
 	FD_PREPARE(fdf, O_RDWR | O_CLOEXEC,
 		   anon_inode_create_getfile("[io_uring_mock]", fops, mf,
 					     O_RDWR | O_CLOEXEC, NULL));
-	if (fdf.err)
-		return fdf.err;
+	if (IS_ERR(fdf))
+		return PTR_ERR(fdf);
 
 	retain_and_null_ptr(mf);
 	file = fd_prepare_file(fdf);
@@ -271,7 +271,6 @@ static int io_create_mock_file(struct io_uring_cmd *cmd, unsigned int issue_flag
 	if (copy_to_user(uarg, &mc, uarg_size))
 		return -EFAULT;
 
-	fd_publish(fdf);
 	return 0;
 }
 

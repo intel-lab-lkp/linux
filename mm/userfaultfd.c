@@ -4809,14 +4809,14 @@ static int new_userfaultfd(int flags)
 		   anon_inode_create_getfile("[userfaultfd]", &userfaultfd_fops, ctx,
 					     O_RDONLY | (flags & UFFD_SHARED_FCNTL_FLAGS),
 					     NULL));
-	if (fdf.err)
-		return fdf.err;
+	if (IS_ERR(fdf))
+		return PTR_ERR(fdf);
 
 	/* prevent the mm struct to be freed */
 	mmgrab(ctx->mm);
 	fd_prepare_file(fdf)->f_mode |= FMODE_NOWAIT;
 	retain_and_null_ptr(ctx);
-	return fd_publish(fdf);
+	return fd_prepare_fd(fdf);
 }
 
 static inline bool userfaultfd_syscall_allowed(int flags)
