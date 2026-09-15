@@ -3828,7 +3828,8 @@ static void __hns_roce_v2_cq_clean(struct hns_roce_cq *hr_cq, u32 qpn,
 	 * Now backwards through the CQ, removing CQ entries
 	 * that match our QP by overwriting them with next entries.
 	 */
-	while ((int) --prod_index - (int) hr_cq->cons_index >= 0) {
+	while (prod_index != hr_cq->cons_index) {
+		--prod_index;
 		cqe = get_cqe_v2(hr_cq, prod_index & hr_cq->ib_cq.cqe);
 		if (hr_reg_read(cqe, CQE_LCL_QPN) == qpn) {
 			if (srq && hr_reg_read(cqe, CQE_S_R)) {
