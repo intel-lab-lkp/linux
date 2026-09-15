@@ -1131,7 +1131,7 @@ static int sa_run(struct sa_req *req)
 		mapped_sg->sgt.orig_nents = src_nents;
 		ret = dma_map_sgtable(ddev, &mapped_sg->sgt, dir_src, 0);
 		if (ret) {
-			kfree(rxd);
+			sa_free_sa_rx_data(rxd);
 			return ret;
 		}
 
@@ -1142,7 +1142,7 @@ static int sa_run(struct sa_req *req)
 		mapped_sg->sgt.orig_nents = sg_nents;
 		ret = dma_map_sgtable(ddev, &mapped_sg->sgt, dir_src, 0);
 		if (ret) {
-			kfree(rxd);
+			sa_free_sa_rx_data(rxd);
 			return ret;
 		}
 
