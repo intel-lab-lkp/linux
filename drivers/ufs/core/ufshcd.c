@@ -3312,6 +3312,15 @@ static int ufshcd_issue_dev_cmd(struct ufs_hba *hba, struct ufshcd_lrb *lrbp,
 {
 	int err;
 
+	/*
+	 * A device command that timed out may still be completed by the
+	 * controller later on. hba->dev_cmd.complete is shared by all device
+	 * commands, so re-arm it here, immediately before submitting, to keep
+	 * such a late completion from being mistaken for the completion of
+	 * this command.
+	 */
+	reinit_completion(&hba->dev_cmd.complete);
+
 	ufshcd_add_query_upiu_trace(hba, UFS_QUERY_SEND, lrbp->ucd_req_ptr);
 	ufshcd_send_command(hba, tag, hba->dev_cmd_queue);
 	err = ufshcd_wait_for_dev_cmd(hba, lrbp, timeout);
