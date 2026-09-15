@@ -324,6 +324,10 @@ int ntfs_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 	unsigned int ia_valid = attr->ia_valid;
 	struct ntfs_inode *ni = NTFS_I(vi);
 	struct ntfs_volume *vol = ni->vol;
+	umode_t old_mode;
+	kuid_t old_uid;
+	kgid_t old_gid;
+	typeof(ni->flags) old_flags;
 
 	if (NVolShutdown(vol))
 		return -EIO;
@@ -350,12 +354,17 @@ int ntfs_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 		ia_valid |= ATTR_MTIME | ATTR_CTIME;
 	}
 
+	old_mode = vi->i_mode;
+	old_uid = vi->i_uid;
+	old_gid = vi->i_gid;
+	old_flags = ni->flags & FILE_ATTR_READONLY;
+
 	setattr_copy(idmap, vi, attr);
 
 	if (vol->sb->s_flags & SB_POSIXACL && !S_ISLNK(vi->i_mode)) {
 		err = posix_acl_chmod(idmap, dentry, vi->i_mode);
 		if (err)
-			goto out;
+			goto out_restore;
 	}
 
 	if (0222 & vi->i_mode)
@@ -377,11 +386,26 @@ int ntfs_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 		err = ntfs_ea_set_wsl_inode(vi, 0, NULL, flags);
 		mutex_unlock(&ni->mrec_lock);
 		if (err)
-			goto out;
+			goto out_restore;
 
 	}
 
 	mark_inode_dirty(vi);
+	goto out;
+
+out_restore:
+	/*
+	 * The on-disk metadata update failed: put the in-memory
+	 * attributes back so that the inode does not keep the new,
+	 * uncommitted values.  This is best effort: the ctime update is
+	 * left in place, ntfs_ea_set_wsl_inode() may have completed some
+	 * of the EAs before failing, and a failed ACL update may leave
+	 * the cached ACL divergent.
+	 */
+	vi->i_mode = old_mode;
+	vi->i_uid = old_uid;
+	vi->i_gid = old_gid;
+	ni->flags = (ni->flags & ~FILE_ATTR_READONLY) | old_flags;
 out:
 	return err;
 }
