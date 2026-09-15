@@ -8,6 +8,8 @@
  * Copyright 2023 Marek Vasut
  */
 
+#include <linux/delay.h>
+#include <linux/gpio/consumer.h>
 #include <linux/i2c.h>
 #include <linux/leds.h>
 #include <linux/module.h>
@@ -121,6 +123,7 @@ static int pca995x_probe(struct i2c_client *client)
 	struct fwnode_handle *led_fwnodes[PCA995X_MAX_OUTPUTS] = { 0 };
 	struct device *dev = &client->dev;
 	const struct pca995x_chipdef *chipdef;
+	struct gpio_desc *reset_gpio;
 	struct pca995x_chip *chip;
 	struct pca995x_led *led;
 	int i, j, reg, ret;
@@ -129,6 +132,16 @@ static int pca995x_probe(struct i2c_client *client)
 
 	if (!dev_fwnode(dev))
 		return -ENODEV;
+
+	reset_gpio = devm_gpiod_get_optional(dev, "reset", GPIOD_OUT_HIGH);
+	if (IS_ERR(reset_gpio))
+		return dev_err_probe(dev, PTR_ERR(reset_gpio),
+				     "failed to request reset GPIO\n");
+	if (reset_gpio) {
+		udelay(3);
+		gpiod_set_value_cansleep(reset_gpio, 0);
+		usleep_range(1500, 1600);
+	}
 
 	chip = devm_kzalloc(dev, sizeof(*chip), GFP_KERNEL);
 	if (!chip)
