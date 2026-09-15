@@ -160,6 +160,7 @@ static int __init kona_timer_init(struct device_node *node)
 	if (!IS_ERR(external_clk)) {
 		arch_timer_rate = clk_get_rate(external_clk);
 		clk_prepare_enable(external_clk);
+		clk_put(external_clk);
 	} else if (!of_property_read_u32(node, "clock-frequency", &freq)) {
 		arch_timer_rate = freq;
 	} else {
