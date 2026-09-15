@@ -10,6 +10,7 @@
  
 #ifndef _LINUX_NOTIFIER_H
 #define _LINUX_NOTIFIER_H
+#include <linux/compiler.h>
 #include <linux/errno.h>
 #include <linux/mutex.h>
 #include <linux/rwsem.h>
@@ -114,10 +115,12 @@ extern void srcu_init_notifier_head(struct srcu_notifier_head *nh);
 
 #define ATOMIC_NOTIFIER_HEAD(name)				\
 	struct atomic_notifier_head name =			\
-		ATOMIC_NOTIFIER_INIT(name)
+		ATOMIC_NOTIFIER_INIT(name);			\
+	ASSERT_STATIC_STORAGE(name)
 #define BLOCKING_NOTIFIER_HEAD(name)				\
 	struct blocking_notifier_head name =			\
-		BLOCKING_NOTIFIER_INIT(name)
+		BLOCKING_NOTIFIER_INIT(name);			\
+	ASSERT_STATIC_STORAGE(name)
 #define RAW_NOTIFIER_HEAD(name)					\
 	struct raw_notifier_head name =				\
 		RAW_NOTIFIER_INIT(name)
@@ -126,12 +129,14 @@ extern void srcu_init_notifier_head(struct srcu_notifier_head *nh);
 #define _SRCU_NOTIFIER_HEAD(name, mod)				\
 	static DEFINE_PER_CPU(struct srcu_data, name##_head_srcu_data); \
 	mod struct srcu_notifier_head name =			\
-			SRCU_NOTIFIER_INIT(name, name##_head_srcu_data)
+			SRCU_NOTIFIER_INIT(name, name##_head_srcu_data);	\
+	ASSERT_STATIC_STORAGE(name)
 
 #else
 #define _SRCU_NOTIFIER_HEAD(name, mod)				\
 	mod struct srcu_notifier_head name =			\
-			SRCU_NOTIFIER_INIT(name, name)
+			SRCU_NOTIFIER_INIT(name, name);		\
+	ASSERT_STATIC_STORAGE(name)
 
 #endif
 
