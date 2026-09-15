@@ -866,9 +866,11 @@ void untrack_possible_nx_huge_page(struct kvm *kvm, struct kvm_mmu_page *sp,
 
 static void unaccount_nx_huge_page(struct kvm *kvm, struct kvm_mmu_page *sp)
 {
+	enum kvm_mmu_type mmu_type = is_tdp_mmu_page(sp) ? KVM_TDP_MMU : KVM_SHADOW_MMU;
+
 	sp->nx_huge_page_disallowed = false;
 
-	untrack_possible_nx_huge_page(kvm, sp, KVM_SHADOW_MMU);
+	untrack_possible_nx_huge_page(kvm, sp, mmu_type);
 }
 
 static struct kvm_memory_slot *gfn_to_memslot_dirty_bitmap(struct kvm_vcpu *vcpu,
