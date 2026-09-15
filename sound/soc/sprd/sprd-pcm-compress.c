@@ -153,11 +153,10 @@ static int sprd_platform_compr_dma_config(struct snd_soc_component *component,
 		return -EINVAL;
 	}
 
-	dma->chan = dma_request_slave_channel(dev,
-					      dma_params->chan_name[channel]);
-	if (!dma->chan) {
+	dma->chan = dma_request_chan(dev, dma_params->chan_name[channel]);
+	if (IS_ERR(dma->chan)) {
 		dev_err(dev, "failed to request dma channel\n");
-		return -ENODEV;
+		return PTR_ERR(dma->chan);
 	}
 
 	sgt = sg = kzalloc_objs(*sg, sg_num);
