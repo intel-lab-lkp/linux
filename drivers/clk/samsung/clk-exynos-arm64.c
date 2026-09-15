@@ -149,6 +149,7 @@ static int __init exynos_arm64_enable_bus_clk(struct device *dev,
 		struct device_node *np, const struct samsung_cmu_info *cmu)
 {
 	struct clk *parent_clk;
+	int ret;
 
 	if (!cmu->clk_name)
 		return 0;
@@ -167,7 +168,11 @@ static int __init exynos_arm64_enable_bus_clk(struct device *dev,
 	if (IS_ERR(parent_clk))
 		return PTR_ERR(parent_clk);
 
-	return clk_prepare_enable(parent_clk);
+	ret = clk_prepare_enable(parent_clk);
+	if (ret)
+		clk_put(parent_clk);
+
+	return ret;
 }
 
 static int __init exynos_arm64_cmu_prepare_pm(struct device *dev,
