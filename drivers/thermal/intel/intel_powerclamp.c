@@ -103,13 +103,9 @@ exit:
 
 static int duration_get(char *buf, const struct kernel_param *kp)
 {
-	int ret;
+	guard(mutex)(&powerclamp_lock);
 
-	mutex_lock(&powerclamp_lock);
-	ret = sysfs_emit(buf, "%d\n", duration / 1000);
-	mutex_unlock(&powerclamp_lock);
-
-	return ret;
+	return sysfs_emit(buf, "%u\n", duration / 1000);
 }
 
 static const struct kernel_param_ops duration_ops = {
