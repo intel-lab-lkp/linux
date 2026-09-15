@@ -695,6 +695,7 @@ static int safexcel_send_req(struct crypto_async_request *base, int ring,
 	struct safexcel_token *atoken;
 	int n_cdesc = 0, n_rdesc = 0;
 	int queued, i, ret = 0;
+	bool src_mapped = false, dst_mapped = false;
 	bool first = true;
 
 	sreq->nr_src = sg_nents_for_len(src, totlen_src);
@@ -746,9 +747,12 @@ static int safexcel_send_req(struct crypto_async_request *base, int ring,
 				max(totlen_src, totlen_dst));
 			return -EINVAL;
 		}
-		if (sreq->nr_src > 0 &&
-		    !dma_map_sg(priv->dev, src, sreq->nr_src, DMA_BIDIRECTIONAL))
-			return -EIO;
+		if (sreq->nr_src > 0) {
+			src_mapped = dma_map_sg(priv->dev, src, sreq->nr_src,
+						DMA_BIDIRECTIONAL);
+			if (!src_mapped)
+				return -EIO;
+		}
 	} else {
 		if (unlikely(totlen_src && (sreq->nr_src <= 0))) {
 			dev_err(priv->dev, "Source buffer not large enough (need %d bytes)!",
@@ -756,9 +760,12 @@ static int safexcel_send_req(struct crypto_async_request *base, int ring,
 			return -EINVAL;
 		}
 
-		if (sreq->nr_src > 0 &&
-		    !dma_map_sg(priv->dev, src, sreq->nr_src, DMA_TO_DEVICE))
-			return -EIO;
+		if (sreq->nr_src > 0) {
+			src_mapped = dma_map_sg(priv->dev, src, sreq->nr_src,
+						DMA_TO_DEVICE);
+			if (!src_mapped)
+				return -EIO;
+		}
 
 		if (unlikely(totlen_dst && (sreq->nr_dst <= 0))) {
 			dev_err(priv->dev, "Dest buffer not large enough (need %d bytes)!",
@@ -767,10 +774,13 @@ static int safexcel_send_req(struct crypto_async_request *base, int ring,
 			goto unmap;
 		}
 
-		if (sreq->nr_dst > 0 &&
-		    !dma_map_sg(priv->dev, dst, sreq->nr_dst, DMA_FROM_DEVICE)) {
-			ret = -EIO;
-			goto unmap;
+		if (sreq->nr_dst > 0) {
+			dst_mapped = dma_map_sg(priv->dev, dst, sreq->nr_dst,
+						DMA_FROM_DEVICE);
+			if (!dst_mapped) {
+				ret = -EIO;
+				goto unmap;
+			}
 		}
 	}
 
@@ -903,14 +913,14 @@ cdesc_rollback:
 		safexcel_ring_rollback_wptr(priv, &priv->ring[ring].cdr);
 unmap:
 	if (src == dst) {
-		if (sreq->nr_src > 0)
+		if (src_mapped)
 			dma_unmap_sg(priv->dev, src, sreq->nr_src,
 				     DMA_BIDIRECTIONAL);
 	} else {
-		if (sreq->nr_src > 0)
+		if (src_mapped)
 			dma_unmap_sg(priv->dev, src, sreq->nr_src,
 				     DMA_TO_DEVICE);
-		if (sreq->nr_dst > 0)
+		if (dst_mapped)
 			dma_unmap_sg(priv->dev, dst, sreq->nr_dst,
 				     DMA_FROM_DEVICE);
 	}
