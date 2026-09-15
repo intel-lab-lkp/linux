@@ -239,6 +239,22 @@ static struct pci_dev *get_next_root(struct pci_dev *root)
 	return root;
 }
 
+static void amd_smn_release_config_regions(u16 *num_roots)
+{
+	struct pci_dev *root __free(pci_dev_put) = NULL;
+
+	if (!num_roots)
+		return;
+
+	while (*num_roots && (root = get_next_root(root))) {
+		pci_release_config_region(root, 0, PCI_CFG_SPACE_SIZE);
+		(*num_roots)--;
+	}
+}
+
+DEFINE_FREE(amd_smn_release_config_regions, u16 *,
+	    amd_smn_release_config_regions(_T));
+
 static bool enable_dfs;
 
 static int __init amd_smn_enable_dfs(char *str)
@@ -250,8 +266,10 @@ __setup("amd_smn_debugfs_enable", amd_smn_enable_dfs);
 
 static int __init amd_smn_init(void)
 {
-	u16 count, num_roots, roots_per_node, node, num_nodes;
+	u16 count, num_roots = 0, roots_per_node, node, num_nodes;
 	struct pci_dev *root __free(pci_dev_put) = NULL;
+
+	u16 *config_regions __free(amd_smn_release_config_regions) = NULL;
 
 	if (!cpu_feature_enabled(X86_FEATURE_ZEN))
 		return 0;
@@ -261,7 +279,8 @@ static int __init amd_smn_init(void)
 	if (amd_roots)
 		return 0;
 
-	num_roots = 0;
+	config_regions = &num_roots;
+
 	while ((root = get_next_root(root))) {
 		pci_dbg(root, "Reserving PCI config space\n");
 
@@ -315,6 +334,7 @@ static int __init amd_smn_init(void)
 		debugfs_create_file("value",	0600, debugfs_dir, NULL, &smn_value_fops);
 	}
 
+	config_regions = NULL;
 	return 0;
 }
 
