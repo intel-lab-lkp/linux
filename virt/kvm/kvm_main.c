@@ -4326,27 +4326,18 @@ static const struct file_operations kvm_vcpu_stats_fops = {
 
 static int kvm_vcpu_ioctl_get_stats_fd(struct kvm_vcpu *vcpu)
 {
-	int fd;
-	struct file *file;
 	char name[15 + ITOA_MAX_LEN + 1];
 
 	snprintf(name, sizeof(name), "kvm-vcpu-stats:%d", vcpu->vcpu_id);
 
-	fd = get_unused_fd_flags(O_CLOEXEC);
-	if (fd < 0)
-		return fd;
-
-	file = anon_inode_getfile_fmode(name, &kvm_vcpu_stats_fops, vcpu,
-					O_RDONLY, FMODE_PREAD);
-	if (IS_ERR(file)) {
-		put_unused_fd(fd);
-		return PTR_ERR(file);
-	}
+	FD_PREPARE(fdf, O_CLOEXEC,
+		   anon_inode_getfile_fmode(name, &kvm_vcpu_stats_fops, vcpu,
+					    O_RDONLY, FMODE_PREAD));
+	if (IS_ERR(fdf))
+		return PTR_ERR(fdf);
 
 	kvm_get_kvm(vcpu->kvm);
-	fd_install(fd, file);
-
-	return fd;
+	return fd_prepare_fd(fdf);
 }
 
 #ifdef CONFIG_KVM_GENERIC_PRE_FAULT_MEMORY
@@ -5136,24 +5127,14 @@ static const struct file_operations kvm_vm_stats_fops = {
 
 static int kvm_vm_ioctl_get_stats_fd(struct kvm *kvm)
 {
-	int fd;
-	struct file *file;
-
-	fd = get_unused_fd_flags(O_CLOEXEC);
-	if (fd < 0)
-		return fd;
-
-	file = anon_inode_getfile_fmode("kvm-vm-stats",
-			&kvm_vm_stats_fops, kvm, O_RDONLY, FMODE_PREAD);
-	if (IS_ERR(file)) {
-		put_unused_fd(fd);
-		return PTR_ERR(file);
-	}
+	FD_PREPARE(fdf, O_CLOEXEC,
+		   anon_inode_getfile_fmode("kvm-vm-stats", &kvm_vm_stats_fops,
+					    kvm, O_RDONLY, FMODE_PREAD));
+	if (IS_ERR(fdf))
+		return PTR_ERR(fdf);
 
 	kvm_get_kvm(kvm);
-	fd_install(fd, file);
-
-	return fd;
+	return fd_prepare_fd(fdf);
 }
 
 #define SANITY_CHECK_MEM_REGION_FIELD(field)					\
@@ -5499,21 +5480,20 @@ EXPORT_SYMBOL_FOR_KVM_INTERNAL(file_is_kvm);
 static int kvm_dev_ioctl_create_vm(unsigned long type)
 {
 	char fdname[ITOA_MAX_LEN + 1];
-	int r, fd;
 	struct kvm *kvm;
 	struct file *file;
+	const struct fd_slot *fd;
+	int r;
 
-	fd = get_unused_fd_flags(O_CLOEXEC);
-	if (fd < 0)
-		return fd;
+	fd = fd_prepare(O_CLOEXEC);
+	if (IS_ERR(fd))
+		return PTR_ERR(fd);
 
-	snprintf(fdname, sizeof(fdname), "%d", fd);
+	snprintf(fdname, sizeof(fdname), "%d", fd_prepare_fd(fd));
 
 	kvm = kvm_create_vm(type, fdname);
-	if (IS_ERR(kvm)) {
-		r = PTR_ERR(kvm);
-		goto put_fd;
-	}
+	if (IS_ERR(kvm))
+		return PTR_ERR(kvm);
 
 	file = anon_inode_getfile("kvm-vm", &kvm_vm_fops, kvm, O_RDWR);
 	if (IS_ERR(file)) {
@@ -5529,13 +5509,10 @@ static int kvm_dev_ioctl_create_vm(unsigned long type)
 	 */
 	kvm_uevent_notify_change(KVM_EVENT_CREATE_VM, kvm);
 
-	fd_install(fd, file);
-	return fd;
+	return fd_stage(fd, file);
 
 put_kvm:
 	kvm_put_kvm(kvm);
-put_fd:
-	put_unused_fd(fd);
 	return r;
 }
 
