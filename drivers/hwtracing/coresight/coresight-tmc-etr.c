@@ -687,10 +687,29 @@ static ssize_t tmc_etr_get_data_flat_buf(struct etr_buf *etr_buf,
 	return len;
 }
 
+/*
+ * tmc_etr_sync_flat_buf_for_device: Drop any CPU cache lines over the trace
+ * buffer before the ETR is allowed to write into it.  The buffer is allocated
+ * with dma_alloc_noncoherent(), which zeroes it with CPU stores, and the DMA
+ * API requires a sync for the device before the device writes into the
+ * memory.  Without it a non-coherent sink writes into memory while the zero
+ * fill is still dirty in cache, and the write-back lands on top of the trace
+ * data.
+ */
+static void tmc_etr_sync_flat_buf_for_device(struct etr_buf *etr_buf)
+{
+	struct etr_flat_buf *flat_buf = etr_buf->private;
+	struct device *real_dev = flat_buf->dev->parent;
+
+	dma_sync_single_for_device(real_dev, flat_buf->daddr, etr_buf->size,
+				   DMA_FROM_DEVICE);
+}
+
 static const struct etr_buf_operations etr_flat_buf_ops = {
 	.alloc = tmc_etr_alloc_flat_buf,
 	.free = tmc_etr_free_flat_buf,
 	.sync = tmc_etr_sync_flat_buf,
+	.sync_for_device = tmc_etr_sync_flat_buf_for_device,
 	.get_data = tmc_etr_get_data_flat_buf,
 };
 
@@ -1109,6 +1128,16 @@ static int __tmc_etr_enable_hw(struct tmc_drvdata *drvdata)
 	writel_relaxed(ffcr, drvdata->base + TMC_FFCR);
 
 	writel_relaxed(drvdata->trigger_cntr, drvdata->base + TMC_TRG);
+
+	/*
+	 * Hand the buffer over in a state the device can write into: drop
+	 * any dirty CPU cache lines first, or they get written back over
+	 * the trace data the ETR produces.  Only the flat buffer needs
+	 * this; the ETR_SG and CATU data pages are synced by
+	 * dma_map_page() when they are allocated.
+	 */
+	if (etr_buf->ops->sync_for_device)
+		etr_buf->ops->sync_for_device(etr_buf);
 	tmc_enable_hw(drvdata);
 
 	CS_LOCK(drvdata->base);

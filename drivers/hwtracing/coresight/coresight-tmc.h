@@ -281,6 +281,7 @@ struct etr_buf_operations {
 	int (*alloc)(struct tmc_drvdata *drvdata, struct etr_buf *etr_buf,
 		     int node, void **pages);
 	void (*sync)(struct etr_buf *etr_buf, u64 rrp, u64 rwp);
+	void (*sync_for_device)(struct etr_buf *etr_buf);
 	ssize_t (*get_data)(struct etr_buf *etr_buf, u64 offset, size_t len,
 			    char **bufpp);
 	void (*free)(struct etr_buf *etr_buf);
