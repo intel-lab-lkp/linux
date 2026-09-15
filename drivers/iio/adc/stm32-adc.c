@@ -2259,7 +2259,7 @@ static int stm32_adc_populate_int_ch(struct iio_dev *indio_dev, const char *ch_n
 {
 	struct stm32_adc *adc = iio_priv(indio_dev);
 	u16 vrefint;
-	int i, ret;
+	int i, ret = 0;
 
 	for (i = 0; i < STM32_ADC_INT_CH_NB; i++) {
 		if (!strncmp(stm32_adc_ic[i].name, ch_name, STM32_ADC_CH_SZ)) {
@@ -2267,29 +2267,34 @@ static int stm32_adc_populate_int_ch(struct iio_dev *indio_dev, const char *ch_n
 			switch (i) {
 			case STM32_ADC_INT_CH_VDDCORE:
 				if (!adc->cfg->regs->or_vddcore.reg)
-					dev_warn(&indio_dev->dev,
-						 "%s channel not available\n", ch_name);
+					ret = -ENOENT;
 				break;
 			case STM32_ADC_INT_CH_VDDCPU:
 				if (!adc->cfg->regs->or_vddcpu.reg)
-					dev_warn(&indio_dev->dev,
-						 "%s channel not available\n", ch_name);
+					ret = -ENOENT;
 				break;
 			case STM32_ADC_INT_CH_VDDQ_DDR:
 				if (!adc->cfg->regs->or_vddq_ddr.reg)
-					dev_warn(&indio_dev->dev,
-						 "%s channel not available\n", ch_name);
+					ret = -ENOENT;
 				break;
 			case STM32_ADC_INT_CH_VREFINT:
 				if (!adc->cfg->regs->ccr_vref.reg)
-					dev_warn(&indio_dev->dev,
-						 "%s channel not available\n", ch_name);
+					ret = -ENOENT;
 				break;
 			case STM32_ADC_INT_CH_VBAT:
 				if (!adc->cfg->regs->ccr_vbat.reg)
-					dev_warn(&indio_dev->dev,
-						 "%s channel not available\n", ch_name);
+					ret = -ENOENT;
 				break;
+			}
+
+			if (ret) {
+				/*
+				 * Confusing channel label matches an internal STM32 ADC channel.
+				 * Just warn about it, as there's normally no restriction on the
+				 * name but that's not among supported internal channels.
+				 */
+				dev_warn(&indio_dev->dev, "no %s internal channel\n", ch_name);
+				return 0;
 			}
 
 			if (stm32_adc_ic[i].idx != STM32_ADC_INT_CH_VREFINT) {
