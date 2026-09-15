@@ -565,7 +565,7 @@ static void hws_ack_all_irqs(struct hws_pcie_dev *hws)
 	}
 }
 
-static void hws_open_irq_fabric(struct hws_pcie_dev *hws)
+static void hws_configure_irq_fabric(struct hws_pcie_dev *hws)
 {
 	/* Route all sources to vector 0. */
 	writel(0x00000000, hws->bar0_base + PCIE_INT_DEC_REG_BASE);
@@ -574,10 +574,6 @@ static void hws_open_irq_fabric(struct hws_pcie_dev *hws)
 	/* Enable the PCIe bridge. */
 	writel(0x00000001, hws->bar0_base + PCIEBR_EN_REG_BASE);
 	(void)readl(hws->bar0_base + PCIEBR_EN_REG_BASE);
-
-	/* Open the global/bridge gate (legacy 0x3FFFF) */
-	writel(HWS_INT_EN_MASK, hws->bar0_base + INT_EN_REG_BASE);
-	(void)readl(hws->bar0_base + INT_EN_REG_BASE);
 }
 
 void hws_init_video_sys(struct hws_pcie_dev *hws, bool enable)
@@ -604,7 +600,7 @@ void hws_init_video_sys(struct hws_pcie_dev *hws, bool enable)
 	writel(0x80FFFFFF, hws->bar0_base + HWS_REG_DEC_MODE);
 	writel(0x13, hws->bar0_base + HWS_REG_DEC_MODE);
 	hws_ack_all_irqs(hws);
-	hws_open_irq_fabric(hws);
+	hws_configure_irq_fabric(hws);
 	/* 6) record that we're now running */
 	hws->start_run = true;
 }

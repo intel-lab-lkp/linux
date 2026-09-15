@@ -150,15 +150,9 @@ irqreturn_t hws_irq_handler(int irq, void *info)
 	struct hws_pcie_dev *pdx = info;
 	u32 int_state;
 
-	/* Fast path: if suspended, quietly ack and exit */
-	if (READ_ONCE(pdx->suspended)) {
-		int_state = readl_relaxed(pdx->bar0_base + HWS_REG_INT_STATUS);
-		if (int_state) {
-			writel(int_state, pdx->bar0_base + HWS_REG_INT_STATUS);
-			(void)readl_relaxed(pdx->bar0_base + HWS_REG_INT_STATUS);
-		}
-		return int_state ? IRQ_HANDLED : IRQ_NONE;
-	}
+	if (!pdx || READ_ONCE(pdx->suspended) || !pdx->bar0_base)
+		return IRQ_NONE;
+
 	int_state = readl_relaxed(pdx->bar0_base + HWS_REG_INT_STATUS);
 	if (!int_state || int_state == 0xFFFFFFFF) {
 		return IRQ_NONE;
