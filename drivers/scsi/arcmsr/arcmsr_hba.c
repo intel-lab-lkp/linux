@@ -1164,10 +1164,10 @@ out_free_sysfs:
 	if (set_date_time)
 		timer_delete_sync(&acb->refresh_timer);
 	timer_delete_sync(&acb->eternal_timer);
-	flush_work(&acb->arcmsr_do_message_isr_bh);
 	arcmsr_stop_adapter_bgrb(acb);
 	arcmsr_flush_adapter_cache(acb);
 	arcmsr_free_irq(pdev, acb);
+	flush_work(&acb->arcmsr_do_message_isr_bh);
 scsi_host_remove:
 	scsi_remove_host(host);
 free_ccb_pool:
@@ -1685,12 +1685,12 @@ static void arcmsr_free_pcidev(struct AdapterControlBlock *acb)
 	host = acb->host;
 	arcmsr_free_sysfs_attr(acb);
 	scsi_remove_host(host);
-	flush_work(&acb->arcmsr_do_message_isr_bh);
 	timer_delete_sync(&acb->eternal_timer);
 	if (set_date_time)
 		timer_delete_sync(&acb->refresh_timer);
 	pdev = acb->pdev;
 	arcmsr_free_irq(pdev, acb);
+	flush_work(&acb->arcmsr_do_message_isr_bh);
 	arcmsr_free_ccb_pool(acb);
 	if (acb->adapter_type == ACB_ADAPTER_TYPE_F)
 		arcmsr_free_io_queue(acb);
@@ -1718,7 +1718,6 @@ static void arcmsr_remove(struct pci_dev *pdev)
 	}
 	arcmsr_free_sysfs_attr(acb);
 	scsi_remove_host(host);
-	flush_work(&acb->arcmsr_do_message_isr_bh);
 	timer_delete_sync(&acb->eternal_timer);
 	if (set_date_time)
 		timer_delete_sync(&acb->refresh_timer);
@@ -1750,6 +1749,7 @@ static void arcmsr_remove(struct pci_dev *pdev)
 		}
 	}
 	arcmsr_free_irq(pdev, acb);
+	flush_work(&acb->arcmsr_do_message_isr_bh);
 	arcmsr_free_ccb_pool(acb);
 	if (acb->adapter_type == ACB_ADAPTER_TYPE_F)
 		arcmsr_free_io_queue(acb);
