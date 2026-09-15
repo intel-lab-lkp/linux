@@ -273,6 +273,7 @@ void tb_tunnel_event(struct tb *tb, enum tb_tunnel_event event,
 	kfree(envp[1]);
 	kfree(envp[0]);
 }
+EXPORT_SYMBOL_GPL(tb_tunnel_event);
 
 static inline void tb_tunnel_set_active(struct tb_tunnel *tunnel, bool active)
 {

@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-only
 menuconfig USB4
 	tristate "Unified support for USB4 and Thunderbolt"
-	depends on PCI
 	select APPLE_PROPERTIES if EFI_STUB && X86
 	select CRC32
 	select CRYPTO_LIB_SHA256
@@ -17,6 +16,16 @@ menuconfig USB4
 	  called thunderbolt.
 
 if USB4
+
+config USB4_PCIE
+	depends on PCI
+	tristate "Support for PCIe-attached USB4 and Thunderbolt controllers"
+	help
+	  Say Y here to add support for the USB4 and Thunderbolt host
+	  routers attached over the PCIe bus, commonly found on x86 PCs.
+
+	  To compile this driver a module, choose M here. The module will be
+	  called thunderbolt_pcie.
 
 config USB4_CONFIGFS
 	def_tristate USB4

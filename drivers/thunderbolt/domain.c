@@ -313,6 +313,7 @@ const struct bus_type tb_bus_type = {
 	.remove = tb_service_remove,
 	.shutdown = tb_service_shutdown,
 };
+EXPORT_SYMBOL_GPL(tb_bus_type);
 
 static void tb_domain_release(struct device *dev)
 {
@@ -421,6 +422,7 @@ err_free:
 
 	return NULL;
 }
+EXPORT_SYMBOL_GPL(tb_domain_alloc);
 
 /**
  * tb_domain_add() - Add domain to the system
@@ -514,6 +516,7 @@ void tb_domain_remove(struct tb *tb)
 
 	device_unregister(&tb->dev);
 }
+EXPORT_SYMBOL_GPL(tb_domain_remove);
 
 /**
  * tb_domain_suspend_noirq() - Suspend a domain
@@ -904,8 +907,9 @@ int tb_domain_unregister_unplugged_xdomains(struct tb *tb)
 
 	return ctx.n;
 }
+EXPORT_SYMBOL_GPL(tb_domain_unregister_unplugged_xdomains);
 
-int tb_domain_init(void)
+static int __init tb_domain_init(void)
 {
 	int ret;
 
@@ -931,7 +935,7 @@ err_acpi:
 	return ret;
 }
 
-void tb_domain_exit(void)
+static void __exit tb_domain_exit(void)
 {
 	bus_unregister(&tb_bus_type);
 	ida_destroy(&tb_domain_ida);
@@ -941,3 +945,9 @@ void tb_domain_exit(void)
 	tb_debugfs_exit();
 	tb_configfs_exit();
 }
+
+postcore_initcall(tb_domain_init);
+module_exit(tb_domain_exit);
+
+MODULE_DESCRIPTION("Thunderbolt/USB4 core driver");
+MODULE_LICENSE("GPL");

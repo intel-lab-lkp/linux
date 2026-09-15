@@ -348,6 +348,16 @@ static bool nhi_pci_is_present(struct tb_nhi *nhi)
 	return pci_device_is_present(to_pci_dev(nhi->dev));
 }
 
+static struct tb *nhi_pci_select_cm(struct tb_nhi *nhi)
+{
+	/*
+	 * Either the firmware-based CM is running (we did not get
+	 * control from the firmware) or this is a pre-USB4 PC, so
+	 * first try using the firmware CM and then fallback to software CM.
+	 */
+	return icm_probe(nhi);
+}
+
 static const struct tb_nhi_ops pci_nhi_default_ops = {
 	.add_links = nhi_pci_add_links,
 	.pre_nvm_auth = nhi_pci_start_dma_port,
@@ -358,6 +368,7 @@ static const struct tb_nhi_ops pci_nhi_default_ops = {
 	.is_present = nhi_pci_is_present,
 	.init_interrupts = nhi_pci_init_msi,
 	.reset_interface = nhi_reset_interface,
+	.select_cm = nhi_pci_select_cm,
 };
 
 /* Ice Lake specific NHI operations */
@@ -577,6 +588,7 @@ static const struct tb_nhi_ops icl_nhi_ops = {
 	.is_present = nhi_pci_is_present,
 	.init_interrupts = nhi_pci_init_msi,
 	.reset_interface = nhi_reset_interface,
+	.select_cm = nhi_pci_select_cm,
 };
 
 static int nhi_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
@@ -738,7 +750,7 @@ static struct pci_device_id nhi_ids[] = {
 };
 
 MODULE_DEVICE_TABLE(pci, nhi_ids);
-MODULE_DESCRIPTION("Thunderbolt/USB4 core driver");
+MODULE_DESCRIPTION("PCIe-attached Thunderbolt/USB4 host interface driver");
 MODULE_LICENSE("GPL");
 
 static struct pci_driver nhi_driver = {
@@ -749,27 +761,4 @@ static struct pci_driver nhi_driver = {
 	.shutdown = nhi_pci_shutdown,
 	.driver.pm = &nhi_pm_ops,
 };
-
-static int __init nhi_init(void)
-{
-	int ret;
-
-	ret = tb_domain_init();
-	if (ret)
-		return ret;
-
-	ret = pci_register_driver(&nhi_driver);
-	if (ret)
-		tb_domain_exit();
-
-	return ret;
-}
-
-static void __exit nhi_unload(void)
-{
-	pci_unregister_driver(&nhi_driver);
-	tb_domain_exit();
-}
-
-rootfs_initcall(nhi_init);
-module_exit(nhi_unload);
+module_pci_driver(nhi_driver)

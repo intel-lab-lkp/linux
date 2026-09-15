@@ -2396,6 +2396,7 @@ const struct device_type tb_switch_type = {
 	.uevent = tb_switch_uevent,
 	.pm = &tb_switch_pm_ops,
 };
+EXPORT_SYMBOL_GPL(tb_switch_type);
 
 static int tb_switch_get_generation(struct tb_switch *sw)
 {
@@ -2571,6 +2572,7 @@ err_free_sw_ports:
 
 	return ERR_PTR(ret);
 }
+EXPORT_SYMBOL_GPL(tb_switch_alloc);
 
 /**
  * tb_switch_alloc_safe_mode() - allocate a switch that is in safe mode
@@ -2610,6 +2612,7 @@ tb_switch_alloc_safe_mode(struct tb *tb, struct device *parent, u64 route)
 
 	return sw;
 }
+EXPORT_SYMBOL_GPL(tb_switch_alloc_safe_mode);
 
 /**
  * tb_switch_configure() - Uploads configuration to the switch
@@ -3438,6 +3441,7 @@ err_del:
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(tb_switch_add);
 
 /**
  * tb_switch_remove() - Remove and release a switch
@@ -3483,6 +3487,7 @@ void tb_switch_remove(struct tb_switch *sw)
 		dev_info(&sw->dev, "device disconnected\n");
 	device_unregister(&sw->dev);
 }
+EXPORT_SYMBOL_GPL(tb_switch_remove);
 
 /**
  * tb_sw_set_unplugged() - set is_unplugged on switch and downstream switches
@@ -3828,6 +3833,7 @@ struct tb_switch *tb_switch_find_by_link_depth(struct tb *tb, u8 link, u8 depth)
 
 	return NULL;
 }
+EXPORT_SYMBOL_GPL(tb_switch_find_by_link_depth);
 
 /**
  * tb_switch_find_by_uuid() - Find switch by UUID
@@ -3854,6 +3860,7 @@ struct tb_switch *tb_switch_find_by_uuid(struct tb *tb, const uuid_t *uuid)
 
 	return NULL;
 }
+EXPORT_SYMBOL_GPL(tb_switch_find_by_uuid);
 
 /**
  * tb_switch_find_by_route() - Find switch by route string
@@ -3883,6 +3890,7 @@ struct tb_switch *tb_switch_find_by_route(struct tb *tb, u64 route)
 
 	return NULL;
 }
+EXPORT_SYMBOL_GPL(tb_switch_find_by_route);
 
 /**
  * tb_switch_find_port() - return the first port of @type on @sw or NULL
@@ -3903,6 +3911,7 @@ struct tb_port *tb_switch_find_port(struct tb_switch *sw,
 
 	return NULL;
 }
+EXPORT_SYMBOL_GPL(tb_switch_find_port);
 
 /*
  * Can be used for read/write a specified PCIe bridge for any Thunderbolt 3

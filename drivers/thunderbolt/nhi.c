@@ -548,6 +548,7 @@ irqreturn_t ring_msix(int irq, void *data)
 
 	return IRQ_HANDLED;
 }
+EXPORT_SYMBOL_GPL(ring_msix);
 
 static int nhi_alloc_hop(struct tb_nhi *nhi, struct tb_ring *ring)
 {
@@ -1001,6 +1002,7 @@ int nhi_mailbox_cmd(struct tb_nhi *nhi, enum nhi_mailbox_cmd cmd, u32 data)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(nhi_mailbox_cmd);
 
 /**
  * nhi_mailbox_mode() - Return current firmware operation mode
@@ -1021,6 +1023,7 @@ enum nhi_fw_mode nhi_mailbox_mode(struct tb_nhi *nhi)
 
 	return (enum nhi_fw_mode)val;
 }
+EXPORT_SYMBOL_GPL(nhi_mailbox_mode);
 
 void nhi_interrupt_work(struct work_struct *work)
 {
@@ -1071,6 +1074,7 @@ void nhi_interrupt_work(struct work_struct *work)
 	}
 	spin_unlock_irq(&nhi->lock);
 }
+EXPORT_SYMBOL_GPL(nhi_interrupt_work);
 
 irqreturn_t nhi_msi(int irq, void *data)
 {
@@ -1078,6 +1082,7 @@ irqreturn_t nhi_msi(int irq, void *data)
 	schedule_work(&nhi->interrupt_work);
 	return IRQ_HANDLED;
 }
+EXPORT_SYMBOL_GPL(nhi_msi);
 
 static int __nhi_suspend_noirq(struct device *dev, bool wakeup)
 {
@@ -1235,6 +1240,7 @@ void nhi_shutdown(struct tb_nhi *nhi)
 	if (nhi->ops->shutdown)
 		nhi->ops->shutdown(nhi);
 }
+EXPORT_SYMBOL_GPL(nhi_shutdown);
 
 static void nhi_reset(struct tb_nhi *nhi)
 {
@@ -1292,6 +1298,7 @@ void nhi_reset_interface(struct tb_nhi *nhi)
 	/* Wait for tHIReset (10 ms) to complete */
 	usleep_range(10000, 20000);
 }
+EXPORT_SYMBOL_GPL(nhi_reset_interface);
 
 static struct tb *nhi_select_cm(struct tb_nhi *nhi)
 {
@@ -1302,13 +1309,8 @@ static struct tb *nhi_select_cm(struct tb_nhi *nhi)
 	 * USB4 case is simple. If we got control of any of the
 	 * capabilities, we use software CM.
 	 */
-	if (!tb_acpi_is_native()) {
-		/*
-		 * Either firmware based CM is running (we did not get
-		 * control from the firmware) or this is pre-USB4 PC so
-		 * try first firmware CM and then fallback to software CM.
-		 */
-		tb = icm_probe(nhi);
+	if (!tb_acpi_is_native() && nhi->ops->select_cm) {
+		tb = nhi->ops->select_cm(nhi);
 		if (tb)
 			return tb;
 	}
@@ -1411,6 +1413,7 @@ int nhi_probe(struct tb_nhi *nhi)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(nhi_probe);
 
 /*
  * The tunneled pci bridges are siblings of us. Use resume_noirq to reenable
@@ -1433,3 +1436,4 @@ const struct dev_pm_ops nhi_pm_ops = {
 	.runtime_suspend = nhi_runtime_suspend,
 	.runtime_resume = nhi_runtime_resume,
 };
+EXPORT_SYMBOL_GPL(nhi_pm_ops);

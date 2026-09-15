@@ -56,6 +56,7 @@ extern const struct dev_pm_ops nhi_pm_ops;
  * @is_present: Whether the device is currently present on the parent bus
  * @init_interrupts: NHI specific interrupt initialization hook
  * @reset_interface: Resets the host interface
+ * @select_cm: optional hook to select a custom CM
  */
 struct tb_nhi_ops {
 	int (*init)(struct tb_nhi *nhi);
@@ -72,6 +73,7 @@ struct tb_nhi_ops {
 	bool (*is_present)(struct tb_nhi *nhi);
 	int (*init_interrupts)(struct tb_nhi *nhi);
 	void (*reset_interface)(struct tb_nhi *nhi);
+	struct tb * (*select_cm)(struct tb_nhi *nhi);
 };
 
 /*
