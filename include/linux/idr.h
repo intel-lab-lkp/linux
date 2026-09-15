@@ -55,7 +55,9 @@ struct idr {
  * An IDR defined using this macro is ready for use with no additional
  * initialisation required.  It contains no IDs.
  */
-#define DEFINE_IDR(name)	struct idr name = IDR_INIT(name)
+#define DEFINE_IDR(name) \
+	struct idr name = IDR_INIT(name);	\
+	ASSERT_STATIC_STORAGE(name)
 
 /**
  * idr_get_cursor - Return the current position of the cyclic allocator

@@ -33,7 +33,9 @@ void item_idr_remove(struct idr *idr, int id)
 void idr_alloc_test(void)
 {
 	unsigned long i;
-	DEFINE_IDR(idr);
+	struct idr idr;
+
+	idr_init(&idr);
 
 	assert(idr_alloc_cyclic(&idr, DUMMY_PTR, 0, 0x4000, GFP_KERNEL) == 0);
 	assert(idr_alloc_cyclic(&idr, DUMMY_PTR, 0x3ffd, 0x4000, GFP_KERNEL) == 0x3ffd);
@@ -79,7 +81,9 @@ void idr_alloc2_test(void)
 
 void idr_replace_test(void)
 {
-	DEFINE_IDR(idr);
+	struct idr idr;
+
+	idr_init(&idr);
 
 	idr_alloc(&idr, (void *)-1, 10, 11, GFP_KERNEL);
 	idr_replace(&idr, &idr, 10);
@@ -96,7 +100,9 @@ void idr_replace_test(void)
 void idr_null_test(void)
 {
 	int i;
-	DEFINE_IDR(idr);
+	struct idr idr;
+
+	idr_init(&idr);
 
 	assert(idr_is_empty(&idr));
 
@@ -150,7 +156,9 @@ void idr_null_test(void)
 void idr_nowait_test(void)
 {
 	unsigned int i;
-	DEFINE_IDR(idr);
+	struct idr idr;
+
+	idr_init(&idr);
 
 	idr_preload(GFP_KERNEL);
 
@@ -169,10 +177,10 @@ void idr_get_next_test(int base)
 {
 	unsigned long i;
 	int nextid;
-	DEFINE_IDR(idr);
-	idr_init_base(&idr, base);
-
+	struct idr idr;
 	int indices[] = {4, 7, 9, 15, 65, 128, 1000, 99999, 0};
+
+	idr_init_base(&idr, base);
 
 	for(i = 0; indices[i]; i++) {
 		struct item *item = item_create(indices[i], 0);
@@ -229,7 +237,8 @@ void idr_u32_test1(struct idr *idr, u32 handle)
 
 void idr_u32_test(int base)
 {
-	DEFINE_IDR(idr);
+	struct idr idr;
+
 	idr_init_base(&idr, base);
 	idr_u32_test1(&idr, 10);
 	idr_u32_test1(&idr, 0x7fffffff);
@@ -360,7 +369,9 @@ void idr_find_test(void)
 void idr_checks(void)
 {
 	unsigned long i;
-	DEFINE_IDR(idr);
+	struct idr idr;
+
+	idr_init(&idr);
 
 	for (i = 0; i < 10000; i++) {
 		struct item *item = item_create(i, 0);
