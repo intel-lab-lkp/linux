@@ -236,20 +236,6 @@ void kmsan_internal_set_shadow_origin(void *addr, size_t size, int b,
 	}
 }
 
-struct page *kmsan_vmalloc_to_page_or_null(void *vaddr)
-{
-	struct page *page;
-
-	if (!kmsan_internal_is_vmalloc_addr(vaddr) &&
-	    !kmsan_internal_is_module_addr(vaddr))
-		return NULL;
-	page = vmalloc_to_page(vaddr);
-	if (pfn_valid(page_to_pfn(page)))
-		return page;
-	else
-		return NULL;
-}
-
 void kmsan_internal_check_memory(void *addr, size_t size,
 				 const void __user *user_addr, int reason)
 {
