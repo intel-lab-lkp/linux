@@ -68,6 +68,7 @@ struct vm_struct {
 	phys_addr_t		phys_addr;
 	const void		*caller;
 	unsigned long		requested_size;
+	pgprot_t		prot;
 };
 
 struct vmap_area {

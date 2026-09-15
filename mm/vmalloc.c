@@ -3894,6 +3894,8 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 	unsigned int flags;
 	int ret;
 
+	area->prot = prot;
+
 	array_size = nr_small_pages * sizeof(struct page *);
 
 	/* __GFP_NOFAIL and "noblock" flags are mutually exclusive. */
@@ -4474,8 +4476,79 @@ void *vrealloc_node_align_noprof(const void *p, size_t size, unsigned long align
 		return (void *)p;
 	}
 
+	/*
+	 * Grow in-place: allocate and map additional pages within the
+	 * existing VA range, avoiding a full reallocation + memcpy.
+	 *
+	 * Skip huge page allocations (page_order > 0) as partial huge
+	 * page mapping would require splitting.
+	 *
+	 * Skip VM_FLUSH_RESET_PERMS and VM_USERMAP for the same reasons
+	 * as the shrink path above.
+	 *
+	 * Skip VM_MAP_PUT_PAGES as those allocations use caller-supplied
+	 * pages; growing would mix allocator-supplied pages with them.
+	 *
+	 * Skip if either GFP_NOFS or GFP_NOIO are used, as page table
+	 * allocation internally allocates with GFP_KERNEL, which could
+	 * trigger a recursive deadlock under filesystem or I/O reclaim.
+	 */
+	if (PAGE_ALIGN(size) <= alloced_size && !vm_area_page_order(vm) &&
+	    !(vm->flags & (VM_FLUSH_RESET_PERMS | VM_USERMAP |
+			   VM_MAP_PUT_PAGES)) &&
+	    gfp_has_io_fs(flags)) {
+		unsigned long addr = (unsigned long)kasan_reset_tag(p);
+		unsigned long old_nr_pages = vm->nr_pages;
+		unsigned long new_nr_pages = PAGE_ALIGN(size) >> PAGE_SHIFT;
+		unsigned long nr_new_pages = new_nr_pages - old_nr_pages;
+		gfp_t alloc_gfp = flags;
+		unsigned long nr_allocated;
+		unsigned int scope_flags;
+		struct vmap_node *vn;
+		int ret;
+
+		if (!(alloc_gfp & (GFP_DMA | GFP_DMA32)))
+			alloc_gfp |= __GFP_HIGHMEM;
+
+		nr_allocated = vm_area_alloc_pages(
+				vmalloc_gfp_adjust(alloc_gfp, false), nid,
+				0, nr_new_pages, vm->pages + old_nr_pages);
+
+		if (nr_allocated != nr_new_pages) {
+			if (nr_allocated)
+				vm_area_free_pages(vm, old_nr_pages,
+						   old_nr_pages + nr_allocated);
+			goto need_realloc;
+		}
+
+		scope_flags = memalloc_apply_gfp_scope(flags);
+		ret = __vmap_pages_range(addr + (old_nr_pages << PAGE_SHIFT),
+					 addr + (new_nr_pages << PAGE_SHIFT),
+					 vm->prot,
+					 vm->pages + old_nr_pages,
+					 PAGE_SHIFT,
+					 (flags & GFP_RECLAIM_MASK) | __GFP_ZERO);
+		memalloc_restore_scope(scope_flags);
+
+		if (ret) {
+			vunmap_range(addr + (old_nr_pages << PAGE_SHIFT),
+				     addr + (new_nr_pages << PAGE_SHIFT));
+			vm_area_free_pages(vm, old_nr_pages, new_nr_pages);
+			goto need_realloc;
+		}
+
+		vn = addr_to_node(addr);
+		spin_lock(&vn->busy.lock);
+		vm->nr_pages = new_nr_pages;
+		spin_unlock(&vn->busy.lock);
+
+		vm->requested_size = size;
+		kasan_vrealloc(p, old_size, size);
+
+		return (void *)p;
+	}
+
 need_realloc:
-	/* TODO: Grow the vm_area, i.e. allocate and map additional pages. */
 	n = __vmalloc_node_noprof(size, align, flags, nid, __builtin_return_address(0));
 
 	if (!n)
