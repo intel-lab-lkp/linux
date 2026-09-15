@@ -162,7 +162,6 @@ struct sa_match_data;
 
 /**
  * struct sa_crypto_data - Crypto driver instance data
- * @base: Base address of the register space
  * @soc_data: Pointer to SoC specific data
  * @pdev: Platform device pointer
  * @sc_pool: security context pool
@@ -176,7 +175,6 @@ struct sa_match_data;
  * @dma_tx: Pointer to DMA TX channel
  */
 struct sa_crypto_data {
-	void __iomem *base;
 	const struct sa_match_data *match_data;
 	struct platform_device	*pdev;
 	struct dma_pool		*sc_pool;
