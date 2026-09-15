@@ -26,7 +26,10 @@
 #include <linux/unaligned.h>
 #include <linux/units.h>
 
+#include <linux/iio/buffer.h>
 #include <linux/iio/iio.h>
+#include <linux/iio/triggered_buffer.h>
+#include <linux/iio/trigger_consumer.h>
 
 #define AD4134_RESET_TIME_US			(10 * USEC_PER_SEC)
 
@@ -124,6 +127,14 @@ static const struct iio_chan_spec_ext_info ad4134_filter_type_ext_info[] = {
 	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),				\
 	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE),			\
 	.ext_info = ad4134_filter_type_ext_info,				\
+	.scan_index = (_index),							\
+	.scan_type = {								\
+		.format = IIO_SCAN_FORMAT_SIGNED_INT,				\
+		.realbits = AD4134_CHAN_PRECISION_BITS,				\
+		.storagebits = 32,						\
+		.shift = 8,							\
+		.endianness = IIO_BE,						\
+	},									\
 }
 
 static const struct iio_chan_spec ad4134_chan_set[] = {
@@ -131,6 +142,7 @@ static const struct iio_chan_spec ad4134_chan_set[] = {
 	AD4134_CHANNEL(1),
 	AD4134_CHANNEL(2),
 	AD4134_CHANNEL(3),
+	IIO_CHAN_SOFT_TIMESTAMP(4),
 };
 
 struct ad4134_state {
@@ -149,7 +161,10 @@ struct ad4134_state {
 	 * DMA (thus cache coherency maintenance) requires the transfer buffers
 	 * to live in their own cache lines.
 	 */
-	u8 rx_buf[AD4134_SPI_MAX_XFER_LEN] __aligned(IIO_DMA_MINALIGN);
+	union {
+		u8 reg[AD4134_SPI_MAX_XFER_LEN];
+		u32 scan[ARRAY_SIZE(ad4134_chan_set)];
+	} rx_buf __aligned(IIO_DMA_MINALIGN);
 	u8 tx_buf[AD4134_SPI_MAX_XFER_LEN];
 };
 
@@ -235,7 +250,7 @@ static int ad4134_reg_write(void *context, unsigned int reg, unsigned int val)
 	struct ad4134_state *st = context;
 	struct spi_transfer xfer = {
 		.tx_buf = st->tx_buf,
-		.rx_buf = st->rx_buf,
+		.rx_buf = st->rx_buf.reg,
 		.len = st->crc_en ? AD4134_SPI_MAX_XFER_LEN : 2,
 	};
 	int ret;
@@ -246,7 +261,7 @@ static int ad4134_reg_write(void *context, unsigned int reg, unsigned int val)
 	if (ret)
 		return ret;
 
-	if (st->crc_en && st->rx_buf[2] != st->tx_buf[2])
+	if (st->crc_en && st->rx_buf.reg[2] != st->tx_buf[2])
 		dev_dbg(&st->spi->dev, "reg write CRC check failed\n");
 
 	return 0;
@@ -269,8 +284,8 @@ static int ad4134_data_read(struct ad4134_state *st, unsigned int reg,
 	 * interface. Now we read data from all channels but keep only the bits
 	 * from the requested one.
 	 */
-	for (i = 0; i < ARRAY_SIZE(ad4134_chan_set); i++) {
-		ret = spi_write_then_read(st->spi, NULL, 0, st->rx_buf,
+	for (i = 0; i < AD4134_NUM_CHANNELS; i++) {
+		ret = spi_write_then_read(st->spi, NULL, 0, st->rx_buf.reg,
 					  BITS_TO_BYTES(AD4134_CHAN_PRECISION_BITS));
 		if (ret)
 			return ret;
@@ -281,7 +296,7 @@ static int ad4134_data_read(struct ad4134_state *st, unsigned int reg,
 		 * Clock out data from all channels to avoid that.
 		 */
 		if (i == AD4134_VREG_CH(reg))
-			sample = get_unaligned_be24(st->rx_buf);
+			sample = get_unaligned_be24(st->rx_buf.reg);
 	}
 	*val = sign_extend32(sample, AD4134_CHAN_PRECISION_BITS - 1);
 
@@ -293,7 +308,7 @@ static int ad4134_register_read(struct ad4134_state *st, unsigned int reg,
 {
 	struct spi_transfer xfer = {
 		.tx_buf = st->tx_buf,
-		.rx_buf = st->rx_buf,
+		.rx_buf = st->rx_buf.reg,
 		.len = st->crc_en ? AD4134_SPI_MAX_XFER_LEN : 2,
 	};
 	unsigned int inst;
@@ -306,10 +321,10 @@ static int ad4134_register_read(struct ad4134_state *st, unsigned int reg,
 	if (ret)
 		return ret;
 
-	*val = st->rx_buf[1];
+	*val = st->rx_buf.reg[1];
 
 	/* Check CRC */
-	if (st->crc_en && st->rx_buf[2] != st->tx_buf[2])
+	if (st->crc_en && st->rx_buf.reg[2] != st->tx_buf[2])
 		dev_dbg(&st->spi->dev, "reg read CRC check failed\n");
 
 	return 0;
@@ -333,6 +348,37 @@ static const struct regmap_config ad4134_regmap_config = {
 	.max_register = AD4134_CH_VREG(ARRAY_SIZE(ad4134_chan_set)),
 };
 
+static irqreturn_t ad4134_trigger_handler(int irq, void *p)
+{
+	struct iio_poll_func *pf = p;
+	struct iio_dev *indio_dev = pf->indio_dev;
+	struct ad4134_state *st = iio_priv(indio_dev);
+	unsigned int i = 0;
+	int ret;
+
+	gpiod_set_value_cansleep(st->odr_gpio, 1);
+	fsleep(1);
+	gpiod_set_value_cansleep(st->odr_gpio, 0);
+
+	for (unsigned int ch = 0; ch < AD4134_NUM_CHANNELS; ch++) {
+		ret = spi_write_then_read(st->spi, NULL, 0, &st->rx_buf.scan[ch],
+					  BITS_TO_BYTES(AD4134_CHAN_PRECISION_BITS));
+		if (ret)
+			goto err_out;
+
+		if (test_bit(ch, indio_dev->active_scan_mask) && ch != i)
+			memcpy(&st->rx_buf.scan[i++], &st->rx_buf.scan[ch],
+			       sizeof(st->rx_buf.scan[ch]));
+	}
+
+	iio_push_to_buffers_with_ts(indio_dev, &st->rx_buf.scan,
+				    sizeof(st->rx_buf.scan), pf->timestamp);
+
+err_out:
+	iio_trigger_notify_done(indio_dev->trig);
+	return IRQ_HANDLED;
+}
+
 static int ad4134_read_raw(struct iio_dev *indio_dev,
 			   struct iio_chan_spec const *chan,
 			   int *val, int *val2, long info)
@@ -342,6 +388,10 @@ static int ad4134_read_raw(struct iio_dev *indio_dev,
 
 	switch (info) {
 	case IIO_CHAN_INFO_RAW: {
+		IIO_DEV_ACQUIRE_DIRECT_MODE(indio_dev, claim);
+		if (IIO_DEV_ACQUIRE_FAILED(claim))
+			return -EBUSY;
+
 		guard(mutex)(&st->lock);
 
 		gpiod_set_value_cansleep(st->odr_gpio, 1);
@@ -545,6 +595,13 @@ static int ad4134_probe(struct spi_device *spi)
 	if (ret)
 		return dev_err_probe(dev, ret,
 				     "failed to setup minimum I/O mode\n");
+
+	ret = devm_iio_triggered_buffer_setup(dev, indio_dev,
+					      iio_pollfunc_store_time,
+					      ad4134_trigger_handler,
+					      NULL);
+	if (ret)
+		return ret;
 
 	/* Bump precision to 24-bit */
 	ret = regmap_update_bits(st->regmap, AD4134_DATA_PACKET_CONFIG_REG,
