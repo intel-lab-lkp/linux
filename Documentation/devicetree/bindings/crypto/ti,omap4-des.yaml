@@ -31,13 +31,6 @@ properties:
       - const: tx
       - const: rx
 
-  clocks:
-    maxItems: 1
-
-  clock-names:
-    items:
-      - const: fck
-
 dependencies:
   dmas: [ dma-names ]
 
@@ -45,8 +38,6 @@ required:
   - compatible
   - reg
   - interrupts
-  - clocks
-  - clock-names
 
 additionalProperties: false
 
@@ -58,8 +49,6 @@ examples:
         compatible = "ti,omap4-des";
         reg = <0x480a5000 0xa0>;
         interrupts = <GIC_SPI 82 IRQ_TYPE_LEVEL_HIGH>;
-        clocks = <&l3_iclk_div>;
-        clock-names = "fck";
         dmas = <&sdma 117>, <&sdma 116>;
         dma-names = "tx", "rx";
     };
