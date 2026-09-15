@@ -239,6 +239,15 @@ static struct pci_dev *get_next_root(struct pci_dev *root)
 	return root;
 }
 
+static void amd_smn_release_config_regions(u16 num_roots)
+{
+	struct pci_dev *root __free(pci_dev_put) = NULL;
+
+	/* Release the PCI config space for each root device. */
+	while (num_roots-- && (root = get_next_root(root)))
+		pci_release_config_region(root, 0, PCI_CFG_SPACE_SIZE);
+}
+
 static bool enable_dfs;
 
 static int __init amd_smn_enable_dfs(char *str)
@@ -274,6 +283,7 @@ static int __init amd_smn_init(void)
 		 */
 		if (!pci_request_config_region_exclusive(root, 0, PCI_CFG_SPACE_SIZE, NULL)) {
 			pci_err(root, "Failed to reserve config space\n");
+			amd_smn_release_config_regions(num_roots);
 			return -EEXIST;
 		}
 
@@ -287,8 +297,10 @@ static int __init amd_smn_init(void)
 
 	num_nodes = amd_num_nodes();
 	amd_roots = kzalloc_objs(*amd_roots, num_nodes);
-	if (!amd_roots)
+	if (!amd_roots) {
+		amd_smn_release_config_regions(num_roots);
 		return -ENOMEM;
+	}
 
 	roots_per_node = num_roots / num_nodes;
 	if (!roots_per_node) {
