@@ -45,6 +45,8 @@ enum cpufreq_table_sorting {
 struct cpufreq_cpuinfo {
 	unsigned int		max_freq;
 	unsigned int		min_freq;
+	/* Maximum sustainable frequency excluding boost, or 0 if unknown. */
+	unsigned int		max_sustainable_freq;
 
 	/* in 10^(-9) s = nanoseconds */
 	unsigned int		transition_latency;

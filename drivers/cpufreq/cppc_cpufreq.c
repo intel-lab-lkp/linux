@@ -682,7 +682,8 @@ static int cppc_cpufreq_cpu_init(struct cpufreq_policy *policy)
 	policy->cpuinfo.min_freq = cppc_perf_to_khz(caps, caps->lowest_perf);
 	policy->cpuinfo.max_freq = cppc_perf_to_khz(caps, policy->boost_enabled ?
 						    caps->highest_perf : caps->nominal_perf);
-
+	policy->cpuinfo.max_sustainable_freq =
+		cppc_perf_to_khz(caps, caps->nominal_perf);
 	policy->transition_delay_us = cppc_cpufreq_get_transition_delay_us(cpu);
 	policy->shared_type = cpu_data->shared_type;
 

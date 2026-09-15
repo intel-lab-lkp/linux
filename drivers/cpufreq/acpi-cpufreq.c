@@ -856,6 +856,9 @@ static int acpi_cpufreq_cpu_init(struct cpufreq_policy *policy)
 	}
 	freq_table[valid_states].frequency = CPUFREQ_TABLE_END;
 
+	/* Init max sustainable cpu frequency */
+	policy->cpuinfo.max_sustainable_freq = freq_table[0].frequency;
+
 	max_boost_ratio = get_max_boost_ratio(cpu, &nominal_freq);
 	if (max_boost_ratio) {
 		unsigned int freq = nominal_freq;

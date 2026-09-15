@@ -1428,6 +1428,7 @@ static void __intel_pstate_update_max_freq(struct cpufreq_policy *policy,
 
 	policy->cpuinfo.max_freq = READ_ONCE(global.no_turbo) ?
 			cpudata->pstate.max_freq : cpudata->pstate.turbo_freq;
+	policy->cpuinfo.max_sustainable_freq = cpudata->pstate.max_freq;
 
 	refresh_frequency_limits(policy);
 }
@@ -3046,6 +3047,7 @@ static int __intel_pstate_cpu_init(struct cpufreq_policy *policy)
 	policy->cpuinfo.min_freq = cpu->pstate.min_freq;
 	policy->cpuinfo.max_freq = READ_ONCE(global.no_turbo) ?
 			cpu->pstate.max_freq : cpu->pstate.turbo_freq;
+	policy->cpuinfo.max_sustainable_freq = cpu->pstate.max_freq;
 
 	intel_pstate_init_acpi_perf_limits(policy);
 
