@@ -64,6 +64,7 @@ sys.path.insert(0, os.path.join(SRC_DIR, LIB_DIR))
 
 from kdoc.python_version import PythonVersion
 from kdoc.latex_fonts import LatexFontChecker
+from kdoc.docutils_version import DocutilsVersionChecker
 from jobserver import JobserverExec         # pylint: disable=C0413,C0411,E0401
 
 #
@@ -466,6 +467,8 @@ class SphinxBuilder:
         max_len = 0
         tex_suffix = ".tex"
         tex_files = []
+        sphinx_build_path = shutil.which(self.sphinxbuild,
+                                         path=self.env["PATH"])
 
         #
         # Since early 2024, Fedora and openSUSE tumbleweed have started
@@ -554,9 +557,11 @@ class SphinxBuilder:
 
             print()
             if build_failed:
-                msg = LatexFontChecker().check()
-                if msg:
-                    print(msg)
+                for checker in (DocutilsVersionChecker(sphinx_build_path),
+                                LatexFontChecker()):
+                    msg = checker.check()
+                    if msg:
+                        print(msg)
 
                 sys.exit("Error: not all PDF files were created.")
 
@@ -564,9 +569,11 @@ class SphinxBuilder:
             n_failures = len(builds)
             failures = ", ".join(builds.keys())
 
-            msg = LatexFontChecker().check()
-            if msg:
-                print(msg)
+            for checker in (DocutilsVersionChecker(sphinx_build_path),
+                            LatexFontChecker()):
+                msg = checker.check()
+                if msg:
+                    print(msg)
 
             sys.exit(f"Error: Can't build {n_failures} PDF file(s): {failures}")
 
