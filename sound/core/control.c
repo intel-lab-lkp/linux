@@ -14,6 +14,7 @@
 #include <linux/mm.h>
 #include <linux/math64.h>
 #include <linux/sched/signal.h>
+#include <linux/cleanup.h>
 #include <sound/core.h>
 #include <sound/minors.h>
 #include <sound/info.h>
@@ -904,36 +905,45 @@ static int snd_ctl_card_bytes(struct snd_card *card,
 			      struct snd_ctl_card_bytes *info,
 			      unsigned int __user *data_len_out)
 {
+	char *copy __free(kfree) = NULL;
+	bool too_small = false;
 	unsigned int data_len;
 
-	switch (info->type) {
-	case SND_CTL_CARD_BTYPE_COMPONENTS:
-		scoped_guard(rwsem_read, &snd_ioctl_rwsem) {
-			const char *components = card->components;
-
-			if (!components)
-				components = "";
-
-			data_len = strlen(components) + 1;
-
-			if (!info->data || info->data_allocated == 0)
-				break;
-
-			if (info->data_allocated < data_len)
-				return -ENOMEM;
-
-			if (copy_to_user(u64_to_user_ptr(info->data), components, data_len))
-				return -EFAULT;
-		}
-		break;
-	default:
+	if (info->type != SND_CTL_CARD_BTYPE_COMPONENTS)
 		return -EINVAL;
+
+	scoped_guard(rwsem_read, &snd_ioctl_rwsem) {
+		const char *components = card->components;
+
+		if (!components)
+			components = "";
+
+		data_len = strlen(components) + 1;
+
+		if (info->data && info->data_allocated != 0) {
+			if (info->data_allocated < data_len) {
+				too_small = true;
+			} else {
+				copy = kmemdup(components, data_len, GFP_KERNEL);
+				if (!copy)
+					return -ENOMEM;
+			}
+		}
 	}
 
+	/* Copy outside the lock.  A user buffer that faults can be made to take
+	 * arbitrarily long (userfaultfd, FUSE), and snd_ioctl_rwsem is global:
+	 * holding it across the copy lets an unprivileged reader block the card
+	 * probe path, and with it a card teardown waiting on that path.
+	 */
+	if (copy && copy_to_user(u64_to_user_ptr(info->data), copy, data_len))
+		return -EFAULT;
+
+	/* report the required size even when the buffer was too small */
 	if (put_user(data_len, data_len_out))
 		return -EFAULT;
 
-	return 0;
+	return too_small ? -ENOMEM : 0;
 }
 
 static int snd_ctl_card_bytes_user(struct snd_card *card,
