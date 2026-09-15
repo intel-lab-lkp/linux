@@ -12,6 +12,9 @@
  * IOMMU_DOMAIN_DMA default domains. Only one provider can be compiled in at a
  * time.
  */
+static_assert(!(IS_ENABLED(CONFIG_IOMMU_DMA) &&
+		IS_ENABLED(CONFIG_ARM_DMA_USE_IOMMU)));
+
 #if defined(CONFIG_ARM_DMA_USE_IOMMU)
 
 #include <asm/dma-iommu.h>
