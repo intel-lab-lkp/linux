@@ -2893,6 +2893,8 @@ static int vsock_net_child_mode_string(const struct ctl_table *table, int write,
 				      vsock_net_child_mode(net), &new_mode);
 	if (ret)
 		return ret;
+	if (!*lenp)
+		return 0;
 
 	if (write) {
 		/* Prevent a "local" namespace from escalating to "global",
