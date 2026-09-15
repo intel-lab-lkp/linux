@@ -1705,7 +1705,10 @@ static void ceu_remove(struct platform_device *pdev)
 
 	v4l2_device_unregister(&ceudev->v4l2_dev);
 
-	video_unregister_device(&ceudev->vdev);
+	if (video_is_registered(&ceudev->vdev))
+		video_unregister_device(&ceudev->vdev);
+	else
+		kfree(ceudev);
 }
 
 static const struct dev_pm_ops ceu_pm_ops = {
