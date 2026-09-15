@@ -55,7 +55,6 @@ static int cdns_plat_pcie_probe(struct platform_device *pdev)
 	if (!cdns_plat_pcie)
 		return -ENOMEM;
 
-	platform_set_drvdata(pdev, cdns_plat_pcie);
 	if (is_rc) {
 		if (!IS_ENABLED(CONFIG_PCIE_CADENCE_PLAT_HOST))
 			return -ENODEV;
@@ -113,6 +112,8 @@ static int cdns_plat_pcie_probe(struct platform_device *pdev)
 		if (ret)
 			goto err_init;
 	}
+
+	platform_set_drvdata(pdev, cdns_plat_pcie->pcie);
 
 	return 0;
 
