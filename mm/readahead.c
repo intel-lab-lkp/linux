@@ -204,6 +204,47 @@ static struct folio *ractl_alloc_folio(struct readahead_control *ractl,
 	return folio;
 }
 
+static inline int ra_alloc_folio(struct readahead_control *ractl, pgoff_t index,
+		pgoff_t mark, unsigned int order, gfp_t gfp)
+{
+	int err;
+	struct folio *folio = ractl_alloc_folio(ractl, gfp, order);
+
+	if (!folio)
+		return -ENOMEM;
+	mark = round_down(mark, 1UL << order);
+	if (index == mark)
+		folio_set_readahead(folio);
+	err = filemap_add_folio(ractl->mapping, folio, index, gfp);
+	if (err) {
+		folio_put(folio);
+		return err;
+	}
+
+	ractl->_nr_pages += 1UL << order;
+	ractl->_workingset |= folio_test_workingset(folio);
+	return 0;
+}
+
+/*
+ * The largest folio that fits at @index: it must be naturally aligned
+ * and must not extend past the @remaining pages left of the request.
+ * Nothing beyond the request is read; for a forced read (WILLNEED,
+ * readahead(2), FMODE_RANDOM) the request is all the caller asked for.
+ * This is the policy page_cache_ra_order() and __filemap_get_folio()
+ * already use.
+ */
+static unsigned int ra_unbounded_order(pgoff_t index, unsigned long remaining,
+				       unsigned int min_order,
+				       unsigned int max_order)
+{
+	unsigned int order = min_t(unsigned int, max_order, ilog2(remaining));
+
+	if (index)
+		order = min_t(unsigned int, order, __ffs(index));
+	return max(order, min_order);
+}
+
 /**
  * page_cache_ra_unbounded - Start unchecked readahead.
  * @ractl: Readahead control.
@@ -214,6 +255,9 @@ static struct folio *ractl_alloc_folio(struct readahead_control *ractl,
  * readahead beyond a file's stated i_size.  This is almost certainly
  * not the function you want to call.  Use page_cache_async_readahead()
  * or page_cache_sync_readahead() instead.
+ *
+ * Folios as large as the mapping allows are used, but the request is
+ * not extended to fit them.
  *
  * Context: File is referenced by caller, and ractl->mapping->invalidate_lock
  * must be held by the caller at least in shared mode.  Mutexes may be held by
@@ -227,6 +271,8 @@ void page_cache_ra_unbounded(struct readahead_control *ractl,
 	gfp_t gfp_mask = readahead_gfp_mask(mapping);
 	unsigned long mark = ULONG_MAX, i = 0;
 	unsigned int min_nrpages = mapping_min_folio_nrpages(mapping);
+	unsigned int min_order = mapping_min_folio_order(mapping);
+	unsigned int max_order = mapping_max_folio_order(mapping);
 
 	/*
 	 * Partway through the readahead operation, we will have added
@@ -247,19 +293,13 @@ void page_cache_ra_unbounded(struct readahead_control *ractl,
 	index = mapping_align_index(mapping, index);
 
 	/*
-	 * As iterator `i` is aligned to min_nrpages, round_up the
-	 * difference between nr_to_read and lookahead_size to mark the
-	 * index that only has lookahead or "async_region" to set the
-	 * readahead flag.
+	 * Folios start at multiples of min_nrpages, so round_up the
+	 * index that only has lookahead or "async_region" to mark the
+	 * folio that gets the readahead flag.
 	 */
-	if (lookahead_size <= nr_to_read) {
-		unsigned long ra_folio_index;
-
-		ra_folio_index = round_up(readahead_index(ractl) +
-					  nr_to_read - lookahead_size,
-					  min_nrpages);
-		mark = ra_folio_index - index;
-	}
+	if (lookahead_size <= nr_to_read)
+		mark = round_up(readahead_index(ractl) + nr_to_read -
+				lookahead_size, min_nrpages);
 	nr_to_read += readahead_index(ractl) - index;
 	ractl->_index = index;
 
@@ -268,6 +308,7 @@ void page_cache_ra_unbounded(struct readahead_control *ractl,
 	 */
 	while (i < nr_to_read) {
 		struct folio *folio = xa_load(&mapping->i_pages, index + i);
+		unsigned int order;
 		int ret;
 
 		if (folio && !xa_is_value(folio)) {
@@ -285,26 +326,34 @@ void page_cache_ra_unbounded(struct readahead_control *ractl,
 			continue;
 		}
 
-		folio = ractl_alloc_folio(ractl, gfp_mask,
-					mapping_min_folio_order(mapping));
-		if (!folio)
-			break;
-
-		ret = filemap_add_folio(mapping, folio, index + i, gfp_mask);
-		if (ret < 0) {
-			folio_put(folio);
-			if (ret == -ENOMEM)
+		order = ra_unbounded_order(index + i, nr_to_read - i,
+					   min_order, max_order);
+		for (;;) {
+			ret = ra_alloc_folio(ractl, index + i, mark, order,
+					     gfp_mask);
+			if (!ret || order == min_order)
 				break;
+			/*
+			 * -ENOMEM: memory is too fragmented for a folio this
+			 * large, or the memcg would not take it; don't ask
+			 * for that order again during this request.
+			 * -EEXIST: something already sits within the range
+			 * this folio would cover, but the index itself may
+			 * still be free in front of it.
+			 */
+			if (ret == -ENOMEM)
+				max_order = order - 1;
+			order--;
+		}
+		if (ret == -ENOMEM)
+			break;
+		if (ret) {
 			read_pages(ractl);
 			ractl->_index += min_nrpages;
 			i = ractl->_index - index;
 			continue;
 		}
-		if (i == mark)
-			folio_set_readahead(folio);
-		ractl->_workingset |= folio_test_workingset(folio);
-		ractl->_nr_pages += min_nrpages;
-		i += min_nrpages;
+		i += 1UL << order;
 	}
 
 	/*
@@ -455,28 +504,6 @@ static unsigned long get_next_ra_size(struct file_ra_state *ra,
  * The code ramps up the readahead size aggressively at first, but slow down as
  * it approaches max_readahead.
  */
-
-static inline int ra_alloc_folio(struct readahead_control *ractl, pgoff_t index,
-		pgoff_t mark, unsigned int order, gfp_t gfp)
-{
-	int err;
-	struct folio *folio = ractl_alloc_folio(ractl, gfp, order);
-
-	if (!folio)
-		return -ENOMEM;
-	mark = round_down(mark, 1UL << order);
-	if (index == mark)
-		folio_set_readahead(folio);
-	err = filemap_add_folio(ractl->mapping, folio, index, gfp);
-	if (err) {
-		folio_put(folio);
-		return err;
-	}
-
-	ractl->_nr_pages += 1UL << order;
-	ractl->_workingset |= folio_test_workingset(folio);
-	return 0;
-}
 
 void page_cache_ra_order(struct readahead_control *ractl,
 		struct file_ra_state *ra)
