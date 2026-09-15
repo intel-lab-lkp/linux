@@ -78,6 +78,13 @@ struct tegra_smmu_swgroup {
 	 * tegra_smmu_enable_translation().
 	 */
 	bool defer_enable;
+
+	/*
+	 * Set once the clients behind this swgroup are known to work with an
+	 * IOMMU_DOMAIN_DMA default domain. All swgroups of a
+	 * tegra_smmu_group_soc must agree.
+	 */
+	bool use_dma_api;
 };
 
 struct tegra_smmu_group_soc {

@@ -1037,12 +1037,26 @@ static int tegra_smmu_of_xlate(struct device *dev,
 
 static int tegra_smmu_def_domain_type(struct device *dev)
 {
+	struct iommu_fwspec *fwspec = dev_iommu_fwspec_get(dev);
+	struct tegra_smmu *smmu = dev_iommu_priv_get(dev);
+	unsigned int i;
+
+	if (!fwspec || !smmu)
+		return IOMMU_DOMAIN_IDENTITY;
+
 	/*
-	 * FIXME: For now we want to run all translation in IDENTITY mode, due
-	 * to some device quirks. Better would be to just quirk the troubled
-	 * devices.
+	 * Only clients known to work with the DMA API get a DMA default domain.
+	 * The rest keep running in identity mode.
 	 */
-	return IOMMU_DOMAIN_IDENTITY;
+	for (i = 0; i < fwspec->num_ids; i++) {
+		const struct tegra_smmu_swgroup *group;
+
+		group = tegra_smmu_find_swgroup(smmu, fwspec->ids[i]);
+		if (!group || !group->use_dma_api)
+			return IOMMU_DOMAIN_IDENTITY;
+	}
+
+	return IOMMU_DOMAIN_DMA;
 }
 
 static const struct iommu_ops tegra_smmu_ops = {
@@ -1151,6 +1165,40 @@ static void tegra_smmu_debugfs_exit(struct tegra_smmu *smmu)
 	debugfs_remove_recursive(smmu->debugfs);
 }
 
+/*
+ * The default domain type is a property of the IOMMU group, so all swgroups in
+ * one group must agree on use_dma_api. Otherwise the core sees conflicting
+ * def_domain_type and falls back to identity for the whole group.
+ */
+static void tegra_smmu_check_groups(struct tegra_smmu *smmu)
+{
+	const struct tegra_smmu_soc *soc = smmu->soc;
+	unsigned int i, j;
+
+	for (i = 0; i < soc->num_groups; i++) {
+		const struct tegra_smmu_group_soc *group = &soc->groups[i];
+		int dma_api = -1;
+
+		for (j = 0; j < group->num_swgroups; j++) {
+			const struct tegra_smmu_swgroup *swgrp;
+
+			swgrp = tegra_smmu_find_swgroup(smmu,
+							group->swgroups[j]);
+			if (!swgrp)
+				continue;
+
+			if (dma_api < 0)
+				dma_api = swgrp->use_dma_api;
+			else if (swgrp->use_dma_api != !!dma_api)
+				break;
+		}
+
+		WARN(j < group->num_swgroups,
+		     "SMMU group %s mixes DMA API and identity swgroups\n",
+		     group->name);
+	}
+}
+
 struct tegra_smmu *tegra_smmu_probe(struct device *dev,
 				    const struct tegra_smmu_soc *soc,
 				    struct tegra_mc *mc)
@@ -1184,6 +1232,8 @@ struct tegra_smmu *tegra_smmu_probe(struct device *dev,
 	smmu->soc = soc;
 	smmu->dev = dev;
 	smmu->mc = mc;
+
+	tegra_smmu_check_groups(smmu);
 
 	smmu->pfn_mask =
 		BIT_MASK(mc->soc->num_address_bits - SMMU_PTE_SHIFT) - 1;

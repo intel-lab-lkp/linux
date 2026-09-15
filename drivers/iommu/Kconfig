@@ -252,6 +252,7 @@ config TEGRA_IOMMU_SMMU
 	depends on TEGRA_AHB
 	depends on TEGRA_MC
 	select IOMMU_API
+	select ARM_DMA_USE_IOMMU if ARM
 	help
 	  This driver supports the IOMMU hardware (SMMU) found on NVIDIA Tegra
 	  SoCs (Tegra30 up to Tegra210).
