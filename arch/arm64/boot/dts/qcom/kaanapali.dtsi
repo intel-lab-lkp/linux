@@ -3619,7 +3619,9 @@
 
 				operating-points-v2 = <&mdp_opp_table>;
 
-				power-domains = <&rpmhpd RPMHPD_MMCX>;
+				power-domains = <&rpmhpd RPMHPD_MMCX>,
+						<&dispcc DISP_CC_MDSS_CORE_INT2_GDSC>;
+				power-domain-names = "mmcx", "int2";
 
 				ports {
 					#address-cells = <1>;
