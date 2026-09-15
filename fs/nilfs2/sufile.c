@@ -870,10 +870,14 @@ ssize_t nilfs_sufile_get_suinfo(struct inode *sufile, __u64 segnum, void *buf,
 
 	down_read(&NILFS_MDT(sufile)->mi_sem);
 
+	nsegs = nilfs_sufile_get_nsegments(sufile);
+	if (segnum >= nsegs) {
+		ret = 0;
+		goto out;
+	}
+
 	segusages_per_block = nilfs_sufile_segment_usages_per_block(sufile);
-	nsegs = min_t(unsigned long,
-		      nilfs_sufile_get_nsegments(sufile) - segnum,
-		      nsi);
+	nsegs = min_t(unsigned long, nsegs - segnum, nsi);
 	for (i = 0; i < nsegs; i += n, segnum += n) {
 		n = min_t(unsigned long,
 			  segusages_per_block -
