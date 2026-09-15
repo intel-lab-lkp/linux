@@ -1597,6 +1597,25 @@ static void __meminit accept_and_free_block(struct page *page,
 	__free_pages_ok(page, order, FPI_TO_TAIL);
 }
 
+static void __meminit free_poisoned_block(struct page *page, unsigned int order,
+					  enum meminit_context context)
+{
+	unsigned long i, nr_pages = 1UL << order;
+
+	for (i = 0; i < nr_pages; i++) {
+		struct page *p = page + i;
+		phys_addr_t phys = page_to_phys(p);
+
+		if (range_contains_poisoned_memory(phys, PAGE_SIZE)) {
+			hwpoison_boot_page(p, context);
+			continue;
+		}
+
+		/* this part of the block is not poisoned */
+		accept_and_free_block(p, 0);
+	}
+}
+
 void __meminit __free_pages_core(struct page *page, unsigned int order,
 		enum meminit_context context)
 {
@@ -1629,6 +1648,13 @@ void __meminit __free_pages_core(struct page *page, unsigned int order,
 
 		/* memblock adjusts totalram_pages() manually. */
 		atomic_long_add(nr_pages, &page_zone(page)->managed_pages);
+	}
+
+	/* First: a block parked by __free_unaccepted() never returns here. */
+	if (range_contains_poisoned_memory(page_to_phys(page),
+					   PAGE_SIZE << order)) {
+		free_poisoned_block(page, order, context);
+		return;
 	}
 
 	accept_and_free_block(page, order);
