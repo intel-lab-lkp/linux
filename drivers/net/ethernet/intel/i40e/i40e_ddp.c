@@ -55,7 +55,7 @@ static int i40e_ddp_does_profile_exist(struct i40e_hw *hw,
 	struct i40e_ddp_profile_list *profile_list;
 	u8 buff[I40E_PROFILE_LIST_SIZE];
 	int status;
-	int i;
+	u32 i, p_count;
 
 	status = i40e_aq_get_ddp_list(hw, buff, I40E_PROFILE_LIST_SIZE, 0,
 				      NULL);
@@ -63,7 +63,12 @@ static int i40e_ddp_does_profile_exist(struct i40e_hw *hw,
 		return -1;
 
 	profile_list = (struct i40e_ddp_profile_list *)buff;
-	for (i = 0; i < profile_list->p_count; i++) {
+	/* Never walk past the end of buff[], the profile count reported by
+	 * the firmware is not guaranteed to fit into the buffer we gave it.
+	 */
+	p_count = min_t(u32, profile_list->p_count, I40E_MAX_PROFILE_NUM);
+
+	for (i = 0; i < p_count; i++) {
 		if (i40e_ddp_profiles_eq(pinfo, &profile_list->p_info[i]))
 			return 1;
 	}
@@ -110,7 +115,7 @@ static int i40e_ddp_does_profile_overlap(struct i40e_hw *hw,
 	struct i40e_ddp_profile_list *profile_list;
 	u8 buff[I40E_PROFILE_LIST_SIZE];
 	int status;
-	int i;
+	u32 i, p_count;
 
 	status = i40e_aq_get_ddp_list(hw, buff, I40E_PROFILE_LIST_SIZE, 0,
 				      NULL);
@@ -118,7 +123,12 @@ static int i40e_ddp_does_profile_overlap(struct i40e_hw *hw,
 		return -EIO;
 
 	profile_list = (struct i40e_ddp_profile_list *)buff;
-	for (i = 0; i < profile_list->p_count; i++) {
+	/* Never walk past the end of buff[], the profile count reported by
+	 * the firmware is not guaranteed to fit into the buffer we gave it.
+	 */
+	p_count = min_t(u32, profile_list->p_count, I40E_MAX_PROFILE_NUM);
+
+	for (i = 0; i < p_count; i++) {
 		if (i40e_ddp_profiles_overlap(pinfo,
 					      &profile_list->p_info[i]))
 			return 1;
