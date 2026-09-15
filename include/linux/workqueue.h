@@ -6,6 +6,7 @@
 #ifndef _LINUX_WORKQUEUE_H
 #define _LINUX_WORKQUEUE_H
 
+#include <linux/compiler.h>
 #include <linux/alloc_tag.h>
 #include <linux/timer.h>
 #include <linux/linkage.h>
@@ -250,13 +251,16 @@ struct execute_work {
 	}
 
 #define DECLARE_WORK(n, f)						\
-	struct work_struct n = __WORK_INITIALIZER(n, f)
+	struct work_struct n = __WORK_INITIALIZER(n, f);		\
+	ASSERT_STATIC_STORAGE(n)
 
 #define DECLARE_DELAYED_WORK(n, f)					\
-	struct delayed_work n = __DELAYED_WORK_INITIALIZER(n, f, 0)
+	struct delayed_work n = __DELAYED_WORK_INITIALIZER(n, f, 0);	\
+	ASSERT_STATIC_STORAGE(n)
 
 #define DECLARE_DEFERRABLE_WORK(n, f)					\
-	struct delayed_work n = __DELAYED_WORK_INITIALIZER(n, f, TIMER_DEFERRABLE)
+	struct delayed_work n = __DELAYED_WORK_INITIALIZER(n, f, TIMER_DEFERRABLE);	\
+	ASSERT_STATIC_STORAGE(n)
 
 #ifdef CONFIG_DEBUG_OBJECTS_WORK
 extern void __init_work(struct work_struct *work, int onstack);
