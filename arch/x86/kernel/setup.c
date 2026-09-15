@@ -19,6 +19,7 @@
 #include <linux/iscsi_ibft.h>
 #include <linux/kexec_handover.h>
 #include <linux/memblock.h>
+#include <linux/overflow.h>
 #include <linux/panic_notifier.h>
 #include <linux/pci.h>
 #include <linux/random.h>
@@ -487,7 +488,7 @@ static void __init parse_setup_data(void)
 		u32 data_len, data_type;
 
 		data = early_memremap(pa_data, sizeof(*data));
-		data_len = data->len + sizeof(struct setup_data);
+		data_len = struct_size(data, data, data->len);
 		data_type = data->type;
 		pa_next = data->next;
 		early_memunmap(data, sizeof(*data));
@@ -584,7 +585,7 @@ static void __init memblock_x86_reserve_range_setup_data(void)
 		len = sizeof(*data);
 		pa_next = data->next;
 
-		memblock_reserve_kern(pa_data, sizeof(*data) + data->len);
+		memblock_reserve_kern(pa_data, struct_size(data, data, data->len));
 
 		if (data->type == SETUP_INDIRECT) {
 			len += data->len;
