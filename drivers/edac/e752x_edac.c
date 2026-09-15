@@ -1387,7 +1387,7 @@ static int e752x_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	edac_dbg(0, "\n");
 
 	/* wake up and enable device */
-	if (pci_enable_device(pdev) < 0)
+	if (pcim_enable_device(pdev) < 0)
 		return -EIO;
 
 	return e752x_probe1(pdev, ent->driver_data);
