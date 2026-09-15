@@ -7,6 +7,7 @@
 #include "wacom.h"
 #include <linux/input/mt.h>
 #include <linux/jiffies.h>
+#include <linux/math64.h>
 
 /* resolution for penabled devices */
 #define WACOM_PL_RES		20
@@ -1960,6 +1961,24 @@ static void wacom_wac_battery_usage_mapping(struct hid_device *hdev,
 	return;
 }
 
+static bool wacom_wac_battery_percentage(struct hid_field *field, __s32 value,
+					 __s32 *percentage)
+{
+	s64 range = (s64)field->logical_maximum - field->logical_minimum;
+	s64 result;
+
+	if (range <= 0)
+		return false;
+
+	result = div64_s64(((s64)value - field->logical_minimum) * 100,
+			   range);
+	if (result < 0 || result > 100)
+		return false;
+
+	*percentage = result;
+	return true;
+}
+
 static void wacom_wac_battery_event(struct hid_device *hdev, struct hid_field *field,
 		struct hid_usage *usage, __s32 value)
 {
@@ -1973,7 +1992,8 @@ static void wacom_wac_battery_event(struct hid_device *hdev, struct hid_field *f
 			wacom_wac->hid_data.bat_status = POWER_SUPPLY_STATUS_UNKNOWN;
 		}
 		else {
-			value = value * 100 / (field->logical_maximum - field->logical_minimum);
+			if (!wacom_wac_battery_percentage(field, value, &value))
+				return;
 			wacom_wac->hid_data.battery_capacity = value;
 			wacom_wac->hid_data.bat_connected = 1;
 			wacom_wac->hid_data.bat_status = WACOM_POWER_SUPPLY_STATUS_AUTO;
@@ -1981,7 +2001,8 @@ static void wacom_wac_battery_event(struct hid_device *hdev, struct hid_field *f
 		wacom_wac->features.quirks |= WACOM_QUIRK_BATTERY;
 		break;
 	case WACOM_HID_WD_BATTERY_LEVEL:
-		value = value * 100 / (field->logical_maximum - field->logical_minimum);
+		if (!wacom_wac_battery_percentage(field, value, &value))
+			return;
 		wacom_wac->hid_data.battery_capacity = value;
 		wacom_wac->hid_data.bat_connected = 1;
 		wacom_wac->hid_data.bat_status = WACOM_POWER_SUPPLY_STATUS_AUTO;
