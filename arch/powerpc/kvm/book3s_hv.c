@@ -4969,9 +4969,8 @@ int kvmhv_run_single_vcpu(struct kvm_vcpu *vcpu, u64 time_limit,
 
 	if (!nested) {
 		kvmppc_core_prepare_to_enter(vcpu);
-		if (test_bit(BOOK3S_IRQPRIO_EXTERNAL,
-			     &vcpu->arch.pending_exceptions) ||
-		    xive_interrupt_pending(vcpu)) {
+		if (!xive_interrupt_pending(vcpu) && test_bit(BOOK3S_IRQPRIO_EXTERNAL,
+							      &vcpu->arch.pending_exceptions)) {
 			/*
 			 * For nested HV, don't synthesize but always pass MER,
 			 * the L0 will be able to optimise that more
