@@ -35,8 +35,8 @@ void intel_alpm_lobf_enable(const struct intel_crtc_state *new_crtc_state);
 void intel_alpm_lobf_debugfs_add(struct intel_connector *connector);
 bool intel_alpm_aux_wake_supported(struct intel_dp *intel_dp);
 bool intel_alpm_aux_less_wake_supported(struct intel_dp *intel_dp);
-bool intel_alpm_is_alpm_aux_less(struct intel_dp *intel_dp,
-				 const struct intel_crtc_state *crtc_state);
+bool intel_alpm_is_aux_less(struct intel_dp *intel_dp,
+			    const struct intel_crtc_state *crtc_state);
 bool intel_alpm_pr_as_sdp_skip_frames_enabled(struct intel_dp *intel_dp,
 					      const struct intel_crtc_state *crtc_state);
 void intel_alpm_pr_as_sdp_update(const struct intel_crtc_state *crtc_state);
