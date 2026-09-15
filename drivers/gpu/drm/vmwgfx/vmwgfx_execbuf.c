@@ -4109,15 +4109,17 @@ int vmw_execbuf_process(struct drm_file *file_priv,
 	uint32_t handle = 0;
 	int ret;
 	int32_t out_fence_fd = -1;
+	const struct fd_slot *out_fd = NULL;
 	struct sync_file *sync_file = NULL;
 	DECLARE_VAL_CONTEXT(val_ctx, sw_context, 1);
 
 	if (flags & DRM_VMW_EXECBUF_FLAG_EXPORT_FENCE_FD) {
-		out_fence_fd = get_unused_fd_flags(O_CLOEXEC);
-		if (out_fence_fd < 0) {
+		out_fd = fd_prepare(O_CLOEXEC);
+		if (IS_ERR(out_fd)) {
 			VMW_DEBUG_USER("Failed to get a fence fd.\n");
-			return out_fence_fd;
+			return PTR_ERR(out_fd);
 		}
+		out_fence_fd = fd_prepare_fd(out_fd);
 	}
 
 	if (throttle_us) {
@@ -4256,27 +4258,20 @@ int vmw_execbuf_process(struct drm_file *file_priv,
 		sync_file = sync_file_create(&fence->base);
 		if (!sync_file) {
 			VMW_DEBUG_USER("Sync file create failed for fence\n");
-			put_unused_fd(out_fence_fd);
+			/* The reserved descriptor is released on return. */
 			out_fence_fd = -1;
 
 			(void) vmw_fence_obj_wait(fence, false, false,
 						  VMW_FENCE_WAIT_TIMEOUT);
-		}
-	}
-
-	ret = vmw_execbuf_copy_fence_user(dev_priv, vmw_fpriv(file_priv), ret,
-				    user_fence_rep, fence, handle, out_fence_fd);
-
-	if (sync_file) {
-		if (ret) {
-			/* usercopy of fence failed, put the file object */
-			fput(sync_file->file);
-			put_unused_fd(out_fence_fd);
 		} else {
 			/* Link the fence with the FD created earlier */
-			fd_install(out_fence_fd, sync_file->file);
+			fd_stage(out_fd, sync_file->file);
 		}
 	}
+
+	/* A staged sync file is dropped with the ioctl on error. */
+	ret = vmw_execbuf_copy_fence_user(dev_priv, vmw_fpriv(file_priv), ret,
+				    user_fence_rep, fence, handle, out_fence_fd);
 
 	/* Don't unreference when handing fence out */
 	if (unlikely(out_fence != NULL)) {
@@ -4323,9 +4318,7 @@ out_free_header:
 	if (header)
 		vmw_cmdbuf_header_free(header);
 out_free_fence_fd:
-	if (out_fence_fd >= 0)
-		put_unused_fd(out_fence_fd);
-
+	/* A reserved descriptor is released on return. */
 	return ret;
 }
 
