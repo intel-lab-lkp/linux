@@ -61,6 +61,29 @@ required:
   - clocks
   - clock-names
 
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: qcom,kaanapali-dpu
+    then:
+      properties:
+        power-domains:
+          items:
+            - description: MMCX power domain
+            - description: INT2 GDSC power domain
+
+        power-domain-names:
+          minItems: 2
+          maxItems: 2
+          items:
+            - const: mmcx
+            - const: int2
+
+      required:
+        - power-domain-names
+
 unevaluatedProperties: false
 
 examples:
