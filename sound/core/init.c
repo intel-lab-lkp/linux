@@ -707,8 +707,13 @@ static void copy_valid_id_string(struct snd_card *card, const char *src,
 
 	while (*nid && !safe_ascii_char(*nid))
 		nid++;
-	if (isdigit(*nid))
-		*id++ = isalpha(*src) ? *src : 'D';
+	if (isdigit(*nid)) {
+		/* isalpha() alone is not enough: the ctype table classifies the
+		 * Latin-1 high bytes as letters, so a non-ASCII first byte would
+		 * end up in the id, which must stay alphanumeric ASCII.
+		 */
+		*id++ = isascii(*src) && isalpha(*src) ? *src : 'D';
+	}
 	while (*nid && (size_t)(id - card->id) < sizeof(card->id) - 1) {
 		if (safe_ascii_char(*nid))
 			*id++ = *nid;
