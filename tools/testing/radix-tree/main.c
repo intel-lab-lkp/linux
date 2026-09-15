@@ -15,7 +15,9 @@
 void __gang_check(unsigned long middle, long down, long up, int chunk, int hop)
 {
 	long idx;
-	RADIX_TREE(tree, GFP_KERNEL);
+	struct radix_tree_root tree;
+
+	INIT_RADIX_TREE(&tree, GFP_KERNEL);
 
 	middle = 1 << 30;
 
@@ -78,7 +80,9 @@ void big_gang_check(bool long_run)
 
 void add_and_check(void)
 {
-	RADIX_TREE(tree, GFP_KERNEL);
+	struct radix_tree_root tree;
+
+	INIT_RADIX_TREE(&tree, GFP_KERNEL);
 
 	item_insert(&tree, 44);
 	item_check_present(&tree, 44);
@@ -89,7 +93,9 @@ void add_and_check(void)
 void dynamic_height_check(void)
 {
 	int i;
-	RADIX_TREE(tree, GFP_KERNEL);
+	struct radix_tree_root tree;
+
+	INIT_RADIX_TREE(&tree, GFP_KERNEL);
 	tree_verify_min_height(&tree, 0);
 
 	item_insert(&tree, 42);
@@ -155,10 +161,12 @@ void check_copied_tags(struct radix_tree_root *tree, unsigned long start, unsign
 
 void copy_tag_check(void)
 {
-	RADIX_TREE(tree, GFP_KERNEL);
+	struct radix_tree_root tree;
 	unsigned long idx[ITEMS];
 	unsigned long start, end, count = 0, tagged, cur, tmp;
 	int i;
+
+	INIT_RADIX_TREE(&tree, GFP_KERNEL);
 
 //	printf("generating radix tree indices...\n");
 	start = rand();

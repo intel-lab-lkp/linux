@@ -8,6 +8,7 @@
 #ifndef _LINUX_RADIX_TREE_H
 #define _LINUX_RADIX_TREE_H
 
+#include <linux/compiler.h>
 #include <linux/bitops.h>
 #include <linux/gfp_types.h>
 #include <linux/list.h>
@@ -79,7 +80,8 @@ static inline bool radix_tree_is_internal_node(void *ptr)
 #define RADIX_TREE_INIT(name, mask)	XARRAY_INIT(name, mask)
 
 #define RADIX_TREE(name, mask) \
-	struct radix_tree_root name = RADIX_TREE_INIT(name, mask)
+	struct radix_tree_root name = RADIX_TREE_INIT(name, mask);	\
+	ASSERT_STATIC_STORAGE(name)
 
 #define INIT_RADIX_TREE(root, mask) xa_init_flags(root, mask)
 

@@ -28,12 +28,14 @@
 
 void regression3_test(void)
 {
-	RADIX_TREE(root, GFP_KERNEL);
+	struct radix_tree_root root;
 	void *ptr0 = (void *)4ul;
 	void *ptr = (void *)8ul;
 	struct radix_tree_iter iter;
 	void **slot;
 	bool first;
+
+	INIT_RADIX_TREE(&root, GFP_KERNEL);
 
 	printv(1, "running regression test 3 (should take milliseconds)\n");
 

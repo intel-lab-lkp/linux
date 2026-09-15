@@ -42,7 +42,9 @@ __simple_checks(struct radix_tree_root *tree, unsigned long index, int tag)
 void simple_checks(void)
 {
 	unsigned long index;
-	RADIX_TREE(tree, GFP_KERNEL);
+	struct radix_tree_root tree;
+
+	INIT_RADIX_TREE(&tree, GFP_KERNEL);
 
 	for (index = 0; index < 10000; index++) {
 		__simple_checks(&tree, index, 0);
@@ -61,7 +63,9 @@ void simple_checks(void)
  */
 static void extend_checks(void)
 {
-	RADIX_TREE(tree, GFP_KERNEL);
+	struct radix_tree_root tree;
+
+	INIT_RADIX_TREE(&tree, GFP_KERNEL);
 
 	item_insert(&tree, 43);
 	assert(item_tag_get(&tree, 43, 0) == 0);
@@ -90,7 +94,9 @@ static void contract_checks(void)
 {
 	struct item *item;
 	int tmp;
-	RADIX_TREE(tree, GFP_KERNEL);
+	struct radix_tree_root tree;
+
+	INIT_RADIX_TREE(&tree, GFP_KERNEL);
 
 	tmp = 1<<RADIX_TREE_MAP_SHIFT;
 	item_insert(&tree, tmp);
@@ -271,8 +277,10 @@ static void do_thrash(struct radix_tree_root *tree, char *thrash_state, int tag)
 
 static void thrash_tags(void)
 {
-	RADIX_TREE(tree, GFP_KERNEL);
+	struct radix_tree_root tree;
 	char *thrash_state;
+
+	INIT_RADIX_TREE(&tree, GFP_KERNEL);
 
 	thrash_state = malloc(THRASH_SIZE);
 	memset(thrash_state, 0, THRASH_SIZE);
@@ -286,7 +294,9 @@ static void thrash_tags(void)
 
 static void leak_check(void)
 {
-	RADIX_TREE(tree, GFP_KERNEL);
+	struct radix_tree_root tree;
+
+	INIT_RADIX_TREE(&tree, GFP_KERNEL);
 
 	item_insert(&tree, 1000000);
 	item_delete(&tree, 1000000);
@@ -295,7 +305,9 @@ static void leak_check(void)
 
 static void __leak_check(void)
 {
-	RADIX_TREE(tree, GFP_KERNEL);
+	struct radix_tree_root tree;
+
+	INIT_RADIX_TREE(&tree, GFP_KERNEL);
 
 	printv(2, "%d: nr_allocated=%d\n", __LINE__, nr_allocated);
 	item_insert(&tree, 1000000);
@@ -309,9 +321,11 @@ static void __leak_check(void)
 static void single_check(void)
 {
 	struct item *items[BATCH];
-	RADIX_TREE(tree, GFP_KERNEL);
+	struct radix_tree_root tree;
 	int ret;
 	unsigned long first = 0;
+
+	INIT_RADIX_TREE(&tree, GFP_KERNEL);
 
 	item_insert(&tree, 0);
 	item_tag_set(&tree, 0, 0);

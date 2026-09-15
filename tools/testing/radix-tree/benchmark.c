@@ -114,8 +114,10 @@ static void benchmark_delete(struct radix_tree_root *root,
 
 static void benchmark_size(unsigned long size, unsigned long step)
 {
-	RADIX_TREE(tree, GFP_KERNEL);
+	struct radix_tree_root tree;
 	long long normal, tagged;
+
+	INIT_RADIX_TREE(&tree, GFP_KERNEL);
 
 	benchmark_insert(&tree, size, step);
 	benchmark_tagging(&tree, size, step);
