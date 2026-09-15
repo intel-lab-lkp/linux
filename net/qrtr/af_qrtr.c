@@ -119,14 +119,15 @@ static DEFINE_XARRAY_ALLOC(qrtr_ports);
 
 /* The xarray API uses fixed unsigned long keys and we will have to make
  * do with that.
- * These keys are often a combination of node IDs (currently u32) and
- * port numbers (also currently u32).
- * Using the high 32 bits for the node ID and the low 32 bits for the
- * port number will work fine to create keys on platforms where unsigned long
- * is 64 bits wide, but obviously is not be possible on platforms where
- * unsigned long is smaller.
+ * These keys are often a combination of node IDs and port numbers or
+ * endpoint IDs and node IDs (all currently u32).
+ * Using the high 32 bits for the node/endpoint ID and the low 32 bits for the
+ * port number/node ID will work fine to create keys on platforms where
+ * unsigned long is 64 bits wide, but obviously is not be possible on
+ * platforms where unsigned long is smaller.
  * Virtually split up unsigned long in half and assign the upper bits to
- * node IDs and the lower bits to the port number, however big that may be.
+ * node/endpoint IDs and the lower bits to the port number/node ID, however
+ * big that may be.
  */
 #define QRTR_XARRAY_INDEX_BITS  (8 /* CHAR_BIT */ * sizeof(unsigned long))
 #define QRTR_INDEX_HALF_BITS (QRTR_XARRAY_INDEX_BITS >> 1)
@@ -457,19 +458,36 @@ static struct qrtr_node *qrtr_node_lookup(unsigned int nid)
  *
  * This is mostly useful for automatic node id assignment, based on
  * the source id in the incoming packet.
+ *
+ * Return: 0 on success; negative error code on failure
  */
-static void qrtr_node_assign(struct qrtr_node *node, unsigned int nid)
+static int qrtr_node_assign(struct qrtr_node *node, unsigned int nid)
 {
 	unsigned long flags;
+	unsigned long key;
 
 	if (nid == QRTR_EP_NID_AUTO)
-		return;
+		return 0;
+
+	if (node->ep->id > QRTR_INDEX_HALF_UNSIGNED_MAX ||
+	    nid > QRTR_INDEX_HALF_UNSIGNED_MAX)
+		return -EINVAL;
 
 	spin_lock_irqsave(&qrtr_nodes_lock, flags);
-	radix_tree_insert(&qrtr_nodes, nid, node);
+
+	/* Always insert with the endpoint_id + node_id */
+	key = ((unsigned long)(node->ep->id) << QRTR_INDEX_HALF_BITS) |
+	      ((unsigned long)(nid) & QRTR_INDEX_HALF_UNSIGNED_MAX);
+	radix_tree_insert(&qrtr_nodes, key, node);
+
+	if (!radix_tree_lookup(&qrtr_nodes, nid))
+		radix_tree_insert(&qrtr_nodes, nid, node);
+
 	if (node->nid == QRTR_EP_NID_AUTO)
 		node->nid = nid;
 	spin_unlock_irqrestore(&qrtr_nodes_lock, flags);
+
+	return 0;
 }
 
 /**
@@ -563,14 +581,18 @@ int qrtr_endpoint_post(struct qrtr_endpoint *ep, const void *data, size_t len)
 
 	skb_put_data(skb, data + hdrlen, size);
 
-	qrtr_node_assign(node, cb->src_node);
+	ret = qrtr_node_assign(node, cb->src_node);
+	if (ret)
+		goto err;
 
 	if (cb->type == QRTR_TYPE_NEW_SERVER) {
 		/* Remote node endpoint can bridge other distant nodes */
 		const struct qrtr_ctrl_pkt *pkt;
 
 		pkt = data + hdrlen;
-		qrtr_node_assign(node, le32_to_cpu(pkt->server.node));
+		ret = qrtr_node_assign(node, le32_to_cpu(pkt->server.node));
+		if (ret)
+			goto err;
 	}
 
 	if (cb->type == QRTR_TYPE_RESUME_TX) {
@@ -579,10 +601,13 @@ int qrtr_endpoint_post(struct qrtr_endpoint *ep, const void *data, size_t len)
 			goto err;
 	} else {
 		ipc = qrtr_port_lookup(cb->dst_port);
-		if (!ipc)
+		if (!ipc) {
+			ret = -EINVAL;
 			goto err;
+		}
 
-		if (sock_queue_rcv_skb(&ipc->sk, skb)) {
+		ret = sock_queue_rcv_skb(&ipc->sk, skb);
+		if (ret) {
 			qrtr_port_put(ipc);
 			goto err;
 		}
@@ -662,7 +687,9 @@ int qrtr_endpoint_register(struct qrtr_endpoint *ep, unsigned int nid)
 	xa_init(&node->qrtr_tx_flow);
 	mutex_init(&node->qrtr_tx_lock);
 
-	qrtr_node_assign(node, nid);
+	rc = qrtr_node_assign(node, nid);
+	if (rc < 0)
+		goto free_node;
 
 	mutex_lock(&qrtr_node_lock);
 	list_add(&node->item, &qrtr_all_nodes);
