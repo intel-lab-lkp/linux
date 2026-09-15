@@ -282,12 +282,27 @@ static int ntfs_setattr_size(struct inode *vi, struct iattr *attr)
 		i_size_write(vi, attr->ia_size);
 		pagecache_isize_extended(vi, old_size, attr->ia_size);
 	} else {
+		/*
+		 * The on-disk truncation below can fail, in which case
+		 * the size is reverted and the data beyond the new size
+		 * becomes visible again.  Write that range back first:
+		 * truncate_setsize() drops those pages and dirty data
+		 * cannot be recovered afterwards.
+		 */
+		if (attr->ia_size < old_size) {
+			err = filemap_write_and_wait_range(vi->i_mapping,
+					attr->ia_size, old_size - 1);
+			if (err)
+				goto out_unlock;
+		}
+
 		truncate_setsize(vi, attr->ia_size);
 	}
 
 	err = ntfs_truncate_vfs(vi, attr->ia_size, old_size);
 	if (err)
 		i_size_write(vi, old_size);
+out_unlock:
 	filemap_invalidate_unlock(vi->i_mapping);
 
 	return err;
