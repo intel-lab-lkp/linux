@@ -49,6 +49,8 @@
 #define TDH_SYS_SHUTDOWN		52
 #define TDH_SYS_UPDATE			53
 #define TDH_SYS_DISABLE			69
+#define TDH_IOMMU_SETUP			128
+#define TDH_IOMMU_CLEAR			129
 
 /*
  * SEAMCALL leaf:

@@ -2034,3 +2034,59 @@ void tdx_sys_disable(void)
 	if (ret && (ret & TDX_SW_ERROR) != TDX_SW_ERROR)
 		pr_err("TDH.SYS.DISABLE failed: 0x%016llx\n", ret);
 }
+
+/*
+ * Wrapper for TDH.IOMMU.SETUP leaf, which transitions the IOMMU and related
+ * I/O stack into Secure TDX Mode.
+ */
+u64 tdh_iommu_setup(u64 reg_base, void *root, u64 *tdx_iommu_id)
+{
+	/*
+	 * The @root page format is defined by the TDX Connect ABI spec
+	 * (Table 3.35, Structure of IOMMU_MT Parameter): the first two
+	 * entries describe the size and HPA (Host Physical Address) of
+	 * the two contiguous buffers for the invalidation queue; the
+	 * remaining entries provide HPAs of IOMMU_MT_PAGES_COUNT metadata
+	 * pages. IOMMU_MT_PAGES_COUNT is obtained from trusted IOMMU global
+	 * metadata.
+	 */
+	struct tdx_module_args args = {
+		.rcx = reg_base,
+		.rdx = __pa(root),
+	};
+	u64 ret;
+
+	/*
+	 * Don't loop forever:
+	 *
+	 *  - TDX_INTERRUPTED_RESUMABLE guarantees forward progress between
+	 *    calls.
+	 *  - On TDX_INTERRUPTED_RESUMABLE, all registers except RAX remain
+	 *    unchanged.
+	 */
+	do {
+		ret = seamcall_ret(TDH_IOMMU_SETUP, &args);
+	} while (ret == TDX_INTERRUPTED_RESUMABLE);
+
+	*tdx_iommu_id = args.rcx;
+
+	return ret;
+}
+
+/*
+ * Wrapper for TDH.IOMMU.CLEAR leaf, which terminates Secure TDX Mode for the
+ * target IOMMU and restores control of related hardware resources to the host.
+ */
+u64 tdh_iommu_clear(u64 tdx_iommu_id)
+{
+	struct tdx_module_args args = {
+		.rcx = tdx_iommu_id,
+	};
+	u64 ret;
+
+	do {
+		ret = seamcall(TDH_IOMMU_CLEAR, &args);
+	} while (ret == TDX_INTERRUPTED_RESUMABLE);
+
+	return ret;
+}
