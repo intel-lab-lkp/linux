@@ -18,6 +18,7 @@
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/slab.h>
 
 #include <crypto/aes.h>
 #include <crypto/authenc.h>
@@ -392,39 +393,51 @@ static void prepare_kopad(u8 *k_opad, const u8 *key, u16 key_sz)
 		k_opad[i] = 0x5c;
 }
 
-static int sa_export_shash(void *state, struct shash_desc *hash,
-			   int digest_size, __be32 *out)
+static int sa_export_shash(struct shash_desc *hash, int digest_size,
+			   __be32 *out)
 {
-	struct sha1_state *sha1;
-	struct sha256_state *sha256;
 	u32 *result;
 	int ret = 0;
+	int state_size;
+	u8 *sha;
+
+	state_size = crypto_shash_statesize(hash->tfm);
+	if (state_size <= 0) {
+		dev_err(sa_k3_dev, "%s: invalid state_size=%d\n", __func__,
+			state_size);
+		return -EINVAL;
+	}
+
+	sha = kmalloc(state_size, GFP_KERNEL);
+	if (!sha)
+		return -ENOMEM;
 
 	/* Export the intermediate digest to program into SA2UL */
-	ret = crypto_shash_export(hash, state);
+	ret = crypto_shash_export(hash, sha);
 	if (ret) {
 		dev_err(sa_k3_dev, "%s: crypto_shash_export failed\n",
 			__func__);
+		kfree_sensitive(sha);
 		return ret;
 	}
 
 	switch (digest_size) {
 	case SHA1_DIGEST_SIZE:
-		sha1 = state;
-		result = sha1->state;
+		result = (u32 *)sha;
 		break;
 	case SHA256_DIGEST_SIZE:
-		sha256 = state;
-		result = sha256->state;
+		result = (u32 *)sha;
 		break;
 	default:
 		dev_err(sa_k3_dev, "%s: bad digest_size=%d\n", __func__,
 			digest_size);
+		kfree_sensitive(sha);
 		return -EINVAL;
 	}
 
 	cpu_to_be32_array(out, result, digest_size / 4);
 
+	kfree_sensitive(sha);
 	return ret;
 }
 
@@ -435,16 +448,11 @@ static int sa_prepare_iopads(struct algo_data *data, const u8 *key,
 	int block_size = crypto_shash_blocksize(data->ctx->shash);
 	int digest_size = crypto_shash_digestsize(data->ctx->shash);
 	int ret = 0;
-
-	union {
-		struct sha1_state sha1;
-		struct sha256_state sha256;
-		u8 k_pad[SHA1_BLOCK_SIZE];
-	} sha;
+	u8 k_pad[SHA1_BLOCK_SIZE];
 
 	shash->tfm = data->ctx->shash;
 
-	prepare_kipad(sha.k_pad, key, key_sz);
+	prepare_kipad(k_pad, key, key_sz);
 
 	ret = crypto_shash_init(shash);
 	if (ret) {
@@ -452,20 +460,20 @@ static int sa_prepare_iopads(struct algo_data *data, const u8 *key,
 			__func__, __LINE__, ret);
 		return ret;
 	}
-	ret = crypto_shash_update(shash, sha.k_pad, block_size);
+	ret = crypto_shash_update(shash, k_pad, block_size);
 	if (ret) {
 		dev_err(sa_k3_dev, "%s: %d: crypto_shash_update for ipad failed, ret=%d\n",
 			__func__, __LINE__, ret);
 		return ret;
 	}
-	ret = sa_export_shash(&sha, shash, digest_size, ipad);
+	ret = sa_export_shash(shash, digest_size, ipad);
 	if (ret) {
 		dev_err(sa_k3_dev, "%s: %d: sa_export_shash for ipad failed, ret=%d\n",
 			__func__, __LINE__, ret);
 		return ret;
 	}
 
-	prepare_kopad(sha.k_pad, key, key_sz);
+	prepare_kopad(k_pad, key, key_sz);
 
 	ret = crypto_shash_init(shash);
 	if (ret) {
@@ -473,20 +481,20 @@ static int sa_prepare_iopads(struct algo_data *data, const u8 *key,
 			__func__, __LINE__, ret);
 		return ret;
 	}
-	ret = crypto_shash_update(shash, sha.k_pad, block_size);
+	ret = crypto_shash_update(shash, k_pad, block_size);
 	if (ret) {
 		dev_err(sa_k3_dev, "%s: %d: crypto_shash_update for opad failed, ret=%d\n",
 			__func__, __LINE__, ret);
 		return ret;
 	}
-	ret = sa_export_shash(&sha, shash, digest_size, opad);
+	ret = sa_export_shash(shash, digest_size, opad);
 	if (ret) {
 		dev_err(sa_k3_dev, "%s: %d: sa_export_shash for opad failed, ret=%d\n",
 			__func__, __LINE__, ret);
 		return ret;
 	}
 
-	memzero_explicit(&sha, sizeof(sha));
+	memzero_explicit(k_pad, SHA1_BLOCK_SIZE);
 
 	return ret;
 }
