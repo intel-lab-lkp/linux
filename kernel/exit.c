@@ -1000,6 +1000,7 @@ void __noreturn do_exit(long code)
 
 	exit_sem(tsk);
 	exit_shm(tsk);
+	exit_fd_slots();
 	exit_files(tsk);
 	exit_fs(tsk);
 	if (group_dead)

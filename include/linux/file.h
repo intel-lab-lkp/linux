@@ -91,6 +91,8 @@ extern bool get_close_on_exec(unsigned int fd);
 extern int __get_unused_fd_flags(unsigned flags, unsigned long nofile);
 extern int get_unused_fd_flags(unsigned flags);
 extern void put_unused_fd(unsigned int fd);
+void __fd_slots_commit(long ret);
+void exit_fd_slots(void);
 
 DEFINE_CLASS(get_unused_fd, int, if (_T >= 0) put_unused_fd(_T),
 	     get_unused_fd_flags(flags), unsigned flags)
@@ -117,6 +119,12 @@ DEFINE_FREE(fput, struct file *, if (!IS_ERR_OR_NULL(_T)) fput(_T))
 #define take_fd(fd) __get_and_null(fd, -EBADF)
 
 extern void fd_install(unsigned int fd, struct file *file);
+
+struct fd_slot;
+const struct fd_slot *fd_prepare(unsigned flags);
+int fd_stage(const struct fd_slot *slot, struct file *file);
+int __fd_slot_fd(const struct fd_slot *slot);
+struct file *__fd_slot_file(const struct fd_slot *slot);
 
 int receive_fd(struct file *file, int __user *ufd, unsigned int o_flags);
 
@@ -148,15 +156,32 @@ struct fd_prepare {
 /* Typedef for fd_prepare cleanup guards. */
 typedef struct fd_prepare class_fd_prepare_t;
 
-/*
- * Accessors for fd_prepare class members.
- * _Generic() is used for zero-cost type safety.
- */
-#define fd_prepare_fd(_fdf) \
-	(_Generic((_fdf), struct fd_prepare: (_fdf).__fd))
+/* Do not use directly. */
+static inline int __fd_prepare_fd_old(struct fd_prepare fdf)
+{
+	return fdf.__fd;
+}
 
-#define fd_prepare_file(_fdf) \
-	(_Generic((_fdf), struct fd_prepare: (_fdf).__file))
+/* Do not use directly. */
+static inline struct file *__fd_prepare_file_old(struct fd_prepare fdf)
+{
+	return fdf.__file;
+}
+
+/*
+ * Accessors for a prepared descriptor. _Generic() bridges struct fd_prepare
+ * (the cleanup class below) and struct fd_slot (fd_prepare()) while callers are
+ * converted; the struct fd_prepare arm goes away with FD_PREPARE().
+ */
+#define fd_prepare_fd(_x) _Generic((_x),				\
+	struct fd_prepare:	__fd_prepare_fd_old,			\
+	struct fd_slot *:	__fd_slot_fd,				\
+	const struct fd_slot *:	__fd_slot_fd)(_x)
+
+#define fd_prepare_file(_x) _Generic((_x),				\
+	struct fd_prepare:	__fd_prepare_file_old,			\
+	struct fd_slot *:	__fd_slot_file,				\
+	const struct fd_slot *:	__fd_slot_file)(_x)
 
 /* Do not use directly. */
 static inline void class_fd_prepare_destructor(const struct fd_prepare *fdf)

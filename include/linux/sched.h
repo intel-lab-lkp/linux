@@ -832,6 +832,24 @@ struct task_ipi_mask {
 struct task_ipi_mask { };
 #endif
 
+/* Descriptors this syscall prepared, installed when it returns. */
+#define FD_SLOTS_INLINE	2
+
+struct file;
+
+struct fd_slot {
+	struct file			* __private file;
+	int				__private fd;
+};
+
+/* Inline up to FD_SLOTS_INLINE slots, the rest in the spill. */
+struct fd_slots {
+	unsigned int			nr;
+	unsigned int			spill_max;
+	struct fd_slot			*spill;
+	struct fd_slot			inline_slots[FD_SLOTS_INLINE];
+};
+
 struct task_struct {
 #ifdef CONFIG_THREAD_INFO_IN_TASK
 	/*
@@ -1205,6 +1223,9 @@ struct task_struct {
 
 	/* Open file information: */
 	struct files_struct		*files;
+
+	/* Descriptors prepared by the current syscall: */
+	struct fd_slots			fd_slots;
 
 #ifdef CONFIG_IO_URING
 	struct io_uring_task		*io_uring;
