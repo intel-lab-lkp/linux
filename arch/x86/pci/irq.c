@@ -1312,8 +1312,12 @@ static void __init pirq_find_router(struct irq_router *r)
 	if (rt->rtr_vendor) {
 		dev = pci_get_domain_bus_and_slot(0, rt->rtr_bus,
 						  rt->rtr_devfn);
-		if (dev && pirq_try_router(r, rt, dev))
-			pirq_router_dev = dev;
+		if (dev) {
+			if (pirq_try_router(r, rt, dev))
+				pirq_router_dev = dev;
+			else
+				pci_dev_put(dev);
+		}
 	} else {
 		dev = NULL;
 		for_each_pci_dev(dev) {
