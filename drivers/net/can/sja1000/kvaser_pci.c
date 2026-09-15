@@ -186,10 +186,6 @@ static void kvaser_pci_del_chan(struct net_device *dev)
 	}
 	unregister_sja1000dev(dev);
 
-	pci_iounmap(board->pci_dev, priv->reg_base);
-	pci_iounmap(board->pci_dev, board->conf_addr);
-	pci_iounmap(board->pci_dev, board->res_addr);
-
 	free_sja1000dev(dev);
 }
 
@@ -367,8 +363,17 @@ failure:
 static void kvaser_pci_remove_one(struct pci_dev *pdev)
 {
 	struct net_device *dev = pci_get_drvdata(pdev);
+	struct sja1000_priv *priv = netdev_priv(dev);
+	struct kvaser_pci *board = priv->priv;
+	void __iomem *base_addr = priv->reg_base;
+	void __iomem *conf_addr = board->conf_addr;
+	void __iomem *res_addr = board->res_addr;
 
 	kvaser_pci_del_chan(dev);
+
+	pci_iounmap(pdev, conf_addr);
+	pci_iounmap(pdev, res_addr);
+	pci_iounmap(pdev, base_addr);
 
 	pci_release_regions(pdev);
 	pci_disable_device(pdev);
