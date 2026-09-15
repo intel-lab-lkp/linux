@@ -1139,8 +1139,10 @@ static const struct tegra_mc_client tegra30_mc_clients[] = {
 };
 
 static const struct tegra_smmu_swgroup tegra30_swgroups[] = {
-	{ .name = "dc",   .swgroup = TEGRA_SWGROUP_DC,   .reg = 0x240 },
-	{ .name = "dcb",  .swgroup = TEGRA_SWGROUP_DCB,  .reg = 0x244 },
+	{ .name = "dc",   .swgroup = TEGRA_SWGROUP_DC,   .reg = 0x240,
+	  .defer_enable = true },
+	{ .name = "dcb",  .swgroup = TEGRA_SWGROUP_DCB,  .reg = 0x244,
+	  .defer_enable = true },
 	{ .name = "epp",  .swgroup = TEGRA_SWGROUP_EPP,  .reg = 0x248 },
 	{ .name = "g2",   .swgroup = TEGRA_SWGROUP_G2,   .reg = 0x24c },
 	{ .name = "mpe",  .swgroup = TEGRA_SWGROUP_MPE,  .reg = 0x264 },

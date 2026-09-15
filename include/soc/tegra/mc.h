@@ -70,6 +70,14 @@ struct tegra_smmu_swgroup {
 	const char *name;
 	unsigned int swgroup;
 	unsigned int reg;
+
+	/*
+	 * Set for clients which may already be running when the kernel takes
+	 * over, e.g. display controllers scanning out a boot splash. They are
+	 * left in bypass until their driver calls
+	 * tegra_smmu_enable_translation().
+	 */
+	bool defer_enable;
 };
 
 struct tegra_smmu_group_soc {
@@ -103,6 +111,7 @@ struct tegra_smmu *tegra_smmu_probe(struct device *dev,
 				    const struct tegra_smmu_soc *soc,
 				    struct tegra_mc *mc);
 void tegra_smmu_remove(struct tegra_smmu *smmu);
+void tegra_smmu_enable_translation(struct device *dev);
 #else
 static inline struct tegra_smmu *
 tegra_smmu_probe(struct device *dev, const struct tegra_smmu_soc *soc,
@@ -112,6 +121,10 @@ tegra_smmu_probe(struct device *dev, const struct tegra_smmu_soc *soc,
 }
 
 static inline void tegra_smmu_remove(struct tegra_smmu *smmu)
+{
+}
+
+static inline void tegra_smmu_enable_translation(struct device *dev)
 {
 }
 #endif

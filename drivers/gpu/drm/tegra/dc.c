@@ -19,6 +19,7 @@
 #include <linux/reset.h>
 
 #include <soc/tegra/common.h>
+#include <soc/tegra/mc.h>
 #include <soc/tegra/pmc.h>
 
 #include <drm/drm_atomic.h>
@@ -2750,6 +2751,13 @@ static int tegra_dc_init(struct host1x_client *client)
 		dev_err(client->dev, "failed to attach to domain: %d\n", err);
 		return err;
 	}
+
+	/*
+	 * Enable translation now that the final domain is attached.
+	 * The hardware was reset at probe and has not been programmed
+	 * since.
+	 */
+	tegra_smmu_enable_translation(client->dev);
 
 	if (dc->soc->wgrps)
 		primary = tegra_dc_add_shared_planes(drm, dc);

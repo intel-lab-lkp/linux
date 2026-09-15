@@ -368,7 +368,13 @@ static void tegra_smmu_enable(struct tegra_smmu *smmu, unsigned int swgroup,
 		value = smmu_readl(smmu, group->reg);
 		value &= ~SMMU_ASID_MASK;
 		value |= SMMU_ASID_VALUE(asid);
-		value |= SMMU_ASID_ENABLE;
+		/*
+		 * A deferred client is set up completely, but with translation
+		 * gated off, so it stays in bypass until its driver calls
+		 * tegra_smmu_enable_translation().
+		 */
+		if (!group->defer_enable)
+			value |= SMMU_ASID_ENABLE;
 		smmu_writel(smmu, value, group->reg);
 	} else {
 		pr_warn("%s group from swgroup %u not found\n", __func__,
@@ -416,6 +422,49 @@ static void tegra_smmu_disable(struct tegra_smmu *smmu, unsigned int swgroup,
 		smmu_writel(smmu, value, client->regs.smmu.reg);
 	}
 }
+
+/**
+ * tegra_smmu_enable_translation - Release a client's swgroups to translation
+ * @dev: memory client device, already quiesced by its driver
+ *
+ * Enables translation for swgroups which were left in bypass at attach time
+ * because the client could still have been running from a pre-kernel
+ * configuration. Must be called after @dev has been attached to the domain it
+ * will use. Safe to call for any device; clients which were not deferred are
+ * unaffected.
+ */
+void tegra_smmu_enable_translation(struct device *dev)
+{
+	struct iommu_fwspec *fwspec = dev_iommu_fwspec_get(dev);
+	struct tegra_smmu *smmu = dev_iommu_priv_get(dev);
+	struct iommu_domain *domain;
+	unsigned int i;
+
+	if (!fwspec || !smmu)
+		return;
+
+	domain = iommu_get_domain_for_dev(dev);
+	if (!domain || !(domain->type & __IOMMU_DOMAIN_PAGING))
+		return;
+
+	mutex_lock(&smmu->lock);
+
+	for (i = 0; i < fwspec->num_ids; i++) {
+		const struct tegra_smmu_swgroup *group;
+		u32 value;
+
+		group = tegra_smmu_find_swgroup(smmu, fwspec->ids[i]);
+		if (!group || !group->defer_enable)
+			continue;
+
+		value = smmu_readl(smmu, group->reg);
+		value |= SMMU_ASID_ENABLE;
+		smmu_writel(smmu, value, group->reg);
+	}
+
+	mutex_unlock(&smmu->lock);
+}
+EXPORT_SYMBOL_GPL(tegra_smmu_enable_translation);
 
 static int tegra_smmu_as_prepare(struct tegra_smmu *smmu,
 				 struct tegra_smmu_as *as)
