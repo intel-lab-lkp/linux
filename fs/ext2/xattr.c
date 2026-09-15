@@ -485,6 +485,14 @@ bad_block:
 		if (not_found > 0)
 			here = last;
 
+		/*
+		 * The value area must not overlap the entry area, otherwise
+		 * the space calculation below underflows and the new value
+		 * would be written before the start of the block.
+		 */
+		if (min_offs < (size_t)((char *)last - (char *)header) + sizeof(__u32))
+			goto bad_block;
+
 		/* Check whether we have enough space left. */
 		free = min_offs - ((char*)last - (char*)header) - sizeof(__u32);
 	} else {
