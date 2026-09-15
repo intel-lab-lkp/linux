@@ -182,6 +182,8 @@ static int __init integrator_ap_timer_init_of(struct device_node *node)
 				"arm,timer-primary", &path);
 	if (err) {
 		pr_warn("Failed to read property\n");
+		clk_disable_unprepare(clk);
+		clk_put(clk);
 		return err;
 	}
 
@@ -202,6 +204,8 @@ static int __init integrator_ap_timer_init_of(struct device_node *node)
 				"arm,timer-secondary", &path);
 	if (err) {
 		pr_warn("Failed to read property\n");
+		clk_disable_unprepare(clk);
+		clk_put(clk);
 		return err;
 	}
 
