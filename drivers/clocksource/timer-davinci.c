@@ -376,8 +376,11 @@ static int __init of_davinci_timer_register(struct device_node *np)
 	}
 
 	rv = davinci_timer_register(clk, &timer_cfg);
-	if (rv)
-		clk_put(clk);
+	/*
+	 * The clock is left enabled on success, but the consumer reference
+	 * taken by of_clk_get() is not needed anymore in either case.
+	 */
+	clk_put(clk);
 
 	return rv;
 }
