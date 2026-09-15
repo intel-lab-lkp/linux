@@ -697,6 +697,8 @@ static int peak_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	return 0;
 
 failure_free_dev:
+if (!chan->prev_dev && chan->pciec_card)
+	peak_pciec_remove(chan->pciec_card);
 	pci_set_drvdata(pdev, chan->prev_dev);
 	free_sja1000dev(dev);
 
@@ -704,19 +706,17 @@ failure_remove_channels:
 	/* Disable interrupts */
 	writew(0x0, cfg_base + PITA_ICR + 2);
 
-	chan = NULL;
 	for (dev = pci_get_drvdata(pdev); dev; dev = prev_dev) {
 		priv = netdev_priv(dev);
 		chan = priv->priv;
 		prev_dev = chan->prev_dev;
 
+		/* do that only for first channel */
+		if (!prev_dev && chan->pciec_card)
+			peak_pciec_remove(chan->pciec_card);
 		unregister_sja1000dev(dev);
 		free_sja1000dev(dev);
 	}
-
-	/* free any PCIeC resources too */
-	if (chan && chan->pciec_card)
-		peak_pciec_remove(chan->pciec_card);
 
 	pci_iounmap(pdev, reg_base);
 
