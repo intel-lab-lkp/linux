@@ -33,6 +33,7 @@
 #include <crypto/scatterwalk.h>
 #include <crypto/sha1.h>
 #include <crypto/sha2.h>
+#include <crypto/engine.h>
 
 #include "sa2ul.h"
 
@@ -150,9 +151,9 @@ struct algo_data {
 struct sa_alg_tmpl {
 	u32 type;		/* CRYPTO_ALG_TYPE from <linux/crypto.h> */
 	union {
-		struct skcipher_alg skcipher;
-		struct ahash_alg ahash;
-		struct aead_alg aead;
+		struct skcipher_engine_alg skcipher;
+		struct ahash_engine_alg ahash;
+		struct aead_engine_alg aead;
 	} alg;
 	bool registered;
 };
@@ -914,8 +915,8 @@ static int sa_cipher_cra_init(struct crypto_skcipher *tfm)
 	}
 
 	ctx->fallback.skcipher = child;
-	crypto_skcipher_set_reqsize(tfm, crypto_skcipher_reqsize(child) +
-					 sizeof(struct skcipher_request));
+	crypto_skcipher_set_reqsize(tfm, sizeof(struct sa_cipher_req_ctx) +
+					 crypto_skcipher_reqsize(child));
 
 	dev_dbg(sa_k3_dev, "%s(0x%p) sc-ids(0x%x(0x%pad), 0x%x(0x%pad))\n",
 		__func__, tfm, ctx->enc.sc_id, &ctx->enc.sc_phys,
@@ -1086,6 +1087,7 @@ static void sa_free_sa_rx_data(struct sa_rx_data *rxd)
 static void sa_aes_dma_in_callback(void *data)
 {
 	struct sa_rx_data *rxd = data;
+	struct sa_crypto_data *pdata = dev_get_drvdata(sa_k3_dev);
 	struct skcipher_request *req;
 	u32 *result;
 	__be32 *mdptr;
@@ -1106,7 +1108,7 @@ static void sa_aes_dma_in_callback(void *data)
 
 	sa_free_sa_rx_data(rxd);
 
-	skcipher_request_complete(req, 0);
+	crypto_finalize_skcipher_request(pdata->engine, req, 0);
 }
 
 static int
@@ -1337,12 +1339,19 @@ err_cleanup:
 	return ret;
 }
 
-static int sa_cipher_run(struct skcipher_request *req, u8 *iv, int enc)
+static int sa_run_one(struct sa_req *req)
+{
+	int ret = sa_run(req);
+
+	return ret == -EINPROGRESS ? 0 : ret;
+}
+
+static int sa_cipher_run(struct skcipher_request *req, int enc)
 {
 	struct sa_tfm_ctx *ctx =
 	    crypto_skcipher_ctx(crypto_skcipher_reqtfm(req));
 	struct crypto_alg *alg = req->base.tfm->__crt_alg;
-	struct sa_req sa_req = { 0 };
+	struct sa_cipher_req_ctx *rctx = skcipher_request_ctx(req);
 
 	if (!req->cryptlen)
 		return 0;
@@ -1354,7 +1363,7 @@ static int sa_cipher_run(struct skcipher_request *req, u8 *iv, int enc)
 	if (req->cryptlen > SA_MAX_DATA_SZ ||
 	    (req->cryptlen >= SA_UNSAFE_DATA_SZ_MIN &&
 	     req->cryptlen <= SA_UNSAFE_DATA_SZ_MAX)) {
-		struct skcipher_request *subreq = skcipher_request_ctx(req);
+		struct skcipher_request *subreq = &rctx->fallback_req;
 
 		skcipher_request_set_tfm(subreq, ctx->fallback.skcipher);
 		skcipher_request_set_callback(subreq, req->base.flags,
@@ -1368,33 +1377,46 @@ static int sa_cipher_run(struct skcipher_request *req, u8 *iv, int enc)
 			return crypto_skcipher_decrypt(subreq);
 	}
 
+	rctx->enc = enc;
+
+	return crypto_transfer_skcipher_request_to_engine(ctx->dev_data->engine, req);
+}
+
+static int sa_cipher_do_one_req(struct crypto_engine *engine, void *areq)
+{
+	struct skcipher_request *req = container_of(areq, struct skcipher_request, base);
+	struct sa_tfm_ctx *ctx = crypto_skcipher_ctx(crypto_skcipher_reqtfm(req));
+	struct sa_cipher_req_ctx *rctx = skcipher_request_ctx(req);
+	struct sa_req sa_req = { 0 };
+
 	sa_req.size = req->cryptlen;
 	sa_req.enc_size = req->cryptlen;
 	sa_req.src = req->src;
 	sa_req.dst = req->dst;
-	sa_req.enc_iv = iv;
+	sa_req.enc_iv = req->iv;
 	sa_req.type = CRYPTO_ALG_TYPE_SKCIPHER;
-	sa_req.enc = enc;
+	sa_req.enc = rctx->enc;
 	sa_req.callback = sa_aes_dma_in_callback;
 	sa_req.base = &req->base;
 	sa_req.ctx = ctx;
 
-	return sa_run(&sa_req);
+	return sa_run_one(&sa_req);
 }
 
 static int sa_encrypt(struct skcipher_request *req)
 {
-	return sa_cipher_run(req, req->iv, 1);
+	return sa_cipher_run(req, 1);
 }
 
 static int sa_decrypt(struct skcipher_request *req)
 {
-	return sa_cipher_run(req, req->iv, 0);
+	return sa_cipher_run(req, 0);
 }
 
 static void sa_sha_dma_in_callback(void *data)
 {
 	struct sa_rx_data *rxd = data;
+	struct sa_crypto_data *pdata = dev_get_drvdata(sa_k3_dev);
 	struct ahash_request *req;
 	struct crypto_ahash *tfm;
 	unsigned int authsize;
@@ -1416,7 +1438,7 @@ static void sa_sha_dma_in_callback(void *data)
 
 	sa_free_sa_rx_data(rxd);
 
-	ahash_request_complete(req, 0);
+	crypto_finalize_hash_request(pdata->engine, req, 0);
 }
 
 static int zero_message_process(struct ahash_request *req)
@@ -1445,7 +1467,6 @@ static int sa_sha_run(struct ahash_request *req)
 {
 	struct sa_tfm_ctx *ctx = crypto_ahash_ctx(crypto_ahash_reqtfm(req));
 	struct sa_sha_req_ctx *rctx = ahash_request_ctx(req);
-	struct sa_req sa_req = { 0 };
 	size_t auth_len;
 
 	auth_len = req->nbytes;
@@ -1468,8 +1489,17 @@ static int sa_sha_run(struct ahash_request *req)
 		return ret;
 	}
 
-	sa_req.size = auth_len;
-	sa_req.auth_size = auth_len;
+	return crypto_transfer_hash_request_to_engine(ctx->dev_data->engine, req);
+}
+
+static int sa_sha_do_one_req(struct crypto_engine *engine, void *areq)
+{
+	struct ahash_request *req = container_of(areq, struct ahash_request, base);
+	struct sa_tfm_ctx *ctx = crypto_ahash_ctx(crypto_ahash_reqtfm(req));
+	struct sa_req sa_req = { 0 };
+
+	sa_req.size = req->nbytes;
+	sa_req.auth_size = req->nbytes;
 	sa_req.src = req->src;
 	sa_req.dst = req->src;
 	sa_req.enc = true;
@@ -1478,7 +1508,7 @@ static int sa_sha_run(struct ahash_request *req)
 	sa_req.ctx = ctx;
 	sa_req.base = &req->base;
 
-	return sa_run(&sa_req);
+	return sa_run_one(&sa_req);
 }
 
 static int sa_sha_setup(struct sa_tfm_ctx *ctx, struct  algo_data *ad)
@@ -1689,6 +1719,7 @@ static void sa_sha_cra_exit(struct crypto_tfm *tfm)
 static void sa_aead_dma_in_callback(void *data)
 {
 	struct sa_rx_data *rxd = data;
+	struct sa_crypto_data *pdata = dev_get_drvdata(sa_k3_dev);
 	struct aead_request *req;
 	struct crypto_aead *tfm;
 	unsigned int start;
@@ -1722,7 +1753,7 @@ static void sa_aead_dma_in_callback(void *data)
 
 	sa_free_sa_rx_data(rxd);
 
-	aead_request_complete(req, err);
+	crypto_finalize_aead_request(pdata->engine, req, err);
 }
 
 static int sa_cra_init_aead(struct crypto_aead *tfm, const char *hash,
@@ -1751,7 +1782,7 @@ static int sa_cra_init_aead(struct crypto_aead *tfm, const char *hash,
 		return PTR_ERR(ctx->fallback.aead);
 	}
 
-	crypto_aead_set_reqsize(tfm, sizeof(struct aead_request) +
+	crypto_aead_set_reqsize(tfm, sizeof(struct sa_aead_req_ctx) +
 				crypto_aead_reqsize(ctx->fallback.aead));
 
 	ret = sa_init_ctx_info(&ctx->enc, data);
@@ -1897,11 +1928,11 @@ static int sa_aead_cbc_sha256_setkey(struct crypto_aead *authenc,
 	return sa_aead_setkey(authenc, key, keylen, &ad);
 }
 
-static int sa_aead_run(struct aead_request *req, u8 *iv, int enc)
+static int sa_aead_run(struct aead_request *req, int enc)
 {
 	struct crypto_aead *tfm = crypto_aead_reqtfm(req);
 	struct sa_tfm_ctx *ctx = crypto_aead_ctx(tfm);
-	struct sa_req sa_req = { 0 };
+	struct sa_aead_req_ctx *rctx = aead_request_ctx(req);
 	size_t auth_size, enc_size;
 
 	enc_size = req->cryptlen;
@@ -1915,7 +1946,7 @@ static int sa_aead_run(struct aead_request *req, u8 *iv, int enc)
 	if (auth_size > SA_MAX_DATA_SZ ||
 	    (auth_size >= SA_UNSAFE_DATA_SZ_MIN &&
 	     auth_size <= SA_UNSAFE_DATA_SZ_MAX)) {
-		struct aead_request *subreq = aead_request_ctx(req);
+		struct aead_request *subreq = &rctx->fallback_req;
 		int ret;
 
 		aead_request_set_tfm(subreq, ctx->fallback.aead);
@@ -1930,265 +1961,314 @@ static int sa_aead_run(struct aead_request *req, u8 *iv, int enc)
 		return ret;
 	}
 
+	rctx->enc = enc;
+
+	return crypto_transfer_aead_request_to_engine(ctx->dev_data->engine, req);
+}
+
+static int sa_aead_do_one_req(struct crypto_engine *engine, void *areq)
+{
+	struct aead_request *req = container_of(areq, struct aead_request, base);
+	struct crypto_aead *tfm = crypto_aead_reqtfm(req);
+	struct sa_tfm_ctx *ctx = crypto_aead_ctx(tfm);
+	struct sa_aead_req_ctx *rctx = aead_request_ctx(req);
+	struct sa_req sa_req = { 0 };
+	size_t auth_size, enc_size;
+
+	enc_size = req->cryptlen;
+	auth_size = req->assoclen + req->cryptlen;
+
+	if (!rctx->enc) {
+		enc_size -= crypto_aead_authsize(tfm);
+		auth_size -= crypto_aead_authsize(tfm);
+	}
+
 	sa_req.enc_offset = req->assoclen;
 	sa_req.enc_size = enc_size;
 	sa_req.auth_size = auth_size;
 	sa_req.size = auth_size;
-	sa_req.enc_iv = iv;
+	sa_req.enc_iv = req->iv;
 	sa_req.type = CRYPTO_ALG_TYPE_AEAD;
-	sa_req.enc = enc;
+	sa_req.enc = rctx->enc;
 	sa_req.callback = sa_aead_dma_in_callback;
 	sa_req.base = &req->base;
 	sa_req.ctx = ctx;
 	sa_req.src = req->src;
 	sa_req.dst = req->dst;
 
-	return sa_run(&sa_req);
+	return sa_run_one(&sa_req);
 }
 
 /* AEAD algorithm encrypt interface function */
 static int sa_aead_encrypt(struct aead_request *req)
 {
-	return sa_aead_run(req, req->iv, 1);
+	return sa_aead_run(req, 1);
 }
 
 /* AEAD algorithm decrypt interface function */
 static int sa_aead_decrypt(struct aead_request *req)
 {
-	return sa_aead_run(req, req->iv, 0);
+	return sa_aead_run(req, 0);
 }
 
 static struct sa_alg_tmpl sa_algs[] = {
 	[SA_ALG_CBC_AES] = {
 		.type = CRYPTO_ALG_TYPE_SKCIPHER,
 		.alg.skcipher = {
-			.base.cra_name		= "cbc(aes)",
-			.base.cra_driver_name	= "cbc-aes-sa2ul",
-			.base.cra_priority	= 30000,
-			.base.cra_flags		= CRYPTO_ALG_TYPE_SKCIPHER |
-						  CRYPTO_ALG_KERN_DRIVER_ONLY |
-						  CRYPTO_ALG_ASYNC |
-						  CRYPTO_ALG_NEED_FALLBACK,
-			.base.cra_blocksize	= AES_BLOCK_SIZE,
-			.base.cra_ctxsize	= sizeof(struct sa_tfm_ctx),
-			.base.cra_module	= THIS_MODULE,
-			.init			= sa_cipher_cra_init,
-			.exit			= sa_cipher_cra_exit,
-			.min_keysize		= AES_MIN_KEY_SIZE,
-			.max_keysize		= AES_MAX_KEY_SIZE,
-			.ivsize			= AES_BLOCK_SIZE,
-			.setkey			= sa_aes_cbc_setkey,
-			.encrypt		= sa_encrypt,
-			.decrypt		= sa_decrypt,
+			.base = {
+				.base.cra_name		= "cbc(aes)",
+				.base.cra_driver_name	= "cbc-aes-sa2ul",
+				.base.cra_priority	= 30000,
+				.base.cra_flags		= CRYPTO_ALG_TYPE_SKCIPHER |
+							  CRYPTO_ALG_KERN_DRIVER_ONLY |
+							  CRYPTO_ALG_ASYNC |
+							  CRYPTO_ALG_NEED_FALLBACK,
+				.base.cra_blocksize	= AES_BLOCK_SIZE,
+				.base.cra_ctxsize	= sizeof(struct sa_tfm_ctx),
+				.base.cra_module	= THIS_MODULE,
+				.init			= sa_cipher_cra_init,
+				.exit			= sa_cipher_cra_exit,
+				.min_keysize		= AES_MIN_KEY_SIZE,
+				.max_keysize		= AES_MAX_KEY_SIZE,
+				.ivsize			= AES_BLOCK_SIZE,
+				.setkey			= sa_aes_cbc_setkey,
+				.encrypt		= sa_encrypt,
+				.decrypt		= sa_decrypt,
+			},
+			.op.do_one_request = sa_cipher_do_one_req,
 		}
 	},
 	[SA_ALG_EBC_AES] = {
 		.type = CRYPTO_ALG_TYPE_SKCIPHER,
 		.alg.skcipher = {
-			.base.cra_name		= "ecb(aes)",
-			.base.cra_driver_name	= "ecb-aes-sa2ul",
-			.base.cra_priority	= 30000,
-			.base.cra_flags		= CRYPTO_ALG_TYPE_SKCIPHER |
-						  CRYPTO_ALG_KERN_DRIVER_ONLY |
-						  CRYPTO_ALG_ASYNC |
-						  CRYPTO_ALG_NEED_FALLBACK,
-			.base.cra_blocksize	= AES_BLOCK_SIZE,
-			.base.cra_ctxsize	= sizeof(struct sa_tfm_ctx),
-			.base.cra_module	= THIS_MODULE,
-			.init			= sa_cipher_cra_init,
-			.exit			= sa_cipher_cra_exit,
-			.min_keysize		= AES_MIN_KEY_SIZE,
-			.max_keysize		= AES_MAX_KEY_SIZE,
-			.setkey			= sa_aes_ecb_setkey,
-			.encrypt		= sa_encrypt,
-			.decrypt		= sa_decrypt,
+			.base = {
+				.base.cra_name		= "ecb(aes)",
+				.base.cra_driver_name	= "ecb-aes-sa2ul",
+				.base.cra_priority	= 30000,
+				.base.cra_flags		= CRYPTO_ALG_TYPE_SKCIPHER |
+							  CRYPTO_ALG_KERN_DRIVER_ONLY |
+							  CRYPTO_ALG_ASYNC |
+							  CRYPTO_ALG_NEED_FALLBACK,
+				.base.cra_blocksize	= AES_BLOCK_SIZE,
+				.base.cra_ctxsize	= sizeof(struct sa_tfm_ctx),
+				.base.cra_module	= THIS_MODULE,
+				.init			= sa_cipher_cra_init,
+				.exit			= sa_cipher_cra_exit,
+				.min_keysize		= AES_MIN_KEY_SIZE,
+				.max_keysize		= AES_MAX_KEY_SIZE,
+				.setkey			= sa_aes_ecb_setkey,
+				.encrypt		= sa_encrypt,
+				.decrypt		= sa_decrypt,
+			},
+			.op.do_one_request = sa_cipher_do_one_req,
 		}
 	},
 	[SA_ALG_CBC_DES3] = {
 		.type = CRYPTO_ALG_TYPE_SKCIPHER,
 		.alg.skcipher = {
-			.base.cra_name		= "cbc(des3_ede)",
-			.base.cra_driver_name	= "cbc-des3-sa2ul",
-			.base.cra_priority	= 30000,
-			.base.cra_flags		= CRYPTO_ALG_TYPE_SKCIPHER |
-						  CRYPTO_ALG_KERN_DRIVER_ONLY |
-						  CRYPTO_ALG_ASYNC |
-						  CRYPTO_ALG_NEED_FALLBACK,
-			.base.cra_blocksize	= DES_BLOCK_SIZE,
-			.base.cra_ctxsize	= sizeof(struct sa_tfm_ctx),
-			.base.cra_module	= THIS_MODULE,
-			.init			= sa_cipher_cra_init,
-			.exit			= sa_cipher_cra_exit,
-			.min_keysize		= 3 * DES_KEY_SIZE,
-			.max_keysize		= 3 * DES_KEY_SIZE,
-			.ivsize			= DES_BLOCK_SIZE,
-			.setkey			= sa_3des_cbc_setkey,
-			.encrypt		= sa_encrypt,
-			.decrypt		= sa_decrypt,
+			.base = {
+				.base.cra_name		= "cbc(des3_ede)",
+				.base.cra_driver_name	= "cbc-des3-sa2ul",
+				.base.cra_priority	= 30000,
+				.base.cra_flags		= CRYPTO_ALG_TYPE_SKCIPHER |
+							  CRYPTO_ALG_KERN_DRIVER_ONLY |
+							  CRYPTO_ALG_ASYNC |
+							  CRYPTO_ALG_NEED_FALLBACK,
+				.base.cra_blocksize	= DES_BLOCK_SIZE,
+				.base.cra_ctxsize	= sizeof(struct sa_tfm_ctx),
+				.base.cra_module	= THIS_MODULE,
+				.init			= sa_cipher_cra_init,
+				.exit			= sa_cipher_cra_exit,
+				.min_keysize		= 3 * DES_KEY_SIZE,
+				.max_keysize		= 3 * DES_KEY_SIZE,
+				.ivsize			= DES_BLOCK_SIZE,
+				.setkey			= sa_3des_cbc_setkey,
+				.encrypt		= sa_encrypt,
+				.decrypt		= sa_decrypt,
+			},
+			.op.do_one_request = sa_cipher_do_one_req,
 		}
 	},
 	[SA_ALG_ECB_DES3] = {
 		.type = CRYPTO_ALG_TYPE_SKCIPHER,
 		.alg.skcipher = {
-			.base.cra_name		= "ecb(des3_ede)",
-			.base.cra_driver_name	= "ecb-des3-sa2ul",
-			.base.cra_priority	= 30000,
-			.base.cra_flags		= CRYPTO_ALG_TYPE_SKCIPHER |
-						  CRYPTO_ALG_KERN_DRIVER_ONLY |
-						  CRYPTO_ALG_ASYNC |
-						  CRYPTO_ALG_NEED_FALLBACK,
-			.base.cra_blocksize	= DES_BLOCK_SIZE,
-			.base.cra_ctxsize	= sizeof(struct sa_tfm_ctx),
-			.base.cra_module	= THIS_MODULE,
-			.init			= sa_cipher_cra_init,
-			.exit			= sa_cipher_cra_exit,
-			.min_keysize		= 3 * DES_KEY_SIZE,
-			.max_keysize		= 3 * DES_KEY_SIZE,
-			.setkey			= sa_3des_ecb_setkey,
-			.encrypt		= sa_encrypt,
-			.decrypt		= sa_decrypt,
+			.base = {
+				.base.cra_name		= "ecb(des3_ede)",
+				.base.cra_driver_name	= "ecb-des3-sa2ul",
+				.base.cra_priority	= 30000,
+				.base.cra_flags		= CRYPTO_ALG_TYPE_SKCIPHER |
+							  CRYPTO_ALG_KERN_DRIVER_ONLY |
+							  CRYPTO_ALG_ASYNC |
+							  CRYPTO_ALG_NEED_FALLBACK,
+				.base.cra_blocksize	= DES_BLOCK_SIZE,
+				.base.cra_ctxsize	= sizeof(struct sa_tfm_ctx),
+				.base.cra_module	= THIS_MODULE,
+				.init			= sa_cipher_cra_init,
+				.exit			= sa_cipher_cra_exit,
+				.min_keysize		= 3 * DES_KEY_SIZE,
+				.max_keysize		= 3 * DES_KEY_SIZE,
+				.setkey			= sa_3des_ecb_setkey,
+				.encrypt		= sa_encrypt,
+				.decrypt		= sa_decrypt,
+			},
+			.op.do_one_request = sa_cipher_do_one_req,
 		}
 	},
 	[SA_ALG_SHA1] = {
 		.type = CRYPTO_ALG_TYPE_AHASH,
 		.alg.ahash = {
-			.halg.base = {
-				.cra_name	= "sha1",
-				.cra_driver_name	= "sha1-sa2ul",
-				.cra_priority	= 400,
-				.cra_flags	= CRYPTO_ALG_TYPE_AHASH |
-						  CRYPTO_ALG_ASYNC |
-						  CRYPTO_ALG_KERN_DRIVER_ONLY |
-						  CRYPTO_ALG_NEED_FALLBACK,
-				.cra_blocksize	= SHA1_BLOCK_SIZE,
-				.cra_ctxsize	= sizeof(struct sa_tfm_ctx),
-				.cra_module	= THIS_MODULE,
-				.cra_init	= sa_sha1_cra_init,
-				.cra_exit	= sa_sha_cra_exit,
+			.base = {
+				.halg.base = {
+					.cra_name	= "sha1",
+					.cra_driver_name	= "sha1-sa2ul",
+					.cra_priority	= 400,
+					.cra_flags	= CRYPTO_ALG_TYPE_AHASH |
+							  CRYPTO_ALG_ASYNC |
+							  CRYPTO_ALG_KERN_DRIVER_ONLY |
+							  CRYPTO_ALG_NEED_FALLBACK,
+					.cra_blocksize	= SHA1_BLOCK_SIZE,
+					.cra_ctxsize	= sizeof(struct sa_tfm_ctx),
+					.cra_module	= THIS_MODULE,
+					.cra_init	= sa_sha1_cra_init,
+					.cra_exit	= sa_sha_cra_exit,
+				},
+				.halg.digestsize	= SHA1_DIGEST_SIZE,
+				.halg.statesize		= sizeof(struct sa_sha_req_ctx) +
+							  sizeof(struct sha1_state),
+				.init			= sa_sha_init,
+				.update			= sa_sha_update,
+				.final			= sa_sha_final,
+				.finup			= sa_sha_finup,
+				.digest			= sa_sha_run,
+				.export			= sa_sha_export,
+				.import			= sa_sha_import,
 			},
-			.halg.digestsize	= SHA1_DIGEST_SIZE,
-			.halg.statesize		= sizeof(struct sa_sha_req_ctx) +
-						  sizeof(struct sha1_state),
-			.init			= sa_sha_init,
-			.update			= sa_sha_update,
-			.final			= sa_sha_final,
-			.finup			= sa_sha_finup,
-			.digest			= sa_sha_run,
-			.export			= sa_sha_export,
-			.import			= sa_sha_import,
+			.op.do_one_request = sa_sha_do_one_req,
 		},
 	},
 	[SA_ALG_SHA256] = {
 		.type = CRYPTO_ALG_TYPE_AHASH,
 		.alg.ahash = {
-			.halg.base = {
-				.cra_name	= "sha256",
-				.cra_driver_name	= "sha256-sa2ul",
-				.cra_priority	= 400,
-				.cra_flags	= CRYPTO_ALG_TYPE_AHASH |
-						  CRYPTO_ALG_ASYNC |
-						  CRYPTO_ALG_KERN_DRIVER_ONLY |
-						  CRYPTO_ALG_NEED_FALLBACK,
-				.cra_blocksize	= SHA256_BLOCK_SIZE,
-				.cra_ctxsize	= sizeof(struct sa_tfm_ctx),
-				.cra_module	= THIS_MODULE,
-				.cra_init	= sa_sha256_cra_init,
-				.cra_exit	= sa_sha_cra_exit,
+			.base = {
+				.halg.base = {
+					.cra_name	= "sha256",
+					.cra_driver_name	= "sha256-sa2ul",
+					.cra_priority	= 400,
+					.cra_flags	= CRYPTO_ALG_TYPE_AHASH |
+							  CRYPTO_ALG_ASYNC |
+							  CRYPTO_ALG_KERN_DRIVER_ONLY |
+							  CRYPTO_ALG_NEED_FALLBACK,
+					.cra_blocksize	= SHA256_BLOCK_SIZE,
+					.cra_ctxsize	= sizeof(struct sa_tfm_ctx),
+					.cra_module	= THIS_MODULE,
+					.cra_init	= sa_sha256_cra_init,
+					.cra_exit	= sa_sha_cra_exit,
+				},
+				.halg.digestsize	= SHA256_DIGEST_SIZE,
+				.halg.statesize		= sizeof(struct sa_sha_req_ctx) +
+							  sizeof(struct sha256_state),
+				.init			= sa_sha_init,
+				.update			= sa_sha_update,
+				.final			= sa_sha_final,
+				.finup			= sa_sha_finup,
+				.digest			= sa_sha_run,
+				.export			= sa_sha_export,
+				.import			= sa_sha_import,
 			},
-			.halg.digestsize	= SHA256_DIGEST_SIZE,
-			.halg.statesize		= sizeof(struct sa_sha_req_ctx) +
-						  sizeof(struct sha256_state),
-			.init			= sa_sha_init,
-			.update			= sa_sha_update,
-			.final			= sa_sha_final,
-			.finup			= sa_sha_finup,
-			.digest			= sa_sha_run,
-			.export			= sa_sha_export,
-			.import			= sa_sha_import,
+			.op.do_one_request = sa_sha_do_one_req,
 		},
 	},
 	[SA_ALG_SHA512] = {
 		.type = CRYPTO_ALG_TYPE_AHASH,
 		.alg.ahash = {
-			.halg.base = {
-				.cra_name	= "sha512",
-				.cra_driver_name	= "sha512-sa2ul",
-				.cra_priority	= 400,
-				.cra_flags	= CRYPTO_ALG_TYPE_AHASH |
-						  CRYPTO_ALG_ASYNC |
-						  CRYPTO_ALG_KERN_DRIVER_ONLY |
-						  CRYPTO_ALG_NEED_FALLBACK,
-				.cra_blocksize	= SHA512_BLOCK_SIZE,
-				.cra_ctxsize	= sizeof(struct sa_tfm_ctx),
-				.cra_module	= THIS_MODULE,
-				.cra_init	= sa_sha512_cra_init,
-				.cra_exit	= sa_sha_cra_exit,
+			.base = {
+				.halg.base = {
+					.cra_name	= "sha512",
+					.cra_driver_name	= "sha512-sa2ul",
+					.cra_priority	= 400,
+					.cra_flags	= CRYPTO_ALG_TYPE_AHASH |
+							  CRYPTO_ALG_ASYNC |
+							  CRYPTO_ALG_KERN_DRIVER_ONLY |
+							  CRYPTO_ALG_NEED_FALLBACK,
+					.cra_blocksize	= SHA512_BLOCK_SIZE,
+					.cra_ctxsize	= sizeof(struct sa_tfm_ctx),
+					.cra_module	= THIS_MODULE,
+					.cra_init	= sa_sha512_cra_init,
+					.cra_exit	= sa_sha_cra_exit,
+				},
+				.halg.digestsize	= SHA512_DIGEST_SIZE,
+				.halg.statesize		= sizeof(struct sa_sha_req_ctx) +
+							  sizeof(struct sha512_state),
+				.init			= sa_sha_init,
+				.update			= sa_sha_update,
+				.final			= sa_sha_final,
+				.finup			= sa_sha_finup,
+				.digest			= sa_sha_run,
+				.export			= sa_sha_export,
+				.import			= sa_sha_import,
 			},
-			.halg.digestsize	= SHA512_DIGEST_SIZE,
-			.halg.statesize		= sizeof(struct sa_sha_req_ctx) +
-						  sizeof(struct sha512_state),
-			.init			= sa_sha_init,
-			.update			= sa_sha_update,
-			.final			= sa_sha_final,
-			.finup			= sa_sha_finup,
-			.digest			= sa_sha_run,
-			.export			= sa_sha_export,
-			.import			= sa_sha_import,
+			.op.do_one_request = sa_sha_do_one_req,
 		},
 	},
 	[SA_ALG_AUTHENC_SHA1_AES] = {
 		.type	= CRYPTO_ALG_TYPE_AEAD,
 		.alg.aead = {
 			.base = {
-				.cra_name = "authenc(hmac(sha1),cbc(aes))",
-				.cra_driver_name =
-					"authenc(hmac(sha1),cbc(aes))-sa2ul",
-				.cra_blocksize = AES_BLOCK_SIZE,
-				.cra_flags = CRYPTO_ALG_TYPE_AEAD |
-					CRYPTO_ALG_KERN_DRIVER_ONLY |
-					CRYPTO_ALG_ASYNC |
-					CRYPTO_ALG_NEED_FALLBACK,
-				.cra_ctxsize = sizeof(struct sa_tfm_ctx),
-				.cra_module = THIS_MODULE,
-				.cra_priority = 3000,
-			},
-			.ivsize = AES_BLOCK_SIZE,
-			.maxauthsize = SHA1_DIGEST_SIZE,
+				.base = {
+					.cra_name = "authenc(hmac(sha1),cbc(aes))",
+					.cra_driver_name =
+						"authenc(hmac(sha1),cbc(aes))-sa2ul",
+					.cra_blocksize = AES_BLOCK_SIZE,
+					.cra_flags = CRYPTO_ALG_TYPE_AEAD |
+						CRYPTO_ALG_KERN_DRIVER_ONLY |
+						CRYPTO_ALG_ASYNC |
+						CRYPTO_ALG_NEED_FALLBACK,
+					.cra_ctxsize = sizeof(struct sa_tfm_ctx),
+					.cra_module = THIS_MODULE,
+					.cra_priority = 3000,
+				},
+				.ivsize = AES_BLOCK_SIZE,
+				.maxauthsize = SHA1_DIGEST_SIZE,
 
-			.init = sa_cra_init_aead_sha1,
-			.exit = sa_exit_tfm_aead,
-			.setkey = sa_aead_cbc_sha1_setkey,
-			.setauthsize = sa_aead_setauthsize,
-			.encrypt = sa_aead_encrypt,
-			.decrypt = sa_aead_decrypt,
+				.init = sa_cra_init_aead_sha1,
+				.exit = sa_exit_tfm_aead,
+				.setkey = sa_aead_cbc_sha1_setkey,
+				.setauthsize = sa_aead_setauthsize,
+				.encrypt = sa_aead_encrypt,
+				.decrypt = sa_aead_decrypt,
+			},
+			.op.do_one_request = sa_aead_do_one_req,
 		},
 	},
 	[SA_ALG_AUTHENC_SHA256_AES] = {
 		.type	= CRYPTO_ALG_TYPE_AEAD,
 		.alg.aead = {
 			.base = {
-				.cra_name = "authenc(hmac(sha256),cbc(aes))",
-				.cra_driver_name =
-					"authenc(hmac(sha256),cbc(aes))-sa2ul",
-				.cra_blocksize = AES_BLOCK_SIZE,
-				.cra_flags = CRYPTO_ALG_TYPE_AEAD |
-					CRYPTO_ALG_KERN_DRIVER_ONLY |
-					CRYPTO_ALG_ASYNC |
-					CRYPTO_ALG_NEED_FALLBACK,
-				.cra_ctxsize = sizeof(struct sa_tfm_ctx),
-				.cra_module = THIS_MODULE,
-				.cra_alignmask = 0,
-				.cra_priority = 3000,
-			},
-			.ivsize = AES_BLOCK_SIZE,
-			.maxauthsize = SHA256_DIGEST_SIZE,
+				.base = {
+					.cra_name = "authenc(hmac(sha256),cbc(aes))",
+					.cra_driver_name =
+						"authenc(hmac(sha256),cbc(aes))-sa2ul",
+					.cra_blocksize = AES_BLOCK_SIZE,
+					.cra_flags = CRYPTO_ALG_TYPE_AEAD |
+						CRYPTO_ALG_KERN_DRIVER_ONLY |
+						CRYPTO_ALG_ASYNC |
+						CRYPTO_ALG_NEED_FALLBACK,
+					.cra_ctxsize = sizeof(struct sa_tfm_ctx),
+					.cra_module = THIS_MODULE,
+					.cra_alignmask = 0,
+					.cra_priority = 3000,
+				},
+				.ivsize = AES_BLOCK_SIZE,
+				.maxauthsize = SHA256_DIGEST_SIZE,
 
-			.init = sa_cra_init_aead_sha256,
-			.exit = sa_exit_tfm_aead,
-			.setkey = sa_aead_cbc_sha256_setkey,
-			.setauthsize = sa_aead_setauthsize,
-			.encrypt = sa_aead_encrypt,
-			.decrypt = sa_aead_decrypt,
+				.init = sa_cra_init_aead_sha256,
+				.exit = sa_exit_tfm_aead,
+				.setkey = sa_aead_cbc_sha256_setkey,
+				.setauthsize = sa_aead_setauthsize,
+				.encrypt = sa_aead_encrypt,
+				.decrypt = sa_aead_decrypt,
+			},
+			.op.do_one_request = sa_aead_do_one_req,
 		},
 	},
 };
@@ -2209,14 +2289,14 @@ static void sa_register_algos(struct sa_crypto_data *dev_data)
 
 		type = sa_algs[i].type;
 		if (type == CRYPTO_ALG_TYPE_SKCIPHER) {
-			alg_name = sa_algs[i].alg.skcipher.base.cra_name;
-			err = crypto_register_skcipher(&sa_algs[i].alg.skcipher);
+			alg_name = sa_algs[i].alg.skcipher.base.base.cra_name;
+			err = crypto_engine_register_skcipher(&sa_algs[i].alg.skcipher);
 		} else if (type == CRYPTO_ALG_TYPE_AHASH) {
-			alg_name = sa_algs[i].alg.ahash.halg.base.cra_name;
-			err = crypto_register_ahash(&sa_algs[i].alg.ahash);
+			alg_name = sa_algs[i].alg.ahash.base.halg.base.cra_name;
+			err = crypto_engine_register_ahash(&sa_algs[i].alg.ahash);
 		} else if (type == CRYPTO_ALG_TYPE_AEAD) {
-			alg_name = sa_algs[i].alg.aead.base.cra_name;
-			err = crypto_register_aead(&sa_algs[i].alg.aead);
+			alg_name = sa_algs[i].alg.aead.base.base.cra_name;
+			err = crypto_engine_register_aead(&sa_algs[i].alg.aead);
 		} else {
 			dev_err(dev,
 				"un-supported crypto algorithm (%d)",
@@ -2242,11 +2322,11 @@ static void sa_unregister_algos(const struct device *dev)
 		if (!sa_algs[i].registered)
 			continue;
 		if (type == CRYPTO_ALG_TYPE_SKCIPHER)
-			crypto_unregister_skcipher(&sa_algs[i].alg.skcipher);
+			crypto_engine_unregister_skcipher(&sa_algs[i].alg.skcipher);
 		else if (type == CRYPTO_ALG_TYPE_AHASH)
-			crypto_unregister_ahash(&sa_algs[i].alg.ahash);
+			crypto_engine_unregister_ahash(&sa_algs[i].alg.ahash);
 		else if (type == CRYPTO_ALG_TYPE_AEAD)
-			crypto_unregister_aead(&sa_algs[i].alg.aead);
+			crypto_engine_unregister_aead(&sa_algs[i].alg.aead);
 
 		sa_algs[i].registered = false;
 	}
@@ -2422,6 +2502,16 @@ static int sa_ul_probe(struct platform_device *pdev)
 	if (ret)
 		goto destroy_dma_pool;
 
+	dev_data->engine = crypto_engine_alloc_init(dev, 0);
+	if (!dev_data->engine) {
+		ret = -ENOMEM;
+		goto release_dma;
+	}
+
+	ret = crypto_engine_start(dev_data->engine);
+	if (ret)
+		goto free_engine;
+
 	spin_lock_init(&dev_data->scid_lock);
 
 	val = SA_EEC_ENCSS_EN | SA_EEC_AUTHSS_EN | SA_EEC_CTXCACH_EN |
@@ -2436,15 +2526,19 @@ static int sa_ul_probe(struct platform_device *pdev)
 
 	ret = of_platform_populate(node, NULL, NULL, dev);
 	if (ret)
-		goto release_dma;
+		goto unregister_algos;
 
 	device_for_each_child(dev, dev, sa_link_child);
 
 	return 0;
 
-release_dma:
+unregister_algos:
 	sa_unregister_algos(dev);
 
+free_engine:
+	crypto_engine_exit(dev_data->engine);
+
+release_dma:
 	dma_release_channel(dev_data->dma_rx2);
 	dma_release_channel(dev_data->dma_rx1);
 	dma_release_channel(dev_data->dma_tx);
@@ -2466,6 +2560,8 @@ static void sa_ul_remove(struct platform_device *pdev)
 	of_platform_depopulate(&pdev->dev);
 
 	sa_unregister_algos(&pdev->dev);
+
+	crypto_engine_exit(dev_data->engine);
 
 	dma_release_channel(dev_data->dma_rx2);
 	dma_release_channel(dev_data->dma_rx1);

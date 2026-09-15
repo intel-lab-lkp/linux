@@ -159,6 +159,7 @@ struct sa_match_data;
  * @dma_rx1: Pointer to DMA rx channel for sizes < 256 Bytes
  * @dma_rx2: Pointer to DMA rx channel for sizes > 256 Bytes
  * @dma_tx: Pointer to DMA TX channel
+ * @engine: crypto_engine instance for this device
  */
 struct sa_crypto_data {
 	const struct sa_match_data *match_data;
@@ -173,6 +174,7 @@ struct sa_crypto_data {
 	struct dma_chan		*dma_rx1;
 	struct dma_chan		*dma_rx2;
 	struct dma_chan		*dma_tx;
+	struct crypto_engine	*engine;
 };
 
 /**
@@ -259,6 +261,26 @@ struct sa_tfm_ctx {
  */
 struct sa_sha_req_ctx {
 	struct ahash_request	fallback_req;
+};
+
+/**
+ * struct sa_cipher_req_ctx: Structure used for skcipher request
+ * @enc: True if this request is an encrypt operation
+ * @fallback_req: SW fallback request container
+ */
+struct sa_cipher_req_ctx {
+	bool enc;
+	struct skcipher_request fallback_req;
+};
+
+/**
+ * struct sa_aead_req_ctx: Structure used for aead request
+ * @enc: True if this request is an encrypt operation
+ * @fallback_req: SW fallback request container
+ */
+struct sa_aead_req_ctx {
+	bool enc;
+	struct aead_request fallback_req;
 };
 
 /**
