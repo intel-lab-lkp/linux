@@ -41,8 +41,6 @@
 #define SA_CMDL_UPD_ENC         0x0001
 #define SA_CMDL_UPD_AUTH        0x0002
 #define SA_CMDL_UPD_ENC_IV      0x0004
-#define SA_CMDL_UPD_AUTH_IV     0x0008
-#define SA_CMDL_UPD_AUX_KEY     0x0010
 
 #define SA_AUTH_SUBKEY_LEN	16
 #define SA_CMDL_PAYLOAD_LENGTH_MASK	0xFFFF
@@ -551,17 +549,6 @@ static void sa_set_sc_auth(struct algo_data *ad, const u8 *key, u16 key_sz,
 	}
 }
 
-static inline void sa_copy_iv(__be32 *out, const u8 *iv, bool size16)
-{
-	int j;
-
-	for (j = 0; j < ((size16) ? 4 : 2); j++) {
-		*out = cpu_to_be32(*((u32 *)iv));
-		iv += 4;
-		out++;
-	}
-}
-
 /* Format general command label */
 static int sa_format_cmdl_gen(struct sa_cmdl_cfg *cfg, u8 *cmdl,
 			      struct sa_cmdl_upd_info *upd_info)
@@ -670,17 +657,6 @@ static inline void sa_update_cmdl(struct sa_req *req, u32 *cmdl,
 		cmdl[upd_info->auth_offset.index] |=
 			FIELD_PREP(SA_CMDL_SOP_BYPASS_LEN_MASK,
 				   req->auth_offset);
-		if (upd_info->flags & SA_CMDL_UPD_AUTH_IV) {
-			sa_copy_iv((void *)&cmdl[upd_info->auth_iv.index],
-				   req->auth_iv,
-				   (upd_info->auth_iv.size > 8));
-		}
-		if (upd_info->flags & SA_CMDL_UPD_AUX_KEY) {
-			int offset = (req->auth_size & 0xF) ? 4 : 0;
-
-			memcpy(&cmdl[upd_info->aux_key_info.index],
-			       &upd_info->aux_key[offset], 16);
-		}
 	}
 }
 
