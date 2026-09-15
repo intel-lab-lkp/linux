@@ -2,6 +2,7 @@
 #ifndef _LINUX_KTHREAD_H
 #define _LINUX_KTHREAD_H
 /* Simple interface for creating and stopping kernel threads without mess. */
+#include <linux/compiler.h>
 #include <linux/err.h>
 #include <linux/sched.h>
 
@@ -179,7 +180,8 @@ struct kthread_delayed_work {
 
 #define DEFINE_KTHREAD_DELAYED_WORK(dwork, fn)				\
 	struct kthread_delayed_work dwork =				\
-		KTHREAD_DELAYED_WORK_INIT(dwork, fn)
+		KTHREAD_DELAYED_WORK_INIT(dwork, fn);			\
+	ASSERT_STATIC_STORAGE(dwork)
 
 extern void __kthread_init_worker(struct kthread_worker *worker,
 			const char *name, struct lock_class_key *key);
