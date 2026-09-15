@@ -113,6 +113,7 @@ ahd_linux_pci_dev_remove(struct pci_dev *pdev)
 	ahd_intr_enable(ahd, FALSE);
 	ahd_unlock(ahd, &s);
 	ahd_free(ahd);
+	pci_disable_device(pdev);
 }
 
 static void
