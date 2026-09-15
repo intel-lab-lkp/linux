@@ -2465,7 +2465,8 @@ static int sa_ul_probe(struct platform_device *pdev)
 	struct device_node *node = dev->of_node;
 	static void __iomem *saul_base;
 	struct sa_crypto_data *dev_data;
-	u32 status, val;
+	u32 status, val, rev;
+	unsigned int major, minor;
 	int ret;
 
 	dev_data = devm_kzalloc(dev, sizeof(*dev_data), GFP_KERNEL);
@@ -2493,6 +2494,11 @@ static int sa_ul_probe(struct platform_device *pdev)
 		pm_runtime_disable(dev);
 		return ret;
 	}
+
+	rev = readl_relaxed(saul_base + SA_REVISION);
+	major = FIELD_GET(SA_REVISION_MAJOR_MASK, rev);
+	minor = FIELD_GET(SA_REVISION_MINOR_MASK, rev);
+	dev_info(dev, "SAxUL_VERSION: %u.%u\n", major, minor);
 
 	ret = sa_init_mem(dev_data);
 	if (ret)

@@ -16,8 +16,17 @@
 #include <crypto/sha1.h>
 #include <crypto/sha2.h>
 
+#define SA_REVISION			0x0000
 #define SA_ENGINE_STATUS		0x0008
 #define SA_ENGINE_ENABLE_CONTROL	0x1000
+
+/*
+ * SA_REVISION register fields (see REVISION Register, offset 0x0)
+ * major == 2: SA2_UL, major == 3: SA3_UL (minor 0 == SA3_UL, minor 1 ==
+ * SA3_UL_CM aka SA3_UL v3.1)
+ */
+#define SA_REVISION_MAJOR_MASK		GENMASK(10, 8)
+#define SA_REVISION_MINOR_MASK		GENMASK(5, 0)
 
 struct sa_tfm_ctx;
 /*
