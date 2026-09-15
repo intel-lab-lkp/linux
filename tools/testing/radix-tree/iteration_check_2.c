@@ -54,8 +54,10 @@ static void *throbber(void *arg)
 void iteration_test2(unsigned test_duration)
 {
 	pthread_t threads[2];
-	DEFINE_XARRAY(array);
+	struct xarray array;
 	int i;
+
+	xa_init(&array);
 
 	printv(1, "Running iteration test 2 for %d seconds\n", test_duration);
 

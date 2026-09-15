@@ -321,7 +321,8 @@ struct xarray {
  * initialisation at compiletime instead of runtime.
  */
 #define DEFINE_XARRAY_FLAGS(name, flags)				\
-	struct xarray name = XARRAY_INIT(name, flags)
+	struct xarray name = XARRAY_INIT(name, flags);			\
+	ASSERT_STATIC_STORAGE(name)
 
 /**
  * DEFINE_XARRAY() - Define an XArray.
