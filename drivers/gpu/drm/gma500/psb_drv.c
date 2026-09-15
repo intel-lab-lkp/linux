@@ -169,7 +169,6 @@ static void psb_driver_unload(struct drm_device *dev)
 
 	/* TODO: Kill vblank etc here */
 
-	gma_backlight_exit(dev);
 	psb_modeset_cleanup(dev);
 
 	gma_irq_uninstall(dev);
@@ -226,6 +225,7 @@ static void psb_device_release(void *data)
 {
 	struct drm_device *dev = data;
 
+	gma_backlight_exit(dev);
 	psb_driver_unload(dev);
 }
 
@@ -405,7 +405,7 @@ static int psb_driver_load(struct drm_device *dev, unsigned long flags)
 	drm_connector_list_iter_end(&conn_iter);
 
 	if (ret)
-		return ret;
+		goto out_err;
 	psb_intel_opregion_enable_asle(dev);
 
 	return devm_add_action_or_reset(dev->dev, psb_device_release, dev);
