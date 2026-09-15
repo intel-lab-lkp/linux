@@ -13,6 +13,24 @@
 #include <asm/kvm_emulate.h>
 #include <asm/kvm_host.h>
 
+/*
+ * Under pKVM a host vCPU's ->kvm is host-writable: the nVHE pair
+ * validates it.
+ */
+#ifdef __KVM_NVHE_HYPERVISOR__
+struct kvm *vcpu_get_kvm(struct kvm_vcpu *vcpu);
+void vcpu_put_kvm(struct kvm_vcpu *vcpu, struct kvm *kvm);
+#else
+static inline struct kvm *vcpu_get_kvm(struct kvm_vcpu *vcpu)
+{
+	return vcpu->kvm;
+}
+
+static inline void vcpu_put_kvm(struct kvm_vcpu *vcpu, struct kvm *kvm)
+{
+}
+#endif
+
 static inline void kvm_skip_instr(struct kvm_vcpu *vcpu)
 {
 	if (vcpu_mode_is_32bit(vcpu)) {

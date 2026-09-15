@@ -11,6 +11,8 @@
 
 #include <asm/kvm_emulate.h>
 
+#include <hyp/adjust_pc.h>
+
 #include <nvhe/mem_protect.h>
 #include <nvhe/memory.h>
 #include <nvhe/pkvm.h>
@@ -302,6 +304,43 @@ struct pkvm_hyp_vcpu *pkvm_get_loaded_hyp_vcpu(void)
 {
 	return __this_cpu_read(loaded_hyp_vcpu);
 
+}
+
+static struct pkvm_hyp_vm *loaded_hyp_vm_of(struct kvm_vcpu *vcpu)
+{
+	struct pkvm_hyp_vcpu *hyp_vcpu = pkvm_get_loaded_hyp_vcpu();
+
+	if (hyp_vcpu &&
+	    (vcpu == &hyp_vcpu->vcpu || vcpu == hyp_vcpu->host_vcpu))
+		return pkvm_hyp_vcpu_to_hyp_vm(hyp_vcpu);
+
+	return NULL;
+}
+
+/* An unloaded host vCPU's VM is mapped at EL2 only while pinned. */
+struct kvm *vcpu_get_kvm(struct kvm_vcpu *vcpu)
+{
+	struct pkvm_hyp_vm *hyp_vm;
+	struct kvm *kvm;
+
+	if (!is_protected_kvm_enabled())
+		return kern_hyp_va(vcpu->kvm);
+
+	hyp_vm = loaded_hyp_vm_of(vcpu);
+	if (hyp_vm)
+		return &hyp_vm->kvm;
+
+	kvm = kern_hyp_va(READ_ONCE(vcpu->kvm));
+	if (hyp_pin_shared_mem(kvm, kvm + 1))
+		return NULL;
+
+	return kvm;
+}
+
+void vcpu_put_kvm(struct kvm_vcpu *vcpu, struct kvm *kvm)
+{
+	if (kvm && is_protected_kvm_enabled() && !loaded_hyp_vm_of(vcpu))
+		hyp_unpin_shared_mem(kvm, kvm + 1);
 }
 
 struct pkvm_hyp_vm *get_pkvm_hyp_vm(pkvm_handle_t handle)
