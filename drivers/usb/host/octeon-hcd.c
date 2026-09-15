@@ -1923,6 +1923,7 @@ static void cvmx_usb_schedule(struct octeon_hcd *usb, int is_sof)
 	struct cvmx_usb_pipe *pipe;
 	int need_sof;
 	u64 min_due;
+	bool due_now;
 	enum cvmx_usb_transfer ttype;
 
 	if (usb->init_flags & CVMX_USB_INITIALIZE_FLAGS_NO_DMA) {
@@ -1964,12 +1965,23 @@ done:
 	 */
 	need_sof = 0;
 	min_due = ~0ull;
+	due_now = false;
 	for (ttype = CVMX_USB_TRANSFER_CONTROL;
 	     ttype <= CVMX_USB_TRANSFER_INTERRUPT; ttype++) {
 		list_for_each_entry(pipe, &usb->active_pipes[ttype], node) {
-			if (pipe->next_tx_frame > usb->frame_number &&
-			    pipe->next_tx_frame < min_due)
+			if (pipe->next_tx_frame <= usb->frame_number) {
+				/*
+				 * A periodic pipe that is due but was not
+				 * started - no idle channel, or its split
+				 * window is closed - is only retried from a
+				 * SOF, so do not sleep past it.
+				 */
+				if (ttype == CVMX_USB_TRANSFER_ISOCHRONOUS ||
+				    ttype == CVMX_USB_TRANSFER_INTERRUPT)
+					due_now = true;
+			} else if (pipe->next_tx_frame < min_due) {
 				min_due = pipe->next_tx_frame;
+			}
 		}
 	}
 	if (min_due != ~0ull) {
@@ -1983,7 +1995,7 @@ done:
 		 * a few frames. Stay well below the 16383-frame wrap of
 		 * HFNUM. One (micro)frame is 125us in high-speed mode.
 		 */
-		if (delta <= 4 || delta > 8000)
+		if (due_now || delta <= 4 || delta > 8000)
 			need_sof = 1;
 		else
 			hrtimer_start(&usb->sof_timer,
