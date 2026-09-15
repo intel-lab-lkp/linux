@@ -8,6 +8,7 @@
 #ifndef _LINUX_RWSEM_H
 #define _LINUX_RWSEM_H
 
+#include <linux/compiler.h>
 #include <linux/linkage.h>
 
 #include <linux/types.h>
@@ -111,7 +112,8 @@ static inline void rwsem_assert_held_write_nolockdep(const struct rw_semaphore *
 	  __RWSEM_DEP_MAP_INIT(name) }
 
 #define DECLARE_RWSEM(name) \
-	struct rw_semaphore name = __RWSEM_INITIALIZER(name)
+	struct rw_semaphore name = __RWSEM_INITIALIZER(name);	\
+	ASSERT_STATIC_STORAGE(name)
 
 extern void __init_rwsem(struct rw_semaphore *sem, const char *name,
 			 struct lock_class_key *key);
@@ -164,7 +166,8 @@ context_lock_struct(rw_semaphore) {
 	}
 
 #define DECLARE_RWSEM(lockname) \
-	struct rw_semaphore lockname = __RWSEM_INITIALIZER(lockname)
+	struct rw_semaphore lockname = __RWSEM_INITIALIZER(lockname);	\
+	ASSERT_STATIC_STORAGE(lockname)
 
 extern void  __init_rwsem(struct rw_semaphore *rwsem, const char *name,
 			  struct lock_class_key *key);

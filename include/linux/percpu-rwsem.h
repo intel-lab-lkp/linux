@@ -2,6 +2,7 @@
 #ifndef _LINUX_PERCPU_RWSEM_H
 #define _LINUX_PERCPU_RWSEM_H
 
+#include <linux/compiler.h>
 #include <linux/atomic.h>
 #include <linux/percpu.h>
 #include <linux/rcuwait.h>
@@ -36,7 +37,8 @@ is_static struct percpu_rw_semaphore name = {				\
 	.waiters = __WAIT_QUEUE_HEAD_INITIALIZER(name.waiters),		\
 	.block = ATOMIC_INIT(0),					\
 	__PERCPU_RWSEM_DEP_MAP_INIT(name)				\
-}
+};									\
+	ASSERT_STATIC_STORAGE(name)
 
 #define DEFINE_PERCPU_RWSEM(name)		\
 	__DEFINE_PERCPU_RWSEM(name, /* not static */)
