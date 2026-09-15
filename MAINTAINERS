@@ -29112,6 +29112,7 @@ M:	Richard Leitner <richard.leitner@linux.dev>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/media/i2c/vision-components,mipi-module-controller.yaml
+F:	drivers/media/i2c/vc-mipi.c
 
 VISL VIRTUAL STATELESS DECODER DRIVER
 M:	Daniel Almeida <daniel.almeida@collabora.com>

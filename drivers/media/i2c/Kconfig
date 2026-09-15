@@ -868,6 +868,19 @@ config VIDEO_VGXY61
 	  This is a Video4Linux2 sensor driver for the ST VGXY61
 	  camera sensor.
 
+config VIDEO_VC_MIPI
+	tristate "Vision Components MIPI Module support"
+	depends on I2C
+	help
+	  This is a driver for the camera module controller found in the Vision
+	  Components MIPI modules.
+
+	  The controller manages the power supply, reset signal and I2C
+	  communication to the actual camera sensor.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called vc-mipi.
+
 source "drivers/media/i2c/ccs/Kconfig"
 source "drivers/media/i2c/et8ek8/Kconfig"
 
