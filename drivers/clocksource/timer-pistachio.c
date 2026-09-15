@@ -181,20 +181,22 @@ static int __init pistachio_clksrc_of_init(struct device_node *node)
 	fast_clk = of_clk_get_by_name(node, "fast");
 	if (IS_ERR(fast_clk)) {
 		pr_err("clock get failed (%lu)\n", PTR_ERR(fast_clk));
+		clk_put(sys_clk);
 		return PTR_ERR(fast_clk);
 	}
 
 	ret = clk_prepare_enable(sys_clk);
 	if (ret < 0) {
 		pr_err("failed to enable clock (%d)\n", ret);
+		clk_put(sys_clk);
 		return ret;
 	}
 
 	ret = clk_prepare_enable(fast_clk);
 	if (ret < 0) {
 		pr_err("failed to enable clock (%d)\n", ret);
-		clk_disable_unprepare(sys_clk);
-		return ret;
+		clk_put(fast_clk);
+		goto disable_sys_clk;
 	}
 
 	rate = clk_get_rate(fast_clk);
@@ -210,7 +212,27 @@ static int __init pistachio_clksrc_of_init(struct device_node *node)
 
 	raw_spin_lock_init(&pcs_gpt.lock);
 	sched_clock_register(pistachio_read_sched_clock, 32, rate);
-	return clocksource_register_hz(&pcs_gpt.cs, rate);
+	ret = clocksource_register_hz(&pcs_gpt.cs, rate);
+	if (ret)
+		goto disable_clks;
+
+	/*
+	 * Both clocks are intentionally left enabled for the clocksource;
+	 * only drop the consumer references taken by of_clk_get_by_name().
+	 */
+	clk_put(fast_clk);
+	clk_put(sys_clk);
+
+	return 0;
+
+disable_clks:
+	clk_disable_unprepare(fast_clk);
+	clk_put(fast_clk);
+disable_sys_clk:
+	clk_disable_unprepare(sys_clk);
+	clk_put(sys_clk);
+
+	return ret;
 }
 TIMER_OF_DECLARE(pistachio_gptimer, "img,pistachio-gptimer",
 		       pistachio_clksrc_of_init);
