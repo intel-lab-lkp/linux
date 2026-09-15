@@ -1876,8 +1876,9 @@ static void vgxy61_remove(struct i2c_client *client)
 	struct vgxy61_dev *sensor = to_vgxy61_dev(sd);
 
 	v4l2_async_unregister_subdev(&sensor->sd);
-	mutex_destroy(&sensor->lock);
 	media_entity_cleanup(&sensor->sd.entity);
+	v4l2_ctrl_handler_free(sensor->sd.ctrl_handler);
+	mutex_destroy(&sensor->lock);
 
 	pm_runtime_disable(&client->dev);
 	if (!pm_runtime_status_suspended(&client->dev))
