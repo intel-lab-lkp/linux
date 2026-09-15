@@ -1041,13 +1041,17 @@ static int sa_3des_ecb_setkey(struct crypto_skcipher *tfm, const u8 *key,
 static void sa_sync_from_device(struct sa_rx_data *rxd)
 {
 	struct sg_table *sgt;
+	u32 dir;
 
-	if (rxd->mapped_sg[0].dir == DMA_BIDIRECTIONAL)
+	if (rxd->mapped_sg[0].dir == DMA_BIDIRECTIONAL) {
 		sgt = &rxd->mapped_sg[0].sgt;
-	else
+		dir = rxd->mapped_sg[0].dir;
+	} else {
 		sgt = &rxd->mapped_sg[1].sgt;
+		dir = rxd->mapped_sg[1].dir;
+	}
 
-	dma_sync_sgtable_for_cpu(rxd->ddev, sgt, DMA_FROM_DEVICE);
+	dma_sync_sgtable_for_cpu(rxd->ddev, sgt, dir);
 }
 
 static void sa_free_sa_rx_data(struct sa_rx_data *rxd)
