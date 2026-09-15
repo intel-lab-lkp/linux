@@ -19,6 +19,14 @@ struct dma_iommu_mapping {
 	size_t			bits;		/* per bitmap */
 	dma_addr_t		base;
 
+	/*
+	 * Set for mappings created by arm_iommu_create_mapping(), where
+	 * @domain is owned by the mapping.
+	 * Clear for mappings that are a cookie of a domain owned by the IOMMU
+	 * core.
+	 */
+	bool			owns_domain;
+
 	spinlock_t		lock;
 	struct kref		kref;
 };
@@ -31,6 +39,15 @@ void arm_iommu_release_mapping(struct dma_iommu_mapping *mapping);
 int arm_iommu_attach_device(struct device *dev,
 					struct dma_iommu_mapping *mapping);
 void arm_iommu_detach_device(struct device *dev);
+
+#ifdef CONFIG_ARM_DMA_USE_IOMMU
+struct iommu_domain;
+
+void iommu_setup_dma_ops(struct device *dev, struct iommu_domain *domain);
+void iommu_teardown_dma_ops(struct device *dev);
+int iommu_get_dma_cookie(struct iommu_domain *domain);
+void iommu_put_dma_cookie(struct iommu_domain *domain);
+#endif
 
 #endif /* __KERNEL__ */
 #endif
