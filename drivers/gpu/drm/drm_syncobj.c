@@ -663,25 +663,14 @@ static const struct file_operations drm_syncobj_file_fops = {
  */
 int drm_syncobj_get_fd(struct drm_syncobj *syncobj, int *p_fd)
 {
-	struct file *file;
-	int fd;
-
-	fd = get_unused_fd_flags(O_CLOEXEC);
-	if (fd < 0)
-		return fd;
-
-	file = anon_inode_getfile("syncobj_file",
-				  &drm_syncobj_file_fops,
-				  syncobj, 0);
-	if (IS_ERR(file)) {
-		put_unused_fd(fd);
-		return PTR_ERR(file);
-	}
+	FD_PREPARE(fdf, O_CLOEXEC,
+		   anon_inode_getfile("syncobj_file", &drm_syncobj_file_fops,
+				      syncobj, 0));
+	if (IS_ERR(fdf))
+		return PTR_ERR(fdf);
 
 	drm_syncobj_get(syncobj);
-	fd_install(fd, file);
-
-	*p_fd = fd;
+	*p_fd = fd_prepare_fd(fdf);
 	return 0;
 }
 EXPORT_SYMBOL(drm_syncobj_get_fd);
@@ -762,31 +751,24 @@ static int drm_syncobj_export_sync_file(struct drm_file *file_private,
 	int ret;
 	struct dma_fence *fence;
 	struct sync_file *sync_file;
-	int fd = get_unused_fd_flags(O_CLOEXEC);
+	const struct fd_slot *fd = fd_prepare(O_CLOEXEC);
 
-	if (fd < 0)
-		return fd;
+	if (IS_ERR(fd))
+		return PTR_ERR(fd);
 
 	ret = drm_syncobj_find_fence(file_private, handle, point, 0, &fence);
 	if (ret)
-		goto err_put_fd;
+		return ret;
 
 	sync_file = sync_file_create(fence);
 
 	dma_fence_put(fence);
 
-	if (!sync_file) {
-		ret = -EINVAL;
-		goto err_put_fd;
-	}
+	if (!sync_file)
+		return -EINVAL;
 
-	fd_install(fd, sync_file->file);
-
-	*p_fd = fd;
+	*p_fd = fd_stage(fd, sync_file->file);
 	return 0;
-err_put_fd:
-	put_unused_fd(fd);
-	return ret;
 }
 /**
  * drm_syncobj_open - initializes syncobj file-private structures at devnode open time

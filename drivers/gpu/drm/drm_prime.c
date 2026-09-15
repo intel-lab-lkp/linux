@@ -513,19 +513,16 @@ int drm_gem_prime_handle_to_fd(struct drm_device *dev,
 			       int *prime_fd)
 {
 	struct dma_buf *dmabuf;
-	int fd = get_unused_fd_flags(flags);
+	const struct fd_slot *fd = fd_prepare(flags);
 
-	if (fd < 0)
-		return fd;
+	if (IS_ERR(fd))
+		return PTR_ERR(fd);
 
 	dmabuf = drm_gem_prime_handle_to_dmabuf(dev, file_priv, handle, flags);
-	if (IS_ERR(dmabuf)) {
-		put_unused_fd(fd);
+	if (IS_ERR(dmabuf))
 		return PTR_ERR(dmabuf);
-	}
 
-	fd_install(fd, dmabuf->file);
-	*prime_fd = fd;
+	*prime_fd = fd_stage(fd, dmabuf->file);
 	return 0;
 }
 EXPORT_SYMBOL(drm_gem_prime_handle_to_fd);

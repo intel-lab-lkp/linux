@@ -484,7 +484,7 @@ int drm_mode_create_lease_ioctl(struct drm_device *dev,
 	struct file *lessee_file = NULL;
 	struct file *lessor_file = lessor_priv->filp;
 	struct drm_file *lessee_priv;
-	int fd = -1;
+	const struct fd_slot *fd;
 	uint32_t *object_ids;
 
 	/* Can't lease without MODESET */
@@ -529,10 +529,10 @@ int drm_mode_create_lease_ioctl(struct drm_device *dev,
 	}
 
 	/* Allocate a file descriptor for the lease */
-	fd = get_unused_fd_flags(cl->flags & (O_CLOEXEC | O_NONBLOCK));
-	if (fd < 0) {
+	fd = fd_prepare(cl->flags & (O_CLOEXEC | O_NONBLOCK));
+	if (IS_ERR(fd)) {
 		idr_destroy(&leases);
-		ret = fd;
+		ret = PTR_ERR(fd);
 		goto out_lessor;
 	}
 
@@ -543,7 +543,7 @@ int drm_mode_create_lease_ioctl(struct drm_device *dev,
 	if (IS_ERR(lessee)) {
 		ret = PTR_ERR(lessee);
 		idr_destroy(&leases);
-		goto out_leases;
+		goto out_lessor;
 	}
 
 	/* Clone the lessor file to create a new file for us */
@@ -562,12 +562,13 @@ int drm_mode_create_lease_ioctl(struct drm_device *dev,
 	lessee_priv->authenticated = 1;
 
 	/* Pass fd back to userspace */
-	drm_dbg_lease(dev, "Returning fd %d id %d\n", fd, lessee->lessee_id);
-	cl->fd = fd;
+	drm_dbg_lease(dev, "Returning fd %d id %d\n", fd_prepare_fd(fd),
+		      lessee->lessee_id);
+	cl->fd = fd_prepare_fd(fd);
 	cl->lessee_id = lessee->lessee_id;
 
 	/* Hook up the fd */
-	fd_install(fd, lessee_file);
+	fd_stage(fd, lessee_file);
 
 	drm_master_put(&lessor);
 	drm_dbg_lease(dev, "drm_mode_create_lease_ioctl succeeded\n");
@@ -575,9 +576,6 @@ int drm_mode_create_lease_ioctl(struct drm_device *dev,
 
 out_lessee:
 	drm_master_put(&lessee);
-
-out_leases:
-	put_unused_fd(fd);
 
 out_lessor:
 	drm_master_put(&lessor);
