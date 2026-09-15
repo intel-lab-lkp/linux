@@ -737,7 +737,9 @@ static struct panel_simple *panel_simple_probe(struct device *dev)
 		goto disable_pm_runtime;
 	}
 
-	drm_panel_add(&panel->base);
+	err = devm_drm_panel_add(dev, &panel->base);
+	if (err)
+		goto disable_pm_runtime;
 
 	return panel;
 
@@ -785,7 +787,6 @@ static void panel_simple_remove(struct device *dev)
 {
 	struct panel_simple *panel = dev_get_drvdata(dev);
 
-	drm_panel_remove(&panel->base);
 	panel_simple_shutdown(dev);
 
 	pm_runtime_dont_use_autosuspend(dev);
@@ -6540,7 +6541,6 @@ static int panel_simple_dsi_probe(struct mipi_dsi_device *dsi)
 {
 	const struct panel_desc_dsi *desc;
 	struct panel_simple *panel;
-	int err;
 
 	panel = panel_simple_probe(&dsi->dev);
 	if (IS_ERR(panel))
@@ -6551,14 +6551,7 @@ static int panel_simple_dsi_probe(struct mipi_dsi_device *dsi)
 	dsi->format = desc->format;
 	dsi->lanes = desc->lanes;
 
-	err = mipi_dsi_attach(dsi);
-	if (err) {
-		struct panel_simple *panel = mipi_dsi_get_drvdata(dsi);
-
-		drm_panel_remove(&panel->base);
-	}
-
-	return err;
+	return mipi_dsi_attach(dsi);
 }
 
 static void panel_simple_dsi_remove(struct mipi_dsi_device *dsi)
