@@ -87,6 +87,7 @@ static inline void rcu_irq_exit_check_preempt(void) { }
 
 struct task_struct;
 void rcu_preempt_deferred_qs(struct task_struct *t);
+void rcu_ct_kernel_exit_qs(void);
 
 void exit_rcu(void);
 

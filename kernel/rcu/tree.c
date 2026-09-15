@@ -369,6 +369,25 @@ notrace void rcu_momentary_eqs(void)
 EXPORT_SYMBOL_GPL(rcu_momentary_eqs);
 
 /**
+ * rcu_ct_kernel_exit_qs - report deferred QS on syscall/exception exit if needed
+ *
+ * Called from ct_kernel_exit() on every return to userspace.  Guards the
+ * rcu_preempt_deferred_qs() call with rcu_preempt_need_deferred_qs() so that
+ * on the common fast path -- where nothing is deferred -- we avoid the
+ * cache-line traffic on current->rcu_read_unlock_special that the unconditional
+ * call causes.  This is particularly significant on weakly-ordered architectures
+ * (e.g. ppc64le) where rcu_read_lock/unlock issue lwsync/isync barriers and
+ * already touch that cache line in the syscall body.
+ *
+ * Follows the same pattern used by rcu_flavor_sched_clock_irq().
+ */
+notrace void rcu_ct_kernel_exit_qs(void)
+{
+	if (rcu_preempt_need_deferred_qs(current))
+		rcu_preempt_deferred_qs(current);
+}
+
+/**
  * rcu_is_cpu_rrupt_from_idle - see if 'interrupted' from idle
  *
  * If the current CPU is idle and running at a first-level (not nested)
