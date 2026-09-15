@@ -8214,31 +8214,31 @@ static struct pci_driver e1000_driver = {
 };
 
 /**
- * e1000_init_module - Driver Registration Routine
+ * e1000e_init_module - Driver Registration Routine
  *
- * e1000_init_module is the first routine called when the driver is
+ * e1000e_init_module is the first routine called when the driver is
  * loaded. All it does is register with the PCI subsystem.
  **/
-static int __init e1000_init_module(void)
+static int __init e1000e_init_module(void)
 {
 	pr_info("Intel(R) PRO/1000 Network Driver\n");
 	pr_info("Copyright(c) 1999 - 2015 Intel Corporation.\n");
 
 	return pci_register_driver(&e1000_driver);
 }
-module_init(e1000_init_module);
+module_init(e1000e_init_module);
 
 /**
- * e1000_exit_module - Driver Exit Cleanup Routine
+ * e1000e_exit_module - Driver Exit Cleanup Routine
  *
- * e1000_exit_module is called just before the driver is removed
+ * e1000e_exit_module is called just before the driver is removed
  * from memory.
  **/
-static void __exit e1000_exit_module(void)
+static void __exit e1000e_exit_module(void)
 {
 	pci_unregister_driver(&e1000_driver);
 }
-module_exit(e1000_exit_module);
+module_exit(e1000e_exit_module);
 
 MODULE_DESCRIPTION("Intel(R) PRO/1000 Network Driver");
 MODULE_LICENSE("GPL v2");
