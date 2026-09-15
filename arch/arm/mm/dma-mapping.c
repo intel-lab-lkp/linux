@@ -1761,8 +1761,17 @@ EXPORT_SYMBOL_GPL(arm_iommu_detach_device);
 
 static void arm_setup_iommu_dma_ops(struct device *dev)
 {
-	struct dma_iommu_mapping *mapping;
+	struct dma_iommu_mapping *mapping = to_dma_iommu_mapping(dev);
 	u64 dma_base = 0, size = 1ULL << 32;
+
+	/*
+	 * An existing cookie means the core owns the domain. Only set the
+	 * per-binding DMA ops.
+	 */
+	if (mapping) {
+		set_dma_ops(dev, &iommu_ops);
+		return;
+	}
 
 	if (dev->dma_range_map) {
 		dma_base = dma_range_map_min(dev->dma_range_map);
@@ -1790,6 +1799,9 @@ static void arm_teardown_iommu_dma_ops(struct device *dev)
 	struct dma_iommu_mapping *mapping = to_dma_iommu_mapping(dev);
 
 	if (!mapping)
+		return;
+
+	if (!mapping->owns_domain)
 		return;
 
 	arm_iommu_detach_device(dev);
