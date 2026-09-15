@@ -74,6 +74,8 @@ static ssize_t reset_store(struct device *dev,
 	ret = kstrtoul(buf, 16, &val);
 	if (ret)
 		return ret;
+	if (coresight_get_mode(drvdata->csdev))
+		return -EBUSY;
 
 	if (val) {
 		spin_lock(&drvdata->spinlock);
@@ -744,6 +746,8 @@ static ssize_t cntr_val_store(struct device *dev,
 	ret = kstrtoul(buf, 16, &val);
 	if (ret)
 		return ret;
+	if (coresight_get_mode(drvdata->csdev))
+		return -EBUSY;
 
 	spin_lock(&drvdata->spinlock);
 	config->cntr_val[config->cntr_idx] = val;
