@@ -33,6 +33,7 @@
 #include "lapic.h"
 #include "xen.h"
 #include "smm.h"
+#include "svm/svm.h"
 
 #include <linux/clocksource.h>
 #include <linux/interrupt.h>
@@ -5089,7 +5090,8 @@ static int emulator_read_write_onepage(unsigned long addr, void *val,
 	 * operation using rep will only have the initial GPA from the NPF
 	 * occurred.
 	 */
-	if (ctxt->gpa_available && emulator_can_use_gpa(ctxt) &&
+	if ((ctxt->gpa_access & (write ? ACC_WRITE_MASK : ACC_READ_MASK)) &&
+	    emulator_can_use_gpa(ctxt) &&
 	    (addr & ~PAGE_MASK) == (ctxt->gpa_val & ~PAGE_MASK)) {
 		gpa = ctxt->gpa_val;
 		ret = vcpu_is_mmio_gpa(vcpu, addr, gpa, write);
@@ -5938,7 +5940,7 @@ static void init_emulate_ctxt(struct kvm_vcpu *vcpu)
 
 	kvm_x86_call(get_cs_db_l_bits)(vcpu, &cs_db, &cs_l);
 
-	ctxt->gpa_available = false;
+	ctxt->gpa_access = 0;
 	ctxt->eflags = kvm_get_rflags(vcpu);
 	ctxt->tf = (ctxt->eflags & X86_EFLAGS_TF) != 0;
 
@@ -6454,7 +6456,18 @@ restart:
 
 		/* With shadow page tables, cr2 contains a GVA or nGPA. */
 		if (vcpu->arch.mmu->root_role.direct) {
-			ctxt->gpa_available = true;
+			ctxt->gpa_access = ACC_READ_MASK;
+			/*
+			 * Always allow writes for SEV guests, as the guest's
+			 * page tables are encrypted, i.e. KVM can't walk the
+			 * guest's page tables and so must always use the GPA
+			 * from the initial fault.  Restricting use of the GPA
+			 * to the access type that faulted would prevent KVM
+			 * from emulating RMW operations for SEV guests.
+			 */
+			if ((emulation_type & EMULTYPE_PF_WRITE) ||
+			    (cpu_feature_enabled(X86_FEATURE_SVM) && is_sev_guest(vcpu)))
+				ctxt->gpa_access |= ACC_WRITE_MASK;
 			ctxt->gpa_val = cr2_or_gpa;
 		}
 	} else {
