@@ -112,6 +112,8 @@ s64 cpuidle_governor_latency_req(unsigned int cpu)
 	int device_req = dev_pm_qos_raw_resume_latency(device);
 	int global_req = cpu_latency_qos_limit();
 	int global_wake_req = cpu_wakeup_latency_qos_limit();
+	struct cpuidle_device *dev;
+	s64 result;
 
 	if (global_req > global_wake_req)
 		global_req = global_wake_req;
@@ -119,5 +121,11 @@ s64 cpuidle_governor_latency_req(unsigned int cpu)
 	if (device_req > global_req)
 		device_req = global_req;
 
-	return (s64)device_req * NSEC_PER_USEC;
+	result = (s64)device_req * NSEC_PER_USEC;
+
+	dev = per_cpu(cpuidle_devices, cpu);
+	if (dev && dev->latency_limit_ns && dev->latency_limit_ns < result)
+		result = dev->latency_limit_ns;
+
+	return result;
 }

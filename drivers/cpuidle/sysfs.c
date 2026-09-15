@@ -207,8 +207,44 @@ static void cpuidle_sysfs_release(struct kobject *kobj)
 	complete(&kdev->kobj_unregister);
 }
 
+static ssize_t show_latency_limit_ns(struct cpuidle_device *dev, char *buf)
+{
+	return sysfs_emit(buf, "%llu\n", dev->latency_limit_ns);
+}
+
+static ssize_t store_latency_limit_ns(struct cpuidle_device *dev,
+				       const char *buf, size_t count)
+{
+	u64 value;
+	int err;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	err = kstrtou64(buf, 0, &value);
+	if (err)
+		return err;
+
+	dev->latency_limit_ns = value;
+
+	return count;
+}
+
+static struct cpuidle_attr attr_latency_limit_ns = {
+	.attr = { .name = "latency_limit_ns", .mode = 0644 },
+	.show = show_latency_limit_ns,
+	.store = store_latency_limit_ns,
+};
+
+static struct attribute *cpuidle_device_default_attrs[] = {
+	&attr_latency_limit_ns.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(cpuidle_device_default);
+
 static const struct kobj_type ktype_cpuidle = {
 	.sysfs_ops = &cpuidle_sysfs_ops,
+	.default_groups = cpuidle_device_default_groups,
 	.release = cpuidle_sysfs_release,
 };
 
