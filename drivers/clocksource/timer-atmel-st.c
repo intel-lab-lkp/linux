@@ -222,12 +222,15 @@ static int __init atmel_st_timer_init(struct device_node *node)
 	ret = clk_prepare_enable(sclk);
 	if (ret) {
 		pr_err("Could not enable slow clock\n");
+		clk_put(sclk);
 		return ret;
 	}
 
 	sclk_rate = clk_get_rate(sclk);
 	if (!sclk_rate) {
 		pr_err("Invalid slow clock rate\n");
+		clk_disable_unprepare(sclk);
+		clk_put(sclk);
 		return -EINVAL;
 	}
 	timer_latch = (sclk_rate + HZ / 2) / HZ;
@@ -244,7 +247,14 @@ static int __init atmel_st_timer_init(struct device_node *node)
 					2, AT91_ST_ALMV);
 
 	/* register clocksource */
-	return clocksource_register_hz(&clk32k, sclk_rate);
+	ret = clocksource_register_hz(&clk32k, sclk_rate);
+	if (ret) {
+		clk_disable_unprepare(sclk);
+		clk_put(sclk);
+		return ret;
+	}
+
+	return 0;
 }
 TIMER_OF_DECLARE(atmel_st_timer, "atmel,at91rm9200-st",
 		       atmel_st_timer_init);
