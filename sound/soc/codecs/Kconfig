@@ -1992,6 +1992,7 @@ config SND_SOC_RT766_SDCA_SDW
 	tristate "Realtek RT766 SDCA Codec - SDW"
 	depends on SOUNDWIRE
 	depends on SND_SOC_SDCA
+	depends on HID
 	select SND_SOC_SDCA_HID
 	select SND_SOC_SDCA_IRQ
 	select REGMAP_SOUNDWIRE
