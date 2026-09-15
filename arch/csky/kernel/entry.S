@@ -80,6 +80,15 @@ ENTRY(csky_systemcall)
 	jsr     syscallid
 #endif
 	stw     a0, (sp, LSAVE_A0)      /* Save return value */
+	/* descriptors reserved by the syscall are committed in syscall_trace_exit() */
+	mov     r9, sp
+	bmaski  r10, THREAD_SHIFT
+	andn    r9, r10
+	ldw     r10, (r9, TINFO_FLAGS)
+	lrw	r9, _TIF_FD_SLOTS
+	and	r10, r9
+	cmpnei	r10, 0
+	bt      1f
 	jmpi    ret_from_exception
 
 csky_syscall_trace:
