@@ -316,21 +316,28 @@ int gma_irq_install(struct drm_device *dev)
 		dev_priv->use_msi = false;
 	}
 
-	if (pdev->irq == IRQ_NOTCONNECTED)
-		return -ENOTCONN;
+	if (pdev->irq == IRQ_NOTCONNECTED) {
+		ret = -ENOTCONN;
+		goto err_disable_msi;
+	}
 
 	gma_irq_preinstall(dev);
 
 	/* PCI devices require shared interrupts. */
 	ret = request_irq(pdev->irq, gma_irq_handler, IRQF_SHARED, dev->driver->name, dev);
 	if (ret)
-		return ret;
+		goto err_disable_msi;
 
 	gma_irq_postinstall(dev);
 
 	dev_priv->irq_enabled = true;
 
 	return 0;
+
+err_disable_msi:
+	if (dev_priv->use_msi)
+		pci_disable_msi(pdev);
+	return ret;
 }
 
 void gma_irq_uninstall(struct drm_device *dev)
@@ -372,6 +379,7 @@ void gma_irq_uninstall(struct drm_device *dev)
 	free_irq(pdev->irq, dev);
 	if (dev_priv->use_msi)
 		pci_disable_msi(pdev);
+	dev_priv->irq_enabled = false;
 }
 
 int gma_crtc_enable_vblank(struct drm_crtc *crtc)
