@@ -164,9 +164,13 @@ work_resched:
 
 	.align	2
 syscall_exit_work:
-	! r0: current_thread_info->flags
 	! r8: current_thread_info
-	tst	#(_TIF_WORK_SYSCALL_MASK & 0xff), r0
+	mov.l	@(TI_FLAGS,r8), r0		! current_thread_info->flags
+	mov	#(_TIF_WORK_SYSCALL_MASK & 0xff), r1
+	mov	#(_TIF_WORK_SYSCALL_MASK >> 8), r2
+	shll8	r2
+	or	r2, r1
+	tst	r1, r0
 	bt/s	work_pending
 	 tst	#_TIF_NEED_RESCHED, r0
 	TRACE_IRQS_ON
