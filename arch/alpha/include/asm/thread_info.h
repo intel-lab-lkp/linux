@@ -67,6 +67,7 @@ register unsigned long *current_stack_pointer __asm__ ("$30");
 #define TIF_NOTIFY_SIGNAL	5	/* signal notifications exist */
 #define TIF_SECCOMP		6	/* seccomp syscall filtering active */
 #define	TIF_SYSCALL_TRACEPOINT	7	/* syscall tracepoint instrumentation */
+#define TIF_FD_SLOTS		8	/* syscall prepared descriptors */
 #define TIF_DIE_IF_KERNEL	9	/* dik recursion lock */
 #define TIF_MEMDIE		13	/* is terminating due to OOM killer */
 #define TIF_POLLING_NRFLAG	14	/* idle is polling for TIF_NEED_RESCHED */
@@ -80,6 +81,7 @@ register unsigned long *current_stack_pointer __asm__ ("$30");
 #define _TIF_SECCOMP		(1<<TIF_SECCOMP)
 #define _TIF_POLLING_NRFLAG	(1<<TIF_POLLING_NRFLAG)
 #define _TIF_SYSCALL_TRACEPOINT	(1<<TIF_SYSCALL_TRACEPOINT)
+#define _TIF_FD_SLOTS		(1<<TIF_FD_SLOTS)
 
 /*
  * Work to do on syscall entry (in entry.S).

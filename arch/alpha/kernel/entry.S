@@ -569,6 +569,13 @@ entSys:
 $ret_success:
 	stq	$0, 0($sp)
 	stq	$31, 72($sp)		/* a3=0 => no error */
+$syscall_exit:
+	/* Descriptors reserved by the syscall are committed in
+	   syscall_trace_leave, off the return path interrupts share.  */
+	ldl	$17, TI_FLAGS($8)
+	lda	$2, _TIF_FD_SLOTS
+	and	$17, $2, $2
+	bne	$2, $fd_slots_exit
 
 	.align	4
 	.globl	ret_from_sys_call
@@ -612,7 +619,7 @@ $syscall_error:
 	stq	$0, 0($sp)
 	mov	$31, $26	/* tell "ret_from_sys_call" we can restart */
 	stq	$1, 72($sp)	/* a3 for return */
-	br	ret_from_sys_call
+	br	$syscall_exit
 
 /*
  * Do all cleanup when returning from all interrupts and system calls.
@@ -647,6 +654,21 @@ $work_notifysig:
 	jsr	$26, do_work_pending
 	UNDO_SWITCH_STACK
 	br	restore_all
+
+	.align	4
+$fd_slots_exit:
+	/* Keep the return address and the syscall restart state in
+	   $26/$18/$19 across the call.  */
+	DO_SWITCH_STACK
+	mov	$26, $9
+	mov	$18, $10
+	mov	$19, $11
+	jsr	$26, syscall_trace_leave
+	mov	$9, $26
+	mov	$10, $18
+	mov	$11, $19
+	UNDO_SWITCH_STACK
+	br	ret_from_sys_call
 
 /*
  * PTRACE syscall handler
