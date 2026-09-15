@@ -1262,7 +1262,8 @@ parse_ntb:
 		 */
 		if ((ndp_len < opts->ndp_size
 				+ 2 * 2 * (opts->dgram_item_len * 2)) ||
-				(ndp_len % opts->ndplen_align != 0)) {
+				(ndp_len % opts->ndplen_align != 0) ||
+				(ndp_len > block_len - ndp_index)) {
 			INFO(port->func.config->cdev, "Bad NDP length: %#X\n",
 			     ndp_len);
 			goto err;
