@@ -559,16 +559,17 @@ static int dsicm_probe(struct mipi_dsi_device *dsi)
 	dsi->hs_rate = ddata->panel_data->max_hs_rate;
 	dsi->lp_rate = ddata->panel_data->max_lp_rate;
 
-	drm_panel_add(&ddata->panel);
+	r = devm_drm_panel_add(dev, &ddata->panel);
+	if (r)
+		goto err_sysfs;
 
 	r = mipi_dsi_attach(dsi);
 	if (r < 0)
-		goto err_dsi_attach;
+		goto err_sysfs;
 
 	return 0;
 
-err_dsi_attach:
-	drm_panel_remove(&ddata->panel);
+err_sysfs:
 	sysfs_remove_group(&dsi->dev.kobj, &dsicm_attr_group);
 err_bl:
 	if (ddata->extbldev)
@@ -580,12 +581,13 @@ err_bl:
 static void dsicm_remove(struct mipi_dsi_device *dsi)
 {
 	struct panel_drv_data *ddata = mipi_dsi_get_drvdata(dsi);
+	int ret;
 
 	dev_dbg(&dsi->dev, "remove\n");
 
-	mipi_dsi_detach(dsi);
-
-	drm_panel_remove(&ddata->panel);
+	ret = mipi_dsi_detach(dsi);
+	if (ret < 0)
+		dev_err(&dsi->dev, "failed to detach from DSI host: %d\n", ret);
 
 	sysfs_remove_group(&dsi->dev.kobj, &dsicm_attr_group);
 
