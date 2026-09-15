@@ -13,6 +13,8 @@ struct pglist_data *next_online_pgdat(struct pglist_data *pgdat);
 	     pgdat;					\
 	     pgdat = next_online_pgdat(pgdat))
 
+#define for_each_zone(zone)		for (zone = NULL; zone; )
+
 enum zone_type {
 	__MAX_NR_ZONES
 };
