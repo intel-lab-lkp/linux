@@ -578,6 +578,8 @@ static bool wait_for_scan(const char *msg, char *p, size_t len,
 		usleep(TICK);
 	}
 
+	madvise(p, len, MADV_NOHUGEPAGE);
+
 	return timeout == -1;
 }
 
@@ -839,6 +841,7 @@ out:
 
 static void collapse_max_ptes_swap(struct collapse_context *c, struct mem_ops *ops)
 {
+	struct thp_settings settings = *thp_current_settings();
 	int max_ptes_swap = thp_read_num("khugepaged/max_ptes_swap");
 	void *p;
 
@@ -860,6 +863,9 @@ static void collapse_max_ptes_swap(struct collapse_context *c, struct mem_ops *o
 	validate_memory(p, 0, hpage_pmd_size);
 
 	if (c->enforce_pte_scan_limits) {
+		settings.hugepages[collapse_order].enabled = THP_MADVISE;
+		thp_push_settings(&settings);
+
 		ops->fault(p, 0, hpage_pmd_size);
 		ksft_print_msg("Swapout %d of %d pages...", max_ptes_swap,
 		       hpage_pmd_nr);
@@ -869,12 +875,15 @@ static void collapse_max_ptes_swap(struct collapse_context *c, struct mem_ops *o
 			success("OK");
 		} else {
 			fail("Fail");
+			thp_pop_settings();
 			goto out;
 		}
 
 		c->collapse("Collapse with max_ptes_swap pages swapped out", p,
 			    1, ops, true);
 		validate_memory(p, 0, hpage_pmd_size);
+
+		thp_pop_settings();
 	}
 out:
 	ops->cleanup_area(p, hpage_pmd_size);
@@ -1075,6 +1084,7 @@ out:
 
 static void collapse_max_ptes_shared(struct collapse_context *c, struct mem_ops *ops)
 {
+	struct thp_settings settings = *thp_current_settings();
 	int max_ptes_shared = thp_read_num("khugepaged/max_ptes_shared");
 	int wstatus;
 	void *p;
@@ -1100,6 +1110,9 @@ static void collapse_max_ptes_shared(struct collapse_context *c, struct mem_ops 
 			    1, ops, !c->enforce_pte_scan_limits);
 
 		if (c->enforce_pte_scan_limits) {
+			settings.hugepages[collapse_order].enabled = THP_MADVISE;
+			thp_push_settings(&settings);
+
 			ksft_print_msg("Trigger CoW on page %d of %d...",
 			       hpage_pmd_nr - max_ptes_shared, hpage_pmd_nr);
 			ops->fault(p, 0, (hpage_pmd_nr - max_ptes_shared) *
@@ -1111,6 +1124,8 @@ static void collapse_max_ptes_shared(struct collapse_context *c, struct mem_ops 
 
 			c->collapse("Collapse with max_ptes_shared PTEs shared",
 				    p, 1, ops, true);
+
+			thp_pop_settings();
 		}
 
 		validate_memory(p, 0, hpage_pmd_size);
