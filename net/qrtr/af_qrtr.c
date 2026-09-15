@@ -107,6 +107,13 @@ static inline struct qrtr_sock *qrtr_sk(struct sock *sk)
 	return container_of(sk, struct qrtr_sock, sk);
 }
 
+void qrtr_sock_set_report_endpoint(struct sock *sk)
+{
+	struct qrtr_sock *ipc = qrtr_sk(sk);
+
+	assign_bit(QRTR_F_REPORT_ENDPOINT, &ipc->flags, 1);
+}
+
 int qrtr_msg_get_endpoint(struct msghdr *msg, u32 *out_endpoint_id)
 {
 	struct cmsghdr *cmsg;
@@ -1165,6 +1172,11 @@ static int qrtr_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 
 		/* control messages already require the type as 'command' */
 		skb_copy_bits(skb, 0, &qrtr_type, 4);
+		/*
+		 * Allow local name service to make packets appear as if
+		 * they originated remotely
+		 */
+		endpoint_id = msg_endpoint_id;
 	}
 
 	type = le32_to_cpu(qrtr_type);
