@@ -1465,6 +1465,7 @@ static int sa_sha_cra_init_alg(struct crypto_tfm *tfm, const char *alg_base)
 		if (IS_ERR(ctx->fallback.ahash)) {
 			dev_err(ctx->dev_data->dev,
 				"Could not load fallback driver\n");
+			crypto_free_shash(ctx->shash);
 			return PTR_ERR(ctx->fallback.ahash);
 		}
 	}
