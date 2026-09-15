@@ -2,6 +2,7 @@
 #ifndef _LINUX_SWAIT_H
 #define _LINUX_SWAIT_H
 
+#include <linux/compiler.h>
 #include <linux/list.h>
 #include <linux/stddef.h>
 #include <linux/spinlock.h>
@@ -64,7 +65,8 @@ struct swait_queue {
 }
 
 #define DECLARE_SWAIT_QUEUE_HEAD(name)					\
-	struct swait_queue_head name = __SWAIT_QUEUE_HEAD_INITIALIZER(name)
+	struct swait_queue_head name = __SWAIT_QUEUE_HEAD_INITIALIZER(name);	\
+	ASSERT_STATIC_STORAGE(name)
 
 extern void __init_swait_queue_head(struct swait_queue_head *q, const char *name,
 				    struct lock_class_key *key);
@@ -82,7 +84,7 @@ extern void __init_swait_queue_head(struct swait_queue_head *q, const char *name
 	struct swait_queue_head name = __SWAIT_QUEUE_HEAD_INIT_ONSTACK(name)
 #else
 # define DECLARE_SWAIT_QUEUE_HEAD_ONSTACK(name)			\
-	DECLARE_SWAIT_QUEUE_HEAD(name)
+	struct swait_queue_head name = __SWAIT_QUEUE_HEAD_INITIALIZER(name)
 #endif
 
 /**

@@ -9,6 +9,7 @@
  * See kernel/sched/completion.c for details.
  */
 
+#include <linux/compiler.h>
 #include <linux/swait.h>
 
 /*
@@ -50,7 +51,8 @@ static inline void complete_release(struct completion *x) {}
  * variables.
  */
 #define DECLARE_COMPLETION(work) \
-	struct completion work = COMPLETION_INITIALIZER(work)
+	struct completion work = COMPLETION_INITIALIZER(work);	\
+	ASSERT_STATIC_STORAGE(work)
 
 /*
  * Lockdep needs to run a non-constant initializer for on-stack
@@ -70,8 +72,10 @@ static inline void complete_release(struct completion *x) {}
 # define DECLARE_COMPLETION_ONSTACK_MAP(work, map) \
 	struct completion work = COMPLETION_INITIALIZER_ONSTACK_MAP(work, map)
 #else
-# define DECLARE_COMPLETION_ONSTACK(work) DECLARE_COMPLETION(work)
-# define DECLARE_COMPLETION_ONSTACK_MAP(work, map) DECLARE_COMPLETION(work)
+# define DECLARE_COMPLETION_ONSTACK(work) \
+	struct completion work = COMPLETION_INITIALIZER(work)
+# define DECLARE_COMPLETION_ONSTACK_MAP(work, map) \
+	DECLARE_COMPLETION_ONSTACK(work)
 #endif
 
 /**
