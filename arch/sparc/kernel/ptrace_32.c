@@ -11,6 +11,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/file.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/errno.h>
@@ -436,6 +437,9 @@ long arch_ptrace(struct task_struct *child, long request,
 asmlinkage int syscall_trace(struct pt_regs *regs, int syscall_exit_p)
 {
 	int ret = 0;
+
+	if (syscall_exit_p && test_thread_flag(TIF_FD_SLOTS))
+		fd_slots_commit(regs);
 
 	if (test_thread_flag(TIF_SYSCALL_TRACE)) {
 		if (syscall_exit_p)

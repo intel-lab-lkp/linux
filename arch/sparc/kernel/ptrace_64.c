@@ -12,6 +12,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/file.h>
 #include <linux/sched.h>
 #include <linux/sched/task_stack.h>
 #include <linux/mm.h>
@@ -1109,6 +1110,9 @@ asmlinkage void syscall_trace_leave(struct pt_regs *regs)
 {
 	if (test_thread_flag(TIF_NOHZ))
 		user_exit();
+
+	if (test_thread_flag(TIF_FD_SLOTS))
+		fd_slots_commit(regs);
 
 	audit_syscall_exit(regs);
 

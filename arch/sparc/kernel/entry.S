@@ -1023,7 +1023,7 @@ ret_sys_call:
 	ld	[%sp + STACKFRAME_SZ + PT_PSR], %g3
 	set	PSR_C, %g2
 	bgeu	1f
-	 andcc	%l5, _TIF_SYSCALL_TRACE, %g0
+	 andcc	%l5, (_TIF_SYSCALL_TRACE | _TIF_FD_SLOTS), %g0
 
 	/* System call success, clear Carry condition code. */
 	andn	%g3, %g2, %g3
