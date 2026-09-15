@@ -691,8 +691,10 @@ static int register_multicolor(struct i2c_client *client, struct blinkm_data *da
 
 	mc_led_info = devm_kcalloc(&client->dev, NUM_LEDS, sizeof(*mc_led_info),
 					GFP_KERNEL);
-	if (!mc_led_info)
+	if (!mc_led_info) {
+		sysfs_remove_group(&client->dev.kobj, &blinkm_group);
 		return -ENOMEM;
+	}
 
 	mc_led_info[RED].color_index = LED_COLOR_ID_RED;
 	mc_led_info[GREEN].color_index = LED_COLOR_ID_GREEN;
