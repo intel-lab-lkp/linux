@@ -5,6 +5,7 @@ Designs and Implementations
    :maxdepth: 2
 
    control-names
+   card-names
    channel-mapping-api
    compress-accel
    compress-offload

@@ -438,6 +438,18 @@ functionality of each chip type.
 The shortname field is a string shown as more verbose name. The longname
 field contains the information shown in ``/proc/asound/cards``.
 
+These fields, together with mixername, are fixed-size and hold UTF-8. A name
+that comes from the device rather than from a literal in the driver needs two
+things: copy it with snd_utf8_strscpy() so that a name too long for the field
+is not cut in the middle of a character, and offer the untruncated form so
+that user space can get the whole name::
+
+  snd_utf8_strscpy(card->shortname, product, sizeof(card->shortname));
+  snd_card_set_full_shortname(card, product);
+
+The second call stores nothing if the name fit, so it costs nothing for short
+names. See Documentation/sound/designs/card-names.rst for the details.
+
 5) Create other components, such as mixer, MIDI, etc.
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
