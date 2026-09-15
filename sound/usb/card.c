@@ -627,15 +627,23 @@ static void usb_audio_make_shortname(struct usb_device *dev,
 		s = quirk->product_name;
 	if (s && *s) {
 		strscpy(card->shortname, s, sizeof(card->shortname));
+		/* The UTF-8 field is optional and only stored when it carries
+		 * more than the ASCII one above, so this is a no-op for a plain
+		 * ASCII name that fits.  It can only fail with -ENOMEM, and the
+		 * ASCII name is already in place, so ignore the result.
+		 */
+		snd_card_set_full_shortname(card, s);
 		return;
 	}
 
-	/* retrieve the device string as shortname.  usb_string() hands back
-	 * UTF-8, so cut at a character boundary rather than at a byte one.
+	/* retrieve the device string as shortname; USB string descriptors are
+	 * converted to UTF-8 by usb_string(), so dev->product may well carry
+	 * characters that only fit into the UTF-8 field
 	 */
 	if (dev->product && *dev->product) {
 		snd_utf8_strscpy(card->shortname, dev->product,
 				 sizeof(card->shortname));
+		snd_card_set_full_shortname(card, dev->product);
 	} else {
 		/* no name available from anywhere, so use ID */
 		scnprintf(card->shortname, sizeof(card->shortname),
@@ -645,6 +653,69 @@ static void usb_audio_make_shortname(struct usb_device *dev,
 	}
 
 	strim(card->shortname);
+}
+
+static const char *usb_audio_speed_string(struct usb_device *dev)
+{
+	switch (snd_usb_get_speed(dev)) {
+	case USB_SPEED_LOW:
+		return ", low speed";
+	case USB_SPEED_FULL:
+		return ", full speed";
+	case USB_SPEED_HIGH:
+		return ", high speed";
+	case USB_SPEED_SUPER:
+		return ", super speed";
+	case USB_SPEED_SUPER_PLUS:
+		return ", super speed plus";
+	default:
+		return "";
+	}
+}
+
+/* Skip leading and trailing spaces of @s without touching it, storing the
+ * remaining length in @len.  strim() cannot be used here because the source
+ * strings are const and must stay untruncated.
+ */
+static const char *usb_audio_trim(const char *s, int *len)
+{
+	int n;
+
+	if (!s) {
+		*len = 0;
+		return "";
+	}
+	while (*s == ' ' || (*s >= '\t' && *s <= '\r'))
+		s++;
+	n = strlen(s);
+	while (n && (s[n - 1] == ' ' || (s[n - 1] >= '\t' && s[n - 1] <= '\r')))
+		n--;
+	*len = n;
+	return s;
+}
+
+/* Assemble the UTF-8 long name from the same pieces as the ASCII one, but from
+ * the untruncated sources.
+ */
+static void usb_audio_make_utf8_longname(struct usb_device *dev,
+					 struct snd_card *card,
+					 const char *vendor)
+{
+	char *longname __free(kfree) = NULL;
+	char path[64];
+	int vendor_len;
+
+	/* the short name has been built already, prefer its UTF-8 form */
+	const char *product = card->full_shortname ? : card->shortname;
+
+	vendor = usb_audio_trim(vendor, &vendor_len);
+	usb_make_path(dev, path, sizeof(path));
+
+	longname = kasprintf(GFP_KERNEL, "%.*s%s%s at %s%s",
+			     vendor_len, vendor, vendor_len ? " " : "",
+			     product, path, usb_audio_speed_string(dev));
+	if (longname)
+		snd_card_set_full_longname(card, longname);
 }
 
 static void usb_audio_make_longname(struct usb_device *dev,
@@ -663,6 +734,7 @@ static void usb_audio_make_longname(struct usb_device *dev,
 		s = preset->profile_name;
 	if (s && *s) {
 		strscpy(card->longname, s, sizeof(card->longname));
+		snd_card_set_full_longname(card, s);
 		return;
 	}
 
@@ -670,11 +742,12 @@ static void usb_audio_make_longname(struct usb_device *dev,
 		s = preset->vendor_name;
 	else if (quirk && quirk->vendor_name)
 		s = quirk->vendor_name;
+	if (!(s && *s) && dev->manufacturer && *dev->manufacturer)
+		s = dev->manufacturer;
+
 	*card->longname = 0;
 	if (s && *s)
 		strscpy(card->longname, s);
-	else if (dev->manufacturer && *dev->manufacturer)
-		strscpy(card->longname, dev->manufacturer);
 
 	if (*card->longname) {
 		strim(card->longname);
@@ -689,25 +762,9 @@ static void usb_audio_make_longname(struct usb_device *dev,
 	if (len < sizeof(card->longname))
 		usb_make_path(dev, card->longname + len, sizeof(card->longname) - len);
 
-	switch (snd_usb_get_speed(dev)) {
-	case USB_SPEED_LOW:
-		strlcat(card->longname, ", low speed", sizeof(card->longname));
-		break;
-	case USB_SPEED_FULL:
-		strlcat(card->longname, ", full speed", sizeof(card->longname));
-		break;
-	case USB_SPEED_HIGH:
-		strlcat(card->longname, ", high speed", sizeof(card->longname));
-		break;
-	case USB_SPEED_SUPER:
-		strlcat(card->longname, ", super speed", sizeof(card->longname));
-		break;
-	case USB_SPEED_SUPER_PLUS:
-		strlcat(card->longname, ", super speed plus", sizeof(card->longname));
-		break;
-	default:
-		break;
-	}
+	strlcat(card->longname, usb_audio_speed_string(dev), sizeof(card->longname));
+
+	usb_audio_make_utf8_longname(dev, card, s);
 }
 
 static void snd_usb_init_quirk_flags(int idx, struct snd_usb_audio *chip)
