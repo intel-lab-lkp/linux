@@ -1579,6 +1579,24 @@ static void __free_pages_ok(struct page *page, unsigned int order,
 		free_one_page(zone, page, pfn, order, fpi_flags);
 }
 
+/* Accept the block if it needs it, then hand it to the allocator. */
+static void __meminit accept_and_free_block(struct page *page,
+					    unsigned int order)
+{
+	if (page_contains_unaccepted(page, order)) {
+		if (order == MAX_PAGE_ORDER && __free_unaccepted(page))
+			return;
+
+		accept_memory(page_to_phys(page), PAGE_SIZE << order);
+	}
+
+	/*
+	 * Bypass PCP and place fresh pages right to the tail, primarily
+	 * relevant for memory onlining.
+	 */
+	__free_pages_ok(page, order, FPI_TO_TAIL);
+}
+
 void __meminit __free_pages_core(struct page *page, unsigned int order,
 		enum meminit_context context)
 {
@@ -1613,18 +1631,7 @@ void __meminit __free_pages_core(struct page *page, unsigned int order,
 		atomic_long_add(nr_pages, &page_zone(page)->managed_pages);
 	}
 
-	if (page_contains_unaccepted(page, order)) {
-		if (order == MAX_PAGE_ORDER && __free_unaccepted(page))
-			return;
-
-		accept_memory(page_to_phys(page), PAGE_SIZE << order);
-	}
-
-	/*
-	 * Bypass PCP and place fresh pages right to the tail, primarily
-	 * relevant for memory onlining.
-	 */
-	__free_pages_ok(page, order, FPI_TO_TAIL);
+	accept_and_free_block(page, order);
 }
 
 /*
