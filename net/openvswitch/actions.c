@@ -360,6 +360,9 @@ static void update_ipv6_checksum(struct sk_buff *skb, u8 l4_proto,
 {
 	int transport_len = skb->len - skb_transport_offset(skb);
 
+	if (unlikely(transport_len < 0))
+		return;
+
 	if (l4_proto == NEXTHDR_TCP) {
 		if (likely(transport_len >= sizeof(struct tcphdr)))
 			inet_proto_csum_replace16(&tcp_hdr(skb)->check, skb,
