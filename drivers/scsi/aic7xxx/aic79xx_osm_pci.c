@@ -189,6 +189,7 @@ ahd_linux_pci_dev_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	error = ahd_pci_config(ahd, entry);
 	if (error != 0) {
 		ahd_free(ahd);
+		pci_disable_device(pdev);
 		return (-error);
 	}
 
