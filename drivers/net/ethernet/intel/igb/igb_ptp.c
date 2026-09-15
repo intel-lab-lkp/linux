@@ -1283,9 +1283,26 @@ int igb_ptp_hwtstamp_set(struct net_device *netdev,
 			 struct netlink_ext_ack *extack)
 {
 	struct igb_adapter *adapter = netdev_priv(netdev);
+	struct e1000_hw *hw = &adapter->hw;
+	bool quiesce = false;
 	int err;
 
+	/* CFG_TS_EN changes the Rx buffer layout, so flipping it on a live
+	 * queue leaves the descriptor and the data disagreeing about the
+	 * 16 byte timestamp header for one window, mangling a frame.
+	 */
+	if ((hw->mac.type == e1000_i210 || hw->mac.type == e1000_i211) &&
+	    netif_running(netdev) &&
+	    !(rd32(E1000_RXPBS) & E1000_RXPBS_CFG_TS_EN)) {
+		quiesce = true;
+		igb_down(adapter);
+	}
+
 	err = igb_ptp_set_timestamp_mode(adapter, config);
+
+	if (quiesce)
+		igb_up(adapter);
+
 	if (err)
 		return err;
 
