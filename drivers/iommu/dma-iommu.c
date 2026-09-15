@@ -2166,6 +2166,11 @@ out_err:
 	dev_clear_dma_iommu(dev);
 }
 
+void iommu_teardown_dma_ops(struct device *dev)
+{
+	dev_clear_dma_iommu(dev);
+}
+
 static bool has_msi_cookie(const struct iommu_domain *domain)
 {
 	return domain && (domain->cookie_type == IOMMU_COOKIE_DMA_IOVA ||
