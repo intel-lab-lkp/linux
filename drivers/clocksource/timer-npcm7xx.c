@@ -203,10 +203,12 @@ static int __init npcm7xx_timer_init(struct device_node *np)
 	/* Enable the clock for timer1, if it exists */
 	clk = of_clk_get(np, 1);
 	if (clk) {
-		if (!IS_ERR(clk))
+		if (!IS_ERR(clk)) {
 			clk_prepare_enable(clk);
-		else
+			clk_put(clk);
+		} else {
 			pr_warn("%pOF: Failed to get clock for timer1: %pe", np, clk);
+		}
 	}
 
 	npcm7xx_clocksource_init();
