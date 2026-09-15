@@ -579,7 +579,11 @@ static bool coredump_close_files(struct core_state *core_state)
 	/* Use the dumper's real creds not the overridden ones. */
 	scoped_with_creds(current_real_cred()) {
 		io_uring_task_cancel();
-		switch_files_struct(current, files);
+		/* The dumper itself may be a vhost worker without a table. */
+		if (current->files)
+			switch_files_struct(current, files);
+		else
+			put_files_struct(files);
 	}
 
 	coredump_wait_inactive(core_state);
