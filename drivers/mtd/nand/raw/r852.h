@@ -131,6 +131,7 @@ struct r852_device {
 	int card_detected;		/* card detected in slot */
 	int card_unstable;		/* whenever the card is inserted,
 					   is not known yet */
+	bool removing;			/* do not queue card work during removal */
 	int readonly;			/* card is readonly */
 	int sm;				/* Is card smartmedia */
 

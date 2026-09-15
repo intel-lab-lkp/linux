@@ -747,6 +747,9 @@ static irqreturn_t r852_irq(int irq, void *data)
 		/* this will timeout DMA if active, but better that garbage */
 		r852_disable_irqs(dev);
 
+		if (dev->removing)
+			goto out;
+
 		if (dev->card_unstable)
 			goto out;
 
@@ -976,6 +979,10 @@ error1:
 static void r852_remove(struct pci_dev *pci_dev)
 {
 	struct r852_device *dev = pci_get_drvdata(pci_dev);
+
+	spin_lock_irq(&dev->irqlock);
+	dev->removing = true;
+	spin_unlock_irq(&dev->irqlock);
 
 	/* Stop detect workqueue -
 		we are going to unregister the device anyway*/
