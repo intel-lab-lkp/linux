@@ -22,11 +22,7 @@
 #define QRTR_MAX_EPH_SOCKET 0x7fff
 #define QRTR_EPH_PORT_RANGE \
 		XA_LIMIT(QRTR_MIN_EPH_SOCKET, QRTR_MAX_EPH_SOCKET)
-#if BITS_PER_LONG >= 64
 #define QRTR_ENDPOINT_RANGE XA_LIMIT(qrtr_local_nid + 1, INT_MAX)
-#else
-#define QRTR_ENDPOINT_RANGE XA_LIMIT(qrtr_local_nid + 1, USHRT_MAX)
-#endif
 
 #define QRTR_PORT_CTRL_LEGACY 0xffff
 
@@ -186,6 +182,9 @@ static DEFINE_XARRAY_ALLOC(qrtr_ports);
 #define QRTR_INDEX_HALF_SIGNED_MAX ((long)(QRTR_INDEX_HALF_UNSIGNED_MAX) >> 1)
 #define QRTR_INDEX_HALF_SIGNED_MIN ((long)(-1) - QRTR_INDEX_HALF_SIGNED_MAX)
 
+/* endpoint not defined, i.e. endpoint 0 */
+static struct qrtr_node_lookup_helper helper0;
+
 /**
  * struct qrtr_node - endpoint node
  * @ep_lock: lock for endpoint management and callbacks
@@ -245,9 +244,11 @@ static void __qrtr_node_release(struct kref *kref)
 {
 	struct qrtr_node *node = container_of(kref, struct qrtr_node, ref);
 	struct radix_tree_iter iter;
+	struct radix_tree_iter iter2;
 	struct qrtr_tx_flow *flow;
 	unsigned long flags;
 	void __rcu **slot;
+	void __rcu **slot2;
 	unsigned long index;
 
 	spin_lock_irqsave(&qrtr_nodes_lock, flags);
@@ -255,8 +256,18 @@ static void __qrtr_node_release(struct kref *kref)
 	 * multiple entries pointing to our released node, delete them all.
 	 */
 	radix_tree_for_each_slot(slot, &qrtr_nodes, &iter, 0) {
-		if (*slot == node)
+		struct qrtr_node_lookup_helper *helper = *slot;
+
+		if (!helper)
+			continue;
+		radix_tree_for_each_slot(slot2, &helper->nodes, &iter2, 0) {
+			if (*slot2 == node)
+				radix_tree_iter_delete(&helper->nodes, &iter2, slot2);
+		}
+		if (helper != &helper0 && radix_tree_empty(&helper->nodes)) {
 			radix_tree_iter_delete(&qrtr_nodes, &iter, slot);
+			helper->added = 0;
+		}
 	}
 	spin_unlock_irqrestore(&qrtr_nodes_lock, flags);
 
@@ -494,22 +505,14 @@ static struct qrtr_node *qrtr_node_lookup(unsigned int endpoint_id,
 					  unsigned int nid)
 {
 	struct qrtr_node *node = NULL;
+	struct qrtr_node_lookup_helper *helper = NULL;
 	unsigned long flags;
-	unsigned long key = 0;
-
-	/* nid is chosen by device firmware and is generally a single
-	 * and small number. If firmware chooses otherwise, use it
-	 * modulo 65536 in 32-bit systems.
-	 */
-	if (endpoint_id > QRTR_INDEX_HALF_UNSIGNED_MAX)
-		return node;
-
-	key = ((unsigned long)(endpoint_id) << QRTR_INDEX_HALF_BITS) |
-	      ((unsigned long)(nid) & QRTR_INDEX_HALF_UNSIGNED_MAX);
 
 	mutex_lock(&qrtr_node_lock);
 	spin_lock_irqsave(&qrtr_nodes_lock, flags);
-	node = radix_tree_lookup(&qrtr_nodes, key);
+	helper = radix_tree_lookup(&qrtr_nodes, endpoint_id);
+	if (helper)
+		node = radix_tree_lookup(&helper->nodes, nid);
 	node = qrtr_node_acquire(node);
 	spin_unlock_irqrestore(&qrtr_nodes_lock, flags);
 	mutex_unlock(&qrtr_node_lock);
@@ -527,33 +530,45 @@ static struct qrtr_node *qrtr_node_lookup(unsigned int endpoint_id,
 static int qrtr_node_assign(struct qrtr_node *node, unsigned int nid)
 {
 	unsigned long flags;
-	unsigned long key;
+	int rc = 0;
+	int did_insert0 = 0;
 
 	if (nid == QRTR_EP_NID_AUTO)
 		return 0;
 
-	/* nid is chosen by device firmware and is generally a single
-	 * and small number. If firmware chooses otherwise, use it
-	 * modulo 65536 in 32-bit systems.
-	 */
-	if (node->ep->id > QRTR_INDEX_HALF_UNSIGNED_MAX)
-		return -EINVAL;
-
 	spin_lock_irqsave(&qrtr_nodes_lock, flags);
 
-	/* Always insert with the endpoint_id + node_id */
-	key = ((unsigned long)(node->ep->id) << QRTR_INDEX_HALF_BITS) |
-	      ((unsigned long)(nid) & QRTR_INDEX_HALF_UNSIGNED_MAX);
-	radix_tree_insert(&qrtr_nodes, key, node);
-
-	if (!radix_tree_lookup(&qrtr_nodes, nid))
-		radix_tree_insert(&qrtr_nodes, nid, node);
+	if (!radix_tree_lookup(&helper0.nodes, nid)) {
+		rc = radix_tree_insert(&helper0.nodes, nid, node);
+		if (rc)
+			goto err_lock;
+		did_insert0 = 1;
+	}
+	if (!node->ep->helper.added) {
+		INIT_RADIX_TREE(&node->ep->helper.nodes, GFP_ATOMIC);
+		rc = radix_tree_insert(&qrtr_nodes, node->ep->id,
+				       &node->ep->helper);
+		if (rc)
+			goto err_insert0;
+		node->ep->helper.added = 1;
+	}
+	rc = radix_tree_insert(&node->ep->helper.nodes, nid, node);
+	if (rc && rc != -EEXIST)
+		goto err_insert0; // Don't revert helper insertion
 
 	if (node->nid == QRTR_EP_NID_AUTO)
 		node->nid = nid;
 	spin_unlock_irqrestore(&qrtr_nodes_lock, flags);
 
 	return 0;
+
+err_insert0:
+	if (did_insert0)
+		radix_tree_delete(&helper0.nodes, nid);
+
+err_lock:
+	spin_unlock_irqrestore(&qrtr_nodes_lock, flags);
+	return rc;
 }
 
 /**
@@ -773,6 +788,7 @@ int qrtr_endpoint_register(struct qrtr_endpoint *ep, unsigned int nid)
 	mutex_unlock(&qrtr_node_lock);
 	ep->node = node;
 	ep->id = endpoint_id;
+	ep->helper.added = 0;
 
 	return 0;
 free_node:
@@ -791,12 +807,14 @@ void qrtr_endpoint_unregister(struct qrtr_endpoint *ep)
 	struct sockaddr_qrtr src = {AF_QIPCRTR, node->nid, QRTR_PORT_CTRL};
 	struct sockaddr_qrtr dst = {AF_QIPCRTR, qrtr_local_nid, QRTR_PORT_CTRL};
 	struct radix_tree_iter iter;
+	struct radix_tree_iter iter2;
 	struct qrtr_ctrl_pkt *pkt;
 	struct qrtr_tx_flow *flow;
 	struct sk_buff *skb;
 	unsigned long flags;
 	unsigned long index;
 	void __rcu **slot;
+	void __rcu **slot2;
 	u32 endpoint_id;
 
 	mutex_lock(&node->ep_lock);
@@ -807,15 +825,27 @@ void qrtr_endpoint_unregister(struct qrtr_endpoint *ep)
 	/* Notify the local controller about the event */
 	spin_lock_irqsave(&qrtr_nodes_lock, flags);
 	radix_tree_for_each_slot(slot, &qrtr_nodes, &iter, 0) {
-		if (*slot != node)
+		struct qrtr_node_lookup_helper *helper = *slot;
+
+		if (!helper)
 			continue;
-		src.sq_node = iter.index;
-		skb = qrtr_alloc_ctrl_packet(&pkt, GFP_ATOMIC);
-		if (skb) {
-			pkt->cmd = cpu_to_le32(QRTR_TYPE_BYE);
-			qrtr_local_enqueue(NULL, skb, endpoint_id,
-					   QRTR_TYPE_BYE, &src, &dst);
+		radix_tree_for_each_slot(slot2, &helper->nodes, &iter2, 0) {
+			if (*slot2 != node)
+				continue;
+			src.sq_node = iter.index;
+			skb = qrtr_alloc_ctrl_packet(&pkt, GFP_ATOMIC);
+			if (skb) {
+				pkt->cmd = cpu_to_le32(QRTR_TYPE_BYE);
+				qrtr_local_enqueue(NULL, skb, endpoint_id,
+						   QRTR_TYPE_BYE, &src, &dst);
+			}
 		}
+	}
+	if (ep->helper.added) {
+		radix_tree_for_each_slot(slot, &ep->helper.nodes, &iter, 0)
+			radix_tree_iter_delete(&ep->helper.nodes, &iter, slot);
+		radix_tree_delete(&qrtr_nodes, ep->id);
+		ep->helper.added = 0;
 	}
 	spin_unlock_irqrestore(&qrtr_nodes_lock, flags);
 
@@ -1593,8 +1623,17 @@ static int __init qrtr_proto_init(void)
 	if (rc)
 		goto err_sock;
 
+	rc = radix_tree_insert(&qrtr_nodes, 0, &helper0);
+	if (rc)
+		goto err_ns;
+
+	INIT_RADIX_TREE(&helper0.nodes, GFP_ATOMIC);
+	helper0.added = 1;
+
 	return 0;
 
+err_ns:
+	qrtr_ns_remove();
 err_sock:
 	sock_unregister(qrtr_family.family);
 err_proto:
@@ -1605,6 +1644,7 @@ postcore_initcall(qrtr_proto_init);
 
 static void __exit qrtr_proto_fini(void)
 {
+	radix_tree_delete(&qrtr_nodes, 0);
 	qrtr_ns_remove();
 	sock_unregister(qrtr_family.family);
 	proto_unregister(&qrtr_proto);
