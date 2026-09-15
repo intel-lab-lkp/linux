@@ -5531,7 +5531,7 @@ static void ublk_unpin_range_pages(unsigned long base_pfn,
  *
  * Returns true if the tree walk completed, false if more ranges remain.
  */
-#define UBLK_REMOVE_BATCH	64
+#define UBLK_REMOVE_BATCH	32
 
 struct ublk_unpin_range {
 	unsigned long base_pfn;
