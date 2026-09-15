@@ -11,6 +11,7 @@
 #ifndef __LINUX_MUTEX_H
 #define __LINUX_MUTEX_H
 
+#include <linux/compiler.h>
 #include <asm/current.h>
 #include <linux/list.h>
 #include <linux/spinlock_types.h>
@@ -84,7 +85,8 @@ do {									\
 		__DEP_MAP_MUTEX_INITIALIZER(lockname) }
 
 #define DEFINE_MUTEX(mutexname) \
-	struct mutex mutexname = __MUTEX_INITIALIZER(mutexname)
+	struct mutex mutexname = __MUTEX_INITIALIZER(mutexname);	\
+	ASSERT_STATIC_STORAGE(mutexname)
 
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
 void mutex_init_lockdep(struct mutex *lock, const char *name, struct lock_class_key *key);
@@ -124,7 +126,8 @@ extern bool mutex_is_locked(struct mutex *lock);
 }
 
 #define DEFINE_MUTEX(mutexname)						\
-	struct mutex mutexname = __MUTEX_INITIALIZER(mutexname)
+	struct mutex mutexname = __MUTEX_INITIALIZER(mutexname);	\
+	ASSERT_STATIC_STORAGE(mutexname)
 
 #define mutex_is_locked(l)	rt_mutex_base_is_locked(&(l)->rtmutex)
 

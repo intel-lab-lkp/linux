@@ -2,7 +2,11 @@
 #ifndef _MUTEX_H
 #define _MUTEX_H
 
-#define DEFINE_MUTEX(name) int name
+#include <linux/compiler.h>
+
+#define DEFINE_MUTEX(name) \
+	int name;				\
+	ASSERT_STATIC_STORAGE(name)
 
 static inline void dummy_mutex_guard(int *name)
 {

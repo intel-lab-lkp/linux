@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <linux/compiler.h>
+
 /* Forward declarations to avoid header cycle. */
 struct vm_area_struct;
 static inline void vma_start_write(struct vm_area_struct *vma);
@@ -435,7 +437,8 @@ struct vma_iterator {
 	}
 
 #define DEFINE_MUTEX(mutexname) \
-	struct mutex mutexname = {}
+	struct mutex mutexname = {};		\
+	ASSERT_STATIC_STORAGE(mutexname)
 
 #define DECLARE_BITMAP(name, bits) \
 	unsigned long name[BITS_TO_LONGS(bits)]

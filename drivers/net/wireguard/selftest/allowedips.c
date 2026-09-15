@@ -257,7 +257,7 @@ static __init bool randomized_test(void)
 	u8 ip[16], mutate_mask[16], mutated[16];
 	struct wg_peer **peers, *peer;
 	struct horrible_allowedips h;
-	DEFINE_MUTEX(mutex);
+	struct mutex mutex;
 	struct allowedips t;
 	bool ret = false;
 
@@ -499,7 +499,7 @@ bool __init wg_allowedips_selftest(void)
 	struct allowedips_node *iter_node;
 	bool success = false;
 	struct allowedips t;
-	DEFINE_MUTEX(mutex);
+	struct mutex mutex;
 	struct in6_addr ip;
 	size_t i = 0, count = 0;
 	__be64 part;
