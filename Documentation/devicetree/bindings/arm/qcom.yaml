@@ -950,6 +950,15 @@ properties:
           - const: google,bonito
           - const: qcom,sdm670
 
+      - description: Xiaomi Mi 8 family
+        items:
+          - enum:
+              - xiaomi,dipper
+              - xiaomi,equuleus
+              - xiaomi,ursa
+          - const: xiaomi,dipper-common
+          - const: qcom,sdm845
+
       - description: Xiaomi Poco F1
         items:
           - enum:
