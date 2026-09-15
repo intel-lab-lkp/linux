@@ -252,9 +252,9 @@ static int qrtr_tx_resume(struct qrtr_node *node, struct sk_buff *skb)
 	struct qrtr_tx_flow *flow;
 	unsigned long key = 0;
 
-	if (remote_node > QRTR_INDEX_HALF_UNSIGNED_MAX ||
-	    remote_port > QRTR_INDEX_HALF_UNSIGNED_MAX)
-		return -EINVAL;
+	/* Don't check node/port for the valid range, use only low
+	 * 16 bits on 32-bit architectures.
+	 */
 
 	key = ((unsigned long)(remote_node) << QRTR_INDEX_HALF_BITS) |
 	      ((unsigned long)(remote_port) & QRTR_INDEX_HALF_UNSIGNED_MAX);
@@ -295,11 +295,9 @@ static int qrtr_tx_wait(struct qrtr_node *node, int dest_node, int dest_port,
 	int confirm_rx = 0;
 	int ret;
 
-	if (dest_node < QRTR_INDEX_HALF_SIGNED_MIN ||
-	    dest_node > QRTR_INDEX_HALF_SIGNED_MAX ||
-	    dest_port < QRTR_INDEX_HALF_SIGNED_MIN ||
-	    dest_port > QRTR_INDEX_HALF_SIGNED_MAX)
-		return -EINVAL;
+	/* Don't check node/port for the valid range, use only low
+	 * 16 bits on 32-bit architectures.
+	 */
 
 	key = ((unsigned long)(dest_node) << QRTR_INDEX_HALF_BITS) |
 	      ((unsigned long)(dest_port) & QRTR_INDEX_HALF_UNSIGNED_MAX);
@@ -369,11 +367,9 @@ static int qrtr_tx_flow_failed(struct qrtr_node *node, int dest_node,
 	unsigned long key = 0;
 	struct qrtr_tx_flow *flow;
 
-	if (dest_node < QRTR_INDEX_HALF_SIGNED_MIN ||
-	    dest_node > QRTR_INDEX_HALF_SIGNED_MAX ||
-	    dest_port < QRTR_INDEX_HALF_SIGNED_MIN ||
-	    dest_port > QRTR_INDEX_HALF_SIGNED_MAX)
-		return -EINVAL;
+	/* Don't check node/port for the valid range, use only low
+	 * 16 bits on 32-bit architectures.
+	 */
 
 	key = ((unsigned long)(dest_node) << QRTR_INDEX_HALF_BITS) |
 	      ((unsigned long)(dest_port) & QRTR_INDEX_HALF_UNSIGNED_MAX);
