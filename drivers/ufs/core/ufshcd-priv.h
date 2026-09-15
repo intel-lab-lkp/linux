@@ -3,6 +3,7 @@
 #ifndef _UFSHCD_PRIV_H_
 #define _UFSHCD_PRIV_H_
 
+#include <linux/cleanup.h>
 #include <linux/pm_runtime.h>
 #include <ufs/ufshcd.h>
 
@@ -14,6 +15,16 @@ static inline bool ufshcd_is_user_access_allowed(struct ufs_hba *hba)
 }
 
 void ufshcd_schedule_eh_work(struct ufs_hba *hba);
+
+DEFINE_LOCK_GUARD_1(ufshcd_wl_pm, struct ufs_hba,
+	({
+		mutex_lock(&_T->lock->wl_pm_mutex);
+		_T->lock->pm_op_in_progress = true;
+	}),
+	({
+		_T->lock->pm_op_in_progress = false;
+		mutex_unlock(&_T->lock->wl_pm_mutex);
+	}))
 
 static inline bool ufshcd_keep_autobkops_enabled_except_suspend(
 							struct ufs_hba *hba)
