@@ -1634,6 +1634,7 @@ static int imx290_probe(struct i2c_client *client)
 	ret = imx290_stop_streaming(imx290);
 	if (ret) {
 		ret = dev_err_probe(dev, ret, "Could not initialize device\n");
+		pm_runtime_put_noidle(dev);
 		goto err_pm;
 	}
 
@@ -1662,7 +1663,6 @@ err_subdev:
 	imx290_subdev_cleanup(imx290);
 err_pm:
 	pm_runtime_disable(dev);
-	pm_runtime_put_noidle(dev);
 	imx290_power_off(imx290);
 	return ret;
 }
