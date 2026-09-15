@@ -395,9 +395,12 @@ int hva_hw_probe(struct platform_device *pdev, struct hva_dev *hva)
 	return 0;
 
 err_pm:
-	pm_runtime_put(dev);
+	pm_runtime_put_noidle(dev);
 err_disable:
 	pm_runtime_disable(dev);
+	if (IS_ENABLED(CONFIG_PM) && !pm_runtime_status_suspended(dev))
+		hva_hw_runtime_suspend(dev);
+	pm_runtime_set_suspended(dev);
 
 	return ret;
 }
@@ -409,8 +412,11 @@ void hva_hw_remove(struct hva_dev *hva)
 	disable_irq(hva->irq_its);
 	disable_irq(hva->irq_err);
 
-	pm_runtime_put_autosuspend(dev);
 	pm_runtime_disable(dev);
+	if (IS_ENABLED(CONFIG_PM) && !pm_runtime_status_suspended(dev))
+		hva_hw_runtime_suspend(dev);
+	pm_runtime_set_suspended(dev);
+	pm_runtime_put_noidle(dev);
 }
 
 int hva_hw_runtime_suspend(struct device *dev)
