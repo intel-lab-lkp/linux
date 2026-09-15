@@ -44,27 +44,15 @@ static void hws_program_dma_window(struct hws_video *vid, dma_addr_t dma);
 static struct hwsvideo_buffer *
 hws_take_queued_buffer_locked(struct hws_video *vid);
 
-static unsigned long long hws_elapsed_us(u64 start_ns)
-{
-	return div_u64(ktime_get_mono_fast_ns() - start_ns, 1000);
-}
-
 static inline bool list_node_unlinked(const struct list_head *n)
 {
 	return n->next == LIST_POISON1 || n->prev == LIST_POISON2;
 }
 
-static bool dma_window_verify;
-module_param_named(dma_window_verify, dma_window_verify, bool, 0644);
-MODULE_PARM_DESC(dma_window_verify,
-		 "Read back DMA window registers after programming (debug)");
-
 void hws_set_dma_doorbell(struct hws_pcie_dev *hws, unsigned int ch,
 			  dma_addr_t dma, const char *tag)
 {
 	iowrite32(lower_32_bits(dma), hws->bar0_base + HWS_REG_DMA_ADDR(ch));
-	dev_dbg(&hws->pdev->dev, "dma_doorbell ch%u: dma=0x%llx tag=%s\n", ch,
-		(u64)dma, tag ? tag : "");
 }
 
 static void hws_program_dma_window(struct hws_video *vid, dma_addr_t dma)
@@ -111,21 +99,7 @@ static void hws_program_dma_window(struct hws_video *vid, dma_addr_t dma)
 
 	vid->window_valid = true;
 
-	if (dma_window_verify && wrote) {
-		u32 r_hi =
-		    readl(hws->bar0_base + PCI_ADDR_TABLE_BASE + table_off);
-		u32 r_lo =
-		    readl(hws->bar0_base + PCI_ADDR_TABLE_BASE + table_off +
-			  PCIE_BARADDROFSIZE);
-		u32 r_base = readl(hws->bar0_base + HWS_BUF_BASE_OFF(ch));
-		u32 r_half = readl(hws->bar0_base + HWS_HALF_SZ_OFF(ch));
-
-		dev_dbg(&hws->pdev->dev,
-			"ch%u remap verify: hi=0x%08x page_lo=0x%08x exp_page=0x%08x base=0x%08x exp_base=0x%08x half16B=0x%08x exp_half=0x%08x\n",
-			ch, r_hi, r_lo, page_lo, r_base,
-			(ch + 1) * PCIEBAR_AXI_BASE + pci_addr, r_half,
-			vid->pix.half_size / 16);
-	} else if (wrote) {
+	if (wrote) {
 		/* Flush posted writes before arming DMA */
 		readl_relaxed(hws->bar0_base + HWS_HALF_SZ_OFF(ch));
 	}
@@ -172,9 +146,6 @@ void hws_prime_next_locked(struct hws_video *vid)
 	hws_program_dma_for_addr(hws, vid->channel_index, dma);
 	iowrite32(lower_32_bits(dma),
 		  hws->bar0_base + HWS_REG_DMA_ADDR(vid->channel_index));
-	dev_dbg(&hws->pdev->dev,
-		"ch%u pre-armed next buffer %p dma=0x%llx\n",
-		vid->channel_index, next, (u64)dma);
 }
 
 static bool hws_force_no_signal_frame(struct hws_video *v, const char *tag)
@@ -312,7 +283,6 @@ int hws_video_init_channel(struct hws_pcie_dev *pdev, int ch)
 	atomic_set(&vid->sequence_number, 0);
 	vid->active = NULL;
 
-	/* DMA watchdog removed; retain counters for diagnostics */
 	vid->timeout_count = 0;
 	vid->error_count = 0;
 
@@ -525,9 +495,6 @@ void hws_enable_video_capture(struct hws_pcie_dev *hws, unsigned int chan,
 	(void)readl(hws->bar0_base + HWS_REG_VCAP_ENABLE);
 
 	WRITE_ONCE(hws->video[chan].cap_active, on);
-
-	dev_dbg(&hws->pdev->dev, "vcap %s ch%u (reg=0x%08x)\n",
-		on ? "ON" : "OFF", chan, status);
 }
 
 static void hws_seed_dma_windows(struct hws_pcie_dev *hws)
@@ -660,9 +627,6 @@ int hws_check_card_status(struct hws_pcie_dev *hws)
 
 	/* If RUN/READY bit (bit0) is not set, reinitialize the video core. */
 	if (!(status & BIT(0))) {
-		dev_dbg(&hws->pdev->dev,
-			"SYS_STATUS not ready (0x%08x), reinitializing\n",
-			status);
 		hws_init_video_sys(hws, true);
 	}
 
@@ -743,17 +707,12 @@ static bool hws_read_active_state(struct hws_pcie_dev *pdx, unsigned int ch,
 static void handle_hwv2_path(struct hws_pcie_dev *hws, unsigned int ch)
 {
 	struct hws_video *vid;
-	u32 reg, in_fps, cur_out_res, want_out_res;
+	u32 reg, cur_out_res, want_out_res;
 
 	if (!hws || !hws->bar0_base || ch >= hws->max_channels)
 		return;
 
 	vid = &hws->video[ch];
-
-	/* 1) Input frame rate (read-only; log or export via debugfs if wanted) */
-	in_fps = readl(hws->bar0_base + HWS_REG_FRAME_RATE(ch));
-	/* dev_dbg(&hws->pdev->dev, "ch%u input fps=%u\n", ch, in_fps); */
-	(void)in_fps;
 
 	/* 2) Output resolution programming.
 	 * For now, mirror the current format to OUT_RES.
@@ -1104,11 +1063,6 @@ static void hws_buffer_queue(struct vb2_buffer *vb)
 	struct hws_pcie_dev *hws = vid->parent;
 	unsigned long flags;
 
-	dev_dbg(&hws->pdev->dev,
-		"buffer_queue(ch=%u): vb=%p sizeimage=%u q_active=%d\n",
-		vid->channel_index, vb, vid->pix.sizeimage,
-		READ_ONCE(vid->cap_active));
-
 	/* Initialize buffer slot */
 	buf->slot = 0;
 
@@ -1120,9 +1074,6 @@ static void hws_buffer_queue(struct vb2_buffer *vb)
 	if (READ_ONCE(vid->cap_active) && !vid->active) {
 		dma_addr_t dma_addr;
 
-		dev_dbg(&hws->pdev->dev,
-			"buffer_queue(ch=%u): priming first vb=%p\n",
-			vid->channel_index, &buf->vb.vb2_buf);
 		list_del_init(&buf->list);
 		vid->queued_count--;
 		vid->active = buf;
@@ -1150,9 +1101,6 @@ static int hws_start_streaming(struct vb2_queue *q, unsigned int count)
 	struct vb2_buffer *prog_vb2 = NULL;
 	unsigned long flags;
 	int ret;
-
-	dev_dbg(&hws->pdev->dev, "start_streaming: ch=%u count=%u\n",
-		v->channel_index, count);
 
 	ret = hws_check_card_status(hws);
 	if (ret) {
@@ -1201,9 +1149,6 @@ static int hws_start_streaming(struct vb2_queue *q, unsigned int count)
 		v->queued_count--;
 		v->active = to_program;
 		prog_vb2 = &to_program->vb.vb2_buf;
-		dev_dbg(&hws->pdev->dev,
-			"start_streaming: ch=%u took buffer %p\n",
-			v->channel_index, to_program);
 	}
 	spin_unlock_irqrestore(&v->irq_lock, flags);
 
@@ -1219,10 +1164,6 @@ static int hws_start_streaming(struct vb2_queue *q, unsigned int count)
 			iowrite32(lower_32_bits(dma_addr),
 				  hws->bar0_base +
 				  HWS_REG_DMA_ADDR(v->channel_index));
-			dev_dbg(&hws->pdev->dev,
-				"start_streaming: ch=%u programmed buffer %p dma=0x%08x\n",
-				v->channel_index, to_program,
-				lower_32_bits(dma_addr));
 			(void)readl(hws->bar0_base + HWS_REG_INT_STATUS);
 		}
 
@@ -1235,45 +1176,9 @@ static int hws_start_streaming(struct vb2_queue *q, unsigned int count)
 			hws_prime_next_locked(v);
 			spin_unlock_irqrestore(&v->irq_lock, pf);
 		}
-	} else {
-		dev_dbg(&hws->pdev->dev,
-			"start_streaming: ch=%u no buffer yet (will arm on QBUF)\n",
-			v->channel_index);
 	}
 
 	return 0;
-}
-
-static void hws_log_video_state(struct hws_video *v, const char *action,
-				const char *phase)
-{
-	struct hws_pcie_dev *hws = v->parent;
-	unsigned long flags;
-	unsigned int queued = 0;
-	unsigned int tracked = 0;
-	unsigned int seq = 0;
-	struct hwsvideo_buffer *b;
-	bool streaming = vb2_is_streaming(&v->buffer_queue);
-	bool cap_active;
-	bool stop_requested;
-	struct hwsvideo_buffer *active;
-	struct hwsvideo_buffer *next_prepared;
-
-	spin_lock_irqsave(&v->irq_lock, flags);
-	list_for_each_entry(b, &v->capture_queue, list)
-		queued++;
-	cap_active = READ_ONCE(v->cap_active);
-	stop_requested = READ_ONCE(v->stop_requested);
-	active = v->active;
-	next_prepared = v->next_prepared;
-	tracked = v->queued_count;
-	seq = (u32)atomic_read(&v->sequence_number);
-	spin_unlock_irqrestore(&v->irq_lock, flags);
-
-	dev_dbg(&hws->pdev->dev,
-		"video:%s:%s ch=%u streaming=%d cap=%d stop=%d active=%p next=%p queued=%u tracked=%u seq=%u\n",
-		action, phase, v->channel_index, streaming, cap_active,
-		stop_requested, active, next_prepared, queued, tracked, seq);
 }
 
 static void hws_stop_streaming(struct vb2_queue *q)
@@ -1283,10 +1188,6 @@ static void hws_stop_streaming(struct vb2_queue *q)
 	unsigned long flags;
 	struct hwsvideo_buffer *b, *tmp;
 	LIST_HEAD(done);
-	unsigned int done_cnt = 0;
-	u64 start_ns = ktime_get_mono_fast_ns();
-
-	hws_log_video_state(v, "streamoff", "begin");
 
 	/* 1) Quiesce SW/HW first */
 	lockdep_assert_held(&v->state_lock);
@@ -1307,12 +1208,7 @@ static void hws_stop_streaming(struct vb2_queue *q)
 		/* Unlink from 'done' before completing */
 		list_del_init(&b->list);
 		vb2_buffer_done(&b->vb.vb2_buf, VB2_BUF_STATE_ERROR);
-		done_cnt++;
 	}
-	dev_dbg(&hws->pdev->dev,
-		"video:streamoff:done ch=%u completed=%u (%lluus)\n",
-		v->channel_index, done_cnt, hws_elapsed_us(start_ns));
-	hws_log_video_state(v, "streamoff", "end");
 }
 
 static const struct vb2_ops hwspcie_video_qops = {
@@ -1447,42 +1343,25 @@ void hws_video_unregister(struct hws_pcie_dev *dev)
 int hws_video_quiesce(struct hws_pcie_dev *hws, const char *reason)
 {
 	int i, ret = 0;
-	u64 start_ns = ktime_get_mono_fast_ns();
 
-	dev_dbg(&hws->pdev->dev, "video:%s:begin channels=%u\n", reason,
-		hws->cur_max_video_ch);
 	for (i = 0; i < hws->cur_max_video_ch; i++) {
 		struct hws_video *vid = &hws->video[i];
 		struct vb2_queue *q = &vid->buffer_queue;
-		u64 ch_start_ns = ktime_get_mono_fast_ns();
 		bool streaming;
 
 		if (!q || !q->ops) {
-			dev_dbg(&hws->pdev->dev,
-				"video:%s:ch=%d skipped queue-unavailable\n",
-				reason, i);
 			continue;
 		}
 
 		streaming = vb2_is_streaming(q);
-		hws_log_video_state(vid, reason, "channel");
 		if (streaming) {
 			/* Stop via vb2, which runs .stop_streaming. */
 			int r = vb2_streamoff(q, q->type);
 
-			dev_dbg(&hws->pdev->dev,
-				"video:%s:ch=%d streamoff ret=%d (%lluus)\n",
-				reason, i, r, hws_elapsed_us(ch_start_ns));
 			if (r && !ret)
 				ret = r;
-		} else {
-			dev_dbg(&hws->pdev->dev,
-				"video:%s:ch=%d idle (%lluus)\n",
-				reason, i, hws_elapsed_us(ch_start_ns));
 		}
 	}
-	dev_dbg(&hws->pdev->dev, "video:%s:done ret=%d (%lluus)\n", reason,
-		ret, hws_elapsed_us(start_ns));
 	return ret;
 }
 
