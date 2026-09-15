@@ -2,6 +2,7 @@
 #ifndef _LINUX_TIMER_H
 #define _LINUX_TIMER_H
 
+#include <linux/compiler.h>
 #include <linux/list.h>
 #include <linux/ktime.h>
 #include <linux/stddef.h>
@@ -62,7 +63,8 @@
 
 #define DEFINE_TIMER(_name, _function)				\
 	struct timer_list _name =				\
-		__TIMER_INITIALIZER(_function, 0)
+		__TIMER_INITIALIZER(_function, 0);		\
+	ASSERT_STATIC_STORAGE(_name)
 
 /*
  * LOCKDEP and DEBUG timer interfaces.
