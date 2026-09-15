@@ -49,11 +49,19 @@ static LIST_HEAD(mpam_all_msc);
 
 struct srcu_struct mpam_srcu;
 
+/* Number of MSCs reported by firmware */
+static int fw_num_msc;
+
 /*
  * Number of MSCs that have been probed. Once all MSCs have been probed MPAM
  * can be enabled.
  */
 static atomic_t mpam_num_msc;
+
+/* Number of MSCs that have had their hardware probed */
+static atomic_t mpam_num_msc_probed;
+
+static void mpam_enable_once(struct work_struct *work);
 
 static int mpam_cpuhp_state;
 static DEFINE_MUTEX(mpam_cpuhp_state_lock);
@@ -72,7 +80,7 @@ static DEFINE_SPINLOCK(partid_max_lock);
  * scheduled via this work_struct. If access to an MSC depends on a CPU that
  * was not brought online at boot, this can happen surprisingly late.
  */
-static DECLARE_WORK(mpam_enable_work, &mpam_enable);
+static DECLARE_WORK(mpam_enable_work, &mpam_enable_once);
 
 /*
  * All mpam error interrupts indicate a software bug. On receipt, disable the
@@ -1852,7 +1860,6 @@ static int mpam_discovery_cpu_online(unsigned int cpu)
 {
 	int err = 0;
 	struct mpam_msc *msc;
-	bool new_device_probed = false;
 
 	if (mpam_is_enabled())
 		return 0;
@@ -1863,18 +1870,18 @@ static int mpam_discovery_cpu_online(unsigned int cpu)
 		if (!cpumask_test_cpu(cpu, &msc->accessibility))
 			continue;
 
-		mutex_lock(&msc->probe_lock);
-		if (!msc->probed)
-			err = mpam_msc_hw_probe(msc);
-		mutex_unlock(&msc->probe_lock);
+		guard(mutex)(&msc->probe_lock);
+		if (msc->probed)
+			continue;
 
+		err = mpam_msc_hw_probe(msc);
 		if (err)
 			break;
-		new_device_probed = true;
+
+		if (atomic_add_return(1, &mpam_num_msc_probed) == fw_num_msc)
+			schedule_work(&mpam_enable_work);
 	}
 
-	if (new_device_probed && !err)
-		schedule_work(&mpam_enable_work);
 	if (err) {
 		mpam_disable_reason = "error during probing";
 		schedule_work(&mpam_broken_work);
@@ -2106,8 +2113,6 @@ static struct mpam_msc *do_mpam_msc_drv_probe(struct platform_device *pdev)
 
 	return msc;
 }
-
-static int fw_num_msc;
 
 static int mpam_msc_drv_probe(struct platform_device *pdev)
 {
@@ -2715,7 +2720,7 @@ static int mpam_allocate_config(void)
 	return 0;
 }
 
-static void mpam_enable_once(void)
+static void mpam_enable_once(struct work_struct *work)
 {
 	int err;
 
@@ -2867,34 +2872,6 @@ void mpam_disable(struct work_struct *ignored)
 	mpam_free_garbage();
 
 	pr_err_once("MPAM disabled due to %s\n", mpam_disable_reason);
-}
-
-/*
- * Enable mpam once all devices have been probed.
- * Scheduled by mpam_discovery_cpu_online() once all devices have been created.
- * Also scheduled when new devices are probed when new CPUs come online.
- */
-void mpam_enable(struct work_struct *work)
-{
-	static atomic_t once;
-	struct mpam_msc *msc;
-	bool all_devices_probed = true;
-
-	/* Have we probed all the hw devices? */
-	guard(srcu)(&mpam_srcu);
-	list_for_each_entry_srcu(msc, &mpam_all_msc, all_msc_list,
-				 srcu_read_lock_held(&mpam_srcu)) {
-		mutex_lock(&msc->probe_lock);
-		if (!msc->probed)
-			all_devices_probed = false;
-		mutex_unlock(&msc->probe_lock);
-
-		if (!all_devices_probed)
-			break;
-	}
-
-	if (all_devices_probed && !atomic_fetch_inc(&once))
-		mpam_enable_once();
 }
 
 #define maybe_update_config(cfg, feature, newcfg, member, changes) do { \
