@@ -4636,9 +4636,9 @@ retry:
 	if (create_dir) {
 		struct dentry *res = vfs_mkdir_no_perm(idmap, dir_inode, dentry,
 						       mode, &delegated_inode);
-			error = PTR_ERR_OR_ZERO(res);
-			if (!error)
-				dentry = res;
+		error = PTR_ERR_OR_ZERO(res);
+		if (!error)
+			dentry = res;
 	} else {
 		error = vfs_create_no_perm(idmap, dentry, mode, &delegated_inode);
 	}
