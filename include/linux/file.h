@@ -92,6 +92,8 @@ extern int __get_unused_fd_flags(unsigned flags, unsigned long nofile);
 extern int get_unused_fd_flags(unsigned flags);
 extern void put_unused_fd(unsigned int fd);
 void __fd_slots_commit(long ret);
+struct pt_regs;
+void fd_slots_commit(struct pt_regs *regs);
 void exit_fd_slots(void);
 
 DEFINE_CLASS(get_unused_fd, int, if (_T >= 0) put_unused_fd(_T),

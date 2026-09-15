@@ -23,6 +23,7 @@
 #include <linux/file_ref.h>
 #include <net/sock.h>
 #include <linux/init_task.h>
+#include <asm/syscall.h>
 
 #include "internal.h"
 
@@ -643,6 +644,19 @@ static void fd_release(unsigned int fd)
 /* Enough for SCM_MAX_FD, and a page of slots on 4K pages. */
 #define FD_SLOTS_SPILL_MIN	256
 
+/* Make the syscall exit path call fd_slots_commit(). */
+#if defined(CONFIG_GENERIC_ENTRY)
+#define fd_slots_set_work()	set_syscall_work(FD_SLOTS)
+#define fd_slots_clear_work()	clear_syscall_work(FD_SLOTS)
+#elif defined(TIF_FD_SLOTS)
+#define fd_slots_set_work()	set_thread_flag(TIF_FD_SLOTS)
+#define fd_slots_clear_work()	clear_thread_flag(TIF_FD_SLOTS)
+#else
+/* Nothing commits until the architecture provides the flag. */
+#define fd_slots_set_work()	do { } while (0)
+#define fd_slots_clear_work()	do { } while (0)
+#endif
+
 static struct fd_slot *fd_slot(struct fd_slots *slots, unsigned int idx)
 {
 	if (idx < FD_SLOTS_INLINE)
@@ -690,6 +704,8 @@ static struct fd_slot *fd_slot_record(int fd)
 	}
 	ACCESS_PRIVATE(slot, fd) = fd;
 	ACCESS_PRIVATE(slot, file) = NULL;
+	if (!idx)
+		fd_slots_set_work();
 	slots->nr = idx + 1;
 	return slot;
 }
@@ -809,6 +825,14 @@ static __always_inline void fd_slots_finish(struct fd_slots *slots, bool failed)
 	else
 		fd_slots_drop(slots);
 	slots->nr = 0;
+	fd_slots_clear_work();
+}
+
+/* Syscall exit hook, keyed on the return value the caller will see. */
+void fd_slots_commit(struct pt_regs *regs)
+{
+	fd_slots_finish(&current->fd_slots,
+			syscall_get_error(current, regs) != 0);
 }
 
 /* Install or drop the prepared descriptors based on @ret. */

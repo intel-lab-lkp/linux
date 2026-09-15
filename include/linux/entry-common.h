@@ -3,6 +3,7 @@
 #define __LINUX_ENTRYCOMMON_H
 
 #include <linux/audit.h>
+#include <linux/file.h>
 #include <linux/irq-entry-common.h>
 #include <linux/livepatch.h>
 #include <linux/ptrace.h>
@@ -36,7 +37,8 @@
 				 SYSCALL_WORK_SYSCALL_TRACE |		\
 				 SYSCALL_WORK_SYSCALL_AUDIT |		\
 				 SYSCALL_WORK_SYSCALL_USER_DISPATCH |	\
-				 SYSCALL_WORK_SYSCALL_EXIT_TRAP)
+				 SYSCALL_WORK_SYSCALL_EXIT_TRAP |	\
+				 SYSCALL_WORK_FD_SLOTS)
 
 /**
  * arch_ptrace_report_syscall_permit_entry - Architecture specific wrapper for
@@ -244,6 +246,10 @@ static __always_inline void arch_ptrace_report_syscall_exit(struct pt_regs *regs
 static __always_inline void syscall_exit_work(struct pt_regs *regs, unsigned long work)
 {
 	bool step;
+
+	/* Install or drop the descriptors the syscall prepared. */
+	if (work & SYSCALL_WORK_FD_SLOTS)
+		fd_slots_commit(regs);
 
 	/*
 	 * If the syscall was rolled back due to syscall user dispatching,
