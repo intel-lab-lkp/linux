@@ -210,40 +210,31 @@ MODULE_PARM_DESC(cpumask, "Mask of CPUs to use for idle injection.");
 static int max_idle_set(const char *arg, const struct kernel_param *kp)
 {
 	u8 new_max_idle;
-	int ret = 0;
+	int ret;
 
-	mutex_lock(&powerclamp_lock);
+	guard(mutex)(&powerclamp_lock);
 
 	/* Can't set mask when cooling device is in use */
-	if (powerclamp_data.clamping) {
-		ret = -EAGAIN;
-		goto skip_limit_set;
-	}
+	if (powerclamp_data.clamping)
+		return -EAGAIN;
 
 	ret = kstrtou8(arg, 10, &new_max_idle);
 	if (ret)
-		goto skip_limit_set;
+		return ret;
 
-	if (new_max_idle > MAX_TARGET_RATIO) {
-		ret = -EINVAL;
-		goto skip_limit_set;
-	}
+	if (new_max_idle > MAX_TARGET_RATIO)
+		return -EINVAL;
 
 	if (!cpumask_available(idle_injection_cpu_mask)) {
 		ret = allocate_copy_idle_injection_mask(cpu_present_mask);
 		if (ret)
-			goto skip_limit_set;
+			return ret;
 	}
 
-	if (check_invalid(idle_injection_cpu_mask, new_max_idle)) {
-		ret = -EINVAL;
-		goto skip_limit_set;
-	}
+	if (check_invalid(idle_injection_cpu_mask, new_max_idle))
+		return -EINVAL;
 
 	max_idle = new_max_idle;
-
-skip_limit_set:
-	mutex_unlock(&powerclamp_lock);
 
 	return ret;
 }
