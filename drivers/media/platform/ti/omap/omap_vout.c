@@ -1586,6 +1586,7 @@ static void omap_vout_remove(struct platform_device *pdev)
 		omap_dss_put_device(vid_dev->displays[k]);
 	}
 	kfree(vid_dev);
+	omapdss_compat_uninit();
 }
 
 static int __init omap_vout_probe(struct platform_device *pdev)
