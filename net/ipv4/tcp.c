@@ -267,6 +267,7 @@
 #include <linux/errqueue.h>
 #include <linux/static_key.h>
 #include <linux/btf.h>
+#include <linux/sched/mm.h>
 
 #include <net/icmp.h>
 #include <net/inet_common.h>
@@ -1860,21 +1861,116 @@ void tcp_set_rcvbuf(struct sock *sk, int val)
 }
 
 #ifdef CONFIG_MMU
+struct tcp_zc_vma {
+	unsigned long nr_pages;
+	struct mm_struct *mm;
+	refcount_t refcnt;
+	struct sock *sk;
+};
+
+/* Keep the size argument to __sk_mem_raise_allocated() within int. */
+#define TCP_ZEROCOPY_MEM_CHUNK (INT_MAX >> PAGE_SHIFT)
+
+static void tcp_zc_mem_uncharge(struct sock *sk, unsigned long nr_pages)
+{
+	unsigned int chunk;
+
+	while (nr_pages) {
+		chunk = min_t(unsigned long, nr_pages,
+			      TCP_ZEROCOPY_MEM_CHUNK);
+		__sk_mem_reduce_allocated(sk, chunk);
+		nr_pages -= chunk;
+	}
+}
+
+static int tcp_zc_mem_charge(struct sock *sk, unsigned long nr_pages)
+{
+	unsigned long charged = 0;
+	unsigned int chunk;
+	int ret;
+
+	while (nr_pages) {
+		chunk = min_t(unsigned long, nr_pages,
+			      TCP_ZEROCOPY_MEM_CHUNK);
+		ret = __sk_mem_raise_allocated(sk, chunk << PAGE_SHIFT,
+					       chunk, SK_MEM_RECV_ZEROCOPY);
+		if (!ret) {
+			tcp_zc_mem_uncharge(sk, charged);
+			return -ENOMEM;
+		}
+		charged += chunk;
+		nr_pages -= chunk;
+	}
+
+	return 0;
+}
+
+static void tcp_zc_vma_open(struct vm_area_struct *vma)
+{
+	struct tcp_zc_vma *zc_vma = vma->vm_private_data;
+
+	refcount_inc(&zc_vma->refcnt);
+}
+
+static void tcp_zc_vma_close(struct vm_area_struct *vma)
+{
+	struct tcp_zc_vma *zc_vma = vma->vm_private_data;
+
+	if (refcount_dec_and_test(&zc_vma->refcnt)) {
+		tcp_zc_mem_uncharge(zc_vma->sk, zc_vma->nr_pages);
+		mmdrop(zc_vma->mm);
+		sock_put(zc_vma->sk);
+		kfree(zc_vma);
+	}
+}
+
 static const struct vm_operations_struct tcp_vm_ops = {
+	.open = tcp_zc_vma_open,
+	.close = tcp_zc_vma_close,
 };
 
 int tcp_mmap(struct file *file, struct socket *sock,
 	     struct vm_area_struct *vma)
 {
+	struct tcp_zc_vma *zc_vma;
+	unsigned long nr_pages;
+
 	if (vma->vm_flags & (VM_WRITE | VM_EXEC))
 		return -EPERM;
 	vm_flags_clear(vma, VM_MAYWRITE | VM_MAYEXEC);
 
 	/* Instruct vm_insert_page() to not mmap_read_lock(mm) */
-	vm_flags_set(vma, VM_MIXEDMAP);
+	vm_flags_set(vma, VM_DONTCOPY | VM_DONTEXPAND | VM_MIXEDMAP);
+
+	nr_pages = (vma->vm_end - vma->vm_start) >> PAGE_SHIFT;
+	zc_vma = kmalloc_obj(*zc_vma, GFP_KERNEL_ACCOUNT);
+	if (!zc_vma)
+		return -ENOMEM;
+
+	zc_vma->nr_pages = nr_pages;
+	zc_vma->mm = vma->vm_mm;
+	zc_vma->sk = sock->sk;
+	refcount_set(&zc_vma->refcnt, 1);
+	mmgrab(zc_vma->mm);
+	sock_hold(zc_vma->sk);
+	if (tcp_zc_mem_charge(zc_vma->sk, nr_pages)) {
+		mmdrop(zc_vma->mm);
+		sock_put(zc_vma->sk);
+		kfree(zc_vma);
+		return -ENOMEM;
+	}
 
 	vma->vm_ops = &tcp_vm_ops;
+	vma->vm_private_data = zc_vma;
 	return 0;
+}
+
+static bool tcp_zc_vma_valid(const struct vm_area_struct *vma,
+			     const struct mm_struct *mm)
+{
+	const struct tcp_zc_vma *zc_vma = vma->vm_private_data;
+
+	return vma->vm_ops == &tcp_vm_ops && zc_vma && zc_vma->mm == mm;
 }
 
 static skb_frag_t *skb_advance_to_frag(struct sk_buff *skb, u32 offset_skb,
@@ -2173,7 +2269,7 @@ static struct vm_area_struct *find_tcp_vma(struct mm_struct *mm,
 	struct vm_area_struct *vma = lock_vma_under_rcu(mm, address);
 
 	if (vma) {
-		if (vma->vm_ops != &tcp_vm_ops) {
+		if (!tcp_zc_vma_valid(vma, mm)) {
 			vma_end_read(vma);
 			return NULL;
 		}
@@ -2183,7 +2279,7 @@ static struct vm_area_struct *find_tcp_vma(struct mm_struct *mm,
 
 	mmap_read_lock(mm);
 	vma = vma_lookup(mm, address);
-	if (!vma || vma->vm_ops != &tcp_vm_ops) {
+	if (!vma || !tcp_zc_vma_valid(vma, mm)) {
 		mmap_read_unlock(mm);
 		return NULL;
 	}

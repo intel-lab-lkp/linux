@@ -38,7 +38,8 @@
 
 #define skmem_kind_names			\
 		EM(SK_MEM_SEND)			\
-		EMe(SK_MEM_RECV)
+		EM(SK_MEM_RECV)			\
+		EMe(SK_MEM_RECV_ZEROCOPY)
 
 /* enums need to be exported to user space */
 #undef EM

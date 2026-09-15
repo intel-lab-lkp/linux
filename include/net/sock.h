@@ -1556,6 +1556,7 @@ void __sk_mem_reclaim(struct sock *sk, int amount);
 
 #define SK_MEM_SEND	0
 #define SK_MEM_RECV	1
+#define SK_MEM_RECV_ZEROCOPY	0x100
 
 /* sysctl_mem values are in pages */
 static inline long sk_prot_mem_limits(const struct sock *sk, int index)
