@@ -1169,7 +1169,7 @@ static int check_windows_hibernation_status(struct ntfs_volume *vol)
 			return 0;
 		}
 		/* A real error occurred. */
-		ntfs_error(vol->sb, "Failed to find inode number for hiberfil.sys.");
+		ntfs_debug("Failed to find inode number for hiberfil.sys.");
 		return ret;
 	}
 	/* Get the inode. */
@@ -1177,7 +1177,7 @@ static int check_windows_hibernation_status(struct ntfs_volume *vol)
 	if (IS_ERR(vi)) {
 		if (!IS_ERR(vi))
 			iput(vi);
-		ntfs_error(vol->sb, "Failed to load hiberfil.sys.");
+		ntfs_debug("Failed to load hiberfil.sys.");
 		return IS_ERR(vi) ? PTR_ERR(vi) : -EIO;
 	}
 	if (unlikely(i_size_read(vi) < NTFS_HIBERFIL_HEADER_SIZE)) {
@@ -1188,7 +1188,7 @@ static int check_windows_hibernation_status(struct ntfs_volume *vol)
 
 	folio = read_mapping_folio(vi->i_mapping, 0, NULL);
 	if (IS_ERR(folio)) {
-		ntfs_error(vol->sb, "Failed to read from hiberfil.sys.");
+		ntfs_debug("Failed to read from hiberfil.sys.");
 		ret = PTR_ERR(folio);
 		goto iput_out;
 	}
@@ -1587,8 +1587,13 @@ get_ctx_vol_failed:
 		const char *es1;
 
 		es1 = err < 0 ? es1a : es1b;
-		/* If a read-write mount, convert it to a read-only mount. */
-		if (!sb_rdonly(sb) && vol->on_errors == ON_ERRORS_REMOUNT_RO) {
+		/*
+		 * A Windows hibernation image is not a filesystem error, so
+		 * this is a safety interlock rather than something the
+		 * errors= policy may downgrade: always convert a read-write
+		 * mount to read-only.
+		 */
+		if (!sb_rdonly(sb)) {
 			sb->s_flags |= SB_RDONLY;
 			ntfs_error(sb, "%s.  Mounting read-only%s", es1, es2);
 		}
