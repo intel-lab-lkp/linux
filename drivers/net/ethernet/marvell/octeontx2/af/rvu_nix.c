@@ -5077,10 +5077,6 @@ static int rvu_nix_block_init(struct rvu *rvu, struct nix_hw *nix_hw)
 		if (err)
 			return err;
 
-		err = nix_setup_bpids(rvu, nix_hw, blkaddr);
-		if (err)
-			return err;
-
 		/* Configure segmentation offload formats */
 		nix_setup_lso(rvu, nix_hw, blkaddr);
 
