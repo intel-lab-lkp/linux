@@ -6276,10 +6276,7 @@ pick_next_task(struct rq *rq, struct rq_flags *rf)
 	 * selection. In this case, do a core-wide selection.
 	 */
 	if (rq->core->core_pick_seq == rq->core->core_task_seq &&
-	    rq->core->core_pick_seq != rq->core_sched_seq &&
 	    rq->core_pick) {
-		WRITE_ONCE(rq->core_sched_seq, rq->core->core_pick_seq);
-
 		next = rq->core_pick;
 		rq->dl_server = rq->core_dl_server;
 		rq->core_pick = NULL;
@@ -6311,11 +6308,13 @@ restart:
 	}
 
 	/*
-	 * core->core_task_seq, core->core_pick_seq, rq->core_sched_seq
+	 * core->core_task_seq, core->core_pick_seq
 	 *
 	 * @task_seq guards the task state ({en,de}queues)
 	 * @pick_seq is the @task_seq we did a selection on
-	 * @sched_seq is the @pick_seq we scheduled
+	 *
+	 * Once a core-wide selection is committed, a non-NULL core_pick denotes
+	 * a pick which still needs to be consumed on this CPU.
 	 *
 	 * However, preemptions can cause multiple picks on the same task set.
 	 * 'Fix' this by also increasing @task_seq for every pick.
@@ -6422,7 +6421,6 @@ restart:
 
 	rq->core->core_pick_seq = rq->core->core_task_seq;
 	next = rq->core_pick;
-	rq->core_sched_seq = rq->core->core_pick_seq;
 
 	/* Something should have been selected for current CPU */
 	WARN_ON_ONCE(!next);

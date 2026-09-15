@@ -1371,7 +1371,6 @@ struct rq {
 	struct task_struct	*core_pick;
 	struct sched_dl_entity	*core_dl_server;
 	unsigned int		core_enabled;
-	unsigned int		core_sched_seq;
 	struct rb_root		core_tree;
 
 	/* shared state -- careful with sched_core_cpu_deactivate() */
