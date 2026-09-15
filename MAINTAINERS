@@ -29106,6 +29106,13 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/iio/light/vishay,veml6075.yaml
 F:	drivers/iio/light/veml6075.c
 
+VISION COMPONENTS MIPI MODULE CONTROLLER DRIVER
+M:	Laurent Pinchart <laurent.pinchart@ideasonboard.com>
+M:	Richard Leitner <richard.leitner@linux.dev>
+L:	linux-media@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/media/i2c/vision-components,mipi-module-controller.yaml
+
 VISL VIRTUAL STATELESS DECODER DRIVER
 M:	Daniel Almeida <daniel.almeida@collabora.com>
 L:	linux-media@vger.kernel.org

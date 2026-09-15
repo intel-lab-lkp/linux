@@ -1,0 +1,92 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/media/i2c/vision-components,mipi-module-controller.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Vision Components MIPI Camera Module Controller
+
+maintainers:
+  - Laurent Pinchart <laurent.pinchart@ideasonboard.com>
+  - Richard Leitner <richard.leitner@linux.dev>
+
+description: |-
+  The MIPI camera module controller is an FPGA-based, I2C-accessible system
+  controller found on MIPI camera modules from Vision Components. It abstracts
+  the camera sensor behind a unified register interface, and controls and
+  sequences the on-board power supplies and clocks.
+
+  The camera sensor abstraction is optional. The controller exposes a tunneled
+  downstream I2C bus used by the attached image sensor. The controller node
+  acts as the upstream device on the host bus, while child node below the
+  controller represent the sensor device reachable through the tunnel.
+
+properties:
+  compatible:
+    const: vision-components,mipi-module-controller
+
+  reg:
+    maxItems: 1
+
+  '#clock-cells':
+    const: 0
+
+  clock-frequency:
+    description: Frequency of the sensor clock provided by the module
+
+  vcc-supply:
+    description: Power supply of the module (3.3V)
+
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 0
+
+required:
+  - compatible
+  - reg
+  - '#clock-cells'
+  - clock-frequency
+  - vcc-supply
+  - '#address-cells'
+  - '#size-cells'
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        vc_mipi_ctrl: controller@10 {
+            compatible = "vision-components,mipi-module-controller";
+            reg = <0x10>;
+            #clock-cells = <0>;
+            clock-frequency = <37125000>;
+            vcc-supply = <&cam_3v3>;
+
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            i2c@0 {
+                #address-cells = <1>;
+                #size-cells = <0>;
+
+                vc_mipi_sensor: camera@60 {
+                    compatible = "ovti,ov9281";
+                    reg = <0x60>;
+
+                    clocks = <&vc_mipi_ctrl>;
+                    clock-names = "inck";
+
+                    avdd-supply = <&vc_mipi_ctrl>;
+                    dvdd-supply = <&vc_mipi_ctrl>;
+                    dovdd-supply = <&vc_mipi_ctrl>;
+                };
+            };
+        };
+    };
+...
+
