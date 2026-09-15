@@ -496,15 +496,22 @@ out:
  **/
 int i40e_lan_del_device(struct i40e_pf *pf)
 {
-	struct auxiliary_device *aux_dev = pf->cinst->lan_info.aux_dev;
+	struct auxiliary_device *aux_dev;
 	struct i40e_device *ldev, *tmp;
 	int ret = -ENODEV;
 
-	auxiliary_device_delete(aux_dev);
-	auxiliary_device_uninit(aux_dev);
+	/* i40e_client_add_instance() leaves pf->cinst NULL when it fails,
+	 * so there may be no auxiliary device to tear down here.
+	 */
+	if (pf->cinst) {
+		aux_dev = pf->cinst->lan_info.aux_dev;
 
-	/* First, remove any client instance. */
-	i40e_client_del_instance(pf);
+		auxiliary_device_delete(aux_dev);
+		auxiliary_device_uninit(aux_dev);
+
+		/* First, remove any client instance. */
+		i40e_client_del_instance(pf);
+	}
 
 	mutex_lock(&i40e_device_mutex);
 	list_for_each_entry_safe(ldev, tmp, &i40e_devices, list) {
