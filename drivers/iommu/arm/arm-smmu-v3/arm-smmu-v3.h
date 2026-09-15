@@ -189,6 +189,8 @@ struct arm_vsmmu;
 #define Q_WRP(llq, p)			((p) & (1 << (llq)->max_n_shift))
 /* A position is Q_WRP | Q_IDX, wrapping at twice the queue capacity */
 #define Q_POS(llq, p)			(Q_WRP(llq, p) | Q_IDX(llq, p))
+/* Entries between two positions, i.e. how far @b leads @a */
+#define Q_DIFF(llq, a, b)		Q_POS(llq, (b) - (a))
 #define Q_OVERFLOW_FLAG			(1U << 31)
 #define Q_OVF(p)			((p) & Q_OVERFLOW_FLAG)
 #define Q_ENT(q, p)			((q)->base +			\
