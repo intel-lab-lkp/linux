@@ -2888,7 +2888,7 @@ static int parport_pc_pci_probe(struct pci_dev *dev,
 	/* This is a PCI card */
 	i -= last_sio;
 	count = 0;
-	err = pci_enable_device(dev);
+	err = pcim_enable_device(dev);
 	if (err)
 		return err;
 
