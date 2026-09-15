@@ -1058,7 +1058,7 @@ struct snd_timer_tread {
  *                                                                          *
  ****************************************************************************/
 
-#define SNDRV_CTL_VERSION		SNDRV_PROTOCOL_VERSION(2, 0, 10)
+#define SNDRV_CTL_VERSION		SNDRV_PROTOCOL_VERSION(2, 0, 11)
 
 struct snd_ctl_card_info {
 	int card;			/* card number */
@@ -1076,11 +1076,39 @@ struct snd_ctl_card_info {
  * Card components can exceed the fixed 128 bytes in snd_ctl_card_info.
  * Use SNDRV_CTL_IOCTL_CARD_BYTES with type SND_CTL_CARD_BTYPE_COMPONENTS
  * to retrieve the full string.
+ *
+ * SND_CTL_CARD_BTYPE_NAME, _LONGNAME and _MIXERNAME return the untruncated
+ * form of the name, longname and mixername fields of struct snd_ctl_card_info,
+ * in the same way SND_CTL_CARD_BTYPE_COMPONENTS returns the untruncated
+ * components string.  Available since SNDRV_CTL_VERSION 2.0.11.
+ *
+ * A name that fits into its fixed field is not repeated here: an empty result
+ * means the field in struct snd_ctl_card_info already holds the whole name.
+ * An older kernel answers -EINVAL for the unknown type, which means the same.
+ * So there is one name per card, available in two lengths, and never two names
+ * that could disagree.
+ *
+ * Card names are UTF-8.  The kernel guarantees that what it returns here is
+ * well-formed UTF-8 carrying no code point that would break a line (C0 and C1
+ * controls, U+2028, U+2029), and that it is never cut inside a multi-byte
+ * sequence.  The fixed fields are cut at a character boundary too.
+ *
+ * Nothing beyond that is guaranteed, deliberately.  Invisible, bidirectional
+ * and deprecated format characters pass through, NFC is only a recommendation
+ * to drivers, and homoglyphs cannot be detected at all: all of that needs the
+ * Unicode character properties, which belong in user space and not in the
+ * sound core, and a range list in the kernel would go stale with every
+ * Unicode release.  So a name is a display string and never a security
+ * boundary: isolate it for display (U+2066/U+2069), filter
+ * Default_Ignorable_Code_Point, and match cards on id, driver or components.
  */
 
 /* Type values for struct snd_ctl_card_bytes::type */
 enum {
 	SND_CTL_CARD_BTYPE_COMPONENTS	= 1,	/* full card components string */
+	SND_CTL_CARD_BTYPE_NAME		= 2,	/* full short name */
+	SND_CTL_CARD_BTYPE_LONGNAME	= 3,	/* full long name */
+	SND_CTL_CARD_BTYPE_MIXERNAME	= 4,	/* full mixer name */
 };
 
 struct snd_ctl_card_bytes {

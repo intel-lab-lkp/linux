@@ -14,6 +14,7 @@
 #include <linux/mm.h>
 #include <linux/math64.h>
 #include <linux/sched/signal.h>
+#include <linux/err.h>
 #include <linux/cleanup.h>
 #include <sound/core.h>
 #include <sound/minors.h>
@@ -901,6 +902,26 @@ static int snd_ctl_card_info(struct snd_card *card, struct snd_ctl_file * ctl,
 	return 0;
 }
 
+/* Pick the card string a SND_CTL_CARD_BTYPE_* value refers to.
+ * Returns NULL for an unset field, which is handed out as an empty string.
+ * Must be called with snd_ioctl_rwsem held.
+ */
+static const char *snd_ctl_card_btype_str(struct snd_card *card, __u32 type)
+{
+	switch (type) {
+	case SND_CTL_CARD_BTYPE_COMPONENTS:
+		return card->components;
+	case SND_CTL_CARD_BTYPE_NAME:
+		return card->full_shortname;
+	case SND_CTL_CARD_BTYPE_LONGNAME:
+		return card->full_longname;
+	case SND_CTL_CARD_BTYPE_MIXERNAME:
+		return card->full_mixername;
+	default:
+		return ERR_PTR(-EINVAL);
+	}
+}
+
 static int snd_ctl_card_bytes(struct snd_card *card,
 			      struct snd_ctl_card_bytes *info,
 			      unsigned int __user *data_len_out)
@@ -909,22 +930,21 @@ static int snd_ctl_card_bytes(struct snd_card *card,
 	bool too_small = false;
 	unsigned int data_len;
 
-	if (info->type != SND_CTL_CARD_BTYPE_COMPONENTS)
-		return -EINVAL;
-
 	scoped_guard(rwsem_read, &snd_ioctl_rwsem) {
-		const char *components = card->components;
+		const char *str = snd_ctl_card_btype_str(card, info->type);
 
-		if (!components)
-			components = "";
+		if (IS_ERR(str))
+			return PTR_ERR(str);
+		if (!str)
+			str = "";
 
-		data_len = strlen(components) + 1;
+		data_len = strlen(str) + 1;
 
 		if (info->data && info->data_allocated != 0) {
 			if (info->data_allocated < data_len) {
 				too_small = true;
 			} else {
-				copy = kmemdup(components, data_len, GFP_KERNEL);
+				copy = kmemdup(str, data_len, GFP_KERNEL);
 				if (!copy)
 					return -ENOMEM;
 			}
