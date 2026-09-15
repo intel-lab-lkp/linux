@@ -73,6 +73,8 @@ struct safexcel_cipher_req {
 	unsigned int rdescs;
 	bool needs_inv;
 	int  nr_src, nr_dst;
+	unsigned int output_offset;
+	unsigned int output_len;
 };
 
 static int safexcel_skcipher_iv(struct safexcel_cipher_ctx *ctx, u8 *iv,
@@ -608,6 +610,71 @@ static int safexcel_context_control(struct safexcel_cipher_ctx *ctx,
 	return 0;
 }
 
+/* classify each scatterlist entry by its overlap with the logical output */
+static enum dma_data_direction safexcel_aead_dma_dir(unsigned int offset,
+						     unsigned int len,
+						     unsigned int output_offset,
+						     unsigned int output_len,
+						     bool inplace)
+{
+	unsigned int end = offset + len;
+	unsigned int output_end = output_offset + output_len;
+
+	if (!output_len || offset >= output_end || output_offset >= end)
+		return DMA_TO_DEVICE;
+
+	if (inplace || offset < output_offset || end > output_end)
+		return DMA_BIDIRECTIONAL;
+
+	return DMA_FROM_DEVICE;
+}
+
+static void safexcel_unmap_aead(struct device *dev, struct scatterlist *sgl,
+				int nents, unsigned int output_offset,
+				unsigned int output_len, bool inplace)
+{
+	struct scatterlist *sg;
+	unsigned int offset = 0;
+	int i;
+
+	for_each_sg(sgl, sg, nents, i) {
+		enum dma_data_direction dir;
+
+		dir = safexcel_aead_dma_dir(offset, sg->length, output_offset,
+					    output_len, inplace);
+		dma_unmap_page(dev, sg_dma_address(sg), sg_dma_len(sg), dir);
+		offset += sg->length;
+	}
+}
+
+static int safexcel_map_aead(struct device *dev, struct scatterlist *sgl,
+			     int nents, unsigned int output_offset,
+			     unsigned int output_len, bool inplace)
+{
+	struct scatterlist *sg;
+	unsigned int offset = 0;
+	int i;
+
+	for_each_sg(sgl, sg, nents, i) {
+		enum dma_data_direction dir;
+
+		dir = safexcel_aead_dma_dir(offset, sg->length, output_offset,
+					    output_len, inplace);
+		sg_dma_address(sg) = dma_map_page(dev, sg_page(sg), sg->offset,
+						  sg->length, dir);
+		if (dma_mapping_error(dev, sg_dma_address(sg)))
+			goto err_unmap;
+		sg_dma_len(sg) = sg->length;
+		offset += sg->length;
+	}
+
+	return nents;
+
+err_unmap:
+	safexcel_unmap_aead(dev, sgl, i, output_offset, output_len, inplace);
+	return 0;
+}
+
 static int safexcel_handle_req_result(struct safexcel_crypto_priv *priv, int ring,
 				      struct crypto_async_request *async,
 				      struct scatterlist *src,
@@ -645,16 +712,30 @@ static int safexcel_handle_req_result(struct safexcel_crypto_priv *priv, int rin
 	safexcel_complete(priv, ring);
 
 	if (src == dst) {
-		if (sreq->nr_src > 0)
-			dma_unmap_sg(priv->dev, src, sreq->nr_src,
-				     DMA_BIDIRECTIONAL);
+		if (sreq->nr_src > 0) {
+			if (ctx->aead)
+				safexcel_unmap_aead(priv->dev, src,
+						    sreq->nr_src,
+						    sreq->output_offset,
+						    sreq->output_len, true);
+			else
+				dma_unmap_sg(priv->dev, src, sreq->nr_src,
+					     DMA_BIDIRECTIONAL);
+		}
 	} else {
 		if (sreq->nr_src > 0)
 			dma_unmap_sg(priv->dev, src, sreq->nr_src,
 				     DMA_TO_DEVICE);
-		if (sreq->nr_dst > 0)
-			dma_unmap_sg(priv->dev, dst, sreq->nr_dst,
-				     DMA_FROM_DEVICE);
+		if (sreq->nr_dst > 0) {
+			if (ctx->aead)
+				safexcel_unmap_aead(priv->dev, dst,
+						    sreq->nr_dst,
+						    sreq->output_offset,
+						    sreq->output_len, false);
+			else
+				dma_unmap_sg(priv->dev, dst, sreq->nr_dst,
+					     DMA_FROM_DEVICE);
+		}
 	}
 
 	/*
@@ -737,6 +818,10 @@ static int safexcel_send_req(struct crypto_async_request *base, int ring,
 	 */
 	totlen = totlen_src;
 	queued = totlen_src;
+	if (ctx->aead) {
+		sreq->output_offset = assoclen;
+		sreq->output_len = totlen_dst - assoclen;
+	}
 
 	if (src == dst) {
 		sreq->nr_src = max(sreq->nr_src, sreq->nr_dst);
@@ -748,8 +833,17 @@ static int safexcel_send_req(struct crypto_async_request *base, int ring,
 			return -EINVAL;
 		}
 		if (sreq->nr_src > 0) {
-			src_mapped = dma_map_sg(priv->dev, src, sreq->nr_src,
-						DMA_BIDIRECTIONAL);
+			if (ctx->aead)
+				src_mapped =
+					safexcel_map_aead(priv->dev, src,
+							  sreq->nr_src,
+							  sreq->output_offset,
+							  sreq->output_len,
+							  true);
+			else
+				src_mapped = dma_map_sg(priv->dev, src,
+							sreq->nr_src,
+							DMA_BIDIRECTIONAL);
 			if (!src_mapped)
 				return -EIO;
 		}
@@ -775,8 +869,17 @@ static int safexcel_send_req(struct crypto_async_request *base, int ring,
 		}
 
 		if (sreq->nr_dst > 0) {
-			dst_mapped = dma_map_sg(priv->dev, dst, sreq->nr_dst,
-						DMA_FROM_DEVICE);
+			if (ctx->aead)
+				dst_mapped =
+					safexcel_map_aead(priv->dev, dst,
+							  sreq->nr_dst,
+							  sreq->output_offset,
+							  sreq->output_len,
+							  false);
+			else
+				dst_mapped = dma_map_sg(priv->dev, dst,
+							sreq->nr_dst,
+							DMA_FROM_DEVICE);
 			if (!dst_mapped) {
 				ret = -EIO;
 				goto unmap;
@@ -913,16 +1016,30 @@ cdesc_rollback:
 		safexcel_ring_rollback_wptr(priv, &priv->ring[ring].cdr);
 unmap:
 	if (src == dst) {
-		if (src_mapped)
-			dma_unmap_sg(priv->dev, src, sreq->nr_src,
-				     DMA_BIDIRECTIONAL);
+		if (src_mapped) {
+			if (ctx->aead)
+				safexcel_unmap_aead(priv->dev, src,
+						    sreq->nr_src,
+						    sreq->output_offset,
+						    sreq->output_len, true);
+			else
+				dma_unmap_sg(priv->dev, src, sreq->nr_src,
+					     DMA_BIDIRECTIONAL);
+		}
 	} else {
 		if (src_mapped)
 			dma_unmap_sg(priv->dev, src, sreq->nr_src,
 				     DMA_TO_DEVICE);
-		if (dst_mapped)
-			dma_unmap_sg(priv->dev, dst, sreq->nr_dst,
-				     DMA_FROM_DEVICE);
+		if (dst_mapped) {
+			if (ctx->aead)
+				safexcel_unmap_aead(priv->dev, dst,
+						    sreq->nr_dst,
+						    sreq->output_offset,
+						    sreq->output_len, false);
+			else
+				dma_unmap_sg(priv->dev, dst, sreq->nr_dst,
+					     DMA_FROM_DEVICE);
+		}
 	}
 
 	return ret;
