@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <inttypes.h>
 #include <linux/zalloc.h>
 
@@ -248,8 +249,15 @@ static int __add_member_cb(Dwarf_Die *die, void *arg)
 	else
 		die_mem = member_type;
 
-	if (dwarf_aggregate_size(&die_mem, &size) < 0)
-		size = 0;
+	if (dwarf_aggregate_size(&die_mem, &size) < 0) {
+		if (dwarf_tag(&die_mem) == DW_TAG_array_type) { /* flex-array? */
+			die_get_real_type(&die_mem, &die_mem);
+			if (dwarf_aggregate_size(&die_mem, &size) < 0)
+				size = 0;
+		} else {
+			size = 0;
+		}
+	}
 
 	if (dwarf_attr_integrate(die, DW_AT_data_member_location, &attr)) {
 		if (dwarf_formudata(&attr, &loc) != 0) {
@@ -399,6 +407,7 @@ static struct annotated_data_type *dso__findnew_data_type(struct dso *dso,
 	result->self.type_name = type_name;
 	result->self.size = size;
 	INIT_LIST_HEAD(&result->self.children);
+	result->flex_array = die_has_flex_array(type_die);
 
 	if (symbol_conf.annotate_data_member)
 		add_member_types(result, type_die);
@@ -517,13 +526,30 @@ static bool is_better_type(Dwarf_Die *type_a, Dwarf_Die *type_b)
 	return false;
 }
 
+static enum type_match_result check_type_offset(Dwarf_Die *type_die, int offset)
+{
+	Dwarf_Word size;
+
+	/* Get the size of the actual type */
+	if (dwarf_aggregate_size(type_die, &size) < 0)
+		return PERF_TMR_NO_SIZE;
+
+	/* Minimal sanity check */
+	if (offset < 0)
+		return PERF_TMR_BAD_OFFSET;
+
+	if ((unsigned)offset >= size && !die_has_flex_array(type_die))
+		return PERF_TMR_BAD_OFFSET;
+
+	return PERF_TMR_OK;
+}
+
 /* The type info will be saved in @type_die */
 static enum type_match_result check_variable(struct data_loc_info *dloc,
 					     Dwarf_Die *var_die,
 					     Dwarf_Die *type_die, int reg,
 					     int offset, bool is_fbreg)
 {
-	Dwarf_Word size;
 	bool needs_pointer = true;
 	Dwarf_Die sized_type;
 
@@ -554,15 +580,7 @@ static enum type_match_result check_variable(struct data_loc_info *dloc,
 	else
 		sized_type = *type_die;
 
-	/* Get the size of the actual type */
-	if (dwarf_aggregate_size(&sized_type, &size) < 0)
-		return PERF_TMR_NO_SIZE;
-
-	/* Minimal sanity check */
-	if ((unsigned)offset >= size)
-		return PERF_TMR_BAD_OFFSET;
-
-	return PERF_TMR_OK;
+	return check_type_offset(&sized_type, offset);
 }
 
 struct type_state_stack *find_stack_state(struct type_state *state,
@@ -1112,7 +1130,6 @@ static enum type_match_result check_matching_type(struct type_state *state,
 						  struct disasm_line *dl,
 						  Dwarf_Die *type_die)
 {
-	Dwarf_Word size;
 	u32 insn_offset = dl->al.offset;
 	int reg = dloc->op->reg1;
 	int offset = dloc->op->offset;
@@ -1166,12 +1183,7 @@ again:
 		else
 			sized_type = *type_die;
 
-		/* Get the size of the actual type */
-		if (dwarf_aggregate_size(&sized_type, &size) < 0 ||
-		    (unsigned)dloc->type_offset >= size)
-			return PERF_TMR_BAD_OFFSET;
-
-		return PERF_TMR_OK;
+		return check_type_offset(&sized_type, dloc->type_offset);
 	}
 
 	if (state->regs[reg].kind == TSR_KIND_POINTER) {
@@ -1190,12 +1202,7 @@ again:
 
 		dloc->type_offset = dloc->op->offset + state->regs[reg].offset;
 
-		/* Get the size of the actual type */
-		if (dwarf_aggregate_size(type_die, &size) < 0 ||
-		    (unsigned)dloc->type_offset >= size)
-			return PERF_TMR_BAD_OFFSET;
-
-		return PERF_TMR_OK;
+		return check_type_offset(type_die, dloc->type_offset);
 	}
 
 	if (state->regs[reg].kind == TSR_KIND_PERCPU_POINTER) {
@@ -1209,9 +1216,7 @@ again:
 
 		dloc->type_offset = dloc->op->offset;
 
-		/* Get the size of the actual type */
-		if (dwarf_aggregate_size(type_die, &size) < 0 ||
-		    (unsigned)dloc->type_offset >= size)
+		if (check_type_offset(type_die, dloc->type_offset) != PERF_TMR_OK)
 			return PERF_TMR_BAIL_OUT;
 
 		return PERF_TMR_OK;
@@ -1839,7 +1844,7 @@ int annotated_data_type__update_samples(struct annotated_data_type *adt,
 			return -1;
 	}
 
-	if (offset < 0 || offset >= adt->self.size)
+	if (offset < 0 || (offset >= adt->self.size && !adt->flex_array))
 		return -1;
 
 	h = &adt->histograms[evsel->core.idx];
