@@ -1132,6 +1132,16 @@ try_to_take_rt_mutex(struct rt_mutex_base *lock, struct task_struct *task,
 		struct rt_mutex_waiter *top_waiter = rt_mutex_top_waiter(lock);
 
 		/*
+		 * The waiter may have been dequeued while the lock was
+		 * dropped. In that case the waiters tree is empty and
+		 * top_waiter is NULL, so there is nothing to steal from.
+		 * Take the lock and leave the transient state to
+		 * rt_mutex_set_owner() below.
+		 */
+		if (!top_waiter)
+			goto takeit;
+
+		/*
 		 * If waiter is the highest priority waiter of @lock,
 		 * or allowed to steal it, take it over.
 		 */
