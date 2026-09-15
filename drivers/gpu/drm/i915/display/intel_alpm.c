@@ -453,6 +453,12 @@ bool intel_alpm_compute_params(struct intel_dp *intel_dp,
 	int precharge = intel_dp_aux_fw_sync_len(intel_dp) - preamble;
 	u8 max_wake_lines;
 
+	/* DP2.1 ALPM is not supported on UHBR (128b/132b) link rates on NVL. */
+	if (DISPLAY_VER(display) == 35 &&
+	    !intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP) &&
+	    intel_dp_is_uhbr(crtc_state))
+		return false;
+
 	io_wake_time = max(precharge, io_buffer_wake_time(crtc_state)) +
 		preamble + phy_wake + tfw_exit_latency;
 	fast_wake_time = precharge + preamble + phy_wake +
