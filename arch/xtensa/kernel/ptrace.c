@@ -13,6 +13,7 @@
  */
 
 #include <linux/audit.h>
+#include <linux/file.h>
 #include <linux/errno.h>
 #include <linux/hw_breakpoint.h>
 #include <linux/kernel.h>
@@ -570,6 +571,9 @@ int do_syscall_trace_enter(struct pt_regs *regs)
 void do_syscall_trace_leave(struct pt_regs *regs)
 {
 	int step;
+
+	if (test_thread_flag(TIF_FD_SLOTS))
+		fd_slots_commit(regs);
 
 	audit_syscall_exit(regs);
 

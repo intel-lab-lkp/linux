@@ -1976,6 +1976,11 @@ ENTRY(system_call)
 1:	/* regs->areg[2] = return_value */
 
 	s32i	abi_rv, abi_saved0, PT_AREG2
+
+	/* descriptors reserved by the syscall are committed in do_syscall_trace_leave */
+	GET_THREAD_INFO(a4, a1)
+	l32i	a4, a4, TI_FLAGS
+	bbsi.l	a4, TIF_FD_SLOTS, 1f
 	bnez	abi_saved1, 1f
 .Lsyscall_exit:
 #if defined(__XTENSA_WINDOWED_ABI__)
