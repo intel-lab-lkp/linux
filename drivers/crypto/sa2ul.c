@@ -956,7 +956,7 @@ static int sa_3des_cbc_setkey(struct crypto_skcipher *tfm, const u8 *key,
 
 	ad.mci_enc = mci_cbc_3des_enc_array;
 	ad.mci_dec = mci_cbc_3des_dec_array;
-	ad.iv_idx = 6;
+	ad.iv_idx = 4;
 	ad.iv_out_size = 8;
 
 	return sa_cipher_setkey(tfm, key, keylen, &ad);
@@ -1028,7 +1028,7 @@ static void sa_aes_dma_in_callback(void *data)
 	skcipher_request_complete(req, 0);
 }
 
-static void
+static int
 sa_prepare_tx_desc(u32 *mdptr, u32 pslen, u32 *psdata, u32 epiblen, u32 *epib)
 {
 	u32 *out, *in;
@@ -1041,6 +1041,8 @@ sa_prepare_tx_desc(u32 *mdptr, u32 pslen, u32 *psdata, u32 epiblen, u32 *epib)
 	for (out = &mdptr[5], in = psdata, i = 0;
 	     i < pslen / sizeof(u32); i++)
 		*out++ = *in++;
+
+	return epiblen + sizeof(u32) + pslen;
 }
 
 static int sa_run(struct sa_req *req)
@@ -1097,16 +1099,6 @@ static int sa_run(struct sa_req *req)
 
 	sa_update_cmdl(req, cmdl, &sa_ctx->cmdl_upd_info);
 
-	if (req->type != CRYPTO_ALG_TYPE_AHASH) {
-		if (req->enc)
-			req->type |=
-				(SA_REQ_SUBTYPE_ENC << SA_REQ_SUBTYPE_SHIFT);
-		else
-			req->type |=
-				(SA_REQ_SUBTYPE_DEC << SA_REQ_SUBTYPE_SHIFT);
-	}
-
-	cmdl[sa_ctx->cmdl_size / sizeof(u32)] = req->type;
 
 	/*
 	 * Map the packets, first we check if the data fits into a single
@@ -1239,9 +1231,9 @@ static int sa_run(struct sa_req *req)
 	 */
 	mdptr = (u32 *)dmaengine_desc_get_metadata_ptr(tx_out, &pl, &ml);
 
-	sa_prepare_tx_desc(mdptr, (sa_ctx->cmdl_size + (SA_PSDATA_CTX_WORDS *
-				   sizeof(u32))), cmdl, sizeof(sa_ctx->epib),
-			   sa_ctx->epib);
+	req->mdata_size = sa_prepare_tx_desc(mdptr, sa_ctx->cmdl_size,
+					     cmdl, sizeof(sa_ctx->epib),
+					     sa_ctx->epib);
 
 	dmaengine_desc_set_metadata_len(tx_out, req->mdata_size);
 
@@ -1298,7 +1290,6 @@ static int sa_cipher_run(struct skcipher_request *req, u8 *iv, int enc)
 	sa_req.type = CRYPTO_ALG_TYPE_SKCIPHER;
 	sa_req.enc = enc;
 	sa_req.callback = sa_aes_dma_in_callback;
-	sa_req.mdata_size = 44;
 	sa_req.base = &req->base;
 	sa_req.ctx = ctx;
 
@@ -1398,7 +1389,6 @@ static int sa_sha_run(struct ahash_request *req)
 	sa_req.enc = true;
 	sa_req.type = CRYPTO_ALG_TYPE_AHASH;
 	sa_req.callback = sa_sha_dma_in_callback;
-	sa_req.mdata_size = 28;
 	sa_req.ctx = ctx;
 	sa_req.base = &req->base;
 
@@ -1862,7 +1852,6 @@ static int sa_aead_run(struct aead_request *req, u8 *iv, int enc)
 	sa_req.type = CRYPTO_ALG_TYPE_AEAD;
 	sa_req.enc = enc;
 	sa_req.callback = sa_aead_dma_in_callback;
-	sa_req.mdata_size = 52;
 	sa_req.base = &req->base;
 	sa_req.ctx = ctx;
 	sa_req.src = req->src;
