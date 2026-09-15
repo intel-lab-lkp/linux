@@ -524,6 +524,7 @@ config QCOM_PDC
 	tristate "Qualcomm PDC"
 	depends on ARCH_QCOM || COMPILE_TEST
 	select IRQ_DOMAIN_HIERARCHY
+	select QCOM_SCM
 	default ARCH_QCOM
 	help
 	  Power Domain Controller driver to manage and configure wakeup
