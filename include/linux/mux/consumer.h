@@ -11,6 +11,7 @@
 #define _LINUX_MUX_CONSUMER_H
 
 #include <linux/compiler.h>
+#include <linux/device.h>
 
 struct device;
 struct mux_control;
@@ -62,7 +63,8 @@ void mux_control_put(struct mux_control *mux);
 struct mux_control *devm_mux_control_get(struct device *dev, const char *mux_name);
 
 struct mux_state *
-devm_mux_state_get_from_np(struct device *dev, const char *mux_name, struct device_node *np);
+devm_mux_state_get_from_swnode(struct device *dev, const char *mux_name,
+			       struct fwnode_handle *node);
 
 struct mux_state *devm_mux_state_get_optional(struct device *dev, const char *mux_name);
 struct mux_state *devm_mux_state_get_selected(struct device *dev, const char *mux_name);
@@ -165,6 +167,6 @@ static inline struct mux_state *devm_mux_state_get_optional_selected(struct devi
 #endif /* CONFIG_MULTIPLEXER */
 
 #define devm_mux_state_get(dev, mux_name)		\
-	devm_mux_state_get_from_np(dev, mux_name, NULL)
+	devm_mux_state_get_from_swnode(dev, mux_name, NULL)
 
 #endif /* _LINUX_MUX_CONSUMER_H */

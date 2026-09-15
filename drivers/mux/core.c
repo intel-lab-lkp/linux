@@ -18,7 +18,7 @@
 #include <linux/module.h>
 #include <linux/mux/consumer.h>
 #include <linux/mux/driver.h>
-#include <linux/of.h>
+#include <linux/property.h>
 #include <linux/slab.h>
 
 /*
@@ -118,6 +118,7 @@ struct mux_chip *mux_chip_alloc(struct device *dev,
 	mux_chip->dev.type = &mux_type;
 	mux_chip->dev.parent = dev;
 	mux_chip->dev.of_node = dev->of_node;
+	mux_chip->dev.fwnode = dev->fwnode;
 	dev_set_drvdata(&mux_chip->dev, mux_chip);
 
 	mux_chip->id = ida_alloc(&mux_ida, GFP_KERNEL);
@@ -517,11 +518,11 @@ int mux_state_deselect(struct mux_state *mstate)
 EXPORT_SYMBOL_GPL(mux_state_deselect);
 
 /* Note this function returns a reference to the mux_chip dev. */
-static struct mux_chip *of_find_mux_chip_by_node(struct device_node *np)
+static struct mux_chip *mux_chip_find_by_fwnode(struct fwnode_handle *fwnode)
 {
 	struct device *dev;
 
-	dev = class_find_device_by_of_node(&mux_class, np);
+	dev = class_find_device_by_fwnode(&mux_class, fwnode);
 
 	return dev ? to_mux_chip(dev) : NULL;
 }
@@ -533,17 +534,17 @@ static struct mux_chip *of_find_mux_chip_by_node(struct device_node *np)
  * @state: Pointer to where the requested state is returned, or NULL when
  *         the required multiplexer states are handled by other means.
  * @optional: Whether to return NULL and silence errors when mux doesn't exist.
- * @node: the device nodes, use dev->of_node if it is NULL.
+ * @node: the device nodes, use dev's fwnode if it is NULL.
  *
  * Return: Pointer to the mux-control on success, an ERR_PTR with a negative
  * errno on error, or NULL if optional is true and mux doesn't exist.
  */
 static struct mux_control *mux_get(struct device *dev, const char *mux_name,
 				   unsigned int *state, bool optional,
-				   struct device_node *node)
+				   struct fwnode_handle *node)
 {
-	struct device_node *np = node ? node : dev->of_node;
-	struct of_phandle_args args;
+	struct fwnode_handle *fwnode = node ? node : dev_fwnode(dev);
+	struct fwnode_reference_args args;
 	struct mux_chip *mux_chip;
 	unsigned int controller;
 	int index = 0;
@@ -551,11 +552,13 @@ static struct mux_control *mux_get(struct device *dev, const char *mux_name,
 
 	if (mux_name) {
 		if (state)
-			index = of_property_match_string(np, "mux-state-names",
-							 mux_name);
+			index = fwnode_property_match_string(fwnode,
+							     "mux-state-names",
+							     mux_name);
 		else
-			index = of_property_match_string(np, "mux-control-names",
-							 mux_name);
+			index = fwnode_property_match_string(fwnode,
+							     "mux-control-names",
+							     mux_name);
 		if (index < 0 && optional) {
 			return NULL;
 		} else if (index < 0) {
@@ -566,39 +569,40 @@ static struct mux_control *mux_get(struct device *dev, const char *mux_name,
 	}
 
 	if (state)
-		ret = of_parse_phandle_with_args(np,
-						 "mux-states", "#mux-state-cells",
-						 index, &args);
+		ret = fwnode_property_get_reference_args(fwnode, "mux-states",
+							 "#mux-state-cells", 0,
+							 index, &args);
 	else
-		ret = of_parse_phandle_with_args(np,
-						 "mux-controls", "#mux-control-cells",
-						 index, &args);
+		ret = fwnode_property_get_reference_args(fwnode,
+							 "mux-controls", "#mux-control-cells",
+							 0, index, &args);
+
 	if (ret) {
 		if (optional && ret == -ENOENT)
 			return NULL;
 
-		dev_err(dev, "%pOF: failed to get mux-%s %s(%i)\n",
-			np, state ? "state" : "control",
-			mux_name ?: "", index);
+		dev_err(dev, "%pfw: failed to get mux-%s %s(%i)\n",
+			fwnode, state ? "state" : "control", mux_name ?: "",
+			index);
 		return ERR_PTR(ret);
 	}
 
-	mux_chip = of_find_mux_chip_by_node(args.np);
-	of_node_put(args.np);
+	mux_chip = mux_chip_find_by_fwnode(args.fwnode);
+	fwnode_handle_put(args.fwnode);
 	if (!mux_chip)
 		return ERR_PTR(-EPROBE_DEFER);
 
 	controller = 0;
 	if (state) {
-		if (args.args_count > 2 || args.args_count == 0 ||
-		    (args.args_count < 2 && mux_chip->controllers > 1)) {
-			dev_err(dev, "%pOF: wrong #mux-state-cells for %pOF\n",
-				np, args.np);
+		if (args.nargs > 2 || args.nargs == 0 ||
+		    (args.nargs < 2 && mux_chip->controllers > 1)) {
+			dev_err(dev, "%pfw: wrong #mux-state-cells for %pfw\n",
+				fwnode, args.fwnode);
 			put_device(&mux_chip->dev);
 			return ERR_PTR(-EINVAL);
 		}
 
-		if (args.args_count == 2) {
+		if (args.nargs == 2) {
 			controller = args.args[0];
 			*state = args.args[1];
 		} else {
@@ -606,21 +610,21 @@ static struct mux_control *mux_get(struct device *dev, const char *mux_name,
 		}
 
 	} else {
-		if (args.args_count > 1 ||
-		    (!args.args_count && mux_chip->controllers > 1)) {
-			dev_err(dev, "%pOF: wrong #mux-control-cells for %pOF\n",
-				np, args.np);
+		if (args.nargs > 1 ||
+		    (!args.nargs && mux_chip->controllers > 1)) {
+			dev_err(dev, "%pfw: wrong #mux-control-cells for %pfw\n",
+				fwnode, args.fwnode);
 			put_device(&mux_chip->dev);
 			return ERR_PTR(-EINVAL);
 		}
 
-		if (args.args_count)
+		if (args.nargs)
 			controller = args.args[0];
 	}
 
 	if (controller >= mux_chip->controllers) {
-		dev_err(dev, "%pOF: bad mux controller %u specified in %pOF\n",
-			np, controller, args.np);
+		dev_err(dev, "%pfw: bad mux controller %u specified in %pfw\n",
+			fwnode, controller, args.fwnode);
 		put_device(&mux_chip->dev);
 		return ERR_PTR(-EINVAL);
 	}
@@ -714,14 +718,14 @@ EXPORT_SYMBOL_GPL(devm_mux_control_get);
  * @dev: The device that needs a mux-state.
  * @mux_name: The name identifying the mux-state.
  * @optional: Whether to return NULL and silence errors when mux doesn't exist.
- * @np: the device nodes, use dev->of_node if it is NULL.
+ * @node: the device nodes, use dev's fwnode if it is NULL.
  *
  * Return: Pointer to the mux-state on success, an ERR_PTR with a negative
  * errno on error, or NULL if optional is true and mux doesn't exist.
  */
 static struct mux_state *
 mux_state_get(struct device *dev, const char *mux_name, bool optional,
-	      struct device_node *np)
+	      struct fwnode_handle *node)
 {
 	struct mux_state *mstate;
 
@@ -729,7 +733,7 @@ mux_state_get(struct device *dev, const char *mux_name, bool optional,
 	if (!mstate)
 		return ERR_PTR(-ENOMEM);
 
-	mstate->mux = mux_get(dev, mux_name, &mstate->state, optional, np);
+	mstate->mux = mux_get(dev, mux_name, &mstate->state, optional, node);
 	if (IS_ERR(mstate->mux)) {
 		int err = PTR_ERR(mstate->mux);
 
@@ -771,7 +775,7 @@ static void devm_mux_state_release(struct device *dev, void *res)
  * @dev: The device that needs a mux-state.
  * @mux_name: The name identifying the mux-state.
  * @optional: Whether to return NULL and silence errors when mux doesn't exist.
- * @np: The device nodes, use dev->of_node if it is NULL.
+ * @node: The device nodes, use dev's fwnode if it is NULL.
  * @init: Optional function pointer for mux-state object initialisation.
  * @exit: Optional function pointer for mux-state object cleanup on release.
  *
@@ -779,7 +783,7 @@ static void devm_mux_state_release(struct device *dev, void *res)
  * errno on error, or NULL if optional is true and mux doesn't exist.
  */
 static struct mux_state *__devm_mux_state_get(struct device *dev, const char *mux_name,
-					      bool optional, struct device_node *np,
+					      bool optional, struct fwnode_handle *node,
 					      int (*init)(struct mux_state *mstate),
 					      int (*exit)(struct mux_state *mstate))
 {
@@ -787,7 +791,7 @@ static struct mux_state *__devm_mux_state_get(struct device *dev, const char *mu
 	struct mux_state *mstate;
 	int ret;
 
-	mstate = mux_state_get(dev, mux_name, optional, np);
+	mstate = mux_state_get(dev, mux_name, optional, node);
 	if (IS_ERR(mstate))
 		return ERR_CAST(mstate);
 	else if (optional && !mstate)
@@ -821,23 +825,23 @@ err_devres_alloc:
 }
 
 /**
- * devm_mux_state_get_from_np() - Get the mux-state for a device, with resource
+ * devm_mux_state_get_from_swnode() - Get the mux-state for a device, with resource
  *				  management.
  * @dev: The device that needs a mux-control.
  * @mux_name: The name identifying the mux-control.
- * @np: the device nodes, use dev->of_node if it is NULL.
+ * @node: the device nodes, use dev's fwnode if it is NULL.
  *
  * Return: Pointer to the mux-state, or an ERR_PTR with a negative errno.
  *
  * The mux-state will automatically be freed on release.
  */
 struct mux_state *
-devm_mux_state_get_from_np(struct device *dev, const char *mux_name,
-			   struct device_node *np)
+devm_mux_state_get_from_swnode(struct device *dev, const char *mux_name,
+			       struct fwnode_handle *node)
 {
-	return __devm_mux_state_get(dev, mux_name, false, np, NULL, NULL);
+	return __devm_mux_state_get(dev, mux_name, false, node, NULL, NULL);
 }
-EXPORT_SYMBOL_GPL(devm_mux_state_get_from_np);
+EXPORT_SYMBOL_GPL(devm_mux_state_get_from_swnode);
 
 /**
  * devm_mux_state_get_optional() - Get the optional mux-state for a device,
