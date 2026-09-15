@@ -150,7 +150,7 @@ struct the_nilfs {
 
 	/* Checkpoint tree */
 	struct rb_root		ns_cptree;
-	spinlock_t		ns_cptree_lock;
+	struct mutex		ns_cptree_lock; /* Protects ns_cptree */
 
 	/* Dirty inode list */
 	struct list_head	ns_dirty_files;

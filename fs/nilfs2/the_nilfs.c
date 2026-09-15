@@ -70,7 +70,7 @@ struct the_nilfs *alloc_nilfs(struct super_block *sb)
 	spin_lock_init(&nilfs->ns_inode_lock);
 	spin_lock_init(&nilfs->ns_last_segment_lock);
 	nilfs->ns_cptree = RB_ROOT;
-	spin_lock_init(&nilfs->ns_cptree_lock);
+	mutex_init(&nilfs->ns_cptree_lock);
 	init_rwsem(&nilfs->ns_segctor_sem);
 	nilfs->ns_sb_update_freq = NILFS_SB_FREQ;
 
@@ -852,7 +852,7 @@ struct nilfs_root *nilfs_lookup_root(struct the_nilfs *nilfs, __u64 cno)
 	struct rb_node *n;
 	struct nilfs_root *root;
 
-	spin_lock(&nilfs->ns_cptree_lock);
+	mutex_lock(&nilfs->ns_cptree_lock);
 	n = nilfs->ns_cptree.rb_node;
 	while (n) {
 		root = rb_entry(n, struct nilfs_root, rb_node);
@@ -863,11 +863,11 @@ struct nilfs_root *nilfs_lookup_root(struct the_nilfs *nilfs, __u64 cno)
 			n = n->rb_right;
 		} else {
 			refcount_inc(&root->count);
-			spin_unlock(&nilfs->ns_cptree_lock);
+			mutex_unlock(&nilfs->ns_cptree_lock);
 			return root;
 		}
 	}
-	spin_unlock(&nilfs->ns_cptree_lock);
+	mutex_unlock(&nilfs->ns_cptree_lock);
 
 	return NULL;
 }
@@ -887,7 +887,7 @@ nilfs_find_or_create_root(struct the_nilfs *nilfs, __u64 cno)
 	if (!new)
 		return NULL;
 
-	spin_lock(&nilfs->ns_cptree_lock);
+	mutex_lock(&nilfs->ns_cptree_lock);
 
 	p = &nilfs->ns_cptree.rb_node;
 	parent = NULL;
@@ -902,7 +902,7 @@ nilfs_find_or_create_root(struct the_nilfs *nilfs, __u64 cno)
 			p = &(*p)->rb_right;
 		} else {
 			refcount_inc(&root->count);
-			spin_unlock(&nilfs->ns_cptree_lock);
+			mutex_unlock(&nilfs->ns_cptree_lock);
 			kfree(new);
 			return root;
 		}
@@ -915,16 +915,18 @@ nilfs_find_or_create_root(struct the_nilfs *nilfs, __u64 cno)
 	atomic64_set(&new->inodes_count, 0);
 	atomic64_set(&new->blocks_count, 0);
 
+	err = nilfs_sysfs_create_snapshot_group(new);
+	if (err) {
+		mutex_unlock(&nilfs->ns_cptree_lock);
+		wait_for_completion(&new->snapshot_kobj_unregister);
+		kfree(new);
+		return NULL;
+	}
+
 	rb_link_node(&new->rb_node, parent, p);
 	rb_insert_color(&new->rb_node, &nilfs->ns_cptree);
 
-	spin_unlock(&nilfs->ns_cptree_lock);
-
-	err = nilfs_sysfs_create_snapshot_group(new);
-	if (err) {
-		kfree(new);
-		new = NULL;
-	}
+	mutex_unlock(&nilfs->ns_cptree_lock);
 
 	return new;
 }
@@ -933,13 +935,14 @@ void nilfs_put_root(struct nilfs_root *root)
 {
 	struct the_nilfs *nilfs = root->nilfs;
 
-	if (refcount_dec_and_lock(&root->count, &nilfs->ns_cptree_lock)) {
+	if (refcount_dec_and_mutex_lock(&root->count,
+					&nilfs->ns_cptree_lock)) {
 		rb_erase(&root->rb_node, &nilfs->ns_cptree);
-		spin_unlock(&nilfs->ns_cptree_lock);
-
 		nilfs_sysfs_delete_snapshot_group(root);
-		iput(root->ifile);
+		wait_for_completion(&root->snapshot_kobj_unregister);
+		mutex_unlock(&nilfs->ns_cptree_lock);
 
+		iput(root->ifile);
 		kfree(root);
 	}
 }
