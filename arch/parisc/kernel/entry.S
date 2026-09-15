@@ -1732,6 +1732,8 @@ syscall_check_resched:
 	/* check for reschedule */
 	mfctl	%cr30,%r19
 	LDREG	TASK_TI_FLAGS(%r19),%r19	/* long */
+	/* descriptors reserved by the syscall are committed in do_syscall_trace_exit */
+	bb,<,n	%r19, 31-TIF_FD_SLOTS, syscall_do_fd_slots /* forward */
 	bb,<,n	%r19, 31-TIF_NEED_RESCHED, syscall_do_resched /* forward */
 
 	.import do_signal,code
@@ -1764,6 +1766,16 @@ syscall_do_signal:
 	reg_restore %r20
 
 	b,n     syscall_check_sig
+
+syscall_do_fd_slots:
+	mfctl	%cr30,%r1
+#ifdef CONFIG_64BIT
+	ldo	-16(%r30),%r29			/* Reference param save area */
+#endif
+	ldo	TASK_REGS(%r1),%r26		/* struct pt_regs *regs */
+	BL	do_syscall_trace_exit,%r2
+	nop
+	b,n	syscall_check_resched
 
 syscall_restore:
 	mfctl	%cr30,%r1
