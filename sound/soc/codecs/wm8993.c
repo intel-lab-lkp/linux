@@ -996,7 +996,14 @@ static int wm8993_set_bias_level(struct snd_soc_component *component,
 				return ret;
 
 			regcache_cache_only(wm8993->regmap, false);
-			regcache_sync(wm8993->regmap);
+			ret = regcache_sync(wm8993->regmap);
+			if (ret) {
+				regcache_cache_only(wm8993->regmap, true);
+				regcache_mark_dirty(wm8993->regmap);
+				regulator_bulk_disable(ARRAY_SIZE(wm8993->supplies),
+						       wm8993->supplies);
+				return ret;
+			}
 
 			wm_hubs_vmid_ena(component);
 

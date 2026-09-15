@@ -1083,6 +1083,7 @@ static int wm8991_set_bias_level(struct snd_soc_component *component,
 	struct wm8991_priv *wm8991 = snd_soc_component_get_drvdata(component);
 	struct snd_soc_dapm_context *dapm = snd_soc_component_to_dapm(component);
 	u16 val;
+	int ret;
 
 	switch (level) {
 	case SND_SOC_BIAS_ON:
@@ -1097,7 +1098,11 @@ static int wm8991_set_bias_level(struct snd_soc_component *component,
 
 	case SND_SOC_BIAS_STANDBY:
 		if (snd_soc_dapm_get_bias_level(dapm) == SND_SOC_BIAS_OFF) {
-			regcache_sync(wm8991->regmap);
+			ret = regcache_sync(wm8991->regmap);
+			if (ret) {
+				regcache_mark_dirty(wm8991->regmap);
+				return ret;
+			}
 			/* Enable all output discharge bits */
 			snd_soc_component_write(component, WM8991_ANTIPOP1, WM8991_DIS_LLINE |
 				      WM8991_DIS_RLINE | WM8991_DIS_OUT3 |

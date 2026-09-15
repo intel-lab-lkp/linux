@@ -483,7 +483,12 @@ static int wm8731_set_bias_level(struct snd_soc_component *component,
 			if (ret != 0)
 				return ret;
 
-			regcache_sync(wm8731->regmap);
+			ret = regcache_sync(wm8731->regmap);
+			if (ret) {
+				regulator_bulk_disable(ARRAY_SIZE(wm8731->supplies),
+						       wm8731->supplies);
+				return ret;
+			}
 		}
 
 		/* Clear PWROFF, gate CLKOUT, everything else as-is */

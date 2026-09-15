@@ -355,7 +355,9 @@ static int adau1701_reset(struct snd_soc_component *component, unsigned int clkd
 	regmap_write(adau1701->regmap, ADAU1701_DSPCTRL, ADAU1701_DSPCTRL_CR);
 
 	regcache_mark_dirty(adau1701->regmap);
-	regcache_sync(adau1701->regmap);
+	ret = regcache_sync(adau1701->regmap);
+	if (ret)
+		return ret;
 
 	return 0;
 }
