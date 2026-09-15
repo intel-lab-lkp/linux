@@ -1169,12 +1169,29 @@ static int arm_iommu_get_sgtable(struct device *dev, struct sg_table *sgt,
 {
 	unsigned int count = PAGE_ALIGN(size) >> PAGE_SHIFT;
 	struct page **pages = __iommu_get_pages(cpu_addr, attrs);
+	struct page *page;
+	int ret;
 
-	if (!pages)
-		return -ENXIO;
+	if (pages)
+		return sg_alloc_table_from_pages(sgt, pages, count, 0, size,
+						 GFP_KERNEL);
 
-	return sg_alloc_table_from_pages(sgt, pages, count, 0, size,
-					 GFP_KERNEL);
+	/*
+	 * The buffer was not allocated through these DMA ops. It may belong to
+	 * a device which is not behind an IOMMU at all, which can happen when a
+	 * buffer is allocated on one device and mapped for another. Describe it
+	 * as a single chunk, as iommu_dma_get_sgtable() does.
+	 */
+	if (is_vmalloc_addr(cpu_addr))
+		page = vmalloc_to_page(cpu_addr);
+	else
+		page = virt_to_page(cpu_addr);
+
+	ret = sg_alloc_table(sgt, 1, GFP_KERNEL);
+	if (!ret)
+		sg_set_page(sgt->sgl, page, PAGE_ALIGN(size), 0);
+
+	return ret;
 }
 
 /*
