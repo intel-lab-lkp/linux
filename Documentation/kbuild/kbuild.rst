@@ -317,6 +317,15 @@ To get all available archs you can also specify all. E.g.::
 
     $ make ALLSOURCE_ARCHS=all tags
 
+With Exuberant or Universal Ctags, ``make -jN tags`` generates tags for
+directories in parallel and merges them into a single sorted ``tags`` file.
+The jobs share make's jobserver with other build targets. For example::
+
+    $ make -j8 ALLSOURCE_ARCHS=all tags
+
+Per-directory tag files are temporary and are removed after merging.
+Every invocation regenerates the complete tags file.
+
 IGNORE_DIRS
 -----------
 For tags/TAGS/cscope targets, you can choose which directories won't

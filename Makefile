@@ -2260,7 +2260,10 @@ clean: $(clean-dirs)
 quiet_cmd_tags = GEN     $@
       cmd_tags = $(BASH) $(srctree)/scripts/tags.sh $@
 
-tags TAGS cscope gtags: FORCE
+tags: FORCE
+	+$(call cmd,tags)
+
+TAGS cscope gtags: FORCE
 	$(call cmd,tags)
 
 # Generate rust-project.json (a file that describes the structure of non-Cargo

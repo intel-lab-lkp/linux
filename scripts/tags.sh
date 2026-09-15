@@ -121,8 +121,12 @@ all_compiled_sources()
 {
 	{
 		echo include/generated/autoconf.h
-		find $ignore -name "*.cmd" -exec \
-			grep -Poh '(?<=^  )\S+\.([chS]|rs)(?=\s)|(?<== )\S+\.(?1)(?=$)' {} \+ |
+		# A .cmd batch with no source references is not an error.
+		find $ignore -name "*.cmd" -exec sh -c '
+			pattern=$1
+			shift
+			grep -Poh "$pattern" "$@" || [ "$?" -eq 1 ]
+		' sh '(?<=^  )\S+\.([chS]|rs)(?=\s)|(?<== )\S+\.(?1)(?=$)' {} \+ |
 		awk '!a[$0]++'
 	} | xargs realpath -esq $([ -z "$KBUILD_ABS_SRCTREE" ] && echo --relative-to=.) |
 	sort -u
@@ -130,7 +134,9 @@ all_compiled_sources()
 
 all_target_sources()
 {
-	if [ -n "$COMPILED_SOURCE" ]; then
+	if [ -n "$tags_input" ]; then
+		sed -n 's/^s //p' "$tags_input.files"
+	elif [ -n "$COMPILED_SOURCE" ]; then
 		all_compiled_sources
 	else
 		all_sources
@@ -139,6 +145,10 @@ all_target_sources()
 
 all_kconfigs()
 {
+	if [ -n "$tags_input" ]; then
+		sed -n 's/^k //p' "$tags_input.files"
+		return
+	fi
 	find ${tree}arch/ -maxdepth 1 $ignore \
 	       -name "Kconfig*" -not -type l -print;
 	for arch in $ALLSOURCE_ARCHS; do
@@ -282,11 +292,23 @@ setup_regex()
 	done
 }
 
-exuberant()
+setup_ctags()
 {
 	CTAGS_EXTRA="extra"
 	if $1 --version 2>&1 | grep -iq universal; then
 	    CTAGS_EXTRA="extras"
+	fi
+	CTAGS_KCONFIG=n
+	if $1 --list-languages | grep -iq kconfig; then
+		CTAGS_KCONFIG=y
+	fi
+	export CTAGS_EXTRA CTAGS_KCONFIG
+}
+
+exuberant()
+{
+	if [ -z "$CTAGS_EXTRA" ]; then
+		setup_ctags "$1"
 	fi
 	setup_regex exuberant asm c
 	# identifiers to ignore by ctags
@@ -312,16 +334,75 @@ exuberant()
 		static
 	)
 	all_target_sources | \
-	xargs $1 -a -I "$(IFS=','; echo "${ign[*]}")" \
+	xargs -r $1 -a "${tags_flags[@]}" -I "$(IFS=','; echo "${ign[*]}")" \
 	--$CTAGS_EXTRA=+fq --c-kinds=+px --fields=+iaS --langmap=c:+.h \
-	"${regex[@]}"
+	"${regex[@]}" || return
 
 	KCONFIG_ARGS=()
-	if ! $1 --list-languages | grep -iq kconfig; then
+	if [ "$CTAGS_KCONFIG" != y ]; then
 		setup_regex exuberant kconfig
 		KCONFIG_ARGS=(--langdef=kconfig --language-force=kconfig "${regex[@]}")
 	fi
-	all_kconfigs | xargs $1 -a "${KCONFIG_ARGS[@]}"
+	all_kconfigs | xargs -r $1 -a "${tags_flags[@]}" "${KCONFIG_ARGS[@]}"
+}
+
+# Call in a subshell so error handling and cleanup stay local to the operation.
+setup_tags_tmp()
+{
+	set -eo pipefail
+	tmp=$(mktemp -d .tmp_tags.XXXXXX)
+	trap 'rm -rf "$tmp"' EXIT
+	trap 'exit 1' HUP INT TERM
+}
+
+# Let recursive make schedule directory shards using the caller's jobserver.
+parallel_tags()
+(
+	local tmp
+	setup_tags_tmp
+	# Workers inherit these capabilities instead of probing for each directory.
+	setup_ctags ${CTAGS:-ctags}
+
+	{
+		all_target_sources | sed 's/^/s /'
+		all_kconfigs | sed 's/^/k /'
+	} | LC_ALL=C sort -u | awk -v tmp="$tmp" '
+		{
+			dir = substr($0, 3)
+			if (!sub(/\/[^\/]*$/, "", dir))
+				dir = "."
+			if (!(dir in ids)) {
+				ids[dir] = ++n
+				print tmp "/" n ".tags"
+			}
+			out = tmp "/" ids[dir] ".files"
+			if (out != previous) {
+				if (previous != "")
+					close(previous)
+				previous = out
+			}
+			print >> out
+		}' > "$tmp/shards"
+	${MAKE:-make} -f "${tree}scripts/Makefile.tags" tags_tmp="$tmp"
+)
+
+merge_tags()
+(
+	local tmp
+	setup_tags_tmp
+
+	# Read filenames from stdin to avoid command-line length limits.
+	{
+		tr '\n' '\0' < "$1/shards"
+		# sort requires at least one input, even when there are no shards.
+		printf '/dev/null\0'
+	} | LC_ALL=C sort -m -u --files0-from=- | cut -f2- > "$tmp/merged"
+	mv "$tmp/merged" tags
+)
+
+remove_struct_forward_declarations()
+{
+	LC_ALL=C sed -e '/^\([a-zA-Z_][a-zA-Z0-9_]*\)\t.*\t\/\^struct \1;.*\$\/;"\tx$/d' "$@"
 }
 
 emacs()
@@ -366,9 +447,43 @@ case "$1" in
 		;;
 
 	"tags")
-		rm -f tags
-		xtags ${CTAGS:-ctags}
+		# Recursive recipes also run in dry-run, touch and question modes.
+		# Only normal invocations may generate intermediate files.
+		case ${MAKEFLAGS%% *} in
+		*n*) exit 0 ;;
+		*t*) touch tags; exit $? ;;
+		*q*) exit 1 ;;
+		esac
+		if ${CTAGS:-ctags} --version 2>&1 | grep -Eiq 'exuberant|universal'; then
+			parallel_tags
+			exit $?
+		else
+			rm -f tags
+			xtags ${CTAGS:-ctags}
+		fi
 		remove_structs=y
+		;;
+
+	"tags-worker")
+		tags_input=${2%.tags}
+		# Never expose an incomplete shard after an error or interruption.
+		setup_tags_tmp
+		tags_flags=(-f "$tmp/tags" --sort=no --tag-relative=no)
+		exuberant ${CTAGS:-ctags}
+		# Sort once per changed directory. Prefix records so the final merge
+		# keeps pseudo-tags ahead of all regular tag names.
+		remove_struct_forward_declarations "$tmp/tags" | awk '
+			{
+				sub(/^!_TAG_FILE_SORTED\t0\t/, "!_TAG_FILE_SORTED\t1\t")
+				print (/^!_TAG_/ ? "0\t" : "1\t") $0
+			}' | LC_ALL=C sort --parallel=1 -u > "$tmp/sorted"
+		mv "$tmp/sorted" "$2"
+		exit 0
+		;;
+
+	"tags-merge")
+		merge_tags "$2"
+		exit $?
 		;;
 
 	"TAGS")
@@ -380,5 +495,5 @@ esac
 
 # Remove structure forward declarations.
 if [ -n "$remove_structs" ]; then
-    LC_ALL=C sed -i -e '/^\([a-zA-Z_][a-zA-Z0-9_]*\)\t.*\t\/\^struct \1;.*\$\/;"\tx$/d' $1
+	remove_struct_forward_declarations -i "$1"
 fi

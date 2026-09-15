@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Directory tag shards share the parent make's jobserver.
+
+.PHONY: tags
+tags: $(shell cat $(tags_tmp)/shards)
+	$(Q)$(BASH) $(srctree)/scripts/tags.sh tags-merge $(tags_tmp)
+
+%.tags: %.files
+	$(Q)$(BASH) $(srctree)/scripts/tags.sh tags-worker $@
