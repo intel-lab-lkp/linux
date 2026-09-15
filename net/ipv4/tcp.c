@@ -481,20 +481,31 @@ void tcp_init_sock(struct sock *sk)
 static void tcp_tx_timestamp(struct sock *sk, struct sockcm_cookie *sockc)
 {
 	struct sk_buff *skb = tcp_write_queue_tail(sk);
+	struct skb_shared_info *shinfo;
 	u32 tsflags = sockc->tsflags;
+	struct tcp_skb_cb *tcb;
+	u32 tskey;
 
 	if (unlikely(!skb))
 		skb = skb_rb_last(&sk->tcp_rtx_queue);
+	if (unlikely(!skb))
+		return;
 
-	if (tsflags && skb) {
-		struct skb_shared_info *shinfo = skb_shinfo(skb);
-		struct tcp_skb_cb *tcb = TCP_SKB_CB(skb);
+	shinfo = skb_shinfo(skb);
+	tcb = TCP_SKB_CB(skb);
+	tskey = tcb->seq + skb->len - 1;
+	if (skb_cloned(skb) &&
+	    !shinfo->tx_flags && !tcb->txstamp_ack) {
+		if (shinfo->tskey != tskey)
+			return;
+	} else if (tsflags & SOF_TIMESTAMPING_TX_RECORD_MASK) {
+		shinfo->tskey = tskey;
+	}
 
+	if (tsflags) {
 		sock_tx_timestamp(sk, sockc, &shinfo->tx_flags);
 		if (tsflags & SOF_TIMESTAMPING_TX_ACK)
 			tcb->txstamp_ack |= TSTAMP_ACK_SK;
-		if (tsflags & SOF_TIMESTAMPING_TX_RECORD_MASK)
-			shinfo->tskey = TCP_SKB_CB(skb)->seq + skb->len - 1;
 	}
 
 	if (cgroup_bpf_enabled(CGROUP_SOCK_OPS) &&

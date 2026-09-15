@@ -1522,6 +1522,12 @@ static void tcp_v6_send_check(struct sock *sk, struct sk_buff *skb)
 }
 #endif
 
+static bool tcp_has_tx_tstamp(const struct sk_buff *skb)
+{
+	return TCP_SKB_CB(skb)->txstamp_ack ||
+		(skb_shinfo(skb)->tx_flags & SKBTX_ANY_TSTAMP);
+}
+
 /* This routine actually transmits TCP packets queued in by
  * tcp_do_sendmsg().  This is used by both the initial
  * transmission and possible later retransmissions.
@@ -1559,8 +1565,14 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 		tcp_skb_tsorted_save(oskb) {
 			if (unlikely(skb_cloned(oskb)))
 				skb = pskb_copy(oskb, gfp_mask);
-			else
+			else {
+				if (oskb->len &&
+				    !(TCP_SKB_CB(oskb)->tcp_flags & TCPHDR_SYN) &&
+				    !tcp_has_tx_tstamp(oskb))
+					skb_shinfo(oskb)->tskey =
+						TCP_SKB_CB(oskb)->seq + oskb->len - 1;
 				skb = skb_clone(oskb, gfp_mask);
+			}
 		} tcp_skb_tsorted_restore(oskb);
 
 		if (unlikely(!skb))
@@ -1793,12 +1805,6 @@ static void tcp_adjust_pcount(struct sock *sk, const struct sk_buff *skb, int de
 		tp->sacked_out -= min_t(u32, tp->sacked_out, decr);
 
 	tcp_verify_left_out(tp);
-}
-
-static bool tcp_has_tx_tstamp(const struct sk_buff *skb)
-{
-	return TCP_SKB_CB(skb)->txstamp_ack ||
-		(skb_shinfo(skb)->tx_flags & SKBTX_ANY_TSTAMP);
 }
 
 static void tcp_fragment_tstamp(struct sk_buff *skb, struct sk_buff *skb2)
