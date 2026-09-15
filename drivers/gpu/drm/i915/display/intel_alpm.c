@@ -74,24 +74,49 @@ static int get_silence_period_symbols(const struct intel_crtc_state *crtc_state)
 		1000 / 1000;
 }
 
-static void get_lfps_cycle_min_max_time(const struct intel_crtc_state *crtc_state,
-					int *min, int *max)
+static void lnl_get_lfps_period_min_max_time(const struct intel_crtc_state *crtc_state,
+					     int *min, int *max)
 {
-	if (crtc_state->port_clock < 540000) {
-		*min = 65 * LFPS_CYCLE_COUNT;
-		*max = 75 * LFPS_CYCLE_COUNT;
-	} else {
+	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP)) {
+		if (crtc_state->port_clock < 540000) {
+			*min = 65 * LFPS_CYCLE_COUNT;
+			*max = 75 * LFPS_CYCLE_COUNT;
+		} else {
+			*min = 140;
+			*max = 800;
+		}
+	}
+}
+
+static void xe3plpd_get_lfps_period_min_max_time(const struct intel_crtc_state *crtc_state,
+						 int *min, int *max)
+{
+	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP)) {
 		*min = 140;
 		*max = 800;
+	} else {
+		*min = 320;
+		*max = 1600;
 	}
+}
+
+static void get_lfps_period_min_max_time(const struct intel_crtc_state *crtc_state,
+					int *min, int *max)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+
+	if (HAS_LT_PHY(display))
+		xe3plpd_get_lfps_period_min_max_time(crtc_state, min, max);
+	else
+		lnl_get_lfps_period_min_max_time(crtc_state, min, max);
 }
 
 static int get_lfps_cycle_time(const struct intel_crtc_state *crtc_state)
 {
 	int tlfps_cycle_min, tlfps_cycle_max;
 
-	get_lfps_cycle_min_max_time(crtc_state, &tlfps_cycle_min,
-				    &tlfps_cycle_max);
+	get_lfps_period_min_max_time(crtc_state, &tlfps_cycle_min,
+				     &tlfps_cycle_max);
 
 	return tlfps_cycle_min +  (tlfps_cycle_max - tlfps_cycle_min) / 2;
 }
