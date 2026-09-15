@@ -230,7 +230,8 @@ static int __init ftm_clocksource_init(unsigned long freq)
 static int __init __ftm_clk_init(struct device_node *np, char *cnt_name,
 				 char *ftm_name)
 {
-	struct clk *clk;
+	struct clk *clk, *ftm_clk;
+	unsigned long rate;
 	int err;
 
 	clk = of_clk_get_by_name(np, cnt_name);
@@ -242,20 +243,28 @@ static int __init __ftm_clk_init(struct device_node *np, char *cnt_name,
 	if (err) {
 		pr_err("ftm: clock failed to prepare+enable \"%s\": %d\n",
 			cnt_name, err);
+		clk_put(clk);
 		return err;
 	}
 
-	clk = of_clk_get_by_name(np, ftm_name);
-	if (IS_ERR(clk)) {
-		pr_err("ftm: Cannot get \"%s\": %ld\n", ftm_name, PTR_ERR(clk));
-		return PTR_ERR(clk);
+	ftm_clk = of_clk_get_by_name(np, ftm_name);
+	if (IS_ERR(ftm_clk)) {
+		pr_err("ftm: Cannot get \"%s\": %ld\n", ftm_name,
+			PTR_ERR(ftm_clk));
+		clk_disable_unprepare(clk);
+		clk_put(clk);
+		return PTR_ERR(ftm_clk);
 	}
-	err = clk_prepare_enable(clk);
-	if (err)
+	err = clk_prepare_enable(ftm_clk);
+	if (err) {
 		pr_err("ftm: clock failed to prepare+enable \"%s\": %d\n",
 			ftm_name, err);
+		rate = clk_get_rate(ftm_clk);
+		clk_put(ftm_clk);
+		return rate;
+	}
 
-	return clk_get_rate(clk);
+	return clk_get_rate(ftm_clk);
 }
 
 static unsigned long __init ftm_clk_init(struct device_node *np)
