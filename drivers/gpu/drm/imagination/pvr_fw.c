@@ -278,37 +278,6 @@ pvr_fw_find_mmu_segment(struct pvr_device *pvr_dev, u32 addr, u32 size, void *fw
 	return -EINVAL;
 }
 
-static int
-pvr_fw_create_fwif_connection_ctl(struct pvr_device *pvr_dev)
-{
-	struct drm_device *drm_dev = from_pvr_device(pvr_dev);
-	struct pvr_fw_device *fw_dev = &pvr_dev->fw_dev;
-
-	fw_dev->fwif_connection_ctl =
-		pvr_fw_object_create_and_map_offset(pvr_dev,
-						    fw_dev->fw_heap_info.config_offset +
-						    PVR_ROGUE_FWIF_CONNECTION_CTL_OFFSET,
-						    sizeof(*fw_dev->fwif_connection_ctl),
-						    PVR_BO_FW_FLAGS_DEVICE_UNCACHED,
-						    NULL, NULL,
-						    &fw_dev->mem.fwif_connection_ctl_obj);
-	if (IS_ERR(fw_dev->fwif_connection_ctl)) {
-		drm_err(drm_dev,
-			"Unable to allocate FWIF connection control memory\n");
-		return PTR_ERR(fw_dev->fwif_connection_ctl);
-	}
-
-	return 0;
-}
-
-static void
-pvr_fw_fini_fwif_connection_ctl(struct pvr_device *pvr_dev)
-{
-	struct pvr_fw_device *fw_dev = &pvr_dev->fw_dev;
-
-	pvr_fw_object_unmap_and_destroy(fw_dev->mem.fwif_connection_ctl_obj);
-}
-
 static void
 fw_osinit_init(void *cpu_ptr, void *priv)
 {
@@ -459,12 +428,28 @@ pvr_fw_create_structures(struct pvr_device *pvr_dev)
 	struct pvr_fw_mem *fw_mem = &fw_dev->mem;
 	int err;
 
+	fw_dev->fwif_connection_ctl =
+		pvr_fw_object_create_and_map_offset(pvr_dev,
+						    fw_dev->fw_heap_info.config_offset +
+						    PVR_ROGUE_FWIF_CONNECTION_CTL_OFFSET,
+						    sizeof(*fw_dev->fwif_connection_ctl),
+						    PVR_BO_FW_FLAGS_DEVICE_UNCACHED,
+						    NULL, NULL,
+						    &fw_mem->fwif_connection_ctl_obj);
+
+	if (IS_ERR(fw_dev->fwif_connection_ctl)) {
+		drm_err(drm_dev,
+			"Unable to allocate FWIF connection control memory\n");
+		return PTR_ERR(fw_dev->fwif_connection_ctl);
+	}
+
 	fw_dev->power_sync = pvr_fw_object_create_and_map(pvr_dev, sizeof(*fw_dev->power_sync),
 							  PVR_BO_FW_FLAGS_DEVICE_UNCACHED,
 							  NULL, NULL, &fw_mem->power_sync_obj);
 	if (IS_ERR(fw_dev->power_sync)) {
 		drm_err(drm_dev, "Unable to allocate FW power_sync structure\n");
-		return PTR_ERR(fw_dev->power_sync);
+		err = PTR_ERR(fw_dev->power_sync);
+		goto err_release_connection_ctl;
 	}
 
 	fw_dev->hwrinfobuf = pvr_fw_object_create_and_map(pvr_dev, sizeof(*fw_dev->hwrinfobuf),
@@ -594,6 +579,9 @@ err_release_hwrinfobuf:
 err_release_power_sync:
 	pvr_fw_object_unmap_and_destroy(fw_mem->power_sync_obj);
 
+err_release_connection_ctl:
+	pvr_fw_object_unmap_and_destroy(fw_mem->fwif_connection_ctl_obj);
+
 	return err;
 }
 
@@ -615,6 +603,7 @@ pvr_fw_destroy_structures(struct pvr_device *pvr_dev)
 	pvr_fw_object_unmap_and_destroy(fw_mem->power_sync_obj);
 	pvr_fw_object_unmap_and_destroy(fw_mem->osdata_obj);
 	pvr_fw_object_unmap_and_destroy(fw_mem->osinit_obj);
+	pvr_fw_object_unmap_and_destroy(fw_mem->fwif_connection_ctl_obj);
 }
 
 /**
@@ -755,10 +744,6 @@ pvr_fw_process(struct pvr_device *pvr_dev)
 	pvr_fw_object_vunmap(fw_mem->code_obj);
 	fw_code_ptr = NULL;
 
-	err = pvr_fw_create_fwif_connection_ctl(pvr_dev);
-	if (err)
-		goto err_free_kdata;
-
 	return 0;
 
 err_free_kdata:
@@ -841,8 +826,6 @@ static void
 pvr_fw_cleanup(struct pvr_device *pvr_dev)
 {
 	struct pvr_fw_mem *fw_mem = &pvr_dev->fw_dev.mem;
-
-	pvr_fw_fini_fwif_connection_ctl(pvr_dev);
 
 	kfree(fw_mem->core_data);
 	kfree(fw_mem->core_code);
