@@ -1671,6 +1671,7 @@ static int sa_cra_init_aead(struct crypto_aead *tfm, const char *hash,
 	if (IS_ERR(ctx->fallback.aead)) {
 		dev_err(sa_k3_dev, "fallback driver %s couldn't be loaded\n",
 			fallback);
+		crypto_free_shash(ctx->shash);
 		return PTR_ERR(ctx->fallback.aead);
 	}
 
