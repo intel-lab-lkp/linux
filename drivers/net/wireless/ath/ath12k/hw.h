@@ -238,6 +238,7 @@ struct ath12k_hw_params {
 	} client;
 
 	bool host_alloc_ml_id;
+	bool host_alloc_iface_mac;
 };
 
 struct ath12k_hw_ops {
