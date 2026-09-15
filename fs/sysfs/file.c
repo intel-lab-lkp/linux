@@ -228,10 +228,12 @@ static const struct kernfs_ops sysfs_file_kfops_ro = {
 };
 
 static const struct kernfs_ops sysfs_file_kfops_wo = {
+	.atomic_write_len	= PAGE_SIZE,
 	.write		= sysfs_kf_write,
 };
 
 static const struct kernfs_ops sysfs_file_kfops_rw = {
+	.atomic_write_len	= PAGE_SIZE,
 	.seq_show	= sysfs_kf_seq_show,
 	.write		= sysfs_kf_write,
 };
