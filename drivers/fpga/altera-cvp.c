@@ -64,6 +64,7 @@
 #define ALTERA_CVP_V1_SIZE	4
 #define ALTERA_CVP_V2_SIZE	4096
 
+#define CVP_TEARDOWN_MAX_RETRY 1
 /* Optional CvP config error status check for debugging */
 static bool altera_cvp_chkcfg;
 
@@ -308,7 +309,38 @@ static int altera_cvp_teardown(struct fpga_manager *mgr,
 	ret = altera_cvp_wait_status(conf, VSE_CVP_STATUS_CFG_RDY, 0,
 				     conf->priv->poll_time_us);
 	if (ret)
-		dev_err(&mgr->dev, "CFG_RDY == 0 timeout\n");
+		dev_warn(&mgr->dev, "CFG_RDY == 0 timeout\n");
+
+	return ret;
+}
+
+static void altera_cvp_disable_cvp_mode(struct altera_cvp_conf *conf)
+{
+	u32 val;
+
+	altera_read_config_dword(conf, VSE_CVP_MODE_CTRL, &val);
+	val &= ~VSE_CVP_MODE_CTRL_HIP_CLK_SEL;
+	val &= ~VSE_CVP_MODE_CTRL_CVP_MODE;
+	altera_write_config_dword(conf, VSE_CVP_MODE_CTRL, val);
+}
+
+static int altera_cvp_recovery(struct fpga_manager *mgr,
+			       struct fpga_image_info *info)
+{
+	struct altera_cvp_conf *conf = mgr->priv;
+	int ret, retry;
+
+	ret = altera_cvp_teardown(mgr, info);
+	for (retry = 0; ret && retry < CVP_TEARDOWN_MAX_RETRY; retry++) {
+		altera_cvp_disable_cvp_mode(conf);
+		ret = altera_cvp_teardown(mgr, info);
+	}
+
+	if (ret)
+		dev_err(&mgr->dev, "Tear-down failed after %d retries\n",
+			CVP_TEARDOWN_MAX_RETRY);
+	else
+		dev_info(&mgr->dev, "Tear-down successful\n");
 
 	return ret;
 }
@@ -345,7 +377,7 @@ static int altera_cvp_write_init(struct fpga_manager *mgr,
 
 	if (val & VSE_CVP_STATUS_CFG_RDY) {
 		dev_warn(&mgr->dev, "CvP already started, tear down first\n");
-		ret = altera_cvp_teardown(mgr, info);
+		ret = altera_cvp_recovery(mgr, info);
 		if (ret)
 			return ret;
 	}
@@ -486,7 +518,7 @@ static int altera_cvp_write_complete(struct fpga_manager *mgr,
 	u32 mask, val;
 	int ret;
 
-	ret = altera_cvp_teardown(mgr, info);
+	ret = altera_cvp_recovery(mgr, info);
 	if (ret)
 		return ret;
 
