@@ -711,6 +711,7 @@ err_of_node_put:
 static void ebu_nand_remove(struct platform_device *pdev)
 {
 	struct ebu_nand_controller *ebu_host = platform_get_drvdata(pdev);
+	struct device_node *chip_np = nand_get_flash_node(&ebu_host->chip);
 	int ret;
 
 	ret = mtd_device_unregister(nand_to_mtd(&ebu_host->chip));
@@ -718,6 +719,7 @@ static void ebu_nand_remove(struct platform_device *pdev)
 	nand_cleanup(&ebu_host->chip);
 	ebu_nand_disable(&ebu_host->chip);
 	ebu_dma_cleanup(ebu_host);
+	of_node_put(chip_np);
 }
 
 static const struct of_device_id ebu_nand_match[] = {
