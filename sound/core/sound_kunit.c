@@ -299,6 +299,63 @@ static void test_card_add_component(struct kunit *test)
 	KUNIT_ASSERT_STREQ(test, card->components, TEST_FIRST_COMPONENT " " TEST_SECOND_COMPONENT);
 }
 
+/* snd_utf8_strscpy() has to behave exactly like strscpy() for ASCII and only
+ * differ where a multi-byte sequence would be cut.  The escapes keep this file
+ * plain ASCII; \x escapes are greedy, hence the split literals.
+ */
+#define STRSCPY_UMLAUT		"\xc3\xa4"	/* 2 bytes */
+#define STRSCPY_HIRAGANA	"\xe3\x81\x82"	/* 3 bytes */
+
+static void test_utf8_strscpy(struct kunit *test)
+{
+	char dst[8], ref[8];
+	size_t len;
+
+	/* fits: same result as strscpy(), NUL terminated */
+	len = snd_utf8_strscpy(dst, "abc", sizeof(dst));
+	KUNIT_EXPECT_EQ(test, len, 3);
+	KUNIT_EXPECT_STREQ(test, dst, "abc");
+
+	/* exactly fills the buffer */
+	len = snd_utf8_strscpy(dst, "abcdefg", sizeof(dst));
+	KUNIT_EXPECT_EQ(test, len, sizeof(dst) - 1);
+	KUNIT_EXPECT_STREQ(test, dst, "abcdefg");
+
+	/* too long and pure ASCII: identical to strscpy() */
+	len = snd_utf8_strscpy(dst, "abcdefghij", sizeof(dst));
+	strscpy(ref, "abcdefghij", sizeof(ref));
+	KUNIT_EXPECT_EQ(test, len, sizeof(dst) - 1);
+	KUNIT_EXPECT_STREQ(test, dst, ref);
+
+	/* 2-byte characters: 7 bytes of room hold three of them plus one ASCII
+	 * byte, so the fourth has to be dropped whole rather than halved
+	 */
+	len = snd_utf8_strscpy(dst, STRSCPY_UMLAUT STRSCPY_UMLAUT
+				    STRSCPY_UMLAUT STRSCPY_UMLAUT,
+			       sizeof(dst));
+	KUNIT_EXPECT_EQ(test, len, 6);
+	KUNIT_EXPECT_STREQ(test, dst, STRSCPY_UMLAUT STRSCPY_UMLAUT
+				      STRSCPY_UMLAUT);
+
+	/* 3-byte characters: two fit, the third would be cut */
+	len = snd_utf8_strscpy(dst, STRSCPY_HIRAGANA STRSCPY_HIRAGANA
+				    STRSCPY_HIRAGANA,
+			       sizeof(dst));
+	KUNIT_EXPECT_EQ(test, len, 6);
+	KUNIT_EXPECT_STREQ(test, dst, STRSCPY_HIRAGANA STRSCPY_HIRAGANA);
+
+	/* not UTF-8 at all: a run of continuation bytes longer than any
+	 * sequence, so the plain strscpy() cut stands rather than eating the
+	 * whole string
+	 */
+	len = snd_utf8_strscpy(dst, "\x80\x80\x80\x80\x80\x80\x80\x80\x80",
+			       sizeof(dst));
+	KUNIT_EXPECT_EQ(test, len, sizeof(dst) - 1);
+
+	/* zero-sized destination must not be written to */
+	KUNIT_EXPECT_EQ(test, snd_utf8_strscpy(dst, "abc", 0), 0);
+}
+
 static struct kunit_case sound_utils_cases[] = {
 	KUNIT_CASE(test_phys_format_size),
 	KUNIT_CASE(test_format_width),
@@ -310,6 +367,7 @@ static struct kunit_case sound_utils_cases[] = {
 	KUNIT_CASE(test_card_set_id),
 	KUNIT_CASE(test_pcm_format_name),
 	KUNIT_CASE(test_card_add_component),
+	KUNIT_CASE(test_utf8_strscpy),
 	{},
 };
 

@@ -789,6 +789,58 @@ void snd_card_set_id(struct snd_card *card, const char *nid)
 }
 EXPORT_SYMBOL(snd_card_set_id);
 
+/**
+ *  snd_utf8_strscpy - copy a UTF-8 string, cutting only at a character boundary
+ *  @dst: destination buffer
+ *  @src: source string, expected to be UTF-8
+ *  @size: size of @dst in bytes
+ *
+ *  Like strscpy(), except that a string too long for @dst ends after the last
+ *  complete UTF-8 sequence that fits, so @dst never ends in the middle of a
+ *  character.  For pure ASCII input the result is identical to strscpy().
+ *
+ *  This matters for names that come from a device: usb_string() converts the
+ *  UTF-16LE string descriptors into UTF-8, so a product name copied into one
+ *  of the fixed-size card name fields can otherwise end in a partial sequence,
+ *  which user space has no way to repair.
+ *
+ *  Return: the length of the copied string, excluding the terminating NUL.
+ */
+size_t snd_utf8_strscpy(char *dst, const char *src, size_t size)
+{
+	size_t len, tail;
+
+	if (!size)
+		return 0;
+
+	len = strnlen(src, size);
+	if (len < size) {
+		memcpy(dst, src, len);
+		dst[len] = '\0';
+		return len;
+	}
+
+	/* @src does not fit.  strscpy() would cut at @size - 1, which may land
+	 * inside a multi-byte sequence, so back up to the start of that
+	 * sequence instead.  A sequence is at most four bytes, so a longer run
+	 * of continuation bytes means @src is not UTF-8 after all and the plain
+	 * cut stands.
+	 */
+	len = size - 1;
+	for (tail = 0; tail < 4 && len; tail++) {
+		if (((unsigned char)src[len] & 0xc0) != 0x80)
+			break;
+		len--;
+	}
+	if (tail >= 4)
+		len = size - 1;
+
+	memcpy(dst, src, len);
+	dst[len] = '\0';
+	return len;
+}
+EXPORT_SYMBOL_GPL(snd_utf8_strscpy);
+
 static ssize_t id_show(struct device *dev,
 		       struct device_attribute *attr, char *buf)
 {

@@ -630,9 +630,12 @@ static void usb_audio_make_shortname(struct usb_device *dev,
 		return;
 	}
 
-	/* retrieve the device string as shortname */
+	/* retrieve the device string as shortname.  usb_string() hands back
+	 * UTF-8, so cut at a character boundary rather than at a byte one.
+	 */
 	if (dev->product && *dev->product) {
-		strscpy(card->shortname, dev->product);
+		snd_utf8_strscpy(card->shortname, dev->product,
+				 sizeof(card->shortname));
 	} else {
 		/* no name available from anywhere, so use ID */
 		scnprintf(card->shortname, sizeof(card->shortname),
