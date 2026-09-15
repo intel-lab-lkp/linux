@@ -16,6 +16,7 @@
 #include <linux/debugfs.h>
 #include <linux/completion.h>
 #include <linux/interrupt.h>
+#include <linux/err.h>
 
 #include <sound/core.h>
 #include <sound/control.h>
@@ -146,6 +147,7 @@ static int snd_card_init(struct snd_card *card, struct device *parent,
 			 int idx, const char *xid, struct module *module,
 			 size_t extra_size);
 static int snd_card_do_free(struct snd_card *card);
+static void snd_card_free_full_names(struct snd_card *card);
 static const struct attribute_group card_dev_attr_group;
 
 static void release_card_device(struct device *dev)
@@ -594,6 +596,7 @@ static int snd_card_do_free(struct snd_card *card)
 	kfree(card->components);
 	card->components = NULL;
 	card->components_alloc_size = 0;
+	snd_card_free_full_names(card);
 	if (card->private_free)
 		card->private_free(card);
 #ifdef CONFIG_SND_CTL_DEBUG
@@ -840,6 +843,275 @@ size_t snd_utf8_strscpy(char *dst, const char *src, size_t size)
 	return len;
 }
 EXPORT_SYMBOL_GPL(snd_utf8_strscpy);
+
+/*
+ * Untruncated card names
+ *
+ * card->shortname, card->longname and card->mixername are fixed-size fields,
+ * and a name that does not fit is cut.  card->full_shortname and friends hold
+ * the whole name in that case, exactly as card->components holds the whole
+ * components string of which snd_ctl_card_info::components is a cut copy.
+ * User space reads them through SNDRV_CTL_IOCTL_CARD_BYTES.
+ *
+ * A field stays NULL when the name fits, so "set" means "the fixed field is
+ * not the whole story".  Nothing has to be kept in sync: there is one name,
+ * in two lengths.
+ *
+ * Card names are UTF-8.  The kernel prints them into procfs and hands them to
+ * user space, so it repairs what would break that: a malformed sequence
+ * becomes U+FFFD, and a code point that would break a line becomes a space.
+ * Rejecting a name instead would achieve nothing, since the fixed field still
+ * holds it and readers are told to use that when the full one is absent.
+ *
+ * Beyond that the kernel does not inspect names.  NFC, homoglyphs and the
+ * invisible and bidirectional format characters need the Unicode character
+ * properties, which would go stale in the sound core; user space has them.
+ * A name is a display string and never an identifier: card->id stays the
+ * unique handle.
+ */
+
+/* ASCII whitespace only; isspace() also matches 0xa0, which would eat UTF-8
+ * continuation bytes
+ */
+static bool utf8_is_ascii_space(unsigned char c)
+{
+	return c == ' ' || (c >= '\t' && c <= '\r');
+}
+
+/* Decode the UTF-8 sequence at @s, which holds @len readable bytes.
+ * Stores the code point in @cp and returns its length in bytes, or 0 if @s
+ * doesn't start a well-formed sequence.
+ */
+static size_t utf8_decode(const unsigned char *s, size_t len, u32 *cp)
+{
+	static const u32 min_cp[5] = { 0, 0, 0x80, 0x800, 0x10000 };
+	size_t i, n;
+	u32 val;
+
+	if (s[0] < 0x80) {
+		*cp = s[0];
+		return 1;
+	} else if ((s[0] & 0xe0) == 0xc0) {
+		n = 2;
+		val = s[0] & 0x1f;
+	} else if ((s[0] & 0xf0) == 0xe0) {
+		n = 3;
+		val = s[0] & 0x0f;
+	} else if ((s[0] & 0xf8) == 0xf0) {
+		n = 4;
+		val = s[0] & 0x07;
+	} else {
+		return 0;	/* stray continuation byte or 5/6-byte form */
+	}
+
+	if (len < n)
+		return 0;
+	for (i = 1; i < n; i++) {
+		if ((s[i] & 0xc0) != 0x80)
+			return 0;
+		val = (val << 6) | (s[i] & 0x3f);
+	}
+
+	/* overlong encoding, surrogate half or beyond the Unicode range */
+	if (val < min_cp[n] || val > 0x10ffff || (val >= 0xd800 && val <= 0xdfff))
+		return 0;
+
+	*cp = val;
+	return n;
+}
+
+/* U+FFFD REPLACEMENT CHARACTER */
+#define UTF8_REPLACEMENT	"\xef\xbf\xbd"
+
+/* Code points that would break the structure the name is printed into: sysfs
+ * attributes and /proc/asound/cards are line based, and a terminal acts on
+ * control characters.  They are replaced by a space rather than rejected.
+ *
+ * Nothing else is inspected.  Invisible, bidirectional and deprecated format
+ * characters are a real spoofing vector, but catching them needs the Unicode
+ * character properties, which would mean a table in the sound core that goes
+ * stale with every Unicode release.  A short list of ranges only looks like a
+ * defence; user space has the tables and has to do that part.
+ */
+static bool utf8_needs_space(u32 cp)
+{
+	if (cp < 0x20 || cp == 0x7f)		/* C0 controls and DEL */
+		return true;
+	if (cp >= 0x80 && cp <= 0x9f)		/* C1 controls */
+		return true;
+	if (cp == 0x2028 || cp == 0x2029)	/* line/paragraph separator */
+		return true;
+	return false;
+}
+
+/* Sanitise @src into a UTF-8 string of at most @max bytes.
+ *
+ * A malformed sequence becomes U+FFFD, one per bad byte, as recommended for
+ * the maximal subpart of an ill-formed subsequence in Unicode TR#36.  Code
+ * points that would break a line become a space.  The result is therefore
+ * always well-formed and always printable on one line, which means a caller
+ * never has to fall back to the ASCII field because a name was hostile.
+ *
+ * Surrounding whitespace is dropped and the result is cut at a character
+ * boundary, never inside a sequence.  Returns NULL when nothing usable is
+ * left, which the caller treats as "unset".
+ */
+static char *snd_card_name_dup(const char *src, size_t max)
+{
+	const unsigned char *s = (const unsigned char *)src;
+	size_t avail = strlen(src);
+	size_t in = 0, out = 0, start = 0;
+	char *buf, *shrunk;
+	size_t n;
+	u32 cp;
+
+	buf = kmalloc(max + 1, GFP_KERNEL);
+	if (!buf)
+		return ERR_PTR(-ENOMEM);
+
+	while (in < avail) {
+		n = utf8_decode(s + in, avail - in, &cp);
+		if (!n) {
+			if (out + sizeof(UTF8_REPLACEMENT) - 1 > max)
+				break;
+			memcpy(buf + out, UTF8_REPLACEMENT,
+			       sizeof(UTF8_REPLACEMENT) - 1);
+			out += sizeof(UTF8_REPLACEMENT) - 1;
+			in++;
+			continue;
+		}
+		if (utf8_needs_space(cp)) {
+			if (out + 1 > max)
+				break;
+			buf[out++] = ' ';
+			in += n;
+			continue;
+		}
+		if (out + n > max)
+			break;		/* cut at a character boundary */
+		memcpy(buf + out, s + in, n);
+		out += n;
+		in += n;
+	}
+
+	/* drop surrounding whitespace, including what the replacing above may
+	 * have produced at either end
+	 */
+	while (start < out && utf8_is_ascii_space(buf[start]))
+		start++;
+	while (out > start && utf8_is_ascii_space(buf[out - 1]))
+		out--;
+	if (out == start) {
+		kfree(buf);
+		return NULL;
+	}
+	out -= start;
+	memmove(buf, buf + start, out);
+	buf[out] = '\0';
+
+	shrunk = krealloc(buf, out + 1, GFP_KERNEL);
+	return shrunk ? : buf;	/* shrinking does not fail, but do not rely on it */
+}
+
+static int snd_card_set_full_name(struct snd_card *card, char **dst,
+				  const char *ascii, const char *name,
+				  size_t max)
+{
+	char *copy = NULL, *old;
+
+	if (name) {
+		copy = snd_card_name_dup(name, max);
+		if (IS_ERR(copy))
+			return PTR_ERR(copy);
+		/* Nothing gained over the ASCII field: leave the field unset so
+		 * the documented fallback does the same job without a second
+		 * allocation.  This keeps "set" meaning "carries more".
+		 */
+		if (copy && !strcmp(copy, ascii)) {
+			kfree(copy);
+			copy = NULL;
+		}
+	}
+
+	scoped_guard(rwsem_write, &snd_ioctl_rwsem) {
+		old = *dst;
+		*dst = copy;
+	}
+	kfree(old);
+	return 0;
+}
+
+static void snd_card_free_full_names(struct snd_card *card)
+{
+	kfree(card->full_shortname);
+	card->full_shortname = NULL;
+	kfree(card->full_longname);
+	card->full_longname = NULL;
+	kfree(card->full_mixername);
+	card->full_mixername = NULL;
+}
+
+/**
+ *  snd_card_set_full_shortname - set the UTF-8 short name of the card
+ *  @card: soundcard structure
+ *  @name: UTF-8 name, or NULL to clear the field
+ *
+ *  Offers the untruncated form of card->shortname.  Set card->shortname first,
+ *  with snd_utf8_strscpy(): if the sanitised name comes out identical to it,
+ *  the name fit and the field is left unset, so "set" always means "the fixed
+ *  field is cut".
+ *
+ *  @name is sanitised, never rejected: malformed sequences become U+FFFD and
+ *  line breaking code points become a space.  Surrounding whitespace is
+ *  stripped and a name longer than SNDRV_CARD_FULL_SHORTNAME_MAX bytes is cut
+ *  at a character boundary.  The caller should normalise @name to NFC
+ *  beforehand; the kernel cannot.  Call this before snd_card_register().
+ *
+ *  Return: Zero on success, -ENOMEM on allocation failure.
+ */
+int snd_card_set_full_shortname(struct snd_card *card, const char *name)
+{
+	return snd_card_set_full_name(card, &card->full_shortname,
+				      card->shortname, name,
+				      SNDRV_CARD_FULL_SHORTNAME_MAX);
+}
+EXPORT_SYMBOL_GPL(snd_card_set_full_shortname);
+
+/**
+ *  snd_card_set_full_longname - set the UTF-8 long name of the card
+ *  @card: soundcard structure
+ *  @name: UTF-8 name, or NULL to clear the field
+ *
+ *  Offers the untruncated form of card->longname; see
+ *  snd_card_set_full_shortname() for the rules that apply.
+ *
+ *  Return: Zero on success, -ENOMEM on allocation failure.
+ */
+int snd_card_set_full_longname(struct snd_card *card, const char *name)
+{
+	return snd_card_set_full_name(card, &card->full_longname,
+				      card->longname, name,
+				      SNDRV_CARD_FULL_LONGNAME_MAX);
+}
+EXPORT_SYMBOL_GPL(snd_card_set_full_longname);
+
+/**
+ *  snd_card_set_full_mixername - set the UTF-8 mixer name of the card
+ *  @card: soundcard structure
+ *  @name: UTF-8 name, or NULL to clear the field
+ *
+ *  Offers the untruncated form of card->mixername; see
+ *  snd_card_set_full_shortname() for the rules that apply.
+ *
+ *  Return: Zero on success, -ENOMEM on allocation failure.
+ */
+int snd_card_set_full_mixername(struct snd_card *card, const char *name)
+{
+	return snd_card_set_full_name(card, &card->full_mixername,
+				      card->mixername, name,
+				      SNDRV_CARD_FULL_MIXERNAME_MAX);
+}
+EXPORT_SYMBOL_GPL(snd_card_set_full_mixername);
 
 static ssize_t id_show(struct device *dev,
 		       struct device_attribute *attr, char *buf)

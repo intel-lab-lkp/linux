@@ -96,6 +96,16 @@ static inline void snd_refcount_get(struct snd_refcount *ref)
 void snd_refcount_put(struct snd_refcount *ref);
 void snd_refcount_sync(struct snd_refcount *ref);
 
+/*
+ * Maximum size in bytes, excluding the terminating NUL, of the untruncated
+ * card name fields.  Each limit is four times the size of the corresponding
+ * fixed field, so the same number of characters always fits, whatever they
+ * encode to: card names are UTF-8, and a character takes up to four bytes.
+ */
+#define SNDRV_CARD_FULL_SHORTNAME_MAX	128
+#define SNDRV_CARD_FULL_LONGNAME_MAX	320
+#define SNDRV_CARD_FULL_MIXERNAME_MAX	320
+
 /* main structure for soundcard */
 
 struct snd_card {
@@ -108,6 +118,20 @@ struct snd_card {
 	char longname[80];		/* name of this soundcard */
 	char irq_descr[32];		/* Interrupt description */
 	char mixername[80];		/* mixer name */
+	/*
+	 * The untruncated form of the three name fields above, like
+	 * card->components is the untruncated form of what
+	 * snd_ctl_card_info::components holds.  Each is NULL unless the name
+	 * did not fit into its fixed-size field, so a reader that finds NULL
+	 * already has the whole name in the field above.
+	 *
+	 * Set them only via snd_card_set_full_*(), and only before
+	 * snd_card_register().  After that they are read under
+	 * snd_ioctl_rwsem.
+	 */
+	char *full_shortname;		/* UTF-8 short name, may be NULL */
+	char *full_longname;		/* UTF-8 long name, may be NULL */
+	char *full_mixername;		/* UTF-8 mixer name, may be NULL */
 	char *components;		/* card components, space-delimited */
 	unsigned int components_alloc_size;	/* current allocation size of components */
 	struct module *module;		/* top-level module */
@@ -317,6 +341,9 @@ void snd_card_free_when_closed(struct snd_card *card);
 int snd_card_free_on_error(struct device *dev, int ret);
 void snd_card_set_id(struct snd_card *card, const char *id);
 size_t snd_utf8_strscpy(char *dst, const char *src, size_t size);
+int snd_card_set_full_shortname(struct snd_card *card, const char *name);
+int snd_card_set_full_longname(struct snd_card *card, const char *name);
+int snd_card_set_full_mixername(struct snd_card *card, const char *name);
 int snd_card_register(struct snd_card *card);
 int snd_card_info_init(void);
 int snd_card_add_dev_attr(struct snd_card *card,
