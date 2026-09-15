@@ -2575,7 +2575,7 @@ static int kvm_vm_set_mem_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 	for (i = start; i < end; i++) {
 		r = xa_reserve(&kvm->mem_attr_array, i, GFP_KERNEL_ACCOUNT);
 		if (r)
-			goto out_unlock;
+			goto out_release;
 
 		cond_resched();
 	}
@@ -2592,6 +2592,28 @@ static int kvm_vm_set_mem_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 	kvm_handle_gfn_range(kvm, &post_set_range);
 
 out_unlock:
+	mutex_unlock(&kvm->slots_lock);
+
+	return r;
+
+out_release:
+	/*
+	 * The reservation loop failed at @i; the entries in [start, i) were
+	 * reserved by this call and, without releasing them here, would be
+	 * retained until userspace happens to clear a range covering them, or
+	 * until the VM is destroyed.  The retained entries are not inert:
+	 * a bare reservation is an XA_ZERO_ENTRY, which the !attrs fast path of
+	 * kvm_range_has_memory_attributes() counts as present (it calls
+	 * xas_find() directly) even though kvm_get_memory_attributes() reports
+	 * it as absent, so a straddling hugepage over such an entry gets marked
+	 * mixed and KVM stops using a hugepage for a range whose attributes are
+	 * uniform.  xa_release() erases an entry only while it is still a
+	 * reservation, so value entries that predate this call are untouched.
+	 */
+	while (i-- > start) {
+		xa_release(&kvm->mem_attr_array, i);
+		cond_resched();
+	}
 	mutex_unlock(&kvm->slots_lock);
 
 	return r;
