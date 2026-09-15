@@ -8,6 +8,7 @@
 #include <linux/kthread.h>
 #include <linux/pci.h>
 #include <linux/list.h>
+#include <linux/mutex.h>
 #include <linux/spinlock.h>
 #include <linux/sizes.h>
 #include <linux/atomic.h>
@@ -161,6 +162,7 @@ struct hws_pcie_dev {
 
 	/* Kernel thread */
 	struct task_struct *main_task;
+	struct mutex monitor_lock; /* serializes monitor and lifecycle changes */
 	struct hws_scratch_dma scratch_vid[MAX_VID_CHANNELS];
 
 	bool suspended;

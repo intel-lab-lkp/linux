@@ -177,8 +177,10 @@ static int main_ks_thread_handle(void *data)
 			continue;
 		}
 
-		/* avoid MMIO when suspended (guarded above) */
-		check_video_format(pdx);
+		mutex_lock(&pdx->monitor_lock);
+		if (!READ_ONCE(pdx->suspended))
+			check_video_format(pdx);
+		mutex_unlock(&pdx->monitor_lock);
 
 		try_to_freeze(); /* cooperate with freezer each loop */
 
@@ -338,6 +340,10 @@ static void hws_block_hotpaths(struct hws_pcie_dev *hws)
 	if (hws->irq >= 0)
 		synchronize_irq(hws->irq);
 
+	/* Wait for a monitor pass that started before suspended was set. */
+	mutex_lock(&hws->monitor_lock);
+	mutex_unlock(&hws->monitor_lock);
+
 	if (hws->bar0_base)
 		hws_irq_clear_pending(hws);
 }
@@ -357,6 +363,7 @@ static int hws_probe(struct pci_dev *pdev, const struct pci_device_id *pci_id)
 	hws->pdev = pdev;
 	hws->irq = -1;
 	hws->suspended = false;
+	mutex_init(&hws->monitor_lock);
 	pci_set_drvdata(pdev, hws);
 
 	/* 1) Enable device + bus mastering (managed) */

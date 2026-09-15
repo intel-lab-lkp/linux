@@ -611,6 +611,8 @@ int hws_check_card_status(struct hws_pcie_dev *hws)
 
 	if (!hws || !hws->bar0_base)
 		return -ENODEV;
+	if (READ_ONCE(hws->suspended))
+		return -EBUSY;
 
 	status = readl(hws->bar0_base + HWS_REG_SYS_STATUS);
 
@@ -621,9 +623,12 @@ int hws_check_card_status(struct hws_pcie_dev *hws)
 		return -ENODEV;
 	}
 
-	/* If RUN/READY bit (bit0) is not set, reinitialize the video core. */
+	/* Runtime reset would invalidate every active channel's DMA ownership. */
 	if (!(status & BIT(0))) {
-		hws_init_video_sys(hws, true);
+		dev_warn_ratelimited(&hws->pdev->dev,
+				     "SYS_STATUS not ready (0x%08x); runtime core reset refused\n",
+				     status);
+		return -EIO;
 	}
 
 	return 0;
@@ -1349,6 +1354,7 @@ int hws_video_quiesce(struct hws_pcie_dev *hws, const char *reason)
 			continue;
 		}
 
+		mutex_lock(&vid->state_lock);
 		streaming = vb2_is_streaming(q);
 		if (streaming) {
 			/* Stop via vb2, which runs .stop_streaming. */
@@ -1357,6 +1363,7 @@ int hws_video_quiesce(struct hws_pcie_dev *hws, const char *reason)
 			if (r && !ret)
 				ret = r;
 		}
+		mutex_unlock(&vid->state_lock);
 	}
 	return ret;
 }
