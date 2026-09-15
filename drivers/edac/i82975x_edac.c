@@ -233,7 +233,7 @@ static struct pci_dev *mci_pdev;	/* init dev: in case that AGP code has
 					 * already registered driver
 					 */
 
-static int i82975x_registered = 1;
+static bool i82975x_fallback;
 
 static void i82975x_get_error_info(struct mem_ctl_info *mci,
 		struct i82975x_error_info *info)
@@ -597,6 +597,10 @@ static int i82975x_init_one(struct pci_dev *pdev,
 		return -EIO;
 
 	rc = i82975x_probe1(pdev, ent->driver_data);
+	if (rc) {
+		pci_disable_device(pdev);
+		return rc;
+	}
 
 	if (mci_pdev == NULL)
 		mci_pdev = pci_dev_get(pdev);
@@ -620,6 +624,7 @@ static void i82975x_remove_one(struct pci_dev *pdev)
 		iounmap( pvt->mch_window );
 
 	edac_mc_free(mci);
+	pci_disable_device(pdev);
 }
 
 static const struct pci_device_id i82975x_pci_tbl[] = {
@@ -670,6 +675,7 @@ static int __init i82975x_init(void)
 			pci_rc = -ENODEV;
 			goto fail1;
 		}
+		i82975x_fallback = true;
 	}
 
 	return 0;
@@ -688,10 +694,9 @@ static void __exit i82975x_exit(void)
 
 	pci_unregister_driver(&i82975x_driver);
 
-	if (!i82975x_registered) {
+	if (i82975x_fallback)
 		i82975x_remove_one(mci_pdev);
-		pci_dev_put(mci_pdev);
-	}
+	pci_dev_put(mci_pdev);
 }
 
 module_init(i82975x_init);
