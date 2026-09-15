@@ -3755,6 +3755,23 @@ static void alc2xx_fixup_headset_mic(struct hda_codec *codec,
 	}
 }
 
+static void alc295_fixup_acer_nitro_headset_mode(struct hda_codec *codec,
+						 const struct hda_fixup *fix,
+						 int action)
+{
+	int err;
+
+	alc2xx_fixup_headset_mic(codec, fix, action);
+	if (action == HDA_FIXUP_ACT_PROBE) {
+		/* Mic pin 0x19 can report either state incorrectly after S3. */
+		err = snd_hda_jack_set_presence_source(codec, 0x19, 0x21);
+		if (err < 0)
+			codec_warn(codec, "failed to set headset presence source: %d\n",
+				   err);
+	}
+	alc_fixup_headset_mode_no_hp_mic(codec, fix, action);
+}
+
 static void alc245_fixup_hp_spectre_x360_eu0xxx(struct hda_codec *codec,
 					  const struct hda_fixup *fix, int action)
 {
@@ -4350,6 +4367,7 @@ enum {
 	ALC287_FIXUP_THINKPAD_I2S_SPK,
 	ALC287_FIXUP_MG_RTKC_CSAMP_CS35L41_I2C_THINKPAD,
 	ALC2XX_FIXUP_HEADSET_MIC,
+	ALC295_FIXUP_ACER_NITRO_HEADSET_MODE,
 	ALC289_FIXUP_DELL_CS35L41_SPI_2,
 	ALC256_FIXUP_ACER_SFG16_MICMUTE_LED,
 	ALC256_FIXUP_HEADPHONE_AMP_VOL,
@@ -6867,6 +6885,10 @@ static const struct hda_fixup alc269_fixups[] = {
 		.type = HDA_FIXUP_FUNC,
 		.v.func = alc2xx_fixup_headset_mic,
 	},
+	[ALC295_FIXUP_ACER_NITRO_HEADSET_MODE] = {
+		.type = HDA_FIXUP_FUNC,
+		.v.func = alc295_fixup_acer_nitro_headset_mode,
+	},
 	[ALC289_FIXUP_DELL_CS35L41_SPI_2] = {
 		.type = HDA_FIXUP_FUNC,
 		.v.func = cs35l41_fixup_spi_two,
@@ -7190,7 +7212,8 @@ static const struct hda_quirk alc269_fixup_tbl[] = {
 	SND_PCI_QUIRK(0x1025, 0x1430, "Acer TravelMate B311R-31", ALC256_FIXUP_ACER_MIC_NO_PRESENCE),
 	SND_PCI_QUIRK(0x1025, 0x1466, "Acer Aspire A515-56", ALC255_FIXUP_ACER_HEADPHONE_AND_MIC),
 	SND_PCI_QUIRK(0x1025, 0x1534, "Acer Predator PH315-54", ALC255_FIXUP_ACER_MIC_NO_PRESENCE),
-	SND_PCI_QUIRK(0x1025, 0x1539, "Acer Nitro 5 AN515-57", ALC2XX_FIXUP_HEADSET_MIC),
+	SND_PCI_QUIRK(0x1025, 0x1539, "Acer Nitro 5 AN515-57",
+		      ALC295_FIXUP_ACER_NITRO_HEADSET_MODE),
 	SND_PCI_QUIRK(0x1025, 0x159c, "Acer Nitro 5 AN515-58", ALC287_FIXUP_ACER_MICMUTE_LED),
 	SND_PCI_QUIRK(0x1025, 0x1597, "Acer Nitro 5 AN517-55", ALC2XX_FIXUP_HEADSET_MIC),
 	SND_PCI_QUIRK(0x1025, 0x159e, "Acer Nitro 5 AN515-46", ALC2XX_FIXUP_HEADSET_MIC),
