@@ -440,7 +440,8 @@ static long dma_buf_export_sync_file(struct dma_buf *dmabuf,
 	enum dma_resv_usage usage;
 	struct dma_fence *fence = NULL;
 	struct sync_file *sync_file;
-	int fd, ret;
+	int ret;
+	const struct fd_slot *fd;
 
 	if (copy_from_user(&arg, user_data, sizeof(arg)))
 		return -EFAULT;
@@ -451,14 +452,14 @@ static long dma_buf_export_sync_file(struct dma_buf *dmabuf,
 	if ((arg.flags & DMA_BUF_SYNC_RW) == 0)
 		return -EINVAL;
 
-	fd = get_unused_fd_flags(O_CLOEXEC);
-	if (fd < 0)
-		return fd;
+	fd = fd_prepare(O_CLOEXEC);
+	if (IS_ERR(fd))
+		return PTR_ERR(fd);
 
 	usage = dma_resv_usage_rw(arg.flags & DMA_BUF_SYNC_WRITE);
 	ret = dma_resv_get_singleton(dmabuf->resv, usage, &fence);
 	if (ret)
-		goto err_put_fd;
+		return ret;
 
 	if (!fence)
 		fence = dma_fence_get_stub();
@@ -467,26 +468,14 @@ static long dma_buf_export_sync_file(struct dma_buf *dmabuf,
 
 	dma_fence_put(fence);
 
-	if (!sync_file) {
-		ret = -ENOMEM;
-		goto err_put_fd;
-	}
+	if (!sync_file)
+		return -ENOMEM;
 
-	arg.fd = fd;
-	if (copy_to_user(user_data, &arg, sizeof(arg))) {
-		ret = -EFAULT;
-		goto err_put_file;
-	}
-
-	fd_install(fd, sync_file->file);
+	arg.fd = fd_stage(fd, sync_file->file);
+	if (copy_to_user(user_data, &arg, sizeof(arg)))
+		return -EFAULT;
 
 	return 0;
-
-err_put_file:
-	fput(sync_file->file);
-err_put_fd:
-	put_unused_fd(fd);
-	return ret;
 }
 
 static long dma_buf_import_sync_file(struct dma_buf *dmabuf,
