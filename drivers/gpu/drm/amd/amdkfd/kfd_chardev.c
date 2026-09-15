@@ -1988,11 +1988,10 @@ static uint32_t get_process_num_bos(struct kfd_process *p)
 	return num_of_bos;
 }
 
-static int criu_get_prime_handle(struct kgd_mem *mem,
-				 int flags, u32 *shared_fd,
-				 struct file **file)
+static int criu_get_prime_handle(struct kgd_mem *mem, int flags, u32 *shared_fd)
 {
 	struct dma_buf *dmabuf;
+	const struct fd_slot *fd;
 	int ret;
 
 	ret = amdgpu_amdkfd_gpuvm_export_dmabuf(mem, &dmabuf);
@@ -2001,38 +2000,17 @@ static int criu_get_prime_handle(struct kgd_mem *mem,
 		return ret;
 	}
 
-	ret = get_unused_fd_flags(flags);
-	if (ret < 0) {
+	fd = fd_prepare(flags);
+	if (IS_ERR(fd)) {
+		ret = PTR_ERR(fd);
 		pr_err("dmabuf create fd failed, ret:%d\n", ret);
-		goto out_free_dmabuf;
+		dma_buf_put(dmabuf);
+		return ret;
 	}
 
-	*shared_fd = ret;
-	*file = dmabuf->file;
+	/* Installed or dropped with the ioctl's result, nothing to put back. */
+	*shared_fd = fd_stage(fd, dmabuf->file);
 	return 0;
-
-out_free_dmabuf:
-	dma_buf_put(dmabuf);
-	return ret;
-}
-
-static void commit_files(struct file **files,
-			 struct kfd_criu_bo_bucket *bo_buckets,
-			 unsigned int count,
-			 int err)
-{
-	while (count--) {
-		struct file *file = files[count];
-
-		if (!file)
-			continue;
-		if (err) {
-			fput(file);
-			put_unused_fd(bo_buckets[count].dmabuf_fd);
-		} else {
-			fd_install(bo_buckets[count].dmabuf_fd, file);
-		}
-	}
 }
 
 static int criu_checkpoint_bos(struct kfd_process *p,
@@ -2043,7 +2021,6 @@ static int criu_checkpoint_bos(struct kfd_process *p,
 {
 	struct kfd_criu_bo_bucket *bo_buckets;
 	struct kfd_criu_bo_priv_data *bo_privs;
-	struct file **files = NULL;
 	int ret = 0, pdd_index, bo_index = 0, id;
 	void *mem;
 
@@ -2053,12 +2030,6 @@ static int criu_checkpoint_bos(struct kfd_process *p,
 
 	bo_privs = kvcalloc(num_bos, sizeof(*bo_privs), GFP_KERNEL);
 	if (!bo_privs) {
-		ret = -ENOMEM;
-		goto exit;
-	}
-
-	files = kvcalloc(num_bos, sizeof(struct file *), GFP_KERNEL);
-	if (!files) {
 		ret = -ENOMEM;
 		goto exit;
 	}
@@ -2105,7 +2076,7 @@ static int criu_checkpoint_bos(struct kfd_process *p,
 				ret = criu_get_prime_handle(kgd_mem,
 						bo_bucket->alloc_flags &
 						KFD_IOC_ALLOC_MEM_FLAGS_WRITABLE ? DRM_RDWR : 0,
-						&bo_bucket->dmabuf_fd, &files[bo_index]);
+						&bo_bucket->dmabuf_fd);
 				if (ret)
 					goto exit;
 			} else {
@@ -2156,8 +2127,6 @@ static int criu_checkpoint_bos(struct kfd_process *p,
 	*priv_offset += num_bos * sizeof(*bo_privs);
 
 exit:
-	commit_files(files, bo_buckets, bo_index, ret);
-	kvfree(files);
 	kvfree(bo_buckets);
 	kvfree(bo_privs);
 	return ret;
@@ -2504,8 +2473,7 @@ static int criu_restore_memory_of_gpu(struct kfd_process_device *pdd,
 
 static int criu_restore_bo(struct kfd_process *p,
 			   struct kfd_criu_bo_bucket *bo_bucket,
-			   struct kfd_criu_bo_priv_data *bo_priv,
-			   struct file **file)
+			   struct kfd_criu_bo_priv_data *bo_priv)
 {
 	struct kfd_process_device *pdd;
 	struct kgd_mem *kgd_mem;
@@ -2557,7 +2525,7 @@ static int criu_restore_bo(struct kfd_process *p,
 	if (bo_bucket->alloc_flags
 	    & (KFD_IOC_ALLOC_MEM_FLAGS_VRAM | KFD_IOC_ALLOC_MEM_FLAGS_GTT)) {
 		ret = criu_get_prime_handle(kgd_mem, DRM_RDWR,
-					    &bo_bucket->dmabuf_fd, file);
+					    &bo_bucket->dmabuf_fd);
 		if (ret)
 			return ret;
 	} else {
@@ -2574,7 +2542,6 @@ static int criu_restore_bos(struct kfd_process *p,
 {
 	struct kfd_criu_bo_bucket *bo_buckets = NULL;
 	struct kfd_criu_bo_priv_data *bo_privs = NULL;
-	struct file **files = NULL;
 	int ret = 0;
 	uint32_t i = 0;
 
@@ -2587,12 +2554,6 @@ static int criu_restore_bos(struct kfd_process *p,
 	bo_buckets = kvmalloc_objs(*bo_buckets, args->num_bos);
 	if (!bo_buckets)
 		return -ENOMEM;
-
-	files = kvcalloc(args->num_bos, sizeof(struct file *), GFP_KERNEL);
-	if (!files) {
-		ret = -ENOMEM;
-		goto exit;
-	}
 
 	ret = copy_from_user(bo_buckets, (void __user *)args->bos,
 			     args->num_bos * sizeof(*bo_buckets));
@@ -2619,7 +2580,7 @@ static int criu_restore_bos(struct kfd_process *p,
 
 	/* Create and map new BOs */
 	for (; i < args->num_bos; i++) {
-		ret = criu_restore_bo(p, &bo_buckets[i], &bo_privs[i], &files[i]);
+		ret = criu_restore_bo(p, &bo_buckets[i], &bo_privs[i]);
 		if (ret) {
 			pr_debug("Failed to restore BO[%d] ret%d\n", i, ret);
 			goto exit;
@@ -2634,8 +2595,6 @@ static int criu_restore_bos(struct kfd_process *p,
 		ret = -EFAULT;
 
 exit:
-	commit_files(files, bo_buckets, i, ret);
-	kvfree(files);
 	kvfree(bo_buckets);
 	kvfree(bo_privs);
 	return ret;
