@@ -1335,6 +1335,15 @@ static void pdc_hw_disable(struct pdc_state *pdcs)
 		  &dma_reg->dmarcv.control);
 }
 
+static void pdc_stop(struct pdc_state *pdcs)
+{
+	struct device *dev = &pdcs->pdev->dev;
+
+	pdc_hw_disable(pdcs);
+	devm_free_irq(dev, pdcs->pdc_irq, dev);
+	cancel_work_sync(&pdcs->rx_work);
+}
+
 /**
  * pdc_rx_buf_pool_create() - Pool of receive buffers used to catch the metadata
  * header returned with each response message.
@@ -1581,15 +1590,16 @@ static int pdc_probe(struct platform_device *pdev)
 	/* Initialize mailbox controller */
 	err = pdc_mb_init(pdcs);
 	if (err)
-		goto cleanup_buf_pool;
+		goto cleanup_irq;
 
 	pdc_setup_debugfs(pdcs);
 
 	dev_dbg(dev, "pdc_probe() successful");
 	return PDC_SUCCESS;
 
+cleanup_irq:
+	pdc_stop(pdcs);
 cleanup_buf_pool:
-	cancel_work_sync(&pdcs->rx_work);
 	dma_pool_destroy(pdcs->rx_buf_pool);
 
 cleanup_ring_pool:
@@ -1605,9 +1615,7 @@ static void pdc_remove(struct platform_device *pdev)
 
 	pdc_free_debugfs();
 
-	cancel_work_sync(&pdcs->rx_work);
-
-	pdc_hw_disable(pdcs);
+	pdc_stop(pdcs);
 
 	dma_pool_destroy(pdcs->rx_buf_pool);
 	dma_pool_destroy(pdcs->ring_pool);
