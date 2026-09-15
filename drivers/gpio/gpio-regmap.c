@@ -296,6 +296,12 @@ void *gpio_regmap_get_drvdata(struct gpio_regmap *gpio)
 }
 EXPORT_SYMBOL_GPL(gpio_regmap_get_drvdata);
 
+struct gpio_chip *gpio_regmap_get_chip(struct gpio_regmap *gpio)
+{
+	return &gpio->gpio_chip;
+}
+EXPORT_SYMBOL_GPL(gpio_regmap_get_chip);
+
 /**
  * gpio_regmap_register() - Register a generic regmap GPIO controller
  * @config: configuration for gpio_regmap
@@ -304,7 +310,6 @@ EXPORT_SYMBOL_GPL(gpio_regmap_get_drvdata);
  */
 struct gpio_regmap *gpio_regmap_register(const struct gpio_regmap_config *config)
 {
-	struct irq_domain *irq_domain;
 	struct gpio_regmap *gpio;
 	struct gpio_chip *chip;
 	int ret;
@@ -412,6 +417,8 @@ struct gpio_regmap *gpio_regmap_register(const struct gpio_regmap_config *config
 
 #ifdef CONFIG_REGMAP_IRQ
 	if (config->regmap_irq_chip) {
+		struct irq_domain *irq_domain;
+
 		gpio->regmap_irq_line = config->regmap_irq_line;
 		ret = regmap_add_irq_chip_fwnode(dev_fwnode(config->parent), config->regmap,
 						 config->regmap_irq_line, config->regmap_irq_flags,
@@ -420,12 +427,15 @@ struct gpio_regmap *gpio_regmap_register(const struct gpio_regmap_config *config
 			goto err_remove_gpiochip;
 
 		irq_domain = regmap_irq_get_domain(gpio->irq_chip_data);
+		if (irq_domain) {
+			ret = gpiochip_irqchip_add_domain(chip, irq_domain);
+			if (ret)
+				goto err_remove_gpiochip;
+		}
 	} else
 #endif
-	irq_domain = config->irq_domain;
-
-	if (irq_domain) {
-		ret = gpiochip_irqchip_add_domain(chip, irq_domain);
+	if (config->irq_domain) {
+		ret = gpiochip_irqchip_add_domain(chip, config->irq_domain);
 		if (ret)
 			goto err_remove_gpiochip;
 	}
