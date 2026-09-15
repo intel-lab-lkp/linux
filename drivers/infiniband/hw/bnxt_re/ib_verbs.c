@@ -2229,8 +2229,8 @@ int bnxt_re_create_srq(struct ib_srq *ib_srq,
 	dev_attr = rdev->dev_attr;
 	srq = container_of(ib_srq, struct bnxt_re_srq, ib_srq);
 
-	if (srq_init_attr->attr.max_wr >= dev_attr->max_srq_wqes) {
-		ibdev_err(&rdev->ibdev, "Create CQ failed - max exceeded");
+	if (srq_init_attr->attr.max_wr > dev_attr->max_srq_wqes) {
+		ibdev_err(&rdev->ibdev, "Create SRQ failed - max exceeded");
 		rc = -EINVAL;
 		goto exit;
 	}
