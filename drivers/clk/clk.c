@@ -5430,6 +5430,9 @@ EXPORT_SYMBOL(of_clk_get);
  * This function parses the clocks and clock-names properties,
  * and uses them to look up the struct clk from the registered list of clock
  * providers.
+ *
+ * Returns: A clock pointer on success or an error pointer on failure.  This
+ * function never returns NULL.
  */
 struct clk *of_clk_get_by_name(struct device_node *np, const char *name)
 {
