@@ -223,6 +223,7 @@ __dabt_svc:
 ENDPROC(__dabt_svc)
 
 	.align	5
+.pushsection   .irqentry.text, "ax"
 __irq_svc:
 	svc_entry
 	irq_handler from_user=0
@@ -239,6 +240,7 @@ __irq_svc:
 	svc_exit r5, irq = 1			@ return from exception
  UNWIND(.fnend		)
 ENDPROC(__irq_svc)
+.popsection
 
 	.ltorg
 
