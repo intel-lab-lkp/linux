@@ -2266,8 +2266,10 @@ static int flexcan_probe(struct platform_device *pdev)
 
  failed_setup_stop_mode:
 	unregister_flexcandev(dev);
+	goto failed_pm_runtime_disable;
  failed_register:
 	pm_runtime_put_noidle(&pdev->dev);
+failed_pm_runtime_disable:
 	pm_runtime_disable(&pdev->dev);
  failed_platform_get_irq:
 	free_candev(dev);
