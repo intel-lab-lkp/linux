@@ -870,6 +870,10 @@ bool io_req_post_cqe(struct io_kiocb *req, s32 res, u32 cflags)
 	lockdep_assert(!io_wq_current_is_worker());
 	lockdep_assert_held(&ctx->uring_lock);
 
+	/* Descriptors this CQE reports must be installed before it is visible. */
+	if (unlikely(current->fd_slots.nr))
+		__fd_slots_commit(res);
+
 	if (!(ctx->int_flags & IO_RING_F_LOCKLESS_CQ)) {
 		spin_lock(&ctx->completion_lock);
 		posted = io_fill_cqe_aux(ctx, req->cqe.user_data, res, cflags);
@@ -895,6 +899,8 @@ bool io_req_post_cqe32(struct io_kiocb *req, struct io_uring_cqe cqe[2])
 	lockdep_assert_held(&ctx->uring_lock);
 
 	cqe[0].user_data = req->cqe.user_data;
+	if (unlikely(current->fd_slots.nr))
+		__fd_slots_commit(cqe[0].res);
 	if (!(ctx->int_flags & IO_RING_F_LOCKLESS_CQ)) {
 		spin_lock(&ctx->completion_lock);
 		posted = io_fill_cqe_aux32(ctx, cqe);
@@ -1365,6 +1371,24 @@ static bool io_assign_file(struct io_kiocb *req, const struct io_issue_def *def,
 
 #define REQ_ISSUE_SLOW_FLAGS	(REQ_F_CREDS | REQ_F_ARM_LTIMEOUT)
 
+/*
+ * Requests complete from io_uring_enter(), task_work, io-wq workers and the
+ * SQPOLL thread, and their CQEs are visible before any syscall returns. So
+ * the descriptors a request reserved are committed per request, before its
+ * completion is posted.
+ */
+static void io_req_fd_reservations(struct io_kiocb *req, int ret)
+{
+	long res = ret;
+
+	/* A request holding reservations must not go async or be reissued. */
+	WARN_ON_ONCE(ret == IOU_ISSUE_SKIP_COMPLETE || ret == IOU_RETRY ||
+		     ret == IOU_REQUEUE);
+	if (ret == IOU_COMPLETE)
+		res = req->cqe.res;
+	__fd_slots_commit(res);
+}
+
 static inline int __io_issue_sqe(struct io_kiocb *req,
 				 unsigned int issue_flags,
 				 const struct io_issue_def *def)
@@ -1384,6 +1408,9 @@ static inline int __io_issue_sqe(struct io_kiocb *req,
 		audit_uring_entry(req->opcode);
 
 	ret = def->issue(req, issue_flags);
+
+	if (unlikely(current->fd_slots.nr))
+		io_req_fd_reservations(req, ret);
 
 	if (!def->audit_skip)
 		audit_uring_exit(!ret, ret);
