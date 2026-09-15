@@ -7,6 +7,7 @@
  * ----------------------------------------------------------------------- */
 
 #include <linux/efi.h>
+#include <linux/overflow.h>
 #include <linux/pci.h>
 #include <linux/stddef.h>
 
@@ -176,7 +177,7 @@ static void retrieve_apple_device_properties(struct boot_params *boot_params)
 
 	do {
 		status = efi_bs_call(allocate_pool, EFI_LOADER_DATA,
-				     size + sizeof(struct setup_data),
+				     struct_size(new, data, size),
 				     (void **)&new);
 		if (status != EFI_SUCCESS) {
 			efi_err("Failed to allocate memory for 'properties'\n");
@@ -649,8 +650,8 @@ setup_e820(struct boot_params *params, struct setup_data *e820ext, u32 e820ext_s
 		}
 
 		if (nr_entries == ARRAY_SIZE(params->e820_table)) {
-			u32 need = (nr_desc - i) * sizeof(struct boot_e820_entry) +
-				   sizeof(struct setup_data);
+			u32 need = struct_size(e820ext, data,
+				(nr_desc - i) * sizeof(struct boot_e820_entry));
 
 			if (!e820ext || e820ext_size < need)
 				return EFI_BUFFER_TOO_SMALL;
@@ -684,8 +685,7 @@ static efi_status_t alloc_e820ext(u32 nr_desc, struct setup_data **e820ext,
 	efi_status_t status;
 	unsigned long size;
 
-	size = sizeof(struct setup_data) +
-		sizeof(struct boot_e820_entry) * nr_desc;
+	size = struct_size(*e820ext, data, nr_desc * sizeof(struct boot_e820_entry));
 
 	if (*e820ext) {
 		efi_bs_call(free_pool, *e820ext);
