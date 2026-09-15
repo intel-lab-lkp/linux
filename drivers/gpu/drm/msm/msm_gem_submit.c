@@ -558,7 +558,7 @@ int msm_ioctl_gem_submit(struct drm_device *dev, void *data,
 	struct drm_syncobj **syncobjs_to_reset = NULL;
 	struct sync_file *sync_file = NULL;
 	unsigned cmds_to_parse;
-	int out_fence_fd = -1;
+	const struct fd_slot *out_fence_fd = NULL;
 	unsigned i;
 	int ret;
 
@@ -601,9 +601,9 @@ int msm_ioctl_gem_submit(struct drm_device *dev, void *data,
 	ring = gpu->rb[queue->ring_nr];
 
 	if (args->flags & MSM_SUBMIT_FENCE_FD_OUT) {
-		out_fence_fd = get_unused_fd_flags(O_CLOEXEC);
-		if (out_fence_fd < 0) {
-			ret = out_fence_fd;
+		out_fence_fd = fd_prepare(O_CLOEXEC);
+		if (IS_ERR(out_fence_fd)) {
+			ret = PTR_ERR(out_fence_fd);
 			goto out_post_unlock;
 		}
 	}
@@ -777,6 +777,8 @@ int msm_ioctl_gem_submit(struct drm_device *dev, void *data,
 		sync_file = sync_file_create(submit->user_fence);
 		if (!sync_file)
 			ret = -ENOMEM;
+		else
+			fd_stage(out_fence_fd, sync_file->file);
 	}
 
 	if (ret)
@@ -814,15 +816,9 @@ out:
 out_unlock:
 	mutex_unlock(&queue->lock);
 out_post_unlock:
-	if (ret) {
-		if (out_fence_fd >= 0)
-			put_unused_fd(out_fence_fd);
-		if (sync_file)
-			fput(sync_file->file);
-	} else if (sync_file) {
-		fd_install(out_fence_fd, sync_file->file);
-		args->fence_fd = out_fence_fd;
-	}
+	/* A staged sync file and its descriptor are dropped on return. */
+	if (!ret && sync_file)
+		args->fence_fd = fd_prepare_fd(out_fence_fd);
 
 	if (!IS_ERR_OR_NULL(submit)) {
 		msm_gem_submit_put(submit);

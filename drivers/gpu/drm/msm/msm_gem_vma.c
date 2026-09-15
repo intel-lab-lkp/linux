@@ -1441,7 +1441,7 @@ msm_ioctl_vm_bind(struct drm_device *dev, void *data, struct drm_file *file)
 	struct drm_syncobj **syncobjs_to_reset = NULL;
 	struct sync_file *sync_file = NULL;
 	struct dma_fence *fence;
-	int out_fence_fd = -1;
+	const struct fd_slot *out_fence_fd = NULL;
 	int ret, nr_bos = 0;
 	unsigned i;
 
@@ -1479,9 +1479,9 @@ msm_ioctl_vm_bind(struct drm_device *dev, void *data, struct drm_file *file)
 	}
 
 	if (args->flags & MSM_VM_BIND_FENCE_FD_OUT) {
-		out_fence_fd = get_unused_fd_flags(O_CLOEXEC);
-		if (out_fence_fd < 0) {
-			ret = out_fence_fd;
+		out_fence_fd = fd_prepare(O_CLOEXEC);
+		if (IS_ERR(out_fence_fd)) {
+			ret = PTR_ERR(out_fence_fd);
 			goto out_post_unlock;
 		}
 	}
@@ -1565,6 +1565,8 @@ msm_ioctl_vm_bind(struct drm_device *dev, void *data, struct drm_file *file)
 		sync_file = sync_file_create(job->fence);
 		if (!sync_file)
 			ret = -ENOMEM;
+		else
+			fd_stage(out_fence_fd, sync_file->file);
 	}
 
 	if (ret)
@@ -1593,15 +1595,9 @@ out:
 out_unlock:
 	mutex_unlock(&queue->lock);
 out_post_unlock:
-	if (ret) {
-		if (out_fence_fd >= 0)
-			put_unused_fd(out_fence_fd);
-		if (sync_file)
-			fput(sync_file->file);
-	} else if (sync_file) {
-		fd_install(out_fence_fd, sync_file->file);
-		args->fence_fd = out_fence_fd;
-	}
+	/* A staged sync file and its descriptor are dropped on return. */
+	if (!ret && sync_file)
+		args->fence_fd = fd_prepare_fd(out_fence_fd);
 
 	if (!IS_ERR_OR_NULL(job)) {
 		if (ret)
