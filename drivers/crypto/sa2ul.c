@@ -9,7 +9,6 @@
  *		Tero Kristo
  */
 #include <linux/bitfield.h>
-#include <linux/clk.h>
 #include <linux/dma-mapping.h>
 #include <linux/dmaengine.h>
 #include <linux/dmapool.h>
@@ -69,14 +68,6 @@
 #define SA_SW0_DEST_INFO_PRESENT	BIT(30)
 #define SA_SW2_EGRESS_LENGTH		0xFF000000
 #define SA_BASIC_HASH		0x10
-
-#define SHA256_DIGEST_WORDS    8
-/* Make 32-bit word from 4 bytes */
-#define SA_MK_U32(b0, b1, b2, b3) (((b0) << 24) | ((b1) << 16) | \
-				   ((b2) << 8) | (b3))
-
-/* size of SCCTL structure in bytes */
-#define SA_SCCTL_SZ 16
 
 /* Max Authentication tag size */
 #define SA_MAX_AUTH_TAG_SZ 64
@@ -199,14 +190,12 @@ struct sa_rx_data {
 
 /**
  * struct sa_req: SA request definition
- * @dev: device for the request
  * @size: total data to the xmitted via DMA
  * @enc_offset: offset of cipher data
  * @enc_size: data to be passed to cipher engine
  * @enc_iv: cipher IV
  * @auth_offset: offset of the authentication data
  * @auth_size: size of the authentication data
- * @auth_iv: authentication IV
  * @type: algorithm type for the request
  * @cmdl: command label pointer
  * @base: pointer to the base request
@@ -218,14 +207,12 @@ struct sa_rx_data {
  * @mdata_size: metadata size passed to DMA
  */
 struct sa_req {
-	struct device *dev;
 	u16 size;
 	u8 enc_offset;
 	u16 enc_size;
 	u8 *enc_iv;
 	u8 auth_offset;
 	u16 auth_size;
-	u8 *auth_iv;
 	u32 type;
 	u32 *cmdl;
 	struct crypto_async_request *base;

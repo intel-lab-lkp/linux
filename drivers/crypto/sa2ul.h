@@ -169,7 +169,6 @@ struct sa_match_data;
  * @scid_lock: secure context ID lock
  * @sc_id: Security Context ID
  * @ctx_bm: Bitmap to keep track of Security context ID's
- * @ctx: SA tfm context pointer
  * @dma_rx1: Pointer to DMA rx channel for sizes < 256 Bytes
  * @dma_rx2: Pointer to DMA rx channel for sizes > 256 Bytes
  * @dma_tx: Pointer to DMA TX channel
@@ -184,7 +183,6 @@ struct sa_crypto_data {
 	u16		sc_id;
 	unsigned long	ctx_bm[DIV_ROUND_UP(SA_MAX_NUM_CTX,
 				BITS_PER_LONG)];
-	struct sa_tfm_ctx	*ctx;
 	struct dma_chan		*dma_rx1;
 	struct dma_chan		*dma_rx2;
 	struct dma_chan		*dma_tx;
@@ -193,12 +191,10 @@ struct sa_crypto_data {
 /**
  * struct sa_cmdl_param_info: Command label parameters info
  * @index: Index of the parameter in the command label format
- * @offset: the offset of the parameter
  * @size: Size of the parameter
  */
 struct sa_cmdl_param_info {
 	u16	index;
-	u16	offset;
 	u16	size;
 };
 
@@ -208,7 +204,6 @@ struct sa_cmdl_param_info {
 /**
  * struct sa_cmdl_upd_info: Command label updation info
  * @flags: flags in command label
- * @submode: Encryption submodes
  * @enc_size: Size of first pass encryption size
  * @enc_offset: Encryption payload offset in the packet
  * @enc_iv: Encryption initialization vector for pass2
@@ -217,7 +212,6 @@ struct sa_cmdl_param_info {
  */
 struct sa_cmdl_upd_info {
 	u16	flags;
-	u16	submode;
 	struct sa_cmdl_param_info	enc_size;
 	struct sa_cmdl_param_info	enc_offset;
 	struct sa_cmdl_param_info	enc_iv;
@@ -262,7 +256,6 @@ struct sa_ctx_info {
  * @dev_data: struct sa_crypto_data pointer
  * @enc: struct sa_ctx_info for encryption
  * @dec: struct sa_ctx_info for decryption
- * @keylen: encrption/decryption keylength
  * @iv_idx: Initialization vector index
  * @key: encryption key
  * @fallback: SW fallback algorithm
@@ -271,7 +264,6 @@ struct sa_tfm_ctx {
 	struct sa_crypto_data *dev_data;
 	struct sa_ctx_info enc;
 	struct sa_ctx_info dec;
-	int keylen;
 	int iv_idx;
 	struct crypto_shash	*shash;
 	/* for fallback */
@@ -284,13 +276,9 @@ struct sa_tfm_ctx {
 
 /**
  * struct sa_sha_req_ctx: Structure used for sha request
- * @dev_data: struct sa_crypto_data pointer
- * @cmdl: Complete command label with psdata and epib included
  * @fallback_req: SW fallback request container
  */
 struct sa_sha_req_ctx {
-	struct sa_crypto_data	*dev_data;
-	u32			cmdl[SA_MAX_CMDL_WORDS + SA_PSDATA_CTX_WORDS];
 	struct ahash_request	fallback_req;
 };
 
