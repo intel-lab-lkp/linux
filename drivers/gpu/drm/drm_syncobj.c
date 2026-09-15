@@ -1462,9 +1462,9 @@ int
 drm_syncobj_eventfd_ioctl(struct drm_device *dev, void *data,
 			  struct drm_file *file_private)
 {
+	struct eventfd_ctx *ev_fd_ctx __free(eventfd) = NULL;
 	struct drm_syncobj_eventfd *args = data;
 	struct drm_syncobj *syncobj;
-	struct eventfd_ctx *ev_fd_ctx;
 	struct syncobj_eventfd_entry *entry;
 	int ret;
 
@@ -1490,10 +1490,10 @@ drm_syncobj_eventfd_ioctl(struct drm_device *dev, void *data,
 	entry = kzalloc_obj(*entry);
 	if (!entry) {
 		ret = -ENOMEM;
-		goto err_kzalloc;
+		goto err_fdget;
 	}
 	entry->syncobj = syncobj;
-	entry->ev_fd_ctx = ev_fd_ctx;
+	entry->ev_fd_ctx = no_free_ptr(ev_fd_ctx);
 	entry->point = args->point;
 	entry->flags = args->flags;
 
@@ -1502,8 +1502,6 @@ drm_syncobj_eventfd_ioctl(struct drm_device *dev, void *data,
 
 	return 0;
 
-err_kzalloc:
-	eventfd_ctx_put(ev_fd_ctx);
 err_fdget:
 	drm_syncobj_put(syncobj);
 	return ret;
