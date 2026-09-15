@@ -162,7 +162,7 @@ struct sa_match_data;
 
 /**
  * struct sa_crypto_data - Crypto driver instance data
- * @soc_data: Pointer to SoC specific data
+ * @match_data: Pointer to match data
  * @pdev: Platform device pointer
  * @sc_pool: security context pool
  * @dev: Device pointer
