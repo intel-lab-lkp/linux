@@ -202,6 +202,7 @@ static int __init asm9260_timer_init(struct device_node *np)
 	ret = clk_prepare_enable(clk);
 	if (ret) {
 		pr_err("Failed to enable clk!\n");
+		clk_put(clk);
 		return ret;
 	}
 
@@ -211,6 +212,7 @@ static int __init asm9260_timer_init(struct device_node *np)
 	if (ret) {
 		pr_err("Failed to setup irq!\n");
 		clk_disable_unprepare(clk);
+		clk_put(clk);
 		return ret;
 	}
 
