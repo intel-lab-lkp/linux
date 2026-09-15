@@ -329,17 +329,10 @@ int hva_hw_probe(struct platform_device *pdev, struct hva_dev *hva)
 		return PTR_ERR(hva->clk);
 	}
 
-	ret = clk_prepare(hva->clk);
-	if (ret < 0) {
-		dev_err(dev, "%s     failed to prepare clock\n", HVA_PREFIX);
-		hva->clk = ERR_PTR(-EINVAL);
-		return ret;
-	}
-
 	/* get status interruption resource */
 	ret  = platform_get_irq(pdev, 0);
 	if (ret < 0)
-		goto err_clk;
+		return ret;
 	hva->irq_its = ret;
 
 	ret = devm_request_threaded_irq(dev, hva->irq_its, hva_hw_its_interrupt,
@@ -349,14 +342,14 @@ int hva_hw_probe(struct platform_device *pdev, struct hva_dev *hva)
 	if (ret) {
 		dev_err(dev, "%s     failed to install status IRQ 0x%x\n",
 			HVA_PREFIX, hva->irq_its);
-		goto err_clk;
+		return ret;
 	}
 	disable_irq(hva->irq_its);
 
 	/* get error interruption resource */
 	ret = platform_get_irq(pdev, 1);
 	if (ret < 0)
-		goto err_clk;
+		return ret;
 	hva->irq_err = ret;
 
 	ret = devm_request_threaded_irq(dev, hva->irq_err, hva_hw_err_interrupt,
@@ -366,7 +359,7 @@ int hva_hw_probe(struct platform_device *pdev, struct hva_dev *hva)
 	if (ret) {
 		dev_err(dev, "%s     failed to install error IRQ 0x%x\n",
 			HVA_PREFIX, hva->irq_err);
-		goto err_clk;
+		return ret;
 	}
 	disable_irq(hva->irq_err);
 
@@ -405,8 +398,6 @@ err_pm:
 	pm_runtime_put(dev);
 err_disable:
 	pm_runtime_disable(dev);
-err_clk:
-	clk_unprepare(hva->clk);
 
 	return ret;
 }
