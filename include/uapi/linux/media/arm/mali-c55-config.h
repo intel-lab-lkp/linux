@@ -800,6 +800,7 @@ struct mali_c55_params_ccm {
 	__u16 coeffs[3][3];
 	__u16 gains[3];
 	__u16 offs[3];
+	__u16 __pad;
 };
 
 /**
