@@ -214,6 +214,20 @@ static int kvm_arm_default_max_vcpus(void)
 	return vgic_present ? kvm_vgic_get_max_vcpus() : KVM_MAX_VCPUS;
 }
 
+/*
+ * Fix the counter offset to 0 for Protected VMs and mark the
+ * offset flag. The user can't set the offset via KVM_ARM_SET_COUNTER_OFFSET.
+ */
+static void kvm_arch_fix_timer_offsets(struct kvm *kvm)
+{
+	if (!kvm_vm_is_protected(kvm))
+		return;
+
+	/* Fix the counter offset to 0 and mark the offset initialised */
+	kvm->arch.timer_data.poffset = kvm->arch.timer_data.voffset = 0;
+	set_bit(KVM_ARCH_FLAG_VM_COUNTER_OFFSET, &kvm->arch.flags);
+}
+
 /**
  * kvm_arch_init_vm - initializes a VM data structure
  * @kvm:	pointer to the KVM struct
@@ -267,6 +281,7 @@ int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
 
 	kvm_vgic_early_init(kvm);
 
+	kvm_arch_fix_timer_offsets(kvm);
 	kvm_timer_init_vm(kvm);
 
 	/* The maximum number of VCPUs is limited by the host's GIC model */

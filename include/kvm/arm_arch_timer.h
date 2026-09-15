@@ -176,8 +176,7 @@ static inline bool has_cntpoff(void)
 		if (__ctxt) {						\
 			struct arch_timer_offset *ato = &__ctxt->offset;\
 									\
-			if (ato->vm_offset)				\
-				off += *KERN_HYP_VA(ato->vm_offset);	\
+			off += *KERN_HYP_VA(ato->vm_offset);		\
 			if (ato->vcpu_offset)				\
 				off += *KERN_HYP_VA(ato->vcpu_offset);	\
 		}							\
