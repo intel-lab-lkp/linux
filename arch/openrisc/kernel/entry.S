@@ -701,10 +701,11 @@ _syscall_show_regs:
 #endif
 
 _syscall_check_trace_leave:
-	/* r30 is a callee-saved register so this should still hold the
-	 * _TIF_SYSCALL_TRACE flag from _syscall_check_trace_enter above...
+	/* Reload the flags, the syscall may have set TIF_FD_SLOTS.
 	 * _syscall_trace_leave expects syscall result to be in pt_regs->r11.
 	 */
+	l.lwz	r30,TI_FLAGS(r10)
+	l.andi	r30,r30,(_TIF_SYSCALL_TRACE|_TIF_FD_SLOTS)
 	l.sfne	r30,r0
 	l.bf	_syscall_trace_leave
 	 l.nop

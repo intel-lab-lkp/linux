@@ -13,6 +13,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/file.h>
 #include <linux/sched.h>
 #include <linux/sched/task_stack.h>
 #include <linux/string.h>
@@ -310,6 +311,9 @@ asmlinkage long do_syscall_trace_enter(struct pt_regs *regs)
 asmlinkage void do_syscall_trace_leave(struct pt_regs *regs)
 {
 	int step;
+
+	if (test_thread_flag(TIF_FD_SLOTS))
+		fd_slots_commit(regs);
 
 	audit_syscall_exit(regs);
 
