@@ -1476,11 +1476,6 @@ static int sa_sha_cra_init_alg(struct crypto_tfm *tfm, const char *alg_base)
 	return 0;
 }
 
-static int sa_sha_digest(struct ahash_request *req)
-{
-	return sa_sha_run(req);
-}
-
 static int sa_sha_init(struct ahash_request *req)
 {
 	struct crypto_ahash *tfm = crypto_ahash_reqtfm(req);
@@ -1997,7 +1992,7 @@ static struct sa_alg_tmpl sa_algs[] = {
 			.update			= sa_sha_update,
 			.final			= sa_sha_final,
 			.finup			= sa_sha_finup,
-			.digest			= sa_sha_digest,
+			.digest			= sa_sha_run,
 			.export			= sa_sha_export,
 			.import			= sa_sha_import,
 		},
@@ -2026,7 +2021,7 @@ static struct sa_alg_tmpl sa_algs[] = {
 			.update			= sa_sha_update,
 			.final			= sa_sha_final,
 			.finup			= sa_sha_finup,
-			.digest			= sa_sha_digest,
+			.digest			= sa_sha_run,
 			.export			= sa_sha_export,
 			.import			= sa_sha_import,
 		},
@@ -2055,7 +2050,7 @@ static struct sa_alg_tmpl sa_algs[] = {
 			.update			= sa_sha_update,
 			.final			= sa_sha_final,
 			.finup			= sa_sha_finup,
-			.digest			= sa_sha_digest,
+			.digest			= sa_sha_run,
 			.export			= sa_sha_export,
 			.import			= sa_sha_import,
 		},
