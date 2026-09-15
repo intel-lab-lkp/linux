@@ -220,10 +220,15 @@ int memory_notify(enum memory_block_state state, void *v)
 
 #if defined(CONFIG_MEMORY_FAILURE) && defined(CONFIG_MEMORY_HOTPLUG)
 static unsigned long memblk_nr_poison(struct memory_block *mem);
+static void memblk_nr_poison_init(struct memory_block *mem);
 #else
 static inline unsigned long memblk_nr_poison(struct memory_block *mem)
 {
 	return 0;
+}
+
+static inline void memblk_nr_poison_init(struct memory_block *mem)
+{
 }
 #endif
 
@@ -807,6 +812,7 @@ static int add_memory_block(unsigned long block_id, int nid, unsigned long state
 	mem->state = state;
 	mem->nid = nid;
 	INIT_LIST_HEAD(&mem->group_next);
+	memblk_nr_poison_init(mem);
 
 #ifndef CONFIG_NUMA
 	if (state == MEM_ONLINE)
@@ -1250,5 +1256,34 @@ void memblk_nr_poison_sub(unsigned long pfn, long i)
 static unsigned long memblk_nr_poison(struct memory_block *mem)
 {
 	return atomic_long_read(&mem->nr_hwpoison);
+}
+
+/*
+ * Frames a kexec handed over are flagged as they reach the allocator, long
+ * before this block exists, so memblk_nr_poison_inc() had nowhere to count
+ * them. Take them from the page flag instead.
+ */
+static void memblk_nr_poison_init(struct memory_block *mem)
+{
+	unsigned long pfn = section_nr_to_pfn(mem->start_section_nr);
+	unsigned long nr_pages = PAGES_PER_SECTION * sections_per_block;
+	unsigned long i, nr_poison = 0;
+
+	/* A hotplugged block is created before its pages are online. */
+	if (mem->state != MEM_ONLINE)
+		return;
+
+	if (!range_contains_poisoned_memory(PFN_PHYS(pfn),
+					    nr_pages << PAGE_SHIFT))
+		return;
+
+	for (i = 0; i < nr_pages; i++) {
+		struct page *page = pfn_to_online_page(pfn + i);
+
+		if (page && PageHWPoison(page))
+			nr_poison++;
+	}
+
+	atomic_long_set(&mem->nr_hwpoison, nr_poison);
 }
 #endif
