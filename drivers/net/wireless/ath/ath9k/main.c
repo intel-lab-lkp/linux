@@ -231,6 +231,17 @@ static bool ath_prepare_reset(struct ath_softc *sc)
 	return ret;
 }
 
+static void ath_restore_spectral_scan(struct ath_softc *sc, bool start)
+{
+	struct ath_common *common = ath9k_hw_common(sc->sc_ah);
+
+	if (!start || sc->cur_chan->offchannel || sc->hw->conf.radar_enabled ||
+	    sc->spec_priv.spectral_mode != SPECTRAL_BACKGROUND)
+		return;
+
+	ath9k_cmn_spectral_scan_trigger(common, &sc->spec_priv);
+}
+
 static bool ath_complete_reset(struct ath_softc *sc, bool start)
 {
 	struct ath_hw *ah = sc->sc_ah;
@@ -269,6 +280,7 @@ static bool ath_complete_reset(struct ath_softc *sc, bool start)
 		ath_restart_work(sc);
 		ath_txq_schedule_all(sc);
 	}
+	ath_restore_spectral_scan(sc, start);
 
 	sc->gtt_cnt = 0;
 
