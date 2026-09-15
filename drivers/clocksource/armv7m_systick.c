@@ -69,6 +69,9 @@ static int __init system_timer_of_register(struct device_node *np)
 
 	pr_info("ARM System timer initialized as clocksource\n");
 
+	if (clk)
+		clk_put(clk);
+
 	return 0;
 
 out_clk_disable:
