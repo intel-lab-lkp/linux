@@ -176,7 +176,6 @@ static void iavf_force_wb(struct iavf_vsi *vsi, struct iavf_q_vector *q_vector)
  **/
 void iavf_detect_recover_hung(struct iavf_vsi *vsi)
 {
-	struct iavf_ring *tx_ring = NULL;
 	struct net_device *netdev;
 	unsigned int i;
 	int packets;
@@ -194,29 +193,38 @@ void iavf_detect_recover_hung(struct iavf_vsi *vsi)
 	if (!netif_carrier_ok(netdev))
 		return;
 
-	for (i = 0; i < vsi->back->num_active_queues; i++) {
-		tx_ring = &vsi->back->tx_rings[i];
-		if (tx_ring && tx_ring->desc) {
-			/* If packet counter has not changed the queue is
-			 * likely stalled, so force an interrupt for this
-			 * queue.
-			 *
-			 * prev_pkt_ctr would be negative if there was no
-			 * pending work.
-			 */
-			packets = tx_ring->stats.packets & INT_MAX;
-			if (tx_ring->prev_pkt_ctr == packets) {
-				iavf_force_wb(vsi, tx_ring->q_vector);
-				continue;
-			}
+	/* tx_rings can be freed/reallocated by a concurrent reset */
+	if (!vsi->back->tx_rings)
+		return;
 
-			/* Memory barrier between read of packet count and call
-			 * to iavf_get_tx_pending()
-			 */
-			smp_rmb();
-			tx_ring->prev_pkt_ctr =
-			  iavf_get_tx_pending(tx_ring, true) ? packets : -1;
+	for (i = 0; i < vsi->back->num_active_queues; i++) {
+		struct iavf_ring *tx_ring = &vsi->back->tx_rings[i];
+		struct iavf_q_vector *q_vector;
+
+		/* read once, q_vector can be reassigned by a concurrent reset */
+		q_vector = READ_ONCE(tx_ring->q_vector);
+		if (!q_vector || !tx_ring->desc)
+			continue;
+
+		/* If packet counter has not changed the queue is
+		 * likely stalled, so force an interrupt for this
+		 * queue.
+		 *
+		 * prev_pkt_ctr would be negative if there was no
+		 * pending work.
+		 */
+		packets = tx_ring->stats.packets & INT_MAX;
+		if (tx_ring->prev_pkt_ctr == packets) {
+			iavf_force_wb(vsi, q_vector);
+			continue;
 		}
+
+		/* Memory barrier between read of packet count and call
+		 * to iavf_get_tx_pending()
+		 */
+		smp_rmb();
+		tx_ring->prev_pkt_ctr =
+		  iavf_get_tx_pending(tx_ring, true) ? packets : -1;
 	}
 }
 
