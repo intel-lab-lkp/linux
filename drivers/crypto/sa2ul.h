@@ -168,8 +168,6 @@ struct sa_match_data;
  * @sc_pool: security context pool
  * @dev: Device pointer
  * @scid_lock: secure context ID lock
- * @sc_id_start: starting index for SC ID
- * @sc_id_end: Ending index for SC ID
  * @sc_id: Security Context ID
  * @ctx_bm: Bitmap to keep track of Security context ID's
  * @ctx: SA tfm context pointer
@@ -185,8 +183,6 @@ struct sa_crypto_data {
 	struct device *dev;
 	spinlock_t	scid_lock; /* lock for SC-ID allocation */
 	/* Security context data */
-	u16		sc_id_start;
-	u16		sc_id_end;
 	u16		sc_id;
 	unsigned long	ctx_bm[DIV_ROUND_UP(SA_MAX_NUM_CTX,
 				BITS_PER_LONG)];

@@ -764,7 +764,7 @@ static void sa_free_ctx_info(struct sa_ctx_info *ctx,
 {
 	unsigned long bn;
 
-	bn = ctx->sc_id - data->sc_id_start;
+	bn = ctx->sc_id;
 	spin_lock(&data->scid_lock);
 	__clear_bit(bn, data->ctx_bm);
 	data->sc_id--;
@@ -788,7 +788,7 @@ static int sa_init_ctx_info(struct sa_ctx_info *ctx,
 	data->sc_id++;
 	spin_unlock(&data->scid_lock);
 
-	ctx->sc_id = (u16)(data->sc_id_start + bn);
+	ctx->sc_id = (u16)bn;
 
 	ctx->sc = dma_pool_alloc(data->sc_pool, GFP_KERNEL, &ctx->sc_phys);
 	if (!ctx->sc) {
