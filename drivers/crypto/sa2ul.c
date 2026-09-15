@@ -1050,6 +1050,8 @@ static int sa_run(struct sa_req *req)
 	struct sa_rx_data *rxd;
 	gfp_t gfp_flags;
 	u32 cmdl[SA_MAX_CMDL_WORDS];
+	u16 cmdl_size;
+	struct sa_cmdl_upd_info cmdl_upd_info;
 	struct sa_crypto_data *pdata = dev_get_drvdata(sa_k3_dev);
 	struct device *ddev;
 	struct dma_chan *dma_rx;
@@ -1095,9 +1097,12 @@ static int sa_run(struct sa_req *req)
 	ddev = dmaengine_get_dma_device(pdata->dma_tx);
 	rxd->ddev = ddev;
 
-	memcpy(cmdl, sa_ctx->cmdl, sa_ctx->cmdl_size);
+	/* Snapshot TFM context to local copies for isolation from setkey() */
+	cmdl_size = sa_ctx->cmdl_size;
+	cmdl_upd_info = sa_ctx->cmdl_upd_info;
+	memcpy(cmdl, sa_ctx->cmdl, cmdl_size);
 
-	sa_update_cmdl(req, cmdl, &sa_ctx->cmdl_upd_info);
+	sa_update_cmdl(req, cmdl, &cmdl_upd_info);
 
 
 	/*
@@ -1211,7 +1216,7 @@ static int sa_run(struct sa_req *req)
 	rxd->req = (void *)req->base;
 	rxd->enc = req->enc;
 	rxd->iv_idx = req->ctx->iv_idx;
-	rxd->enc_iv_size = sa_ctx->cmdl_upd_info.enc_iv.size;
+	rxd->enc_iv_size = cmdl_upd_info.enc_iv.size;
 	rxd->tx_in->callback = req->callback;
 	rxd->tx_in->callback_param = rxd;
 
@@ -1231,7 +1236,7 @@ static int sa_run(struct sa_req *req)
 	 */
 	mdptr = (u32 *)dmaengine_desc_get_metadata_ptr(tx_out, &pl, &ml);
 
-	req->mdata_size = sa_prepare_tx_desc(mdptr, sa_ctx->cmdl_size,
+	req->mdata_size = sa_prepare_tx_desc(mdptr, cmdl_size,
 					     cmdl, sizeof(sa_ctx->epib),
 					     sa_ctx->epib);
 
