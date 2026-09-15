@@ -14,7 +14,6 @@ struct gro_cell {
 int gro_cells_receive(struct gro_cells *gcells, struct sk_buff *skb)
 {
 	struct net_device *dev = skb->dev;
-	bool have_bh_lock = false;
 	struct gro_cell *cell;
 	int res;
 
@@ -26,32 +25,33 @@ int gro_cells_receive(struct gro_cells *gcells, struct sk_buff *skb)
 
 	if (!gcells->cells || skb_cloned(skb) || netif_elide_gro(dev)) {
 		res = netif_rx(skb);
-		goto unlock;
+		goto out_rcu;
 	}
 
 	local_lock_nested_bh(&gcells->cells->bh_lock);
-	have_bh_lock = true;
 	cell = this_cpu_ptr(gcells->cells);
 
-	if (skb_queue_len(&cell->napi_skbs) > READ_ONCE(net_hotdata.max_backlog)) {
-drop:
-		dev_core_stats_rx_dropped_inc(dev);
-		kfree_skb(skb);
-		res = NET_RX_DROP;
+	if (skb_queue_len(&cell->napi_skbs) > READ_ONCE(net_hotdata.max_backlog))
 		goto unlock;
-	}
 
 	__skb_queue_tail(&cell->napi_skbs, skb);
 	if (skb_queue_len(&cell->napi_skbs) == 1)
 		napi_schedule(&cell->napi);
 
+	local_unlock_nested_bh(&gcells->cells->bh_lock);
 	res = NET_RX_SUCCESS;
 
-unlock:
-	if (have_bh_lock)
-		local_unlock_nested_bh(&gcells->cells->bh_lock);
+out_rcu:
 	rcu_read_unlock();
 	return res;
+
+unlock:
+	local_unlock_nested_bh(&gcells->cells->bh_lock);
+drop:
+	dev_core_stats_rx_dropped_inc(dev);
+	kfree_skb(skb);
+	res = NET_RX_DROP;
+	goto out_rcu;
 }
 EXPORT_SYMBOL(gro_cells_receive);
 
