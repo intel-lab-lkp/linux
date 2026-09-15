@@ -18,6 +18,7 @@
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
+#include <linux/math64.h>
 #include <linux/mm.h>
 #include <linux/spinlock.h>
 #include <linux/unaligned.h>
@@ -1089,7 +1090,11 @@ EXPORT_SYMBOL_GPL(hid_validate_values);
 static int hid_calculate_multiplier(struct hid_device *hid,
 				     struct hid_field *multiplier)
 {
-	int m;
+	s64 logical_range;
+	s64 physical_range;
+	s64 quotient;
+	s64 scaled;
+	s64 m;
 	__s32 v = *multiplier->value;
 	__s32 lmin = multiplier->logical_minimum;
 	__s32 lmax = multiplier->logical_maximum;
@@ -1103,13 +1108,21 @@ static int hid_calculate_multiplier(struct hid_device *hid,
 	 * Resolution Multiplier of zero."
 	 * HID Usage Table, v1.12, Section 4.3.1, p31
 	 */
-	if (lmax - lmin == 0)
+	logical_range = (s64)lmax - lmin;
+	if (!logical_range)
 		return 1;
+
+	physical_range = (s64)pmax - pmin;
+	quotient = div64_s64((s64)v - lmin, logical_range);
 	/*
 	 * Handling the unit exponent is left as an exercise to whoever
 	 * finds a device where that exponent is not 0.
 	 */
-	m = ((v - lmin)/(lmax - lmin) * (pmax - pmin) + pmin);
+	if (check_mul_overflow(quotient, physical_range, &scaled) ||
+	    check_add_overflow(scaled, (s64)pmin, &m)) {
+		hid_warn(hid, "Resolution Multiplier calculation overflow\n");
+		return 1;
+	}
 	if (unlikely(multiplier->unit_exponent != 0)) {
 		hid_warn(hid,
 			 "unsupported Resolution Multiplier unit exponent %d\n",
@@ -1118,11 +1131,12 @@ static int hid_calculate_multiplier(struct hid_device *hid,
 
 	/* There are no devices with an effective multiplier > 255 */
 	if (unlikely(m == 0 || m > 255 || m < -255)) {
-		hid_warn(hid, "unsupported Resolution Multiplier %d\n", m);
+		hid_warn(hid, "unsupported Resolution Multiplier %lld\n",
+			 (long long)m);
 		m = 1;
 	}
 
-	return m;
+	return (int)m;
 }
 
 static void hid_apply_multiplier_to_field(struct hid_device *hid,
