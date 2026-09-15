@@ -11443,6 +11443,12 @@ static int i40e_set_num_rings_in_vsi(struct i40e_vsi *vsi)
 
 	case I40E_VSI_SRIOV:
 		vsi->alloc_queue_pairs = pf->num_vf_qps;
+		/* i40e_vsi_setup() limits queue pairs to num_lan_msix;
+		 * keep alloc_queue_pairs consistent with that limit.
+		 */
+		if (test_bit(I40E_FLAG_MSIX_ENA, pf->flags))
+			vsi->alloc_queue_pairs =
+				min_t(u16, pf->num_vf_qps, pf->num_lan_msix);
 		if (!vsi->num_tx_desc)
 			vsi->num_tx_desc = ALIGN(I40E_DEFAULT_NUM_DESCRIPTORS,
 						 I40E_REQ_DESCRIPTOR_MULTIPLE);
