@@ -74,12 +74,14 @@ static int __init st_clksrc_setup_clk(struct device_node *np)
 
 	if (clk_prepare_enable(clk)) {
 		pr_err("clksrc-st-lpc: Failed to enable LPC clock\n");
+		clk_put(clk);
 		return -EINVAL;
 	}
 
 	if (!clk_get_rate(clk)) {
 		pr_err("clksrc-st-lpc: Failed to get LPC clock rate\n");
 		clk_disable_unprepare(clk);
+		clk_put(clk);
 		return -EINVAL;
 	}
 
