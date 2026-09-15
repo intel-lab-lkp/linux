@@ -1947,7 +1947,12 @@ static void igb_setup_tx_mode(struct igb_adapter *adapter)
 			igb_config_tx_modes(adapter, i);
 		}
 	} else {
-		wr32(E1000_RXPBS, I210_RXPBSIZE_DEFAULT);
+		/* Preserve RXPBS.CFG_TS_EN so Rx timestamping settings
+		 * persist across link changes.
+		 */
+		val = rd32(E1000_RXPBS) & E1000_RXPBS_CFG_TS_EN;
+		wr32(E1000_RXPBS, val | I210_RXPBSIZE_DEFAULT);
+
 		wr32(E1000_TXPBS, I210_TXPBSIZE_DEFAULT);
 		wr32(E1000_I210_DTXMXPKTSZ, I210_DTXMXPKTSZ_DEFAULT);
 
