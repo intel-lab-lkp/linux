@@ -237,7 +237,7 @@ void wx_setup_vfmrqc_vf(struct wx *wx)
 
 	vfmrqc |= WX_VXMRQC_RSS_EN;
 
-	if (wx->num_rx_queues > 3)
+	if (wx->num_rx_queues >= 3)
 		vfmrqc |= WX_VXMRQC_RSS_HASH(2);
 	else if (wx->num_rx_queues > 1)
 		vfmrqc |= WX_VXMRQC_RSS_HASH(1);

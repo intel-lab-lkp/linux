@@ -72,6 +72,9 @@ static void txgbevf_set_num_queues(struct wx *wx)
 		queue = min_t(u16, wx->mac.max_rx_queues, wx->mac.max_tx_queues);
 		rss = min_t(u16, queue, rss);
 
+		if (wx->ring_feature[RING_F_RSS].limit)
+			rss = min_t(u16, rss, wx->ring_feature[RING_F_RSS].limit);
+
 		if (wx->vfinfo->vf_api >= wx_mbox_api_13) {
 			wx->num_rx_queues = rss;
 			wx->num_tx_queues = rss;

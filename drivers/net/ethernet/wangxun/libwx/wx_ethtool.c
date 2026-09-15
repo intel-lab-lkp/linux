@@ -564,6 +564,68 @@ int wx_set_channels(struct net_device *dev,
 }
 EXPORT_SYMBOL(wx_set_channels);
 
+static void wx_get_channels_vf(struct net_device *dev,
+			       struct ethtool_channels *ch)
+{
+	struct wx *wx = netdev_priv(dev);
+
+	/* report maximum channels */
+	ch->max_combined = wx->mac.max_rx_queues;
+
+	ch->max_other = 1;
+	ch->other_count = 1;
+
+	/* record current channels */
+	ch->combined_count = wx->num_rx_queues;
+}
+
+static int wx_set_channels_vf(struct net_device *dev,
+			      struct ethtool_channels *ch)
+{
+	struct wx *wx = netdev_priv(dev);
+	u16 rss_limit;
+	int ret;
+
+	rss_limit = wx->ring_feature[RING_F_RSS].limit;
+
+	/* verify other_count has not changed */
+	if (ch->other_count != 1)
+		return -EINVAL;
+
+	/* verify the number of channels does not exceed hardware limits */
+	if (ch->combined_count > wx->mac.max_rx_queues)
+		return -EINVAL;
+
+	/* if device is resetting, do nothing */
+	if (test_bit(WX_STATE_RESETTING, wx->state))
+		return -EBUSY;
+
+	wx->ring_feature[RING_F_RSS].limit = ch->combined_count;
+
+	if (netif_running(dev))
+		wxvf_close(dev);
+
+	wx_clear_interrupt_scheme(wx);
+
+	ret = wx_init_interrupt_scheme(wx);
+	if (ret)
+		goto err_out;
+
+	if (netif_running(dev)) {
+		ret = wxvf_open(dev);
+		if (ret)
+			goto err_close;
+	}
+
+	return 0;
+
+err_close:
+	wx_clear_interrupt_scheme(wx);
+err_out:
+	wx->ring_feature[RING_F_RSS].limit = rss_limit;
+	return ret;
+}
+
 u32 wx_rss_indir_size(struct net_device *netdev)
 {
 	struct wx *wx = netdev_priv(netdev);
@@ -852,6 +914,8 @@ static const struct ethtool_ops wx_ethtool_ops_vf = {
 	.set_coalesce		= wx_set_coalesce,
 	.get_ts_info		= ethtool_op_get_ts_info,
 	.get_link_ksettings	= wx_get_link_ksettings_vf,
+	.get_channels		= wx_get_channels_vf,
+	.set_channels		= wx_set_channels_vf,
 };
 
 void wx_set_ethtool_ops_vf(struct net_device *netdev)
