@@ -201,12 +201,12 @@ static int configure_protocol(struct ux500_msp *msp,
 
 	/* The code below should not be separated. */
 	temp_reg = readl(msp->registers + MSP_GCR) & ~TX_CLK_POL_RISING;
-	temp_reg |= MSP_TX_CLKPOL_BIT(!protdesc->tx_clk_pol ^
-					  config->bclk_inverted);
+	temp_reg |= MSP_TX_CLKPOL_BIT(!(protdesc->tx_clk_pol ^
+					  config->bclk_inverted));
 	writel(temp_reg, msp->registers + MSP_GCR);
 	temp_reg = readl(msp->registers + MSP_GCR) & ~RX_CLK_POL_RISING;
-	temp_reg |= MSP_RX_CLKPOL_BIT(protdesc->rx_clk_pol ^
-					  config->bclk_inverted);
+	temp_reg |= MSP_RX_CLKPOL_BIT(!!(protdesc->rx_clk_pol ^
+					  config->bclk_inverted));
 	writel(temp_reg, msp->registers + MSP_GCR);
 
 	return 0;
