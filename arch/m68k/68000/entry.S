@@ -89,6 +89,16 @@ ENTRY(system_call)
 	jbsr	%a0@
 	movel	%d0,%sp@(PT_OFF_D0)	/* save the return value*/
 
+	/* descriptors reserved by the syscall are committed in syscall_trace_leave */
+	getthreadinfo
+	btst	#(TIF_FD_SLOTS%8),%a2@(TINFO_FLAGS+(31-TIF_FD_SLOTS)/8)
+	jeq	ret_from_exception
+	subql	#4,%sp			/* dummy return address */
+	SAVE_SWITCH_STACK
+	jbsr	syscall_trace_leave
+	RESTORE_SWITCH_STACK
+	addql	#4,%sp
+
 ret_from_exception:
 	btst	#5,%sp@(PT_OFF_SR)	/* check if returning to kernel*/
 	jeq	Luser_return		/* if so, skip resched, signals*/

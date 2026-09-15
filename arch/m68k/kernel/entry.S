@@ -229,6 +229,8 @@ ret_from_syscall:
 syscall_exit_work:
 	btst	#5,%sp@(PT_OFF_SR)	| check if returning to kernel
 	bnes	1b			| if so, skip resched, signals
+	btst	#4,%a1@(TINFO_FLAGS+2)	| TIF_FD_SLOTS: commit descriptors
+	jne	do_trace_exit
 	lslw	#1,%d0
 	jcs	do_trace_exit
 	jmi	do_delayed_trace
