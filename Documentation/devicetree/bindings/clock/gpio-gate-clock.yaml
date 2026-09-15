@@ -11,7 +11,9 @@ maintainers:
 
 properties:
   compatible:
-    const: gpio-gate-clock
+    enum:
+      - gpio-gate-clock
+      - gpio-locked-fixed-clock
 
   clocks:
     maxItems: 1
@@ -23,10 +25,29 @@ properties:
     description: GPIO reference for enabling and disabling the clock.
     maxItems: 1
 
+  locked-gpios:
+    description: GPIO that indicates whether the clock is enabled or disabled.
+    maxItems: 1
+
 required:
   - compatible
   - '#clock-cells'
-  - enable-gpios
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          const: gpio-gate-clock
+    then:
+      required:
+        - enable-gpios
+  - if:
+      properties:
+        compatible:
+          const: gpio-locked-fixed-clock
+    then:
+      required:
+        - locked-gpios
 
 additionalProperties: false
 
@@ -39,4 +60,11 @@ examples:
         clocks = <&parentclk>;
         #clock-cells = <0>;
         enable-gpios = <&gpio 1 GPIO_ACTIVE_HIGH>;
+    };
+
+    clk_gpio_locked {
+        compatible = "gpio-locked-fixed-clock";
+        #clock-cells = <0>;
+        clocks = <&pll>;
+        locked-gpios = <&gpio0 4 GPIO_ACTIVE_HIGH>;
     };
