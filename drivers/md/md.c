@@ -86,13 +86,16 @@ static const struct kobj_type md_ktype;
 static DECLARE_WAIT_QUEUE_HEAD(resync_wait);
 
 /*
- * This workqueue is used for sync_work to register new sync_thread, and for
- * del_work to remove rdev, and for event_work that is only set by dm-raid.
+ * md_misc_wq runs sync_work (new sync_thread) and event_work (dm-raid).
+ * sync_work grabs reconfig_mutex, so this queue must not be flushed while
+ * holding reconfig_mutex, nor while holding major_names_lock (md_probe /
+ * md_alloc is called from blk_probe_dev with that lock held).
  *
- * Noted that sync_work will grab reconfig_mutex, hence never flush this
- * workqueue whith reconfig_mutex grabbed.
+ * md_del_wq runs only del_work (mddev_delayed_delete). md_alloc() flushes
+ * this queue to wait for a previous instance of the same device to go away.
  */
 static struct workqueue_struct *md_misc_wq;
+static struct workqueue_struct *md_del_wq;
 
 static int remove_and_add_spares(struct mddev *mddev,
 				 struct md_rdev *this);
@@ -651,7 +654,7 @@ static void __mddev_put(struct mddev *mddev)
 	 * Call queue_work inside the spinlock so that flush_workqueue() after
 	 * mddev_find will succeed in waiting for the work to be done.
 	 */
-	queue_work(md_misc_wq, &mddev->del_work);
+	queue_work(md_del_wq, &mddev->del_work);
 }
 
 static void mddev_put_locked(struct mddev *mddev)
@@ -6329,9 +6332,12 @@ struct mddev *md_alloc(dev_t dev, char *name)
 
 	/*
 	 * Wait for any previous instance of this device to be completely
-	 * removed (mddev_delayed_delete).
+	 * removed (mddev_delayed_delete). Do not flush md_misc_wq: it also
+	 * runs sync_work, which takes reconfig_mutex and can take
+	 * major_names_lock via md_import_device(). md_alloc() is called from
+	 * md_probe() while blk_probe_dev() already holds major_names_lock.
 	 */
-	flush_workqueue(md_misc_wq);
+	flush_workqueue(md_del_wq);
 
 	mutex_lock(&disks_mutex);
 	mddev = mddev_alloc(dev);
@@ -10765,6 +10771,10 @@ static int __init md_init(void)
 	if (!md_misc_wq)
 		goto err_misc_wq;
 
+	md_del_wq = alloc_workqueue("md_del", WQ_PERCPU, 0);
+	if (!md_del_wq)
+		goto err_del_wq;
+
 	ret = __register_blkdev(MD_MAJOR, "md", md_probe);
 	if (ret < 0)
 		goto err_md;
@@ -10783,6 +10793,8 @@ static int __init md_init(void)
 err_mdp:
 	unregister_blkdev(MD_MAJOR, "md");
 err_md:
+	destroy_workqueue(md_del_wq);
+err_del_wq:
 	destroy_workqueue(md_misc_wq);
 err_misc_wq:
 	md_llbitmap_exit();
@@ -11093,6 +11105,7 @@ static __exit void md_exit(void)
 	spin_unlock(&all_mddevs_lock);
 
 	destroy_workqueue(md_misc_wq);
+	destroy_workqueue(md_del_wq);
 	md_bitmap_exit();
 }
 
