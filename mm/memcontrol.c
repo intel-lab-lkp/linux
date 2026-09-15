@@ -2587,6 +2587,62 @@ static unsigned long calculate_high_delay(unsigned int nr_pages,
 	return penalty_jiffies * nr_pages / MEMCG_CHARGE_BATCH;
 }
 
+/**
+ * __mem_cgroup_large_folio_over_high - would a large folio escape memory.high?
+ * @mm: mm the folio would be charged against, may be NULL
+ * @gfp: gfp mask the folio would be allocated and charged with
+ *
+ * memory.high is enforced on return to userspace, or synchronously in
+ * try_charge_memcg() - but the synchronous path is gated on the charge gfp
+ * allowing blocking.  Large folios are charged with the THP allocation gfp,
+ * which does not allow blocking unless the allocation policy asks for direct
+ * compaction, so those charges escape throttling entirely: a fault loop that
+ * does not return to userspace inbetween - the populate loop of mlock() or
+ * MADV_POPULATE_*, any GUP-driven population - can grow usage from
+ * memory.high all the way up to memory.max with no reclaim and no delay.
+ *
+ * Above memory.high the cgroup is supposed to be under reclaim pressure, so
+ * refuse the large folio instead.  Callers fall back to order-0, which is
+ * charged with a blocking gfp and throttled as documented.
+ *
+ * This is a lockless snapshot of the counters; a stale result only costs one
+ * large folio either way.
+ *
+ * Callers should use mem_cgroup_large_folio_over_high(), which keeps the
+ * counter lookup off the fault path unless the task has actually charged
+ * above memory.high before.
+ *
+ * Return: %true if the caller should fall back to a smaller order.
+ */
+bool __mem_cgroup_large_folio_over_high(struct mm_struct *mm, gfp_t gfp)
+{
+	struct mem_cgroup *memcg, *iter;
+	bool over_high = false;
+
+	/*
+	 * A charge that can block is throttled by try_charge_memcg() itself,
+	 * there is no reason to give up the large folio for it.
+	 */
+	if (gfpflags_allow_blocking(gfp))
+		return false;
+
+	memcg = get_mem_cgroup_from_mm(mm);
+	if (!memcg)
+		return false;
+
+	for (iter = memcg; iter; iter = parent_mem_cgroup(iter)) {
+		if (page_counter_read(&iter->memory) >
+		    READ_ONCE(iter->memory.high)) {
+			over_high = true;
+			break;
+		}
+	}
+
+	mem_cgroup_put(memcg);
+
+	return over_high;
+}
+
 /*
  * Reclaims memory over the high limit. Called directly from
  * try_charge() (context permitting), as well as from the userland

@@ -440,8 +440,22 @@ static struct folio *__swap_cache_alloc(struct swap_cluster_info *ci,
 	 * Limit THP gfp. The limitation is a no-op for typical
 	 * GFP_HIGHUSER_MOVABLE but matters for shmem.
 	 */
-	if (order)
+	if (order) {
 		gfp = thp_shmem_limit_gfp_mask(vma_thp_gfp_mask(vma), gfp);
+
+		/*
+		 * This gfp may not allow blocking, in which case the charge
+		 * below escapes the memory.high throttling in
+		 * try_charge_memcg().  Above memory.high, have the caller
+		 * retry with a smaller order, down to order-0, which is
+		 * charged with the caller's blocking gfp and throttled as
+		 * documented.  Only fault context is throttled here; the
+		 * readahead and zswap writeback callers have no @vmf and are
+		 * not the ones to hold back.
+		 */
+		if (vmf && mem_cgroup_large_folio_over_high(vma->vm_mm, gfp))
+			return ERR_PTR(-ENOMEM);
+	}
 
 	if (mpol || !vmf) {
 		folio = folio_alloc_mpol(gfp, order, mpol, ilx, numa_node_id());

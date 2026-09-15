@@ -5321,6 +5321,13 @@ static struct folio *alloc_anon_folio(struct vm_fault *vmf)
 
 	/* Try allocating the highest of the remaining orders. */
 	gfp = vma_thp_gfp_mask(vma);
+
+	/* Same reasoning as in vma_alloc_anon_folio_pmd(). */
+	if (mem_cgroup_large_folio_over_high(vma->vm_mm, gfp)) {
+		count_mthp_stat(order, MTHP_STAT_ANON_FAULT_FALLBACK);
+		goto fallback;
+	}
+
 	while (orders) {
 		addr = ALIGN_DOWN(vmf->address, PAGE_SIZE << order);
 		folio = vma_alloc_folio(gfp, order, vma, addr);

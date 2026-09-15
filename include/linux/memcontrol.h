@@ -941,6 +941,33 @@ static inline void mem_cgroup_handle_over_high(gfp_t gfp_mask)
 		__mem_cgroup_handle_over_high(gfp_mask);
 }
 
+bool __mem_cgroup_large_folio_over_high(struct mm_struct *mm, gfp_t gfp);
+
+/**
+ * mem_cgroup_large_folio_over_high - would a large folio escape memory.high?
+ * @mm: mm the folio would be charged against, may be NULL
+ * @gfp: gfp mask the folio would be allocated and charged with
+ *
+ * See __mem_cgroup_large_folio_over_high().
+ *
+ * The task's over-high debt is more than a fast path here, it also scopes
+ * the check to the case that is broken.  The debt is settled and cleared on
+ * every return to userspace, so a task faulting large folios from a
+ * userspace loop always finds it zero and keeps getting them - memory.high
+ * is enforced for it on the way out.  Only a loop that stays in the kernel,
+ * where nothing throttles at all, accrues debt and reaches the counters.
+ *
+ * Return: %true if the caller should fall back to a smaller order.
+ */
+static inline bool mem_cgroup_large_folio_over_high(struct mm_struct *mm,
+						    gfp_t gfp)
+{
+	if (likely(!current->memcg_nr_pages_over_high))
+		return false;
+
+	return __mem_cgroup_large_folio_over_high(mm, gfp);
+}
+
 unsigned long mem_cgroup_get_max(struct mem_cgroup *memcg);
 
 void mem_cgroup_print_oom_context(struct mem_cgroup *memcg,
@@ -1388,6 +1415,12 @@ mem_cgroup_print_oom_meminfo(struct mem_cgroup *memcg)
 
 static inline void mem_cgroup_handle_over_high(gfp_t gfp_mask)
 {
+}
+
+static inline bool mem_cgroup_large_folio_over_high(struct mm_struct *mm,
+						    gfp_t gfp)
+{
+	return false;
 }
 
 static inline struct mem_cgroup *mem_cgroup_get_oom_group(

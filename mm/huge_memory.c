@@ -1355,6 +1355,18 @@ static struct folio *vma_alloc_anon_folio_pmd(struct vm_area_struct *vma,
 	const int order = HPAGE_PMD_ORDER;
 	struct folio *folio;
 
+	/*
+	 * A THP charged with a gfp that cannot block escapes the memory.high
+	 * throttling in try_charge_memcg().  Don't hand out one while the
+	 * cgroup is already above memory.high: the order-0 fallback is charged
+	 * with a blocking gfp and throttles as documented.
+	 */
+	if (mem_cgroup_large_folio_over_high(vma->vm_mm, gfp)) {
+		count_vm_event(THP_FAULT_FALLBACK);
+		count_mthp_stat(order, MTHP_STAT_ANON_FAULT_FALLBACK);
+		return NULL;
+	}
+
 	folio = vma_alloc_folio(gfp, order, vma, addr & HPAGE_PMD_MASK);
 
 	if (unlikely(!folio)) {
