@@ -3849,11 +3849,26 @@ static int spi_nor_probe(struct spi_mem *spimem)
 				   data ? data->nr_parts : 0);
 }
 
+/*
+ * Restore between operations, not during one. Removal and shutdown both run
+ * with MTD users still attached: a busy flash silently ignores the commands
+ * spi_nor_restore() sends, and a restore landing inside a read changes the
+ * chip's address width under the transfer.
+ */
+static void spi_nor_restore_locked(struct spi_nor *nor)
+{
+	if (spi_nor_prep_and_lock(nor))
+		return;
+
+	spi_nor_restore(nor);
+	spi_nor_unlock_and_unprep(nor);
+}
+
 static int spi_nor_remove(struct spi_mem *spimem)
 {
 	struct spi_nor *nor = spi_mem_get_drvdata(spimem);
 
-	spi_nor_restore(nor);
+	spi_nor_restore_locked(nor);
 
 	/* Clean up MTD stuff. */
 	return mtd_device_unregister(&nor->mtd);
@@ -3863,7 +3878,7 @@ static void spi_nor_shutdown(struct spi_mem *spimem)
 {
 	struct spi_nor *nor = spi_mem_get_drvdata(spimem);
 
-	spi_nor_restore(nor);
+	spi_nor_restore_locked(nor);
 }
 
 /*
