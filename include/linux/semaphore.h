@@ -8,6 +8,7 @@
 #ifndef __LINUX_SEMAPHORE_H
 #define __LINUX_SEMAPHORE_H
 
+#include <linux/compiler.h>
 #include <linux/list.h>
 #include <linux/spinlock.h>
 
@@ -44,7 +45,8 @@ struct semaphore {
  * context.
  */
 #define DEFINE_SEMAPHORE(_name, _n)	\
-	struct semaphore _name = __SEMAPHORE_INITIALIZER(_name, _n)
+	struct semaphore _name = __SEMAPHORE_INITIALIZER(_name, _n);	\
+	ASSERT_STATIC_STORAGE(_name)
 
 static inline void sema_init(struct semaphore *sem, int val)
 {
