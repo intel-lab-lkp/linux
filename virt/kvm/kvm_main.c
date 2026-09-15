@@ -2446,8 +2446,17 @@ bool kvm_range_has_memory_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 		return (kvm_get_memory_attributes(kvm, start) & mask) == attrs;
 
 	guard(rcu)();
-	if (!attrs)
-		return !xas_find(&xas, end - 1);
+	if (!attrs) {
+		/*
+		 * Skip reservations: a bare XA_ZERO_ENTRY carries no
+		 * attributes, but xas_find() returns it raw.
+		 */
+		do {
+			entry = xas_find(&xas, end - 1);
+		} while (xas_retry(&xas, entry));
+
+		return !entry;
+	}
 
 	for (index = start; index < end; index++) {
 		do {
