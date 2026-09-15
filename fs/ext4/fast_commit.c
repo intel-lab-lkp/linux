@@ -2314,13 +2314,13 @@ out:
 	return ret;
 }
 
-static void ext4_fc_set_bitmaps_and_counters(struct super_block *sb)
+static int ext4_fc_set_bitmaps_and_counters(struct super_block *sb)
 {
 	struct ext4_fc_replay_state *state;
 	struct inode *inode;
 	struct ext4_ext_path *path = NULL;
 	struct ext4_map_blocks map;
-	int i, ret, j;
+	int i, ret = 0, j;
 	ext4_lblk_t cur, end;
 
 	state = &EXT4_SB(sb)->s_fc_replay_state;
@@ -2348,13 +2348,14 @@ static void ext4_fc_set_bitmaps_and_counters(struct super_block *sb)
 
 			if (ret > 0) {
 				path = ext4_find_extent(inode, map.m_lblk, path, 0);
-				if (!IS_ERR(path)) {
-					for (j = 0; j < path->p_depth; j++)
-						ext4_mb_mark_bb(inode->i_sb,
-							path[j].p_block, 1, true);
-				} else {
+				if (IS_ERR(path)) {
+					ret = PTR_ERR(path);
 					path = NULL;
+					break;
 				}
+				for (j = 0; j < path->p_depth; j++)
+					ext4_mb_mark_bb(inode->i_sb,
+							path[j].p_block, 1, true);
 				cur += ret;
 				ext4_mb_mark_bb(inode->i_sb, map.m_pblk,
 							map.m_len, true);
@@ -2363,9 +2364,14 @@ static void ext4_fc_set_bitmaps_and_counters(struct super_block *sb)
 			}
 		}
 		iput(inode);
+		if (ret < 0)
+			goto out;
 	}
 
+	ret = 0;
+out:
 	ext4_free_ext_path(path);
+	return ret;
 }
 
 /*
@@ -2589,8 +2595,7 @@ static int ext4_fc_replay(journal_t *journal, struct buffer_head *bh,
 	}
 	if (!sbi->s_fc_replay_state.fc_replay_num_tags) {
 		ext4_debug("Replay stops\n");
-		ext4_fc_set_bitmaps_and_counters(sb);
-		return 0;
+		return ext4_fc_set_bitmaps_and_counters(sb);
 	}
 
 #ifdef CONFIG_EXT4_DEBUG
@@ -2609,8 +2614,7 @@ static int ext4_fc_replay(journal_t *journal, struct buffer_head *bh,
 		val = cur + EXT4_FC_TAG_BASE_LEN;
 
 		if (state->fc_replay_num_tags == 0) {
-			ret = JBD2_FC_REPLAY_STOP;
-			ext4_fc_set_bitmaps_and_counters(sb);
+			ret = ext4_fc_set_bitmaps_and_counters(sb);
 			break;
 		}
 
