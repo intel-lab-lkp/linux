@@ -216,6 +216,7 @@ void vxlan_vs_del_vnigrp(struct vxlan_dev *vxlan);
 int vxlan_vnilist_update_group(struct vxlan_dev *vxlan,
 			       union vxlan_addr *old_remote_ip,
 			       union vxlan_addr *new_remote_ip,
+			       u32 old_ifindex, u32 new_ifindex,
 			       struct netlink_ext_ack *extack);
 
 
