@@ -1010,6 +1010,8 @@ enum ufshcd_mcq_opr {
  * @is_powered: flag to check if HBA is powered
  * @shutting_down: flag to check if shutdown has been invoked
  * @host_sem: semaphore used to serialize concurrent contexts
+ * @wl_pm_mutex: serializes WLUN suspend/resume against other contexts that
+ *	change the link power state while the WLUN may be suspended
  * @eh_wq: Workqueue that eh_work works on
  * @eh_work: Worker to handle UFS errors that require s/w attention
  * @eeh_work: Worker to handle exception events
@@ -1176,6 +1178,7 @@ struct ufs_hba {
 	bool is_powered;
 	bool shutting_down;
 	struct semaphore host_sem;
+	struct mutex wl_pm_mutex;
 
 	/* Work Queues */
 	struct workqueue_struct *eh_wq;
