@@ -497,8 +497,11 @@ static struct qrtr_node *qrtr_node_lookup(unsigned int endpoint_id,
 	unsigned long flags;
 	unsigned long key = 0;
 
-	if (endpoint_id > QRTR_INDEX_HALF_UNSIGNED_MAX ||
-	    nid > QRTR_INDEX_HALF_UNSIGNED_MAX)
+	/* nid is chosen by device firmware and is generally a single
+	 * and small number. If firmware chooses otherwise, use it
+	 * modulo 65536 in 32-bit systems.
+	 */
+	if (endpoint_id > QRTR_INDEX_HALF_UNSIGNED_MAX)
 		return node;
 
 	key = ((unsigned long)(endpoint_id) << QRTR_INDEX_HALF_BITS) |
@@ -529,8 +532,11 @@ static int qrtr_node_assign(struct qrtr_node *node, unsigned int nid)
 	if (nid == QRTR_EP_NID_AUTO)
 		return 0;
 
-	if (node->ep->id > QRTR_INDEX_HALF_UNSIGNED_MAX ||
-	    nid > QRTR_INDEX_HALF_UNSIGNED_MAX)
+	/* nid is chosen by device firmware and is generally a single
+	 * and small number. If firmware chooses otherwise, use it
+	 * modulo 65536 in 32-bit systems.
+	 */
+	if (node->ep->id > QRTR_INDEX_HALF_UNSIGNED_MAX)
 		return -EINVAL;
 
 	spin_lock_irqsave(&qrtr_nodes_lock, flags);
