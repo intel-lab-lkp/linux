@@ -14,6 +14,7 @@
 #include <linux/array_size.h>
 #include <linux/bitfield.h>
 #include <linux/bits.h>
+#include <linux/cleanup.h>
 #include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/dmi.h>
@@ -646,9 +647,11 @@ static int amd_pmc_wa_irq1(struct amd_pmc_dev *pdev)
 	return 0;
 }
 
+DEFINE_FREE(rtc_class_close, struct rtc_device *, rtc_class_close(_T));
+
 static int amd_pmc_verify_czn_rtc(struct amd_pmc_dev *pdev, u32 *arg)
 {
-	struct rtc_device *rtc_device;
+	struct rtc_device *rtc_device __free(rtc_class_close) = NULL;
 	time64_t then, now, duration;
 	struct rtc_wkalrm alarm;
 	struct rtc_time tm;
