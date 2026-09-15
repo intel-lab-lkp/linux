@@ -184,6 +184,8 @@ struct sa_crypto_data {
 	struct dma_chan		*dma_rx2;
 	struct dma_chan		*dma_tx;
 	struct crypto_engine	*engine;
+	/* true if HW is SA3UL_CM (SA_REVISION major=3 minor=1) */
+	bool aes_cm;
 };
 
 /**

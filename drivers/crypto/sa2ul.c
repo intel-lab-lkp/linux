@@ -21,6 +21,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/slab.h>
+#include <linux/random.h>
 
 #include <crypto/aes.h>
 #include <crypto/authenc.h>
@@ -500,11 +501,22 @@ static int sa_prepare_iopads(struct algo_data *data, const u8 *key,
 	return ret;
 }
 
+/* SubWord using kernel AES S-box */
+static inline u32 sa_aes_subword(u32 w)
+{
+	return (u32)crypto_aes_sbox[w & 0xff] |
+	       ((u32)crypto_aes_sbox[(w >> 8) & 0xff] << 8) |
+	       ((u32)crypto_aes_sbox[(w >> 16) & 0xff] << 16) |
+	       ((u32)crypto_aes_sbox[(w >> 24) & 0xff] << 24);
+}
+
 /* Derive the inverse key used in AES-CBC decryption operation */
-static inline int sa_aes_inv_key(u8 *inv_key, const u8 *key, u16 key_sz)
+static inline int sa_aes_inv_key(u8 *inv_key, const u8 *key, u16 key_sz,
+				 bool aes_cm)
 {
 	struct crypto_aes_ctx ctx __cleanup(aes_zeroize_ctx);
 	int key_pos;
+	u32 round15[4];
 
 	if (aes_expandkey(&ctx, key, key_sz)) {
 		dev_err(sa_k3_dev, "%s: bad key len(%d)\n", __func__, key_sz);
@@ -515,6 +527,23 @@ static inline int sa_aes_inv_key(u8 *inv_key, const u8 *key, u16 key_sz)
 	if (key_sz == AES_KEYSIZE_192) {
 		ctx.key_enc[52] = ctx.key_enc[51] ^ ctx.key_enc[46];
 		ctx.key_enc[53] = ctx.key_enc[52] ^ ctx.key_enc[47];
+	}
+
+	/*
+	 * SA3UL CM hardware variant needs an extra round 15 for AES-256.
+	 * ctx.key_enc[] only holds 60 words (rounds 0-14), so round 15 is
+	 * computed into a local array instead of writing past its end.
+	 */
+	if (key_sz == AES_KEYSIZE_256 && aes_cm) {
+		round15[0] = sa_aes_subword(ctx.key_enc[59]) ^ ctx.key_enc[52];
+		round15[1] = round15[0] ^ ctx.key_enc[53];
+		round15[2] = round15[1] ^ ctx.key_enc[54];
+		round15[3] = round15[2] ^ ctx.key_enc[55];
+
+		/* Decrypt key = round14 || round15 */
+		memcpy(inv_key, &ctx.key_enc[56], 16);
+		memcpy(inv_key + 16, round15, 16);
+		return 0;
 	}
 
 	/* Based crypto_aes_expand_key logic */
@@ -556,7 +585,10 @@ static int sa_set_sc_enc(struct algo_data *ad, const u8 *key, u16 key_sz,
 
 	/* For AES-CBC decryption get the inverse key */
 	if (ad->inv_key && !enc) {
-		if (sa_aes_inv_key(&sc_buf[SC_ENC_KEY_OFFSET], key, key_sz))
+		struct sa_crypto_data *dev_data = dev_get_drvdata(sa_k3_dev);
+		bool aes_cm = dev_data ? dev_data->aes_cm : false;
+
+		if (sa_aes_inv_key(&sc_buf[SC_ENC_KEY_OFFSET], key, key_sz, aes_cm))
 			return -EINVAL;
 	/* For all other cases: key is used */
 	} else {
@@ -2459,6 +2491,63 @@ static const struct of_device_id of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, of_match);
 
+/*
+ * SA3UL_CM (aes_cm) requires a one-time TRNG-seeded AES-ECB priming
+ * operation after every power-up/reset before its side-channel
+ * countermeasures are considered active. This reuses the driver's own
+ * registered ecb(aes) transform with a throwaway random key/plaintext.
+ */
+static int sa_aes_cm_trng_prime(struct sa_crypto_data *dev_data)
+{
+	struct crypto_skcipher *tfm;
+	struct skcipher_request *req;
+	struct crypto_wait wait;
+	u8 key[AES_KEYSIZE_128];
+	u8 *pt;
+	struct scatterlist sg;
+	int ret;
+
+	pt = kmalloc(AES_BLOCK_SIZE, GFP_KERNEL);
+	if (!pt)
+		return -ENOMEM;
+
+	get_random_bytes(key, sizeof(key));
+	get_random_bytes(pt, AES_BLOCK_SIZE);
+
+	tfm = crypto_alloc_skcipher("ecb-aes-sa2ul", 0, 0);
+	if (IS_ERR(tfm)) {
+		ret = PTR_ERR(tfm);
+		goto out_zero;
+	}
+
+	req = skcipher_request_alloc(tfm, GFP_KERNEL);
+	if (!req) {
+		ret = -ENOMEM;
+		goto free_tfm;
+	}
+
+	ret = crypto_skcipher_setkey(tfm, key, sizeof(key));
+	if (ret)
+		goto free_req;
+
+	sg_init_one(&sg, pt, AES_BLOCK_SIZE);
+	crypto_init_wait(&wait);
+	skcipher_request_set_callback(req, CRYPTO_TFM_REQ_MAY_SLEEP,
+				      crypto_req_done, &wait);
+	skcipher_request_set_crypt(req, &sg, &sg, AES_BLOCK_SIZE, NULL);
+
+	ret = crypto_wait_req(crypto_skcipher_encrypt(req), &wait);
+
+free_req:
+	skcipher_request_free(req);
+free_tfm:
+	crypto_free_skcipher(tfm);
+out_zero:
+	memzero_explicit(key, sizeof(key));
+	kfree(pt);
+	return ret;
+}
+
 static int sa_ul_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -2499,6 +2588,7 @@ static int sa_ul_probe(struct platform_device *pdev)
 	major = FIELD_GET(SA_REVISION_MAJOR_MASK, rev);
 	minor = FIELD_GET(SA_REVISION_MINOR_MASK, rev);
 	dev_info(dev, "SAxUL_VERSION: %u.%u\n", major, minor);
+	dev_data->aes_cm = (major == 3 && minor == 1);
 
 	ret = sa_init_mem(dev_data);
 	if (ret)
@@ -2529,6 +2619,12 @@ static int sa_ul_probe(struct platform_device *pdev)
 		writel_relaxed(val, saul_base + SA_ENGINE_ENABLE_CONTROL);
 
 	sa_register_algos(dev_data);
+
+	if (dev_data->aes_cm) {
+		ret = sa_aes_cm_trng_prime(dev_data);
+		if (ret)
+			dev_warn(dev, "aes_cm TRNG priming failed: %d\n", ret);
+	}
 
 	ret = of_platform_populate(node, NULL, NULL, dev);
 	if (ret)
