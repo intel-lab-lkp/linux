@@ -1521,7 +1521,7 @@ int spi_nor_parse_sfdp(struct spi_nor *nor)
 {
 	const struct sfdp_parameter_header *param_header, *bfpt_header;
 	struct sfdp_parameter_header *param_headers = NULL;
-	struct spi_nor_flash_parameter params, params2;
+	struct spi_nor_flash_parameter __free(kfree) *params = NULL;
 	struct sfdp_header header;
 	struct device *dev = nor->dev;
 	struct sfdp *sfdp;
@@ -1533,7 +1533,9 @@ int spi_nor_parse_sfdp(struct spi_nor *nor)
 	 * Get a backup of all the parameter to roll back to in case of an
 	 * error.
 	 */
-	memcpy(&params, nor->params, sizeof(params));
+	params = kmemdup(nor->params, sizeof(*params), GFP_KERNEL);
+	if (!params)
+		return -ENOMEM;
 
 	/* Get the SFDP header. */
 	err = spi_nor_read_sfdp_dma_unsafe(nor, 0, sizeof(header), &header);
@@ -1653,6 +1655,8 @@ int spi_nor_parse_sfdp(struct spi_nor *nor)
 
 	/* Parse optional parameter tables. */
 	for (i = 0; i < header.nph; i++) {
+		struct spi_nor_flash_parameter params2;
+
 		memcpy(&params2, nor->params, sizeof(params2));
 		param_header = &param_headers[i];
 
@@ -1712,7 +1716,7 @@ free_sfdp:
 free_param_headers:
 	kfree(param_headers);
 	if (err)
-		memcpy(nor->params, &params, sizeof(*nor->params));
+		memcpy(nor->params, params, sizeof(*nor->params));
 
 	return err;
 }
