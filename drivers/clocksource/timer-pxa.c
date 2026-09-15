@@ -195,6 +195,7 @@ static int __init pxa_timer_dt_init(struct device_node *np)
 	ret = clk_prepare_enable(clk);
 	if (ret) {
 		pr_crit("Failed to prepare clock\n");
+		clk_put(clk);
 		return ret;
 	}
 
@@ -202,10 +203,14 @@ static int __init pxa_timer_dt_init(struct device_node *np)
 	irq = irq_of_parse_and_map(np, 0);
 	if (irq <= 0) {
 		pr_crit("%pOFn: unable to parse OS-timer0 irq\n", np);
+		clk_put(clk);
 		return -EINVAL;
 	}
 
-	return pxa_timer_common_init(irq, clk_get_rate(clk));
+	ret = pxa_timer_common_init(irq, clk_get_rate(clk));
+	clk_put(clk);
+
+	return ret;
 }
 TIMER_OF_DECLARE(pxa_timer, "marvell,pxa-timer", pxa_timer_dt_init);
 
