@@ -10,6 +10,7 @@
 #define _LINUX_EVENTFD_H
 
 #include <linux/wait.h>
+#include <linux/cleanup.h>
 #include <linux/err.h>
 #include <linux/percpu-defs.h>
 #include <linux/percpu.h>
@@ -88,6 +89,8 @@ static inline void eventfd_signal(struct eventfd_ctx *ctx)
 {
 	eventfd_signal_mask(ctx, 0);
 }
+
+DEFINE_FREE(eventfd, struct eventfd_ctx *, eventfd_ctx_put(_T))
 
 #endif /* _LINUX_EVENTFD_H */
 
