@@ -4,6 +4,7 @@
  */
 
 #include <linux/audit.h>
+#include <linux/file.h>
 #include <linux/ptrace.h>
 #include <linux/sched.h>
 #include <linux/uaccess.h>
@@ -141,6 +142,9 @@ int syscall_trace_enter(struct pt_regs *regs)
 void syscall_trace_leave(struct pt_regs *regs)
 {
 	int ptraced = current->ptrace;
+
+	if (test_thread_flag(TIF_FD_SLOTS))
+		fd_slots_commit(regs);
 
 	audit_syscall_exit(regs);
 
