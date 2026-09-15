@@ -17,6 +17,7 @@
 #include <linux/compiler.h>
 #include <linux/context_tracking.h>
 #include <linux/elf.h>
+#include <linux/file.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/sched/task_stack.h>
@@ -1363,6 +1364,9 @@ asmlinkage void syscall_trace_leave(struct pt_regs *regs)
 	 * user mode.
 	 */
 	user_exit();
+
+	if (test_thread_flag(TIF_FD_SLOTS))
+		fd_slots_commit(regs);
 
 	audit_syscall_exit(regs);
 
