@@ -215,8 +215,10 @@ static int __init mxs_timer_init(struct device_node *np)
 	}
 
 	ret = clk_prepare_enable(timer_clk);
-	if (ret)
+	if (ret) {
+		clk_put(timer_clk);
 		return ret;
+	}
 
 	/*
 	 * Initialize timers to a known state
@@ -256,18 +258,32 @@ static int __init mxs_timer_init(struct device_node *np)
 	/* init and register the timer to the framework */
 	ret = mxs_clocksource_init(timer_clk);
 	if (ret)
-		return ret;
+		goto err_clk_disable;
 
 	ret = mxs_clockevent_init(timer_clk);
 	if (ret)
-		return ret;
+		goto err_clk_disable;
 
 	/* Make irqs happen */
 	irq = irq_of_parse_and_map(np, 0);
-	if (irq <= 0)
-		return -EINVAL;
+	if (irq <= 0) {
+		ret = -EINVAL;
+		goto err_clk_disable;
+	}
 
-	return request_irq(irq, mxs_timer_interrupt, IRQF_TIMER | IRQF_IRQPOLL,
-			   "MXS Timer Tick", &mxs_clockevent_device);
+	ret = request_irq(irq, mxs_timer_interrupt, IRQF_TIMER | IRQF_IRQPOLL,
+			  "MXS Timer Tick", &mxs_clockevent_device);
+	if (ret)
+		goto err_clk_disable;
+
+	clk_put(timer_clk);
+
+	return 0;
+
+err_clk_disable:
+	clk_disable_unprepare(timer_clk);
+	clk_put(timer_clk);
+
+	return ret;
 }
 TIMER_OF_DECLARE(mxs, "fsl,timrot", mxs_timer_init);
