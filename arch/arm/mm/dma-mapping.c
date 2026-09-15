@@ -1470,21 +1470,8 @@ static const struct dma_map_ops iommu_ops = {
 	.sync_sg_for_device	= arm_iommu_sync_sg_for_device,
 };
 
-/**
- * arm_iommu_create_mapping
- * @dev: pointer to the client device (for IOMMU calls)
- * @base: start address of the valid IO address space
- * @size: maximum size of the valid IO address space
- *
- * Creates a mapping structure which holds information about used/unused
- * IO address ranges, which is required to perform memory allocation and
- * mapping with IOMMU aware functions.
- *
- * The client device need to be attached to the mapping with
- * arm_iommu_attach_device function.
- */
-struct dma_iommu_mapping *
-arm_iommu_create_mapping(struct device *dev, dma_addr_t base, u64 size)
+static struct dma_iommu_mapping *
+__arm_iommu_alloc_mapping(dma_addr_t base, u64 size)
 {
 	unsigned int bits = size >> PAGE_SHIFT;
 	unsigned int bitmap_size = BITS_TO_LONGS(bits) * sizeof(long);
@@ -1525,16 +1512,7 @@ arm_iommu_create_mapping(struct device *dev, dma_addr_t base, u64 size)
 
 	spin_lock_init(&mapping->lock);
 
-	mapping->domain = iommu_paging_domain_alloc(dev);
-	if (IS_ERR(mapping->domain)) {
-		err = PTR_ERR(mapping->domain);
-		goto err4;
-	}
-
-	kref_init(&mapping->kref);
 	return mapping;
-err4:
-	kfree(mapping->bitmaps[0]);
 err3:
 	kfree(mapping->bitmaps);
 err2:
@@ -1542,19 +1520,59 @@ err2:
 err:
 	return ERR_PTR(err);
 }
-EXPORT_SYMBOL_GPL(arm_iommu_create_mapping);
 
-static void release_iommu_mapping(struct kref *kref)
+static void __arm_iommu_free_mapping(struct dma_iommu_mapping *mapping)
 {
 	int i;
-	struct dma_iommu_mapping *mapping =
-		container_of(kref, struct dma_iommu_mapping, kref);
 
-	iommu_domain_free(mapping->domain);
 	for (i = 0; i < mapping->nr_bitmaps; i++)
 		kfree(mapping->bitmaps[i]);
 	kfree(mapping->bitmaps);
 	kfree(mapping);
+}
+
+/**
+ * arm_iommu_create_mapping
+ * @dev: pointer to the client device (for IOMMU calls)
+ * @base: start address of the valid IO address space
+ * @size: maximum size of the valid IO address space
+ *
+ * Creates a mapping structure which holds information about used/unused
+ * IO address ranges, which is required to perform memory allocation and
+ * mapping with IOMMU aware functions.
+ *
+ * The client device need to be attached to the mapping with
+ * arm_iommu_attach_device function.
+ */
+struct dma_iommu_mapping *
+arm_iommu_create_mapping(struct device *dev, dma_addr_t base, u64 size)
+{
+	struct dma_iommu_mapping *mapping;
+
+	mapping = __arm_iommu_alloc_mapping(base, size);
+	if (IS_ERR(mapping))
+		return mapping;
+
+	mapping->domain = iommu_paging_domain_alloc(dev);
+	if (IS_ERR(mapping->domain)) {
+		int err = PTR_ERR(mapping->domain);
+
+		__arm_iommu_free_mapping(mapping);
+		return ERR_PTR(err);
+	}
+
+	kref_init(&mapping->kref);
+	return mapping;
+}
+EXPORT_SYMBOL_GPL(arm_iommu_create_mapping);
+
+static void release_iommu_mapping(struct kref *kref)
+{
+	struct dma_iommu_mapping *mapping =
+		container_of(kref, struct dma_iommu_mapping, kref);
+
+	iommu_domain_free(mapping->domain);
+	__arm_iommu_free_mapping(mapping);
 }
 
 static int extend_iommu_mapping(struct dma_iommu_mapping *mapping)
