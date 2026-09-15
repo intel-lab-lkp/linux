@@ -828,11 +828,16 @@ static void erdma_destroy_mtt(struct erdma_dev *dev, struct erdma_mtt *mtt)
 
 static int get_mtt_entries(struct erdma_dev *dev, struct erdma_mem *mem,
 			   u64 start, u64 len, int access, u64 virt,
-			   unsigned long req_page_size, bool force_continuous)
+			   unsigned long req_page_size, bool force_continuous,
+			   bool is_cq)
 {
 	int ret = 0;
 
-	mem->umem = ib_umem_get_va(&dev->ibdev, start, len, access);
+	if (is_cq)
+		mem->umem = ib_umem_get_cq_buf_or_va(&dev->ibdev, NULL, start,
+						     len, access);
+	else
+		mem->umem = ib_umem_get_va(&dev->ibdev, start, len, access);
 	if (IS_ERR(mem->umem)) {
 		ret = PTR_ERR(mem->umem);
 		mem->umem = NULL;
@@ -951,7 +956,7 @@ static int init_user_qp(struct erdma_qp *qp, struct erdma_ucontext *uctx,
 
 	ret = get_mtt_entries(qp->dev, &qp->user_qp.sq_mem, va,
 			      qp->attrs.sq_size << SQEBB_SHIFT, 0, va,
-			      (SZ_1M - SZ_4K), true);
+			      (SZ_1M - SZ_4K), true, false);
 	if (ret)
 		return ret;
 
@@ -960,7 +965,7 @@ static int init_user_qp(struct erdma_qp *qp, struct erdma_ucontext *uctx,
 
 	ret = get_mtt_entries(qp->dev, &qp->user_qp.rq_mem, va + rq_offset,
 			      qp->attrs.rq_size << RQE_SHIFT, 0, va + rq_offset,
-			      (SZ_1M - SZ_4K), true);
+			      (SZ_1M - SZ_4K), true, false);
 	if (ret)
 		goto put_sq_mtt;
 
@@ -1250,7 +1255,7 @@ struct ib_mr *erdma_reg_user_mr(struct ib_pd *ibpd, u64 start, u64 len,
 		return ERR_PTR(-ENOMEM);
 
 	ret = get_mtt_entries(dev, &mr->mem, start, len, access, virt,
-			      SZ_2G - SZ_4K, false);
+			      SZ_2G - SZ_4K, false, false);
 	if (ret)
 		goto err_out_free;
 
@@ -1931,7 +1936,7 @@ static int erdma_init_user_cq(struct erdma_ucontext *ctx, struct erdma_cq *cq,
 
 	ret = get_mtt_entries(dev, &cq->user_cq.qbuf_mem, ureq->qbuf_va,
 			      ureq->qbuf_len, IB_ACCESS_LOCAL_WRITE,
-			      ureq->qbuf_va, SZ_64M - SZ_4K, true);
+			      ureq->qbuf_va, SZ_64M - SZ_4K, true, true);
 	if (ret)
 		return ret;
 
