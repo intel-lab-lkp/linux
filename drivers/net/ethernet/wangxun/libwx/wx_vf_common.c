@@ -17,7 +17,9 @@ int wxvf_suspend(struct device *dev_d)
 	struct wx *wx = pci_get_drvdata(pdev);
 
 	netif_device_detach(wx->netdev);
+	rtnl_lock();
 	wx_clear_interrupt_scheme(wx);
+	rtnl_unlock();
 	pci_disable_device(pdev);
 
 	return 0;
@@ -36,8 +38,10 @@ int wxvf_resume(struct device *dev_d)
 	struct wx *wx = pci_get_drvdata(pdev);
 
 	pci_set_master(pdev);
+	rtnl_lock();
 	wx_init_interrupt_scheme(wx);
 	netif_device_attach(wx->netdev);
+	rtnl_unlock();
 
 	return 0;
 }
@@ -205,7 +209,9 @@ static void wx_configure_rx_vf(struct wx *wx)
 	 * the Base and Length of the Rx Descriptor Ring
 	 */
 	for (i = 0; i < wx->num_rx_queues; i++) {
-		struct wx_ring *rx_ring = wx->rx_ring[i];
+		struct wx_ring *rx_ring =
+			rcu_dereference_protected(wx->rx_ring[i],
+						  lockdep_rtnl_is_held());
 #ifdef HAVE_SWIOTLB_SKIP_CPU_SYNC
 		wx_set_rx_buffer_len_vf(wx, rx_ring);
 #endif

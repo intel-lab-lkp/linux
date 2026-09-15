@@ -239,7 +239,9 @@ static void txgbe_disable_device(struct wx *wx)
 	/* disable all enabled rx queues */
 	for (i = 0; i < wx->num_rx_queues; i++)
 		/* this call also flushes the previous write */
-		wx_disable_rx_queue(wx, wx->rx_ring[i]);
+		wx_disable_rx_queue(wx,
+				    rcu_dereference_protected(wx->rx_ring[i],
+							      lockdep_rtnl_is_held()));
 
 	netif_tx_stop_all_queues(netdev);
 	netif_tx_disable(netdev);
@@ -275,7 +277,8 @@ static void txgbe_disable_device(struct wx *wx)
 
 	/* disable transmits in the hardware now that interrupts are off */
 	for (i = 0; i < wx->num_tx_queues; i++) {
-		u8 reg_idx = wx->tx_ring[i]->reg_idx;
+		u8 reg_idx = rcu_dereference_protected(wx->tx_ring[i],
+			lockdep_rtnl_is_held())->reg_idx;
 
 		wr32(wx, WX_PX_TR_CFG(reg_idx), WX_PX_TR_CFG_SWFLSH);
 	}
@@ -865,7 +868,9 @@ static int txgbe_probe(struct pci_dev *pdev,
 
 	txgbe_init_service(wx);
 
+	rtnl_lock();
 	err = wx_init_interrupt_scheme(wx);
+	rtnl_unlock();
 	if (err)
 		goto err_cancel_service;
 
