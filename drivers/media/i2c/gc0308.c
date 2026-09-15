@@ -1385,6 +1385,7 @@ static int gc0308_probe(struct i2c_client *client)
 		dev_err_probe(dev, ret, "failed to register v4l subdev\n");
 		goto fail_rpm;
 	}
+	pm_runtime_put_autosuspend(dev);
 
 	return 0;
 
