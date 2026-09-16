@@ -103,7 +103,10 @@ static u32 mv_chan_get_current_desc(struct mv_xor_chan *chan)
 static void mv_chan_set_next_descriptor(struct mv_xor_chan *chan,
 					u32 next_desc_addr)
 {
-	writel_relaxed(next_desc_addr, XOR_NEXT_DESC(chan));
+	/* writel drains descriptor writes to DRAM before the engine
+	 * is pointed at them
+	 */
+	writel(next_desc_addr, XOR_NEXT_DESC(chan));
 }
 
 static void mv_chan_unmask_interrupts(struct mv_xor_chan *chan)
@@ -409,6 +412,11 @@ mv_xor_tx_submit(struct dma_async_tx_descriptor *tx)
 
 		/* fix up the hardware chain */
 		mv_desc_set_next_desc(old_chain_tail, sw_desc->async_tx.phys);
+
+		/* make the new link visible to the engine before we read
+		 * the channel state, the device may fetch it at any point
+		 */
+		mb();
 
 		/* if the channel is not busy */
 		if (!mv_chan_is_busy(mv_chan)) {
