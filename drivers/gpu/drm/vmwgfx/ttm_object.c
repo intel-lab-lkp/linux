@@ -203,8 +203,10 @@ int ttm_base_object_init(struct ttm_object_file *tfile,
 	ret = idr_alloc(&tdev->idr, base, 1, 0, GFP_NOWAIT);
 	spin_unlock(&tdev->object_lock);
 	idr_preload_end();
-	if (ret < 0)
+	if (ret < 0) {
+		ttm_object_file_unref(&base->tfile);
 		return ret;
+	}
 
 	base->handle = ret;
 	ret = ttm_ref_object_add(tfile, base, NULL, false);
@@ -218,6 +220,7 @@ out_err1:
 	spin_lock(&tdev->object_lock);
 	idr_remove(&tdev->idr, base->handle);
 	spin_unlock(&tdev->object_lock);
+	ttm_object_file_unref(&base->tfile);
 	return ret;
 }
 
