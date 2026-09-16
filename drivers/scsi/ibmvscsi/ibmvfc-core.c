@@ -6994,6 +6994,8 @@ static void ibmvfc_remove(struct vio_dev *vdev)
 	ibmvfc_release_sub_crqs(vhost);
 	ibmvfc_release_crq_queue(vhost);
 
+	ibmvfc_nvme_unregister(vhost);
+
 	ibmvfc_free_mem(vhost);
 	spin_lock(&ibmvfc_driver_lock);
 	list_del(&vhost->queue);
