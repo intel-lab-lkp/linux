@@ -748,6 +748,7 @@ static int lt8912_parse_dt(struct lt8912 *lt)
 	return 0;
 
 err_free_host_node:
+	drm_bridge_put(lt->bridge.next_bridge);
 	of_node_put(port_node);
 	of_node_put(lt->host_node);
 	return ret;
@@ -755,6 +756,7 @@ err_free_host_node:
 
 static int lt8912_put_dt(struct lt8912 *lt)
 {
+	drm_bridge_put(lt->bridge.next_bridge);
 	of_node_put(lt->host_node);
 	return 0;
 }
