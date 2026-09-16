@@ -396,11 +396,13 @@ normal:
 			continue;
 
 		/* Remember where the last DATA chunk came from so we
-		 * know where to send the SACK.
+		 * know where to send the SACK.  As in sctp_assoc_bh_rcv(),
+		 * never register a dead (already removed) transport.
 		 */
-		if (asoc && sctp_chunk_is_data(chunk))
-			asoc->peer.last_data_from = chunk->transport;
-		else {
+		if (asoc && sctp_chunk_is_data(chunk)) {
+			if (!chunk->transport || !chunk->transport->dead)
+				asoc->peer.last_data_from = chunk->transport;
+		} else {
 			SCTP_INC_STATS(ep->base.net, SCTP_MIB_INCTRLCHUNKS);
 			if (asoc)
 				asoc->stats.ictrlchunks++;

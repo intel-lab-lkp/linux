@@ -1030,11 +1030,19 @@ normal:
 			continue;
 
 		/* Remember where the last DATA chunk came from so we
-		 * know where to send the SACK.
+		 * know where to send the SACK.  chunk->transport may have
+		 * been removed while processing an earlier chunk of this
+		 * same packet (e.g. a stale-cookie ERROR chunk queues
+		 * SCTP_CMD_DEL_NON_PRIMARY, which removes the non-primary
+		 * transport this packet arrived on), so never register a
+		 * dead transport; otherwise last_data_from would be left
+		 * dangling once the receive reference is dropped and the
+		 * transport is freed.
 		 */
-		if (sctp_chunk_is_data(chunk))
-			asoc->peer.last_data_from = chunk->transport;
-		else {
+		if (sctp_chunk_is_data(chunk)) {
+			if (!chunk->transport || !chunk->transport->dead)
+				asoc->peer.last_data_from = chunk->transport;
+		} else {
 			SCTP_INC_STATS(net, SCTP_MIB_INCTRLCHUNKS);
 			asoc->stats.ictrlchunks++;
 			if (chunk->chunk_hdr->type == SCTP_CID_SACK)
