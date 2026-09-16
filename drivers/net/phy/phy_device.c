@@ -1803,7 +1803,9 @@ static void phy_detach_internal(struct phy_device *phydev, bool notify_bus)
 		/* hwprov may technically be protected by ops lock but
 		 * not for devices with a phydev, see phy_link_topo_add_phy()
 		 */
-		hwprov = rtnl_dereference(dev->hwprov);
+		hwprov = rcu_dereference_protected(dev->hwprov,
+						   lockdep_rtnl_is_held() ||
+						   dev->reg_state == NETREG_UNINITIALIZED);
 		/* Disable timestamp if it is the one selected */
 		if (hwprov && hwprov->phydev == phydev) {
 			rcu_assign_pointer(dev->hwprov, NULL);
