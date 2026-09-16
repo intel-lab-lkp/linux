@@ -317,7 +317,8 @@ void amdgpu_dm_backlight_set_level(struct amdgpu_display_manager *dm,
 	} else {
 		/* power module uses millipercent */
 		get_brightness_range(caps, &min, &max);
-		brightness = DIV_ROUND_CLOSEST(brightness * 100, (max - min)) * 1000;
+		brightness = DIV_ROUND_CLOSEST_ULL((u64)(brightness - min) * 100000,
+						   max - min);
 		rc = mod_power_set_backlight_percent(dm->power_module, stream,
 						     brightness, 0, false);
 	}
