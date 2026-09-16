@@ -4499,6 +4499,23 @@ bool __folio_unqueue_deferred_split(struct folio *folio)
 	return unqueued;	/* useful for debug warnings */
 }
 
+static bool thp_can_be_underused(unsigned long nr_pages,
+				 unsigned long max_ptes_none)
+{
+	/*
+	 * The sysctl maximum means the user tolerates any number of zero-filled
+	 * pages, so nothing is ever underused.
+	 */
+	if (max_ptes_none == HPAGE_PMD_NR - 1)
+		return false;
+
+	/*
+	 * A folio no larger than the number of zero-filled pages the user
+	 * tolerates can never exceed it. It can never be underused.
+	 */
+	return nr_pages > max_ptes_none;
+}
+
 /* partially_mapped=false won't clear PG_partially_mapped folio flag */
 void deferred_split_folio(struct folio *folio, bool partially_mapped)
 {
@@ -4560,25 +4577,27 @@ static unsigned long deferred_split_count(struct shrinker *shrink,
 
 static bool thp_underused(struct folio *folio)
 {
-	int num_zero_pages = 0, num_filled_pages = 0;
-	int i;
+	const unsigned long max_ptes_none = khugepaged_max_ptes_none;
+	const unsigned long nr_pages = folio_nr_pages(folio);
+	unsigned long num_zero_pages = 0, num_filled_pages = 0;
+	unsigned long i;
 
-	if (khugepaged_max_ptes_none == HPAGE_PMD_NR - 1)
+	if (!thp_can_be_underused(nr_pages, max_ptes_none))
 		return false;
 
 	if (folio_contain_hwpoisoned_page(folio))
 		return false;
 
-	for (i = 0; i < folio_nr_pages(folio); i++) {
+	for (i = 0; i < nr_pages; i++) {
 		if (pages_identical(folio_page(folio, i), ZERO_PAGE(0))) {
-			if (++num_zero_pages > khugepaged_max_ptes_none)
+			if (++num_zero_pages > max_ptes_none)
 				return true;
 		} else {
 			/*
 			 * Another path for early exit once the number
 			 * of non-zero filled pages exceeds threshold.
 			 */
-			if (++num_filled_pages >= HPAGE_PMD_NR - khugepaged_max_ptes_none)
+			if (++num_filled_pages >= nr_pages - max_ptes_none)
 				return false;
 		}
 	}
