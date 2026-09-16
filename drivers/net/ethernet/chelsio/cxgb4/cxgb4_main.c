@@ -7116,6 +7116,9 @@ static void remove_one(struct pci_dev *pdev)
 
 		if (adapter->flags & CXGB4_FULL_INIT_DONE)
 			cxgb_down(adapter);
+		else if (adapter->sge.fw_evtq.desc ||
+			 adapter->sge.intrq.desc)
+			t4_free_sge_resources(adapter);
 
 		if (adapter->flags & CXGB4_USING_MSIX)
 			free_msix_info(adapter);
