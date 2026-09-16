@@ -359,8 +359,8 @@ static void xdbc_do_reset_debug_port(u32 id, u32 count)
 	for (i = id; i < (id + count); i++) {
 		portsc = ops_reg + 0x400 + i * 0x10;
 		val = readl(portsc);
-		if (!(val & PORT_CONNECT))
-			writel(val | PORT_RESET, portsc);
+		if (!(val & PORT_CCS))
+			writel(val | PORT_PR, portsc);
 	}
 }
 
