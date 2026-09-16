@@ -380,8 +380,12 @@ static int amd_core_hw_config(struct perf_event *event)
 	else if (event->attr.exclude_guest)
 		event->hw.config |= AMD64_EVENTSEL_HOSTONLY;
 
-	if ((x86_pmu.flags & PMU_FL_PAIR) && amd_is_pair_event_code(&event->hw))
-		event->hw.flags |= PERF_X86_EVENT_PAIR;
+	if (x86_pmu.flags & PMU_FL_PAIR) {
+		if ((event->hw.config & AMD64_EVENTSEL_EVENT) == AMD_MERGE_EVENT)
+			return -EINVAL;
+		if (amd_is_pair_event_code(&event->hw))
+			event->hw.flags |= PERF_X86_EVENT_PAIR;
+	}
 
 	if (has_branch_stack(event))
 		return static_call(amd_pmu_branch_hw_config)(event);
