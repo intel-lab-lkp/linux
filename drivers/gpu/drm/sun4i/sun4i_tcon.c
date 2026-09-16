@@ -808,6 +808,8 @@ static int sun4i_tcon_init_clocks(struct device *dev,
 		}
 	}
 
+	put_device(&pdev->dev);
+
 	return 0;
 }
 
