@@ -1297,6 +1297,7 @@ static int switchtec_dma_create(struct pci_dev *pdev)
 
 err_chans_release_exit:
 	switchtec_dma_chans_release(pdev, swdma_dev);
+	put_device(dma->dev);
 
 err_exit:
 	if (swdma_dev->chan_status_irq)
