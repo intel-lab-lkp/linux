@@ -440,6 +440,29 @@ void rproc_remove_rvdev(struct rproc_vdev *rvdev)
 	if (rvdev)
 		list_del(&rvdev->node);
 }
+
+static struct fwnode_handle *rproc_get_vdev_fwnode(struct device *dev, int idx)
+{
+	struct fwnode_handle *group, *child;
+	u32 reg;
+	int ret;
+
+	group = device_get_named_child_node(dev, "virtio");
+
+	fwnode_for_each_child_node(group, child) {
+		ret = fwnode_property_read_u32(child, "reg", &reg);
+		if (ret)
+			continue;
+
+		if (idx == reg)
+			break;
+	}
+
+	fwnode_handle_put(group);
+
+	return child;
+}
+
 /**
  * rproc_handle_vdev() - handle a vdev fw resource
  * @rproc: the remote processor
@@ -475,6 +498,7 @@ static int rproc_handle_vdev(struct rproc *rproc, void *ptr,
 	struct device *dev = &rproc->dev;
 	size_t rsc_size;
 	struct rproc_vdev_data rvdev_data;
+	struct platform_device_info pdev_info;
 	struct platform_device *pdev;
 
 	/* make sure resource isn't truncated */
@@ -504,8 +528,16 @@ static int rproc_handle_vdev(struct rproc *rproc, void *ptr,
 	 * as device id, then we get duplication in sysfs, so need to use
 	 * PLATFORM_DEVID_AUTO to auto select device id.
 	 */
-	pdev = platform_device_register_data(dev, "rproc-virtio", PLATFORM_DEVID_AUTO, &rvdev_data,
-					     sizeof(rvdev_data));
+	memset(&pdev_info, 0, sizeof(pdev_info));
+	pdev_info.parent = dev;
+	pdev_info.fwnode = rproc_get_vdev_fwnode(dev->parent, rvdev_data.index);
+	pdev_info.of_node_reused = true;
+	pdev_info.name = "rproc-virtio";
+	pdev_info.id = PLATFORM_DEVID_AUTO;
+	pdev_info.data = &rvdev_data;
+	pdev_info.size_data = sizeof(rvdev_data);
+
+	pdev = platform_device_register_full(&pdev_info);
 	if (IS_ERR(pdev)) {
 		dev_err(dev, "failed to create rproc-virtio device\n");
 		return PTR_ERR(pdev);
