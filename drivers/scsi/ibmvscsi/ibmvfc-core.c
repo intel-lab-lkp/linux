@@ -5155,7 +5155,8 @@ static void ibmvfc_discover_targets_done(struct ibmvfc_event *evt)
 					      max_targets);
 		ibmvfc_dbg(vhost, "%d %s targets found\n", channels->num_targets,
 			   proto_type[channels->protocol]);
-		ibmvfc_set_host_action(vhost, IBMVFC_HOST_ACTION_ALLOC_TGTS);
+		if (!--vhost->pending_disc)
+			ibmvfc_set_host_action(vhost, IBMVFC_HOST_ACTION_ALLOC_TGTS);
 		break;
 	case IBMVFC_MAD_FAILED:
 		level += ibmvfc_retry_host_init(vhost);
@@ -5219,6 +5220,7 @@ static void ibmvfc_discover_targets(struct ibmvfc_host *vhost)
 	}
 
 	ibmvfc_set_host_action(vhost, IBMVFC_HOST_ACTION_INIT_WAIT);
+	vhost->pending_disc = 1;
 
 	if (!ibmvfc_send_event(evt, vhost, default_timeout))
 		ibmvfc_dbg(vhost, "Sent discover SCSI targets\n");
@@ -5234,6 +5236,8 @@ static void ibmvfc_discover_targets(struct ibmvfc_host *vhost)
 		ibmvfc_hard_reset_host(vhost);
 		return;
 	}
+
+	vhost->pending_disc++;
 
 	if (!ibmvfc_send_event(evt, vhost, default_timeout))
 		ibmvfc_dbg(vhost, "Sent discover NVMe targets\n");
