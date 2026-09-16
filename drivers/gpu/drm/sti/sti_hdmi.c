@@ -1466,7 +1466,11 @@ static int sti_hdmi_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, hdmi);
 
 	drm_bridge_add(&hdmi->bridge);
-	return component_add(&pdev->dev, &sti_hdmi_ops);
+	ret = component_add(&pdev->dev, &sti_hdmi_ops);
+	if (ret)
+		goto release_adapter;
+
+	return 0;
 
  release_adapter:
 	i2c_put_adapter(hdmi->ddc_adapt);
