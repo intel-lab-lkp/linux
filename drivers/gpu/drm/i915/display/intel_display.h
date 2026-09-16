@@ -525,5 +525,7 @@ bool intel_scanout_needs_vtd_wa(struct intel_display *display);
 int intel_crtc_num_joined_pipes(const struct intel_crtc_state *crtc_state);
 void intel_display_compute_link_m_n(u32 *link_m, u32 *link_n,
 				    int pixel_clock, int link_symbol_clock);
+bool intel_display_can_bypass_m_n_limit(struct intel_display *display,
+					int m_n_ratio, enum pipe pipe);
 
 #endif
