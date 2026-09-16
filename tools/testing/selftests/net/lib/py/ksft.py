@@ -21,6 +21,7 @@ KSFT_DISRUPTIVE = True
 KSFT_METRICS = None
 KSFT_METRICS_START = None
 KSFT_METRIC_AGGREGATES = None
+KSFT_METRIC_REPORTING = 0
 KSFT_METRICS_LOCK = threading.Lock()
 
 
@@ -97,6 +98,14 @@ def ksft_pr(*objs, **kwargs):
     text = sep.join(str(obj) for obj in objs)
     prefixed = f"\n{pfx} ".join(text.split('\n'))
     print(pfx, prefixed, **kwargs)
+
+
+def ksft_metric_reporting(enable):
+    """Enter or leave a scope which enables benchmark metric producers."""
+    global KSFT_METRIC_REPORTING
+
+    with KSFT_METRICS_LOCK:
+        KSFT_METRIC_REPORTING += 1 if enable else -1
 
 
 def ksft_metric_aggregate(name, summarize="total", *, aggregation=None,
@@ -219,6 +228,7 @@ def ksft_metric(name, value, *, shape, **labels):
 
 def _ksft_flush_metrics():
     global KSFT_METRICS, KSFT_METRICS_START, KSFT_METRIC_AGGREGATES
+    global KSFT_METRIC_REPORTING
 
     with KSFT_METRICS_LOCK:
         metrics = KSFT_METRICS
@@ -226,6 +236,7 @@ def _ksft_flush_metrics():
         KSFT_METRICS = None
         KSFT_METRICS_START = None
         KSFT_METRIC_AGGREGATES = None
+        KSFT_METRIC_REPORTING = 0
 
     metric_names = {metric["name"] for metric in metrics or []}
     for name, metadata in (aggregates or {}).items():
@@ -549,7 +560,7 @@ def ksft_run(cases=None, globs=None, case_pfx=None, args=()):
     totals = {"pass": 0, "fail": 0, "skip": 0, "xfail": 0}
 
     global KSFT_RESULT, KSFT_METRICS, KSFT_METRICS_START
-    global KSFT_METRIC_AGGREGATES
+    global KSFT_METRIC_AGGREGATES, KSFT_METRIC_REPORTING
     if KSFT_RESULT is not None:
         raise RuntimeError("ksft_run() can't be called multiple times.")
 
@@ -564,6 +575,7 @@ def ksft_run(cases=None, globs=None, case_pfx=None, args=()):
             KSFT_METRICS = []
             KSFT_METRICS_START = time.monotonic()
             KSFT_METRIC_AGGREGATES = {}
+            KSFT_METRIC_REPORTING = 0
         cnt += 1
         comment = ""
         cnt_key = ""
