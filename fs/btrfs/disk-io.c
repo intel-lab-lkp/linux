@@ -125,14 +125,6 @@ int btrfs_buffer_uptodate(struct extent_buffer *eb, u64 parent_transid,
 		return 1;
 	}
 
-	if (btrfs_header_generation(eb) != parent_transid) {
-		btrfs_err_rl(eb->fs_info,
-"parent transid verify failed on logical %llu mirror %u wanted %llu found %llu",
-			eb->start, eb->read_mirror,
-			parent_transid, btrfs_header_generation(eb));
-		clear_extent_buffer_uptodate(eb);
-		return 0;
-	}
 	return 1;
 }
 
