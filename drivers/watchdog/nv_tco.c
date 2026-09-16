@@ -324,14 +324,14 @@ static unsigned char nv_tco_getdevice(void)
 	if (val == 0x0001 || val == 0x0000) {
 		/* Something is wrong here, bar isn't setup */
 		pr_err("failed to get tcobase address\n");
-		return 0;
+		goto err;
 	}
 	val &= 0xff00;
 	tcobase = val + 0x40;
 
 	if (!request_region(tcobase, 0x10, "NV TCO")) {
 		pr_err("I/O address 0x%04x already in use\n", tcobase);
-		return 0;
+		goto err;
 	}
 
 	/* Set a reasonable heartbeat before we stop the timer */
@@ -373,6 +373,9 @@ static unsigned char nv_tco_getdevice(void)
 	return 1;
 out:
 	release_region(tcobase, 0x10);
+err:
+	pci_dev_put(tco_pci);
+	tco_pci = NULL;
 	return 0;
 }
 
@@ -443,6 +446,7 @@ static void nv_tco_cleanup(void)
 	/* Deregister */
 	misc_deregister(&nv_tco_miscdev);
 	release_region(tcobase, 0x10);
+	pci_dev_put(tco_pci);
 }
 
 static void nv_tco_remove(struct platform_device *dev)
