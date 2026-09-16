@@ -152,6 +152,8 @@ int die_get_scopes(Dwarf_Die *cu_die, Dwarf_Addr pc, Dwarf_Die **scopes);
 struct die_var_type {
 	struct die_var_type *next;
 	u64 die_off;
+	int die_tag;
+	bool from_alt;	/* die_off is relative to the alt (dwz) file */
 	u64 addr;
 	u64 end;        /* end address of location range */
 	int reg;
@@ -182,6 +184,37 @@ Dwarf_Die *die_find_variable_by_addr(Dwarf_Die *sc_die, Dwarf_Addr addr,
 
 /* Save all variables and parameters in this scope */
 void die_collect_vars(Dwarf_Die *sc_die, struct die_var_type **var_types);
+
+/*
+ * Get the type DIE saved by die_collect_vars()/die_collect_global_vars().
+ *
+ * The offsets those save are the dwarf_dieoffset() of the type DIE, which is
+ * relative to the debug file that DIE lives in: the dwz common file, the alt
+ * file in libdw terms, for the types shared by more than one CU, the main
+ * file for the rest.  Resolving an alt file offset in the main file does not
+ * fail: dwarf_offdie() parses whatever is at that offset there, and an offset
+ * that is a CU header in the main file reads back as a typedef whose
+ * DW_AT_type refers to itself, which is what hung 'perf report -s type' on
+ * the dwz compressed debug info of zlib-ng (libz.so.1).
+ *
+ * So @from_alt, recorded when the offset was saved, says which of the two
+ * files to resolve it in.  It is not inferred from the DIE contents: dwz
+ * encodes references into the common file as DW_FORM_GNU_ref_alt, so
+ * elfutils resolves them into the alt Dwarf and the CU of the type DIE then
+ * belongs to that other file, which die_same_file() compares exactly.
+ *
+ * There is deliberately no fallback to the other file when the offset does
+ * not resolve: that fallback is the misparse above.
+ *
+ * @die_tag is then only a sanity check: the offset is of a DIE that had this
+ * tag when it was saved, so a mismatch means the debug info changed under us,
+ * or is broken, and giving up on the type is the right answer.
+ */
+Dwarf_Die *die_get_type_die(Dwarf *dbg, u64 die_off, int die_tag, bool from_alt,
+			    Dwarf_Die *die_mem);
+
+/* Whether two DIEs live in the same debug file */
+bool die_same_file(Dwarf_Die *die_a, Dwarf_Die *die_b);
 
 /* Save all global variables in this CU */
 void die_collect_global_vars(Dwarf_Die *cu_die, struct die_var_type **var_types);
