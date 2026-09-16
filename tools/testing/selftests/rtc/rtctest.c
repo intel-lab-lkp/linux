@@ -49,7 +49,7 @@ TEST_F(rtc, date_read) {
 	struct rtc_time rtc_tm;
 
 	if (self->fd == -1 && errno == ENOENT)
-		SKIP(return, "Skipping test since %s does not exist", rtc_file);
+		SKIP(return, "%s does not exist", rtc_file);
 	ASSERT_NE(-1, self->fd);
 
 	/* Read the RTC time/date */
@@ -118,7 +118,7 @@ TEST_F_TIMEOUT(rtc, date_read_loop, READ_LOOP_DURATION_SEC + 2) {
 	time_t start_rtc_read, prev_rtc_read;
 
 	if (self->fd == -1 && errno == ENOENT)
-		SKIP(return, "Skipping test since %s does not exist", rtc_file);
+		SKIP(return, "%s does not exist", rtc_file);
 	ASSERT_NE(-1, self->fd);
 
 	TH_LOG("Continuously reading RTC time for %ds (with %dms breaks after every read).",
@@ -156,7 +156,7 @@ TEST_F_TIMEOUT(rtc, uie_read, NUM_UIE + 2) {
 	unsigned long data;
 
 	if (self->fd == -1 && errno == ENOENT)
-		SKIP(return, "Skipping test since %s does not exist", rtc_file);
+		SKIP(return, "%s does not exist", rtc_file);
 	ASSERT_NE(-1, self->fd);
 
 	/* Turn on update interrupts */
@@ -185,7 +185,7 @@ TEST_F(rtc, uie_select) {
 	unsigned long data;
 
 	if (self->fd == -1 && errno == ENOENT)
-		SKIP(return, "Skipping test since %s does not exist", rtc_file);
+		SKIP(return, "%s does not exist", rtc_file);
 	ASSERT_NE(-1, self->fd);
 
 	/* Turn on update interrupts */
@@ -229,14 +229,14 @@ TEST_F(rtc, alarm_alm_set) {
 	enum rtc_alarm_state alarm_state = RTC_ALARM_UNKNOWN;
 
 	if (self->fd == -1 && errno == ENOENT)
-		SKIP(return, "Skipping test since %s does not exist", rtc_file);
+		SKIP(return, "%s does not exist", rtc_file);
 	ASSERT_NE(-1, self->fd);
 
 	alarm_state = get_rtc_alarm_state(self->fd, 1);
 	if (alarm_state == RTC_ALARM_DISABLED)
-		SKIP(return, "Skipping test since alarms are not supported.");
+		SKIP(return, "alarms are not supported.");
 	if (alarm_state == RTC_ALARM_RES_MINUTE)
-		SKIP(return, "Skipping test since alarms has only minute granularity.");
+		SKIP(return, "alarms has only minute granularity.");
 
 	rc = ioctl(self->fd, RTC_RD_TIME, &tm);
 	ASSERT_NE(-1, rc);
@@ -299,14 +299,14 @@ TEST_F(rtc, alarm_wkalm_set) {
 	enum rtc_alarm_state alarm_state = RTC_ALARM_UNKNOWN;
 
 	if (self->fd == -1 && errno == ENOENT)
-		SKIP(return, "Skipping test since %s does not exist", rtc_file);
+		SKIP(return, "%s does not exist", rtc_file);
 	ASSERT_NE(-1, self->fd);
 
 	alarm_state = get_rtc_alarm_state(self->fd, 1);
 	if (alarm_state == RTC_ALARM_DISABLED)
-		SKIP(return, "Skipping test since alarms are not supported.");
+		SKIP(return, "alarms are not supported.");
 	if (alarm_state == RTC_ALARM_RES_MINUTE)
-		SKIP(return, "Skipping test since alarms has only minute granularity.");
+		SKIP(return, "alarms has only minute granularity.");
 
 	rc = ioctl(self->fd, RTC_RD_TIME, &alarm.time);
 	ASSERT_NE(-1, rc);
@@ -363,12 +363,12 @@ TEST_F_TIMEOUT(rtc, alarm_alm_set_minute, 65) {
 	enum rtc_alarm_state alarm_state = RTC_ALARM_UNKNOWN;
 
 	if (self->fd == -1 && errno == ENOENT)
-		SKIP(return, "Skipping test since %s does not exist", rtc_file);
+		SKIP(return, "%s does not exist", rtc_file);
 	ASSERT_NE(-1, self->fd);
 
 	alarm_state = get_rtc_alarm_state(self->fd, 0);
 	if (alarm_state == RTC_ALARM_DISABLED)
-		SKIP(return, "Skipping test since alarms are not supported.");
+		SKIP(return, "alarms are not supported.");
 
 	rc = ioctl(self->fd, RTC_RD_TIME, &tm);
 	ASSERT_NE(-1, rc);
@@ -431,12 +431,12 @@ TEST_F_TIMEOUT(rtc, alarm_wkalm_set_minute, 65) {
 	enum rtc_alarm_state alarm_state = RTC_ALARM_UNKNOWN;
 
 	if (self->fd == -1 && errno == ENOENT)
-		SKIP(return, "Skipping test since %s does not exist", rtc_file);
+		SKIP(return, "%s does not exist", rtc_file);
 	ASSERT_NE(-1, self->fd);
 
 	alarm_state = get_rtc_alarm_state(self->fd, 0);
 	if (alarm_state == RTC_ALARM_DISABLED)
-		SKIP(return, "Skipping test since alarms are not supported.");
+		SKIP(return, "alarms are not supported.");
 
 	rc = ioctl(self->fd, RTC_RD_TIME, &alarm.time);
 	ASSERT_NE(-1, rc);
@@ -502,8 +502,7 @@ int main(int argc, char **argv)
 	if (access(rtc_file, R_OK) == 0)
 		ret = test_harness_run(argc, argv);
 	else
-		ksft_exit_skip("[SKIP]: Cannot access rtc file %s - Exiting\n",
-						rtc_file);
+		ksft_exit_skip("Cannot access rtc file %s - Exiting\n", rtc_file);
 
 	return ret;
 }
