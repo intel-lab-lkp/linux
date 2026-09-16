@@ -1349,8 +1349,16 @@ static void ks_pcie_remove(struct platform_device *pdev)
 {
 	struct keystone_pcie *ks_pcie = platform_get_drvdata(pdev);
 	struct device_link **link = ks_pcie->link;
+	struct dw_pcie *pci = ks_pcie->pci;
+	const struct ks_pcie_of_data *data;
 	int num_lanes = ks_pcie->num_lanes;
 	struct device *dev = &pdev->dev;
+
+	data = of_device_get_match_data(dev);
+	if (data->mode == DW_PCIE_EP_TYPE) {
+		pci_epc_deinit_notify(pci->ep.epc);
+		dw_pcie_ep_deinit(&pci->ep);
+	}
 
 	pm_runtime_put(dev);
 	pm_runtime_disable(dev);
