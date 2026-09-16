@@ -974,23 +974,27 @@ static int dw_mipi_dsi_rockchip_bind(struct device *dev,
 
 		if (master1 && master2) {
 			DRM_DEV_ERROR(dsi->dev, "only one clock-master allowed\n");
+			put_device(second);
 			return -EINVAL;
 		}
 
 		if (!master1 && !master2) {
 			DRM_DEV_ERROR(dsi->dev, "no clock-master defined\n");
+			put_device(second);
 			return -EINVAL;
 		}
 
 		/* we are the slave in dual-DSI */
 		if (!master1) {
 			dsi->is_slave = true;
+			put_device(second);
 			return 0;
 		}
 
 		dsi->slave = dev_get_drvdata(second);
 		if (!dsi->slave) {
 			DRM_DEV_ERROR(dev, "could not get slaves data\n");
+			put_device(second);
 			return -ENODEV;
 		}
 
