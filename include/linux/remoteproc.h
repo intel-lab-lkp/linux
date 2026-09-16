@@ -340,9 +340,22 @@ struct rproc_vring {
 };
 
 /**
+ * struct rproc_map_record - remoteproc map record
+ * @original:	original virtual address
+ * @num: allocation size
+ * @bounce: bounce buffer virtual address (NULL if not used)
+ */
+struct rproc_map_record {
+	void *original;
+	size_t size;
+	void *bounce;
+};
+
+/**
  * struct rproc_vdev - remoteproc state for a supported virtio device
  * @subdev: handle for registering the vdev as a rproc subdevice
  * @pdev: remoteproc virtio platform device
+ * @map_records: array of map records
  * @id: virtio device id (as in virtio_ids.h)
  * @node: list node
  * @rproc: the rproc handle
@@ -358,6 +371,7 @@ struct rproc_vdev {
 	unsigned int id;
 	struct list_head node;
 	struct rproc *rproc;
+	struct rproc_map_record *map_records;
 	u32 rsc_offset;
 	u32 index;
 	unsigned int num_vrings;
