@@ -499,6 +499,8 @@ static void hinic3_nic_remove(struct auxiliary_device *adev)
 	if (!hinic3_support_nic(nic_dev->hwdev))
 		return;
 
+	hinic3_adev_event_unregister(adev);
+
 	netdev = nic_dev->netdev;
 	unregister_netdev(netdev);
 
