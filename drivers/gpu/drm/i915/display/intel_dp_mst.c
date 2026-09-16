@@ -1571,7 +1571,8 @@ mst_connector_mode_valid_ctx(struct drm_connector *_connector,
 					      INTEL_DP_LINK_CAPS_ORDER_KEY_RATE_LANE,
 					      INTEL_DP_LINK_CAPS_FILTER_ALL,
 					      &max_rate_config) &&
-	    !intel_dp_can_support_m_n(display, mode->clock, max_rate_config.rate)) {
+	    !intel_dp_can_support_m_n(display, NULL, mode->clock,
+				      max_rate_config.rate)) {
 		*status = MODE_CLOCK_HIGH;
 		return 0;
 	}
