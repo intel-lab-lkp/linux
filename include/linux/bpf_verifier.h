@@ -71,6 +71,7 @@ struct bpf_reg_state {
 		/* For dynptr stack slots */
 		struct {
 			enum bpf_dynptr_type type;
+			bool type_unknown;
 			/* A dynptr is 16 bytes so it takes up 2 stack slots.
 			 * We need to track which slot is the first slot
 			 * to protect against cases where the user may try to
@@ -1531,6 +1532,7 @@ struct bpf_map_desc {
 /* The last initialized dynptr; Populated by process_dynptr_func() */
 struct bpf_dynptr_desc {
 	enum bpf_dynptr_type type;
+	bool type_unknown;
 	u32 id;
 	u32 parent_id;
 };
