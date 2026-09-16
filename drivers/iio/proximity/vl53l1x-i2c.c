@@ -713,8 +713,6 @@ static int vl53l1x_probe(struct i2c_client *client)
 		if (ret)
 			return ret;
 
-		indio_dev->trig = iio_trigger_get(trig);
-
 		ret = vl53l1x_configure_irq(dev, client->irq, indio_dev);
 		if (ret)
 			return ret;
@@ -724,6 +722,8 @@ static int vl53l1x_probe(struct i2c_client *client)
 						      NULL);
 		if (ret)
 			return ret;
+
+		indio_dev->trig = iio_trigger_get(trig);
 	}
 
 	return devm_iio_device_register(dev, indio_dev);
