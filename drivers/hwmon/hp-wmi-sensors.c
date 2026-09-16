@@ -631,8 +631,14 @@ static int check_numeric_sensor_wobj(const union acpi_object *wobj,
 	for (i = 0; i < elem_count && prop <= last_prop; i++, prop++) {
 		type = elements[i].type;
 		valid_type = hp_wmi_property_map[prop];
-		if (type != valid_type)
+		if (type != valid_type) {
+			if (type == ACPI_TYPE_BUFFER &&
+			    valid_type == ACPI_TYPE_STRING &&
+			    is_raw_wmi_string(elements[i].buffer.pointer,
+					      elements[i].buffer.length))
+				continue;
 			return -EINVAL;
+		}
 
 		switch (prop) {
 		case HP_WMI_PROPERTY_OPERATIONAL_STATUS:
@@ -651,8 +657,13 @@ static int check_numeric_sensor_wobj(const union acpi_object *wobj,
 			/* PossibleStates[0] has already been type-checked. */
 			for (j = 0; i + 1 < elem_count && j + 1 < count; j++) {
 				type = elements[++i].type;
-				if (type != valid_type)
+				if (type != valid_type) {
+					if (type == ACPI_TYPE_BUFFER &&
+					    is_raw_wmi_string(elements[i].buffer.pointer,
+							      elements[i].buffer.length))
+						continue;
 					return -EINVAL;
+				}
 			}
 
 			/* Old variant: BaseUnits follows PossibleStates[]. */
