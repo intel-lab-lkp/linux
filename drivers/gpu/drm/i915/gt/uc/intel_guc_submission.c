@@ -3487,6 +3487,8 @@ static void __guc_context_destroy(struct intel_context *ce)
 
 		if (ve->base.breadcrumbs)
 			intel_breadcrumbs_put(ve->base.breadcrumbs);
+		if (ve->base.sched_engine)
+			i915_sched_engine_put(ve->base.sched_engine);
 
 		kfree(ve);
 	} else {
