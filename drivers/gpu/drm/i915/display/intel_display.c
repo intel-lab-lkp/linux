@@ -2641,8 +2641,8 @@ static void compute_m_n(u32 *ret_m, u32 *ret_n,
 	intel_reduce_m_n_ratio(ret_m, ret_n);
 }
 
-static void intel_display_compute_link_m_n(u32 *link_m, u32 *link_n,
-					   int pixel_clock, int link_symbol_clock)
+void intel_display_compute_link_m_n(u32 *link_m, u32 *link_n,
+				    int pixel_clock, int link_symbol_clock)
 {
 	compute_m_n(link_m, link_n,
 		    pixel_clock, link_symbol_clock,
