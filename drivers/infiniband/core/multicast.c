@@ -409,8 +409,9 @@ static void process_group_error(struct mcast_group *group)
 
 		ret = member->multicast.callback(-ENETRESET,
 						 &member->multicast);
-		deref_member(member);
-		if (ret)
+		if (refcount_dec_and_test(&member->refcount))
+			complete(&member->comp);
+		else if (ret)
 			ib_sa_free_multicast(&member->multicast);
 		spin_lock_irq(&group->lock);
 	}
