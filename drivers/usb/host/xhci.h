@@ -367,11 +367,11 @@ struct xhci_slot_ctx {
  */
 #define DEV_SPEED	(0xf << 20)
 #define GET_DEV_SPEED(n) (((n) & DEV_SPEED) >> 20)
-#define	SLOT_SPEED_FS		(XDEV_FS << 20)
-#define	SLOT_SPEED_LS		(XDEV_LS << 20)
-#define	SLOT_SPEED_HS		(XDEV_HS << 20)
-#define	SLOT_SPEED_SS		(XDEV_SS << 20)
-#define	SLOT_SPEED_SSP		(XDEV_SSP << 20)
+#define	SLOT_SPEED_FS		(PORT_SPEED_FS << 20)
+#define	SLOT_SPEED_LS		(PORT_SPEED_LS << 20)
+#define	SLOT_SPEED_HS		(PORT_SPEED_HS << 20)
+#define	SLOT_SPEED_SS		(PORT_SPEED_SS << 20)
+#define	SLOT_SPEED_SSP		(PORT_SPEED_SSP << 20)
 /* bit 24 reserved */
 /* Is this LS/FS device connected through a HS hub? - bit 25 */
 #define DEV_MTT		BIT(25)
@@ -2375,31 +2375,31 @@ static inline const char *xhci_decode_slot_context(char *str,
 static inline const char *xhci_portsc_link_state_string(u32 portsc)
 {
 	switch (FIELD_GET(PORT_PLS_MASK, portsc)) {
-	case XDEV_U0:
+	case PLS_U0:
 		return "U0";
-	case XDEV_U1:
+	case PLS_U1:
 		return "U1";
-	case XDEV_U2:
+	case PLS_U2:
 		return "U2";
-	case XDEV_U3:
+	case PLS_U3:
 		return "U3";
-	case XDEV_DISABLED:
+	case PLS_DISABLED:
 		return "Disabled";
-	case XDEV_RXDETECT:
+	case PLS_RXDETECT:
 		return "RxDetect";
-	case XDEV_INACTIVE:
+	case PLS_INACTIVE:
 		return "Inactive";
-	case XDEV_POLLING:
+	case PLS_POLLING:
 		return "Polling";
-	case XDEV_RECOVERY:
+	case PLS_RECOVERY:
 		return "Recovery";
-	case XDEV_HOT_RESET:
+	case PLS_HOT_RESET:
 		return "Hot Reset";
-	case XDEV_COMP_MODE:
+	case PLS_COMP_MODE:
 		return "Compliance mode";
-	case XDEV_TEST_MODE:
+	case PLS_TEST_MODE:
 		return "Test mode";
-	case XDEV_RESUME:
+	case PLS_RESUME:
 		return "Resume";
 	default:
 		break;
@@ -2416,7 +2416,7 @@ static inline const char *xhci_decode_portsc(char *str, u32 portsc)
 	if (portsc == ~(u32)0)
 		return str;
 
-	ret += sprintf(str + ret, "Speed=%ld ", FIELD_GET(DEV_SPEED_MASK, portsc));
+	ret += sprintf(str + ret, "Speed=%ld ", FIELD_GET(PORT_SPEED_MASK, portsc));
 	ret += sprintf(str + ret, "Link=%s ", xhci_portsc_link_state_string(portsc));
 
 	/* RO/ROS: Read-only */

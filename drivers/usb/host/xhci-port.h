@@ -20,20 +20,20 @@
  * PLS values 0-11 are defined in USB chapter 11.
  */
 #define PORT_PLS_MASK	GENMASK(8, 5)
-#define XDEV_U0		0
-#define XDEV_U1		1
-#define XDEV_U2		2
-#define XDEV_U3		3
-#define XDEV_DISABLED	4
-#define XDEV_RXDETECT	5
-#define XDEV_INACTIVE	6
-#define XDEV_POLLING	7
-#define XDEV_RECOVERY	8
-#define XDEV_HOT_RESET	9
-#define XDEV_COMP_MODE	10
-#define XDEV_TEST_MODE	11
+#define PLS_U0		0
+#define PLS_U1		1
+#define PLS_U2		2
+#define PLS_U3		3
+#define PLS_DISABLED	4
+#define PLS_RXDETECT	5
+#define PLS_INACTIVE	6
+#define PLS_POLLING	7
+#define PLS_RECOVERY	8
+#define PLS_HOT_RESET	9
+#define PLS_COMP_MODE	10
+#define PLS_TEST_MODE	11
 /* Values 12-14 are Reserved */
-#define XDEV_RESUME	15
+#define PLS_RESUME	15
 /* bit 9 - Port Power (PP) */
 #define PORT_POWER	BIT(9)
 /*
@@ -49,12 +49,12 @@
  * 7 - SuperSpeed Gen2 x2
  * 8-15 Reserved
  */
-#define DEV_SPEED_MASK	GENMASK(13, 10)
-#define	XDEV_FS		1
-#define	XDEV_LS		2
-#define	XDEV_HS		3
-#define	XDEV_SS		4
-#define	XDEV_SSP	5
+#define PORT_SPEED_MASK	GENMASK(13, 10)
+#define	PORT_SPEED_FS	1
+#define	PORT_SPEED_LS	2
+#define	PORT_SPEED_HS	3
+#define	PORT_SPEED_SS	4
+#define	PORT_SPEED_SSP	5
 
 /* Port Indicator Control */
 #define PORT_LED_OFF	(0 << 14)

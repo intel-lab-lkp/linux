@@ -361,12 +361,12 @@ static ssize_t xhci_port_write(struct file *file,  const char __user *ubuf,
 		spin_lock_irqsave(&xhci->lock, flags);
 		/* compliance mode can only be enabled on ports in RxDetect */
 		portsc = xhci_portsc_readl(port);
-		if (FIELD_GET(PORT_PLS_MASK, portsc) != XDEV_RXDETECT) {
+		if (FIELD_GET(PORT_PLS_MASK, portsc) != PLS_RXDETECT) {
 			spin_unlock_irqrestore(&xhci->lock, flags);
 			return -EPERM;
 		}
 		portsc = xhci_port_state_to_neutral(portsc);
-		FIELD_MODIFY(PORT_PLS_MASK, &portsc, XDEV_COMP_MODE);
+		FIELD_MODIFY(PORT_PLS_MASK, &portsc, PLS_COMP_MODE);
 		portsc |= PORT_LINK_STROBE;
 		xhci_portsc_writel(port, portsc);
 		spin_unlock_irqrestore(&xhci->lock, flags);
@@ -715,7 +715,7 @@ static int xhci_ss_bw_show(struct seq_file *s, void *unused)
 	int ret;
 	struct xhci_hcd		*xhci = (struct xhci_hcd *)s->private;
 
-	ret = xhci_port_bw_show(xhci, XDEV_SS, s);
+	ret = xhci_port_bw_show(xhci, PORT_SPEED_SS, s);
 	return ret;
 }
 
@@ -724,7 +724,7 @@ static int xhci_hs_bw_show(struct seq_file *s, void *unused)
 	int ret;
 	struct xhci_hcd		*xhci = (struct xhci_hcd *)s->private;
 
-	ret = xhci_port_bw_show(xhci, XDEV_HS, s);
+	ret = xhci_port_bw_show(xhci, PORT_SPEED_HS, s);
 	return ret;
 }
 
@@ -733,7 +733,7 @@ static int xhci_fs_bw_show(struct seq_file *s, void *unused)
 	int ret;
 	struct xhci_hcd		*xhci = (struct xhci_hcd *)s->private;
 
-	ret = xhci_port_bw_show(xhci, XDEV_FS, s);
+	ret = xhci_port_bw_show(xhci, PORT_SPEED_FS, s);
 	return ret;
 }
 

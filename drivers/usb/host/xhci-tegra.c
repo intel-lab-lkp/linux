@@ -2033,7 +2033,7 @@ static bool xhci_hub_ports_suspended(struct xhci_hub *hub)
 		if ((value & PORT_PE) == 0)
 			continue;
 
-		if (FIELD_GET(PORT_PLS_MASK, value) != XDEV_U3) {
+		if (FIELD_GET(PORT_PLS_MASK, value) != PLS_U3) {
 			dev_info(dev, "%u-%u isn't suspended: %#010x\n",
 				 hub->hcd->self.busnum, i + 1, value);
 			status = false;
@@ -2104,18 +2104,18 @@ static void tegra_xusb_restore_context(struct tegra_xusb *tegra)
 
 static enum usb_device_speed tegra_xhci_portsc_to_speed(struct tegra_xusb *tegra, u32 portsc)
 {
-	u32 port_speed = FIELD_GET(DEV_SPEED_MASK, portsc);
+	u32 port_speed = FIELD_GET(PORT_SPEED_MASK, portsc);
 
-	if (port_speed == XDEV_LS)
+	if (port_speed == PORT_SPEED_LS)
 		return USB_SPEED_LOW;
 
-	if (port_speed == XDEV_HS)
+	if (port_speed == PORT_SPEED_HS)
 		return USB_SPEED_HIGH;
 
-	if (port_speed == XDEV_FS)
+	if (port_speed == PORT_SPEED_FS)
 		return USB_SPEED_FULL;
 
-	if (port_speed >= XDEV_SS)
+	if (port_speed >= PORT_SPEED_SS)
 		return USB_SPEED_SUPER;
 
 	return USB_SPEED_UNKNOWN;
@@ -2254,8 +2254,8 @@ static int tegra_xusb_enter_elpg(struct tegra_xusb *tegra, bool is_auto_resume)
 			continue;
 		portsc = xhci_portsc_readl(xhci->usb2_rhub.ports[i]);
 		tegra->lp0_utmi_pad_mask &= ~BIT(i);
-		if ((FIELD_GET(PORT_PLS_MASK, portsc) == XDEV_U3) ||
-		    (FIELD_GET(DEV_SPEED_MASK, portsc) == XDEV_FS))
+		if ((FIELD_GET(PORT_PLS_MASK, portsc) == PLS_U3) ||
+		    (FIELD_GET(PORT_SPEED_MASK, portsc) == PORT_SPEED_FS))
 			tegra->lp0_utmi_pad_mask |= BIT(i);
 	}
 
@@ -2800,7 +2800,7 @@ static int tegra_xhci_hub_control(struct usb_hcd *hcd, u16 type_req, u16 value, 
 			if (!test_bit(i, &bus_state->resuming_ports))
 				continue;
 			portsc = xhci_portsc_readl(ports[i]);
-			if (FIELD_GET(PORT_PLS_MASK, portsc) == XDEV_RESUME)
+			if (FIELD_GET(PORT_PLS_MASK, portsc) == PLS_RESUME)
 				tegra_phy_xusb_utmi_pad_power_on(
 					tegra_xusb_get_phy(tegra, "usb2", (int) i));
 		}
