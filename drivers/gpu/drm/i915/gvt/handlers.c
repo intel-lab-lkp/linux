@@ -1505,7 +1505,17 @@ static int handle_g2v_notification(struct intel_vgpu *vgpu, int notification)
 		root_entry_type = GTT_TYPE_PPGTT_ROOT_L3_ENTRY;
 		fallthrough;
 	case VGT_G2V_PPGTT_L4_PAGE_TABLE_CREATE:
-		mm = intel_vgpu_get_ppgtt_mm(vgpu, root_entry_type, pdps);
+		/*
+		 * A newly created mm keeps its initial reference as the
+		 * registration reference, dropped by the DESTROY
+		 * notification. A duplicate CREATE for an already tracked
+		 * mm must not take an extra reference that nothing drops.
+		 */
+		mm = intel_vgpu_find_ppgtt_mm(vgpu, pdps);
+		if (mm)
+			return 0;
+
+		mm = intel_vgpu_create_ppgtt_mm(vgpu, root_entry_type, pdps);
 		return PTR_ERR_OR_ZERO(mm);
 	case VGT_G2V_PPGTT_L3_PAGE_TABLE_DESTROY:
 	case VGT_G2V_PPGTT_L4_PAGE_TABLE_DESTROY:
