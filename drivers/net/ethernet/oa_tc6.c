@@ -11,6 +11,8 @@
 #include <linux/mdio.h>
 #include <linux/phy.h>
 #include <linux/oa_tc6.h>
+#include <linux/gpio/consumer.h>
+#include <linux/delay.h>
 
 /* Control command header */
 #define OA_TC6_CTRL_HEADER_DATA_NOT_CTRL	BIT(31)
@@ -88,6 +90,7 @@ struct oa_tc6 {
 	bool disable_traffic;
 	bool prot_ctrl;
 	enum oa_tc6_quirk_flag quirk_flags;
+	struct gpio_desc *reset_gpio;
 };
 
 enum oa_tc6_header_type {
@@ -1502,6 +1505,24 @@ struct oa_tc6 *oa_tc6_init(struct spi_device *spi, struct net_device *netdev,
 					    GFP_KERNEL);
 	if (!tc6->spi_data_rx_buf)
 		return NULL;
+
+	tc6->reset_gpio = devm_gpiod_get_optional(&spi->dev, "reset",
+						  GPIOD_OUT_LOW);
+	if (IS_ERR(tc6->reset_gpio)) {
+		dev_err_probe(&spi->dev, PTR_ERR(tc6->reset_gpio),
+			      "Failed to get reset GPIO\n");
+		return NULL;
+	}
+
+	if (tc6->reset_gpio) {
+		/* Assert hardware reset for 10 us (datasheet specifies min 5 us)
+		 * and allow 1 ms settle time for crystal oscillator startup.
+		 */
+		gpiod_set_value_cansleep(tc6->reset_gpio, 1);
+		fsleep(10);
+		gpiod_set_value_cansleep(tc6->reset_gpio, 0);
+		fsleep(1000);
+	}
 
 	/* Check the PROTE bit status so that we can reset the device */
 	ret = oa_tc6_check_ctrl_protection(tc6);
