@@ -249,7 +249,7 @@ static u64 rproc_virtio_get_features(struct virtio_device *vdev)
 
 	rsc = (void *)rvdev->rproc->table_ptr + rvdev->rsc_offset;
 
-	return rsc->dfeatures;
+	return rsc->dfeatures | (1ULL << VIRTIO_F_VERSION_1);
 }
 
 static void rproc_transport_features(struct virtio_device *vdev)
@@ -275,14 +275,16 @@ static int rproc_virtio_finalize_features(struct virtio_device *vdev)
 	/* Give virtio_rproc a chance to accept features. */
 	rproc_transport_features(vdev);
 
-	/* Make sure we don't have any features > 32 bits! */
-	BUG_ON((u32)vdev->features != vdev->features);
+	/* Make sure we don't have any features > 32 bits except VIRTIO_F_VERSION_1 */
+	if (WARN_ON_ONCE((u32)vdev->features !=
+			 (vdev->features & ~(1ULL << VIRTIO_F_VERSION_1))))
+		return -1;
 
 	/*
 	 * Remember the finalized features of our vdev, and provide it
 	 * to the remote processor once it is powered on.
 	 */
-	rsc->gfeatures = vdev->features;
+	rsc->gfeatures = vdev->features & ~(1ULL << VIRTIO_F_VERSION_1);
 
 	return 0;
 }
