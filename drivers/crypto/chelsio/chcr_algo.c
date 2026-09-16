@@ -1396,17 +1396,22 @@ static int chcr_aes_decrypt(struct skcipher_request *req)
 		return -ENXIO;
 
 	if (unlikely(cxgb4_is_crypto_q_full(u_ctx->lldi.ports[0],
-						reqctx->txqidx) &&
-		(!(req->base.flags & CRYPTO_TFM_REQ_MAY_BACKLOG))))
-			return -ENOSPC;
+					    reqctx->txqidx) &&
+	    (!(req->base.flags & CRYPTO_TFM_REQ_MAY_BACKLOG)))) {
+		err = -ENOSPC;
+		goto error;
+	}
 	err = process_cipher(req, u_ctx->lldi.rxq_ids[reqctx->rxqidx],
 			     &skb, CHCR_DECRYPT_OP);
 	if (err || !skb)
-		return err;
+		goto error;
 	skb->dev = u_ctx->lldi.ports[0];
 	set_wr_txq(skb, CPL_PRIORITY_DATA, reqctx->txqidx);
 	chcr_send_wr(skb);
 	return -EINPROGRESS;
+error:
+	chcr_dec_wrcount(dev);
+	return err;
 }
 static int chcr_device_init(struct chcr_context *ctx)
 {
