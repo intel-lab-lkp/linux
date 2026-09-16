@@ -1122,7 +1122,6 @@ static void scrub_guc_desc_for_outstanding_g2h(struct intel_guc *guc)
 			if (destroyed) {
 				intel_gt_pm_put_async_untracked(guc_to_gt(guc));
 				release_guc_id(guc, ce);
-				__guc_context_destroy(ce);
 			}
 			if (pending_enable || deregister)
 				intel_context_put(ce);
@@ -1144,6 +1143,13 @@ static void scrub_guc_desc_for_outstanding_g2h(struct intel_guc *guc)
 
 			intel_context_put(ce);
 		}
+
+		/*
+		 * Finish the destroy last, as it may free the context while
+		 * the above states still need to access it.
+		 */
+		if (destroyed)
+			__guc_context_destroy(ce);
 
 		if (do_put)
 			intel_context_put(ce);
