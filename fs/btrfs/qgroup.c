@@ -674,11 +674,6 @@ void btrfs_free_qgroup_config(struct btrfs_fs_info *fs_info)
 	struct rb_node *n;
 	struct btrfs_qgroup *qgroup;
 
-	/*
-	 * btrfs_quota_disable() can be called concurrently with
-	 * btrfs_qgroup_rescan() -> qgroup_rescan_zero_tracking(), so take the
-	 * lock.
-	 */
 	spin_lock(&fs_info->qgroup_lock);
 	while ((n = rb_first(&fs_info->qgroup_tree))) {
 		qgroup = rb_entry(n, struct btrfs_qgroup, node);
@@ -1275,14 +1270,9 @@ out_add_root:
 	                         &fs_info->qgroup_rescan_work);
 	} else {
 		/*
-		 * We have set both BTRFS_FS_QUOTA_ENABLED and
-		 * BTRFS_QGROUP_STATUS_FLAG_ON, so we can only fail with
-		 * -EINPROGRESS. That can happen because someone started the
-		 * rescan worker by calling quota rescan ioctl before we
-		 * attempted to initialize the rescan worker. Failure due to
-		 * quotas disabled in the meanwhile is not possible, because
-		 * we are holding a write lock on fs_info->subvol_sem, which
-		 * is also acquired when disabling quotas.
+		 * At this point quotas are enabled, so the only expected error
+		 * is -EINPROGRESS, either because a rescan is already pending
+		 * or new rescans are temporarily rejected.
 		 * Ignore such error, and any other error would need to undo
 		 * everything we did in the transaction we just committed.
 		 */
@@ -3932,10 +3922,7 @@ out:
 
 	/*
 	 * Only update status, since the previous part has already updated the
-	 * qgroup info, and only if we did any actual work. This also prevents
-	 * race with a concurrent quota disable, which has already set
-	 * fs_info->quota_root to NULL and cleared BTRFS_FS_QUOTA_ENABLED at
-	 * btrfs_quota_disable().
+	 * qgroup info, and only if we did any actual work.
 	 */
 	if (did_leaf_rescans) {
 		trans = btrfs_start_transaction(fs_info->quota_root, 1);
@@ -4074,6 +4061,8 @@ btrfs_qgroup_rescan(struct btrfs_fs_info *fs_info)
 {
 	int ret = 0;
 
+	lockdep_assert_held_read(&fs_info->subvol_sem);
+
 	ret = qgroup_rescan_init(fs_info, 0, 1);
 	if (ret)
 		return ret;
@@ -4100,8 +4089,7 @@ btrfs_qgroup_rescan(struct btrfs_fs_info *fs_info)
 	mutex_lock(&fs_info->qgroup_rescan_lock);
 	/*
 	 * The rescan worker is only for full accounting qgroups, check if it's
-	 * enabled as it is pointless to queue it otherwise. A concurrent quota
-	 * disable may also have just cleared BTRFS_FS_QUOTA_ENABLED.
+	 * enabled as it is pointless to queue it otherwise.
 	 */
 	if (btrfs_qgroup_full_accounting(fs_info)) {
 		fs_info->qgroup_rescan_running = true;

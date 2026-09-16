@@ -3866,7 +3866,10 @@ static long btrfs_ioctl_quota_rescan(struct file *file, void __user *arg)
 		goto drop_write;
 	}
 
+	/* Serialize rescan setup with quota enable and disable. */
+	down_read(&fs_info->subvol_sem);
 	ret = btrfs_qgroup_rescan(fs_info);
+	up_read(&fs_info->subvol_sem);
 
 drop_write:
 	mnt_drop_write_file(file);
