@@ -1077,6 +1077,8 @@ void usb_enable_intel_xhci_ports(struct pci_dev *xhci_pdev)
 			break;
 		}
 	}
+	/* for_each_pci_dev() takes a reference on the found companion */
+	pci_dev_put(companion);
 
 	if (!ehci_found)
 		return;
