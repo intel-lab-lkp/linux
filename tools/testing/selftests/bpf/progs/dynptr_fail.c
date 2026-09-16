@@ -13,6 +13,9 @@
 
 char _license[] SEC("license") = "GPL";
 
+extern int bpf_dynptr_memset(const struct bpf_dynptr *p, __u64 offset, __u64 size,
+			     __u8 val) __ksym __weak;
+
 struct test_info {
 	int x;
 	struct bpf_dynptr ptr;
@@ -1272,6 +1275,186 @@ int skb_invalid_data_slice4(struct __sk_buff *skb)
 	hdr->h_proto = 1;
 
 	return SK_PASS;
+}
+
+/*
+ * A kfunc that may clobber packet pointers must invalidate skb data slices.
+ */
+SEC("?tc")
+__failure __msg("invalid mem access")
+int skb_invalid_data_slice_after_dynptr_memset(struct __sk_buff *skb)
+{
+	struct bpf_dynptr ptr;
+	struct ethhdr *hdr;
+	char buffer[sizeof(*hdr)] = {};
+
+	bpf_dynptr_from_skb(skb, 0, &ptr);
+
+	hdr = bpf_dynptr_slice_rdwr(&ptr, 0, buffer, sizeof(buffer));
+	if (!hdr)
+		return SK_DROP;
+
+	bpf_dynptr_memset(&ptr, 0, 0, 0);
+
+	/* this should fail */
+	val = hdr->h_proto;
+
+	return SK_PASS;
+}
+
+/*
+ * A dynptr kfunc that may clobber packet pointers must not invalidate packet
+ * pointers when called with a non-skb dynptr.
+ */
+SEC("?tc")
+__success
+int pkt_ptr_valid_after_dynptr_memset_on_mem(struct __sk_buff *skb)
+{
+	struct bpf_dynptr ptr;
+	int *p = (void *)(long)skb->data;
+
+	if ((void *)(p + 1) > (void *)(long)skb->data_end)
+		return SK_DROP;
+
+	if (bpf_dynptr_from_mem(&val, sizeof(val), 0, &ptr))
+		return SK_DROP;
+
+	bpf_dynptr_memset(&ptr, 0, 0, 0);
+
+	return *p ? SK_PASS : SK_DROP;
+}
+
+__noinline
+int skb_dynptr_memset(struct __sk_buff *skb)
+{
+	struct bpf_dynptr ptr;
+
+	if (bpf_dynptr_from_skb(skb, 0, &ptr))
+		return 0;
+
+	return bpf_dynptr_memset(&ptr, 0, 0, 0);
+}
+
+/*
+ * A global subprog that may clobber packet pointers must invalidate packet
+ * pointers held by its caller.
+ */
+SEC("?tc")
+__failure __msg("invalid mem access")
+int skb_invalid_pkt_ptr_after_dynptr_memset_global(struct __sk_buff *skb)
+{
+	int *p = (void *)(long)skb->data;
+
+	if ((void *)(p + 1) > (void *)(long)skb->data_end)
+		return SK_DROP;
+
+	skb_dynptr_memset(skb);
+
+	/* this should fail */
+	val = *p;
+
+	return SK_PASS;
+}
+
+__noinline
+int skb_dynptr_memset_global_arg(struct __sk_buff *skb,
+				 struct bpf_dynptr *ptr)
+{
+	int *p = (void *)(long)skb->data;
+
+	if ((void *)(p + 1) > (void *)(long)skb->data_end)
+		return SK_DROP;
+
+	bpf_dynptr_memset(ptr, 0, sizeof(*p), 0);
+
+	/* this should fail */
+	val = *p;
+
+	return SK_PASS;
+}
+
+/*
+ * A global subprog must conservatively treat a dynptr argument as possibly
+ * skb-backed when checking whether a kfunc invalidates packet pointers.
+ */
+SEC("?tc")
+__failure __msg("invalid mem access")
+int skb_invalid_pkt_ptr_after_dynptr_memset_global_arg(struct __sk_buff *skb)
+{
+	struct bpf_dynptr ptr;
+
+	if (bpf_dynptr_from_skb(skb, 0, &ptr))
+		return SK_DROP;
+
+	return skb_dynptr_memset_global_arg(skb, &ptr);
+}
+
+__noinline
+int skb_dynptr_write_global_arg(struct bpf_dynptr *ptr)
+{
+	int write_data = 0;
+
+	return bpf_dynptr_write(ptr, 0, &write_data, sizeof(write_data), 0);
+}
+
+/*
+ * A global subprog that calls bpf_dynptr_write() on a dynptr argument must
+ * invalidate packet pointers held by its caller.
+ */
+SEC("?tc")
+__failure __msg("invalid mem access")
+int skb_invalid_pkt_ptr_after_dynptr_write_global_arg(struct __sk_buff *skb)
+{
+	struct bpf_dynptr ptr;
+	int *p = (void *)(long)skb->data;
+
+	if ((void *)(p + 1) > (void *)(long)skb->data_end)
+		return SK_DROP;
+
+	if (bpf_dynptr_from_skb(skb, 0, &ptr))
+		return SK_DROP;
+
+	skb_dynptr_write_global_arg(&ptr);
+
+	/* this should fail */
+	val = *p;
+
+	return SK_PASS;
+}
+
+__noinline
+int skb_dynptr_write_global_arg_with_pkt_ptr(struct __sk_buff *skb,
+					    struct bpf_dynptr *ptr)
+{
+	int write_data = 0;
+	int *p = (void *)(long)skb->data;
+
+	if ((void *)(p + 1) > (void *)(long)skb->data_end)
+		return SK_DROP;
+
+	bpf_dynptr_write(ptr, 0, &write_data, sizeof(write_data), 0);
+
+	/* this should fail */
+	val = *p;
+
+	return SK_PASS;
+}
+
+/*
+ * A global subprog must conservatively treat a dynptr argument as possibly
+ * skb-backed when checking whether bpf_dynptr_write() invalidates packet
+ * pointers in the callee.
+ */
+SEC("?tc")
+__failure __msg("invalid mem access")
+int skb_invalid_pkt_ptr_after_dynptr_write_global_arg_in_subprog(struct __sk_buff *skb)
+{
+	struct bpf_dynptr ptr;
+
+	if (bpf_dynptr_from_skb(skb, 0, &ptr))
+		return SK_DROP;
+
+	return skb_dynptr_write_global_arg_with_pkt_ptr(skb, &ptr);
 }
 
 /* Read-only skb data slice is invalidated on write to skb metadata */
