@@ -26,8 +26,11 @@ static void ibmvfc_nvme_localport_delete(struct nvme_fc_local_port *lport)
 static void ibmvfc_nvme_remoteport_delete(struct nvme_fc_remote_port *rport)
 {
 	struct ibmvfc_target *tgt = rport->private;
+	unsigned long flags;
 
+	spin_lock_irqsave(&tgt->vhost->host->host_lock, flags);
 	tgt->nvme_remote_port = NULL;
+	spin_unlock_irqrestore(&tgt->vhost->host->host_lock, flags);
 	complete(&tgt->nvme_delete_done);
 }
 
@@ -469,7 +472,9 @@ static struct nvme_fc_port_template ibmvfc_nvme_fc_transport = {
 int ibmvfc_nvme_register_remoteport(struct ibmvfc_target *tgt)
 {
 	struct ibmvfc_host *vhost = tgt->vhost;
+	struct nvme_fc_remote_port *rport;
 	struct nvme_fc_port_info pinfo;
+	unsigned long flags;
 	int rc;
 
 	if (!IS_ENABLED(CONFIG_NVME_FC))
@@ -486,14 +491,16 @@ int ibmvfc_nvme_register_remoteport(struct ibmvfc_target *tgt)
 	pinfo.port_id = tgt->ids.port_id;
 	pinfo.port_role = FC_PORT_ROLE_NVME_TARGET;
 
-	rc = nvme_fc_register_remoteport(vhost->nvme_local_port, &pinfo,
-					 &tgt->nvme_remote_port);
+	rc = nvme_fc_register_remoteport(vhost->nvme_local_port, &pinfo, &rport);
 
+	spin_lock_irqsave(&vhost->host->host_lock, flags);
 	if (!rc) {
 		ibmvfc_log(vhost, 2, "register_remoteport: traddr=nn-0x%llx:pn-0x%llx PortID:%x\n",
 			   pinfo.node_name, pinfo.port_name, pinfo.port_id);
-		tgt->nvme_remote_port->private = tgt;
+		rport->private = tgt;
+		tgt->nvme_remote_port = rport;
 	}
+	spin_unlock_irqrestore(&vhost->host->host_lock, flags);
 
 	return rc;
 }
