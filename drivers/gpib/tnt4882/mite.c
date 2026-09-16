@@ -58,8 +58,10 @@ void mite_init(void)
 		pcidev;
 		pcidev = pci_get_device(PCI_VENDOR_ID_NATINST, PCI_ANY_ID, pcidev)) {
 		mite = kzalloc_obj(*mite);
-		if (!mite)
+		if (!mite) {
+			pci_dev_put(pcidev);
 			return;
+		}
 
 		mite->pcidev = pcidev;
 		pci_dev_get(mite->pcidev);
