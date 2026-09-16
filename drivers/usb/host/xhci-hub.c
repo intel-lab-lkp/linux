@@ -1785,8 +1785,9 @@ static bool xhci_port_missing_cas_quirk(struct xhci_port *port)
 	if (pls != PLS_POLLING && pls != PLS_COMP_MODE)
 		return false;
 
-	/* clear wakeup/change bits, and do a warm port reset */
-	portsc &= ~(PORTSC_RW1CS_BITS | PORT_WAKE_BITS);
+	portsc = xhci_port_state_to_neutral(portsc);
+	/* clear wakeup and do a warm port reset */
+	portsc &= ~PORT_WAKE_BITS;
 	portsc |= PORT_WPR;
 	xhci_portsc_writel(port, portsc);
 	/* flush write */
