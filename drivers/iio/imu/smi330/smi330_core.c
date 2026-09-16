@@ -886,9 +886,6 @@ int smi330_core_probe(struct device *dev, struct regmap *regmap)
 		if (ret)
 			return dev_err_probe(dev, ret,
 					     "IIO register trigger failed\n");
-
-		/* Set default operation mode to data ready. */
-		indio_dev->trig = iio_trigger_get(data->trig);
 	}
 
 	ret = devm_iio_triggered_buffer_setup(dev, indio_dev,
@@ -896,6 +893,11 @@ int smi330_core_probe(struct device *dev, struct regmap *regmap)
 					      smi330_trigger_handler, NULL);
 	if (ret)
 		return dev_err_probe(dev, ret, "IIO buffer setup failed\n");
+
+	if (data->trig) {
+		/* Set default operation mode to data ready. */
+		indio_dev->trig = iio_trigger_get(data->trig);
+	}
 
 	ret = devm_iio_device_register(dev, indio_dev);
 	if (ret)
