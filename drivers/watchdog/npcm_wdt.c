@@ -149,8 +149,11 @@ static int npcm_wdt_start(struct watchdog_device *wdd)
 {
 	struct npcm_wdt *wdt = to_npcm_wdt(wdd);
 	u32 val;
+	int err;
 
-	clk_prepare_enable(wdt->clk);
+	err = clk_prepare_enable(wdt->clk);
+	if (err)
+		return err;
 
 	if (wdd->timeout < 2)
 		val = 0x800;
@@ -216,7 +219,7 @@ static int npcm_wdt_set_timeout(struct watchdog_device *wdd,
 		wdd->timeout = 2750;
 
 	if (watchdog_active(wdd))
-		npcm_wdt_start(wdd);
+		return npcm_wdt_start(wdd);
 
 	return 0;
 }
@@ -234,9 +237,12 @@ static int npcm_wdt_restart(struct watchdog_device *wdd,
 			    unsigned long action, void *data)
 {
 	struct npcm_wdt *wdt = to_npcm_wdt(wdd);
+	int err;
 
 	/* For reset, we start the WDT clock and leave it running. */
-	clk_prepare_enable(wdt->clk);
+	err = clk_prepare_enable(wdt->clk);
+	if (err)
+		return err;
 
 	writel(NPCM_WTR | NPCM_WTRE | NPCM_WTE, wdt->reg);
 	udelay(1000);
@@ -428,13 +434,18 @@ static int npcm_wdt_probe(struct platform_device *pdev)
 	watchdog_init_timeout(&wdt->wdd, 0, dev);
 
 	/* Ensure timeout is able to be represented by the hardware */
-	npcm_wdt_set_timeout(&wdt->wdd, wdt->wdd.timeout);
+	ret = npcm_wdt_set_timeout(&wdt->wdd, wdt->wdd.timeout);
+	if (ret)
+		return ret;
 
 	npcm_get_reset_status(wdt, dev, data, start);
 
 	if (npcm_is_running(&wdt->wdd)) {
 		/* Restart with the default or device-tree specified timeout */
-		npcm_wdt_start(&wdt->wdd);
+		ret = npcm_wdt_start(&wdt->wdd);
+		if (ret)
+			return ret;
+
 		set_bit(WDOG_HW_RUNNING, &wdt->wdd.status);
 	}
 
