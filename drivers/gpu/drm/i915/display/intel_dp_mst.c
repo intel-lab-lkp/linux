@@ -1521,6 +1521,7 @@ mst_connector_mode_valid_ctx(struct drm_connector *_connector,
 		DRM_DP_BW_OVERHEAD_MST | DRM_DP_BW_OVERHEAD_SSC_REF_CLK;
 	int min_link_bpp_x16 = fxp_q4_from_int(18);
 	struct intel_dp_link_config max_bw_config;
+	struct intel_dp_link_config max_rate_config;
 	static bool supports_dsc;
 	int ret;
 	bool dsc = false;
@@ -1563,6 +1564,15 @@ mst_connector_mode_valid_ctx(struct drm_connector *_connector,
 					   mode->clock, mode->hdisplay,
 					   min_link_bpp_x16,
 					   bw_overhead_flags);
+
+	if (intel_dp_link_caps_get_max_config(intel_dp->link.caps,
+					      INTEL_DP_LINK_CAPS_ORDER_KEY_RATE_LANE,
+					      INTEL_DP_LINK_CAPS_FILTER_ALL,
+					      &max_rate_config) &&
+	    !intel_dp_can_support_m_n(display, mode->clock, max_rate_config.rate)) {
+		*status = MODE_CLOCK_HIGH;
+		return 0;
+	}
 
 	/*
 	 * TODO:
