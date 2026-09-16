@@ -356,7 +356,14 @@ static void kthread_affine_node(void)
 		return;
 
 	if (!zalloc_cpumask_var(&affinity, GFP_KERNEL)) {
-		WARN_ON_ONCE(1);
+		/*
+		 * The thread stays out of kthread_affinity_list, so a later
+		 * CPU hotplug will not fix up its affinity. Report it, but do
+		 * not warn: the allocation can fail under memory pressure or
+		 * fault injection, and that is not a kernel bug.
+		 */
+		pr_warn_once("kthread: %s: no cpumask, node affinity not set\n",
+			     current->comm);
 		return;
 	}
 
