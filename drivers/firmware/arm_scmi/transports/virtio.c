@@ -625,6 +625,14 @@ static void virtio_mark_txdone(struct scmi_chan_info *cinfo, int ret,
 		return;
 	}
 
+	/*
+	 * Hold a spare reference to msg so that it is not returned to the
+	 * free-list while it is still accessed under poll_lock: a message
+	 * sitting on the free-list can be re-allocated and re-initialized
+	 * without taking poll_lock.
+	 */
+	scmi_vio_msg_acquire(msg);
+
 	spin_lock_irqsave(&msg->poll_lock, flags);
 	/* Do not free timedout polled messages only if still inflight */
 	if (ret != -ETIMEDOUT || msg->poll_status == VIO_MSG_POLL_DONE)
@@ -632,6 +640,8 @@ static void virtio_mark_txdone(struct scmi_chan_info *cinfo, int ret,
 	else if (msg->poll_status == VIO_MSG_POLLING)
 		msg->poll_status = VIO_MSG_POLL_TIMEOUT;
 	spin_unlock_irqrestore(&msg->poll_lock, flags);
+
+	scmi_vio_msg_release(vioch, msg);
 
 	scmi_vio_channel_release(vioch);
 }
