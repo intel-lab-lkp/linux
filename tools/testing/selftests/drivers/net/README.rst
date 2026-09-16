@@ -141,6 +141,14 @@ Communication channel dependent::
   for netns - name of the "remote" namespace
   for ssh - name/address of the remote host
 
+kperf
+~~~~~
+
+Performance tests which use kperf expect ``kperf-client`` in ``PATH`` on the
+local host and ``kperf-server`` in ``PATH`` on both endpoints. Kperf is an
+optional dependency; tests which require it are skipped when it is not
+installed.
+
 Example
 =======
 

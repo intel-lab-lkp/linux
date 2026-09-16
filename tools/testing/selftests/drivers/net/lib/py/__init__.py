@@ -53,12 +53,14 @@ try:
                "ksft_not_none", "ksft_not_none"]
 
     from .env import NetDrvEnv, NetDrvEpEnv, NetDrvContEnv
+    from .kperf import KperfResult, KperfRunner
     from .load import GenerateTraffic, Iperf3Runner
     from .system_monitor import SystemMonitor
     from .remote import Remote
 
     __all__ += ["NetDrvEnv", "NetDrvEpEnv", "NetDrvContEnv", "GenerateTraffic",
-                "Remote", "Iperf3Runner", "SystemMonitor"]
+                "Remote", "Iperf3Runner", "SystemMonitor", "KperfResult",
+                "KperfRunner"]
 except ModuleNotFoundError as e:
     print("Failed importing `net` library from kernel sources")
     print(str(e))
