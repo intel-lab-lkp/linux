@@ -120,6 +120,15 @@ config MESON_GXL_PHY
 	help
 	  Currently has a driver for the Amlogic Meson GXL Internal PHY
 
+config AC300_PHY
+	tristate "Allwinner AC300 EPHY support"
+	depends on OF && NVMEM
+	help
+	  Support for the Allwinner AC300 integrated Fast Ethernet Physical
+	  Layer (EPHY) co-packaged on Allwinner H616 and H618 SoCs. The AC300
+	  EPHY communicates over MDIO and provides 10/100 Mbps connectivity.
+	  If compiled as a module, it will be called ac300-phy.
+
 config ADIN_PHY
 	tristate "Analog Devices Industrial Ethernet PHYs"
 	help
