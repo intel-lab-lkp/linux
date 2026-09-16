@@ -7472,6 +7472,7 @@ out:
 
 static void mv88e6xxx_remove(struct mdio_device *mdiodev)
 {
+	struct dsa_mv88e6xxx_pdata *pdata = mdiodev->dev.platform_data;
 	struct dsa_switch *ds = dev_get_drvdata(&mdiodev->dev);
 	struct mv88e6xxx_chip *chip;
 
@@ -7494,6 +7495,9 @@ static void mv88e6xxx_remove(struct mdio_device *mdiodev)
 		mv88e6xxx_irq_poll_free(chip);
 
 	mv88e6xxx_phy_destroy(chip);
+
+	if (pdata)
+		dev_put(pdata->netdev);
 }
 
 static void mv88e6xxx_shutdown(struct mdio_device *mdiodev)
