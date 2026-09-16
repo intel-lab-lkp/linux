@@ -299,12 +299,14 @@ static bool rga3_handle_irq(struct rockchip_rga *rga)
 	return FIELD_GET(RGA3_INT_FRM_DONE, intr);
 }
 
-static void rga3_get_version(struct rockchip_rga *rga)
+static struct rockchip_rga_version rga3_get_version(struct rockchip_rga *rga)
 {
 	u32 version = rga_read(rga, RGA3_VERSION_NUM);
 
-	rga->version.major = FIELD_GET(RGA3_VERSION_NUM_MAJOR, version);
-	rga->version.minor = FIELD_GET(RGA3_VERSION_NUM_MINOR, version);
+	return (struct rockchip_rga_version) {
+		.major = FIELD_GET(RGA3_VERSION_NUM_MAJOR, version),
+		.minor = FIELD_GET(RGA3_VERSION_NUM_MINOR, version),
+	};
 }
 
 static struct rga3_fmt rga3_formats[] = {
