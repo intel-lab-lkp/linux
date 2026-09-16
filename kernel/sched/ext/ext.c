@@ -5340,13 +5340,20 @@ static void scx_sched_free_rcu_work(struct work_struct *work)
 
 	for_each_possible_cpu(cpu) {
 		struct scx_sched_pcpu *pcpu = per_cpu_ptr(sch->pcpu, cpu);
+		struct rq *rq = cpu_rq(cpu);
 
 		/*
-		 * $sch would have entered bypass mode before the RCU grace
-		 * period. As that blocks new deferrals, all
-		 * deferred_reenq_local_node's must be off-list by now.
+		 * Bypass blocks new deferrals, but a request queued before bypass
+		 * may still be pending. As run_deferred() runs under the rq lock,
+		 * take it to wait for any in-flight processing before unlinking the
+		 * now-obsolete request.
 		 */
-		WARN_ON_ONCE(!list_empty(&pcpu->deferred_reenq_local.node));
+		scoped_guard (rq_lock_irqsave, rq) {
+			guard(raw_spinlock)(&rq->scx.deferred_reenq_lock);
+
+			if (!list_empty(&pcpu->deferred_reenq_local.node))
+				list_del_init(&pcpu->deferred_reenq_local.node);
+		}
 
 		/* remove the queued ecaps sync so the pcpu can be freed */
 		scx_discard_ecaps_to_sync(cpu, pcpu);
@@ -5355,7 +5362,7 @@ static void scx_sched_free_rcu_work(struct work_struct *work)
 		 * Bypass blocks new kicks. Flush the kick irq_work so this
 		 * pcpu's to_kick_node is off the list before it is freed.
 		 */
-		irq_work_sync(&cpu_rq(cpu)->scx.kick_cpus_irq_work);
+		irq_work_sync(&rq->scx.kick_cpus_irq_work);
 		WARN_ON_ONCE(!list_empty(&pcpu->to_kick_node));
 		free_cpumask_var(pcpu->cpus_to_kick);
 		free_cpumask_var(pcpu->cpus_to_kick_if_idle);
