@@ -72,6 +72,12 @@ config CAN_IXXAT_USB
 	  interface the USB bus with the CAN bus for communication
 	  via CAN 2.0 and/or CAN FD.
 
+	  The driver provides support for the following devices:
+	    - IXXAT USB-to-CAN compact
+	    - IXXAT USB-to-CAN embedded
+	    - IXXAT USB-to-CAN professional
+	    - IXXAT USB-to-CAN automotive
+
 config CAN_KVASER_USB
 	tristate "Kvaser CAN/USB interface"
 	select NET_DEVLINK

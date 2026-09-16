@@ -22,6 +22,16 @@
 #include <linux/usb.h>
 #include <linux/can/dev.h>
 
+/* vendor ids used by IXXAT devices */
+#define IXXAT_USB_VENDOR_ID_LEGACY		0x08d8
+
+/* IXXAT_USB_VENDOR_ID_LEGACY supported device ids: CL1 */
+#define USB2CAN_V2_COMPACT_PRODUCT_ID		0x0008
+#define USB2CAN_V2_EMBEDDED_PRODUCT_ID		0x0009
+#define USB2CAN_V2_PROFESSIONAL_PRODUCT_ID	0x000A
+#define USB2CAN_V2_AUTOMOTIVE_PRODUCT_ID	0x000B
+#define USB2CAN_V2_PLUGIN_PRODUCT_ID		0x001F
+
 /* supported bus types */
 #define IXXAT_USB_BUSTYPE_CAN		1
 
@@ -731,6 +741,8 @@ struct ixxat_usb_adapter {
 			     struct ixxat_cancaps2 *caps);
 	int (*init_ctrl)(struct ixxat_usb_candevice *dev);
 };
+
+extern const struct ixxat_usb_adapter usb2can_cl1;
 
 /* ixxat_usb_setup_cmd() - Setup a device command
  * @req: Request block

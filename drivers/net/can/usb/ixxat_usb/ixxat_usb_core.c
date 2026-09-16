@@ -63,14 +63,63 @@ struct ixxat_driver_info {
 	bool is_legacy;
 };
 
+/* IXXAT_USB_VENDOR_ID_LEGACY products information */
+static const struct ixxat_driver_info legacy_usb2can_compact = {
+	.name = "IXXAT USB Compact",
+	.adapter = &usb2can_cl1,
+	.is_legacy = true,
+};
+
+static const struct ixxat_driver_info legacy_usb2can_embedded = {
+	.name = "IXXAT USB Embedded",
+	.adapter = &usb2can_cl1,
+	.is_legacy = true,
+};
+
+static const struct ixxat_driver_info legacy_usb2can_pro = {
+	.name = "IXXAT USB Professional",
+	.adapter = &usb2can_cl1,
+	.is_legacy = true,
+};
+
+static const struct ixxat_driver_info legacy_usb2can_auto = {
+	.name = "IXXAT USB Automotive",
+	.adapter = &usb2can_cl1,
+	.is_legacy = true,
+};
+
+static const struct ixxat_driver_info legacy_usb2can_plugin = {
+	.name = "IXXAT USB Plugin",
+	.adapter = &usb2can_cl1,
+	.is_legacy = true,
+};
+
 /* Table of devices that work with this driver
  *
- * This table is intentionally left empty: no IXXAT USB adapter family is
- * supported yet. Support for the various device families is added by
- * subsequent commits, each of which populates this table with the relevant
- * struct usb_device_id entries.
+ * Only the USB-to-CAN CL1 (V2 communication layer) adapter family is
+ * supported at this point. Support for the USB-to-CAN FD and CAN-IDM
+ * families is added by a subsequent commit in this series.
  */
 static const struct usb_device_id ixxat_usb_table[] = {
+	/* Legacy Vendor Id products list */
+	{ USB_DEVICE(IXXAT_USB_VENDOR_ID_LEGACY, USB2CAN_V2_COMPACT_PRODUCT_ID),
+	  .driver_info = (kernel_ulong_t)&legacy_usb2can_compact,
+	},
+	{ USB_DEVICE(IXXAT_USB_VENDOR_ID_LEGACY,
+		     USB2CAN_V2_EMBEDDED_PRODUCT_ID),
+	  .driver_info = (kernel_ulong_t)&legacy_usb2can_embedded,
+	},
+	{ USB_DEVICE(IXXAT_USB_VENDOR_ID_LEGACY,
+		     USB2CAN_V2_PROFESSIONAL_PRODUCT_ID),
+	  .driver_info = (kernel_ulong_t)&legacy_usb2can_pro,
+	},
+	{ USB_DEVICE(IXXAT_USB_VENDOR_ID_LEGACY,
+		     USB2CAN_V2_AUTOMOTIVE_PRODUCT_ID),
+	  .driver_info = (kernel_ulong_t)&legacy_usb2can_auto,
+	},
+	{ USB_DEVICE(IXXAT_USB_VENDOR_ID_LEGACY, USB2CAN_V2_PLUGIN_PRODUCT_ID),
+	  .driver_info = (kernel_ulong_t)&legacy_usb2can_plugin,
+	},
 	{ } /* Terminating entry */
 };
 
