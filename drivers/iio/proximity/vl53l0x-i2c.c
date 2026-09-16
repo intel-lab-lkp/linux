@@ -371,8 +371,6 @@ static int vl53l0x_probe(struct i2c_client *client)
 		if (ret)
 			return ret;
 
-		indio_dev->trig = iio_trigger_get(data->trig);
-
 		ret = vl53l0x_configure_irq(client, indio_dev);
 		if (ret)
 			return ret;
@@ -384,6 +382,8 @@ static int vl53l0x_probe(struct i2c_client *client)
 					&iio_triggered_buffer_setup_ops);
 		if (ret)
 			return ret;
+
+		indio_dev->trig = iio_trigger_get(data->trig);
 	}
 
 	return devm_iio_device_register(&client->dev, indio_dev);
