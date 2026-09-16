@@ -440,10 +440,12 @@ int arch_lock_shadow_stack_status(struct task_struct *task,
 {
 	/* If shtstk not supported or not enabled on task, nothing to lock here */
 	if (!is_user_shstk_enabled() ||
-	    !is_shstk_enabled(task) || arg != 0)
+	    !is_shstk_enabled(task))
 		return -EINVAL;
 
-	set_shstk_lock(task, true);
+	/* transparently handle unknown bits, this is part of the API */
+	if (arg & PR_SHADOW_STACK_ENABLE)
+		set_shstk_lock(task, true);
 
 	return 0;
 }
