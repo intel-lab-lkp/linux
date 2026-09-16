@@ -259,6 +259,33 @@ ksft_pr()
 
 Use ``ksft_pr()`` instead of ``print()`` to avoid breaking TAP format.
 
+ksft_metric()
+~~~~~~~~~~~~~
+
+Use ``ksft_metric()`` to report a numeric measurement for the current test
+case. The helper records the time relative to the start of the case and emits
+each observation immediately before the test result as compact JSON. For
+example::
+
+  ksft_metric("throughput", 100.5, shape="scalar", direction="rx")
+
+emits output similar to::
+
+  # ktap-metric-json: {"direction":"rx","name":"throughput","shape":"scalar","time":1.234,"value":100.5}
+
+When ``run_kselftest.sh`` nests the test output, its diagnostic prefix makes
+this ``# # ktap-metric-json: <json>``. A background sampler can call
+``ksft_metric()`` repeatedly. Pass ``shape`` explicitly to describe the
+layout of each value. For per-CPU data, the array index is the CPU number and
+``None`` represents a missing or offline CPU::
+
+  ksft_metric("cpu.utilization", [75.0, 22.0, None, 100.0],
+              shape="per-cpu", host="local")
+
+The helper does not infer the shape from the Python value, since an array may
+represent something other than per-CPU data. Metrics are measurements only and
+do not affect the pass or fail result.
+
 ksft_disruptive
 ~~~~~~~~~~~~~~~
 

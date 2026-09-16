@@ -4,9 +4,11 @@ import fnmatch
 import functools
 import getopt
 import inspect
+import json
 import os
 import signal
 import sys
+import threading
 import time
 import traceback
 from collections import namedtuple
@@ -16,6 +18,9 @@ from . import utils
 KSFT_RESULT = None
 KSFT_RESULT_ALL = True
 KSFT_DISRUPTIVE = True
+KSFT_METRICS = None
+KSFT_METRICS_START = None
+KSFT_METRICS_LOCK = threading.Lock()
 
 
 class KsftFailEx(Exception):
@@ -91,6 +96,39 @@ def ksft_pr(*objs, **kwargs):
     text = sep.join(str(obj) for obj in objs)
     prefixed = f"\n{pfx} ".join(text.split('\n'))
     print(pfx, prefixed, **kwargs)
+
+
+def ksft_metric(name, value, *, shape, **labels):
+    """Record a timestamped metric with an explicitly described shape."""
+    with KSFT_METRICS_LOCK:
+        if KSFT_METRICS is None or KSFT_METRICS_START is None:
+            raise RuntimeError("ksft_metric() called outside of a test case")
+
+        metric = {
+            "name": name,
+            "shape": shape,
+            "value": value,
+            "time": round(time.monotonic() - KSFT_METRICS_START, 6),
+        }
+        for key, label_value in sorted(labels.items()):
+            if key in metric:
+                raise ValueError(f"Metric label uses reserved name: {key}")
+            metric[key] = label_value
+        KSFT_METRICS.append(metric)
+
+
+def _ksft_flush_metrics():
+    global KSFT_METRICS, KSFT_METRICS_START
+
+    with KSFT_METRICS_LOCK:
+        metrics = KSFT_METRICS
+        KSFT_METRICS = None
+        KSFT_METRICS_START = None
+
+    for metric in metrics or []:
+        payload = json.dumps(metric, allow_nan=False, separators=(",", ":"),
+                             sort_keys=True)
+        ksft_pr(f"ktap-metric-json: {payload}")
 
 
 def _fail(*args):
@@ -400,7 +438,7 @@ def ksft_run(cases=None, globs=None, case_pfx=None, args=()):
 
     totals = {"pass": 0, "fail": 0, "skip": 0, "xfail": 0}
 
-    global KSFT_RESULT
+    global KSFT_RESULT, KSFT_METRICS, KSFT_METRICS_START
     if KSFT_RESULT is not None:
         raise RuntimeError("ksft_run() can't be called multiple times.")
 
@@ -411,6 +449,9 @@ def ksft_run(cases=None, globs=None, case_pfx=None, args=()):
     stop = False
     for func, args, name in test_cases:
         KSFT_RESULT = True
+        with KSFT_METRICS_LOCK:
+            KSFT_METRICS = []
+            KSFT_METRICS_START = time.monotonic()
         cnt += 1
         comment = ""
         cnt_key = ""
@@ -450,6 +491,7 @@ def ksft_run(cases=None, globs=None, case_pfx=None, args=()):
         if not cnt_key:
             cnt_key = 'pass' if KSFT_RESULT else 'fail'
 
+        _ksft_flush_metrics()
         ktap_result(KSFT_RESULT, cnt, name, comment=comment)
         totals[cnt_key] += 1
 
