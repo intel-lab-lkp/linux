@@ -402,6 +402,7 @@ void usb_wwan_close(struct usb_serial_port *port)
 		if (!urb)
 			break;
 		unbusy_queued_urb(urb, portdata);
+		usb_put_urb(urb);
 		usb_autopm_put_interface_async(serial->interface);
 	}
 
