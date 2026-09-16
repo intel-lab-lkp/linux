@@ -247,15 +247,18 @@ int dlpar_attach_node(struct device_node *dn, struct device_node *parent)
 	return 0;
 }
 
-int dlpar_detach_node(struct device_node *dn)
+int dlpar_detach_node(struct device_node *dn, bool notify)
 {
 	struct device_node *child;
 	int rc;
 
 	for_each_child_of_node(dn, child)
-		dlpar_detach_node(child);
+		dlpar_detach_node(child, notify);
 
-	rc = of_detach_node(dn);
+	if (notify)
+		rc = of_detach_node(dn);
+	else
+		rc = of_detach_node_no_notify(dn);
 	if (rc)
 		return rc;
 
