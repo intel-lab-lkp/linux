@@ -1845,6 +1845,10 @@ int ibmvfc_send_event(struct ibmvfc_event *evt,
 				dev_warn(vhost->dev, "Send warning. Receive queue closed, will retry.\n");
 			if (evt->cmnd)
 				scsi_dma_unmap(evt->cmnd);
+			else if (evt->fcp_req) {
+				evt->fcp_req->status = -EBUSY;
+				evt->fcp_req->done(evt->fcp_req);
+			}
 			ibmvfc_free_event(evt);
 			return SCSI_MLQUEUE_HOST_BUSY;
 		}
