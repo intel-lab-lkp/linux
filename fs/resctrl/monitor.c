@@ -978,7 +978,7 @@ int setup_rmid_lru_list(void)
 	if (rmid_ptrs)
 		return 0;
 
-	idx_limit = resctrl_arch_system_num_rmid_idx();
+	idx_limit = resctrl_arch_system_max_rmid_idx();
 	rmid_ptrs = kzalloc_objs(struct rmid_entry, idx_limit);
 	if (!rmid_ptrs)
 		return -ENOMEM;
