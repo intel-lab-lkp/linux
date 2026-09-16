@@ -302,6 +302,9 @@ static void tlan_remove_one(struct pci_dev *pdev)
 
 	cancel_work_sync(&priv->tlan_tqueue);
 	free_netdev(dev);
+#ifdef CONFIG_PCI
+	pci_disable_device(pdev);
+#endif
 }
 
 static void tlan_start(struct net_device *dev)
