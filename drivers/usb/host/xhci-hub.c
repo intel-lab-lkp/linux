@@ -17,8 +17,6 @@
 #include "xhci.h"
 #include "xhci-trace.h"
 
-#define	PORT_WAKE_BITS	(PORT_WOE | PORT_WDE | PORT_WCE)
-
 /* Default sublink speed attribute of each lane */
 static u32 ssp_cap_default_ssa[] = {
 	0x00050034, /* USB 3.0 SS Gen1x1 id:4 symmetric rx 5Gbps */
@@ -388,37 +386,6 @@ static unsigned int xhci_port_speed(int portsc)
 	return 0;
 }
 
-/*
- * These bits are Read Only (RO) and should be saved and written to the
- * registers: 0, 3, 10:13, 24, 30
- * connect status, over-current status, port speed, and device removable.
- * connect status and port speed are also sticky - meaning they're in
- * the AUX well and they aren't changed by a hot, warm, or cold reset.
- */
-#define	XHCI_PORT_RO	(PORT_CCS | PORT_OCA | PORT_SPEED_MASK | PORT_CAS | PORT_DR)
-/*
- * These bits are RW; writing a 0 clears the bit, writing a 1 sets the bit:
- * bits 5:8, 9, 14:15, 25, 26, 27
- * link state, port power, port indicator state, "wake on" enable state
- */
-#define XHCI_PORT_RWS	(PORT_PLS_MASK | PORT_PP | PORT_PIC_MASK | PORT_WCE | \
-			 PORT_WDE | PORT_WOE)
-/*
- * These bits are RW; writing a 1 sets the bit, writing a 0 has no effect:
- * bits 4, 31
- */
-#define	XHCI_PORT_RW1S	(PORT_PR | PORT_WPR)
-/*
- * Bit 16 is RW, and writing a '1' to it causes the link state control to be
- * latched in
- */
-#define	XHCI_PORT_RW	(PORT_LWS)
-/*
- * These bits are Reserved Zero (RsvdZ) and zero should be written to them:
- * bits 2, 28:31
- */
-#define	XHCI_PORT_RZ	((1<<2) | (0xf<<28))
-
 /**
  * xhci_port_state_to_neutral() - Clean up read portsc value back into writeable
  * @portsc: u32 port value read from portsc register to be cleanup up
@@ -437,7 +404,7 @@ static unsigned int xhci_port_speed(int portsc)
 u32 xhci_port_state_to_neutral(u32 portsc)
 {
 	/* Save read-only status and port state */
-	return (portsc & XHCI_PORT_RO) | (portsc & XHCI_PORT_RWS);
+	return (portsc & PORTSC_RO_BITS) | (portsc & PORTSC_RWS_BITS);
 }
 EXPORT_SYMBOL_GPL(xhci_port_state_to_neutral);
 
