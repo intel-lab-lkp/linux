@@ -7,6 +7,7 @@
 
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
+#include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/iopoll.h>
 #include <linux/module.h>
@@ -25,7 +26,7 @@ struct sunxi_ccu {
 void ccu_helper_wait_for_lock(struct ccu_common *common, u32 lock)
 {
 	void __iomem *addr;
-	u32 reg;
+	int i;
 
 	if (!lock)
 		return;
@@ -35,7 +36,14 @@ void ccu_helper_wait_for_lock(struct ccu_common *common, u32 lock)
 	else
 		addr = common->base + common->reg;
 
-	WARN_ON(readl_relaxed_poll_timeout(addr, reg, reg & lock, 100, 70000));
+	for (i = 0; i < 100000; i++) {
+		if (readl_relaxed(addr) & lock)
+			return;
+		udelay(1);
+	}
+
+	if (!(readl_relaxed(addr) & lock))
+		pr_warn("%s: clock lock timeout\n", clk_hw_get_name(&common->hw));
 }
 EXPORT_SYMBOL_NS_GPL(ccu_helper_wait_for_lock, "SUNXI_CCU");
 
