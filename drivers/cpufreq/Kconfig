@@ -242,6 +242,20 @@ config CPUFREQ_VIRT
 
 	  If in doubt, say N.
 
+config CPUFREQ_VIRTIO
+	tristate "Virtio CPU frequency driver"
+	depends on VIRTIO
+	help
+	  This option adds a virtio cpufreq frontend. The guest sends a
+	  vCPU id to the host backend and receives the mapped physical
+	  CPU frequency in kHz through the cpufreq .get() callback.
+
+	  This is intended for virtualization stacks (for example Xen)
+	  that pin each vCPU to a pCPU and expose host frequency to the
+	  guest. It does not change the host frequency.
+
+	  If in doubt, say N.
+
 config CPUFREQ_DT_PLATDEV
 	bool "Generic DT based cpufreq platdev driver"
 	depends on OF
