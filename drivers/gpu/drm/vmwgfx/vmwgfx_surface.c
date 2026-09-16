@@ -965,6 +965,7 @@ static int vmw_buffer_prime_to_surface_base(struct vmw_private *dev_priv,
 	base = &user_srf->prime.base;
 	ret = ttm_ref_object_add(tfile, base, NULL, false);
 	if (ret) {
+		ttm_base_object_unref(&base);
 		drm_warn(&dev_priv->drm,
 			 "Couldn't add an object ref for the buffer (%d).\n", *handle);
 		goto out;
