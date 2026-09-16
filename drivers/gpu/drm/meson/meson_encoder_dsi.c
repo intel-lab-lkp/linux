@@ -135,17 +135,21 @@ int meson_encoder_dsi_probe(struct meson_drm *priv)
 	/* Encoder */
 	ret = drm_simple_encoder_init(priv->drm, &meson_encoder_dsi->encoder,
 				      DRM_MODE_ENCODER_DSI);
-	if (ret)
+	if (ret) {
+		drm_bridge_put(meson_encoder_dsi->bridge.next_bridge);
 		return dev_err_probe(priv->dev, ret,
 				     "Failed to init DSI encoder\n");
+	}
 
 	meson_encoder_dsi->encoder.possible_crtcs = BIT(0);
 
 	/* Attach DSI Encoder Bridge to Encoder */
 	ret = drm_bridge_attach(&meson_encoder_dsi->encoder, &meson_encoder_dsi->bridge, NULL, 0);
-	if (ret)
+	if (ret) {
+		drm_bridge_put(meson_encoder_dsi->bridge.next_bridge);
 		return dev_err_probe(priv->dev, ret,
 				     "Failed to attach bridge\n");
+	}
 
 	/*
 	 * We should have now in place:
