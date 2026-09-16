@@ -1085,9 +1085,10 @@ static int scsi_add_lun(struct scsi_device *sdev, unsigned char *inq_result,
 		return SCSI_SCAN_LUN_PRESENT;
 
 	/*
-	 * No need to freeze the queue as it isn't reachable to anyone else yet.
+	 * No need to freeze the queue or hold limits_lock during sdev_configure
+	 * as the queue isn't reachable to anyone else yet.
 	 */
-	lim = queue_limits_start_update(sdev->request_queue);
+	lim = sdev->request_queue->limits;
 	if (*bflags & BLIST_MAX_512)
 		lim.max_hw_sectors = 512;
 	else if (*bflags & BLIST_MAX_1024)
@@ -1096,7 +1097,6 @@ static int scsi_add_lun(struct scsi_device *sdev, unsigned char *inq_result,
 	if (hostt->sdev_configure)
 		ret = hostt->sdev_configure(sdev, &lim);
 	if (ret) {
-		queue_limits_cancel_update(sdev->request_queue);
 		/*
 		 * If the LLDD reports device not present, don't clutter the
 		 * console with failure messages.
@@ -1107,7 +1107,7 @@ static int scsi_add_lun(struct scsi_device *sdev, unsigned char *inq_result,
 		return SCSI_SCAN_NO_RESPONSE;
 	}
 
-	ret = queue_limits_commit_update(sdev->request_queue, &lim);
+	ret = queue_limits_set(sdev->request_queue, &lim);
 	if (ret) {
 		sdev_printk(KERN_ERR, sdev, "failed to apply queue limits.\n");
 		return SCSI_SCAN_NO_RESPONSE;
