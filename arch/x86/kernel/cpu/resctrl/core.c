@@ -799,6 +799,12 @@ void resctrl_arch_pre_mount(void)
 		return;
 
 	/*
+	 * AET may claim to support more RMIDs than are permitted to be
+	 * assigned to IA32_PQR_ASSOC.RMID. Enforce this limit.
+	 */
+	r->mon.num_rmid = min(r->mon.num_rmid, pqr_assoc_num_rmid);
+
+	/*
 	 * Late discovery of telemetry events means the domains for the
 	 * resource were not built. Do that now.
 	 */
