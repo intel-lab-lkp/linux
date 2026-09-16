@@ -427,7 +427,7 @@ static int host1x_device_add(struct host1x *host1x,
 			     struct host1x_driver *driver)
 {
 	struct host1x_client *client, *tmp;
-	struct host1x_subdev *subdev;
+	struct host1x_subdev *subdev, *sd;
 	struct host1x_device *device;
 	int err;
 
@@ -457,6 +457,10 @@ static int host1x_device_add(struct host1x *host1x,
 
 	err = host1x_device_parse_dt(device, driver);
 	if (err < 0) {
+		mutex_lock(&device->subdevs_lock);
+		list_for_each_entry_safe(subdev, sd, &device->subdevs, list)
+			host1x_subdev_del(subdev);
+		mutex_unlock(&device->subdevs_lock);
 		kfree(device);
 		return err;
 	}
