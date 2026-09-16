@@ -1680,6 +1680,7 @@ static int vc4_hvs_bind(struct device *dev, struct device *master, void *data)
 					     (vc4->gen >= VC4_GEN_6_C) ? "core" : NULL);
 		if (IS_ERR(hvs->core_clk)) {
 			dev_err(&pdev->dev, "Couldn't get core clock\n");
+			rpi_firmware_put(firmware);
 			return PTR_ERR(hvs->core_clk);
 		}
 
@@ -1687,6 +1688,7 @@ static int vc4_hvs_bind(struct device *dev, struct device *master, void *data)
 					     (vc4->gen >= VC4_GEN_6_C) ? "disp" : NULL);
 		if (IS_ERR(hvs->disp_clk)) {
 			dev_err(&pdev->dev, "Couldn't get disp clock\n");
+			rpi_firmware_put(firmware);
 			return PTR_ERR(hvs->disp_clk);
 		}
 
