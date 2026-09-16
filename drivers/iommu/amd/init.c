@@ -1796,6 +1796,7 @@ static void __init free_iommu_one(struct amd_iommu *iommu)
 	free_ga_log(iommu);
 	iommu_unmap_mmio_space(iommu);
 	amd_iommu_iopf_uninit(iommu);
+	pci_dev_put(iommu->dev);
 }
 
 static void __init free_iommu_all(void)
