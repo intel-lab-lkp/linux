@@ -257,11 +257,16 @@ static void ibmvfc_trc_start(struct ibmvfc_event *evt)
 
 	switch (entry->fmt) {
 	case IBMVFC_CMD_FORMAT:
-		entry->op_code = iu->cdb[0];
 		entry->scsi_id = be64_to_cpu(vfc_cmd->tgt_scsi_id);
-		entry->lun = scsilun_to_int(&iu->lun);
-		entry->tmf_flags = iu->tmf_flags;
-		entry->u.start.xfer_len = be32_to_cpu(iu->xfer_len);
+		if (evt->cmnd) {
+			entry->op_code = iu->cdb[0];
+			entry->lun = scsilun_to_int(&iu->lun);
+			entry->tmf_flags = iu->tmf_flags;
+			entry->u.start.xfer_len = be32_to_cpu(iu->xfer_len);
+		} else if (evt->fcp_req) {
+			entry->op_code = vfc_cmd->v3nvme.iu.sqe.common.opcode;
+			entry->u.start.xfer_len = be32_to_cpu(vfc_cmd->payload_len);
+		}
 		break;
 	case IBMVFC_MAD_FORMAT:
 		entry->op_code = be32_to_cpu(mad->opcode);
@@ -294,15 +299,19 @@ static void ibmvfc_trc_end(struct ibmvfc_event *evt)
 
 	switch (entry->fmt) {
 	case IBMVFC_CMD_FORMAT:
-		entry->op_code = iu->cdb[0];
 		entry->scsi_id = be64_to_cpu(vfc_cmd->tgt_scsi_id);
-		entry->lun = scsilun_to_int(&iu->lun);
-		entry->tmf_flags = iu->tmf_flags;
 		entry->u.end.status = be16_to_cpu(vfc_cmd->status);
 		entry->u.end.error = be16_to_cpu(vfc_cmd->error);
-		entry->u.end.fcp_rsp_flags = rsp->flags;
-		entry->u.end.rsp_code = rsp->data.info.rsp_code;
-		entry->u.end.scsi_status = rsp->scsi_status;
+		if (evt->cmnd) {
+			entry->op_code = iu->cdb[0];
+			entry->lun = scsilun_to_int(&iu->lun);
+			entry->tmf_flags = iu->tmf_flags;
+			entry->u.end.fcp_rsp_flags = rsp->flags;
+			entry->u.end.rsp_code = rsp->data.info.rsp_code;
+			entry->u.end.scsi_status = rsp->scsi_status;
+		} else if (evt->fcp_req) {
+			entry->op_code = vfc_cmd->v3nvme.iu.sqe.common.opcode;
+		}
 		break;
 	case IBMVFC_MAD_FORMAT:
 		entry->op_code = be32_to_cpu(mad->opcode);
