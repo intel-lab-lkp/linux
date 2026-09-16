@@ -383,8 +383,10 @@ static int ppkb_probe(struct i2c_client *client)
 		error = devm_i2c_add_adapter(dev, &ppkb->adapter);
 		if (error) {
 			dev_err(dev, "Failed to add I2C adapter: %d\n", error);
+			of_node_put(i2c_bus);
 			return error;
 		}
+		of_node_put(i2c_bus);
 	}
 
 	crc8_populate_msb(ppkb->crc_table, PPKB_CRC8_POLYNOMIAL);
