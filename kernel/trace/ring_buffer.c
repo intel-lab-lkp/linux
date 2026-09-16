@@ -7488,10 +7488,6 @@ int ring_buffer_subbuf_order_set(struct trace_buffer *buffer, int order)
 
 	/* Make sure all new buffers are allocated, before deleting the old ones */
 	for_each_buffer_cpu(buffer, cpu) {
-
-		if (!cpumask_test_cpu(cpu, buffer->cpumask))
-			continue;
-
 		cpu_buffer = buffer->buffers[cpu];
 
 		/* Update the number of pages to match the new size */
@@ -7521,9 +7517,6 @@ int ring_buffer_subbuf_order_set(struct trace_buffer *buffer, int order)
 		struct buffer_data_read_page old_free_data_page;
 		struct list_head old_pages;
 		unsigned long flags;
-
-		if (!cpumask_test_cpu(cpu, buffer->cpumask))
-			continue;
 
 		cpu_buffer = buffer->buffers[cpu];
 
