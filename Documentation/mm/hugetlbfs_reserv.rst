@@ -314,21 +314,8 @@ huge pages.  If they can not be reserved, the mount fails.
 The routines hugepage_subpool_get/put_pages() are called when pages are
 obtained from or released back to a subpool.  They perform all subpool
 accounting, and track any reservations associated with the subpool.
-hugepage_subpool_get/put_pages are passed the number of huge pages by which
-to adjust the subpool 'used page' count (down for get, up for put).  Normally,
-they return the same value that was passed or an error if not enough pages
-exist in the subpool.
-
-However, if reserves are associated with the subpool a return value less
-than the passed value may be returned.  This return value indicates the
-number of additional global pool adjustments which must be made.  For example,
-suppose a subpool contains 3 reserved huge pages and someone asks for 5.
-The 3 reserved pages associated with the subpool can be used to satisfy part
-of the request.  But, 2 pages must be obtained from the global pools.  To
-relay this information to the caller, the value 2 is returned.  The caller
-is then responsible for attempting to obtain the additional two pages from
-the global pools.
-
+hugepage_subpool_get/put_pages() use the number of huge pages passed to adjust
+the subpool 'used page' count.
 
 COW and Reservations
 ====================
