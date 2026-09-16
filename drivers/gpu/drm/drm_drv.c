@@ -744,6 +744,7 @@ static int drm_dev_init(struct drm_device *dev,
 				(drm_core_check_feature(dev, DRIVER_RENDER) ||
 				drm_core_check_feature(dev, DRIVER_MODESET))) {
 		DRM_ERROR("DRM driver can't be both a compute acceleration and graphics driver\n");
+		put_device(dev->dev);
 		return -EINVAL;
 	}
 
