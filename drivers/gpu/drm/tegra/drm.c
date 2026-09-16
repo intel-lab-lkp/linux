@@ -159,8 +159,10 @@ static int host1x_reloc_copy_from_user(struct host1x_reloc *dest,
 		return -ENOENT;
 
 	dest->target.bo = tegra_gem_lookup(file, target);
-	if (!dest->target.bo)
+	if (!dest->target.bo) {
+		drm_gem_object_put(dest->cmdbuf.bo);
 		return -ENOENT;
+	}
 
 	return 0;
 }
