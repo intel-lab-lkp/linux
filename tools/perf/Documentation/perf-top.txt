@@ -90,9 +90,13 @@ Default is to monitor all CPUS.
 	client cache first, when it is not available locally, on for
 	these commands by default.  Turn it off per invocation with
 	--no-debuginfod, with the "top.debuginfod" config option or
-	globally with "core.debuginfod" set to false.  Disabled as well
-	when the build-id cache is off, e.g. "buildid.dir" set to
-	/dev/null.
+	globally with "core.debuginfod" set to false.  While a fetch is
+	in progress, 's' skips the current fetch and 'd' skips it and
+	disables debuginfod for the rest of the session, writing
+	core.debuginfod=false to the configuration file so that it
+	stays disabled in the next runs too; in the stdio interface the
+	progress is a line on stderr.  Disabled as well when the
+	build-id cache is off, e.g. "buildid.dir" set to /dev/null.
 
 --kallsyms=<file>::
 	kallsyms pathname

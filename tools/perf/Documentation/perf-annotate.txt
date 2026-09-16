@@ -64,7 +64,9 @@ OPTIONS
 	configured in DEBUGINFOD_URLS, checking the local debuginfod
 	client cache first, when it is not available locally, on for
 	these commands by default.  See the --debuginfod option of
-	'perf report' for how to turn it off.
+	'perf report' for how to turn it off, including the 's' and
+	'd' keys that skip a fetch in progress while 'perf' is
+	waiting for it.
 
 --itrace::
 	Options for decoding instruction tracing data. The options are:
