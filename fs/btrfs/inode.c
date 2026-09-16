@@ -3204,6 +3204,79 @@ static int insert_ordered_extent_file_extent(struct btrfs_trans_handle *trans,
 					   update_inode_bytes, oe->qgroup_rsv);
 }
 
+static int finish_delayed_ordered(struct btrfs_ordered_extent *oe)
+{
+	struct btrfs_inode *inode = oe->inode;
+	struct btrfs_fs_info *fs_info = inode->root->fs_info;
+	struct btrfs_ordered_extent *child;
+	struct btrfs_ordered_extent *tmp;
+	struct extent_state *cached = NULL;
+	const u32 nr_bits = oe->num_bytes >> fs_info->sectorsize_bits;
+	bool io_error = test_bit(BTRFS_ORDERED_IOERR, &oe->flags);
+	u64 cur = oe->file_offset;
+	int ret = 0;
+	int saved_ret = 0;
+
+	/* Finish each child OE. */
+	list_for_each_entry_safe(child, tmp, &oe->child_list, child_list) {
+		list_del_init(&child->child_list);
+		refcount_inc(&child->refs);
+
+		/* The range should have been marked in the bitmap. */
+		ASSERT(bitmap_test_range_all_set(oe->child_bitmap,
+			(child->file_offset - oe->file_offset) >> fs_info->sectorsize_bits,
+			child->num_bytes >> fs_info->sectorsize_bits));
+
+		if (io_error)
+			set_bit(BTRFS_ORDERED_IOERR, &child->flags);
+
+		ret = btrfs_finish_one_ordered(child);
+		if (ret && !saved_ret)
+			saved_ret = ret;
+	}
+
+	/* For ranges that don't have a child OE, manually clean them up. */
+	while (cur < oe->file_offset + oe->num_bytes) {
+		const u32 cur_bit = (cur - oe->file_offset) >> fs_info->sectorsize_bits;
+		u32 first_zero;
+		u32 next_set;
+		u64 range_start;
+		u64 range_end;
+		u32 range_len;
+
+		first_zero = find_next_zero_bit(oe->child_bitmap, nr_bits, cur_bit);
+		if (first_zero >= nr_bits)
+			break;
+		next_set = find_next_bit(oe->child_bitmap, nr_bits, first_zero);
+		ASSERT(next_set > first_zero);
+
+		range_start = oe->file_offset + (first_zero << fs_info->sectorsize_bits);
+		range_len = (next_set - first_zero) << fs_info->sectorsize_bits;
+		range_end = range_start + range_len - 1;
+
+		btrfs_lock_extent(&inode->io_tree, range_start, range_end, &cached);
+		/*
+		 * The range has reserved data/metadata but no real OE, thus we have
+		 * to manually release them.
+		 */
+		btrfs_delalloc_release_space(inode, NULL, range_start, range_len, true);
+		/*
+		 * Also need to remove/drop the pinned extent map range.
+		 * Here we do not want the extent map to stay, as they do not represent
+		 * any real extent on-disk.
+		 */
+		btrfs_drop_extent_map_range(inode, range_start, range_end, false);
+		btrfs_clear_extent_bit(&inode->io_tree, range_start, range_end,
+				EXTENT_LOCKED | EXTENT_DELALLOC_NEW | EXTENT_DEFRAG |
+				EXTENT_DO_ACCOUNTING, &cached);
+		cur = range_end + 1;
+	}
+	btrfs_remove_ordered_extent(oe);
+	btrfs_put_ordered_extent(oe);
+	btrfs_put_ordered_extent(oe);
+	return saved_ret;
+}
+
 /*
  * As ordered data IO finishes, this gets called so we can finish
  * an ordered extent if the range of bytes in the file it covers are
@@ -3225,6 +3298,9 @@ int btrfs_finish_one_ordered(struct btrfs_ordered_extent *ordered_extent)
 	bool truncated = false;
 	bool clear_reserved_extent = true;
 	unsigned int clear_bits = 0;
+
+	if (test_bit(BTRFS_ORDERED_DELAYED, &ordered_extent->flags))
+		return finish_delayed_ordered(ordered_extent);
 
 	start = ordered_extent->file_offset;
 	end = start + ordered_extent->num_bytes - 1;
