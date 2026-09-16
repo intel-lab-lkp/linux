@@ -2296,6 +2296,16 @@ static int elf_validity_cache_index_versions(struct load_info *info, int flags)
 	 * number of entries in every section.
 	 */
 	if (vers_ext_crc) {
+		/*
+		 * The name section is walked by its sh_offset and sh_size
+		 * below. elf_validity_check_sectionheaders() exempts SHT_NOBITS
+		 * sections from validate_section_offset(), so a __version_ext_names
+		 * section of that type reaches here with an unvalidated sh_offset.
+		 * Bound it before dereferencing hdr + sh_offset.
+		 */
+		if (validate_section_offset(info, &info->sechdrs[vers_ext_name]))
+			return -ENOEXEC;
+
 		crc_count = info->sechdrs[vers_ext_crc].sh_size / sizeof(u32);
 		name = (void *)info->hdr +
 			info->sechdrs[vers_ext_name].sh_offset;
