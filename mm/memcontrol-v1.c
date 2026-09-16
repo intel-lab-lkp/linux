@@ -138,9 +138,9 @@ static void __mem_cgroup_threshold(struct mem_cgroup *memcg, bool swap)
 
 	rcu_read_lock();
 	if (!swap)
-		t = rcu_dereference(memcg->thresholds.primary);
+		t = rcu_dereference(memcg->v1.thresholds.primary);
 	else
-		t = rcu_dereference(memcg->memsw_thresholds.primary);
+		t = rcu_dereference(memcg->v1.memsw_thresholds.primary);
 
 	if (!t)
 		goto unlock;
@@ -215,7 +215,7 @@ static void memcg1_charge_statistics(struct mem_cgroup *memcg, int nr_pages)
 		nr_pages = -nr_pages; /* for event */
 	}
 
-	__this_cpu_add(memcg->events_percpu->nr_page_events, nr_pages);
+	__this_cpu_add(memcg->v1.events_percpu->nr_page_events, nr_pages);
 }
 
 #define THRESHOLDS_EVENTS_TARGET 128
@@ -224,11 +224,11 @@ static bool memcg1_event_ratelimit(struct mem_cgroup *memcg)
 {
 	unsigned long val, next;
 
-	val = __this_cpu_read(memcg->events_percpu->nr_page_events);
-	next = __this_cpu_read(memcg->events_percpu->threshold_target);
+	val = __this_cpu_read(memcg->v1.events_percpu->nr_page_events);
+	next = __this_cpu_read(memcg->v1.events_percpu->threshold_target);
 	/* from time_after() in jiffies.h */
 	if ((long)(next - val) < 0) {
-		__this_cpu_write(memcg->events_percpu->threshold_target,
+		__this_cpu_write(memcg->v1.events_percpu->threshold_target,
 				 val + THRESHOLDS_EVENTS_TARGET);
 		return true;
 	}
@@ -383,7 +383,7 @@ void memcg1_uncharge_batch(struct mem_cgroup *memcg, unsigned long pgpgout,
 
 	local_irq_save(flags);
 	count_memcg_events(memcg, PGPGOUT, pgpgout);
-	__this_cpu_add(memcg->events_percpu->nr_page_events, nr_memory);
+	__this_cpu_add(memcg->v1.events_percpu->nr_page_events, nr_memory);
 	memcg1_check_events(memcg);
 	local_irq_restore(flags);
 }
@@ -408,7 +408,7 @@ static void mem_cgroup_oom_notify_cb(struct mem_cgroup *memcg)
 
 	spin_lock(&memcg_oom_lock);
 
-	list_for_each_entry(ev, &memcg->oom_notify, list)
+	list_for_each_entry(ev, &memcg->v1.oom_notify, list)
 		eventfd_signal(ev->eventfd);
 
 	spin_unlock(&memcg_oom_lock);
@@ -435,13 +435,13 @@ static int __mem_cgroup_usage_register_event(struct mem_cgroup *memcg,
 	if (ret)
 		return ret;
 
-	mutex_lock(&memcg->thresholds_lock);
+	mutex_lock(&memcg->v1.thresholds_lock);
 
 	if (type == _MEM) {
-		thresholds = &memcg->thresholds;
+		thresholds = &memcg->v1.thresholds;
 		usage = mem_cgroup_usage(memcg, false);
 	} else if (type == _MEMSWAP) {
-		thresholds = &memcg->memsw_thresholds;
+		thresholds = &memcg->v1.memsw_thresholds;
 		usage = mem_cgroup_usage(memcg, true);
 	} else
 		BUG();
@@ -497,7 +497,7 @@ static int __mem_cgroup_usage_register_event(struct mem_cgroup *memcg,
 	synchronize_rcu();
 
 unlock:
-	mutex_unlock(&memcg->thresholds_lock);
+	mutex_unlock(&memcg->v1.thresholds_lock);
 
 	return ret;
 }
@@ -522,13 +522,13 @@ static void __mem_cgroup_usage_unregister_event(struct mem_cgroup *memcg,
 	unsigned long usage;
 	int i, j, size, entries;
 
-	mutex_lock(&memcg->thresholds_lock);
+	mutex_lock(&memcg->v1.thresholds_lock);
 
 	if (type == _MEM) {
-		thresholds = &memcg->thresholds;
+		thresholds = &memcg->v1.thresholds;
 		usage = mem_cgroup_usage(memcg, false);
 	} else if (type == _MEMSWAP) {
-		thresholds = &memcg->memsw_thresholds;
+		thresholds = &memcg->v1.memsw_thresholds;
 		usage = mem_cgroup_usage(memcg, true);
 	} else
 		BUG();
@@ -596,7 +596,7 @@ swap_buffers:
 		thresholds->spare = NULL;
 	}
 unlock:
-	mutex_unlock(&memcg->thresholds_lock);
+	mutex_unlock(&memcg->v1.thresholds_lock);
 }
 
 static void mem_cgroup_usage_unregister_event(struct mem_cgroup *memcg,
@@ -623,10 +623,10 @@ static int mem_cgroup_oom_register_event(struct mem_cgroup *memcg,
 	spin_lock(&memcg_oom_lock);
 
 	event->eventfd = eventfd;
-	list_add(&event->list, &memcg->oom_notify);
+	list_add(&event->list, &memcg->v1.oom_notify);
 
 	/* already in OOM ? */
-	if (memcg->under_oom)
+	if (memcg->v1.under_oom)
 		eventfd_signal(eventfd);
 	spin_unlock(&memcg_oom_lock);
 
@@ -640,7 +640,7 @@ static void mem_cgroup_oom_unregister_event(struct mem_cgroup *memcg,
 
 	spin_lock(&memcg_oom_lock);
 
-	list_for_each_entry_safe(ev, tmp, &memcg->oom_notify, list) {
+	list_for_each_entry_safe(ev, tmp, &memcg->v1.oom_notify, list) {
 		if (ev->eventfd == eventfd) {
 			list_del(&ev->list);
 			kfree(ev);
@@ -709,7 +709,7 @@ static int memcg_event_wake(wait_queue_entry_t *wait, unsigned int mode,
 		 * side will require wqh->lock via remove_wait_queue(),
 		 * which we hold.
 		 */
-		spin_lock(&memcg->event_list_lock);
+		spin_lock(&memcg->v1.event_list_lock);
 		if (!list_empty(&event->list)) {
 			list_del_init(&event->list);
 			/*
@@ -718,7 +718,7 @@ static int memcg_event_wake(wait_queue_entry_t *wait, unsigned int mode,
 			 */
 			schedule_work(&event->remove);
 		}
-		spin_unlock(&memcg->event_list_lock);
+		spin_unlock(&memcg->v1.event_list_lock);
 	}
 
 	return 0;
@@ -868,9 +868,9 @@ static ssize_t memcg_write_event_control(struct kernfs_open_file *of,
 
 	vfs_poll(fd_file(efile), &event->pt);
 
-	spin_lock_irq(&memcg->event_list_lock);
-	list_add(&event->list, &memcg->event_list);
-	spin_unlock_irq(&memcg->event_list_lock);
+	spin_lock_irq(&memcg->v1.event_list_lock);
+	list_add(&event->list, &memcg->v1.event_list);
+	spin_unlock_irq(&memcg->v1.event_list_lock);
 	return nbytes;
 
 out_put_css:
@@ -884,10 +884,10 @@ out_kfree:
 
 void memcg1_memcg_init(struct mem_cgroup *memcg)
 {
-	INIT_LIST_HEAD(&memcg->oom_notify);
-	mutex_init(&memcg->thresholds_lock);
-	INIT_LIST_HEAD(&memcg->event_list);
-	spin_lock_init(&memcg->event_list_lock);
+	INIT_LIST_HEAD(&memcg->v1.oom_notify);
+	mutex_init(&memcg->v1.thresholds_lock);
+	INIT_LIST_HEAD(&memcg->v1.event_list);
+	spin_lock_init(&memcg->v1.event_list_lock);
 }
 
 void memcg1_css_offline(struct mem_cgroup *memcg)
@@ -899,12 +899,12 @@ void memcg1_css_offline(struct mem_cgroup *memcg)
 	 * Notify userspace about cgroup removing only after rmdir of cgroup
 	 * directory to avoid race between userspace and kernelspace.
 	 */
-	spin_lock_irq(&memcg->event_list_lock);
-	list_for_each_entry_safe(event, tmp, &memcg->event_list, list) {
+	spin_lock_irq(&memcg->v1.event_list_lock);
+	list_for_each_entry_safe(event, tmp, &memcg->v1.event_list, list) {
 		list_del_init(&event->list);
 		schedule_work(&event->remove);
 	}
-	spin_unlock_irq(&memcg->event_list_lock);
+	spin_unlock_irq(&memcg->v1.event_list_lock);
 }
 
 /*
@@ -918,7 +918,7 @@ static bool mem_cgroup_oom_trylock(struct mem_cgroup *memcg)
 	spin_lock(&memcg_oom_lock);
 
 	for_each_mem_cgroup_tree(iter, memcg) {
-		if (iter->oom_lock) {
+		if (iter->v1.oom_lock) {
 			/*
 			 * this subtree of our hierarchy is already locked
 			 * so we cannot give a lock.
@@ -927,7 +927,7 @@ static bool mem_cgroup_oom_trylock(struct mem_cgroup *memcg)
 			mem_cgroup_iter_break(memcg, iter);
 			break;
 		}
-		iter->oom_lock = true;
+		iter->v1.oom_lock = true;
 	}
 
 	if (failed) {
@@ -940,7 +940,7 @@ static bool mem_cgroup_oom_trylock(struct mem_cgroup *memcg)
 				mem_cgroup_iter_break(memcg, iter);
 				break;
 			}
-			iter->oom_lock = false;
+			iter->v1.oom_lock = false;
 		}
 	} else
 		mutex_acquire(&memcg_oom_lock_dep_map, 0, 1, _RET_IP_);
@@ -957,7 +957,7 @@ static void mem_cgroup_oom_unlock(struct mem_cgroup *memcg)
 	spin_lock(&memcg_oom_lock);
 	mutex_release(&memcg_oom_lock_dep_map, _RET_IP_);
 	for_each_mem_cgroup_tree(iter, memcg)
-		iter->oom_lock = false;
+		iter->v1.oom_lock = false;
 	spin_unlock(&memcg_oom_lock);
 }
 
@@ -967,7 +967,7 @@ static void mem_cgroup_mark_under_oom(struct mem_cgroup *memcg)
 
 	spin_lock(&memcg_oom_lock);
 	for_each_mem_cgroup_tree(iter, memcg)
-		iter->under_oom++;
+		iter->v1.under_oom++;
 	spin_unlock(&memcg_oom_lock);
 }
 
@@ -981,8 +981,8 @@ static void mem_cgroup_unmark_under_oom(struct mem_cgroup *memcg)
 	 */
 	spin_lock(&memcg_oom_lock);
 	for_each_mem_cgroup_tree(iter, memcg)
-		if (iter->under_oom > 0)
-			iter->under_oom--;
+		if (iter->v1.under_oom > 0)
+			iter->v1.under_oom--;
 	spin_unlock(&memcg_oom_lock);
 }
 
@@ -1012,14 +1012,14 @@ static int memcg_oom_wake_function(wait_queue_entry_t *wait,
 void memcg1_oom_recover(struct mem_cgroup *memcg)
 {
 	/*
-	 * For the following lockless ->under_oom test, the only required
+	 * For the following lockless ->v1.under_oom test, the only required
 	 * guarantee is that it must see the state asserted by an OOM when
 	 * this function is called as a result of userland actions
 	 * triggered by the notification of the OOM.  This is trivially
 	 * achieved by invoking mem_cgroup_mark_under_oom() before
 	 * triggering notification.
 	 */
-	if (memcg && memcg->under_oom)
+	if (memcg && memcg->v1.under_oom)
 		__wake_up(&memcg_oom_waitq, TASK_NORMAL, 0, memcg);
 }
 
@@ -1100,7 +1100,7 @@ bool memcg1_oom_prepare(struct mem_cgroup *memcg, bool *locked)
 	 * Please note that mem_cgroup_out_of_memory might fail to find a
 	 * victim and then we have to bail out from the charge path.
 	 */
-	if (READ_ONCE(memcg->oom_kill_disable)) {
+	if (READ_ONCE(memcg->v1.oom_kill_disable)) {
 		if (current->in_user_fault) {
 			css_get(&memcg->css);
 			current->memcg_in_oom = memcg;
@@ -1576,10 +1576,10 @@ static u64 mem_cgroup_read_u64(struct cgroup_subsys_state *css,
 		counter = &memcg->memsw;
 		break;
 	case _KMEM:
-		counter = &memcg->kmem;
+		counter = &memcg->v1.kmem;
 		break;
 	case _TCP:
-		counter = &memcg->tcpmem;
+		counter = &memcg->v1.tcpmem;
 		break;
 	default:
 		BUG();
@@ -1619,11 +1619,11 @@ static int memcg_update_tcp_max(struct mem_cgroup *memcg, unsigned long max)
 
 	mutex_lock(&memcg_max_mutex);
 
-	ret = page_counter_set_max(&memcg->tcpmem, max);
+	ret = page_counter_set_max(&memcg->v1.tcpmem, max);
 	if (ret)
 		goto out;
 
-	if (!memcg->tcpmem_active) {
+	if (!memcg->v1.tcpmem_active) {
 		/*
 		 * The active flag needs to be written after the static_key
 		 * update. This is what guarantees that the socket activation
@@ -1641,7 +1641,7 @@ static int memcg_update_tcp_max(struct mem_cgroup *memcg, unsigned long max)
 		 * patched in yet.
 		 */
 		static_branch_inc(&memcg_sockets_enabled_key);
-		memcg->tcpmem_active = true;
+		memcg->v1.tcpmem_active = true;
 	}
 out:
 	mutex_unlock(&memcg_max_mutex);
@@ -1710,10 +1710,10 @@ static ssize_t mem_cgroup_reset(struct kernfs_open_file *of, char *buf,
 		counter = &memcg->memsw;
 		break;
 	case _KMEM:
-		counter = &memcg->kmem;
+		counter = &memcg->v1.kmem;
 		break;
 	case _TCP:
-		counter = &memcg->tcpmem;
+		counter = &memcg->v1.tcpmem;
 		break;
 	default:
 		BUG();
@@ -1976,7 +1976,7 @@ static int mem_cgroup_swappiness_write(struct cgroup_subsys_state *css,
 	if (!mem_cgroup_is_root(memcg)) {
 		pr_info_once("Per memcg swappiness does not exist in cgroup v2. "
 			     "See memory.reclaim or memory.swap.max there\n ");
-		WRITE_ONCE(memcg->swappiness, val);
+		WRITE_ONCE(memcg->v1.swappiness, val);
 	} else
 		WRITE_ONCE(vm_swappiness, val);
 
@@ -1987,8 +1987,8 @@ static int mem_cgroup_oom_control_read(struct seq_file *sf, void *v)
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_seq(sf);
 
-	seq_printf(sf, "oom_kill_disable %d\n", READ_ONCE(memcg->oom_kill_disable));
-	seq_printf(sf, "under_oom %d\n", (bool)memcg->under_oom);
+	seq_printf(sf, "oom_kill_disable %d\n", READ_ONCE(memcg->v1.oom_kill_disable));
+	seq_printf(sf, "under_oom %d\n", (bool)memcg->v1.under_oom);
 	seq_printf(sf, "oom_kill %lu\n",
 		   atomic_long_read(&memcg->memory_events[MEMCG_OOM_KILL]));
 	return 0;
@@ -2007,7 +2007,7 @@ static int mem_cgroup_oom_control_write(struct cgroup_subsys_state *css,
 	if (mem_cgroup_is_root(memcg) || !((val == 0) || (val == 1)))
 		return -EINVAL;
 
-	WRITE_ONCE(memcg->oom_kill_disable, val);
+	WRITE_ONCE(memcg->v1.oom_kill_disable, val);
 	if (!val)
 		memcg1_oom_recover(memcg);
 
@@ -2183,9 +2183,9 @@ void memcg1_account_kmem(struct mem_cgroup *memcg, int nr_pages)
 {
 	if (!cgroup_subsys_on_dfl(memory_cgrp_subsys)) {
 		if (nr_pages > 0)
-			page_counter_charge(&memcg->kmem, nr_pages);
+			page_counter_charge(&memcg->v1.kmem, nr_pages);
 		else
-			page_counter_uncharge(&memcg->kmem, -nr_pages);
+			page_counter_uncharge(&memcg->v1.kmem, -nr_pages);
 	}
 }
 
@@ -2194,13 +2194,13 @@ bool memcg1_charge_skmem(struct mem_cgroup *memcg, unsigned int nr_pages,
 {
 	struct page_counter *fail;
 
-	if (page_counter_try_charge(&memcg->tcpmem, nr_pages, &fail)) {
-		memcg->tcpmem_pressure = 0;
+	if (page_counter_try_charge(&memcg->v1.tcpmem, nr_pages, &fail)) {
+		memcg->v1.tcpmem_pressure = 0;
 		return true;
 	}
-	memcg->tcpmem_pressure = 1;
+	memcg->v1.tcpmem_pressure = 1;
 	if (gfp_mask & __GFP_NOFAIL) {
-		page_counter_charge(&memcg->tcpmem, nr_pages);
+		page_counter_charge(&memcg->v1.tcpmem, nr_pages);
 		return true;
 	}
 	return false;
@@ -2208,12 +2208,12 @@ bool memcg1_charge_skmem(struct mem_cgroup *memcg, unsigned int nr_pages,
 
 bool memcg1_alloc_events(struct mem_cgroup *memcg)
 {
-	memcg->events_percpu = alloc_percpu_gfp(struct memcg1_events_percpu,
+	memcg->v1.events_percpu = alloc_percpu_gfp(struct memcg1_events_percpu,
 						GFP_KERNEL_ACCOUNT);
-	return !!memcg->events_percpu;
+	return !!memcg->v1.events_percpu;
 }
 
 void memcg1_free_events(struct mem_cgroup *memcg)
 {
-	free_percpu(memcg->events_percpu);
+	free_percpu(memcg->v1.events_percpu);
 }

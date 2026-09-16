@@ -2705,7 +2705,7 @@ static inline bool mem_cgroup_sk_under_memory_pressure(const struct sock *sk)
 
 #ifdef CONFIG_MEMCG_V1
 	if (!cgroup_subsys_on_dfl(memory_cgrp_subsys))
-		return !!memcg->tcpmem_pressure;
+		return !!memcg->v1.tcpmem_pressure;
 #endif /* CONFIG_MEMCG_V1 */
 
 	do {

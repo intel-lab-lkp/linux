@@ -1867,8 +1867,8 @@ void mem_cgroup_print_oom_meminfo(struct mem_cgroup *memcg)
 			K((u64)page_counter_read(&memcg->memsw)),
 			K((u64)memcg->memsw.max), memcg->memsw.failcnt);
 		pr_info("kmem: usage %llukB, limit %llukB, failcnt %lu\n",
-			K((u64)page_counter_read(&memcg->kmem)),
-			K((u64)memcg->kmem.max), memcg->kmem.failcnt);
+			K((u64)page_counter_read(&memcg->v1.kmem)),
+			K((u64)memcg->v1.kmem.max), memcg->v1.kmem.failcnt);
 	}
 #endif
 
@@ -4285,13 +4285,13 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 		page_counter_init(&memcg->memory, &parent->memory, memcg_on_dfl);
 		page_counter_init(&memcg->swap, &parent->swap, false);
 #ifdef CONFIG_MEMCG_V1
-		WRITE_ONCE(memcg->swappiness, mem_cgroup_swappiness(parent));
+		WRITE_ONCE(memcg->v1.swappiness, mem_cgroup_swappiness(parent));
 		memcg->memory.track_failcnt = !memcg_on_dfl;
 		memcg->memsw.track_failcnt = !memcg_on_dfl;
-		WRITE_ONCE(memcg->oom_kill_disable, READ_ONCE(parent->oom_kill_disable));
-		page_counter_init(&memcg->kmem, &parent->kmem, false);
-		page_counter_init(&memcg->tcpmem, &parent->tcpmem, false);
-		memcg->tcpmem.track_failcnt = !memcg_on_dfl;
+		WRITE_ONCE(memcg->v1.oom_kill_disable, READ_ONCE(parent->v1.oom_kill_disable));
+		page_counter_init(&memcg->v1.kmem, &parent->v1.kmem, false);
+		page_counter_init(&memcg->v1.tcpmem, &parent->v1.tcpmem, false);
+		memcg->v1.tcpmem.track_failcnt = !memcg_on_dfl;
 #endif
 	} else {
 		init_memcg_stats();
@@ -4299,8 +4299,8 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 		page_counter_init(&memcg->memory, NULL, true);
 		page_counter_init(&memcg->swap, NULL, false);
 #ifdef CONFIG_MEMCG_V1
-		page_counter_init(&memcg->kmem, NULL, false);
-		page_counter_init(&memcg->tcpmem, NULL, false);
+		page_counter_init(&memcg->v1.kmem, NULL, false);
+		page_counter_init(&memcg->v1.tcpmem, NULL, false);
 #endif
 		root_mem_cgroup = memcg;
 		return &memcg->css;
@@ -4477,8 +4477,8 @@ static void mem_cgroup_css_reset(struct cgroup_subsys_state *css)
 	WRITE_ONCE(memcg->zswap_writeback, true);
 #endif
 #ifdef CONFIG_MEMCG_V1
-	page_counter_set_max(&memcg->kmem, PAGE_COUNTER_MAX);
-	page_counter_set_max(&memcg->tcpmem, PAGE_COUNTER_MAX);
+	page_counter_set_max(&memcg->v1.kmem, PAGE_COUNTER_MAX);
+	page_counter_set_max(&memcg->v1.tcpmem, PAGE_COUNTER_MAX);
 #endif
 	page_counter_set_min(&memcg->memory, 0);
 	page_counter_set_low(&memcg->memory, 0);

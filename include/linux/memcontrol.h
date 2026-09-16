@@ -308,50 +308,7 @@ struct mem_cgroup {
 	__cacheline_group_end_aligned(memcg_cold);
 
 #ifdef CONFIG_MEMCG_V1
-	/*
-	 * Transitional: the anonymous struct reproduces the historical layout
-	 * so existing memcg->X accesses keep compiling; it is removed once the
-	 * access sites are converted to memcg->v1.X.
-	 */
-	union {
-		struct mem_cgroup_v1 v1;
-		struct {
-			/* Legacy consumer-oriented counters */
-			struct page_counter kmem;		/* v1 only */
-			struct page_counter tcpmem;		/* v1 only */
-
-			struct memcg1_events_percpu __percpu *events_percpu;
-
-			/* protected by memcg_oom_lock */
-			bool oom_lock;
-			int under_oom;
-
-			/* OOM-Killer disable */
-			int oom_kill_disable;
-
-			/* protect arrays of thresholds */
-			struct mutex thresholds_lock;
-
-			/* thresholds for memory usage. RCU-protected */
-			struct mem_cgroup_thresholds thresholds;
-
-			/* thresholds for mem+swap usage. RCU-protected */
-			struct mem_cgroup_thresholds memsw_thresholds;
-
-			/* For oom notifier event fd */
-			struct list_head oom_notify;
-
-			/* Legacy tcp memory accounting */
-			bool tcpmem_active;
-			int tcpmem_pressure;
-
-			/* List of events which userspace want to receive */
-			struct list_head event_list;
-			spinlock_t event_list_lock;
-
-			int swappiness;
-		};
-	};
+	struct mem_cgroup_v1 v1;
 #endif /* CONFIG_MEMCG_V1 */
 
 	/*

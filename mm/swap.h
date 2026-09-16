@@ -87,7 +87,7 @@ static inline int mem_cgroup_swappiness(struct mem_cgroup *memcg)
 #ifdef CONFIG_MEMCG_V1
 	if (!cgroup_subsys_on_dfl(memory_cgrp_subsys) &&
 	    !mem_cgroup_disabled() && !mem_cgroup_is_root(memcg))
-		return READ_ONCE(memcg->swappiness);
+		return READ_ONCE(memcg->v1.swappiness);
 #endif
 	return READ_ONCE(vm_swappiness);
 }
