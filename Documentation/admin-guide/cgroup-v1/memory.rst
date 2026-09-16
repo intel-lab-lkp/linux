@@ -9,6 +9,13 @@ Memory Resource Controller
       understanding.
 
 .. note::
+      The legacy (v1) memory controller implementation is isolated behind
+      ``CONFIG_MEMCG_V1``: its interface lives in ``mm/memcontrol-v1.c`` and
+      its per-cgroup state in ``struct mem_cgroup_v1`` (see
+      ``include/linux/memcontrol.h``).  New functionality belongs to the
+      cgroup v2 memory controller.
+
+.. note::
       The Memory Resource Controller has generically been referred to as the
       memory controller in this document. Do not confuse memory controller
       used here with the memory controller that is used in hardware.
