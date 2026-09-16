@@ -530,6 +530,10 @@ int ibmvfc_nvme_register(struct ibmvfc_host *vhost)
 	if (!IS_ENABLED(CONFIG_NVME_FC))
 		return 0;
 
+	/* Unregister any stale local port left from a previous link-up */
+	if (vhost->nvme_local_port)
+		ibmvfc_nvme_unregister(vhost);
+
 	pinfo.node_name = fc_host_node_name(vhost->host);
 	pinfo.port_name = fc_host_port_name(vhost->host);
 	pinfo.port_id = fc_host_port_id(vhost->host);
