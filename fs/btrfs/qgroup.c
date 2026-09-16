@@ -617,9 +617,12 @@ out:
 			set_bit(BTRFS_FS_QUOTA_ENABLED, &fs_info->flags);
 		if (test_bit(BTRFS_QGROUP_STATUS_BIT_RESCAN, &fs_info->qgroup_flags))
 			ret = qgroup_rescan_init(fs_info, rescan_progress, 0);
-	} else {
+	}
+
+	if (ret < 0) {
+		clear_bit(BTRFS_FS_QUOTA_ENABLED, &fs_info->flags);
 		clear_bit(BTRFS_QGROUP_STATUS_BIT_RESCAN, &fs_info->qgroup_flags);
-		btrfs_sysfs_del_qgroups(fs_info);
+		btrfs_free_qgroup_config(fs_info);
 	}
 
 	return ret < 0 ? ret : 0;
