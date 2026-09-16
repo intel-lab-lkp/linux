@@ -266,42 +266,42 @@ static void rga3_hw_setup_cmdbuf(struct rga_ctx *ctx)
 	rga3_cmd_set_wr_format(ctx);
 }
 
-static void rga3_hw_start(struct rockchip_rga *rga,
+static void rga3_hw_start(struct rga_core *core,
 			  struct rga_vb_buffer *src, struct rga_vb_buffer *dst)
 {
-	struct rga_ctx *ctx = rga->curr;
+	struct rga_ctx *ctx = core->curr;
 
 	rga3_cmd_set_win0_addr(ctx, &src->dma_addrs);
 	rga3_cmd_set_wr_addr(ctx, &dst->dma_addrs);
 
-	rga_write(rga, RGA3_CMD_ADDR, ctx->cmdbuf_phy);
+	rga_write(core, RGA3_CMD_ADDR, ctx->cmdbuf_phy);
 
 	/* sync CMD buf for RGA */
-	dma_sync_single_for_device(rga->dev, ctx->cmdbuf_phy,
+	dma_sync_single_for_device(core->rga->cores[0]->dev, ctx->cmdbuf_phy,
 				   PAGE_SIZE, DMA_BIDIRECTIONAL);
 
 	/* set to master mode and start the conversion */
-	rga_write(rga, RGA3_SYS_CTRL,
+	rga_write(core, RGA3_SYS_CTRL,
 		  FIELD_PREP(RGA3_CMD_MODE, RGA3_CMD_MODE_MASTER));
-	rga_write(rga, RGA3_INT_EN, FIELD_PREP(RGA3_INT_FRM_DONE, 1));
-	rga_write(rga, RGA3_CMD_CTRL,
+	rga_write(core, RGA3_INT_EN, FIELD_PREP(RGA3_INT_FRM_DONE, 1));
+	rga_write(core, RGA3_CMD_CTRL,
 		  FIELD_PREP(RGA3_CMD_LINE_START_PULSE, 1));
 }
 
-static bool rga3_handle_irq(struct rockchip_rga *rga)
+static bool rga3_handle_irq(struct rga_core *core)
 {
 	u32 intr;
 
-	intr = rga_read(rga, RGA3_INT_RAW);
+	intr = rga_read(core, RGA3_INT_RAW);
 	/* clear all interrupts */
-	rga_write(rga, RGA3_INT_CLR, intr);
+	rga_write(core, RGA3_INT_CLR, intr);
 
 	return FIELD_GET(RGA3_INT_FRM_DONE, intr);
 }
 
-static struct rockchip_rga_version rga3_get_version(struct rockchip_rga *rga)
+static struct rockchip_rga_version rga3_get_version(struct rga_core *core)
 {
-	u32 version = rga_read(rga, RGA3_VERSION_NUM);
+	u32 version = rga_read(core, RGA3_VERSION_NUM);
 
 	return (struct rockchip_rga_version) {
 		.major = FIELD_GET(RGA3_VERSION_NUM_MAJOR, version),
