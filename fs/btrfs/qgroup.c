@@ -3859,7 +3859,7 @@ static bool rescan_should_stop(struct btrfs_fs_info *fs_info)
 {
 	if (btrfs_fs_closing(fs_info))
 		return true;
-	if (test_bit(BTRFS_FS_STATE_REMOUNTING, &fs_info->fs_state))
+	if (test_bit(BTRFS_FS_STATE_RO, &fs_info->fs_state))
 		return true;
 	if (!btrfs_qgroup_enabled(fs_info))
 		return true;
@@ -4127,8 +4127,8 @@ int btrfs_qgroup_wait_for_completion(struct btrfs_fs_info *fs_info,
 }
 
 /*
- * this is only called from open_ctree where we're still single threaded, thus
- * locking is omitted here.
+ * Called during initial read-write mount or read-only to read-write remount,
+ * while userspace writes are still blocked.
  */
 void
 btrfs_qgroup_rescan_resume(struct btrfs_fs_info *fs_info)

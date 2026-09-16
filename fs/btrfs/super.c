@@ -1301,6 +1301,7 @@ static int btrfs_remount_rw(struct btrfs_fs_info *fs_info)
 	 * sync/async discard lists in the right state.
 	 */
 	btrfs_discard_resume(fs_info);
+	btrfs_qgroup_rescan_resume(fs_info);
 
 	return 0;
 }

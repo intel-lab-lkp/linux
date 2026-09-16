@@ -3177,8 +3177,6 @@ int btrfs_start_pre_rw_mount(struct btrfs_fs_info *fs_info)
 		return ret;
 	}
 
-	btrfs_qgroup_rescan_resume(fs_info);
-
 	if (!fs_info->uuid_root) {
 		btrfs_info(fs_info, "creating UUID tree");
 		ret = btrfs_create_uuid_tree(fs_info);
@@ -3759,6 +3757,7 @@ int __cold open_ctree(struct super_block *sb, struct btrfs_fs_devices *fs_device
 		return ret;
 	}
 	btrfs_discard_resume(fs_info);
+	btrfs_qgroup_rescan_resume(fs_info);
 
 	if (fs_info->uuid_root &&
 	    (btrfs_test_opt(fs_info, RESCAN_UUID_TREE) ||
