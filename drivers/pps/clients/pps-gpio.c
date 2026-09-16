@@ -17,6 +17,7 @@
 #include <linux/slab.h>
 #include <linux/pps_kernel.h>
 #include <linux/gpio/consumer.h>
+#include <linux/pinctrl/consumer.h>
 #include <linux/list.h>
 #include <linux/property.h>
 #include <linux/timer.h>
@@ -30,6 +31,8 @@ struct pps_gpio_device_data {
 	struct gpio_desc *gpio_pin;	/* GPIO port descriptors */
 	struct gpio_desc *echo_pin;
 	struct timer_list echo_timer;	/* timer to reset echo active state */
+	struct pinctrl *pinctrl;	/* pin control handle */
+	struct pinctrl_state *pins_inactive;	/* pins released when unbound */
 	bool assert_falling_edge;
 	unsigned int echo_active_ms;	/* PPS echo active duration */
 	unsigned long echo_timeout;	/* timer timeout value in jiffies */
@@ -94,6 +97,51 @@ static void pps_gpio_echo_timer_callback(struct timer_list *t)
 	info = timer_container_of(info, t, echo_timer);
 
 	gpiod_set_value(info->echo_pin, 0);
+}
+
+/*
+ * Look up the optional "inactive" pinctrl state: the mux to restore when
+ * pps-gpio is unbound or the system is shut down. It is only meaningful
+ * paired with a "default" state, which the driver core applies before probe
+ * to mux the pins for PPS use. A board that describes neither is unaffected;
+ * one that describes "inactive" without "default" is rejected, since
+ * releasing pins that were never put into a defined PPS state is incoherent.
+ */
+static int pps_gpio_get_pins(struct device *dev)
+{
+	struct pps_gpio_device_data *data = dev_get_drvdata(dev);
+	struct pinctrl_state *pins_default;
+
+	data->pinctrl = devm_pinctrl_get(dev);
+	if (IS_ERR(data->pinctrl))
+		return dev_err_probe(dev, PTR_ERR(data->pinctrl),
+				     "failed to get pinctrl\n");
+
+	/* The "inactive" state is optional; without it there is nothing to do. */
+	data->pins_inactive = pinctrl_lookup_state(data->pinctrl, "inactive");
+	if (IS_ERR(data->pins_inactive)) {
+		data->pins_inactive = NULL;
+		return 0;
+	}
+
+	/* "inactive" requires a "default" state to release back from. */
+	pins_default = pinctrl_lookup_state(data->pinctrl, "default");
+	if (IS_ERR(pins_default))
+		return dev_err_probe(dev, PTR_ERR(pins_default),
+				     "\"inactive\" pinctrl state requires a \"default\" state\n");
+
+	return 0;
+}
+
+/*
+ * Release the pins to their "inactive" state, if the board describes one, so
+ * they are handed back to whatever function uses them while pps-gpio is not
+ * driving PPS. Boards without an "inactive" state are unaffected.
+ */
+static void pps_gpio_release_pins(struct pps_gpio_device_data *data)
+{
+	if (data->pins_inactive)
+		pinctrl_select_state(data->pinctrl, data->pins_inactive);
 }
 
 static int pps_gpio_setup(struct device *dev)
@@ -161,6 +209,11 @@ static int pps_gpio_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
+	/* pinctrl setup (optional states) */
+	ret = pps_gpio_get_pins(dev);
+	if (ret)
+		return ret;
+
 	/* IRQ setup */
 	ret = gpiod_to_irq(data->gpio_pin);
 	if (ret < 0) {
@@ -216,7 +269,28 @@ static void pps_gpio_remove(struct platform_device *pdev)
 	timer_delete_sync(&data->echo_timer);
 	/* reset echo pin in any case */
 	gpiod_set_value(data->echo_pin, 0);
+	/* release the pins last, once nothing can drive them anymore */
+	pps_gpio_release_pins(data);
 	dev_info(&pdev->dev, "removed IRQ %d as PPS source\n", data->irq);
+}
+
+static void pps_gpio_shutdown(struct platform_device *pdev)
+{
+	struct pps_gpio_device_data *data = platform_get_drvdata(pdev);
+
+	/*
+	 * Quiesce the hardware before touching the mux: stop the IRQ and the
+	 * echo timer first so nothing can drive the pins, then hand them back
+	 * to their "inactive" function. The kernel keeps running after
+	 * device_shutdown() (for example to load and start a kexec image), so
+	 * the pins must not be released while an IRQ or timer callback can
+	 * still reach them. The PPS source is left registered; unregistering
+	 * it is a remove-time concern and is unnecessary on shutdown.
+	 */
+	free_irq(data->irq, data);
+	timer_delete_sync(&data->echo_timer);
+	gpiod_set_value(data->echo_pin, 0);
+	pps_gpio_release_pins(data);
 }
 
 static const struct of_device_id pps_gpio_dt_ids[] = {
@@ -228,6 +302,7 @@ MODULE_DEVICE_TABLE(of, pps_gpio_dt_ids);
 static struct platform_driver pps_gpio_driver = {
 	.probe		= pps_gpio_probe,
 	.remove		= pps_gpio_remove,
+	.shutdown	= pps_gpio_shutdown,
 	.driver		= {
 		.name	= PPS_GPIO_NAME,
 		.of_match_table	= pps_gpio_dt_ids,
