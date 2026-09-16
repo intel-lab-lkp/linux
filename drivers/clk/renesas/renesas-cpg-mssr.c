@@ -672,7 +672,10 @@ void cpg_mssr_detach_dev(struct generic_pm_domain *unused, struct device *dev)
 
 static void cpg_mssr_genpd_remove(void *data)
 {
-	pm_genpd_remove(data);
+	struct device_node *np = data;
+
+	of_genpd_del_provider(np);
+	pm_genpd_remove(&cpg_mssr_clk_domain->genpd);
 }
 
 static int __init cpg_mssr_add_clk_domain(struct device *dev,
@@ -702,13 +705,15 @@ static int __init cpg_mssr_add_clk_domain(struct device *dev,
 	if (ret)
 		return ret;
 
-	ret = devm_add_action_or_reset(dev, cpg_mssr_genpd_remove, genpd);
-	if (ret)
-		return ret;
-
 	cpg_mssr_clk_domain = pd;
 
-	return of_genpd_add_provider_simple(np, genpd);
+	ret = of_genpd_add_provider_simple(np, genpd);
+	if (ret) {
+		pm_genpd_remove(genpd);
+		return ret;
+	}
+
+	return devm_add_action_or_reset(dev, cpg_mssr_genpd_remove, np);
 }
 
 #ifdef CONFIG_RESET_CONTROLLER
