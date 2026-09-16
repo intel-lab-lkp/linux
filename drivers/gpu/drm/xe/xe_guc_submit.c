@@ -3265,26 +3265,32 @@ static void handle_sched_done(struct xe_guc *guc, struct xe_exec_queue *q,
 		if (q->guc->suspend_pending) {
 			clear_exec_queue_pending_disable(q);
 			suspend_fence_signal(q);
+
+			/*
+			 * Publish the cleared state before waking waiters.
+			 */
+			smp_wmb();
+			wake_up_all(&guc->ct.wq);
 		} else {
-			if (exec_queue_banned(q)) {
-				smp_wmb();
-				wake_up_all(&guc->ct.wq);
-			}
-			if (exec_queue_destroyed(q)) {
-				/*
-				 * Make sure to clear the pending_disable only
-				 * after sampling the destroyed state. We want
-				 * to ensure we don't trigger the unregister too
-				 * early with something intending to only
-				 * disable scheduling. The caller doing the
-				 * destroy must wait for an ongoing
-				 * pending_disable before marking as destroyed.
-				 */
-				clear_exec_queue_pending_disable(q);
+			bool destroyed = exec_queue_destroyed(q);
+
+			/*
+			 * Make sure to clear pending_disable only after sampling
+			 * the destroyed state. The caller doing the destroy must
+			 * wait for an ongoing disable before marking the queue
+			 * destroyed.
+			 */
+			clear_exec_queue_pending_disable(q);
+
+			/*
+			 * Publish the cleared state before waking waiters.
+			 */
+			smp_wmb();
+			wake_up_all(&guc->ct.wq);
+
+			/* The queue remains alive until DEREGISTER_DONE. */
+			if (destroyed)
 				deregister_exec_queue(guc, q);
-			} else {
-				clear_exec_queue_pending_disable(q);
-			}
 		}
 	}
 }
