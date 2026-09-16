@@ -279,8 +279,10 @@ static int i2cr_probe(struct i2c_client *client)
 	i2cr->client = client;
 
 	ret = fsi_master_register(&i2cr->master);
-	if (ret)
+	if (ret) {
+		of_node_put(i2cr->master.dev.of_node);
 		return ret;
+	}
 
 	i2c_set_clientdata(client, i2cr);
 	return 0;
