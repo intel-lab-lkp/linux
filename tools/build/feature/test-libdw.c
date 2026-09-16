@@ -49,8 +49,21 @@ int test_elfutils(void)
 	return 0;
 }
 
+/*
+ * elfutils 0.160 and later: used to tell which debug file a DIE lives in,
+ * the dwz alt file or the main one, see die_same_file() in
+ * tools/perf/util/dwarf-aux.c.  Only the symbol is needed, so take its
+ * address instead of calling it.
+ */
+int test_libdw_cu_getdwarf(void)
+{
+	void *sym = (void *)dwarf_cu_getdwarf;
+
+	return sym == NULL;
+}
+
 int main(void)
 {
 	return test_libdw() + test_libdw_unwind() + test_libdw_getlocations() +
-	       test_libdw_getcfi() + test_elfutils();
+	       test_libdw_getcfi() + test_libdw_cu_getdwarf() + test_elfutils();
 }
