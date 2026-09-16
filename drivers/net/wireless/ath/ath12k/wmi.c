@@ -544,10 +544,8 @@ ath12k_pull_mac_phy_cap_svc_ready_ext(struct ath12k_wmi_pdev *wmi_handle,
 	 * for tx/rx chainmask which will be used to advertise supported ht/vht rates to
 	 * mac80211.
 	 */
-	pdev_cap->tx_chain_mask_shift =
-			find_first_bit((unsigned long *)&pdev_cap->tx_chain_mask, 32);
-	pdev_cap->rx_chain_mask_shift =
-			find_first_bit((unsigned long *)&pdev_cap->rx_chain_mask, 32);
+	pdev_cap->tx_chain_mask_shift = __ffs(pdev_cap->tx_chain_mask);
+	pdev_cap->rx_chain_mask_shift = __ffs(pdev_cap->rx_chain_mask);
 
 	if (supported_bands & WMI_HOST_WLAN_2GHZ_CAP) {
 		cap_band = &pdev_cap->band[NL80211_BAND_2GHZ];
