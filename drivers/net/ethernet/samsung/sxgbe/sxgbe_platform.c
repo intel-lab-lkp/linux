@@ -67,6 +67,13 @@ static int sxgbe_probe_config_dt(struct platform_device *pdev,
 }
 #endif /* CONFIG_OF */
 
+static void sxgbe_irq_dispose_mapping(void *data)
+{
+	unsigned int irq = (unsigned int)(unsigned long)data;
+
+	irq_dispose_mapping(irq);
+}
+
 /**
  * sxgbe_platform_probe
  * @pdev: platform device pointer
@@ -116,6 +123,11 @@ static int sxgbe_platform_probe(struct platform_device *pdev)
 		goto err_drv_remove;
 	}
 
+	ret = devm_add_action_or_reset(dev, sxgbe_irq_dispose_mapping,
+				       (void *)(unsigned long)priv->irq);
+	if (ret)
+		goto err_drv_remove;
+
 	/* Get MAC address if available (DT) */
 	of_get_ethdev_address(node, priv->dev);
 
@@ -124,38 +136,43 @@ static int sxgbe_platform_probe(struct platform_device *pdev)
 		priv->txq[i]->irq_no = irq_of_parse_and_map(node, chan++);
 		if (priv->txq[i]->irq_no <= 0) {
 			dev_err(dev, "sxgbe tx irq parsing failed\n");
-			goto err_tx_irq_unmap;
+			goto err_drv_remove;
 		}
+		ret = devm_add_action_or_reset(dev, sxgbe_irq_dispose_mapping,
+					       (void *)(unsigned long)
+					       priv->txq[i]->irq_no);
+		if (ret)
+			goto err_drv_remove;
 	}
 
 	for (i = 0; i < SXGBE_RX_QUEUES; i++) {
 		priv->rxq[i]->irq_no = irq_of_parse_and_map(node, chan++);
 		if (priv->rxq[i]->irq_no <= 0) {
 			dev_err(dev, "sxgbe rx irq parsing failed\n");
-			goto err_rx_irq_unmap;
+			goto err_drv_remove;
 		}
+		ret = devm_add_action_or_reset(dev, sxgbe_irq_dispose_mapping,
+					       (void *)(unsigned long)
+				       priv->rxq[i]->irq_no);
+		if (ret)
+			goto err_drv_remove;
 	}
 
 	priv->lpi_irq = irq_of_parse_and_map(node, chan);
 	if (priv->lpi_irq <= 0) {
 		dev_err(dev, "sxgbe lpi irq parsing failed\n");
-		goto err_rx_irq_unmap;
+		goto err_drv_remove;
 	}
-
+	ret = devm_add_action_or_reset(dev, sxgbe_irq_dispose_mapping,
+				       (void *)(unsigned long)priv->lpi_irq);
+	if (ret)
+		goto err_drv_remove;
 	platform_set_drvdata(pdev, priv->dev);
 
 	pr_debug("platform driver registration completed\n");
 
 	return 0;
 
-err_rx_irq_unmap:
-	while (i--)
-		irq_dispose_mapping(priv->rxq[i]->irq_no);
-	i = SXGBE_TX_QUEUES;
-err_tx_irq_unmap:
-	while (i--)
-		irq_dispose_mapping(priv->txq[i]->irq_no);
-	irq_dispose_mapping(priv->irq);
 err_drv_remove:
 	sxgbe_drv_remove(priv->dev);
 err_out:
