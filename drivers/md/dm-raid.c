@@ -3326,12 +3326,15 @@ bad:
 
 static void raid_dtr(struct dm_target *ti)
 {
+	unsigned int noio_flags = 0;
 	struct raid_set *rs = ti->private;
 
-	mddev_lock_nointr(&rs->md);
+	mddev_suspend_and_lock_nointr(&rs->md);
+	noio_flags = memalloc_noio_save();
 	md_stop(&rs->md);
 	rs->md.dm_gendisk = NULL;
-	mddev_unlock(&rs->md);
+	memalloc_noio_restore(noio_flags);
+	mddev_unlock_and_resume(&rs->md);
 
 	if (work_pending(&rs->md.event_work))
 		flush_work(&rs->md.event_work);

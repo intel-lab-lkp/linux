@@ -4657,6 +4657,8 @@ array_state_store(struct mddev *mddev, const char *buf, size_t len)
 {
 	int err = 0;
 	enum array_state st = match_word(buf, array_states);
+	unsigned int noio_flags = 0;
+	bool suspend = false;
 
 	/* No lock dependent actions */
 	switch (st) {
@@ -4666,9 +4668,11 @@ array_state_store(struct mddev *mddev, const char *buf, size_t len)
 	case broken:		/* cannot be set */
 	case bad_word:
 		return -EINVAL;
-	case clear:
-	case readonly:
 	case inactive:
+	case clear:
+		suspend = true;
+		fallthrough;
+	case readonly:
 	case read_auto:
 		if (!mddev->pers || !md_is_rdwr(mddev))
 			break;
@@ -4702,9 +4706,11 @@ array_state_store(struct mddev *mddev, const char *buf, size_t len)
 		spin_unlock(&mddev->lock);
 		return err ?: len;
 	}
-	err = mddev_lock(mddev);
+	err = suspend ? mddev_suspend_and_lock(mddev) : mddev_lock(mddev);
 	if (err)
 		return err;
+	if (suspend)
+		noio_flags = memalloc_noio_save();
 
 	switch (st) {
 	case inactive:
@@ -4775,7 +4781,12 @@ array_state_store(struct mddev *mddev, const char *buf, size_t len)
 			mddev->hold_active = 0;
 		sysfs_notify_dirent_safe(mddev->sysfs_state);
 	}
-	mddev_unlock(mddev);
+	if (suspend) {
+		memalloc_noio_restore(noio_flags);
+		mddev_unlock_and_resume(mddev);
+	} else {
+		mddev_unlock(mddev);
+	}
 
 	if (st == readonly || st == read_auto || st == inactive ||
 	    (err && st == clear))
@@ -8299,6 +8310,7 @@ static bool md_ioctl_need_suspend(unsigned int cmd)
 	case HOT_REMOVE_DISK:
 	case SET_BITMAP_FILE:
 	case SET_ARRAY_INFO:
+	case STOP_ARRAY:
 		return true;
 	default:
 		return false;
