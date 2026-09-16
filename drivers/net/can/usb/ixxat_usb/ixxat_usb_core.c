@@ -94,12 +94,68 @@ static const struct ixxat_driver_info legacy_usb2can_plugin = {
 	.is_legacy = true,
 };
 
-/* Table of devices that work with this driver
- *
- * Only the USB-to-CAN CL1 (V2 communication layer) adapter family is
- * supported at this point. Support for the USB-to-CAN FD and CAN-IDM
- * families is added by a subsequent commit in this series.
- */
+static const struct ixxat_driver_info legacy_usb2can_fd_compact = {
+	.name = "IXXAT USB Compact FD",
+	.adapter = &usb2can_fd,
+};
+
+static const struct ixxat_driver_info legacy_usb2can_fd_pro = {
+	.name = "IXXAT USB Professional FD",
+	.adapter = &usb2can_fd,
+};
+
+static const struct ixxat_driver_info legacy_usb2can_fd_auto = {
+	.name = "IXXAT USB Automotive FD",
+	.adapter = &usb2can_fd,
+};
+
+static const struct ixxat_driver_info legacy_usb2can_fd_pcie_mini = {
+	.name = "IXXAT USB PCIe Mini FD",
+	.adapter = &usb2can_fd,
+};
+
+static const struct ixxat_driver_info legacy_usb2car = {
+	.name = "IXXAT USB-to-Car",
+	.adapter = &usb2can_fd,
+};
+
+static const struct ixxat_driver_info legacy_can_idm101 = {
+	.name = "IXXAT IDM 101",
+	.adapter = &can_fd_idm,
+};
+
+static const struct ixxat_driver_info legacy_can_idm200 = {
+	.name = "IXXAT IDM 200",
+	.adapter = &can_fd_idm,
+};
+
+/* IXXAT_USB_VENDOR_ID products information */
+static const struct ixxat_driver_info usb2can_fd_pro = {
+	.name = "Ixxat USB-to-CAN/FD Pro",
+	.adapter = &usb2can_fd,
+};
+
+static const struct ixxat_driver_info usb2can_fd_std = {
+	.name = "Ixxat USB-to-CAN/FD Standard",
+	.adapter = &usb2can_fd,
+};
+
+static const struct ixxat_driver_info usb2can_fd_std_card = {
+	.name = "Ixxat USB-to-CAN/FD Standard Card",
+	.adapter = &usb2can_fd,
+};
+
+static const struct ixxat_driver_info usb2can_fd_pro_module = {
+	.name = "Ixxat USB-to-CAN/FD Pro Module",
+	.adapter = &usb2can_fd,
+};
+
+static const struct ixxat_driver_info usb2can_fd_standard_module = {
+	.name = "Ixxat USB-to-CAN/FD Standard Module",
+	.adapter = &usb2can_fd,
+};
+
+/* Table of devices that work with this driver */
 static const struct usb_device_id ixxat_usb_table[] = {
 	/* Legacy Vendor Id products list */
 	{ USB_DEVICE(IXXAT_USB_VENDOR_ID_LEGACY, USB2CAN_V2_COMPACT_PRODUCT_ID),
@@ -119,6 +175,48 @@ static const struct usb_device_id ixxat_usb_table[] = {
 	},
 	{ USB_DEVICE(IXXAT_USB_VENDOR_ID_LEGACY, USB2CAN_V2_PLUGIN_PRODUCT_ID),
 	  .driver_info = (kernel_ulong_t)&legacy_usb2can_plugin,
+	},
+	{ USB_DEVICE(IXXAT_USB_VENDOR_ID_LEGACY, USB2CAN_FD_COMPACT_PRODUCT_ID),
+	  .driver_info = (kernel_ulong_t)&legacy_usb2can_fd_compact,
+	},
+	{ USB_DEVICE(IXXAT_USB_VENDOR_ID_LEGACY,
+		     USB2CAN_FD_EMBEDDED_PRODUCT_ID),
+	  .driver_info = (kernel_ulong_t)&legacy_usb2can_fd_pro,
+	},
+	{ USB_DEVICE(IXXAT_USB_VENDOR_ID_LEGACY,
+		     USB2CAN_FD_AUTOMOTIVE_PRODUCT_ID),
+	  .driver_info = (kernel_ulong_t)&legacy_usb2can_fd_auto,
+	},
+	{ USB_DEVICE(IXXAT_USB_VENDOR_ID_LEGACY,
+		     USB2CAN_FD_PCIE_MINI_PRODUCT_ID),
+	  .driver_info = (kernel_ulong_t)&legacy_usb2can_fd_pcie_mini,
+	},
+	{ USB_DEVICE(IXXAT_USB_VENDOR_ID_LEGACY, USB2CAR_PRODUCT_ID),
+	  .driver_info = (kernel_ulong_t)&legacy_usb2car,
+	},
+	{ USB_DEVICE(IXXAT_USB_VENDOR_ID_LEGACY, CAN_IDM101_PRODUCT_ID),
+	  .driver_info = (kernel_ulong_t)&legacy_can_idm101,
+	},
+	{ USB_DEVICE(IXXAT_USB_VENDOR_ID_LEGACY, CAN_IDM200_PRODUCT_ID),
+	  .driver_info = (kernel_ulong_t)&legacy_can_idm200,
+	},
+
+	/* New Vendor Id products list */
+	{ USB_DEVICE(IXXAT_USB_VENDOR_ID, USB2CAN_FD_PRO_PRODUCT_ID),
+	  .driver_info = (kernel_ulong_t)&usb2can_fd_pro,
+	},
+	{ USB_DEVICE(IXXAT_USB_VENDOR_ID, USB2CAN_FD_STANDARD_PRODUCT_ID),
+	  .driver_info = (kernel_ulong_t)&usb2can_fd_std,
+	},
+	{ USB_DEVICE(IXXAT_USB_VENDOR_ID, USB2CAN_FD_STANDARD_CARD_PRODUCT_ID),
+	  .driver_info = (kernel_ulong_t)&usb2can_fd_std_card,
+	},
+	{ USB_DEVICE(IXXAT_USB_VENDOR_ID, USB2CAN_FD_PRO_MODULE_PRODUCT_ID),
+	  .driver_info = (kernel_ulong_t)&usb2can_fd_pro_module,
+	},
+	{ USB_DEVICE(IXXAT_USB_VENDOR_ID,
+		     USB2CAN_FD_STANDARD_MODULE_PRODUCT_ID),
+	  .driver_info = (kernel_ulong_t)&usb2can_fd_standard_module,
 	},
 	{ } /* Terminating entry */
 };
@@ -189,6 +287,10 @@ static const struct ixxat_usb_adapter *
 {
 	const struct ixxat_driver_info *drv_info =
 		(const struct ixxat_driver_info *)id->driver_info;
+
+	if (drv_info->adapter->cl1_msg_format &&
+	    ixxat_usb_has_cl2_firmware(id, dev_fwinfo))
+		return &usb2can_v2;
 
 	return drv_info->adapter;
 }
@@ -834,9 +936,10 @@ static int ixxat_usb_stop_ctrl(struct ixxat_usb_candevice *dev)
 	const u16 port = dev->ctrl_index;
 	const u32 rcv_size = sizeof(cmd.res);
 	const u32 cmd_size = sizeof(cmd);
+	const u32 req_size = cmd_size - rcv_size;
 
 	ixxat_usb_setup_cmd(&cmd.req, &cmd.res);
-	cmd.req.size = cpu_to_le32(cmd_size - rcv_size);
+	cmd.req.size = cpu_to_le32(req_size);
 	cmd.req.code = cpu_to_le32(IXXAT_USB_CAN_CMD_STOP);
 	cmd.req.port = cpu_to_le16(port);
 	cmd.action = cpu_to_le32(IXXAT_USB_STOP_ACTION_CLEARALL);

@@ -77,6 +77,12 @@ config CAN_IXXAT_USB
 	    - IXXAT USB-to-CAN embedded
 	    - IXXAT USB-to-CAN professional
 	    - IXXAT USB-to-CAN automotive
+	    - IXXAT USB-to-CAN FD compact
+	    - IXXAT USB-to-CAN FD professional
+	    - IXXAT USB-to-CAN FD automotive
+	    - IXXAT USB-to-CAN FD MiniPCIe
+	    - IXXAT USB-to-CAR
+	    - IXXAT CAN-IDM101
 
 config CAN_KVASER_USB
 	tristate "Kvaser CAN/USB interface"

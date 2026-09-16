@@ -24,6 +24,7 @@
 
 /* vendor ids used by IXXAT devices */
 #define IXXAT_USB_VENDOR_ID_LEGACY		0x08d8
+#define IXXAT_USB_VENDOR_ID			0x08db
 
 /* IXXAT_USB_VENDOR_ID_LEGACY supported device ids: CL1 */
 #define USB2CAN_V2_COMPACT_PRODUCT_ID		0x0008
@@ -31,6 +32,22 @@
 #define USB2CAN_V2_PROFESSIONAL_PRODUCT_ID	0x000A
 #define USB2CAN_V2_AUTOMOTIVE_PRODUCT_ID	0x000B
 #define USB2CAN_V2_PLUGIN_PRODUCT_ID		0x001F
+
+/* IXXAT_USB_VENDOR_ID_LEGACY supported device ids: CL2 */
+#define USB2CAN_FD_COMPACT_PRODUCT_ID		0x0014
+#define USB2CAN_FD_EMBEDDED_PRODUCT_ID		0x0015
+#define USB2CAN_FD_AUTOMOTIVE_PRODUCT_ID	0x0017
+#define USB2CAN_FD_PCIE_MINI_PRODUCT_ID		0x001B
+#define USB2CAR_PRODUCT_ID			0x001C
+#define CAN_IDM101_PRODUCT_ID			0xFF12
+#define CAN_IDM200_PRODUCT_ID			0xFF13
+
+/* IXXAT_USB_VENDOR_ID supported device ids: CL2 */
+#define USB2CAN_FD_PRO_PRODUCT_ID		0x0010
+#define USB2CAN_FD_STANDARD_PRODUCT_ID		0x0011
+#define USB2CAN_FD_STANDARD_CARD_PRODUCT_ID	0x0012
+#define USB2CAN_FD_PRO_MODULE_PRODUCT_ID	0x0013
+#define USB2CAN_FD_STANDARD_MODULE_PRODUCT_ID	0x0014
 
 /* supported bus types */
 #define IXXAT_USB_BUSTYPE_CAN		1
@@ -743,6 +760,9 @@ struct ixxat_usb_adapter {
 };
 
 extern const struct ixxat_usb_adapter usb2can_cl1;
+extern const struct ixxat_usb_adapter usb2can_v2;
+extern const struct ixxat_usb_adapter usb2can_fd;
+extern const struct ixxat_usb_adapter can_fd_idm;
 
 /* ixxat_usb_setup_cmd() - Setup a device command
  * @req: Request block
