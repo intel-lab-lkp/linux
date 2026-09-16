@@ -25,14 +25,19 @@
 #include <linux/init.h>
 #include <linux/export.h>
 #include <linux/clocksource.h>
+#include <linux/cc_platform.h>
 #include <linux/cpu.h>
 #include <linux/efi.h>
+#include <linux/mm.h>
+#include <linux/preempt.h>
 #include <linux/reboot.h>
+#include <linux/set_memory.h>
 #include <linux/static_call.h>
 #include <linux/sched/cputime.h>
 #include <asm/div64.h>
 #include <asm/x86_init.h>
 #include <asm/hypervisor.h>
+#include <asm/cpufeature.h>
 #include <asm/cpuid/api.h>
 #include <asm/timer.h>
 #include <asm/apic.h>
@@ -147,6 +152,7 @@ static struct cyc2ns_data vmware_cyc2ns __ro_after_init;
 static bool vmw_sched_clock __initdata = true;
 static DEFINE_PER_CPU_DECRYPTED(struct vmware_steal_time, vmw_steal_time) __aligned(64);
 static bool has_steal_clock;
+static bool vmw_steal_time_ready;
 static bool steal_acc __initdata = true; /* steal time accounting */
 
 static __init int setup_vmw_sched_clock(char *s)
@@ -280,7 +286,9 @@ static void vmware_disable_steal_time(void)
 
 static void vmware_guest_cpu_init(void)
 {
-	if (has_steal_clock)
+	if (has_steal_clock &&
+	    (!cc_platform_has(CC_ATTR_GUEST_MEM_ENCRYPT) ||
+	     vmw_steal_time_ready))
 		vmware_register_steal_time();
 }
 
@@ -324,6 +332,92 @@ static int vmware_cpu_down_prepare(unsigned int cpu)
 	return 0;
 }
 #endif
+
+static void __init vmware_steal_time_range(int cpu, unsigned long *start,
+					   int *numpages)
+{
+	unsigned long addr = (unsigned long)per_cpu_ptr(&vmw_steal_time, cpu);
+
+	*start = addr & PAGE_MASK;
+	*numpages = DIV_ROUND_UP(offset_in_page(addr) +
+				 sizeof(struct vmware_steal_time), PAGE_SIZE);
+}
+
+static int __init vmware_decrypt_steal_time(void)
+{
+	int cpu, failed_cpu, numpages, ret;
+	unsigned long start;
+
+	if (!has_steal_clock ||
+	    !cc_platform_has(CC_ATTR_GUEST_MEM_ENCRYPT))
+		return 0;
+
+	/*
+	 * TDX's conversion callback derives the physical range with __pa(),
+	 * so the storage must live in the direct map. The page per-CPU
+	 * allocator, which is also the automatic fallback when the embedding
+	 * allocator fails, hands out vmalloc addresses instead. Reject those
+	 * before converting anything, so no page is left converted.
+	 */
+	if (cpu_feature_enabled(X86_FEATURE_TDX_GUEST)) {
+		for_each_possible_cpu(cpu) {
+			if (!is_vmalloc_addr(per_cpu_ptr(&vmw_steal_time, cpu)))
+				continue;
+
+			pr_warn("steal time disabled: TDX requires a direct mapping\n");
+			has_steal_clock = false;
+			return 0;
+		}
+	}
+
+	for_each_possible_cpu(cpu) {
+		vmware_steal_time_range(cpu, &start, &numpages);
+		ret = set_memory_decrypted(start, numpages);
+		if (ret) {
+			failed_cpu = cpu;
+			goto rollback;
+		}
+
+		/*
+		 * Conversion need not preserve the zeroes. The host
+		 * initializes only the counter on enable, so the guest
+		 * must initialize the reserved words itself.
+		 */
+		memset(per_cpu_ptr(&vmw_steal_time, cpu), 0,
+		       sizeof(struct vmware_steal_time));
+	}
+
+	vmw_steal_time_ready = true;
+	preempt_disable();
+	vmware_guest_cpu_init();
+	preempt_enable();
+	if (!has_steal_clock) {
+		pr_warn("failed to register boot CPU steal-time memory\n");
+		failed_cpu = nr_cpu_ids;
+		goto rollback_pages;
+	}
+	return 0;
+
+rollback:
+	pr_warn("failed to decrypt steal-time memory for CPU %d: %d\n",
+		failed_cpu, ret);
+
+rollback_pages:
+	for_each_possible_cpu(cpu) {
+		vmware_steal_time_range(cpu, &start, &numpages);
+		ret = set_memory_encrypted(start, numpages);
+		if (ret)
+			pr_warn("failed to re-encrypt steal-time memory for CPU %d: %d\n",
+				cpu, ret);
+		if (cpu == failed_cpu)
+			break;
+	}
+
+	vmw_steal_time_ready = false;
+	has_steal_clock = false;
+	return 0;
+}
+early_initcall(vmware_decrypt_steal_time);
 
 static __init int activate_jump_labels(void)
 {
