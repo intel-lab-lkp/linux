@@ -946,6 +946,7 @@ static void ltdc_crtc_mode_set_nofb(struct drm_crtc *crtc)
 		ret = pm_runtime_get_sync(ddev->dev);
 		if (ret) {
 			drm_err(crtc->dev, "Failed to set mode, cannot get sync\n");
+			pm_runtime_put_noidle(ddev->dev);
 			return;
 		}
 	}
