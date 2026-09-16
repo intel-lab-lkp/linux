@@ -138,7 +138,6 @@ function ddcmd_load () {
     local val="$4"
 
     # 1. Setup the control filters (using positional ddcmd range-check)
-    echo  "$query" "$range"
     ddcmd "$query" "$range"
 
     # 2. Execute the workload and capture syslog prints
@@ -332,9 +331,20 @@ function FT_basic_queries {
     ddcmd "file $f +l"  "$f"
     ddcmd "file $f -m"  "$f"
     ddcmd "file $f =_"  "$f"
+}
 
-    # multi-query commands split on ; on a single line
+function FT_multi_query {
+    v_echo "${GREEN}# MULTI_QUERY_TESTS ${NC}"
+    if [ $LACK_DD_BUILTIN -eq 1 ]; then
+	echo "SKIP - test requires dynamic_debug built into kernel"
+	return
+    fi
+    local f='kernel/params.c'
+    ddcmd =_ # zero everything
+
+    # multi-query commands on a single line, split on ;/@ respectively
     ddcmd "file $f +mf ; file $f func parse_args +sl" "$f"
+    ddcmd "file $f -f @ file $f func parse_args -l"   "$f"
 
     # verify multi-cmd input, newline separated, with embedded comments
     ddcmd =_ # reset before multiline query to capture full transition
@@ -380,7 +390,7 @@ function FT_test_classes {
     verify_control_slice '\[test_dynamic_debug\]'
 
     # 2. Verify state transition and live-printing end-to-end via ddcmd_load!
-    ddcmd_load "class D2_CORE +pmf;class D2_KMS +pls;class D2_ATOMIC +pml" \
+    ddcmd_load "class,D2_CORE,+pmf;class,D2_KMS,+pls;class,D2_ATOMIC,+pml" \
         '\[test_dynamic_debug\]' \
         "/sys/module/test_dynamic_debug/parameters/do_classes" "1"
 
@@ -474,6 +484,7 @@ builtin_tests=(
     FT_grammar_errs
     FT_basic_queries
     FT_comma_terminators
+    FT_multi_query
 )
 
 # Modular Feature Tests (Require CONFIG_MODULES=y and test_dynamic_debug*.ko available)
@@ -496,8 +507,8 @@ modular_tests=(
 #
 # ==============================================================================
 function GOLDEN_RECORDS {
-    cat << 'EOF' | {
-#K= 26fd1565f209b383d9f2fbf0b54cd5fc FT_grammar_errs.1
+    cat << 'EO_DYNDBG_GOLDEN_REFS' | {
+#K= 95b249c7ec2cbd5a436f96060b2bee37 FT_grammar_errs.1
 #K= 200c01632c52a63f6d186da1c6460740 FT_grammar_errs.2
 #K= 7d7141900ce6e32f15c99202309c63a4 FT_grammar_errs.3
 #K= 1bb798a5831d0119789d424ef6cb55c4 FT_grammar_errs.4
@@ -517,7 +528,7 @@ function GOLDEN_RECORDS {
 #K= cb8288d607b0c5282125852f3ab05107 FT_grammar_errs.18
 #K= b371c6ba52503d037dbc43da788af8be FT_grammar_errs.19
 #K= 98e2bd3e4f3da58536496a38ec3e6238 FT_grammar_errs.20
-#K= 02b210b2646aceb68f3d6d2876a3d57a FT_grammar_errs.21
+#K= c4e8b7261811e9fdf0c80fa9e374a29e FT_grammar_errs.21
 #K= 51030cd01ed601a68dd48356902954b1 FT_grammar_errs.22
 #K= af8818de076407d4e7f4e384ba110ac5 FT_grammar_errs.23
 #K= 023ba04ffced833b4776fb4fcaae7755 FT_grammar_errs.24
@@ -537,7 +548,7 @@ function GOLDEN_RECORDS {
 #K= 130bf64b92a5e34d1c4cce98899084e1 FT_grammar_errs.38
 #K= 9681a05658f1a50e3434aa991b5ce992 FT_grammar_errs.39
 #K= 38506317363a188fbb7a417ff50457a9 FT_grammar_errs.40
-#K= 02b210b2646aceb68f3d6d2876a3d57a FT_grammar_errs.41
+#K= c4e8b7261811e9fdf0c80fa9e374a29e FT_grammar_errs.41
 #K= 8c08a8b5cacbf885d022360ed856e7a1 FT_grammar_errs.42
 #K= f0f4d894a49bd2c1856cf4f013f83e54 FT_grammar_errs.43
 #K= 25b92d52cb299fa8d84c5584e490bd97 FT_grammar_errs.44
@@ -561,14 +572,15 @@ function GOLDEN_RECORDS {
 #K= db17180b59444e5e34a8fc20c40e4530 FT_basic_queries.2
 #K= f7bd56bd407ff255ef2e3b5fb093ae6a FT_basic_queries.3
 #K= 4ce44468b3b5f80ae42ade1f261b952f FT_basic_queries.4
-#K= 02e4fd94602e108cb89bfc70d47a5dad FT_basic_queries.5
-#K= f03a7ca7316e8db4c0e16523dc41e75d FT_basic_queries.6
-#K= c518a50ba30ba8099d0dc874a27ecf16 FT_basic_queries.7
 #K= c8bbbac639f244ed9088208ebb7d83a6 FT_comma_terminators.1
 #K= bed6350f058f600910837dae83a12f56 FT_comma_terminators.2
 #K= 6e8599556a312200fb6d484565b6c52f FT_comma_terminators.3
 #K= 68b329da9893e34099c7d8ad5cb9c940 FT_comma_terminators.4
 #K= adc1ef04304c861c87fe294a8ba4e402 FT_comma_terminators.5
+#K= 02e4fd94602e108cb89bfc70d47a5dad FT_multi_query.1
+#K= c0fc482bbf18b9d5ffd6743b18bc34f7 FT_multi_query.2
+#K= f03a7ca7316e8db4c0e16523dc41e75d FT_multi_query.3
+#K= c518a50ba30ba8099d0dc874a27ecf16 FT_multi_query.4
 #K= 8f18ea82c09460434b6e9e4cd12543e8 FT_test_classes.1
 #K= a15ec4843acd721fbdfddc0b512c8032 FT_test_classes.2
 #K= 20d4545f9753e677e72e3adf52527fd3 FT_test_classes.3
@@ -613,7 +625,7 @@ function GOLDEN_RECORDS {
 #K= 6a320774e2b535ceb89d6cdde6f5d0fb FT_modprobe_w_param.34
 #K= 7f961a7d3facd89bdd4b9d8e7b5541e9 FT_modprobe_w_param.35
 #K= 6a320774e2b535ceb89d6cdde6f5d0fb FT_modprobe_w_param.36
-EOF
+EO_DYNDBG_GOLDEN_REFS
         # Read the K-recs and skip those for tests that can't run
         while read -r line; do
             # Filter built-in if needed
