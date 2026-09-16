@@ -237,6 +237,7 @@ struct swap_info_struct {
 	struct percpu_ref users;	/* indicate and keep swap device valid. */
 	unsigned long	flags;		/* SWP_USED etc: see above */
 	signed short	prio;		/* swap priority of this type */
+	unsigned int	tier_mask;	/* swap tier mask */
 	struct plist_node list;		/* entry in its swap tier */
 	signed char	type;		/* strange name for an index */
 	unsigned int	max;		/* size of this swap device */
