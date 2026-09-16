@@ -559,7 +559,7 @@ config SOPHGO_CV1800B_DMAMUX
 
 config STE_DMA40
 	bool "ST-Ericsson DMA40 support"
-	depends on ARCH_U8500
+	depends on ARCH_U8500 || COMPILE_TEST
 	select DMA_ENGINE
 	select SRAM
 	help
