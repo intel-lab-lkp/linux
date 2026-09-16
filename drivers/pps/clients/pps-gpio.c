@@ -17,6 +17,7 @@
 #include <linux/slab.h>
 #include <linux/pps_kernel.h>
 #include <linux/gpio/consumer.h>
+#include <linux/pinctrl/consumer.h>
 #include <linux/list.h>
 #include <linux/property.h>
 #include <linux/timer.h>
@@ -216,7 +217,24 @@ static void pps_gpio_remove(struct platform_device *pdev)
 	timer_delete_sync(&data->echo_timer);
 	/* reset echo pin in any case */
 	gpiod_set_value(data->echo_pin, 0);
+	/*
+	 * Release the pins to their "idle" state, if the board defines one, so
+	 * they are handed back to whatever function uses them while pps-gpio is
+	 * not bound. Boards that do not describe an idle pinctrl state are
+	 * unaffected. The "default" (active) state is applied automatically by
+	 * the driver core before probe.
+	 */
+	pinctrl_pm_select_idle_state(&pdev->dev);
 	dev_info(&pdev->dev, "removed IRQ %d as PPS source\n", data->irq);
+}
+
+static void pps_gpio_shutdown(struct platform_device *pdev)
+{
+	/*
+	 * Leave the pins in their "idle" state on shutdown so a subsequent
+	 * kernel (e.g. after kexec) finds the pin controller in a known state.
+	 */
+	pinctrl_pm_select_idle_state(&pdev->dev);
 }
 
 static const struct of_device_id pps_gpio_dt_ids[] = {
@@ -228,6 +246,7 @@ MODULE_DEVICE_TABLE(of, pps_gpio_dt_ids);
 static struct platform_driver pps_gpio_driver = {
 	.probe		= pps_gpio_probe,
 	.remove		= pps_gpio_remove,
+	.shutdown	= pps_gpio_shutdown,
 	.driver		= {
 		.name	= PPS_GPIO_NAME,
 		.of_match_table	= pps_gpio_dt_ids,
