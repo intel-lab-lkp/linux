@@ -797,37 +797,31 @@ static int rga_probe(struct platform_device *pdev)
 	if (ret)
 		return dev_err_probe(&pdev->dev, ret, "Unable to parse OF data\n");
 
-	pm_runtime_enable(rga->dev);
+	ret = devm_pm_runtime_enable(rga->dev);
+	if (ret)
+		return ret;
 
 	rga->regs = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(rga->regs)) {
-		ret = PTR_ERR(rga->regs);
-		goto err_put_clk;
-	}
+	if (IS_ERR(rga->regs))
+		return PTR_ERR(rga->regs);
 
 	irq = platform_get_irq(pdev, 0);
-	if (irq < 0) {
-		ret = irq;
-		goto err_put_clk;
-	}
+	if (irq < 0)
+		return irq;
 
 	ret = devm_request_irq(rga->dev, irq, rga_isr,
 			       rga_has_internal_iommu(rga) ? 0 : IRQF_SHARED,
 			       dev_name(rga->dev), rga);
-	if (ret < 0) {
-		dev_err(rga->dev, "failed to request irq\n");
-		goto err_put_clk;
-	}
+	if (ret < 0)
+		return dev_err_probe(rga->dev, ret, "failed to request irq\n");
 
 	ret = dma_set_mask_and_coherent(rga->dev, DMA_BIT_MASK(32));
-	if (ret) {
-		dev_err(rga->dev, "32-bit DMA not supported");
-		goto err_put_clk;
-	}
+	if (ret)
+		dev_err_probe(rga->dev, ret, "32-bit DMA not supported");
 
 	ret = v4l2_device_register(&pdev->dev, &rga->v4l2_dev);
 	if (ret)
-		goto err_put_clk;
+		return ret;
 	vfd = video_device_alloc();
 	if (!vfd) {
 		v4l2_err(&rga->v4l2_dev, "Failed to allocate video device\n");
@@ -877,8 +871,6 @@ rel_vdev:
 	video_device_release(vfd);
 unreg_v4l2_dev:
 	v4l2_device_unregister(&rga->v4l2_dev);
-err_put_clk:
-	pm_runtime_disable(rga->dev);
 
 	return ret;
 }
@@ -892,8 +884,6 @@ static void rga_remove(struct platform_device *pdev)
 	v4l2_m2m_release(rga->m2m_dev);
 	video_unregister_device(rga->vfd);
 	v4l2_device_unregister(&rga->v4l2_dev);
-
-	pm_runtime_disable(rga->dev);
 }
 
 static int __maybe_unused rga_runtime_suspend(struct device *dev)
