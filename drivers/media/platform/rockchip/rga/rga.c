@@ -72,6 +72,10 @@ static irqreturn_t rga_isr(int irq, void *prv)
 	struct rga_core *core = prv;
 	struct rockchip_rga *rga = core->rga;
 
+	/* ignore interrupt on an unbound core */
+	if (!rga)
+		return IRQ_HANDLED;
+
 	if (rga->hw->handle_irq(core)) {
 		struct vb2_v4l2_buffer *src, *dst;
 		struct rga_ctx *ctx = core->curr;
@@ -740,55 +744,16 @@ static int rga_parse_dt(struct rga_core *core)
 
 static int rga_core_bind(struct device *dev, struct device *master, void *data)
 {
-	struct platform_device *pdev = to_platform_device(dev);
 	struct rockchip_rga *rga = data;
-	struct rga_core *core;
+	struct rga_core *core = dev_get_drvdata(dev);
 	struct video_device *vfd;
 	int ret = 0;
-	int irq;
-
-	if (!pdev->dev.of_node)
-		return -ENODEV;
-
-	core = devm_kzalloc(&pdev->dev, sizeof(*core), GFP_KERNEL);
-	if (!core)
-		return -ENOMEM;
 
 	core->rga = rga;
-	core->dev = &pdev->dev;
 
 	rga->cores[0] = core;
 
-	ret = rga_parse_dt(core);
-	if (ret)
-		return dev_err_probe(&pdev->dev, ret, "Unable to parse OF data\n");
-
-	ret = devm_pm_runtime_enable(core->dev);
-	if (ret)
-		return ret;
-
-	pm_runtime_set_autosuspend_delay(core->dev, 50);
-	pm_runtime_use_autosuspend(core->dev);
-
-	core->regs = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(core->regs))
-		return PTR_ERR(core->regs);
-
-	irq = platform_get_irq(pdev, 0);
-	if (irq < 0)
-		return irq;
-
-	ret = devm_request_irq(core->dev, irq, rga_isr,
-			       rga_has_internal_iommu(rga) ? 0 : IRQF_SHARED,
-			       dev_name(core->dev), core);
-	if (ret < 0)
-		return dev_err_probe(core->dev, ret, "failed to request irq\n");
-
-	ret = dma_set_mask_and_coherent(core->dev, DMA_BIT_MASK(32));
-	if (ret)
-		dev_err_probe(core->dev, ret, "32-bit DMA not supported");
-
-	ret = v4l2_device_register(&pdev->dev, &rga->v4l2_dev);
+	ret = v4l2_device_register(dev, &rga->v4l2_dev);
 	if (ret)
 		return ret;
 	vfd = video_device_alloc();
@@ -804,7 +769,6 @@ static int rga_core_bind(struct device *dev, struct device *master, void *data)
 	video_set_drvdata(vfd, rga);
 	rga->vfd = vfd;
 
-	platform_set_drvdata(pdev, core);
 	rga->m2m_dev = v4l2_m2m_init(&rga_m2m_ops);
 	if (IS_ERR(rga->m2m_dev)) {
 		v4l2_err(&rga->v4l2_dev, "Failed to init mem2mem device\n");
@@ -855,6 +819,8 @@ static void rga_core_unbind(struct device *dev, struct device *master,
 	v4l2_m2m_release(rga->m2m_dev);
 	video_unregister_device(rga->vfd);
 	v4l2_device_unregister(&rga->v4l2_dev);
+
+	core->rga = NULL;
 }
 
 static const struct component_ops rga_core_ops = {
@@ -864,7 +830,54 @@ static const struct component_ops rga_core_ops = {
 
 static int rga_core_probe(struct platform_device *pdev)
 {
+	struct rga_core *core;
+	const struct rga_hw *hw;
 	int ret = 0;
+	int irq;
+
+	if (!pdev->dev.of_node)
+		return -ENODEV;
+
+	hw = of_device_get_match_data(&pdev->dev);
+	if (!hw)
+		return dev_err_probe(&pdev->dev, -ENODEV, "failed to get match data\n");
+
+	core = devm_kzalloc(&pdev->dev, sizeof(*core), GFP_KERNEL);
+	if (!core)
+		return -ENOMEM;
+
+	core->dev = &pdev->dev;
+
+	ret = rga_parse_dt(core);
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret, "Unable to parse OF data\n");
+
+	ret = devm_pm_runtime_enable(core->dev);
+	if (ret)
+		return ret;
+
+	pm_runtime_set_autosuspend_delay(core->dev, 50);
+	pm_runtime_use_autosuspend(core->dev);
+
+	core->regs = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(core->regs))
+		return PTR_ERR(core->regs);
+
+	irq = platform_get_irq(pdev, 0);
+	if (irq < 0)
+		return irq;
+
+	ret = devm_request_irq(core->dev, irq, rga_isr,
+			       hw->has_internal_iommu ? 0 : IRQF_SHARED,
+			       dev_name(core->dev), core);
+	if (ret < 0)
+		return dev_err_probe(core->dev, ret, "failed to request irq\n");
+
+	ret = dma_set_mask_and_coherent(core->dev, DMA_BIT_MASK(32));
+	if (ret)
+		dev_err_probe(core->dev, ret, "32-bit DMA not supported");
+
+	platform_set_drvdata(pdev, core);
 
 	ret = component_add(&pdev->dev, &rga_core_ops);
 	if (ret < 0)
