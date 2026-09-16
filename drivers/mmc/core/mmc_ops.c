@@ -708,11 +708,33 @@ int mmc_send_tuning(struct mmc_host *host, u32 opcode, int *cmd_error)
 	data.flags = MMC_DATA_READ;
 
 	/*
-	 * According to the tuning specs, Tuning process
-	 * is normally shorter 40 executions of CMD19,
-	 * and timeout value should be shorter than 150 ms
+	 * JESD84-B51B 6.6.5.1, "Sampling Tuning Sequence for HS200":
+	 *
+	 *   "The Device is guaranteed to complete a sequence of 40 times
+	 *   CMD21 executions within 150 ms. This is exclusive of any
+	 *   host overhead."
+	 *
+	 * SD Physical Layer Specification Version 4.00:
+	 *
+	 *   "The card shall complete a sequence of 40 times CMD19
+	 *   executions in no more than 150ms. The tuning process is
+	 *   normally shorter than 40 executions of CMD19, and therefore
+	 *   should be shorter than 150 ms."
+	 *
+	 * Both specs bound a *sequence* of 40 tuning commands, i.e. at
+	 * most 150/40 ms (3.75 ms) of device time per command, excluding
+	 * host overhead.  And that is generous: the device serves the
+	 * tuning block straight from its SD/MMC IP, no storage access
+	 * involved, so the whole transaction is only a few us of bus
+	 * time even in the slowest reasonable setup (64 bytes at
+	 * 50 MHz, 4-bit takes ~2.6 us).  The timeout exists solely to
+	 * catch devices which never return the block at all.
+	 *
+	 * Use 5 ms per command: ~1.3x the spec-implied per-command
+	 * budget for host overhead and slower devices, still 30x below
+	 * the 150 ms bound.
 	 */
-	data.timeout_ns = 150 * NSEC_PER_MSEC;
+	data.timeout_ns = 5 * NSEC_PER_MSEC;
 
 	data.sg = &sg;
 	data.sg_len = 1;
