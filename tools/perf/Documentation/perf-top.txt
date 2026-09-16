@@ -95,8 +95,9 @@ Default is to monitor all CPUS.
 	disables debuginfod for the rest of the session, writing
 	core.debuginfod=false to the configuration file so that it
 	stays disabled in the next runs too; in the stdio interface the
-	progress is a line on stderr.  Disabled as well when the
-	build-id cache is off, e.g. "buildid.dir" set to /dev/null.
+	progress is a line on stderr, in the TUI a window over the
+	browser.  Disabled as well when the build-id cache is off, e.g.
+	"buildid.dir" set to /dev/null.
 
 --kallsyms=<file>::
 	kallsyms pathname

@@ -151,11 +151,14 @@ out:
 
 #ifdef HAVE_DEBUGINFOD_SUPPORT
 /*
- * use_browser tells whether a full screen UI, the TUI for now, owns
- * the terminal and its input queue: the fetch progress and the
- * skip/disable keys below are stdio only when it doesn't.
+ * The TUI side of the fetch interaction is behind the ui/ layer: slang
+ * stays in ui/tui/, callers ask for pending keys and for the fetch
+ * progress window with the ui__ primitives in ui/util.h, implemented in
+ * ui/tui/util.c for the slang TUI and as no-ops in builds without it.
  */
 #include "ui/ui.h"
+#include "ui/util.h"
+#include "ui/helpline.h"
 
 static bool debuginfod_progress_started;
 static bool debuginfod_fetch_cancelled;
@@ -176,11 +179,15 @@ static void debuginfod_signal_handler(int sig)
 
 /*
  * Say that the fetch in progress was skipped, and where disabling it
- * lands.
+ * lands: the stdio case prints on stderr, the TUI shows it on its
+ * helpline, as the window with the fetch progress goes away with it.
  */
 static void debuginfod__skipped(const char *msg)
 {
-	fprintf(stderr, "\n%s\n", msg);
+	if (use_browser > 0)
+		ui_helpline__puts(msg);
+	else
+		fprintf(stderr, "\n%s\n", msg);
 }
 
 /*
@@ -193,7 +200,8 @@ static void debuginfod__skipped(const char *msg)
  * write core.debuginfod=false to the configuration file, the same
  * rewrite 'perf config' does, the comments are not preserved as the
  * config set carries just the key-value pairs, pointing at
- * 'perf config' when that rewrite can't be done.
+ * 'perf config' when that rewrite can't be done.  Shared by the stdio
+ * and the TUI fetch UIs.
  */
 static void debuginfod__cancel_key(int key)
 {
@@ -230,6 +238,16 @@ static void debuginfod__poll_cancel_keys(void)
 }
 
 /*
+ * The TUI fetch UI: the browser thread is the one doing the fetch, so
+ * its input queue has the keys typed while it was busy, drain those.
+ */
+static void debuginfod__tui_poll_cancel_keys(void)
+{
+	while (ui__key_pending())
+		debuginfod__cancel_key(ui__key_read());
+}
+
+/*
  * Print a warning and a progress indicator when the debuginfod client
  * ends up fetching a file, which can be big, such as the vmlinux for a
  * kernel profiled on another machine or before it got upgraded, so that
@@ -246,7 +264,9 @@ static void debuginfod__poll_cancel_keys(void)
  *
  * In the stdio case the progress goes to stderr, a \r terminated line,
  * the keys are drained from stdin, that debuginfod__fetch() put in raw
- * mode.
+ * mode.  In the TUI the progress is drawn in a window over the browser
+ * and the keys come from the TUI input queue, slang stays behind the
+ * ui/ layer, see the comment on ui/util.h.
  */
 static int debuginfod_progress_fn(debuginfod_client *c __maybe_unused,
 				  long a, long b)
@@ -254,7 +274,18 @@ static int debuginfod_progress_fn(debuginfod_client *c __maybe_unused,
 	if (debuginfod_signal)
 		return 1;
 
-	if (!isatty(STDERR_FILENO) || use_browser)
+	if (use_browser > 0) {
+		ui__progress_window("Fetching debuginfo by build ID from the debuginfod servers",
+				    "This may take a while for large files such as the vmlinux, press 's' to skip, 'd' to skip and disable",
+				    a > 0 ? (u64)a : 0, b > 0 ? (u64)b : 0);
+
+		debuginfod__tui_poll_cancel_keys();
+		if (debuginfod_fetch_cancelled)
+			return 1;
+		return 0;
+	}
+
+	if (!isatty(STDERR_FILENO))
 		return 0;
 
 	if (isatty(STDIN_FILENO)) {
@@ -502,11 +533,14 @@ static int debuginfod__fetch(const struct build_id *bid, char **path)
 	 * Make stdin deliver keypresses without waiting for a newline,
 	 * the progress callback above polls it for the 's'/'d' keys,
 	 * only in the stdio case with both stdin and stderr being a
-	 * terminal: the pipe cases have no business being poked here,
-	 * and in the TUI the terminal and its input queue are the
-	 * browser's own.  Intercept SIGINT, SIGQUIT and SIGTERM so that
-	 * the terminal is restored before the process dies, the handler
-	 * only records the signal and the callback aborts the query.
+	 * terminal: the TUI draws its own progress window over the
+	 * browser and drains the keys from the input queue the browser
+	 * owns, with the ui__ primitives, and the pipe cases have no
+	 * business being poked here.  Intercept SIGINT, SIGQUIT and
+	 * SIGTERM so that the terminal is restored before the process
+	 * dies, the handler only records the signal and the callback
+	 * aborts the query; in the TUI the terminal is the TUI's own and
+	 * so are those signal handlers, that restore it before exiting.
 	 * The handlers go in before the terminal mode changes, so that a
 	 * signal landing in between is caught and the raw mode is
 	 * restored.
@@ -538,7 +572,9 @@ static int debuginfod__fetch(const struct build_id *bid, char **path)
 		sigaction(SIGTERM, &orig_sigterm, NULL);
 
 	debuginfod_end(c);
-	if (debuginfod_progress_started) {
+	if (use_browser > 0)
+		ui__progress_window_end();
+	else if (debuginfod_progress_started) {
 		fputc('\n', stderr);
 		debuginfod_progress_started = false;
 	}
