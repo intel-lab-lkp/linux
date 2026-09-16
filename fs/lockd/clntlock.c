@@ -216,10 +216,13 @@ nlmclnt_recovery(struct nlm_host *host)
 	if (!host->h_reclaiming++) {
 		nlm_get_host(host);
 		task = kthread_run(reclaimer, host, "%s-reclaim", host->h_name);
-		if (IS_ERR(task))
+		if (IS_ERR(task)) {
 			printk(KERN_ERR "lockd: unable to spawn reclaimer "
 				"thread. Locks for %s won't be reclaimed! "
 				"(%ld)\n", host->h_name, PTR_ERR(task));
+			host->h_reclaiming = 0;
+			nlmclnt_release_host(host);
+		}
 	}
 }
 
