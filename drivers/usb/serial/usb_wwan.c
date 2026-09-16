@@ -585,9 +585,11 @@ static int usb_wwan_submit_delayed_urbs(struct usb_serial_port *port)
 			err_count++;
 			unbusy_queued_urb(urb, portdata);
 			usb_autopm_put_interface_async(serial->interface);
+			usb_put_urb(urb);
 			continue;
 		}
 		data->in_flight++;
+		usb_put_urb(urb);
 	}
 
 	if (err_count)
