@@ -1005,6 +1005,7 @@ struct ibmvfc_host {
 	unsigned int nvme_enabled:1;
 	unsigned int do_scsi_login:1;
 	unsigned int do_nvme_login:1;
+	unsigned int do_nvme_register:1;
 	unsigned int aborting_passthru:1;
 	unsigned int scan_complete:1;
 	int scan_timeout;
