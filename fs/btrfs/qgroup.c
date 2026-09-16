@@ -3940,7 +3940,7 @@ out:
 	mutex_lock(&fs_info->qgroup_rescan_lock);
 	cancelled = test_and_clear_bit(BTRFS_QGROUP_RUNTIME_BIT_CANCEL_RESCAN,
 				       &fs_info->qgroup_flags);
-	if (!stopped || cancelled)
+	if (!stopped || cancelled || !btrfs_qgroup_enabled(fs_info))
 		clear_bit(BTRFS_QGROUP_STATUS_BIT_RESCAN, &fs_info->qgroup_flags);
 	if (trans) {
 		int ret2 = update_qgroup_status_item(trans);
@@ -4096,6 +4096,7 @@ btrfs_qgroup_rescan(struct btrfs_fs_info *fs_info)
 		btrfs_queue_work(fs_info->qgroup_rescan_workers,
 				 &fs_info->qgroup_rescan_work);
 	} else {
+		clear_bit(BTRFS_QGROUP_STATUS_BIT_RESCAN, &fs_info->qgroup_flags);
 		ret = -ENOTCONN;
 	}
 	mutex_unlock(&fs_info->qgroup_rescan_lock);
