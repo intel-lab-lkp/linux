@@ -1609,8 +1609,23 @@ static int stm32_adc_read_raw(struct iio_dev *indio_dev,
 		else
 			ret = -EINVAL;
 
-		if (mask == IIO_CHAN_INFO_PROCESSED)
-			*val = STM32_ADC_VREFINT_VOLTAGE * adc->vrefint.vrefint_cal / *val;
+		if (mask == IIO_CHAN_INFO_PROCESSED) {
+			int vrefint_raw;
+
+			if (ret < 0) {
+				iio_device_release_direct(indio_dev);
+				return ret;
+			}
+
+			vrefint_raw = *val;
+
+			if (vrefint_raw == 0) {
+				iio_device_release_direct(indio_dev);
+				return -EINVAL;
+			}
+
+			*val = STM32_ADC_VREFINT_VOLTAGE * adc->vrefint.vrefint_cal / vrefint_raw;
+		}
 
 		iio_device_release_direct(indio_dev);
 		return ret;
