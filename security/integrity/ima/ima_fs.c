@@ -595,7 +595,7 @@ static ssize_t ima_write_policy(struct file *file, const char __user *buf,
 		pr_err("signed policy file (specified as an absolute pathname) required\n");
 		integrity_audit_msg(AUDIT_INTEGRITY_STATUS, NULL, NULL,
 				    "policy_update", "signed policy required",
-				    1, 0);
+				    1, 0, -EINVAL);
 		result = -EACCES;
 	} else {
 		ima_measure_raw_policy(data, datalen);
@@ -745,7 +745,7 @@ static int ima_release_policy(struct inode *inode, struct file *file)
 
 	pr_info("policy update %s\n", cause);
 	integrity_audit_msg(AUDIT_INTEGRITY_STATUS, NULL, NULL,
-			    "policy_update", cause, !valid_policy, 0);
+			    "policy_update", cause, !valid_policy, 0, 0);
 
 	if (!valid_policy) {
 		ima_delete_rules();
