@@ -137,7 +137,7 @@ out:
 	return false;
 }
 
-void rtl_fw_write_firmware(struct rtl8169_private *tp, struct rtl_fw *rtl_fw)
+int rtl_fw_write_firmware(struct rtl8169_private *tp, struct rtl_fw *rtl_fw)
 {
 	struct rtl_fw_phy_action *pa = &rtl_fw->phy_action;
 	rtl_fw_write_t fw_write = rtl_fw->phy_write;
@@ -150,10 +150,13 @@ void rtl_fw_write_firmware(struct rtl8169_private *tp, struct rtl_fw *rtl_fw)
 		u32 data = action & 0x0000ffff;
 		u32 regno = (action & 0x0fff0000) >> 16;
 		enum rtl_fw_opcode opcode = action >> 28;
+		int rc;
 
 		switch (opcode) {
 		case PHY_READ:
 			predata = fw_read(tp, regno);
+			if (predata < 0)
+				return predata;
 			count++;
 			break;
 		case PHY_DATA_OR:
@@ -179,7 +182,9 @@ void rtl_fw_write_firmware(struct rtl8169_private *tp, struct rtl_fw *rtl_fw)
 			count = 0;
 			break;
 		case PHY_WRITE:
-			fw_write(tp, regno, data);
+			rc = fw_write(tp, regno, data);
+			if (rc < 0)
+				return rc;
 			break;
 		case PHY_READCOUNT_EQ_SKIP:
 			if (count == data)
@@ -194,7 +199,9 @@ void rtl_fw_write_firmware(struct rtl8169_private *tp, struct rtl_fw *rtl_fw)
 				index += regno;
 			break;
 		case PHY_WRITE_PREVIOUS:
-			fw_write(tp, regno, predata);
+			rc = fw_write(tp, regno, predata);
+			if (rc < 0)
+				return rc;
 			break;
 		case PHY_SKIPN:
 			index += regno;
@@ -204,6 +211,8 @@ void rtl_fw_write_firmware(struct rtl8169_private *tp, struct rtl_fw *rtl_fw)
 			break;
 		}
 	}
+
+	return 0;
 }
 
 void rtl_fw_release_firmware(struct rtl_fw *rtl_fw)

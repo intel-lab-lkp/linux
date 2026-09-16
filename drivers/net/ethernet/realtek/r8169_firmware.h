@@ -36,4 +36,4 @@ struct rtl_fw {
 
 int rtl_fw_request_firmware(struct rtl_fw *rtl_fw);
 void rtl_fw_release_firmware(struct rtl_fw *rtl_fw);
-void rtl_fw_write_firmware(struct rtl8169_private *tp, struct rtl_fw *rtl_fw);
+int rtl_fw_write_firmware(struct rtl8169_private *tp, struct rtl_fw *rtl_fw);
