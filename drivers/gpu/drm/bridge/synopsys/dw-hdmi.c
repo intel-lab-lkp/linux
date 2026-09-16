@@ -3588,6 +3588,7 @@ struct dw_hdmi *dw_hdmi_probe(struct platform_device *pdev,
 	return hdmi;
 
 err_res:
+	drm_bridge_put(hdmi->bridge.next_bridge);
 	i2c_put_adapter(hdmi->ddc);
 
 	return ERR_PTR(ret);
@@ -3597,6 +3598,7 @@ EXPORT_SYMBOL_GPL(dw_hdmi_probe);
 void dw_hdmi_remove(struct dw_hdmi *hdmi)
 {
 	drm_bridge_remove(&hdmi->bridge);
+	drm_bridge_put(hdmi->bridge.next_bridge);
 
 	if (hdmi->audio && !IS_ERR(hdmi->audio))
 		platform_device_unregister(hdmi->audio);
