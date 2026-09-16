@@ -286,6 +286,27 @@ The helper does not infer the shape from the Python value, since an array may
 represent something other than per-CPU data. Metrics are measurements only and
 do not affect the pass or fail result.
 
+ksft_metric_aggregate()
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Use ``ksft_metric_aggregate()`` before the first matching observation to
+register processing, display, and regression policy for a metric. The policy
+is emitted once per test case rather than repeated in every observation. For
+example::
+
+  ksft_metric_aggregate("nic.rx.dropped", summarize="distribution",
+                        transform="rate", display_range={"min": 0})
+  ksft_metric("nic.rx.dropped", 0, shape="scalar", host="local")
+
+emits separate policy and observation records::
+
+  # ktap-metric-policy-json: {"display_range":{"min":0},"name":"nic.rx.dropped","summarize":"distribution","transform":"rate"}
+  # ktap-metric-json: {"host":"local","name":"nic.rx.dropped","shape":"scalar","time":1.234,"value":0}
+
+Consumers apply a policy to observations with the same metric name. The
+function docstring documents the supported summary, transform, aggregation,
+regression, and display options.
+
 ksft_disruptive
 ~~~~~~~~~~~~~~~
 

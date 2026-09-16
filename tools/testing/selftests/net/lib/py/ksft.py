@@ -20,6 +20,7 @@ KSFT_RESULT_ALL = True
 KSFT_DISRUPTIVE = True
 KSFT_METRICS = None
 KSFT_METRICS_START = None
+KSFT_METRIC_AGGREGATES = None
 KSFT_METRICS_LOCK = threading.Lock()
 
 
@@ -98,6 +99,105 @@ def ksft_pr(*objs, **kwargs):
     print(pfx, prefixed, **kwargs)
 
 
+def ksft_metric_aggregate(name, summarize="total", *, aggregation=None,
+                          transform=None, regression=None,
+                          display_range=None, display_scale=None,
+                          display_label=None):
+    """Register processing and presentation metadata for a metric.
+
+    The policy applies to every observation with ``name`` in the current test
+    case. It is emitted once as a ``ktap-metric-policy-json`` record before
+    the matching ``ktap-metric-json`` observations, so a consumer can process
+    the metric without recognizing its name. Register a policy before the
+    first matching :func:`ksft_metric` call. Registering the same policy more
+    than once is allowed; changing it or registering it after an observation
+    is rejected.
+
+    Args:
+        name: Metric name passed to :func:`ksft_metric`.
+        summarize: Operation used to reduce the processed observations.
+            Supported values are ``last``, ``total``, ``p50``, ``p90``,
+            ``p99``, ``max``, and ``distribution``. ``distribution`` keeps
+            ``last`` for one scalar observation and produces p50, p90, p99,
+            and max for sampled observations. The default is ``total``.
+        aggregation: Optional operation applied to each transformed
+            observation before summarization. An aggregation may reduce a
+            structured value, such as an array, to a scalar.
+            ``busy-core-equivalents`` expects a CPU-indexed array and sums
+            transformed per-CPU rates. Without a transform, it treats values
+            as percentages and divides their sum by 100. The resulting series
+            measures concurrently busy cores.
+        transform: Optional operation applied before aggregation and summary.
+            ``rate`` calculates ``(current - previous) / elapsed_time`` from
+            timestamped cumulative observations. Counter decreases and
+            intervals with nonpositive elapsed time do not produce a rate.
+        regression: Optional regression-tracking policy dictionary:
+
+            ``compare``
+                Summary operation to compare: ``last``, ``total``, ``p50``,
+                ``p90``, ``p99``, or ``max``. This is independent of the
+                summaries selected for display.
+            ``better``
+                ``higher`` or ``lower``, indicating which direction is an
+                improvement.
+            ``relative_tolerance``
+                Optional nonnegative fractional deterioration, for example
+                ``0.05`` for five percent.
+            ``absolute_tolerance``
+                Optional nonnegative deterioration in the processed metric's
+                native units. At least one tolerance is required; consumers
+                use the larger allowance when both are present.
+
+            The producer describes comparison semantics, while the consumer
+            selects historical baselines and determines regression status.
+        display_range: Optional graph range dictionary containing ``min``,
+            ``max``, or both. It describes displayed individual series. An
+            upper bound does not cap a post-aggregation total such as multiple
+            busy-core equivalents.
+        display_scale: Optional positive multiplier applied only when values
+            are displayed, after transformation. It does not alter stored
+            observations, aggregation, summaries, or regression comparison.
+        display_label: Optional nonempty axis label for displayed values.
+
+    Example::
+
+        ksft_metric_aggregate(
+            "cpu.time.usr", summarize="p90", transform="rate",
+            aggregation="busy-core-equivalents",
+            display_range={"min": 0, "max": 100},
+            display_scale=100,
+            display_label="Percent of one CPU")
+
+    Raises:
+        RuntimeError: If called outside a test case or after a matching metric.
+        ValueError: If the policy conflicts with an earlier registration.
+    """
+    metadata = {"summarize": summarize}
+    optional = {
+        "aggregation": aggregation,
+        "transform": transform,
+        "regression": regression,
+        "display_range": display_range,
+        "display_scale": display_scale,
+        "display_label": display_label,
+    }
+    metadata.update({key: value for key, value in optional.items()
+                     if value is not None})
+
+    with KSFT_METRICS_LOCK:
+        if KSFT_METRIC_AGGREGATES is None:
+            raise RuntimeError(
+                "ksft_metric_aggregate() called outside of a test case")
+        previous = KSFT_METRIC_AGGREGATES.get(name)
+        if previous is not None and previous != metadata:
+            raise ValueError(f"Conflicting aggregation for metric {name}")
+        if previous is None and any(metric["name"] == name
+                                    for metric in KSFT_METRICS):
+            raise RuntimeError(
+                f"Aggregation registered after metric {name} was recorded")
+        KSFT_METRIC_AGGREGATES[name] = metadata
+
+
 def ksft_metric(name, value, *, shape, **labels):
     """Record a timestamped metric with an explicitly described shape."""
     with KSFT_METRICS_LOCK:
@@ -118,13 +218,23 @@ def ksft_metric(name, value, *, shape, **labels):
 
 
 def _ksft_flush_metrics():
-    global KSFT_METRICS, KSFT_METRICS_START
+    global KSFT_METRICS, KSFT_METRICS_START, KSFT_METRIC_AGGREGATES
 
     with KSFT_METRICS_LOCK:
         metrics = KSFT_METRICS
+        aggregates = KSFT_METRIC_AGGREGATES
         KSFT_METRICS = None
         KSFT_METRICS_START = None
+        KSFT_METRIC_AGGREGATES = None
 
+    metric_names = {metric["name"] for metric in metrics or []}
+    for name, metadata in (aggregates or {}).items():
+        if name not in metric_names:
+            continue
+        policy = {"name": name, **metadata}
+        payload = json.dumps(policy, allow_nan=False, separators=(",", ":"),
+                             sort_keys=True)
+        ksft_pr(f"ktap-metric-policy-json: {payload}")
     for metric in metrics or []:
         payload = json.dumps(metric, allow_nan=False, separators=(",", ":"),
                              sort_keys=True)
@@ -439,6 +549,7 @@ def ksft_run(cases=None, globs=None, case_pfx=None, args=()):
     totals = {"pass": 0, "fail": 0, "skip": 0, "xfail": 0}
 
     global KSFT_RESULT, KSFT_METRICS, KSFT_METRICS_START
+    global KSFT_METRIC_AGGREGATES
     if KSFT_RESULT is not None:
         raise RuntimeError("ksft_run() can't be called multiple times.")
 
@@ -452,6 +563,7 @@ def ksft_run(cases=None, globs=None, case_pfx=None, args=()):
         with KSFT_METRICS_LOCK:
             KSFT_METRICS = []
             KSFT_METRICS_START = time.monotonic()
+            KSFT_METRIC_AGGREGATES = {}
         cnt += 1
         comment = ""
         cnt_key = ""
