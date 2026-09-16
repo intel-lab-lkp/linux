@@ -847,6 +847,60 @@ void lamparray_unregister(struct lamparray *la)
 }
 EXPORT_SYMBOL_GPL(lamparray_unregister);
 
+/*
+ * Blank all lamps on suspend rather than handing control back to the firmware,
+ * which may not turn them off in low power states. On an Acer Predator PT14-52T,
+ * system power draw during s2idle was ~12.35W with lamps lit, and ~2.84W with
+ * them blanked; the lighting accounted for ~77% of the power draw during suspend.
+ * Since writing zeroes is well defined on all lamparray devices, always do it.
+ * This is ignored if use_leds_uapi is 0; let userspace keep full control.
+ */
+void lamparray_suspend(struct lamparray *la)
+{
+	struct lamparray_device *ldev;
+
+	if (!la)
+		return;
+
+	ldev = &la->ldev;
+
+	if (!ldev->use_leds_uapi)
+		return;
+
+	mutex_lock(&ldev->dev_lock);
+	lamparray_hw_set_state(ldev, 0, 0, 0, 0);
+	mutex_unlock(&ldev->dev_lock);
+
+	hid_hw_wait(ldev->hdev);
+}
+EXPORT_SYMBOL_GPL(lamparray_suspend);
+
+void lamparray_resume(struct lamparray *la)
+{
+	struct lamparray_device *ldev;
+
+	if (!la)
+		return;
+
+	ldev = &la->ldev;
+
+	if (!ldev->use_leds_uapi)
+		return;
+
+	/*
+	 * After a S4 transition, some devices report
+	 * AutonomousMode = 0 while still ignoring host lamp updates.
+	 * Writing 0 again does nothing; forcing a 1 -> 0
+	 * will guarantee the device will update.
+	 */
+	lamparray_hw_set_autonomous(ldev, true);
+	hid_hw_wait(ldev->hdev);
+	lamparray_hw_set_autonomous(ldev, false);
+
+	lamparray_restore_state(ldev);
+}
+EXPORT_SYMBOL_GPL(lamparray_resume);
+
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Tim Guttzeit <tgu@tuxedocomputers.com>");
 MODULE_AUTHOR("Aaron Erhardt <aer@tuxedocomputers.com>");

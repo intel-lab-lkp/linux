@@ -65,6 +65,27 @@ struct lamparray *lamparray_register(struct hid_device *hdev,
  */
 void lamparray_unregister(struct lamparray *la);
 
+/**
+ * lamparray_suspend() - blank all lamps ahead of sleep transition
+ * @la: LampArray handle returned by lamparray_register()
+ *
+ * Writes zeroes to the rgb values only, keeping the brightness, unless the
+ * use_leds_uapi sysfs attribute is 0, in which case, it will return early
+ * before writing anything. The cached state is left untouched so
+ * lamparray_resume() can restore it.
+ */
+void lamparray_suspend(struct lamparray *la);
+
+/**
+ * lamparray_resume() - restore host control and LampArray state
+ * @la: LampArray handle returned by lamparray_register()
+ *
+ * Disables autonomous mode (in case device returns to firmware control after suspend)
+ * and restores the cached state of the device. If the use_leds_uapi attribute is 0,
+ * it will return early and prevent any unwanted writing.
+ */
+void lamparray_resume(struct lamparray *la);
+
 #else /* !CONFIG_HID_LAMPARRAY */
 
 static inline bool lamparray_is_supported_device(struct hid_device *hdev)
@@ -80,6 +101,14 @@ lamparray_register(struct hid_device *hdev,
 }
 
 static inline void lamparray_unregister(struct lamparray *la)
+{
+}
+
+static inline void lamparray_suspend(struct lamparray *la)
+{
+}
+
+static inline void lamparray_resume(struct lamparray *la)
 {
 }
 
