@@ -28,6 +28,18 @@ properties:
     description: Indicates a falling edge assert, when present. Rising edge if absent.
     type: boolean
 
+  pinctrl-names:
+    description:
+      When the PPS input is muxed through a pin controller, name the "default"
+      state to select the PPS/GPIO function while the driver is bound. An
+      optional "idle" state, if present, is selected when the driver is
+      unbound or the system is shut down, handing the pins back to their
+      alternate function.
+    minItems: 1
+    items:
+      - const: default
+      - const: idle
+
 required:
   - compatible
   - gpios
@@ -40,8 +52,9 @@ examples:
 
     pps {
         compatible = "pps-gpio";
-        pinctrl-names = "default";
+        pinctrl-names = "default", "idle";
         pinctrl-0 = <&pinctrl_pps>;
+        pinctrl-1 = <&pinctrl_pps_idle>;
         gpios = <&gpio1 26 GPIO_ACTIVE_HIGH>;
         assert-falling-edge;
         echo-gpios = <&gpio1 27 GPIO_ACTIVE_HIGH>;
