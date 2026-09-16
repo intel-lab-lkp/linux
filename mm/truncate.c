@@ -213,8 +213,8 @@ static int folio_split_or_unmap(struct folio *folio, struct page *split_at,
  *
  * When @pstart and/or @pend are non-NULL they receive the indexes of the
  * page range fully covered by [lstart, lend] after any split (or none),
- * i.e. the range of pages wholly within [lstart, lend] and so safe to
- * discard.
+ * aligned inwards to min_order, i.e. the range of folios wholly within
+ * [lstart, lend] and so safe to discard.
  *
  * Returns false if splitting failed so the caller can avoid
  * discarding the entire folio which is stubbornly unsplit.
@@ -226,6 +226,7 @@ bool truncate_inode_partial_folio(struct folio *folio, loff_t lstart,
 	size_t size = folio_size(folio);
 	unsigned int offset, length;
 	struct page *split_at, *split_at2;
+	unsigned long min_nrbytes;
 	unsigned int min_order;
 
 	if (pos < lstart)
@@ -263,6 +264,7 @@ bool truncate_inode_partial_folio(struct folio *folio, loff_t lstart,
 		return true;
 
 	min_order = mapping_min_folio_order(folio->mapping);
+	min_nrbytes = mapping_min_folio_nrbytes(folio->mapping);
 	split_at = folio_page(folio, PAGE_ALIGN_DOWN(offset) / PAGE_SIZE);
 	if (!folio_split_or_unmap(folio, split_at, min_order)) {
 		/*
@@ -271,12 +273,12 @@ bool truncate_inode_partial_folio(struct folio *folio, loff_t lstart,
 		 * for shmem truncate
 		 */
 		struct folio *folio2;
-		pgoff_t end, aligned_end = (pos + offset + length) >>
-					   PAGE_SHIFT;
+		pgoff_t end, aligned_end = round_down(pos + offset + length,
+						min_nrbytes) >> PAGE_SHIFT;
 
 		if (pstart)
-			*pstart = round_up(pos + offset, PAGE_SIZE) >>
-				  PAGE_SHIFT;
+			*pstart = round_up(pos + offset,
+					   min_nrbytes) >> PAGE_SHIFT;
 
 		if (offset + length == size) {
 			end = aligned_end;
