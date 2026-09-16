@@ -2045,7 +2045,7 @@ static void handle_port_status(struct xhci_hcd *xhci, union xhci_trb *event)
 	bus_state = &port->rhub->bus_state;
 	hcd_portnum = port->hcd_portnum;
 	portsc = xhci_portsc_readl(port);
-	pls = portsc & PORT_PLS_MASK;
+	pls = FIELD_GET(PORT_PLS_MASK, portsc);
 
 	xhci_dbg(xhci, "Port change event, %d-%d, id %d, portsc: 0x%x\n",
 		 hcd->self.busnum, hcd_portnum + 1, port_id, portsc);
@@ -2066,7 +2066,8 @@ static void handle_port_status(struct xhci_hcd *xhci, union xhci_trb *event)
 		port->connected = !!(portsc & PORT_CONNECT);
 	}
 
-	if ((portsc & PORT_PLC) && (portsc & PORT_PLS_MASK) == XDEV_RESUME) {
+	pls = FIELD_GET(PORT_PLS_MASK, portsc);
+	if ((portsc & PORT_PLC) && pls == XDEV_RESUME) {
 		xhci_dbg(xhci, "port resume event for port %d\n", port_id);
 
 		cmd_reg = readl(&xhci->op_regs->command);
@@ -2107,11 +2108,9 @@ static void handle_port_status(struct xhci_hcd *xhci, union xhci_trb *event)
 		}
 	}
 
-	if ((portsc & PORT_PLC) &&
-	    FIELD_GET(DEV_SPEED_MASK, portsc) >= XDEV_SS &&
-	    ((portsc & PORT_PLS_MASK) == XDEV_U0 ||
-	     (portsc & PORT_PLS_MASK) == XDEV_U1 ||
-	     (portsc & PORT_PLS_MASK) == XDEV_U2)) {
+	pls = FIELD_GET(PORT_PLS_MASK, portsc);
+	if ((portsc & PORT_PLC) && pls <= XDEV_U2 &&
+	    FIELD_GET(DEV_SPEED_MASK, portsc) >= XDEV_SS) {
 		xhci_dbg(xhci, "resume SS port %d finished\n", port_id);
 		complete(&port->u3exit_done);
 		/* We've just brought the device into U0/1/2 through either the

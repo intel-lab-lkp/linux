@@ -2374,7 +2374,7 @@ static inline const char *xhci_decode_slot_context(char *str,
 
 static inline const char *xhci_portsc_link_state_string(u32 portsc)
 {
-	switch (portsc & PORT_PLS_MASK) {
+	switch (FIELD_GET(PORT_PLS_MASK, portsc)) {
 	case XDEV_U0:
 		return "U0";
 	case XDEV_U1:
