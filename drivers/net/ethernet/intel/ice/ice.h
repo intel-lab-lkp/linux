@@ -647,6 +647,7 @@ struct ice_pf {
 	 */
 	u16 num_dmac_chnl_fltrs;
 	struct hlist_head tc_flower_fltr_list;
+	struct hlist_head tc_sw_fltr_list;
 
 	u64 supported_rxdids;
 

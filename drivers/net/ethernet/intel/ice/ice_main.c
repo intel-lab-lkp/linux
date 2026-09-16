@@ -8421,7 +8421,7 @@ ice_setup_tc_cls_flower(struct ice_netdev_priv *np,
 	case FLOW_CLS_REPLACE:
 		return ice_add_cls_flower(filter_dev, vsi, cls_flower, ingress);
 	case FLOW_CLS_DESTROY:
-		return ice_del_cls_flower(vsi, cls_flower);
+		return ice_del_cls_flower(filter_dev, vsi, cls_flower);
 	default:
 		return -EINVAL;
 	}

@@ -2271,6 +2271,117 @@ ice_find_tc_flower_fltr(struct ice_pf *pf, unsigned long cookie)
 }
 
 /**
+ * ice_tc_fltr_is_drop - check if a filter carries a drop action
+ * @cls_flower: offload request describing the filter
+ *
+ * Return: true if any action of the filter is a drop, false otherwise.
+ */
+static bool ice_tc_fltr_is_drop(struct flow_cls_offload *cls_flower)
+{
+	struct flow_rule *rule = flow_cls_offload_flow_rule(cls_flower);
+	struct flow_action_entry *act;
+	int i;
+
+	if (cls_flower->classid)
+		return false;
+
+	flow_action_for_each(i, act, &rule->action)
+		if (act->id == FLOW_ACTION_DROP)
+			return true;
+
+	return false;
+}
+
+/**
+ * ice_tc_untrack_sw_fltr - forget a tracked software-only filter
+ * @pf: pointer to PF structure
+ * @filter_dev: device the filter was requested on
+ * @cookie: unique filter identifier from the offload request
+ *
+ * Return: true if the filter was tracked, false otherwise.
+ */
+static bool ice_tc_untrack_sw_fltr(struct ice_pf *pf,
+				   struct net_device *filter_dev,
+				   unsigned long cookie)
+{
+	struct ice_tc_sw_fltr *sw_fltr;
+
+	hlist_for_each_entry(sw_fltr, &pf->tc_sw_fltr_list, node) {
+		if (sw_fltr->cookie != cookie ||
+		    sw_fltr->filter_dev != filter_dev)
+			continue;
+
+		hlist_del(&sw_fltr->node);
+		kfree(sw_fltr);
+		return true;
+	}
+
+	return false;
+}
+
+/**
+ * ice_tc_track_sw_fltr - remember a filter that was not offloaded
+ * @pf: pointer to PF structure
+ * @filter_dev: device the filter was requested on
+ * @cls_flower: offload request describing the filter
+ * @direction: block direction the filter was requested for
+ */
+static void ice_tc_track_sw_fltr(struct ice_pf *pf,
+				 struct net_device *filter_dev,
+				 struct flow_cls_offload *cls_flower,
+				 enum ice_eswitch_fltr_direction direction)
+{
+	struct ice_tc_sw_fltr *sw_fltr;
+
+	hlist_for_each_entry(sw_fltr, &pf->tc_sw_fltr_list, node)
+		if (sw_fltr->cookie == cls_flower->cookie &&
+		    sw_fltr->filter_dev == filter_dev)
+			return;
+
+	sw_fltr = kzalloc_obj(*sw_fltr);
+	if (!sw_fltr)
+		return;
+
+	sw_fltr->cookie = cls_flower->cookie;
+	sw_fltr->filter_dev = filter_dev;
+	sw_fltr->prio = cls_flower->common.prio;
+	sw_fltr->direction = direction;
+	sw_fltr->is_drop = ice_tc_fltr_is_drop(cls_flower);
+	hlist_add_head(&sw_fltr->node, &pf->tc_sw_fltr_list);
+}
+
+/**
+ * ice_tc_drop_bypasses_fltr - check if a drop rule would bypass a filter
+ * @pf: pointer to PF structure
+ * @filter_dev: device the drop filter is requested on
+ * @prio: TC priority of the drop filter
+ * @direction: block direction of the drop filter
+ *
+ * Return: true if such a filter exists, false otherwise.
+ */
+static bool
+ice_tc_drop_bypasses_fltr(struct ice_pf *pf, struct net_device *filter_dev,
+			  u32 prio, enum ice_eswitch_fltr_direction direction)
+{
+	struct ice_tc_flower_fltr *fltr;
+	struct ice_tc_sw_fltr *sw_fltr;
+
+	hlist_for_each_entry(sw_fltr, &pf->tc_sw_fltr_list, node)
+		if (sw_fltr->filter_dev == filter_dev &&
+		    sw_fltr->direction == direction && sw_fltr->prio < prio &&
+		    !sw_fltr->is_drop)
+			return true;
+
+	hlist_for_each_entry(fltr, &pf->tc_flower_fltr_list, tc_flower_node)
+		if (fltr->filter_dev == filter_dev &&
+		    fltr->direction == direction && fltr->prio < prio &&
+		    fltr->action.fltr_act != ICE_DROP_PACKET)
+			return true;
+
+	return false;
+}
+
+/**
  * ice_add_cls_flower - add TC flower filters
  * @netdev: Pointer to filter device
  * @vsi: Pointer to VSI
@@ -2285,14 +2396,24 @@ int ice_add_cls_flower(struct net_device *netdev, struct ice_vsi *vsi,
 {
 	struct netlink_ext_ack *extack = cls_flower->common.extack;
 	struct net_device *vsi_netdev = vsi->netdev;
+	enum ice_eswitch_fltr_direction direction;
 	struct ice_tc_flower_fltr *fltr;
 	struct ice_pf *pf = vsi->back;
+	bool track_sw_fltrs;
 	int err;
 
-	if (ice_is_reset_in_progress(pf->state))
-		return -EBUSY;
-	if (test_bit(ICE_FLAG_FW_LLDP_AGENT, pf->flags))
-		return -EINVAL;
+	direction = ingress ? ICE_ESWITCH_FLTR_INGRESS :
+			      ICE_ESWITCH_FLTR_EGRESS;
+	track_sw_fltrs = !ice_is_eswitch_mode_switchdev(pf);
+
+	if (ice_is_reset_in_progress(pf->state)) {
+		err = -EBUSY;
+		goto track_sw;
+	}
+	if (test_bit(ICE_FLAG_FW_LLDP_AGENT, pf->flags)) {
+		err = -EINVAL;
+		goto track_sw;
+	}
 
 	if (ice_is_port_repr_netdev(netdev))
 		vsi_netdev = netdev;
@@ -2305,7 +2426,8 @@ int ice_add_cls_flower(struct net_device *netdev, struct ice_vsi *vsi,
 		 */
 		if (netdev == vsi_netdev)
 			NL_SET_ERR_MSG_MOD(extack, "can't apply TC flower filters, turn ON hw-tc-offload and try again");
-		return -EINVAL;
+		err = -EINVAL;
+		goto track_sw;
 	}
 
 	/* avoid duplicate entries, if exists - return error */
@@ -2315,27 +2437,50 @@ int ice_add_cls_flower(struct net_device *netdev, struct ice_vsi *vsi,
 		return -EEXIST;
 	}
 
+	if (track_sw_fltrs && !cls_flower->common.skip_sw &&
+	    ice_tc_fltr_is_drop(cls_flower) &&
+	    ice_tc_drop_bypasses_fltr(pf, netdev, cls_flower->common.prio,
+				      direction)) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "Drop filter not offloaded because it would bypass a higher priority filter");
+		err = -EOPNOTSUPP;
+		goto track_sw;
+	}
+
 	/* prep and add TC-flower filter in HW */
 	err = ice_add_tc_fltr(netdev, vsi, cls_flower, &fltr, ingress);
 	if (err)
-		return err;
+		goto track_sw;
+
+	fltr->filter_dev = netdev;
+	fltr->prio = cls_flower->common.prio;
 
 	/* add filter into an ordered list */
 	hlist_add_head(&fltr->tc_flower_node, &pf->tc_flower_fltr_list);
 	return 0;
+
+track_sw:
+	if (track_sw_fltrs && !cls_flower->common.skip_sw)
+		ice_tc_track_sw_fltr(pf, netdev, cls_flower, direction);
+	return err;
 }
 
 /**
  * ice_del_cls_flower - delete TC flower filters
+ * @netdev: Pointer to filter device
  * @vsi: Pointer to VSI
  * @cls_flower: Pointer to struct flow_cls_offload
  */
 int
-ice_del_cls_flower(struct ice_vsi *vsi, struct flow_cls_offload *cls_flower)
+ice_del_cls_flower(struct net_device *netdev, struct ice_vsi *vsi,
+		   struct flow_cls_offload *cls_flower)
 {
 	struct ice_tc_flower_fltr *fltr;
 	struct ice_pf *pf = vsi->back;
 	int err;
+
+	if (ice_tc_untrack_sw_fltr(pf, netdev, cls_flower->cookie))
+		return 0;
 
 	/* find filter */
 	fltr = ice_find_tc_flower_fltr(pf, cls_flower->cookie);
