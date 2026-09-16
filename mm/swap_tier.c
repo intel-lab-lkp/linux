@@ -65,6 +65,7 @@ void swap_tiers_init(void)
 
 	for_each_tier(tier, idx) {
 		plist_head_init(&tier->active_head);
+		plist_head_init(&tier->avail_head);
 		INIT_LIST_HEAD(&tier->list);
 		swap_tier_inactivate(tier);
 	}
@@ -92,11 +93,14 @@ void swap_tiers_assign_dev(struct swap_info_struct *swp)
 
 	lockdep_assert_held(&swap_lock);
 
+	/* The allocator walks the tiers under swap_avail_lock. */
+	spin_lock(&swap_avail_lock);
 	tier = swap_tier_lookup(swp->prio);
 	if (!tier) {
 		tier = swap_tier_prepare(swp->prio);
 		swap_tier_activate(tier);
 	}
+	spin_unlock(&swap_avail_lock);
 
 	plist_add(&swp->list, &tier->active_head);
 }
@@ -109,6 +113,17 @@ void swap_tiers_remove_dev(struct swap_info_struct *swp)
 
 	tier = swap_tier_lookup(swp->prio);
 	plist_del(&swp->list, &tier->active_head);
-	if (plist_head_empty(&tier->active_head))
+	if (plist_head_empty(&tier->active_head)) {
+		spin_lock(&swap_avail_lock);
 		swap_tier_inactivate(tier);
+		spin_unlock(&swap_avail_lock);
+	}
+}
+
+/* The avail list of the tier @swp belongs to. */
+struct plist_head *swap_tiers_avail_head(struct swap_info_struct *swp)
+{
+	lockdep_assert_held(&swap_avail_lock);
+
+	return &swap_tier_lookup(swp->prio)->avail_head;
 }

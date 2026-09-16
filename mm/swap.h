@@ -37,6 +37,7 @@ struct swap_io_ctx;
 #endif
 
 extern spinlock_t swap_lock;
+extern spinlock_t swap_avail_lock;
 extern struct swap_info_struct *swap_info[];
 
 /*
