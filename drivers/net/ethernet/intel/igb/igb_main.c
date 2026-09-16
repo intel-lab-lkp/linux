@@ -3191,6 +3191,16 @@ static s32 igb_init_i2c(struct igb_adapter *adapter)
 }
 
 /**
+ *  igb_remove_i2c - Cleanup  I2C interface
+ *  @adapter: pointer to adapter structure
+ **/
+static void igb_remove_i2c(struct igb_adapter *adapter)
+{
+	/* free the adapter bus structure */
+	i2c_del_adapter(&adapter->i2c_adap);
+}
+
+/**
  *  igb_probe - Device Initialization Routine
  *  @pdev: PCI device information struct
  *  @ent: entry in igb_pci_tbl
@@ -3657,7 +3667,7 @@ static int igb_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 err_register:
 	igb_release_hw_control(adapter);
-	memset(&adapter->i2c_adap, 0, sizeof(adapter->i2c_adap));
+	igb_remove_i2c(adapter);
 err_eeprom:
 	if (!igb_check_reset_block(hw))
 		igb_reset_phy(hw);
@@ -3849,16 +3859,6 @@ out:
 }
 
 #endif
-/**
- *  igb_remove_i2c - Cleanup  I2C interface
- *  @adapter: pointer to adapter structure
- **/
-static void igb_remove_i2c(struct igb_adapter *adapter)
-{
-	/* free the adapter bus structure */
-	i2c_del_adapter(&adapter->i2c_adap);
-}
-
 /**
  *  igb_remove - Device Removal Routine
  *  @pdev: PCI device information struct
