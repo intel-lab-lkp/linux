@@ -202,7 +202,7 @@ int sm750_hw_copyarea(struct lynx_accel *accel,
 		}
 	}
 
-	if ((direction == BOTTOM_TO_TOP) || (direction == RIGHT_TO_LEFT)) {
+	if (direction == BOTTOM_TO_TOP || direction == RIGHT_TO_LEFT) {
 		sx += width - 1;
 		sy += height - 1;
 		dx += width - 1;
