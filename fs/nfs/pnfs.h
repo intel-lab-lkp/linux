@@ -44,6 +44,7 @@ enum {
 	NFS_LSEG_LAYOUTCOMMIT,	/* layoutcommit bit set for layoutcommit */
 	NFS_LSEG_LAYOUTRETURN,	/* layoutreturn bit set for layoutreturn */
 	NFS_LSEG_UNAVAILABLE,	/* unavailable bit set for temporary problem */
+	NFS_LSEG_IO_CANCELLED,	/* IO cancelled on behalf of this lseg */
 };
 
 /* Individual ip address */
@@ -692,7 +693,8 @@ pnfs_lseg_request_intersecting(struct pnfs_layout_segment *lseg, struct nfs_page
 static inline void pnfs_lseg_cancel_io(struct nfs_server *server,
 				       struct pnfs_layout_segment *lseg)
 {
-	if (server->pnfs_curr_ld->cancel_io)
+	if (server->pnfs_curr_ld->cancel_io &&
+	    !test_and_set_bit(NFS_LSEG_IO_CANCELLED, &lseg->pls_flags))
 		server->pnfs_curr_ld->cancel_io(lseg);
 }
 
