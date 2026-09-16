@@ -2104,16 +2104,18 @@ static void tegra_xusb_restore_context(struct tegra_xusb *tegra)
 
 static enum usb_device_speed tegra_xhci_portsc_to_speed(struct tegra_xusb *tegra, u32 portsc)
 {
-	if (DEV_LOWSPEED(portsc))
+	u32 port_speed = FIELD_GET(DEV_SPEED_MASK, portsc);
+
+	if (port_speed == XDEV_LS)
 		return USB_SPEED_LOW;
 
-	if (DEV_HIGHSPEED(portsc))
+	if (port_speed == XDEV_HS)
 		return USB_SPEED_HIGH;
 
-	if (DEV_FULLSPEED(portsc))
+	if (port_speed == XDEV_FS)
 		return USB_SPEED_FULL;
 
-	if (DEV_SUPERSPEED_ANY(portsc))
+	if (port_speed >= XDEV_SS)
 		return USB_SPEED_SUPER;
 
 	return USB_SPEED_UNKNOWN;
@@ -2252,7 +2254,8 @@ static int tegra_xusb_enter_elpg(struct tegra_xusb *tegra, bool is_auto_resume)
 			continue;
 		portsc = xhci_portsc_readl(xhci->usb2_rhub.ports[i]);
 		tegra->lp0_utmi_pad_mask &= ~BIT(i);
-		if (((portsc & PORT_PLS_MASK) == XDEV_U3) || ((portsc & DEV_SPEED_MASK) == XDEV_FS))
+		if (((portsc & PORT_PLS_MASK) == XDEV_U3) ||
+		    (FIELD_GET(DEV_SPEED_MASK, portsc) == XDEV_FS))
 			tegra->lp0_utmi_pad_mask |= BIT(i);
 	}
 
