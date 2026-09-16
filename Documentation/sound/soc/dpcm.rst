@@ -358,7 +358,6 @@ The machine driver sets some additional parameters to the DAI link i.e.
 
   static struct snd_soc_dai_link dais[] = {
 	< ... more DAI links above ... >
-	{
 		.name = "MODEM",
 		.stream_name = "MODEM",
 		.cpu_dai_name = "dai2",
