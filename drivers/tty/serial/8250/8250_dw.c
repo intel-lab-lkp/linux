@@ -28,6 +28,7 @@
 
 #include <linux/serial_8250.h>
 #include <linux/serial_reg.h>
+#include <linux/of.h>
 
 #include "8250_dwlib.h"
 
@@ -436,7 +437,7 @@ static int dw8250_handle_irq(struct uart_port *p)
 	 * This problem has only been observed so far when not in DMA mode
 	 * so we limit the workaround only to non-DMA mode.
 	 */
-	if (!up->dma && rx_timeout) {
+	if (!(up->capabilities & UART_CAP_RXFIFO_EMPTY_READ) && !up->dma && rx_timeout) {
 		status = serial_lsr_in(up);
 
 		if (!(status & (UART_LSR_DR | UART_LSR_BI)))
@@ -758,6 +759,14 @@ static int dw8250_probe(struct platform_device *pdev)
 
 	if (!data->skip_autocfg)
 		dw8250_setup_port(p);
+	/*
+	 * On this IP, reading UART_RX while the FIFO is empty raises a data
+	 * abort. serial8250_clear_interrupts() and serial8250_do_shutdown()
+	 * in the 8250 core unconditionally read UART_RX, so guard those
+	 * reads with an LSR_DR check.
+	 */
+	if (of_device_is_compatible(pdev->dev.of_node, "ti,tda54-uart"))
+		up->capabilities |= UART_CAP_RXFIFO_EMPTY_READ;
 
 	/* If we have a valid fifosize, try hooking up DMA */
 	if (p->fifosize) {
@@ -888,6 +897,10 @@ static const struct dw8250_platform_data dw8250_ultrarisc_dp1000_data = {
 	.quirks = DW_UART_QUIRK_CPR_VALUE,
 };
 
+static const struct dw8250_platform_data dw8250_tda54_data = {
+	.usr_reg = DW_UART_USR,
+};
+
 static const struct of_device_id dw8250_of_match[] = {
 	{ .compatible = "snps,dw-apb-uart", .data = &dw8250_dw_apb },
 	{ .compatible = "cavium,octeon-3860-uart", .data = &dw8250_octeon_3860_data },
@@ -895,6 +908,7 @@ static const struct of_device_id dw8250_of_match[] = {
 	{ .compatible = "renesas,rzn1-uart", .data = &dw8250_renesas_rzn1_data },
 	{ .compatible = "sophgo,sg2044-uart", .data = &dw8250_skip_set_rate_data },
 	{ .compatible = "starfive,jh7100-uart", .data = &dw8250_skip_set_rate_data },
+	{ .compatible = "ti,tda54-uart", .data = &dw8250_tda54_data },
 	{ .compatible = "ultrarisc,dp1000-uart", .data = &dw8250_ultrarisc_dp1000_data },
 	{ /* Sentinel */ }
 };

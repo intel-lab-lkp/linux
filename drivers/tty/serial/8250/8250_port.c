@@ -706,8 +706,13 @@ static void serial8250_set_sleep(struct uart_8250_port *p, int sleep)
 /* Clear the interrupt registers. */
 static void serial8250_clear_interrupts(struct uart_port *port)
 {
-	serial_port_in(port, UART_LSR);
-	serial_port_in(port, UART_RX);
+	struct uart_8250_port *up = up_to_u8250p(port);
+	unsigned int lsr;
+
+	lsr = serial_port_in(port, UART_LSR);
+	if (!(up->capabilities & UART_CAP_RXFIFO_EMPTY_READ) || (lsr & UART_LSR_DR))
+		serial_port_in(port, UART_RX);
+
 	serial_port_in(port, UART_IIR);
 	serial_port_in(port, UART_MSR);
 }
@@ -2455,7 +2460,8 @@ void serial8250_do_shutdown(struct uart_port *port)
 	 * Read data port to reset things, and then unlink from
 	 * the IRQ chain.
 	 */
-	serial_port_in(port, UART_RX);
+	if (!(up->capabilities & UART_CAP_RXFIFO_EMPTY_READ) || (serial_lsr_in(up) & UART_LSR_DR))
+		serial_port_in(port, UART_RX);
 	/*
 	 * LCR writes on DW UART can trigger late (unmaskable) IRQs.
 	 * Handle them before releasing the handler.
