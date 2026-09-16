@@ -428,6 +428,7 @@ static int rpi_touchscreen_probe(struct i2c_client *i2c)
 	if (IS_ERR(ts->dsi)) {
 		dev_err(dev, "DSI device registration failed: %ld\n",
 			PTR_ERR(ts->dsi));
+		of_node_put(info.node);
 		return PTR_ERR(ts->dsi);
 	}
 
