@@ -115,8 +115,19 @@ u64 *kvm_tdp_mmu_fast_pf_get_last_sptep(struct kvm_vcpu *vcpu, gfn_t gfn,
 
 #ifdef CONFIG_X86_64
 static inline bool is_tdp_mmu_page(struct kvm_mmu_page *sp) { return sp->tdp_mmu_page; }
+
+static inline enum kvm_mmu_type page_mmu_type(struct kvm_mmu_page *sp) {
+	return is_tdp_mmu_page(sp) ? KVM_TDP_MMU : KVM_SHADOW_MMU;
+}
+
 #else
+
 static inline bool is_tdp_mmu_page(struct kvm_mmu_page *sp) { return false; }
+
+static inline enum kvm_mmu_type page_mmu_type(struct kvm_mmu_page *sp) {
+	return KVM_SHADOW_MMU;
+}
+
 #endif
 
 #endif /* __KVM_X86_MMU_TDP_MMU_H */
