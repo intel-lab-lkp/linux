@@ -53,6 +53,32 @@
 		};
 	};
 
+	gpio-keys-virtio {
+		compatible = "gpio-keys-polled";
+		poll-interval = <100>;
+
+		button-v1 {
+			label = "Button V1";
+			linux,code = <BTN_3>;
+			gpios = <&v_gpio 23 GPIO_ACTIVE_LOW>;
+		};
+
+		button-v2 {
+			label = "Button V2";
+			linux,code = <BTN_4>;
+			gpios = <&v_gpio 24 GPIO_ACTIVE_LOW>;
+		};
+	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		led {
+			gpios = <&v_gpio 18 GPIO_ACTIVE_HIGH>;
+			label = "LED V";
+		};
+	};
+
 	reg_usdhc2_vmmc: regulator-usdhc2 {
 		compatible = "regulator-fixed";
 		off-on-delay-us = <12000>;
@@ -89,11 +115,6 @@
 			linux,cma-default;
 		};
 
-		rsc_table: rsc-table@2021e000 {
-			reg = <0 0x2021e000 0 0x1000>;
-			no-map;
-		};
-
 		vdev0vring0: vdev0vring0@a4000000 {
 			reg = <0 0xa4000000 0 0x8000>;
 			no-map;
@@ -105,12 +126,42 @@
 		};
 
 		vdev1vring0: vdev1vring0@a4010000 {
-			reg = <0 0xa4010000 0 0x8000>;
+			reg = <0 0xa4010000 0 0x1000>;
 			no-map;
 		};
 
-		vdev1vring1: vdev1vring1@a4018000 {
-			reg = <0 0xa4018000 0 0x8000>;
+		vdev2vring0: vdev2vring0@a4011000 {
+			reg = <0 0xa4011000 0 0x2000>;
+			no-map;
+		};
+
+		vdev2vring1: vdev2vring1@a4013000 {
+			reg = <0 0xa4013000 0 0x2000>;
+			no-map;
+		};
+
+		vdev3vring0: vdev3vring0@a4015000 {
+			reg = <0 0xa4015000 0 0x2000>;
+			no-map;
+		};
+
+		vdev4vring0: vdev4vring0@a4017000 {
+			reg = <0 0xa4017000 0 0x4000>;
+			no-map;
+		};
+
+		vdev5vring0: vdev5vring0@a401B000 {
+			reg = <0 0xa401B000 0 0x2000>;
+			no-map;
+		};
+
+		vdev5vring1: vdev5vring1@a401D000 {
+			reg = <0 0xa401D000 0 0x2000>;
+			no-map;
+		};
+
+		vdev5vring2: vdev5vring2@a401F000 {
+			reg = <0 0xa401F000 0 0x1000>;
 			no-map;
 		};
 
@@ -149,8 +200,67 @@
 		 <&mu1 3 1>;
 	mbox-names = "tx", "rx", "rxdb";
 	memory-region = <&vdevbuffer>, <&vdev0vring0>, <&vdev0vring1>,
-			<&vdev1vring0>, <&vdev1vring1>, <&rsc_table>;
+			<&vdev1vring0>, <&vdev2vring0>, <&vdev2vring1>,
+			<&vdev3vring0>, <&vdev4vring0>,
+			<&vdev5vring0>, <&vdev5vring1>, <&vdev5vring2>;
 	status = "okay";
+
+	virtio {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		vdev@2 {
+			reg = <2>;
+
+			v_gpio: gpio {
+				compatible = "virtio,device29";
+				gpio-controller;
+				#gpio-cells = <2>;
+				interrupt-controller;
+				#interrupt-cells = <2>;
+			};
+		};
+
+		vdev@3 {
+			reg = <3>;
+
+			i2c {
+				compatible = "virtio,device22";
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				eeprom@50 {
+					compatible = "atmel,24c1025";
+					reg = <0x50>;
+				};
+			};
+		};
+
+		vdev@4 {
+			reg = <4>;
+
+			spi {
+				compatible = "virtio,device2d";
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				sram@0 {
+					compatible = "microchip,mchp23k256";
+					reg = <0>;
+					spi-max-frequency = <20000000>;
+				};
+
+				lcd@1 {
+					compatible = "adafruit,yx240qv29", "ilitek,ili9341";
+					reg = <1>;
+					spi-max-frequency = <10000000>;
+					dc-gpios = <&v_gpio 21 GPIO_ACTIVE_HIGH>;
+					reset-gpios = <&v_gpio 20 GPIO_ACTIVE_HIGH>;
+					rotation = <90>;
+				};
+			};
+		};
+	};
 };
 
 &eqos {
