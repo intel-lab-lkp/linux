@@ -711,6 +711,7 @@ static void ltq_etop_remove(struct platform_device *pdev)
 		ltq_etop_hw_exit(dev);
 		ltq_etop_mdio_cleanup(dev);
 		unregister_netdev(dev);
+		free_netdev(dev);
 	}
 }
 
