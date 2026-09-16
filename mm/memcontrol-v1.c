@@ -122,10 +122,13 @@ static unsigned long mem_cgroup_usage(struct mem_cgroup *memcg, bool swap)
 		if (swap)
 			val += total_swap_pages - get_nr_swap_pages();
 	} else {
-		if (!swap)
+		if (!swap) {
 			val = page_counter_read(&memcg->memory);
-		else
-			val = page_counter_read(&memcg->memsw);
+		} else {
+			/* Preserve the user-visible memory <= memsw invariant. */
+			val = max(page_counter_read(&memcg->memory),
+				  page_counter_read(&memcg->memsw));
+		}
 	}
 	return val;
 }
