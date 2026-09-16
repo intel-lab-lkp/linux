@@ -2003,7 +2003,7 @@ static int memblock_free_only_region_check(void)
  * Expect the total size of reserved memory to be updated and the counter to
  * not be updated.
  */
-static int memblock_free_near_max_check(void)
+static int memblock_phys_free_near_max_check(void)
 {
 	struct memblock_region *rgn;
 	phys_addr_t total_size;
@@ -2026,7 +2026,7 @@ static int memblock_free_near_max_check(void)
 
 	reset_memblock_regions();
 	memblock_reserve(r1.base, r1.size);
-	memblock_free((void *)r2.base, r2.size);
+	memblock_phys_free(r2.base, r2.size);
 
 	ASSERT_EQ(rgn->base, r1.base);
 	ASSERT_EQ(rgn->size, total_size);
@@ -2114,7 +2114,7 @@ static int memblock_free_checks(void)
 	memblock_free_overlap_bottom_check();
 	memblock_free_within_check();
 	memblock_free_only_region_check();
-	memblock_free_near_max_check();
+	memblock_phys_free_near_max_check();
 	memblock_free_overlap_two_check();
 
 	prefix_pop();
