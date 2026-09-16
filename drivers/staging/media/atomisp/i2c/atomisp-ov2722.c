@@ -971,7 +971,7 @@ static int ov2722_probe(struct i2c_client *client)
 
 	ret = __ov2722_init_ctrl_handler(dev);
 	if (ret)
-		goto out_ctrl_handler_free;
+		goto out_remove;
 
 	dev->sd.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
 	dev->pad.flags = MEDIA_PAD_FL_SOURCE;
@@ -980,12 +980,17 @@ static int ov2722_probe(struct i2c_client *client)
 
 	ret = media_entity_pads_init(&dev->sd.entity, 1, &dev->pad);
 	if (ret)
-		ov2722_remove(client);
+		goto out_remove;
 
-	return atomisp_register_i2c_module(&dev->sd, ovpdev);
+	ret = atomisp_register_i2c_module(&dev->sd, ovpdev);
+	if (ret)
+		goto out_remove;
 
-out_ctrl_handler_free:
-	v4l2_ctrl_handler_free(&dev->ctrl_handler);
+	return 0;
+
+out_remove:
+	ov2722_remove(client);
+	return ret;
 
 out_free:
 	atomisp_gmin_remove_subdev(&dev->sd);
