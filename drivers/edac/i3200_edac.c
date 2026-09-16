@@ -439,10 +439,13 @@ static int i3200_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 		return -EIO;
 
 	rc = i3200_probe1(pdev, ent->driver_data);
+	if (rc)
+		return rc;
+
 	if (!mci_pdev)
 		mci_pdev = pci_dev_get(pdev);
 
-	return rc;
+	return 0;
 }
 
 static void i3200_remove_one(struct pci_dev *pdev)
