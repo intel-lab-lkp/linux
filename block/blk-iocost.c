@@ -2532,8 +2532,20 @@ static void calc_vtime_cost_builtin(struct bio *bio, struct ioc_gq *iocg,
 	u64 pages = max_t(u64, bio_sectors(bio) >> IOC_SECT_TO_PAGE_SHIFT, 1);
 	u64 seek_pages = 0;
 	u64 cost = 0;
+	u64 flush_cost = 0;
 
-	/* Can't calculate cost for empty bio */
+	/*
+	 * A WRITE|REQ_PREFLUSH bio carries a flush component: the flush
+	 * machine runs a cache flush for it, either standalone (dataless)
+	 * or ahead of the data.  Charge the flush on top of the data cost,
+	 * priced as a pageless random write with a one-page floor so fast
+	 * profiles still charge something.  Flush bios are never merged.
+	 */
+	if (!is_merge && (bio->bi_opf & REQ_PREFLUSH))
+		flush_cost = max(ioc->params.lcoefs[LCOEF_WRANDIO],
+				 ioc->params.lcoefs[LCOEF_WPAGE]);
+
+	/* Can't calculate data cost for empty bio */
 	if (!bio->bi_iter.bi_size)
 		goto out;
 
@@ -2566,7 +2578,7 @@ static void calc_vtime_cost_builtin(struct bio *bio, struct ioc_gq *iocg,
 	}
 	cost += pages * coef_page;
 out:
-	*costp = cost;
+	*costp = cost + flush_cost;
 }
 
 static u64 calc_vtime_cost(struct bio *bio, struct ioc_gq *iocg, bool is_merge)
@@ -2708,7 +2720,9 @@ static void ioc_rqos_throttle(struct rq_qos *rqos, struct bio *bio)
 	if (!iocg_activate(iocg, &now))
 		return;
 
-	iocg->cursor = bio_end_sector(bio);
+	/* dataless bios have no meaningful position for seq/rand detection */
+	if (bio->bi_iter.bi_size)
+		iocg->cursor = bio_end_sector(bio);
 	vtime = atomic64_read(&iocg->vtime);
 	cost = adjust_inuse_and_calc_cost(iocg, vtime, abs_cost, &now);
 
