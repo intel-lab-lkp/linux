@@ -322,6 +322,16 @@ io_check_error(unsigned char reason, struct pt_regs *regs)
 }
 NOKPROBE_SYMBOL(io_check_error);
 
+/*
+ * Fallback used when the AMD perf core, which provides the strong
+ * implementation, is not built in. Without it no PMC overflow NMI latency
+ * window is tracked at all, so no "unknown NMI" report is ever suppressed.
+ */
+bool __weak perf_nmi_window_active(void)
+{
+	return false;
+}
+
 static void
 unknown_nmi_error(unsigned char reason, struct pt_regs *regs)
 {
@@ -339,6 +349,19 @@ unknown_nmi_error(unsigned char reason, struct pt_regs *regs)
 	}
 
 	__this_cpu_add(nmi_stats.unknown, 1);
+
+	/*
+	 * No handler was able to identify this NMI, so its source is unknown.
+	 * The one exception is a latent PMC overflow NMI: the overflow NMI can
+	 * arrive long after the counter was already processed by an earlier
+	 * NMI, which leaves nothing here that could identify it. If the perf
+	 * NMI latency window is still open, this NMI is very likely that late
+	 * arrival, so keep quiet about it instead of reporting a bogus unknown
+	 * NMI (and instead of panicking on unknown_nmi_panic). It is still
+	 * accounted in nmi_stats.unknown and thus stays visible in debugfs.
+	 */
+	if (perf_nmi_window_active())
+		return;
 
 	pr_emerg_ratelimited("Uhhuh. NMI received for unknown reason %02x on CPU %d.\n",
 			     reason, smp_processor_id());
