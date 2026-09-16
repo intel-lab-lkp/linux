@@ -164,21 +164,12 @@ static int ibmvfc_nvme_ls_req(struct nvme_fc_local_port *lport,
 	return 0;
 }
 
-static void ibmvfc_sync_nvme_completion(struct ibmvfc_event *evt)
+static void ibmvfc_init_ls_abort(struct ibmvfc_event *evt,
+				 struct ibmvfc_event *abt_evt)
 {
-	/* copy the response back */
-	if (evt->sync_iu)
-		*evt->sync_iu = *evt->xfer_iu;
-
-	complete(&evt->comp);
-}
-
-static void ibmvfc_init_ls_abort(struct ibmvfc_event *evt, struct nvmefc_ls_req *ls_abort)
-{
-	struct ibmvfc_tmf *tmf;
-	struct ibmvfc_event *abt_evt = ls_abort->private;
 	struct ibmvfc_target *tgt = abt_evt->tgt;
 	struct ibmvfc_host *vhost = evt->vhost;
+	struct ibmvfc_tmf *tmf;
 
 	tmf = &evt->iu.tmf;
 	memset(tmf, 0, sizeof(*tmf));
@@ -192,8 +183,18 @@ static void ibmvfc_init_ls_abort(struct ibmvfc_event *evt, struct nvmefc_ls_req 
 	tmf->cancel_key = cpu_to_be32((u64)abt_evt);
 	tmf->my_cancel_key = cpu_to_be32((u64)evt);
 	tmf->assoc_id = cpu_to_be64(tgt->assoc_id);
+}
 
-	init_completion(&evt->comp);
+static void ibmvfc_nvme_ls_abort_done(struct ibmvfc_event *evt)
+{
+	u16 status = be16_to_cpu(evt->xfer_iu->mad_common.status);
+
+	if (status)
+		ibmvfc_dbg(evt->vhost, "ls_abort: cancel MAD failed with rc=%x\n",
+			   status);
+
+	kref_put(&evt->tgt->kref, ibmvfc_release_tgt);
+	ibmvfc_free_event(evt);
 }
 
 static void ibmvfc_nvme_ls_abort(struct nvme_fc_local_port *lport,
@@ -202,34 +203,35 @@ static void ibmvfc_nvme_ls_abort(struct nvme_fc_local_port *lport,
 {
 	struct ibmvfc_host *vhost = lport->private;
 	struct ibmvfc_target *tgt = rport->private;
-	struct ibmvfc_event *evt;
-	union ibmvfc_iu rsp;
+	struct ibmvfc_event *evt, *abt_evt;
 	unsigned long flags;
-	u16 status = IBMVFC_MAD_CRQ_ERROR;
+
+	spin_lock_irqsave(&vhost->host->host_lock, flags);
+
+	/*
+	 * If the original LS has already completed naturally, abt_evt will
+	 * have been freed back to the pool (evt->free set to 1 under
+	 * host_lock by ibmvfc_free_event()).  Nothing left to cancel.
+	 */
+	abt_evt = ls_abort->private;
+	if (!abt_evt || atomic_read(&abt_evt->free)) {
+		spin_unlock_irqrestore(&vhost->host->host_lock, flags);
+		return;
+	}
 
 	evt = ibmvfc_get_event(&vhost->crq);
-	if (!vhost->logged_in || !evt)
+	if (!vhost->logged_in || !evt) {
+		spin_unlock_irqrestore(&vhost->host->host_lock, flags);
 		return;
+	}
 
-	spin_lock_irqsave(&vhost->host->host_lock, flags);
 	kref_get(&tgt->kref);
-	ibmvfc_init_event(evt, ibmvfc_sync_nvme_completion, IBMVFC_MAD_FORMAT);
-	ibmvfc_init_ls_abort(evt, ls_abort);
-	evt->sync_iu = &rsp;
+	ibmvfc_init_event(evt, ibmvfc_nvme_ls_abort_done, IBMVFC_MAD_FORMAT);
+	ibmvfc_init_ls_abort(evt, abt_evt);
+	evt->tgt = tgt;
 
-	if (ibmvfc_send_event(evt, vhost, default_timeout))
-		goto out;
-
+	ibmvfc_send_event(evt, vhost, default_timeout);
 	spin_unlock_irqrestore(&vhost->host->host_lock, flags);
-
-	wait_for_completion(&evt->comp);
-	status = be16_to_cpu(rsp.mad_common.status);
-	spin_lock_irqsave(&vhost->host->host_lock, flags);
-	ibmvfc_free_event(evt);
-out:
-	spin_unlock_irqrestore(&vhost->host->host_lock, flags);
-	ibmvfc_dbg(vhost, "ls_abort: cancel failed with rc=%x\n", status);
-	kref_put(&tgt->kref, ibmvfc_release_tgt);
 }
 
 static void ibmvfc_nvme_done(struct ibmvfc_event *evt)
