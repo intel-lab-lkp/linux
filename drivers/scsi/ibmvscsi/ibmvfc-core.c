@@ -6865,7 +6865,9 @@ static int ibmvfc_probe(struct vio_dev *vdev, const struct vio_device_id *id)
 	int rc = -ENOMEM;
 	unsigned int online_cpus = num_online_cpus();
 	unsigned int max_scsi_queues = min_t(unsigned int, IBMVFC_MAX_SCSI_QUEUES, online_cpus);
-	unsigned int max_nvme_queues = min_t(unsigned int, IBMVFC_MAX_NVME_QUEUES, online_cpus);
+	unsigned int max_nvme_queues = min_t(unsigned int,
+					     min(IBMVFC_MAX_NVME_QUEUES, nr_nvme_hw_queues),
+					     online_cpus);
 
 	ENTER;
 	shost = scsi_host_alloc(&driver_template, sizeof(*vhost));
