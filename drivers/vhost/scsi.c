@@ -2008,6 +2008,41 @@ out:
 	return -ENOMEM;
 }
 
+/* Callers must hold dev mutex. */
+static int vhost_scsi_activate_vq(struct vhost_scsi *vs, unsigned int index)
+{
+	struct vhost_virtqueue *vq;
+	int ret = 0;
+
+	if (!vs->vs_tpg)
+		return 0;
+	if (index >= vs->dev.nvqs)
+		return -EINVAL;
+	index = array_index_nospec(index, vs->dev.nvqs);
+	if (index < VHOST_SCSI_VQ_IO)
+		return 0;
+
+	vq = &vs->vqs[index].vq;
+	mutex_lock(&vq->mutex);
+	if (vhost_vq_get_backend(vq) || !vhost_vq_is_setup(vq))
+		goto unlock;
+
+	ret = vhost_scsi_setup_vq_cmds(vq, vq->num);
+	if (ret)
+		goto unlock;
+
+	vhost_vq_set_backend(vq, vs->vs_tpg);
+	ret = vhost_vq_init_access(vq);
+	if (ret) {
+		vhost_vq_set_backend(vq, NULL);
+		vhost_scsi_destroy_vq_cmds(vq);
+	}
+unlock:
+	mutex_unlock(&vq->mutex);
+
+	return ret;
+}
+
 /*
  * Called from vhost_scsi_ioctl() context to walk the list of available
  * vhost_scsi_tpg with an active struct vhost_scsi_nexus
@@ -2105,6 +2140,9 @@ vhost_scsi_set_endpoint(struct vhost_scsi *vs,
 
 		for (i = 0; i < vs->dev.nvqs; i++) {
 			vq = &vs->vqs[i].vq;
+			if (i >= VHOST_SCSI_VQ_IO && !vs->vqs[i].scsi_cmds)
+				continue;
+
 			mutex_lock(&vq->mutex);
 			vhost_vq_set_backend(vq, vs_tpg);
 			vhost_vq_init_access(vq);
@@ -2409,6 +2447,7 @@ vhost_scsi_ioctl(struct file *f,
 	u64 __user *featurep = argp;
 	u32 __user *eventsp = argp;
 	u32 events_missed;
+	u32 vq_index = 0;
 	u64 features;
 	int r, abi_version = VHOST_SCSI_ABI_VERSION;
 	struct vhost_virtqueue *vq = &vs->vqs[VHOST_SCSI_VQ_EVT].vq;
@@ -2464,12 +2503,19 @@ vhost_scsi_ioctl(struct file *f,
 		mutex_unlock(&vs->dev.mutex);
 		return r;
 	default:
+		if (ioctl == VHOST_SET_VRING_ADDR &&
+		    get_user(vq_index, (u32 __user *)argp))
+			return -EFAULT;
+
 		mutex_lock(&vs->dev.mutex);
 		r = vhost_dev_ioctl(&vs->dev, ioctl, argp);
-		if (r == -ENOIOCTLCMD)
+		if (r == -ENOIOCTLCMD) {
 			r = vhost_vring_ioctl(&vs->dev, ioctl, argp);
-		else
+			if (!r && ioctl == VHOST_SET_VRING_ADDR)
+				r = vhost_scsi_activate_vq(vs, vq_index);
+		} else {
 			vhost_scsi_flush(vs);
+		}
 		mutex_unlock(&vs->dev.mutex);
 		return r;
 	}
