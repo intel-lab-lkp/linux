@@ -851,14 +851,14 @@ static int ads131e08_probe(struct spi_device *spi)
 		return ret;
 	}
 
-	indio_dev->trig = iio_trigger_get(st->trig);
-
 	ret = devm_iio_triggered_buffer_setup(&spi->dev, indio_dev,
 		NULL, &ads131e08_trigger_handler, NULL);
 	if (ret) {
 		dev_err(&spi->dev, "failed to setup IIO buffer\n");
 		return ret;
 	}
+
+	indio_dev->trig = iio_trigger_get(st->trig);
 
 	st->vref_reg = devm_regulator_get_optional(&spi->dev, "vref");
 	if (!IS_ERR(st->vref_reg)) {
