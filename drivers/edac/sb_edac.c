@@ -2926,6 +2926,8 @@ static int broadwell_mci_bind_devs(struct mem_ctl_info *mci,
 	return 0;
 
 enodev:
+	pci_dev_put(pvt->info.pci_vtd);
+	pvt->info.pci_vtd = NULL;
 	sbridge_printk(KERN_ERR, "Some needed devices are missing\n");
 	return -ENODEV;
 }
