@@ -489,10 +489,13 @@ static int mv_xor_add_io_win(struct mv_xor_chan *mv_chan, u32 addr)
 	u8 target, attr;
 	int ret;
 	int i;
+	unsigned long flags;
 
 	/* Nothing needs to get done for the Armada 3700 */
 	if (xordev->xor_type == XOR_ARMADA_37XX)
 		return 0;
+
+	spin_lock_irqsave(&xordev->win_lock, flags);
 
 	/*
 	 * Loop over the cached windows to check, if the requested area
@@ -503,6 +506,7 @@ static int mv_xor_add_io_win(struct mv_xor_chan *mv_chan, u32 addr)
 		if (addr >= xordev->win_start[i] &&
 		    addr <= xordev->win_end[i]) {
 			/* Window is already mapped */
+			spin_unlock_irqrestore(&xordev->win_lock, flags);
 			return 0;
 		}
 	}
@@ -513,8 +517,10 @@ static int mv_xor_add_io_win(struct mv_xor_chan *mv_chan, u32 addr)
 
 	/* If no IO window is found that addr has to be located in SDRAM */
 	ret = mvebu_mbus_get_io_win_info(addr, &size, &target, &attr);
-	if (ret < 0)
+	if (ret < 0) {
+		spin_unlock_irqrestore(&xordev->win_lock, flags);
 		return 0;
+	}
 
 	/*
 	 * Mask the base addr 'addr' according to 'size' read back from the
@@ -532,8 +538,10 @@ static int mv_xor_add_io_win(struct mv_xor_chan *mv_chan, u32 addr)
 
 	/* Set 'i' to the first free window to write the new values to */
 	i = ffs(~win_enable) - 1;
-	if (i >= WINDOW_COUNT)
+	if (i >= WINDOW_COUNT) {
+		spin_unlock_irqrestore(&xordev->win_lock, flags);
 		return -ENOMEM;
+	}
 
 	writel((addr & 0xffff0000) | (attr << 8) | target,
 	       base + WINDOW_BASE(i));
@@ -547,6 +555,8 @@ static int mv_xor_add_io_win(struct mv_xor_chan *mv_chan, u32 addr)
 	win_enable |= 3 << (16 + (2 * i));
 	writel(win_enable, base + WINDOW_BAR_ENABLE(0));
 	writel(win_enable, base + WINDOW_BAR_ENABLE(1));
+
+	spin_unlock_irqrestore(&xordev->win_lock, flags);
 
 	return 0;
 }
@@ -1345,6 +1355,7 @@ static int mv_xor_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, xordev);
 
+	spin_lock_init(&xordev->win_lock);
 
 	/*
 	 * We need to know which type of XOR device we use before
