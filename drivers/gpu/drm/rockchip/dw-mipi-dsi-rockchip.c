@@ -1116,8 +1116,10 @@ static int dw_mipi_dsi_rockchip_host_attach(void *priv_data,
 			DRM_DEV_ERROR(second,
 				      "Failed to register component: %d\n",
 				      ret);
+			put_device(second);
 			goto out;
 		}
+		put_device(second);
 	}
 
 	return 0;
