@@ -174,7 +174,7 @@ static void signal_irq_work(struct irq_work *work)
 	struct intel_breadcrumbs *b = container_of(work, typeof(*b), irq_work);
 	const ktime_t timestamp = ktime_get();
 	struct llist_node *signal, *sn;
-	struct intel_context *ce;
+	struct intel_context *ce, *cn;
 
 	signal = NULL;
 	if (unlikely(!llist_empty(&b->signaled_requests)))
@@ -210,8 +210,18 @@ static void signal_irq_work(struct irq_work *work)
 
 	rcu_read_lock();
 	atomic_inc(&b->signaler_active);
-	list_for_each_entry_rcu(ce, &b->signalers, signal_link) {
+	for (ce = list_first_or_null_rcu(&b->signalers, typeof(*ce), signal_link);
+	     ce;
+	     ce = cn) {
 		struct i915_request *rq;
+
+		/*
+		 * Grab the next signaler up front, as dropping the final
+		 * reference below may free the current one before we
+		 * advance the iterator.
+		 */
+		cn = list_next_or_null_rcu(&b->signalers, &ce->signal_link,
+					   typeof(*cn), signal_link);
 
 		list_for_each_entry_rcu(rq, &ce->signals, signal_link) {
 			bool release;
