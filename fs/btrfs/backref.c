@@ -3426,6 +3426,12 @@ static int handle_indirect_tree_backref(struct btrfs_trans_handle *trans,
 		lower = upper;
 		upper = NULL;
 	}
+	/* We walked up to BTRFS_MAX_LEVEL without reaching the tree root. */
+	if (level == BTRFS_MAX_LEVEL) {
+		btrfs_put_root(root);
+		ret = -EUCLEAN;
+		goto out;
+	}
 out:
 	btrfs_release_path(path);
 	return ret;
