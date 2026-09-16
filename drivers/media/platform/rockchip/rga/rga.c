@@ -10,6 +10,7 @@
 #include <linux/delay.h>
 #include <linux/fs.h>
 #include <linux/interrupt.h>
+#include <linux/iommu.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_platform.h>
@@ -761,6 +762,19 @@ static int rga_core_bind(struct device *dev, struct device *master, void *data)
 		  rga->version.major, rga->version.minor);
 
 	if (rga->num_cores) {
+		/* Attach to the first cores iommu */
+		struct iommu_domain *domain = iommu_get_domain_for_dev(rga->cores[0]->dev);
+
+		if (!domain) {
+			dev_err(core->dev, "Couldn't get domain of the first core\n");
+			return -ENODEV;
+		}
+		ret = iommu_attach_device(domain, core->dev);
+		if (ret) {
+			dev_err(core->dev, "Couldn't attach to the domain of the first core\n");
+			return ret;
+		}
+
 		/* we are not the first core, expect that we have the same version */
 		if (rga->version.major != version.major || rga->version.minor != version.minor) {
 			v4l2_err(&rga->v4l2_dev, "Detected multi-core setup with different core versions!\n");
@@ -787,6 +801,14 @@ static void rga_core_unbind(struct device *dev, struct device *master,
 	for (i = 0; i < rga->num_cores; i++) {
 		if (rga->cores[i] != core)
 			continue;
+
+		if (i) {
+			/* Detach from the first core iommu */
+			struct iommu_domain *domain = iommu_get_domain_for_dev(rga->cores[0]->dev);
+
+			if (domain)
+				iommu_detach_device(domain, core->dev);
+		}
 
 		rga->cores[i] = rga->cores[rga->num_cores - 1];
 		rga->num_cores--;
