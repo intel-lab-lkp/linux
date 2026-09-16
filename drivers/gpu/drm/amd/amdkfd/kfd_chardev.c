@@ -2380,6 +2380,7 @@ static int criu_restore_devices(struct kfd_process *p,
 		}
 
 		if (pdd->drm_file) {
+			fput(drm_file);
 			ret = -EINVAL;
 			goto exit;
 		}
