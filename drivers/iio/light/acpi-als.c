@@ -210,11 +210,6 @@ static int acpi_als_probe(struct platform_device *pdev)
 	ret = devm_iio_trigger_register(dev, als->trig);
 	if (ret)
 		return ret;
-	/*
-	 * Set hardware trigger by default to let events flow when
-	 * BIOS support notification.
-	 */
-	indio_dev->trig = iio_trigger_get(als->trig);
 
 	ret = devm_iio_triggered_buffer_setup(dev, indio_dev,
 					      iio_pollfunc_store_time,
@@ -222,6 +217,12 @@ static int acpi_als_probe(struct platform_device *pdev)
 					      NULL);
 	if (ret)
 		return ret;
+
+	/*
+	 * Set hardware trigger by default to let events flow when
+	 * BIOS support notification.
+	 */
+	indio_dev->trig = iio_trigger_get(als->trig);
 
 	ret = devm_iio_device_register(dev, indio_dev);
 	if (ret)
