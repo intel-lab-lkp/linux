@@ -71,6 +71,7 @@ static void mock_device_release(struct drm_device *dev)
 
 	i915_gem_drain_workqueue(i915);
 
+	i915_vm_put(fetch_and_zero(&to_gt(i915)->vm));
 	mock_fini_ggtt(to_gt(i915)->ggtt);
 	destroy_workqueue(i915->unordered_wq);
 	destroy_workqueue(i915->wq);
@@ -145,6 +146,7 @@ struct drm_i915_private *mock_gem_device(void)
 #endif
 	struct drm_i915_private *i915;
 	struct intel_display *display;
+	struct i915_address_space *vm;
 	struct pci_dev *pdev;
 	int ret;
 
@@ -263,6 +265,9 @@ err_wq:
 err_drv:
 	intel_region_ttm_device_fini(i915);
 err_ttm:
+	vm = fetch_and_zero(&to_gt(i915)->vm);
+	if (vm)
+		i915_vm_put(vm);
 	intel_gt_driver_late_release_all(i915);
 	intel_memory_regions_driver_release(i915);
 	drm_mode_config_cleanup(&i915->drm);
