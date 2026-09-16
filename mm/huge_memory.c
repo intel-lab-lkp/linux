@@ -4531,8 +4531,18 @@ void deferred_split_folio(struct folio *folio, bool partially_mapped)
 	if (folio_order(folio) <= 1)
 		return;
 
-	if (!partially_mapped && !split_underused_thp)
-		return;
+	if (!partially_mapped) {
+		if (!split_underused_thp)
+			return;
+		/*
+		 * Nothing will ever split this folio for being underused, so
+		 * keep it off the queue entirely rather than paying for the
+		 * list_lru lock here and a shrinker scan later.
+		 */
+		if (!thp_can_be_underused(folio_nr_pages(folio),
+					  khugepaged_max_ptes_none))
+			return;
+	}
 
 	/*
 	 * Exclude swapcache: originally to avoid a corrupt deferred split
