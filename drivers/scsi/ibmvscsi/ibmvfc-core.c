@@ -1188,7 +1188,7 @@ static void ibmvfc_purge_requests(struct ibmvfc_host *vhost, int error_code)
 	struct ibmvfc_queue *scsi_q = vhost->scsi_scrqs.scrqs;
 	struct ibmvfc_queue *nvme_q = vhost->nvme_scrqs.scrqs;
 	unsigned long flags;
-	int shwqs, nhwqs = 0;
+	int shwqs = 0, nhwqs = 0;
 	int i;
 
 	if (vhost->using_channels) {
