@@ -177,8 +177,6 @@ static inline void cache_alloc_hsw_probe(void)
 	r->cache.min_cbm_bits = 2;
 	r->cache.arch_has_sparse_bitmasks = false;
 	r->alloc_capable = true;
-
-	rdt_alloc_capable = true;
 }
 
 /*
@@ -930,7 +928,11 @@ static __init bool get_rdt_alloc_resources(void)
 	struct rdt_resource *r;
 	bool ret = false;
 
-	if (rdt_alloc_capable)
+	/*
+	 * On Haswell systems cache_alloc_hsw_probe() already marked
+	 * RDT_RESOURCE_L3 as alloc_capable. No further enumeration is needed.
+	 */
+	if (resctrl_alloc_capable())
 		return true;
 
 	if (!boot_cpu_has(X86_FEATURE_RDT_A))
