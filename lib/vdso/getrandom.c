@@ -4,6 +4,7 @@
  */
 
 #include <linux/array_size.h>
+#include <linux/compiler.h>
 #include <linux/minmax.h>
 #include <vdso/datapage.h>
 #include <vdso/getrandom.h>
@@ -83,8 +84,11 @@ __cvdso_getrandom_data(const struct vdso_rng_data *rng_info, void *buffer, size_
 		params->size_of_opaque_state = sizeof(*state);
 		params->mmap_prot = PROT_READ | PROT_WRITE;
 		params->mmap_flags = MAP_DROPPABLE | MAP_ANONYMOUS;
-		for (size_t i = 0; i < ARRAY_SIZE(params->reserved); ++i)
+		for (size_t i = 0; i < ARRAY_SIZE(params->reserved); ++i) {
+			/* prevent compiler from turning loop into memset() */
+			OPTIMIZER_HIDE_VAR(i);
 			params->reserved[i] = 0;
+		}
 		return 0;
 	}
 
