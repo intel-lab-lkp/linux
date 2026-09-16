@@ -2590,7 +2590,10 @@ static void rzg2l_cpg_detach_dev(struct generic_pm_domain *unused, struct device
 
 static void rzg2l_cpg_genpd_remove(void *data)
 {
-	pm_genpd_remove(data);
+	struct rzg2l_cpg_priv *priv = data;
+
+	of_genpd_del_provider(priv->dev->of_node);
+	pm_genpd_remove(&priv->genpd);
 }
 
 static int __init rzg2l_cpg_add_clk_domain(struct rzg2l_cpg_priv *priv)
@@ -2609,11 +2612,13 @@ static int __init rzg2l_cpg_add_clk_domain(struct rzg2l_cpg_priv *priv)
 	if (ret)
 		return ret;
 
-	ret = devm_add_action_or_reset(dev, rzg2l_cpg_genpd_remove, genpd);
-	if (ret)
+	ret = of_genpd_add_provider_simple(np, genpd);
+	if (ret) {
+		pm_genpd_remove(genpd);
 		return ret;
+	}
 
-	return of_genpd_add_provider_simple(np, genpd);
+	return devm_add_action_or_reset(dev, rzg2l_cpg_genpd_remove, priv);
 }
 
 static int __init rzg2l_cpg_probe(struct platform_device *pdev)
