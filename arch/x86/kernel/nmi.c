@@ -322,6 +322,16 @@ io_check_error(unsigned char reason, struct pt_regs *regs)
 }
 NOKPROBE_SYMBOL(io_check_error);
 
+/*
+ * Fallback used when the AMD perf core, which provides the strong
+ * implementation, is not built in. Without it no PMC overflow NMI latency
+ * window is tracked at all, so no "unknown NMI" report is ever suppressed.
+ */
+bool __weak perf_nmi_window_active(void)
+{
+	return false;
+}
+
 static void
 unknown_nmi_error(unsigned char reason, struct pt_regs *regs)
 {
@@ -339,6 +349,19 @@ unknown_nmi_error(unsigned char reason, struct pt_regs *regs)
 	}
 
 	__this_cpu_add(nmi_stats.unknown, 1);
+
+	/*
+	 * No handler was able to identify this NMI, so its source is unknown.
+	 * The one exception is a latent PMC overflow NMI: the overflow NMI can
+	 * arrive long after the counter was already processed by an earlier
+	 * NMI, which leaves nothing here that could identify it. If the perf
+	 * NMI latency window is still open, this NMI is very likely that late
+	 * arrival, so keep quiet about it instead of reporting a bogus unknown
+	 * NMI (and instead of panicking on unknown_nmi_panic). It is still
+	 * accounted in nmi_stats.unknown and thus stays visible in debugfs.
+	 */
+	if (perf_nmi_window_active())
+		return;
 
 	pr_emerg_ratelimited("Uhhuh. NMI received for unknown reason %02x on CPU %d.\n",
 			     reason, smp_processor_id());
@@ -407,38 +430,50 @@ static noinstr void default_do_nmi(struct pt_regs *regs)
 	}
 
 	/*
-	 * Non-CPU-specific NMI: NMI sources can be processed on any CPU.
+	 * If the perf NMI latency window is still open, a recently handled PMC
+	 * overflow may have generated a latent NMI that arrives too late to be
+	 * paired with that overflow. Skip the expensive reason port read
+	 * (inb 0x61 + global nmi_reason_lock) which is a known scalability
+	 * bottleneck when spurious PMIs arrive at high frequency on AMD.
 	 *
-	 * Another CPU may be processing panic routines while holding
-	 * nmi_reason_lock. Check if the CPU issued the IPI for crash dumping,
-	 * and if so, call its callback directly.  If there is no CPU preparing
-	 * crash dump, we simply loop here.
+	 * NMI_UNKNOWN handlers (hpwdt, etc.) are still invoked below via
+	 * unknown_nmi_error(), so hardware watchdog NMIs are not lost.
 	 */
-	while (!raw_spin_trylock(&nmi_reason_lock)) {
-		run_crash_ipi_callback(regs);
-		cpu_relax();
-	}
-
-	reason = x86_platform.get_nmi_reason();
-
-	if (reason & NMI_REASON_MASK) {
-		if (reason & NMI_REASON_SERR)
-			pci_serr_error(reason, regs);
-		else if (reason & NMI_REASON_IOCHK)
-			io_check_error(reason, regs);
-
+	if (!perf_nmi_window_active()) {
 		/*
-		 * Reassert NMI in case it became active
-		 * meanwhile as it's edge-triggered:
+		 * Non-CPU-specific NMI: NMI sources can be processed on any CPU.
+		 *
+		 * Another CPU may be processing panic routines while holding
+		 * nmi_reason_lock. Check if the CPU issued the IPI for crash
+		 * dumping, and if so, call its callback directly.  If there is no
+		 * CPU preparing crash dump, we simply loop here.
 		 */
-		if (IS_ENABLED(CONFIG_X86_32))
-			reassert_nmi();
+		while (!raw_spin_trylock(&nmi_reason_lock)) {
+			run_crash_ipi_callback(regs);
+			cpu_relax();
+		}
 
-		__this_cpu_add(nmi_stats.external, 1);
+		reason = x86_platform.get_nmi_reason();
+
+		if (reason & NMI_REASON_MASK) {
+			if (reason & NMI_REASON_SERR)
+				pci_serr_error(reason, regs);
+			else if (reason & NMI_REASON_IOCHK)
+				io_check_error(reason, regs);
+
+			/*
+			 * Reassert NMI in case it became active
+			 * meanwhile as it's edge-triggered:
+			 */
+			if (IS_ENABLED(CONFIG_X86_32))
+				reassert_nmi();
+
+			__this_cpu_add(nmi_stats.external, 1);
+			raw_spin_unlock(&nmi_reason_lock);
+			goto out;
+		}
 		raw_spin_unlock(&nmi_reason_lock);
-		goto out;
 	}
-	raw_spin_unlock(&nmi_reason_lock);
 
 	/*
 	 * Only one NMI can be latched at a time.  To handle

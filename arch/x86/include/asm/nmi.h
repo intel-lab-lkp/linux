@@ -105,4 +105,12 @@ void stop_nmi(void);
 void restart_nmi(void);
 void local_touch_nmi(void);
 
+/*
+ * Last resort check of the NMI dispatch path, used to suppress "unknown NMI"
+ * reports caused by PMC overflow NMI latency. The strong implementation lives
+ * in the AMD perf core, arch/x86/kernel/nmi.c provides a __weak fallback which
+ * always returns false.
+ */
+bool perf_nmi_window_active(void);
+
 #endif /* _ASM_X86_NMI_H */
