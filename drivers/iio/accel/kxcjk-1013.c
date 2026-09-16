@@ -1487,10 +1487,6 @@ static int kxcjk1013_probe(struct i2c_client *client)
 		if (ret)
 			goto err_poweroff;
 
-		indio_dev->trig = iio_trigger_get(data->dready_trig);
-
-		data->motion_trig->ops = &kxcjk1013_trigger_ops;
-		iio_trigger_set_drvdata(data->motion_trig, indio_dev);
 		ret = iio_trigger_register(data->motion_trig);
 		if (ret) {
 			data->motion_trig = NULL;
@@ -1506,6 +1502,9 @@ static int kxcjk1013_probe(struct i2c_client *client)
 		dev_err(&client->dev, "iio triggered buffer setup failed\n");
 		goto err_trigger_unregister;
 	}
+
+	if (data->dready_trig)
+		indio_dev->trig = iio_trigger_get(data->dready_trig);
 
 	ret = pm_runtime_set_active(&client->dev);
 	if (ret)
