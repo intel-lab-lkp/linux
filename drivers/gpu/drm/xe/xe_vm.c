@@ -2054,11 +2054,20 @@ static void vm_destroy_work_func(struct work_struct *w)
 		xe_file_put(vm->xef);
 
 	kfree(vm);
+
+	drm_dev_put(&xe->drm);
 }
 
 static void xe_vm_free(struct drm_gpuvm *gpuvm)
 {
 	struct xe_vm *vm = container_of(gpuvm, struct xe_vm, gpuvm);
+
+	/*
+	 * drm_gpuvm drops its device reference as soon as this callback
+	 * returns, but vm_destroy_work_func() still uses device state. Hold a
+	 * reference across the deferred work.
+	 */
+	drm_dev_get(&vm->xe->drm);
 
 	/* To destroy the VM we need to be able to sleep */
 	queue_work(system_dfl_wq, &vm->destroy_work);
