@@ -5835,6 +5835,8 @@ skip_this:
 
 		memcpy(nskb->cb, skb->cb, sizeof(skb->cb));
 		skb_copy_decrypted(nskb, skb);
+		nskb->tstamp = skb->tstamp;
+		skb_hwtstamps(nskb)->hwtstamp = skb_hwtstamps(skb)->hwtstamp;
 		TCP_SKB_CB(nskb)->seq = TCP_SKB_CB(nskb)->end_seq = start;
 		if (list)
 			__skb_queue_before(list, skb, nskb);
