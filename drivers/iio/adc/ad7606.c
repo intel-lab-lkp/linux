@@ -1638,8 +1638,6 @@ int ad7606_probe(struct device *dev, int irq, void __iomem *base_address,
 		if (ret)
 			return ret;
 
-		indio_dev->trig = iio_trigger_get(st->trig);
-
 		ret = devm_request_threaded_irq(dev, irq, NULL, &ad7606_interrupt,
 						IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 						chip_info->name, indio_dev);
@@ -1652,6 +1650,8 @@ int ad7606_probe(struct device *dev, int irq, void __iomem *base_address,
 						      &ad7606_buffer_ops);
 		if (ret)
 			return ret;
+
+		indio_dev->trig = iio_trigger_get(st->trig);
 	}
 
 	st->write_scale = ad7606_write_scale_hw;
