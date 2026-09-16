@@ -30,6 +30,10 @@ struct seq_buf {
 		.size = SIZE,				\
 	}
 
+/**
+ * seq_buf_clear - reset the seq_buf to be read / appended from the beginning
+ * @s: the seq_buf handle
+ */
 static inline void seq_buf_clear(struct seq_buf *s)
 {
 	s->len = 0;
@@ -37,12 +41,40 @@ static inline void seq_buf_clear(struct seq_buf *s)
 		s->buffer[0] = '\0';
 }
 
+/**
+ * seq_buf_init - initialize a seq_buf
+ * @s: the seq_buf handle
+ * @buf: pointer to the buffer
+ * @size: total size of @buf
+ *
+ * The contents of the buffer are ignored.
+ */
 static inline void
 seq_buf_init(struct seq_buf *s, char *buf, unsigned int size)
 {
 	s->buffer = buf;
 	s->size = size;
 	seq_buf_clear(s);
+}
+
+/**
+ * seq_buf_init_append - initialize a seq_buf over a buffer that may
+ *			 already hold NUL-terminated content
+ * @s: the seq_buf handle
+ * @buf: pointer to the (possibly non-empty) buffer
+ * @size: total size of @buf
+ *
+ * Unlike seq_buf_init(), which always clears @buf, this preserves
+ * whatever NUL-terminated content @buf already holds and positions
+ * @s to append after it. Useful for converting code that used to
+ * append to an existing buffer with strlcat()/scnprintf() and friends.
+ */
+static inline void
+seq_buf_init_append(struct seq_buf *s, char *buf, unsigned int size)
+{
+	s->buffer = buf;
+	s->size = size;
+	s->len = strnlen(buf, size);
 }
 
 /*
@@ -106,6 +138,33 @@ static inline const char *seq_buf_str(struct seq_buf *s)
 		s->buffer[s->size - 1] = 0;
 
 	return s->buffer;
+}
+
+/**
+ * seq_buf_strlen - get the length of the NUL-terminated string in seq_buf
+ * @s: the seq_buf handle
+ *
+ * Like seq_buf_str(), this makes sure that the buffer in @s is
+ * NUL-terminated, and returns the length of the resulting string.
+ * Unlike seq_buf_used(), the returned length is always correct, even
+ * when the buffer is completely full: in that case seq_buf_used()
+ * reports @s->size, but the last byte was overwritten with the
+ * trailing NUL, so only @s->size - 1 bytes of content remain.
+ *
+ * Returns: the length of the NUL-terminated string in @s->buffer.
+ */
+static inline size_t seq_buf_strlen(struct seq_buf *s)
+{
+	if (WARN_ON(s->size == 0))
+		return 0;
+
+	if (seq_buf_buffer_left(s)) {
+		s->buffer[s->len] = 0;
+		return s->len;
+	}
+
+	s->buffer[s->size - 1] = 0;
+	return s->size - 1;
 }
 
 /**
@@ -179,6 +238,7 @@ extern int seq_buf_putmem(struct seq_buf *s, const void *mem, unsigned int len);
 extern int seq_buf_putmem_hex(struct seq_buf *s, const void *mem,
 			      unsigned int len);
 extern int seq_buf_path(struct seq_buf *s, const struct path *path, const char *esc);
+extern size_t seq_buf_puts_trunc(struct seq_buf *s, const char *str);
 extern int seq_buf_hex_dump(struct seq_buf *s, const char *prefix_str,
 			    int prefix_type, int rowsize, int groupsize,
 			    const void *buf, size_t len, bool ascii);

@@ -377,6 +377,41 @@ int seq_buf_to_user(struct seq_buf *s, char __user *ubuf, size_t start, int cnt)
 }
 
 /**
+ * seq_buf_puts_trunc - append as much of a string as fits, keeping any of it
+ * @s: the seq_buf handle
+ * @str: the string to append
+ *
+ * seq_buf_puts() writes nothing at all if @str doesn't fully fit,
+ * unlike strlcat()/strscpy(), which copy as much of the source as
+ * there is room for. That all-or-nothing behavior is usually what's
+ * wanted for building diagnostic/trace text, but it's the wrong
+ * choice when converting code that relied on strlcat()'s always-copy-
+ * what-fits truncation to avoid losing content that was already
+ * appended. This copies the leading bytes of @str that fit, reserving
+ * room for the NUL terminator later added by seq_buf_str().
+ *
+ * Unlike seq_buf_puts(), this does NOT NUL-terminate @s->buffer as it
+ * goes (it copies raw bytes via seq_buf_putmem(), not @str's own
+ * terminator). Callers MUST call seq_buf_str() or seq_buf_strlen()
+ * before using @s->buffer as a C string.
+ *
+ * Returns: the number of bytes copied from @str.
+ */
+size_t seq_buf_puts_trunc(struct seq_buf *s, const char *str)
+{
+	size_t left = seq_buf_buffer_left(s);
+	size_t len;
+
+	if (left <= 1)
+		return 0;
+
+	len = strnlen(str, left - 1);
+	seq_buf_putmem(s, str, len);
+
+	return len;
+}
+
+/**
  * seq_buf_hex_dump - print formatted hex dump into the sequence buffer
  * @s: seq_buf descriptor
  * @prefix_str: string to prefix each line with;
