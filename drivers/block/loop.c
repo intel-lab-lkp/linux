@@ -1138,10 +1138,32 @@ out_putf:
 
 static void __loop_clr_fd(struct loop_device *lo)
 {
+	struct gendisk *disk = lo->lo_disk;
 	struct queue_limits lim;
 	struct file *filp;
 	gfp_t gfp = lo->old_gfp_mask;
+	unsigned int memflags;
 	int err;
+
+	WARN_ON_ONCE(READ_ONCE(lo->lo_state) != Lo_rundown);
+
+	/*
+	 * Wait for ongoing loop_queue_rq() calls. Subsequent loop_queue_rq()
+	 * calls which are made after this call returned will see lo->lo_state
+	 * != Lo_bound and return with BLK_STS_IOERR.
+	 */
+	blk_mq_wait_quiesce_done(&lo->tag_set);
+
+	/* loop_queue_rq() queues work on lo->workqueue, hence drain it. */
+	drain_workqueue(lo->workqueue);
+
+	lim = queue_limits_start_update(lo->lo_queue);
+
+	/*
+	 * Freeze the request queue while updating parameters used while
+	 * processing requests.
+	 */
+	memflags = blk_mq_freeze_queue(lo->lo_queue);
 
 	spin_lock_irq(&lo->lo_lock);
 	filp = lo->lo_backing_file;
@@ -1153,17 +1175,16 @@ static void __loop_clr_fd(struct loop_device *lo)
 	lo->lo_sizelimit = 0;
 	memset(lo->lo_file_name, 0, LO_NAME_SIZE);
 
-	/*
-	 * Reset the block size to the default.
-	 *
-	 * No queue freezing needed because this is called from the final
-	 * ->release call only, so there can't be any outstanding I/O.
-	 */
-	lim = queue_limits_start_update(lo->lo_queue);
+	/* Reset the block size to the default. */
 	lim.logical_block_size = SECTOR_SIZE;
 	lim.physical_block_size = SECTOR_SIZE;
 	lim.io_min = SECTOR_SIZE;
 	queue_limits_commit_update(lo->lo_queue, &lim);
+
+	blk_mq_unfreeze_queue(lo->lo_queue, memflags);
+
+	/* Serialize against concurrent bdev_open() calls. */
+	mutex_lock(&disk->open_mutex);
 
 	invalidate_disk(lo->lo_disk);
 	loop_sysfs_exit(lo);
@@ -1178,9 +1199,6 @@ static void __loop_clr_fd(struct loop_device *lo)
 	/*
 	 * Remove all partitions, including partitions added manually with
 	 * BLKPG, which may exist even if LO_FLAGS_PARTSCAN is not set.
-	 *
-	 * open_mutex has been held already in release path, so don't acquire
-	 * it here.
 	 */
 	err = bdev_disk_changed(lo->lo_disk, false);
 	if (err)
@@ -1197,6 +1215,8 @@ static void __loop_clr_fd(struct loop_device *lo)
 	lo->lo_flags = 0;
 	if (!part_shift)
 		set_bit(GD_SUPPRESS_PART_SCAN, &lo->lo_disk->state);
+	mutex_unlock(&disk->open_mutex);
+
 	mutex_lock(&lo->lo_mutex);
 	WRITE_ONCE(lo->lo_state, Lo_unbound);
 	mutex_unlock(&lo->lo_mutex);
@@ -1754,7 +1774,6 @@ static int lo_open(struct gendisk *disk, blk_mode_t mode)
 static void lo_release(struct gendisk *disk)
 {
 	struct loop_device *lo = disk->private_data;
-	bool need_clear = false;
 
 	if (disk_openers(disk) > 0)
 		return;
@@ -1767,11 +1786,14 @@ static void lo_release(struct gendisk *disk)
 	mutex_lock(&lo->lo_mutex);
 	if (lo->lo_state == Lo_bound && (lo->lo_flags & LO_FLAGS_AUTOCLEAR))
 		WRITE_ONCE(lo->lo_state, Lo_rundown);
-
-	need_clear = (lo->lo_state == Lo_rundown);
 	mutex_unlock(&lo->lo_mutex);
+}
 
-	if (need_clear)
+static void lo_post_release(struct gendisk *disk)
+{
+	struct loop_device *lo = disk->private_data;
+
+	if (READ_ONCE(lo->lo_state) == Lo_rundown)
 		__loop_clr_fd(lo);
 }
 
@@ -1791,6 +1813,7 @@ static const struct block_device_operations lo_fops = {
 	.owner =	THIS_MODULE,
 	.open =         lo_open,
 	.release =	lo_release,
+	.post_release = lo_post_release,
 	.ioctl =	lo_ioctl,
 #ifdef CONFIG_COMPAT
 	.compat_ioctl =	lo_compat_ioctl,
