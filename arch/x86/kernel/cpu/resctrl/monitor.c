@@ -27,12 +27,6 @@
 #include "internal.h"
 
 /*
- * Global boolean for rdt_monitor which is true if any
- * resource monitoring is enabled.
- */
-bool rdt_mon_capable;
-
-/*
  * Scale factor to convert L3 monitor events to bytes.
  */
 unsigned int __ro_after_init rdt_l3_mon_scale;
