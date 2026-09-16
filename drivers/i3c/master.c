@@ -3685,8 +3685,10 @@ int i3c_master_register(struct i3c_master_controller *master,
 	INIT_LIST_HEAD(&master->boardinfo.i3c);
 
 	ret = i3c_master_rpm_get(master);
-	if (ret)
+	if (ret) {
+		of_node_put(master->dev.of_node);
 		return ret;
+	}
 
 	device_initialize(&master->dev);
 
