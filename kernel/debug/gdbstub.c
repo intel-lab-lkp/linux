@@ -373,6 +373,12 @@ static int write_mem_msg(int binary)
 
 	if (kgdb_hex2long(&ptr, &addr) > 0 && *(ptr++) == ',' &&
 	    kgdb_hex2long(&ptr, &length) > 0 && *(ptr++) == ':') {
+		/*
+		 * The in-place decode touches 2 * length bytes at ptr,
+		 * inside remcom_in_buffer[BUFMAX].
+		 */
+		if (length > (BUFMAX - (ptr - remcom_in_buffer)) / 2)
+			return -EINVAL;
 		if (binary)
 			err = kgdb_ebin2mem(ptr, (char *)addr, length);
 		else
