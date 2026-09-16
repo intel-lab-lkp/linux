@@ -396,8 +396,18 @@ static void ibmvfc_init_fcp_abort(struct ibmvfc_event *evt,
 	tmf->target_wwpn = cpu_to_be64(tgt->wwpn);
 	tmf->assoc_id = cpu_to_be64(tgt->assoc_id);
 	tmf->task_tag = cpu_to_be64((u64)abt_evt);
+}
 
-	init_completion(&evt->comp);
+static void ibmvfc_nvme_fcp_abort_done(struct ibmvfc_event *evt)
+{
+	u16 status = be16_to_cpu(evt->xfer_iu->mad_common.status);
+
+	if (status)
+		ibmvfc_dbg(evt->vhost, "fcp_abort: cancel MAD failed with rc=%x\n",
+			   status);
+
+	kref_put(&evt->tgt->kref, ibmvfc_release_tgt);
+	ibmvfc_free_event(evt);
 }
 
 static void ibmvfc_nvme_fcp_abort(struct nvme_fc_local_port *lport,
@@ -409,9 +419,7 @@ static void ibmvfc_nvme_fcp_abort(struct nvme_fc_local_port *lport,
 	struct ibmvfc_target *tgt = rport->private;
 	struct ibmvfc_event *evt, *abt_evt = abort_req->private;
 	struct ibmvfc_queue *queue;
-	union ibmvfc_iu rsp;
 	unsigned long flags;
-	u16 status = 0;
 
 	if (!abt_evt)
 		return;
@@ -426,27 +434,12 @@ static void ibmvfc_nvme_fcp_abort(struct nvme_fc_local_port *lport,
 
 	spin_lock_irqsave(queue->q_lock, flags);
 	kref_get(&tgt->kref);
-	ibmvfc_init_event(evt, ibmvfc_sync_nvme_completion, IBMVFC_MAD_FORMAT);
+	ibmvfc_init_event(evt, ibmvfc_nvme_fcp_abort_done, IBMVFC_MAD_FORMAT);
 	ibmvfc_init_fcp_abort(evt, abort_req);
-	evt->sync_iu = &rsp;
+	evt->tgt = tgt;
 
-	if (ibmvfc_send_event(evt, vhost, default_timeout))
-		goto out;
-
+	ibmvfc_send_event(evt, vhost, default_timeout);
 	spin_unlock_irqrestore(queue->q_lock, flags);
-
-	wait_for_completion(&evt->comp);
-	status = be16_to_cpu(rsp.mad_common.status);
-
-	spin_lock_irqsave(queue->q_lock, flags);
-	ibmvfc_free_event(evt);
-out:
-	spin_unlock_irqrestore(queue->q_lock, flags);
-
-	if (status)
-		ibmvfc_dbg(vhost, "fcp_abort: cancel failed with rc=%x\n", status);
-
-	kref_put(&tgt->kref, ibmvfc_release_tgt);
 }
 
 static struct nvme_fc_port_template ibmvfc_nvme_fc_transport = {
