@@ -7,15 +7,13 @@
  * Author: Len Brown <len.brown@intel.com>
  */
 #include <linux/cpufreq.h>
-#include <linux/delay.h>
-#include <linux/ktime.h>
+#include <linux/jiffies.h>
 #include <linux/math64.h>
 #include <linux/percpu.h>
-#include <linux/rcupdate.h>
-#include <linux/sched/isolation.h>
 #include <linux/sched/topology.h>
-#include <linux/smp.h>
+#include <linux/seqlock.h>
 #include <linux/syscore_ops.h>
+#include <linux/workqueue.h>
 
 #include <asm/cpu.h>
 #include <asm/cpu_device_id.h>
