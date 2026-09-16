@@ -503,15 +503,22 @@ void arch_scale_freq_tick(void)
  */
 #define MAX_SAMPLE_AGE	((unsigned long)HZ / 50)
 
-int arch_freq_get_on_cpu(int cpu)
+/**
+ * arch_freq_get_avg() - Read cached APERF/MPERF frequency feedback
+ * @cpu: CPU to read.
+ *
+ * Return: Frequency in kHz, -EAGAIN if no usable sample is available, or
+ * -EOPNOTSUPP if APERF/MPERF is unsupported.
+ */
+int arch_freq_get_avg(int cpu)
 {
 	struct aperfmperf *s = per_cpu_ptr(&cpu_samples, cpu);
-	unsigned int seq, freq;
 	unsigned long last;
+	unsigned int seq;
 	u64 acnt, mcnt;
 
 	if (!cpu_feature_enabled(X86_FEATURE_APERFMPERF))
-		goto fallback;
+		return -EOPNOTSUPP;
 
 	do {
 		seq = raw_read_seqcount_begin(&s->seq);
@@ -525,11 +532,19 @@ int arch_freq_get_on_cpu(int cpu)
 	 * which covers idle and NOHZ full CPUs.
 	 */
 	if (!mcnt || (jiffies - last) > MAX_SAMPLE_AGE)
-		goto fallback;
+		return -EAGAIN;
 
 	return div64_u64((cpu_khz * acnt), mcnt);
+}
 
-fallback:
+int arch_freq_get_on_cpu(int cpu)
+{
+	int freq = arch_freq_get_avg(cpu);
+
+	if (freq >= 0)
+		return freq;
+
+	/* Preserve the fallback used by scaling_cur_freq and /proc/cpuinfo. */
 	freq = cpufreq_quick_get(cpu);
 	return freq ? freq : cpu_khz;
 }
