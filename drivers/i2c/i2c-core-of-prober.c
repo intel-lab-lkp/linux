@@ -354,6 +354,7 @@ int i2c_of_probe_simple_enable(struct device *dev, struct device_node *bus_node,
 	if (ret)
 		goto out_disable_regulator;
 
+	of_node_put(node);
 	return 0;
 
 out_disable_regulator:
