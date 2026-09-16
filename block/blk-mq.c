@@ -648,6 +648,8 @@ static struct request *blk_mq_alloc_cached_request(struct request_queue *q,
 			return NULL;
 		if (op_is_flush(rq->cmd_flags) != op_is_flush(opf))
 			return NULL;
+		if (blk_rq_is_passthrough(rq) != blk_op_is_passthrough(opf))
+			return NULL;
 
 		rq_list_pop(&plug->cached_rqs);
 		blk_mq_rq_time_init(rq, blk_time_get_ns());
@@ -3061,6 +3063,8 @@ static struct request *blk_mq_get_cached_request(struct blk_plug *plug,
 	    (type != HCTX_TYPE_READ || rq->mq_hctx->type != HCTX_TYPE_DEFAULT))
 		return NULL;
 	if (op_is_flush(rq->cmd_flags) != op_is_flush(opf))
+		return NULL;
+	if (blk_rq_is_passthrough(rq) != blk_op_is_passthrough(opf))
 		return NULL;
 	rq_list_pop(&plug->cached_rqs);
 	return rq;
