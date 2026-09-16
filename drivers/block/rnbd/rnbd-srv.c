@@ -362,10 +362,10 @@ static void process_msg_close(struct rnbd_srv_session *srv_sess,
 	if (IS_ERR(sess_dev))
 		return;
 
-	rnbd_put_sess_dev(sess_dev);
 	mutex_lock(&srv_sess->lock);
 	rnbd_srv_destroy_dev_session_sysfs(sess_dev);
 	mutex_unlock(&srv_sess->lock);
+	rnbd_put_sess_dev(sess_dev);
 }
 
 static int process_msg_open(struct rnbd_srv_session *srv_sess,
