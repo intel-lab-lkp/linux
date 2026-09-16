@@ -347,6 +347,8 @@ int intel_dp_mtp_tu_compute_config(struct intel_dp *intel_dp,
 					 link_bpp_x16,
 					 &crtc_state->dp_m_n);
 
+		intel_dp_check_m_n_ratio(crtc_state, &crtc_state->dp_m_n);
+
 		if (is_mst) {
 			int remote_bw_overhead;
 			int remote_tu;
