@@ -255,12 +255,19 @@ are the following:
 
         This is expected to be based on the frequency the hardware actually runs
         at and, as such, might require specialised hardware support (such as AMU
-        extension on ARM). If one cannot be determined, this attribute should
-        not be present.
+        extension on ARM or APERF/MPERF on x86). This attribute is not present
+        when hardware feedback is unsupported.
 
         Note that failed attempt to retrieve current frequency for a given
         CPU(s) will result in an appropriate error, i.e.: EAGAIN for CPU that
         remains idle (raised on ARM).
+        The attribute remains present during temporary sampling gaps.
+
+        On x86, reads use cached APERF/MPERF samples without waking the target
+        CPU to collect new samples. An expired sample or a zero MPERF delta
+        results in ``EAGAIN`` instead of a fallback to a policy or reference
+        frequency. A CPU that has just entered idle can still have a usable
+        sample, while a busy CPU excluded from periodic sampling can lack one.
 
 ``cpuinfo_max_freq``
 	Maximum possible operating frequency the CPUs belonging to this policy

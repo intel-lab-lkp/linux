@@ -705,9 +705,24 @@ __weak int arch_freq_get_on_cpu(int cpu)
 	return -EOPNOTSUPP;
 }
 
+/**
+ * arch_freq_get_avg() - Get an average frequency from hardware feedback
+ * @cpu: CPU to read.
+ *
+ * Provide cpuinfo_avg_freq with an average operating frequency derived
+ * from recent hardware feedback for @cpu or its frequency domain.
+ *
+ * Return: Frequency in kHz, -EOPNOTSUPP if feedback is unsupported for the
+ * CPU or policy under the current configuration.
+ */
+__weak int arch_freq_get_avg(int cpu)
+{
+	return -EOPNOTSUPP;
+}
+
 static inline bool cpufreq_avg_freq_supported(struct cpufreq_policy *policy)
 {
-	return arch_freq_get_on_cpu(policy->cpu) != -EOPNOTSUPP;
+	return arch_freq_get_avg(policy->cpu) != -EOPNOTSUPP;
 }
 
 static ssize_t show_scaling_cur_freq(struct cpufreq_policy *policy, char *buf)
@@ -769,7 +784,7 @@ static ssize_t show_cpuinfo_cur_freq(struct cpufreq_policy *policy,
 static ssize_t show_cpuinfo_avg_freq(struct cpufreq_policy *policy,
 				     char *buf)
 {
-	int avg_freq = arch_freq_get_on_cpu(policy->cpu);
+	int avg_freq = arch_freq_get_avg(policy->cpu);
 
 	if (avg_freq > 0)
 		return sysfs_emit(buf, "%u\n", avg_freq);

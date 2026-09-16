@@ -181,7 +181,7 @@ void arch_cpu_idle_enter(void)
 
 #define AMU_SAMPLE_EXP_MS	20
 
-int arch_freq_get_on_cpu(int cpu)
+int arch_freq_get_avg(int cpu)
 {
 	struct amu_cntr_sample *amu_sample;
 	unsigned int start_cpu = cpu;
@@ -248,6 +248,11 @@ int arch_freq_get_on_cpu(int cpu)
 	freq = scale * arch_scale_freq_ref(cpu);
 	freq >>= SCHED_CAPACITY_SHIFT;
 	return freq;
+}
+
+int arch_freq_get_on_cpu(int cpu)
+{
+	return arch_freq_get_avg(cpu);
 }
 
 static void amu_fie_setup(const struct cpumask *cpus)
