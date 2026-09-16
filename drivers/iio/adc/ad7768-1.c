@@ -1505,12 +1505,16 @@ static int ad7768_triggered_buffer_alloc(struct iio_dev *indio_dev)
 	if (ret)
 		return ret;
 
+	ret = devm_iio_triggered_buffer_setup(indio_dev->dev.parent, indio_dev,
+					      &iio_pollfunc_store_time,
+					      &ad7768_trigger_handler,
+					      &ad7768_buffer_ops);
+	if (ret)
+		return ret;
+
 	indio_dev->trig = iio_trigger_get(st->trig);
 
-	return devm_iio_triggered_buffer_setup(indio_dev->dev.parent, indio_dev,
-					       &iio_pollfunc_store_time,
-					       &ad7768_trigger_handler,
-					       &ad7768_buffer_ops);
+	return 0;
 }
 
 static int ad7768_vcm_enable(struct regulator_dev *rdev)
