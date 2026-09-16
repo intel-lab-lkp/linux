@@ -1364,7 +1364,7 @@ static bool get_swap_device_info(struct swap_info_struct *si)
  * Fast path try to get swap entries with specified order from current
  * CPU's swap entry pool (a cluster).
  */
-static bool swap_alloc_fast(struct folio *folio)
+static bool swap_alloc_fast(struct folio *folio, unsigned int mask)
 {
 	unsigned int order = folio_order(folio);
 	struct swap_cluster_info *ci;
@@ -1376,8 +1376,11 @@ static bool swap_alloc_fast(struct folio *folio)
 	 * so checking it's liveness by get_swap_device_info is enough.
 	 */
 	si = this_cpu_read(percpu_swap_cluster.si[order]);
+	if (!si || !swap_tiers_mask_test(READ_ONCE(si->tier_mask), mask))
+		return false;
+
 	offset = this_cpu_read(percpu_swap_cluster.offset[order]);
-	if (!si || !offset || !get_swap_device_info(si))
+	if (!offset || !get_swap_device_info(si))
 		return false;
 
 	ci = swap_cluster_lock(si, offset);
@@ -1394,7 +1397,7 @@ static bool swap_alloc_fast(struct folio *folio)
 }
 
 /* Rotate the device and switch to a new cluster */
-static void swap_alloc_slow(struct folio *folio)
+static void swap_alloc_slow(struct folio *folio, unsigned int mask)
 {
 	struct swap_info_struct *si, *next;
 	struct swap_tier *tier;
@@ -1405,6 +1408,9 @@ start_over:
 	for_each_active_tier(tier) {
 		prio = tier->prio;
 		plist_for_each_entry_safe(si, next, &tier->avail_head, avail_list) {
+			if (!swap_tiers_mask_test(READ_ONCE(si->tier_mask), mask))
+				continue;
+
 			/* Rotate the device and switch to a new cluster */
 			plist_requeue(&si->avail_list, &tier->avail_head);
 			spin_unlock(&swap_avail_lock);
@@ -1439,7 +1445,7 @@ start_over:
  * Discard pending clusters in a synchronized way when under high pressure.
  * Return: true if any cluster is discarded.
  */
-static bool swap_sync_discard(void)
+static bool swap_sync_discard(unsigned int mask)
 {
 	bool ret = false;
 	struct swap_info_struct *si, *next;
@@ -1451,6 +1457,8 @@ start_over:
 	for_each_active_tier(tier) {
 		prio = tier->prio;
 		plist_for_each_entry_safe(si, next, &tier->active_head, list) {
+			if (!swap_tiers_mask_test(si->tier_mask, mask))
+				continue;
 			spin_unlock(&swap_lock);
 			if (get_swap_device_info(si)) {
 				if (si->flags & SWP_PAGE_DISCARD)
@@ -1749,6 +1757,7 @@ int folio_alloc_swap(struct folio *folio)
 {
 	unsigned int order = folio_order(folio);
 	unsigned int size = 1 << order;
+	unsigned int mask;
 
 	VM_BUG_ON_FOLIO(!folio_test_locked(folio), folio);
 	VM_BUG_ON_FOLIO(!folio_test_uptodate(folio), folio);
@@ -1772,13 +1781,14 @@ int folio_alloc_swap(struct folio *folio)
 	}
 
 again:
+	mask = folio_tier_mask(folio);
 	local_lock(&percpu_swap_cluster.lock);
-	if (!swap_alloc_fast(folio))
-		swap_alloc_slow(folio);
+	if (!swap_alloc_fast(folio, mask))
+		swap_alloc_slow(folio, mask);
 	local_unlock(&percpu_swap_cluster.lock);
 
 	if (!order && unlikely(!folio_test_swapcache(folio))) {
-		if (swap_sync_discard())
+		if (swap_sync_discard(mask))
 			goto again;
 	}
 
