@@ -1254,6 +1254,7 @@ free_uhdlc_priv:
 static void ucc_hdlc_remove(struct platform_device *pdev)
 {
 	struct ucc_hdlc_private *priv = dev_get_drvdata(&pdev->dev);
+	unregister_hdlc_device(priv->ndev);
 
 	uhdlc_memclean(priv);
 
@@ -1266,6 +1267,8 @@ static void ucc_hdlc_remove(struct platform_device *pdev)
 		iounmap(priv->utdm->siram);
 		priv->utdm->siram = NULL;
 	}
+	free_netdev(priv->ndev);
+	kfree(priv->utdm);
 	kfree(priv);
 
 	dev_info(&pdev->dev, "UCC based hdlc module removed\n");
