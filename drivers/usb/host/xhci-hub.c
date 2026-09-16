@@ -678,14 +678,14 @@ static void xhci_set_port_power(struct xhci_hcd *xhci, struct xhci_port *port,
 
 static void xhci_port_set_test_mode(struct xhci_hcd *xhci, u16 test_mode, int portnum)
 {
-	u32 temp;
+	u32 portpmsc;
 	struct xhci_port *port;
 
 	/* xhci only supports test mode for usb2 ports */
 	port = xhci->usb2_rhub.ports[portnum];
-	temp = readl(&port->port_reg->portpmsc);
-	temp |= test_mode << PORT_TEST_MODE_SHIFT;
-	writel(temp, &port->port_reg->portpmsc);
+	portpmsc = readl(&port->port_reg->portpmsc);
+	FIELD_MODIFY(PORT_TEST_MODE_MASK, &portpmsc, test_mode);
+	writel(portpmsc, &port->port_reg->portpmsc);
 	xhci->test_mode = test_mode;
 	if (test_mode == USB_TEST_FORCE_ENABLE)
 		xhci_start(xhci);
