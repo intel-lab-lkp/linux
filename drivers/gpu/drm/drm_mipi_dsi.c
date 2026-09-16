@@ -162,6 +162,7 @@ static struct mipi_dsi_device *
 of_mipi_dsi_device_add(struct mipi_dsi_host *host, struct device_node *node)
 {
 	struct mipi_dsi_device_info info = { };
+	struct mipi_dsi_device *dsi;
 	int ret;
 	u32 reg;
 
@@ -180,7 +181,11 @@ of_mipi_dsi_device_add(struct mipi_dsi_host *host, struct device_node *node)
 	info.channel = reg;
 	info.node = of_node_get(node);
 
-	return mipi_dsi_device_register_full(host, &info);
+	dsi = mipi_dsi_device_register_full(host, &info);
+	if (IS_ERR(dsi))
+		of_node_put(node);
+
+	return dsi;
 }
 #else
 static struct mipi_dsi_device *
