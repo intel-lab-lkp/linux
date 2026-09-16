@@ -359,6 +359,7 @@ static int ibmvfc_nvme_fcp_io(struct nvme_fc_local_port *lport,
 	ibmvfc_dbg(vhost, "vfc-nvme-mq-%d\n", evt->hwq);
 
 	ibmvfc_init_event(evt, ibmvfc_nvme_done, IBMVFC_CMD_FORMAT);
+	evt->tgt = rport->private;
 	evt->fcp_req = fcp_req;
 	fcp_req->private = evt;
 
