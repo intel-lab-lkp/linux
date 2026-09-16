@@ -197,6 +197,8 @@ static int intel_guc_steal_guc_ids(void *arg)
 			ret = PTR_ERR(ce[context_index]);
 			guc_err(guc, "Failed to create context: %pe\n", ce[context_index]);
 			ce[context_index--] = NULL;
+			if (last)
+				i915_request_put(last);
 			goto err_spin_rq;
 		}
 
@@ -207,6 +209,8 @@ static int intel_guc_steal_guc_ids(void *arg)
 			if ((ret != -EAGAIN) || !last) {
 				guc_err(guc, "Failed to create %srequest %d: %pe\n",
 					last ? "" : "first ", context_index, ERR_PTR(ret));
+				if (last)
+					i915_request_put(last);
 				goto err_spin_rq;
 			}
 		} else {
