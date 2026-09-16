@@ -541,13 +541,32 @@ out:
 	return error;
 }
 
-static int profile_umount(struct aa_profile *profile, const struct path *path,
-			  char *buffer, struct apparmor_audit_data *ad)
+static int profile_umount(struct aa_profile *profile, const char *name,
+			  struct apparmor_audit_data *ad)
 {
+
+	AA_BUG(!profile);
+	AA_BUG(!name);
+
 	struct aa_ruleset *rules = profile->label.rules[0];
 	struct aa_perms perms = { };
-	const char *name = NULL;
 	aa_state_t state;
+
+	state = aa_dfa_match(rules->policy->dfa,
+			     rules->policy->start[AA_CLASS_MOUNT],
+			     name);
+	perms = *aa_lookup_perms(rules->policy, state);
+
+	aa_apply_modes_to_perms(profile, &perms);
+	return aa_check_perms(profile, &perms, AA_MAY_UMOUNT, ad, audit_cb);
+}
+
+static int umount_path_perm(struct aa_profile *profile, const struct path *path,
+			    int flags, char *buffer,
+			    struct apparmor_audit_data *ad)
+{
+	struct aa_ruleset *rules = profile->label.rules[0];
+	const char *name = NULL;
 	int error;
 
 	AA_BUG(!profile);
@@ -556,23 +575,14 @@ static int profile_umount(struct aa_profile *profile, const struct path *path,
 	if (!RULE_MEDIATES(rules, AA_CLASS_MOUNT))
 		return 0;
 
-	/* TODO: lift path_name, need to separate profile path_flags from
-	 * the lookup
-	 */
-	error = aa_path_name(path, path_flags(profile, path), buffer, &name,
+	error = aa_path_name(path, flags | profile->path_flags, buffer, &name,
 			     &ad->info, profile->disconnected);
 	if (error)
 		return aa_audit_perm_error(&profile->label, AA_MAY_UMOUNT,
 					   error, ad, audit_cb);
 
 	ad->name = name;
-	state = aa_dfa_match(rules->policy->dfa,
-			     rules->policy->start[AA_CLASS_MOUNT],
-			     name);
-	perms = *aa_lookup_perms(rules->policy, state);
-
-	aa_apply_modes_to_perms(profile, &perms);
-	return aa_check_perms(profile, &perms, AA_MAY_UMOUNT, ad, audit_cb);
+	return profile_umount(profile, name, ad);
 }
 
 int aa_umount(const struct cred *subj_cred, struct aa_label *label,
@@ -587,12 +597,14 @@ int aa_umount(const struct cred *subj_cred, struct aa_label *label,
 	AA_BUG(!label);
 	AA_BUG(!mnt);
 
+	flags = S_ISDIR(path.dentry->d_inode->i_mode) ? PATH_IS_DIR : 0;
+
 	buffer = aa_get_buffer(false);
 	if (!buffer)
 		return -ENOMEM;
 
 	error = fn_for_each(label, profile,
-			profile_umount(profile, &path, buffer, &ad));
+			umount_path_perm(profile, &path, flags, buffer, &ad));
 	aa_put_buffer(buffer);
 
 	return error;
