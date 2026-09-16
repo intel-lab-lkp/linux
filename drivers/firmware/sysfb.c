@@ -71,9 +71,12 @@ void sysfb_disable(struct device *dev)
 
 	mutex_lock(&disable_lock);
 	parent = sysfb_parent_dev(si);
-	if (!dev || !parent || dev == parent) {
-		sysfb_unregister();
-		disabled = true;
+	if (!IS_ERR(parent)) {
+		if (!dev || !parent || dev == parent) {
+			sysfb_unregister();
+			disabled = true;
+		}
+		put_device(parent);
 	}
 	mutex_unlock(&disable_lock);
 }
