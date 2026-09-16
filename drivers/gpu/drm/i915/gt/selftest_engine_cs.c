@@ -351,13 +351,14 @@ out:
 
 			if (i915_request_wait(rq, 0, HZ / 5) < 0)
 				err = -EIO;
+			if (err == 0)
+				cycles[i] =
+					(rq->hwsp_seqno[4] - rq->hwsp_seqno[3]) -
+					(rq->hwsp_seqno[3] - rq->hwsp_seqno[2]);
+
 			i915_request_put(rq);
 			if (err)
 				break;
-
-			cycles[i] =
-				(rq->hwsp_seqno[4] - rq->hwsp_seqno[3]) -
-				(rq->hwsp_seqno[3] - rq->hwsp_seqno[2]);
 		}
 		i915_vma_put(nop);
 		i915_vma_put(base);
