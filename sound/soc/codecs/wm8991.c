@@ -1083,6 +1083,7 @@ static int wm8991_set_bias_level(struct snd_soc_component *component,
 	struct wm8991_priv *wm8991 = snd_soc_component_get_drvdata(component);
 	struct snd_soc_dapm_context *dapm = snd_soc_component_to_dapm(component);
 	u16 val;
+	int ret;
 
 	switch (level) {
 	case SND_SOC_BIAS_ON:
@@ -1097,7 +1098,11 @@ static int wm8991_set_bias_level(struct snd_soc_component *component,
 
 	case SND_SOC_BIAS_STANDBY:
 		if (snd_soc_dapm_get_bias_level(dapm) == SND_SOC_BIAS_OFF) {
-			regcache_sync(wm8991->regmap);
+			ret = regcache_sync(wm8991->regmap);
+			if (ret) {
+				regcache_mark_dirty(wm8991->regmap);
+				return ret;
+			}
 			/* Enable all output discharge bits */
 			snd_soc_component_write(component, WM8991_ANTIPOP1, WM8991_DIS_LLINE |
 				      WM8991_DIS_RLINE | WM8991_DIS_OUT3 |
@@ -1195,6 +1200,13 @@ static int wm8991_set_bias_level(struct snd_soc_component *component,
 #define WM8991_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE |\
 			SNDRV_PCM_FMTBIT_S24_LE)
 
+static const u64 wm8991_selectable_formats =
+	SND_SOC_POSSIBLE_DAIFMT_I2S	|
+	SND_SOC_POSSIBLE_DAIFMT_RIGHT_J	|
+	SND_SOC_POSSIBLE_DAIFMT_LEFT_J	|
+	SND_SOC_POSSIBLE_DAIFMT_DSP_A	|
+	SND_SOC_POSSIBLE_DAIFMT_DSP_B;
+
 static const struct snd_soc_dai_ops wm8991_ops = {
 	.hw_params = wm8991_hw_params,
 	.mute_stream = wm8991_mute,
@@ -1202,6 +1214,8 @@ static const struct snd_soc_dai_ops wm8991_ops = {
 	.set_clkdiv = wm8991_set_dai_clkdiv,
 	.set_pll = wm8991_set_dai_pll,
 	.no_capture_mute = 1,
+	.auto_selectable_formats = &wm8991_selectable_formats,
+	.num_auto_selectable_formats = 1,
 };
 
 /*

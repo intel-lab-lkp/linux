@@ -490,8 +490,21 @@ static int ssm2518_set_power(struct ssm2518 *ssm2518, bool enable)
 	if (enable) {
 		ret = regmap_update_bits(ssm2518->regmap, SSM2518_REG_POWER1,
 			SSM2518_POWER1_SPWDN | SSM2518_POWER1_RESET, 0x00);
-		regcache_sync(ssm2518->regmap);
+		if (ret)
+			goto err_power_off;
+
+		ret = regcache_sync(ssm2518->regmap);
+		if (ret)
+			goto err_power_off;
 	}
+
+	return ret;
+
+err_power_off:
+	regcache_cache_only(ssm2518->regmap, true);
+	regcache_mark_dirty(ssm2518->regmap);
+	if (ssm2518->enable_gpio)
+		gpiod_set_value_cansleep(ssm2518->enable_gpio, 0);
 
 	return ret;
 }
@@ -620,12 +633,25 @@ static int ssm2518_startup(struct snd_pcm_substream *substream,
 #define SSM2518_FORMATS (SNDRV_PCM_FMTBIT_S8 | SNDRV_PCM_FMTBIT_S16_LE | \
 			SNDRV_PCM_FMTBIT_S24_LE | SNDRV_PCM_FMTBIT_S32)
 
+static const u64 ssm2518_selectable_formats =
+	SND_SOC_POSSIBLE_DAIFMT_I2S	|
+	SND_SOC_POSSIBLE_DAIFMT_RIGHT_J	|
+	SND_SOC_POSSIBLE_DAIFMT_LEFT_J	|
+	SND_SOC_POSSIBLE_DAIFMT_DSP_A	|
+	SND_SOC_POSSIBLE_DAIFMT_DSP_B	|
+	SND_SOC_POSSIBLE_DAIFMT_NB_NF	|
+	SND_SOC_POSSIBLE_DAIFMT_NB_IF	|
+	SND_SOC_POSSIBLE_DAIFMT_IB_NF	|
+	SND_SOC_POSSIBLE_DAIFMT_IB_IF;
+
 static const struct snd_soc_dai_ops ssm2518_dai_ops = {
 	.startup = ssm2518_startup,
 	.hw_params	= ssm2518_hw_params,
 	.mute_stream	= ssm2518_mute,
 	.set_fmt	= ssm2518_set_dai_fmt,
 	.set_tdm_slot	= ssm2518_set_tdm_slot,
+	.auto_selectable_formats	= &ssm2518_selectable_formats,
+	.num_auto_selectable_formats	= 1,
 	.no_capture_mute = 1,
 };
 

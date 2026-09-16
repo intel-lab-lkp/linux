@@ -787,12 +787,13 @@ static int adau1372_enable_pll(struct adau1372 *adau1372)
 
 static int adau1372_set_power(struct adau1372 *adau1372, bool enable)
 {
+	int ret;
+
 	if (adau1372->enabled == enable)
 		return 0;
 
 	if (enable) {
 		unsigned int clk_ctrl = ADAU1372_CLK_CTRL_MCLK_EN;
-		int ret;
 
 		ret = clk_prepare_enable(adau1372->mclk);
 		if (ret)
@@ -811,24 +812,21 @@ static int adau1372_set_power(struct adau1372 *adau1372, bool enable)
 		 */
 		if (adau1372->use_pll) {
 			ret = adau1372_enable_pll(adau1372);
-			if (ret) {
-				if (!adau1372->pd_gpio)
-					regmap_update_bits(adau1372->regmap,
-							   ADAU1372_REG_CLK_CTRL,
-							   ADAU1372_CLK_CTRL_PLL_EN,
-							   0);
-				regcache_cache_only(adau1372->regmap, true);
-				if (adau1372->pd_gpio)
-					gpiod_set_value(adau1372->pd_gpio, 1);
-				clk_disable_unprepare(adau1372->mclk);
-				return ret;
-			}
+			if (ret)
+				goto err_power_down;
 			clk_ctrl |= ADAU1372_CLK_CTRL_CLKSRC;
 		}
 
-		regmap_update_bits(adau1372->regmap, ADAU1372_REG_CLK_CTRL,
-				   ADAU1372_CLK_CTRL_MCLK_EN | ADAU1372_CLK_CTRL_CLKSRC, clk_ctrl);
-		regcache_sync(adau1372->regmap);
+		ret = regmap_update_bits(adau1372->regmap, ADAU1372_REG_CLK_CTRL,
+					 ADAU1372_CLK_CTRL_MCLK_EN |
+					 ADAU1372_CLK_CTRL_CLKSRC,
+					 clk_ctrl);
+		if (ret)
+			goto err_power_down;
+
+		ret = regcache_sync(adau1372->regmap);
+		if (ret)
+			goto err_power_down;
 	} else {
 		if (adau1372->pd_gpio) {
 			/*
@@ -849,6 +847,20 @@ static int adau1372_set_power(struct adau1372 *adau1372, bool enable)
 	adau1372->enabled = enable;
 
 	return 0;
+
+err_power_down:
+	if (!adau1372->pd_gpio)
+		regmap_update_bits(adau1372->regmap, ADAU1372_REG_CLK_CTRL,
+				   ADAU1372_CLK_CTRL_MCLK_EN |
+				   ADAU1372_CLK_CTRL_PLL_EN, 0);
+
+	regcache_cache_only(adau1372->regmap, true);
+	regcache_mark_dirty(adau1372->regmap);
+	if (adau1372->pd_gpio)
+		gpiod_set_value(adau1372->pd_gpio, 1);
+	clk_disable_unprepare(adau1372->mclk);
+
+	return ret;
 }
 
 static int adau1372_set_bias_level(struct snd_soc_component *component,
@@ -881,12 +893,24 @@ static const struct snd_soc_component_driver adau1372_driver = {
 	.endianness = 1,
 };
 
+static const u64 adau1372_selectable_formats =
+	SND_SOC_POSSIBLE_DAIFMT_I2S	|
+	SND_SOC_POSSIBLE_DAIFMT_LEFT_J	|
+	SND_SOC_POSSIBLE_DAIFMT_DSP_A	|
+	SND_SOC_POSSIBLE_DAIFMT_DSP_B	|
+	SND_SOC_POSSIBLE_DAIFMT_NB_NF	|
+	SND_SOC_POSSIBLE_DAIFMT_NB_IF	|
+	SND_SOC_POSSIBLE_DAIFMT_IB_NF	|
+	SND_SOC_POSSIBLE_DAIFMT_IB_IF;
+
 static const struct snd_soc_dai_ops adau1372_dai_ops = {
 	.set_fmt = adau1372_set_dai_fmt,
 	.set_tdm_slot = adau1372_set_tdm_slot,
 	.set_tristate = adau1372_set_tristate,
 	.hw_params = adau1372_hw_params,
 	.startup = adau1372_startup,
+	.auto_selectable_formats = &adau1372_selectable_formats,
+	.num_auto_selectable_formats = 1,
 };
 
 #define ADAU1372_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | \

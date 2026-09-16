@@ -1416,13 +1416,19 @@ static int aic3x_set_power(struct snd_soc_component *component, int power)
 			gpiod_set_value(aic3x->gpio_reset, 0);
 		}
 
-		if (aic3x->model == AIC3X_MODEL_3007)
-			regmap_multi_reg_write_bypassed(aic3x->regmap, aic3007_class_d,
-							ARRAY_SIZE(aic3007_class_d));
+		if (aic3x->model == AIC3X_MODEL_3007) {
+			ret = regmap_multi_reg_write_bypassed(aic3x->regmap,
+							      aic3007_class_d,
+							      ARRAY_SIZE(aic3007_class_d));
+			if (ret)
+				goto err_power_off;
+		}
 
 		/* Sync reg_cache with the hardware */
 		regcache_cache_only(aic3x->regmap, false);
-		regcache_sync(aic3x->regmap);
+		ret = regcache_sync(aic3x->regmap);
+		if (ret)
+			goto err_power_off;
 
 		/* Rewrite paired PLL D registers in case cached sync skipped
 		 * writing one of them and thus caused other one also not
@@ -1457,6 +1463,17 @@ static int aic3x_set_power(struct snd_soc_component *component, int power)
 	}
 out:
 	return ret;
+
+err_power_off:
+	if (aic3x->gpio_reset)
+		gpiod_set_value(aic3x->gpio_reset, 1);
+	regcache_cache_only(aic3x->regmap, true);
+	regcache_mark_dirty(aic3x->regmap);
+	aic3x->power = 0;
+	regulator_bulk_disable(ARRAY_SIZE(aic3x->supplies),
+			       aic3x->supplies);
+
+	return ret;
 }
 
 static int aic3x_set_bias_level(struct snd_soc_component *component,
@@ -1464,6 +1481,7 @@ static int aic3x_set_bias_level(struct snd_soc_component *component,
 {
 	struct snd_soc_dapm_context *dapm = snd_soc_component_to_dapm(component);
 	struct aic3x_priv *aic3x = snd_soc_component_get_drvdata(component);
+	int ret;
 
 	switch (level) {
 	case SND_SOC_BIAS_ON:
@@ -1477,8 +1495,12 @@ static int aic3x_set_bias_level(struct snd_soc_component *component,
 		}
 		break;
 	case SND_SOC_BIAS_STANDBY:
-		if (!aic3x->power)
-			aic3x_set_power(component, 1);
+		if (!aic3x->power) {
+			ret = aic3x_set_power(component, 1);
+			if (ret)
+				return ret;
+		}
+
 		if (snd_soc_dapm_get_bias_level(dapm) == SND_SOC_BIAS_PREPARE &&
 		    aic3x->master) {
 			/* disable pll */
@@ -1488,7 +1510,7 @@ static int aic3x_set_bias_level(struct snd_soc_component *component,
 		break;
 	case SND_SOC_BIAS_OFF:
 		if (aic3x->power)
-			aic3x_set_power(component, 0);
+			return aic3x_set_power(component, 0);
 		break;
 	}
 
@@ -1500,6 +1522,18 @@ static int aic3x_set_bias_level(struct snd_soc_component *component,
 			 SNDRV_PCM_FMTBIT_S24_3LE | SNDRV_PCM_FMTBIT_S24_LE | \
 			 SNDRV_PCM_FMTBIT_S32_LE)
 
+static const u64 aic3x_selectable_formats[] = {
+	/* Hi Priority */
+	SND_SOC_POSSIBLE_DAIFMT_I2S	|
+	SND_SOC_POSSIBLE_DAIFMT_RIGHT_J	|
+	SND_SOC_POSSIBLE_DAIFMT_LEFT_J	|
+	SND_SOC_POSSIBLE_DAIFMT_NB_NF,
+	/* Low Priority */
+	SND_SOC_POSSIBLE_DAIFMT_DSP_A	|
+	SND_SOC_POSSIBLE_DAIFMT_DSP_B	|
+	SND_SOC_POSSIBLE_DAIFMT_IB_NF,
+};
+
 static const struct snd_soc_dai_ops aic3x_dai_ops = {
 	.hw_params	= aic3x_hw_params,
 	.prepare	= aic3x_prepare,
@@ -1507,6 +1541,8 @@ static const struct snd_soc_dai_ops aic3x_dai_ops = {
 	.set_sysclk	= aic3x_set_dai_sysclk,
 	.set_fmt	= aic3x_set_dai_fmt,
 	.set_tdm_slot	= aic3x_set_dai_tdm_slot,
+	.auto_selectable_formats	= aic3x_selectable_formats,
+	.num_auto_selectable_formats	= ARRAY_SIZE(aic3x_selectable_formats),
 	.no_capture_mute = 1,
 };
 
@@ -1627,23 +1663,8 @@ static int aic3x_init(struct snd_soc_component *component)
 static int aic3x_component_probe(struct snd_soc_component *component)
 {
 	struct aic3x_priv *aic3x = snd_soc_component_get_drvdata(component);
-	int ret, i;
 
 	aic3x->component = component;
-
-	for (i = 0; i < ARRAY_SIZE(aic3x->supplies); i++) {
-		aic3x->disable_nb[i].nb.notifier_call = aic3x_regulator_event;
-		aic3x->disable_nb[i].aic3x = aic3x;
-		ret = devm_regulator_register_notifier(
-						aic3x->supplies[i].consumer,
-						&aic3x->disable_nb[i].nb);
-		if (ret) {
-			dev_err(component->dev,
-				"Failed to request regulator notifier: %d\n",
-				 ret);
-			return ret;
-		}
-	}
 
 	regcache_mark_dirty(aic3x->regmap);
 	aic3x_init(component);
@@ -1844,6 +1865,19 @@ int aic3x_probe(struct device *dev, struct regmap *regmap, kernel_ulong_t driver
 				      aic3x->supplies);
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to request supplies\n");
+
+	for (i = 0; i < ARRAY_SIZE(aic3x->supplies); i++) {
+		aic3x->disable_nb[i].nb.notifier_call = aic3x_regulator_event;
+		aic3x->disable_nb[i].aic3x = aic3x;
+		ret = devm_regulator_register_notifier(aic3x->supplies[i].consumer,
+						       &aic3x->disable_nb[i].nb);
+		if (ret) {
+			dev_err(dev,
+				"Failed to request regulator notifier: %d\n",
+				ret);
+			return ret;
+		}
+	}
 
 	aic3x_configure_ocmv(dev, aic3x);
 

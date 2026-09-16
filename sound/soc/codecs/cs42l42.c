@@ -1122,6 +1122,13 @@ EXPORT_SYMBOL_NS_GPL(cs42l42_mute_stream, "SND_SOC_CS42L42_CORE");
 			 SNDRV_PCM_FMTBIT_S24_LE |\
 			 SNDRV_PCM_FMTBIT_S32_LE)
 
+static const u64 cs42l42_selectable_formats =
+	SND_SOC_POSSIBLE_DAIFMT_I2S	|
+	SND_SOC_POSSIBLE_DAIFMT_NB_NF	|
+	SND_SOC_POSSIBLE_DAIFMT_NB_IF	|
+	SND_SOC_POSSIBLE_DAIFMT_IB_NF	|
+	SND_SOC_POSSIBLE_DAIFMT_IB_IF;
+
 static const struct snd_soc_dai_ops cs42l42_ops = {
 	.startup	= cs42l42_dai_startup,
 	.hw_params	= cs42l42_pcm_hw_params,
@@ -1129,6 +1136,8 @@ static const struct snd_soc_dai_ops cs42l42_ops = {
 	.set_sysclk	= cs42l42_set_sysclk,
 	.set_bclk_ratio	= cs42l42_set_bclk_ratio,
 	.mute_stream	= cs42l42_mute_stream,
+	.auto_selectable_formats	= &cs42l42_selectable_formats,
+	.num_auto_selectable_formats	= 1,
 };
 
 struct snd_soc_dai_driver cs42l42_dai = {
@@ -2237,22 +2246,37 @@ int cs42l42_resume(struct device *dev)
 }
 EXPORT_SYMBOL_NS_GPL(cs42l42_resume, "SND_SOC_CS42L42_CORE");
 
-void cs42l42_resume_restore(struct device *dev)
+int cs42l42_resume_restore(struct device *dev)
 {
 	struct cs42l42_private *cs42l42 = dev_get_drvdata(dev);
+	int ret;
 
 	regcache_cache_only(cs42l42->regmap, false);
 	regcache_mark_dirty(cs42l42->regmap);
 
 	scoped_guard(mutex, &cs42l42->irq_lock) {
 		/* Sync LATCH_TO_VP first so the VP domain registers sync correctly */
-		regcache_sync_region(cs42l42->regmap, CS42L42_MIC_DET_CTL1, CS42L42_MIC_DET_CTL1);
-		regcache_sync(cs42l42->regmap);
+		ret = regcache_sync_region(cs42l42->regmap,
+					   CS42L42_MIC_DET_CTL1,
+					   CS42L42_MIC_DET_CTL1);
+		if (!ret)
+			ret = regcache_sync(cs42l42->regmap);
 
-		cs42l42->suspended = false;
+		if (!ret)
+			cs42l42->suspended = false;
+	}
+
+	if (ret) {
+		regcache_cache_only(cs42l42->regmap, true);
+		gpiod_set_value_cansleep(cs42l42->reset_gpio, 0);
+		regulator_bulk_disable(ARRAY_SIZE(cs42l42->supplies),
+				       cs42l42->supplies);
+		return ret;
 	}
 
 	dev_dbg(dev, "System resumed\n");
+
+	return 0;
 }
 EXPORT_SYMBOL_NS_GPL(cs42l42_resume_restore, "SND_SOC_CS42L42_CORE");
 
@@ -2264,9 +2288,7 @@ static int __maybe_unused cs42l42_i2c_resume(struct device *dev)
 	if (ret)
 		return ret;
 
-	cs42l42_resume_restore(dev);
-
-	return 0;
+	return cs42l42_resume_restore(dev);
 }
 
 int cs42l42_common_probe(struct cs42l42_private *cs42l42,
