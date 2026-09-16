@@ -240,8 +240,10 @@ static int hub_master_probe(struct fsi_device *fsi_dev)
 	hub_master_init(hub);
 
 	rc = fsi_master_register(&hub->master);
-	if (rc)
+	if (rc) {
+		of_node_put(hub->master.dev.of_node);
 		goto err_release;
+	}
 
 	/* At this point, fsi_master_register performs the device_initialize(),
 	 * and holds the sole reference on master.dev. This means the device
