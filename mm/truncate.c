@@ -206,15 +206,21 @@ static int folio_split_or_unmap(struct folio *folio, struct page *split_at,
 /*
  * Handle partial folios.  The folio may be entirely within the
  * range if a split has raced with us.  If not, we zero the part of the
- * folio that's within the [start, end] range, and then split the folio if
+ * folio that's within the [lstart, lend] range, and then split the folio if
  * it's large.  split_page_range() will discard pages which now lie beyond
  * i_size, and we rely on the caller to discard pages which lie within a
  * newly created hole.
  *
+ * When @pstart and/or @pend are non-NULL they receive the indexes of the
+ * page range fully covered by [lstart, lend] after any split (or none),
+ * i.e. the range of pages wholly within [lstart, lend] and so safe to
+ * discard.
+ *
  * Returns false if splitting failed so the caller can avoid
  * discarding the entire folio which is stubbornly unsplit.
  */
-bool truncate_inode_partial_folio(struct folio *folio, loff_t start, loff_t end)
+bool truncate_inode_partial_folio(struct folio *folio, loff_t lstart,
+				  loff_t lend, pgoff_t *pstart, pgoff_t *pend)
 {
 	loff_t pos = folio_pos(folio);
 	size_t size = folio_size(folio);
@@ -222,14 +228,20 @@ bool truncate_inode_partial_folio(struct folio *folio, loff_t start, loff_t end)
 	struct page *split_at, *split_at2;
 	unsigned int min_order;
 
-	if (pos < start)
-		offset = start - pos;
+	if (pos < lstart)
+		offset = lstart - pos;
 	else
 		offset = 0;
-	if (pos + size <= (u64)end)
+	if (pos + size <= (u64)lend)
 		length = size - offset;
 	else
-		length = end + 1 - pos - offset;
+		length = lend + 1 - pos - offset;
+
+	if (pstart)
+		*pstart = offset ? folio_next_index(folio) : folio->index;
+	if (pend)
+		*pend = (pos + size > (u64)lend) ? folio->index :
+						   folio_next_index(folio);
 
 	folio_wait_writeback(folio);
 	if (length == size) {
@@ -259,32 +271,62 @@ bool truncate_inode_partial_folio(struct folio *folio, loff_t start, loff_t end)
 		 * for shmem truncate
 		 */
 		struct folio *folio2;
+		pgoff_t end, aligned_end = (pos + offset + length) >>
+					   PAGE_SHIFT;
 
-		if (offset + length == size)
-			goto no_split;
+		if (pstart)
+			*pstart = round_up(pos + offset, PAGE_SIZE) >>
+				  PAGE_SHIFT;
+
+		if (offset + length == size) {
+			end = aligned_end;
+			goto out;
+		}
 
 		split_at2 = folio_page(folio,
 				PAGE_ALIGN_DOWN(offset + length) / PAGE_SIZE);
 		folio2 = page_folio(split_at2);
 
+		/*
+		 * folio2 may become stale due to a concurrent split or
+		 * freeing, so validate it before and after taking its lock.
+		 * If it fails, we can't get an accurate end position and fall
+		 * back to folio->index, which may leave sub-folios split off
+		 * at the offset edge in the page cache this round.
+		 */
+		end = folio->index;
 		if (!folio_try_get(folio2))
-			goto no_split;
-
-		if (!folio_test_large(folio2))
 			goto out;
+
+		if (folio2->mapping != folio->mapping ||
+		    !folio_test_large(folio2))
+			goto out_put;
 
 		if (!folio_trylock(folio2))
-			goto out;
+			goto out_put;
 
-		/* make sure folio2 is large and does not change its mapping */
-		if (folio_test_large(folio2) &&
-		    folio2->mapping == folio->mapping)
-			folio_split_or_unmap(folio2, split_at2, min_order);
+		if (page_folio(split_at2) != folio2) {
+			folio_unlock(folio2);
+			goto out_put;
+		}
+		if (!folio_test_large(folio2)) {
+			end = aligned_end;
+			folio_unlock(folio2);
+			goto out_put;
+		}
+
+		/* Split failed: back off to the head of the straddler */
+		if (folio_split_or_unmap(folio2, split_at2, min_order))
+			end = folio2->index;
+		else
+			end = aligned_end;
 
 		folio_unlock(folio2);
-out:
+out_put:
 		folio_put(folio2);
-no_split:
+out:
+		if (pend)
+			*pend = end;
 		return true;
 	}
 	if (folio_test_dirty(folio))
@@ -413,11 +455,8 @@ void truncate_inode_pages_range(struct address_space *mapping,
 	folio = __filemap_get_folio(mapping, lstart >> PAGE_SHIFT, FGP_LOCK, 0);
 	if (!IS_ERR(folio)) {
 		same_folio = lend < folio_next_pos(folio);
-		if (!truncate_inode_partial_folio(folio, lstart, lend)) {
-			start = folio_next_index(folio);
-			if (same_folio)
-				end = folio->index;
-		}
+		truncate_inode_partial_folio(folio, lstart, lend, &start,
+					     same_folio ? &end : NULL);
 		folio_unlock(folio);
 		folio_put(folio);
 		folio = NULL;
@@ -427,8 +466,8 @@ void truncate_inode_pages_range(struct address_space *mapping,
 		folio = __filemap_get_folio(mapping, lend >> PAGE_SHIFT,
 						FGP_LOCK, 0);
 		if (!IS_ERR(folio)) {
-			if (!truncate_inode_partial_folio(folio, lstart, lend))
-				end = folio->index;
+			truncate_inode_partial_folio(folio, lstart, lend,
+						     NULL, &end);
 			folio_unlock(folio);
 			folio_put(folio);
 		}
