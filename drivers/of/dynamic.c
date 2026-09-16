@@ -318,6 +318,22 @@ int of_detach_node(struct device_node *np)
 }
 EXPORT_SYMBOL_GPL(of_detach_node);
 
+/**
+ * of_detach_node_no_notify() - "Unplug" a node from the device
+ * and return without running notifiers.
+ * @np:	Pointer to the caller's Device Node
+ */
+int of_detach_node_no_notify(struct device_node *np)
+{
+	mutex_lock(&of_mutex);
+	if (!of_node_check_flag(np, OF_DETACHED))
+		__of_detach_node(np);
+	mutex_unlock(&of_mutex);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(of_detach_node_no_notify);
+
 void __of_prop_free(struct property *prop)
 {
 	kfree(prop->name);

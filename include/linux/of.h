@@ -442,6 +442,7 @@ extern int of_update_property(struct device_node *np, struct property *newprop);
 
 extern int of_attach_node(struct device_node *);
 extern int of_detach_node(struct device_node *);
+extern int of_detach_node_no_notify(struct device_node *);
 
 #define of_match_ptr(_ptr)	(_ptr)
 
