@@ -18,8 +18,6 @@
 #include "xhci-trace.h"
 
 #define	PORT_WAKE_BITS	(PORT_WOE | PORT_WDE | PORT_WCE)
-#define	PORT_RWC_BITS	(PORT_CSC | PORT_PEC | PORT_WRC | PORT_OCC | \
-			 PORT_PRC | PORT_PLC | PORT_PED)
 
 /* Default sublink speed attribute of each lane */
 static u32 ssp_cap_default_ssa[] = {
@@ -410,15 +408,6 @@ static unsigned int xhci_port_speed(int portsc)
  * bits 4, 31
  */
 #define	XHCI_PORT_RW1S	(PORT_PR | PORT_WPR)
-/*
- * These bits are RW; writing a 1 clears the bit, writing a 0 has no effect:
- * bits 1, 17, 18, 19, 20, 21, 22, 23
- * port enable/disable, and
- * change bits: connect, PED, warm port reset changed (reserved zero for USB 2.0 ports),
- * over-current, reset, link state, and L1 change
- */
-#define XHCI_PORT_RW1CS	(PORT_PED | PORT_CSC | PORT_PEC | PORT_WRC | PORT_OCC | PORT_PRC | \
-			 PORT_PLC | PORT_CEC)
 /*
  * Bit 16 is RW, and writing a '1' to it causes the link state control to be
  * latched in
@@ -1339,10 +1328,8 @@ int xhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 				 * Clear all change bits, so that we get a new
 				 * connection event.
 				 */
-				portsc |= PORT_CSC | PORT_PEC | PORT_WRC |
-					  PORT_OCC | PORT_PRC | PORT_PLC |
-					  PORT_CEC;
-				xhci_portsc_writel(port, portsc | PORT_PED);
+				portsc |= PORTSC_RW1CS_BITS;
+				xhci_portsc_writel(port, portsc);
 				portsc = xhci_portsc_readl(port);
 				break;
 			}
@@ -1835,7 +1822,7 @@ static bool xhci_port_missing_cas_quirk(struct xhci_port *port)
 		return false;
 
 	/* clear wakeup/change bits, and do a warm port reset */
-	portsc &= ~(PORT_RWC_BITS | PORT_CEC | PORT_WAKE_BITS);
+	portsc &= ~(PORTSC_RW1CS_BITS | PORT_WAKE_BITS);
 	portsc |= PORT_WPR;
 	xhci_portsc_writel(port, portsc);
 	/* flush write */
@@ -1915,7 +1902,7 @@ int xhci_bus_resume(struct usb_hcd *hcd)
 				break;
 			}
 		/* disable wake for all ports, write new link state if needed */
-		portsc &= ~(PORT_RWC_BITS | PORT_CEC | PORT_WAKE_BITS);
+		portsc &= ~(PORTSC_RW1CS_BITS | PORT_WAKE_BITS);
 		xhci_portsc_writel(ports[port_index], portsc);
 	}
 

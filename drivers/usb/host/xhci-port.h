@@ -117,8 +117,9 @@
 #define PORT_DR		BIT(30)
 /* bit 31 - Warm Port Reset, complete when PORT_WRC is '1' */
 #define PORT_WPR		BIT(31)
-#define PORT_CHANGE_MASK	(PORT_CSC | PORT_PEC | PORT_WRC | PORT_OCC | \
-				 PORT_PRC | PORT_PLC | PORT_CEC)
+/* Writing 1 clears the bit, writing 0 has no effect. */
+#define PORTSC_RW1CS_BITS	(PORT_PED | PORT_CSC | PORT_PEC | PORT_WRC | PORT_OCC | PORT_PRC | \
+				 PORT_PLC | PORT_CEC)
 
 /* We mark duplicate entries with -1 */
 #define DUPLICATE_ENTRY ((u8)(-1))
