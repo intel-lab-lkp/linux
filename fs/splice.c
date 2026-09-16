@@ -177,9 +177,9 @@ static const struct pipe_buf_operations user_page_pipe_buf_ops = {
 
 static void wakeup_pipe_readers(struct pipe_inode_info *pipe)
 {
-	smp_mb();
-	if (waitqueue_active(&pipe->rd_wait))
-		wake_up_interruptible(&pipe->rd_wait);
+	if (wq_has_sleeper(&pipe->rd_wait))
+		wake_up_interruptible_poll(&pipe->rd_wait,
+					   EPOLLIN | EPOLLRDNORM);
 	kill_fasync(&pipe->fasync_readers, SIGIO, POLL_IN);
 }
 
@@ -413,9 +413,9 @@ EXPORT_SYMBOL(nosteal_pipe_buf_ops);
 
 static void wakeup_pipe_writers(struct pipe_inode_info *pipe)
 {
-	smp_mb();
-	if (waitqueue_active(&pipe->wr_wait))
-		wake_up_interruptible(&pipe->wr_wait);
+	if (wq_has_sleeper(&pipe->wr_wait))
+		wake_up_interruptible_poll(&pipe->wr_wait,
+					   EPOLLOUT | EPOLLWRNORM);
 	kill_fasync(&pipe->fasync_writers, SIGIO, POLL_OUT);
 }
 
