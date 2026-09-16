@@ -746,22 +746,32 @@ static int rga_core_bind(struct device *dev, struct device *master, void *data)
 {
 	struct rockchip_rga *rga = data;
 	struct rga_core *core = dev_get_drvdata(dev);
+	struct rockchip_rga_version version;
 	int ret = 0;
 
 	core->rga = rga;
-
-	rga->cores[0] = core;
 
 	ret = pm_runtime_resume_and_get(core->dev);
 	if (ret < 0)
 		return ret;
 
-	rga->version = rga->hw->get_version(core);
+	version = rga->hw->get_version(core);
 
 	v4l2_info(&rga->v4l2_dev, "HW Version: 0x%02x.%02x\n",
 		  rga->version.major, rga->version.minor);
 
+	if (rga->num_cores) {
+		/* we are not the first core, expect that we have the same version */
+		if (rga->version.major != version.major || rga->version.minor != version.minor) {
+			v4l2_err(&rga->v4l2_dev, "Detected multi-core setup with different core versions!\n");
+			return -ENODEV;
+		}
+	} else
+		rga->version = version;
+
 	pm_runtime_put(core->dev);
+
+	rga->cores[rga->num_cores++] = core;
 
 	return 0;
 }
@@ -770,6 +780,18 @@ static void rga_core_unbind(struct device *dev, struct device *master,
 			    void *data)
 {
 	struct rga_core *core = dev_get_drvdata(dev);
+	struct rockchip_rga *rga = core->rga;
+	u8 i;
+
+	/* Remove our core from the list */
+	for (i = 0; i < rga->num_cores; i++) {
+		if (rga->cores[i] != core)
+			continue;
+
+		rga->cores[i] = rga->cores[rga->num_cores - 1];
+		rga->num_cores--;
+		break;
+	}
 
 	core->rga = NULL;
 }
@@ -992,14 +1014,6 @@ static int rga_probe(struct platform_device *pdev)
 		component_match_add_release(dev, &match, component_release_of,
 					    component_compare_of, core_node);
 		num_cores++;
-
-		/*
-		 * As multi core is not implemented yet,
-		 * break out of the loop to only have one core per rockchip_rga struct.
-		 * Also put the node, which otherwise would've been done by the loop iteration.
-		 */
-		of_node_put(core_node);
-		break;
 	}
 
 	rga = devm_kzalloc(dev, sizeof(*rga) + num_cores * sizeof(*rga->cores), GFP_KERNEL);
