@@ -78,6 +78,7 @@ static void w1_slave_release(struct device *dev)
 
 	dev_dbg(dev, "%s: Releasing %s [%p]\n", __func__, sl->name, sl);
 
+	of_node_put(dev->of_node);
 	w1_family_put(sl->family);
 	sl->master->slave_count--;
 }
@@ -697,7 +698,6 @@ static int __w1_attach_slave_device(struct w1_slave *sl)
 		dev_err(&sl->dev,
 			"Device registration [%s] failed. err=%d\n",
 			dev_name(&sl->dev), err);
-		of_node_put(sl->dev.of_node);
 		put_device(&sl->dev);
 		return err;
 	}
