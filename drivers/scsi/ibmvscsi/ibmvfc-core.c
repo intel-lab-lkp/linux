@@ -1859,7 +1859,7 @@ int ibmvfc_send_event(struct ibmvfc_event *evt,
 			evt->done = ibmvfc_vfc_eh_done;
 		} else if (evt->fcp_req || evt->ls_req) {
 			evt->done = ibmvfc_vfc_eh_done;
-		} else {
+		} else if (evt->crq.format == IBMVFC_MAD_FORMAT) {
 			evt->xfer_iu->mad_common.status = cpu_to_be16(IBMVFC_MAD_CRQ_ERROR);
 			evt->done = evt->_done;
 		}
