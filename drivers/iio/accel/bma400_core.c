@@ -1781,7 +1781,6 @@ int bma400_probe(struct device *dev, struct regmap *regmap, int irq,
 			return dev_err_probe(data->dev, ret,
 					     "iio trigger register fail\n");
 
-		indio_dev->trig = iio_trigger_get(data->trig);
 		ret = devm_request_threaded_irq(dev, irq, NULL,
 						&bma400_interrupt,
 						IRQF_TRIGGER_RISING | IRQF_ONESHOT,
@@ -1795,6 +1794,9 @@ int bma400_probe(struct device *dev, struct regmap *regmap, int irq,
 	if (ret)
 		return dev_err_probe(data->dev, ret,
 				     "iio triggered buffer setup failed\n");
+
+	if (irq > 0)
+		indio_dev->trig = iio_trigger_get(data->trig);
 
 	return devm_iio_device_register(dev, indio_dev);
 }
