@@ -744,7 +744,7 @@ static int drm_syncobj_import_sync_file_fence(struct drm_file *file_private,
 		struct dma_fence_chain *chain = dma_fence_chain_alloc();
 
 		if (!chain)
-			return -ENOMEM;
+			goto err_put;
 
 		drm_syncobj_add_point(syncobj, chain, fence, point);
 	} else {
@@ -754,6 +754,10 @@ static int drm_syncobj_import_sync_file_fence(struct drm_file *file_private,
 	dma_fence_put(fence);
 	drm_syncobj_put(syncobj);
 	return 0;
+err_put:
+	dma_fence_put(fence);
+	drm_syncobj_put(syncobj);
+	return -ENOMEM;
 }
 
 static int drm_syncobj_export_sync_file(struct drm_file *file_private,
