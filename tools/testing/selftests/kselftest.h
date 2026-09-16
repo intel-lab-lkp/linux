@@ -173,19 +173,25 @@ static inline void ksft_print_cnts(void)
 		ksft_cnt.ksft_xskip, ksft_cnt.ksft_error);
 }
 
-static inline __printf(1, 2) void ksft_print_msg(const char *msg, ...)
+static inline void ksft_vprint_msg(const char *msg, va_list args)
 {
 	int saved_errno = errno;
-	va_list args;
 
-	va_start(args, msg);
 	printf("# ");
 	errno = saved_errno;
 	vprintf(msg, args);
+}
+
+static inline __printf(1, 2) void ksft_print_msg(const char *msg, ...)
+{
+	va_list args;
+
+	va_start(args, msg);
+	ksft_vprint_msg(msg, args);
 	va_end(args);
 }
 
-static inline void ksft_print_dbg_msg(const char *msg, ...)
+static inline __printf(1, 2) void ksft_print_dbg_msg(const char *msg, ...)
 {
 	va_list args;
 
@@ -193,7 +199,7 @@ static inline void ksft_print_dbg_msg(const char *msg, ...)
 		return;
 
 	va_start(args, msg);
-	ksft_print_msg(msg, args);
+	ksft_vprint_msg(msg, args);
 	va_end(args);
 }
 
