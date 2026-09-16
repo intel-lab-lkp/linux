@@ -219,7 +219,10 @@ static void hidma_issue_task(struct tasklet_struct *t)
 {
 	struct hidma_dev *dmadev = from_tasklet(dmadev, t, task);
 
-	pm_runtime_get_sync(dmadev->ddev.dev);
+	if (pm_runtime_get_sync(dmadev->ddev.dev) < 0) {
+		pm_runtime_put_noidle(dmadev->ddev.dev);
+		return;
+	}
 	hidma_ll_start(dmadev->lldev);
 }
 
