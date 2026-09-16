@@ -9,6 +9,7 @@ obj-$(CONFIG_CAN_ESD_USB) += esd_usb.o
 obj-$(CONFIG_CAN_ETAS_ES58X) += etas_es58x/
 obj-$(CONFIG_CAN_F81604) += f81604.o
 obj-$(CONFIG_CAN_GS_USB) += gs_usb.o
+obj-$(CONFIG_CAN_IXXAT_USB) += ixxat_usb/
 obj-$(CONFIG_CAN_KVASER_USB) += kvaser_usb/
 obj-$(CONFIG_CAN_MCBA_USB) += mcba_usb.o
 obj-$(CONFIG_CAN_NCT6694) += nct6694_canfd.o
