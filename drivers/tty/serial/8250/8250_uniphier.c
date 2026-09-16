@@ -201,8 +201,10 @@ static int uniphier_uart_probe(struct platform_device *pdev)
 	up.port.membase = membase;
 
 	ret = uart_read_port_properties(&up.port);
-	if (ret)
+	if (ret) {
+		clk_disable_unprepare(priv->clk);
 		return ret;
+	}
 
 	up.port.type = PORT_16550A;
 	up.port.iotype = UPIO_MEM32;
