@@ -6907,7 +6907,7 @@ static void skb_defer_free_flush(void)
 	struct skb_defer_node *sdn;
 	int node;
 
-	for_each_node(node) {
+	for_each_online_node(node) {
 		sdn = this_cpu_ptr(net_hotdata.skb_defer_nodes) + node;
 
 		if (llist_empty(&sdn->defer_list))
@@ -12895,9 +12895,12 @@ out:
 static int dev_cpu_dead(unsigned int oldcpu)
 {
 	struct sk_buff **list_skb;
-	struct sk_buff *skb;
+	struct llist_node *free_list;
+	struct sk_buff *skb, *next;
+	struct skb_defer_node *sdn;
 	unsigned int cpu;
 	struct softnet_data *sd, *oldsd, *remsd = NULL;
+	int node;
 
 	local_irq_disable();
 	cpu = smp_processor_id();
@@ -12955,6 +12958,26 @@ static int dev_cpu_dead(unsigned int oldcpu)
 	while ((skb = skb_dequeue(&oldsd->input_pkt_queue))) {
 		netif_rx(skb);
 		rps_input_queue_head_incr(oldsd);
+	}
+
+	/* Drain skbs deferred to the offlining CPU: its softirq no longer
+	 * runs, so skb_defer_free_flush() would never free them.  Also drain
+	 * skbs deferred to this CPU's node, which may leave node_online_map
+	 * and thus be skipped by the for_each_online_node() loop in
+	 * skb_defer_free_flush().
+	 */
+	for_each_node(node) {
+		sdn = per_cpu_ptr(net_hotdata.skb_defer_nodes, oldcpu) + node;
+		free_list = llist_del_all(&sdn->defer_list);
+		llist_for_each_entry_safe(skb, next, free_list, ll_node)
+			dev_consume_skb_any(skb);
+	}
+	node = cpu_to_node(oldcpu);
+	for_each_online_cpu(cpu) {
+		sdn = per_cpu_ptr(net_hotdata.skb_defer_nodes, cpu) + node;
+		free_list = llist_del_all(&sdn->defer_list);
+		llist_for_each_entry_safe(skb, next, free_list, ll_node)
+			dev_consume_skb_any(skb);
 	}
 
 	return 0;
