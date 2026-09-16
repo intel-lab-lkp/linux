@@ -1145,14 +1145,15 @@ DECLARE_RTL_COND(rtl_ocp_gphy_cond)
 	return RTL_R32(tp, GPHY_OCP) & OCPAR_FLAG;
 }
 
-static void r8168_phy_ocp_write(struct rtl8169_private *tp, u32 reg, u32 data)
+static int r8168_phy_ocp_write(struct rtl8169_private *tp, u32 reg, u32 data)
 {
 	if (rtl_ocp_reg_failure(reg))
-		return;
+		return 0;
 
 	RTL_W32(tp, GPHY_OCP, OCPAR_FLAG | (reg << 15) | data);
 
-	rtl_loop_wait_low(tp, &rtl_ocp_gphy_cond, 25, 10);
+	return rtl_loop_wait_low(tp, &rtl_ocp_gphy_cond, 25, 10) ?
+		0 : -ETIMEDOUT;
 }
 
 static int r8168_phy_ocp_read(struct rtl8169_private *tp, u32 reg)
@@ -1337,11 +1338,11 @@ static void rtl8168g_phy_suspend_quirk(struct rtl8169_private *tp, int value)
 	}
 };
 
-static void r8168g_mdio_write(struct rtl8169_private *tp, int reg, int value)
+static int r8168g_mdio_write(struct rtl8169_private *tp, int reg, int value)
 {
 	if (reg == 0x1f) {
 		tp->ocp_base = value ? value << 4 : OCP_STD_PHY_BASE;
-		return;
+		return 0;
 	}
 
 	if (tp->ocp_base != OCP_STD_PHY_BASE)
@@ -1350,7 +1351,7 @@ static void r8168g_mdio_write(struct rtl8169_private *tp, int reg, int value)
 	if (tp->ocp_base == OCP_STD_PHY_BASE && reg == MII_BMCR)
 		rtl8168g_phy_suspend_quirk(tp, value);
 
-	r8168_phy_ocp_write(tp, tp->ocp_base + reg * 2, value);
+	return r8168_phy_ocp_write(tp, tp->ocp_base + reg * 2, value);
 }
 
 static int r8168g_mdio_read(struct rtl8169_private *tp, int reg)
@@ -1364,14 +1365,15 @@ static int r8168g_mdio_read(struct rtl8169_private *tp, int reg)
 	return r8168_phy_ocp_read(tp, tp->ocp_base + reg * 2);
 }
 
-static void mac_mcu_write(struct rtl8169_private *tp, int reg, int value)
+static int mac_mcu_write(struct rtl8169_private *tp, int reg, int value)
 {
 	if (reg == 0x1f) {
 		tp->ocp_base = value << 4;
-		return;
+		return 0;
 	}
 
 	r8168_mac_ocp_write(tp, tp->ocp_base + reg, value);
+	return 0;
 }
 
 static bool rtl_is_8116af(struct rtl8169_private *tp)
@@ -1393,16 +1395,19 @@ DECLARE_RTL_COND(rtl_phyar_cond)
 	return RTL_R32(tp, PHYAR) & 0x80000000;
 }
 
-static void r8169_mdio_write(struct rtl8169_private *tp, int reg, int value)
+static int r8169_mdio_write(struct rtl8169_private *tp, int reg, int value)
 {
 	RTL_W32(tp, PHYAR, 0x80000000 | (reg & 0x1f) << 16 | (value & 0xffff));
 
-	rtl_loop_wait_low(tp, &rtl_phyar_cond, 25, 20);
+	if (!rtl_loop_wait_low(tp, &rtl_phyar_cond, 25, 20))
+		return -ETIMEDOUT;
 	/*
 	 * According to hardware specs a 20us delay is required after write
 	 * complete indication, but before sending next command.
 	 */
 	udelay(20);
+
+	return 0;
 }
 
 static int r8169_mdio_read(struct rtl8169_private *tp, int reg)
@@ -1440,13 +1445,17 @@ static void r8168dp_2_mdio_stop(struct rtl8169_private *tp)
 	RTL_W32(tp, 0xd0, RTL_R32(tp, 0xd0) | R8168DP_1_MDIO_ACCESS_BIT);
 }
 
-static void r8168dp_2_mdio_write(struct rtl8169_private *tp, int reg, int value)
+static int r8168dp_2_mdio_write(struct rtl8169_private *tp, int reg, int value)
 {
+	int rc;
+
 	r8168dp_2_mdio_start(tp);
 
-	r8169_mdio_write(tp, reg, value);
+	rc = r8169_mdio_write(tp, reg, value);
 
 	r8168dp_2_mdio_stop(tp);
+
+	return rc;
 }
 
 static int r8168dp_2_mdio_read(struct rtl8169_private *tp, int reg)
@@ -1466,19 +1475,16 @@ static int r8168dp_2_mdio_read(struct rtl8169_private *tp, int reg)
 	return value;
 }
 
-static void rtl_writephy(struct rtl8169_private *tp, int location, int val)
+static int rtl_writephy(struct rtl8169_private *tp, int location, int val)
 {
 	switch (tp->mac_version) {
 	case RTL_GIGA_MAC_VER_28:
 	case RTL_GIGA_MAC_VER_31:
-		r8168dp_2_mdio_write(tp, location, val);
-		break;
+		return r8168dp_2_mdio_write(tp, location, val);
 	case RTL_GIGA_MAC_VER_40 ... RTL_GIGA_MAC_VER_LAST:
-		r8168g_mdio_write(tp, location, val);
-		break;
+		return r8168g_mdio_write(tp, location, val);
 	default:
-		r8169_mdio_write(tp, location, val);
-		break;
+		return r8169_mdio_write(tp, location, val);
 	}
 }
 

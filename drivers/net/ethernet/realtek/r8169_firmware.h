@@ -12,7 +12,7 @@
 #include <linux/firmware.h>
 
 struct rtl8169_private;
-typedef void (*rtl_fw_write_t)(struct rtl8169_private *tp, int reg, int val);
+typedef int (*rtl_fw_write_t)(struct rtl8169_private *tp, int reg, int val);
 typedef int (*rtl_fw_read_t)(struct rtl8169_private *tp, int reg);
 
 #define RTL_VER_SIZE		32
