@@ -733,8 +733,10 @@ static void cdns_dsi_bridge_atomic_pre_enable(struct drm_bridge *bridge,
 	 * enable their streams.
 	 */
 
-	if (WARN_ON(pm_runtime_get_sync(dsi->base.dev) < 0))
+	if (WARN_ON(pm_runtime_get_sync(dsi->base.dev) < 0)) {
+		pm_runtime_put_noidle(dsi->base.dev);
 		return;
+	}
 
 	new_bridge_state = drm_atomic_get_new_bridge_state(state, bridge);
 	if (WARN_ON(!new_bridge_state))
