@@ -144,6 +144,7 @@ static void mchp_lvds_atomic_enable(struct drm_bridge *bridge,
 	ret = pm_runtime_get_sync(lvds->dev);
 	if (ret < 0) {
 		dev_err(lvds->dev, "failed to get pm runtime: %d\n", ret);
+		pm_runtime_put_noidle(lvds->dev);
 		return;
 	}
 
