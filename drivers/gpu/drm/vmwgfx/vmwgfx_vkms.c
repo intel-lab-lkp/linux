@@ -135,6 +135,7 @@ crc_generate_worker(struct work_struct *work)
 			drm_warn(
 				crtc->dev,
 				"CRC worker wasn't able to sync the crc surface!\n");
+			vmw_surface_unreference(&surf);
 			return;
 		}
 
