@@ -130,6 +130,16 @@ static const struct emac_variant emac_variant_a64 = {
 	.tx_delay_max = 7,
 };
 
+static const struct emac_variant emac_variant_h616_internal = {
+	.syscon_field = &sun8i_syscon_reg_field,
+	.soc_has_internal_phy = true,
+	.support_mii = true,
+	.support_rmii = true,
+	.support_rgmii = true,
+	.rx_delay_max = 31,
+	.tx_delay_max = 7,
+};
+
 static const struct emac_variant emac_variant_h6 = {
 	.syscon_field = &sun8i_syscon_reg_field,
 	/* The "Internal PHY" of H6 is not on the die. It's on the
@@ -570,6 +580,7 @@ static const struct stmmac_dma_ops sun8i_dwmac_dma_ops = {
 };
 
 static int sun8i_dwmac_power_internal_phy(struct stmmac_priv *priv);
+static int sun8i_dwmac_reset(struct stmmac_priv *priv);
 
 static int sun8i_dwmac_init(struct device *dev, void *priv)
 {
@@ -587,6 +598,10 @@ static int sun8i_dwmac_init(struct device *dev, void *priv)
 
 	if (gmac->use_internal_phy) {
 		ret = sun8i_dwmac_power_internal_phy(netdev_priv(ndev));
+		if (ret)
+			goto err_disable_regulator;
+
+		ret = sun8i_dwmac_reset(netdev_priv(ndev));
 		if (ret)
 			goto err_disable_regulator;
 	}
@@ -784,16 +799,23 @@ static int get_ephy_nodes(struct stmmac_priv *priv)
 	/* Seek for internal PHY */
 	for_each_child_of_node_scoped(mdio_internal, iphynode) {
 		gmac->ephy_clk = of_clk_get(iphynode, 0);
-		if (IS_ERR(gmac->ephy_clk))
-			continue;
-		gmac->rst_ephy = of_reset_control_get_exclusive(iphynode, NULL);
-		if (IS_ERR(gmac->rst_ephy)) {
-			ret = PTR_ERR(gmac->rst_ephy);
+		if (IS_ERR(gmac->ephy_clk)) {
+			ret = PTR_ERR(gmac->ephy_clk);
 			if (ret == -EPROBE_DEFER) {
 				of_node_put(mdio_internal);
 				return ret;
 			}
-			continue;
+			gmac->ephy_clk = NULL;
+		}
+		gmac->rst_ephy = of_reset_control_get_exclusive(iphynode, NULL);
+		if (IS_ERR(gmac->rst_ephy)) {
+			ret = PTR_ERR(gmac->rst_ephy);
+			if (ret == -EPROBE_DEFER) {
+				clk_put(gmac->ephy_clk);
+				of_node_put(mdio_internal);
+				return ret;
+			}
+			gmac->rst_ephy = NULL;
 		}
 		dev_info(priv->device, "Found internal PHY node\n");
 		of_node_put(mdio_internal);
@@ -871,7 +893,9 @@ static int mdio_mux_syscon_switch_fn(int current_child, int desired_child,
 		switch (desired_child) {
 		case DWMAC_SUN8I_MDIO_MUX_INTERNAL_ID:
 			dev_info(priv->device, "Switch mux to internal PHY");
-			val = (reg & ~H3_EPHY_MUX_MASK) | H3_EPHY_SELECT;
+			val = (reg & ~H3_EPHY_MUX_MASK);
+			if (gmac->variant != &emac_variant_h616_internal)
+				val |= H3_EPHY_SELECT;
 			gmac->use_internal_phy = true;
 			break;
 		case DWMAC_SUN8I_MDIO_MUX_EXTERNAL_ID:
@@ -892,10 +916,13 @@ static int mdio_mux_syscon_switch_fn(int current_child, int desired_child,
 		} else {
 			sun8i_dwmac_unpower_internal_phy(gmac);
 		}
-		/* After changing syscon value, the MAC need reset or it will
+		/* After changing syscon value, the MAC needs reset or it will
 		 * use the last value (and so the last PHY set).
+		 * For internal PHY, the MAC reset will timeout because the PHY
+		 * is not yet enabled/clocked. Delay the reset to dwmac_init.
 		 */
-		ret = sun8i_dwmac_reset(priv);
+		if (!gmac->use_internal_phy)
+			ret = sun8i_dwmac_reset(priv);
 	}
 	return ret;
 }
@@ -1000,9 +1027,13 @@ static int sun8i_dwmac_set_syscon(struct device *dev,
 
 static void sun8i_dwmac_unset_syscon(struct sunxi_priv_data *gmac)
 {
-	if (gmac->variant->soc_has_internal_phy)
-		regmap_field_write(gmac->regmap_field,
-				   (H3_EPHY_SHUTDOWN | H3_EPHY_SELECT));
+	if (gmac->variant->soc_has_internal_phy) {
+		u32 val = H3_EPHY_SHUTDOWN;
+
+		if (gmac->variant != &emac_variant_h616_internal)
+			val |= H3_EPHY_SELECT;
+		regmap_field_write(gmac->regmap_field, val);
+	}
 }
 
 static void sun8i_dwmac_exit(struct device *dev, void *priv)
@@ -1111,6 +1142,7 @@ static int sun8i_dwmac_probe(struct platform_device *pdev)
 	struct stmmac_priv *priv;
 	struct net_device *ndev;
 	struct regmap *regmap;
+	u32 syscon_idx = 0;
 	int ret;
 
 	ret = stmmac_get_platform_resources(pdev, &stmmac_res);
@@ -1163,8 +1195,15 @@ static int sun8i_dwmac_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	ret = of_property_read_u32_index(pdev->dev.of_node, "syscon", 1,
+					 &syscon_idx);
 	gmac->regmap_field = devm_regmap_field_alloc(dev, regmap,
-						     *gmac->variant->syscon_field);
+						     (const struct reg_field) {
+							.reg = gmac->variant->syscon_field->reg +
+							       syscon_idx * sizeof(u32),
+							.lsb = gmac->variant->syscon_field->lsb,
+							.msb = gmac->variant->syscon_field->msb,
+						     });
 	if (IS_ERR(gmac->regmap_field)) {
 		ret = PTR_ERR(gmac->regmap_field);
 		dev_err(dev, "Unable to map syscon register: %d\n", ret);
@@ -1278,6 +1317,12 @@ static const struct of_device_id sun8i_dwmac_match[] = {
 		.data = &emac_variant_a64 },
 	{ .compatible = "allwinner,sun50i-h6-emac",
 		.data = &emac_variant_h6 },
+	{ .compatible = "allwinner,sun50i-h616-emac",
+		.data = &emac_variant_h6 },
+	{ .compatible = "allwinner,sun50i-h616-emac1",
+		.data = &emac_variant_h6 },
+	{ .compatible = "allwinner,sun50i-h616-internal-emac",
+		.data = &emac_variant_h616_internal },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, sun8i_dwmac_match);
