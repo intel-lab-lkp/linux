@@ -546,6 +546,52 @@ static void mv_cesa_remove(struct platform_device *pdev)
 	mv_cesa_remove_algs(cesa);
 
 	cesa_dev = NULL;
+
+	for (int i = 0; i < cesa->caps->nengines; i++) {
+		struct mv_cesa_engine *engine = &cesa->engines[i];
+		struct crypto_async_request *req;
+
+		/*
+		 * Stop the engine before releasing resources so it no longer
+		 * issues DMA to the SRAM region or to request scatterlists
+		 * that are about to be unmapped.
+		 */
+		writel(0, engine->regs + CESA_SA_INT_MSK);
+		writel(0, engine->regs + CESA_SA_CMD);
+		writel(0, engine->regs + CESA_TDMA_CONTROL);
+
+		spin_lock_bh(&engine->lock);
+		/*
+		 * Complete the request currently in flight and drain the
+		 * pending and already-processed queues with an error so that
+		 * waiters do not block indefinitely when the device is unbound
+		 * while requests are still outstanding.
+		 */
+		if (engine->req) {
+			req = engine->req;
+			engine->req = NULL;
+			spin_unlock_bh(&engine->lock);
+			mv_cesa_complete_req(crypto_tfm_ctx(req->tfm), req,
+					     -ENOENT);
+			spin_lock_bh(&engine->lock);
+		}
+
+		while ((req = crypto_dequeue_request(&engine->queue)) != NULL) {
+			spin_unlock_bh(&engine->lock);
+			mv_cesa_complete_req(crypto_tfm_ctx(req->tfm), req,
+					     -ENOENT);
+			spin_lock_bh(&engine->lock);
+		}
+
+		while ((req = mv_cesa_engine_dequeue_complete_request(engine))
+		       != NULL) {
+			spin_unlock_bh(&engine->lock);
+			mv_cesa_complete_req(crypto_tfm_ctx(req->tfm), req,
+					     -ENOENT);
+			spin_lock_bh(&engine->lock);
+		}
+		spin_unlock_bh(&engine->lock);
+	}
 }
 
 static const struct platform_device_id mv_cesa_plat_id_table[] = {
