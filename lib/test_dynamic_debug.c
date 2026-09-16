@@ -28,25 +28,45 @@
 #endif
 
 #include <linux/module.h>
+#include <linux/sched.h>
 
-/* re-gen output by reading or writing sysfs node: do_prints */
+/* re-trigger debug output by reading or writing sysfs nodes: do_classes or do_bulk */
+static void do_classes(unsigned int); /* device under test */
+static void do_bulk(unsigned int);    /* device under test */
 
-static void do_prints(void); /* device under test */
-static int param_set_do_prints(const char *instr, const struct kernel_param *kp)
+static int param_set_do_repeats(const char *instr, const struct kernel_param *kp)
 {
-	do_prints();
+	int rc;
+	unsigned int ct;
+	void (*repeat_fn)(unsigned int) = kp->arg;
+
+	rc = kstrtouint(instr, 0, &ct);
+	if (rc) {
+		pr_err("expecting numeric input, using 1 instead\n");
+		ct = 1;
+	}
+
+	repeat_fn(ct);
+
 	return 0;
 }
-static int param_get_do_prints(char *buffer, const struct kernel_param *kp)
+
+static int param_get_do_repeats(char *buffer, const struct kernel_param *kp)
 {
-	do_prints();
-	return scnprintf(buffer, PAGE_SIZE, "did do_prints\n");
+	void (*repeat_fn)(unsigned int) = kp->arg;
+
+	repeat_fn(1);
+
+	return scnprintf(buffer, PAGE_SIZE, "did 1 %s\n", kp->name);
 }
-static const struct kernel_param_ops param_ops_do_prints = {
-	.set = param_set_do_prints,
-	.get = param_get_do_prints,
+
+static const struct kernel_param_ops param_ops_do_repeats = {
+	.set = param_set_do_repeats,
+	.get = param_get_do_repeats,
 };
-module_param_cb(do_prints, &param_ops_do_prints, NULL, 0600);
+
+module_param_cb(do_classes, &param_ops_do_repeats, do_classes, 0600);
+module_param_cb(do_bulk, &param_ops_do_repeats, do_bulk, 0600);
 
 /*
  * Using the CLASSMAP api:
@@ -103,7 +123,10 @@ enum cat_disjoint_bits {
 	D2_DRMRES };
 
 /* numeric verbosity, V2 > V1 related.  V1 is > D2_DRMRES */
-enum cat_level_num { V1 = 16, V2, V3, V4, V5, V6, V7 };
+enum cat_level_num { V1 = 16, V2, V3, V4, V5, V6, V7, V8 };
+
+/* test _USE_ w offset */
+enum cat_level_offset { Vu1 = V1 + 8, Vu2, Vu3, Vu4, Vu5, Vu6, Vu7, Vu8 };
 
 /* recapitulate DRM's multi-classmap setup */
 #if !defined(TEST_DYNAMIC_DEBUG_SUBMOD)
@@ -126,7 +149,7 @@ DYNAMIC_DEBUG_CLASSMAP_DEFINE(map_disjoint_bits, DD_CLASS_TYPE_DISJOINT_BITS,
 			      "D2_DRMRES");
 
 DYNAMIC_DEBUG_CLASSMAP_DEFINE(map_level_num, DD_CLASS_TYPE_LEVEL_NUM,
-			      V1, "V1", "V2", "V3", "V4", "V5", "V6", "V7");
+			      V1, "V1", "V2", "V3", "V4", "V5", "V6", "V7", "V8");
 
 #ifdef FORCE_CLASSID_CONFLICT
 /*
@@ -135,18 +158,6 @@ DYNAMIC_DEBUG_CLASSMAP_DEFINE(map_level_num, DD_CLASS_TYPE_LEVEL_NUM,
  */
 DYNAMIC_DEBUG_CLASSMAP_DEFINE(classid_range_conflict, 0, D2_CORE + 1, "D3_CORE");
 #endif
-
-#else /* TEST_DYNAMIC_DEBUG_SUBMOD */
-
-/*
- * in submod/drm-drivers, use the classmaps defined in top/parent
- * module above.
- */
-
-DYNAMIC_DEBUG_CLASSMAP_USE(map_disjoint_bits);
-DYNAMIC_DEBUG_CLASSMAP_USE_(map_level_num, 7);
-
-enum cat_level_offset { Vu1 = V1 + 7, Vu2, Vu3, Vu4, Vu5, Vu6, Vu7 };
 
 #if defined(DD_MACRO_ARGCHECK)
 /*
@@ -160,6 +171,19 @@ DYNAMIC_DEBUG_CLASSMAP_DEFINE(fail_emptyclass, 0, 0 /* ,empty */);
 DYNAMIC_DEBUG_CLASSMAP_DEFINE(fail_maptype, 3, 10, "no such type");
 DYNAMIC_DEBUG_CLASSMAP_DEFINE(fail_base_len, 0, 60,
 			      "base", "plus", "classes", "length", "too-big");
+#endif
+
+#else /* TEST_DYNAMIC_DEBUG_SUBMOD */
+
+/*
+ * in submod/drm-drivers, use the classmaps defined in top/parent
+ * module above.
+ */
+
+DYNAMIC_DEBUG_CLASSMAP_USE(map_disjoint_bits);
+DYNAMIC_DEBUG_CLASSMAP_USE_(map_level_num, 7);
+
+#if defined(DD_MACRO_ARGCHECK)
 DYNAMIC_DEBUG_CLASSMAP_USE_(fail_offset_big, 100);
 #endif /* DD_MACRO_ARGCHECK */
 
@@ -202,6 +226,7 @@ static void do_levels(void)
 	prdbg(V5);
 	prdbg(V6);
 	prdbg(V7);
+	prdbg(V8);
 #else
 	prdbg(Vu1);
 	prdbg(Vu2);
@@ -210,20 +235,46 @@ static void do_levels(void)
 	prdbg(Vu5);
 	prdbg(Vu6);
 	prdbg(Vu7);
+	prdbg(Vu8);
 #endif
 }
 
-static void do_prints(void)
+static void do_classes(unsigned int ct)
 {
-	pr_debug("do_prints:\n");
-	do_cats();
-	do_levels();
+	/* maybe clamp this */
+	pr_debug("do_classes %u times:\n", ct);
+	for (; ct; ct--) {
+		do_cats();
+		do_levels();
+		cond_resched();
+	}
+}
+
+static void do_bulk(unsigned int ct)
+{
+	unsigned int i;
+
+	pr_debug("do_bulk %u times:\n", ct);
+	for (i = 0; i < ct; i++) {
+		pr_debug("bulk msg %u.0\n", i + 1);
+		pr_debug("bulk msg %u.1\n", i + 1);
+		pr_debug("bulk msg %u.2\n", i + 1);
+		pr_debug("bulk msg %u.3\n", i + 1);
+		pr_debug("bulk msg %u.4\n", i + 1);
+		pr_debug("bulk msg %u.5\n", i + 1);
+		pr_debug("bulk msg %u.6\n", i + 1);
+		pr_debug("bulk msg %u.7\n", i + 1);
+		pr_debug("bulk msg %u.8\n", i + 1);
+		pr_debug("bulk msg %u.9\n", i + 1);
+		cond_resched();
+	}
 }
 
 static int __init test_dynamic_debug_init(void)
 {
 	pr_debug("init start\n");
-	do_prints();
+	do_classes(1);
+	do_bulk(1);
 	pr_debug("init done\n");
 	return 0;
 }
