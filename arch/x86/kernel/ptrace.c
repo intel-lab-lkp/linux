@@ -192,7 +192,7 @@ static u16 get_segment_reg(struct task_struct *task, unsigned long offset)
 		if (task == current)
 			savesegment(gs, retval);
 		else
-			retval = task->thread.gs;
+			retval = task->thread.gsindex;
 	}
 	return retval;
 }
@@ -230,7 +230,7 @@ static int set_segment_reg(struct task_struct *task,
 		break;
 
 	case offsetof(struct user_regs_struct, gs):
-		task->thread.gs = value;
+		task->thread.gsindex = value;
 	}
 
 	return 0;

@@ -172,7 +172,7 @@ __switch_to(struct task_struct *prev_p, struct task_struct *next_p)
 	 * used %fs or %gs (it does not today), or if the kernel is
 	 * running inside of a hypervisor layer.
 	 */
-	savesegment(gs, prev->gs);
+	savesegment(gs, prev->gsindex);
 
 	/*
 	 * Load the per-thread Thread-Local Storage descriptor.
@@ -202,8 +202,8 @@ __switch_to(struct task_struct *prev_p, struct task_struct *next_p)
 	/*
 	 * Restore %gs if needed (which is common)
 	 */
-	if (prev->gs | next->gs)
-		loadsegment(gs, next->gs);
+	if (prev->gsindex | next->gsindex)
+		loadsegment(gs, next->gsindex);
 
 	raw_cpu_write(current_task, next_p);
 
