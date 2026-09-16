@@ -348,6 +348,8 @@ static int rhashtable_rehash_table(struct rhashtable *ht)
 	/* Publish the new table pointer. */
 	rcu_assign_pointer(ht->tbl, new_tbl);
 
+	old_tbl->dying = true;
+
 	spin_lock(&ht->lock);
 	list_for_each_entry(walker, &old_tbl->walkers, list)
 		walker->tbl = NULL;
@@ -356,8 +358,8 @@ static int rhashtable_rehash_table(struct rhashtable *ht)
 	 * table, and thus no references to the old table will
 	 * remain.
 	 * We do this inside the locked region so that
-	 * rhashtable_walk_stop() can use rcu_head_after_call_rcu()
-	 * to check if it should not re-link the table.
+	 * rhashtable_walk_stop() can check tbl->dying before it
+	 * re-links the table.
 	 */
 	call_rcu(&old_tbl->rcu, bucket_table_free_rcu);
 	spin_unlock(&ht->lock);
@@ -433,6 +435,9 @@ static void rht_deferred_worker(struct work_struct *work)
 	mutex_lock(&ht->mutex);
 
 	tbl = rht_dereference(ht->tbl, ht);
+	if (!tbl)
+		goto out;
+
 	tbl = rhashtable_last_table(ht, tbl);
 
 	if (rht_grow_above_75(ht, tbl))
@@ -449,18 +454,11 @@ static void rht_deferred_worker(struct work_struct *work)
 		err = err ?: nerr;
 	}
 
-	mutex_unlock(&ht->mutex);
-
-	/*
-	 * Re-arm via @run_work, not @run_irq_work.
-	 * rhashtable_free_and_destroy() drains async work as irq_work_sync()
-	 * followed by cancel_work_sync(). If this site queued irq_work while
-	 * cancel_work_sync() was waiting for us, irq_work_sync() would already
-	 * have returned and the stale irq_work could fire post-teardown.
-	 * cancel_work_sync() natively handles self-requeue on @run_work.
-	 */
 	if (err)
-		schedule_work(&ht->run_work);
+		irq_work_queue(&ht->run_irq_work);
+
+out:
+	mutex_unlock(&ht->mutex);
 }
 
 /*
@@ -487,6 +485,8 @@ static int rhashtable_insert_rehash(struct rhashtable *ht,
 	int err;
 
 	old_tbl = rht_dereference_rcu(ht->tbl, ht);
+	if (!old_tbl)
+		return -EAGAIN;
 
 	size = tbl->size;
 
@@ -634,6 +634,8 @@ static void *rhashtable_try_insert(struct rhashtable *ht, const void *key,
 	void *data;
 
 	new_tbl = rcu_dereference(ht->tbl);
+	if (!new_tbl)
+		return ERR_PTR(-ESTALE);
 
 	do {
 		tbl = new_tbl;
@@ -777,6 +779,8 @@ void *rhashtable_next_key(struct rhashtable *ht, const void *prev_key)
 		return ERR_PTR(-EOPNOTSUPP);
 
 	tbl = rht_dereference_rcu(ht->tbl, ht);
+	if (!tbl)
+		return NULL;
 	do {
 		he = __rhashtable_next_in_table(ht, tbl, prev_key);
 		if (!IS_ERR_OR_NULL(he))
@@ -818,13 +822,15 @@ void rhashtable_walk_enter(struct rhashtable *ht, struct rhashtable_iter *iter)
 	iter->p = NULL;
 	iter->slot = 0;
 	iter->skip = 0;
-	iter->end_of_table = 0;
 
 	spin_lock(&ht->lock);
 	iter->walker.tbl =
 		rcu_dereference_protected(ht->tbl, lockdep_is_held(&ht->lock));
-	list_add(&iter->walker.list, &iter->walker.tbl->walkers);
+	if (iter->walker.tbl)
+		list_add(&iter->walker.list, &iter->walker.tbl->walkers);
 	spin_unlock(&ht->lock);
+
+	iter->end_of_table = !iter->walker.tbl;
 }
 EXPORT_SYMBOL_GPL(rhashtable_walk_enter);
 
@@ -878,6 +884,10 @@ int rhashtable_walk_start_check(struct rhashtable_iter *iter)
 		return 0;
 	if (!iter->walker.tbl) {
 		iter->walker.tbl = rht_dereference_rcu(ht->tbl, ht);
+		if (!iter->walker.tbl) {
+			iter->end_of_table = true;
+			return 0;
+		}
 		iter->slot = 0;
 		iter->skip = 0;
 		iter->p = NULL;
@@ -1089,7 +1099,7 @@ void rhashtable_walk_stop(struct rhashtable_iter *iter)
 	ht = iter->ht;
 
 	spin_lock(&ht->lock);
-	if (rcu_head_after_call_rcu(&tbl->rcu, bucket_table_free_rcu))
+	if (tbl->dying)
 		/* This bucket table is being freed, don't re-link it. */
 		iter->walker.tbl = NULL;
 	else
@@ -1268,45 +1278,12 @@ static void rhashtable_free_one(struct rhashtable *ht, struct rhash_head *obj,
 	} while (list);
 }
 
-/**
- * rhashtable_free_and_destroy - free elements and destroy hash table
- * @ht:		the hash table to destroy
- * @free_fn:	callback to release resources of element
- * @arg:	pointer passed to free_fn
- *
- * Stops an eventual async resize. If defined, invokes free_fn for each
- * element to releasal resources. Please note that RCU protected
- * readers may still be accessing the elements. Releasing of resources
- * must occur in a compatible manner. Then frees the bucket array.
- *
- * This function will eventually sleep to wait for an async resize
- * to complete. The caller is responsible that no further write operations
- * occurs in parallel.
- *
- * After cancel_work_sync() has returned, the deferred rehash worker is
- * quiesced and, per the contract above, no other concurrent access to the
- * rhashtable is possible. The tables are therefore owned exclusively by
- * this function and can be walked without ht->mutex held.
- */
-void rhashtable_free_and_destroy(struct rhashtable *ht,
-				 void (*free_fn)(void *ptr, void *arg),
-				 void *arg)
+static void rhashtable_free(struct rhashtable *ht, struct bucket_table *tbl,
+			    void (*free_fn)(void *ptr, void *arg), void *arg)
 {
-	struct bucket_table *tbl, *next_tbl;
+	struct bucket_table *next_tbl;
 	unsigned int i;
 
-	irq_work_sync(&ht->run_irq_work);
-	cancel_work_sync(&ht->run_work);
-
-	/*
-	 * Do NOT take ht->mutex here. The rehash worker establishes
-	 * ht->mutex -> fs_reclaim via GFP_KERNEL bucket allocation under
-	 * the mutex; callers on the reclaim path (e.g. simple_xattr_ht_free()
-	 * from evict() under the dcache shrinker for shmem/kernfs/pidfs
-	 * inodes) would otherwise close a circular dependency
-	 * fs_reclaim -> ht->mutex.
-	 */
-	tbl = rcu_dereference_raw(ht->tbl);
 restart:
 	if (free_fn) {
 		for (i = 0; i < tbl->size; i++) {
@@ -1330,6 +1307,36 @@ restart:
 		tbl = next_tbl;
 		goto restart;
 	}
+}
+
+/**
+ * rhashtable_free_and_destroy - free elements and destroy hash table
+ * @ht:		the hash table to destroy
+ * @free_fn:	callback to release resources of element
+ * @arg:	pointer passed to free_fn
+ *
+ * Stops an eventual async resize. If defined, invokes free_fn for each
+ * element to releasal resources. Please note that RCU protected
+ * readers may still be accessing the elements. Releasing of resources
+ * must occur in a compatible manner. Then frees the bucket array.
+ *
+ * This function will eventually sleep to wait for an async resize
+ * to complete. The caller is responsible that no further write operations
+ * occurs in parallel.
+ *
+ * After disable_work_sync() has returned, the deferred rehash worker is
+ * quiesced and, per the contract above, no other concurrent access to the
+ * rhashtable is possible. The tables are therefore owned exclusively by
+ * this function and can be walked without ht->mutex held.
+ */
+void rhashtable_free_and_destroy(struct rhashtable *ht,
+				 void (*free_fn)(void *ptr, void *arg),
+				 void *arg)
+{
+	disable_work_sync(&ht->run_work);
+	irq_work_sync(&ht->run_irq_work);
+
+	rhashtable_free(ht, rcu_dereference_raw(ht->tbl), free_fn, arg);
 }
 EXPORT_SYMBOL_GPL(rhashtable_free_and_destroy);
 
@@ -1407,3 +1414,79 @@ struct rhash_lock_head __rcu **rht_bucket_nested_insert(
 
 }
 EXPORT_SYMBOL_GPL(rht_bucket_nested_insert);
+
+/**
+ * rhashtable_flush_and_free - detach and discard all current elements
+ * @ht:		the hash table to flush
+ * @free_fn:	callback to release resources of an element, may be %NULL
+ * @arg:	pointer passed to free_fn
+ *
+ * Swaps the bucket table backing @ht for a new, empty table.
+ *
+ * The detached table is then walked and every element found is
+ * unlinked, and, if @free_fn is given, handed to it for release.
+ *
+ * Unlike rhashtable_destroy(), @ht is left fully initialized and may
+ * continue to be used for lookups, insertions, and removals.
+ *
+ * This function may sleep, it cannot be called from atomic context or
+ * RCU read-side critical sections.
+ *
+ * The caller must not make concurrent rhashtable_flush_and_free calls.
+ * That is, a subsequent call can only be made once the first call has
+ * returned.
+ */
+void rhashtable_flush_and_free(struct rhashtable *ht,
+			       void (*free_fn)(void *ptr, void *arg),
+			       void *arg)
+{
+	struct bucket_table *tbl, *old_tbl, *new_tbl;
+	struct rhashtable_walker *walker;
+
+	new_tbl = bucket_table_alloc(ht, rounded_hashtable_size(&ht->p),
+				     GFP_KERNEL);
+	if (!new_tbl)
+		new_tbl = bucket_table_alloc(ht, ht->p.min_size,
+					     GFP_KERNEL | __GFP_NOFAIL);
+
+	mutex_lock(&ht->mutex);
+	old_tbl = rht_dereference(ht->tbl, ht);
+	RCU_INIT_POINTER(ht->tbl, NULL);
+	mutex_unlock(&ht->mutex);
+
+	/* Wait for insertions/removals on the old ht->tbl to complete. */
+	synchronize_rcu();
+
+	/* Cancel resizes/rehashes. */
+	irq_work_sync(&ht->run_irq_work);
+	cancel_work_sync(&ht->run_work);
+
+	atomic_set(&ht->nelems, 0);
+
+	/* No need for mutex as rehashes have all stopped. */
+	rcu_assign_pointer(ht->tbl, new_tbl);
+
+	/* Detach walkers from the old hash table. */
+	tbl = old_tbl;
+	spin_lock(&ht->lock);
+	do {
+		tbl->dying = true;
+		list_for_each_entry(walker, &tbl->walkers, list) {
+			struct rhashtable_iter *iter = container_of(
+				walker, struct rhashtable_iter, walker);
+
+			walker->tbl = NULL;
+			iter->end_of_table = true;
+			iter->p = NULL;
+		}
+
+		tbl = rcu_dereference_raw(tbl->future_tbl);
+	} while (tbl);
+	spin_unlock(&ht->lock);
+
+	/* Wait for walkers on old table to complete. */
+	synchronize_rcu();
+
+	rhashtable_free(ht, old_tbl, free_fn, arg);
+}
+EXPORT_SYMBOL_GPL(rhashtable_flush_and_free);
