@@ -412,8 +412,10 @@ static void usbhsc_power_ctrl(struct usbhs_priv *priv, int enable)
 		pm_runtime_get_sync(dev);
 
 		/* enable clks */
-		if (usbhsc_clk_prepare_enable(priv))
+		if (usbhsc_clk_prepare_enable(priv)) {
+			pm_runtime_put_sync(dev);
 			return;
+		}
 
 		/* enable platform power */
 		usbhs_platform_call(priv, power_ctrl, pdev, priv->base, enable);
