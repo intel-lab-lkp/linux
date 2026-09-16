@@ -2693,6 +2693,7 @@ static int ibmvfc_cancel_all_mq(struct scsi_device *sdev, int type)
 	unsigned long flags;
 	int num_hwq, i;
 	int fail = 0;
+	int rc;
 	LIST_HEAD(cancelq);
 	u16 status;
 
@@ -2719,7 +2720,18 @@ static int ibmvfc_cancel_all_mq(struct scsi_device *sdev, int type)
 				return -ENOMEM;
 			}
 			evt->sync_iu = &queues[i].cancel_rsp;
-			ibmvfc_send_event(evt, vhost, default_timeout);
+			rc = ibmvfc_send_event(evt, vhost, default_timeout);
+			if (rc) {
+				spin_unlock(queues[i].q_lock);
+				spin_unlock_irqrestore(&vhost->host->host_lock, flags);
+				sdev_printk(KERN_ERR, sdev, "Failed to send cancel event. rc=%d\n", rc);
+				list_for_each_entry_safe(evt, temp, &cancelq, cancel) {
+					wait_for_completion(&evt->comp);
+					list_del(&evt->cancel);
+					ibmvfc_free_event(evt);
+				}
+				return 0;
+			}
 			list_add_tail(&evt->cancel, &cancelq);
 		}
 
