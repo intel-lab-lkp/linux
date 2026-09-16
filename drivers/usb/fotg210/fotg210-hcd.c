@@ -186,6 +186,11 @@ int fotg210_hcd_remove(struct platform_device *pdev)
 	return 0;
 }
 
+void fotg210_hcd_shutdown(struct platform_device *pdev)
+{
+	usb_hcd_platform_shutdown(pdev);
+}
+
 int fotg210_hcd_suspend(struct device *dev)
 {
 #ifdef CONFIG_PM

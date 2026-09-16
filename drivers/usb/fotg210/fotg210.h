@@ -26,6 +26,7 @@ void fotg210_vbus(struct fotg210 *fotg, bool enable);
 #ifdef CONFIG_USB_FOTG210_HCD
 int fotg210_hcd_probe(struct platform_device *pdev, struct fotg210 *fotg);
 int fotg210_hcd_remove(struct platform_device *pdev);
+void fotg210_hcd_shutdown(struct platform_device *pdev);
 int fotg210_hcd_suspend(struct device *dev);
 int fotg210_hcd_resume(struct device *dev);
 int fotg210_hcd_init(void);
@@ -40,6 +41,10 @@ static inline int fotg210_hcd_probe(struct platform_device *pdev,
 static inline int fotg210_hcd_remove(struct platform_device *pdev)
 {
 	return -ENODEV;
+}
+
+static inline void fotg210_hcd_shutdown(struct platform_device *pdev)
+{
 }
 
 static inline int fotg210_hcd_suspend(struct device *dev)

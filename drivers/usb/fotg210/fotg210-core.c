@@ -259,7 +259,7 @@ static void fotg210_remove(struct platform_device *pdev)
 static void fotg210_shutdown(struct platform_device *pdev)
 {
 	if (usb_get_dr_mode(&pdev->dev) != USB_DR_MODE_PERIPHERAL)
-		usb_hcd_platform_shutdown(pdev);
+		fotg210_hcd_shutdown(pdev);
 }
 
 static int fotg210_suspend(struct device *dev)
