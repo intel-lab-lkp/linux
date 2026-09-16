@@ -75,7 +75,7 @@ enabled
     - must be set (0/1)
 
 id
-    - must be set [0,MAX_PHYS)]
+    - must be set [0,MAX_PHYS)
 
 class, proto, type, role, oob_mode, linkrate
     - must be set
