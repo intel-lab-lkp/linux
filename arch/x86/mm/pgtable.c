@@ -713,7 +713,7 @@ int pmd_clear_huge(pmd_t *pmd)
  * Context: The PUD range has been unmapped and TLB purged.
  * Return: 1 if clearing the entry succeeded. 0 otherwise.
  *
- * NOTE: Callers must allow a single page allocation.
+ * NOTE: Callers must allow a single non-blocking page allocation.
  */
 int pud_free_pmd_page(pud_t *pud, unsigned long addr)
 {
@@ -722,7 +722,13 @@ int pud_free_pmd_page(pud_t *pud, unsigned long addr)
 	int i;
 
 	pmd = pud_pgtable(*pud);
-	pmd_sv = (pmd_t *)__get_free_page(GFP_KERNEL);
+	/*
+	 * The only caller, vmap_try_huge_pud(), holds the init_mm mmap read
+	 * lock, which reclaim can take via set_memory_*().  Do not enter
+	 * reclaim from here.  Failing is fine: the caller then keeps the
+	 * existing PMD table instead of installing a huge PUD mapping.
+	 */
+	pmd_sv = (pmd_t *)__get_free_page(GFP_NOWAIT);
 	if (!pmd_sv)
 		return 0;
 
