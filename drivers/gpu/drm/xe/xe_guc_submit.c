@@ -2984,17 +2984,17 @@ static void guc_exec_queue_start(struct xe_exec_queue *q)
 		trace_xe_exec_queue_resubmit(q);
 		if (job) {
 			for (i = 0; i < q->width; ++i) {
+				u32 replay_head = job->ptrs[i].head;
+
 				/*
-				 * The GuC context is unregistered at this point
-				 * time, adjusting software ring tail ensures
-				 * jobs are rewritten in original placement,
-				 * adjusting LRC tail ensures the newly loaded
-				 * GuC / contexts only view the LRC tail
-				 * increasing as jobs are written out.
+				 * A started job may have advanced the saved LRC
+				 * head past its original ring position. Rewind
+				 * both head and tail before rewriting and
+				 * replaying the pending jobs.
 				 */
-				q->lrc[i]->ring.tail = job->ptrs[i].head;
-				xe_lrc_set_ring_tail(q->lrc[i],
-						     xe_lrc_ring_head(q->lrc[i]));
+				q->lrc[i]->ring.tail = replay_head;
+				xe_lrc_set_ring_head(q->lrc[i], replay_head);
+				xe_lrc_set_ring_tail(q->lrc[i], replay_head);
 			}
 		}
 		xe_sched_resubmit_jobs(sched);
