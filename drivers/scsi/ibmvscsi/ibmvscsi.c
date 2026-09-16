@@ -2341,26 +2341,40 @@ static int ibmvscsi_probe(struct vio_dev *vdev, const struct vio_device_id *id)
 	return -1;
 }
 
-static void ibmvscsi_remove(struct vio_dev *vdev)
+static void ibmvscsi_quiesce(struct ibmvscsi_host_data *hostdata, int scsi_error_code)
 {
-	struct ibmvscsi_host_data *hostdata = dev_get_drvdata(&vdev->dev);
-
-	srp_remove_host(hostdata->host);
-	scsi_remove_host(hostdata->host);
-
-	purge_requests(hostdata, DID_ERROR);
-	release_event_pool(&hostdata->pool, hostdata);
+	ibmvscsi_set_request_limit(hostdata, 0);
+	kthread_stop(hostdata->work_thread);
 
 	ibmvscsi_release_crq_queue(&hostdata->queue, hostdata,
 					max_events);
 
-	kthread_stop(hostdata->work_thread);
+	purge_requests(hostdata, scsi_error_code);
+
+	release_event_pool(&hostdata->pool, hostdata);
 	unmap_persist_bufs(hostdata);
+}
+
+static void ibmvscsi_shutdown(struct vio_dev *vdev)
+{
+	struct ibmvscsi_host_data *hostdata = dev_get_drvdata(&vdev->dev);
+
+	scsi_block_requests(hostdata->host);
+	ibmvscsi_quiesce(hostdata, DID_REQUEUE);
+}
+
+static void ibmvscsi_remove(struct vio_dev *vdev)
+{
+	struct ibmvscsi_host_data *hostdata = dev_get_drvdata(&vdev->dev);
+
+	ibmvscsi_quiesce(hostdata, DID_ERROR);
 
 	spin_lock(&ibmvscsi_driver_lock);
 	list_del(&hostdata->host_list);
 	spin_unlock(&ibmvscsi_driver_lock);
 
+	srp_remove_host(hostdata->host);
+	scsi_remove_host(hostdata->host);
 	scsi_host_put(hostdata->host);
 }
 
@@ -2398,6 +2412,7 @@ static struct vio_driver ibmvscsi_driver = {
 	.id_table = ibmvscsi_device_table,
 	.probe = ibmvscsi_probe,
 	.remove = ibmvscsi_remove,
+	.shutdown = ibmvscsi_shutdown,
 	.get_desired_dma = ibmvscsi_get_desired_dma,
 	.name = "ibmvscsi",
 	.pm = &ibmvscsi_pm_ops,
