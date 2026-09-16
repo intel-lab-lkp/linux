@@ -69,6 +69,7 @@
 
 struct nfqnl_instance {
 	struct hlist_node hlist;		/* global list of queues */
+	struct hlist_node hlist_portid;		/* global list of queues, by portid */
 	struct rhashtable nfqnl_packet_map;
 	struct rcu_work	rwork;
 
@@ -101,6 +102,7 @@ static unsigned int nfnl_queue_net_id __read_mostly;
 struct nfnl_queue_net {
 	spinlock_t instances_lock;
 	struct hlist_head instance_table[INSTANCE_BUCKETS];
+	struct hlist_head instance_table_portid[INSTANCE_BUCKETS];
 };
 
 static struct nfnl_queue_net *nfnl_queue_pernet(struct net *net)
@@ -111,6 +113,11 @@ static struct nfnl_queue_net *nfnl_queue_pernet(struct net *net)
 static inline u_int8_t instance_hashfn(u_int16_t queue_num)
 {
 	return ((queue_num >> 8) ^ queue_num) % INSTANCE_BUCKETS;
+}
+
+static inline u8 instance_portid_hashfn(u32 portid)
+{
+	return portid % INSTANCE_BUCKETS;
 }
 
 static const struct rhashtable_params nfqnl_rhashtable_params = {
@@ -131,6 +138,20 @@ instance_lookup(struct nfnl_queue_net *q, u_int16_t queue_num)
 	head = &q->instance_table[instance_hashfn(queue_num)];
 	hlist_for_each_entry_rcu(inst, head, hlist) {
 		if (inst->queue_num == queue_num)
+			return inst;
+	}
+	return NULL;
+}
+
+static struct nfqnl_instance *
+instance_lookup_by_portid(struct nfnl_queue_net *q, u32 portid)
+{
+	struct nfqnl_instance *inst;
+	struct hlist_head *head;
+
+	head = &q->instance_table[instance_portid_hashfn(portid)];
+	hlist_for_each_entry(inst, head, hlist) {
+		if (inst->peer_portid == portid)
 			return inst;
 	}
 	return NULL;
@@ -160,7 +181,8 @@ instance_create(struct nfnl_queue_net *q, u_int16_t queue_num, u32 portid)
 		goto out_free;
 
 	spin_lock(&q->instances_lock);
-	if (instance_lookup(q, queue_num)) {
+	if (instance_lookup(q, queue_num) ||
+	    instance_lookup_by_portid(q, queue_num)) {
 		err = -EEXIST;
 		goto out_unlock;
 	}
@@ -172,6 +194,8 @@ instance_create(struct nfnl_queue_net *q, u_int16_t queue_num, u32 portid)
 
 	h = instance_hashfn(queue_num);
 	hlist_add_head_rcu(&inst->hlist, &q->instance_table[h]);
+	h = instance_portid_hashfn(portid);
+	hlist_add_head(&inst->hlist_portid, &q->instance_table_portid[h]);
 
 	spin_unlock(&q->instances_lock);
 
@@ -208,6 +232,7 @@ static void
 __instance_destroy(struct nfqnl_instance *inst)
 {
 	hlist_del_rcu(&inst->hlist);
+	hlist_del(&inst->hlist_portid);
 
 	INIT_RCU_WORK(&inst->rwork, instance_destroy_work);
 	queue_rcu_work(nfq_cleanup_wq, &inst->rwork);
@@ -2119,8 +2144,10 @@ static int __net_init nfnl_queue_net_init(struct net *net)
 	unsigned int i;
 	struct nfnl_queue_net *q = nfnl_queue_pernet(net);
 
-	for (i = 0; i < INSTANCE_BUCKETS; i++)
+	for (i = 0; i < INSTANCE_BUCKETS; i++) {
 		INIT_HLIST_HEAD(&q->instance_table[i]);
+		INIT_HLIST_HEAD(&q->instance_table_portid[i]);
+	}
 
 	spin_lock_init(&q->instances_lock);
 
