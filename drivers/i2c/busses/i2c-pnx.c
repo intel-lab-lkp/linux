@@ -643,20 +643,24 @@ static int i2c_pnx_probe(struct platform_device *pdev)
 	}
 #endif
 	alg_data->clk = devm_clk_get(&pdev->dev, NULL);
-	if (IS_ERR(alg_data->clk))
-		return PTR_ERR(alg_data->clk);
+	if (IS_ERR(alg_data->clk)) {
+		ret = PTR_ERR(alg_data->clk);
+		goto err_of_node;
+	}
 
 	snprintf(alg_data->adapter.name, sizeof(alg_data->adapter.name),
 		 "%s", pdev->name);
 
 	/* Register I/O resource */
 	alg_data->ioaddr = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
-	if (IS_ERR(alg_data->ioaddr))
-		return PTR_ERR(alg_data->ioaddr);
+	if (IS_ERR(alg_data->ioaddr)) {
+		ret = PTR_ERR(alg_data->ioaddr);
+		goto err_of_node;
+	}
 
 	ret = clk_prepare_enable(alg_data->clk);
 	if (ret)
-		return ret;
+		goto err_of_node;
 
 	freq = clk_get_rate(alg_data->clk);
 
@@ -706,6 +710,8 @@ static int i2c_pnx_probe(struct platform_device *pdev)
 
 out_clock:
 	clk_disable_unprepare(alg_data->clk);
+err_of_node:
+	of_node_put(alg_data->adapter.dev.of_node);
 	return ret;
 }
 
@@ -715,6 +721,7 @@ static void i2c_pnx_remove(struct platform_device *pdev)
 
 	i2c_del_adapter(&alg_data->adapter);
 	clk_disable_unprepare(alg_data->clk);
+	of_node_put(alg_data->adapter.dev.of_node);
 }
 
 #ifdef CONFIG_OF
