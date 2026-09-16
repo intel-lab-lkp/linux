@@ -501,8 +501,6 @@ static int ccs811_probe(struct i2c_client *client)
 		ret = iio_trigger_register(data->drdy_trig);
 		if (ret)
 			goto err_poweroff;
-
-		indio_dev->trig = iio_trigger_get(data->drdy_trig);
 	}
 
 	ret = iio_triggered_buffer_setup(indio_dev, NULL,
@@ -512,6 +510,9 @@ static int ccs811_probe(struct i2c_client *client)
 		dev_err(&client->dev, "triggered buffer setup failed\n");
 		goto err_trigger_unregister;
 	}
+
+	if (data->drdy_trig)
+		indio_dev->trig = iio_trigger_get(data->drdy_trig);
 
 	ret = iio_device_register(indio_dev);
 	if (ret < 0) {
