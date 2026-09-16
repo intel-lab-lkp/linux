@@ -119,6 +119,7 @@
  * @sleep_val:			time in ms to sleep while waiting for drdy
  * @ctrl_reg1:			CTRL_REG1 register shadow value
  * @data_cfg:			DATA_CFG register shadow value
+ * @ctrl_reg4:			CTRL_REG4 register value to restore on resume
  * @open_drain:			true for irq pin in open-drain mode
  */
 struct mma8452_data {
@@ -137,6 +138,7 @@ struct mma8452_data {
 	int sleep_val;
 	u8 ctrl_reg1;
 	u8 data_cfg;
+	u8 ctrl_reg4;
 	bool open_drain;
 };
 
@@ -1086,15 +1088,28 @@ static irqreturn_t mma8452_interrupt(int irq, void *p)
 {
 	struct iio_dev *indio_dev = p;
 	struct mma8452_data *data = iio_priv(indio_dev);
+	struct device *dev = &data->client->dev;
 	irqreturn_t ret = IRQ_NONE;
+	int pm_status;
 	int src;
+
+	pm_status = pm_runtime_get_if_active(dev);
+	if (pm_status == 0)
+		return IRQ_NONE; /* device is powered down */
+
+	/*
+	 * pm_status is now 1 or -EINVAL. If pm_status==1, runtime PM is enabled
+	 * and device is RPM_ACTIVE. If pm_status==-EINVAL, runtime PM is
+	 * disabled (e.g. CONFIG_PM not enabled), and we can/must assume device
+	 * is active.
+	 */
 
 	src = i2c_smbus_read_byte_data(data->client, MMA8452_INT_SRC);
 	if (src < 0)
-		return IRQ_NONE;
+		goto out_runtime_put;
 
 	if (!(src & (data->chip_info->enabled_events | MMA8452_INT_DRDY)))
-		return IRQ_NONE;
+		goto out_runtime_put;
 
 	if (src & MMA8452_INT_DRDY) {
 		iio_trigger_poll_nested(indio_dev->trig);
@@ -1119,6 +1134,10 @@ static irqreturn_t mma8452_interrupt(int irq, void *p)
 		mma8452_transient_interrupt(indio_dev);
 		ret = IRQ_HANDLED;
 	}
+
+out_runtime_put:
+	if (pm_status > 0)
+		pm_runtime_put_autosuspend(dev);
 
 	return ret;
 }
@@ -1715,7 +1734,7 @@ static int mma8452_probe(struct i2c_client *client)
 			dev_info(dev, "invalid irq type, setting default active low\n");
 			irq_flags = IRQF_TRIGGER_LOW;
 		}
-		irq_flags |= IRQF_ONESHOT;
+		irq_flags |= IRQF_ONESHOT | IRQF_SHARED;
 		ret = request_threaded_irq(client->irq, NULL, mma8452_interrupt,
 					   irq_flags, client->name, indio_dev);
 		if (ret)
@@ -1771,11 +1790,12 @@ static void mma8452_remove(struct i2c_client *client)
 
 	iio_device_unregister(indio_dev);
 
-	pm_runtime_disable(dev);
-	pm_runtime_set_suspended(dev);
-
 	if (client->irq)
 		free_irq(client->irq, indio_dev);
+	/* No irq will fire beyond this point */
+
+	pm_runtime_disable(dev);
+	pm_runtime_set_suspended(dev);
 
 	iio_triggered_buffer_cleanup(indio_dev);
 	mma8452_trigger_cleanup(indio_dev);
@@ -1787,29 +1807,67 @@ static void mma8452_remove(struct i2c_client *client)
 #ifdef CONFIG_PM
 static int mma8452_runtime_suspend(struct device *dev)
 {
-	struct iio_dev *indio_dev = i2c_get_clientdata(to_i2c_client(dev));
+	struct i2c_client *client = to_i2c_client(dev);
+	struct iio_dev *indio_dev = i2c_get_clientdata(client);
 	struct mma8452_data *data = iio_priv(indio_dev);
 	int ret;
 
-	scoped_guard(mutex, &data->lock)
-		ret = mma8452_standby(data);
+	mutex_lock(&data->lock);
+
+	ret = mma8452_standby(data);
 	if (ret < 0) {
-		dev_err(dev, "powering off device failed\n");
-		return -EAGAIN;
+		dev_err(dev, "transition to STANDBY mode failed\n");
+		ret = -EAGAIN;
+		goto out_unlock;
 	}
+
+	ret = i2c_smbus_read_byte_data(client, MMA8452_CTRL_REG4);
+	if (ret < 0) {
+		dev_warn(dev, "backing up CTRL_REG4 failed\n");
+		ret = -EAGAIN;
+		goto out_active;
+	} else
+		data->ctrl_reg4 = ret;
+
+	ret = i2c_smbus_write_byte_data(client, MMA8452_CTRL_REG4, 0);
+	if (ret) {
+		dev_warn(dev, "disabling interrupt sources (CTRL_REG4) failed\n");
+		ret = -EAGAIN;
+		goto out_active;
+	}
+
+	/*
+	 * Interrupt line should be deasserted now, so we just need ensure any
+	 * mid-flight irq is completed (will return IRQ_NONE due to
+	 * pm_status==0).
+	 */
+	if (client->irq)
+		synchronize_irq(client->irq);
 
 	ret = regulator_bulk_disable(ARRAY_SIZE(data->regs), data->regs);
 	if (ret) {
 		dev_err(dev, "failed to disable regulators\n");
-		return ret;
+		goto out_restore_ctrl_reg4;
 	}
 
+	mutex_unlock(&data->lock);
 	return 0;
+
+out_restore_ctrl_reg4:
+	if (i2c_smbus_write_byte_data(client, MMA8452_CTRL_REG4, data->ctrl_reg4))
+		dev_warn(dev, "restoring CTRL_REG4 failed\n");
+out_active:
+	if (mma8452_active(data))
+		dev_warn(dev, "failed to switch back to ACTIVE mode\n");
+out_unlock:
+	mutex_unlock(&data->lock);
+	return ret;
 }
 
 static int mma8452_runtime_resume(struct device *dev)
 {
-	struct iio_dev *indio_dev = i2c_get_clientdata(to_i2c_client(dev));
+	struct i2c_client *client = to_i2c_client(dev);
+	struct iio_dev *indio_dev = i2c_get_clientdata(client);
 	struct mma8452_data *data = iio_priv(indio_dev);
 	int ret, sleep_val;
 
@@ -1820,6 +1878,10 @@ static int mma8452_runtime_resume(struct device *dev)
 	}
 
 	ret = mma8452_set_interrupt_pin_mode(data);
+	if (ret)
+		goto runtime_resume_failed;
+
+	ret = i2c_smbus_write_byte_data(client, MMA8452_CTRL_REG4, data->ctrl_reg4);
 	if (ret)
 		goto runtime_resume_failed;
 
