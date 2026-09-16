@@ -6526,7 +6526,10 @@ static void ibmvfc_reg_sub_crqs(struct ibmvfc_host *vhost,
 		if (ibmvfc_register_channel(vhost, channels, i)) {
 			for (j = i; j > 0; j--)
 				ibmvfc_deregister_channel(vhost, channels, j - 1);
-			vhost->do_enquiry = 0;
+			if (channels->protocol == IBMVFC_PROTO_SCSI)
+				vhost->do_enquiry = 0;
+			else
+				vhost->nvme_enabled = 0;
 			return;
 		}
 	}
