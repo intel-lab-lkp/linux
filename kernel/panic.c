@@ -62,6 +62,7 @@ static int pause_on_oops;
 static int pause_on_oops_flag;
 static DEFINE_SPINLOCK(pause_on_oops_lock);
 bool crash_kexec_post_notifiers;
+static bool crash_kexec_in_memory_sys_info;
 int panic_on_warn __read_mostly;
 unsigned long panic_on_taint;
 bool panic_on_taint_nousertaint = false;
@@ -582,6 +583,7 @@ void vpanic(const char *fmt, va_list args)
 	long i, i_next = 0, len;
 	int state = 0;
 	bool _crash_kexec_post_notifiers = crash_kexec_post_notifiers;
+	bool _crash_kexec_in_memory_sys_info = crash_kexec_in_memory_sys_info;
 
 	if (panic_on_warn) {
 		/*
@@ -669,8 +671,22 @@ void vpanic(const char *fmt, va_list args)
 	 *
 	 * Bypass the panic_cpu check and call __crash_kexec directly.
 	 */
-	if (!_crash_kexec_post_notifiers)
-		__crash_kexec(NULL);
+	if (!_crash_kexec_post_notifiers) {
+		if (_crash_kexec_in_memory_sys_info) {
+			unsigned long si_mask = panic_print ? : SYS_INFO_IN_MEMORY_DEFAULT;
+
+			/* Populate log_buf in RAM without stalling on slow UARTs */
+			printk_suppress_console_flush(true);
+			printk_freeze_tail(true);
+			sys_info(si_mask);
+			kmsg_dump_desc(KMSG_DUMP_PANIC, buf);
+			__crash_kexec(NULL);
+			printk_freeze_tail(false);
+			printk_suppress_console_flush(false);
+		} else {
+			__crash_kexec(NULL);
+		}
+	}
 
 	panic_other_cpus_shutdown(_crash_kexec_post_notifiers);
 
@@ -1208,6 +1224,7 @@ core_param(panic, panic_timeout, int, 0644);
 core_param(pause_on_oops, pause_on_oops, int, 0644);
 core_param(panic_on_warn, panic_on_warn, int, 0644);
 core_param(crash_kexec_post_notifiers, crash_kexec_post_notifiers, bool, 0644);
+core_param(crash_kexec_in_memory_sys_info, crash_kexec_in_memory_sys_info, bool, 0644);
 core_param(panic_console_replay, panic_console_replay, bool, 0644);
 
 static int panic_print_set(const char *val, const struct kernel_param *kp)

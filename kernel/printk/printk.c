@@ -467,6 +467,15 @@ bool legacy_allow_panic_sync;
 /* Avoid using irq_work when suspending. */
 bool console_irqwork_blocked;
 
+bool console_flush_suppressed;
+EXPORT_SYMBOL_GPL(console_flush_suppressed);
+
+void printk_suppress_console_flush(bool suppress)
+{
+	WRITE_ONCE(console_flush_suppressed, suppress);
+}
+EXPORT_SYMBOL_GPL(printk_suppress_console_flush);
+
 #ifdef CONFIG_PRINTK
 DECLARE_WAIT_QUEUE_HEAD(log_wait);
 static DECLARE_WAIT_QUEUE_HEAD(legacy_wait);

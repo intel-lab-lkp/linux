@@ -1037,6 +1037,16 @@ Kernel parameters
 			Default is enabled if CONFIG_HOTPLUG_PARALLEL=y. Otherwise
 			the parameter has no effect.
 
+	crash_kexec_in_memory_sys_info
+			[KNL] Collect diagnostic system telemetry (memory,
+			locks, timers, blocked tasks) into the
+			printk ring buffer entirely in RAM before jumping to
+			the kdump kernel. Unlike crash_kexec_post_notifiers,
+			this option bypasses slow hardware console emission and
+			avoids running external panic notifiers. The printk ring
+			buffer tail is also frozen during collection to prevent
+			telemetry output from overwriting the initial panic Oops.
+
 	crash_kexec_post_notifiers
 			Only jump to kdump kernel after running the panic
 			notifiers and dumping kmsg. This option increases

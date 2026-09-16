@@ -17,6 +17,9 @@
 #define SYS_INFO_ALL_BT			0x00000040
 #define SYS_INFO_BLOCKED_TASKS		0x00000080
 
+#define SYS_INFO_IN_MEMORY_DEFAULT	(SYS_INFO_MEM | SYS_INFO_LOCKS | \
+					 SYS_INFO_TIMERS | SYS_INFO_BLOCKED_TASKS)
+
 void sys_info(unsigned long si_mask);
 unsigned long sys_info_parse_param(char *str);
 

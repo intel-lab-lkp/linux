@@ -377,6 +377,14 @@ static struct prb_data_block *to_block(struct prb_data_ring *data_ring,
 	return (void *)&data_ring->data[DATA_INDEX(data_ring, begin_lpos)];
 }
 
+static bool printk_tail_frozen;
+
+void printk_freeze_tail(bool freeze)
+{
+	WRITE_ONCE(printk_tail_frozen, freeze);
+}
+EXPORT_SYMBOL_GPL(printk_freeze_tail);
+
 /*
  * Increase the data size to account for data block meta data plus any
  * padding so that the adjacent data block is aligned on the ID size.
@@ -678,6 +686,10 @@ static bool data_push_tail(struct printk_ringbuffer *rb, unsigned long lpos)
 	 */
 	tail_lpos = atomic_long_read(&data_ring->tail_lpos); /* LMM(data_push_tail:A) */
 
+	if (unlikely(READ_ONCE(printk_tail_frozen)) &&
+	    need_more_space(data_ring, tail_lpos, lpos))
+		return false;
+
 	/*
 	 * Loop until the tail lpos is at or beyond @lpos. This condition
 	 * may already be satisfied, resulting in no full memory barrier
@@ -788,6 +800,9 @@ static bool desc_push_tail(struct printk_ringbuffer *rb,
 	struct prb_desc_ring *desc_ring = &rb->desc_ring;
 	enum desc_state d_state;
 	struct prb_desc desc;
+
+	if (unlikely(READ_ONCE(printk_tail_frozen)))
+		return false;
 
 	d_state = desc_read(desc_ring, tail_id, &desc, NULL, NULL);
 
@@ -935,6 +950,9 @@ static bool desc_reserve(struct printk_ringbuffer *rb, unsigned long *id_out)
 			 * Make space for the new descriptor by
 			 * advancing the tail.
 			 */
+			if (unlikely(READ_ONCE(printk_tail_frozen)))
+				return false;
+
 			if (!desc_push_tail(rb, id_prev_wrap))
 				return false;
 		}
