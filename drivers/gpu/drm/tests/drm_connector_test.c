@@ -582,6 +582,7 @@ static void drm_test_drm_connector_dynamic_register_mode_object(struct kunit *te
 
 	tmp_connector = drm_connector_lookup(connector->dev, NULL, connector->base.id);
 	KUNIT_ASSERT_PTR_EQ(test, tmp_connector, connector);
+	drm_connector_put(tmp_connector);
 }
 
 /*
