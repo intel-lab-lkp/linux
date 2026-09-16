@@ -277,6 +277,40 @@ int dma_mmap_from_dev_coherent(struct device *dev, struct vm_area_struct *vma,
 	return __dma_mmap_from_coherent(mem, vma, vaddr, size, ret);
 }
 
+/**
+ * dma_dev_coherent_size() - total size of the device coherent pool
+ * @dev:	device from which we allocate memory
+ *
+ * Returns the total size of the coherent memory pool associated to the given
+ * device, or 0 in case of no pool.
+ */
+size_t dma_dev_coherent_size(struct device *dev)
+{
+	struct dma_coherent_mem *mem = dev_get_coherent_memory(dev);
+
+	if (!mem)
+		return 0;
+
+	return (mem->size << PAGE_SHIFT);
+}
+
+/**
+ * dma_dev_coherent_base() - base address of the device coherent pool
+ * @dev:	device from which we allocate memory
+ *
+ * Returns the base address of the coherent memory pool associated with the
+ * device, or DMA_MAPPING_ERROR in case of no pool.
+ */
+dma_addr_t dma_dev_coherent_base(struct device *dev)
+{
+	struct dma_coherent_mem *mem = dev_get_coherent_memory(dev);
+
+	if (!mem)
+		return DMA_MAPPING_ERROR;
+
+	return dma_get_device_base(dev, mem);
+}
+
 #ifdef CONFIG_DMA_GLOBAL_POOL
 static struct dma_coherent_mem *dma_coherent_default_memory __ro_after_init;
 
