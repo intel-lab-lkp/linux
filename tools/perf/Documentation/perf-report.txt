@@ -378,10 +378,11 @@ OPTIONS
 	'd' skips it and disables debuginfod for the rest of the
 	session, writing core.debuginfod=false to the configuration
 	file so that it stays disabled in the next runs too; in the
-	stdio interface the progress is a line on stderr.  It is
-	disabled as well when the local build-id cache is turned off,
-	e.g. "buildid.dir" set to /dev/null, as that asks for fetched
-	files not to be kept on the box.
+	stdio interface the progress is a line on stderr, in the TUI a
+	window over the browser.  It is disabled as well when the local
+	build-id cache is turned off, e.g. "buildid.dir" set to
+	/dev/null, as that asks for fetched files not to be kept on the
+	box.
 
 --kallsyms=<file>::
         kallsyms pathname
