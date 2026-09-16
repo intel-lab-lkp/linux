@@ -21,6 +21,7 @@ mod private {
 
 /// Describes core properties of integer types.
 pub trait Integer:
+    // Sealed so that unsafe code can rely on the correctness of its implementations.
     private::Sealed
     + Sized
     + Copy

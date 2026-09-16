@@ -40,6 +40,8 @@ macro_rules! fits_within {
 /// Returns `true` if `value` can be represented with at most `N` bits in a `T`.
 #[inline(always)]
 fn fits_within<T: Integer>(value: T, num_bits: u32) -> bool {
+    // `Integer` is sealed, so the bit width, shifts and equality have primitive integer semantics.
+    // Unsafe code relies on this function correctly checking whether `value` fits.
     fits_within!(value, T, num_bits)
 }
 
@@ -472,8 +474,9 @@ where
         T: Integer,
         U: Integer<Signedness = T::Signedness>,
     {
-        // SAFETY: The converted value is represented using `N` bits, `U` can contain `N` bits, and
-        // `U` and `T` have the same sign, hence this conversion cannot fail.
+        // SAFETY: `Integer` is sealed, so the bit widths and signedness are correct. The converted
+        // value is represented using `N` bits, `U` can contain `N` bits, and `U` and `T` have the
+        // same sign, hence this conversion cannot fail.
         let value = unsafe { U::try_from(self.get()).unwrap_unchecked() };
 
         // SAFETY: Although the backing type has changed, the value is still represented within
@@ -498,8 +501,9 @@ where
         const_assert!(SHIFT < T::BITS);
         const_assert!(RES + SHIFT >= N);
 
-        // SAFETY: We shift the value right by `SHIFT`, reducing the number of bits needed to
-        // represent the shifted value by as much, and just asserted that `RES >= N - SHIFT`.
+        // SAFETY: `Integer` is sealed, so the shift has primitive integer semantics. We reduce the
+        // number of bits needed to represent the shifted value by `SHIFT`, and just asserted that
+        // `RES >= N - SHIFT`.
         unsafe { Bounded::__new(self.0 >> SHIFT) }
     }
 
@@ -550,8 +554,9 @@ where
     pub fn shl<const SHIFT: u32, const RES: u32>(self) -> Bounded<T, RES> {
         const_assert!(RES >= N + SHIFT);
 
-        // SAFETY: We shift the value left by `SHIFT`, augmenting the number of bits needed to
-        // represent the shifted value by as much, and just asserted that `RES >= N + SHIFT`.
+        // SAFETY: `Integer` is sealed, so the shift has primitive integer semantics. We augment
+        // the number of bits needed to represent the shifted value by `SHIFT`, and just asserted
+        // that `RES >= N + SHIFT`.
         unsafe { Bounded::__new(self.0 << SHIFT) }
     }
 }
@@ -1028,8 +1033,9 @@ macro_rules! impl_from_primitive {
             Self: AtLeastXBits<{ <$type as Integer>::BITS as usize }>,
         {
             fn from(value: $type) -> Self {
-                // SAFETY: The trait bound on `Self` guarantees that `N` bits is
-                // enough to hold any value of the source type.
+                // SAFETY: `Integer` is sealed, so the bit widths and signedness are correct. The
+                // trait bound on `Self` guarantees that `N` bits is enough to hold any value of
+                // the source type.
                 unsafe { Self::__new(T::from(value)) }
             }
         }
@@ -1104,9 +1110,9 @@ macro_rules! impl_into_primitive {
             Bounded<T, N>: FitsInXBits<{ <$type as Integer>::BITS as usize }>,
         {
             fn from(value: Bounded<T, N>) -> $type {
-                // SAFETY: The trait bound on `Bounded` ensures that any value it holds (which
-                // is constrained to `N` bits) can fit into the destination type, so this
-                // conversion cannot fail.
+                // SAFETY: `Integer` is sealed, so the bit widths and signedness are correct. The
+                // trait bound on `Bounded` ensures that any value it holds (which is constrained
+                // to `N` bits) can fit into the destination type, so this conversion cannot fail.
                 unsafe { <$type>::try_from(value.get()).unwrap_unchecked() }
             }
         }
@@ -1137,8 +1143,8 @@ where
     T: Integer<Signedness = Unsigned> + From<bool>,
 {
     fn from(value: bool) -> Self {
-        // SAFETY: A boolean is represented by `0` or `1`, so it fits within any valid unsigned
-        // `Bounded` width.
+        // SAFETY: `Integer` is sealed, so `T` is a primitive unsigned integer. A boolean is
+        // represented by `0` or `1`, so it fits within any valid unsigned `Bounded` width.
         unsafe { Self::__new(T::from(value)) }
     }
 }
