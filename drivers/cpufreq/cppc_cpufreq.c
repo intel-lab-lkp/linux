@@ -184,12 +184,10 @@ static void cppc_cpufreq_cpu_fie_init(struct cpufreq_policy *policy)
 }
 
 /*
- * We free all the resources on policy's removal and not on CPU removal as the
+ * We free the resources for the whole policy and not per CPU as the
  * irq-work are per-cpu and the hotplug core takes care of flushing the pending
  * irq-works (hint: smpcfd_dying_cpu()) on CPU hotplug. Even if the kthread-work
  * fires on another CPU after the concerned CPU is removed, it won't harm.
- *
- * We just need to make sure to remove them all on policy->exit().
  */
 static void cppc_cpufreq_cpu_fie_exit(struct cpufreq_policy *policy)
 {
@@ -199,7 +197,7 @@ static void cppc_cpufreq_cpu_fie_exit(struct cpufreq_policy *policy)
 	if (fie_disabled)
 		return;
 
-	/* policy->cpus will be empty here, use related_cpus instead */
+	/* policy->cpus excludes the offline CPUs, use related_cpus */
 	topology_clear_scale_freq_source(SCALE_FREQ_SOURCE_CPPC, policy->related_cpus);
 
 	for_each_cpu(cpu, policy->related_cpus) {
@@ -754,6 +752,128 @@ static void cppc_cpufreq_cpu_exit(struct cpufreq_policy *policy)
 	cppc_cpufreq_put_cpu_data(policy);
 }
 
+/*
+ * Prepare the restore in online() so that the platform never sees MIN above
+ * MAX.
+ *
+ * cppc_set_perf() writes MIN before MAX, and each write takes effect on its
+ * own unless the registers are accessed through PCC, which delivers them in
+ * one transaction. If the MIN being restored is above the MAX currently
+ * programmed, the CPU sits with MIN above MAX until the MAX write lands, so
+ * raise MAX first. Restoring a lower MAX needs no preparation. Both values
+ * come from the policy limits, which keep MIN below MAX, so the MIN written
+ * first is never above the MAX that follows it.
+ */
+static int
+cppc_cpufreq_prepare_perf_restore(unsigned int cpu,
+				  const struct cppc_perf_ctrls *target)
+{
+	struct cppc_perf_ctrls cur = {}, prep = {};
+	int ret;
+
+	ret = cppc_get_perf(cpu, &cur);
+	if (ret)
+		return ret;
+
+	if (!cur.max_perf || target->min_perf <= cur.max_perf)
+		return 0;
+
+	prep.desired_perf = target->desired_perf;
+	prep.min_perf = 0;	/* Zero leaves MIN unchanged. */
+	prep.max_perf = target->max_perf;
+
+	return cppc_set_perf(cpu, &prep);
+}
+
+/*
+ * Run when the policy's first CPU comes back online, the counterpart of
+ * offline().
+ *
+ * The platform may have disabled CPPC and reset the performance controls
+ * (desired, min and max performance) while the CPU was offline, so re-enable
+ * CPPC and reprogram them.
+ *
+ * Report failures without returning them, or the core would free the policy and
+ * leave the CPU without cpufreq. A failed write to the performance controls is
+ * not fatal, as the governor's next request programs them again. A failed CPPC
+ * enable stops the restore, as the writes that follow may not reach the
+ * platform.
+ */
+static int cppc_cpufreq_cpu_online(struct cpufreq_policy *policy)
+{
+	struct cppc_cpudata *cpu_data = policy->driver_data;
+	unsigned int cpu = policy->cpu;
+	int ret;
+
+	ret = cppc_set_enable(cpu, true);
+	if (ret && ret != -EOPNOTSUPP) {
+		pr_warn("Failed to re-enable CPPC for CPU%u (%d)\n", cpu, ret);
+		goto out_fie;
+	}
+
+	/*
+	 * Recompute min/max from the policy, clamp desired_perf into range, and
+	 * reprogram the performance controls.
+	 */
+	cppc_cpufreq_update_perf_limits(cpu_data, policy);
+
+	cpu_data->perf_ctrls.desired_perf =
+		clamp_t(u32, cpu_data->perf_ctrls.desired_perf,
+			cpu_data->perf_ctrls.min_perf,
+			cpu_data->perf_ctrls.max_perf);
+
+	ret = cppc_cpufreq_prepare_perf_restore(cpu, &cpu_data->perf_ctrls);
+	if (ret)
+		pr_debug("Failed to prepare perf restore on CPU%u (%d)\n",
+			 cpu, ret);
+
+	ret = cppc_set_perf(cpu, &cpu_data->perf_ctrls);
+	if (ret)
+		pr_debug("Failed to restore perf controls on CPU%u (%d)\n",
+			 cpu, ret);
+
+out_fie:
+	/* Restart what offline() stopped, with a new counter snapshot. */
+	cppc_cpufreq_cpu_fie_init(policy);
+
+	return 0;
+}
+
+/*
+ * Run when the policy's last online CPU goes down, undoing what online() did.
+ * Defining offline() is what makes the core keep the policy alive instead of
+ * tearing it down.
+ */
+static int cppc_cpufreq_cpu_offline(struct cpufreq_policy *policy)
+{
+	struct cppc_cpudata *cpu_data = policy->driver_data;
+	struct cppc_perf_ctrls perf_ctrls = cpu_data->perf_ctrls;
+	unsigned int cpu = policy->cpu;
+	int ret;
+
+	/*
+	 * Stop the frequency invariance updates and cancel the pending work, so
+	 * that no sample spans the offline window. online() restarts them with
+	 * a new counter snapshot.
+	 */
+	cppc_cpufreq_cpu_fie_exit(policy);
+
+	/*
+	 * Request the lowest desired performance while the policy has no online
+	 * CPU. Zeroing MIN and MAX makes cppc_set_perf() leave them unchanged.
+	 */
+	perf_ctrls.desired_perf = cpu_data->perf_caps.lowest_perf;
+	perf_ctrls.min_perf = 0;
+	perf_ctrls.max_perf = 0;
+
+	ret = cppc_set_perf(cpu, &perf_ctrls);
+	if (ret)
+		pr_debug("Err setting perf value:%u on CPU:%u. ret:%d\n",
+			 cpu_data->perf_caps.lowest_perf, cpu, ret);
+
+	return 0;
+}
+
 static inline u64 get_delta(u64 t1, u64 t0)
 {
 	if (t1 > t0 || t0 > ~(u32)0)
@@ -1047,6 +1167,8 @@ static struct cpufreq_driver cppc_cpufreq_driver = {
 	.fast_switch = cppc_cpufreq_fast_switch,
 	.init = cppc_cpufreq_cpu_init,
 	.exit = cppc_cpufreq_cpu_exit,
+	.online = cppc_cpufreq_cpu_online,
+	.offline = cppc_cpufreq_cpu_offline,
 	.set_boost = cppc_cpufreq_set_boost,
 	.attr = cppc_cpufreq_attr,
 	.name = "cppc_cpufreq",
