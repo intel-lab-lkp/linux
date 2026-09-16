@@ -48,6 +48,7 @@
 #include "swap_table.h"
 #include "internal.h"
 #include "swap.h"
+#include "swap_tier.h"
 
 static void swap_range_alloc(struct swap_info_struct *si,
 			     unsigned int nr_entries);
@@ -61,9 +62,9 @@ static void move_cluster(struct swap_info_struct *si,
  * lazily allocated & freed swap device info struts, and SWP_USED indicates
  * which device is used, ~SWP_USED devices and can be reused.
  *
- * Also protects swap_active_head total_swap_pages, and the SWP_WRITEOK flag.
+ * Also protects the swap tiers, total_swap_pages, and the SWP_WRITEOK flag.
  */
-static DEFINE_SPINLOCK(swap_lock);
+DEFINE_SPINLOCK(swap_lock);
 static unsigned int nr_swapfiles;
 atomic_long_t nr_swap_pages;
 /*
@@ -84,16 +85,10 @@ static const char Bad_file[] = "Bad swap file entry ";
 static const char Bad_offset[] = "Bad swap offset entry ";
 
 /*
- * all active swap_info_structs
- * protected with swap_lock, and ordered by priority.
- */
-static PLIST_HEAD(swap_active_head);
-
-/*
  * all available (active, not full) swap_info_structs
  * protected with swap_avail_lock, ordered by priority.
- * This is used by folio_alloc_swap() instead of swap_active_head
- * because swap_active_head includes all swap_info_structs,
+ * This is used by folio_alloc_swap() instead of the active lists of
+ * the swap tiers because those include all swap_info_structs,
  * but folio_alloc_swap() doesn't need to look at full ones.
  * This uses its own lock instead of swap_lock because when a
  * swap_info_struct changes between not-full/full, it needs to
@@ -1444,22 +1439,27 @@ static bool swap_sync_discard(void)
 {
 	bool ret = false;
 	struct swap_info_struct *si, *next;
+	struct swap_tier *tier;
+	short prio;
 
 	spin_lock(&swap_lock);
 start_over:
-	plist_for_each_entry_safe(si, next, &swap_active_head, list) {
-		spin_unlock(&swap_lock);
-		if (get_swap_device_info(si)) {
-			if (si->flags & SWP_PAGE_DISCARD)
-				ret = swap_do_scheduled_discard(si);
-			put_swap_device(si);
-		}
-		if (ret)
-			return true;
+	for_each_active_tier(tier) {
+		prio = tier->prio;
+		plist_for_each_entry_safe(si, next, &tier->active_head, list) {
+			spin_unlock(&swap_lock);
+			if (get_swap_device_info(si)) {
+				if (si->flags & SWP_PAGE_DISCARD)
+					ret = swap_do_scheduled_discard(si);
+				put_swap_device(si);
+			}
+			if (ret)
+				return true;
 
-		spin_lock(&swap_lock);
-		if (plist_node_empty(&next->list))
-			goto start_over;
+			spin_lock(&swap_lock);
+			if (plist_node_empty(&next->list) || tier->prio != prio)
+				goto start_over;
+		}
 	}
 	spin_unlock(&swap_lock);
 
@@ -3088,7 +3088,7 @@ static void _enable_swap_info(struct swap_info_struct *si)
 
 	assert_spin_locked(&swap_lock);
 
-	plist_add(&si->list, &swap_active_head);
+	swap_tiers_assign_dev(si);
 
 	/* Add back to available list */
 	add_to_avail_list(si, true);
@@ -3182,6 +3182,7 @@ SYSCALL_DEFINE1(swapoff, const char __user *, specialfile)
 {
 	struct swap_info_struct *p = NULL;
 	struct swap_cluster_info *cluster_info;
+	struct swap_tier *tier;
 	struct file *swap_file, *victim;
 	struct address_space *mapping;
 	struct inode *inode;
@@ -3200,13 +3201,17 @@ SYSCALL_DEFINE1(swapoff, const char __user *, specialfile)
 
 	mapping = victim->f_mapping;
 	spin_lock(&swap_lock);
-	plist_for_each_entry(p, &swap_active_head, list) {
-		if (p->flags & SWP_WRITEOK) {
-			if (p->swap_file->f_mapping == mapping) {
-				found = 1;
-				break;
+	for_each_active_tier(tier) {
+		plist_for_each_entry(p, &tier->active_head, list) {
+			if (p->flags & SWP_WRITEOK) {
+				if (p->swap_file->f_mapping == mapping) {
+					found = 1;
+					break;
+				}
 			}
 		}
+		if (found)
+			break;
 	}
 	if (!found) {
 		err = -EINVAL;
@@ -3230,7 +3235,7 @@ SYSCALL_DEFINE1(swapoff, const char __user *, specialfile)
 	}
 	spin_lock(&p->lock);
 	del_from_avail_list(p, true);
-	plist_del(&p->list, &swap_active_head);
+	swap_tiers_remove_dev(p);
 	atomic_long_sub(p->pages, &nr_swap_pages);
 	total_swap_pages -= p->pages;
 	spin_unlock(&p->lock);
@@ -4002,7 +4007,7 @@ int swap_dup_entry_direct(swp_entry_t entry)
 #if defined(CONFIG_MEMCG) && defined(CONFIG_BLK_CGROUP)
 static bool __has_usable_swap(void)
 {
-	return !plist_head_empty(&swap_active_head);
+	return !list_empty(&swap_tier_active_list);
 }
 
 void __folio_throttle_swaprate(struct folio *folio, gfp_t gfp)
@@ -4055,6 +4060,7 @@ static int __init swapfile_init(void)
 		swap_migration_ad_supported = true;
 #endif	/* CONFIG_MIGRATION */
 
+	swap_tiers_init();
 	return 0;
 }
 subsys_initcall(swapfile_init);
