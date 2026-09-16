@@ -32,6 +32,7 @@
 #include "string2.h"
 #include "vdso.h"
 #include "annotate-data.h"
+#include "debuginfo.h"
 #include "libdw.h"
 
 static const char * const debuglink_paths[] = {
@@ -2073,5 +2074,23 @@ struct debuginfo *dso__debuginfo(struct dso *dso)
 
 	mutex_unlock(dso__lock(dso));
 	free(name);
+
+	/*
+	 * The debuginfo for a DSO in the profile may not be installed
+	 * locally, for instance the vmlinux for the kernel the profile was
+	 * recorded on when processing it on another machine, or after the
+	 * kernel and its debuginfo got upgraded in between.  Fall back to
+	 * fetching it keyed by the build ID recorded in the perf.data file,
+	 * using the debuginfod client, which checks its local cache first.
+	 *
+	 * Do it outside dso__lock, a fetch from a remote debuginfod server
+	 * can take a while and would otherwise block anything else using
+	 * this dso, and honour the opt-out, the user may have asked for
+	 * no debuginfod via --no-debuginfod, core.debuginfod=false or by
+	 * disabling the build-id cache.
+	 */
+	if (dinfo == NULL)
+		dinfo = debuginfo__new_build_id(dso__bid(dso));
+
 	return dinfo;
 }
