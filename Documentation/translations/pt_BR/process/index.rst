@@ -72,6 +72,7 @@ gerenciamento de bugs e vulnerabilidades.
    :maxdepth: 1
 
    Falhas de segurança <security-bugs>
+   O modelo de ameaças do kernel do Linux <threat-model>
    CVEs <cve>
 
 Informações para mantenedores
