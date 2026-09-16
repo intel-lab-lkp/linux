@@ -80,6 +80,17 @@ FIXTURE(vma) {
 
 FIXTURE_SETUP(vma) {
 	char template[] = "./set-anon-vma-test-XXXXXX";
+	void *probe;
+	int res;
+
+	/* Naming anonymous VMAs needs CONFIG_ANON_VMA_NAME. */
+	probe = mmap(NULL, AREA_SIZE, PROT_READ | PROT_WRITE,
+					MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	ASSERT_NE(probe, MAP_FAILED);
+	res = rename_vma((unsigned long)probe, AREA_SIZE, GOOD_NAME);
+	munmap(probe, AREA_SIZE);
+	if (res == -EINVAL)
+		SKIP(return, "CONFIG_ANON_VMA_NAME is not enabled");
 
 	self->ptr_anon = mmap(NULL, AREA_SIZE, PROT_READ | PROT_WRITE,
 					MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
