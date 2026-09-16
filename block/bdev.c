@@ -1189,6 +1189,9 @@ void bdev_release(struct file *bdev_file)
 		blkdev_put_whole(bdev);
 	mutex_unlock(&disk->open_mutex);
 
+	if (disk->fops->post_release)
+		disk->fops->post_release(disk);
+
 	module_put(disk->fops->owner);
 put_no_open:
 	blkdev_put_no_open(bdev);
