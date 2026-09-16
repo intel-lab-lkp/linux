@@ -83,6 +83,17 @@ Default is to monitor all CPUS.
 --ignore-vmlinux::
 	Ignore vmlinux files.
 
+--debuginfod::
+--no-debuginfod::
+	Fetch debuginfo keyed by build ID from the debuginfod servers
+	configured in DEBUGINFOD_URLS, checking the local debuginfod
+	client cache first, when it is not available locally, on for
+	these commands by default.  Turn it off per invocation with
+	--no-debuginfod, with the "top.debuginfod" config option or
+	globally with "core.debuginfod" set to false.  Disabled as well
+	when the build-id cache is off, e.g. "buildid.dir" set to
+	/dev/null.
+
 --kallsyms=<file>::
 	kallsyms pathname
 

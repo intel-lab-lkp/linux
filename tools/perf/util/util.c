@@ -21,9 +21,11 @@
 #include <linux/time64.h>
 #include <linux/overflow.h>
 #include <unistd.h>
+#include "build-id.h"
 #include "cap.h"
 #include "strlist.h"
 #include "string2.h"
+#include "symbol_conf.h"
 
 /*
  * XXX We need to find a better place for these things...
@@ -431,6 +433,8 @@ char *perf_exe(char *buf, int len)
 	return strcpy(buf, "perf");
 }
 
+static bool debuginfod__urls_set_by_tool;
+
 void perf_debuginfod_setup(struct perf_debuginfod *di)
 {
 	/*
@@ -443,6 +447,7 @@ void perf_debuginfod_setup(struct perf_debuginfod *di)
 	else if (di->urls && strcmp(di->urls, "system"))
 		setenv("DEBUGINFOD_URLS", di->urls, 1);
 
+	debuginfod__urls_set_by_tool = true;
 	pr_debug("DEBUGINFOD_URLS=%s\n", getenv("DEBUGINFOD_URLS"));
 
 #ifndef HAVE_DEBUGINFOD_SUPPORT
@@ -450,6 +455,104 @@ void perf_debuginfod_setup(struct perf_debuginfod *di)
 		pr_warning("WARNING: debuginfod support requested, but perf is not built with it\n");
 #endif
 }
+
+#ifdef HAVE_DEBUGINFOD_SUPPORT
+/*
+ * The debuginfod client checks its local cache only as part of the
+ * server query flow, so with no servers configured it fails even when
+ * the artifact is in the client cache.  Distro setup scripts, e.g.
+ * /etc/profile.d/99-debuginfod.sh, export DEBUGINFOD_URLS from the
+ * .urls files in /etc/debuginfod, but that doesn't reach environments
+ * that don't source the profile scripts, such as cron jobs, systemd
+ * services and CI, so do it here when the variable isn't set.  An
+ * explicitly empty DEBUGINFOD_URLS is an opt-out, matching the
+ * perf_debuginfod_setup() handling, and is left alone.
+ *
+ * setenv() is not thread safe: it can race with a getenv() in another
+ * thread on the environ array, and there are getenv()s that don't go
+ * through the fetch lock: libdebuginfod reads DEBUGINFOD_URLS in every
+ * debuginfod_begin(), and perf creates clients from other paths,
+ * build-id.c, probe-event.c and probe-finder.c, so this is called from
+ * symbol__init(), on the single-threaded setup, before the threads that
+ * can get here are started, and not from the fetch path.
+ *
+ * When debuginfod is turned off, with --no-debuginfod,
+ * core.debuginfod=false or by disabling the build-id cache, set it to
+ * that empty opt-out instead of exporting it: libdwfl's own debuginfod
+ * client reads DEBUGINFOD_URLS in every query, not only when perf's
+ * client is used, so it would otherwise fetch debuginfo and keep it in
+ * its own cache even though the user asked for no debuginfod.
+ *
+ * This lives here, not in debuginfo.o, as that object is only built
+ * with CONFIG_LIBDW and the debuginfod users above are not.
+ */
+void debuginfod__setup_urls_env(void)
+{
+	char *urls = NULL;
+	DIR *dir;
+	struct dirent *dent;
+
+	/*
+	 * Tools that set DEBUGINFOD_URLS themselves, e.g. 'perf record'
+	 * --debuginfod and 'perf buildid-cache', already made their
+	 * choice, leave it alone.
+	 */
+	if (debuginfod__urls_set_by_tool)
+		return;
+
+	if (!symbol_conf.debuginfod || !strcmp(buildid_dir, "/dev/null")) {
+		setenv("DEBUGINFOD_URLS", "", 1);
+		pr_debug("DEBUGINFOD_URLS cleared, debuginfod is disabled\n");
+		return;
+	}
+
+	if (getenv("DEBUGINFOD_URLS") != NULL)
+		return;
+
+	dir = opendir("/etc/debuginfod");
+	if (dir == NULL)
+		return;
+
+	while ((dent = readdir(dir)) != NULL) {
+		char *content = NULL;
+		char *new_urls;
+		char path[PATH_MAX];
+		size_t len = strlen(dent->d_name), i, size;
+		int n;
+
+		if (len < 5 || strcmp(dent->d_name + len - 5, ".urls"))
+			continue;
+
+		snprintf(path, sizeof(path), "/etc/debuginfod/%s", dent->d_name);
+		if (filename__read_str(path, &content, &size) < 0)
+			continue;
+
+		for (i = 0; i < size; i++)
+			if (content[i] == '\n' || content[i] == '\r')
+				content[i] = ' ';
+
+		if (urls == NULL) {
+			urls = strdup(content);
+		} else {
+			n = asprintf(&new_urls, "%s %s", urls, content);
+			if (n < 0) {
+				free(content);
+				continue;
+			}
+			free(urls);
+			urls = new_urls;
+		}
+		free(content);
+	}
+	closedir(dir);
+
+	if (urls != NULL) {
+		setenv("DEBUGINFOD_URLS", urls, 1);
+		pr_debug("Set DEBUGINFOD_URLS from /etc/debuginfod: %s\n", urls);
+	}
+	free(urls);
+}
+#endif /* HAVE_DEBUGINFOD_SUPPORT */
 
 /*
  * Return a new filename prepended with task's root directory if it's in
