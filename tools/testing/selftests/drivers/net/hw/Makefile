@@ -32,6 +32,7 @@ TEST_PROGS = \
 	hw_stats_l3.sh \
 	hw_stats_l3_gre.sh \
 	iou-zcrx.py \
+	iperf.py \
 	ipsec_vxlan.py \
 	irq.py \
 	loopback.sh \

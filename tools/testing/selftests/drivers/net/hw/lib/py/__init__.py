@@ -28,8 +28,8 @@ try:
     from net.lib.py import bpf_map_set, bpf_map_dump, bpf_prog_map_ids
     from net.lib.py import KsftSkipEx, KsftFailEx, KsftXfailEx
     from net.lib.py import ksft_disruptive, ksft_exit, ksft_metric, \
-        ksft_metric_aggregate, ksft_metric_reporting, ksft_pr, ksft_run, \
-        ksft_setup, \
+        ksft_metric_aggregate, ksft_metric_reporting, \
+        ksft_metric_reporting_enabled, ksft_pr, ksft_run, ksft_setup, \
         ksft_variants, KsftNamedVariant
     from net.lib.py import ksft_eq, ksft_ge, ksft_in, ksft_is, ksft_lt, \
         ksft_ne, ksft_not_in, ksft_raises, ksft_true, ksft_gt, ksft_not_none
@@ -47,8 +47,8 @@ try:
                "bpf_map_set", "bpf_map_dump", "bpf_prog_map_ids",
                "KsftSkipEx", "KsftFailEx", "KsftXfailEx",
                "ksft_disruptive", "ksft_exit", "ksft_metric",
-               "ksft_metric_aggregate", "ksft_metric_reporting", "ksft_pr",
-               "ksft_run",
+               "ksft_metric_aggregate", "ksft_metric_reporting",
+               "ksft_metric_reporting_enabled", "ksft_pr", "ksft_run",
                "ksft_setup", "ksft_variants",
                "KsftNamedVariant",
                "ksft_eq", "ksft_ge", "ksft_in", "ksft_is", "ksft_lt",

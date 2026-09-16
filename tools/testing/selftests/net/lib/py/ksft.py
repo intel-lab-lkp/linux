@@ -108,6 +108,12 @@ def ksft_metric_reporting(enable):
         KSFT_METRIC_REPORTING += 1 if enable else -1
 
 
+def ksft_metric_reporting_enabled():
+    """Return whether benchmark metric producers should emit metrics."""
+    with KSFT_METRICS_LOCK:
+        return KSFT_METRIC_REPORTING > 0
+
+
 def ksft_metric_aggregate(name, summarize="total", *, aggregation=None,
                           transform=None, regression=None,
                           display_range=None, display_scale=None,

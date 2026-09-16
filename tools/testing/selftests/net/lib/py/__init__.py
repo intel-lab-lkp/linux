@@ -9,7 +9,7 @@ from .ksft import KsftFailEx, KsftSkipEx, KsftXfailEx, ksft_pr, ksft_eq, \
     ksft_ne, ksft_true, ksft_not_none, ksft_in, ksft_not_in, ksft_is, \
     ksft_ge, ksft_gt, ksft_lt, ksft_raises, ksft_busy_wait, \
     ktap_result, ksft_disruptive, ksft_metric, ksft_metric_aggregate, \
-    ksft_metric_reporting, ksft_setup, ksft_run, \
+    ksft_metric_reporting, ksft_metric_reporting_enabled, ksft_setup, ksft_run, \
     ksft_exit, ksft_variants, KsftNamedVariant
 from .netns import NetNS, NetNSEnter, UserNetNS
 from .nsim import NetdevSim, NetdevSimDev
@@ -26,8 +26,8 @@ __all__ = ["KSRC",
            "ksft_ne", "ksft_true", "ksft_not_none", "ksft_in", "ksft_not_in",
            "ksft_is", "ksft_ge", "ksft_gt", "ksft_lt", "ksft_raises",
            "ksft_busy_wait", "ktap_result", "ksft_disruptive", "ksft_metric",
-           "ksft_metric_aggregate", "ksft_metric_reporting", "ksft_setup",
-           "ksft_run",
+           "ksft_metric_aggregate", "ksft_metric_reporting",
+           "ksft_metric_reporting_enabled", "ksft_setup", "ksft_run",
            "ksft_exit", "ksft_variants",
            "KsftNamedVariant",
            "NetNS", "NetNSEnter", "UserNetNS",

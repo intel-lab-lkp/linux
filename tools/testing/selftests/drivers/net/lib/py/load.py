@@ -4,7 +4,8 @@ import re
 import time
 import json
 
-from lib.py import ksft_pr, cmd, ip, rand_port, wait_port_listen
+from lib.py import cmd, ip, ksft_metric, ksft_metric_aggregate, \
+    ksft_metric_reporting_enabled, ksft_pr, rand_port, wait_port_listen
 
 
 class Iperf3Runner:
@@ -57,8 +58,17 @@ class Iperf3Runner:
         """
         Runs an iperf3 measurement and returns the average bandwidth (Gbps).
         Discards the first and last few reporting intervals and uses only the
-        middle part of the run where throughput is typically stable.
+        middle part of the run where throughput is typically stable. When a
+        SystemMonitor is active, also emit throughput and retransmit metrics.
         """
+        report_metrics = ksft_metric_reporting_enabled()
+        if report_metrics:
+            ksft_metric_aggregate(
+                "throughput", summarize="distribution",
+                regression={"compare": "p50", "better": "higher",
+                            "relative_tolerance": 0.05})
+            ksft_metric_aggregate("tcp.retransmits", summarize="max")
+
         self.start_server()
         result = self.start_client(duration=10, reverse=reverse)
 
@@ -77,6 +87,17 @@ class Iperf3Runner:
         stable = samples[3:-3]
 
         avg = sum(stable) / len(stable)
+        retransmits = out.get("end", {}).get("sum_sent", {}).get(
+            "retransmits")
+        if report_metrics:
+            if not isinstance(retransmits, int) or \
+                    isinstance(retransmits, bool):
+                raise ValueError("iperf3 did not report TCP retransmits")
+            receiver = "remote" if reverse else "local"
+            sender = "local" if reverse else "remote"
+            ksft_metric("throughput", avg, shape="scalar", host=receiver)
+            ksft_metric("tcp.retransmits", retransmits, shape="scalar",
+                        host=sender)
 
         return avg
 
