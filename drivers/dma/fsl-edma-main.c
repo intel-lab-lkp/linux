@@ -279,6 +279,7 @@ static struct dma_chan *fsl_edma_xlate(struct of_phandle_args *dma_spec,
 				if (!fsl_chan->srcid) {
 					dev_err(&fsl_chan->pdev->dev, "Invalidate srcid %d\n",
 						fsl_chan->srcid);
+					dma_release_channel(chan);
 					return NULL;
 				}
 
