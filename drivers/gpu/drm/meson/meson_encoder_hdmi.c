@@ -475,6 +475,9 @@ int meson_encoder_hdmi_probe(struct meson_drm *priv)
 		}
 
 		meson_encoder_hdmi->cec_notifier = notifier;
+
+		/* The notifier keeps the device only as a lookup key */
+		put_device(&pdev->dev);
 	}
 
 	priv->encoders[MESON_ENC_HDMI] = meson_encoder_hdmi;
