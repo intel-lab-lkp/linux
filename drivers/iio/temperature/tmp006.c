@@ -353,8 +353,6 @@ static int tmp006_probe(struct i2c_client *client)
 		if (ret)
 			return ret;
 
-		indio_dev->trig = iio_trigger_get(data->drdy_trig);
-
 		ret = devm_request_irq(&client->dev, client->irq,
 				       iio_trigger_generic_data_rdy_poll,
 				       IRQF_NO_THREAD, "tmp006_irq",
@@ -367,6 +365,9 @@ static int tmp006_probe(struct i2c_client *client)
 					      tmp006_trigger_handler, NULL);
 	if (ret < 0)
 		return ret;
+
+	if (data->drdy_trig)
+		indio_dev->trig = iio_trigger_get(data->drdy_trig);
 
 	return devm_iio_device_register(&client->dev, indio_dev);
 }
