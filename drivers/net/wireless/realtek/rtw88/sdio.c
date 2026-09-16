@@ -1090,10 +1090,8 @@ static void rtw_sdio_handle_interrupt(struct sdio_func *sdio_func)
 
 	if (hisr & REG_SDIO_HISR_TXERR)
 		rtw_sdio_tx_err_isr(rtwdev);
-	if (hisr & REG_SDIO_HISR_RX_REQUEST) {
-		hisr &= ~REG_SDIO_HISR_RX_REQUEST;
+	if (hisr & REG_SDIO_HISR_RX_REQUEST)
 		rtw_sdio_rx_isr(rtwdev);
-	}
 
 	rtw_write32(rtwdev, REG_SDIO_HISR, hisr);
 
