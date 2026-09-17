@@ -763,8 +763,10 @@ static int dwc_pcie_pmu_probe(struct platform_device *plat_dev)
 	}
 
 	vsec = dwc_pcie_des_cap(pdev);
-	if (!vsec)
+	if (!vsec) {
+		pci_dev_put(pdev);
 		return -ENODEV;
+	}
 
 	pci_dev_put(pdev);
 	name = devm_kasprintf(&plat_dev->dev, GFP_KERNEL, "dwc_rootport_%x", sbdf);
