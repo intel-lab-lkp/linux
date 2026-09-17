@@ -523,11 +523,6 @@ static void help(char *name)
 	exit(0);
 }
 
-void destroy_cgroup(char *cg)
-{
-	printf("Destroying cgroup: %s\n", cg);
-}
-
 int main(int argc, char *argv[])
 {
 	struct test_params params = {
