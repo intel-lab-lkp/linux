@@ -66,6 +66,12 @@ config CC_HAS_ASM_AOR_FORMAT_FLAGS
 	  Clang versions before 19.1.0 do not support A,
 	  O, and R inline assembly format flags.
 
+config CC_HAS_ASM_M_FORMAT_FLAG
+	def_bool !(CC_IS_CLANG && CLANG_VERSION < 240100)
+	help
+	  Clang versions before 24.1.0 do not support the
+	  M inline assembly format flags.
+
 config CC_HAS_ASM_IMMEDIATE_STRINGS
 	def_bool !(CC_IS_GCC && GCC_VERSION < 90000)
 	help
