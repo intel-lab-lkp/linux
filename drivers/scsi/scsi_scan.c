@@ -1122,8 +1122,7 @@ static int scsi_add_lun(struct scsi_device *sdev, unsigned char *inq_result,
 	if (hostt->sdev_configure)
 		scsi_realloc_sdev_budget_map(sdev, sdev->queue_depth);
 
-	if (sdev->scsi_level >= SCSI_3)
-		scsi_attach_vpd(sdev);
+	scsi_attach_vpd(sdev);
 
 	scsi_cdl_check(sdev);
 
