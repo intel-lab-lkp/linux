@@ -1084,6 +1084,19 @@ dmaengine_prep_slave_sg(struct dma_chan *chan, struct scatterlist *sgl,
 	return dmaengine_prep_config_sg(chan, sgl, sg_len, dir, flags, NULL);
 }
 
+/* Depercated, don't use it except sound/soc/sprd/ */
+static inline struct dma_async_tx_descriptor *
+dmaengine_prep_slave_sg_context(struct dma_chan *chan, struct scatterlist *sgl,
+				unsigned int sg_len, enum dma_transfer_direction dir,
+				unsigned long flags, void *context)
+{
+	if (!chan->device->device_prep_slave_sg)
+		return NULL;
+
+	return chan->device->device_prep_slave_sg(chan, sgl, sg_len, dir,
+						  flags, context);
+}
+
 /**
  * dmaengine_prep_config_sg_safe - prepare a scatter-gather DMA transfer
  *                                 with atomic slave configuration update
