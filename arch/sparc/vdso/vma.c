@@ -27,6 +27,12 @@
 
 unsigned int __read_mostly vdso_enabled = 1;
 
+/* Called by the timekeeping code after every update of the vDSO data. */
+void __arch_sync_vdso_time_data(struct vdso_time_data *vdata)
+{
+	flush_dcache_page(virt_to_page(vdata));
+}
+
 #ifdef	CONFIG_SPARC64
 static struct vm_special_mapping vdso_mapping64 = {
 	.name = "[vdso]"
