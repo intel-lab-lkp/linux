@@ -876,18 +876,25 @@ static ktime_t tick_nohz_next_event(struct tick_sched *ts, int cpu)
 	 * If this CPU is the one which had the do_timer() duty last, we limit
 	 * the sleep time to the timekeeping 'max_deferment' value.
 	 * Otherwise we can sleep as long as we want.
+	 *
+	 * Only read the max deferment in the former case: it is a seqcount
+	 * read of the globally shared timekeeper, and on a large machine
+	 * almost every caller is not the do_timer() CPU and would throw the
+	 * value away.
 	 */
-	delta = timekeeping_max_deferment();
 	tick_cpu = READ_ONCE(tick_do_timer_cpu);
 	if (tick_cpu != cpu &&
-	    (tick_cpu != TICK_DO_TIMER_NONE || !tick_sched_flag_test(ts, TS_FLAG_DO_TIMER_LAST)))
-		delta = KTIME_MAX;
-
-	/* Calculate the next expiry time */
-	if (delta < (KTIME_MAX - basemono))
-		expires = basemono + delta;
-	else
+	    (tick_cpu != TICK_DO_TIMER_NONE || !tick_sched_flag_test(ts, TS_FLAG_DO_TIMER_LAST))) {
 		expires = KTIME_MAX;
+	} else {
+		delta = timekeeping_max_deferment();
+
+		/* Calculate the next expiry time */
+		if (delta < (KTIME_MAX - basemono))
+			expires = basemono + delta;
+		else
+			expires = KTIME_MAX;
+	}
 
 	ts->timer_expires = min_t(u64, expires, next_tick);
 
