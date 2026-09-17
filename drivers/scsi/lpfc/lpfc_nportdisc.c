@@ -1155,7 +1155,13 @@ lpfc_release_rpi(struct lpfc_hba *phba, struct lpfc_vport *vport,
 				 ndlp->nlp_rpi, ndlp->nlp_DID, ndlp->nlp_flag);
 
 		rc = lpfc_sli_issue_mbox(phba, pmb, MBX_NOWAIT);
-		if (rc == MBX_NOT_FINISHED) {
+
+		/* Only a queued or completed command is handed to the
+		 * port; other results, such as the -EIO returned by the
+		 * SLI-4 path when it cannot submit a non-polled command,
+		 * leave the mailbox and the node reference to the caller.
+		 */
+		if (rc != MBX_SUCCESS && rc != MBX_BUSY) {
 			lpfc_nlp_put(ndlp);
 			mempool_free(pmb, phba->mbox_mem_pool);
 		}
