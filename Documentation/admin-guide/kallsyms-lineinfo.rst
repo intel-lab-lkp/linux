@@ -77,10 +77,10 @@ Memory Overhead
 
 The vmlinux lineinfo tables are stored in ``.rodata``.  On an x86_64
 ``defconfig`` with ``CONFIG_DEBUG_INFO`` they hold 1.66 million entries and
-grow the stripped image by 16 MiB, about 10 bytes per entry after
-deduplication.
+grow the stripped image by 8 MiB, about 3.8 bytes per entry after delta
+compression.
 
-Per-module lineinfo adds about 10 bytes per entry to each ``.ko`` file, plus
+Per-module lineinfo adds about 4 bytes per entry to each ``.ko`` file, plus
 a small fixed cost per covered section.
 
 Known Limitations
