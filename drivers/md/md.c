@@ -1142,6 +1142,9 @@ void md_write_metadata(struct mddev *mddev, struct md_rdev *rdev,
 	if (test_bit(Faulty, &rdev->flags))
 		return;
 
+	if (WARN_ON_ONCE(size <= 0 || offset + size > PAGE_SIZE))
+		return;
+
 	bio = bio_alloc_bioset(rdev->meta_bdev ? rdev->meta_bdev : rdev->bdev,
 			      1,
 			      REQ_OP_WRITE | REQ_SYNC | REQ_IDLE | REQ_META
