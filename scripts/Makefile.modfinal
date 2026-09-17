@@ -46,8 +46,47 @@ quiet_cmd_btf_ko = BTF [M] $@
 		$(CONFIG_SHELL) $(srctree)/scripts/gen-btf.sh --btf_base $(objtree)/vmlinux $@; \
 	fi;
 
+# Fold the table generation into the link command rather than running it as a
+# separate $(newer-prereqs) step: if_changed also relinks when only the command
+# line changes, e.g. when LDFLAGS_MODULE gains a different --build-id, and a
+# relinked module whose lineinfo step was skipped silently loses its table.
+#
+# The table describes the module's own section layout, so it is built from a
+# partial link that already has that layout and merged in the link that
+# produces the module.  Two things are held back for that second link: --be8,
+# because it converts the object to a form the linker will not read again, and
+# --build-id, because the note has to cover the module that is shipped and LLD
+# drops one it merely read.  Everything else belongs in the first link, where
+# the table is measured: KBUILD_LDFLAGS_MODULE names an object of its own on
+# PowerPC, arch/powerpc/lib/crtsavres.o, and text linked ahead of the module
+# would move the code the table describes away from the section anchor.  The
+# table object goes first in the second link so that its empty .text
+# contributes no bytes and the anchor still resolves to the start of that
+# code.  It is deleted up front because a table left behind by an interrupted
+# build describes a layout this one need not have.
+ifdef CONFIG_KALLSYMS_LINEINFO_MODULES
+lineinfo_ldflags_all = $(KBUILD_LDFLAGS_MODULE) $(LDFLAGS_MODULE)
+lineinfo_ldflags_last = $(filter --be8 --build-id --build-id=%,		\
+			       $(lineinfo_ldflags_all))
+
+      cmd_ld_ko_o =							\
+	rm -f $@.lineinfo_pre $@.lineinfo.o;				\
+	$(LD) -r $(KBUILD_LDFLAGS)					\
+		$(filter-out $(lineinfo_ldflags_last),			\
+			     $(lineinfo_ldflags_all))			\
+		-T $(objtree)/scripts/module.lds			\
+		-o $@.lineinfo_pre $(filter %.o, $^);			\
+	$(CONFIG_SHELL) $(srctree)/scripts/gen-mod-lineinfo.sh		\
+		$@.lineinfo_pre $@.lineinfo.o;				\
+	$(LD) -r $(KBUILD_LDFLAGS) $(lineinfo_ldflags_last)		\
+		-T $(objtree)/scripts/module.lds -o $@			\
+		$$(test -f $@.lineinfo.o && echo $@.lineinfo.o)		\
+		$@.lineinfo_pre;					\
+	rm -f $@.lineinfo_pre $@.lineinfo.o
+endif
+
 # Re-generate module BTFs if either module's .ko or vmlinux changed
-%.ko: %.o %.mod.o .module-common.o $(objtree)/scripts/module.lds $(and $(CONFIG_DEBUG_INFO_BTF_MODULES),$(KBUILD_BUILTIN),$(objtree)/vmlinux) FORCE
+%.ko: %.o %.mod.o .module-common.o $(objtree)/scripts/module.lds $(and $(CONFIG_DEBUG_INFO_BTF_MODULES),$(KBUILD_BUILTIN),$(objtree)/vmlinux) $(and $(CONFIG_KALLSYMS_LINEINFO_MODULES),$(objtree)/scripts/gen_lineinfo $(srctree)/scripts/gen-mod-lineinfo.sh) FORCE
 	+$(call if_changed,ld_ko_o)
 ifdef CONFIG_DEBUG_INFO_BTF_MODULES
 	+$(if $(newer-prereqs),$(call cmd,btf_ko))

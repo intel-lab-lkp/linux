@@ -51,22 +51,49 @@ With ``CONFIG_KALLSYMS_LINEINFO``::
 Note that assembly routines (such as ``entry_SYSCALL_64_after_hwframe``) are
 not annotated because they lack DWARF debug information.
 
+Module Support
+==============
+
+``CONFIG_KALLSYMS_LINEINFO_MODULES`` extends the feature to loadable kernel
+modules.  When enabled, each ``.ko`` is post-processed at build time to embed
+a ``.mod_lineinfo`` section containing the same kind of address-to-source
+mapping.
+
+Enable in addition to the base options::
+
+    CONFIG_MODULES=y
+    CONFIG_KALLSYMS_LINEINFO_MODULES=y
+
+Stack traces from module code will then include annotations::
+
+    my_driver_func+0x30/0x100 [my_driver] (drivers/foo/bar.c:123)
+
+The ``.mod_lineinfo`` section is loaded into read-only module memory alongside
+the module text.  No additional runtime memory allocation is required; the data
+is freed when the module is unloaded.
+
 Memory Overhead
 ===============
 
-The lineinfo tables are stored in ``.rodata``.  On an x86_64 ``defconfig``
-with ``CONFIG_DEBUG_INFO`` they hold 1.66 million entries and grow the
-stripped image by 16 MiB, about 10 bytes per entry after deduplication.
+The vmlinux lineinfo tables are stored in ``.rodata``.  On an x86_64
+``defconfig`` with ``CONFIG_DEBUG_INFO`` they hold 1.66 million entries and
+grow the stripped image by 16 MiB, about 10 bytes per entry after
+deduplication.
+
+Per-module lineinfo adds about 10 bytes per entry to each ``.ko`` file, plus
+a small fixed cost per covered section.
 
 Known Limitations
 =================
 
-- **vmlinux only**: Only symbols in the core kernel image are annotated.
-  Module symbols are not covered.
-- **4 GiB offset limit**: Address offsets from ``_text`` are stored as 32-bit
-  values.  Entries beyond 4 GiB from ``_text`` are skipped at build time with
-  a warning.
+- **4 GiB offset limit**: Address offsets from ``_text`` (vmlinux) or
+  ``.text`` base (modules) are stored as 32-bit values.  Entries beyond
+  4 GiB are skipped at build time with a warning.
 - **65535 file limit**: Source file IDs are stored as 16-bit values.  Builds
   with more than 65535 unique source files will fail with an error.
 - **No assembly annotations**: Functions implemented in assembly that lack
   DWARF ``.debug_line`` data are not annotated.
+- **Module init text**: A module's ``.init.text`` is annotated from a separate
+  ``.init.mod_lineinfo`` section, which is released along with the module's
+  init memory.  Traces taken after the module has finished initializing carry
+  no annotation for those addresses.
