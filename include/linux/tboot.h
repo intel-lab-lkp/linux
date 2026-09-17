@@ -24,6 +24,10 @@ enum {
 #include <linux/acpi.h>
 /* used to communicate between tboot and the launched kernel */
 
+/*TXT Extended Data Element Types*/
+#define HEAP_EXTDATA_TYPE_END   0
+#define HEAP_EXTDATA_TYPE_DTPR 14
+
 #define TB_KEY_SIZE             64   /* 512 bits */
 
 #define MAX_TB_MAC_REGIONS      32
@@ -56,6 +60,14 @@ struct tboot_acpi_sleep_info {
 	u64 wakeup_vector;
 	u32 vector_width;
 	u64 kernel_s3_resume_vector;
+} __packed;
+
+/*
+ * structure for tboot extended data elements
+ */
+struct heap_ext_data_elt {
+	u32 type;
+	u32 size;
 } __packed;
 
 /*
@@ -126,6 +138,9 @@ extern void tboot_probe(void);
 extern void tboot_shutdown(u32 shutdown_type);
 extern struct acpi_table_header *tboot_get_dmar_table(
 				      struct acpi_table_header *dmar_tbl);
+extern struct acpi_table_dtpr *tboot_get_dtpr_table(void **);
+extern void tboot_parse_dtpr_table(struct acpi_table_dtpr *);
+extern bool tboot_is_tpr_enabled(void);
 
 #else
 
@@ -135,6 +150,9 @@ extern struct acpi_table_header *tboot_get_dmar_table(
 #define tboot_sleep(sleep_state, pm1a_control, pm1b_control)	\
 					do { } while (0)
 #define tboot_get_dmar_table(dmar_tbl)	(dmar_tbl)
+#define tboot_get_dtpr_table(txt_heap) NULL
+#define tboot_parse_dtpr_table(dtpr) do { } while (0)
+#define tboot_is_tpr_enabled() 0
 
 #endif /* !CONFIG_INTEL_TXT */
 
