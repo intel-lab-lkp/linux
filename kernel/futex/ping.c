@@ -105,6 +105,43 @@ static void futex_unqueue_ping(struct futex_q *q)
 	q->ping_state = NULL;
 }
 
+/*
+ * We own the ping_state but weren't able to get the futex.
+ * Wake up the next waiter and give them ownership.
+ */
+static void give_ping_state_to_next_waiter(struct futex_hash_bucket *hb,
+					   union futex_key *key,
+					   struct futex_pi_state *ping_state)
+{
+	struct futex_q *top_waiter;
+	DEFINE_WAKE_Q(wake_q);
+
+	raw_spin_lock_irq(&ping_state->ping_mutex.wait_lock);
+	/*
+	 * Someone else got the futex and we don't need to do anything
+	 * anymore, as it's their responsibility now.
+	 */
+	if (ping_state->owner && ping_state->owner != current)
+		goto out;
+
+	top_waiter = futex_top_waiter(hb, key);
+	/*
+	 * There are no other waiters but we leave the WAITERS bit set
+	 * (with no owner or ping_state) to be cleaned up at a later unlock,
+	 * at the cost of an extra syscall at the next lock operation, to
+	 * keep things simple.
+	 */
+	if (!top_waiter)
+		goto out;
+	get_ping_state(ping_state);
+	get_task_struct(top_waiter->task);
+	wake_q_add_safe(&wake_q, top_waiter->task);
+	ping_state_update_owner(ping_state, top_waiter->task);
+
+out:
+	raw_spin_unlock_irq_wake(&ping_state->ping_mutex.wait_lock, &wake_q);
+}
+
 /* Returns >0 if lock acquired, <0 on error */
 static int futex_trylock_ping_state(u32 __user *uaddr,
 				    struct futex_pi_state *ping_state)
@@ -365,18 +402,31 @@ retry_private:
 		}
 
 out_unqueue:
+		/*
+		 * We got a pending signal or timeout, but the futex was handed
+		 * off to us. Fix up the return value to indicate success.
+		 */
+		if ((ret == -EINTR || ret == -ETIMEDOUT) &&
+		    ping_mutex_owner(&q.ping_state->ping_mutex) == current)
+			ret = 0;
+
+		/*
+		 * We are the pi_state owner but don't own the futex.
+		 * This can happen if we get picked by the previous
+		 * owner but get out without acquiring the lock for
+		 * some reason.
+		 * Wake up the next waiter and give the ping_state to them.
+		 */
 		if (ret != 0 && q.ping_state->owner == current) {
-			/*
-			 * We are pi_state owner but don't own the futex.
-			 * This can happen if we get picked by the previous
-			 * owner but get out without acquiring the lock for
-			 * some reason.
-			 * A later commit addresses this.
-			 */
-			WARN_ON_ONCE(1);
-		}
-		/* This also puts the ping_state */
-		futex_unqueue_ping(&q);
+			if (!plist_node_empty(&q.list))
+				__futex_unqueue(&q);
+			give_ping_state_to_next_waiter(hb, &q.key,
+						       q.ping_state);
+			put_ping_state(q.ping_state);
+		} else
+			/* This also puts the ping_state */
+			futex_unqueue_ping(&q);
+
 out_unlock:
 		futex_q_unlock(hb);
 		__release(q.lock_ptr);
