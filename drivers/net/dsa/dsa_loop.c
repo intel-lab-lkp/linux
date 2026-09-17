@@ -390,6 +390,8 @@ static int dsa_loop_drv_probe(struct mdio_device *mdiodev)
 	if (!ret)
 		dev_info(&mdiodev->dev, "%s: 0x%0x\n",
 			 pdata->name, pdata->enabled_ports);
+	else
+		dev_put(ps->netdev);
 
 	return ret;
 }
