@@ -66,6 +66,9 @@ static int xfrm4_transport_output(struct xfrm_state *x, struct sk_buff *skb)
 	struct iphdr *iph = ip_hdr(skb);
 	int ihl = iph->ihl * 4;
 
+	if (ihl > skb->len)
+		return -EINVAL;
+
 	if (!skb->inner_protocol)
 		skb_set_inner_transport_header(skb,
 					       skb_transport_offset(skb));
