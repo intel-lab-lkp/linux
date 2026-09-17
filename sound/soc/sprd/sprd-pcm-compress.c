@@ -235,9 +235,9 @@ static int sprd_platform_compr_dma_config(struct snd_soc_component *component,
 	 * We configure the DMA request mode, interrupt mode, channel
 	 * mode and channel trigger mode by the flags.
 	 */
-	dma->desc = dma->chan->device->device_prep_slave_sg(dma->chan, sg,
-							    sg_num, dir,
-							    flags, &link);
+	dma->desc = dmaengine_prep_slave_sg_context(dma->chan, sg,
+						    sg_num, dir,
+						    flags, &link);
 	if (!dma->desc) {
 		dev_err(dev, "failed to prepare slave sg\n");
 		ret = -ENOMEM;
