@@ -77,6 +77,14 @@
 		mmc1 = &sdhi1;
 	};
 
+	sound_card: sound {
+		compatible = "audio-graph-card";
+
+		label = "snd-rzg3e";
+
+		dais = <&rsnd_port0>;	/* DA7212 */
+	};
+
 	vqmmc_sd1_pvdd: regulator-vqmmc-sd1-pvdd {
 		compatible = "regulator-gpio";
 		regulator-name = "SD1_PVDD";
@@ -85,14 +93,6 @@
 		gpios = <&pinctrl RZG3E_GPIO(1, 5) GPIO_ACTIVE_HIGH>;
 		gpios-states = <0>;
 		states = <3300000 0>, <1800000 1>;
-	};
-
-	sound_card: sound {
-		compatible = "audio-graph-card";
-
-		label = "snd-rzg3e";
-
-		dais = <&rsnd_port0>;	/* DA7212 */
 	};
 };
 
