@@ -1186,6 +1186,7 @@ nvmet_fc_target_assoc_free(struct kref *ref)
 	ida_free(&tgtport->assoc_cnt, assoc->a_id);
 	pr_info("{%d:%d}: Association freed\n",
 		tgtport->fc_target_port.port_num, assoc->a_id);
+	nvmet_fc_tgtport_put(tgtport);
 	kfree(assoc);
 }
 
@@ -1222,8 +1223,6 @@ nvmet_fc_delete_target_assoc(struct nvmet_fc_tgt_assoc *assoc)
 
 	pr_info("{%d:%d}: Association deleted\n",
 		tgtport->fc_target_port.port_num, assoc->a_id);
-
-	nvmet_fc_tgtport_put(tgtport);
 }
 
 static struct nvmet_fc_tgt_assoc *
