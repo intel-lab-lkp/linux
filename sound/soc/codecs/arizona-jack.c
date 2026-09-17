@@ -275,6 +275,7 @@ static void arizona_start_mic(struct arizona_priv *info)
 				       &change);
 	if (ret < 0) {
 		dev_err(arizona->dev, "Failed to enable micd: %d\n", ret);
+		pm_runtime_put_autosuspend(arizona->dev);
 	} else if (!change) {
 		regulator_disable(info->micvdd);
 		pm_runtime_put_autosuspend(arizona->dev);
