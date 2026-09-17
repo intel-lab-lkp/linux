@@ -8782,11 +8782,9 @@ lpfc_els_rsp_rls_acc(struct lpfc_hba *phba, LPFC_MBOXQ_t *pmb)
 				     lpfc_max_els_tries, ndlp,
 				     ndlp->nlp_DID, ELS_CMD_ACC);
 
-	/* Decrement the ndlp reference count from previous mbox command */
-	lpfc_nlp_put(ndlp);
-
 	if (!elsiocb) {
 		mempool_free(pmb, phba->mbox_mem_pool);
+		lpfc_nlp_put(ndlp);
 		return;
 	}
 
@@ -8824,6 +8822,10 @@ lpfc_els_rsp_rls_acc(struct lpfc_hba *phba, LPFC_MBOXQ_t *pmb)
 	elsiocb->cmd_cmpl = lpfc_cmpl_els_rsp;
 	phba->fc_stat.elsXmitACC++;
 	elsiocb->ndlp = lpfc_nlp_get(ndlp);
+
+	/* Decrement the ndlp reference count from previous mbox command */
+	lpfc_nlp_put(ndlp);
+
 	if (!elsiocb->ndlp) {
 		lpfc_els_free_iocb(phba, elsiocb);
 		return;
