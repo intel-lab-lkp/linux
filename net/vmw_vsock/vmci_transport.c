@@ -529,18 +529,25 @@ static bool vmci_transport_allow_dgram(struct vsock_sock *vsock, u32 peer_cid)
 	if (VMADDR_CID_HYPERVISOR == peer_cid)
 		return true;
 
-	if (vsock->cached_peer != peer_cid) {
-		vsock->cached_peer = peer_cid;
-		if (!vmci_transport_is_trusted(vsock, peer_cid) &&
-		    (vmci_context_get_priv_flags(peer_cid) &
-		     VMCI_PRIVILEGE_FLAG_RESTRICTED)) {
-			vsock->cached_peer_allow_dgram = false;
-		} else {
-			vsock->cached_peer_allow_dgram = true;
-		}
-	}
+	/* Enforce the per-netns mode on the receive path, symmetrically with
+	 * the send hook vmci_transport_dgram_allow(): a socket in a non-global
+	 * (local) netns must not receive datagrams it could never send.
+	 */
+	if (!vsock_net_mode_global(vsock))
+		return false;
 
-	return vsock->cached_peer_allow_dgram;
+	/* Evaluate on every datagram instead of caching the decision in
+	 * vsock->cached_peer{,_allow_dgram}: those fields were an
+	 * unsynchronized check-then-set shared between the lockless receive
+	 * tasklet and the lock_sock() send path, which could return a stale
+	 * 'allow' for a restricted peer.
+	 */
+	if (!vmci_transport_is_trusted(vsock, peer_cid) &&
+	    (vmci_context_get_priv_flags(peer_cid) &
+	     VMCI_PRIVILEGE_FLAG_RESTRICTED))
+		return false;
+
+	return true;
 }
 
 static int
