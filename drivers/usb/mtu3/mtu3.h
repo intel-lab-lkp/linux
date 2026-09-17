@@ -316,6 +316,14 @@ static inline struct ssusb_mtk *dev_to_ssusb(struct device *dev)
 }
 
 /**
+ * struct mtu3_platform_data - platform data for the driver.
+ * @single_slot: the IP can handle only one buffer for bulk transfers
+ */
+struct mtu3_platform_data {
+	bool single_slot;
+};
+
+/**
  * struct mtu3 - device driver instance data.
  * @slot: MTU3_U2_IP_SLOT_DEFAULT for U2 IP only,
  *		MTU3_U3_IP_SLOT_DEFAULT for U3 IP
@@ -369,6 +377,7 @@ struct mtu3 {
 	unsigned connected:1;
 	unsigned async_callbacks:1;
 	unsigned separate_fifo:1;
+	unsigned single_slot:1;
 
 	u8 address;
 	u8 test_mode_nr;

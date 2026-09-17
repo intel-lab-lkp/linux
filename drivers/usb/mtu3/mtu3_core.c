@@ -923,12 +923,17 @@ int ssusb_gadget_init(struct ssusb_mtk *ssusb)
 {
 	struct device *dev = ssusb->dev;
 	struct platform_device *pdev = to_platform_device(dev);
+	const struct mtu3_platform_data *pdata = NULL;
 	struct mtu3 *mtu = NULL;
 	int ret = -ENOMEM;
 
 	mtu = devm_kzalloc(dev, sizeof(struct mtu3), GFP_KERNEL);
 	if (mtu == NULL)
 		return -ENOMEM;
+
+	pdata = device_get_match_data(dev);
+	if (pdata)
+		mtu->single_slot = pdata->single_slot;
 
 	mtu->irq = platform_get_irq_byname_optional(pdev, "device");
 	if (mtu->irq < 0) {
