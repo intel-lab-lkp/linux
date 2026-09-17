@@ -1,24 +1,29 @@
 // SPDX-License-Identifier: GPL-2.0
-#include <assert.h>
-#include <linux/compiler.h>
-#include <elfutils/libdw.h>
-#include <elfutils/libdwfl.h>
-#include <inttypes.h>
-#include <errno.h>
-#include "debug.h"
-#include "dso.h"
-#include <dwarf-regs.h>
-#include "unwind.h"
 #include "unwind-libdw.h"
-#include "machine.h"
-#include "map.h"
-#include "symbol.h"
-#include "thread.h"
+
+#include <assert.h>
+#include <errno.h>
+#include <inttypes.h>
+#include <stdlib.h>
+
+#include <linux/compiler.h>
 #include <linux/types.h>
 #include <linux/zalloc.h>
-#include "event.h"
-#include "perf_regs.h"
+
+#include <dwarf-regs.h>
+#include <elfutils/libdw.h>
+#include <elfutils/libdwfl.h>
+
 #include "callchain.h"
+#include "debug.h"
+#include "dso.h"
+#include "event.h"
+#include "machine.h"
+#include "map.h"
+#include "perf_regs.h"
+#include "symbol.h"
+#include "thread.h"
+#include "unwind.h"
 #include "util/env.h"
 
 /*
