@@ -2759,7 +2759,7 @@ static struct fman *read_dts_node(struct platform_device *of_dev)
 		err = -EINVAL;
 		dev_err(&of_dev->dev, "%s: could not find MURAM node\n",
 			__func__);
-		goto fman_free;
+		goto fman_node_put;
 	}
 
 	err = of_address_to_resource(muram_node, 0,
@@ -2768,7 +2768,7 @@ static struct fman *read_dts_node(struct platform_device *of_dev)
 		of_node_put(muram_node);
 		dev_err(&of_dev->dev, "%s: of_address_to_resource() = %d\n",
 			__func__, err);
-		goto fman_free;
+		goto fman_node_put;
 	}
 
 	of_node_put(muram_node);
@@ -2778,7 +2778,7 @@ static struct fman *read_dts_node(struct platform_device *of_dev)
 	if (err < 0) {
 		dev_err(&of_dev->dev, "%s: irq %d allocation failed (error = %d)\n",
 			__func__, irq, err);
-		goto fman_free;
+		goto fman_node_put;
 	}
 
 	if (fman->dts_params.err_irq != 0) {
@@ -2788,7 +2788,7 @@ static struct fman *read_dts_node(struct platform_device *of_dev)
 		if (err < 0) {
 			dev_err(&of_dev->dev, "%s: irq %d allocation failed (error = %d)\n",
 				__func__, fman->dts_params.err_irq, err);
-			goto fman_free;
+			goto fman_node_put;
 		}
 	}
 
@@ -2796,7 +2796,7 @@ static struct fman *read_dts_node(struct platform_device *of_dev)
 	if (IS_ERR(base_addr)) {
 		err = PTR_ERR(base_addr);
 		dev_err(&of_dev->dev, "%s: devm_ioremap() failed\n", __func__);
-		goto fman_free;
+		goto fman_node_put;
 	}
 
 	fman->dts_params.base_addr = base_addr;
@@ -2808,13 +2808,15 @@ static struct fman *read_dts_node(struct platform_device *of_dev)
 	if (err) {
 		dev_err(&of_dev->dev, "%s: of_platform_populate() failed\n",
 			__func__);
-		goto fman_free;
+		goto fman_node_put;
 	}
 
 #ifdef CONFIG_DPAA_ERRATUM_A050385
 	fman_has_err_a050385 =
 		of_property_read_bool(fm_node, "fsl,erratum-a050385");
 #endif
+
+	of_node_put(fm_node);
 
 	return fman;
 
