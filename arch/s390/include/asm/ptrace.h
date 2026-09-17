@@ -132,7 +132,6 @@ struct pt_regs {
 	};
 	unsigned long flags;
 	unsigned long last_break;
-	unsigned int cpu;
 	unsigned char percpu_register;
 };
 
