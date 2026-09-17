@@ -294,34 +294,77 @@ static bool has_tsx(const struct kvm_cpuid_entry2 *entry)
 	       (entry->ebx & TDX_FEATURE_TSX);
 }
 
-static void clear_tsx(struct kvm_cpuid_entry2 *entry)
-{
-	entry->ebx &= ~TDX_FEATURE_TSX;
-}
-
 static bool has_waitpkg(const struct kvm_cpuid_entry2 *entry)
 {
 	return entry->function == 7 && entry->index == 0 &&
 	       (entry->ecx & __feature_bit(X86_FEATURE_WAITPKG));
 }
 
-static void clear_waitpkg(struct kvm_cpuid_entry2 *entry)
-{
-	entry->ecx &= ~__feature_bit(X86_FEATURE_WAITPKG);
-}
-
-static void tdx_clear_unsupported_cpuid(struct kvm_cpuid_entry2 *entry)
-{
-	if (has_tsx(entry))
-		clear_tsx(entry);
-
-	if (has_waitpkg(entry))
-		clear_waitpkg(entry);
-}
-
 static bool tdx_unsupported_cpuid(const struct kvm_cpuid_entry2 *entry)
 {
 	return has_tsx(entry) || has_waitpkg(entry);
+}
+
+#define TDX_CPUID_ALL_ALLOWED_MASK	GENMASK_U32(31, 0)
+
+static u32 tdx_get_cpuid_cfg_non_feature_mask(u32 function, u32 index, int reg)
+{
+	/*
+	 * For a leaf/subleaf/register that will never be repurposed to hold
+	 * feature bits, it's safe to return TDX_CPUID_ALL_ALLOWED_MASK, i.e.
+	 * leave the TDX module's CPUID config mask intact.
+	 */
+	switch (function) {
+	case 1:
+		if (reg == CPUID_EAX || reg == CPUID_EBX)
+			return TDX_CPUID_ALL_ALLOWED_MASK;
+		return 0;
+	case 4:
+	case 0x18:
+	case 0x1f:
+		return TDX_CPUID_ALL_ALLOWED_MASK;
+	case 0x24:
+		if (index == 0 && reg == CPUID_EBX)
+			return GENMASK_U32(7, 0);
+		return 0;
+	case 0x80000008:
+		if (reg == CPUID_EAX)
+			return TDX_CPUID_ALL_ALLOWED_MASK;
+		return 0;
+	default:
+		return 0;
+	}
+}
+
+static u32 tdx_get_cpuid_cfg_feature_mask(u32 function, u32 index, int reg)
+{
+	for (int i = 0; i < NR_KVM_CPU_CAPS; i++) {
+		const struct cpuid_reg *cpuid = &reverse_cpuid[i];
+
+		if (!cpuid->function)
+			continue;
+
+		if (cpuid->function == function && cpuid->index == index &&
+		    cpuid->reg == reg)
+			return tdx_cpu_cfg_caps[i];
+	}
+
+	return 0;
+}
+
+static u32 tdx_get_cpuid_cfg_mask(u32 function, u32 index, int reg)
+{
+	u32 non_feature_mask = tdx_get_cpuid_cfg_non_feature_mask(function, index, reg);
+
+	/* Skip reverse_cpuid[] walk if it's already all allowed. */
+	if (non_feature_mask == TDX_CPUID_ALL_ALLOWED_MASK)
+		return TDX_CPUID_ALL_ALLOWED_MASK;
+
+	/*
+	 * It's possible that a CPUID register contains both feature and
+	 * non-feature bits.
+	 */
+	return non_feature_mask | tdx_get_cpuid_cfg_feature_mask(function, index, reg);
 }
 
 #define KVM_TDX_CPUID_NO_SUBLEAF	((__u32)-1)
@@ -347,8 +390,6 @@ static void td_init_cpuid_entry2(struct kvm_cpuid_entry2 *entry, unsigned char i
 	 */
 	if (entry->function == 0x80000008)
 		entry->eax = tdx_set_guest_phys_addr_bits(entry->eax, 0xff);
-
-	tdx_clear_unsupported_cpuid(entry);
 }
 
 #define TDVMCALLINFO_SETUP_EVENT_NOTIFY_INTERRUPT	BIT(1)
@@ -371,8 +412,16 @@ static int init_kvm_tdx_caps(const struct tdx_sys_info_td_conf *td_conf,
 	caps->user_tdvmcallinfo_1_r11 =
 		TDVMCALLINFO_SETUP_EVENT_NOTIFY_INTERRUPT;
 
-	for (i = 0; i < td_conf->num_cpuid_config; i++)
-		td_init_cpuid_entry2(&caps->cpuid.entries[i], i);
+	for (i = 0; i < td_conf->num_cpuid_config; i++) {
+		struct kvm_cpuid_entry2 *e = &caps->cpuid.entries[i];
+
+		td_init_cpuid_entry2(e, i);
+		/* Only report the configurable bits allowed by KVM. */
+		e->eax &= tdx_get_cpuid_cfg_mask(e->function, e->index, CPUID_EAX);
+		e->ebx &= tdx_get_cpuid_cfg_mask(e->function, e->index, CPUID_EBX);
+		e->ecx &= tdx_get_cpuid_cfg_mask(e->function, e->index, CPUID_ECX);
+		e->edx &= tdx_get_cpuid_cfg_mask(e->function, e->index, CPUID_EDX);
+	}
 
 	return 0;
 }

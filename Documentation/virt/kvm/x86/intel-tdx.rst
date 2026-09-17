@@ -69,6 +69,14 @@ Return the TDX capabilities that current KVM supports with the specific TDX
 module loaded in the system.  It reports what features/capabilities are allowed
 to be configured to the TDX guest.
 
+Note, a CPUID feature bit that the TDX module reports as directly configurable
+is not necessarily reported as configurable by KVM.  KVM omits features it
+doesn't support.  Generally speaking, KVM reports a feature as configurable
+only if KVM supports the feature for both TDX and non-TDX VMs, though there are
+a handful of exceptions where KVM allows a feature for TDX guests that it never
+advertises for non-TDX VMs.  Userspace must rely on KVM_TDX_CAPABILITIES to
+determine what can be passed in cpuid to KVM_TDX_INIT_VM.
+
 - id: KVM_TDX_CAPABILITIES
 - flags: must be 0
 - data: pointer to struct kvm_tdx_capabilities
