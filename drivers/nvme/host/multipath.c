@@ -499,6 +499,8 @@ inline struct nvme_ns *nvme_find_path(struct nvme_ns_head *head)
 static bool nvme_available_path(struct nvme_ns_head *head)
 	__must_hold_shared(&head->srcu)
 {
+	bool fail_if_no_path = test_bit(NVME_NSHEAD_FAIL_IF_NO_PATH,
+					&head->flags);
 	struct nvme_ns *ns;
 
 	if (!test_bit(NVME_NSHEAD_DISK_LIVE, &head->flags))
@@ -510,13 +512,24 @@ static bool nvme_available_path(struct nvme_ns_head *head)
 			continue;
 		switch (nvme_ctrl_state(ns->ctrl)) {
 		case NVME_CTRL_LIVE:
-		case NVME_CTRL_RESETTING:
-		case NVME_CTRL_CONNECTING:
+			if (fail_if_no_path &&
+			    (ns->ana_state == NVME_ANA_INACCESSIBLE ||
+			     ns->ana_state == NVME_ANA_PERSISTENT_LOSS))
+				continue;
 			return true;
+		case NVME_CTRL_RESETTING:
+			return true;
+		case NVME_CTRL_CONNECTING:
+			if (!fail_if_no_path)
+				return true;
+			continue;
 		default:
 			break;
 		}
 	}
+
+	if (fail_if_no_path)
+		return false;
 
 	/*
 	 * If "head->delayed_removal_secs" is configured (i.e., non-zero), do
@@ -1182,6 +1195,48 @@ static ssize_t delayed_removal_secs_store(struct device *dev,
 }
 
 DEVICE_ATTR_RW(delayed_removal_secs);
+
+static ssize_t fail_if_no_path_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct gendisk *disk = dev_to_disk(dev);
+	struct nvme_ns_head *head = disk->private_data;
+
+	return sysfs_emit(buf, test_bit(NVME_NSHEAD_FAIL_IF_NO_PATH,
+			&head->flags) ? "on\n" : "off\n");
+}
+
+static ssize_t fail_if_no_path_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct gendisk *disk = dev_to_disk(dev);
+	struct nvme_ns_head *head = disk->private_data;
+	bool enable;
+	int ret;
+
+	ret = kstrtobool(buf, &enable);
+	if (ret < 0)
+		return ret;
+
+	if (enable)
+		set_bit(NVME_NSHEAD_FAIL_IF_NO_PATH, &head->flags);
+	else
+		clear_bit(NVME_NSHEAD_FAIL_IF_NO_PATH, &head->flags);
+
+	/*
+	 * Ensure that update to NVME_NSHEAD_FAIL_IF_NO_PATH is seen
+	 * by its reader.
+	 */
+	synchronize_srcu(&head->srcu);
+
+	/* Make already-queued I/O re-evaluate path availability. */
+	if (enable)
+		kblockd_schedule_work(&head->requeue_work);
+
+	return count;
+}
+
+DEVICE_ATTR_RW(fail_if_no_path);
 
 static ssize_t multipath_failover_count_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
