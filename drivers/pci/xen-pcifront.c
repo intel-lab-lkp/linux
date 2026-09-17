@@ -579,6 +579,7 @@ static pci_ers_result_t pcifront_common_process(int cmd,
 	int bus = pdev->sh_info->aer_op.bus;
 	int devfn = pdev->sh_info->aer_op.devfn;
 	int domain = pdev->sh_info->aer_op.domain;
+	pci_ers_result_t result = PCI_ERS_RESULT_NONE;
 	struct pci_dev *pcidev;
 
 	dev_dbg(&pdev->xdev->dev,
@@ -597,21 +598,25 @@ static pci_ers_result_t pcifront_common_process(int cmd,
 		pci_dbg(pcidev, "trying to call AER service\n");
 		switch (cmd) {
 		case XEN_PCI_OP_aer_detected:
-			return pdrv->err_handler->error_detected(pcidev, state);
+			result = pdrv->err_handler->error_detected(pcidev, state);
+			break;
 		case XEN_PCI_OP_aer_mmio:
-			return pdrv->err_handler->mmio_enabled(pcidev);
+			result = pdrv->err_handler->mmio_enabled(pcidev);
+			break;
 		case XEN_PCI_OP_aer_slotreset:
-			return pdrv->err_handler->slot_reset(pcidev);
+			result = pdrv->err_handler->slot_reset(pcidev);
+			break;
 		case XEN_PCI_OP_aer_resume:
 			pdrv->err_handler->resume(pcidev);
-			return PCI_ERS_RESULT_NONE;
+			break;
 		default:
 			dev_err(&pdev->xdev->dev,
 				"bad request in aer recovery operation!\n");
 		}
 	}
 
-	return PCI_ERS_RESULT_NONE;
+	pci_dev_put(pcidev);
+	return result;
 }
 
 
