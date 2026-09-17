@@ -48,7 +48,6 @@ ssize_t test_write(int fd, const void *buf, size_t count)
 	/* Note: Count of zero is allowed (see "RETURN VALUE" portion of
 	 * write(2) manpage for details.
 	 */
-	TEST_ASSERT(count >= 0, "Unexpected count, count: %li", count);
 
 	do {
 		rc = write(fd, ptr, num_left);
@@ -125,7 +124,6 @@ ssize_t test_read(int fd, void *buf, size_t count)
 	/* Note: Count of zero is allowed (see "If count is zero" portion of
 	 * read(2) manpage for details.
 	 */
-	TEST_ASSERT(count >= 0, "Unexpected count, count: %li", count);
 
 	do {
 		rc = read(fd, ptr, num_left);
