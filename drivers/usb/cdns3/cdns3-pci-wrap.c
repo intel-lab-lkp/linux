@@ -89,7 +89,7 @@ static int cdns3_pci_probe(struct pci_dev *pdev,
 	err = pcim_enable_device(pdev);
 	if (err) {
 		dev_err(&pdev->dev, "Enabling PCI device has failed %d\n", err);
-		return err;
+		goto put_func;
 	}
 
 	pci_set_master(pdev);
@@ -98,8 +98,10 @@ static int cdns3_pci_probe(struct pci_dev *pdev,
 		wrap = pci_get_drvdata(func);
 	} else {
 		wrap = kzalloc_obj(*wrap);
-		if (!wrap)
-			return -ENOMEM;
+		if (!wrap) {
+			err = -ENOMEM;
+			goto put_func;
+		}
 	}
 
 	res = wrap->dev_res;
@@ -160,11 +162,16 @@ static int cdns3_pci_probe(struct pci_dev *pdev,
 		if (IS_ERR(wrap->plat_dev)) {
 			err = PTR_ERR(wrap->plat_dev);
 			kfree(wrap);
-			return err;
+			goto put_func;
 		}
 	}
 
 	pci_set_drvdata(pdev, wrap);
+	err = 0;
+
+put_func:
+	pci_dev_put(func);
+
 	return err;
 }
 
