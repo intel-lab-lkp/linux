@@ -200,6 +200,7 @@ static void __init of_unittest_dynamic(void)
 	prop = kzalloc_objs(*prop, 4);
 	if (!prop) {
 		unittest(0, "kzalloc() failed\n");
+		of_node_put(np);
 		return;
 	}
 
@@ -244,6 +245,8 @@ static void __init of_unittest_dynamic(void)
 	if (prop->value)
 		unittest(of_add_property(np, prop) == 0,
 			 "Adding a large property should have passed\n");
+
+	of_node_put(np);
 }
 
 static int __init of_unittest_check_node_linkage(struct device_node *np)
