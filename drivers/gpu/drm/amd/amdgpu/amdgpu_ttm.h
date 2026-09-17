@@ -269,4 +269,7 @@ void amdgpu_ttm_mmio_remap_free_sgt(struct device *dev,
 				    enum dma_data_direction dir,
 				    struct sg_table *sgt);
 
+const char *amdgpu_ttm_pl_to_name(unsigned int placement);
+const struct drm_memory_info *amdgpu_drm_memory_info(struct drm_device *drm);
+
 #endif

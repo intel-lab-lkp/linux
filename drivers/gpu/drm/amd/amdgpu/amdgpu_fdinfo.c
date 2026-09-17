@@ -55,14 +55,9 @@ static const char *amdgpu_ip_name[AMDGPU_HW_IP_NUM] = {
 	[AMDGPU_HW_IP_VPE]	=	"vpe",
 };
 
-void amdgpu_show_fdinfo(struct drm_printer *p, struct drm_file *file)
+const char *amdgpu_ttm_pl_to_name(unsigned int placement)
 {
-	struct amdgpu_fpriv *fpriv = file->driver_priv;
-	struct amdgpu_vm *vm = &fpriv->vm;
-
-	struct amdgpu_mem_stats stats[__AMDGPU_PL_NUM];
-	ktime_t usage[AMDGPU_HW_IP_NUM];
-	const char *pl_name[] = {
+	static const char *names[] = {
 		[TTM_PL_VRAM] = "vram",
 		[TTM_PL_TT] = "gtt",
 		[TTM_PL_SYSTEM] = "cpu",
@@ -71,6 +66,30 @@ void amdgpu_show_fdinfo(struct drm_printer *p, struct drm_file *file)
 		[AMDGPU_PL_OA] = "oa",
 		[AMDGPU_PL_DOORBELL] = "doorbell",
 		[AMDGPU_PL_MMIO_REMAP] = "mmioremap",
+	};
+
+	if (WARN_ON_ONCE(placement >= ARRAY_SIZE(names)))
+		return "unknown";
+
+	return names[placement];
+}
+
+void amdgpu_show_fdinfo(struct drm_printer *p, struct drm_file *file)
+{
+	struct amdgpu_fpriv *fpriv = file->driver_priv;
+	struct amdgpu_vm *vm = &fpriv->vm;
+
+	struct amdgpu_mem_stats stats[__AMDGPU_PL_NUM];
+	ktime_t usage[AMDGPU_HW_IP_NUM];
+	static const unsigned int regions[] = {
+		TTM_PL_VRAM,
+		TTM_PL_TT,
+		TTM_PL_SYSTEM,
+		AMDGPU_PL_GDS,
+		AMDGPU_PL_GWS,
+		AMDGPU_PL_OA,
+		AMDGPU_PL_DOORBELL,
+		AMDGPU_PL_MMIO_REMAP,
 	};
 	unsigned int hw_ip, i;
 
@@ -85,15 +104,12 @@ void amdgpu_show_fdinfo(struct drm_printer *p, struct drm_file *file)
 
 	drm_printf(p, "pasid:\t%u\n", fpriv->vm.pasid);
 
-	for (i = 0; i < ARRAY_SIZE(pl_name); i++) {
-		if (!pl_name[i])
-			continue;
-
+	for (i = 0; i < ARRAY_SIZE(regions); i++) {
 		drm_print_memory_stats(p,
 				       &stats[i].drm,
 				       DRM_GEM_OBJECT_RESIDENT |
 				       DRM_GEM_OBJECT_PURGEABLE,
-				       pl_name[i]);
+				       amdgpu_ttm_pl_to_name(regions[i]));
 	}
 
 	/* Legacy amdgpu keys, alias to drm-resident-memory-: */
