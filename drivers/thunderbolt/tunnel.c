@@ -1116,15 +1116,16 @@ static void tb_dp_dprx_work(struct work_struct *work)
 
 static int tb_dp_dprx_start(struct tb_tunnel *tunnel)
 {
-	/*
-	 * Bump up the reference to keep the tunnel around. It will be
-	 * dropped in tb_dp_dprx_stop() once the tunnel is deactivated.
-	 */
-	tb_tunnel_get(tunnel);
-
 	tunnel->dprx_started = true;
 
 	if (tunnel->callback) {
+		/*
+		 * Bump up the reference to keep the tunnel around while
+		 * the delayed work is pending. It is dropped either in
+		 * tb_dp_dprx_stop() when the work was canceled, or by the
+		 * work itself.
+		 */
+		tb_tunnel_get(tunnel);
 		tunnel->dprx_timeout = dprx_timeout_to_ktime(dprx_timeout);
 		queue_delayed_work(tunnel->tb->wq, &tunnel->dprx_work, 0);
 		return -EINPROGRESS;
