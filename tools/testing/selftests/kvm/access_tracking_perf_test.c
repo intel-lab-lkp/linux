@@ -504,7 +504,7 @@ static void help(char *name)
 	printf("usage: %s [-h] [-m mode] [-b vcpu_bytes] [-v vcpus] [-o]  [-s mem_type]\n",
 	       name);
 	puts("");
-	printf(" -h: Display this help message.");
+	printf(" -h: Display this help message.\n");
 	guest_modes_help();
 	printf(" -b: specify the size of the memory region which should be\n"
 	       "     dirtied by each vCPU. e.g. 10M or 3G.\n"
