@@ -1032,6 +1032,8 @@ struct kvm_tdx_init_vm {
 	/*
 	 * Call KVM_TDX_INIT_VM before vcpu creation, thus before
 	 * KVM_SET_CPUID2.
+	 * KVM validates @cpuid, i.e. setting a bit that KVM_TDX_CAPABILITIES
+	 * doesn't report as configurable fails the ioctl.
 	 * This configuration supersedes KVM_SET_CPUID2s for VCPUs because the
 	 * TDX module directly virtualizes those CPUIDs without VMM.  The user
 	 * space VMM, e.g. qemu, should make KVM_SET_CPUID2 consistent with

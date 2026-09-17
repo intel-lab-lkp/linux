@@ -286,25 +286,6 @@ static u32 tdx_set_guest_phys_addr_bits(const u32 eax, int addr_bits)
 	return (eax & ~GENMASK(23, 16)) | (addr_bits & 0xff) << 16;
 }
 
-#define TDX_FEATURE_TSX (__feature_bit(X86_FEATURE_HLE) | __feature_bit(X86_FEATURE_RTM))
-
-static bool has_tsx(const struct kvm_cpuid_entry2 *entry)
-{
-	return entry->function == 7 && entry->index == 0 &&
-	       (entry->ebx & TDX_FEATURE_TSX);
-}
-
-static bool has_waitpkg(const struct kvm_cpuid_entry2 *entry)
-{
-	return entry->function == 7 && entry->index == 0 &&
-	       (entry->ecx & __feature_bit(X86_FEATURE_WAITPKG));
-}
-
-static bool tdx_unsupported_cpuid(const struct kvm_cpuid_entry2 *entry)
-{
-	return has_tsx(entry) || has_waitpkg(entry);
-}
-
 #define TDX_CPUID_ALL_ALLOWED_MASK	GENMASK_U32(31, 0)
 
 static u32 tdx_get_cpuid_cfg_non_feature_mask(u32 function, u32 index, int reg)
@@ -2548,6 +2529,17 @@ static int setup_tdparams_eptp_controls(struct kvm_cpuid2 *cpuid,
 	return 0;
 }
 
+static bool tdx_has_unsupported_cpuid_cfg_bit(const struct kvm_cpuid_entry2 *entry)
+{
+	u32 function = entry->function;
+	u32 index = entry->index;
+
+	return (entry->eax & ~tdx_get_cpuid_cfg_mask(function, index, CPUID_EAX)) ||
+	       (entry->ebx & ~tdx_get_cpuid_cfg_mask(function, index, CPUID_EBX)) ||
+	       (entry->ecx & ~tdx_get_cpuid_cfg_mask(function, index, CPUID_ECX)) ||
+	       (entry->edx & ~tdx_get_cpuid_cfg_mask(function, index, CPUID_EDX));
+}
+
 static int setup_tdparams_cpuids(struct kvm_cpuid2 *cpuid,
 				 struct td_params *td_params)
 {
@@ -2571,7 +2563,16 @@ static int setup_tdparams_cpuids(struct kvm_cpuid2 *cpuid,
 		if (!entry)
 			continue;
 
-		if (tdx_unsupported_cpuid(entry))
+		/*
+		 * Reject entries whose index doesn't match the expected one.
+		 * This catches userspace passing a CPUID entry with the
+		 * KVM_CPUID_FLAG_SIGNIFCANT_INDEX flag cleared when the index
+		 * is significant.
+		 */
+		if (entry->index != tmp.index)
+			return -EINVAL;
+
+		if (tdx_has_unsupported_cpuid_cfg_bit(entry))
 			return -EINVAL;
 
 		copy_cnt++;
