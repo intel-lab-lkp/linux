@@ -1842,6 +1842,8 @@ static void xudc_ep0_out(struct xusb_udc *udc)
 		ep0rambase = (u8 __force *) (udc->addr +
 			     (ep0->rambase << 2));
 		buffer = req->usb_req.buf + req->usb_req.actual;
+		if (bytes_to_rx > req->usb_req.length - req->usb_req.actual)
+			bytes_to_rx = req->usb_req.length - req->usb_req.actual;
 		req->usb_req.actual = req->usb_req.actual + bytes_to_rx;
 		memcpy_toio((void __iomem *)buffer, ep0rambase, bytes_to_rx);
 
