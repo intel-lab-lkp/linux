@@ -1983,13 +1983,13 @@ void ssh_ptl_shutdown(struct ssh_ptl *ptl)
 		smp_mb__before_atomic();
 		clear_bit(SSH_PACKET_SF_PENDING_BIT, &p->state);
 
-		list_move_tail(&p->pending_node, &complete_q);
+		list_move_tail(&p->pending_node, &complete_p);
 	}
 	atomic_set(&ptl->pending.count, 0);
 	spin_unlock(&ptl->pending.lock);
 
 	/* Complete and drop packets on complete_q. */
-	list_for_each_entry(p, &complete_q, queue_node) {
+	list_for_each_entry_safe(p, n, &complete_q, queue_node) {
 		if (!test_and_set_bit(SSH_PACKET_SF_COMPLETED_BIT, &p->state))
 			__ssh_ptl_complete(p, -ESHUTDOWN);
 
@@ -1997,7 +1997,7 @@ void ssh_ptl_shutdown(struct ssh_ptl *ptl)
 	}
 
 	/* Complete and drop packets on complete_p. */
-	list_for_each_entry(p, &complete_p, pending_node) {
+	list_for_each_entry_safe(p, n, &complete_p, pending_node) {
 		if (!test_and_set_bit(SSH_PACKET_SF_COMPLETED_BIT, &p->state))
 			__ssh_ptl_complete(p, -ESHUTDOWN);
 
