@@ -1161,6 +1161,7 @@ struct ice_aq_get_set_rss_lut_params {
 #define ICE_SR_OROM_BANK_SIZE		0x45
 #define ICE_SR_NETLIST_BANK_PTR		0x46
 #define ICE_SR_NETLIST_BANK_SIZE	0x47
+#define ICE_SR_PQC_MANIFEST_BANK_PTR	0x4E
 #define ICE_SR_SECTOR_SIZE_IN_WORDS	0x800
 
 /* CSS Header words */
