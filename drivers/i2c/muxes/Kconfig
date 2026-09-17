@@ -64,6 +64,21 @@ config I2C_MUX_PCA9541
 	  This driver can also be built as a module.  If so, the module
 	  will be called i2c-mux-pca9541.
 
+config I2C_MUX_PCA9641
+	tristate "NXP PCA9641 I2C Master Arbiter"
+	help
+	  If you say yes here you get support for the NXP PCA9641
+	  2-to-1 I2C bus master arbiter.
+
+	  The PCA9641 arbitrates between two upstream I2C masters competing
+	  for a single downstream slave bus. It implements a lock/grant
+	  ownership model with an optional reserve time window, hardware
+	  interrupt outputs (INT0/INT1), and a 16-bit shared mailbox for
+	  inter-master communication.
+
+	  This driver can also be built as a module.  If so, the module
+	  will be called i2c-mux-pca9641.
+
 config I2C_MUX_PCA954x
 	tristate "NXP PCA954x/PCA984x and Maxim MAX735x/MAX736x I2C Mux/switches"
 	depends on GPIOLIB || COMPILE_TEST

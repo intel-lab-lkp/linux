@@ -12254,6 +12254,13 @@ S:	Maintained
 F:	Documentation/i2c/busses/i2c-nvidia-gpu.rst
 F:	drivers/i2c/busses/i2c-nvidia-gpu.c
 
+NXP PCA9641 I2C BUS MASTER ARBITER DRIVER
+M:	Shiv Prakash Gupta <shivprakash.gupta@nxp.com>
+L:	linux-i2c@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/i2c/nxp,pca9641.yaml
+F:	drivers/i2c/muxes/i2c-mux-pca9641.c
+
 I2C MUXES
 M:	Peter Rosin <peda@lysator.liu.se>
 L:	linux-i2c@vger.kernel.org
