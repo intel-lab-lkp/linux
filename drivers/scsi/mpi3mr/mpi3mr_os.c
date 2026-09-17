@@ -2052,7 +2052,6 @@ static void mpi3mr_pcietopochg_evt_bh(struct mpi3mr_ioc *mrioc,
 			if (tgtdev->host_exposed)
 				mpi3mr_remove_tgtdev_from_host(mrioc, tgtdev);
 			mpi3mr_tgtdev_del_from_list(mrioc, tgtdev, false);
-			mpi3mr_tgtdev_put(tgtdev);
 			break;
 		default:
 			break;
