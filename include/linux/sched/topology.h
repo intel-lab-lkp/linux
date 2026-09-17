@@ -234,6 +234,11 @@ static inline void rebuild_sched_domains_energy(void)
 }
 #endif
 
+static inline u64 cap_scale(u64 value, u64 scale)
+{
+	return value * scale >> SCHED_CAPACITY_SHIFT;
+}
+
 #ifndef arch_scale_cpu_capacity
 /**
  * arch_scale_cpu_capacity - get the capacity scale factor of a given CPU.
