@@ -825,7 +825,9 @@ static ssize_t nvme_ctrl_dhchap_secret_store(struct device *dev,
 {
 	struct nvme_ctrl *ctrl = dev_get_drvdata(dev);
 	struct nvmf_ctrl_options *opts = ctrl->opts;
+	struct nvme_dhchap_key *key = NULL;
 	char *dhchap_secret;
+	int ret;
 
 	if (!ctrl->opts->dhchap_secret)
 		return -EINVAL;
@@ -838,16 +840,17 @@ static ssize_t nvme_ctrl_dhchap_secret_store(struct device *dev,
 	if (!dhchap_secret)
 		return -ENOMEM;
 	memcpy(dhchap_secret, buf, count);
-	nvme_auth_stop(ctrl);
+
 	if (strcmp(dhchap_secret, opts->dhchap_secret)) {
-		struct nvme_dhchap_key *key, *host_key;
-		int ret;
+		struct nvme_dhchap_key *host_key;
 
 		ret = nvme_auth_parse_key(dhchap_secret, &key);
 		if (ret) {
 			kfree(dhchap_secret);
 			return ret;
 		}
+
+		nvme_auth_stop(ctrl);
 		kfree(opts->dhchap_secret);
 		opts->dhchap_secret = dhchap_secret;
 		host_key = ctrl->host_key;
@@ -855,8 +858,11 @@ static ssize_t nvme_ctrl_dhchap_secret_store(struct device *dev,
 		ctrl->host_key = key;
 		mutex_unlock(&ctrl->dhchap_auth_mutex);
 		nvme_auth_free_key(host_key);
-	} else
+	} else {
+		nvme_auth_stop(ctrl);
 		kfree(dhchap_secret);
+	}
+
 	/* Start re-authentication */
 	dev_info(ctrl->device, "re-authenticating controller\n");
 	queue_work(nvme_wq, &ctrl->dhchap_auth_work);
@@ -883,7 +889,9 @@ static ssize_t nvme_ctrl_dhchap_ctrl_secret_store(struct device *dev,
 {
 	struct nvme_ctrl *ctrl = dev_get_drvdata(dev);
 	struct nvmf_ctrl_options *opts = ctrl->opts;
+	struct nvme_dhchap_key *key = NULL;
 	char *dhchap_secret;
+	int ret;
 
 	if (!ctrl->opts->dhchap_ctrl_secret)
 		return -EINVAL;
@@ -896,16 +904,17 @@ static ssize_t nvme_ctrl_dhchap_ctrl_secret_store(struct device *dev,
 	if (!dhchap_secret)
 		return -ENOMEM;
 	memcpy(dhchap_secret, buf, count);
-	nvme_auth_stop(ctrl);
+
 	if (strcmp(dhchap_secret, opts->dhchap_ctrl_secret)) {
-		struct nvme_dhchap_key *key, *ctrl_key;
-		int ret;
+		struct nvme_dhchap_key *ctrl_key;
 
 		ret = nvme_auth_parse_key(dhchap_secret, &key);
 		if (ret) {
 			kfree(dhchap_secret);
 			return ret;
 		}
+
+		nvme_auth_stop(ctrl);
 		kfree(opts->dhchap_ctrl_secret);
 		opts->dhchap_ctrl_secret = dhchap_secret;
 		ctrl_key = ctrl->ctrl_key;
@@ -913,8 +922,11 @@ static ssize_t nvme_ctrl_dhchap_ctrl_secret_store(struct device *dev,
 		ctrl->ctrl_key = key;
 		mutex_unlock(&ctrl->dhchap_auth_mutex);
 		nvme_auth_free_key(ctrl_key);
-	} else
+	} else {
+		nvme_auth_stop(ctrl);
 		kfree(dhchap_secret);
+	}
+
 	/* Start re-authentication */
 	dev_info(ctrl->device, "re-authenticating controller\n");
 	queue_work(nvme_wq, &ctrl->dhchap_auth_work);
