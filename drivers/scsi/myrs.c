@@ -875,6 +875,8 @@ static void myrs_log_event(struct myrs_hba *cs, struct myrs_event *ev)
 				break;
 			}
 		}
+		if (sdev)
+			scsi_device_put(sdev);
 		break;
 	case 'L':
 		shost_printk(KERN_INFO, shost,
