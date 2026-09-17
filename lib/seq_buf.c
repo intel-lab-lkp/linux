@@ -116,12 +116,13 @@ EXPORT_SYMBOL_GPL(seq_buf_printf);
  */
 void seq_buf_do_printk(struct seq_buf *s, const char *lvl)
 {
-	const char *start, *lf;
+	const char *start, *lf, *end;
 
 	if (s->size == 0 || s->len == 0)
 		return;
 
 	start = seq_buf_str(s);
+	end = s->buffer + seq_buf_strlen(s);
 	while ((lf = strchr(start, '\n'))) {
 		int len = lf - start + 1;
 
@@ -130,7 +131,7 @@ void seq_buf_do_printk(struct seq_buf *s, const char *lvl)
 	}
 
 	/* No trailing LF */
-	if (start < s->buffer + s->len)
+	if (start < end)
 		printk("%s%s\n", lvl, start);
 }
 EXPORT_SYMBOL_GPL(seq_buf_do_printk);

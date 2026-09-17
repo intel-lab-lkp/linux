@@ -6,6 +6,7 @@
  */
 
 #include <kunit/test.h>
+#include <linux/console.h>
 #include <linux/fs.h>
 #include <linux/seq_buf.h>
 #include <linux/shmem_fs.h>
@@ -431,6 +432,67 @@ static void seq_buf_strlen_puts_overflow_test(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, seq_buf_strlen(&s), strlen(seq_buf_str(&s)));
 }
 
+/*
+ * Counters for the console that seq_buf_do_printk_test() registers while it
+ * runs. Only records carrying the marker, and records holding nothing but a
+ * line feed, are counted, so unrelated kernel messages do not disturb them.
+ */
+#define SEQ_BUF_PRINTK_MARKER	"sbdpkx"
+
+static unsigned int seq_buf_printk_marked;
+static unsigned int seq_buf_printk_empty;
+
+static void seq_buf_printk_capture(struct console *con, const char *s,
+				   unsigned int count)
+{
+	const char *text = s;
+	const char *prefix;
+
+	/* Skip the "[   12.345678] " timestamp, when there is one. */
+	prefix = memchr(s, ']', count);
+	if (prefix && prefix + 2 <= s + count && prefix[1] == ' ')
+		text = prefix + 2;
+	count -= text - s;
+
+	if (count == 0 || (count == 1 && text[0] == '\n'))
+		seq_buf_printk_empty++;
+	else if (strnstr(text, SEQ_BUF_PRINTK_MARKER, count))
+		seq_buf_printk_marked++;
+}
+
+static void seq_buf_do_printk_test(struct kunit *test)
+{
+	static struct console capture = {
+		.name = "sbufcap",
+		.write = seq_buf_printk_capture,
+		.flags = CON_ENABLED,
+		.index = -1,
+	};
+	DECLARE_SEQ_BUF(s, 8);
+
+	/*
+	 * Fill the buffer exactly, so that the NUL takes the place of the
+	 * last byte and the string ends with the line feed before it.
+	 */
+	seq_buf_puts(&s, SEQ_BUF_PRINTK_MARKER);
+	seq_buf_putc(&s, '\n');
+	seq_buf_putc(&s, '!');
+	KUNIT_ASSERT_FALSE(test, seq_buf_has_overflowed(&s));
+	KUNIT_ASSERT_EQ(test, seq_buf_used(&s), 8);
+	KUNIT_ASSERT_EQ(test, seq_buf_strlen(&s), 7);
+
+	seq_buf_printk_marked = 0;
+	seq_buf_printk_empty = 0;
+
+	register_console(&capture);
+	seq_buf_do_printk(&s, KERN_INFO);
+	unregister_console(&capture);
+
+	/* The one line that was written, and nothing after it. */
+	KUNIT_EXPECT_EQ(test, seq_buf_printk_marked, 1);
+	KUNIT_EXPECT_EQ(test, seq_buf_printk_empty, 0);
+}
+
 static struct kunit_case seq_buf_test_cases[] = {
 	KUNIT_CASE(seq_buf_init_test),
 	KUNIT_CASE(seq_buf_declare_test),
@@ -451,6 +513,7 @@ static struct kunit_case seq_buf_test_cases[] = {
 	KUNIT_CASE(seq_buf_strlen_printf_overflow_test),
 	KUNIT_CASE(seq_buf_strlen_full_test),
 	KUNIT_CASE(seq_buf_strlen_puts_overflow_test),
+	KUNIT_CASE(seq_buf_do_printk_test),
 	{}
 };
 
