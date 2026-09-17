@@ -379,8 +379,11 @@ int mmc_add_card(struct mmc_card *card)
 	device_enable_async_suspend(&card->dev);
 
 	ret = device_add(&card->dev);
-	if (ret)
+	if (ret) {
+		of_node_put(card->dev.of_node);
+		card->dev.of_node = NULL;
 		return ret;
+	}
 
 	mmc_card_set_present(card);
 
