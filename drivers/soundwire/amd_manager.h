@@ -274,4 +274,197 @@ static u32 sdw_manager_reg_mask_array[AMD_ACP63_SDW_MAX_MANAGER_COUNT] =  {
 		AMD_SDW0_EXT_INTR_MASK,
 		AMD_SDW1_EXT_INTR_MASK
 };
+
+#define AMD_SDW_HW_OPS(amd_manager, cb)	((amd_manager)->hw_ops->cb)
+
+/**
+ * struct amd_sdw_hw_ops - hardware-revision-specific SoundWire manager ops
+ *
+ * @init_sdw_manager: enable the SoundWire manager hardware and perform bus reset
+ * @enable_sdw_manager: set the manager enable bit and wait for it to assert
+ * @disable_sdw_manager: clear the manager enable bit and wait for it to deassert
+ * @enable_sdw_interrupts: unmask ACP-level and per-manager interrupt bits
+ * @disable_sdw_interrupts: mask ACP-level and per-manager interrupt bits
+ * @set_frameshape: write the row/column frame-shape register
+ * @send_cmd_get_resp: issue an immediate command and return the response;
+ *   returns 0 on success with the raw u64 response in @response,
+ *   or negative on hardware timeout
+ * @wake_enable: enable or disable the in-band SoundWire wake interrupt
+ * @host_wake_enable: enable or disable the host-side wake interrupt
+ * @set_device_state: write the D0/D3 device power state for the manager instance
+ * @read_and_process_ping_status: issue a PING command and process the slave
+ *   attach/detach status; called from the IRQ work path
+ * @process_wake_event: handle an in-band wake notification from a slave
+ * @irq_thread: hw_ops callback invoked by the thin work_struct wrapper on
+ *   each interrupt; reads status registers and dispatches slave events
+ * @update_slave_status_work: hw_ops callback invoked by the status-update
+ *   work item; reads slave status and updates the SoundWire core
+ * @clk_init_ctrl: set the clock divider and update the frame shape registers
+ *   based on the current bus clock frequency
+ * @clock_stop_exit: restart the SoundWire bus clock after a CLK_STOP_MODE
+ *   suspend; implementation differs across ACP revisions
+ * @suspend: system-suspend hook; stops the bus and powers down the manager
+ * @suspend_runtime: runtime-suspend hook; same sequence as @suspend
+ * @resume_runtime: runtime-resume hook; reinitialises the manager and restarts
+ *   the bus after a POWER_OFF_MODE or CLK_STOP_MODE suspend
+ */
+struct amd_sdw_hw_ops {
+	int (*init_sdw_manager)(struct amd_sdw_manager *amd_manager);
+	int (*enable_sdw_manager)(struct amd_sdw_manager *amd_manager);
+	int (*disable_sdw_manager)(struct amd_sdw_manager *amd_manager);
+	void (*enable_sdw_interrupts)(struct amd_sdw_manager *amd_manager);
+	void (*disable_sdw_interrupts)(struct amd_sdw_manager *amd_manager);
+	void (*set_frameshape)(struct amd_sdw_manager *amd_manager);
+	int (*send_cmd_get_resp)(struct amd_sdw_manager *amd_manager, u32 lower_data,
+				 u32 upper_data, u64 *response);
+	void (*wake_enable)(struct amd_sdw_manager *amd_manager, bool enable);
+	int (*host_wake_enable)(struct amd_sdw_manager *amd_manager, bool enable);
+	int (*set_device_state)(struct amd_sdw_manager *amd_manager, u32 target_device_state);
+	void (*read_and_process_ping_status)(struct amd_sdw_manager *amd_manager);
+	void (*process_wake_event)(struct amd_sdw_manager *amd_manager);
+	void (*irq_thread)(struct amd_sdw_manager *amd_manager);
+	void (*update_slave_status_work)(struct amd_sdw_manager *amd_manager);
+	int (*clk_init_ctrl)(struct amd_sdw_manager *amd_manager);
+	int (*clock_stop_exit)(struct amd_sdw_manager *amd_manager);
+	int (*suspend)(struct amd_sdw_manager *amd_manager);
+	int (*suspend_runtime)(struct amd_sdw_manager *amd_manager);
+	int (*resume_runtime)(struct amd_sdw_manager *amd_manager);
+};
+
+static inline int acp_init_sdw_manager(struct amd_sdw_manager *amd_manager)
+{
+	if (amd_manager && amd_manager->hw_ops && amd_manager->hw_ops->init_sdw_manager)
+		return AMD_SDW_HW_OPS(amd_manager, init_sdw_manager)(amd_manager);
+	return -EOPNOTSUPP;
+}
+
+static inline int acp_enable_sdw_manager(struct amd_sdw_manager *amd_manager)
+{
+	if (amd_manager && amd_manager->hw_ops && amd_manager->hw_ops->enable_sdw_manager)
+		return AMD_SDW_HW_OPS(amd_manager, enable_sdw_manager)(amd_manager);
+	return -EOPNOTSUPP;
+}
+
+static inline int acp_disable_sdw_manager(struct amd_sdw_manager *amd_manager)
+{
+	if (amd_manager && amd_manager->hw_ops && amd_manager->hw_ops->disable_sdw_manager)
+		return AMD_SDW_HW_OPS(amd_manager, disable_sdw_manager)(amd_manager);
+	return -EOPNOTSUPP;
+}
+
+static inline void acp_enable_sdw_interrupts(struct amd_sdw_manager *amd_manager)
+{
+	if (amd_manager && amd_manager->hw_ops && amd_manager->hw_ops->enable_sdw_interrupts)
+		AMD_SDW_HW_OPS(amd_manager, enable_sdw_interrupts)(amd_manager);
+}
+
+static inline void acp_disable_sdw_interrupts(struct amd_sdw_manager *amd_manager)
+{
+	if (amd_manager && amd_manager->hw_ops && amd_manager->hw_ops->disable_sdw_interrupts)
+		AMD_SDW_HW_OPS(amd_manager, disable_sdw_interrupts)(amd_manager);
+}
+
+static inline void acp_sdw_set_frameshape(struct amd_sdw_manager *amd_manager)
+{
+	if (amd_manager && amd_manager->hw_ops && amd_manager->hw_ops->set_frameshape)
+		AMD_SDW_HW_OPS(amd_manager, set_frameshape)(amd_manager);
+}
+
+static inline int acp_sdw_send_cmd_get_resp(struct amd_sdw_manager *amd_manager,
+					    u32 lower_data, u32 upper_data, u64 *response)
+{
+	if (amd_manager && amd_manager->hw_ops && amd_manager->hw_ops->send_cmd_get_resp)
+		return AMD_SDW_HW_OPS(amd_manager, send_cmd_get_resp)(amd_manager,
+								      lower_data, upper_data,
+								      response);
+	return -EOPNOTSUPP;
+}
+
+static inline void acp_sdw_wake_enable(struct amd_sdw_manager *amd_manager, bool enable)
+{
+	if (amd_manager && amd_manager->hw_ops && amd_manager->hw_ops->wake_enable)
+		AMD_SDW_HW_OPS(amd_manager, wake_enable)(amd_manager, enable);
+}
+
+static inline int acp_sdw_host_wake_enable(struct amd_sdw_manager *amd_manager, bool enable)
+{
+	if (amd_manager && amd_manager->hw_ops && amd_manager->hw_ops->host_wake_enable)
+		return AMD_SDW_HW_OPS(amd_manager, host_wake_enable)(amd_manager, enable);
+	return -EOPNOTSUPP;
+}
+
+static inline int acp_sdw_set_device_state(struct amd_sdw_manager *amd_manager,
+					   u32 target_device_state)
+{
+	if (amd_manager && amd_manager->hw_ops && amd_manager->hw_ops->set_device_state)
+		return AMD_SDW_HW_OPS(amd_manager, set_device_state)(amd_manager,
+								      target_device_state);
+	return -EOPNOTSUPP;
+}
+
+static inline void acp_sdw_read_and_process_ping_status(struct amd_sdw_manager *amd_manager)
+{
+	if (amd_manager && amd_manager->hw_ops && amd_manager->hw_ops->read_and_process_ping_status)
+		AMD_SDW_HW_OPS(amd_manager, read_and_process_ping_status)(amd_manager);
+}
+
+static inline void acp_sdw_process_wake_event(struct amd_sdw_manager *amd_manager)
+{
+	if (amd_manager && amd_manager->hw_ops && amd_manager->hw_ops->process_wake_event)
+		AMD_SDW_HW_OPS(amd_manager, process_wake_event)(amd_manager);
+}
+
+static inline void acp_sdw_irq_thread(struct amd_sdw_manager *amd_manager)
+{
+	if (amd_manager && amd_manager->hw_ops && amd_manager->hw_ops->irq_thread)
+		AMD_SDW_HW_OPS(amd_manager, irq_thread)(amd_manager);
+}
+
+static inline void acp_sdw_update_slave_status_work(struct amd_sdw_manager *amd_manager)
+{
+	if (amd_manager && amd_manager->hw_ops && amd_manager->hw_ops->update_slave_status_work)
+		AMD_SDW_HW_OPS(amd_manager, update_slave_status_work)(amd_manager);
+}
+
+static inline int acp_sdw_clk_init_ctrl(struct amd_sdw_manager *amd_manager)
+{
+	if (amd_manager && amd_manager->hw_ops && amd_manager->hw_ops->clk_init_ctrl)
+		return AMD_SDW_HW_OPS(amd_manager, clk_init_ctrl)(amd_manager);
+	return -EOPNOTSUPP;
+}
+
+static inline int acp_sdw_clock_stop_exit(struct amd_sdw_manager *amd_manager)
+{
+	if (amd_manager && amd_manager->hw_ops && amd_manager->hw_ops->clock_stop_exit)
+		return AMD_SDW_HW_OPS(amd_manager, clock_stop_exit)(amd_manager);
+	return -EOPNOTSUPP;
+}
+
+static inline int acp_sdw_suspend(struct device *dev)
+{
+	struct amd_sdw_manager *amd_manager = dev_get_drvdata(dev);
+
+	if (amd_manager && amd_manager->hw_ops && amd_manager->hw_ops->suspend)
+		return AMD_SDW_HW_OPS(amd_manager, suspend)(amd_manager);
+	return -EOPNOTSUPP;
+}
+
+static inline int acp_sdw_suspend_runtime(struct device *dev)
+{
+	struct amd_sdw_manager *amd_manager = dev_get_drvdata(dev);
+
+	if (amd_manager && amd_manager->hw_ops && amd_manager->hw_ops->suspend_runtime)
+		return AMD_SDW_HW_OPS(amd_manager, suspend_runtime)(amd_manager);
+	return -EOPNOTSUPP;
+}
+
+static inline int acp_sdw_resume_runtime(struct device *dev)
+{
+	struct amd_sdw_manager *amd_manager = dev_get_drvdata(dev);
+
+	if (amd_manager && amd_manager->hw_ops && amd_manager->hw_ops->resume_runtime)
+		return AMD_SDW_HW_OPS(amd_manager, resume_runtime)(amd_manager);
+	return -EOPNOTSUPP;
+}
+
 #endif
