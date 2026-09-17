@@ -446,6 +446,23 @@ static void list_test_list_cut_before(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, i, 3);
 }
 
+static void list_test_list_cut_before_empty(struct kunit *test)
+{
+	LIST_HEAD(entry);
+	LIST_HEAD(head);
+	LIST_HEAD(list);
+
+	/*
+	 * entry is initialized but not on head.  With an empty head
+	 * this used to corrupt the list.
+	 */
+	list_cut_before(&list, &head, &entry);
+
+	KUNIT_EXPECT_TRUE(test, list_empty(&head));
+	KUNIT_EXPECT_TRUE(test, list_empty(&list));
+	KUNIT_EXPECT_TRUE(test, list_empty(&entry));
+}
+
 static void list_test_list_splice(struct kunit *test)
 {
 	struct list_head entries[5], *cur;
@@ -788,6 +805,7 @@ static struct kunit_case list_test_cases[] = {
 	KUNIT_CASE(list_test_list_is_singular),
 	KUNIT_CASE(list_test_list_cut_position),
 	KUNIT_CASE(list_test_list_cut_before),
+	KUNIT_CASE(list_test_list_cut_before_empty),
 	KUNIT_CASE(list_test_list_splice),
 	KUNIT_CASE(list_test_list_splice_tail),
 	KUNIT_CASE(list_test_list_splice_init),
