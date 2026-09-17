@@ -2060,9 +2060,18 @@ static int elf_validity_cache_secstrings(struct load_info *info)
 
 	for (i = 0; i < info->hdr->e_shnum; i++) {
 		shdr = &info->sechdrs[i];
-		/* SHT_NULL means sh_name has an undefined value */
-		if (shdr->sh_type == SHT_NULL)
+		/*
+		 * SHT_NULL means sh_name has an undefined value. The section
+		 * name walkers that follow (find_any_unique_sec(),
+		 * module_mark_ro_after_init(), ...) look the name up as
+		 * secstrings + sh_name for every section, so give the undefined
+		 * value a safe in-bounds meaning instead of skipping the check:
+		 * the empty string at index 0.
+		 */
+		if (shdr->sh_type == SHT_NULL) {
+			shdr->sh_name = 0;
 			continue;
+		}
 		if (shdr->sh_name >= strhdr->sh_size) {
 			pr_err("Invalid ELF section name in module (section %u type %u)\n",
 			       i, shdr->sh_type);
