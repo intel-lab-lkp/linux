@@ -723,6 +723,19 @@ static void damon_test_set_attrs(struct kunit *test)
 	invalid_attrs.aggr_interval = 4999;
 	KUNIT_EXPECT_EQ(test, damon_set_attrs(c, &invalid_attrs), -EINVAL);
 
+	invalid_attrs = valid_attrs;
+	invalid_attrs.sample_interval = 0;
+	KUNIT_EXPECT_EQ(test, damon_set_attrs(c, &invalid_attrs), -EINVAL);
+
+	invalid_attrs = valid_attrs;
+	invalid_attrs.aggr_interval = 0;
+	KUNIT_EXPECT_EQ(test, damon_set_attrs(c, &invalid_attrs), -EINVAL);
+
+	invalid_attrs = valid_attrs;
+	invalid_attrs.sample_interval = 0;
+	invalid_attrs.aggr_interval = 0;
+	KUNIT_EXPECT_EQ(test, damon_set_attrs(c, &invalid_attrs), -EINVAL);
+
 	damon_destroy_ctx(c);
 }
 
