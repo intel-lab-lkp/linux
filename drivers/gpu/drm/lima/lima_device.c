@@ -297,8 +297,14 @@ static void lima_fini_gp_pipe(struct lima_device *dev)
 {
 	struct lima_sched_pipe *pipe = dev->pipe + lima_pipe_gp;
 
-	lima_gp_pipe_fini(dev);
+	cancel_work_sync(&pipe->recover_work);
+
 	lima_sched_pipe_fini(pipe);
+
+	/* a recovery may have restarted the GP job */
+	lima_gp_stop(dev->ip + lima_ip_gp);
+
+	lima_gp_pipe_fini(dev);
 }
 
 static int lima_init_pp_pipe(struct lima_device *dev)
@@ -442,17 +448,23 @@ void lima_device_fini(struct lima_device *ldev)
 	int i;
 	struct lima_sched_error_task *et, *tmp;
 
+	lima_fini_pp_pipe(ldev);
+
+	/* free the IRQ sources of recover_work before the GP pipe drain */
+	lima_fini_ip(ldev, lima_ip_gp);
+	lima_fini_ip(ldev, lima_ip_gpmmu);
+	lima_fini_gp_pipe(ldev);
+
+	/* the timeout handlers lock it: free after both schedulers */
 	list_for_each_entry_safe(et, tmp, &ldev->error_task_list, list) {
 		list_del(&et->list);
 		kvfree(et);
 	}
 	mutex_destroy(&ldev->error_task_list_lock);
 
-	lima_fini_pp_pipe(ldev);
-	lima_fini_gp_pipe(ldev);
-
 	for (i = lima_ip_num - 1; i >= 0; i--)
-		lima_fini_ip(ldev, i);
+		if (i != lima_ip_gp && i != lima_ip_gpmmu)
+			lima_fini_ip(ldev, i);
 
 	if (ldev->dlbu_cpu)
 		dma_free_wc(ldev->dev, LIMA_PAGE_SIZE,

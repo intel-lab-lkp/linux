@@ -350,6 +350,13 @@ void lima_gp_fini(struct lima_ip *ip)
 	devm_free_irq(dev->dev, ip->irq, ip);
 }
 
+/* keep the irq masked: hard_reset() re-enables it */
+void lima_gp_stop(struct lima_ip *ip)
+{
+	lima_gp_hard_reset(ip);
+	gp_write(LIMA_GP_INT_MASK, 0);
+}
+
 int lima_gp_pipe_init(struct lima_device *dev)
 {
 	int frame_size = sizeof(struct drm_lima_gp_frame);
