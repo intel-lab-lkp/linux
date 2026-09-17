@@ -695,10 +695,15 @@ static void sas_eh_handle_resets(struct Scsi_Host *shost)
 		if (test_and_clear_bit(SAS_DEV_RESET, &dev->state))
 			i->dft->lldd_I_T_nexus_reset(dev);
 
-		sas_put_device(dev);
 		spin_lock_irq(&ha->lock);
 		clear_bit(SAS_DEV_EH_PENDING, &dev->state);
 		ha->eh_active--;
+		spin_unlock_irq(&ha->lock);
+
+		/* dev->state is no longer used, this may be the last reference */
+		sas_put_device(dev);
+
+		spin_lock_irq(&ha->lock);
 	}
 	spin_unlock_irq(&ha->lock);
 }
