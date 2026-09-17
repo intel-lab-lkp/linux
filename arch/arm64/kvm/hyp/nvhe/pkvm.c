@@ -846,6 +846,10 @@ int __pkvm_init_vm(struct kvm *host_kvm, unsigned long vm_hva,
 
 	vm_size = pkvm_get_hyp_vm_size(nr_vcpus);
 	pgd_size = kvm_pgtable_stage2_pgd_size(host_mmu.arch.mmu.vtcr);
+	if (!IS_ALIGNED(pgd_hva, pgd_size)) {
+		ret = -EINVAL;
+		goto err_unpin_kvm;
+	}
 
 	ret = -ENOMEM;
 
