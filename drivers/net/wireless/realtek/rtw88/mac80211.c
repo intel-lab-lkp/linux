@@ -3,6 +3,7 @@
  */
 
 #include "main.h"
+#include "phy.h"
 #include "sec.h"
 #include "tx.h"
 #include "fw.h"
@@ -94,6 +95,8 @@ static int rtw_ops_config(struct ieee80211_hw *hw, int radio_idx, u32 changed)
 
 	if (changed & IEEE80211_CONF_CHANGE_CHANNEL)
 		rtw_set_channel(rtwdev);
+	else if (changed & IEEE80211_CONF_CHANGE_POWER)
+		rtw_phy_set_tx_power_level(rtwdev, rtwdev->hal.current_channel);
 
 	if ((changed & IEEE80211_CONF_CHANGE_IDLE) &&
 	    (hw->conf.flags & IEEE80211_CONF_IDLE) &&

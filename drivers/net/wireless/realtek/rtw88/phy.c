@@ -2236,6 +2236,29 @@ err:
 	return (s8)rtwdev->chip->max_power_index;
 }
 
+static s8 rtw_phy_get_tx_power_user(struct rtw_dev *rtwdev, u8 band, u8 path,
+				    u8 rate)
+{
+	struct rtw_hal *hal = &rtwdev->hal;
+	const struct rtw_chip_info *chip = rtwdev->chip;
+	static const u8 path_share_dbm[] = { 0, 0, 3, 5, 6 };
+	int power_level = rtwdev->hw->conf.power_level;
+	u8 rs = rtw_phy_rate_to_rate_section(rate);
+	u8 paths = clamp_t(u8, hweight8(hal->antenna_tx), 1, 4);
+	s32 idx;
+	s8 base;
+
+	if (power_level <= 0 || rs == RTW_RATE_SECTION_NUM)
+		return (s8)chip->max_power_index;
+
+	idx = (power_level - path_share_dbm[paths]) << chip->txgi_factor;
+	base = band == PHY_BAND_2G ? hal->tx_pwr_by_rate_base_2g[path][rs] :
+				     hal->tx_pwr_by_rate_base_5g[path][rs];
+
+	return (s8)clamp_t(s32, idx, -chip->max_power_index - 1,
+			   chip->max_power_index) - base;
+}
+
 void rtw_get_tx_power_params(struct rtw_dev *rtwdev, u8 path, u8 rate, u8 bw,
 			     u8 ch, u8 regd, struct rtw_power_params *pwr_param)
 {
@@ -2248,6 +2271,7 @@ void rtw_get_tx_power_params(struct rtw_dev *rtwdev, u8 path, u8 rate, u8 bw,
 	s8 *limit = &pwr_param->pwr_limit;
 	s8 *remnant = &pwr_param->pwr_remnant;
 	s8 *sar = &pwr_param->pwr_sar;
+	s8 *user = &pwr_param->pwr_user;
 
 	pwr_idx = &rtwdev->efuse.txpwr_idx_table[path];
 	group = rtw_get_channel_group(ch, rate);
@@ -2272,6 +2296,7 @@ void rtw_get_tx_power_params(struct rtw_dev *rtwdev, u8 path, u8 rate, u8 bw,
 	*remnant = rate <= DESC_RATE11M ? dm_info->txagc_remnant_cck :
 					  dm_info->txagc_remnant_ofdm[path];
 	*sar = rtw_phy_get_tx_power_sar(rtwdev, hal->sar_band, path, rate);
+	*user = rtw_phy_get_tx_power_user(rtwdev, band, path, rate);
 }
 
 u8
@@ -2289,6 +2314,7 @@ rtw_phy_get_tx_power_index(struct rtw_dev *rtwdev, u8 rf_path, u8 rate,
 	offset = min3(pwr_param.pwr_offset,
 		      pwr_param.pwr_limit,
 		      pwr_param.pwr_sar);
+	offset = min(offset, pwr_param.pwr_user);
 
 	if (rtwdev->chip->en_dis_dpd)
 		offset += rtw_phy_get_dis_dpd_by_rate_diff(rtwdev, rate);
