@@ -16,6 +16,7 @@
 #include <linux/set_memory.h>
 #include <linux/io.h>
 #include <linux/delay.h>
+#include <linux/iopoll.h>
 #include <linux/sockptr.h>
 #include <linux/tsm.h>
 #include <linux/tsm-mr.h>
@@ -198,10 +199,10 @@ static void *quote_data;
 static DEFINE_MUTEX(quote_lock);
 
 /*
- * GetQuote request timeout in seconds. Expect that 30 seconds
+ * GetQuote request timeout in seconds. Expect that 2 seconds
  * is enough time for QE to respond to any Quote requests.
  */
-static u32 getquote_timeout = 30;
+static u32 getquote_timeout = 2;
 
 static long tdx_get_report0(struct tdx_report_req __user *req)
 {
@@ -251,18 +252,31 @@ static void *alloc_quote_buf(void)
  */
 static int wait_for_quote_completion(struct tdx_quote_buf *quote_buf, u32 timeout)
 {
-	int i = 0;
+	u64 status;
+	int ret;
 
 	/*
-	 * Quote requests usually take a few seconds to complete, so waking up
-	 * once per second to recheck the status is fine for this use case.
+	 * Quote requests usually take a few milliseconds to complete, so waking
+	 * up once per 5 milliseconds to recheck the status is fine for this use
+	 * case. Fixed-interval polling doesn't scale well since QE response
+	 * times vary by implementation; an interrupt-based approach would be
+	 * the proper long-term solution.
+	 *
+	 * Also break out early if a signal is pending so the caller can be
+	 * interrupted while waiting.
 	 */
-	while (quote_buf->status == GET_QUOTE_IN_FLIGHT && i++ < timeout) {
-		if (msleep_interruptible(MSEC_PER_SEC))
-			return -EINTR;
-	}
+	ret = read_poll_timeout(READ_ONCE, status,
+				status != GET_QUOTE_IN_FLIGHT ||
+					signal_pending(current),
+				5 * USEC_PER_MSEC, timeout * USEC_PER_SEC,
+				false, quote_buf->status);
+	if (ret)
+		return ret;
 
-	return (i == timeout) ? -ETIMEDOUT : 0;
+	if (signal_pending(current))
+		return -EINTR;
+
+	return 0;
 }
 
 static int tdx_report_new_locked(struct tsm_report *report, void *data)
