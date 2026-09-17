@@ -423,7 +423,8 @@ static void unpin_host_vcpus(struct pkvm_hyp_vcpu *hyp_vcpus[],
 }
 
 static void init_pkvm_hyp_vm(struct kvm *host_kvm, struct pkvm_hyp_vm *hyp_vm,
-			     unsigned int nr_vcpus, pkvm_handle_t handle)
+			     unsigned int nr_vcpus, pkvm_handle_t handle,
+			     u64 vtcr)
 {
 	struct kvm_s2_mmu *mmu = &hyp_vm->kvm.arch.mmu;
 	int idx = vm_handle_to_idx(handle);
@@ -439,7 +440,7 @@ static void init_pkvm_hyp_vm(struct kvm *host_kvm, struct pkvm_hyp_vm *hyp_vm,
 	/* VMID 0 is reserved for the host */
 	atomic64_set(&mmu->vmid.id, idx + 1);
 
-	mmu->vtcr = host_mmu.arch.mmu.vtcr;
+	mmu->vtcr = vtcr;
 	mmu->arch = &hyp_vm->kvm.arch;
 	mmu->pgt = &hyp_vm->pgt;
 }
@@ -826,6 +827,8 @@ int __pkvm_init_vm(struct kvm *host_kvm, unsigned long vm_hva,
 	unsigned int nr_vcpus;
 	pkvm_handle_t handle;
 	void *pgd = NULL;
+	u32 phys_shift;
+	u64 vtcr;
 	int ret;
 
 	ret = hyp_pin_shared_mem(host_kvm, host_kvm + 1);
@@ -844,8 +847,17 @@ int __pkvm_init_vm(struct kvm *host_kvm, unsigned long vm_hva,
 		goto err_unpin_kvm;
 	}
 
+	phys_shift = VTCR_EL2_IPA(READ_ONCE(host_kvm->arch.mmu.vtcr));
+	if (phys_shift < ARM64_MIN_PARANGE_BITS ||
+	    phys_shift > kvm_get_ipa_max(id_aa64mmfr0_el1_sys_val)) {
+		ret = -EINVAL;
+		goto err_unpin_kvm;
+	}
+	vtcr = kvm_get_vtcr(id_aa64mmfr0_el1_sys_val, id_aa64mmfr1_el1_sys_val,
+			    phys_shift);
+
 	vm_size = pkvm_get_hyp_vm_size(nr_vcpus);
-	pgd_size = kvm_pgtable_stage2_pgd_size(host_mmu.arch.mmu.vtcr);
+	pgd_size = kvm_pgtable_stage2_pgd_size(vtcr);
 	if (!IS_ALIGNED(pgd_hva, pgd_size)) {
 		ret = -EINVAL;
 		goto err_unpin_kvm;
@@ -861,7 +873,7 @@ int __pkvm_init_vm(struct kvm *host_kvm, unsigned long vm_hva,
 	if (!pgd)
 		goto err_remove_mappings;
 
-	init_pkvm_hyp_vm(host_kvm, hyp_vm, nr_vcpus, handle);
+	init_pkvm_hyp_vm(host_kvm, hyp_vm, nr_vcpus, handle, vtcr);
 
 	ret = kvm_guest_prepare_stage2(hyp_vm, pgd);
 	if (ret)
