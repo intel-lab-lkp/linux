@@ -1950,6 +1950,7 @@ static void __init of_unittest_platform_populate(void)
 
 	np = of_find_node_by_path("/testcase-data");
 	of_platform_default_populate(np, NULL, NULL);
+	of_node_put(np);
 
 	/* Test that a missing irq domain returns -EPROBE_DEFER */
 	np = of_find_node_by_path("/testcase-data/testcase-device1");
@@ -1960,6 +1961,7 @@ static void __init of_unittest_platform_populate(void)
 		irq = platform_get_irq(pdev, 0);
 		unittest(irq == -EPROBE_DEFER,
 			 "device deferred probe failed - %d\n", irq);
+		of_node_put(np);
 
 		/* Test that a parsing failure does not return -EPROBE_DEFER */
 		np = of_find_node_by_path("/testcase-data/testcase-device2");
@@ -1977,6 +1979,7 @@ static void __init of_unittest_platform_populate(void)
 		unittest(irq < 0 && irq != -EPROBE_DEFER,
 			 "device parsing error failed - %d\n", irq);
 	}
+	of_node_put(np);
 
 	np = of_find_node_by_path("/testcase-data/platform-tests");
 	unittest(np, "No testcase data in device tree\n");
