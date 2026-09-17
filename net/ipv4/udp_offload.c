@@ -188,6 +188,8 @@ static struct sk_buff *__skb_udp_tunnel_segment(struct sk_buff *skb,
 
 	if (unlikely(!pskb_may_pull(skb, tnl_hlen)))
 		goto out;
+	if (unlikely(gso_header_len_add(skb, tnl_hlen)))
+		goto out;
 
 	uh = udp_hdr(skb);
 
@@ -242,7 +244,7 @@ static struct sk_buff *__skb_udp_tunnel_segment(struct sk_buff *skb,
 	}
 
 	/* segment inner packet. */
-	segs = gso_inner_segment(skb, features);
+	segs = skb_gso_segment_cb(skb, gso_inner_segment, features);
 	if (IS_ERR_OR_NULL(segs)) {
 		skb_gso_error_unwind(skb, protocol, tnl_hlen, mac_offset,
 				     mac_len);

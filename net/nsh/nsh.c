@@ -95,6 +95,8 @@ static struct sk_buff *nsh_gso_segment(struct sk_buff *skb,
 		goto out;
 	if (unlikely(!pskb_may_pull(skb, nsh_len)))
 		goto out;
+	if (unlikely(gso_header_len_add(skb, nsh_len)))
+		goto out;
 
 	proto = tun_p_to_eth_p(nsh_hdr(skb)->np);
 	if (!proto)

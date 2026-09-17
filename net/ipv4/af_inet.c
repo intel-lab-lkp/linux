@@ -1375,6 +1375,8 @@ struct sk_buff *inet_gso_segment(struct sk_buff *skb,
 	int id;
 
 	skb_reset_network_header(skb);
+	if (unlikely(gso_header_len_add(skb, 0)))
+		goto out;
 	nhoff = skb_network_header(skb) - skb_mac_header(skb);
 	if (unlikely(!pskb_may_pull(skb, sizeof(*iph))))
 		goto out;
@@ -1389,6 +1391,8 @@ struct sk_buff *inet_gso_segment(struct sk_buff *skb,
 
 	/* Warning: after this point, iph might be no longer valid */
 	if (unlikely(!pskb_may_pull(skb, ihl)))
+		goto out;
+	if (unlikely(gso_header_len_add(skb, ihl)))
 		goto out;
 	__skb_pull(skb, ihl);
 
@@ -1408,7 +1412,8 @@ struct sk_buff *inet_gso_segment(struct sk_buff *skb,
 
 	ops = rcu_dereference(inet_offloads[proto]);
 	if (likely(ops && ops->callbacks.gso_segment)) {
-		segs = ops->callbacks.gso_segment(skb, features);
+		segs = skb_gso_segment_cb(skb, ops->callbacks.gso_segment,
+					  features);
 		if (!segs)
 			skb->network_header = skb_mac_header(skb) + nhoff - skb->head;
 	}

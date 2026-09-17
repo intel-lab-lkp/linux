@@ -141,7 +141,8 @@ static struct sk_buff *xfrm4_transport_gso_segment(struct xfrm_state *x,
 	skb->transport_header += x->props.header_len;
 	ops = rcu_dereference(inet_offloads[xo->proto]);
 	if (likely(ops && ops->callbacks.gso_segment))
-		segs = ops->callbacks.gso_segment(skb, features);
+		segs = skb_gso_segment_cb(skb, ops->callbacks.gso_segment,
+					  features);
 
 	return segs;
 }
@@ -182,7 +183,8 @@ static struct sk_buff *xfrm4_beet_gso_segment(struct xfrm_state *x,
 	__skb_pull(skb, skb_transport_offset(skb));
 	ops = rcu_dereference(inet_offloads[proto]);
 	if (likely(ops && ops->callbacks.gso_segment))
-		segs = ops->callbacks.gso_segment(skb, features);
+		segs = skb_gso_segment_cb(skb, ops->callbacks.gso_segment,
+					  features);
 
 	return segs;
 }
@@ -228,6 +230,9 @@ static struct sk_buff *esp4_gso_segment(struct sk_buff *skb,
 		return ERR_PTR(-EINVAL);
 
 	if (!pskb_may_pull(skb, sizeof(*esph) + crypto_aead_ivsize(aead)))
+		return ERR_PTR(-EINVAL);
+	if (unlikely(gso_header_len_add(skb,
+					sizeof(*esph) + crypto_aead_ivsize(aead))))
 		return ERR_PTR(-EINVAL);
 
 	__skb_pull(skb, sizeof(*esph) + crypto_aead_ivsize(aead));

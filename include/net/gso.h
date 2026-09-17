@@ -19,9 +19,38 @@ struct skb_gso_cb {
 	int	encap_level;
 	__wsum	csum;
 	__u16	csum_start;
+	/* Bytes charged to the current GSO callback chain. */
+	u16	gso_header_len;
 };
 #define SKB_GSO_CB_OFFSET	32
 #define SKB_GSO_CB(skb) ((struct skb_gso_cb *)((skb)->cb + SKB_GSO_CB_OFFSET))
+
+#define GSO_MAX_HEADER	256
+
+static inline bool gso_header_len_add(struct sk_buff *skb,
+				      unsigned int len)
+{
+	struct skb_gso_cb *cb = SKB_GSO_CB(skb);
+
+	if (unlikely(cb->gso_header_len > GSO_MAX_HEADER ||
+		     len > GSO_MAX_HEADER - cb->gso_header_len))
+		return true;
+
+	cb->gso_header_len += len;
+	return false;
+}
+
+static inline struct sk_buff *
+skb_gso_segment_cb(struct sk_buff *skb,
+		   struct sk_buff *(*gso_segment)(struct sk_buff *,
+						  netdev_features_t),
+			netdev_features_t features)
+{
+	if (unlikely(gso_header_len_add(skb, 0)))
+		return ERR_PTR(-EINVAL);
+
+	return gso_segment(skb, features);
+}
 
 static inline int skb_tnl_header_len(const struct sk_buff *inner_skb)
 {

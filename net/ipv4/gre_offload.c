@@ -32,6 +32,8 @@ static struct sk_buff *gre_gso_segment(struct sk_buff *skb,
 
 	if (unlikely(!pskb_may_pull(skb, tnl_hlen)))
 		goto out;
+	if (unlikely(gso_header_len_add(skb, tnl_hlen)))
+		goto out;
 
 	/* setup inner skb. */
 	skb->encapsulation = 0;
