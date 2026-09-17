@@ -1807,6 +1807,16 @@ static struct sparc32_cachetlb_ops smp_cachetlb_ops __ro_after_init = {
 };
 #endif
 
+void flush_icache_range(unsigned long start, unsigned long end)
+{
+	if (start >= end || poke_srmmu != poke_viking)
+		return;
+
+	/* One local FLUSH synchronizes all preceding instruction stores. */
+	__asm__ __volatile__("flush %0" : : "r" (start) : "memory");
+}
+EXPORT_SYMBOL(flush_icache_range);
+
 /* Load up routines and constants for sun4m and sun4d mmu */
 void __init load_mmu(void)
 {

@@ -201,7 +201,12 @@ viking_flush_tlb_page:
 
 viking_flush_page_to_ram:
 viking_flush_page_for_dma:
+	retl
+	 nop
+
 viking_flush_sig_insns:
+	/* FLUSH is not address scoped here, so one covers both words. */
+	flush	%o1
 	retl
 	 nop
 
