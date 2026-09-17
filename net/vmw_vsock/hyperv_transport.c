@@ -326,6 +326,14 @@ static void hvs_open_connection(struct vmbus_channel *chan)
 		if (sk_acceptq_is_full(sk))
 			goto out;
 
+		/* __vsock_release() may have already flushed the accept queue
+		 * and set sk_shutdown = SHUTDOWN_MASK while leaving sk_state ==
+		 * TCP_LISTEN.  Enqueuing a child now would leak the child socket
+		 * and its VMBUS channel.  Mirror virtio_transport_recv_listen().
+		 */
+		if (sk->sk_shutdown == SHUTDOWN_MASK)
+			goto out;
+
 		new = vsock_create_connected(sk);
 		if (!new)
 			goto out;
