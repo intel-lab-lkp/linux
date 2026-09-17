@@ -937,7 +937,6 @@ static int qcom_slim_ngd_xfer_msg_sync(struct slim_controller *ctrl,
 		ret = -ETIMEDOUT;
 		goto pm_put;
 	}
-	return 0;
 
 pm_put:
 	pm_runtime_put(ctrl->dev);
