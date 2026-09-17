@@ -4093,6 +4093,8 @@ _scsih_ublock_io_device_wait(struct MPT3SAS_ADAPTER *ioc, u64 sas_address,
 				tr_timeout = pcie_device->reset_timeout;
 				tr_method = MPI26_SCSITASKMGMT_MSGFLAGS_PROTOCOL_LVL_RST_PCIE;
 			}
+			if (pcie_device)
+				pcie_device_put(pcie_device);
 			rc = _scsih_wait_for_device_to_become_ready(ioc,
 			      sas_target->handle, 0, (sas_target->flags &
 			      MPT_TARGET_FLAGS_RAID_COMPONENT), sdev->lun, tr_timeout, tr_method);
@@ -4114,8 +4116,6 @@ _scsih_ublock_io_device_wait(struct MPT3SAS_ADAPTER *ioc, u64 sas_address,
 				}
 				continue;
 			}
-			if (pcie_device)
-				pcie_device_put(pcie_device);
 		} while ((rc == DEVICE_RETRY || rc == DEVICE_START_UNIT ||
 		    rc == DEVICE_STOP_UNIT || rc == DEVICE_RETRY_UA)
 			&& count++ <= command_retry_count);
