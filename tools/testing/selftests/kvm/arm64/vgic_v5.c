@@ -187,8 +187,10 @@ int test_kvm_device(u32 gic_dev_type)
 
 	/* trial mode */
 	ret = __kvm_test_create_device(v.vm, gic_dev_type);
-	if (ret)
+	if (ret) {
+		kvm_vm_free(v.vm);
 		return ret;
+	}
 	v.gic_fd = kvm_create_device(v.vm, gic_dev_type);
 
 	ret = __kvm_create_device(v.vm, gic_dev_type);
