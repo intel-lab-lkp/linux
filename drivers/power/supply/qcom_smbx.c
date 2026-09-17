@@ -1005,7 +1005,7 @@ static int smb_probe(struct platform_device *pdev)
 	supply_config.drv_data = chip;
 	supply_config.fwnode = dev_fwnode(&pdev->dev);
 
-	desc = devm_kzalloc(chip->dev, sizeof(smb_psy_desc), GFP_KERNEL);
+	desc = devm_kzalloc(chip->dev, sizeof(*desc), GFP_KERNEL);
 	if (!desc)
 		return -ENOMEM;
 	memcpy(desc, &smb_psy_desc, sizeof(smb_psy_desc));
