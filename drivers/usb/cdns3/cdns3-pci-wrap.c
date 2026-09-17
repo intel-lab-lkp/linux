@@ -181,6 +181,8 @@ static void cdns3_pci_remove(struct pci_dev *pdev)
 
 	if (!pci_is_enabled(func))
 		kfree(wrap);
+
+	pci_dev_put(func);
 }
 
 static const struct pci_device_id cdns3_pci_ids[] = {
