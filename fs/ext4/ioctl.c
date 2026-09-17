@@ -1674,11 +1674,21 @@ group_extend_out:
 	}
 
 	case EXT4_IOC_GROUP_ADD: {
+		struct ext4_new_group_input uinput;
 		struct ext4_new_group_data input;
 
-		if (copy_from_user(&input, (struct ext4_new_group_input __user *)arg,
-				sizeof(input)))
+		if (copy_from_user(&uinput,
+				   (struct ext4_new_group_input __user *)arg,
+				   sizeof(uinput)))
 			return -EFAULT;
+
+		memset(&input, 0, sizeof(input));
+		input.group		= uinput.group;
+		input.block_bitmap	= uinput.block_bitmap;
+		input.inode_bitmap	= uinput.inode_bitmap;
+		input.inode_table	= uinput.inode_table;
+		input.blocks_count	= uinput.blocks_count;
+		input.reserved_blocks	= uinput.reserved_blocks;
 
 		return ext4_ioctl_group_add(filp, &input);
 	}
