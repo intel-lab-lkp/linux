@@ -23,9 +23,12 @@ description:
 
 select:
   anyOf:
-    - required: [ 'atmel,dmacon' ]
-    - required: [ 'atmel,lcdcon2' ]
-    - required: [ 'atmel,guard-time' ]
+    - required:
+        - atmel,dmacon
+    - required:
+        - atmel,lcdcon2
+    - required:
+        - atmel,guard-time
 
 properties:
   atmel,dmacon:

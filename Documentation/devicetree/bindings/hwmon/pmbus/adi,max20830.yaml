@@ -67,8 +67,10 @@ required:
   - vddh-supply
 
 dependencies:
-  adi,vout-rfb1-ohms: ['adi,vout-rfb2-ohms']
-  adi,vout-rfb2-ohms: ['adi,vout-rfb1-ohms']
+  adi,vout-rfb1-ohms:
+    - adi,vout-rfb2-ohms
+  adi,vout-rfb2-ohms:
+    - adi,vout-rfb1-ohms
 
 unevaluatedProperties: false
 

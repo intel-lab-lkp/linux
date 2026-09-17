@@ -143,12 +143,21 @@ required:
   - s5m8767,pmic-buck-ds-gpios
 
 dependencies:
-  s5m8767,pmic-buck2-dvs-voltage: [ 's5m8767,pmic-buck-dvs-gpios' ]
-  s5m8767,pmic-buck3-dvs-voltage: [ 's5m8767,pmic-buck-dvs-gpios' ]
-  s5m8767,pmic-buck4-dvs-voltage: [ 's5m8767,pmic-buck-dvs-gpios' ]
-  s5m8767,pmic-buck2-uses-gpio-dvs: [ 's5m8767,pmic-buck-dvs-gpios', 's5m8767,pmic-buck2-dvs-voltage' ]
-  s5m8767,pmic-buck3-uses-gpio-dvs: [ 's5m8767,pmic-buck-dvs-gpios', 's5m8767,pmic-buck3-dvs-voltage' ]
-  s5m8767,pmic-buck4-uses-gpio-dvs: [ 's5m8767,pmic-buck-dvs-gpios', 's5m8767,pmic-buck4-dvs-voltage' ]
+  s5m8767,pmic-buck2-dvs-voltage:
+    - s5m8767,pmic-buck-dvs-gpios
+  s5m8767,pmic-buck3-dvs-voltage:
+    - s5m8767,pmic-buck-dvs-gpios
+  s5m8767,pmic-buck4-dvs-voltage:
+    - s5m8767,pmic-buck-dvs-gpios
+  s5m8767,pmic-buck2-uses-gpio-dvs:
+    - s5m8767,pmic-buck-dvs-gpios
+    - s5m8767,pmic-buck2-dvs-voltage
+  s5m8767,pmic-buck3-uses-gpio-dvs:
+    - s5m8767,pmic-buck-dvs-gpios
+    - s5m8767,pmic-buck3-dvs-voltage
+  s5m8767,pmic-buck4-uses-gpio-dvs:
+    - s5m8767,pmic-buck-dvs-gpios
+    - s5m8767,pmic-buck4-dvs-voltage
 
 additionalProperties: false
 

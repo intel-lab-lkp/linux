@@ -272,10 +272,14 @@ properties:
       in order to be interpreted as a flick or swipe.
 
 dependencies:
-  azoteq,gesture-swipe: ["linux,keycodes"]
-  azoteq,timeout-tap-ms: ["linux,keycodes"]
-  azoteq,timeout-swipe-ms: ["linux,keycodes"]
-  azoteq,thresh-swipe: ["linux,keycodes"]
+  azoteq,gesture-swipe:
+    - linux,keycodes
+  azoteq,timeout-tap-ms:
+    - linux,keycodes
+  azoteq,timeout-swipe-ms:
+    - linux,keycodes
+  azoteq,thresh-swipe:
+    - linux,keycodes
 
 patternProperties:
   "^channel@[0-7]$":

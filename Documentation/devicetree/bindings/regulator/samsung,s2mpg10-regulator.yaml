@@ -139,7 +139,8 @@ $defs:
           property describes the GPIO line used.
 
     dependentRequired:
-      enable-gpios: [ "samsung,ext-control" ]
+      enable-gpios:
+        - samsung,ext-control
 
 allOf:
   # Bucks 8, 9, and LDO 1 can not be controlled externally - above definition

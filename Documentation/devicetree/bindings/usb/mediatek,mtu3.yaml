@@ -227,10 +227,14 @@ patternProperties:
       example if the host mode is enabled.
 
 dependencies:
-  connector: [ usb-role-switch ]
-  port: [ usb-role-switch ]
-  role-switch-default-mode: [ usb-role-switch ]
-  wakeup-source: [ 'mediatek,syscon-wakeup' ]
+  connector:
+    - usb-role-switch
+  port:
+    - usb-role-switch
+  role-switch-default-mode:
+    - usb-role-switch
+  wakeup-source:
+    - mediatek,syscon-wakeup
 
 required:
   - compatible

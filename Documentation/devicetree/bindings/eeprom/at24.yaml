@@ -20,7 +20,9 @@ select:
       contains:
         anyOf:
           - pattern: "^atmel,(24(c|cs|mac)[0-9]+|spd)$"
-          - enum: ["microchip,24aa025e48", "microchip,24aa025e64"]
+          - enum:
+              - microchip,24aa025e48
+              - microchip,24aa025e64
   required:
     - compatible
 

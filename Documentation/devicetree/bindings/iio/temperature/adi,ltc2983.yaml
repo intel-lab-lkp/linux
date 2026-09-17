@@ -284,7 +284,8 @@ patternProperties:
               type: boolean
 
           dependencies:
-            adi,current-rotate: [ 'adi,rsense-share' ]
+            adi,current-rotate:
+              - adi,rsense-share
 
       - if:
           properties:
@@ -368,7 +369,8 @@ patternProperties:
       - adi,rsense-handle
 
     dependencies:
-      adi,current-rotate: [ 'adi,rsense-share' ]
+      adi,current-rotate:
+        - adi,rsense-share
 
     allOf:
       - if:

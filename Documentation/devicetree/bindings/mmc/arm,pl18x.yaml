@@ -168,9 +168,12 @@ properties:
       The GPIO matching the CKIN pin.
 
 dependencies:
-  st,cmd-gpios: [ "st,use-ckin" ]
-  st,ck-gpios: [ "st,use-ckin" ]
-  st,ckin-gpios: [ "st,use-ckin" ]
+  st,cmd-gpios:
+    - st,use-ckin
+  st,ck-gpios:
+    - st,use-ckin
+  st,ckin-gpios:
+    - st,use-ckin
 
 unevaluatedProperties: false
 

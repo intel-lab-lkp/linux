@@ -53,8 +53,10 @@ properties:
     enum: [0, 3, 6, 11]
 
 dependentRequired:
-  abracon,tc-diode: ["abracon,tc-resistor"]
-  abracon,tc-resistor: ["abracon,tc-diode"]
+  abracon,tc-diode:
+    - abracon,tc-resistor
+  abracon,tc-resistor:
+    - abracon,tc-diode
 
 required:
   - compatible

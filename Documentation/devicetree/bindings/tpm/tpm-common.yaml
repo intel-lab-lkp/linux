@@ -50,8 +50,10 @@ properties:
 
 # must always have both linux,sml-base and linux,sml-size
 dependentRequired:
-  linux,sml-base: ['linux,sml-size']
-  linux,sml-size: ['linux,sml-base']
+  linux,sml-base:
+    - linux,sml-size
+  linux,sml-size:
+    - linux,sml-base
 
 # must only have either memory-region or linux,sml-base
 # as well as either resets or reset-gpios

@@ -48,7 +48,8 @@ patternProperties:
         description: Regulator active discharge time in microseconds.
 
     dependencies:
-      active-discharge-gpios: [ 'ti,active-discharge-time-us' ]
+      active-discharge-gpios:
+        - ti,active-discharge-time-us
 
 required:
   - compatible

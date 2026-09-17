@@ -43,8 +43,10 @@ properties:
     description: Bottom feedback resistor value in ohms for external feedback.
 
 dependencies:
-  adi,rtop-ohms: [ 'adi,rbot-ohms' ]
-  adi,rbot-ohms: [ 'adi,rtop-ohms' ]
+  adi,rtop-ohms:
+    - adi,rbot-ohms
+  adi,rbot-ohms:
+    - adi,rtop-ohms
 
 required:
   - compatible

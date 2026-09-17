@@ -347,9 +347,12 @@ properties:
         additionalProperties: false
 
     dependencies:
-      azoteq,rx-enable: ["azoteq,tx-enable"]
-      azoteq,tx-enable: ["azoteq,rx-enable"]
-      azoteq,channel-select: ["azoteq,rx-enable"]
+      azoteq,rx-enable:
+        - azoteq,tx-enable
+      azoteq,tx-enable:
+        - azoteq,rx-enable
+      azoteq,channel-select:
+        - azoteq,rx-enable
 
     additionalProperties: false
 
@@ -592,11 +595,16 @@ properties:
   touchscreen-swapped-x-y: true
 
 dependencies:
-  touchscreen-size-x: ["azoteq,num-contacts"]
-  touchscreen-size-y: ["azoteq,num-contacts"]
-  touchscreen-inverted-x: ["azoteq,num-contacts"]
-  touchscreen-inverted-y: ["azoteq,num-contacts"]
-  touchscreen-swapped-x-y: ["azoteq,num-contacts"]
+  touchscreen-size-x:
+    - azoteq,num-contacts
+  touchscreen-size-y:
+    - azoteq,num-contacts
+  touchscreen-inverted-x:
+    - azoteq,num-contacts
+  touchscreen-inverted-y:
+    - azoteq,num-contacts
+  touchscreen-swapped-x-y:
+    - azoteq,num-contacts
 
 required:
   - compatible

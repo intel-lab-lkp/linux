@@ -125,8 +125,10 @@ properties:
       Mic bias voltage output on MICBIAS2 pin
 
 dependencies:
-  ti,micbias1-gpo: ['ti,micbias1-vg']
-  ti,micbias2-gpo: ['ti,micbias2-vg']
+  ti,micbias1-gpo:
+    - ti,micbias1-vg
+  ti,micbias2-gpo:
+    - ti,micbias2-vg
 
 required:
   - compatible

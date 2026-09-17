@@ -396,8 +396,10 @@ patternProperties:
         description: Specifies the cycle's current reference trim.
 
     dependencies:
-      azoteq,iref-level: ["azoteq,iref-enable"]
-      azoteq,iref-trim: ["azoteq,iref-enable"]
+      azoteq,iref-level:
+        - azoteq,iref-enable
+      azoteq,iref-trim:
+        - azoteq,iref-enable
 
     additionalProperties: false
 
@@ -627,8 +629,10 @@ patternProperties:
         additionalProperties: false
 
     dependencies:
-      azoteq,ref-weight: ["azoteq,ref-select"]
-      azoteq,use-prox: ["azoteq,ref-select"]
+      azoteq,ref-weight:
+        - azoteq,ref-select
+      azoteq,use-prox:
+        - azoteq,ref-select
 
     additionalProperties: false
 
