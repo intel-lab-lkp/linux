@@ -1,28 +1,32 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "aslr.h"
 
-#include "addr_location.h"
-#include "debug.h"
-#include "event.h"
-#include "evsel.h"
-#include "evlist.h"
-#include "machine.h"
-#include "map.h"
-#include "thread.h"
-#include "tool.h"
-#include "session.h"
-#include "data.h"
-#include "dso.h"
-#include "pmu.h"
-#include "pmus.h"
-
-#include <internal/lib.h>  /* page_size */
-#include <linux/compiler.h>
-#include <linux/zalloc.h>
 #include <errno.h>
 #include <inttypes.h>
-#include <unistd.h>
+#include <stdlib.h>
+#include <string.h>
+
 #include <byteswap.h>
+#include <linux/compiler.h>
+#include <linux/zalloc.h>
+#include <unistd.h>
+
+#include <internal/lib.h> /* page_size */
+
+#include "addr_location.h"
+#include "data.h"
+#include "debug.h"
+#include "dso.h"
+#include "event.h"
+#include "evlist.h"
+#include "evsel.h"
+#include "machine.h"
+#include "map.h"
+#include "pmu.h"
+#include "pmus.h"
+#include "session.h"
+#include "thread.h"
+#include "tool.h"
 
 /**
  * struct remap_addresses_key - Key for mapping original addresses to remapped ones.
