@@ -2434,6 +2434,11 @@ int ksz_mdio_register(struct ksz_device *dev)
 	}
 
 put_mdio_node:
+	if (ret && dev->parent_mdio_bus) {
+		put_device(&dev->parent_mdio_bus->dev);
+		dev->parent_mdio_bus = NULL;
+	}
+
 	of_node_put(mdio_np);
 	of_node_put(parent_bus_node);
 
