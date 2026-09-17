@@ -555,6 +555,11 @@ static inline void list_cut_before(struct list_head *list,
 				   struct list_head *head,
 				   struct list_head *entry)
 {
+	if (list_empty(head)) {
+		INIT_LIST_HEAD(list);
+		return;
+	}
+
 	if (head->next == entry) {
 		INIT_LIST_HEAD(list);
 		return;
