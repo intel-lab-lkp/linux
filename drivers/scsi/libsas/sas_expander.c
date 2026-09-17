@@ -61,8 +61,23 @@ static int smp_execute_task_sg(struct domain_device *dev,
 	struct sas_internal *i =
 		to_sas_internal(dev->port->ha->shost->transportt);
 	struct sas_ha_struct *ha = dev->port->ha;
+	bool ha_resuming = test_bit(SAS_HA_RESUMING, &ha->state);
 
-	pm_runtime_get_sync(ha->dev);
+	/*
+	 * While the host is resuming, ha->dev may be RPM_RESUMING and
+	 * the resume blocked in sas_drain_work() waiting for this very
+	 * SMP IO, so waiting for the host to resume here would deadlock.
+	 * Use the noresume/noidle variants to still hold a PM reference
+	 * for the duration of the IO, the hardware is already initialized
+	 * by the LLDD before sas_resume_ha() runs.
+	 */
+	if (ha_resuming) {
+		pm_runtime_get_noresume(ha->dev);
+	} else {
+		res = pm_runtime_resume_and_get(ha->dev);
+		if (res)
+			return res;
+	}
 	mutex_lock(&dev->ex_dev.cmd_mutex);
 	for (retry = 0; retry < 3; retry++) {
 		if (test_bit(SAS_DEV_GONE, &dev->state)) {
@@ -135,7 +150,10 @@ static int smp_execute_task_sg(struct domain_device *dev,
 		}
 	}
 	mutex_unlock(&dev->ex_dev.cmd_mutex);
-	pm_runtime_put_sync(ha->dev);
+	if (ha_resuming)
+		pm_runtime_put_noidle(ha->dev);
+	else
+		pm_runtime_put_sync(ha->dev);
 
 	BUG_ON(retry == 3 && task != NULL);
 	sas_free_task(task);
