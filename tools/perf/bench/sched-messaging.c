@@ -14,21 +14,23 @@
 #include "bench.h"
 
 /* Test groups of 20 processes spraying to 20 receivers */
-#include <pthread.h>
+#include <errno.h>
+#include <limits.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/wait.h>
-#include <sys/time.h>
-#include <poll.h>
-#include <limits.h>
+
 #include <err.h>
 #include <linux/list.h>
 #include <linux/time64.h>
+#include <poll.h>
+#include <pthread.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #define DATASIZE 100
 
