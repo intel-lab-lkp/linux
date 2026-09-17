@@ -248,7 +248,7 @@ static u32 uvc_v4l2_get_bytesperline(const struct uvc_format *format,
 static int uvc_v4l2_try_format(struct uvc_streaming *stream,
 	struct v4l2_format *fmt, struct uvc_streaming_control *probe,
 	const struct uvc_format **uvc_format,
-	const struct uvc_frame **uvc_frame)
+	const struct uvc_frame **uvc_frame, bool probe_device)
 {
 	const struct uvc_format *format = NULL;
 	const struct uvc_frame *frame = NULL;
@@ -343,10 +343,14 @@ static int uvc_v4l2_try_format(struct uvc_streaming *stream,
 		probe->dwMaxVideoFrameSize =
 			stream->ctrl.dwMaxVideoFrameSize;
 
-	/* Probe the device. */
-	ret = uvc_probe_video(stream, probe);
-	if (ret < 0)
-		return ret;
+	/* Some devices stall on probes during idle format enumeration. */
+	if (probe_device) {
+		ret = uvc_probe_video(stream, probe);
+		if (ret < 0)
+			return ret;
+	} else {
+		probe->dwMaxVideoFrameSize = frame->dwMaxVideoFrameBufferSize;
+	}
 
 	/*
 	 * After the probe, update fmt with the values returned from
@@ -439,7 +443,7 @@ static int uvc_ioctl_s_fmt(struct file *file, void *priv,
 	if (fmt->type != stream->type)
 		return -EINVAL;
 
-	ret = uvc_v4l2_try_format(stream, fmt, &probe, &format, &frame);
+	ret = uvc_v4l2_try_format(stream, fmt, &probe, &format, &frame, true);
 	if (ret < 0)
 		return ret;
 
@@ -656,7 +660,8 @@ static int uvc_ioctl_try_fmt(struct file *file, void *priv,
 	struct uvc_streaming *stream = handle->stream;
 	struct uvc_streaming_control probe;
 
-	return uvc_v4l2_try_format(stream, fmt, &probe, NULL, NULL);
+	return uvc_v4l2_try_format(stream, fmt, &probe, NULL, NULL,
+		!(stream->dev->quirks & UVC_QUIRK_SKIP_TRY_FMT_PROBE));
 }
 
 static int uvc_ioctl_enum_input(struct file *file, void *priv,
