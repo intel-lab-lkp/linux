@@ -2250,9 +2250,16 @@ static int vsock_connectible_sendmsg(struct socket *sock, struct msghdr *msg,
 
 	while (total_written < len) {
 		ssize_t written;
+		/* For SEQPACKET wait until the whole remaining message fits, so
+		 * it is enqueued atomically.  A credit-limited partial send that
+		 * then errors out (e.g. -EINTR) would otherwise leave EOM-less
+		 * fragments that the peer merges into the next message.
+		 */
+		s64 min_space = (sk->sk_type == SOCK_SEQPACKET) ?
+				(s64)(len - total_written) : 1;
 
 		add_wait_queue(sk_sleep(sk), &wait);
-		while (vsock_stream_has_space(vsk) == 0 &&
+		while (vsock_stream_has_space(vsk) < min_space &&
 		       sk->sk_err == 0 &&
 		       !(sk->sk_shutdown & SEND_SHUTDOWN) &&
 		       !(vsk->peer_shutdown & RCV_SHUTDOWN)) {
