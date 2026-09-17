@@ -165,6 +165,13 @@ static void __init tdx_initialize_cpu_cfg_caps(void)
 		TDX_CFG_F(AVX512_VP2INTERSECT),
 		TDX_CFG_F(SERIALIZE),
 		TDX_CFG_F(TSXLDTRK),
+		/*
+		 * KVM doesn't support MSR_IA32_CORE_CAPS, but older TDX specs
+		 * define this bit as fixed-1.  Report it as configurable to
+		 * accommodate the legacy TDX module definition, and to let
+		 * userspace detect that the bit is no longer fixed-1.
+		 */
+		TDX_CFG_EXTRA_F(CORE_CAPABILITIES),
 	);
 
 	tdx_cpu_cfg_cap_init(CPUID_7_1_EAX,
