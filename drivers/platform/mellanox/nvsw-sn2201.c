@@ -1172,12 +1172,14 @@ static void nvsw_sn2201_config_exit(struct nvsw_sn2201 *nvsw_sn2201)
 static int nvsw_sn2201_i2c_completion_notify(void *handle, int id)
 {
 	struct nvsw_sn2201 *nvsw_sn2201 = handle;
+	struct i2c_adapter *adapter;
 	void *regmap;
 	int i, err;
 
 	/* Create main mux. */
-	nvsw_sn2201->main_mux_devs->adapter = i2c_get_adapter(nvsw_sn2201->main_mux_devs->nr);
-	if (!nvsw_sn2201->main_mux_devs->adapter) {
+	adapter = i2c_get_adapter(nvsw_sn2201->main_mux_devs->nr);
+	nvsw_sn2201->main_mux_devs->adapter = adapter;
+	if (!adapter) {
 		err = -ENODEV;
 		dev_err(nvsw_sn2201->dev, "Failed to get adapter for bus %d\n",
 			nvsw_sn2201->main_mux_devs->nr);
@@ -1189,6 +1191,12 @@ static int nvsw_sn2201_i2c_completion_notify(void *handle, int id)
 						nvsw_sn2201->main_mux_devs_num);
 	if (err) {
 		dev_err(nvsw_sn2201->dev, "Failed to create main mux devices\n");
+		/*
+		 * nvsw_sn2201_create_static_devices() clears ->adapter on
+		 * failure, so release the reference taken above here.
+		 */
+		i2c_put_adapter(adapter);
+		nvsw_sn2201->main_mux_devs->adapter = NULL;
 		goto nvsw_sn2201_create_static_devices_fail;
 	}
 
