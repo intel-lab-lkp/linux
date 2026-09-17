@@ -5,16 +5,15 @@
  * Builtin regression testing command: ever growing number of sanity tests
  */
 #include <ctype.h>
-#include <fcntl.h>
 #include <errno.h>
-#ifdef HAVE_BACKTRACE_SUPPORT
-#include <execinfo.h>
-#endif
 #include <setjmp.h>
+#include <signal.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include <dirent.h>
+#include <fcntl.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/zalloc.h>
@@ -43,6 +42,10 @@
 #include "util/rlimit.h"
 #include "util/strbuf.h"
 #include "util/term.h"
+
+#ifdef HAVE_BACKTRACE_SUPPORT
+#include <execinfo.h>
+#endif
 
 static const char *junit_filename;
 static struct strbuf junit_xml_buf = STRBUF_INIT;
