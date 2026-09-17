@@ -249,6 +249,20 @@ u64 amdxdna_gem_dev_addr(struct amdxdna_gem_obj *abo)
 	return amdxdna_obj_dma_addr(abo);
 }
 
+static void amdxdna_umap_set_fault_flags(struct amdxdna_umap *mapp,
+					 struct vm_area_struct *vma)
+{
+	mapp->range.default_flags = HMM_PFN_REQ_FAULT;
+
+	if (!vma)
+		vma = vma_lookup(mapp->notifier.mm, mapp->range.start);
+
+	if (vma && vma->vm_start <= mapp->range.start &&
+	    vma->vm_end >= mapp->range.end &&
+	    (vma->vm_flags & VM_WRITE))
+		mapp->range.default_flags |= HMM_PFN_REQ_WRITE;
+}
+
 static bool amdxdna_hmm_invalidate(struct mmu_interval_notifier *mni,
 				   const struct mmu_notifier_range *range,
 				   unsigned long cur_seq)
@@ -270,6 +284,7 @@ static bool amdxdna_hmm_invalidate(struct mmu_interval_notifier *mni,
 	down_write(&xdna->notifier_lock);
 	abo->mem.map_invalid = true;
 	mapp->invalid = true;
+	amdxdna_umap_set_fault_flags(mapp, NULL);
 	mmu_interval_set_seq(&mapp->notifier, cur_seq);
 	up_write(&xdna->notifier_lock);
 
@@ -418,7 +433,7 @@ static int amdxdna_hmm_register(struct amdxdna_gem_obj *abo,
 	mapp->range.notifier = &mapp->notifier;
 	mapp->range.start = vma->vm_start;
 	mapp->range.end = vma->vm_end;
-	mapp->range.default_flags = HMM_PFN_REQ_FAULT;
+	amdxdna_umap_set_fault_flags(mapp, vma);
 	mapp->abo = abo;
 	kref_init(&mapp->refcnt);
 
