@@ -378,6 +378,7 @@ static void cros_unregister_ports(struct cros_typec_data *typec)
 		if (!typec->ports[i])
 			continue;
 
+		cros_typec_altmodes_stop(typec->ports[i]);
 		cros_typec_remove_partner(typec, i);
 		cros_typec_remove_cable(typec, i);
 
