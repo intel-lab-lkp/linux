@@ -76,6 +76,30 @@ they help speeding up rejection of non-existing files provided
 by the users.
 
 
+efivarfs
+--------
+
+These entries appear under ``/proc/sys/fs/efivarfs`` and control how
+``statfs(2)`` on an efivarfs mount reports the EFI variable-store
+capacity. The capacity is obtained from the ``QueryVariableInfo()`` EFI
+runtime service, which on some x86 platforms can take tens of
+milliseconds. To avoid this cost on the ``statfs(2)`` hot path the
+reported capacity is cached; these knobs control how the cache is
+refreshed.
+
+``statfs_refresh`` (default 1)
+  When set to 1, ``statfs(2)`` refreshes the cached capacity by calling
+  the firmware, rate-limited to a few calls every couple of seconds.
+  When set to 0, ``statfs(2)`` never calls firmware and always serves the
+  cached value; the cache is then updated only at mount time and by
+  ``force_refresh``. Set this to 0 on latency-sensitive systems.
+
+``force_refresh`` (write-only)
+  Writing any value forces an immediate, synchronous re-query of the
+  firmware to update the cache. Useful to pick up capacity changes when
+  ``statfs_refresh`` is 0. The written value is ignored.
+
+
 file-max & file-nr
 ------------------
 

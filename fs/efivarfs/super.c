@@ -19,6 +19,7 @@
 #include <linux/notifier.h>
 #include <linux/printk.h>
 #include <linux/namei.h>
+#include <linux/sysctl.h>
 
 #include "internal.h"
 #include "../internal.h"
@@ -77,43 +78,70 @@ static int efivarfs_show_options(struct seq_file *m, struct dentry *root)
 	return 0;
 }
 
-static int efivarfs_statfs(struct dentry *dentry, struct kstatfs *buf)
+/*
+ * Cached EFI variable-store capacity: QueryVariableInfo() is costly on some
+ * firmware, so statfs() serves this cache instead of calling firmware.
+ */
+static DEFINE_SPINLOCK(efivarfs_cap_lock);
+static u64 efivarfs_cap_storage;
+static u64 efivarfs_cap_remaining;
+
+/*
+ * fs.efivarfs.statfs_refresh (default 1): when set, statfs() refreshes the
+ * cached capacity, rate-limited. Set to 0 on latency-sensitive systems so
+ * statfs() never calls firmware; the cache is then updated only at mount and by
+ * fs.efivarfs.force_refresh.
+ */
+static int efivarfs_statfs_refresh = 1;
+
+static void efivarfs_query_capacity(void)
 {
 	const u32 attr = EFI_VARIABLE_NON_VOLATILE |
 			 EFI_VARIABLE_BOOTSERVICE_ACCESS |
 			 EFI_VARIABLE_RUNTIME_ACCESS;
-	u64 storage_space, remaining_space, max_variable_size;
-	u64 id = huge_encode_dev(dentry->d_sb->s_dev);
+	u64 storage_space = 0, remaining_space = 0, max_variable_size;
 	efi_status_t status;
 
-	/* Some UEFI firmware does not implement QueryVariableInfo() */
-	storage_space = remaining_space = 0;
-	if (efi_rt_services_supported(EFI_RT_SUPPORTED_QUERY_VARIABLE_INFO)) {
-		static DEFINE_RATELIMIT_STATE(_rs, 2 * HZ, 5);
-		static u64 storage, remaining;
-		static DEFINE_SPINLOCK(lock);
+	if (!efivar_is_available() ||
+	    !efi_rt_services_supported(EFI_RT_SUPPORTED_QUERY_VARIABLE_INFO))
+		return;
 
-		if (!__ratelimit(&_rs)) {
-			ratelimit_set_flags(&_rs, RATELIMIT_MSG_ON_RELEASE);
-
-			spin_lock(&lock);
-			storage_space = storage;
-			remaining_space = remaining;
-			spin_unlock(&lock);
-		} else {
-			status = efivar_query_variable_info(attr, &storage_space,
-							    &remaining_space,
-							    &max_variable_size);
-			if (status != EFI_SUCCESS && status != EFI_UNSUPPORTED)
-				pr_warn("query_variable_info() failed: 0x%lx\n",
-					status);
-
-			spin_lock(&lock);
-			storage = storage_space;
-			remaining = remaining_space;
-			spin_unlock(&lock);
-		}
+	status = efivar_query_variable_info(attr, &storage_space,
+					    &remaining_space, &max_variable_size);
+	if (status != EFI_SUCCESS && status != EFI_UNSUPPORTED) {
+		pr_warn_ratelimited("query_variable_info() failed: 0x%lx\n", status);
+		return;
 	}
+
+	spin_lock(&efivarfs_cap_lock);
+	efivarfs_cap_storage = storage_space;
+	efivarfs_cap_remaining = remaining_space;
+	spin_unlock(&efivarfs_cap_lock);
+}
+
+static int efivarfs_statfs(struct dentry *dentry, struct kstatfs *buf)
+{
+	u64 id = huge_encode_dev(dentry->d_sb->s_dev);
+	u64 storage_space, remaining_space;
+
+	/*
+	 * Refresh the cached capacity (rate-limited) unless statfs_refresh is
+	 * disabled, in which case statfs() serves the cache without ever calling
+	 * the expensive QueryVariableInfo() firmware service.
+	 */
+	if (READ_ONCE(efivarfs_statfs_refresh)) {
+		static DEFINE_RATELIMIT_STATE(_rs, 2 * HZ, 5);
+
+		if (__ratelimit(&_rs))
+			efivarfs_query_capacity();
+		else
+			ratelimit_set_flags(&_rs, RATELIMIT_MSG_ON_RELEASE);
+	}
+
+	spin_lock(&efivarfs_cap_lock);
+	storage_space = efivarfs_cap_storage;
+	remaining_space = efivarfs_cap_remaining;
+	spin_unlock(&efivarfs_cap_lock);
 
 	/*
 	 * This is not a normal filesystem, so no point in pretending it has a block
@@ -392,6 +420,9 @@ static int efivarfs_fill_super(struct super_block *sb, struct fs_context *fc)
 	if (err)
 		return err;
 
+	/* Prime the capacity cache once at mount so df has valid numbers. */
+	efivarfs_query_capacity();
+
 	return efivar_init(efivarfs_callback, sb, true);
 }
 
@@ -552,13 +583,58 @@ static struct file_system_type efivarfs_type = {
 	.fs_flags = FS_POWER_FREEZE,
 };
 
+static int efivarfs_force_refresh;
+
+static int efivarfs_force_refresh_handler(const struct ctl_table *table, int write,
+					  void *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret = proc_dointvec(table, write, buffer, lenp, ppos);
+
+	/* The written value is irrelevant; any write triggers a re-query. */
+	if (!ret && write)
+		efivarfs_query_capacity();
+	return ret;
+}
+
+static const struct ctl_table efivarfs_sysctls[] = {
+	{
+		.procname	= "statfs_refresh",
+		.data		= &efivarfs_statfs_refresh,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
+	{
+		.procname	= "force_refresh",
+		.data		= &efivarfs_force_refresh,
+		.maxlen		= sizeof(int),
+		.mode		= 0200,
+		.proc_handler	= efivarfs_force_refresh_handler,
+	},
+};
+
+static struct ctl_table_header *efivarfs_sysctl_header;
+
 static __init int efivarfs_init(void)
 {
-	return register_filesystem(&efivarfs_type);
+	int err = register_filesystem(&efivarfs_type);
+
+	if (err)
+		return err;
+
+	efivarfs_sysctl_header = register_sysctl("fs/efivarfs", efivarfs_sysctls);
+	if (!efivarfs_sysctl_header)
+		pr_warn("efivarfs: unable to register sysctls\n");
+
+	return 0;
 }
 
 static __exit void efivarfs_exit(void)
 {
+	if (efivarfs_sysctl_header)
+		unregister_sysctl_table(efivarfs_sysctl_header);
 	unregister_filesystem(&efivarfs_type);
 }
 
