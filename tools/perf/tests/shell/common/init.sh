@@ -132,7 +132,6 @@ check_uprobes_available()
 
 clear_all_probes()
 {
-	echo 0 > /sys/kernel/debug/tracing/events/enable
 	check_kprobes_available && echo > /sys/kernel/debug/tracing/kprobe_events
 	check_uprobes_available && echo > /sys/kernel/debug/tracing/uprobe_events
 }
