@@ -110,6 +110,7 @@ bool hibernation_available(void)
 {
 	return nohibernate == 0 &&
 		!security_locked_down(LOCKDOWN_HIBERNATION) &&
+		!debug_pagealloc_enabled() &&
 		!secretmem_active() && !cxl_mem_active();
 }
 
