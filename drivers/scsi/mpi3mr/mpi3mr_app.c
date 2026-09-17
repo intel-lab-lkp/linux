@@ -2741,8 +2741,9 @@ static long mpi3mr_bsg_process_mpt_cmds(struct bsg_job *job)
 			stgt_priv = (struct mpi3mr_stgt_priv_data *)
 			    tgtdev->starget->hostdata;
 			atomic_inc(&stgt_priv->block_io);
-			mpi3mr_tgtdev_put(tgtdev);
 		}
+		if (tgtdev)
+			mpi3mr_tgtdev_put(tgtdev);
 	}
 
 	mrioc->bsg_cmds.state = MPI3MR_CMD_PENDING;
