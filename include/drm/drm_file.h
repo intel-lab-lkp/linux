@@ -66,6 +66,12 @@ enum drm_minor_type {
 	DRM_MINOR_ACCEL = 32,
 };
 
+struct drm_memstat_attr {
+	struct kobject kobj;
+	unsigned int region;
+	struct drm_device *drm;
+};
+
 /**
  * struct drm_minor - DRM device minor structure
  *
@@ -81,6 +87,9 @@ struct drm_minor {
 	int type;                       /* Control or render or accel */
 	struct device *kdev;		/* Linux device */
 	struct drm_device *dev;
+
+	struct kobject	*sysfs_memstat;
+	struct drm_memstat_attr  *sysfs_memstat_regions;
 
 	struct dentry *debugfs_symlink;
 	struct dentry *debugfs_root;
