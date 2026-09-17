@@ -499,10 +499,18 @@ static void hvs_close_timeout(struct work_struct *work)
 
 	sock_hold(sk);
 	lock_sock(sk);
-	if (!sock_flag(sk, SOCK_DONE))
+	if (!sock_flag(sk, SOCK_DONE)) {
 		hvs_do_close_lock_held(vsk, false);
-
-	vsk->close_work_scheduled = false;
+	} else if (vsk->close_work_scheduled) {
+		/* A concurrent rescind (hvs_close_connection) set SOCK_DONE but
+		 * could not cancel this already-running work, so it left the
+		 * scheduling reference and vsock_remove_sock() to us.  Finish
+		 * the cleanup to avoid leaking the socket and its table entry.
+		 */
+		vsk->close_work_scheduled = false;
+		vsock_remove_sock(vsk);
+		sock_put(sk);
+	}
 	release_sock(sk);
 	sock_put(sk);
 }
