@@ -429,6 +429,8 @@ int intel_dp_mtp_tu_compute_config(struct intel_dp *intel_dp,
 		return slots;
 	}
 
+	intel_dp_check_m_n_ratio(crtc_state, &crtc_state->dp_m_n);
+
 	if (!dsc)
 		crtc_state->pipe_bpp = fxp_q4_to_int(bpp_x16);
 	else
