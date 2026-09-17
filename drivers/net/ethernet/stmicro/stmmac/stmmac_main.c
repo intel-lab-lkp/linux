@@ -6844,13 +6844,13 @@ static int stmmac_vlan_update(struct stmmac_priv *priv, bool is_double)
 		crc = bitrev32(~stmmac_vid_crc32_le(vid_le)) >> 28;
 		hash |= (1 << crc);
 		count++;
+		pmatch = vid;
 	}
 
 	if (!priv->dma_cap.vlhash) {
 		if (count > 2) /* VID = 0 always passes filter */
 			return -EOPNOTSUPP;
 
-		pmatch = vid;
 		hash = 0;
 	}
 
