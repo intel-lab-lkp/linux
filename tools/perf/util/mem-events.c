@@ -1,22 +1,28 @@
 // SPDX-License-Identifier: GPL-2.0
+#include "mem-events.h"
+
+#include <errno.h>
+#include <limits.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <api/fs/fs.h>
+
 #include <linux/kernel.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+#include <api/fs/fs.h>
+
 #include "cpumap.h"
-#include "map_symbol.h"
-#include "mem-events.h"
-#include "mem-info.h"
 #include "debug.h"
 #include "evsel.h"
-#include "symbol.h"
+#include "map_symbol.h"
+#include "mem-info.h"
 #include "pmu.h"
 #include "pmus.h"
+#include "symbol.h"
 
 unsigned int perf_mem_events__loads_ldlat = 30;
 
