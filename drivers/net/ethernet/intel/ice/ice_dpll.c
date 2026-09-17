@@ -107,6 +107,9 @@ static const struct dpll_pin_frequency ice_esync_range[] = {
  */
 static bool ice_dpll_is_sw_pin(struct ice_pf *pf, u8 index, bool input)
 {
+	if (!input && !ice_is_feature_supported(pf, ICE_F_SMA_CTRL))
+		return false;
+
 	if (input && pf->hw.device_id == ICE_DEV_ID_E810C_QSFP)
 		index -= ICE_DPLL_SW_PIN_INPUT_BASE_QSFP -
 			 ICE_DPLL_SW_PIN_INPUT_BASE_SFP;
@@ -1213,6 +1216,8 @@ static int ice_dpll_sma_direction_set(struct ice_dpll_pin *p,
 
 	if (p->direction == direction && p->active)
 		return 0;
+	if (!ice_is_feature_supported(p->pf, ICE_F_SMA_CTRL))
+		return -EOPNOTSUPP;
 	ret = ice_read_sma_ctrl(&p->pf->hw, &data);
 	if (ret)
 		return ret;
@@ -4510,9 +4515,14 @@ static int ice_dpll_init_info_sw_pins(struct ice_pf *pf)
 						  true, &freq_supp_num);
 		pin->prop.freq_supported_num = freq_supp_num;
 		pin->prop.capabilities =
-			(DPLL_PIN_CAPABILITIES_DIRECTION_CAN_CHANGE |
-			 DPLL_PIN_CAPABILITIES_PRIORITY_CAN_CHANGE |
-			 caps);
+			(DPLL_PIN_CAPABILITIES_PRIORITY_CAN_CHANGE | caps);
+		if (ice_is_feature_supported(pf, ICE_F_SMA_CTRL)) {
+			pin->prop.capabilities |=
+				DPLL_PIN_CAPABILITIES_DIRECTION_CAN_CHANGE;
+		} else {
+			pin->active = true;
+			pin->direction = DPLL_PIN_DIRECTION_INPUT;
+		}
 		pin->pf = pf;
 		pin->prop.board_label = ice_dpll_sw_pin_sma[i];
 		pin->input = &d->inputs[pin_abs_idx];
@@ -4526,6 +4536,7 @@ static int ice_dpll_init_info_sw_pins(struct ice_pf *pf)
 		pin->idx = i;
 		pin->prop.type = DPLL_PIN_TYPE_EXT;
 		pin->prop.capabilities = caps;
+		pin->hidden = !ice_is_feature_supported(pf, ICE_F_SMA_CTRL);
 		pin->pf = pf;
 		pin->prop.board_label = ice_dpll_sw_pin_ufl[i];
 		if (i == ICE_DPLL_PIN_SW_1_IDX) {
@@ -4554,6 +4565,9 @@ static int ice_dpll_init_info_sw_pins(struct ice_pf *pf)
 		}
 		ice_dpll_phase_range_set(&pin->prop.phase_range, phase_adj_max);
 	}
+
+	if (!ice_is_feature_supported(pf, ICE_F_SMA_CTRL))
+		return 0;
 
 	/* Initialize the SMA control register to a known-good default state.
 	 * Without this write the PCA9575 GPIO expander retains its power-on
