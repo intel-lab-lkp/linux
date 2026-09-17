@@ -29,7 +29,7 @@ static int attach_prog(struct bpf_link **link, struct bpf_program *prog, const c
 	return attach_err;
 }
 
-int augmented_syscalls__prepare(void)
+int augmented_syscalls__prepare(bool inherit)
 {
 	struct bpf_program *prog;
 	char buf[128];
@@ -41,12 +41,18 @@ int augmented_syscalls__prepare(void)
 		return -errno;
 	}
 
+	skel->rodata->inherit = inherit;
+
 	/*
-	 * Disable attaching the BPF programs except for sys_enter and
-	 * sys_exit that tail call into this as necessary.
+	 * Disable attaching the BPF programs other than those attached
+	 * explicitly by augmented_syscalls__attach(), the rest are reached by
+	 * tail calls.
 	 */
 	bpf_object__for_each_program(prog, skel->obj) {
-		if (prog != skel->progs.sys_enter && prog != skel->progs.sys_exit)
+		if (prog != skel->progs.sys_enter && prog != skel->progs.sys_exit &&
+		    prog != skel->progs.sched_process_fork &&
+		    prog != skel->progs.sched_process_exit &&
+		    prog != skel->progs.sched_process_exec)
 			bpf_program__set_autoattach(prog, /*autoattach=*/false);
 	}
 
@@ -64,13 +70,42 @@ int augmented_syscalls__prepare(void)
 		return err;
 	}
 
+	return 0;
+}
+
+int augmented_syscalls__attach(void)
+{
+	int err;
+
+	if (skel == NULL)
+		return 0;
+
 	/*
-	 * Only sys_enter and sys_exit are attached, the remaining programs are
-	 * reached by tail calls. Attach them explicitly and, on failure, undo
-	 * any partial attachment: leaving sys_enter live on
-	 * raw_syscalls:sys_enter would keep running a BPF program for every
-	 * syscall on the system for a perf trace session that never starts.
+	 * Attaching is deliberately separate from, and a lot later than,
+	 * loading: these are system wide tracepoint programs, so from the
+	 * moment they are attached they are the only thing deciding which
+	 * tasks and syscalls are traced. Going live before the pid and
+	 * syscall maps are populated would mean a target that forked in the
+	 * meantime was never picked up by sched_process_fork() below.
+	 *
+	 * Attach explicitly, so that a failure part way through can undo what
+	 * came before it: leaving sys_enter live on raw_syscalls:sys_enter
+	 * would keep running a BPF program for every syscall on the system for
+	 * a perf trace session that never starts.
+	 *
+	 * The scheduler programs maintain the pid maps, and are attached first
+	 * so that no fork, exit or exec can be missed between sys_enter going
+	 * live and the maps being maintained.
 	 */
+	if (attach_prog(&skel->links.sched_process_fork, skel->progs.sched_process_fork,
+			"sched_process_fork"))
+		goto out_cleanup;
+	if (attach_prog(&skel->links.sched_process_exit, skel->progs.sched_process_exit,
+			"sched_process_exit"))
+		goto out_cleanup;
+	if (attach_prog(&skel->links.sched_process_exec, skel->progs.sched_process_exec,
+			"sched_process_exec"))
+		goto out_cleanup;
 	if (attach_prog(&skel->links.sys_enter, skel->progs.sys_enter, "sys_enter"))
 		goto out_cleanup;
 	if (attach_prog(&skel->links.sys_exit, skel->progs.sys_exit, "sys_exit"))
@@ -82,6 +117,13 @@ out_cleanup:
 	err = attach_err;
 	/* Destroys every link attached above along with the skeleton. */
 	augmented_syscalls__cleanup();
+	/*
+	 * Tearing the skeleton down closes file descriptors and frees memory,
+	 * either of which may overwrite errno. Restore it so that a caller
+	 * reporting this with "%m" describes the attach failure rather than
+	 * whatever the teardown happened to do last.
+	 */
+	errno = -err;
 	return err;
 }
 
@@ -128,17 +170,29 @@ int augmented_syscalls__set_filter_pids(unsigned int nr, pid_t *pids)
 	bool value = true;
 	int err = 0;
 
-	if (skel == NULL)
+	if (skel == NULL || nr == 0)
 		return 0;
 
+	/*
+	 * Tell the BPF program that the pids_filtered map is in use. Without
+	 * this it would have to look up every task in an empty map, on every
+	 * syscall on the system, to find out that nothing is filtered.
+	 */
 	for (size_t i = 0; i < nr; ++i) {
 		err = bpf_map__update_elem(skel->maps.pids_filtered, &pids[i],
 					   sizeof(*pids), &value, sizeof(value),
 					   BPF_ANY);
 		if (err)
-			break;
+			return err;
 	}
-	return err;
+	/*
+	 * Publish the filter only now that the map is fully populated.
+	 * augmented_syscalls__attach() has not run yet, so nothing is reading
+	 * either of them, but keeping the flag and the map consistent means
+	 * the ordering stays correct however the callers are rearranged.
+	 */
+	skel->bss->has_pids_filtered = true;
+	return 0;
 }
 
 /*
@@ -161,43 +215,13 @@ int augmented_syscalls__set_target_pids(unsigned int nr, pid_t *pids)
 			return err;
 	}
 	/*
-	 * Set the flag only once every target is in the map. The BPF programs
-	 * are attached by this point, so flipping it first would have them
-	 * filter against a partially populated map and drop syscalls made by
-	 * the targets that had not been added yet.
+	 * Set the flag only once every target is in the map, so that the two
+	 * are never inconsistent. Publishing it first would, once the
+	 * programs are attached, have them filter against a partially
+	 * populated map and drop syscalls made by targets not yet added.
 	 */
 	skel->bss->has_pids_to_trace = true;
 	return 0;
-}
-
-int augmented_syscalls__add_target_pid(pid_t pid)
-{
-	bool value = true;
-
-	if (skel == NULL || !skel->bss->has_pids_to_trace || skel->maps.pids_to_trace == NULL)
-		return 0;
-
-	return bpf_map__update_elem(skel->maps.pids_to_trace, &pid, sizeof(pid),
-				    &value, sizeof(value), BPF_ANY);
-}
-
-int augmented_syscalls__del_target_pid(pid_t pid)
-{
-	if (skel == NULL || !skel->bss->has_pids_to_trace || skel->maps.pids_to_trace == NULL)
-		return 0;
-
-	return bpf_map__delete_elem(skel->maps.pids_to_trace, &pid, sizeof(pid), 0);
-}
-
-bool augmented_syscalls__has_target_pid(pid_t pid)
-{
-	bool value;
-
-	if (skel == NULL || !skel->bss->has_pids_to_trace || skel->maps.pids_to_trace == NULL)
-		return false;
-
-	return bpf_map__lookup_elem(skel->maps.pids_to_trace, &pid, sizeof(pid),
-				    &value, sizeof(value), 0) == 0;
 }
 
 /*
