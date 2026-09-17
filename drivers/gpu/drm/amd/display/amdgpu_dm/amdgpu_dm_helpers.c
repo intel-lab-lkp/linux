@@ -1244,12 +1244,16 @@ enum dc_edid_status dm_helpers_read_local_edid(
 	 * do check sum and retry to make sure read correct edid.
 	 */
 	do {
-		drm_edid = dm_helpers_read_acpi_edid(aconnector);
-		if (drm_edid)
-			drm_info(connector->dev, "Using ACPI provided EDID for %s\n", connector->name);
-		else if (!ddc)
+		drm_edid = drm_edid_read_override(connector);
+		if (!drm_edid) {
+			drm_edid = dm_helpers_read_acpi_edid(aconnector);
+			if (drm_edid)
+				drm_info(connector->dev, "Using ACPI provided EDID for %s\n",
+					 connector->name);
+		}
+		if (!drm_edid && !ddc)
 			drm_edid = dm_helpers_read_vbios_hardcoded_edid(link, aconnector);
-		else
+		else if (!drm_edid)
 			drm_edid = drm_edid_read_ddc(connector, ddc);
 		drm_edid_connector_update(connector, drm_edid);
 
