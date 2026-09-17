@@ -3918,6 +3918,9 @@ void ice_init_feature_support(struct ice_pf *pf)
 		ice_set_feature_support(pf, ICE_F_GCS);
 		ice_set_feature_support(pf, ICE_F_TXTIME);
 	}
+
+	if (pf->hw.erot_present)
+		ice_set_feature_support(pf, ICE_F_EROT);
 }
 
 /**

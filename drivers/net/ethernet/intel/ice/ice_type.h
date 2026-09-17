@@ -319,6 +319,9 @@ struct ice_hw_common_caps {
 	/* Post update reset restriction */
 	bool reset_restrict_support;
 	bool tx_sched_topo_comp_mode_en;
+	/* eRoT (external Root of Trust) controller present */
+	bool external_pqc_rot_present;
+	bool external_pqc_rot_present_cap_advertised;
 };
 
 /* IEEE 1588 TIME_SYNC specific info */
@@ -1052,6 +1055,8 @@ struct ice_hw {
 	u8 dvm_ena;
 	u16 io_expander_handle;
 	u8 cgu_part_number;
+	/* true when eRoT (external Root of Trust) controller is present */
+	bool erot_present;
 };
 
 /* Statistics collected by each port, VSI, VEB, and S-channel */

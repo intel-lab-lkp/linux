@@ -1106,6 +1106,45 @@ static int ice_determine_css_hdr_len(struct ice_hw *hw)
 }
 
 /**
+ * ice_parse_erot_presence - detect eRoT and populate hw->erot_present
+ * @hw: pointer to the HW struct
+ *
+ * Uses the device capability LIBIE_AQC_CAPS_EXTERNAL_PQC_ROT_PRESENT when
+ * advertised by firmware, falling back to the eRoT Presence fuse only when
+ * the capability is not advertised at all (older firmware).
+ *
+ * Priority:
+ *  1. Device capability external_pqc_rot_present (advertised && == 1)
+ *     => eRoT present
+ *  2. Fuse BIT(0) set (only when capability not advertised)
+ *     => eRoT present
+ *  3. Otherwise => eRoT not present
+ */
+void ice_parse_erot_presence(struct ice_hw *hw)
+{
+	u16 fuse = 0;
+	int err;
+
+	hw->erot_present = false;
+
+	if (hw->dev_caps.common_cap.external_pqc_rot_present) {
+		hw->erot_present = true;
+	} else if (!hw->dev_caps.common_cap.external_pqc_rot_present_cap_advertised) {
+		err = ice_read_sr_word(hw, ICE_SR_EROT_PRESENCE_FUSE, &fuse);
+		if (err)
+			dev_warn(ice_hw_to_dev(hw),
+				 "Unable to read eRoT presence fuse (SR 0x%04x), err %d; assuming eRoT not present\n",
+				 ICE_SR_EROT_PRESENCE_FUSE, err);
+		else if (fuse & ICE_EROT_PRESENCE_FUSE_PRESENT)
+			hw->erot_present = true;
+	}
+
+	if (hw->erot_present)
+		dev_info(ice_hw_to_dev(hw),
+			 "eRoT (external Root of Trust) present\n");
+}
+
+/**
  * ice_init_nvm - initializes NVM setting
  * @hw: pointer to the HW struct
  *

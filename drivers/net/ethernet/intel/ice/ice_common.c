@@ -1031,6 +1031,7 @@ int ice_init_hw(struct ice_hw *hw)
 	if (status)
 		goto err_unroll_cqinit;
 
+	ice_parse_erot_presence(hw);
 	if (!hw->port_info)
 		hw->port_info = devm_kzalloc(ice_hw_to_dev(hw),
 					     sizeof(*hw->port_info),
@@ -2483,6 +2484,12 @@ ice_parse_common_caps(struct ice_hw *hw, struct ice_hw_common_caps *caps,
 		break;
 	case LIBIE_AQC_CAPS_TX_SCHED_TOPO_COMP_MODE:
 		caps->tx_sched_topo_comp_mode_en = (number == 1);
+		break;
+	case LIBIE_AQC_CAPS_EXTERNAL_PQC_ROT_PRESENT:
+		caps->external_pqc_rot_present = (number == 1);
+		caps->external_pqc_rot_present_cap_advertised = true;
+		ice_debug(hw, ICE_DBG_INIT, "%s: external_pqc_rot_present = %d\n",
+			  prefix, caps->external_pqc_rot_present);
 		break;
 	default:
 		/* Not one of the recognized common capabilities */

@@ -28,7 +28,12 @@ int ice_get_inactive_nvm_ver(struct ice_hw *hw, struct ice_nvm_info *nvm);
 int
 ice_get_inactive_netlist_ver(struct ice_hw *hw, struct ice_netlist_info *netlist);
 int ice_read_pba_string(struct ice_hw *hw, u8 *pba_num, u32 pba_num_size);
+/* eRoT Presence fuse SR offset; BIT(0) set means eRoT present */
+#define ICE_SR_EROT_PRESENCE_FUSE	0x1016
+#define ICE_EROT_PRESENCE_FUSE_PRESENT	BIT(0)
+
 int ice_init_nvm(struct ice_hw *hw);
+void ice_parse_erot_presence(struct ice_hw *hw);
 int ice_read_sr_word(struct ice_hw *hw, u16 offset, u16 *data);
 int
 ice_aq_update_nvm(struct ice_hw *hw, u16 module_typeid, u32 offset,
