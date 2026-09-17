@@ -213,6 +213,11 @@ xfs_trans_read_buf(
 				      flags, bpp, ops);
 }
 
+void __xfs_trans_cancel(struct xfs_trans *, int);
+
+#define xfs_trans_cancel(tp) __xfs_trans_cancel((tp), 0)
+#define xfs_trans_cancel_error(tp, error) __xfs_trans_cancel((tp), (error))
+
 struct xfs_buf	*xfs_trans_getsb(struct xfs_trans *);
 struct xfs_buf	*xfs_trans_getrtsb(struct xfs_trans *tp);
 
@@ -237,7 +242,6 @@ void		xfs_trans_log_inode(xfs_trans_t *, struct xfs_inode *, uint);
 int		xfs_trans_commit(struct xfs_trans *);
 int		xfs_trans_roll(struct xfs_trans **);
 int		xfs_trans_roll_inode(struct xfs_trans **, struct xfs_inode *);
-void		xfs_trans_cancel(xfs_trans_t *);
 int		xfs_trans_ail_init(struct xfs_mount *);
 void		xfs_trans_ail_destroy(struct xfs_mount *);
 
