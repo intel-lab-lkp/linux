@@ -578,6 +578,7 @@ static void __init of_unittest_parse_phandle_with_args_map(void)
 	for (i = 0; i < ARRAY_SIZE(p); ++i) {
 		if (!p[i]) {
 			pr_err("missing testcase data\n");
+			of_node_put(np);
 			return;
 		}
 		prefs[i] = OF_KREF_READ(p[i]);
@@ -708,6 +709,8 @@ static void __init of_unittest_parse_phandle_with_args_map(void)
 			 i, prefs[i], OF_KREF_READ(p[i]));
 		of_node_put(p[i]);
 	}
+
+	of_node_put(np);
 }
 
 static void __init of_unittest_property_string(void)
