@@ -1651,8 +1651,8 @@ static struct mlx5_ib_flow_handler *create_leftovers_rule(struct mlx5_ib_dev *de
 	struct mlx5_ib_flow_handler *handler = NULL;
 
 	static struct {
-		struct ib_flow_spec_eth eth_flow;
 		struct ib_flow_attr	flow_attr;
+		struct ib_flow_spec_eth eth_flow;
 	} leftovers_wc = { .flow_attr = { .num_of_specs = 1,
 					  .size = sizeof(leftovers_wc) },
 			   .eth_flow = {
@@ -1662,8 +1662,8 @@ static struct mlx5_ib_flow_handler *create_leftovers_rule(struct mlx5_ib_dev *de
 				   .val = { .dst_mac = { 0x1 } } } };
 
 	static struct {
-		struct ib_flow_spec_eth eth_flow;
 		struct ib_flow_attr	flow_attr;
+		struct ib_flow_spec_eth eth_flow;
 	} leftovers_uc = { .flow_attr = { .num_of_specs = 1,
 					  .size = sizeof(leftovers_uc) },
 			   .eth_flow = {
