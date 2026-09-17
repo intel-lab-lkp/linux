@@ -717,6 +717,14 @@ void signal_wake_up_state(struct task_struct *t, unsigned int state)
 		kick_process(t);
 }
 
+/* Only SIGKILL or a freezer interrupt a coredump, see dump_interrupted(). */
+bool coredump_signal_pending(struct task_struct *p)
+{
+	return __fatal_signal_pending(p) || freezing(p) ||
+	       (READ_ONCE(p->jobctl) & JOBCTL_TRAP_FREEZE);
+}
+EXPORT_SYMBOL(coredump_signal_pending);
+
 static inline void posixtimer_sig_ignore(struct task_struct *tsk, struct sigqueue *q);
 
 static void sigqueue_free_ignored(struct task_struct *tsk, struct sigqueue *q)
