@@ -7660,6 +7660,44 @@ exit:
 	return 0;
 }
 
+static int bnxt_hwrm_tx_ring_reset(struct bnxt *bp,
+				   struct bnxt_tx_ring_info *txr)
+{
+	struct bnxt_ring_struct *ring = &txr->tx_ring_struct;
+	struct hwrm_ring_reset_input *req;
+	int rc;
+
+	rc = hwrm_req_init(bp, req, HWRM_RING_RESET);
+	if (rc)
+		return rc;
+
+	req->ring_type = RING_RESET_REQ_RING_TYPE_TX;
+	req->ring_id = cpu_to_le16(ring->fw_ring_id);
+	return hwrm_req_send_silent(bp, req);
+}
+
+static int bnxt_tx_ring_reset_and_free(struct bnxt *bp,
+				       struct bnxt_tx_ring_info *txr)
+{
+	struct bnxt_ring_struct *ring = &txr->tx_ring_struct;
+	struct bnxt_cp_ring_info *cpr;
+	int rc;
+
+	rc = bnxt_hwrm_tx_ring_reset(bp, txr);
+	if (rc) {
+		netdev_err(bp->dev,
+			   "TX ring %d reset failed after RING_FREE failed, rc: %d\n",
+			   txr->txq_index, rc);
+		return rc;
+	}
+
+	cpr = &txr->bnapi->cp_ring;
+	cpr->sw_stats->tx.tx_resets++;
+
+	return hwrm_ring_free_send_msg(bp, ring, RING_FREE_REQ_RING_TYPE_TX,
+				       INVALID_HW_RING_ID);
+}
+
 static int bnxt_hwrm_tx_ring_free(struct bnxt *bp,
 				  struct bnxt_tx_ring_info *txr,
 				  bool close_path)
@@ -7675,6 +7713,9 @@ static int bnxt_hwrm_tx_ring_free(struct bnxt *bp,
 		       INVALID_HW_RING_ID;
 	rc = hwrm_ring_free_send_msg(bp, ring, RING_FREE_REQ_RING_TYPE_TX,
 				     cmpl_ring_id);
+	if (rc && cmpl_ring_id != INVALID_HW_RING_ID)
+		rc = bnxt_tx_ring_reset_and_free(bp, txr);
+
 	ring->fw_ring_id = INVALID_HW_RING_ID;
 	return rc;
 }
