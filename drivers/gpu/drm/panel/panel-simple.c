@@ -5114,6 +5114,32 @@ static const struct panel_desc tpk_f10a_0102 = {
 	},
 };
 
+static const struct drm_display_mode truly_tft320240_229_e_mode = {
+	.clock = 6410,
+	.hdisplay = 320,
+	.hsync_start = 320 + 8,
+	.hsync_end = 320 + 8 + 39,
+	.htotal = 320 + 8 + 39 + 4,
+	.vdisplay = 240,
+	.vsync_start = 240 + 8,
+	.vsync_end = 240 + 8 + 8,
+	.vtotal = 240 + 8 + 8 + 4,
+	.flags = DRM_MODE_FLAG_NVSYNC | DRM_MODE_FLAG_NHSYNC,
+};
+
+static const struct panel_desc truly_tft320240_229_e = {
+	.modes = &truly_tft320240_229_e_mode,
+	.num_modes = 1,
+	.bpc = 8,
+	.size = {
+		.width = 70,
+		.height = 53,
+	},
+	.bus_format = MEDIA_BUS_FMT_RGB888_1X24,
+	.bus_flags = DRM_BUS_FLAG_DE_HIGH,
+	.connector_type = DRM_MODE_CONNECTOR_DPI,
+};
+
 static const struct display_timing urt_umsh_8596md_timing = {
 	.pixelclock = { 33260000, 33260000, 33260000 },
 	.hactive = { 800, 800, 800 },
@@ -6167,6 +6193,9 @@ static const struct of_device_id platform_of_match[] = {
 	}, {
 		.compatible = "tpk,f10a-0102",
 		.data = &tpk_f10a_0102,
+	}, {
+		.compatible = "truly,tft320240-229-e",
+		.data = &truly_tft320240_229_e,
 	}, {
 		.compatible = "urt,umsh-8596md-t",
 		.data = &urt_umsh_8596md_parallel,
