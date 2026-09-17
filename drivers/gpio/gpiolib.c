@@ -1013,6 +1013,9 @@ int gpiochip_add_hog(struct gpio_chip *gc, struct fwnode_handle *fwnode)
 
 	fwnode_property_read_string(fwnode, "line-name", &name);
 
+	if (!name && is_of_node(fwnode))
+		name = to_of_node(fwnode)->name;
+
 	for (unsigned int i = 0; i < num_hogs; i++) {
 		if (is_of_node(fwnode)) {
 			/*
