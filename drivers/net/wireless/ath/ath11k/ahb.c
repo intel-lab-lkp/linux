@@ -1146,6 +1146,7 @@ static int ath11k_ahb_fw_resource_deinit(struct ath11k_base *ab)
 static int ath11k_ahb_probe(struct platform_device *pdev)
 {
 	struct ath11k_base *ab;
+	struct ath11k_ahb *ab_ahb;
 	const struct ath11k_hif_ops *hif_ops;
 	const struct ath11k_pci_ops *pci_ops;
 	enum ath11k_hw_rev hw_rev;
@@ -1186,6 +1187,7 @@ static int ath11k_ahb_probe(struct platform_device *pdev)
 	ab->pdev = pdev;
 	ab->hw_rev = hw_rev;
 	ab->fw_mode = ATH11K_FIRMWARE_MODE_NORMAL;
+	ab_ahb = ath11k_ahb_priv(ab);
 	platform_set_drvdata(pdev, ab);
 
 	ret = ath11k_pcic_register_pci_ops(ab, pci_ops);
@@ -1262,6 +1264,8 @@ err_ce_unmap:
 	ath11k_ahb_ce_unmap(ab);
 
 err_core_free:
+	if (ab_ahb->tgt_rproc)
+		rproc_put(ab_ahb->tgt_rproc);
 	ath11k_core_free(ab);
 	platform_set_drvdata(pdev, NULL);
 
@@ -1286,6 +1290,7 @@ static void ath11k_ahb_remove_prepare(struct ath11k_base *ab)
 
 static void ath11k_ahb_free_resources(struct ath11k_base *ab)
 {
+	struct ath11k_ahb *ab_ahb = ath11k_ahb_priv(ab);
 	struct platform_device *pdev = ab->pdev;
 
 	ath11k_ahb_free_irq(ab);
@@ -1294,6 +1299,8 @@ static void ath11k_ahb_free_resources(struct ath11k_base *ab)
 	ath11k_ahb_fw_resource_deinit(ab);
 	ath11k_ce_free_pipes(ab);
 	ath11k_ahb_ce_unmap(ab);
+
+	rproc_put(ab_ahb->tgt_rproc);
 
 	ath11k_core_free(ab);
 	platform_set_drvdata(pdev, NULL);
