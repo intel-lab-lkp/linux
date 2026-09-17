@@ -3,6 +3,12 @@
  * Copyright (c) 2014-2016, NVIDIA CORPORATION.  All rights reserved.
  */
 
+#include <linux/delay.h>
+#include <linux/math64.h>
+#include <linux/minmax.h>
+#include <linux/sched/clock.h>
+#include <linux/time64.h>
+
 #include <soc/tegra/ivc.h>
 
 #define TEGRA_IVC_ALIGN 64
@@ -395,9 +401,110 @@ int tegra_ivc_write_advance(struct tegra_ivc *ivc)
 }
 EXPORT_SYMBOL(tegra_ivc_write_advance);
 
+/*
+ * A peer that moves to the SYNC state and then stops responding leaves this
+ * end with nothing to do. Each call to tegra_ivc_notified() repeats the same
+ * work, changes no state and returns -EAGAIN again, and the only in-tree
+ * caller retries in a loop with no timeout and no iteration limit. The result
+ * is a doorbell and several shared memory writes per iteration, for as long as
+ * the peer stays silent.
+ *
+ * Delay the call instead of skipping the work. Each call still does everything
+ * it did before, so the behaviour a caller sees is unchanged apart from how
+ * long the call takes. The delay doubles on each fruitless call, up to
+ * TEGRA_IVC_RESYNC_MAX_NS, which reduces the doorbell rate, the memory traffic
+ * and the CPU time together.
+ *
+ * A call counts as fruitless if it did not change this end's own state and is
+ * about to return -EAGAIN. That covers every case where a peer can stall the
+ * handshake, including the states from which no branch below can make
+ * progress, without naming any of them.
+ *
+ * The loop itself is not bounded by this. The channel really is not ready, so
+ * the return value does not change and a caller that retries forever still
+ * does. Only the cost of retrying falls.
+ */
+#define TEGRA_IVC_RESYNC_MIN_NS		(10 * NSEC_PER_USEC)
+#define TEGRA_IVC_RESYNC_MAX_NS		(100 * NSEC_PER_MSEC)
+#define TEGRA_IVC_RESYNC_MAX_SHIFT	16
+#define TEGRA_IVC_RESYNC_THRESHOLD	1
+
+/*
+ * resync_count stops increasing at U8_MAX, so a threshold near that value
+ * would leave no room for the delay to grow and the backoff would never take
+ * effect. Clamp the threshold so that a larger value always means a longer
+ * grace period, and leave TEGRA_IVC_RESYNC_DISABLED as the only way to turn
+ * the backoff off.
+ */
+#define TEGRA_IVC_RESYNC_THRESHOLD_MAX	32
+
+static void tegra_ivc_resync_restart(struct tegra_ivc *ivc)
+{
+	ivc->resync_count = 0;
+}
+
+static void tegra_ivc_resync_wait(struct tegra_ivc *ivc)
+{
+	unsigned int threshold = ivc->resync_threshold;
+	unsigned int shift;
+	u64 deadline;
+	u64 delay;
+
+	if (threshold == TEGRA_IVC_RESYNC_DISABLED)
+		return;
+
+	if (!threshold)
+		threshold = TEGRA_IVC_RESYNC_THRESHOLD;
+	else if (threshold > TEGRA_IVC_RESYNC_THRESHOLD_MAX)
+		threshold = TEGRA_IVC_RESYNC_THRESHOLD_MAX;
+
+	ivc->resync_events++;
+
+	if (ivc->resync_count != U8_MAX)
+		ivc->resync_count++;
+
+	/*
+	 * A small number of fruitless calls is normal while a peer catches
+	 * up, so they are not delayed. Still yield to any sibling thread,
+	 * because the caller is likely to be spinning.
+	 */
+	if (ivc->resync_count <= threshold) {
+		cpu_relax();
+		return;
+	}
+
+	shift = ivc->resync_count - 1 - threshold;
+	if (shift >= TEGRA_IVC_RESYNC_MAX_SHIFT)
+		delay = TEGRA_IVC_RESYNC_MAX_NS;
+	else
+		delay = min_t(u64, TEGRA_IVC_RESYNC_MIN_NS << shift,
+			      TEGRA_IVC_RESYNC_MAX_NS);
+
+	ivc->resync_delayed_ns += delay;
+
+	if (ivc->resync_can_sleep) {
+		might_sleep();
+		fsleep(div_u64(delay, NSEC_PER_USEC));
+		return;
+	}
+
+	/*
+	 * This can be reached while the device is suspended, where
+	 * timekeeping may also be suspended and ktime_get() would warn and
+	 * return a clock that is not advancing. local_clock() remains valid
+	 * there, and tegra_bpmp_wait_request_channel_free() busy-waits the
+	 * same way for the same reason.
+	 */
+	deadline = local_clock() + delay;
+	while (local_clock() < deadline)
+		cpu_relax();
+}
+
 void tegra_ivc_reset(struct tegra_ivc *ivc)
 {
 	unsigned int offset = offsetof(struct tegra_ivc_header, tx.count);
+
+	tegra_ivc_resync_restart(ivc);
 
 	tegra_ivc_header_write_field(&ivc->tx.map, tx.state, TEGRA_IVC_STATE_SYNC);
 	tegra_ivc_flush(ivc, ivc->tx.phys + offset);
@@ -545,6 +652,17 @@ int tegra_ivc_notified(struct tegra_ivc *ivc)
 		 * to the diagram in "IVC State Transition Table" above.
 		 */
 	}
+
+	/*
+	 * Read the state back to find out whether any of the branches above
+	 * changed it, rather than tracking which branch ran. A peer that is
+	 * making progress moves us along and resets the backoff; a peer that
+	 * has stopped leaves the value sampled at the top of this function.
+	 */
+	if (tegra_ivc_header_read_field(&ivc->tx.map, tx.state) != tx_state)
+		tegra_ivc_resync_restart(ivc);
+	else if (tx_state != TEGRA_IVC_STATE_ESTABLISHED)
+		tegra_ivc_resync_wait(ivc);
 
 	if (tx_state != TEGRA_IVC_STATE_ESTABLISHED)
 		return -EAGAIN;
@@ -701,6 +819,20 @@ int tegra_ivc_init(struct tegra_ivc *ivc, struct device *peer, const struct iosy
 	 */
 	ivc->tx.position = 0;
 	ivc->rx.position = 0;
+
+	/*
+	 * This function assigns the fields it uses and does not zero the
+	 * structure, so clear the backoff state explicitly. A caller that
+	 * passes an uninitialised structure would otherwise inherit a random
+	 * resync_can_sleep and could end up sleeping in atomic context. Both
+	 * of the caller-settable fields are cleared here, so they have to be
+	 * set after this function returns.
+	 */
+	ivc->resync_can_sleep = false;
+	ivc->resync_threshold = 0;
+	ivc->resync_count = 0;
+	ivc->resync_events = 0;
+	ivc->resync_delayed_ns = 0;
 
 	return 0;
 }
