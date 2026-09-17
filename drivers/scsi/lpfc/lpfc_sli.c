@@ -2915,7 +2915,19 @@ lpfc_sli_def_mbox_cmpl(struct lpfc_hba *phba, LPFC_MBOXQ_t *pmb)
 			    ndlp->nlp_defer_did != NLP_EVT_NOTHING_PENDING) {
 				clear_bit(NLP_UNREG_INP, &ndlp->nlp_flag);
 				ndlp->nlp_defer_did = NLP_EVT_NOTHING_PENDING;
-				lpfc_issue_els_plogi(vport, ndlp->nlp_DID, 0);
+
+				if (!test_bit(NLP_DELAY_TMO, &ndlp->nlp_flag) &&
+				    ndlp->nlp_last_elscmd == ELS_CMD_PLOGI) {
+					rc = lpfc_issue_els_plogi(vport,
+								  ndlp->nlp_DID,
+								  0);
+					if (!rc) {
+						ndlp->nlp_prev_state =
+							ndlp->nlp_state;
+						lpfc_nlp_set_state(vport, ndlp,
+							   NLP_STE_PLOGI_ISSUE);
+					}
+				}
 			} else {
 				clear_bit(NLP_UNREG_INP, &ndlp->nlp_flag);
 			}
@@ -2966,6 +2978,7 @@ lpfc_sli4_unreg_rpi_cmpl_clr(struct lpfc_hba *phba, LPFC_MBOXQ_t *pmb)
 	struct lpfc_vport  *vport = pmb->vport;
 	struct lpfc_nodelist *ndlp;
 	bool unreg_inp;
+	int rc = 0;
 
 	ndlp = pmb->ctx_ndlp;
 	if (pmb->u.mb.mbxCommand == MBX_UNREG_LOGIN) {
@@ -3003,15 +3016,31 @@ lpfc_sli4_unreg_rpi_cmpl_clr(struct lpfc_hba *phba, LPFC_MBOXQ_t *pmb)
 						LOG_MBOX | LOG_SLI | LOG_NODE,
 						"4111 UNREG cmpl deferred "
 						"clr x%x on "
-						"NPort x%x Data: x%x x%px\n",
+						"NPort x%x Data: x%x x%x x%px\n",
 						ndlp->nlp_rpi, ndlp->nlp_DID,
-						ndlp->nlp_defer_did, ndlp);
+						ndlp->nlp_defer_did,
+						ndlp->nlp_last_elscmd,
+						ndlp);
 					ndlp->nlp_defer_did =
 						NLP_EVT_NOTHING_PENDING;
-					lpfc_issue_els_plogi(
-						vport, ndlp->nlp_DID, 0);
-				}
 
+					if (!test_bit(NLP_DELAY_TMO,
+						      &ndlp->nlp_flag) &&
+					    ndlp->nlp_last_elscmd ==
+					    ELS_CMD_PLOGI) {
+						rc = lpfc_issue_els_plogi(vport,
+							      ndlp->nlp_DID, 0);
+						if (rc)
+							goto out;
+
+						ndlp->nlp_prev_state =
+								ndlp->nlp_state;
+						lpfc_nlp_set_state(vport,
+							   ndlp,
+							   NLP_STE_PLOGI_ISSUE);
+					}
+				}
+out:
 				lpfc_nlp_put(ndlp);
 			}
 		}
