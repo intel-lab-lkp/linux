@@ -15,6 +15,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/clk.h>
+#include <linux/mutex.h>
 
 #include <dt-bindings/power/imx8mm-power.h>
 #include <dt-bindings/power/imx8mn-power.h>
@@ -34,6 +35,12 @@ struct imx8m_blk_ctrl {
 	struct regmap *regmap;
 	struct imx8m_blk_ctrl_domain *domains;
 	struct genpd_onecell_data onecell_data;
+	/*
+	 * Serializes the blk-ctrl reset/clock sequence across sibling domains;
+	 * their transitions interact through the shared VPUMIX bus domain,
+	 * VPU_NOC and the not-ack-verified ADB400 handshake (ERR050531).
+	 */
+	struct mutex power_lock;
 };
 
 struct imx8m_blk_ctrl_domain_data {
@@ -98,12 +105,14 @@ static int imx8m_blk_ctrl_power_on(struct generic_pm_domain *genpd)
 	struct imx8m_blk_ctrl *bc = domain->bc;
 	int ret;
 
+	mutex_lock(&bc->power_lock);
+
 	/* make sure bus domain is awake */
 	ret = pm_runtime_get_sync(bc->bus_power_dev);
 	if (ret < 0) {
 		pm_runtime_put_noidle(bc->bus_power_dev);
 		dev_err(bc->dev, "failed to power up bus domain\n");
-		return ret;
+		goto unlock;
 	}
 
 	/* put devices into reset */
@@ -148,12 +157,16 @@ static int imx8m_blk_ctrl_power_on(struct generic_pm_domain *genpd)
 	/* disable upstream clocks */
 	clk_bulk_disable_unprepare(data->num_clks, domain->clks);
 
+	mutex_unlock(&bc->power_lock);
+
 	return 0;
 
 clk_disable:
 	clk_bulk_disable_unprepare(data->num_clks, domain->clks);
 bus_put:
 	pm_runtime_put(bc->bus_power_dev);
+unlock:
+	mutex_unlock(&bc->power_lock);
 
 	return ret;
 }
@@ -163,6 +176,8 @@ static int imx8m_blk_ctrl_power_off(struct generic_pm_domain *genpd)
 	struct imx8m_blk_ctrl_domain *domain = to_imx8m_blk_ctrl_domain(genpd);
 	const struct imx8m_blk_ctrl_domain_data *data = domain->data;
 	struct imx8m_blk_ctrl *bc = domain->bc;
+
+	mutex_lock(&bc->power_lock);
 
 	/* put devices into reset and disable clocks */
 	if (data->mipi_phy_rst_mask)
@@ -176,6 +191,8 @@ static int imx8m_blk_ctrl_power_off(struct generic_pm_domain *genpd)
 
 	/* allow bus domain to suspend */
 	pm_runtime_put(bc->bus_power_dev);
+
+	mutex_unlock(&bc->power_lock);
 
 	return 0;
 }
@@ -201,6 +218,10 @@ static int imx8m_blk_ctrl_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	bc->dev = dev;
+
+	ret = devm_mutex_init(dev, &bc->power_lock);
+	if (ret)
+		return ret;
 
 	bc_data = of_device_get_match_data(dev);
 
