@@ -21,6 +21,9 @@
 #include <linux/console.h>
 #include <linux/cpu.h>
 #include <linux/freezer.h>
+#include <linux/pid.h>
+#include <linux/sched/signal.h>
+#include <linux/security.h>
 
 #include <linux/uaccess.h>
 
@@ -33,6 +36,146 @@ static struct snapshot_data snapshot_state;
 int is_hibernate_resume_dev(dev_t dev)
 {
 	return hibernation_available() && snapshot_state.dev == dev;
+}
+
+bool hibernate_snapshot_write_active(dev_t dev)
+{
+#if defined(CONFIG_ENCRYPTED_HIBERNATION)
+	struct snapshot_data *data = &snapshot_state;
+
+	return data->encryption_required && data->mode == O_RDONLY &&
+		data->ready && data->dev == dev &&
+		snapshot_encryption_enabled(data);
+#else
+	return false;
+#endif
+}
+
+#if defined(CONFIG_ENCRYPTED_HIBERNATION)
+static bool snapshot_encrypted_output_owned(struct snapshot_data *data, dev_t dev)
+{
+	return hibernate_snapshot_write_active(dev) &&
+		data->owner_tgid == task_tgid(current);
+}
+
+static bool snapshot_header_write_range(struct snapshot_data *data,
+					loff_t pos, size_t count)
+{
+	loff_t header_offset = data->swap_header_offset;
+	loff_t offset;
+
+	if (pos < header_offset)
+		return false;
+
+	offset = pos - header_offset;
+	return offset < PAGE_SIZE && count <= PAGE_SIZE - offset;
+}
+
+static u64 snapshot_swap_write_budget(struct snapshot_data *data)
+{
+	if (data->crypt_swap_allocated > U64_MAX >> PAGE_SHIFT)
+		return 0;
+
+	return data->crypt_swap_allocated << PAGE_SHIFT;
+}
+
+static void snapshot_reset_swap_write_state(struct snapshot_data *data,
+					    bool reset_allocation)
+{
+	spin_lock(&data->crypt_lock);
+	if (reset_allocation)
+		data->crypt_swap_allocated = 0;
+	data->crypt_swap_reserved = 0;
+	data->crypt_header_reserved = 0;
+	spin_unlock(&data->crypt_lock);
+}
+#endif
+
+enum hibernate_snapshot_write
+hibernate_snapshot_write_begin(dev_t dev, loff_t pos, size_t count)
+{
+#if defined(CONFIG_ENCRYPTED_HIBERNATION)
+	struct snapshot_data *data = &snapshot_state;
+	enum hibernate_snapshot_write type = HIBERNATE_SNAPSHOT_WRITE_NONE;
+	bool image_range_allocated;
+	u64 swap_budget;
+
+	if (!count || !snapshot_encrypted_output_owned(data, dev))
+		return HIBERNATE_SNAPSHOT_WRITE_NONE;
+
+	mutex_lock(&system_transition_mutex);
+
+	if (!snapshot_encrypted_output_owned(data, dev))
+		goto unlock;
+
+	image_range_allocated = swsusp_swap_range_allocated(data->swap, pos, count);
+
+	spin_lock(&data->crypt_lock);
+	swap_budget = snapshot_swap_write_budget(data);
+	if (snapshot_header_write_range(data, pos, count) &&
+	    data->crypt_header_reserved <= PAGE_SIZE &&
+	    PAGE_SIZE - data->crypt_header_reserved >= count) {
+		data->crypt_header_reserved += count;
+		type = HIBERNATE_SNAPSHOT_WRITE_HEADER;
+	} else if (image_range_allocated &&
+		   swap_budget >= data->crypt_swap_reserved &&
+		   swap_budget - data->crypt_swap_reserved >= count) {
+		data->crypt_swap_reserved += count;
+		type = HIBERNATE_SNAPSHOT_WRITE_IMAGE;
+	}
+	spin_unlock(&data->crypt_lock);
+
+	if (type == HIBERNATE_SNAPSHOT_WRITE_NONE)
+		goto unlock;
+
+	return type;
+
+unlock:
+	mutex_unlock(&system_transition_mutex);
+	return HIBERNATE_SNAPSHOT_WRITE_NONE;
+#else
+	return HIBERNATE_SNAPSHOT_WRITE_NONE;
+#endif
+}
+
+void hibernate_snapshot_write_end(enum hibernate_snapshot_write type,
+				  size_t reserved, ssize_t written)
+{
+#if defined(CONFIG_ENCRYPTED_HIBERNATION)
+	struct snapshot_data *data = &snapshot_state;
+	u64 *reserved_total;
+	size_t unused;
+
+	if (type == HIBERNATE_SNAPSHOT_WRITE_NONE)
+		return;
+	if (!reserved)
+		goto unlock;
+
+	if (type == HIBERNATE_SNAPSHOT_WRITE_HEADER)
+		unused = reserved;
+	else if (written <= 0)
+		unused = reserved;
+	else if (written < reserved)
+		unused = reserved - written;
+	else
+		goto unlock;
+
+	reserved_total = type == HIBERNATE_SNAPSHOT_WRITE_HEADER ?
+		&data->crypt_header_reserved : &data->crypt_swap_reserved;
+
+	spin_lock(&data->crypt_lock);
+	*reserved_total -= min_t(u64, *reserved_total, unused);
+	spin_unlock(&data->crypt_lock);
+
+unlock:
+	mutex_unlock(&system_transition_mutex);
+#endif
+}
+
+static bool snapshot_encryption_required(struct snapshot_data *data)
+{
+	data->encryption_required = security_locked_down(LOCKDOWN_HIBERNATION);
+	return data->encryption_required;
 }
 
 static int snapshot_open(struct inode *inode, struct file *filp)
@@ -60,6 +203,14 @@ static int snapshot_open(struct inode *inode, struct file *filp)
 	data = &snapshot_state;
 	filp->private_data = data;
 	memset(&data->handle, 0, sizeof(struct snapshot_handle));
+#if defined(CONFIG_ENCRYPTED_HIBERNATION)
+	spin_lock_init(&data->crypt_lock);
+	data->crypt_swap_allocated = 0;
+	data->crypt_swap_reserved = 0;
+	data->crypt_header_reserved = 0;
+	data->swap_header_offset = 0;
+	data->owner_tgid = NULL;
+#endif
 	if ((filp->f_flags & O_ACCMODE) == O_RDONLY) {
 		/* Hibernating.  The image device should be accessible. */
 		data->swap = pin_hibernation_swap_type(swsusp_resume_device, 0);
@@ -90,6 +241,11 @@ static int snapshot_open(struct inode *inode, struct file *filp)
 	data->ready = false;
 	data->platform_support = false;
 	data->dev = 0;
+	data->encryption_required = snapshot_encryption_required(data);
+#if defined(CONFIG_ENCRYPTED_HIBERNATION)
+	if (!error)
+		data->owner_tgid = get_task_pid(current, PIDTYPE_TGID);
+#endif
 
  unlock:
 	unlock_system_sleep(sleep_flags);
@@ -107,6 +263,10 @@ static int snapshot_release(struct inode *inode, struct file *filp)
 	swsusp_free();
 	data = filp->private_data;
 	data->dev = 0;
+#if defined(CONFIG_ENCRYPTED_HIBERNATION)
+	put_pid(data->owner_tgid);
+	data->owner_tgid = NULL;
+#endif
 	free_all_swap_pages(data->swap);
 	unpin_hibernation_swap_type(data->swap);
 	if (data->frozen) {
@@ -139,6 +299,11 @@ static ssize_t snapshot_read(struct file *filp, char __user *buf,
 	data = filp->private_data;
 	if (!data->ready) {
 		res = -ENODATA;
+		goto unlock;
+	}
+	if (snapshot_encryption_required(data) &&
+	    !snapshot_encryption_enabled(data)) {
+		res = -EPERM;
 		goto unlock;
 	}
 
@@ -182,6 +347,12 @@ static ssize_t snapshot_write(struct file *filp, const char __user *buf,
 	sleep_flags = lock_system_sleep();
 
 	data = filp->private_data;
+
+	if (snapshot_encryption_required(data) &&
+	    !snapshot_encryption_enabled(data)) {
+		res = -EPERM;
+		goto unlock;
+	}
 
 	if (snapshot_encryption_enabled(data)) {
 		res = snapshot_write_encrypted(data, buf, count, offp);
@@ -255,6 +426,9 @@ static int snapshot_set_swap_area(struct snapshot_data *data,
 	if (data->swap < 0)
 		return swdev ? -ENODEV : -EINVAL;
 	data->dev = swdev;
+#if defined(CONFIG_ENCRYPTED_HIBERNATION)
+	data->swap_header_offset = (loff_t)offset << PAGE_SHIFT;
+#endif
 	return 0;
 }
 
@@ -321,6 +495,11 @@ static long snapshot_ioctl(struct file *filp, unsigned int cmd,
 			error = -EPERM;
 			break;
 		}
+		if (snapshot_encryption_required(data) &&
+		    !snapshot_encryption_enabled(data)) {
+			error = -EPERM;
+			break;
+		}
 		pm_restore_gfp_mask();
 		error = hibernation_snapshot(data->platform_support);
 		if (!error) {
@@ -331,6 +510,11 @@ static long snapshot_ioctl(struct file *filp, unsigned int cmd,
 		break;
 
 	case SNAPSHOT_ATOMIC_RESTORE:
+		if (snapshot_encryption_required(data) &&
+		    !snapshot_encryption_enabled(data)) {
+			error = -EPERM;
+			break;
+		}
 		if (snapshot_encryption_enabled(data)) {
 			error = snapshot_finalize_decrypted_image(data);
 			if (error)
@@ -356,6 +540,9 @@ static long snapshot_ioctl(struct file *filp, unsigned int cmd,
 		memset(&data->handle, 0, sizeof(struct snapshot_handle));
 		data->ready = false;
 		snapshot_teardown_encryption(data);
+#if defined(CONFIG_ENCRYPTED_HIBERNATION)
+		snapshot_reset_swap_write_state(data, false);
+#endif
 		/*
 		 * It is necessary to thaw kernel threads here, because
 		 * SNAPSHOT_CREATE_IMAGE may be invoked directly after
@@ -398,6 +585,13 @@ static long snapshot_ioctl(struct file *filp, unsigned int cmd,
 		if (offset) {
 			offset <<= PAGE_SHIFT;
 			error = put_user(offset, (loff_t __user *)arg);
+#if defined(CONFIG_ENCRYPTED_HIBERNATION)
+			if (!error) {
+				spin_lock(&data->crypt_lock);
+				data->crypt_swap_allocated++;
+				spin_unlock(&data->crypt_lock);
+			}
+#endif
 		} else {
 			error = -ENOSPC;
 		}
@@ -409,10 +603,18 @@ static long snapshot_ioctl(struct file *filp, unsigned int cmd,
 			break;
 		}
 		free_all_swap_pages(data->swap);
+#if defined(CONFIG_ENCRYPTED_HIBERNATION)
+		snapshot_reset_swap_write_state(data, true);
+#endif
 		break;
 
 	case SNAPSHOT_S2RAM:
 		if (!data->frozen) {
+			error = -EPERM;
+			break;
+		}
+		if (snapshot_encryption_required(data) &&
+		    !snapshot_encryption_enabled(data)) {
 			error = -EPERM;
 			break;
 		}
@@ -429,6 +631,11 @@ static long snapshot_ioctl(struct file *filp, unsigned int cmd,
 		break;
 
 	case SNAPSHOT_POWER_OFF:
+		if (snapshot_encryption_required(data) &&
+		    !snapshot_encryption_enabled(data)) {
+			error = -EPERM;
+			break;
+		}
 		if (data->platform_support)
 			error = hibernation_platform_enter();
 		break;
@@ -442,6 +649,10 @@ static long snapshot_ioctl(struct file *filp, unsigned int cmd,
 			error = snapshot_get_encryption_key(data, (void __user *)arg);
 		else
 			error = snapshot_set_encryption_key(data, (void __user *)arg);
+#if defined(CONFIG_ENCRYPTED_HIBERNATION)
+		if (!error)
+			snapshot_reset_swap_write_state(data, false);
+#endif
 		break;
 
 	case SNAPSHOT_SET_USER_KEY:

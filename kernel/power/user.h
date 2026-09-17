@@ -5,9 +5,12 @@
 
 #include <linux/crypto.h>
 #include <linux/scatterlist.h>
+#include <linux/spinlock.h>
 #include <linux/suspend_ioctls.h>
 #include <crypto/aead.h>
 #include <crypto/aes.h>
+
+struct pid;
 
 #define SNAPSHOT_ENCRYPTION_KEY_SIZE AES_KEYSIZE_128
 #define SNAPSHOT_AUTH_TAG_SIZE 16
@@ -23,6 +26,7 @@ struct snapshot_data {
 	bool ready;
 	bool platform_support;
 	bool free_bitmaps;
+	bool encryption_required;
 	dev_t dev;
 
 #if defined(CONFIG_ENCRYPTED_HIBERNATION)
@@ -42,6 +46,13 @@ struct snapshot_data {
 	bool user_key_valid;
 	u64 meta_size;
 	u64 crypt_meta_size;
+	/* Protect the swap allocation and block-write reservations. */
+	spinlock_t crypt_lock;
+	u64 crypt_swap_allocated;
+	u64 crypt_swap_reserved;
+	u64 crypt_header_reserved;
+	loff_t swap_header_offset;
+	struct pid *owner_tgid;
 #endif
 
 };

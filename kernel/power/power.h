@@ -170,6 +170,7 @@ extern bool hibernate_acquire(void);
 extern void hibernate_release(void);
 
 extern sector_t alloc_swapdev_block(int swap);
+bool swsusp_swap_range_allocated(int swap, loff_t pos, size_t count);
 extern void free_all_swap_pages(int swap);
 extern int swsusp_swap_in_use(void);
 
