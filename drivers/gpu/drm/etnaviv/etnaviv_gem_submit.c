@@ -322,6 +322,13 @@ static int submit_perfmon_validate(struct etnaviv_gem_submit *submit,
 		if (ret)
 			return ret;
 
+		/* perfmon writes the result back; refuse a read-only userptr */
+		if (bo->obj->userptr.ro) {
+			DRM_ERROR("perfmon request: BO %u is a read-only userptr\n",
+				  r->read_idx);
+			return -EINVAL;
+		}
+
 		/* at offset 0 a sequence number gets stored used for userspace sync */
 		if (r->read_offset == 0) {
 			DRM_ERROR("perfmon request: offset is 0");
