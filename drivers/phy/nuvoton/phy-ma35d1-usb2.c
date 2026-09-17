@@ -111,15 +111,20 @@ static int ma35_usb_phy_probe(struct platform_device *pdev)
 				     "failed to find usb_phy clock\n");
 
 	phy = devm_phy_create(&pdev->dev, NULL, &ma35_usb_phy_ops);
-	if (IS_ERR(phy))
-		return dev_err_probe(&pdev->dev, PTR_ERR(phy), "Failed to create PHY\n");
+	if (IS_ERR(phy)) {
+		clk_put(p_phy->clk);
+		return dev_err_probe(&pdev->dev, PTR_ERR(phy),
+				     "Failed to create PHY\n");
+	}
 
 	phy_set_drvdata(phy, p_phy);
 
 	provider = devm_of_phy_provider_register(&pdev->dev, of_phy_simple_xlate);
-	if (IS_ERR(provider))
+	if (IS_ERR(provider)) {
+		clk_put(p_phy->clk);
 		return dev_err_probe(&pdev->dev, PTR_ERR(provider),
 				     "Failed to register PHY provider\n");
+	}
 	return 0;
 }
 
