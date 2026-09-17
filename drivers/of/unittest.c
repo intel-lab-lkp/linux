@@ -3460,10 +3460,11 @@ static int of_notify(struct notifier_block *nb, unsigned long action,
 		break;
 
 	default:			/* should not happen */
-		of_node_put(nd->overlay);
 		ret = -EINVAL;
 		break;
 	}
+
+	of_node_put(nd->overlay);
 
 	if (ret)
 		return notifier_from_errno(ret);
