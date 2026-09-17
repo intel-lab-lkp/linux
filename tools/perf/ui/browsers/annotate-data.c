@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <inttypes.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+
 #include <linux/zalloc.h>
 #include <sys/ttydefaults.h>
 
@@ -10,8 +13,8 @@
 #include "ui/ui.h"
 #include "util/annotate.h"
 #include "util/annotate-data.h"
-#include "util/evsel.h"
 #include "util/evlist.h"
+#include "util/evsel.h"
 #include "util/sort.h"
 
 #define FOLDED_SIGN  '+'
