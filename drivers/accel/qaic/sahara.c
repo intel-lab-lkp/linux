@@ -880,6 +880,7 @@ static void sahara_mhi_remove(struct mhi_device *mhi_dev)
 	struct sahara_context *context = dev_get_drvdata(&mhi_dev->dev);
 
 	cancel_work_sync(&context->fw_work);
+	cancel_work_sync(&context->read_data_work);
 	cancel_work_sync(&context->dump_work);
 	vfree(context->mem_dump);
 	sahara_release_image(context);
