@@ -14,6 +14,7 @@ Scheduler
     sched-design-CFS
     sched-eevdf
     sched-domains
+    sched-wake-affinity
     sched-capacity
     sched-energy
     schedutil
