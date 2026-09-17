@@ -648,7 +648,8 @@ vmw_cmd_res_check(struct vmw_private *dev_priv,
 			return ret;
 
 		ret = vmw_user_resource_lookup_handle
-			(dev_priv, sw_context->fp->tfile, *id_loc, converter, &res);
+			(dev_priv, sw_context->filp, sw_context->fp->tfile, *id_loc,
+			 converter, &res);
 		if (ret != 0) {
 			VMW_DEBUG_USER("Could not find/use resource 0x%08x.\n",
 				       (unsigned int) *id_loc);
@@ -4073,7 +4074,7 @@ static int vmw_execbuf_tie_context(struct vmw_private *dev_priv,
 		return ret;
 
 	ret = vmw_user_resource_lookup_handle
-		(dev_priv, sw_context->fp->tfile, handle,
+		(dev_priv, sw_context->filp, sw_context->fp->tfile, handle,
 		 user_context_converter, &res);
 	if (ret != 0) {
 		VMW_DEBUG_USER("Could not find or user DX context 0x%08x.\n",

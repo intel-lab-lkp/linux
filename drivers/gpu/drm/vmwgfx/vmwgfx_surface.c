@@ -689,8 +689,9 @@ int vmw_surface_destroy_ioctl(struct drm_device *dev, void *data,
 {
 	struct drm_vmw_surface_arg *arg = (struct drm_vmw_surface_arg *)data;
 	struct ttm_object_file *tfile = vmw_fpriv(file_priv)->tfile;
+	uint32_t sid = vmw_prime_resolve_handle(file_priv, arg->sid);
 
-	return ttm_ref_object_base_unref(tfile, arg->sid);
+	return ttm_ref_object_base_unref(tfile, sid);
 }
 
 /**
@@ -999,7 +1000,13 @@ vmw_surface_handle_reference(struct vmw_private *dev_priv,
 								&handle,
 								base_p);
 	} else {
-		handle = u_handle;
+		/*
+		 * u_handle may be a raw ttm handle (the historical case), or
+		 * a prime-import bridge GEM handle returned by an earlier
+		 * generic PRIME_FD_TO_HANDLE call (see vmwgfx_prime.c) --
+		 * resolve it back to the real ttm handle either way.
+		 */
+		handle = vmw_prime_resolve_handle(file_priv, u_handle);
 	}
 
 	ret = -EINVAL;
@@ -2321,7 +2328,7 @@ int vmw_dumb_create(struct drm_file *file_priv,
 	args->size = arg.rep.buffer_size;
 	args->pitch = vmw_surface_calculate_pitch(desc, &drm_size);
 
-	ret = vmw_user_resource_lookup_handle(dev_priv, tfile, arg.rep.handle,
+	ret = vmw_user_resource_lookup_handle(dev_priv, file_priv, tfile, arg.rep.handle,
 					      user_surface_converter,
 					      &res);
 	if (ret) {

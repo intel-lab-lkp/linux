@@ -651,6 +651,19 @@ int vmw_user_bo_lookup(struct drm_file *filp,
 		return -ESRCH;
 	}
 
+	/*
+	 * A handle in the standard GEM table is not necessarily a real
+	 * vmw_bo -- it may be a prime-import bridge object (see
+	 * vmwgfx_prime.c). to_vmw_bo() below is an unchecked container_of;
+	 * calling it on anything else corrupts an out-of-bounds pointer.
+	 */
+	if (gobj->funcs != &vmw_gem_object_funcs) {
+		drm_gem_object_put(gobj);
+		DRM_ERROR("Handle 0x%08lx is not a vmwgfx buffer object.\n",
+			  (unsigned long)handle);
+		return -ESRCH;
+	}
+
 	*out = to_vmw_bo(gobj);
 
 	return 0;

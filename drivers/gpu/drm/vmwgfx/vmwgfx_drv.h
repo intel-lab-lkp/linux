@@ -788,6 +788,7 @@ extern int vmw_resource_reserve(struct vmw_resource *res, bool interruptible,
 extern bool vmw_resource_needs_backup(const struct vmw_resource *res);
 extern int vmw_user_resource_lookup_handle(
 	struct vmw_private *dev_priv,
+	struct drm_file *file_priv,
 	struct ttm_object_file *tfile,
 	uint32_t handle,
 	const struct vmw_user_resource_conv *converter,
@@ -1105,6 +1106,8 @@ extern int vmw_prime_handle_to_fd(struct drm_device *dev,
 				  struct drm_file *file_priv,
 				  uint32_t handle, uint32_t flags,
 				  int *prime_fd);
+extern uint32_t vmw_prime_resolve_handle(struct drm_file *file_priv,
+					 uint32_t handle);
 struct drm_gem_object *vmw_prime_import_sg_table(struct drm_device *dev,
 						 struct dma_buf_attachment *attach,
 						 struct sg_table *table);

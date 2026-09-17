@@ -255,6 +255,7 @@ int vmw_resource_init(struct vmw_private *dev_priv, struct vmw_resource *res,
  * type, -EINVAL will be returned.
  */
 int vmw_user_resource_lookup_handle(struct vmw_private *dev_priv,
+				    struct drm_file *file_priv,
 				    struct ttm_object_file *tfile,
 				    uint32_t handle,
 				    const struct vmw_user_resource_conv
@@ -265,6 +266,7 @@ int vmw_user_resource_lookup_handle(struct vmw_private *dev_priv,
 	struct vmw_resource *res;
 	int ret = -EINVAL;
 
+	handle = vmw_prime_resolve_handle(file_priv, handle);
 	base = ttm_base_object_lookup(tfile, handle);
 	if (unlikely(!base))
 		return -EINVAL;
@@ -300,7 +302,7 @@ int vmw_user_object_lookup(struct vmw_private *dev_priv,
 
 	WARN_ON(uo->surface || uo->buffer);
 
-	ret = vmw_user_resource_lookup_handle(dev_priv, tfile, handle,
+	ret = vmw_user_resource_lookup_handle(dev_priv, filp, tfile, handle,
 					      user_surface_converter,
 					      &res);
 	if (!ret) {

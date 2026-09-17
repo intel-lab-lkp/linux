@@ -220,7 +220,7 @@ int vmw_present_ioctl(struct drm_device *dev, void *data,
 	}
 	vfb = vmw_framebuffer_to_vfb(fb);
 
-	ret = vmw_user_resource_lookup_handle(dev_priv, tfile, arg->sid,
+	ret = vmw_user_resource_lookup_handle(dev_priv, file_priv, tfile, arg->sid,
 					      user_surface_converter,
 					      &res);
 	if (ret)
