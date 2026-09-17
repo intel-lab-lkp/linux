@@ -869,6 +869,8 @@ out_fail:
 	list_for_each_entry_safe(mpt3sas_phy, next, &mpt3sas_port->phy_list,
 	    port_siblings)
 		list_del(&mpt3sas_phy->port_siblings);
+	if (sas_device)
+		sas_device_put(sas_device);
 	kfree(mpt3sas_port);
 	return NULL;
 }
