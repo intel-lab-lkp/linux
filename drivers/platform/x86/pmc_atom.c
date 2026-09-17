@@ -579,6 +579,7 @@ static int __init pmc_atom_init(void)
 {
 	struct pci_dev *pdev = NULL;
 	const struct pci_device_id *ent;
+	int ret = -ENODEV;
 
 	/*
 	 * We look for our device - PCU PMC.
@@ -591,11 +592,14 @@ static int __init pmc_atom_init(void)
 	 */
 	for_each_pci_dev(pdev) {
 		ent = pci_match_id(pmc_pci_ids, pdev);
-		if (ent)
-			return pmc_setup_dev(pdev, ent);
+		if (ent) {
+			ret = pmc_setup_dev(pdev, ent);
+			break;
+		}
 	}
-	/* Device not found */
-	return -ENODEV;
+
+	pci_dev_put(pdev);
+	return ret;
 }
 
 device_initcall(pmc_atom_init);
