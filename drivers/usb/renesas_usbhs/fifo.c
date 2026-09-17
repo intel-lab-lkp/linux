@@ -810,7 +810,7 @@ static int __usbhsf_dma_map_ctrl(struct usbhs_pkt *pkt, int map)
 	struct usbhs_fifo *fifo = usbhs_pipe_to_fifo(pipe);
 	struct dma_chan *chan = usbhsf_dma_chan_get(fifo, pkt);
 
-	return info->dma_map_ctrl(chan->device->dev, pkt, map);
+	return info->dma_map_ctrl(dmaengine_get_dma_device(chan), pkt, map);
 }
 
 static void usbhsf_dma_complete(void *arg,
