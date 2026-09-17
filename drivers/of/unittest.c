@@ -351,6 +351,8 @@ static void __init of_unittest_printf(void)
 	of_unittest_printf_one(np, "%pOFc", "test-sub-device");
 	of_unittest_printf_one(np, "%pOFC",
 			"\"test-sub-device\",\"test-compat2\",\"test-compat3\"");
+
+	of_node_put(np);
 }
 
 struct node_hash {
