@@ -551,10 +551,12 @@ static int st21nfca_hci_i2c_probe(struct i2c_client *client)
 			       &phy->hdev,
 			       &phy->se_status);
 	if (r)
-		goto out_free;
+		goto out_free_irq;
 
 	return 0;
 
+out_free_irq:
+	devm_free_irq(&client->dev, client->irq, phy);
 out_free:
 	kfree_skb(phy->pending_skb);
 	return r;
@@ -564,6 +566,7 @@ static void st21nfca_hci_i2c_remove(struct i2c_client *client)
 {
 	struct st21nfca_i2c_phy *phy = i2c_get_clientdata(client);
 
+	devm_free_irq(&client->dev, client->irq, phy);
 	st21nfca_hci_remove(phy->hdev);
 
 	if (phy->powered)
