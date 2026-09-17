@@ -1171,6 +1171,7 @@ static void __init of_unittest_dma_ranges_one(const char *path,
 		if (!dev_bogus) {
 			unittest(0, "kzalloc() failed\n");
 			kfree(map);
+			of_node_put(np);
 			return;
 		}
 
