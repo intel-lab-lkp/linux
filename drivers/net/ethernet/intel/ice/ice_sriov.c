@@ -1386,7 +1386,8 @@ int ice_set_vf_trust(struct net_device *netdev, int vf_id, bool trusted)
 
 	if (ice_is_eswitch_mode_switchdev(pf)) {
 		dev_info(ice_pf_to_dev(pf), "Trusted VF is forbidden in switchdev mode\n");
-		return -EOPNOTSUPP;
+		ret = -EOPNOTSUPP;
+		goto out_put_vf;
 	}
 
 	ret = ice_check_vf_ready_for_cfg(vf);
