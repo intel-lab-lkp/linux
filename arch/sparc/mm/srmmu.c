@@ -1613,6 +1613,33 @@ static void smp_flush_tlb_all(void)
 	local_ops->tlb_all();
 }
 
+/* Serialize complete sun4m Viking shootdowns; remote callbacks must not lock. */
+static DEFINE_SPINLOCK(viking_tlb_lock);
+
+static void smp_viking_flush_tlb_xcall(void *func, unsigned long arg1,
+					  unsigned long arg2,
+					  unsigned long arg3)
+{
+	int cpu;
+
+	for_each_online_cpu(cpu) {
+		if (cpu == smp_processor_id())
+			continue;
+		sparc32_ipi_ops->cross_call(func, *cpumask_of(cpu),
+					    arg1, arg2, arg3, 0);
+	}
+}
+
+static void smp_viking_flush_tlb_all(void)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&viking_tlb_lock, flags);
+	smp_viking_flush_tlb_xcall(local_ops->tlb_all, 0, 0, 0);
+	local_ops->tlb_all();
+	spin_unlock_irqrestore(&viking_tlb_lock, flags);
+}
+
 static bool any_other_mm_cpus(struct mm_struct *mm)
 {
 	return cpumask_any_but(mm_cpumask(mm), smp_processor_id()) < nr_cpu_ids;
@@ -1637,6 +1664,25 @@ static void smp_flush_tlb_mm(struct mm_struct *mm)
 					     cpumask_of(smp_processor_id()));
 		}
 		local_ops->tlb_mm(mm);
+	}
+}
+
+static void smp_viking_flush_tlb_mm(struct mm_struct *mm)
+{
+	unsigned long flags;
+
+	if (mm->context != NO_CONTEXT) {
+		spin_lock_irqsave(&viking_tlb_lock, flags);
+		if (any_other_mm_cpus(mm)) {
+			smp_viking_flush_tlb_xcall(local_ops->tlb_mm,
+						     (unsigned long)mm, 0, 0);
+			if (atomic_read(&mm->mm_users) == 1 &&
+			    current->active_mm == mm)
+				cpumask_copy(mm_cpumask(mm),
+					     cpumask_of(smp_processor_id()));
+		}
+		local_ops->tlb_mm(mm);
+		spin_unlock_irqrestore(&viking_tlb_lock, flags);
 	}
 }
 
@@ -1668,6 +1714,24 @@ static void smp_flush_tlb_range(struct vm_area_struct *vma,
 	}
 }
 
+static void smp_viking_flush_tlb_range(struct vm_area_struct *vma,
+				       unsigned long start,
+				       unsigned long end)
+{
+	struct mm_struct *mm = vma->vm_mm;
+	unsigned long flags;
+
+	if (mm->context != NO_CONTEXT) {
+		spin_lock_irqsave(&viking_tlb_lock, flags);
+		if (any_other_mm_cpus(mm))
+			smp_viking_flush_tlb_xcall(local_ops->tlb_range,
+						     (unsigned long)vma,
+						     start, end);
+		local_ops->tlb_range(vma, start, end);
+		spin_unlock_irqrestore(&viking_tlb_lock, flags);
+	}
+}
+
 static void smp_flush_cache_page(struct vm_area_struct *vma, unsigned long page)
 {
 	struct mm_struct *mm = vma->vm_mm;
@@ -1687,6 +1751,23 @@ static void smp_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
 		if (any_other_mm_cpus(mm))
 			xc2(local_ops->tlb_page, (unsigned long)vma, page);
 		local_ops->tlb_page(vma, page);
+	}
+}
+
+static void smp_viking_flush_tlb_page(struct vm_area_struct *vma,
+				      unsigned long page)
+{
+	struct mm_struct *mm = vma->vm_mm;
+	unsigned long flags;
+
+	if (mm->context != NO_CONTEXT) {
+		spin_lock_irqsave(&viking_tlb_lock, flags);
+		if (any_other_mm_cpus(mm))
+			smp_viking_flush_tlb_xcall(local_ops->tlb_page,
+						     (unsigned long)vma,
+						     page, 0);
+		local_ops->tlb_page(vma, page);
+		spin_unlock_irqrestore(&viking_tlb_lock, flags);
 	}
 }
 
@@ -1744,6 +1825,13 @@ void __init load_mmu(void)
 	}
 
 	if (poke_srmmu == poke_viking) {
+		if (sparc_cpu_model == sun4m) {
+			smp_cachetlb_ops.tlb_all = smp_viking_flush_tlb_all;
+			smp_cachetlb_ops.tlb_mm = smp_viking_flush_tlb_mm;
+			smp_cachetlb_ops.tlb_range = smp_viking_flush_tlb_range;
+			smp_cachetlb_ops.tlb_page = smp_viking_flush_tlb_page;
+		}
+
 		/* Avoid unnecessary cross calls. */
 		smp_cachetlb_ops.cache_all = local_ops->cache_all;
 		smp_cachetlb_ops.cache_mm = local_ops->cache_mm;
