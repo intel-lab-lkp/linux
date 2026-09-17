@@ -1286,6 +1286,10 @@ static int ep0_handle_feature(struct bdc *bdc,
 			return 0;
 		}
 		dev_dbg(bdc->dev, "epnum=%d\n", epnum);
+		if (epnum >= bdc->num_eps) {
+			dev_err(bdc->dev, "Invalid ep index %d\n", epnum);
+			return -EINVAL;
+		}
 		ep = bdc->bdc_ep_array[epnum];
 		if (!ep)
 			return -EINVAL;
@@ -1352,6 +1356,10 @@ static int ep0_handle_status(struct bdc *bdc,
 			epnum = 1; /* EP0 */
 		}
 
+		if (epnum >= bdc->num_eps) {
+			dev_err(bdc->dev, "Invalid ep index %d\n", epnum);
+			return -EINVAL;
+		}
 		ep = bdc->bdc_ep_array[epnum];
 		if (!ep) {
 			dev_err(bdc->dev, "ISSUE, GET_STATUS for invalid EP ?");
