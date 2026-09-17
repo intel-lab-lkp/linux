@@ -2545,6 +2545,8 @@ static void mpi3mr_dev_rmhs_send_tm(struct mpi3mr_ioc *mrioc, u16 handle,
 	if (tgtdev && (iou_rc == MPI3_CTRL_OP_REMOVE_DEVICE))
 		tgtdev->state = MPI3MR_DEV_REMOVE_HS_STARTED;
 	spin_unlock_irqrestore(&mrioc->tgtdev_lock, flags);
+	if (tgtdev)
+		mpi3mr_tgtdev_put(tgtdev);
 
 	if (drv_cmd)
 		goto issue_cmd;
