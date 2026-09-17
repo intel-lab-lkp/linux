@@ -259,10 +259,10 @@ unsigned long __thp_vma_allowable_orders(struct vm_area_struct *vma,
 
 	/*
 	 * THPeligible bit of smaps should show 1 for proper VMAs even
-	 * though anon_vma is not initialized yet.
+	 * though they don't have an anon rmap yet.
 	 *
-	 * Allow page fault since anon_vma may be not initialized until
-	 * the first page fault.
+	 * Allow page fault since the VMA may not have an anon rmap until the
+	 * first page fault.
 	 */
 	if (!vma_has_anon_rmap(vma))
 		return (smaps || in_pf) ? orders : 0;
@@ -4176,11 +4176,10 @@ static int __folio_split(struct folio *folio, unsigned int new_order,
 	if (is_anon) {
 		/*
 		 * The caller does not necessarily hold an mmap_lock that would
-		 * prevent the anon_vma disappearing so we first we take a
-		 * reference to it and then lock the anon_vma for write. This
-		 * is similar to folio_lock_anon_vma_read except the write lock
-		 * is taken to serialise against parallel split or collapse
-		 * operations.
+		 * prevent the anon rmap disappearing so we first we take a
+		 * reference to it and then lock it for write. This is similar
+		 * to folio_lock_anon_vma_read except the write lock is taken to
+		 * serialise against parallel split or collapse operations.
 		 */
 		anon_vma = folio_get_anon_vma(folio);
 		if (!anon_vma) {
@@ -4336,7 +4335,7 @@ out_no_memcg:
  * THP pages in the middle of migration, due to allocation issues on either
  * side.
  *
- * anon_vma_lock is not required to be held, mmap_read_lock() or
+ * The anon rmap lock is not required to be held, mmap_read_lock() or
  * mmap_write_lock() should be held. @folio is expected to be locked by the
  * caller. device-private and non device-private folios are supported along
  * with folios that are in the swapcache. @folio should also be unmapped and
