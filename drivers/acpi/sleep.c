@@ -104,8 +104,6 @@ u32 acpi_target_system_state(void)
 }
 EXPORT_SYMBOL_GPL(acpi_target_system_state);
 
-static bool pwr_btn_event_pending;
-
 /*
  * The ACPI specification wants us to save NVS memory regions during hibernation
  * and to restore them during the subsequent resume.  Windows does that also for
@@ -484,7 +482,6 @@ static int acpi_pm_prepare(void)
  */
 static void acpi_pm_finish(void)
 {
-	struct acpi_device *pwr_btn_adev;
 	u32 acpi_state = acpi_target_sleep_state;
 
 	acpi_ec_unblock_transactions();
@@ -503,23 +500,6 @@ static void acpi_pm_finish(void)
 	acpi_target_sleep_state = ACPI_STATE_S0;
 
 	acpi_resume_power_resources();
-
-	/* If we were woken with the fixed power button, provide a small
-	 * hint to userspace in the form of a wakeup event on the fixed power
-	 * button device (if it can be found).
-	 *
-	 * We delay the event generation til now, as the PM layer requires
-	 * timekeeping to be running before we generate events. */
-	if (!pwr_btn_event_pending)
-		return;
-
-	pwr_btn_event_pending = false;
-	pwr_btn_adev = acpi_dev_get_first_match_dev(ACPI_BUTTON_HID_POWERF,
-						    NULL, -1);
-	if (pwr_btn_adev) {
-		pm_wakeup_event(&pwr_btn_adev->dev, 0);
-		acpi_dev_put(pwr_btn_adev);
-	}
 }
 
 /**
@@ -625,27 +605,6 @@ static int acpi_suspend_enter(suspend_state_t pm_state)
 
 	/* Reprogram control registers */
 	acpi_leave_sleep_state_prep(acpi_state);
-
-	/* ACPI 3.0 specs (P62) says that it's the responsibility
-	 * of the OSPM to clear the status bit [ implying that the
-	 * POWER_BUTTON event should not reach userspace ]
-	 *
-	 * However, we do generate a small hint for userspace in the form of
-	 * a wakeup event. We flag this condition for now and generate the
-	 * event later, as we're currently too early in resume to be able to
-	 * generate wakeup events.
-	 */
-	if (ACPI_SUCCESS(status) && (acpi_state == ACPI_STATE_S3)) {
-		acpi_event_status pwr_btn_status = ACPI_EVENT_FLAG_DISABLED;
-
-		acpi_get_event_status(ACPI_EVENT_POWER_BUTTON, &pwr_btn_status);
-
-		if (pwr_btn_status & ACPI_EVENT_FLAG_STATUS_SET) {
-			acpi_clear_event(ACPI_EVENT_POWER_BUTTON);
-			/* Flag for later */
-			pwr_btn_event_pending = true;
-		}
-	}
 
 	/*
 	 * Disable all GPE and clear their status bits before interrupts are
