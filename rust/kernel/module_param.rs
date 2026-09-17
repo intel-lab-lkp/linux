@@ -75,7 +75,9 @@ where
         let new_value = T::try_from_param_arg(arg)?;
 
         // SAFETY: By function safety requirements, this access is safe.
-        let container = unsafe { &*((*param).__bindgen_anon_1.arg.cast::<SetOnce<T>>()) };
+        let param_access = unsafe { &*((*param)
+            .__bindgen_anon_1.arg.cast::<ModuleParamAccess<T>>()) };
+        let container = &param_access.value;
 
         container
             .populate(new_value)
