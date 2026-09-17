@@ -68,6 +68,7 @@
 #include <linux/wait_api.h>
 #include <linux/workqueue_api.h>
 #include <linux/livepatch_sched.h>
+#include <linux/futex.h>
 
 #ifdef CONFIG_PREEMPT_DYNAMIC
 # ifdef CONFIG_GENERIC_IRQ_ENTRY
@@ -158,6 +159,8 @@ static inline struct task_struct *__blocked_on_owner(struct blocked_on_lock *bo)
 		return NULL;
 	case BO_T_MUTEX:
 		return __mutex_owner(bo->lock);
+	case BO_T_PING_FUTEX:
+		return ping_mutex_owner(bo->lock);
 	default:
 		WARN_ON_ONCE(1);
 		return NULL;
@@ -6917,6 +6920,8 @@ lock_blocked_on_lock(struct blocked_on_lock *bo)
 {
 	if (bo->type == BO_T_MUTEX)
 		raw_spin_lock(&((struct mutex *)bo->lock)->wait_lock);
+	else if (bo->type == BO_T_PING_FUTEX)
+		ping_mutex_lock_wait_lock(bo->lock);
 	else
 		WARN_ON_ONCE(1);
 }
@@ -6926,6 +6931,8 @@ unlock_blocked_on_lock(struct blocked_on_lock *bo)
 {
 	if (bo->type == BO_T_MUTEX)
 		raw_spin_unlock(&((struct mutex *)bo->lock)->wait_lock);
+	else if (bo->type == BO_T_PING_FUTEX)
+		ping_mutex_unlock_wait_lock(bo->lock);
 	else
 		WARN_ON_ONCE(1);
 }

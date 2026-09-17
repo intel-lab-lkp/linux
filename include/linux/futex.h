@@ -170,4 +170,15 @@ static inline struct task_struct *ping_mutex_owner(struct ping_mutex *ping_mutex
 	return READ_ONCE(ping_mutex->owner);
 }
 
+static inline void ping_mutex_lock_wait_lock(struct ping_mutex *ping_mutex)
+{
+	lockdep_assert_irqs_disabled();
+	raw_spin_lock(&ping_mutex->wait_lock);
+}
+
+static inline void ping_mutex_unlock_wait_lock(struct ping_mutex *ping_mutex)
+{
+	raw_spin_unlock(&ping_mutex->wait_lock);
+}
+
 #endif /* _LINUX_FUTEX_H */

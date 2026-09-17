@@ -370,6 +370,9 @@ retry_private:
 
 		queued = false;
 		while (1) {
+			set_task_blocked_on(current, &q.ping_state->ping_mutex,
+					    BO_T_PING_FUTEX);
+
 			set_current_state(TASK_INTERRUPTIBLE|TASK_FREEZABLE);
 			if (!queued) {
 				futex_queue(&q, hb, current);
@@ -381,6 +384,9 @@ retry_private:
 			}
 
 			futex_do_wait(&q, to);
+
+			clear_task_blocked_on(current,
+					      &q.ping_state->ping_mutex);
 
 			futex_q_lockptr_lock(&q);
 			if (to && !to->task) {
@@ -511,6 +517,7 @@ retry:
 	/* Leave it queued, it gets unqueued on the lock side */
 	get_task_struct(top_waiter->task);
 	wake_q_add_safe(&wake_q, top_waiter->task);
+	clear_task_blocked_on(top_waiter->task, &ping_state->ping_mutex);
 	spin_unlock(&hb->lock);
 
 	/*
