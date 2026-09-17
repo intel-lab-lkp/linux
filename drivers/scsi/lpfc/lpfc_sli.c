@@ -4598,6 +4598,7 @@ lpfc_sli_abort_iocb_ring(struct lpfc_hba *phba, struct lpfc_sli_ring *pring)
 	spinlock_t *plock;		/* for transmit queue access */
 	struct lpfc_iocbq *iocb, *next_iocb;
 	int offline;
+	unsigned long iflag;
 
 	if (phba->sli_rev >= LPFC_SLI_REV4)
 		plock = &pring->ring_lock;
@@ -4610,7 +4611,7 @@ lpfc_sli_abort_iocb_ring(struct lpfc_hba *phba, struct lpfc_sli_ring *pring)
 	offline = pci_channel_offline(phba->pcidev);
 
 	/* Cancel everything on txq */
-	spin_lock_irq(plock);
+	spin_lock_irqsave(plock, iflag);
 	list_splice_init(&pring->txq, &tx_completions);
 	pring->txq_cnt = 0;
 
@@ -4620,12 +4621,19 @@ lpfc_sli_abort_iocb_ring(struct lpfc_hba *phba, struct lpfc_sli_ring *pring)
 			iocb->cmd_flag &= ~LPFC_IO_ON_TXCMPLQ;
 		list_splice_init(&pring->txcmplq, &tx_completions);
 		pring->txcmplq_cnt = 0;
+		spin_unlock_irqrestore(plock, iflag);
 	} else {
+		/* lpfc_sli_issue_abort_iotag expects the hba_lock held, but not
+		 * the ring_lock.
+		 */
+		spin_unlock_irqrestore(plock, iflag);
+		spin_lock_irqsave(&phba->hbalock, iflag);
 		/* Issue ABTS for everything on the txcmplq */
 		list_for_each_entry_safe(iocb, next_iocb, &pring->txcmplq, list)
-			lpfc_sli_issue_abort_iotag(phba, pring, iocb, NULL);
+			lpfc_sli_issue_abort_iotag(phba, pring, iocb, false,
+						   NULL);
+		spin_unlock_irqrestore(&phba->hbalock, iflag);
 	}
-	spin_unlock_irq(plock);
 
 	if (!offline)
 		lpfc_issue_hb_tmo(phba);
@@ -12017,7 +12025,7 @@ lpfc_sli_host_down(struct lpfc_vport *vport)
 				if (iocb->vport != vport)
 					continue;
 				lpfc_sli_issue_abort_iotag(phba, pring, iocb,
-							   NULL);
+							   false, NULL);
 			}
 			pring->flag = prev_pring_flag;
 		}
@@ -12045,7 +12053,7 @@ lpfc_sli_host_down(struct lpfc_vport *vport)
 				if (iocb->vport != vport)
 					continue;
 				lpfc_sli_issue_abort_iotag(phba, pring, iocb,
-							   NULL);
+							   false, NULL);
 			}
 			pring->flag = prev_pring_flag;
 		}
@@ -12462,6 +12470,7 @@ lpfc_ignore_els_cmpl(struct lpfc_hba *phba, struct lpfc_iocbq *cmdiocb,
  * @phba: Pointer to HBA context object.
  * @pring: Pointer to driver SLI ring object.
  * @cmdiocb: Pointer to driver command iocb object.
+ * @ia: Flag to explicitly or implicitly inhibit abort.
  * @cmpl: completion function.
  *
  * This function issues an abort iocb for the provided command iocb. In case
@@ -12474,7 +12483,7 @@ lpfc_ignore_els_cmpl(struct lpfc_hba *phba, struct lpfc_iocbq *cmdiocb,
  **/
 int
 lpfc_sli_issue_abort_iotag(struct lpfc_hba *phba, struct lpfc_sli_ring *pring,
-			   struct lpfc_iocbq *cmdiocb, void *cmpl)
+			   struct lpfc_iocbq *cmdiocb, bool ia, void *cmpl)
 {
 	struct lpfc_vport *vport = cmdiocb->vport;
 	struct lpfc_iocbq *abtsiocbp;
@@ -12483,7 +12492,6 @@ lpfc_sli_issue_abort_iotag(struct lpfc_hba *phba, struct lpfc_sli_ring *pring,
 	struct lpfc_nodelist *ndlp = NULL;
 	u32 ulp_command = get_job_cmnd(phba, cmdiocb);
 	u16 ulp_context, iotag;
-	bool ia;
 
 	/*
 	 * There are certain command types we don't want to abort.  And we
@@ -12533,7 +12541,7 @@ lpfc_sli_issue_abort_iotag(struct lpfc_hba *phba, struct lpfc_sli_ring *pring,
 	}
 
 	/* Just close the exchange under certain conditions. */
-	if (test_bit(FC_UNLOADING, &vport->load_flag) ||
+	if (ia || test_bit(FC_UNLOADING, &vport->load_flag) ||
 	    phba->link_state < LPFC_LINK_UP ||
 	    (phba->sli_rev == LPFC_SLI_REV4 &&
 	     phba->sli4_hba.link_state.status == LPFC_FC_LA_TYPE_LINK_DOWN) ||
@@ -12576,7 +12584,7 @@ lpfc_sli_issue_abort_iotag(struct lpfc_hba *phba, struct lpfc_sli_ring *pring,
 
 abort_iotag_exit:
 
-	lpfc_printf_vlog(vport, KERN_INFO, LOG_SLI,
+	lpfc_printf_vlog(vport, KERN_INFO, LOG_ELS | LOG_SLI,
 			 "0339 Abort IO XRI x%x, Original iotag x%x, "
 			 "abort tag x%x Cmdjob : x%px Abortjob : x%px "
 			 "retval x%x : IA %d cmd_cmpl %ps\n",
@@ -12870,7 +12878,7 @@ lpfc_sli_abort_iocb(struct lpfc_vport *vport, u16 tgt_id, u64 lun_id,
 		} else if (phba->sli_rev == LPFC_SLI_REV4) {
 			pring = lpfc_sli4_calc_ring(phba, iocbq);
 		}
-		ret_val = lpfc_sli_issue_abort_iotag(phba, pring, iocbq,
+		ret_val = lpfc_sli_issue_abort_iotag(phba, pring, iocbq, false,
 						     lpfc_sli_abort_fcp_cmpl);
 		spin_unlock_irqrestore(&phba->hbalock, iflags);
 		if (ret_val != IOCB_SUCCESS)
