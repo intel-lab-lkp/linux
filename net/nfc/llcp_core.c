@@ -638,6 +638,7 @@ out:
 u8 *nfc_llcp_general_bytes(struct nfc_dev *dev, size_t *general_bytes_len)
 {
 	struct nfc_llcp_local *local;
+	u8 *gb;
 
 	local = nfc_llcp_find_local(dev);
 	if (local == NULL) {
@@ -648,10 +649,11 @@ u8 *nfc_llcp_general_bytes(struct nfc_dev *dev, size_t *general_bytes_len)
 	nfc_llcp_build_gb(local);
 
 	*general_bytes_len = local->gb_len;
+	gb = local->gb;
 
 	nfc_llcp_local_put(local);
 
-	return local->gb;
+	return gb;
 }
 
 int nfc_llcp_set_remote_gb(struct nfc_dev *dev, const u8 *gb, u8 gb_len)
