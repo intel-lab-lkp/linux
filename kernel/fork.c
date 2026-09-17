@@ -2491,8 +2491,10 @@ __latent_entropy struct task_struct *copy_process(
 		goto bad_fork_core_free;
 	}
 
-	/* Let kill terminate clone/fork in the middle */
-	if (fatal_signal_pending(current)) {
+	/* Let kill or a group exit, exec or coredump abort clone/fork */
+	if (fatal_signal_pending(current) ||
+	    (current->signal->flags & SIGNAL_GROUP_EXIT) ||
+	    current->signal->group_exec_task || current->in_execve) {
 		retval = -EINTR;
 		goto bad_fork_core_free;
 	}
