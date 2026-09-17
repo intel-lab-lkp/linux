@@ -1155,12 +1155,14 @@ static int trf7970a_switch_rf_on(struct trf7970a *trf)
 	if (trf->state != TRF7970A_ST_RF_OFF) {	/* Power on, RF off */
 		dev_err(trf->dev, "%s - Incorrect state: %d\n", __func__,
 			trf->state);
+		pm_runtime_put_autosuspend(trf->dev);
 		return -EINVAL;
 	}
 
 	ret = trf7970a_init(trf);
 	if (ret) {
 		dev_err(trf->dev, "%s - Can't initialize: %d\n", __func__, ret);
+		pm_runtime_put_autosuspend(trf->dev);
 		return ret;
 	}
 
