@@ -165,7 +165,7 @@ static int pps_gpio_probe(struct platform_device *pdev)
 	ret = gpiod_to_irq(data->gpio_pin);
 	if (ret < 0) {
 		dev_err(dev, "failed to map GPIO to IRQ: %d\n", ret);
-		return -EINVAL;
+		return ret;
 	}
 	data->irq = ret;
 
@@ -197,8 +197,8 @@ static int pps_gpio_probe(struct platform_device *pdev)
 			  data->info.name, data);
 	if (ret) {
 		pps_unregister_source(data->pps);
-		dev_err(dev, "failed to acquire IRQ %d\n", data->irq);
-		return -EINVAL;
+		dev_err(dev, "failed to acquire IRQ %d: %d\n", data->irq, ret);
+		return ret;
 	}
 
 	dev_dbg(&data->pps->dev, "Registered IRQ %d as PPS source\n",
