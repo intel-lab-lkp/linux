@@ -51,6 +51,7 @@ static int u_boot_env_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev->of_node;
 	struct u_boot_env *priv;
+	int ret;
 
 	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -70,10 +71,16 @@ static int u_boot_env_probe(struct platform_device *pdev)
 	config.size = priv->mtd->size;
 
 	priv->nvmem = devm_nvmem_register(dev, &config);
-	if (IS_ERR(priv->nvmem))
+	if (IS_ERR(priv->nvmem)) {
+		put_mtd_device(priv->mtd);
 		return PTR_ERR(priv->nvmem);
+	}
 
-	return u_boot_env_parse(dev, priv->nvmem, priv->format);
+	ret = u_boot_env_parse(dev, priv->nvmem, priv->format);
+	if (ret)
+		put_mtd_device(priv->mtd);
+
+	return ret;
 }
 
 static const struct of_device_id u_boot_env_of_match_table[] = {
