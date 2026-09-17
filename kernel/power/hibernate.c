@@ -412,6 +412,11 @@ int hibernation_snapshot(int platform_mode)
 	if (error)
 		goto Close;
 
+	if (secretmem_active()) {
+		error = -EBUSY;
+		goto Thaw;
+	}
+
 	if (hibernation_test(TEST_FREEZER)) {
 
 		/*
