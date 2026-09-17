@@ -274,6 +274,7 @@ struct hfs_btree *hfs_btree_open(struct super_block *sb, u32 id)
 	struct inode *inode;
 	struct page *page;
 	unsigned int size;
+	int res;
 
 	tree = kzalloc_obj(*tree);
 	if (!tree)
@@ -291,6 +292,18 @@ struct hfs_btree *hfs_btree_open(struct super_block *sb, u32 id)
 	if (!HFSPLUS_I(tree->inode)->first_blocks) {
 		pr_err("invalid btree extent records (0 size)\n");
 		goto free_inode;
+	}
+
+	res = hfsplus_check_fork(sb, HFSPLUS_I(tree->inode)->first_extents,
+				 HFSPLUS_I(tree->inode)->alloc_blocks);
+	if (res == -EIO) {
+		pr_err("%s (cnid 0x%x) fork's first extent is corrupt\n",
+		       hfs_btree_name(id), id);
+		goto free_inode;
+	} else if (res) {
+		pr_warn("%s (cnid 0x%x) fork has corrupt extents, forcing read-only.\n",
+			hfs_btree_name(id), id);
+		set_bit(HFSPLUS_I_CORRUPT_TREE, &HFSPLUS_I(tree->inode)->flags);
 	}
 
 	mapping = tree->inode->i_mapping;

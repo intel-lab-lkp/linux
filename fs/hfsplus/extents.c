@@ -84,6 +84,54 @@ static u32 hfsplus_ext_lastblock(struct hfsplus_extent *ext)
 	return be32_to_cpu(ext->start_block) + be32_to_cpu(ext->block_count);
 }
 
+static inline bool is_extents_btree(struct inode *inode)
+{
+	return inode->i_ino == HFSPLUS_EXT_CNID;
+}
+
+static bool hfsplus_extent_valid(struct hfsplus_extent *ext, u32 total_blocks)
+{
+	u32 start = be32_to_cpu(ext->start_block);
+	u32 count = be32_to_cpu(ext->block_count);
+
+	if (!count)
+		return start == 0;
+
+	return start + count > start && start + count <= total_blocks;
+}
+
+/*
+ * Returns 0 if the fork's extents are consistent, -EUCLEAN if only
+ * extents past the first are corrupt (safe to mount read-only), or
+ * -EIO if the first extent is corrupt or the fork has no used extent.
+ */
+int hfsplus_check_fork(struct super_block *sb, struct hfsplus_extent *ext,
+		       u32 total_blocks)
+{
+	struct hfsplus_sb_info *sbi = HFSPLUS_SB(sb);
+	bool seen_hole = false;
+	u32 used_blocks = 0;
+	int i;
+
+	for (i = 0; i < 8; i++, ext++) {
+		u32 count = be32_to_cpu(ext->block_count);
+
+		if (!hfsplus_extent_valid(ext, sbi->total_blocks) ||
+		    (seen_hole && count))
+			return i ? -EUCLEAN : -EIO;
+
+		if (count)
+			used_blocks += count;
+		else
+			seen_hole = true;
+	}
+
+	if (!used_blocks)
+		return -EIO;
+
+	return used_blocks == total_blocks ? 0 : -EUCLEAN;
+}
+
 static int __hfsplus_ext_write_extent(struct inode *inode,
 		struct hfs_find_data *fd)
 {
@@ -216,6 +264,9 @@ static int hfsplus_ext_read_extent(struct inode *inode, u32 block)
 	if (block >= hip->cached_start &&
 	    block < hip->cached_start + hip->cached_blocks)
 		return 0;
+
+	if (is_extents_btree(inode))
+		return -ENOSPC;
 
 	res = hfs_find_init(HFSPLUS_SB(inode->i_sb)->ext_tree, &fd);
 	if (!res) {
@@ -392,6 +443,11 @@ found:
 	}
 }
 
+static bool hfsplus_fork_full(struct hfsplus_extent *ext)
+{
+	return ext[7].block_count != 0;
+}
+
 int hfsplus_free_fork(struct super_block *sb, u32 cnid,
 		struct hfsplus_fork_raw *fork, int type)
 {
@@ -465,12 +521,22 @@ int hfsplus_file_extend(struct inode *inode, bool zeroout)
 	}
 
 	len = hip->clump_blocks;
-	start = hfsplus_block_allocate(sb, sbi->total_blocks, goal, &len);
-	if (start >= sbi->total_blocks) {
-		start = hfsplus_block_allocate(sb, goal, 0, &len);
-		if (start >= goal) {
+	if (is_extents_btree(inode) && hip->alloc_blocks == hip->first_blocks &&
+	    hfsplus_fork_full(hip->first_extents)) {
+		/* Full fork, no overflow extent possible: goal or nothing */
+		start = hfsplus_block_allocate(sb, goal + len, goal, &len);
+		if (start != goal) {
 			res = -ENOSPC;
 			goto out;
+		}
+	} else {
+		start = hfsplus_block_allocate(sb, sbi->total_blocks, goal, &len);
+		if (start >= sbi->total_blocks) {
+			start = hfsplus_block_allocate(sb, goal, 0, &len);
+			if (start >= goal) {
+				res = -ENOSPC;
+				goto out;
+			}
 		}
 	}
 
@@ -526,6 +592,15 @@ out:
 	return res;
 
 insert_extent:
+	/* Can't happen: the fork-full check above rules this out */
+	if (WARN_ON_ONCE(is_extents_btree(inode))) {
+		if (hfsplus_block_free(sb, start, len))
+			pr_err("can't free extent: start %u, count %u\n",
+			       start, len);
+		res = -ENOSPC;
+		goto out;
+	}
+
 	hfs_dbg("insert new extent\n");
 	res = hfsplus_ext_write_extent_locked(inode);
 	if (res)
