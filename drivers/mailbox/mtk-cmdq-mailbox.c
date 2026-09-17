@@ -633,11 +633,22 @@ static struct mbox_chan *cmdq_xlate(struct mbox_controller *mbox,
 	return &mbox->chans[ind];
 }
 
+static void cmdq_put_clocks(void *data)
+{
+	struct cmdq *cmdq = data;
+	u32 i;
+
+	for (i = 0; i < cmdq->pdata->gce_num; i++)
+		if (!IS_ERR_OR_NULL(cmdq->clocks[i].clk))
+			clk_put(cmdq->clocks[i].clk);
+}
+
 static int cmdq_get_clocks(struct device *dev, struct cmdq *cmdq)
 {
 	static const char * const gce_name = "gce";
 	struct device_node *parent = dev->of_node->parent;
 	struct clk_bulk_data *clks;
+	int ret;
 
 	cmdq->clocks = devm_kcalloc(dev, cmdq->pdata->gce_num,
 				    sizeof(*cmdq->clocks), GFP_KERNEL);
@@ -660,7 +671,14 @@ static int cmdq_get_clocks(struct device *dev, struct cmdq *cmdq)
 	 * If there is more than one GCE, get the clocks for the others too,
 	 * as the clock of the main GCE must be enabled for additional IPs
 	 * to be reachable.
+	 *
+	 * Those clocks are not devm-managed, so keep track of their
+	 * references and drop them when this device goes away.
 	 */
+	ret = devm_add_action_or_reset(dev, cmdq_put_clocks, cmdq);
+	if (ret)
+		return ret;
+
 	for_each_child_of_node_scoped(parent, node) {
 		int alias_id = of_alias_get_id(node, gce_name);
 
