@@ -1272,6 +1272,7 @@ static void __init of_unittest_pci_empty_dma_ranges(void)
 
 	if (of_pci_dma_range_parser_init(&parser, np)) {
 		pr_err("missing dma-ranges property\n");
+		of_node_put(np);
 		return;
 	}
 
