@@ -488,10 +488,8 @@ static void nd_async_device_register(void *d, async_cookie_t cookie)
 	struct device *dev = d;
 	struct device *parent = dev->parent;
 
-	if (device_add(dev) != 0) {
+	if (device_add(dev) != 0)
 		dev_err(dev, "%s: failed\n", __func__);
-		put_device(dev);
-	}
 	put_device(dev);
 	if (parent)
 		put_device(parent);
