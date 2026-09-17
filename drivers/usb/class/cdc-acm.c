@@ -1707,6 +1707,7 @@ static int acm_resume(struct usb_interface *intf)
 				break;
 
 			acm_start_wb(acm, urb->context);
+			usb_free_urb(urb);
 		}
 
 		/*
