@@ -471,6 +471,14 @@ struct dw_pcie_rp {
 	bool			native_ecam;
 	bool                    skip_l23_ready;
 	bool			skip_pwrctrl_off;
+	/*
+	 * suspend_poweroff: Allow L2 entry during suspend even when D3cold
+	 * capability check fails. Used on platforms where RC loses power
+	 * during suspend. Some wakeup-capable endpoints in D3hot fail the
+	 * D3cold capability check, but L2 entry is still required to
+	 * properly notify endpoints before RC power loss.
+	 */
+	bool                    suspend_poweroff;
 };
 
 struct dw_pcie_ep_ops {

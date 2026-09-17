@@ -2016,6 +2016,14 @@ static int imx_pcie_probe(struct platform_device *pdev)
 				goto err_pwrctrl_destroy;
 		}
 
+		/*
+		 * i.MX RC is powered off during suspend, requiring L2 entry
+		 * to notify endpoints before power loss. Some endpoints fail
+		 * the D3cold capability check, which would normally prevent
+		 * L2 entry. Force L2 entry anyway since the link will be lost
+		 * when RC powers off.
+		 */
+		pci->pp.suspend_poweroff = true;
 		if (imx_check_flag(imx_pcie, IMX_PCIE_FLAG_SKIP_L23_READY))
 			pci->pp.skip_l23_ready = true;
 		if (imx_check_flag(imx_pcie, IMX_PCIE_FLAG_KEEP_MSI_CAP))
