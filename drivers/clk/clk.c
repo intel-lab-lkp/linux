@@ -24,6 +24,7 @@
 #include <linux/spinlock.h>
 #include <linux/string.h>
 #include <linux/stringhash.h>
+#include <linux/workqueue.h>
 
 #include "clk.h"
 
@@ -46,6 +47,10 @@ static LIST_HEAD(clk_notifier_list);
 /* List of registered clks that use runtime PM */
 static HLIST_HEAD(clk_rpm_list);
 static DEFINE_MUTEX(clk_rpm_list_lock);
+
+static bool clk_disable_unused_done;
+
+#define CLK_DISABLE_UNUSED_DELAY	(HZ / 2)
 
 static const struct hlist_head *all_lists[] = {
 	&clk_root_list,
@@ -1511,7 +1516,7 @@ static void clk_core_disable_unprepare(struct clk_core *core)
 	clk_core_unprepare_lock(core);
 }
 
-static void __init clk_unprepare_unused_subtree(struct clk_core *core)
+static void clk_unprepare_unused_subtree(struct clk_core *core)
 {
 	struct clk_core *child;
 
@@ -1536,7 +1541,7 @@ static void __init clk_unprepare_unused_subtree(struct clk_core *core)
 	}
 }
 
-static void __init clk_disable_unused_subtree(struct clk_core *core)
+static void clk_disable_unused_subtree(struct clk_core *core)
 {
 	struct clk_core *child;
 	unsigned long flags;
@@ -1585,21 +1590,14 @@ static int __init clk_ignore_unused_setup(char *__unused)
 }
 __setup("clk_ignore_unused", clk_ignore_unused_setup);
 
-static int __init clk_disable_unused(void)
+static void clk_disable_unused(void)
 {
 	struct clk_core *core;
 	int ret;
 
-	if (clk_ignore_unused) {
-		pr_warn("clk: Not disabling unused clocks\n");
-		return 0;
-	}
-
-	pr_info("clk: Disabling unused clocks\n");
-
 	ret = clk_pm_runtime_get_all();
 	if (ret)
-		return ret;
+		return;
 	/*
 	 * Grab the prepare lock to keep the clk topology stable while iterating
 	 * over clks.
@@ -1621,10 +1619,31 @@ static int __init clk_disable_unused(void)
 	clk_prepare_unlock();
 
 	clk_pm_runtime_put_all();
+}
+
+static void clk_disable_unused_workfn(struct work_struct *work)
+{
+	clk_disable_unused();
+}
+
+static DECLARE_DELAYED_WORK(clk_disable_unused_work, clk_disable_unused_workfn);
+
+static int __init clk_disable_unused_init(void)
+{
+	if (clk_ignore_unused) {
+		pr_warn("clk: Not disabling unused clocks\n");
+		return 0;
+	}
+
+	pr_info("clk: Disabling unused clocks\n");
+
+	clk_disable_unused();
+
+	WRITE_ONCE(clk_disable_unused_done, true);
 
 	return 0;
 }
-late_initcall_sync(clk_disable_unused);
+late_initcall_sync(clk_disable_unused_init);
 
 static int clk_core_determine_round_nolock(struct clk_core *core,
 					   struct clk_rate_request *req)
@@ -4462,8 +4481,13 @@ __clk_register(struct device *dev, struct device_node *np, struct clk_hw *hw)
 	clk_core_link_consumer(core, hw->clk);
 
 	ret = __clk_core_init(core);
-	if (!ret)
+	if (!ret) {
+		if (READ_ONCE(clk_disable_unused_done))
+			mod_delayed_work(system_power_efficient_wq,
+					 &clk_disable_unused_work,
+					 CLK_DISABLE_UNUSED_DELAY);
 		return hw->clk;
+	}
 
 	clk_prepare_lock();
 	clk_core_unlink_consumer(hw->clk);
