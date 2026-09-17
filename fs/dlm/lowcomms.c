@@ -184,6 +184,13 @@ static int dlm_local_count;
 static struct workqueue_struct *io_workqueue;
 static struct workqueue_struct *process_workqueue;
 
+/* Set while the lowcomms workqueues are up; published with release and
+ * read with acquire semantics. The send path must read it inside a
+ * connections_srcu read-side critical section, see work_stop(); the
+ * socket callbacks only use it as a racy best-effort guard.
+ */
+static atomic_t workqueues_up;
+
 static struct hlist_head connection_hash[CONN_HASH_SIZE];
 static DEFINE_SPINLOCK(connections_lock);
 DEFINE_STATIC_SRCU(connections_srcu);
@@ -216,7 +223,8 @@ static void lowcomms_queue_swork(struct connection *con)
 {
 	assert_spin_locked(&con->writequeue_lock);
 
-	if (!test_bit(CF_IO_STOP, &con->flags) &&
+	if (atomic_read_acquire(&workqueues_up) &&
+	    !test_bit(CF_IO_STOP, &con->flags) &&
 	    !test_bit(CF_APP_LIMITED, &con->flags) &&
 	    !test_and_set_bit(CF_SEND_PENDING, &con->flags))
 		queue_work(io_workqueue, &con->swork);
@@ -228,7 +236,8 @@ static void lowcomms_queue_rwork(struct connection *con)
 	WARN_ON_ONCE(!lockdep_sock_is_held(con->sock->sk));
 #endif
 
-	if (!test_bit(CF_IO_STOP, &con->flags) &&
+	if (atomic_read_acquire(&workqueues_up) &&
+	    !test_bit(CF_IO_STOP, &con->flags) &&
 	    !test_and_set_bit(CF_RECV_PENDING, &con->flags))
 		queue_work(io_workqueue, &con->rwork);
 }
@@ -544,7 +553,8 @@ static void lowcomms_listen_data_ready(struct sock *sk)
 {
 	trace_sk_data_ready(sk);
 
-	queue_work(io_workqueue, &listen_con.rwork);
+	if (atomic_read_acquire(&workqueues_up))
+		queue_work(io_workqueue, &listen_con.rwork);
 }
 
 int dlm_lowcomms_connect_node(int nodeid)
@@ -553,6 +563,13 @@ int dlm_lowcomms_connect_node(int nodeid)
 	int idx;
 
 	idx = srcu_read_lock(&connections_srcu);
+
+	/* queueing send work requires the lowcomms workqueues */
+	if (!atomic_read_acquire(&workqueues_up)) {
+		srcu_read_unlock(&connections_srcu, idx);
+		return -ENOTCONN;
+	}
+
 	con = nodeid2con(nodeid, 0);
 	if (WARN_ON_ONCE(!con)) {
 		srcu_read_unlock(&connections_srcu, idx);
@@ -1275,6 +1292,13 @@ struct dlm_msg *dlm_lowcomms_new_msg(int nodeid, int len, char **ppc,
 	}
 
 	idx = srcu_read_lock(&connections_srcu);
+
+	/* sending requires the lowcomms workqueues, see work_stop() */
+	if (!atomic_read_acquire(&workqueues_up)) {
+		srcu_read_unlock(&connections_srcu, idx);
+		return NULL;
+	}
+
 	con = nodeid2con(nodeid, 0);
 	if (WARN_ON_ONCE(!con)) {
 		srcu_read_unlock(&connections_srcu, idx);
@@ -1336,19 +1360,27 @@ void dlm_lowcomms_put_msg(struct dlm_msg *msg)
 	kref_put(&msg->ref, dlm_msg_release);
 }
 
-/* does not held connections_srcu, usage lowcomms_error_report only */
+/* usage lowcomms_error_report only, may run in softirq context */
 int dlm_lowcomms_resend_msg(struct dlm_msg *msg)
 {
 	struct dlm_msg *msg_resend;
 	char *ppc;
+	int idx;
 
-	if (msg->retransmit)
+	idx = srcu_read_lock(&connections_srcu);
+
+	/* retransmission requires the lowcomms workqueues, see work_stop() */
+	if (!atomic_read_acquire(&workqueues_up) || msg->retransmit) {
+		srcu_read_unlock(&connections_srcu, idx);
 		return 1;
+	}
 
 	msg_resend = dlm_lowcomms_new_msg_con(msg->entry->con, msg->len, &ppc,
 					      NULL, NULL);
-	if (!msg_resend)
+	if (!msg_resend) {
+		srcu_read_unlock(&connections_srcu, idx);
 		return -ENOMEM;
+	}
 
 	msg->retransmit = true;
 	kref_get(&msg->ref);
@@ -1358,6 +1390,7 @@ int dlm_lowcomms_resend_msg(struct dlm_msg *msg)
 	_dlm_lowcomms_commit_msg(msg_resend);
 	dlm_lowcomms_put_msg(msg_resend);
 
+	srcu_read_unlock(&connections_srcu, idx);
 	return 0;
 }
 
@@ -1685,6 +1718,12 @@ static void process_send_sockets(struct work_struct *work)
 
 static void work_stop(void)
 {
+	/* senders check workqueues_up inside connections_srcu, so once
+	 * synchronize_srcu() returns no queue_work() is in flight
+	 */
+	atomic_set_release(&workqueues_up, 0);
+	synchronize_srcu(&connections_srcu);
+
 	if (io_workqueue) {
 		destroy_workqueue(io_workqueue);
 		io_workqueue = NULL;
@@ -1713,6 +1752,7 @@ static int work_start(void)
 		return -ENOMEM;
 	}
 
+	atomic_set_release(&workqueues_up, 1);
 	return 0;
 }
 

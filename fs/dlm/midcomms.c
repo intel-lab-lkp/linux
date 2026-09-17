@@ -1500,6 +1500,12 @@ int dlm_midcomms_rawmsg_send(struct midcomms_node *node, void *buf,
 	struct dlm_msg *msg;
 	char *msgbuf;
 
+	/* the rawmsg interface is independent of the lockspace lifetime,
+	 * sending requires the lowcomms workqueues to be up
+	 */
+	if (!dlm_lowcomms_is_running())
+		return -ENOTCONN;
+
 	rd.node = node;
 	rd.buf = buf;
 
