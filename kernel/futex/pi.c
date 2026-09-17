@@ -348,8 +348,16 @@ int attach_to_pi_state(u32 __user *uaddr, u32 uval,
 	 * state exists then the owner TID must be the same as the
 	 * user space TID. [9/10]
 	 */
-	if (pid != task_pid_vnr(pi_state->owner))
-		goto out_einval;
+	if (pid != task_pid_vnr(pi_state->owner)) {
+		if (!ping) {
+			goto out_einval;
+		} else {
+			ret = fixup_ping_owner_after_user_steal(pi_state,
+								uaddr, uval);
+			if (ret)
+				goto out_error;
+		}
+	}
 
 out_attach:
 	if (!ping) {

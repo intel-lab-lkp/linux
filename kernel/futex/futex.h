@@ -413,6 +413,8 @@ extern int attach_to_pi_owner(u32 __user *uaddr, u32 uval, union futex_key *key,
 			      bool ping);
 extern void get_ping_state(struct futex_pi_state *ping_state);
 extern void put_ping_state(struct futex_pi_state *ping_state);
+extern int fixup_ping_owner_after_user_steal(struct futex_pi_state *ping_state,
+				      u32 __user *uaddr, u32 uval);
 
 /*
  * Express the locking dependencies for lockdep:

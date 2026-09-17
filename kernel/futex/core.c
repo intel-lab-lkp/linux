@@ -1445,6 +1445,14 @@ static void exit_ping_state_list(struct task_struct *curr)
 	while (!list_empty(head)) {
 		next = head->next;
 		ping_state = list_entry(next, struct futex_pi_state, list);
+		/*
+		 * XXX In the case when we are ping_state owner but
+		 * the futex is actually owned by someone who stole it
+		 * from userspace, is setting ping_state.owner = NULL here
+		 * enough? Probably not, otherwise the ping_state could leak
+		 * if they also exit before unlocking or someone else
+		 * fixing up the ownership.
+		 */
 		if (1) {
 			CLASS(hbr, hbr)(&key);
 			auto hb = hbr.hb;
