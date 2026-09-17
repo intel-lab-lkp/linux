@@ -239,6 +239,8 @@ bool intel_dp_joiner_candidate_valid(struct intel_connector *connector,
 
 u8 intel_dp_as_sdp_transmission_time(void);
 
+bool intel_dp_mode_valid_m_n(struct intel_dp *intel_dp, int pixel_clock);
+
 int intel_dp_link_init(struct intel_dp *intel_dp);
 void intel_dp_link_cleanup(struct intel_dp *intel_dp);
 
