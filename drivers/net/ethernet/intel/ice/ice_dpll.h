@@ -6,6 +6,7 @@
 
 #include "ice.h"
 
+#define ICE_DPLL_PIN_LABEL_LEN		16
 #define ICE_DPLL_RCLK_NUM_MAX	4
 #define ICE_DPLL_TXCLK_NUM_MAX	2
 #define E825_EXT_EREF_PIN_IDX	0
@@ -84,6 +85,7 @@ struct ice_dpll_pin {
 	bool active;
 	bool hidden;
 	enum ice_e825c_ref_clk tx_ref_src;
+	char label[ICE_DPLL_PIN_LABEL_LEN];
 };
 
 /** ice_dpll - store info required for DPLL control
