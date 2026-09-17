@@ -4110,6 +4110,7 @@ static __init void of_unittest_overlay_high_level(void)
 					 np);
 				of_node_put(np);
 				of_node_put(base_child);
+				of_node_put(of_symbols);
 				return;
 			}
 		}
@@ -4308,10 +4309,13 @@ static __init void of_unittest_overlay_high_level(void)
 	EXPECT_END(KERN_ERR,
 		   "OF: resolver: node label 'this_label_does_not_exist' not found in live devicetree symbols table");
 
+	of_node_put(of_symbols);
+
 	return;
 
 err_unlock:
 	mutex_unlock(&of_mutex);
+	of_node_put(of_symbols);
 }
 
 static int of_unittest_pci_dev_num;
