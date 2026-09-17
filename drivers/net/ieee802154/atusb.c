@@ -180,9 +180,15 @@ static void atusb_work_urbs(struct work_struct *work)
 		if (!urb)
 			return;
 		ret = atusb_submit_rx_urb(atusb, urb);
+		if (!ret)
+			usb_put_urb(urb);
 	} while (!ret);
 
+	/* The reference obtained above is dropped once the URB is back
+	 * on the idle anchor.
+	 */
 	usb_anchor_urb(urb, &atusb->idle_urbs);
+	usb_put_urb(urb);
 	dev_warn_ratelimited(&usb_dev->dev,
 			     "atusb_in: can't allocate/submit URB (%d)\n", ret);
 	schedule_delayed_work(&atusb->work,
