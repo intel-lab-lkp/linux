@@ -174,15 +174,16 @@ EXPORT_SYMBOL_GPL(__wake_up_locked_key);
  * @mode: which threads
  * @key: opaque value to be passed to wakeup targets
  *
- * The sync wakeup differs that the waker knows that it will schedule
- * away soon, so while the target thread will be woken up, it will not
- * be migrated to another CPU - ie. the two threads are 'synchronized'
- * with each other. This can prevent needless bouncing between CPUs.
+ * The caller expects the waker to schedule away soon. This helper passes
+ * WF_SYNC to waitqueue wake functions. The default wake function forwards
+ * it to the scheduler.
  *
- * On UP it can prevent extra preemption.
+ * For fair-class tasks, WF_SYNC is a wakeup-placement and preemption
+ * hint. It does not guarantee that the wakee will run on the waker CPU
+ * or avoid migration. On UP, this may avoid an unnecessary preemption.
  *
- * If this function wakes up a task, it executes a full memory barrier before
- * accessing the task state.
+ * If this function wakes up a task, it executes a full memory barrier
+ * before accessing the task state.
  */
 void __wake_up_sync_key(struct wait_queue_head *wq_head, unsigned int mode,
 			void *key)
@@ -200,15 +201,16 @@ EXPORT_SYMBOL_GPL(__wake_up_sync_key);
  * @mode: which threads
  * @key: opaque value to be passed to wakeup targets
  *
- * The sync wakeup differs in that the waker knows that it will schedule
- * away soon, so while the target thread will be woken up, it will not
- * be migrated to another CPU - ie. the two threads are 'synchronized'
- * with each other. This can prevent needless bouncing between CPUs.
+ * The caller expects the waker to schedule away soon. This helper passes
+ * WF_SYNC to waitqueue wake functions. The default wake function forwards
+ * it to the scheduler
  *
- * On UP it can prevent extra preemption.
+ * For fair-class tasks, WF_SYNC is a wakeup-placement and preemption
+ * hint. It does not guarantee that the wakee will run on the waker CPU
+ * or avoid migration. On UP, this may avoid an unnecessary preemption.
  *
- * If this function wakes up a task, it executes a full memory barrier before
- * accessing the task state.
+ * If this function wakes up a task, it executes a full memory barrier
+ * before accessing the task state.
  */
 void __wake_up_locked_sync_key(struct wait_queue_head *wq_head,
 			       unsigned int mode, void *key)
