@@ -6079,6 +6079,37 @@ ice_cgu_get_pin_freq_supp(struct ice_hw *hw, u8 pin, bool input, u8 *num)
 }
 
 /**
+ * ice_cgu_get_pin_freq_supp_by_caps - get supported frequencies from pin caps
+ * @caps: input pin capability flags from Get CGU Input Config
+ * @num: number of returned frequencies
+ *
+ * Return: array of supported frequencies, NULL if no fixed frequency is
+ * advertised.
+ */
+struct dpll_pin_frequency *
+ice_cgu_get_pin_freq_supp_by_caps(u8 caps, u8 *num)
+{
+	bool pps = caps & ICE_AQC_GET_CGU_IN_CFG_FLG1_1PPS_SUPP;
+	bool mhz = caps & ICE_AQC_GET_CGU_IN_CFG_FLG1_10MHZ_SUPP;
+
+	if (pps && mhz) {
+		*num = ARRAY_SIZE(ice_cgu_pin_freq_common);
+		return ice_cgu_pin_freq_common;
+	}
+	if (pps) {
+		*num = ARRAY_SIZE(ice_cgu_pin_freq_1_hz);
+		return ice_cgu_pin_freq_1_hz;
+	}
+	if (mhz) {
+		*num = ARRAY_SIZE(ice_cgu_pin_freq_10_mhz);
+		return ice_cgu_pin_freq_10_mhz;
+	}
+	*num = 0;
+
+	return NULL;
+}
+
+/**
  * ice_cgu_get_pin_name - get pin's name
  * @hw: pointer to the hw struct
  * @pin: pin index

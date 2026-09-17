@@ -4997,9 +4997,59 @@ static void ice_dpll_phase_range_set(struct dpll_pin_phase_adjust_range *range,
 }
 
 /**
+ * ice_dpll_init_info_pin_generic_input - describe a generic input pin
+ * @pf: board private structure
+ * @pin: pin to describe
+ *
+ * Derive the pin type, board label and supported frequencies from the pin
+ * classification reported by firmware.
+ *
+ * Return:
+ * * 0 - success
+ * * negative - AQ failure
+ */
+static int
+ice_dpll_init_info_pin_generic_input(struct ice_pf *pf, struct ice_dpll_pin *pin)
+{
+	u8 type, caps, num;
+	const char *kind;
+	int ret;
+
+	ret = ice_aq_get_input_pin_cfg(&pf->hw, pin->idx, NULL, &type, &caps,
+				       NULL, NULL, NULL);
+	if (ret)
+		return ret;
+
+	if (type & ICE_AQC_GET_CGU_IN_CFG_TYPE_GPS) {
+		pin->prop.type = DPLL_PIN_TYPE_GNSS;
+		kind = "GNSS";
+	} else if (type & ICE_AQC_GET_CGU_IN_CFG_TYPE_PHY) {
+		pin->prop.type = DPLL_PIN_TYPE_MUX;
+		kind = "RCLK";
+	} else if (type & ICE_AQC_GET_CGU_IN_CFG_TYPE_EXTERNAL) {
+		pin->prop.type = DPLL_PIN_TYPE_EXT;
+		kind = "EXT";
+		if (caps & ICE_AQC_GET_CGU_IN_CFG_FLG1_ANYFREQ)
+			caps |= ICE_AQC_GET_CGU_IN_CFG_FLG1_1PPS_SUPP |
+				ICE_AQC_GET_CGU_IN_CFG_FLG1_10MHZ_SUPP;
+	} else {
+		pin->prop.type = pin->freq == ICE_DPLL_PIN_GEN_RCLK_FREQ ?
+				 DPLL_PIN_TYPE_MUX : DPLL_PIN_TYPE_EXT;
+		kind = "IN";
+	}
+	snprintf(pin->label, sizeof(pin->label), "%s-%u", kind, pin->idx);
+	pin->prop.board_label = pin->label;
+	pin->prop.freq_supported =
+		ice_cgu_get_pin_freq_supp_by_caps(caps, &num);
+	pin->prop.freq_supported_num = num;
+
+	return 0;
+}
+
+/**
  * ice_dpll_init_info_pins_generic - initializes generic pins info
  * @pf: board private structure
- * @input: if input pins initialized
+ * @input: if we are initializing input pins
  *
  * Init information for generic pins, cache them in PF's pins structures.
  *
@@ -5010,13 +5060,10 @@ static void ice_dpll_phase_range_set(struct dpll_pin_phase_adjust_range *range,
 static int ice_dpll_init_info_pins_generic(struct ice_pf *pf, bool input)
 {
 	struct ice_dpll *de = &pf->dplls.eec, *dp = &pf->dplls.pps;
-	static const char labels[][sizeof("99")] = {
-		"0", "1", "2", "3", "4", "5", "6", "7", "8",
-		"9", "10", "11", "12", "13", "14", "15" };
 	u32 cap = DPLL_PIN_CAPABILITIES_STATE_CAN_CHANGE;
 	enum ice_dpll_pin_type pin_type;
-	int i, pin_num, ret = -EINVAL;
 	struct ice_dpll_pin *pins;
+	int i, pin_num, ret = 0;
 	u32 phase_adj_max;
 
 	if (input) {
@@ -5031,12 +5078,9 @@ static int ice_dpll_init_info_pins_generic(struct ice_pf *pf, bool input)
 		phase_adj_max = pf->dplls.output_phase_adj_max;
 		pin_type = ICE_DPLL_PIN_TYPE_OUTPUT;
 	}
-	if (pin_num > ARRAY_SIZE(labels))
-		return ret;
 
 	for (i = 0; i < pin_num; i++) {
 		pins[i].idx = i;
-		pins[i].prop.board_label = labels[i];
 		ice_dpll_phase_range_set(&pins[i].prop.phase_range,
 					 phase_adj_max);
 		pins[i].prop.capabilities = cap;
@@ -5044,12 +5088,16 @@ static int ice_dpll_init_info_pins_generic(struct ice_pf *pf, bool input)
 		ret = ice_dpll_pin_state_update(pf, &pins[i], pin_type, NULL);
 		if (ret)
 			break;
-		if (input && pins[i].freq == ICE_DPLL_PIN_GEN_RCLK_FREQ)
-			pins[i].prop.type = DPLL_PIN_TYPE_MUX;
-		else
+		if (!input) {
+			snprintf(pins[i].label, sizeof(pins[i].label),
+				 "OUT-%u", pins[i].idx);
+			pins[i].prop.board_label = pins[i].label;
 			pins[i].prop.type = DPLL_PIN_TYPE_EXT;
-		if (!input)
 			continue;
+		}
+		ret = ice_dpll_init_info_pin_generic_input(pf, &pins[i]);
+		if (ret)
+			break;
 		ret = ice_aq_get_cgu_ref_prio(&pf->hw, de->dpll_idx, i,
 					      &de->input_prio[i]);
 		if (ret)
