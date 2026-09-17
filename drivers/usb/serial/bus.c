@@ -6,6 +6,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/acpi.h>
 #include <linux/errno.h>
 #include <linux/tty.h>
 #include <linux/slab.h>
@@ -49,9 +50,13 @@ static int usb_serial_device_probe(struct device *dev)
 			goto err_autopm_put;
 	}
 
+	ACPI_COMPANION_SET(dev, ACPI_COMPANION(&port->serial->dev->dev));
+
 	minor = port->minor;
-	tty_dev = tty_port_register_device(&port->port, usb_serial_tty_driver,
-					   minor, dev);
+	tty_dev = tty_port_register_device_serdev(&port->port,
+						  usb_serial_tty_driver,
+						  minor, dev,
+						  &port->serial->dev->dev);
 	if (IS_ERR(tty_dev)) {
 		retval = PTR_ERR(tty_dev);
 		goto err_port_remove;
