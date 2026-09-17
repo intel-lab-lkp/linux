@@ -395,6 +395,16 @@ extern int refill_pi_state_cache(void);
 extern void get_pi_state(struct futex_pi_state *pi_state);
 extern void put_pi_state(struct futex_pi_state *pi_state);
 extern int fixup_pi_owner(u32 __user *uaddr, struct futex_q *q, int locked);
+extern int pi_handle_exit_race(u32 __user *uaddr, u32 uval);
+extern struct futex_pi_state *alloc_pi_state(void);
+extern int attach_to_pi_state(u32 __user *uaddr, u32 uval,
+			      struct futex_pi_state *pi_state,
+			      struct futex_pi_state **ps,
+			      bool ping);
+extern int attach_to_pi_owner(u32 __user *uaddr, u32 uval, union futex_key *key,
+			      struct futex_pi_state **ps,
+			      struct task_struct **exiting,
+			      bool ping);
 
 /*
  * Express the locking dependencies for lockdep:
