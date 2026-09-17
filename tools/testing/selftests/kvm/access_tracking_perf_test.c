@@ -175,8 +175,8 @@ static void pageidle_mark_vcpu_memory_idle(struct kvm_vm *vm,
 {
 	int vcpu_idx = vcpu_args->vcpu_idx;
 	gva_t base_gva = vcpu_args->gva;
-	u64 pages = vcpu_args->pages;
-	u64 page;
+	u64 idle_page_size;
+	u64 pages, page;
 	u64 still_idle = 0;
 	u64 no_pfn = 0;
 	int page_idle_fd;
@@ -192,8 +192,18 @@ static void pageidle_mark_vcpu_memory_idle(struct kvm_vm *vm,
 	pagemap_fd = open("/proc/self/pagemap", O_RDONLY);
 	TEST_ASSERT(pagemap_fd > 0, "Failed to open pagemap.");
 
+	/*
+	 * Idle tracking operates on host pages, so walk the region in units of
+	 * the larger of the guest and host page size.  If the host page is the
+	 * bigger one, several guest pages are backed by one host page and
+	 * checking/marking the same PFN once per guest page would make the
+	 * sanity check below count the shared page as still idle.
+	 */
+	idle_page_size = max_t(u64, memstress_args.guest_page_size, getpagesize());
+	pages = vcpu_args->pages * memstress_args.guest_page_size / idle_page_size;
+
 	for (page = 0; page < pages; page++) {
-		gva_t gva = base_gva + page * memstress_args.guest_page_size;
+		gva_t gva = base_gva + page * idle_page_size;
 		u64 pfn = lookup_pfn(pagemap_fd, vm, gva);
 
 		if (!pfn) {
