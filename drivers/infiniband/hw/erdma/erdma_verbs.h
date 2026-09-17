@@ -352,8 +352,7 @@ struct erdma_qp {
 };
 
 struct erdma_kcq_info {
-	void *qbuf;
-	dma_addr_t qbuf_dma_addr;
+	struct erdma_mem qbuf_mem;
 	u32 ci;
 	u32 cmdsn;
 	u32 notify_cnt;
