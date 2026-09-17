@@ -1543,6 +1543,7 @@ lpfc_issue_ct_rsp(struct lpfc_hba *phba, struct bsg_job *job, uint32_t tag,
 	if (phba->cfg_poll & DISABLE_FCP_RING_INT) {
 		if (lpfc_readl(phba->HCregaddr, &creg_val)) {
 			rc = -IOCB_ERROR;
+			lpfc_nlp_put(dd_data->context_un.iocb.ndlp);
 			goto issue_ct_rsp_exit;
 		}
 		creg_val |= (HC_R0INT_ENA << LPFC_FCP_RING);
