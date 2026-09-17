@@ -389,11 +389,21 @@ int stmmac_mdio_reset(struct mii_bus *bus)
 		struct gpio_desc *reset_gpio;
 		u32 delays[3] = { 0, 0, 0 };
 
-		reset_gpio = devm_gpiod_get_optional(priv->device,
-						     "snps,reset",
-						     GPIOD_OUT_LOW);
-		if (IS_ERR(reset_gpio))
-			return PTR_ERR(reset_gpio);
+		/* Request the reset line only once and reuse the descriptor
+		 * afterwards. A second request of the very same line makes
+		 * gpiolib fail with -EBUSY, which devm_gpiod_get_optional()
+		 * passes through because it only filters out -ENOENT. The
+		 * reset would then abort early and leave the PHY un-reset.
+		 */
+		if (!priv->mdio_reset_gpio) {
+			priv->mdio_reset_gpio =
+				devm_gpiod_get_optional(priv->device,
+							"snps,reset",
+							GPIOD_OUT_LOW);
+			if (IS_ERR(priv->mdio_reset_gpio))
+				return PTR_ERR(priv->mdio_reset_gpio);
+		}
+		reset_gpio = priv->mdio_reset_gpio;
 
 		device_property_read_u32_array(priv->device,
 					       "snps,reset-delays-us",
