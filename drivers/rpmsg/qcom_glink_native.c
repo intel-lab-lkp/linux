@@ -6,6 +6,7 @@
 #include <linux/idr.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
+#include <linux/limits.h>
 #include <linux/list.h>
 #include <linux/mfd/syscon.h>
 #include <linux/module.h>
@@ -1605,6 +1606,11 @@ static struct device_node *qcom_glink_match_channel(struct device_node *node,
 	return NULL;
 }
 
+static ssize_t qcom_glink_get_mtu(struct rpmsg_endpoint *ept)
+{
+	return INT_MAX;
+}
+
 static const struct rpmsg_device_ops glink_device_ops = {
 	.create_ept = qcom_glink_create_ept,
 	.announce_create = qcom_glink_announce_create,
@@ -1617,6 +1623,7 @@ static const struct rpmsg_endpoint_ops glink_endpoint_ops = {
 	.trysend = qcom_glink_trysend,
 	.trysendto = qcom_glink_trysendto,
 	.set_flow_control = qcom_glink_set_flow_control,
+	.get_mtu = qcom_glink_get_mtu,
 };
 
 static void qcom_glink_rpdev_release(struct device *dev)
