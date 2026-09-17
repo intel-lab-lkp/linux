@@ -2968,7 +2968,7 @@ static int lpfcdiag_sli3_loop_post_rxbufs(struct lpfc_hba *phba, uint16_t rxxri,
 
 		iocb_stat = lpfc_sli_issue_iocb(phba, LPFC_ELS_RING, cmdiocbq,
 						0);
-		if (iocb_stat == IOCB_ERROR) {
+		if (lpfc_iocb_failed(iocb_stat)) {
 			diag_cmd_data_free(phba,
 				(struct lpfc_dmabufext *)mp[0]);
 			if (mp[1])

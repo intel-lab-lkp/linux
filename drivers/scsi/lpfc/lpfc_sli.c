@@ -245,6 +245,38 @@ lpfc_sli4_pcimem_bcopy(void *srcp, void *destp, uint32_t cnt)
 #endif
 
 /**
+ * lpfc_sli4_queue_io_for_retry - Put an ELS/CT IO request on the txq.
+ * @phba - pointer to the hba instance.
+ * @iocb - the IO request to put on the txq.
+ * @head  - A boolean to request a put to the head (true) or tail
+ *         (false) of the txq.
+ *
+ * This routine is for SLI4 interfaces only.
+ * When ELS/CT commands can't be sent because of ELS WQ full put status,
+ * queue the iocbq on the phba->txq, at the head or tail as requested by
+ * the caller, for a retry later in lpfc_drain_txq. The lpfc_drain_txq
+ * routine is called per ELS CQE completion.
+ */
+void lpfc_sli4_queue_io_for_retry(struct lpfc_hba *phba,
+				  struct lpfc_iocbq *iocb,
+				  bool head)
+{
+	unsigned long iflags;
+	struct lpfc_sli_ring *pring;
+
+	/* Mark the IO as in RETRY to stop a full reprep of the SGL/XRI. */
+	iocb->cmd_flag |= LPFC_IO_IN_RETRY;
+	pring = phba->sli4_hba.els_wq->pring;
+
+	/* Insert to the head or tail of the txq ring as indicated
+	 * by the caller's head argument.
+	 */
+	spin_lock_irqsave(&pring->ring_lock, iflags);
+	__lpfc_sli_ringtx_put(phba, pring, iocb, head);
+	spin_unlock_irqrestore(&pring->ring_lock, iflags);
+}
+
+/**
  * lpfc_sli4_wq_put - Put a Work Queue Entry on an Work Queue
  * @q: The Work Queue to operate on.
  * @wqe: The work Queue Entry to put on the Work queue.
@@ -276,6 +308,10 @@ lpfc_sli4_wq_put(struct lpfc_queue *q, union lpfc_wqe128 *wqe)
 	/* If the host has not yet processed the next entry then we are done */
 	idx = ((q->host_index + 1) % q->entry_count);
 	if (idx == q->hba_index) {
+		lpfc_printf_log(q->phba, KERN_WARNING, LOG_SLI,
+				"9998 No available WQ Slots on "
+				"q_id x%x, host x%x, hba x%x\n",
+				q->queue_id, idx, q->hba_index);
 		q->WQ_overflow++;
 		return -EBUSY;
 	}
@@ -10445,6 +10481,7 @@ lpfc_mbox_api_table_setup(struct lpfc_hba *phba, uint8_t dev_grp)
  * @phba: Pointer to HBA context object.
  * @pring: Pointer to driver SLI ring object.
  * @piocb: Pointer to address of newly added command iocb.
+ * @head: put at head (true) or tail (false)
  *
  * This function is called with hbalock held for SLI3 ports or
  * the ring lock held for SLI4 ports to add a command
@@ -10453,14 +10490,20 @@ lpfc_mbox_api_table_setup(struct lpfc_hba *phba, uint8_t dev_grp)
  **/
 void
 __lpfc_sli_ringtx_put(struct lpfc_hba *phba, struct lpfc_sli_ring *pring,
-		    struct lpfc_iocbq *piocb)
+		      struct lpfc_iocbq *piocb, bool head)
 {
 	if (phba->sli_rev == LPFC_SLI_REV4)
 		lockdep_assert_held(&pring->ring_lock);
 	else
 		lockdep_assert_held(&phba->hbalock);
-	/* Insert the caller's iocb in the txq tail for later processing. */
-	list_add_tail(&piocb->list, &pring->txq);
+
+	/* Insert the caller's iocb in the txq head or tail for later
+	 * processing.
+	 */
+	if (head)
+		list_add(&piocb->list, &pring->txq);
+	else
+		list_add_tail(&piocb->list, &pring->txq);
 }
 
 /**
@@ -10468,6 +10511,7 @@ __lpfc_sli_ringtx_put(struct lpfc_hba *phba, struct lpfc_sli_ring *pring,
  * @phba: Pointer to HBA context object.
  * @pring: Pointer to driver SLI ring object.
  * @piocb: Pointer to address of newly added command iocb.
+ * @head: put at head (true) or tail (false)
  *
  * This function is called with hbalock held before a new
  * iocb is submitted to the firmware. This function checks
@@ -10613,7 +10657,7 @@ __lpfc_sli_issue_iocb_s3(struct lpfc_hba *phba, uint32_t ring_number,
  out_busy:
 
 	if (!(flag & SLI_IOCB_RET_IOCB)) {
-		__lpfc_sli_ringtx_put(phba, pring, piocb);
+		__lpfc_sli_ringtx_put(phba, pring, piocb, false);
 		return IOCB_SUCCESS;
 	}
 
@@ -10751,6 +10795,7 @@ __lpfc_sli_issue_iocb_s4(struct lpfc_hba *phba, uint32_t ring_number,
 	struct lpfc_queue *wq;
 	struct lpfc_sli_ring *pring;
 	u32 ulp_command = get_job_cmnd(phba, piocb);
+	int rc = IOCB_SUCCESS;
 
 	/* Get the WQ */
 	if ((piocb->cmd_flag & LPFC_IO_FCP) ||
@@ -10766,9 +10811,11 @@ __lpfc_sli_issue_iocb_s4(struct lpfc_hba *phba, uint32_t ring_number,
 	/*
 	 * The WQE can be either 64 or 128 bytes,
 	 */
-
 	lockdep_assert_held(&pring->ring_lock);
 	wqe = &piocb->wqe;
+	if (piocb->cmd_flag & LPFC_IO_IN_RETRY)
+		goto retry_io;
+
 	if (piocb->sli4_xritag == NO_XRI) {
 		if (ulp_command == CMD_ABORT_XRI_CX)
 			sglq = NULL;
@@ -10778,7 +10825,7 @@ __lpfc_sli_issue_iocb_s4(struct lpfc_hba *phba, uint32_t ring_number,
 				if (!(flag & SLI_IOCB_RET_IOCB)) {
 					__lpfc_sli_ringtx_put(phba,
 							pring,
-							piocb);
+							piocb, false);
 					return IOCB_SUCCESS;
 				} else {
 					return IOCB_BUSY;
@@ -10819,12 +10866,19 @@ __lpfc_sli_issue_iocb_s4(struct lpfc_hba *phba, uint32_t ring_number,
 			return IOCB_ERROR;
 	}
 
-	if (lpfc_sli4_wq_put(wq, wqe))
-		return IOCB_ERROR;
+ retry_io:
+	piocb->cmd_flag &= ~LPFC_IO_IN_RETRY;
 
-	lpfc_sli_ringtxcmpl_put(phba, pring, piocb);
-
-	return 0;
+	/* Push the wqe to the wq and if successful, push to the txcmplq.
+	 * A return of -EBUSY the WQ is currently full and a retry possible.
+	 * Otherwise the put failed for another, nonretryable reason.
+	 */
+	rc = lpfc_sli4_wq_put(wq, wqe);
+	if (!rc)
+		lpfc_sli_ringtxcmpl_put(phba, pring, piocb);
+	else if (rc == -EBUSY)
+		return IOCB_FAILED_PUT;
+	return rc;
 }
 
 /*
@@ -12608,7 +12662,7 @@ abort_iotag_exit:
 			 ulp_context, (phba->sli_rev == LPFC_SLI_REV4) ?
 			 cmdiocb->iotag : iotag, iotag, cmdiocb, abtsiocbp,
 			 retval, ia, abtsiocbp->cmd_cmpl);
-	if (retval) {
+	if (lpfc_iocb_failed(retval)) {
 		cmdiocb->cmd_flag &= ~LPFC_DRIVER_ABORTED;
 		__lpfc_sli_release_iocbq(phba, abtsiocbp);
 	}
@@ -13060,7 +13114,7 @@ lpfc_sli_abort_taskmgmt(struct lpfc_vport *vport, struct lpfc_sli_ring *pring,
 
 		spin_unlock(&lpfc_cmd->buf_lock);
 
-		if (ret_val == IOCB_ERROR)
+		if (lpfc_iocb_failed(ret_val))
 			__lpfc_sli_release_iocbq(phba, abtsiocbq);
 		else
 			sum++;
@@ -19200,7 +19254,7 @@ lpfc_sli4_seq_abort_rsp(struct lpfc_vport *vport,
 			 ctiocb->abort_rctl, oxid, phba->link_state);
 
 	rc = lpfc_sli_issue_iocb(phba, LPFC_ELS_RING, ctiocb, 0);
-	if (rc == IOCB_ERROR) {
+	if (lpfc_iocb_failed(rc)) {
 		lpfc_printf_vlog(vport, KERN_ERR, LOG_TRACE_EVENT,
 				 "2925 Failed to issue CT ABTS RSP x%x on "
 				 "xri x%x, Data x%x\n",
@@ -19581,7 +19635,7 @@ lpfc_sli4_handle_mds_loopback(struct lpfc_vport *vport,
 	iocbq->cmd_cmpl = lpfc_sli4_mds_loopback_cmpl;
 
 	rc = lpfc_sli_issue_iocb(phba, LPFC_ELS_RING, iocbq, 0);
-	if (rc == IOCB_ERROR)
+	if (lpfc_iocb_failed(rc))
 		goto exit;
 
 	lpfc_in_buf_free(phba, &dmabuf->dbuf);
@@ -21301,12 +21355,15 @@ lpfc_drain_txq(struct lpfc_hba *phba)
 		}
 		txq_cnt--;
 
+		/* Capture the return values that indicate an error during IO
+		 * submit and cannot be retried. Prefix message 2822.
+		 */
 		ret = __lpfc_sli_issue_iocb(phba, pring->ringno, piocbq, 0);
-
-		if (ret && ret != IOCB_BUSY) {
+		if (ret && ret != IOCB_BUSY && ret != IOCB_FAILED_PUT) {
 			fail_msg = " - Cannot send IO ";
 			piocbq->cmd_flag &= ~LPFC_DRIVER_ABORTED;
 		}
+
 		if (fail_msg) {
 			piocbq->cmd_flag |= LPFC_DRIVER_ABORTED;
 			/* Failed means we can't issue and need to cancel */
@@ -21319,9 +21376,35 @@ lpfc_drain_txq(struct lpfc_hba *phba)
 			list_add_tail(&piocbq->list, &completions);
 			fail_msg = NULL;
 		}
-		spin_unlock_irqrestore(&pring->ring_lock, iflags);
-		if (txq_cnt == 0 || ret == IOCB_BUSY)
+
+		if (txq_cnt == 0 || ret == IOCB_BUSY ||
+		    ret == IOCB_FAILED_PUT) {
+			/* IOCB_FAILED_PUT is unique to SLI4 and means SGL/XRI
+			 * resources are allocated.  For this case, set the
+			 * in retry flag.  For SLI3 and 4, push the IO to the
+			 * txq for retry.
+			 */
+			lpfc_printf_log(phba, KERN_INFO, LOG_SLI,
+					"2820 IOCB iotag x%x xri x%x ret %d "
+					"cmd_flg x%x txq_cnt x%x\n",
+					piocbq->iotag, piocbq->sli4_xritag, ret,
+					piocbq->cmd_flag, txq_cnt);
+			switch (ret) {
+			case IOCB_FAILED_PUT:
+				piocbq->cmd_flag |= LPFC_IO_IN_RETRY;
+				__lpfc_sli_ringtx_put(phba, pring, piocbq,
+						      true);
+				break;
+			case IOCB_BUSY:
+				__lpfc_sli_ringtx_put(phba, pring, piocbq,
+						      true);
+				break;
+			}
+			spin_unlock_irqrestore(&pring->ring_lock, iflags);
 			break;
+		}
+
+		spin_unlock_irqrestore(&pring->ring_lock, iflags);
 	}
 	/* Cancel all the IOCBs that cannot be issued */
 	lpfc_sli_cancel_iocbs(phba, &completions, IOSTAT_LOCAL_REJECT,

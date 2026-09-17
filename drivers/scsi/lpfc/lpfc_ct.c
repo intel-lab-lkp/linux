@@ -246,7 +246,7 @@ lpfc_ct_reject_event(struct lpfc_nodelist *ndlp,
 		goto ct_no_ndlp;
 
 	rc = lpfc_sli_issue_iocb(phba, LPFC_ELS_RING, cmdiocbq, 0);
-	if (rc) {
+	if (lpfc_iocb_failed(rc)) {
 		lpfc_nlp_put(ndlp);
 		goto ct_no_ndlp;
 	}
@@ -639,11 +639,24 @@ lpfc_gen_req(struct lpfc_vport *vport, struct lpfc_dmabuf *bmp,
 		goto out;
 
 	rc = lpfc_sli_issue_iocb(phba, LPFC_ELS_RING, geniocb, 0);
-	if (rc == IOCB_ERROR) {
+	if (lpfc_iocb_failed(rc)) {
+		lpfc_vlog_msg(vport, KERN_NOTICE,
+			      LOG_ELS | LOG_DISCOVERY | LOG_NODE,
+			      "0156 %ps WQE Put returned %d\n",
+			      cmpl, rc);
+
+		/* Under heavy vpi counts, the driver's host_index can catch up
+		 * to the hba_index causing a put error. Catch this case and
+		 * put the IO on phba->txq.
+		 */
+		if (rc == IOCB_FAILED_PUT && phba->sli_rev == LPFC_SLI_REV4) {
+			lpfc_sli4_queue_io_for_retry(phba, geniocb, false);
+			return 0;
+		}
+
 		lpfc_nlp_put(ndlp);
 		goto out;
 	}
-
 	return 0;
 out:
 	lpfc_sli_release_iocbq(phba, geniocb);
@@ -2258,7 +2271,7 @@ lpfc_cmpl_ct_disc_fdmi(struct lpfc_hba *phba, struct lpfc_iocbq *cmdiocb,
 				/* Retry the same FDMI command */
 				err = lpfc_sli_issue_iocb(phba, LPFC_ELS_RING,
 							  cmdiocb, 0);
-				if (err == IOCB_ERROR)
+				if (lpfc_iocb_failed(err))
 					break;
 				return;
 			default:

@@ -123,6 +123,7 @@ struct lpfc_iocbq {
 #define LPFC_IO_NVMET		0x800000 /* NVMET command */
 #define LPFC_IO_VMID            0x1000000 /* VMID tagged IO */
 #define LPFC_IO_CMF		0x4000000 /* CMF command */
+#define LPFC_IO_IN_RETRY	0x8000000 /* Caller is retrying IO. */
 
 	uint32_t drvrTimeout;	/* driver timeout in seconds */
 	struct lpfc_vport *vport;/* virtual port pointer */
@@ -160,6 +161,23 @@ struct lpfc_iocbq {
 #define IOCB_ABORTED        4
 #define IOCB_ABORTING	    5
 #define IOCB_NORESOURCE	    6
+#define IOCB_FAILED_PUT     7
+
+/**
+ * lpfc_iocb_failed - test an IOCB issue return status for failure
+ * @rc: return status from an IOCB issue routine (e.g. lpfc_sli_issue_iocb).
+ *
+ * IOCB_SUCCESS is the only non-failure return value. Callers must test
+ * rc != IOCB_SUCCESS rather than rc == IOCB_ERROR, since that misses
+ * IOCB_FAILED_PUT (SLI-4 WQ full) and treats it as success.
+ *
+ * Return: true if the IOCB issue did not succeed.
+ */
+static inline bool
+lpfc_iocb_failed(int rc)
+{
+	return rc != IOCB_SUCCESS;
+}
 
 #define SLI_WQE_RET_WQE    1    /* Return WQE if cmd ring full */
 

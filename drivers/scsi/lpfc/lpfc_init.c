@@ -2813,6 +2813,7 @@ lpfc_sli3_post_buffer(struct lpfc_hba *phba, struct lpfc_sli_ring *pring, int cn
 	IOCB_t *icmd;
 	struct lpfc_iocbq *iocb;
 	struct lpfc_dmabuf *mp1, *mp2;
+	int rc;
 
 	cnt += pring->missbufcnt;
 
@@ -2875,8 +2876,8 @@ lpfc_sli3_post_buffer(struct lpfc_hba *phba, struct lpfc_sli_ring *pring, int cn
 		icmd->ulpCommand = CMD_QUE_RING_BUF64_CN;
 		icmd->ulpLe = 1;
 
-		if (lpfc_sli_issue_iocb(phba, pring->ringno, iocb, 0) ==
-		    IOCB_ERROR) {
+		rc = lpfc_sli_issue_iocb(phba, pring->ringno, iocb, 0);
+		if (lpfc_iocb_failed(rc)) {
 			lpfc_mbuf_free(phba, mp1->virt, mp1->phys);
 			kfree(mp1);
 			cnt++;
