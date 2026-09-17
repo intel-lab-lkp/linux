@@ -2084,6 +2084,7 @@ free_setup:
 	kfree(pdev->setup_buf);
 free_pdev:
 	kfree(pdev);
+	pm_runtime_put_autosuspend(cdns->dev);
 
 	return ret;
 }
