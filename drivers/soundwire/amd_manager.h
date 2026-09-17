@@ -8,7 +8,12 @@
 
 #include <linux/soundwire/sdw_amd.h>
 
-#define SDW_MANAGER_REG_OFFSET				0xc00
+/*
+ * Register offset between successive SoundWire manager instances.
+ * This value applies to ACP6.3, ACP7.0, ACP7.1, and ACP7.2. A new
+ * revision with a different offset must define its own constant.
+ */
+#define ACP63_SDW_MANAGER_REG_OFFSET				0xc00
 #define AMD_SDW_DEFAULT_ROWS				50
 #define AMD_SDW_DEFAULT_COLUMNS				10
 #define ACP_PAD_PULLDOWN_CTRL				0x0001448

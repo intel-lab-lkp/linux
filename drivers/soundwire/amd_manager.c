@@ -27,7 +27,7 @@
 
 #define to_amd_sdw(b)	container_of(b, struct amd_sdw_manager, bus)
 
-static int amd_sdw_clk_init_ctrl(struct amd_sdw_manager *amd_manager)
+static int amd_acp63_sdw_clk_init_ctrl(struct amd_sdw_manager *amd_manager)
 {
 	struct sdw_bus *bus = &amd_manager->bus;
 	struct sdw_master_prop *prop = &bus->prop;
@@ -57,7 +57,7 @@ static int amd_sdw_clk_init_ctrl(struct amd_sdw_manager *amd_manager)
 	return 0;
 }
 
-static int amd_init_sdw_manager(struct amd_sdw_manager *amd_manager)
+static int amd_acp63_init_sdw_manager(struct amd_sdw_manager *amd_manager)
 {
 	u32 val;
 	int ret;
@@ -89,7 +89,7 @@ static int amd_init_sdw_manager(struct amd_sdw_manager *amd_manager)
 				  AMD_SDW_TIMEOUT);
 }
 
-static int amd_enable_sdw_manager(struct amd_sdw_manager *amd_manager)
+static int amd_acp63_enable_sdw_manager(struct amd_sdw_manager *amd_manager)
 {
 	u32 val;
 
@@ -98,7 +98,7 @@ static int amd_enable_sdw_manager(struct amd_sdw_manager *amd_manager)
 				  AMD_SDW_TIMEOUT);
 }
 
-static int amd_disable_sdw_manager(struct amd_sdw_manager *amd_manager)
+static int amd_acp63_disable_sdw_manager(struct amd_sdw_manager *amd_manager)
 {
 	u32 val;
 
@@ -115,7 +115,7 @@ static int amd_disable_sdw_manager(struct amd_sdw_manager *amd_manager)
 				  AMD_SDW_TIMEOUT);
 }
 
-static void amd_enable_sdw_interrupts(struct amd_sdw_manager *amd_manager)
+static void amd_acp63_enable_sdw_interrupts(struct amd_sdw_manager *amd_manager)
 {
 	u32 val;
 
@@ -131,7 +131,7 @@ static void amd_enable_sdw_interrupts(struct amd_sdw_manager *amd_manager)
 	writel(AMD_SDW_IRQ_ERROR_MASK, amd_manager->mmio + ACP_SW_ERROR_INTR_MASK);
 }
 
-static void amd_disable_sdw_interrupts(struct amd_sdw_manager *amd_manager)
+static void amd_acp63_disable_sdw_interrupts(struct amd_sdw_manager *amd_manager)
 {
 	u32 irq_mask;
 
@@ -146,7 +146,7 @@ static void amd_disable_sdw_interrupts(struct amd_sdw_manager *amd_manager)
 	writel(0x00, amd_manager->mmio + ACP_SW_ERROR_INTR_MASK);
 }
 
-static void amd_sdw_set_frameshape(struct amd_sdw_manager *amd_manager)
+static void amd_acp63_sdw_set_frameshape(struct amd_sdw_manager *amd_manager)
 {
 	u32 frame_size;
 
@@ -154,7 +154,7 @@ static void amd_sdw_set_frameshape(struct amd_sdw_manager *amd_manager)
 	writel(frame_size, amd_manager->mmio + ACP_SW_FRAMESIZE);
 }
 
-static void amd_sdw_wake_enable(struct amd_sdw_manager *amd_manager, bool enable)
+static void amd_acp63_sdw_wake_enable(struct amd_sdw_manager *amd_manager, bool enable)
 {
 	u32 wake_ctrl;
 
@@ -167,7 +167,8 @@ static void amd_sdw_wake_enable(struct amd_sdw_manager *amd_manager, bool enable
 	writel(wake_ctrl, amd_manager->mmio + ACP_SW_STATE_CHANGE_STATUS_MASK_8TO11);
 }
 
-static int amd_sdw_set_device_state(struct amd_sdw_manager *amd_manager, u32 target_device_state)
+static int amd_acp63_sdw_set_device_state(struct amd_sdw_manager *amd_manager,
+					  u32 target_device_state)
 {
 	u32 sdw_dev_state;
 
@@ -190,7 +191,7 @@ static int amd_sdw_set_device_state(struct amd_sdw_manager *amd_manager, u32 tar
 	return 0;
 }
 
-static int amd_sdw_host_wake_enable(struct amd_sdw_manager *amd_manager, bool enable)
+static int amd_acp63_sdw_host_wake_enable(struct amd_sdw_manager *amd_manager, bool enable)
 {
 	u32 intr_cntl1;
 	u32 sdw_host_wake_irq_mask;
@@ -244,8 +245,8 @@ static void amd_sdw_ctl_word_prep(u32 *lower_word, u32 *upper_word, struct sdw_m
 	*lower_word = lower_data;
 }
 
-static int amd_sdw_send_cmd_get_resp(struct amd_sdw_manager *amd_manager, u32 lower_data,
-				     u32 upper_data, u64 *response)
+static int amd_acp63_sdw_send_cmd_get_resp(struct amd_sdw_manager *amd_manager, u32 lower_data,
+					   u32 upper_data, u64 *response)
 {
 	u32 lower_resp, upper_resp;
 	u32 sts;
@@ -301,7 +302,8 @@ amd_program_scp_addr(struct amd_sdw_manager *amd_manager, struct sdw_msg *msg)
 	scp_msg.buf = &msg->addr_page1;
 	scp_msg.flags = SDW_MSG_FLAG_WRITE;
 	amd_sdw_ctl_word_prep(&lower_data, &upper_data, &scp_msg, 0);
-	if (amd_sdw_send_cmd_get_resp(amd_manager, lower_data, upper_data, &response_buf[0])) {
+	if (amd_acp63_sdw_send_cmd_get_resp(amd_manager, lower_data, upper_data,
+					    &response_buf[0])) {
 		dev_err_ratelimited(amd_manager->dev,
 				    "SCP_addrpage command timeout for Slave %d\n", msg->dev_num);
 		return SDW_CMD_TIMEOUT;
@@ -309,7 +311,8 @@ amd_program_scp_addr(struct amd_sdw_manager *amd_manager, struct sdw_msg *msg)
 	scp_msg.addr = SDW_SCP_ADDRPAGE2;
 	scp_msg.buf = &msg->addr_page2;
 	amd_sdw_ctl_word_prep(&lower_data, &upper_data, &scp_msg, 0);
-	if (amd_sdw_send_cmd_get_resp(amd_manager, lower_data, upper_data, &response_buf[1])) {
+	if (amd_acp63_sdw_send_cmd_get_resp(amd_manager, lower_data, upper_data,
+					    &response_buf[1])) {
 		dev_err_ratelimited(amd_manager->dev,
 				    "SCP_addrpage command timeout for Slave %d\n", msg->dev_num);
 		return SDW_CMD_TIMEOUT;
@@ -374,6 +377,7 @@ static enum sdw_command_response amd_sdw_fill_msg_resp(struct amd_sdw_manager *a
 	return SDW_CMD_OK;
 }
 
+/* AMD SoundWire bus helper shared across all ACP revisions. */
 static unsigned int _amd_sdw_xfer_msg(struct amd_sdw_manager *amd_manager, struct sdw_msg *msg,
 				      int cmd_offset)
 {
@@ -381,7 +385,7 @@ static unsigned int _amd_sdw_xfer_msg(struct amd_sdw_manager *amd_manager, struc
 	u32 upper_data = 0, lower_data = 0;
 
 	amd_sdw_ctl_word_prep(&lower_data, &upper_data, msg, cmd_offset);
-	if (amd_sdw_send_cmd_get_resp(amd_manager, lower_data, upper_data, &response)) {
+	if (amd_acp63_sdw_send_cmd_get_resp(amd_manager, lower_data, upper_data, &response)) {
 		dev_err_ratelimited(amd_manager->dev, "command timeout for Slave %d\n",
 				    msg->dev_num);
 		return SDW_CMD_TIMEOUT;
@@ -389,6 +393,7 @@ static unsigned int _amd_sdw_xfer_msg(struct amd_sdw_manager *amd_manager, struc
 	return amd_sdw_fill_msg_resp(amd_manager, msg, response, cmd_offset);
 }
 
+/* AMD SoundWire bus helper shared across all ACP revisions. */
 static enum sdw_command_response amd_sdw_xfer_msg(struct sdw_bus *bus, struct sdw_msg *msg)
 {
 	struct amd_sdw_manager *amd_manager = to_amd_sdw(bus);
@@ -405,6 +410,7 @@ static enum sdw_command_response amd_sdw_xfer_msg(struct sdw_bus *bus, struct sd
 	return SDW_CMD_OK;
 }
 
+/* AMD SoundWire bus helper shared across all ACP revisions. */
 static void amd_sdw_fill_slave_status(struct amd_sdw_manager *amd_manager, u16 index, u32 status)
 {
 	switch (status) {
@@ -419,6 +425,7 @@ static void amd_sdw_fill_slave_status(struct amd_sdw_manager *amd_manager, u16 i
 	}
 }
 
+/* AMD SoundWire bus helper shared across all ACP revisions. */
 static void amd_sdw_process_ping_status(u64 response, struct amd_sdw_manager *amd_manager)
 {
 	u64 slave_stat;
@@ -436,12 +443,12 @@ static void amd_sdw_process_ping_status(u64 response, struct amd_sdw_manager *am
 	}
 }
 
-static void amd_sdw_read_and_process_ping_status(struct amd_sdw_manager *amd_manager)
+static void amd_acp63_sdw_read_and_process_ping_status(struct amd_sdw_manager *amd_manager)
 {
 	u64 response;
 
 	mutex_lock(&amd_manager->bus.msg_lock);
-	if (amd_sdw_send_cmd_get_resp(amd_manager, 0, 0, &response)) {
+	if (amd_acp63_sdw_send_cmd_get_resp(amd_manager, 0, 0, &response)) {
 		mutex_unlock(&amd_manager->bus.msg_lock);
 		dev_err_ratelimited(amd_manager->dev, "SDW%x ping status timeout\n",
 				    amd_manager->instance);
@@ -454,7 +461,7 @@ static void amd_sdw_read_and_process_ping_status(struct amd_sdw_manager *amd_man
 	mutex_unlock(&amd_manager->bus.msg_lock);
 }
 
-static u32 amd_sdw_read_ping_status(struct sdw_bus *bus)
+static u32 amd_acp63_sdw_read_ping_status(struct sdw_bus *bus)
 {
 	struct amd_sdw_manager *amd_manager = to_amd_sdw(bus);
 	u64 response;
@@ -463,7 +470,7 @@ static u32 amd_sdw_read_ping_status(struct sdw_bus *bus)
 	/* Called by sdw_show_ping_status() which holds msg_lock. */
 	lockdep_assert_held(&bus->msg_lock);
 
-	if (amd_sdw_send_cmd_get_resp(amd_manager, 0, 0, &response)) {
+	if (amd_acp63_sdw_send_cmd_get_resp(amd_manager, 0, 0, &response)) {
 		dev_err_ratelimited(amd_manager->dev, "SDW%x ping status timeout\n",
 				    amd_manager->instance);
 		return amd_manager->ping_slave_stat == U32_MAX ? 0 : amd_manager->ping_slave_stat;
@@ -476,7 +483,7 @@ static u32 amd_sdw_read_ping_status(struct sdw_bus *bus)
 	return slave_stat;
 }
 
-static int amd_sdw_compute_params(struct sdw_bus *bus, struct sdw_stream_runtime *stream)
+static int amd_acp63_sdw_compute_params(struct sdw_bus *bus, struct sdw_stream_runtime *stream)
 {
 	struct amd_sdw_manager *amd_manager = to_amd_sdw(bus);
 	struct sdw_transport_data t_data = {0};
@@ -562,8 +569,8 @@ static int amd_sdw_compute_params(struct sdw_bus *bus, struct sdw_stream_runtime
 	return 0;
 }
 
-static int amd_sdw_port_params(struct sdw_bus *bus, struct sdw_port_params *p_params,
-			       unsigned int bank)
+static int amd_acp63_sdw_port_params(struct sdw_bus *bus, struct sdw_port_params *p_params,
+				     unsigned int bank)
 {
 	struct amd_sdw_manager *amd_manager = to_amd_sdw(bus);
 	u32 frame_fmt_reg, dpn_frame_fmt;
@@ -599,9 +606,9 @@ static int amd_sdw_port_params(struct sdw_bus *bus, struct sdw_port_params *p_pa
 	return 0;
 }
 
-static int amd_sdw_transport_params(struct sdw_bus *bus,
-				    struct sdw_transport_params *params,
-				    enum sdw_reg_bank bank)
+static int amd_acp63_sdw_transport_params(struct sdw_bus *bus,
+					  struct sdw_transport_params *params,
+					  enum sdw_reg_bank bank)
 {
 	struct amd_sdw_manager *amd_manager = to_amd_sdw(bus);
 	u32 dpn_frame_fmt;
@@ -676,9 +683,9 @@ static int amd_sdw_transport_params(struct sdw_bus *bus,
 	return 0;
 }
 
-static int amd_sdw_port_enable(struct sdw_bus *bus,
-			       struct sdw_enable_ch *enable_ch,
-			       unsigned int bank)
+static int amd_acp63_sdw_port_enable(struct sdw_bus *bus,
+				     struct sdw_enable_ch *enable_ch,
+				     unsigned int bank)
 {
 	struct amd_sdw_manager *amd_manager = to_amd_sdw(bus);
 	u32 dpn_ch_enable;
@@ -755,6 +762,7 @@ static int sdw_master_read_amd_prop(struct sdw_bus *bus)
 	return 0;
 }
 
+/* AMD SoundWire bus helper shared across all ACP revisions. */
 static int amd_prop_read(struct sdw_bus *bus)
 {
 	sdw_master_read_prop(bus);
@@ -762,16 +770,16 @@ static int amd_prop_read(struct sdw_bus *bus)
 	return 0;
 }
 
-static const struct sdw_master_port_ops amd_sdw_port_ops = {
-	.dpn_set_port_params = amd_sdw_port_params,
-	.dpn_set_port_transport_params = amd_sdw_transport_params,
-	.dpn_port_enable_ch = amd_sdw_port_enable,
+static const struct sdw_master_port_ops amd_acp63_sdw_port_ops = {
+	.dpn_set_port_params = amd_acp63_sdw_port_params,
+	.dpn_set_port_transport_params = amd_acp63_sdw_transport_params,
+	.dpn_port_enable_ch = amd_acp63_sdw_port_enable,
 };
 
-static const struct sdw_master_ops amd_sdw_ops = {
+static const struct sdw_master_ops amd_acp63_sdw_ops = {
 	.read_prop = amd_prop_read,
 	.xfer_msg = amd_sdw_xfer_msg,
-	.read_ping_status = amd_sdw_read_ping_status,
+	.read_ping_status = amd_acp63_sdw_read_ping_status,
 };
 
 static int amd_sdw_hw_params(struct snd_pcm_substream *substream,
@@ -941,7 +949,7 @@ static int amd_sdw_register_dais(struct amd_sdw_manager *amd_manager)
 					       dais, num_dais);
 }
 
-static void amd_sdw_update_slave_status_work(struct work_struct *work)
+static void amd_acp63_sdw_update_slave_status_work(struct work_struct *work)
 {
 	struct amd_sdw_manager *amd_manager =
 		container_of(work, struct amd_sdw_manager, amd_sdw_work);
@@ -967,7 +975,7 @@ update_status:
 			       ACP_SW_STATE_CHANGE_STATUS_MASK_0TO7);
 			writel(AMD_SDW_IRQ_MASK_8TO11, amd_manager->mmio +
 			       ACP_SW_STATE_CHANGE_STATUS_MASK_8TO11);
-			amd_sdw_read_and_process_ping_status(amd_manager);
+			amd_acp63_sdw_read_and_process_ping_status(amd_manager);
 			goto update_status;
 		} else {
 			dev_err_ratelimited(amd_manager->dev,
@@ -1001,7 +1009,7 @@ static void amd_sdw_update_slave_status(u32 status_change_0to7, u32 status_chang
 	}
 }
 
-static void amd_sdw_process_wake_event(struct amd_sdw_manager *amd_manager)
+static void amd_acp63_sdw_process_wake_event(struct amd_sdw_manager *amd_manager)
 {
 	dev_dbg(amd_manager->dev, "SoundWire Wake event reported\n");
 	pm_request_resume(amd_manager->dev);
@@ -1009,7 +1017,7 @@ static void amd_sdw_process_wake_event(struct amd_sdw_manager *amd_manager)
 	writel(0x00, amd_manager->mmio + ACP_SW_STATE_CHANGE_STATUS_8TO11);
 }
 
-static void amd_sdw_irq_thread(struct work_struct *work)
+static void amd_acp63_sdw_irq_thread(struct work_struct *work)
 {
 	struct amd_sdw_manager *amd_manager =
 			container_of(work, struct amd_sdw_manager, amd_sdw_irq_thread);
@@ -1024,10 +1032,10 @@ static void amd_sdw_irq_thread(struct work_struct *work)
 	dev_dbg(amd_manager->dev, "[SDW%d] SDW INT: 0to7=0x%x, 8to11=0x%x\n",
 		amd_manager->instance, status_change_0to7, status_change_8to11);
 	if (status_change_8to11 & AMD_SDW_WAKE_STAT_MASK)
-		return amd_sdw_process_wake_event(amd_manager);
+		return amd_acp63_sdw_process_wake_event(amd_manager);
 
 	if (status_change_8to11 & AMD_SDW_PREQ_INTR_STAT) {
-		amd_sdw_read_and_process_ping_status(amd_manager);
+		amd_acp63_sdw_read_and_process_ping_status(amd_manager);
 	} else {
 		/* Check for the updated status on peripheral device */
 		amd_sdw_update_slave_status(status_change_0to7, status_change_8to11, amd_manager);
@@ -1045,17 +1053,17 @@ int amd_sdw_manager_start(struct amd_sdw_manager *amd_manager)
 
 	prop = &amd_manager->bus.prop;
 	if (!prop->hw_disabled) {
-		ret = amd_sdw_clk_init_ctrl(amd_manager);
+		ret = amd_acp63_sdw_clk_init_ctrl(amd_manager);
 		if (ret)
 			return ret;
-		ret = amd_init_sdw_manager(amd_manager);
+		ret = amd_acp63_init_sdw_manager(amd_manager);
 		if (ret)
 			return ret;
-		amd_enable_sdw_interrupts(amd_manager);
-		ret = amd_enable_sdw_manager(amd_manager);
+		amd_acp63_enable_sdw_interrupts(amd_manager);
+		ret = amd_acp63_enable_sdw_manager(amd_manager);
 		if (ret)
 			return ret;
-		amd_sdw_set_frameshape(amd_manager);
+		amd_acp63_sdw_set_frameshape(amd_manager);
 	}
 	/* Enable runtime PM */
 	pm_runtime_set_autosuspend_delay(amd_manager->dev, AMD_SDW_MASTER_SUSPEND_DELAY_MS);
@@ -1091,15 +1099,15 @@ static int amd_sdw_manager_probe(struct platform_device *pdev)
 	amd_manager->ping_slave_stat = U32_MAX;
 	amd_manager->instance = pdata->instance;
 	amd_manager->mmio = amd_manager->acp_mmio +
-			    (amd_manager->instance * SDW_MANAGER_REG_OFFSET);
+			    (amd_manager->instance * ACP63_SDW_MANAGER_REG_OFFSET);
 	amd_manager->acp_sdw_lock = pdata->acp_sdw_lock;
 	amd_manager->acp_rev = pdata->acp_rev;
 	amd_manager->cols_index = sdw_find_col_index(AMD_SDW_DEFAULT_COLUMNS);
 	amd_manager->rows_index = sdw_find_row_index(AMD_SDW_DEFAULT_ROWS);
 	amd_manager->dev = dev;
-	amd_manager->bus.ops = &amd_sdw_ops;
-	amd_manager->bus.port_ops = &amd_sdw_port_ops;
-	amd_manager->bus.compute_params = &amd_sdw_compute_params;
+	amd_manager->bus.ops = &amd_acp63_sdw_ops;
+	amd_manager->bus.port_ops = &amd_acp63_sdw_port_ops;
+	amd_manager->bus.compute_params = &amd_acp63_sdw_compute_params;
 	amd_manager->bus.clk_stop_timeout = 200;
 	amd_manager->bus.link_id = amd_manager->instance;
 
@@ -1156,8 +1164,8 @@ static int amd_sdw_manager_probe(struct platform_device *pdev)
 		return ret;
 	}
 	dev_set_drvdata(dev, amd_manager);
-	INIT_WORK(&amd_manager->amd_sdw_irq_thread, amd_sdw_irq_thread);
-	INIT_WORK(&amd_manager->amd_sdw_work, amd_sdw_update_slave_status_work);
+	INIT_WORK(&amd_manager->amd_sdw_irq_thread, amd_acp63_sdw_irq_thread);
+	INIT_WORK(&amd_manager->amd_sdw_work, amd_acp63_sdw_update_slave_status_work);
 	return 0;
 }
 
@@ -1168,15 +1176,21 @@ static void amd_sdw_manager_remove(struct platform_device *pdev)
 
 	if (pm_runtime_enabled(&pdev->dev))
 		pm_runtime_disable(&pdev->dev);
-	amd_disable_sdw_interrupts(amd_manager);
+	amd_acp63_disable_sdw_interrupts(amd_manager);
 	cancel_work_sync(&amd_manager->amd_sdw_irq_thread);
 	cancel_work_sync(&amd_manager->amd_sdw_work);
 	sdw_bus_master_delete(&amd_manager->bus);
-	ret = amd_disable_sdw_manager(amd_manager);
+	ret = amd_acp63_disable_sdw_manager(amd_manager);
 	if (ret)
 		dev_err(&pdev->dev, "Failed to disable device (%pe)\n", ERR_PTR(ret));
 }
 
+/*
+ * AMD SoundWire clock-stop sequence shared across all ACP revisions.
+ * Differences between revisions in this path are minimal; a switch/case
+ * on acp_rev is sufficient to accommodate any variant-specific additions
+ * needed for future platforms.
+ */
 static int amd_sdw_clock_stop(struct amd_sdw_manager *amd_manager)
 {
 	u32 val;
@@ -1208,7 +1222,7 @@ static int amd_sdw_clock_stop(struct amd_sdw_manager *amd_manager)
 	return 0;
 }
 
-static int amd_sdw_clock_stop_exit(struct amd_sdw_manager *amd_manager)
+static int amd_acp63_sdw_clock_stop_exit(struct amd_sdw_manager *amd_manager)
 {
 	int ret;
 	u32 val;
@@ -1300,7 +1314,7 @@ static int amd_sdw_host_wake_enable_by_rev(struct amd_sdw_manager *amd_manager, 
 	case ACP70_PCI_REV_ID:
 	case ACP71_PCI_REV_ID:
 	case ACP72_PCI_REV_ID:
-		return amd_sdw_host_wake_enable(amd_manager, enable);
+		return amd_acp63_sdw_host_wake_enable(amd_manager, enable);
 	default:
 		dev_err(amd_manager->dev, "unexpected acp_rev 0x%x\n", amd_manager->acp_rev);
 		return -EINVAL;
@@ -1321,22 +1335,22 @@ static int __maybe_unused amd_suspend(struct device *dev)
 	}
 
 	if (amd_manager->power_mode_mask & AMD_SDW_CLK_STOP_MODE) {
-		amd_disable_sdw_interrupts(amd_manager);
+		amd_acp63_disable_sdw_interrupts(amd_manager);
 		cancel_work_sync(&amd_manager->amd_sdw_irq_thread);
 		cancel_work_sync(&amd_manager->amd_sdw_work);
-		amd_sdw_wake_enable(amd_manager, false);
+		amd_acp63_sdw_wake_enable(amd_manager, false);
 		ret = amd_sdw_host_wake_enable_by_rev(amd_manager, false);
 		if (ret)
 			return ret;
 		ret = amd_sdw_clock_stop(amd_manager);
 		if (ret)
 			return ret;
-		amd_enable_sdw_interrupts(amd_manager);
+		amd_acp63_enable_sdw_interrupts(amd_manager);
 	} else if (amd_manager->power_mode_mask & AMD_SDW_POWER_OFF_MODE) {
-		amd_disable_sdw_interrupts(amd_manager);
+		amd_acp63_disable_sdw_interrupts(amd_manager);
 		cancel_work_sync(&amd_manager->amd_sdw_irq_thread);
 		cancel_work_sync(&amd_manager->amd_sdw_work);
-		amd_sdw_wake_enable(amd_manager, false);
+		amd_acp63_sdw_wake_enable(amd_manager, false);
 		ret = amd_sdw_host_wake_enable_by_rev(amd_manager, false);
 		if (ret)
 			return ret;
@@ -1347,7 +1361,7 @@ static int __maybe_unused amd_suspend(struct device *dev)
 		ret = amd_sdw_clock_stop(amd_manager);
 		if (ret)
 			return ret;
-		ret = amd_disable_sdw_manager(amd_manager);
+		ret = amd_acp63_disable_sdw_manager(amd_manager);
 		if (ret)
 			return ret;
 	}
@@ -1357,7 +1371,7 @@ static int __maybe_unused amd_suspend(struct device *dev)
 	case ACP70_PCI_REV_ID:
 	case ACP71_PCI_REV_ID:
 	case ACP72_PCI_REV_ID:
-		ret = amd_sdw_set_device_state(amd_manager, AMD_SDW_DEVICE_STATE_D3);
+		ret = amd_acp63_sdw_set_device_state(amd_manager, AMD_SDW_DEVICE_STATE_D3);
 		if (ret)
 			return ret;
 		break;
@@ -1381,29 +1395,29 @@ static int __maybe_unused amd_suspend_runtime(struct device *dev)
 		return 0;
 	}
 	if (amd_manager->power_mode_mask & AMD_SDW_CLK_STOP_MODE) {
-		amd_disable_sdw_interrupts(amd_manager);
+		amd_acp63_disable_sdw_interrupts(amd_manager);
 		cancel_work_sync(&amd_manager->amd_sdw_irq_thread);
 		cancel_work_sync(&amd_manager->amd_sdw_work);
-		amd_sdw_wake_enable(amd_manager, true);
+		amd_acp63_sdw_wake_enable(amd_manager, true);
 		ret = amd_sdw_host_wake_enable_by_rev(amd_manager, true);
 		if (ret)
 			return ret;
 		ret = amd_sdw_clock_stop(amd_manager);
 		if (ret)
 			return ret;
-		amd_enable_sdw_interrupts(amd_manager);
+		amd_acp63_enable_sdw_interrupts(amd_manager);
 	} else if (amd_manager->power_mode_mask & AMD_SDW_POWER_OFF_MODE) {
-		amd_disable_sdw_interrupts(amd_manager);
+		amd_acp63_disable_sdw_interrupts(amd_manager);
 		cancel_work_sync(&amd_manager->amd_sdw_irq_thread);
 		cancel_work_sync(&amd_manager->amd_sdw_work);
-		amd_sdw_wake_enable(amd_manager, true);
+		amd_acp63_sdw_wake_enable(amd_manager, true);
 		ret = amd_sdw_host_wake_enable_by_rev(amd_manager, true);
 		if (ret)
 			return ret;
 		ret = amd_sdw_clock_stop(amd_manager);
 		if (ret)
 			return ret;
-		ret = amd_disable_sdw_manager(amd_manager);
+		ret = amd_acp63_disable_sdw_manager(amd_manager);
 		if (ret)
 			return ret;
 	}
@@ -1413,7 +1427,7 @@ static int __maybe_unused amd_suspend_runtime(struct device *dev)
 	case ACP70_PCI_REV_ID:
 	case ACP71_PCI_REV_ID:
 	case ACP72_PCI_REV_ID:
-		ret = amd_sdw_set_device_state(amd_manager, AMD_SDW_DEVICE_STATE_D3);
+		ret = amd_acp63_sdw_set_device_state(amd_manager, AMD_SDW_DEVICE_STATE_D3);
 		if (ret)
 			return ret;
 		if (amd_manager->wake_en_mask) {
@@ -1446,7 +1460,7 @@ static int __maybe_unused amd_resume_runtime(struct device *dev)
 	}
 
 	if (amd_manager->power_mode_mask & AMD_SDW_CLK_STOP_MODE) {
-		ret = amd_sdw_clock_stop_exit(amd_manager);
+		ret = amd_acp63_sdw_clock_stop_exit(amd_manager);
 		if (ret)
 			return ret;
 		ret = amd_sdw_host_wake_enable_by_rev(amd_manager, false);
@@ -1481,17 +1495,17 @@ static int __maybe_unused amd_resume_runtime(struct device *dev)
 			}
 		}
 		sdw_clear_slave_status(bus, SDW_UNATTACH_REQUEST_MASTER_RESET);
-		ret = amd_sdw_clk_init_ctrl(amd_manager);
+		ret = amd_acp63_sdw_clk_init_ctrl(amd_manager);
 		if (ret)
 			return ret;
-		ret = amd_init_sdw_manager(amd_manager);
+		ret = amd_acp63_init_sdw_manager(amd_manager);
 		if (ret)
 			return ret;
-		amd_enable_sdw_interrupts(amd_manager);
-		ret = amd_enable_sdw_manager(amd_manager);
+		amd_acp63_enable_sdw_interrupts(amd_manager);
+		ret = amd_acp63_enable_sdw_manager(amd_manager);
 		if (ret)
 			return ret;
-		amd_sdw_set_frameshape(amd_manager);
+		amd_acp63_sdw_set_frameshape(amd_manager);
 	}
 	switch (amd_manager->acp_rev) {
 	case ACP63_PCI_REV_ID:
@@ -1499,7 +1513,7 @@ static int __maybe_unused amd_resume_runtime(struct device *dev)
 	case ACP70_PCI_REV_ID:
 	case ACP71_PCI_REV_ID:
 	case ACP72_PCI_REV_ID:
-		ret = amd_sdw_set_device_state(amd_manager, AMD_SDW_DEVICE_STATE_D0);
+		ret = amd_acp63_sdw_set_device_state(amd_manager, AMD_SDW_DEVICE_STATE_D0);
 		if (ret)
 			return ret;
 		break;
