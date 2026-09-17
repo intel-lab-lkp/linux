@@ -2104,6 +2104,7 @@ static void attach_node_and_children(struct device_node *np)
 	kfree(full_name);
 	if (dup) {
 		update_node_properties(np, dup);
+		of_node_put(dup);
 		return;
 	}
 
