@@ -6500,7 +6500,7 @@ static int hpsa_big_passthru_ioctl(struct ctlr_info *h,
 		return -EINVAL;
 	if (ioc->buf_size > ioc->malloc_size * SG_ENTRIES_IN_CMD)
 		return -EINVAL;
-	buff = kcalloc(SG_ENTRIES_IN_CMD, sizeof(char *), GFP_KERNEL);
+	buff = kcalloc(SG_ENTRIES_IN_CMD, sizeof(*buff), GFP_KERNEL);
 	if (!buff) {
 		status = -ENOMEM;
 		goto cleanup1;
