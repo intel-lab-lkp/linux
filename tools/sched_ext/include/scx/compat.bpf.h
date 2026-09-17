@@ -404,6 +404,23 @@ static inline void scx_bpf_task_set_dsq_vtime(struct task_struct *p, u64 vtime)
 }
 
 /*
+ * v7.4: Add per-task control over whether slice expiry requests lazy or
+ * immediate rescheduling. Older kernels have no equivalent operation, so the
+ * compatibility wrapper is a no-op when the kfunc is unavailable. As with the
+ * setters above, discard the kfunc's authority result for consistency.
+ *
+ * Keep the wrapper until pre-v7.4 kernels fall out of the sched_ext scheduler
+ * support window.
+ */
+bool scx_bpf_task_set_slice_expiry___new(struct task_struct *p, bool lazy) __ksym __weak;
+
+static inline void scx_bpf_task_set_slice_expiry(struct task_struct *p, bool lazy)
+{
+	if (bpf_ksym_exists(scx_bpf_task_set_slice_expiry___new))
+		scx_bpf_task_set_slice_expiry___new(p, lazy);
+}
+
+/*
  * v7.1: New scx_bpf_dsq_reenq() that allows re-enqueues on more DSQs. This
  * will eventually deprecate scx_bpf_reenqueue_local().
  */
