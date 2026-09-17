@@ -2,4 +2,4 @@
 
 CONTEXT_ANALYSIS := y
 
-obj-y += core.o syscalls.o pi.o requeue.o waitwake.o
+obj-y += core.o syscalls.o pi.o ping.o requeue.o waitwake.o

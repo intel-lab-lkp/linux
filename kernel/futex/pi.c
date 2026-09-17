@@ -287,6 +287,8 @@ int attach_to_pi_state(u32 __user *uaddr, u32 uval,
 	 */
 	if (!ping)
 		raw_spin_lock_irq(&pi_state->pi_mutex.wait_lock);
+	else
+		raw_spin_lock_irq(&pi_state->ping_mutex.wait_lock);
 
 	/*
 	 * Since {uval, pi_state} is serialized by wait_lock, and our current
@@ -353,6 +355,9 @@ out_attach:
 	if (!ping) {
 		get_pi_state(pi_state);
 		raw_spin_unlock_irq(&pi_state->pi_mutex.wait_lock);
+	} else {
+		get_ping_state(pi_state);
+		raw_spin_unlock_irq(&pi_state->ping_mutex.wait_lock);
 	}
 	*ps = pi_state;
 	return 0;
@@ -443,6 +448,16 @@ static void __attach_to_pi_owner(struct task_struct *p, union futex_key *key,
 		rt_mutex_init_proxy_locked(&pi_state->pi_mutex, p);
 		WARN_ON(!list_empty(&pi_state->list));
 		list_add(&pi_state->list, &p->futex.pi_state_list);
+	} else {
+		/*
+		 * Initialize the pi_mutex in locked state and make @p
+		 * the owner of it:
+		 */
+		pi_state->ping_mutex.owner = p;
+		raw_spin_lock_init(&pi_state->ping_mutex.wait_lock);
+
+		WARN_ON(!list_empty(&pi_state->list));
+		list_add(&pi_state->list, &p->futex.ping_state_list);
 	}
 
 	/* Store the key for possible exit cleanups: */

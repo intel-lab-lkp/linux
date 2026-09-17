@@ -26,6 +26,7 @@ struct futex_sched_data {
 	struct compat_robust_list_head __user	*compat_robust_list;
 #endif
 	struct list_head			pi_state_list;
+	struct list_head			ping_state_list;
 	struct futex_pi_state			*pi_state_cache;
 	struct mutex				exit_mutex;
 	unsigned int				state;
