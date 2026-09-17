@@ -1502,13 +1502,15 @@ static int wcn36xx_platform_get_resources(struct wcn36xx *wcn,
 			"tx-rings-empty", &wcn->tx_rings_empty_state_bit);
 	if (IS_ERR(wcn->tx_rings_empty_state)) {
 		wcn36xx_err("failed to get tx-rings-empty state\n");
+		qcom_smem_state_put(wcn->tx_enable_state);
 		return PTR_ERR(wcn->tx_rings_empty_state);
 	}
 
 	mmio_node = of_parse_phandle(pdev->dev.parent->of_node, "qcom,mmio", 0);
 	if (!mmio_node) {
 		wcn36xx_err("failed to acquire qcom,mmio reference\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto put_mmio_node;
 	}
 
 	wcn->is_pronto = !!of_device_is_compatible(mmio_node, "qcom,pronto");
@@ -1552,6 +1554,7 @@ unmap_ccu:
 	iounmap(wcn->ccu_base);
 put_mmio_node:
 	of_node_put(mmio_node);
+	qcom_smem_state_put(wcn->tx_enable_state);
 	return ret;
 }
 
