@@ -977,6 +977,10 @@ __acquires(m66592->lock)
 		break;
 	case USB_RECIP_ENDPOINT:
 		ep = m66592->epaddr2ep[w_index & USB_ENDPOINT_NUMBER_MASK];
+		if (!ep) {
+			pipe_stall(m66592, 0);
+			return;		/* exit */
+		}
 		pid = control_reg_get_pid(m66592, ep->pipenum);
 		if (pid == M66592_PID_STALL)
 			status = 1 << USB_ENDPOINT_HALT;
@@ -1012,6 +1016,10 @@ static void clear_feature(struct m66592 *m66592, struct usb_ctrlrequest *ctrl)
 		u16 w_index = le16_to_cpu(ctrl->wIndex);
 
 		ep = m66592->epaddr2ep[w_index & USB_ENDPOINT_NUMBER_MASK];
+		if (!ep) {
+			pipe_stall(m66592, 0);
+			break;
+		}
 		pipe_stop(m66592, ep->pipenum);
 		control_reg_sqclr(m66592, ep->pipenum);
 
@@ -1069,6 +1077,10 @@ static void set_feature(struct m66592 *m66592, struct usb_ctrlrequest *ctrl)
 		u16 w_index = le16_to_cpu(ctrl->wIndex);
 
 		ep = m66592->epaddr2ep[w_index & USB_ENDPOINT_NUMBER_MASK];
+		if (!ep) {
+			pipe_stall(m66592, 0);
+			break;
+		}
 		pipe_stall(m66592, ep->pipenum);
 
 		control_end(m66592, 1);
