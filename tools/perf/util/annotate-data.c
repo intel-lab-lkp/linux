@@ -4,20 +4,23 @@
  *
  * Written by Namhyung Kim <namhyung@kernel.org>
  */
+#include "annotate-data.h"
+
 #include <errno.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <inttypes.h>
+#include <string.h>
+
 #include <linux/zalloc.h>
 
 #include "annotate.h"
-#include "annotate-data.h"
-#include "debuginfo.h"
 #include "debug.h"
+#include "debuginfo.h"
 #include "dso.h"
 #include "dwarf-regs.h"
-#include "evsel.h"
 #include "evlist.h"
+#include "evsel.h"
 #include "map.h"
 #include "map_symbol.h"
 #include "sort.h"
