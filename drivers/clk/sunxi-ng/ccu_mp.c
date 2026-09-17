@@ -236,9 +236,11 @@ static int ccu_mp_set_rate(struct clk_hw *hw, unsigned long rate,
 	spin_lock_irqsave(cmp->common.lock, flags);
 
 	reg = readl(cmp->common.base + cmp->common.reg);
-	reg &= ~GENMASK(cmp->m.width + cmp->m.shift - 1, cmp->m.shift);
+	if (cmp->m.width)
+		reg &= ~GENMASK(cmp->m.width + cmp->m.shift - 1, cmp->m.shift);
 	reg &= ~GENMASK(cmp->p.width + cmp->p.shift - 1, cmp->p.shift);
-	reg |= (m - cmp->m.offset) << cmp->m.shift;
+	if (cmp->m.width)
+		reg |= (m - cmp->m.offset) << cmp->m.shift;
 	if (shift)
 		reg |= ilog2(p) << cmp->p.shift;
 	else
