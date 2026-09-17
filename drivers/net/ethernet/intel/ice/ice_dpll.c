@@ -4124,13 +4124,13 @@ static int ice_dpll_init_pins(struct ice_pf *pf, bool cgu)
 			if (ret)
 				goto deinit_sma;
 			count += ICE_DPLL_PIN_SW_NUM;
+			ret = ice_dpll_pin_ref_sync_register(pf->dplls.sma,
+							     ICE_DPLL_PIN_SW_NUM);
+			if (ret)
+				goto deinit_ufl;
 		}
 		ret = ice_dpll_pin_ref_sync_register(pf->dplls.inputs,
 						     pf->dplls.num_inputs);
-		if (ret)
-			goto deinit_ufl;
-		ret = ice_dpll_pin_ref_sync_register(pf->dplls.sma,
-						     ICE_DPLL_PIN_SW_NUM);
 		if (ret)
 			goto deinit_ufl;
 	} else {
@@ -4501,6 +4501,8 @@ static int ice_dpll_init_info_sw_pins(struct ice_pf *pf)
 	int i, ret;
 	u8 data;
 
+	if (d->generic)
+		goto init_sma_ctrl;
 	if (pf->hw.device_id == ICE_DEV_ID_E810C_QSFP)
 		input_idx_offset = ICE_E810_RCLK_PINS_NUM;
 	phase_adj_max = max(d->input_phase_adj_max, d->output_phase_adj_max);
@@ -4566,6 +4568,7 @@ static int ice_dpll_init_info_sw_pins(struct ice_pf *pf)
 		ice_dpll_phase_range_set(&pin->prop.phase_range, phase_adj_max);
 	}
 
+init_sma_ctrl:
 	if (!ice_is_feature_supported(pf, ICE_F_SMA_CTRL))
 		return 0;
 
@@ -4584,7 +4587,7 @@ static int ice_dpll_init_info_sw_pins(struct ice_pf *pf)
 	if (ret)
 		return ret;
 
-	ret = ice_dpll_pin_state_update(pf, pin, ICE_DPLL_PIN_TYPE_SOFTWARE,
+	ret = ice_dpll_pin_state_update(pf, d->sma, ICE_DPLL_PIN_TYPE_SOFTWARE,
 					NULL);
 	if (ret)
 		return ret;
