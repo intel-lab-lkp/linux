@@ -1238,8 +1238,7 @@ static unsigned long *
 xfs_alloc_bucket_bitmap(
 	struct xfs_mount	*mp)
 {
-	return kvmalloc_array(BITS_TO_LONGS(mp->m_sb.sb_rgcount),
-			sizeof(unsigned long), GFP_KERNEL | __GFP_ZERO);
+	return kvzalloc_objs(unsigned long, BITS_TO_LONGS(mp->m_sb.sb_rgcount));
 }
 
 static struct xfs_zone_info *
