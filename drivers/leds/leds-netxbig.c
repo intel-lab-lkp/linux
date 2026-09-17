@@ -597,8 +597,7 @@ static int netxbig_leds_get_of_pdata(struct device *dev,
 	pdata->leds = leds;
 	pdata->num_leds = num_leds;
 
-	return 0;
-
+	ret = 0;
 put_device:
 	put_device(gpio_ext_dev);
 	return ret;
