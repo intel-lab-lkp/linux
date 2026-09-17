@@ -18,6 +18,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/property.h>
+#include <linux/reset.h>
 #include <linux/slab.h>
 
 #include <media/rcar-fcp.h>
@@ -63,6 +64,8 @@
 #define RCAR_FCP_REG_BA_REF_Y2			0x0118
 #define RCAR_FCP_REG_BA_REF_C			0x011c
 
+struct reset_control;
+
 enum rcar_fcp_type {
 	RCAR_FCPF,
 	RCAR_FCPV,
@@ -73,6 +76,7 @@ struct rcar_fcp_device {
 	struct device *dev;
 	void __iomem *base;
 	enum rcar_fcp_type type;
+	struct reset_control *rstc;
 };
 
 static LIST_HEAD(fcp_devices);
@@ -262,11 +266,18 @@ static int rcar_fcp_probe(struct platform_device *pdev)
 	fcp->dev = &pdev->dev;
 	fcp->type = (enum rcar_fcp_type)device_get_match_data(&pdev->dev);
 
+	platform_set_drvdata(pdev, fcp);
+
 	fcp->base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(fcp->base))
 		return PTR_ERR(fcp->base);
 
 	dma_set_max_seg_size(fcp->dev, UINT_MAX);
+
+	fcp->rstc = devm_reset_control_get_optional(&pdev->dev, NULL);
+	if (IS_ERR(fcp->rstc))
+		return dev_err_probe(&pdev->dev, PTR_ERR(fcp->rstc),
+				     "failed to get reset control\n");
 
 	pm_runtime_enable(&pdev->dev);
 	ret = pm_runtime_resume_and_get(&pdev->dev);
@@ -282,8 +293,6 @@ static int rcar_fcp_probe(struct platform_device *pdev)
 	mutex_lock(&fcp_lock);
 	list_add_tail(&fcp->list, &fcp_devices);
 	mutex_unlock(&fcp_lock);
-
-	platform_set_drvdata(pdev, fcp);
 
 	return 0;
 
@@ -305,11 +314,32 @@ static void rcar_fcp_remove(struct platform_device *pdev)
 	pm_runtime_disable(&pdev->dev);
 }
 
+static int fcp_pm_runtime_suspend(struct device *dev)
+{
+	struct rcar_fcp_device *fcp = dev_get_drvdata(dev);
+
+	reset_control_assert(fcp->rstc);
+	return 0;
+}
+
+static int fcp_pm_runtime_resume(struct device *dev)
+{
+	struct rcar_fcp_device *fcp = dev_get_drvdata(dev);
+
+	reset_control_deassert(fcp->rstc);
+	return 0;
+}
+
+static const struct dev_pm_ops fcp_pm_ops = {
+	RUNTIME_PM_OPS(fcp_pm_runtime_suspend, fcp_pm_runtime_resume, NULL)
+};
+
 static struct platform_driver rcar_fcp_platform_driver = {
 	.probe		= rcar_fcp_probe,
 	.remove		= rcar_fcp_remove,
 	.driver		= {
 		.name	= "rcar-fcp",
+		.pm = pm_ptr(&fcp_pm_ops),
 		.of_match_table = rcar_fcp_of_match,
 		.suppress_bind_attrs = true,
 	},
