@@ -623,20 +623,28 @@ static int xgene_pcie_probe(struct platform_device *pdev)
 
 	ret = xgene_pcie_map_reg(port, pdev);
 	if (ret)
-		return ret;
+		goto err_put_node;
 
 	ret = xgene_pcie_init_port(port);
 	if (ret)
-		return ret;
+		goto err_put_node;
 
 	ret = xgene_pcie_setup(port);
 	if (ret)
-		return ret;
+		goto err_put_node;
 
 	bridge->sysdata = port;
 	bridge->ops = &xgene_pcie_ops;
 
-	return pci_host_probe(bridge);
+	ret = pci_host_probe(bridge);
+	if (ret)
+		goto err_put_node;
+
+	return 0;
+
+err_put_node:
+	of_node_put(port->node);
+	return ret;
 }
 
 static const struct of_device_id xgene_pcie_match_table[] = {
