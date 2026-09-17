@@ -278,7 +278,7 @@ rx_handler_result_t tap_handle_frame(struct sk_buff **pskb)
 	if (q->flags & IFF_VNET_HDR)
 		features |= tap->tap_features;
 	if (netif_needs_gso(skb, features)) {
-		struct sk_buff *segs = __skb_gso_segment(skb, features, false);
+		struct sk_buff *segs = __skb_gso_segment(skb, features, false, 0);
 		struct sk_buff *next;
 
 		if (IS_ERR(segs)) {
