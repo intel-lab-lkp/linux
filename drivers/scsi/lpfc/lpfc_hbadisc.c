@@ -4664,9 +4664,15 @@ lpfc_nlp_reg_node(struct lpfc_vport *vport, struct lpfc_nodelist *ndlp)
 			}
 		} else {
 			/* Just take an NDLP ref count since the
-			 * target does not register rports.
+			 * target does not register rports. Mark it as
+			 * an NVME transport ref so that
+			 * lpfc_nlp_unreg_node() releases it.
 			 */
 			lpfc_nlp_get(ndlp);
+
+			spin_lock_irqsave(&ndlp->lock, iflags);
+			ndlp->fc4_xpt_flags |= NVME_XPT_REGD;
+			spin_unlock_irqrestore(&ndlp->lock, iflags);
 		}
 	}
 }
