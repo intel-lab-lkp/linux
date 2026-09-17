@@ -794,7 +794,8 @@ static void cxl_walk_cel(struct cxl_memdev_state *mds, size_t size, u8 *cel)
 	set_features_cap(cxl_mbox, ro_cmds, wr_cmds);
 }
 
-static struct cxl_mbox_get_supported_logs *cxl_get_gsl(struct cxl_memdev_state *mds)
+static struct cxl_mbox_get_supported_logs *cxl_get_gsl(struct cxl_memdev_state *mds,
+						       size_t *len)
 {
 	struct cxl_mailbox *cxl_mbox = &mds->cxlds.cxl_mbox;
 	struct cxl_mbox_get_supported_logs *ret;
@@ -818,6 +819,7 @@ static struct cxl_mbox_get_supported_logs *cxl_get_gsl(struct cxl_memdev_state *
 		return ERR_PTR(rc);
 	}
 
+	*len = mbox_cmd.size_out;	/* bytes actually received */
 
 	return ret;
 }
@@ -849,17 +851,46 @@ int cxl_enumerate_cmds(struct cxl_memdev_state *mds)
 	struct cxl_mbox_get_supported_logs *gsl;
 	struct device *dev = mds->cxlds.dev;
 	struct cxl_mem_command *cmd;
+	size_t gsl_len, gsl_hdr_size, max_entries;
 	int i, rc;
 
-	gsl = cxl_get_gsl(mds);
+	gsl = cxl_get_gsl(mds, &gsl_len);
 	if (IS_ERR(gsl))
 		return PTR_ERR(gsl);
 
+	/*
+	 * The device chooses the reported payload length and min_out only
+	 * requires the entry count field on its own (2 bytes), so a response
+	 * shorter than the header is reachable.  There is nothing to enumerate
+	 * in that case: fail rather than derive a bound from an underflowed
+	 * subtraction.
+	 */
+	gsl_hdr_size = struct_offset(gsl, entry);
+	if (gsl_len < gsl_hdr_size) {
+		dev_err(dev,
+		"GSL: response of %zu bytes is too short for the header\n",
+		gsl_len);
+		return -EIO;
+	}
+
+	max_entries = (gsl_len - gsl_hdr_size) / sizeof(gsl->entry[0]);
+
 	rc = -ENOENT;
 	for (i = 0; i < le16_to_cpu(gsl->entries); i++) {
-		u32 size = le32_to_cpu(gsl->entry[i].size);
-		uuid_t uuid = gsl->entry[i].uuid;
+		u32 size;
+		uuid_t uuid;
 		u8 *log;
+
+		if (i >= max_entries) {
+			dev_warn_ratelimited(dev,
+					     "GSL: device claimed %u entries but the payload holds %zu\n",
+					     le16_to_cpu(gsl->entries),
+					     max_entries);
+			break;
+		}
+
+		size = le32_to_cpu(gsl->entry[i].size);
+		uuid = gsl->entry[i].uuid;
 
 		dev_dbg(dev, "Found LOG type %pU of size %d", &uuid, size);
 
