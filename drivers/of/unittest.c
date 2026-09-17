@@ -1379,6 +1379,7 @@ static void __init of_unittest_bus_3cell_ranges(void)
 
 	if (of_range_parser_init(&parser, np)) {
 		pr_err("missing ranges property\n");
+		of_node_put(np);
 		return;
 	}
 
