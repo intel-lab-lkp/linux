@@ -3197,14 +3197,22 @@ init_failed:
  */
 void idpf_vc_core_deinit(struct idpf_adapter *adapter)
 {
-	bool remove_in_prog;
+	bool reset_in_prog;
 
 	if (!test_bit(IDPF_VC_CORE_INIT, adapter->flags))
 		return;
 
-	/* Avoid transaction timeouts when called during reset */
-	remove_in_prog = test_bit(IDPF_REMOVE_IN_PROG, adapter->flags);
-	if (!remove_in_prog)
+	/* Shut the transaction manager down early only when the mailbox is
+	 * already gone, i.e. a hard reset is in progress or has been detected,
+	 * to avoid waiting for transaction timeouts. On remove and on shutdown
+	 * the mailbox still works and must stay up until the vports are torn
+	 * down. Otherwise the disable and destroy messages never reach the
+	 * device, which keeps its queues enabled with ring addresses from this
+	 * kernel after a warm reboot.
+	 */
+	reset_in_prog = test_bit(IDPF_HR_RESET_IN_PROG, adapter->flags) ||
+			idpf_is_reset_detected(adapter);
+	if (reset_in_prog)
 		libie_ctlq_xn_shutdown(adapter->xnm);
 
 	idpf_ptp_release(adapter);
@@ -3213,7 +3221,7 @@ void idpf_vc_core_deinit(struct idpf_adapter *adapter)
 	idpf_rel_rx_pt_lkup(adapter);
 	idpf_intr_rel(adapter);
 
-	if (remove_in_prog)
+	if (!reset_in_prog)
 		libie_ctlq_xn_shutdown(adapter->xnm);
 
 	cancel_delayed_work_sync(&adapter->serv_task);
