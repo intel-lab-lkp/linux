@@ -199,10 +199,11 @@ static int amd_pmf_get_battery_prop(enum power_supply_property prop)
 			continue;
 
 		ret = power_supply_get_property(psy, prop, &value);
-		if (ret) {
-			power_supply_put(psy);
+		power_supply_put(psy);
+		if (ret)
 			return ret;
-		}
+
+		break;
 	}
 
 	return value.intval;
