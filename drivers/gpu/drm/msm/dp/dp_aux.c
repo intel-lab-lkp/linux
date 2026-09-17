@@ -679,6 +679,14 @@ u32 msm_dp_aux_is_link_connected(struct drm_dp_aux *msm_dp_aux)
 	return status;
 }
 
+bool msm_dp_aux_is_edp(struct drm_dp_aux *msm_dp_aux)
+{
+	struct msm_dp_aux_private *aux =
+		container_of(msm_dp_aux, struct msm_dp_aux_private, msm_dp_aux);
+
+	return aux->is_edp;
+}
+
 struct drm_dp_aux *msm_dp_aux_get(struct device *dev,
 			      struct phy *phy,
 			      bool is_edp,

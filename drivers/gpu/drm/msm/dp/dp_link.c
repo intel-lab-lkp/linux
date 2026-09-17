@@ -725,6 +725,16 @@ static int msm_dp_link_parse_sink_status_field(struct msm_dp_link_private *link)
 		DRM_ERROR("DP parse sink count failed\n");
 		return ret;
 	}
+
+	/*
+	 * Some eDP sinks do not report a valid sink count, even though they
+	 * otherwise participate in link training and DPCD capability exchange.
+	 * Treat a zero raw count as a valid non-zero placeholder so we do not
+	 * misclassify the link as disconnected on eDP.
+	 */
+	if (msm_dp_aux_is_edp(link->aux) && ret == 0)
+		ret = 1;
+
 	link->msm_dp_link.sink_count = ret;
 
 	ret = drm_dp_dpcd_read_link_status(link->aux,
