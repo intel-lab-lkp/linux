@@ -6043,7 +6043,24 @@ static int resp_atomic_write(struct scsi_cmnd *scp,
 		}
 	}
 
+	if (sdebug_dev_is_zoned(devip))
+		sdeb_meta_write_lock(sip);
+
+	ret = check_device_access_params(scp, lba, len, true);
+	if (ret) {
+		if (sdebug_dev_is_zoned(devip))
+			sdeb_meta_write_unlock(sip);
+		return ret;
+	}
+
 	ret = do_device_access(sip, scp, 0, lba, len, 0, true, true);
+
+	/* If ZBC zone then bump its write pointer */
+	if (sdebug_dev_is_zoned(devip)) {
+		zbc_inc_wp(devip, lba, len);
+		sdeb_meta_write_unlock(sip);
+	}
+
 	if (unlikely(ret == -1))
 		return DID_ERROR << 16;
 	if (unlikely(ret != len * sdebug_sector_size))
