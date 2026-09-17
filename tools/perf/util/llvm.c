@@ -1,5 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "llvm.h"
+
+#include <errno.h>
+#include <inttypes.h>
+#include <stdlib.h>
+
+#include <fcntl.h>
+#include <linux/zalloc.h>
+#include <unistd.h>
+
 #include "annotate.h"
 #include "debug.h"
 #include "dso.h"
@@ -7,10 +16,6 @@
 #include "namespaces.h"
 #include "srcline.h"
 #include "symbol.h"
-#include <errno.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <linux/zalloc.h>
 
 #ifdef HAVE_LIBLLVM_SUPPORT
 #include "llvm-c-helpers.h"
