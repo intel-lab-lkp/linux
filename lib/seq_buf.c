@@ -200,6 +200,39 @@ int seq_buf_puts(struct seq_buf *s, const char *str)
 EXPORT_SYMBOL_GPL(seq_buf_puts);
 
 /**
+ * seq_buf_puts_trunc - append as much of a string as fits, keeping any of it
+ * @s: the seq_buf handle
+ * @str: the string to append
+ *
+ * This copies the leading bytes of @str that fit, reserving room for the NUL
+ * terminator later added by seq_buf_str(). This differs from seq_buf_puts(),
+ * which writes nothing at all if @str doesn't fully fit.
+ *
+ * Unlike seq_buf_puts(), this does NOT NUL-terminate @s->buffer as it
+ * goes (it copies raw bytes via seq_buf_putmem(), not @str's own
+ * terminator). Callers MUST call seq_buf_str() or seq_buf_strlen()
+ * before using @s->buffer as a C string.
+ *
+ * Returns: the number of bytes copied from @str.
+ */
+size_t seq_buf_puts_trunc(struct seq_buf *s, const char *str)
+{
+	size_t len = strlen(str);
+
+	WARN_ON(s->size == 0);
+
+	if (seq_buf_can_fit(s, len))
+		return seq_buf_puts(s, str);
+
+	/* Truncate the string to fit the buffer. */
+	len = s->size - s->len;
+	memcpy(s->buffer + s->len, str, len);
+	seq_buf_set_overflow(s);
+	return len;
+}
+EXPORT_SYMBOL_GPL(seq_buf_puts_trunc);
+
+/**
  * seq_buf_putc - sequence printing of simple character
  * @s: seq_buf descriptor
  * @c: simple character to record

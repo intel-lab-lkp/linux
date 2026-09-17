@@ -23,6 +23,21 @@ static void seq_buf_init_test(struct kunit *test)
 	KUNIT_EXPECT_STREQ(test, seq_buf_str(&s), "");
 }
 
+static void seq_buf_init_append_test(struct kunit *test)
+{
+	char buf[32] = "hello world";
+	struct seq_buf s;
+
+	seq_buf_init_append(&s, buf, sizeof(buf));
+
+	KUNIT_EXPECT_EQ(test, s.size, 32);
+	KUNIT_EXPECT_EQ(test, s.len, 11);
+	KUNIT_EXPECT_FALSE(test, seq_buf_has_overflowed(&s));
+	KUNIT_EXPECT_EQ(test, seq_buf_buffer_left(&s), 32 - 11);
+	KUNIT_EXPECT_EQ(test, seq_buf_used(&s), 11);
+	KUNIT_EXPECT_STREQ(test, seq_buf_str(&s), "hello world");
+}
+
 static void seq_buf_declare_test(struct kunit *test)
 {
 	DECLARE_SEQ_BUF(s, 24);
@@ -49,6 +64,36 @@ static void seq_buf_clear_test(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, s.len, 0);
 	KUNIT_EXPECT_FALSE(test, seq_buf_has_overflowed(&s));
 	KUNIT_EXPECT_STREQ(test, seq_buf_str(&s), "");
+}
+
+static void seq_buf_strlen_test(struct kunit *test)
+{
+	DECLARE_SEQ_BUF(s, 16);
+
+	seq_buf_puts(&s, "hello world!");
+	KUNIT_EXPECT_EQ(test, seq_buf_strlen(&s), 12);
+	KUNIT_EXPECT_FALSE(test, seq_buf_has_overflowed(&s));
+	KUNIT_EXPECT_STREQ(test, seq_buf_str(&s), "hello world!");
+
+	seq_buf_puts(&s, " It's a small world!");
+	KUNIT_EXPECT_EQ(test, seq_buf_strlen(&s), s.size - 1);
+	KUNIT_EXPECT_TRUE(test, seq_buf_has_overflowed(&s));
+	KUNIT_EXPECT_STREQ(test, seq_buf_str(&s), "hello world!");
+}
+
+static void seq_buf_puts_trunc_test(struct kunit *test)
+{
+	DECLARE_SEQ_BUF(s, 10);
+
+	seq_buf_puts(&s, "hello");
+	KUNIT_EXPECT_EQ(test, seq_buf_used(&s), 5);
+	KUNIT_EXPECT_FALSE(test, seq_buf_has_overflowed(&s));
+	KUNIT_EXPECT_STREQ(test, seq_buf_str(&s), "hello");
+
+	seq_buf_puts_trunc(&s, " world!");
+	KUNIT_EXPECT_EQ(test, seq_buf_strlen(&s), s.size - 1);
+	KUNIT_EXPECT_TRUE(test, seq_buf_has_overflowed(&s));
+	KUNIT_EXPECT_STREQ(test, seq_buf_str(&s), "hello wor");
 }
 
 static void seq_buf_puts_test(struct kunit *test)
@@ -218,8 +263,11 @@ static void seq_buf_putmem_hex_overflow_test(struct kunit *test)
 
 static struct kunit_case seq_buf_test_cases[] = {
 	KUNIT_CASE(seq_buf_init_test),
+	KUNIT_CASE(seq_buf_init_append_test),
 	KUNIT_CASE(seq_buf_declare_test),
 	KUNIT_CASE(seq_buf_clear_test),
+	KUNIT_CASE(seq_buf_strlen_test),
+	KUNIT_CASE(seq_buf_puts_trunc_test),
 	KUNIT_CASE(seq_buf_puts_test),
 	KUNIT_CASE(seq_buf_puts_overflow_test),
 	KUNIT_CASE(seq_buf_putc_test),
