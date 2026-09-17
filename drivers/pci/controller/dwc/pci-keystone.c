@@ -528,7 +528,7 @@ static void ks_pcie_quirk(struct pci_dev *dev)
 {
 	struct pci_bus *bus = dev->bus;
 	struct keystone_pcie *ks_pcie;
-	struct device *bridge_dev;
+	struct device *bridge_dev = NULL;
 	struct pci_dev *bridge;
 	u32 val;
 
@@ -582,23 +582,27 @@ static void ks_pcie_quirk(struct pci_dev *dev)
 	if (pci_match_id(am6_pci_devids, bridge)) {
 		bridge_dev = pci_get_host_bridge_device(dev);
 		if (!bridge_dev || !bridge_dev->parent)
-			return;
+			goto out;
 
 		ks_pcie = dev_get_drvdata(bridge_dev->parent);
 		if (!ks_pcie)
-			return;
+			goto out;
 
 		val = ks_pcie_app_readl(ks_pcie, PID);
 		val &= RTL;
 		val >>= RTL_SHIFT;
 		if (val != AM6_PCI_PG1_RTL_VER)
-			return;
+			goto out;
 
 		if (pcie_get_readrq(dev) > 128) {
 			dev_info(&dev->dev, "limiting MRRS to 128 bytes\n");
 			pcie_set_readrq(dev, 128);
 		}
 	}
+
+out:
+	if (bridge_dev)
+		pci_put_host_bridge_device(bridge_dev);
 }
 DECLARE_PCI_FIXUP_ENABLE(PCI_ANY_ID, PCI_ANY_ID, ks_pcie_quirk);
 
