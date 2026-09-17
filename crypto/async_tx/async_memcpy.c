@@ -58,9 +58,9 @@ async_memcpy(struct page *dest, struct page *src, unsigned int dest_offset,
 					      DMA_FROM_DEVICE);
 		unmap->len = len;
 
-		tx = device->device_prep_dma_memcpy(chan, unmap->addr[1],
-						    unmap->addr[0], len,
-						    dma_prep_flags);
+		tx = dmaengine_prep_dma_memcpy(chan, unmap->addr[1],
+					       unmap->addr[0], len,
+					       dma_prep_flags);
 	}
 
 	if (tx) {
