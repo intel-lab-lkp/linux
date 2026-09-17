@@ -19,10 +19,6 @@
 #include "erdma_cm.h"
 #include "erdma_verbs.h"
 
-static int erdma_mem_init(struct erdma_dev *dev, struct erdma_mem *mem,
-			  struct erdma_mem_init_attr *attr);
-static void erdma_mem_uninit(struct erdma_dev *dev, struct erdma_mem *mem);
-
 static void assemble_qbuf_mtt_for_cmd(struct erdma_mem *mem, u32 *cfg,
 				      u64 *addr0, u64 *addr1)
 {
@@ -473,92 +469,6 @@ static int erdma_qp_validate_attr(struct erdma_dev *dev,
 	return 0;
 }
 
-static void free_kernel_qp(struct erdma_qp *qp)
-{
-	struct erdma_dev *dev = qp->dev;
-
-	vfree(qp->kern_qp.swr_tbl);
-	vfree(qp->kern_qp.rwr_tbl);
-
-	erdma_mem_uninit(dev, &qp->kern_qp.sq_mem);
-	dma_pool_free(dev->db_pool, qp->kern_qp.sq_dbrec,
-		      qp->kern_qp.sq_dbrec_dma);
-	erdma_mem_uninit(dev, &qp->kern_qp.rq_mem);
-	dma_pool_free(dev->db_pool, qp->kern_qp.rq_dbrec,
-		      qp->kern_qp.rq_dbrec_dma);
-}
-
-static int init_kernel_qp(struct erdma_dev *dev, struct erdma_qp *qp,
-			  struct ib_qp_init_attr *attrs)
-{
-	struct erdma_mem_init_attr attr = {
-		.type = ERDMA_KMEM,
-	};
-	struct erdma_kqp *kqp = &qp->kern_qp;
-	int ret = -ENOMEM;
-	int size;
-
-	if (attrs->sq_sig_type == IB_SIGNAL_ALL_WR)
-		kqp->sig_all = 1;
-
-	kqp->sq_pi = 0;
-	kqp->sq_ci = 0;
-	kqp->rq_pi = 0;
-	kqp->rq_ci = 0;
-	kqp->hw_sq_db =
-		dev->func_bar + (ERDMA_SDB_SHARED_PAGE_INDEX << PAGE_SHIFT);
-	kqp->hw_rq_db = dev->func_bar + ERDMA_BAR_RQDB_SPACE_OFFSET;
-
-	kqp->swr_tbl = vmalloc_array(qp->attrs.sq_size, sizeof(u64));
-	if (!kqp->swr_tbl)
-		return -ENOMEM;
-
-	kqp->rwr_tbl = vmalloc_array(qp->attrs.rq_size, sizeof(u64));
-	if (!kqp->rwr_tbl)
-		goto err_free_swr_tbl;
-
-	size = qp->attrs.sq_size << SQEBB_SHIFT;
-	attr.len = size;
-	ret = erdma_mem_init(dev, &kqp->sq_mem, &attr);
-	if (ret)
-		goto err_free_rwr_tbl;
-
-	kqp->sq_dbrec =
-		dma_pool_zalloc(dev->db_pool, GFP_KERNEL, &kqp->sq_dbrec_dma);
-	if (!kqp->sq_dbrec) {
-		ret = -ENOMEM;
-		goto err_free_sq_mem;
-	}
-
-	size = qp->attrs.rq_size << RQE_SHIFT;
-	attr.len = size;
-	ret = erdma_mem_init(dev, &kqp->rq_mem, &attr);
-	if (ret)
-		goto err_free_sq_dbrec;
-
-	kqp->rq_dbrec =
-		dma_pool_zalloc(dev->db_pool, GFP_KERNEL, &kqp->rq_dbrec_dma);
-	if (!kqp->rq_dbrec) {
-		ret = -ENOMEM;
-		goto err_free_rq_mem;
-	}
-
-	return 0;
-
-err_free_rq_mem:
-	erdma_mem_uninit(dev, &kqp->rq_mem);
-err_free_sq_dbrec:
-	dma_pool_free(dev->db_pool, kqp->sq_dbrec, kqp->sq_dbrec_dma);
-err_free_sq_mem:
-	erdma_mem_uninit(dev, &kqp->sq_mem);
-err_free_rwr_tbl:
-	vfree(kqp->rwr_tbl);
-err_free_swr_tbl:
-	vfree(kqp->swr_tbl);
-
-	return ret;
-}
-
 static void erdma_init_mtt_leaf(struct erdma_mem *mem, struct erdma_mtt *mtt)
 {
 	struct ib_block_iter biter;
@@ -930,6 +840,92 @@ static void erdma_mem_uninit(struct erdma_dev *dev, struct erdma_mem *mem)
 {
 	erdma_destroy_mtt(dev, mem->mtt);
 	erdma_mem_free(dev, mem);
+}
+
+static void free_kernel_qp(struct erdma_qp *qp)
+{
+	struct erdma_dev *dev = qp->dev;
+
+	vfree(qp->kern_qp.swr_tbl);
+	vfree(qp->kern_qp.rwr_tbl);
+
+	erdma_mem_uninit(dev, &qp->kern_qp.sq_mem);
+	dma_pool_free(dev->db_pool, qp->kern_qp.sq_dbrec,
+		      qp->kern_qp.sq_dbrec_dma);
+	erdma_mem_uninit(dev, &qp->kern_qp.rq_mem);
+	dma_pool_free(dev->db_pool, qp->kern_qp.rq_dbrec,
+		      qp->kern_qp.rq_dbrec_dma);
+}
+
+static int init_kernel_qp(struct erdma_dev *dev, struct erdma_qp *qp,
+			  struct ib_qp_init_attr *attrs)
+{
+	struct erdma_mem_init_attr attr = {
+		.type = ERDMA_KMEM,
+	};
+	struct erdma_kqp *kqp = &qp->kern_qp;
+	int ret = -ENOMEM;
+	int size;
+
+	if (attrs->sq_sig_type == IB_SIGNAL_ALL_WR)
+		kqp->sig_all = 1;
+
+	kqp->sq_pi = 0;
+	kqp->sq_ci = 0;
+	kqp->rq_pi = 0;
+	kqp->rq_ci = 0;
+	kqp->hw_sq_db =
+		dev->func_bar + (ERDMA_SDB_SHARED_PAGE_INDEX << PAGE_SHIFT);
+	kqp->hw_rq_db = dev->func_bar + ERDMA_BAR_RQDB_SPACE_OFFSET;
+
+	kqp->swr_tbl = vmalloc_array(qp->attrs.sq_size, sizeof(u64));
+	if (!kqp->swr_tbl)
+		return -ENOMEM;
+
+	kqp->rwr_tbl = vmalloc_array(qp->attrs.rq_size, sizeof(u64));
+	if (!kqp->rwr_tbl)
+		goto err_free_swr_tbl;
+
+	size = qp->attrs.sq_size << SQEBB_SHIFT;
+	attr.len = size;
+	ret = erdma_mem_init(dev, &kqp->sq_mem, &attr);
+	if (ret)
+		goto err_free_rwr_tbl;
+
+	kqp->sq_dbrec =
+		dma_pool_zalloc(dev->db_pool, GFP_KERNEL, &kqp->sq_dbrec_dma);
+	if (!kqp->sq_dbrec) {
+		ret = -ENOMEM;
+		goto err_free_sq_mem;
+	}
+
+	size = qp->attrs.rq_size << RQE_SHIFT;
+	attr.len = size;
+	ret = erdma_mem_init(dev, &kqp->rq_mem, &attr);
+	if (ret)
+		goto err_free_sq_dbrec;
+
+	kqp->rq_dbrec =
+		dma_pool_zalloc(dev->db_pool, GFP_KERNEL, &kqp->rq_dbrec_dma);
+	if (!kqp->rq_dbrec) {
+		ret = -ENOMEM;
+		goto err_free_rq_mem;
+	}
+
+	return 0;
+
+err_free_rq_mem:
+	erdma_mem_uninit(dev, &kqp->rq_mem);
+err_free_sq_dbrec:
+	dma_pool_free(dev->db_pool, kqp->sq_dbrec, kqp->sq_dbrec_dma);
+err_free_sq_mem:
+	erdma_mem_uninit(dev, &kqp->sq_mem);
+err_free_rwr_tbl:
+	vfree(kqp->rwr_tbl);
+err_free_swr_tbl:
+	vfree(kqp->swr_tbl);
+
+	return ret;
 }
 
 static int erdma_map_user_dbrecords(struct erdma_ucontext *ctx,
