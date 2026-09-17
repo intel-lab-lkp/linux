@@ -1452,6 +1452,7 @@ static void qcom_smd_edge_release(struct device *dev)
 		kfree(channel);
 	}
 
+	of_node_put(edge->of_node);
 	kfree(edge);
 }
 
