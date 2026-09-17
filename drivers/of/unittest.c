@@ -1142,6 +1142,8 @@ static void __init of_unittest_dma_get_max_cpu_address(void)
 	unittest(cpu_addr == 0x4fffffff,
 		 "of_dma_get_max_cpu_address: wrong CPU addr %pad (expecting %x)\n",
 		 &cpu_addr, 0x4fffffff);
+
+	of_node_put(np);
 }
 
 static void __init of_unittest_dma_ranges_one(const char *path,
