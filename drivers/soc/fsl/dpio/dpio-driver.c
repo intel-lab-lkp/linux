@@ -263,6 +263,8 @@ err_priv_alloc:
 static void dpio_teardown_irqs(struct fsl_mc_device *dpio_dev)
 {
 	unregister_dpio_irq_handlers(dpio_dev);
+	devm_free_irq(&dpio_dev->dev, dpio_dev->irqs[0]->virq,
+		      &dpio_dev->dev);
 	fsl_mc_free_irqs(dpio_dev);
 }
 
@@ -276,9 +278,9 @@ static void dpaa2_dpio_remove(struct fsl_mc_device *dpio_dev)
 	priv = dev_get_drvdata(dev);
 	cpu = dpaa2_io_get_cpu(priv->io);
 
-	dpaa2_io_down(priv->io);
-
 	dpio_teardown_irqs(dpio_dev);
+
+	dpaa2_io_down(priv->io);
 
 	cpumask_set_cpu(cpu, cpus_unused_mask);
 
