@@ -2289,6 +2289,28 @@ static const struct drm_edid *drm_edid_override_get(struct drm_connector *connec
 	return IS_ERR(override) ? NULL : override;
 }
 
+/**
+ * drm_edid_read_override - read override or firmware EDID
+ * @connector: connector to use
+ *
+ * Read the EDID from debugfs override_edid or firmware EDID
+ * (drm_edid_load_firmware() and drm.edid_firmware parameter), in this priority
+ * order. This does not probe the connector or read the EDID from hardware.
+ *
+ * The returned pointer must be freed using drm_edid_free().
+ *
+ * Return: Pointer to EDID, or NULL if the connector is forced off or no EDID
+ * override is available.
+ */
+const struct drm_edid *drm_edid_read_override(struct drm_connector *connector)
+{
+	if (connector->force == DRM_FORCE_OFF)
+		return NULL;
+
+	return drm_edid_override_get(connector);
+}
+EXPORT_SYMBOL(drm_edid_read_override);
+
 /* For debugfs edid_override implementation */
 int drm_edid_override_show(struct drm_connector *connector, struct seq_file *m)
 {
