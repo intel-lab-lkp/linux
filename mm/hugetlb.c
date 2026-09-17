@@ -100,12 +100,24 @@ static char hstate_cmdline_buf[COMMAND_LINE_SIZE] __initdata;
 static int hstate_cmdline_index __initdata;
 static struct hugetlb_cmdline hugetlb_params[HUGE_MAX_CMDLINE_ARGS] __initdata;
 static int hugetlb_param_index __initdata;
+/*
+ * Set once hugetlb_bootmem_alloc() has consumed the recorded parameters.
+ * A parameter recorded after that point can never be honored, so report it
+ * instead of dropping it silently.  This happens if an architecture calls
+ * parse_early_param() only after mm_core_init_early().
+ */
+static bool hugetlb_cmdline_consumed __initdata;
 static __init int hugetlb_add_param(char *s, int (*setup)(char *val));
 static __init void hugetlb_parse_params(void);
 
 #define hugetlb_early_param(str, func) \
 static __init int func##args(char *s) \
 { \
+	if (hugetlb_cmdline_consumed) { \
+		pr_warn("HugeTLB: %s=%s recorded too late to be honored, ignoring\n", \
+			str, s ?: ""); \
+		return 0; \
+	} \
 	return hugetlb_add_param(s, func); \
 } \
 early_param(str, func##args)
@@ -4553,6 +4565,8 @@ void __init hugetlb_bootmem_alloc(void)
 		INIT_LIST_HEAD(&huge_boot_pages[i]);
 
 	hugetlb_parse_params();
+	/* Anything recorded from here on can no longer be honored. */
+	hugetlb_cmdline_consumed = true;
 
 	for_each_hstate(h) {
 		h->next_nid_to_alloc = first_online_node;
