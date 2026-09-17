@@ -14,6 +14,7 @@
 #include <strings.h>
 #include <errno.h>
 #include <signal.h>
+#include <sys/wait.h>
 #include <string.h>
 
 #include "kselftest.h"
@@ -279,6 +280,16 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
+	/*
+	 * Generate one event to observe and stop listening shortly after,
+	 * so that the test terminates on its own.
+	 */
+	signal(SIGALRM, sigint);
+	alarm(5);
+	if (fork() == 0)
+		_exit(0);
+	wait(NULL);
+
 	while (!interrupted) {
 		err = handle_events(epoll_fd, &proc_ev);
 		if (err < 0) {
@@ -306,5 +317,5 @@ int main(int argc, char *argv[])
 	close(nl_sock);
 
 	printf("Done total count: %d\n", tcount);
-	exit(0);
+	exit(tcount > 0 ? KSFT_PASS : KSFT_FAIL);
 }
