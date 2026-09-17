@@ -2808,6 +2808,64 @@ static bool gup_fast_folio_allowed(struct folio *folio, unsigned int flags)
 
 #ifdef CONFIG_ARCH_HAS_PTE_SPECIAL
 /*
+ * Extend the run of pages grabbed by gup_fast_pte_range() from @page, mapped
+ * by the PTE at @ptep, to the following PTEs that map the next pages of
+ * @folio with the same protection.  The caller holds one reference for @page
+ * and has verified @pte against the page table; this takes the references
+ * for the rest of the run and stores its pages in @pages.  Returns the
+ * number of pages in the run, including @page.
+ */
+static unsigned int gup_fast_pte_batch(struct folio *folio,
+		struct page *page, pmd_t pmd, pmd_t *pmdp, pte_t *ptep,
+		pte_t pte, unsigned int flags, unsigned int max_nr,
+		struct page **pages)
+{
+	unsigned int nr, i;
+
+	if (max_nr == 1)
+		return 1;
+
+	/*
+	 * The reference on @folio keeps folio_nr_pages() stable.  The PTEs
+	 * are read without the PTL, hence FPB_LOCKLESS.
+	 */
+	nr = folio_pte_batch_flags(folio, NULL, ptep, &pte, max_nr,
+				   FPB_RESPECT_WRITE | FPB_LOCKLESS);
+
+	/*
+	 * gup_must_unshare() is per page: a read-only run of an anonymous
+	 * folio ends at the first page that is not exclusive.
+	 */
+	if (!pte_write(pte)) {
+		for (i = 1; i < nr; i++) {
+			if (gup_must_unshare(NULL, flags, page + i))
+				break;
+		}
+		nr = i;
+	}
+	if (nr == 1)
+		return 1;
+
+	if (try_grab_folio(folio, nr - 1, flags))
+		return 1;
+
+	/*
+	 * The PTEs were read after the reference on @folio was taken, so the
+	 * pages cannot have been freed, but the page table could have been
+	 * detached by a THP collapse meanwhile, leaving stale PTEs.  Drop the
+	 * run and let the next iteration hit the pmd check and bail out.
+	 */
+	if (unlikely(pmd_val(pmd) != pmd_val(pmdp_get_lockless(pmdp)))) {
+		gup_put_folio(folio, nr - 1, flags);
+		return 1;
+	}
+
+	for (i = 1; i < nr; i++)
+		*pages++ = page + i;
+	return nr;
+}
+
+/*
  * GUP-fast relies on pte change detection to avoid concurrent pgtable
  * operations.
  *
@@ -2830,6 +2888,8 @@ static int gup_fast_pte_range(pmd_t pmd, pmd_t *pmdp, unsigned long addr,
 		unsigned long end, unsigned int flags, struct page **pages,
 		int *nr)
 {
+	unsigned int nr_batch;
+	bool large;
 	int ret = 0;
 	pte_t *ptep, *ptem;
 
@@ -2891,9 +2951,25 @@ static int gup_fast_pte_range(pmd_t pmd, pmd_t *pmdp, unsigned long addr,
 			gup_put_folio(folio, 1, flags);
 			goto pte_unmap;
 		}
+		/*
+		 * Read the folio flags before the atomic in
+		 * folio_set_referenced(); a load right after it has to wait for
+		 * it, which is measurable on the order-0 path.
+		 */
+		large = folio_test_large(folio);
 		folio_set_referenced(folio);
 		pages[*nr] = page;
 		(*nr)++;
+
+		if (likely(!large))
+			continue;
+
+		nr_batch = gup_fast_pte_batch(folio, page, pmd, pmdp, ptep, pte,
+					      flags, (end - addr) >> PAGE_SHIFT,
+					      pages + *nr);
+		*nr += nr_batch - 1;
+		ptep += nr_batch - 1;
+		addr += (nr_batch - 1) * PAGE_SIZE;
 	} while (ptep++, addr += PAGE_SIZE, addr != end);
 
 	ret = 1;

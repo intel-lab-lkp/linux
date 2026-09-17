@@ -368,6 +368,12 @@ typedef int __bitwise fpb_t;
  */
 #define FPB_MERGE_YOUNG_DIRTY		((__force fpb_t)BIT(4))
 
+/*
+ * Read the page table entries with ptep_get_lockless(): the caller does not
+ * hold the page table lock (GUP-fast).
+ */
+#define FPB_LOCKLESS			((__force fpb_t)BIT(5))
+
 static inline pte_t __pte_batch_clear_ignored(pte_t pte, fpb_t flags)
 {
 	if (!(flags & FPB_RESPECT_DIRTY))
@@ -399,6 +405,10 @@ static inline pte_t __pte_batch_clear_ignored(pte_t pte, fpb_t flags)
  * @ptep must map any page of the folio. max_nr must be at least one and
  * must be limited by the caller so scanning cannot exceed a single VMA and
  * a single page table.
+ *
+ * The caller must hold the page table lock, unless FPB_LOCKLESS is set: then
+ * the entries are read with ptep_get_lockless() and the caller has to make
+ * sure the folio cannot be freed or split, as GUP-fast does.
  *
  * Depending on the FPB_MERGE_* flags, the pte stored at @ptentp will
  * be updated: it's crucial that a pointer to a COPY of the first
@@ -436,7 +446,10 @@ static inline unsigned int folio_pte_batch_flags(struct folio *folio,
 	ptep = ptep + nr;
 
 	while (nr < max_nr) {
-		pte = ptep_get(ptep);
+		if (flags & FPB_LOCKLESS)
+			pte = ptep_get_lockless(ptep);
+		else
+			pte = ptep_get(ptep);
 
 		if (!pte_same(__pte_batch_clear_ignored(pte, flags), expected_pte))
 			break;
