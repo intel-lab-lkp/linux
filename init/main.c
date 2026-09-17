@@ -1002,10 +1002,12 @@ void start_kernel(void)
 	page_address_init();
 	pr_notice("%s", linux_banner);
 	setup_arch(&command_line);
-	mm_core_init_early();
-	/* Static keys and static calls are needed by LSMs */
+	/* Static keys and static calls are needed by LSMs and early params */
 	jump_label_init();
 	static_call_init();
+	/* parameters may set static keys */
+	parse_early_param();
+	mm_core_init_early();
 	early_security_init();
 	setup_boot_config();
 	setup_command_line(command_line);
@@ -1016,8 +1018,6 @@ void start_kernel(void)
 	boot_cpu_hotplug_init();
 
 	print_kernel_cmdline(saved_command_line);
-	/* parameters may set static keys */
-	parse_early_param();
 	after_dashes = parse_args("Booting kernel",
 				  static_command_line, __start___param,
 				  __stop___param - __start___param,
