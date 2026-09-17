@@ -1,30 +1,35 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <errno.h>
 #include <inttypes.h>
-#include <sys/types.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include <linux/err.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
-#include "builtin.h"
-#include "perf.h"
 
 #include <subcmd/parse-options.h>
+
+#include "builtin.h"
+#include "perf.h"
 #include "util/auxtrace.h"
-#include "util/trace-event.h"
-#include "util/tool.h"
-#include "util/session.h"
 #include "util/data.h"
-#include "util/map_symbol.h"
-#include "util/mem-events.h"
 #include "util/debug.h"
 #include "util/dso.h"
 #include "util/map.h"
-#include "util/symbol.h"
+#include "util/map_symbol.h"
+#include "util/mem-events.h"
 #include "util/pmus.h"
 #include "util/sample.h"
+#include "util/session.h"
 #include "util/sort.h"
 #include "util/string2.h"
+#include "util/symbol.h"
+#include "util/tool.h"
+#include "util/trace-event.h"
 #include "util/util.h"
-#include <linux/err.h>
 
 #define MEM_OPERATION_LOAD	0x1
 #define MEM_OPERATION_STORE	0x2
