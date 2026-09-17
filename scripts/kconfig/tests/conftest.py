@@ -34,6 +34,9 @@ class Conf:
         """
         # the directory of the test being run
         self._test_dir = os.path.dirname(str(request.fspath))
+        self.default_env = {
+            "KCONFIG_WARN_CHANGED_INPUT": "",
+        }
 
     # runners
     def _run_conf(self, mode, dot_config=None, out_file='.config',
@@ -56,6 +59,11 @@ class Conf:
 
         # Override 'srctree' environment to make the test as the top directory
         extra_env['srctree'] = self._test_dir
+
+        # Set default environment variables, if not set by caller
+        for var in self.default_env:
+            if not var in extra_env:
+                extra_env[var] = self.default_env[var]
 
         # Clear KCONFIG_DEFCONFIG_LIST to keep unit tests from being affected
         # by the user's environment.
