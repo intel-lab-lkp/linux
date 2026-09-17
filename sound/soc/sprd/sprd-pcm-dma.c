@@ -276,9 +276,9 @@ static int sprd_pcm_hw_params(struct snd_soc_component *component,
 		 */
 		flags = SPRD_DMA_FLAGS(SPRD_DMA_CHN_MODE_NONE, SPRD_DMA_NO_TRG,
 				       SPRD_DMA_FRAG_REQ, SPRD_DMA_TRANS_INT);
-		data->desc = chan->device->device_prep_slave_sg(chan, sg,
-								sg_num, dir,
-								flags, &link);
+		data->desc = dmaengine_prep_slave_sg_context(chan, sg,
+							     sg_num, dir,
+							     flags, &link);
 		if (!data->desc) {
 			dev_err(component->dev, "failed to prepare slave sg\n");
 			ret = -ENOMEM;
