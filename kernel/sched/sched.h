@@ -2514,7 +2514,7 @@ static inline bool task_is_blocked(struct task_struct *p)
 	if (!sched_proxy_exec())
 		return false;
 
-	return !!p->blocked_on;
+	return !!p->blocked_on.lock;
 }
 
 static inline int task_on_cpu(struct rq *rq, struct task_struct *p)

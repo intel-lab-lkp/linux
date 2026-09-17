@@ -689,7 +689,7 @@ __mutex_lock_common(struct mutex *lock, unsigned int state, unsigned int subclas
 	}
 
 	raw_spin_lock(&current->blocked_lock);
-	__set_task_blocked_on(current, lock);
+	__set_task_blocked_on(current, lock, BO_T_MUTEX);
 	set_current_state(state);
 	trace_contention_begin(lock, LCB_F_MUTEX);
 	for (;;) {
@@ -734,7 +734,7 @@ __mutex_lock_common(struct mutex *lock, unsigned int state, unsigned int subclas
 		 * that has cleared our blocked_on state, re-set
 		 * it to the lock we are trying to acquire.
 		 */
-		__set_task_blocked_on(current, lock);
+		__set_task_blocked_on(current, lock, BO_T_MUTEX);
 		set_current_state(state);
 		/*
 		 * Here we order against unlock; we must either see it change
@@ -762,7 +762,7 @@ __mutex_lock_common(struct mutex *lock, unsigned int state, unsigned int subclas
 
 			raw_spin_lock_irqsave(&lock->wait_lock, flags);
 			raw_spin_lock(&current->blocked_lock);
-			__set_task_blocked_on(current, lock);
+			__set_task_blocked_on(current, lock, BO_T_MUTEX);
 			set_current_state(state);
 
 			if (opt_acquired)
@@ -1038,7 +1038,7 @@ static noinline void __sched __mutex_unlock_slowpath(struct mutex *lock, unsigne
 		 */
 		donor = current->blocked_donor;
 		if (donor) {
-			struct mutex *next_lock;
+			void *next_lock;
 
 			raw_spin_lock_nested(&donor->blocked_lock, SINGLE_DEPTH_NESTING);
 			next_lock = __get_task_blocked_on(donor);
