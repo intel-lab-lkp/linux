@@ -12,6 +12,11 @@ int augmented_syscalls__prepare(void);
 int augmented_syscalls__create_bpf_output(struct evlist *evlist);
 void augmented_syscalls__setup_bpf_output(void);
 int augmented_syscalls__set_filter_pids(unsigned int nr, pid_t *pids);
+int augmented_syscalls__set_target_pids(unsigned int nr, pid_t *pids);
+int augmented_syscalls__add_target_pid(pid_t pid);
+int augmented_syscalls__del_target_pid(pid_t pid);
+bool augmented_syscalls__has_target_pid(pid_t pid);
+int augmented_syscalls__set_target_syscalls(unsigned int nr, int *syscall_ids, bool not_syscalls);
 int augmented_syscalls__get_map_fds(int *enter_fd, int *exit_fd, int *beauty_fd);
 struct bpf_program *augmented_syscalls__find_by_title(const char *name);
 struct bpf_program *augmented_syscalls__unaugmented(void);
@@ -35,6 +40,34 @@ static inline void augmented_syscalls__setup_bpf_output(void)
 
 static inline int augmented_syscalls__set_filter_pids(unsigned int nr __maybe_unused,
 						      pid_t *pids __maybe_unused)
+{
+	return 0;
+}
+
+static inline int augmented_syscalls__set_target_pids(unsigned int nr __maybe_unused,
+						      pid_t *pids __maybe_unused)
+{
+	return 0;
+}
+
+static inline int augmented_syscalls__add_target_pid(pid_t pid __maybe_unused)
+{
+	return 0;
+}
+
+static inline int augmented_syscalls__del_target_pid(pid_t pid __maybe_unused)
+{
+	return 0;
+}
+
+static inline bool augmented_syscalls__has_target_pid(pid_t pid __maybe_unused)
+{
+	return false;
+}
+
+static inline int augmented_syscalls__set_target_syscalls(unsigned int nr __maybe_unused,
+							  int *syscall_ids __maybe_unused,
+							  bool not_syscalls __maybe_unused)
 {
 	return 0;
 }

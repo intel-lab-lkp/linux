@@ -114,6 +114,41 @@ struct pids_filtered {
 	__uint(max_entries, 64);
 } pids_filtered SEC(".maps");
 
+/*
+ * Optional hash map containing specific PIDs/TGIDs to trace (e.g., when
+ * attached to a process with -p or tracing a specific command workload).
+ *
+ * has_pids_to_trace: Set to true if target PID filtering is active.
+ *                    When false, all processes are eligible for tracing.
+ */
+struct pids_to_trace {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__type(key, pid_t);
+	__type(value, bool);
+	__uint(max_entries, 1024);
+} pids_to_trace SEC(".maps");
+
+bool has_pids_to_trace;
+
+/*
+ * Hash map storing syscall IDs for filtering (via 'perf trace -e ...').
+ *
+ * has_syscalls_to_trace: Set to true if any syscall filter is active.
+ * not_syscalls_to_trace: Inverts matching when '!' prefix is used in -e
+ *                        (e.g., -e !open,close means trace everything EXCEPT
+ *                        open and close; an exclusion blacklist rather than
+ *                        an inclusion whitelist).
+ */
+struct syscalls_to_trace {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__type(key, int);
+	__type(value, bool);
+	__uint(max_entries, 1024);
+} syscalls_to_trace SEC(".maps");
+
+bool has_syscalls_to_trace;
+bool not_syscalls_to_trace;
+
 struct augmented_args_payload {
 	struct syscall_enter_args args;
 	struct augmented_arg arg, arg2; // We have to reserve space for two arguments (rename, etc)
@@ -154,8 +189,8 @@ static inline struct augmented_args_payload *augmented_args_payload(void)
 
 static inline int augmented__output(void *ctx, struct augmented_args_payload *args, int len)
 {
-	/* If perf_event_output fails, return non-zero so that it gets recorded unaugmented */
-	return bpf_perf_event_output(ctx, &__augmented_syscalls__, BPF_F_CURRENT_CPU, args, len);
+	bpf_perf_event_output(ctx, &__augmented_syscalls__, BPF_F_CURRENT_CPU, args, len);
+	return 1;
 }
 
 static inline int augmented__beauty_output(void *ctx, void *data, int len)
@@ -191,10 +226,21 @@ unsigned int augmented_arg__read_str(struct augmented_arg *augmented_arg, const 
 	return augmented_len;
 }
 
-SEC("tp/raw_syscalls/sys_enter")
+/*
+ * Default sys_enter program for syscalls without pointer argument augmentation.
+ * Writes the raw struct syscall_enter_args payload into __augmented_syscalls__
+ * and returns 1 so the tracepoint is never vetoed in the kernel.
+ */
+SEC("tp/syscalls/sys_enter_unaugmented")
 int syscall_unaugmented(struct syscall_enter_args *args)
 {
-	return 1;
+	struct augmented_args_payload *augmented_args = augmented_args_payload();
+
+	if (augmented_args == NULL)
+		return 1;
+
+	bpf_probe_read_kernel(&augmented_args->args, sizeof(augmented_args->args), args);
+	return augmented__output(args, augmented_args, sizeof(augmented_args->args));
 }
 
 /*
@@ -424,9 +470,39 @@ static pid_t getpid(void)
 	return bpf_get_current_pid_tgid();
 }
 
+/*
+ * Returns true if a PID is explicitly excluded/filtered out (e.g., via --filter-pids).
+ */
 static bool pid_filter__has(struct pids_filtered *pids, pid_t pid)
 {
 	return bpf_map_lookup_elem(pids, &pid) != NULL;
+}
+
+/*
+ * Checks if the current task (thread PID or process TGID) is targeted for tracing.
+ * Checks both PID (thread ID) and TGID (process ID) so that all threads of a
+ * target process match.
+ */
+static inline bool pid_to_trace__has(pid_t pid)
+{
+	pid_t tgid = bpf_get_current_pid_tgid() >> 32;
+
+	return bpf_map_lookup_elem(&pids_to_trace, &pid) != NULL ||
+	       bpf_map_lookup_elem(&pids_to_trace, &tgid) != NULL;
+}
+
+/*
+ * Determines if a syscall should be traced based on the filter map:
+ * - When not_syscalls_to_trace is true: blacklist mode (trace if NOT in map).
+ * - When not_syscalls_to_trace is false: whitelist mode (trace ONLY if IN map).
+ */
+static inline bool syscall_to_trace__enabled(int id)
+{
+	bool in_map = bpf_map_lookup_elem(&syscalls_to_trace, &id) != NULL;
+
+	if (not_syscalls_to_trace)
+		return !in_map;
+	return in_map;
 }
 
 u64 ZERO = 0;
@@ -562,6 +638,11 @@ static int augment_sys_enter(void *ctx, struct syscall_enter_args *args)
 	return augmented__beauty_output(ctx, payload, sizeof(struct syscall_enter_args) + output);
 }
 
+/*
+ * Main raw_syscalls:sys_enter tracepoint handler.
+ * Always returns 1 so the tracepoint is never vetoed in the kernel for
+ * other concurrent listeners. Filtered events simply do not output to the ring buffer.
+ */
 SEC("tp/raw_syscalls/sys_enter")
 int sys_enter(struct syscall_enter_args *args)
 {
@@ -576,8 +657,11 @@ int sys_enter(struct syscall_enter_args *args)
 	 * initial, non-augmented raw_syscalls:sys_enter payload.
 	 */
 
+	if (has_pids_to_trace && !pid_to_trace__has(getpid()))
+		return 1;
+
 	if (pid_filter__has(&pids_filtered, getpid()))
-		return 0;
+		return 1;
 
 	augmented_args = augmented_args_payload();
 	if (augmented_args == NULL)
@@ -585,25 +669,41 @@ int sys_enter(struct syscall_enter_args *args)
 
 	bpf_probe_read_kernel(&augmented_args->args, sizeof(augmented_args->args), args);
 
-	/*
-	 * Jump to syscall specific augmenter, even if the default one,
-	 * "!raw_syscalls:unaugmented" that will just return 1 to return the
-	 * unaugmented tracepoint payload.
-	 */
-	if (augment_sys_enter(args, &augmented_args->args))
-		bpf_tail_call(args, &syscalls_sys_enter, augmented_args->args.syscall_nr);
+	if (has_syscalls_to_trace && !syscall_to_trace__enabled(augmented_args->args.syscall_nr))
+		return 1;
 
-	// If not found on the PROG_ARRAY syscalls map, then we're filtering it:
-	return 0;
+	/*
+	 * Jump to syscall specific augmenter. If augmented, augment_sys_enter()
+	 * outputs the payload to __augmented_syscalls__ and returns 0.
+	 * Return 1 so we never veto the kernel tracepoint for other listeners.
+	 */
+	if (augment_sys_enter(args, &augmented_args->args) == 0)
+		return 1;
+
+	bpf_tail_call(args, &syscalls_sys_enter, augmented_args->args.syscall_nr);
+
+	/*
+	 * If not found on the PROG_ARRAY syscalls map, return 1 so we
+	 * don't veto the tracepoint event system-wide for other concurrent
+	 * listeners.
+	 */
+	return 1;
 }
 
+/*
+ * Main raw_syscalls:sys_exit tracepoint handler.
+ * Always returns 1 so the tracepoint is never vetoed in the kernel.
+ */
 SEC("tp/raw_syscalls/sys_exit")
 int sys_exit(struct syscall_exit_args *args)
 {
 	struct syscall_exit_args exit_args;
 
+	if (has_pids_to_trace && !pid_to_trace__has(getpid()))
+		return 1;
+
 	if (pid_filter__has(&pids_filtered, getpid()))
-		return 0;
+		return 1;
 
 	bpf_probe_read_kernel(&exit_args, sizeof(exit_args), args);
 	/*
@@ -613,9 +713,12 @@ int sys_exit(struct syscall_exit_args *args)
 	 */
 	bpf_tail_call(args, &syscalls_sys_exit, exit_args.syscall_nr);
 	/*
-	 * If not found on the PROG_ARRAY syscalls map, then we're filtering it:
+	 * If not found on the PROG_ARRAY syscalls map, return 1 so we
+	 * don't veto the tracepoint event system-wide for other concurrent
+	 * listeners. perf trace's own evsel filter will discard non-matching
+	 * syscalls.
 	 */
-	return 0;
+	return 1;
 }
 
 char _license[] SEC("license") = "GPL";

@@ -1,4 +1,5 @@
 #include <bpf/libbpf.h>
+#include <errno.h>
 #include <internal/xyarray.h>
 
 #include "bpf_skel/augmented_raw_syscalls.skel.h"
@@ -9,6 +10,23 @@
 
 static struct augmented_raw_syscalls_bpf *skel;
 static struct evsel *bpf_output;
+
+/* Set by attach_prog() so the first failure is what gets reported. */
+static int attach_err;
+
+static int attach_prog(struct bpf_link **link, struct bpf_program *prog, const char *name)
+{
+	*link = bpf_program__attach(prog);
+	if (*link)
+		return 0;
+	/*
+	 * Save errno before pr_debug(), which formats and writes output and so
+	 * can overwrite it.
+	 */
+	attach_err = -errno;
+	pr_debug("Failed to attach %s BPF program\n", name);
+	return attach_err;
+}
 
 int augmented_syscalls__prepare(void)
 {
@@ -35,11 +53,35 @@ int augmented_syscalls__prepare(void)
 	if (err < 0) {
 		libbpf_strerror(err, buf, sizeof(buf));
 		pr_debug("Failed to load augmented syscalls BPF skeleton: %s\n", buf);
+		/*
+		 * Tear the skeleton down rather than leaving a half initialized
+		 * one behind. The caller falls back to unaugmented tracing and
+		 * still calls the setters below, which must then do nothing
+		 * instead of failing against a skeleton with no maps.
+		 */
+		augmented_syscalls__cleanup();
 		return err;
 	}
 
-	augmented_raw_syscalls_bpf__attach(skel);
+	/*
+	 * Only sys_enter and sys_exit are attached, the remaining programs are
+	 * reached by tail calls. Attach them explicitly and, on failure, undo
+	 * any partial attachment: leaving sys_enter live on
+	 * raw_syscalls:sys_enter would keep running a BPF program for every
+	 * syscall on the system for a perf trace session that never starts.
+	 */
+	if (attach_prog(&skel->links.sys_enter, skel->progs.sys_enter, "sys_enter"))
+		goto out_cleanup;
+	if (attach_prog(&skel->links.sys_exit, skel->progs.sys_exit, "sys_exit"))
+		goto out_cleanup;
+
 	return 0;
+
+out_cleanup:
+	err = attach_err;
+	/* Destroys every link attached above along with the skeleton. */
+	augmented_syscalls__cleanup();
+	return err;
 }
 
 int augmented_syscalls__create_bpf_output(struct evlist *evlist)
@@ -98,6 +140,96 @@ int augmented_syscalls__set_filter_pids(unsigned int nr, pid_t *pids)
 	return err;
 }
 
+/*
+ * Populate target PIDs in the BPF pids_to_trace map (e.g., for -p <PID> or
+ * when tracing a specified command workload).
+ */
+int augmented_syscalls__set_target_pids(unsigned int nr, pid_t *pids)
+{
+	bool value = true;
+	int err = 0;
+
+	if (skel == NULL || nr == 0)
+		return 0;
+
+	for (size_t i = 0; i < nr; ++i) {
+		err = bpf_map__update_elem(skel->maps.pids_to_trace, &pids[i],
+					   sizeof(*pids), &value, sizeof(value),
+					   BPF_ANY);
+		if (err)
+			return err;
+	}
+	/*
+	 * Set the flag only once every target is in the map. The BPF programs
+	 * are attached by this point, so flipping it first would have them
+	 * filter against a partially populated map and drop syscalls made by
+	 * the targets that had not been added yet.
+	 */
+	skel->bss->has_pids_to_trace = true;
+	return 0;
+}
+
+int augmented_syscalls__add_target_pid(pid_t pid)
+{
+	bool value = true;
+
+	if (skel == NULL || !skel->bss->has_pids_to_trace || skel->maps.pids_to_trace == NULL)
+		return 0;
+
+	return bpf_map__update_elem(skel->maps.pids_to_trace, &pid, sizeof(pid),
+				    &value, sizeof(value), BPF_ANY);
+}
+
+int augmented_syscalls__del_target_pid(pid_t pid)
+{
+	if (skel == NULL || !skel->bss->has_pids_to_trace || skel->maps.pids_to_trace == NULL)
+		return 0;
+
+	return bpf_map__delete_elem(skel->maps.pids_to_trace, &pid, sizeof(pid), 0);
+}
+
+bool augmented_syscalls__has_target_pid(pid_t pid)
+{
+	bool value;
+
+	if (skel == NULL || !skel->bss->has_pids_to_trace || skel->maps.pids_to_trace == NULL)
+		return false;
+
+	return bpf_map__lookup_elem(skel->maps.pids_to_trace, &pid, sizeof(pid),
+				    &value, sizeof(value), 0) == 0;
+}
+
+/*
+ * Populate syscalls in the BPF syscalls_to_trace map:
+ * - not_syscalls: true if '!' prefix was specified (blacklist mode: trace
+ *   all syscalls EXCEPT these).
+ *   false if whitelist mode (trace ONLY these syscalls).
+ */
+int augmented_syscalls__set_target_syscalls(unsigned int nr, int *syscall_ids, bool not_syscalls)
+{
+	bool value = true;
+	int err = 0;
+
+	if (skel == NULL || nr == 0)
+		return 0;
+
+	skel->bss->not_syscalls_to_trace = not_syscalls;
+	for (size_t i = 0; i < nr; ++i) {
+		err = bpf_map__update_elem(skel->maps.syscalls_to_trace, &syscall_ids[i],
+					   sizeof(int), &value, sizeof(value),
+					   BPF_ANY);
+		if (err)
+			return err;
+	}
+	/*
+	 * As for the pid maps, publish the filter only once it is complete:
+	 * in whitelist mode a half filled map would drop syscalls that were
+	 * asked for but not added yet.
+	 */
+	skel->bss->has_syscalls_to_trace = true;
+	return 0;
+}
+
 int augmented_syscalls__get_map_fds(int *enter_fd, int *exit_fd, int *beauty_fd)
 {
 	if (skel == NULL)
@@ -140,4 +272,5 @@ struct bpf_program *augmented_syscalls__find_by_title(const char *name)
 void augmented_syscalls__cleanup(void)
 {
 	augmented_raw_syscalls_bpf__destroy(skel);
+	skel = NULL;
 }
