@@ -210,6 +210,14 @@ static void init_can_skb(struct sk_buff *skb)
 {
 	skb->pkt_type = PACKET_BROADCAST;
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
+
+	/* Restore the initialisations that were present before
+	 * 9f10374bb024 to prevent skb_under_panic in packet_rcv_spkt
+	 * and similar consumers.
+	 */
+	skb_reset_mac_header(skb);
+	skb_reset_network_header(skb);
+	skb_reset_transport_header(skb);
 }
 
 struct sk_buff *alloc_can_skb(struct net_device *dev, struct can_frame **cf)
