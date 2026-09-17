@@ -2277,15 +2277,20 @@ syscall_arg_fmt__init_array(struct syscall_arg_fmt *arg, struct tep_format_field
 	struct tep_format_field *last_field = NULL;
 	int len;
 
-	for (; field; field = field->next, ++arg) {
-		/* assume it's the last argument */
+	for (; field; field = field->next) {
+		/*
+		 * Skip internal tracepoint fields (e.g., __data_loc strings in
+		 * Linux 6.19+) so they do not advance the syscall arg array index.
+		 */
 		if (is_internal_field(field))
 			continue;
 
 		last_field = field;
 
-		if (arg->scnprintf)
+		if (arg->scnprintf) {
+			++arg;
 			continue;
+		}
 
 		len = strlen(field->name);
 
@@ -2342,6 +2347,7 @@ syscall_arg_fmt__init_array(struct syscall_arg_fmt *arg, struct tep_format_field
 				}
 			}
 		}
+		++arg;
 	}
 
 	return last_field;
@@ -2363,6 +2369,7 @@ static int syscall__read_info(struct syscall *sc, struct trace *trace)
 	char tp_name[128];
 	const char *name;
 	struct tep_format_field *field;
+	int nr_args;
 	int err;
 
 	if (sc->nonexistent)
@@ -2401,23 +2408,24 @@ static int syscall__read_info(struct syscall *sc, struct trace *trace)
 		return err;
 	}
 
-	/*
-	 * The tracepoint format contains __syscall_nr field, so it's one more
-	 * than the actual number of syscall arguments.
-	 */
-	if (syscall__alloc_arg_fmts(sc, sc->tp_format->format.nr_fields - 1))
-		return -ENOMEM;
-
 	sc->args = sc->tp_format->format.fields;
+	nr_args = sc->tp_format->format.nr_fields;
 	/*
 	 * We need to check and discard the first variable '__syscall_nr'
 	 * or 'nr' that mean the syscall number. It is needless here.
 	 * So drop '__syscall_nr' or 'nr' field but does not exist on older kernels.
+	 *
+	 * Do this before allocating, and size the array from what is left, so
+	 * that a format without the field does not leave
+	 * syscall_arg_fmt__init_array() walking one entry past the end.
 	 */
 	if (sc->args && (!strcmp(sc->args->name, "__syscall_nr") || !strcmp(sc->args->name, "nr"))) {
 		sc->args = sc->args->next;
-		--sc->nr_args;
+		--nr_args;
 	}
+
+	if (syscall__alloc_arg_fmts(sc, nr_args))
+		return -ENOMEM;
 
 	field = sc->args;
 	while (field) {
@@ -2636,10 +2644,16 @@ static size_t syscall__scnprintf_args(struct syscall *sc, char *bf, size_t size,
 	if (sc->args != NULL) {
 		struct tep_format_field *field;
 
-		for (field = sc->args; field;
-		     field = field->next, ++arg.idx, bit <<= 1) {
-			if (arg.mask & bit)
+		for (field = sc->args; field; field = field->next) {
+			/* Skip internal fields so they are not printed as spurious arguments */
+			if (is_internal_field(field))
 				continue;
+
+			if (arg.mask & bit) {
+				++arg.idx;
+				bit <<= 1;
+				continue;
+			}
 
 			arg.fmt = &sc->arg_fmt[arg.idx];
 			val = syscall_arg__val(&arg, arg.idx);
@@ -2658,8 +2672,11 @@ static size_t syscall__scnprintf_args(struct syscall *sc, char *bf, size_t size,
 			 */
 			if (val == 0 && !trace->show_zeros &&
 			    !(sc->arg_fmt && sc->arg_fmt[arg.idx].show_zero) &&
-			    !(sc->arg_fmt && sc->arg_fmt[arg.idx].strtoul == STUL_BTF_TYPE))
+			    !(sc->arg_fmt && sc->arg_fmt[arg.idx].strtoul == STUL_BTF_TYPE)) {
+				++arg.idx;
+				bit <<= 1;
 				continue;
+			}
 
 			printed += scnprintf(bf + printed, size - printed, "%s", printed ? ", " : "");
 
@@ -2674,12 +2691,16 @@ static size_t syscall__scnprintf_args(struct syscall *sc, char *bf, size_t size,
 								   size - printed, val, field->type);
 				if (btf_printed) {
 					printed += btf_printed;
+					++arg.idx;
+					bit <<= 1;
 					continue;
 				}
 			}
 
 			printed += syscall_arg_fmt__scnprintf_val(&sc->arg_fmt[arg.idx],
 								  bf + printed, size - printed, &arg, val);
+			++arg.idx;
+			bit <<= 1;
 		}
 	} else if (IS_ERR(sc->tp_format)) {
 		/*
@@ -2940,7 +2961,9 @@ static int trace__fprintf_sample(struct trace *trace, struct perf_sample *sample
 	return printed;
 }
 
-static void *syscall__augmented_args(struct syscall *sc, struct perf_sample *sample, int *augmented_args_size, int raw_augmented_args_size)
+static void *syscall__augmented_args(struct trace *trace, struct syscall *sc,
+				     struct perf_sample *sample,
+				     int *augmented_args_size, int raw_augmented_args_size)
 {
 	/*
 	 * For now with BPF raw_augmented we hook into raw_syscalls:sys_enter
@@ -2957,6 +2980,24 @@ static void *syscall__augmented_args(struct syscall *sc, struct perf_sample *sam
 	 * traffic to just what is needed for each syscall.
 	 */
 	int args_size = raw_augmented_args_size ?: sc->args_size;
+
+	/*
+	 * Augmented arguments are a perf trace specific payload, they are only
+	 * ever appended to samples emitted by the BPF __augmented_syscalls__
+	 * bpf-output event.
+	 *
+	 * Native syscalls:sys_enter_NAME tracepoints may also carry trailing
+	 * data of their own: since Linux 6.19 they append __data_loc char[]
+	 * fields plus the string payloads they point at. Those bytes are not a
+	 * struct augmented_arg, so treating them as one would make
+	 * syscall_arg__scnprintf_augmented_string() read a bogus length and
+	 * walk arg->augmented.args far out of bounds.
+	 *
+	 * So only look for augmented arguments on the event that can actually
+	 * produce them.
+	 */
+	if (sample->evsel != trace->syscalls.events.bpf_output)
+		return NULL;
 
 	*augmented_args_size = sample->raw_size - args_size;
 	if (*augmented_args_size > 0) {
@@ -3016,17 +3057,13 @@ static int trace__sys_enter(struct trace *trace,
 	if (!(trace->duration_filter || trace->summary_only || trace->min_stack))
 		trace__printf_interrupted_entry(trace);
 	/*
-	 * If this is raw_syscalls.sys_enter, then it always comes with the 6 possible
-	 * arguments, even if the syscall being handled, say "openat", uses only 4 arguments
-	 * this breaks syscall__augmented_args() check for augmented args, as we calculate
-	 * syscall->args_size using each syscalls:sys_enter_NAME tracefs format file,
-	 * so when handling, say the openat syscall, we end up getting 6 args for the
-	 * raw_syscalls:sys_enter event, when we expected just 4, we end up mistakenly
-	 * thinking that the extra 2 u64 args are the augmented filename, so just check
-	 * here and avoid using augmented syscalls when the evsel is the raw_syscalls one.
+	 * syscall__augmented_args() only returns a payload for the BPF
+	 * __augmented_syscalls__ event, so raw_syscalls:sys_enter (which always
+	 * carries all 6 possible arguments rather than sc->args_size worth) and
+	 * the native syscalls:sys_enter_NAME tracepoints are both handled there.
 	 */
-	if (evsel != trace->syscalls.events.sys_enter)
-		augmented_args = syscall__augmented_args(sc, sample, &augmented_args_size, trace->raw_augmented_syscalls_args_size);
+	augmented_args = syscall__augmented_args(trace, sc, sample, &augmented_args_size,
+						 trace->raw_augmented_syscalls_args_size);
 	ttrace->entry_time = sample->time;
 	ttrace->entry_cpu = sample->cpu;
 	msg = ttrace->entry_str;
@@ -3071,7 +3108,7 @@ static int trace__fprintf_sys_enter(struct trace *trace, struct perf_sample *sam
 	struct syscall *sc;
 	char msg[1024];
 	void *args, *augmented_args = NULL;
-	int augmented_args_size, e_machine;
+	int augmented_args_size = 0, e_machine;
 	size_t printed = 0;
 
 
@@ -3089,7 +3126,8 @@ static int trace__fprintf_sys_enter(struct trace *trace, struct perf_sample *sam
 		goto out_put;
 
 	args = perf_evsel__sc_tp_ptr(args, sample);
-	augmented_args = syscall__augmented_args(sc, sample, &augmented_args_size, trace->raw_augmented_syscalls_args_size);
+	augmented_args = syscall__augmented_args(trace, sc, sample, &augmented_args_size,
+						 trace->raw_augmented_syscalls_args_size);
 	printed += syscall__scnprintf_args(sc, msg, sizeof(msg), args, augmented_args, augmented_args_size, trace, thread);
 	fprintf(trace->output, "%.*s", (int)printed, msg);
 	err = 0;
@@ -4121,10 +4159,16 @@ static int trace__bpf_sys_enter_beauty_map(struct trace *trace, int e_machine, i
 	if (trace->btf == NULL)
 		return -1;
 
-	for (i = 0, field = sc->args; field; ++i, field = field->next) {
-		// XXX We're only collecting pointer payloads _from_ user space
-		if (!sc->arg_fmt[i].from_user)
+	for (i = 0, field = sc->args; field; field = field->next) {
+		/* Skip internal fields to keep beauty array index aligned with syscall arguments */
+		if (is_internal_field(field))
 			continue;
+
+		// XXX We're only collecting pointer payloads _from_ user space
+		if (!sc->arg_fmt[i].from_user) {
+			++i;
+			continue;
+		}
 
 		struct_offset = strstr(field->type, "struct ");
 		if (struct_offset == NULL)
@@ -4143,8 +4187,10 @@ static int trace__bpf_sys_enter_beauty_map(struct trace *trace, int e_machine, i
 			name[cnt] = '\0';
 
 			/* cache struct's btf_type and type_id */
-			if (syscall_arg_fmt__cache_btf_struct(&sc->arg_fmt[i], trace->btf, name))
+			if (syscall_arg_fmt__cache_btf_struct(&sc->arg_fmt[i], trace->btf, name)) {
+				++i;
 				continue;
+			}
 
 			bt = sc->arg_fmt[i].type;
 			beauty_array[i] = bt->size;
@@ -4170,7 +4216,9 @@ static int trace__bpf_sys_enter_beauty_map(struct trace *trace, int e_machine, i
 			struct tep_format_field *field_tmp;
 
 			/* find the size of the buffer that appears in pairs with buf */
-			for (j = 0, field_tmp = sc->args; field_tmp; ++j, field_tmp = field_tmp->next) {
+			for (j = 0, field_tmp = sc->args; field_tmp; field_tmp = field_tmp->next) {
+				if (is_internal_field(field_tmp))
+					continue;
 				if (!(field_tmp->flags & TEP_FIELD_IS_POINTER) && /* only integers */
 				    (strstr(field_tmp->name, "count") ||
 				     strstr(field_tmp->name, "siz") ||  /* size, bufsiz */
@@ -4180,14 +4228,29 @@ static int trace__bpf_sys_enter_beauty_map(struct trace *trace, int e_machine, i
 					can_augment = true;
 					break;
 				}
+				++j;
 			}
 		}
+		++i;
 	}
 
 	if (can_augment)
 		return 0;
 
 	return -1;
+}
+
+/*
+ * Advance to the first field that is a real syscall argument, so that callers
+ * walking two argument lists in step never have to reason about internal
+ * fields appearing in one list but not the other.
+ */
+static struct tep_format_field *next_user_arg(struct tep_format_field *field)
+{
+	while (field && is_internal_field(field))
+		field = field->next;
+
+	return field;
 }
 
 static struct bpf_program *trace__find_usable_bpf_prog_entry(struct trace *trace,
@@ -4197,7 +4260,7 @@ static struct bpf_program *trace__find_usable_bpf_prog_entry(struct trace *trace
 	/*
 	 * We're only interested in syscalls that have a pointer:
 	 */
-	for (field = sc->args; field; field = field->next) {
+	for (field = next_user_arg(sc->args); field; field = next_user_arg(field->next)) {
 		if (field->flags & TEP_FIELD_IS_POINTER)
 			goto try_to_find_pair;
 	}
@@ -4215,21 +4278,31 @@ try_to_find_pair:
 		    pair->bpf_prog.sys_enter == unaugmented_prog)
 			continue;
 
-		for (field = sc->args, candidate_field = pair->args;
-		     field && candidate_field; field = field->next, candidate_field = candidate_field->next) {
+		/*
+		 * Both cursors only ever point at real arguments, so the loop
+		 * ends when one of the two syscalls runs out of them, rather
+		 * than when one happens to have trailing internal fields.
+		 */
+		field = next_user_arg(sc->args);
+		candidate_field = next_user_arg(pair->args);
+		while (field && candidate_field) {
 			bool is_pointer = field->flags & TEP_FIELD_IS_POINTER,
 			     candidate_is_pointer = candidate_field->flags & TEP_FIELD_IS_POINTER;
 
 			if (is_pointer) {
-			       if (!candidate_is_pointer) {
+				if (!candidate_is_pointer) {
 					// The candidate just doesn't copies our pointer arg, might copy other pointers we want.
+					field = next_user_arg(field->next);
+					candidate_field = next_user_arg(candidate_field->next);
 					continue;
-			       }
+				}
 			} else {
 				if (candidate_is_pointer) {
 					// The candidate might copy a pointer we don't have, skip it.
 					goto next_candidate;
 				}
+				field = next_user_arg(field->next);
+				candidate_field = next_user_arg(candidate_field->next);
 				continue;
 			}
 
@@ -4250,6 +4323,8 @@ try_to_find_pair:
 				goto next_candidate;
 
 			is_candidate = true;
+			field = next_user_arg(field->next);
+			candidate_field = next_user_arg(candidate_field->next);
 		}
 
 		if (!is_candidate)
@@ -4261,7 +4336,9 @@ try_to_find_pair:
 		 * more than what is common to the two syscalls.
 		 */
 		if (candidate_field) {
-			for (candidate_field = candidate_field->next; candidate_field; candidate_field = candidate_field->next)
+			candidate_field = next_user_arg(candidate_field->next);
+			for (; candidate_field;
+			     candidate_field = next_user_arg(candidate_field->next))
 				if (candidate_field->flags & TEP_FIELD_IS_POINTER)
 					goto next_candidate;
 		}
