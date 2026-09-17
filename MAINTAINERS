@@ -14025,6 +14025,12 @@ S:	Maintained
 F:	Documentation/hwmon/k8temp.rst
 F:	drivers/hwmon/k8temp.c
 
+KALLSYMS LINEINFO
+M:	Sasha Levin <sashal@kernel.org>
+S:	Maintained
+F:	Documentation/admin-guide/kallsyms-lineinfo.rst
+F:	scripts/gen_lineinfo.c
+
 KANDOU KB9002 PCIE RETIMER HWMON DRIVER
 M:	Andy Chung <andy.chung@amd.com>
 L:	linux-hwmon@vger.kernel.org

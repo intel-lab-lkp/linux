@@ -103,7 +103,7 @@ vmlinux_link()
 	${ld} ${ldflags} -o ${output}					\
 		${wl}--whole-archive ${objs} ${wl}--no-whole-archive	\
 		${wl}--start-group ${libs} ${wl}--end-group		\
-		${kallsymso} ${btf_vmlinux_bin_o} ${arch_vmlinux_o} ${ldlibs}
+		${kallsymso} ${lineinfo_o} ${btf_vmlinux_bin_o} ${arch_vmlinux_o} ${ldlibs}
 }
 
 # Check if kallsymso_prev and kallsymso differ
@@ -142,6 +142,40 @@ kallsyms()
 	kallsymso=${2}.o
 }
 
+# Generate lineinfo tables from DWARF debug info in a temporary vmlinux.
+# ${1} - temporary vmlinux with debug info
+# Output: sets lineinfo_o to the generated .o file
+gen_lineinfo()
+{
+	info LINEINFO .tmp_lineinfo.S
+	if ! scripts/gen_lineinfo "${1}" > .tmp_lineinfo.S; then
+		echo >&2 "Failed to generate lineinfo from ${1}"
+		echo >&2 "Try to disable CONFIG_KALLSYMS_LINEINFO"
+		exit 1
+	fi
+
+	info AS .tmp_lineinfo.o
+	${CC} ${NOSTDINC_FLAGS} ${LINUXINCLUDE} ${KBUILD_CPPFLAGS} \
+	      ${KBUILD_AFLAGS} ${KBUILD_AFLAGS_KERNEL} \
+	      -c -o .tmp_lineinfo.o .tmp_lineinfo.S
+
+	lineinfo_o=.tmp_lineinfo.o
+	lineinfo_src=${1}
+}
+
+# Compare the text layout of two linked images.
+# Lineinfo offsets are relative to _text, so anything that moves text after
+# the table was generated invalidates every one of them.  Replacing the
+# stub with the real table grows the image by megabytes, and that is exactly
+# what makes the linker insert branch stubs (see the kallsyms comment
+# below), so this has to be checked rather than assumed.
+text_layout_changed()
+{
+	${NM} -n "${1}" | awk '$2 ~ /^[tT]$/ { print $1, $3 }' > "${1}.text_layout"
+	${NM} -n "${2}" | awk '$2 ~ /^[tT]$/ { print $1, $3 }' > "${2}.text_layout"
+	! cmp -s "${1}.text_layout" "${2}.text_layout"
+}
+
 # Perform kallsyms for the given temporary vmlinux.
 sysmap_and_kallsyms()
 {
@@ -168,6 +202,9 @@ sorttable()
 cleanup()
 {
 	rm -f .btf.*
+	rm -f .tmp_lineinfo.*
+	rm -f .tmp_vmlinux_lineinfo*
+	rm -f .tmp_vmlinux*.text_layout
 	rm -f .tmp_vmlinux.nm-sort
 	rm -f System.map
 	rm -f vmlinux
@@ -196,6 +233,8 @@ fi
 btf_vmlinux_bin_o=
 btfids_vmlinux=
 kallsymso=
+lineinfo_o=
+lineinfo_src=
 strip_debug=
 generate_map=
 
@@ -211,10 +250,21 @@ if is_enabled CONFIG_KALLSYMS; then
 	kallsyms .tmp_vmlinux0.syms .tmp_vmlinux0.kallsyms
 fi
 
+if is_enabled CONFIG_KALLSYMS_LINEINFO; then
+	# Assemble an empty lineinfo stub for the initial link.
+	# The real lineinfo is generated from .tmp_vmlinux1 by gen_lineinfo.
+	${CC} ${NOSTDINC_FLAGS} ${LINUXINCLUDE} ${KBUILD_CPPFLAGS} \
+	      ${KBUILD_AFLAGS} ${KBUILD_AFLAGS_KERNEL} \
+	      -c -o .tmp_lineinfo.o "${srctree}/scripts/empty_lineinfo.S"
+	lineinfo_o=.tmp_lineinfo.o
+fi
+
 if is_enabled CONFIG_KALLSYMS || is_enabled CONFIG_DEBUG_INFO_BTF; then
 
-	# The kallsyms linking does not need debug symbols, but the BTF does.
-	if ! is_enabled CONFIG_DEBUG_INFO_BTF; then
+	# The kallsyms linking does not need debug symbols, but BTF and
+	# lineinfo generation do.
+	if ! is_enabled CONFIG_DEBUG_INFO_BTF &&
+	   ! is_enabled CONFIG_KALLSYMS_LINEINFO; then
 		strip_debug=1
 	fi
 
@@ -230,6 +280,10 @@ if is_enabled CONFIG_DEBUG_INFO_BTF; then
 	fi
 	btf_vmlinux_bin_o=.tmp_vmlinux1.btf.o
 	btfids_vmlinux=.tmp_vmlinux1.BTF_ids
+fi
+
+if is_enabled CONFIG_KALLSYMS_LINEINFO; then
+	gen_lineinfo .tmp_vmlinux1
 fi
 
 if is_enabled CONFIG_KALLSYMS; then
@@ -276,6 +330,34 @@ if is_enabled CONFIG_KALLSYMS; then
 			[ -n "${KALLSYMS_EXTRA_PASS}" ]; then
 		vmlinux_link .tmp_vmlinux3
 		sysmap_and_kallsyms .tmp_vmlinux3
+	fi
+fi
+
+if is_enabled CONFIG_KALLSYMS_LINEINFO; then
+	# ${lineinfo_src} was linked against the stub, so its text can sit at
+	# different addresses than the image we are about to ship.  When that
+	# happens, regenerate from an image that already carries a real-sized
+	# table and link once more; a second shift would mean the layout is
+	# not settling, which is worth failing over rather than shipping line
+	# numbers that point at the wrong source.
+	lineinfo_last=${kallsyms_sysmap%.syms}
+	lineinfo_last=${lineinfo_last:-.tmp_vmlinux1}
+
+	if text_layout_changed "${lineinfo_src}" "${lineinfo_last}"; then
+		info LINEINFO "text moved, regenerating"
+		strip_debug=
+		vmlinux_link .tmp_vmlinux_lineinfo
+		gen_lineinfo .tmp_vmlinux_lineinfo
+		strip_debug=1
+		vmlinux_link .tmp_vmlinux_lineinfo2
+		if is_enabled CONFIG_KALLSYMS; then
+			sysmap_and_kallsyms .tmp_vmlinux_lineinfo2
+		fi
+		if text_layout_changed "${lineinfo_src}" .tmp_vmlinux_lineinfo2; then
+			echo >&2 "Failed to settle text layout for lineinfo"
+			echo >&2 "Try to disable CONFIG_KALLSYMS_LINEINFO"
+			exit 1
+		fi
 	fi
 fi
 

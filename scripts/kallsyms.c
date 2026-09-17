@@ -90,6 +90,17 @@ static bool is_ignored_symbol(const char *name, char type)
 			return true;
 	}
 
+	/*
+	 * The generated lineinfo tables (scripts/gen_lineinfo, stubbed by
+	 * scripts/empty_lineinfo.S) are read-only data whose size and
+	 * addresses change between kallsyms passes.  Match them by prefix so
+	 * the set cannot drift as the table layout evolves.  Text symbols are
+	 * exempt, so lib/tests/lineinfo_kunit.c's lineinfo_target_*() stay
+	 * resolvable -- the test looks them up by name.
+	 */
+	if (toupper(type) != 'T' && !strncmp(name, "lineinfo_", 9))
+		return true;
+
 	return false;
 }
 
