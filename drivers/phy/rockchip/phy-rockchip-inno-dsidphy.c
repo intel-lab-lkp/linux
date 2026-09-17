@@ -672,6 +672,7 @@ static int inno_dsidphy_power_on(struct phy *phy)
 		inno_dsidphy_lvds_mode_enable(inno);
 		break;
 	default:
+		pm_runtime_put(inno->dev);
 		return -EINVAL;
 	}
 
