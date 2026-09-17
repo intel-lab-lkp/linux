@@ -104,8 +104,10 @@ properties:
     const: 0
 
 dependencies:
-  adi,lo-x2-en: [ "adi,lo-en" ]
-  adi,lo-ppf-en: [ "adi,lo-en" ]
+  adi,lo-x2-en:
+    - adi,lo-en
+  adi,lo-ppf-en:
+    - adi,lo-en
 
 required:
   - compatible

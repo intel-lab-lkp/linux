@@ -82,7 +82,8 @@ properties:
   msi-parent: true
 
 dependencies:
-  brcm,pcie-ob-axi-offset: ["brcm,pcie-ob"]
+  brcm,pcie-ob-axi-offset:
+    - brcm,pcie-ob
   brcm,pcie-msi-inten: [msi-controller]
 
 required:

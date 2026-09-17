@@ -104,7 +104,8 @@ allOf:
           const: hardware
 
 dependencies:
-  atmel,reset-type: ['atmel,watchdog-type']
+  atmel,reset-type:
+    - atmel,watchdog-type
 
 unevaluatedProperties: false
 

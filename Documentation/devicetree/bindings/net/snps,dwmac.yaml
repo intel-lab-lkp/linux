@@ -605,8 +605,10 @@ required:
   - phy-mode
 
 dependencies:
-  snps,reset-active-low: ["snps,reset-gpio"]
-  snps,reset-delays-us: ["snps,reset-gpio"]
+  snps,reset-active-low:
+    - snps,reset-gpio
+  snps,reset-delays-us:
+    - snps,reset-gpio
 
 allOf:
   - $ref: ethernet-controller.yaml#

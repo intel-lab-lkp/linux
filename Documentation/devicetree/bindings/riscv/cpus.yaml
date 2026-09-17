@@ -151,8 +151,10 @@ anyOf:
       - riscv,isa-base
 
 dependencies:
-  riscv,isa-base: [ "riscv,isa-extensions" ]
-  riscv,isa-extensions: [ "riscv,isa-base" ]
+  riscv,isa-base:
+    - riscv,isa-extensions
+  riscv,isa-extensions:
+    - riscv,isa-base
 
 required:
   - interrupt-controller

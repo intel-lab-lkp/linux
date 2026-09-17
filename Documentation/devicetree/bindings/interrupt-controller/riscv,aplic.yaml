@@ -101,7 +101,8 @@ properties:
       that is mentioned in the "interrupts-extended"
 
 dependencies:
-  riscv,delegation: [ "riscv,children" ]
+  riscv,delegation:
+    - riscv,children
 
 required:
   - compatible

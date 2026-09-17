@@ -166,7 +166,8 @@ properties:
     type: boolean
 
 dependencies:
-  adi,charge-pump-resistor-ohms: [ 'adi,charge-pump-current-microamp' ]
+  adi,charge-pump-resistor-ohms:
+    - adi,charge-pump-current-microamp
 
 required:
   - compatible

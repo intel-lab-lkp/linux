@@ -48,8 +48,10 @@ required:
   - resets
 
 oneOf:
-  - required: ['hisilicon,fixed-mode']
-  - required: ['hisilicon,mode-select-bits']
+  - required:
+      - hisilicon,fixed-mode
+  - required:
+      - hisilicon,mode-select-bits
 
 additionalProperties: false
 

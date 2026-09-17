@@ -251,8 +251,10 @@ allOf:
         - nvidia,xcvr-lsrslew
 
       anyOf:
-        - required: ["nvidia,xcvr-setup"]
-        - required: ["nvidia,xcvr-setup-use-fuses"]
+        - required:
+            - nvidia,xcvr-setup
+        - required:
+            - nvidia,xcvr-setup-use-fuses
 
       if:
         properties:

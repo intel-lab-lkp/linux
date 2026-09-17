@@ -75,6 +75,7 @@ properties:
     default: 0
 
 dependencies:
-  linux,input-type: [ "linux,code" ]
+  linux,input-type:
+    - linux,code
 
 additionalProperties: true

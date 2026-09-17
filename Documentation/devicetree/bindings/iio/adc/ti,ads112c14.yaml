@@ -132,8 +132,10 @@ dependencies:
   refn-supply: [ refp-supply ]
 
 oneOf:
-  - required: [ refp-supply ]
-  - required: [ "ti,refp-refn-resistor-ohms" ]
+  - required:
+      - refp-supply
+  - required:
+      - ti,refp-refn-resistor-ohms
   - properties:
       refp-supply: false
       refn-supply: false

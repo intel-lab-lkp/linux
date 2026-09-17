@@ -194,7 +194,8 @@ patternProperties:
     description: The hard wired USB devices.
 
 dependencies:
-  wakeup-source: [ 'mediatek,syscon-wakeup' ]
+  wakeup-source:
+    - mediatek,syscon-wakeup
 
 required:
   - compatible

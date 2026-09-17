@@ -251,9 +251,12 @@ required:
   - regulators
 
 dependencies:
-  max8997,pmic-buck1-uses-gpio-dvs: [ 'max8997,pmic-buck125-dvs-gpios' ]
-  max8997,pmic-buck2-uses-gpio-dvs: [ 'max8997,pmic-buck125-dvs-gpios' ]
-  max8997,pmic-buck5-uses-gpio-dvs: [ 'max8997,pmic-buck125-dvs-gpios' ]
+  max8997,pmic-buck1-uses-gpio-dvs:
+    - max8997,pmic-buck125-dvs-gpios
+  max8997,pmic-buck2-uses-gpio-dvs:
+    - max8997,pmic-buck125-dvs-gpios
+  max8997,pmic-buck5-uses-gpio-dvs:
+    - max8997,pmic-buck125-dvs-gpios
 
 additionalProperties: false
 

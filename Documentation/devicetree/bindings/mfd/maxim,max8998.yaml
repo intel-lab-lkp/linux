@@ -130,8 +130,10 @@ properties:
           - regulator-name
 
 dependencies:
-  max8998,pmic-buck1-dvs-gpios: [ "max8998,pmic-buck1-dvs-voltage" ]
-  max8998,pmic-buck2-dvs-gpio: [ "max8998,pmic-buck2-dvs-voltage" ]
+  max8998,pmic-buck1-dvs-gpios:
+    - max8998,pmic-buck1-dvs-voltage
+  max8998,pmic-buck2-dvs-gpio:
+    - max8998,pmic-buck2-dvs-voltage
 
 required:
   - compatible
