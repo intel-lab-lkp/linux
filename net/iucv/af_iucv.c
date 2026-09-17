@@ -323,6 +323,12 @@ static void iucv_sock_unlink(struct iucv_sock_list *l, struct sock *sk)
 	write_unlock_bh(&l->lock);
 }
 
+/* Used by afiucv_netdev_event() two-pass algorithm */
+struct iucv_netdev_todo {
+	struct list_head list;
+	struct sock *sk;
+};
+
 /* Kill socket (only if zapped and orphaned) */
 static void iucv_sock_kill(struct sock *sk)
 {
@@ -448,7 +454,7 @@ static void iucv_sock_close(struct sock *sk)
 
 	if (iucv->hs_dev) {
 		dev_put(iucv->hs_dev);
-		iucv->hs_dev = NULL;
+		WRITE_ONCE(iucv->hs_dev, NULL);
 		sk->sk_bound_dev_if = 0;
 	}
 
@@ -2217,21 +2223,62 @@ static int afiucv_netdev_event(struct notifier_block *this,
 			       unsigned long event, void *ptr)
 {
 	struct net_device *event_dev = netdev_notifier_info_to_dev(ptr);
+	struct iucv_netdev_todo *entry, *tmp;
+	LIST_HEAD(todo);
 	struct sock *sk;
-	struct iucv_sock *iucv;
 
 	switch (event) {
 	case NETDEV_REBOOT:
 	case NETDEV_GOING_DOWN:
+		/*
+		 * Pass 1: collect matching sockets under read_lock_bh.
+		 *
+		 * read_lock_bh(&iucv_sk_list.lock) excludes concurrent
+		 * write_lock_bh in iucv_sock_link/unlink, so sk cannot
+		 * be removed from the list or freed while we walk it.
+		 * sock_hold() pins the sk so it survives after we drop
+		 * the lock.
+		 *
+		 * iucv_sock_close() writes hs_dev = NULL under lock_sock,
+		 * which is orthogonal to read_lock_bh.  READ_ONCE() documents
+		 * the intentional concurrent access: if hs_dev is being
+		 * cleared to NULL it will not equal event_dev (a valid
+		 * pointer) so the socket is correctly skipped.
+		 */
+		read_lock_bh(&iucv_sk_list.lock);
 		sk_for_each(sk, &iucv_sk_list.head) {
-			iucv = iucv_sk(sk);
-			if ((iucv->hs_dev == event_dev) &&
-			    (sk->sk_state == IUCV_CONNECTED)) {
+			if (READ_ONCE(iucv_sk(sk)->hs_dev) != event_dev)
+				continue;
+			entry = kmalloc_obj(*entry, GFP_ATOMIC);
+			if (!entry)
+				continue;
+			sock_hold(sk);
+			entry->sk = sk;
+			list_add_tail(&entry->list, &todo);
+		}
+		read_unlock_bh(&iucv_sk_list.lock);
+		/*
+		 * Pass 2: act on each socket under lock_sock.
+		 *
+		 * lock_sock() serialises against iucv_sock_close() and
+		 * sock_orphan(), so sk_state and sk_socket are stable.
+		 * iucv_send_ctrl() may call sock_alloc_send_skb(GFP_KERNEL)
+		 * which requires non-atomic context -- satisfied here because
+		 * we are no longer holding read_lock_bh.
+		 */
+		list_for_each_entry_safe(entry, tmp, &todo, list) {
+			sk = entry->sk;
+			lock_sock(sk);
+			if (sk->sk_state == IUCV_CONNECTED) {
 				if (event == NETDEV_GOING_DOWN)
 					iucv_send_ctrl(sk, AF_IUCV_FLAG_FIN);
 				sk->sk_state = IUCV_DISCONN;
 				sk->sk_state_change(sk);
 			}
+			release_sock(sk);
+			sock_put(sk);
+			list_del(&entry->list);
+			kfree(entry);
 		}
 		break;
 	case NETDEV_DOWN:
