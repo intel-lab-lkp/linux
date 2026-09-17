@@ -296,6 +296,11 @@ static int tda10086_set_symbol_rate(struct tda10086_state *state,
 
 	dprintk ("%s %i\n", __func__, symbol_rate);
 
+	if (symbol_rate < 1000) {
+		dprintk("%s: symbol rate %u too small\n", __func__, symbol_rate);
+		return -EINVAL;
+	}
+
 	/* setup the decimation and anti-aliasing filters.. */
 	if (symbol_rate < SACLK / 10000 * 137) {
 		dfn=4;
