@@ -1835,6 +1835,7 @@ SYSCALL_DEFINE1(set_tid_address, int __user *, tidptr)
 static void rt_mutex_init_task(struct task_struct *p)
 {
 	raw_spin_lock_init(&p->pi_lock);
+	raw_spin_lock_init(&p->pi_futex_lock);
 #ifdef CONFIG_RT_MUTEXES
 	p->pi_waiters = RB_ROOT_CACHED;
 	p->pi_top_task = NULL;

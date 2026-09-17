@@ -51,18 +51,18 @@ static void pi_state_update_owner(struct futex_pi_state *pi_state,
 	lockdep_assert_held(&pi_state->pi_mutex.wait_lock);
 
 	if (old_owner) {
-		raw_spin_lock(&old_owner->pi_lock);
+		raw_spin_lock(&old_owner->pi_futex_lock);
 		WARN_ON(list_empty(&pi_state->list));
 		list_del_init(&pi_state->list);
-		raw_spin_unlock(&old_owner->pi_lock);
+		raw_spin_unlock(&old_owner->pi_futex_lock);
 	}
 
 	if (new_owner) {
-		raw_spin_lock(&new_owner->pi_lock);
+		raw_spin_lock(&new_owner->pi_futex_lock);
 		WARN_ON(!list_empty(&pi_state->list));
 		list_add(&pi_state->list, &new_owner->futex.pi_state_list);
 		pi_state->owner = new_owner;
-		raw_spin_unlock(&new_owner->pi_lock);
+		raw_spin_unlock(&new_owner->pi_futex_lock);
 	}
 }
 
@@ -177,7 +177,7 @@ void put_pi_state(struct futex_pi_state *pi_state)
  *
  *	(and pi_mutex 'obviously')
  *
- * p->pi_lock:
+ * p->pi_futex_lock:
  *
  *	p->futex.pi_state_list -> pi_state->list, relation
  *	pi_mutex->owner -> pi_state->owner, relation
@@ -191,7 +191,7 @@ void put_pi_state(struct futex_pi_state *pi_state)
  *
  *   hb->lock
  *     pi_mutex->wait_lock
- *       p->pi_lock
+ *       p->pi_futex_lock
  *
  * Futex kernel state:
  *
@@ -222,12 +222,12 @@ void put_pi_state(struct futex_pi_state *pi_state)
  *
  * The state has two related locks:
  *
- * 1) p::pi_lock
+ * 1) p::pi_futex_lock
  *
- *    p::pi_lock has to be taken by the waiter when evaluating the state to
- *    protect against a concurrent exit/exec cleanup by the owner. If the state
- *    is OK then the waiter can be attached to the owner while still holding
- *    pi_lock.
+ *    p::pi_futex_lock has to be taken by the waiter when evaluating the state
+ *    to protect against a concurrent exit/exec cleanup by the owner. If the
+ *    state is OK then the waiter can be attached to the owner while still
+ *    holding pi_futex_lock.
  *
  *    The cleanup code has to hold it for all state transitions to ensure that
  *    the stores to the state cannot be reordered against previous stores on
@@ -482,13 +482,13 @@ static int attach_to_pi_owner(u32 __user *uaddr, u32 uval, union futex_key *key,
 	 * We need to look at the task state to figure out whether the task is
 	 * exiting. To protect against the change of the task state from
 	 * FUTEX_STATE_OK to FUTEX_STATE_EXISTING in futex_cleanup_begin() it is
-	 * required to do this protected by p->pi_lock, which prevents the owner
-	 * from concurrently starting the exit cleanup.
+	 * required to do this protected by p->pi_futex_lock, which prevents
+	 * the owner from concurrently starting the exit cleanup.
 	 *
-	 * If the state is FUTEX_STATE_OK pi_lock must be held until the waiter
-	 * is attached to protect against a concurrent exit()/exec().
+	 * If the state is FUTEX_STATE_OK pi_futex_lock must be held until the
+	 * waiter is attached to protect against a concurrent exit()/exec().
 	 */
-	raw_spin_lock_irq(&p->pi_lock);
+	raw_spin_lock_irq(&p->pi_futex_lock);
 
 	/* Validate that the task is ready for futex operations. */
 	if (unlikely(p->futex.state != FUTEX_STATE_OK)) {
@@ -503,14 +503,14 @@ static int attach_to_pi_owner(u32 __user *uaddr, u32 uval, union futex_key *key,
 		 * re-evaluates the situation.
 		 */
 		if (p->futex.state == FUTEX_STATE_EXITING) {
-			raw_spin_unlock_irq(&p->pi_lock);
+			raw_spin_unlock_irq(&p->pi_futex_lock);
 			*exiting = p;
 			return -EBUSY;
 		}
 
 		int ret = handle_exit_race(uaddr, uval);
 
-		raw_spin_unlock_irq(&p->pi_lock);
+		raw_spin_unlock_irq(&p->pi_futex_lock);
 		put_task_struct(p);
 		return ret;
 	}
@@ -524,14 +524,14 @@ static int attach_to_pi_owner(u32 __user *uaddr, u32 uval, union futex_key *key,
 		 * key's mm is freed.
 		 */
 		if (unlikely(p->mm != key->private.mm)) {
-			raw_spin_unlock_irq(&p->pi_lock);
+			raw_spin_unlock_irq(&p->pi_futex_lock);
 			put_task_struct(p);
 			return -EPERM;
 		}
 	}
 
 	__attach_to_pi_owner(p, key, ps);
-	raw_spin_unlock_irq(&p->pi_lock);
+	raw_spin_unlock_irq(&p->pi_futex_lock);
 
 	put_task_struct(p);
 
@@ -650,9 +650,9 @@ int futex_lock_pi_atomic(u32 __user *uaddr, struct futex_hash_bucket *hb,
 		 * because @task is known and valid.
 		 */
 		if (set_waiters) {
-			raw_spin_lock_irq(&task->pi_lock);
+			raw_spin_lock_irq(&task->pi_futex_lock);
 			__attach_to_pi_owner(task, key, ps);
-			raw_spin_unlock_irq(&task->pi_lock);
+			raw_spin_unlock_irq(&task->pi_futex_lock);
 		}
 		return 1;
 	}
