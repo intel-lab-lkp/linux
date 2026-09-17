@@ -220,8 +220,10 @@ static int ovpn_udp6_output(struct ovpn_peer *peer, struct ovpn_bind *bind,
 			    struct dst_cache *cache, struct sock *sk,
 			    struct sk_buff *skb)
 {
+	struct net *net = sock_net(sk);
 	struct dst_entry *dst;
-	int ret;
+	int gen0, gen1, ret;
+	u32 cookie;
 
 	struct flowi6 fl = {
 		.saddr = bind->local.ipv6,
@@ -250,7 +252,11 @@ static int ovpn_udp6_output(struct ovpn_peer *peer, struct ovpn_bind *bind,
 		dst_cache_reset(cache);
 	}
 
-	dst = ip6_dst_lookup_flow(sock_net(sk), sk, &fl, NULL);
+	gen0 = rt_genid_ipv6(net);
+	/* keep the unordered initial generation read before the FIB lookup */
+	smp_rmb();
+
+	dst = ip6_dst_lookup_flow(net, sk, &fl, NULL);
 	if (IS_ERR(dst)) {
 		ret = PTR_ERR(dst);
 		net_dbg_ratelimited("%s: no route to host %pISpc: %d\n",
@@ -258,7 +264,15 @@ static int ovpn_udp6_output(struct ovpn_peer *peer, struct ovpn_bind *bind,
 				    &bind->remote.in6, ret);
 		goto err;
 	}
-	dst_cache_set_ip6(cache, dst, &fl.saddr);
+
+	cookie = rt6_get_cookie(dst_rt6_info(dst));
+
+	/* keep the FIB and cookie reads before the final generation read */
+	smp_rmb();
+	gen1 = rt_genid_ipv6(net);
+
+	if (likely(gen0 == gen1))
+		dst_cache_set_ip6_cookie(cache, dst, &fl.saddr, cookie);
 
 transmit:
 	/* user IPv6 packets may be larger than the transport interface

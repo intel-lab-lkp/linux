@@ -46,6 +46,19 @@ void dst_cache_set_ip4(struct dst_cache *dst_cache, struct dst_entry *dst,
 #if IS_ENABLED(CONFIG_IPV6)
 
 /**
+ *	dst_cache_set_ip6_cookie - store ipv6 dst with caller-provided cookie
+ *	@dst_cache: the cache
+ *	@dst: the entry to be cached
+ *	@saddr: the source address to be stored inside the cache
+ *	@cookie: the route validation cookie to store with @dst
+ *
+ *	local BH must be disabled.
+ */
+void dst_cache_set_ip6_cookie(struct dst_cache *dst_cache,
+			      struct dst_entry *dst,
+			      const struct in6_addr *saddr, u32 cookie);
+
+/**
  *	dst_cache_set_ip6 - store the ipv6 dst into the cache
  *	@dst_cache: the cache
  *	@dst: the entry to be cached

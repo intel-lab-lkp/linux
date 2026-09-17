@@ -117,8 +117,9 @@ void dst_cache_set_ip4(struct dst_cache *dst_cache, struct dst_entry *dst,
 EXPORT_SYMBOL_GPL(dst_cache_set_ip4);
 
 #if IS_ENABLED(CONFIG_IPV6)
-void dst_cache_set_ip6(struct dst_cache *dst_cache, struct dst_entry *dst,
-		       const struct in6_addr *saddr)
+void dst_cache_set_ip6_cookie(struct dst_cache *dst_cache,
+			      struct dst_entry *dst,
+			      const struct in6_addr *saddr, u32 cookie)
 {
 	struct dst_cache_pcpu *idst;
 
@@ -128,10 +129,20 @@ void dst_cache_set_ip6(struct dst_cache *dst_cache, struct dst_entry *dst,
 	local_lock_nested_bh(&dst_cache->cache->bh_lock);
 
 	idst = this_cpu_ptr(dst_cache->cache);
-	dst_cache_per_cpu_dst_set(idst, dst,
-				  rt6_get_cookie(dst_rt6_info(dst)));
+	dst_cache_per_cpu_dst_set(idst, dst, cookie);
 	idst->in6_saddr = *saddr;
 	local_unlock_nested_bh(&dst_cache->cache->bh_lock);
+}
+EXPORT_SYMBOL_GPL(dst_cache_set_ip6_cookie);
+
+void dst_cache_set_ip6(struct dst_cache *dst_cache, struct dst_entry *dst,
+		       const struct in6_addr *saddr)
+{
+	if (!dst_cache->cache)
+		return;
+
+	dst_cache_set_ip6_cookie(dst_cache, dst, saddr,
+				 rt6_get_cookie(dst_rt6_info(dst)));
 }
 EXPORT_SYMBOL_GPL(dst_cache_set_ip6);
 
