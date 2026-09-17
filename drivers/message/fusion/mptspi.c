@@ -914,8 +914,12 @@ static int mptspi_write_spi_device_pg1(struct scsi_target *starget,
 				nego_parms |= MPI_SCSIDEVPAGE1_RP_IDP;
 				pg1->RequestedParameters =
 				    cpu_to_le32(nego_parms);
+				scsi_device_put(sdev);
 				break;
 			}
+
+			if (sdev)
+				scsi_device_put(sdev);
 		}
 	}
 
