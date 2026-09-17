@@ -165,6 +165,7 @@ ahc_dump_target_state(struct ahc_softc *ahc, struct seq_file *m,
 			continue;
 
 		ahc_dump_device_state(m, sdev);
+		scsi_device_put(sdev);
 	}
 }
 
