@@ -1921,6 +1921,7 @@ static void __init of_unittest_match_node(void)
 		if (!match) {
 			unittest(0, "%s didn't match anything\n",
 				match_node_tests[i].path);
+			of_node_put(np);
 			continue;
 		}
 
@@ -1928,9 +1929,11 @@ static void __init of_unittest_match_node(void)
 			unittest(0, "%s got wrong match. expected %s, got %s\n",
 				match_node_tests[i].path, match_node_tests[i].data,
 				(const char *)match->data);
+			of_node_put(np);
 			continue;
 		}
 		unittest(1, "passed");
+		of_node_put(np);
 	}
 }
 
