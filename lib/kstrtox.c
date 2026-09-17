@@ -85,7 +85,6 @@ unsigned int _parse_integer_limit(const char *s, unsigned int base, unsigned lon
 		if (unlikely(res & (~0ull << 60))) {
 			if (check_mul_overflow(res, base, &res) ||
 			    check_add_overflow(res, val, &res)) {
-				res = ULLONG_MAX;
 				overflow = KSTRTOX_OVERFLOW;
 			}
 		} else {

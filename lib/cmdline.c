@@ -14,6 +14,8 @@
 #include <linux/string.h>
 #include <linux/ctype.h>
 
+#include "kstrtox.h"
+
 /*
  *	If a hyphen was found in get_option, this will handle the
  *	range of numbers, M-N.  This will expand the range and insert
@@ -146,14 +148,21 @@ EXPORT_SYMBOL(get_options);
  *	Parses a string into a number.  The number stored at @ptr is
  *	potentially suffixed with K, M, G, T, P, E.
  *
- *	Return: The value as recognized by simple_strtoull() multiplied
- *	by the value as specified by suffix, if any.
+ *	Return: The value multiplied by the value as specified by suffix, if any.
  */
 
 unsigned long long memparse(const char *ptr, char **retptr)
 {
-	char *endptr;	/* local pointer to end of parsed string */
-	unsigned long long ret = simple_strtoull(ptr, &endptr, 0);
+	unsigned int base = 0;
+	ptr = _parse_integer_fixup_radix(ptr, &base);
+	unsigned long long ret;
+	unsigned int rv = _parse_integer(ptr, base, &ret);
+	if (rv & KSTRTOX_OVERFLOW) {
+		rv &= ~KSTRTOX_OVERFLOW;
+		ret = -1;
+	}
+	/* local pointer to end of parsed string */
+	const char *endptr = ptr + rv;
 	unsigned int shl = 0;
 
 	/* Consume valid suffix even in case of overflow. */
@@ -194,7 +203,7 @@ unsigned long long memparse(const char *ptr, char **retptr)
 	}
 
 	if (retptr)
-		*retptr = endptr;
+		*retptr = (char *)endptr;
 
 	return ret;
 }
