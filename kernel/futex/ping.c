@@ -7,7 +7,8 @@
 #include "futex.h"
 
 static int futex_trylock_ping_state(u32 __user *uaddr,
-				    struct futex_pi_state *ping_state);
+				    struct futex_pi_state *ping_state,
+				    bool handoff);
 
 static void ping_state_update_owner(struct futex_pi_state *ping_state,
 				    struct task_struct *new_owner)
@@ -144,7 +145,8 @@ out:
 
 /* Returns >0 if lock acquired, <0 on error */
 static int futex_trylock_ping_state(u32 __user *uaddr,
-				    struct futex_pi_state *ping_state)
+				    struct futex_pi_state *ping_state,
+				    bool handoff)
 {
 	struct task_struct *owner;
 	u32 uval, new, newtid;
@@ -152,13 +154,15 @@ static int futex_trylock_ping_state(u32 __user *uaddr,
 
 	ret = 0;
 	raw_spin_lock_irq(&ping_state->ping_mutex.wait_lock);
+	ret = futex_get_value_locked(&uval, uaddr);
+	if (ret)
+		goto err;
 	owner = ping_mutex_owner(&ping_state->ping_mutex);
 	if (owner == NULL) {
 		newtid = task_pid_vnr(current);
 
-		ret = futex_get_value_locked(&uval, uaddr);
-		if (ret)
-			goto err;
+		WARN_ON_ONCE(ping_state->handoff || ping_state->pickup);
+
 		if (uval & FUTEX_TID_MASK) {
 			ret = -EAGAIN;
 			goto err;
@@ -171,7 +175,19 @@ static int futex_trylock_ping_state(u32 __user *uaddr,
 			ping_state_update_owner(ping_state, current);
 		WRITE_ONCE(ping_state->ping_mutex.owner, current);
 		ret = 1;
-	}
+	} else if (ping_state->pickup) {
+		if (owner != current) {
+			ret = -EAGAIN;
+			goto err;
+		}
+		if ((uval & FUTEX_TID_MASK) != task_pid_vnr(current)) {
+			ret = -EINVAL;
+			goto err;
+		}
+		ping_state->pickup = 0;
+		ret = 1;
+	} else if (handoff && !ping_state->handoff)
+		ping_state->handoff = 1;
 	raw_spin_unlock_irq(&ping_state->ping_mutex.wait_lock);
 	return ret;
 
@@ -233,7 +249,7 @@ static int futex_lock_ping_atomic(u32 __user *uaddr,
 		_ps = top_waiter->ping_state;
 		if (_ps == NULL)
 			return -EINVAL;
-		ret = futex_trylock_ping_state(uaddr, _ps);
+		ret = futex_trylock_ping_state(uaddr, _ps, false);
 		if (ret > 0) {
 			/* We stole the lock from the top waiter. */
 			raw_spin_lock_irq(&_ps->ping_mutex.wait_lock);
@@ -297,7 +313,7 @@ int futex_lock_ping(u32 __user *uaddr, unsigned int flags, ktime_t *time,
 	struct hrtimer_sleeper timeout, *to;
 	struct task_struct *exiting;
 	struct futex_q q = futex_q_init;
-	bool queued;
+	bool queued, should_handoff;
 	int ret;
 
 	if (refill_pi_state_cache())
@@ -369,6 +385,7 @@ retry_private:
 		}
 
 		queued = false;
+		should_handoff = false;
 		while (1) {
 			set_task_blocked_on(current, &q.ping_state->ping_mutex,
 					    BO_T_PING_FUTEX);
@@ -398,13 +415,15 @@ retry_private:
 				goto out_unqueue;
 			}
 
-			ret = futex_trylock_ping_state(uaddr, q.ping_state);
+			ret = futex_trylock_ping_state(uaddr, q.ping_state,
+						       should_handoff);
 			if (ret > 0) {
 				/* Got the futex */
 				ret = 0;
 				goto out_unqueue;
 			} else if (ret < 0)
 				goto out_unqueue;
+			should_handoff = true;
 		}
 
 out_unqueue:
@@ -526,6 +545,13 @@ retry:
 	 * no top_waiter.
 	 */
 	new = FUTEX_WAITERS;
+	if (ping_state->handoff) {
+		new |= task_pid_vnr(top_waiter->task);
+		ping_state->handoff = 0;
+		ping_state->pickup = 1;
+		WRITE_ONCE(ping_state->ping_mutex.owner, top_waiter->task);
+	} else
+		WRITE_ONCE(ping_state->ping_mutex.owner, NULL);
 	ret = lock_pi_update_atomic(uaddr, uval, new);
 	if (ret) {
 		raw_spin_unlock_irq(&ping_state->ping_mutex.wait_lock);
@@ -543,7 +569,6 @@ retry:
 	}
 
 	ping_state_update_owner(ping_state, top_waiter->task);
-	WRITE_ONCE(ping_state->ping_mutex.owner, NULL);
 	raw_spin_unlock_irq_wake(&ping_state->ping_mutex.wait_lock, &wake_q);
 	put_ping_state(ping_state);
 	return 0;
