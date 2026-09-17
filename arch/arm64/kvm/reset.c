@@ -231,19 +231,9 @@ u32 get_kvm_ipa_limit(void)
 
 int __init kvm_set_ipa_limit(void)
 {
-	unsigned int parange;
 	u64 mmfr0;
 
 	mmfr0 = read_sanitised_ftr_reg(SYS_ID_AA64MMFR0_EL1);
-	parange = cpuid_feature_extract_unsigned_field(mmfr0,
-				ID_AA64MMFR0_EL1_PARANGE_SHIFT);
-	/*
-	 * IPA size beyond 48 bits for 4K and 16K page size is only supported
-	 * when LPA2 is available. So if we have LPA2, enable it, else cap to 48
-	 * bits, in case it's reported as larger on the system.
-	 */
-	if (!kvm_lpa2_is_enabled() && PAGE_SIZE != SZ_64K)
-		parange = min(parange, (unsigned int)ID_AA64MMFR0_EL1_PARANGE_48);
 
 	/*
 	 * Check with ARMv8.5-GTG that our PAGE_SIZE is supported at
@@ -264,7 +254,7 @@ int __init kvm_set_ipa_limit(void)
 		return -EINVAL;
 	}
 
-	kvm_ipa_limit = id_aa64mmfr0_parange_to_phys_shift(parange);
+	kvm_ipa_limit = kvm_get_ipa_max(mmfr0);
 	kvm_info("IPA Size Limit: %d bits%s\n", kvm_ipa_limit,
 		 ((kvm_ipa_limit < KVM_PHYS_SHIFT) ?
 		  " (Reduced IPA size, limited VM/VMM compatibility)" : ""));

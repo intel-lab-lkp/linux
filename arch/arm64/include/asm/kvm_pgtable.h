@@ -48,6 +48,21 @@ static inline u64 kvm_get_parange(u64 mmfr0)
 	return parange;
 }
 
+/*
+ * The largest IPA size a VM can be given. Unlike VTCR_EL2.PS
+ * (kvm_get_parange()), it isn't clamped to the kernel's PA configuration.
+ */
+static inline u32 kvm_get_ipa_max(u64 mmfr0)
+{
+	unsigned int parange = cpuid_feature_extract_unsigned_field(mmfr0,
+				ID_AA64MMFR0_EL1_PARANGE_SHIFT);
+
+	if (!kvm_lpa2_is_enabled() && PAGE_SIZE != SZ_64K)
+		parange = min(parange, (unsigned int)ID_AA64MMFR0_EL1_PARANGE_48);
+
+	return id_aa64mmfr0_parange_to_phys_shift(parange);
+}
+
 typedef u64 kvm_pte_t;
 
 #define KVM_PTE_VALID			BIT(0)
