@@ -6415,8 +6415,10 @@ _scsih_update_vphys_after_reset(struct MPT3SAS_ADAPTER *ioc)
 					    &mport->vphys_list);
 					sas_device = mpt3sas_get_sdev_by_addr(
 					    ioc, attached_sas_addr, port);
-					if (sas_device)
+					if (sas_device) {
 						sas_device->port = mport;
+						sas_device_put(sas_device);
+					}
 				}
 				/*
 				 * Earlier while updating the hba_port table,
