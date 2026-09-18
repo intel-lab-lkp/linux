@@ -756,7 +756,7 @@ static int rxgk_challenge_to_recvmsg(struct rxrpc_connection *conn,
 				     struct sk_buff *challenge,
 				     struct msghdr *msg)
 {
-	struct rxgk_challenge chall;
+	struct rxgk_challenge chall = {};
 
 	chall.base.service_id		= conn->service_id;
 	chall.base.security_index	= conn->security_ix;
