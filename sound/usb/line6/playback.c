@@ -181,6 +181,7 @@ static int submit_audio_out_urb(struct snd_line6_pcm *line6pcm)
 		}
 
 		fsize *= bytes_per_frame;
+		fsize = min(fsize, line6pcm->max_packet_size_out);
 
 		fout->offset = urb_size;
 		fout->length = fsize;
