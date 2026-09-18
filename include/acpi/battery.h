@@ -3,6 +3,7 @@
 #define __ACPI_BATTERY_H
 
 #include <linux/device.h>
+#include <linux/list.h>
 #include <linux/power_supply.h>
 
 #define ACPI_BATTERY_CLASS "battery"
@@ -18,8 +19,17 @@ struct acpi_battery_hook {
 	struct list_head list;
 };
 
+struct acpi_battery_hook_device {
+	struct power_supply *battery;
+	struct list_head list;
+};
+
 void battery_hook_register(struct acpi_battery_hook *hook);
 void battery_hook_unregister(struct acpi_battery_hook *hook);
 int devm_battery_hook_register(struct device *dev, struct acpi_battery_hook *hook);
+
+void battery_hook_add_battery(struct acpi_battery_hook_device *hook_dev,
+			      struct power_supply *battery);
+void battery_hook_remove_battery(struct acpi_battery_hook_device *hook_dev);
 
 #endif
