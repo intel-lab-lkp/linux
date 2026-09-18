@@ -460,6 +460,31 @@ static __init int get_tdx_sys_info_features(struct tdx_sys_info_features *featur
 	return read_sys_metadata_table(feature_mappings, features);
 }
 
+#define TDX_SYSINFO_MAP_TDMR(_field_id, _member) \
+	TDX_SYSINFO_MAP(_field_id, struct tdx_sys_info_tdmr, _member)
+
+static const struct field_mapping tdmr_mappings[] __initconst = {
+	TDX_SYSINFO_MAP_TDMR(MAX_TDMRS,			max_tdmrs),
+	TDX_SYSINFO_MAP_TDMR(MAX_RESERVED_PER_TDMR,	max_reserved_per_tdmr),
+	TDX_SYSINFO_MAP_TDMR(PAMT_4K_ENTRY_SIZE,	pamt_4k_entry_size),
+	TDX_SYSINFO_MAP_TDMR(PAMT_2M_ENTRY_SIZE,	pamt_2m_entry_size),
+	TDX_SYSINFO_MAP_TDMR(PAMT_1G_ENTRY_SIZE,	pamt_1g_entry_size),
+};
+
+static __init int get_tdx_sys_info_tdmr(struct tdx_sys_info_tdmr *tdmr)
+{
+	return read_sys_metadata_table(tdmr_mappings, tdmr);
+}
+
+static const struct field_mapping dpamt_mappings[] __initconst = {
+	TDX_SYSINFO_MAP_TDMR(PAMT_PAGE_BITMAP_ENTRY_BITS, pamt_page_bitmap_entry_bits),
+};
+
+static __init int get_tdx_sys_info_tdmr_dpamt(struct tdx_sys_info_tdmr *tdmr)
+{
+	return read_sys_metadata_table(dpamt_mappings, tdmr);
+}
+
 #include "tdx_global_metadata.c"
 
 static __init int check_features(struct tdx_sys_info *sysinfo)
