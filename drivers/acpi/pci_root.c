@@ -137,6 +137,7 @@ static struct pci_osc_bit_struct pci_osc_control_bit[] = {
 	{ OSC_PCI_EXPRESS_CAPABILITY_CONTROL, "PCIeCapability" },
 	{ OSC_PCI_EXPRESS_LTR_CONTROL, "LTR" },
 	{ OSC_PCI_EXPRESS_DPC_CONTROL, "DPC" },
+	{ OSC_PCI_EXPRESS_FLIT_CONTROL, "FlitLogging" },
 };
 
 static struct pci_osc_bit_struct cxl_osc_support_bit[] = {
@@ -519,6 +520,14 @@ static u32 calculate_control(void)
 	 */
 	if (IS_ENABLED(CONFIG_PCIE_DPC) && IS_ENABLED(CONFIG_PCIE_EDR))
 		control |= OSC_PCI_EXPRESS_DPC_CONTROL;
+
+	/*
+	 * An OS that requests Flit Logging control must request AER control
+	 * as well, so pair it with the bit that was actually requested above.
+	 */
+	if (IS_ENABLED(CONFIG_PCIE_FLIT) &&
+	    (control & OSC_PCI_EXPRESS_AER_CONTROL))
+		control |= OSC_PCI_EXPRESS_FLIT_CONTROL;
 
 	return control;
 }
@@ -1040,6 +1049,8 @@ struct pci_bus *acpi_pci_root_create(struct acpi_pci_root *root,
 		host_bridge->native_ltr = 0;
 	if (!(root->osc_control_set & OSC_PCI_EXPRESS_DPC_CONTROL))
 		host_bridge->native_dpc = 0;
+	if (!(root->osc_control_set & OSC_PCI_EXPRESS_FLIT_CONTROL))
+		host_bridge->native_flit = 0;
 
 	if (!(root->osc_ext_control_set & OSC_CXL_ERROR_REPORTING_CONTROL))
 		host_bridge->native_cxl_error = 0;

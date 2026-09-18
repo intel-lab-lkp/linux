@@ -278,6 +278,12 @@ static int get_port_device_capability(struct pci_dev *dev)
 			services |= PCIE_PORT_SERVICE_BWCTRL;
 	}
 
+#ifdef CONFIG_PCIE_FLIT
+	/* flit_cap is set only when the capability is OS-managed */
+	if (dev->flit_cap)
+		services |= PCIE_PORT_SERVICE_FLIT;
+#endif
+
 	return services;
 }
 
@@ -834,6 +840,7 @@ static void __init pcie_init_services(void)
 	pcie_dpc_init();
 	pcie_bwctrl_init();
 	pcie_hp_init();
+	pcie_flit_init();
 }
 
 static int __init pcie_portdrv_init(void)

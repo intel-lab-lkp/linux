@@ -1798,6 +1798,7 @@ int pci_save_state(struct pci_dev *dev)
 
 	pci_save_dpc_state(dev);
 	pci_save_aer_state(dev);
+	pci_save_flit_state(dev);
 	pci_save_ptm_state(dev);
 	pci_save_tph_state(dev);
 	return pci_save_vc_state(dev);
@@ -1870,6 +1871,7 @@ void pci_restore_state(struct pci_dev *dev)
 
 	pci_aer_clear_status(dev);
 	pci_restore_aer_state(dev);
+	pci_restore_flit_state(dev);
 
 	pci_restore_config_space(dev);
 

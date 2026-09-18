@@ -1000,6 +1000,18 @@ static inline void pci_dpc_init(struct pci_dev *pdev) { }
 static inline bool pci_dpc_recovered(struct pci_dev *pdev) { return false; }
 #endif
 
+#ifdef CONFIG_PCIE_FLIT
+void pci_flit_init(struct pci_dev *pdev);
+void pci_flit_exit(struct pci_dev *pdev);
+void pci_save_flit_state(struct pci_dev *pdev);
+void pci_restore_flit_state(struct pci_dev *pdev);
+#else
+static inline void pci_flit_init(struct pci_dev *pdev) { }
+static inline void pci_flit_exit(struct pci_dev *pdev) { }
+static inline void pci_save_flit_state(struct pci_dev *pdev) { }
+static inline void pci_restore_flit_state(struct pci_dev *pdev) { }
+#endif
+
 #ifdef CONFIG_PCIEPORTBUS
 void pci_rcec_init(struct pci_dev *dev);
 void pci_rcec_exit(struct pci_dev *dev);

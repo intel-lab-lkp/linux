@@ -763,7 +763,8 @@
 #define PCI_EXT_CAP_ID_DEV3	0x2F	/* Device 3 Capability/Control/Status */
 #define PCI_EXT_CAP_ID_IDE	0x30    /* Integrity and Data Encryption */
 #define PCI_EXT_CAP_ID_PL_64GT	0x31	/* Physical Layer 64.0 GT/s */
-#define PCI_EXT_CAP_ID_MAX	PCI_EXT_CAP_ID_PL_64GT
+#define PCI_EXT_CAP_ID_FLIT	0x32	/* Flit Logging */
+#define PCI_EXT_CAP_ID_MAX	PCI_EXT_CAP_ID_FLIT
 
 #define PCI_EXT_CAP_DSN_SIZEOF	12
 #define PCI_EXT_CAP_MCAST_ENDPOINT_SIZEOF 40
@@ -1186,6 +1187,22 @@
 
 /* Physical Layer 64.0 GT/s */
 #define PCI_PL_64GT_LE_CTRL	0x20	/* Lane Equalization Control Register */
+
+/* Flit Logging Extended Capability */
+#define PCI_FLIT_ERR_LOG1		0x04		/* Flit Error Log 1 Register */
+#define  PCI_FLIT_ERR_LOG1_VALID	0x00000001	/* Flit Error Log Valid */
+#define  PCI_FLIT_ERR_LOG1_MORE		0x00002000	/* More Entries Valid */
+#define  PCI_FLIT_ERR_LOG1_UNRECOG	0x00004000	/* Unrecognized Flit */
+#define  PCI_FLIT_ERR_LOG1_FEC_UNCOR	0x00008000	/* FEC Uncorrectable Error in Flit */
+#define  PCI_FLIT_ERR_LOG1_SYND_PARITY0	0x00ff0000	/* Syndrome Parity for ECC Group 0 */
+#define  PCI_FLIT_ERR_LOG1_SYND_CHECK0	0xff000000	/* Syndrome Check for ECC Group 0 */
+#define PCI_FLIT_ERR_LOG2		0x08		/* Flit Error Log 2 Register */
+#define PCI_FLIT_ERR_CNTR_CTRL		0x0c		/* Flit Error Counter Control Register */
+#define  PCI_FLIT_ERR_CNTR_CTRL_EN	0x0001		/* Flit Error Counter Enable */
+#define  PCI_FLIT_ERR_CNTR_CTRL_INTR_EN	0x0002		/* Flit Error Counter Interrupt Enable */
+#define  PCI_FLIT_ERR_CNTR_CTRL_TRIGGER	0x0ff0		/* Trigger Event on Error Count */
+#define PCI_FLIT_ERR_CNTR_STA		0x0e		/* Flit Error Counter Status Register */
+#define  PCI_FLIT_ERR_CNTR_STA_INTR_GEN	0x0008		/* Interrupt Generated based on Trigger */
 
 /* Native PCIe Enclosure Management */
 #define PCI_NPEM_CAP     0x04 /* NPEM capability register */
