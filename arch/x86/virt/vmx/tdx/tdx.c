@@ -499,6 +499,18 @@ static __init int get_tdx_sys_info_td_ctrl(struct tdx_sys_info_td_ctrl *td_ctrl)
 	return read_sys_metadata_table(td_ctrl_mappings, td_ctrl);
 }
 
+#define TDX_SYSINFO_MAP_HANDOFF(_field_id, _member) \
+	TDX_SYSINFO_MAP(_field_id, struct tdx_sys_info_handoff, _member)
+
+static const struct field_mapping handoff_mappings[] = {
+	TDX_SYSINFO_MAP_HANDOFF(MODULE_HV, module_hv),
+};
+
+static int get_tdx_sys_info_handoff(struct tdx_sys_info_handoff *handoff)
+{
+	return read_sys_metadata_table(handoff_mappings, handoff);
+}
+
 #include "tdx_global_metadata.c"
 
 static __init int check_features(struct tdx_sys_info *sysinfo)
