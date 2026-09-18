@@ -135,6 +135,9 @@ Description:	Writing 0, or any negative value, disables AER correctable
 		ratelimit interval in ms. Default is
 		DEFAULT_RATELIMIT_INTERVAL (5000 ms).
 
+		Reading gets the current ratelimit interval in ms, rounded
+		up to a whole jiffy.
+
 What:		/sys/bus/pci/devices/<dev>/aer/correctable_ratelimit_burst
 Date:		May 2025
 KernelVersion:	6.16.0
@@ -155,6 +158,9 @@ Description:	Writing 0, or any negative value, disables AER non-fatal
 		uncorrectable error log ratelimiting. Writing a positive
 		value sets the ratelimit interval in ms. Default is
 		DEFAULT_RATELIMIT_INTERVAL (5000 ms).
+
+		Reading gets the current ratelimit interval in ms, rounded
+		up to a whole jiffy.
 
 What:		/sys/bus/pci/devices/<dev>/aer/nonfatal_ratelimit_burst
 Date:		May 2025
