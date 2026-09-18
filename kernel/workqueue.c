@@ -1669,7 +1669,7 @@ static bool is_percpu_pool(struct worker_pool *pool)
 static struct wq_node_nr_active *wq_node_nr_active(struct workqueue_struct *wq,
 						   int node)
 {
-	BUG_ON(!(wq->flags & WQ_UNBOUND));
+	BUG_ON(wq->flags & WQ_PERCPU);
 
 	if (node == NUMA_NO_NODE)
 		node = nr_node_ids;
@@ -2453,10 +2453,10 @@ static void __queue_work(int cpu, struct workqueue_struct *wq,
 retry:
 	/* pwq which will be used unless @work is executing elsewhere */
 	if (req_cpu == WORK_CPU_UNBOUND) {
-		if (wq->flags & WQ_UNBOUND)
-			cpu = wq_select_unbound_cpu(raw_smp_processor_id());
-		else
+		if (wq->flags & WQ_PERCPU)
 			cpu = raw_smp_processor_id();
+		else
+			cpu = wq_select_unbound_cpu(raw_smp_processor_id());
 	}
 
 	pwq = rcu_dereference(*per_cpu_ptr(wq->cpu_pwq, cpu));
@@ -2500,7 +2500,7 @@ retry:
 	 * on it, so the retrying is guaranteed to make forward-progress.
 	 */
 	if (unlikely(!pwq->refcnt)) {
-		if (wq->flags & WQ_UNBOUND) {
+		if (!(wq->flags & WQ_PERCPU)) {
 			raw_spin_unlock(&pool->lock);
 			cpu_relax();
 			goto retry;
@@ -2669,7 +2669,7 @@ bool queue_work_node(int node, struct workqueue_struct *wq,
 	 * workqueue_select_cpu_near would need to be updated to allow for
 	 * some round robin type logic.
 	 */
-	WARN_ON_ONCE(!(wq->flags & WQ_UNBOUND));
+	WARN_ON_ONCE(wq->flags & WQ_PERCPU);
 
 	local_irq_save(irq_flags);
 
@@ -5297,7 +5297,7 @@ static void rcu_free_wq(struct rcu_head *rcu)
 	struct workqueue_struct *wq =
 		container_of(rcu, struct workqueue_struct, rcu);
 
-	if (wq->flags & WQ_UNBOUND)
+	if (!(wq->flags & WQ_PERCPU))
 		free_node_nr_active(wq->node_nr_active);
 
 	free_flush_pnodes(wq);
@@ -5799,7 +5799,7 @@ static void apply_wqattrs_commit(struct apply_wqattrs_ctx *ctx)
 		ctx->dfl_pwq = install_pwq(ctx->wq, -1, ctx->dfl_pwq);
 
 	/* update node_nr_active->max, which only unbound workqueues have */
-	if (ctx->wq->flags & WQ_UNBOUND)
+	if (!(ctx->wq->flags & WQ_PERCPU))
 		wq_update_node_max_active(ctx->wq, -1);
 
 	mutex_unlock(&ctx->wq->mutex);
@@ -5841,8 +5841,8 @@ int apply_workqueue_attrs(struct workqueue_struct *wq,
 {
 	int ret;
 
-	/* only unbound workqueues can change attributes */
-	if (WARN_ON(!(wq->flags & WQ_UNBOUND)))
+	/* a percpu workqueue is pinned to the concurrency managed backend */
+	if (WARN_ON(wq->flags & WQ_PERCPU))
 		return -EINVAL;
 
 	/* concurrency management comes from WQ_PERCPU, it is not applied */
@@ -5882,7 +5882,7 @@ static void unbound_wq_update_pwq(struct workqueue_struct *wq, int cpu)
 
 	lockdep_assert_held(&wq_pool_mutex);
 
-	if (!(wq->flags & WQ_UNBOUND) || wq->attrs->ordered)
+	if (wq->attrs->ordered || wq->attrs->concurrency_managed)
 		return;
 
 	/*
@@ -6085,7 +6085,7 @@ static void wq_adjust_max_active(struct workqueue_struct *wq)
 	WRITE_ONCE(wq->min_active, new_min);
 	WRITE_ONCE(wq->percpu_max_active, new_max);
 
-	if (wq->flags & WQ_UNBOUND)
+	if (!(wq->flags & WQ_PERCPU))
 		wq_update_node_max_active(wq, -1);
 
 	if (new_max == 0)
@@ -6170,6 +6170,13 @@ static struct workqueue_struct *__alloc_workqueue(const char *fmt,
 		flags &= ~WQ_PERCPU;
 	}
 
+	/*
+	 * Every workqueue is backed by the unbound machinery now. WQ_PERCPU no
+	 * longer picks a backend, it only says the workqueue is concurrency
+	 * managed and may not leave that backend.
+	 */
+	flags |= WQ_UNBOUND;
+
 	if (flags & WQ_BH) {
 		/*
 		 * BH workqueues always share a single execution context per CPU
@@ -6200,7 +6207,7 @@ static struct workqueue_struct *__alloc_workqueue(const char *fmt,
 	if (alloc_flush_pnodes(wq) < 0)
 		goto err_free_wq;
 
-	if (flags & WQ_UNBOUND) {
+	if (!(flags & WQ_PERCPU)) {
 		if (alloc_node_nr_active(wq->node_nr_active) < 0)
 			goto err_free_wq;
 	}
@@ -6239,7 +6246,7 @@ err_unlock_free_node_nr_active:
 	 */
 	if (pwq_release_worker)
 		kthread_flush_worker(pwq_release_worker);
-	if (wq->flags & WQ_UNBOUND)
+	if (!(wq->flags & WQ_PERCPU))
 		free_node_nr_active(wq->node_nr_active);
 err_free_wq:
 	free_workqueue_attrs(wq->attrs);
@@ -6488,8 +6495,7 @@ EXPORT_SYMBOL_GPL(workqueue_set_max_active);
 void workqueue_set_min_active(struct workqueue_struct *wq, int min_active)
 {
 	/* min_active is only meaningful for non-ordered unbound workqueues */
-	if (WARN_ON((wq->flags & (WQ_BH | WQ_UNBOUND | __WQ_ORDERED)) !=
-		    WQ_UNBOUND))
+	if (WARN_ON(wq->flags & (WQ_BH | WQ_PERCPU | __WQ_ORDERED)))
 		return;
 
 	mutex_lock(&wq->mutex);
@@ -7185,7 +7191,7 @@ int workqueue_online_cpu(unsigned int cpu)
 	list_for_each_entry(wq, &workqueues, list) {
 		struct workqueue_attrs *attrs = wq->attrs;
 
-		if (wq->flags & WQ_UNBOUND) {
+		if (!(wq->flags & WQ_PERCPU)) {
 			const struct wq_pod_type *pt = wqattrs_pod_type(attrs);
 			int tcpu;
 
@@ -7220,7 +7226,7 @@ int workqueue_offline_cpu(unsigned int cpu)
 	list_for_each_entry(wq, &workqueues, list) {
 		struct workqueue_attrs *attrs = wq->attrs;
 
-		if (wq->flags & WQ_UNBOUND) {
+		if (!(wq->flags & WQ_PERCPU)) {
 			const struct wq_pod_type *pt = wqattrs_pod_type(attrs);
 			int tcpu;
 
@@ -7395,7 +7401,8 @@ static int workqueue_apply_unbound_cpumask(const cpumask_var_t unbound_cpumask)
 	lockdep_assert_held(&wq_pool_mutex);
 
 	list_for_each_entry(wq, &workqueues, list) {
-		if (!(wq->flags & WQ_UNBOUND) || (wq->flags & __WQ_DESTROYING))
+		if ((wq->flags & __WQ_DESTROYING) ||
+		    wq->attrs->concurrency_managed)
 			continue;
 
 		ctx = apply_wqattrs_prepare(wq, wq->attrs, unbound_cpumask);
@@ -7556,7 +7563,7 @@ static ssize_t per_cpu_show(struct device *dev, struct device_attribute *attr,
 {
 	struct workqueue_struct *wq = dev_to_wq(dev);
 
-	return scnprintf(buf, PAGE_SIZE, "%d\n", (bool)!(wq->flags & WQ_UNBOUND));
+	return scnprintf(buf, PAGE_SIZE, "%d\n", (bool)(wq->flags & WQ_PERCPU));
 }
 static DEVICE_ATTR_RO(per_cpu);
 
@@ -7932,7 +7939,7 @@ int workqueue_sysfs_register(struct workqueue_struct *wq)
 		return ret;
 	}
 
-	if (wq->flags & WQ_UNBOUND) {
+	if (!(wq->flags & WQ_PERCPU)) {
 		struct device_attribute *attr;
 
 		for (attr = wq_sysfs_unbound_attrs; attr->attr.name; attr++) {
@@ -8800,7 +8807,7 @@ void __init workqueue_init_topology(void)
 	list_for_each_entry(wq, &workqueues, list) {
 		for_each_online_cpu(cpu)
 			unbound_wq_update_pwq(wq, cpu);
-		if (wq->flags & WQ_UNBOUND) {
+		if (!(wq->flags & WQ_PERCPU)) {
 			mutex_lock(&wq->mutex);
 			wq_update_node_max_active(wq, -1);
 			mutex_unlock(&wq->mutex);
