@@ -4351,7 +4351,7 @@ static int kvm_vcpu_ioctl_get_stats_fd(struct kvm_vcpu *vcpu)
 	return fd;
 }
 
-#ifdef CONFIG_KVM_GENERIC_PRE_FAULT_MEMORY
+#ifdef KVM_GENERIC_PRE_FAULT_MEMORY
 static int kvm_vcpu_pre_fault_memory(struct kvm_vcpu *vcpu,
 				     struct kvm_pre_fault_memory *range)
 {
@@ -4650,7 +4650,7 @@ out_free1:
 		r = kvm_vcpu_ioctl_get_stats_fd(vcpu);
 		break;
 	}
-#ifdef CONFIG_KVM_GENERIC_PRE_FAULT_MEMORY
+#ifdef KVM_GENERIC_PRE_FAULT_MEMORY
 	case KVM_PRE_FAULT_MEMORY: {
 		struct kvm_pre_fault_memory range;
 
@@ -4891,7 +4891,7 @@ static int kvm_vm_ioctl_check_extension_generic(struct kvm *kvm, long arg)
 	case KVM_CAP_DESTROY_MEMORY_REGION_WORKS:
 	case KVM_CAP_JOIN_MEMORY_REGIONS_WORKS:
 	case KVM_CAP_INTERNAL_ERROR_DATA:
-#ifdef CONFIG_HAVE_KVM_MSI
+#ifdef KVM_MSI
 	case KVM_CAP_SIGNAL_MSI:
 #endif
 #ifdef CONFIG_HAVE_KVM_IRQCHIP
@@ -5281,7 +5281,7 @@ static long kvm_vm_ioctl(struct file *filp,
 		r = kvm_ioeventfd(kvm, &data);
 		break;
 	}
-#ifdef CONFIG_HAVE_KVM_MSI
+#ifdef KVM_MSI
 	case KVM_SIGNAL_MSI: {
 		struct kvm_msi msi;
 
