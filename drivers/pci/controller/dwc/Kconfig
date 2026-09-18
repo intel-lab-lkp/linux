@@ -350,6 +350,7 @@ config PCIE_RCAR_GEN4_HOST
 	depends on PCI_MSI
 	select PCIE_DW_HOST
 	select PCIE_RCAR_GEN4
+	select PCI_HOST_COMMON
 	help
 	  Say Y here if you want PCIe controller (host mode) on R-Car Gen4 SoCs.
 	  To compile this driver as a module, choose M here: the module will be

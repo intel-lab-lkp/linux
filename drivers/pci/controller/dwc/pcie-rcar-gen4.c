@@ -25,6 +25,7 @@
 #include <linux/reset.h>
 
 #include "../../pci.h"
+#include "../pci-host-common.h"
 #include "pcie-designware.h"
 
 /* Renesas-specific */
@@ -39,8 +40,17 @@
 #define MSICAP0			0x0050
 #define MSICAP0_MSIE		BIT(16)
 
+/* PCIe Reset Status */
+#define PCIERSTSTS		0x0020
+#define SMLH_REQ_RST_NOT	BIT(2)
+#define LINK_REQ_RST_NOT	BIT(1)
+#define LINK_DOWN_RESET_MASK	(SMLH_REQ_RST_NOT | LINK_REQ_RST_NOT)
+
 /* PCIe Interrupt Status 0 */
 #define PCIEINTSTS0		0x0084
+
+/* PCIe Reset Status Enable */
+#define PCIERSTSTSEN		0x0300
 
 /* PCIe Interrupt Status 0 Enable */
 #define PCIEINTSTS0EN		0x0310
@@ -49,6 +59,9 @@
 /* PCIe DMA Interrupt Status Enable */
 #define PCIEDMAINTSTSEN		0x0314
 #define PCIEDMAINTSTSEN_INIT	GENMASK(15, 0)
+
+/* PCIe Reset Status Clear */
+#define PCIERSTSTSCLR		0x0330
 
 /* Port Logic Registers 89 */
 #define PRTLGC89		0x0b70
@@ -92,6 +105,10 @@ struct rcar_gen4_pcie_drvdata {
 };
 
 enum rcar_gen4_pcie_state {
+	/* A reset request is pending, or its recovery failed */
+	RCAR_PCIE_LINK_DOWN,
+	/* Link-down detection is being torn down */
+	RCAR_PCIE_IRQ_STOPPED,
 	/* The controller is being reset and reinitialized */
 	RCAR_PCIE_RESETTING,
 };
@@ -102,6 +119,10 @@ struct rcar_gen4_pcie {
 	void __iomem *phy_base;
 	struct platform_device *pdev;
 	const struct rcar_gen4_pcie_drvdata *drvdata;
+	/* intreq_pcim_sub ("msi"), shared with the iMSI-RX */
+	int sub_irq;
+	bool sub_irq_owned;
+	struct work_struct link_down_work;
 	unsigned long state;
 	/* Protects APP interrupt enable registers and their software state. */
 	raw_spinlock_t app_lock;
@@ -361,8 +382,19 @@ static bool rcar_gen4_pcie_irqs_blocked(struct rcar_gen4_pcie *rcar)
 	return !!rcar->state;
 }
 
+/*
+ * DBI must not be touched while the link is down or the controller is being
+ * reset.
+ */
+static bool rcar_gen4_pcie_dbi_unsafe(struct rcar_gen4_pcie *rcar)
+{
+	return test_bit(RCAR_PCIE_LINK_DOWN, &rcar->state) ||
+	       test_bit(RCAR_PCIE_RESETTING, &rcar->state);
+}
+
 static void rcar_gen4_pcie_app_irq_sync_locked(struct rcar_gen4_pcie *rcar)
 {
+	struct dw_pcie_rp *pp = &rcar->dw.pp;
 	bool armed = !rcar_gen4_pcie_irqs_blocked(rcar);
 	u32 val;
 
@@ -370,9 +402,28 @@ static void rcar_gen4_pcie_app_irq_sync_locked(struct rcar_gen4_pcie *rcar)
 
 	val = readl(rcar->base + PCIEINTSTS0EN);
 	val &= ~MSI_CTRL_INT;
-	if (armed && pci_msi_enabled())
+	/*
+	 * MSI delivery only depends on DBI being usable; teardown must not
+	 * stop it while devices are still being removed.
+	 */
+	if (!rcar_gen4_pcie_dbi_unsafe(rcar) && pp->use_imsi_rx &&
+	    pci_msi_enabled())
 		val |= MSI_CTRL_INT;
 	writel(val, rcar->base + PCIEINTSTS0EN);
+
+	val = readl(rcar->base + PCIERSTSTSEN);
+	if (armed && rcar->sub_irq > 0) {
+		/*
+		 * Clear latches recorded while the sources were masked, so
+		 * stale requests do not fire as soon as they are re-enabled.
+		 */
+		if (!(val & LINK_DOWN_RESET_MASK))
+			writel(LINK_DOWN_RESET_MASK, rcar->base + PCIERSTSTSCLR);
+		val |= LINK_DOWN_RESET_MASK;
+	} else {
+		val &= ~LINK_DOWN_RESET_MASK;
+	}
+	writel(val, rcar->base + PCIERSTSTSEN);
 }
 
 static void rcar_gen4_pcie_app_irq_sync(struct rcar_gen4_pcie *rcar)
@@ -433,6 +484,134 @@ err:
 	writel(val, rcar->base + PCIEINTSTS0EN);
 
 	return ret;
+}
+
+/* Returns true if a latched reset-request status was consumed. */
+static bool rcar_gen4_pcie_handle_link_down(struct rcar_gen4_pcie *rcar)
+{
+	bool schedule = false;
+	u32 status;
+
+	scoped_guard(raw_spinlock_irqsave, &rcar->app_lock) {
+		status = readl(rcar->base + PCIERSTSTS) &
+			 readl(rcar->base + PCIERSTSTSEN) & LINK_DOWN_RESET_MASK;
+		if (!status)
+			return false;
+
+		if (!test_bit(RCAR_PCIE_IRQ_STOPPED, &rcar->state) &&
+		    !test_bit(RCAR_PCIE_RESETTING, &rcar->state))
+			schedule = !test_and_set_bit(RCAR_PCIE_LINK_DOWN,
+						     &rcar->state);
+		rcar_gen4_pcie_app_irq_sync_locked(rcar);
+		writel(status, rcar->base + PCIERSTSTSCLR);
+	}
+
+	if (schedule)
+		schedule_work(&rcar->link_down_work);
+
+	return true;
+}
+
+static void rcar_gen4_pcie_link_down_work(struct work_struct *work)
+{
+	struct rcar_gen4_pcie *rcar =
+		container_of(work, struct rcar_gen4_pcie, link_down_work);
+	struct dw_pcie_rp *pp = &rcar->dw.pp;
+	struct pci_dev *port;
+
+	for_each_pci_bridge(port, pp->bridge->bus) {
+		if (pci_pcie_type(port) == PCI_EXP_TYPE_ROOT_PORT)
+			pci_host_handle_link_down(port);
+	}
+
+	if (test_bit(RCAR_PCIE_LINK_DOWN, &rcar->state))
+		dev_err(rcar->dw.dev,
+			"Root Port reset failed; keeping the controller's interrupts masked until a reset succeeds\n");
+}
+
+static bool rcar_gen4_pcie_pre_msi_irq(struct dw_pcie_rp *pp)
+{
+	struct dw_pcie *dw = to_dw_pcie_from_pp(pp);
+	struct rcar_gen4_pcie *rcar = to_rcar_gen4_pcie(dw);
+
+	rcar_gen4_pcie_handle_link_down(rcar);
+	if (rcar_gen4_pcie_dbi_unsafe(rcar))
+		return true;
+
+	/* Check once more right before the DesignWare DBI access. */
+	rcar_gen4_pcie_handle_link_down(rcar);
+
+	return rcar_gen4_pcie_dbi_unsafe(rcar);
+}
+
+static irqreturn_t rcar_gen4_pcie_sub_irq_handler(int irq, void *data)
+{
+	struct rcar_gen4_pcie *rcar = data;
+
+	return rcar_gen4_pcie_handle_link_down(rcar) ?
+		IRQ_HANDLED : IRQ_NONE;
+}
+
+/*
+ * Arm link-down detection once enumeration is done: the chained iMSI-RX
+ * handler is only installed after ops->init, and the recovery needs the
+ * Root Port to exist.
+ */
+static void rcar_gen4_pcie_link_down_irq_init(struct dw_pcie_rp *pp)
+{
+	struct dw_pcie *dw = to_dw_pcie_from_pp(pp);
+	struct rcar_gen4_pcie *rcar = to_rcar_gen4_pcie(dw);
+	struct device *dev = dw->dev;
+	int irq, ret;
+
+	if (pp->use_imsi_rx && pp->msi_irq[0] > 0) {
+		/* The DesignWare core owns the chained handler of this interrupt. */
+		rcar->sub_irq = pp->msi_irq[0];
+	} else {
+		irq = platform_get_irq_byname_optional(rcar->pdev, "msi");
+		if (irq < 0) {
+			dev_warn(dev, "Failed to get \"msi\" IRQ; link-down detection unavailable\n");
+			return;
+		}
+
+		/*
+		 * Run in hard IRQ context even on PREEMPT_RT, like the chained
+		 * handler, so the reset request is masked before anything else
+		 * touches DBI.
+		 */
+		ret = request_irq(irq, rcar_gen4_pcie_sub_irq_handler,
+				  IRQF_NO_THREAD, dev_name(dev), rcar);
+		if (ret) {
+			dev_warn(dev, "Failed to request \"msi\" IRQ; link-down detection unavailable\n");
+			return;
+		}
+
+		rcar->sub_irq = irq;
+		rcar->sub_irq_owned = true;
+	}
+
+	guard(raw_spinlock_irqsave)(&rcar->app_lock);
+	clear_bit(RCAR_PCIE_IRQ_STOPPED, &rcar->state);
+	rcar_gen4_pcie_app_irq_sync_locked(rcar);
+}
+
+static void rcar_gen4_pcie_link_down_irq_deinit(struct rcar_gen4_pcie *rcar)
+{
+	if (test_and_set_bit(RCAR_PCIE_IRQ_STOPPED, &rcar->state))
+		return;
+
+	rcar_gen4_pcie_app_irq_sync(rcar);
+
+	if (rcar->sub_irq > 0)
+		synchronize_irq(rcar->sub_irq);
+
+	cancel_work_sync(&rcar->link_down_work);
+
+	if (rcar->sub_irq_owned) {
+		free_irq(rcar->sub_irq, rcar);
+		rcar->sub_irq_owned = false;
+	}
+	rcar->sub_irq = 0;
 }
 
 static int rcar_gen4_pcie_enable_device(struct pci_host_bridge *bridge,
@@ -524,14 +703,23 @@ static void rcar_gen4_pcie_quiesce_irqs(struct rcar_gen4_pcie *rcar)
 		set_bit(RCAR_PCIE_RESETTING, &rcar->state);
 		rcar_gen4_pcie_app_irq_sync_locked(rcar);
 	}
+
+	if (rcar->sub_irq > 0)
+		disable_irq(rcar->sub_irq);
 }
 
-static void rcar_gen4_pcie_resume_irqs(struct rcar_gen4_pcie *rcar)
+static void rcar_gen4_pcie_resume_irqs(struct rcar_gen4_pcie *rcar,
+				       bool recovered)
 {
 	scoped_guard(raw_spinlock_irqsave, &rcar->app_lock) {
+		if (recovered)
+			clear_bit(RCAR_PCIE_LINK_DOWN, &rcar->state);
 		clear_bit(RCAR_PCIE_RESETTING, &rcar->state);
 		rcar_gen4_pcie_app_irq_sync_locked(rcar);
 	}
+
+	if (rcar->sub_irq > 0)
+		enable_irq(rcar->sub_irq);
 }
 
 /*
@@ -574,7 +762,7 @@ static int rcar_gen4_pcie_reset_root_port(struct pci_host_bridge *bridge,
 	dev_dbg(dev, "Root Port reset completed\n");
 
 out:
-	rcar_gen4_pcie_resume_irqs(rcar);
+	rcar_gen4_pcie_resume_irqs(rcar, !ret);
 
 	return ret;
 }
@@ -610,6 +798,8 @@ static void rcar_gen4_pcie_host_deinit(struct dw_pcie_rp *pp)
 	struct dw_pcie *dw = to_dw_pcie_from_pp(pp);
 	struct rcar_gen4_pcie *rcar = to_rcar_gen4_pcie(dw);
 
+	rcar_gen4_pcie_link_down_irq_deinit(rcar);
+
 	gpiod_set_value_cansleep(dw->pe_rst, 1);
 	rcar_gen4_pcie_common_deinit(rcar);
 }
@@ -617,6 +807,8 @@ static void rcar_gen4_pcie_host_deinit(struct dw_pcie_rp *pp)
 static const struct dw_pcie_host_ops rcar_gen4_pcie_host_ops = {
 	.init = rcar_gen4_pcie_host_init,
 	.deinit = rcar_gen4_pcie_host_deinit,
+	.post_init = rcar_gen4_pcie_link_down_irq_init,
+	.pre_msi_irq = rcar_gen4_pcie_pre_msi_irq,
 };
 
 static int rcar_gen4_add_dw_pcie_rp(struct rcar_gen4_pcie *rcar)
@@ -632,6 +824,7 @@ static int rcar_gen4_add_dw_pcie_rp(struct rcar_gen4_pcie *rcar)
 		return ret;
 
 	raw_spin_lock_init(&rcar->app_lock);
+	INIT_WORK(&rcar->link_down_work, rcar_gen4_pcie_link_down_work);
 
 	pp->num_vectors = MAX_MSI_IRQS;
 	pp->ops = &rcar_gen4_pcie_host_ops;
@@ -641,6 +834,8 @@ static int rcar_gen4_add_dw_pcie_rp(struct rcar_gen4_pcie *rcar)
 
 static void rcar_gen4_remove_dw_pcie_rp(struct rcar_gen4_pcie *rcar)
 {
+	/* Cancel recovery work before removing the PCI bus */
+	rcar_gen4_pcie_link_down_irq_deinit(rcar);
 	dw_pcie_host_deinit(&rcar->dw.pp);
 }
 
