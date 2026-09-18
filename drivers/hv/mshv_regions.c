@@ -7,11 +7,13 @@
  * Authors: Microsoft Linux virtualization team
  */
 
+#include <linux/bitmap.h>
 #include <linux/hmm.h>
 #include <linux/hyperv.h>
 #include <linux/kref.h>
 #include <linux/mm.h>
 #include <linux/vmalloc.h>
+#include <linux/xarray.h>
 
 #include <asm/mshyperv.h>
 
@@ -194,51 +196,327 @@ struct mshv_mem_region *mshv_region_create(u64 guest_pfn, u64 nr_pages,
 	return region;
 }
 
-static int mshv_region_chunk_share(struct mshv_mem_region *region,
-				   u32 flags,
-				   u64 page_offset, u64 page_count,
-				   bool huge_page)
+int mshv_region_host_access_init(struct mshv_mem_region *region)
 {
+	unsigned int nr_pages;
+	unsigned int longs;
+	size_t bytes;
+
+	if (region->nr_pages > UINT_MAX)
+		return -E2BIG;
+
+	nr_pages = region->nr_pages;
+	longs = BITS_TO_LONGS(nr_pages);
+	bytes = array_size(longs, sizeof(unsigned long));
+	region->host_access_read = kvcalloc(4, bytes, GFP_KERNEL);
+	if (!region->host_access_read)
+		return -ENOMEM;
+
+	region->host_access_write = region->host_access_read + longs;
+	region->host_access_exclusive = region->host_access_write + longs;
+	region->host_access_uncertain =
+		region->host_access_exclusive + longs;
+	bitmap_fill(region->host_access_read, nr_pages);
+	bitmap_fill(region->host_access_write, nr_pages);
+	return 0;
+}
+
+int mshv_region_check_duplicate_pfns(struct mshv_mem_region *region)
+{
+	struct mshv_partition *partition = region->partition;
+	struct mshv_mem_region *existing;
+	DEFINE_XARRAY(pfns);
+	u64 i;
+	int ret = 0;
+
+	lockdep_assert_held(&partition->pt_mutex);
+
+	/*
+	 * Use a temporary index so alias rejection has no permanent per-page
+	 * memory cost. xa_insert() also rejects duplicate PFNs within region.
+	 */
+	for (i = 0; i < region->nr_pages; i++) {
+		ret = xa_insert(&pfns, page_to_pfn(region->mreg_pages[i]),
+				region, GFP_KERNEL);
+		if (ret) {
+			if (ret == -EBUSY)
+				ret = -EEXIST;
+			goto out;
+		}
+	}
+
+	hlist_for_each_entry(existing, &partition->pt_mem_regions, hnode) {
+		if (existing->mreg_type != MSHV_REGION_TYPE_MEM_PINNED)
+			continue;
+		for (i = 0; i < existing->nr_pages; i++) {
+			if (!xa_load(&pfns,
+				     page_to_pfn(existing->mreg_pages[i])))
+				continue;
+			ret = -EEXIST;
+			goto out;
+		}
+	}
+
+out:
+	xa_destroy(&pfns);
+	return ret;
+}
+
+static bool mshv_host_access_state_is_baseline(u8 state)
+{
+	return state == MSHV_HOST_ACCESS_BASELINE;
+}
+
+u8 mshv_region_host_access_get(const struct mshv_mem_region *region, u64 index)
+{
+	u8 state = 0;
+
+	if (WARN_ON_ONCE(!region->host_access_read ||
+			 index >= region->nr_pages))
+		return MSHV_HOST_ACCESS_UNCERTAIN;
+
+	if (test_bit(index, region->host_access_read))
+		state |= MSHV_HOST_ACCESS_READ;
+	if (test_bit(index, region->host_access_write))
+		state |= MSHV_HOST_ACCESS_WRITE;
+	if (test_bit(index, region->host_access_exclusive))
+		state |= MSHV_HOST_ACCESS_EXCLUSIVE;
+	if (test_bit(index, region->host_access_uncertain))
+		state |= MSHV_HOST_ACCESS_UNCERTAIN;
+	return state;
+}
+
+void mshv_region_host_access_set(struct mshv_mem_region *region, u64 index,
+				 u8 state)
+{
+	u8 old = mshv_region_host_access_get(region, index);
+
+	if (mshv_host_access_state_is_baseline(old) &&
+	    !mshv_host_access_state_is_baseline(state))
+		region->host_nonbaseline_pages++;
+	else if (!mshv_host_access_state_is_baseline(old) &&
+		 mshv_host_access_state_is_baseline(state))
+		region->host_nonbaseline_pages--;
+
+	assign_bit(index, region->host_access_read,
+		   state & MSHV_HOST_ACCESS_READ);
+	assign_bit(index, region->host_access_write,
+		   state & MSHV_HOST_ACCESS_WRITE);
+	assign_bit(index, region->host_access_exclusive,
+		   state & MSHV_HOST_ACCESS_EXCLUSIVE);
+	assign_bit(index, region->host_access_uncertain,
+		   state & MSHV_HOST_ACCESS_UNCERTAIN);
+}
+
+static void
+mshv_region_host_access_mark_uncertain(struct mshv_mem_region *region,
+				       u64 index, u64 count)
+{
+	u64 i;
+
+	for (i = 0; i < count; i++) {
+		u8 state = mshv_region_host_access_get(region, index + i);
+
+		mshv_region_host_access_set(region, index + i, state | MSHV_HOST_ACCESS_UNCERTAIN);
+	}
+}
+
+static int
+mshv_host_access_normalize_result(struct mshv_host_access_result *result,
+				  u64 count)
+{
+	if (result->completed > count) {
+		result->completed = 0;
+		result->uncertain = true;
+		result->error = -EPROTO;
+	} else if (!result->error && result->completed != count) {
+		result->uncertain = true;
+		result->error = -EPROTO;
+	}
+
+	return result->error;
+}
+
+u8 mshv_make_host_access_state(u8 old_state, u32 host_access, u32 flags)
+{
+	/* Permissions are replaced; only explicit flags change ownership. */
+	u8 state = old_state & (MSHV_HOST_ACCESS_EXCLUSIVE |
+			      MSHV_HOST_ACCESS_UNCERTAIN);
+
+	if (host_access & HV_MAP_GPA_READABLE)
+		state |= MSHV_HOST_ACCESS_READ;
+	if (host_access & HV_MAP_GPA_WRITABLE)
+		state |= MSHV_HOST_ACCESS_WRITE;
+
+	if (flags & HV_MODIFY_SPA_PAGE_HOST_ACCESS_MAKE_EXCLUSIVE) {
+		state |= MSHV_HOST_ACCESS_EXCLUSIVE;
+		state &= ~MSHV_HOST_ACCESS_UNCERTAIN;
+	} else if (flags & HV_MODIFY_SPA_PAGE_HOST_ACCESS_MAKE_SHARED) {
+		state &= ~(MSHV_HOST_ACCESS_EXCLUSIVE |
+			   MSHV_HOST_ACCESS_UNCERTAIN);
+	}
+
+	return state;
+}
+
+int
+mshv_apply_region_host_access(struct mshv_mem_region *region, u64 index,
+			      u64 count, u32 host_access, u32 flags,
+			      struct mshv_host_access_result *result)
+{
+	u64 i;
+
+	mshv_host_access_normalize_result(result, count);
+	for (i = 0; i < result->completed; i++) {
+		u8 old_state = mshv_region_host_access_get(region, index + i);
+		u8 state = mshv_make_host_access_state(old_state, host_access,
+						       flags);
+
+		mshv_region_host_access_set(region, index + i, state);
+	}
+	if (result->uncertain) {
+		u64 remaining = count - result->completed;
+		u64 uncertain_index = index + result->completed;
+
+		mshv_region_host_access_mark_uncertain(region, uncertain_index,
+						       remaining);
+	}
+
+	return result->error;
+}
+
+static u8 mshv_host_access_page_state(const struct mshv_host_access_page *page)
+{
+	return mshv_region_host_access_get(page->region, page->index);
+}
+
+static void mshv_host_access_page_set(struct mshv_host_access_page *page,
+				      u8 state)
+{
+	mshv_region_host_access_set(page->region, page->index, state);
+}
+
+int
+mshv_apply_host_access(struct mshv_host_access_page *host_pages,
+		       u64 count, u32 host_access, u32 flags,
+		       struct mshv_host_access_result *result)
+{
+	u64 i;
+
+	mshv_host_access_normalize_result(result, count);
+	for (i = 0; i < result->completed; i++) {
+		struct mshv_host_access_page *host_page = &host_pages[i];
+		u8 old_state = mshv_host_access_page_state(host_page);
+		u8 state = mshv_make_host_access_state(old_state, host_access,
+						       flags);
+
+		mshv_host_access_page_set(host_page, state);
+	}
+	if (result->uncertain) {
+		for (i = result->completed; i < count; i++) {
+			struct mshv_host_access_page *host_page = &host_pages[i];
+			u8 old = mshv_host_access_page_state(host_page);
+
+			mshv_host_access_page_set(host_page,
+						  old | MSHV_HOST_ACCESS_UNCERTAIN);
+		}
+	}
+
+	return result->error;
+}
+
+bool mshv_region_host_access_is_baseline(const struct mshv_mem_region *region)
+{
+	return !region->host_access_read || !region->host_nonbaseline_pages;
+}
+
+static int
+mshv_region_modify_host_access(struct mshv_mem_region *region, u32 flags,
+			       u64 page_offset, u64 page_count, bool huge_page,
+			       u32 host_access, bool acquire)
+{
+	struct mshv_host_access_result result;
+
 	if (huge_page)
 		flags |= HV_MODIFY_SPA_PAGE_HOST_ACCESS_LARGE_PAGE;
 
-	return hv_call_modify_spa_host_access(region->partition->pt_id,
-					      region->mreg_pages + page_offset,
-					      page_count,
+	mshv_modify_host_access(region->partition->pt_id,
+				region->mreg_pages + page_offset, page_count,
+				host_access, flags, acquire, &result);
+
+	/*
+	 * completed is always a trusted count in 4K pages, including for 2M
+	 * entries. The result helper is intentionally hypercall-independent so
+	 * KUnit can inject partial and impossible completions.
+	 */
+	return mshv_apply_region_host_access(region, page_offset, page_count,
+					     host_access, flags, &result);
+}
+
+static int mshv_region_chunk_share(struct mshv_mem_region *region,
+				   u32 flags, u64 page_offset,
+				   u64 page_count, bool huge_page)
+{
+	return mshv_region_modify_host_access(region, flags, page_offset,
+					      page_count, huge_page,
 					      HV_MAP_GPA_READABLE |
-					      HV_MAP_GPA_WRITABLE,
-					      flags, true);
+					      HV_MAP_GPA_WRITABLE, true);
 }
 
 int mshv_region_share(struct mshv_mem_region *region)
 {
-	u32 flags = HV_MODIFY_SPA_PAGE_HOST_ACCESS_MAKE_SHARED;
+	u64 offset = 0;
+	int state_error = 0;
+	int ret;
 
-	return mshv_region_process_range(region, flags,
-					 0, region->nr_pages,
-					 mshv_region_chunk_share);
+	while (offset < region->nr_pages) {
+		u64 count;
+		u32 flags;
+		u8 state = mshv_region_host_access_get(region, offset);
+
+		if (state & MSHV_HOST_ACCESS_UNCERTAIN) {
+			state_error = -EUCLEAN;
+			offset++;
+			continue;
+		}
+		if (mshv_host_access_state_is_baseline(state)) {
+			offset++;
+			continue;
+		}
+
+		flags = state & MSHV_HOST_ACCESS_EXCLUSIVE ?
+			HV_MODIFY_SPA_PAGE_HOST_ACCESS_MAKE_SHARED : 0;
+		/* One call may cover only pages with identical restore state. */
+		for (count = 1; offset + count < region->nr_pages; count++) {
+			u8 next = mshv_region_host_access_get(region,
+							      offset + count);
+
+			if (next != state)
+				break;
+		}
+
+		ret = mshv_region_process_range(region, flags, offset, count,
+						mshv_region_chunk_share);
+		if (ret)
+			return ret;
+		offset += count;
+	}
+	return state_error;
 }
 
 static int mshv_region_chunk_unshare(struct mshv_mem_region *region,
-				     u32 flags,
-				     u64 page_offset, u64 page_count,
-				     bool huge_page)
+				     u32 flags, u64 page_offset,
+				     u64 page_count, bool huge_page)
 {
-	if (huge_page)
-		flags |= HV_MODIFY_SPA_PAGE_HOST_ACCESS_LARGE_PAGE;
-
-	return hv_call_modify_spa_host_access(region->partition->pt_id,
-					      region->mreg_pages + page_offset,
-					      page_count, 0,
-					      flags, false);
+	return mshv_region_modify_host_access(region, flags, page_offset,
+					      page_count, huge_page, 0, false);
 }
 
 int mshv_region_unshare(struct mshv_mem_region *region)
 {
 	u32 flags = HV_MODIFY_SPA_PAGE_HOST_ACCESS_MAKE_EXCLUSIVE;
 
-	return mshv_region_process_range(region, flags,
-					 0, region->nr_pages,
+	return mshv_region_process_range(region, flags, 0, region->nr_pages,
 					 mshv_region_chunk_unshare);
 }
 
@@ -373,12 +651,14 @@ static void mshv_region_destroy(struct kref *ref)
 		container_of(ref, struct mshv_mem_region, mreg_refcount);
 
 	/* Callers must retain the list reference until cleanup is certain. */
-	if (WARN_ON_ONCE(region->mapping_may_exist))
+	if (WARN_ON_ONCE(region->mapping_may_exist ||
+			 !mshv_region_host_access_is_baseline(region)))
 		return;
 
 	if (region->mreg_type == MSHV_REGION_TYPE_MEM_MOVABLE)
 		mshv_region_movable_fini(region);
 
+	kvfree(region->host_access_read);
 	mshv_region_invalidate(region);
 	vfree(region);
 }

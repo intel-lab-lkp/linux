@@ -231,6 +231,12 @@ enum {
 #define MSHV_GPA_HOST_ACCESS_FLAGS_MASK \
 	((1 << MSHV_GPA_HOST_ACCESS_BIT_COUNT) - 1)
 
+/*
+ * Maximum guest_gpas array entries. page_count is always a count of 4K
+ * pages, including LARGE_PAGE requests where each 2M group uses 512 entries.
+ */
+#define MSHV_MODIFY_GPA_HOST_ACCESS_MAX_PAGES	65536
+
 struct mshv_modify_gpa_host_access {
 	__u8 flags;
 	__u8 rsvd[7];

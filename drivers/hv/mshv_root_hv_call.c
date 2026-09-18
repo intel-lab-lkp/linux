@@ -1046,6 +1046,42 @@ int hv_unmap_stats_page(enum hv_stats_object_type type,
 
 #ifdef HV_SUPPORTS_SEV_SNP_GUESTS
 
+int hv_call_set_partition_property(u64 partition_id, u64 property_code,
+				   u64 property_value,
+				   void (*completion_handler)(void *, u64 *),
+				   void *completion_data)
+{
+	u64 status;
+	unsigned long flags;
+	struct hv_input_set_partition_property *input;
+
+	if (!completion_handler) {
+		pr_err("%s: Missing completion handler\n", __func__);
+		return -EINVAL;
+	}
+
+	local_irq_save(flags);
+	input = *this_cpu_ptr(hyperv_pcpu_input_arg);
+
+	memset(input, 0, sizeof(*input));
+	input->partition_id = partition_id;
+	input->property_code = property_code;
+	input->property_value = property_value;
+	status = hv_do_hypercall(HVCALL_SET_PARTITION_PROPERTY, input, NULL);
+	local_irq_restore(flags);
+
+	if (unlikely(hv_result(status) == HV_STATUS_CALL_PENDING))
+		completion_handler(completion_data, &status);
+
+	if (!hv_result_success(status)) {
+		pr_err_ratelimited("%s: %s\n", __func__,
+				   hv_result_to_string(status));
+		return hv_result_to_errno(status);
+	}
+
+	return 0;
+}
+
 int hv_call_import_isolated_pages(u64 partition_id, u64 *pages,
 				  u64 num_pages, u64 *completed_pages,
 				  enum hv_isolated_page_type page_type,
@@ -1191,20 +1227,55 @@ int hv_call_issue_psp_guest_request(u64 partition_id, u64 req_pfn,
 }
 #endif
 
+int mshv_validate_host_access_flags(u32 flags, bool acquire)
+{
+	if ((flags & HV_MODIFY_SPA_PAGE_HOST_ACCESS_MAKE_EXCLUSIVE) &&
+	    (flags & HV_MODIFY_SPA_PAGE_HOST_ACCESS_MAKE_SHARED))
+		return -EINVAL;
+	if ((acquire &&
+	     (flags & HV_MODIFY_SPA_PAGE_HOST_ACCESS_MAKE_EXCLUSIVE)) ||
+	    (!acquire &&
+	     (flags & HV_MODIFY_SPA_PAGE_HOST_ACCESS_MAKE_SHARED)))
+		return -EINVAL;
+	return 0;
+}
+
+u64 mshv_host_access_partition_id(u64 partition_id, u32 flags)
+{
+	return flags & HV_MODIFY_SPA_PAGE_HOST_ACCESS_MAKE_EXCLUSIVE ?
+		partition_id : 0;
+}
+
+int mshv_repcomp_to_page_count(u64 repcomp, u64 rep_count,
+			       unsigned int page_shift,
+			       u64 *completed_pages)
+{
+	if (repcomp > rep_count)
+		return -EPROTO;
+	if (check_shl_overflow(repcomp, page_shift, completed_pages))
+		return -EOVERFLOW;
+	return 0;
+}
+
 int hv_call_modify_spa_host_access(u64 partition_id, struct page **pages,
-				   u64 page_struct_count, u32 host_access,
-				   u32 flags, u8 acquire)
+				   u64 page_struct_count, u64 *completed_pages,
+				   bool *completion_uncertain,
+				   u32 host_access, u32 flags, bool acquire)
 {
 	struct hv_input_modify_sparse_spa_page_host_access *input_page;
 	u64 status;
-	int done = 0;
+	u64 done = 0;
+	u64 completed_4k;
 	unsigned long irq_flags, large_shift = 0;
+	int ret;
 	u64 page_count = page_struct_count;
 	u16 code = acquire ? HVCALL_ACQUIRE_SPARSE_SPA_PAGE_HOST_ACCESS :
 			     HVCALL_RELEASE_SPARSE_SPA_PAGE_HOST_ACCESS;
 
-	if (page_count == 0)
+	if (!page_count || !completed_pages || !completion_uncertain)
 		return -EINVAL;
+	*completed_pages = 0;
+	*completion_uncertain = false;
 
 	if (flags & HV_MODIFY_SPA_PAGE_HOST_ACCESS_LARGE_PAGE) {
 		if (!HV_PAGE_COUNT_2M_ALIGNED(page_count))
@@ -1213,31 +1284,34 @@ int hv_call_modify_spa_host_access(u64 partition_id, struct page **pages,
 		page_count >>= large_shift;
 	}
 
+	ret = mshv_validate_host_access_flags(flags, acquire);
+	if (ret)
+		return ret;
+
 	while (done < page_count) {
-		ulong i, completed, remain = page_count - done;
-		int rep_count = min(remain,
-				    HV_MODIFY_SPARSE_SPA_PAGE_HOST_ACCESS_MAX_PAGE_COUNT);
+		u64 i, completed, remain = page_count - done;
+		unsigned int rep_count = min_t(u64, remain,
+			HV_MODIFY_SPARSE_SPA_PAGE_HOST_ACCESS_MAX_PAGE_COUNT);
 
 		local_irq_save(irq_flags);
 		input_page = *this_cpu_ptr(hyperv_pcpu_input_arg);
-
 		memset(input_page, 0, sizeof(*input_page));
-		/* Only set the partition id if you are making the pages
-		 * exclusive
-		 */
+		/* ACQUIRE and permission-only RELEASE require partition_id zero. */
 		if (flags & HV_MODIFY_SPA_PAGE_HOST_ACCESS_MAKE_EXCLUSIVE)
-			input_page->partition_id = partition_id;
+			input_page->partition_id =
+				mshv_host_access_partition_id(partition_id, flags);
 		input_page->flags = flags;
 		input_page->host_access = host_access;
 
 		for (i = 0; i < rep_count; i++) {
 			u64 index = (done + i) << large_shift;
 
-			if (index >= page_struct_count)
+			if (index >= page_struct_count) {
+				local_irq_restore(irq_flags);
 				return -EINVAL;
-
+			}
 			input_page->spa_page_list[i] =
-						page_to_pfn(pages[index]);
+				page_to_pfn(pages[index]);
 		}
 
 		status = hv_do_rep_hypercall(code, rep_count, 0, input_page,
@@ -1245,12 +1319,39 @@ int hv_call_modify_spa_host_access(u64 partition_id, struct page **pages,
 		local_irq_restore(irq_flags);
 
 		completed = hv_repcomp(status);
-
-		if (!hv_result_success(status))
-			return hv_result_to_errno(status);
+		ret = mshv_repcomp_to_page_count(completed, rep_count, large_shift, &completed_4k);
+		if (ret) {
+			*completion_uncertain = true;
+			pr_err_ratelimited("%s: invalid completion count %llu/%u\n",
+					   __func__, completed, rep_count);
+			return ret;
+		}
 
 		done += completed;
+		*completed_pages += completed_4k;
+		if (!hv_result_success(status)) {
+			pr_err_ratelimited("%s: completed %llu of %llu pages: %s\n",
+					   __func__, *completed_pages,
+					   page_struct_count,
+					   hv_result_to_string(status));
+			return hv_result_to_errno(status);
+		}
+		if (!completed) {
+			*completion_uncertain = true;
+			return -EPROTO;
+		}
 	}
 
 	return 0;
+}
+
+void mshv_modify_host_access(u64 partition_id, struct page **pages,
+			     u64 page_count, u32 host_access, u32 flags,
+			     bool acquire, struct mshv_host_access_result *result)
+{
+	result->error = hv_call_modify_spa_host_access(partition_id, pages,
+						       page_count,
+						       &result->completed,
+						       &result->uncertain,
+						       host_access, flags, acquire);
 }
