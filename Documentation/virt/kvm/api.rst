@@ -9061,6 +9061,25 @@ enabled, cmma can't be enabled anymore and pfmfi and the storage key
 interpretation are disabled. If cmma has already been enabled or the
 hpage_2g module parameter is not set to 1, -EINVAL is returned.
 
+7.48 KVM_CAP_HCALL_FAULT_EXIT
+------------------------------------
+
+:Architectures: x86
+:Parameters: args[0] is 0 to disable, 1 to enable
+
+When enabled, KVM checks the memory that is read or written by
+hypercalls (including slow Hyper-V hypercalls and KVM_HC_CLOCK_PAIRING).
+An inaccessible input page causes a KVM_EXIT_MEMORY_FAULT with
+KVM_MEMORY_EXIT_FLAG_READ.  An inaccessible or read-only output page causes
+a KVM_EXIT_MEMORY_FAULT with KVM_MEMORY_EXIT_FLAG_WRITE.  The reported
+range identifies the page containing the parameter GPA.
+
+Hypercall parameters that are unused by the selected hypercall are not checked.
+
+For Hyper-V, unknown hypercalls are passed to userspace without checking their
+parameter pages.  The fault GPA is in the physical address space of the
+VM managed by userspace, after nested GPA translation.
+
 8. Other capabilities.
 ======================
 

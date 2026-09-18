@@ -2033,7 +2033,68 @@ out_flush_all:
 	return -ENOSPC;
 }
 
-static u64 kvm_hv_flush_tlb(struct kvm_vcpu *vcpu, struct kvm_hv_hcall *hc)
+static int kvm_hv_hypercall_check_gpa(struct kvm_vcpu *vcpu, gpa_t gpa,
+				      bool write)
+{
+	bool writable = true;
+	gfn_t gfn = gpa_to_gfn(gpa);
+	unsigned long addr;
+
+	addr = kvm_vcpu_gfn_to_hva_prot(vcpu, gfn, &writable);
+	if (!kvm_is_error_hva(addr) && (!write || writable))
+		return 0;
+
+	kvm_prepare_memory_fault_exit(vcpu, gfn_to_gpa(gfn), PAGE_SIZE,
+				      write, false, false);
+	return -EFAULT;
+}
+
+static unsigned int kvm_hv_hypercall_mem_access(u16 code)
+{
+	switch (code) {
+	case HVCALL_SIGNAL_EVENT:
+	case HVCALL_POST_MESSAGE:
+	case HVCALL_FLUSH_VIRTUAL_ADDRESS_LIST:
+	case HVCALL_FLUSH_VIRTUAL_ADDRESS_LIST_EX:
+	case HVCALL_FLUSH_VIRTUAL_ADDRESS_SPACE:
+	case HVCALL_FLUSH_VIRTUAL_ADDRESS_SPACE_EX:
+	case HVCALL_SEND_IPI:
+	case HVCALL_SEND_IPI_EX:
+		return KVM_MEMORY_EXIT_FLAG_READ;
+	case HVCALL_POST_DEBUG_DATA:
+	case HVCALL_RETRIEVE_DEBUG_DATA:
+		return KVM_MEMORY_EXIT_FLAG_READ | KVM_MEMORY_EXIT_FLAG_WRITE;
+	case HVCALL_RESET_DEBUG_SESSION:
+	case HV_EXT_CALL_QUERY_CAPABILITIES:
+		return KVM_MEMORY_EXIT_FLAG_WRITE;
+	}
+
+	return 0;
+}
+
+static int kvm_hv_hypercall_check_params(struct kvm_vcpu *vcpu,
+					 struct kvm_hv_hcall *hc)
+{
+	unsigned access;
+	int r;
+
+	if (hc->fast || !vcpu->kvm->arch.hcall_fault_exit)
+		return 0;
+
+	access = kvm_hv_hypercall_mem_access(hc->code);
+	if (access & KVM_MEMORY_EXIT_FLAG_READ) {
+		r = kvm_hv_hypercall_check_gpa(vcpu, hc->ingpa, false);
+		if (r)
+			return r;
+	}
+
+	if (access & KVM_MEMORY_EXIT_FLAG_WRITE)
+		return kvm_hv_hypercall_check_gpa(vcpu, hc->outgpa, true);
+
+	return 0;
+}
+
+static s64 kvm_hv_flush_tlb(struct kvm_vcpu *vcpu, struct kvm_hv_hcall *hc)
 {
 	struct kvm_vcpu_hv *hv_vcpu = to_hv_vcpu(vcpu);
 	unsigned long *vcpu_mask = hv_vcpu->vcpu_mask;
@@ -2053,6 +2114,19 @@ static u64 kvm_hv_flush_tlb(struct kvm_vcpu *vcpu, struct kvm_hv_hcall *hc)
 	struct kvm_vcpu *v;
 	unsigned long i;
 	bool all_cpus;
+	int r;
+
+	/* Slow direct hypercalls from L2 provide a nested GPA. */
+	if (!hc->fast) {
+		hc->ingpa = kvm_translate_gpa(vcpu, &vcpu->arch.gva_walk, hc->ingpa,
+					      PFERR_GUEST_FINAL_MASK, NULL, 0);
+		if (unlikely(hc->ingpa == INVALID_GPA))
+			return HV_STATUS_INVALID_HYPERCALL_INPUT;
+	}
+
+	r = kvm_hv_hypercall_check_params(vcpu, hc);
+	if (r)
+		return r;
 
 	/*
 	 * The Hyper-V TLFS doesn't allow more than HV_MAX_SPARSE_VCPU_BANKS
@@ -2060,20 +2134,6 @@ static u64 kvm_hv_flush_tlb(struct kvm_vcpu *vcpu, struct kvm_hv_hcall *hc)
 	 * vCPUs (>4096) exceeds this limit.
 	 */
 	BUILD_BUG_ON(KVM_HV_MAX_SPARSE_VCPU_SET_BITS > HV_MAX_SPARSE_VCPU_BANKS);
-
-	/*
-	 * 'Slow' hypercall's first parameter is the address in guest's memory
-	 * where hypercall parameters are placed. This is either a GPA or a
-	 * nested GPA when KVM is handling the call from L2 ('direct' TLB
-	 * flush).  Translate the address here so the memory can be uniformly
-	 * read with kvm_read_guest().
-	 */
-	if (!hc->fast) {
-		hc->ingpa = kvm_translate_gpa(vcpu, &vcpu->arch.gva_walk, hc->ingpa,
-					      PFERR_GUEST_FINAL_MASK, NULL, 0);
-		if (unlikely(hc->ingpa == INVALID_GPA))
-			return HV_STATUS_INVALID_HYPERCALL_INPUT;
-	}
 
 	if (hc->code == HVCALL_FLUSH_VIRTUAL_ADDRESS_LIST ||
 	    hc->code == HVCALL_FLUSH_VIRTUAL_ADDRESS_SPACE) {
@@ -2242,7 +2302,7 @@ static void kvm_hv_send_ipi_to_many(struct kvm *kvm, u32 vector,
 	}
 }
 
-static u64 kvm_hv_send_ipi(struct kvm_vcpu *vcpu, struct kvm_hv_hcall *hc)
+static int kvm_hv_send_ipi(struct kvm_vcpu *vcpu, struct kvm_hv_hcall *hc)
 {
 	struct kvm_vcpu_hv *hv_vcpu = to_hv_vcpu(vcpu);
 	u64 *sparse_banks = hv_vcpu->sparse_banks;
@@ -2252,6 +2312,11 @@ static u64 kvm_hv_send_ipi(struct kvm_vcpu *vcpu, struct kvm_hv_hcall *hc)
 	u64 valid_bank_mask;
 	u32 vector;
 	bool all_cpus;
+	int r;
+
+	r = kvm_hv_hypercall_check_params(vcpu, hc);
+	if (r)
+		return r;
 
 	if (!lapic_in_kernel(vcpu))
 		return HV_STATUS_INVALID_HYPERCALL_INPUT;
@@ -2432,11 +2497,16 @@ static int kvm_hv_hypercall_complete_userspace(struct kvm_vcpu *vcpu)
 	return kvm_hv_hypercall_complete(vcpu, vcpu->run->hyperv.u.hcall.result);
 }
 
-static u16 kvm_hvcall_signal_event(struct kvm_vcpu *vcpu, struct kvm_hv_hcall *hc)
+static int kvm_hvcall_signal_event(struct kvm_vcpu *vcpu, struct kvm_hv_hcall *hc)
 {
 	struct kvm_hv *hv = to_kvm_hv(vcpu->kvm);
 	struct eventfd_ctx *eventfd;
 	u64 conn_id;
+	int ret;
+
+	ret = kvm_hv_hypercall_check_params(vcpu, hc);
+	if (ret)
+		return ret;
 
 	if (unlikely(!hc->fast)) {
 		int ret;
@@ -2550,11 +2620,30 @@ static bool hv_check_hypercall_access(struct kvm_vcpu_hv *hv_vcpu, u16 code)
 	return true;
 }
 
+static int kvm_hv_hypercall_userspace_exit(struct kvm_vcpu *vcpu,
+					   struct kvm_hv_hcall *hc)
+{
+	int r;
+
+	r = kvm_hv_hypercall_check_params(vcpu, hc);
+	if (r)
+		return r;
+
+	vcpu->run->exit_reason = KVM_EXIT_HYPERV;
+	vcpu->run->hyperv.type = KVM_EXIT_HYPERV_HCALL;
+	vcpu->run->hyperv.u.hcall.input = hc->param;
+	vcpu->run->hyperv.u.hcall.params[0] = hc->ingpa;
+	vcpu->run->hyperv.u.hcall.params[1] = hc->outgpa;
+	vcpu->arch.complete_userspace_io = kvm_hv_hypercall_complete_userspace;
+	return 0;
+}
+
 int kvm_hv_hypercall(struct kvm_vcpu *vcpu)
 {
 	struct kvm_vcpu_hv *hv_vcpu = to_hv_vcpu(vcpu);
 	struct kvm_hv_hcall hc;
 	u64 ret = HV_STATUS_SUCCESS;
+	s64 r;
 
 	/*
 	 * hypercall generates UD from non zero cpl and real mode
@@ -2622,7 +2711,10 @@ int kvm_hv_hypercall(struct kvm_vcpu *vcpu)
 			ret = HV_STATUS_INVALID_HYPERCALL_INPUT;
 			break;
 		}
-		ret = kvm_hvcall_signal_event(vcpu, &hc);
+		r = kvm_hvcall_signal_event(vcpu, &hc);
+		if (r < 0)
+			return r;
+		ret = r;
 		if (ret != HV_STATUS_INVALID_PORT_ID)
 			break;
 		fallthrough;	/* maybe userspace knows this conn_id */
@@ -2632,7 +2724,7 @@ int kvm_hv_hypercall(struct kvm_vcpu *vcpu)
 			ret = HV_STATUS_INVALID_HYPERCALL_INPUT;
 			break;
 		}
-		goto hypercall_userspace_exit;
+		return kvm_hv_hypercall_userspace_exit(vcpu, &hc);
 	case HVCALL_FLUSH_VIRTUAL_ADDRESS_LIST:
 		if (unlikely(hc.var_cnt)) {
 			ret = HV_STATUS_INVALID_HYPERCALL_INPUT;
@@ -2644,7 +2736,10 @@ int kvm_hv_hypercall(struct kvm_vcpu *vcpu)
 			ret = HV_STATUS_INVALID_HYPERCALL_INPUT;
 			break;
 		}
-		ret = kvm_hv_flush_tlb(vcpu, &hc);
+		r = kvm_hv_flush_tlb(vcpu, &hc);
+		if (r < 0)
+			return r;
+		ret = r;
 		break;
 	case HVCALL_FLUSH_VIRTUAL_ADDRESS_SPACE:
 		if (unlikely(hc.var_cnt)) {
@@ -2657,7 +2752,10 @@ int kvm_hv_hypercall(struct kvm_vcpu *vcpu)
 			ret = HV_STATUS_INVALID_HYPERCALL_INPUT;
 			break;
 		}
-		ret = kvm_hv_flush_tlb(vcpu, &hc);
+		r = kvm_hv_flush_tlb(vcpu, &hc);
+		if (r < 0)
+			return r;
+		ret = r;
 		break;
 	case HVCALL_SEND_IPI:
 		if (unlikely(hc.var_cnt)) {
@@ -2670,7 +2768,10 @@ int kvm_hv_hypercall(struct kvm_vcpu *vcpu)
 			ret = HV_STATUS_INVALID_HYPERCALL_INPUT;
 			break;
 		}
-		ret = kvm_hv_send_ipi(vcpu, &hc);
+		r = kvm_hv_send_ipi(vcpu, &hc);
+		if (r < 0)
+			return r;
+		ret = r;
 		break;
 	case HVCALL_POST_DEBUG_DATA:
 	case HVCALL_RETRIEVE_DEBUG_DATA:
@@ -2691,14 +2792,14 @@ int kvm_hv_hypercall(struct kvm_vcpu *vcpu)
 			ret = HV_STATUS_OPERATION_DENIED;
 			break;
 		}
-		goto hypercall_userspace_exit;
+		return kvm_hv_hypercall_userspace_exit(vcpu, &hc);
 	}
 	case HV_EXT_CALL_QUERY_CAPABILITIES ... HV_EXT_CALL_MAX:
 		if (unlikely(hc.fast)) {
 			ret = HV_STATUS_INVALID_PARAMETER;
 			break;
 		}
-		goto hypercall_userspace_exit;
+		return kvm_hv_hypercall_userspace_exit(vcpu, &hc);
 	default:
 		ret = HV_STATUS_INVALID_HYPERCALL_CODE;
 		break;
@@ -2707,14 +2808,6 @@ int kvm_hv_hypercall(struct kvm_vcpu *vcpu)
 hypercall_complete:
 	return kvm_hv_hypercall_complete(vcpu, ret);
 
-hypercall_userspace_exit:
-	vcpu->run->exit_reason = KVM_EXIT_HYPERV;
-	vcpu->run->hyperv.type = KVM_EXIT_HYPERV_HCALL;
-	vcpu->run->hyperv.u.hcall.input = hc.param;
-	vcpu->run->hyperv.u.hcall.params[0] = hc.ingpa;
-	vcpu->run->hyperv.u.hcall.params[1] = hc.outgpa;
-	vcpu->arch.complete_userspace_io = kvm_hv_hypercall_complete_userspace;
-	return 0;
 }
 
 void kvm_hv_init_vm(struct kvm *kvm)

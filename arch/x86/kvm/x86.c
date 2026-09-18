@@ -2242,6 +2242,7 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 	case KVM_CAP_HYPERV_ENFORCE_CPUID:
 	case KVM_CAP_SYS_HYPERV_CPUID:
 #endif
+	case KVM_CAP_HCALL_FAULT_EXIT:
 	case KVM_CAP_PCI_SEGMENT:
 	case KVM_CAP_DEBUGREGS:
 	case KVM_CAP_X86_ROBUST_SINGLESTEP:
@@ -4210,6 +4211,10 @@ disable_exits_unlock:
 		mutex_unlock(&kvm->lock);
 		break;
 	}
+	case KVM_CAP_HCALL_FAULT_EXIT:
+		kvm->arch.hcall_fault_exit = cap->args[0];
+		r = 0;
+		break;
 	default:
 		r = -EINVAL;
 		break;
@@ -7191,25 +7196,28 @@ EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_x86_vendor_exit);
 
 #ifdef CONFIG_X86_64
 static int kvm_pv_clock_pairing(struct kvm_vcpu *vcpu, gpa_t paddr,
-			        unsigned long clock_type)
+			        unsigned long clock_type, unsigned long *ret)
 {
 	struct kvm_clock_pairing clock_pairing;
 	struct timespec64 ts;
 	size_t offset = 0;
+	bool writable;
+	unsigned long hva;
 	u64 cycle;
 
+	*ret = -KVM_EOPNOTSUPP;
 	if (clock_type != KVM_CLOCK_PAIRING_WALLCLOCK)
-		return -KVM_EOPNOTSUPP;
+		return 0;
 
 	/*
 	 * When tsc is in permanent catchup mode guests won't be able to use
 	 * pvclock_read_retry loop to get consistent view of pvclock
 	 */
 	if (vcpu->arch.tsc_always_catchup)
-		return -KVM_EOPNOTSUPP;
+		return 0;
 
 	if (!kvm_get_walltime_and_clockread(&ts, &cycle))
-		return -KVM_EOPNOTSUPP;
+		return 0;
 
 	clock_pairing.sec = ts.tv_sec;
 	clock_pairing.nsec = ts.tv_nsec;
@@ -7217,6 +7225,7 @@ static int kvm_pv_clock_pairing(struct kvm_vcpu *vcpu, gpa_t paddr,
 	clock_pairing.flags = 0;
 	memset(&clock_pairing.pad, 0, sizeof(clock_pairing.pad));
 
+	*ret = -KVM_EFAULT;
 	while (offset < sizeof(clock_pairing)) {
 		gpa_t gpa = kvm_translate_gpa(vcpu, &vcpu->arch.gva_walk, paddr + offset,
 					      PFERR_WRITE_MASK | PFERR_GUEST_FINAL_MASK, NULL, 0);
@@ -7224,12 +7233,22 @@ static int kvm_pv_clock_pairing(struct kvm_vcpu *vcpu, gpa_t paddr,
 				   PAGE_SIZE - offset_in_page(gpa));
 
 		if (gpa == INVALID_GPA)
-			return -KVM_EFAULT;
+			return 0;
+		if (vcpu->kvm->arch.hcall_fault_exit) {
+			hva = kvm_vcpu_gfn_to_hva_prot(vcpu, gpa_to_gfn(gpa), &writable);
+			if (kvm_is_error_hva(hva) || !writable) {
+				kvm_prepare_memory_fault_exit(vcpu, gpa & PAGE_MASK, PAGE_SIZE,
+							      true, false, false);
+				return -EFAULT;
+			}
+		}
 		if (kvm_write_guest(vcpu->kvm, gpa, (u8 *)&clock_pairing + offset, len))
-			return -KVM_EFAULT;
+			return 0;
 
 		offset += len;
 	}
+
+	*ret = 0;
 	return 0;
 }
 #endif
@@ -7388,7 +7407,8 @@ int ____kvm_emulate_hypercall(struct kvm_vcpu *vcpu, int cpl,
 		break;
 #ifdef CONFIG_X86_64
 	case KVM_HC_CLOCK_PAIRING:
-		ret = kvm_pv_clock_pairing(vcpu, a0, a1);
+		if (kvm_pv_clock_pairing(vcpu, a0, a1, &ret))
+			return -EFAULT;
 		break;
 #endif
 	case KVM_HC_SEND_IPI:
