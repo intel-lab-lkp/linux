@@ -173,9 +173,8 @@ cifs_chan_skip_or_disable(struct cifs_ses *ses,
 	unsigned int chan_index;
 
 	if (SERVER_IS_CHAN(server)) {
-		cifs_dbg(VFS,
-			"server %s does not support multichannel anymore. Skip secondary channel\n",
-			 ses->server->hostname);
+		cifs_server_dbg(VFS,
+				"server does not support multichannel anymore. Skip secondary channel\n");
 
 		spin_lock(&ses->chan_lock);
 		chan_index = cifs_ses_get_chan_index(ses, server);

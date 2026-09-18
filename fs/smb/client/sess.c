@@ -192,8 +192,7 @@ int cifs_try_adding_channels(struct cifs_ses *ses)
 		spin_lock(&ses->iface_lock);
 		if (!ses->iface_count) {
 			spin_unlock(&ses->iface_lock);
-			cifs_dbg(ONCE, "server %s does not advertise interfaces\n",
-				      ses->server->hostname);
+			cifs_server_dbg(ONCE, "server does not advertise interfaces\n");
 			break;
 		}
 
@@ -373,7 +372,7 @@ cifs_chan_update_iface(struct cifs_ses *ses, struct TCP_Server_Info *server)
 	spin_lock(&ses->iface_lock);
 	if (!ses->iface_count) {
 		spin_unlock(&ses->iface_lock);
-		cifs_dbg(ONCE, "server %s does not advertise interfaces\n", ses->server->hostname);
+		cifs_server_dbg(ONCE, "server does not advertise interfaces\n");
 		return;
 	}
 

@@ -632,6 +632,7 @@ static int
 parse_server_interfaces(struct network_interface_info_ioctl_rsp *buf,
 			size_t buf_len, struct cifs_ses *ses, bool in_mount)
 {
+	struct TCP_Server_Info *server = ses->server;
 	struct network_interface_info_ioctl_rsp *p;
 	struct sockaddr_in *addr4;
 	struct sockaddr_in6 *addr6;
@@ -666,10 +667,8 @@ parse_server_interfaces(struct network_interface_info_ioctl_rsp *buf,
 	if (bytes_left == 0) {
 		/* avoid spamming logs every 10 minutes, so log only in mount */
 		if ((ses->chan_max > 1) && in_mount)
-			cifs_dbg(VFS,
-				 "multichannel not available\n"
-				 "Empty network interface list returned by server %s\n",
-				 ses->server->hostname);
+			cifs_server_dbg(VFS,
+					"multichannel not available - Empty network interface list returned by server\n");
 		rc = -EOPNOTSUPP;
 		goto out;
 	}
