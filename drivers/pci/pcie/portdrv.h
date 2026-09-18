@@ -23,6 +23,11 @@
 #define PCIE_PORT_SERVICE_BWCTRL_SHIFT	4	/* Bandwidth Controller (notifications) */
 #define PCIE_PORT_SERVICE_BWCTRL	(1 << PCIE_PORT_SERVICE_BWCTRL_SHIFT)
 
+/* Services sharing the PCI Express Capability Interrupt Message Number */
+#define PCIE_PORT_SERVICES_EXPCAP	(PCIE_PORT_SERVICE_PME | \
+					 PCIE_PORT_SERVICE_HP | \
+					 PCIE_PORT_SERVICE_BWCTRL)
+
 #define PCIE_PORT_DEVICE_MAXSERVICES   5
 
 extern bool pcie_ports_dpc_native;
