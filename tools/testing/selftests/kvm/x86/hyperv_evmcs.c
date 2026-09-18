@@ -18,6 +18,8 @@
 #include "hyperv.h"
 #include "vmx.h"
 
+#define L2_HCALL_INPUT_GPA	0x100000000ull
+
 static int ud_count;
 
 static void guest_ud_handler(struct ex_regs *regs)
@@ -60,6 +62,8 @@ void l2_guest_code(void)
 	rdmsr_from_l2(MSR_GS_BASE); /* intercepted */
 
 	/* L2 TLB flush tests */
+	hyperv_hypercall(HVCALL_FLUSH_VIRTUAL_ADDRESS_SPACE,
+			 L2_HCALL_INPUT_GPA, 0);
 	hyperv_hypercall(HVCALL_FLUSH_VIRTUAL_ADDRESS_SPACE | HV_HYPERCALL_FAST_BIT, 0x0,
 			 HV_FLUSH_ALL_VIRTUAL_ADDRESS_SPACES | HV_FLUSH_ALL_PROCESSORS);
 	rdmsr_from_l2(MSR_FS_BASE);
@@ -228,7 +232,7 @@ static struct kvm_vcpu *save_restore_vm(struct kvm_vm *vm,
 int main(int argc, char *argv[])
 {
 	gva_t vmx_pages_gva = 0, hv_pages_gva = 0;
-	gva_t hcall_page;
+	gva_t hcall_input_page, hcall_page;
 
 	struct kvm_vcpu *vcpu;
 	struct kvm_vm *vm;
@@ -239,17 +243,23 @@ int main(int argc, char *argv[])
 	TEST_REQUIRE(kvm_has_cap(KVM_CAP_NESTED_STATE));
 	TEST_REQUIRE(kvm_has_cap(KVM_CAP_HYPERV_ENLIGHTENED_VMCS));
 	TEST_REQUIRE(kvm_hv_cpu_has(HV_X64_NESTED_DIRECT_FLUSH));
+	TEST_REQUIRE(kvm_cpu_has_ept());
 
 	vm = vm_create_with_one_vcpu(&vcpu, guest_code);
+	vm_enable_ept(vm);
 
 	hcall_page = vm_alloc_pages(vm, 1);
 	memset(addr_gva2hva(vm, hcall_page), 0x0,  getpagesize());
+	hcall_input_page = vm_alloc_page(vm);
+	memset(addr_gva2hva(vm, hcall_input_page), 0, getpagesize());
 
 	vcpu_set_hv_cpuid(vcpu);
 	vcpu_enable_evmcs(vcpu);
 
 	vcpu_alloc_vmx(vm, &vmx_pages_gva);
 	vcpu_alloc_hyperv_test_pages(vm, &hv_pages_gva);
+	tdp_identity_map_default_memslots(vm);
+	tdp_map(vm, L2_HCALL_INPUT_GPA, addr_gva2gpa(vm, hcall_input_page), PAGE_SIZE);
 	vcpu_args_set(vcpu, 3, vmx_pages_gva, hv_pages_gva, addr_gva2gpa(vm, hcall_page));
 	vcpu_set_msr(vcpu, HV_X64_MSR_VP_INDEX, vcpu->id);
 
