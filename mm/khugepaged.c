@@ -2589,14 +2589,15 @@ out:
 	return result;
 }
 
-static enum scan_result collapse_scan_file(struct mm_struct *mm,
-		unsigned long addr, struct file *file, pgoff_t start,
-		struct collapse_control *cc)
+static enum scan_result collapse_scan_file(struct vm_area_struct *vma,
+		unsigned long addr, struct collapse_control *cc)
 {
 	const unsigned int max_ptes_none = collapse_max_ptes_none(cc, NULL, HPAGE_PMD_ORDER);
 	const unsigned int max_ptes_swap = collapse_max_ptes_swap(cc, HPAGE_PMD_ORDER);
+	struct file *file = vma->vm_file;
 	struct folio *folio = NULL;
 	struct address_space *mapping = file->f_mapping;
+	pgoff_t start = linear_page_index(vma, addr);
 	XA_STATE(xas, &mapping->i_pages, start);
 	int present, swap;
 	int node = NUMA_NO_NODE;
@@ -2692,7 +2693,21 @@ static enum scan_result collapse_scan_file(struct mm_struct *mm,
 		count_vm_event(THP_SCAN_EXCEED_NONE_PTE);
 	}
 
-	trace_mm_khugepaged_scan_file(mm, failed_pfn, file, present, swap,
+	/*
+	 * SCAN_PTE_MAPPED_HUGEPAGE is work too: the page cache already holds
+	 * the PMD folio, and retracting the PTE table is the run's job.
+	 */
+	if (result == SCAN_SUCCEED || result == SCAN_PTE_MAPPED_HUGEPAGE) {
+		/*
+		 * A file collapse works on the page cache and never sees a
+		 * VMA, so take what it needs from this one while it is still
+		 * here.
+		 */
+		cc->scan_file = get_file(file);
+		cc->scan_pgoff = start;
+	}
+
+	trace_mm_khugepaged_scan_file(vma->vm_mm, failed_pfn, file, present, swap,
 				      result);
 	return result;
 }
@@ -2740,9 +2755,6 @@ enum scan_result collapse_scan_pmd(struct vm_area_struct *vma,
 		unsigned long addr, struct collapse_control *cc,
 		unsigned long orders)
 {
-	enum scan_result result;
-	pgoff_t pgoff;
-
 	mmap_assert_locked(vma->vm_mm);
 	/* Whatever the last scan found has to have been run by now */
 	collapse_put_scan_file(cc);
@@ -2750,22 +2762,7 @@ enum scan_result collapse_scan_pmd(struct vm_area_struct *vma,
 	if (vma_is_anonymous(vma))
 		return collapse_scan_anon_pmd(vma, addr, cc, orders);
 
-	pgoff = linear_page_index(vma, addr);
-	result = collapse_scan_file(vma->vm_mm, addr, vma->vm_file, pgoff, cc);
-	/*
-	 * SCAN_PTE_MAPPED_HUGEPAGE is work too: the page cache already holds
-	 * the PMD folio, and retracting the PTE table is the run's job.
-	 */
-	if (result != SCAN_SUCCEED && result != SCAN_PTE_MAPPED_HUGEPAGE)
-		return result;
-
-	/*
-	 * A file collapse works on the page cache and never sees a VMA, so take
-	 * what it needs from this one while it is still here.
-	 */
-	cc->scan_file = get_file(vma->vm_file);
-	cc->scan_pgoff = pgoff;
-	return result;
+	return collapse_scan_file(vma, addr, cc);
 }
 
 /*
