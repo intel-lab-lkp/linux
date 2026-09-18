@@ -18,6 +18,7 @@
 #include <linux/pci.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <ras/ras_event.h>
 #include "portdrv.h"
 #include "../pci.h"
 
@@ -205,6 +206,8 @@ static void flit_report(struct pci_dev *pdev, u32 err_log1, u32 err_log2)
 		return;
 
 	pci_warn(pdev, "ErrLog1: 0x%08x ErrLog2: 0x%08x\n", err_log1, err_log2);
+
+	trace_flit_event(pci_name(pdev), err_log1, err_log2);
 }
 
 static irqreturn_t flit_ist(int irq, void *context)

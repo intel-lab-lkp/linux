@@ -381,6 +381,44 @@ TRACE_EVENT(aer_event,
 			"Not available")
 );
 #endif /* CONFIG_PCIEAER */
+
+/*
+ * PCIe Flit Logging trace event
+ *
+ * One event is generated for each flit error the driver logs from the Flit
+ * Error Log of a PCIe Flit Mode port.
+ *
+ * char * dev_name -	The name of the slot where the device resides
+ *			([domain:]bus:device.function).
+ * u32 err_log1 -	Flit Error Log 1 register value.
+ * u32 err_log2 -	Flit Error Log 2 register value.
+ */
+#ifdef CONFIG_PCIE_FLIT
+TRACE_EVENT(flit_event,
+	TP_PROTO(const char *dev_name,
+		 const u32 err_log1,
+		 const u32 err_log2),
+
+	TP_ARGS(dev_name, err_log1, err_log2),
+
+	TP_STRUCT__entry(
+		__string(	dev_name,	dev_name	)
+		__field(	u32,		err_log1	)
+		__field(	u32,		err_log2	)
+	),
+
+	TP_fast_assign(
+		__assign_str(dev_name);
+		__entry->err_log1	= err_log1;
+		__entry->err_log2	= err_log2;
+	),
+
+	TP_printk("%s err_log1:0x%08x err_log2:0x%08x",
+		__get_str(dev_name),
+		__entry->err_log1,
+		__entry->err_log2)
+);
+#endif /* CONFIG_PCIE_FLIT */
 #endif /* _TRACE_HW_EVENT_MC_H */
 
 /* This part must be outside protection */
