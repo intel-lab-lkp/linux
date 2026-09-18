@@ -399,8 +399,12 @@ static void rvu_rep_get_stats64(struct net_device *dev,
 
 static int rvu_eswitch_config(struct otx2_nic *priv, u8 ena)
 {
+	struct devlink_port_attrs attrs = {};
 	struct esw_cfg_req *req;
 
+	rvu_rep_devlink_set_switch_id(priv, &attrs.switch_id);
+
+	/* Sole message in this sync; see esw_cfg_req in af/mbox.h. */
 	mutex_lock(&priv->mbox.lock);
 	req = otx2_mbox_alloc_msg_esw_cfg(&priv->mbox);
 	if (!req) {
@@ -408,6 +412,12 @@ static int rvu_eswitch_config(struct otx2_nic *priv, u8 ena)
 		return -ENOMEM;
 	}
 	req->ena = ena;
+	req->switch_id_len = attrs.switch_id.id_len;
+	if (req->switch_id_len > MAX_PHYS_ITEM_ID_LEN) {
+		mutex_unlock(&priv->mbox.lock);
+		return -EINVAL;
+	}
+	memcpy(req->switch_id, attrs.switch_id.id, req->switch_id_len);
 	otx2_sync_mbox_msg(&priv->mbox);
 	mutex_unlock(&priv->mbox.lock);
 	return 0;

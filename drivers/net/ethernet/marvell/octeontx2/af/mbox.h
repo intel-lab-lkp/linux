@@ -1784,10 +1784,30 @@ struct get_rep_cnt_rsp {
 	u64 rsvd;
 };
 
+/*
+ * MBOX_MSG_ESW_CFG wire format.
+ *
+ * Transaction shape: the representor driver issues exactly one mailbox
+ * message per sync on this path.  rvu_eswitch_config() in nic/rep.c
+ * allocates only struct esw_cfg_req, then calls otx2_sync_mbox_msg()
+ * without enqueueing any other message IDs.  The AF handles one request
+ * per dispatch for this doorbell.
+ *
+ * Layout extensions are therefore confined to this message: fields cannot
+ * be confused with a batched successor because the representor driver
+ * never batches ESW_CFG with other messages.  otx2_mbox_alloc_msg_rsp()
+ * does advance hdr.next_msgoff cumulatively when multiple messages share
+ * a sync, but that API usage does not occur on the ESW_CFG caller path.
+ *
+ * PF and AF implementations are updated together in-tree; both sides
+ * must agree on the struct size carried by MBOX_MSG_ESW_CFG.
+ */
 struct esw_cfg_req {
 	struct mbox_msghdr hdr;
 	u8 ena;
 	u64 rsvd;
+	unsigned char switch_id[MAX_PHYS_ITEM_ID_LEN];
+	u8 switch_id_len;
 };
 
 struct rep_evt_data {
