@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 
-#define KMSG_COMPONENT "kvm-s390-arm64"
+#define KMSG_COMPONENT "kvm_arm64"
 #define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/miscdevice.h>
