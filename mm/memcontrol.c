@@ -1919,6 +1919,12 @@ unsigned long mem_cgroup_get_max(struct mem_cgroup *memcg)
 		if (mem_cgroup_swappiness(memcg))
 			max += min(READ_ONCE(memcg->swap.max),
 				   (unsigned long)total_swap_pages);
+		/*
+		 * A combined memory+swap limit caps the sum of the two, so it
+		 * is the real ceiling once it is configured.  It defaults to
+		 * "max", which leaves the value above unchanged.
+		 */
+		max = min(max, READ_ONCE(memcg->memsw.max));
 	}
 	return max;
 }
