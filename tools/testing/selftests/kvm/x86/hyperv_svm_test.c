@@ -162,6 +162,8 @@ int main(int argc, char *argv[])
 
 	/* Create VM */
 	vm = vm_create_with_one_vcpu(&vcpu, guest_code);
+	if (kvm_has_cap(KVM_CAP_HCALL_FAULT_EXIT))
+		vm_enable_cap(vm, KVM_CAP_HCALL_FAULT_EXIT, 1);
 	vm_enable_npt(vm);
 	vcpu_set_hv_cpuid(vcpu);
 	vcpu_alloc_svm(vm, &nested_gva);
