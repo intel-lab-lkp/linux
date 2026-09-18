@@ -564,19 +564,33 @@ static __init int get_tdx_sys_info_td_conf(struct tdx_sys_info_td_conf *td_conf)
 
 static __init int get_tdx_sys_info(struct tdx_sys_info *sysinfo)
 {
-	int ret = 0;
+	int ret;
 
-	ret = ret ?: get_tdx_sys_info_version(&sysinfo->version);
+	ret = get_tdx_sys_info_version(&sysinfo->version);
 
 	pr_info("Module version: " TDX_VERSION_FMT "\n",
 		sysinfo->version.major_version,
 		sysinfo->version.minor_version,
 		sysinfo->version.update_version);
 
-	ret = ret ?: get_tdx_sys_info_features(&sysinfo->features);
-	ret = ret ?: get_tdx_sys_info_tdmr(&sysinfo->tdmr);
-	ret = ret ?: get_tdx_sys_info_td_ctrl(&sysinfo->td_ctrl);
-	ret = ret ?: get_tdx_sys_info_td_conf(&sysinfo->td_conf);
+	if (ret)
+		return ret;
+
+	ret = get_tdx_sys_info_features(&sysinfo->features);
+	if (ret)
+		return ret;
+
+	ret = get_tdx_sys_info_tdmr(&sysinfo->tdmr);
+	if (ret)
+		return ret;
+
+	ret = get_tdx_sys_info_td_ctrl(&sysinfo->td_ctrl);
+	if (ret)
+		return ret;
+
+	ret = get_tdx_sys_info_td_conf(&sysinfo->td_conf);
+	if (ret)
+		return ret;
 
 	/*
 	 * The kernel supports using TDX without DPAMT, so
@@ -584,10 +598,13 @@ static __init int get_tdx_sys_info(struct tdx_sys_info *sysinfo)
 	 * try to support buggy TDX modules that advertise
 	 * DPAMT but don't expose the metadata.
 	 */
-	if (!ret && tdx_supports_dynamic_pamt(sysinfo))
+	if (tdx_supports_dynamic_pamt(sysinfo)) {
 		ret = get_tdx_sys_info_tdmr_dpamt(&sysinfo->tdmr);
+		if (ret)
+			return ret;
+	}
 
-	return ret;
+	return 0;
 }
 
 static __init int check_features(struct tdx_sys_info *sysinfo)
