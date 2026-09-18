@@ -915,7 +915,42 @@ static int ttusb_stop_feed(struct dvb_demux_feed *dvbdmxfeed)
 
 static int ttusb_setup_interfaces(struct ttusb *ttusb)
 {
-	usb_set_interface(ttusb->dev, 1, 1);
+	static const u8 bulk_ep_addrs[] = { 0x01, 0x81, 0 };
+	struct usb_host_interface *alt;
+	struct usb_interface *intf;
+	bool have_isoc_in = false;
+	int i, ret;
+
+	ret = usb_set_interface(ttusb->dev, 1, 1);
+	if (ret < 0)
+		return ret;
+
+	intf = usb_ifnum_to_if(ttusb->dev, 1);
+	if (!intf)
+		return -ENODEV;
+
+	/*
+	 * The pipes below hardcode endpoint numbers and transfer types, so
+	 * make sure the device actually has what we are about to assume it
+	 * has. Otherwise an isochronous URB ends up aimed at, say, an
+	 * interrupt endpoint and usb_submit_urb() WARNs about it.
+	 */
+	if (!usb_check_bulk_endpoints(intf, bulk_ep_addrs))
+		return -ENODEV;
+
+	/* no usb_check_isoc_endpoints() to call, so look for it by hand */
+	alt = intf->cur_altsetting;
+	for (i = 0; i < alt->desc.bNumEndpoints; i++) {
+		struct usb_endpoint_descriptor *desc = &alt->endpoint[i].desc;
+
+		if (usb_endpoint_is_isoc_in(desc) &&
+		    usb_endpoint_num(desc) == 2) {
+			have_isoc_in = true;
+			break;
+		}
+	}
+	if (!have_isoc_in)
+		return -ENODEV;
 
 	ttusb->bulk_out_pipe = usb_sndbulkpipe(ttusb->dev, 1);
 	ttusb->bulk_in_pipe = usb_rcvbulkpipe(ttusb->dev, 1);
@@ -1618,7 +1653,13 @@ static int ttusb_probe(struct usb_interface *intf, const struct usb_device_id *i
 
 	mutex_init(&ttusb->semusb);
 
-	ttusb_setup_interfaces(ttusb);
+	result = ttusb_setup_interfaces(ttusb);
+	if (result < 0) {
+		dprintk("ttusb_setup_interfaces - failed\n");
+		mutex_unlock(&ttusb->semi2c);
+		kfree(ttusb);
+		return result;
+	}
 
 	result = ttusb_alloc_iso_urbs(ttusb);
 	if (result < 0) {
