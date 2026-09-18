@@ -446,21 +446,27 @@ u16 nvmet_req_find_ns(struct nvmet_req *req)
 {
 	u32 nsid = le32_to_cpu(req->cmd->common.nsid);
 	struct nvmet_subsys *subsys = nvmet_req_subsys(req);
+	u16 status = NVME_SC_SUCCESS;
 
+	rcu_read_lock();
 	req->ns = xa_load(&subsys->namespaces, nsid);
 	if (unlikely(!req->ns) ||
-	    !test_bit(NVMET_NS_IO_LIVE, &req->ns->flags)) {
+	    !test_bit(NVMET_NS_IO_LIVE, &req->ns->flags) ||
+	    !percpu_ref_tryget_live_rcu(&req->ns->ref)) {
 		req->error_loc = offsetof(struct nvme_common_command, nsid);
-		if (!req->ns) /* ns doesn't exist! */
-			return NVME_SC_INVALID_NS | NVME_STATUS_DNR;
+		if (!req->ns) { /* ns doesn't exist! */
+			status = NVME_SC_INVALID_NS | NVME_STATUS_DNR;
+			goto unlock;
+		}
 
 		/* ns exists but it's disabled */
 		req->ns = NULL;
-		return NVME_SC_INTERNAL_PATH_ERROR;
+		status = NVME_SC_INTERNAL_PATH_ERROR;
 	}
+unlock:
+	rcu_read_unlock();
 
-	percpu_ref_get(&req->ns->ref);
-	return NVME_SC_SUCCESS;
+	return status;
 }
 
 static void nvmet_destroy_namespace(struct percpu_ref *ref)
