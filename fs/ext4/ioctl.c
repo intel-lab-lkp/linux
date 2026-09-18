@@ -1674,11 +1674,14 @@ group_extend_out:
 	}
 
 	case EXT4_IOC_GROUP_ADD: {
+		struct ext4_new_group_input __user *uinput = (void __user *)arg;
 		struct ext4_new_group_data input;
 
-		if (copy_from_user(&input, (struct ext4_new_group_input __user *)arg,
-				sizeof(input)))
+		if (copy_from_user(&input, uinput, sizeof(*uinput)))
 			return -EFAULT;
+
+		memset((char *)&input + sizeof(*uinput), 0,
+		       sizeof(input) - sizeof(*uinput));
 
 		return ext4_ioctl_group_add(filp, &input);
 	}
