@@ -2542,6 +2542,7 @@ struct ib_device_ops {
 	int (*poll_cq)(struct ib_cq *cq, int num_entries, struct ib_wc *wc);
 	int (*peek_cq)(struct ib_cq *cq, int wc_cnt);
 	int (*req_notify_cq)(struct ib_cq *cq, enum ib_cq_notify_flags flags);
+	int (*reap_eq)(struct ib_device *device, struct ib_cq *cq);
 	int (*post_srq_recv)(struct ib_srq *srq,
 			     const struct ib_recv_wr *recv_wr,
 			     const struct ib_recv_wr **bad_recv_wr);
@@ -4294,6 +4295,29 @@ static inline int ib_req_notify_cq(struct ib_cq *cq,
 				   enum ib_cq_notify_flags flags)
 {
 	return cq->device->ops.req_notify_cq(cq, flags);
+}
+
+/**
+ * ib_reap_eq - Poll the event queue associated with a CQ.
+ * @device: Device that owns the CQ.
+ * @cq: CQ whose associated event queue should be polled.
+ *
+ * Poll the device event queue associated with @cq to recover completions
+ * after a missed event queue notification. This is an optional provider
+ * callback.
+ *
+ * Return: 0 on success, %-EINVAL for invalid input, and %-EOPNOTSUPP when
+ * unsupported.
+ */
+static inline int ib_reap_eq(struct ib_device *device, struct ib_cq *cq)
+{
+	if (!device || !cq || cq->device != device)
+		return -EINVAL;
+
+	if (!device->ops.reap_eq)
+		return -EOPNOTSUPP;
+
+	return device->ops.reap_eq(device, cq);
 }
 
 struct ib_cq *ib_cq_pool_get(struct ib_device *dev, unsigned int nr_cqe,

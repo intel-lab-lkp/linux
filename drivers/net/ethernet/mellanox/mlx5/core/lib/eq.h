@@ -6,6 +6,7 @@
 #include <linux/mlx5/driver.h>
 #include <linux/mlx5/eq.h>
 #include <linux/mlx5/cq.h>
+#include <linux/mutex.h>
 
 #define MLX5_EQE_SIZE       (sizeof(struct mlx5_eqe))
 
@@ -46,6 +47,7 @@ struct mlx5_eq_comp {
 	struct notifier_block   irq_nb;
 	struct mlx5_eq_tasklet  tasklet_ctx;
 	struct list_head        list;
+	struct mutex            poll_lock; /* protect recovery polling */
 };
 
 static inline u32 eq_get_size(struct mlx5_eq *eq)
