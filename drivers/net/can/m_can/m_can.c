@@ -2612,8 +2612,14 @@ int m_can_class_suspend(struct device *dev)
 			hrtimer_cancel(&cdev->hrtimer);
 			m_can_write(cdev, M_CAN_IE, IR_RF0N);
 
-			if (cdev->ops->deinit)
+			if (cdev->ops->deinit) {
 				ret = cdev->ops->deinit(cdev);
+				if (ret) {
+					netdev_err(cdev->net, "failed to deinit device while suspending %pe\n",
+						   ERR_PTR(ret));
+					goto err_restore_interface;
+				}
+			}
 		} else {
 			m_can_stop(ndev);
 		}
@@ -2624,6 +2630,21 @@ int m_can_class_suspend(struct device *dev)
 
 	if (!m_can_class_wakeup_pinctrl_enabled(cdev))
 		pinctrl_pm_select_sleep_state(dev);
+
+	return 0;
+
+err_restore_interface:
+	if (netif_running(ndev)) {
+		if (cdev->pm_wake_source) {
+			/* Enable interrupts that trigger immediately if
+			 * something is there and keep the hrtimer off
+			 */
+			cdev->active_interrupts |= IR_RF0N | IR_TEFN;
+			m_can_write(cdev, M_CAN_IE, cdev->active_interrupts);
+		}
+		netif_device_attach(ndev);
+		netif_start_queue(ndev);
+	}
 
 	return ret;
 }
