@@ -40,6 +40,7 @@ static int mana_ib_post_rq(struct mana_ib_qp *qp, const struct ib_recv_wr *wr)
 	memset(shadow_wqe, 0, sizeof(*shadow_wqe));
 	shadow_wqe->wr_id = wr->wr_id;
 	shadow_wqe->wqe_size_in_bu = wqe_info.wqe_size_in_bu;
+	shadow_wqe->wqe_offset_or_psn = wqe_info.wqe_offset;
 	shadow_queue_advance_producer(&qp->shadow_rq);
 
 	return 0;
@@ -144,6 +145,7 @@ static int mana_ib_post_send_ud_one(struct mana_ib_qp *qp, const struct ib_ud_wr
 	memset(shadow_wqe, 0, sizeof(*shadow_wqe));
 	shadow_wqe->wr_id = wr->wr.wr_id;
 	shadow_wqe->wqe_size_in_bu = wqe_info.wqe_size_in_bu;
+	shadow_wqe->wqe_offset_or_psn = wqe_info.wqe_offset;
 	shadow_queue_advance_producer(&qp->shadow_sq);
 
 	return 0;
