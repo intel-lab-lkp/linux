@@ -4837,6 +4837,7 @@ static int svm_check_intercept(struct kvm_vcpu *vcpu,
 	int vmexit, ret = X86EMUL_CONTINUE;
 	struct __x86_intercept icpt_info;
 	struct vmcb *vmcb = svm->vmcb;
+	bool decode_assists;
 
 	if (info->intercept >= ARRAY_SIZE(x86_intercept_map))
 		goto out;
@@ -4846,13 +4847,25 @@ static int svm_check_intercept(struct kvm_vcpu *vcpu,
 	if (stage != icpt_info.stage)
 		goto out;
 
+	decode_assists = guest_cpu_cap_has(vcpu, X86_FEATURE_DECODEASSISTS);
+
 	switch (icpt_info.exit_code) {
 	case SVM_EXIT_READ_CR0:
 		if (info->intercept == x86_intercept_cr_read)
 			icpt_info.exit_code += info->modrm_reg;
+
+		if (decode_assists)
+			vmcb->control.exit_info_1 =
+				info->intercept == x86_intercept_cr_read ?
+				CR_VALID | (info->modrm_rm & SVM_EXITINFO_REG_MASK) : 0;
 		break;
 	case SVM_EXIT_WRITE_CR0: {
 		unsigned long cr0, val;
+
+		if (decode_assists)
+			vmcb->control.exit_info_1 =
+				info->intercept == x86_intercept_cr_write ?
+				CR_VALID | (info->modrm_rm & SVM_EXITINFO_REG_MASK) : 0;
 
 		/*
 		 * Adjust the exit code accordingly if a CR other than CR0 is
@@ -4898,6 +4911,20 @@ static int svm_check_intercept(struct kvm_vcpu *vcpu,
 	case SVM_EXIT_READ_DR0:
 	case SVM_EXIT_WRITE_DR0:
 		icpt_info.exit_code += info->modrm_reg;
+		if (decode_assists)
+			vmcb->control.exit_info_1 = info->modrm_rm & SVM_EXITINFO_REG_MASK;
+		break;
+	case SVM_EXIT_SWINT:
+		if (decode_assists)
+			vmcb->control.exit_info_1 = info->src_val & 0xff;
+		break;
+	case SVM_EXIT_INVLPG:
+		if (decode_assists)
+			vmcb->control.exit_info_1 = info->invlpg_linear_addr;
+		break;
+	case SVM_EXIT_INVLPGA:
+		if (decode_assists)
+			vmcb->control.exit_info_1 = 0;
 		break;
 	case SVM_EXIT_MSR:
 		if (info->intercept == x86_intercept_wrmsr)
