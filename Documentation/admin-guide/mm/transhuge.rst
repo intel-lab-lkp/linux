@@ -389,8 +389,8 @@ is not defined within a valid ``thp_anon``, its policy will default to
 Similarly to ``transparent_hugepage``, you can control the hugepage
 allocation policy for the internal shmem mount by using the kernel parameter
 ``transparent_hugepage_shmem=<policy>``, where ``<policy>`` is one of the
-seven valid policies for shmem (``always``, ``within_size``, ``advise``,
-``never``, ``deny``, and ``force``).
+four valid policies for shmem (``always``, ``within_size``, ``advise``,
+``never``).
 
 Similarly to ``transparent_hugepage_shmem``, you can control the default
 hugepage allocation policy for the tmpfs mount by using the kernel parameter

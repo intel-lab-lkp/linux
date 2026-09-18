@@ -668,7 +668,7 @@ static unsigned int shmem_huge_global_enabled(struct inode *inode, pgoff_t index
 	}
 }
 
-static int shmem_parse_huge(const char *str)
+static int shmem_parse_huge(const char *str, bool skip_deny_force)
 {
 	int huge;
 
@@ -683,9 +683,9 @@ static int shmem_parse_huge(const char *str)
 		huge = SHMEM_HUGE_WITHIN_SIZE;
 	else if (!strcmp(str, "advise"))
 		huge = SHMEM_HUGE_ADVISE;
-	else if (!strcmp(str, "deny"))
+	else if (!strcmp(str, "deny") && !skip_deny_force)
 		huge = SHMEM_HUGE_DENY;
-	else if (!strcmp(str, "force"))
+	else if (!strcmp(str, "force") && !skip_deny_force)
 		huge = SHMEM_HUGE_FORCE;
 	else
 		return -EINVAL;
@@ -5680,7 +5680,7 @@ static ssize_t shmem_enabled_store(struct kobject *kobj,
 	if (count && tmp[count - 1] == '\n')
 		tmp[count - 1] = '\0';
 
-	huge = shmem_parse_huge(tmp);
+	huge = shmem_parse_huge(tmp, /*skip_deny_force=*/false);
 	if (huge == -EINVAL)
 		return huge;
 
@@ -5807,7 +5807,7 @@ static int __init setup_transparent_hugepage_shmem(char *str)
 {
 	int huge;
 
-	huge = shmem_parse_huge(str);
+	huge = shmem_parse_huge(str, /*skip_deny_force=*/true);
 	if (huge == -EINVAL) {
 		pr_warn("transparent_hugepage_shmem= cannot parse, ignored\n");
 		return huge;
@@ -5822,7 +5822,7 @@ static int __init setup_transparent_hugepage_tmpfs(char *str)
 {
 	int huge;
 
-	huge = shmem_parse_huge(str);
+	huge = shmem_parse_huge(str, /*skip_deny_force=*/true);
 	if (huge < 0) {
 		pr_warn("transparent_hugepage_tmpfs= cannot parse, ignored\n");
 		return huge;
