@@ -260,6 +260,7 @@ intel_dp_aux_xfer(struct intel_dp *intel_dp,
 	u32 aux_clock_divider;
 	enum intel_display_power_domain aux_domain;
 	struct ref_tracker *aux_wakeref;
+	struct ref_tracker *dc_off_wakeref = NULL;
 	struct ref_tracker *pps_wakeref = NULL;
 	int i, ret, recv_bytes;
 	int try, clock = 0;
@@ -285,6 +286,9 @@ intel_dp_aux_xfer(struct intel_dp *intel_dp,
 	aux_domain = intel_aux_power_domain(dig_port);
 
 	aux_wakeref = intel_display_power_get(display, aux_domain);
+
+	(HAS_LT_PHY(display))
+		dc_off_wakeref = intel_display_power_get(display, POWER_DOMAIN_DC_OFF);
 
 	/*
 	 * The PPS state needs to be locked for:
@@ -458,6 +462,9 @@ out:
 
 	if (pps_wakeref)
 		intel_pps_unlock(intel_dp, pps_wakeref);
+
+	if (dc_off_wakeref)
+		intel_display_power_put(display, POWER_DOMAIN_DC_OFF, dc_off_wakeref);
 
 	intel_display_power_put_async(display, aux_domain, aux_wakeref);
 out_unlock:
