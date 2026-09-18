@@ -371,7 +371,7 @@ static int dvb_net_ule_ts_pusi(struct dvb_net_ule_handle *h)
 		/* Synchronize continuity counter. */
 		h->priv->tscc = h->ts[3] & 0x0F;
 		/* There is a pointer field here. */
-		if (h->ts[4] > h->ts_remain) {
+		if (h->ts[4] >= h->ts_remain) {
 			pr_err("%lu: Invalid ULE packet (pointer field %d)\n",
 				h->priv->ts_count, h->ts[4]);
 			h->ts += TS_SZ;
