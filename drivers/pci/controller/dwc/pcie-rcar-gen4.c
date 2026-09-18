@@ -323,7 +323,7 @@ static struct rcar_gen4_pcie *rcar_gen4_pcie_alloc(struct platform_device *pdev)
 static int rcar_gen4_pcie_host_msi_addr(struct dw_pcie_rp *pp, u32 *msi_addr)
 {
 	struct dw_pcie *dw = to_dw_pcie_from_pp(pp);
-	struct device_node *msi_node = NULL;
+	struct device_node *msi_node __free(device_node) = NULL;
 	struct device *dev = dw->dev;
 	struct resource res;
 	u64 addr;
