@@ -190,14 +190,19 @@ int hv_call_delete_partition(u64 partition_id)
 
 /* Ask the hypervisor to map guest ram pages or the guest mmio space */
 static int hv_do_map_gpa_hcall(u64 partition_id, u64 gfn, u64 page_struct_count,
-			       u32 flags, struct page **pages, u64 mmio_spa)
+			       u32 flags, struct page **pages, u64 mmio_spa,
+			       bool *mapping_may_exist)
 {
 	struct hv_input_map_gpa_pages *input_page;
 	u64 status, *pfnlist;
 	unsigned long irq_flags, large_shift = 0;
-	int ret = 0, done = 0;
 	u64 page_count = page_struct_count;
+	u64 done = 0;
+	bool cleanup_needed = false;
+	int ret = 0;
 
+	if (mapping_may_exist)
+		*mapping_may_exist = false;
 	if (page_count == 0 || (pages && mmio_spa))
 		return -EINVAL;
 
@@ -213,8 +218,9 @@ static int hv_do_map_gpa_hcall(u64 partition_id, u64 gfn, u64 page_struct_count,
 	}
 
 	while (done < page_count) {
-		ulong i, completed, remain = page_count - done;
-		int rep_count = min(remain, HV_MAP_GPA_BATCH_SIZE);
+		u64 i, completed, remain = page_count - done;
+		unsigned int rep_count = min_t(u64, remain,
+					       HV_MAP_GPA_BATCH_SIZE);
 
 		local_irq_save(irq_flags);
 		input_page = *this_cpu_ptr(hyperv_pcpu_input_arg);
@@ -224,49 +230,62 @@ static int hv_do_map_gpa_hcall(u64 partition_id, u64 gfn, u64 page_struct_count,
 		input_page->map_flags = flags;
 		pfnlist = input_page->source_gpa_page_list;
 
-		for (i = 0; i < rep_count; i++)
+		for (i = 0; i < rep_count; i++) {
 			if (flags & HV_MAP_GPA_NO_ACCESS) {
 				pfnlist[i] = 0;
 			} else if (pages) {
 				u64 index = (done + i) << large_shift;
 
-				if (index >= page_struct_count) {
-					ret = -EINVAL;
-					break;
-				}
 				pfnlist[i] = page_to_pfn(pages[index]);
 			} else {
 				pfnlist[i] = mmio_spa + done + i;
 			}
-		if (ret)
-			break;
+		}
 
 		status = hv_do_rep_hypercall(HVCALL_MAP_GPA_PAGES, rep_count, 0,
 					     input_page, NULL);
 		local_irq_restore(irq_flags);
 
 		completed = hv_repcomp(status);
+		if (completed > rep_count) {
+			cleanup_needed = true;
+			ret = -EIO;
+			break;
+		}
+		done += completed;
 
 		if (hv_result_needs_memory(status)) {
 			ret = hv_call_deposit_pages(NUMA_NO_NODE, partition_id,
 						    HV_MAP_GPA_DEPOSIT_PAGES);
 			if (ret)
 				break;
-
-		} else if (!hv_result_success(status)) {
+			continue;
+		}
+		if (!hv_result_success(status)) {
 			ret = hv_result_to_errno(status);
 			break;
 		}
-
-		done += completed;
+		if (!completed) {
+			cleanup_needed = true;
+			ret = -EIO;
+			break;
+		}
 	}
 
-	if (ret && done) {
+	if (ret && (done || cleanup_needed)) {
 		u32 unmap_flags = 0;
+		int unmap_ret;
 
 		if (flags & HV_MAP_GPA_LARGE_PAGE)
 			unmap_flags |= HV_UNMAP_GPA_LARGE_PAGE;
-		hv_call_unmap_gpa_pages(partition_id, gfn, done, unmap_flags);
+		/* Unmap the full request so no unknown partial mapping survives. */
+		unmap_ret =
+			hv_call_unmap_gpa_pages(partition_id, gfn,
+						page_struct_count, unmap_flags);
+		if (unmap_ret && mapping_may_exist)
+			*mapping_may_exist = true;
+	} else if (!ret && mapping_may_exist) {
+		*mapping_may_exist = true;
 	}
 
 	return ret;
@@ -274,16 +293,18 @@ static int hv_do_map_gpa_hcall(u64 partition_id, u64 gfn, u64 page_struct_count,
 
 /* Ask the hypervisor to map guest ram pages */
 int hv_call_map_gpa_pages(u64 partition_id, u64 gpa_target, u64 page_count,
-			  u32 flags, struct page **pages)
+			  u32 flags, struct page **pages,
+			  bool *mapping_may_exist)
 {
 	return hv_do_map_gpa_hcall(partition_id, gpa_target, page_count,
-				   flags, pages, 0);
+				   flags, pages, 0, mapping_may_exist);
 }
 
 /* Ask the hypervisor to map guest mmio space */
-int hv_call_map_mmio_pages(u64 partition_id, u64 gfn, u64 mmio_spa, u64 numpgs)
+int hv_call_map_mmio_pages(u64 partition_id, u64 gfn, u64 mmio_spa,
+			   u64 numpgs, bool *mapping_may_exist)
 {
-	int i;
+	u64 i;
 	u32 flags = HV_MAP_GPA_READABLE | HV_MAP_GPA_WRITABLE |
 		    HV_MAP_GPA_NOT_CACHED;
 
@@ -292,7 +313,7 @@ int hv_call_map_mmio_pages(u64 partition_id, u64 gfn, u64 mmio_spa, u64 numpgs)
 			return -EINVAL;
 
 	return hv_do_map_gpa_hcall(partition_id, gfn, numpgs, flags, NULL,
-				   mmio_spa);
+				   mmio_spa, mapping_may_exist);
 }
 
 int hv_call_unmap_gpa_pages(u64 partition_id, u64 gfn, u64 page_count_4k,
@@ -301,7 +322,8 @@ int hv_call_unmap_gpa_pages(u64 partition_id, u64 gfn, u64 page_count_4k,
 	struct hv_input_unmap_gpa_pages *input_page;
 	u64 status, page_count = page_count_4k;
 	unsigned long irq_flags, large_shift = 0;
-	int ret = 0, done = 0;
+	u64 done = 0;
+	int ret = 0;
 
 	if (page_count == 0)
 		return -EINVAL;
@@ -315,8 +337,9 @@ int hv_call_unmap_gpa_pages(u64 partition_id, u64 gfn, u64 page_count_4k,
 	}
 
 	while (done < page_count) {
-		ulong completed, remain = page_count - done;
-		int rep_count = min(remain, HV_UMAP_GPA_PAGES);
+		u64 completed, remain = page_count - done;
+		unsigned int rep_count = min_t(u64, remain,
+					       HV_UMAP_GPA_PAGES);
 
 		local_irq_save(irq_flags);
 		input_page = *this_cpu_ptr(hyperv_pcpu_input_arg);
@@ -329,8 +352,16 @@ int hv_call_unmap_gpa_pages(u64 partition_id, u64 gfn, u64 page_count_4k,
 		local_irq_restore(irq_flags);
 
 		completed = hv_repcomp(status);
+		if (completed > rep_count) {
+			ret = -EIO;
+			break;
+		}
 		if (!hv_result_success(status)) {
 			ret = hv_result_to_errno(status);
+			break;
+		}
+		if (!completed) {
+			ret = -EIO;
 			break;
 		}
 

@@ -65,6 +65,7 @@ static int mshv_vp_mmap(struct file *file, struct vm_area_struct *vma);
 static vm_fault_t mshv_vp_fault(struct vm_fault *vmf);
 static int mshv_init_async_handler(struct mshv_partition *partition);
 static void mshv_async_hvcall_handler(void *data, u64 *status);
+static void mshv_quarantine_partition(struct mshv_partition *partition);
 
 static const union hv_input_vtl input_vtl_zero;
 static const union hv_input_vtl input_vtl_normal = {
@@ -1319,8 +1320,23 @@ static int mshv_prepare_pinned_region(struct mshv_mem_region *region)
 	}
 
 	ret = mshv_region_map(region);
-	if (ret && mshv_partition_encrypted(partition)) {
+	if (ret) {
 		int shrc;
+
+		/* A partial map must be removed before host access is restored. */
+		if (region->mapping_may_exist) {
+			int cleanup_ret = mshv_region_unmap(region);
+
+			if (cleanup_ret || region->mapping_may_exist) {
+				pt_err(partition,
+				       "Failed to clean up mapping at GFN %#llx after map failure: %d; retaining region\n",
+				       region->start_gfn, cleanup_ret);
+				return ret;
+			}
+		}
+
+		if (!mshv_partition_encrypted(partition))
+			return ret;
 
 		shrc = mshv_region_share(region);
 		if (!shrc)
@@ -1330,8 +1346,8 @@ static int mshv_prepare_pinned_region(struct mshv_mem_region *region)
 		       "Failed to share memory region (guest_pfn: %llu): %d\n",
 		       region->start_gfn, shrc);
 		/*
-		 * Don't unpin if marking shared failed because pages are no
-		 * longer mapped in the host, ie root, anymore.
+		 * Do not unpin if restoring host access failed because the
+		 * pages are no longer mapped in the host.
 		 */
 		goto err_out;
 	}
@@ -1392,18 +1408,23 @@ mshv_map_user_memory(struct mshv_partition *partition,
 		/*
 		 * For movable memory regions, remap with no access to let
 		 * the hypervisor track dirty pages, enabling pre-copy live
-		 * migration.
+		 * migration. The notifier is already registered, so serialize
+		 * this initial map with notifier, fault, and unmap operations.
 		 */
+		mutex_lock(&region->mreg_mutex);
 		ret = hv_call_map_gpa_pages(partition->pt_id,
 					    region->start_gfn,
 					    region->nr_pages,
-					    HV_MAP_GPA_NO_ACCESS, NULL);
+					    HV_MAP_GPA_NO_ACCESS, NULL,
+					    &region->mapping_may_exist);
+		mutex_unlock(&region->mreg_mutex);
 		break;
 	case MSHV_REGION_TYPE_MMIO:
 		ret = hv_call_map_mmio_pages(partition->pt_id,
 					     region->start_gfn,
 					     mmio_pfn,
-					     region->nr_pages);
+					     region->nr_pages,
+					     &region->mapping_may_exist);
 		break;
 	}
 
@@ -1421,6 +1442,28 @@ mshv_map_user_memory(struct mshv_partition *partition,
 	return 0;
 
 errout:
+	if (region->mreg_type == MSHV_REGION_TYPE_MEM_MOVABLE) {
+		bool mapping_may_exist;
+
+		mutex_lock(&region->mreg_mutex);
+		mapping_may_exist = region->mapping_may_exist;
+		mutex_unlock(&region->mreg_mutex);
+		if (!mapping_may_exist)
+			goto put_region;
+	} else if (!region->mapping_may_exist) {
+		goto put_region;
+	}
+
+	spin_lock(&partition->pt_mem_regions_lock);
+	hlist_add_head(&region->hnode, &partition->pt_mem_regions);
+	spin_unlock(&partition->pt_mem_regions_lock);
+	pt_err(partition,
+	       "Retaining region after uncertain map cleanup at GFN %#llx\n",
+	       region->start_gfn);
+	mshv_quarantine_partition(partition);
+	return ret;
+
+put_region:
 	mshv_region_put(region);
 	return ret;
 }
@@ -1431,33 +1474,64 @@ mshv_unmap_user_memory(struct mshv_partition *partition,
 		       struct mshv_user_mem_region *mem)
 {
 	struct mshv_mem_region *region;
+	long ret;
 
 	if (!(mem->flags & BIT(MSHV_SET_MEM_BIT_UNMAP)))
 		return -EINVAL;
 
+	/*
+	 * The list owns one reference. Take a temporary reference and detach
+	 * under the lookup lock before waiting for existing remappers. This
+	 * prevents a zero-ref region from being reinserted on unmap failure.
+	 */
 	spin_lock(&partition->pt_mem_regions_lock);
-
 	region = mshv_partition_region_by_gfn(partition, mem->guest_pfn);
-	if (!region) {
+	if (!region || !mshv_region_get(region)) {
 		spin_unlock(&partition->pt_mem_regions_lock);
 		return -ENOENT;
 	}
 
-	/* Paranoia check */
 	if (region->start_uaddr != mem->userspace_addr ||
 	    region->start_gfn != mem->guest_pfn ||
 	    region->nr_pages != HVPFN_DOWN(mem->size)) {
 		spin_unlock(&partition->pt_mem_regions_lock);
+		mshv_region_put(region);
 		return -EINVAL;
 	}
 
-	hlist_del(&region->hnode);
-
+	WRITE_ONCE(region->faults_blocked, true);
+	hlist_del_init(&region->hnode);
 	spin_unlock(&partition->pt_mem_regions_lock);
 
-	mshv_region_put(region);
+	/* Drain admitted faults, then serialize against the notifier remap. */
+	down_write(&region->mreg_fault_lock);
+	mutex_lock(&region->mreg_mutex);
+	ret = mshv_region_unmap(region);
+	if (ret)
+		goto restore_region;
 
+	mutex_unlock(&region->mreg_mutex);
+	up_write(&region->mreg_fault_lock);
+
+	if (region->mreg_type == MSHV_REGION_TYPE_MEM_MOVABLE)
+		mshv_region_movable_fini(region);
+
+	/* Drop the detached list ownership and the temporary reference. */
+	mshv_region_put(region);
+	mshv_region_put(region);
 	return 0;
+
+restore_region:
+	/* Restore lookup visibility before allowing remappers to proceed. */
+	spin_lock(&partition->pt_mem_regions_lock);
+	hlist_add_head(&region->hnode, &partition->pt_mem_regions);
+	WRITE_ONCE(region->faults_blocked, false);
+	spin_unlock(&partition->pt_mem_regions_lock);
+	mutex_unlock(&region->mreg_mutex);
+	up_write(&region->mreg_fault_lock);
+	mshv_region_put(region);
+	return ret;
+
 }
 
 static long
@@ -1658,6 +1732,11 @@ mshv_partition_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg)
 	if (mutex_lock_killable(&partition->pt_mutex))
 		return -EINTR;
 
+	if (partition->teardown_quarantined) {
+		ret = -EIO;
+		goto out;
+	}
+
 	switch (ioctl) {
 	case MSHV_INITIALIZE_PARTITION:
 		ret = mshv_partition_ioctl_initialize(partition);
@@ -1688,6 +1767,7 @@ mshv_partition_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg)
 		ret = -ENOTTY;
 	}
 
+out:
 	mutex_unlock(&partition->pt_mutex);
 	return ret;
 }
@@ -1795,6 +1875,16 @@ remove_partition(struct mshv_partition *partition)
 	synchronize_rcu();
 }
 
+static void mshv_quarantine_partition(struct mshv_partition *partition)
+{
+	if (partition->teardown_quarantined)
+		return;
+
+	/* Retain both the partition and the cleanup code indefinitely. */
+	__module_get(THIS_MODULE);
+	partition->teardown_quarantined = true;
+}
+
 /*
  * Tear down a partition and remove it from the list.
  * Partition's refcount must be 0
@@ -1813,6 +1903,39 @@ static void destroy_partition(struct mshv_partition *partition)
 	}
 
 	trace_mshv_destroy_partition(partition->pt_id);
+
+	hlist_for_each_entry(region, &partition->pt_mem_regions, hnode) {
+		bool was_blocked;
+		int unmap_ret;
+
+		/* Stop new lookup users before draining in-flight remappers. */
+		spin_lock(&partition->pt_mem_regions_lock);
+		was_blocked = READ_ONCE(region->faults_blocked);
+		WRITE_ONCE(region->faults_blocked, true);
+		spin_unlock(&partition->pt_mem_regions_lock);
+
+		down_write(&region->mreg_fault_lock);
+		mutex_lock(&region->mreg_mutex);
+		unmap_ret = mshv_region_unmap(region);
+		if (unmap_ret) {
+			spin_lock(&partition->pt_mem_regions_lock);
+			WRITE_ONCE(region->faults_blocked, was_blocked);
+			spin_unlock(&partition->pt_mem_regions_lock);
+			mutex_unlock(&region->mreg_mutex);
+			up_write(&region->mreg_fault_lock);
+
+			pt_err(partition,
+			       "Failed to unmap region at GFN %#llx: %d; retaining partition\n",
+			       region->start_gfn, unmap_ret);
+			mshv_quarantine_partition(partition);
+			return;
+		}
+		mutex_unlock(&region->mreg_mutex);
+		up_write(&region->mreg_fault_lock);
+
+		if (region->mreg_type == MSHV_REGION_TYPE_MEM_MOVABLE)
+			mshv_region_movable_fini(region);
+	}
 
 	if (partition->pt_initialized) {
 		/*
@@ -1874,7 +1997,7 @@ static void destroy_partition(struct mshv_partition *partition)
 
 	hlist_for_each_entry_safe(region, n, &partition->pt_mem_regions,
 				  hnode) {
-		hlist_del(&region->hnode);
+		hlist_del_init(&region->hnode);
 		mshv_region_put(region);
 	}
 
@@ -1883,6 +2006,8 @@ static void destroy_partition(struct mshv_partition *partition)
 	hv_call_delete_partition(partition->pt_id);
 
 	mshv_free_routing_table(partition);
+	if (partition->teardown_quarantined)
+		module_put(THIS_MODULE);
 	kfree(partition);
 }
 
