@@ -3088,7 +3088,7 @@ ice_vsi_rebuild_set_coalesce(struct ice_vsi *vsi,
  *
  * Return: 0 on success and negative value on failure
  */
-static int ice_vsi_resize_stat_arrays(struct ice_vsi *vsi)
+int ice_vsi_resize_stat_arrays(struct ice_vsi *vsi)
 {
 	struct ice_vsi_alloc_queues_params qs;
 	struct ice_vsi_stats *old_stat;
