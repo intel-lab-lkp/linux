@@ -458,6 +458,25 @@ void mshv_isr(void)
 	}
 }
 
+static bool mshv_synic_vmbus_owns_registers(void)
+{
+	/* Nested VMBus programs nested MSRs, while MSHV uses non-nested MSRs. */
+	return hv_vmbus_exists() && !hv_nested;
+}
+
+static void *mshv_synic_map_shared_page(u64 pfn)
+{
+	u64 base;
+
+	if (!pfn)
+		return NULL;
+
+	/* Match Hyper-V's established confidential SynIC mapping convention. */
+	base = (pfn << HV_HYP_PAGE_SHIFT) &
+		~ms_hyperv.shared_gpa_boundary;
+	return memremap(base, HV_HYP_PAGE_SIZE, MEMREMAP_WB | MEMREMAP_DEC);
+}
+
 static int mshv_synic_cpu_init(unsigned int cpu)
 {
 	union hv_synic_simp simp;
@@ -468,11 +487,7 @@ static int mshv_synic_cpu_init(unsigned int cpu)
 	struct hv_message_page *msg_page;
 	struct hv_synic_event_flags_page *event_flags_page;
 	struct hv_synic_event_ring_page *event_ring_page;
-	/*
-	 * VMBus owns SIMP/SIEFP/SCONTROL when it is active.
-	 * See hv_hyp_synic_enable_regs() for that initialization.
-	 */
-	bool vmbus_active = hv_vmbus_exists();
+	bool vmbus_active = mshv_synic_vmbus_owns_registers();
 
 	/*
 	 * Map the SYNIC message page. When VMBus is not active the
@@ -484,8 +499,7 @@ static int mshv_synic_cpu_init(unsigned int cpu)
 		simp.simp_enabled = true;
 		hv_set_non_nested_msr(HV_MSR_SIMP, simp.as_uint64);
 	}
-	msg_page = memremap(simp.base_simp_gpa << HV_HYP_PAGE_SHIFT,
-			    HV_HYP_PAGE_SIZE, MEMREMAP_WB);
+	msg_page = mshv_synic_map_shared_page(simp.base_simp_gpa);
 	WRITE_ONCE(spages->hyp_synic_message_page, msg_page);
 
 	if (!msg_page)
@@ -500,8 +514,7 @@ static int mshv_synic_cpu_init(unsigned int cpu)
 		siefp.siefp_enabled = true;
 		hv_set_non_nested_msr(HV_MSR_SIEFP, siefp.as_uint64);
 	}
-	event_flags_page = memremap(siefp.base_siefp_gpa << HV_HYP_PAGE_SHIFT,
-				    HV_HYP_PAGE_SIZE, MEMREMAP_WB);
+	event_flags_page = mshv_synic_map_shared_page(siefp.base_siefp_gpa);
 	WRITE_ONCE(spages->synic_event_flags_page, event_flags_page);
 
 	if (!event_flags_page)
@@ -511,8 +524,8 @@ static int mshv_synic_cpu_init(unsigned int cpu)
 	sirbp.as_uint64 = hv_get_non_nested_msr(HV_MSR_SIRBP);
 
 	if (hv_root_partition()) {
-		event_ring_page = memremap(sirbp.base_sirbp_gpa << HV_HYP_PAGE_SHIFT,
-					   HV_HYP_PAGE_SIZE, MEMREMAP_WB);
+		event_ring_page =
+			mshv_synic_map_shared_page(sirbp.base_sirbp_gpa);
 
 		if (!event_ring_page)
 			goto cleanup_siefp;
@@ -595,8 +608,7 @@ static int mshv_synic_cpu_exit(unsigned int cpu)
 	struct hv_message_page *msg_page;
 	struct hv_synic_event_flags_page *event_flags_page;
 	struct hv_synic_event_ring_page *event_ring_page;
-	/* VMBus owns SIMP/SIEFP/SCONTROL when it is active */
-	bool vmbus_active = hv_vmbus_exists();
+	bool vmbus_active = mshv_synic_vmbus_owns_registers();
 
 	msg_page = READ_ONCE(spages->hyp_synic_message_page);
 	event_flags_page = READ_ONCE(spages->synic_event_flags_page);
