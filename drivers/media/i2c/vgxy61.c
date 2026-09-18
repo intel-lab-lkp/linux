@@ -1457,9 +1457,20 @@ static int vgxy61_tx_from_ep(struct vgxy61_dev *sensor,
 	}
 
 	/* Build log2phy, phy2log and polarities from ep info */
+	if (ep.bus.mipi_csi2.clock_lane >= VGXY61_NB_POLARITIES) {
+		dev_err(&client->dev, "invalid clock lane %u\n",
+			ep.bus.mipi_csi2.clock_lane);
+		goto error_ep;
+	}
 	log2phy[0] = ep.bus.mipi_csi2.clock_lane;
 	phy2log[log2phy[0]] = 0;
 	for (l = 1; l < l_nb + 1; l++) {
+		if (ep.bus.mipi_csi2.data_lanes[l - 1] >=
+		    VGXY61_NB_POLARITIES) {
+			dev_err(&client->dev, "invalid data lane %u\n",
+				ep.bus.mipi_csi2.data_lanes[l - 1]);
+			goto error_ep;
+		}
 		log2phy[l] = ep.bus.mipi_csi2.data_lanes[l - 1];
 		phy2log[log2phy[l]] = l;
 	}
