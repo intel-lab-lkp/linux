@@ -338,6 +338,13 @@ int crash_get_memory_ranges_nolock(struct crash_mem **mem_ranges)
 	struct crash_mem *cmem;
 	int ret;
 
+	/*
+	 * Callers must serialize against memory hotplug by holding
+	 * device_hotplug_lock, otherwise the memblock iteration below can
+	 * race with memblock_double_array() and read freed memory.
+	 */
+	device_hotplug_lock_assert_held();
+
 	max_nr_ranges = arch_get_system_nr_ranges();
 	if (!max_nr_ranges)
 		return -ENOMEM;
