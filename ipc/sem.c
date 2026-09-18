@@ -627,8 +627,8 @@ SYSCALL_DEFINE3(semget, key_t, key, int, nsems, int, semflg)
 }
 
 /**
- * perform_atomic_semop[_slow] - Attempt to perform semaphore
- *                               operations on a given array.
+ * perform_atomic_semop_slow - Attempt to perform semaphore
+ *                             operations on a given array.
  * @sma: semaphore array
  * @q: struct sem_queue that describes the operation
  *
@@ -642,6 +642,8 @@ SYSCALL_DEFINE3(semget, key_t, key, int, nsems, int, semflg)
  * Returns 0 if the operation was possible.
  * Returns 1 if the operation is impossible, the caller must sleep.
  * Returns <0 for error codes.
+ *
+ * This description is also valid for perform_atomic_semop(), the function below
  */
 static int perform_atomic_semop_slow(struct sem_array *sma, struct sem_queue *q)
 {
@@ -716,6 +718,10 @@ undo:
 	return result;
 }
 
+/*
+ * The description of this functions is the same as the one for
+ * perform_atomic_semop_slow(), see the kernel-doc above.
+ */
 static int perform_atomic_semop(struct sem_array *sma, struct sem_queue *q)
 {
 	int result, sem_op, nsops;
