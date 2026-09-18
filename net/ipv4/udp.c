@@ -2522,8 +2522,9 @@ start_lookup:
 			__UDP_INC_STATS(net, UDP_MIB_INERRORS);
 			continue;
 		}
-		if (udp_queue_rcv_skb(sk, nskb) > 0)
-			consume_skb(nskb);
+		ret = udp_queue_rcv_skb(sk, nskb);
+		if (ret > 0)
+			ip_protocol_deliver_rcu(net, nskb, ret);
 	}
 
 	/* Also lookup *:port if we are using hash2 and haven't done so yet. */

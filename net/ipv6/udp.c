@@ -1001,8 +1001,9 @@ start_lookup:
 			continue;
 		}
 
-		if (udpv6_queue_rcv_skb(sk, nskb) > 0)
-			consume_skb(nskb);
+		ret = udpv6_queue_rcv_skb(sk, nskb);
+		if (ret > 0)
+			ip6_protocol_deliver_rcu(net, nskb, ret, true);
 	}
 
 	/* Also lookup *:port if we are using hash2 and haven't done so yet. */
