@@ -599,6 +599,12 @@ static const char *aer_agent_string[] = {
 	"",
 };
 
+/*
+ * pci_dev_attr_groups[] in pci-sysfs.c is the only consumer of the groups
+ * below, and the ratelimit accessors they are built from live there too.
+ */
+#ifdef CONFIG_SYSFS
+
 #define aer_stats_dev_attr(name, stats_array, strings_array,		\
 			   total_string, total_field)			\
 	static ssize_t							\
@@ -687,87 +693,14 @@ const struct attribute_group aer_stats_attr_group = {
 	.is_visible = aer_stats_attrs_are_visible,
 };
 
-/*
- * Ratelimit interval, in milliseconds
- * <=0: disabled with ratelimit.interval = 0
- * >0: enabled, ratelimit.interval held in jiffies
- */
-#define aer_ratelimit_interval_attr(name, ratelimit)			\
-	static ssize_t							\
-	name##_show(struct device *dev, struct device_attribute *attr,	\
-					 char *buf)			\
-	{								\
-		struct pci_dev *pdev = to_pci_dev(dev);			\
-		unsigned long iv = pdev->aer_info->ratelimit.interval;	\
-									\
-		return sysfs_emit(buf, "%u\n", jiffies_to_msecs(iv));	\
-	}								\
-									\
-	static ssize_t							\
-	name##_store(struct device *dev, struct device_attribute *attr, \
-		     const char *buf, size_t count) 			\
-	{								\
-		struct pci_dev *pdev = to_pci_dev(dev);			\
-		int interval;						\
-									\
-		if (!capable(CAP_SYS_ADMIN))				\
-			return -EPERM;					\
-									\
-		if (kstrtoint(buf, 0, &interval) < 0)			\
-			return -EINVAL;					\
-									\
-		if (interval <= 0)					\
-			interval = 0;					\
-		else							\
-			interval = msecs_to_jiffies(interval); 		\
-									\
-		pdev->aer_info->ratelimit.interval = interval;		\
-									\
-		return count;						\
-	}								\
-	static DEVICE_ATTR_RW(name);
-
-#define aer_ratelimit_burst_attr(name, ratelimit)			\
-	static ssize_t							\
-	name##_show(struct device *dev, struct device_attribute *attr,	\
-		    char *buf)						\
-	{								\
-		struct pci_dev *pdev = to_pci_dev(dev);			\
-									\
-		return sysfs_emit(buf, "%d\n",				\
-				  pdev->aer_info->ratelimit.burst);	\
-	}								\
-									\
-	static ssize_t							\
-	name##_store(struct device *dev, struct device_attribute *attr,	\
-		     const char *buf, size_t count)			\
-	{								\
-		struct pci_dev *pdev = to_pci_dev(dev);			\
-		int burst;						\
-									\
-		if (!capable(CAP_SYS_ADMIN))				\
-			return -EPERM;					\
-									\
-		if (kstrtoint(buf, 0, &burst) < 0)			\
-			return -EINVAL;					\
-									\
-		if (burst < 0)						\
-			burst = 0;					\
-									\
-		pdev->aer_info->ratelimit.burst = burst;		\
-									\
-		return count;						\
-	}								\
-	static DEVICE_ATTR_RW(name);
-
 #define aer_ratelimit_attrs(name)					\
-	aer_ratelimit_interval_attr(name##_ratelimit_interval_ms,	\
-				    name##_ratelimit)			\
-	aer_ratelimit_burst_attr(name##_ratelimit_burst,		\
-				 name##_ratelimit)
+	PCI_RATELIMIT_INTERVAL_ATTR(name##_ratelimit_interval_ms,	\
+				    aer_info->name##_ratelimit);	\
+	PCI_RATELIMIT_BURST_ATTR(name##_ratelimit_burst,		\
+				 aer_info->name##_ratelimit)
 
-aer_ratelimit_attrs(correctable)
-aer_ratelimit_attrs(nonfatal)
+aer_ratelimit_attrs(correctable);
+aer_ratelimit_attrs(nonfatal);
 
 static struct attribute *aer_attrs[] = {
 	&dev_attr_correctable_ratelimit_interval_ms.attr,
@@ -791,6 +724,8 @@ const struct attribute_group aer_attr_group = {
 	.attrs = aer_attrs,
 	.is_visible = SYSFS_GROUP_VISIBLE(aer),
 };
+
+#endif /* CONFIG_SYSFS */
 
 static void pci_dev_aer_stats_incr(struct pci_dev *pdev,
 				   struct aer_err_info *info)

@@ -9,6 +9,7 @@
 #include <trace/events/pci.h>
 
 struct pcie_tlp_log;
+struct ratelimit_state;
 
 /* Number of possible devfns: 0.0 to 1f.7 inclusive */
 #define MAX_NR_DEVFNS 256
@@ -73,6 +74,54 @@ struct pcie_tlp_log;
 /* Parameters for the waiting for link up routine */
 #define PCIE_LINK_WAIT_MAX_RETRIES	10
 #define PCIE_LINK_WAIT_SLEEP_MS		90
+
+ssize_t pci_ratelimit_interval_show(struct ratelimit_state *rs, char *buf);
+ssize_t pci_ratelimit_interval_store(struct ratelimit_state *rs,
+				     const char *buf, size_t count);
+ssize_t pci_ratelimit_burst_show(struct ratelimit_state *rs, char *buf);
+ssize_t pci_ratelimit_burst_store(struct ratelimit_state *rs,
+				  const char *buf, size_t count);
+
+/*
+ * Define the "<name>" sysfs attribute for the interval or the burst of a
+ * struct ratelimit_state. @member names it within struct pci_dev, so it
+ * reads as e.g. aer_info->correctable_ratelimit.
+ */
+#define PCI_RATELIMIT_INTERVAL_ATTR(name, member)			\
+	static ssize_t name##_show(struct device *dev,			\
+				   struct device_attribute *attr,	\
+				   char *buf)				\
+	{								\
+		return pci_ratelimit_interval_show(			\
+				&to_pci_dev(dev)->member, buf);		\
+	}								\
+									\
+	static ssize_t name##_store(struct device *dev,			\
+				    struct device_attribute *attr,	\
+				    const char *buf, size_t count)	\
+	{								\
+		return pci_ratelimit_interval_store(			\
+				&to_pci_dev(dev)->member, buf, count);	\
+	}								\
+	static DEVICE_ATTR_RW(name)
+
+#define PCI_RATELIMIT_BURST_ATTR(name, member)				\
+	static ssize_t name##_show(struct device *dev,			\
+				   struct device_attribute *attr,	\
+				   char *buf)				\
+	{								\
+		return pci_ratelimit_burst_show(			\
+				&to_pci_dev(dev)->member, buf);		\
+	}								\
+									\
+	static ssize_t name##_store(struct device *dev,			\
+				    struct device_attribute *attr,	\
+				    const char *buf, size_t count)	\
+	{								\
+		return pci_ratelimit_burst_store(			\
+				&to_pci_dev(dev)->member, buf, count);	\
+	}								\
+	static DEVICE_ATTR_RW(name)
 
 /* Format of TLP; PCIe r7.0, sec 2.2.1 */
 #define PCIE_TLP_FMT_3DW_NO_DATA	0x00 /* 3DW header, no data */

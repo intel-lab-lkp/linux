@@ -29,6 +29,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/msi.h>
 #include <linux/of.h>
+#include <linux/ratelimit.h>
 #include <linux/aperture.h>
 #include <linux/unaligned.h>
 #include "pci.h"
@@ -1891,6 +1892,73 @@ static umode_t pcie_dev_attrs_are_visible(struct kobject *kobj,
 static const struct attribute_group pci_dev_group = {
 	.attrs = pci_dev_attrs,
 };
+
+/*
+ * Accessors shared by the capabilities that expose a struct ratelimit_state
+ * through sysfs. Use them via PCI_RATELIMIT_INTERVAL_ATTR() and
+ * PCI_RATELIMIT_BURST_ATTR() rather than calling them directly.
+ */
+ssize_t pci_ratelimit_interval_show(struct ratelimit_state *rs, char *buf)
+{
+	unsigned long iv = rs->interval;
+
+	return sysfs_emit(buf, "%u\n", jiffies_to_msecs(iv));
+}
+
+/*
+ * Ratelimit interval, in milliseconds
+ * <=0: disabled with ratelimit.interval = 0
+ * >0: enabled, ratelimit.interval held in jiffies
+ */
+ssize_t pci_ratelimit_interval_store(struct ratelimit_state *rs,
+				     const char *buf, size_t count)
+{
+	int interval;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (kstrtoint(buf, 0, &interval) < 0)
+		return -EINVAL;
+
+	if (interval <= 0)
+		interval = 0;
+	else
+		interval = msecs_to_jiffies(interval);
+
+	rs->interval = interval;
+
+	return count;
+}
+
+ssize_t pci_ratelimit_burst_show(struct ratelimit_state *rs, char *buf)
+{
+	return sysfs_emit(buf, "%d\n", rs->burst);
+}
+
+/*
+ * Ratelimit burst
+ * <=0: everything suppressed, unless the interval is also 0
+ * >0: messages allowed per interval
+ */
+ssize_t pci_ratelimit_burst_store(struct ratelimit_state *rs,
+				  const char *buf, size_t count)
+{
+	int burst;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (kstrtoint(buf, 0, &burst) < 0)
+		return -EINVAL;
+
+	if (burst < 0)
+		burst = 0;
+
+	rs->burst = burst;
+
+	return count;
+}
 
 const struct attribute_group *pci_dev_groups[] = {
 	&pci_dev_group,
