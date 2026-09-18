@@ -448,6 +448,18 @@ static int get_tdx_sys_info_version(struct tdx_sys_info_version *version)
 	return read_sys_metadata_table(version_mappings, version);
 }
 
+#define TDX_SYSINFO_MAP_FEATURES(_field_id, _member) \
+	TDX_SYSINFO_MAP(_field_id, struct tdx_sys_info_features, _member)
+
+static const struct field_mapping feature_mappings[] __initconst = {
+	TDX_SYSINFO_MAP_FEATURES(TDX_FEATURES0, tdx_features0),
+};
+
+static __init int get_tdx_sys_info_features(struct tdx_sys_info_features *features)
+{
+	return read_sys_metadata_table(feature_mappings, features);
+}
+
 #include "tdx_global_metadata.c"
 
 static __init int check_features(struct tdx_sys_info *sysinfo)
