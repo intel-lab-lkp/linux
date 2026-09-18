@@ -206,10 +206,14 @@ struct mem_cgroup {
 	 */
 	struct page_counter_protection memory_prot;
 
-	union {
-		struct page_counter swap;	/* v2 only */
-		struct page_counter memsw;	/* v1 only */
-	};
+	/*
+	 * Swap accounting.  These used to share storage because v1 only ever
+	 * used memsw (the combined memory+swap limit) and v2 only ever used
+	 * swap (a standalone swap limit).  They are separate now so that the
+	 * combined counter can be maintained on both hierarchies.
+	 */
+	struct page_counter swap;	/* Standalone swap limit, v2 only */
+	struct page_counter memsw;	/* Combined memory+swap, v1 & v2 */
 
 	/* Written on the charge, reclaim and socket paths. */
 	__cacheline_group_begin_aligned(memcg_write_hot);

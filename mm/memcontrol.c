@@ -1591,14 +1591,17 @@ static unsigned long mem_cgroup_margin(struct mem_cgroup *memcg)
 	if (count < limit)
 		margin = limit - count;
 
-	if (do_memsw_account()) {
-		count = page_counter_read(&memcg->memsw);
-		limit = READ_ONCE(memcg->memsw.max);
-		if (count < limit)
-			margin = min(margin, limit - count);
-		else
-			margin = 0;
-	}
+	/*
+	 * The combined memory+swap limit applies on both hierarchies and
+	 * caps what can still be charged.  It defaults to "max", so this
+	 * only narrows the margin once a combined limit is configured.
+	 */
+	count = page_counter_read(&memcg->memsw);
+	limit = READ_ONCE(memcg->memsw.max);
+	if (count < limit)
+		margin = min(margin, limit - count);
+	else
+		margin = 0;
 
 	return margin;
 }
@@ -2188,8 +2191,7 @@ static bool consume_stock(struct mem_cgroup *memcg, unsigned int nr_pages)
 static void memcg_uncharge(struct mem_cgroup *memcg, unsigned int nr_pages)
 {
 	page_counter_uncharge(&memcg->memory, nr_pages);
-	if (do_memsw_account())
-		page_counter_uncharge(&memcg->memsw, nr_pages);
+	page_counter_uncharge(&memcg->memsw, nr_pages);
 }
 
 /*
@@ -2721,12 +2723,19 @@ retry:
 		batch = nr_pages;
 
 	reclaim_options = MEMCG_RECLAIM_MAY_SWAP;
-	if (!do_memsw_account() ||
-	    page_counter_try_charge(&memcg->memsw, batch, &counter)) {
+	/*
+	 * The combined memory+swap counter is charged on both hierarchies.
+	 * Its limit is only configurable through v1's memsw.limit_in_bytes
+	 * for now and defaults to "max", so unless the user configures a
+	 * combined limit this never fails.
+	 *
+	 * Swapping does not reduce the combined charge, so when the combined
+	 * limit is what we hit, reclaim must not count on swap.
+	 */
+	if (page_counter_try_charge(&memcg->memsw, batch, &counter)) {
 		if (page_counter_try_charge(&memcg->memory, batch, &counter))
 			goto done_restock;
-		if (do_memsw_account())
-			page_counter_uncharge(&memcg->memsw, batch);
+		page_counter_uncharge(&memcg->memsw, batch);
 		mem_over_limit = mem_cgroup_from_counter(counter, memory);
 	} else {
 		mem_over_limit = mem_cgroup_from_counter(counter, memsw);
@@ -2836,8 +2845,7 @@ force:
 	 * temporarily by force charging it.
 	 */
 	page_counter_charge(&memcg->memory, nr_pages);
-	if (do_memsw_account())
-		page_counter_charge(&memcg->memsw, nr_pages);
+	page_counter_charge(&memcg->memsw, nr_pages);
 
 out:
 	/*
@@ -4295,12 +4303,14 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 	WRITE_ONCE(memcg->zswap_writeback, true);
 #endif
 	page_counter_set_high(&memcg->swap, PAGE_COUNTER_MAX);
+	page_counter_set_high(&memcg->memsw, PAGE_COUNTER_MAX);
 	if (parent) {
 		page_counter_init(&memcg->memory, &parent->memory);
 		if (memcg_on_dfl)
 			page_counter_init_protection(&memcg->memory, &memcg->memory_prot,
 						     &parent->memory_prot);
 		page_counter_init(&memcg->swap, &parent->swap);
+		page_counter_init(&memcg->memsw, &parent->memsw);
 #ifdef CONFIG_MEMCG_V1
 		WRITE_ONCE(memcg->swappiness, mem_cgroup_swappiness(parent));
 		memcg->memory.track_failcnt = !memcg_on_dfl;
@@ -4317,6 +4327,7 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 		page_counter_init_protection(&memcg->memory, &memcg->memory_prot,
 					     NULL);
 		page_counter_init(&memcg->swap, NULL);
+		page_counter_init(&memcg->memsw, NULL);
 #ifdef CONFIG_MEMCG_V1
 		page_counter_init(&memcg->kmem, NULL);
 		page_counter_init(&memcg->tcpmem, NULL);
@@ -4490,6 +4501,7 @@ static void mem_cgroup_css_reset(struct cgroup_subsys_state *css)
 
 	page_counter_set_max(&memcg->memory, PAGE_COUNTER_MAX);
 	page_counter_set_max(&memcg->swap, PAGE_COUNTER_MAX);
+	page_counter_set_max(&memcg->memsw, PAGE_COUNTER_MAX);
 	WRITE_ONCE(memcg->oom_group, false);
 #ifdef CONFIG_ZSWAP
 	WRITE_ONCE(memcg->zswap_max, PAGE_COUNTER_MAX);
@@ -4503,6 +4515,7 @@ static void mem_cgroup_css_reset(struct cgroup_subsys_state *css)
 	page_counter_set_low(&memcg->memory, 0);
 	page_counter_set_high(&memcg->memory, PAGE_COUNTER_MAX);
 	page_counter_set_high(&memcg->swap, PAGE_COUNTER_MAX);
+	page_counter_set_high(&memcg->memsw, PAGE_COUNTER_MAX);
 	memcg_wb_domain_size_changed(memcg);
 }
 
@@ -5608,8 +5621,7 @@ void mem_cgroup_replace_folio(struct folio *old, struct folio *new)
 	 */
 	if (!obj_cgroup_is_root(objcg)) {
 		page_counter_charge(&memcg->memory, nr_pages);
-		if (do_memsw_account())
-			page_counter_charge(&memcg->memsw, nr_pages);
+		page_counter_charge(&memcg->memsw, nr_pages);
 	}
 
 	commit_charge(new, objcg);
@@ -5980,12 +5992,24 @@ int __mem_cgroup_try_charge_swap(struct folio *folio)
 	/* memcg is pined by memcg ID. */
 	rcu_read_unlock();
 
-	if (!mem_cgroup_is_root(memcg) &&
-	    !page_counter_try_charge(&memcg->swap, nr_pages, &counter)) {
-		memcg_memory_event(memcg, MEMCG_SWAP_MAX);
-		memcg_memory_event(memcg, MEMCG_SWAP_FAIL);
-		mem_cgroup_private_id_put(memcg, nr_pages);
-		return -ENOMEM;
+	if (!mem_cgroup_is_root(memcg)) {
+		if (!page_counter_try_charge(&memcg->swap, nr_pages, &counter)) {
+			memcg_memory_event(memcg, MEMCG_SWAP_MAX);
+			memcg_memory_event(memcg, MEMCG_SWAP_FAIL);
+			mem_cgroup_private_id_put(memcg, nr_pages);
+			return -ENOMEM;
+		}
+		/*
+		 * Hand the combined memory+swap charge over to the swap slot.
+		 * The folio still holds a memsw charge and drops it when it
+		 * leaves memory, so the combined charge stays constant across
+		 * the swapout; it is briefly counted twice in between, which
+		 * only ever makes the combined limit stricter.
+		 *
+		 * Force-charge here: this is a transfer of an existing charge,
+		 * not a new allocation, so it must not fail.
+		 */
+		page_counter_charge(&memcg->memsw, nr_pages);
 	}
 	mod_memcg_state(memcg, MEMCG_SWAP, nr_pages);
 
@@ -6010,10 +6034,10 @@ void __mem_cgroup_uncharge_swap(unsigned short id, unsigned int nr_pages)
 	memcg = mem_cgroup_from_private_id(id);
 	if (memcg) {
 		if (!mem_cgroup_is_root(memcg)) {
-			if (do_memsw_account())
-				page_counter_uncharge(&memcg->memsw, nr_pages);
-			else
+			/* v1 tracks swap only through the combined counter */
+			if (!do_memsw_account())
 				page_counter_uncharge(&memcg->swap, nr_pages);
+			page_counter_uncharge(&memcg->memsw, nr_pages);
 		}
 		mod_memcg_state(memcg, MEMCG_SWAP, -nr_pages);
 		mem_cgroup_private_id_put(memcg, nr_pages);
