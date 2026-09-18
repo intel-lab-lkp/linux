@@ -95,7 +95,8 @@ static void dw_chained_msi_isr(struct irq_desc *desc)
 	chained_irq_enter(chip, desc);
 
 	pp = irq_desc_get_handler_data(desc);
-	dw_handle_msi_irq(pp);
+	if (!pp->ops->pre_msi_irq || !pp->ops->pre_msi_irq(pp))
+		dw_handle_msi_irq(pp);
 
 	chained_irq_exit(chip, desc);
 }
