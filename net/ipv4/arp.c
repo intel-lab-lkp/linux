@@ -1278,6 +1278,8 @@ int arp_ioctl(struct net *net, unsigned int cmd, void __user *arg)
 		err = copy_from_user(&r, arg, sizeof(struct arpreq));
 		if (err)
 			return -EFAULT;
+		if (strnlen(r.arp_dev, IFNAMSIZ) == IFNAMSIZ)
+			return -EINVAL;
 		break;
 	default:
 		return -EINVAL;
