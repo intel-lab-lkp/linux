@@ -84,6 +84,19 @@ struct sgp40_serial_number_result {
 	u8	C_crc;
 } __packed;
 
+/*
+ * Datasheet table 13.
+ */
+#define SGP40_SELF_TEST_PASS 0xD4
+#define SGP40_SELF_TEST_FAIL 0x4B
+
+struct sgp40_self_test_result {
+	u8	data;
+	u8	_ignore;
+	u8	crc;
+} __packed;
+
+
 static const struct iio_chan_spec sgp40_channels[] = {
 	{
 		.type = IIO_CONCENTRATION,
@@ -208,6 +221,42 @@ static int sgp40_get_serial_number(struct sgp40_data *data)
 	dev_dbg(data->dev, "serial number: %llu", data->serial_number);
 
 	return 0;
+}
+
+static int sgp40_execute_self_test(struct sgp40_data *data)
+{
+	int ret;
+	struct i2c_client *client = data->client;
+	struct sgp40_command run_test = {.command = {0x28, 0x0E}};
+	struct sgp40_self_test_result res;
+
+	ret = i2c_master_send(client, (char*)&run_test, sizeof(run_test.command));
+	if (ret != sizeof(run_test.command)) {
+		dev_err(data->dev, "i2c_master_send ret: %d, expected %zu", ret, sizeof(run_test.command));
+		return -EIO;
+	}
+	msleep(320);
+
+	ret = i2c_master_recv(client, (char*)&res, sizeof(res));
+	if (ret < 0)
+		return ret;
+	if (ret != sizeof(res)) {
+		dev_err(data->dev, "i2c_master_recv ret: %d, expected: %zu", ret, sizeof(res));
+		return -EIO;
+	}
+
+	if (crc8(sgp40_crc8_table, (u8*)&res, 2, SGP40_CRC8_INIT) != res.crc) {
+		dev_warn(data->dev, "CRC error in execute_self_test");
+	}
+
+	dev_dbg(data->dev, "self test result: 0x%x", res.data);
+	switch (res.data) {
+		case SGP40_SELF_TEST_PASS:
+			return 0;
+		case SGP40_SELF_TEST_FAIL:
+		default:
+			return res.data;
+	}
 }
 
 static int sgp40_measure_resistance_raw(struct sgp40_data *data, u16 *resistance_raw)
@@ -420,6 +469,10 @@ static int sgp40_probe(struct i2c_client *client)
 	ret = sgp40_get_serial_number(data);
 	if (ret)
 		dev_warn(dev, "failed to retrieve device serial number\n");
+
+	ret = sgp40_execute_self_test(data);
+	if (ret)
+		dev_warn(dev, "device self test failed: ret 0x%x", ret);
 
 	ret = devm_iio_device_register(dev, indio_dev);
 	if (ret)
