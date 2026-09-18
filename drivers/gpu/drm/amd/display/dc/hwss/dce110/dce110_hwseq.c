@@ -51,6 +51,7 @@
 #include "link_service.h"
 #include "dccg.h"
 #include "clock_source.h"
+#include "dce/dce_clock_source.h"
 #include "clk_mgr.h"
 #include "abm.h"
 #include "audio.h"
@@ -2519,6 +2520,38 @@ static void dce110_reset_hw_ctx_wrap(
 	}
 }
 
+/*
+ * Audio wall clock DTO0 is fed by the CRTC pixel clock, so its module must be
+ * the rate the CRTC really runs at.
+ *
+ * For HDMI YCbCr 4:2:0, get_pixel_clock_parameters() halves
+ * requested_pix_clk_100hz, the PHY PLL is programmed at that rate and
+ * dce112_program_pixel_clk_resync() sets PIXCLK_DOUBLE_RATE_ENABLE, so the
+ * CRTC runs at twice requested_pix_clk_100hz. Only the DCE 11.2/12.x clock
+ * sources have that field in their mask.
+ *
+ * The audio_output used for ACR (N/CTS) is built separately and keeps the
+ * TMDS rate.
+ */
+static void dce110_audio_dto_fixup_420(const struct pipe_ctx *pipe_ctx,
+				       struct audio_crtc_info *crtc_info)
+{
+	const struct dce110_clk_src *clk_src;
+
+	if (pipe_ctx->stream->signal != SIGNAL_TYPE_HDMI_TYPE_A ||
+	    !pipe_ctx->stream_res.pix_clk_params.flags.SUPPORT_YCBCR420 ||
+	    !pipe_ctx->clock_source ||
+	    pipe_ctx->clock_source->id == CLOCK_SOURCE_ID_DP_DTO)
+		return;
+
+	clk_src = TO_DCE110_CLK_SRC(pipe_ctx->clock_source);
+	if (!clk_src->cs_mask->PHYPLLA_PIXCLK_DOUBLE_RATE_ENABLE)
+		return;
+
+	crtc_info->calculated_pixel_clock_100Hz =
+		pipe_ctx->stream_res.pix_clk_params.requested_pix_clk_100hz * 2;
+}
+
 static void dce110_setup_audio_dto(
 		struct dc *dc,
 		struct dc_state *context)
@@ -2559,6 +2592,7 @@ static void dce110_setup_audio_dto(
 			struct audio_output audio_output;
 
 			build_audio_output(context, pipe_ctx, &audio_output);
+			dce110_audio_dto_fixup_420(pipe_ctx, &audio_output.crtc_info);
 
 			if (dc->res_pool->dccg && dc->res_pool->dccg->funcs->set_audio_dtbclk_dto) {
 				struct dtbclk_dto_params dto_params = {0};
