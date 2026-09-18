@@ -1176,9 +1176,11 @@ int dw_pcie_setup_rc(struct dw_pcie_rp *pp)
 	 * The iMSI-RX module does not support receiving MSI or MSI-X generated
 	 * by the Root Port. If iMSI-RX is used as the MSI controller, remove
 	 * the MSI and MSI-X capabilities of the Root Port to allow the drivers
-	 * to fall back to INTx instead.
+	 * to fall back to INTx instead. Glue drivers set no_rp_msi when the
+	 * platform never delivers the Root Port's own MSIs, whatever the MSI
+	 * controller in use.
 	 */
-	if (pp->use_imsi_rx && !pp->keep_rp_msi_en) {
+	if ((pp->use_imsi_rx || pp->no_rp_msi) && !pp->keep_rp_msi_en) {
 		dw_pcie_remove_capability(pci, PCI_CAP_ID_MSI);
 		dw_pcie_remove_capability(pci, PCI_CAP_ID_MSIX);
 	}
