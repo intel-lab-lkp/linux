@@ -8,7 +8,8 @@
 #include <linux/types.h>
 
 #define COLLAPSE_MAX_PTES_LIMIT		(HPAGE_PMD_NR - 1)
-#define COLLAPSE_MIN_MTHP_ORDER		2
+#define COLLAPSE_MIN_ANON_MTHP_ORDER		2
+#define COLLAPSE_MIN_FILE_MTHP_ORDER		1
 
 enum scan_result {
 	SCAN_FAIL,

@@ -302,6 +302,14 @@ static bool pte_none_or_zero(pte_t pte)
 	return pte_present(pte) && is_zero_pfn(pte_pfn(pte));
 }
 
+static unsigned int collapse_min_mthp_order(struct file *file)
+{
+	if (file)
+		return COLLAPSE_MIN_FILE_MTHP_ORDER;
+
+	return COLLAPSE_MIN_ANON_MTHP_ORDER;
+}
+
 /**
  * collapse_max_ptes_none - Calculate maximum allowed empty PTEs or PTEs mapping
  * the shared zeropage for the given collapse operation.
@@ -1485,7 +1493,7 @@ next_order:
 		 * any smaller order enabled. When at the smallest order
 		 * we must always move to the next offset.
 		 */
-		if (order > COLLAPSE_MIN_MTHP_ORDER &&
+		if (order > collapse_min_mthp_order(NULL) &&
 		    (cc->scan_orders & GENMASK(order - 1, 0))) {
 			order--;
 			continue;
