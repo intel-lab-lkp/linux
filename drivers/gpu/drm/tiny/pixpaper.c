@@ -1140,7 +1140,10 @@ static void pixpaper_remove(struct spi_device *spi)
 	drm_atomic_helper_shutdown(&panel->drm);
 }
 
-static const struct spi_device_id pixpaper_ids[] = { { "pixpaper", 0 }, {} };
+static const struct spi_device_id pixpaper_ids[] = {
+	{ .name = "pixpaper" },
+	{ }
+};
 MODULE_DEVICE_TABLE(spi, pixpaper_ids);
 
 static const struct of_device_id pixpaper_dt_ids[] = {
