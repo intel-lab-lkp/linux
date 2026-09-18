@@ -1494,7 +1494,11 @@ virtio_gpu_cmd_resource_create_blob(struct virtio_gpu_device *vgdev,
 	cmd_p->hdr.ctx_id = cpu_to_le32(params->ctx_id);
 	cmd_p->resource_id = cpu_to_le32(bo->hw_res_handle);
 	cmd_p->blob_mem = cpu_to_le32(params->blob_mem);
-	cmd_p->blob_flags = cpu_to_le32(params->blob_flags);
+	/* Guest-only flags stay off the wire. */
+	cmd_p->blob_flags = cpu_to_le32(params->blob_flags &
+			(VIRTIO_GPU_BLOB_FLAG_USE_MAPPABLE |
+			 VIRTIO_GPU_BLOB_FLAG_USE_SHAREABLE |
+			 VIRTIO_GPU_BLOB_FLAG_USE_CROSS_DEVICE));
 	cmd_p->blob_id = cpu_to_le64(params->blob_id);
 	cmd_p->size = cpu_to_le64(params->size);
 	cmd_p->nr_entries = cpu_to_le32(nents);
