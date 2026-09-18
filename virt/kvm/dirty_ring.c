@@ -6,6 +6,7 @@
  */
 #include <linux/kvm_host.h>
 #include <linux/kvm.h>
+#include <linux/overflow.h>
 #include <linux/vmalloc.h>
 #include <linux/kvm_dirty_ring.h>
 #include <trace/events/kvm.h>
@@ -163,18 +164,21 @@ int kvm_dirty_ring_reset(struct kvm *kvm, struct kvm_dirty_ring *ring,
 			 * is scanning pages in the same slot.
 			 */
 			if (next_slot == cur_slot) {
-				s64 delta = next_offset - cur_offset;
+				unsigned long shifted_mask;
 
-				if (delta >= 0 && delta < BITS_PER_LONG) {
-					mask |= 1ull << delta;
-					continue;
-				}
+				if (next_offset >= cur_offset) {
+					u64 shift = next_offset - cur_offset;
 
-				/* Backwards visit, careful about overflows! */
-				if (delta > -BITS_PER_LONG && delta < 0 &&
-				(mask << -delta >> -delta) == mask) {
+					if (shift < BITS_PER_TYPE(mask)) {
+						mask |= BIT(shift);
+						continue;
+					}
+				} else if (!check_shl_overflow(mask,
+							       cur_offset - next_offset,
+							       &shifted_mask)) {
+					/* Backwards visit, move the batch's base down. */
 					cur_offset = next_offset;
-					mask = (mask << -delta) | 1;
+					mask = shifted_mask | BIT(0);
 					continue;
 				}
 			}
