@@ -1352,6 +1352,8 @@ static int kvm_vm_release(struct inode *inode, struct file *filp)
 
 	kvm_irqfd_release(kvm);
 
+	WRITE_ONCE(kvm->file, NULL);
+
 	kvm_put_kvm(kvm);
 	return 0;
 }
@@ -5531,6 +5533,8 @@ static int kvm_dev_ioctl_create_vm(unsigned long type)
 		r = PTR_ERR(file);
 		goto put_kvm;
 	}
+
+	kvm->file = file;
 
 	/*
 	 * Don't call kvm_put_kvm anymore at this point; file->f_op is
