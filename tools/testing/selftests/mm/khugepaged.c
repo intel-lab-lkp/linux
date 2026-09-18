@@ -627,6 +627,9 @@ static void mthp_khugepaged_collapse(const char *msg, char *p, int nr_hpages,
 	if (ops == &__anon_ops) {
 		settings.thp_enabled = THP_NEVER;
 		settings.hugepages[collapse_order].enabled = THP_MADVISE;
+	} else if (ops == &__shmem_ops) {
+		settings.shmem_enabled = SHMEM_NEVER;
+		settings.shmem_hugepages[collapse_order].enabled = SHMEM_ADVISE;
 	}
 
 	thp_push_settings(&settings);
@@ -1260,8 +1263,6 @@ static void parse_test_type(int argc, char **argv)
 			usage();
 	} else if (!strcmp(buf, "shmem")) {
 		shmem_ops = &__shmem_ops;
-		if (mthp_khugepaged_context)
-			usage();
 	} else {
 		usage();
 	}
@@ -1358,6 +1359,7 @@ int main(int argc, char **argv)
 	TEST(collapse_full, khugepaged_context, read_write_file_write_ops);
 	TEST(collapse_full, khugepaged_context, shmem_ops);
 	TEST(collapse_full, mthp_khugepaged_context, anon_ops);
+	TEST(collapse_full, mthp_khugepaged_context, shmem_ops);
 	TEST(collapse_full, madvise_context, anon_ops);
 	TEST(collapse_full, madvise_context, read_only_file_ops);
 	TEST(collapse_full, madvise_context, read_write_file_read_ops);
@@ -1369,6 +1371,7 @@ int main(int argc, char **argv)
 	TEST(collapse_empty, madvise_context, anon_ops);
 
 	TEST(collapse_single_mthp, mthp_khugepaged_context, anon_ops);
+	TEST(collapse_single_mthp, mthp_khugepaged_context, shmem_ops);
 
 	TEST(collapse_single_pte_entry, khugepaged_context, anon_ops);
 	TEST(collapse_single_pte_entry, khugepaged_context, read_only_file_ops);
