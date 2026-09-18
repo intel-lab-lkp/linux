@@ -187,10 +187,16 @@ static int flexcop_master_xfer(struct i2c_adapter *i2c_adap,
 					msgs[i].buf[0], msgs[i+1].buf,
 					msgs[i+1].len);
 			i++; /* skip the following message */
-		} else /* writing */
+		} else { /* writing */
+			if (msgs[i].len == 0) {
+				deb_i2c("zero-length write message");
+				ret = -EINVAL;
+				break;
+			}
 			ret = i2c->fc->i2c_request(i2c, FC_WRITE, msgs[i].addr,
 					msgs[i].buf[0], &msgs[i].buf[1],
 					msgs[i].len - 1);
+		}
 		if (ret < 0) {
 			deb_i2c("i2c master_xfer failed");
 			break;
