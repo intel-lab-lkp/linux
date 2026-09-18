@@ -1272,6 +1272,7 @@ static int index[SNDRV_CARDS] = SNDRV_DEFAULT_IDX;
 static char *id[SNDRV_CARDS] = SNDRV_DEFAULT_STR;
 static int frames_per_urb = BF_FRAMES_PER_URB_DEFAULT;
 static int nurbs = BF_NURBS_DEFAULT;
+static int panel_poll_ms = BF_PANEL_POLL_MS_DEFAULT;
 
 module_param_array(index, int, NULL, 0444);
 MODULE_PARM_DESC(index, "Index value for the Babyface Pro sound card.");
@@ -1281,6 +1282,8 @@ module_param(frames_per_urb, int, 0644);
 MODULE_PARM_DESC(frames_per_urb, "Audio frames per URB, 8..1024 (16 = low-latency floor, 256 = default).");
 module_param(nurbs, int, 0644);
 MODULE_PARM_DESC(nurbs, "URBs in flight per direction, 1..16 (16 = low-latency).");
+module_param(panel_poll_ms, int, 0644);
+MODULE_PARM_DESC(panel_poll_ms, "Front-panel poll interval in ms, 10..1000 (20 = default, matches Windows' ~50 Hz).");
 
 /* -- USB driver ------------------------- */
 
@@ -1366,10 +1369,12 @@ static int babyface_probe(struct usb_interface *intf,
 	chip->alt = BF_ALT_1;
 	chip->frame_bytes = 56;
 	chip->preamp = BF_PREAMP_BASE;
+	chip->panel_poll_ms = clamp(panel_poll_ms, 10, 1000);
 	mutex_init(&chip->mutex);
 	spin_lock_init(&chip->lock);
 	atomic_set(&chip->urb_err, 0);
 	INIT_WORK(&chip->stream_work, babyface_stream_work);
+	INIT_DELAYED_WORK(&chip->panel_work, babyface_panel_work);
 	chip->card->private_free = babyface_private_free;
 
 	/* Model-neutral on purpose.  The FS and the original (2015)
@@ -1524,11 +1529,22 @@ static int babyface_probe(struct usb_interface *intf,
 		goto error;
 	}
 
+	err = babyface_create_panel(chip);
+	if (err < 0) {
+		dev_err(&intf->dev, "front-panel control creation failed: %d\n", err);
+		goto error;
+	}
+
 	err = snd_card_register(chip->card);
 	if (err < 0) {
 		dev_err(&intf->dev, "snd_card_register failed: %d\n", err);
 		goto error;
 	}
+
+	/* The panel poll mirrors the physical buttons/wheel into the
+	 * Front Panel controls; it runs for the whole card lifetime.
+	 */
+	babyface_panel_start(chip);
 
 	usb_set_intfdata(intf, chip);
 	dev_info(&intf->dev,
@@ -1569,6 +1585,7 @@ static void babyface_disconnect(struct usb_interface *intf)
 
 	chip->shutdown = true;
 	cancel_work_sync(&chip->stream_work);
+	babyface_panel_stop(chip);
 	/* Balance the probe()-time usb_disable_autosuspend(): the usb_device
 	 * outlives this interface claim (a usbfs detach re-probes without
 	 * the physical device ever disconnecting), so leaving autosuspend
@@ -1605,6 +1622,7 @@ static int babyface_suspend(struct usb_interface *intf, pm_message_t message)
 			snd_pcm_suspend_all(sdev->device_data);
 	}
 	cancel_work_sync(&chip->stream_work);
+	babyface_panel_stop(chip);
 	mutex_lock(&chip->mutex);
 	if (chip->streaming)
 		babyface_stream_kill(chip);
@@ -1635,6 +1653,8 @@ static int babyface_resume(struct usb_interface *intf)
 	err = babyface_restore_state(chip);
 out:
 	mutex_unlock(&chip->mutex);
+	if (!err)
+		babyface_panel_start(chip);
 	return err;
 }
 
