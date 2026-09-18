@@ -3180,6 +3180,7 @@ DEFINE_STATIC_CALL(intel_pmu_set_topdown_event_period, x86_perf_event_set_period
 
 static inline u64 icl_get_metrics_event_value(u64 metric, u64 slots, int idx)
 {
+	int shift = (idx - INTEL_PMC_IDX_METRIC_BASE) * INTEL_TD_METRIC_FIELD_BITS;
 	u32 val;
 
 	/*
@@ -3187,8 +3188,8 @@ static inline u64 icl_get_metrics_event_value(u64 metric, u64 slots, int idx)
 	 * summing up to 0xff.
 	 * slots-in-metric = (Metric / 0xff) * slots
 	 */
-	val = (metric >> ((idx - INTEL_PMC_IDX_METRIC_BASE) * 8)) & 0xff;
-	return  mul_u64_u32_div(slots, val, 0xff);
+	val = (metric >> shift) & INTEL_TD_METRIC_FIELD_MASK;
+	return mul_u64_u32_div(slots, val, INTEL_TD_METRIC_FIELD_MASK);
 }
 
 static u64 icl_get_topdown_value(struct perf_event *event,
@@ -4790,7 +4791,8 @@ static int core_pmu_hw_config(struct perf_event *event)
 }
 
 #define INTEL_TD_METRIC_AVAILABLE_MAX	(INTEL_TD_METRIC_RETIRING + \
-					 ((x86_pmu.num_topdown_events - 1) << 8))
+					 ((x86_pmu.num_topdown_events - 1) << \
+					  INTEL_TD_METRIC_FIELD_BITS))
 
 static bool is_available_metric_event(struct perf_event *event)
 {

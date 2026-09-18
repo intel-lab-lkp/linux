@@ -423,6 +423,10 @@ static inline bool use_fixed_pseudo_encoding(u64 code)
 #define INTEL_TD_METRIC_MAX			INTEL_TD_METRIC_MEM_BOUND
 #define INTEL_TD_METRIC_NUM			8
 
+/* Width, in bits, of each metric's field within the PERF_METRICS MSR. */
+#define INTEL_TD_METRIC_FIELD_BITS		8
+#define INTEL_TD_METRIC_FIELD_MASK		GENMASK_ULL(INTEL_TD_METRIC_FIELD_BITS - 1, 0)
+
 #define INTEL_TD_CFG_METRIC_CLEAR_BIT		0
 #define INTEL_TD_CFG_METRIC_CLEAR		BIT_ULL(INTEL_TD_CFG_METRIC_CLEAR_BIT)
 
