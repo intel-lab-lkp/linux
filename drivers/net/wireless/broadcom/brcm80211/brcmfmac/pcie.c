@@ -9,6 +9,7 @@
 #include <linux/pci.h>
 #include <linux/vmalloc.h>
 #include <linux/delay.h>
+#include <linux/dmi.h>
 #include <linux/interrupt.h>
 #include <linux/bcma/bcma.h>
 #include <linux/sched.h>
@@ -48,6 +49,40 @@ enum brcmf_pcie_state {
 	BRCMFMAC_PCIE_STATE_DOWN,
 	BRCMFMAC_PCIE_STATE_UP
 };
+
+/*
+ * BCM4377 on these T2 Macs never acknowledges HOST_D3_INFORM. The platform
+ * can nevertheless enter and leave system suspend if the PCIe mailbox
+ * interrupt is masked and resume takes the existing cold-reprobe path.
+ */
+static const struct dmi_system_id brcmf_pcie_no_d3_ack_quirk[] = {
+	{
+		.matches = {
+			DMI_EXACT_MATCH(DMI_BOARD_VENDOR, "Apple Inc."),
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "MacBookAir9,1"),
+		},
+	},
+	{
+		.matches = {
+			DMI_EXACT_MATCH(DMI_BOARD_VENDOR, "Apple Inc."),
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "MacBookPro15,4"),
+		},
+	},
+	{
+		.matches = {
+			DMI_EXACT_MATCH(DMI_BOARD_VENDOR, "Apple Inc."),
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "MacBookPro16,3"),
+		},
+	},
+	{}
+};
+
+static bool brcmf_pcie_quirk_no_d3_ack(struct pci_dev *pdev)
+{
+	return pdev->vendor == PCI_VENDOR_ID_BROADCOM &&
+	       pdev->device == BRCM_PCIE_4377_DEVICE_ID &&
+	       dmi_check_system(brcmf_pcie_no_d3_ack_quirk);
+}
 
 BRCMF_FW_DEF(43602, "brcmfmac43602-pcie");
 BRCMF_FW_DEF(4350, "brcmfmac4350-pcie");
@@ -2652,11 +2687,18 @@ static int brcmf_pcie_pm_enter_D3(struct device *dev)
 	wait_event_timeout(devinfo->mbdata_resp_wait, devinfo->mbdata_completed,
 			   BRCMF_PCIE_MBDATA_TIMEOUT);
 	if (!devinfo->mbdata_completed) {
+		if (brcmf_pcie_quirk_no_d3_ack(devinfo->pdev)) {
+			dev_info(dev, "D3 ACK missing; masking PCIe mailbox interrupt\n");
+			brcmf_pcie_intr_disable(devinfo);
+			goto done;
+		}
+
 		brcmf_err(bus, "Timeout on response for entering D3 substate\n");
 		brcmf_bus_change_state(bus, BRCMF_BUS_UP);
 		return -EIO;
 	}
 
+done:
 	devinfo->state = BRCMFMAC_PCIE_STATE_DOWN;
 
 	return 0;
