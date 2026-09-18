@@ -62,21 +62,18 @@ hbh_mt6(const struct sk_buff *skb, struct xt_action_param *par)
 			    NEXTHDR_HOP : NEXTHDR_DEST, NULL, NULL);
 	if (err < 0) {
 		if (err != -ENOENT)
-			par->hotdrop = true;
+			goto hotdrop;
 		return false;
 	}
 
 	oh = skb_header_pointer(skb, ptr, sizeof(_optsh), &_optsh);
-	if (oh == NULL) {
-		par->hotdrop = true;
-		return false;
-	}
+	if (!oh)
+		goto hotdrop;
 
 	hdrlen = ipv6_optlen(oh);
 	if (skb->len - ptr < hdrlen) {
-		/* Packet smaller than it's length field */
-		par->hotdrop = true;
-		return false;
+		/* Packet smaller than its length field */
+		goto hotdrop;
 	}
 
 	ret = (!(optinfo->flags & IP6T_OPTS_LEN) ||
@@ -94,8 +91,8 @@ hbh_mt6(const struct sk_buff *skb, struct xt_action_param *par)
 				break;
 			tp = skb_header_pointer(skb, ptr, sizeof(_opttype),
 						&_opttype);
-			if (tp == NULL)
-				break;
+			if (!tp)
+				goto hotdrop;
 
 			/* Type check */
 			if (*tp != (optinfo->opts[temp] & 0xFF00) >> 8)
@@ -107,12 +104,12 @@ hbh_mt6(const struct sk_buff *skb, struct xt_action_param *par)
 
 				/* length field exists ? */
 				if (hdrlen < 2)
-					break;
+					goto hotdrop;
 				lp = skb_header_pointer(skb, ptr + 1,
 							sizeof(_optlen),
 							&_optlen);
-				if (lp == NULL)
-					break;
+				if (!lp)
+					goto hotdrop;
 				spec_len = optinfo->opts[temp] & 0x00FF;
 
 				if (spec_len != 0x00FF && spec_len != *lp)
@@ -123,9 +120,9 @@ hbh_mt6(const struct sk_buff *skb, struct xt_action_param *par)
 				optlen = 1;
 			}
 
-			if ((ptr > skb->len - optlen || hdrlen < optlen) &&
-			    temp < optinfo->optsnr - 1)
-				break;
+			if (ptr > skb->len || optlen > skb->len - ptr ||
+			    hdrlen < optlen)
+				goto hotdrop;
 
 			ptr += optlen;
 			hdrlen -= optlen;
@@ -136,6 +133,10 @@ hbh_mt6(const struct sk_buff *skb, struct xt_action_param *par)
 			return false;
 	}
 
+	return false;
+
+hotdrop:
+	par->hotdrop = true;
 	return false;
 }
 
