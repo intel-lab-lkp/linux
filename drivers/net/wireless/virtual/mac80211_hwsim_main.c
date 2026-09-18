@@ -1333,6 +1333,9 @@ mac80211_hwsim_get_tx_rate(struct ieee80211_hw *hw,
 	    (IEEE80211_TX_RC_MCS | IEEE80211_TX_RC_VHT_MCS))
 		return NULL;
 
+	if (info->control.rates[0].idx < 0)
+		return NULL;
+
 	return ieee80211_get_tx_rate(hw, info);
 }
 
