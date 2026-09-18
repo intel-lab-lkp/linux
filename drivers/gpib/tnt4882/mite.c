@@ -35,19 +35,13 @@
 #include <linux/ioport.h>
 #include <linux/delay.h>
 #include <linux/mm.h>
-#include <linux/interrupt.h>
 #include <linux/pci.h>
 #include <linux/io.h>
 #include <linux/slab.h>
 
 #include "mite.h"
 
-#define PCI_MITE_SIZE		4096
-#define PCI_DAQ_SIZE		4096
-
 struct mite_struct *mite_devices;
-
-#define TOP_OF_PAGE(x) ((x) | (~(PAGE_MASK)))
 
 void mite_init(void)
 {
