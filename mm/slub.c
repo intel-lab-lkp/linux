@@ -422,6 +422,7 @@ struct node_barn {
 	spinlock_t lock;
 	struct list_head sheaves_full;
 	struct list_head sheaves_empty;
+	struct slab_sheaf *sheaf_partial;
 	unsigned int nr_full;
 	unsigned int nr_empty;
 };
@@ -3165,6 +3166,89 @@ static struct slab_sheaf *barn_get_empty_sheaf(struct node_barn *barn,
 }
 
 /*
+ * Exchange @sheaf, which holds fewer objects than requested, for a full one,
+ * keeping the leftover objects in the barn's partial sheaf instead of
+ * flushing them.
+ *
+ * Returns a full sheaf, or NULL if the barn cannot make one.
+ * The returned sheaf might be @sheaf itself or a new one.
+ */
+static struct slab_sheaf *barn_replace_partial_sheaf(struct kmem_cache *s,
+						     struct node_barn *barn,
+						     struct slab_sheaf *sheaf)
+{
+	struct slab_sheaf *full = NULL, *partial;
+	unsigned int to_move;
+	unsigned long flags;
+
+	if (!data_race(barn->nr_full) && !data_race(barn->sheaf_partial))
+		return NULL;
+
+	spin_lock_irqsave(&barn->lock, flags);
+
+	partial = barn->sheaf_partial;
+	if (partial && partial->size + sheaf->size >= s->sheaf_capacity) {
+		/* Fill the larger one to capacity from the smaller */
+		if (partial->size > sheaf->size)
+			swap(partial, sheaf);
+
+		to_move = s->sheaf_capacity - sheaf->size;
+		partial->size -= to_move;
+		memcpy(&sheaf->objects[sheaf->size],
+		       &partial->objects[partial->size],
+		       to_move * sizeof(void *));
+		sheaf->size = s->sheaf_capacity;
+
+		if (partial->size) {
+			barn->sheaf_partial = partial;
+		} else {
+			/*
+			 * No empty-limit check here or below: the sheaf put on the
+			 * empty list is either the barn's own partial sheaf, or the
+			 * caller's sheaf taken in exchange for a full one, so the
+			 * barn holds no more sheaves than before.
+			 * barn_replace_empty_sheaf() skips the check for the same
+			 * reason.
+			 */
+			list_add(&partial->barn_list, &barn->sheaves_empty);
+			barn->nr_empty++;
+			barn->sheaf_partial = NULL;
+		}
+
+		full = sheaf;
+		goto done;
+	}
+
+	if (!barn->nr_full)
+		goto done;
+
+	full = list_first_entry(&barn->sheaves_full, struct slab_sheaf,
+				barn_list);
+	list_del(&full->barn_list);
+	barn->nr_full--;
+
+	if (partial) {
+		/* The two do not reach capacity: the partial sheaf absorbs all of @sheaf */
+		memcpy(&partial->objects[partial->size], sheaf->objects,
+		       sheaf->size * sizeof(void *));
+		partial->size += sheaf->size;
+		sheaf->size = 0;
+	}
+
+	if (sheaf->size) {
+		barn->sheaf_partial = sheaf;
+	} else {
+		list_add(&sheaf->barn_list, &barn->sheaves_empty);
+		barn->nr_empty++;
+	}
+
+done:
+	spin_unlock_irqrestore(&barn->lock, flags);
+
+	return full;
+}
+
+/*
  * The following two functions are used mainly in cases where we have to undo an
  * intended action due to a race or cpu migration. Thus they do not check the
  * empty or full sheaf limits for simplicity.
@@ -3298,6 +3382,7 @@ static void barn_init(struct node_barn *barn)
 	spin_lock_init(&barn->lock);
 	INIT_LIST_HEAD(&barn->sheaves_full);
 	INIT_LIST_HEAD(&barn->sheaves_empty);
+	barn->sheaf_partial = NULL;
 	barn->nr_full = 0;
 	barn->nr_empty = 0;
 }
@@ -3315,6 +3400,10 @@ static void barn_shrink(struct kmem_cache *s, struct node_barn *barn)
 	barn->nr_full = 0;
 	list_splice_init(&barn->sheaves_empty, &empty_list);
 	barn->nr_empty = 0;
+	if (barn->sheaf_partial) {
+		list_add(&barn->sheaf_partial->barn_list, &full_list);
+		barn->sheaf_partial = NULL;
+	}
 
 	spin_unlock_irqrestore(&barn->lock, flags);
 
@@ -5073,11 +5162,50 @@ void *kmem_cache_alloc_node_noprof(struct kmem_cache *s, gfp_t gfpflags, int nod
 }
 EXPORT_SYMBOL(kmem_cache_alloc_node_noprof);
 
-static int __prefill_sheaf_pfmemalloc(struct kmem_cache *s,
-				      struct slab_sheaf *sheaf, gfp_t gfp)
+/*
+ * Refill *@sheafp from the barn; *@sheafp may be replaced.
+ *
+ * Returns true if the sheaf is now full, at s->sheaf_capacity.
+ * Returns false if the sheaf is still not full.
+ */
+static bool refill_sheaf_from_barn(struct kmem_cache *s,
+				   struct slab_sheaf **sheafp)
 {
+	struct node_barn *barn = get_barn(s);
+	struct slab_sheaf *sheaf = *sheafp;
+	struct slab_sheaf *full;
+
+	/* Objects from pfmemalloc slabs must not enter the barn */
+	if (!barn || sheaf->pfmemalloc)
+		return false;
+
+	full = barn_replace_partial_sheaf(s, barn, sheaf);
+	if (!full)
+		return false;
+
+	stat(s, BARN_GET);
+	full->capacity = s->sheaf_capacity;
+	full->pfmemalloc = false;
+	*sheafp = full;
+
+	/*
+	 * A sheaf taken from the barn's full list may hold fewer than capacity
+	 * objects, see rcu_free_sheaf().
+	 */
+	return full->size == s->sheaf_capacity;
+}
+
+static int __prefill_sheaf_pfmemalloc(struct kmem_cache *s,
+				      struct slab_sheaf **sheafp, gfp_t gfp)
+{
+	struct slab_sheaf *sheaf;
 	gfp_t gfp_nomemalloc;
 	int ret;
+
+	if (refill_sheaf_from_barn(s, sheafp))
+		return 0;
+
+	sheaf = *sheafp;
 
 	gfp_nomemalloc = gfp | __GFP_NOMEMALLOC;
 	if (gfp_pfmemalloc_allowed(gfp))
@@ -5171,7 +5299,7 @@ kmem_cache_prefill_sheaf(struct kmem_cache *s, gfp_t gfp, unsigned int size)
 		sheaf->pfmemalloc = false;
 
 		if (sheaf->size < size &&
-		    __prefill_sheaf_pfmemalloc(s, sheaf, gfp)) {
+		    __prefill_sheaf_pfmemalloc(s, &sheaf, gfp)) {
 			sheaf_flush_unused(s, sheaf);
 			free_empty_sheaf(s, sheaf);
 			sheaf = NULL;
@@ -5238,14 +5366,12 @@ void kmem_cache_return_sheaf(struct kmem_cache *s, gfp_t gfp,
 
 /*
  * Refill a sheaf previously returned by kmem_cache_prefill_sheaf to at least
- * the given size.
+ * the given size. The sheaf might have been replaced with a new one, whether
+ * the refill succeeds or not.
  *
  * Return: 0 on success. The sheaf will contain at least @size objects.
- * The sheaf might have been replaced with a new one if more than
- * sheaf->capacity objects are requested.
  *
- * Return: -ENOMEM on failure. Some objects might have been added to the sheaf
- * but the sheaf will not be replaced.
+ * Return: -ENOMEM on failure. Some objects might have been added to the sheaf.
  *
  * In practice we always refill to full sheaf's capacity.
  */
@@ -5267,7 +5393,7 @@ int kmem_cache_refill_sheaf(struct kmem_cache *s, gfp_t gfp,
 
 	if (likely(sheaf->capacity >= size)) {
 		if (likely(sheaf->capacity == s->sheaf_capacity))
-			return __prefill_sheaf_pfmemalloc(s, sheaf, gfp);
+			return __prefill_sheaf_pfmemalloc(s, sheafp, gfp);
 
 		if (!__kmem_cache_alloc_bulk(s, gfp, sheaf->capacity - sheaf->size,
 					     &sheaf->objects[sheaf->size]))
