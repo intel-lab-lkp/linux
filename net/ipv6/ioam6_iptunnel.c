@@ -262,7 +262,9 @@ static int ioam6_do_inline(struct net *net, struct sk_buff *skb,
 
 	hdrlen = (tuninfo->eh.hdrlen + 1) << 3;
 
-	err = skb_cow_head(skb, hdrlen + dst_dev_overhead(cache_dst, skb));
+	err = skb_cow_head(skb, hdrlen +
+			   max_t(unsigned int, skb->mac_len,
+				 dst_dev_overhead(cache_dst, skb)));
 	if (unlikely(err))
 		return err;
 
@@ -303,7 +305,9 @@ static int ioam6_do_encap(struct net *net, struct sk_buff *skb,
 	hdrlen = (tuninfo->eh.hdrlen + 1) << 3;
 	len = sizeof(*hdr) + hdrlen;
 
-	err = skb_cow_head(skb, len + dst_dev_overhead(cache_dst, skb));
+	err = skb_cow_head(skb, len +
+			   max_t(unsigned int, skb->mac_len,
+				 dst_dev_overhead(cache_dst, skb)));
 	if (unlikely(err))
 		return err;
 

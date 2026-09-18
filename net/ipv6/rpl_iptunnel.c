@@ -154,7 +154,9 @@ static int rpl_do_srh_inline(struct sk_buff *skb, const struct rpl_lwt *rlwt,
 
 	hdrlen = ((csrh->hdrlen + 1) << 3);
 
-	err = skb_cow_head(skb, hdrlen + dst_dev_overhead(cache_dst, skb));
+	err = skb_cow_head(skb, hdrlen +
+			   max_t(unsigned int, skb->mac_len,
+				 dst_dev_overhead(cache_dst, skb)));
 	if (unlikely(err)) {
 		kfree(buf);
 		return err;
