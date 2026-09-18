@@ -565,18 +565,27 @@ static void prepare_ibc(struct kvm_vcpu *vcpu, struct vsie_page *vsie_page)
 	}
 }
 
+/*
+ * Only write the interception fields back; avoid clobbering the timer and
+ * guest-state fields in scb_o.
+ */
+static inline void unshadow_intercept(struct kvm_s390_sie_block *scb_o,
+				      struct kvm_s390_sie_block *scb_s)
+{
+	scb_o->icptcode = scb_s->icptcode;
+	scb_o->icptstatus = scb_s->icptstatus;
+	scb_o->ipa = scb_s->ipa;
+	scb_o->ipb = scb_s->ipb;
+	scb_o->gbea = scb_s->gbea;
+}
+
 /* unshadow the scb, copying parameters back to the real scb */
 static void unshadow_scb(struct kvm_vcpu *vcpu, struct vsie_page *vsie_page)
 {
 	struct kvm_s390_sie_block *scb_s = &vsie_page->scb_s;
 	struct kvm_s390_sie_block *scb_o = vsie_page->scb_o;
 
-	/* interception */
-	scb_o->icptcode = scb_s->icptcode;
-	scb_o->icptstatus = scb_s->icptstatus;
-	scb_o->ipa = scb_s->ipa;
-	scb_o->ipb = scb_s->ipb;
-	scb_o->gbea = scb_s->gbea;
+	unshadow_intercept(scb_o, scb_s);
 
 	/* timer */
 	scb_o->cputm = scb_s->cputm;
@@ -641,7 +650,7 @@ static int shadow_scb(struct kvm_vcpu *vcpu, struct vsie_page *vsie_page)
 
 	rc = prepare_cpuflags(vcpu, vsie_page);
 	if (rc)
-		goto out;
+		goto out_validity;
 
 	/* timer */
 	scb_s->cputm = scb_o->cputm;
@@ -755,9 +764,12 @@ static int shadow_scb(struct kvm_vcpu *vcpu, struct vsie_page *vsie_page)
 
 	prepare_ibc(vcpu, vsie_page);
 	rc = shadow_crycb(vcpu, vsie_page);
-out:
 	if (rc)
 		unshadow_scb(vcpu, vsie_page);
+	return rc;
+
+out_validity:
+	unshadow_intercept(vsie_page->scb_o, &vsie_page->scb_s);
 	return rc;
 }
 
