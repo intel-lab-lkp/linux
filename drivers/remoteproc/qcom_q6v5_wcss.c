@@ -1042,9 +1042,13 @@ static void q6v5_wcss_remove(struct platform_device *pdev)
 	struct rproc *rproc = platform_get_drvdata(pdev);
 	struct q6v5_wcss *wcss = rproc->priv;
 
-	qcom_q6v5_deinit(&wcss->q6v5);
-	qcom_remove_pdm_subdev(rproc, &wcss->pdm_subdev);
 	rproc_del(rproc);
+
+	qcom_q6v5_deinit(&wcss->q6v5);
+	qcom_remove_glink_subdev(rproc, &wcss->glink_subdev);
+	qcom_remove_pdm_subdev(rproc, &wcss->pdm_subdev);
+	qcom_remove_sysmon_subdev(wcss->sysmon);
++	qcom_remove_ssr_subdev(rproc, &wcss->ssr_subdev);
 }
 
 static const struct wcss_data wcss_ipq8074_res_init = {
