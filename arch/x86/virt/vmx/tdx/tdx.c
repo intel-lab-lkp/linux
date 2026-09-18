@@ -395,6 +395,42 @@ static int read_sys_metadata_field(u64 field_id, u64 *data)
 	return 0;
 }
 
+/*
+ * Map a TDX global metadata field to a structure member.
+ * @field_id: The TDX global metadata field ID.
+ * @size: The size of the structure member.
+ * @offset: The member's offset within its containing structure.
+ */
+struct field_mapping {
+	u64 field_id;
+	size_t size;
+	int offset;
+};
+
+/* Read each metadata field listed in @mappings[] into @data. */
+static int __maybe_unused __read_sys_metadata_table(const struct field_mapping *mappings,
+						    int num_mappings, void *data)
+{
+	int i, ret;
+	u64 val;
+
+	for (i = 0; i < num_mappings; i++) {
+		ret = read_sys_metadata_field(mappings[i].field_id, &val);
+		if (ret)
+			return ret;
+		memcpy((char *)data + mappings[i].offset, &val, mappings[i].size);
+	}
+
+	return 0;
+}
+
+#define TDX_SYSINFO_MAP(_field, _type, _member)			\
+{								\
+	.field_id	= TDX_MD_FIELD_ID_##_field,		\
+	.offset		= offsetof(_type, _member),		\
+	.size		= sizeof_field(_type, _member),		\
+}
+
 #include "tdx_global_metadata.c"
 
 static __init int check_features(struct tdx_sys_info *sysinfo)
