@@ -310,14 +310,19 @@ void hfs_btree_close(struct hfs_btree *tree)
 		return;
 
 	for (i = 0; i < NODE_HASH_SIZE; i++) {
-		while ((node = tree->node_hash[i])) {
-			tree->node_hash[i] = node->next_hash;
+		for (;;) {
+			spin_lock(&tree->hash_lock);
+			node = tree->node_hash[i];
+			if (node)
+				hfs_bnode_unhash(node);
+			spin_unlock(&tree->hash_lock);
+			if (!node)
+				break;
 			if (atomic_read(&node->refcnt))
 				pr_err("node %d:%d still has %d user(s)!\n",
 				       node->tree->cnid, node->this,
 				       atomic_read(&node->refcnt));
 			hfs_bnode_free(node);
-			tree->node_hash_cnt--;
 		}
 	}
 	iput(tree->inode);
