@@ -899,8 +899,11 @@ again:
 	 * If we have accumulated decent amount of IO, send it to the block
 	 * layer so that IO can run while we are accumulating more folios to
 	 * write.
+	 *
+	 * This doesn't apply to delayed bbio which is going to be
+	 * compressed.
 	 */
-	else if (bio_ctrl->wbc &&
+	else if (bio_ctrl->wbc && !bio_ctrl->bbio->is_delayed &&
 		 bio_ctrl->bbio->bio.bi_iter.bi_size >= fs_info->writeback_bio_size)
 		submit_one_bio(bio_ctrl);
 	return 0;
