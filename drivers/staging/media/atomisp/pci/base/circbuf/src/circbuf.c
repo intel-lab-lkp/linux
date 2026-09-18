@@ -24,7 +24,7 @@
  * @return the oldest element.
  */
 static inline ia_css_circbuf_elem_t
-ia_css_circbuf_read(ia_css_circbuf_t *cb);
+ia_css_circbuf_read(struct ia_css_circbuf_s *cb);
 
 /*
  * @brief Shift a chunk of elements in the circular buffer.
@@ -36,8 +36,8 @@ ia_css_circbuf_read(ia_css_circbuf_t *cb);
  * @param chunk_src  The position at which the first element in the chunk is.
  * @param chunk_dest The position to which the first element in the chunk would be shift.
  */
-static inline void ia_css_circbuf_shift_chunk(ia_css_circbuf_t *cb,
-	u32 chunk_src,
+static inline void ia_css_circbuf_shift_chunk(struct ia_css_circbuf_s *cb,
+					      u32 chunk_src,
 	uint32_t chunk_dest);
 
 /*
@@ -60,7 +60,7 @@ ia_css_circbuf_elem_get_val(ia_css_circbuf_elem_t *elem);
  * Refer to "ia_css_circbuf.h" for details.
  */
 void
-ia_css_circbuf_create(ia_css_circbuf_t *cb,
+ia_css_circbuf_create(struct ia_css_circbuf_s *cb,
 		      ia_css_circbuf_elem_t *elems,
 		      ia_css_circbuf_desc_t *desc)
 {
@@ -84,7 +84,7 @@ ia_css_circbuf_create(ia_css_circbuf_t *cb,
  * @brief Destroy the circular buffer.
  * Refer to "ia_css_circbuf.h" for details.
  */
-void ia_css_circbuf_destroy(ia_css_circbuf_t *cb)
+void ia_css_circbuf_destroy(struct ia_css_circbuf_s *cb)
 {
 	cb->desc = NULL;
 
@@ -95,7 +95,7 @@ void ia_css_circbuf_destroy(ia_css_circbuf_t *cb)
  * @brief Pop a value out of the circular buffer.
  * Refer to "ia_css_circbuf.h" for details.
  */
-uint32_t ia_css_circbuf_pop(ia_css_circbuf_t *cb)
+uint32_t ia_css_circbuf_pop(struct ia_css_circbuf_s *cb)
 {
 	u32 ret;
 	ia_css_circbuf_elem_t elem;
@@ -112,7 +112,7 @@ uint32_t ia_css_circbuf_pop(ia_css_circbuf_t *cb)
  * @brief Extract a value out of the circular buffer.
  * Refer to "ia_css_circbuf.h" for details.
  */
-uint32_t ia_css_circbuf_extract(ia_css_circbuf_t *cb, int offset)
+uint32_t ia_css_circbuf_extract(struct ia_css_circbuf_s *cb, int offset)
 {
 	int max_offset;
 	u32 val;
@@ -162,7 +162,7 @@ uint32_t ia_css_circbuf_extract(ia_css_circbuf_t *cb, int offset)
  * @brief Peek an element from the circular buffer.
  * Refer to "ia_css_circbuf.h" for details.
  */
-uint32_t ia_css_circbuf_peek(ia_css_circbuf_t *cb, int offset)
+uint32_t ia_css_circbuf_peek(struct ia_css_circbuf_s *cb, int offset)
 {
 	int pos;
 
@@ -176,7 +176,7 @@ uint32_t ia_css_circbuf_peek(ia_css_circbuf_t *cb, int offset)
  * @brief Get the value of an element from the circular buffer.
  * Refer to "ia_css_circbuf.h" for details.
  */
-uint32_t ia_css_circbuf_peek_from_start(ia_css_circbuf_t *cb, int offset)
+uint32_t ia_css_circbuf_peek_from_start(struct ia_css_circbuf_s *cb, int offset)
 {
 	int pos;
 
@@ -192,7 +192,7 @@ uint32_t ia_css_circbuf_peek_from_start(ia_css_circbuf_t *cb, int offset)
  * Please refer to "ia_css_circbuf.h" for details.
  */
 bool ia_css_circbuf_increase_size(
-    ia_css_circbuf_t *cb,
+	struct ia_css_circbuf_s *cb,
     unsigned int sz_delta,
     ia_css_circbuf_elem_t *elems)
 {
@@ -260,7 +260,7 @@ ia_css_circbuf_elem_get_val(ia_css_circbuf_elem_t *elem)
  * Refer to "Forward declarations" for details.
  */
 static inline ia_css_circbuf_elem_t
-ia_css_circbuf_read(ia_css_circbuf_t *cb)
+ia_css_circbuf_read(struct ia_css_circbuf_s *cb)
 {
 	ia_css_circbuf_elem_t elem;
 
@@ -280,7 +280,7 @@ ia_css_circbuf_read(ia_css_circbuf_t *cb)
  * Refer to "Forward declarations" for details.
  */
 static inline void
-ia_css_circbuf_shift_chunk(ia_css_circbuf_t *cb,
+ia_css_circbuf_shift_chunk(struct ia_css_circbuf_s *cb,
 			   u32 chunk_src, uint32_t chunk_dest)
 {
 	int chunk_offset;
@@ -289,7 +289,7 @@ ia_css_circbuf_shift_chunk(ia_css_circbuf_t *cb,
 
 	/* get the chunk offset and size */
 	chunk_offset = ia_css_circbuf_get_offset(cb,
-		       chunk_src, chunk_dest);
+						 chunk_src, chunk_dest);
 	chunk_sz = ia_css_circbuf_get_offset(cb, cb->desc->start, chunk_src) + 1;
 
 	/* shift each element to its terminal position */
@@ -308,5 +308,5 @@ ia_css_circbuf_shift_chunk(ia_css_circbuf_t *cb,
 
 	/* adjust the index "start" */
 	cb->desc->start = ia_css_circbuf_get_pos_at_offset(cb, cb->desc->start,
-			  chunk_offset);
+							   chunk_offset);
 }
