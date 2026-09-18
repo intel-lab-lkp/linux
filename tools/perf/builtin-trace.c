@@ -200,6 +200,7 @@ struct trace {
 	int			max_summary;
 	int			raw_augmented_syscalls_args_size;
 	bool			raw_augmented_syscalls;
+	bool			syscall_augment;
 	bool			fd_path_disabled;
 	bool			sort_events;
 	bool			not_ev_qualifier;
@@ -2059,6 +2060,23 @@ static int trace__process_event(struct trace *trace, struct machine *machine,
 		color_fprintf(trace->output, PERF_COLOR_RED,
 			      "LOST %" PRIu64 " events!\n", (u64)event->lost.lost);
 		ret = machine__process_lost_event(machine, event, sample);
+		break;
+	case PERF_RECORD_FORK:
+		if (trace->raw_augmented_syscalls &&
+		    (augmented_syscalls__has_target_pid(event->fork.ppid) ||
+		     augmented_syscalls__has_target_pid(event->fork.ptid))) {
+			augmented_syscalls__add_target_pid(event->fork.pid);
+		}
+		ret = machine__process_fork_event(machine, event, sample);
+		break;
+	case PERF_RECORD_EXIT:
+		if (trace->raw_augmented_syscalls) {
+			if (event->fork.pid == event->fork.tid)
+				augmented_syscalls__del_target_pid(event->fork.pid);
+			else
+				augmented_syscalls__del_target_pid(event->fork.tid);
+		}
+		ret = machine__process_exit_event(machine, event, sample);
 		break;
 	default:
 		ret = machine__process_event(machine, event, sample);
@@ -4059,7 +4077,7 @@ out_delete_sys_enter:
 
 static int trace__set_ev_qualifier_tp_filter(struct trace *trace)
 {
-	int err = -1;
+	int err = 0;
 	struct evsel *sys_exit;
 	char *filter = asprintf_expr_inout_ints("id", !trace->not_ev_qualifier,
 						trace->ev_qualifier_ids.nr,
@@ -4068,15 +4086,27 @@ static int trace__set_ev_qualifier_tp_filter(struct trace *trace)
 	if (filter == NULL)
 		goto out_enomem;
 
-	if (!evsel__append_tp_filter(trace->syscalls.events.sys_enter, filter)) {
-		sys_exit = trace->syscalls.events.sys_exit;
+	/*
+	 * With BPF augmentation sys_enter is filtered in BPF and removed from
+	 * the evlist, so only apply the tracepoint filter to the events that
+	 * are actually present.
+	 */
+	if (trace->syscalls.events.sys_enter)
+		err = evsel__append_tp_filter(trace->syscalls.events.sys_enter, filter);
+
+	sys_exit = trace->syscalls.events.sys_exit;
+	if (!err && sys_exit)
 		err = evsel__append_tp_filter(sys_exit, filter);
-	}
 
 	free(filter);
 out:
 	return err;
 out_enomem:
+	/*
+	 * err defaults to 0 because either tracepoint may legitimately be
+	 * absent, so the error has to be set explicitly here.
+	 */
+	err = -ENOMEM;
 	errno = ENOMEM;
 	goto out;
 }
@@ -4518,7 +4548,27 @@ static int trace__init_syscalls_bpf_prog_array_maps(struct trace *trace __maybe_
 
 static int trace__set_ev_qualifier_filter(struct trace *trace)
 {
-	if (trace->syscalls.events.sys_enter)
+	/*
+	 * Synchronize syscall filter with BPF augmenter map:
+	 * Pass trace->not_ev_qualifier to indicate blacklist mode ('!' prefix,
+	 * e.g., -e !open,close) vs whitelist mode (-e open,close).
+	 *
+	 * A failure here would leave the BPF program filtering on a partially
+	 * populated map, silently dropping or emitting the wrong syscalls, so
+	 * propagate the error rather than continuing.
+	 */
+	if (trace->ev_qualifier_ids.nr > 0) {
+		int err = augmented_syscalls__set_target_syscalls(trace->ev_qualifier_ids.nr,
+								  trace->ev_qualifier_ids.entries,
+								  trace->not_ev_qualifier);
+
+		if (err) {
+			pr_debug("Failed to set the syscalls to trace in the BPF map: %d\n", err);
+			return err;
+		}
+	}
+
+	if (trace->syscalls.events.sys_enter || trace->syscalls.events.sys_exit)
 		return trace__set_ev_qualifier_tp_filter(trace);
 	return 0;
 }
@@ -4559,12 +4609,20 @@ static int trace__set_filter_loop_pids(struct trace *trace)
 
 static int trace__set_filter_pids(struct trace *trace)
 {
-	int err = 0;
+	struct perf_thread_map *threads = evlist__core(trace->evlist)->threads;
 	/*
 	 * Better not use !target__has_task() here because we need to cover the
 	 * case where no threads were specified in the command line, but a
 	 * workload was, and in that case we will fill in the thread_map when
 	 * we fork the workload in evlist__prepare_workload.
+	 */
+	bool has_target = perf_thread_map__pid(threads, 0) != -1;
+	int err = 0;
+
+	/*
+	 * The exclusion list: --filter-pids names tasks to never report, and
+	 * with no target at all we instead exclude perf itself so that tracing
+	 * does not feed back into itself.
 	 */
 	if (trace->filter_pids.nr > 0) {
 		err = evlist__append_tp_filter_pids(trace->evlist, trace->filter_pids.nr,
@@ -4573,8 +4631,35 @@ static int trace__set_filter_pids(struct trace *trace)
 			err = augmented_syscalls__set_filter_pids(trace->filter_pids.nr,
 						       trace->filter_pids.entries);
 		}
-	} else if (perf_thread_map__pid(evlist__core(trace->evlist)->threads, 0) == -1) {
+	} else if (!has_target) {
 		err = trace__set_filter_loop_pids(trace);
+	}
+
+	if (err)
+		return err;
+
+	/*
+	 * The inclusion list, which is a separate axis from the exclusion list
+	 * above and so must be programmed even when --filter-pids was given:
+	 * naming tasks to leave out does not widen -p/-t or a workload to the
+	 * whole system.
+	 *
+	 * This matters more than it does on the tracepoint only path. A BPF
+	 * tracepoint program is attached system wide rather than to the
+	 * target's file descriptors, so pids_to_trace is the only thing
+	 * keeping other tasks out.
+	 */
+	if (has_target) {
+		int nr = perf_thread_map__nr(threads);
+		pid_t *pids = malloc(nr * sizeof(pid_t));
+
+		if (pids == NULL)
+			return -ENOMEM;
+
+		for (int i = 0; i < nr; i++)
+			pids[i] = perf_thread_map__pid(threads, i);
+		err = augmented_syscalls__set_target_pids(nr, pids);
+		free(pids);
 	}
 
 	return err;
@@ -4803,7 +4888,20 @@ static int trace__run(struct trace *trace, int argc, const char **argv)
 	}
 
 	if (!trace->raw_augmented_syscalls) {
-		if (trace->trace_syscalls && trace__add_syscall_newtp(trace))
+		/*
+		 * The syscall tracepoints may be in the evlist already:
+		 * cmd_trace() adds the pair whenever it prepares BPF
+		 * augmentation, and it then either keeps them, gives up on
+		 * augmentation and leaves them behind, or has
+		 * __augmented_syscalls__ take over the enters and removes only
+		 * the enter one. trace__add_syscall_newtp() adds the pair
+		 * whatever is there, so it is called only when neither is, and
+		 * every event it adds is one the evlist does not already have.
+		 */
+		bool have_syscall_tp = trace->syscalls.events.sys_enter != NULL ||
+				       trace->syscalls.events.sys_exit != NULL;
+
+		if (trace->trace_syscalls && !have_syscall_tp && trace__add_syscall_newtp(trace))
 			goto out_error_raw_syscalls;
 
 		if (trace->trace_syscalls)
@@ -4898,7 +4996,7 @@ create_maps:
 
 	err = trace__set_filter_pids(trace);
 	if (err < 0)
-		goto out_error_mem;
+		goto out_error_filter_pids;
 
 	/*
 	 * TODO: Initialize for all host binary machine types, not just
@@ -4909,7 +5007,7 @@ create_maps:
 	if (trace->ev_qualifier_ids.nr > 0) {
 		err = trace__set_ev_qualifier_filter(trace);
 		if (err < 0)
-			goto out_errno;
+			goto out_error_ev_qualifier;
 
 		if (trace->syscalls.events.sys_exit) {
 			pr_debug("event qualifier tracepoint filter: %s\n",
@@ -5089,13 +5187,31 @@ out_error_apply_filters:
 		"Failed to set filter \"%s\" on event %s: %m\n",
 		evsel->filter, evsel__name(evsel));
 	goto out_put_evlist;
+
+out_error_filter_pids:
+	/*
+	 * Report what actually went wrong. Programming the pid filters
+	 * allocates, but it also writes BPF maps, which fails for reasons of
+	 * its own: -E2BIG when the target has more threads than pids_to_trace
+	 * has room for, say.
+	 */
+	fprintf(trace->output, "Failed to set the pid filters: %s\n",
+		str_error_r(-err, errbuf, sizeof(errbuf)));
+	goto out_put_evlist;
+
+out_error_ev_qualifier:
+	/*
+	 * Use the returned error, not errno. Reporting the failure on the way
+	 * out of trace__set_ev_qualifier_filter() goes through the formatted
+	 * output functions, which are free to leave errno describing
+	 * something else by the time it is read here.
+	 */
+	fprintf(trace->output, "Failed to set the syscall filters: %s\n",
+		str_error_r(-err, errbuf, sizeof(errbuf)));
+	goto out_put_evlist;
 }
 out_error_mem:
 	fprintf(trace->output, "Not enough memory to run!\n");
-	goto out_put_evlist;
-
-out_errno:
-	fprintf(trace->output, "%m\n");
 	goto out_put_evlist;
 }
 
@@ -5811,6 +5927,7 @@ int cmd_trace(int argc, const char **argv)
 		.show_arg_names = true,
 		.args_alignment = 70,
 		.trace_syscalls = false,
+		.syscall_augment = true,
 		.kernel_syscallchains = false,
 		.max_stack = UINT_MAX,
 		.max_events = ULONG_MAX,
@@ -5866,6 +5983,8 @@ int cmd_trace(int argc, const char **argv)
 	OPT_CALLBACK_DEFAULT('F', "pf", &trace.trace_pgfaults, "all|maj|min",
 		     "Trace pagefaults", parse_pagefaults, "maj"),
 	OPT_BOOLEAN(0, "syscalls", &trace.trace_syscalls, "Trace syscalls"),
+	OPT_BOOLEAN(0, "syscall-augment", &trace.syscall_augment,
+		    "Augment syscalls with BPF"),
 	OPT_BOOLEAN('f', "force", &trace.force, "don't complain, do it"),
 	OPT_CALLBACK(0, "call-graph", &trace.opts,
 		     "record_mode[,record_size]", record_callchain_help,
@@ -5988,7 +6107,7 @@ int cmd_trace(int argc, const char **argv)
 				       "cgroup monitoring only available in system-wide mode");
 	}
 
-	if (!trace.trace_syscalls)
+	if (!trace.trace_syscalls || !trace.syscall_augment)
 		goto skip_augmentation;
 
 	if ((argc >= 1) && (strcmp(argv[0], "record") == 0)) {
@@ -6010,11 +6129,34 @@ int cmd_trace(int argc, const char **argv)
 	if (err < 0)
 		goto skip_augmentation;
 
-	trace__add_syscall_newtp(&trace);
+	/*
+	 * The syscall tracepoints are what the augmented events are described
+	 * and paired with: the enter one supplies the format
+	 * __augmented_syscalls__ is read with, and the exit one reports the
+	 * returns, since BPF only takes over the enters. Without them there is
+	 * nothing to augment, so drop the skeleton and carry on with plain
+	 * tracepoints, as the bpf-output failure below does.
+	 */
+	if (trace__add_syscall_newtp(&trace)) {
+		pr_debug("Failed to set up the syscall tracepoints, disabling augmentation\n");
+		augmented_syscalls__cleanup();
+		goto skip_augmentation;
+	}
 
 	err = augmented_syscalls__create_bpf_output(trace.evlist);
-	if (err == 0)
+	if (err == 0) {
 		trace.syscalls.events.bpf_output = evlist__last(trace.evlist);
+	} else {
+		/*
+		 * augmented_syscalls__prepare() already attached sys_enter and
+		 * sys_exit, which are system wide. Falling through to
+		 * skip_augmentation without undoing that would run a BPF
+		 * program for every syscall on the machine, for the whole
+		 * session, with nothing consuming the output.
+		 */
+		pr_debug("Failed to create the augmented syscalls bpf-output event, disabling augmentation\n");
+		augmented_syscalls__cleanup();
+	}
 
 skip_augmentation:
 	err = -1;
@@ -6070,7 +6212,9 @@ skip_augmentation:
 	 * syscall.
 	 */
 	if (trace.syscalls.events.bpf_output) {
-		evlist__for_each_entry(trace.evlist, evsel) {
+		struct evsel *n;
+
+		evlist__for_each_entry_safe(trace.evlist, n, evsel) {
 			bool raw_syscalls_sys_exit = evsel__name_is(evsel, "raw_syscalls:sys_exit");
 
 			if (raw_syscalls_sys_exit) {
@@ -6078,28 +6222,44 @@ skip_augmentation:
 				goto init_augmented_syscall_tp;
 			}
 
-			if (trace.syscalls.events.bpf_output->priv == NULL &&
-			    strstr(evsel__name(evsel), "syscalls:sys_enter")) {
+			/*
+			 * Match the evsel trace__add_syscall_newtp() made by
+			 * identity rather than by name. It is called
+			 * raw_syscalls:sys_enter, or syscalls:sys_enter on
+			 * kernels too old to have the raw variant, and a
+			 * substring test for the latter also matches the
+			 * per syscall syscalls:sys_enter_SYSCALL tracepoints
+			 * a user can ask for by name. Claiming one of those
+			 * here would take the event the user asked for out of
+			 * the evlist below and describe __augmented_syscalls__
+			 * with the wrong tracefs format.
+			 */
+			if (evsel == trace.syscalls.events.sys_enter) {
 				struct evsel *augmented = trace.syscalls.events.bpf_output;
 				if (evsel__init_augmented_syscall_tp(augmented, evsel) ||
 				    evsel__init_augmented_syscall_tp_args(augmented))
 					goto out;
 				/*
-				 * Augmented is __augmented_syscalls__ BPF_OUTPUT event
+				 * Augmented is __augmented_syscalls__ BPF_OUTPUT event.
 				 * Above we made sure we can get from the payload the tp fields
 				 * that we get from syscalls:sys_enter tracefs format file.
+				 * Since BPF outputs all enter events (both augmented and
+				 * unaugmented) into __augmented_syscalls__, we remove the raw
+				 * sys_enter evsel from evlist so that perf trace only listens
+				 * to __augmented_syscalls__, avoiding duplicate events and
+				 * avoiding kernel tracepoint vetoes.
+				 *
+				 * Because evlist__remove() removes the first evsel (which had
+				 * tracking=true by default), re-designate the tracking event
+				 * so PERF_RECORD_COMM and fork tracking continue to be enabled.
 				 */
 				augmented->handler = trace__sys_enter;
-				/*
-				 * Now we do the same for the *syscalls:sys_enter event so that
-				 * if we handle it directly, i.e. if the BPF prog returns 0 so
-				 * as not to filter it, then we'll handle it just like we would
-				 * for the BPF_OUTPUT one:
-				 */
-				if (evsel__init_augmented_syscall_tp(evsel, evsel) ||
-				    evsel__init_augmented_syscall_tp_args(evsel))
-					goto out;
-				evsel->handler = trace__sys_enter;
+				evlist__remove(trace.evlist, evsel);
+				evsel__put_and_free_priv(evsel);
+				trace.syscalls.events.sys_enter = NULL;
+				evlist__set_tracking_event(trace.evlist,
+					trace.syscalls.events.sys_exit ?: augmented);
+				continue;
 			}
 
 			if (strstarts(evsel__name(evsel), "syscalls:sys_exit_")) {
