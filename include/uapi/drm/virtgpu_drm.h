@@ -203,8 +203,17 @@ struct drm_virtgpu_resource_create_blob {
 	__u64 blob_id;
 
 #define DRM_VIRTGPU_BLOB_FLAG_HINT_DEFER_MAPPING        0x0001
+/* Guest-only: pin an existing process mapping as blob backing. */
+#define DRM_VIRTGPU_BLOB_FLAG_HINT_USERPTR              0x0002
+#define DRM_VIRTGPU_BLOB_FLAG_HINT_USERPTR_RDONLY       0x0004
 	__u32 blob_hints;
 	__u32 pad2;
+
+	/*
+	 * userptr: guest userspace memory address for
+	 * DRM_VIRTGPU_BLOB_FLAG_HINT_USERPTR. Must be 0 if that hint is not set.
+	 */
+	__u64 userptr;
 };
 
 #define VIRTGPU_CONTEXT_PARAM_CAPSET_ID       0x0001
