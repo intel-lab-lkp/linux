@@ -424,11 +424,21 @@ static int __read_sys_metadata_table(const struct field_mapping *mappings,
 	return 0;
 }
 
+/*
+ * The size encoded in the field ID and the size of the destination C
+ * member must agree.
+ */
+#define TDX_MD_FIELD_SIZE_CHECK(_field, _type, _member)	\
+	BUILD_BUG_ON_ZERO(sizeof_field(_type, _member) !=	\
+			  TDX_MD_FIELD_ELE_SIZE(TDX_MD_FIELD_ID_##_field))
+
 #define TDX_SYSINFO_MAP(_field, _type, _member)			\
 {								\
 	.field_id	= TDX_MD_FIELD_ID_##_field,		\
 	.offset		= offsetof(_type, _member),		\
-	.size		= sizeof_field(_type, _member),		\
+	.size		= sizeof_field(_type, _member) +	\
+			  TDX_MD_FIELD_SIZE_CHECK(		\
+				_field, _type, _member),	\
 }
 
 #define TDX_SYSINFO_MAP_VERSION(_field_id, _member) \

@@ -99,6 +99,21 @@
 /* Class "TDX Module Handoff" */
 #define TDX_MD_FIELD_ID_MODULE_HV			0x8900000100000000ULL
 
+/*
+ * Sub-field definitions of TDX global metadata field IDs.
+ *
+ * See "Metadata Field Identifier" in the Intel TDX Module ABI
+ * Specification.
+ *
+ *  - Bit 33:32: ELEMENT_SIZE_CODE -- log2 of a single metadata
+ *                                    element's size in bytes
+ */
+#define TDX_MD_FIELD_ELE_SIZE_CODE(field_id)	\
+	(((field_id) & GENMASK_ULL(33, 32)) >> 32)
+
+#define TDX_MD_FIELD_ELE_SIZE(field_id)	\
+	(1 << TDX_MD_FIELD_ELE_SIZE_CODE(field_id))
+
 /* TDX page types */
 #define	PT_NDA		0x0
 #define	PT_RSVD		0x1
