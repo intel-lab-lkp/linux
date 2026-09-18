@@ -924,8 +924,20 @@ static struct uprobe *find_uprobe_rcu(struct inode *inode, loff_t offset)
 		 * try again as we might have missed the element (false
 		 * negative). If seqcount is unchanged, search truly failed.
 		 */
-		if (node)
-			return __node_2_uprobe(node);
+		if (node) {
+			struct uprobe *uprobe = __node_2_uprobe(node);
+
+			/*
+			 * A uprobe is inserted before it is prepared; do
+			 * not hand it out until ->arch is usable.
+			 */
+			if (!test_bit(UPROBE_COPY_INSN, &uprobe->flags))
+				return NULL;
+
+			/* Pairs with the smp_wmb() in prepare_uprobe(). */
+			smp_rmb();
+			return uprobe;
+		}
 	} while (read_seqcount_retry(&uprobes_seqcount, seq));
 
 	return NULL;
@@ -1123,7 +1135,7 @@ static int prepare_uprobe(struct uprobe *uprobe, struct file *file,
 	if (ret)
 		goto out;
 
-	smp_wmb(); /* pairs with the smp_rmb() in handle_swbp() */
+	smp_wmb(); /* pairs with the smp_rmb() in find_uprobe_rcu() */
 	set_bit(UPROBE_COPY_INSN, &uprobe->flags);
 
  out:
@@ -2742,23 +2754,6 @@ static void handle_swbp(struct pt_regs *regs)
 
 	/* change it in advance for ->handler() and restart */
 	instruction_pointer_set(regs, bp_vaddr);
-
-	/*
-	 * TODO: move copy_insn/etc into _register and remove this hack.
-	 * After we hit the bp, _unregister + _register can install the
-	 * new and not-yet-analyzed uprobe at the same address, restart.
-	 */
-	if (unlikely(!test_bit(UPROBE_COPY_INSN, &uprobe->flags)))
-		goto out;
-
-	/*
-	 * Pairs with the smp_wmb() in prepare_uprobe().
-	 *
-	 * Guarantees that if we see the UPROBE_COPY_INSN bit set, then
-	 * we must also see the stores to &uprobe->arch performed by the
-	 * prepare_uprobe() call.
-	 */
-	smp_rmb();
 
 	/* Tracing handlers use ->utask to communicate with fetch methods */
 	if (!get_utask())
