@@ -1360,6 +1360,14 @@ static enum rtw_lps_deep_mode rtw_update_lps_deep_mode(struct rtw_dev *rtwdev,
 	    !fw->feature)
 		return LPS_DEEP_MODE_NONE;
 
+	/* RTL8821CE PCIe devices fail to wake up from 32kHz LCLK deep sleep
+	 * in time for PCIe completion deadlines, leading to PCIe bus freeze
+	 * and communication timeouts.
+	 */
+	if (rtw_hci_type(rtwdev) == RTW_HCI_TYPE_PCIE &&
+	    chip->id == RTW_CHIP_TYPE_8821C)
+		return LPS_DEEP_MODE_NONE;
+
 	if ((chip->lps_deep_mode_supported & BIT(LPS_DEEP_MODE_PG)) &&
 	    rtw_fw_feature_check(fw, FW_FEATURE_PG))
 		return LPS_DEEP_MODE_PG;
