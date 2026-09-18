@@ -408,8 +408,8 @@ struct field_mapping {
 };
 
 /* Read each metadata field listed in @mappings[] into @data. */
-static int __maybe_unused __read_sys_metadata_table(const struct field_mapping *mappings,
-						    int num_mappings, void *data)
+static int __read_sys_metadata_table(const struct field_mapping *mappings,
+				     int num_mappings, void *data)
 {
 	int i, ret;
 	u64 val;
@@ -429,6 +429,23 @@ static int __maybe_unused __read_sys_metadata_table(const struct field_mapping *
 	.field_id	= TDX_MD_FIELD_ID_##_field,		\
 	.offset		= offsetof(_type, _member),		\
 	.size		= sizeof_field(_type, _member),		\
+}
+
+#define TDX_SYSINFO_MAP_VERSION(_field_id, _member) \
+	TDX_SYSINFO_MAP(_field_id, struct tdx_sys_info_version, _member)
+
+static const struct field_mapping version_mappings[] = {
+	TDX_SYSINFO_MAP_VERSION(MINOR_VERSION,  minor_version),
+	TDX_SYSINFO_MAP_VERSION(MAJOR_VERSION,  major_version),
+	TDX_SYSINFO_MAP_VERSION(UPDATE_VERSION, update_version),
+};
+
+#define read_sys_metadata_table(_table, _data) \
+	__read_sys_metadata_table(_table, ARRAY_SIZE(_table), _data)
+
+static int get_tdx_sys_info_version(struct tdx_sys_info_version *version)
+{
+	return read_sys_metadata_table(version_mappings, version);
 }
 
 #include "tdx_global_metadata.c"

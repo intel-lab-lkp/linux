@@ -60,6 +60,16 @@
  */
 #define TDX_VERSION_SHIFT		16
 
+/*
+ * TDX global metadata field IDs.
+ *
+ * See "global_metadata.pdf" in Intel TDX Module ABI Definitions.
+ */
+/* Class "TDX Module Version" */
+#define TDX_MD_FIELD_ID_MINOR_VERSION			0x0800000100000003ULL
+#define TDX_MD_FIELD_ID_MAJOR_VERSION			0x0800000100000004ULL
+#define TDX_MD_FIELD_ID_UPDATE_VERSION			0x0800000100000005ULL
+
 /* TDX page types */
 #define	PT_NDA		0x0
 #define	PT_RSVD		0x1
