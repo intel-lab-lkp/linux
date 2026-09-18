@@ -3105,7 +3105,7 @@ static int mmu_set_spte(struct kvm_vcpu *vcpu, struct kvm_memory_slot *slot,
 	u64 spte;
 
 	/* Prefetching always gets a writable pfn.  */
-	bool host_writable = !fault || fault->map_writable;
+	unsigned host_access = fault ? fault->host_access : ACC_ALL;
 	bool prefetch = !fault || fault->prefetch;
 	bool write_fault = fault && fault->write;
 
@@ -3142,7 +3142,7 @@ static int mmu_set_spte(struct kvm_vcpu *vcpu, struct kvm_memory_slot *slot,
 	}
 
 	wrprot = make_spte(vcpu, sp, slot, pte_access, gfn, pfn, *sptep, prefetch,
-			   false, host_writable, &spte);
+			   false, host_access, &spte);
 
 	if (*sptep == spte) {
 		ret = RET_PF_SPURIOUS;
@@ -3589,7 +3589,7 @@ static int kvm_handle_noslot_fault(struct kvm_vcpu *vcpu,
 
 	fault->slot = NULL;
 	fault->pfn = KVM_PFN_NOSLOT;
-	fault->map_writable = false;
+	fault->host_access = 0;
 
 	/*
 	 * If MMIO caching is disabled, emulate immediately without
@@ -4614,7 +4614,8 @@ static void kvm_mmu_finish_page_fault(struct kvm_vcpu *vcpu,
 				      struct kvm_page_fault *fault, int r)
 {
 	kvm_release_faultin_page(vcpu->kvm, fault->refcounted_page,
-				 r == RET_PF_RETRY, fault->map_writable);
+				 r == RET_PF_RETRY,
+				 !!(fault->host_access & ACC_WRITE_MASK));
 }
 
 static int kvm_mmu_faultin_pfn_gmem(struct kvm_vcpu *vcpu,
@@ -4634,9 +4635,10 @@ static int kvm_mmu_faultin_pfn_gmem(struct kvm_vcpu *vcpu,
 		return r;
 	}
 
-	fault->map_writable &= !(fault->slot->flags & KVM_MEM_READONLY);
-	fault->max_level = kvm_max_level_for_order(max_order);
+	if (fault->slot->flags & KVM_MEM_READONLY)
+		fault->host_access &= ~ACC_WRITE_MASK;
 
+	fault->max_level = kvm_max_level_for_order(max_order);
 	return RET_PF_CONTINUE;
 }
 
@@ -4684,7 +4686,8 @@ static int __kvm_mmu_faultin_pfn(struct kvm_vcpu *vcpu,
 				       &writable, &fault->refcounted_page);
 
 out_pf_continue:
-	fault->map_writable &= writable;
+	if (!writable)
+		fault->host_access &= ~ACC_WRITE_MASK;
 	return RET_PF_CONTINUE;
 }
 
@@ -5003,7 +5006,7 @@ static int kvm_mmu_do_page_fault(struct kvm_vcpu *vcpu, gpa_t cr2_or_gpa,
 		.is_private = err & PFERR_PRIVATE_ACCESS,
 
 		.pfn = KVM_PFN_ERR_FAULT,
-		.map_writable = true,
+		.host_access = ACC_ALL,
 	};
 	int r;
 
@@ -5197,7 +5200,7 @@ int kvm_tdp_mmu_map_private_pfn(struct kvm_vcpu *vcpu, gfn_t gfn, kvm_pfn_t pfn)
 		.gfn = gfn,
 		.slot = kvm_vcpu_gfn_to_memslot(vcpu, gfn),
 		.pfn = pfn,
-		.map_writable = true,
+		.host_access = ACC_ALL,
 	};
 	struct kvm *kvm = vcpu->kvm;
 	int r;
