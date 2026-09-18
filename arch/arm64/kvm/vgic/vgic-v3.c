@@ -96,9 +96,16 @@ static void vgic_v3_fold_lr(struct kvm_vcpu *vcpu, u64 val)
 		deactivated = irq->active && !(val & ICH_LR_ACTIVE_BIT);
 		irq->active = !!(val & ICH_LR_ACTIVE_BIT);
 
-		/* Edge is the only case where we preserve the pending bit */
+		/*
+		 * Edge is the only case where we preserve the pending bit.
+		 * Do not resurrect the pending state of LPIs once the
+		 * redistributor has them disabled: vgic_flush_pending_lpis()
+		 * has discarded them, and the LRs of a running vCPU cannot
+		 * be remotely cleared.
+		 */
 		if (irq->config == VGIC_CONFIG_EDGE &&
-		    (val & ICH_LR_PENDING_BIT))
+		    (val & ICH_LR_PENDING_BIT) &&
+		    (irq->intid < VGIC_MIN_LPI || vgic_lpis_enabled(vcpu)))
 			irq->pending_latch = true;
 
 		/*
@@ -154,6 +161,9 @@ void vgic_v3_fold_lr_state(struct kvm_vcpu *vcpu)
 
 	for (int lr = 0; lr < cpuif->used_lrs; lr++)
 		vgic_v3_fold_lr(vcpu, cpuif->vgic_lr[lr]);
+
+	if (!eoicount)
+		return;
 
 	/*
 	 * EOIMode=0: use EOIcount to emulate deactivation. We are
