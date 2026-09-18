@@ -1873,11 +1873,15 @@ void mem_cgroup_print_oom_meminfo(struct mem_cgroup *memcg)
 	pr_info("memory: usage %llukB, limit %llukB, failcnt %lu\n",
 		K((u64)page_counter_read(&memcg->memory)),
 		K((u64)READ_ONCE(memcg->memory.max)), memory_failcnt);
-	if (cgroup_subsys_on_dfl(memory_cgrp_subsys))
+	if (cgroup_subsys_on_dfl(memory_cgrp_subsys)) {
 		pr_info("swap: usage %llukB, limit %llukB, failcnt %lu\n",
 			K((u64)page_counter_read(&memcg->swap)),
 			K((u64)READ_ONCE(memcg->swap.max)),
 			atomic_long_read(&memcg->memory_events[MEMCG_SWAP_MAX]));
+		pr_info("memory+swap: usage %llukB, limit %llukB\n",
+			K((u64)page_counter_read(&memcg->memsw)),
+			K((u64)READ_ONCE(memcg->memsw.max)));
+	}
 #ifdef CONFIG_MEMCG_V1
 	else {
 		pr_info("memory+swap: usage %llukB, limit %llukB, failcnt %lu\n",
@@ -2724,10 +2728,10 @@ retry:
 
 	reclaim_options = MEMCG_RECLAIM_MAY_SWAP;
 	/*
-	 * The combined memory+swap counter is charged on both hierarchies.
-	 * Its limit is only configurable through v1's memsw.limit_in_bytes
-	 * for now and defaults to "max", so unless the user configures a
-	 * combined limit this never fails.
+	 * The combined memory+swap counter is charged on both hierarchies:
+	 * v1 exposes it as memsw.limit_in_bytes, v2 as memory.memsw.max.
+	 * It defaults to "max", so unless the user configures a combined
+	 * limit this never fails.
 	 *
 	 * Swapping does not reduce the combined charge, so when the combined
 	 * limit is what we hit, reclaim must not count on swap.
@@ -4981,6 +4985,14 @@ static int memory_max_show(struct seq_file *m, void *v)
 		READ_ONCE(mem_cgroup_from_seq(m)->memory.max));
 }
 
+/*
+ * Serializes memory.max against memory.memsw.max so that the two cannot be
+ * tested and installed concurrently, which would let a pair of writers land
+ * in a state where memory.max exceeds the combined limit.  Only held across
+ * the check and the store, never across reclaim.
+ */
+static DEFINE_MUTEX(dfl_max_mutex);
+
 static ssize_t memory_max_write(struct kernfs_open_file *of,
 				char *buf, size_t nbytes, loff_t off)
 {
@@ -4995,7 +5007,20 @@ static ssize_t memory_max_write(struct kernfs_open_file *of,
 	if (err)
 		return err;
 
+	/*
+	 * Keep the basic invariant memory.max <= memory.memsw.max, so a
+	 * combined memory+swap limit cannot be exceeded through the memory
+	 * limit.  memory.memsw.max defaults to "max", so this only rejects
+	 * writes once a combined limit has been configured.
+	 */
+	mutex_lock(&dfl_max_mutex);
+	if (max > READ_ONCE(memcg->memsw.max)) {
+		mutex_unlock(&dfl_max_mutex);
+		return -EINVAL;
+	}
+
 	xchg(&memcg->memory.max, max);
+	mutex_unlock(&dfl_max_mutex);
 
 	if (of->file->f_flags & O_NONBLOCK)
 		goto out;
@@ -6204,7 +6229,108 @@ static int swap_events_show(struct seq_file *m, void *v)
 	return 0;
 }
 
+static u64 memsw_current_read(struct cgroup_subsys_state *css,
+			      struct cftype *cft)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
+
+	return (u64)page_counter_read(&memcg->memsw) * PAGE_SIZE;
+}
+
+static int memsw_max_show(struct seq_file *m, void *v)
+{
+	return seq_puts_memcg_tunable(m,
+		READ_ONCE(mem_cgroup_from_seq(m)->memsw.max));
+}
+
+/*
+ * The combined memory+swap limit.  Swapping a page out does not release a
+ * combined charge, so reclaim cannot use swap to get back under this limit;
+ * only dropping pages, or freeing swap slots, helps.
+ */
+static ssize_t memsw_max_write(struct kernfs_open_file *of,
+			       char *buf, size_t nbytes, loff_t off)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
+	unsigned int nr_reclaims = MAX_RECLAIM_RETRIES;
+	bool drained = false;
+	unsigned long max;
+	int err;
+
+	buf = strstrip(buf);
+	err = page_counter_memparse(buf, "max", &max);
+	if (err)
+		return err;
+
+	/*
+	 * Keep the basic invariant memory.max <= memory.memsw.max: a combined
+	 * limit below the memory limit could never be met by reclaim.  Lower
+	 * memory.max first to install a combined limit on a fresh cgroup,
+	 * where memory.max still defaults to "max".
+	 */
+	mutex_lock(&dfl_max_mutex);
+	if (max < READ_ONCE(memcg->memory.max)) {
+		mutex_unlock(&dfl_max_mutex);
+		return -EINVAL;
+	}
+
+	xchg(&memcg->memsw.max, max);
+	mutex_unlock(&dfl_max_mutex);
+
+	if (of->file->f_flags & O_NONBLOCK)
+		goto out;
+
+	for (;;) {
+		unsigned long nr_pages = page_counter_read(&memcg->memsw);
+
+		if (max != READ_ONCE(memcg->memsw.max))
+			break;
+
+		if (nr_pages <= max)
+			break;
+
+		if (signal_pending(current))
+			break;
+
+		/* cgroup_rmdir() waits for us with cgroup_mutex held. */
+		if (memcg_is_dying(memcg))
+			break;
+
+		if (!drained) {
+			drain_all_stock(memcg);
+			drained = true;
+			continue;
+		}
+
+		if (nr_reclaims) {
+			if (!try_to_free_mem_cgroup_pages(memcg, nr_pages - max,
+					GFP_KERNEL, 0, NULL))
+				nr_reclaims--;
+			continue;
+		}
+
+		memcg_memory_event(memcg, MEMCG_OOM);
+		if (!mem_cgroup_out_of_memory(memcg, GFP_KERNEL, 0))
+			break;
+		cond_resched();
+	}
+out:
+	memcg_wb_domain_size_changed(memcg);
+	return nbytes;
+}
+
 static struct cftype swap_files[] = {
+	{
+		.name = "memsw.current",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.read_u64 = memsw_current_read,
+	},
+	{
+		.name = "memsw.max",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = memsw_max_show,
+		.write = memsw_max_write,
+	},
 	{
 		.name = "swap.current",
 		.flags = CFTYPE_NOT_ON_ROOT,

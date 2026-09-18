@@ -1881,6 +1881,38 @@ The following nested keys are defined.
 	Swap usage hard limit.  If a cgroup's swap usage reaches this
 	limit, anonymous memory of the cgroup will not be swapped out.
 
+  memory.memsw.current
+	A read-only single value file which exists on non-root cgroups.
+
+	The total amount of memory and swap space currently charged to
+	the cgroup and its descendants.
+
+  memory.memsw.max
+	A read-write single value file which exists on non-root
+	cgroups.  The default is "max".
+
+	Combined memory and swap usage hard limit.  Unlike memory.max,
+	which can be met by swapping anonymous memory out, a charge
+	counted here is kept for as long as the memory occupies either
+	RAM or a swap slot.  Reclaim therefore cannot bring a cgroup
+	back under this limit by swapping; only dropping pages, or
+	freeing swap slots, does.
+
+	This is the default-hierarchy counterpart of cgroup v1's
+	memory.memsw.limit_in_bytes and is useful for workloads that
+	must be capped on the sum of the two resources rather than on
+	each of them separately.
+
+	The limit must not be lower than memory.max: writes that would
+	violate memory.max <= memory.memsw.max are rejected with
+	EINVAL, in either file.  Since memory.max defaults to "max", a
+	combined limit can only be installed after memory.max has been
+	lowered.  To raise both limits, write memory.memsw.max first;
+	to lower both, write memory.max first.
+
+	If the limit is exceeded and reclaim cannot bring usage back
+	down, the cgroup OOM killer is invoked.
+
   memory.swap.events
 	A read-only flat-keyed file which exists on non-root cgroups.
 	The following entries are defined.  Unless specified
