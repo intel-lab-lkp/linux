@@ -159,7 +159,15 @@ static bool mshv_async_call_completion_isr(struct hv_message *msg)
 		goto unlock_out;
 	}
 
-	partition->async_hypercall_status = async_msg->status;
+	/* No current completion caller consumes the distinct substatus. */
+	(void)async_msg->sub_status;
+	partition->async_hypercall_status =
+		(u64)async_msg->status & ~HV_HYPERCALL_REP_COMP_MASK;
+	partition->async_hypercall_status |=
+		(min_t(u64, async_msg->completion_count,
+		       HV_HYPERCALL_REP_COMP_MASK >>
+		       HV_HYPERCALL_REP_COMP_OFFSET) <<
+		 HV_HYPERCALL_REP_COMP_OFFSET);
 	complete(&partition->async_hypercall);
 
 	handled = true;
