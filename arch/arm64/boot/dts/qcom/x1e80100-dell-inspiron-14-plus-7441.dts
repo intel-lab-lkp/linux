@@ -10,6 +10,19 @@
 / {
 	model = "Dell Inspiron 14 Plus 7441";
 	compatible = "dell,inspiron-14-plus-7441", "qcom,x1e80100";
+
+	backlight: backlight {
+		compatible = "pwm-backlight";
+		pwms = <&pmk8550_pwm 0 4266537>;
+		power-supply = <&vreg_edp_3p3>;
+
+		brightness-levels = <0 10 20 30 40 50 60 70 80 90 100>;
+		num-interpolated-steps = <10>;
+		default-brightness-level = <80>;
+
+		pinctrl-0 = <&edp_bl_pwm>;
+		pinctrl-names = "default";
+	};
 };
 
 &sound {
@@ -39,6 +52,25 @@
 
 &iris {
 	firmware-name = "qcom/x1e80100/dell/inspiron-14-plus-7441/qcvss8380.mbn";
+	status = "okay";
+};
+
+&mdss_dp3 {
+	aux-bus {
+		panel {
+			backlight = <&backlight>;
+		};
+	};
+};
+
+&pmk8550_gpios {
+	edp_bl_pwm: edp-bl-pwm-state {
+		pins = "gpio5";
+		function = "func3";
+	};
+};
+
+&pmk8550_pwm {
 	status = "okay";
 };
 
