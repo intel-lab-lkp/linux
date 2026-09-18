@@ -6,6 +6,7 @@
 #include <linux/mm_types.h>
 
 struct lruvec;
+struct zswap_entry;
 
 extern atomic_long_t zswap_stored_pages;
 
@@ -28,6 +29,7 @@ unsigned long zswap_total_pages(void);
 bool zswap_store(struct folio *folio);
 int zswap_load(struct folio *folio);
 void zswap_invalidate(int type, pgoff_t offset, unsigned long nr_entries);
+void zswap_entry_free(struct zswap_entry *entry);
 int zswap_swapon(int type, unsigned long nr_pages);
 void zswap_swapoff(int type);
 void zswap_memcg_offline_cleanup(struct mem_cgroup *memcg);
@@ -53,6 +55,8 @@ static inline void zswap_invalidate(int type, pgoff_t offset,
 		unsigned long nr_entries)
 {
 }
+
+static inline void zswap_entry_free(struct zswap_entry *entry) {}
 
 static inline int zswap_swapon(int type, unsigned long nr_pages)
 {

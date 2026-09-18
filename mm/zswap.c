@@ -39,6 +39,7 @@
 #include <linux/zsmalloc.h>
 
 #include "swap.h"
+#include "vswap.h"
 #include "internal.h"
 
 /*********************************
@@ -255,6 +256,25 @@ static inline struct xarray *zswap_tree(int type, pgoff_t offset)
 static inline struct xarray *swap_zswap_tree(swp_entry_t swp)
 {
 	return zswap_tree(swp_type(swp), swp_offset(swp));
+}
+
+static struct zswap_entry *zswap_entry_load(swp_entry_t swp)
+{
+	if (is_vswap_entry(swp))
+		return vswap_zswap_load(swp);
+	return xa_load(swap_zswap_tree(swp), swp_offset(swp));
+}
+
+static struct zswap_entry *zswap_entry_store(swp_entry_t swp,
+					     struct zswap_entry *entry)
+{
+	if (is_vswap_entry(swp)) {
+		vswap_zswap_store(swp, entry);
+		return NULL;
+	}
+
+	return xa_store(swap_zswap_tree(swp), swp_offset(swp), entry,
+			GFP_KERNEL);
 }
 
 #define zswap_pool_debug(msg, p)			\
@@ -774,7 +794,7 @@ static void zswap_entry_cache_free(struct zswap_entry *entry)
  * Carries out the common pattern of freeing an entry's zsmalloc allocation,
  * freeing the entry itself, and decrementing the number of stored pages.
  */
-static void zswap_entry_free(struct zswap_entry *entry)
+void zswap_entry_free(struct zswap_entry *entry)
 {
 	struct zswap_pool *pool = zswap_entry_pool(entry);
 
@@ -1226,6 +1246,9 @@ static unsigned long zswap_shrinker_count(struct shrinker *shrinker,
 	if (!zswap_shrinker_enabled || !mem_cgroup_zswap_writeback_enabled(memcg))
 		return 0;
 
+	if (vswap_is_enabled())
+		return 0;
+
 	/*
 	 * The shrinker resumes swap writeback, which will enter block
 	 * and may enter fs. XXX: Harmonize with vmscan.c __GFP_FS
@@ -1308,12 +1331,17 @@ static struct shrinker *zswap_alloc_shrinker(void)
  * Return: 0 if at least one entry was written back, -EAGAIN if entries
  * were scanned but none could be written back, or -ENOENT if @memcg has
  * writeback disabled, is a zombie cgroup, or has empty zswap LRUs.
+ *
+ * Also returns -ENOENT when vswap is enabled.
  */
 static int shrink_memcg(struct mem_cgroup *memcg)
 {
 	int nid, shrunk = 0, scanned = 0;
 
 	if (!mem_cgroup_zswap_writeback_enabled(memcg))
+		return -ENOENT;
+
+	if (vswap_is_enabled())
 		return -ENOENT;
 
 	/*
@@ -1343,6 +1371,13 @@ static void shrink_worker(struct work_struct *w)
 	struct mem_cgroup *memcg;
 	int ret, failures = 0, attempts = 0;
 	unsigned long thr;
+
+	/*
+	 * When vswap is enabled, zswap entries are almost all vswap backed,
+	 * with no slot to write back to.
+	 */
+	if (vswap_is_enabled())
+		return;
 
 	/* Reclaim down to the accept threshold */
 	thr = zswap_accept_thr_pages();
@@ -1447,15 +1482,13 @@ static bool zswap_store_page(struct folio *folio, long index,
 		goto compress_failed;
 
 	/*
-	 * Set pool_idx before the xa_store() below publishes the entry, or a
+	 * Set pool_idx before the store below publishes the entry, or a
 	 * concurrent reader could resolve a stale pool_idx left by slab reuse
 	 * to an unrelated live pool.
 	 */
 	entry->pool_idx = pool->idx;
 
-	old = xa_store(swap_zswap_tree(page_swpentry),
-		       swp_offset(page_swpentry),
-		       entry, GFP_KERNEL);
+	old = zswap_entry_store(page_swpentry, entry);
 	if (xa_is_err(old)) {
 		int err = xa_err(old);
 
@@ -1523,7 +1556,7 @@ bool zswap_store(struct folio *folio)
 	struct mem_cgroup *memcg = NULL;
 	struct zswap_pool *pool;
 	bool ret = false;
-	long index;
+	long index = 0;
 
 	VM_WARN_ON_ONCE(!folio_test_locked(folio));
 	VM_WARN_ON_ONCE(!folio_test_swapcache(folio));
@@ -1576,14 +1609,21 @@ put_objcg:
 	if (!ret && zswap_pool_reached_full)
 		queue_work(shrink_wq, &zswap_shrink_work);
 check_old:
+	if (ret)
+		return ret;
+
 	/*
 	 * If the zswap store fails or zswap is disabled, we must invalidate
 	 * the possibly stale entries which were previously stored at the
 	 * offsets corresponding to each page of the folio. Otherwise,
 	 * writeback could overwrite the new data in the swapfile.
 	 */
-	if (!ret)
+	if (is_vswap_entry(swp)) {
+		if (index > 0)
+			folio_release_vswap_backing(folio);
+	} else {
 		zswap_invalidate(swp_type(swp), swp_offset(swp), nr_pages);
+	}
 
 	return ret;
 }
@@ -1634,8 +1674,7 @@ static bool zswap_is_present(swp_entry_t entry, unsigned int nr)
 int zswap_load(struct folio *folio)
 {
 	swp_entry_t swp = folio->swap;
-	pgoff_t offset = swp_offset(swp);
-	struct xarray *tree = swap_zswap_tree(swp);
+	struct swap_info_struct *si = __swap_entry_to_info(swp);
 	struct zswap_entry *entry;
 
 	VM_WARN_ON_ONCE(!folio_test_locked(folio));
@@ -1659,7 +1698,7 @@ int zswap_load(struct folio *folio)
 		return -ENOENT;
 	}
 
-	entry = xa_load(tree, offset);
+	entry = zswap_entry_load(swp);
 	if (!entry)
 		return -ENOENT;
 
@@ -1682,8 +1721,13 @@ int zswap_load(struct folio *folio)
 	 * compression work.
 	 */
 	folio_mark_dirty(folio);
-	xa_erase(tree, offset);
-	zswap_entry_free(entry);
+
+	if (swap_is_vswap(si)) {
+		folio_release_vswap_backing(folio);
+	} else {
+		xa_erase(swap_zswap_tree(swp), swp_offset(swp));
+		zswap_entry_free(entry);
+	}
 
 	folio_unlock(folio);
 	return 0;

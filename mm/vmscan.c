@@ -69,6 +69,7 @@
 #include "internal.h"
 #include "page_alloc.h"
 #include "swap.h"
+#include "vswap.h"
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/vmscan.h>
@@ -415,10 +416,12 @@ static inline bool can_reclaim_anon_pages(struct mem_cgroup *memcg,
 	if (memcg == NULL) {
 		/*
 		 * For non-memcg reclaim, is there space in any swap device?
-		 * And under GFP_NOIO, is there enough swapcached anon to make
-		 * scanning anon worthwhile?
+		 * vswap does not contribute to nr_swap_pages. And under
+		 * GFP_NOIO, is there enough swapcached anon to make scanning
+		 * anon worthwhile?
 		 */
-		if (get_nr_swap_pages() > 0 &&
+		if ((get_nr_swap_pages() > 0 ||
+		     (vswap_is_enabled() && zswap_is_enabled())) &&
 		    !reclaimable_anon_is_low(memcg, nid, sc))
 			return true;
 	} else {
@@ -426,7 +429,7 @@ static inline bool can_reclaim_anon_pages(struct mem_cgroup *memcg,
 		 * Is the memcg below its swap limit, and under GFP_NOIO does
 		 * it have enough swapcached anon to make scanning worthwhile?
 		 */
-		if (mem_cgroup_get_nr_swap_pages(memcg) > 0 &&
+		if (mem_cgroup_can_swap(memcg, 1) &&
 		    !reclaimable_anon_is_low(memcg, nid, sc))
 			return true;
 	}
@@ -1603,7 +1606,8 @@ activate_locked_split:
 activate_locked:
 		/* Not a candidate for swapping, so reclaim swap space. */
 		if (folio_test_swapcache(folio) &&
-		    (mem_cgroup_swap_full(folio) || folio_test_mlocked(folio)))
+		    ((mem_cgroup_swap_full(folio) && !is_vswap_entry(folio->swap)) ||
+		     folio_test_mlocked(folio)))
 			folio_free_swap(folio);
 		VM_BUG_ON_FOLIO(folio_test_active(folio), folio);
 		if (!folio_test_mlocked(folio)) {
@@ -2760,7 +2764,7 @@ static bool can_age_anon_pages(struct lruvec *lruvec,
 			       struct scan_control *sc)
 {
 	/* Aging the anon LRU is valuable if swap is present: */
-	if (total_swap_pages > 0)
+	if (total_swap_pages > 0 || (vswap_is_enabled() && zswap_is_enabled()))
 		return true;
 
 	/* Also valuable if anon pages can be demoted: */
@@ -2853,7 +2857,7 @@ static int get_swappiness(struct lruvec *lruvec, struct scan_control *sc)
 		return 0;
 
 	if (!can_demote(pgdat->node_id, sc, memcg) &&
-	    mem_cgroup_get_nr_swap_pages(memcg) < MIN_LRU_BATCH)
+	    !mem_cgroup_can_swap(memcg, MIN_LRU_BATCH))
 		return 0;
 
 	return swappiness;

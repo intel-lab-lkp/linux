@@ -367,6 +367,8 @@ extern void __meminit kswapd_stop(int nid);
 bool current_is_kswapd(void);
 
 #ifdef CONFIG_SWAP
+bool mem_cgroup_can_vswap(struct mem_cgroup *memcg);
+
 int add_swap_extent(struct swap_info_struct *sis, unsigned long start_page,
 		unsigned long nr_pages, sector_t start_block);
 int generic_swapfile_activate(struct swap_info_struct *, struct file *,
@@ -440,6 +442,11 @@ static inline void put_swap_device(struct swap_info_struct *si)
 }
 
 #else /* CONFIG_SWAP */
+static inline bool mem_cgroup_can_vswap(struct mem_cgroup *memcg)
+{
+	return false;
+}
+
 static inline struct swap_info_struct *get_swap_device(swp_entry_t entry)
 {
 	return NULL;
@@ -538,6 +545,7 @@ static inline void mem_cgroup_uncharge_swap(unsigned short id, unsigned int nr_p
 
 long mem_cgroup_get_folio_swap_margin(struct folio *folio);
 extern long mem_cgroup_get_nr_swap_pages(struct mem_cgroup *memcg);
+bool mem_cgroup_can_swap(struct mem_cgroup *memcg, long nr_pages);
 extern bool mem_cgroup_swap_full(struct folio *folio);
 #else
 static inline int mem_cgroup_try_charge_swap(struct folio *folio)
@@ -558,6 +566,11 @@ static inline long mem_cgroup_get_folio_swap_margin(struct folio *folio)
 static inline long mem_cgroup_get_nr_swap_pages(struct mem_cgroup *memcg)
 {
 	return get_nr_swap_pages();
+}
+
+static inline bool mem_cgroup_can_swap(struct mem_cgroup *memcg, long nr_pages)
+{
+	return mem_cgroup_can_vswap(memcg) || get_nr_swap_pages() >= nr_pages;
 }
 
 static inline bool mem_cgroup_swap_full(struct folio *folio)
