@@ -67,6 +67,9 @@ __sum16 nf_ip6_checksum(struct sk_buff *skb, unsigned int hook,
 	const struct ipv6hdr *ip6h = ipv6_hdr(skb);
 	__sum16 csum = 0;
 
+	if (unlikely(dataoff > skb->len))
+		return CSUM_MANGLED_0;
+
 	switch (skb->ip_summed) {
 	case CHECKSUM_COMPLETE:
 		if (hook != NF_INET_PRE_ROUTING && hook != NF_INET_LOCAL_IN)
@@ -144,6 +147,9 @@ __sum16 nf_checksum_partial(struct sk_buff *skb, unsigned int hook,
 			    u8 protocol, unsigned short family)
 {
 	__sum16 csum = 0;
+
+	if (unlikely(dataoff > skb->len || len > skb->len - dataoff))
+		return CSUM_MANGLED_0;
 
 	switch (family) {
 	case AF_INET:
