@@ -1665,10 +1665,7 @@ int drbd_nl_chg_disk_opts_doit(struct sk_buff *skb, struct genl_info *info)
 	else
 		device->ldev->md.flags |= MDF_AL_DISABLED;
 
-	if (new_disk_conf->md_flushes)
-		clear_bit(MD_NO_FUA, &device->flags);
-	else
-		set_bit(MD_NO_FUA, &device->flags);
+	assign_bit(MD_NO_FUA, &device->flags, !new_disk_conf->md_flushes);
 
 	if (write_ordering_changed(old_disk_conf, new_disk_conf))
 		drbd_bump_write_ordering(device->resource, NULL, WO_BDEV_FLUSH);
@@ -2031,10 +2028,7 @@ int drbd_nl_attach_doit(struct sk_buff *skb, struct genl_info *info)
 
 	/* Reset the "barriers don't work" bits here, then force meta data to
 	 * be written, to ensure we determine if barriers are supported. */
-	if (new_disk_conf->md_flushes)
-		clear_bit(MD_NO_FUA, &device->flags);
-	else
-		set_bit(MD_NO_FUA, &device->flags);
+	assign_bit(MD_NO_FUA, &device->flags, !new_disk_conf->md_flushes);
 
 	/* Point of no return reached.
 	 * Devices and memory are no longer released by error cleanup below.
@@ -2053,10 +2047,8 @@ int drbd_nl_attach_doit(struct sk_buff *skb, struct genl_info *info)
 	drbd_bump_write_ordering(device->resource, device->ldev, WO_BDEV_FLUSH);
 	unlock_all_resources();
 
-	if (drbd_md_test_flag(device->ldev, MDF_CRASHED_PRIMARY))
-		set_bit(CRASHED_PRIMARY, &device->flags);
-	else
-		clear_bit(CRASHED_PRIMARY, &device->flags);
+	assign_bit(CRASHED_PRIMARY, &device->flags,
+		   drbd_md_test_flag(device->ldev, MDF_CRASHED_PRIMARY));
 
 	if (drbd_md_test_flag(device->ldev, MDF_PRIMARY_IND) &&
 	    !(device->state.role == R_PRIMARY && device->resource->susp_nod))

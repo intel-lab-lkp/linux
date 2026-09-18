@@ -1166,10 +1166,8 @@ static int mtip_get_identify(struct mtip_port *port, void __user *user_buffer)
 #endif
 
 	/* Check security locked state */
-	if (port->identify[128] & 0x4)
-		set_bit(MTIP_DDF_SEC_LOCK_BIT, &port->dd->dd_flag);
-	else
-		clear_bit(MTIP_DDF_SEC_LOCK_BIT, &port->dd->dd_flag);
+	assign_bit(MTIP_DDF_SEC_LOCK_BIT, &port->dd->dd_flag,
+		   port->identify[128] & 0x4);
 
 	/* Set the identify buffer as valid. */
 	port->identify_valid = 1;

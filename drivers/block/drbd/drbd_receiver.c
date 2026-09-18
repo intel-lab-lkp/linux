@@ -920,10 +920,7 @@ randomize:
 		kref_get(&device->kref);
 		rcu_read_unlock();
 
-		if (discard_my_data)
-			set_bit(DISCARD_MY_DATA, &device->flags);
-		else
-			clear_bit(DISCARD_MY_DATA, &device->flags);
+		assign_bit(DISCARD_MY_DATA, &device->flags, discard_my_data);
 
 		drbd_connected(peer_device);
 		kref_put(&device->kref, drbd_destroy_device);

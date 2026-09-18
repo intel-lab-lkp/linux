@@ -1580,12 +1580,8 @@ static void check_wp(int fdc, int drive)
 			  "checking whether disk is write protected\n");
 		debug_dcl(drive_params[drive].flags, "wp=%x\n",
 			  reply_buffer[ST3] & 0x40);
-		if (!(reply_buffer[ST3] & 0x40))
-			set_bit(FD_DISK_WRITABLE_BIT,
-				&drive_state[drive].flags);
-		else
-			clear_bit(FD_DISK_WRITABLE_BIT,
-				  &drive_state[drive].flags);
+		assign_bit(FD_DISK_WRITABLE_BIT, &drive_state[drive].flags,
+			   !(reply_buffer[ST3] & 0x40));
 	}
 }
 
