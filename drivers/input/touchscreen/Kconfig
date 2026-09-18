@@ -360,6 +360,18 @@ config TOUCHSCREEN_EGALAX_SERIAL
 	  To compile this driver as a module, choose M here: the
 	  module will be called egalax_ts_serial.
 
+config TOUCHSCREEN_ESWIN_EPH8621
+	tristate "ESWIN EPH8621 touchscreen"
+	depends on SPI_MASTER
+	help
+	  Say Y here if you have a ESWIN EPH8621 connected to
+	  your system via SPI.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called eswin_eph8621.
+
 config TOUCHSCREEN_EXC3000
 	tristate "EETI EXC3000 multi-touch panel support"
 	depends on I2C
