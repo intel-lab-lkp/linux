@@ -107,9 +107,13 @@
 
 /* Host settings-state word carried by the BF_REG_KEEPALIVE_SETTINGS
  * keepalive (PROTOCOL.md "keepalive 0x10 0x05CF wVal = host settings-
- * state register", hardware-verified 2026-08-22/23).  Only the
- * Internal value is used until the clock-source control lands with a
- * later patch in this series.
+ * state register", hardware-verified 2026-08-22/23): clock source is
+ * NOT a register write at all, only this flag word changes.  Bit 2 =
+ * clock Optical (bit clear = Internal, the default); bits 6/10 (EQ for
+ * Record / Optical-Out SPDIF) are next in the driver's own upstream
+ * follow-up list, not wired to a control yet - the composer below only
+ * OR's in the clock bit today, structured so those can be added the
+ * same way later without another flag-stomping rewrite.
  */
 #define BF_SETTINGS_CLOCK_INTERNAL	0x0001
 #define BF_SETTINGS_CLOCK_OPTICAL	0x0004
@@ -168,6 +172,15 @@
  */
 #define BF_REG_LOWMAP_BASE_L		0x0000	/* + idx_l */
 #define BF_REG_LOWMAP_BASE_R		0x001a	/* + idx_r */
+
+#define BF_REQ_LOOPBACK			0x15	/* per-output-channel flag */
+
+/* Loopback map width (captured 2026-08-25, cap_loopback2.pcap):
+ * TotalMix writes the FULL 30-channel 0x15 map on every toggle (ON =
+ * the pair at 0x0001 + the other 28 at 0x0000; OFF = all 0x0000).
+ * wIdx = 2xout_index: AN1/2 = 0/1, PH3/4 = 2/3, AS1/2 = 4/5, ...
+ */
+#define BF_LOOPBACK_CHANNELS		30
 
 /* The "cross" register block within each output: the L-registers sit at
  * odd offsets 5..23 and the R-registers at even offsets 4..22 (the stereo
@@ -286,6 +299,16 @@ struct snd_usb_babyface {
 					 * (0 = +4dBu, the default)
 					 */
 	struct snd_kcontrol *trim_kctl[4]; /* for snd_ctl_notify */
+	bool loopback[6];
+	bool an12;			/* AN 1>2 copy */
+	bool linked;			/* AN1/2 input link */
+	bool ms_proc;			/* MS processor engaged */
+	bool clock_optical;		/* clock source: false = Internal (default) */
+	int width;			/* width knob -100..+100 */
+	u16 fx_send;			/* FX send level 0..0x1000 */
+	u16 dim_saved[2];		/* pre-DIM Phones master (out 1 L/R) */
+	bool dim;			/* DIM engaged (fixed -20 dB on Phones) */
+	struct snd_kcontrol *dim_kctl;      /* for snd_ctl_notify */
 };
 
 /* The mixer state cached across interface re-probes/resume (see
@@ -306,6 +329,15 @@ struct bf_saved {
 	int trim[4];
 	bool split[6];
 	int ref_level;
+	int pitch;
+	bool loopback[6];
+	bool an12;
+	bool linked;
+	bool ms_proc;
+	bool clock_optical;
+	int width;
+	u16 fx_send;
+	bool dim;
 };
 
 struct bf_rate {
@@ -337,6 +369,7 @@ void bf_state_save(struct snd_usb_babyface *chip);
 int bf_state_restore(struct snd_usb_babyface *chip);
 void bf_state_purge(void);
 int babyface_restore_state(struct snd_usb_babyface *chip);
+int bf_state_apply_flags(struct snd_usb_babyface *chip);
 
 /* -- babyfacepro-ctl.c ----------------------- */
 extern const u16 bf_flag_cycle[4];
@@ -358,6 +391,9 @@ int bf_trim_apply(struct snd_usb_babyface *chip, int mic, int trim_db2);
 int bf_gain_max_db(int mic);
 int bf_gain_db(int mic, u8 raw);
 u8 bf_gain_raw(int mic, int db);
+int bf_loopback_write_map(struct snd_usb_babyface *chip, int out, bool on);
+void bf_panel_toggle_dim(struct snd_usb_babyface *chip);
+int babyface_create_flags(struct snd_usb_babyface *chip);
 
 /* Master gain-law helpers - shared with the front-panel wheels once
  * the front panel lands.
