@@ -4778,6 +4778,7 @@ static void pmcraid_remove(struct pci_dev *pdev)
 	iounmap(pinstance->mapped_dma_addr);
 	pci_release_regions(pdev);
 	scsi_host_put(pinstance->host);
+	atomic_dec(&pmcraid_adapter_count);
 	pci_disable_device(pdev);
 
 	return;
