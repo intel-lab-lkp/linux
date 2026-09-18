@@ -323,6 +323,14 @@ static int tegra_pwm_probe(struct platform_device *pdev)
 	int ret;
 
 	soc = of_device_get_match_data(dev);
+	if (!soc) {
+		/*
+		 * This can only happen if pdev was matched via pdev->name
+		 * (which should not happen today) or in combination with a
+		 * driver override.
+		 */
+		return dev_err_probe(dev, -ENODEV, "Unsupported device\n");
+	}
 
 	chip = devm_pwmchip_alloc(dev, soc->num_channels, sizeof(*pc));
 	if (IS_ERR(chip))
