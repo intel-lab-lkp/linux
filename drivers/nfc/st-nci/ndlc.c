@@ -39,7 +39,7 @@
 #define NDLC_DUMP_SKB(info, skb)                                 \
 do {                                                             \
 	pr_debug("%s:\n", info);                                 \
-	print_hex_dump(KERN_DEBUG, "ndlc: ", DUMP_PREFIX_OFFSET, \
+	print_hex_dump_debug("ndlc: ", DUMP_PREFIX_OFFSET,       \
 			16, 1, skb->data, skb->len, 0);          \
 } while (0)
 
