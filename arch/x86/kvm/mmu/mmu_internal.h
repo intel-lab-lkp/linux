@@ -291,6 +291,25 @@ struct kvm_page_fault {
 };
 
 /*
+ * Returns true if the access indicated by @fault is forbidden by the existing
+ * SPTE protections.
+ */
+static inline bool __permission_fault(struct kvm_mmu *mmu, unsigned access,
+				      struct kvm_page_fault *fault)
+{
+	unsigned pfec;
+
+	/*
+	 * RSVD is handled elsewhere, and is used for SMAP in the context
+	 * of accessing fmt.permissions[].  SPTEs never use PK or SS, as
+	 * they are not supported for shadow paging and irrelevant for TDP.
+	 */
+	pfec = fault->error_code & (
+		PFERR_WRITE_MASK | PFERR_USER_MASK | PFERR_FETCH_MASK);
+	return (mmu->fmt.permissions[pfec >> 1] >> access) & 1;
+}
+
+/*
  * Return values of handle_mmio_page_fault(), mmu.page_fault(), fast_page_fault(),
  * and of course kvm_mmu_do_page_fault().
  *

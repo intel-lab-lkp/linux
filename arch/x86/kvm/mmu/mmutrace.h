@@ -8,6 +8,13 @@
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM kvmmmu
 
+#ifdef CREATE_TRACE_POINTS
+#define tracing_kvm_rip_read(vcpu) ({					\
+	typeof(vcpu) __vcpu = vcpu;					\
+	__vcpu->arch.guest_state_protected ? 0 : kvm_rip_read(__vcpu);	\
+	})
+#endif
+
 #define KVM_MMU_PAGE_FIELDS		\
 	__field(__u8, mmu_valid_gen)	\
 	__field(__u64, gfn)		\
@@ -445,6 +452,35 @@ TRACE_EVENT(
 
 	TP_printk("gfn %llx spte %llx level %d errno %d",
 		  __entry->gfn, __entry->spte, __entry->level, __entry->errno)
+);
+
+TRACE_EVENT(kvm_faultin_memory_protections,
+	TP_PROTO(struct kvm_vcpu *vcpu, struct kvm_page_fault *fault,
+		 unsigned access),
+	TP_ARGS(vcpu, fault, access),
+
+	TP_STRUCT__entry(
+		__field(unsigned int, vcpu_id)
+		__field(unsigned long, guest_rip)
+		__field(u64, fault_address)
+		__field(bool, write)
+		__field(bool, exec)
+		__field(unsigned, access)
+	),
+
+	TP_fast_assign(
+		__entry->vcpu_id = vcpu->vcpu_id;
+		__entry->guest_rip = tracing_kvm_rip_read(vcpu);
+		__entry->fault_address = fault->gfn;
+		__entry->write = fault->write;
+		__entry->exec = fault->exec;
+		__entry->access = access;
+	),
+
+	TP_printk("vcpu %d rip 0x%lx gfn 0x%016llx access %s protections 0x%x",
+		  __entry->vcpu_id, __entry->guest_rip, __entry->fault_address,
+		  __entry->exec ? "X" : (__entry->write ? "W" : "R"),
+		  __entry->access)
 );
 
 #endif /* _TRACE_KVMMMU_H */
