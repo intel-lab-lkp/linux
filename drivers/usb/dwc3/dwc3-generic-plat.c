@@ -22,12 +22,15 @@
 #define EIC7700_HSP_AXI_LP_XM_CSYSREQ	BIT(0)
 #define EIC7700_HSP_AXI_LP_XS_CSYSREQ	BIT(16)
 
+#define JHB100_ADAPTER_PORT_EN		BIT(20)
+
 struct dwc3_generic {
 	struct device		*dev;
 	struct dwc3		dwc;
 	struct clk_bulk_data	*clks;
 	int			num_clocks;
 	struct reset_control	*resets;
+	void __iomem		*phy_regs; /* PHY or PHY adapter regs */
 };
 
 struct dwc3_generic_config {
@@ -40,6 +43,43 @@ struct dwc3_generic_config {
 static void dwc3_generic_reset_control_assert(void *data)
 {
 	reset_control_assert(data);
+}
+
+static void dwc3_jhb100_pre_run_stop(struct dwc3 *dwc3, bool start)
+{
+	struct dwc3_generic *data = to_dwc3_generic(dwc3);
+	u32	val;
+
+	if (start) {
+		val = readl(data->phy_regs);
+		val |= JHB100_ADAPTER_PORT_EN;
+		writel(val, data->phy_regs);
+	} else {
+		val = readl(data->phy_regs);
+		val &= ~JHB100_ADAPTER_PORT_EN;
+		writel(val, data->phy_regs);
+	}
+}
+
+struct dwc3_glue_ops jhb100_glue_ops = {
+	.pre_run_stop = dwc3_jhb100_pre_run_stop,
+};
+
+static int dwc3_jhb100_init(struct dwc3_generic *dwc3g)
+{
+	struct platform_device *pdev = to_platform_device(dwc3g->dev);
+
+	dwc3g->phy_regs = devm_platform_ioremap_resource_byname(pdev, "adapter");
+	if (IS_ERR(dwc3g->phy_regs)) {
+		dwc3g->phy_regs = NULL;
+		/* Generic bmc USB with PHY*/
+		return 0;
+	}
+
+	/* usb device controller with adapter */
+	dwc3g->dwc.glue_ops = &jhb100_glue_ops;
+
+	return 0;
 }
 
 static int dwc3_eic7700_init(struct dwc3_generic *dwc3g)
@@ -231,12 +271,17 @@ static const struct dwc3_generic_config eic7700_dwc3 =  {
 	.properties = DWC3_DEFAULT_PROPERTIES,
 };
 
+static const struct dwc3_generic_config jhb100_dwc3 =  {
+	.init = dwc3_jhb100_init,
+	.properties = DWC3_DEFAULT_PROPERTIES,
+};
+
 static const struct of_device_id dwc3_generic_of_match[] = {
 	{ .compatible = "spacemit,k1-dwc3", &spacemit_k1_dwc3},
 	{ .compatible = "spacemit,k3-dwc3", },
 	{ .compatible = "fsl,ls1028a-dwc3", &fsl_ls1028_dwc3},
 	{ .compatible = "eswin,eic7700-dwc3", &eic7700_dwc3},
-	{ .compatible = "starfive,jhb100-dwc3", },
+	{ .compatible = "starfive,jhb100-dwc3", &jhb100_dwc3},
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, dwc3_generic_of_match);
