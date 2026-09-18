@@ -178,23 +178,18 @@ static int rcar_gen4_pcie_common_init(struct rcar_gen4_pcie *rcar)
 	u32 val;
 	int ret;
 
-	ret = clk_bulk_prepare_enable(DW_PCIE_NUM_CORE_CLKS, dw->core_clks);
-	if (ret) {
-		dev_err(dw->dev, "Enabling core clocks failed\n");
+	ret = reset_control_assert(dw->core_rsts[DW_PCIE_PWR_RST].rstc);
+	if (ret)
 		return ret;
-	}
 
-	if (!reset_control_status(dw->core_rsts[DW_PCIE_PWR_RST].rstc)) {
-		reset_control_assert(dw->core_rsts[DW_PCIE_PWR_RST].rstc);
-		/*
-		 * R-Car V4H Reference Manual R19UH0186EJ0130 Rev.1.30 Apr.
-		 * 21, 2025 page 585 Figure 9.3.2 Software Reset flow (B)
-		 * indicates that for peripherals in HSC domain, after
-		 * reset has been asserted by writing a matching reset bit
-		 * into register SRCR, it is mandatory to wait 1ms.
-		 */
-		fsleep(1000);
-	}
+	/*
+	 * R-Car V4H Reference Manual R19UH0186EJ0130 Rev.1.30 Apr.
+	 * 21, 2025 page 585 Figure 9.3.2 Software Reset flow (B)
+	 * indicates that for peripherals in HSC domain, after
+	 * reset has been asserted by writing a matching reset bit
+	 * into register SRCR, it is mandatory to wait 1ms.
+	 */
+	fsleep(1000);
 
 	val = readl(rcar->base + PCIEMSR0);
 	if (rcar->drvdata->mode == DW_PCIE_RC_TYPE) {
@@ -202,8 +197,7 @@ static int rcar_gen4_pcie_common_init(struct rcar_gen4_pcie *rcar)
 	} else if (rcar->drvdata->mode == DW_PCIE_EP_TYPE) {
 		val |= DEVICE_TYPE_EP;
 	} else {
-		ret = -EINVAL;
-		goto err_unprepare;
+		return -EINVAL;
 	}
 
 	if (dw->num_lanes < 4)
@@ -213,7 +207,7 @@ static int rcar_gen4_pcie_common_init(struct rcar_gen4_pcie *rcar)
 
 	ret = reset_control_deassert(dw->core_rsts[DW_PCIE_PWR_RST].rstc);
 	if (ret)
-		goto err_unprepare;
+		return ret;
 
 	/*
 	 * Assure the reset is latched and the core is ready for DBI access.
@@ -225,18 +219,16 @@ static int rcar_gen4_pcie_common_init(struct rcar_gen4_pcie *rcar)
 	 * synchronous one, and wait a little over 1ms to add additional
 	 * safety margin.
 	 */
-	reset_control_status(dw->core_rsts[DW_PCIE_PWR_RST].rstc);
+	ret = reset_control_status(dw->core_rsts[DW_PCIE_PWR_RST].rstc);
+	if (ret < 0)
+		return ret;
+
 	fsleep(1000);
 
 	if (rcar->drvdata->additional_common_init)
 		rcar->drvdata->additional_common_init(rcar);
 
 	return 0;
-
-err_unprepare:
-	clk_bulk_disable_unprepare(DW_PCIE_NUM_CORE_CLKS, dw->core_clks);
-
-	return ret;
 }
 
 static void rcar_gen4_pcie_common_deinit(struct rcar_gen4_pcie *rcar)
@@ -245,6 +237,18 @@ static void rcar_gen4_pcie_common_deinit(struct rcar_gen4_pcie *rcar)
 
 	reset_control_assert(dw->core_rsts[DW_PCIE_PWR_RST].rstc);
 	clk_bulk_disable_unprepare(DW_PCIE_NUM_CORE_CLKS, dw->core_clks);
+}
+
+static int rcar_gen4_pcie_clk_enable(struct rcar_gen4_pcie *rcar)
+{
+	struct dw_pcie *dw = &rcar->dw;
+	int ret;
+
+	ret = clk_bulk_prepare_enable(DW_PCIE_NUM_CORE_CLKS, dw->core_clks);
+	if (ret)
+		dev_err(dw->dev, "Enabling core clocks failed\n");
+
+	return ret;
 }
 
 static int rcar_gen4_pcie_prepare(struct rcar_gen4_pcie *rcar)
@@ -449,14 +453,11 @@ static int rcar_gen4_pcie_enable_device(struct pci_host_bridge *bridge,
 }
 
 /* Host mode */
-static int rcar_gen4_pcie_host_init(struct dw_pcie_rp *pp)
+static int rcar_gen4_pcie_host_hw_init(struct dw_pcie_rp *pp)
 {
 	struct dw_pcie *dw = to_dw_pcie_from_pp(pp);
 	struct rcar_gen4_pcie *rcar = to_rcar_gen4_pcie(dw);
 	int ret;
-
-	if (pp->bridge)
-		pp->bridge->enable_device = rcar_gen4_pcie_enable_device;
 
 	gpiod_set_value_cansleep(dw->pe_rst, 1);
 
@@ -475,11 +476,30 @@ static int rcar_gen4_pcie_host_init(struct dw_pcie_rp *pp)
 
 	ret = rcar_gen4_pcie_host_msi_init(pp);
 	if (ret)
-		goto err;
+		return ret;
 
 	msleep(PCIE_T_PVPERL_MS);	/* pe_rst requires 100msec delay */
-
 	gpiod_set_value_cansleep(dw->pe_rst, 0);
+
+	return 0;
+}
+
+static int rcar_gen4_pcie_host_init(struct dw_pcie_rp *pp)
+{
+	struct dw_pcie *dw = to_dw_pcie_from_pp(pp);
+	struct rcar_gen4_pcie *rcar = to_rcar_gen4_pcie(dw);
+	int ret;
+
+	if (pp->bridge)
+		pp->bridge->enable_device = rcar_gen4_pcie_enable_device;
+
+	ret = rcar_gen4_pcie_clk_enable(rcar);
+	if (ret)
+		return ret;
+
+	ret = rcar_gen4_pcie_host_hw_init(pp);
+	if (ret)
+		goto err;
 
 	return 0;
 
@@ -529,9 +549,15 @@ static int rcar_gen4_pcie_ep_pre_init(struct dw_pcie_ep *ep)
 
 	writel(0, rcar->base + PCIEDMAINTSTSEN);
 
-	ret = rcar_gen4_pcie_common_init(rcar);
+	ret = rcar_gen4_pcie_clk_enable(rcar);
 	if (ret)
 		return ret;
+
+	ret = rcar_gen4_pcie_common_init(rcar);
+	if (ret) {
+		rcar_gen4_pcie_common_deinit(rcar);
+		return ret;
+	}
 
 	writel(PCIEDMAINTSTSEN_INIT, rcar->base + PCIEDMAINTSTSEN);
 
