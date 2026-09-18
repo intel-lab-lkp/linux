@@ -316,14 +316,15 @@ static const struct pwm_ops tegra_pwm_ops = {
 
 static int tegra_pwm_probe(struct platform_device *pdev)
 {
+	struct device *dev = &pdev->dev;
 	struct pwm_chip *chip;
 	struct tegra_pwm_chip *pc;
 	const struct tegra_pwm_soc *soc;
 	int ret;
 
-	soc = of_device_get_match_data(&pdev->dev);
+	soc = of_device_get_match_data(dev);
 
-	chip = devm_pwmchip_alloc(&pdev->dev, soc->num_channels, sizeof(*pc));
+	chip = devm_pwmchip_alloc(dev, soc->num_channels, sizeof(*pc));
 	if (IS_ERR(chip))
 		return PTR_ERR(chip);
 	pc = to_tegra_pwm_chip(chip);
@@ -331,28 +332,39 @@ static int tegra_pwm_probe(struct platform_device *pdev)
 	pc->soc = soc;
 
 	pc->regs = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(pc->regs))
+	if (IS_ERR(pc->regs)) {
+		/*
+		 * devm_platform_ioremap_resource() already emits an error
+		 * message with CONFIG_HAS_IOMEM, so don't emit another message
+		 * here.
+		 */
 		return PTR_ERR(pc->regs);
+	}
 
 	platform_set_drvdata(pdev, chip);
 
-	pc->clk = devm_clk_get(&pdev->dev, NULL);
+	pc->clk = devm_clk_get(dev, NULL);
 	if (IS_ERR(pc->clk))
-		return PTR_ERR(pc->clk);
+		return dev_err_probe(dev, PTR_ERR(pc->clk), "Failed to get clock\n");
 
-	ret = devm_tegra_core_dev_init_opp_table_common(&pdev->dev);
-	if (ret)
+	ret = devm_tegra_core_dev_init_opp_table_common(dev);
+	if (ret) {
+		/*
+		 * devm_tegra_core_dev_init_opp_table_common() emits an error
+		 * message most of the time, so don't add another.
+		 */
 		return ret;
+	}
 
-	pm_runtime_enable(&pdev->dev);
-	ret = pm_runtime_resume_and_get(&pdev->dev);
+	pm_runtime_enable(dev);
+	ret = pm_runtime_resume_and_get(dev);
 	if (ret)
-		return ret;
+		return dev_err_probe(dev, ret, "Failed to runtime resume device\n");
 
 	/* Set maximum frequency of the IP */
-	ret = dev_pm_opp_set_rate(&pdev->dev, ULONG_MAX);
+	ret = dev_pm_opp_set_rate(dev, ULONG_MAX);
 	if (ret < 0) {
-		dev_err(&pdev->dev, "Failed to set max frequency: %d\n", ret);
+		dev_err_probe(dev, ret, "Failed to set max frequency\n");
 		goto put_pm;
 	}
 
@@ -363,8 +375,7 @@ static int tegra_pwm_probe(struct platform_device *pdev)
 	 */
 	pc->clk_rate = clk_get_rate(pc->clk);
 	if (pc->clk_rate < TEGRA_PWM_DEPTH) {
-		dev_err(&pdev->dev, "clock maximum frequency out of range\n");
-		ret = -ERANGE;
+		ret = dev_err_probe(dev, -ERANGE, "Clock maximum frequency out of range\n");
 		goto put_pm;
 	}
 
@@ -372,10 +383,9 @@ static int tegra_pwm_probe(struct platform_device *pdev)
 	pc->min_period_ns =
 	    (NSEC_PER_SEC / (pc->clk_rate / TEGRA_PWM_DEPTH)) + 1;
 
-	pc->rst = devm_reset_control_get_exclusive(&pdev->dev, "pwm");
+	pc->rst = devm_reset_control_get_exclusive(dev, "pwm");
 	if (IS_ERR(pc->rst)) {
-		ret = PTR_ERR(pc->rst);
-		dev_err(&pdev->dev, "Reset control is not found: %d\n", ret);
+		ret = dev_err_probe(dev, PTR_ERR(pc->rst), "Failed to get reset control\n");
 		goto put_pm;
 	}
 
@@ -385,17 +395,17 @@ static int tegra_pwm_probe(struct platform_device *pdev)
 
 	ret = pwmchip_add(chip);
 	if (ret < 0) {
-		dev_err(&pdev->dev, "pwmchip_add() failed: %d\n", ret);
+		dev_err_probe(dev, ret, "Adding pwmchip failed\n");
 		reset_control_assert(pc->rst);
 		goto put_pm;
 	}
 
-	pm_runtime_put(&pdev->dev);
+	pm_runtime_put(dev);
 
 	return 0;
 put_pm:
-	pm_runtime_put_sync_suspend(&pdev->dev);
-	pm_runtime_force_suspend(&pdev->dev);
+	pm_runtime_put_sync_suspend(dev);
+	pm_runtime_force_suspend(dev);
 	return ret;
 }
 
