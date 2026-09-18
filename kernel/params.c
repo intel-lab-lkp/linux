@@ -20,6 +20,11 @@
 /* Protects all built-in parameters, modules use their own param_lock */
 static DEFINE_MUTEX(param_lock);
 
+/* Serializes module kobject lookup and creation in
+ * lookup_or_create_module_kobject()
+ */
+static DEFINE_MUTEX(mod_kobject_mutex);
+
 /* Use the module's mutex, or if built-in use the built-in mutex */
 #ifdef CONFIG_MODULES
 #define KPARAM_MUTEX(mod)	((mod) ? &(mod)->param_lock : &param_lock)
@@ -754,13 +759,24 @@ lookup_or_create_module_kobject(const char *name)
 	struct kobject *kobj;
 	int err;
 
+	/*
+	 * The lookup and the creation must be done atomically, otherwise
+	 * concurrent callers may race to create the same kobject, and the
+	 * loser of the race gets -EEXIST from kobject_init_and_add().
+	 */
+	mutex_lock(&mod_kobject_mutex);
+
 	kobj = kset_find_obj(module_kset, name);
-	if (kobj)
-		return to_module_kobject(kobj);
+	if (kobj) {
+		mk = to_module_kobject(kobj);
+		goto out;
+	}
 
 	mk = kzalloc_obj(struct module_kobject);
-	if (!mk)
-		return NULL;
+	if (!mk) {
+		mk = NULL;
+		goto out;
+	}
 
 	mk->mod = THIS_MODULE;
 	mk->kobj.kset = module_kset;
@@ -771,12 +787,15 @@ lookup_or_create_module_kobject(const char *name)
 		kobject_put(&mk->kobj);
 		pr_crit("Adding module '%s' to sysfs failed (%d), the system may be unstable.\n",
 			name, err);
-		return NULL;
+		mk = NULL;
+		goto out;
 	}
 
 	/* So that we hold reference in both cases. */
 	kobject_get(&mk->kobj);
 
+out:
+	mutex_unlock(&mod_kobject_mutex);
 	return mk;
 }
 
