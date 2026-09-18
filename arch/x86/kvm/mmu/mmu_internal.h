@@ -280,7 +280,7 @@ struct kvm_page_fault {
 	unsigned long mmu_seq;
 	kvm_pfn_t pfn;
 	struct page *refcounted_page;
-	bool map_writable;
+	u8 host_access;
 
 	/*
 	 * Indicates the guest is trying to write a gfn that contains one or
