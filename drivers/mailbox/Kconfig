@@ -36,6 +36,18 @@ config ARM_MHU_V3
 	  that provides different means of transports: supported extensions
 	  will be discovered and possibly managed at probe-time.
 
+config APPLE_DOCKCHANNEL
+	tristate "Apple DockChannel FIFO mailbox"
+	depends on ARCH_APPLE || COMPILE_TEST
+	depends on HAS_IOMEM
+	depends on OF
+	help
+	  DockChannel is a hardware FIFO used on Apple Silicon SoCs for
+	  communication between the application processor and co-processors.
+	  This driver exposes DockChannel FIFOs through the mailbox framework.
+
+	  Say Y here if you have an M2 or later Apple MacBook.
+
 config AST2700_MBOX
 	tristate "ASPEED AST2700 IPC driver"
 	depends on ARCH_ASPEED || COMPILE_TEST
