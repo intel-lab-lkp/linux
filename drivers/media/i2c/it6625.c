@@ -889,11 +889,19 @@ static int it6625_s_ctrl_audio_present(struct v4l2_subdev *sd)
 				audio_present(it6625));
 }
 
-static void it6625_v4l2_sd_ctrl_update(struct v4l2_subdev *sd)
+static int it6625_v4l2_sd_ctrl_update(struct v4l2_subdev *sd)
 {
-	it6625_s_ctrl_detect_hdmi_5v(sd);
-	it6625_s_ctrl_audio_sampling_rate(sd);
-	it6625_s_ctrl_audio_present(sd);
+	int ret;
+
+	ret = it6625_s_ctrl_detect_hdmi_5v(sd);
+	if (ret)
+		return ret;
+
+	ret = it6625_s_ctrl_audio_sampling_rate(sd);
+	if (ret)
+		return ret;
+
+	return it6625_s_ctrl_audio_present(sd);
 }
 
 static void it6625_enable_stream_locked(struct it6625 *it6625, bool enable)
@@ -1136,9 +1144,12 @@ static void it6625_clear_timings(struct it6625 *it6625)
 static void it6625_irq_hdmi_5v_change(struct it6625 *it6625)
 {
 	struct v4l2_subdev *sd = &it6625->sd;
+	int ret;
 
 	it6625_clear_timings(it6625);
-	it6625_v4l2_sd_ctrl_update(sd);
+	ret = it6625_v4l2_sd_ctrl_update(sd);
+	if (ret)
+		dev_err(it6625->dev, "%s: failed to update controls: %d", __func__, ret);
 }
 
 static void it6625_irq_hdcp_change(struct it6625 *it6625)
@@ -2297,7 +2308,9 @@ static int it6625_probe(struct i2c_client *client)
 	it6625_debugfs_init(it6625, client);
 
 	it6625_initial_setup(it6625);
-	it6625_v4l2_sd_ctrl_update(sd);
+	err = it6625_v4l2_sd_ctrl_update(sd);
+	if (err)
+		dev_err(it6625->dev, "%s: failed to update controls: %d", __func__, err);
 
 	err = v4l2_async_register_subdev(sd);
 	if (err < 0) {
