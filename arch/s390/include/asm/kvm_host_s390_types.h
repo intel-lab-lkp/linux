@@ -6,6 +6,7 @@
 #include <linux/atomic.h>
 #include <linux/types.h>
 
+#define KVM_S390_CPU_MASK 0xff
 #define KVM_S390_MAX_VSIE_VCPUS 256
 #define KVM_S390_MAX_SCA_PAGES 5
 
@@ -13,6 +14,7 @@
 #define KVM_S390_ESCA_CPU_SLOTS 248
 
 #define SCB_ALIGNMENT_SHIFT 9
+#define SCA_ALIGNMENT_SHIFT 6
 
 #define SIGP_CTRL_C		0x80
 #define SIGP_CTRL_SCN_MASK	0x3f
