@@ -89,7 +89,7 @@ bool rodata_full __ro_after_init = true;
 
 bool can_set_direct_map(void)
 {
-	return linear_map_needs_set();
+	return linear_map_needs_set() || system_supports_bbml3();
 }
 
 static int update_range_prot(unsigned long start, unsigned long size,

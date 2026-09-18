@@ -811,24 +811,30 @@ static bool linear_map_requires_bbml3;
 
 int split_kernel_leaf_mapping(unsigned long start, unsigned long end)
 {
+	bool force_pte;
 	int ret;
 
 	/*
 	 * If the region is within a pte-mapped area, there is no need to try to
-	 * split. Additionally, CONFIG_DEBUG_PAGEALLOC and CONFIG_KFENCE may
-	 * change permissions from atomic context so for those cases (which are
-	 * always pte-mapped), we must not go any further because taking the
-	 * mutex below may sleep. Do not call force_pte_mapping() here because
-	 * it could return a confusing result if called from a secondary cpu
-	 * prior to finalizing caps. Instead, linear_map_requires_bbml3 gives us
-	 * what we need.
+	 * split:
+	 *
+	 * Do not call force_pte_mapping() here because it could return a
+	 * confusing result if called from a secondary cpu prior to finalizing
+	 * caps. Instead, retrieve that value with linear_map_requires_bbml3.
+	 *
+	 * Additionally, CONFIG_KFENCE may change permissions from atomic
+	 * context so for this case (which is always pte-mapped), we must not go
+	 * any further because taking the mutex below may sleep.
+	 *
+	 * Finally, set_memory_* can be called on PTE-mapped vmalloc mappings.
 	 */
-	if (!linear_map_requires_bbml3 || is_kfence_address((void *)start))
+	force_pte = !linear_map_requires_bbml3 && linear_map_needs_set();
+	if (force_pte || is_kfence_address((void *)start) || !__is_lm_address(__tag_reset(start)))
 		return 0;
 
 	if (!system_supports_bbml3()) {
 		/*
-		 * BBML3 systems should not be trying to change
+		 * Non-BBML3 systems should not be trying to change
 		 * permissions on anything that is not pte-mapped in the first
 		 * place. Just return early and let the permission change code
 		 * raise a warning if not already pte-mapped.
