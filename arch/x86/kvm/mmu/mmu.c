@@ -8271,6 +8271,7 @@ bool kvm_arch_post_set_memory_attributes(struct kvm *kvm,
 {
 	unsigned long attrs = range->arg.attributes;
 	struct kvm_memory_slot *slot = range->slot;
+	struct kvm_mmu_page *sp;
 	int level;
 
 	lockdep_assert_held_write(&kvm->mmu_lock);
@@ -8326,7 +8327,36 @@ bool kvm_arch_post_set_memory_attributes(struct kvm *kvm,
 				hugepage_set_mixed(slot, gfn, level);
 		}
 	}
+
+	/*
+	 * There are special considerations when applying an memory protection
+	 * attibute against a page containing guest PTEs, because virtual
+	 * addresses that requires traversing that page need to fault.
+	 *
+	 * When using shadow paging, the PTEs that the CPU actually walks
+	 * do not have any information about attributes (unlike TDP where
+	 * the attributes become part of the TDP permission bits).  Since
+	 * this should be a rare occasion, just invalidate all the mmu roots
+	 * if shadow paging is in use and attributes do cover a guest PTE.
+	 */
+	for (gfn_t gfn = range->start; gfn < range->end; gfn++) {
+		for_each_gfn_valid_sp_with_gptes(kvm, sp, gfn) {
+			__kvm_mmu_zap_all_fast_front_half(kvm);
+			return false;
+		}
+	}
 	return false;
+}
+
+void kvm_arch_post_set_memory_attributes_unlocked(struct kvm *kvm)
+{
+	/*
+	 * This may also be called if no zap was done in
+	 * kvm_arch_post_set_memory_attributes().  It is not an issue because
+	 * __kvm_mmu_zap_all_fast_back_half() is cheap when it does not do
+	 * anything.
+	 */
+	 __kvm_mmu_zap_all_fast_back_half(kvm);
 }
 
 void kvm_mmu_init_memslot_memory_attributes(struct kvm *kvm,
