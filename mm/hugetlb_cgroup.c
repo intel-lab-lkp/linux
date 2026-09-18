@@ -108,8 +108,8 @@ static void hugetlb_cgroup_init(struct hugetlb_cgroup *h_cgroup,
 		fault = hugetlb_cgroup_counter_from_cgroup(h_cgroup, idx);
 		rsvd = hugetlb_cgroup_counter_from_cgroup_rsvd(h_cgroup, idx);
 
-		page_counter_init(fault, fault_parent, false);
-		page_counter_init(rsvd, rsvd_parent, false);
+		page_counter_init(fault, fault_parent);
+		page_counter_init(rsvd, rsvd_parent);
 
 		if (!cgroup_subsys_on_dfl(hugetlb_cgrp_subsys)) {
 			fault->track_failcnt = true;

@@ -16,7 +16,7 @@
 
 static bool track_protection(struct page_counter *c)
 {
-	return c->protection_support;
+	return c->prot != NULL;
 }
 
 static void propagate_protected_usage(struct page_counter *c,
