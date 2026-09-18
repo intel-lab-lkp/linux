@@ -216,6 +216,8 @@ static struct kvm_vcpu *save_restore_vm(struct kvm_vm *vm,
 
 	/* Restore state in a new VM.  */
 	vcpu = vm_recreate_with_one_vcpu(vm);
+	if (kvm_has_cap(KVM_CAP_HCALL_FAULT_EXIT))
+		vm_enable_cap(vm, KVM_CAP_HCALL_FAULT_EXIT, 1);
 	vcpu_set_hv_cpuid(vcpu);
 	vcpu_enable_evmcs(vcpu);
 	vcpu_load_state(vcpu, state);
@@ -246,6 +248,8 @@ int main(int argc, char *argv[])
 	TEST_REQUIRE(kvm_cpu_has_ept());
 
 	vm = vm_create_with_one_vcpu(&vcpu, guest_code);
+	if (kvm_has_cap(KVM_CAP_HCALL_FAULT_EXIT))
+		vm_enable_cap(vm, KVM_CAP_HCALL_FAULT_EXIT, 1);
 	vm_enable_ept(vm);
 
 	hcall_page = vm_alloc_pages(vm, 1);
