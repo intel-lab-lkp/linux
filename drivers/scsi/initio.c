@@ -2934,6 +2934,7 @@ static void initio_remove_one(struct pci_dev *pdev)
 	struct initio_host *s = (struct initio_host *)host->hostdata;
 	scsi_remove_host(host);
 	free_irq(pdev->irq, host);
+	kfree(s->scb);
 	release_region(s->addr, 256);
 	scsi_host_put(host);
 	pci_disable_device(pdev);
