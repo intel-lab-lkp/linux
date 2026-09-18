@@ -21,6 +21,7 @@
 #include <asm/cacheflush.h>
 #include <asm/cputype.h>
 #include <asm/daifflags.h>
+#include <asm/fixmap.h>
 #include <asm/irqflags.h>
 #include <asm/kexec.h>
 #include <asm/memory.h>
@@ -211,6 +212,17 @@ static int create_safe_exec_page(void *src_start, size_t length,
 	*phys_dst_addr = virt_to_phys(page);
 
 	return 0;
+}
+
+void *hibernate_map_page(struct page *page)
+{
+	set_fixmap(FIX_HIBERNATE, page_to_phys(page));
+	return (void *)__fix_to_virt(FIX_HIBERNATE);
+}
+
+void hibernate_unmap_page(struct page *page)
+{
+	clear_fixmap(FIX_HIBERNATE);
 }
 
 #ifdef CONFIG_ARM64_MTE
