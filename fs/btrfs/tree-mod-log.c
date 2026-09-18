@@ -498,8 +498,11 @@ out_unlock:
 
 free_tms:
 	if (tm_list) {
-		for (i = 0; i < nritems; i++)
+		for (i = 0; i < nritems; i++) {
+			if (tm_list[i] && !RB_EMPTY_NODE(&tm_list[i]->node))
+				rb_erase(&tm_list[i]->node, &fs_info->tree_mod_log);
 			kfree(tm_list[i]);
+		}
 		kfree(tm_list);
 	}
 	kfree(tm);
