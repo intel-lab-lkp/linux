@@ -6413,7 +6413,7 @@ static void print_binder_transaction_ilocked(struct seq_file *m,
 	spin_lock(&t->lock);
 	to_proc = t->to_proc;
 	seq_printf(m,
-		   "%s %d: %pK from %d:%d to %d:%d code %x flags %x pri %ld a%d r%d elapsed %lldms",
+		   "%s %d: %p from %d:%d to %d:%d code %x flags %x pri %ld a%d r%d elapsed %lldms",
 		   prefix, t->debug_id, t,
 		   t->from_pid,
 		   t->from_tid,
@@ -6578,7 +6578,7 @@ static void print_binder_ref_olocked(struct seq_file *m,
 				     struct binder_ref *ref)
 {
 	binder_node_lock(ref->node);
-	seq_printf(m, "  ref %d: desc %d %snode %d s %d w %d d %pK\n",
+	seq_printf(m, "  ref %d: desc %d %snode %d s %d w %d d %p\n",
 		   ref->data.debug_id, ref->data.desc,
 		   ref->node->proc ? "" : "dead ",
 		   ref->node->debug_id, ref->data.strong,
