@@ -3615,6 +3615,7 @@ void perf_get_x86_pmu_capability(struct x86_pmu_capability *cap)
 	cap->events_mask_len	= x86_pmu.events_mask_len;
 	cap->pebs_ept		= x86_pmu.pebs_ept;
 	cap->mediated		= !!(pmu.capabilities & PERF_PMU_CAP_MEDIATED_VPMU);
+	cap->num_topdown_events	= x86_pmu.num_topdown_events;
 }
 EXPORT_SYMBOL_FOR_KVM(perf_get_x86_pmu_capability);
 
