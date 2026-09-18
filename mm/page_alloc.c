@@ -6924,6 +6924,9 @@ out:
 	return ret;
 }
 
+/* Cap sysctl writes to the same bound calculate_min_free_kbytes() uses. */
+static const int max_user_min_free_kbytes = 262144;
+
 static const struct ctl_table page_alloc_sysctl_table[] = {
 	{
 		.procname	= "min_free_kbytes",
@@ -6932,6 +6935,7 @@ static const struct ctl_table page_alloc_sysctl_table[] = {
 		.mode		= 0644,
 		.proc_handler	= min_free_kbytes_sysctl_handler,
 		.extra1		= SYSCTL_ZERO,
+		.extra2		= (void *)&max_user_min_free_kbytes,
 	},
 	{
 		.procname	= "watermark_boost_factor",
