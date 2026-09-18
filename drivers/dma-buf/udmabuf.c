@@ -383,6 +383,14 @@ static long udmabuf_create(struct miscdevice *device,
 	if (!pgcnt)
 		goto err_noinit;
 
+	/*
+	 * init_udmabuf() allocates two arrays of pointers, one entry per
+	 * page, with kvmalloc(), which cannot handle sizes larger than
+	 * INT_MAX bytes.
+	 */
+	if (pgcnt > INT_MAX / sizeof(struct page *))
+		goto err_noinit;
+
 	ret = init_udmabuf(ubuf, pgcnt);
 	if (ret)
 		goto err;
