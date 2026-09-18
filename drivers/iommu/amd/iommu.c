@@ -2531,7 +2531,6 @@ static struct iommu_device *amd_iommu_probe_device(struct device *dev)
 		pr_warn_once("%s: DMA translation not supported by iommu.\n",
 			     __func__);
 		iommu_dev = ERR_PTR(-ENODEV);
-		goto out_err;
 	}
 
 	iommu_completion_wait(iommu);
