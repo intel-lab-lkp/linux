@@ -369,6 +369,15 @@ static void pnfs_recall_all_layouts(struct nfs_client *clp,
 	do_callback_layoutrecall(clp, &args, cps);
 }
 
+__be32 nfs4_callback_notify(void *argp, void *resp,
+			    struct cb_process_state *cps)
+{
+	struct cb_notifyargs *args = argp;
+
+	kfree(args->cna_changes);
+	return 0;
+}
+
 __be32 nfs4_callback_devicenotify(void *argp, void *resp,
 				  struct cb_process_state *cps)
 {
