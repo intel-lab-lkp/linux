@@ -365,6 +365,7 @@ static void mxc_rtc_remove(struct platform_device *pdev)
 {
 	struct mxc_rtc_data *pdata = platform_get_drvdata(pdev);
 
+	devm_free_irq(&pdev->dev, pdata->irq, &pdev->dev);
 	clk_disable_unprepare(pdata->clk);
 }
 
