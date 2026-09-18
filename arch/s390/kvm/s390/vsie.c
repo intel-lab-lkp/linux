@@ -147,6 +147,8 @@ static inline bool use_ssca(struct kvm *kvm, struct kvm_s390_sie_block *scb)
 {
 	if (!kvm->arch.use_ssca)
 		return false;
+	if (!test_kvm_cpu_feat(kvm, KVM_S390_VM_CPU_FEAT_SIGPIF))
+		return false;
 	if (!(scb->eca & ECA_SIGPI) && !(scb->ecb & ECB_SRSI))
 		return false;
 	if (!read_scao(kvm, scb))
