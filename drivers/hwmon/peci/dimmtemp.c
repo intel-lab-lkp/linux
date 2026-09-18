@@ -285,6 +285,32 @@ static int check_populated_dimms(struct peci_dimmtemp *priv)
 	return 0;
 }
 
+static int check_populated_dimms_stable(struct peci_dimmtemp *priv)
+{
+	DECLARE_BITMAP(dimm_mask, DIMM_NUMS_MAX);
+	int ret;
+
+	ret = check_populated_dimms(priv);
+	if (ret)
+		return ret;
+
+	bitmap_copy(dimm_mask, priv->dimm_mask, DIMM_NUMS_MAX);
+
+	ret = check_populated_dimms(priv);
+	if (ret)
+		return ret;
+
+	if (!bitmap_equal(dimm_mask, priv->dimm_mask, DIMM_NUMS_MAX)) {
+		dev_dbg(priv->dev,
+			"Deferred unstable DIMM mask: %*pbl -> %*pbl\n",
+			DIMM_NUMS_MAX, dimm_mask, DIMM_NUMS_MAX,
+			priv->dimm_mask);
+		return -EAGAIN;
+	}
+
+	return 0;
+}
+
 static int create_dimm_temp_label(struct peci_dimmtemp *priv, int chan)
 {
 	int rank = chan / priv->gen_info->dimm_idx_max;
@@ -322,7 +348,7 @@ static int create_dimm_temp_info(struct peci_dimmtemp *priv)
 	 * All other states mean that the platform never reached the state that
 	 * allows to check DIMM state - causing us to retry later on.
 	 */
-	ret = check_populated_dimms(priv);
+	ret = check_populated_dimms_stable(priv);
 	if (ret == -ENODEV) {
 		dev_dbg(priv->dev, "No DIMMs found\n");
 		return 0;
