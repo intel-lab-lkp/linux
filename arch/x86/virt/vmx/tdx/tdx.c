@@ -485,6 +485,20 @@ static __init int get_tdx_sys_info_tdmr_dpamt(struct tdx_sys_info_tdmr *tdmr)
 	return read_sys_metadata_table(dpamt_mappings, tdmr);
 }
 
+#define TDX_SYSINFO_MAP_TD_CTRL(_field_id, _member) \
+	TDX_SYSINFO_MAP(_field_id, struct tdx_sys_info_td_ctrl, _member)
+
+static const struct field_mapping td_ctrl_mappings[] __initconst = {
+	TDX_SYSINFO_MAP_TD_CTRL(TDR_BASE_SIZE,		tdr_base_size),
+	TDX_SYSINFO_MAP_TD_CTRL(TDCS_BASE_SIZE,		tdcs_base_size),
+	TDX_SYSINFO_MAP_TD_CTRL(TDVPS_BASE_SIZE,	tdvps_base_size),
+};
+
+static __init int get_tdx_sys_info_td_ctrl(struct tdx_sys_info_td_ctrl *td_ctrl)
+{
+	return read_sys_metadata_table(td_ctrl_mappings, td_ctrl);
+}
+
 #include "tdx_global_metadata.c"
 
 static __init int check_features(struct tdx_sys_info *sysinfo)
