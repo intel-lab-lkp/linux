@@ -1072,6 +1072,105 @@
 			resets = <&mdlc_vio 0x106>;
 		};
 
+		vspi0: vsp@c5080000 {
+			compatible = "renesas,vsp2";
+			reg = <0 0xc5080000 0 0x8000>;
+			interrupts = <GIC_SPI 643 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&cpg R8A78000_CPG_SGD4_VIO_DP_OTHER>;
+			power-domains = <&mdlc_vio 0x07 0xfe>;
+			resets = <&mdlc_vio 0xfe>;
+
+			renesas,fcp = <&fcpvi0>;
+		};
+
+		vspi1: vsp@c5088000 {
+			compatible = "renesas,vsp2";
+			reg = <0 0xc5088000 0 0x8000>;
+			interrupts = <GIC_SPI 644 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&cpg R8A78000_CPG_SGD4_VIO_DP_OTHER>;
+			power-domains = <&mdlc_vio 0x07 0xff>;
+			resets = <&mdlc_vio 0xff>;
+
+			renesas,fcp = <&fcpvi1>;
+		};
+
+		vspi2: vsp@c5090000 {
+			compatible = "renesas,vsp2";
+			reg = <0 0xc5090000 0 0x8000>;
+			interrupts = <GIC_SPI 645 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&cpg R8A78000_CPG_SGD4_VIO_DP_OTHER>;
+			power-domains = <&mdlc_vio 0x07 0x100>;
+			resets = <&mdlc_vio 0x100>;
+
+			renesas,fcp = <&fcpvi2>;
+		};
+
+		vspi3: vsp@c5098000 {
+			compatible = "renesas,vsp2";
+			reg = <0 0xc5098000 0 0x8000>;
+			interrupts = <GIC_SPI 646 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&cpg R8A78000_CPG_SGD4_VIO_DP_OTHER>;
+			power-domains = <&mdlc_vio 0x07 0x101>;
+			resets = <&mdlc_vio 0x101>;
+
+			renesas,fcp = <&fcpvi3>;
+		};
+
+		vspb0: vsp@c50c0000 {
+			compatible = "renesas,vsp2";
+			reg = <0 0xc50c0000 0 0x8000>;
+			interrupts = <GIC_SPI 618 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&cpg R8A78000_CPG_SGD4_VIO_DP_OTHER>;
+			power-domains = <&mdlc_vio 0x07 0xf9>;
+			resets = <&mdlc_vio 0xf9>;
+
+			renesas,fcp = <&fcpvb0>;
+		};
+
+		vspb1: vsp@c50c8000 {
+			compatible = "renesas,vsp2";
+			reg = <0 0xc50c8000 0 0x8000>;
+			interrupts = <GIC_SPI 619 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&cpg R8A78000_CPG_SGD4_VIO_DP_OTHER>;
+			power-domains = <&mdlc_vio 0x07 0xfa>;
+			resets = <&mdlc_vio 0xfa>;
+
+			renesas,fcp = <&fcpvb1>;
+		};
+
+		vspb2: vsp@c50d0000 {
+			compatible = "renesas,vsp2";
+			reg = <0 0xc50d0000 0 0x8000>;
+			interrupts = <GIC_SPI 620 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&cpg R8A78000_CPG_SGD4_VIO_DP_OTHER>;
+			power-domains = <&mdlc_vio 0x07 0xfb>;
+			resets = <&mdlc_vio 0xfb>;
+
+			renesas,fcp = <&fcpvb2>;
+		};
+
+		vspb3: vsp@c50d8000 {
+			compatible = "renesas,vsp2";
+			reg = <0 0xc50d8000 0 0x8000>;
+			interrupts = <GIC_SPI 621 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&cpg R8A78000_CPG_SGD4_VIO_DP_OTHER>;
+			power-domains = <&mdlc_vio 0x07 0xfc>;
+			resets = <&mdlc_vio 0xfc>;
+
+			renesas,fcp = <&fcpvb3>;
+		};
+
+		vspb4: vsp@c50e0000 {
+			compatible = "renesas,vsp2";
+			reg = <0 0xc50e0000 0 0x8000>;
+			interrupts = <GIC_SPI 622 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&cpg R8A78000_CPG_SGD4_VIO_DP_OTHER>;
+			power-domains = <&mdlc_vio 0x07 0xfd>;
+			resets = <&mdlc_vio 0xfd>;
+
+			renesas,fcp = <&fcpvb4>;
+		};
+
 		mdlc_cmnn: system-controller@ca410000 {
 			compatible = "renesas,r8a78000-mdlc";
 			reg = <0 0xca410000 0 0x1000>;
