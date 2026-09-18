@@ -401,6 +401,13 @@ static int ca_set_pmt(struct dst_state *state, struct ca_msg *p_ca_message, stru
 	u8 tag_length = 8;
 
 	length = asn_1_decode(&p_ca_message->msg[3]);
+	if (length > sizeof(hw_buffer->msg) - tag_length) {
+		dprintk(verbose, DST_CA_ERROR, 1,
+			" CA Message too long (%u) ! *** Bailing Out *** !",
+			length);
+		return -EINVAL;
+	}
+
 	dprintk(verbose, DST_CA_DEBUG, 1, " CA Message length=[%d]", length);
 	debug_string(&p_ca_message->msg[4], length, 0); /*	length is excluding tag & length	*/
 
