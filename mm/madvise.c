@@ -1599,10 +1599,12 @@ static int madvise_vma_behavior(struct madvise_behavior *madv_behavior)
 			goto out;
 		break;
 	case MADV_HUGEPAGE:
+		new_flags &= ~VM_NOHUGEPAGE;
+		new_flags |= VM_HUGEPAGE;
+		break;
 	case MADV_NOHUGEPAGE:
-		error = hugepage_madvise(vma, &new_flags, behavior);
-		if (error)
-			goto out;
+		new_flags &= ~VM_HUGEPAGE;
+		new_flags |= VM_NOHUGEPAGE;
 		break;
 	case __MADV_SET_ANON_VMA_NAME:
 		/* Only anonymous mappings can be named */

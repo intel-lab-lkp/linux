@@ -508,8 +508,6 @@ change_huge_pud(struct mmu_gather *tlb, struct vm_area_struct *vma,
 			__split_huge_pud(__vma, __pud, __address);	\
 	}  while (0)
 
-int hugepage_madvise(struct vm_area_struct *vma, vm_flags_t *vm_flags,
-		     int advice);
 void vma_adjust_trans_huge(struct vm_area_struct *vma, unsigned long start,
 			   unsigned long end, struct vm_area_struct *next);
 spinlock_t *__pmd_trans_huge_lock(pmd_t *pmd, struct vm_area_struct *vma);
@@ -706,12 +704,6 @@ static inline bool unmap_huge_pmd_locked(struct vm_area_struct *vma,
 
 #define split_huge_pud(__vma, __pmd, __address)	\
 	do { } while (0)
-
-static inline int hugepage_madvise(struct vm_area_struct *vma,
-				   vm_flags_t *vm_flags, int advice)
-{
-	return -EINVAL;
-}
 
 static inline void vma_adjust_trans_huge(struct vm_area_struct *vma,
 					 unsigned long start,
