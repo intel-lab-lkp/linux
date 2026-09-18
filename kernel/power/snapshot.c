@@ -85,7 +85,7 @@ static inline int hibernate_restore_unprotect_page(void *page_address) {return 0
  * It is still worth to have a warning here if something changes and this
  * will no longer be the case.
  */
-static inline void hibernate_map_page(struct page *page)
+void * __weak hibernate_map_page(struct page *page)
 {
 	if (IS_ENABLED(CONFIG_ARCH_HAS_SET_DIRECT_MAP)) {
 		int ret = set_direct_map_default_noflush(page);
@@ -95,9 +95,10 @@ static inline void hibernate_map_page(struct page *page)
 	} else {
 		debug_pagealloc_map_pages(page, 1);
 	}
+	return page_address(page);
 }
 
-static inline void hibernate_unmap_page(struct page *page)
+void __weak hibernate_unmap_page(struct page *page)
 {
 	if (IS_ENABLED(CONFIG_ARCH_HAS_SET_DIRECT_MAP)) {
 		unsigned long addr = (unsigned long)page_address(page);
@@ -1456,8 +1457,9 @@ static bool safe_copy_page(void *dst, struct page *s_page)
 	if (kernel_page_present(s_page)) {
 		zeros_only = do_copy_page(dst, page_address(s_page));
 	} else {
-		hibernate_map_page(s_page);
-		zeros_only = do_copy_page(dst, page_address(s_page));
+		void *src = hibernate_map_page(s_page);
+
+		zeros_only = do_copy_page(dst, src);
 		hibernate_unmap_page(s_page);
 	}
 	return zeros_only;
