@@ -119,6 +119,8 @@ static int v9fs_dir_readdir(struct file *file, struct dir_context *ctx)
 			rdir->tail = n;
 		}
 		while (rdir->head < rdir->tail) {
+			size_t namelen;
+
 			err = p9stat_read(fid->clnt, rdir->buf + rdir->head,
 					  rdir->tail - rdir->head, &st);
 			if (err <= 0) {
@@ -126,8 +128,16 @@ static int v9fs_dir_readdir(struct file *file, struct dir_context *ctx)
 				return -EIO;
 			}
 
-			over = !dir_emit(ctx, st.name, strlen(st.name),
-					QID2INO(&st.qid), dt_type(&st));
+			namelen = strlen(st.name);
+			if (namelen > NAME_MAX) {
+				p9_debug(P9_DEBUG_ERROR,
+					 "skip dentry: name length %zu > NAME_MAX\n",
+					 namelen);
+				over = false;
+			} else {
+				over = !dir_emit(ctx, st.name, namelen,
+						 QID2INO(&st.qid), dt_type(&st));
+			}
 			p9stat_free(&st);
 			if (over)
 				return 0;
