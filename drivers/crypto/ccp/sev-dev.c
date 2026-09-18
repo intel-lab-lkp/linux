@@ -2208,6 +2208,79 @@ fw_err:
 	return ret;
 }
 
+#ifdef CONFIG_FW_UPLOAD
+static enum fw_upload_err sev_fw_upload_prepare(struct fw_upload *fw_upload,
+						const u8 *data, u32 size)
+{
+	return FW_UPLOAD_ERR_NONE;
+}
+
+static enum fw_upload_err sev_fw_upload_write(struct fw_upload *fw_upload,
+					      const u8 *data, u32 offset,
+					      u32 size, u32 *written)
+{
+	return FW_UPLOAD_ERR_BUSY;
+}
+
+static enum fw_upload_err sev_fw_upload_poll_complete(struct fw_upload *fw_upload)
+{
+	return FW_UPLOAD_ERR_NONE;
+}
+
+static void sev_fw_upload_cancel(struct fw_upload *fw_upload)
+{
+	/* intentional no-op */
+}
+
+static const struct fw_upload_ops sev_fw_upload_ops = {
+	.prepare = sev_fw_upload_prepare,
+	.write = sev_fw_upload_write,
+	.poll_complete = sev_fw_upload_poll_complete,
+	.cancel = sev_fw_upload_cancel,
+};
+
+static void register_sev_fw_uploader(struct sev_device *sev)
+{
+	struct fw_upload *fwl;
+
+	/*
+	 * SNP firmware update is a platform-wide operation; only the master
+	 * PSP issues firmware commands. Register a single global interface.
+	 */
+	if (sev->psp != psp_master || sev->fwl)
+		return;
+
+	fwl = firmware_upload_register(sev->dev, "sev", &sev_fw_upload_ops,
+				       sev);
+	if (IS_ERR(fwl)) {
+		dev_err(sev->dev, "SEV firmware upload registration failure: %ld\n",
+			PTR_ERR(fwl));
+		return;
+	}
+
+	sev->fwl = fwl;
+}
+
+/*
+ * The upload ops issue PSP commands, so the interface has to be gone before
+ * the SEV firmware is shut down and the PSP interrupt handler is cleared.
+ * devm teardown on sev->dev runs after the driver's remove callback and is
+ * therefore too late. Both teardown paths call this, and a module removal can
+ * run concurrently with a sysfs unbind, so claim the pointer atomically to
+ * keep the unregister to a single caller.
+ */
+static void unregister_sev_fw_uploader(struct sev_device *sev)
+{
+	struct fw_upload *fwl = xchg(&sev->fwl, NULL);
+
+	if (fwl)
+		firmware_upload_unregister(fwl);
+}
+#else	/* CONFIG_FW_UPLOAD */
+static void register_sev_fw_uploader(struct sev_device *sev) { }
+static void unregister_sev_fw_uploader(struct sev_device *sev) { }
+#endif	/* CONFIG_FW_UPLOAD */
+
 static int __sev_snp_shutdown_locked(int *error, bool panic)
 {
 	struct psp_device *psp = psp_master;
@@ -3014,6 +3087,8 @@ void sev_dev_destroy(struct psp_device *psp)
 	if (!sev)
 		return;
 
+	unregister_sev_fw_uploader(sev);
+
 	sev_firmware_shutdown(sev);
 
 	if (sev->misc)
@@ -3077,6 +3152,8 @@ void sev_pci_init(void)
 			 api_major, api_minor, build,
 			 sev->api_major, sev->api_minor, sev->build);
 
+	register_sev_fw_uploader(sev);
+
 	return;
 
 err:
@@ -3091,6 +3168,8 @@ void sev_pci_exit(void)
 
 	if (!sev)
 		return;
+
+	unregister_sev_fw_uploader(sev);
 
 	sev_firmware_shutdown(sev);
 }
