@@ -35,12 +35,14 @@ properties:
     maxItems: 1
 
   clocks:
+    minItems: 2
     items:
       - description: USB main enable clk
       - description: DWC3 bus early clock
       - description: DWC3 ref clock
 
   clock-names:
+    minItems: 2
     items:
       - const: main
       - const: bus_early
