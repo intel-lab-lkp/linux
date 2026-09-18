@@ -713,11 +713,18 @@ void nfs4_pnfs_ds_put(struct nfs4_pnfs_ds *ds)
 {
 	struct nfs_net *nn = net_generic(ds->ds_net, nfs_net_id);
 
-	if (refcount_dec_and_lock(&ds->ds_count, &nn->nfs4_data_server_lock)) {
-		hlist_del_init(&ds->ds_node);
+	spin_lock(&nn->nfs4_data_server_lock);
+	refcount_dec(&ds->ds_count);
+	if (refcount_read(&ds->ds_count) > 1) {
 		spin_unlock(&nn->nfs4_data_server_lock);
-		destroy_ds(ds);
+		return;
 	}
+	hlist_del_init(&ds->ds_node);
+	spin_unlock(&nn->nfs4_data_server_lock);
+
+	/* The cache's reference is the last one */
+	if (refcount_dec_and_test(&ds->ds_count))
+		destroy_ds(ds);
 }
 EXPORT_SYMBOL_GPL(nfs4_pnfs_ds_put);
 
@@ -803,7 +810,7 @@ nfs4_pnfs_ds_add(const struct net *net, struct list_head *dsaddrs, u32 version,
 		INIT_LIST_HEAD(&ds->ds_addrs);
 		list_splice_init(dsaddrs, &ds->ds_addrs);
 		ds->ds_remotestr = remotestr;
-		refcount_set(&ds->ds_count, 1);
+		refcount_set(&ds->ds_count, 2);
 		INIT_HLIST_NODE(&ds->ds_node);
 		ds->ds_net = net;
 		ds->ds_clp = NULL;
