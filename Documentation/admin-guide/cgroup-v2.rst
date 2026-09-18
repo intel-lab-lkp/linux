@@ -2656,9 +2656,11 @@ Cpuset Interface Files
   cpuset.cpus.isolated
 	A read-only and root cgroup only multiple values file.
 
-	This file shows the set of all isolated CPUs used in existing
-	isolated partitions. It will be empty if no isolated partition
-	is created.
+	This file shows CPUs isolated from scheduler domains by
+	isolated cpuset partitions or at boot with "isolcpus=domain"
+	(including the default "isolcpus=<cpu-list>" form).  CPUs
+	isolated at boot remain listed after any partition using them
+	is released.
 
   cpuset.cpus.partition
 	A read-write single value file which exists on non-root
