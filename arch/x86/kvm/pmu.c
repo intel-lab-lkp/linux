@@ -680,8 +680,14 @@ void kvm_pmu_handle_event(struct kvm_vcpu *vcpu)
 		 * reprogram bit, i.e. opportunistically try again on the next
 		 * PMU refresh.  Don't make a new request as doing so can stall
 		 * the guest if reprogramming repeatedly fails.
+		 *
+		 * -EINVAL means the event's config was rejected outright and
+		 * can never succeed on retry, so don't re-arm; the guest can
+		 * still do so itself by rewriting the event selector.
 		 */
-		if (reprogram_counter(pmc))
+		int r = reprogram_counter(pmc);
+
+		if (r && r != -EINVAL)
 			set_bit(pmc->idx, pmu->reprogram_pmi);
 	}
 
