@@ -3930,11 +3930,13 @@ static int ov5640_probe(struct i2c_client *client)
 	if (ret)
 		return ret;
 
-	ret = ov5640_get_regulators(sensor);
+	ret = devm_mutex_init(dev, &sensor->lock);
 	if (ret)
 		goto entity_cleanup;
 
-	mutex_init(&sensor->lock);
+	ret = ov5640_get_regulators(sensor);
+	if (ret)
+		goto entity_cleanup;
 
 	ret = ov5640_init_controls(sensor);
 	if (ret)
@@ -3972,7 +3974,6 @@ free_ctrls:
 	v4l2_ctrl_handler_free(&sensor->ctrls.handler);
 entity_cleanup:
 	media_entity_cleanup(&sensor->sd.entity);
-	mutex_destroy(&sensor->lock);
 	return ret;
 }
 
@@ -3990,7 +3991,6 @@ static void ov5640_remove(struct i2c_client *client)
 	v4l2_async_unregister_subdev(&sensor->sd);
 	media_entity_cleanup(&sensor->sd.entity);
 	v4l2_ctrl_handler_free(&sensor->ctrls.handler);
-	mutex_destroy(&sensor->lock);
 }
 
 static const struct dev_pm_ops ov5640_pm_ops = {
