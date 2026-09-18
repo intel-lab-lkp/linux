@@ -1200,6 +1200,7 @@
 #define PCI_FLIT_ERR_CNTR_CTRL		0x0c		/* Flit Error Counter Control Register */
 #define  PCI_FLIT_ERR_CNTR_CTRL_EN	0x0001		/* Flit Error Counter Enable */
 #define  PCI_FLIT_ERR_CNTR_CTRL_INTR_EN	0x0002		/* Flit Error Counter Interrupt Enable */
+#define  PCI_FLIT_ERR_CNTR_CTRL_EVENTS	0x000c		/* Events to count */
 #define  PCI_FLIT_ERR_CNTR_CTRL_TRIGGER	0x0ff0		/* Trigger Event on Error Count */
 #define PCI_FLIT_ERR_CNTR_STA		0x0e		/* Flit Error Counter Status Register */
 #define  PCI_FLIT_ERR_CNTR_STA_INTR_GEN	0x0008		/* Interrupt Generated based on Trigger */

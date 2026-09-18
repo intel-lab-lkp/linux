@@ -13,6 +13,7 @@
 #define dev_fmt pr_fmt
 
 #include <linux/bitfield.h>
+#include <linux/capability.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
@@ -79,11 +80,14 @@ static bool flit_is_native(struct pci_dev *pdev)
 struct flit_info {
 	spinlock_t lock;	/* serializes Counter Control read-modify-write */
 	struct ratelimit_state ratelimit;
+	u16 trigger;		/* Trigger Event on Error Count to program */
 	bool cntr_enabled;	/* Counter Enable as the driver intends it */
 };
 
 void pci_flit_init(struct pci_dev *pdev)
 {
+	u16 ctrl, trigger;
+
 	if (!flit_is_port(pdev) || !flit_is_native(pdev))
 		return;
 
@@ -102,6 +106,17 @@ void pci_flit_init(struct pci_dev *pdev)
 	ratelimit_state_init(&pdev->flit_info->ratelimit,
 			     DEFAULT_RATELIMIT_INTERVAL,
 			     DEFAULT_RATELIMIT_BURST);
+
+	/*
+	 * Sample the trigger before anything here writes the register. A zero
+	 * field means the platform left it alone, so fall back to the default.
+	 * From here on flit_info->trigger is what gets programmed, so a zero
+	 * written through sysfs stays zero.
+	 */
+	pci_read_config_word(pdev, pdev->flit_cap + PCI_FLIT_ERR_CNTR_CTRL,
+			     &ctrl);
+	trigger = FIELD_GET(PCI_FLIT_ERR_CNTR_CTRL_TRIGGER, ctrl);
+	pdev->flit_info->trigger = trigger ? trigger : FLIT_DEFAULT_TRIGGER;
 
 	pci_add_ext_cap_save_buffer(pdev, PCI_EXT_CAP_ID_FLIT, sizeof(u16));
 
@@ -164,16 +179,24 @@ void pci_restore_flit_state(struct pci_dev *pdev)
  * Count at zero, and per PCIe r6.4, sec 7.7.8.4, table 7-95, a zero trigger
  * never generates an event.
  */
-static void flit_cntr_ctrl_update(struct pci_dev *pdev, u16 clear, u16 set)
+static void __flit_cntr_ctrl_update(struct pci_dev *pdev, u16 clear, u16 set)
 {
-	unsigned long flags;
 	u16 ctrl;
 
-	spin_lock_irqsave(&pdev->flit_info->lock, flags);
+	lockdep_assert_held(&pdev->flit_info->lock);
+
 	pci_read_config_word(pdev, pdev->flit_cap + PCI_FLIT_ERR_CNTR_CTRL, &ctrl);
 	ctrl &= ~clear;
 	ctrl |= set;
 	pci_write_config_word(pdev, pdev->flit_cap + PCI_FLIT_ERR_CNTR_CTRL, ctrl);
+}
+
+static void flit_cntr_ctrl_update(struct pci_dev *pdev, u16 clear, u16 set)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&pdev->flit_info->lock, flags);
+	__flit_cntr_ctrl_update(pdev, clear, set);
 	spin_unlock_irqrestore(&pdev->flit_info->lock, flags);
 }
 
@@ -186,9 +209,130 @@ static void flit_cntr_ctrl_update(struct pci_dev *pdev, u16 clear, u16 set)
 PCI_RATELIMIT_INTERVAL_ATTR(ratelimit_interval_ms, flit_info->ratelimit);
 PCI_RATELIMIT_BURST_ATTR(ratelimit_burst, flit_info->ratelimit);
 
+/*
+ * Program a durable setting into the register and the save buffer.
+ * pcie_portdrv_slot_reset() restores that buffer after running .slot_reset, so
+ * it is the last writer on the recovery path and would otherwise put the
+ * probe-time word back.
+ *
+ * Both writes happen under the lock, so the register and the buffer cannot
+ * disagree if trigger_count and events_to_count are written at once. The
+ * buffer gets the same clear and set rather than a fresh sample, which would
+ * pick up the Counter Enable that flit_isr() leaves clear for flit_ist().
+ */
+static void flit_cntr_ctrl_set(struct pci_dev *pdev, u16 clear, u16 set)
+{
+	struct pci_cap_saved_state *save_state;
+	unsigned long flags;
+	u16 *cap;
+
+	save_state = pci_find_saved_ext_cap(pdev, PCI_EXT_CAP_ID_FLIT);
+	cap = save_state ? (u16 *)&save_state->cap.data[0] : NULL;
+
+	pci_config_pm_runtime_get(pdev);
+
+	spin_lock_irqsave(&pdev->flit_info->lock, flags);
+	__flit_cntr_ctrl_update(pdev, clear, set);
+	if (cap) {
+		*cap &= ~clear;
+		*cap |= set;
+	}
+	spin_unlock_irqrestore(&pdev->flit_info->lock, flags);
+
+	pci_config_pm_runtime_put(pdev);
+}
+
+/* A port in D3cold answers config reads with all ones. */
+static u16 flit_cntr_ctrl_read(struct pci_dev *pdev)
+{
+	u16 ctrl;
+
+	pci_config_pm_runtime_get(pdev);
+	pci_read_config_word(pdev, pdev->flit_cap + PCI_FLIT_ERR_CNTR_CTRL,
+			     &ctrl);
+	pci_config_pm_runtime_put(pdev);
+
+	return ctrl;
+}
+
+static ssize_t trigger_count_show(struct device *dev,
+				  struct device_attribute *attr, char *buf)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	u16 ctrl, trigger;
+
+	ctrl = flit_cntr_ctrl_read(pdev);
+	trigger = FIELD_GET(PCI_FLIT_ERR_CNTR_CTRL_TRIGGER, ctrl);
+
+	return sysfs_emit(buf, "%u\n", trigger);
+}
+
+static ssize_t trigger_count_store(struct device *dev,
+				   struct device_attribute *attr,
+				   const char *buf, size_t count)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	u16 val;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (kstrtou16(buf, 0, &val) < 0)
+		return -EINVAL;
+
+	if (val > FIELD_MAX(PCI_FLIT_ERR_CNTR_CTRL_TRIGGER))
+		return -EINVAL;
+
+	pdev->flit_info->trigger = val;
+	flit_cntr_ctrl_set(pdev, PCI_FLIT_ERR_CNTR_CTRL_TRIGGER,
+			   FIELD_PREP(PCI_FLIT_ERR_CNTR_CTRL_TRIGGER, val));
+
+	return count;
+}
+
+static DEVICE_ATTR_RW(trigger_count);
+
+static ssize_t events_to_count_show(struct device *dev,
+				    struct device_attribute *attr, char *buf)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	u16 ctrl, events;
+
+	ctrl = flit_cntr_ctrl_read(pdev);
+	events = FIELD_GET(PCI_FLIT_ERR_CNTR_CTRL_EVENTS, ctrl);
+
+	return sysfs_emit(buf, "%u\n", events);
+}
+
+static ssize_t events_to_count_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf, size_t count)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	u16 val;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (kstrtou16(buf, 0, &val) < 0)
+		return -EINVAL;
+
+	if (val > FIELD_MAX(PCI_FLIT_ERR_CNTR_CTRL_EVENTS))
+		return -EINVAL;
+
+	flit_cntr_ctrl_set(pdev, PCI_FLIT_ERR_CNTR_CTRL_EVENTS,
+			   FIELD_PREP(PCI_FLIT_ERR_CNTR_CTRL_EVENTS, val));
+
+	return count;
+}
+
+static DEVICE_ATTR_RW(events_to_count);
+
 static struct attribute *flit_attrs[] = {
 	&dev_attr_ratelimit_interval_ms.attr,
 	&dev_attr_ratelimit_burst.attr,
+	&dev_attr_trigger_count.attr,
+	&dev_attr_events_to_count.attr,
 	NULL
 };
 
@@ -223,9 +367,9 @@ static void flit_cntr_enable(struct pci_dev *pdev)
 	spin_lock_irqsave(&pdev->flit_info->lock, flags);
 	pci_read_config_word(pdev, flit + PCI_FLIT_ERR_CNTR_CTRL, &reg);
 
-	/* Set default trigger count if not set by platform, since zero never fires */
-	if (!(reg & PCI_FLIT_ERR_CNTR_CTRL_TRIGGER))
-		reg |= FIELD_PREP(PCI_FLIT_ERR_CNTR_CTRL_TRIGGER, FLIT_DEFAULT_TRIGGER);
+	reg &= ~PCI_FLIT_ERR_CNTR_CTRL_TRIGGER;
+	reg |= FIELD_PREP(PCI_FLIT_ERR_CNTR_CTRL_TRIGGER,
+			  pdev->flit_info->trigger);
 
 	reg |= PCI_FLIT_ERR_CNTR_CTRL_EN | PCI_FLIT_ERR_CNTR_CTRL_INTR_EN;
 	pci_write_config_word(pdev, flit + PCI_FLIT_ERR_CNTR_CTRL, reg);

@@ -33,3 +33,38 @@ Description:	Ratelimit burst for flit error logs. Writing a value changes
 		Writing 0, or any negative value, suppresses all logs
 		unless the interval attribute is also 0. Default is
 		DEFAULT_RATELIMIT_BURST (10).
+
+What:		/sys/bus/pci/devices/<dev>/flit/trigger_count
+Date:		September 2026
+KernelVersion:	7.4.0
+Contact:	linux-pci@vger.kernel.org
+Description:	Trigger Event on Error Count field of the Flit Error Counter
+		Control register. An event is generated when the Flit Error
+		Counter exceeds this value. Accepts 0 to 255. Reading gets
+		the current field value.
+
+		The counter is eight bits and decrements on its own at a
+		rate set by the link width and encoding, so a high value
+		reports only a link whose error rate greatly exceeds that
+		drain rate. Writing 0 disables event generation, and 255
+		can never be exceeded, so neither value generates an event.
+
+		A value set by the platform is left alone. Default is 254
+		where the platform left the field at zero.
+
+What:		/sys/bus/pci/devices/<dev>/flit/events_to_count
+Date:		September 2026
+KernelVersion:	7.4.0
+Contact:	linux-pci@vger.kernel.org
+Description:	Events to Count field of the Flit Error Counter Control
+		register, selecting which events the Flit Error Counter
+		counts. Reading gets the current field value::
+
+		    0  FEC-correctable Flit, Invalid Flit, or Framing Error
+		    1  FEC-correctable Flit
+		    2  Invalid Flit
+		    3  the events selected by 0, plus a 1b/1b TS Ordered Set
+		       with only one valid half, and an invalid Ordered Set
+
+		The driver never writes this field on its own, so it
+		defaults to the value set by the platform.
