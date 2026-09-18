@@ -931,6 +931,11 @@ static int thp7312_set_focus(struct thp7312_device *thp7312)
 	if (thp7312->focus_absolute->is_new) {
 		unsigned int value;
 
+		if (thp7312->focus_absolute->val < 0 ||
+		    thp7312->focus_absolute->val >=
+		    ARRAY_SIZE(thp7312_focus_values))
+			return -EINVAL;
+
 		value = thp7312_focus_values[thp7312->focus_absolute->val];
 
 		ret = cci_write(thp7312->regmap,
