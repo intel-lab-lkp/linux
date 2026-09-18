@@ -6,6 +6,7 @@
 #include <linux/init.h>
 #include <linux/sched.h>
 #include <linux/sysfs.h>
+#include <linux/time64.h>
 #include <linux/export.h>
 #include <linux/nodemask.h>
 #include <linux/cpumask.h>
@@ -245,10 +246,10 @@ static unsigned int get_idle_ticks_bit(u64 ns)
 {
 	u64 cycle;
 
-	if (ns >= 10000)
-		cycle = div_u64(ns + 500, 1000) * tb_ticks_per_usec;
+	if (ns >= 10 * NSEC_PER_USEC)
+		cycle = div_u64(ns + NSEC_PER_USEC / 2, NSEC_PER_USEC) * tb_ticks_per_usec;
 	else
-		cycle = div_u64(ns * tb_ticks_per_usec, 1000);
+		cycle = div_u64(ns * tb_ticks_per_usec, NSEC_PER_USEC);
 
 	if (!cycle)
 		return 0;
@@ -324,15 +325,15 @@ static ssize_t show_pw20_wait_time(struct device *dev,
 					PWRMGTCR0_PW20_ENT_SHIFT;
 
 		tb_cycle = (tb_cycle << (MAX_BIT - value + 1));
-		/* convert ms to ns */
-		if (tb_ticks_per_usec > 1000) {
-			time = div_u64(tb_cycle, tb_ticks_per_usec / 1000);
+		/* Convert time-base ticks to ns */
+		if (tb_ticks_per_usec > NSEC_PER_USEC) {
+			time = div_u64(tb_cycle, tb_ticks_per_usec / NSEC_PER_USEC);
 		} else {
-			u32 rem_us;
+			u32 rem_ticks;
 
-			time = div_u64_rem(tb_cycle, tb_ticks_per_usec,
-						&rem_us);
-			time = time * 1000 + rem_us * 1000 / tb_ticks_per_usec;
+			time = div_u64_rem(tb_cycle, tb_ticks_per_usec, &rem_ticks);
+			time *= NSEC_PER_USEC;
+			time += rem_ticks * NSEC_PER_USEC / tb_ticks_per_usec;
 		}
 	} else {
 		time = pw20_wt;
@@ -446,15 +447,15 @@ static ssize_t show_altivec_idle_wait_time(struct device *dev,
 					PWRMGTCR0_AV_IDLE_CNT_SHIFT;
 
 		tb_cycle = (tb_cycle << (MAX_BIT - value + 1));
-		/* convert ms to ns */
-		if (tb_ticks_per_usec > 1000) {
-			time = div_u64(tb_cycle, tb_ticks_per_usec / 1000);
+		/* Convert time-base ticks to ns */
+		if (tb_ticks_per_usec > NSEC_PER_USEC) {
+			time = div_u64(tb_cycle, tb_ticks_per_usec / NSEC_PER_USEC);
 		} else {
-			u32 rem_us;
+			u32 rem_ticks;
 
-			time = div_u64_rem(tb_cycle, tb_ticks_per_usec,
-						&rem_us);
-			time = time * 1000 + rem_us * 1000 / tb_ticks_per_usec;
+			time = div_u64_rem(tb_cycle, tb_ticks_per_usec, &rem_ticks);
+			time *= NSEC_PER_USEC;
+			time += rem_ticks * NSEC_PER_USEC / tb_ticks_per_usec;
 		}
 	} else {
 		time = altivec_idle_wt;
