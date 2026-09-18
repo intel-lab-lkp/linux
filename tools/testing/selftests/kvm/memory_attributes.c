@@ -22,6 +22,8 @@
 #define TEST_MEM_SLOT	1
 #define TEST_MEM_GPA	0x80000000
 
+#define HV_STATUS_INVALID_HYPERCALL_INPUT	3
+
 #define MMIO_GPA	0x700000000
 #define MMIO_GVA	MMIO_GPA
 
@@ -29,12 +31,35 @@
 #define PT_ACCESSED_MASK	BIT_ULL(5)
 #define PTE_VADDR		0x1000000000
 
+static volatile uint64_t ipis_rcvd;
+
+static pthread_t vcpu_thread;
+
+struct hv_vpset {
+	u64 format;
+	u64 valid_bank_mask;
+	u64 bank_contents[2];
+};
+
+enum HV_GENERIC_SET_FORMAT {
+	HV_GENERIC_SET_SPARSE_4K,
+	HV_GENERIC_SET_ALL,
+};
+
+struct hv_send_ipi_ex {
+	u32 vector;
+	u32 reserved;
+	struct hv_vpset vp_set;
+};
+
 enum {
 	TEST_OP_NOP,
 	TEST_OP_READ,
 	TEST_OP_WRITE,
 	TEST_OP_EXEC,
 	TEST_OP_INVPLG,
+	TEST_OP_HYPERV_HYPERCALL_INPUT,
+	TEST_OP_MONITOR_ADDRESS,
 	TEST_OP_EXIT,
 };
 
@@ -44,6 +69,8 @@ const char *test_op_names[] =
 	[TEST_OP_WRITE] = "Write",
 	[TEST_OP_EXEC] = "Exec",
 	[TEST_OP_INVPLG] = "Invplg",
+	[TEST_OP_HYPERV_HYPERCALL_INPUT] = "HvHcall input",
+	[TEST_OP_MONITOR_ADDRESS] = "Monitor address",
 	[TEST_OP_EXIT] = "Exit",
 };
 
@@ -51,6 +78,8 @@ struct test_data {
 	uint8_t op;
 	int stage;
 	gva_t vaddr;
+	gpa_t paddr;
+	uint8_t confirm_read;
 	uint64_t expected_val;
 
 	struct kvm_vcpu *vcpu;
@@ -63,19 +92,26 @@ static void arch_controlled_write(gva_t addr, uint64_t val);
 static void arch_controlled_exec(gva_t addr);
 static void arch_write_return_insn(struct kvm_vm *vm, gpa_t paddr);
 static bool arch_test_op(struct test_data *test_data);
+static void arch_guest_init(void);
 
 static void guest_code(void *data)
 {
 	struct test_data *test_data = data;
 	int stage = 1;
 
+	arch_guest_init();
+
 	while (true) {
 		uint64_t expected_val = READ_ONCE(test_data->expected_val);
+		bool confirm_read = READ_ONCE(test_data->confirm_read);
 		gva_t vaddr = READ_ONCE(test_data->vaddr);
+		u64 val;
 
 		switch(READ_ONCE(test_data->op)) {
 		case TEST_OP_READ:
-			(void) arch_controlled_read(vaddr);
+			val = arch_controlled_read(vaddr);
+			if (confirm_read)
+				GUEST_ASSERT_EQ(expected_val, val);
 			GUEST_SYNC(stage++);
 			break;
 		case TEST_OP_WRITE:
@@ -84,6 +120,14 @@ static void guest_code(void *data)
 			break;
 		case TEST_OP_EXEC:
 			arch_controlled_exec(vaddr);
+			GUEST_SYNC(stage++);
+			break;
+		case TEST_OP_MONITOR_ADDRESS: {
+			if (arch_controlled_read(vaddr) != expected_val)
+				GUEST_SYNC(stage++);
+			break;
+		}
+		case TEST_OP_NOP:
 			GUEST_SYNC(stage++);
 			break;
 		default:
@@ -145,6 +189,7 @@ static void test_page_restricted(struct kvm_vcpu *vcpu, int op,
 
 	test_data->op = op;
 	test_data->vaddr = vaddr;
+	test_data->paddr = fault_paddr;
 
 	rc = _vcpu_run(vcpu);
 	TEST_ASSERT(rc == -1 && errno == EFAULT,
@@ -390,12 +435,16 @@ int main(int argc, char *argv[])
 	test_mem = vm_alloc_pages(vm, pages);
 	virt_map(vcpu->vm, MMIO_GVA, MMIO_GPA, 1);
 	test_data = init_test_data(vcpu);
+#ifdef __x86_64__
+	vcpu_set_hv_cpuid(vcpu);
+#endif
 
 	test_input_validation(vm);
 	test_memory_access(vcpu, test_mem, size);
 	test_memattrs_ignore_mmio(vcpu);
 #ifdef __x86_64__
 	arch_test_memory_access_pte(vcpu, test_mem);
+	arch_test_side_channels(vcpu, test_mem, size);
 #endif
 	test_finalize(vcpu);
 
