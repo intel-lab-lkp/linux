@@ -1972,12 +1972,19 @@ static int __maybe_unused tps6598x_suspend(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct tps6598x *tps = i2c_get_clientdata(client);
 
-	if (tps->wakeup) {
+	/*
+	 * Mask the interrupt before the parent I2C controller is suspended:
+	 * otherwise a still-asserted level IRQ keeps re-entering the handler,
+	 * whose register reads then fail with -ESHUTDOWN, producing an
+	 * interrupt storm until the noirq phase globally disables interrupts.
+	 */
+	if (client->irq)
 		disable_irq(client->irq);
+
+	if (tps->wakeup)
 		enable_irq_wake(client->irq);
-	} else if (tps->reset) {
+	else if (tps->reset)
 		gpiod_set_value_cansleep(tps->reset, 1);
-	}
 
 	if (!client->irq)
 		cancel_delayed_work_sync(&tps->wq_poll);
@@ -1993,18 +2000,16 @@ static int __maybe_unused tps6598x_resume(struct device *dev)
 
 	ret = tps6598x_check_mode(tps);
 	if (ret < 0)
-		return ret;
+		goto out_enable_irq;
 
 	if (ret == TPS_MODE_PTCH) {
 		ret = tps->data->init(tps);
 		if (ret)
-			return ret;
+			goto out_enable_irq;
 	}
+	ret = 0;
 
-	if (tps->wakeup) {
-		disable_irq_wake(client->irq);
-		enable_irq(client->irq);
-	} else if (tps->reset) {
+	if (!tps->wakeup && tps->reset) {
 		gpiod_set_value_cansleep(tps->reset, 0);
 		msleep(TPS_SETUP_MS);
 	}
@@ -2013,7 +2018,20 @@ static int __maybe_unused tps6598x_resume(struct device *dev)
 		queue_delayed_work(system_power_efficient_wq, &tps->wq_poll,
 				   msecs_to_jiffies(POLL_INTERVAL));
 
-	return 0;
+out_enable_irq:
+	/*
+	 * Unwind suspend unconditionally, including on the error paths above:
+	 * the line is requested with IRQF_SHARED, so a leaked disable_irq()
+	 * would mask it for every other device on it, and the imbalance would
+	 * never be recovered by a later resume.
+	 */
+	if (tps->wakeup)
+		disable_irq_wake(client->irq);
+
+	if (client->irq)
+		enable_irq(client->irq);
+
+	return ret;
 }
 
 static const struct dev_pm_ops tps6598x_pm_ops = {
