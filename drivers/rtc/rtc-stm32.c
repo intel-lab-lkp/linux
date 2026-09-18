@@ -1137,6 +1137,20 @@ static int stm32_rtc_probe(struct platform_device *pdev)
 	if (ret)
 		goto err;
 
+	stm32_rtc_clean_outs(rtc);
+
+	ret = devm_pinctrl_register_and_init(&pdev->dev, &stm32_rtc_pdesc, rtc, &pctl);
+	if (ret) {
+		dev_err_probe(&pdev->dev, ret, "pinctrl register failed");
+		goto err;
+	}
+
+	ret = pinctrl_enable(pctl);
+	if (ret) {
+		dev_err_probe(&pdev->dev, ret, "pinctrl enable failed");
+		goto err;
+	}
+
 	rtc->irq_alarm = platform_get_irq(pdev, 0);
 	if (rtc->irq_alarm <= 0) {
 		ret = rtc->irq_alarm;
@@ -1171,16 +1185,6 @@ static int stm32_rtc_probe(struct platform_device *pdev)
 			rtc->irq_alarm);
 		goto err;
 	}
-
-	stm32_rtc_clean_outs(rtc);
-
-	ret = devm_pinctrl_register_and_init(&pdev->dev, &stm32_rtc_pdesc, rtc, &pctl);
-	if (ret)
-		return dev_err_probe(&pdev->dev, ret, "pinctrl register failed");
-
-	ret = pinctrl_enable(pctl);
-	if (ret)
-		return dev_err_probe(&pdev->dev, ret, "pinctrl enable failed");
 
 	/*
 	 * If INITS flag is reset (calendar year field set to 0x00), calendar
