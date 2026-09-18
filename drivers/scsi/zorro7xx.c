@@ -164,6 +164,7 @@ static void zorro7xx_remove_one(struct zorro_dev *z)
 	kfree(hostdata);
 	free_irq(host->irq, host);
 	zorro_release_device(z);
+	scsi_host_put(host);
 }
 
 static struct zorro_driver zorro7xx_driver = {
