@@ -64,6 +64,7 @@ struct uprobe {
 	refcount_t		ref;
 	struct rw_semaphore	register_rwsem;
 	struct rw_semaphore	consumer_rwsem;
+	struct mutex		prepare_mutex;	/* serializes prepare_uprobe() */
 	struct list_head	pending_list;
 	struct list_head	consumers;
 	struct inode		*inode;		/* Also hold a ref to inode */
@@ -1007,6 +1008,7 @@ static struct uprobe *alloc_uprobe(struct inode *inode, loff_t offset,
 	INIT_LIST_HEAD(&uprobe->consumers);
 	init_rwsem(&uprobe->register_rwsem);
 	init_rwsem(&uprobe->consumer_rwsem);
+	mutex_init(&uprobe->prepare_mutex);
 	RB_CLEAR_NODE(&uprobe->rb_node);
 	refcount_set(&uprobe->ref, 1);
 
@@ -1104,8 +1106,8 @@ static int prepare_uprobe(struct uprobe *uprobe, struct file *file,
 	if (test_bit(UPROBE_COPY_INSN, &uprobe->flags))
 		return ret;
 
-	/* TODO: move this into _register, until then we abuse this sem. */
-	down_write(&uprobe->consumer_rwsem);
+	/* Serialize concurrent prepare_uprobe() calls from uprobe_mmap(). */
+	mutex_lock(&uprobe->prepare_mutex);
 	if (test_bit(UPROBE_COPY_INSN, &uprobe->flags))
 		goto out;
 
@@ -1125,7 +1127,7 @@ static int prepare_uprobe(struct uprobe *uprobe, struct file *file,
 	set_bit(UPROBE_COPY_INSN, &uprobe->flags);
 
  out:
-	up_write(&uprobe->consumer_rwsem);
+	mutex_unlock(&uprobe->prepare_mutex);
 
 	return ret;
 }
