@@ -76,6 +76,7 @@ MODULE_DEVICE_TABLE(acpi, battery_device_ids);
 enum {
 	ACPI_BATTERY_ALARM_PRESENT,
 	ACPI_BATTERY_XINFO_PRESENT,
+	ACPI_BATTERY_BCT_PRESENT,
 	ACPI_BATTERY_QUIRK_PERCENTAGE_CAPACITY,
 	/* On Lenovo Thinkpad models from 2010 and 2011, the power unit
 	 * switches between mWh and mAh depending on whether the system
@@ -94,6 +95,14 @@ enum {
 	 * on a full charge, but showing degradation in full charge cap.
 	 */
 	ACPI_BATTERY_QUIRK_DEGRADED_FULL_CHARGE,
+	/*
+	 * Valve steamdeck devices can get discharged even when battery status
+	 * is charging. This happens typically low power supply unit is
+	 * connected. To accurate determine this scenario, we shall read
+	 * battery charge time ("_BCT") to know whether the steamdeck is
+	 * really charging with the power supply unit.
+	 */
+	ACPI_BATTERY_QUIRK_VALVE_STEAMDECK,
 };
 
 struct acpi_battery {
@@ -110,6 +119,7 @@ struct acpi_battery {
 
 	struct mutex property_lock; /* Protects properties below. */
 	unsigned long update_time;
+	unsigned long long charge_time;
 	int revision;
 	int rate_now;
 	int capacity_now;
@@ -234,7 +244,7 @@ static int acpi_battery_get_property(struct power_supply *psy,
 					: POWER_SUPPLY_STATUS_DISCHARGING;
 				return 0;
 			}
-		else if (battery->state & ACPI_BATTERY_STATE_CHARGING)
+		else if (battery->state & ACPI_BATTERY_STATE_CHARGING) {
 			/* Check the rate and capacity to validate the status. */
 			if (!acpi_battery_is_full(battery) ||
 			    (battery->rate_now != ACPI_BATTERY_VALUE_UNKNOWN &&
@@ -244,6 +254,12 @@ static int acpi_battery_get_property(struct power_supply *psy,
 				/* Full and zero rate. */
 				val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
 			}
+
+			if (test_bit(ACPI_BATTERY_QUIRK_VALVE_STEAMDECK, &battery->flags) &&
+			    test_bit(ACPI_BATTERY_BCT_PRESENT, &battery->flags) &&
+			    battery->charge_time == ACPI_BATTERY_VALUE_UNKNOWN)
+				val->intval = POWER_SUPPLY_STATUS_DISCHARGING;
+		}
 		else if (battery->state & ACPI_BATTERY_STATE_CHARGE_LIMITING)
 			val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
 		else if (acpi_battery_is_charged(battery))
@@ -677,6 +693,10 @@ static int acpi_battery_get_state(struct acpi_battery *battery)
 	int result = 0;
 	acpi_status status = 0;
 	struct acpi_buffer buffer = { ACPI_ALLOCATE_BUFFER, NULL };
+	union acpi_object arg0 = { ACPI_TYPE_INTEGER };
+	struct acpi_object_list args = { 1, &arg0 };
+
+	arg0.integer.value = 100;
 
 	lockdep_assert_held(&battery->property_lock);
 
@@ -701,6 +721,15 @@ static int acpi_battery_get_state(struct acpi_battery *battery)
 				 state_offsets, ARRAY_SIZE(state_offsets));
 	battery->update_time = jiffies;
 	kfree(buffer.pointer);
+
+	if (test_bit(ACPI_BATTERY_BCT_PRESENT, &battery->flags)) {
+		status = acpi_evaluate_integer(battery->device->handle, "_BCT",
+					       &args, &battery->charge_time);
+		if (ACPI_FAILURE(status))
+			acpi_handle_info(battery->device->handle,
+					 "_BCT evaluation failed: %s",
+					 acpi_format_exception(status));
+	}
 
 	/* For buggy DSDTs that report negative 16-bit values for either
 	 * charging or discharging current and/or report 0 as 65536
@@ -1152,6 +1181,15 @@ static void acpi_battery_quirks(struct acpi_battery *battery)
 		set_bit(ACPI_BATTERY_QUIRK_DEGRADED_FULL_CHARGE, &battery->flags);
 		battery->capacity_now = battery->full_charge_capacity;
 	}
+
+	if (dmi_name_in_vendors("Valve")) {
+		const char *name;
+
+		name = dmi_get_system_info(DMI_PRODUCT_NAME);
+		if ((name && (!strncmp("Jupiter", name, 7))) ||
+		    (name && (!strncmp("Galileo", name, 7))))
+			set_bit(ACPI_BATTERY_QUIRK_VALVE_STEAMDECK, &battery->flags);
+	}
 }
 
 static int acpi_battery_update(struct acpi_battery *battery, bool resume)
@@ -1178,6 +1216,8 @@ static int acpi_battery_update(struct acpi_battery *battery, bool resume)
 			if (result)
 				return result;
 			acpi_battery_init_alarm(battery);
+			if (acpi_has_method(battery->device->handle, "_BCT"))
+				set_bit(ACPI_BATTERY_BCT_PRESENT, &battery->flags);
 		}
 
 		result = acpi_battery_get_state(battery);
