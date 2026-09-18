@@ -305,14 +305,36 @@ static void nci_nfcee_mode_set_rsp_packet(struct nci_dev *ndev,
 static void nci_core_conn_create_rsp_packet(struct nci_dev *ndev,
 					    const struct sk_buff *skb)
 {
-	__u8 status = skb->data[0];
 	struct nci_conn_info *conn_info = NULL;
 	const struct nci_core_conn_create_rsp *rsp;
+	__u8 status;
 
+	if (skb->len < 1)
+		return;
+
+	status = skb->data[0];
 	pr_debug("status 0x%x\n", status);
 
+	if (!test_and_clear_bit(NCI_CONN_CREATE_PENDING, &ndev->flags)) {
+		pr_warn_ratelimited("unexpected CORE_CONN_CREATE_RSP\n");
+		return;
+	}
+
 	if (status == NCI_STATUS_OK) {
+		if (skb->len < sizeof(*rsp)) {
+			status = NCI_STATUS_SYNTAX_ERROR;
+			goto exit;
+		}
+
 		rsp = (struct nci_core_conn_create_rsp *)skb->data;
+
+		if (rsp->conn_id == NCI_STATIC_RF_CONN_ID ||
+		    nci_get_conn_info_by_conn_id(ndev, rsp->conn_id)) {
+			pr_warn_ratelimited("invalid or duplicate conn_id 0x%x\n",
+					    rsp->conn_id);
+			status = NCI_STATUS_REJECTED;
+			goto exit;
+		}
 
 		conn_info = devm_kzalloc(&ndev->nfc_dev->dev,
 					 sizeof(*conn_info), GFP_KERNEL);
@@ -339,21 +361,22 @@ static void nci_core_conn_create_rsp_packet(struct nci_dev *ndev,
 		 */
 
 		INIT_LIST_HEAD(&conn_info->list);
-		list_add(&conn_info->list, &ndev->conn_info_list);
+		list_add_tail(&conn_info->list, &ndev->conn_info_list);
 
-		if (ndev->cur_params.id == ndev->hci_dev->nfcee_id)
+		if (conn_info->dest_type == NCI_DESTINATION_NFCEE &&
+		    ndev->cur_params.id == ndev->hci_dev->nfcee_id)
 			ndev->hci_dev->conn_info = conn_info;
 
-		conn_info->conn_id = rsp->conn_id;
 		conn_info->max_pkt_payload_len = rsp->max_ctrl_pkt_payload_len;
 		atomic_set(&conn_info->credits_cnt, rsp->credits_cnt);
 	}
 
-free_conn_info:
-	if (status == NCI_STATUS_REJECTED)
-		devm_kfree(&ndev->nfc_dev->dev, conn_info);
-exit:
+	nci_req_complete(ndev, status);
+	return;
 
+free_conn_info:
+	devm_kfree(&ndev->nfc_dev->dev, conn_info);
+exit:
 	nci_req_complete(ndev, status);
 }
 

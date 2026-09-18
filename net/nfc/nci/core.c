@@ -134,6 +134,7 @@ static int __nci_request(struct nci_dev *ndev,
 	}
 
 	ndev->req_status = ndev->req_result = 0;
+	clear_bit(NCI_CONN_CREATE_PENDING, &ndev->flags);
 
 	return rc;
 }
@@ -709,6 +710,7 @@ static void nci_core_conn_create_req(struct nci_dev *ndev, const void *opt)
 {
 	const struct core_conn_create_data *data = opt;
 
+	set_bit(NCI_CONN_CREATE_PENDING, &ndev->flags);
 	nci_send_cmd(ndev, NCI_OP_CORE_CONN_CREATE_CMD, data->length, data->cmd);
 }
 
