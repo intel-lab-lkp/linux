@@ -131,7 +131,7 @@ static void print2byte(uint16_t input, struct iio_channel_info *info)
 		printf("%05f ", ((float)input + info->offset) * info->scale);
 		break;
 	case 'f': {
-#if defined(__FLT16_MAX__)
+#if defined(FLT16_MAX)
 		union {
 			uint16_t u;
 			_Float16 f;
