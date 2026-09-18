@@ -136,6 +136,9 @@ static bool nf_confirm_get_protoff(struct sk_buff *skb, struct net *net,
 				   enum ip_conntrack_info ctinfo,
 				   unsigned int *protoffp, u8 *pnum)
 {
+	unsigned int nhoff = skb_network_offset(skb);
+	struct nf_conntrack_tuple tuple, invert;
+	enum ip_conntrack_dir dir;
 	unsigned int protoff;
 	__be16 frag_off;
 	int start;
@@ -144,12 +147,13 @@ static bool nf_confirm_get_protoff(struct sk_buff *skb, struct net *net,
 	case NFPROTO_IPV4:
 		if (ip_is_fragment(ip_hdr(skb)))
 			return false;
-		protoff = skb_network_offset(skb) + ip_hdrlen(skb);
+		protoff = nhoff + ip_hdrlen(skb);
 		*pnum = ip_hdr(skb)->protocol;
 		break;
 	case NFPROTO_IPV6:
 		*pnum = ipv6_hdr(skb)->nexthdr;
-		start = ipv6_skip_exthdr(skb, sizeof(struct ipv6hdr), pnum, &frag_off);
+		start = ipv6_skip_exthdr(skb, nhoff + sizeof(struct ipv6hdr),
+					 pnum, &frag_off);
 		if (start < 0 || frag_off)
 			return false;
 
@@ -158,6 +162,41 @@ static bool nf_confirm_get_protoff(struct sk_buff *skb, struct net *net,
 	default:
 		DEBUG_NET_WARN_ONCE(1, "helper invoked on non-IP family!");
 		return false;
+	}
+
+	if (protoff > skb->len)
+		return false;
+
+	if (!nf_ct_get_tuplepr(skb, nhoff, nf_ct_l3num(ct), net, &tuple))
+		return false;
+
+	dir = CTINFO2DIR(ctinfo);
+	if (!nf_ct_invert_tuple(&invert, &tuple))
+		return false;
+
+	/* This is called after L3/L4 headers have been mangled by NAT:
+	 * Packet in original direction has been subject to SNAT, i.e.
+	 * inverted reply dir.
+	 * Packet in reply direction has been subject to DNAT, i.e.
+	 * inverted original direction.
+	 */
+	if (!nf_ct_tuple_equal(&invert, nf_ct_tuple(ct, !dir)))
+		return false;
+
+	/* Validate that a full, sane TCP header (including options) is
+	 * present at protoff before helpers/seqadj are allowed to touch it.
+	 */
+	if (tuple.dst.protonum == IPPROTO_TCP) {
+		unsigned int tcplen = skb->len - protoff;
+		const struct tcphdr *th;
+		struct tcphdr _tcph;
+
+		th = skb_header_pointer(skb, protoff, sizeof(_tcph), &_tcph);
+		if (!th)
+			return false;
+
+		if (th->doff * 4 < sizeof(*th) || tcplen < th->doff * 4)
+			return false;
 	}
 
 	*protoffp = protoff;
