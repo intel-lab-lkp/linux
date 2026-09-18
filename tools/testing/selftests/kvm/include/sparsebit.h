@@ -30,7 +30,6 @@ typedef u64 sparsebit_num_t;
 
 struct sparsebit *sparsebit_alloc(void);
 void sparsebit_free(struct sparsebit **sbitp);
-void sparsebit_copy(struct sparsebit *dstp, const struct sparsebit *src);
 
 bool sparsebit_is_set(const struct sparsebit *sbit, sparsebit_idx_t idx);
 bool sparsebit_is_set_num(const struct sparsebit *sbit,
@@ -38,7 +37,6 @@ bool sparsebit_is_set_num(const struct sparsebit *sbit,
 bool sparsebit_is_clear(const struct sparsebit *sbit, sparsebit_idx_t idx);
 bool sparsebit_is_clear_num(const struct sparsebit *sbit,
 			    sparsebit_idx_t idx, sparsebit_num_t num);
-sparsebit_num_t sparsebit_num_set(const struct sparsebit *sbit);
 bool sparsebit_any_set(const struct sparsebit *sbit);
 bool sparsebit_any_clear(const struct sparsebit *sbit);
 bool sparsebit_all_set(const struct sparsebit *sbit);

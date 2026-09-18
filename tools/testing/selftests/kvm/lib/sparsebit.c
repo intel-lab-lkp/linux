@@ -184,8 +184,7 @@ struct sparsebit {
 
 	/*
 	 * A redundant count of the total number of bits set.  Used for
-	 * diagnostic purposes and to change the time complexity of
-	 * sparsebit_num_set() from O(n) to O(1).
+	 * diagnostic purposes and to answer sparsebit_all_set() in O(1).
 	 * Note: Due to overflow, a value of 0 means none or all set.
 	 */
 	sparsebit_num_t num_set;
@@ -268,39 +267,6 @@ static struct node *node_prev(const struct sparsebit *s, struct node *np)
 	return (struct node *) nodep->parent;
 }
 
-
-/* Allocates space to hold a copy of the node sub-tree pointed to by
- * subtree and duplicates the bit settings to the newly allocated nodes.
- * Returns the newly allocated copy of subtree.
- */
-static struct node *node_copy_subtree(const struct node *subtree)
-{
-	struct node *root;
-
-	/* Duplicate the node at the root of the subtree */
-	root = calloc(1, sizeof(*root));
-	if (!root) {
-		perror("calloc");
-		abort();
-	}
-
-	root->idx = subtree->idx;
-	root->mask = subtree->mask;
-	root->num_after = subtree->num_after;
-
-	/* As needed, recursively duplicate the left and right subtrees */
-	if (subtree->left) {
-		root->left = node_copy_subtree(subtree->left);
-		root->left->parent = root;
-	}
-
-	if (subtree->right) {
-		root->right = node_copy_subtree(subtree->right);
-		root->right->parent = root;
-	}
-
-	return root;
-}
 
 /* Searches for and returns a pointer to the node that describes the setting
  * of the bit given by idx.  A node describes the setting of a bit if its
@@ -964,22 +930,6 @@ void sparsebit_free(struct sparsebit **sbitp)
 	*sbitp = NULL;
 }
 
-/* Makes a copy of the sparsebit array given by s, to the sparsebit
- * array given by d.  Note, d must have already been allocated via
- * sparsebit_alloc().  It can though already have bits set, which
- * if different from src will be cleared.
- */
-void sparsebit_copy(struct sparsebit *d, const struct sparsebit *s)
-{
-	/* First clear any bits already set in the destination */
-	sparsebit_clear_all(d);
-
-	if (s->root) {
-		d->root = node_copy_subtree(s->root);
-		d->num_set = s->num_set;
-	}
-}
-
 /* Returns whether num consecutive bits starting at idx are all set.  */
 bool sparsebit_is_set_num(const struct sparsebit *s,
 	sparsebit_idx_t idx, sparsebit_num_t num)
@@ -1033,17 +983,6 @@ bool sparsebit_is_clear_num(const struct sparsebit *s,
 	 * there are enough cleared bits between idx and the next set bit.
 	 */
 	return next_set == 0 || next_set - idx >= num;
-}
-
-/* Returns the total number of bits set.  Note: 0 is also returned for
- * the case of all bits set.  This is because with all bits set, there
- * is 1 additional bit set beyond what can be represented in the return
- * value.  Use sparsebit_any_set(), instead of sparsebit_num_set() > 0,
- * to determine if the sparsebit array has any bits set.
- */
-sparsebit_num_t sparsebit_num_set(const struct sparsebit *s)
-{
-	return s->num_set;
 }
 
 /* Returns whether any bit is set in the sparsebit array.  */
