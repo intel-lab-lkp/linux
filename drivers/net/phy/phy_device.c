@@ -1941,11 +1941,13 @@ void phy_detach(struct phy_device *phydev)
 		/* hwprov may technically be protected by ops lock but
 		 * not for devices with a phydev, see phy_link_topo_add_phy()
 		 */
-		hwprov = rtnl_dereference(dev->hwprov);
-		/* Disable timestamp if it is the one selected */
-		if (hwprov && hwprov->phydev == phydev) {
-			rcu_assign_pointer(dev->hwprov, NULL);
-			kfree_rcu(hwprov, rcu_head);
+		if (dev->reg_state != NETREG_UNINITIALIZED) {
+			hwprov = rtnl_dereference(dev->hwprov);
+			/* Disable timestamp if it is the one selected */
+			if (hwprov && hwprov->phydev == phydev) {
+				rcu_assign_pointer(dev->hwprov, NULL);
+				kfree_rcu(hwprov, rcu_head);
+			}
 		}
 
 		phydev->attached_dev->phydev = NULL;
