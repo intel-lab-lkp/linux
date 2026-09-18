@@ -4772,20 +4772,34 @@ gpa_t kvm_mmu_gva_to_gpa_system(struct kvm_vcpu *vcpu, gva_t gva,
 
 static int kvm_read_guest_virt_helper(gva_t addr, void *val, unsigned int bytes,
 				      struct kvm_vcpu *vcpu, u64 access,
-				      struct x86_exception *exception)
+				      struct x86_exception *exception,
+				      unsigned int *bytes_read)
 {
 	struct kvm_pagewalk *gva_walk = &vcpu->arch.gva_walk;
 	void *data = val;
 	int r = X86EMUL_CONTINUE;
 
 	while (bytes) {
-		gpa_t gpa = gva_walk->gva_to_gpa(vcpu, gva_walk, addr, access, exception);
+		gpa_t gpa;
 		unsigned offset = addr & (PAGE_SIZE-1);
 		unsigned toread = min(bytes, (unsigned)PAGE_SIZE - offset);
 		int ret;
 
-		if (gpa == INVALID_GPA)
-			return X86EMUL_PROPAGATE_FAULT;
+		/* Apply address wrapping or canonicality checks before each fetch chunk. */
+		if (access & PFERR_FETCH_MASK) {
+			if (!is_64_bit_mode(vcpu))
+				addr = (u32)addr;
+			else if (is_noncanonical_address(addr, vcpu, 0)) {
+				r = X86EMUL_UNHANDLEABLE;
+				goto out;
+			}
+		}
+
+		gpa = gva_walk->gva_to_gpa(vcpu, gva_walk, addr, access, exception);
+		if (gpa == INVALID_GPA) {
+			r = X86EMUL_PROPAGATE_FAULT;
+			goto out;
+		}
 		ret = kvm_vcpu_read_guest_page(vcpu, gpa >> PAGE_SHIFT, data,
 					       offset, toread);
 		if (ret < 0) {
@@ -4798,13 +4812,32 @@ static int kvm_read_guest_virt_helper(gva_t addr, void *val, unsigned int bytes,
 		addr += toread;
 	}
 out:
+	if (bytes_read)
+		*bytes_read = data - val;
 	return r;
 }
 
-/* used for instruction fetching */
-static int kvm_fetch_guest_virt(struct x86_emulate_ctxt *ctxt,
-				gva_t addr, void *val, unsigned int bytes,
-				struct x86_exception *exception)
+/* Return the number of instruction bytes read, including partial reads. */
+unsigned int kvm_fetch_guest_virt(struct kvm_vcpu *vcpu, gva_t addr,
+				 void *val, unsigned int bytes)
+{
+	struct x86_exception exception = {};
+	unsigned int bytes_read;
+	u64 access = PFERR_FETCH_MASK;
+
+	if (kvm_x86_call(get_cpl)(vcpu) == 3)
+		access |= PFERR_USER_MASK;
+
+	kvm_read_guest_virt_helper(addr, val, bytes, vcpu, access,
+				  &exception, &bytes_read);
+	return bytes_read;
+}
+EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_fetch_guest_virt);
+
+static int emulator_fetch_guest_virt(struct x86_emulate_ctxt *ctxt,
+				     gva_t addr, void *val,
+				     unsigned int bytes,
+				     struct x86_exception *exception)
 {
 	struct kvm_vcpu *vcpu = emul_to_vcpu(ctxt);
 	struct kvm_pagewalk *gva_walk = &vcpu->arch.gva_walk;
@@ -4843,7 +4876,7 @@ int kvm_read_guest_virt(struct kvm_vcpu *vcpu,
 	 */
 	memset(exception, 0, sizeof(*exception));
 	return kvm_read_guest_virt_helper(addr, val, bytes, vcpu, access,
-					  exception);
+					  exception, NULL);
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_read_guest_virt);
 
@@ -4859,7 +4892,8 @@ static int emulator_read_std(struct x86_emulate_ctxt *ctxt,
 	else if (kvm_x86_call(get_cpl)(vcpu) == 3)
 		access |= PFERR_USER_MASK;
 
-	return kvm_read_guest_virt_helper(addr, val, bytes, vcpu, access, exception);
+	return kvm_read_guest_virt_helper(addr, val, bytes, vcpu, access,
+					  exception, NULL);
 }
 
 static int kvm_write_guest_virt_helper(gva_t addr, void *val, unsigned int bytes,
@@ -5771,7 +5805,7 @@ static const struct x86_emulate_ops emulate_ops = {
 	.write_gpr           = emulator_write_gpr,
 	.read_std            = emulator_read_std,
 	.write_std           = emulator_write_std,
-	.fetch               = kvm_fetch_guest_virt,
+	.fetch               = emulator_fetch_guest_virt,
 	.read_emulated       = emulator_read_emulated,
 	.write_emulated      = emulator_write_emulated,
 	.cmpxchg_emulated    = emulator_cmpxchg_emulated,
