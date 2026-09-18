@@ -1,0 +1,35 @@
+PCIe Flit error log ratelimits
+------------------------------
+
+These attributes show up under the Root Ports, Switch Ports and Root Complex
+Event Collectors that implement the PCI Express Flit Logging Extended
+Capability, where the OS was granted control of it. They represent configurable
+ratelimits of the flit error logs written to the kernel log.
+
+The ratelimit applies only to the kernel log. The flit_event trace event is
+emitted for every flit error the driver drains from the Flit Error Log,
+regardless of these settings. The log is a FIFO of implementation specific
+depth, so errors the hardware could not log are not reported either way.
+
+Writing these attributes requires CAP_SYS_ADMIN.
+
+What:		/sys/bus/pci/devices/<dev>/flit/ratelimit_interval_ms
+Date:		September 2026
+KernelVersion:	7.4.0
+Contact:	linux-pci@vger.kernel.org
+Description:	Writing 0, or any negative value, disables flit error log
+		ratelimiting. Writing a positive value sets the ratelimit
+		interval in ms. Reading gets the current ratelimit interval
+		in ms, rounded up to a whole jiffy. Default is
+		DEFAULT_RATELIMIT_INTERVAL (5000 ms).
+
+What:		/sys/bus/pci/devices/<dev>/flit/ratelimit_burst
+Date:		September 2026
+KernelVersion:	7.4.0
+Contact:	linux-pci@vger.kernel.org
+Description:	Ratelimit burst for flit error logs. Writing a value changes
+		the number of logs (burst) allowed per interval before
+		ratelimiting. Reading gets the current ratelimit burst.
+		Writing 0, or any negative value, suppresses all logs
+		unless the interval attribute is also 0. Default is
+		DEFAULT_RATELIMIT_BURST (10).

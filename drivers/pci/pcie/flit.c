@@ -16,8 +16,10 @@
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
+#include <linux/ratelimit.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/sysfs.h>
 #include <ras/ras_event.h>
 #include "portdrv.h"
 #include "../pci.h"
@@ -76,6 +78,7 @@ static bool flit_is_native(struct pci_dev *pdev)
 
 struct flit_info {
 	spinlock_t lock;	/* serializes Counter Control read-modify-write */
+	struct ratelimit_state ratelimit;
 	bool cntr_enabled;	/* Counter Enable as the driver intends it */
 };
 
@@ -95,6 +98,10 @@ void pci_flit_init(struct pci_dev *pdev)
 	}
 
 	spin_lock_init(&pdev->flit_info->lock);
+
+	ratelimit_state_init(&pdev->flit_info->ratelimit,
+			     DEFAULT_RATELIMIT_INTERVAL,
+			     DEFAULT_RATELIMIT_BURST);
 
 	pci_add_ext_cap_save_buffer(pdev, PCI_EXT_CAP_ID_FLIT, sizeof(u16));
 
@@ -170,6 +177,38 @@ static void flit_cntr_ctrl_update(struct pci_dev *pdev, u16 clear, u16 set)
 	spin_unlock_irqrestore(&pdev->flit_info->lock, flags);
 }
 
+/*
+ * pci_dev_attr_groups[] in pci-sysfs.c is the only consumer of the group
+ * below, and the ratelimit accessors it is built from live there too.
+ */
+#ifdef CONFIG_SYSFS
+
+PCI_RATELIMIT_INTERVAL_ATTR(ratelimit_interval_ms, flit_info->ratelimit);
+PCI_RATELIMIT_BURST_ATTR(ratelimit_burst, flit_info->ratelimit);
+
+static struct attribute *flit_attrs[] = {
+	&dev_attr_ratelimit_interval_ms.attr,
+	&dev_attr_ratelimit_burst.attr,
+	NULL
+};
+
+static bool flit_group_visible(struct kobject *kobj)
+{
+	struct pci_dev *pdev = to_pci_dev(kobj_to_dev(kobj));
+
+	return !!pdev->flit_info;
+}
+
+DEFINE_SIMPLE_SYSFS_GROUP_VISIBLE(flit);
+
+const struct attribute_group flit_attr_group = {
+	.name		= "flit",
+	.attrs		= flit_attrs,
+	.is_visible	= SYSFS_GROUP_VISIBLE(flit),
+};
+
+#endif /* CONFIG_SYSFS */
+
 static void flit_cntr_enable(struct pci_dev *pdev)
 {
 	u16 flit = pdev->flit_cap;
@@ -205,7 +244,8 @@ static void flit_report(struct pci_dev *pdev, u32 err_log1, u32 err_log2)
 	if (!(err_log1 & FLIT_ERR_LOG1_ERROR) && !err_log2)
 		return;
 
-	pci_warn(pdev, "ErrLog1: 0x%08x ErrLog2: 0x%08x\n", err_log1, err_log2);
+	if (__ratelimit(&pdev->flit_info->ratelimit))
+		pci_warn(pdev, "ErrLog1: 0x%08x ErrLog2: 0x%08x\n", err_log1, err_log2);
 
 	trace_flit_event(pci_name(pdev), err_log1, err_log2);
 }

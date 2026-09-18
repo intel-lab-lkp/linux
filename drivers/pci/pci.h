@@ -1005,6 +1005,7 @@ void pci_flit_init(struct pci_dev *pdev);
 void pci_flit_exit(struct pci_dev *pdev);
 void pci_save_flit_state(struct pci_dev *pdev);
 void pci_restore_flit_state(struct pci_dev *pdev);
+extern const struct attribute_group flit_attr_group;
 #else
 static inline void pci_flit_init(struct pci_dev *pdev) { }
 static inline void pci_flit_exit(struct pci_dev *pdev) { }
