@@ -701,10 +701,7 @@ static unsigned int tnt4882_update_status(struct gpib_board *board, unsigned int
 	nec7210_update_status_nolock(board, &priv->nec7210_priv);
 	/* set / clear SRQ state since it is not cleared by interrupt */
 	line_status = tnt_readb(priv, BSR);
-	if (line_status & BCSR_SRQ_BIT)
-		set_bit(SRQI_NUM, &board->status);
-	else
-		clear_bit(SRQI_NUM, &board->status);
+	assign_bit(SRQI_NUM, &board->status, line_status & BCSR_SRQ_BIT);
 	spin_unlock_irqrestore(&board->spinlock, flags);
 	return board->status;
 }

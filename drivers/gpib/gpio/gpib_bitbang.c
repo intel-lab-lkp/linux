@@ -949,25 +949,13 @@ static unsigned int bb_update_status(struct gpib_board *board, unsigned int clea
 
 	board->status &= ~clear_mask;
 
-	if (gpiod_get_value(SRQ))	       /* SRQ asserted low */
-		clear_bit(SRQI_NUM, &board->status);
-	else
-		set_bit(SRQI_NUM, &board->status);
-	if (gpiod_get_value(_ATN))			/* ATN asserted low */
-		clear_bit(ATN_NUM, &board->status);
-	else
-		set_bit(ATN_NUM, &board->status);
-	if (priv->talker_state == talker_active ||
-	    priv->talker_state == talker_addressed)
-		set_bit(TACS_NUM, &board->status);
-	else
-		clear_bit(TACS_NUM, &board->status);
+	assign_bit(SRQI_NUM, &board->status, !gpiod_get_value(SRQ));
+	assign_bit(ATN_NUM, &board->status, !gpiod_get_value(_ATN));
+	assign_bit(TACS_NUM, &board->status,
+		   priv->talker_state == talker_active || priv->talker_state == talker_addressed);
 
-	if (priv->listener_state == listener_active ||
-	    priv->listener_state == listener_addressed)
-		set_bit(LACS_NUM, &board->status);
-	else
-		clear_bit(LACS_NUM, &board->status);
+	assign_bit(LACS_NUM, &board->status,
+		   priv->listener_state == listener_active || priv->listener_state == listener_addressed);
 
 	dbg_printk(2, "0x%lx mask 0x%x\n", board->status, clear_mask);
 

@@ -824,10 +824,8 @@ irqreturn_t fluke_gpib_internal_interrupt(struct gpib_board *board)
 		retval = IRQ_HANDLED;
 
 	if (read_byte(nec_priv, ADR0) & DATA_IN_STATUS)	{
-		if (test_bit(RFD_HOLDOFF_BN, &nec_priv->state))
-			set_bit(READ_READY_BN, &nec_priv->state);
-		else
-			clear_bit(READ_READY_BN, &nec_priv->state);
+		assign_bit(READ_READY_BN, &nec_priv->state,
+			   test_bit(RFD_HOLDOFF_BN, &nec_priv->state));
 	}
 
 	if (retval == IRQ_HANDLED)

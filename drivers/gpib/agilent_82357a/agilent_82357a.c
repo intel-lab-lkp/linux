@@ -865,10 +865,7 @@ static unsigned int agilent_82357a_update_status(struct gpib_board *board,
 		return -ENODEV;
 	usb_dev = interface_to_usbdev(a_priv->bus_interface);
 	board->status &= ~clear_mask;
-	if (a_priv->is_cic)
-		set_bit(CIC_NUM, &board->status);
-	else
-		clear_bit(CIC_NUM, &board->status);
+	assign_bit(CIC_NUM, &board->status, a_priv->is_cic);
 	address_status.address = ADSR;
 	retval = agilent_82357a_read_registers(a_priv, &address_status, 1, 0);
 	if (retval) {
@@ -877,29 +874,14 @@ static unsigned int agilent_82357a_update_status(struct gpib_board *board,
 		return board->status;
 	}
 	// check for remote/local
-	if (address_status.value & HR_REM)
-		set_bit(REM_NUM, &board->status);
-	else
-		clear_bit(REM_NUM, &board->status);
+	assign_bit(REM_NUM, &board->status, address_status.value & HR_REM);
 	// check for lockout
-	if (address_status.value & HR_LLO)
-		set_bit(LOK_NUM, &board->status);
-	else
-		clear_bit(LOK_NUM, &board->status);
+	assign_bit(LOK_NUM, &board->status, address_status.value & HR_LLO);
 	// check for ATN
-	if (address_status.value & HR_ATN)
-		set_bit(ATN_NUM, &board->status);
-	else
-		clear_bit(ATN_NUM, &board->status);
+	assign_bit(ATN_NUM, &board->status, address_status.value & HR_ATN);
 	// check for talker/listener addressed
-	if (address_status.value & HR_TA)
-		set_bit(TACS_NUM, &board->status);
-	else
-		clear_bit(TACS_NUM, &board->status);
-	if (address_status.value & HR_LA)
-		set_bit(LACS_NUM, &board->status);
-	else
-		clear_bit(LACS_NUM, &board->status);
+	assign_bit(TACS_NUM, &board->status, address_status.value & HR_TA);
+	assign_bit(LACS_NUM, &board->status, address_status.value & HR_LA);
 
 	bus_status.address = BSR;
 	retval = agilent_82357a_read_registers(a_priv, &bus_status, 1, 0);
@@ -908,10 +890,7 @@ static unsigned int agilent_82357a_update_status(struct gpib_board *board,
 			dev_err(&usb_dev->dev, "read_registers() returned error\n");
 		return board->status;
 	}
-	if (bus_status.value & BSR_SRQ_BIT)
-		set_bit(SRQI_NUM, &board->status);
-	else
-		clear_bit(SRQI_NUM, &board->status);
+	assign_bit(SRQI_NUM, &board->status, bus_status.value & BSR_SRQ_BIT);
 
 	return board->status;
 }

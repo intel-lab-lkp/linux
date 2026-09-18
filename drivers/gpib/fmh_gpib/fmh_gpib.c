@@ -1165,25 +1165,17 @@ irqreturn_t fmh_gpib_internal_interrupt(struct gpib_board *board)
 
 	ext_status_1 = read_byte(nec_priv, EXT_STATUS_1_REG);
 
-	if (ext_status_1 & DATA_IN_STATUS_BIT)
-		set_bit(READ_READY_BN, &nec_priv->state);
-	else
-		clear_bit(READ_READY_BN, &nec_priv->state);
+	assign_bit(READ_READY_BN, &nec_priv->state,
+		   ext_status_1 & DATA_IN_STATUS_BIT);
 
-	if (ext_status_1 & DATA_OUT_STATUS_BIT)
-		set_bit(WRITE_READY_BN, &nec_priv->state);
-	else
-		clear_bit(WRITE_READY_BN, &nec_priv->state);
+	assign_bit(WRITE_READY_BN, &nec_priv->state,
+		   ext_status_1 & DATA_OUT_STATUS_BIT);
 
-	if (ext_status_1 & COMMAND_OUT_STATUS_BIT)
-		set_bit(COMMAND_READY_BN, &nec_priv->state);
-	else
-		clear_bit(COMMAND_READY_BN, &nec_priv->state);
+	assign_bit(COMMAND_READY_BN, &nec_priv->state,
+		   ext_status_1 & COMMAND_OUT_STATUS_BIT);
 
-	if (ext_status_1 & RFD_HOLDOFF_STATUS_BIT)
-		set_bit(RFD_HOLDOFF_BN, &nec_priv->state);
-	else
-		clear_bit(RFD_HOLDOFF_BN, &nec_priv->state);
+	assign_bit(RFD_HOLDOFF_BN, &nec_priv->state,
+		   ext_status_1 & RFD_HOLDOFF_STATUS_BIT);
 
 	if (ext_status_1 & END_STATUS_BIT) {
 		/*

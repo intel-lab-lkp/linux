@@ -177,26 +177,15 @@ unsigned int nec7210_update_status_nolock(struct gpib_board *board, struct nec72
 		return 0;
 
 	address_status_bits = read_byte(priv, ADSR);
-	if (address_status_bits & HR_CIC)
-		set_bit(CIC_NUM, &board->status);
-	else
-		clear_bit(CIC_NUM, &board->status);
+	assign_bit(CIC_NUM, &board->status, address_status_bits & HR_CIC);
 	// check for talker/listener addressed
 	update_talker_state(priv, address_status_bits);
-	if (priv->talker_state == talker_active || priv->talker_state == talker_addressed)
-		set_bit(TACS_NUM, &board->status);
-	else
-		clear_bit(TACS_NUM, &board->status);
+	assign_bit(TACS_NUM, &board->status,
+		   priv->talker_state == talker_active || priv->talker_state == talker_addressed);
 	update_listener_state(priv, address_status_bits);
-	if (priv->listener_state == listener_active ||
-	    priv->listener_state == listener_addressed)
-		set_bit(LACS_NUM, &board->status);
-	else
-		clear_bit(LACS_NUM, &board->status);
-	if (address_status_bits & HR_NATN)
-		clear_bit(ATN_NUM, &board->status);
-	else
-		set_bit(ATN_NUM, &board->status);
+	assign_bit(LACS_NUM, &board->status,
+		   priv->listener_state == listener_active || priv->listener_state == listener_addressed);
+	assign_bit(ATN_NUM, &board->status, !(address_status_bits & HR_NATN));
 	spoll_status = nec7210_serial_poll_status(board, priv);
 	if (priv->srq_pending && (spoll_status & request_service_bit) == 0) {
 		priv->srq_pending = 0;
@@ -861,18 +850,12 @@ irqreturn_t nec7210_interrupt_have_status(struct gpib_board *board,
 
 	// change in lockout status
 	if (status2 & HR_LOKC) {
-		if (status2 & HR_LOK)
-			set_bit(LOK_NUM, &board->status);
-		else
-			clear_bit(LOK_NUM, &board->status);
+		assign_bit(LOK_NUM, &board->status, status2 & HR_LOK);
 	}
 
 	// change in remote status
 	if (status2 & HR_REMC) {
-		if (status2 & HR_REM)
-			set_bit(REM_NUM, &board->status);
-		else
-			clear_bit(REM_NUM, &board->status);
+		assign_bit(REM_NUM, &board->status, status2 & HR_REM);
 	}
 
 	// record reception of END

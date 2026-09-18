@@ -356,32 +356,19 @@ static unsigned int update_status_nolock(struct gpib_board *board, struct tms991
 	address_status = read_byte(priv, ADSR);
 
 	// check for remote/local
-	if (address_status & HR_REM)
-		set_bit(REM_NUM, &board->status);
-	else
-		clear_bit(REM_NUM, &board->status);
+	assign_bit(REM_NUM, &board->status, address_status & HR_REM);
 	// check for lockout
-	if (address_status & HR_LLO)
-		set_bit(LOK_NUM, &board->status);
-	else
-		clear_bit(LOK_NUM, &board->status);
+	assign_bit(LOK_NUM, &board->status, address_status & HR_LLO);
 	// check for ATN
-	if (address_status & HR_ATN)
-		set_bit(ATN_NUM, &board->status);
-	else
-		clear_bit(ATN_NUM, &board->status);
+	assign_bit(ATN_NUM, &board->status, address_status & HR_ATN);
 	// check for talker/listener addressed
 	update_talker_state(priv, address_status);
-	if (priv->talker_state == talker_active || priv->talker_state == talker_addressed)
-		set_bit(TACS_NUM, &board->status);
-	else
-		clear_bit(TACS_NUM, &board->status);
+	assign_bit(TACS_NUM, &board->status,
+		   priv->talker_state == talker_active || priv->talker_state == talker_addressed);
 
 	update_listener_state(priv, address_status);
-	if (priv->listener_state == listener_active || priv->listener_state == listener_addressed)
-		set_bit(LACS_NUM, &board->status);
-	else
-		clear_bit(LACS_NUM, &board->status);
+	assign_bit(LACS_NUM, &board->status,
+		   priv->listener_state == listener_active || priv->listener_state == listener_addressed);
 	// Check for SRQI - not reset elsewhere except in autospoll
 	if (board->status & SRQI) {
 		bsr_bits = read_byte(priv, BSR);
