@@ -13,3 +13,36 @@ kvm-$(CONFIG_HAVE_KVM_IRQ_ROUTING) += $(KVM)/irqchip.o
 kvm-$(CONFIG_HAVE_KVM_DIRTY_RING) += $(KVM)/dirty_ring.o
 kvm-$(CONFIG_HAVE_KVM_PFNCACHE) += $(KVM)/pfncache.o
 kvm-$(CONFIG_KVM_GUEST_MEMFD) += $(KVM)/guest_memfd.o
+
+# Force grep to emit a goofy group separator that can in turn be replaced with
+# the above newline macro (newlines in Make are a nightmare).  Note, grep only
+# prints the group separator when N lines of context are requested via -C,
+# a.k.a. --NUM.  Simply request zero lines.  Print the separator only after
+# filtering out expected exports to avoid extra newlines in the error message.
+define __kvm_get_exports
+$(shell grep "$(1)" -C0 --include='*.[ch]' -nrw \
+	$(srctree)/virt/kvm $(srctree)/arch/$(SRCARCH)/kvm \
+	$(addprefix | grep -v -e ,$(kvm_exports_allowed)) \
+	| grep "$(1)" -C0 --group-separator="!SEP!")
+endef
+
+
+KVM_CHECK_EXPORT_DIRS ?= $(srctree)/virt/kvm $(srctree)/arch/$(ARCH)/kvm
+
+# Fail the build if any unwanted $(1) usage is found outside kvm_exports_allowed.
+define kvm_check_exports
+kvm_nr_exports := $(shell grep "$(1)" --include='*.[ch]' -nrw \
+	$(KVM_CHECK_EXPORT_DIRS) \
+	$(addprefix | grep -v -e ,$(kvm_exports_allowed)) | wc -l)
+
+ifneq (0,$$(kvm_nr_exports))
+$$(error ERROR ***\
+$$(newline)found $$(kvm_nr_exports) unwanted occurrences of $(1):\
+$$(newline)  $(subst !SEP!,$$(newline) ,$(call __kvm_get_exports,$(1)))\
+$$(newline)in directories:\
+$$(newline)  $(KVM_CHECK_EXPORT_DIRS)\
+$$(newline)If this is a valid exception add it to kvm_exports_allowed or\
+$$(newline)use EXPORT_SYMBOL_FOR_KVM_INTERNAL, not $(1))
+endif # kvm_nr_exports != 0
+undefine kvm_nr_exports
+endef # kvm_check_exports
