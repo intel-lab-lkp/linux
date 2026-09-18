@@ -91,6 +91,16 @@ void virtio_gpu_cleanup_object(struct virtio_gpu_object *bo)
 		drm_gem_free_mmap_offset(&vram->base.base.base);
 		drm_gem_object_release(&vram->base.base.base);
 		kfree(vram);
+	} else if (virtio_gpu_is_userptr(bo)) {
+		struct virtio_gpu_object_userptr *userptr =
+			to_virtio_gpu_userptr(bo);
+
+		mutex_lock(&userptr->lock);
+		userptr->ops->put_pages(userptr);
+		mutex_unlock(&userptr->lock);
+		mutex_destroy(&userptr->lock);
+		drm_gem_object_release(&userptr->base.base.base);
+		kfree(userptr);
 	} else {
 		drm_gem_object_release(&bo->base.base);
 		kfree(bo);
@@ -313,6 +323,18 @@ int virtio_gpu_object_restore_all(struct virtio_gpu_device *vgdev)
 			if (ret)
 				break;
 
+			continue;
+		}
+
+		if (virtio_gpu_is_userptr(bo)) {
+			ret = virtio_gpu_userptr_restore(vgdev, bo, &ents,
+							 &nents);
+			if (ret)
+				break;
+
+			virtio_gpu_cmd_resource_create_blob(vgdev, bo,
+							    &bo->params,
+							    ents, nents);
 			continue;
 		}
 
