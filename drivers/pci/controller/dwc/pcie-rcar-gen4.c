@@ -14,11 +14,13 @@
 #include <linux/io.h>
 #include <linux/iopoll.h>
 #include <linux/irqchip/arm-gic-v3.h>
+#include <linux/irqdomain.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
+#include <linux/of_pci.h>
 #include <linux/pci.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
@@ -56,12 +58,20 @@
 #define PCIEINTSTS0EN		0x0310
 #define MSI_CTRL_INT		BIT(26)
 
+/* Root Port notifications routed to intreq_pcim_lperr ("aer") */
+#define AER_RC_ERR_MSI		BIT(29)
+#define AER_RC_ERR_INT		BIT(27)
+#define RP_AER_MASK		(AER_RC_ERR_MSI | AER_RC_ERR_INT)
+
 /* PCIe DMA Interrupt Status Enable */
 #define PCIEDMAINTSTSEN		0x0314
 #define PCIEDMAINTSTSEN_INIT	GENMASK(15, 0)
 
 /* PCIe Reset Status Clear */
 #define PCIERSTSTSCLR		0x0330
+
+/* PCIe Interrupt Status 0 Clear */
+#define PCIEINTSTS0CLR		0x0340
 
 /* Port Logic Registers 89 */
 #define PRTLGC89		0x0b70
@@ -123,6 +133,12 @@ struct rcar_gen4_pcie {
 	int sub_irq;
 	bool sub_irq_owned;
 	struct work_struct link_down_work;
+	/* Virtual Root Port INTx, fed from intreq_pcim_lperr ("aer") */
+	struct irq_domain *rp_irq_domain;
+	struct fwnode_handle *rp_fwnode;
+	unsigned int rp_irq;
+	bool rp_irq_enabled;
+	int aer_irq;
 	unsigned long state;
 	/* Protects APP interrupt enable registers and their software state. */
 	raw_spinlock_t app_lock;
@@ -376,7 +392,7 @@ static int rcar_gen4_pcie_host_msi_addr(struct dw_pcie_rp *pp, u32 *msi_addr)
 	return 0;
 }
 
-/* Whether the APP interrupt sources may currently be enabled. */
+/* True if APP interrupt enables should stay masked */
 static bool rcar_gen4_pcie_irqs_blocked(struct rcar_gen4_pcie *rcar)
 {
 	return !!rcar->state;
@@ -401,7 +417,7 @@ static void rcar_gen4_pcie_app_irq_sync_locked(struct rcar_gen4_pcie *rcar)
 	lockdep_assert_held(&rcar->app_lock);
 
 	val = readl(rcar->base + PCIEINTSTS0EN);
-	val &= ~MSI_CTRL_INT;
+	val &= ~(MSI_CTRL_INT | RP_AER_MASK);
 	/*
 	 * MSI delivery only depends on DBI being usable; teardown must not
 	 * stop it while devices are still being removed.
@@ -409,6 +425,8 @@ static void rcar_gen4_pcie_app_irq_sync_locked(struct rcar_gen4_pcie *rcar)
 	if (!rcar_gen4_pcie_dbi_unsafe(rcar) && pp->use_imsi_rx &&
 	    pci_msi_enabled())
 		val |= MSI_CTRL_INT;
+	if (armed && rcar->rp_irq_enabled && rcar->aer_irq > 0)
+		val |= RP_AER_MASK;
 	writel(val, rcar->base + PCIEINTSTS0EN);
 
 	val = readl(rcar->base + PCIERSTSTSEN);
@@ -504,10 +522,39 @@ static bool rcar_gen4_pcie_handle_link_down(struct rcar_gen4_pcie *rcar)
 						     &rcar->state);
 		rcar_gen4_pcie_app_irq_sync_locked(rcar);
 		writel(status, rcar->base + PCIERSTSTSCLR);
+		/*
+		 * Drop any Root Port events triggered by link down; the
+		 * upcoming reset will reinitialize the controller anyway.
+		 */
+		writel(RP_AER_MASK, rcar->base + PCIEINTSTS0CLR);
 	}
 
 	if (schedule)
 		schedule_work(&rcar->link_down_work);
+
+	return true;
+}
+
+/*
+ * Dispatch pending Root Port notifications in @mask to the virtual Root
+ * Port IRQ. Returns true if there was something to handle.
+ */
+static bool rcar_gen4_pcie_rp_irq_dispatch(struct rcar_gen4_pcie *rcar,
+					   u32 mask)
+{
+	u32 status;
+
+	status = readl(rcar->base + PCIEINTSTS0) &
+		 readl(rcar->base + PCIEINTSTS0EN) & mask;
+	if (!status)
+		return false;
+
+	/* Check once more right before running handlers that access DBI. */
+	if (rcar_gen4_pcie_handle_link_down(rcar) ||
+	    rcar_gen4_pcie_irqs_blocked(rcar))
+		return true;
+
+	generic_handle_domain_irq(rcar->rp_irq_domain, 0);
 
 	return true;
 }
@@ -604,6 +651,8 @@ static void rcar_gen4_pcie_link_down_irq_deinit(struct rcar_gen4_pcie *rcar)
 
 	if (rcar->sub_irq > 0)
 		synchronize_irq(rcar->sub_irq);
+	if (rcar->aer_irq > 0)
+		synchronize_irq(rcar->aer_irq);
 
 	cancel_work_sync(&rcar->link_down_work);
 
@@ -612,6 +661,183 @@ static void rcar_gen4_pcie_link_down_irq_deinit(struct rcar_gen4_pcie *rcar)
 		rcar->sub_irq_owned = false;
 	}
 	rcar->sub_irq = 0;
+}
+
+static void rcar_gen4_pcie_rp_irq_mask(struct irq_data *d)
+{
+	struct rcar_gen4_pcie *rcar = irq_data_get_irq_chip_data(d);
+
+	guard(raw_spinlock_irqsave)(&rcar->app_lock);
+	rcar->rp_irq_enabled = false;
+	rcar_gen4_pcie_app_irq_sync_locked(rcar);
+}
+
+static void rcar_gen4_pcie_rp_irq_unmask(struct irq_data *d)
+{
+	struct rcar_gen4_pcie *rcar = irq_data_get_irq_chip_data(d);
+
+	guard(raw_spinlock_irqsave)(&rcar->app_lock);
+	rcar->rp_irq_enabled = true;
+	rcar_gen4_pcie_app_irq_sync_locked(rcar);
+}
+
+static void rcar_gen4_pcie_rp_irq_ack(struct irq_data *d)
+{
+	struct rcar_gen4_pcie *rcar = irq_data_get_irq_chip_data(d);
+
+	/*
+	 * Clear APP latches before the service clears Root Error Status so
+	 * we don't drop back-to-back notifications.
+	 */
+	writel(RP_AER_MASK, rcar->base + PCIEINTSTS0CLR);
+}
+
+static const struct irq_chip rcar_gen4_pcie_rp_irq_chip = {
+	.name = "rcar-gen4-rp",
+	.irq_mask = rcar_gen4_pcie_rp_irq_mask,
+	.irq_unmask = rcar_gen4_pcie_rp_irq_unmask,
+	.irq_ack = rcar_gen4_pcie_rp_irq_ack,
+};
+
+static int rcar_gen4_pcie_rp_irq_map(struct irq_domain *domain,
+				     unsigned int irq, irq_hw_number_t hwirq)
+{
+	irq_set_chip_and_handler(irq, &rcar_gen4_pcie_rp_irq_chip,
+				 handle_level_irq);
+	irq_set_chip_data(irq, domain->host_data);
+	irq_set_noprobe(irq);
+
+	return 0;
+}
+
+static const struct irq_domain_ops rcar_gen4_pcie_rp_irq_domain_ops = {
+	.map = rcar_gen4_pcie_rp_irq_map,
+};
+
+static irqreturn_t rcar_gen4_pcie_aer_irq_handler(int irq, void *data)
+{
+	struct rcar_gen4_pcie *rcar = data;
+
+	if (rcar_gen4_pcie_handle_link_down(rcar))
+		return IRQ_HANDLED;
+
+	return rcar_gen4_pcie_rp_irq_dispatch(rcar, RP_AER_MASK) ?
+		IRQ_HANDLED : IRQ_NONE;
+}
+
+static int rcar_gen4_pcie_map_irq(const struct pci_dev *dev, u8 slot, u8 pin)
+{
+	struct pci_host_bridge *bridge = pci_find_host_bridge(dev->bus);
+	struct rcar_gen4_pcie *rcar = dev_get_drvdata(bridge->dev.parent);
+
+	/* Downstream devices use standard OF INTx mapping */
+	if (!pci_is_root_bus(dev->bus))
+		return of_irq_parse_and_map_pci(dev, slot, pin);
+
+	/* Root Port uses the virtual IRQ (always INTA) */
+	return rcar->rp_irq;
+}
+
+static int rcar_gen4_pcie_rp_irq_init(struct dw_pcie_rp *pp)
+{
+	struct dw_pcie *dw = to_dw_pcie_from_pp(pp);
+	struct rcar_gen4_pcie *rcar = to_rcar_gen4_pcie(dw);
+	struct device *dev = dw->dev;
+	int irq, ret;
+
+	irq = platform_get_irq_byname_optional(rcar->pdev, "aer");
+	if (irq == -ENXIO)
+		irq = 0;	/* old DT: Root Port AER stays unavailable */
+	else if (irq < 0)
+		return dev_err_probe(dev, irq, "Failed to get AER IRQ\n");
+
+	/* Keep the notifications masked until a port service requests the IRQ. */
+	scoped_guard(raw_spinlock_irqsave, &rcar->app_lock) {
+		rcar->rp_irq_enabled = false;
+		rcar_gen4_pcie_app_irq_sync_locked(rcar);
+	}
+	writel(RP_AER_MASK, rcar->base + PCIEINTSTS0CLR);
+
+	/*
+	 * Note: suspend/resume support must not tear down and recreate this
+	 * domain, as the port driver keeps the mapped IRQ.
+	 */
+	rcar->rp_fwnode = irq_domain_alloc_named_fwnode(dev_name(dev));
+	if (!rcar->rp_fwnode)
+		return -ENOMEM;
+
+	rcar->rp_irq_domain = irq_domain_create_linear(rcar->rp_fwnode, 1,
+						       &rcar_gen4_pcie_rp_irq_domain_ops,
+						       rcar);
+	if (!rcar->rp_irq_domain) {
+		ret = -ENOMEM;
+		goto err_free_fwnode;
+	}
+
+	rcar->rp_irq = irq_create_mapping(rcar->rp_irq_domain, 0);
+	if (!rcar->rp_irq) {
+		ret = -ENOMEM;
+		goto err_remove_domain;
+	}
+
+	if (irq) {
+		/* Dispatch the child IRQ in hard IRQ context, including on PREEMPT_RT. */
+		ret = devm_request_irq(dev, irq,
+				       rcar_gen4_pcie_aer_irq_handler,
+				       IRQF_NO_THREAD, "rcar-gen4-pcie-aer",
+				       rcar);
+		if (ret) {
+			dev_err_probe(dev, ret, "Failed to request AER IRQ\n");
+			goto err_dispose_mapping;
+		}
+		rcar->aer_irq = irq;
+	}
+
+	/*
+	 * The Root Port MSI capabilities are hidden (no_rp_msi), so the port
+	 * services fall back to INTx; route it to the virtual IRQ.
+	 */
+	pp->bridge->map_irq = rcar_gen4_pcie_map_irq;
+
+	return 0;
+
+err_dispose_mapping:
+	irq_dispose_mapping(rcar->rp_irq);
+	rcar->rp_irq = 0;
+err_remove_domain:
+	irq_domain_remove(rcar->rp_irq_domain);
+	rcar->rp_irq_domain = NULL;
+err_free_fwnode:
+	irq_domain_free_fwnode(rcar->rp_fwnode);
+	rcar->rp_fwnode = NULL;
+
+	return ret;
+}
+
+static void rcar_gen4_pcie_rp_irq_deinit(struct rcar_gen4_pcie *rcar)
+{
+	if (!rcar->rp_irq_domain)
+		return;
+
+	/*
+	 * The port services are gone; stop the parent IRQ before tearing down
+	 * the domain.
+	 */
+	if (rcar->aer_irq > 0)
+		devm_free_irq(rcar->dw.dev, rcar->aer_irq, rcar);
+
+	scoped_guard(raw_spinlock_irqsave, &rcar->app_lock) {
+		rcar->rp_irq_enabled = false;
+		rcar_gen4_pcie_app_irq_sync_locked(rcar);
+	}
+
+	irq_dispose_mapping(rcar->rp_irq);
+	irq_domain_remove(rcar->rp_irq_domain);
+	irq_domain_free_fwnode(rcar->rp_fwnode);
+	rcar->rp_irq_domain = NULL;
+	rcar->rp_irq = 0;
+	rcar->aer_irq = 0;
+	rcar->rp_fwnode = NULL;
 }
 
 static int rcar_gen4_pcie_enable_device(struct pci_host_bridge *bridge,
@@ -706,6 +932,8 @@ static void rcar_gen4_pcie_quiesce_irqs(struct rcar_gen4_pcie *rcar)
 
 	if (rcar->sub_irq > 0)
 		disable_irq(rcar->sub_irq);
+	if (rcar->aer_irq > 0)
+		disable_irq(rcar->aer_irq);
 }
 
 static void rcar_gen4_pcie_resume_irqs(struct rcar_gen4_pcie *rcar,
@@ -718,6 +946,8 @@ static void rcar_gen4_pcie_resume_irqs(struct rcar_gen4_pcie *rcar,
 		rcar_gen4_pcie_app_irq_sync_locked(rcar);
 	}
 
+	if (rcar->aer_irq > 0)
+		enable_irq(rcar->aer_irq);
 	if (rcar->sub_irq > 0)
 		enable_irq(rcar->sub_irq);
 }
@@ -786,9 +1016,14 @@ static int rcar_gen4_pcie_host_init(struct dw_pcie_rp *pp)
 	if (ret)
 		goto err;
 
+	ret = rcar_gen4_pcie_rp_irq_init(pp);
+	if (ret)
+		goto err;
+
 	return 0;
 
 err:
+	gpiod_set_value_cansleep(dw->pe_rst, 1);
 	rcar_gen4_pcie_common_deinit(rcar);
 	return ret;
 }
@@ -799,6 +1034,7 @@ static void rcar_gen4_pcie_host_deinit(struct dw_pcie_rp *pp)
 	struct rcar_gen4_pcie *rcar = to_rcar_gen4_pcie(dw);
 
 	rcar_gen4_pcie_link_down_irq_deinit(rcar);
+	rcar_gen4_pcie_rp_irq_deinit(rcar);
 
 	gpiod_set_value_cansleep(dw->pe_rst, 1);
 	rcar_gen4_pcie_common_deinit(rcar);
@@ -827,6 +1063,12 @@ static int rcar_gen4_add_dw_pcie_rp(struct rcar_gen4_pcie *rcar)
 	INIT_WORK(&rcar->link_down_work, rcar_gen4_pcie_link_down_work);
 
 	pp->num_vectors = MAX_MSI_IRQS;
+	/*
+	 * The APP block only latches the Root Port's own interrupts into
+	 * PCIEINTSTS0; they are never delivered as MSI. Fall back to INTx,
+	 * which rcar_gen4_pcie_map_irq() routes to the virtual Root Port IRQ.
+	 */
+	pp->no_rp_msi = true;
 	pp->ops = &rcar_gen4_pcie_host_ops;
 
 	return dw_pcie_host_init(pp);
