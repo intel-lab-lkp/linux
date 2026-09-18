@@ -2061,23 +2061,6 @@ static int trace__process_event(struct trace *trace, struct machine *machine,
 			      "LOST %" PRIu64 " events!\n", (u64)event->lost.lost);
 		ret = machine__process_lost_event(machine, event, sample);
 		break;
-	case PERF_RECORD_FORK:
-		if (trace->raw_augmented_syscalls &&
-		    (augmented_syscalls__has_target_pid(event->fork.ppid) ||
-		     augmented_syscalls__has_target_pid(event->fork.ptid))) {
-			augmented_syscalls__add_target_pid(event->fork.pid);
-		}
-		ret = machine__process_fork_event(machine, event, sample);
-		break;
-	case PERF_RECORD_EXIT:
-		if (trace->raw_augmented_syscalls) {
-			if (event->fork.pid == event->fork.tid)
-				augmented_syscalls__del_target_pid(event->fork.pid);
-			else
-				augmented_syscalls__del_target_pid(event->fork.tid);
-		}
-		ret = machine__process_exit_event(machine, event, sample);
-		break;
 	default:
 		ret = machine__process_event(machine, event, sample);
 		break;
@@ -5016,6 +4999,22 @@ create_maps:
 	}
 
 	/*
+	 * Everything the BPF programs filter on is now in their maps, so it is
+	 * safe to let them run. They are attached system wide, so anything
+	 * before this point would have been filtered against a map that was
+	 * still being built up.
+	 *
+	 * Falling back to unaugmented tracing is no longer possible here: the
+	 * evlist was built around __augmented_syscalls__ back in cmd_trace(),
+	 * which is where that decision is taken and where the sys_enter evsel
+	 * was dropped. Fail the session rather than run one that can report
+	 * nothing.
+	 */
+	err = augmented_syscalls__attach();
+	if (err < 0)
+		goto out_error_attach;
+
+	/*
 	 * If the "close" syscall is not traced, then we will not have the
 	 * opportunity to, in syscall_arg__scnprintf_close_fd() invalidate the
 	 * fd->pathname table and were ending up showing the last value set by
@@ -5207,6 +5206,16 @@ out_error_ev_qualifier:
 	 * something else by the time it is read here.
 	 */
 	fprintf(trace->output, "Failed to set the syscall filters: %s\n",
+		str_error_r(-err, errbuf, sizeof(errbuf)));
+	goto out_put_evlist;
+
+out_error_attach:
+	/*
+	 * Use the returned error rather than errno: the failing attach is
+	 * unwound before returning, and the libbpf calls that does can leave
+	 * errno describing something else entirely.
+	 */
+	fprintf(trace->output, "Failed to attach the augmented syscalls BPF programs: %s\n",
 		str_error_r(-err, errbuf, sizeof(errbuf)));
 	goto out_put_evlist;
 }
@@ -6125,7 +6134,7 @@ int cmd_trace(int argc, const char **argv)
 			goto skip_augmentation;
 	}
 
-	err = augmented_syscalls__prepare();
+	err = augmented_syscalls__prepare(!trace.opts.no_inherit);
 	if (err < 0)
 		goto skip_augmentation;
 
@@ -6148,11 +6157,11 @@ int cmd_trace(int argc, const char **argv)
 		trace.syscalls.events.bpf_output = evlist__last(trace.evlist);
 	} else {
 		/*
-		 * augmented_syscalls__prepare() already attached sys_enter and
-		 * sys_exit, which are system wide. Falling through to
-		 * skip_augmentation without undoing that would run a BPF
-		 * program for every syscall on the machine, for the whole
-		 * session, with nothing consuming the output.
+		 * Drop the loaded skeleton before falling back to unaugmented
+		 * tracing. Otherwise the setters called from trace__run() would
+		 * still program its maps, and augmented_syscalls__attach() would
+		 * then put system wide BPF programs on raw_syscalls for a
+		 * session with nothing consuming their output.
 		 */
 		pr_debug("Failed to create the augmented syscalls bpf-output event, disabling augmentation\n");
 		augmented_syscalls__cleanup();
