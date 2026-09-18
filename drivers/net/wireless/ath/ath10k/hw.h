@@ -638,6 +638,12 @@ struct ath10k_hw_params {
 
 	/* The hardware support multicast frame registrations */
 	bool mcast_frame_registration;
+
+	/* Firmware sends no HTT security indication for a pairwise key
+	 * removal (WMI_CIPHER_NONE install), so waiting for one would only
+	 * time out.
+	 */
+	bool no_pairwise_key_del_ind;
 };
 
 struct htt_resp;

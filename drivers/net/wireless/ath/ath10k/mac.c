@@ -324,6 +324,11 @@ static int ath10k_install_key(struct ath10k_vif *arvif,
 	if (ret)
 		return ret;
 
+	/* Group-key removal installs a replacement key and is acknowledged. */
+	if (cmd == DISABLE_KEY && !(flags & WMI_KEY_GROUP) &&
+	    ar->hw_params.no_pairwise_key_del_ind)
+		return 0;
+
 	time_left = wait_for_completion_timeout(&ar->install_key_done, 3 * HZ);
 	if (time_left == 0)
 		return -ETIMEDOUT;

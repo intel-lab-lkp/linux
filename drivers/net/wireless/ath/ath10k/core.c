@@ -347,6 +347,7 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
 		.use_fw_tx_credits = true,
 		.delay_unmap_buffer = false,
 		.mcast_frame_registration = false,
+		.no_pairwise_key_del_ind = true,
 	},
 	{
 		.id = QCA6174_HW_3_2_VERSION,
@@ -746,6 +747,7 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
 		.use_fw_tx_credits = false,
 		.delay_unmap_buffer = true,
 		.mcast_frame_registration = false,
+		.no_pairwise_key_del_ind = true,
 	},
 };
 
