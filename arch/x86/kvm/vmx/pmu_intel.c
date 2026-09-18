@@ -417,6 +417,9 @@ static int intel_pmu_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 			reprogram_fixed_counters(pmu, data);
 		break;
 	case MSR_PERF_METRICS:
+		if (data & pmu->perf_metrics_rsvd)
+			return 1;
+
 		pmu->perf_metrics = data;
 		break;
 	case MSR_IA32_PEBS_ENABLE:
@@ -601,8 +604,21 @@ static void intel_pmu_refresh(struct kvm_vcpu *vcpu)
 	counter_rsvd = ~((BIT_ULL(pmu->nr_arch_gp_counters) - 1) |
 			 ((BIT_ULL(pmu->nr_arch_fixed_counters) - 1) << KVM_FIXED_PMC_BASE_IDX));
 	pmu->global_ctrl_rsvd = counter_rsvd;
-	if (perf_capabilities & PERF_CAP_PERF_METRICS)
+	if (perf_capabilities & PERF_CAP_PERF_METRICS) {
 		pmu->global_ctrl_rsvd &= ~GLOBAL_CTRL_EN_PERF_METRICS;
+
+		/*
+		 * PERF_METRICS has one 8-bit field per metric. At 8 metrics,
+		 * skip computing the mask and set perf_metrics_rsvd to 0
+		 * directly, since BIT_ULL(64) is undefined.
+		 */
+		if (kvm_pmu_cap.num_topdown_events < INTEL_TD_METRIC_NUM)
+			pmu->perf_metrics_rsvd =
+				~(BIT_ULL(kvm_pmu_cap.num_topdown_events *
+					  INTEL_TD_METRIC_FIELD_BITS) - 1);
+		else
+			pmu->perf_metrics_rsvd = 0;
+	}
 
 	/*
 	 * GLOBAL_STATUS and GLOBAL_OVF_CONTROL (a.k.a. GLOBAL_STATUS_RESET)
