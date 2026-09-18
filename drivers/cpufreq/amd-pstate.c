@@ -615,7 +615,7 @@ static int shmem_init_perf(struct amd_cpudata *cpudata)
 	if (ret)
 		pr_warn("failed to set auto_sel, ret: %d\n", ret);
 
-	return ret;
+	return 0;
 }
 
 DEFINE_STATIC_CALL(amd_pstate_init_perf, msr_init_perf);
