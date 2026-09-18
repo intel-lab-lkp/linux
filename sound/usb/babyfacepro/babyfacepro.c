@@ -279,7 +279,21 @@ static DEFINE_MUTEX(bf_saved_mutex);
  */
 int babyface_restore_state(struct snd_usb_babyface *chip)
 {
-	int out, src, ret;
+	int out, src, mic, ret;
+
+	/* Preamp state + commit. */
+	ret = bf_preamp_state_write(chip);
+	if (ret < 0)
+		return ret;
+
+	/* The four input gains. */
+	for (mic = 0; mic < 4; mic++) {
+		ret = bf_vendor_write(chip, BF_REQ_GAIN,
+				      (u16)bf_gain_raw(mic, chip->gain[mic]),
+				      BF_REG_GAIN + mic);
+		if (ret < 0)
+			return ret;
+	}
 
 	/* Masters (8-bit = the real volume) + mutes. */
 	ret = bf_apply_masters(chip);
@@ -337,10 +351,16 @@ void bf_state_save(struct snd_usb_babyface *chip)
 		list_add_tail(&s->list, &bf_saved_list);
 	}
 
+	s->preamp = chip->preamp;
+	memcpy(s->gain, chip->gain, sizeof(s->gain));
 	s->flag_cnt = chip->flag_cnt;
 	memcpy(s->master, chip->master, sizeof(s->master));
 	memcpy(s->muted, chip->muted, sizeof(s->muted));
 	memcpy(s->xpoint, chip->xpoint, sizeof(s->xpoint));
+	memcpy(s->phase, chip->phase, sizeof(s->phase));
+	memcpy(s->trim, chip->trim, sizeof(s->trim));
+	memcpy(s->split, chip->split, sizeof(s->split));
+	s->ref_level = chip->ref_level;
 	mutex_unlock(&bf_saved_mutex);
 }
 
@@ -359,10 +379,16 @@ int bf_state_restore(struct snd_usb_babyface *chip)
 	list_for_each_entry(s, &bf_saved_list, list) {
 		if (strcmp(s->key, key))
 			continue;
+		chip->preamp = s->preamp;
+		memcpy(chip->gain, s->gain, sizeof(chip->gain));
 		chip->flag_cnt = s->flag_cnt;
 		memcpy(chip->master, s->master, sizeof(chip->master));
 		memcpy(chip->muted, s->muted, sizeof(chip->muted));
 		memcpy(chip->xpoint, s->xpoint, sizeof(chip->xpoint));
+		memcpy(chip->phase, s->phase, sizeof(chip->phase));
+		memcpy(chip->trim, s->trim, sizeof(chip->trim));
+		memcpy(chip->split, s->split, sizeof(chip->split));
+		chip->ref_level = s->ref_level;
 		ret = 1;
 		break;
 	}
@@ -1118,6 +1144,7 @@ static int babyface_probe(struct usb_interface *intf,
 	struct snd_card *card;
 	struct snd_pcm *pcm;
 	unsigned int urbsize;
+	u8 st[4];
 	int i, err;
 
 	if (intf->cur_altsetting->desc.bInterfaceNumber != BF_IFACE) {
@@ -1152,6 +1179,7 @@ static int babyface_probe(struct usb_interface *intf,
 	chip->rate = 48000;
 	chip->alt = BF_ALT_1;
 	chip->frame_bytes = 56;
+	chip->preamp = BF_PREAMP_BASE;
 	mutex_init(&chip->mutex);
 	spin_lock_init(&chip->lock);
 	atomic_set(&chip->urb_err, 0);
@@ -1206,6 +1234,15 @@ static int babyface_probe(struct usb_interface *intf,
 		dev_err(&intf->dev, "cold init failed: %d\n", err);
 		goto error;
 	}
+
+	/* Sync the preamp state from the 0x17 readback (byte 0 mirrors
+	 * the 48V/PAD bits; it persists across power cycles).
+	 */
+	err = bf_vendor_read(chip, BF_REQ_PREAMP, BF_REG_PREAMP, st);
+	if (err < 0)
+		dev_dbg(&intf->dev, "preamp readback failed: %d\n", err);
+	else
+		chip->preamp = st[0];
 
 	/* Restore the mixer state saved at the last disconnect (if any);
 	 * the device keeps its registers across a usbfs detach, but the
@@ -1280,6 +1317,18 @@ static int babyface_probe(struct usb_interface *intf,
 	err = babyface_create_xpoints(chip);
 	if (err < 0) {
 		dev_err(&intf->dev, "crosspoint creation failed: %d\n", err);
+		goto error;
+	}
+
+	err = babyface_create_trim(chip);
+	if (err < 0) {
+		dev_err(&intf->dev, "phase/split/trim control creation failed: %d\n", err);
+		goto error;
+	}
+
+	err = babyface_create_preamp(chip);
+	if (err < 0) {
+		dev_err(&intf->dev, "preamp control creation failed: %d\n", err);
 		goto error;
 	}
 

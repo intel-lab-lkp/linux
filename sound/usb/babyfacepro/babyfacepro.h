@@ -114,6 +114,45 @@
 #define BF_SETTINGS_CLOCK_INTERNAL	0x0001
 #define BF_SETTINGS_CLOCK_OPTICAL	0x0004
 
+/* Preamp state byte (0x17, wIdx 0x003F - full state, verified).
+ * NOTE 2026-08-26 (cap_reflevel3.pcap): the 0x0C "base" is NOT a
+ * constant - it is the Instr 3/4 REF-LEVEL bits (bits 2-3, +4dBu =
+ * 0x0C set; -10dBV/Boost = clear; Boost additionally commits 0x21
+ * wVal 0x0003).  Keeping it always set = forcing the default +4dBu,
+ * which is correct for the driver (no ref-level control).
+ */
+#define BF_REG_PREAMP			0x003f
+#define BF_REG_GAIN			0x0000	/* + mic 0-3 (bReq 0x1a) */
+#define BF_PREAMP_REF_4DBU		0x000c
+#define BF_PREAMP_REF_MASK		0x000c
+#define BF_PREAMP_BASE			BF_PREAMP_REF_4DBU
+#define BF_PREAMP_48V_MIC1		0x0001
+#define BF_PREAMP_48V_MIC2		0x0002
+#define BF_PREAMP_PAD_MIC1		0x0010
+#define BF_PREAMP_PAD_MIC2		0x0020
+
+/* Ref Level (Instr 3/4) - PROTOCOL.md "Ref level (Instr 3/4) - LABELED"
+ * (cap_reflevel2.pcap, hardware-verified): a single shared 3-state
+ * switch for the Instrument pair.  +4dBu/-10dBV are bits 2-3 of the
+ * preamp byte (BF_PREAMP_REF_MASK); Boost shares -10dBV's bits and is
+ * distinguished only by the 0x21 commit value (0x0003, not the usual
+ * 0x0000) - not a persisted register bit, so it must be tracked
+ * host-side (chip->ref_level) and re-asserted on every preamp write,
+ * not just the one that engaged it (see bf_preamp_state_write).
+ */
+#define BF_REF_LEVEL_4DBU		0
+#define BF_REF_LEVEL_MINUS10DBV		1
+#define BF_REF_LEVEL_BOOST		2
+
+/* Preamp gain: 0-65 dB in 1 dB steps, packed coarse/fine (see the
+ * gain-scale comment above bf_gain_max_db).
+ */
+#define BF_GAIN_MAX_DB			65
+/* Mic gain is packed: bits 0-4 coarse (3 dB), bits 5-7 the 0-2 dB rest. */
+#define BF_GAIN_COARSE_MASK		0x1f
+#define BF_GAIN_COARSE_MAX		20
+#define BF_GAIN_FINE_SHIFT		5
+
 /* Register addresses (masters + crosspoint matrix). */
 #define BF_REG_MASTER_16		0x03e0	/* + 2*out (bReq 0x12) */
 #define BF_REG_MASTER_8			0x0004	/* + 2*out (bReq 0x1a) */
@@ -216,6 +255,37 @@ struct snd_usb_babyface {
 	u16 master[6][2];		/* cached 16-bit masters */
 	bool muted[6];
 	u16 xpoint[6][14][2];		/* cached crosspoints (out, src, L/R) */
+	u16 preamp;			/* 48V/PAD bits, base 0x0c */
+	u8 gain[4];			/* preamp gain in dB 0-65/9 (raw derived
+					 * at write: mic packed coarse/fine,
+					 * instr 0.5 dB/step)
+					 */
+	bool phase[4];			/* polarity invert, AN1-4 (bf_sources 0-3);
+					 * xpoint[][0..3][0] stays the PLAIN
+					 * value, only the wire write is
+					 * negated - see bf_phase_put's own
+					 * comment for the known limitation
+					 * this implies.
+					 */
+	int trim[4];			/* Trim (T), dB (-65..+6), AN1-4;
+					 * one shared register per pair, so
+					 * both entries of a pair are kept
+					 * equal; same "wire-only" caveat as
+					 * phase - see bf_trim_apply's own
+					 * comment.
+					 */
+	bool split[6];			/* stereo split, playback pairs PB1-PB6
+					 * (bf_sources idx 8-13); fixed
+					 * constants (PROTOCOL.md "Stereo
+					 * split"), not derived from the
+					 * fader - xpoint[][] is left
+					 * untouched, same as phase.
+					 */
+	int ref_level;			/* Instr 3/4 ref level, one of the
+					 * BF_REF_LEVEL_* values
+					 * (0 = +4dBu, the default)
+					 */
+	struct snd_kcontrol *trim_kctl[4]; /* for snd_ctl_notify */
 };
 
 /* The mixer state cached across interface re-probes/resume (see
@@ -226,10 +296,16 @@ struct snd_usb_babyface {
 struct bf_saved {
 	struct list_head list;
 	char key[32];
+	u16 preamp;
+	u8 gain[4];
 	u8 flag_cnt;
 	u16 master[6][2];
 	bool muted[6];
 	u16 xpoint[6][14][2];
+	bool phase[4];
+	int trim[4];
+	bool split[6];
+	int ref_level;
 };
 
 struct bf_rate {
@@ -273,6 +349,15 @@ int bf_xpoint_write(struct snd_usb_babyface *chip, int out, int src,
 		    u16 l, u16 r);
 int babyface_create_masters(struct snd_usb_babyface *chip);
 int babyface_create_xpoints(struct snd_usb_babyface *chip);
+int babyface_create_trim(struct snd_usb_babyface *chip);
+int babyface_create_preamp(struct snd_usb_babyface *chip);
+int bf_preamp_state_write(struct snd_usb_babyface *chip);
+int bf_phase_apply(struct snd_usb_babyface *chip, int mic, bool invert);
+int bf_split_apply(struct snd_usb_babyface *chip, int pb, bool split);
+int bf_trim_apply(struct snd_usb_babyface *chip, int mic, int trim_db2);
+int bf_gain_max_db(int mic);
+int bf_gain_db(int mic, u8 raw);
+u8 bf_gain_raw(int mic, int db);
 
 /* Master gain-law helpers - shared with the front-panel wheels once
  * the front panel lands.
