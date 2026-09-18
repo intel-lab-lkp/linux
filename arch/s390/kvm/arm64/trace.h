@@ -5,7 +5,7 @@
 #include <linux/tracepoint.h>
 
 #undef TRACE_SYSTEM
-#define TRACE_SYSTEM kvm
+#define TRACE_SYSTEM kvm_arm64
 
 #endif /* KVM_ARM64_TRACE_KVM_H */
 
