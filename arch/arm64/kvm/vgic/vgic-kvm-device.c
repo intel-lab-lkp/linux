@@ -566,14 +566,21 @@ static int vgic_v3_attr_regs_access(struct kvm_device *dev,
 			return -EFAULT;
 	}
 
-	mutex_lock(&dev->kvm->lock);
+	/* If the caller has not indicated that it already holds the necessary locks
+	 * (e.g., via KVM_DEV_ARM_VGIC_ATTR_FLAG_LOCKED), we must acquire the VM lock
+	 * and pause all VCPUs to ensure consistent access to VGIC state. This prevents
+	 * race conditions with concurrent interrupt injection or VCPU execution.
+	 */
+	if (attr->flags != KVM_DEV_ARM_VGIC_ATTR_FLAG_LOCKED) {
+		mutex_lock(&dev->kvm->lock);
 
-	if (kvm_trylock_all_vcpus(dev->kvm)) {
-		mutex_unlock(&dev->kvm->lock);
-		return -EBUSY;
+		if (kvm_trylock_all_vcpus(dev->kvm)) {
+			mutex_unlock(&dev->kvm->lock);
+			return -EBUSY;
+		}
+
+		mutex_lock(&dev->kvm->arch.config_lock);
 	}
-
-	mutex_lock(&dev->kvm->arch.config_lock);
 
 	if (!(vgic_initialized(dev->kvm) || reg_allowed_pre_init(attr))) {
 		ret = -EBUSY;
@@ -611,15 +618,96 @@ static int vgic_v3_attr_regs_access(struct kvm_device *dev,
 	}
 
 out:
-	mutex_unlock(&dev->kvm->arch.config_lock);
-	kvm_unlock_all_vcpus(dev->kvm);
-	mutex_unlock(&dev->kvm->lock);
+	/* Release the locks acquired at the beginning of this function,
+	 * but only if we actually acquired them.
+	 * The order of unlocking must be the reverse of locking.
+	 */
+	if (attr->flags != KVM_DEV_ARM_VGIC_ATTR_FLAG_LOCKED) {
+		mutex_unlock(&dev->kvm->arch.config_lock);
+		kvm_unlock_all_vcpus(dev->kvm);
+		mutex_unlock(&dev->kvm->lock);
+	}
 
 	if (!ret && uaccess && !is_write) {
 		u32 __user *uaddr = (u32 __user *)(unsigned long)attr->addr;
 		ret = put_user(val, uaddr);
 	}
 
+	return ret;
+}
+
+/* vgic_v3_batch_access - Batch access to VGIC registers
+ *
+ * @dev: The VGIC device
+ * @attr: The device attribute containing the batch entries
+ * @is_write: True for write, false for read
+ *
+ * This function allows userspace to read or write multiple VGIC registers
+ * in a single system call, reducing overhead during live migration.
+ *
+ * Returns: 0 on success, or the first error encountered.
+ * Individual entry errors are stored in entries[i].error.
+ */
+static int vgic_v3_batch_access(struct kvm_device *dev,
+				struct kvm_device_attr *attr, bool is_write)
+{
+	struct kvm_dev_arm_vgic_batch_entry __user *uentries;
+	struct kvm_dev_arm_vgic_batch_entry *entries;
+	struct kvm_device_attr sub_attr;
+	u32 count = attr->attr;
+	int ret = 0, i;
+
+	if (!count || count > KVM_DEV_ARM_VGIC_BATCH_MAX)
+		return -EINVAL;
+
+	entries = kvmalloc_array(count, sizeof(*entries), GFP_KERNEL);
+	if (!entries)
+		return -ENOMEM;
+
+	uentries = (void __user *)attr->addr;
+	if (copy_from_user(entries, uentries, count * sizeof(*entries))) {
+		kvfree(entries);
+		return -EFAULT;
+	}
+
+	mutex_lock(&dev->kvm->lock);
+	if (kvm_trylock_all_vcpus(dev->kvm)) {
+		mutex_unlock(&dev->kvm->lock);
+		kvfree(entries);
+		return -EBUSY;
+	}
+	mutex_lock(&dev->kvm->arch.config_lock);
+
+	/* Process each entry in the batch */
+	for (i = 0; i < count; i++) {
+		int err;
+
+		sub_attr.group = entries[i].group;
+		sub_attr.attr = entries[i].attr;
+		sub_attr.addr = (unsigned long)uentries +
+			i * sizeof(struct kvm_dev_arm_vgic_batch_entry) +
+			offsetof(struct kvm_dev_arm_vgic_batch_entry, val);
+
+		/* Set flag to indicate that locks are already held.
+		 * This prevents vgic_v3_attr_regs_access from acquiring locks again,
+		 * avoiding deadlock and overhead.
+		 */
+		sub_attr.flags = KVM_DEV_ARM_VGIC_ATTR_FLAG_LOCKED;
+
+		err = vgic_v3_attr_regs_access(dev, &sub_attr, is_write);
+
+		if (err) {
+			pr_err("group %d attr %lld get err %d\n",
+				sub_attr.group, sub_attr.attr, err);
+			ret = err;
+		}
+	}
+
+	mutex_unlock(&dev->kvm->arch.config_lock);
+	kvm_unlock_all_vcpus(dev->kvm);
+	mutex_unlock(&dev->kvm->lock);
+
+	kvfree(entries);
 	return ret;
 }
 
@@ -649,6 +737,8 @@ static int vgic_v3_set_attr(struct kvm_device *dev,
 		dev->kvm->arch.vgic.mi_intid = val;
 		return 0;
 	}
+	case KVM_DEV_ARM_VGIC_GRP_BATCH_REGS:
+		return vgic_v3_batch_access(dev, attr, true);
 	default:
 		return vgic_set_common_attr(dev, attr);
 	}
@@ -669,6 +759,8 @@ static int vgic_v3_get_attr(struct kvm_device *dev,
 		guard(mutex)(&dev->kvm->arch.config_lock);
 		return put_user(dev->kvm->arch.vgic.mi_intid, uaddr);
 	}
+	case KVM_DEV_ARM_VGIC_GRP_BATCH_REGS:
+		return vgic_v3_batch_access(dev, attr, false);
 	default:
 		return vgic_get_common_attr(dev, attr);
 	}
@@ -707,6 +799,9 @@ static int vgic_v3_has_attr(struct kvm_device *dev,
 		case KVM_DEV_ARM_VGIC_SAVE_PENDING_TABLES:
 			return 0;
 		}
+		break;
+	case KVM_DEV_ARM_VGIC_GRP_BATCH_REGS:
+		return 0;
 	}
 	return -ENXIO;
 }
