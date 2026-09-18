@@ -172,6 +172,7 @@ static void gen_lo_setup(struct net_device *dev,
 	dev->type		= ARPHRD_LOOPBACK;	/* 0x0001*/
 	dev->flags		= IFF_LOOPBACK;
 	dev->priv_flags		|= IFF_LIVE_ADDR_CHANGE | IFF_NO_QUEUE;
+	dev->request_ops_lock	= true;
 	dev->lltx		= true;
 	dev->netns_immutable	= true;
 	netif_keep_dst(dev);
