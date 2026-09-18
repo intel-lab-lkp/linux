@@ -861,6 +861,56 @@ static const struct mdlc_info r8a78000_mdlc_fw_4_28_0[] = {
 	{ /* sentinel */ }
 };
 
+static const struct power_map_in r8a78000_mdlc_vio_power_fw_4_31_0[] = {
+	{ 0, 4 },	/* PD_VIO0 */
+	{ 1, 5 },	/* PD_VIO1 */
+	{ 2, 6 },	/* PD_VIO2 */
+	{ 3, 7 },	/* PD_VIO3 */
+	{ 7, 11 },	/* PD_VIO4 */
+	{ -1 }
+};
+static const struct mod_map_in r8a78000_mdlc_vio_mod_fw_4_31_0[] = {
+	{ 0x70, 26 },	/* VSPD0 */
+	{ 0x71, 27 },	/* VSPD1 */
+	{ 0x72, 28 },	/* VSPD2 */
+	{ 0x73, 29 },	/* VSPD3 */
+	{ 0x74, 30 },	/* VSPD4 */
+	{ 0x75, 31 },	/* VSPDB0 */
+	{ 0x76, 32 },	/* VSPDB1 */
+	{ 0x77, 33 },	/* VSPDB2 */
+	{ 0x78, 34 },	/* VSPDB3 */
+	{ 0x79, 35 },	/* VSPDB4 */
+	{ 0x7e, 40 },	/* FCPVD0 */
+	{ 0x7f, 41 },	/* FCPVD1 */
+	{ 0x80, 42 },	/* FCPVD2 */
+	{ 0x81, 43 },	/* FCPVD3 */
+	{ 0x82, 44 },	/* FCPVD4 */
+	{ 0x83, 45 },	/* FCPVD5 */
+	{ 0x84, 46 },	/* FCPVD6 */
+	{ 0x85, 47 },	/* FCPVD7 */
+	{ 0x86, 48 },	/* FCPVD8 */
+	{ 0x87, 49 },	/* FCPVD9 */
+	{ 0xf9, 163 },	/* VSPB0 */
+	{ 0xfa, 164 },	/* VSPB1 */
+	{ 0xfb, 165 },	/* VSPB2 */
+	{ 0xfc, 166 },	/* VSPB3 */
+	{ 0xfd, 167 },	/* VSPB4 */
+	{ 0xfe, 168 },	/* VSPI0 */
+	{ 0xff, 169 },	/* VSPI1 */
+	{ 0x100, 170 },	/* VSPI2 */
+	{ 0x101, 171 },	/* VSPI3 */
+	{ 0x102, 172 },	/* FCPVB0 */
+	{ 0x103, 173 },	/* FCPVB1 */
+	{ 0x104, 174 },	/* FCPVB2 */
+	{ 0x105, 175 },	/* FCPVB3 */
+	{ 0x106, 176 },	/* FCPVB4 */
+	{ 0x107, 177 },	/* FCPVI0 */
+	{ 0x108, 178 },	/* FCPVI1 */
+	{ 0x109, 179 },	/* FCPVI2 */
+	{ 0x10a, 180 },	/* FCPVI3 */
+	{ -1 }
+};
+
 static const struct mod_map_in r8a78000_mdlc_pere_mod_fw_4_31_0[] = {
 	{ 0x30, 193 },	/* PERE_GPIODM0 */
 	// No CLOCK_ATTRIBUTES { 0x31, 194 },	/* PERE_GPIODM1 */
@@ -997,8 +1047,8 @@ static const struct mdlc_info r8a78000_mdlc_fw_4_31_0[] = {
 		/* FIXME .mod_map = r8a78000_mdlc_vips_mod_fw_4_31_0, */
 	}, {
 		.base = 0xc5000000 /* mdlc_vio */,
-		/* FIXME .power_map = r8a78000_mdlc_vio_power_fw_4_28_0, */
-		/* FIXME .mod_map = r8a78000_mdlc_vio_mod_fw_4_31_0, */
+		.power_map = r8a78000_mdlc_vio_power_fw_4_31_0,
+		.mod_map = r8a78000_mdlc_vio_mod_fw_4_31_0,
 	}, {
 		.base = 0xc08f0000 /* mdlc_pere */,
 		.power_map = r8a78000_mdlc_pere_power_fw_4_28_0,
