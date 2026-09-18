@@ -781,9 +781,14 @@ int virtio_gpu_panic_cmd_transfer_to_host_2d(struct virtio_gpu_device *vgdev,
 	struct virtio_gpu_vbuffer *vbuf;
 	bool use_dma_api = virtio_gpu_use_dma_api(vgdev->vdev);
 
-	if (virtio_gpu_is_shmem(bo) && use_dma_api)
-		dma_sync_sgtable_for_device(vgdev->vdev->dev.parent,
-					    bo->base.sgt, DMA_TO_DEVICE);
+	if (use_dma_api) {
+		if (virtio_gpu_is_shmem(bo))
+			dma_sync_sgtable_for_device(vgdev->vdev->dev.parent,
+						    bo->base.sgt,
+						    DMA_TO_DEVICE);
+		else if (virtio_gpu_is_userptr(bo))
+			virtio_gpu_userptr_dma_sync_for_device(bo);
+	}
 
 	cmd_p = virtio_gpu_panic_alloc_cmd_resp(vgdev, &vbuf, sizeof(*cmd_p));
 	memset(cmd_p, 0, sizeof(*cmd_p));
@@ -812,9 +817,14 @@ void virtio_gpu_cmd_transfer_to_host_2d(struct virtio_gpu_device *vgdev,
 	struct virtio_gpu_vbuffer *vbuf;
 	bool use_dma_api = virtio_gpu_use_dma_api(vgdev->vdev);
 
-	if (virtio_gpu_is_shmem(bo) && use_dma_api)
-		dma_sync_sgtable_for_device(vgdev->vdev->dev.parent,
-					    bo->base.sgt, DMA_TO_DEVICE);
+	if (use_dma_api) {
+		if (virtio_gpu_is_shmem(bo))
+			dma_sync_sgtable_for_device(vgdev->vdev->dev.parent,
+						    bo->base.sgt,
+						    DMA_TO_DEVICE);
+		else if (virtio_gpu_is_userptr(bo))
+			virtio_gpu_userptr_dma_sync_for_device(bo);
+	}
 
 	cmd_p = virtio_gpu_alloc_cmd(vgdev, &vbuf, sizeof(*cmd_p));
 	memset(cmd_p, 0, sizeof(*cmd_p));
@@ -1245,9 +1255,14 @@ void virtio_gpu_cmd_transfer_to_host_3d(struct virtio_gpu_device *vgdev,
 	struct virtio_gpu_vbuffer *vbuf;
 	bool use_dma_api = virtio_gpu_use_dma_api(vgdev->vdev);
 
-	if (virtio_gpu_is_shmem(bo) && use_dma_api)
-		dma_sync_sgtable_for_device(vgdev->vdev->dev.parent,
-					    bo->base.sgt, DMA_TO_DEVICE);
+	if (use_dma_api) {
+		if (virtio_gpu_is_shmem(bo))
+			dma_sync_sgtable_for_device(vgdev->vdev->dev.parent,
+						    bo->base.sgt,
+						    DMA_TO_DEVICE);
+		else if (virtio_gpu_is_userptr(bo))
+			virtio_gpu_userptr_dma_sync_for_device(bo);
+	}
 
 	cmd_p = virtio_gpu_alloc_cmd(vgdev, &vbuf, sizeof(*cmd_p));
 	memset(cmd_p, 0, sizeof(*cmd_p));
