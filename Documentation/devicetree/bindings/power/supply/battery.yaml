@@ -154,7 +154,7 @@ patternProperties:
       of the battery and corresponding battery capacity percent, which is used
       to look up battery capacity according to current OCV value. And the open
       circuit voltage unit is microvolt.
-    maxItems: 100
+    maxItems: 128
     items:
       items:
         - description: open circuit voltage (OCV) in microvolts
