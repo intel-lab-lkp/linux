@@ -2616,6 +2616,9 @@ int vmx_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 			if (!cpuid_model_is_consistent(vcpu))
 				return 1;
 		}
+		if ((data & PERF_CAP_RDPMC_METRICS_CLEAR) &&
+		    !(data & PERF_CAP_PERF_METRICS))
+			return 1;
 		ret = kvm_set_msr_common(vcpu, msr_info);
 		break;
 
@@ -7999,7 +8002,8 @@ static __init u64 vmx_get_perf_capabilities(void)
 	}
 
 	if (enable_mediated_pmu)
-		perf_cap |= kvm_host.perf_capabilities & PERF_CAP_PERF_METRICS;
+		perf_cap |= kvm_host.perf_capabilities &
+			    (PERF_CAP_PERF_METRICS | PERF_CAP_RDPMC_METRICS_CLEAR);
 
 	return perf_cap;
 }

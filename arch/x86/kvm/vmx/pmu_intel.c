@@ -36,6 +36,9 @@
 #define INTEL_RDPMC_TYPE_MASK	GENMASK(31, 16)
 #define INTEL_RDPMC_INDEX_MASK	GENMASK(15, 0)
 
+/* Index of the SLOTS fixed counter relative to the first fixed counter. */
+#define INTEL_FIXED_SLOTS_IDX	(INTEL_PMC_IDX_FIXED_SLOTS - INTEL_PMC_IDX_FIXED)
+
 #define MSR_PMC_FULL_WIDTH_BIT      (MSR_IA32_PMC0 - MSR_IA32_PERFCTR0)
 
 static struct lbr_desc *vcpu_to_lbr_desc(struct kvm_vcpu *vcpu)
@@ -84,6 +87,14 @@ static void reprogram_fixed_counters(struct kvm_pmu *pmu, u64 data)
 		__set_bit(KVM_FIXED_PMC_BASE_IDX + i, pmu->pmc_in_use);
 		kvm_pmu_request_counter_reprogram(pmc);
 	}
+}
+
+static bool intel_pmu_metrics_clear_enabled(struct kvm_pmu *pmu)
+{
+	u8 fixed_ctr_ctrl = fixed_ctrl_field(pmu->fixed_ctr_ctrl,
+					     INTEL_FIXED_SLOTS_IDX);
+
+	return fixed_ctr_ctrl & INTEL_FIXED_3_METRICS_CLEAR;
 }
 
 static int intel_emulate_rdpmc(struct kvm_vcpu *vcpu, unsigned int idx,
@@ -138,6 +149,18 @@ static int intel_emulate_rdpmc(struct kvm_vcpu *vcpu, unsigned int idx,
 			return 1;
 
 		*data = pmu->perf_metrics;
+
+		/*
+		 * Per the SDM, RDPMC of PERF_METRICS clears both PERF_METRICS
+		 * and the SLOTS fixed counter when Metrics Clear Mode is
+		 * enabled via INTEL_FIXED_3_METRICS_CLEAR in FIXED_CTR_CTRL.
+		 */
+		pmc = kvm_pmc_idx_to_pmc(pmu, INTEL_PMC_IDX_FIXED_SLOTS);
+		if (pmc && intel_pmu_metrics_clear_enabled(pmu)) {
+			pmu->perf_metrics = 0;
+			pmc_write_counter(pmc, 0);
+		}
+
 		return 0;
 	default:
 		return 1;
@@ -600,6 +623,11 @@ static void intel_pmu_refresh(struct kvm_vcpu *vcpu)
 	intel_pmu_enable_fixed_counter_bits(pmu, INTEL_FIXED_0_KERNEL |
 						 INTEL_FIXED_0_USER |
 						 INTEL_FIXED_0_ENABLE_PMI);
+
+	if (perf_capabilities & PERF_CAP_RDPMC_METRICS_CLEAR)
+		pmu->fixed_ctr_ctrl_rsvd &=
+			~intel_fixed_bits_by_idx(INTEL_FIXED_SLOTS_IDX,
+						 INTEL_FIXED_3_METRICS_CLEAR);
 
 	counter_rsvd = ~((BIT_ULL(pmu->nr_arch_gp_counters) - 1) |
 			 ((BIT_ULL(pmu->nr_arch_fixed_counters) - 1) << KVM_FIXED_PMC_BASE_IDX));
