@@ -511,6 +511,57 @@ static int get_tdx_sys_info_handoff(struct tdx_sys_info_handoff *handoff)
 	return read_sys_metadata_table(handoff_mappings, handoff);
 }
 
+#define TDX_SYSINFO_MAP_TD_CONF(_field_id, _member) \
+	TDX_SYSINFO_MAP(_field_id, struct tdx_sys_info_td_conf, _member)
+
+static const struct field_mapping td_conf_mappings[] __initconst = {
+	TDX_SYSINFO_MAP_TD_CONF(ATTRIBUTES_FIXED0,	attributes_fixed0),
+	TDX_SYSINFO_MAP_TD_CONF(ATTRIBUTES_FIXED1,	attributes_fixed1),
+	TDX_SYSINFO_MAP_TD_CONF(XFAM_FIXED0,		xfam_fixed0),
+	TDX_SYSINFO_MAP_TD_CONF(XFAM_FIXED1,		xfam_fixed1),
+	TDX_SYSINFO_MAP_TD_CONF(NUM_CPUID_CONFIG,	num_cpuid_config),
+	TDX_SYSINFO_MAP_TD_CONF(MAX_VCPUS_PER_TD,	max_vcpus_per_td),
+};
+
+static __init int get_tdx_sys_info_td_conf(struct tdx_sys_info_td_conf *td_conf)
+{
+	int ret, i, j;
+
+	ret = read_sys_metadata_table(td_conf_mappings, td_conf);
+	if (ret)
+		return ret;
+
+	/*
+	 * The number of CPUID config entries must not exceed the array
+	 * sizes.
+	 */
+	if (td_conf->num_cpuid_config > ARRAY_SIZE(td_conf->cpuid_config_leaves) ||
+	    td_conf->num_cpuid_config > ARRAY_SIZE(td_conf->cpuid_config_values))
+		return -EINVAL;
+
+	/*
+	 * TDX_MD_FIELD_ID_CPUID_CONFIG_* give the field ID of each array's
+	 * first element. The remaining elements follow consecutively, in
+	 * the order they appear in the structure.
+	 */
+	for (i = 0; i < td_conf->num_cpuid_config; i++) {
+		ret = read_sys_metadata_field(TDX_MD_FIELD_ID_CPUID_CONFIG_LEAVES + i,
+					      &td_conf->cpuid_config_leaves[i]);
+		if (ret)
+			return ret;
+
+		for (j = 0; j < 2; j++) {
+			ret = read_sys_metadata_field(
+				TDX_MD_FIELD_ID_CPUID_CONFIG_VALUES + i * 2 + j,
+				&td_conf->cpuid_config_values[i][j]);
+			if (ret)
+				return ret;
+		}
+	}
+
+	return 0;
+}
+
 #include "tdx_global_metadata.c"
 
 static __init int check_features(struct tdx_sys_info *sysinfo)
