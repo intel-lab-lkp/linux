@@ -104,6 +104,7 @@ static int nci_queue_tx_data_frags(struct nci_dev *ndev,
 	struct sk_buff_head frags_q;
 	struct sk_buff *skb_frag;
 	int frag_len;
+	u8 max_len;
 	int rc = 0;
 
 	pr_debug("conn_id 0x%x, total_len %d\n", conn_id, total_len);
@@ -114,11 +115,18 @@ static int nci_queue_tx_data_frags(struct nci_dev *ndev,
 		goto exit;
 	}
 
+	/* the rx workqueue may update the field concurrently */
+	max_len = READ_ONCE(conn_info->max_pkt_payload_len);
+
+	if (!max_len) {
+		rc = -EPROTO;
+		goto exit;
+	}
+
 	__skb_queue_head_init(&frags_q);
 
 	while (total_len) {
-		frag_len =
-			min_t(int, total_len, conn_info->max_pkt_payload_len);
+		frag_len = min_t(int, total_len, max_len);
 
 		skb_frag = nci_skb_alloc(ndev,
 					 (NCI_DATA_HDR_SIZE + frag_len),
