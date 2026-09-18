@@ -42,6 +42,11 @@ properties:
     description: Interrupt from the MAC-PHY for receive data available
       and error conditions
 
+  reset-gpios:
+    description:
+      GPIO connected to the active-low RESET_N pin of the MAC-PHY.
+    maxItems: 1
+
 required:
   - compatible
   - reg
