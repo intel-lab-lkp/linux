@@ -14,6 +14,7 @@
 #include <linux/if_ether.h>
 #include <linux/net_tstamp.h>
 #include <linux/phy.h>
+#include <linux/string_choices.h>
 #include <net/vxlan.h>
 
 #include "xgbe.h"
@@ -807,27 +808,27 @@ void xgbe_get_all_hw_features(struct xgbe_prv_data *pdata)
 
 		/* Hardware feature register 0 */
 		dev_dbg(pdata->dev, "  1GbE support              : %s\n",
-			hw_feat->gmii ? "yes" : "no");
+			str_yes_no(hw_feat->gmii));
 		dev_dbg(pdata->dev, "  VLAN hash filter          : %s\n",
-			hw_feat->vlhash ? "yes" : "no");
+			str_yes_no(hw_feat->vlhash));
 		dev_dbg(pdata->dev, "  MDIO interface            : %s\n",
-			hw_feat->sma ? "yes" : "no");
+			str_yes_no(hw_feat->sma));
 		dev_dbg(pdata->dev, "  Wake-up packet support    : %s\n",
-			hw_feat->rwk ? "yes" : "no");
+			str_yes_no(hw_feat->rwk));
 		dev_dbg(pdata->dev, "  Magic packet support      : %s\n",
-			hw_feat->mgk ? "yes" : "no");
+			str_yes_no(hw_feat->mgk));
 		dev_dbg(pdata->dev, "  Management counters       : %s\n",
-			hw_feat->mmc ? "yes" : "no");
+			str_yes_no(hw_feat->mmc));
 		dev_dbg(pdata->dev, "  ARP offload               : %s\n",
-			hw_feat->aoe ? "yes" : "no");
+			str_yes_no(hw_feat->aoe));
 		dev_dbg(pdata->dev, "  IEEE 1588-2008 Timestamp  : %s\n",
-			hw_feat->ts ? "yes" : "no");
+			str_yes_no(hw_feat->ts));
 		dev_dbg(pdata->dev, "  Energy Efficient Ethernet : %s\n",
-			hw_feat->eee ? "yes" : "no");
+			str_yes_no(hw_feat->eee));
 		dev_dbg(pdata->dev, "  TX checksum offload       : %s\n",
-			hw_feat->tx_coe ? "yes" : "no");
+			str_yes_no(hw_feat->tx_coe));
 		dev_dbg(pdata->dev, "  RX checksum offload       : %s\n",
-			hw_feat->rx_coe ? "yes" : "no");
+			str_yes_no(hw_feat->rx_coe));
 		dev_dbg(pdata->dev, "  Additional MAC addresses  : %u\n",
 			hw_feat->addn_mac);
 		dev_dbg(pdata->dev, "  Timestamp source          : %s\n",
@@ -835,9 +836,9 @@ void xgbe_get_all_hw_features(struct xgbe_prv_data *pdata)
 			(hw_feat->ts_src == 2) ? "external" :
 			(hw_feat->ts_src == 3) ? "internal/external" : "n/a");
 		dev_dbg(pdata->dev, "  SA/VLAN insertion         : %s\n",
-			hw_feat->sa_vlan_ins ? "yes" : "no");
+			str_yes_no(hw_feat->sa_vlan_ins));
 		dev_dbg(pdata->dev, "  VXLAN/NVGRE support       : %s\n",
-			hw_feat->vxn ? "yes" : "no");
+			str_yes_no(hw_feat->vxn));
 
 		/* Hardware feature register 1 */
 		dev_dbg(pdata->dev, "  RX fifo size              : %u\n",
@@ -845,19 +846,19 @@ void xgbe_get_all_hw_features(struct xgbe_prv_data *pdata)
 		dev_dbg(pdata->dev, "  TX fifo size              : %u\n",
 			hw_feat->tx_fifo_size);
 		dev_dbg(pdata->dev, "  IEEE 1588 high word       : %s\n",
-			hw_feat->adv_ts_hi ? "yes" : "no");
+			str_yes_no(hw_feat->adv_ts_hi));
 		dev_dbg(pdata->dev, "  DMA width                 : %u\n",
 			hw_feat->dma_width);
 		dev_dbg(pdata->dev, "  Data Center Bridging      : %s\n",
-			hw_feat->dcb ? "yes" : "no");
+			str_yes_no(hw_feat->dcb));
 		dev_dbg(pdata->dev, "  Split header              : %s\n",
-			hw_feat->sph ? "yes" : "no");
+			str_yes_no(hw_feat->sph));
 		dev_dbg(pdata->dev, "  TCP Segmentation Offload  : %s\n",
-			hw_feat->tso ? "yes" : "no");
+			str_yes_no(hw_feat->tso));
 		dev_dbg(pdata->dev, "  Debug memory interface    : %s\n",
-			hw_feat->dma_debug ? "yes" : "no");
+			str_yes_no(hw_feat->dma_debug));
 		dev_dbg(pdata->dev, "  Receive Side Scaling      : %s\n",
-			hw_feat->rss ? "yes" : "no");
+			str_yes_no(hw_feat->rss));
 		dev_dbg(pdata->dev, "  Traffic Class count       : %u\n",
 			hw_feat->tc_cnt);
 		dev_dbg(pdata->dev, "  Hash table size           : %u\n",
