@@ -35,6 +35,7 @@
 #include <linux/mutex.h>
 #include <linux/i2c.h>
 #include <linux/iio/iio.h>
+#include <linux/iio/sysfs.h>
 
 /*
  * floating point calculation of voc is done as integer
@@ -53,11 +54,12 @@ struct sgp40_data {
 	int			rht;
 	int			temp;
 	int			res_calibbias;
+	u64			serial_number;
 	/* Prevent concurrent access to rht, tmp, calibbias */
 	struct mutex		lock;
 };
 
-struct sgp40_tg_measure {
+struct sgp40_command {
 	u8	command[2];
 	__be16	rht_ticks;
 	u8	rht_crc;
@@ -68,6 +70,18 @@ struct sgp40_tg_measure {
 struct sgp40_tg_result {
 	__be16	res_ticks;
 	u8	res_crc;
+} __packed;
+
+/*
+ * Datasheet table 16. Serial number is given as 48-bit value 0xAAAABBBBCCCC.
+ */
+struct sgp40_serial_number_result {
+	__be16	A;
+	u8	A_crc;
+	__be16	B;
+	u8	B_crc;
+	__be16	C;
+	u8	C_crc;
 } __packed;
 
 static const struct iio_chan_spec sgp40_channels[] = {
@@ -162,6 +176,40 @@ static int sgp40_calc_voc(struct sgp40_data *data, u16 resistance_raw, int *voc)
 	return 0;
 }
 
+static int sgp40_get_serial_number(struct sgp40_data *data)
+{
+	int ret;
+	struct i2c_client *client = data->client;
+	struct sgp40_command get_sn = {.command = {0x36, 0x82}};
+	struct sgp40_serial_number_result res;
+
+	ret = i2c_master_send(client, (char*)&get_sn, sizeof(get_sn.command));
+	if (ret != sizeof(get_sn.command)) {
+		dev_err(data->dev, "i2c_master_send ret: %d, expected %zu", ret, sizeof(get_sn.command));
+		return -EIO;
+	}
+	msleep(1);
+	ret = i2c_master_recv(client, (char*)&res, sizeof(res));
+	if (ret < 0)
+		return ret;
+	if (ret != sizeof(res)) {
+		dev_err(data->dev, "i2c_master_recv ret: %d, expected: %zu", ret, sizeof(res));
+		return -EIO;
+	}
+
+	if (crc8(sgp40_crc8_table, (u8*)&res.A, 2, SGP40_CRC8_INIT) != res.A_crc ||
+	    crc8(sgp40_crc8_table, (u8*)&res.B, 2, SGP40_CRC8_INIT) != res.B_crc ||
+	    crc8(sgp40_crc8_table, (u8*)&res.C, 2, SGP40_CRC8_INIT) != res.C_crc)
+	{
+		dev_warn(data->dev, "CRC error in get_serial_number");
+	}
+
+	data->serial_number = 0LL | ((u64)be16_to_cpu(res.A) << 32) | ((u64)be16_to_cpu(res.B) << 16) | (u64)be16_to_cpu(res.C);
+	dev_dbg(data->dev, "serial number: %llu", data->serial_number);
+
+	return 0;
+}
+
 static int sgp40_measure_resistance_raw(struct sgp40_data *data, u16 *resistance_raw)
 {
 	int ret;
@@ -169,7 +217,7 @@ static int sgp40_measure_resistance_raw(struct sgp40_data *data, u16 *resistance
 	u32 ticks;
 	u16 ticks16;
 	u8 crc;
-	struct sgp40_tg_measure tg = {.command = {0x26, 0x0F}};
+	struct sgp40_command tg = {.command = {0x26, 0x0F}};
 	struct sgp40_tg_result tgres;
 
 	mutex_lock(&data->lock);
@@ -311,9 +359,31 @@ static int sgp40_write_raw(struct iio_dev *indio_dev,
 	return -EINVAL;
 }
 
+static ssize_t serial_number_show(struct device *dev,
+				  struct device_attribute *attr,
+				  char *buf)
+{
+	struct sgp40_data *data = iio_priv(dev_to_iio_dev(dev));
+
+	return sysfs_emit_at(buf, 0, "%llu\n", data->serial_number);
+}
+
+static IIO_DEVICE_ATTR_RO(serial_number, 0);
+
+static struct attribute *sgp40_attributes[] = {
+	&iio_dev_attr_serial_number.dev_attr.attr,
+	NULL
+};
+
+static struct attribute_group sgp40_attribute_group = {
+	.attrs = sgp40_attributes,
+};
+
+
 static const struct iio_info sgp40_info = {
 	.read_raw	= sgp40_read_raw,
 	.write_raw	= sgp40_write_raw,
+	.attrs		= &sgp40_attribute_group,
 };
 
 static int sgp40_probe(struct i2c_client *client)
@@ -346,6 +416,10 @@ static int sgp40_probe(struct i2c_client *client)
 	indio_dev->modes = INDIO_DIRECT_MODE;
 	indio_dev->channels = sgp40_channels;
 	indio_dev->num_channels = ARRAY_SIZE(sgp40_channels);
+
+	ret = sgp40_get_serial_number(data);
+	if (ret)
+		dev_warn(dev, "failed to retrieve device serial number\n");
 
 	ret = devm_iio_device_register(dev, indio_dev);
 	if (ret)
