@@ -121,6 +121,15 @@ allOf:
             reg:
               maximum: 7
 
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: renesas,r9a08g045-adc
+    then:
+      required:
+        - '#io-channel-cells'
+
 additionalProperties: false
 
 examples:
