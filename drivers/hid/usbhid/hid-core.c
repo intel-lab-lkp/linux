@@ -292,10 +292,8 @@ static void hid_irq_in(struct urb *urb)
 			 * because most keyboards don't wake up when
 			 * a key is released
 			 */
-			if (hid_check_keys_pressed(hid))
-				set_bit(HID_KEYS_PRESSED, &usbhid->iofl);
-			else
-				clear_bit(HID_KEYS_PRESSED, &usbhid->iofl);
+			assign_bit(HID_KEYS_PRESSED, &usbhid->iofl,
+				   hid_check_keys_pressed(hid));
 		}
 		break;
 	case -EPIPE:		/* stall */

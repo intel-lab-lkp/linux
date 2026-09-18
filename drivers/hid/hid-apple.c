@@ -578,10 +578,7 @@ static int hidinput_apple_event(struct hid_device *hid, struct input_dev *input,
 			trans = apple_find_translation(powerbook_numlock_keys, code);
 
 			if (trans) {
-				if (value)
-					set_bit(code, asc->pressed_numlock);
-				else
-					clear_bit(code, asc->pressed_numlock);
+				assign_bit(code, asc->pressed_numlock, value);
 
 				code = trans->to;
 			}
