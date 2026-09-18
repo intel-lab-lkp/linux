@@ -448,7 +448,8 @@ u16 nvmet_req_find_ns(struct nvmet_req *req)
 	struct nvmet_subsys *subsys = nvmet_req_subsys(req);
 
 	req->ns = xa_load(&subsys->namespaces, nsid);
-	if (unlikely(!req->ns || !req->ns->enabled)) {
+	if (unlikely(!req->ns) ||
+	    !test_bit(NVMET_NS_IO_LIVE, &req->ns->flags)) {
 		req->error_loc = offsetof(struct nvme_common_command, nsid);
 		if (!req->ns) /* ns doesn't exist! */
 			return NVME_SC_INVALID_NS | NVME_STATUS_DNR;
@@ -623,6 +624,7 @@ int nvmet_ns_enable(struct nvmet_ns *ns)
 	ns->enabled = true;
 	xa_set_mark(&subsys->namespaces, ns->nsid, NVMET_NS_ENABLED);
 	nvmet_debugfs_ns_setup(ns);
+	set_bit(NVMET_NS_IO_LIVE, &ns->flags);
 	ret = 0;
 out_unlock:
 	mutex_unlock(&subsys->lock);
@@ -643,11 +645,11 @@ void nvmet_ns_disable(struct nvmet_ns *ns)
 	struct nvmet_subsys *subsys = ns->subsys;
 	struct nvmet_ctrl *ctrl;
 
-	mutex_lock(&subsys->lock);
-	if (!ns->enabled)
-		goto out_unlock;
+	if (!test_and_clear_bit(NVMET_NS_IO_LIVE, &ns->flags))
+		return;
 
-	ns->enabled = false;
+	mutex_lock(&subsys->lock);
+
 	xa_clear_mark(&subsys->namespaces, ns->nsid, NVMET_NS_ENABLED);
 	nvmet_debugfs_ns_free(ns);
 
@@ -675,7 +677,7 @@ void nvmet_ns_disable(struct nvmet_ns *ns)
 	mutex_lock(&subsys->lock);
 	nvmet_ns_changed(subsys, ns->nsid);
 	nvmet_ns_dev_disable(ns);
-out_unlock:
+	ns->enabled = false;
 	mutex_unlock(&subsys->lock);
 }
 
