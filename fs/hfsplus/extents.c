@@ -16,6 +16,47 @@
 #include "hfsplus_fs.h"
 #include "hfsplus_raw.h"
 
+/* Index of the last extent in the fork */
+#define HFSPLUS_EXTENT_LAST_IDX 7
+
+static inline bool is_extents_btree(struct inode *inode)
+{
+    return inode->i_ino == HFSPLUS_EXT_CNID;
+}
+
+static bool hfsplus_extent_valid(struct hfsplus_extent *ext, u32 volume_blocks)
+{
+    u32 start = be32_to_cpu(ext->start_block);
+    u32 count = be32_to_cpu(ext->block_count);
+
+    if (count == 0)
+        return start == 0;
+
+    return start + count <= volume_blocks;
+}
+
+/*
+ * Returns 0 if fork extents are consistent, -EUCLEAN if extents
+ * past the first are corrupt, or -EIO if the first extent is corrupt.
+ */
+int hfsplus_check_fork(struct super_block *sb, struct hfsplus_extent *ext, u32 volume_blocks)
+{
+    bool non_zero_seen = false;
+    int i;
+
+    for (i = 0; i <= HFSPLUS_EXTENT_LAST_IDX; i++, ext++) {
+        u32 count = be32_to_cpu(ext->block_count);
+
+        if (!hfsplus_extent_valid(ext, volume_blocks) || (non_zero_seen && count == 0))
+            return i ? -EUCLEAN : -EIO;
+
+        if (count > 0)
+            non_zero_seen = true;
+    }
+
+    return 0;
+}
+
 /* Compare two extents keys, returns 0 on same, pos/neg for difference */
 int hfsplus_ext_cmp_key(const hfsplus_btree_key *k1,
 			const hfsplus_btree_key *k2)

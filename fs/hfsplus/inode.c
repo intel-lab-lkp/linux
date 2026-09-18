@@ -559,34 +559,45 @@ void hfsplus_delete_inode(struct inode *inode)
 	hfsplus_mark_mdb_dirty(sb);
 }
 
-void hfsplus_inode_read_fork(struct inode *inode, struct hfsplus_fork_raw *fork)
+int hfsplus_inode_read_fork(struct inode *inode, struct hfsplus_fork_raw *fork)
 {
-	struct super_block *sb = inode->i_sb;
-	struct hfsplus_sb_info *sbi = HFSPLUS_SB(sb);
-	struct hfsplus_inode_info *hip = HFSPLUS_I(inode);
-	u32 count;
-	int i;
+    struct super_block *sb = inode->i_sb;
+    struct hfsplus_sb_info *sbi = HFSPLUS_SB(sb);
+    struct hfsplus_inode_info *hip = HFSPLUS_I(inode);
+    u32 count;
+    int i, ret;
 
-	memcpy(&hip->first_extents, &fork->extents, sizeof(hfsplus_extent_rec));
-	for (count = 0, i = 0; i < 8; i++)
-		count += be32_to_cpu(fork->extents[i].block_count);
-	hip->first_blocks = count;
-	memset(hip->cached_extents, 0, sizeof(hfsplus_extent_rec));
-	hip->cached_start = 0;
-	hip->cached_blocks = 0;
+    /* Validate fork extents to catch on-disk corruption early */
+    ret = hfsplus_check_fork(sb, fork->extents, sbi->total_blocks);
+    if (ret) {
+        pr_err("hfsplus: fork check failed for inode %lu (err=%d)\n", inode->i_ino, ret);
+        set_bit(HFSPLUS_I_CORRUPT_TREE, &hip->flags);
+        sb->s_flags |= SB_RDONLY;
+        return ret; /* Return error directly to the caller */
+    }
 
-	hip->alloc_blocks = be32_to_cpu(fork->total_blocks);
-	hip->phys_size = inode->i_size = be64_to_cpu(fork->total_size);
-	hip->fs_blocks =
-		(inode->i_size + sb->s_blocksize - 1) >> sb->s_blocksize_bits;
-	inode_set_bytes(inode, hip->fs_blocks << sb->s_blocksize_bits);
-	hip->clump_blocks =
-		be32_to_cpu(fork->clump_size) >> sbi->alloc_blksz_shift;
-	if (!hip->clump_blocks) {
-		hip->clump_blocks = HFSPLUS_IS_RSRC(inode) ?
-			sbi->rsrc_clump_blocks :
-			sbi->data_clump_blocks;
-	}
+    memcpy(&hip->first_extents, &fork->extents, sizeof(hfsplus_extent_rec));
+    for (count = 0, i = 0; i <= HFSPLUS_EXTENT_LAST_IDX; i++)
+        count += be32_to_cpu(fork->extents[i].block_count);
+    hip->first_blocks = count;
+    memset(hip->cached_extents, 0, sizeof(hfsplus_extent_rec));
+    hip->cached_start = 0;
+    hip->cached_blocks = 0;
+
+    hip->alloc_blocks = be32_to_cpu(fork->total_blocks);
+    hip->phys_size = inode->i_size = be64_to_cpu(fork->total_size);
+    hip->fs_blocks =
+        (inode->i_size + sb->s_blocksize - 1) >> sb->s_blocksize_bits;
+    inode_set_bytes(inode, hip->fs_blocks << sb->s_blocksize_bits);
+    hip->clump_blocks =
+        be32_to_cpu(fork->clump_size) >> sbi->alloc_blksz_shift;
+    if (!hip->clump_blocks) {
+        hip->clump_blocks = HFSPLUS_IS_RSRC(inode) ?
+            sbi->rsrc_clump_blocks :
+            sbi->data_clump_blocks;
+    }
+
+    return 0;
 }
 
 void hfsplus_inode_write_fork(struct inode *inode,
