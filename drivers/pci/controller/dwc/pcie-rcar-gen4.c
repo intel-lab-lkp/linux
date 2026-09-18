@@ -44,8 +44,6 @@
 /* PCIe Interrupt Status 0 Enable */
 #define PCIEINTSTS0EN		0x0310
 #define MSI_CTRL_INT		BIT(26)
-#define SMLH_LINK_UP		BIT(7)
-#define RDLH_LINK_UP		BIT(6)
 
 /* PCIe DMA Interrupt Status Enable */
 #define PCIEDMAINTSTSEN		0x0314
@@ -102,17 +100,6 @@ struct rcar_gen4_pcie {
 #define to_rcar_gen4_pcie(_dw)	container_of(_dw, struct rcar_gen4_pcie, dw)
 
 /* Common */
-static bool rcar_gen4_pcie_link_up(struct dw_pcie *dw)
-{
-	struct rcar_gen4_pcie *rcar = to_rcar_gen4_pcie(dw);
-	u32 val, mask;
-
-	val = readl(rcar->base + PCIEINTSTS0);
-	mask = RDLH_LINK_UP | SMLH_LINK_UP;
-
-	return (val & mask) == mask;
-}
-
 /*
  * Manually initiate the speed change. Return 0 if change succeeded; otherwise
  * -ETIMEDOUT.
@@ -298,7 +285,6 @@ static int rcar_gen4_pcie_get_resources(struct rcar_gen4_pcie *rcar)
 static const struct dw_pcie_ops dw_pcie_ops = {
 	.start_link = rcar_gen4_pcie_start_link,
 	.stop_link = rcar_gen4_pcie_stop_link,
-	.link_up = rcar_gen4_pcie_link_up,
 };
 
 static struct rcar_gen4_pcie *rcar_gen4_pcie_alloc(struct platform_device *pdev)
