@@ -528,6 +528,9 @@ enum x86_intercept {
 };
 
 int x86_decode_insn(struct x86_emulate_ctxt *ctxt, void *insn, int insn_len, int emulation_type);
+unsigned int x86_emulator_copy_insn_bytes(struct x86_emulate_ctxt *ctxt,
+					  unsigned long eip, u8 *bytes,
+					  unsigned int max_bytes);
 bool x86_page_table_writing_insn(struct x86_emulate_ctxt *ctxt);
 #define EMULATION_FAILED -1
 #define EMULATION_OK 0
