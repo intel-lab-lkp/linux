@@ -25,7 +25,7 @@ pgd_t *pgd_alloc(struct mm_struct *mm)
 EXPORT_SYMBOL_GPL(pgd_alloc);
 
 #ifdef CONFIG_CPU_SUPPORTS_HUGEPAGES
-int has_transparent_hugepage(void)
+int arch_has_pmd_leaves(void)
 {
 	static unsigned int mask = -1;
 
@@ -42,9 +42,9 @@ int has_transparent_hugepage(void)
 	return mask == PM_HUGE_MASK;
 }
 #else
-int has_transparent_hugepage(void)
+int arch_has_pmd_leaves(void)
 {
 	return 0;
 }
 #endif
-EXPORT_SYMBOL(has_transparent_hugepage);
+EXPORT_SYMBOL(arch_has_pmd_leaves);
