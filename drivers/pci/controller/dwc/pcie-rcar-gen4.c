@@ -63,6 +63,16 @@
 #define AER_RC_ERR_INT		BIT(27)
 #define RP_AER_MASK		(AER_RC_ERR_MSI | AER_RC_ERR_INT)
 
+/* Root Port notifications routed to intreq_pcim_sub ("msi") */
+#define BW_MGT_MSI		BIT(23)
+#define BW_MGT_INT		BIT(22)
+#define LINK_AUTO_BW_MSI	BIT(21)
+#define LINK_AUTO_BW_INT	BIT(20)
+#define PME_MSI			BIT(12)
+#define PME_INT			BIT(10)
+#define RP_SUB_MASK		(BW_MGT_MSI | BW_MGT_INT | LINK_AUTO_BW_MSI | \
+				 LINK_AUTO_BW_INT | PME_MSI | PME_INT)
+
 /* PCIe DMA Interrupt Status Enable */
 #define PCIEDMAINTSTSEN		0x0314
 #define PCIEDMAINTSTSEN_INIT	GENMASK(15, 0)
@@ -417,7 +427,7 @@ static void rcar_gen4_pcie_app_irq_sync_locked(struct rcar_gen4_pcie *rcar)
 	lockdep_assert_held(&rcar->app_lock);
 
 	val = readl(rcar->base + PCIEINTSTS0EN);
-	val &= ~(MSI_CTRL_INT | RP_AER_MASK);
+	val &= ~(MSI_CTRL_INT | RP_AER_MASK | RP_SUB_MASK);
 	/*
 	 * MSI delivery only depends on DBI being usable; teardown must not
 	 * stop it while devices are still being removed.
@@ -427,6 +437,8 @@ static void rcar_gen4_pcie_app_irq_sync_locked(struct rcar_gen4_pcie *rcar)
 		val |= MSI_CTRL_INT;
 	if (armed && rcar->rp_irq_enabled && rcar->aer_irq > 0)
 		val |= RP_AER_MASK;
+	if (armed && rcar->rp_irq_enabled && rcar->sub_irq > 0)
+		val |= RP_SUB_MASK;
 	writel(val, rcar->base + PCIEINTSTS0EN);
 
 	val = readl(rcar->base + PCIERSTSTSEN);
@@ -526,7 +538,8 @@ static bool rcar_gen4_pcie_handle_link_down(struct rcar_gen4_pcie *rcar)
 		 * Drop any Root Port events triggered by link down; the
 		 * upcoming reset will reinitialize the controller anyway.
 		 */
-		writel(RP_AER_MASK, rcar->base + PCIEINTSTS0CLR);
+		writel(RP_AER_MASK | RP_SUB_MASK,
+		       rcar->base + PCIEINTSTS0CLR);
 	}
 
 	if (schedule)
@@ -585,6 +598,8 @@ static bool rcar_gen4_pcie_pre_msi_irq(struct dw_pcie_rp *pp)
 	if (rcar_gen4_pcie_dbi_unsafe(rcar))
 		return true;
 
+	rcar_gen4_pcie_rp_irq_dispatch(rcar, RP_SUB_MASK);
+
 	/* Check once more right before the DesignWare DBI access. */
 	rcar_gen4_pcie_handle_link_down(rcar);
 
@@ -595,7 +610,10 @@ static irqreturn_t rcar_gen4_pcie_sub_irq_handler(int irq, void *data)
 {
 	struct rcar_gen4_pcie *rcar = data;
 
-	return rcar_gen4_pcie_handle_link_down(rcar) ?
+	if (rcar_gen4_pcie_handle_link_down(rcar))
+		return IRQ_HANDLED;
+
+	return rcar_gen4_pcie_rp_irq_dispatch(rcar, RP_SUB_MASK) ?
 		IRQ_HANDLED : IRQ_NONE;
 }
 
@@ -689,7 +707,7 @@ static void rcar_gen4_pcie_rp_irq_ack(struct irq_data *d)
 	 * Clear APP latches before the service clears Root Error Status so
 	 * we don't drop back-to-back notifications.
 	 */
-	writel(RP_AER_MASK, rcar->base + PCIEINTSTS0CLR);
+	writel(RP_AER_MASK | RP_SUB_MASK, rcar->base + PCIEINTSTS0CLR);
 }
 
 static const struct irq_chip rcar_gen4_pcie_rp_irq_chip = {
@@ -756,7 +774,7 @@ static int rcar_gen4_pcie_rp_irq_init(struct dw_pcie_rp *pp)
 		rcar->rp_irq_enabled = false;
 		rcar_gen4_pcie_app_irq_sync_locked(rcar);
 	}
-	writel(RP_AER_MASK, rcar->base + PCIEINTSTS0CLR);
+	writel(RP_AER_MASK | RP_SUB_MASK, rcar->base + PCIEINTSTS0CLR);
 
 	/*
 	 * Note: suspend/resume support must not tear down and recreate this
