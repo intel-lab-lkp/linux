@@ -3,6 +3,7 @@
 KVM := ../../../../virt/kvm
 KVM_DEV_NAME = kvm_arm64
 KVM_DEV_MINOR = MISC_DYNAMIC_MINOR
+KVM_CHECK_EXPORT_DIRS ?= $(srctree)/virt/kvm $(srctree)/arch/s390/kvm/gmap $(src)
 include $(srctree)/virt/kvm/Makefile.kvm
 include $(srctree)/arch/s390/kvm/gmap/Makefile
 include $(src)/Makefile.gen
@@ -91,3 +92,16 @@ targets += kvm-unnamespaced.o kvm_symbol_list kvm-namespaced.o
 endif
 
 obj-$(CONFIG_KVM) += kvm-arm64.o
+
+# Fail the build if there is unexpected EXPORT_SYMBOL_GPL (or EXPORT_SYMBOL)
+# usage in arm64 KVM code. A symbol may only use EXPORT_SYMBOL_GPL if it is
+# defined in exactly one of the two s390 KVM modules (kvm or kvm_arm64). A
+# symbol defined in both would cause a conflict during linking if builtin is
+# selected. Catch the issue early.
+
+# This "symbol" is not exported by arm on s390 but still in the source code and the
+# export check scans unexpanded source code.
+kvm_exports_allowed := kvm_file_to_kvm_fn
+
+$(eval $(call kvm_check_exports,EXPORT_SYMBOL_GPL))
+$(eval $(call kvm_check_exports,EXPORT_SYMBOL))

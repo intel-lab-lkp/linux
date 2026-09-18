@@ -29,7 +29,6 @@ bool kvm_s390_pv_is_protected(struct kvm *kvm)
 	lockdep_assert_held(&kvm->lock);
 	return !!kvm_s390_pv_get_handle(kvm);
 }
-EXPORT_SYMBOL_GPL(kvm_s390_pv_is_protected);
 
 bool kvm_s390_pv_cpu_is_protected(struct kvm_vcpu *vcpu)
 {
