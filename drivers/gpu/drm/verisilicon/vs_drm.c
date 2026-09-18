@@ -25,7 +25,6 @@
 #include "vs_bridge.h"
 #include "vs_crtc.h"
 #include "vs_dc.h"
-#include "vs_dc_top_regs.h"
 #include "vs_drm.h"
 
 #define DRIVER_NAME	"verisilicon"
@@ -168,8 +167,8 @@ void vs_drm_handle_irq(struct vs_dc *dc, u32 irqs)
 	unsigned int i;
 
 	for (i = 0; i < dc->identity.display_count; i++) {
-		if (irqs & VSDC_TOP_IRQ_VSYNC(i)) {
-			irqs &= ~VSDC_TOP_IRQ_VSYNC(i);
+		if (irqs & VSDC_IRQ_VSYNC(i)) {
+			irqs &= ~VSDC_IRQ_VSYNC(i);
 			if (dc->drm_dev->crtcs[i])
 				drm_crtc_handle_vblank(&dc->drm_dev->crtcs[i]->base);
 		}

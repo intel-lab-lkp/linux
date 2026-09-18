@@ -6,12 +6,20 @@
 #ifndef _VS_DRM_H_
 #define _VS_DRM_H_
 
+#include <linux/bits.h>
 #include <linux/platform_device.h>
 #include <linux/types.h>
 
 #include <drm/drm_device.h>
 
 struct vs_dc;
+
+/*
+ * DC variants use different interrupt registers with diverging bit
+ * assignments; each irq_ack() implementation must translate its
+ * hardware-specific bits into these definitions.
+ */
+#define VSDC_IRQ_VSYNC(n)	BIT(n)
 
 struct vs_drm_dev {
 	struct drm_device base;
