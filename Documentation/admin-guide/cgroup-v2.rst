@@ -2536,16 +2536,25 @@ Cpuset Interface Files
 	A read-only multiple values file which exists on all
 	cpuset-enabled cgroups.
 
-	It lists the onlined CPUs that are actually granted to this
-	cgroup by its parent.  These CPUs are allowed to be used by
-	tasks within the current cgroup.
+	It lists the active CPUs available to tasks in this cgroup.
 
-	If "cpuset.cpus" is empty, the "cpuset.cpus.effective" file shows
-	all the CPUs from the parent cgroup that can be available to
-	be used by this cgroup.  Otherwise, it should be a subset of
-	"cpuset.cpus" unless none of the CPUs listed in "cpuset.cpus"
-	can be granted.  In this case, it will be treated just like an
-	empty "cpuset.cpus".
+	For a cgroup that is not a valid partition root, an empty
+	"cpuset.cpus" makes "cpuset.cpus.effective" show all CPUs
+	available from the parent cgroup.  Otherwise, it is a subset
+	of "cpuset.cpus" unless none of the requested CPUs can be
+	granted.  In that case, it is treated like an empty
+	"cpuset.cpus".
+
+	For a valid non-root partition root, "cpuset.cpus.effective" contains
+	the active CPUs from "cpuset.cpus.exclusive.effective" except
+	those granted to valid child partition roots.  If
+	"cpuset.cpus.exclusive" is set to a value different from
+	"cpuset.cpus", the effective CPUs need not be a subset of
+	"cpuset.cpus".  For example, if CPUs 2-5 are active,
+	available, and not assigned to a valid child partition root,
+	a partition root with "cpuset.cpus" set to "0-3" and
+	"cpuset.cpus.exclusive" set to "2-5" has "2-5" in
+	"cpuset.cpus.effective".
 
 	Its value will be affected by CPU hotplug events.
 
