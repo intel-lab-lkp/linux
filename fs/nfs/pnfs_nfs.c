@@ -695,7 +695,22 @@ void nfs4_pnfs_ds_addr_list_free(struct list_head *dsaddrs)
 }
 EXPORT_SYMBOL_GPL(nfs4_pnfs_ds_addr_list_free);
 
-static void destroy_ds(struct nfs4_pnfs_ds *ds)
+static unsigned int dataserver_linger = 120;
+module_param(dataserver_linger, uint, 0644);
+MODULE_PARM_DESC(dataserver_linger,
+		 "Seconds an unused pNFS data server connection is cached (0 disables)");
+
+/* Clamped so that a large value cannot overflow the jiffies conversion */
+static unsigned long nfs4_ds_linger(void)
+{
+	unsigned int secs = READ_ONCE(dataserver_linger);
+
+	if (!secs)
+		return 0;
+	return min(secs, 3600U) * HZ;
+}
+
+static void __destroy_ds(struct nfs4_pnfs_ds *ds)
 {
 	dprintk("--> %s\n", __func__);
 	ifdebug(FACILITY)
@@ -709,13 +724,90 @@ static void destroy_ds(struct nfs4_pnfs_ds *ds)
 	kfree(ds);
 }
 
+static void destroy_ds(struct nfs4_pnfs_ds *ds)
+{
+	cancel_delayed_work_sync(&ds->ds_reaper);
+	__destroy_ds(ds);
+}
+
+static void nfs4_pnfs_ds_reap_work(struct work_struct *work)
+{
+	struct nfs4_pnfs_ds *ds = container_of(to_delayed_work(work),
+					       struct nfs4_pnfs_ds, ds_reaper);
+	struct nfs_net *nn = net_generic(ds->ds_net, nfs_net_id);
+	unsigned long linger, expires;
+
+	spin_lock(&nn->nfs4_data_server_lock);
+	if (hlist_unhashed(&ds->ds_node) ||
+	    refcount_read(&ds->ds_count) > 1) {
+		spin_unlock(&nn->nfs4_data_server_lock);
+		return;
+	}
+	linger = nfs4_ds_linger();
+	expires = ds->ds_idle + linger;
+	/*
+	 * Was the DS revived and put again after we were queued?
+	 */
+	if (linger && time_before(jiffies, expires)) {
+		queue_delayed_work(nfsiod_workqueue, &ds->ds_reaper,
+				   expires - jiffies);
+		spin_unlock(&nn->nfs4_data_server_lock);
+		return;
+	}
+	hlist_del_init(&ds->ds_node);
+	spin_unlock(&nn->nfs4_data_server_lock);
+
+	if (refcount_dec_and_test(&ds->ds_count))
+		__destroy_ds(ds);
+}
+
+/*
+ * Tear down every unused data server in @net immediately
+ */
+void nfs4_pnfs_ds_reap_net(const struct net *net)
+{
+	struct nfs_net *nn = net_generic(net, nfs_net_id);
+	struct nfs4_pnfs_ds *ds;
+	struct hlist_node *tmp;
+	HLIST_HEAD(dispose);
+	int i;
+
+	spin_lock(&nn->nfs4_data_server_lock);
+	for (i = 0; i < NFS4_DS_CACHE_HASH_SIZE; i++) {
+		hlist_for_each_entry_safe(ds, tmp,
+					  &nn->nfs4_data_server_cache[i],
+					  ds_node) {
+			if (refcount_read(&ds->ds_count) > 1)
+				continue;
+			hlist_del_init(&ds->ds_node);
+			hlist_add_head(&ds->ds_tmpnode, &dispose);
+		}
+	}
+	spin_unlock(&nn->nfs4_data_server_lock);
+
+	while (!hlist_empty(&dispose)) {
+		ds = hlist_entry(dispose.first, struct nfs4_pnfs_ds, ds_tmpnode);
+		hlist_del(&ds->ds_tmpnode);
+		if (refcount_dec_and_test(&ds->ds_count))
+			destroy_ds(ds);
+	}
+}
+
 void nfs4_pnfs_ds_put(struct nfs4_pnfs_ds *ds)
 {
 	struct nfs_net *nn = net_generic(ds->ds_net, nfs_net_id);
+	unsigned long linger = nfs4_ds_linger();
 
 	spin_lock(&nn->nfs4_data_server_lock);
 	refcount_dec(&ds->ds_count);
 	if (refcount_read(&ds->ds_count) > 1) {
+		spin_unlock(&nn->nfs4_data_server_lock);
+		return;
+	}
+
+	if (linger) {
+		ds->ds_idle = jiffies;
+		queue_delayed_work(nfsiod_workqueue, &ds->ds_reaper, linger);
 		spin_unlock(&nn->nfs4_data_server_lock);
 		return;
 	}
@@ -815,6 +907,7 @@ nfs4_pnfs_ds_add(const struct net *net, struct list_head *dsaddrs, u32 version,
 		ds->ds_net = net;
 		ds->ds_clp = NULL;
 		ds->ds_version = version;
+		INIT_DELAYED_WORK(&ds->ds_reaper, nfs4_pnfs_ds_reap_work);
 		hlist_add_head(&ds->ds_node, bucket);
 		dprintk("%s add new data server %s\n", __func__,
 			ds->ds_remotestr);

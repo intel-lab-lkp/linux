@@ -111,8 +111,10 @@ unset_pnfs_layoutdriver(struct nfs_server *nfss)
 		if (nfss->pnfs_curr_ld->clear_layoutdriver)
 			nfss->pnfs_curr_ld->clear_layoutdriver(nfss);
 		/* Decrement the MDS count. Purge the deviceid cache if zero */
-		if (atomic_dec_and_test(&nfss->nfs_client->cl_mds_count))
+		if (atomic_dec_and_test(&nfss->nfs_client->cl_mds_count)) {
 			nfs4_deviceid_purge_client(nfss->nfs_client);
+			nfs4_pnfs_ds_reap_net(nfss->nfs_client->cl_net);
+		}
 		module_put(nfss->pnfs_curr_ld->owner);
 	}
 	nfss->pnfs_curr_ld = NULL;

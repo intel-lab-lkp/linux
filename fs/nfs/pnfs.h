@@ -58,6 +58,7 @@ struct nfs4_pnfs_ds_addr {
 
 struct nfs4_pnfs_ds {
 	struct hlist_node	ds_node;  /* nfs_net nfs4_data_server_cache */
+	struct hlist_node	ds_tmpnode; /* for batched disposal */
 	char			*ds_remotestr;	/* comma sep list of addrs */
 	struct list_head	ds_addrs;
 	const struct net	*ds_net;
@@ -66,6 +67,8 @@ struct nfs4_pnfs_ds {
 	u32			ds_version;	/* cache key, with ds_addrs */
 	unsigned long		ds_state;
 #define NFS4DS_CONNECTING	0	/* ds is establishing connection */
+	unsigned long		ds_idle;	/* jiffies of the last put */
+	struct delayed_work	ds_reaper;
 };
 
 struct pnfs_layout_segment {
@@ -498,6 +501,7 @@ int pnfs_generic_commit_pagelist(struct inode *inode,
 int pnfs_generic_scan_commit_lists(struct nfs_commit_info *cinfo, int max);
 void pnfs_generic_write_commit_done(struct rpc_task *task, void *data);
 void nfs4_pnfs_ds_put(struct nfs4_pnfs_ds *ds);
+void nfs4_pnfs_ds_reap_net(const struct net *net);
 struct nfs4_pnfs_ds *nfs4_pnfs_ds_add(const struct net *net,
 				      struct list_head *dsaddrs,
 				      u32 version, gfp_t gfp_flags);
