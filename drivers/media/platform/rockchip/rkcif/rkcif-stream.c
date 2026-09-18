@@ -314,7 +314,7 @@ static void rkcif_stream_stop_streaming(struct vb2_queue *queue)
 
 	stream->stopping = true;
 	ret = wait_event_timeout(stream->wq_stopped, !stream->stopping,
-				 msecs_to_jiffies(1000));
+				 secs_to_jiffies(1));
 
 	if (!ret && stream->stop_streaming)
 		stream->stop_streaming(stream);
