@@ -1833,6 +1833,11 @@ static void j1939_xtp_rx_dpo_one(struct j1939_session *session,
 
 	/* transmitted without problems */
 	session->pkt.dpo = j1939_etp_ctl_to_packet(skb->data);
+	if (session->pkt.dpo > session->pkt.total) {
+		j1939_session_timers_cancel(session);
+		j1939_session_cancel(session, J1939_XTP_ABORT_FAULT);
+		return;
+	}
 	session->last_cmd = dat[0];
 	j1939_tp_set_rxtimeout(session, 750);
 
