@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0 */
+// SPDX-License-Identifier: GPL-2.0
 /*
  * BPF extensible scheduler class: Documentation/scheduler/sched-ext.rst
  *
@@ -129,7 +129,7 @@ static atomic64_t scx_sched_id_cursor = ATOMIC64_INIT(0);
  */
 struct scx_sched *scx_enabling_sub_sched;
 #else
-#define scx_enabling_sub_sched	(struct scx_sched *)NULL
+#define scx_enabling_sub_sched	((struct scx_sched *)NULL)
 #endif	/* CONFIG_EXT_SUB_SCHED */
 
 /*
@@ -4779,12 +4779,13 @@ int scx_tg_online(struct task_group *tg)
 			sch = scx_tg_sched(&root_task_group);
 
 		if (SCX_HAS_OP(sch, cgroup_init)) {
-			struct scx_cgroup_init_args args =
-				{ .weight = tg->scx.weight,
-				  .bw_period_us = tg->scx.bw_period_us,
-				  .bw_quota_us = tg->scx.bw_quota_us,
-				  .bw_burst_us = tg->scx.bw_burst_us,
-				  .sched_idle = tg->scx.idle };
+			struct scx_cgroup_init_args args = {
+				.weight = tg->scx.weight,
+				.bw_period_us = tg->scx.bw_period_us,
+				.bw_quota_us = tg->scx.bw_quota_us,
+				.bw_burst_us = tg->scx.bw_burst_us,
+				.sched_idle = tg->scx.idle,
+			};
 
 			ret = SCX_CALL_OP_RET(sch, cgroup_init,
 					      NULL, tg->css.cgroup, &args);
@@ -6200,7 +6201,7 @@ void scx_bypass(struct scx_sched *sch, bool bypass)
 
 			/* cycling deq/enq is enough, see the function comment */
 			scoped_guard (sched_change, p, DEQUEUE_SAVE | DEQUEUE_MOVE) {
-				/* nothing */ ;
+				/* nothing */;
 			}
 		}
 
@@ -7288,6 +7289,7 @@ struct scx_sched *scx_alloc_and_add_sched(struct scx_enable_cmd *cmd,
 
 #ifdef CONFIG_EXT_SUB_SCHED
 	char *buf = kzalloc(PATH_MAX, GFP_KERNEL);
+
 	if (!buf) {
 		ret = -ENOMEM;
 		goto err_free_lb_resched;

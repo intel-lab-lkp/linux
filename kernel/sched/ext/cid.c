@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0 */
+// SPDX-License-Identifier: GPL-2.0
 /*
  * BPF extensible scheduler class: Documentation/scheduler/sched-ext.rst
  *
@@ -28,10 +28,10 @@ struct scx_cid_topo __rcu *scx_cid_topo;
 
 static struct scx_cid_tables *scx_cid_tables;	/* used only during alloc/free */
 
-#define SCX_CID_TOPO_NEG	(struct scx_cid_topo) {				\
+#define SCX_CID_TOPO_NEG	((struct scx_cid_topo) {			\
 	.core_cid = -1, .core_idx = -1, .llc_cid = -1, .llc_idx = -1,		\
 	.node_cid = -1, .node_idx = -1, .shard_cid = -1, .shard_idx = -1,	\
-}
+})
 
 /*
  * Return @cpu's LLC shared_cpu_map. If cacheinfo isn't populated (offline or
