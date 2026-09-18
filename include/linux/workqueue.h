@@ -205,6 +205,16 @@ struct workqueue_attrs {
 	enum wq_affn_scope affn_scope;
 
 	/**
+	 * @concurrency_managed: use the concurrency managed per-cpu pools
+	 *
+	 * Those keep at most one worker running per CPU and account max_active
+	 * per CPU rather than per node. Set from %WQ_PERCPU when the workqueue
+	 * is created and fixed for its lifetime, so it always comes with
+	 * %WQ_AFFN_CPU and @affn_strict.
+	 */
+	bool concurrency_managed;
+
+	/**
 	 * @ordered: work items must be executed one by one in queueing order
 	 */
 	bool ordered;

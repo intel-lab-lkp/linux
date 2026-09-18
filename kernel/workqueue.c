@@ -5026,6 +5026,7 @@ static void copy_workqueue_attrs(struct workqueue_attrs *to,
 	 * get_unbound_pool() explicitly clears the fields.
 	 */
 	to->affn_scope = from->affn_scope;
+	to->concurrency_managed = from->concurrency_managed;
 	to->ordered = from->ordered;
 }
 
@@ -5036,6 +5037,7 @@ static void copy_workqueue_attrs(struct workqueue_attrs *to,
 static void wqattrs_clear_for_pool(struct workqueue_attrs *attrs)
 {
 	attrs->affn_scope = WQ_AFFN_NR_TYPES;
+	attrs->concurrency_managed = false;
 	attrs->ordered = false;
 	if (attrs->affn_strict)
 		cpumask_copy(attrs->cpumask, cpu_possible_mask);
@@ -5607,9 +5609,9 @@ static struct pool_workqueue *alloc_pwq(struct workqueue_struct *wq,
 
 	lockdep_assert_held(&wq_pool_mutex);
 
-	WARN_ON_ONCE((wq->flags & WQ_PERCPU) && cpu < 0);
+	WARN_ON_ONCE(attrs->concurrency_managed && cpu < 0);
 
-	if (cpu >= 0 && (wq->flags & WQ_PERCPU)) {
+	if (cpu >= 0 && attrs->concurrency_managed) {
 		pool = get_percpu_pool(wq, cpu);
 	} else {
 		pool = get_unbound_pool(attrs);
@@ -5737,7 +5739,7 @@ apply_wqattrs_prepare(struct workqueue_struct *wq,
 	copy_workqueue_attrs(new_attrs, attrs);
 	wqattrs_actualize_cpumask(new_attrs, unbound_cpumask);
 	cpumask_copy(new_attrs->__pod_cpumask, new_attrs->cpumask);
-	if (!(wq->flags & WQ_PERCPU)) {
+	if (!new_attrs->concurrency_managed) {
 		ctx->dfl_pwq = alloc_unbound_pwq(wq, new_attrs);
 		if (!ctx->dfl_pwq)
 			goto out_free;
@@ -5843,6 +5845,10 @@ int apply_workqueue_attrs(struct workqueue_struct *wq,
 	if (WARN_ON(!(wq->flags & WQ_UNBOUND)))
 		return -EINVAL;
 
+	/* concurrency management comes from WQ_PERCPU, it is not applied */
+	if (WARN_ON(attrs->concurrency_managed))
+		return -EINVAL;
+
 	mutex_lock(&wq_pool_mutex);
 	ret = apply_workqueue_attrs_locked(wq, attrs);
 	mutex_unlock(&wq_pool_mutex);
@@ -5933,6 +5939,13 @@ static struct workqueue_attrs *alloc_wq_std_attrs(struct workqueue_struct *wq)
 
 	if (wq->flags & __WQ_ORDERED)
 		attrs->ordered = true;
+
+	/* a percpu workqueue wants a concurrency managed pwq on every CPU */
+	if (wq->flags & WQ_PERCPU) {
+		attrs->affn_scope = WQ_AFFN_CPU;
+		attrs->affn_strict = true;
+		attrs->concurrency_managed = true;
+	}
 
 	return attrs;
 }
