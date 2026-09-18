@@ -66,7 +66,8 @@ struct mshv_create_partition {
  * This is extended version of the above initial MSHV_CREATE_PARTITION
  * ioctl and allows for following additional parameters:
  *
- * @pt_num_cpu_fbanks: Must be set to MSHV_NUM_CPU_FEATURES_BANKS.
+ * @pt_num_cpu_fbanks: Number of processor feature banks provided. Must not
+ *                     exceed MSHV_NUM_CPU_FEATURES_BANKS.
  * @pt_cpu_fbanks: Disabled processor feature banks array.
  * @pt_disabled_xsave: Disabled xsave feature bits.
  *
