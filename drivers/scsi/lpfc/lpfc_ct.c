@@ -832,10 +832,8 @@ lpfc_ns_rsp_audit_did(struct lpfc_vport *vport, uint32_t Did, uint8_t fc4_type)
 			if (ndlp->nlp_type != NLP_NVME_INITIATOR ||
 			    ndlp->nlp_state != NLP_STE_UNMAPPED_NODE)
 				continue;
-			if (ndlp->nlp_DID == Did)
-				clear_bit(NLP_NVMET_RECOV, &ndlp->nlp_flag);
-			else
-				set_bit(NLP_NVMET_RECOV, &ndlp->nlp_flag);
+			assign_bit(NLP_NVMET_RECOV, &ndlp->nlp_flag,
+				   ndlp->nlp_DID != Did);
 		}
 	}
 }

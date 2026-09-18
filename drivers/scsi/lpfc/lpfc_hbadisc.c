@@ -3776,10 +3776,8 @@ lpfc_mbx_cmpl_read_topology(struct lpfc_hba *phba, LPFC_MBOXQ_t *pmb)
 
 	memcpy(&phba->alpa_map[0], mp->virt, 128);
 
-	if (bf_get(lpfc_mbx_read_top_pb, la))
-		set_bit(FC_BYPASSED_MODE, &vport->fc_flag);
-	else
-		clear_bit(FC_BYPASSED_MODE, &vport->fc_flag);
+	assign_bit(FC_BYPASSED_MODE, &vport->fc_flag,
+		   bf_get(lpfc_mbx_read_top_pb, la));
 
 	if (phba->fc_eventTag <= la->eventTag) {
 		phba->fc_stat.LinkMultiEvent++;

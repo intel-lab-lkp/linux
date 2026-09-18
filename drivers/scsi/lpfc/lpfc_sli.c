@@ -8575,11 +8575,8 @@ lpfc_sli4_hba_setup(struct lpfc_hba *phba)
 	if (!test_bit(HBA_FCOE_MODE, &phba->hba_flag))
 		lpfc_get_platform_uuid(phba);
 
-	if (bf_get(lpfc_mbx_rd_rev_cee_ver, &mqe->un.read_rev) ==
-		LPFC_DCBX_CEE_MODE)
-		set_bit(HBA_FIP_SUPPORT, &phba->hba_flag);
-	else
-		clear_bit(HBA_FIP_SUPPORT, &phba->hba_flag);
+	assign_bit(HBA_FIP_SUPPORT, &phba->hba_flag,
+		   bf_get(lpfc_mbx_rd_rev_cee_ver, &mqe->un.read_rev) == LPFC_DCBX_CEE_MODE);
 
 	clear_bit(HBA_IOQ_FLUSH, &phba->hba_flag);
 

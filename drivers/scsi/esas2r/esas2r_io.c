@@ -149,10 +149,7 @@ void esas2r_start_vda_request(struct esas2r_adapter *a,
 	if (a->last_write >= a->list_size) {
 		a->last_write = 0;
 		/* update the toggle bit */
-		if (test_bit(AF_COMM_LIST_TOGGLE, &a->flags))
-			clear_bit(AF_COMM_LIST_TOGGLE, &a->flags);
-		else
-			set_bit(AF_COMM_LIST_TOGGLE, &a->flags);
+		change_bit(AF_COMM_LIST_TOGGLE, &a->flags);
 	}
 
 	element =

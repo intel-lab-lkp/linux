@@ -785,10 +785,8 @@ static int bnx2fc_link_ok(struct fc_lport *lport)
  */
 void bnx2fc_get_link_state(struct bnx2fc_hba *hba)
 {
-	if (test_bit(__LINK_STATE_NOCARRIER, &hba->phys_dev->state))
-		set_bit(ADAPTER_STATE_LINK_DOWN, &hba->adapter_state);
-	else
-		clear_bit(ADAPTER_STATE_LINK_DOWN, &hba->adapter_state);
+	assign_bit(ADAPTER_STATE_LINK_DOWN, &hba->adapter_state,
+		   test_bit(__LINK_STATE_NOCARRIER, &hba->phys_dev->state));
 }
 
 static int bnx2fc_net_config(struct fc_lport *lport, struct net_device *netdev)

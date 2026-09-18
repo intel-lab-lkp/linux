@@ -96,10 +96,8 @@ static void bnx2i_adjust_qp_size(struct bnx2i_hba *hba)
  */
 static void bnx2i_get_link_state(struct bnx2i_hba *hba)
 {
-	if (test_bit(__LINK_STATE_NOCARRIER, &hba->netdev->state))
-		set_bit(ADAPTER_STATE_LINK_DOWN, &hba->adapter_state);
-	else
-		clear_bit(ADAPTER_STATE_LINK_DOWN, &hba->adapter_state);
+	assign_bit(ADAPTER_STATE_LINK_DOWN, &hba->adapter_state,
+		   test_bit(__LINK_STATE_NOCARRIER, &hba->netdev->state));
 }
 
 

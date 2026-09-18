@@ -1240,10 +1240,8 @@ static void esas2r_nvram_callback(struct esas2r_adapter *a,
 
 	if (rq->req_stat != RS_PENDING) {
 		/* update the NVRAM state */
-		if (rq->req_stat == RS_SUCCESS)
-			set_bit(AF_NVR_VALID, &a->flags);
-		else
-			clear_bit(AF_NVR_VALID, &a->flags);
+		assign_bit(AF_NVR_VALID, &a->flags,
+			   rq->req_stat == RS_SUCCESS);
 
 		esas2r_enable_heartbeat(a);
 

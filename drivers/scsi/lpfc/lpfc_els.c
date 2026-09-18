@@ -1810,48 +1810,36 @@ lpfc_plogi_confirm_nport(struct lpfc_hba *phba, uint32_t *prsp,
 	new_ndlp->nlp_flag = ndlp->nlp_flag;
 
 	/* if new_ndlp had NLP_UNREG_INP set, keep it */
-	if (test_bit(NLP_UNREG_INP, &keep_new_nlp_flag))
-		set_bit(NLP_UNREG_INP, &new_ndlp->nlp_flag);
-	else
-		clear_bit(NLP_UNREG_INP, &new_ndlp->nlp_flag);
+	assign_bit(NLP_UNREG_INP, &new_ndlp->nlp_flag,
+		   test_bit(NLP_UNREG_INP, &keep_new_nlp_flag));
 
 	/* if new_ndlp had NLP_RPI_REGISTERED set, keep it */
-	if (test_bit(NLP_RPI_REGISTERED, &keep_new_nlp_flag))
-		set_bit(NLP_RPI_REGISTERED, &new_ndlp->nlp_flag);
-	else
-		clear_bit(NLP_RPI_REGISTERED, &new_ndlp->nlp_flag);
+	assign_bit(NLP_RPI_REGISTERED, &new_ndlp->nlp_flag,
+		   test_bit(NLP_RPI_REGISTERED, &keep_new_nlp_flag));
 
 	/*
 	 * Retain the DROPPED flag. This will take care of the init
 	 * refcount when affecting the state change
 	 */
-	if (test_bit(NLP_DROPPED, &keep_new_nlp_flag))
-		set_bit(NLP_DROPPED, &new_ndlp->nlp_flag);
-	else
-		clear_bit(NLP_DROPPED, &new_ndlp->nlp_flag);
+	assign_bit(NLP_DROPPED, &new_ndlp->nlp_flag,
+		   test_bit(NLP_DROPPED, &keep_new_nlp_flag));
 
 	ndlp->nlp_flag = keep_new_nlp_flag;
 
 	/* if ndlp had NLP_UNREG_INP set, keep it */
-	if (test_bit(NLP_UNREG_INP, &keep_nlp_flag))
-		set_bit(NLP_UNREG_INP, &ndlp->nlp_flag);
-	else
-		clear_bit(NLP_UNREG_INP, &ndlp->nlp_flag);
+	assign_bit(NLP_UNREG_INP, &ndlp->nlp_flag,
+		   test_bit(NLP_UNREG_INP, &keep_nlp_flag));
 
 	/* if ndlp had NLP_RPI_REGISTERED set, keep it */
-	if (test_bit(NLP_RPI_REGISTERED, &keep_nlp_flag))
-		set_bit(NLP_RPI_REGISTERED, &ndlp->nlp_flag);
-	else
-		clear_bit(NLP_RPI_REGISTERED, &ndlp->nlp_flag);
+	assign_bit(NLP_RPI_REGISTERED, &ndlp->nlp_flag,
+		   test_bit(NLP_RPI_REGISTERED, &keep_nlp_flag));
 
 	/*
 	 * Retain the DROPPED flag. This will take care of the init
 	 * refcount when affecting the state change
 	 */
-	if (test_bit(NLP_DROPPED, &keep_nlp_flag))
-		set_bit(NLP_DROPPED, &ndlp->nlp_flag);
-	else
-		clear_bit(NLP_DROPPED, &ndlp->nlp_flag);
+	assign_bit(NLP_DROPPED, &ndlp->nlp_flag,
+		   test_bit(NLP_DROPPED, &keep_nlp_flag));
 
 	spin_unlock_irq(&new_ndlp->lock);
 	spin_unlock_irq(&ndlp->lock);

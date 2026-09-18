@@ -888,10 +888,8 @@ sci_io_request_terminate(struct isci_request *ireq)
 		sci_change_state(&ireq->sm, SCI_REQ_ABORTING);
 		fallthrough;	/* and handle like ABORTING */
 	case SCI_REQ_ABORTING:
-		if (!isci_remote_device_is_safe_to_abort(ireq->target_device))
-			set_bit(IREQ_PENDING_ABORT, &ireq->flags);
-		else
-			clear_bit(IREQ_PENDING_ABORT, &ireq->flags);
+		assign_bit(IREQ_PENDING_ABORT, &ireq->flags,
+			   !isci_remote_device_is_safe_to_abort(ireq->target_device));
 		/* If the request is only waiting on the remote device
 		 * suspension, return SUCCESS so the caller will wait too.
 		 */
@@ -2696,10 +2694,8 @@ static void isci_request_handle_controller_specific_errors(
 		*response_ptr = SAS_TASK_UNDELIVERED;
 		*status_ptr = SAS_SAM_STAT_TASK_ABORTED;
 
-		if (task->task_proto == SAS_PROTOCOL_SMP)
-			set_bit(IREQ_COMPLETE_IN_TARGET, &request->flags);
-		else
-			clear_bit(IREQ_COMPLETE_IN_TARGET, &request->flags);
+		assign_bit(IREQ_COMPLETE_IN_TARGET, &request->flags,
+			   task->task_proto == SAS_PROTOCOL_SMP);
 		break;
 	}
 }
@@ -2886,10 +2882,8 @@ static void isci_request_io_request_complete(struct isci_host *ihost,
 		else
 			status = SAS_ABORTED_TASK;
 
-		if (SAS_PROTOCOL_SMP == task->task_proto)
-			set_bit(IREQ_COMPLETE_IN_TARGET, &request->flags);
-		else
-			clear_bit(IREQ_COMPLETE_IN_TARGET, &request->flags);
+		assign_bit(IREQ_COMPLETE_IN_TARGET, &request->flags,
+			   SAS_PROTOCOL_SMP == task->task_proto);
 		break;
 	}
 
