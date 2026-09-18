@@ -2892,11 +2892,10 @@ static int lan78xx_phy_init(struct lan78xx_net *dev)
 		return 0;
 	}
 
-	/* if phyirq is not set, use polling mode in phylib */
 	if (dev->domain_data.phyirq > 0)
-		phydev->irq = dev->domain_data.phyirq;
-	else
-		phydev->irq = PHY_POLL;
+		dev->mdiobus->irq[phydev->mdio.addr] = dev->domain_data.phyirq;
+
+	phydev->irq = dev->mdiobus->irq[phydev->mdio.addr];
 	netdev_dbg(dev->net, "phydev->irq = %d\n", phydev->irq);
 
 	ret = phylink_connect_phy(dev->phylink, phydev);
