@@ -7195,8 +7195,8 @@ static int kvm_pv_clock_pairing(struct kvm_vcpu *vcpu, gpa_t paddr,
 {
 	struct kvm_clock_pairing clock_pairing;
 	struct timespec64 ts;
+	size_t offset = 0;
 	u64 cycle;
-	int ret;
 
 	if (clock_type != KVM_CLOCK_PAIRING_WALLCLOCK)
 		return -KVM_EOPNOTSUPP;
@@ -7217,12 +7217,20 @@ static int kvm_pv_clock_pairing(struct kvm_vcpu *vcpu, gpa_t paddr,
 	clock_pairing.flags = 0;
 	memset(&clock_pairing.pad, 0, sizeof(clock_pairing.pad));
 
-	ret = 0;
-	if (kvm_write_guest(vcpu->kvm, paddr, &clock_pairing,
-			    sizeof(struct kvm_clock_pairing)))
-		ret = -KVM_EFAULT;
+	while (offset < sizeof(clock_pairing)) {
+		gpa_t gpa = kvm_translate_gpa(vcpu, &vcpu->arch.gva_walk, paddr + offset,
+					      PFERR_WRITE_MASK | PFERR_GUEST_FINAL_MASK, NULL, 0);
+		size_t len = min_t(size_t, sizeof(clock_pairing) - offset,
+				   PAGE_SIZE - offset_in_page(gpa));
 
-	return ret;
+		if (gpa == INVALID_GPA)
+			return -KVM_EFAULT;
+		if (kvm_write_guest(vcpu->kvm, gpa, (u8 *)&clock_pairing + offset, len))
+			return -KVM_EFAULT;
+
+		offset += len;
+	}
+	return 0;
 }
 #endif
 
