@@ -2432,10 +2432,15 @@ static int kvm_vm_ioctl_clear_dirty_log(struct kvm *kvm,
 #ifdef CONFIG_KVM_GENERIC_MEMORY_ATTRIBUTES
 u64 kvm_supported_mem_attributes(struct kvm *kvm)
 {
-	if (kvm_arch_has_private_mem(kvm))
-		return KVM_MEMORY_ATTRIBUTE_PRIVATE;
+	u64 supported_attrs = 0;
 
-	return 0;
+	if (kvm_arch_has_memory_protection_attributes(kvm))
+		supported_attrs |= KVM_MEMORY_ATTRIBUTE_PROT;
+
+	if (kvm_arch_has_private_mem(kvm))
+		supported_attrs |= KVM_MEMORY_ATTRIBUTE_PRIVATE;
+
+	return supported_attrs;
 }
 
 /*
@@ -2609,6 +2614,25 @@ out_unlock:
 
 	return r;
 }
+
+bool __weak kvm_arch_mem_attributes_supported_prot(struct kvm *kvm, unsigned long attrs)
+{
+	WARN_ON_ONCE("KVM_MEMORY_ATTRIBUTE_PROT requires kvm_arch_mem_attributes_supported_prot()");
+	return false;
+}
+
+bool kvm_mem_attributes_valid(struct kvm *kvm, unsigned long attrs)
+{
+	if (attrs & ~kvm_supported_mem_attributes(kvm))
+		return false;
+
+	if ((attrs & KVM_MEMORY_ATTRIBUTE_PROT) &&
+	    !kvm_arch_mem_attributes_supported_prot(kvm, attrs))
+		return false;
+
+	return true;
+}
+
 static int kvm_vm_ioctl_set_mem_attributes(struct kvm *kvm,
 					   struct kvm_memory_attributes *attrs)
 {
@@ -2617,7 +2641,7 @@ static int kvm_vm_ioctl_set_mem_attributes(struct kvm *kvm,
 	/* flags is currently not used. */
 	if (attrs->flags)
 		return -EINVAL;
-	if (attrs->attributes & ~kvm_supported_mem_attributes(kvm))
+	if (!kvm_mem_attributes_valid(kvm, attrs->attributes))
 		return -EINVAL;
 	if (attrs->size == 0 || attrs->address + attrs->size < attrs->address)
 		return -EINVAL;
