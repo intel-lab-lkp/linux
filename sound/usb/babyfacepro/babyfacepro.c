@@ -1188,6 +1188,8 @@ static int babyface_pcm_hw_params(struct snd_pcm_substream *subs,
 		chip->rate = r->rate;
 		chip->alt = r->alt;
 		chip->frame_bytes = r->frame_bytes;
+		/* The DSP EQ coefficients depend on fs: re-upload. */
+		bf_eq_reupload(chip);
 		/* Publish the new geometry before restarting either stream. */
 		schedule_work(&chip->stream_work);
 		dev_dbg(&chip->dev->dev, "rate %u Hz (alt %u)\n",
@@ -1532,6 +1534,12 @@ static int babyface_probe(struct usb_interface *intf,
 	err = babyface_create_panel(chip);
 	if (err < 0) {
 		dev_err(&intf->dev, "front-panel control creation failed: %d\n", err);
+		goto error;
+	}
+
+	err = babyface_create_eq(chip);
+	if (err < 0) {
+		dev_err(&intf->dev, "EQ control creation failed: %d\n", err);
 		goto error;
 	}
 

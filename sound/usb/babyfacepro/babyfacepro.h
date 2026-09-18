@@ -405,6 +405,21 @@ struct snd_usb_babyface {
 					 * so the input VU follows the wheel)
 					 */
 	struct snd_kcontrol *panel_kctl[7]; /* for snd_ctl_notify */
+
+	/* DSP EQ (babyfacepro-ctl.c) - 4 analog-input strips, params kept in state */
+	struct bf_eq_channel {
+		bool on;		/* EQ engaged (else identity blocks) */
+		s32 slope_db;		/* low-cut slope 6/12/18/24 (0 = off) */
+		s32 lc_hz;		/* low-cut freq, 0 = off */
+		u32 lc_raw;		/* cached 0x38 word */
+		u8 slope;		/* cached slope byte (2^n - 1) */
+		s32 band_type[3];	/* 0 off, 1 bell, 2 low shelf, 3 high shelf */
+		s32 band_freq[3];	/* Hz */
+		s32 band_q[3];		/* Q x 100 */
+		s32 band_gain[3];	/* dB x 10 */
+		s32 words[3][4];	/* cached c0..c3 */
+		s32 shared;		/* cached c4 (shared by the slots) */
+	} eq[4];
 };
 
 /* The mixer state cached across interface re-probes/resume (see
@@ -494,6 +509,10 @@ int babyface_create_panel(struct snd_usb_babyface *chip);
 void babyface_panel_start(struct snd_usb_babyface *chip);
 void babyface_panel_stop(struct snd_usb_babyface *chip);
 void babyface_panel_work(struct work_struct *work);
+void bf_eq_band_words(s32 *w, int type, s32 freq_hz, s32 q100,
+		      s32 gain_x10, s32 fs);
+void bf_eq_reupload(struct snd_usb_babyface *chip);
+int babyface_create_eq(struct snd_usb_babyface *chip);
 
 /* Master gain-law helpers - shared with the front-panel wheels once
  * the front panel lands.
