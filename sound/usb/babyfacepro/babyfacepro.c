@@ -3,13 +3,16 @@
  * RME Babyface Pro / Pro FS - proprietary-mode USB audio driver
  *
  * Core driver: USB vendor requests + cold init, interrupt-URB PCM
- * streaming, and the card lifecycle (probe/disconnect/module entry).
- * No mixer controls, front-panel support or suspend/resume yet - see
- * babyfacepro.h and the cover letter for the rest of the series.
+ * streaming, mixer-state persistence across re-probes/resume, and the
+ * card lifecycle (probe/disconnect/module entry).  See babyfacepro.h
+ * for the shared device state and register map, and babyfacepro-ctl.c
+ * for the ALSA control surface (mixer, front panel, DSP EQ - added by
+ * later patches in this series).
  */
 #include <linux/math64.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/unaligned.h>
 #include <linux/usb.h>
@@ -250,6 +253,139 @@ int bf_cold_init(struct snd_usb_babyface *chip)
 			return ret;
 	}
 	return 0;
+}
+
+/* -- mixer-state persistence across interface re-probes --------
+ * A userspace client can claim the proprietary interface via usbfs
+ * (USBDEVFS_DISCONNECT_CLAIM - seen with PipeWire grabbing the
+ * device when a stream targets the sink, and with the TuxMix
+ * user-space daemon's libusb).  That detaches us and the card
+ * disappears for the duration; on release the interface re-probes.
+ * The device keeps its registers across the detach, but our cold
+ * init clears them - so save the mixer state at disconnect and
+ * restore it at the next probe.
+ */
+
+static LIST_HEAD(bf_saved_list);
+static DEFINE_MUTEX(bf_saved_mutex);
+
+/* Re-apply the whole cached mixer state after a resume (the device
+ * lost its registers across a system suspend - TotalMix does the same
+ * re-apply).  Caller holds chip->mutex.
+ *
+ * Only the masters and the crosspoint matrix exist at this point in
+ * the series; preamp/gain and pitch are re-applied here too once the
+ * later patches that introduce them land.
+ */
+int babyface_restore_state(struct snd_usb_babyface *chip)
+{
+	int out, src, ret;
+
+	/* Masters (8-bit = the real volume) + mutes. */
+	ret = bf_apply_masters(chip);
+	if (ret < 0)
+		return ret;
+
+	/* Crosspoints (canonical out -> register block; AN1/2 also needs
+	 * the low map, see bf_xpoint_write's own comment).
+	 */
+	for (out = 0; out < 6; out++) {
+		unsigned int blk = bf_xpoint_block[out];
+
+		for (src = 0; src < 14; src++) {
+			ret = bf_xpoint_write(chip, out, src,
+					      chip->xpoint[out][src][0],
+					      chip->xpoint[out][src][1]);
+			if (ret < 0)
+				return ret;
+		}
+		ret = bf_crosspoint_clear_cross(chip, blk);
+		if (ret < 0)
+			return ret;
+	}
+	/* The rate (family register), then the varispeed ratio, which is
+	 * sticky in the device and so must be re-sent even at pitch 0 in
+	 * case something else wrote it while we were detached.
+	 */
+	ret = bf_clock_write(chip);
+	if (ret < 0)
+		return ret;
+	return bf_pitch_write(chip, chip->pitch);
+}
+
+void bf_state_save(struct snd_usb_babyface *chip)
+{
+	struct bf_saved *s;
+	const char *key = chip->dev->serial ? chip->dev->serial :
+			  dev_name(&chip->dev->dev);
+	bool found = false;
+
+	mutex_lock(&bf_saved_mutex);
+	list_for_each_entry(s, &bf_saved_list, list) {
+		if (strcmp(s->key, key))
+			continue;
+		found = true;
+		break;
+	}
+	if (!found) {
+		s = kzalloc_obj(*s, GFP_KERNEL);
+		if (!s) {
+			mutex_unlock(&bf_saved_mutex);
+			return;
+		}
+		strscpy(s->key, key, sizeof(s->key));
+		list_add_tail(&s->list, &bf_saved_list);
+	}
+
+	s->flag_cnt = chip->flag_cnt;
+	memcpy(s->master, chip->master, sizeof(s->master));
+	memcpy(s->muted, chip->muted, sizeof(s->muted));
+	memcpy(s->xpoint, chip->xpoint, sizeof(s->xpoint));
+	mutex_unlock(&bf_saved_mutex);
+}
+
+/* Copy a saved state (if any) into a freshly probed chip and push it
+ * to the device.  Returns 1 when restored, -ENOENT when there is none,
+ * or a negative error from the vendor writes.
+ */
+int bf_state_restore(struct snd_usb_babyface *chip)
+{
+	struct bf_saved *s;
+	const char *key = chip->dev->serial ? chip->dev->serial :
+			  dev_name(&chip->dev->dev);
+	int ret = -ENOENT;
+
+	mutex_lock(&bf_saved_mutex);
+	list_for_each_entry(s, &bf_saved_list, list) {
+		if (strcmp(s->key, key))
+			continue;
+		chip->flag_cnt = s->flag_cnt;
+		memcpy(chip->master, s->master, sizeof(chip->master));
+		memcpy(chip->muted, s->muted, sizeof(chip->muted));
+		memcpy(chip->xpoint, s->xpoint, sizeof(chip->xpoint));
+		ret = 1;
+		break;
+	}
+	mutex_unlock(&bf_saved_mutex);
+	if (ret != 1)
+		return ret;
+
+	mutex_lock(&chip->mutex);
+	ret = babyface_restore_state(chip);
+	mutex_unlock(&chip->mutex);
+	return ret ? ret : 1;
+}
+
+void bf_state_purge(void)
+{
+	struct bf_saved *s, *tmp;
+
+	mutex_lock(&bf_saved_mutex);
+	list_for_each_entry_safe(s, tmp, &bf_saved_list, list) {
+		list_del(&s->list);
+		kfree(s);
+	}
+	mutex_unlock(&bf_saved_mutex);
 }
 
 /* -- PCM data path ------------------------- */
@@ -637,6 +773,14 @@ void babyface_stream_work(struct work_struct *work)
 		}
 		/* Session arm (cap_audio frame 5829, after the URBs). */
 		ret = bf_vendor_write(chip, BF_REQ_SESSION_ARM, 0x0000, 0xc000);
+		if (ret < 0)
+			goto err;
+
+		/* The cold init above cleared the mixer registers; push the
+		 * cached masters and crosspoints back so the session starts
+		 * at the user's levels.
+		 */
+		ret = babyface_restore_state(chip);
 		if (ret < 0)
 			goto err;
 
@@ -1063,6 +1207,26 @@ static int babyface_probe(struct usb_interface *intf,
 		goto error;
 	}
 
+	/* Restore the mixer state saved at the last disconnect (if any);
+	 * the device keeps its registers across a usbfs detach, but the
+	 * cold init above cleared them, so push the user's settings back.
+	 */
+	err = bf_state_restore(chip);
+	if (err == -ENOENT) {
+		/* No saved state: the 0x16 clear zeroed the mixer registers,
+		 * so restore the factory default routing to keep the outputs
+		 * live out of the box.
+		 */
+		err = babyface_write_default_mixer(chip);
+		if (err < 0) {
+			dev_err(&intf->dev, "default mixer restore failed: %d\n", err);
+			goto error;
+		}
+	} else if (err < 0) {
+		dev_err(&intf->dev, "mixer state restore failed: %d\n", err);
+		goto error;
+	}
+
 	/* Keep the allocation size independent of the active USB mode. */
 	urbsize = BF_WORDS_PER_FRAME * sizeof(u32) * chip->frames_per_urb;
 	chip->urbs_in = kcalloc(chip->nurbs, sizeof(*chip->urbs_in), GFP_KERNEL);
@@ -1107,6 +1271,18 @@ static int babyface_probe(struct usb_interface *intf,
 		goto error;
 	}
 
+	err = babyface_create_masters(chip);
+	if (err < 0) {
+		dev_err(&intf->dev, "master control creation failed: %d\n", err);
+		goto error;
+	}
+
+	err = babyface_create_xpoints(chip);
+	if (err < 0) {
+		dev_err(&intf->dev, "crosspoint creation failed: %d\n", err);
+		goto error;
+	}
+
 	err = snd_card_register(chip->card);
 	if (err < 0) {
 		dev_err(&intf->dev, "snd_card_register failed: %d\n", err);
@@ -1143,6 +1319,12 @@ static void babyface_disconnect(struct usb_interface *intf)
 	usb_set_intfdata(intf, NULL);
 	if (chip->shutdown)
 		return;
+
+	/* Keep the mixer state for the next probe: a userspace usbfs
+	 * claim (PipeWire sink grab, TuxMix daemon) detaches us and the
+	 * cold init of the re-probe would otherwise wipe the settings.
+	 */
+	bf_state_save(chip);
 
 	chip->shutdown = true;
 	cancel_work_sync(&chip->stream_work);
@@ -1189,6 +1371,7 @@ static int __init babyface_init(void)
 
 static void __exit babyface_exit(void)
 {
+	bf_state_purge();
 	usb_deregister(&babyface_driver);
 }
 
