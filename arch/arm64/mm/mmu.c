@@ -776,6 +776,24 @@ out:
 	return ret;
 }
 
+/*
+ * True if the linear map needs to be modified for one of the following
+ * features:
+ *
+ * rodata_full and DEBUG_PAGEALLOC need to protect/unprotect pages in
+ * the linear map.
+ *
+ * KFENCE pool needs to protect/unprotect pages in the linear map if
+ * initialized late.
+ *
+ * Realms need to mark pages shared/protected in the linear map.
+ */
+bool linear_map_needs_set(void)
+{
+	return rodata_full || debug_pagealloc_enabled() ||
+	       arm64_kfence_can_set_direct_map() || is_realm_world();
+}
+
 static inline bool force_pte_mapping(void)
 {
 	const bool bbml3 = system_capabilities_finalized() ?
@@ -785,7 +803,7 @@ static inline bool force_pte_mapping(void)
 		return true;
 	if (bbml3)
 		return false;
-	return rodata_full || arm64_kfence_can_set_direct_map() || is_realm_world();
+	return linear_map_needs_set();
 }
 
 static DEFINE_MUTEX(pgtable_split_lock);
@@ -1203,7 +1221,7 @@ static void __init map_mem(void)
 
 	arm64_kfence_map_pool();
 
-	linear_map_requires_bbml3 = !force_pte_mapping() && can_set_direct_map();
+	linear_map_requires_bbml3 = !force_pte_mapping() && linear_map_needs_set();
 
 	if (force_pte_mapping())
 		flags |= NO_BLOCK_MAPPINGS | NO_CONT_MAPPINGS;
