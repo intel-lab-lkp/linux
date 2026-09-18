@@ -656,6 +656,13 @@ static void *get_result_buffer(struct dm_ioctl *param, size_t param_size,
 {
 	param->data_start = align_ptr(param + 1) - (void *) param;
 
+	/*
+	 * The buffer can be as small as offsetof(*param, data), which is
+	 * less than sizeof(*param), so don't run off the end of it.
+	 */
+	if (param->data_start > param_size)
+		param->data_start = param_size;
+
 	if (param->data_start < param_size)
 		*len = param_size - param->data_start;
 	else
