@@ -2195,12 +2195,9 @@ static enum scan_result collapse_file(struct mm_struct *mm, unsigned long addr,
 	bool is_shmem = shmem_file(file);
 
 	/*
-	 * MADV_COLLAPSE ignores shmem huge config, so do not check shmem
-	 *
-	 * TODO: once shmem always calls mapping_set_large_folios() on its
-	 * mapping, the shmem check can be removed.
+	 * MADV_COLLAPSE ignores shmem huge config, so do not check shmem.
 	 */
-	VM_WARN_ON_ONCE(!is_shmem && !mapping_pmd_folio_support(mapping));
+	VM_WARN_ON_ONCE(!mapping_pmd_folio_support(mapping));
 	VM_WARN_ON_ONCE(start & (HPAGE_PMD_NR - 1));
 
 	result = alloc_charge_folio(&new_folio, mm, cc, HPAGE_PMD_ORDER);
