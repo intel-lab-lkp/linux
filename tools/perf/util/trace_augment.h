@@ -16,6 +16,7 @@ int augmented_syscalls__create_bpf_output(struct evlist *evlist);
 void augmented_syscalls__setup_bpf_output(void);
 int augmented_syscalls__set_filter_pids(unsigned int nr, pid_t *pids);
 int augmented_syscalls__set_target_pids(unsigned int nr, pid_t *pids);
+int augmented_syscalls__prune_dead_pids(bool (*is_alive)(pid_t pid));
 int augmented_syscalls__set_target_syscalls(unsigned int nr, int *syscall_ids, bool not_syscalls);
 int augmented_syscalls__get_map_fds(int *enter_fd, int *exit_fd, int *beauty_fd);
 struct bpf_program *augmented_syscalls__find_by_title(const char *name);
@@ -51,6 +52,11 @@ static inline int augmented_syscalls__set_filter_pids(unsigned int nr __maybe_un
 
 static inline int augmented_syscalls__set_target_pids(unsigned int nr __maybe_unused,
 						      pid_t *pids __maybe_unused)
+{
+	return 0;
+}
+
+static inline int augmented_syscalls__prune_dead_pids(bool (*is_alive)(pid_t pid) __maybe_unused)
 {
 	return 0;
 }
