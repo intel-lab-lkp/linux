@@ -441,7 +441,7 @@ static int ecryptfs_get_tree(struct fs_context *fc)
 	const char *err = "Getting sb failed";
 	struct inode *inode;
 	struct path path;
-	int rc;
+	int rc, active;
 
 	if (!fc->source) {
 		rc = -EINVAL;
@@ -468,6 +468,7 @@ static int ecryptfs_get_tree(struct fs_context *fc)
 		goto out;
 	}
 
+	active = atomic_read(&s->s_active);
 	rc = super_setup_bdi(s);
 	if (rc)
 		goto out1;
@@ -562,7 +563,7 @@ out_free:
 out1:
 	deactivate_locked_super(s);
 out:
-	if (sbi)
+	if (sbi && active > 1)
 		ecryptfs_destroy_mount_crypt_stat(&sbi->mount_crypt_stat);
 
 	printk(KERN_ERR "%s; rc = [%d]\n", err, rc);
