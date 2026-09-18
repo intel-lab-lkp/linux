@@ -1486,9 +1486,9 @@ static void nbd_config_put(struct nbd_device *nbd)
 		if (test_and_clear_bit(NBD_RT_HAS_BACKEND_FILE,
 				       &config->runtime_flags)) {
 			device_remove_file(disk_to_dev(nbd->disk), &backend_attr);
-			kfree(nbd->backend);
-			nbd->backend = NULL;
 		}
+		kfree(nbd->backend);
+		nbd->backend = NULL;
 		nbd_clear_sock(nbd);
 		if (config->num_connections) {
 			int i;
