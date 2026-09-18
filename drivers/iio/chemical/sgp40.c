@@ -29,6 +29,7 @@
  * by writing to the out values of temp and humidityrelative.
  */
 
+#include "linux/device.h"
 #include <linux/delay.h>
 #include <linux/crc8.h>
 #include <linux/module.h>
@@ -259,6 +260,21 @@ static int sgp40_execute_self_test(struct sgp40_data *data)
 	}
 }
 
+static int sgp40_turn_heater_off(struct sgp40_data *data)
+{
+	int ret;
+	struct i2c_client *client = data->client;
+	struct sgp40_command turn_off = {.command = {0x36, 0x15}};
+
+	ret = i2c_master_send(client, (char*)&turn_off, sizeof(turn_off.command));
+	if (ret != sizeof(turn_off.command)) {
+		dev_err(data->dev, "i2c_master_send ret: %d, expected %zu", ret, sizeof(turn_off.command));
+		return -EIO;
+	}
+	msleep(1);
+	return 0;
+}
+
 static int sgp40_measure_resistance_raw(struct sgp40_data *data, u16 *resistance_raw)
 {
 	int ret;
@@ -417,10 +433,22 @@ static ssize_t serial_number_show(struct device *dev,
 	return sysfs_emit_at(buf, 0, "%llu\n", data->serial_number);
 }
 
+static ssize_t turn_heater_off_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf, size_t len)
+{
+	struct sgp40_data *data = iio_priv(dev_to_iio_dev(dev));
+	sgp40_turn_heater_off(data);
+
+	return len;
+}
+
 static IIO_DEVICE_ATTR_RO(serial_number, 0);
+static IIO_DEVICE_ATTR_WO(turn_heater_off, 0);
 
 static struct attribute *sgp40_attributes[] = {
 	&iio_dev_attr_serial_number.dev_attr.attr,
+	&iio_dev_attr_turn_heater_off.dev_attr.attr,
 	NULL
 };
 
