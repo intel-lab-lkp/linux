@@ -2108,15 +2108,6 @@ update_stats_wait_end_fair(struct cfs_rq *cfs_rq, struct sched_entity *se)
 
 	stats = __schedstats_from_se(se);
 
-	/*
-	 * When the sched_schedstat changes from 0 to 1, some sched se
-	 * maybe already in the runqueue, the se->statistics.wait_start
-	 * will be 0.So it will let the delta wrong. We need to avoid this
-	 * scenario.
-	 */
-	if (unlikely(!schedstat_val(stats->wait_start)))
-		return;
-
 	if (entity_is_task(se))
 		p = task_of(se);
 

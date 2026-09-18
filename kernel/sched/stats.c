@@ -21,7 +21,17 @@ void __update_stats_wait_start(struct rq *rq, struct task_struct *p,
 void __update_stats_wait_end(struct rq *rq, struct task_struct *p,
 			     struct sched_statistics *stats)
 {
-	u64 delta = rq_clock(rq) - schedstat_val(stats->wait_start);
+	u64 delta;
+
+	/*
+	 * Tasks enqueued while schedstats were disabled have a zero
+	 * wait_start: the wait was never recorded. Skip it, as the delta
+	 * against 0 would be the time since boot.
+	 */
+	if (unlikely(!schedstat_val(stats->wait_start)))
+		return;
+
+	delta = rq_clock(rq) - schedstat_val(stats->wait_start);
 
 	if (p) {
 		if (task_on_rq_migrating(p)) {
