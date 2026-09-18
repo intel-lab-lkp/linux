@@ -1515,20 +1515,6 @@ static inline void ixgbe_ping_vf(struct ixgbe_adapter *adapter, int vf)
 	ixgbe_write_mbx(hw, &ping, 1, vf);
 }
 
-void ixgbe_ping_all_vfs(struct ixgbe_adapter *adapter)
-{
-	struct ixgbe_hw *hw = &adapter->hw;
-	u32 ping;
-	int i;
-
-	for (i = 0 ; i < adapter->num_vfs; i++) {
-		ping = IXGBE_PF_CONTROL_MSG;
-		if (adapter->vfinfo[i].clear_to_send)
-			ping |= IXGBE_VT_MSGTYPE_CTS;
-		ixgbe_write_mbx(hw, &ping, 1, i);
-	}
-}
-
 /**
  * ixgbe_set_all_vfs - update vfs queues
  * @adapter: Pointer to adapter struct
