@@ -6055,24 +6055,25 @@ static void wq_adjust_max_active(struct workqueue_struct *wq)
 	}
 
 	/*
-	 * Update the limit and then kick inactive work items if more active
+	 * Update both limits and then kick inactive work items if more active
 	 * work items are allowed. This doesn't break work item ordering
 	 * because new work items are always queued behind existing inactive
 	 * work items if there are any.
+	 *
+	 * Which one a pwq honours follows its pool, see pwq_tryinc_nr_active().
+	 * Keeping both current means a pwq is never metered against a limit
+	 * that was never set.
 	 */
-	if (wq->flags & WQ_UNBOUND) {
-		if (wq->max_active == new_max && wq->min_active == new_min)
-			return;
+	if (wq->max_active == new_max && wq->min_active == new_min &&
+	    wq->percpu_max_active == new_max)
+		return;
 
-		WRITE_ONCE(wq->max_active, new_max);
-		WRITE_ONCE(wq->min_active, new_min);
+	WRITE_ONCE(wq->max_active, new_max);
+	WRITE_ONCE(wq->min_active, new_min);
+	WRITE_ONCE(wq->percpu_max_active, new_max);
+
+	if (wq->flags & WQ_UNBOUND)
 		wq_update_node_max_active(wq, -1);
-	} else {
-		if (wq->percpu_max_active == new_max)
-			return;
-
-		WRITE_ONCE(wq->percpu_max_active, new_max);
-	}
 
 	if (new_max == 0)
 		return;
@@ -6169,14 +6170,11 @@ static struct workqueue_struct *__alloc_workqueue(const char *fmt,
 
 	/* init wq */
 	wq->flags = flags;
-	if (flags & WQ_UNBOUND) {
-		wq->max_active = max_active;
-		wq->min_active = min(max_active, WQ_DFL_MIN_ACTIVE);
-		wq->saved_min_active = wq->min_active;
-	} else {
-		wq->percpu_max_active = max_active;
-	}
+	wq->max_active = max_active;
+	wq->min_active = min(max_active, WQ_DFL_MIN_ACTIVE);
+	wq->percpu_max_active = max_active;
 	wq->saved_max_active = max_active;
+	wq->saved_min_active = wq->min_active;
 	mutex_init(&wq->mutex);
 	atomic_set(&wq->nr_pwqs_to_flush, 0);
 	INIT_LIST_HEAD(&wq->pwqs);
@@ -6452,8 +6450,7 @@ void workqueue_set_max_active(struct workqueue_struct *wq, int max_active)
 	mutex_lock(&wq->mutex);
 
 	wq->saved_max_active = max_active;
-	if (wq->flags & WQ_UNBOUND)
-		wq->saved_min_active = min(wq->saved_min_active, max_active);
+	wq->saved_min_active = min(wq->saved_min_active, max_active);
 
 	wq_adjust_max_active(wq);
 
