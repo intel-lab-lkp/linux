@@ -80,7 +80,7 @@ static umode_t psp_firmware_is_visible(struct kobject *kobj, struct attribute *a
 		val = ioread32(psp->io_regs + psp->vdata->bootloader_info_reg);
 
 	if (attr == &dev_attr_tee_version.attr && psp->capability.tee &&
-	    psp->vdata->tee->info_reg)
+	    psp->vdata->tee && psp->vdata->tee->info_reg)
 		val = ioread32(psp->io_regs + psp->vdata->tee->info_reg);
 
 	/* If platform disallows accessing this register it will be all f's */
