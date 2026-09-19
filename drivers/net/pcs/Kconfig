@@ -46,4 +46,18 @@ config PCS_RZN1_MIIC
 	  Renesas RZ/N1, RZ/N2H, and RZ/T2H SoCs. This PCS converts MII to
 	  RMII/RGMII, or can be set in pass-through mode for MII.
 
+config PCS_NXP_S32G_XPCS
+	tristate "NXP S32G XPCS support"
+	select PHYLINK
+	select REGMAP
+	select PCS_NXP_SERDES_XPCS
+	help
+	  This option enables the NXP S32G SerDes XPCS platform glue. It
+	  provides the indirect-MMIO register transport and the S32G PMA/PLL
+	  bring-up sequences on top of the shared NXP SerDes xPCS core
+	  (PCS_NXP_SERDES_XPCS), which supplies the phylink PCS layer for the
+	  SGMII / 2500BASE-X lanes of the shared SerDes combo PHY. It is
+	  driven by the S32G SerDes PHY driver. Say Y or M here if you need
+	  SGMII Ethernet on an NXP S32G2 or S32G3 SoC.
+
 endmenu
