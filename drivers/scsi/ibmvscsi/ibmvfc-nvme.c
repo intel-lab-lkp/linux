@@ -202,7 +202,7 @@ static void ibmvfc_nvme_ls_abort(struct nvme_fc_local_port *lport,
 	struct ibmvfc_event *evt;
 	union ibmvfc_iu rsp;
 	unsigned long flags;
-	u16 status;
+	u16 status = IBMVFC_MAD_CRQ_ERROR;
 
 	evt = ibmvfc_get_event(&vhost->crq);
 	if (!vhost->logged_in || !evt)
