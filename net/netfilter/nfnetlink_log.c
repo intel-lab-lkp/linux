@@ -610,10 +610,8 @@ __build_packet_message(struct nfnl_log_net *log,
 
 		hwhdrp = skb_mac_header(skb);
 
-		if (skb->dev->type == ARPHRD_SIT)
-			hwhdrp -= ETH_HLEN;
-
 		if (hwhdrp >= skb->head &&
+		    hwhdrp + skb->dev->hard_header_len <= skb_tail_pointer(skb) &&
 		    nla_put(inst->skb, NFULA_HWHEADER,
 			    skb->dev->hard_header_len, hwhdrp))
 			goto nla_put_failure;
@@ -688,6 +686,7 @@ __build_packet_message(struct nfnl_log_net *log,
 	return 0;
 
 nla_put_failure:
+	nlmsg_cancel(inst->skb, nlh);
 	PRINTR(KERN_ERR "nfnetlink_log: error creating log nlmsg\n");
 	return -1;
 }
@@ -832,11 +831,12 @@ nfulnl_log_packet(struct net *net,
 			goto alloc_failure;
 	}
 
-	inst->qlen++;
+	if (__build_packet_message(log, inst, skb, data_len, pf,
+				   hooknum, in, out, prefix, plen,
+				   nfnl_ct, ct, ctinfo) < 0)
+		goto unlock_and_release;
 
-	__build_packet_message(log, inst, skb, data_len, pf,
-				hooknum, in, out, prefix, plen,
-				nfnl_ct, ct, ctinfo);
+	inst->qlen++;
 
 	if (inst->qlen >= qthreshold)
 		__nfulnl_flush(inst);
@@ -1002,8 +1002,10 @@ static int nfulnl_recv_config(struct sk_buff *skb, const struct nfnl_info *info,
 		struct nfulnl_msg_config_mode *params =
 			nla_data(nfula[NFULA_CFG_MODE]);
 
-		nfulnl_set_mode(inst, params->copy_mode,
-				ntohl(params->copy_range));
+		ret = nfulnl_set_mode(inst, params->copy_mode,
+				      ntohl(params->copy_range));
+		if (ret < 0)
+			goto err_destroy;
 	}
 
 	if (nfula[NFULA_CFG_TIMEOUT]) {
@@ -1015,7 +1017,9 @@ static int nfulnl_recv_config(struct sk_buff *skb, const struct nfnl_info *info,
 	if (nfula[NFULA_CFG_NLBUFSIZ]) {
 		__be32 nlbufsiz = nla_get_be32(nfula[NFULA_CFG_NLBUFSIZ]);
 
-		nfulnl_set_nlbufsiz(inst, ntohl(nlbufsiz));
+		ret = nfulnl_set_nlbufsiz(inst, ntohl(nlbufsiz));
+		if (ret < 0)
+			goto err_destroy;
 	}
 
 	if (nfula[NFULA_CFG_QTHRESH]) {
@@ -1031,6 +1035,11 @@ out_put:
 	instance_put(inst);
 out:
 	return ret;
+
+err_destroy:
+	if (cmd && cmd->command == NFULNL_CFG_CMD_BIND)
+		instance_destroy(log, inst);
+	goto out_put;
 }
 
 static const struct nfnl_callback nfulnl_cb[NFULNL_MSG_MAX] = {
