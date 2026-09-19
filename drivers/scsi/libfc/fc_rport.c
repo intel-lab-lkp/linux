@@ -1848,6 +1848,7 @@ static void fc_rport_recv_plogi_req(struct fc_lport *lport,
 	struct fc_els_flogi *pl;
 	struct fc_seq_els_data rjt_data;
 	u32 sid;
+	bool drop_rdata = false;
 
 	lockdep_assert_held(&lport->lp_mutex);
 
@@ -1940,8 +1941,10 @@ static void fc_rport_recv_plogi_req(struct fc_lport *lport,
 	 * Send LS_ACC.	 If this fails, the originator should retry.
 	 */
 	fp = fc_frame_alloc(lport, sizeof(*pl));
-	if (!fp)
+	if (!fp) {
+		drop_rdata = sid == FC_FID_DIR_SERV;
 		goto out;
+	}
 
 	fc_plogi_fill(lport, fp, ELS_LS_ACC);
 	fc_fill_reply_hdr(fp, rx_fp, FC_RCTL_ELS_REP, 0);
@@ -1949,6 +1952,8 @@ static void fc_rport_recv_plogi_req(struct fc_lport *lport,
 	fc_rport_enter_prli(rdata);
 out:
 	mutex_unlock(&rdata->rp_mutex);
+	if (drop_rdata)
+		kref_put(&rdata->kref, fc_rport_destroy);
 	fc_frame_free(rx_fp);
 	return;
 
