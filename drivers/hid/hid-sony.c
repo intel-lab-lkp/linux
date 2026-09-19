@@ -561,6 +561,7 @@ struct sony_sc {
 
 	/* Rock Band 3 Pro Instruments */
 	unsigned long rb3_pro_poke_jiffies;
+	struct work_struct rb3_pro_poke_work;
 };
 
 static void sony_set_leds(struct sony_sc *sc);
@@ -655,6 +656,14 @@ static int rb3_pro_instrument_enable_full_report(struct sony_sc *sc)
 	kfree(buf);
 
 	return ret;
+}
+
+static void rb3_pro_poke_worker(struct work_struct *work)
+{
+	struct sony_sc *sc = container_of(work, struct sony_sc,
+					  rb3_pro_poke_work);
+
+	rb3_pro_instrument_enable_full_report(sc);
 }
 
 static int djh_turntable_mapping(struct hid_device *hdev, struct hid_input *hi,
@@ -1101,7 +1110,7 @@ static int rb3_pro_instrument_raw_event(struct sony_sc *sc, u8 *rd, int size)
 	/* Only attempt to enable full report every 8 seconds */
 	if (time_after(jiffies, sc->rb3_pro_poke_jiffies)) {
 		sc->rb3_pro_poke_jiffies = jiffies + secs_to_jiffies(8);
-		rb3_pro_instrument_enable_full_report(sc);
+		schedule_work(&sc->rb3_pro_poke_work);
 	}
 
 	return 0;
@@ -2124,6 +2133,8 @@ static inline void sony_cancel_work_sync(struct sony_sc *sc)
 		}
 		cancel_work_sync(&sc->state_worker);
 	}
+	if (sc->quirks & RB3_PRO_INSTRUMENT)
+		cancel_work_sync(&sc->rb3_pro_poke_work);
 }
 
 static void sony_cleanup(struct sony_sc *sc)
@@ -2350,6 +2361,11 @@ static int sony_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	hid_set_drvdata(hdev, sc);
 	sc->hdev = hdev;
 
+	if (sc->quirks & RB3_PRO_INSTRUMENT) {
+		sc->rb3_pro_poke_jiffies = 0;
+		INIT_WORK(&sc->rb3_pro_poke_work, rb3_pro_poke_worker);
+	}
+
 	ret = hid_parse(hdev);
 	if (ret) {
 		hid_err(hdev, "parse failed\n");
@@ -2390,9 +2406,6 @@ static int sony_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		ret = -ENODEV;
 		goto err;
 	}
-
-	if (sc->quirks & RB3_PRO_INSTRUMENT)
-		sc->rb3_pro_poke_jiffies = 0;
 
 	if (sc->quirks & (GHL_GUITAR_PS3WIIU | GHL_GUITAR_PS4)) {
 		if (!hid_is_usb(hdev)) {

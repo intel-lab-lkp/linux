@@ -3728,15 +3728,14 @@ static ssize_t hid_debug_events_read(struct file *file, char __user *buffer,
 				break;
 			}
 
-			/* if list->hdev is NULL we cannot remove_wait_queue().
-			 * if list->hdev->debug is 0 then hid_debug_unregister()
-			 * was already called and list->hdev is being destroyed.
-			 * if we add remove_wait_queue() here we can hit a race.
+			/* if list->hdev->debug is 0 then hid_debug_unregister()
+			 * was already called; break out of the wait loop so
+			 * remove_wait_queue() is unconditionally called before
+			 * returning.
 			 */
 			if (!list->hdev || !list->hdev->debug) {
 				ret = -EIO;
-				__set_current_state(TASK_RUNNING);
-				goto out;
+				break;
 			}
 
 			if (file->f_flags & O_NONBLOCK) {
