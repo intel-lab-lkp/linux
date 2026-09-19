@@ -51,6 +51,10 @@ void hpfs_ea_ext_remove(struct super_block *s, secno a, int ano, unsigned len)
 static char *get_indirect_ea(struct super_block *s, int ano, secno a, int size)
 {
 	char *ret;
+	if (size < 0 || size > 0xffff) {
+		hpfs_error(s, "bad indirect EA size %d", size);
+		return NULL;
+	}
 	if (!(ret = kmalloc(size + 1, GFP_NOFS))) {
 		pr_err("out of memory for EA\n");
 		return NULL;
@@ -135,10 +139,22 @@ char *hpfs_get_ea(struct super_block *s, struct fnode *fnode, char *key, int *si
 	secno a;
 	struct extended_attribute *ea;
 	struct extended_attribute *ea_end = fnode_end_ea(fnode);
-	for (ea = fnode_ea(fnode); ea < ea_end; ea = next_ea(ea))
+	if (le16_to_cpu(fnode->ea_size_s) &&
+	    (le16_to_cpu(fnode->ea_offs) < 0xc4 ||
+	     le16_to_cpu(fnode->ea_offs) + le16_to_cpu(fnode->acl_size_s) +
+	     le16_to_cpu(fnode->ea_size_s) > 0x200))
+		return NULL;
+	for (ea = fnode_ea(fnode); ea < ea_end; ea = next_ea(ea)) {
+		if ((char *)ea + 5 > (char *)ea_end ||
+		    next_ea(ea) > ea_end ||
+		    ea->name[ea->namelen] != 0)
+			return NULL;
 		if (!strcmp(ea->name, key)) {
-			if (ea_indirect(ea))
+			if (ea_indirect(ea)) {
+				if (ea_valuelen(ea) < 8)
+					return NULL;
 				return get_indirect_ea(s, ea_in_anode(ea), ea_sec(ea), *size = ea_len(ea));
+			}
 			if (!(ret = kmalloc((*size = ea_valuelen(ea)) + 1, GFP_NOFS))) {
 				pr_err("out of memory for EA\n");
 				return NULL;
@@ -147,6 +163,7 @@ char *hpfs_get_ea(struct super_block *s, struct fnode *fnode, char *key, int *si
 			ret[ea_valuelen(ea)] = 0;
 			return ret;
 		}
+	}
 	a = le32_to_cpu(fnode->ea_secno);
 	len = le32_to_cpu(fnode->ea_size_l);
 	ano = fnode_in_anode(fnode);
@@ -162,6 +179,7 @@ char *hpfs_get_ea(struct super_block *s, struct fnode *fnode, char *key, int *si
 		if (hpfs_ea_read(s, a, ano, pos, 4, ex)) return NULL;
 		if (hpfs_ea_read(s, a, ano, pos + 4, ea->namelen + 1 + (ea_indirect(ea) ? 8 : 0), ex + 4))
 			return NULL;
+		ea->name[ea->namelen] = 0;
 		if (!strcmp(ea->name, key)) {
 			if (ea_indirect(ea))
 				return get_indirect_ea(s, ea_in_anode(ea), ea_sec(ea), *size = ea_len(ea));

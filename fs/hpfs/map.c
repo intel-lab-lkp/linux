@@ -168,9 +168,9 @@ struct fnode *hpfs_map_fnode(struct super_block *s, ino_t ino, struct buffer_hea
 		return NULL;
 	}
 	if ((fnode = hpfs_map_sector(s, ino, bhp, FNODE_RD_AHEAD))) {
+		struct extended_attribute *ea;
+		struct extended_attribute *ea_end;
 		if (hpfs_sb(s)->sb_chk) {
-			struct extended_attribute *ea;
-			struct extended_attribute *ea_end;
 			if (le32_to_cpu(fnode->magic) != FNODE_MAGIC) {
 				hpfs_error(s, "bad magic on fnode %08lx",
 					(unsigned long)ino);
@@ -192,24 +192,31 @@ struct fnode *hpfs_map_fnode(struct super_block *s, ino_t ino, struct buffer_hea
 					goto bail;
 				}
 			}
-			if (le16_to_cpu(fnode->ea_size_s) && (le16_to_cpu(fnode->ea_offs) < 0xc4 ||
-			   le16_to_cpu(fnode->ea_offs) + le16_to_cpu(fnode->acl_size_s) + le16_to_cpu(fnode->ea_size_s) > 0x200)) {
-				hpfs_error(s,
-					"bad EA info in fnode %08lx: ea_offs == %04x ea_size_s == %04x",
-					(unsigned long)ino,
-					le16_to_cpu(fnode->ea_offs), le16_to_cpu(fnode->ea_size_s));
+		}
+		if (le16_to_cpu(fnode->ea_size_s) &&
+		    (le16_to_cpu(fnode->ea_offs) < 0xc4 ||
+		     le16_to_cpu(fnode->ea_offs) +
+		     le16_to_cpu(fnode->acl_size_s) +
+		     le16_to_cpu(fnode->ea_size_s) > 0x200)) {
+			hpfs_error(s,
+				"bad EA info in fnode %08lx: ea_offs == %04x ea_size_s == %04x",
+				(unsigned long)ino,
+				le16_to_cpu(fnode->ea_offs),
+				le16_to_cpu(fnode->ea_size_s));
+			goto bail;
+		}
+		ea = fnode_ea(fnode);
+		ea_end = fnode_end_ea(fnode);
+		while (ea != ea_end) {
+			if ((char *)ea + 5 > (char *)ea_end ||
+			    next_ea(ea) > ea_end ||
+			    ea->name[ea->namelen] != 0 ||
+			    (ea_indirect(ea) && ea_valuelen(ea) != 8)) {
+				hpfs_error(s, "bad EA in fnode %08lx",
+					(unsigned long)ino);
 				goto bail;
 			}
-			ea = fnode_ea(fnode);
-			ea_end = fnode_end_ea(fnode);
-			while (ea != ea_end) {
-				if (ea > ea_end) {
-					hpfs_error(s, "bad EA in fnode %08lx",
-						(unsigned long)ino);
-					goto bail;
-				}
-				ea = next_ea(ea);
-			}
+			ea = next_ea(ea);
 		}
 	}
 	return fnode;
