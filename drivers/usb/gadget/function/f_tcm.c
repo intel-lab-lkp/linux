@@ -136,6 +136,8 @@ static void bot_send_bad_status(struct usbg_cmd *cmd)
 			req->length = cmd->data_len;
 			cmd->data_len = 0;
 		}
+		if (cmd->is_read)
+			memset(fu->cmd[0].buf, 0, req->length);
 		req->complete = bot_err_compl;
 		req->context = cmd;
 		req->buf = fu->cmd[0].buf;
@@ -330,7 +332,8 @@ static int bot_prepare_reqs(struct f_uas *fu)
 	fu->bot_status.req->complete = bot_status_complete;
 	fu->bot_status.csw.Signature = cpu_to_le32(US_BULK_CS_SIGN);
 
-	fu->cmd[0].buf = kmalloc(fu->ep_out->maxpacket, GFP_KERNEL);
+	fu->cmd[0].buf = kzalloc(max(fu->ep_out->maxpacket,
+				     fu->ep_in->maxpacket), GFP_KERNEL);
 	if (!fu->cmd[0].buf)
 		goto err_buf;
 
@@ -528,7 +531,10 @@ static void uasp_free_cmdreq(struct f_uas *fu)
 	int i;
 
 	for (i = 0; i < USBG_NUM_CMDS; i++) {
-		usb_ep_free_request(fu->ep_cmd, fu->cmd[i].req);
+		if (fu->cmd[i].req) {
+			usb_ep_dequeue(fu->ep_cmd, fu->cmd[i].req);
+			usb_ep_free_request(fu->ep_cmd, fu->cmd[i].req);
+		}
 		kfree(fu->cmd[i].buf);
 		fu->cmd[i].req = NULL;
 		fu->cmd[i].buf = NULL;
@@ -871,7 +877,8 @@ static void uasp_cmd_complete(struct usb_ep *ep, struct usb_request *req)
 		return;
 	}
 
-	usbg_submit_command(fu, req);
+	if (usbg_submit_command(fu, req) < 0)
+		usb_ep_queue(fu->ep_cmd, req, GFP_ATOMIC);
 }
 
 static int uasp_alloc_stream_res(struct f_uas *fu, struct uas_stream *stream)
@@ -904,11 +911,14 @@ out:
 
 static int uasp_alloc_cmd(struct f_uas *fu, int i)
 {
+	size_t alloc_len = max_t(size_t, fu->ep_cmd->maxpacket,
+				 sizeof(struct command_iu) + USBG_MAX_CMD);
+
 	fu->cmd[i].req = usb_ep_alloc_request(fu->ep_cmd, GFP_KERNEL);
 	if (!fu->cmd[i].req)
 		goto err;
 
-	fu->cmd[i].buf = kmalloc(fu->ep_cmd->maxpacket, GFP_KERNEL);
+	fu->cmd[i].buf = kzalloc(alloc_len, GFP_KERNEL);
 	if (!fu->cmd[i].buf)
 		goto err_buf;
 
@@ -920,6 +930,7 @@ static int uasp_alloc_cmd(struct f_uas *fu, int i)
 
 err_buf:
 	usb_ep_free_request(fu->ep_cmd, fu->cmd[i].req);
+	fu->cmd[i].req = NULL;
 err:
 	return -ENOMEM;
 }
@@ -949,6 +960,7 @@ static int uasp_prepare_reqs(struct f_uas *fu)
 
 err_free_stream:
 	uasp_free_cmdreq(fu);
+	i = USBG_NUM_CMDS;
 
 err_cleanup:
 	if (i) {
@@ -1382,6 +1394,9 @@ static int usbg_submit_command(struct f_uas *fu, struct usb_request *req)
 		return -EINVAL;
 	}
 
+	if (req->actual < sizeof(struct command_iu))
+		return -EINVAL;
+
 	scsi_tag = be16_to_cpup(&iu->tag);
 	cmd = usbg_get_cmd(fu, tv_nexus, scsi_tag);
 	if (IS_ERR(cmd)) {
@@ -1434,7 +1449,8 @@ static int usbg_submit_command(struct f_uas *fu, struct usb_request *req)
 	}
 
 	cmd_len = (cmd_iu->len & ~0x3) + 16;
-	if (cmd_len > USBG_MAX_CMD) {
+	if (cmd_len > USBG_MAX_CMD ||
+	    req->actual < offsetof(struct command_iu, cdb) + cmd_len) {
 		target_free_tag(tv_nexus->tvn_se_sess, &cmd->se_cmd);
 		hash_del(&stream->node);
 		return -EINVAL;
@@ -1740,12 +1756,20 @@ unlock_inst:
 
 static int tcm_usbg_drop_nexus(struct usbg_tpg *);
 
+static int usbg_attach(struct usbg_tpg *);
+static void usbg_detach(struct usbg_tpg *);
+
 static void usbg_drop_tpg(struct se_portal_group *se_tpg)
 {
 	struct usbg_tpg *tpg = container_of(se_tpg,
 				struct usbg_tpg, se_tpg);
 	unsigned i;
 	struct f_tcm_opts *opts;
+
+	if (tpg->gadget_connect) {
+		usbg_detach(tpg);
+		tpg->gadget_connect = false;
+	}
 
 	tcm_usbg_drop_nexus(tpg);
 	core_tpg_deregister(se_tpg);
@@ -1760,6 +1784,7 @@ static void usbg_drop_tpg(struct se_portal_group *se_tpg)
 		opts = container_of(tpg_instances[i].func_inst,
 			struct f_tcm_opts, func_inst);
 		mutex_lock(&opts->dep_lock);
+		opts->can_attach = false;
 		if (opts->has_dep)
 			module_put(opts->dependent);
 		else
@@ -1815,9 +1840,6 @@ static struct configfs_attribute *usbg_wwn_attrs[] = {
 	&usbg_wwn_attr_version,
 	NULL,
 };
-
-static int usbg_attach(struct usbg_tpg *);
-static void usbg_detach(struct usbg_tpg *);
 
 static int usbg_enable_tpg(struct se_portal_group *se_tpg, bool enable)
 {

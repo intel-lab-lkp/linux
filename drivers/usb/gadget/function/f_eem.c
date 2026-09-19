@@ -457,7 +457,7 @@ static int eem_unwrap(struct gether *port,
 					goto next;
 				}
 
-				ctx = kmalloc_obj(*ctx);
+				ctx = kmalloc_obj(*ctx, GFP_ATOMIC);
 				if (!ctx) {
 					kfree(req->buf);
 					usb_ep_free_request(ep, req);

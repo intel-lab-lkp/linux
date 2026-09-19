@@ -426,6 +426,9 @@ static ssize_t f_hidg_read(struct file *file, char __user *buffer,
 {
 	struct f_hidg *hidg = file->private_data;
 
+	if (!hidg->func.config || !hidg->func.config->cdev)
+		return -ENODEV;
+
 	if (hidg->use_out_ep)
 		return f_hidg_intout_read(file, buffer, count, ptr);
 	else
@@ -437,7 +440,7 @@ static void f_hidg_req_complete(struct usb_ep *ep, struct usb_request *req)
 	struct f_hidg *hidg = (struct f_hidg *)ep->driver_data;
 	unsigned long flags;
 
-	if (req->status != 0) {
+	if (req->status != 0 && hidg->func.config && hidg->func.config->cdev) {
 		ERROR(hidg->func.config->cdev,
 			"End Point Request ERROR: %d\n", req->status);
 	}
@@ -455,6 +458,9 @@ static ssize_t f_hidg_write(struct file *file, const char __user *buffer,
 	struct usb_request *req;
 	unsigned long flags;
 	ssize_t status = -ENOMEM;
+
+	if (!hidg->func.config || !hidg->func.config->cdev)
+		return -ENODEV;
 
 	spin_lock_irqsave(&hidg->write_spinlock, flags);
 
@@ -644,11 +650,15 @@ static int f_hidg_get_report_id(struct file *file, __u8 __user *buffer)
 static int f_hidg_get_report(struct file *file, struct usb_hidg_report __user *buffer)
 {
 	struct f_hidg			*hidg = file->private_data;
-	struct usb_composite_dev	*cdev = hidg->func.config->cdev;
+	struct usb_composite_dev	*cdev;
 	unsigned long	flags;
 	struct report_entry *entry;
 	struct report_entry *ptr;
 	__u8 report_id;
+
+	if (!hidg->func.config || !hidg->func.config->cdev)
+		return -ENODEV;
+	cdev = hidg->func.config->cdev;
 
 	entry = kmalloc_obj(*entry);
 	if (!entry)
@@ -668,13 +678,7 @@ static int f_hidg_get_report(struct file *file, struct usb_hidg_report __user *b
 
 	if (ptr) {
 		/* Report already exists in list - update it */
-		if (copy_from_user(&ptr->report_data, buffer,
-				sizeof(struct usb_hidg_report))) {
-			spin_unlock_irqrestore(&hidg->get_report_spinlock, flags);
-			ERROR(cdev, "copy_from_user error\n");
-			kfree(entry);
-			return -EINVAL;
-		}
+		ptr->report_data = entry->report_data;
 		kfree(entry);
 	} else {
 		/* Report does not exist in list - add it */
@@ -998,11 +1002,12 @@ static void hidg_disable(struct usb_function *f)
 
 	spin_lock_irqsave(&hidg->get_report_spinlock, flags);
 	if (!hidg->get_report_returned) {
-		usb_ep_free_request(f->config->cdev->gadget->ep0, hidg->get_req);
-		hidg->get_req = NULL;
 		hidg->get_report_returned = true;
+		spin_unlock_irqrestore(&hidg->get_report_spinlock, flags);
+		usb_ep_dequeue(f->config->cdev->gadget->ep0, hidg->get_req);
+	} else {
+		spin_unlock_irqrestore(&hidg->get_report_spinlock, flags);
 	}
-	spin_unlock_irqrestore(&hidg->get_report_spinlock, flags);
 
 	spin_lock_irqsave(&hidg->read_spinlock, flags);
 	hidg->disabled = true;
@@ -1100,6 +1105,8 @@ static int hidg_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 
 	if (hidg->in_ep != NULL) {
 		spin_lock_irqsave(&hidg->write_spinlock, flags);
+		if (hidg->req && !hidg->write_pending)
+			free_ep_req(hidg->in_ep, hidg->req);
 		hidg->req = req_in;
 		hidg->write_pending = 0;
 		spin_unlock_irqrestore(&hidg->write_spinlock, flags);
@@ -1585,10 +1592,19 @@ static void hidg_free(struct usb_function *f)
 static void hidg_unbind(struct usb_configuration *c, struct usb_function *f)
 {
 	struct f_hidg *hidg = func_to_hidg(f);
+	struct report_entry *entry, *tmp;
+	unsigned long flags;
 
 	cdev_device_del(hidg->cdev, &hidg->dev);
 	destroy_workqueue(hidg->workqueue);
+	spin_lock_irqsave(&hidg->get_report_spinlock, flags);
+	list_for_each_entry_safe(entry, tmp, &hidg->report_list, node) {
+		list_del(&entry->node);
+		kfree(entry);
+	}
+	spin_unlock_irqrestore(&hidg->get_report_spinlock, flags);
 	usb_free_all_descriptors(f);
+	hidg->func.config = NULL;
 }
 
 static struct usb_function *hidg_alloc(struct usb_function_instance *fi)
