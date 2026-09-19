@@ -1671,10 +1671,23 @@ static int ntty_tiocmset(struct tty_struct *tty,
 	return 0;
 }
 
+static struct async_icount ntty_get_icount(struct port *port)
+{
+	struct nozomi *dc = port->dc;
+	struct async_icount cnow;
+	unsigned long flags;
+
+	spin_lock_irqsave(&dc->spin_mutex, flags);
+	cnow = port->tty_icount;
+	spin_unlock_irqrestore(&dc->spin_mutex, flags);
+
+	return cnow;
+}
+
 static int ntty_cflags_changed(struct port *port, unsigned long flags,
 		struct async_icount *cprev)
 {
-	const struct async_icount cnow = port->tty_icount;
+	const struct async_icount cnow = ntty_get_icount(port);
 	int ret;
 
 	ret = ((flags & TIOCM_RNG) && (cnow.rng != cprev->rng))
@@ -1691,7 +1704,7 @@ static int ntty_tiocgicount(struct tty_struct *tty,
 				struct serial_icounter_struct *icount)
 {
 	struct port *port = tty->driver_data;
-	const struct async_icount cnow = port->tty_icount;
+	const struct async_icount cnow = ntty_get_icount(port);
 
 	icount->cts = cnow.cts;
 	icount->dsr = cnow.dsr;
@@ -1715,7 +1728,7 @@ static int ntty_ioctl(struct tty_struct *tty,
 
 	switch (cmd) {
 	case TIOCMIWAIT: {
-		struct async_icount cprev = port->tty_icount;
+		struct async_icount cprev = ntty_get_icount(port);
 
 		rval = wait_event_interruptible(port->tty_wait,
 				ntty_cflags_changed(port, arg, &cprev));
