@@ -1950,13 +1950,17 @@ static size_t syscall_arg__scnprintf_filename(char *bf, size_t size,
 static size_t syscall_arg__scnprintf_buf(char *bf, size_t size, struct syscall_arg *arg)
 {
 	struct augmented_arg *augmented_arg = arg->augmented.args;
-	unsigned char *orig = (unsigned char *)augmented_arg->value;
+	unsigned char *orig;
 	size_t printed = 0;
 	int consumed;
 
-	if (augmented_arg == NULL)
-		return 0;
+	if (augmented_arg == NULL || arg->augmented.size < (int)sizeof(*augmented_arg))
+		return scnprintf(bf, size, "%#lx", arg->val);
 
+	if (augmented_arg->size <= 0 || augmented_arg->size > arg->augmented.size - (int)sizeof(*augmented_arg))
+		return scnprintf(bf, size, "%#lx", arg->val);
+
+	orig = (unsigned char *)augmented_arg->value;
 	for (int j = 0; j < augmented_arg->size; ++j) {
 		bool control_char = orig[j] <= MAX_CONTROL_CHAR || orig[j] >= MAX_ASCII;
 		/* print control characters (0~31 and 127), and non-ascii characters in \(digits) */
