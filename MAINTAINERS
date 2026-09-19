@@ -3371,6 +3371,20 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/pci/nxp,s32g-pcie.yaml
 F:	drivers/pci/controller/dwc/pcie-nxp-s32g*
 
+ARM/NXP S32G SERDES DRIVER
+M:	Ciprian Marian Costea <ciprianmarian.costea@oss.nxp.com>
+M:	Jan Petrous <jan.petrous@oss.nxp.com>
+R:	NXP S32 Linux Team <s32@nxp.com>
+L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
+L:	linux-phy@lists.infradead.org
+L:	netdev@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/phy/nxp,s32g-serdes.yaml
+F:	drivers/net/pcs/pcs-nxp-s32g-xpcs.c
+F:	drivers/phy/freescale/phy-nxp-s32g-serdes.c
+F:	include/linux/pcs/pcs-nxp-s32g-xpcs.h
+F:	include/linux/phy/nxp-s32g-serdes.h
+
 ARM/NXP S32G/S32R DWMAC ETHERNET DRIVER
 M:	Jan Petrous <jan.petrous@oss.nxp.com>
 R:	s32@nxp.com
@@ -19787,6 +19801,15 @@ L:	linux-kernel@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/extcon/extcon-ptn5150.yaml
 F:	drivers/extcon/extcon-ptn5150.c
+
+NXP SERDES XPCS SHARED CORE
+M:	Jan Petrous <jan.petrous@oss.nxp.com>
+M:	Clark Wang <xiaoning.wang@nxp.com>
+R:	NXP S32 Linux Team <s32@nxp.com>
+L:	netdev@vger.kernel.org
+S:	Maintained
+F:	drivers/net/pcs/pcs-nxp-serdes-xpcs.c
+F:	include/linux/pcs/pcs-nxp-serdes-xpcs.h
 
 NXP SGTL5000 DRIVER
 M:	Fabio Estevam <festevam@gmail.com>
