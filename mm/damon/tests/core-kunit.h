@@ -1929,6 +1929,40 @@ static void damon_test_rand(struct kunit *test)
 	}
 }
 
+static void damos_test_esz_goal_temporal(struct kunit *test)
+{
+	unsigned long max_sz = ULONG_MAX / 10000;
+	struct damos_quota_goal goal = {
+		.metric = DAMOS_QUOTA_USER_INPUT,
+		.target_value = 10000,
+		.current_value = 0,
+	};
+	struct damon_ctx *ctx;
+	struct damos s;
+
+	ctx = damon_new_ctx();
+	KUNIT_ASSERT_NOT_NULL(test, ctx);
+
+	memset(&s, 0, sizeof(s));
+	INIT_LIST_HEAD(&s.quota.goals);
+	list_add(&goal.list, &s.quota.goals);
+	s.quota.goal_tuner = DAMOS_QUOTA_GOAL_TUNER_TEMPORAL;
+
+	s.quota.sz = max_sz;
+	damos_set_effective_quota(ctx, &s);
+	KUNIT_EXPECT_EQ(test, s.quota.esz, max_sz);
+
+	s.quota.sz = max_sz + 1;
+	damos_set_effective_quota(ctx, &s);
+	KUNIT_EXPECT_EQ(test, s.quota.esz, max_sz);
+
+	s.quota.sz = ULONG_MAX;
+	damos_set_effective_quota(ctx, &s);
+	KUNIT_EXPECT_EQ(test, s.quota.esz, max_sz);
+
+	damon_destroy_ctx(ctx);
+}
+
 static struct kunit_case damon_test_cases[] = {
 	KUNIT_CASE(damon_test_target),
 	KUNIT_CASE(damon_test_regions),
@@ -1965,6 +1999,7 @@ static struct kunit_case damon_test_cases[] = {
 	KUNIT_CASE(damon_test_is_last_region),
 	KUNIT_CASE(damon_test_walk_control_obsolete),
 	KUNIT_CASE(damon_test_rand),
+	KUNIT_CASE(damos_test_esz_goal_temporal),
 	{},
 };
 
