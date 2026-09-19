@@ -154,26 +154,39 @@ void qxl_draw_dirty_fb(struct qxl_device *qdev,
 	struct qxl_drm_image *dimage;
 	int ret;
 
-	ret = alloc_drawable(qdev, &release);
-	if (ret)
-		return;
-
-	clips->x1 += dumb_shadow_offset;
-	clips->x2 += dumb_shadow_offset;
-
-	left = clips->x1;
-	right = clips->x2;
+	left = clips->x1 + dumb_shadow_offset;
+	right = clips->x2 + dumb_shadow_offset;
 	top = clips->y1;
 	bottom = clips->y2;
 
 	/* skip the first clip rect */
 	for (i = 1, clips_ptr = clips + inc;
 	     i < num_clips; i++, clips_ptr += inc) {
-		left = min_t(int, left, (int)clips_ptr->x1);
-		right = max_t(int, right, (int)clips_ptr->x2);
+		left = min_t(int, left, (int)clips_ptr->x1 + dumb_shadow_offset);
+		right = max_t(int, right, (int)clips_ptr->x2 + dumb_shadow_offset);
 		top = min_t(int, top, (int)clips_ptr->y1);
 		bottom = max_t(int, bottom, (int)clips_ptr->y2);
 	}
+
+	if (dumb_shadow_offset < 0 || dumb_shadow_offset > INT_MAX - fb->width)
+		return;
+
+	left = clamp_t(int, left, dumb_shadow_offset,
+		       dumb_shadow_offset + fb->width);
+	right = clamp_t(int, right, dumb_shadow_offset,
+			dumb_shadow_offset + fb->width);
+	top = clamp_t(int, top, 0, fb->height);
+	bottom = clamp_t(int, bottom, 0, fb->height);
+
+	if (left >= right || top >= bottom)
+		return;
+
+	if ((size_t)bottom * stride > fb->obj[0]->size)
+		return;
+
+	ret = alloc_drawable(qdev, &release);
+	if (ret)
+		return;
 
 	width = right - left;
 	height = bottom - top;

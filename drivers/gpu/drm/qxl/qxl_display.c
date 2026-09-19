@@ -81,7 +81,7 @@ static int qxl_display_copy_rom_client_monitors_config(struct qxl_device *qdev)
 	uint32_t crc;
 	int status = MONITORS_CONFIG_UNCHANGED;
 
-	num_monitors = qdev->rom->client_monitors_config.count;
+	num_monitors = READ_ONCE(qdev->rom->client_monitors_config.count);
 	crc = crc32(0, (const uint8_t *)&qdev->rom->client_monitors_config,
 		  sizeof(qdev->rom->client_monitors_config));
 	if (crc != qdev->rom->client_monitors_config_crc)
@@ -94,9 +94,9 @@ static int qxl_display_copy_rom_client_monitors_config(struct qxl_device *qdev)
 		DRM_DEBUG_KMS("client monitors list will be truncated: %d < %d\n",
 			      qxl_num_crtc, num_monitors);
 		num_monitors = qxl_num_crtc;
-	} else {
-		num_monitors = qdev->rom->client_monitors_config.count;
 	}
+	if (num_monitors > ARRAY_SIZE(qdev->rom->client_monitors_config.heads))
+		num_monitors = ARRAY_SIZE(qdev->rom->client_monitors_config.heads);
 	if (qdev->client_monitors_config
 	      && (num_monitors != qdev->client_monitors_config->count)) {
 		status = MONITORS_CONFIG_MODIFIED;
@@ -453,6 +453,9 @@ static int qxl_framebuffer_surface_dirty(struct drm_framebuffer *fb,
 		norect.x2 = fb->width;
 		norect.y2 = fb->height;
 	} else if (flags & DRM_MODE_FB_DIRTY_ANNOTATE_COPY) {
+		if (num_clips < 2)
+			goto out_lock_end;
+		clips++;
 		num_clips /= 2;
 		inc = 2; /* skip source rects */
 	}
@@ -600,7 +603,7 @@ static struct qxl_bo *qxl_create_cursor(struct qxl_device *qdev,
 	struct qxl_cursor cursor;
 	int ret;
 
-	if (!user_bo)
+	if (!user_bo || user_bo->tbo.base.size < size)
 		return NULL;
 
 	ret = qxl_bo_create(qdev, sizeof(struct qxl_cursor) + size,
@@ -617,6 +620,7 @@ static struct qxl_bo *qxl_create_cursor(struct qxl_device *qdev,
 	if (ret)
 		goto err_unmap;
 
+	memset(&cursor, 0, sizeof(cursor));
 	cursor.header.unique = 0;
 	cursor.header.type = SPICE_CURSOR_TYPE_ALPHA;
 	cursor.header.width = 64;
@@ -818,10 +822,11 @@ static void qxl_calc_dumb_shadow(struct qxl_device *qdev,
 		DRM_DEBUG("%dx%d\n", surf->width, surf->height);
 }
 
-static void qxl_prepare_shadow(struct qxl_device *qdev, struct qxl_bo *user_bo,
-			       int crtc_index)
+static int qxl_prepare_shadow(struct qxl_device *qdev, struct qxl_bo *user_bo,
+			      int crtc_index)
 {
 	struct qxl_surface surf;
+	int ret;
 
 	qxl_update_dumb_head(qdev, crtc_index,
 			     user_bo);
@@ -835,9 +840,11 @@ static void qxl_prepare_shadow(struct qxl_device *qdev, struct qxl_bo *user_bo,
 				(&qdev->dumb_shadow_bo->tbo.base);
 			qdev->dumb_shadow_bo = NULL;
 		}
-		qxl_bo_create(qdev, surf.height * surf.stride,
-			      true, true, QXL_GEM_DOMAIN_SURFACE, 0,
-			      &surf, &qdev->dumb_shadow_bo);
+		ret = qxl_bo_create(qdev, surf.height * surf.stride,
+				    true, true, QXL_GEM_DOMAIN_SURFACE, 0,
+				    &surf, &qdev->dumb_shadow_bo);
+		if (ret)
+			return ret;
 	}
 	if (user_bo->shadow != qdev->dumb_shadow_bo) {
 		if (user_bo->shadow) {
@@ -850,6 +857,7 @@ static void qxl_prepare_shadow(struct qxl_device *qdev, struct qxl_bo *user_bo,
 		user_bo->shadow = qdev->dumb_shadow_bo;
 		qxl_bo_pin(user_bo->shadow);
 	}
+	return 0;
 }
 
 static int qxl_plane_prepare_fb(struct drm_plane *plane,
@@ -868,7 +876,9 @@ static int qxl_plane_prepare_fb(struct drm_plane *plane,
 
 	if (plane->type == DRM_PLANE_TYPE_PRIMARY &&
 	    user_bo->is_dumb) {
-		qxl_prepare_shadow(qdev, user_bo, new_state->crtc->index);
+		ret = qxl_prepare_shadow(qdev, user_bo, new_state->crtc->index);
+		if (ret)
+			return ret;
 	}
 
 	if (plane->type == DRM_PLANE_TYPE_CURSOR &&
@@ -918,7 +928,25 @@ static const uint32_t qxl_cursor_plane_formats[] = {
 	DRM_FORMAT_ARGB8888,
 };
 
+static int qxl_cursor_atomic_check(struct drm_plane *plane,
+				   struct drm_atomic_commit *state)
+{
+	struct drm_plane_state *new_plane_state = drm_atomic_get_new_plane_state(state,
+										 plane);
+	struct drm_framebuffer *fb = new_plane_state->fb;
+
+	if (!fb)
+		return 0;
+
+	if (fb->width != 64 || fb->height != 64 ||
+	    !fb->obj[0] || fb->obj[0]->size < 64 * 64 * 4)
+		return -EINVAL;
+
+	return 0;
+}
+
 static const struct drm_plane_helper_funcs qxl_cursor_helper_funcs = {
+	.atomic_check = qxl_cursor_atomic_check,
 	.atomic_update = qxl_cursor_atomic_update,
 	.atomic_disable = qxl_cursor_atomic_disable,
 	.prepare_fb = qxl_plane_prepare_fb,
