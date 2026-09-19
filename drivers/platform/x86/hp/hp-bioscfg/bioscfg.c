@@ -38,15 +38,19 @@ struct kobj_attribute common_display_langcode =
 
 int hp_get_integer_from_buffer(u8 **buffer, u32 *buffer_size, u32 *integer)
 {
-	int *ptr = PTR_ALIGN((int *)*buffer, sizeof(int));
+	u32 *ptr = PTR_ALIGN((u32 *)*buffer, sizeof(*ptr));
+	u32 pad = (u8 *)ptr - *buffer;
 
-	/* Ensure there is enough space remaining to read the integer */
-	if (*buffer_size < sizeof(int))
+	/*
+	 * Ensure there is enough space remaining to read the integer,
+	 * including any padding PTR_ALIGN() introduced to reach it.
+	 */
+	if (*buffer_size < pad + sizeof(*ptr))
 		return -EINVAL;
 
 	*integer = *(ptr++);
 	*buffer = (u8 *)ptr;
-	*buffer_size -= sizeof(int);
+	*buffer_size -= pad + sizeof(*integer);
 
 	return 0;
 }
