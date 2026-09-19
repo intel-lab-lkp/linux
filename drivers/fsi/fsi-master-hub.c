@@ -240,8 +240,13 @@ static int hub_master_probe(struct fsi_device *fsi_dev)
 	hub_master_init(hub);
 
 	rc = fsi_master_register(&hub->master);
-	if (rc)
+	if (rc) {
+		if (hub->master.idx < 0)
+			goto err_free_hub;
+
+		put_device(&hub->master.dev);
 		goto err_release;
+	}
 
 	/* At this point, fsi_master_register performs the device_initialize(),
 	 * and holds the sole reference on master.dev. This means the device
@@ -253,6 +258,8 @@ static int hub_master_probe(struct fsi_device *fsi_dev)
 	get_device(&hub->master.dev);
 	return 0;
 
+err_free_hub:
+	kfree(hub);
 err_release:
 	fsi_slave_release_range(fsi_dev->slave, FSI_HUB_LINK_OFFSET,
 			FSI_HUB_LINK_SIZE * links);
