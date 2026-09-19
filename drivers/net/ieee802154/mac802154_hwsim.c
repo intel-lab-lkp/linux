@@ -987,6 +987,8 @@ static int hwsim_add_one(struct genl_info *info, struct device *dev,
 
 err_subscribe:
 	ieee802154_unregister_hw(phy->hw);
+	kfree_rcu(rcu_dereference_protected(phy->pib, 1), rcu);
+	goto err_pib;
 err_reg:
 	kfree(pib);
 err_pib:
@@ -1003,6 +1005,8 @@ static void hwsim_del(struct hwsim_phy *phy)
 
 	list_del(&phy->list);
 
+	ieee802154_unregister_hw(phy->hw);
+
 	rcu_read_lock();
 	list_for_each_entry_rcu(e, &phy->edges, list) {
 		list_del_rcu(&e->list);
@@ -1013,7 +1017,6 @@ static void hwsim_del(struct hwsim_phy *phy)
 
 	kfree_rcu(pib, rcu);
 
-	ieee802154_unregister_hw(phy->hw);
 	ieee802154_free_hw(phy->hw);
 }
 
