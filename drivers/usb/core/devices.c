@@ -500,8 +500,8 @@ static ssize_t usb_device_dump(char __user **buffer, size_t *nbytes,
 				      file_offset, childdev, bus,
 				      level + 1, chix - 1, ++cnt);
 		usb_unlock_device(childdev);
-		if (ret == -EFAULT)
-			return total_written;
+		if (ret < 0)
+			return total_written ? total_written : ret;
 		total_written += ret;
 	}
 	return total_written;

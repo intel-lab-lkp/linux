@@ -88,7 +88,7 @@ static ssize_t usbport_trig_port_show(struct device *dev,
 						      struct usbport_trig_port,
 						      attr);
 
-	return sysfs_emit(buf, "%d\n", port->observed) + 1;
+	return sysfs_emit(buf, "%d\n", port->observed);
 }
 
 static ssize_t usbport_trig_port_store(struct device *dev,
@@ -334,13 +334,13 @@ static void usbport_trig_deactivate(struct led_classdev *led_cdev)
 	struct usbport_trig_data *usbport_data = led_get_trigger_data(led_cdev);
 	struct usbport_trig_port *port, *tmp;
 
+	usb_unregister_notify(&usbport_data->nb);
+
 	list_for_each_entry_safe(port, tmp, &usbport_data->ports, list) {
 		usbport_trig_remove_port(usbport_data, port);
 	}
 
 	sysfs_remove_group(&led_cdev->dev->kobj, &ports_group);
-
-	usb_unregister_notify(&usbport_data->nb);
 
 	kfree(usbport_data);
 }

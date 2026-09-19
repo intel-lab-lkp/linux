@@ -602,7 +602,7 @@ __acquires(ps->lock)
 			as->bulk_addr = 0;
 		}
 	}
-	ps->disabled_bulk_eps |= (1 << bulk_addr);
+	ps->disabled_bulk_eps |= (1U << bulk_addr);
 
 	/* Now carefully unlink all the marked pending URBs */
  rescan:
@@ -1600,6 +1600,8 @@ find_memory_area(struct usb_dev_state *ps, const struct usbdevfs_urb *uurb)
 
 	spin_lock_irqsave(&ps->lock, flags);
 	list_for_each_entry(iter, &ps->memory_list, memlist) {
+		if (!iter->vma_use_count)
+			continue;
 		if (uurb_start >= iter->vm_start &&
 				uurb_start < iter->vm_start + iter->size) {
 			if (uurb->buffer_length > iter->vm_start + iter->size -
@@ -1937,10 +1939,9 @@ static int proc_do_submiturb(struct usb_dev_state *ps, struct usbdevfs_urb *uurb
 	if (!is_in)
 		snoop_urb_data(as->urb, as->urb->transfer_buffer_length);
 
-	async_newpending(as);
-
 	if (usb_endpoint_xfer_bulk(&ep->desc)) {
 		spin_lock_irq(&ps->lock);
+		list_add_tail(&as->asynclist, &ps->async_pending);
 
 		/* Not exactly the endpoint address; the direction bit is
 		 * shifted to the 0x10 position so that the value will be
@@ -1956,17 +1957,18 @@ static int proc_do_submiturb(struct usb_dev_state *ps, struct usbdevfs_urb *uurb
 		if (uurb->flags & USBDEVFS_URB_BULK_CONTINUATION)
 			as->bulk_status = AS_CONTINUATION;
 		else
-			ps->disabled_bulk_eps &= ~(1 << as->bulk_addr);
+			ps->disabled_bulk_eps &= ~(1U << as->bulk_addr);
 
 		/* Don't accept continuation URBs if the endpoint is
 		 * disabled because of an earlier error.
 		 */
-		if (ps->disabled_bulk_eps & (1 << as->bulk_addr))
+		if (ps->disabled_bulk_eps & (1U << as->bulk_addr))
 			ret = -EREMOTEIO;
 		else
 			ret = usb_submit_urb(as->urb, GFP_ATOMIC);
 		spin_unlock_irq(&ps->lock);
 	} else {
+		async_newpending(as);
 		ret = usb_submit_urb(as->urb, GFP_KERNEL);
 	}
 

@@ -279,9 +279,10 @@ static ssize_t usb3_lpm_permit_store(struct device *dev,
 			       const char *buf, size_t count)
 {
 	struct usb_port *port_dev = to_usb_port(dev);
-	struct usb_device *udev = port_dev->child;
+	struct usb_device *udev;
 	struct usb_hcd *hcd;
 
+	device_lock(dev);
 	if (!strncmp(buf, "u1_u2", 5)) {
 		port_dev->usb3_lpm_u1_permit = 1;
 		port_dev->usb3_lpm_u2_permit = 1;
@@ -297,22 +298,30 @@ static ssize_t usb3_lpm_permit_store(struct device *dev,
 	} else if (!strncmp(buf, "0", 1)) {
 		port_dev->usb3_lpm_u1_permit = 0;
 		port_dev->usb3_lpm_u2_permit = 0;
-	} else
+	} else {
+		device_unlock(dev);
 		return -EINVAL;
+	}
+
+	udev = usb_get_dev(port_dev->child);
+	device_unlock(dev);
 
 	/* If device is connected to the port, disable or enable lpm
 	 * to make new u1 u2 setting take effect immediately.
 	 */
 	if (udev) {
 		hcd = bus_to_hcd(udev->bus);
-		if (!hcd)
+		if (!hcd) {
+			usb_put_dev(udev);
 			return -EINVAL;
+		}
 		usb_lock_device(udev);
 		mutex_lock(hcd->bandwidth_mutex);
 		if (!usb_disable_lpm(udev))
 			usb_enable_lpm(udev);
 		mutex_unlock(hcd->bandwidth_mutex);
 		usb_unlock_device(udev);
+		usb_put_dev(udev);
 	}
 
 	return count;

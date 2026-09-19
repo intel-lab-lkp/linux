@@ -106,7 +106,9 @@ static void usb_parse_ss_endpoint_companion(struct device *ddev, int cfgno,
 	 */
 	desc = (struct usb_ss_ep_comp_descriptor *) buffer;
 
-	if (size < USB_DT_SS_EP_COMP_SIZE) {
+	if (size < USB_DT_SS_EP_COMP_SIZE ||
+	    desc->bLength < USB_DT_SS_EP_COMP_SIZE ||
+	    desc->bLength > size) {
 		dev_notice(ddev,
 			   "invalid SuperSpeed endpoint companion descriptor "
 			   "of length %d, skipping\n", size);

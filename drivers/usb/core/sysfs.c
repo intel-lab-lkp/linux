@@ -908,7 +908,7 @@ bos_descriptors_read(struct file *filp, struct kobject *kobj,
 	if (rc < 0)
 		return -EINTR;
 	bos = udev->bos;
-	if (bos) {
+	if (bos && bos->desc) {
 		desc = bos->desc;
 		desclen = le16_to_cpu(desc->wTotalLength);
 		if (off < desclen) {
