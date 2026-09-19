@@ -865,7 +865,7 @@ static void pixpaper_plane_atomic_update(struct drm_plane *plane,
 	struct drm_shadow_plane_state *shadow_plane_state =
 		to_drm_shadow_plane_state(plane_state);
 	struct drm_crtc *crtc = plane_state->crtc;
-	struct pixpaper_panel *panel = to_pixpaper_panel(crtc->dev);
+	struct pixpaper_panel *panel = to_pixpaper_panel(plane->dev);
 
 	struct drm_device *drm = &panel->drm;
 	struct drm_framebuffer *fb = plane_state->fb;
@@ -874,6 +874,9 @@ static void pixpaper_plane_atomic_update(struct drm_plane *plane,
 	int i, j, idx;
 	__le32 *src_pixels = NULL;
 	struct pixpaper_error_ctx err = { .errno_code = 0 };
+
+	if (!crtc || !fb)
+		return;
 
 	if (!drm_dev_enter(drm, &idx))
 		return;

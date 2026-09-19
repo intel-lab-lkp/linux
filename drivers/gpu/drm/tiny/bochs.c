@@ -422,6 +422,8 @@ static int bochs_primary_plane_helper_atomic_check(struct drm_plane *plane,
 						   struct drm_atomic_commit *state)
 {
 	struct drm_plane_state *new_plane_state = drm_atomic_get_new_plane_state(state, plane);
+	struct drm_framebuffer *fb = new_plane_state->fb;
+	struct bochs_device *bochs = to_bochs_device(plane->dev);
 	struct drm_crtc *new_crtc = new_plane_state->crtc;
 	struct drm_crtc_state *new_crtc_state = NULL;
 	int ret;
@@ -437,6 +439,9 @@ static int bochs_primary_plane_helper_atomic_check(struct drm_plane *plane,
 		return ret;
 	else if (!new_plane_state->visible)
 		return 0;
+
+	if (fb && (u64)fb->pitches[0] * fb->height > bochs->fb_size)
+		return -EINVAL;
 
 	return 0;
 }

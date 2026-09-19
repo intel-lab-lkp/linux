@@ -268,12 +268,18 @@ static void gm12u320_copy_fb_to_blocks(struct gm12u320_device *gm12u320)
 	x2 = gm12u320->fb_update.rect.x2;
 	y1 = gm12u320->fb_update.rect.y1;
 	y2 = gm12u320->fb_update.rect.y2;
-	vaddr = gm12u320->fb_update.src_map.vaddr; /* TODO: Use mapping abstraction properly */
+
+	ret = drm_gem_fb_vmap(fb, &gm12u320->fb_update.src_map, NULL);
+	if (ret) {
+		GM12U320_ERR("drm_gem_fb_vmap err: %d\n", ret);
+		goto put_fb;
+	}
+	vaddr = gm12u320->fb_update.src_map.vaddr;
 
 	ret = drm_gem_fb_begin_cpu_access(fb, DMA_FROM_DEVICE);
 	if (ret) {
 		GM12U320_ERR("drm_gem_fb_begin_cpu_access err: %d\n", ret);
-		goto put_fb;
+		goto vunmap_fb;
 	}
 
 	src = vaddr + y1 * fb->pitches[0] + x1 * 4;
@@ -311,6 +317,8 @@ static void gm12u320_copy_fb_to_blocks(struct gm12u320_device *gm12u320)
 	}
 
 	drm_gem_fb_end_cpu_access(fb, DMA_FROM_DEVICE);
+vunmap_fb:
+	drm_gem_fb_vunmap(fb, &gm12u320->fb_update.src_map);
 put_fb:
 	drm_framebuffer_put(fb);
 	gm12u320->fb_update.fb = NULL;
@@ -418,6 +426,7 @@ static void gm12u320_fb_mark_dirty(struct drm_framebuffer *fb,
 	} else {
 		struct drm_rect *rect = &gm12u320->fb_update.rect;
 
+		gm12u320->fb_update.src_map = *map;
 		rect->x1 = min(rect->x1, dirty->x1);
 		rect->y1 = min(rect->y1, dirty->y1);
 		rect->x2 = max(rect->x2, dirty->x2);
@@ -583,8 +592,17 @@ static void gm12u320_pipe_update(struct drm_simple_display_pipe *pipe,
 	struct drm_shadow_plane_state *shadow_plane_state = to_drm_shadow_plane_state(state);
 	struct drm_rect rect;
 
-	if (drm_atomic_helper_damage_merged(old_state, state, &rect))
+	if (!state->fb) {
+		gm12u320_stop_fb_update(to_gm12u320(pipe->crtc.dev));
+		return;
+	}
+
+	if (drm_atomic_helper_damage_merged(old_state, state, &rect)) {
 		gm12u320_fb_mark_dirty(state->fb, &shadow_plane_state->data[0], &rect);
+	} else if (old_state->fb != state->fb) {
+		drm_rect_init(&rect, 0, 0, state->fb->width, state->fb->height);
+		gm12u320_fb_mark_dirty(state->fb, &shadow_plane_state->data[0], &rect);
+	}
 }
 
 static const struct drm_simple_display_pipe_funcs gm12u320_pipe_funcs = {

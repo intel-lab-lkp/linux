@@ -595,6 +595,9 @@ static int sharp_memory_probe(struct spi_device *spi)
 		smd->vcom_mode = SHARP_MEMORY_SOFTWARE_VCOM;
 		smd->sw_vcom_signal = kthread_run(sharp_memory_sw_vcom_signal_thread,
 						  smd, "sw_vcom_signal");
+		if (IS_ERR(smd->sw_vcom_signal))
+			return dev_err_probe(dev, PTR_ERR(smd->sw_vcom_signal),
+					     "Failed to start sw_vcom_signal thread\n");
 
 	} else if (!strcmp("external", vcom_mode_str)) {
 		smd->vcom_mode = SHARP_MEMORY_EXTERNAL_VCOM;
@@ -616,15 +619,21 @@ static int sharp_memory_probe(struct spi_device *spi)
 	ret = sharp_memory_pipe_init(drm, smd, sharp_memory_formats,
 				     ARRAY_SIZE(sharp_memory_formats),
 				     NULL);
-	if (ret)
+	if (ret) {
+		if (smd->sw_vcom_signal)
+			kthread_stop(smd->sw_vcom_signal);
 		return dev_err_probe(dev, ret, "Failed to initialize display pipeline.\n");
+	}
 
 	drm_plane_enable_fb_damage_clips(&smd->plane);
 	drm_mode_config_reset(drm);
 
 	ret = drm_dev_register(drm, 0);
-	if (ret)
+	if (ret) {
+		if (smd->sw_vcom_signal)
+			kthread_stop(smd->sw_vcom_signal);
 		return dev_err_probe(dev, ret, "Failed to register drm device.\n");
+	}
 
 	drm_client_setup(drm, NULL);
 
