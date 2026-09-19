@@ -697,7 +697,8 @@ static void ca8210_rx_done(struct cas_control *cas_ctl)
 
 	if (buf[0] & SPI_SYN) {
 		if (priv->sync_command_response) {
-			memcpy(priv->sync_command_response, buf, len);
+			memcpy(priv->sync_command_response, buf,
+			       min_t(size_t, len, sizeof(struct mac_message)));
 			complete(&priv->sync_exchange_complete);
 		} else {
 			if (cascoda_api_upstream)
@@ -1677,6 +1678,9 @@ static u8 hwme_get_request_sync(
 		return IEEE802154_SYSTEM_ERROR;
 
 	if (response.pdata.hwme_get_cnf.status == IEEE802154_SUCCESS) {
+		if (response.pdata.hwme_get_cnf.hw_attribute_length >
+		    sizeof(response.pdata.hwme_get_cnf.hw_attribute_value))
+			return IEEE802154_SYSTEM_ERROR;
 		*hw_attribute_length =
 			response.pdata.hwme_get_cnf.hw_attribute_length;
 		memcpy(
@@ -1755,12 +1759,16 @@ static int ca8210_skb_rx(
 	u8                    *data_ind
 )
 {
-	struct ieee802154_hdr hdr;
+	struct ieee802154_hdr hdr = { };
 	int msdulen;
 	int hlen;
-	u8 mpdulinkquality = data_ind[23];
+	u8 mpdulinkquality;
 	struct sk_buff *skb;
 	struct ca8210_priv *priv = hw->priv;
+
+	if (len < 30)
+		return -EINVAL;
+	mpdulinkquality = data_ind[23];
 
 	/* Allocate mtu size buffer for every rx packet */
 	skb = dev_alloc_skb(IEEE802154_MTU + sizeof(hdr));
@@ -1770,7 +1778,7 @@ static int ca8210_skb_rx(
 	skb_reserve(skb, sizeof(hdr));
 
 	msdulen = data_ind[22]; /* msdu_length */
-	if (msdulen > IEEE802154_MTU) {
+	if (msdulen > IEEE802154_MTU || len < 30 + msdulen) {
 		dev_err(
 			&priv->spi->dev,
 			"received erroneously large msdu length!\n"
@@ -1787,6 +1795,10 @@ static int ca8210_skb_rx(
 	hdr.sec.level = data_ind[29 + msdulen];
 	dev_dbg(&priv->spi->dev, "security level: %#03x\n", hdr.sec.level);
 	if (hdr.sec.level > 0) {
+		if (len < 40 + msdulen) {
+			kfree_skb(skb);
+			return -EINVAL;
+		}
 		hdr.sec.key_id_mode = data_ind[30 + msdulen];
 		memcpy(&hdr.sec.extended_src, &data_ind[31 + msdulen], 8);
 		hdr.sec.key_id = data_ind[39 + msdulen];
@@ -1801,6 +1813,7 @@ static int ca8210_skb_rx(
 	hdr.dest.pan_id = cpu_to_le16(get_unaligned_le16(&data_ind[12]));
 	dev_dbg(&priv->spi->dev, "dstPanId: %#06x\n", hdr.dest.pan_id);
 	memcpy(&hdr.dest.extended_addr, &data_ind[14], 8);
+	hdr.seq = data_ind[24];
 
 	/* Fill in FC implicitly */
 	hdr.fc.type = 1; /* Data frame */
@@ -2028,11 +2041,14 @@ static int ca8210_xmit_async(struct ieee802154_hw *hw, struct sk_buff *skb)
 static int ca8210_get_ed(struct ieee802154_hw *hw, u8 *level)
 {
 	u8 lenvar;
+	u8 buf[sizeof(((struct hwme_get_confirm_pset *)0)->hw_attribute_value)] = { 0 };
+	u8 status;
 	struct ca8210_priv *priv = hw->priv;
 
-	return link_to_linux_err(
-		hwme_get_request_sync(HWME_EDVALUE, &lenvar, level, priv->spi)
-	);
+	status = hwme_get_request_sync(HWME_EDVALUE, &lenvar, buf, priv->spi);
+	if (status == IEEE802154_SUCCESS)
+		*level = buf[0];
+	return link_to_linux_err(status);
 }
 
 /**
