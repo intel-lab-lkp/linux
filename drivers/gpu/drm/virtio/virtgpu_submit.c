@@ -343,8 +343,14 @@ static void virtio_gpu_cleanup_submit(struct virtio_gpu_submit *submit)
 	if (submit->out_fence_fd >= 0)
 		put_unused_fd(submit->out_fence_fd);
 
-	if (submit->out_fence)
+	if (submit->out_fence) {
+		if (submit->out_fence->e && !submit->out_fence->f.seqno) {
+			drm_event_cancel_free(submit->vgdev->ddev,
+					      &submit->out_fence->e->base);
+			submit->out_fence->e = NULL;
+		}
 		dma_fence_put(&submit->out_fence->f);
+	}
 
 	if (submit->sync_file)
 		fput(submit->sync_file->file);
@@ -414,6 +420,9 @@ static int virtio_gpu_init_submit(struct virtio_gpu_submit *submit,
 	err = virtio_gpu_init_submit_buflist(submit);
 	if (err)
 		return err;
+
+	if (!exbuf->size)
+		return -EINVAL;
 
 	submit->buf = vmemdup_user(u64_to_user_ptr(exbuf->command), exbuf->size);
 	if (IS_ERR(submit->buf))

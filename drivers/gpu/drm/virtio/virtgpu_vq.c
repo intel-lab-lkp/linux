@@ -202,6 +202,10 @@ static void *virtio_gpu_alloc_cmd_cb(struct virtio_gpu_device *vgdev,
 static void free_vbuf(struct virtio_gpu_device *vgdev,
 		      struct virtio_gpu_vbuffer *vbuf)
 {
+	if (vbuf->objs) {
+		virtio_gpu_array_put_free_delayed(vgdev, vbuf->objs);
+		vbuf->objs = NULL;
+	}
 	if (vbuf->resp_size > MAX_INLINE_RESP_SIZE)
 		kfree(vbuf->resp_buf);
 	kvfree(vbuf->data_buf);
@@ -282,8 +286,6 @@ void virtio_gpu_dequeue_ctrl_func(struct work_struct *work)
 	wake_up(&vgdev->ctrlq.ack_queue);
 
 	list_for_each_entry_safe(entry, tmp, &reclaim_list, list) {
-		if (entry->objs)
-			virtio_gpu_array_put_free_delayed(vgdev, entry->objs);
 		list_del(&entry->list);
 		free_vbuf(vgdev, entry);
 	}
@@ -517,6 +519,7 @@ static int virtio_gpu_queue_fenced_ctrl_buffer(struct virtio_gpu_device *vgdev,
 			if (!sgt) {
 				if (fence && vbuf->objs)
 					virtio_gpu_array_unlock_resv(vbuf->objs);
+				free_vbuf(vgdev, vbuf);
 				return -ENOMEM;
 			}
 
@@ -1409,8 +1412,7 @@ virtio_gpu_cmd_resource_assign_uuid(struct virtio_gpu_device *vgdev,
 	cmd_p->resource_id = cpu_to_le32(bo->hw_res_handle);
 
 	vbuf->objs = objs;
-	virtio_gpu_queue_ctrl_buffer(vgdev, vbuf);
-	return 0;
+	return virtio_gpu_queue_ctrl_buffer(vgdev, vbuf);
 }
 
 static void virtio_gpu_cmd_resource_map_cb(struct virtio_gpu_device *vgdev,
