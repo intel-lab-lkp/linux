@@ -40,6 +40,10 @@ static int bfs_move_block(unsigned long from, unsigned long to,
 	if (!bh)
 		return -EIO;
 	new = sb_getblk(sb, to);
+	if (!new) {
+		brelse(bh);
+		return -EIO;
+	}
 	memcpy(new->b_data, bh->b_data, bh->b_size);
 	mark_buffer_dirty(new);
 	bforget(bh);
@@ -54,9 +58,9 @@ static int bfs_move_blocks(struct super_block *sb, unsigned long start,
 
 	dprintf("%08lx-%08lx->%08lx\n", start, end, where);
 	for (i = start; i <= end; i++)
-		if(bfs_move_block(i, where + i, sb)) {
+		if (bfs_move_block(i, where + i - start, sb)) {
 			dprintf("failed to move block %08lx -> %08lx\n", i,
-								where + i);
+							where + i - start);
 			return -EIO;
 		}
 	return 0;
