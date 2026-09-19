@@ -197,22 +197,31 @@ rpi_firmware_print_firmware_revision(struct rpi_firmware *fw)
 	dev_info(fw->cl.dev, "Attached to firmware from %ptT\n", &date_and_time);
 }
 
-static void
+static int
 rpi_register_hwmon_driver(struct device *dev, struct rpi_firmware *fw)
 {
+	struct platform_device *pdev;
 	u32 packet;
-	int ret = rpi_firmware_property(fw, RPI_FIRMWARE_GET_THROTTLED,
-					&packet, sizeof(packet));
+	int ret;
 
+	ret = rpi_firmware_property(fw, RPI_FIRMWARE_GET_THROTTLED,
+				    &packet, sizeof(packet));
 	if (ret)
-		return;
+		return 0;
 
-	rpi_hwmon = platform_device_register_data(dev, "raspberrypi-hwmon",
-						  -1, NULL, 0);
+	pdev = platform_device_register_data(dev, "raspberrypi-hwmon",
+					     -1, NULL, 0);
+	if (IS_ERR(pdev))
+		return PTR_ERR(pdev);
+
+	rpi_hwmon = pdev;
+
+	return 0;
 }
 
-static void rpi_register_clk_driver(struct device *dev)
+static int rpi_register_clk_driver(struct device *dev)
 {
+	struct platform_device *pdev;
 	struct device_node *firmware;
 
 	/*
@@ -224,11 +233,17 @@ static void rpi_register_clk_driver(struct device *dev)
 					   "raspberrypi,firmware-clocks");
 	if (firmware) {
 		of_node_put(firmware);
-		return;
+		return 0;
 	}
 
-	rpi_clk = platform_device_register_data(dev, "raspberrypi-clk",
-						-1, NULL, 0);
+	pdev = platform_device_register_data(dev, "raspberrypi-clk",
+					     -1, NULL, 0);
+	if (IS_ERR(pdev))
+		return PTR_ERR(pdev);
+
+	rpi_clk = pdev;
+
+	return 0;
 }
 
 unsigned int rpi_firmware_clk_get_max_rate(struct rpi_firmware *fw, unsigned int id)
@@ -277,6 +292,7 @@ static int rpi_firmware_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct rpi_firmware *fw;
+	int ret;
 
 	/*
 	 * Memory will be freed by rpi_firmware_delete() once all users have
@@ -292,7 +308,7 @@ static int rpi_firmware_probe(struct platform_device *pdev)
 
 	fw->chan = mbox_request_channel(&fw->cl, 0);
 	if (IS_ERR(fw->chan)) {
-		int ret = PTR_ERR(fw->chan);
+		ret = PTR_ERR(fw->chan);
 		kfree(fw);
 		return dev_err_probe(dev, ret, "Failed to get mbox channel\n");
 	}
@@ -303,10 +319,25 @@ static int rpi_firmware_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, fw);
 
 	rpi_firmware_print_firmware_revision(fw);
-	rpi_register_hwmon_driver(dev, fw);
-	rpi_register_clk_driver(dev);
+
+	ret = rpi_register_hwmon_driver(dev, fw);
+	if (ret)
+		goto err_put_fw;
+
+	ret = rpi_register_clk_driver(dev);
+	if (ret)
+		goto err_unregister_hwmon;
 
 	return 0;
+
+err_unregister_hwmon:
+	platform_device_unregister(rpi_hwmon);
+	rpi_hwmon = NULL;
+err_put_fw:
+	platform_set_drvdata(pdev, NULL);
+	rpi_firmware_put(fw);
+
+	return ret;
 }
 
 static void rpi_firmware_shutdown(struct platform_device *pdev)
