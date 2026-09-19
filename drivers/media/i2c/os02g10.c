@@ -488,7 +488,7 @@ static int os02g10_enable_streams(struct v4l2_subdev *sd,
 
 	ret = os02g10_set_framefmt(os02g10, state);
 	if (ret) {
-		dev_err(os02g10->dev, "failed to set frame foramt\n");
+		dev_err(os02g10->dev, "failed to set frame format\n");
 		goto err_rpm_put;
 	}
 
