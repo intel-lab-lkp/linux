@@ -11,6 +11,7 @@
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
+#include <linux/iopoll.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
@@ -183,6 +184,22 @@ fail:
 	return ret;
 }
 
+#define EIP93_PE_READY_POLL_TIMEOUT_US	1000
+
+static inline u32 eip93_ctrl_status(const struct eip93_descriptor *rdesc)
+{
+	return READ_ONCE(rdesc->pe_ctrl_stat_word);
+}
+
+static inline bool eip93_desc_is_ready(const struct eip93_descriptor *rdesc,
+				       u32 pe_ctrl_stat)
+{
+	return FIELD_GET(EIP93_PE_CTRL_PE_READY_DES_TRING_OWN,
+			 pe_ctrl_stat) == EIP93_PE_CTRL_PE_READY &&
+	       FIELD_GET(EIP93_PE_LENGTH_HOST_PE_READY,
+			 READ_ONCE(rdesc->pe_length_word)) == EIP93_PE_LENGTH_PE_READY;
+}
+
 static void eip93_handle_result_descriptor(struct eip93_device *eip93)
 {
 	struct crypto_async_request *async;
@@ -191,7 +208,6 @@ static void eip93_handle_result_descriptor(struct eip93_device *eip93)
 	bool last_entry;
 	int handled, left, err;
 	u32 pe_ctrl_stat;
-	u32 pe_length;
 
 get_more:
 	handled = 0;
@@ -216,13 +232,12 @@ get_more:
 			break;
 		}
 		/* make sure DMA is finished writing */
-		do {
-			pe_ctrl_stat = READ_ONCE(rdesc->pe_ctrl_stat_word);
-			pe_length = READ_ONCE(rdesc->pe_length_word);
-		} while (FIELD_GET(EIP93_PE_CTRL_PE_READY_DES_TRING_OWN, pe_ctrl_stat) !=
-			 EIP93_PE_CTRL_PE_READY ||
-			 FIELD_GET(EIP93_PE_LENGTH_HOST_PE_READY, pe_length) !=
-			 EIP93_PE_LENGTH_PE_READY);
+		err = read_poll_timeout_atomic(eip93_ctrl_status, pe_ctrl_stat,
+					       eip93_desc_is_ready(rdesc, pe_ctrl_stat),
+					       1, EIP93_PE_READY_POLL_TIMEOUT_US,
+					       false, rdesc);
+		if (err)
+			return;
 
 		err = rdesc->pe_ctrl_stat_word & (EIP93_PE_CTRL_PE_EXT_ERR_CODE |
 						  EIP93_PE_CTRL_PE_EXT_ERR |
