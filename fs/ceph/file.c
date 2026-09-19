@@ -754,7 +754,7 @@ static int ceph_finish_async_create(struct inode *dir, struct inode *inode,
 			d_drop(dentry);
 		discard_new_inode(inode);
 	} else {
-		struct dentry *dn;
+		struct dentry *dn = NULL;
 
 		doutc(cl, "d_adding new inode 0x%llx to 0x%llx/%s\n",
 		      vino.ino, ceph_ino(dir), dentry->d_name.name);
@@ -775,10 +775,9 @@ static int ceph_finish_async_create(struct inode *dir, struct inode *inode,
 			if (!d_unhashed(dentry))
 				d_drop(dentry);
 			dn = d_splice_alias(inode, dentry);
-			WARN_ON_ONCE(dn && dn != dentry);
 		}
 		file->f_mode |= FMODE_CREATED;
-		ret = finish_open(file, dentry, ceph_open);
+		ret = finish_no_open(file, dn);
 	}
 
 	spin_lock(&dentry->d_lock);
@@ -977,33 +976,25 @@ retry:
 	}
 	if (err)
 		goto out_req;
-	if (dn || d_really_is_negative(dentry) || d_is_symlink(dentry)) {
-		/* make vfs retry on splice, ENOENT, or symlink */
-		doutc(cl, "finish_no_open on dn %p\n", dn);
-		err = finish_no_open(file, dn);
-	} else {
-		if (IS_ENCRYPTED(dir) &&
-		    !fscrypt_has_permitted_context(dir, d_inode(dentry))) {
-			pr_warn_client(cl,
-				"Inconsistent encryption context (parent %llx:%llx child %llx:%llx)\n",
-				ceph_vinop(dir), ceph_vinop(d_inode(dentry)));
-			goto out_req;
-		}
 
-		doutc(cl, "finish_open on dn %p\n", dn);
-		if (req->r_op == CEPH_MDS_OP_CREATE && req->r_reply_info.has_create_ino) {
-			struct inode *newino = d_inode(dentry);
-
-			cache_file_layout(dir, newino);
-			ceph_init_inode_acls(newino, &as_ctx);
-			file->f_mode |= FMODE_CREATED;
-		}
-		if ((flags & __O_REGULAR) && !d_is_reg(dentry)) {
-			err = -EFTYPE;
-			goto out_req;
-		}
-		err = finish_open(file, dentry, ceph_open);
+	if (IS_ENCRYPTED(dir) &&
+	    !fscrypt_has_permitted_context(dir, d_inode(dentry))) {
+		pr_warn_client(cl,
+			       "Inconsistent encryption context (parent %llx:%llx child %llx:%llx)\n",
+			       ceph_vinop(dir), ceph_vinop(d_inode(dentry)));
+		goto out_req;
 	}
+
+	doutc(cl, "finish_no_open on dn %p\n", dn);
+	if (req->r_op == CEPH_MDS_OP_CREATE && req->r_reply_info.has_create_ino) {
+		struct inode *newino = d_inode(dentry);
+
+		cache_file_layout(dir, newino);
+		ceph_init_inode_acls(newino, &as_ctx);
+		file->f_mode |= FMODE_CREATED;
+	}
+	err = finish_no_open(file, dn);
+
 out_req:
 	ceph_mdsc_put_request(req);
 	iput(new_inode);
