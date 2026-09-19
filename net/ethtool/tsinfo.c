@@ -295,6 +295,7 @@ struct ethnl_tsinfo_dump_ctx {
 	struct tsinfo_reply_data	*reply_data;
 	unsigned long			pos_ifindex;
 	bool				netdev_dump_done;
+	bool				single_dev;
 	unsigned long			pos_phyindex;
 	enum hwtstamp_provider_qualifier pos_phcqualifier;
 };
@@ -476,12 +477,15 @@ int ethnl_tsinfo_dumpit(struct sk_buff *skb, struct netlink_callback *cb)
 	struct net *net = sock_net(skb->sk);
 	int ret = 0;
 
-	if (ctx->req_info->base.dev) {
-		struct net_device *dev = ctx->req_info->base.dev;
+	if (ctx->single_dev) {
+		struct net_device *dev = dev_get_by_index(net, ctx->pos_ifindex);
 
+		if (!dev)
+			return -ENODEV;
 		netdev_lock_ops_compat(dev);
 		ret = ethnl_tsinfo_dump_one_net_topo(skb, dev, cb);
 		netdev_unlock_ops_compat(dev);
+		dev_put(dev);
 		return ret;
 	}
 
@@ -533,6 +537,13 @@ int ethnl_tsinfo_start(struct netlink_callback *cb)
 	ctx->req_info = req_info;
 	ctx->reply_data = reply_data;
 	ctx->pos_ifindex = 0;
+	ctx->single_dev = false;
+	if (req_info->base.dev) {
+		ctx->pos_ifindex = req_info->base.dev->ifindex;
+		ctx->single_dev = true;
+		ethnl_parse_header_dev_put(&req_info->base);
+		req_info->base.dev = NULL;
+	}
 	ctx->pos_phyindex = 0;
 	ctx->netdev_dump_done = false;
 	ctx->pos_phcqualifier = HWTSTAMP_PROVIDER_QUALIFIER_PRECISE;
