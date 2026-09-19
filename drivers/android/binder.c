@@ -6023,7 +6023,19 @@ static void binder_vma_close(struct vm_area_struct *vma)
 		     proc->pid, vma->vm_start, vma->vm_end,
 		     (vma->vm_end - vma->vm_start) / SZ_1K, vma->vm_flags,
 		     (unsigned long)pgprot_val(vma->vm_page_prot));
+	if (vma->vm_start != proc->alloc.vm_start)
+		return;
 	binder_alloc_vma_close(&proc->alloc);
+}
+
+static int binder_may_split(struct vm_area_struct *vma, unsigned long addr)
+{
+	return -EINVAL;
+}
+
+static int binder_mremap(struct vm_area_struct *vma)
+{
+	return -EINVAL;
 }
 
 VISIBLE_IF_KUNIT vm_fault_t binder_vm_fault(struct vm_fault *vmf)
@@ -6035,6 +6047,8 @@ EXPORT_SYMBOL_IF_KUNIT(binder_vm_fault);
 static const struct vm_operations_struct binder_vm_ops = {
 	.open = binder_vma_open,
 	.close = binder_vma_close,
+	.may_split = binder_may_split,
+	.mremap = binder_mremap,
 	.fault = binder_vm_fault,
 };
 
