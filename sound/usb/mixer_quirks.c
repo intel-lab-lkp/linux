@@ -38,7 +38,9 @@
 #include "mixer_scarlett2.h"
 #include "mixer_us16x08.h"
 #include "mixer_s1810c.h"
+#ifdef CONFIG_SND_USB_EVO
 #include "mixer_evo.h"
+#endif
 #include "helper.h"
 #include "fcp.h"
 
@@ -4540,9 +4542,11 @@ int snd_usb_mixer_apply_create_quirk(struct usb_mixer_interface *mixer)
 		err = snd_fcp_init(mixer);
 		break;
 
+#ifdef CONFIG_SND_USB_EVO
 	case USB_ID(USB_AUDIENT_VID, USB_EVO4_PID): /* Audient EVO 4 */
 		err = snd_evo_controls_create(mixer);
 		break;
+#endif
 
 	case USB_ID(0x041e, 0x323b): /* Creative Sound Blaster E1 */
 		err = snd_soundblaster_e1_switch_create(mixer);
