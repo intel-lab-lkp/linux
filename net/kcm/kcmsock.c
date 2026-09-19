@@ -693,7 +693,8 @@ retry:
 		}
 
 		/* Successfully sent the whole packet, account for it. */
-		sk->sk_wmem_queued -= txm->sent;
+		sk_wmem_queued_add(sk, -txm->sent);
+		sk_mem_uncharge(sk, txm->sent);
 		total_sent += txm->sent;
 		skb_dequeue(&sk->sk_write_queue);
 		kfree_skb(head);
@@ -960,10 +961,17 @@ out_error:
 		 */
 		if (copied)
 			goto partial_message;
-		if (head != kcm->seq_skb)
+		if (head && head != kcm->seq_skb) {
+			sk_wmem_queued_add(sk, -head->len);
+			sk_mem_uncharge(sk, head->len);
 			kfree_skb(head);
+		}
 	} else {
-		kfree_skb(head);
+		if (head) {
+			sk_wmem_queued_add(sk, -head->len);
+			sk_mem_uncharge(sk, head->len);
+			kfree_skb(head);
+		}
 		kcm->seq_skb = NULL;
 	}
 
@@ -1686,6 +1694,7 @@ static int kcm_release(struct socket *sock)
 	struct kcm_sock *kcm;
 	struct kcm_mux *mux;
 	struct kcm_psock *psock;
+	struct sk_buff *skb;
 
 	if (!sk)
 		return 0;
@@ -1695,13 +1704,21 @@ static int kcm_release(struct socket *sock)
 
 	lock_sock(sk);
 	sock_orphan(sk);
-	kfree_skb(kcm->seq_skb);
+	if (kcm->seq_skb) {
+		sk_wmem_queued_add(sk, -kcm->seq_skb->len);
+		sk_mem_uncharge(sk, kcm->seq_skb->len);
+		kfree_skb(kcm->seq_skb);
+	}
 
 	/* Purge queue under lock to avoid race condition with tx_work trying
 	 * to act when queue is nonempty. If tx_work runs after this point
 	 * it will just return.
 	 */
-	__skb_queue_purge(&sk->sk_write_queue);
+	while ((skb = __skb_dequeue(&sk->sk_write_queue)) != NULL) {
+		sk_wmem_queued_add(sk, -skb->len);
+		sk_mem_uncharge(sk, skb->len);
+		kfree_skb(skb);
+	}
 
 	release_sock(sk);
 
