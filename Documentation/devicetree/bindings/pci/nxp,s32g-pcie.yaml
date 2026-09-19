@@ -82,7 +82,6 @@ unevaluatedProperties: false
 examples:
   - |
     #include <dt-bindings/interrupt-controller/arm-gic.h>
-    #include <dt-bindings/phy/phy.h>
 
     bus {
         #address-cells = <2>;
@@ -124,7 +123,7 @@ examples:
                 ranges;
 
                 device_type = "pci";
-                phys = <&serdes0 PHY_TYPE_PCIE 0 0>;
+                phys = <&serdes0_pcie0>;
             };
         };
     };
