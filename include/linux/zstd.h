@@ -457,15 +457,12 @@ size_t zstd_cstream_workspace_bound_with_ext_seq_prod(const zstd_compression_par
 
 /**
  * zstd_init_cstream() - initialize a zstd streaming compression context
- * @parameters        The zstd parameters to use for compression.
- * @pledged_src_size: If params.fParams.contentSizeFlag == 1 then the caller
- *                    must pass the source size (zero means empty source).
- *                    Otherwise, the caller may optionally pass the source
- *                    size, or zero if unknown.
+ * @parameters:       The zstd parameters to use for compression.
+ * @pledged_src_size: The source size, or zero if unknown.
  * @workspace:        The workspace to emplace the context into. It must outlive
  *                    the returned context.
  * @workspace_size:   The size of workspace.
- *                    Use zstd_cstream_workspace_bound(params->cparams) to
+ *                    Use zstd_cstream_workspace_bound(&parameters->cParams) to
  *                    determine how large the workspace must be.
  *
  * Return:            The zstd streaming compression context or NULL on error.
@@ -552,14 +549,14 @@ size_t zstd_dstream_workspace_bound(size_t max_window_size);
 
 /**
  * zstd_init_dstream() - initialize a zstd streaming decompression context
- * @max_window_size: The maximum window size allowed for compressed frames.
+ * @max_window_size: Unused. This argument does not limit the frame window size.
  * @workspace:       The workspace to emplace the context into. It must outlive
  *                   the returned context.
- * @workspaceSize:   The size of workspace.
+ * @workspace_size:  The size of workspace.
  *                   Use zstd_dstream_workspace_bound(max_window_size) to
  *                   determine how large the workspace must be.
  *
- * Return:           The zstd streaming decompression context.
+ * Return:           The zstd streaming decompression context or NULL on error.
  */
 zstd_dstream *zstd_init_dstream(size_t max_window_size, void *workspace,
 	size_t workspace_size);
