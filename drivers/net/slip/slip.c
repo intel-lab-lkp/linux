@@ -335,7 +335,7 @@ static void sl_bump(struct slip *sl)
 			}
 			/* make sure we've reserved enough space for uncompress
 			   to use */
-			if (count + 80 > sl->buffsize) {
+			if (count + 120 > sl->buffsize) {
 				dev->stats.rx_over_errors++;
 				return;
 			}
