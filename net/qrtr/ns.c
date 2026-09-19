@@ -347,6 +347,9 @@ static int ctrl_cmd_bye(struct sockaddr_qrtr *from)
 	iv.iov_base = &pkt;
 	iv.iov_len = sizeof(pkt);
 
+	if (from->sq_port != QRTR_PORT_CTRL)
+		return -EINVAL;
+
 	node = node_get(from->sq_node);
 	if (!node)
 		return 0;
@@ -638,6 +641,9 @@ static void qrtr_ns_worker(struct work_struct *work)
 			pr_err("error receiving packet: %zd\n", msglen);
 			break;
 		}
+
+		if (msglen < sizeof(*pkt))
+			continue;
 
 		pkt = recv_buf;
 		cmd = le32_to_cpu(pkt->cmd);
