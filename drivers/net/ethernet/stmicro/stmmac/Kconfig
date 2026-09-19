@@ -192,6 +192,12 @@ config DWMAC_S32
 	tristate "NXP S32G/S32R GMAC support"
 	default ARCH_S32
 	depends on OF && (ARCH_S32 || COMPILE_TEST)
+	# SGMII needs the PCS from the SerDes driver. The header falls back
+	# to a stub returning -ENODEV when that driver is not reachable, and
+	# stmmac makes a failing plat->pcs_init() fatal, so a built-in MAC
+	# with a modular SerDes would refuse to probe on any DT describing
+	# pcs-handle. Forbid that combination instead.
+	depends on PHY_S32G_SERDES || PHY_S32G_SERDES=n
 	help
 	  Support for ethernet controller on NXP S32CC SOCs.
 

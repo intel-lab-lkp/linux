@@ -16,12 +16,14 @@
 #include <linux/of_mdio.h>
 #include <linux/of_address.h>
 #include <linux/phy.h>
+#include <linux/phy/nxp-s32g-serdes.h>
 #include <linux/phylink.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <linux/stmmac.h>
 
 #include "stmmac_platform.h"
+#include "stmmac.h"
 
 #define GMAC_INTF_RATE_125M	125000000	/* 125MHz */
 
@@ -40,21 +42,87 @@ struct s32_priv_data {
 	phy_interface_t *intf_mode;
 	struct clk *tx_clk;
 	struct clk *rx_clk;
+	/* SGMII PCS provided by the SerDes subsystem (NULL if not SGMII) */
+	struct phylink_pcs *pcs;
 };
 
 static int s32_gmac_write_phy_intf_select(struct s32_priv_data *gmac)
 {
+	u32 intf_sel;
 	int ret = 0;
 
+	switch (*gmac->intf_mode) {
+	case PHY_INTERFACE_MODE_SGMII:
+		intf_sel = S32_PHY_INTF_SEL_SGMII;
+		break;
+	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
+		intf_sel = S32_PHY_INTF_SEL_RGMII;
+		break;
+	case PHY_INTERFACE_MODE_RMII:
+		intf_sel = S32_PHY_INTF_SEL_RMII;
+		break;
+	case PHY_INTERFACE_MODE_MII:
+		intf_sel = S32_PHY_INTF_SEL_MII;
+		break;
+	default:
+		dev_err(gmac->dev, "Unsupported phy interface mode: %s\n",
+			phy_modes(*gmac->intf_mode));
+		return -EINVAL;
+	}
+
 	if (gmac->ctrl_sts)
-		writel(S32_PHY_INTF_SEL_RGMII, gmac->ctrl_sts);
+		writel(intf_sel, gmac->ctrl_sts);
 	else
 		ret = regmap_write(gmac->sts_regmap, gmac->sts_offset,
-				   S32_PHY_INTF_SEL_RGMII);
+				   intf_sel);
 
 	dev_dbg(gmac->dev, "PHY mode set to %s\n", phy_modes(*gmac->intf_mode));
 
 	return ret;
+}
+
+static int s32_gmac_pcs_init(struct stmmac_priv *priv)
+{
+	struct s32_priv_data *gmac = priv->plat->bsp_priv;
+	struct device_node *pcs_node;
+
+	/*
+	 * pcs-handle points at the SerDes XPCS lane child node; its
+	 * nxp,xpcs-instance property is what identifies the XPCS instance.
+	 */
+	pcs_node = of_parse_phandle(gmac->dev->of_node, "pcs-handle", 0);
+	if (!pcs_node) {
+		dev_dbg(gmac->dev, "no 'pcs-handle' property, SGMII PCS unavailable\n");
+		return 0;
+	}
+
+	gmac->pcs = s32g_serdes_pcs_create(gmac->dev, pcs_node);
+	of_node_put(pcs_node);
+
+	if (IS_ERR(gmac->pcs)) {
+		int err = PTR_ERR(gmac->pcs);
+
+		gmac->pcs = NULL;
+		/* SerDes may not be probed yet - defer probe. */
+		return err;
+	}
+
+	dev_dbg(gmac->dev, "SGMII PCS created via SerDes XPCS\n");
+	return 0;
+}
+
+static struct phylink_pcs *s32_gmac_select_pcs(struct stmmac_priv *priv,
+					       phy_interface_t interface)
+{
+	struct s32_priv_data *gmac = priv->plat->bsp_priv;
+
+	if (interface == PHY_INTERFACE_MODE_SGMII && gmac->pcs)
+		return gmac->pcs;
+
+	return NULL;
 }
 
 static int s32_gmac_init(struct device *dev, void *priv)
@@ -204,6 +272,8 @@ static int s32_dwmac_probe(struct platform_device *pdev)
 
 	plat->init = s32_gmac_init;
 	plat->exit = s32_gmac_exit;
+	plat->pcs_init = s32_gmac_pcs_init;
+	plat->select_pcs = s32_gmac_select_pcs;
 
 	plat->clk_tx_i = gmac->tx_clk;
 	plat->set_clk_tx_rate = stmmac_set_clk_tx_rate;
