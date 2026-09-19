@@ -48,6 +48,8 @@ static ssize_t romfs_mtd_strnlen(struct super_block *sb,
 		ret = ROMFS_MTD_READ(sb, pos, segment, &len, buf);
 		if (ret < 0)
 			return ret;
+		if (len != segment)
+			return -EIO;
 		p = memchr(buf, 0, len);
 		if (p)
 			return n + (p - buf);
@@ -79,6 +81,8 @@ static int romfs_mtd_strcmp(struct super_block *sb, unsigned long pos,
 		ret = ROMFS_MTD_READ(sb, pos, segment, &len, buf);
 		if (ret < 0)
 			return ret;
+		if (len != segment)
+			return -EIO;
 		len--;
 		if (memcmp(buf, str, len) != 0)
 			return 0;
