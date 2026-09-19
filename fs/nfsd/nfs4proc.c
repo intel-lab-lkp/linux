@@ -320,6 +320,7 @@ nfsd4_create_file(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	};
 	__u32 v_mtime, v_atime;
 	__be32 status, create_status;
+	struct svc_export *exp;
 	int want_write_err;
 
 	if (name_is_dot_dotdot(open->op_fname, open->op_fnamelen))
@@ -339,21 +340,8 @@ nfsd4_create_file(struct svc_rqst *rqstp, struct svc_fh *fhp,
 						    open->op_fnamelen),
 					  parent.dentry);
 		if (child && !IS_ERR(child) && d_is_reg(child) &&
-		    unlikely(nfsd_mountpoint(child, fhp->fh_export))) {
-			struct svc_export *exp = exp_get(fhp->fh_export);
-
-			status = nfsd_cross_mnt(rqstp, &child, &exp);
-			if (status == nfs_ok)
-				status = fh_compose(resfhp, exp,
-						    child, fhp);
-			fh_fill_post_noop(fhp);
-			open->op_truncate =
-				(iap->ia_valid & ATTR_SIZE) &&
-				!iap->ia_size;
-			dput(child);
-			exp_put(exp);
-			return status;
-		}
+		    unlikely(nfsd_mountpoint(child, fhp->fh_export)))
+			goto do_cross_mnt;
 		if (!IS_ERR(child))
 			dput(child);
 	}
@@ -466,6 +454,14 @@ nfsd4_create_file(struct svc_rqst *rqstp, struct svc_fh *fhp,
 			status = nfserr_exist;
 			goto out;
 		}
+		/* We opened an existing file, it might be a junction. */
+		if (unlikely(nfsd_mountpoint(child, fhp->fh_export) == 1)) {
+			dget(child);
+			nfsd_filp_close(open->op_filp);
+			open->op_filp = NULL;
+			goto do_cross_mnt;
+		}
+
 		/* NFSv4 protocol requires change attributes
 		 * even though no change happened.
 		 */
@@ -511,6 +507,21 @@ nfsd4_create_file(struct svc_rqst *rqstp, struct svc_fh *fhp,
 out:
 	nfsd_attrs_free(&attrs);
 	return status;
+
+do_cross_mnt:
+	exp = exp_get(fhp->fh_export);
+
+	status = nfsd_cross_mnt(rqstp, &child, &exp);
+	if (status == nfs_ok)
+		status = fh_compose(resfhp, exp,
+				    child, fhp);
+	fh_fill_post_noop(fhp);
+	open->op_truncate =
+		(iap->ia_valid & ATTR_SIZE) &&
+		!iap->ia_size;
+	dput(child);
+	exp_put(exp);
+	goto out;
 }
 
 /**
