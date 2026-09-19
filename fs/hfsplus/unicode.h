@@ -56,4 +56,8 @@ extern struct hfsplus_ccc_range hfsplus_ccc_table[];
 extern struct hfsplus_legacy_decomp hfsplus_legacy_decomp_table[];
 extern struct hfsplus_legacy_seq_fixup hfsplus_legacy_seq_fixups[];
 
+u8 hfsplus_combining_class(u16 c);
+const u16 *hfsplus_legacy_decompose(u16 uc, int *size);
+void hfsplus_fixup_legacy_sequences(u16 *buf, int *len);
+
 #endif /* _LINUX_HFSPLUS_UNICODE_H */
