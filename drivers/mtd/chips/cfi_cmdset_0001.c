@@ -2510,10 +2510,7 @@ static void cfi_intelext_save_locks(struct mtd_info *mtd)
 
 			status = cfi_varsize_frob(mtd,
 					do_getlockstatus_oneblock, adr, len, NULL);
-			if (status)
-				set_bit(block, region->lockmap);
-			else
-				clear_bit(block, region->lockmap);
+			assign_bit(block, region->lockmap, status);
 		}
 	}
 }
