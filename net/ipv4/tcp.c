@@ -705,6 +705,9 @@ void tcp_skb_entail(struct sock *sk, struct sk_buff *skb)
 	tcb->tcp_flags = TCPHDR_ACK;
 	__skb_header_release(skb);
 	psp_enqueue_set_decrypted(sk, skb);
+	if (static_branch_unlikely(&bpfts_v2_needed_key) &&
+	    SK_BPF_CB_FLAG_TEST(sk, SK_BPF_CB_TIMESTAMPING_V2))
+		skb_hwtstamps(skb)->start_time = sk->sk_start_time;
 	tcp_add_write_queue_tail(sk, skb);
 	sk_wmem_queued_add(sk, skb->truesize);
 	sk_mem_charge(sk, skb->truesize);
