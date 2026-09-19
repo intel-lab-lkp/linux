@@ -526,6 +526,8 @@ static void mqueue_evict_inode(struct inode *inode)
 	spin_lock(&info->lock);
 	while ((msg = msg_get(info)) != NULL)
 		list_add_tail(&msg->m_list, &tmp_msg);
+	if (info->notify_owner)
+		remove_notification(info);
 	kfree(info->node_cache);
 	spin_unlock(&info->lock);
 
