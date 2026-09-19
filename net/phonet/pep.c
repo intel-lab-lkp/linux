@@ -192,15 +192,21 @@ static int pep_reject_conn(struct sock *sk, struct sk_buff *skb, u8 code,
 static int pep_ctrlreq_error(struct sock *sk, struct sk_buff *oskb, u8 code,
 				gfp_t priority)
 {
-	const struct pnpipehdr *oph = pnp_hdr(oskb);
+	const struct pnpipehdr *oph;
 	struct sk_buff *skb;
 	struct pnpipehdr *ph;
 	struct sockaddr_pn dst;
-	u8 data[4] = {
-		oph->pep_type, /* PEP type */
-		code, /* error code, at an unusual offset */
-		PAD, PAD,
-	};
+	u8 data[4];
+
+	oph = pnp_hdr(oskb);
+	if (!pskb_may_pull(oskb, (unsigned int)((oph->data + 1) - oskb->data)))
+		return -EINVAL;
+
+	oph = pnp_hdr(oskb);
+	data[0] = oph->pep_type; /* PEP type */
+	data[1] = code; /* error code, at an unusual offset */
+	data[2] = PAD;
+	data[3] = PAD;
 
 	skb = pep_alloc_skb(sk, data, 4, priority);
 	if (!skb)
@@ -377,6 +383,8 @@ static int pipe_do_rcv(struct sock *sk, struct sk_buff *skb)
 		break;
 
 	case PNS_PEP_CTRL_REQ:
+		if (!pskb_may_pull(skb, sizeof(*hdr) + 1))
+			break;
 		if (skb_queue_len(&pn->ctrlreq_queue) >= PNPIPE_CTRLREQ_MAX) {
 			sk_drops_inc(sk);
 			break;
@@ -823,6 +831,7 @@ static struct sock *pep_sock_accept(struct sock *sk,
 
 	/* Parse sub-blocks (options) */
 	n_sb = hdr->data[3];
+	__skb_pull(skb, sizeof(*hdr) + 4);
 	while (n_sb > 0) {
 		u8 type, buf[1], len = sizeof(buf);
 		const u8 *data = pep_get_sb(skb, &type, &len, buf);
@@ -836,6 +845,8 @@ static struct sock *pep_sock_accept(struct sock *sk,
 			peer_type = (peer_type & 0xff00) | data[0];
 			break;
 		case PN_PIPE_SB_ALIGNED_DATA:
+			if (len < 1)
+				goto drop;
 			aligned = data[0] != 0;
 			break;
 		}
@@ -1048,8 +1059,16 @@ static int pep_setsockopt(struct sock *sk, int level, int optname,
 			release_sock(sk);
 			err = gprs_attach(sk);
 			if (err > 0) {
-				pn->ifindex = err;
-				err = 0;
+				lock_sock(sk);
+				if (sock_flag(sk, SOCK_DEAD) || pn->ifindex) {
+					release_sock(sk);
+					gprs_detach(sk);
+					err = -EINVAL;
+				} else {
+					pn->ifindex = err;
+					err = 0;
+					release_sock(sk);
+				}
 			}
 		} else {
 			pn->ifindex = 0;
