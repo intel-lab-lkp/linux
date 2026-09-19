@@ -5686,6 +5686,7 @@ static void skb_tstamp_tx_report_bpf_timestamping(struct sk_buff *skb,
 						  struct sock *sk,
 						  int tstype)
 {
+	ktime_t start = 0;
 	int op;
 
 	switch (tstype) {
@@ -5695,6 +5696,8 @@ static void skb_tstamp_tx_report_bpf_timestamping(struct sk_buff *skb,
 	case SCM_TSTAMP_SND:
 		if (hwtstamps) {
 			op = BPF_SOCK_OPS_TSTAMP_SND_HW_CB;
+			if (static_branch_unlikely(&bpfts_v2_needed_key))
+				start = skb_hwtstamps(skb)->start_time;
 			*skb_hwtstamps(skb) = *hwtstamps;
 		} else {
 			op = BPF_SOCK_OPS_TSTAMP_SND_SW_CB;
@@ -5708,6 +5711,8 @@ static void skb_tstamp_tx_report_bpf_timestamping(struct sk_buff *skb,
 	}
 
 	bpf_skops_tx_timestamping(sk, skb, op);
+	if (static_branch_unlikely(&bpfts_v2_needed_key) && start)
+		skb_hwtstamps(skb)->start_time = start;
 }
 
 void __skb_tstamp_tx(struct sk_buff *orig_skb,
