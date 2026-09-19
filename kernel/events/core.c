@@ -7050,7 +7050,11 @@ static void perf_mmap_close(struct vm_area_struct *vma)
 
 		/* now it's safe to free the pages */
 		atomic_long_sub(rb->aux_nr_pages - rb->aux_mmap_locked, &mmap_user->locked_vm);
-		atomic64_sub(rb->aux_mmap_locked, &vma->vm_mm->pinned_vm);
+		if (rb->aux_mmap_mm) {
+			atomic64_sub(rb->aux_mmap_locked, &rb->aux_mmap_mm->pinned_vm);
+			mmdrop(rb->aux_mmap_mm);
+			rb->aux_mmap_mm = NULL;
+		}
 
 		/* this has to be the last one */
 		rb_free_aux(rb);
@@ -7272,7 +7276,7 @@ static void perf_mmap_unaccount(struct vm_area_struct *vma, struct perf_buffer *
 
 	atomic_long_sub((perf_data_size(rb) >> PAGE_SHIFT) + 1 - rb->mmap_locked,
 			&user->locked_vm);
-	atomic64_sub(rb->mmap_locked, &vma->vm_mm->pinned_vm);
+	atomic64_sub(rb->mmap_locked, &rb->mmap_mm->pinned_vm);
 }
 
 static int perf_mmap_rb(struct vm_area_struct *vma, struct perf_event *event,
@@ -7311,7 +7315,6 @@ static int perf_mmap_rb(struct vm_area_struct *vma, struct perf_event *event,
 			 * Success -- managed to mmap() the same buffer
 			 * multiple times.
 			 */
-			perf_mmap_account(vma, user_extra, extra);
 			refcount_inc(&event->mmap_count);
 			return 0;
 		}
@@ -7338,6 +7341,8 @@ static int perf_mmap_rb(struct vm_area_struct *vma, struct perf_event *event,
 		return -ENOMEM;
 
 	rb->mmap_locked = extra;
+	rb->mmap_mm = vma->vm_mm;
+	mmgrab(rb->mmap_mm);
 
 	ring_buffer_attach(event, rb);
 
@@ -7399,7 +7404,8 @@ static int perf_mmap_aux(struct vm_area_struct *vma, struct perf_event *event,
 
 	if (rb_has_aux(rb)) {
 		refcount_inc(&rb->aux_mmap_count);
-
+		user_extra = 0;
+		extra = 0;
 	} else {
 		if (!perf_mmap_calc_limits(vma, &user_extra, &extra)) {
 			refcount_dec(&rb->mmap_count);
@@ -7420,6 +7426,8 @@ static int perf_mmap_aux(struct vm_area_struct *vma, struct perf_event *event,
 
 		refcount_set(&rb->aux_mmap_count, 1);
 		rb->aux_mmap_locked = extra;
+		rb->aux_mmap_mm = vma->vm_mm;
+		mmgrab(rb->aux_mmap_mm);
 	}
 
 	perf_mmap_account(vma, user_extra, extra);

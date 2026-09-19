@@ -5,6 +5,7 @@
 #include <linux/hardirq.h>
 #include <linux/uaccess.h>
 #include <linux/refcount.h>
+#include <linux/sched/mm.h>
 
 /* Buffer handling */
 
@@ -38,6 +39,8 @@ struct perf_buffer {
 	refcount_t			mmap_count;
 	unsigned long			mmap_locked;
 	struct user_struct		*mmap_user;
+	struct mm_struct		*mmap_mm;
+	struct mm_struct		*aux_mmap_mm;
 
 	/* AUX area */
 	struct mutex			aux_mutex;
@@ -67,6 +70,10 @@ static inline void rb_free_rcu(struct rcu_head *rcu_head)
 	struct perf_buffer *rb;
 
 	rb = container_of(rcu_head, struct perf_buffer, rcu_head);
+	if (rb->aux_mmap_mm)
+		mmdrop(rb->aux_mmap_mm);
+	if (rb->mmap_mm)
+		mmdrop(rb->mmap_mm);
 	free_uid(rb->mmap_user);
 	rb_free(rb);
 }
