@@ -4604,6 +4604,9 @@ out_dput:
 	goto out;
 }
 
+static int do_open(struct nameidata *nd,
+		   struct file *file, const struct open_flags *op);
+
 /**
  * vfs_lookup_open - open and possibly create a regular file
  * @parent: directory to contain file
@@ -4660,6 +4663,9 @@ struct file *vfs_lookup_open(struct path *parent, struct qstr *last,
 	}
 	op.open_flag = open_flag;
 	op.mode = mode;
+	op.acc_mode = ACC_MODE(open_flag);
+	if (open_flag & O_TRUNC)
+		op.acc_mode |= MAY_WRITE;
 	dentry = lookup_open(&nd, file, &op);
 
 	if (IS_ERR(dentry))
@@ -4677,7 +4683,7 @@ struct file *vfs_lookup_open(struct path *parent, struct qstr *last,
 			error = -ELOOP;
 	} else if (!(file->f_mode & FMODE_OPENED)) {
 		nd.path.dentry = dentry;
-		error = vfs_open(&nd.path, file);
+		error = do_open(&nd, file, &op);
 	}
 	dput(dentry);
 
