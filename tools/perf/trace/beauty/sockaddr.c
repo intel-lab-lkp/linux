@@ -39,31 +39,48 @@ static size_t af_local__scnprintf(struct sockaddr *sa, char *bf, size_t size)
 	return scnprintf(bf, size, ", path: %s", sun->sun_path);
 }
 
-static size_t (*af_scnprintfs[])(struct sockaddr *sa, char *bf, size_t size) = {
-	[AF_LOCAL] = af_local__scnprintf,
-	[AF_INET]  = af_inet__scnprintf,
-	[AF_INET6] = af_inet6__scnprintf,
+static const struct af_scnprintf {
+	size_t (*scnprintf)(struct sockaddr *sa, char *bf, size_t size);
+	size_t min_size;
+} af_scnprintfs[] = {
+	[AF_LOCAL] = { af_local__scnprintf, offsetof(struct sockaddr_un, sun_path) + 1 },
+	[AF_INET]  = { af_inet__scnprintf,  sizeof(struct sockaddr_in) },
+	[AF_INET6] = { af_inet6__scnprintf, sizeof(struct sockaddr_in6) },
 };
 
 static size_t syscall_arg__scnprintf_augmented_sockaddr(struct syscall_arg *arg, char *bf, size_t size)
 {
-	struct sockaddr *sa = (struct sockaddr *)&arg->augmented.args->value;
+	struct augmented_arg *augmented_arg = arg->augmented.args;
+	size_t payload_size;
+	struct sockaddr *sa;
 	char family[32];
 	size_t printed;
+
+	if (arg->augmented.size < (int)(sizeof(*augmented_arg) + sizeof(sa->sa_family)))
+		return 0;
+
+	sa = (struct sockaddr *)augmented_arg->value;
+	payload_size = arg->augmented.size - sizeof(*augmented_arg);
 
 	strarray__scnprintf(&strarray__socket_families, family, sizeof(family), "%d", arg->show_string_prefix, sa->sa_family);
 	printed = scnprintf(bf, size, "{ .family: %s", family);
 
-	if (sa->sa_family < ARRAY_SIZE(af_scnprintfs) && af_scnprintfs[sa->sa_family])
-		printed += af_scnprintfs[sa->sa_family](sa, bf + printed, size - printed);
+	if (sa->sa_family < ARRAY_SIZE(af_scnprintfs) && af_scnprintfs[sa->sa_family].scnprintf &&
+	    payload_size >= af_scnprintfs[sa->sa_family].min_size)
+		printed += af_scnprintfs[sa->sa_family].scnprintf(sa, bf + printed,
+								  size - printed);
 
 	return printed + scnprintf(bf + printed, size - printed, " }");
 }
 
 size_t syscall_arg__scnprintf_sockaddr(char *bf, size_t size, struct syscall_arg *arg)
 {
-	if (arg->augmented.args)
-		return syscall_arg__scnprintf_augmented_sockaddr(arg, bf, size);
+	if (arg->augmented.args) {
+		size_t printed = syscall_arg__scnprintf_augmented_sockaddr(arg, bf, size);
+
+		if (printed)
+			return printed;
+	}
 
 	return scnprintf(bf, size, "%#lx", arg->val);
 }
