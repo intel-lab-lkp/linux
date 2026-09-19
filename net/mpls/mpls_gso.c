@@ -36,6 +36,8 @@ static struct sk_buff *mpls_gso_segment(struct sk_buff *skb,
 		goto out;
 	if (unlikely(!pskb_may_pull(skb, mpls_hlen)))
 		goto out;
+	if (unlikely(gso_header_len_add(skb, mpls_hlen)))
+		goto out;
 
 	/* Setup inner SKB. */
 	mpls_protocol = skb->protocol;

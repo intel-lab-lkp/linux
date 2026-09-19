@@ -79,6 +79,8 @@ static int ipv6_gso_pull_exthdrs(struct sk_buff *skb, int proto)
 
 		if (unlikely(!pskb_may_pull(skb, len)))
 			break;
+		if (unlikely(gso_header_len_add(skb, len)))
+			return -EINVAL;
 
 		opth = (void *)skb->data;
 		proto = opth->nexthdr;
@@ -104,8 +106,12 @@ static struct sk_buff *ipv6_gso_segment(struct sk_buff *skb,
 	bool gso_partial;
 
 	skb_reset_network_header(skb);
+	if (unlikely(gso_header_len_add(skb, 0)))
+		goto out;
 	nhoff = skb_network_header(skb) - skb_mac_header(skb);
 	if (unlikely(!pskb_may_pull(skb, sizeof(*ipv6h))))
+		goto out;
+	if (unlikely(gso_header_len_add(skb, sizeof(*ipv6h))))
 		goto out;
 
 	encap = SKB_GSO_CB(skb)->encap_level > 0;
@@ -118,6 +124,8 @@ static struct sk_buff *ipv6_gso_segment(struct sk_buff *skb,
 	segs = ERR_PTR(-EPROTONOSUPPORT);
 
 	proto = ipv6_gso_pull_exthdrs(skb, ipv6h->nexthdr);
+	if (unlikely(proto < 0))
+		goto out;
 
 	if (skb->encapsulation &&
 	    skb_shinfo(skb)->gso_type & (SKB_GSO_IPXIP4 | SKB_GSO_IPXIP6))
@@ -132,7 +140,8 @@ static struct sk_buff *ipv6_gso_segment(struct sk_buff *skb,
 		if (!skb_reset_transport_header_careful(skb))
 			goto out;
 
-		segs = ops->callbacks.gso_segment(skb, features);
+		segs = skb_gso_segment_cb(skb, ops->callbacks.gso_segment,
+					   features);
 		if (!segs)
 			skb->network_header = skb_mac_header(skb) + nhoff - skb->head;
 	}
