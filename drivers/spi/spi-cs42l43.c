@@ -19,6 +19,7 @@
 #include <linux/mfd/cs42l43-regs.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/overflow.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/property.h>
@@ -29,6 +30,7 @@
 #define CS42L43_FIFO_SIZE		16
 #define CS42L43_SPI_ROOT_HZ		49152000
 #define CS42L43_SPI_MAX_LENGTH		65532
+#define CS42L43_MAX_SPK_ID_GPIOS	8
 
 enum cs42l43_spi_cmd {
 	CS42L43_WRITE,
@@ -39,6 +41,12 @@ struct cs42l43_spi {
 	struct device *dev;
 	struct regmap *regmap;
 	struct spi_controller *ctlr;
+};
+
+struct cs42l43_spk_id_gpio_mapping {
+	struct fwnode_handle *fwnode;
+	struct acpi_gpio_params params[CS42L43_MAX_SPK_ID_GPIOS];
+	struct acpi_gpio_mapping mappings[2];
 };
 
 static const unsigned int cs42l43_clock_divs[] = {
@@ -215,31 +223,118 @@ static size_t cs42l43_spi_max_length(struct spi_device *spi)
 	return CS42L43_SPI_MAX_LENGTH;
 }
 
-static int cs42l43_get_speaker_id_gpios(struct cs42l43_spi *priv, int *result)
+static struct cs42l43_spk_id_gpio_mapping *
+cs42l43_add_speaker_id_gpio_mapping(struct cs42l43_spi *priv)
 {
-	struct gpio_descs *descs;
-	u32 spkid;
+	struct fwnode_reference_args args;
+	struct acpi_device *adev;
 	int i, ret;
 
-	descs = gpiod_get_array_optional(priv->dev, "spk-id", GPIOD_IN);
-	if (!descs)
-		return 0;
-	else if (IS_ERR(descs))
-		return PTR_ERR(descs);
+	struct cs42l43_spk_id_gpio_mapping *mapping __free(kfree) = kzalloc_obj(*mapping,
+										GFP_KERNEL);
 
-	spkid = 0;
-	for (i = 0; i < descs->ndescs; i++) {
-		ret = gpiod_get_value_cansleep(descs->desc[i]);
-		if (ret < 0)
-			goto err;
+	if (!mapping)
+		return ERR_PTR(-ENOMEM);
 
-		spkid |= (ret << i);
+	ret = fwnode_property_get_reference_args(dev_fwnode(priv->dev), "spk-id-gpios",
+						 NULL, 3, 0, &args);
+	if (ret)
+		return ERR_PTR(ret);
+
+	struct fwnode_handle *fwnode __free(fwnode_handle) = args.fwnode;
+
+	if (args.nargs < 3)
+		return ERR_PTR(-EINVAL);
+
+	if (overflows_type(args.args[0], mapping->params[0].crs_entry_index))
+		return ERR_PTR(-EOVERFLOW);
+
+	adev = to_acpi_device_node(fwnode);
+	if (!adev)
+		return ERR_PTR(-EINVAL);
+
+	for (i = 0; i < ARRAY_SIZE(mapping->params); i++) {
+		mapping->params[i].crs_entry_index = args.args[0];
+		mapping->params[i].line_index = i;
+		mapping->params[i].active_low = !!args.args[2];
 	}
 
-	dev_dbg(priv->dev, "spk-id-gpios = %d\n", spkid);
-	*result = spkid;
-err:
-	gpiod_put_array(descs);
+	mapping->mappings[0] = (struct acpi_gpio_mapping) {
+		.name = "spk-id-gpios",
+		.data = mapping->params,
+		.size = ARRAY_SIZE(mapping->params),
+	};
+
+	ret = acpi_dev_add_driver_gpios(adev, mapping->mappings);
+	if (ret)
+		return ERR_PTR(ret);
+
+	mapping->fwnode = no_free_ptr(fwnode);
+
+	return no_free_ptr(mapping);
+}
+
+static void cs42l43_remove_speaker_id_gpio_mapping(struct cs42l43_spk_id_gpio_mapping *mapping)
+{
+	if (!mapping)
+		return;
+
+	if (mapping->fwnode) {
+		acpi_dev_remove_driver_gpios(to_acpi_device_node(mapping->fwnode));
+		fwnode_handle_put(mapping->fwnode);
+	}
+
+	kfree(mapping);
+}
+
+static int cs42l43_get_speaker_id_gpios(struct cs42l43_spi *priv, int *result)
+{
+	struct fwnode_handle *gpio_fwnode = dev_fwnode(priv->dev);
+	struct cs42l43_spk_id_gpio_mapping *mapping = NULL;
+	struct gpio_desc *desc;
+	u32 spkid = 0;
+	int i, ret = 0;
+
+	if (is_acpi_node(gpio_fwnode)) {
+		mapping = cs42l43_add_speaker_id_gpio_mapping(priv);
+		if (IS_ERR(mapping)) {
+			ret = PTR_ERR(mapping);
+			if (ret == -ENOENT)
+				return 0;
+
+			return ret;
+		}
+
+		gpio_fwnode = mapping->fwnode;
+	}
+
+	for (i = 0; i < CS42L43_MAX_SPK_ID_GPIOS; i++) {
+		desc = fwnode_gpiod_get_index(gpio_fwnode, "spk-id", i, GPIOD_IN,
+					      dev_name(priv->dev));
+		if (IS_ERR(desc)) {
+			ret = PTR_ERR(desc);
+			if (ret == -ENOENT)
+				break;
+
+			goto out;
+		}
+
+		ret = gpiod_get_value_cansleep(desc);
+		gpiod_put(desc);
+		if (ret < 0)
+			goto out;
+
+		spkid |= (u32)ret << i;
+	}
+
+	if (i) {
+		dev_dbg(priv->dev, "spk-id-gpios = %u from %d GPIOs\n", spkid, i);
+		*result = spkid;
+	}
+
+	ret = 0;
+out:
+	cs42l43_remove_speaker_id_gpio_mapping(mapping);
 
 	return ret;
 }
