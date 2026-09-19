@@ -4703,7 +4703,7 @@ static int binder_wait_for_work(struct binder_thread *thread,
 static int binder_apply_fd_fixups(struct binder_proc *proc,
 				  struct binder_transaction *t)
 {
-	struct binder_txn_fd_fixup *fixup, *tmp;
+	struct binder_txn_fd_fixup *fixup;
 	int ret = 0;
 
 	list_for_each_entry(fixup, &t->fd_fixups, fixup_entry) {
@@ -4728,17 +4728,23 @@ static int binder_apply_fd_fixups(struct binder_proc *proc,
 			goto err;
 		}
 	}
+
+	return 0;
+
+err:
+	binder_free_txn_fixups(t);
+	return ret;
+}
+
+static void binder_fd_fixups_install(struct binder_transaction *t)
+{
+	struct binder_txn_fd_fixup *fixup, *tmp;
+
 	list_for_each_entry_safe(fixup, tmp, &t->fd_fixups, fixup_entry) {
 		fd_install(fixup->target_fd, fixup->file);
 		list_del(&fixup->fixup_entry);
 		kfree(fixup);
 	}
-
-	return ret;
-
-err:
-	binder_free_txn_fixups(t);
-	return ret;
 }
 
 static int binder_thread_read(struct binder_proc *proc,
@@ -5119,25 +5125,35 @@ retry:
 			trsize = sizeof(tr);
 		}
 		if (put_user(cmd, (uint32_t __user *)ptr)) {
+			struct binder_buffer *buffer = t->buffer;
+
 			if (t_from)
 				binder_thread_dec_tmpref(t_from);
 
+			buffer->transaction = NULL;
 			binder_cleanup_transaction(t, "put_user failed",
 						   BR_FAILED_REPLY);
+			binder_free_buf(proc, thread, buffer, true);
 
 			return -EFAULT;
 		}
 		ptr += sizeof(uint32_t);
 		if (copy_to_user(ptr, &tr, trsize)) {
+			struct binder_buffer *buffer = t->buffer;
+
 			if (t_from)
 				binder_thread_dec_tmpref(t_from);
 
+			buffer->transaction = NULL;
 			binder_cleanup_transaction(t, "copy_to_user failed",
 						   BR_FAILED_REPLY);
+			binder_free_buf(proc, thread, buffer, true);
 
 			return -EFAULT;
 		}
 		ptr += trsize;
+
+		binder_fd_fixups_install(t);
 
 		trace_binder_transaction_received(t);
 		binder_stat_br(proc, thread, cmd);
