@@ -283,10 +283,21 @@ static int netlbl_calipso_listall(struct sk_buff *skb,
 static int netlbl_calipso_remove_cb(struct netlbl_dom_map *entry, void *arg)
 {
 	struct netlbl_domhsh_walk_arg *cb_arg = arg;
+	struct netlbl_af6list *iter6;
+	struct netlbl_domaddr6_map *map6;
 
 	if (entry->def.type == NETLBL_NLTYPE_CALIPSO &&
 	    entry->def.calipso->doi == cb_arg->doi)
 		return netlbl_domhsh_remove_entry(entry, cb_arg->audit_info);
+	else if (entry->def.type == NETLBL_NLTYPE_ADDRSELECT) {
+		netlbl_af6list_foreach_rcu(iter6, &entry->def.addrsel->list6) {
+			map6 = netlbl_domhsh_addr6_entry(iter6);
+			if (map6->def.type == NETLBL_NLTYPE_CALIPSO &&
+			    map6->def.calipso->doi == cb_arg->doi)
+				return netlbl_domhsh_remove_entry(entry,
+								  cb_arg->audit_info);
+		}
+	}
 
 	return 0;
 }
