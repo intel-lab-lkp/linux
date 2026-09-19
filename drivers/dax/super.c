@@ -385,10 +385,7 @@ EXPORT_SYMBOL_GPL(dax_flush);
 
 void dax_write_cache(struct dax_device *dax_dev, bool wc)
 {
-	if (wc)
-		set_bit(DAXDEV_WRITE_CACHE, &dax_dev->flags);
-	else
-		clear_bit(DAXDEV_WRITE_CACHE, &dax_dev->flags);
+	assign_bit(DAXDEV_WRITE_CACHE, &dax_dev->flags, wc);
 }
 EXPORT_SYMBOL_GPL(dax_write_cache);
 
