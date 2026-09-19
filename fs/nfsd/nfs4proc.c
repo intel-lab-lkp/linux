@@ -223,17 +223,15 @@ do_open_permission(struct svc_rqst *rqstp, struct svc_fh *current_fh, struct nfs
 	return fh_verify(rqstp, current_fh, S_IFREG, accmode);
 }
 
-static int nfsd_check_obj_isreg(struct dentry *child)
+static __be32 nfsd_check_obj_isreg(struct dentry *child)
 {
-	umode_t mode = d_inode(child)->i_mode;
-
-	if (S_ISREG(mode))
+	if (d_is_reg(child))
 		return 0;
-	if (S_ISDIR(mode))
-		return -EISDIR;
-	if (S_ISLNK(mode))
-		return -ELOOP;
-	return -EFTYPE;
+	if (d_is_dir(child))
+		return nfserr_isdir;
+	if (d_is_symlink(child))
+		return nfserr_symlink;
+	return nfserr_wrong_type;
 }
 
 static void nfsd4_set_open_owner_reply_cache(struct nfsd4_compound_state *cstate, struct nfsd4_open *open, struct svc_fh *resfh)
@@ -565,7 +563,7 @@ do_open_lookup(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate, stru
 	}
 	if (status)
 		goto out;
-	status = nfserrno(nfsd_check_obj_isreg((*resfh)->fh_dentry));
+	status = nfsd_check_obj_isreg((*resfh)->fh_dentry);
 	if (status)
 		goto out;
 
