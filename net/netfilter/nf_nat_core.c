@@ -575,8 +575,10 @@ static void nf_nat_l4proto_unique_tuple(struct nf_conntrack_tuple *tuple,
 			range_size = 65536;
 		} else {
 			min = ntohs(range->min_proto.icmp.id);
-			range_size = ntohs(range->max_proto.icmp.id) -
-				     ntohs(range->min_proto.icmp.id) + 1;
+			max = ntohs(range->max_proto.icmp.id);
+			if (unlikely(max < min))
+				swap(max, min);
+			range_size = max - min + 1;
 		}
 		goto find_free_id;
 #if IS_ENABLED(CONFIG_NF_CT_PROTO_GRE)
@@ -596,7 +598,11 @@ static void nf_nat_l4proto_unique_tuple(struct nf_conntrack_tuple *tuple,
 			range_size = 65535;
 		} else {
 			min = ntohs(range->min_proto.gre.key);
-			range_size = ntohs(range->max_proto.gre.key) - min + 1;
+			max = ntohs(range->max_proto.gre.key);
+			if (max < min)
+				range_size = 1;
+			else
+				range_size = max - min + 1;
 		}
 		goto find_free_id;
 #endif
