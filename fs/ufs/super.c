@@ -455,7 +455,7 @@ static int ufs_read_cylinder_structures(struct super_block *sb)
 {
 	struct ufs_sb_info *sbi = UFS_SB(sb);
 	struct ufs_sb_private_info *uspi = sbi->s_uspi;
-	unsigned char * base, * space;
+	unsigned char *base = NULL, *space;
 	unsigned size, blks, i;
 
 	UFSD("ENTER\n");
@@ -465,17 +465,21 @@ static int ufs_read_cylinder_structures(struct super_block *sb)
 	 * on the device. 
 	 */
 	size = uspi->s_cssize;
+	if (!size || size < (size_t)uspi->s_ncg * sizeof(struct ufs_csum))
+		goto failed;
 	blks = (size + uspi->s_fsize - 1) >> uspi->s_fshift;
 	base = space = kmalloc(size, GFP_NOFS);
 	if (!base)
 		goto failed; 
 	sbi->s_csp = (struct ufs_csum *)space;
 	for (i = 0; i < blks; i++) {
+		size_t copy_len = min_t(size_t, size - (space - base),
+					uspi->s_fsize);
 		struct buffer_head *bh = sb_bread(sb, uspi->s_csaddr + i);
 		if (!bh)
 			goto failed;
-		memcpy(space, bh->b_data, uspi->s_fsize);
-		space += uspi->s_fsize;
+		memcpy(space, bh->b_data, copy_len);
+		space += copy_len;
 		brelse (bh);
 	}
 
@@ -595,15 +599,19 @@ static void ufs_put_super_internal(struct super_block *sb)
 	size = uspi->s_cssize;
 	blks = (size + uspi->s_fsize - 1) >> uspi->s_fshift;
 	base = space = (char*) sbi->s_csp;
-	for (i = 0; i < blks; i++, space += uspi->s_fsize) {
+	for (i = 0; i < blks; i++) {
+		size_t copy_len = min_t(size_t, size - (space - base),
+					uspi->s_fsize);
 		struct buffer_head *bh = sb_bread(sb, uspi->s_csaddr + i);
 
 		if (unlikely(!bh)) { // better than an oops...
 			ufs_panic(sb, __func__,
 				"can't write part of cylinder group summary");
+			space += copy_len;
 			continue;
 		}
-		memcpy(bh->b_data, space, uspi->s_fsize);
+		memcpy(bh->b_data, space, copy_len);
+		space += copy_len;
 		mark_buffer_dirty(bh);
 		brelse(bh);
 	}
@@ -1179,6 +1187,11 @@ magic_found:
 	uspi->s_nspfshift = uspi->s_fshift - UFS_SECTOR_BITS;
 	uspi->s_nspb = uspi->s_nspf << uspi->s_fpbshift;
 	uspi->s_inopf = uspi->s_inopb >> uspi->s_fpbshift;
+	if (!uspi->s_inopf || !uspi->s_ipg) {
+		ufs_error(sb, __func__, "invalid fs_inopb (%u) or fs_ipg (%u)\n",
+			  uspi->s_inopb, uspi->s_ipg);
+		goto failed;
+	}
 	uspi->s_bpf = uspi->s_fsize << 3;
 	uspi->s_bpfshift = uspi->s_fshift + 3;
 	uspi->s_bpfmask = uspi->s_bpf - 1;
@@ -1211,18 +1224,23 @@ magic_found:
 	inode = ufs_iget(sb, UFS_ROOTINO);
 	if (IS_ERR(inode)) {
 		ret = PTR_ERR(inode);
-		goto failed;
+		goto failed_put_cyl;
 	}
 	sb->s_root = d_make_root(inode);
 	if (!sb->s_root) {
 		ret = -ENOMEM;
-		goto failed;
+		goto failed_put_cyl;
 	}
 
 	UFSD("EXIT\n");
 	return 0;
 
+failed_put_cyl:
+	if (!sb_rdonly(sb))
+		ufs_put_super_internal(sb);
 failed:
+	dput(sb->s_root);
+	sb->s_root = NULL;
 	if (ubh)
 		ubh_brelse_uspi (uspi);
 	kfree (uspi);
