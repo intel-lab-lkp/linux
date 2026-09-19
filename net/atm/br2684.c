@@ -369,8 +369,11 @@ static int br2684_setfilt(struct atm_vcc *atmvcc, void __user * arg)
 		 * by device.
 		 */
 		struct br2684_dev *brdev;
+		struct net_device *net_dev;
+
 		read_lock(&devs_lock);
-		brdev = BRPRIV(br2684_find_dev(&fs.ifspec));
+		net_dev = br2684_find_dev(&fs.ifspec);
+		brdev = net_dev ? BRPRIV(net_dev) : NULL;
 		if (brdev == NULL || list_empty(&brdev->brvccs) ||
 		    brdev->brvccs.next != brdev->brvccs.prev)	/* >1 VCC */
 			brvcc = NULL;
@@ -392,6 +395,7 @@ packet_fails_filter(__be16 type, struct br2684_vcc *brvcc, struct sk_buff *skb)
 	if (brvcc->filter.netmask == 0)
 		return 0;	/* no filter in place */
 	if (type == htons(ETH_P_IP) &&
+	    pskb_may_pull(skb, sizeof(struct iphdr)) &&
 	    (((struct iphdr *)(skb->data))->daddr & brvcc->filter.
 	     netmask) == brvcc->filter.prefix)
 		return 0;
@@ -449,7 +453,7 @@ static void br2684_push(struct atm_vcc *atmvcc, struct sk_buff *skb)
 			__skb_trim(skb, skb->len - 4);
 
 		/* accept packets that have "ipv[46]" in the snap header */
-		if ((skb->len >= (sizeof(llc_oui_ipv4))) &&
+		if (pskb_may_pull(skb, sizeof(llc_oui_ipv4)) &&
 		    (memcmp(skb->data, llc_oui_ipv4,
 			    sizeof(llc_oui_ipv4) - BR2684_ETHERTYPE_LEN) == 0)) {
 			if (memcmp(skb->data + 6, ethertype_ipv6,
@@ -468,7 +472,7 @@ static void br2684_push(struct atm_vcc *atmvcc, struct sk_buff *skb)
 		 * Note, that only 7 char is checked so frames with a valid FCS
 		 * are also accepted (but FCS is not checked of course).
 		 */
-		} else if ((skb->len >= sizeof(llc_oui_pid_pad)) &&
+		} else if (pskb_may_pull(skb, sizeof(llc_oui_pid_pad) + ETH_HLEN) &&
 			   (memcmp(skb->data, llc_oui_pid_pad, 7) == 0)) {
 			skb_pull(skb, sizeof(llc_oui_pid_pad));
 			skb->protocol = eth_type_trans(skb, net_dev);
@@ -479,6 +483,8 @@ static void br2684_push(struct atm_vcc *atmvcc, struct sk_buff *skb)
 		if (brdev->payload == p_routed) {
 			struct iphdr *iph;
 
+			if (!pskb_may_pull(skb, sizeof(struct iphdr)))
+				goto dropped;
 			skb_reset_network_header(skb);
 			iph = ip_hdr(skb);
 			if (iph->version == 4)
@@ -489,6 +495,8 @@ static void br2684_push(struct atm_vcc *atmvcc, struct sk_buff *skb)
 				goto error;
 			skb->pkt_type = PACKET_HOST;
 		} else { /* p_bridged */
+			if (!pskb_may_pull(skb, BR2684_PAD_LEN + ETH_HLEN))
+				goto dropped;
 			/* first 2 chars should be 0 */
 			if (memcmp(skb->data, pad, BR2684_PAD_LEN) != 0)
 				goto error;
@@ -535,6 +543,8 @@ static int br2684_regvcc(struct atm_vcc *atmvcc, void __user * arg)
 	struct atm_backend_br2684 be;
 	int err;
 
+	if (atmvcc->user_back)
+		return -EINVAL;
 	if (copy_from_user(&be, arg, sizeof be))
 		return -EFAULT;
 	brvcc = kzalloc_obj(struct br2684_vcc);
