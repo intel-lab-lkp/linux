@@ -949,7 +949,7 @@ unsigned long ftrace_graph_top_ret_addr(struct task_struct *task)
  * @task: The task the unwinder is being executed on
  * @idx: An initialized pointer to the next stack index to use
  * @ret: The current return address (likely pointing to return_handler)
- * @retp: The address on the stack of the current return location
+ * @retp: The identity of the current return location
  *
  * This function can be called by stack unwinding code to convert a found stack
  * return address (@ret) to its original value, in case the function graph
@@ -962,7 +962,10 @@ unsigned long ftrace_graph_top_ret_addr(struct task_struct *task)
  * will be assigned that location so that if called again, it will continue
  * where it left off.
  *
- * @retp is a pointer to the return address on the stack.
+ * @retp is compared against the value saved by function_graph_enter*().
+ * It is usually the address of the return address on the stack, but may
+ * be another stable frame identity as long as the graph entry code and
+ * the unwinder use the same value.
  */
 unsigned long ftrace_graph_ret_addr(struct task_struct *task, int *idx,
 				    unsigned long ret, unsigned long *retp)
