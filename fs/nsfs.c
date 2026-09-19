@@ -624,6 +624,7 @@ static struct dentry *nsfs_fh_to_dentry(struct super_block *sb, struct fid *fh,
 		break;
 #endif
 	default:
+		ns->ops->put(ns);
 		return ERR_PTR(-EOPNOTSUPP);
 	}
 
