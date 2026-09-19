@@ -477,6 +477,9 @@ static int dpc_probe(struct pcie_device *dev)
 	int status;
 	u16 cap;
 
+	if (!pdev->aer_cap)
+		return -ENOTSUPP;
+
 	if (!pcie_aer_is_native(pdev) && !pcie_ports_dpc_native)
 		return -ENOTSUPP;
 
