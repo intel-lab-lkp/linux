@@ -170,6 +170,8 @@ static int mock_context_alloc(struct intel_context *ce)
 
 	ce->timeline = intel_timeline_create(ce->engine->gt);
 	if (IS_ERR(ce->timeline)) {
+		kref_put(&ce->ring->ref, intel_ring_free);
+		ce->ring = NULL;
 		kfree(ce->engine);
 		return PTR_ERR(ce->timeline);
 	}
@@ -178,6 +180,8 @@ static int mock_context_alloc(struct intel_context *ce)
 	if (err) {
 		intel_timeline_put(ce->timeline);
 		ce->timeline = NULL;
+		kref_put(&ce->ring->ref, intel_ring_free);
+		ce->ring = NULL;
 		return err;
 	}
 
