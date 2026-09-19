@@ -1,0 +1,111 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR BSD-3-Clause)
+/*
+ * Copyright 2021-2026 NXP
+ *
+ * NXP S32G3 Reference Design Board 3 (S32G-VNP-RDB3),
+ * SerDes_0 Mode 1: PCIe x1 (lane 0) + 1G SGMII via GMAC0 (XPCS0, lane 1).
+ *
+ * Overlay applied on top of s32g399a-rdb3.dtb. It reroutes GMAC0 from the
+ * on-board RGMII PHY to the SerDes_0 XPCS0 lane and brings up the PCIe
+ * controllers as root complexes. The lane layout present here selects
+ * SerDes SUBSYS_MODE 1.
+ */
+
+/dts-v1/;
+/plugin/;
+
+&serdes0 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+
+	/* Mode 1 lane layout: PCIe on lane 0, GMAC SGMII (XPCS0) on lane 1. */
+	serdes0_pcie0: phy@0 {
+		reg = <0>;
+		compatible = "nxp,s32g-serdes-pcie-phy";
+		#phy-cells = <0>;
+	};
+
+	serdes0_xpcs0: phy@1 {
+		reg = <1>;
+		compatible = "nxp,s32g-serdes-xpcs";
+		nxp,xpcs-instance = <0>;
+	};
+};
+
+&serdes1 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+
+	/*
+	 * SerDes_1 Mode 1 lane layout: PCIe on lane 0, SGMII (PFE_MAC0
+	 * via XPCS0) on lane 1.
+	 *
+	 * Both lanes must be described: the SerDes driver derives the
+	 * SUBSYS_MODE from the full lane mux, so lane 1 has to be present
+	 * as XPCS instance 0 (PFE_MAC0) for the mode-1 match to succeed.
+	 * PFE is not modeled as a MAC consumer in this upstreaming device
+	 * tree, so the XPCS lane is only brought up by the SerDes driver
+	 * and left without a pcs-handle user.
+	 */
+	serdes1_pcie0: phy@0 {
+		reg = <0>;
+		compatible = "nxp,s32g-serdes-pcie-phy";
+		#phy-cells = <0>;
+	};
+
+	serdes1_xpcs0: phy@1 {
+		reg = <1>;
+		compatible = "nxp,s32g-serdes-xpcs";
+		nxp,xpcs-instance = <0>;
+	};
+};
+
+/*
+ * Both PCIe root complexes are wired on the RDB3:
+ *  - PCIe_0 reaches the M.2 slots (M-key or E-key) when board switch
+ *    SW17-2 is set to ON. It consumes SerDes_0 lane-0 PCIe phy.
+ *  - PCIe_1 reaches the PCIe card slot. It consumes SerDes_1 lane-0 PCIe phy.
+ */
+&pcie0 {
+	status = "okay";
+};
+
+&pcie0_rp {
+	num-lanes = <1>;
+	phys = <&serdes0_pcie0>;
+};
+
+&pcie1 {
+	status = "okay";
+};
+
+&pcie1_rp {
+	num-lanes = <1>;
+	phys = <&serdes1_pcie0>;
+};
+
+&gmac0 {
+	/delete-property/ phy-handle;
+	clocks = <&clks 24>, <&clks 17>, <&clks 16>, <&clks 15>;
+	clock-names = "stmmaceth", "tx", "rx", "ptp_ref";
+	phy-mode = "sgmii";
+	pcs-handle = <&serdes0_xpcs0>;
+	status = "okay";
+
+	/*
+	 * GMAC0 is wired back-to-back to the on-board SJA1110 switch over
+	 * this SGMII lane. There is no PHY on the segment, so there is
+	 * nothing to reference with phy-handle: the link partner is a
+	 * switch port. Describe it as a fixed 1G link; phylink then uses
+	 * out-of-band negotiation. The switch itself is not described by
+	 * this overlay. The PCS also supports in-band negotiation, for
+	 * boards whose link partner is described.
+	 */
+	fixed-link {
+		speed = <1000>;
+		full-duplex;
+		pause;
+	};
+};
