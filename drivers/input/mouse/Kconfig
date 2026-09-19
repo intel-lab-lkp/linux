@@ -332,21 +332,6 @@ config MOUSE_VSXXXAA
 	  described in the source file). This driver also works with the
 	  digitizer (VSXXX-AB) DEC produced.
 
-config MOUSE_GPIO
-	tristate "GPIO mouse"
-	depends on GPIOLIB || COMPILE_TEST
-	help
-	  This driver simulates a mouse on GPIO lines of various CPUs (and some
-	  other chips).
-
-	  Say Y here if your device has buttons or a simple joystick connected
-	  directly to GPIO lines. Your board-specific setup logic must also
-	  provide a platform device and platform data saying which GPIOs are
-	  used.
-
-	  To compile this driver as a module, choose M here: the
-	  module will be called gpio_mouse.
-
 config MOUSE_MAPLE
 	tristate "Maple mouse (for the Dreamcast)"
 	depends on MAPLE

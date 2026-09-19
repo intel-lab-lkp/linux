@@ -21,11 +21,6 @@ hardware descriptions such as device tree or ACPI:
   GPIO line cannot generate interrupts, so it needs to be periodically polled
   by a timer.
 
-- gpio_mouse: drivers/input/mouse/gpio_mouse.c is used to provide a mouse with
-  up to three buttons by simply using GPIOs and no mouse port. You can cut the
-  mouse cable and connect the wires to GPIO lines or solder a mouse connector
-  to the lines for a more permanent solution of this type.
-
 - gpio-beeper: drivers/input/misc/gpio-beeper.c is used to provide a beep from
   an external speaker connected to a GPIO line. (If the beep is controlled by
   off/on, for an actual PWM waveform, see pwm-gpio below.)
