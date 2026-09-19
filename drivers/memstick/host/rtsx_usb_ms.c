@@ -551,6 +551,13 @@ static void rtsx_usb_ms_request(struct memstick_host *msh)
 		schedule_work(&host->handle_req);
 }
 
+static void rtsx_usb_ms_cancel(struct memstick_host *msh)
+{
+	struct rtsx_usb_ms *host = memstick_priv(msh);
+
+	cancel_work_sync(&host->handle_req);
+}
+
 static int rtsx_usb_ms_set_param(struct memstick_host *msh,
 		enum memstick_param param, int value)
 {
@@ -787,6 +794,7 @@ static int rtsx_usb_ms_drv_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&host->poll_card, rtsx_usb_ms_poll_card);
 
 	msh->request = rtsx_usb_ms_request;
+	msh->cancel = rtsx_usb_ms_cancel;
 	msh->set_param = rtsx_usb_ms_set_param;
 	msh->caps = MEMSTICK_CAP_PAR4;
 

@@ -359,6 +359,20 @@ static int h_memstick_set_rw_addr(struct memstick_dev *card,
 	}
 }
 
+/* On timeout the host may still hold current_mrq; make it let go first. */
+static void memstick_wait_req(struct memstick_dev *card)
+{
+	struct memstick_host *host = card->host;
+
+	if (wait_for_completion_timeout(&card->mrq_complete,
+					msecs_to_jiffies(500)))
+		return;
+
+	if (host->cancel)
+		host->cancel(host);
+	card->current_mrq.error = -ETIMEDOUT;
+}
+
 /**
  * memstick_set_rw_addr - issue SET_RW_REG_ADDR request and wait for it to
  *                        complete
@@ -370,9 +384,7 @@ int memstick_set_rw_addr(struct memstick_dev *card)
 {
 	card->next_request = h_memstick_set_rw_addr;
 	memstick_new_req(card->host);
-	if (!wait_for_completion_timeout(&card->mrq_complete,
-			msecs_to_jiffies(500)))
-		card->current_mrq.error = -ETIMEDOUT;
+	memstick_wait_req(card);
 
 	return card->current_mrq.error;
 }
@@ -405,9 +417,7 @@ static struct memstick_dev *memstick_alloc_card(struct memstick_host *host)
 
 		card->next_request = h_memstick_read_dev_id;
 		memstick_new_req(host);
-		if (!wait_for_completion_timeout(&card->mrq_complete,
-				msecs_to_jiffies(500)))
-			card->current_mrq.error = -ETIMEDOUT;
+		memstick_wait_req(card);
 
 		if (card->current_mrq.error)
 			goto err_out;

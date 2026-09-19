@@ -285,6 +285,8 @@ struct memstick_host {
 
 	/* Notify the host that some requests are pending. */
 	void                (*request)(struct memstick_host *host);
+	/* Stop using the current request; may sleep until the host is idle. */
+	void                (*cancel)(struct memstick_host *host);
 	/* Set host IO parameters (power, clock, etc).     */
 	int                 (*set_param)(struct memstick_host *host,
 					 enum memstick_param param,
