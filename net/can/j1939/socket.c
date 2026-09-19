@@ -470,6 +470,10 @@ static int j1939_sk_bind(struct socket *sock, struct sockaddr_unsized *uaddr, in
 			ret = -EINVAL;
 			goto out_release_sock;
 		}
+		if (j1939_sock_pending_get(&jsk->sk)) {
+			ret = -EBUSY;
+			goto out_release_sock;
+		}
 
 		/* drop old references */
 		j1939_jsk_del(priv, jsk);
