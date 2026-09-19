@@ -208,12 +208,12 @@ static inline int getLayerId(const __u8 *usbPacket)
 	return __le32_to_cpup((__le32 *)(usbPacket));
 }
 
-static inline int getPacketId(const __u8 *usbPacket)
+static inline __u32 getPacketId(const __u8 *usbPacket)
 {
 	return __le32_to_cpup((__le32 *)(usbPacket+4));
 }
 
-static inline int getDataLength(const __u8 *usbPacket)
+static inline __u32 getDataLength(const __u8 *usbPacket)
 {
 	return __le32_to_cpup((__le32 *)(usbPacket+8));
 }
@@ -607,6 +607,10 @@ static int gsp_send(struct garmin_data *garmin_data_p,
 	if (k >= GARMIN_PKTHDR_LENGTH) {
 		pktid  = getPacketId(garmin_data_p->outbuffer);
 		datalen = getDataLength(garmin_data_p->outbuffer);
+		if (datalen < 0 || datalen > GPS_OUT_BUFSIZ - GARMIN_PKTHDR_LENGTH) {
+			garmin_data_p->outsize = 0;
+			return -3;
+		}
 		i = GARMIN_PKTHDR_LENGTH + datalen;
 		if (k < i)
 			return 0;
@@ -769,8 +773,13 @@ static int nat_receive(struct garmin_data *garmin_data_p,
 
 		/* do we have a complete packet ? */
 		if (garmin_data_p->insize >= GARMIN_PKTHDR_LENGTH) {
-			len = GARMIN_PKTHDR_LENGTH+
-			   getDataLength(garmin_data_p->inbuffer);
+			__u32 dlen = getDataLength(garmin_data_p->inbuffer);
+
+			if (dlen > GPS_IN_BUFSIZ - GARMIN_PKTHDR_LENGTH) {
+				garmin_data_p->insize = 0;
+				break;
+			}
+			len = GARMIN_PKTHDR_LENGTH + dlen;
 			if (garmin_data_p->insize >= len) {
 				garmin_write_bulk(garmin_data_p->port,
 						   garmin_data_p->inbuffer,
@@ -951,7 +960,8 @@ static void garmin_write_bulk_callback(struct urb *urb)
 		struct garmin_data *garmin_data_p =
 					usb_get_serial_port_data(port);
 
-		if (getLayerId(urb->transfer_buffer) == GARMIN_LAYERID_APPL) {
+		if (urb->transfer_buffer_length >= 5 &&
+		    getLayerId(urb->transfer_buffer) == GARMIN_LAYERID_APPL) {
 
 			if (garmin_data_p->mode == MODE_GARMIN_SERIAL) {
 				gsp_send_ack(garmin_data_p,
