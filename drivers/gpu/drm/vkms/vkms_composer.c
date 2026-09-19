@@ -334,6 +334,10 @@ static void clamp_line_coordinates(enum pixel_read_direction direction,
 	switch (direction) {
 	case READ_LEFT_TO_RIGHT:
 	case READ_RIGHT_TO_LEFT:
+		if (*src_y_start < 0 || *src_y_start >= current_plane->frame_info->fb->height) {
+			*pixel_count = 0;
+			break;
+		}
 		if (*src_x_start < 0) {
 			*pixel_count += *src_x_start;
 			*dst_x_start -= *src_x_start;
@@ -345,6 +349,10 @@ static void clamp_line_coordinates(enum pixel_read_direction direction,
 		break;
 	case READ_BOTTOM_TO_TOP:
 	case READ_TOP_TO_BOTTOM:
+		if (*src_x_start < 0 || *src_x_start >= current_plane->frame_info->fb->width) {
+			*pixel_count = 0;
+			break;
+		}
 		if (*src_y_start < 0) {
 			*pixel_count += *src_y_start;
 			*dst_x_start -= *src_y_start;
@@ -625,13 +633,14 @@ void vkms_composer_worker(struct work_struct *work)
 	crtc_state->frame_end = 0;
 	crtc_state->crc_pending = false;
 
-	if (crtc->state->gamma_lut) {
+	if (crtc_state->base.gamma_lut) {
 		s64 max_lut_index_fp;
 		s64 u16_max_fp = drm_int2fixp(0xffff);
 
-		crtc_state->gamma_lut.base = (struct drm_color_lut *)crtc->state->gamma_lut->data;
+		crtc_state->gamma_lut.base =
+			(struct drm_color_lut *)crtc_state->base.gamma_lut->data;
 		crtc_state->gamma_lut.lut_length =
-			crtc->state->gamma_lut->length / sizeof(struct drm_color_lut);
+			crtc_state->base.gamma_lut->length / sizeof(struct drm_color_lut);
 		max_lut_index_fp = drm_int2fixp(crtc_state->gamma_lut.lut_length - 1);
 		crtc_state->gamma_lut.channel_value2index_ratio = drm_fixp_div(max_lut_index_fp,
 									       u16_max_fp);

@@ -49,8 +49,7 @@ static void packed_pixels_offset(const struct vkms_frame_info *frame_info, int x
 										  plane_index);
 	*rem_x = x % drm_format_info_block_width(format, plane_index);
 	*rem_y = y % drm_format_info_block_height(format, plane_index);
-	*offset = fb->offsets[plane_index] +
-		  block_y * block_pitch +
+	*offset = block_y * block_pitch +
 		  block_x * format->char_per_block[plane_index];
 }
 
@@ -78,7 +77,7 @@ static void packed_pixels_addr(const struct vkms_frame_info *frame_info,
 	int offset;
 
 	packed_pixels_offset(frame_info, x, y, plane_index, &offset, rem_x, rem_y);
-	*addr = (u8 *)frame_info->map[0].vaddr + offset;
+	*addr = (u8 *)frame_info->map[plane_index].vaddr + offset;
 }
 
 /**
@@ -139,7 +138,7 @@ static void packed_pixels_addr_1x1(const struct vkms_frame_info *frame_info,
 
 	packed_pixels_offset(frame_info, x, y, plane_index, &offset, &rem_x,
 			     &rem_y);
-	*addr = (u8 *)frame_info->map[0].vaddr + offset;
+	*addr = (u8 *)frame_info->map[plane_index].vaddr + offset;
 }
 
 /**
