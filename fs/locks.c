@@ -1938,6 +1938,9 @@ generic_add_lease(struct file *filp, int arg, struct file_lease **flp, void **pr
 	list_for_each_entry(fl, &ctx->flc_lease, c.flc_list) {
 		if (fl->c.flc_file == filp &&
 		    fl->c.flc_owner == lease->c.flc_owner) {
+			if ((fl->c.flc_flags & (FL_LEASE | FL_DELEG)) !=
+			    (lease->c.flc_flags & (FL_LEASE | FL_DELEG)))
+				goto out;
 			my_fl = fl;
 			continue;
 		}
