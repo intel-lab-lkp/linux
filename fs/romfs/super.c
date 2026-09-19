@@ -191,6 +191,8 @@ static int romfs_readdir(struct file *file, struct dir_context *ctx)
 			    romfs_dtype_table[nextfh & ROMFH_TYPE]))
 			goto out;
 
+		if ((nextfh & ROMFH_MASK) && (nextfh & ROMFH_MASK) <= offset)
+			goto out;
 		offset = nextfh & ROMFH_MASK;
 	}
 out:
@@ -223,6 +225,8 @@ static struct dentry *romfs_lookup(struct inode *dir, struct dentry *dentry,
 	len = dentry->d_name.len;
 
 	for (;;) {
+		unsigned long next_offset;
+
 		if (!offset || offset >= maxoff)
 			break;
 
@@ -246,7 +250,12 @@ static struct dentry *romfs_lookup(struct inode *dir, struct dentry *dentry,
 		}
 
 		/* next entry */
-		offset = be32_to_cpu(ri.next) & ROMFH_MASK;
+		next_offset = be32_to_cpu(ri.next) & ROMFH_MASK;
+		if (next_offset && next_offset <= offset) {
+			ret = -EIO;
+			goto error;
+		}
+		offset = next_offset;
 	}
 
 	return d_splice_alias(inode, dentry);
