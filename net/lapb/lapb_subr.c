@@ -106,6 +106,7 @@ int lapb_validate_nr(struct lapb_cb *lapb, unsigned short nr)
 int lapb_decode(struct lapb_cb *lapb, struct sk_buff *skb,
 		struct lapb_frame *frame)
 {
+	memset(frame, 0, sizeof(*frame));
 	frame->type = LAPB_ILLEGAL;
 
 	lapb_dbg(2, "(%p) S%d RX %3ph\n", lapb->dev, lapb->state, skb->data);
@@ -120,25 +121,33 @@ int lapb_decode(struct lapb_cb *lapb, struct sk_buff *skb,
 		if (lapb->mode & LAPB_DCE) {
 			if (skb->data[0] == LAPB_ADDR_D)
 				frame->cr = LAPB_COMMAND;
-			if (skb->data[0] == LAPB_ADDR_C)
+			else if (skb->data[0] == LAPB_ADDR_C)
 				frame->cr = LAPB_RESPONSE;
+			else
+				return -1;
 		} else {
 			if (skb->data[0] == LAPB_ADDR_C)
 				frame->cr = LAPB_COMMAND;
-			if (skb->data[0] == LAPB_ADDR_D)
+			else if (skb->data[0] == LAPB_ADDR_D)
 				frame->cr = LAPB_RESPONSE;
+			else
+				return -1;
 		}
 	} else {
 		if (lapb->mode & LAPB_DCE) {
 			if (skb->data[0] == LAPB_ADDR_B)
 				frame->cr = LAPB_COMMAND;
-			if (skb->data[0] == LAPB_ADDR_A)
+			else if (skb->data[0] == LAPB_ADDR_A)
 				frame->cr = LAPB_RESPONSE;
+			else
+				return -1;
 		} else {
 			if (skb->data[0] == LAPB_ADDR_A)
 				frame->cr = LAPB_COMMAND;
-			if (skb->data[0] == LAPB_ADDR_B)
+			else if (skb->data[0] == LAPB_ADDR_B)
 				frame->cr = LAPB_RESPONSE;
+			else
+				return -1;
 		}
 	}
 
