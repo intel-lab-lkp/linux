@@ -991,6 +991,7 @@ static int ibmvfc_reenable_crq_queue(struct ibmvfc_host *vhost)
 	vhost->using_channels = 0;
 	vhost->do_scsi_login = 0;
 	vhost->do_nvme_login = 0;
+	vhost->do_nvme_register = 0;
 	spin_unlock(vhost->crq.q_lock);
 	spin_unlock_irqrestore(&vhost->host->host_lock, flags);
 
@@ -1032,6 +1033,7 @@ static int ibmvfc_reset_crq(struct ibmvfc_host *vhost)
 	vhost->using_channels = 0;
 	vhost->do_scsi_login = 0;
 	vhost->do_nvme_login = 0;
+	vhost->do_nvme_register = 0;
 
 	/* Clean out the queue */
 	memset(crq->msgs.crq, 0, PAGE_SIZE);
@@ -5242,7 +5244,7 @@ static void ibmvfc_fabric_login_nvme_done(struct ibmvfc_event *evt)
 	switch (mad_status) {
 	case IBMVFC_MAD_SUCCESS:
 		fc_host_port_id(vhost->host) = be64_to_cpu(rsp->nport_id);
-		ibmvfc_nvme_register(vhost);
+		vhost->do_nvme_register = 1;
 		ibmvfc_dbg(vhost, "NVMe fabric login succeeded\n");
 		break;
 	case IBMVFC_MAD_FAILED:
@@ -6069,6 +6071,14 @@ static void ibmvfc_do_work(struct ibmvfc_host *vhost)
 			vhost->job_step(vhost);
 		break;
 	case IBMVFC_HOST_ACTION_QUERY:
+		if (vhost->do_nvme_register) {
+			vhost->do_nvme_register = 0;
+			spin_unlock_irqrestore(&vhost->host->host_lock, flags);
+			ibmvfc_nvme_register(vhost);
+			spin_lock_irqsave(&vhost->host->host_lock, flags);
+			if (vhost->action != IBMVFC_HOST_ACTION_QUERY)
+				break;
+		}
 		list_for_each_entry(tgt, &vhost->scsi_scrqs.targets, queue)
 			ibmvfc_init_tgt(tgt, ibmvfc_tgt_query_target);
 		list_for_each_entry(tgt, &vhost->nvme_scrqs.targets, queue)
