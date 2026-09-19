@@ -129,25 +129,28 @@ exit:
 
 u8 rtw_set_802_11_ssid(struct adapter *padapter, struct ndis_802_11_ssid *ssid)
 {
-	u8 status = _SUCCESS;
+	struct mlme_priv *pmlmepriv;
+	struct wlan_network *pnetwork;
 
-	struct mlme_priv *pmlmepriv = &padapter->mlmepriv;
-	struct wlan_network *pnetwork = &pmlmepriv->cur_network;
+	if (!padapter || !ssid || !rtw_validate_ssid(ssid))
+		return _FAIL;
+
+	if (!padapter->hw_init_completed)
+		return _FAIL;
+
+	pmlmepriv = &padapter->mlmepriv;
+	pnetwork = &pmlmepriv->cur_network;
 
 	netdev_dbg(padapter->pnetdev, "set ssid [%s] fw_state = 0x%08x\n",
 		   ssid->ssid, get_fwstate(pmlmepriv));
 
-	if (!padapter->hw_init_completed) {
-		status = _FAIL;
-		goto exit;
-	}
-
-	spin_lock_bh(&pmlmepriv->lock);
+	guard(spinlock_bh)(&pmlmepriv->lock);
 
 	if (check_fwstate(pmlmepriv, _FW_UNDER_SURVEY))
 		goto handle_tkip_countermeasure;
-	else if (check_fwstate(pmlmepriv, _FW_UNDER_LINKING))
-		goto release_mlme_lock;
+
+	if (check_fwstate(pmlmepriv, _FW_UNDER_LINKING))
+		return _SUCCESS;
 
 	if (check_fwstate(pmlmepriv, _FW_LINKED | WIFI_ADHOC_MASTER_STATE)) {
 		if ((pmlmepriv->assoc_ssid.ssid_length == ssid->ssid_length) &&
@@ -167,7 +170,11 @@ u8 rtw_set_802_11_ssid(struct adapter *padapter, struct ndis_802_11_ssid *ssid)
 						set_fwstate(pmlmepriv, WIFI_ADHOC_STATE);
 					}
 				} else {
-					goto release_mlme_lock;/* it means driver is in WIFI_ADHOC_MASTER_STATE, we needn't create bss again. */
+					return _SUCCESS;
+					/*
+					 * it means driver is in WIFI_ADHOC_MASTER_STATE,
+					 * we needn't create bss again.
+					 */
 				}
 			} else {
 				rtw_lps_ctrl_wk_cmd(padapter, LPS_CTRL_JOINBSS, 1);
@@ -188,30 +195,18 @@ u8 rtw_set_802_11_ssid(struct adapter *padapter, struct ndis_802_11_ssid *ssid)
 	}
 
 handle_tkip_countermeasure:
-	if (rtw_handle_tkip_countermeasure(padapter, __func__) == _FAIL) {
-		status = _FAIL;
-		goto release_mlme_lock;
-	}
-
-	if (!rtw_validate_ssid(ssid)) {
-		status = _FAIL;
-		goto release_mlme_lock;
-	}
+	if (rtw_handle_tkip_countermeasure(padapter, __func__) == _FAIL)
+		return _FAIL;
 
 	memcpy(&pmlmepriv->assoc_ssid, ssid, sizeof(struct ndis_802_11_ssid));
 	pmlmepriv->assoc_by_bssid = false;
 
-	if (check_fwstate(pmlmepriv, _FW_UNDER_SURVEY))
+	if (check_fwstate(pmlmepriv, _FW_UNDER_SURVEY)) {
 		pmlmepriv->to_join = true;
-	else
-		status = rtw_do_join(padapter);
+		return _SUCCESS;
+	}
 
-release_mlme_lock:
-	spin_unlock_bh(&pmlmepriv->lock);
-
-exit:
-
-	return status;
+	return rtw_do_join(padapter);
 }
 
 u8 rtw_set_802_11_connect(struct adapter *padapter, u8 *bssid, struct ndis_802_11_ssid *ssid)
@@ -219,7 +214,7 @@ u8 rtw_set_802_11_connect(struct adapter *padapter, u8 *bssid, struct ndis_802_1
 	u8 status = _SUCCESS;
 	bool bssid_valid = true;
 	bool ssid_valid = true;
-	struct mlme_priv *pmlmepriv = &padapter->mlmepriv;
+	struct mlme_priv *pmlmepriv;
 
 	if (!ssid || !rtw_validate_ssid(ssid))
 		ssid_valid = false;
@@ -227,30 +222,25 @@ u8 rtw_set_802_11_connect(struct adapter *padapter, u8 *bssid, struct ndis_802_1
 	if (!bssid || !rtw_validate_bssid(bssid))
 		bssid_valid = false;
 
-	if (!ssid_valid && !bssid_valid) {
-		status = _FAIL;
-		goto exit;
-	}
+	if (!ssid_valid && !bssid_valid)
+		return _FAIL;
 
-	if (!padapter->hw_init_completed) {
-		status = _FAIL;
-		goto exit;
-	}
+	if (!padapter || !padapter->hw_init_completed)
+		return _FAIL;
 
-	spin_lock_bh(&pmlmepriv->lock);
+	pmlmepriv = &padapter->mlmepriv;
+
+	guard(spinlock_bh)(&pmlmepriv->lock);
 
 	netdev_dbg(padapter->pnetdev, FUNC_ADPT_FMT "  fw_state = 0x%08x\n",
 		   FUNC_ADPT_ARG(padapter), get_fwstate(pmlmepriv));
 
-	if (check_fwstate(pmlmepriv, _FW_UNDER_SURVEY))
-		goto handle_tkip_countermeasure;
-	else if (check_fwstate(pmlmepriv, _FW_UNDER_LINKING))
-		goto release_mlme_lock;
+	if (check_fwstate(pmlmepriv, _FW_UNDER_LINKING))
+		return status;
 
-handle_tkip_countermeasure:
 	if (rtw_handle_tkip_countermeasure(padapter, __func__) == _FAIL) {
 		status = _FAIL;
-		goto release_mlme_lock;
+		return status;
 	}
 
 	if (ssid && ssid_valid)
@@ -270,10 +260,6 @@ handle_tkip_countermeasure:
 	else
 		status = rtw_do_join(padapter);
 
-release_mlme_lock:
-	spin_unlock_bh(&pmlmepriv->lock);
-
-exit:
 	return status;
 }
 
@@ -292,7 +278,7 @@ u8 rtw_set_802_11_infrastructure_mode(struct adapter *padapter,
 			stop_ap_mode(padapter);
 		}
 
-		spin_lock_bh(&pmlmepriv->lock);
+		guard(spinlock_bh)(&pmlmepriv->lock);
 
 		if (check_fwstate(pmlmepriv, _FW_LINKED) || (*pold_state == NL80211_IFTYPE_ADHOC))
 			rtw_disassoc_cmd(padapter, 0, true);
@@ -331,8 +317,6 @@ u8 rtw_set_802_11_infrastructure_mode(struct adapter *padapter,
 		}
 
 		/* SecClearAllKeys(adapter); */
-
-		spin_unlock_bh(&pmlmepriv->lock);
 	}
 	return true;
 }
@@ -341,7 +325,7 @@ u8 rtw_set_802_11_disassociate(struct adapter *padapter)
 {
 	struct mlme_priv *pmlmepriv = &padapter->mlmepriv;
 
-	spin_lock_bh(&pmlmepriv->lock);
+	guard(spinlock_bh)(&pmlmepriv->lock);
 
 	if (check_fwstate(pmlmepriv, _FW_LINKED)) {
 		rtw_disassoc_cmd(padapter, 0, true);
@@ -350,43 +334,30 @@ u8 rtw_set_802_11_disassociate(struct adapter *padapter)
 		rtw_pwr_wakeup(padapter);
 	}
 
-	spin_unlock_bh(&pmlmepriv->lock);
-
 	return true;
 }
 
 u8 rtw_set_802_11_bssid_list_scan(struct adapter *padapter, struct ndis_802_11_ssid *pssid, int ssid_max_num)
 {
-	struct mlme_priv *pmlmepriv = &padapter->mlmepriv;
-	u8 res = true;
+	struct mlme_priv *pmlmepriv;
 
-	if (!padapter) {
-		res = false;
-		goto exit;
-	}
-	if (!padapter->hw_init_completed) {
-		res = false;
-		goto exit;
-	}
+	if (!padapter || !padapter->hw_init_completed)
+		return false;
+
+	pmlmepriv = &padapter->mlmepriv;
 
 	if (check_fwstate(pmlmepriv, _FW_UNDER_SURVEY | _FW_UNDER_LINKING) ||
 	    pmlmepriv->link_detect_info.busy_traffic) {
 		/*  Scan or linking is in progress, do nothing. */
-		res = true;
-
-	} else {
-		if (rtw_is_scan_deny(padapter))
-			return _SUCCESS;
-
-		spin_lock_bh(&pmlmepriv->lock);
-
-		res = rtw_sitesurvey_cmd(padapter, pssid, ssid_max_num, NULL, 0);
-
-		spin_unlock_bh(&pmlmepriv->lock);
+		return true;
 	}
-exit:
 
-	return res;
+	if (rtw_is_scan_deny(padapter))
+		return _SUCCESS;
+
+	guard(spinlock_bh)(&pmlmepriv->lock);
+
+	return rtw_sitesurvey_cmd(padapter, pssid, ssid_max_num, NULL, 0);
 }
 
 u8 rtw_set_802_11_authentication_mode(struct adapter *padapter, enum ndis_802_11_authentication_mode authmode)

@@ -1086,7 +1086,7 @@ void rtw_reset_securitypriv(struct adapter *adapter)
 	u32 backupTKIPcountermeasure_time = 0;
 	struct mlme_ext_priv *pmlmeext = &adapter->mlmeextpriv;
 
-	spin_lock_bh(&adapter->security_key_mutex);
+	guard(spinlock_bh)(&adapter->security_key_mutex);
 
 	if (adapter->securitypriv.dot11_auth_algrthm == dot11_auth_algrthm_8021x) {
 		/* 802.1x */
@@ -1133,7 +1133,6 @@ void rtw_reset_securitypriv(struct adapter *adapter)
 		psec_priv->ndisencryptstatus = Ndis802_11WEPDisabled;
 		/*  */
 	}
-	spin_unlock_bh(&adapter->security_key_mutex);
 }
 
 /* Notes: the function could be > passive_level (the same context as Rx tasklet) */

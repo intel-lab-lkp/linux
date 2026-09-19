@@ -2015,7 +2015,7 @@ s32 dump_mgntframe_and_wait_ack(struct adapter *padapter, struct xmit_frame *pmg
 		return -1;
 	}
 
-	if (mutex_lock_interruptible(&pxmitpriv->ack_tx_mutex) == 0) {
+	scoped_cond_guard(mutex_intr, (void)0, &pxmitpriv->ack_tx_mutex) {
 		pxmitpriv->ack_tx = true;
 		pxmitpriv->seq_no = seq_no++;
 		pmgntframe->ack_report = 1;
@@ -2023,7 +2023,6 @@ s32 dump_mgntframe_and_wait_ack(struct adapter *padapter, struct xmit_frame *pmg
 			ret = rtw_ack_tx_wait(pxmitpriv, timeout_ms);
 
 		pxmitpriv->ack_tx = false;
-		mutex_unlock(&pxmitpriv->ack_tx_mutex);
 	}
 
 	return ret;

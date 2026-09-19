@@ -1912,20 +1912,20 @@ void stop_ap_mode(struct adapter *padapter)
 	padapter->securitypriv.ndisencryptstatus = Ndis802_11WEPDisabled;
 
 	/* for ACL */
-	spin_lock_bh(&pacl_node_q->lock);
-	phead = get_list_head(pacl_node_q);
-	list_for_each_safe(plist, tmp, phead) {
-		paclnode = list_entry(plist, struct rtw_wlan_acl_node, list);
+	scoped_guard(spinlock_bh, &pacl_node_q->lock) {
+		phead = get_list_head(pacl_node_q);
+		list_for_each_safe(plist, tmp, phead) {
+			paclnode = list_entry(plist, struct rtw_wlan_acl_node, list);
 
-		if (paclnode->valid) {
-			paclnode->valid = false;
+			if (paclnode->valid) {
+				paclnode->valid = false;
 
-			list_del_init(&paclnode->list);
+				list_del_init(&paclnode->list);
 
-			pacl_list->num--;
+				pacl_list->num--;
+			}
 		}
 	}
-	spin_unlock_bh(&pacl_node_q->lock);
 
 	rtw_sta_flush(padapter);
 

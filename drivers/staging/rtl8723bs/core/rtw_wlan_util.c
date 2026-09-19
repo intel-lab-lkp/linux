@@ -296,15 +296,12 @@ inline unsigned long rtw_get_on_cur_ch_time(struct adapter *adapter)
 
 void r8723bs_select_channel(struct adapter *padapter, unsigned char channel)
 {
-	if (mutex_lock_interruptible(&(adapter_to_dvobj(padapter)->setch_mutex)))
-		return;
+	scoped_cond_guard(mutex_intr, return, &(adapter_to_dvobj(padapter)->setch_mutex)) {
+		/* saved channel info */
+		rtw_set_oper_ch(padapter, channel);
 
-	/* saved channel info */
-	rtw_set_oper_ch(padapter, channel);
-
-	rtw_hal_set_chan(padapter, channel);
-
-	mutex_unlock(&(adapter_to_dvobj(padapter)->setch_mutex));
+		rtw_hal_set_chan(padapter, channel);
+	}
 }
 
 void set_channel_bwmode(struct adapter *padapter, unsigned char channel, unsigned char channel_offset, unsigned short bwmode)
@@ -314,17 +311,14 @@ void set_channel_bwmode(struct adapter *padapter, unsigned char channel, unsigne
 	center_ch = rtw_get_center_ch(channel, bwmode, channel_offset);
 
 	/* set Channel */
-	if (mutex_lock_interruptible(&(adapter_to_dvobj(padapter)->setch_mutex)))
-		return;
+	scoped_cond_guard(mutex_intr, return, &(adapter_to_dvobj(padapter)->setch_mutex)) {
+		/* saved channel/bw info */
+		rtw_set_oper_ch(padapter, channel);
+		rtw_set_oper_bw(padapter, bwmode);
+		rtw_set_oper_choffset(padapter, channel_offset);
 
-	/* saved channel/bw info */
-	rtw_set_oper_ch(padapter, channel);
-	rtw_set_oper_bw(padapter, bwmode);
-	rtw_set_oper_choffset(padapter, channel_offset);
-
-	rtw_hal_set_chnl_bw(padapter, center_ch, bwmode, channel_offset, chnl_offset80); /*  set center channel */
-
-	mutex_unlock(&(adapter_to_dvobj(padapter)->setch_mutex));
+		rtw_hal_set_chnl_bw(padapter, center_ch, bwmode, channel_offset, chnl_offset80); /*  set center channel */
+	}
 }
 
 inline u8 *get_my_bssid(struct wlan_bssid_ex *pnetwork)

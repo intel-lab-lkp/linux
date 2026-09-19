@@ -460,8 +460,7 @@ _next:
 		cmd_hdl = NULL;
 
 post_process:
-
-		if (mutex_lock_interruptible(&pcmd->padapter->cmdpriv.sctx_mutex) == 0) {
+		scoped_cond_guard(mutex_intr, (void)0, &pcmd->padapter->cmdpriv.sctx_mutex) {
 			if (pcmd->sctx) {
 				netdev_dbg(padapter->pnetdev,
 					   FUNC_ADPT_FMT " pcmd->sctx\n",
@@ -472,7 +471,6 @@ post_process:
 				else
 					rtw_sctx_done_err(&pcmd->sctx, RTW_SCTX_DONE_CMD_ERROR);
 			}
-			mutex_unlock(&pcmd->padapter->cmdpriv.sctx_mutex);
 		}
 
 		/* call callback function for post-processed */
@@ -655,10 +653,9 @@ int rtw_startbss_cmd(struct adapter  *padapter, int flags)
 
 		if (res == _SUCCESS && (flags & RTW_CMDF_WAIT_ACK)) {
 			rtw_sctx_wait(&sctx);
-			if (mutex_lock_interruptible(&pcmdpriv->sctx_mutex) == 0) {
+			scoped_cond_guard(mutex_intr, (void)0, &pcmdpriv->sctx_mutex) {
 				if (sctx.status == RTW_SCTX_SUBMITTED)
 					pcmd->sctx = NULL;
-				mutex_unlock(&pcmdpriv->sctx_mutex);
 			}
 		}
 	}
@@ -1406,7 +1403,7 @@ static void rtw_lps_change_dtim_hdl(struct adapter *padapter, u8 dtim)
 	if (hal_btcoex_IsBtControlLps(padapter))
 		return;
 
-	mutex_lock(&pwrpriv->lock);
+	guard(mutex)(&pwrpriv->lock);
 
 	pwrpriv->dtim = dtim;
 
@@ -1415,8 +1412,6 @@ static void rtw_lps_change_dtim_hdl(struct adapter *padapter, u8 dtim)
 
 		rtw_hal_set_hwreg(padapter, HW_VAR_H2C_FW_PWRMODE, (u8 *)(&ps_mode));
 	}
-
-	mutex_unlock(&pwrpriv->lock);
 }
 
 static void rtw_dm_ra_mask_hdl(struct adapter *padapter, struct sta_info *psta)
@@ -1923,13 +1918,13 @@ void rtw_setassocsta_cmdrsp_callback(struct adapter *padapter,  struct cmd_obj *
 	psta->aid = passocsta_rsp->cam_id;
 	psta->mac_id = passocsta_rsp->cam_id;
 
-	spin_lock_bh(&pmlmepriv->lock);
+	scoped_guard(spinlock_bh, &pmlmepriv->lock) {
+		if (check_fwstate(pmlmepriv, WIFI_MP_STATE) &&
+		    check_fwstate(pmlmepriv, _FW_UNDER_LINKING))
+			_clr_fwstate_(pmlmepriv, _FW_UNDER_LINKING);
 
-	if (check_fwstate(pmlmepriv, WIFI_MP_STATE) && check_fwstate(pmlmepriv, _FW_UNDER_LINKING))
-		_clr_fwstate_(pmlmepriv, _FW_UNDER_LINKING);
-
-	set_fwstate(pmlmepriv, _FW_LINKED);
-	spin_unlock_bh(&pmlmepriv->lock);
+		set_fwstate(pmlmepriv, _FW_LINKED);
+	}
 
 exit:
 	rtw_free_cmd_obj(pcmd);
