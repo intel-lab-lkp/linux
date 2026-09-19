@@ -462,23 +462,24 @@ nfsd4_create_file(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		open->op_created = true;
 
 	if (!open->op_created) {
-		if (open->op_createmode == NFS4_CREATE_UNCHECKED) {
-			/* NFSv4 protocol requires change attributes
-			 * even though no change happened.
-			 */
-			fh_fill_post_noop(fhp);
-
-			/*
-			 * In NFSv4, we don't want to truncate the file
-			 * now. This would be wrong if the OPEN fails for
-			 * some other reason. Furthermore, if the size is
-			 * nonzero, we should ignore it according to spec!
-			 */
-			open->op_truncate = (d_is_reg(child) &&
-					     (iap->ia_valid & ATTR_SIZE) &&
-					     !iap->ia_size);
-		} else
+		if (open->op_createmode != NFS4_CREATE_UNCHECKED) {
 			status = nfserr_exist;
+			goto out;
+		}
+		/* NFSv4 protocol requires change attributes
+		 * even though no change happened.
+		 */
+		fh_fill_post_noop(fhp);
+
+		/*
+		 * In NFSv4, we don't want to truncate the file
+		 * now. This would be wrong if the OPEN fails for
+		 * some other reason. Furthermore, if the size is
+		 * nonzero, we should ignore it according to spec!
+		 */
+		open->op_truncate = (d_is_reg(child) &&
+				     (iap->ia_valid & ATTR_SIZE) &&
+				     !iap->ia_size);
 		goto out;
 	}
 	/* file was created */
