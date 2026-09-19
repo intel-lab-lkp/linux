@@ -72,7 +72,7 @@ int mv88e6xxx_get_ts_info(struct dsa_switch *ds, int port,
 	chip = ds->priv;
 	ptp_ops = chip->info->ops->ptp_ops;
 
-	if (!chip->info->ptp_support)
+	if (!chip->info->ptp_support || !chip->ptp_clock)
 		return -EOPNOTSUPP;
 
 	info->so_timestamping =
@@ -176,7 +176,7 @@ int mv88e6xxx_port_hwtstamp_set(struct dsa_switch *ds, int port,
 	struct mv88e6xxx_port_hwtstamp *ps = &chip->port_hwtstamp[port];
 	int err;
 
-	if (!chip->info->ptp_support)
+	if (!chip->info->ptp_support || !chip->ptp_clock)
 		return -EOPNOTSUPP;
 
 	err = mv88e6xxx_set_hwtstamp_config(chip, port, config);
@@ -195,7 +195,7 @@ int mv88e6xxx_port_hwtstamp_get(struct dsa_switch *ds, int port,
 	struct mv88e6xxx_chip *chip = ds->priv;
 	struct mv88e6xxx_port_hwtstamp *ps = &chip->port_hwtstamp[port];
 
-	if (!chip->info->ptp_support)
+	if (!chip->info->ptp_support || !chip->ptp_clock)
 		return -EOPNOTSUPP;
 
 	*config = ps->tstamp_config;
@@ -213,7 +213,7 @@ static struct ptp_header *mv88e6xxx_should_tstamp(struct mv88e6xxx_chip *chip,
 	struct mv88e6xxx_port_hwtstamp *ps = &chip->port_hwtstamp[port];
 	struct ptp_header *hdr;
 
-	if (!chip->info->ptp_support)
+	if (!chip->info->ptp_support || !chip->ptp_clock)
 		return NULL;
 
 	hdr = ptp_parse_header(skb, type);

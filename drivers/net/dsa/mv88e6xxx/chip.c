@@ -4106,12 +4106,21 @@ static int mv88e6xxx_setup(struct dsa_switch *ds)
 	/* Setup PTP Hardware Clock and timestamping */
 	if (chip->info->ptp_support) {
 		err = mv88e6xxx_ptp_setup(chip);
-		if (err)
+		if (err == -ENODEV) {
+			/* The TAI clock period is not one that the driver
+			 * supports: run the switch without PTP rather than
+			 * failing the whole probe.
+			 */
+			dev_warn(chip->dev,
+				 "PTP clock unavailable, hardware timestamping disabled\n");
+			err = 0;
+		} else if (err) {
 			goto unlock;
-
-		err = mv88e6xxx_hwtstamp_setup(chip);
-		if (err)
-			goto unlock;
+		} else {
+			err = mv88e6xxx_hwtstamp_setup(chip);
+			if (err)
+				goto unlock;
+		}
 	}
 
 	err = mv88e6xxx_stats_setup(chip);
