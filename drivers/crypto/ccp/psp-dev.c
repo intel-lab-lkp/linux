@@ -198,13 +198,17 @@ static int psp_init(struct psp_device *psp)
 {
 	int ret;
 
-	if (!psp_check_sev_support(psp)) {
+	/*
+	 * The capability register describes the silicon and the vdata describes
+	 * what this driver was given to drive it with. Require both.
+	 */
+	if (psp->vdata->sev && !psp_check_sev_support(psp)) {
 		ret = sev_dev_init(psp);
 		if (ret)
 			return ret;
 	}
 
-	if (!psp_check_tee_support(psp)) {
+	if (psp->vdata->tee && !psp_check_tee_support(psp)) {
 		ret = tee_dev_init(psp);
 		if (ret)
 			return ret;
