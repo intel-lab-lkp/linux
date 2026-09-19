@@ -669,7 +669,7 @@ static void pci_init_host_bridge(struct pci_host_bridge *bridge)
 	 * OS from interfering.
 	 */
 #ifdef CONFIG_PCIEPORTBUS
-	bridge->native_aer = 1;
+	bridge->native_aer = pci_aer_available();
 	bridge->native_pcie_hotplug = 1;
 	bridge->native_pme = 1;
 	bridge->native_dpc = 1;
