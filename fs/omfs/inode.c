@@ -265,7 +265,13 @@ iget_failed:
 static void omfs_put_super(struct super_block *sb)
 {
 	struct omfs_sb_info *sbi = OMFS_SB(sb);
-	kfree(sbi->s_imap);
+	int i;
+
+	if (sbi->s_imap) {
+		for (i = 0; i < sbi->s_imap_size; i++)
+			kfree(sbi->s_imap[i]);
+		kfree(sbi->s_imap);
+	}
 	kfree(sbi);
 	sb->s_fs_info = NULL;
 }
@@ -502,6 +508,11 @@ static int omfs_fill_super(struct super_block *sb, struct fs_context *fc)
 	sbi->s_sys_blocksize = be32_to_cpu(omfs_sb->s_sys_blocksize);
 	mutex_init(&sbi->s_bitmap_lock);
 
+	if (sbi->s_mirrors == 0) {
+		ret = -EINVAL;
+		goto out_brelse_bh;
+	}
+
 	if (sbi->s_num_blocks > OMFS_MAX_BLOCKS) {
 		printk(KERN_ERR "omfs: sysblock number (%llx) is out of range\n",
 		       (unsigned long long)sbi->s_num_blocks);
@@ -598,8 +609,16 @@ out_brelse_bh2:
 out_brelse_bh:
 	brelse(bh);
 end:
-	if (ret)
+	if (ret) {
+		if (sbi->s_imap) {
+			int i;
+
+			for (i = 0; i < sbi->s_imap_size; i++)
+				kfree(sbi->s_imap[i]);
+			kfree(sbi->s_imap);
+		}
 		kfree(sbi);
+	}
 	return ret;
 }
 

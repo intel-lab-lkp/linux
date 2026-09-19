@@ -53,6 +53,9 @@ static int set_run(struct super_block *sb, int map,
 	struct buffer_head *bh;
 	struct omfs_sb_info *sbi = OMFS_SB(sb);
 
+	if (map < 0 || map >= sbi->s_imap_size)
+		return -EINVAL;
+
  	err = -ENOMEM;
 	bh = sb_bread(sb, clus_to_blk(sbi, sbi->s_bitmap_ino) + map);
 	if (!bh)
@@ -65,6 +68,8 @@ static int set_run(struct super_block *sb, int map,
 
 			mark_buffer_dirty(bh);
 			brelse(bh);
+			if (map >= sbi->s_imap_size)
+				goto out;
 			bh = sb_bread(sb,
 				clus_to_blk(sbi, sbi->s_bitmap_ino) + map);
 			if (!bh)
