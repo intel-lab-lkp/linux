@@ -380,7 +380,7 @@ static int st7586_probe(struct spi_device *spi)
 	dbi = &dbidev->dbi;
 	drm = &dbidev->drm;
 
-	bufsize = (st7586_mode.vdisplay + 2) / 3 * st7586_mode.hdisplay;
+	bufsize = (st7586_mode.hdisplay + 2) / 3 * st7586_mode.vdisplay;
 
 	dbi->reset = devm_gpiod_get(dev, "reset", GPIOD_OUT_HIGH);
 	if (IS_ERR(dbi->reset))

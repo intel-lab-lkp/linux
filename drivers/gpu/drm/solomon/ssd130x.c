@@ -802,7 +802,7 @@ static int ssd132x_update_rect(struct ssd130x_device *ssd130x,
 		/* Process pair of pixels and combine them into a single byte */
 		for (j = 0; j < width; j += segment_width) {
 			u8 n1 = buf[i * width + j];
-			u8 n2 = buf[i * width + j + 1];
+			u8 n2 = (j + 1 < width) ? buf[i * width + j + 1] : 0;
 
 			data_array[array_idx++] = (n2 & 0xf0) | (n1 >> 4);
 		}
