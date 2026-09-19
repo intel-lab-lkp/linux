@@ -85,18 +85,18 @@ int zstd_max_clevel(void);
 int zstd_default_clevel(void);
 
 /**
- * struct zstd_custom_mem - custom memory allocation
+ * typedef zstd_custom_mem - custom memory allocation
  */
 typedef ZSTD_customMem zstd_custom_mem;
 
 /**
- * struct zstd_dict_load_method - Dictionary load method.
+ * typedef zstd_dict_load_method - Dictionary load method.
  * See zstd_lib.h.
  */
 typedef ZSTD_dictLoadMethod_e zstd_dict_load_method;
 
 /**
- * struct zstd_dict_content_type - Dictionary context type.
+ * typedef zstd_dict_content_type - Dictionary content type.
  * See zstd_lib.h.
  */
 typedef ZSTD_dictContentType_e zstd_dict_content_type;
@@ -251,14 +251,14 @@ zstd_cctx *zstd_create_cctx_advanced(zstd_custom_mem custom_mem);
 
 /**
  * zstd_free_cctx() - Free compression context
- * @cdict:        Pointer to compression context.
+ * @cctx:         Pointer to compression context.
  *
  * Return:        Always 0.
  */
 size_t zstd_free_cctx(zstd_cctx* cctx);
 
 /**
- * struct zstd_cdict - Compression dictionary.
+ * typedef zstd_cdict - Compression dictionary.
  * See zstd_lib.h.
  */
 typedef ZSTD_CDict zstd_cdict;
@@ -267,12 +267,11 @@ typedef ZSTD_CDict zstd_cdict;
  * zstd_create_cdict_byreference() - Create compression dictionary
  * @dict:              Pointer to dictionary buffer.
  * @dict_size:         Size of the dictionary buffer.
- * @dict_load_method:  Dictionary load method.
- * @dict_content_type: Dictionary content type.
- * @custom_mem:        Memory allocator.
+ * @cparams:          Compression parameters.
+ * @custom_mem:       Memory allocator.
  *
- * Note, this uses @dict by reference (ZSTD_dlm_byRef), so it should be
- * free before zstd_cdict is destroyed.
+ * This uses @dict by reference. The buffer must remain accessible and
+ * unmodified until the returned zstd_cdict is destroyed.
  *
  * Return:             NULL on error, pointer to compression dictionary
  *                     otherwise.
@@ -347,7 +346,7 @@ size_t zstd_decompress_dctx(zstd_dctx *dctx, void *dst, size_t dst_capacity,
 	const void *src, size_t src_size);
 
 /**
- * struct zstd_ddict - Decompression dictionary.
+ * typedef zstd_ddict - Decompression dictionary.
  * See zstd_lib.h.
  */
 typedef ZSTD_DDict zstd_ddict;
@@ -356,12 +355,10 @@ typedef ZSTD_DDict zstd_ddict;
  * zstd_create_ddict_byreference() - Create decompression dictionary
  * @dict:              Pointer to dictionary buffer.
  * @dict_size:         Size of the dictionary buffer.
- * @dict_load_method:  Dictionary load method.
- * @dict_content_type: Dictionary content type.
- * @custom_mem:        Memory allocator.
+ * @custom_mem:       Memory allocator.
  *
- * Note, this uses @dict by reference (ZSTD_dlm_byRef), so it should be
- * free before zstd_ddict is destroyed.
+ * This uses @dict by reference. The buffer must remain accessible and
+ * unmodified until the returned zstd_ddict is destroyed.
  *
  * Return:             NULL on error, pointer to decompression dictionary
  *                     otherwise.
@@ -370,7 +367,7 @@ zstd_ddict *zstd_create_ddict_byreference(const void *dict, size_t dict_size,
 					  zstd_custom_mem custom_mem);
 /**
  * zstd_free_ddict() - Free decompression dictionary
- * @dict:         Pointer to the dictionary.
+ * @ddict:        Pointer to the dictionary.
  *
  * Return:        Always 0.
  */
