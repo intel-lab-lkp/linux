@@ -87,6 +87,16 @@ static int adfs_checkdiscrecord(struct adfs_discrecord *dr)
 		if (dr->unused52[i] != 0)
 			return 1;
 
+	/* At least one zone and one allocation ID per zone are required */
+	if (!dr->nzones && !dr->nzones_high)
+		return 1;
+	if (le16_to_cpu(dr->zone_spare) < 32 ||
+	    le16_to_cpu(dr->zone_spare) >= (8U << dr->log2secsize))
+		return 1;
+	if (((1U << dr->log2secsize) * 8 - le16_to_cpu(dr->zone_spare)) <
+	    (dr->idlen + 1))
+		return 1;
+
 	return 0;
 }
 
@@ -181,7 +191,8 @@ static int adfs_statfs(struct dentry *dentry, struct kstatfs *buf)
 	buf->f_type    = ADFS_SUPER_MAGIC;
 	buf->f_namelen = sbi->s_namelen;
 	buf->f_bsize   = sb->s_blocksize;
-	buf->f_ffree   = (long)(buf->f_bfree * buf->f_files) / (long)buf->f_blocks;
+	buf->f_ffree   = buf->f_blocks ?
+			 (long)(buf->f_bfree * buf->f_files) / (long)buf->f_blocks : 0;
 	buf->f_fsid    = u64_to_fsid(id);
 
 	return 0;
