@@ -611,7 +611,8 @@ static long efi_runtime_query_capsulecaps(unsigned long arg)
 	if (copy_from_user(&qcaps, qcaps_user, sizeof(qcaps)))
 		return -EFAULT;
 
-	if (qcaps.capsule_count == ULONG_MAX)
+	/* capsule_count is iterated over with a signed int index below */
+	if (qcaps.capsule_count >= INT_MAX)
 		return -EINVAL;
 
 	capsules = kzalloc_objs(efi_capsule_header_t, qcaps.capsule_count + 1);
