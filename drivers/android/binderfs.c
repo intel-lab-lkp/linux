@@ -258,7 +258,8 @@ static void binderfs_evict_inode(struct inode *inode)
 		return;
 
 	mutex_lock(&binderfs_minors_mutex);
-	--info->device_count;
+	if (device->context.name)
+		--info->device_count;
 	ida_free(&binderfs_minors, device->miscdev.minor);
 	mutex_unlock(&binderfs_minors_mutex);
 
@@ -430,8 +431,12 @@ static int binderfs_binder_ctl_create(struct super_block *sb)
 	device->miscdev.minor = minor;
 
 	dentry = d_alloc_name(root, "binder-control");
-	if (!dentry)
+	if (!dentry) {
+		mutex_lock(&binderfs_minors_mutex);
+		ida_free(&binderfs_minors, minor);
+		mutex_unlock(&binderfs_minors_mutex);
 		goto out;
+	}
 
 	inode->i_private = device;
 	info->control_dentry = dentry;

@@ -16,7 +16,7 @@ static const struct genl_split_ops binder_nl_ops[] = {
 };
 
 static const struct genl_multicast_group binder_nl_mcgrps[] = {
-	[BINDER_NLGRP_REPORT] = { "report", },
+	[BINDER_NLGRP_REPORT] = { "report", .flags = GENL_MCAST_CAP_NET_ADMIN },
 };
 
 struct genl_family binder_nl_family __ro_after_init = {
