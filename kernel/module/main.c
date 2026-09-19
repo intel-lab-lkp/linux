@@ -2287,6 +2287,22 @@ static int elf_validity_cache_index_versions(struct load_info *info, int flags)
 	 * number of entries in every section.
 	 */
 	if (vers_ext_crc) {
+		/*
+		 * The names section is read below as hdr + sh_offset, so it
+		 * must hold file data. A real one is SHT_PROGBITS.
+		 * elf_validity_cache_sechdrs() exempts SHT_NULL and
+		 * SHT_NOBITS from validate_section_offset() on the assumption
+		 * they have no contents, so a SHT_NOBITS __version_ext_names
+		 * would reach the walk with an offset that was never bounded.
+		 * Require the type; a SHT_PROGBITS section is already bounded
+		 * there, so its sh_offset is safe to dereference.
+		 */
+		if (info->sechdrs[vers_ext_name].sh_type != SHT_PROGBITS) {
+			pr_err("Invalid ELF __version_ext_names type: %u\n",
+			       info->sechdrs[vers_ext_name].sh_type);
+			return -ENOEXEC;
+		}
+
 		crc_count = info->sechdrs[vers_ext_crc].sh_size / sizeof(u32);
 		name = (void *)info->hdr +
 			info->sechdrs[vers_ext_name].sh_offset;
