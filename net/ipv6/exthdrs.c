@@ -598,11 +598,12 @@ looped_back:
 		oldhdr = ipv6_hdr(skb);
 	}
 	skb_push(skb, chdr_len);
+	memmove(skb->data, oldhdr, sizeof(struct ipv6hdr));
 	skb_reset_network_header(skb);
 	skb_mac_header_rebuild(skb);
 	skb_set_transport_header(skb, sizeof(struct ipv6hdr));
+	ipv6_hdr(skb)->nexthdr = NEXTHDR_ROUTING;
 
-	memmove(ipv6_hdr(skb), oldhdr, sizeof(struct ipv6hdr));
 	memcpy(skb_transport_header(skb), chdr, (chdr->hdrlen + 1) << 3);
 
 	ipv6_hdr(skb)->payload_len = htons(skb->len - sizeof(struct ipv6hdr));
