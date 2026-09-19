@@ -271,14 +271,27 @@ static int i845_check_cursor(struct intel_crtc_state *crtc_state,
 	return 0;
 }
 
-/* TODO: split into noarm+arm pair */
+static void i845_cursor_update_noarm(struct intel_dsb *dsb,
+				     struct intel_plane *plane,
+				     const struct intel_crtc_state *crtc_state,
+				     const struct intel_plane_state *plane_state)
+{
+	struct intel_display *display = to_intel_display(plane);
+	u32 pos = 0;
+
+	if (plane_state && plane_state->uapi.visible)
+		pos = intel_cursor_position(crtc_state, plane_state, false);
+
+	intel_de_write_fw(display, CURPOS(display, PIPE_A), pos);
+}
+
 static void i845_cursor_update_arm(struct intel_dsb *dsb,
 				   struct intel_plane *plane,
 				   const struct intel_crtc_state *crtc_state,
 				   const struct intel_plane_state *plane_state)
 {
 	struct intel_display *display = to_intel_display(plane);
-	u32 cntl = 0, base = 0, pos = 0, size = 0;
+	u32 cntl = 0, base = 0, size = 0;
 
 	if (plane_state && plane_state->uapi.visible) {
 		unsigned int width = drm_rect_width(&plane_state->uapi.dst);
@@ -290,7 +303,6 @@ static void i845_cursor_update_arm(struct intel_dsb *dsb,
 		size = CURSOR_HEIGHT(height) | CURSOR_WIDTH(width);
 
 		base = plane_state->surf;
-		pos = intel_cursor_position(crtc_state, plane_state, false);
 	}
 
 	/* On these chipsets we can only modify the base/size/stride
@@ -302,14 +314,11 @@ static void i845_cursor_update_arm(struct intel_dsb *dsb,
 		intel_de_write_fw(display, CURCNTR(display, PIPE_A), 0);
 		intel_de_write_fw(display, CURBASE(display, PIPE_A), base);
 		intel_de_write_fw(display, CURSIZE(display, PIPE_A), size);
-		intel_de_write_fw(display, CURPOS(display, PIPE_A), pos);
 		intel_de_write_fw(display, CURCNTR(display, PIPE_A), cntl);
 
 		plane->cursor.base = base;
 		plane->cursor.size = size;
 		plane->cursor.cntl = cntl;
-	} else {
-		intel_de_write_fw(display, CURPOS(display, PIPE_A), pos);
 	}
 }
 
@@ -649,7 +658,21 @@ static void skl_write_cursor_wm(struct intel_dsb *dsb,
 			   skl_cursor_ddb_reg_val(ddb));
 }
 
-/* TODO: split into noarm+arm pair */
+static void i9xx_cursor_update_noarm(struct intel_dsb *dsb,
+				     struct intel_plane *plane,
+				     const struct intel_crtc_state *crtc_state,
+				     const struct intel_plane_state *plane_state)
+{
+	struct intel_display *display = to_intel_display(plane);
+	enum pipe pipe = plane->pipe;
+	u32 pos = 0;
+
+	if (plane_state && plane_state->uapi.visible)
+		pos = intel_cursor_position(crtc_state, plane_state, false);
+
+	intel_de_write_dsb(display, dsb, CURPOS(display, pipe), pos);
+}
+
 static void i9xx_cursor_update_arm(struct intel_dsb *dsb,
 				   struct intel_plane *plane,
 				   const struct intel_crtc_state *crtc_state,
@@ -657,7 +680,7 @@ static void i9xx_cursor_update_arm(struct intel_dsb *dsb,
 {
 	struct intel_display *display = to_intel_display(plane);
 	enum pipe pipe = plane->pipe;
-	u32 cntl = 0, base = 0, pos = 0, fbc_ctl = 0;
+	u32 cntl = 0, base = 0, fbc_ctl = 0;
 
 	if (plane_state && plane_state->uapi.visible) {
 		int width = drm_rect_width(&plane_state->uapi.dst);
@@ -670,7 +693,6 @@ static void i9xx_cursor_update_arm(struct intel_dsb *dsb,
 			fbc_ctl = CUR_FBC_EN | CUR_FBC_HEIGHT(height - 1);
 
 		base = plane_state->surf;
-		pos = intel_cursor_position(crtc_state, plane_state, false);
 	}
 
 	/*
@@ -707,14 +729,12 @@ static void i9xx_cursor_update_arm(struct intel_dsb *dsb,
 		if (HAS_CUR_FBC(display))
 			intel_de_write_dsb(display, dsb, CUR_FBC_CTL(display, pipe), fbc_ctl);
 		intel_de_write_dsb(display, dsb, CURCNTR(display, pipe), cntl);
-		intel_de_write_dsb(display, dsb, CURPOS(display, pipe), pos);
 		intel_de_write_dsb(display, dsb, CURBASE(display, pipe), base);
 
 		plane->cursor.base = base;
 		plane->cursor.size = fbc_ctl;
 		plane->cursor.cntl = cntl;
 	} else {
-		intel_de_write_dsb(display, dsb, CURPOS(display, pipe), pos);
 		intel_de_write_dsb(display, dsb, CURBASE(display, pipe), base);
 	}
 }
@@ -1174,6 +1194,7 @@ intel_cursor_plane_create(struct intel_display *display,
 	if (display->platform.i845g || display->platform.i865g) {
 		cursor->max_stride = i845_cursor_max_stride;
 		cursor->min_alignment = i845_cursor_min_alignment;
+		cursor->update_noarm = i845_cursor_update_noarm;
 		cursor->update_arm = i845_cursor_update_arm;
 		cursor->disable_arm = i845_cursor_disable_arm;
 		cursor->get_hw_state = i845_cursor_get_hw_state;
@@ -1191,6 +1212,7 @@ intel_cursor_plane_create(struct intel_display *display,
 		if (intel_scanout_needs_vtd_wa(display))
 			cursor->vtd_guard = 2;
 
+		cursor->update_noarm = i9xx_cursor_update_noarm;
 		cursor->update_arm = i9xx_cursor_update_arm;
 		cursor->disable_arm = i9xx_cursor_disable_arm;
 		cursor->get_hw_state = i9xx_cursor_get_hw_state;
