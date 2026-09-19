@@ -1167,10 +1167,7 @@ static ssize_t delayed_removal_secs_store(struct device *dev,
 
 	mutex_lock(&head->subsys->lock);
 	head->delayed_removal_secs = sec;
-	if (sec)
-		set_bit(NVME_NSHEAD_QUEUE_IF_NO_PATH, &head->flags);
-	else
-		clear_bit(NVME_NSHEAD_QUEUE_IF_NO_PATH, &head->flags);
+	assign_bit(NVME_NSHEAD_QUEUE_IF_NO_PATH, &head->flags, sec);
 	mutex_unlock(&head->subsys->lock);
 	/*
 	 * Ensure that update to NVME_NSHEAD_QUEUE_IF_NO_PATH is seen
