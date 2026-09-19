@@ -352,9 +352,6 @@ static int udf_map_block(struct inode *inode, struct udf_map_rq *map)
 	int ret;
 	struct udf_inode_info *iinfo = UDF_I(inode);
 
-	if (WARN_ON_ONCE(iinfo->i_alloc_type == ICBTAG_FLAG_AD_IN_ICB))
-		return -EFSCORRUPTED;
-
 	map->oflags = 0;
 	if (!(map->iflags & UDF_MAP_CREATE)) {
 		struct kernel_lb_addr eloc;
@@ -364,6 +361,18 @@ static int udf_map_block(struct inode *inode, struct udf_map_rq *map)
 		int8_t etype;
 
 		down_read(&iinfo->i_data_sem);
+		/*
+		 * The allocation type may have changed back to in-ICB
+		 * after a caller checked it without holding i_data_sem:
+		 * e.g. a concurrent expand failure restores inline
+		 * allocation in udf_expand_file_adinicb(). Recheck here
+		 * under i_data_sem and fail gracefully instead of
+		 * warning about a transient state.
+		 */
+		if (iinfo->i_alloc_type == ICBTAG_FLAG_AD_IN_ICB) {
+			ret = -EFSCORRUPTED;
+			goto out_read;
+		}
 		ret = inode_bmap(inode, map->lblk, &epos, &eloc, &elen, &offset,
 				 &etype);
 		if (ret < 0)
