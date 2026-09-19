@@ -295,6 +295,7 @@ int ip6_xmit(const struct sock *sk, struct sk_buff *skb, struct flowi6 *fl6,
 	struct in6_addr *first_hop = &fl6->daddr;
 	struct dst_entry *dst = skb_dst(skb);
 	struct inet6_dev *idev = ip6_dst_idev(dst);
+	struct ipv6_txoptions opt_space;
 	struct net *net = sock_net(sk);
 	unsigned int head_room;
 	struct net_device *dev;
@@ -303,6 +304,9 @@ int ip6_xmit(const struct sock *sk, struct sk_buff *skb, struct flowi6 *fl6,
 	int seg_len = skb->len;
 	int ret, hlimit = -1;
 	u32 mtu;
+
+	if (unlikely(opt))
+		opt = __ipv6_fixup_options(&opt_space, opt);
 
 	rcu_read_lock();
 
