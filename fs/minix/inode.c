@@ -185,15 +185,15 @@ static bool minix_check_superblock(struct super_block *sb)
 		return false;
 	}
 
-	if (sbi->s_ninodes < 1 || sbi->s_firstdatazone <= 4 ||
-	    sbi->s_firstdatazone >= sbi->s_nzones)
+	if (sbi->s_ninodes == 0 || sbi->s_ninodes == UINT_MAX ||
+	    sbi->s_firstdatazone <= 4 || sbi->s_firstdatazone >= sbi->s_nzones)
 		return false;
 
 	/* Apparently minix can create filesystems that allocate more blocks for
 	 * the bitmaps than needed.  We simply ignore that, but verify it didn't
 	 * create one with not enough blocks and bail out if so.
 	 */
-	block = minix_blocks_needed(sbi->s_ninodes, sb->s_blocksize);
+	block = minix_blocks_needed((u64)sbi->s_ninodes + 1, sb->s_blocksize);
 	if (sbi->s_imap_blocks < block) {
 		printk("MINIX-fs: file system does not have enough "
 		       "imap blocks allocated. Refusing to mount.\n");
@@ -201,7 +201,7 @@ static bool minix_check_superblock(struct super_block *sb)
 	}
 
 	block = minix_blocks_needed(
-			(sbi->s_nzones - sbi->s_firstdatazone + 1),
+			(u64)sbi->s_nzones - sbi->s_firstdatazone + 1,
 			sb->s_blocksize);
 	if (sbi->s_zmap_blocks < block) {
 		printk("MINIX-fs: file system does not have enough "
