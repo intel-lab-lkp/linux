@@ -480,8 +480,10 @@ sg_read(struct file *filp, char __user *buf, size_t count, loff_t * ppos)
 
 	hp = &srp->header;
 	old_hdr = kzalloc(SZ_SG_HEADER, GFP_KERNEL);
-	if (!old_hdr)
-		return -ENOMEM;
+	if (!old_hdr) {
+		retval = -ENOMEM;
+		goto free_old_hdr;
+	}
 
 	old_hdr->reply_len = (int) hp->timeout;
 	old_hdr->pack_len = old_hdr->reply_len; /* old, strange behaviour */
@@ -543,10 +545,10 @@ sg_read(struct file *filp, char __user *buf, size_t count, loff_t * ppos)
 		}
 	} else
 		count = (old_hdr->result == 0) ? 0 : -EIO;
-	sg_finish_rem_req(srp);
-	sg_remove_request(sfp, srp);
 	retval = count;
 free_old_hdr:
+	sg_finish_rem_req(srp);
+	sg_remove_request(sfp, srp);
 	kfree(old_hdr);
 	return retval;
 }
@@ -1667,8 +1669,11 @@ init_sg(void)
 {
 	int rc;
 
-	if (scatter_elem_sz < PAGE_SIZE) {
+	if (scatter_elem_sz < (int)PAGE_SIZE) {
 		scatter_elem_sz = PAGE_SIZE;
+		scatter_elem_sz_prev = scatter_elem_sz;
+	} else if (scatter_elem_sz > (int)(PAGE_SIZE << MAX_PAGE_ORDER)) {
+		scatter_elem_sz = PAGE_SIZE << MAX_PAGE_ORDER;
 		scatter_elem_sz_prev = scatter_elem_sz;
 	}
 
@@ -1875,9 +1880,14 @@ sg_build_indirect(Sg_scatter_hold * schp, Sg_fd * sfp, int buff_size)
 
 	num = scatter_elem_sz;
 	if (unlikely(num != scatter_elem_sz_prev)) {
-		if (num < PAGE_SIZE) {
+		if (num < (int)PAGE_SIZE) {
+			num = PAGE_SIZE;
 			scatter_elem_sz = PAGE_SIZE;
 			scatter_elem_sz_prev = PAGE_SIZE;
+		} else if (num > (int)(PAGE_SIZE << MAX_PAGE_ORDER)) {
+			num = PAGE_SIZE << MAX_PAGE_ORDER;
+			scatter_elem_sz = PAGE_SIZE << MAX_PAGE_ORDER;
+			scatter_elem_sz_prev = PAGE_SIZE << MAX_PAGE_ORDER;
 		} else
 			scatter_elem_sz_prev = num;
 	}
