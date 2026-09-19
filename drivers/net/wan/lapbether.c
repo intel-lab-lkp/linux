@@ -133,11 +133,13 @@ static int lapbeth_rcv(struct sk_buff *skb, struct net_device *dev,
 		goto drop_unlock;
 
 	len = skb->data[0] + skb->data[1] * 256;
-	dev->stats.rx_packets++;
-	dev->stats.rx_bytes += len;
 
 	skb_pull(skb, 2);	/* Remove the length bytes */
-	skb_trim(skb, len);	/* Set the length of the data */
+	if (pskb_trim_rcsum(skb, len))
+		goto drop_unlock;
+
+	dev->stats.rx_packets++;
+	dev->stats.rx_bytes += len;
 
 	err = lapb_data_received(lapbeth->axdev, skb);
 	if (err != LAPB_OK) {
