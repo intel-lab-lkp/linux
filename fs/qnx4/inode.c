@@ -104,12 +104,15 @@ unsigned long qnx4_block_map( struct inode *inode, long iblock )
 				bh = sb_bread(inode->i_sb, i_xblk - 1);
 				if ( !bh ) {
 					QNX4DEBUG((KERN_ERR "qnx4: I/O error reading xtnt block [%ld])\n", i_xblk - 1));
-					return -EIO;
+					return 0;
 				}
 				xblk = (struct qnx4_xblk*)bh->b_data;
-				if ( memcmp( xblk->xblk_signature, "IamXblk", 7 ) ) {
+				if (memcmp(xblk->xblk_signature, "IamXblk", 7) ||
+				    xblk->xblk_num_xtnts == 0 ||
+				    xblk->xblk_num_xtnts > QNX4_MAX_XTNTS_PER_XBLK) {
 					QNX4DEBUG((KERN_ERR "qnx4: block at %ld is not a valid xtnt\n", qnx4_inode->i_xblk));
-					return -EIO;
+					brelse(bh);
+					return 0;
 				}
 			}
 			block = try_extent(&xblk->xblk_xtnts[ix], &offset);
