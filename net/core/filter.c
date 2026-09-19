@@ -5468,6 +5468,13 @@ static int sk_bpf_set_get_cb_flags(struct sock *sk, char *optval, bool getopt)
 	if (sk_bpf_cb_flags & ~SK_BPF_CB_MASK)
 		return -EINVAL;
 
+	if ((sk_bpf_cb_flags ^ sk->sk_bpf_cb_flags) & SK_BPF_CB_TIMESTAMPING_V2) {
+		if (sk_bpf_cb_flags & SK_BPF_CB_TIMESTAMPING_V2)
+			bpfts_v2_enable();
+		else
+			bpfts_v2_disable();
+	}
+
 	sk->sk_bpf_cb_flags = sk_bpf_cb_flags;
 
 	return 0;

@@ -2440,6 +2440,59 @@ void net_disable_timestamp(void)
 }
 EXPORT_SYMBOL(net_disable_timestamp);
 
+DEFINE_STATIC_KEY_FALSE(bpfts_v2_needed_key);
+EXPORT_SYMBOL(bpfts_v2_needed_key);
+#ifdef CONFIG_JUMP_LABEL
+static atomic_t bpfts_v2_needed_deferred;
+static atomic_t bpfts_v2_wanted;
+static void bpfts_v2_clear(struct work_struct *work)
+{
+	int deferred = atomic_xchg(&bpfts_v2_needed_deferred, 0);
+	int wanted;
+
+	wanted = atomic_add_return(deferred, &bpfts_v2_wanted);
+	if (wanted > 0)
+		static_branch_enable(&bpfts_v2_needed_key);
+	else
+		static_branch_disable(&bpfts_v2_needed_key);
+}
+static DECLARE_WORK(bpfts_v2_work, bpfts_v2_clear);
+#endif
+
+void bpfts_v2_enable(void)
+{
+#ifdef CONFIG_JUMP_LABEL
+	int wanted = atomic_read(&bpfts_v2_wanted);
+
+	while (wanted > 0) {
+		if (atomic_try_cmpxchg(&bpfts_v2_wanted, &wanted, wanted + 1))
+			return;
+	}
+	atomic_inc(&bpfts_v2_needed_deferred);
+	schedule_work(&bpfts_v2_work);
+#else
+	static_branch_inc(&bpfts_v2_needed_key);
+#endif
+}
+EXPORT_SYMBOL(bpfts_v2_enable);
+
+void bpfts_v2_disable(void)
+{
+#ifdef CONFIG_JUMP_LABEL
+	int wanted = atomic_read(&bpfts_v2_wanted);
+
+	while (wanted > 1) {
+		if (atomic_try_cmpxchg(&bpfts_v2_wanted, &wanted, wanted - 1))
+			return;
+	}
+	atomic_dec(&bpfts_v2_needed_deferred);
+	schedule_work(&bpfts_v2_work);
+#else
+	static_branch_dec(&bpfts_v2_needed_key);
+#endif
+}
+EXPORT_SYMBOL(bpfts_v2_disable);
+
 static inline void net_timestamp_set(struct sk_buff *skb)
 {
 	skb->tstamp = 0;

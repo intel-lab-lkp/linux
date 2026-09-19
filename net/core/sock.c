@@ -2365,6 +2365,9 @@ static void __sk_destruct(struct rcu_head *head)
 
 	sock_disable_timestamp(sk, SK_FLAGS_TIMESTAMP);
 
+	if (sk->sk_bpf_cb_flags & SK_BPF_CB_TIMESTAMPING_V2)
+		bpfts_v2_disable();
+
 #ifdef CONFIG_BPF_SYSCALL
 	bpf_sk_storage_free(sk);
 #endif
@@ -2554,6 +2557,8 @@ struct sock *sk_clone(const struct sock *sk, const gfp_t priority,
 
 	if (sock_needs_netstamp(sk) && newsk->sk_flags & SK_FLAGS_TIMESTAMP)
 		net_enable_timestamp();
+	if (newsk->sk_bpf_cb_flags & SK_BPF_CB_TIMESTAMPING_V2)
+		bpfts_v2_enable();
 
 	rcu_read_lock();
 	filter = rcu_dereference(sk->sk_filter);

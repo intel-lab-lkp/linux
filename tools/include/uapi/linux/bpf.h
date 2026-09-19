@@ -7143,8 +7143,9 @@ enum {
 
 enum {
 	SK_BPF_CB_TX_TIMESTAMPING	= 1<<0,
-	SK_BPF_CB_MASK			= (SK_BPF_CB_TX_TIMESTAMPING - 1) |
-					   SK_BPF_CB_TX_TIMESTAMPING
+	SK_BPF_CB_TIMESTAMPING_V2		= 1<<1,
+	SK_BPF_CB_MASK			= (SK_BPF_CB_TIMESTAMPING_V2 - 1) |
+					   SK_BPF_CB_TIMESTAMPING_V2
 };
 
 /* List of known BPF sock_ops operators.

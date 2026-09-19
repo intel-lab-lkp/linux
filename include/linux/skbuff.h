@@ -4519,6 +4519,10 @@ static inline void skb_set_delivery_type_by_clockid(struct sk_buff *skb,
 
 DECLARE_STATIC_KEY_FALSE(netstamp_needed_key);
 
+DECLARE_STATIC_KEY_FALSE(bpfts_v2_needed_key);
+void bpfts_v2_enable(void);
+void bpfts_v2_disable(void);
+
 /* It is used in the ingress path to clear the delivery_time.
  * If needed, set the skb->tstamp to the (rcv) timestamp.
  */
