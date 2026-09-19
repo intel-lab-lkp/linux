@@ -23,6 +23,8 @@
 
 #define HEALTH_CHECK_PERIOD (HZ * 2)
 
+#define AUTOSUSPEND_DELAY_MS 2000
+
 /* PCI VID definitions */
 #define PCI_VENDOR_ID_THALES	0x1269
 #define PCI_VENDOR_ID_QUECTEL	0x1eac
@@ -38,11 +40,12 @@
  * @name: name of the PCI module
  * @fw: firmware path (if any)
  * @edl: emergency download mode firmware path (if any)
- * @edl_trigger: capable of triggering EDL mode in the device (if supported)
  * @bar_num: PCI base address register to use for MHI MMIO register space
  * @dma_data_width: DMA transfer word size (32 or 64 bits)
  * @vf_dma_data_width: DMA transfer word size for VF's (optional)
  * @mru_default: default MRU size for MBIM network packets
+ * @autosuspend_delay: customized autosuspend_delay_ms value for specific mhi device
+ * @edl_trigger: capable of triggering EDL mode in the device (if supported)
  * @sideband_wake: Devices using dedicated sideband GPIO for wakeup instead
  *		   of inband wake support (such as sdx24)
  * @no_m3: M3 not supported
@@ -54,11 +57,12 @@ struct mhi_pci_dev_info {
 	const char *name;
 	const char *fw;
 	const char *edl;
-	bool edl_trigger;
 	unsigned int bar_num;
 	unsigned int dma_data_width;
 	unsigned int vf_dma_data_width;
 	unsigned int mru_default;
+	unsigned int autosuspend_delay;
+	bool edl_trigger;
 	bool sideband_wake;
 	bool no_m3;
 	bool reset_on_remove;
@@ -1371,6 +1375,7 @@ static int mhi_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	struct mhi_pci_device *mhi_pdev;
 	struct mhi_controller *mhi_cntrl;
 	unsigned int dma_data_width;
+	unsigned int autosuspend_delay;
 	int err;
 
 	dev_info(&pdev->dev, "MHI PCI device found: %s\n", info->name);
@@ -1395,6 +1400,9 @@ static int mhi_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	dma_data_width = (pdev->is_virtfn && info->vf_dma_data_width) ?
 			  info->vf_dma_data_width : info->dma_data_width;
+
+	autosuspend_delay = info->autosuspend_delay ? info->autosuspend_delay :
+			  AUTOSUSPEND_DELAY_MS;
 
 	mhi_cntrl->cntrl_dev = &pdev->dev;
 	mhi_cntrl->iova_start = 0;
@@ -1465,7 +1473,7 @@ static int mhi_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	/* Allow runtime suspend only if both PME from D3Hot and M3 are supported */
 	if (pci_pme_capable(pdev, PCI_D3hot) && !(info->no_m3)) {
-		pm_runtime_set_autosuspend_delay(&pdev->dev, 2000);
+		pm_runtime_set_autosuspend_delay(&pdev->dev, autosuspend_delay);
 		pm_runtime_use_autosuspend(&pdev->dev);
 		pm_runtime_mark_last_busy(&pdev->dev);
 		pm_runtime_put_noidle(&pdev->dev);
