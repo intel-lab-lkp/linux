@@ -971,6 +971,11 @@ affs_truncate(struct inode *inode)
 
 	while (ext_key) {
 		ext_bh = affs_bread(sb, ext_key);
+		if (!ext_bh) {
+			affs_error(sb, "truncate",
+				   "Cannot read extension block %u", ext_key);
+			break;
+		}
 		size = AFFS_SB(sb)->s_hashsize;
 		if (size > blkcnt - blk)
 			size = blkcnt - blk;
