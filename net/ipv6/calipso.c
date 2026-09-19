@@ -944,6 +944,10 @@ calipso_opt_insert(struct ipv6_opt_hdr *hop,
 		memcpy((char *)new + buf_len, (char *)hop + end, hop_len - end);
 		buf_len += hop_len - end;
 	}
+	if (buf_len > 8 * 256) {
+		kfree(new);
+		return ERR_PTR(-ENOSPC);
+	}
 	new->nexthdr = 0;
 	new->hdrlen = buf_len / 8 - 1;
 
@@ -1323,6 +1327,13 @@ static int calipso_skbuff_setattr(struct sk_buff *skb,
 
 	ip6_hdr = ipv6_hdr(skb);
 	if (ip6_hdr->nexthdr == NEXTHDR_HOP) {
+		if (!pskb_may_pull(skb, sizeof(*ip6_hdr) + sizeof(*hop)))
+			return -EINVAL;
+		ip6_hdr = ipv6_hdr(skb);
+		hop = (struct ipv6_opt_hdr *)(ip6_hdr + 1);
+		if (!pskb_may_pull(skb, sizeof(*ip6_hdr) + ipv6_optlen(hop)))
+			return -EINVAL;
+		ip6_hdr = ipv6_hdr(skb);
 		hop = (struct ipv6_opt_hdr *)(ip6_hdr + 1);
 		ret_val = calipso_opt_find(hop, &start, &end);
 		if (ret_val && ret_val != -ENOENT)
@@ -1341,6 +1352,8 @@ static int calipso_skbuff_setattr(struct sk_buff *skb,
 	/* At this point new_end aligns to 4n, so (new_end & 4) pads to 8n */
 	pad = ((new_end & 4) + (end & 7)) & 7;
 	len_delta = new_end - (int)end + pad;
+	if (start && (int)ipv6_optlen(hop) + len_delta > 8 * 256)
+		return -ENOSPC;
 	ret_val = skb_cow(skb,
 			  skb_headroom(skb) + (len_delta > 0 ? len_delta : 0));
 	if (ret_val < 0)
