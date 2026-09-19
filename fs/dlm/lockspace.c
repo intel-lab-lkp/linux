@@ -190,6 +190,7 @@ static int do_uevent(struct dlm_ls *ls, int in, unsigned int release_recover)
 {
 	char message[512] = {};
 	char *envp[] = { message, NULL };
+	int error;
 
 	if (in) {
 		kobject_uevent(&ls->ls_kobj, KOBJ_ONLINE);
@@ -203,8 +204,16 @@ static int do_uevent(struct dlm_ls *ls, int in, unsigned int release_recover)
 	/* dlm_controld will see the uevent, do the necessary group management
 	   and then write to sysfs to wake us */
 
-	wait_event(ls->ls_uevent_wait,
-		   test_and_clear_bit(LSFL_UEVENT_WAIT, &ls->ls_flags));
+	if (in) {
+		/* don't hang forever if dlm_controld never answers */
+		error = wait_event_killable(ls->ls_uevent_wait,
+			test_and_clear_bit(LSFL_UEVENT_WAIT, &ls->ls_flags));
+		if (error)
+			return error;
+	} else {
+		wait_event(ls->ls_uevent_wait,
+			   test_and_clear_bit(LSFL_UEVENT_WAIT, &ls->ls_flags));
+	}
 
 	log_rinfo(ls, "group event done %d", ls->ls_uevent_result);
 
