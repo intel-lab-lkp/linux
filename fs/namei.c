@@ -4621,9 +4621,7 @@ out_dput:
  * determine the type of file found from the error.
  * -EISDIR : a directory was found
  * -ELOOP  : a symlink was found
- * -ENODEV : a block or character device special file was found
- * -EFTYPE : any other non-regular file was found, such as FIFO or SOCK.
- *           or ->atomic_open responded to __O_REGULAR.
+ * -EFTYPE : any other non-regular file was found, device-special, FIFO or SOCK
  *
  * Returns: the opened struct file, or an error.
  */
@@ -4671,24 +4669,12 @@ struct file *vfs_lookup_open(struct path *parent, struct qstr *last,
 		error = -ENOENT;
 	} else if (!(file->f_mode & FMODE_CREATED) && (open_flag & O_EXCL)) {
 		error = -EEXIST;
-	} else if ((dentry->d_inode->i_mode & S_IFMT) != S_IFREG) {
-		switch (dentry->d_inode->i_mode & S_IFMT) {
-		case S_IFDIR:
+	} else if (!d_is_reg(dentry)) {
+		error = -EFTYPE;
+		if (d_is_dir(dentry))
 			error = -EISDIR;
-			break;
-		case S_IFLNK:
+		if (d_is_symlink(dentry))
 			error = -ELOOP;
-			break;
-		case S_IFBLK:
-		case S_IFCHR:
-			error = -ENODEV;
-			break;
-		case S_IFIFO:
-		case S_IFSOCK:
-		default:
-			error = -EFTYPE;
-			break;
-		}
 	} else if (!(file->f_mode & FMODE_OPENED)) {
 		nd.path.dentry = dentry;
 		error = vfs_open(&nd.path, file);
