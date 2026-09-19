@@ -43,6 +43,91 @@
 #define DW_IC_SDA_HOLD_MIN_VERS			0x3131312A /* "111*" == v1.11* */
 #define DW_IC_COMP_TYPE_VALUE			0x44570140 /* "DW" + 0x0140 */
 
+/*
+ * Logical register IDs. The physical offset backing each ID depends on the
+ * variant of the IP (selected via i2c_dw_select_variant() based on the
+ * device's compatible string) and is looked up at runtime through
+ * dev->regs[]. This lets a single set of driver code paths serve IP
+ * variants with different register layouts.
+ */
+enum dw_i2c_reg_idx {
+	DW_REG_IDX_CON,
+	DW_REG_IDX_TAR,
+	DW_REG_IDX_SAR,
+	DW_REG_IDX_DATA_CMD,
+	DW_REG_IDX_SS_SCL_HCNT,
+	DW_REG_IDX_SS_SCL_LCNT,
+	DW_REG_IDX_FS_SCL_HCNT,
+	DW_REG_IDX_FS_SCL_LCNT,
+	DW_REG_IDX_HS_SCL_HCNT,
+	DW_REG_IDX_HS_SCL_LCNT,
+	DW_REG_IDX_INTR_STAT,
+	DW_REG_IDX_INTR_MASK,
+	DW_REG_IDX_RAW_INTR_STAT,
+	DW_REG_IDX_RX_TL,
+	DW_REG_IDX_TX_TL,
+	DW_REG_IDX_CLR_INTR,
+	DW_REG_IDX_CLR_RX_UNDER,
+	DW_REG_IDX_CLR_RX_OVER,
+	DW_REG_IDX_CLR_TX_OVER,
+	DW_REG_IDX_CLR_RD_REQ,
+	DW_REG_IDX_CLR_TX_ABRT,
+	DW_REG_IDX_CLR_RX_DONE,
+	DW_REG_IDX_CLR_ACTIVITY,
+	DW_REG_IDX_CLR_STOP_DET,
+	DW_REG_IDX_CLR_START_DET,
+	DW_REG_IDX_CLR_GEN_CALL,
+	DW_REG_IDX_ENABLE,
+	DW_REG_IDX_STATUS,
+	DW_REG_IDX_TXFLR,
+	DW_REG_IDX_RXFLR,
+	DW_REG_IDX_SDA_HOLD,
+	DW_REG_IDX_TX_ABRT_SOURCE,
+	DW_REG_IDX_ENABLE_STATUS,
+	DW_REG_IDX_SMBUS_INTR_MASK,
+	DW_REG_IDX_COMP_PARAM_1,
+	DW_REG_IDX_COMP_VERSION,
+	DW_REG_IDX_COMP_TYPE,
+	DW_REG_IDX_MAX,
+};
+
+/*
+ * Bit positions within the CON register that could differ between IP
+ * variants. Values here match the DW_IC_CON_* macros in
+ * <linux/designware_i2c.h>.
+ */
+struct dw_i2c_con_bits {
+	u32 master;
+	u32 speed_std;
+	u32 speed_fast;
+	u32 speed_high;
+	u32 speed_mask;
+	u32 bit10_slave;
+	u32 bit10_master;
+	u32 restart_en;
+	u32 slave_disable;
+	u32 stop_det_ifaddressed;
+	u32 tx_empty_ctrl;
+	u32 rx_fifo_full_hld_ctrl;
+	u32 bus_clear_ctrl;
+};
+
+/* Logical interrupt IDs for i2c_dw_ack_intr(); DW_INTR_IDX_ALL = "current pending interrupt" */
+enum dw_i2c_intr_idx {
+	DW_INTR_IDX_ALL,
+	DW_INTR_IDX_RX_UNDER,
+	DW_INTR_IDX_RX_OVER,
+	DW_INTR_IDX_TX_OVER,
+	DW_INTR_IDX_RD_REQ,
+	DW_INTR_IDX_TX_ABRT,
+	DW_INTR_IDX_RX_DONE,
+	DW_INTR_IDX_ACTIVITY,
+	DW_INTR_IDX_STOP_DET,
+	DW_INTR_IDX_START_DET,
+	DW_INTR_IDX_GEN_CALL,
+	DW_INTR_IDX_MAX,
+};
+
 #define DW_IC_INTR_DEFAULT_MASK			(DW_IC_INTR_RX_FULL | \
 						 DW_IC_INTR_TX_ABRT | \
 						 DW_IC_INTR_STOP_DET)
@@ -126,6 +211,9 @@ struct reset_control;
  * struct dw_i2c_dev - private i2c-designware data
  * @dev: driver model device node
  * @map: IO registers map
+ * @regs: logical-to-physical register offset table for the active IP variant
+ * @con_bits: CON register bit-layout for the active IP variant
+ * @intr_clr: logical intr number to reg table for the active IP variant
  * @sysmap: System controller registers map
  * @base: IO registers pointer
  * @ext: Extended IO registers pointer
@@ -189,6 +277,9 @@ struct reset_control;
 struct dw_i2c_dev {
 	struct device		*dev;
 	struct regmap		*map;
+	const u32		*regs;
+	const struct dw_i2c_con_bits *con_bits;
+	const u32		*intr_clr;
 	struct regmap		*sysmap;
 	void __iomem		*base;
 	void __iomem		*ext;
@@ -265,6 +356,7 @@ struct i2c_dw_semaphore_callbacks {
 	int	(*probe)(struct dw_i2c_dev *dev);
 };
 
+void i2c_dw_select_variant(struct dw_i2c_dev *dev);
 u32 i2c_dw_scl_hcnt(struct dw_i2c_dev *dev, unsigned int reg, u32 ic_clk,
 		    u32 tSYMBOL, u32 tf, int offset);
 u32 i2c_dw_scl_lcnt(struct dw_i2c_dev *dev, unsigned int reg, u32 ic_clk,
@@ -283,12 +375,12 @@ extern const struct dev_pm_ops i2c_dw_dev_pm_ops;
 static inline void __i2c_dw_enable(struct dw_i2c_dev *dev)
 {
 	dev->status |= STATUS_ACTIVE;
-	regmap_write(dev->map, DW_IC_ENABLE, 1);
+	regmap_write(dev->map, dev->regs[DW_REG_IDX_ENABLE], 1);
 }
 
 static inline void __i2c_dw_disable_nowait(struct dw_i2c_dev *dev)
 {
-	regmap_write(dev->map, DW_IC_ENABLE, 0);
+	regmap_write(dev->map, dev->regs[DW_REG_IDX_ENABLE], 0);
 	dev->status &= ~STATUS_ACTIVE;
 }
 
@@ -297,7 +389,7 @@ static inline void __i2c_dw_write_intr_mask(struct dw_i2c_dev *dev,
 {
 	unsigned int val = dev->flags & ACCESS_POLLING ? 0 : intr_mask;
 
-	regmap_write(dev->map, DW_IC_INTR_MASK, val);
+	regmap_write(dev->map, dev->regs[DW_REG_IDX_INTR_MASK], val);
 	dev->sw_mask = intr_mask;
 }
 
@@ -305,9 +397,17 @@ static inline void __i2c_dw_read_intr_mask(struct dw_i2c_dev *dev,
 					   unsigned int *intr_mask)
 {
 	if (!(dev->flags & ACCESS_POLLING))
-		regmap_read(dev->map, DW_IC_INTR_MASK, intr_mask);
+		regmap_read(dev->map, dev->regs[DW_REG_IDX_INTR_MASK], intr_mask);
 	else
 		*intr_mask = dev->sw_mask;
+}
+
+/* Acknowledge a logical interrupt via dev->intr_clr[]: reg ID */
+static inline void i2c_dw_ack_intr(struct dw_i2c_dev *dev, enum dw_i2c_intr_idx intr)
+{
+	unsigned int dummy;
+
+	regmap_read(dev->map, dev->regs[dev->intr_clr[intr]], &dummy);
 }
 
 void __i2c_dw_disable(struct dw_i2c_dev *dev);

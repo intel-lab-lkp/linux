@@ -53,7 +53,7 @@ int i2c_dw_unreg_slave(struct i2c_client *slave)
 {
 	struct dw_i2c_dev *dev = i2c_get_adapdata(slave->adapter);
 
-	regmap_write(dev->map, DW_IC_INTR_MASK, 0);
+	regmap_write(dev->map, dev->regs[DW_REG_IDX_INTR_MASK], 0);
 	i2c_dw_disable(dev);
 	synchronize_irq(dev->irq);
 	dev->slave = NULL;
@@ -65,7 +65,7 @@ int i2c_dw_unreg_slave(struct i2c_client *slave)
 
 static u32 i2c_dw_read_clear_intrbits_slave(struct dw_i2c_dev *dev)
 {
-	unsigned int stat, dummy;
+	unsigned int stat;
 
 	/*
 	 * The IC_INTR_STAT register just indicates "enabled" interrupts.
@@ -79,7 +79,7 @@ static u32 i2c_dw_read_clear_intrbits_slave(struct dw_i2c_dev *dev)
 	 *
 	 * The raw version might be useful for debugging purposes.
 	 */
-	regmap_read(dev->map, DW_IC_INTR_STAT, &stat);
+	regmap_read(dev->map, dev->regs[DW_REG_IDX_INTR_STAT], &stat);
 
 	/*
 	 * Do not use the IC_CLR_INTR register to clear interrupts, or
@@ -89,23 +89,23 @@ static u32 i2c_dw_read_clear_intrbits_slave(struct dw_i2c_dev *dev)
 	 * Instead, use the separately-prepared IC_CLR_* registers.
 	 */
 	if (stat & DW_IC_INTR_TX_ABRT)
-		regmap_read(dev->map, DW_IC_CLR_TX_ABRT, &dummy);
+		i2c_dw_ack_intr(dev, DW_INTR_IDX_TX_ABRT);
 	if (stat & DW_IC_INTR_RX_UNDER)
-		regmap_read(dev->map, DW_IC_CLR_RX_UNDER, &dummy);
+		i2c_dw_ack_intr(dev, DW_INTR_IDX_RX_UNDER);
 	if (stat & DW_IC_INTR_RX_OVER)
-		regmap_read(dev->map, DW_IC_CLR_RX_OVER, &dummy);
+		i2c_dw_ack_intr(dev, DW_INTR_IDX_RX_OVER);
 	if (stat & DW_IC_INTR_TX_OVER)
-		regmap_read(dev->map, DW_IC_CLR_TX_OVER, &dummy);
+		i2c_dw_ack_intr(dev, DW_INTR_IDX_TX_OVER);
 	if (stat & DW_IC_INTR_RX_DONE)
-		regmap_read(dev->map, DW_IC_CLR_RX_DONE, &dummy);
+		i2c_dw_ack_intr(dev, DW_INTR_IDX_RX_DONE);
 	if (stat & DW_IC_INTR_ACTIVITY)
-		regmap_read(dev->map, DW_IC_CLR_ACTIVITY, &dummy);
+		i2c_dw_ack_intr(dev, DW_INTR_IDX_ACTIVITY);
 	if (stat & DW_IC_INTR_STOP_DET)
-		regmap_read(dev->map, DW_IC_CLR_STOP_DET, &dummy);
+		i2c_dw_ack_intr(dev, DW_INTR_IDX_STOP_DET);
 	if (stat & DW_IC_INTR_START_DET)
-		regmap_read(dev->map, DW_IC_CLR_START_DET, &dummy);
+		i2c_dw_ack_intr(dev, DW_INTR_IDX_START_DET);
 	if (stat & DW_IC_INTR_GEN_CALL)
-		regmap_read(dev->map, DW_IC_CLR_GEN_CALL, &dummy);
+		i2c_dw_ack_intr(dev, DW_INTR_IDX_GEN_CALL);
 
 	return stat;
 }
@@ -119,9 +119,9 @@ irqreturn_t i2c_dw_isr_slave(struct dw_i2c_dev *dev)
 	unsigned int raw_stat, stat, enabled, tmp;
 	u8 val = 0, slave_activity;
 
-	regmap_read(dev->map, DW_IC_ENABLE, &enabled);
-	regmap_read(dev->map, DW_IC_RAW_INTR_STAT, &raw_stat);
-	regmap_read(dev->map, DW_IC_STATUS, &tmp);
+	regmap_read(dev->map, dev->regs[DW_REG_IDX_ENABLE], &enabled);
+	regmap_read(dev->map, dev->regs[DW_REG_IDX_RAW_INTR_STAT], &raw_stat);
+	regmap_read(dev->map, dev->regs[DW_REG_IDX_STATUS], &tmp);
 	slave_activity = ((tmp & DW_IC_STATUS_SLAVE_ACTIVITY) >> 6);
 
 	if (!enabled || !(raw_stat & ~DW_IC_INTR_ACTIVITY) || !dev->slave)
@@ -141,7 +141,7 @@ irqreturn_t i2c_dw_isr_slave(struct dw_i2c_dev *dev)
 		}
 
 		do {
-			regmap_read(dev->map, DW_IC_DATA_CMD, &tmp);
+			regmap_read(dev->map, dev->regs[DW_REG_IDX_DATA_CMD], &tmp);
 			if (tmp & DW_IC_DATA_CMD_FIRST_DATA_BYTE)
 				i2c_slave_event(dev->slave,
 						I2C_SLAVE_WRITE_REQUESTED,
@@ -149,13 +149,13 @@ irqreturn_t i2c_dw_isr_slave(struct dw_i2c_dev *dev)
 			val = tmp;
 			i2c_slave_event(dev->slave, I2C_SLAVE_WRITE_RECEIVED,
 					&val);
-			regmap_read(dev->map, DW_IC_STATUS, &tmp);
+			regmap_read(dev->map, dev->regs[DW_REG_IDX_STATUS], &tmp);
 		} while (tmp & DW_IC_STATUS_RFNE);
 	}
 
 	if (stat & DW_IC_INTR_RD_REQ) {
 		if (slave_activity) {
-			regmap_read(dev->map, DW_IC_CLR_RD_REQ, &tmp);
+			i2c_dw_ack_intr(dev, DW_INTR_IDX_RD_REQ);
 
 			if (!(dev->status & STATUS_READ_IN_PROGRESS)) {
 				i2c_slave_event(dev->slave,
@@ -168,7 +168,7 @@ irqreturn_t i2c_dw_isr_slave(struct dw_i2c_dev *dev)
 						I2C_SLAVE_READ_PROCESSED,
 						&val);
 			}
-			regmap_write(dev->map, DW_IC_DATA_CMD, val);
+			regmap_write(dev->map, dev->regs[DW_REG_IDX_DATA_CMD], val);
 		}
 	}
 
@@ -185,8 +185,8 @@ void i2c_dw_configure_slave(struct dw_i2c_dev *dev)
 
 	dev->functionality |= I2C_FUNC_SLAVE;
 
-	dev->slave_cfg = DW_IC_CON_RX_FIFO_FULL_HLD_CTRL |
-			 DW_IC_CON_RESTART_EN | DW_IC_CON_STOP_DET_IFADDRESSED;
+	dev->slave_cfg = dev->con_bits->rx_fifo_full_hld_ctrl |
+			 dev->con_bits->restart_en | dev->con_bits->stop_det_ifaddressed;
 }
 EXPORT_SYMBOL_GPL(i2c_dw_configure_slave);
 
