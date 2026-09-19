@@ -102,6 +102,7 @@ static const struct {
 	{ NFS4ERR_BADTYPE,	-EBADTYPE	},
 	{ NFS4ERR_SYMLINK,	-ELOOP		},
 	{ NFS4ERR_DEADLOCK,	-EDEADLK	},
+	{ NFS4ERR_WRONG_TYPE,	-EFTYPE		},
 };
 
 static const struct {
