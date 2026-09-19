@@ -2306,36 +2306,53 @@ static int set_mesh(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
 static void mesh_send_start_complete(struct hci_dev *hdev, void *data, int err)
 {
 	struct mgmt_mesh_tx *mesh_tx = data;
-	struct mgmt_cp_mesh_send *send = (void *)mesh_tx->param;
+	struct mgmt_cp_mesh_send *send;
 	unsigned long mesh_send_interval;
 	u8 mgmt_err = mgmt_status(err);
 
-	/* Report any errors here, but don't report completion */
+	hci_dev_lock(hdev);
+	if (mesh_tx != mgmt_mesh_next(hdev, NULL)) {
+		hci_dev_unlock(hdev);
+		return;
+	}
 
+	/* Report any errors here, but don't report completion */
 	if (mgmt_err) {
 		hci_dev_clear_flag(hdev, HCI_MESH_SENDING);
 		/* Send Complete Error Code for handle */
 		mesh_send_complete(hdev, mesh_tx, false);
+		hci_dev_unlock(hdev);
 		return;
 	}
 
+	send = (void *)mesh_tx->param;
 	mesh_send_interval = msecs_to_jiffies((send->cnt) * 25);
 	queue_delayed_work(hdev->req_workqueue, &hdev->mesh_send_done,
 			   mesh_send_interval);
+	hci_dev_unlock(hdev);
 }
 
 static int mesh_send_sync(struct hci_dev *hdev, void *data)
 {
 	struct mgmt_mesh_tx *mesh_tx = data;
-	struct mgmt_cp_mesh_send *send = (void *)mesh_tx->param;
+	struct mgmt_cp_mesh_send *send;
 	struct adv_info *adv, *next_instance;
 	u8 instance = hdev->le_num_of_adv_sets + 1;
 	u16 timeout, duration;
 	int err = 0;
 
-	if (hdev->le_num_of_adv_sets <= hdev->adv_instance_cnt)
-		return MGMT_STATUS_BUSY;
+	hci_dev_lock(hdev);
+	if (mesh_tx != mgmt_mesh_next(hdev, NULL)) {
+		hci_dev_unlock(hdev);
+		return MGMT_STATUS_FAILED;
+	}
 
+	if (hdev->le_num_of_adv_sets <= hdev->adv_instance_cnt) {
+		hci_dev_unlock(hdev);
+		return MGMT_STATUS_BUSY;
+	}
+
+	send = (void *)mesh_tx->param;
 	timeout = 1000;
 	duration = send->cnt * INTERVAL_TO_MS(hdev->le_adv_max_interval);
 	adv = hci_add_adv_instance(hdev, instance, 0,
@@ -2371,6 +2388,8 @@ static int mesh_send_sync(struct hci_dev *hdev, void *data)
 		 */
 		instance = 0;
 	}
+
+	hci_dev_unlock(hdev);
 
 	if (instance)
 		return hci_schedule_adv_instance_sync(hdev, instance, true);
@@ -2534,10 +2553,8 @@ static int mesh_send(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
 		err = mgmt_cmd_status(sk, hdev->id, MGMT_OP_MESH_SEND,
 				      MGMT_STATUS_FAILED);
 
-		if (mesh_tx) {
-			if (sending)
-				mgmt_mesh_remove(mesh_tx);
-		}
+		if (mesh_tx)
+			mgmt_mesh_remove(mesh_tx);
 	} else {
 		hci_dev_set_flag(hdev, HCI_MESH_SENDING);
 
