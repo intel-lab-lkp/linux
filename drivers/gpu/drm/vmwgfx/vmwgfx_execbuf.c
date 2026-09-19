@@ -1512,6 +1512,10 @@ static int vmw_cmd_dma(struct vmw_private *dev_priv,
 	cmd = container_of(header, typeof(*cmd), header);
 
 	if (unlikely(header->size < sizeof(cmd->body) + sizeof(*suffix))) {
+		VMW_DEBUG_USER("Invalid DMA command size.\n");
+		return -EINVAL;
+	}
+	if (unlikely(header->size < sizeof(cmd->body) + sizeof(*suffix))) {
 		VMW_DEBUG_USER("Illegal SVGA_3D_CMD_SURFACE_DMA size.\n");
 		return -EINVAL;
 	}
@@ -1572,6 +1576,10 @@ static int vmw_cmd_draw(struct vmw_private *dev_priv,
 	VMW_DECLARE_CMD_VAR(*cmd, SVGA3dCmdDrawPrimitives);
 	SVGA3dVertexDecl *decl = (SVGA3dVertexDecl *)(
 		(unsigned long)header + sizeof(*cmd));
+	if (unlikely(header->size < sizeof(cmd->body))) {
+		VMW_DEBUG_USER("Draw command size too small.\n");
+		return -EINVAL;
+	}
 	SVGA3dPrimitiveRange *range;
 	uint32_t i;
 	uint32_t maxnum;
@@ -1930,6 +1938,11 @@ static int vmw_cmd_shader_define(struct vmw_private *dev_priv,
 
 	if (unlikely(!dev_priv->has_mob))
 		return 0;
+
+	if (unlikely(cmd->header.size < sizeof(cmd->body))) {
+		VMW_DEBUG_USER("Invalid shader define command size.\n");
+		return -EINVAL;
+	}
 
 	size = cmd->header.size - sizeof(cmd->body);
 	ret = vmw_compat_shader_add(dev_priv, vmw_context_res_man(ctx),

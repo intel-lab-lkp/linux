@@ -100,7 +100,7 @@ vmw_surface_calculate_pitch(const SVGA3dSurfaceDesc *desc,
 
 	vmw_surface_get_size_in_blocks(desc, size, &blocks);
 
-	pitch = blocks.width * desc->pitchBytesPerBlock;
+	pitch = clamped_umul32(blocks.width, desc->pitchBytesPerBlock);
 
 	return pitch;
 }
@@ -159,11 +159,13 @@ vmw_surface_get_serialized_size(SVGA3dSurfaceFormat format,
 	for (mip = 0; mip < num_mip_levels; mip++) {
 		struct drm_vmw_size size =
 			vmw_surface_get_mip_size(base_level_size, mip);
-		total_size += vmw_surface_get_image_buffer_size(desc,
-								  &size, 0);
+		total_size = min_t(u64,
+			(u64)total_size +
+			vmw_surface_get_image_buffer_size(desc, &size, 0),
+			U32_MAX);
 	}
 
-	return total_size * num_layers;
+	return clamped_umul32(total_size, num_layers);
 }
 
 /**

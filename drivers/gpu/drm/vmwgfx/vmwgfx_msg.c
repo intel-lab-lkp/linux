@@ -431,7 +431,7 @@ int vmw_host_get_guestinfo(const char *guest_info_param,
 		/* Remove reply code, which are the first 2 characters of
 		 * the reply
 		 */
-		reply_len = max(reply_len - 2, (size_t) 0);
+		reply_len = reply_len > 2 ? reply_len - 2 : 0;
 		reply_len = min(reply_len, *length);
 
 		if (reply_len > 0)
@@ -572,7 +572,8 @@ int vmw_msg_ioctl(struct drm_device *dev, void *data,
 			goto out_msg;
 		}
 		if (reply && reply_len > 0) {
-			if (copy_to_user((void __user *)((unsigned long)arg->receive),
+			if (reply_len > arg->receive_len ||
+			    copy_to_user((void __user *)((unsigned long)arg->receive),
 					 reply, reply_len)) {
 				DRM_ERROR("Failed to copy message to userspace.\n");
 				kfree(reply);
@@ -1045,7 +1046,7 @@ int vmw_mksstat_add_ioctl(struct drm_device *dev, void *data,
 	hypervisor_ppn_add((PPN64)page_to_pfn(page));
 
 	dev_priv->mksstat_user_pages[slot] = page;
-	atomic_set(&dev_priv->mksstat_user_pids[slot], task_pgrp_vnr(current));
+	atomic_set(&dev_priv->mksstat_user_pids[slot], pid_nr(task_pgrp(current)));
 
 	arg->id = slot;
 
@@ -1104,7 +1105,7 @@ int vmw_mksstat_remove_ioctl(struct drm_device *dev, void *data,
 
 	DRM_DEV_INFO(dev->dev, "pid=%d arg.id=%zu\n", current->pid, slot);
 
-	pgid = task_pgrp_vnr(current);
+	pgid = pid_nr(task_pgrp(current));
 	pid = atomic_cmpxchg(&dev_priv->mksstat_user_pids[slot], pgid, MKSSTAT_PID_RESERVED);
 
 	if (!pid)

@@ -535,7 +535,8 @@ static int vmw_user_bo_synccpu_release(struct drm_file *filp,
 
 	if (!ret) {
 		if (!(flags & drm_vmw_synccpu_allow_cs)) {
-			atomic_dec(&vmw_bo->cpu_writers);
+			if (!atomic_add_unless(&vmw_bo->cpu_writers, -1, 0))
+				ret = -EINVAL;
 		}
 		vmw_user_bo_unref(&vmw_bo);
 	}

@@ -481,6 +481,10 @@ static int vmw_cotable_resize(struct vmw_resource *res, size_t new_size)
 		goto out_wait;
 	}
 
+	ret = dma_resv_reserve_fences(bo->base.resv, 1);
+	if (unlikely(ret))
+		goto out_wait;
+
 	vmw_resource_mob_detach(res);
 	res->guest_memory_bo = buf;
 	res->guest_memory_size = new_size;
@@ -504,10 +508,6 @@ static int vmw_cotable_resize(struct vmw_resource *res, size_t new_size)
 	/* Let go of the old mob. */
 	vmw_user_bo_unref(&old_buf);
 	res->id = vcotbl->type;
-
-	ret = dma_resv_reserve_fences(bo->base.resv, 1);
-	if (unlikely(ret))
-		goto out_wait;
 
 	/* Release the pin acquired in vmw_bo_create */
 	ttm_bo_unpin(bo);

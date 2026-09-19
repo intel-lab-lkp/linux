@@ -785,14 +785,26 @@ int vmw_surface_define_ioctl(struct drm_device *dev, void *data,
 
 	for (i = 0; i < DRM_VMW_MAX_SURFACE_FACES; ++i) {
 		for (j = 0; j < metadata->mip_levels[i]; ++j) {
-			uint32_t stride = vmw_surface_calculate_pitch(
-						  desc, cur_size);
+			uint32_t stride;
 
+			if (unlikely(cur_size->width == 0 ||
+				     cur_size->height == 0 ||
+				     cur_size->depth == 0)) {
+				ret = -EINVAL;
+				goto out_no_copy;
+			}
+			stride = vmw_surface_calculate_pitch(desc, cur_size);
 			cur_offset->face = i;
 			cur_offset->mip = j;
 			cur_offset->bo_offset = cur_bo_offset;
-			cur_bo_offset += vmw_surface_get_image_buffer_size
-				(desc, cur_size, stride);
+			if (unlikely(check_add_overflow(cur_bo_offset,
+							vmw_surface_get_image_buffer_size(desc,
+											  cur_size,
+											  stride),
+							&cur_bo_offset))) {
+				ret = -EINVAL;
+				goto out_no_copy;
+			}
 			++cur_offset;
 			++cur_size;
 		}
@@ -967,12 +979,14 @@ static int vmw_buffer_prime_to_surface_base(struct vmw_private *dev_priv,
 	if (ret) {
 		drm_warn(&dev_priv->drm,
 			 "Couldn't add an object ref for the buffer (%d).\n", *handle);
+		ttm_base_object_unref(&base);
 		goto out;
 	}
 
 	*base_p = base;
 out:
 	vmw_user_bo_unref(&bo);
+	drm_gem_handle_delete(file_priv, *handle);
 
 	return ret;
 }
@@ -1440,7 +1454,7 @@ int vmw_gb_surface_reference_ioctl(struct drm_device *dev, void *data,
 	    (union drm_vmw_gb_surface_reference_arg *)data;
 	struct drm_vmw_surface_arg *req = &arg->req;
 	struct drm_vmw_gb_surface_ref_rep *rep = &arg->rep;
-	struct drm_vmw_gb_surface_ref_ext_rep rep_ext;
+	struct drm_vmw_gb_surface_ref_ext_rep rep_ext = {};
 	int ret;
 
 	ret = vmw_gb_surface_reference_internal(dev, req, &rep_ext, file_priv);
@@ -1720,6 +1734,7 @@ vmw_gb_surface_reference_internal(struct drm_device *dev,
 	srf = &user_srf->srf;
 	if (!srf->res.guest_memory_bo) {
 		DRM_ERROR("Shared GB surface is missing a backup buffer.\n");
+		ret = -EINVAL;
 		goto out_bad_resource;
 	}
 	metadata = &srf->metadata;
@@ -1755,9 +1770,13 @@ vmw_gb_surface_reference_internal(struct drm_device *dev,
 		SVGA3D_FLAGS_UPPER_32(metadata->flags);
 	rep->creq.multisample_pattern = metadata->multisample_pattern;
 	rep->creq.quality_level = metadata->quality_level;
+	rep->creq.buffer_byte_stride = metadata->buffer_byte_stride;
 	rep->creq.must_be_zero = 0;
 
 out_bad_resource:
+	if (unlikely(ret != 0))
+		ttm_ref_object_base_unref(vmw_fpriv(file_priv)->tfile,
+					  base->handle);
 	ttm_base_object_unref(&base);
 
 	return ret;

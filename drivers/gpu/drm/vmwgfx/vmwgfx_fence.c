@@ -703,6 +703,7 @@ int vmw_fence_event_ioctl(struct drm_device *dev, void *data,
 			if (unlikely(ret != 0)) {
 				DRM_ERROR("Failed to reference a fence "
 					  "object.\n");
+				ttm_base_object_unref(&base);
 				goto out_no_ref_obj;
 			}
 			handle = base->handle;

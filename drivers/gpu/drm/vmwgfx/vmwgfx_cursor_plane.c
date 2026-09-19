@@ -116,6 +116,12 @@ static void vmw_cursor_update_mob(struct vmw_private *vmw,
 	u32 *image = vmw_bo_map_and_cache(bo);
 	const u32 image_size = vps->base.crtc_w * vps->base.crtc_h * sizeof(*image);
 
+	if (!bo || !vps->cursor.mob)
+		return;
+	if (image_size > bo->tbo.base.size ||
+	    sizeof(*header) + image_size > vps->cursor.mob->tbo.base.size)
+		return;
+
 	header = vmw_bo_map_and_cache(vps->cursor.mob);
 	alpha_header = &header->header.alphaHeader;
 
@@ -359,7 +365,9 @@ void vmw_kms_cursor_snoop(struct vmw_surface *srf,
 	    box->x != 0    || box->y != 0    || box->z != 0    ||
 	    box->srcx != 0 || box->srcy != 0 || box->srcz != 0 ||
 	    box->d != 1    || box_count != 1 ||
-	    box->w > VMW_CURSOR_SNOOP_WIDTH || box->h > VMW_CURSOR_SNOOP_HEIGHT) {
+	    box->w == 0    || box->h == 0    ||
+	    box->w > VMW_CURSOR_SNOOP_WIDTH || box->h > VMW_CURSOR_SNOOP_HEIGHT ||
+	    cmd->dma.guest.pitch > image_pitch) {
 		/* TODO handle none page aligned offsets */
 		/* TODO handle more dst & src != 0 */
 		/* TODO handle more then one copy */
@@ -374,6 +382,9 @@ void vmw_kms_cursor_snoop(struct vmw_surface *srf,
 
 	kmap_offset = cmd->dma.guest.ptr.offset >> PAGE_SHIFT;
 	kmap_num = (VMW_CURSOR_SNOOP_HEIGHT * image_pitch) >> PAGE_SHIFT;
+
+	if (bo->base.size < ((kmap_offset + kmap_num) << PAGE_SHIFT))
+		return;
 
 	ret = ttm_bo_reserve(bo, true, false, NULL);
 	if (unlikely(ret != 0)) {
@@ -393,7 +404,7 @@ void vmw_kms_cursor_snoop(struct vmw_surface *srf,
 	} else {
 		/* Image is unsigned pointer. */
 		for (i = 0; i < box->h; i++)
-			memcpy(srf->snooper.image + i * image_pitch,
+			memcpy((u8 *)srf->snooper.image + i * image_pitch,
 			       virtual + i * cmd->dma.guest.pitch,
 			       box->w * desc->pitchBytesPerBlock);
 	}
@@ -548,7 +559,9 @@ vmw_cursor_buffer_changed(struct vmw_plane_state *new_vps,
 			old_image = vmw_bo_map_and_cache(old_bo);
 			new_image = vmw_bo_map_and_cache(new_bo);
 
-			if (old_image && new_image && old_image != new_image)
+			if (old_image && new_image && old_image != new_image &&
+			    size <= old_bo->tbo.base.size &&
+			    size <= new_bo->tbo.base.size)
 				changed = memcmp(old_image, new_image, size) !=
 					  0;
 
@@ -727,6 +740,14 @@ int vmw_cursor_plane_atomic_check(struct drm_plane *plane,
 	/* Turning off */
 	if (!fb)
 		return 0;
+
+	if (new_state->crtc_w <= 0 || new_state->crtc_h <= 0 ||
+	    new_state->crtc_w > vmw->fb_max_width ||
+	    new_state->crtc_h > vmw->fb_max_height) {
+		drm_warn(&vmw->drm, "Invalid cursor dimensions (%d, %d)\n",
+			 new_state->crtc_w, new_state->crtc_h);
+		return -EINVAL;
+	}
 
 	update_type = vmw_cursor_update_type(vmw, vps);
 	if (update_type == VMW_CURSOR_UPDATE_LEGACY) {
