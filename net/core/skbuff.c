@@ -5749,7 +5749,10 @@ void __skb_tstamp_tx(struct sk_buff *orig_skb,
 #endif
 			skb = alloc_skb(0, GFP_ATOMIC);
 	} else {
-		skb = skb_clone(orig_skb, GFP_ATOMIC);
+		if (static_branch_unlikely(&bpfts_v2_needed_key) && hwtstamps)
+			skb = pskb_copy(orig_skb, GFP_ATOMIC);
+		else
+			skb = skb_clone(orig_skb, GFP_ATOMIC);
 
 		if (skb_orphan_frags_rx(skb, GFP_ATOMIC)) {
 			kfree_skb(skb);
