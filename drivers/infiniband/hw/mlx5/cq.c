@@ -563,6 +563,13 @@ repoll:
 		xa_lock(&dev->sig_mrs);
 		sig = xa_load(&dev->sig_mrs,
 				mlx5_base_mkey(be32_to_cpu(sig_err_cqe->mkey)));
+		if (!sig) {
+			xa_unlock(&dev->sig_mrs);
+			mlx5_ib_warn(dev, "CQN: 0x%x Got SIGERR on unknown mkey: 0x%x\n",
+				     cq->mcq.cqn,
+				     be32_to_cpu(sig_err_cqe->mkey));
+			goto repoll;
+		}
 		get_sig_err_item(sig_err_cqe, &sig->err_item);
 		sig->sig_err_exists = true;
 		sig->sigerr_count++;
