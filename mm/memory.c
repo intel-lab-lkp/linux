@@ -4356,6 +4356,71 @@ static bool wp_can_reuse_anon_folio(struct folio *folio,
 }
 
 /*
+ * The pages of the folio around the one that faulted are handled in aligned
+ * blocks of this many PTEs: a 64K folio with 4K pages, and the size of a
+ * contpte block on arm64.
+ */
+#define WP_REUSE_NR_PTES	16
+
+/*
+ * wp_can_reuse_anon_folio() found a large folio to be exclusive to this MM.
+ * That holds for all of its pages and not only for the one that faulted: mark
+ * the ones in the same block exclusive as well and map them writable, like
+ * mprotect() would. Each of them would otherwise take a write fault of its own
+ * that repeats the check on the very same folio.
+ *
+ * The PTE that faulted is among them; wp_page_reuse() completes it.
+ */
+static void wp_reuse_large_anon_folio(struct vm_fault *vmf,
+		struct folio *folio)
+{
+	const fpb_t flags = FPB_RESPECT_WRITE | FPB_RESPECT_SOFT_DIRTY;
+	const unsigned long idx = folio_page_idx(folio, vmf->page);
+	struct vm_area_struct *vma = vmf->vma;
+	unsigned long addr = vmf->address;
+	unsigned long block = ALIGN_DOWN(addr, WP_REUSE_NR_PTES * PAGE_SIZE);
+	unsigned long nr_before, nr_after, end;
+	struct page *page;
+	unsigned int nr, i;
+	pte_t *ptep, pte;
+
+	/* Stay within the folio, the VMA and the block. */
+	nr_before = min3(idx, (addr - block) >> PAGE_SHIFT,
+			 (addr - vma->vm_start) >> PAGE_SHIFT);
+	nr_after = min3(folio_nr_pages(folio) - idx,
+			(block + WP_REUSE_NR_PTES * PAGE_SIZE - addr) >> PAGE_SHIFT,
+			(vma->vm_end - addr) >> PAGE_SHIFT);
+	end = addr + (nr_after << PAGE_SHIFT);
+	addr -= nr_before << PAGE_SHIFT;
+	ptep = vmf->pte - nr_before;
+	page = vmf->page - nr_before;
+
+	for (; addr != end; addr += nr * PAGE_SIZE, ptep += nr, page += nr) {
+		pte = ptep_get(ptep);
+		nr = 1;
+
+		/* Unmapped or replaced since, or writable already. */
+		if (!pte_present(pte) || pte_pfn(pte) != page_to_pfn(page) ||
+		    pte_write(pte))
+			continue;
+
+		nr = folio_pte_batch_flags(folio, NULL, ptep, &pte,
+					   (end - addr) >> PAGE_SHIFT, flags);
+		for (i = 0; i < nr; i++)
+			if (!PageAnonExclusive(page + i))
+				SetPageAnonExclusive(page + i);
+
+		/* The PTEs of a batch agree on everything this looks at. */
+		if (!can_change_pte_writable(vma, addr, pte))
+			continue;
+
+		pte = modify_prot_start_ptes(vma, addr, ptep, nr);
+		modify_prot_commit_ptes(vma, addr, ptep, pte,
+					pte_mkwrite(pte, vma), nr);
+	}
+}
+
+/*
  * This routine handles present pages, when
  * * users try to write to a shared page (FAULT_FLAG_WRITE)
  * * GUP wants to take a R/O pin on a possibly shared anonymous page
@@ -4449,8 +4514,14 @@ static vm_fault_t do_wp_page(struct vm_fault *vmf)
 	 */
 	if (folio && folio_test_anon(folio) &&
 	    (PageAnonExclusive(vmf->page) || wp_can_reuse_anon_folio(folio, vma))) {
-		if (!PageAnonExclusive(vmf->page))
-			SetPageAnonExclusive(vmf->page);
+		if (!PageAnonExclusive(vmf->page)) {
+			if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) &&
+			    folio_test_large(folio) && likely(!unshare) &&
+			    likely(vma->vm_flags & VM_WRITE))
+				wp_reuse_large_anon_folio(vmf, folio);
+			else
+				SetPageAnonExclusive(vmf->page);
+		}
 		if (unlikely(unshare)) {
 			pte_unmap_unlock(vmf->pte, vmf->ptl);
 			return 0;
