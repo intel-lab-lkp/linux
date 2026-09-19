@@ -827,7 +827,8 @@ struct st7571_device *st7571_probe(struct device *dev,
 	st7571->regmap = regmap;
 
 	st7571->hwbuf = devm_kzalloc(st7571->dev,
-				     (st7571->nlines * st7571->ncols * st7571->bpp) / 8,
+				     (round_up(st7571->nlines, 8) *
+				      st7571->ncols * st7571->bpp) / 8,
 				     GFP_KERNEL);
 	if (!st7571->hwbuf)
 		return ERR_PTR(-ENOMEM);
