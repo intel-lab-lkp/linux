@@ -5589,6 +5589,11 @@ int tcp_send_rcvq(struct sock *sk, struct msghdr *msg, size_t size)
 		WARN_ON_ONCE(fragstolen); /* should not happen */
 		__kfree_skb(skb);
 	}
+	if (!RB_EMPTY_ROOT(&tcp_sk(sk)->out_of_order_queue)) {
+		tcp_ofo_queue(sk);
+		if (tcp_sk(sk)->rx_opt.num_sacks)
+			tcp_sack_remove(tcp_sk(sk));
+	}
 	return size;
 
 err_free:
