@@ -1874,6 +1874,9 @@ void pm_runtime_reinit(struct device *dev)
 	if (dev->power.runtime_status == RPM_ACTIVE)
 		pm_runtime_set_suspended(dev);
 
+	if (dev->power.use_autosuspend)
+		pm_runtime_dont_use_autosuspend(dev);
+
 	if (dev->power.irq_safe) {
 		spin_lock_irq(&dev->power.lock);
 		dev->power.irq_safe = 0;
