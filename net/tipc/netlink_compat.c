@@ -881,7 +881,7 @@ static int tipc_nl_compat_name_table_dump_header(struct tipc_nl_compat_msg *msg)
 	if (TLV_GET_DATA_LEN(msg->req) < (int)sizeof(struct tipc_name_table_query))
 		return -EINVAL;
 
-	depth = ntohl(ntq->depth);
+	depth = ntohl(ntq->depth) & ~TIPC_NTQ_ALLTYPES;
 
 	if (depth > 4)
 		depth = 4;
@@ -932,6 +932,7 @@ static int tipc_nl_compat_name_table_dump(struct tipc_nl_compat_msg *msg,
 	if (!(depth & TIPC_NTQ_ALLTYPES) &&
 	    (type != nla_get_u32(publ[TIPC_NLA_PUBL_TYPE])))
 		return 0;
+	depth &= ~TIPC_NTQ_ALLTYPES;
 	if (lowbound && (lowbound > nla_get_u32(publ[TIPC_NLA_PUBL_UPPER])))
 		return 0;
 	if (upbound && (upbound < nla_get_u32(publ[TIPC_NLA_PUBL_LOWER])))
@@ -1138,6 +1139,9 @@ static int tipc_nl_compat_net_set(struct tipc_nl_compat_cmd_doit *cmd,
 {
 	u32 val;
 	struct nlattr *net;
+
+	if (TLV_GET_DATA_LEN(msg->req) < (int)sizeof(__be32))
+		return -EINVAL;
 
 	val = ntohl(*(__be32 *)TLV_DATA(msg->req));
 
