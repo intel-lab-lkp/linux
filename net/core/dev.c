@@ -2501,11 +2501,17 @@ static inline void net_timestamp_set(struct sk_buff *skb)
 		skb->tstamp = ktime_get_real();
 }
 
-#define net_timestamp_check(COND, SKB)				\
-	if (static_branch_unlikely(&netstamp_needed_key)) {	\
-		if ((COND) && !(SKB)->tstamp)			\
-			(SKB)->tstamp = ktime_get_real();	\
-	}							\
+#define net_timestamp_check(COND, SKB)					\
+	if (static_branch_unlikely(&netstamp_needed_key) ||		\
+	    static_branch_unlikely(&bpfts_v2_needed_key)) {		\
+		if (static_branch_unlikely(&netstamp_needed_key) &&	\
+		    (COND) && !(SKB)->tstamp)				\
+			(SKB)->tstamp = ktime_get_real();		\
+		if (static_branch_unlikely(&bpfts_v2_needed_key) &&	\
+		    !skb_hwtstamps(SKB)->hwtstamp)			\
+			skb_hwtstamps(SKB)->start_time =		\
+				(SKB)->tstamp ?: ktime_get_real();	\
+	}								\
 
 bool is_skb_forwardable(const struct net_device *dev, const struct sk_buff *skb)
 {
