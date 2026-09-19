@@ -211,6 +211,7 @@ static const char * const omen_thermal_profile_boards[] = {
 	"8BAD",
 	"8C58",
 	"8E41",
+	"8F1C",
 };
 
 /* DMI Board names of Omen laptops that are specifically set to be thermal
@@ -220,6 +221,7 @@ static const char * const omen_thermal_profile_boards[] = {
 static const char * const omen_thermal_profile_force_v0_boards[] = {
 	"8607",
 	"8746", "8747", "8748", "8749", "874A",
+	"8F1C",
 };
 
 /* DMI board names of Omen laptops that have a thermal profile timer which will
@@ -229,6 +231,7 @@ static const char * const omen_thermal_profile_force_v0_boards[] = {
 static const char * const omen_timed_thermal_profile_boards[] = {
 	"8A15", "8A42",
 	"8BAD",
+	"8F1C",
 };
 
 /* DMI Board names of Victus 16-d laptops */
