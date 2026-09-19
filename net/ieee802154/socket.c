@@ -552,7 +552,7 @@ static int dgram_ioctl(struct sock *sk, int cmd, int *karg)
 			 * of this packet since that is all
 			 * that will be read.
 			 */
-			*karg = skb->len - ieee802154_hdr_length(skb);
+			*karg = skb->len;
 		}
 		spin_unlock_bh(&sk->sk_receive_queue.lock);
 		return 0;
