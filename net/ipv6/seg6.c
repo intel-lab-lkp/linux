@@ -138,8 +138,8 @@ out:
 static struct genl_family seg6_genl_family;
 
 static const struct nla_policy seg6_genl_policy[SEG6_ATTR_MAX + 1] = {
-	[SEG6_ATTR_DST]				= { .type = NLA_BINARY,
-		.len = sizeof(struct in6_addr) },
+	[SEG6_ATTR_DST]				=
+		NLA_POLICY_EXACT_LEN(sizeof(struct in6_addr)),
 	[SEG6_ATTR_DSTLEN]			= { .type = NLA_S32, },
 	[SEG6_ATTR_HMACKEYID]		= { .type = NLA_U32, },
 	[SEG6_ATTR_SECRET]			= { .type = NLA_BINARY, },
@@ -242,7 +242,8 @@ static int seg6_genl_set_tunsrc(struct sk_buff *skb, struct genl_info *info)
 
 	sdata = seg6_pernet(net);
 
-	if (!info->attrs[SEG6_ATTR_DST])
+	if (!info->attrs[SEG6_ATTR_DST] ||
+	    nla_len(info->attrs[SEG6_ATTR_DST]) != sizeof(struct in6_addr))
 		return -EINVAL;
 
 	val = nla_data(info->attrs[SEG6_ATTR_DST]);
