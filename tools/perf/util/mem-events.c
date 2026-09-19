@@ -82,6 +82,7 @@ static const char *perf_pmu__mem_events_name(struct perf_pmu *pmu, int i,
 					     char *buf, size_t buf_size)
 {
 	struct perf_mem_event *e;
+	const char *name;
 
 	if (i >= PERF_MEM_EVENTS__MAX || !pmu)
 		return NULL;
@@ -90,24 +91,26 @@ static const char *perf_pmu__mem_events_name(struct perf_pmu *pmu, int i,
 	if (!e || !e->name)
 		return NULL;
 
+	name = e->name;
+
 	if (i == PERF_MEM_EVENTS__LOAD || i == PERF_MEM_EVENTS__LOAD_STORE) {
 		if (e->ldlat) {
 			if (!e->aux_event) {
 				/* ARM and Most of Intel */
 				scnprintf(buf, buf_size,
-					  e->name, pmu->name,
+					  name, pmu->name,
 					  perf_mem_events__loads_ldlat);
 			} else {
 				/* Intel with mem-loads-aux event */
 				scnprintf(buf, buf_size,
-					  e->name, pmu->name, pmu->name,
+					  name, pmu->name, pmu->name,
 					  perf_mem_events__loads_ldlat);
 			}
 		} else {
 			if (!e->aux_event) {
 				/* AMD and POWER */
 				scnprintf(buf, buf_size,
-					  e->name, pmu->name);
+					  name, pmu->name);
 			} else {
 				return NULL;
 			}
@@ -117,7 +120,7 @@ static const char *perf_pmu__mem_events_name(struct perf_pmu *pmu, int i,
 
 	if (i == PERF_MEM_EVENTS__STORE) {
 		scnprintf(buf, buf_size,
-			  e->name, pmu->name);
+			  name, pmu->name);
 		return buf;
 	}
 
