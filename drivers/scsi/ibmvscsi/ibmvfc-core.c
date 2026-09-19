@@ -992,6 +992,8 @@ static int ibmvfc_reenable_crq_queue(struct ibmvfc_host *vhost)
 	vhost->do_scsi_login = 0;
 	vhost->do_nvme_login = 0;
 	vhost->do_nvme_register = 0;
+	if (vhost->nvme_scrqs.scrqs)
+		vhost->nvme_enabled = 1;
 	spin_unlock(vhost->crq.q_lock);
 	spin_unlock_irqrestore(&vhost->host->host_lock, flags);
 
@@ -1034,6 +1036,8 @@ static int ibmvfc_reset_crq(struct ibmvfc_host *vhost)
 	vhost->do_scsi_login = 0;
 	vhost->do_nvme_login = 0;
 	vhost->do_nvme_register = 0;
+	if (vhost->nvme_scrqs.scrqs)
+		vhost->nvme_enabled = 1;
 
 	/* Clean out the queue */
 	memset(crq->msgs.crq, 0, PAGE_SIZE);
@@ -6531,7 +6535,10 @@ static void ibmvfc_reg_sub_crqs(struct ibmvfc_host *vhost,
 		if (ibmvfc_register_channel(vhost, channels, i)) {
 			for (j = i; j > 0; j--)
 				ibmvfc_deregister_channel(vhost, channels, j - 1);
-			vhost->do_enquiry = 0;
+			if (channels->protocol == IBMVFC_PROTO_SCSI)
+				vhost->do_enquiry = 0;
+			else
+				vhost->nvme_enabled = 0;
 			return;
 		}
 	}
