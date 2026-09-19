@@ -698,7 +698,9 @@ static int attach_auth_trunc(struct xfrm_algo_auth **algpp, u8 *props,
 		NL_SET_ERR_MSG(extack, "Requested AUTH_TRUNC algorithm not found");
 		return -ENOSYS;
 	}
-	if (ualg->alg_trunc_len > algo->uinfo.auth.icv_fullbits) {
+	if (ualg->alg_trunc_len > algo->uinfo.auth.icv_fullbits ||
+	    (ualg->alg_trunc_len & 7) ||
+	    (ualg->alg_trunc_len > 0 && ualg->alg_trunc_len < 32)) {
 		NL_SET_ERR_MSG(extack, "Invalid length requested for truncated ICV");
 		return -EINVAL;
 	}
