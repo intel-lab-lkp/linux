@@ -657,7 +657,9 @@ ssize_t __hfsplus_getxattr(struct inode *inode, const char *name,
 				fd.entryoffset +
 				offsetof(struct hfsplus_attr_inline_data,
 				length));
-		if (record_length > HFSPLUS_MAX_INLINE_DATA_SIZE) {
+		if (record_length > HFSPLUS_MAX_INLINE_DATA_SIZE ||
+		    offsetof(struct hfsplus_attr_inline_data, raw_bytes) +
+			    record_length > fd.entrylength) {
 			pr_err("invalid xattr record size\n");
 			res = -EIO;
 			goto out;

@@ -401,6 +401,31 @@ static int hfsplus_reconfigure(struct fs_context *fc)
 			sb->s_flags |= SB_RDONLY;
 			fc->sb_flags |= SB_RDONLY;
 		}
+
+		if (!(fc->sb_flags & SB_RDONLY) && !sbi->hidden_dir) {
+			struct inode *root = d_inode(sb->s_root);
+			struct qstr str = QSTR_INIT(HFSP_HIDDENDIR_NAME,
+						    sizeof(HFSP_HIDDENDIR_NAME) - 1);
+			int err;
+
+			mutex_lock(&sbi->vh_mutex);
+			sbi->hidden_dir = hfsplus_new_inode(sb, root, S_IFDIR);
+			if (!sbi->hidden_dir) {
+				mutex_unlock(&sbi->vh_mutex);
+				return -ENOMEM;
+			}
+			err = hfsplus_create_cat(sbi->hidden_dir->i_ino, root,
+						 &str, sbi->hidden_dir);
+			if (err) {
+				iput(sbi->hidden_dir);
+				sbi->hidden_dir = NULL;
+				mutex_unlock(&sbi->vh_mutex);
+				return err;
+			}
+			hfsplus_cat_write_inode(sbi->hidden_dir);
+			hfsplus_cat_write_inode(root);
+			mutex_unlock(&sbi->vh_mutex);
+		}
 	}
 	return 0;
 }

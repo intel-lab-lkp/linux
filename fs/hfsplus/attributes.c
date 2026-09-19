@@ -83,7 +83,7 @@ int hfsplus_attr_build_key(struct super_block *sb, hfsplus_btree_key *key,
 
 hfsplus_attr_entry *hfsplus_alloc_attr_entry(void)
 {
-	return kmem_cache_alloc(hfsplus_attr_tree_cachep, GFP_KERNEL);
+	return kmem_cache_zalloc(hfsplus_attr_tree_cachep, GFP_KERNEL);
 }
 
 void hfsplus_destroy_attr_entry(hfsplus_attr_entry *entry)
