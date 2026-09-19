@@ -397,7 +397,7 @@ static long swap_inode_boot_loader(struct super_block *sb,
 	if (inode->i_nlink != 1 || !S_ISREG(inode->i_mode) ||
 	    IS_SWAPFILE(inode) || IS_ENCRYPTED(inode) ||
 	    (EXT4_I(inode)->i_flags & EXT4_JOURNAL_DATA_FL) ||
-	    ext4_has_inline_data(inode)) {
+	    ext4_has_inline_data(inode) || ext4_has_inline_data(inode_bl)) {
 		err = -EINVAL;
 		goto journal_err_out;
 	}
@@ -461,6 +461,8 @@ static long swap_inode_boot_loader(struct super_block *sb,
 	size_bl = (qsize_t)(inode_bl->i_blocks) * (1 << 9) + inode_bl->i_bytes;
 	diff = size - size_bl;
 	swap_inode_data(inode, inode_bl);
+	ext4_clear_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
+	ext4_clear_inode_state(inode_bl, EXT4_STATE_MAY_INLINE_DATA);
 
 	inode_set_ctime_current(inode);
 	inode_set_ctime_current(inode_bl);
