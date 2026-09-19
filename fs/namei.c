@@ -4554,7 +4554,12 @@ retry:
 		goto out_dput;
 	}
 
-	error = try_break_deleg(dir_inode, LEASE_BREAK_DIR_CREATE, &delegated_inode);
+	if (op->open_flag & O_NONBLOCK)
+		error = try_break_deleg(dir_inode, LEASE_BREAK_DIR_CREATE,
+					NULL);
+	else
+		error = try_break_deleg(dir_inode, LEASE_BREAK_DIR_CREATE,
+					&delegated_inode);
 	if (error)
 		goto out_dput;
 
