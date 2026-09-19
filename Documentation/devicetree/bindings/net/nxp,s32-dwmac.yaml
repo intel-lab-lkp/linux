@@ -15,7 +15,8 @@ description:
   The SoC series S32G2xx and S32G3xx feature one DWMAC instance,
   the SoC S32R45 has two instances. The devices can use RGMII/RMII/MII
   interface over Pinctrl device or the output can be routed
-  to the embedded SerDes for SGMII connectivity.
+  to the embedded SerDes for SGMII connectivity, in which case the
+  SerDes XPCS lane acting as the PCS is referenced via pcs-handle.
   The DWMAC instances have connected all RX/TX queues interrupts,
   enabling load balancing of data traffic across all CPU cores.
 
@@ -80,6 +81,14 @@ properties:
       - const: tx
       - const: rx
       - const: ptp_ref
+
+  pcs-handle:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    maxItems: 1
+    description:
+      phandle pointing to the SerDes XPCS lane child node that provides
+      the SGMII PCS for this MAC. See
+      Documentation/devicetree/bindings/phy/nxp,s32g-serdes.yaml.
 
 required:
   - clocks
