@@ -358,7 +358,7 @@ static int software_key_eds_op(struct kernel_pkey_params *params,
 		BUG();
 	}
 
-	if (!issig && ret == 0)
+	if (params->op == kernel_pkey_encrypt && ret == 0)
 		ret = crypto_akcipher_maxsize(tfm);
 
 error_free_tfm:
