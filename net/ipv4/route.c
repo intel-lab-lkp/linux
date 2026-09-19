@@ -3087,8 +3087,10 @@ static int rt_fill_info(struct net *net, __be32 dst, __be32 src,
 							 r, portid);
 
 				if (err <= 0) {
-					if (err == 0)
+					if (err == 0) {
+						nlmsg_end(skb, nlh);
 						return 0;
+					}
 					goto nla_put_failure;
 				}
 			} else

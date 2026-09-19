@@ -547,6 +547,13 @@ static netdev_tx_t reg_vif_xmit(struct sk_buff *skb, struct net_device *dev)
 		return err;
 	}
 
+	if (!pskb_may_pull(skb, sizeof(struct iphdr))) {
+		DEV_STATS_INC(dev, tx_dropped);
+		rcu_read_unlock();
+		kfree_skb(skb);
+		return NETDEV_TX_OK;
+	}
+
 	DEV_STATS_ADD(dev, tx_bytes, skb->len);
 	DEV_STATS_INC(dev, tx_packets);
 
@@ -2498,6 +2505,7 @@ int ipmr_get_route(struct net *net, struct sk_buff *skb,
 		skb_push(skb2, sizeof(struct iphdr));
 		skb_reset_network_header(skb2);
 		iph = ip_hdr(skb2);
+		memset(iph, 0, sizeof(*iph));
 		iph->ihl = sizeof(struct iphdr) >> 2;
 		iph->saddr = saddr;
 		iph->daddr = daddr;
