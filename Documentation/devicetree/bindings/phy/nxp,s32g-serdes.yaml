@@ -1,0 +1,258 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/phy/nxp,s32g-serdes.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: NXP S32G2xxx/S32G3xxx SerDes PHY subsystem
+
+maintainers:
+  - Ghennadi Procopciuc <ghennadi.procopciuc@nxp.com>
+  - Jan Petrous <jan.petrous@oss.nxp.com>
+
+description: |
+  The SerDes subsystem multiplexes two SerDes lanes between one PCIe
+  controller PHY and two Synopsys DesignWare XPCS (Ethernet PCS) instances,
+  behind a shared 2-lane combo PHY. The active routing is selected by the
+  SS_RW_REG_0[SUBSYS_MODE] field.
+
+  Reference-manual working modes described by this binding:
+
+  Mode  Lane0   Lane1   PHY refclk (MHz)  Description
+  ------------------------------------------------------------
+  0     PCIe    PCIe    100               PCIe x2
+  1     PCIe    XPCS0   100               PCIe x1 + SGMII
+  2     PCIe    XPCS1   100               PCIe x1 + SGMII
+  3     XPCS0   XPCS1   100 or 125        dual SGMII, 1.25 Gbit/s
+
+  Which Ethernet MAC an XPCS instance feeds is fixed by the SoC integration
+  and differs per SoC and per SerDes instance - on S32G3 SerDes_0, XPCS0
+  feeds GMAC0 and XPCS1 feeds PFE_MAC2, while on SerDes_1 the same two
+  instances feed PFE_MAC0 and PFE_MAC1. That mapping is a property of the
+  SoC, not of this binding, and is resolved by the driver.
+
+  The 3.125 Gbit/s working modes are not described here yet. Distinguishing
+  them from mode 3 requires a per-lane 2500BASE-X capability, which this
+  binding does not express; the reference clock does not distinguish them
+  either, as both accept 100 or 125 MHz. They are added by a follow-up.
+
+  SUBSYS_MODE is not encoded in the devicetree. It is derived at probe from
+  information already present in standard form:
+    - the lane mux, from the per-lane child nodes below;
+    - the XPCS instance a lane feeds, from nxp,xpcs-instance (this is what
+      distinguishes modes 1 and 2).
+  Each mode above has a unique lane mux, so the mode is a pure function of
+  the child nodes. The reference-clock rate is validated against the
+  derived mode; it is never used to select it.
+
+  Both lanes must always be described, even a lane the board does not wire
+  out to a connector. The lane mux is a property of the hardware
+  SUBSYS_MODE, not of the board routing: in mode 1, for example, the
+  subsystem internally routes lane 1 to XPCS0 whether or not the board
+  connects that lane to anything. The child nodes describe that fixed
+  hardware mux, so both must be present; omitting a lane leaves the mode
+  underivable and the probe fails with -EINVAL. Which of those lanes is
+  actually used by a given board is expressed elsewhere (the consumer's
+  phys / pcs-handle reference), not by leaving the lane out here.
+
+  The full reference-manual mode tables differ per SoC, which is why S32G2
+  and S32G3 use distinct compatibles without a fallback between them.
+
+  They also differ between the two SerDes instances of one SoC, so each
+  instance additionally carries a compatible naming it, with the per-SoC
+  string as fallback:
+
+    serdes0: compatible = "nxp,s32g3-serdes0", "nxp,s32g3-serdes";
+    serdes1: compatible = "nxp,s32g3-serdes1", "nxp,s32g3-serdes";
+
+  For the modes described here the two instances behave identically and a
+  driver need only match the fallback. They diverge outside this scope:
+  on S32G3 the 3.125 Gbit/s dual-XPCS mode 4 exists on SerDes_1 only, and
+  on S32G2 only SerDes_1 reaches 3.125 Gbit/s at all. Recording the
+  instance now means the follow-up that adds those modes is purely
+  additive - it matches the specific strings and needs no devicetree
+  change.
+
+  The same mechanism covers SoCs whose instances differ in kind rather
+  than in degree: on S32R47 one SerDes has no PCIe controller at all, so
+  its compatible must be distinguishable in order to reject a PCIe lane
+  child in schema rather than at probe time.
+
+properties:
+  compatible:
+    oneOf:
+      - items:
+          - enum:
+              - nxp,s32g2-serdes0
+              - nxp,s32g2-serdes1
+          - const: nxp,s32g2-serdes
+      - items:
+          - enum:
+              - nxp,s32g3-serdes0
+              - nxp,s32g3-serdes1
+          - const: nxp,s32g3-serdes
+
+  reg:
+    maxItems: 4
+
+  reg-names:
+    items:
+      - const: ss-pcie
+      - const: pcie-phy
+      - const: xpcs0
+      - const: xpcs1
+
+  clocks:
+    minItems: 4
+    maxItems: 5
+
+  clock-names:
+    minItems: 4
+    items:
+      - const: axi
+      - const: aux
+      - const: apb
+      - const: ref
+      - const: ext
+    description:
+      The combo PHY reference can be taken from the internal reference
+      clock ("ref") or from the external reference pad ("ext"). A board
+      that routes the external pad lists both; the external reference is
+      then the one used.
+
+  resets:
+    maxItems: 2
+
+  reset-names:
+    items:
+      - const: serdes
+      - const: pcie
+
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 0
+
+patternProperties:
+  '^phy@[01]$':
+    description: One SerDes lane. The unit address is the physical lane index.
+    type: object
+    additionalProperties: false
+
+    properties:
+      reg:
+        description: Physical lane index.
+        maximum: 1
+
+      compatible:
+        enum:
+          - nxp,s32g-serdes-pcie-phy
+          - nxp,s32g-serdes-xpcs
+
+      '#phy-cells':
+        const: 0
+
+      nxp,xpcs-instance:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        enum: [0, 1]
+        description:
+          DesignWare XPCS instance this lane is routed to. Required for, and
+          only valid on, XPCS lanes. Distinguishes modes 1 and 2; for the
+          dual-XPCS mode the instance equals the lane index.
+
+    required:
+      - reg
+      - compatible
+
+    allOf:
+      - if:
+          properties:
+            compatible:
+              const: nxp,s32g-serdes-xpcs
+          required:
+            - compatible
+        then:
+          # An XPCS lane is not a generic PHY provider. It is referenced by
+          # the Ethernet controller through pcs-handle, not through phys.
+          required:
+            - nxp,xpcs-instance
+          properties:
+            '#phy-cells': false
+        else:
+          required:
+            - '#phy-cells'
+          properties:
+            nxp,xpcs-instance: false
+
+required:
+  - compatible
+  - reg
+  - reg-names
+  - clocks
+  - clock-names
+  - resets
+  - reset-names
+  - '#address-cells'
+  - '#size-cells'
+
+additionalProperties: false
+
+examples:
+  # PCIe x1 on lane 0 + 1G SGMII on lane 1 via XPCS0 (derived mode 1).
+  - |
+    serdes@40480000 {
+        compatible = "nxp,s32g3-serdes0", "nxp,s32g3-serdes";
+        reg = <0x40480000 0x108>,
+              <0x40483008 0x10>,
+              <0x40482000 0x800>,
+              <0x40482800 0x800>;
+        reg-names = "ss-pcie", "pcie-phy", "xpcs0", "xpcs1";
+        clocks = <&clks 1>, <&clks 2>, <&clks 3>, <&clks 4>;
+        clock-names = "axi", "aux", "apb", "ref";
+        resets = <&scmi_reset 1>, <&scmi_reset 0>;
+        reset-names = "serdes", "pcie";
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        phy@0 {
+            reg = <0>;
+            compatible = "nxp,s32g-serdes-pcie-phy";
+            #phy-cells = <0>;
+        };
+
+        phy@1 {
+            reg = <1>;
+            compatible = "nxp,s32g-serdes-xpcs";
+            nxp,xpcs-instance = <0>;
+        };
+    };
+
+  # Dual 1G SGMII (derived mode 3).
+  - |
+    serdes@44180000 {
+        compatible = "nxp,s32g3-serdes1", "nxp,s32g3-serdes";
+        reg = <0x44180000 0x108>,
+              <0x44183008 0x10>,
+              <0x44182000 0x800>,
+              <0x44182800 0x800>;
+        reg-names = "ss-pcie", "pcie-phy", "xpcs0", "xpcs1";
+        clocks = <&clks 1>, <&clks 2>, <&clks 3>, <&clks 4>;
+        clock-names = "axi", "aux", "apb", "ref";
+        resets = <&scmi_reset 11>, <&scmi_reset 10>;
+        reset-names = "serdes", "pcie";
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        phy@0 {
+            reg = <0>;
+            compatible = "nxp,s32g-serdes-xpcs";
+            nxp,xpcs-instance = <0>;
+        };
+
+        phy@1 {
+            reg = <1>;
+            compatible = "nxp,s32g-serdes-xpcs";
+            nxp,xpcs-instance = <1>;
+        };
+    };
