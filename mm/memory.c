@@ -4356,18 +4356,11 @@ static bool wp_can_reuse_anon_folio(struct folio *folio,
 }
 
 /*
- * The pages of the folio around the one that faulted are handled in aligned
- * blocks of this many PTEs: a 64K folio with 4K pages, and the size of a
- * contpte block on arm64.
- */
-#define WP_REUSE_NR_PTES	16
-
-/*
  * wp_can_reuse_anon_folio() found a large folio to be exclusive to this MM.
  * That holds for all of its pages and not only for the one that faulted: mark
- * the ones in the same block exclusive as well and map them writable, like
- * mprotect() would. Each of them would otherwise take a write fault of its own
- * that repeats the check on the very same folio.
+ * the ones that this page table maps exclusive as well and map them writable,
+ * like mprotect() would. Each of them would otherwise take a write fault of
+ * its own that repeats the check on the very same folio.
  *
  * The PTE that faulted is among them; wp_page_reuse() completes it.
  */
@@ -4378,17 +4371,17 @@ static void wp_reuse_large_anon_folio(struct vm_fault *vmf,
 	const unsigned long idx = folio_page_idx(folio, vmf->page);
 	struct vm_area_struct *vma = vmf->vma;
 	unsigned long addr = vmf->address;
-	unsigned long block = ALIGN_DOWN(addr, WP_REUSE_NR_PTES * PAGE_SIZE);
+	unsigned long pt_start = ALIGN_DOWN(addr, PMD_SIZE);
 	unsigned long nr_before, nr_after, end;
 	struct page *page;
 	unsigned int nr, i;
 	pte_t *ptep, pte;
 
-	/* Stay within the folio, the VMA and the block. */
-	nr_before = min3(idx, (addr - block) >> PAGE_SHIFT,
+	/* Stay within the folio, the VMA and the page table. */
+	nr_before = min3(idx, (addr - pt_start) >> PAGE_SHIFT,
 			 (addr - vma->vm_start) >> PAGE_SHIFT);
 	nr_after = min3(folio_nr_pages(folio) - idx,
-			(block + WP_REUSE_NR_PTES * PAGE_SIZE - addr) >> PAGE_SHIFT,
+			(pt_start + PMD_SIZE - addr) >> PAGE_SHIFT,
 			(vma->vm_end - addr) >> PAGE_SHIFT);
 	end = addr + (nr_after << PAGE_SHIFT);
 	addr -= nr_before << PAGE_SHIFT;
