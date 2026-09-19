@@ -29,6 +29,9 @@ static struct posix_acl *v9fs_fid_get_acl(struct p9_fid *fid, const char *name)
 		return ERR_PTR(size);
 	if (size == 0)
 		return ERR_PTR(-ENODATA);
+	/* the size is server-controlled; a valid ACL fits in an xattr */
+	if (size > XATTR_SIZE_MAX)
+		return ERR_PTR(-E2BIG);
 
 	value = kzalloc(size, GFP_NOFS);
 	if (!value)
