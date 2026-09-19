@@ -184,6 +184,7 @@ static void ibmvfc_tgt_send_prli(struct ibmvfc_target *);
 static void ibmvfc_tgt_send_plogi(struct ibmvfc_target *);
 static void ibmvfc_tgt_query_target(struct ibmvfc_target *);
 static void ibmvfc_npiv_logout(struct ibmvfc_host *);
+static void ibmvfc_discover_nvme_targets(struct ibmvfc_host *);
 static void ibmvfc_tgt_implicit_logout_and_del(struct ibmvfc_target *);
 static void ibmvfc_tgt_move_login(struct ibmvfc_target *);
 
@@ -5136,45 +5137,41 @@ static int ibmvfc_alloc_targets(struct ibmvfc_host *vhost)
 }
 
 /**
- * ibmvfc_discover_targets_done - Completion handler for discover targets MAD
+ * ibmvfc_discover_scsi_targets_done - Completion handler for SCSI discover targets MAD
  * @evt:	ibmvfc event struct
  *
  **/
-static void ibmvfc_discover_targets_done(struct ibmvfc_event *evt)
+static void ibmvfc_discover_scsi_targets_done(struct ibmvfc_event *evt)
 {
 	struct ibmvfc_host *vhost = evt->vhost;
 	struct ibmvfc_discover_targets *rsp = &evt->xfer_iu->discover_targets;
-	struct ibmvfc_channels *channels;
 	u32 mad_status = be16_to_cpu(rsp->common.status);
-	u32 opcode = be32_to_cpu(rsp->common.opcode);
 	int level = IBMVFC_DEFAULT_LOG_LEVEL;
-
-	if (opcode == IBMVFC_DISC_TARGETS)
-		channels = &vhost->scsi_scrqs;
-	else
-		channels = &vhost->nvme_scrqs;
 
 	switch (mad_status) {
 	case IBMVFC_MAD_SUCCESS:
-		ibmvfc_dbg(vhost, "Discover %s Targets succeeded\n",
-			   proto_type[channels->protocol]);
-		channels->num_targets = min_t(u32, be32_to_cpu(rsp->num_written),
-					      max_targets);
-		ibmvfc_dbg(vhost, "%d %s targets found\n", channels->num_targets,
-			   proto_type[channels->protocol]);
-		ibmvfc_set_host_action(vhost, IBMVFC_HOST_ACTION_ALLOC_TGTS);
+		ibmvfc_dbg(vhost, "Discover SCSI Targets succeeded\n");
+		vhost->scsi_scrqs.num_targets = min_t(u32, be32_to_cpu(rsp->num_written),
+						      max_targets);
+		ibmvfc_dbg(vhost, "%d SCSI targets found\n",
+			   vhost->scsi_scrqs.num_targets);
+		if (ibmvfc_nvme_active(vhost)) {
+			ibmvfc_set_host_action(vhost, IBMVFC_HOST_ACTION_INIT);
+			vhost->job_step = ibmvfc_discover_nvme_targets;
+		} else {
+			ibmvfc_set_host_action(vhost, IBMVFC_HOST_ACTION_ALLOC_TGTS);
+		}
 		break;
 	case IBMVFC_MAD_FAILED:
 		level += ibmvfc_retry_host_init(vhost);
-		ibmvfc_log(vhost, level, "Discover %s Targets failed: %s (%x:%x)\n",
-			   proto_type[channels->protocol],
+		ibmvfc_log(vhost, level, "Discover SCSI Targets failed: %s (%x:%x)\n",
 			   ibmvfc_get_cmd_error(be16_to_cpu(rsp->status), be16_to_cpu(rsp->error)),
 			   be16_to_cpu(rsp->status), be16_to_cpu(rsp->error));
 		break;
 	case IBMVFC_MAD_DRIVER_FAILED:
 		break;
 	default:
-		dev_err(vhost->dev, "Invalid Discover Targets response: 0x%x\n", mad_status);
+		dev_err(vhost->dev, "Invalid Discover SCSI Targets response: 0x%x\n", mad_status);
 		ibmvfc_link_down(vhost, IBMVFC_LINK_DEAD);
 		break;
 	}
@@ -5183,7 +5180,47 @@ static void ibmvfc_discover_targets_done(struct ibmvfc_event *evt)
 	wake_up(&vhost->work_wait_q);
 }
 
-static struct ibmvfc_event *ibmvfc_get_disc_event(struct ibmvfc_channels *channels)
+/**
+ * ibmvfc_discover_nvme_targets_done - Completion handler for NVMe discover targets MAD
+ * @evt:	ibmvfc event struct
+ *
+ **/
+static void ibmvfc_discover_nvme_targets_done(struct ibmvfc_event *evt)
+{
+	struct ibmvfc_host *vhost = evt->vhost;
+	struct ibmvfc_discover_targets *rsp = &evt->xfer_iu->discover_targets;
+	u32 mad_status = be16_to_cpu(rsp->common.status);
+	int level = IBMVFC_DEFAULT_LOG_LEVEL;
+
+	switch (mad_status) {
+	case IBMVFC_MAD_SUCCESS:
+		ibmvfc_dbg(vhost, "Discover NVMe Targets succeeded\n");
+		vhost->nvme_scrqs.num_targets = min_t(u32, be32_to_cpu(rsp->num_written),
+						      max_targets);
+		ibmvfc_dbg(vhost, "%d NVMe targets found\n",
+			   vhost->nvme_scrqs.num_targets);
+		ibmvfc_set_host_action(vhost, IBMVFC_HOST_ACTION_ALLOC_TGTS);
+		break;
+	case IBMVFC_MAD_FAILED:
+		level += ibmvfc_retry_host_init(vhost);
+		ibmvfc_log(vhost, level, "Discover NVMe Targets failed: %s (%x:%x)\n",
+			   ibmvfc_get_cmd_error(be16_to_cpu(rsp->status), be16_to_cpu(rsp->error)),
+			   be16_to_cpu(rsp->status), be16_to_cpu(rsp->error));
+		break;
+	case IBMVFC_MAD_DRIVER_FAILED:
+		break;
+	default:
+		dev_err(vhost->dev, "Invalid Discover NVMe Targets response: 0x%x\n", mad_status);
+		ibmvfc_link_down(vhost, IBMVFC_LINK_DEAD);
+		break;
+	}
+
+	ibmvfc_free_event(evt);
+	wake_up(&vhost->work_wait_q);
+}
+
+static struct ibmvfc_event *ibmvfc_get_disc_event(struct ibmvfc_channels *channels,
+						  void (*done)(struct ibmvfc_event *))
 {
 	struct ibmvfc_discover_targets *mad;
 	struct ibmvfc_host *vhost = ibmvfc_channels_to_vhost(channels);
@@ -5192,7 +5229,7 @@ static struct ibmvfc_event *ibmvfc_get_disc_event(struct ibmvfc_channels *channe
 	if (!evt)
 		return NULL;
 
-	ibmvfc_init_event(evt, ibmvfc_discover_targets_done, IBMVFC_MAD_FORMAT);
+	ibmvfc_init_event(evt, done, IBMVFC_MAD_FORMAT);
 	mad = &evt->iu.discover_targets;
 	memset(mad, 0, sizeof(*mad));
 	mad->common.version = cpu_to_be32(1);
@@ -5210,13 +5247,39 @@ static struct ibmvfc_event *ibmvfc_get_disc_event(struct ibmvfc_channels *channe
 }
 
 /**
- * ibmvfc_discover_targets - Send Discover Targets MAD
+ * ibmvfc_discover_nvme_targets - Send Discover NVMe Targets MAD
+ * @vhost:	ibmvfc host struct
+ *
+ **/
+static void ibmvfc_discover_nvme_targets(struct ibmvfc_host *vhost)
+{
+	struct ibmvfc_event *evt = ibmvfc_get_disc_event(&vhost->nvme_scrqs,
+							 ibmvfc_discover_nvme_targets_done);
+	int level = IBMVFC_DEFAULT_LOG_LEVEL;
+
+	if (!evt) {
+		ibmvfc_log(vhost, level, "Discover NVMe Targets failed: no available events\n");
+		ibmvfc_hard_reset_host(vhost);
+		return;
+	}
+
+	ibmvfc_set_host_action(vhost, IBMVFC_HOST_ACTION_INIT_WAIT);
+
+	if (!ibmvfc_send_event(evt, vhost, default_timeout))
+		ibmvfc_dbg(vhost, "Sent discover NVMe targets\n");
+	else
+		ibmvfc_link_down(vhost, IBMVFC_LINK_DEAD);
+}
+
+/**
+ * ibmvfc_discover_targets - Send Discover SCSI Targets MAD
  * @vhost:	ibmvfc host struct
  *
  **/
 static void ibmvfc_discover_targets(struct ibmvfc_host *vhost)
 {
-	struct ibmvfc_event *evt = ibmvfc_get_disc_event(&vhost->scsi_scrqs);
+	struct ibmvfc_event *evt = ibmvfc_get_disc_event(&vhost->scsi_scrqs,
+							 ibmvfc_discover_scsi_targets_done);
 	int level = IBMVFC_DEFAULT_LOG_LEVEL;
 
 	if (!evt) {
@@ -5230,27 +5293,7 @@ static void ibmvfc_discover_targets(struct ibmvfc_host *vhost)
 	if (!ibmvfc_send_event(evt, vhost, default_timeout))
 		ibmvfc_dbg(vhost, "Sent discover SCSI targets\n");
 	else
-		goto link_down;
-
-	if (!ibmvfc_nvme_active(vhost))
-		return;
-
-	evt = ibmvfc_get_disc_event(&vhost->nvme_scrqs);
-	if (!evt) {
-		ibmvfc_log(vhost, level, "Discover NVMe Targets failed: no available events\n");
-		ibmvfc_hard_reset_host(vhost);
-		return;
-	}
-
-	if (!ibmvfc_send_event(evt, vhost, default_timeout))
-		ibmvfc_dbg(vhost, "Sent discover NVMe targets\n");
-	else
-		goto link_down;
-
-	return;
-
-link_down:
-	ibmvfc_link_down(vhost, IBMVFC_LINK_DEAD);
+		ibmvfc_link_down(vhost, IBMVFC_LINK_DEAD);
 }
 
 static void ibmvfc_fabric_login_nvme_done(struct ibmvfc_event *evt)
