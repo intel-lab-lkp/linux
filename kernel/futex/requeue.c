@@ -834,12 +834,13 @@ int futex_wait_requeue_pi(u32 __user *uaddr, unsigned int flags,
 	switch (futex_requeue_pi_wakeup_sync(&q)) {
 	case Q_REQUEUE_PI_IGNORE:
 		{
-			CLASS(hbr, hbr)(&q.key);
-			auto hb = hbr.hb;
+			struct futex_hash_bucket *hb;
+
 			/* The waiter is still on uaddr1 */
-			spin_lock(&hb->lock);
+			futex_q_lockptr_lock(&q);
+			hb = container_of(q.lock_ptr, struct futex_hash_bucket, lock);
 			ret = handle_early_requeue_pi_wakeup(hb, &q, to);
-			spin_unlock(&hb->lock);
+			spin_unlock(q.lock_ptr);
 		}
 		break;
 
