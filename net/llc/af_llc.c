@@ -204,6 +204,25 @@ static int llc_ui_release(struct socket *sock)
 	llc = llc_sk(sk);
 	dprintk("%s: closing local(%02X) remote(%02X)\n", __func__,
 		llc->laddr.lsap, llc->daddr.lsap);
+	if (sk->sk_state == TCP_LISTEN) {
+		struct sk_buff *skb;
+
+		while ((skb = skb_dequeue(&sk->sk_receive_queue)) != NULL) {
+			struct sock *child = skb->sk;
+
+			if (child) {
+				struct llc_sock *child_llc = llc_sk(child);
+
+				skb_orphan(skb);
+				if (child_llc->sap)
+					llc_sap_remove_socket(child_llc->sap, child);
+				netdev_put(child_llc->dev, &child_llc->dev_tracker);
+				sock_orphan(child);
+				llc_sk_free(child);
+			}
+			kfree_skb(skb);
+		}
+	}
 	if (!llc_send_disc(sk))
 		llc_ui_wait_for_disc(sk, READ_ONCE(sk->sk_rcvtimeo));
 	if (!sock_flag(sk, SOCK_ZAPPED)) {
