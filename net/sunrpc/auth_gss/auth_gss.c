@@ -2001,7 +2001,7 @@ gss_unwrap_resp_integ(struct rpc_task *task, struct rpc_cred *cred,
 	/* opaque databody_integ<>; */
 	if (xdr_stream_decode_u32(xdr, &len))
 		goto unwrap_failed;
-	if (len & 3)
+	if (len < XDR_UNIT || len & 3)
 		goto unwrap_failed;
 	offset = rcv_buf->len - xdr_stream_remaining(xdr);
 	if (xdr_stream_decode_u32(xdr, &seqno))
@@ -2021,13 +2021,12 @@ gss_unwrap_resp_integ(struct rpc_task *task, struct rpc_cred *cred,
 
 	/* opaque checksum<>; */
 	offset += len;
-	if (xdr_decode_word(rcv_buf, offset, &len))
+	if (xdr_decode_word(rcv_buf, offset, &mic.len))
 		goto unwrap_failed;
 	offset += sizeof(__be32);
-	if (offset + len > rcv_buf->len)
+	if (offset + mic.len > rcv_buf->len)
 		goto unwrap_failed;
-	mic.len = len;
-	mic.data = kmalloc(len, GFP_KERNEL);
+	mic.data = kmalloc(mic.len, GFP_KERNEL);
 	if (ZERO_OR_NULL_PTR(mic.data))
 		goto unwrap_failed;
 	if (read_bytes_from_xdr_buf(rcv_buf, offset, mic.data, mic.len))
@@ -2038,6 +2037,12 @@ gss_unwrap_resp_integ(struct rpc_task *task, struct rpc_cred *cred,
 		clear_bit(RPCAUTH_CRED_UPTODATE, &cred->cr_flags);
 	if (maj_stat != GSS_S_COMPLETE)
 		goto bad_mic;
+	if (xdr_stream_remaining(xdr) < len - XDR_UNIT)
+		goto unwrap_failed;
+
+	/* Expose only the authenticated payload to the decoder. */
+	xdr_truncate_decode(xdr, xdr_stream_remaining(xdr) -
+			    (len - XDR_UNIT));
 
 	gss_update_rslack(task, cred, 2, 2 + 1 + XDR_QUADLEN(mic.len));
 	ret = 0;
