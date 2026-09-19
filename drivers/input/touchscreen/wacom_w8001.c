@@ -285,6 +285,14 @@ static irqreturn_t w8001_interrupt(struct serio *serio,
 	struct w8001_coord coord;
 	unsigned char tmp;
 
+	/*
+	 * Resync if a malformed or overlong packet has pushed idx past
+	 * the end of the data array, so the array store below is always
+	 * in bounds.
+	 */
+	if (w8001->idx >= W8001_MAX_LENGTH)
+		w8001->idx = 0;
+
 	w8001->data[w8001->idx] = data;
 	switch (w8001->idx++) {
 	case 0:
