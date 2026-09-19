@@ -482,7 +482,6 @@ static void usbip_pack_ret_submit(struct usbip_header *pdu, struct urb *urb,
 		if (rpdu->number_of_packets < 0 ||
 		    rpdu->number_of_packets > urb->number_of_packets)
 			rpdu->number_of_packets = 0;
-		urb->number_of_packets = rpdu->number_of_packets;
 		urb->error_count	= rpdu->error_count;
 	}
 }
@@ -702,8 +701,9 @@ int usbip_recv_iso(struct usbip_device *ud, struct urb *urb)
 
 	ret = usbip_recv(ud->tcp_socket, buff, size);
 	if (ret != size) {
-		dev_err(&urb->dev->dev, "recv iso_frame_descriptor, %d\n",
-			ret);
+		if (urb->dev)
+			dev_err(&urb->dev->dev,
+				"recv iso_frame_descriptor, %d\n", ret);
 		kfree(buff);
 
 		if (ud->side == USBIP_STUB || ud->side == USBIP_VUDC)
@@ -781,6 +781,8 @@ void usbip_pad_iso(struct usbip_device *ud, struct urb *urb)
 	 * memory when padding) and move them into the proper place
 	 */
 	for (i = np-1; i > 0; i--) {
+		if (actualoffset < urb->iso_frame_desc[i].actual_length)
+			return;
 		actualoffset -= urb->iso_frame_desc[i].actual_length;
 
 		/*

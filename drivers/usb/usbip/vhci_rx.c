@@ -73,6 +73,13 @@ static void vhci_recv_ret_submit(struct vhci_device *vdev,
 		return;
 	}
 
+	if (usb_pipeisoc(urb->pipe) &&
+	    pdu->u.ret_submit.number_of_packets != urb->number_of_packets) {
+		usbip_event_add(ud, VDEV_EVENT_ERROR_TCP);
+		urb->status = -EPROTO;
+		goto error;
+	}
+
 	/* unpack the pdu to a urb */
 	usbip_pack_pdu(pdu, urb, USBIP_RET_SUBMIT, 0);
 
