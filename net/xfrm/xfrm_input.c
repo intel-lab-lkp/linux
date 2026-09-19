@@ -197,12 +197,12 @@ static int xfrm4_remove_beet_encap(struct xfrm_state *x, struct sk_buff *skb)
 
 		phlen = sizeof(*ph) + ph->padlen;
 		optlen = ph->hdrlen * 8 + (IPV4_BEET_PHMAXLEN - phlen);
-		if (optlen < 0 || optlen & 3 || optlen > 250)
+		if (optlen < 0 || optlen & 3 || optlen > MAX_IPOPTLEN)
 			goto out;
 
 		XFRM_MODE_SKB_CB(skb)->protocol = ph->nexthdr;
 
-		if (!pskb_may_pull(skb, phlen))
+		if (!pskb_may_pull(skb, phlen + optlen))
 			goto out;
 		__skb_pull(skb, phlen);
 	}
