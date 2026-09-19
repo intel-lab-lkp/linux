@@ -3506,6 +3506,11 @@ static unsigned int ata_scsi_pass_thru(struct ata_queued_cmd *qc)
 	if (is_multi_taskfile(tf)) {
 		unsigned int multi_count = 1 << (cdb[1] >> 5);
 
+		if (!dev->multi_count) {
+			fp = (cdb[0] == ATA_16) ? 14 : 9;
+			goto invalid_fld;
+		}
+
 		/* compare the passed through multi_count
 		 * with the cached multi_count of libata
 		 */
