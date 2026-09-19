@@ -2968,6 +2968,17 @@ int jfs_readdir(struct file *file, struct dir_context *ctx)
 			/* copy name in the additional segment(s) */
 			next = d->next;
 			while (next >= 0) {
+				int max_slot = (p->header.flag & BT_ROOT) ?
+					DTROOTMAXSLOT : p->header.maxslot;
+
+				if (unlikely(next < 1 || next >= max_slot)) {
+					jfs_error(ip->i_sb,
+						  "JFS:Dtree error: ino = %ld, bn=%lld, index = %d\n",
+						  (long)ip->i_ino,
+						  (long long)bn,
+						  i);
+					goto skip_one;
+				}
 				t = (struct dtslot *) & p->slot[next];
 				name_ptr += outlen;
 				d_namleft -= len;
@@ -4343,6 +4354,10 @@ bool check_dtroot(dtroot_t *p)
 		}
 
 		/* The last node in the free list must terminate with next = -1 */
+		if (unlikely(__test_and_set_bit(fsi, bitmap))) {
+			jfs_err("duplicate index%d in slot in dtroot\n", fsi);
+			return false;
+		}
 		if (unlikely(p->slot[fsi].next != -1)) {
 			jfs_err("Bad next:%d of the last slot in dtroot\n",
 					p->slot[fsi].next);
@@ -4375,6 +4390,21 @@ bool check_dtroot(dtroot_t *p)
 		if (unlikely(idx && __test_and_set_bit(idx, bitmap))) {
 			jfs_err("Duplicate index:%d in stbl in dtroot\n", idx);
 			return false;
+		}
+
+		if (idx > 0) {
+			int next = (p->header.flag & BT_LEAF) ?
+				((struct ldtentry *)&p->slot[idx])->next :
+				((struct idtentry *)&p->slot[idx])->next;
+
+			while (next >= 0) {
+				if (unlikely(next < 1 || next >= DTROOTMAXSLOT ||
+					     __test_and_set_bit(next, bitmap))) {
+					jfs_err("Bad continuation slot:%d in dtroot\n", next);
+					return false;
+				}
+				next = p->slot[next].next;
+			}
 		}
 	}
 
@@ -4436,6 +4466,10 @@ bool check_dtpage(dtpage_t *p)
 		}
 
 		/* The last node in the free list must terminate with next = -1 */
+		if (unlikely(__test_and_set_bit(fsi, bitmap))) {
+			jfs_err("duplicate index%d in slot in dtpage\n", fsi);
+			return false;
+		}
 		if (unlikely(p->slot[fsi].next != -1)) {
 			jfs_err("Bad next:%d of the last slot in dtpage\n",
 					p->slot[fsi].next);
@@ -4464,6 +4498,7 @@ bool check_dtpage(dtpage_t *p)
 	 */
 	for (i = 0; i < p->header.nextindex; i++) {
 		int idx = DT_GETSTBL(p)[i];
+		int next;
 
 		/* Check if index is out of valid data slot range */
 		if (unlikely(idx < 1 || idx >= DTPAGEMAXSLOT)) {
@@ -4476,6 +4511,18 @@ bool check_dtpage(dtpage_t *p)
 		if (unlikely(__test_and_set_bit(idx, bitmap))) {
 			jfs_err("Duplicate index:%d in stbl of dtpage\n", idx);
 			return false;
+		}
+
+		next = (p->header.flag & BT_LEAF) ?
+			((struct ldtentry *)&p->slot[idx])->next :
+			((struct idtentry *)&p->slot[idx])->next;
+		while (next >= 0) {
+			if (unlikely(next < 1 || next >= DTPAGEMAXSLOT ||
+				     __test_and_set_bit(next, bitmap))) {
+				jfs_err("Bad continuation slot:%d in dtpage\n", next);
+				return false;
+			}
+			next = p->slot[next].next;
 		}
 	}
 

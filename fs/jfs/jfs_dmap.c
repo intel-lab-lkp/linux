@@ -288,7 +288,8 @@ int dbMount(struct inode *ipbmap)
 	    (bmp->db_agstart > (CTLTREESIZE - 1 - bmp->db_agwidth * (MAXAG - 1))) ||
 	    (bmp->db_agl2size > L2MAXL2SIZE - L2MAXAG) ||
 	    (bmp->db_agl2size < 0) ||
-	    ((bmp->db_mapsize - 1) >> bmp->db_agl2size) > MAXAG) {
+	    (bmp->db_mapsize <= 0) ||
+	    (((bmp->db_mapsize - 1) >> bmp->db_agl2size) >= MAXAG)) {
 		err = -EINVAL;
 		goto err_release_metapage;
 	}
