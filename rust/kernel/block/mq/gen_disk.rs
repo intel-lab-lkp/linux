@@ -129,6 +129,7 @@ impl GenDiskBuilder {
             submit_bio: None,
             open: None,
             release: None,
+            run_todo: None,
             ioctl: None,
             compat_ioctl: None,
             check_events: None,
