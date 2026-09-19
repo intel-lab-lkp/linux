@@ -511,6 +511,7 @@ static int ast_primary_plane_helper_atomic_check(struct drm_plane *plane,
 						 struct drm_atomic_commit *state)
 {
 	struct drm_device *dev = plane->dev;
+	struct ast_plane *ast_plane = to_ast_plane(plane);
 	struct drm_plane_state *new_plane_state = drm_atomic_get_new_plane_state(state, plane);
 	struct drm_crtc_state *new_crtc_state = NULL;
 	struct ast_crtc_state *new_ast_crtc_state;
@@ -531,6 +532,11 @@ static int ast_primary_plane_helper_atomic_check(struct drm_plane *plane,
 		else
 			return 0;
 	}
+
+	if (new_plane_state->fb->pitches[0] > AST_PRIMARY_PLANE_MAX_OFFSET)
+		return -EINVAL;
+	if ((u64)new_plane_state->fb->pitches[0] * new_plane_state->fb->height > ast_plane->size)
+		return -ENOSPC;
 
 	new_ast_crtc_state = to_ast_crtc_state(new_crtc_state);
 

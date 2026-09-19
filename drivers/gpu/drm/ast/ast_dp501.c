@@ -250,7 +250,8 @@ static bool ast_launch_m68k(struct ast_device *ast)
 
 		/* copy image to buffer */
 		for (i = 0; i < len; i += 4) {
-			data = *(u32 *)(fw_addr + i);
+			data = 0;
+			memcpy(&data, fw_addr + i, min_t(u32, len - i, 4));
 			ast_moutdwm(ast, boot_address + i, data);
 		}
 
