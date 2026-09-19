@@ -1918,7 +1918,7 @@ static int packet_rcv_spkt(struct sk_buff *skb, struct net_device *dev,
 	 */
 
 	spkt->spkt_family = dev->type;
-	strscpy(spkt->spkt_device, dev->name, sizeof(spkt->spkt_device));
+	strscpy_pad(spkt->spkt_device, dev->name, sizeof(spkt->spkt_device));
 	spkt->spkt_protocol = skb->protocol;
 
 	/*
@@ -3510,15 +3510,8 @@ static int packet_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 	if (err)
 		goto out_free;
 
-	if (sock->type != SOCK_PACKET) {
-		struct sockaddr_ll *sll = &PACKET_SKB_CB(skb)->sa.ll;
-
-		/* Original length was stored in sockaddr_ll fields */
+	if (sock->type != SOCK_PACKET)
 		origlen = PACKET_SKB_CB(skb)->sa.origlen;
-		sll->sll_family = AF_PACKET;
-		sll->sll_protocol = (sock->type == SOCK_DGRAM) ?
-			vlan_get_protocol_dgram(skb) : skb->protocol;
-	}
 
 	sock_recv_cmsgs(msg, sk, skb);
 
@@ -3552,6 +3545,13 @@ static int packet_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 			msg->msg_namelen = copy_len;
 		}
 		memcpy(msg->msg_name, &PACKET_SKB_CB(skb)->sa, copy_len);
+		if (sock->type != SOCK_PACKET) {
+			struct sockaddr_ll *u_sll = msg->msg_name;
+
+			u_sll->sll_family = AF_PACKET;
+			u_sll->sll_protocol = (sock->type == SOCK_DGRAM) ?
+				vlan_get_protocol_dgram(skb) : skb->protocol;
+		}
 	}
 
 	if (packet_sock_flag(pkt_sk(sk), PACKET_SOCK_AUXDATA)) {
