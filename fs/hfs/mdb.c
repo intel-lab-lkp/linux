@@ -204,6 +204,11 @@ int hfs_mdb_get(struct super_block *sb)
 	/* These parameters are read from the MDB, and never written */
 	HFS_SB(sb)->part_start = part_start;
 	HFS_SB(sb)->fs_ablocks = be16_to_cpu(mdb->drNmAlBlks);
+	if (!HFS_SB(sb)->fs_ablocks) {
+		brelse(bh);
+		HFS_SB(sb)->mdb_bh = NULL;
+		return -EINVAL;
+	}
 	HFS_SB(sb)->fs_div = HFS_SB(sb)->alloc_blksz >> sb->s_blocksize_bits;
 	HFS_SB(sb)->clumpablks = be32_to_cpu(mdb->drClpSiz) /
 				 HFS_SB(sb)->alloc_blksz;
