@@ -1672,6 +1672,7 @@ struct nft_trans {
 	u16				flags;
 	u8				report:1;
 	u8				put_net:1;
+	u8				aborted:1;
 };
 
 /**

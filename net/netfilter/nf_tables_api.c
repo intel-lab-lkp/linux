@@ -146,6 +146,7 @@ static bool nft_chain_vstate_valid(const struct nft_ctx *ctx,
 }
 
 static void nf_tables_trans_destroy_work(struct work_struct *w);
+static void nf_tables_abort_release(struct nft_trans *trans);
 
 static void nft_trans_gc_work(struct work_struct *work);
 static DECLARE_WORK(trans_gc_work, nft_trans_gc_work);
@@ -10284,8 +10285,19 @@ static void nf_tables_trans_destroy_work(struct work_struct *w)
 	synchronize_rcu();
 
 	list_for_each_entry_safe(trans, next, &head, list) {
-		nft_trans_list_del(trans);
-		nft_commit_release(trans);
+		/*
+		 * binding_list is already unlinked here: for commit-origin
+		 * transactions it was never linked to begin with, and for
+		 * abort-origin ones nft_trans_list_del() unlinked it under
+		 * commit_mutex before this trans was queued (see
+		 * __nf_tables_abort()) since that list is only ever walked
+		 * under that mutex. Only detach from the local work list.
+		 */
+		list_del(&trans->list);
+		if (trans->aborted)
+			nf_tables_abort_release(trans);
+		else
+			nft_commit_release(trans);
 	}
 }
 
@@ -11274,6 +11286,10 @@ static void nf_tables_abort_release(struct nft_trans *trans)
 			nf_tables_flowtable_destroy(nft_trans_flowtable(trans));
 		break;
 	}
+
+	if (trans->put_net)
+		put_net(trans->net);
+
 	kfree(trans);
 }
 
@@ -11478,12 +11494,37 @@ static int __nf_tables_abort(struct net *net, enum nfnl_abort_action action)
 
 	nft_set_abort_update(nft_net);
 
-	synchronize_rcu();
+	/*
+	 * Defer destruction past an RCU grace period, same as the commit
+	 * path (see nf_tables_commit_release()): an abort must not block
+	 * on synchronize_rcu() while holding commit_mutex, since every
+	 * other nf_tables netlink request queues up behind that mutex.
+	 *
+	 * nft_trans_list_del() also unlinks bindable NEWSET/NEWCHAIN
+	 * transactions from nft_net->binding_list, which is only ever
+	 * walked under commit_mutex (see nf_tables_commit()), so that
+	 * unlink has to happen here and not from the unlocked workqueue.
+	 */
+	if (!list_empty(&nft_net->commit_list)) {
+		LIST_HEAD(head);
 
-	list_for_each_entry_safe_reverse(trans, next,
-					 &nft_net->commit_list, list) {
-		nft_trans_list_del(trans);
-		nf_tables_abort_release(trans);
+		list_for_each_entry_safe_reverse(trans, next,
+						 &nft_net->commit_list, list) {
+			trans->aborted = 1;
+			nft_trans_list_del(trans);
+			list_add_tail(&trans->list, &head);
+		}
+
+		trans = list_last_entry(&head, struct nft_trans, list);
+		get_net(trans->net);
+		WARN_ON_ONCE(trans->put_net);
+		trans->put_net = true;
+
+		spin_lock(&nf_tables_destroy_list_lock);
+		list_splice_tail(&head, &nft_net->destroy_list);
+		spin_unlock(&nf_tables_destroy_list_lock);
+
+		schedule_work(&nft_net->destroy_work);
 	}
 
 	return err;
