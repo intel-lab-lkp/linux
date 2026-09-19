@@ -4632,11 +4632,12 @@ struct file *vfs_lookup_open(struct path *parent, struct qstr *last,
 	int error = 0;
 
 	WARN_ONCE(mode & ~S_IALLUGO, "mode must only have permission bits");
-	WARN_ONCE(open_flag & ~(O_ACCMODE|O_CREAT|O_EXCL|O_TRUNC|__O_REGULAR),
+	WARN_ONCE(open_flag & ~(O_ACCMODE|O_CREAT|O_EXCL|O_TRUNC|__O_REGULAR|
+				O_NONBLOCK|O_LARGEFILE|O_NOFOLLOW),
 		  "open_flag has unsupported flags");
 
 	mode |= S_IFREG;
-	open_flag |= __O_REGULAR;
+	open_flag |= __O_REGULAR | O_NOFOLLOW;
 
 	error = lookup_noperm_common(last, parent->dentry);
 	if (error)
