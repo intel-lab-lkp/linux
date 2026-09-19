@@ -447,6 +447,12 @@ static inline bool skb_frag_must_loop(struct page *p)
  * struct skb_shared_hwtstamps - hardware time stamps
  * @hwtstamp:		hardware time stamp transformed into duration
  *			since arbitrary point in time
+ * @start_time:		Start time stamped when SK_BPF_CB_TIMESTAMPING_V2
+ *			is enabled; shares storage with @hwtstamp. A real
+ *			hardware time stamp always takes precedence: the start
+ *			time is only recorded when @hwtstamp is still empty
+ *			(no hardware time stamp available), so the two are
+ *			never needed at the same time on a given skb.
  * @netdev_data:	address/cookie of network device driver used as
  *			reference to actual hardware time stamp
  *
@@ -462,6 +468,7 @@ static inline bool skb_frag_must_loop(struct page *p)
 struct skb_shared_hwtstamps {
 	union {
 		ktime_t	hwtstamp;
+		ktime_t	start_time;
 		void *netdev_data;
 	};
 };
