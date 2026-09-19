@@ -81,8 +81,16 @@ static size_t perf_event_attr___scnprintf(struct perf_event_attr *attr, char *bf
 
 static size_t syscall_arg__scnprintf_augmented_perf_event_attr(struct syscall_arg *arg, char *bf, size_t size)
 {
-	struct perf_event_attr *attr = (void *)arg->augmented.args->value;
+	struct augmented_arg *augmented_arg = arg->augmented.args;
+	struct perf_event_attr *attr;
 	struct perf_event_attr local_attr;
+	size_t payload_size;
+
+	if (arg->augmented.size < (int)(sizeof(*augmented_arg) + PERF_ATTR_SIZE_VER0))
+		return 0;
+
+	attr = (void *)augmented_arg->value;
+	payload_size = arg->augmented.size - sizeof(*augmented_arg);
 
 	/*
 	 * augmented_raw_syscalls.bpf.c (shipped with perf) copies
@@ -93,7 +101,10 @@ static size_t syscall_arg__scnprintf_augmented_perf_event_attr(struct syscall_ar
 	 * without writing to the potentially read-only augmented
 	 * args buffer.
 	 */
-	if (!attr->size) {
+	if (attr->size) {
+		if (attr->size < PERF_ATTR_SIZE_VER0 || payload_size < attr->size)
+			return 0;
+	} else {
 		memcpy(&local_attr, attr, PERF_ATTR_SIZE_VER0);
 		memset((void *)&local_attr + PERF_ATTR_SIZE_VER0, 0,
 		       sizeof(local_attr) - PERF_ATTR_SIZE_VER0);
@@ -107,8 +118,12 @@ static size_t syscall_arg__scnprintf_augmented_perf_event_attr(struct syscall_ar
 
 size_t syscall_arg__scnprintf_perf_event_attr(char *bf, size_t size, struct syscall_arg *arg)
 {
-	if (arg->augmented.args)
-		return syscall_arg__scnprintf_augmented_perf_event_attr(arg, bf, size);
+	if (arg->augmented.args) {
+		size_t printed = syscall_arg__scnprintf_augmented_perf_event_attr(arg, bf, size);
+
+		if (printed)
+			return printed;
+	}
 
 	return scnprintf(bf, size, "%#lx", arg->val);
 }
