@@ -21,12 +21,23 @@ allOf:
       properties:
         reg:
           maxItems: 1
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: snps,dwc-i2c
+    then:
+      required:
+        - snps,tx-fifo-depth
+        - snps,rx-fifo-depth
 
 properties:
   compatible:
     oneOf:
       - description: Generic Synopsys DesignWare I2C controller
         const: snps,designware-i2c
+      - description: Synopsys Advanced I2C/SMBus/PMBus Controller
+        const: snps,dwc-i2c
       - description: Renesas RZ/N1D I2C controller
         items:
           - const: renesas,r9a06g032-i2c  # RZ/N1D
@@ -121,6 +132,18 @@ properties:
       low period of SCL line.
     type: boolean
 
+  snps,tx-fifo-depth:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      The depth of the hardware TX FIFO. Required on the snps,dwc-i2c IP
+      variant, where fifo depth cannot be autodetected.
+
+  snps,rx-fifo-depth:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      The depth of the hardware RX FIFO. Required on the snps,dwc-i2c IP
+      variant, where fifo depth cannot be autodetected.
+
 unevaluatedProperties: false
 
 required:
@@ -171,5 +194,15 @@ examples:
       pinctrl-names = "default";
       interrupts = <8>;
       clocks = <&ahb_clk>;
+    };
+  - |
+    i2c@53b00000 {
+      compatible = "snps,dwc-i2c";
+      reg = <0x53b00000 0x1000>;
+      interrupts = <166>;
+      clocks = <&sysclk>;
+      clock-frequency = <100000>;
+      snps,tx-fifo-depth = <32>;
+      snps,rx-fifo-depth = <32>;
     };
 ...
