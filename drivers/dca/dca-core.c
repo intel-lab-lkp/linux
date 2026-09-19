@@ -368,8 +368,11 @@ int register_dca_provider(struct dca_provider *dca, struct device *dev)
 		raw_spin_unlock_irqrestore(&dca_lock, flags);
 		rc = dca_pci_rc_from_dev(dev);
 		newdomain = dca_allocate_domain(rc);
-		if (!newdomain)
+		if (!newdomain) {
+			dca_sysfs_remove_provider(dca);
 			return -ENODEV;
+		}
+
 		raw_spin_lock_irqsave(&dca_lock, flags);
 		/* Recheck, we might have raced after dropping the lock */
 		domain = dca_get_domain(dev);
