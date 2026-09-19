@@ -413,6 +413,13 @@ static int axis_fifo_parse_dt(struct axis_fifo *fifo)
 	if (ret)
 		return ret;
 
+	if (fifo->tx_fifo_depth <= 4) {
+		dev_err(fifo->dt_device,
+			"invalid xlnx,tx-fifo-depth (%u), must be > 4\n",
+			fifo->tx_fifo_depth);
+		return -EINVAL;
+	}
+
 	ret = of_property_read_u32(node, "xlnx,use-rx-data",
 				   &fifo->has_rx_fifo);
 	if (ret)
