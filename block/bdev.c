@@ -974,6 +974,8 @@ int bdev_open(struct block_device *bdev, blk_mode_t mode, void *holder,
 	bool unblock_events = true;
 	struct gendisk *disk = bdev->bd_disk;
 	int ret;
+	struct module *fops_owner = NULL;
+	void (*run_todo)(struct gendisk *disk) = NULL;
 
 	if (holder) {
 		mode |= BLK_OPEN_EXCL;
@@ -996,6 +998,7 @@ int bdev_open(struct block_device *bdev, blk_mode_t mode, void *holder,
 	ret = -EBUSY;
 	if (!bdev_may_open(bdev, mode))
 		goto put_module;
+	run_todo = disk->fops->run_todo;
 	if (bdev_is_partition(bdev))
 		ret = blkdev_get_part(bdev, mode);
 	else
@@ -1037,12 +1040,15 @@ int bdev_open(struct block_device *bdev, blk_mode_t mode, void *holder,
 
 	return 0;
 put_module:
-	module_put(disk->fops->owner);
+	fops_owner = disk->fops->owner;
 abort_claiming:
 	if (holder)
 		bd_abort_claiming(bdev, holder);
 	mutex_unlock(&disk->open_mutex);
 	disk_unblock_events(disk);
+	if (run_todo)
+		run_todo(disk);
+	module_put(fops_owner);
 	return ret;
 }
 
@@ -1188,6 +1194,8 @@ void bdev_release(struct file *bdev_file)
 	else
 		blkdev_put_whole(bdev);
 	mutex_unlock(&disk->open_mutex);
+	if (disk->fops->run_todo)
+		disk->fops->run_todo(disk);
 
 	module_put(disk->fops->owner);
 put_no_open:

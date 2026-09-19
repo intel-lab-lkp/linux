@@ -1580,6 +1580,16 @@ struct block_device_operations {
 			unsigned int flags);
 	int (*open)(struct gendisk *disk, blk_mode_t mode);
 	void (*release)(struct gendisk *disk);
+	/*
+	 * This operation is for performing synchronous cleanup without
+	 * disk->open_mutex held when blkdev_get_whole() returned an error or
+	 * blkdev_put_whole() was called.
+	 * Since this operation is called after disk->open_mutex was released,
+	 * users of this operation must implement appropriate serialization.
+	 * Also, users of this operation must not expect that either open() or
+	 * release() was called before this operation is called.
+	 */
+	void (*run_todo)(struct gendisk *disk);
 	int (*ioctl)(struct block_device *bdev, blk_mode_t mode,
 			unsigned cmd, unsigned long arg);
 	int (*compat_ioctl)(struct block_device *bdev, blk_mode_t mode,
