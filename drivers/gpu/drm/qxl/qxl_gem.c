@@ -43,7 +43,7 @@ void qxl_gem_object_free(struct drm_gem_object *gobj)
 	ttm_bo_fini(tbo);
 }
 
-int qxl_gem_object_create(struct qxl_device *qdev, int size,
+int qxl_gem_object_create(struct qxl_device *qdev, size_t size,
 			  int alignment, int initial_domain,
 			  bool discardable, bool kernel,
 			  struct qxl_surface *surf,
@@ -60,7 +60,7 @@ int qxl_gem_object_create(struct qxl_device *qdev, int size,
 	if (r) {
 		if (r != -ERESTARTSYS)
 			DRM_ERROR(
-			"Failed to allocate GEM object (%d, %d, %u, %d)\n",
+			"Failed to allocate GEM object (%zu, %d, %u, %d)\n",
 				  size, initial_domain, alignment, r);
 		return r;
 	}

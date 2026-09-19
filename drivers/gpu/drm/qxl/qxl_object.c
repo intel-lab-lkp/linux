@@ -116,6 +116,8 @@ int qxl_bo_create(struct qxl_device *qdev, unsigned long size,
 	else
 		type = ttm_bo_type_device;
 	*bo_ptr = NULL;
+	if (size == 0 || size > ULONG_MAX - PAGE_SIZE + 1)
+		return -EINVAL;
 	bo = kzalloc_obj(struct qxl_bo);
 	if (bo == NULL)
 		return -ENOMEM;
@@ -165,10 +167,8 @@ int qxl_bo_vmap_locked(struct qxl_bo *bo, struct iosys_map *map)
 	}
 
 	r = ttm_bo_vmap(&bo->tbo, &bo->map);
-	if (r) {
-		qxl_bo_unpin_locked(bo);
+	if (r)
 		return r;
-	}
 	bo->map_count = 1;
 
 	/* TODO: Remove kptr in favor of map everywhere. */
@@ -223,7 +223,7 @@ void *qxl_bo_kmap_atomic_page(struct qxl_device *qdev,
 	return io_mapping_map_atomic_wc(map, offset + page_offset);
 fallback:
 	if (bo->kptr) {
-		rptr = bo->kptr + (page_offset * PAGE_SIZE);
+		rptr = bo->kptr + page_offset;
 		return rptr;
 	}
 
@@ -232,7 +232,7 @@ fallback:
 		return NULL;
 	rptr = bo_map.vaddr; /* TODO: Use mapping abstraction properly */
 
-	rptr += page_offset * PAGE_SIZE;
+	rptr += page_offset;
 	return rptr;
 }
 
@@ -395,8 +395,11 @@ int qxl_bo_check_id(struct qxl_device *qdev, struct qxl_bo *bo)
 			return ret;
 
 		ret = qxl_hw_surface_alloc(qdev, bo);
-		if (ret)
+		if (ret) {
+			qxl_surface_id_dealloc(qdev, bo->surface_id);
+			bo->surface_id = 0;
 			return ret;
+		}
 	}
 	return 0;
 }

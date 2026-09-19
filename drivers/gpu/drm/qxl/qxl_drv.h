@@ -297,7 +297,7 @@ int qxl_destroy_monitors_object(struct qxl_device *qdev);
 /* qxl_gem.c */
 void qxl_gem_init(struct qxl_device *qdev);
 void qxl_gem_fini(struct qxl_device *qdev);
-int qxl_gem_object_create(struct qxl_device *qdev, int size,
+int qxl_gem_object_create(struct qxl_device *qdev, size_t size,
 			  int alignment, int initial_domain,
 			  bool discardable, bool kernel,
 			  struct qxl_surface *surf,
