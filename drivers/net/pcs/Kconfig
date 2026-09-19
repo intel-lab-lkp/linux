@@ -12,6 +12,17 @@ config PCS_XPCS
 	  This module provides a driver and helper functions for Synopsys
 	  DesignWare XPCS controllers.
 
+config PCS_NXP_SERDES_XPCS
+	tristate "NXP SerDes XPCS shared core"
+	select PHYLINK
+	select REGMAP
+	help
+	  Transport agnostic phylink PCS core for the Synopsys DesignWare
+	  Ethernet XPCS and Ethernet PHY of the SerDes subsystems found on
+	  NXP S32G and i.MX SoCs. The platform specific register transport
+	  (indirect MMIO on S32G, Clause 45 MDIO on i.MX) is implemented as
+	  regmap callbacks by the platform drivers selecting this core.
+
 config PCS_LYNX
 	tristate
 	help
