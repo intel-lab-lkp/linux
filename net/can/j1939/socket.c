@@ -688,7 +688,7 @@ static int j1939_sk_setsockopt_flag(struct j1939_sock *jsk, sockptr_t optval,
 	else
 		jsk->state &= ~flag;
 	release_sock(&jsk->sk);
-	return tmp;
+	return 0;
 }
 
 static int j1939_sk_setsockopt(struct socket *sock, int level, int optname,
