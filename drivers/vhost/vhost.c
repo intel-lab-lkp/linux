@@ -2150,6 +2150,17 @@ static long vhost_vring_set_addr(struct vhost_dev *d,
 				a.flags & (0x1 << VHOST_VRING_F_LOG),
 				a.log_guest_addr))
 			return -EINVAL;
+
+		/*
+		 * Commands may retain iovecs derived from the current ring
+		 * addresses.  Keep the addresses unchanged while the backend
+		 * is attached.
+		 */
+		if ((vq->desc || vq->avail || vq->used) &&
+		    (vq->desc != (void __user *)(unsigned long)a.desc_user_addr ||
+		     vq->avail != (void __user *)(unsigned long)a.avail_user_addr ||
+		     vq->used != (void __user *)(unsigned long)a.used_user_addr))
+			return -EBUSY;
 	}
 
 	vq->log_used = !!(a.flags & (0x1 << VHOST_VRING_F_LOG));
