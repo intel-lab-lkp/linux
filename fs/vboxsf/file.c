@@ -308,13 +308,17 @@ static int vboxsf_write_end(const struct kiocb *iocb,
 	struct inode *inode = mapping->host;
 	struct vboxsf_handle *sf_handle = iocb->ki_filp->private_data;
 	size_t from = offset_in_folio(folio, pos);
-	u32 nwritten = len;
+	u32 nwritten = copied;
 	u8 *buf;
 	int err;
 
 	/* zero the stale part of the folio if we did a short copy */
 	if (!folio_test_uptodate(folio) && copied < len)
 		folio_zero_range(folio, from + copied, len - copied);
+
+	/* Nothing copied: reject so generic_perform_write() faults in and retries */
+	if (!copied)
+		goto out;
 
 	buf = kmap(&folio->page);
 	err = vboxsf_write(sf_handle->root, sf_handle->handle,
