@@ -42,14 +42,16 @@ static int i2c_dw_set_timings_master(struct dw_i2c_dev *dev)
 	u32 ic_clk;
 	int ret;
 
-	ret = i2c_dw_acquire_lock(dev);
-	if (ret)
-		return ret;
+	if (!(dev->flags & MODEL_DWC_I2C)) {
+		ret = i2c_dw_acquire_lock(dev);
+		if (ret)
+			return ret;
 
-	ret = regmap_read(dev->map, dev->regs[DW_REG_IDX_COMP_PARAM_1], &comp_param1);
-	i2c_dw_release_lock(dev);
-	if (ret)
-		return ret;
+		ret = regmap_read(dev->map, dev->regs[DW_REG_IDX_COMP_PARAM_1], &comp_param1);
+		i2c_dw_release_lock(dev);
+		if (ret)
+			return ret;
+	}
 
 	/* Set standard and fast speed dividers for high/low periods */
 	sda_falling_time = t->sda_fall_ns ?: 300; /* ns */
@@ -135,7 +137,8 @@ static int i2c_dw_set_timings_master(struct dw_i2c_dev *dev)
 	/* Check is high speed possible and fall back to fast mode if not */
 	if ((dev->master_cfg & dev->con_bits->speed_mask) ==
 		dev->con_bits->speed_high) {
-		if ((comp_param1 & DW_IC_COMP_PARAM_1_SPEED_MODE_MASK)
+		if (!(dev->flags & MODEL_DWC_I2C) &&
+		    (comp_param1 & DW_IC_COMP_PARAM_1_SPEED_MODE_MASK)
 			!= DW_IC_COMP_PARAM_1_SPEED_MODE_HIGH) {
 			dev_err(dev->dev, "High Speed not supported!\n");
 			t->bus_freq_hz = I2C_MAX_FAST_MODE_FREQ;
@@ -403,8 +406,11 @@ i2c_dw_xfer_msg(struct dw_i2c_dev *dev)
 			 * If both IC_EMPTYFIFO_HOLD_MASTER_EN and
 			 * IC_RESTART_EN are set, we must manually
 			 * set restart bit between messages.
+			 * snps,dwc-i2c does not define a CON.RESTART_EN
+			 * bit, and behaves like it is set to 1.
 			 */
-			if (dev->master_cfg & dev->con_bits->restart_en &&
+			if (((dev->master_cfg & dev->con_bits->restart_en) ||
+			     (dev->flags & MODEL_DWC_I2C)) &&
 			    dev->msg_write_idx > 0)
 				need_restart = true;
 		}
