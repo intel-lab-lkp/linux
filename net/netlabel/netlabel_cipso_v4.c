@@ -185,6 +185,9 @@ static int netlbl_cipsov4_add_std(struct genl_info *info,
 					break;
 				}
 		}
+	if (doi_def->map.std->lvl.local_size == 0 ||
+	    doi_def->map.std->lvl.cipso_size == 0)
+		goto add_std_failure;
 	doi_def->map.std->lvl.local = kcalloc(doi_def->map.std->lvl.local_size,
 					      sizeof(u32),
 					      GFP_KERNEL | __GFP_NOWARN);
@@ -260,6 +263,9 @@ static int netlbl_cipsov4_add_std(struct genl_info *info,
 						break;
 					}
 			}
+		if (doi_def->map.std->cat.local_size == 0 ||
+		    doi_def->map.std->cat.cipso_size == 0)
+			goto add_std_failure;
 		doi_def->map.std->cat.local = kcalloc(
 					      doi_def->map.std->cat.local_size,
 					      sizeof(u32),
@@ -680,10 +686,21 @@ static int netlbl_cipsov4_listall(struct sk_buff *skb,
 static int netlbl_cipsov4_remove_cb(struct netlbl_dom_map *entry, void *arg)
 {
 	struct netlbl_domhsh_walk_arg *cb_arg = arg;
+	struct netlbl_af4list *iter4;
+	struct netlbl_domaddr4_map *map4;
 
 	if (entry->def.type == NETLBL_NLTYPE_CIPSOV4 &&
 	    entry->def.cipso->doi == cb_arg->doi)
 		return netlbl_domhsh_remove_entry(entry, cb_arg->audit_info);
+	else if (entry->def.type == NETLBL_NLTYPE_ADDRSELECT) {
+		netlbl_af4list_foreach_rcu(iter4, &entry->def.addrsel->list4) {
+			map4 = netlbl_domhsh_addr4_entry(iter4);
+			if (map4->def.type == NETLBL_NLTYPE_CIPSOV4 &&
+			    map4->def.cipso->doi == cb_arg->doi)
+				return netlbl_domhsh_remove_entry(entry,
+							cb_arg->audit_info);
+		}
+	}
 
 	return 0;
 }
