@@ -847,6 +847,8 @@ static int bsd_decompress (void *state, unsigned char *ibuf, int isize,
     int extra;
 
     db       = (struct bsd_db *) state;
+	if (isize < PPP_HDRLEN + BSD_OVHD)
+		return DECOMP_ERROR;
     max_ent  = db->max_ent;
     accm     = 0;
     bitno    = 32;		/* 1st valid bit in accm */

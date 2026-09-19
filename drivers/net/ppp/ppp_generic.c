@@ -2552,7 +2552,8 @@ ppp_decompress_frame(struct ppp *ppp, struct sk_buff *skb)
 	/* Until we fix all the decompressor's need to make sure
 	 * data portion is linear.
 	 */
-	if (!pskb_may_pull(skb, skb->len))
+	if (!pskb_may_pull(skb, skb->len) ||
+	    pskb_expand_head(skb, 2, 0, GFP_ATOMIC))
 		goto err;
 
 	if (proto == PPP_COMP) {
@@ -2576,7 +2577,7 @@ ppp_decompress_frame(struct ppp *ppp, struct sk_buff *skb)
 		/* the decompressor still expects the A/C bytes in the hdr */
 		len = ppp->rcomp->decompress(ppp->rc_state, skb->data - 2,
 				skb->len + 2, ns->data, obuff_size);
-		if (len < 0) {
+		if (len < PPP_HDRLEN) {
 			/* Pass the compressed frame to pppd as an
 			   error indication. */
 			if (len == DECOMP_FATALERROR)
