@@ -753,14 +753,21 @@ int siox_master_register(struct siox_master *smaster)
 	smaster->poll_thread = kthread_run(siox_poll_thread, smaster,
 					   "siox-%d", smaster->busno);
 	if (IS_ERR(smaster->poll_thread)) {
+		ret = PTR_ERR(smaster->poll_thread);
 		smaster->active = 0;
-		return PTR_ERR(smaster->poll_thread);
+		goto err_put_device;
 	}
 
 	ret = device_add(&smaster->dev);
-	if (ret)
+	if (ret) {
 		kthread_stop(smaster->poll_thread);
+		goto err_put_device;
+	}
 
+	return 0;
+
+err_put_device:
+	put_device(&smaster->dev);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(siox_master_register);
