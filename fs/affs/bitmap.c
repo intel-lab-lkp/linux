@@ -133,7 +133,7 @@ affs_alloc_block(struct inode *inode, u32 goal)
 		return ++AFFS_I(inode)->i_lastalloc;
 	}
 
-	if (!goal || goal > sbi->s_partition_size) {
+	if (!affs_validblock(sb, goal)) {
 		if (goal)
 			affs_warning(sb, "affs_balloc", "invalid goal %d", goal);
 		//if (!AFFS_I(inode)->i_last_block)
