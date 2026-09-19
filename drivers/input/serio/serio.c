@@ -83,6 +83,11 @@ static int serio_bind_driver(struct serio *serio, struct serio_driver *drv)
 {
 	int error;
 
+	guard(device)(&serio->dev);
+
+	if (serio->dev.driver)
+		return serio->dev.driver == &drv->driver ? 0 : -EBUSY;
+
 	if (serio_match_port(drv->id_table, serio)) {
 
 		serio->dev.driver = &drv->driver;
