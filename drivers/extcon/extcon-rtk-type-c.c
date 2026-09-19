@@ -1409,17 +1409,6 @@ static void extcon_rtk_type_c_remove(struct platform_device *pdev)
 	u32 default_ctrl;
 	unsigned long flags;
 
-	remove_debug_files(type_c);
-
-	if (type_c->port) {
-		typec_unregister_port(type_c->port);
-		type_c->port = NULL;
-	}
-
-	cancel_delayed_work_sync(&type_c->delayed_work);
-	flush_delayed_work(&type_c->delayed_work);
-	WARN_ON_ONCE(delayed_work_pending(&type_c->delayed_work));
-
 	spin_lock_irqsave(&type_c->lock, flags);
 	/* disable interrupt */
 	default_ctrl = readl(type_c->reg_base + USB_TYPEC_CTRL) &
@@ -1431,12 +1420,22 @@ static void extcon_rtk_type_c_remove(struct platform_device *pdev)
 	writel(0, type_c->reg_base + USB_TYPEC_CTRL_CC2_0);
 
 	spin_unlock_irqrestore(&type_c->lock, flags);
+	devm_free_irq(dev, type_c->irq, type_c);
+
+	cancel_delayed_work_sync(&type_c->delayed_work);
+	flush_delayed_work(&type_c->delayed_work);
+	WARN_ON_ONCE(delayed_work_pending(&type_c->delayed_work));
+
+	remove_debug_files(type_c);
+
+	if (type_c->port) {
+		typec_unregister_port(type_c->port);
+		type_c->port = NULL;
+	}
 
 	if (type_c->rd_ctrl_gpio_desc)
 		gpiod_put(type_c->rd_ctrl_gpio_desc);
 	type_c->rd_ctrl_gpio_desc = NULL;
-
-	free_irq(type_c->irq, type_c);
 }
 
 static const struct type_c_cfg rtd1295_type_c_cfg = {
