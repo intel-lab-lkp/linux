@@ -60,10 +60,7 @@ static int blacklist_range(range_action action, unsigned int from_ssid,
 
 	while ((from_ssid < to_ssid) || ((from_ssid == to_ssid) &&
 	       (from <= to))) {
-		if (action == add)
-			set_bit(from, bl_dev[from_ssid]);
-		else
-			clear_bit(from, bl_dev[from_ssid]);
+		assign_bit(from, bl_dev[from_ssid], action == add);
 		from++;
 		if (from > __MAX_SUBCHANNEL) {
 			from_ssid++;
