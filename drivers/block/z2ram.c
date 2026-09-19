@@ -333,8 +333,10 @@ static int z2ram_register_disk(int minor)
 
 	z2ram_gendisk[minor] = disk;
 	err = add_disk(disk);
-	if (err)
+	if (err) {
+		z2ram_gendisk[minor] = NULL;
 		put_disk(disk);
+	}
 	return err;
 }
 
@@ -379,6 +381,8 @@ static void __exit z2_exit(void)
 	unregister_blkdev(Z2RAM_MAJOR, DEVICE_NAME);
 
 	for (i = 0; i < Z2MINOR_COUNT; i++) {
+		if (!z2ram_gendisk[i])
+			continue;
 		del_gendisk(z2ram_gendisk[i]);
 		put_disk(z2ram_gendisk[i]);
 	}
