@@ -5007,6 +5007,9 @@ static struct file *path_openat(struct nameidata *nd,
 		error = -EINVAL;
 	}
 	fput_close(file);
+	if (error == -EISDIR &&
+	    (op->open_flag & __O_REGULAR))
+		error = -EFTYPE;
 	if (error == -EOPENSTALE) {
 		if (flags & LOOKUP_RCU)
 			error = -ECHILD;

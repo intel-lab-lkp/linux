@@ -599,17 +599,62 @@ otherwise noted.
 
 ``atomic_open``
 	called on the last component of an open.  Using this optional
-	method the filesystem can look up, possibly create and open the
-	file in one atomic operation.  If it wants to leave actual
-	opening to the caller (e.g. if the file turned out to be a
-	symlink, device, or just something filesystem won't do atomic
-	open for), it may signal this by returning finish_no_open(file,
-	dentry).  This method is only called if the last component is
-	negative or needs lookup.  Cached positive dentries are still
-	handled by f_op->open().  If the file was created, FMODE_CREATED
-	flag should be set in file->f_mode.  In case of O_EXCL the
-	method must only succeed if the file didn't exist and hence
-	FMODE_CREATED shall always be set on success.
+	method the filesystem can look up, create, truncate, and open
+	the file in one atomic operation.  This is needed if the
+	filesystem content can be changed asynchronously and
+	specifically if a negative dentry is not a guarantee that the
+	object doesn't exist.  It is also useful if it is possible to
+	perform combinations of revalidate, lookup, create, open, and
+	truncate more efficiently what with a sequence of individual
+	operations.
+
+	If the object found is not a file or directory, or if
+	lookup/create succeeded without establishing any "open" state,
+	then finish_no_open() should be called to confirm that the
+	dentry is ready to be handled by normal VFS processing.
+	FMODE_CREATED should be set in the "file" if the object was
+	created, and this will prevent further access permission checks,
+	or handling of O_TRUNC and O_EXCL.
+
+	If the lookup/create operation established some open state for a
+	file or directory, the open should be completed by calling
+	finish_open().  Passing NULL as the "open" function to
+	finish_open() is unlikely to be useful as that assumes that no
+	open state has been established.
+
+	atomic_open() may generate errors related to O_DIRECTORY,
+	__O_REGULAR, O_EXCL, O_NOFOLLOW but is not required to as the
+	caller will check those against the resulting dentry and
+	generate any error needed, possibly closing the file if it was
+	opened by finish_open().  atomic_open() is encouraged to handle
+	these flags only when doing so is more efficient than not.
+
+	If __O_REGULAR is handled, it should generate -EISDIR if the
+	name is known to be a directory or -EFTYPE if it is some other
+	non-regular file other than a symbolic link.  Handling of a
+	symbolic link should be guided by O_NOFOLLOW, not __O_REGULAR:
+	-ELOOP can be return if O_NOFOLLOW is set, otherwise the symlink
+	should be returned through finish_no_open().
+
+	The focus for atomic_open() is to provide the correct dentry and
+	to set FMODE_CREATED as accurately as possible.  If O_EXCL was
+	set, FMODE_CREATED should only be set if this operation
+	certainly created the object.  If O_EXCL was not set,
+	FMODE_CREATE should be set if it is possible that this operation
+	created the object.
+
+	This method is only called if the last component is negative or
+	needs lookup.  Cached positive dentries are still handled by
+	f_op->open().
+
+	If the dentry provided is negative (not in-lookup) and O_CREAT
+	isn't set, then there is no guarantee of exclusive access to the
+	dentry - another thread might call ->atomic_open() on the same
+	dentry at the same time.  If needed a filesystem can ensure this
+	doesn't happen by returning 0 from ->d_revalidate when that is
+	called with LOOKUP_OPEN on a negative dentry.  This will ensure
+	that ->atomic_open() only receives an in-lookup dentry, which
+	always ensures exclusive access.
 
 ``tmpfile``
 	called in the end of O_TMPFILE open().  Optional, equivalent to
