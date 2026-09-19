@@ -368,9 +368,14 @@ static irqreturn_t cpwd_interrupt(int irq, void *dev_id)
 
 static int cpwd_open(struct inode *inode, struct file *f)
 {
-	struct cpwd *p = cpwd_device;
+	struct cpwd *p;
 
-	mutex_lock(&cpwd_mutex);
+	guard(mutex)(&cpwd_mutex);
+
+	p = cpwd_device;
+	if (!p)
+		return -ENODEV;
+
 	switch (iminor(inode)) {
 	case WD0_MINOR:
 	case WD1_MINOR:
@@ -378,7 +383,6 @@ static int cpwd_open(struct inode *inode, struct file *f)
 		break;
 
 	default:
-		mutex_unlock(&cpwd_mutex);
 		return -ENODEV;
 	}
 
@@ -387,13 +391,10 @@ static int cpwd_open(struct inode *inode, struct file *f)
 		if (request_irq(p->irq, &cpwd_interrupt,
 				IRQF_SHARED, DRIVER_NAME, p)) {
 			pr_err("Cannot register IRQ %d\n", p->irq);
-			mutex_unlock(&cpwd_mutex);
 			return -EBUSY;
 		}
 		p->initialized = true;
 	}
-
-	mutex_unlock(&cpwd_mutex);
 
 	return stream_open(inode, f);
 }
@@ -413,8 +414,14 @@ static long cpwd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	void __user *argp = (void __user *)arg;
 	struct inode *inode = file_inode(file);
 	int index = iminor(inode) - WD0_MINOR;
-	struct cpwd *p = cpwd_device;
+	struct cpwd *p;
 	int setopt = 0;
+
+	guard(mutex)(&cpwd_mutex);
+
+	p = cpwd_device;
+	if (!p)
+		return -ENODEV;
 
 	switch (cmd) {
 	/* Generic Linux IOCTLs */
@@ -482,8 +489,14 @@ static ssize_t cpwd_write(struct file *file, const char __user *buf,
 			  size_t count, loff_t *ppos)
 {
 	struct inode *inode = file_inode(file);
-	struct cpwd *p = cpwd_device;
 	int index = iminor(inode);
+	struct cpwd *p;
+
+	guard(mutex)(&cpwd_mutex);
+
+	p = cpwd_device;
+	if (!p)
+		return -ENODEV;
 
 	if (count) {
 		cpwd_pingtimer(p, index);
@@ -617,6 +630,8 @@ static void cpwd_remove(struct platform_device *op)
 {
 	struct cpwd *p = platform_get_drvdata(op);
 	int i;
+
+	guard(mutex)(&cpwd_mutex);
 
 	for (i = 0; i < WD_NUMDEVS; i++) {
 		misc_deregister(&p->devs[i].misc);
