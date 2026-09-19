@@ -185,7 +185,7 @@ static int virtio_gpu_resource_create_ioctl(struct drm_device *dev, void *data,
 
 	ret = drm_gem_handle_create(file, obj, &handle);
 	if (ret) {
-		drm_gem_object_release(obj);
+		drm_gem_object_put(obj);
 		return ret;
 	}
 
@@ -490,6 +490,9 @@ static int verify_blob(struct virtio_gpu_device *vgdev,
 			return -EINVAL;
 	}
 
+	if (rc_blob->size == 0 || rc_blob->size > ULONG_MAX - PAGE_SIZE + 1)
+		return -EINVAL;
+
 	params->blob_mem = rc_blob->blob_mem;
 	params->size = rc_blob->size;
 	params->blob = true;
@@ -557,14 +560,14 @@ static int virtio_gpu_resource_create_blob_ioctl(struct drm_device *dev,
 	if (params.blob_flags & VIRTGPU_BLOB_FLAG_USE_CROSS_DEVICE) {
 		ret = virtio_gpu_resource_assign_uuid(vgdev, bo);
 		if (ret) {
-			drm_gem_object_release(obj);
+			drm_gem_object_put(obj);
 			return ret;
 		}
 	}
 
 	ret = drm_gem_handle_create(file, obj, &handle);
 	if (ret) {
-		drm_gem_object_release(obj);
+		drm_gem_object_put(obj);
 		return ret;
 	}
 
@@ -616,6 +619,15 @@ static int virtio_gpu_context_init_ioctl(struct drm_device *dev,
 		goto out_unlock;
 	}
 
+	u32 context_init = vfpriv->context_init;
+	u32 num_rings = vfpriv->num_rings;
+	u64 ring_idx_mask = vfpriv->ring_idx_mask;
+	bool explicit_debug_name = vfpriv->explicit_debug_name;
+	bool num_rings_set = (vfpriv->base_fence_ctx != 0);
+	char debug_name[DEBUG_NAME_MAX_LEN];
+
+	memcpy(debug_name, vfpriv->debug_name, sizeof(debug_name));
+
 	for (i = 0; i < num_params; i++) {
 		param = ctx_set_params[i].param;
 		value = ctx_set_params[i].value;
@@ -633,16 +645,16 @@ static int virtio_gpu_context_init_ioctl(struct drm_device *dev,
 			}
 
 			/* Context capset ID already set */
-			if (vfpriv->context_init &
+			if (context_init &
 			    VIRTIO_GPU_CONTEXT_INIT_CAPSET_ID_MASK) {
 				ret = -EINVAL;
 				goto out_unlock;
 			}
 
-			vfpriv->context_init |= value;
+			context_init |= value;
 			break;
 		case VIRTGPU_CONTEXT_PARAM_NUM_RINGS:
-			if (vfpriv->base_fence_ctx) {
+			if (num_rings_set) {
 				ret = -EINVAL;
 				goto out_unlock;
 			}
@@ -652,30 +664,31 @@ static int virtio_gpu_context_init_ioctl(struct drm_device *dev,
 				goto out_unlock;
 			}
 
-			vfpriv->base_fence_ctx = dma_fence_context_alloc(value);
-			vfpriv->num_rings = value;
+			num_rings = value;
+			num_rings_set = true;
 			break;
 		case VIRTGPU_CONTEXT_PARAM_POLL_RINGS_MASK:
-			if (vfpriv->ring_idx_mask) {
+			if (ring_idx_mask) {
 				ret = -EINVAL;
 				goto out_unlock;
 			}
 
-			vfpriv->ring_idx_mask = value;
+			ring_idx_mask = value;
 			break;
 		case VIRTGPU_CONTEXT_PARAM_DEBUG_NAME:
-			if (vfpriv->explicit_debug_name) {
+			if (explicit_debug_name) {
 				ret = -EINVAL;
 				goto out_unlock;
 			}
 
-			ret = strncpy_from_user(vfpriv->debug_name,
+			memset(debug_name, 0, sizeof(debug_name));
+			ret = strncpy_from_user(debug_name,
 						u64_to_user_ptr(value),
 						DEBUG_NAME_MAX_LEN - 1);
 			if (ret < 0)
 				goto out_unlock;
 
-			vfpriv->explicit_debug_name = true;
+			explicit_debug_name = true;
 			ret = 0;
 			break;
 		default:
@@ -684,15 +697,26 @@ static int virtio_gpu_context_init_ioctl(struct drm_device *dev,
 		}
 	}
 
-	if (vfpriv->ring_idx_mask) {
+	if (ring_idx_mask) {
 		valid_ring_mask = 0;
-		for (i = 0; i < vfpriv->num_rings; i++)
+		for (i = 0; i < num_rings; i++)
 			valid_ring_mask |= 1ULL << i;
 
-		if (~valid_ring_mask & vfpriv->ring_idx_mask) {
+		if (~valid_ring_mask & ring_idx_mask) {
 			ret = -EINVAL;
 			goto out_unlock;
 		}
+	}
+
+	vfpriv->context_init = context_init;
+	if (num_rings_set && !vfpriv->base_fence_ctx) {
+		vfpriv->base_fence_ctx = dma_fence_context_alloc(num_rings);
+		vfpriv->num_rings = num_rings;
+	}
+	vfpriv->ring_idx_mask = ring_idx_mask;
+	if (explicit_debug_name && !vfpriv->explicit_debug_name) {
+		memcpy(vfpriv->debug_name, debug_name, sizeof(vfpriv->debug_name));
+		vfpriv->explicit_debug_name = true;
 	}
 
 	virtio_gpu_create_context_locked(vgdev, vfpriv);

@@ -248,7 +248,10 @@ void virtio_gpu_vram_map_deferred(struct virtio_gpu_object_vram *vram)
 		return;
 
 	mutex_lock(&map_lock);
-	if (!drm_mm_node_allocated(&vram->vram_node))
-		virtio_gpu_vram_map(&vram->base);
+	if (!drm_mm_node_allocated(&vram->vram_node)) {
+		vram->map_state = STATE_INITIALIZING;
+		if (virtio_gpu_vram_map(&vram->base))
+			vram->map_state = STATE_ERR;
+	}
 	mutex_unlock(&map_lock);
 }
