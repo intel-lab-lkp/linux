@@ -367,8 +367,12 @@ static int ibmvfc_nvme_fcp_io(struct nvme_fc_local_port *lport,
 
 	vfc_cmd->correlation = cpu_to_be64((u64)evt);
 
-	if (likely(!(rc = ibmvfc_nvme_map_sg_data(fcp_req, evt, vfc_cmd))))
-		return ibmvfc_send_event(evt, vhost, 0);
+	if (likely(!(rc = ibmvfc_nvme_map_sg_data(fcp_req, evt, vfc_cmd)))) {
+		rc = ibmvfc_send_event(evt, vhost, 0);
+		if (rc)
+			return -EBUSY;
+		return 0;
+	}
 
 	ibmvfc_free_event(evt);
 
