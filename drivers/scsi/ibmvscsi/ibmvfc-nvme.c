@@ -184,7 +184,7 @@ static void ibmvfc_init_ls_abort(struct ibmvfc_event *evt, struct nvmefc_ls_req 
 	tmf->common.opcode = cpu_to_be32(IBMVFC_NVMF_TMF_MAD);
 	tmf->common.length = cpu_to_be16(sizeof(*tmf));
 	if (vhost->state != IBMVFC_ACTIVE)
-		if (!ibmvfc_check_caps(vhost, IBMVFC_CAN_SUPPRESS_ABTS))
+		if (ibmvfc_check_caps(vhost, IBMVFC_CAN_SUPPRESS_ABTS))
 			tmf->flags = cpu_to_be32(IBMVFC_TMF_SUPPRESS_ABTS);
 	tmf->cancel_key = cpu_to_be32((u64)abt_evt);
 	tmf->my_cancel_key = cpu_to_be32((u64)evt);
