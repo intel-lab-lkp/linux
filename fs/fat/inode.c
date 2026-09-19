@@ -535,11 +535,11 @@ int fat_fill_inode(struct inode *inode, struct msdos_dir_entry *de)
 			return error;
 		MSDOS_I(inode)->mmu_private = inode->i_size;
 
-		set_nlink(inode, fat_subdirs(inode));
-
 		error = fat_validate_dir(inode);
 		if (error < 0)
 			return error;
+
+		set_nlink(inode, fat_subdirs(inode));
 	} else { /* not a directory */
 		inode->i_generation |= 1;
 		inode->i_mode = fat_make_mode(sbi, de->attr,
@@ -610,6 +610,7 @@ struct inode *fat_build_inode(struct super_block *sb,
 	inode_set_iversion(inode, 1);
 	err = fat_fill_inode(inode, de);
 	if (err) {
+		make_bad_inode(inode);
 		iput(inode);
 		inode = ERR_PTR(err);
 		goto out;
@@ -688,12 +689,14 @@ static void fat_free_eofblocks(struct inode *inode)
 static void fat_evict_inode(struct inode *inode)
 {
 	truncate_inode_pages_final(&inode->i_data);
-	if (!inode->i_nlink) {
-		inode->i_size = 0;
-		fat_truncate_blocks(inode, 0);
-	} else {
-		mmb_sync(&MSDOS_I(inode)->i_metadata_bhs);
-		fat_free_eofblocks(inode);
+	if (!is_bad_inode(inode) && !sb_rdonly(inode->i_sb)) {
+		if (!inode->i_nlink) {
+			inode->i_size = 0;
+			fat_truncate_blocks(inode, 0);
+		} else {
+			mmb_sync(&MSDOS_I(inode)->i_metadata_bhs);
+			fat_free_eofblocks(inode);
+		}
 	}
 
 	mmb_invalidate(&MSDOS_I(inode)->i_metadata_bhs);
