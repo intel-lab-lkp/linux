@@ -97,6 +97,7 @@ static int subdev_open(struct file *file)
 	struct video_device *vdev = video_devdata(file);
 	struct v4l2_subdev *sd = vdev_to_v4l2_subdev(vdev);
 	struct v4l2_subdev_fh *subdev_fh;
+	struct media_device *mdev;
 	int ret;
 
 	subdev_fh = kzalloc_obj(*subdev_fh);
@@ -112,15 +113,22 @@ static int subdev_open(struct file *file)
 	v4l2_fh_init(&subdev_fh->vfh, vdev);
 	v4l2_fh_add(&subdev_fh->vfh, file);
 
-	if (sd->v4l2_dev->mdev && sd->entity.graph_obj.mdev->dev) {
-		struct module *owner;
+	/* Unregistration clears the entity's mdev without waiting for open. */
+	mdev = READ_ONCE(sd->entity.graph_obj.mdev);
+	if (mdev && mdev->dev) {
+		struct device *dev = mdev->dev;
 
-		owner = sd->entity.graph_obj.mdev->dev->driver->owner;
-		if (!try_module_get(owner)) {
+		/* Unbind clears dev->driver under the device lock. */
+		device_lock(dev);
+		if (!dev->driver)
+			ret = -ENODEV;
+		else if (!try_module_get(dev->driver->owner))
 			ret = -EBUSY;
+		else
+			subdev_fh->owner = dev->driver->owner;
+		device_unlock(dev);
+		if (ret)
 			goto err;
-		}
-		subdev_fh->owner = owner;
 	}
 
 	if (sd->internal_ops && sd->internal_ops->open) {
