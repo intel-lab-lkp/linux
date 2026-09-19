@@ -77,6 +77,9 @@ static int fou_udp_recv(struct sock *sk, struct sk_buff *skb)
 	if (!fou)
 		return 1;
 
+	if (unlikely(!fou->protocol))
+		goto drop;
+
 	if (fou_recv_pull(skb, fou, sizeof(struct udphdr)))
 		goto drop;
 
@@ -695,6 +698,9 @@ static int parse_nl_config(struct genl_info *info,
 
 	if (info->attrs[FOU_ATTR_TYPE])
 		cfg->type = nla_get_u8(info->attrs[FOU_ATTR_TYPE]);
+
+	if (cfg->type == FOU_ENCAP_DIRECT && !cfg->protocol)
+		return -EINVAL;
 
 	if (info->attrs[FOU_ATTR_REMCSUM_NOPARTIAL])
 		cfg->flags |= FOU_F_REMCSUM_NOPARTIAL;
