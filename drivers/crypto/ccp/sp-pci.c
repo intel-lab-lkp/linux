@@ -477,6 +477,21 @@ static const struct psp_vdata pspv7 = {
 	.intsts_reg		= 0x10514,	/* P2CMSG_INTSTS */
 };
 
+/*
+ * The BC-250 uses the pspv3 register layout but has no usable TEE: the
+ * capability register advertises one and PSP_CMD_TEE_RING_INIT never
+ * completes. Platform access has its own mailbox and is unaffected.
+ */
+static const struct psp_vdata pspv_bc250 = {
+	.platform_access	= &pa_v1,
+	.bootloader_info_reg	= 0x109ec,	/* C2PMSG_59 */
+	.feature_reg		= 0x109fc,	/* C2PMSG_63 */
+	.inten_reg		= 0x10690,	/* P2CMSG_INTEN */
+	.intsts_reg		= 0x10694,	/* P2CMSG_INTSTS */
+	.platform_features	= PLATFORM_FEATURE_DBC |
+				  PLATFORM_FEATURE_HSTI,
+};
+
 #endif
 
 static const struct sp_dev_vdata dev_vdata[] = {
@@ -549,6 +564,12 @@ static const struct sp_dev_vdata dev_vdata[] = {
 		.psp_vdata = &pspv7,
 #endif
 	},
+	{	/* 10 */
+		.bar = 2,
+#ifdef CONFIG_CRYPTO_DEV_SP_PSP
+		.psp_vdata = &pspv_bc250,
+#endif
+	},
 
 };
 static const struct pci_device_id sp_pci_table[] = {
@@ -560,6 +581,7 @@ static const struct pci_device_id sp_pci_table[] = {
 	{ PCI_VDEVICE(AMD, 0x14CA), .driver_data = (kernel_ulong_t)&dev_vdata[5] },
 	{ PCI_VDEVICE(AMD, 0x15C7), .driver_data = (kernel_ulong_t)&dev_vdata[6] },
 	{ PCI_VDEVICE(AMD, 0x1649), .driver_data = (kernel_ulong_t)&dev_vdata[6] },
+	{ PCI_VDEVICE(AMD, 0x143e), .driver_data = (kernel_ulong_t)&dev_vdata[10] },
 	{ PCI_VDEVICE(AMD, 0x1134), .driver_data = (kernel_ulong_t)&dev_vdata[7] },
 	{ PCI_VDEVICE(AMD, 0x17E0), .driver_data = (kernel_ulong_t)&dev_vdata[7] },
 	{ PCI_VDEVICE(AMD, 0x156E), .driver_data = (kernel_ulong_t)&dev_vdata[8] },
