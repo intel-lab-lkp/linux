@@ -263,6 +263,26 @@ static inline bool axi_chan_is_hw_enable(struct axi_dma_chan *chan)
 		return !!(val & (BIT(chan->id) << DMAC_CHAN_EN_SHIFT));
 }
 
+static int axi_chan_wait_idle(struct axi_dma_chan *chan)
+{
+	unsigned int timeout = 50; /* 50 x 2us = 100us */
+
+	/*
+	 * Writing the channel-disable bit is asynchronous: the hardware
+	 * finishes the current burst, flushes the FIFO and only then
+	 * clears the enable bit. Wait until the channel is really idle
+	 * before (re)starting a transfer, otherwise the non-idle check
+	 * in axi_chan_block_xfer_start() would silently drop it.
+	 */
+	while (axi_chan_is_hw_enable(chan)) {
+		if (!--timeout)
+			return -ETIMEDOUT;
+		udelay(2);
+	}
+
+	return 0;
+}
+
 static void axi_dma_hw_init(struct axi_dma_chip *chip)
 {
 	int ret;
@@ -501,7 +521,7 @@ static void dma_chan_issue_pending(struct dma_chan *dchan)
 	unsigned long flags;
 
 	spin_lock_irqsave(&chan->vc.lock, flags);
-	if (vchan_issue_pending(&chan->vc))
+	if (vchan_issue_pending(&chan->vc) && !axi_chan_is_hw_enable(chan))
 		axi_chan_start_first_queued(chan);
 	spin_unlock_irqrestore(&chan->vc.lock, flags);
 }
@@ -1067,6 +1087,9 @@ static noinline void axi_chan_handle_err(struct axi_dma_chan *chan, u32 status)
 	spin_lock_irqsave(&chan->vc.lock, flags);
 
 	axi_chan_disable(chan);
+	if (axi_chan_wait_idle(chan))
+		dev_warn(chan2dev(chan), "%s failed to go idle\n",
+			 axi_chan_name(chan));
 
 	/* The bad descriptor currently is in the head of vc list */
 	vd = vchan_next_desc(&chan->vc);
@@ -1108,6 +1131,9 @@ static void axi_chan_block_xfer_complete(struct axi_dma_chan *chan)
 		dev_err(chan2dev(chan), "BUG: %s caught DWAXIDMAC_IRQ_DMA_TRF, but channel not idle!\n",
 			axi_chan_name(chan));
 		axi_chan_disable(chan);
+		if (axi_chan_wait_idle(chan))
+			dev_warn(chan2dev(chan), "%s failed to go idle\n",
+				 axi_chan_name(chan));
 	}
 
 	/* The completed descriptor currently is in the head of vc list */
@@ -1141,6 +1167,9 @@ static void axi_chan_block_xfer_complete(struct axi_dma_chan *chan)
 		/* Remove the completed descriptor from issued list before completing */
 		list_del(&vd->node);
 		vchan_cookie_complete(vd);
+
+		/* Restart the next queued descriptor, if any */
+		axi_chan_start_first_queued(chan);
 	}
 
 out:
