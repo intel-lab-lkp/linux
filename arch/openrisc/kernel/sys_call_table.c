@@ -21,7 +21,6 @@
 
 #define sys_mmap2 sys_mmap_pgoff
 #define sys_clone __sys_clone
-#define sys_clone3 __sys_clone3
 #define sys_fork __sys_fork
 
 void *sys_call_table[__NR_syscalls] = {
