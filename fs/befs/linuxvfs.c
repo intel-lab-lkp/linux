@@ -222,7 +222,7 @@ befs_readdir(struct file *file, struct dir_context *ctx)
 	befs_off_t value;
 	int result;
 	size_t keysize;
-	char keybuf[BEFS_NAME_LEN + 1];
+	char keybuf[BEFS_NAME_LEN + 1] = { 0 };
 
 	befs_debug(sb, "---> %s name %pD, inode %llu, ctx->pos %lld",
 		  __func__, file, inode->i_ino, ctx->pos);

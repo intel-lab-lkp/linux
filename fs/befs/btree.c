@@ -219,6 +219,19 @@ befs_bt_read_node(struct super_block *sb, const befs_data_stream *ds,
 	node->head.all_key_length =
 	    fs16_to_cpu(sb, node->od_node->all_key_length);
 
+	{
+		size_t keylen_off = round_up(sizeof(befs_btree_nodehead) +
+					     node->head.all_key_length, 8);
+		size_t total_needed = keylen_off +
+			(size_t)node->head.all_key_count * (sizeof(fs16) + sizeof(fs64));
+		if (off >= node->bh->b_size ||
+		    total_needed > node->bh->b_size - off) {
+			brelse(node->bh);
+			node->bh = NULL;
+			return BEFS_ERR;
+		}
+	}
+
 	befs_debug(sb, "<--- %s", __func__);
 	return BEFS_OK;
 }
@@ -343,6 +356,8 @@ befs_find_key(struct super_block *sb, struct befs_btree_node *node,
 	/* if node can not contain key, just skip this node */
 	last = node->head.all_key_count - 1;
 	thiskey = befs_bt_get_key(sb, node, last, &keylen);
+	if (!thiskey)
+		return BEFS_BT_NOT_FOUND;
 
 	eq = befs_compare_strings(thiskey, keylen, findkey, findkey_len);
 	if (eq < 0) {
@@ -360,6 +375,8 @@ befs_find_key(struct super_block *sb, struct befs_btree_node *node,
 		befs_debug(sb, "first: %d, last: %d, mid: %d", first, last,
 			   mid);
 		thiskey = befs_bt_get_key(sb, node, mid, &keylen);
+		if (!thiskey)
+			return BEFS_BT_NOT_FOUND;
 		eq = befs_compare_strings(thiskey, keylen, findkey,
 					  findkey_len);
 
@@ -417,6 +434,7 @@ befs_btree_read(struct super_block *sb, const befs_data_stream *ds,
 	int cur_key;
 	fs64 *valarray;
 	char *keystart;
+	ssize_t copy_len;
 	u16 keylen;
 	int res;
 
@@ -487,6 +505,10 @@ befs_btree_read(struct super_block *sb, const befs_data_stream *ds,
 	valarray = befs_bt_valarray(this_node);
 
 	keystart = befs_bt_get_key(sb, this_node, cur_key, &keylen);
+	if (!keystart) {
+		brelse(this_node->bh);
+		goto error_alloc;
+	}
 
 	befs_debug(sb, "Read [%llu,%d]: keysize %d",
 		   (long long unsigned int)node_off, (int)cur_key,
@@ -499,9 +521,9 @@ befs_btree_read(struct super_block *sb, const befs_data_stream *ds,
 		goto error_alloc;
 	}
 
-	strscpy(keybuf, keystart, keylen + 1);
+	copy_len = strscpy(keybuf, keystart, keylen + 1);
+	*keysize = (copy_len < 0) ? keylen : copy_len;
 	*value = fs64_to_cpu(sb, valarray[cur_key]);
-	*keysize = keylen;
 
 	befs_debug(sb, "Read [%llu,%d]: Key \"%.*s\", Value %llu", node_off,
 		   cur_key, keylen, keybuf, *value);
@@ -678,7 +700,7 @@ befs_bt_get_key(struct super_block *sb, struct befs_btree_node *node,
 	char *keystart;
 	fs16 *keylen_index;
 
-	if (index < 0 || index > node->head.all_key_count) {
+	if (index < 0 || index >= node->head.all_key_count) {
 		*keylen = 0;
 		return NULL;
 	}
@@ -690,6 +712,12 @@ befs_bt_get_key(struct super_block *sb, struct befs_btree_node *node,
 		prev_key_end = 0;
 	else
 		prev_key_end = fs16_to_cpu(sb, keylen_index[index - 1]);
+
+	if (fs16_to_cpu(sb, keylen_index[index]) < prev_key_end ||
+	    fs16_to_cpu(sb, keylen_index[index]) > node->head.all_key_length) {
+		*keylen = 0;
+		return NULL;
+	}
 
 	*keylen = fs16_to_cpu(sb, keylen_index[index]) - prev_key_end;
 
