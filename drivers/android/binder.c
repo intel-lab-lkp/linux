@@ -5206,11 +5206,17 @@ static void binder_release_work(struct binder_proc *proc,
 		switch (wtype) {
 		case BINDER_WORK_TRANSACTION: {
 			struct binder_transaction *t;
+			struct binder_buffer *buffer;
 
 			t = container_of(w, struct binder_transaction, work);
+			buffer = t->buffer;
+			if (buffer)
+				buffer->transaction = NULL;
 
 			binder_cleanup_transaction(t, "process died.",
 						   BR_DEAD_REPLY);
+			if (!proc->is_dead && buffer)
+				binder_free_buf(proc, NULL, buffer, true);
 		} break;
 		case BINDER_WORK_RETURN_ERROR: {
 			struct binder_error *e = container_of(
