@@ -10,6 +10,7 @@
 #include <linux/dcache.h>
 #include <linux/stringhash.h>
 #include "hfsplus_fs.h"
+#include "unicode.h"
 
 struct test_mock_string_env {
 	struct hfsplus_unistr str1;

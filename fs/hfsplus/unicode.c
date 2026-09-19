@@ -16,6 +16,7 @@
 
 #include "hfsplus_fs.h"
 #include "hfsplus_raw.h"
+#include "unicode.h"
 
 /* Fold the case of a unicode char, given the 16 bit value */
 /* Returns folded char, or 0 if ignorable */
