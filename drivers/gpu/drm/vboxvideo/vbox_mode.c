@@ -140,7 +140,8 @@ static bool vbox_set_up_input_mapping(struct vbox_private *vbox)
 
 		if (!fb1) {
 			fb1 = fb;
-			if (fb1 == vbox->ddev.fb_helper->fb)
+			if (vbox->ddev.fb_helper &&
+			    fb1 == vbox->ddev.fb_helper->fb)
 				break;
 		} else if (fb != fb1) {
 			single_framebuffer = false;
@@ -362,7 +363,8 @@ static int vbox_cursor_atomic_check(struct drm_plane *plane,
 		return 0;
 
 	if (width > VBOX_MAX_CURSOR_WIDTH || height > VBOX_MAX_CURSOR_HEIGHT ||
-	    width == 0 || height == 0)
+	    width == 0 || height == 0 ||
+	    width != new_state->fb->width || height != new_state->fb->height)
 		return -EINVAL;
 
 	return 0;
@@ -379,6 +381,7 @@ static void copy_cursor_image(u8 *src, u8 *dst, u32 width, u32 height,
 	size_t line_size = (width + 7) / 8;
 	u32 i, j;
 
+	memset(dst, 0, mask_size);
 	memcpy(dst + mask_size, src, width * height * 4);
 	for (i = 0; i < height; ++i)
 		for (j = 0; j < width; ++j)

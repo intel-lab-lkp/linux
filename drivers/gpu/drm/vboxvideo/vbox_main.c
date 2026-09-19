@@ -115,6 +115,10 @@ int vbox_hw_init(struct vbox_private *vbox)
 
 	DRM_INFO("VRAM %08x\n", vbox->full_vram_size);
 
+	if (vbox->full_vram_size < VBVA_ADAPTER_INFORMATION_SIZE +
+				   vbox->num_crtcs * VBVA_MIN_BUFFER_SIZE)
+		return -EINVAL;
+
 	ret = pcim_request_region(pdev, 0, "vboxvideo");
 	if (ret)
 		return ret;

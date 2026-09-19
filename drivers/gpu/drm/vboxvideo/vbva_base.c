@@ -21,18 +21,35 @@
 
 static u32 vbva_buffer_available(const struct vbva_buffer *vbva)
 {
-	s32 diff = vbva->data_offset - vbva->free_offset;
+	u32 data_len = READ_ONCE(vbva->data_len);
+	u32 data_offset = READ_ONCE(vbva->data_offset);
+	u32 free_offset = READ_ONCE(vbva->free_offset);
+	s32 diff;
 
-	return diff > 0 ? diff : vbva->data_len + diff;
+	if (!data_len || data_offset >= data_len || free_offset >= data_len)
+		return 0;
+
+	diff = data_offset - free_offset;
+
+	return diff > 0 ? diff : data_len + diff;
 }
 
 static void vbva_buffer_place_data_at(struct vbva_buf_ctx *vbva_ctx,
 				      const void *p, u32 len, u32 offset)
 {
 	struct vbva_buffer *vbva = vbva_ctx->vbva;
-	u32 bytes_till_boundary = vbva->data_len - offset;
-	u8 *dst = &vbva->data[offset];
-	s32 diff = len - bytes_till_boundary;
+	u32 data_len = READ_ONCE(vbva->data_len);
+	u32 bytes_till_boundary;
+	u8 *dst;
+	s32 diff;
+
+	if (data_len > vbva_ctx->buffer_length - sizeof(*vbva) ||
+	    offset >= data_len || len > data_len)
+		return;
+
+	bytes_till_boundary = data_len - offset;
+	dst = &vbva->data[offset];
+	diff = len - bytes_till_boundary;
 
 	if (diff <= 0) {
 		/* Chunk will not cross buffer boundary. */
@@ -92,6 +109,9 @@ bool vbva_write(struct vbva_buf_ctx *vbva_ctx, struct gen_pool *ctx,
 
 		vbva_buffer_place_data_at(vbva_ctx, p, chunk,
 					  vbva->free_offset);
+
+		if (!vbva->data_len)
+			return false;
 
 		vbva->free_offset = (vbva->free_offset + chunk) %
 				    vbva->data_len;
@@ -165,7 +185,7 @@ bool vbva_buffer_begin_update(struct vbva_buf_ctx *vbva_ctx,
 			      struct gen_pool *ctx)
 {
 	struct vbva_record *record;
-	u32 next;
+	u32 free_idx, next;
 
 	if (!vbva_ctx->vbva ||
 	    !(vbva_ctx->vbva->host_flags.host_events & VBVA_F_MODE_ENABLED))
@@ -173,7 +193,11 @@ bool vbva_buffer_begin_update(struct vbva_buf_ctx *vbva_ctx,
 
 	WARN_ON(vbva_ctx->buffer_overflow || vbva_ctx->record);
 
-	next = (vbva_ctx->vbva->record_free_index + 1) % VBVA_MAX_RECORDS;
+	free_idx = READ_ONCE(vbva_ctx->vbva->record_free_index);
+	if (free_idx >= VBVA_MAX_RECORDS)
+		return false;
+
+	next = (free_idx + 1) % VBVA_MAX_RECORDS;
 
 	/* Flush if all slots in the records queue are used */
 	if (next == vbva_ctx->vbva->record_first_index)
@@ -183,7 +207,7 @@ bool vbva_buffer_begin_update(struct vbva_buf_ctx *vbva_ctx,
 	if (next == vbva_ctx->vbva->record_first_index)
 		return false;
 
-	record = &vbva_ctx->vbva->records[vbva_ctx->vbva->record_free_index];
+	record = &vbva_ctx->vbva->records[free_idx];
 	record->len_and_flags = VBVA_F_RECORD_PARTIAL;
 	vbva_ctx->vbva->record_free_index = next;
 	/* Remember which record we are using. */
