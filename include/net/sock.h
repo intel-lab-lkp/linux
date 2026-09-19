@@ -314,6 +314,7 @@ struct sk_filter;
   *	@mptcp_retransmit_timer: mptcp retransmit timer
   *	@sk_stamp: time stamp of last packet received
   *	@sk_stamp_seq: lock for accessing sk_stamp on 32 bit architectures only
+  *	@sk_start_time: start time recorded for SK_BPF_CB_TIMESTAMPING_V2
   *	@sk_tsflags: SO_TIMESTAMPING flags
   *	@sk_bpf_cb_flags: used in bpf_setsockopt()
   *	@sk_use_task_frag: allow sk_page_frag() to use current->task_frag.
@@ -552,6 +553,7 @@ struct sock {
 #if BITS_PER_LONG==32
 	seqlock_t		sk_stamp_seq;
 #endif
+	ktime_t			sk_start_time;
 	int			sk_disconnects;
 
 	union {
