@@ -115,7 +115,7 @@ static void hci_sock_free_cookie(struct sock *sk)
 {
 	int id = hci_pi(sk)->cookie;
 
-	if (id) {
+	if (id > 0) {
 		hci_pi(sk)->cookie = 0;
 		ida_free(&sock_cookie_ida, id);
 	}
@@ -177,6 +177,9 @@ static bool is_filtered_packet(struct sock *sk, struct sk_buff *skb)
 	if (hci_skb_pkt_type(skb) != HCI_EVENT_PKT)
 		return false;
 
+	if (skb->len < HCI_EVENT_HDR_SIZE)
+		return true;
+
 	flt_event = (*(__u8 *)skb->data & HCI_FLT_EVENT_BITS);
 
 	if (!hci_test_bit(flt_event, &flt->event_mask))
@@ -187,11 +190,13 @@ static bool is_filtered_packet(struct sock *sk, struct sk_buff *skb)
 		return false;
 
 	if (flt_event == HCI_EV_CMD_COMPLETE &&
-	    flt->opcode != get_unaligned((__le16 *)(skb->data + 3)))
+	    (skb->len < 5 ||
+	     flt->opcode != get_unaligned((__le16 *)(skb->data + 3))))
 		return true;
 
 	if (flt_event == HCI_EV_CMD_STATUS &&
-	    flt->opcode != get_unaligned((__le16 *)(skb->data + 4)))
+	    (skb->len < 6 ||
+	     flt->opcode != get_unaligned((__le16 *)(skb->data + 4))))
 		return true;
 
 	return false;
