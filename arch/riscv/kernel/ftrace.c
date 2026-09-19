@@ -229,11 +229,16 @@ int ftrace_modify_call(struct dyn_ftrace *rec, unsigned long old_addr,
 #ifdef CONFIG_FUNCTION_GRAPH_TRACER
 /*
  * Most of this function is copied from arm64.
+ *
+ * Use the frame CFA as the RISC-V graph return address identity: static
+ * _mcount derives it from &frame->ra, dynamic ftrace uses the saved entry
+ * SP, and the unwinder tracks the same value when walking frame records.
  */
 void prepare_ftrace_return(unsigned long *parent, unsigned long self_addr,
 			   unsigned long frame_pointer)
 {
 	unsigned long return_hooker = (unsigned long)&return_to_handler;
+	unsigned long *retp = parent + 1;
 	unsigned long old;
 
 	if (unlikely(atomic_read(&current->tracing_graph_pause)))
@@ -245,7 +250,7 @@ void prepare_ftrace_return(unsigned long *parent, unsigned long self_addr,
 	 */
 	old = *parent;
 
-	if (!function_graph_enter(old, self_addr, frame_pointer, parent))
+	if (!function_graph_enter(old, self_addr, frame_pointer, retp))
 		*parent = return_hooker;
 }
 
@@ -256,6 +261,7 @@ void ftrace_graph_func(unsigned long ip, unsigned long parent_ip,
 	unsigned long return_hooker = (unsigned long)&return_to_handler;
 	unsigned long frame_pointer = arch_ftrace_regs(fregs)->s0;
 	unsigned long *parent = &arch_ftrace_regs(fregs)->ra;
+	unsigned long *retp = (unsigned long *)arch_ftrace_regs(fregs)->sp;
 	unsigned long old;
 
 	if (unlikely(atomic_read(&current->tracing_graph_pause)))
@@ -267,7 +273,7 @@ void ftrace_graph_func(unsigned long ip, unsigned long parent_ip,
 	 */
 	old = *parent;
 
-	if (!function_graph_enter_regs(old, ip, frame_pointer, parent, fregs))
+	if (!function_graph_enter_regs(old, ip, frame_pointer, retp, fregs))
 		*parent = return_hooker;
 }
 #endif /* CONFIG_DYNAMIC_FTRACE */
