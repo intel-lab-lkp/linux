@@ -785,7 +785,7 @@ static void qrtr_port_remove(struct qrtr_sock *ipc)
  *   <QRTR_MIN_EPH_SOCKET: Specified; requires CAP_NET_ADMIN
  *   >QRTR_MIN_EPH_SOCKET: Specified; available to all
  */
-static int qrtr_port_assign(struct qrtr_sock *ipc, int *port)
+static int qrtr_port_assign(struct qrtr_sock *ipc, u32 *port)
 {
 	int rc;
 
@@ -835,7 +835,7 @@ static int __qrtr_bind(struct socket *sock,
 {
 	struct qrtr_sock *ipc = qrtr_sk(sock->sk);
 	struct sock *sk = sock->sk;
-	int port;
+	u32 port;
 	int rc;
 
 	/* rebinding ok */
