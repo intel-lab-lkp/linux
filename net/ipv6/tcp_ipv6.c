@@ -255,6 +255,17 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr_unsized *uaddr,
 		return err;
 	}
 
+	if (icsk->icsk_af_ops == &ipv6_mapped) {
+		/* Paired with READ_ONCE() in tcp_(get|set)sockopt() */
+		WRITE_ONCE(icsk->icsk_af_ops, &ipv6_specific);
+		if (sk_is_mptcp(sk))
+			mptcpv6_handle_mapped(sk, false);
+		sk->sk_backlog_rcv = tcp_v6_do_rcv;
+#if defined(CONFIG_TCP_MD5SIG) || defined(CONFIG_TCP_AO)
+		tp->af_specific = &tcp_sock_ipv6_specific;
+#endif
+	}
+
 	if (!ipv6_addr_any(&sk->sk_v6_rcv_saddr))
 		saddr = &sk->sk_v6_rcv_saddr;
 
