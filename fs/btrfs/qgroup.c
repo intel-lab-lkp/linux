@@ -3991,8 +3991,11 @@ qgroup_rescan_init(struct btrfs_fs_info *fs_info, u64 progress_objectid,
 	int ret = 0;
 
 	if (btrfs_qgroup_mode(fs_info) == BTRFS_QGROUP_MODE_SIMPLE) {
+		if (init_flags)
+			return -EOPNOTSUPP;
+
 		btrfs_warn(fs_info, "qgroup rescan init failed, running in simple mode");
-		return -EINVAL;
+		return -EUCLEAN;
 	}
 
 	if (!init_flags) {
