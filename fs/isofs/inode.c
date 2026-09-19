@@ -1173,7 +1173,9 @@ static int isofs_read_level3_size(struct inode *inode)
 	struct buffer_head *bh = NULL;
 	unsigned long block, offset, block_saved, offset_saved;
 	int i = 0;
+	unsigned int empty_blocks = 0;
 	int more_entries = 0;
+	int ret = -EIO;
 	struct iso_directory_record *tmpde = NULL;
 	struct iso_inode_info *ei = ISOFS_I(inode);
 
@@ -1205,8 +1207,14 @@ static int isofs_read_level3_size(struct inode *inode)
 			bh = NULL;
 			++block;
 			offset = 0;
+			if (++empty_blocks > 100)
+				goto out;
 			continue;
 		}
+
+		if (de_len < sizeof(struct iso_directory_record))
+			goto out;
+		empty_blocks = 0;
 
 		block_saved = block;
 		offset_saved = offset;
@@ -1246,10 +1254,11 @@ static int isofs_read_level3_size(struct inode *inode)
 		if (i > 100)
 			goto out_toomany;
 	} while (more_entries);
+	ret = 0;
 out:
 	kfree(tmpde);
 	brelse(bh);
-	return 0;
+	return ret;
 
 out_nomem:
 	brelse(bh);
@@ -1264,6 +1273,7 @@ out_toomany:
 	printk(KERN_INFO "%s: More than 100 file sections ?!?, aborting...\n"
 		"isofs_read_level3_size: inode=%llu\n",
 		__func__, inode->i_ino);
+	ret = 0;
 	goto out;
 }
 
