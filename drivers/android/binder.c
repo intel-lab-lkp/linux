@@ -5732,6 +5732,7 @@ static int binder_ioctl_freeze(struct binder_freeze_info *info,
 		binder_inner_proc_lock(target_proc);
 		target_proc->is_frozen = false;
 		binder_inner_proc_unlock(target_proc);
+		binder_add_freeze_work(target_proc, false);
 	} else {
 		binder_add_freeze_work(target_proc, true);
 	}
@@ -5939,9 +5940,19 @@ static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		mutex_unlock(&binder_procs_lock);
 
 		for (i = 0; i < target_procs_count; i++) {
-			if (ret >= 0)
+			if (ret >= 0) {
 				ret = binder_ioctl_freeze(&info,
 							  target_procs[i]);
+				if (ret < 0 && info.enable) {
+					struct binder_freeze_info unfreeze = info;
+					int j;
+
+					unfreeze.enable = 0;
+					for (j = 0; j < i; j++)
+						binder_ioctl_freeze(&unfreeze,
+								    target_procs[j]);
+				}
+			}
 
 			binder_proc_dec_tmpref(target_procs[i]);
 		}
