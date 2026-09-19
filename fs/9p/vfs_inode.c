@@ -503,7 +503,7 @@ static void v9fs_dec_count(struct inode *inode)
 
 	if (!(v9ses->cache & (CACHE_META | CACHE_LOOSE)))
 		return;
-	if (!S_ISDIR(inode->i_mode) || inode->i_nlink > 2)
+	if (S_ISDIR(inode->i_mode) ? inode->i_nlink > 2 : inode->i_nlink > 0)
 		drop_nlink(inode);
 }
 
