@@ -637,8 +637,10 @@ static int rds_cmsg_recv(struct rds_incoming *inc, struct msghdr *msg,
 		for (i = 0; i < rs->rs_rx_traces; i++) {
 			j = rs->rs_rx_trace[i];
 			t.rx_trace_pos[i] = j;
-			t.rx_trace[i] = inc->i_rx_lat_trace[j + 1] -
-					  inc->i_rx_lat_trace[j];
+			if (inc->i_rx_lat_trace[j + 1] &&
+			    inc->i_rx_lat_trace[j])
+				t.rx_trace[i] = inc->i_rx_lat_trace[j + 1] -
+						inc->i_rx_lat_trace[j];
 		}
 
 		ret = put_cmsg(msg, SOL_RDS, RDS_CMSG_RXPATH_LATENCY,
