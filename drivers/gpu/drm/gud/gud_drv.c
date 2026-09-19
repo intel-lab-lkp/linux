@@ -328,7 +328,7 @@ static int gud_stats_debugfs(struct seq_file *m, void *data)
 		seq_puts(m, " none");
 	seq_puts(m, "\n");
 
-	if (gdrm->compression) {
+	if (gdrm->compression && gdrm->stats_actual_length) {
 		u64 remainder;
 		u64 ratio = div64_u64_rem(gdrm->stats_length, gdrm->stats_actual_length,
 					  &remainder);
@@ -427,6 +427,8 @@ static void gud_free_buffers_and_mutex(void *data)
 {
 	struct gud_device *gdrm = data;
 
+	vfree(gdrm->shadow_buf);
+	gdrm->shadow_buf = NULL;
 	vfree(gdrm->compress_buf);
 	gdrm->compress_buf = NULL;
 	sg_free_table(&gdrm->bulk_sgt);
@@ -443,7 +445,7 @@ static int gud_probe(struct usb_interface *intf, const struct usb_device_id *id)
 	struct usb_endpoint_descriptor *bulk_out;
 	struct gud_display_descriptor_req desc;
 	struct device *dev = &intf->dev;
-	size_t max_buffer_size = 0;
+	size_t max_buffer_size = 0, max_pitch = 0;
 	struct gud_device *gdrm;
 	struct drm_device *drm;
 	struct device *dma_dev;
@@ -495,6 +497,10 @@ static int gud_probe(struct usb_interface *intf, const struct usb_device_id *id)
 		put_device(dma_dev);
 	} else {
 		dev_warn(dev, "buffer sharing not supported"); /* not an error */
+	if (!drm->mode_config.min_width || !drm->mode_config.min_height ||
+	    drm->mode_config.max_width < drm->mode_config.min_width ||
+	    drm->mode_config.max_height < drm->mode_config.min_height)
+		return -EINVAL;
 	}
 
 	/* Mode config init */
@@ -523,7 +529,7 @@ static int gud_probe(struct usb_interface *intf, const struct usb_device_id *id)
 	num_formats_dev = ret;
 	for (i = 0; i < num_formats_dev; i++) {
 		const struct drm_format_info *info;
-		size_t fmt_buf_size;
+		size_t fmt_buf_size, fmt_pitch;
 		u32 format;
 
 		format = gud_to_fourcc(formats_dev[i]);
@@ -562,8 +568,9 @@ static int gud_probe(struct usb_interface *intf, const struct usb_device_id *id)
 			break;
 		}
 
-		fmt_buf_size = drm_format_info_min_pitch(info, 0, drm->mode_config.max_width) *
-			       drm->mode_config.max_height;
+		fmt_pitch = drm_format_info_min_pitch(info, 0, drm->mode_config.max_width);
+		fmt_buf_size = fmt_pitch * drm->mode_config.max_height;
+		max_pitch = max(max_pitch, fmt_pitch);
 		max_buffer_size = max(max_buffer_size, fmt_buf_size);
 
 		if (format == GUD_DRM_FORMAT_R1 || format == GUD_DRM_FORMAT_XRGB1111)
@@ -588,9 +595,13 @@ static int gud_probe(struct usb_interface *intf, const struct usb_device_id *id)
 
 	if (desc.max_buffer_size)
 		max_buffer_size = le32_to_cpu(desc.max_buffer_size);
+	if (max_buffer_size < max_pitch)
+		max_buffer_size = max_pitch;
 	/* Prevent a misbehaving device from allocating loads of RAM. 4096x4096@XRGB8888 = 64 MB */
 	if (max_buffer_size > SZ_64M)
 		max_buffer_size = SZ_64M;
+	if (max_buffer_size < max_pitch)
+		return -EINVAL;
 
 	gdrm->bulk_pipe = usb_sndbulkpipe(interface_to_usbdev(intf), usb_endpoint_num(bulk_out));
 	gdrm->bulk_len = max_buffer_size;

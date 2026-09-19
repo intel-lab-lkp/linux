@@ -156,9 +156,13 @@ static int gud_prep_flush(struct gud_device *gdrm, struct drm_framebuffer *fb,
 			  struct drm_format_conv_state *fmtcnv_state)
 {
 	u8 compression = gdrm->compression;
+	unsigned int block_width = drm_format_info_block_width(format, 0);
 	struct iosys_map dst;
 	void *vaddr, *buf;
 	size_t pitch, len;
+
+	if (block_width > 1)
+		rect->x1 = ALIGN_DOWN(rect->x1, block_width);
 
 	pitch = drm_format_info_min_pitch(format, 0, drm_rect_width(rect));
 	len = pitch * drm_rect_height(rect);
@@ -327,7 +331,7 @@ static void gud_flush_damage(struct gud_device *gdrm, struct drm_framebuffer *fb
 {
 	struct drm_format_conv_state fmtcnv_state = DRM_FORMAT_CONV_STATE_INIT;
 	const struct drm_format_info *format;
-	unsigned int i, lines;
+	unsigned int i, lines, block_width;
 	size_t pitch;
 	int ret;
 
@@ -335,12 +339,21 @@ static void gud_flush_damage(struct gud_device *gdrm, struct drm_framebuffer *fb
 	if (format->format == DRM_FORMAT_XRGB8888 && gdrm->xrgb8888_emulation_format)
 		format = gdrm->xrgb8888_emulation_format;
 
+	block_width = drm_format_info_block_width(format, 0);
+	if (block_width > 1)
+		damage->x1 = ALIGN_DOWN(damage->x1, block_width);
+
 	/* Split update if it's too big */
 	pitch = drm_format_info_min_pitch(format, 0, drm_rect_width(damage));
 	lines = drm_rect_height(damage);
 
+	if (!pitch || !lines)
+		return;
+
 	if (gdrm->bulk_len < lines * pitch)
 		lines = gdrm->bulk_len / pitch;
+	if (!lines)
+		return;
 
 	for (i = 0; i < DIV_ROUND_UP(drm_rect_height(damage), lines); i++) {
 		struct drm_rect rect = *damage;
@@ -398,6 +411,13 @@ static int gud_fb_queue_damage(struct gud_device *gdrm, struct drm_framebuffer *
 	struct iosys_map shadow_map;
 
 	mutex_lock(&gdrm->damage_lock);
+
+	if (gdrm->shadow_buf && gdrm->fb &&
+	    (fb->pitches[0] != gdrm->fb->pitches[0] || fb->height != gdrm->fb->height)) {
+		vfree(gdrm->shadow_buf);
+		gdrm->shadow_buf = NULL;
+		gud_clear_damage(gdrm);
+	}
 
 	if (!gdrm->shadow_buf) {
 		gdrm->shadow_buf = vcalloc(fb->pitches[0], fb->height);
@@ -562,8 +582,8 @@ int gud_plane_atomic_check(struct drm_plane *plane,
 			goto out;
 		}
 
-		req->properties[num_properties + i].prop = cpu_to_le16(prop);
-		req->properties[num_properties + i].val = cpu_to_le64(val);
+		req->properties[num_properties].prop = cpu_to_le16(prop);
+		req->properties[num_properties].val = cpu_to_le64(val);
 		num_properties++;
 	}
 

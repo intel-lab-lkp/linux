@@ -569,7 +569,7 @@ static int gud_connector_add_properties(struct gud_device *gdrm, struct gud_conn
 			continue; /* not a DRM property */
 
 		property = gud_connector_property_lookup(connector, prop);
-		if (drm_WARN_ON(drm, IS_ERR(property)))
+		if (drm_WARN_ON(drm, IS_ERR_OR_NULL(property)))
 			continue;
 
 		state_val = gud_connector_tv_state_val(prop, &gconn->initial_tv_state);
