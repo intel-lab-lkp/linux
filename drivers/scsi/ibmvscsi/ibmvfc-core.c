@@ -6975,6 +6975,7 @@ out:
 static void ibmvfc_remove(struct vio_dev *vdev)
 {
 	struct ibmvfc_host *vhost = dev_get_drvdata(&vdev->dev);
+	struct ibmvfc_target *tgt, *tgt_tmp;
 	LIST_HEAD(purge);
 	unsigned long flags;
 
@@ -6991,6 +6992,22 @@ static void ibmvfc_remove(struct vio_dev *vdev)
 	fc_remove_host(vhost->host);
 	scsi_remove_host(vhost->host);
 
+	list_for_each_entry_safe(tgt, tgt_tmp, &vhost->nvme_scrqs.targets, queue) {
+		if (tgt->nvme_remote_port)
+			ibmvfc_nvme_unregister_remoteport(tgt);
+		list_del(&tgt->queue);
+		timer_delete_sync(&tgt->timer);
+		kref_put(&tgt->kref, ibmvfc_release_tgt);
+	}
+
+	list_for_each_entry_safe(tgt, tgt_tmp, &vhost->scsi_scrqs.targets, queue) {
+		if (tgt->rport)
+			fc_remote_port_delete(tgt->rport);
+		list_del(&tgt->queue);
+		timer_delete_sync(&tgt->timer);
+		kref_put(&tgt->kref, ibmvfc_release_tgt);
+	}
+
 	spin_lock_irqsave(&vhost->host->host_lock, flags);
 	ibmvfc_purge_requests(vhost, DID_ERROR);
 	list_splice_init(&vhost->purge, &purge);
@@ -6998,6 +7015,8 @@ static void ibmvfc_remove(struct vio_dev *vdev)
 	ibmvfc_complete_purge(&purge);
 	ibmvfc_release_sub_crqs(vhost);
 	ibmvfc_release_crq_queue(vhost);
+
+	ibmvfc_nvme_unregister(vhost);
 
 	ibmvfc_free_mem(vhost);
 	spin_lock(&ibmvfc_driver_lock);
