@@ -201,6 +201,8 @@ struct sk_buff *tcp_gso_segment(struct sk_buff *skb,
 	if (unlikely(skb_shinfo(gso_skb)->tx_flags & SKBTX_ANY_TSTAMP))
 		tcp_gso_tstamp(segs, gso_skb, seq, mss);
 
+	skb_copy_start_time(segs, gso_skb);
+
 	newcheck = ~csum_fold(csum_add(csum_unfold(th->check), delta));
 
 	ecn_cwr_mask = !!(skb_shinfo(gso_skb)->gso_type & SKB_GSO_TCP_ACCECN);
@@ -226,6 +228,7 @@ struct sk_buff *tcp_gso_segment(struct sk_buff *skb,
 		th->seq = htonl(seq);
 
 		th->cwr &= ecn_cwr_mask;
+		skb_copy_start_time(skb, gso_skb);
 	}
 
 	/* Following permits TCP Small Queues to work well with GSO :

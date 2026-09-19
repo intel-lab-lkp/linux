@@ -1900,6 +1900,7 @@ int tcp_fragment(struct sock *sk, enum tcp_queue tcp_queue,
 	tcp_skb_fragment_eor(skb, buff);
 
 	skb_split(skb, buff, len);
+	skb_copy_start_time(buff, skb);
 
 	skb_set_delivery_time(buff, skb->tstamp, SKB_CLOCK_MONOTONIC);
 	tcp_fragment_tstamp(skb, buff);
@@ -2439,6 +2440,7 @@ static int tso_fragment(struct sock *sk, struct sk_buff *skb, unsigned int len,
 	tcp_skb_fragment_eor(skb, buff);
 
 	skb_split(skb, buff, len);
+	skb_copy_start_time(buff, skb);
 	tcp_fragment_tstamp(skb, buff);
 
 	/* Fix up tso_factor for both original and new SKB.  */
@@ -3453,6 +3455,8 @@ void tcp_skb_collapse_tstamp(struct sk_buff *skb,
 		TCP_SKB_CB(skb)->txstamp_ack |=
 			TCP_SKB_CB(next_skb)->txstamp_ack;
 	}
+	if (!skb_hwtstamps(skb)->start_time)
+		skb_copy_start_time(skb, (struct sk_buff *)next_skb);
 }
 
 /* Collapses two adjacent SKB's during retransmission. */
@@ -3669,6 +3673,7 @@ start:
 			nskb = __pskb_copy(skb, MAX_TCP_HEADER, GFP_ATOMIC);
 			if (nskb) {
 				nskb->dev = NULL;
+				skb_copy_start_time(nskb, skb);
 				err = tcp_transmit_skb(sk, nskb, 0, GFP_ATOMIC);
 			} else {
 				err = -ENOBUFS;

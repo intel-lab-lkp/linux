@@ -5496,6 +5496,12 @@ static inline void skb_mark_for_recycle(struct sk_buff *skb)
 #endif
 }
 
+static inline void skb_copy_start_time(struct sk_buff *dst, struct sk_buff *src)
+{
+	if (static_branch_unlikely(&bpfts_v2_needed_key))
+		skb_hwtstamps(dst)->start_time = skb_hwtstamps(src)->start_time;
+}
+
 ssize_t skb_splice_from_iter(struct sk_buff *skb, struct iov_iter *iter,
 			     ssize_t maxsize);
 
