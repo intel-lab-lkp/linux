@@ -257,16 +257,16 @@ static int mgag200_g200se_04_pixpllc_atomic_check(struct drm_crtc *crtc,
 		}
 	}
 
+	if (delta > permitteddelta || !m) {
+		pr_warn("PLL delta too large\n");
+		return -EINVAL;
+	}
+
 	fvv = pllreffreq * n / m;
 	fvv = (fvv - 800000) / 50000;
 	if (fvv > 15)
 		fvv = 15;
 	s = fvv << 1;
-
-	if (delta > permitteddelta) {
-		pr_warn("PLL delta too large\n");
-		return -EINVAL;
-	}
 
 	pixpllc->m = m;
 	pixpllc->n = n;

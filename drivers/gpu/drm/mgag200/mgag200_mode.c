@@ -468,6 +468,7 @@ int mgag200_primary_plane_helper_atomic_check(struct drm_plane *plane,
 	struct drm_plane_state *new_plane_state = drm_atomic_get_new_plane_state(new_state, plane);
 	struct drm_framebuffer *new_fb = new_plane_state->fb;
 	struct drm_framebuffer *fb = NULL;
+	struct mga_device *mdev = to_mga_device(plane->dev);
 	struct drm_crtc *new_crtc = new_plane_state->crtc;
 	struct drm_crtc_state *new_crtc_state = NULL;
 	struct mgag200_crtc_state *new_mgag200_crtc_state;
@@ -484,6 +485,9 @@ int mgag200_primary_plane_helper_atomic_check(struct drm_plane *plane,
 		return ret;
 	else if (!new_plane_state->visible)
 		return 0;
+
+	if ((u64)new_fb->pitches[0] * new_fb->height > mdev->vram_available)
+		return -EINVAL;
 
 	if (plane->state)
 		fb = plane->state->fb;
