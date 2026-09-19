@@ -1178,7 +1178,7 @@ static int qrtr_getname(struct socket *sock, struct sockaddr *saddr,
 			int peer)
 {
 	struct qrtr_sock *ipc = qrtr_sk(sock->sk);
-	struct sockaddr_qrtr qaddr;
+	struct sockaddr_qrtr qaddr = {};
 	struct sock *sk = sock->sk;
 
 	lock_sock(sk);
@@ -1188,9 +1188,11 @@ static int qrtr_getname(struct socket *sock, struct sockaddr *saddr,
 			return -ENOTCONN;
 		}
 
-		qaddr = ipc->peer;
+		qaddr.sq_node = ipc->peer.sq_node;
+		qaddr.sq_port = ipc->peer.sq_port;
 	} else {
-		qaddr = ipc->us;
+		qaddr.sq_node = ipc->us.sq_node;
+		qaddr.sq_port = ipc->us.sq_port;
 	}
 	release_sock(sk);
 
@@ -1233,8 +1235,11 @@ static int qrtr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			break;
 		}
 
+		memset(&ifr.ifr_addr, 0, sizeof(ifr.ifr_addr));
 		sq = (struct sockaddr_qrtr *)&ifr.ifr_addr;
-		*sq = ipc->us;
+		sq->sq_family = ipc->us.sq_family;
+		sq->sq_node = ipc->us.sq_node;
+		sq->sq_port = ipc->us.sq_port;
 		if (put_user_ifreq(&ifr, argp)) {
 			rc = -EFAULT;
 			break;
