@@ -57,6 +57,20 @@ __udp_manip_pkt(struct sk_buff *skb,
 		nf_csum_update(skb, iphdroff, &hdr->check, tuple, maniptype);
 		inet_proto_csum_replace2(&hdr->check, skb, *portptr, newport,
 					 false);
+		/* For CHECKSUM_PARTIAL encapsulated non-GSO packets,
+		 * inet_proto_csum_replace2() above is a no-op because the
+		 * port field is data, not pseudo-header. The outer uh->check
+		 * was computed by udp_set_csum() with a temporary sport, and
+		 * the subsequent NAT sport rewrite leaves it stale. On devices
+		 * without hw_enc_features, the software fallback
+		 * skb_checksum_help() honors csum_start which points at the
+		 * inner transport header and only recomputes the inner
+		 * checksum. The stale outer checksum goes out and the
+		 * receiver drops the packet with UdpInCsumErrors.
+		 */
+		if (skb->ip_summed == CHECKSUM_PARTIAL &&
+		    skb->encapsulation && !skb_is_gso(skb))
+			csum_replace2(&hdr->check, *portptr, newport);
 		if (!hdr->check)
 			hdr->check = CSUM_MANGLED_0;
 	}
