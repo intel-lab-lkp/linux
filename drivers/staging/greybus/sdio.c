@@ -597,7 +597,7 @@ static void gb_mmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	u8 drv_type;
 	u32 vdd = 0;
 
-	mutex_lock(&host->lock);
+	guard(mutex)(&host->lock);
 	request.clock = cpu_to_le32(ios->clock);
 
 	if (ios->vdd)
@@ -710,24 +710,19 @@ static void gb_mmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 
 	ret = gb_sdio_set_ios(host, &request);
 	if (ret < 0)
-		goto out;
+		return;
 
 	memcpy(&mmc->ios, ios, sizeof(mmc->ios));
-
-out:
-	mutex_unlock(&host->lock);
 }
 
 static int gb_mmc_get_ro(struct mmc_host *mmc)
 {
 	struct gb_sdio_host *host = mmc_priv(mmc);
 
-	mutex_lock(&host->lock);
+	guard(mutex)(&host->lock);
 	if (host->removed) {
-		mutex_unlock(&host->lock);
 		return -ESHUTDOWN;
 	}
-	mutex_unlock(&host->lock);
 
 	return host->read_only;
 }
@@ -736,12 +731,10 @@ static int gb_mmc_get_cd(struct mmc_host *mmc)
 {
 	struct gb_sdio_host *host = mmc_priv(mmc);
 
-	mutex_lock(&host->lock);
+	guard(mutex)(&host->lock);
 	if (host->removed) {
-		mutex_unlock(&host->lock);
 		return -ESHUTDOWN;
 	}
-	mutex_unlock(&host->lock);
 
 	return host->card_present;
 }
@@ -852,11 +845,11 @@ static void gb_sdio_remove(struct gbphy_device *gbphy_dev)
 	if (ret)
 		gbphy_runtime_get_noresume(gbphy_dev);
 
-	mutex_lock(&host->lock);
-	host->removed = true;
-	mmc = host->mmc;
-	gb_connection_set_data(connection, NULL);
-	mutex_unlock(&host->lock);
+	scoped_guard(mutex, &host->lock) {
+		host->removed = true;
+		mmc = host->mmc;
+		gb_connection_set_data(connection, NULL);
+	}
 
 	destroy_workqueue(host->mrq_workqueue);
 	gb_connection_disable_rx(connection);

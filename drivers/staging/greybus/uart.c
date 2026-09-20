@@ -341,19 +341,16 @@ static struct gb_tty *get_gb_by_minor(unsigned int minor)
 {
 	struct gb_tty *gb_tty;
 
-	mutex_lock(&table_lock);
+	guard(mutex)(&table_lock);
 	gb_tty = idr_find(&tty_minors, minor);
 	if (gb_tty) {
-		mutex_lock(&gb_tty->mutex);
+		guard(mutex)(&gb_tty->mutex);
 		if (gb_tty->disconnected) {
-			mutex_unlock(&gb_tty->mutex);
 			gb_tty = NULL;
 		} else {
 			tty_port_get(&gb_tty->port);
-			mutex_unlock(&gb_tty->mutex);
 		}
 	}
-	mutex_unlock(&table_lock);
 	return gb_tty;
 }
 
@@ -361,9 +358,9 @@ static int alloc_minor(struct gb_tty *gb_tty)
 {
 	int minor;
 
-	mutex_lock(&table_lock);
-	minor = idr_alloc(&tty_minors, gb_tty, 0, GB_NUM_MINORS, GFP_KERNEL);
-	mutex_unlock(&table_lock);
+	scoped_guard(mutex, &table_lock) {
+		minor = idr_alloc(&tty_minors, gb_tty, 0, GB_NUM_MINORS, GFP_KERNEL);
+	}
 	if (minor >= 0)
 		gb_tty->minor = minor;
 	return minor;
@@ -374,9 +371,8 @@ static void release_minor(struct gb_tty *gb_tty)
 	int minor = gb_tty->minor;
 
 	gb_tty->minor = 0;	/* Maybe should use an invalid value instead */
-	mutex_lock(&table_lock);
+	guard(mutex)(&table_lock);
 	idr_remove(&tty_minors, minor);
-	mutex_unlock(&table_lock);
 }
 
 static int gb_tty_install(struct tty_driver *driver, struct tty_struct *tty)
@@ -596,13 +592,12 @@ static int get_serial_info(struct tty_struct *tty,
 	struct gb_tty *gb_tty = tty->driver_data;
 
 	ss->line = gb_tty->minor;
-	mutex_lock(&gb_tty->port.mutex);
+	guard(mutex)(&gb_tty->port.mutex);
 	ss->close_delay = jiffies_to_msecs(gb_tty->port.close_delay) / 10;
 	ss->closing_wait =
 		gb_tty->port.closing_wait == ASYNC_CLOSING_WAIT_NONE ?
 		ASYNC_CLOSING_WAIT_NONE :
 		jiffies_to_msecs(gb_tty->port.closing_wait) / 10;
-	mutex_unlock(&gb_tty->port.mutex);
 
 	return 0;
 }
@@ -620,7 +615,7 @@ static int set_serial_info(struct tty_struct *tty,
 			ASYNC_CLOSING_WAIT_NONE :
 			msecs_to_jiffies(ss->closing_wait * 10);
 
-	mutex_lock(&gb_tty->port.mutex);
+	guard(mutex)(&gb_tty->port.mutex);
 	if (!capable(CAP_SYS_ADMIN)) {
 		if ((close_delay != gb_tty->port.close_delay) ||
 		    (closing_wait != gb_tty->port.closing_wait))
@@ -629,7 +624,6 @@ static int set_serial_info(struct tty_struct *tty,
 		gb_tty->port.close_delay = close_delay;
 		gb_tty->port.closing_wait = closing_wait;
 	}
-	mutex_unlock(&gb_tty->port.mutex);
 	return retval;
 }
 
@@ -926,11 +920,11 @@ static void gb_uart_remove(struct gbphy_device *gbphy_dev)
 	if (ret)
 		gbphy_runtime_get_noresume(gbphy_dev);
 
-	mutex_lock(&gb_tty->mutex);
-	gb_tty->disconnected = true;
+	scoped_guard(mutex, &gb_tty->mutex) {
+		gb_tty->disconnected = true;
 
-	wake_up_all(&gb_tty->wioctl);
-	mutex_unlock(&gb_tty->mutex);
+		wake_up_all(&gb_tty->wioctl);
+	}
 
 	tty_port_tty_vhangup(&gb_tty->port);
 

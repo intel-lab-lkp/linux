@@ -93,21 +93,16 @@ static struct fw_request *get_fw_req(struct fw_download *fw_download,
 {
 	struct fw_request *fw_req;
 
-	mutex_lock(&fw_download->mutex);
+	guard(mutex)(&fw_download->mutex);
 
 	list_for_each_entry(fw_req, &fw_download->fw_requests, node) {
 		if (fw_req->firmware_id == firmware_id) {
 			kref_get(&fw_req->kref);
-			goto unlock;
+			return fw_req;
 		}
 	}
 
-	fw_req = NULL;
-
-unlock:
-	mutex_unlock(&fw_download->mutex);
-
-	return fw_req;
+	return NULL;
 }
 
 static void free_firmware(struct fw_download *fw_download,
@@ -117,9 +112,9 @@ static void free_firmware(struct fw_download *fw_download,
 	if (fw_req->disabled)
 		return;
 
-	mutex_lock(&fw_download->mutex);
-	list_del(&fw_req->node);
-	mutex_unlock(&fw_download->mutex);
+	scoped_guard(mutex, &fw_download->mutex) {
+		list_del(&fw_req->node);
+	}
 
 	fw_req->disabled = true;
 	put_fw_req(fw_req);
@@ -197,9 +192,9 @@ static struct fw_request *find_firmware(struct fw_download *fw_download,
 	fw_req->fw_download = fw_download;
 	kref_init(&fw_req->kref);
 
-	mutex_lock(&fw_download->mutex);
-	list_add(&fw_req->node, &fw_download->fw_requests);
-	mutex_unlock(&fw_download->mutex);
+	scoped_guard(mutex, &fw_download->mutex) {
+		list_add(&fw_req->node, &fw_download->fw_requests);
+	}
 
 	/* Timeout, in jiffies, within which firmware should get loaded */
 	req_count = DIV_ROUND_UP(fw_req->fw->size, MIN_FETCH_SIZE);
@@ -448,10 +443,10 @@ void gb_fw_download_connection_exit(struct gb_connection *connection)
 	 * Make sure we have a reference to the pending requests, before they
 	 * are freed from the timeout handler.
 	 */
-	mutex_lock(&fw_download->mutex);
-	list_for_each_entry(fw_req, &fw_download->fw_requests, node)
-		kref_get(&fw_req->kref);
-	mutex_unlock(&fw_download->mutex);
+	scoped_guard(mutex, &fw_download->mutex) {
+		list_for_each_entry(fw_req, &fw_download->fw_requests, node)
+			kref_get(&fw_req->kref);
+	}
 
 	/* Release pending firmware packages */
 	list_for_each_entry_safe(fw_req, tmp, &fw_download->fw_requests, node) {

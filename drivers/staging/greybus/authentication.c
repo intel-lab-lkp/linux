@@ -65,19 +65,16 @@ static struct gb_cap *get_cap(struct cdev *cdev)
 {
 	struct gb_cap *cap;
 
-	mutex_lock(&list_mutex);
+	guard(mutex)(&list_mutex);
 
 	list_for_each_entry(cap, &cap_list, node) {
 		if (&cap->cdev == cdev) {
 			kref_get(&cap->kref);
-			goto unlock;
+			return cap;
 		}
 	}
 
 	cap = NULL;
-
-unlock:
-	mutex_unlock(&list_mutex);
 
 	return cap;
 }
@@ -276,7 +273,7 @@ static long cap_ioctl_unlocked(struct file *file, unsigned int cmd,
 	 * the connection is getting disconnected, so that we don't start any
 	 * new operations.
 	 */
-	mutex_lock(&cap->mutex);
+	guard(mutex)(&cap->mutex);
 	if (!cap->disabled) {
 		ret = gb_pm_runtime_get_sync(bundle);
 		if (!ret) {
@@ -284,7 +281,6 @@ static long cap_ioctl_unlocked(struct file *file, unsigned int cmd,
 			gb_pm_runtime_put_autosuspend(bundle);
 		}
 	}
-	mutex_unlock(&cap->mutex);
 
 	return ret;
 }
@@ -314,9 +310,9 @@ int gb_cap_connection_init(struct gb_connection *connection)
 	gb_connection_set_data(connection, cap);
 	kref_init(&cap->kref);
 
-	mutex_lock(&list_mutex);
-	list_add(&cap->node, &cap_list);
-	mutex_unlock(&list_mutex);
+	scoped_guard(mutex, &list_mutex) {
+		list_add(&cap->node, &cap_list);
+	}
 
 	ret = gb_connection_enable(connection);
 	if (ret)
@@ -353,9 +349,9 @@ err_remove_ida:
 err_connection_disable:
 	gb_connection_disable(connection);
 err_list_del:
-	mutex_lock(&list_mutex);
-	list_del(&cap->node);
-	mutex_unlock(&list_mutex);
+	scoped_guard(mutex, &list_mutex) {
+		list_del(&cap->node);
+	}
 
 	put_cap(cap);
 
@@ -379,17 +375,17 @@ void gb_cap_connection_exit(struct gb_connection *connection)
 	 * Disallow any new ioctl operations on the char device and wait for
 	 * existing ones to finish.
 	 */
-	mutex_lock(&cap->mutex);
-	cap->disabled = true;
-	mutex_unlock(&cap->mutex);
+	scoped_guard(mutex, &cap->mutex) {
+		cap->disabled = true;
+	}
 
 	/* All pending greybus operations should have finished by now */
 	gb_connection_disable(cap->connection);
 
 	/* Disallow new users to get access to the cap structure */
-	mutex_lock(&list_mutex);
-	list_del(&cap->node);
-	mutex_unlock(&list_mutex);
+	scoped_guard(mutex, &list_mutex) {
+		list_del(&cap->node);
+	}
 
 	/*
 	 * All current users of cap would have taken a reference to it by

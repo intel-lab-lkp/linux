@@ -365,7 +365,7 @@ static void gb_power_supply_state_change(struct gb_power_supply *gbpsy,
 	 * Check gbpsy->pm_acquired to make sure only one pair of 'get_sync'
 	 * and 'put_autosuspend' runtime pm call for state property change.
 	 */
-	mutex_lock(&gbpsy->supply_lock);
+	guard(mutex)(&gbpsy->supply_lock);
 
 	if ((prop->val == GB_POWER_SUPPLY_STATUS_CHARGING) &&
 	    !gbpsy->pm_acquired) {
@@ -385,8 +385,6 @@ static void gb_power_supply_state_change(struct gb_power_supply *gbpsy,
 				gbpsy->pm_acquired = false;
 		}
 	}
-
-	mutex_unlock(&gbpsy->supply_lock);
 }
 
 static void check_changed(struct gb_power_supply *gbpsy,
@@ -861,11 +859,11 @@ static void _gb_power_supplies_release(struct gb_power_supplies *supplies)
 	if (!supplies->supply)
 		return;
 
-	mutex_lock(&supplies->supplies_lock);
-	for (i = 0; i < supplies->supplies_count; i++)
-		_gb_power_supply_release(&supplies->supply[i]);
-	kfree(supplies->supply);
-	mutex_unlock(&supplies->supplies_lock);
+	scoped_guard(mutex, &supplies->supplies_lock) {
+		for (i = 0; i < supplies->supplies_count; i++)
+			_gb_power_supply_release(&supplies->supply[i]);
+		kfree(supplies->supply);
+	}
 	kfree(supplies);
 }
 
@@ -935,18 +933,17 @@ static int gb_power_supplies_setup(struct gb_power_supplies *supplies)
 	int ret;
 	int i;
 
-	mutex_lock(&supplies->supplies_lock);
+	guard(mutex)(&supplies->supplies_lock);
 
 	ret = gb_power_supplies_get_count(supplies);
 	if (ret < 0)
-		goto out;
+		return ret;
 
 	supplies->supply = kzalloc_objs(struct gb_power_supply,
 					supplies->supplies_count);
 
 	if (!supplies->supply) {
-		ret = -ENOMEM;
-		goto out;
+		return -ENOMEM;
 	}
 
 	for (i = 0; i < supplies->supplies_count; i++) {
@@ -954,11 +951,10 @@ static int gb_power_supplies_setup(struct gb_power_supplies *supplies)
 		if (ret < 0) {
 			dev_err(&connection->bundle->dev,
 				"Fail to configure supplies devices\n");
-			goto out;
+			return ret;
 		}
 	}
-out:
-	mutex_unlock(&supplies->supplies_lock);
+
 	return ret;
 }
 
@@ -968,7 +964,7 @@ static int gb_power_supplies_register(struct gb_power_supplies *supplies)
 	int ret = 0;
 	int i;
 
-	mutex_lock(&supplies->supplies_lock);
+	guard(mutex)(&supplies->supplies_lock);
 
 	for (i = 0; i < supplies->supplies_count; i++) {
 		ret = gb_power_supply_enable(&supplies->supply[i]);
@@ -979,7 +975,6 @@ static int gb_power_supplies_register(struct gb_power_supplies *supplies)
 		}
 	}
 
-	mutex_unlock(&supplies->supplies_lock);
 	return ret;
 }
 
@@ -992,7 +987,6 @@ static int gb_supplies_request_handler(struct gb_operation *op)
 	struct gb_power_supply_event_request *payload;
 	u8 psy_id;
 	u8 event;
-	int ret = 0;
 
 	if (op->type != GB_POWER_SUPPLY_TYPE_EVENT) {
 		dev_err(&connection->bundle->dev,
@@ -1011,14 +1005,13 @@ static int gb_supplies_request_handler(struct gb_operation *op)
 
 	payload = request->payload;
 	psy_id = payload->psy_id;
-	mutex_lock(&supplies->supplies_lock);
+	guard(mutex)(&supplies->supplies_lock);
 	if (psy_id >= supplies->supplies_count ||
 	    !supplies->supply[psy_id].registered) {
 		dev_err(&connection->bundle->dev,
 			"Event received for unconfigured power_supply id: %d\n",
 			psy_id);
-		ret = -EINVAL;
-		goto out_unlock;
+		return -EINVAL;
 	}
 
 	event = payload->event;
@@ -1028,8 +1021,7 @@ static int gb_supplies_request_handler(struct gb_operation *op)
 	 */
 	gbpsy = &supplies->supply[psy_id];
 	if (!gbpsy->update_interval) {
-		ret = -ESHUTDOWN;
-		goto out_unlock;
+		return -ESHUTDOWN;
 	}
 
 	if (event & GB_POWER_SUPPLY_UPDATE) {
@@ -1042,9 +1034,7 @@ static int gb_supplies_request_handler(struct gb_operation *op)
 		gb_power_supply_status_update(gbpsy);
 	}
 
-out_unlock:
-	mutex_unlock(&supplies->supplies_lock);
-	return ret;
+	return 0;
 }
 
 static int gb_power_supply_probe(struct gb_bundle *bundle,

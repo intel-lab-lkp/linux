@@ -406,23 +406,21 @@ static void gb_loopback_async_operation_callback(struct gb_operation *operation)
 	op_async = gb_operation_get_data(operation);
 	gb = op_async->gb;
 
-	mutex_lock(&gb->mutex);
+	scoped_guard(mutex, &gb->mutex) {
+		if (!result && op_async->completion)
+			result = op_async->completion(op_async);
 
-	if (!result && op_async->completion)
-		result = op_async->completion(op_async);
+		if (!result) {
+			gb->elapsed_nsecs = gb_loopback_calc_latency(op_async->ts, te);
+		} else {
+			gb->error++;
+			if (result == -ETIMEDOUT)
+				gb->requests_timedout++;
+		}
 
-	if (!result) {
-		gb->elapsed_nsecs = gb_loopback_calc_latency(op_async->ts, te);
-	} else {
-		gb->error++;
-		if (result == -ETIMEDOUT)
-			gb->requests_timedout++;
+		gb->iteration_count++;
+		gb_loopback_calculate_stats(gb, result);
 	}
-
-	gb->iteration_count++;
-	gb_loopback_calculate_stats(gb, result);
-
-	mutex_unlock(&gb->mutex);
 
 	dev_dbg(&gb->connection->bundle->dev, "complete operation %d\n",
 		operation->id);
@@ -847,7 +845,7 @@ static int gb_loopback_fn(void *data)
 			gb_loopback_async_wait_all(gb);
 
 			/* Mark complete unless user-space has poked us */
-			mutex_lock(&gb->mutex);
+			guard(mutex)(&gb->mutex);
 			if (gb->iteration_count == gb->iteration_max) {
 				gb->type = 0;
 				gb->send_count = 0;
@@ -858,7 +856,6 @@ static int gb_loopback_fn(void *data)
 				dev_dbg(&bundle->dev,
 					"continuing on with new test set\n");
 			}
-			mutex_unlock(&gb->mutex);
 			continue;
 		}
 		size = gb->size;
@@ -918,18 +915,16 @@ static int gb_loopback_dbgfs_latency_show_common(struct seq_file *s,
 	int retval;
 
 	if (kfifo_len(kfifo) == 0) {
-		retval = -EAGAIN;
-		goto done;
+		return -EAGAIN;
 	}
 
-	mutex_lock(mutex);
+	guard(mutex)(mutex);
 	retval = kfifo_out(kfifo, &latency, sizeof(latency));
 	if (retval > 0) {
 		seq_printf(s, "%u", latency);
-		retval = 0;
+		return 0;
 	}
-	mutex_unlock(mutex);
-done:
+
 	return retval;
 }
 

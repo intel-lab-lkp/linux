@@ -117,7 +117,7 @@ int gbaudio_dapm_free_controls(struct snd_soc_dapm_context *dapm,
 	struct snd_soc_dapm_widget *w, *tmp_w;
 	struct snd_soc_card *card = snd_soc_dapm_to_card(dapm);
 
-	mutex_lock(&card->dapm_mutex);
+	guard(mutex)(&card->dapm_mutex);
 	for (i = 0; i < num; i++) {
 		/* below logic can be optimized to identify widget pointer */
 		w = NULL;
@@ -137,7 +137,6 @@ int gbaudio_dapm_free_controls(struct snd_soc_dapm_context *dapm,
 		widget++;
 		gbaudio_dapm_free_widget(w);
 	}
-	mutex_unlock(&card->dapm_mutex);
 	return 0;
 }
 

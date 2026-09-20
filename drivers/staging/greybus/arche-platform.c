@@ -310,20 +310,19 @@ static ssize_t state_store(struct device *dev,
 	struct arche_platform_drvdata *arche_pdata = dev_get_drvdata(dev);
 	int ret = 0;
 
-	mutex_lock(&arche_pdata->platform_state_mutex);
+	guard(mutex)(&arche_pdata->platform_state_mutex);
 
 	if (sysfs_streq(buf, "off")) {
 		if (arche_pdata->state == ARCHE_PLATFORM_STATE_OFF)
-			goto exit;
+			return count;
 
 		/*  If SVC goes down, bring down APB's as well */
 		device_for_each_child(arche_pdata->dev, NULL, apb_poweroff);
 
 		arche_platform_poweroff_seq(arche_pdata);
-
 	} else if (sysfs_streq(buf, "active")) {
 		if (arche_pdata->state == ARCHE_PLATFORM_STATE_ACTIVE)
-			goto exit;
+			return count;
 
 		/* First we want to make sure we power off everything
 		 * and then activate back again
@@ -334,16 +333,15 @@ static ssize_t state_store(struct device *dev,
 		arche_platform_wd_irq_en(arche_pdata);
 		ret = arche_platform_coldboot_seq(arche_pdata);
 		if (ret)
-			goto exit;
-
+			return ret;
 	} else if (sysfs_streq(buf, "standby")) {
 		if (arche_pdata->state == ARCHE_PLATFORM_STATE_STANDBY)
-			goto exit;
+			return count;
 
 		dev_warn(arche_pdata->dev, "standby state not supported\n");
 	} else if (sysfs_streq(buf, "fw_flashing")) {
 		if (arche_pdata->state == ARCHE_PLATFORM_STATE_FW_FLASHING)
-			goto exit;
+			return count;
 
 		/*
 		 * Here we only control SVC.
@@ -356,15 +354,11 @@ static ssize_t state_store(struct device *dev,
 
 		ret = arche_platform_fw_flashing_seq(arche_pdata);
 		if (ret)
-			goto exit;
+			return ret ? ret : count;
 	} else {
 		dev_err(arche_pdata->dev, "unknown state\n");
-		ret = -EINVAL;
+		return -EINVAL;
 	}
-
-exit:
-	mutex_unlock(&arche_pdata->platform_state_mutex);
-	return ret ? ret : count;
 }
 
 static ssize_t state_show(struct device *dev,
@@ -396,7 +390,7 @@ static int arche_platform_pm_notifier(struct notifier_block *notifier,
 			     pm_notifier);
 	int ret = NOTIFY_DONE;
 
-	mutex_lock(&arche_pdata->platform_state_mutex);
+	guard(mutex)(&arche_pdata->platform_state_mutex);
 	switch (pm_event) {
 	case PM_SUSPEND_PREPARE:
 		if (arche_pdata->state != ARCHE_PLATFORM_STATE_ACTIVE) {
@@ -416,7 +410,6 @@ static int arche_platform_pm_notifier(struct notifier_block *notifier,
 	default:
 		break;
 	}
-	mutex_unlock(&arche_pdata->platform_state_mutex);
 
 	return ret;
 }
@@ -530,15 +523,13 @@ static int arche_platform_probe(struct platform_device *pdev)
 
 	/* Explicitly power off if requested */
 	if (!of_property_read_bool(pdev->dev.of_node, "arche,init-off")) {
-		mutex_lock(&arche_pdata->platform_state_mutex);
+		guard(mutex)(&arche_pdata->platform_state_mutex);
 		ret = arche_platform_coldboot_seq(arche_pdata);
 		if (ret) {
-			mutex_unlock(&arche_pdata->platform_state_mutex);
 			dev_err(dev, "Failed to cold boot svc %d\n", ret);
 			goto err_unregister_pm_notifier;
 		}
 		arche_platform_wd_irq_en(arche_pdata);
-		mutex_unlock(&arche_pdata->platform_state_mutex);
 	}
 
 	dev_info(dev, "Device registered successfully\n");

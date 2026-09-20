@@ -78,9 +78,9 @@ static void gb_bootrom_timedout(struct work_struct *work)
 
 	dev_err(dev, "Timed out waiting for %s from the Module\n", reason);
 
-	mutex_lock(&bootrom->mutex);
-	free_firmware(bootrom);
-	mutex_unlock(&bootrom->mutex);
+	scoped_guard(mutex, &bootrom->mutex) {
+		free_firmware(bootrom);
+	}
 
 	/* TODO: Power-off Module ? */
 }
@@ -240,6 +240,11 @@ queue_work:
 
 static int gb_bootrom_get_firmware(struct gb_operation *op)
 {
+	/*
+	 * Keep explicit mutex_lock/unlock here instead of guard(mutex)
+	 * to release the lock before queue_work.
+	 */
+
 	struct gb_bootrom *bootrom = gb_connection_get_data(op->connection);
 	const struct firmware *fw;
 	struct gb_bootrom_get_firmware_request *firmware_request;

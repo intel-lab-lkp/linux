@@ -33,14 +33,12 @@ static struct gbaudio_module_info *find_gb_module(struct gbaudio_codec_info *cod
 
 	dev_dbg(codec->dev, "%s:Find module#%d\n", __func__, dev_id);
 
-	mutex_lock(&codec->lock);
-	list_for_each_entry(module, &codec->module_list, list) {
-		if (module->dev_id == dev_id) {
-			mutex_unlock(&codec->lock);
-			return module;
+	scoped_guard(mutex, &codec->lock) {
+		list_for_each_entry(module, &codec->module_list, list) {
+			if (module->dev_id == dev_id)
+				return module;
 		}
 	}
-	mutex_unlock(&codec->lock);
 	dev_warn(codec->dev, "%s: module#%d missing in codec list\n", name,
 		 dev_id);
 	return NULL;

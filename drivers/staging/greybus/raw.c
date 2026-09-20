@@ -246,12 +246,12 @@ static void gb_raw_disconnect(struct gb_bundle *bundle)
 	gb_connection_disable(connection);
 	gb_connection_destroy(connection);
 
-	mutex_lock(&raw->list_lock);
-	list_for_each_entry_safe(raw_data, temp, &raw->list, entry) {
-		list_del(&raw_data->entry);
-		kfree(raw_data);
+	scoped_guard(mutex, &raw->list_lock) {
+		list_for_each_entry_safe(raw_data, temp, &raw->list, entry) {
+			list_del(&raw_data->entry);
+			kfree(raw_data);
+		}
 	}
-	mutex_unlock(&raw->list_lock);
 	put_device(&raw->dev);
 }
 
@@ -310,19 +310,16 @@ static ssize_t raw_read(struct file *file, char __user *buf, size_t count,
 	int retval = 0;
 	struct raw_data *raw_data;
 
-	mutex_lock(&raw->list_lock);
+	guard(mutex)(&raw->list_lock);
 	if (list_empty(&raw->list))
-		goto exit;
+		return 0;
 
 	raw_data = list_first_entry(&raw->list, struct raw_data, entry);
-	if (raw_data->len > count) {
-		retval = -ENOSPC;
-		goto exit;
-	}
+	if (raw_data->len > count)
+		return -ENOSPC;
 
 	if (copy_to_user(buf, &raw_data->data[0], raw_data->len)) {
-		retval = -EFAULT;
-		goto exit;
+		return -EFAULT;
 	}
 
 	list_del(&raw_data->entry);
@@ -330,8 +327,6 @@ static ssize_t raw_read(struct file *file, char __user *buf, size_t count,
 	retval = raw_data->len;
 	kfree(raw_data);
 
-exit:
-	mutex_unlock(&raw->list_lock);
 	return retval;
 }
 

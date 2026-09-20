@@ -87,21 +87,16 @@ static struct fw_mgmt *get_fw_mgmt(struct cdev *cdev)
 {
 	struct fw_mgmt *fw_mgmt;
 
-	mutex_lock(&list_mutex);
+	guard(mutex)(&list_mutex);
 
 	list_for_each_entry(fw_mgmt, &fw_mgmt_list, node) {
 		if (&fw_mgmt->cdev == cdev) {
 			kref_get(&fw_mgmt->kref);
-			goto unlock;
+			return fw_mgmt;
 		}
 	}
 
-	fw_mgmt = NULL;
-
-unlock:
-	mutex_unlock(&list_mutex);
-
-	return fw_mgmt;
+	return NULL;
 }
 
 static int fw_mgmt_interface_fw_version_operation(struct fw_mgmt *fw_mgmt,
@@ -533,7 +528,7 @@ static long fw_mgmt_ioctl_unlocked(struct file *file, unsigned int cmd,
 	 * the connection is getting disconnected, so that we don't start any
 	 * new operations.
 	 */
-	mutex_lock(&fw_mgmt->mutex);
+	guard(mutex)(&fw_mgmt->mutex);
 	if (!fw_mgmt->disabled) {
 		ret = gb_pm_runtime_get_sync(bundle);
 		if (!ret) {
@@ -541,7 +536,6 @@ static long fw_mgmt_ioctl_unlocked(struct file *file, unsigned int cmd,
 			gb_pm_runtime_put_autosuspend(bundle);
 		}
 	}
-	mutex_unlock(&fw_mgmt->mutex);
 
 	return ret;
 }
@@ -591,9 +585,9 @@ int gb_fw_mgmt_connection_init(struct gb_connection *connection)
 	mutex_init(&fw_mgmt->mutex);
 	kref_init(&fw_mgmt->kref);
 
-	mutex_lock(&list_mutex);
-	list_add(&fw_mgmt->node, &fw_mgmt_list);
-	mutex_unlock(&list_mutex);
+	scoped_guard(mutex, &list_mutex) {
+		list_add(&fw_mgmt->node, &fw_mgmt_list);
+	}
 
 	ret = gb_connection_enable(connection);
 	if (ret)
@@ -631,9 +625,9 @@ err_remove_ida:
 err_connection_disable:
 	gb_connection_disable(connection);
 err_list_del:
-	mutex_lock(&list_mutex);
-	list_del(&fw_mgmt->node);
-	mutex_unlock(&list_mutex);
+	scoped_guard(mutex, &list_mutex) {
+		list_del(&fw_mgmt->node);
+	}
 
 	put_fw_mgmt(fw_mgmt);
 
@@ -657,17 +651,17 @@ void gb_fw_mgmt_connection_exit(struct gb_connection *connection)
 	 * Disallow any new ioctl operations on the char device and wait for
 	 * existing ones to finish.
 	 */
-	mutex_lock(&fw_mgmt->mutex);
-	fw_mgmt->disabled = true;
-	mutex_unlock(&fw_mgmt->mutex);
+	scoped_guard(mutex, &fw_mgmt->mutex) {
+		fw_mgmt->disabled = true;
+	}
 
 	/* All pending greybus operations should have finished by now */
 	gb_connection_disable(fw_mgmt->connection);
 
 	/* Disallow new users to get access to the fw_mgmt structure */
-	mutex_lock(&list_mutex);
-	list_del(&fw_mgmt->node);
-	mutex_unlock(&list_mutex);
+	scoped_guard(mutex, &list_mutex) {
+		list_del(&fw_mgmt->node);
+	}
 
 	/*
 	 * All current users of fw_mgmt would have taken a reference to it by

@@ -490,24 +490,21 @@ static int gb_camera_capabilities(struct gb_camera *gcam,
 	if (ret)
 		return ret;
 
-	mutex_lock(&gcam->mutex);
+	scoped_guard(mutex, &gcam->mutex) {
+		if (!gcam->connection) {
+			ret = -EINVAL;
+			goto done;
+		}
 
-	if (!gcam->connection) {
-		ret = -EINVAL;
-		goto done;
+		ret = gb_camera_operation_sync_flags(gcam->connection,
+						     GB_CAMERA_TYPE_CAPABILITIES,
+						     GB_OPERATION_FLAG_SHORT_RESPONSE,
+						     NULL, 0,
+						     (void *)capabilities, size);
+		if (ret)
+			dev_err(&gcam->bundle->dev, "failed to retrieve capabilities: %d\n", ret);
 	}
-
-	ret = gb_camera_operation_sync_flags(gcam->connection,
-					     GB_CAMERA_TYPE_CAPABILITIES,
-					     GB_OPERATION_FLAG_SHORT_RESPONSE,
-					     NULL, 0,
-					     (void *)capabilities, size);
-	if (ret)
-		dev_err(&gcam->bundle->dev, "failed to retrieve capabilities: %d\n", ret);
-
 done:
-	mutex_unlock(&gcam->mutex);
-
 	gb_pm_runtime_put_autosuspend(gcam->bundle);
 
 	return ret;
@@ -519,6 +516,11 @@ static int gb_camera_configure_streams(struct gb_camera *gcam,
 				       struct gb_camera_stream_config *streams,
 				       struct gb_camera_csi_params *csi_params)
 {
+	/*
+	 * Keep explicit mutex_lock/unlock here instead of guard(mutex)
+	 * to release the lock before freeing req and resp.
+	 */
+
 	struct gb_camera_configure_streams_request *req;
 	struct gb_camera_configure_streams_response *resp;
 	unsigned int nstreams = *num_streams;
@@ -668,18 +670,17 @@ static int gb_camera_capture(struct gb_camera *gcam, u32 request_id,
 	req->num_frames = cpu_to_le16(num_frames);
 	memcpy(req->settings, settings, settings_size);
 
-	mutex_lock(&gcam->mutex);
+	scoped_guard(mutex, &gcam->mutex) {
+		if (!gcam->connection) {
+			ret = -EINVAL;
+			goto done;
+		}
 
-	if (!gcam->connection) {
-		ret = -EINVAL;
-		goto done;
+		ret = gb_operation_sync(gcam->connection, GB_CAMERA_TYPE_CAPTURE,
+					req, req_size, NULL, 0);
 	}
 
-	ret = gb_operation_sync(gcam->connection, GB_CAMERA_TYPE_CAPTURE,
-				req, req_size, NULL, 0);
 done:
-	mutex_unlock(&gcam->mutex);
-
 	kfree(req);
 
 	return ret;
@@ -690,24 +691,20 @@ static int gb_camera_flush(struct gb_camera *gcam, u32 *request_id)
 	struct gb_camera_flush_response resp;
 	int ret;
 
-	mutex_lock(&gcam->mutex);
+	guard(mutex)(&gcam->mutex);
 
 	if (!gcam->connection) {
-		ret = -EINVAL;
-		goto done;
+		return -EINVAL;
 	}
 
 	ret = gb_operation_sync(gcam->connection, GB_CAMERA_TYPE_FLUSH, NULL, 0,
 				&resp, sizeof(resp));
 
 	if (ret < 0)
-		goto done;
+		return ret;
 
 	if (request_id)
 		*request_id = le32_to_cpu(resp.request_id);
-
-done:
-	mutex_unlock(&gcam->mutex);
 
 	return ret;
 }
@@ -1187,7 +1184,7 @@ static void gb_camera_cleanup(struct gb_camera *gcam)
 {
 	gb_camera_debugfs_cleanup(gcam);
 
-	mutex_lock(&gcam->mutex);
+	guard(mutex)(&gcam->mutex);
 	if (gcam->data_connection) {
 		gb_connection_disable(gcam->data_connection);
 		gb_connection_destroy(gcam->data_connection);
@@ -1199,7 +1196,6 @@ static void gb_camera_cleanup(struct gb_camera *gcam)
 		gb_connection_destroy(gcam->connection);
 		gcam->connection = NULL;
 	}
-	mutex_unlock(&gcam->mutex);
 }
 
 static void gb_camera_release_module(struct kref *ref)

@@ -354,10 +354,10 @@ static int __gb_lights_led_brightness_set(struct gb_channel *channel)
 	bool old_active;
 	int ret;
 
-	mutex_lock(&channel->lock);
+	guard(mutex)(&channel->lock);
 	ret = gb_pm_runtime_get_sync(bundle);
 	if (ret < 0)
-		goto out_unlock;
+		return ret;
 
 	old_active = channel->active;
 
@@ -377,7 +377,7 @@ static int __gb_lights_led_brightness_set(struct gb_channel *channel)
 
 	/* we need to keep module alive when turning to active state */
 	if (!old_active && channel->active)
-		goto out_unlock;
+		return ret;
 
 	/*
 	 * on the other hand if going to inactive we still hold a reference and
@@ -388,8 +388,6 @@ static int __gb_lights_led_brightness_set(struct gb_channel *channel)
 
 out_pm_put:
 	gb_pm_runtime_put_autosuspend(bundle);
-out_unlock:
-	mutex_unlock(&channel->lock);
 
 	return ret;
 }
@@ -443,10 +441,10 @@ static int gb_blink_set(struct led_classdev *cdev, unsigned long *delay_on,
 	if (!delay_on || !delay_off)
 		return -EINVAL;
 
-	mutex_lock(&channel->lock);
+	guard(mutex)(&channel->lock);
 	ret = gb_pm_runtime_get_sync(bundle);
 	if (ret < 0)
-		goto out_unlock;
+		return ret;
 
 	old_active = channel->active;
 
@@ -467,7 +465,7 @@ static int gb_blink_set(struct led_classdev *cdev, unsigned long *delay_on,
 
 	/* we need to keep module alive when turning to active state */
 	if (!old_active && channel->active)
-		goto out_unlock;
+		return ret;
 
 	/*
 	 * on the other hand if going to inactive we still hold a reference and
@@ -478,8 +476,6 @@ static int gb_blink_set(struct led_classdev *cdev, unsigned long *delay_on,
 
 out_pm_put:
 	gb_pm_runtime_put_autosuspend(bundle);
-out_unlock:
-	mutex_unlock(&channel->lock);
 
 	return ret;
 }
@@ -1146,15 +1142,14 @@ static int gb_lights_create_all(struct gb_lights *glights)
 	int ret;
 	int i;
 
-	mutex_lock(&glights->lights_lock);
+	guard(mutex)(&glights->lights_lock);
 	ret = gb_lights_get_count(glights);
 	if (ret < 0)
-		goto out;
+		return ret;
 
 	glights->lights = kzalloc_objs(struct gb_light, glights->lights_count);
 	if (!glights->lights) {
-		ret = -ENOMEM;
-		goto out;
+		return -ENOMEM;
 	}
 
 	for (i = 0; i < glights->lights_count; i++) {
@@ -1162,12 +1157,10 @@ static int gb_lights_create_all(struct gb_lights *glights)
 		if (ret < 0) {
 			dev_err(&connection->bundle->dev,
 				"Fail to configure lights device\n");
-			goto out;
+			return ret;
 		}
 	}
 
-out:
-	mutex_unlock(&glights->lights_lock);
 	return ret;
 }
 
@@ -1177,7 +1170,7 @@ static int gb_lights_register_all(struct gb_lights *glights)
 	int ret = 0;
 	int i;
 
-	mutex_lock(&glights->lights_lock);
+	guard(mutex)(&glights->lights_lock);
 	for (i = 0; i < glights->lights_count; i++) {
 		ret = gb_lights_light_register(&glights->lights[i]);
 		if (ret < 0) {
@@ -1187,7 +1180,6 @@ static int gb_lights_register_all(struct gb_lights *glights)
 		}
 	}
 
-	mutex_unlock(&glights->lights_lock);
 	return ret;
 }
 
@@ -1231,14 +1223,14 @@ static int gb_lights_request_handler(struct gb_operation *op)
 	if (event & GB_LIGHTS_LIGHT_CONFIG) {
 		light = &glights->lights[light_id];
 
-		mutex_lock(&glights->lights_lock);
-		gb_lights_light_release(light);
-		ret = gb_lights_light_config(glights, light_id);
-		if (!ret)
-			ret = gb_lights_light_register(light);
-		if (ret < 0)
+		scoped_guard(mutex, &glights->lights_lock) {
 			gb_lights_light_release(light);
-		mutex_unlock(&glights->lights_lock);
+			ret = gb_lights_light_config(glights, light_id);
+			if (!ret)
+				ret = gb_lights_light_register(light);
+			if (ret < 0)
+				gb_lights_light_release(light);
+		}
 	}
 
 	return ret;
