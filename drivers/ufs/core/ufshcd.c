@@ -2432,6 +2432,7 @@ static inline void ufshcd_send_command(struct ufs_hba *hba,
 		lrbp->compl_time_stamp = ktime_set(0, 0);
 		lrbp->compl_time_stamp_local_clock = 0;
 	}
+	lrbp->in_flight = true;
 	if (ufshcd_is_scsi_cmd(cmd)) {
 		ufshcd_add_command_trace(hba, cmd, UFS_CMD_SEND);
 		ufshcd_clk_scaling_start_busy(hba);
@@ -3116,10 +3117,14 @@ static int ufshcd_init_cmd_priv(struct Scsi_Host *host, struct scsi_cmnd *cmd)
 static enum scsi_qc_status ufshcd_queuecommand(struct Scsi_Host *host,
 					       struct scsi_cmnd *cmd)
 {
+	struct ufshcd_lrb *lrbp = scsi_cmd_priv(cmd);
 	struct ufs_hba *hba = shost_priv(host);
 	int tag = scsi_cmd_to_rq(cmd)->tag;
 	int err = 0;
 	struct ufs_hw_queue *hwq = NULL;
+
+	lrbp->in_flight = false;
+	lrbp->pending_requeue = false;
 
 	switch (hba->ufshcd_state) {
 	case UFSHCD_STATE_OPERATIONAL:
@@ -3203,6 +3208,8 @@ static enum scsi_qc_status ufshcd_queue_reserved_command(struct Scsi_Host *host,
 	struct ufs_hw_queue *hwq =
 		hba->mcq_enabled ? ufshcd_mcq_req_to_hwq(hba, rq) : NULL;
 
+	lrbp->in_flight = false;
+	lrbp->pending_requeue = false;
 	ufshcd_add_query_upiu_trace(hba, UFS_QUERY_SEND, lrbp->ucd_req_ptr);
 	ufshcd_send_command(hba, cmd, hwq);
 	return 0;
@@ -4671,6 +4678,28 @@ out:
 }
 EXPORT_SYMBOL_GPL(ufshcd_uic_change_pwr_mode);
 
+static bool ufshcd_requeue_one_non_eh_cmd(struct request *req, void *data)
+{
+	struct scsi_cmnd *cmd = blk_mq_rq_to_pdu(req);
+	struct ufshcd_lrb *lrbp = scsi_cmd_priv(cmd);
+
+	if (blk_mq_is_reserved_rq(req) || !lrbp->pending_requeue)
+		return true;
+
+	lrbp->pending_requeue = false;
+	if (!test_bit(SCMD_STATE_COMPLETE, &cmd->state)) {
+		set_host_byte(cmd, DID_REQUEUE);
+		scsi_done(cmd);
+	}
+	return true;
+}
+
+static void ufshcd_requeue_non_eh_cmds(struct ufs_hba *hba)
+{
+	blk_mq_tagset_busy_iter(&hba->host->tag_set,
+				ufshcd_requeue_one_non_eh_cmd, hba);
+}
+
 int ufshcd_link_recovery(struct ufs_hba *hba)
 {
 	int ret;
@@ -4691,6 +4720,8 @@ int ufshcd_link_recovery(struct ufs_hba *hba)
 		hba->ufshcd_state = UFSHCD_STATE_ERROR;
 	ufshcd_clear_eh_in_progress(hba);
 	spin_unlock_irqrestore(&hba->host->host_lock, flags);
+
+	ufshcd_requeue_non_eh_cmds(hba);
 
 	if (ret)
 		dev_err(hba->dev, "%s: link recovery failed, err %d",
@@ -5937,6 +5968,17 @@ static irqreturn_t ufshcd_uic_cmd_compl(struct ufs_hba *hba, u32 intr_status)
 /* Release the resources allocated for processing a SCSI command. */
 void ufshcd_release_scsi_cmd(struct ufs_hba *hba, struct scsi_cmnd *cmd)
 {
+	struct ufshcd_lrb *lrbp = scsi_cmd_priv(cmd);
+
+	lrbp->pending_requeue = false;
+	if (!lrbp->in_flight)
+		return;
+	lrbp->in_flight = false;
+
+	/* Device management commands do not own any of the below. */
+	if (!ufshcd_is_scsi_cmd(cmd))
+		return;
+
 	scsi_dma_unmap(cmd);
 	ufshcd_crypto_clear_prdt(hba, cmd);
 	ufshcd_release(hba);
@@ -5968,8 +6010,9 @@ void ufshcd_compl_one_cqe(struct ufs_hba *hba, int task_tag,
 		if (unlikely(ufshcd_should_inform_monitor(hba, cmd)))
 			ufshcd_update_monitor(hba, cmd);
 		ufshcd_add_command_trace(hba, cmd, UFS_CMD_COMP);
-		cmd->result = ufshcd_transfer_rsp_status(hba, cmd, cqe);
-		ufshcd_release_scsi_cmd(hba, cmd);
+		if (!test_bit(SCMD_STATE_COMPLETE, &cmd->state))
+			cmd->result =
+				ufshcd_transfer_rsp_status(hba, cmd, cqe);
 	} else {
 		if (cqe) {
 			ocs = cqe->overall_status & MASK_OCS;
@@ -5981,8 +6024,17 @@ void ufshcd_compl_one_cqe(struct ufs_hba *hba, int task_tag,
 			hba,
 			ocs == OCS_SUCCESS ? UFS_QUERY_COMP : UFS_QUERY_ERR,
 			(struct utp_upiu_req *)lrbp->ucd_rsp_ptr);
-		cmd->result = 0;
+		if (!test_bit(SCMD_STATE_COMPLETE, &cmd->state))
+			cmd->result = 0;
 	}
+	ufshcd_release_scsi_cmd(hba, cmd);
+	/*
+	 * Clear lrbp->pending_requeue before the tag is freed so that the
+	 * next user of this tag is not mistaken for a command halted by
+	 * ufshcd_hba_stop().
+	 */
+	lrbp->pending_requeue = false;
+
 	/* Do not touch lrbp after scsi_done() has been called. */
 	scsi_done(cmd);
 }
@@ -7918,6 +7970,8 @@ static bool ufshcd_clear_lu_cmds(struct request *req, void *priv)
 	struct ufs_hba *hba = shost_priv(shost);
 	const u64 lun = *(u64 *)priv;
 	const u32 tag = req->tag;
+	unsigned long flags;
+	bool outstanding;
 
 	if (blk_mq_is_reserved_rq(req) || sdev->lun != lun)
 		return true;
@@ -7936,7 +7990,11 @@ static bool ufshcd_clear_lu_cmds(struct request *req, void *priv)
 		return true;
 	}
 
-	ufshcd_compl_one_cqe(hba, tag, NULL);
+	spin_lock_irqsave(&hba->outstanding_lock, flags);
+	outstanding = __test_and_clear_bit(tag, &hba->outstanding_reqs);
+	spin_unlock_irqrestore(&hba->outstanding_lock, flags);
+	if (outstanding)
+		ufshcd_compl_one_cqe(hba, tag, NULL);
 	return true;
 }
 
@@ -8093,6 +8151,7 @@ static int ufshcd_abort(struct scsi_cmnd *cmd)
 	u32 reg;
 
 	ufshcd_hold(hba);
+	lrbp->pending_requeue = false;
 
 	if (!hba->mcq_enabled) {
 		reg = ufshcd_readl(hba, REG_UTP_TRANSFER_REQ_DOOR_BELL);
@@ -8159,6 +8218,16 @@ static int ufshcd_abort(struct scsi_cmnd *cmd)
 	if (hba->mcq_enabled) {
 		/* MCQ mode. Branch off to handle abort for mcq mode */
 		err = ufshcd_mcq_abort(cmd);
+		if (err == SUCCESS) {
+			struct ufs_hw_queue *hwq =
+				ufshcd_mcq_req_to_hwq(hba, rq);
+
+			if (hwq) {
+				spin_lock_irqsave(&hwq->cq_lock, flags);
+				ufshcd_release_scsi_cmd(hba, cmd);
+				spin_unlock_irqrestore(&hwq->cq_lock, flags);
+			}
+		}
 		goto release;
 	}
 
@@ -8222,6 +8291,71 @@ static void ufshcd_process_probe_result(struct ufs_hba *hba,
 			  hba->curr_dev_pwr_mode, hba->uic_link_state);
 }
 
+/*
+ * The caller must own @rq, either by having claimed its bit in
+ * hba->outstanding_reqs (legacy mode) or by holding hwq->cq_lock (MCQ mode).
+ */
+static void __ufshcd_release_stopped_req(struct ufs_hba *hba,
+					 struct request *rq,
+					 struct scsi_cmnd *cmd)
+{
+	struct ufshcd_lrb *lrbp = scsi_cmd_priv(cmd);
+
+	if (!lrbp->in_flight)
+		return;
+
+	ufshcd_release_scsi_cmd(hba, cmd);
+	if (test_bit(SCMD_STATE_COMPLETE, &cmd->state))
+		return;
+
+	if (blk_mq_is_reserved_rq(rq)) {
+		/* Device management commands are not requeued. */
+		set_host_byte(cmd, DID_TIME_OUT);
+		scsi_done(cmd);
+	} else {
+		lrbp->pending_requeue = true;
+	}
+}
+
+static bool ufshcd_release_one_stopped_req(struct request *rq, void *priv)
+{
+	struct scsi_cmnd *cmd = blk_mq_rq_to_pdu(rq);
+	struct ufs_hba *hba = priv;
+	unsigned long flags;
+	bool owned;
+
+	if (hba->mcq_enabled) {
+		struct ufs_hw_queue *hwq = ufshcd_mcq_req_to_hwq(hba, rq);
+
+		if (hwq) {
+			spin_lock_irqsave(&hwq->cq_lock, flags);
+			__ufshcd_release_stopped_req(hba, rq, cmd);
+			spin_unlock_irqrestore(&hwq->cq_lock, flags);
+		}
+		return true;
+	}
+
+	/*
+	 * Keep hba->outstanding_lock a leaf lock, as in ufshcd_poll() and
+	 * ufshcd_abort(): clearing the bit already grants exclusive ownership.
+	 */
+	spin_lock_irqsave(&hba->outstanding_lock, flags);
+	owned = __test_and_clear_bit(rq->tag, &hba->outstanding_reqs);
+	spin_unlock_irqrestore(&hba->outstanding_lock, flags);
+	if (owned)
+		__ufshcd_release_stopped_req(hba, rq, cmd);
+
+	return true;
+}
+
+static void ufshcd_release_stopped_reqs(struct ufs_hba *hba)
+{
+	blk_mq_tagset_busy_iter(&hba->host->tag_set,
+				ufshcd_release_one_stopped_req, hba);
+	/* TMF sweep inherited from the replaced ufshcd_complete_requests(). */
+	ufshcd_tmc_handler(hba);
+}
+
 /**
  * ufshcd_host_reset_and_restore - reset and restore host controller
  * @hba: per-adapter instance
@@ -8237,13 +8371,11 @@ static int ufshcd_host_reset_and_restore(struct ufs_hba *hba)
 	int err;
 
 	/*
-	 * Stop the host controller and complete the requests
-	 * cleared by h/w
+	 * Stop the host controller and release driver resources for
+	 * requests cleared by h/w
 	 */
 	ufshcd_hba_stop(hba);
-	hba->silence_err_logs = true;
-	ufshcd_complete_requests(hba, true);
-	hba->silence_err_logs = false;
+	ufshcd_release_stopped_reqs(hba);
 
 	/* scale up clocks to max frequency before full reinitialization */
 	if (ufshcd_is_clkscaling_supported(hba))
@@ -8324,6 +8456,8 @@ static int ufshcd_reset_and_restore(struct ufs_hba *hba)
 		hba->saved_uic_err |= saved_uic_err;
 	}
 	spin_unlock_irqrestore(&hba->host->host_lock, flags);
+
+	ufshcd_requeue_non_eh_cmds(hba);
 
 	return err;
 }
@@ -9603,30 +9737,6 @@ static enum scsi_timeout_action ufshcd_eh_timed_out(struct scsi_cmnd *scmd)
 	dev_info(hba->dev, "%s() finished; outstanding_tasks = %#lx.\n",
 		 __func__, hba->outstanding_tasks);
 
-	/*
-	 * ufshcd_link_recovery() may already have completed @scmd, e.g. via
-	 * the existing MCQ force-completion path.
-	 */
-	if (!test_bit(SCMD_STATE_COMPLETE, &scmd->state)) {
-		if (!hba->mcq_enabled) {
-			unsigned long flags;
-			struct request *rq = scsi_cmd_to_rq(scmd);
-
-			spin_lock_irqsave(&hba->outstanding_lock, flags);
-			__clear_bit(rq->tag, &hba->outstanding_reqs);
-			spin_unlock_irqrestore(&hba->outstanding_lock, flags);
-		}
-
-		if (ufshcd_is_scsi_cmd(scmd)) {
-			set_host_byte(scmd, DID_REQUEUE);
-			ufshcd_release_scsi_cmd(hba, scmd);
-		} else {
-			set_host_byte(scmd, DID_TIME_OUT);
-		}
-
-		scsi_done(scmd);
-	}
-
 	return SCSI_EH_DONE;
 }
 
@@ -10470,15 +10580,18 @@ set_link_active:
 		ufshcd_device_reset(hba);
 		WARN_ON(!ufshcd_is_link_off(hba));
 	}
-	if (ufshcd_is_link_hibern8(hba) && !ufshcd_uic_hibern8_exit(hba))
+	if (ufshcd_is_link_hibern8(hba) && !ufshcd_uic_hibern8_exit(hba)) {
 		ufshcd_set_link_active(hba);
-	else if (ufshcd_is_link_off(hba))
+	} else if (ufshcd_is_link_off(hba)) {
 		ufshcd_host_reset_and_restore(hba);
+		ufshcd_requeue_non_eh_cmds(hba);
+	}
 set_dev_active:
 	/* Can also get here needing to exit DeepSleep */
 	if (ufshcd_is_ufs_dev_deepsleep(hba)) {
 		ufshcd_device_reset(hba);
 		ufshcd_host_reset_and_restore(hba);
+		ufshcd_requeue_non_eh_cmds(hba);
 	}
 	if (!ufshcd_set_dev_pwr_mode(hba, UFS_ACTIVE_PWR_MODE))
 		ufshcd_disable_auto_bkops(hba);
