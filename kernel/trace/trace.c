@@ -100,6 +100,12 @@ struct tracers {
 };
 
 /*
+ * Tracers that do not define their own flags use these empty flags,
+ * as tr->current_trace_flags must never be NULL.
+ */
+static struct tracer_flags no_tracer_flags;
+
+/*
  * To prevent the comm cache from being overwritten when no
  * tracing is active, only save the comm when a trace event
  * occurred.
@@ -1485,9 +1491,11 @@ int __init register_tracer(struct tracer *type)
 		}
 	}
 
-	/* store the tracer for __set_tracer_option */
+	/* All tracers must have flags, use the empty flags if none are defined */
 	if (type->flags)
 		type->flags->trace = type;
+	else if (!type->default_flags)
+		type->default_flags = &no_tracer_flags;
 
 	ret = do_run_tracer_selftest(type);
 	if (ret < 0)
@@ -8052,9 +8060,6 @@ static int add_tracer(struct trace_array *tr, struct tracer *tracer)
 
 	flags = tracer->flags;
 	if (!flags) {
-		if (!tracer->default_flags)
-			return 0;
-
 		/*
 		 * If the tracer defines default flags, it means the flags are
 		 * per trace instance.
