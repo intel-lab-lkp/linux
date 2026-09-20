@@ -3,6 +3,7 @@
 // Copyright 2025 Advanced Micro Devices, Inc.
 #ifndef UTM_QOS_MODEL_DCHUB_V2_H
 #define UTM_QOS_MODEL_DCHUB_V2_H
+#include <linux/math64.h>
 #include "utm_qos_model_types.h"
 
 struct utm_qos_model_dchub_memory_path_latency_v2 {
@@ -63,22 +64,22 @@ static inline void dchub_v2_get_sop_total_available_bandwidth_KBps(
 	uint64_t dram_available_bandwidth_KBps_urgent;
 	uint64_t fabric_available_bandwidth_KBps_urgent;
 
-	dram_available_bandwidth_KBps_nominal = (uint64_t) sop->uclk_khz
+	dram_available_bandwidth_KBps_nominal = div_u64((uint64_t)sop->uclk_khz
 			* socbb->dram_channel_count
 			* socbb->dram_channel_width_bytes
 			* socbb->dram_transactions_per_clock
-			* socbb->dram_derate_percent_nominal / 100;
-	dram_available_bandwidth_KBps_urgent = (uint64_t) sop->uclk_khz
+			* socbb->dram_derate_percent_nominal, 100);
+	dram_available_bandwidth_KBps_urgent = div_u64((uint64_t)sop->uclk_khz
 			* socbb->dram_channel_count
 			* socbb->dram_channel_width_bytes
 			* socbb->dram_transactions_per_clock
-			* socbb->dram_derate_percent_urgent / 100;
-	fabric_available_bandwidth_KBps_nominal = (uint64_t) sop->fclk_khz
+			* socbb->dram_derate_percent_urgent, 100);
+	fabric_available_bandwidth_KBps_nominal = div_u64((uint64_t)sop->fclk_khz
 			* socbb->fabric_datapath_to_dcn_data_return_bytes
-			* socbb->fabric_derate_percent_nominal / 100;
-	fabric_available_bandwidth_KBps_urgent = (uint64_t) sop->fclk_khz
+			* socbb->fabric_derate_percent_nominal, 100);
+	fabric_available_bandwidth_KBps_urgent = div_u64((uint64_t)sop->fclk_khz
 			* socbb->fabric_datapath_to_dcn_data_return_bytes
-			* socbb->fabric_derate_percent_urgent / 100;
+			* socbb->fabric_derate_percent_urgent, 100);
 
 	total_available_bandwidth->nominal_bandwidth_KBps =
 			dram_available_bandwidth_KBps_nominal < fabric_available_bandwidth_KBps_nominal ?
@@ -112,9 +113,11 @@ static inline bool dchub_v2_is_qos_bandwidth_supported_by_sop(
 	nominal_available_bandwidth_KBps = available_bandwidth.nominal_bandwidth_KBps;
 	urgent_available_bandwidth_KBps = available_bandwidth.urgent_bandwidth_KBps;
 
-	if ((nominal_available_bandwidth_KBps * nominal_utm_budget_percent / 100) < qos_bandwidth->nominal_bandwidth_KBps)
+	if (div_u64(nominal_available_bandwidth_KBps * nominal_utm_budget_percent, 100) <
+			qos_bandwidth->nominal_bandwidth_KBps)
 		return false;
-	else if ((urgent_available_bandwidth_KBps * urgent_utm_budget_percent / 100) < qos_bandwidth->urgent_bandwidth_KBps)
+	else if (div_u64(urgent_available_bandwidth_KBps * urgent_utm_budget_percent, 100) <
+			qos_bandwidth->urgent_bandwidth_KBps)
 		return false;
 	else
 		return true;
