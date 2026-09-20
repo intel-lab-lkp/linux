@@ -76,6 +76,7 @@ static const unsigned short normal_i2c[] = {
 struct spd5118_data {
 	struct regmap *regmap;
 	struct mutex nvmem_lock;
+	bool write_protected;
 };
 
 /* hwmon */
@@ -129,8 +130,9 @@ static int spd5118_read_temp(struct regmap *regmap, u32 attr, long *val)
 	return 0;
 }
 
-static int spd5118_read_alarm(struct regmap *regmap, u32 attr, long *val)
+static int spd5118_read_alarm(struct spd5118_data *data, u32 attr, long *val)
 {
+	struct regmap *regmap = data->regmap;
 	unsigned int mask, regval;
 	int err;
 
@@ -155,7 +157,12 @@ static int spd5118_read_alarm(struct regmap *regmap, u32 attr, long *val)
 	if (err < 0)
 		return err;
 	*val = !!(regval & mask);
-	if (*val)
+	/*
+	 * Clearing a latched alarm condition requires a register write. If the
+	 * device is write protected, leave the status bit alone and report the
+	 * condition as the device presents it.
+	 */
+	if (*val && !data->write_protected)
 		return regmap_write(regmap, SPD5118_REG_TEMP_CLR, mask);
 	return 0;
 }
@@ -175,7 +182,8 @@ static int spd5118_read_enable(struct regmap *regmap, long *val)
 static int spd5118_read(struct device *dev, enum hwmon_sensor_types type,
 			u32 attr, int channel, long *val)
 {
-	struct regmap *regmap = dev_get_drvdata(dev);
+	struct spd5118_data *data = dev_get_drvdata(dev);
+	struct regmap *regmap = data->regmap;
 
 	if (type != hwmon_temp)
 		return -EOPNOTSUPP;
@@ -191,7 +199,7 @@ static int spd5118_read(struct device *dev, enum hwmon_sensor_types type,
 	case hwmon_temp_min_alarm:
 	case hwmon_temp_crit_alarm:
 	case hwmon_temp_lcrit_alarm:
-		return spd5118_read_alarm(regmap, attr, val);
+		return spd5118_read_alarm(data, attr, val);
 	case hwmon_temp_enable:
 		return spd5118_read_enable(regmap, val);
 	default:
@@ -257,7 +265,8 @@ static int spd5118_temp_write(struct regmap *regmap, u32 attr, long val)
 static int spd5118_write(struct device *dev, enum hwmon_sensor_types type,
 			 u32 attr, int channel, long val)
 {
-	struct regmap *regmap = dev_get_drvdata(dev);
+	struct spd5118_data *data = dev_get_drvdata(dev);
+	struct regmap *regmap = data->regmap;
 
 	switch (type) {
 	case hwmon_temp:
@@ -270,6 +279,8 @@ static int spd5118_write(struct device *dev, enum hwmon_sensor_types type,
 static umode_t spd5118_is_visible(const void *_data, enum hwmon_sensor_types type,
 				  u32 attr, int channel)
 {
+	const struct spd5118_data *data = _data;
+
 	if (type != hwmon_temp)
 		return 0;
 
@@ -281,7 +292,7 @@ static umode_t spd5118_is_visible(const void *_data, enum hwmon_sensor_types typ
 	case hwmon_temp_lcrit:
 	case hwmon_temp_crit:
 	case hwmon_temp_enable:
-		return 0644;
+		return data->write_protected ? 0444 : 0644;
 	case hwmon_temp_min_alarm:
 	case hwmon_temp_max_alarm:
 	case hwmon_temp_crit_alarm:
@@ -401,6 +412,14 @@ static int spd5118_nvmem_init(struct device *dev, struct spd5118_data *data)
 	};
 	struct nvmem_device *nvmem;
 
+	/*
+	 * Selecting another SPD page writes the page selector register, which
+	 * fails if the device is write protected, so only the currently
+	 * selected page is readable then. Do not advertise the others.
+	 */
+	if (data->write_protected)
+		nvmem_config.size = SPD5118_PAGE_SIZE;
+
 	nvmem = devm_nvmem_register(dev, &nvmem_config);
 	return PTR_ERR_OR_ZERO(nvmem);
 }
@@ -466,6 +485,24 @@ static const struct regmap_config spd5118_regmap8_config = {
 };
 
 /*
+ * Variant for write protected devices. Since no write can succeed, there is
+ * nothing to cache and nothing to restore on resume; dropping the cache also
+ * keeps regcache_sync() from attempting writes, which would otherwise make the
+ * system fail to resume.
+ */
+static const struct regmap_config spd5118_regmap8_ro_config = {
+	.reg_bits = 8,
+	.val_bits = 8,
+	.max_register = 0x7ff,
+	.writeable_reg = spd5118_writeable_reg,
+	.volatile_reg = spd5118_volatile_reg,
+	.cache_type = REGCACHE_NONE,
+
+	.ranges = spd5118_i2c_regmap_range_cfg,
+	.num_ranges = ARRAY_SIZE(spd5118_i2c_regmap_range_cfg),
+};
+
+/*
  * SPD5118 2-byte register address format (JESD300-5, Tables 7 & 20):
  *   Byte 1 (on wire first):  MemReg | BlkAddr[0] | Address[5:0]
  *   Byte 2 (on wire second): 0000   | BlkAddr[4:1]
@@ -494,6 +531,15 @@ static int spd5118_suspend(struct device *dev)
 	int err;
 
 	/*
+	 * Disabling the temperature sensor means writing to the device, and
+	 * syncing back the register cache on resume means writing as well.
+	 * Neither is possible if the device is write protected, so leave the
+	 * device alone in that case.
+	 */
+	if (data->write_protected)
+		return 0;
+
+	/*
 	 * Make sure the configuration register in the regmap cache is current
 	 * before bypassing it.
 	 */
@@ -517,13 +563,18 @@ static int spd5118_resume(struct device *dev)
 	struct spd5118_data *data = dev_get_drvdata(dev);
 	struct regmap *regmap = data->regmap;
 
+	/* Nothing was changed on suspend, and writes are not possible */
+	if (data->write_protected)
+		return 0;
+
 	regcache_cache_only(regmap, false);
 	return regcache_sync(regmap);
 }
 
 static DEFINE_SIMPLE_DEV_PM_OPS(spd5118_pm_ops, spd5118_suspend, spd5118_resume);
 
-static int spd5118_common_probe(struct device *dev, struct regmap *regmap)
+static int spd5118_common_probe(struct device *dev, struct regmap *regmap,
+				bool write_protected)
 {
 	unsigned int capability, revision, vendor, bank;
 	struct spd5118_data *data;
@@ -554,6 +605,7 @@ static int spd5118_common_probe(struct device *dev, struct regmap *regmap)
 		return -ENODEV;
 
 	data->regmap = regmap;
+	data->write_protected = write_protected;
 	mutex_init(&data->nvmem_lock);
 	dev_set_drvdata(dev, data);
 
@@ -565,7 +617,7 @@ static int spd5118_common_probe(struct device *dev, struct regmap *regmap)
 	}
 
 	hwmon_dev = devm_hwmon_device_register_with_info(dev, "spd5118",
-							 regmap, &spd5118_chip_info,
+							 data, &spd5118_chip_info,
 							 NULL);
 	if (IS_ERR(hwmon_dev))
 		return PTR_ERR(hwmon_dev);
@@ -681,21 +733,51 @@ static int spd5118_i2c_init(struct i2c_client *client)
 	return 0;
 }
 
+/*
+ * Writes to SPD devices can be blocked, either by the SMBus controller (SPD
+ * Write Disable, as set by the BIOS on many systems) or by firmware. There is
+ * no generic way to query this, so probe for it by writing the page selector
+ * register back with the value just read from it. That is a no-op on a device
+ * which supports writes.
+ */
+static bool spd5118_write_protected(struct i2c_client *client, int mode)
+{
+	int err;
+
+	err = i2c_smbus_write_byte_data(client, SPD5118_REG_I2C_LEGACY_MODE, mode);
+	if (err >= 0)
+		return false;
+
+	dev_info(&client->dev,
+		 "SPD writes are blocked (%d), sensor will be read-only\n", err);
+	return true;
+}
+
 static int spd5118_i2c_probe(struct i2c_client *client)
 {
+	const struct regmap_config *config = &spd5118_regmap8_config;
 	struct device *dev = &client->dev;
 	struct regmap *regmap;
-	int err;
+	int err, mode;
+	bool write_protected;
 
 	err = spd5118_i2c_init(client);
 	if (err)
 		return err;
 
-	regmap = devm_regmap_init_i2c(client, &spd5118_regmap8_config);
+	mode = i2c_smbus_read_byte_data(client, SPD5118_REG_I2C_LEGACY_MODE);
+	if (mode < 0)
+		return mode;
+
+	write_protected = spd5118_write_protected(client, mode);
+	if (write_protected)
+		config = &spd5118_regmap8_ro_config;
+
+	regmap = devm_regmap_init_i2c(client, config);
 	if (IS_ERR(regmap))
 		return dev_err_probe(dev, PTR_ERR(regmap), "regmap init failed\n");
 
-	return spd5118_common_probe(dev, regmap);
+	return spd5118_common_probe(dev, regmap, write_protected);
 }
 
 static const struct i2c_device_id spd5118_i2c_id[] = {
@@ -743,7 +825,11 @@ static int spd5118_i3c_probe(struct i3c_device *i3cdev)
 	if (regval[0] != 0x51 || regval[1] != 0x18)
 		return -ENODEV;
 
-	return spd5118_common_probe(dev, regmap);
+	/*
+	 * SPD Write Disable is an SMBus controller feature and does not apply
+	 * to I3C transfers.
+	 */
+	return spd5118_common_probe(dev, regmap, false);
 }
 
 static struct i3c_driver spd5118_i3c_driver = {

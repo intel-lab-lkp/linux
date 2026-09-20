@@ -54,6 +54,12 @@ temp1_crit_alarm	Temperature critical alarm
 Alarm attributes are sticky until read and will be cleared afterwards
 unless the alarm condition still applies.
 
+If the chip cannot be written to, for example because the SMBus controller has
+SPD Write Disable set or because the firmware protects the SPD, the driver runs
+the chip read-only. The writable attributes listed above are read-only then, and
+latched alarm conditions are reported as presented by the chip because clearing
+them requires a write.
+
 
 SPD (Serial Presence Detect) support
 ------------------------------------
@@ -61,3 +67,7 @@ SPD (Serial Presence Detect) support
 The driver also supports reading the SPD NVRAM on SPD5118 compatible chips.
 SPD data is available from the 'eeprom' binary attribute file attached to the
 chip's I2C device.
+
+On write protected chips only the first SPD page can be read, because selecting
+another page requires a write. The 'eeprom' attribute is limited to that page in
+this case.
