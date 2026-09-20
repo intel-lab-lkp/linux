@@ -575,8 +575,7 @@ struct file_notify_information {
 } __packed;
 
 /*
- * See POSIX Extensions to MS-FSCC 2.3.2.1
- * Link: https://gitlab.com/samba-team/smb3-posix-spec/-/blob/master/fscc_posix_extensions.md
+ * See POSIX-FSCC 2.3.1
  */
 typedef struct {
 	/* For undefined recommended transfer size return -1 in that field */
