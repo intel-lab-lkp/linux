@@ -28,8 +28,12 @@ static int skbmark_encode(struct sk_buff *skb, void *skbdata,
 
 static int skbmark_decode(struct sk_buff *skb, void *data, u16 len)
 {
-	u32 ifemark = *(u32 *)data;
+	u32 ifemark;
 
+	if (len != sizeof(ifemark))
+		return -EINVAL;
+
+	ifemark = *(u32 *)data;
 	skb->mark = ntohl(ifemark);
 	return 0;
 }

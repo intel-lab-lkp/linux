@@ -33,8 +33,12 @@ static int skbprio_encode(struct sk_buff *skb, void *skbdata,
 
 static int skbprio_decode(struct sk_buff *skb, void *data, u16 len)
 {
-	u32 ifeprio = *(u32 *)data;
+	u32 ifeprio;
 
+	if (len != sizeof(ifeprio))
+		return -EINVAL;
+
+	ifeprio = *(u32 *)data;
 	skb->priority = ntohl(ifeprio);
 	return 0;
 }

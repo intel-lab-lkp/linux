@@ -28,8 +28,12 @@ static int skbtcindex_encode(struct sk_buff *skb, void *skbdata,
 
 static int skbtcindex_decode(struct sk_buff *skb, void *data, u16 len)
 {
-	u16 ifetc_index = *(u16 *)data;
+	u16 ifetc_index;
 
+	if (len != sizeof(ifetc_index))
+		return -EINVAL;
+
+	ifetc_index = *(u16 *)data;
 	skb->tc_index = ntohs(ifetc_index);
 	return 0;
 }
