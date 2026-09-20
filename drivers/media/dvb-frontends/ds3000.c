@@ -373,6 +373,9 @@ static int ds3000_load_firmware(struct dvb_frontend *fe,
 	struct ds3000_state *state = fe->demodulator_priv;
 	int ret = 0;
 
+	if (fw->size < 2)
+		return -EINVAL;
+
 	dprintk("%s\n", __func__);
 	dprintk("Firmware is %zu bytes (%02x %02x .. %02x %02x)\n",
 			fw->size,
