@@ -456,21 +456,18 @@ fcloop_t2h_ls_req(struct nvmet_fc_target_port *targetport, void *hosthandle,
 	 * 1:1 tgtport vs remoteport
 	 */
 
+	/*
+	 * Fail synchronously: an async completion can run after
+	 * nvmet_fc_unregister_targetport() has freed the pending lsreq.
+	 */
+	if (!tport->remoteport)
+		return -ECONNREFUSED;
+
 	tls_req = kmem_cache_alloc(lsreq_cache, GFP_KERNEL);
 	if (!tls_req)
 		return -ENOMEM;
 	tls_req->lsreq = lsreq;
 	INIT_LIST_HEAD(&tls_req->ls_list);
-
-	if (!tport->remoteport) {
-		tls_req->status = -ECONNREFUSED;
-		spin_lock(&tport->lock);
-		list_add_tail(&tls_req->ls_list, &tport->ls_list);
-		spin_unlock(&tport->lock);
-		queue_work(nvmet_wq, &tport->ls_work);
-		return ret;
-	}
-
 	tls_req->status = 0;
 	ret = nvme_fc_rcv_ls_req(tport->remoteport, &tls_req->ls_rsp,
 				 lsreq->rqstaddr, lsreq->rqstlen);
