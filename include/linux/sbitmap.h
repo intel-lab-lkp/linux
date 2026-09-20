@@ -615,6 +615,13 @@ void sbitmap_finish_wait(struct sbitmap_queue *sbq, struct sbq_wait_state *ws,
 				struct sbq_wait *sbq_wait);
 
 /*
+ * Like sbitmap_add_wait_queue(), but the caller must hold ws->wait.lock.
+ */
+void __sbitmap_add_wait_queue(struct sbitmap_queue *sbq,
+			      struct sbq_wait_state *ws,
+			      struct sbq_wait *sbq_wait);
+
+/*
  * Wrapper around add_wait_queue(), which maintains some extra internal state
  */
 void sbitmap_add_wait_queue(struct sbitmap_queue *sbq,
@@ -622,7 +629,7 @@ void sbitmap_add_wait_queue(struct sbitmap_queue *sbq,
 			    struct sbq_wait *sbq_wait);
 
 /*
- * Must be paired with sbitmap_add_wait_queue()
+ * Must be paired with sbitmap_add_wait_queue() or __sbitmap_add_wait_queue().
  */
 void sbitmap_del_wait_queue(struct sbq_wait *sbq_wait);
 

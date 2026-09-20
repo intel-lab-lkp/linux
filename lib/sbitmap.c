@@ -756,15 +756,30 @@ void sbitmap_queue_show(struct sbitmap_queue *sbq, struct seq_file *m)
 }
 EXPORT_SYMBOL_GPL(sbitmap_queue_show);
 
+void __sbitmap_add_wait_queue(struct sbitmap_queue *sbq,
+			      struct sbq_wait_state *ws,
+			      struct sbq_wait *sbq_wait)
+{
+	lockdep_assert_held(&ws->wait.lock);
+
+	if (!sbq_wait->sbq) {
+		sbq_wait->sbq = sbq;
+		atomic_inc(&sbq->ws_active);
+		sbq_wait->wait.flags &= ~WQ_FLAG_EXCLUSIVE;
+		__add_wait_queue(&ws->wait, &sbq_wait->wait);
+	}
+}
+EXPORT_SYMBOL_GPL(__sbitmap_add_wait_queue);
+
 void sbitmap_add_wait_queue(struct sbitmap_queue *sbq,
 			    struct sbq_wait_state *ws,
 			    struct sbq_wait *sbq_wait)
 {
-	if (!sbq_wait->sbq) {
-		sbq_wait->sbq = sbq;
-		atomic_inc(&sbq->ws_active);
-		add_wait_queue(&ws->wait, &sbq_wait->wait);
-	}
+	unsigned long flags;
+
+	spin_lock_irqsave(&ws->wait.lock, flags);
+	__sbitmap_add_wait_queue(sbq, ws, sbq_wait);
+	spin_unlock_irqrestore(&ws->wait.lock, flags);
 }
 EXPORT_SYMBOL_GPL(sbitmap_add_wait_queue);
 
