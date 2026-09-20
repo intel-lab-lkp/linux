@@ -3120,10 +3120,8 @@ static int kvm_vcpu_ioctl_x86_set_vcpu_events(struct kvm_vcpu *vcpu,
 #endif
 
 		if (lapic_in_kernel(vcpu)) {
-			if (events->smi.latched_init)
-				set_bit(KVM_APIC_INIT, &vcpu->arch.apic->pending_events);
-			else
-				clear_bit(KVM_APIC_INIT, &vcpu->arch.apic->pending_events);
+			assign_bit(KVM_APIC_INIT, &vcpu->arch.apic->pending_events,
+				   events->smi.latched_init);
 		}
 	}
 
@@ -7270,10 +7268,7 @@ static void set_or_clear_apicv_inhibit(unsigned long *inhibits,
 
 	BUILD_BUG_ON(ARRAY_SIZE(apicv_inhibits) != NR_APICV_INHIBIT_REASONS);
 
-	if (set)
-		__set_bit(reason, inhibits);
-	else
-		__clear_bit(reason, inhibits);
+	__assign_bit(reason, inhibits, set);
 
 	trace_kvm_apicv_inhibit_changed(reason, set, *inhibits);
 }

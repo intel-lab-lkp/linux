@@ -114,17 +114,13 @@ static void synic_update_vector(struct kvm_vcpu_hv_synic *synic,
 	if (vector < HV_SYNIC_FIRST_VALID_VECTOR)
 		return;
 
-	if (synic_has_vector_connected(synic, vector))
-		__set_bit(vector, synic->vec_bitmap);
-	else
-		__clear_bit(vector, synic->vec_bitmap);
+	__assign_bit(vector, synic->vec_bitmap,
+		     synic_has_vector_connected(synic, vector));
 
 	auto_eoi_old = !bitmap_empty(synic->auto_eoi_bitmap, 256);
 
-	if (synic_has_vector_auto_eoi(synic, vector))
-		__set_bit(vector, synic->auto_eoi_bitmap);
-	else
-		__clear_bit(vector, synic->auto_eoi_bitmap);
+	__assign_bit(vector, synic->auto_eoi_bitmap,
+		     synic_has_vector_auto_eoi(synic, vector));
 
 	auto_eoi_new = !bitmap_empty(synic->auto_eoi_bitmap, 256);
 
