@@ -131,7 +131,8 @@ static int __init early_init_dt_reserve_memory(phys_addr_t base,
 		 * if the region isn't memory as it won't be mapped.
 		 */
 		if (memblock_overlaps_region(&memblock.memory, base, size) &&
-		    memblock_is_region_reserved(base, size))
+		    (memblock_is_region_reserved(base, size) ||
+		     memblock_overlaps_nomap_region(base, size)))
 			return -EBUSY;
 
 		ret = memblock_mark_nomap(base, size);
@@ -266,6 +267,20 @@ static void __init __rmem_check_for_overlap(void)
 	}
 }
 
+static bool __init rmem_overlaps_check(phys_addr_t base, phys_addr_t size,
+				       int start)
+{
+	int i;
+
+	for (i = start; i < reserved_mem_count; i++) {
+		struct reserved_mem *r = &reserved_mem[i];
+
+		if (memblock_addrs_overlap(base, size, r->base, r->size))
+			return true;
+	}
+	return false;
+}
+
 /**
  * fdt_scan_reserved_mem_late() - Scan FDT and initialize remaining reserved
  * memory regions.
@@ -279,7 +294,7 @@ void __init fdt_scan_reserved_mem_late(void)
 {
 	const void *fdt = initial_boot_params;
 	phys_addr_t base, size;
-	int node, child;
+	int node, child, static_reserved_start;
 
 	if (!fdt)
 		return;
@@ -298,6 +313,8 @@ void __init fdt_scan_reserved_mem_late(void)
 		pr_err("Reserved memory: unsupported node format, ignoring\n");
 		return;
 	}
+
+	static_reserved_start = reserved_mem_count;
 
 	fdt_for_each_subnode(child, fdt, node) {
 		const __be32 *prop;
@@ -326,6 +343,8 @@ void __init fdt_scan_reserved_mem_late(void)
 			continue;
 
 		nomap = of_get_flat_dt_prop(child, "no-map", NULL) != NULL;
+		if (nomap && rmem_overlaps_check(base, size, static_reserved_start))
+			continue;
 		if (!memblock_is_region_rsrv_rmem(base, size, nomap))
 			continue;
 

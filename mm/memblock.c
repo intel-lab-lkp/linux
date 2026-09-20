@@ -2222,6 +2222,32 @@ bool __init_memblock memblock_is_region_rsrv_rmem(phys_addr_t base,
 	return true;
 }
 
+/**
+ * memblock_overlaps_nomap_region - check if a region intersects no-map memory
+ * @base: base of region to check
+ * @size: size of region to check
+ *
+ * Check if the region [@base, @base + @size) intersects a memory block
+ * marked %MEMBLOCK_NOMAP.
+ *
+ * Return:
+ * True if they intersect, false if not.
+ */
+bool __init_memblock memblock_overlaps_nomap_region(phys_addr_t base,
+						    phys_addr_t size)
+{
+	struct memblock_region *region;
+
+	memblock_cap_size(base, &size);
+	for_each_mem_region(region) {
+		if (memblock_is_nomap(region) &&
+		    memblock_addrs_overlap(base, size, region->base, region->size))
+			return true;
+	}
+
+	return false;
+}
+
 void __init_memblock memblock_trim_memory(phys_addr_t align)
 {
 	phys_addr_t start, end, orig_start, orig_end;
