@@ -140,7 +140,7 @@ struct sk_buff *validate_xmit_xfrm(struct sk_buff *skb, netdev_features_t featur
 	 * XFRM stack.
 	 */
 	if (x->xso.type == XFRM_DEV_OFFLOAD_PACKET && x->xso.dev != dev) {
-		kfree_skb(skb);
+		kfree_skb_list(skb);
 		dev_core_stats_tx_dropped_inc(dev);
 		return NULL;
 	}
