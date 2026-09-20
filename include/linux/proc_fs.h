@@ -70,6 +70,7 @@ struct proc_fs_info {
 	const struct cred *mounter_cred;
 	enum proc_hidepid hide_pid;
 	enum proc_pidonly pidonly;
+	atomic_t shard_seq;
 	struct rcu_head rcu;
 };
 

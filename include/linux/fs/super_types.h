@@ -130,7 +130,19 @@ struct super_operations {
 
 	/* Report a filesystem error */
 	void (*report_error)(const struct fserror_event *event);
+
+	void (*inode_list_add)(struct super_block *sb, struct inode *inode);
+	void (*inode_list_del)(struct super_block *sb, struct inode *inode);
 };
+
+/*
+ * Sharded inode list which is used to spread s_inode_list_lock contention
+ * across per-shard locks.
+ */
+struct inode_shard {
+	struct list_head	list;
+	spinlock_t		lock;
+} ____cacheline_aligned_in_smp;
 
 struct super_block {
 	struct list_head			s_list;		/* Keep this first */
@@ -268,6 +280,10 @@ struct super_block {
 	 * Indicates how deep in a filesystem stack this SB is
 	 */
 	int s_stack_depth;
+
+	bool					s_inode_list_sharded;
+	struct inode_shard			*shards;
+	unsigned int				nr_shards;
 
 	/* s_inode_list_lock protects s_inodes */
 	spinlock_t				s_inode_list_lock ____cacheline_aligned_in_smp;

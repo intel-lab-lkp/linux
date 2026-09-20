@@ -1383,98 +1383,114 @@ static void hook_inode_free_security_rcu(void *inode_security)
 static void hook_sb_delete(struct super_block *const sb)
 {
 	struct inode *inode, *prev_inode = NULL;
+	unsigned int nr, i;
 
 	if (!landlock_initialized)
 		return;
 
-	spin_lock(&sb->s_inode_list_lock);
-	list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
-		struct landlock_object *object;
+	nr = sb->s_inode_list_sharded ? sb->nr_shards : 1;
 
-		/* Only handles referenced inodes. */
-		if (!icount_read_once(inode))
-			continue;
+	for (i = 0; i < nr; i++) {
+		struct list_head *head;
+		spinlock_t *lock;
 
-		/*
-		 * Protects against concurrent modification of inode (e.g.
-		 * from get_inode_object()).
-		 */
-		spin_lock(&inode->i_lock);
-		/*
-		 * Checks I_FREEING and I_WILL_FREE  to protect against a race
-		 * condition when release_inode() just called iput(), which
-		 * could lead to a NULL dereference of inode->security or a
-		 * second call to iput() for the same Landlock object.  Also
-		 * checks I_NEW because such inode cannot be tied to an object.
-		 */
-		if (inode_state_read(inode) &
-		    (I_FREEING | I_WILL_FREE | I_NEW)) {
-			spin_unlock(&inode->i_lock);
-			continue;
-		}
-
-		rcu_read_lock();
-		object = rcu_dereference(landlock_inode(inode)->object);
-		if (!object) {
-			rcu_read_unlock();
-			spin_unlock(&inode->i_lock);
-			continue;
-		}
-		/* Keeps a reference to this inode until the next loop walk. */
-		__iget(inode);
-		spin_unlock(&inode->i_lock);
-
-		/*
-		 * If there is no concurrent release_inode() ongoing, then we
-		 * are in charge of calling iput() on this inode, otherwise we
-		 * will just wait for it to finish.
-		 */
-		spin_lock(&object->lock);
-		if (object->underobj == inode) {
-			object->underobj = NULL;
-			spin_unlock(&object->lock);
-			rcu_read_unlock();
-
-			/*
-			 * Because object->underobj was not NULL,
-			 * release_inode() and get_inode_object() guarantee
-			 * that it is safe to reset
-			 * landlock_inode(inode)->object while it is not NULL.
-			 * It is therefore not necessary to lock inode->i_lock.
-			 */
-			rcu_assign_pointer(landlock_inode(inode)->object, NULL);
-			/*
-			 * At this point, we own the ihold() reference that was
-			 * originally set up by get_inode_object() and the
-			 * __iget() reference that we just set in this loop
-			 * walk.  Therefore there are at least two references
-			 * on the inode.
-			 */
-			iput_not_last(inode);
+		if (sb->s_inode_list_sharded) {
+			head = &sb->shards[i].list;
+			lock = &sb->shards[i].lock;
 		} else {
-			spin_unlock(&object->lock);
-			rcu_read_unlock();
+			head = &sb->s_inodes;
+			lock = &sb->s_inode_list_lock;
 		}
 
-		if (prev_inode) {
+		spin_lock(lock);
+		list_for_each_entry(inode, head, i_sb_list) {
+			struct landlock_object *object;
+
+			/* Only handles referenced inodes. */
+			if (!icount_read_once(inode))
+				continue;
+
 			/*
-			 * At this point, we still own the __iget() reference
-			 * that we just set in this loop walk.  Therefore we
-			 * can drop the list lock and know that the inode won't
-			 * disappear from under us until the next loop walk.
+			 * Protects against concurrent modification of inode (e.g.
+			 * from get_inode_object()).
 			 */
-			spin_unlock(&sb->s_inode_list_lock);
+			spin_lock(&inode->i_lock);
 			/*
-			 * We can now actually put the inode reference from the
-			 * previous loop walk, which is not needed anymore.
+			 * Checks I_FREEING and I_WILL_FREE  to protect against a race
+			 * condition when release_inode() just called iput(), which
+			 * could lead to a NULL dereference of inode->security or a
+			 * second call to iput() for the same Landlock object.  Also
+			 * checks I_NEW because such inode cannot be tied to an object.
 			 */
-			iput(prev_inode);
-			cond_resched();
-			spin_lock(&sb->s_inode_list_lock);
+			if (inode_state_read(inode) &
+			    (I_FREEING | I_WILL_FREE | I_NEW)) {
+				spin_unlock(&inode->i_lock);
+				continue;
+			}
+
+			rcu_read_lock();
+			object = rcu_dereference(landlock_inode(inode)->object);
+			if (!object) {
+				rcu_read_unlock();
+				spin_unlock(&inode->i_lock);
+				continue;
+			}
+			/* Keeps a reference to this inode until the next loop walk. */
+			__iget(inode);
+			spin_unlock(&inode->i_lock);
+
+			/*
+			 * If there is no concurrent release_inode() ongoing, then we
+			 * are in charge of calling iput() on this inode, otherwise we
+			 * will just wait for it to finish.
+			 */
+			spin_lock(&object->lock);
+			if (object->underobj == inode) {
+				object->underobj = NULL;
+				spin_unlock(&object->lock);
+				rcu_read_unlock();
+
+				/*
+				 * Because object->underobj was not NULL,
+				 * release_inode() and get_inode_object() guarantee
+				 * that it is safe to reset
+				 * landlock_inode(inode)->object while it is not NULL.
+				 * It is therefore not necessary to lock inode->i_lock.
+				 */
+				rcu_assign_pointer(landlock_inode(inode)->object, NULL);
+				/*
+				 * At this point, we own the ihold() reference that was
+				 * originally set up by get_inode_object() and the
+				 * __iget() reference that we just set in this loop
+				 * walk.  Therefore there are at least two references
+				 * on the inode.
+				 */
+				iput_not_last(inode);
+			} else {
+				spin_unlock(&object->lock);
+				rcu_read_unlock();
+			}
+
+			if (prev_inode) {
+				/*
+				 * At this point, we still own the __iget() reference
+				 * that we just set in this loop walk.  Therefore we
+				 * can drop the list lock and know that the inode won't
+				 * disappear from under us until the next loop walk.
+				 */
+				spin_unlock(lock);
+				/*
+				 * We can now actually put the inode reference from the
+				 * previous loop walk, which is not needed anymore.
+				 */
+				iput(prev_inode);
+				cond_resched();
+				spin_lock(lock);
+			}
+			prev_inode = inode;
 		}
-		prev_inode = inode;
+		spin_unlock(lock);
 	}
-	spin_unlock(&sb->s_inode_list_lock);
 
 	/* Puts the inode reference from the last loop walk, if any. */
 	if (prev_inode)

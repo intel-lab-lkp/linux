@@ -127,6 +127,7 @@ struct proc_inode {
 	struct hlist_node sibling_inodes;
 	const struct proc_ns_operations *ns_ops;
 	struct inode vfs_inode;
+	unsigned int shard_idx;
 } __randomize_layout;
 
 /*
@@ -317,6 +318,7 @@ void proc_init_kmemcache(void);
 void proc_invalidate_siblings_dcache(struct hlist_head *inodes, spinlock_t *lock);
 void set_proc_pid_nlink(void);
 extern struct inode *proc_get_inode(struct super_block *, struct proc_dir_entry *);
+extern int proc_init_inode_shards(struct super_block *);
 extern void proc_entry_rundown(struct proc_dir_entry *);
 
 /*

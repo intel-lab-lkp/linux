@@ -712,7 +712,16 @@ EXPORT_SYMBOL(retire_super);
 
 static bool sb_inodes_empty(struct super_block *sb)
 {
-	return list_empty(&sb->s_inodes);
+	unsigned int i;
+
+	if (!sb->s_inode_list_sharded)
+		return list_empty(&sb->s_inodes);
+
+	for (i = 0; i < sb->nr_shards; i++)
+		if (!list_empty(&sb->shards[i].list))
+			return false;
+
+	return true;
 }
 
 /**
@@ -774,14 +783,29 @@ void generic_shutdown_super(struct super_block *sb)
 			 * iput_final() or such crashes cleanly.
 			 */
 			struct inode *inode;
+			struct list_head *head;
+			spinlock_t *lock;
+			unsigned int nr, i;
+			const bool sharded = sb->s_inode_list_sharded;
 
-			spin_lock(&sb->s_inode_list_lock);
-			list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
-				inode->i_op = VFS_PTR_POISON;
-				inode->i_sb = VFS_PTR_POISON;
-				inode->i_mapping = VFS_PTR_POISON;
+			nr = sharded ? sb->nr_shards : 1;
+			for (i = 0; i < nr; i++) {
+				if (sharded) {
+					head = &sb->shards[i].list;
+					lock = &sb->shards[i].lock;
+				} else {
+					head = &sb->s_inodes;
+					lock = &sb->s_inode_list_lock;
+				}
+
+				spin_lock(lock);
+				list_for_each_entry(inode, head, i_sb_list) {
+					inode->i_op = VFS_PTR_POISON;
+					inode->i_sb = VFS_PTR_POISON;
+					inode->i_mapping = VFS_PTR_POISON;
+				}
+				spin_unlock(lock);
 			}
-			spin_unlock(&sb->s_inode_list_lock);
 		}
 	}
 	/*

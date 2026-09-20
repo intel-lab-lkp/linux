@@ -635,6 +635,10 @@ void inode_sb_list_add(struct inode *inode)
 {
 	struct super_block *sb = inode->i_sb;
 
+	if (sb->s_inode_list_sharded && sb->s_op->inode_list_add) {
+		sb->s_op->inode_list_add(sb, inode);
+		return;
+	}
 	spin_lock(&sb->s_inode_list_lock);
 	list_add(&inode->i_sb_list, &sb->s_inodes);
 	spin_unlock(&sb->s_inode_list_lock);
@@ -646,6 +650,10 @@ static inline void inode_sb_list_del(struct inode *inode)
 	struct super_block *sb = inode->i_sb;
 
 	if (!list_empty(&inode->i_sb_list)) {
+		if (sb->s_inode_list_sharded && sb->s_op->inode_list_del) {
+			sb->s_op->inode_list_del(sb, inode);
+			return;
+		}
 		spin_lock(&sb->s_inode_list_lock);
 		list_del_init(&inode->i_sb_list);
 		spin_unlock(&sb->s_inode_list_lock);
@@ -879,41 +887,56 @@ void evict_inodes(struct super_block *sb)
 {
 	struct inode *inode;
 	LIST_HEAD(dispose);
+	struct list_head *head;
+	spinlock_t *lock;
+	unsigned int nr, i;
+	const bool sharded = sb->s_inode_list_sharded;
 
+	nr = sharded ? sb->nr_shards : 1;
 again:
-	spin_lock(&sb->s_inode_list_lock);
-	list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
-		if (icount_read_once(inode))
-			continue;
+	for (i = 0; i < nr; i++) {
+		if (sharded) {
+			head = &sb->shards[i].list;
+			lock = &sb->shards[i].lock;
+		} else {
+			head = &sb->s_inodes;
+			lock = &sb->s_inode_list_lock;
+		}
 
-		spin_lock(&inode->i_lock);
-		if (icount_read(inode)) {
+		spin_lock(lock);
+		list_for_each_entry(inode, head, i_sb_list) {
+			if (icount_read_once(inode))
+				continue;
+
+			spin_lock(&inode->i_lock);
+			if (icount_read(inode)) {
+				spin_unlock(&inode->i_lock);
+				continue;
+			}
+			if (inode_state_read(inode) & (I_NEW | I_FREEING | I_WILL_FREE)) {
+				spin_unlock(&inode->i_lock);
+				continue;
+			}
+
+			inode_state_set(inode, I_FREEING);
+			inode_lru_list_del(inode);
 			spin_unlock(&inode->i_lock);
-			continue;
-		}
-		if (inode_state_read(inode) & (I_NEW | I_FREEING | I_WILL_FREE)) {
-			spin_unlock(&inode->i_lock);
-			continue;
-		}
+			list_add(&inode->i_lru, &dispose);
 
-		inode_state_set(inode, I_FREEING);
-		inode_lru_list_del(inode);
-		spin_unlock(&inode->i_lock);
-		list_add(&inode->i_lru, &dispose);
-
-		/*
-		 * We can have a ton of inodes to evict at unmount time given
-		 * enough memory, check to see if we need to go to sleep for a
-		 * bit so we don't livelock.
-		 */
-		if (need_resched()) {
-			spin_unlock(&sb->s_inode_list_lock);
-			cond_resched();
-			dispose_list(&dispose);
-			goto again;
+			/*
+			 * We can have a ton of inodes to evict at unmount time given
+			 * enough memory, check to see if we need to go to sleep for a
+			 * bit so we don't livelock.
+			 */
+			if (need_resched()) {
+				spin_unlock(lock);
+				cond_resched();
+				dispose_list(&dispose);
+				goto again;
+			}
 		}
+		spin_unlock(lock);
 	}
-	spin_unlock(&sb->s_inode_list_lock);
 
 	dispose_list(&dispose);
 }
