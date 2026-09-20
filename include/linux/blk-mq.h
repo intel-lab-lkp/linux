@@ -407,7 +407,7 @@ struct blk_mq_hw_ctx {
 	 * @dispatch_wait: Waitqueue to put requests when there is no tag
 	 * available at the moment, to wait for another try in the future.
 	 */
-	wait_queue_entry_t	dispatch_wait;
+	struct sbq_wait		dispatch_wait;
 
 	/**
 	 * @wait_index: Index of next available dispatch_wait queue to insert

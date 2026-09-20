@@ -1863,16 +1863,10 @@ static int blk_mq_dispatch_wake(wait_queue_entry_t *wait, unsigned mode,
 {
 	struct blk_mq_hw_ctx *hctx;
 
-	hctx = container_of(wait, struct blk_mq_hw_ctx, dispatch_wait);
+	hctx = container_of(wait, struct blk_mq_hw_ctx, dispatch_wait.wait);
 
 	spin_lock(&hctx->dispatch_wait_lock);
-	if (!list_empty(&wait->entry)) {
-		struct sbitmap_queue *sbq;
-
-		list_del_init(&wait->entry);
-		sbq = &hctx->tags->bitmap_tags;
-		atomic_dec(&sbq->ws_active);
-	}
+	sbitmap_del_wait_queue(&hctx->dispatch_wait);
 	spin_unlock(&hctx->dispatch_wait_lock);
 
 	blk_mq_run_hw_queue(hctx, true);
@@ -1889,8 +1883,9 @@ static bool blk_mq_mark_tag_wait(struct blk_mq_hw_ctx *hctx,
 				 struct request *rq)
 {
 	struct sbitmap_queue *sbq;
+	struct sbq_wait_state *ws;
 	struct wait_queue_head *wq;
-	wait_queue_entry_t *wait;
+	struct sbq_wait *wait;
 	bool ret;
 
 	if (!(hctx->flags & BLK_MQ_F_TAG_QUEUE_SHARED) &&
@@ -1909,26 +1904,25 @@ static bool blk_mq_mark_tag_wait(struct blk_mq_hw_ctx *hctx,
 	}
 
 	wait = &hctx->dispatch_wait;
-	if (!list_empty_careful(&wait->entry))
+	if (!list_empty_careful(&wait->wait.entry))
 		return false;
 
 	if (blk_mq_tag_is_reserved(rq->mq_hctx->sched_tags, rq->internal_tag))
 		sbq = &hctx->tags->breserved_tags;
 	else
 		sbq = &hctx->tags->bitmap_tags;
-	wq = &bt_wait_ptr(sbq, hctx)->wait;
+	ws = bt_wait_ptr(sbq, hctx);
+	wq = &ws->wait;
 
 	spin_lock_irq(&wq->lock);
 	spin_lock(&hctx->dispatch_wait_lock);
-	if (!list_empty(&wait->entry)) {
+	if (!list_empty(&wait->wait.entry)) {
 		spin_unlock(&hctx->dispatch_wait_lock);
 		spin_unlock_irq(&wq->lock);
 		return false;
 	}
 
-	atomic_inc(&sbq->ws_active);
-	wait->flags &= ~WQ_FLAG_EXCLUSIVE;
-	__add_wait_queue(wq, wait);
+	__sbitmap_add_wait_queue(sbq, ws, wait);
 
 	/*
 	 * Add one explicit barrier since blk_mq_get_driver_tag() may
@@ -1962,8 +1956,7 @@ static bool blk_mq_mark_tag_wait(struct blk_mq_hw_ctx *hctx,
 	 * We got a tag, remove ourselves from the wait queue to ensure
 	 * someone else gets the wakeup.
 	 */
-	list_del_init(&wait->entry);
-	atomic_dec(&sbq->ws_active);
+	sbitmap_del_wait_queue(wait);
 	spin_unlock(&hctx->dispatch_wait_lock);
 	spin_unlock_irq(&wq->lock);
 
@@ -2197,7 +2190,7 @@ out:
 		if (prep == PREP_DISPATCH_NO_BUDGET)
 			needs_resource = true;
 		if (!needs_restart ||
-		    (no_tag && list_empty_careful(&hctx->dispatch_wait.entry)))
+		    (no_tag && list_empty_careful(&hctx->dispatch_wait.wait.entry)))
 			blk_mq_run_hw_queue(hctx, true);
 		else if (needs_resource)
 			blk_mq_delay_run_hw_queue(hctx, BLK_MQ_RESOURCE_DELAY);
@@ -4058,8 +4051,8 @@ blk_mq_alloc_hctx(struct request_queue *q, struct blk_mq_tag_set *set,
 	hctx->nr_ctx = 0;
 
 	spin_lock_init(&hctx->dispatch_wait_lock);
-	init_waitqueue_func_entry(&hctx->dispatch_wait, blk_mq_dispatch_wake);
-	INIT_LIST_HEAD(&hctx->dispatch_wait.entry);
+	init_waitqueue_func_entry(&hctx->dispatch_wait.wait, blk_mq_dispatch_wake);
+	INIT_LIST_HEAD(&hctx->dispatch_wait.wait.entry);
 
 	blk_mq_hctx_kobj_init(hctx);
 
