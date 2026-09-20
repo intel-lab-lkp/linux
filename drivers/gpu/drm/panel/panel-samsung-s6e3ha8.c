@@ -8,6 +8,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/property.h>
 #include <linux/regulator/consumer.h>
 
 #include <drm/display/drm_dsc.h>
@@ -18,28 +19,51 @@
 
 #include "panel-samsung-dsi.h"
 
+struct s6e3ha8_desc {
+	const struct drm_panel_funcs *funcs;
+	const struct drm_display_mode *mode;
+	unsigned long mode_flags;
+	const struct regulator_bulk_data *supplies;
+	unsigned int num_supplies;
+};
+
 struct s6e3ha8 {
 	struct drm_panel panel;
 	struct mipi_dsi_device *dsi;
+	const struct s6e3ha8_desc *desc;
 	struct drm_dsc_config dsc;
 	struct gpio_desc *reset_gpio;
 	struct regulator_bulk_data *supplies;
 };
 
-static const struct regulator_bulk_data s6e3ha8_supplies[] = {
+static const struct regulator_bulk_data s6e3ha8_vddr_supplies[] = {
 	{ .supply = "vdd3" },
 	{ .supply = "vci" },
 	{ .supply = "vddr" },
 };
 
-static inline
-struct s6e3ha8 *to_s6e3ha8_amb577px01_wqhd(struct drm_panel *panel)
+static inline struct s6e3ha8 *to_s6e3ha8(struct drm_panel *panel)
 {
 	return container_of(panel, struct s6e3ha8, panel);
 }
 
 #define s6e3ha8_afc_off(ctx) \
 	mipi_dsi_dcs_write_seq_multi(ctx, 0xe2, 0x00, 0x00)
+
+static int s6e3ha8_get_modes(struct drm_panel *panel,
+			     struct drm_connector *connector)
+{
+	struct s6e3ha8 *priv = to_s6e3ha8(panel);
+
+	return drm_connector_helper_get_modes_fixed(connector, priv->desc->mode);
+}
+
+static int s6e3ha8_unprepare(struct drm_panel *panel)
+{
+	struct s6e3ha8 *priv = to_s6e3ha8(panel);
+
+	return regulator_bulk_disable(priv->desc->num_supplies, priv->supplies);
+}
 
 static void s6e3ha8_amb577px01_wqhd_reset(struct s6e3ha8 *priv)
 {
@@ -135,9 +159,9 @@ static int s6e3ha8_amb577px01_wqhd_on(struct s6e3ha8 *priv)
 	return ctx.accum_err;
 }
 
-static int s6e3ha8_enable(struct drm_panel *panel)
+static int s6e3ha8_amb577px01_wqhd_enable(struct drm_panel *panel)
 {
-	struct s6e3ha8 *priv = to_s6e3ha8_amb577px01_wqhd(panel);
+	struct s6e3ha8 *priv = to_s6e3ha8(panel);
 	struct mipi_dsi_device *dsi = priv->dsi;
 	struct mipi_dsi_multi_context ctx = { .dsi = dsi };
 
@@ -148,9 +172,9 @@ static int s6e3ha8_enable(struct drm_panel *panel)
 	return ctx.accum_err;
 }
 
-static int s6e3ha8_disable(struct drm_panel *panel)
+static int s6e3ha8_amb577px01_wqhd_disable(struct drm_panel *panel)
 {
-	struct s6e3ha8 *priv = to_s6e3ha8_amb577px01_wqhd(panel);
+	struct s6e3ha8 *priv = to_s6e3ha8(panel);
 	struct mipi_dsi_device *dsi = priv->dsi;
 	struct mipi_dsi_multi_context ctx = { .dsi = dsi };
 
@@ -170,13 +194,13 @@ static int s6e3ha8_disable(struct drm_panel *panel)
 
 static int s6e3ha8_amb577px01_wqhd_prepare(struct drm_panel *panel)
 {
-	struct s6e3ha8 *priv = to_s6e3ha8_amb577px01_wqhd(panel);
+	struct s6e3ha8 *priv = to_s6e3ha8(panel);
 	struct mipi_dsi_device *dsi = priv->dsi;
 	struct mipi_dsi_multi_context ctx = { .dsi = dsi };
 	struct drm_dsc_picture_parameter_set pps;
 	int ret;
 
-	ret = regulator_bulk_enable(ARRAY_SIZE(s6e3ha8_supplies), priv->supplies);
+	ret = regulator_bulk_enable(priv->desc->num_supplies, priv->supplies);
 	if (ret < 0)
 		return ret;
 	mipi_dsi_msleep(&ctx, 120);
@@ -198,15 +222,8 @@ static int s6e3ha8_amb577px01_wqhd_prepare(struct drm_panel *panel)
 
 	return ctx.accum_err;
 err:
-	regulator_bulk_disable(ARRAY_SIZE(s6e3ha8_supplies), priv->supplies);
+	regulator_bulk_disable(priv->desc->num_supplies, priv->supplies);
 	return ret;
-}
-
-static int s6e3ha8_amb577px01_wqhd_unprepare(struct drm_panel *panel)
-{
-	struct s6e3ha8 *priv = to_s6e3ha8_amb577px01_wqhd(panel);
-
-	return regulator_bulk_disable(ARRAY_SIZE(s6e3ha8_supplies), priv->supplies);
 }
 
 static const struct drm_display_mode s6e3ha8_amb577px01_wqhd_mode = {
@@ -223,35 +240,44 @@ static const struct drm_display_mode s6e3ha8_amb577px01_wqhd_mode = {
 	.height_mm = 132,
 };
 
-static int s6e3ha8_amb577px01_wqhd_get_modes(struct drm_panel *panel,
-					     struct drm_connector *connector)
-{
-	return drm_connector_helper_get_modes_fixed(connector, &s6e3ha8_amb577px01_wqhd_mode);
-}
-
 static const struct drm_panel_funcs s6e3ha8_amb577px01_wqhd_panel_funcs = {
 	.prepare = s6e3ha8_amb577px01_wqhd_prepare,
-	.unprepare = s6e3ha8_amb577px01_wqhd_unprepare,
-	.get_modes = s6e3ha8_amb577px01_wqhd_get_modes,
-	.enable = s6e3ha8_enable,
-	.disable = s6e3ha8_disable,
+	.unprepare = s6e3ha8_unprepare,
+	.get_modes = s6e3ha8_get_modes,
+	.enable = s6e3ha8_amb577px01_wqhd_enable,
+	.disable = s6e3ha8_amb577px01_wqhd_disable,
 };
 
-static int s6e3ha8_amb577px01_wqhd_probe(struct mipi_dsi_device *dsi)
+static const struct s6e3ha8_desc s6e3ha8_amb577px01_wqhd_desc = {
+	.funcs = &s6e3ha8_amb577px01_wqhd_panel_funcs,
+	.mode = &s6e3ha8_amb577px01_wqhd_mode,
+	.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS |
+		MIPI_DSI_MODE_VIDEO_NO_HFP | MIPI_DSI_MODE_VIDEO_NO_HBP |
+		MIPI_DSI_MODE_VIDEO_NO_HSA | MIPI_DSI_MODE_NO_EOT_PACKET,
+	.supplies = s6e3ha8_vddr_supplies,
+	.num_supplies = ARRAY_SIZE(s6e3ha8_vddr_supplies),
+};
+
+static int s6e3ha8_probe(struct mipi_dsi_device *dsi)
 {
 	struct device *dev = &dsi->dev;
+	const struct s6e3ha8_desc *desc;
 	struct s6e3ha8 *priv;
 	int ret;
 
-	priv = devm_drm_panel_alloc(dev, struct s6e3ha8, panel,
-				    &s6e3ha8_amb577px01_wqhd_panel_funcs,
+	desc = device_get_match_data(dev);
+	if (!desc)
+		return -ENODEV;
+
+	priv = devm_drm_panel_alloc(dev, struct s6e3ha8, panel, desc->funcs,
 				    DRM_MODE_CONNECTOR_DSI);
 	if (IS_ERR(priv))
 		return PTR_ERR(priv);
 
-	ret = devm_regulator_bulk_get_const(dev, ARRAY_SIZE(s6e3ha8_supplies),
-				      s6e3ha8_supplies,
-				      &priv->supplies);
+	priv->desc = desc;
+
+	ret = devm_regulator_bulk_get_const(dev, desc->num_supplies,
+					    desc->supplies, &priv->supplies);
 	if (ret < 0) {
 		dev_err(dev, "failed to get regulators: %d\n", ret);
 		return ret;
@@ -267,9 +293,7 @@ static int s6e3ha8_amb577px01_wqhd_probe(struct mipi_dsi_device *dsi)
 
 	dsi->lanes = 4;
 	dsi->format = MIPI_DSI_FMT_RGB888;
-	dsi->mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS |
-		MIPI_DSI_MODE_VIDEO_NO_HFP | MIPI_DSI_MODE_VIDEO_NO_HBP |
-		MIPI_DSI_MODE_VIDEO_NO_HSA | MIPI_DSI_MODE_NO_EOT_PACKET;
+	dsi->mode_flags = priv->desc->mode_flags;
 
 	priv->panel.prepare_prev_first = true;
 
@@ -300,21 +324,27 @@ static int s6e3ha8_amb577px01_wqhd_probe(struct mipi_dsi_device *dsi)
 	return 0;
 }
 
-static const struct of_device_id s6e3ha8_amb577px01_wqhd_of_match[] = {
-	{ .compatible = "samsung,s6e3ha8" }, /* deprecated */
-	{ .compatible = "samsung,s6e3ha8-amb577px01" },
+static const struct of_device_id s6e3ha8_of_match[] = {
+	{
+		/* deprecated */
+		.compatible = "samsung,s6e3ha8",
+		.data = &s6e3ha8_amb577px01_wqhd_desc,
+	}, {
+		.compatible = "samsung,s6e3ha8-amb577px01",
+		.data = &s6e3ha8_amb577px01_wqhd_desc,
+	},
 	{ /* sentinel */ }
 };
-MODULE_DEVICE_TABLE(of, s6e3ha8_amb577px01_wqhd_of_match);
+MODULE_DEVICE_TABLE(of, s6e3ha8_of_match);
 
-static struct mipi_dsi_driver s6e3ha8_amb577px01_wqhd_driver = {
-	.probe = s6e3ha8_amb577px01_wqhd_probe,
+static struct mipi_dsi_driver s6e3ha8_driver = {
+	.probe = s6e3ha8_probe,
 	.driver = {
 		.name = "panel-s6e3ha8",
-		.of_match_table = s6e3ha8_amb577px01_wqhd_of_match,
+		.of_match_table = s6e3ha8_of_match,
 	},
 };
-module_mipi_dsi_driver(s6e3ha8_amb577px01_wqhd_driver);
+module_mipi_dsi_driver(s6e3ha8_driver);
 
 MODULE_AUTHOR("Dzmitry Sankouski <dsankouski@gmail.com>");
 MODULE_DESCRIPTION("DRM driver for S6E3HA8 panel");
