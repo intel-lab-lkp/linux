@@ -275,5 +275,18 @@ void ufs_rpmb_remove(struct ufs_hba *hba)
 	dev_info(hba->dev, "All UFS RPMB devices unregistered\n");
 }
 
+static int __init ufs_rpmb_init(void)
+{
+	return bus_register(&ufs_rpmb_bus_type);
+}
+
+static void __exit ufs_rpmb_exit(void)
+{
+	bus_unregister(&ufs_rpmb_bus_type);
+}
+
+module_init(ufs_rpmb_init);
+module_exit(ufs_rpmb_exit);
+
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("OP-TEE UFS RPMB driver");
