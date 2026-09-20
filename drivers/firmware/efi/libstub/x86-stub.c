@@ -796,6 +796,8 @@ static bool sev_prepare(void)
 
 	svsm_register_alt_inj();
 
+	svsm_config_alt_inj_vectors();
+
 	return false;
 }
 

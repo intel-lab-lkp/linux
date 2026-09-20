@@ -18,6 +18,13 @@ enum svsm_ai_ctrl {
 	SVSM_AI_REGISTER,
 };
 
+enum svsm_vec_enable {
+	SVSM_IRQ_DISABLE_SINGLE = (0u << 8),
+	SVSM_IRQ_ENABLE_SINGLE = (1u << 8),
+	SVSM_IRQ_DISABLE_ALL = (2u << 8),
+	SVSM_IRQ_ENABLE_ALL = (3u << 8),
+};
+
 void snp_accept_memory(phys_addr_t start, phys_addr_t end);
 u64 sev_get_status(void);
 bool early_is_sevsnp_guest(void);

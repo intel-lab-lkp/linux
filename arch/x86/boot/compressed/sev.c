@@ -534,3 +534,27 @@ void svsm_register_alt_inj(void)
 			sev_es_terminate(SEV_TERM_SET_LINUX, GHCB_TERM_ALT_INJ_FAIL);
 	}
 }
+
+/*
+ * Configure all interrupts as permissive by default for Alternate Injection
+ * enabled SNP guest.
+ */
+void svsm_config_alt_inj_vectors(void)
+{
+	if (early_is_sevsnp_guest() && snp_vmpl) {
+		struct svsm_call call = {};
+		int ret;
+
+		if (!(sev_get_status() & MSR_AMD64_SNP_ALTERNATE_INJ))
+			return;
+
+		call.caa = (struct svsm_ca *)boot_svsm_caa_pa;
+		call.rax = SVSM_APIC_CALL(SVSM_APIC_CONFIG_VECTOR);
+		call.rcx = SVSM_IRQ_ENABLE_ALL;
+
+		ret = svsm_call_msr_protocol(&call);
+		if (ret)
+			sev_es_terminate(SEV_TERM_SET_LINUX, GHCB_TERM_ALT_INJ_FAIL);
+	}
+
+}
