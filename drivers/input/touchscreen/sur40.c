@@ -648,6 +648,15 @@ static int sur40_input_setup_events(struct input_dev *input_dev)
 }
 
 /* Check candidate USB interface. */
+/* Runs once the last video node reference is gone. */
+static void sur40_release(struct v4l2_device *v4l2)
+{
+	struct sur40_state *sur40 = container_of(v4l2, struct sur40_state, v4l2);
+
+	kfree(sur40->bulk_in_buffer);
+	kfree(sur40);
+}
+
 static int sur40_probe(struct usb_interface *interface,
 		       const struct usb_device_id *id)
 {
@@ -733,6 +742,7 @@ static int sur40_probe(struct usb_interface *interface,
 			"Unable to register video master device.");
 		goto err_free_buffer;
 	}
+	sur40->v4l2.release = sur40_release;
 
 	/* initialize the lock and subdevice */
 	sur40->queue = sur40_queue;
@@ -831,11 +841,10 @@ static void sur40_disconnect(struct usb_interface *interface)
 	video_unregister_device(&sur40->vdev);
 	v4l2_device_unregister(&sur40->v4l2);
 
-	kfree(sur40->bulk_in_buffer);
-	kfree(sur40);
-
 	usb_set_intfdata(interface, NULL);
 	dev_dbg(&interface->dev, "%s is now disconnected\n", DRIVER_DESC);
+
+	v4l2_device_put(&sur40->v4l2);
 }
 
 /*
