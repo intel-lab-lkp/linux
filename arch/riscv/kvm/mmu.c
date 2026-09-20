@@ -26,12 +26,11 @@ static void mmu_wp_memory_region(struct kvm *kvm, int slot)
 	phys_addr_t start = memslot->base_gfn << PAGE_SHIFT;
 	phys_addr_t end = (memslot->base_gfn + memslot->npages) << PAGE_SHIFT;
 	struct kvm_gstage gstage;
-	bool flush;
-
-	kvm_riscv_gstage_init(&gstage, kvm);
+	bool flush = false;
 
 	write_lock(&kvm->mmu_lock);
-	flush = kvm_riscv_gstage_wp_range(&gstage, start, end);
+	if (kvm_riscv_gstage_init(&gstage, kvm))
+		flush = kvm_riscv_gstage_wp_range(&gstage, start, end);
 	write_unlock(&kvm->mmu_lock);
 	if (flush)
 		kvm_flush_remote_tlbs_memslot(kvm, memslot);
@@ -44,15 +43,13 @@ int kvm_riscv_mmu_ioremap(struct kvm *kvm, gpa_t gpa, phys_addr_t hpa,
 	pgprot_t prot;
 	unsigned long pfn;
 	phys_addr_t addr, end;
-	unsigned long pgd_levels = kvm->arch.pgd_levels;
+	unsigned long pgd_levels = kvm_riscv_gstage_max_pgd_levels;
 	struct kvm_mmu_memory_cache pcache = {
 		.gfp_custom = (in_atomic) ? GFP_ATOMIC | __GFP_ACCOUNT : 0,
 		.gfp_zero = __GFP_ZERO,
 	};
 	struct kvm_gstage_mapping map;
 	struct kvm_gstage gstage;
-
-	kvm_riscv_gstage_init(&gstage, kvm);
 
 	end = (gpa + size + PAGE_SIZE - 1) & PAGE_MASK;
 	pfn = __phys_to_pfn(hpa);
@@ -72,7 +69,10 @@ int kvm_riscv_mmu_ioremap(struct kvm *kvm, gpa_t gpa, phys_addr_t hpa,
 			goto out;
 
 		write_lock(&kvm->mmu_lock);
-		ret = kvm_riscv_gstage_set_pte(&gstage, &pcache, &map);
+		if (kvm_riscv_gstage_init(&gstage, kvm))
+			ret = kvm_riscv_gstage_set_pte(&gstage, &pcache, &map);
+		else
+			ret = -EFAULT;
 		write_unlock(&kvm->mmu_lock);
 		if (ret)
 			goto out;
@@ -88,12 +88,11 @@ out:
 void kvm_riscv_mmu_iounmap(struct kvm *kvm, gpa_t gpa, unsigned long size)
 {
 	struct kvm_gstage gstage;
-	bool flush;
-
-	kvm_riscv_gstage_init(&gstage, kvm);
+	bool flush = false;
 
 	write_lock(&kvm->mmu_lock);
-	flush = kvm_riscv_gstage_unmap_range(&gstage, gpa, size, false);
+	if (kvm_riscv_gstage_init(&gstage, kvm))
+		flush = kvm_riscv_gstage_unmap_range(&gstage, gpa, size, false);
 	write_unlock(&kvm->mmu_lock);
 
 	if (flush)
@@ -101,14 +100,12 @@ void kvm_riscv_mmu_iounmap(struct kvm *kvm, gpa_t gpa, unsigned long size)
 					    size >> PAGE_SHIFT);
 }
 
-static bool need_topup_split_caches_or_resched(struct kvm *kvm, int count)
+static bool need_topup_split_cache(struct kvm *kvm,
+				   struct kvm_mmu_memory_cache *cache, int count)
 {
-	struct kvm_mmu_memory_cache *cache;
-
 	if (need_resched() || rwlock_needbreak(&kvm->mmu_lock))
 		return true;
 
-	cache = &kvm->arch.pgd_split_page_cache;
 	return kvm_mmu_memory_cache_nr_free_objects(cache) < count;
 }
 
@@ -116,7 +113,8 @@ static bool mmu_split_huge_pages(struct kvm_gstage *gstage,
 				 phys_addr_t start, phys_addr_t end)
 {
 	struct kvm *kvm = gstage->kvm;
-	struct kvm_mmu_memory_cache *pcache = &kvm->arch.pgd_split_page_cache;
+	struct kvm_mmu_memory_cache cache = { .gfp_zero = __GFP_ZERO };
+	struct kvm_mmu_memory_cache *pcache = &cache;
 	phys_addr_t addr = ALIGN_DOWN(start, PMD_SIZE);
 	phys_addr_t last_flush_gfn = addr >> PAGE_SHIFT;
 	int count = gstage->pgd_levels;
@@ -126,7 +124,7 @@ static bool mmu_split_huge_pages(struct kvm_gstage *gstage,
 	lockdep_assert_held_write(&kvm->mmu_lock);
 
 	while (addr < end) {
-		if (need_topup_split_caches_or_resched(kvm, count)) {
+		if (need_topup_split_cache(kvm, pcache, count)) {
 			if (flush) {
 				kvm_flush_remote_tlbs_range(kvm, last_flush_gfn,
 					  (addr >> PAGE_SHIFT) - last_flush_gfn);
@@ -141,19 +139,22 @@ static bool mmu_split_huge_pages(struct kvm_gstage *gstage,
 			if (ret) {
 				kvm_err("Failed to toup split page cache\n");
 				write_lock(&kvm->mmu_lock);
-				return flush;
+				break;
 			}
 			write_lock(&kvm->mmu_lock);
 		}
 
-		if (!kvm->arch.pgd)
-			return flush;
+		if (!kvm->arch.pgd || gstage->pgd != kvm->arch.pgd)
+			break;
 
 		flush |= kvm_riscv_gstage_split_huge(gstage, pcache, addr, 0, false);
 
 		addr += PMD_SIZE;
 	}
 
+	write_unlock(&kvm->mmu_lock);
+	kvm_mmu_free_memory_cache(pcache);
+	write_lock(&kvm->mmu_lock);
 	return flush;
 }
 
@@ -167,7 +168,8 @@ void kvm_arch_mmu_enable_log_dirty_pt_masked(struct kvm *kvm,
 	phys_addr_t end = (base_gfn + __fls(mask) + 1) << PAGE_SHIFT;
 	struct kvm_gstage gstage;
 
-	kvm_riscv_gstage_init(&gstage, kvm);
+	if (!kvm_riscv_gstage_init(&gstage, kvm))
+		return;
 
 	kvm_riscv_gstage_wp_pt_masked(&gstage, base_gfn, mask);
 
@@ -205,12 +207,11 @@ void kvm_arch_flush_shadow_memslot(struct kvm *kvm,
 	gpa_t gpa = slot->base_gfn << PAGE_SHIFT;
 	phys_addr_t size = slot->npages << PAGE_SHIFT;
 	struct kvm_gstage gstage;
-	bool flush;
-
-	kvm_riscv_gstage_init(&gstage, kvm);
+	bool flush = false;
 
 	write_lock(&kvm->mmu_lock);
-	flush = kvm_riscv_gstage_unmap_range(&gstage, gpa, size, false);
+	if (kvm_riscv_gstage_init(&gstage, kvm))
+		flush = kvm_riscv_gstage_unmap_range(&gstage, gpa, size, false);
 	write_unlock(&kvm->mmu_lock);
 	if (flush)
 		kvm_flush_remote_tlbs_range(kvm, gpa >> PAGE_SHIFT,
@@ -224,12 +225,11 @@ static void mmu_split_memory_region(struct kvm *kvm, int slot)
 	phys_addr_t start = memslot->base_gfn << PAGE_SHIFT;
 	phys_addr_t end = (memslot->base_gfn + memslot->npages) << PAGE_SHIFT;
 	struct kvm_gstage gstage;
-	bool flush;
-
-	kvm_riscv_gstage_init(&gstage, kvm);
+	bool flush = false;
 
 	write_lock(&kvm->mmu_lock);
-	flush = mmu_split_huge_pages(&gstage, start, end);
+	if (kvm_riscv_gstage_init(&gstage, kvm))
+		flush = mmu_split_huge_pages(&gstage, start, end);
 	write_unlock(&kvm->mmu_lock);
 
 	if (flush)
@@ -334,12 +334,10 @@ bool kvm_unmap_gfn_range(struct kvm *kvm, struct kvm_gfn_range *range)
 	struct kvm_gstage gstage;
 	bool flush;
 
-	if (!kvm->arch.pgd)
-		return false;
-
 	lockdep_assert_held_write(&kvm->mmu_lock);
 
-	kvm_riscv_gstage_init(&gstage, kvm);
+	if (!kvm_riscv_gstage_init(&gstage, kvm))
+		return false;
 	flush = kvm_riscv_gstage_unmap_range(&gstage, range->start << PAGE_SHIFT,
 					     (range->end - range->start) << PAGE_SHIFT,
 					     range->may_block);
@@ -356,12 +354,10 @@ bool kvm_age_gfn(struct kvm *kvm, struct kvm_gfn_range *range)
 	u64 size = (range->end - range->start) << PAGE_SHIFT;
 	struct kvm_gstage gstage;
 
-	if (!kvm->arch.pgd)
-		return false;
-
 	WARN_ON(size != PAGE_SIZE && size != PMD_SIZE && size != PUD_SIZE);
 
-	kvm_riscv_gstage_init(&gstage, kvm);
+	if (!kvm_riscv_gstage_init(&gstage, kvm))
+		return false;
 	if (!kvm_riscv_gstage_get_leaf(&gstage, range->start << PAGE_SHIFT,
 				       &ptep, &ptep_level))
 		return false;
@@ -376,12 +372,10 @@ bool kvm_test_age_gfn(struct kvm *kvm, struct kvm_gfn_range *range)
 	u64 size = (range->end - range->start) << PAGE_SHIFT;
 	struct kvm_gstage gstage;
 
-	if (!kvm->arch.pgd)
-		return false;
-
 	WARN_ON(size != PAGE_SIZE && size != PMD_SIZE && size != PUD_SIZE);
 
-	kvm_riscv_gstage_init(&gstage, kvm);
+	if (!kvm_riscv_gstage_init(&gstage, kvm))
+		return false;
 	if (!kvm_riscv_gstage_get_leaf(&gstage, range->start << PAGE_SHIFT,
 				       &ptep, &ptep_level))
 		return false;
@@ -563,12 +557,12 @@ static bool kvm_riscv_mmu_dirty_log_write_fault_fast(struct kvm *kvm,
 	bool dirty_marked = false;
 	bool ret;
 
-	kvm_riscv_gstage_init(&gstage, kvm);
 	mmu_seq = kvm->mmu_invalidate_seq;
 
 	read_lock(&kvm->mmu_lock);
 
-	if (mmu_invalidate_retry_gfn(kvm, mmu_seq, gfn)) {
+	if (!kvm_riscv_gstage_init(&gstage, kvm) ||
+	    mmu_invalidate_retry_gfn(kvm, mmu_seq, gfn)) {
 		ret = false;
 		goto out_unlock;
 	}
@@ -639,8 +633,6 @@ int kvm_riscv_mmu_map(struct kvm_vcpu *vcpu, struct kvm_memory_slot *memslot,
 	struct kvm_gstage gstage;
 	struct page *page;
 
-	kvm_riscv_gstage_init(&gstage, kvm);
-
 	/* Setup initial state of output mapping */
 	memset(out_map, 0, sizeof(*out_map));
 
@@ -649,7 +641,7 @@ int kvm_riscv_mmu_map(struct kvm_vcpu *vcpu, struct kvm_memory_slot *memslot,
 		return 0;
 
 	/* We need minimum second+third level pages */
-	ret = kvm_mmu_topup_memory_cache(pcache, kvm->arch.pgd_levels);
+	ret = kvm_mmu_topup_memory_cache(pcache, kvm_riscv_gstage_max_pgd_levels);
 	if (ret) {
 		kvm_err("Failed to topup G-stage cache\n");
 		return ret;
@@ -719,6 +711,11 @@ int kvm_riscv_mmu_map(struct kvm_vcpu *vcpu, struct kvm_memory_slot *memslot,
 
 	write_lock(&kvm->mmu_lock);
 
+	ret = -EFAULT;
+	if (!kvm_riscv_gstage_init(&gstage, kvm))
+		goto out_unlock;
+
+	ret = 0;
 	if (mmu_invalidate_retry(kvm, mmu_seq))
 		goto out_unlock;
 
@@ -764,7 +761,6 @@ int kvm_riscv_mmu_alloc_pgd(struct kvm *kvm)
 	kvm->arch.pgd = page_to_virt(pgd_page);
 	kvm->arch.pgd_phys = page_to_phys(pgd_page);
 	kvm->arch.pgd_levels = kvm_riscv_gstage_max_pgd_levels;
-	kvm->arch.pgd_split_page_cache.gfp_zero = __GFP_ZERO;
 
 	return 0;
 }
@@ -772,41 +768,45 @@ int kvm_riscv_mmu_alloc_pgd(struct kvm *kvm)
 void kvm_riscv_mmu_free_pgd(struct kvm *kvm)
 {
 	struct kvm_gstage gstage;
-	void *pgd = NULL;
-	bool flush = false;
 
 	write_lock(&kvm->mmu_lock);
-	if (kvm->arch.pgd) {
-		kvm_riscv_gstage_init(&gstage, kvm);
-		flush = kvm_riscv_gstage_unmap_range(&gstage, 0UL,
-			kvm_riscv_gstage_gpa_size(kvm->arch.pgd_levels), false);
-		pgd = READ_ONCE(kvm->arch.pgd);
-		kvm->arch.pgd = NULL;
-		kvm->arch.pgd_phys = 0;
-		kvm->arch.pgd_levels = 0;
+	if (!kvm_riscv_gstage_init(&gstage, kvm)) {
+		write_unlock(&kvm->mmu_lock);
+		return;
 	}
+	/* Live walkers must acquire mmu_lock and check the active root. */
+	WRITE_ONCE(kvm->arch.pgd, NULL);
+	kvm->arch.pgd_phys = 0;
+	kvm->arch.pgd_levels = 0;
 	write_unlock(&kvm->mmu_lock);
 
-	if (flush)
-		kvm_flush_remote_tlbs(kvm);
+	/* Quiesce hardware users before freeing the detached page tables. */
+	kvm_make_all_cpus_request(kvm, KVM_REQ_OUTSIDE_GUEST_MODE);
 
-	if (pgd)
-		free_pages((unsigned long)pgd, get_order(kvm_riscv_gstage_pgd_size));
-
-	kvm_mmu_free_memory_cache(&kvm->arch.pgd_split_page_cache);
+	/*
+	 * Request an old-VMID HFENCE. Queue-full fallback can flush the current
+	 * VMID, so the hardware quiescing above protects the tree lifetime.
+	 */
+	kvm_riscv_hfence_gvma_vmid_all(kvm, -1UL, 0, gstage.vmid);
+	kvm_riscv_gstage_free(&gstage);
 }
 
 void kvm_riscv_mmu_update_hgatp(struct kvm_vcpu *vcpu)
 {
 	struct kvm_arch *ka = &vcpu->kvm->arch;
-	unsigned long hgatp = kvm_riscv_gstage_mode(ka->pgd_levels)
-			      << HGATP_MODE_SHIFT;
+	unsigned long hgatp = 0;
 
-	hgatp |= (READ_ONCE(ka->vmid.vmid) << HGATP_VMID_SHIFT) & HGATP_VMID;
-	hgatp |= (ka->pgd_phys >> PAGE_SHIFT) & HGATP_PPN;
+	/* Serialize the root snapshot and HGATP install against root detach. */
+	read_lock(&vcpu->kvm->mmu_lock);
+	if (ka->pgd) {
+		hgatp = kvm_riscv_gstage_mode(ka->pgd_levels) << HGATP_MODE_SHIFT;
+		hgatp |= (READ_ONCE(ka->vmid.vmid) << HGATP_VMID_SHIFT) & HGATP_VMID;
+		hgatp |= (ka->pgd_phys >> PAGE_SHIFT) & HGATP_PPN;
+	}
 
 	ncsr_write(CSR_HGATP, hgatp);
 
 	if (!kvm_riscv_gstage_vmid_bits())
 		kvm_riscv_local_hfence_gvma_all();
+	read_unlock(&vcpu->kvm->mmu_lock);
 }

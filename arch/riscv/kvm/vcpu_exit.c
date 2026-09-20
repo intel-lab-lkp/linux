@@ -90,7 +90,21 @@ unsigned long kvm_riscv_vcpu_unpriv_read(struct kvm_vcpu *vcpu,
 	register unsigned long ttmp asm("a1");
 	unsigned long flags, val, tmp, old_stvec, old_hstatus;
 
+	/*
+	 * Prevent G-stage teardown while HLV/HLVX can walk the page tables.
+	 * The active-root check prevents a new walk from starting after detach.
+	 */
+	read_lock(&vcpu->kvm->mmu_lock);
+	if (!vcpu->kvm->arch.pgd) {
+		read_unlock(&vcpu->kvm->mmu_lock);
+		trap->scause = EXC_LOAD_GUEST_PAGE_FAULT;
+		trap->stval = guest_addr;
+		return 0;
+	}
 	local_irq_save(flags);
+	/* Publish the hardware walk before dropping the root lifetime lock. */
+	smp_store_mb(vcpu->mode, READING_SHADOW_PAGE_TABLES);
+	read_unlock(&vcpu->kvm->mmu_lock);
 
 	old_hstatus = csr_swap(CSR_HSTATUS, vcpu->arch.guest_context.hstatus);
 	old_stvec = csr_swap(CSR_STVEC, (ulong)&__kvm_riscv_unpriv_trap);
@@ -146,6 +160,8 @@ unsigned long kvm_riscv_vcpu_unpriv_read(struct kvm_vcpu *vcpu,
 	csr_write(CSR_STVEC, old_stvec);
 	csr_write(CSR_HSTATUS, old_hstatus);
 
+	/* Complete all HLV/HLVX accesses before publishing OUTSIDE. */
+	smp_store_release(&vcpu->mode, OUTSIDE_GUEST_MODE);
 	local_irq_restore(flags);
 
 	return val;
