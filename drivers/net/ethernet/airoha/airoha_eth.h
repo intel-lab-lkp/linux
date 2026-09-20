@@ -236,6 +236,18 @@ struct airoha_tx_irq_queue {
 	u32 *q;
 };
 
+struct airoha_xdp_stats {
+	u64 rx_xdp_redirect;
+	u64 rx_xdp_redirect_errors;
+	u64 rx_xdp_pass;
+	u64 rx_xdp_aborted;
+	u64 rx_xdp_drop;
+	u64 rx_xdp_tx;
+	u64 rx_xdp_tx_errors;
+	u64 tx_xdp_xmit;
+	u64 tx_xdp_xmit_errors;
+};
+
 struct airoha_hw_stats {
 	struct u64_stats_sync syncp;
 
@@ -258,6 +270,8 @@ struct airoha_hw_stats {
 	u64 rx_fragment;
 	u64 rx_jabber;
 	u64 rx_len[7];
+
+	struct airoha_xdp_stats xdp_stats;
 
 	struct {
 		/* Previous HW register values for 32-bit counter delta

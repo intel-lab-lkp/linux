@@ -864,6 +864,11 @@ static int airoha_xdp_xmit(struct net_device *netdev, int n,
 	spin_unlock(&q->lock);
 	rcu_read_unlock();
 
+	u64_stats_update_begin(&dev->stats.syncp);
+	dev->stats.xdp_stats.tx_xdp_xmit += n - drops;
+	dev->stats.xdp_stats.tx_xdp_xmit_errors += drops;
+	u64_stats_update_end(&dev->stats.syncp);
+
 	return n - drops;
 }
 
@@ -871,40 +876,56 @@ static bool airoha_run_xdp(struct net_device *netdev, struct bpf_prog *prog,
 			   struct xdp_buff *xdp, struct airoha_queue *q,
 			   struct airoha_queue_entry *e, struct page *page)
 {
+	struct airoha_gdm_dev *dev = netdev_priv(netdev);
+	struct airoha_hw_stats *hw_stats = &dev->stats;
 	u32 act = bpf_prog_run_xdp(prog, xdp);
+	u64 *count;
 
 	switch (act) {
 	case XDP_PASS:
-		return false;
+		count = &hw_stats->xdp_stats.rx_xdp_pass;
+		goto update_stats;
 	case XDP_TX:
 		if (unlikely(airoha_xdp_xmit_back(netdev, xdp, q->qdma) < 0)) {
+			count = &hw_stats->xdp_stats.rx_xdp_tx_errors;
 			trace_xdp_exception(netdev, prog, act);
-			page_pool_put_full_page(q->page_pool, page, true);
-		} else {
-			e->buf = NULL;
+			break;
 		}
-		break;
+
+		e->buf = NULL;
+		count = &hw_stats->xdp_stats.rx_xdp_tx;
+		goto update_stats;
 	case XDP_REDIRECT:
 		if (unlikely(xdp_do_redirect(netdev, xdp, prog) < 0)) {
+			count = &hw_stats->xdp_stats.rx_xdp_redirect_errors;
 			trace_xdp_exception(netdev, prog, act);
-			page_pool_put_full_page(q->page_pool, page, true);
-		} else {
-			q->xdp_flush = true;
-			e->buf = NULL;
+			break;
 		}
-		break;
+
+		e->buf = NULL;
+		q->xdp_flush = true;
+		count = &hw_stats->xdp_stats.rx_xdp_redirect;
+		goto update_stats;
 	default:
 		bpf_warn_invalid_xdp_action(netdev, prog, act);
 		fallthrough;
 	case XDP_ABORTED:
+		count = &hw_stats->xdp_stats.rx_xdp_aborted;
 		trace_xdp_exception(netdev, prog, act);
-		fallthrough;
+		break;
 	case XDP_DROP:
-		page_pool_put_full_page(q->page_pool, page, true);
+		count = &hw_stats->xdp_stats.rx_xdp_drop;
 		break;
 	}
 
-	return true;
+	page_pool_put_full_page(q->page_pool, page, true);
+
+update_stats:
+	u64_stats_update_begin(&hw_stats->syncp);
+	*count = *count + 1;
+	u64_stats_update_end(&hw_stats->syncp);
+
+	return act != XDP_PASS;
 }
 
 static int airoha_qdma_rx_process(struct airoha_queue *q, int budget)
@@ -3676,12 +3697,96 @@ static const struct net_device_ops airoha_netdev_ops = {
 	.ndo_xdp_xmit		= airoha_xdp_xmit,
 };
 
+#define AIROHA_ETHTOOL_XDP_STAT(x) { #x, \
+				  offsetof(struct airoha_hw_stats, xdp_stats.x) / \
+				  sizeof(u64) }
+
+static const struct {
+	const char name[ETH_GSTRING_LEN];
+	u32 offset;
+} airoha_ethtool_xdp_stats[] = {
+	AIROHA_ETHTOOL_XDP_STAT(rx_xdp_redirect),
+	AIROHA_ETHTOOL_XDP_STAT(rx_xdp_redirect_errors),
+	AIROHA_ETHTOOL_XDP_STAT(rx_xdp_pass),
+	AIROHA_ETHTOOL_XDP_STAT(rx_xdp_aborted),
+	AIROHA_ETHTOOL_XDP_STAT(rx_xdp_drop),
+	AIROHA_ETHTOOL_XDP_STAT(rx_xdp_tx),
+	AIROHA_ETHTOOL_XDP_STAT(rx_xdp_tx_errors),
+	AIROHA_ETHTOOL_XDP_STAT(tx_xdp_xmit),
+	AIROHA_ETHTOOL_XDP_STAT(tx_xdp_xmit_errors),
+};
+
+static void airoha_ethtool_get_strings(struct net_device *netdev, u32 stringset, u8 *data)
+{
+	int i;
+
+	switch (stringset) {
+	case ETH_SS_STATS:
+		for (i = 0; i < ARRAY_SIZE(airoha_ethtool_xdp_stats); i++) {
+			strscpy(data, airoha_ethtool_xdp_stats[i].name, ETH_GSTRING_LEN);
+			data += ETH_GSTRING_LEN;
+		}
+		page_pool_ethtool_stats_get_strings(data);
+		break;
+	}
+}
+
+static int airoha_ethtool_get_sset_count(struct net_device *netdev, int stringset)
+{
+	switch (stringset) {
+	case ETH_SS_STATS:
+		return ARRAY_SIZE(airoha_ethtool_xdp_stats) + page_pool_ethtool_stats_get_count();
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+
+static void airoha_ethtool_get_ethtool_stats(struct net_device *netdev,
+					     struct ethtool_stats *stats,
+					     u64 *data)
+{
+	struct airoha_gdm_dev *dev = netdev_priv(netdev);
+	struct airoha_hw_stats *hw_stats = &dev->stats;
+	u64 *hw_stats_base = (u64 *)hw_stats;
+	struct page_pool_stats pp_stats = {};
+	struct airoha_qdma *qdma;
+	unsigned int start;
+	int i;
+
+	if (netif_running(netdev))
+		airoha_update_hw_stats(dev);
+
+	do {
+		start = u64_stats_fetch_begin(&hw_stats->syncp);
+		for (i = 0; i < ARRAY_SIZE(airoha_ethtool_xdp_stats); i++)
+			data[i] = hw_stats_base[airoha_ethtool_xdp_stats[i].offset];
+	} while (u64_stats_fetch_retry(&hw_stats->syncp, start));
+
+	rcu_read_lock();
+	qdma = rcu_dereference(dev->qdma);
+	if (qdma) {
+		for (i = 0; i < ARRAY_SIZE(qdma->q_rx); i++) {
+			struct airoha_queue *q = &qdma->q_rx[i];
+
+			if (q->page_pool)
+				page_pool_get_stats(q->page_pool, &pp_stats);
+		}
+	}
+	rcu_read_unlock();
+
+	page_pool_ethtool_stats_get(data + ARRAY_SIZE(airoha_ethtool_xdp_stats),
+				    &pp_stats);
+}
+
 static const struct ethtool_ops airoha_ethtool_ops = {
 	.get_drvinfo		= airoha_ethtool_get_drvinfo,
 	.get_eth_mac_stats      = airoha_ethtool_get_mac_stats,
 	.get_rmon_stats		= airoha_ethtool_get_rmon_stats,
 	.get_link_ksettings	= phy_ethtool_get_link_ksettings,
 	.get_link		= ethtool_op_get_link,
+	.get_strings		= airoha_ethtool_get_strings,
+	.get_sset_count		= airoha_ethtool_get_sset_count,
+	.get_ethtool_stats	= airoha_ethtool_get_ethtool_stats,
 };
 
 static int airoha_metadata_dst_alloc(struct airoha_gdm_port *port)
