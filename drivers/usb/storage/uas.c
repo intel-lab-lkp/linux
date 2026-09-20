@@ -1215,7 +1215,14 @@ static void uas_disconnect(struct usb_interface *intf)
 {
 	struct Scsi_Host *shost = usb_get_intfdata(intf);
 	struct uas_dev_info *devinfo = (struct uas_dev_info *)shost->hostdata;
+	struct usb_device *udev = interface_to_usbdev(intf);
 	unsigned long flags;
+	bool driver_unbind = udev->state != USB_STATE_NOTATTACHED;
+
+	if (driver_unbind) {
+		cancel_work_sync(&devinfo->scan_work);
+		scsi_remove_host(shost);
+	}
 
 	spin_lock_irqsave(&devinfo->lock, flags);
 	devinfo->resetting = 1;
@@ -1227,13 +1234,10 @@ static void uas_disconnect(struct usb_interface *intf)
 	usb_kill_anchored_urbs(&devinfo->data_urbs);
 	uas_zap_pending(devinfo, DID_NO_CONNECT);
 
-	/*
-	 * Prevent SCSI scanning (if it hasn't started yet)
-	 * or wait for the SCSI-scanning routine to stop.
-	 */
-	cancel_work_sync(&devinfo->scan_work);
-
-	scsi_remove_host(shost);
+	if (!driver_unbind) {
+		cancel_work_sync(&devinfo->scan_work);
+		scsi_remove_host(shost);
+	}
 	uas_free_streams(devinfo);
 	scsi_host_put(shost);
 }
@@ -1267,6 +1271,7 @@ static struct usb_driver uas_driver = {
 	.suspend = uas_suspend,
 	.resume = uas_resume,
 	.reset_resume = uas_reset_resume,
+	.soft_unbind = 1,
 	.shutdown = uas_shutdown,
 	.id_table = uas_usb_ids,
 };
