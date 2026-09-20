@@ -63,10 +63,12 @@ struct cpu_topology {
 	int thread_id;
 	int core_id;
 	int cluster_id;
+	int die_id;
 	int package_id;
 	cpumask_t thread_sibling;
 	cpumask_t core_sibling;
 	cpumask_t cluster_sibling;
+	cpumask_t die_sibling;
 	cpumask_t llc_sibling;
 };
 

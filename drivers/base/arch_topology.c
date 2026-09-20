@@ -766,6 +766,14 @@ void update_siblings_masks(unsigned int cpuid)
 		cpumask_set_cpu(cpuid, &cpu_topo->core_sibling);
 		cpumask_set_cpu(cpu, &cpuid_topo->core_sibling);
 
+		if (cpuid_topo->die_id != cpu_topo->die_id)
+			continue;
+
+		if (cpuid_topo->die_id >= 0) {
+			cpumask_set_cpu(cpu, &cpuid_topo->die_sibling);
+			cpumask_set_cpu(cpuid, &cpu_topo->die_sibling);
+		}
+
 		if (cpuid_topo->cluster_id != cpu_topo->cluster_id)
 			continue;
 
@@ -792,6 +800,9 @@ static void clear_cpu_topology(int cpu)
 	cpumask_clear(&cpu_topo->cluster_sibling);
 	cpumask_set_cpu(cpu, &cpu_topo->cluster_sibling);
 
+	cpumask_clear(&cpu_topo->die_sibling);
+	cpumask_set_cpu(cpu, &cpu_topo->die_sibling);
+
 	cpumask_clear(&cpu_topo->core_sibling);
 	cpumask_set_cpu(cpu, &cpu_topo->core_sibling);
 	cpumask_clear(&cpu_topo->thread_sibling);
@@ -808,6 +819,7 @@ void __init reset_cpu_topology(void)
 		cpu_topo->thread_id = -1;
 		cpu_topo->core_id = -1;
 		cpu_topo->cluster_id = -1;
+		cpu_topo->die_id = -1;
 		cpu_topo->package_id = -1;
 
 		clear_cpu_topology(cpu);
@@ -824,6 +836,8 @@ void remove_cpu_topology(unsigned int cpu)
 		cpumask_clear_cpu(cpu, topology_sibling_cpumask(sibling));
 	for_each_cpu(sibling, topology_cluster_cpumask(cpu))
 		cpumask_clear_cpu(cpu, topology_cluster_cpumask(sibling));
+	for_each_cpu(sibling, &cpu_topology[cpu].die_sibling)
+		cpumask_clear_cpu(cpu, &cpu_topology[sibling].die_sibling);
 	for_each_cpu(sibling, topology_llc_cpumask(cpu))
 		cpumask_clear_cpu(cpu, topology_llc_cpumask(sibling));
 
@@ -969,9 +983,9 @@ void store_cpu_topology(unsigned int cpuid)
 	cpuid_topo->core_id = cpuid;
 	cpuid_topo->package_id = cpu_to_node(cpuid);
 
-	pr_debug("CPU%u: package %d core %d thread %d\n",
-		 cpuid, cpuid_topo->package_id, cpuid_topo->core_id,
-		 cpuid_topo->thread_id);
+	pr_debug("CPU%u: package %d die %d core %d thread %d\n",
+		 cpuid, cpuid_topo->package_id, cpuid_topo->die_id,
+		 cpuid_topo->core_id, cpuid_topo->thread_id);
 
 topology_populated:
 	update_siblings_masks(cpuid);
