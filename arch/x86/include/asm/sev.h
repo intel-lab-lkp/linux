@@ -543,6 +543,7 @@ enum es_result savic_register_gpa(u64 gpa);
 enum es_result savic_unregister_gpa(u64 *gpa);
 u64 sev_apic_ghcb_msr_read(u32 reg);
 void sev_apic_ghcb_msr_write(u32 reg, u64 value);
+void svsm_register_alt_inj(void);
 
 static __always_inline void vc_ghcb_invalidate(struct ghcb *ghcb)
 {
@@ -652,6 +653,7 @@ static inline enum es_result savic_register_gpa(u64 gpa) { return ES_UNSUPPORTED
 static inline enum es_result savic_unregister_gpa(u64 *gpa) { return ES_UNSUPPORTED; }
 static inline void sev_apic_ghcb_msr_write(u32 reg, u64 value) { }
 static inline u64 sev_apic_ghcb_msr_read(u32 reg) { return 0; }
+static inline void svsm_register_alt_inj(void) { }
 
 #endif	/* CONFIG_AMD_MEM_ENCRYPT */
 

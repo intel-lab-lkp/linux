@@ -793,6 +793,9 @@ static bool sev_prepare(void)
 			unsupported);
 		return true;
 	}
+
+	svsm_register_alt_inj();
+
 	return false;
 }
 
