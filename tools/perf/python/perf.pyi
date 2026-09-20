@@ -435,6 +435,25 @@ class evlist:
         ...
 
 
+class call_return:
+    """Represents a call/return event from instruction trace decoding."""
+    db_id: int
+    parent_id: int
+    insn_count: int
+    cyc_count: int
+    comm: Optional[str]
+    machine_pid: int
+    pid: Optional[int]
+    tid: Optional[int]
+    call_time: int
+    return_time: int
+    branch_count: int
+    call_ref: int
+    return_ref: int
+    flags: int
+    call_path: Optional[callchain]
+
+
 class session:
     def __init__(
         self,
@@ -442,6 +461,11 @@ class session:
         sample: Optional[Callable[[sample_event], None]] = None,
         stat: Optional[Callable[[Any, Optional[str]], None]] = None,
         context_switch: Optional[Callable[[switch_event], None]] = None,
+        call_return: Optional[Callable[[call_return], None]] = None,
+        itrace: Optional[str] = None,
+        vmlinux: Optional[str] = None,
+        kallsyms: Optional[str] = None,
+        symfs: Optional[str] = None
     ) -> None:
         """Initialize a perf session.
 
@@ -451,6 +475,8 @@ class session:
             stat: Callback for stat events.
         """
         ...
+    e_machine: Optional[int]
+    is_64_bit: bool
     def process_events(self) -> None:
         """Process all events in the session."""
         ...
@@ -683,3 +709,12 @@ RECORD_STAT_ROUND: int
 
 RECORD_MISC_SWITCH_OUT: int
 """MISC_SWITCH_OUT record."""
+
+CALL_RETURN_NO_CALL: int
+"""'return' but no matching 'call'."""
+
+CALL_RETURN_NO_RETURN: int
+"""'call' but no matching 'return'."""
+
+CALL_RETURN_NON_CALL: int
+"""A branch but not a 'call' to the start of a different symbol."""
