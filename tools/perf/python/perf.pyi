@@ -182,6 +182,8 @@ class _sample_members:
     sample_time: int
     sample_id: int
     sample_stream_id: int
+    machine_pid: int
+    vcpu: int
     sample_period: int
     sample_cpu: int
 
@@ -206,10 +208,18 @@ class sample_event(_sample_members):
     symbol: str
     sym_start: int
     sym_end: int
+    sym_offset: Optional[int]
+    addr_dso: Optional[str]
+    addr_symbol: Optional[str]
+    addr_sym_offset: Optional[int]
+    branch_type: int
+    in_tx: int
+    flags: int
+    transaction: int
     brstack: Optional['branch_stack']
     callchain: Optional['callchain']
-    def srccode(self) -> str: ...
-    def insn(self) -> str: ...
+    def srccode(self) -> Optional[tuple[str, int, str]]: ...
+    def insn(self) -> Optional[bytes]: ...
     def __getattr__(self, name: str) -> Any: ...
 
 class mmap_event(_sample_members):
@@ -286,8 +296,9 @@ class read_event(_sample_members):
 class switch_event(_sample_members):
     """Represents a SWITCH or SWITCH_CPU_WIDE record."""
     type: int
-    next_prev_pid: int
-    next_prev_tid: int
+    misc: int
+    next_prev_pid: Optional[int]
+    next_prev_tid: Optional[int]
     evsel: Optional['evsel']
 
 class branch_entry:
@@ -429,7 +440,8 @@ class session:
         self,
         data: data,
         sample: Optional[Callable[[sample_event], None]] = None,
-        stat: Optional[Callable[[Any, Optional[str]], None]] = None
+        stat: Optional[Callable[[Any, Optional[str]], None]] = None,
+        context_switch: Optional[Callable[[switch_event], None]] = None,
     ) -> None:
         """Initialize a perf session.
 
