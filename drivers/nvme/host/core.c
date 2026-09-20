@@ -271,6 +271,38 @@ int nvme_delete_ctrl(struct nvme_ctrl *ctrl)
 }
 EXPORT_SYMBOL_GPL(nvme_delete_ctrl);
 
+static bool nvme_ctrl_fencing(struct nvme_ctrl *ctrl)
+{
+	enum nvme_ctrl_state state = nvme_ctrl_state(ctrl);
+
+	return state == NVME_CTRL_FENCING || state == NVME_CTRL_FENCED;
+}
+
+static void nvme_wait_fencing_done(struct nvme_ctrl *ctrl)
+{
+	wait_event(ctrl->state_wq, !nvme_ctrl_fencing(ctrl));
+}
+
+/*
+ * Like nvme_delete_ctrl(), but waits for a fencing window to end
+ * instead of failing with -EBUSY. May sleep; callers that cannot
+ * sleep must use nvme_delete_ctrl() and handle the failure.
+ */
+int nvme_delete_ctrl_wait(struct nvme_ctrl *ctrl)
+{
+	int ret;
+
+	might_sleep();
+
+	for (;;) {
+		ret = nvme_delete_ctrl(ctrl);
+		if (!ret || !nvme_ctrl_fencing(ctrl))
+			return ret;
+		nvme_wait_fencing_done(ctrl);
+	}
+}
+EXPORT_SYMBOL_GPL(nvme_delete_ctrl_wait);
+
 void nvme_delete_ctrl_sync(struct nvme_ctrl *ctrl)
 {
 	/*
@@ -278,8 +310,13 @@ void nvme_delete_ctrl_sync(struct nvme_ctrl *ctrl)
 	 * since ->delete_ctrl can free the controller.
 	 */
 	nvme_get_ctrl(ctrl);
-	if (nvme_change_ctrl_state(ctrl, NVME_CTRL_DELETING))
-		nvme_do_delete_ctrl(ctrl);
+	while (!nvme_change_ctrl_state(ctrl, NVME_CTRL_DELETING)) {
+		if (!nvme_ctrl_fencing(ctrl))
+			goto out_put;
+		nvme_wait_fencing_done(ctrl);
+	}
+	nvme_do_delete_ctrl(ctrl);
+out_put:
 	nvme_put_ctrl(ctrl);
 }
 

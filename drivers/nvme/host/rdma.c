@@ -2483,7 +2483,7 @@ static void nvme_rdma_remove_one(struct ib_device *ib_device, void *client_data)
 	list_for_each_entry(ctrl, &nvme_rdma_ctrl_list, list) {
 		if (ctrl->device->dev != ib_device)
 			continue;
-		nvme_delete_ctrl(&ctrl->ctrl);
+		nvme_delete_ctrl_wait(&ctrl->ctrl);
 	}
 	mutex_unlock(&nvme_rdma_ctrl_mutex);
 
@@ -2523,7 +2523,7 @@ static void __exit nvme_rdma_cleanup_module(void)
 
 	mutex_lock(&nvme_rdma_ctrl_mutex);
 	list_for_each_entry(ctrl, &nvme_rdma_ctrl_list, list)
-		nvme_delete_ctrl(&ctrl->ctrl);
+		nvme_delete_ctrl_wait(&ctrl->ctrl);
 	mutex_unlock(&nvme_rdma_ctrl_mutex);
 	flush_workqueue(nvme_delete_wq);
 }
