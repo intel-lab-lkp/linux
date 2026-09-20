@@ -2210,10 +2210,7 @@ int kvm_vm_ioctl_enable_cap(struct kvm *kvm,
 			break;
 		if (!kvmppc_book3s_hcall_implemented(kvm, hcall))
 			break;
-		if (cap->args[1])
-			set_bit(hcall / 4, kvm->arch.enabled_hcalls);
-		else
-			clear_bit(hcall / 4, kvm->arch.enabled_hcalls);
+		assign_bit(hcall / 4, kvm->arch.enabled_hcalls, cap->args[1]);
 		r = 0;
 		break;
 	}
