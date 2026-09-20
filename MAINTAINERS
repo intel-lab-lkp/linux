@@ -9362,12 +9362,6 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/memory-controllers/marvell,mvebu-sdram-controller.yaml
 F:	drivers/edac/armada_xp_*
 
-EDAC-AST2500
-M:	Stefan Schaeckeler <sschaeck@cisco.com>
-S:	Supported
-F:	Documentation/devicetree/bindings/edac/aspeed,ast2400-sdram-edac.yaml
-F:	drivers/edac/aspeed_edac.c
-
 EDAC-BLUEFIELD
 M:	Shravan Kumar Ramani <shravankr@nvidia.com>
 M:	David Thompson <davthompson@nvidia.com>
