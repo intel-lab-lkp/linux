@@ -951,10 +951,22 @@ class TypeSubMessage(TypeNest):
             sel_var = f"_sel_{sel}"
         else:
             sel_var = f"{var}->{sel}"
-        get_lines = [f'if (!{sel_var})',
-                     f'return ynl_submsg_failed(yarg, "{self.name}", "{selector}");',
-                     f"if ({self.nested_render_name}_parse(&parg, {sel_var}, attr))",
-                     "return YNL_PARSE_CB_ERROR;"]
+
+        parse_sel = sel_var
+        get_lines = []
+        if not self.selector.is_external() and self.selector.attr and \
+           "enum" in self.selector.attr.attr:
+            enum_name = self.selector.attr.attr["enum"]
+            str_fn = c_lower(self.family.ident_name + "-" + enum_name) + "_str"
+            sel_str_var = f"{sel}_str"
+            get_lines += [f'const char *{sel_str_var};',
+                          f'{sel_str_var} = {str_fn}({sel_var});']
+            parse_sel = sel_str_var
+
+        get_lines += [f'if (!{parse_sel})',
+                      f'return ynl_submsg_failed(yarg, "{self.name}", "{selector}");',
+                      f"if ({self.nested_render_name}_parse(&parg, {parse_sel}, attr))",
+                      "return YNL_PARSE_CB_ERROR;"]
         init_lines = [f"parg.rsp_policy = &{self.nested_render_name}_nest;",
                       f"parg.data = &{var}->{self.c_name};"]
         return get_lines, init_lines, None
