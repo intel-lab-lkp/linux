@@ -591,6 +591,17 @@ void kvm_pmu_request_recreate(struct kvm_vcpu *vcpu)
 	kvm_make_request(KVM_REQ_RELOAD_PMU, vcpu);
 }
 
+void kvm_pmu_apply_pmcr(struct kvm_vcpu *vcpu, u64 old, u64 val, bool force_reload)
+{
+	u64 changed = old ^ val;
+
+	/* Reload the PMU if the write affects the backing perf events. */
+	if (changed & (ARMV8_PMU_PMCR_LC | ARMV8_PMU_PMCR_LP))
+		kvm_pmu_request_recreate(vcpu);
+	else if (force_reload || (changed & ARMV8_PMU_PMCR_E))
+		kvm_make_request(KVM_REQ_RELOAD_PMU, vcpu);
+}
+
 /**
  * kvm_pmu_handle_pmcr - handle PMCR register
  * @vcpu: The vcpu pointer
@@ -598,18 +609,17 @@ void kvm_pmu_request_recreate(struct kvm_vcpu *vcpu)
  */
 void kvm_pmu_handle_pmcr(struct kvm_vcpu *vcpu, u64 val)
 {
+	u64 old = __vcpu_sys_reg(vcpu, PMCR_EL0);
 	int i;
 
 	/* Fixup PMCR_EL0 to reconcile the PMU version and the LP bit */
 	if (!kvm_has_feat(vcpu->kvm, ID_AA64DFR0_EL1, PMUVer, V3P5))
 		val &= ~ARMV8_PMU_PMCR_LP;
 
-	/* Request a reload of the PMU to enable/disable affected counters */
-	if ((__vcpu_sys_reg(vcpu, PMCR_EL0) ^ val) & ARMV8_PMU_PMCR_E)
-		kvm_make_request(KVM_REQ_RELOAD_PMU, vcpu);
-
 	/* The reset bits don't indicate any state, and shouldn't be saved. */
 	__vcpu_assign_sys_reg(vcpu, PMCR_EL0, (val & ~(ARMV8_PMU_PMCR_C | ARMV8_PMU_PMCR_P)));
+
+	kvm_pmu_apply_pmcr(vcpu, old, __vcpu_sys_reg(vcpu, PMCR_EL0), false);
 
 	if (val & ARMV8_PMU_PMCR_C)
 		kvm_pmu_set_counter_value(vcpu, ARMV8_PMU_CYCLE_IDX, 0);
