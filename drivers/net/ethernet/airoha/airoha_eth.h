@@ -7,6 +7,7 @@
 #ifndef AIROHA_ETH_H
 #define AIROHA_ETH_H
 
+#include <linux/bpf.h>
 #include <linux/debugfs.h>
 #include <linux/etherdevice.h>
 #include <linux/iopoll.h>
@@ -15,6 +16,7 @@
 #include <linux/reset.h>
 #include <linux/soc/airoha/airoha_offload.h>
 #include <net/dsa.h>
+#include <net/xdp.h>
 
 #define AIROHA_MAX_NUM_GDM_PORTS	4
 #define AIROHA_MAX_NUM_GDM_DEVS		2
@@ -34,7 +36,11 @@
 #define AIROHA_FE_MC_MAX_VLAN_TABLE	64
 #define AIROHA_FE_MC_MAX_VLAN_PORT	16
 #define AIROHA_NUM_TX_IRQ		2
-#define AIROHA_RX_HEADROOM		(NET_SKB_PAD + NET_IP_ALIGN)
+#define AIROHA_RX_HEADROOM		(XDP_PACKET_HEADROOM + NET_IP_ALIGN)
+#define AIROHA_RX_PAD			(AIROHA_RX_HEADROOM + \
+					 SKB_DATA_ALIGN(sizeof(struct skb_shared_info)))
+#define AIROHA_RX_MAX_BUF_SIZE		(PAGE_SIZE - AIROHA_RX_PAD - \
+					 VLAN_ETH_HLEN - ETH_FCS_LEN)
 #define AIROHA_RX_LEN(_n)		((_n) - AIROHA_RX_HEADROOM)
 #define HW_DSCP_NUM			2048
 #define IRQ_QUEUE_LEN(_n)		((_n) ? 1024 : 2048)
@@ -182,12 +188,16 @@ struct airoha_queue_entry {
 		void *buf;
 		struct {
 			struct list_head list;
-			struct sk_buff *skb;
+			union {
+				struct sk_buff *skb;
+				struct xdp_frame *xdpf;
+			};
 			enum airoha_dma_map_type dma_type;
 		};
 	};
 	dma_addr_t dma_addr;
 	u16 dma_len;
+	bool is_xdpf;
 };
 
 struct airoha_queue {
@@ -210,6 +220,9 @@ struct airoha_queue {
 	struct napi_struct napi;
 	struct page_pool *page_pool;
 	struct sk_buff *skb;
+
+	struct xdp_rxq_info xdp_rxq;
+	bool xdp_flush;
 
 	struct list_head tx_list;
 };
@@ -588,6 +601,8 @@ struct airoha_gdm_dev {
 
 	unsigned long flags;
 	int nbq;
+
+	struct bpf_prog __rcu *xdp_prog;
 
 	struct airoha_hw_stats stats;
 
