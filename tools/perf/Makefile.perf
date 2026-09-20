@@ -129,6 +129,8 @@ include ../scripts/utilities.mak
 # Define GEN_VMLINUX_H to generate vmlinux.h from the BTF.
 #
 # Define NO_SHELLCHECK if you do not want to run shellcheck during build
+#
+# Define NO_MYPY if you do not want to run mypy during build
 
 # As per kernel Makefile, avoid funny character set dependencies
 unexport LC_ALL
@@ -263,8 +265,19 @@ ifneq ($(SHELLCHECK),)
 endif
 
 # Runs mypy on perf python files
-ifeq ($(MYPY),1)
-  MYPY := $(shell which mypy 2> /dev/null)
+MAKEOVERRIDES := $(filter-out MYPY=%,$(MAKEOVERRIDES))
+ifeq ($(NO_MYPY),1)
+  override MYPY :=
+else
+  ifeq ($(MYPY),1)
+    override MYPY := $(shell which mypy 2> /dev/null)
+  else
+    MYPY ?= $(shell which mypy 2> /dev/null)
+  endif
+endif
+
+ifneq ($(MYPY),)
+  override MYPY := MYPYPATH=$(srctree)/tools/perf/python $(MYPY)
 endif
 
 # Runs pylint on perf python files
@@ -948,7 +961,8 @@ clean:: $(LIBAPI)-clean $(LIBBPF)-clean $(LIBSUBCMD)-clean $(LIBSYMBOL)-clean $(
 	$(call QUIET_CLEAN, core-objs)  $(RM) $(LIBPERF_A) $(OUTPUT)perf-archive \
 		$(OUTPUT)perf-iostat $(LANG_BINDINGS)
 	$(Q)find $(or $(OUTPUT),.) -name '*.o' -delete -o -name '*.a' -delete -o \
-		-name '\.*.cmd' -delete -o -name '\.*.d' -delete -o -name '*.shellcheck_log' -delete
+		-name '\.*.cmd' -delete -o -name '\.*.d' -delete -o -name '*.shellcheck_log' -delete -o \
+		-name '*.mypy_log' -delete
 	$(Q)$(RM) $(OUTPUT).config-detected
 	$(call QUIET_CLEAN, core-progs) $(RM) $(ALL_PROGRAMS) perf perf-read-vdso32 \
 		perf-read-vdsox32 $(OUTPUT)$(LIBJVMTI).so
