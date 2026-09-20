@@ -679,16 +679,23 @@ ice_eswitch_br_set_pvid(struct ice_esw_br_port *port,
 	vlan_ops = ice_get_compat_vsi_vlan_ops(port->vsi);
 	err = vlan_ops->set_port_vlan(port->vsi, &port_vlan);
 	if (err)
-		return err;
+		goto err_disable_port_vlan;
 
 	err = vlan_ops->add_vlan(port->vsi, &port_vlan);
 	if (err)
-		return err;
+		goto err_clear_port_vlan;
 
 	ice_eswitch_br_port_vlans_flush(port);
 	port->pvid = vlan->vid;
 
 	return 0;
+
+err_clear_port_vlan:
+	vlan_ops->clear_port_vlan(port->vsi);
+err_disable_port_vlan:
+	ice_vf_vsi_disable_port_vlan(port->vsi);
+
+	return err;
 }
 
 static struct ice_esw_br_vlan *
