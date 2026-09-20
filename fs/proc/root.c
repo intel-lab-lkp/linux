@@ -266,7 +266,7 @@ static int proc_fill_super(struct super_block *s, struct fs_context *fc)
 		return ret;
 
 	/* User space would break if executables or devices appear on proc */
-	s->s_iflags |= SB_I_NOEXEC | SB_I_NODEV;
+	s->s_iflags |= SB_I_NOEXEC | SB_I_NODEV | SB_I_NO_PAGECACHE;
 	s->s_flags |= SB_NODIRATIME | SB_NOSUID | SB_NOEXEC;
 	s->s_blocksize = 1024;
 	s->s_blocksize_bits = 10;
