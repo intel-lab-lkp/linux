@@ -90,20 +90,13 @@ static void gmap_add_child(struct gmap *parent, struct gmap *child)
 
 	child->parent = parent;
 
-	if (is_ucontrol(parent))
-		set_bit(GMAP_FLAG_IS_UCONTROL, &child->flags);
-	else
-		clear_bit(GMAP_FLAG_IS_UCONTROL, &child->flags);
+	assign_bit(GMAP_FLAG_IS_UCONTROL, &child->flags, is_ucontrol(parent));
 
-	if (test_bit(GMAP_FLAG_ALLOW_HPAGE_1M, &parent->flags))
-		set_bit(GMAP_FLAG_ALLOW_HPAGE_1M, &child->flags);
-	else
-		clear_bit(GMAP_FLAG_ALLOW_HPAGE_1M, &child->flags);
+	assign_bit(GMAP_FLAG_ALLOW_HPAGE_1M, &child->flags,
+		   test_bit(GMAP_FLAG_ALLOW_HPAGE_1M, &parent->flags));
 
-	if (test_bit(GMAP_FLAG_ALLOW_HPAGE_2G, &parent->flags))
-		set_bit(GMAP_FLAG_ALLOW_HPAGE_2G, &child->flags);
-	else
-		clear_bit(GMAP_FLAG_ALLOW_HPAGE_2G, &child->flags);
+	assign_bit(GMAP_FLAG_ALLOW_HPAGE_2G, &child->flags,
+		   test_bit(GMAP_FLAG_ALLOW_HPAGE_2G, &parent->flags));
 
 	if (kvm_is_ucontrol(parent->kvm))
 		clear_bit(GMAP_FLAG_OWNS_PAGETABLES, &child->flags);
