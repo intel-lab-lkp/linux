@@ -159,8 +159,16 @@ static int idmapped_layer_fd(const char *path, int nsid, int hostid, int range)
 	return fd_tree;
 }
 
-/* Overlay with a layer passed by fd (idmapped) plus a plain upper/work. */
-static int ovl_mount_lower_fd(const char *upper, const char *work, int fd_lower)
+static int layer_fd(const char *path)
+{
+	return sys_open_tree(AT_FDCWD, path,
+			     OPEN_TREE_CLONE | OPEN_TREE_CLOEXEC);
+}
+
+/* Overlay with lower layers passed by fd plus a plain upper/work. */
+static int ovl_mount_lower_fds(const char *upper, const char *work,
+			       int fd_lower1, int fd_lower2,
+			       const char *index, const char *nfs_export)
 {
 	int fsfd, ovl;
 
@@ -171,8 +179,19 @@ static int ovl_mount_lower_fd(const char *upper, const char *work, int fd_lower)
 	if (sys_fsconfig(fsfd, FSCONFIG_SET_STRING, "source", "test", 0) ||
 	    sys_fsconfig(fsfd, FSCONFIG_SET_STRING, "upperdir", upper, 0) ||
 	    sys_fsconfig(fsfd, FSCONFIG_SET_STRING, "workdir", work, 0) ||
-	    sys_fsconfig(fsfd, FSCONFIG_SET_FD, "lowerdir+", NULL, fd_lower) ||
-	    sys_fsconfig(fsfd, FSCONFIG_CMD_CREATE, NULL, NULL, 0))
+	    sys_fsconfig(fsfd, FSCONFIG_SET_FD, "lowerdir+", NULL, fd_lower1))
+		goto err;
+	if (fd_lower2 >= 0 &&
+	    sys_fsconfig(fsfd, FSCONFIG_SET_FD, "lowerdir+", NULL, fd_lower2))
+		goto err;
+	if (index &&
+	    sys_fsconfig(fsfd, FSCONFIG_SET_STRING, "index", index, 0))
+		goto err;
+	if (nfs_export &&
+	    sys_fsconfig(fsfd, FSCONFIG_SET_STRING, "nfs_export",
+			 nfs_export, 0))
+		goto err;
+	if (sys_fsconfig(fsfd, FSCONFIG_CMD_CREATE, NULL, NULL, 0))
 		goto err;
 
 	ovl = sys_fsmount(fsfd, 0, 0);
@@ -181,6 +200,23 @@ static int ovl_mount_lower_fd(const char *upper, const char *work, int fd_lower)
 err:
 	close(fsfd);
 	return -1;
+}
+
+static int ovl_mount_lower_fd(const char *upper, const char *work, int fd_lower)
+{
+	return ovl_mount_lower_fds(upper, work, fd_lower, -1, NULL, NULL);
+}
+
+static int setup_extra_layer(const char *base, const char *name)
+{
+	char path[PATH_MAX];
+
+	snprintf(path, sizeof(path), "%s/%s", base, name);
+	if (mkdir(path, 0755) && errno != EEXIST)
+		return -1;
+	if (chown(path, ID_HOST, ID_HOST))
+		return -1;
+	return 0;
 }
 
 /*
@@ -495,6 +531,60 @@ TEST_F(idmapped_overlay, nfs_export_handles)
 	EXPECT_EQ(st.st_gid, ID_NS + 7);
 
 	EXPECT_EQ(close(fd), 0);
+	EXPECT_EQ(close(ovl), 0);
+}
+
+/*
+ * Lower file handles cannot be decoded safely when two lower layers share a
+ * superblock but use different idmaps.  nfs_export should be disabled for that
+ * layout, so a normal decodable handle request must fail with EOPNOTSUPP.
+ */
+TEST_F(idmapped_overlay, nfs_export_same_sb_mixed_idmaps)
+{
+	char lower1[PATH_MAX], lower2[PATH_MAX], upper[PATH_MAX], work[PATH_MAX];
+	char path[PATH_MAX], mnt[128];
+	union {
+		struct file_handle fh;
+		char buf[sizeof(struct file_handle) + MAX_HANDLE_SZ];
+	} fhu;
+	struct file_handle *fh = &fhu.fh;
+	int fd_lower1, fd_lower2, ovl, mount_id;
+
+	if (!ovl_supported())
+		SKIP(return, "overlayfs not supported");
+
+	snprintf(lower1, sizeof(lower1), "%s/l", self->base);
+	snprintf(lower2, sizeof(lower2), "%s/l2", self->base);
+	snprintf(upper, sizeof(upper), "%s/u", self->base);
+	snprintf(work, sizeof(work), "%s/w", self->base);
+	ASSERT_EQ(setup_extra_layer(self->base, "l2"), 0);
+
+	snprintf(path, sizeof(path), "%s/l2/file", self->base);
+	ASSERT_EQ(mknod(path, S_IFREG | 0644, 0), 0);
+	ASSERT_EQ(chown(path, ID_HOST + 7, ID_HOST + 7), 0);
+
+	fd_lower1 = idmapped_layer_fd(lower1, ID_HOST, ID_NS, ID_RANGE);
+	ASSERT_GE(fd_lower1, 0);
+	fd_lower2 = layer_fd(lower2);
+	ASSERT_GE(fd_lower2, 0);
+
+	ovl = ovl_mount_lower_fds(upper, work, fd_lower1, fd_lower2, "on", "on");
+	if (ovl < 0)
+		SKIP(return, "overlayfs nfs_export not supported");
+	EXPECT_EQ(close(fd_lower1), 0);
+	EXPECT_EQ(close(fd_lower2), 0);
+
+	snprintf(mnt, sizeof(mnt), "%s/mnt", self->base);
+	ASSERT_EQ(mkdir(mnt, 0755), 0);
+	ASSERT_EQ(sys_move_mount(ovl, "", AT_FDCWD, mnt,
+				 MOVE_MOUNT_F_EMPTY_PATH), 0);
+
+	snprintf(path, sizeof(path), "%s/file", mnt);
+	fh->handle_bytes = MAX_HANDLE_SZ;
+	errno = 0;
+	EXPECT_EQ(name_to_handle_at(AT_FDCWD, path, fh, &mount_id, 0), -1);
+	EXPECT_EQ(errno, EOPNOTSUPP);
+
 	EXPECT_EQ(close(ovl), 0);
 }
 
