@@ -414,6 +414,37 @@ bool kvm_riscv_gstage_op_pte(struct kvm_gstage *gstage, gpa_t addr,
 	return flush;
 }
 
+/* The caller has detached this tree and quiesced its hardware users. */
+static void gstage_free_level(pte_t *ptep, u32 level, unsigned long nr_entries,
+			      unsigned int *processed)
+{
+	pte_t pte, *child;
+	unsigned long i;
+
+	for (i = 0; i < nr_entries; i++) {
+		pte = ptep_get(&ptep[i]);
+		if (level && pte_val(pte) && !gstage_pte_leaf(&pte)) {
+			child = (pte_t *)gstage_pte_page_vaddr(pte);
+			gstage_free_level(child, level - 1, PTRS_PER_PTE, processed);
+			put_page(virt_to_page(child));
+		}
+		/* Leaf PFNs belong to the guest backing memory, not this tree. */
+		if (++*processed == PTRS_PER_PTE) {
+			*processed = 0;
+			cond_resched();
+		}
+	}
+}
+
+void kvm_riscv_gstage_free(struct kvm_gstage *gstage)
+{
+	unsigned int processed = 0;
+
+	gstage_free_level((pte_t *)gstage->pgd, gstage->pgd_levels - 1,
+			  PTRS_PER_PTE << kvm_riscv_gstage_pgd_xbits, &processed);
+	free_pages((unsigned long)gstage->pgd, get_order(kvm_riscv_gstage_pgd_size));
+}
+
 bool kvm_riscv_gstage_unmap_range(struct kvm_gstage *gstage,
 				  gpa_t start, gpa_t size, bool may_block)
 {
@@ -426,6 +457,12 @@ bool kvm_riscv_gstage_unmap_range(struct kvm_gstage *gstage,
 	bool flush = false;
 
 	while (addr < end) {
+		/* cond_resched_rwlock_write() may have let teardown detach us. */
+		if (!(gstage->flags & KVM_GSTAGE_FLAGS_LOCAL) &&
+		    (!gstage->kvm->arch.pgd ||
+		     gstage->pgd != gstage->kvm->arch.pgd))
+			break;
+
 		found_leaf = kvm_riscv_gstage_get_leaf(gstage, addr, &ptep, &ptep_level);
 		ret = gstage_level_to_page_size(gstage, ptep_level, &page_size);
 		if (ret)

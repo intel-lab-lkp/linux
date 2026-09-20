@@ -708,6 +708,7 @@ void kvm_arch_vcpu_put(struct kvm_vcpu *vcpu)
  *
  * Return: 1 if we should enter the guest
  *	    0 if we should exit to userspace
+ *	    negative error code if guest entry is no longer possible
  */
 static int kvm_riscv_check_vcpu_requests(struct kvm_vcpu *vcpu)
 {
@@ -753,6 +754,12 @@ static int kvm_riscv_check_vcpu_requests(struct kvm_vcpu *vcpu)
 
 		if (kvm_dirty_ring_check_request(vcpu))
 			return 0;
+	}
+
+	/* A detached G-stage must not be reused after processing its HFENCE. */
+	if (!READ_ONCE(vcpu->kvm->arch.pgd)) {
+		kvm_riscv_mmu_update_hgatp(vcpu);
+		return -EIO;
 	}
 
 	return 1;
@@ -980,7 +987,8 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu)
 		/* Update HVIP CSR for current CPU */
 		kvm_riscv_update_hvip(vcpu);
 
-		if (kvm_riscv_gstage_vmid_ver_changed(&vcpu->kvm->arch.vmid) ||
+		if (!READ_ONCE(vcpu->kvm->arch.pgd) ||
+		    kvm_riscv_gstage_vmid_ver_changed(&vcpu->kvm->arch.vmid) ||
 		    kvm_request_pending(vcpu) ||
 		    xfer_to_guest_mode_work_pending()) {
 			vcpu->mode = OUTSIDE_GUEST_MODE;

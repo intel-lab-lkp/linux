@@ -87,6 +87,8 @@ bool kvm_riscv_gstage_wp_pt_masked(struct kvm_gstage *gstage, gfn_t base_gfn,
 
 void kvm_riscv_gstage_mode_detect(void);
 
+void kvm_riscv_gstage_free(struct kvm_gstage *gstage);
+
 static inline unsigned long kvm_riscv_gstage_mode(unsigned long pgd_levels)
 {
 	switch (pgd_levels) {
@@ -104,13 +106,18 @@ static inline unsigned long kvm_riscv_gstage_mode(unsigned long pgd_levels)
 	}
 }
 
-static inline void kvm_riscv_gstage_init(struct kvm_gstage *gstage, struct kvm *kvm)
+static inline bool kvm_riscv_gstage_init(struct kvm_gstage *gstage, struct kvm *kvm)
 {
+	lockdep_assert_held(&kvm->mmu_lock);
+	if (!kvm->arch.pgd)
+		return false;
+
 	gstage->kvm = kvm;
 	gstage->flags = 0;
 	gstage->vmid = READ_ONCE(kvm->arch.vmid.vmid);
 	gstage->pgd = kvm->arch.pgd;
 	gstage->pgd_levels = kvm->arch.pgd_levels;
+	return true;
 }
 
 #endif
