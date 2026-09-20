@@ -1,6 +1,6 @@
 #!/bin/bash
-# Check Arm CoreSight disassembly script completes without errors (exclusive)
 # SPDX-License-Identifier: GPL-2.0
+# Check Arm CoreSight disassembly script completes without errors (exclusive)
 
 # The disassembly script reconstructs ranges of instructions and gives these to objdump to
 # decode. objdump doesn't like ranges that go backwards, but these are a good indication
@@ -22,9 +22,10 @@ glb_err=1
 
 perfdata_dir=$(mktemp -d /tmp/__perf_test.perf.data.XXXXX)
 perfdata=${perfdata_dir}/perf.data
+perfdata2=${perfdata_dir}/perf2.data
 file=$(mktemp /tmp/temporary_file.XXXXX)
 # Relative path works whether it's installed or running from repo
-script_path=$(dirname "$0")/../../../scripts/python/arm-cs-trace-disasm.py
+script_path=$(dirname "$0")/../../../python/arm-cs-trace-disasm.py
 
 cleanup_files()
 {
@@ -44,8 +45,15 @@ branch_search='[[:space:]](bl|b(\.(eq|ne|cs|cc|mi|pl|vs|vc|hi|ls|ge|lt|gt|le|al)
 if [ "$(id -u)" == 0 ] && [ -e /proc/kcore ]; then
 	echo "Testing kernel disassembly"
 	perf record -o ${perfdata} -e cs_etm//k --kcore -Se -m,64K -- touch $file > /dev/null 2>&1
-	perf script -i ${perfdata} --itrace=b -s python:${script_path} -- \
-		-d --stop-sample=2 -k ${perfdata}/kcore_dir/kcore 2> /dev/null > ${file}
+	# shellcheck source=lib/setup_python.sh
+	. "$(dirname "$0")"/../lib/setup_python.sh
+	$PYTHON -c "import perf" 2>/dev/null || {
+		echo "Skipping test, perf python module not found"
+		glb_err=2
+		exit 2
+	}
+	$PYTHON ${script_path} -i ${perfdata} --itrace=b -d --stop-sample=2 \
+		-k ${perfdata}/kcore_dir/kcore 2> /dev/null > ${file}
 	grep -q -E ${branch_search} ${file}
 	echo "Found kernel branches"
 else
@@ -56,8 +64,15 @@ fi
 ## Test user ##
 echo "Testing userspace disassembly"
 perf record -o ${perfdata} -e cs_etm//u -Se -m,64K -- touch $file > /dev/null 2>&1
-perf script -i ${perfdata} --itrace=b -s python:${script_path} -- \
-	-d --stop-sample=2 2> /dev/null > ${file}
+perf inject --itrace=b -i ${perfdata} -o ${perfdata2}
+# shellcheck source=lib/setup_python.sh
+. "$(dirname "$0")"/../lib/setup_python.sh
+$PYTHON -c "import perf" 2>/dev/null || {
+	echo "Skipping test, perf python module not found"
+	glb_err=2
+	exit 2
+}
+$PYTHON ${script_path} -i ${perfdata2} -d --stop-sample=2 2> /dev/null > ${file}
 grep -q -E ${branch_search} ${file}
 echo "Found userspace branches"
 
