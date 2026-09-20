@@ -455,6 +455,13 @@ the background design of the feature and the name of the selectable algorithms.
 Refer to :ref:`goals directory <sysfs_schemes_quota_goals>` for the goals
 setup.
 
+The ``temporal`` algorithm converts the size quota into basis points, so it
+cannot represent a ``bytes`` value larger than 429496 on 32-bit kernels, or
+1844674407370955 on 64-bit ones.  Larger values are handled as if no size
+quota were set.  :ref:`addr_unit <damon_design_addr_unit>` does not raise the
+limit, but it does make the limit harder to reach: with a larger unit, the
+same amount of memory is written to ``bytes`` as a smaller number.
+
 You can set the action-failed memory quota charging ratio by writing the
 numerator and the denominator for the ratio to ``fail_charge_num`` and
 ``fail_charge_denom`` files, respectively.  Reading those files will return the
