@@ -500,6 +500,8 @@ int ntfs_ea_get_lxflags(struct inode *inode)
 	ni->lxflags = le32_to_cpu(value);
 	if (ni->lxflags & NTFS_LXFLAGS_IMMUTABLE)
 		inode->i_flags |= S_IMMUTABLE;
+	if (ni->lxflags & NTFS_LXFLAGS_APPEND)
+		inode->i_flags |= S_APPEND;
 	return 0;
 }
 
