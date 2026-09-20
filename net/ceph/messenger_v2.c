@@ -1121,6 +1121,10 @@ static int process_v2_sparse_read(struct ceph_connection *con,
 		do {
 			int idx = spos >> PAGE_SHIFT;
 			int soff = offset_in_page(spos);
+
+			if (idx >= con->v2.in_enc_page_cnt)
+				return -EREMOTEIO;
+
 			struct page *spage = con->v2.in_enc_pages[idx];
 			int len = min_t(int, ret, PAGE_SIZE - soff);
 
