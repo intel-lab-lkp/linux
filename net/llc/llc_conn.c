@@ -32,6 +32,7 @@ static int llc_exec_conn_trans_actions(struct sock *sk,
 				       struct sk_buff *ev);
 static const struct llc_conn_state_trans *llc_qualify_conn_ev(struct sock *sk,
 							      struct sk_buff *skb);
+static void __llc_sk_free(struct sock *sk, bool sync);
 
 /* Offset table on connection states transition diagram */
 static int llc_offset_table[NBR_CONN_STATES][NBR_CONN_EV];
@@ -90,6 +91,8 @@ int llc_conn_state_process(struct sock *sk, struct sk_buff *skb)
 		 */
 		skb_get(skb);
 		skb_queue_tail(&sk->sk_receive_queue, skb);
+		if (sk->sk_state == TCP_LISTEN)
+			sk_acceptq_added(sk);
 		sk->sk_state_change(sk);
 		break;
 	case LLC_DISC_PRIM:
@@ -765,16 +768,88 @@ static struct sock *llc_create_incoming_sock(struct sock *sk,
 	memcpy(&newllc->laddr, daddr, sizeof(newllc->laddr));
 	memcpy(&newllc->daddr, saddr, sizeof(newllc->daddr));
 	newllc->dev = dev;
-	dev_hold(dev);
+	netdev_hold(dev, &newllc->dev_tracker, GFP_ATOMIC);
+	/* Serialize packets that can find the child after it is hashed. */
+	bh_lock_sock_nested(newsk);
 	llc_sap_add_socket(llc->sap, newsk);
 out:
 	return newsk;
 }
 
+static struct sock *llc_create_incoming_sock_from_skb(struct sock *sk,
+						      struct sk_buff *skb)
+{
+	struct llc_addr saddr, daddr;
+
+	llc_pdu_decode_sa(skb, saddr.mac);
+	llc_pdu_decode_ssap(skb, &saddr.lsap);
+	llc_pdu_decode_da(skb, daddr.mac);
+	llc_pdu_decode_dsap(skb, &daddr.lsap);
+
+	return llc_create_incoming_sock(sk, skb->dev, &saddr, &daddr);
+}
+
+static bool llc_sk_unhashed(const struct sock *sk)
+{
+	return hlist_nulls_unhashed_lockless(&sk->sk_nulls_node);
+}
+
+static void llc_release_incoming_sock(struct sock *sk)
+{
+	struct llc_sock *llc = llc_sk(sk);
+
+	local_bh_disable();
+	bh_lock_sock_nested(sk);
+	llc->state = LLC_CONN_OUT_OF_SVC;
+	llc_sap_remove_socket(llc->sap, sk);
+	bh_unlock_sock(sk);
+	local_bh_enable();
+	netdev_put(llc->dev, &llc->dev_tracker);
+	sock_orphan(sk);
+	/* llc_sk_free() drops the allocation reference. */
+	llc_sk_free(sk);
+}
+
+static void llc_abort_incoming_sock(struct sock *sk)
+{
+	struct llc_sock *llc = llc_sk(sk);
+
+	/* The passive-open child is still locked by its creator. */
+	llc->state = LLC_CONN_OUT_OF_SVC;
+	llc_sap_remove_socket(llc->sap, sk);
+	bh_unlock_sock(sk);
+	netdev_put(llc->dev, &llc->dev_tracker);
+	sock_orphan(sk);
+	/* No child timer is armed before passive-open setup completes. */
+	__llc_sk_free(sk, false);
+}
+
+static void llc_conn_send_dm_rsp(struct llc_sap *sap, struct sk_buff *skb,
+				 struct llc_addr *saddr, u8 f_bit)
+{
+	struct sk_buff *nskb;
+	int rc;
+
+	nskb = llc_alloc_frame(NULL, skb->dev, LLC_PDU_TYPE_U, 0);
+	if (!nskb)
+		return;
+
+	llc_pdu_header_init(nskb, LLC_PDU_TYPE_U, sap->laddr.lsap,
+			    saddr->lsap, LLC_PDU_RSP);
+	llc_pdu_init_as_dm_rsp(nskb, f_bit);
+	rc = llc_mac_hdr_init(nskb, skb->dev->dev_addr, saddr->mac);
+	if (unlikely(rc))
+		kfree_skb(nskb);
+	else
+		dev_queue_xmit(nskb);
+}
+
 void llc_conn_handler(struct llc_sap *sap, struct sk_buff *skb)
 {
 	struct llc_addr saddr, daddr;
+	struct sock *newsk = NULL;
 	struct sock *sk;
+	int rc;
 
 	llc_pdu_decode_sa(skb, saddr.mac);
 	llc_pdu_decode_ssap(skb, &saddr.lsap);
@@ -786,6 +861,10 @@ void llc_conn_handler(struct llc_sap *sap, struct sk_buff *skb)
 		goto drop;
 
 	bh_lock_sock(sk);
+	if (unlikely(llc_sk_unhashed(sk)))
+		goto drop_unlock;
+	if (unlikely(llc_sk(sk)->state == LLC_CONN_OUT_OF_SVC))
+		goto drop_unlock;
 	/*
 	 * This has to be done here and not at the upper layer ->accept
 	 * method because of the way the PROCOM state machine works:
@@ -795,11 +874,26 @@ void llc_conn_handler(struct llc_sap *sap, struct sk_buff *skb)
 	 * in the newly created struct sock private area. -acme
 	 */
 	if (unlikely(sk->sk_state == TCP_LISTEN)) {
-		struct sock *newsk = llc_create_incoming_sock(sk, skb->dev,
-							      &saddr, &daddr);
-		if (!newsk)
+		if (llc_conn_ev_rx_sabme_cmd_pbit_set_x(sk, skb)) {
+			if (!llc_conn_ev_rx_disc_cmd_pbit_set_x(sk, skb)) {
+				u8 f_bit;
+
+				llc_pdu_decode_pf_bit(skb, &f_bit);
+				llc_conn_send_dm_rsp(sap, skb, &saddr, f_bit);
+			} else if (!llc_conn_ev_rx_xxx_cmd_pbit_set_1(sk,
+								       skb)) {
+				llc_conn_send_dm_rsp(sap, skb, &saddr, 1);
+			}
 			goto drop_unlock;
-		skb_set_owner_r(skb, newsk);
+		} else if (!sock_owned_by_user(sk)) {
+			if (sk_acceptq_is_full(sk))
+				goto drop_unlock;
+			newsk = llc_create_incoming_sock(sk, skb->dev, &saddr,
+							 &daddr);
+			if (!newsk)
+				goto drop_unlock;
+			skb_set_owner_r(skb, newsk);
+		}
 	} else {
 		/*
 		 * Can't be skb_set_owner_r, this will be done at the
@@ -813,9 +907,15 @@ void llc_conn_handler(struct llc_sap *sap, struct sk_buff *skb)
 		skb->sk = sk;
 		skb->destructor = sock_efree;
 	}
-	if (!sock_owned_by_user(sk))
-		llc_conn_rcv(sk, skb);
-	else {
+	if (!sock_owned_by_user(sk)) {
+		rc = llc_conn_rcv(sk, skb);
+		if (unlikely(rc) && newsk) {
+			llc_abort_incoming_sock(newsk);
+			goto out;
+		}
+		if (newsk)
+			bh_unlock_sock(newsk);
+	} else {
 		dprintk("%s: adding to backlog...\n", __func__);
 		llc_set_backlog_type(skb, LLC_PACKET);
 		if (sk_add_backlog(sk, skb, READ_ONCE(sk->sk_rcvbuf)))
@@ -852,12 +952,28 @@ static int llc_backlog_rcv(struct sock *sk, struct sk_buff *skb)
 {
 	int rc = 0;
 	struct llc_sock *llc = llc_sk(sk);
+	struct sock *newsk = NULL;
 
 	if (likely(llc_backlog_type(skb) == LLC_PACKET)) {
-		if (likely(llc->state > 1)) /* not closed */
-			rc = llc_conn_rcv(sk, skb);
-		else
+		if (unlikely(sk->sk_state == TCP_LISTEN)) {
+			if (llc_sk_unhashed(sk))
+				goto out_kfree_skb;
+			if (llc_conn_ev_rx_sabme_cmd_pbit_set_x(sk, skb))
+				goto out_kfree_skb;
+			if (sk_acceptq_is_full(sk))
+				goto out_kfree_skb;
+			newsk = llc_create_incoming_sock_from_skb(sk, skb);
+			if (!newsk)
+				goto out_kfree_skb;
+			skb_set_owner_r(skb, newsk);
+		} else if (unlikely(llc->state <= 1)) {
 			goto out_kfree_skb;
+		}
+		rc = llc_conn_rcv(sk, skb);
+		if (unlikely(rc) && newsk)
+			llc_abort_incoming_sock(newsk);
+		else if (newsk)
+			bh_unlock_sock(newsk);
 	} else if (llc_backlog_type(skb) == LLC_EVENT) {
 		/* timer expiration event */
 		if (likely(llc->state > 1))  /* not closed */
@@ -965,17 +1081,37 @@ void llc_sk_stop_all_timers(struct sock *sk, bool sync)
  */
 void llc_sk_free(struct sock *sk)
 {
+	__llc_sk_free(sk, true);
+}
+
+static void __llc_sk_free(struct sock *sk, bool sync)
+{
 	struct llc_sock *llc = llc_sk(sk);
+	struct sk_buff *skb;
 
 	llc->state = LLC_CONN_OUT_OF_SVC;
 	/* Stop all (possibly) running timers */
-	llc_sk_stop_all_timers(sk, true);
+	llc_sk_stop_all_timers(sk, sync);
 #ifdef DEBUG_LLC_CONN_ALLOC
 	printk(KERN_INFO "%s: unackq=%d, txq=%d\n", __func__,
 		skb_queue_len(&llc->pdu_unack_q),
 		skb_queue_len(&sk->sk_write_queue));
 #endif
-	skb_queue_purge(&sk->sk_receive_queue);
+	/* Pending accept indications do not hold a reference to their child. */
+	if (sk->sk_state == TCP_LISTEN) {
+		while ((skb = skb_dequeue(&sk->sk_receive_queue))) {
+			struct sock *newsk = skb->sk;
+
+			if (newsk && newsk != sk)
+				sk_acceptq_removed(sk);
+			/* sock_rfree() still needs skb->sk to charge the child. */
+			kfree_skb(skb);
+			if (newsk && newsk != sk)
+				llc_release_incoming_sock(newsk);
+		}
+	} else {
+		skb_queue_purge(&sk->sk_receive_queue);
+	}
 	skb_queue_purge(&sk->sk_write_queue);
 	skb_queue_purge(&llc->pdu_unack_q);
 #ifdef LLC_REFCNT_DEBUG
