@@ -526,8 +526,11 @@ static void dso__list_add(struct dso *dso) EXCLUSIVE_LOCKS_REQUIRED(_dso__data_o
 #ifdef REFCNT_CHECKING
 	dso__data(dso)->dso = dso__get(dso);
 #endif
-	/* Assume the dso is part of dsos, hence the optional reference count above. */
-	assert(dso__dsos(dso));
+	/*
+	 * Most data DSOs belong to a dsos collection. Private data sources,
+	 * such as a lazy symbol index's split-debuginfo file, are instead kept
+	 * alive by their owner.
+	 */
 	dso__data_open_cnt++;
 }
 
@@ -572,16 +575,22 @@ char *dso__filename_with_chroot(const struct dso *dso, const char *filename)
 static char *dso__get_filename(struct dso *dso, const char *root_dir,
 			       bool *decomp)
 {
-	char *name = malloc(PATH_MAX);
+	char *name;
 
 	*decomp = false;
 
-	if (name == NULL)
-		return NULL;
-
-	if (dso__read_binary_type_filename(dso, dso__binary_type(dso),
-					    root_dir, name, PATH_MAX))
-		goto out;
+	if (dso__data(dso)->path) {
+		name = strdup(dso__data(dso)->path);
+		if (!name)
+			return NULL;
+	} else {
+		name = malloc(PATH_MAX);
+		if (!name)
+			return NULL;
+		if (dso__read_binary_type_filename(dso, dso__binary_type(dso),
+						    root_dir, name, PATH_MAX))
+			goto out;
+	}
 
 	if (!is_regular_file(name)) {
 		struct stat st;
@@ -805,6 +814,17 @@ void dso__data_close(struct dso *dso)
 	mutex_lock(dso__data_open_lock());
 	close_dso(dso);
 	mutex_unlock(dso__data_open_lock());
+}
+
+int dso__data_set_path(struct dso *dso, const char *path)
+{
+	char *new_path = strdup(path);
+
+	if (!new_path)
+		return -ENOMEM;
+	free(dso__data(dso)->path);
+	dso__data(dso)->path = new_path;
+	return 0;
 }
 
 static void try_to_open_dso(struct dso *dso, struct machine *machine)
@@ -1674,6 +1694,27 @@ void dso__set_sorted_by_name(struct dso *dso)
 	RC_CHK_ACCESS(dso)->sorted_by_name = true;
 }
 
+void dso__reset_symbol_names(struct dso *dso)
+{
+	zfree(&RC_CHK_ACCESS(dso)->symbol_names);
+	RC_CHK_ACCESS(dso)->symbol_names_len = 0;
+	RC_CHK_ACCESS(dso)->sorted_by_name = false;
+}
+
+void dso__free_ondemand(struct dso *dso)
+{
+	struct dso_ondemand *od = RC_CHK_ACCESS(dso)->ondemand;
+
+	if (!od)
+		return;
+	RC_CHK_ACCESS(dso)->ondemand = NULL;
+	free(od->sorted);
+	symbol__unaccount_bytes(od->nr_alloc * sizeof(*od->sorted));
+	dso__data_close(od->data_dso);
+	dso__put(od->data_dso);
+	free(od);
+}
+
 struct dso *dso__new_id(const char *name, const struct dso_id *id)
 {
 	RC_STRUCT(dso) *dso = zalloc(sizeof(*dso) + strlen(name) + 1);
@@ -1755,7 +1796,11 @@ void dso__delete(struct dso *dso)
 
 	dso__data_close(dso);
 	auxtrace_cache__free(RC_CHK_ACCESS(dso)->auxtrace_cache);
+	mutex_lock(dso__lock(dso));
+	dso__free_ondemand(dso);
+	mutex_unlock(dso__lock(dso));
 	dso_cache__free(dso);
+	zfree(&RC_CHK_ACCESS(dso)->data.path);
 	dso__free_a2l(dso);
 	dso__free_libdw(dso);
 	dso__free_symsrc_filename(dso);

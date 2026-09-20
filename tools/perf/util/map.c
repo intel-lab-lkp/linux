@@ -382,10 +382,28 @@ int map__load(struct map *map)
 
 struct symbol *map__find_symbol(struct map *map, u64 addr)
 {
+	struct dso *dso;
+	struct symbol *sym;
+
 	if (map__load(map) < 0)
 		return NULL;
 
-	return dso__find_symbol(map__dso(map), addr);
+	dso = map__dso(map);
+	if (dso__ondemand(dso)) {
+		/*
+		 * On-demand lookup may materialize and insert a symbol.  Keep
+		 * both the lookup and insertion under the DSO lock so another
+		 * thread cannot traverse or modify the rb-tree concurrently.
+		 */
+		mutex_lock(dso__lock(dso));
+		sym = dso__find_symbol(dso, addr);
+		if (!sym)
+			sym = dso__find_symbol_ondemand(dso, addr);
+		mutex_unlock(dso__lock(dso));
+	} else {
+		sym = dso__find_symbol(dso, addr);
+	}
+	return sym;
 }
 
 struct symbol *map__find_symbol_by_name_idx(struct map *map, const char *name, size_t *idx)
@@ -396,6 +414,16 @@ struct symbol *map__find_symbol_by_name_idx(struct map *map, const char *name, s
 		return NULL;
 
 	dso = map__dso(map);
+	if (dso__ondemand(dso)) {
+		mutex_lock(dso__lock(dso));
+		/*
+		 * Name lookup requires a complete name-sorted array. Preserve
+		 * that API by materializing the remaining address index first.
+		 * An explicit symbol-byte limit can leave a partial set.
+		 */
+		dso__materialize_symbols_ondemand(dso);
+		mutex_unlock(dso__lock(dso));
+	}
 	dso__sort_by_name(dso);
 
 	return dso__find_symbol_by_name(dso, name, idx);

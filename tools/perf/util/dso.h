@@ -264,6 +264,7 @@ struct dso_data {
 #ifdef REFCNT_CHECKING
 	struct dso	 *dso;
 #endif
+	char		 *path;
 	int		 fd;
 	int		 status;
 	u32		 status_seen;
@@ -280,6 +281,27 @@ struct dso_bpf_prog {
 	u32		id;
 	u32		sub_id;
 	struct perf_env	*env;
+};
+
+struct sym_idx {
+	u64	start;	/* adjusted st_value (same space as sym->start) */
+	u64	end;	/* start + st_size, or next start if st_size==0 */
+	u32	name_off; /* symbol's st_name: offset into the strtab */
+	u8	binding;
+	u8	type;
+	u8	flags;
+};
+
+#define SYM_IDX_FLAG_IFUNC_ALIAS	(1 << 0)
+#define SYM_IDX_FLAG_MATERIALIZED	(1 << 1)
+
+struct dso_ondemand {
+	struct dso	*data_dso;	/* exact symbol source, using the DSO data cache */
+	u64		 strtab_offset;	/* file offset of strtab section */
+	u64		 strtab_size;
+	struct sym_idx	*sorted;
+	u32		 nr_sorted;	/* deduped count */
+	u32		 nr_alloc;	/* allocated count, for accounting */
 };
 
 struct auxtrace_cache;
@@ -308,6 +330,7 @@ DECLARE_RC_STRUCT(dso) {
 	char		 *symsrc_filename;
 	struct nsinfo	*nsinfo;
 	struct auxtrace_cache *auxtrace_cache;
+	struct dso_ondemand *ondemand;
 	union { /* Tool specific area */
 		void	 *priv;
 		u64	 db_id;
@@ -446,6 +469,16 @@ static inline struct auxtrace_cache *dso__auxtrace_cache(struct dso *dso)
 static inline void dso__set_auxtrace_cache(struct dso *dso, struct auxtrace_cache *cache)
 {
 	RC_CHK_ACCESS(dso)->auxtrace_cache = cache;
+}
+
+static inline struct dso_ondemand *dso__ondemand(struct dso *dso)
+{
+	return RC_CHK_ACCESS(dso)->ondemand;
+}
+
+static inline void dso__set_ondemand(struct dso *dso, struct dso_ondemand *od)
+{
+	RC_CHK_ACCESS(dso)->ondemand = od;
 }
 
 static inline struct dso_bpf_prog *dso__bpf_prog(struct dso *dso)
@@ -823,6 +856,21 @@ int dso__read_binary_type_filename(const struct dso *dso, enum dso_binary_type t
 				   const char *root_dir, char *filename, size_t size);
 bool is_kernel_module(const char *pathname, int cpumode);
 bool dso__needs_decompress(struct dso *dso);
+struct symbol *dso__find_symbol_ondemand(struct dso *dso, u64 addr)
+	EXCLUSIVE_LOCKS_REQUIRED(dso__lock(dso));
+struct symbol *dso__find_symbol_ondemand_exact(struct dso *dso, u64 addr)
+	EXCLUSIVE_LOCKS_REQUIRED(dso__lock(dso));
+int dso__materialize_symbols_ondemand(struct dso *dso)
+	EXCLUSIVE_LOCKS_REQUIRED(dso__lock(dso));
+const char *dso__read_ondemand_symbol_name(struct dso *data_dso,
+					   u64 strtab_offset, u64 strtab_size,
+					   u64 name_off, char *buf,
+					   size_t buflen, char **to_free,
+					   unsigned int *nr_reads);
+void dso__free_ondemand(struct dso *dso)
+	EXCLUSIVE_LOCKS_REQUIRED(dso__lock(dso));
+void dso__reset_symbol_names(struct dso *dso)
+	EXCLUSIVE_LOCKS_REQUIRED(dso__lock(dso));
 int dso__decompress_kmodule_fd(struct dso *dso, const char *name);
 int dso__decompress_kmodule_path(struct dso *dso, const char *name,
 				 char *pathname, size_t len);
@@ -896,6 +944,7 @@ bool dso__data_get_fd(struct dso *dso, struct machine *machine, int *fd)
 	EXCLUSIVE_TRYLOCK_FUNCTION(true, _dso__data_open_lock);
 void dso__data_put_fd(struct dso *dso) UNLOCK_FUNCTION(_dso__data_open_lock);
 void dso__data_close(struct dso *dso) LOCKS_EXCLUDED(_dso__data_open_lock);
+int dso__data_set_path(struct dso *dso, const char *path);
 
 int dso__data_file_size(struct dso *dso, struct machine *machine);
 off_t dso__data_size(struct dso *dso, struct machine *machine);

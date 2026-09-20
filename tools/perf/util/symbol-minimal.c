@@ -373,6 +373,23 @@ void symbol__elf_init(void)
 {
 }
 
+struct symbol *dso__find_symbol_ondemand(struct dso *dso __maybe_unused,
+					 u64 addr __maybe_unused)
+{
+	return NULL;
+}
+
+struct symbol *dso__find_symbol_ondemand_exact(struct dso *dso __maybe_unused,
+					       u64 addr __maybe_unused)
+{
+	return NULL;
+}
+
+int dso__materialize_symbols_ondemand(struct dso *dso __maybe_unused)
+{
+	return 0;
+}
+
 bool filename__has_section(const char *filename __maybe_unused, const char *sec __maybe_unused)
 {
 	return false;

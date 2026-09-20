@@ -4037,7 +4037,7 @@ static int parse_callret_trace(const struct option *opt __maybe_unused,
 }
 
 static int parse_max_symbol_bytes(const struct option *opt,
-				  const char *str, int unset)
+				const char *str, int unset)
 {
 	unsigned long *max_bytes = (unsigned long *)opt->value;
 	static struct parse_tag size_tags[] = {
@@ -4177,6 +4177,8 @@ int cmd_script(int argc, const char **argv)
 	OPT_CALLBACK(0, "max-symbol-bytes", &symbol_conf.max_symbol_bytes,
 		     "size", "Limit bytes for ELF struct symbol (e.g. 128M; 0=unlimited)",
 		     parse_max_symbol_bytes),
+	OPT_BOOLEAN(0, "lazy-load-symbols", &symbol_conf.lazy_load_symbols,
+		    "Resolve symbols lazily instead of loading full symtabs"),
 	OPT_BOOLEAN(0, "reltime", &reltime, "Show time stamps relative to start"),
 	OPT_BOOLEAN(0, "deltatime", &deltatime, "Show time stamps relative to previous event"),
 	OPT_BOOLEAN('I', "show-info", &show_full_info,

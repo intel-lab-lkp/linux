@@ -143,72 +143,80 @@ int __weak arch__compare_symbol_names_n(const char *namea, const char *nameb,
 	return strncmp(namea, nameb, n);
 }
 
-int __weak arch__choose_best_symbol(struct symbol *syma,
-				    struct symbol *symb __maybe_unused)
+int __weak arch__choose_best_symbol(const char *syma_name)
 {
 	/* Avoid "SyS" kernel syscall aliases */
-	if (strlen(syma->name) >= 3 && !strncmp(syma->name, "SyS", 3))
+	if (strlen(syma_name) >= 3 && !strncmp(syma_name, "SyS", 3))
 		return SYMBOL_B;
-	if (strlen(syma->name) >= 10 && !strncmp(syma->name, "compat_SyS", 10))
+	if (strlen(syma_name) >= 10 && !strncmp(syma_name, "compat_SyS", 10))
 		return SYMBOL_B;
 
 	return SYMBOL_A;
 }
 
-static int choose_best_symbol(struct symbol *syma, struct symbol *symb)
+int symbol__choose_best(u64 a_size, u8 a_type, u8 a_binding,
+			const char *a_name,
+			u64 b_size, u8 b_type, u8 b_binding,
+			const char *b_name)
 {
 	s64 a;
 	s64 b;
 	size_t na, nb;
 
 	/* Prefer a symbol with non zero length */
-	a = syma->end - syma->start;
-	b = symb->end - symb->start;
-	if ((b == 0) && (a > 0))
+	if ((b_size == 0) && (a_size > 0))
 		return SYMBOL_A;
-	else if ((a == 0) && (b > 0))
+	else if ((a_size == 0) && (b_size > 0))
 		return SYMBOL_B;
 
-	if (symbol__type(syma) != symbol__type(symb)) {
-		if (symbol__type(syma) == STT_NOTYPE)
+	if (a_type != b_type) {
+		if (a_type == STT_NOTYPE)
 			return SYMBOL_B;
-		if (symbol__type(symb) == STT_NOTYPE)
+		if (b_type == STT_NOTYPE)
 			return SYMBOL_A;
 	}
 
 	/* Prefer a non weak symbol over a weak one */
-	a = symbol__binding(syma) == STB_WEAK;
-	b = symbol__binding(symb) == STB_WEAK;
+	a = a_binding == STB_WEAK;
+	b = b_binding == STB_WEAK;
 	if (b && !a)
 		return SYMBOL_A;
 	if (a && !b)
 		return SYMBOL_B;
 
 	/* Prefer a global symbol over a non global one */
-	a = symbol__binding(syma) == STB_GLOBAL;
-	b = symbol__binding(symb) == STB_GLOBAL;
+	a = a_binding == STB_GLOBAL;
+	b = b_binding == STB_GLOBAL;
 	if (a && !b)
 		return SYMBOL_A;
 	if (b && !a)
 		return SYMBOL_B;
 
 	/* Prefer a symbol with less underscores */
-	a = prefix_underscores_count(syma->name);
-	b = prefix_underscores_count(symb->name);
+	a = prefix_underscores_count(a_name);
+	b = prefix_underscores_count(b_name);
 	if (b > a)
 		return SYMBOL_A;
 	else if (a > b)
 		return SYMBOL_B;
 
 	/* Choose the symbol with the longest name */
-	na = strlen(syma->name);
-	nb = strlen(symb->name);
+	na = strlen(a_name);
+	nb = strlen(b_name);
 	if (na > nb)
 		return SYMBOL_A;
 	else if (na < nb)
 		return SYMBOL_B;
 
-	return arch__choose_best_symbol(syma, symb);
+	return arch__choose_best_symbol(a_name);
+}
+
+static int choose_best_symbol(struct symbol *syma, struct symbol *symb)
+{
+	return symbol__choose_best(syma->end - syma->start,
+				   symbol__type(syma), symbol__binding(syma), syma->name,
+				   symb->end - symb->start,
+				   symbol__type(symb), symbol__binding(symb), symb->name);
 }
 
 void symbols__fixup_duplicate(struct rb_root_cached *symbols)
@@ -1989,11 +1997,19 @@ int dso__load(struct dso *dso, struct map *map)
 		}
 
 #ifdef HAVE_LIBBFD_SUPPORT
+#ifdef HAVE_LIBELF_SUPPORT
+		if (is_reg && !symbol_conf.lazy_load_symbols)
+#else
 		if (is_reg)
+#endif
 			bfdrc = dso__load_bfd_symbols(dso, name);
 #endif
 		if (is_reg && bfdrc < 0)
 			sirc = symsrc__init(ss, dso, name, symtab_type);
+#if defined(HAVE_LIBBFD_SUPPORT) && defined(HAVE_LIBELF_SUPPORT)
+		if (is_reg && symbol_conf.lazy_load_symbols && sirc < 0)
+			bfdrc = dso__load_bfd_symbols(dso, name);
+#endif
 
 		if (nsexit)
 			nsinfo__mountns_enter(dso__nsinfo(dso), &nsc);

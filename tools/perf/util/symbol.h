@@ -233,6 +233,10 @@ size_t symbol__bytes_used(void);
 void symbol__account_bytes(size_t bytes);
 bool symbol__try_account_bytes(size_t bytes);
 void symbol__unaccount_bytes(size_t bytes);
+int symbol__choose_best(u64 a_size, u8 a_type, u8 a_binding,
+			const char *a_name,
+			u64 b_size, u8 b_type, u8 b_binding,
+			const char *b_name);
 size_t __symbol__fprintf_symname_offs(const struct symbol *sym,
 				      const struct addr_location *al,
 				      bool unknown_as_addr,
@@ -308,7 +312,7 @@ const char *arch__normalize_symbol_name(const char *name);
 int arch__compare_symbol_names(const char *namea, const char *nameb);
 int arch__compare_symbol_names_n(const char *namea, const char *nameb,
 				 unsigned int n);
-int arch__choose_best_symbol(struct symbol *syma, struct symbol *symb);
+int arch__choose_best_symbol(const char *syma_name);
 
 enum symbol_tag_include {
 	SYMBOL_TAG_INCLUDE__NONE = 0,

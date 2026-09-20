@@ -2,6 +2,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <errno.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -12,6 +13,7 @@
 #include "libbfd.h"
 #include "map.h"
 #include "maps.h"
+#include "namespaces.h"
 #include "symbol.h"
 #include "symsrc.h"
 #include "machine.h"
@@ -334,6 +336,7 @@ static bool addend_may_be_ifunc(GElf_Ehdr *ehdr, struct rel_info *ri)
 
 static bool get_ifunc_name(Elf *elf, struct dso *dso, GElf_Ehdr *ehdr,
 			   struct rel_info *ri, char *buf, size_t buf_sz)
+	EXCLUSIVE_LOCKS_REQUIRED(dso__lock(dso))
 {
 	u64 addr = ri->rela.r_addend;
 	struct symbol *sym;
@@ -348,6 +351,8 @@ static bool get_ifunc_name(Elf *elf, struct dso *dso, GElf_Ehdr *ehdr,
 	addr -= phdr.p_vaddr - phdr.p_offset;
 
 	sym = dso__find_symbol_nocache(dso, addr);
+	if (!sym && dso__ondemand(dso))
+		sym = dso__find_symbol_ondemand_exact(dso, addr);
 
 	/* Expecting the address to be an IFUNC or IFUNC alias */
 	if (!sym || sym->start != addr ||
@@ -608,6 +613,26 @@ out:
 	return err;
 }
 
+static u32 sym_idx__lower_bound(const struct dso_ondemand *od, u64 addr);
+
+static void dso__clip_ondemand_symbols_at(struct dso *dso, u64 addr)
+{
+	struct dso_ondemand *od = dso__ondemand(dso);
+	u32 lo, i;
+
+	if (!od)
+		return;
+
+	lo = sym_idx__lower_bound(od, addr);
+	if (!lo)
+		return;
+
+	for (i = 0; i < lo; i++) {
+		if (od->sorted[i].end > addr)
+			od->sorted[i].end = addr;
+	}
+}
+
 /*
  * We need to check if we have a .dynsym, so that we can handle the
  * .plt, synthesizing its symbols, that aren't on the symtabs (be it
@@ -616,6 +641,7 @@ out:
  * have the PLT data stripped out (shdr_rel_plt.sh_type == SHT_NOBITS).
  */
 int dso__synthesize_plt_symbols(struct dso *dso, struct symsrc *ss)
+	EXCLUSIVE_LOCKS_REQUIRED(dso__lock(dso))
 {
 	uint32_t idx;
 	GElf_Sym sym;
@@ -638,6 +664,13 @@ int dso__synthesize_plt_symbols(struct dso *dso, struct symsrc *ss)
 
 	if (!elf_section_by_name(elf, &ehdr, &shdr_plt, ".plt", NULL))
 		return 0;
+
+	/*
+	 * Zero-sized or oversized ELF symbols can have been extended across
+	 * .plt. Clip the index first so lookups cannot attribute PLT addresses
+	 * to a preceding symbol before the synthesized PLT symbols are added.
+	 */
+	dso__clip_ondemand_symbols_at(dso, shdr_plt.sh_offset);
 
 	/*
 	 * A symbol from a previous section (e.g. .init) can have been expanded
@@ -1544,6 +1577,612 @@ static int dso__process_kernel_symbol(struct dso *dso, struct map *map,
 	return 0;
 }
 
+static int cmp_sym_idx(const void *a, const void *b)
+{
+	const struct sym_idx *sa = a, *sb = b;
+
+	if (sa->start != sb->start)
+		return sa->start < sb->start ? -1 : 1;
+	/*
+	 * qsort is not stable. During sorting name_off temporarily holds
+	 * the fill ordinal, preserving eager's symtab insertion order for
+	 * equal-start aliases. It is restored to st_name afterwards.
+	 */
+	if (sa->name_off != sb->name_off)
+		return sa->name_off < sb->name_off ? -1 : 1;
+	return 0;
+}
+
+/*
+ * Return the first entry whose start is not less than @addr. ISO C bsearch()
+ * does not provide an insertion point or guarantee the first equal entry, so
+ * clipping and exact-start alias lookup use this helper.
+ */
+static u32 sym_idx__lower_bound(const struct dso_ondemand *od, u64 addr)
+{
+	u32 lo = 0, hi = od->nr_sorted;
+
+	while (lo < hi) {
+		u32 mid = lo + (hi - lo) / 2;
+
+		if (od->sorted[mid].start < addr)
+			lo = mid + 1;
+		else
+			hi = mid;
+	}
+	return lo;
+}
+
+static int cmp_addr_to_sym_idx(const void *key, const void *entry)
+{
+	u64 addr = *(const u64 *)key;
+	const struct sym_idx *idx = entry;
+
+	if (addr < idx->start)
+		return -1;
+	if (addr >= idx->end)
+		return 1;
+	return 0;
+}
+
+static bool ondemand_sym_ok(Elf *elf, Elf_Data *secstrs,
+			    const GElf_Sym *sym, u32 sh_link,
+			    uint16_t e_machine)
+{
+	Elf_Scn *sym_sec;
+	GElf_Shdr sym_shdr;
+	int is_label = elf_sym__is_label(sym);
+	const char *name;
+
+	if (!is_label && !elf_sym__filter((GElf_Sym *)sym))
+		return false;
+
+	if (sym->st_shndx == SHN_ABS)
+		return false;
+
+	sym_sec = elf_getscn(elf, sym->st_shndx);
+	if (!sym_sec)
+		return false;
+	if (!gelf_getshdr(sym_sec, &sym_shdr))
+		return false;
+	if (!(sym_shdr.sh_flags & SHF_ALLOC))
+		return false;
+
+	if (is_label && (!secstrs || !elf_sec__filter(&sym_shdr, secstrs)))
+		return false;
+
+	name = elf_strptr(elf, sh_link, sym->st_name);
+	if (!name)
+		return false;
+
+	/*
+	 * Reject ARM/AArch64/RISC-V "mapping symbols" ($a/$d/$t/$x), as
+	 * the eager loop does.  They are zero-size STT_NOTYPE labels in
+	 * allocated sections that would otherwise be indexed and fill
+	 * forward over real functions, misattributing everything after
+	 * them.
+	 */
+	if (e_machine == EM_ARM || e_machine == EM_AARCH64) {
+		if (name[0] == '$' && strchr("adtx", name[1]) &&
+		    (name[2] == '\0' || name[2] == '.'))
+			return false;
+	}
+	if (e_machine == EM_RISCV) {
+		if (name[0] == '$' && strchr("dx", name[1]))
+			return false;
+	}
+
+	return true;
+}
+
+static int dso__build_ondemand_index(struct dso *dso, struct symsrc *syms_ss,
+				     struct symsrc *runtime_ss,
+				     int dynsym)
+{
+	struct dso_ondemand *od;
+	Elf *elf = syms_ss->elf;
+	GElf_Ehdr ehdr = syms_ss->ehdr;
+	GElf_Shdr shdr;
+	GElf_Shdr strshdr;
+	Elf_Scn *strscn, *sec_strndx;
+	Elf_Data *syms;
+	GElf_Sym sym;
+	Elf_Data *secstrs = NULL;
+	size_t i, index_bytes, reservation_peak;
+	u32 count = 0, j;
+	u32 *name_offsets;
+	u64 nr_entries, strtab_offset;
+	u64 probe_off;
+	u8 probe;
+
+	/*
+	 * GNU debugdata is backed by a temporary decompressed fd rather than a
+	 * reopenable source path. Keep using the eager loader for that case.
+	 */
+	if (syms_ss->type == DSO_BINARY_TYPE__GNU_DEBUGDATA)
+		return 0;
+
+	if (dynsym)
+		shdr = syms_ss->dynshdr;
+	else
+		shdr = syms_ss->symshdr;
+
+	syms = elf_getdata(dynsym ? syms_ss->dynsym : syms_ss->symtab, NULL);
+	if (!syms)
+		return -1;
+
+	if (!shdr.sh_entsize)
+		return 0;
+
+	nr_entries = shdr.sh_size / shdr.sh_entsize;
+	if (nr_entries > UINT32_MAX)
+		return -EOVERFLOW;
+
+	strscn = elf_getscn(elf, shdr.sh_link);
+	if (!strscn || !gelf_getshdr(strscn, &strshdr))
+		return -1;
+	strtab_offset = strshdr.sh_offset;
+
+	/*
+	 * Section name string table, used to match the eager path's
+	 * elf_sec__filter() (text/data section check for STT_NOTYPE labels).
+	 */
+	sec_strndx = elf_getscn(elf, ehdr.e_shstrndx);
+	if (sec_strndx)
+		secstrs = elf_getdata(sec_strndx, NULL);
+
+	for (i = 0; i < nr_entries; i++) {
+		if (!gelf_getsym(syms, i, &sym))
+			continue;
+		if (ondemand_sym_ok(elf, secstrs, &sym, shdr.sh_link,
+				    ehdr.e_machine))
+			count++;
+	}
+
+	if (!count)
+		return 0;
+	if (check_mul_overflow((size_t)count, sizeof(*od->sorted),
+			       &index_bytes))
+		return -EOVERFLOW;
+
+	/*
+	 * Account the index against the symbol memory budget: at 24
+	 * bytes/symbol it is the dominant on-demand cost and must count
+	 * toward --max-symbol-bytes just like struct symbol allocations do.
+	 */
+	if (!symbol__try_account_bytes(index_bytes)) {
+		symbol_budget_warning();
+		return 0; /* fall back to the eager loader's per-symbol budget */
+	}
+	reservation_peak = symbol__bytes_used();
+
+	od = zalloc(sizeof(*od));
+	if (!od) {
+		symbol__unaccount_bytes(index_bytes);
+		return -1;
+	}
+
+	od->sorted = zalloc(index_bytes);
+	if (!od->sorted) {
+		symbol__unaccount_bytes(index_bytes);
+		free(od);
+		return -1;
+	}
+	od->nr_alloc = count;	/* allocated; the deduped count may shrink */
+	name_offsets = malloc(count * sizeof(*name_offsets));
+	if (!name_offsets) {
+		symbol__unaccount_bytes(index_bytes);
+		free(od->sorted);
+		free(od);
+		return -1;
+	}
+
+	j = 0;
+	for (i = 0; i < nr_entries; i++) {
+		u64 adjusted;
+		GElf_Phdr phdr;
+
+		if (!gelf_getsym(syms, i, &sym))
+			continue;
+		if (!ondemand_sym_ok(elf, secstrs, &sym, shdr.sh_link,
+				     ehdr.e_machine))
+			continue;
+
+		adjusted = sym.st_value;
+
+		if ((ehdr.e_machine == EM_ARM) &&
+		    (GELF_ST_TYPE(sym.st_info) == STT_FUNC) &&
+		    (adjusted & 1))
+			--adjusted;
+
+		/*
+		 * Program header adjustment, identical to the eager loop:
+		 * read the PT_LOAD containing the symbol from the runtime
+		 * ELF (the debug-info file may have zeroed p_offset), and
+		 * fall back to the section-header bias when no program
+		 * header matches -- exactly what the eager path does when
+		 * elf_read_program_header fails.
+		 */
+		if (elf_read_program_header(runtime_ss->elf, adjusted,
+					    &phdr) == 0) {
+			adjusted -= phdr.p_vaddr - phdr.p_offset;
+		} else {
+			Elf_Scn *sym_sec = elf_getscn(elf, sym.st_shndx);
+			GElf_Shdr sym_shdr;
+
+			if (sym_sec && gelf_getshdr(sym_sec, &sym_shdr))
+				adjusted -= sym_shdr.sh_addr - sym_shdr.sh_offset;
+		}
+
+		od->sorted[j].start = adjusted;
+		od->sorted[j].end = sym.st_size; /* st_size for now, converted later */
+		/*
+		 * Sort equal-start aliases in original symtab order to match
+		 * rb-tree insertion order. Restore st_name after sorting.
+		 */
+		name_offsets[j] = sym.st_name;
+		od->sorted[j].name_off = j;
+		od->sorted[j].binding = GELF_ST_BIND(sym.st_info);
+		od->sorted[j].type = GELF_ST_TYPE(sym.st_info);
+		j++;
+	}
+	count = j;
+	if (!count) {
+		symbol__unaccount_bytes(index_bytes);
+		free(name_offsets);
+		free(od->sorted);
+		free(od);
+		return 0;
+	}
+
+	qsort(od->sorted, count, sizeof(*od->sorted), cmp_sym_idx);
+	for (i = 0; i < count; i++)
+		od->sorted[i].name_off = name_offsets[od->sorted[i].name_off];
+	free(name_offsets);
+
+	/*
+	 * Match the eager loader's ordering: fill zero-sized ranges before
+	 * choosing among equal-start aliases, so the size preference sees
+	 * the same synthesized lengths as symbols__fixup_duplicate().
+	 */
+	for (i = 0; i < count; i++) {
+		u64 size = od->sorted[i].end; /* was st_size */
+
+		if (size > 0)
+			od->sorted[i].end = od->sorted[i].start + size;
+		else if (i + 1 < count)
+			od->sorted[i].end = od->sorted[i + 1].start;
+		else
+			od->sorted[i].end = roundup(od->sorted[i].start, 4096) + 4096;
+	}
+
+	if (!symbol_conf.allow_aliases) {
+		u32 out = 0;
+
+		for (i = 0; i < count; i++) {
+			u32 best = i;
+			const char *na = NULL, *nb;
+			char *da = NULL, *db;
+			bool has_ifunc = od->sorted[i].type == STT_GNU_IFUNC;
+
+			na = elf_strptr(elf, shdr.sh_link,
+					od->sorted[best].name_off);
+			if (na) {
+				da = dso__demangle_sym(dso, 0, na);
+				if (da)
+					na = da;
+			}
+
+			for (j = i + 1; j < count &&
+			     od->sorted[j].start == od->sorted[i].start; j++) {
+				int choice;
+
+				has_ifunc |= od->sorted[j].type == STT_GNU_IFUNC;
+				nb = elf_strptr(elf, shdr.sh_link,
+						od->sorted[j].name_off);
+				if (!na || !nb)
+					continue;
+
+				db = dso__demangle_sym(dso, 0, nb);
+				if (db)
+					nb = db;
+
+				choice = symbol__choose_best(
+						od->sorted[best].end -
+						od->sorted[best].start,
+						od->sorted[best].type,
+						od->sorted[best].binding, na,
+						od->sorted[j].end -
+						od->sorted[j].start,
+						od->sorted[j].type,
+						od->sorted[j].binding, nb);
+				if (choice == SYMBOL_B) {
+					best = j;
+					free(da);
+					da = db;
+					na = nb;
+				} else {
+					free(db);
+				}
+			}
+
+			free(da);
+			od->sorted[out++] = od->sorted[best];
+			if (has_ifunc && od->sorted[out - 1].type != STT_GNU_IFUNC)
+				od->sorted[out - 1].flags |= SYM_IDX_FLAG_IFUNC_ALIAS;
+			i = j - 1; /* skip past all aliases of this start */
+		}
+
+		if (out < count) {
+			struct sym_idx *shrunk;
+
+			shrunk = realloc(od->sorted, out * sizeof(*od->sorted));
+			if (shrunk) {
+				od->sorted = shrunk;
+				symbol__unaccount_bytes((od->nr_alloc - out) *
+						       sizeof(*od->sorted));
+				od->nr_alloc = out;
+			}
+		}
+		count = out;
+	}
+
+	/*
+	 * The interval binary search requires non-overlapping ranges.  In
+	 * the default deduplicated mode, prefer the symbol with the nearest
+	 * preceding start when an ELF st_size overlaps the next symbol.
+	 */
+	if (!symbol_conf.allow_aliases) {
+		for (i = 0; i + 1 < count; i++) {
+			if (od->sorted[i].end > od->sorted[i + 1].start)
+				od->sorted[i].end = od->sorted[i + 1].start;
+		}
+	}
+
+	/*
+	 * Keep an exact-path data DSO for the symbol source.  This may differ
+	 * from the runtime image (for example, split debuginfo), so using the
+	 * primary DSO's data cache could read an unrelated string-table offset.
+	 * The standard DSO data cache manages descriptor eviction and reopening.
+	 */
+	od->data_dso = dso__new(syms_ss->name);
+	if (!od->data_dso ||
+	    dso__data_set_path(od->data_dso, syms_ss->name) < 0)
+		goto out_decline_source;
+	dso__set_binary_type(od->data_dso, DSO_BINARY_TYPE__SYSTEM_PATH_DSO);
+	dso__set_nsinfo(od->data_dso, nsinfo__get(dso__nsinfo(dso)));
+
+	/*
+	 * Open the managed source while eager fallback is still possible.
+	 * A later failure would otherwise turn materialization into a miss.
+	 */
+	if (od->sorted[0].name_off >= strshdr.sh_size)
+		goto out_decline_source;
+	if (check_add_overflow(strtab_offset,
+			       (u64)od->sorted[0].name_off, &probe_off))
+		goto out_decline_source;
+	if (dso__data_read_offset(od->data_dso, NULL, probe_off, &probe, 1) != 1)
+		goto out_decline_source;
+
+	od->strtab_offset = strtab_offset;
+	od->strtab_size = strshdr.sh_size;
+	od->nr_sorted = count;
+
+	dso__set_ondemand(dso, od);
+
+	pr_debug("%s: on-demand index: %u symbols (%zu bytes, %zu bytes total) budget=%zu\n",
+		 dso__long_name(dso), count,
+		 od->nr_alloc * sizeof(*od->sorted), symbol__bytes_used(),
+		 reservation_peak);
+
+	return 1;
+
+out_decline_source:
+	if (od->data_dso) {
+		dso__data_close(od->data_dso);
+		dso__put(od->data_dso);
+	}
+	symbol__unaccount_bytes(od->nr_alloc * sizeof(*od->sorted));
+	free(od->sorted);
+	free(od);
+	return 0;
+}
+
+const char *dso__read_ondemand_symbol_name(struct dso *data_dso,
+					   u64 strtab_offset, u64 strtab_size,
+					   u64 name_off, char *buf,
+					   size_t buflen, char **to_free,
+					   unsigned int *nr_reads)
+{
+	ssize_t n;
+	u64 remain;
+	u64 file_off;
+	size_t cap, want;
+
+	*to_free = NULL;
+
+	if (name_off >= strtab_size)
+		return NULL;
+	if (check_add_overflow(strtab_offset, name_off, &file_off))
+		return NULL;
+	remain = strtab_size - name_off;
+	if (nr_reads)
+		*nr_reads = 0;
+
+	want = min((u64)(buflen - 1), remain);
+	if (nr_reads)
+		(*nr_reads)++;
+	n = dso__data_read_offset(data_dso, NULL, file_off, (u8 *)buf, want);
+	if (n <= 0)
+		return NULL;
+	buf[n] = '\0';
+	if (memchr(buf, '\0', n))
+		return buf;
+	if ((size_t)n < want)
+		return NULL;
+
+	cap = 4096;
+	for (;;) {
+		char *tmp;
+
+		want = cap;
+		if (want > remain)
+			want = remain;
+		if (want == 0)
+			break;
+
+		tmp = *to_free ? realloc(*to_free, want + 1) : malloc(want + 1);
+		if (!tmp) {
+			free(*to_free);
+			*to_free = NULL;
+			return NULL;
+		}
+		*to_free = tmp;
+
+		if (nr_reads)
+			(*nr_reads)++;
+		n = dso__data_read_offset(data_dso, NULL, file_off,
+					  (u8 *)*to_free, want);
+		if (n <= 0) {
+			free(*to_free);
+			*to_free = NULL;
+			return NULL;
+		}
+		(*to_free)[n] = '\0';
+
+		if (memchr(*to_free, '\0', n))
+			return *to_free;
+		if ((size_t)n < want)
+			break;
+
+		if (want >= remain || (u64)n >= remain)
+			break;
+
+		if (cap > SIZE_MAX / 2)
+			break;
+		cap *= 2;
+	}
+
+	free(*to_free);
+	*to_free = NULL;
+	return NULL;
+}
+
+static struct symbol *dso__materialize_symbol_ondemand(struct dso *dso, u32 pos)
+	EXCLUSIVE_LOCKS_REQUIRED(dso__lock(dso))
+{
+	struct dso_ondemand *od = dso__ondemand(dso);
+	struct sym_idx *idx = &od->sorted[pos];
+	const char *name;
+	char namebuf[1024];
+	char *name_heap = NULL;
+	char *demangled;
+	bool budget_exceeded;
+	struct symbol *s = NULL;
+
+	/*
+	 * Check the budget before doing any name I/O or demangling, so an
+	 * over-budget DSO stops paying pread+demangle on every later miss.
+	 */
+	if (symbol_conf.max_symbol_bytes &&
+	    symbol__bytes_used() >= symbol_conf.max_symbol_bytes) {
+		symbol_budget_warning();
+		return NULL;
+	}
+
+	name = dso__read_ondemand_symbol_name(od->data_dso, od->strtab_offset,
+					      od->strtab_size, idx->name_off,
+					      namebuf, sizeof(namebuf),
+					      &name_heap, NULL);
+	if (!name)
+		return NULL;
+
+	demangled = dso__demangle_sym(dso, 0, name);
+	if (demangled)
+		name = demangled;
+
+	s = symbol__new_bounded(idx->start, idx->end - idx->start,
+				idx->binding, idx->type, name, &budget_exceeded);
+	free(demangled);
+	free(name_heap);
+	if (!s && budget_exceeded)
+		symbol_budget_warning();
+	if (s) {
+		if (idx->flags & SYM_IDX_FLAG_IFUNC_ALIAS)
+			symbol__set_ifunc_alias(s, true);
+		dso__reset_symbol_names(dso);
+		__symbols__insert(dso__symbols(dso), s);
+		idx->flags |= SYM_IDX_FLAG_MATERIALIZED;
+	}
+	return s;
+}
+
+int dso__materialize_symbols_ondemand(struct dso *dso)
+{
+	struct dso_ondemand *od = dso__ondemand(dso);
+	u32 i;
+
+	if (!od)
+		return 0;
+	for (i = 0; i < od->nr_sorted; i++) {
+		if (od->sorted[i].flags & SYM_IDX_FLAG_MATERIALIZED)
+			continue;
+		if (!dso__materialize_symbol_ondemand(dso, i))
+			return -1;
+	}
+	dso__free_ondemand(dso);
+	return 0;
+}
+
+struct symbol *dso__find_symbol_ondemand(struct dso *dso, u64 addr)
+{
+	struct dso_ondemand *od = dso__ondemand(dso);
+	const struct sym_idx *idx;
+	u32 lo, hi, mid;
+
+	if (!od || !od->sorted || !od->data_dso)
+		return NULL;
+
+	if (!symbol_conf.allow_aliases) {
+		idx = bsearch(&addr, od->sorted, od->nr_sorted,
+			      sizeof(*od->sorted), cmp_addr_to_sym_idx);
+		return idx ? dso__materialize_symbol_ondemand(dso, idx - od->sorted) : NULL;
+	}
+
+	lo = 0;
+	hi = od->nr_sorted;
+	while (lo < hi) {
+		mid = (lo + hi) / 2;
+		if (addr < od->sorted[mid].start)
+			hi = mid;
+		else if (addr >= od->sorted[mid].end)
+			lo = mid + 1;
+		else
+			return dso__materialize_symbol_ondemand(dso, mid);
+	}
+	return NULL;
+}
+
+struct symbol *dso__find_symbol_ondemand_exact(struct dso *dso, u64 addr)
+{
+	struct dso_ondemand *od = dso__ondemand(dso);
+	u32 lo, mid;
+
+	if (!od || !od->sorted || !od->data_dso)
+		return NULL;
+
+	lo = sym_idx__lower_bound(od, addr);
+	if (lo >= od->nr_sorted || od->sorted[lo].start != addr)
+		return NULL;
+	for (mid = lo; mid < od->nr_sorted &&
+	     od->sorted[mid].start == addr; mid++) {
+		if (od->sorted[mid].type == STT_GNU_IFUNC ||
+		    od->sorted[mid].flags & SYM_IDX_FLAG_IFUNC_ALIAS)
+			return dso__materialize_symbol_ondemand(dso, mid);
+	}
+	return dso__materialize_symbol_ondemand(dso, lo);
+}
+
 static int
 dso__load_sym_internal(struct dso *dso, struct map *map, struct symsrc *syms_ss,
 		       struct symsrc *runtime_ss, int kmodule, int dynsym)
@@ -1655,6 +2294,34 @@ dso__load_sym_internal(struct dso *dso, struct map *map, struct symsrc *syms_ss,
 
 	if (kmodule && adjust_kernel_syms)
 		max_text_sh_offset = max_text_section(runtime_ss->elf, &runtime_ss->ehdr);
+
+	/*
+	 * PPC64 ELFv1 function symbols need the eager loop's .opd descriptor
+	 * translation. For symtabs, the selected and runtime sources can differ.
+	 */
+	if (symbol_conf.lazy_load_symbols && !dso__kernel(dso) && !kmodule &&
+	    !syms_ss->opdsec && (dynsym || !runtime_ss->opdsec)) {
+		int oret = 0;
+
+		if (!dynsym && syms_ss->symtab)
+			oret = dso__build_ondemand_index(dso, syms_ss,
+							 runtime_ss, 0);
+		else if (dynsym && !dso__ondemand(dso) && syms_ss->dynsym)
+			oret = dso__build_ondemand_index(dso, syms_ss,
+							 runtime_ss, 1);
+
+		/*
+		 * On hard error, propagate it.  If an index was built, the
+		 * DSO resolves on demand; skip the eager loop below.  If the
+		 * build declined (oret == 0, no index -- e.g. no usable
+		 * symbols, or no reopenable data source), continue with the eager
+		 * loop so the DSO still gets symbols.
+		 */
+		if (oret < 0)
+			return oret;
+		if (dso__ondemand(dso))
+			return 1;
+	}
 
 	curr_dso = dso__get(dso);
 	elf_symtab__for_each_symbol(syms, nr_syms, idx, sym) {
