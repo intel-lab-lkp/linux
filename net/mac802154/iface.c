@@ -313,8 +313,19 @@ static int mac802154_slave_close(struct net_device *dev)
 
 	clear_bit(SDATA_STATE_RUNNING, &sdata->state);
 
-	if (!local->open_count)
+	if (!local->open_count) {
+		/* Ensure any asynchronous transmission already accepted by
+		 * the driver (i.e. past the netif_stop_queue() above) has
+		 * fully completed before calling into ->stop(). Otherwise
+		 * drv_xmit_async() can race with drv_stop(), which some
+		 * drivers (e.g. mac802154_hwsim) do not expect. This mirrors
+		 * the synchronization already done in ieee802154_suspend().
+		 */
+		ieee802154_sync_and_hold_queue(local);
+		synchronize_net();
 		ieee802154_stop_device(local);
+		ieee802154_release_queue(local);
+	}
 
 	return 0;
 }
