@@ -6913,8 +6913,6 @@ void show_all_workqueues(void)
 	struct worker_pool *pool;
 	int pi;
 
-	rcu_read_lock();
-
 	pr_info("Showing busy workqueues and worker pools:\n");
 
 	list_for_each_entry_rcu(wq, &workqueues, list)
@@ -6922,8 +6920,6 @@ void show_all_workqueues(void)
 
 	for_each_pool(pool, pi)
 		show_one_worker_pool(pool);
-
-	rcu_read_unlock();
 }
 
 /**
@@ -8085,15 +8081,11 @@ static void show_cpu_pools_busy_workers(void)
 
 	pr_info("Showing backtraces of busy workers in stalled worker pools:\n");
 
-	rcu_read_lock();
-
 	for_each_pool(pool, pi) {
 		if (pool->cpu_stall)
 			show_cpu_pool_busy_workers(pool);
 
 	}
-
-	rcu_read_unlock();
 }
 
 /*
