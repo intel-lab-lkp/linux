@@ -561,6 +561,13 @@ static bool get_plt_got_name(GElf_Shdr *shdr, size_t i,
 	return result;
 }
 
+static void symbol_budget_warning(void)
+{
+	pr_warning_once("perf: symbol memory budget exceeded (%lu bytes), "
+			"remaining symbols will be [unknown]\n",
+			symbol_conf.max_symbol_bytes);
+}
+
 static int dso__synthesize_plt_got_symbols(struct dso *dso, Elf *elf,
 					   GElf_Ehdr *ehdr,
 					   char *buf, size_t buf_sz)
@@ -580,11 +587,19 @@ static int dso__synthesize_plt_got_symbols(struct dso *dso, Elf *elf,
 		get_rela_dyn_info(elf, ehdr, &di, scn);
 
 	for (i = 0; i < shdr.sh_size; i += shdr.sh_entsize) {
+		bool budget_exceeded;
+
 		if (!get_plt_got_name(&shdr, i, &di, buf, buf_sz))
 			snprintf(buf, buf_sz, "offset_%#" PRIx64 "@plt", (u64)shdr.sh_offset + i);
-		sym = symbol__new(shdr.sh_offset + i, shdr.sh_entsize, STB_GLOBAL, STT_FUNC, buf);
-		if (!sym)
+		sym = symbol__new_bounded(shdr.sh_offset + i, shdr.sh_entsize,
+					  STB_GLOBAL, STT_FUNC, buf, &budget_exceeded);
+		if (!sym) {
+			if (budget_exceeded) {
+				symbol_budget_warning();
+				err = 0;
+			}
 			goto out;
+		}
 		symbols__insert(dso__symbols(dso), sym);
 	}
 	err = 0;
@@ -615,6 +630,7 @@ int dso__synthesize_plt_symbols(struct dso *dso, struct symsrc *ss)
 	Elf *elf;
 	int nr = 0, err = -1;
 	struct rel_info ri = { .is_rela = false };
+	bool budget_exceeded;
 	bool lazy_plt;
 
 	elf = ss->elf;
@@ -636,9 +652,16 @@ int dso__synthesize_plt_symbols(struct dso *dso, struct symsrc *ss)
 		return 0;
 
 	/* Add a symbol for .plt header */
-	plt_sym = symbol__new(shdr_plt.sh_offset, plt_header_size, STB_GLOBAL, STT_FUNC, ".plt");
-	if (!plt_sym)
+	plt_sym = symbol__new_bounded(shdr_plt.sh_offset, plt_header_size,
+					  STB_GLOBAL, STT_FUNC, ".plt",
+					  &budget_exceeded);
+	if (!plt_sym) {
+		if (budget_exceeded) {
+			symbol_budget_warning();
+			return 0;
+		}
 		goto out_elf_end;
+	}
 	symbols__insert(dso__symbols(dso), plt_sym);
 
 	/* Only x86 has .plt.got */
@@ -756,9 +779,15 @@ int dso__synthesize_plt_symbols(struct dso *dso, struct symsrc *ss)
 				 "offset_%#" PRIx64 "@plt", plt_offset);
 		free(demangled);
 
-		f = symbol__new(plt_offset, plt_entry_size, STB_GLOBAL, STT_FUNC, sympltname);
-		if (!f)
+		f = symbol__new_bounded(plt_offset, plt_entry_size, STB_GLOBAL,
+					STT_FUNC, sympltname, &budget_exceeded);
+		if (!f) {
+			if (budget_exceeded) {
+				symbol_budget_warning();
+				err = 0;
+			}
 			goto out_elf_end;
+		}
 
 		plt_offset += plt_entry_size;
 		symbols__insert(dso__symbols(dso), f);
@@ -1534,6 +1563,7 @@ dso__load_sym_internal(struct dso *dso, struct map *map, struct symsrc *syms_ss,
 	Elf *elf;
 	int nr = 0;
 	bool remap_kernel = false, adjust_kernel_syms = false;
+	bool budget_truncated = false;
 	u64 max_text_sh_offset = 0;
 
 	if (kmap && !kmaps)
@@ -1633,7 +1663,15 @@ dso__load_sym_internal(struct dso *dso, struct map *map, struct symsrc *syms_ss,
 		char *demangled = NULL;
 		int is_label = elf_sym__is_label(&sym);
 		const char *section_name;
+		bool budget_exceeded = false;
 		bool used_opd = false;
+
+		if (symbol_conf.max_symbol_bytes &&
+		    symbol__bytes_used() >= symbol_conf.max_symbol_bytes) {
+			symbol_budget_warning();
+			budget_truncated = true;
+			break;
+		}
 
 		if (!is_label && !elf_sym__filter(&sym))
 			continue;
@@ -1775,10 +1813,17 @@ dso__load_sym_internal(struct dso *dso, struct map *map, struct symsrc *syms_ss,
 		if (demangled != NULL)
 			elf_name = demangled;
 
-		f = symbol__new(sym.st_value, sym.st_size,
-				GELF_ST_BIND(sym.st_info),
-				GELF_ST_TYPE(sym.st_info), elf_name);
+		f = symbol__new_bounded(sym.st_value, sym.st_size,
+					GELF_ST_BIND(sym.st_info),
+					GELF_ST_TYPE(sym.st_info), elf_name,
+					&budget_exceeded);
+		if (!f && budget_exceeded) {
+			symbol_budget_warning();
+			budget_truncated = true;
+		}
 		free(demangled);
+		if (!f && budget_truncated)
+			break;
 		if (!f)
 			goto out_elf_end;
 
@@ -1793,7 +1838,8 @@ dso__load_sym_internal(struct dso *dso, struct map *map, struct symsrc *syms_ss,
 	 * For misannotated, zeroed, ASM function sizes.
 	 */
 	if (nr > 0) {
-		symbols__fixup_end(dso__symbols(dso), false);
+		if (!budget_truncated)
+			symbols__fixup_end(dso__symbols(dso), false);
 		symbols__fixup_duplicate(dso__symbols(dso));
 		if (kmap) {
 			/*

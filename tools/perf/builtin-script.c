@@ -68,6 +68,7 @@
 #include "util/thread.h"
 #include "util/thread_map.h"
 #include "util/time-utils.h"
+#include "util/units.h"
 #include "util/tool.h"
 #include "util/trace-event.h"
 #include "util/unwind.h"
@@ -4035,6 +4036,44 @@ static int parse_callret_trace(const struct option *opt __maybe_unused,
 	return 0;
 }
 
+static int parse_max_symbol_bytes(const struct option *opt,
+				  const char *str, int unset)
+{
+	unsigned long *max_bytes = (unsigned long *)opt->value;
+	static struct parse_tag size_tags[] = {
+		{ .tag  = 'B', .mult = 1       },
+		{ .tag  = 'K', .mult = 1 << 10 },
+		{ .tag  = 'M', .mult = 1 << 20 },
+		{ .tag  = 'G', .mult = 1 << 30 },
+		{ .tag  = 0 },
+	};
+	unsigned long bytes;
+	size_t len;
+
+	if (unset) {
+		*max_bytes = 0;
+		return 0;
+	}
+
+	if (!strcmp(str, "0")) {
+		*max_bytes = 0;
+		return 0;
+	}
+
+	len = strlen(str);
+	if (len < 2 || !strchr("BKMG", str[len - 1]) ||
+	    strspn(str, "0123456789") != len - 1)
+		return -1;
+
+	bytes = parse_tag_value(str, size_tags);
+	if (bytes != (unsigned long)-1) {
+		*max_bytes = bytes;
+		return 0;
+	}
+
+	return -1;
+}
+
 int cmd_script(int argc, const char **argv)
 {
 	bool show_full_info = false;
@@ -4135,6 +4174,9 @@ int cmd_script(int argc, const char **argv)
 		     "Set the maximum stack depth when parsing the callchain, "
 		     "anything beyond the specified depth will be ignored. "
 		     "Default: kernel.perf_event_max_stack or " __stringify(PERF_MAX_STACK_DEPTH)),
+	OPT_CALLBACK(0, "max-symbol-bytes", &symbol_conf.max_symbol_bytes,
+		     "size", "Limit bytes for ELF struct symbol (e.g. 128M; 0=unlimited)",
+		     parse_max_symbol_bytes),
 	OPT_BOOLEAN(0, "reltime", &reltime, "Show time stamps relative to start"),
 	OPT_BOOLEAN(0, "deltatime", &deltatime, "Show time stamps relative to previous event"),
 	OPT_BOOLEAN('I', "show-info", &show_full_info,

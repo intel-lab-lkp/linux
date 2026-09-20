@@ -310,13 +310,72 @@ void symbols__fixup_end(struct rb_root_cached *symbols, bool is_kallsyms)
 		curr->end = roundup(curr->start, 4096) + 4096;
 }
 
-struct symbol *symbol__new(u64 start, u64 len, u8 binding, u8 type, const char *name)
+static _Atomic size_t symbol_bytes_used;
+
+size_t symbol__bytes_used(void)
+{
+	return atomic_load_explicit(&symbol_bytes_used, memory_order_relaxed);
+}
+
+void symbol__account_bytes(size_t bytes)
+{
+	atomic_fetch_add_explicit(&symbol_bytes_used, bytes, memory_order_relaxed);
+}
+
+bool symbol__try_account_bytes(size_t bytes)
+{
+	size_t old = symbol__bytes_used();
+
+	for (;;) {
+		if (old > SIZE_MAX - bytes)
+			return false;
+		if (symbol_conf.max_symbol_bytes &&
+		    (old > symbol_conf.max_symbol_bytes ||
+		     bytes > symbol_conf.max_symbol_bytes - old))
+			return false;
+		if (atomic_compare_exchange_weak_explicit(&symbol_bytes_used, &old, old + bytes,
+							  memory_order_relaxed,
+							  memory_order_relaxed))
+			return true;
+	}
+}
+
+void symbol__unaccount_bytes(size_t bytes)
+{
+	atomic_fetch_sub_explicit(&symbol_bytes_used, bytes, memory_order_relaxed);
+}
+
+static struct symbol *__symbol__new(u64 start, u64 len, u8 binding, u8 type,
+				    const char *name, bool bounded,
+				    bool *budget_exceeded)
 {
 	size_t namelen = strlen(name) + 1;
-	struct symbol *sym = calloc(1, (symbol_conf.priv_size +
-					sizeof(*sym) + namelen));
-	if (sym == NULL)
+	size_t alloc_size;
+	struct symbol *sym;
+
+	if (budget_exceeded)
+		*budget_exceeded = false;
+	if (namelen - 1 > UINT32_MAX ||
+	    namelen > SIZE_MAX - sizeof(*sym) ||
+	    symbol_conf.priv_size > SIZE_MAX - sizeof(*sym) - namelen)
 		return NULL;
+	alloc_size = symbol_conf.priv_size + sizeof(*sym) + namelen;
+
+	if (bounded && !symbol__try_account_bytes(alloc_size)) {
+		if (budget_exceeded)
+			*budget_exceeded = true;
+		return NULL;
+	}
+
+	sym = calloc(1, alloc_size);
+	if (sym == NULL) {
+		if (bounded)
+			symbol__unaccount_bytes(alloc_size);
+		return NULL;
+	}
+
+	if (!bounded)
+		symbol__account_bytes(alloc_size);
 
 	if (symbol_conf.priv_size) {
 		if (symbol_conf.init_annotation) {
@@ -339,8 +398,22 @@ struct symbol *symbol__new(u64 start, u64 len, u8 binding, u8 type, const char *
 	return sym;
 }
 
+struct symbol *symbol__new(u64 start, u64 len, u8 binding, u8 type, const char *name)
+{
+	return __symbol__new(start, len, binding, type, name, false, NULL);
+}
+
+struct symbol *symbol__new_bounded(u64 start, u64 len, u8 binding, u8 type,
+				  const char *name, bool *budget_exceeded)
+{
+	return __symbol__new(start, len, binding, type, name, true, budget_exceeded);
+}
+
 void symbol__delete(struct symbol *sym)
 {
+	size_t alloc_size = symbol_conf.priv_size + sizeof(*sym) +
+			    sym->namelen + 1;
+
 	if (symbol_conf.priv_size) {
 		if (symbol_conf.init_annotation) {
 			struct annotation *notes = symbol__annotation(sym);
@@ -348,6 +421,7 @@ void symbol__delete(struct symbol *sym)
 			annotation__exit(notes);
 		}
 	}
+	symbol__unaccount_bytes(alloc_size);
 	free(((void *)sym) - symbol_conf.priv_size);
 }
 

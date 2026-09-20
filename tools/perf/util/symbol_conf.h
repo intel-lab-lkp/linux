@@ -120,6 +120,7 @@ struct symbol_conf {
 	int		pad_output_len_dso;
 	int		group_sort_idx;
 	int		addr_range;
+	unsigned long	max_symbol_bytes;
 	DECLARE_BITMAP(parallelism_filter, MAX_NR_CPUS + 1);
 };
 
