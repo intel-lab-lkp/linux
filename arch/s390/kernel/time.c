@@ -501,10 +501,7 @@ static int __store_stpinfo(void)
 {
 	int rc = chsc_sstpi(stp_page, &stp_info, sizeof(struct stp_sstpi));
 
-	if (rc)
-		clear_bit(CLOCK_SYNC_STPINFO_VALID, &clock_sync_flags);
-	else
-		set_bit(CLOCK_SYNC_STPINFO_VALID, &clock_sync_flags);
+	assign_bit(CLOCK_SYNC_STPINFO_VALID, &clock_sync_flags, !rc);
 	return rc;
 }
 
@@ -795,10 +792,7 @@ static ssize_t online_store(struct device *dev,
 		return -EOPNOTSUPP;
 	mutex_lock(&stp_mutex);
 	stp_online = value;
-	if (stp_online)
-		set_bit(CLOCK_SYNC_STP, &clock_sync_flags);
-	else
-		clear_bit(CLOCK_SYNC_STP, &clock_sync_flags);
+	assign_bit(CLOCK_SYNC_STP, &clock_sync_flags, stp_online);
 	queue_work(time_sync_wq, &stp_work);
 	mutex_unlock(&stp_mutex);
 	return count;
