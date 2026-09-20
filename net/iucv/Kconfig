@@ -9,7 +9,7 @@ config IUCV
 	  communication link between VM guests.
 
 config AFIUCV
-	depends on S390
+	depends on IUCV
 	def_tristate m if QETH_L3 || IUCV
 	prompt "AF_IUCV Socket support (S390 - z/VM and HiperSockets transport)"
 	help
