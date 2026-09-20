@@ -219,6 +219,42 @@ static int setup_extra_layer(const char *base, const char *name)
 	return 0;
 }
 
+static int write_path(const char *path, const char *buf)
+{
+	size_t len = strlen(buf);
+	int fd;
+
+	fd = open(path, O_CREAT | O_TRUNC | O_WRONLY, 0644);
+	if (fd < 0)
+		return -1;
+	if (write(fd, buf, len) != len) {
+		close(fd);
+		return -1;
+	}
+	if (close(fd))
+		return -1;
+	return 0;
+}
+
+static int read_fd_contents(int dirfd, const char *name, char *buf, size_t len)
+{
+	ssize_t n;
+	int fd;
+
+	fd = openat(dirfd, name, O_RDONLY);
+	if (fd < 0)
+		return -1;
+	n = read(fd, buf, len - 1);
+	if (n < 0) {
+		close(fd);
+		return -1;
+	}
+	buf[n] = '\0';
+	if (close(fd))
+		return -1;
+	return 0;
+}
+
 /*
  * Mount an overlay inside user namespace @u1 (so the overlay sb's s_user_ns is
  * not the initial namespace) and idmap that overlay mount with @u2.  Runs in a
@@ -584,6 +620,73 @@ TEST_F(idmapped_overlay, nfs_export_same_sb_mixed_idmaps)
 	errno = 0;
 	EXPECT_EQ(name_to_handle_at(AT_FDCWD, path, fh, &mount_id, 0), -1);
 	EXPECT_EQ(errno, EOPNOTSUPP);
+
+	EXPECT_EQ(close(ovl), 0);
+}
+
+/*
+ * index=on without nfs_export still preserves lower hardlinks on copy up when
+ * same-superblock lower layers use different idmaps.  The copied-up alias must
+ * keep the same contents, inode identity, and owner as the path-selected lower.
+ */
+TEST_F(idmapped_overlay, index_copy_up_same_sb_mixed_idmaps)
+{
+	static const char lower_data[] = "lower\n";
+	static const char upper_data[] = "upper\n";
+	char lower1[PATH_MAX], lower2[PATH_MAX], upper[PATH_MAX], work[PATH_MAX];
+	char path[PATH_MAX], alias[PATH_MAX], buf[32];
+	struct stat st_file, st_alias, st_upper;
+	int fd_lower1, fd_lower2, ovl, fd;
+
+	if (!ovl_supported())
+		SKIP(return, "overlayfs not supported");
+
+	snprintf(lower1, sizeof(lower1), "%s/l", self->base);
+	snprintf(lower2, sizeof(lower2), "%s/l2", self->base);
+	snprintf(upper, sizeof(upper), "%s/u", self->base);
+	snprintf(work, sizeof(work), "%s/w", self->base);
+	ASSERT_EQ(setup_extra_layer(self->base, "l2"), 0);
+
+	snprintf(path, sizeof(path), "%s/l2/file", self->base);
+	snprintf(alias, sizeof(alias), "%s/l2/alias", self->base);
+	ASSERT_EQ(write_path(path, lower_data), 0);
+	ASSERT_EQ(chown(path, ID_HOST + 7, ID_HOST + 7), 0);
+	ASSERT_EQ(link(path, alias), 0);
+
+	fd_lower1 = idmapped_layer_fd(lower1, ID_HOST, ID_NS, ID_RANGE);
+	ASSERT_GE(fd_lower1, 0);
+	fd_lower2 = layer_fd(lower2);
+	ASSERT_GE(fd_lower2, 0);
+
+	ovl = ovl_mount_lower_fds(upper, work, fd_lower1, fd_lower2, "on", "off");
+	ASSERT_GE(ovl, 0);
+	EXPECT_EQ(close(fd_lower1), 0);
+	EXPECT_EQ(close(fd_lower2), 0);
+	ASSERT_EQ(ovl_idmap(ovl), 0);
+
+	fd = openat(ovl, "file", O_WRONLY | O_TRUNC);
+	ASSERT_GE(fd, 0);
+	ASSERT_EQ(write(fd, upper_data, sizeof(upper_data) - 1),
+		  sizeof(upper_data) - 1);
+	EXPECT_EQ(close(fd), 0);
+
+	ASSERT_EQ(read_fd_contents(ovl, "alias", buf, sizeof(buf)), 0);
+	EXPECT_STREQ(upper_data, buf);
+
+	ASSERT_EQ(fstatat(ovl, "file", &st_file, 0), 0);
+	ASSERT_EQ(fstatat(ovl, "alias", &st_alias, 0), 0);
+	EXPECT_EQ(st_file.st_ino, st_alias.st_ino);
+	EXPECT_EQ(st_file.st_nlink, 2);
+	EXPECT_EQ(st_alias.st_nlink, 2);
+	EXPECT_EQ(st_file.st_uid, ID_NS + 7);
+	EXPECT_EQ(st_file.st_gid, ID_NS + 7);
+	EXPECT_EQ(st_alias.st_uid, ID_NS + 7);
+	EXPECT_EQ(st_alias.st_gid, ID_NS + 7);
+
+	snprintf(path, sizeof(path), "%s/u/file", self->base);
+	ASSERT_EQ(stat(path, &st_upper), 0);
+	EXPECT_EQ(st_upper.st_uid, ID_HOST + 7);
+	EXPECT_EQ(st_upper.st_gid, ID_HOST + 7);
 
 	EXPECT_EQ(close(ovl), 0);
 }
