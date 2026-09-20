@@ -1590,7 +1590,7 @@ unsigned int folio_pte_batch(struct folio *folio, pte_t *ptep, pte_t pte,
 }
 #endif /* CONFIG_MMU */
 
-#if defined(CONFIG_SPARSEMEM) && !defined(CONFIG_SPARSEMEM_VMEMMAP)
+#ifdef CONFIG_SPARSEMEM_CLASSIC
 /**
  * page_range_contiguous - test whether the page range is contiguous
  * @page: the start of the page range.

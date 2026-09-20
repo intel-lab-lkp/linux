@@ -201,7 +201,7 @@ static inline void __mm_zero_struct_page(struct page *page)
 extern unsigned long sysctl_user_reserve_kbytes;
 extern unsigned long sysctl_admin_reserve_kbytes;
 
-#if defined(CONFIG_SPARSEMEM) && !defined(CONFIG_SPARSEMEM_VMEMMAP)
+#ifdef CONFIG_SPARSEMEM_CLASSIC
 bool page_range_contiguous(const struct page *page, unsigned long nr_pages);
 #else
 static inline bool page_range_contiguous(const struct page *page,
@@ -2531,10 +2531,6 @@ static inline bool is_nommu_shared_vma_flags(const vma_flags_t *flags)
 }
 #endif
 
-#if defined(CONFIG_SPARSEMEM) && !defined(CONFIG_SPARSEMEM_VMEMMAP)
-#define SECTION_IN_PAGE_FLAGS
-#endif
-
 /*
  * The identification function is mainly used by the buddy allocator for
  * determining if two pages could be buddies. We are not really identifying
@@ -2805,7 +2801,7 @@ static inline struct zone *folio_zone(const struct folio *folio)
 	return &folio_pgdat(folio)->node_zones[folio_zonenum(folio)];
 }
 
-#ifdef SECTION_IN_PAGE_FLAGS
+#ifdef CONFIG_SPARSEMEM_CLASSIC
 static inline void set_page_section(struct page *page, unsigned long section)
 {
 	page->flags.f &= ~(SECTIONS_MASK << SECTIONS_PGSHIFT);
@@ -2823,7 +2819,7 @@ static inline unsigned long memdesc_section(const memdesc_flags_t *mdf)
 	ASSERT_EXCLUSIVE_BITS(mdf->f, SECTIONS_MASK << SECTIONS_PGSHIFT);
 	return (mdf->f >> SECTIONS_PGSHIFT) & SECTIONS_MASK;
 }
-#else /* !SECTION_IN_PAGE_FLAGS */
+#else /* !CONFIG_SPARSEMEM_CLASSIC */
 static inline void set_page_section_from_pfn(struct page *page,
 		unsigned long pfn)
 {
@@ -2833,7 +2829,7 @@ static inline unsigned long memdesc_section(const memdesc_flags_t *mdf)
 {
 	return 0;
 }
-#endif /* SECTION_IN_PAGE_FLAGS */
+#endif /* CONFIG_SPARSEMEM_CLASSIC */
 
 /**
  * folio_pfn - Return the Page Frame Number of a folio.
