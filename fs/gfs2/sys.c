@@ -254,6 +254,7 @@ static ssize_t statfs_sync_store(struct gfs2_sbd *sdp, const char *buf,
 static ssize_t quota_sync_store(struct gfs2_sbd *sdp, const char *buf,
 				size_t len)
 {
+	struct super_block *sb = sdp->sd_vfs;
 	int error, val;
 
 	if (!capable(CAP_SYS_ADMIN))
@@ -266,7 +267,12 @@ static ssize_t quota_sync_store(struct gfs2_sbd *sdp, const char *buf,
 	if (val != 1)
 		return -EINVAL;
 
-	gfs2_quota_sync(sdp->sd_vfs, 0);
+	if (!super_trylock_shared_active(sb))
+		return -EAGAIN;
+
+	gfs2_quota_sync(sb, 0);
+
+	super_unlock_active(sb);
 	return len;
 }
 
