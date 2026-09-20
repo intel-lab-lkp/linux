@@ -1017,6 +1017,8 @@ asmlinkage long sys_uretprobe(void);
 
 asmlinkage long sys_uprobe(void);
 
+asmlinkage long sys_system_energy_efficiency(int __user *mode, int __user *value);
+
 /* pciconfig: alpha, arm, arm64, ia64, sparc */
 asmlinkage long sys_pciconfig_read(unsigned long bus, unsigned long dfn,
 				unsigned long off, unsigned long len,

@@ -22,6 +22,7 @@
 #include <linux/workqueue.h>
 #include <linux/capability.h>
 #include <linux/device.h>
+#include <linux/pci.h>
 #include <linux/key.h>
 #include <linux/times.h>
 #include <linux/posix-timers.h>
@@ -180,6 +181,143 @@ int fs_overflowgid = DEFAULT_FS_OVERFLOWGID;
 
 EXPORT_SYMBOL(fs_overflowuid);
 EXPORT_SYMBOL(fs_overflowgid);
+
+
+/*
+ * Read the real power consumption reported by GPU drivers via hwmon,
+ * in milliwatts. The hwmon ABI exposes power1_input in microwatts;
+ * amdgpu/nouveau/radeon/nvidia provide this channel on supported
+ * hardware. Returns 0 if no driver reports a power reading.
+ */
+static long gpu_hwmon_power_mw(void)
+{
+	static const char * const gpu_drivers[] = {
+		"amdgpu", "nouveau", "radeon", "nvidia",
+	};
+	char buf[32];
+	char path[64];
+	loff_t pos;
+	long total_uw = 0;
+	long val;
+	int i, j, ret;
+
+	for (i = 0; i < 32; i++) {
+		bool is_gpu = false;
+		struct file *fp;
+
+		snprintf(path, sizeof(path), "/sys/class/hwmon/hwmon%d/name", i);
+		fp = filp_open(path, O_RDONLY, 0);
+		if (IS_ERR(fp))
+			continue;
+
+		pos = 0;
+		ret = kernel_read(fp, buf, sizeof(buf) - 1, &pos);
+		filp_close(fp, NULL);
+		if (ret <= 0)
+			continue;
+		buf[ret] = '\0';
+
+		for (j = 0; j < ARRAY_SIZE(gpu_drivers); j++) {
+			if (!strncmp(buf, gpu_drivers[j], strlen(gpu_drivers[j]))) {
+				is_gpu = true;
+				break;
+			}
+		}
+		if (!is_gpu)
+			continue;
+
+		snprintf(path, sizeof(path), "/sys/class/hwmon/hwmon%d/power1_input", i);
+		fp = filp_open(path, O_RDONLY, 0);
+		if (IS_ERR(fp))
+			continue;
+
+		pos = 0;
+		ret = kernel_read(fp, buf, sizeof(buf) - 1, &pos);
+		filp_close(fp, NULL);
+		if (ret <= 0)
+			continue;
+		buf[ret] = '\0';
+
+		if (kstrtol(buf, 10, &val))
+			continue;
+
+		total_uw += val;
+	}
+
+	return total_uw / 1000;	/* microwatts -> milliwatts */
+}
+
+static int gpu_energy_estimate(int *gpus)
+{
+	static const int class_list[] = {
+		0x030000,	/* VGA compatible controller */
+		0x030200,	/* 3D controller (modern NVIDIA/AMD GPUs) */
+		0x030100,	/* XGA */
+		0x030080,	/* other display controller */
+	};
+	struct pci_dev *pdev;
+	int i, count = 0, energy = 0;
+
+	for (i = 0; i < ARRAY_SIZE(class_list); i++) {
+		pdev = NULL;
+		while ((pdev = pci_get_class(class_list[i], pdev)) != NULL) {
+			count++;
+			if (pdev->dev.power.runtime_status == RPM_ACTIVE)
+				energy += 100;
+			else
+				energy += 5;
+		}
+	}
+
+	if (gpus)
+		*gpus = count;
+
+	return energy;
+}
+
+SYSCALL_DEFINE2(system_energy_efficiency, int __user *, mode, int __user *, value)
+{
+	int mode_v, ret;
+	int gpu_num, gpu_energy;
+	long gpu_power_mw;
+
+	if (get_user(mode_v, mode))
+		return -EFAULT;
+
+	if (mode_v < 0 || mode_v > 2)
+		return -EINVAL;
+
+	gpu_energy = gpu_energy_estimate(&gpu_num);
+	gpu_power_mw = gpu_hwmon_power_mw();
+
+	switch (mode_v) {
+	case 0:
+		/* number of GPUs, 0 if the system has none */
+		ret = gpu_num;
+		break;
+	case 1:
+		/*
+		 * Energy efficiency metric: prefer the real GPU power
+		 * (mW) reported by the driver, fall back to runtime PM
+		 * status weights if no power channel exists, then add
+		 * the CPU part (online CPUs x 10)
+		 */
+		ret = (int)(gpu_power_mw ? gpu_power_mw : gpu_energy) +
+		      num_online_cpus() * 10;
+		break;
+	case 2:
+		/* real-time GPU power in mW, 0 if not reported */
+		ret = (int)gpu_power_mw;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (put_user(ret, value))
+		return -EFAULT;
+
+	return 0;
+}
 
 static const struct ctl_table overflow_sysctl_table[] = {
 	{
