@@ -9,7 +9,7 @@ import json
 import os
 import time
 
-from lib.py import cmd, ethtool
+from lib.py import KsftSkipEx, cmd, ethtool, ip, ksft_pr
 
 _strerrors = {os.strerror(e): e for e in errno.errorcode}
 
@@ -116,6 +116,64 @@ def wait_for_link(cfg) -> bool:
     # Local link is UP, we shouldn't have to wait for a whole 8 seconds for
     # the remote to report link up, let's wait a bit less
     return wait_for_link_remote(cfg, timeout = 3)
+
+def controllable_lp(cfg) -> bool:
+    """ Whether the remote interface is the link partner of the local one.
+
+    For low level ethtool tests, we need to have the remote directly connected
+    to the local host (i.e. not through a switch).
+
+    This is tested by taking the local link down and checking that the
+    remote's link drops.
+
+    :param cfg: test config
+    :returns: True if the remote is our link partner
+    """
+    known = getattr(cfg, "lp_controllable", None)
+    if known is not None:
+        return known
+
+    # Set both ends up, wait for up
+    ip(f"link set {cfg.ifname} up")
+    ip(f"link set {cfg.remote_ifname} up", host=cfg.remote)
+
+    # No link established
+    if not wait_for_link(cfg):
+        ksft_pr(f"{cfg.remote_ifname} is not the link partner: no link with both ends up")
+        cfg.lp_controllable = False
+        return False
+
+    ip(f"link set {cfg.ifname} down")
+
+    deadline = time.monotonic() + 3
+    dropped = False
+    while time.monotonic() < deadline and not dropped:
+        dropped = not ethtool(f"{cfg.remote_ifname}", json=True,
+                              host=cfg.remote)[0]["link-detected"]
+        time.sleep(0.1)
+
+    ip(f"link set {cfg.ifname} up")
+
+    if not dropped:
+        ksft_pr(f"{cfg.remote_ifname} is not the link partner: "
+                f"it kept its link through {cfg.ifname} going down")
+        cfg.lp_controllable = False
+        wait_for_link(cfg)
+        return False
+
+    cfg.lp_controllable = wait_for_link(cfg)
+    if not cfg.lp_controllable:
+        ksft_pr(f"{cfg.remote_ifname} is not the link partner: "
+                f"no link back after {cfg.ifname} came up")
+    return cfg.lp_controllable
+
+def require_controllable_lp(cfg) -> None:
+    """ Skip if the remote isn't directly connected to the local device
+
+    :param cfg: test config
+    """
+    if not controllable_lp(cfg):
+        raise KsftSkipEx(f"{cfg.remote_ifname} is not directly connected to {cfg.ifname}")
 
 def forced_link_settings(cfg) -> str:
     """ Returns a string to pass to ethtool -s with speed/duplex corresponding
