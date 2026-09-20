@@ -6109,34 +6109,6 @@ static int ufshcd_poll(struct Scsi_Host *shost, unsigned int queue_num)
 	return completed_reqs != 0;
 }
 
-static bool ufshcd_mcq_force_compl_one(struct request *rq, void *priv)
-{
-	struct scsi_cmnd *cmd = blk_mq_rq_to_pdu(rq);
-	struct scsi_device *sdev = rq->q->queuedata;
-	struct Scsi_Host *shost = sdev->host;
-	struct ufs_hba *hba = shost_priv(shost);
-	struct ufs_hw_queue *hwq = ufshcd_mcq_req_to_hwq(hba, rq);
-
-	if (blk_mq_is_reserved_rq(rq) || !hwq)
-		return true;
-
-	ufshcd_mcq_compl_all_cqes_lock(hba, hwq);
-
-	/*
-	 * For those cmds of which the cqes are not present in the cq, complete
-	 * them explicitly.
-	 */
-	scoped_guard(spinlock_irqsave, &hwq->cq_lock) {
-		if (!test_bit(SCMD_STATE_COMPLETE, &cmd->state)) {
-			set_host_byte(cmd, DID_REQUEUE);
-			ufshcd_release_scsi_cmd(hba, cmd);
-			scsi_done(cmd);
-		}
-	}
-
-	return true;
-}
-
 static bool ufshcd_mcq_compl_one(struct request *rq, void *priv)
 {
 	struct scsi_device *sdev = rq->q->queuedata;
@@ -6151,22 +6123,12 @@ static bool ufshcd_mcq_compl_one(struct request *rq, void *priv)
 }
 
 /**
- * ufshcd_mcq_compl_pending_transfer - MCQ mode function. It is
- * invoked from the error handler context or ufshcd_host_reset_and_restore()
- * to complete the pending transfers and free the resources associated with
- * the scsi command.
- *
+ * ufshcd_mcq_compl_pending_transfer - Complete pending MCQ transfers from EH
  * @hba: per adapter instance
- * @force_compl: This flag is set to true when invoked
- * from ufshcd_host_reset_and_restore() in which case it requires special
- * handling because the host controller has been reset by ufshcd_hba_stop().
  */
-static void ufshcd_mcq_compl_pending_transfer(struct ufs_hba *hba,
-					      bool force_compl)
+static void ufshcd_mcq_compl_pending_transfer(struct ufs_hba *hba)
 {
-	blk_mq_tagset_busy_iter(&hba->host->tag_set,
-				force_compl ? ufshcd_mcq_force_compl_one :
-					      ufshcd_mcq_compl_one,
+	blk_mq_tagset_busy_iter(&hba->host->tag_set, ufshcd_mcq_compl_one,
 				NULL);
 }
 
@@ -6723,10 +6685,10 @@ static void ufshcd_exception_event_handler(struct work_struct *work)
 }
 
 /* Complete requests that have door-bell cleared */
-static void ufshcd_complete_requests(struct ufs_hba *hba, bool force_compl)
+static void ufshcd_complete_requests(struct ufs_hba *hba)
 {
 	if (hba->mcq_enabled)
-		ufshcd_mcq_compl_pending_transfer(hba, force_compl);
+		ufshcd_mcq_compl_pending_transfer(hba);
 	else
 		ufshcd_transfer_req_compl(hba);
 
@@ -7033,7 +6995,7 @@ static bool ufshcd_abort_all(struct ufs_hba *hba)
 
 out:
 	/* Complete the requests that are cleared by s/w */
-	ufshcd_complete_requests(hba, false);
+	ufshcd_complete_requests(hba);
 
 	return ret != 0;
 }
@@ -7095,7 +7057,7 @@ static void ufshcd_err_handler(struct work_struct *work)
 	spin_unlock_irqrestore(&hba->host->host_lock, flags);
 
 	/* Complete requests that have door-bell cleared by h/w */
-	ufshcd_complete_requests(hba, false);
+	ufshcd_complete_requests(hba);
 	spin_lock_irqsave(&hba->host->host_lock, flags);
 again:
 	needs_restore = false;
