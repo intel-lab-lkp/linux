@@ -617,6 +617,7 @@ static int cobalt_s_dv_timings(struct file *file, void *priv,
 				    struct v4l2_dv_timings *timings)
 {
 	struct cobalt_stream *s = video_drvdata(file);
+	struct cobalt *cobalt = s->cobalt;
 	int err;
 
 	if (s->input == 1) {
@@ -629,6 +630,13 @@ static int cobalt_s_dv_timings(struct file *file, void *priv,
 
 	if (vb2_is_busy(&s->q))
 		return -EBUSY;
+
+	if (timings->bt.width > COBALT_MAX_WIDTH ||
+	    timings->bt.height > COBALT_MAX_HEIGHT) {
+		cobalt_info("timings %ux%u out of range\n",
+			    timings->bt.width, timings->bt.height);
+		return -EINVAL;
+	}
 
 	err = v4l2_subdev_call(s->sd,
 			pad, s_dv_timings, 0, timings);
@@ -780,6 +788,14 @@ static int cobalt_try_fmt_vid_cap(struct file *file, void *priv,
 				pix->width * COBALT_BYTES_PER_PIXEL_RGB32);
 		break;
 	}
+
+	/*
+	 * The DMA descriptor buffers are sized for at most
+	 * COBALT_MAX_WIDTH x COBALT_MAX_HEIGHT, so limit the line stride
+	 * accordingly.
+	 */
+	if (pix->bytesperline > COBALT_MAX_WIDTH * COBALT_MAX_BPP)
+		pix->bytesperline = COBALT_MAX_WIDTH * COBALT_MAX_BPP;
 
 	pix->sizeimage = pix->bytesperline * pix->height;
 	pix->field = V4L2_FIELD_NONE;
