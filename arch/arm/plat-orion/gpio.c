@@ -275,15 +275,9 @@ void __init orion_gpio_set_valid(unsigned pin, int mode)
 	if (mode == 1)
 		mode = GPIO_INPUT_OK | GPIO_OUTPUT_OK;
 
-	if (mode & GPIO_INPUT_OK)
-		__set_bit(pin, &ochip->valid_input);
-	else
-		__clear_bit(pin, &ochip->valid_input);
+	__assign_bit(pin, &ochip->valid_input, mode & GPIO_INPUT_OK);
 
-	if (mode & GPIO_OUTPUT_OK)
-		__set_bit(pin, &ochip->valid_output);
-	else
-		__clear_bit(pin, &ochip->valid_output);
+	__assign_bit(pin, &ochip->valid_output, mode & GPIO_OUTPUT_OK);
 }
 
 void orion_gpio_set_blink(unsigned pin, int blink)
