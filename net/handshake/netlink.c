@@ -119,6 +119,7 @@ int handshake_nl_accept_doit(struct sk_buff *skb, struct genl_info *info)
 
 		trace_handshake_cmd_accept(net, req, req->hr_sk, fd_prepare_fd(fdf));
 		fd_publish(fdf);
+		handshake_req_put(req);
 		return 0;
 	}
 
@@ -127,6 +128,7 @@ out_complete:
 		handshake_complete(req, -EIO, NULL);
 out_status:
 	trace_handshake_cmd_accept_err(net, req, NULL, err);
+	handshake_req_put(req);
 	return err;
 }
 
@@ -160,6 +162,7 @@ int handshake_nl_done_doit(struct sk_buff *skb, struct genl_info *info)
 		status = -(int)nla_get_u32(info->attrs[HANDSHAKE_A_DONE_STATUS]);
 
 	handshake_complete(req, status, info);
+	handshake_req_put(req);
 	sockfd_put(sock);
 	return 0;
 }

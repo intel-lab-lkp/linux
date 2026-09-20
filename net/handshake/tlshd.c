@@ -449,9 +449,9 @@ void tls_handshake_close(struct socket *sock)
 	req = handshake_req_hash_lookup(sock->sk);
 	if (!req)
 		return;
-	if (!test_and_clear_bit(HANDSHAKE_F_REQ_SESSION, &req->hr_flags))
-		return;
-	tls_alert_send(sock, TLS_ALERT_LEVEL_WARNING,
-		       TLS_ALERT_DESC_CLOSE_NOTIFY);
+	if (test_and_clear_bit(HANDSHAKE_F_REQ_SESSION, &req->hr_flags))
+		tls_alert_send(sock, TLS_ALERT_LEVEL_WARNING,
+			       TLS_ALERT_DESC_CLOSE_NOTIFY);
+	handshake_req_put(req);
 }
 EXPORT_SYMBOL(tls_handshake_close);

@@ -236,6 +236,7 @@ static void handshake_req_submit_test4(struct kunit *test)
 	/* Assert */
 	KUNIT_EXPECT_NOT_NULL(test, result);
 	KUNIT_EXPECT_PTR_EQ(test, req, result);
+	handshake_req_put(result);
 
 	handshake_req_cancel(sock->sk);
 	KUNIT_EXPECT_EQ(test, file_count(filp), fcount_before);
@@ -398,6 +399,7 @@ static void handshake_req_cancel_test2(struct kunit *test)
 	 * off by handshake_req_next(); see handshake_nl_accept_doit().
 	 */
 	fput(filp);
+	handshake_req_put(next);
 
 	/* Act */
 	result = handshake_req_cancel(sock->sk);
@@ -452,6 +454,7 @@ static void handshake_req_cancel_test3(struct kunit *test)
 	/* Pretend to complete this request */
 	handshake_complete(next, -ETIMEDOUT, NULL);
 	KUNIT_EXPECT_EQ(test, file_count(filp), fcount_before);
+	handshake_req_put(next);
 
 	/* Act */
 	result = handshake_req_cancel(sock->sk);

@@ -59,8 +59,16 @@ void handshake_req_hash_destroy(void)
 
 struct handshake_req *handshake_req_hash_lookup(struct sock *sk)
 {
-	return rhashtable_lookup_fast(&handshake_rhashtbl, &sk,
-				      handshake_rhash_params);
+	struct handshake_req *req;
+
+	rcu_read_lock();
+	req = rhashtable_lookup_fast(&handshake_rhashtbl, &sk,
+				     handshake_rhash_params);
+	if (req && !kref_get_unless_zero(&req->hr_kref))
+		req = NULL;
+	rcu_read_unlock();
+
+	return req;
 }
 EXPORT_SYMBOL_IF_KUNIT(handshake_req_hash_lookup);
 
@@ -74,13 +82,28 @@ static bool handshake_req_hash_add(struct handshake_req *req)
 	return ret == 0;
 }
 
-static void handshake_req_destroy(struct handshake_req *req)
+static void handshake_req_free(struct kref *kref)
 {
+	struct handshake_req *req =
+		container_of(kref, struct handshake_req, hr_kref);
+
 	if (req->hr_proto->hp_destroy)
 		req->hr_proto->hp_destroy(req);
+	kfree_rcu(req, hr_rcu);
+}
+
+void handshake_req_put(struct handshake_req *req)
+{
+	if (req)
+		kref_put(&req->hr_kref, handshake_req_free);
+}
+EXPORT_SYMBOL_IF_KUNIT(handshake_req_put);
+
+static void handshake_req_destroy(struct handshake_req *req)
+{
 	rhashtable_remove_fast(&handshake_rhashtbl, &req->hr_rhash,
 			       handshake_rhash_params);
-	kfree(req);
+	handshake_req_put(req);
 }
 
 static void handshake_sk_destruct(struct sock *sk)
@@ -95,6 +118,7 @@ static void handshake_sk_destruct(struct sock *sk)
 	trace_handshake_destruct(sock_net(sk), req, sk);
 	sk_destruct = req->hr_odestruct;
 	handshake_req_destroy(req);
+	handshake_req_put(req);
 	if (sk_destruct)
 		sk_destruct(sk);
 }
@@ -124,6 +148,7 @@ struct handshake_req *handshake_req_alloc(const struct handshake_proto *proto,
 	if (!req)
 		return NULL;
 
+	kref_init(&req->hr_kref);
 	INIT_LIST_HEAD(&req->hr_list);
 	req->hr_proto = proto;
 	return req;
@@ -187,8 +212,10 @@ static bool remove_pending(struct handshake_net *hn, struct handshake_req *req)
  * @class: handler class to match
  *
  * On a non-NULL return, the caller owns an extra reference
- * on @req->hr_file.  FD_PREPARE() consumes it on success; on
- * the FD_PREPARE() failure path the caller must fput() it.
+ * on @req->hr_file and a reference on @req.  FD_PREPARE() consumes
+ * the file reference on success; on the FD_PREPARE() failure path
+ * the caller must fput() it.  The caller must release the request
+ * reference using handshake_req_put().
  *
  * Return: pointer to a removed handshake_req, or NULL.
  */
@@ -209,6 +236,7 @@ struct handshake_req *handshake_req_next(struct handshake_net *hn, int class)
 		 * ownership.
 		 */
 		get_file(pos->hr_file);
+		kref_get(&pos->hr_kref);
 		req = pos;
 		break;
 	}
@@ -367,6 +395,7 @@ bool handshake_req_cancel(struct sock *sk)
 		/* Request hadn't been accepted - mark cancelled */
 		if (test_and_set_bit(HANDSHAKE_F_REQ_COMPLETED, &req->hr_flags)) {
 			trace_handshake_cancel_busy(net, req, sk);
+			handshake_req_put(req);
 			return false;
 		}
 		goto out_true;
@@ -374,6 +403,7 @@ bool handshake_req_cancel(struct sock *sk)
 	if (test_and_set_bit(HANDSHAKE_F_REQ_COMPLETED, &req->hr_flags)) {
 		/* Request already completed */
 		trace_handshake_cancel_busy(net, req, sk);
+		handshake_req_put(req);
 		return false;
 	}
 
@@ -381,6 +411,7 @@ out_true:
 	trace_handshake_cancel(net, req, sk);
 
 	fput(req->hr_file);
+	handshake_req_put(req);
 	return true;
 }
 EXPORT_SYMBOL(handshake_req_cancel);
