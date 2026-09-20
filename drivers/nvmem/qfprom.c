@@ -252,13 +252,13 @@ err_clk_prepared:
  *
  * Return: 0 or -err.
  */
-static int qfprom_reg_write(void *context, unsigned int reg, void *_val,
+static int qfprom_reg_write(void *context, unsigned int reg, const void *_val,
 			    size_t bytes)
 {
 	struct qfprom_priv *priv = context;
 	struct qfprom_touched_values old;
 	int words = bytes / 4;
-	u32 *value = _val;
+	const u32 *value = _val;
 	u32 blow_status;
 	int ret;
 	int i;
@@ -443,7 +443,7 @@ static int qfprom_probe(struct platform_device *pdev)
 
 		/* Only enable writing if we have SoC data and a valid clock */
 		if (priv->soc_data && priv->secclk)
-			econfig.reg_write = qfprom_reg_write;
+			econfig.reg_write_const = qfprom_reg_write;
 	}
 
 	pm_runtime_enable(dev);
