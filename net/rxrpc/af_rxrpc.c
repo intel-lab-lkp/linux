@@ -722,10 +722,7 @@ static int rxrpc_setsockopt(struct socket *sock, int level, int optname,
 			ret = -EINVAL;
 			if (val > 1)
 				goto error;
-			if (val)
-				set_bit(RXRPC_SOCK_MANAGE_RESPONSE, &rx->flags);
-			else
-				clear_bit(RXRPC_SOCK_MANAGE_RESPONSE, &rx->flags);
+			assign_bit(RXRPC_SOCK_MANAGE_RESPONSE, &rx->flags, val);
 			goto success;
 
 		default:

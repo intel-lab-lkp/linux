@@ -205,10 +205,7 @@ int rxrpc_sock_set_manage_response(struct sock *sk, bool set)
 
 	lock_sock(sk);
 	ret = !!test_bit(RXRPC_SOCK_MANAGE_RESPONSE, &rx->flags);
-	if (set)
-		set_bit(RXRPC_SOCK_MANAGE_RESPONSE, &rx->flags);
-	else
-		clear_bit(RXRPC_SOCK_MANAGE_RESPONSE, &rx->flags);
+	assign_bit(RXRPC_SOCK_MANAGE_RESPONSE, &rx->flags, set);
 	release_sock(sk);
 	return ret;
 }
