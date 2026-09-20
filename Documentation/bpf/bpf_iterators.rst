@@ -86,6 +86,15 @@ Constructor/next/destructor implementation contract is as follows:
     resources and marks stack space used by `struct bpf_iter_<type>` as usable
     for something else. Destructor is marked with KF_ITER_DESTROY flag.
 
+An iterator whose non-RCU struct result borrows the lifetime of its current
+element must additionally mark its next method with ``KF_ITER_LIFETIME``.
+The verifier invalidates the previous result and its trusted derived fields
+on the next call, including when that call returns NULL, and on destruction
+of the iterator. Resources borrowing that lifetime must be released first.
+The flag requires ``KF_ITER_NEXT`` and a struct pointer return type, and
+cannot be combined with ``KF_ACQUIRE``. It does not change RCU lifetime rules.
+Iterators whose results have an independent lifetime should omit this flag.
+
 Any open-coded BPF iterator implementation has to implement at least these
 three methods. It is enforced that for any given type of iterator only
 applicable constructor/destructor/next are callable. I.e., verifier ensures
