@@ -528,10 +528,18 @@ static enum link_result hdmi_frl_perform_link_training(struct ddc_service *ddc_s
 
 		FRL_INFO("FRL LINK TRAINING:  Poll for FLT_UPDATE.\n");
 		/*LTS:3: Start Link Training*/
-		/*Start FLT Timer = 200 ms, or 300ms if link rate >= 16Gbps*/
+		/*
+		 * Start FLT Timer = 300 ms. HDMI 2.1 specifies FLT_TIMEOUT = 200 ms,
+		 * but this budget runs from the FRL_Rate write to the final
+		 * FLT_update and some sinks need more than that in total: an LG C2
+		 * (2022) at 10G x4 raises its first FLT_update (the LTP request)
+		 * ~45 ms after the rate write and reports lock a further ~180 ms
+		 * later, ~225 ms in all, so it failed the 105-poll (~210 ms) budget on
+		 * most DPMS wakes at 4K120 while at 6G x4 (~20 ms + ~180 ms) it just
+		 * fit. Use the 300 ms already allowed for >= 16 Gbps at every rate.
+		 */
 		num_polls = 0;
-		if (link_settings->frl_link_rate >= HDMI_FRL_LINK_RATE_16GBPS)
-			max_polls = 155;
+		max_polls = 155;
 
 		while (num_polls < max_polls) {
 			flt_poll_cur_time = dm_get_timestamp(ddc_service->ctx);
