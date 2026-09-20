@@ -172,6 +172,63 @@ static int test__symbol_bytes_duplicate_selection(struct test_suite *test __mayb
 }
 
 #ifdef HAVE_LIBELF_SUPPORT
+static int truncated_name_case(size_t file_size, unsigned int expected_reads)
+{
+	char path[] = "/tmp/perf-lazy-truncated-XXXXXX";
+	struct dso *data_dso = NULL;
+	char *contents = NULL;
+	char *name_heap = NULL;
+	char namebuf[1024];
+	const char *name;
+	unsigned int nr_reads;
+	int ret = TEST_FAIL;
+	int fd = -1;
+
+	contents = malloc(file_size);
+	if (!contents)
+		goto out;
+	memset(contents, 'a', file_size);
+
+	fd = mkstemp(path);
+	if (fd < 0 || write(fd, contents, file_size) != (ssize_t)file_size)
+		goto out;
+	close(fd);
+	fd = -1;
+
+	data_dso = dso__new(path);
+	if (!data_dso || dso__data_set_path(data_dso, path) < 0)
+		goto out;
+	dso__set_binary_type(data_dso, DSO_BINARY_TYPE__SYSTEM_PATH_DSO);
+	name = dso__read_ondemand_symbol_name(data_dso, 0, 8192, 0,
+					      namebuf, sizeof(namebuf),
+					      &name_heap, &nr_reads);
+	if (name || name_heap || nr_reads != expected_reads)
+		goto out;
+	ret = TEST_OK;
+out:
+	if (fd >= 0)
+		close(fd);
+	if (data_dso)
+		dso__put(data_dso);
+	unlink(path);
+	free(name_heap);
+	free(contents);
+	return ret;
+}
+
+static int test__symbol_bytes_truncated_name(struct test_suite *test __maybe_unused,
+					     int subtest __maybe_unused)
+{
+	/*
+	 * One byte is short in the stack-buffer read.  1023 bytes fills it
+	 * exactly, so the following read exercises the heap-buffer path.
+	 */
+	if (truncated_name_case(1, 1) != TEST_OK ||
+	    truncated_name_case(1023, 2) != TEST_OK)
+		return TEST_FAIL;
+	return TEST_OK;
+}
+
 static int test__symbol_bytes_lazy_name_lookup(struct test_suite *test __maybe_unused,
 					       int subtest __maybe_unused)
 {
@@ -271,6 +328,7 @@ static struct test_case tests__symbol_bytes[] = {
 	TEST_CASE("Concurrent strict reservations", symbol_bytes_reservation),
 	TEST_CASE("Shared duplicate selection", symbol_bytes_duplicate_selection),
 #ifdef HAVE_LIBELF_SUPPORT
+	TEST_CASE("Truncated lazy symbol names", symbol_bytes_truncated_name),
 	TEST_CASE("Lazy address and name lookup", symbol_bytes_lazy_name_lookup),
 #endif
 	{ .name = NULL, }
