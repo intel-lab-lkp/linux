@@ -201,6 +201,10 @@ pub mod code {
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Error(NonZeroI32);
 
+/// Represents an invalid value for a flag type.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct InvalidFlagValue;
+
 impl Error {
     /// Creates an [`Error`] from a kernel error code.
     ///
@@ -320,6 +324,13 @@ impl From<AllocError> for Error {
     #[inline]
     fn from(_: AllocError) -> Error {
         code::ENOMEM
+    }
+}
+
+impl From<InvalidFlagValue> for Error {
+    #[inline]
+    fn from(_: InvalidFlagValue) -> Error {
+        code::EINVAL
     }
 }
 
