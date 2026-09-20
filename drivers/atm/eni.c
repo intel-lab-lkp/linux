@@ -1881,7 +1881,11 @@ static int eni_start(struct atm_dev *dev)
 	return 0;
 
 free_list:
+	eni_out(0, MID_IE);
+	free_irq(eni_dev->irq, dev);
+	tasklet_kill(&eni_dev->task);
 	kfree(eni_dev->free_list);
+	goto out;
 
 free_irq:
 	free_irq(eni_dev->irq, dev);
@@ -2287,13 +2291,16 @@ MODULE_DEVICE_TABLE(pci,eni_pci_tbl);
 static void eni_remove_one(struct pci_dev *pdev)
 {
 	struct atm_dev *dev = pci_get_drvdata(pdev);
-	struct eni_dev *ed = ENI_DEV(dev);
-	struct eni_zero *zero = &ed->zero;
+	struct eni_dev *eni_dev = ENI_DEV(dev);
+	struct eni_zero *zero = &eni_dev->zero;
 
+	eni_out(0, MID_IE);
+	free_irq(eni_dev->irq, dev);
+	tasklet_kill(&eni_dev->task);
 	eni_do_release(dev);
 	atm_dev_deregister(dev);
 	dma_free_coherent(&pdev->dev, ENI_ZEROES_SIZE, zero->addr, zero->dma);
-	kfree(ed);
+	kfree(eni_dev);
 	pci_disable_device(pdev);
 }
 
