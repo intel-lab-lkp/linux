@@ -51,13 +51,13 @@ try:
     from .load import GenerateTraffic, Iperf3Runner
     from .remote import Remote
     from .ethtool import ethtool_ret, onoff, wait_for_link, wait_for_aneg, \
-        controllable_lp, require_controllable_lp, \
+        controllable_lp, require_controllable_lp, require_link_autoneg, \
         forced_link_settings
 
     __all__ += ["NetDrvEnv", "NetDrvEpEnv", "NetDrvContEnv", "GenerateTraffic",
                 "Remote", "Iperf3Runner",
                 "ethtool_ret", "onoff", "wait_for_link", "wait_for_aneg", "controllable_lp", "require_controllable_lp",
-                "forced_link_settings"]
+                "require_link_autoneg", "forced_link_settings"]
 except ModuleNotFoundError as e:
     print("Failed importing `net` library from kernel sources")
     print(str(e))

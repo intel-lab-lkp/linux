@@ -34,7 +34,7 @@ try:
     from drivers.net.lib.py import GenerateTraffic, Remote, Iperf3Runner
     from drivers.net.lib.py import NetDrvEnv, NetDrvEpEnv, NetDrvContEnv
     from drivers.net.lib.py import ethtool_ret, onoff, wait_for_link, wait_for_aneg, \
-        controllable_lp, require_controllable_lp, \
+        controllable_lp, require_controllable_lp, require_link_autoneg, \
         forced_link_settings
 
     __all__ = ["NetNS", "NetNSEnter", "NetdevSimDev", "UserNetNS",

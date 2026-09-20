@@ -175,6 +175,20 @@ def require_controllable_lp(cfg) -> None:
     if not controllable_lp(cfg):
         raise KsftSkipEx(f"{cfg.remote_ifname} is not directly connected to {cfg.ifname}")
 
+def require_link_autoneg(cfg) -> None:
+    """ Skip if local or remote don't support link autoneg
+
+    :param cfg: test config
+    """
+    # Does local device support link aneg
+    if not ethtool(f"{cfg.ifname}", json=True)[0]["supports-auto-negotiation"]:
+        raise KsftSkipEx(f"{cfg.ifname} doesn't support link autoneg")
+
+    # Does remote device support link aneg
+    if not ethtool(f"{cfg.remote_ifname}",
+                   json=True, host=cfg.remote)[0]["supports-auto-negotiation"]:
+        raise KsftSkipEx(f"Remote {cfg.remote_ifname} doesn't support link autoneg")
+
 def forced_link_settings(cfg) -> str:
     """ Returns a string to pass to ethtool -s with speed/duplex corresponding
         to the current settings.
