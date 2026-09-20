@@ -141,6 +141,10 @@ static int __init early_init_dt_reserve_memory(phys_addr_t base,
 		return ret;
 	}
 
+	if (memblock_is_region_reserved(base, size) ||
+	    memblock_overlaps_nomap_region(base, size))
+		return -EBUSY;
+
 	ret = memblock_reserve(base, size);
 	if (!ret)
 		memblock_mark_rsrv_rmem(base, size);
@@ -343,7 +347,7 @@ void __init fdt_scan_reserved_mem_late(void)
 			continue;
 
 		nomap = of_get_flat_dt_prop(child, "no-map", NULL) != NULL;
-		if (nomap && rmem_overlaps_check(base, size, static_reserved_start))
+		if (rmem_overlaps_check(base, size, static_reserved_start))
 			continue;
 		if (!memblock_is_region_rsrv_rmem(base, size, nomap))
 			continue;
