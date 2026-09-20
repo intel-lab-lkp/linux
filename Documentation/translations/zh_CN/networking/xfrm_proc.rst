@@ -2,7 +2,7 @@
 
 .. include:: ../disclaimer-zh_CN.rst
 
-:Original: Documentation/networking/xfrm_proc.rst
+:Original: Documentation/networking/xfrm/xfrm_proc.rst
 
 :翻译:
 
