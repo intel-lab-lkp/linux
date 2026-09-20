@@ -674,10 +674,7 @@ void update_cond_flag(struct trace_event_file *file)
 		}
 	}
 
-	if (set_cond)
-		set_bit(EVENT_FILE_FL_TRIGGER_COND_BIT, &file->flags);
-	else
-		clear_bit(EVENT_FILE_FL_TRIGGER_COND_BIT, &file->flags);
+	assign_bit(EVENT_FILE_FL_TRIGGER_COND_BIT, &file->flags, set_cond);
 }
 
 /**
@@ -1673,10 +1670,8 @@ event_enable_trigger(struct event_trigger_data *data,
 {
 	struct enable_trigger_data *enable_data = data->private_data;
 
-	if (enable_data->enable)
-		clear_bit(EVENT_FILE_FL_SOFT_DISABLED_BIT, &enable_data->file->flags);
-	else
-		set_bit(EVENT_FILE_FL_SOFT_DISABLED_BIT, &enable_data->file->flags);
+	assign_bit(EVENT_FILE_FL_SOFT_DISABLED_BIT, &enable_data->file->flags,
+		   !enable_data->enable);
 }
 
 static bool

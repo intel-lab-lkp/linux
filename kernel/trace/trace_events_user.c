@@ -590,10 +590,7 @@ static int user_event_enabler_write(struct user_event_mm *mm,
 	ptr = kaddr + (uaddr & ~PAGE_MASK);
 
 	/* Update bit atomically, user tracers must be atomic as well */
-	if (enabler->event && enabler->event->status)
-		set_bit(bit, ptr);
-	else
-		clear_bit(bit, ptr);
+	assign_bit(bit, ptr, enabler->event && enabler->event->status);
 
 	kunmap_local(kaddr);
 	unpin_user_pages_dirty_lock(&page, 1, true);

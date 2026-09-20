@@ -859,10 +859,8 @@ static int __ftrace_event_enable_disable(struct trace_event_file *file,
 			WARN_ON_ONCE(ret);
 		}
 		/* If in soft mode, just set the SOFT_DISABLE_BIT, else clear it */
-		if (soft_mode)
-			set_bit(EVENT_FILE_FL_SOFT_DISABLED_BIT, &file->flags);
-		else
-			clear_bit(EVENT_FILE_FL_SOFT_DISABLED_BIT, &file->flags);
+		assign_bit(EVENT_FILE_FL_SOFT_DISABLED_BIT, &file->flags,
+			   soft_mode);
 		break;
 	case 1:
 		/*
@@ -4271,10 +4269,8 @@ struct event_probe_data {
 
 static void update_event_probe(struct event_probe_data *data)
 {
-	if (data->enable)
-		clear_bit(EVENT_FILE_FL_SOFT_DISABLED_BIT, &data->file->flags);
-	else
-		set_bit(EVENT_FILE_FL_SOFT_DISABLED_BIT, &data->file->flags);
+	assign_bit(EVENT_FILE_FL_SOFT_DISABLED_BIT, &data->file->flags,
+		   !data->enable);
 }
 
 static void
