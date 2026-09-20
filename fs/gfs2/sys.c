@@ -63,6 +63,25 @@ static ssize_t id_show(struct gfs2_sbd *sdp, char *buf)
 			MAJOR(sdp->sd_vfs->s_dev), MINOR(sdp->sd_vfs->s_dev));
 }
 
+/*
+ * Sysfs callbacks must not block on s_umount: mount failure and unmount
+ * remove the sysfs files while holding it for writing.
+ */
+static bool super_trylock_shared_active(struct super_block *sb)
+{
+	if (!down_read_trylock(&sb->s_umount))
+		return false;
+	if (sb->s_flags & SB_ACTIVE)
+		return true;
+	up_read(&sb->s_umount);
+	return false;
+}
+
+static void super_unlock_active(struct super_block *sb)
+{
+	up_read(&sb->s_umount);
+}
+
 static ssize_t status_show(struct gfs2_sbd *sdp, char *buf)
 {
 	unsigned long f = sdp->sd_flags;
@@ -248,6 +267,7 @@ static ssize_t quota_sync_store(struct gfs2_sbd *sdp, const char *buf,
 static ssize_t quota_refresh_user_store(struct gfs2_sbd *sdp, const char *buf,
 					size_t len)
 {
+	struct super_block *sb = sdp->sd_vfs;
 	struct kqid qid;
 	int error;
 	u32 id;
@@ -263,13 +283,19 @@ static ssize_t quota_refresh_user_store(struct gfs2_sbd *sdp, const char *buf,
 	if (!qid_valid(qid))
 		return -EINVAL;
 
+	if (!super_trylock_shared_active(sb))
+		return -EAGAIN;
+
 	error = gfs2_quota_refresh(sdp, qid);
+
+	super_unlock_active(sb);
 	return error ? error : len;
 }
 
 static ssize_t quota_refresh_group_store(struct gfs2_sbd *sdp, const char *buf,
 					 size_t len)
 {
+	struct super_block *sb = sdp->sd_vfs;
 	struct kqid qid;
 	int error;
 	u32 id;
@@ -285,7 +311,12 @@ static ssize_t quota_refresh_group_store(struct gfs2_sbd *sdp, const char *buf,
 	if (!qid_valid(qid))
 		return -EINVAL;
 
+	if (!super_trylock_shared_active(sb))
+		return -EAGAIN;
+
 	error = gfs2_quota_refresh(sdp, qid);
+
+	super_unlock_active(sb);
 	return error ? error : len;
 }
 
