@@ -1267,6 +1267,7 @@ static void __exit fake_exit(void)
 	bridge->lm_enabled = 0;
 
 	vme_unregister_bridge(fake_bridge);
+	tasklet_kill(&bridge->int_tasklet);
 
 	fake_crcsr_exit(fake_bridge);
 	/* resources are stored in link list */
