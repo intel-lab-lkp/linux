@@ -645,7 +645,7 @@ impl<'drm> DriverGpuVm for GpuVmData<'drm> {
             #[allow(clippy::useless_conversion)]
             let mut paddr = u64::from(sgt_entry.dma_address());
             #[allow(clippy::useless_conversion)]
-            let mut sgt_entry_length = u64::from(sgt_entry.dma_len());
+            let mut sgt_entry_length = u64::from(sgt_entry.dma_len().into_raw());
 
             if bytes_left_to_map == 0 {
                 break;
