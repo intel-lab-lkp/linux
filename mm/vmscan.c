@@ -1266,8 +1266,60 @@ free_it:
 	return FOLIO_RECLAIM_SUCCESS;
 }
 
+enum folio_pageout_result {
+	FOLIO_PAGEOUT_KEEP_LOCKED,
+	FOLIO_PAGEOUT_KEEP_UNLOCKED,
+	FOLIO_PAGEOUT_ACTIVATE,
+	FOLIO_PAGEOUT_FREE,	/* folio is locked, hand it to folio_try_reclaim_free() */
+};
+
+static enum folio_pageout_result folio_try_pageout(struct folio *folio,
+		struct scan_control *sc, struct swap_io_ctx *ctx,
+		struct list_head *folio_list)
+{
+	struct address_space *mapping = folio_mapping(folio);
+	unsigned int nr_pages = folio_nr_pages(folio);
+
+	switch (pageout(ctx, mapping, folio, folio_list)) {
+	case PAGE_ACTIVATE:
+		/*
+		 * If shmem folio is split when writeback to swap, the
+		 * tail pages will make their own pass through this
+		 * function and be accounted then.  There is no need to
+		 * clamp nr_pages here: folio_activate_locked() derives
+		 * the count from folio_nr_pages() itself.
+		 */
+		if (nr_pages > 1 && !folio_test_large(folio))
+			sc->nr_scanned -= (nr_pages - 1);
+		return FOLIO_PAGEOUT_ACTIVATE;
+	case PAGE_KEEP:
+		return FOLIO_PAGEOUT_KEEP_LOCKED;
+	case PAGE_SUCCESS:
+		if (nr_pages > 1 && !folio_test_large(folio))
+			sc->nr_scanned -= (nr_pages - 1);
+
+		if (folio_test_writeback(folio))
+			return FOLIO_PAGEOUT_KEEP_UNLOCKED;
+		if (folio_test_dirty(folio))
+			return FOLIO_PAGEOUT_KEEP_UNLOCKED;
+
+		/*
+		 * A synchronous write - probably a ramdisk.  Go ahead
+		 * and try to reclaim the folio.
+		 */
+		if (!folio_trylock(folio))
+			return FOLIO_PAGEOUT_KEEP_UNLOCKED;
+		if (folio_test_dirty(folio) || folio_test_writeback(folio))
+			return FOLIO_PAGEOUT_KEEP_LOCKED;
+		fallthrough;
+	case PAGE_CLEAN:
+		return FOLIO_PAGEOUT_FREE;
+	}
+	unreachable();
+}
+
 /*
- * shrink_folio_list() returns the number of reclaimed pages
+ * Reclaimed folios are counted in the return value.
  */
 static unsigned int shrink_folio_list(struct list_head *folio_list,
 		struct pglist_data *pgdat, struct scan_control *sc,
@@ -1585,7 +1637,6 @@ retry:
 		if (folio_maybe_dma_pinned(folio))
 			goto activate_locked;
 
-		mapping = folio_mapping(folio);
 		if (folio_test_dirty(folio)) {
 			if (folio_is_file_lru(folio)) {
 				/*
@@ -1606,50 +1657,21 @@ retry:
 				goto keep_locked;
 			if (!sc->may_writepage)
 				goto keep_locked;
-
 			/*
 			 * Folio is dirty. Flush the TLB if a writable entry
 			 * potentially exists to avoid CPU writes after I/O
 			 * starts and then write it out here.
 			 */
 			try_to_unmap_flush_dirty();
-			switch (pageout(&ctx, mapping, folio, folio_list)) {
-			case PAGE_KEEP:
-				goto keep_locked;
-			case PAGE_ACTIVATE:
-				/*
-				 * If shmem folio is split when writeback to swap,
-				 * the tail pages will make their own pass through
-				 * this function and be accounted then.
-				 */
-				if (nr_pages > 1 && !folio_test_large(folio)) {
-					sc->nr_scanned -= (nr_pages - 1);
-					nr_pages = 1;
-				}
+			switch (folio_try_pageout(folio, sc, &ctx, folio_list)) {
+			case FOLIO_PAGEOUT_ACTIVATE:
 				goto activate_locked;
-			case PAGE_SUCCESS:
-				if (nr_pages > 1 && !folio_test_large(folio)) {
-					sc->nr_scanned -= (nr_pages - 1);
-					nr_pages = 1;
-				}
-				if (folio_test_writeback(folio))
-					goto keep;
-				if (folio_test_dirty(folio))
-					goto keep;
-
-				/*
-				 * A synchronous write - probably a ramdisk.  Go
-				 * ahead and try to reclaim the folio.
-				 */
-				if (!folio_trylock(folio))
-					goto keep;
-				if (folio_test_dirty(folio) ||
-				    folio_test_writeback(folio))
-					goto keep_locked;
-				mapping = folio_mapping(folio);
-				fallthrough;
-			case PAGE_CLEAN:
-				; /* try to free the folio below */
+			case FOLIO_PAGEOUT_KEEP_LOCKED:
+				goto keep_locked;
+			case FOLIO_PAGEOUT_KEEP_UNLOCKED:
+				goto keep;
+			case FOLIO_PAGEOUT_FREE:
+				break;	/* folio is locked; try to free it below */
 			}
 		}
 
