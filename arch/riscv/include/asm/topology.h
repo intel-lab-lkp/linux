@@ -8,6 +8,10 @@
 #include <asm/numa.h>
 #endif
 
+#define topology_die_id(cpu)		(cpu_topology[cpu].die_id)
+#define topology_die_cpumask(cpu)	(&cpu_topology[cpu].die_sibling)
+#define topology_die_sysfs_visible(cpu)	(topology_die_id(cpu) >= 0)
+
 /* Replace task scheduler's default frequency-invariant accounting */
 #define arch_scale_freq_tick		topology_scale_freq_tick
 #define arch_set_freq_scale		topology_set_freq_scale

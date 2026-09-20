@@ -171,16 +171,42 @@ static struct attribute *default_attrs[] = {
 static umode_t topology_is_visible(struct kobject *kobj,
 				   struct attribute *attr, int unused)
 {
-	if (attr == &dev_attr_ppin.attr && !topology_ppin(kobj_to_dev(kobj)->id))
+	unsigned int cpu = kobj_to_dev(kobj)->id;
+
+#ifdef TOPOLOGY_DIE_SYSFS
+	if (attr == &dev_attr_die_id.attr &&
+	    !topology_die_sysfs_visible(cpu))
+		return 0;
+#endif
+
+	if (attr == &dev_attr_ppin.attr && !topology_ppin(cpu))
 		return 0;
 
 	return attr->mode;
 }
 
+#ifdef TOPOLOGY_DIE_SYSFS
+static umode_t topology_bin_is_visible(struct kobject *kobj,
+				       const struct bin_attribute *attr, int unused)
+{
+	unsigned int cpu = kobj_to_dev(kobj)->id;
+
+	if ((attr == &bin_attr_die_cpus ||
+	     attr == &bin_attr_die_cpus_list) &&
+	    !topology_die_sysfs_visible(cpu))
+		return 0;
+
+	return attr->attr.mode;
+}
+#endif
+
 static const struct attribute_group topology_attr_group = {
 	.attrs = default_attrs,
 	.bin_attrs = bin_attrs,
 	.is_visible = topology_is_visible,
+#ifdef TOPOLOGY_DIE_SYSFS
+	.is_bin_visible = topology_bin_is_visible,
+#endif
 	.name = "topology"
 };
 

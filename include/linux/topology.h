@@ -179,6 +179,9 @@ static inline int cpu_to_mem(int cpu)
 
 #if defined(topology_die_id) && defined(topology_die_cpumask)
 #define TOPOLOGY_DIE_SYSFS
+#ifndef topology_die_sysfs_visible
+#define topology_die_sysfs_visible(cpu)	((void)(cpu), true)
+#endif
 #endif
 #if defined(topology_cluster_id) && defined(topology_cluster_cpumask)
 #define TOPOLOGY_CLUSTER_SYSFS
