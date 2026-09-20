@@ -32,6 +32,18 @@ allOf:
       properties:
         compatible:
           contains:
+            const: amlogic,t7-dwmac
+    then:
+      properties:
+        compatible:
+          items:
+            - const: amlogic,t7-dwmac
+            - const: amlogic,meson-axg-dwmac
+            - const: snps,dwmac-4.00
+  - if:
+      properties:
+        compatible:
+          contains:
             enum:
               - amlogic,meson8b-dwmac
               - amlogic,meson8m2-dwmac
@@ -139,8 +151,10 @@ properties:
           - amlogic,meson-gxbb-dwmac
           - amlogic,meson-axg-dwmac
           - amlogic,meson-g12a-dwmac
+          - amlogic,t7-dwmac
     contains:
       enum:
+        - snps,dwmac-4.00
         - snps,dwmac-3.70a
         - snps,dwmac
 
