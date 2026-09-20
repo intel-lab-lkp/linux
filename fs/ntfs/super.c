@@ -1404,6 +1404,7 @@ static bool load_system_files(struct ntfs_volume *vol)
 	struct ntfs_attr_search_ctx *ctx;
 	struct restart_page_header *rp;
 	int err;
+	bool temporary_ro = false;
 
 	ntfs_debug("Entering.");
 	/* Get mft mirror inode compare the contents of $MFT and $MFTMirr. */
@@ -1578,8 +1579,20 @@ get_ctx_vol_failed:
 	 * NVolErrors() without setting the dirty volume flag and mount
 	 * read-only.  This will prevent read-write remounting and it will also
 	 * prevent all writes.
+	 *
+	 * The check runs with the super block temporarily marked read-only, so
+	 * that ntfs_error() calls issued internally by ntfs_lookup_inode_by_name()
+	 * and ntfs_iget() cannot trigger errors=panic before the read-only
+	 * fallback has run.  The super block is not published yet, so the flag
+	 * is not visible elsewhere.
 	 */
+	if (!sb_rdonly(sb)) {
+		sb->s_flags |= SB_RDONLY;
+		temporary_ro = true;
+	}
 	err = check_windows_hibernation_status(vol);
+	if (temporary_ro && !err && !NVolErrors(vol))
+		sb->s_flags &= ~SB_RDONLY;
 	if (unlikely(err)) {
 		static const char *es1a = "Failed to determine if Windows is hibernated";
 		static const char *es1b = "Windows is hibernated";
@@ -1587,12 +1600,25 @@ get_ctx_vol_failed:
 		const char *es1;
 
 		es1 = err < 0 ? es1a : es1b;
-		/* If a read-write mount, convert it to a read-only mount. */
-		if (!sb_rdonly(sb) && vol->on_errors == ON_ERRORS_REMOUNT_RO) {
-			sb->s_flags |= SB_RDONLY;
-			ntfs_error(sb, "%s.  Mounting read-only%s", es1, es2);
-		}
+		/*
+		 * A Windows hibernation image is not a filesystem error, so
+		 * this is a safety interlock rather than something the
+		 * errors= policy may downgrade.  The super block is already
+		 * read-only here: the temporary flag taken for the check
+		 * above is not restored when the check failed.
+		 */
+		ntfs_error(sb, "%s.  Mounting read-only%s", es1, es2);
 		NVolSetErrors(vol);
+	} else if (unlikely(temporary_ro && sb_rdonly(sb))) {
+		static const char *es1 = "Errors were recorded during mount";
+		static const char *es2 = ".  Run chkdsk.";
+
+		/*
+		 * Errors were recorded during the check or earlier, e.g. when
+		 * loading the LogFile.  Stay read-only, like ntfs_reconfigure()
+		 * does for volumes with recorded errors.
+		 */
+		ntfs_error(sb, "%s.  Mounting read-only%s", es1, es2);
 	}
 
 	/* If (still) a read-write mount, empty the logfile. */
