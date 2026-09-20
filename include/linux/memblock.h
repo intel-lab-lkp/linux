@@ -52,6 +52,7 @@ extern unsigned long long max_possible_pfn;
  * kernel that we know is good to use. It is the only memory that
  * allocations may happen from in this phase.
  * @MEMBLOCK_RSRV_HUGETLB: memory is reserved for hugetlb pages
+ * @MEMBLOCK_RSRV_RMEM: memory reserved by a static /reserved-memory node
  */
 enum memblock_flags {
 	MEMBLOCK_NONE		= 0x0,	/* No special request */
@@ -63,6 +64,7 @@ enum memblock_flags {
 	MEMBLOCK_RSRV_KERN	= 0x20,	/* memory reserved for kernel use */
 	MEMBLOCK_KHO_SCRATCH	= 0x40,	/* scratch memory for kexec handover */
 	MEMBLOCK_RSRV_HUGETLB	= 0x80, /* memory reserved for hugetlb pages */
+	MEMBLOCK_RSRV_RMEM	= 0x100, /* static /reserved-memory node */
 };
 
 /**
@@ -160,6 +162,10 @@ int memblock_reserved_mark_noinit(phys_addr_t base, phys_addr_t size);
 int memblock_reserved_mark_kern(phys_addr_t base, phys_addr_t size);
 int memblock_mark_kho_scratch(phys_addr_t base, phys_addr_t size);
 int memblock_clear_kho_scratch(phys_addr_t base, phys_addr_t size);
+int memblock_mark_rsrv_rmem(phys_addr_t base, phys_addr_t size);
+int memblock_clear_rsrv_rmem(phys_addr_t base, phys_addr_t size);
+bool memblock_is_region_rsrv_rmem(phys_addr_t base, phys_addr_t size,
+				  bool nomap);
 
 void memblock_free(void *ptr, size_t size);
 

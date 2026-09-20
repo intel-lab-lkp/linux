@@ -1204,6 +1204,39 @@ __init int memblock_clear_kho_scratch(phys_addr_t base, phys_addr_t size)
 				    MEMBLOCK_KHO_SCRATCH);
 }
 
+/**
+ * memblock_mark_rsrv_rmem - Mark a region reserved by a static /reserved-memory node
+ * @base: the base phys addr of the region
+ * @size: the size of the region
+ *
+ * Only called for statically placed reserved-memory regions (those defined
+ * by a "reg" property), so the late scan can later tell such a region apart
+ * from one reserved by unrelated code.
+ *
+ * Return: 0 on success, -errno on failure.
+ */
+int __init_memblock memblock_mark_rsrv_rmem(phys_addr_t base, phys_addr_t size)
+{
+	return memblock_setclr_flag(&memblock.memory, base, size, 1,
+				    MEMBLOCK_RSRV_RMEM);
+}
+
+/**
+ * memblock_clear_rsrv_rmem - Clear the static /reserved-memory node tag
+ * @base: the base phys addr of the region
+ * @size: the size of the region
+ *
+ * Only called for statically placed reserved-memory regions whose late
+ * initialization failed, to undo the tag set by memblock_mark_rsrv_rmem().
+ *
+ * Return: 0 on success, -errno on failure.
+ */
+int __init_memblock memblock_clear_rsrv_rmem(phys_addr_t base, phys_addr_t size)
+{
+	return memblock_setclr_flag(&memblock.memory, base, size, 0,
+				    MEMBLOCK_RSRV_RMEM);
+}
+
 static bool should_skip_region(struct memblock_type *type,
 			       struct memblock_region *m,
 			       int nid, int flags)
@@ -2154,6 +2187,41 @@ bool __init_memblock memblock_is_region_reserved(phys_addr_t base, phys_addr_t s
 	return memblock_overlaps_region(&memblock.reserved, base, size);
 }
 
+/**
+ * memblock_is_region_rsrv_rmem - check if a range is tagged by MEMBLOCK_RSRV_RMEM
+ * @base: the base phys addr of the range
+ * @size: the size of the range
+ * @nomap: the expected no-map state of the range
+ *
+ * A range with no overlap in memblock.memory lies entirely outside
+ * declared system memory, where the tag could never be applied, so it is
+ * treated as reserved. Otherwise, every overlapping region must carry the
+ * %MEMBLOCK_RSRV_RMEM tag and match @nomap.
+ *
+ * Return: true if the range is reserved, false otherwise.
+ */
+bool __init_memblock memblock_is_region_rsrv_rmem(phys_addr_t base,
+						  phys_addr_t size, bool nomap)
+{
+	phys_addr_t end = base + memblock_cap_size(base, &size);
+	unsigned long i;
+
+	for (i = 0; i < memblock.memory.cnt; i++) {
+		struct memblock_region *r = &memblock.memory.regions[i];
+
+		if (r->base >= end)
+			break;
+		if (!memblock_addrs_overlap(base, size, r->base, r->size))
+			continue;
+		if (!(r->flags & MEMBLOCK_RSRV_RMEM))
+			return false;
+		if (memblock_is_nomap(r) != nomap)
+			return false;
+	}
+
+	return true;
+}
+
 void __init_memblock memblock_trim_memory(phys_addr_t align)
 {
 	phys_addr_t start, end, orig_start, orig_end;
@@ -2880,6 +2948,7 @@ static const char * const flagname[] = {
 	[ilog2(MEMBLOCK_RSRV_KERN)] = "RSV_KERN",
 	[ilog2(MEMBLOCK_KHO_SCRATCH)] = "KHO_SCRATCH",
 	[ilog2(MEMBLOCK_RSRV_HUGETLB)] = "RSV_HUGETLB",
+	[ilog2(MEMBLOCK_RSRV_RMEM)] = "RSV_RMEM",
 };
 
 static int memblock_debug_show(struct seq_file *m, void *private)

@@ -122,6 +122,8 @@ static int fdt_fixup_reserved_mem_node(unsigned long node,
 static int __init early_init_dt_reserve_memory(phys_addr_t base,
 					       phys_addr_t size, bool nomap)
 {
+	int ret;
+
 	if (nomap) {
 		/*
 		 * If the memory is already reserved (by another region), we
@@ -132,9 +134,16 @@ static int __init early_init_dt_reserve_memory(phys_addr_t base,
 		    memblock_is_region_reserved(base, size))
 			return -EBUSY;
 
-		return memblock_mark_nomap(base, size);
+		ret = memblock_mark_nomap(base, size);
+		if (!ret)
+			memblock_mark_rsrv_rmem(base, size);
+		return ret;
 	}
-	return memblock_reserve(base, size);
+
+	ret = memblock_reserve(base, size);
+	if (!ret)
+		memblock_mark_rsrv_rmem(base, size);
+	return ret;
 }
 
 /*
@@ -168,14 +177,19 @@ static int __init __reserved_mem_reserve_reg(unsigned long node,
 	base = b;
 	size = s;
 
-	if (size && early_init_dt_reserve_memory(base, size, nomap) == 0) {
-		fdt_fixup_reserved_mem_node(node, base, size);
-		pr_debug("Reserved memory: reserved region for node '%s': base %pa, size %lu MiB\n",
-			 uname, &base, (unsigned long)(size / SZ_1M));
-	} else {
+	if (!size)
+		return -EINVAL;
+
+	err = early_init_dt_reserve_memory(base, size, nomap);
+	if (err) {
 		pr_err("Reserved memory: failed to reserve memory for node '%s': base %pa, size %lu MiB\n",
 		       uname, &base, (unsigned long)(size / SZ_1M));
+		return err;
 	}
+
+	fdt_fixup_reserved_mem_node(node, base, size);
+	pr_debug("Reserved memory: reserved region for node '%s': base %pa, size %lu MiB\n",
+		 uname, &base, (unsigned long)(size / SZ_1M));
 	return 0;
 }
 
@@ -288,6 +302,7 @@ void __init fdt_scan_reserved_mem_late(void)
 	fdt_for_each_subnode(child, fdt, node) {
 		const __be32 *prop;
 		const char *uname;
+		bool nomap;
 		u64 b, s;
 		int ret;
 		int len;
@@ -307,10 +322,15 @@ void __init fdt_scan_reserved_mem_late(void)
 		base = b;
 		size = s;
 
-		if (size) {
-			uname = fdt_get_name(fdt, child, NULL);
-			fdt_init_reserved_mem_node(child, uname, base, size, false);
-		}
+		if (!size)
+			continue;
+
+		nomap = of_get_flat_dt_prop(child, "no-map", NULL) != NULL;
+		if (!memblock_is_region_rsrv_rmem(base, size, nomap))
+			continue;
+
+		uname = fdt_get_name(fdt, child, NULL);
+		fdt_init_reserved_mem_node(child, uname, base, size, false);
 	}
 
 	/* check for overlapping reserved regions */
@@ -662,8 +682,12 @@ static void __init fdt_init_reserved_mem_node(unsigned long node, const char *un
 
 		if (dynamic && nomap)
 			memblock_clear_nomap(rmem->base, rmem->size);
+
 		if (dynamic || !nomap)
 			memblock_phys_free(rmem->base, rmem->size);
+
+		if (!dynamic)
+			memblock_clear_rsrv_rmem(rmem->base, rmem->size);
 		return;
 	} else {
 		phys_addr_t end = rmem->base + rmem->size - 1;
