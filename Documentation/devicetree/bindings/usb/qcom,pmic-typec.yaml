@@ -91,6 +91,14 @@ required:
   - interrupts
   - interrupt-names
 
+oneOf:
+  - required:
+      - vdd-vbus-supply
+  - properties:
+      connector:
+        required:
+          - vbus-supply
+
 allOf:
   - if:
       properties:
