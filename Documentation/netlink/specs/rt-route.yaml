@@ -467,13 +467,16 @@ attribute-sets:
     attributes:
       -
         name: in
-        type: binary  # bpf prog
+        type: nest
+        nested-attributes: lwt-bpf-prog
       -
         name: out
-        type: binary
+        type: nest
+        nested-attributes: lwt-bpf-prog
       -
         name: xmit
-        type: binary
+        type: nest
+        nested-attributes: lwt-bpf-prog
       -
         name: xmit-headroom
         type: u32
@@ -508,7 +511,8 @@ attribute-sets:
         type: u32
       -
         name: bpf
-        type: binary
+        type: nest
+        nested-attributes: lwt-bpf-prog
       -
         name: vrftable
         type: u32
@@ -618,6 +622,17 @@ attribute-sets:
       -
         name: hwid
         type: u8
+  -
+    name: lwt-bpf-prog
+    name-prefix: lwt-bpf-prog-
+    header: linux/lwtunnel.h
+    attributes:
+      -
+        name: fd
+        type: u32
+      -
+        name: name
+        type: string
 
 operations:
   enum-model: directional
