@@ -334,6 +334,20 @@ static inline void vgic_get_irq_ref(struct vgic_irq *irq)
 	WARN_ON_ONCE(!vgic_try_get_irq_ref(irq));
 }
 
+/*
+ * Linear scan over at most VGIC_V3_MAX_LRS / VGIC_V2_MAX_LRS entries.
+ * Only called on the rare eoicount > 0 path, so the O(n) cost is
+ * acceptable and avoids the complexity of a bitmap.
+ */
+static inline bool intid_in_lrs(u32 intid, const u32 *lr_intids, int nr_lrs)
+{
+	for (int i = 0; i < nr_lrs; i++) {
+		if (lr_intids[i] == intid)
+			return true;
+	}
+	return false;
+}
+
 void vgic_v3_fold_lr_state(struct kvm_vcpu *vcpu);
 void vgic_v3_populate_lr(struct kvm_vcpu *vcpu, struct vgic_irq *irq, int lr);
 void vgic_v3_clear_lr(struct kvm_vcpu *vcpu, int lr);

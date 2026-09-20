@@ -148,37 +148,65 @@ void vgic_v3_fold_lr_state(struct kvm_vcpu *vcpu)
 	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
 	struct vgic_v3_cpu_if *cpuif = &vgic_cpu->vgic_v3;
 	u32 eoicount = FIELD_GET(ICH_HCR_EL2_EOIcount, cpuif->vgic_hcr);
-	struct vgic_irq *irq = *host_data_ptr(last_lr_irq);
+	struct vgic_irq *targets[32];
+	u32 lr_intids[VGIC_V3_MAX_LRS];
+	int nr_lrs = min_t(int, cpuif->used_lrs, ARRAY_SIZE(lr_intids));
+	u32 max_targets;
+	int nr_targets = 0;
 
 	DEBUG_SPINLOCK_BUG_ON(!irqs_disabled());
 
-	for (int lr = 0; lr < cpuif->used_lrs; lr++)
-		vgic_v3_fold_lr(vcpu, cpuif->vgic_lr[lr]);
+	if (!cpuif->used_lrs && !eoicount)
+		return;
+
+	for (int lr = 0; lr < nr_lrs; lr++) {
+		u64 val = cpuif->vgic_lr[lr];
+
+		if (vcpu->kvm->arch.vgic.vgic_model == KVM_DEV_TYPE_ARM_VGIC_V3)
+			lr_intids[lr] = val & ICH_LR_VIRTUAL_ID_MASK;
+		else
+			lr_intids[lr] = val & GICH_LR_VIRTUALID;
+
+		vgic_v3_fold_lr(vcpu, val);
+	}
+
+	cpuif->used_lrs = 0;
+
+	if (likely(!eoicount))
+		return;
+
+	max_targets = min_t(u32, eoicount, ARRAY_SIZE(targets));
 
 	/*
-	 * EOIMode=0: use EOIcount to emulate deactivation. We are
-	 * guaranteed to deactivate in reverse order of the activation, so
-	 * just pick one active interrupt after the other in the tail part
-	 * of the ap_list, past the LRs, and replay the deactivation as if
-	 * the CPU was doing it. We also rely on priority drop to have taken
-	 * place, and the list to be sorted by priority.
+	 * EOIMode=0: replay deactivations for overflow active interrupts.
+	 * Walk ap_list under ap_list_lock and pin candidate interrupts so we
+	 * can process them outside the lock without risking lock inversion.
 	 */
-	list_for_each_entry_continue(irq, &vgic_cpu->ap_list_head, ap_list) {
-		u64 lr;
+	scoped_guard(raw_spinlock, &vgic_cpu->ap_list_lock) {
+		struct vgic_irq *irq;
 
-		/*
-		 * I would have loved to write this using a scoped_guard(),
-		 * but using 'continue' here is a total train wreck.
-		 */
-		if (!eoicount) {
-			break;
-		} else {
-			guard(raw_spinlock)(&irq->irq_lock);
+		list_for_each_entry(irq, &vgic_cpu->ap_list_head, ap_list) {
+			if (nr_targets == max_targets)
+				break;
 
-			if (!(likely(vgic_target_oracle(irq) == vcpu) &&
-			      irq->active))
+			if (intid_in_lrs(irq->intid, lr_intids, nr_lrs))
 				continue;
 
+			scoped_guard(raw_spinlock, &irq->irq_lock) {
+				if (likely(vgic_target_oracle(irq) == vcpu) &&
+				    irq->active) {
+					vgic_get_irq_ref(irq);
+					targets[nr_targets++] = irq;
+				}
+			}
+		}
+	}
+
+	for (int i = 0; i < nr_targets; i++) {
+		struct vgic_irq *irq = targets[i];
+		u64 lr;
+
+		scoped_guard(raw_spinlock, &irq->irq_lock) {
 			lr = vgic_v3_compute_lr(vcpu, irq) & ~ICH_LR_ACTIVE_BIT;
 		}
 
@@ -186,10 +214,8 @@ void vgic_v3_fold_lr_state(struct kvm_vcpu *vcpu)
 			vgic_v3_deactivate_phys(FIELD_GET(ICH_LR_PHYS_ID_MASK, lr));
 
 		vgic_v3_fold_lr(vcpu, lr);
-		eoicount--;
+		vgic_put_irq(vcpu->kvm, irq);
 	}
-
-	cpuif->used_lrs = 0;
 }
 
 void vgic_v3_deactivate(struct kvm_vcpu *vcpu, u64 val)

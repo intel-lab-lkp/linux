@@ -800,9 +800,6 @@ struct kvm_host_data {
 	unsigned int debug_brps;
 	unsigned int debug_wrps;
 
-	/* Last vgic_irq part of the AP list recorded in an LR */
-	struct vgic_irq *last_lr_irq;
-
 	/* PPI state tracking for GICv5-based guests */
 	struct {
 		DECLARE_BITMAP(pendr, VGIC_V5_NR_PRIVATE_IRQS);
