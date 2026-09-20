@@ -929,11 +929,11 @@ static int sur40_start_streaming(struct vb2_queue *vq, unsigned int count)
 static void sur40_stop_streaming(struct vb2_queue *vq)
 {
 	struct sur40_state *sur40 = vb2_get_drv_priv(vq);
+
+	/* Release queued buffers first: nothing completes them after unplug */
+	return_all_buffers(sur40, VB2_BUF_STATE_ERROR);
 	vb2_wait_for_all_buffers(vq);
 	sur40->sequence = -1;
-
-	/* Release all active buffers */
-	return_all_buffers(sur40, VB2_BUF_STATE_ERROR);
 }
 
 /* V4L ioctl */
