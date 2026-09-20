@@ -944,6 +944,24 @@ static bool ovl_lower_uuid_ok(struct ovl_fs *ofs, const uuid_t *uuid)
 	return true;
 }
 
+/*
+ * Lower file handles identify a lower fs, but not the mount whose idmap was
+ * used to decode them.  Remember the first lower idmap seen for each fs so
+ * decodable export handles can be disabled if another one appears.
+ */
+static bool ovl_lower_mnt_idmap_mismatch(struct ovl_sb *fs,
+					 const struct path *path)
+{
+	struct mnt_idmap *idmap = mnt_idmap(path->mnt);
+
+	if (!fs->lower_idmap) {
+		fs->lower_idmap = idmap;
+		return false;
+	}
+
+	return fs->lower_idmap != idmap;
+}
+
 /* Get a unique fsid for the layer */
 static int ovl_get_fsid(struct ovl_fs *ofs, const struct path *path)
 {
@@ -956,8 +974,15 @@ static int ovl_get_fsid(struct ovl_fs *ofs, const struct path *path)
 	bool warn = false;
 
 	for (i = 0; i < ofs->numfs; i++) {
-		if (ofs->fs[i].sb == sb)
+		if (ofs->fs[i].sb == sb) {
+			if (ofs->config.nfs_export &&
+			    ovl_lower_mnt_idmap_mismatch(&ofs->fs[i], path)) {
+				ofs->config.nfs_export = false;
+				pr_warn("different idmaps in same lower fs '%pd2', falling back to nfs_export=off.\n",
+					path->dentry);
+			}
 			return i;
+		}
 	}
 
 	if (!ovl_lower_uuid_ok(ofs, uuid)) {
@@ -987,6 +1012,7 @@ static int ovl_get_fsid(struct ovl_fs *ofs, const struct path *path)
 	ofs->fs[ofs->numfs].sb = sb;
 	ofs->fs[ofs->numfs].pseudo_dev = dev;
 	ofs->fs[ofs->numfs].bad_uuid = bad_uuid;
+	ovl_lower_mnt_idmap_mismatch(&ofs->fs[ofs->numfs], path);
 
 	return ofs->numfs++;
 }
