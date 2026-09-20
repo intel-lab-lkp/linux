@@ -697,11 +697,12 @@ config ARM_ERRATA_754322
 	depends on CPU_V7
 	help
 	  This option enables the workaround for the 754322 Cortex-A9 (r2p*,
-	  r3p*) erratum. A speculative memory access may cause a page table walk
-	  which starts prior to an ASID switch but completes afterwards. This
-	  can populate the micro-TLB with a stale entry which may be hit with
-	  the new ASID. This workaround places two dsb instructions in the mm
-	  switching code so that no page table walks can cross the ASID switch.
+	  r3p*,r4p*) erratum. A speculative memory access may cause a page table
+	  walk which starts prior to an ASID switch but completes afterwards.
+	  This can populate the micro-TLB with a stale entry which may be hit
+	  with the new ASID. This workaround places two dsb instructions in the
+	  mm switching code so that no page table walks can cross the ASID
+	  switch.
 
 config ARM_ERRATA_754327
 	bool "ARM errata: no automatic Store Buffer drain"
