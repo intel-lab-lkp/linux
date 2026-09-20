@@ -184,7 +184,7 @@ static int s6e3ha8_amb577px01_wqhd_prepare(struct drm_panel *panel)
 
 	ret = s6e3ha8_amb577px01_wqhd_on(priv);
 	if (ret < 0) {
-		gpiod_set_value_cansleep(priv->reset_gpio, 1);
+		gpiod_set_value_cansleep(priv->reset_gpio, 0);
 		goto err;
 	}
 
