@@ -850,6 +850,16 @@ static int __stmmac_set_coalesce(struct net_device *dev,
 	else if (queue >= max_cnt)
 		return -EINVAL;
 
+	/* Check TX parameters before applying any RX setting */
+
+	if (ec->tx_coalesce_usecs == 0 &&
+	    ec->tx_max_coalesced_frames == 0)
+		return -EINVAL;
+
+	if (ec->tx_coalesce_usecs > STMMAC_MAX_COAL_TX_TICK ||
+	    ec->tx_max_coalesced_frames > STMMAC_TX_MAX_FRAMES)
+		return -EINVAL;
+
 	if (priv->use_riwt) {
 		rx_riwt = stmmac_usec2riwt(ec->rx_coalesce_usecs, priv);
 
@@ -874,14 +884,6 @@ static int __stmmac_set_coalesce(struct net_device *dev,
 				ec->rx_max_coalesced_frames;
 		}
 	}
-
-	if ((ec->tx_coalesce_usecs == 0) &&
-	    (ec->tx_max_coalesced_frames == 0))
-		return -EINVAL;
-
-	if ((ec->tx_coalesce_usecs > STMMAC_MAX_COAL_TX_TICK) ||
-	    (ec->tx_max_coalesced_frames > STMMAC_TX_MAX_FRAMES))
-		return -EINVAL;
 
 	if (all_queues) {
 		int i;
