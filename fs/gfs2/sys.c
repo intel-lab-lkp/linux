@@ -334,6 +334,7 @@ static ssize_t quota_refresh_group_store(struct gfs2_sbd *sdp, const char *buf,
 
 static ssize_t demote_rq_store(struct gfs2_sbd *sdp, const char *buf, size_t len)
 {
+	struct super_block *sb = sdp->sd_vfs;
 	struct gfs2_glock *gl;
 	const struct gfs2_glock_operations *glops;
 	unsigned int glmode;
@@ -367,14 +368,22 @@ static ssize_t demote_rq_store(struct gfs2_sbd *sdp, const char *buf, size_t len
 		glops = gfs2_glops_list[gltype];
 	if (glops == NULL)
 		return -EINVAL;
+
+	if (!super_trylock_shared_active(sb))
+		return -EAGAIN;
+
 	if (!test_and_set_bit(SDF_DEMOTE, &sdp->sd_flags))
 		fs_info(sdp, "demote interface used\n");
 	rv = gfs2_glock_get(sdp, glnum, glops, NO_CREATE, &gl);
 	if (rv)
-		return rv;
+		goto out_unlock;
 	gfs2_glock_cb(gl, glmode);
 	gfs2_glock_put(gl);
-	return len;
+	rv = 0;
+
+out_unlock:
+	super_unlock_active(sb);
+	return rv ? rv : len;
 }
 
 
