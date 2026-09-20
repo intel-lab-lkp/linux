@@ -1575,6 +1575,7 @@ static const struct of_device_id rtd1619b_pinctrl_of_match[] = {
 	{ .compatible = "realtek,rtd1619b-pinctrl", },
 	{},
 };
+MODULE_DEVICE_TABLE(of, rtd1619b_pinctrl_of_match);
 
 static struct platform_driver rtd1619b_pinctrl_driver = {
 	.driver = {
