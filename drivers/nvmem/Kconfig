@@ -354,7 +354,7 @@ config NVMEM_NINTENDO_OTP
 
 config NVMEM_S32G_OCOTP
 	tristate "S32G SoC OCOTP support"
-	depends on ARCH_S32
+	depends on ARCH_S32 || COMPILE_TEST
 	help
 	  This is a driver for the 'OCOTP' peripheral available on S32G
 	  platforms.
@@ -518,7 +518,7 @@ config NVMEM_SUNPLUS_OCOTP
 
 config NVMEM_SUNXI_SID
 	tristate "Allwinner SoCs SID support"
-	depends on ARCH_SUNXI
+	depends on ARCH_SUNXI || COMPILE_TEST
 	help
 	  This is a driver for the 'security ID' available on various Allwinner
 	  devices.
@@ -563,7 +563,7 @@ config NVMEM_VF610_OCOTP
 
 config NVMEM_ZYNQMP
 	tristate "Xilinx ZYNQMP SoC nvmem firmware support"
-	depends on ARCH_ZYNQMP
+	depends on ARCH_ZYNQMP || COMPILE_TEST
 	help
 	  This is a driver to access hardware related data like
 	  soc revision, IDCODE... etc by using the firmware
