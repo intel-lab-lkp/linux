@@ -32,14 +32,6 @@ pub fn column(this: &Span) -> usize {
     this.column()
 }
 
-pub fn file(this: &Span) -> String {
-    this.file()
-}
-
-pub fn local_file(this: &Span) -> Option<PathBuf> {
-    this.local_file()
-}
-
 pub fn join(this: &Span, other: Span) -> Option<Span> {
     this.join(other)
 }
