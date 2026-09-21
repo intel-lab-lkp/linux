@@ -918,6 +918,9 @@ static int renesas_i3c_i3c_xfers(struct i3c_dev_desc *dev, struct i3c_xfer *i3c_
 		time_left = renesas_i3c_wait_xfer(i3c, xfer);
 		if (!time_left)
 			xfer_failed = true;
+
+		if (i3c_xfers[i].rnw)
+			i3c_xfers[i].actual_len = cmd->rx_count;
 	}
 
 	if (xfer_failed)

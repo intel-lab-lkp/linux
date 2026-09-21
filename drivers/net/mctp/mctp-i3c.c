@@ -131,12 +131,12 @@ static int mctp_i3c_read(struct mctp_i3c_device *mi)
 	if (rc < 0)
 		goto err;
 
-	if (WARN_ON_ONCE(xfer.len > mi->mrl)) {
+	if (WARN_ON_ONCE(xfer.actual_len > mi->mrl)) {
 		/* Bad i3c bus driver */
 		rc = -EIO;
 		goto err;
 	}
-	if (xfer.len < MCTP_I3C_MINLEN) {
+	if (xfer.actual_len < MCTP_I3C_MINLEN) {
 		stats->rx_length_errors++;
 		rc = -EIO;
 		goto err;
@@ -145,15 +145,15 @@ static int mctp_i3c_read(struct mctp_i3c_device *mi)
 	/* check PEC, including address byte */
 	addr = mi->addr << 1 | 1;
 	pec = i2c_smbus_pec(0, &addr, 1);
-	pec = i2c_smbus_pec(pec, xfer.data.in, xfer.len - 1);
-	if (pec != ((u8 *)xfer.data.in)[xfer.len - 1]) {
+	pec = i2c_smbus_pec(pec, xfer.data.in, xfer.actual_len - 1);
+	if (pec != ((u8 *)xfer.data.in)[xfer.actual_len - 1]) {
 		stats->rx_crc_errors++;
 		rc = -EINVAL;
 		goto err;
 	}
 
 	/* Remove PEC */
-	skb_trim(skb, xfer.len - 1);
+	skb_trim(skb, xfer.actual_len - 1);
 
 	cb = __mctp_cb(skb);
 	cb->halen = PID_SIZE;

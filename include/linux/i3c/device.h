@@ -59,7 +59,7 @@ enum i3c_xfer_mode {
  * @rnw: encodes the transfer direction. true for a read, false for a write
  * @cmd: Read/Write command in HDR mode, read: 0x80 - 0xff, write: 0x00 - 0x7f
  * @len: transfer length in bytes of the transfer
- * @actual_len: actual length in bytes are transferred by the controller
+ * @actual_len: actual length in bytes transferred by the controller on read
  * @data: input/output buffer
  * @data.in: input buffer. Must point to a DMA-able buffer
  * @data.out: output buffer. Must point to a DMA-able buffer

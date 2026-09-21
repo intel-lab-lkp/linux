@@ -1029,7 +1029,7 @@ static int dw_i3c_master_i3c_xfers(struct i3c_dev_desc *dev,
 		struct dw_i3c_cmd *cmd = &xfer->cmds[i];
 
 		if (i3c_xfers[i].rnw)
-			i3c_xfers[i].len = cmd->rx_len;
+			i3c_xfers[i].actual_len = cmd->rx_len;
 	}
 
 	ret = xfer->ret;
