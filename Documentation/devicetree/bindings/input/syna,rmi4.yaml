@@ -56,6 +56,7 @@ properties:
 
   vdd-supply: true
   vio-supply: true
+  incell-supply: true
 
   rmi4-f01@1:
     type: object
