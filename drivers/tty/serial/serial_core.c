@@ -965,7 +965,7 @@ static int uart_set_info(struct tty_struct *tty, struct tty_port *port,
 	}
 
 	if ((new_info->irq >= irq_get_nr_irqs()) || (new_info->irq < 0) ||
-	    (new_info->baud_base < 9600))
+	    (new_info->baud_base < 9600) || (new_info->baud_base > UINT_MAX / 16))
 		return -EINVAL;
 
 	if (change_port || change_irq) {
