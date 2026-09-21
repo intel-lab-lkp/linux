@@ -4434,6 +4434,38 @@ static int cow_remap_tree(struct btrfs_trans_handle *trans, struct btrfs_path *p
 	return ret;
 }
 
+static void free_balance_remap_chunks(struct list_head *chunks)
+{
+	struct remap_chunk_info *rci, *tmp;
+
+	list_for_each_entry_safe(rci, tmp, chunks, list) {
+		struct btrfs_block_group *bg = rci->bg;
+		bool is_unused;
+
+		if (!bg)
+			goto free_record;
+
+		/*
+		 * This is a bit racy and the 'used' status can change
+		 * but this is not a problem as later functions will
+		 * verify it again.
+		 */
+		spin_lock(&bg->lock);
+		is_unused = !btrfs_is_block_group_used(bg);
+		spin_unlock(&bg->lock);
+
+		if (is_unused)
+			btrfs_mark_bg_unused(bg);
+		if (rci->made_ro)
+			btrfs_dec_block_group_ro(bg);
+		btrfs_put_block_group(bg);
+
+free_record:
+		list_del(&rci->list);
+		kfree(rci);
+	}
+}
+
 static int balance_remap_chunks(struct btrfs_fs_info *fs_info, struct btrfs_path *path,
 				struct list_head *chunks)
 {
@@ -4473,35 +4505,7 @@ static int balance_remap_chunks(struct btrfs_fs_info *fs_info, struct btrfs_path
 	btrfs_commit_transaction(trans);
 
 end:
-	while (!list_empty(chunks)) {
-		bool is_unused;
-		struct btrfs_block_group *bg;
-
-		rci = list_first_entry(chunks, struct remap_chunk_info, list);
-
-		bg = rci->bg;
-		if (bg) {
-			/*
-			 * This is a bit racy and the 'used' status can change
-			 * but this is not a problem as later functions will
-			 * verify it again.
-			 */
-			spin_lock(&bg->lock);
-			is_unused = !btrfs_is_block_group_used(bg);
-			spin_unlock(&bg->lock);
-
-			if (is_unused)
-				btrfs_mark_bg_unused(bg);
-
-			if (rci->made_ro)
-				btrfs_dec_block_group_ro(bg);
-
-			btrfs_put_block_group(bg);
-		}
-
-		list_del(&rci->list);
-		kfree(rci);
-	}
+	free_balance_remap_chunks(chunks);
 
 	return ret;
 }
@@ -4741,6 +4745,9 @@ loop:
 		}
 	}
 error:
+	if (!list_empty(&remap_chunks))
+		free_balance_remap_chunks(&remap_chunks);
+
 	if (enospc_errors) {
 		btrfs_info(fs_info, "%d enospc errors during balance",
 			   enospc_errors);
