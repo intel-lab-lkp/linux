@@ -771,7 +771,7 @@ int rtw_check_beacon_data(struct adapter *padapter, u8 *pbuf,  int len)
 	if (!check_fwstate(pmlmepriv, WIFI_AP_STATE))
 		return _FAIL;
 
-	if (len < 0 || len > MAX_IE_SZ)
+	if (len < _BEACON_IE_OFFSET_ || len > MAX_IE_SZ)
 		return _FAIL;
 
 	pbss_network->ie_length = len;
@@ -885,61 +885,46 @@ int rtw_check_beacon_data(struct adapter *padapter, u8 *pbuf,  int len)
 	group_cipher = 0; pairwise_cipher = 0;
 	psecuritypriv->wpa_group_cipher = _NO_PRIVACY_;
 	psecuritypriv->wpa_pairwise_cipher = _NO_PRIVACY_;
-	for (p = ie + _BEACON_IE_OFFSET_; ; p += (ie_len + 2)) {
-		p = rtw_get_ie(p,
-			       WLAN_EID_VENDOR_SPECIFIC,
-			       &ie_len,
-			       (pbss_network->ie_length - _BEACON_IE_OFFSET_ - (ie_len + 2)));
-		if ((p) && (!memcmp(p + 2, OUI1, 4))) {
-			if (rtw_parse_wpa_ie(p,
-					     ie_len + 2,
-					     &group_cipher,
-					     &pairwise_cipher,
-					     NULL) == _SUCCESS) {
-				psecuritypriv->dot11_auth_algrthm = dot11_auth_algrthm_8021x;
+	p = rtw_get_ie_ex(ie + _BEACON_IE_OFFSET_,
+			  pbss_network->ie_length - _BEACON_IE_OFFSET_,
+			  WLAN_EID_VENDOR_SPECIFIC,
+			  OUI1, sizeof(OUI1), NULL, &ie_len);
+	if (p) {
+		if (rtw_parse_wpa_ie(p,
+				     ie_len,
+				     &group_cipher,
+				     &pairwise_cipher,
+				     NULL) == _SUCCESS) {
+			psecuritypriv->dot11_auth_algrthm = dot11_auth_algrthm_8021x;
 
-				psecuritypriv->dot8021xalg = 1;/* psk,  todo:802.1x */
+			psecuritypriv->dot8021xalg = 1;/* psk,  todo:802.1x */
 
-				psecuritypriv->wpa_psk |= BIT(0);
+			psecuritypriv->wpa_psk |= BIT(0);
 
-				psecuritypriv->wpa_group_cipher = group_cipher;
-				psecuritypriv->wpa_pairwise_cipher = pairwise_cipher;
-			}
-
-			break;
+			psecuritypriv->wpa_group_cipher = group_cipher;
+			psecuritypriv->wpa_pairwise_cipher = pairwise_cipher;
 		}
-
-		if (!p || ie_len == 0)
-			break;
 	}
 
 	/* wmm */
 	ie_len = 0;
 	pmlmepriv->qospriv.qos_option = 0;
 	if (pregistrypriv->wmm_enable) {
-		for (p = ie + _BEACON_IE_OFFSET_; ; p += (ie_len + 2)) {
-			p = rtw_get_ie(p,
-				       WLAN_EID_VENDOR_SPECIFIC,
-				       &ie_len,
-				       (pbss_network->ie_length -
-					_BEACON_IE_OFFSET_ - (ie_len + 2)));
-			if ((p) && !memcmp(p + 2, WMM_PARA_IE, 6)) {
-				pmlmepriv->qospriv.qos_option = 1;
+		p = rtw_get_ie_ex(ie + _BEACON_IE_OFFSET_,
+				  pbss_network->ie_length - _BEACON_IE_OFFSET_,
+				  WLAN_EID_VENDOR_SPECIFIC,
+				  WMM_PARA_IE, sizeof(WMM_PARA_IE), NULL, &ie_len);
+		if (p && ie_len >= WLAN_WMM_LEN + 2) {
+			pmlmepriv->qospriv.qos_option = 1;
 
-				*(p + 8) |= BIT(7);/* QoS Info, support U-APSD */
+			*(p + 8) |= BIT(7);/* QoS Info, support U-APSD */
 
-				/* disable all ACM bits since the WMM admission */
-				/* control is not supported */
-				*(p + 10) &= ~BIT(4); /* BE */
-				*(p + 14) &= ~BIT(4); /* BK */
-				*(p + 18) &= ~BIT(4); /* VI */
-				*(p + 22) &= ~BIT(4); /* VO */
-
-				break;
-			}
-
-			if (!p || ie_len == 0)
-				break;
+			/* disable all ACM bits since the WMM admission */
+			/* control is not supported */
+			*(p + 10) &= ~BIT(4); /* BE */
+			*(p + 14) &= ~BIT(4); /* BK */
+			*(p + 18) &= ~BIT(4); /* VI */
+			*(p + 22) &= ~BIT(4); /* VO */
 		}
 	}
 
