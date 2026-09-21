@@ -2884,6 +2884,57 @@ static u32 hisi_qm_isolate_threshold_read(struct uacce_device *uacce)
 	return qm->isolate_data.err_threshold;
 }
 
+int qm_usage_percent(struct hisi_qm *qm, int chan_idx)
+{
+	u32 val, used_bw, total_bw;
+
+	val = readl(qm->io_base + QM_CHANNEL_USAGE_OFFSET +
+		    chan_idx * QM_CHANNEL_ADDR_INTRVL);
+	used_bw = lower_16_bits(val);
+	total_bw = upper_16_bits(val);
+	if (!total_bw)
+		return -EIO;
+
+	if (total_bw <= used_bw)
+		return QM_MAX_DEV_USAGE;
+
+	return (used_bw * QM_DEV_USAGE_RATE) / total_bw;
+}
+
+static int hisi_qm_get_dev_usage(struct uacce_device *uacce, char *buf, int size)
+{
+	struct hisi_qm *qm = uacce->priv;
+	struct qm_channel *channel_data = &qm->channel_data;
+	const char *sep = "";
+	int ret, i, len = 0;
+
+	if (qm->ver < QM_HW_V5)
+		return -ENODEV;
+
+	ret = qm_pm_get_sync(qm);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < channel_data->channel_num; i++) {
+		ret = qm_usage_percent(qm, i);
+		if (ret < 0)
+			goto out;
+
+		if (len >= size)
+			break;
+
+		len += scnprintf(buf + len, size - len, "%s%s: %d",
+				 sep, channel_data->channel_name[i], ret);
+		sep = "\n";
+	}
+
+	ret = len;
+out:
+	qm_pm_put_sync(qm);
+
+	return ret;
+}
+
 static const struct uacce_ops uacce_qm_ops = {
 	.get_available_instances = hisi_qm_get_available_instances,
 	.get_queue = hisi_qm_uacce_get_queue,
@@ -2896,6 +2947,7 @@ static const struct uacce_ops uacce_qm_ops = {
 	.get_isolate_state = hisi_qm_get_isolate_state,
 	.isolate_err_threshold_write = hisi_qm_isolate_threshold_write,
 	.isolate_err_threshold_read = hisi_qm_isolate_threshold_read,
+	.get_dev_usage = hisi_qm_get_dev_usage,
 };
 
 static void qm_remove_uacce(struct hisi_qm *qm)
