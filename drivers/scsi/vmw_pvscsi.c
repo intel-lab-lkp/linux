@@ -69,6 +69,7 @@ struct pvscsi_adapter {
 	u8				rev;
 	bool				use_msg;
 	bool				use_req_threshold;
+	bool				irq_requested;
 
 	spinlock_t			hw_lock;
 
@@ -1212,7 +1213,10 @@ static void pvscsi_free_sgls(const struct pvscsi_adapter *adapter)
 
 static void pvscsi_shutdown_intr(struct pvscsi_adapter *adapter)
 {
-	free_irq(pci_irq_vector(adapter->dev, 0), adapter);
+	if (adapter->irq_requested) {
+		free_irq(pci_irq_vector(adapter->dev, 0), adapter);
+		adapter->irq_requested = false;
+	}
 	pci_free_irq_vectors(adapter->dev);
 }
 
@@ -1526,6 +1530,7 @@ static int pvscsi_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		       "vmw_pvscsi: unable to request IRQ: %d\n", error);
 		goto out_reset_adapter;
 	}
+	adapter->irq_requested = true;
 
 	error = scsi_add_host(host, &pdev->dev);
 	if (error) {
