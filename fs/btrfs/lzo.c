@@ -224,8 +224,7 @@ static int copy_compressed_data_to_bio(struct btrfs_fs_info *fs_info,
 		u32 foffset = *total_out & (fsize - 1);
 
 		/* With the range copied, we're larger than the original range. */
-		if (((*total_out + copy_len) >> sectorsize_bits) >=
-		    max_out >> sectorsize_bits)
+		if (*total_out + copy_len >= max_out)
 			return -E2BIG;
 
 		if (!*out_folio) {
@@ -253,6 +252,8 @@ static int copy_compressed_data_to_bio(struct btrfs_fs_info *fs_info,
 	ASSERT(*out_folio);
 
 	/* The remaining size is not enough, pad it with zeros */
+	if (*total_out + sector_bytes_left >= max_out)
+		return -E2BIG;
 	folio_zero_range(*out_folio, offset_in_folio(*out_folio, *total_out), sector_bytes_left);
 	return write_and_queue_folio(out_bio, out_folio, total_out, sector_bytes_left);
 }
