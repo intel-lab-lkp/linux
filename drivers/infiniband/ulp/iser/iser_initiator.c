@@ -464,6 +464,10 @@ int iser_send_data_out(struct iscsi_conn *conn, struct iscsi_task *task,
 		return 0;
 
 send_data_out_error:
+	if (tx_desc->mapped)
+		ib_dma_unmap_single(iser_conn->ib_conn.device->ib_device,
+				    tx_desc->dma_addr, ISER_HEADERS_LEN,
+				    DMA_TO_DEVICE);
 	kmem_cache_free(ig.desc_cache, tx_desc);
 	iser_err("conn %p failed err %d\n", conn, err);
 	return err;
