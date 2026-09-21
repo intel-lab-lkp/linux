@@ -4274,12 +4274,17 @@ process_log:
 	}
 
 	t16 = le16_to_cpu(lrh->redo_off);
+	if (t16 > rec_len || rec_len - t16 < sizeof(*rt)) {
+		err = -EINVAL;
+		goto out;
+	}
 
 	rt = Add2Ptr(lrh, t16);
 	t32 = rec_len - t16;
 
 	/* Now check that this is a valid restart table. */
-	if (!check_rstbl(rt, t32)) {
+	if (le16_to_cpu(rt->size) != sizeof(struct TRANSACTION_ENTRY) ||
+	    !check_rstbl(rt, t32)) {
 		err = -EINVAL;
 		goto out;
 	}
@@ -4314,6 +4319,10 @@ check_dirty_page_table:
 	}
 
 	t16 = le16_to_cpu(lrh->redo_off);
+	if (t16 > rec_len || rec_len - t16 < sizeof(*rt)) {
+		err = -EINVAL;
+		goto out;
+	}
 
 	rt = Add2Ptr(lrh, t16);
 	t32 = rec_len - t16;
@@ -4441,11 +4450,16 @@ check_attr_table:
 	}
 
 	t16 = le16_to_cpu(lrh->redo_off);
+	if (t16 > rec_len || rec_len - t16 < sizeof(*rt)) {
+		err = -EINVAL;
+		goto out;
+	}
 
 	rt = Add2Ptr(lrh, t16);
 	oatbl_bytes = rec_len - t16;
 
-	if (!check_rstbl(rt, oatbl_bytes)) {
+	if (le16_to_cpu(rt->size) < bytes_per_attr_entry ||
+	    !check_rstbl(rt, oatbl_bytes)) {
 		err = -EINVAL;
 		goto out;
 	}
