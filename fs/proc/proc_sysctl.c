@@ -18,6 +18,7 @@
 #include <linux/mount.h>
 #include <linux/kmemleak.h>
 #include <linux/lockdep.h>
+#include <linux/overflow.h>
 #include "internal.h"
 
 #define list_for_each_table_entry(index, header)			\
@@ -91,28 +92,178 @@ static int sysctl_follow_link(struct ctl_table_header **phead, size_t *pindex);
 static int insert_links(struct ctl_table_header *head);
 static void put_links(struct ctl_table_header *header);
 
+static inline bool is_field_table(const struct ctl_table_header *head)
+{
+	return head->table_kind == SYSCTL_TABLE_KIND_FIELD;
+}
+
 static const char *sysctl_entry_procname(struct ctl_table_header *head,
 					 size_t index)
 {
+	if (is_field_table(head))
+		return head->ctl_fields[index].procname;
+
 	return head->ctl_table[index].procname;
 }
 
 static umode_t sysctl_entry_mode(struct ctl_table_header *head, size_t index)
 {
-	return head->ctl_table[index].mode;
+	const struct sysctl_field *field;
+
+	if (!is_field_table(head))
+		return head->ctl_table[index].mode;
+
+	field = &head->ctl_fields[index];
+
+	if (field->mode_fn) {
+		lockdep_assert_not_held(&sysctl_lock);
+		return field->mode_fn(head->ctx);
+	}
+
+	return field->mode;
+}
+
+static bool sysctl_entry_is_dir(const struct ctl_table_header *head,
+				size_t index)
+{
+	/* Do not call field mode_fn callback while holding sysctl_lock. */
+	if (is_field_table(head))
+		return false;
+
+	return S_ISDIR(head->ctl_table[index].mode);
+}
+
+static bool sysctl_entry_is_link(const struct ctl_table_header *head,
+				 size_t index)
+{
+	if (is_field_table(head))
+		return false;
+
+	return S_ISLNK(head->ctl_table[index].mode);
 }
 
 static struct ctl_table_poll *sysctl_entry_poll(struct ctl_table_header *head,
 						size_t index)
 {
+	if (is_field_table(head))
+		return NULL;
+
 	return head->ctl_table[index].poll;
+}
+
+static void *sysctl_context_object(const struct sysctl_context *ctx)
+{
+	if (!ctx)
+		return NULL;
+	if (ctx->object)
+		return ctx->object(ctx);
+
+	switch (ctx->type) {
+	case SYSCTL_CONTEXT_USER_NS:
+		return ctx->ns.user_ns;
+	case SYSCTL_CONTEXT_IPC_NS:
+		return ctx->ns.ipc_ns;
+	case SYSCTL_CONTEXT_PID_NS:
+		return ctx->ns.pid_ns;
+	case SYSCTL_CONTEXT_NET_NS:
+		return ctx->ns.net_ns;
+	}
+
+	return NULL;
+}
+
+static void *sysctl_context_data(const struct sysctl_context *ctx,
+				 size_t offset, size_t size)
+{
+	void *object = sysctl_context_object(ctx);
+
+	if (!object || offset > ctx->object_size ||
+	    size > ctx->object_size - offset)
+		return NULL;
+
+	return (char *)object + offset;
 }
 
 static const struct ctl_table *
 sysctl_entry_table(struct ctl_table_header *head, size_t index,
 		   struct ctl_table *table)
 {
-	return &head->ctl_table[index];
+	const struct sysctl_field *field;
+
+	if (!is_field_table(head))
+		return &head->ctl_table[index];
+
+	field = &head->ctl_fields[index];
+
+	memset(table, 0, sizeof(*table));
+	table->procname = field->procname;
+	table->mode = field->mode;
+
+	if (field->mode_fn)
+		table->mode = field->mode_fn(head->ctx);
+
+	switch (field->type) {
+	case SYSCTL_FIELD_NO_DATA:
+		break;
+	case SYSCTL_FIELD_STRING:
+		table->proc_handler = proc_dostring;
+		table->maxlen = field->maxlen;
+		break;
+	case SYSCTL_FIELD_BOOL:
+		table->proc_handler = proc_dobool;
+		table->maxlen = sizeof(bool);
+		break;
+	case SYSCTL_FIELD_U8:
+	case SYSCTL_FIELD_U8_MINMAX:
+		table->proc_handler = proc_dou8vec_minmax;
+		table->maxlen = sizeof(u8);
+		table->extra1 = field->u8_limits.min;
+		table->extra2 = field->u8_limits.max;
+		break;
+	case SYSCTL_FIELD_INT:
+	case SYSCTL_FIELD_INT_MINMAX:
+		table->proc_handler = field->type == SYSCTL_FIELD_INT ?
+				      proc_dointvec : proc_dointvec_minmax;
+		table->maxlen = sizeof(int);
+		table->extra1 = field->int_limits.min;
+		table->extra2 = field->int_limits.max;
+		break;
+	case SYSCTL_FIELD_UINT:
+	case SYSCTL_FIELD_UINT_MINMAX:
+		table->proc_handler = field->type == SYSCTL_FIELD_UINT ?
+				      proc_douintvec : proc_douintvec_minmax;
+		table->maxlen = sizeof(unsigned int);
+		table->extra1 = field->uint_limits.min;
+		table->extra2 = field->uint_limits.max;
+		break;
+	case SYSCTL_FIELD_LONG:
+	case SYSCTL_FIELD_LONG_MINMAX:
+		table->proc_handler = proc_doulongvec_minmax;
+		table->maxlen = sizeof(long);
+		table->extra1 = field->long_limits.min;
+		table->extra2 = field->long_limits.max;
+		break;
+	case SYSCTL_FIELD_ULONG:
+	case SYSCTL_FIELD_ULONG_MINMAX:
+		table->proc_handler = proc_doulongvec_minmax;
+		table->maxlen = sizeof(unsigned long);
+		table->extra1 = field->ulong_limits.min;
+		table->extra2 = field->ulong_limits.max;
+		break;
+	case SYSCTL_FIELD_SIZE_T:
+		table->proc_handler = proc_doulongvec_minmax;
+		table->maxlen = sizeof(size_t);
+		break;
+	}
+
+	if (field->type != SYSCTL_FIELD_NO_DATA)
+		table->data = sysctl_context_data(head->ctx, field->data_offset, table->maxlen);
+	if (field->proc_handler)
+		table->proc_handler = field->proc_handler;
+	if (field->maxlen)
+		table->maxlen = field->maxlen;
+
+	return table;
 }
 
 static void sysctl_print_dir(struct ctl_dir *dir)
@@ -212,9 +363,17 @@ static void erase_entry(struct ctl_table_header *head, size_t index)
 
 static void init_header(struct ctl_table_header *head,
 	struct ctl_table_root *root, struct ctl_table_set *set,
-	struct ctl_node *node, const struct ctl_table *table, size_t table_size)
+	struct ctl_node *node, const struct ctl_table *table,
+	const struct sysctl_field *fields, size_t table_size,
+	const struct sysctl_context *ctx)
 {
-	head->ctl_table = table;
+	if (fields) {
+		head->ctl_fields = fields;
+		head->table_kind = SYSCTL_TABLE_KIND_FIELD;
+	} else {
+		head->ctl_table = table;
+		head->table_kind = SYSCTL_TABLE_KIND_TABLE;
+	}
 	head->ctl_table_size = table_size;
 	head->ctl_table_arg = table;
 	head->used = 0;
@@ -223,6 +382,7 @@ static void init_header(struct ctl_table_header *head,
 	head->unregistering = NULL;
 	head->root = root;
 	head->set = set;
+	head->ctx = ctx;
 	head->parent = NULL;
 	head->node = node;
 	INIT_HLIST_HEAD(&head->inodes);
@@ -981,7 +1141,7 @@ static struct ctl_dir *find_subdir(struct ctl_dir *dir,
 
 	if (!find_entry(&head, &index, dir, name, namelen))
 		return ERR_PTR(-ENOENT);
-	if (!S_ISDIR(sysctl_entry_mode(head, index)))
+	if (!sysctl_entry_is_dir(head, index))
 		return ERR_PTR(-ENOTDIR);
 	return container_of(head, struct ctl_dir, header);
 }
@@ -1006,7 +1166,8 @@ static struct ctl_dir *new_dir(struct ctl_table_set *set,
 	memcpy(new_name, name, namelen);
 	table[0].procname = new_name;
 	table[0].mode = S_IFDIR|S_IRUGO|S_IXUGO;
-	init_header(&new->header, set->dir.header.root, set, node, table, 1);
+	init_header(&new->header, set->dir.header.root, set, node, table, NULL,
+		    1, NULL);
 
 	return new;
 }
@@ -1187,6 +1348,10 @@ static int sysctl_check_table(const char *path, struct ctl_table_header *header)
 		entry = sysctl_entry_table(header, index, &table);
 		if (!entry->procname)
 			err |= sysctl_err(path, entry, "procname is null");
+		if (is_field_table(header) &&
+		    header->ctl_fields[index].type != SYSCTL_FIELD_NO_DATA &&
+		    !entry->data)
+			err |= sysctl_err(path, entry, "No data");
 		if ((entry->proc_handler == proc_dostring) ||
 		    (entry->proc_handler == proc_dobool) ||
 		    (entry->proc_handler == proc_dointvec) ||
@@ -1199,7 +1364,7 @@ static int sysctl_check_table(const char *path, struct ctl_table_header *header)
 		    (entry->proc_handler == proc_dointvec_ms_jiffies) ||
 		    (entry->proc_handler == proc_doulongvec_minmax) ||
 		    (entry->proc_handler == proc_doulongvec_ms_jiffies_minmax)) {
-			if (!entry->data)
+			if (!is_field_table(header) && !entry->data)
 				err |= sysctl_err(path, entry, "No data");
 			if (!entry->maxlen)
 				err |= sysctl_err(path, entry, "No maxlen");
@@ -1255,7 +1420,7 @@ static struct ctl_table_header *new_links(struct ctl_dir *dir, struct ctl_table_
 		link++;
 	}
 	init_header(links, dir->header.root, dir->header.set, node, link_table,
-		    head->ctl_table_size);
+		    NULL, head->ctl_table_size, NULL);
 	links->nreg = head->ctl_table_size;
 
 	return links;
@@ -1279,10 +1444,10 @@ static bool get_links(struct ctl_dir *dir,
 		if (!find_entry(&tmp_head, &link_index, dir, procname,
 				strlen(procname)))
 			return false;
-		if (S_ISDIR(sysctl_entry_mode(tmp_head, link_index)) &&
-		    S_ISDIR(sysctl_entry_mode(header, index)))
+		if (sysctl_entry_is_dir(tmp_head, link_index) &&
+		    sysctl_entry_is_dir(header, index))
 			continue;
-		if (S_ISLNK(sysctl_entry_mode(tmp_head, link_index)) &&
+		if (sysctl_entry_is_link(tmp_head, link_index) &&
 		    tmp_head->ctl_table[link_index].data == link_root)
 			continue;
 		return false;
@@ -1369,18 +1534,25 @@ static struct ctl_dir *sysctl_mkdir_p(struct ctl_dir *dir, const char *path)
 }
 
 /**
- * __register_sysctl_table - register a leaf sysctl table
+ * __register_sysctl_table_internal - register a leaf sysctl table
  * @set: Sysctl tree to register on
  * @path: The path to the directory the sysctl table is in.
+ * @table: The top-level ctl_table array, or %NULL when registering @fields.
+ * @fields: The top-level ctl_field array, or %NULL when registering @table.
+ * @table_size: The number of elements in @table or @fields.
+ * @ctx: Optional context used to resolve @fields entries.
+ * @ctx_size: Size of @ctx, including any wrapper object that embeds it.
  *
- * @table: the top-level table structure. This table should not be free'd
- *         after registration. So it should not be used on stack. It can either
- *         be a global or dynamically allocated by the caller and free'd later
- *         after sysctl unregistration.
- * @table_size : The number of elements in table
+ * Register a sysctl table hierarchy. One of @table or @fields must be
+ * provided. The descriptor array should not be freed after registration, so it
+ * should not be used on stack. It can either be global or dynamically
+ * allocated by the caller and freed later after sysctl unregistration.
  *
- * Register a sysctl table hierarchy. @table should be a filled in ctl_table
- * array.
+ * If @ctx points to a wrapper object, &struct sysctl_context must be the first
+ * member so @ctx can be copied together with the rest of that object.
+ * Data offsets stored in @fields are checked against @ctx->object_size and
+ * applied to the namespace selected by @ctx->ns. A context wrapper may provide
+ * @ctx->object for tables whose data belongs to another object.
  *
  * The members of the &struct ctl_table structure are used as follows:
  * procname - the name of the sysctl file under /proc/sys. Set to %NULL to not
@@ -1411,25 +1583,69 @@ static struct ctl_dir *sysctl_mkdir_p(struct ctl_dir *dir, const char *path)
  * This routine returns %NULL on a failure to register, and a pointer
  * to the table header on success.
  */
-struct ctl_table_header *__register_sysctl_table(
-	struct ctl_table_set *set,
-	const char *path, const struct ctl_table *table, size_t table_size)
+static struct ctl_table_header *
+__register_sysctl_table_internal(struct ctl_table_set *set, const char *path,
+				 const struct ctl_table *table,
+				 const struct sysctl_field *fields,
+				 size_t table_size,
+				 const struct sysctl_context *ctx, size_t ctx_size)
 {
 	struct ctl_table_root *root = set->dir.header.root;
 	struct ctl_table_header *header;
 	struct ctl_dir *dir;
 	struct ctl_node *node;
+	const struct sysctl_context *header_ctx = NULL;
+	size_t nodes_size;
 	size_t alloc_size;
+	size_t context_offset;
 
-	alloc_size = sizeof(struct ctl_table_header) +
-		     sizeof(struct ctl_node) * table_size;
+	if (!!table == !!fields)
+		return NULL;
+
+	if (ctx && ctx_size < sizeof(*ctx))
+		return NULL;
+
+	if (!ctx && ctx_size)
+		return NULL;
+
+	if (fields && (!ctx || !ctx->object_size ||
+		       !sysctl_context_object(ctx)))
+		return NULL;
+
+	if (check_mul_overflow(sizeof(struct ctl_node), table_size, &nodes_size))
+		return NULL;
+
+	if (check_add_overflow(sizeof(*header), nodes_size, &context_offset))
+		return NULL;
+
+	/*
+	 * Store the copied context after the ctl_node array. struct sysctl_context
+	 * is the first member of any caller-defined wrapper, whose alignment
+	 * must not exceed that of struct sysctl_context.
+	 */
+	if (ctx) {
+		if (check_add_overflow(context_offset,
+				       __alignof__(*ctx) - 1, &context_offset))
+			return NULL;
+		context_offset = ALIGN_DOWN(context_offset, __alignof__(*ctx));
+	}
+
+	if (check_add_overflow(context_offset, ctx_size, &alloc_size))
+		return NULL;
 
 	header = kzalloc(alloc_size, GFP_KERNEL_ACCOUNT);
 	if (!header)
 		return NULL;
 
 	node = (struct ctl_node *)(header + 1);
-	init_header(header, root, set, node, table, table_size);
+	if (ctx) {
+		header_ctx = (const struct sysctl_context *)((void *)header +
+							   context_offset);
+		memcpy((void *)header_ctx, ctx, ctx_size);
+	}
+
+	init_header(header, root, set, node, table, fields, table_size,
+		    header_ctx);
 	if (sysctl_check_table(path, header))
 		goto fail;
 
@@ -1458,6 +1674,25 @@ fail:
 	kfree(header);
 	return NULL;
 }
+
+struct ctl_table_header *
+__register_sysctl_fields(struct ctl_table_set *set, const char *path,
+			 const struct sysctl_field *fields, size_t field_count,
+			 const struct sysctl_context *ctx, size_t ctx_size)
+{
+	return __register_sysctl_table_internal(set, path, NULL, fields,
+						field_count, ctx, ctx_size);
+}
+EXPORT_SYMBOL(__register_sysctl_fields);
+
+struct ctl_table_header *
+__register_sysctl_table(struct ctl_table_set *set, const char *path,
+			const struct ctl_table *table, size_t table_size)
+{
+	return __register_sysctl_table_internal(set, path, table, NULL,
+						table_size, NULL, 0);
+}
+EXPORT_SYMBOL(__register_sysctl_table);
 
 /**
  * register_sysctl_sz - register a sysctl table
@@ -1547,7 +1782,7 @@ static void put_links(struct ctl_table_header *header)
 
 		if (link &&
 		    ((S_ISDIR(link->mode) &&
-		      S_ISDIR(sysctl_entry_mode(header, index))) ||
+		      sysctl_entry_is_dir(header, index)) ||
 		     (S_ISLNK(link->mode) && (link->data == root)))) {
 			drop_sysctl_table(link_head);
 		} else {
@@ -1603,7 +1838,7 @@ void setup_sysctl_set(struct ctl_table_set *set,
 {
 	memset(set, 0, sizeof(*set));
 	set->is_seen = is_seen;
-	init_header(&set->dir.header, root, set, NULL, root_table, 1);
+	init_header(&set->dir.header, root, set, NULL, root_table, NULL, 1, NULL);
 }
 
 void retire_sysctl_set(struct ctl_table_set *set)

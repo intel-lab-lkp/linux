@@ -22,20 +22,27 @@
 #ifndef _LINUX_SYSCTL_H
 #define _LINUX_SYSCTL_H
 
+#include <linux/build_bug.h>
 #include <linux/list.h>
 #include <linux/rcupdate.h>
 #include <linux/wait.h>
 #include <linux/rbtree.h>
+#include <linux/stddef.h>
 #include <linux/uidgid.h>
 #include <uapi/linux/sysctl.h>
 
 /* For the /proc/sys support */
 struct completion;
 struct ctl_table;
+struct sysctl_field;
 struct nsproxy;
 struct ctl_table_root;
 struct ctl_table_header;
 struct ctl_dir;
+struct ipc_namespace;
+struct net;
+struct pid_namespace;
+struct user_namespace;
 
 /* Keep the same order as in fs/proc/proc_sysctl.c */
 #define SYSCTL_ZERO			((void *)&sysctl_vals[0])
@@ -80,6 +87,27 @@ extern const int sysctl_vals[];
 
 extern const unsigned long sysctl_long_vals[];
 extern const unsigned int sysctl_uint_vals[];
+
+enum sysctl_context_type {
+	SYSCTL_CONTEXT_USER_NS,
+	SYSCTL_CONTEXT_IPC_NS,
+	SYSCTL_CONTEXT_PID_NS,
+	SYSCTL_CONTEXT_NET_NS,
+};
+
+union sysctl_namespace {
+	struct user_namespace *user_ns;
+	struct ipc_namespace *ipc_ns;
+	struct pid_namespace *pid_ns;
+	struct net *net_ns;
+};
+
+struct sysctl_context {
+	enum sysctl_context_type type;
+	size_t object_size;
+	union sysctl_namespace ns;
+	void *(*object)(const struct sysctl_context *ctx);
+};
 
 typedef int proc_handler(const struct ctl_table *ctl, int dir, void *buf,
 			 size_t *lenp, loff_t *ppos);
@@ -237,30 +265,114 @@ struct ctl_table {
 	void *extra2;
 } __randomize_layout;
 
+enum sysctl_field_type {
+	SYSCTL_FIELD_NO_DATA,
+	SYSCTL_FIELD_STRING,
+	SYSCTL_FIELD_BOOL,
+	SYSCTL_FIELD_U8,
+	SYSCTL_FIELD_U8_MINMAX,
+	SYSCTL_FIELD_INT,
+	SYSCTL_FIELD_INT_MINMAX,
+	SYSCTL_FIELD_UINT,
+	SYSCTL_FIELD_UINT_MINMAX,
+	SYSCTL_FIELD_LONG,
+	SYSCTL_FIELD_LONG_MINMAX,
+	SYSCTL_FIELD_ULONG,
+	SYSCTL_FIELD_ULONG_MINMAX,
+	SYSCTL_FIELD_SIZE_T,
+};
+
+#define __SYSCTL_FIELD_OFFSET(_struct, _field, _type)				\
+	(offsetof(_struct, _field) +						\
+	 BUILD_BUG_ON_ZERO(!__same_type(((_struct *)0)->_field, *(_type *)0)))
+
+#define SYSCTL_FIELD_INT_OFFSET(_struct, _field)	__SYSCTL_FIELD_OFFSET(_struct, _field, int)
+#define SYSCTL_FIELD_UINT_OFFSET(_struct, _field)	__SYSCTL_FIELD_OFFSET(_struct, _field, unsigned int)
+#define SYSCTL_FIELD_LONG_OFFSET(_struct, _field)	__SYSCTL_FIELD_OFFSET(_struct, _field, long)
+#define SYSCTL_FIELD_ULONG_OFFSET(_struct, _field)	__SYSCTL_FIELD_OFFSET(_struct, _field, unsigned long)
+#define SYSCTL_FIELD_SIZE_T_OFFSET(_struct, _field)	__SYSCTL_FIELD_OFFSET(_struct, _field, size_t)
+
+struct sysctl_field_u8_limits {
+	unsigned int *min;
+	unsigned int *max;
+};
+
+struct sysctl_field_int_limits {
+	int *min;
+	int *max;
+};
+
+struct sysctl_field_uint_limits {
+	unsigned int *min;
+	unsigned int *max;
+};
+
+struct sysctl_field_long_limits {
+	long *min;
+	long *max;
+};
+
+struct sysctl_field_ulong_limits {
+	unsigned long *min;
+	unsigned long *max;
+};
+
+struct sysctl_field {
+	const char *procname;
+	umode_t mode;
+	enum sysctl_field_type type;
+	umode_t (*mode_fn)(const struct sysctl_context *ctx);
+	proc_handler *proc_handler;
+	int maxlen;
+	size_t data_offset;
+	union {
+		struct sysctl_field_u8_limits		u8_limits;
+		struct sysctl_field_int_limits		int_limits;
+		struct sysctl_field_uint_limits		uint_limits;
+		struct sysctl_field_long_limits		long_limits;
+		struct sysctl_field_ulong_limits	ulong_limits;
+	};
+} __randomize_layout;
+
 struct ctl_node {
 	struct rb_node node;
 	struct ctl_table_header *header;
 };
 
 /**
- * struct ctl_table_header - maintains dynamic lists of struct ctl_table trees
- * @ctl_table: pointer to the first element in ctl_table array
- * @ctl_table_size: number of elements pointed by @ctl_table
+ * struct ctl_table_header - maintains dynamic lists of sysctl descriptor trees
+ * @ctl_table: pointer to the first element in a legacy ctl_table array
+ * @ctl_fields: pointer to the first element in a ctl_field array
+ * @ctl_table_size: number of elements pointed to by @ctl_table or @ctl_fields
  * @used: The entry will never be touched when equal to 0.
  * @count: Upped every time something is added to @inodes and downed every time
  *         something is removed from inodes
  * @nreg: When nreg drops to 0 the ctl_table_header will be unregistered.
- * @rcu: Delays the freeing of the inode. Introduced with "unfuck proc_sysctl ->d_compare()"
+ * @rcu: delays freeing the header until after an RCU grace period
+ * @unregistering: completion used while unregistering the header
+ * @ctl_table_arg: original legacy ctl_table passed at registration, or NULL
+ * @ctx: copied registration context used to resolve ctl_field entries
+ * @root: sysctl tree containing this header
+ * @set: sysctl set containing this header
+ * @parent: parent directory of this header
+ * @node: array of nodes corresponding to the descriptor entries
+ * @inodes: inodes currently referring to this header
  *
  * @type: Enumeration to differentiate between ctl target types:
  * type.SYSCTL_TABLE_TYPE_DEFAULT: ctl target with no special considerations
  * type.SYSCTL_TABLE_TYPE_PERMANENTLY_EMPTY: Identifies a permanently empty dir
  *                                            target to serve as a mount point
+ * @table_kind: descriptor format stored in this header
+ * @table_kind.SYSCTL_TABLE_KIND_TABLE: legacy ctl_table descriptors
+ * @table_kind.SYSCTL_TABLE_KIND_FIELD: typed ctl_field descriptors
  */
 struct ctl_table_header {
 	union {
 		struct {
-			const struct ctl_table *ctl_table;
+			union {
+				const struct ctl_table *ctl_table;
+				const struct sysctl_field *ctl_fields;
+			};
 			int ctl_table_size;
 			int used;
 			int count;
@@ -275,10 +387,15 @@ struct ctl_table_header {
 	struct ctl_dir *parent;
 	struct ctl_node *node;
 	struct hlist_head inodes; /* head for proc_inode->sysctl_inodes */
+	const struct sysctl_context *ctx;
 	enum {
 		SYSCTL_TABLE_TYPE_DEFAULT,
 		SYSCTL_TABLE_TYPE_PERMANENTLY_EMPTY,
 	} type;
+	enum {
+		SYSCTL_TABLE_KIND_TABLE,
+		SYSCTL_TABLE_KIND_FIELD,
+	} table_kind;
 };
 
 struct ctl_dir {
@@ -303,6 +420,10 @@ struct ctl_table_root {
 #define register_sysctl(path, table)	\
 	register_sysctl_sz(path, table, ARRAY_SIZE(table))
 
+#define register_sysctl_fields(set, path, fields, ctx)			\
+	__register_sysctl_fields(set, path, fields, ARRAY_SIZE(fields),	\
+				 (ctx), sizeof(*(ctx)))
+
 #ifdef CONFIG_SYSCTL
 
 void proc_sys_poll_notify(struct ctl_table_poll *poll);
@@ -315,6 +436,10 @@ extern void retire_sysctl_set(struct ctl_table_set *set);
 struct ctl_table_header *__register_sysctl_table(
 	struct ctl_table_set *set,
 	const char *path, const struct ctl_table *table, size_t table_size);
+struct ctl_table_header *
+__register_sysctl_fields(struct ctl_table_set *set, const char *path,
+			 const struct sysctl_field *fields, size_t field_count,
+			 const struct sysctl_context *ctx, size_t ctx_size);
 struct ctl_table_header *register_sysctl_sz(const char *path, const struct ctl_table *table,
 					    size_t table_size);
 void unregister_sysctl_table(struct ctl_table_header * table);
@@ -346,6 +471,14 @@ static inline struct ctl_table_header *register_sysctl_mount_point(const char *p
 static inline struct ctl_table_header *register_sysctl_sz(const char *path,
 							  const struct ctl_table *table,
 							  size_t table_size)
+{
+	return NULL;
+}
+
+static inline struct ctl_table_header *
+__register_sysctl_fields(struct ctl_table_set *set, const char *path,
+			 const struct sysctl_field *fields, size_t field_count,
+			 const struct sysctl_context *ctx, size_t ctx_size)
 {
 	return NULL;
 }
