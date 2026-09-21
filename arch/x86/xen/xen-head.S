@@ -55,12 +55,13 @@ SYM_CODE_START(asm_cpu_bringup_and_idle)
 	call cpu_bringup_and_idle
 SYM_CODE_END(asm_cpu_bringup_and_idle)
 
-SYM_CODE_START(xen_cpu_bringup_again)
+SYM_FUNC_START(xen_cpu_bringup_again)
 	UNWIND_HINT_FUNC
 	mov	%rdi, %rsp
 	UNWIND_HINT_REGS
 	call	cpu_bringup_and_idle
-SYM_CODE_END(xen_cpu_bringup_again)
+SYM_FUNC_END(xen_cpu_bringup_again)
+STACK_FRAME_NON_STANDARD_FP(xen_cpu_bringup_again)
 .popsection
 #endif
 #endif
