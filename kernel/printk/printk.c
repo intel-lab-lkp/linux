@@ -1087,7 +1087,7 @@ static void __init log_buf_add_cpu(void)
 
 	cpu_extra = (num_possible_cpus() - 1) * __LOG_CPU_MAX_BUF_LEN;
 
-	/* by default this will only continue through for large > 64 CPUs */
+	/* by default this will only continue through for 18 or more CPUs */
 	if (cpu_extra <= __LOG_BUF_LEN / 2)
 		return;
 
