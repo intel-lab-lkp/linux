@@ -822,10 +822,35 @@ static void cdns_xspi_nand_reset_seq_init(struct cdns_xspi_dev *cdns_xspi)
 	writel(cfg, cdns_xspi->iobase + CDNS_XSPI_RST_SEQ_CFG_0);
 }
 
+static int cdns_xspi_acmd_alloc_dma_buf(struct cdns_xspi_dev *cdns_xspi,
+					size_t len)
+{
+	cdns_xspi->dma_buf = dmam_alloc_coherent(cdns_xspi->dev, len,
+						 &cdns_xspi->dma_addr,
+						 GFP_KERNEL);
+	if (!cdns_xspi->dma_buf)
+		return -ENOMEM;
+
+	cdns_xspi->dma_buf_len = len;
+
+	return 0;
+}
+
+static void cdns_xspi_acmd_disable_xip(struct cdns_xspi_dev *cdns_xspi)
+{
+	u32 reg_val;
+
+	reg_val = readl(cdns_xspi->iobase + CDNS_XSPI_XIP_MODE_CFG);
+	if (reg_val & CDNS_XSPI_XIP_EN) {
+		reg_val &= ~CDNS_XSPI_XIP_EN;
+		writel(reg_val, cdns_xspi->iobase + CDNS_XSPI_XIP_MODE_CFG);
+	}
+}
+
 static int cdns_xspi_nand_init(struct cdns_xspi_dev *cdns_xspi,
 			       struct spinand_device *spinand)
 {
-	u32 reg_val;
+	int ret;
 
 	cdns_xspi_nand_cfg_seq_init(cdns_xspi, spinand);
 	cdns_xspi_nand_read_seq_init(cdns_xspi, spinand);
@@ -835,19 +860,12 @@ static int cdns_xspi_nand_init(struct cdns_xspi_dev *cdns_xspi,
 	cdns_xspi_nand_status_seq_init(cdns_xspi);
 	cdns_xspi_nand_erase_seq_init(cdns_xspi, spinand);
 
-	reg_val = readl(cdns_xspi->iobase + CDNS_XSPI_XIP_MODE_CFG);
-	if (reg_val & CDNS_XSPI_XIP_EN) {
-		reg_val &= ~CDNS_XSPI_XIP_EN;
-		writel(reg_val, cdns_xspi->iobase + CDNS_XSPI_XIP_MODE_CFG);
-	}
-	cdns_xspi->dma_buf_len = spinand->base.memorg.pagesize +
-				 spinand->base.memorg.oobsize;
-	cdns_xspi->dma_buf = dmam_alloc_coherent(cdns_xspi->dev,
-						 cdns_xspi->dma_buf_len,
-						 &cdns_xspi->dma_addr,
-						 GFP_KERNEL);
-	if (!cdns_xspi->dma_buf)
-		return -ENOMEM;
+	cdns_xspi_acmd_disable_xip(cdns_xspi);
+	ret = cdns_xspi_acmd_alloc_dma_buf(cdns_xspi,
+					   spinand->base.memorg.pagesize +
+					   spinand->base.memorg.oobsize);
+	if (ret)
+		return ret;
 
 	cdns_xspi->acmd_info.initialized = true;
 
@@ -1070,12 +1088,10 @@ static u32 cdns_xspi_acmd_cmd(struct cdns_xspi_dev *cdns_xspi, u32 type,
 	       FIELD_PREP(CDNS_XSPI_ACMD_CMD_TYPE, type);
 }
 
-static int cdns_xspi_pio_mdma_erase(struct cdns_xspi_dev *cdns_xspi,
-				    struct spinand_device *spinand,
-				    const struct spi_mem_op *op)
+static int cdns_xspi_pio_erase(struct cdns_xspi_dev *cdns_xspi,
+			       u64 xspi_addr)
 {
 	u32 cmd_regs[6] = { 0 };
-	u64 xspi_addr;
 	int ret;
 
 	ret = cdns_xspi_wait_for_controller_idle(cdns_xspi);
@@ -1084,10 +1100,6 @@ static int cdns_xspi_pio_mdma_erase(struct cdns_xspi_dev *cdns_xspi,
 			"controller did not become idle before erase\n");
 		return ret;
 	}
-
-	ret = cdns_xspi_nand_addr(spinand, op->addr.val, 0, &xspi_addr);
-	if (ret)
-		return ret;
 
 	if (upper_32_bits(xspi_addr)) {
 		dev_err(cdns_xspi->dev,
@@ -1137,10 +1149,110 @@ static int cdns_xspi_pio_reset(struct cdns_xspi_dev *cdns_xspi)
 }
 
 static int cdns_xspi_pio_mdma_program(struct cdns_xspi_dev *cdns_xspi,
+				      u64 xspi_addr, const void *buf,
+				      size_t nbytes)
+{
+	u32 cmd_regs[6] = { 0 };
+	int ret;
+
+	if (!buf || !nbytes)
+		return -EINVAL;
+
+	if (nbytes > cdns_xspi->dma_buf_len)
+		return -EMSGSIZE;
+
+	if (upper_32_bits(xspi_addr)) {
+		dev_err(cdns_xspi->dev,
+			"program address 0x%llx exceeds the ACMD PIO range\n",
+			xspi_addr);
+		return -ERANGE;
+	}
+
+	memcpy(cdns_xspi->dma_buf, buf, nbytes);
+
+	ret = cdns_xspi_wait_for_controller_idle(cdns_xspi);
+	if (ret) {
+		dev_err(cdns_xspi->dev,
+			"controller did not become idle before program\n");
+		return ret;
+	}
+
+	cmd_regs[1] = lower_32_bits(xspi_addr);
+	cmd_regs[2] = lower_32_bits(cdns_xspi->dma_addr);
+	cmd_regs[3] = upper_32_bits(cdns_xspi->dma_addr);
+	cmd_regs[4] = nbytes - 1;
+	cmd_regs[0] = cdns_xspi_acmd_cmd(cdns_xspi,
+					 CDNS_XSPI_ACMD_PROG_OP,
+					 CDNS_XSPI_ACMD_DATA_THREAD, true);
+
+	return cdns_xspi_acmd_run(cdns_xspi, cmd_regs,
+				  CDNS_XSPI_ACMD_DATA_THREAD);
+}
+
+static int cdns_xspi_pio_mdma_read(struct cdns_xspi_dev *cdns_xspi,
+				   u64 xspi_addr, void *buf, size_t nbytes)
+{
+	u32 cmd_regs[6] = { 0 };
+	int ret;
+
+	if (!buf || !nbytes)
+		return -EINVAL;
+
+	if (nbytes > cdns_xspi->dma_buf_len)
+		return -EMSGSIZE;
+
+	ret = cdns_xspi_wait_for_controller_idle(cdns_xspi);
+	if (ret) {
+		dev_err(cdns_xspi->dev,
+			"controller did not become idle before read\n");
+		return ret;
+	}
+
+	if (upper_32_bits(xspi_addr)) {
+		dev_err(cdns_xspi->dev,
+			"read address 0x%llx exceeds the ACMD PIO range\n",
+			xspi_addr);
+		return -ERANGE;
+	}
+
+	cmd_regs[1] = lower_32_bits(xspi_addr);
+	cmd_regs[2] = lower_32_bits(cdns_xspi->dma_addr);
+	cmd_regs[3] = upper_32_bits(cdns_xspi->dma_addr);
+	cmd_regs[4] = nbytes - 1;
+	cmd_regs[0] = cdns_xspi_acmd_cmd(cdns_xspi,
+					 CDNS_XSPI_ACMD_READ_OP,
+					 CDNS_XSPI_ACMD_DATA_THREAD, true);
+
+	ret = cdns_xspi_acmd_run(cdns_xspi, cmd_regs,
+				 CDNS_XSPI_ACMD_DATA_THREAD);
+	if (ret) {
+		dev_err(cdns_xspi->dev, "ACMD read failed: %d\n", ret);
+		return ret;
+	}
+
+	memcpy(buf, cdns_xspi->dma_buf, nbytes);
+
+	return 0;
+}
+
+static int cdns_xspi_nand_pio_erase(struct cdns_xspi_dev *cdns_xspi,
+				    struct spinand_device *spinand,
+				    const struct spi_mem_op *op)
+{
+	u64 xspi_addr;
+	int ret;
+
+	ret = cdns_xspi_nand_addr(spinand, op->addr.val, 0, &xspi_addr);
+	if (ret)
+		return ret;
+
+	return cdns_xspi_pio_erase(cdns_xspi, xspi_addr);
+}
+
+static int cdns_xspi_nand_pio_program(struct cdns_xspi_dev *cdns_xspi,
 				      struct spinand_device *spinand,
 				      const struct spi_mem_op *op)
 {
-	u32 cmd_regs[6] = { 0 };
 	u64 xspi_addr;
 	int ret;
 
@@ -1150,58 +1262,28 @@ static int cdns_xspi_pio_mdma_program(struct cdns_xspi_dev *cdns_xspi,
 		goto out_clear_program_state;
 	}
 
-	if (cdns_xspi->acmd_info.data_nbytes > cdns_xspi->dma_buf_len) {
-		ret = -EMSGSIZE;
-		goto out_clear_program_state;
-	}
-
-	memcpy(cdns_xspi->dma_buf, cdns_xspi->out_buffer,
-	       cdns_xspi->acmd_info.data_nbytes);
-
-	ret = cdns_xspi_wait_for_controller_idle(cdns_xspi);
-	if (ret) {
-		dev_err(cdns_xspi->dev,
-			"controller did not become idle before program\n");
-		goto out_clear_program_state;
-	}
-
 	ret = cdns_xspi_nand_addr(spinand, op->addr.val,
 				  cdns_xspi->acmd_info.column_addr,
 				  &xspi_addr);
 	if (ret)
 		goto out_clear_program_state;
 
-	if (upper_32_bits(xspi_addr)) {
-		dev_err(cdns_xspi->dev,
-			"program address 0x%llx exceeds the ACMD PIO range\n",
-			xspi_addr);
-		ret = -ERANGE;
-		goto out_clear_program_state;
-	}
-
-	cmd_regs[1] = lower_32_bits(xspi_addr);
-	cmd_regs[2] = lower_32_bits(cdns_xspi->dma_addr);
-	cmd_regs[3] = upper_32_bits(cdns_xspi->dma_addr);
-	cmd_regs[4] = cdns_xspi->acmd_info.data_nbytes - 1;
-	cmd_regs[0] = cdns_xspi_acmd_cmd(cdns_xspi,
-					 CDNS_XSPI_ACMD_PROG_OP,
-					 CDNS_XSPI_ACMD_DATA_THREAD, true);
-
-	ret = cdns_xspi_acmd_run(cdns_xspi, cmd_regs,
-				 CDNS_XSPI_ACMD_DATA_THREAD);
+	ret = cdns_xspi_pio_mdma_program(cdns_xspi, xspi_addr,
+					 cdns_xspi->out_buffer,
+					 cdns_xspi->acmd_info.data_nbytes);
 
 out_clear_program_state:
 	cdns_xspi->acmd_info.column_addr = 0;
 	cdns_xspi->acmd_info.data_nbytes = 0;
 	cdns_xspi->out_buffer = NULL;
+
 	return ret;
 }
 
-static int cdns_xspi_pio_mdma_read(struct cdns_xspi_dev *cdns_xspi,
+static int cdns_xspi_nand_pio_read(struct cdns_xspi_dev *cdns_xspi,
 				   struct spinand_device *spinand,
 				   const struct spi_mem_op *op)
 {
-	u32 cmd_regs[6] = { 0 };
 	u64 xspi_addr;
 	int ret;
 
@@ -1217,52 +1299,19 @@ static int cdns_xspi_pio_mdma_read(struct cdns_xspi_dev *cdns_xspi,
 		goto out_clear_read_state;
 	}
 
-	if (op->data.nbytes > cdns_xspi->dma_buf_len) {
-		ret = -EMSGSIZE;
-		goto out_clear_read_state;
-	}
-
-	ret = cdns_xspi_wait_for_controller_idle(cdns_xspi);
-	if (ret) {
-		dev_err(cdns_xspi->dev,
-			"controller did not become idle before read\n");
-		goto out_clear_read_state;
-	}
-
 	ret = cdns_xspi_nand_addr(spinand,
 				  cdns_xspi->acmd_info.row_addr,
 				  op->addr.val, &xspi_addr);
 	if (ret)
 		goto out_clear_read_state;
 
-	if (upper_32_bits(xspi_addr)) {
-		dev_err(cdns_xspi->dev,
-			"read address 0x%llx exceeds the ACMD PIO range\n",
-			xspi_addr);
-		ret = -ERANGE;
-		goto out_clear_read_state;
-	}
-
-	cmd_regs[1] = lower_32_bits(xspi_addr);
-	cmd_regs[2] = lower_32_bits(cdns_xspi->dma_addr);
-	cmd_regs[3] = upper_32_bits(cdns_xspi->dma_addr);
-	cmd_regs[4] = op->data.nbytes - 1;
-	cmd_regs[0] = cdns_xspi_acmd_cmd(cdns_xspi,
-					 CDNS_XSPI_ACMD_READ_OP,
-					 CDNS_XSPI_ACMD_DATA_THREAD, true);
-
-	ret = cdns_xspi_acmd_run(cdns_xspi, cmd_regs,
-				 CDNS_XSPI_ACMD_DATA_THREAD);
-	if (ret) {
-		dev_err(cdns_xspi->dev, "ACMD read failed: %d\n", ret);
-		goto out_clear_read_state;
-	}
-
-	memcpy(op->data.buf.in, cdns_xspi->dma_buf, op->data.nbytes);
+	ret = cdns_xspi_pio_mdma_read(cdns_xspi, xspi_addr,
+				      op->data.buf.in, op->data.nbytes);
 
 out_clear_read_state:
 	cdns_xspi->acmd_info.row_addr_valid = false;
 	cdns_xspi->acmd_info.row_addr = 0;
+
 	return ret;
 }
 
@@ -1334,17 +1383,17 @@ static int cdns_xspi_send_pio_command(struct cdns_xspi_dev *cdns_xspi,
 		return cdns_xspi_pio_reset(cdns_xspi);
 
 	case CDNS_XSPI_NAND_OP_BLOCK_ERASE:
-		return cdns_xspi_pio_mdma_erase(cdns_xspi, spinand, op);
+		return cdns_xspi_nand_pio_erase(cdns_xspi, spinand, op);
 
 	case CDNS_XSPI_NAND_OP_PROGRAM_EXECUTE:
-		return cdns_xspi_pio_mdma_program(cdns_xspi, spinand, op);
+		return cdns_xspi_nand_pio_program(cdns_xspi, spinand, op);
 
 	default:
 		break;
 	}
 
 	if (read_cache && op->cmd.opcode == read_cache->cmd.opcode)
-		return cdns_xspi_pio_mdma_read(cdns_xspi, spinand, op);
+		return cdns_xspi_nand_pio_read(cdns_xspi, spinand, op);
 
 use_stig:
 	/* ACMD does not consume this operation; execute it through STIG. */
