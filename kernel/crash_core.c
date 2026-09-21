@@ -742,7 +742,6 @@ static void crash_handle_hotplug_event(unsigned int hp_action, unsigned int cpu,
 
 	/* No longer handling a hotplug event */
 	image->hp_action = KEXEC_CRASH_HP_NONE;
-	image->elfcorehdr_updated = true;
 
 	/* Change back to read-only */
 	arch_kexec_protect_crashkres();
@@ -752,6 +751,25 @@ out:
 	/* Release lock now that update complete */
 	kexec_unlock();
 	crash_hotplug_unlock();
+}
+
+void crash_hotplug_prepare_elfcorehdr(struct kimage *image)
+{
+	if (!image || !image->hotplug_support || image->file_mode)
+		return;
+
+	crash_find_elfcorehdr(image);
+	if (image->elfcorehdr_index < 0)
+		return;
+
+	/*
+	 * kexec_load() images are not normalized at load, so do it here while
+	 * the lock is still free to take.  hp_action is KEXEC_CRASH_HP_NONE,
+	 * which the arch handler treats as "just rebuild the elfcorehdr".
+	 */
+	lock_device_hotplug();
+	arch_crash_handle_hotplug_event(image, NULL);
+	unlock_device_hotplug();
 }
 
 static int crash_memhp_notifier(struct notifier_block *nb, unsigned long val, void *arg)

@@ -389,7 +389,6 @@ struct kimage {
 #ifdef CONFIG_CRASH_HOTPLUG
 	int hp_action;
 	int elfcorehdr_index;
-	bool elfcorehdr_updated;
 #endif
 
 #ifdef CONFIG_IMA_KEXEC
