@@ -5,6 +5,6 @@
 # No binaries, but make sure arg-less "make" doesn't trigger "run_tests"
 all:
 
-TEST_PROGS := ww_mutex.sh
+TEST_PROGS := ww_mutex.sh mx_test.sh
 
 include ../lib.mk
