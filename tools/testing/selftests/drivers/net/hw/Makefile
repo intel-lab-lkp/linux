@@ -50,6 +50,7 @@ TEST_PROGS = \
 	tso.py \
 	userns_devmem.py \
 	uso.py \
+	xdp_features.py \
 	xdp_metadata.py \
 	xsk_reconfig.py \
 	#
@@ -80,6 +81,7 @@ YNL_GEN_FILES := \
 # end of YNL_GEN_FILES
 TEST_GEN_FILES += $(YNL_GEN_FILES)
 TEST_GEN_FILES += $(patsubst %.c,%.o,$(wildcard *.bpf.c))
+TEST_GEN_PROGS += xdp_features
 
 include ../../../lib.mk
 
@@ -92,6 +94,26 @@ YNL_GENS := \
 include ../../../net/ynl.mk
 
 include ../../../net/bpf.mk
+
+BPFTOOL ?= bpftool
+
+CFLAGS += -I$(OUTPUT) -I$(SCRATCH_DIR)/include
+CFLAGS += -I$(top_srcdir)/tools/include
+CFLAGS += -I$(top_srcdir)/tools/arch/$(SRCARCH)/include
+CFLAGS += -I$(top_srcdir)/tools/include/uapi
+CFLAGS += -I../../../net/lib
+
+$(OUTPUT)/xdp_features.skel.h: $(OUTPUT)/xdp_features.bpf.o
+	$(call msg,GEN-SKEL,,$@)
+	$(Q)$(BPFTOOL) gen skeleton $< name xdp_features > $@
+
+$(OUTPUT)/xdp_features: xdp_features.c xdp_features.h \
+			   $(OUTPUT)/xdp_features.skel.h $(BPFOBJ)
+	$(call msg,BINARY,,$@)
+	$(Q)$(CC) $(CFLAGS) $(filter %.a %.o %.c,$^) \
+		$(LDLIBS) -lelf -lz -lpthread -o $@
+
+EXTRA_CLEAN += $(OUTPUT)/xdp_features.skel.h
 
 ifeq ($(HAS_IOURING_ZCRX),y)
 $(OUTPUT)/iou-zcrx: LDLIBS += -luring -lpthread

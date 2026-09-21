@@ -1,22 +1,26 @@
 // SPDX-License-Identifier: GPL-2.0
-#include <uapi/linux/bpf.h>
-#include <uapi/linux/netdev.h>
+#include <linux/bpf.h>
+#include <linux/netdev.h>
 #include <linux/if_link.h>
-#include <signal.h>
 #include <argp.h>
+#include <errno.h>
 #include <net/if.h>
+#include <pthread.h>
+#include <signal.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <bpf/bpf.h>
 #include <bpf/libbpf.h>
-#include <pthread.h>
 
-#include <network_helpers.h>
-
-#include "bpf_util.h"
+#include "ksft.h"
 #include "xdp_features.skel.h"
 #include "xdp_features.h"
 
@@ -40,7 +44,63 @@ static struct env {
 
 #define BUFSIZE		128
 
-void test__fail(void) { /* for network_helpers.c */ }
+static int make_sockaddr(const char *addr_str, __u16 port,
+			 struct sockaddr_storage *addr)
+{
+	struct sockaddr_in6 *sin6 = (void *)addr;
+
+	memset(addr, 0, sizeof(*addr));
+	sin6->sin6_family = AF_INET6;
+	sin6->sin6_port = htons(port);
+	if (addr_str && inet_pton(AF_INET6, addr_str, &sin6->sin6_addr) != 1)
+		return -1;
+
+	return 0;
+}
+
+static int settimeo(int fd, int timeout_ms)
+{
+	struct timeval timeout = { .tv_sec = 3 };
+
+	if (timeout_ms > 0) {
+		timeout.tv_sec = timeout_ms / 1000;
+		timeout.tv_usec = (timeout_ms % 1000) * 1000;
+	}
+
+	if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout,
+		       sizeof(timeout)) ||
+	    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout,
+		       sizeof(timeout)))
+		return -1;
+
+	return 0;
+}
+
+static int start_server(int type, __u16 port)
+{
+	struct sockaddr_storage addr;
+	int fd, on = 1;
+
+	fd = socket(AF_INET6, type, 0);
+	if (fd < 0)
+		return -1;
+
+	if (settimeo(fd, 0) ||
+	    setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &on, sizeof(on)) ||
+	    (type == SOCK_STREAM &&
+	     setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on))) ||
+	    make_sockaddr(NULL, port, &addr) ||
+	    bind(fd, (struct sockaddr *)&addr, sizeof(struct sockaddr_in6)) ||
+	    (type == SOCK_STREAM && listen(fd, 1))) {
+		int err = errno;
+
+		close(fd);
+		errno = err;
+		return -1;
+	}
+
+	return fd;
+}
 
 static int libbpf_print_fn(enum libbpf_print_level level,
 			   const char *format, va_list args)
@@ -151,8 +211,7 @@ static error_t parse_arg(int key, char *arg, struct argp_state *state)
 		}
 		break;
 	case 'D':
-		if (make_sockaddr(AF_INET6, arg, DUT_ECHO_PORT,
-				  &env.dut_addr, NULL)) {
+		if (make_sockaddr(arg, DUT_ECHO_PORT, &env.dut_addr)) {
 			fprintf(stderr,
 				"Invalid address assigned to the Device Under Test: %s\n",
 				arg);
@@ -160,8 +219,7 @@ static error_t parse_arg(int key, char *arg, struct argp_state *state)
 		}
 		break;
 	case 'C':
-		if (make_sockaddr(AF_INET6, arg, DUT_CTRL_PORT,
-				  &env.dut_ctrl_addr, NULL)) {
+		if (make_sockaddr(arg, DUT_CTRL_PORT, &env.dut_ctrl_addr)) {
 			fprintf(stderr,
 				"Invalid address assigned to the Device Under Test: %s\n",
 				arg);
@@ -169,7 +227,7 @@ static error_t parse_arg(int key, char *arg, struct argp_state *state)
 		}
 		break;
 	case 'T':
-		if (make_sockaddr(AF_INET6, arg, 0, &env.tester_addr, NULL)) {
+		if (make_sockaddr(arg, 0, &env.tester_addr)) {
 			fprintf(stderr,
 				"Invalid address assigned to the Tester device: %s\n",
 				arg);
@@ -213,12 +271,11 @@ static void set_env_default(void)
 	env.feature.drv_feature = NETDEV_XDP_ACT_NDO_XMIT;
 	env.feature.action = -EINVAL;
 	env.ifindex = -ENODEV;
-	strscpy(env.ifname, "unknown");
-	make_sockaddr(AF_INET6, "::ffff:127.0.0.1", DUT_CTRL_PORT,
-		      &env.dut_ctrl_addr, NULL);
-	make_sockaddr(AF_INET6, "::ffff:127.0.0.1", DUT_ECHO_PORT,
-		      &env.dut_addr, NULL);
-	make_sockaddr(AF_INET6, "::ffff:127.0.0.1", 0, &env.tester_addr, NULL);
+	snprintf(env.ifname, sizeof(env.ifname), "unknown");
+	make_sockaddr("::ffff:127.0.0.1", DUT_CTRL_PORT,
+		      &env.dut_ctrl_addr);
+	make_sockaddr("::ffff:127.0.0.1", DUT_ECHO_PORT, &env.dut_addr);
+	make_sockaddr("::ffff:127.0.0.1", 0, &env.tester_addr);
 }
 
 static void *dut_echo_thread(void *arg)
@@ -229,7 +286,7 @@ static void *dut_echo_thread(void *arg)
 	while (!exiting) {
 		struct tlv_hdr *tlv = (struct tlv_hdr *)buf;
 		struct sockaddr_storage addr;
-		socklen_t addrlen;
+		socklen_t addrlen = sizeof(addr);
 		size_t n;
 
 		n = recvfrom(sockfd, buf, sizeof(buf), MSG_WAITALL,
@@ -244,7 +301,6 @@ static void *dut_echo_thread(void *arg)
 		       (struct sockaddr *)&addr, addrlen);
 	}
 
-	pthread_exit((void *)0);
 	close(sockfd);
 
 	return NULL;
@@ -254,9 +310,8 @@ static int dut_run_echo_thread(pthread_t *t, int *sockfd)
 {
 	int err;
 
-	sockfd = start_reuseport_server(AF_INET6, SOCK_DGRAM, NULL,
-					DUT_ECHO_PORT, 0, 1);
-	if (!sockfd) {
+	*sockfd = start_server(SOCK_DGRAM, DUT_ECHO_PORT);
+	if (*sockfd < 0) {
 		fprintf(stderr,
 			"Failed creating data UDP socket on device %s\n",
 			env.ifname);
@@ -269,7 +324,7 @@ static int dut_run_echo_thread(pthread_t *t, int *sockfd)
 		fprintf(stderr,
 			"Failed creating data UDP thread on device %s: %s\n",
 			env.ifname, strerror(-err));
-		free_fds(sockfd, 1);
+		close(*sockfd);
 		return -EINVAL;
 	}
 
@@ -361,25 +416,25 @@ static int recv_msg(int sockfd, void *buf, size_t bufsize, void *val,
 static int dut_run(struct xdp_features *skel)
 {
 	int flags = XDP_FLAGS_UPDATE_IF_NOEXIST | XDP_FLAGS_DRV_MODE;
-	int state, err = 0, *sockfd, ctrl_sockfd, echo_sockfd;
+	int state = CMD_STOP, err = 0, sockfd, ctrl_sockfd, echo_sockfd;
 	struct sockaddr_storage ctrl_addr;
 	pthread_t dut_thread = 0;
-	socklen_t addrlen;
+	socklen_t addrlen = sizeof(ctrl_addr);
 
-	sockfd = start_reuseport_server(AF_INET6, SOCK_STREAM, NULL,
-					DUT_CTRL_PORT, 0, 1);
-	if (!sockfd) {
+	sockfd = start_server(SOCK_STREAM, DUT_CTRL_PORT);
+	if (sockfd < 0) {
 		fprintf(stderr,
 			"Failed creating control socket on device %s\n", env.ifname);
 		return -errno;
 	}
+	ksft_ready();
 
-	ctrl_sockfd = accept(*sockfd, (struct sockaddr *)&ctrl_addr, &addrlen);
+	ctrl_sockfd = accept(sockfd, (struct sockaddr *)&ctrl_addr, &addrlen);
 	if (ctrl_sockfd < 0) {
 		fprintf(stderr,
 			"Failed accepting connections on device %s control socket\n",
 			env.ifname);
-		free_fds(sockfd, 1);
+		close(sockfd);
 		return -errno;
 	}
 
@@ -488,7 +543,7 @@ end_thread:
 out:
 	bpf_xdp_detach(env.ifindex, flags, NULL);
 	close(ctrl_sockfd);
-	free_fds(sockfd, 1);
+	close(sockfd);
 
 	return err;
 }
@@ -636,12 +691,13 @@ static int tester_run(struct xdp_features *skel)
 	if (err)
 		goto out;
 
+	/* Collect results before cleanup traffic can reach the tester. */
+	detected_cap = tester_collect_detected_cap(skel, ntohl(stats));
+
 	/* stop the test */
 	err = send_and_recv_msg(sockfd, CMD_STOP, NULL, 0);
 	/* send a new echo message to wake echo thread of the dut */
 	send_echo_msg();
-
-	detected_cap = tester_collect_detected_cap(skel, ntohl(stats));
 
 	fprintf(stdout, "Feature %s: [%s][%s]\n", get_xdp_feature_str(),
 		detected_cap ? GREEN("DETECTED") : RED("NOT DETECTED"),
