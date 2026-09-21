@@ -85,7 +85,7 @@ static ssize_t pmem_drc_remove_node(u32 drc_index)
 	pr_debug("Attempting to remove %pOF, drc index: %x\n", dn, drc_index);
 
 	/* * NB: tears down the ibm,pmemory device as a side-effect */
-	rc = dlpar_detach_node(dn);
+	rc = dlpar_detach_node(dn, true);
 	if (rc)
 		return rc;
 

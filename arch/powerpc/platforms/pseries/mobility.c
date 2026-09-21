@@ -112,7 +112,7 @@ static int delete_dt_node(struct device_node *dn)
 	}
 
 	pr_debug("removing node %pOFfp\n", dn);
-	dlpar_detach_node(dn);
+	dlpar_detach_node(dn, true);
 	return 0;
 }
 

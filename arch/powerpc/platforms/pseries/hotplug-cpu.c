@@ -602,8 +602,8 @@ static ssize_t dlpar_cpu_add(u32 drc_index)
 			dn, rc, drc_index);
 
 		rc = dlpar_release_drc(drc_index);
-		if (!rc)
-			dlpar_free_cc_nodes(dn);
+		if (!rc && dn)
+			dlpar_detach_node(dn, false);
 
 		return saved_rc;
 	}
@@ -616,7 +616,7 @@ static ssize_t dlpar_cpu_add(u32 drc_index)
 		pr_warn("Failed to online cpu %pOFn, rc: %d, drc index: %x\n",
 			dn, rc, drc_index);
 
-		rc = dlpar_detach_node(dn);
+		rc = dlpar_detach_node(dn, true);
 		if (!rc)
 			dlpar_release_drc(drc_index);
 
