@@ -14,6 +14,7 @@
 #include <crypto/acompress.h>
 #include <linux/blkdev.h>
 #include <linux/export.h>
+#include <linux/kstrtox.h>
 #include <linux/suspend.h>
 #include <linux/reboot.h>
 #include <linux/string.h>
@@ -1278,7 +1279,7 @@ static ssize_t resume_store(struct kobject *kobj, struct kobj_attribute *attr,
 	error = lookup_bdev(name, &dev);
 	if (error) {
 		unsigned maj, min, offset;
-		char *p, dummy;
+		char dummy;
 
 		error = 0;
 		if (sscanf(name, "%u:%u%c", &maj, &min, &dummy) == 2 ||
@@ -1288,9 +1289,12 @@ static ssize_t resume_store(struct kobject *kobj, struct kobj_attribute *attr,
 			if (maj != MAJOR(dev) || min != MINOR(dev))
 				error = -EINVAL;
 		} else {
-			dev = new_decode_dev(simple_strtoul(name, &p, 16));
-			if (*p)
+			unsigned int val;
+
+			if (kstrtouint(name, 16, &val))
 				error = -EINVAL;
+			else
+				dev = new_decode_dev(val);
 		}
 	}
 	kfree(name);
