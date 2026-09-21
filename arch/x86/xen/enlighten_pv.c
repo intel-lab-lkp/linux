@@ -1325,14 +1325,11 @@ static void __init xen_domu_set_legacy_features(void)
 extern void early_xen_iret_patch(void);
 
 /* First C function to be called on Xen boot */
-asmlinkage __visible void __init xen_start_kernel(struct start_info *si)
+asmlinkage __visible void __init __noreturn xen_start_kernel(struct start_info *si)
 {
 	struct physdev_set_iopl set_iopl;
 	unsigned long initrd_start = 0;
 	int rc;
-
-	if (!si)
-		return;
 
 	clear_bss();
 
