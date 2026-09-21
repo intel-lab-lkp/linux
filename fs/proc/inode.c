@@ -62,7 +62,7 @@ static struct inode *proc_alloc_inode(struct super_block *sb)
 	ei->op.proc_get_link = NULL;
 	ei->pde = NULL;
 	ei->sysctl = NULL;
-	ei->sysctl_entry = NULL;
+	ei->sysctl_entry_idx = 0;
 	INIT_HLIST_NODE(&ei->sibling_inodes);
 	ei->ns_ops = NULL;
 	return &ei->vfs_inode;
