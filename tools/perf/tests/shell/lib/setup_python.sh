@@ -18,6 +18,10 @@ fi
 # Set PYTHONPATH to find the in-tree built perf.so first, avoiding system-wide perf.so
 if [ -n "$PERF_EXEC_PATH" ] && [ -d "$PERF_EXEC_PATH/python" ]; then
   PYTHONPATH_DIR="$PERF_EXEC_PATH/python"
+elif [ -n "${BASH_SOURCE[0]}" ] && [ -d "$(dirname "${BASH_SOURCE[0]}")/../../../python" ]; then
+  PYTHONPATH_DIR="$(dirname "${BASH_SOURCE[0]}")/../../../python"
+elif [ -d "$(dirname "$0")/../../../python" ]; then
+  PYTHONPATH_DIR="$(dirname "$0")/../../../python"
 elif [ -d "$(dirname "$0")/../../python" ]; then
   PYTHONPATH_DIR="$(dirname "$0")/../../python"
 elif [ -d "$(dirname "$0")/../python" ]; then
