@@ -22,6 +22,7 @@
 #include <rdma/ib_addr.h>
 #include <rdma/ib_cache.h>
 #include <linux/mlx5/port.h>
+#include <linux/mlx5/eq.h>
 #include <linux/mlx5/vport.h>
 #include <linux/mlx5/fs.h>
 #include <linux/mlx5/eswitch.h>
@@ -3651,6 +3652,22 @@ static void get_dev_fw_str(struct ib_device *ibdev, char *str)
 		 fw_rev_sub(dev->mdev));
 }
 
+static int mlx5_ib_reap_eq(struct ib_device *ibdev, struct ib_cq *ibcq)
+{
+	struct mlx5_ib_dev *dev;
+	struct mlx5_ib_cq *cq;
+
+	if (!ibdev || !ibcq || ibcq->device != ibdev)
+		return -EINVAL;
+
+	dev = to_mdev(ibdev);
+	if (!dev->mdev)
+		return -ENODEV;
+
+	cq = to_mcq(ibcq);
+	return mlx5_eq_reap(dev->mdev, cq->mcq.eq);
+}
+
 static int lag_event(struct notifier_block *nb, unsigned long event, void *data)
 {
 	struct mlx5_ib_dev *dev = container_of(nb, struct mlx5_ib_dev,
@@ -4639,6 +4656,7 @@ static const struct ib_device_ops mlx5_ib_dev_ops = {
 	.query_ucontext = mlx5_ib_query_ucontext,
 	.reg_user_mr = mlx5_ib_reg_user_mr,
 	.reg_user_mr_dmabuf = mlx5_ib_reg_user_mr_dmabuf,
+	.reap_eq = mlx5_ib_reap_eq,
 	.req_notify_cq = mlx5_ib_arm_cq,
 	.rereg_user_mr = mlx5_ib_rereg_user_mr,
 	.resize_user_cq = mlx5_ib_resize_cq,

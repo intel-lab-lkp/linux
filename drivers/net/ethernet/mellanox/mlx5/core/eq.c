@@ -148,20 +148,42 @@ static int mlx5_eq_comp_int(struct notifier_block *nb,
 /* Some architectures don't latch interrupts when they are disabled, so using
  * mlx5_eq_poll_irq_disabled could end up losing interrupts while trying to
  * avoid losing them.  It is not recommended to use it, unless this is the last
- * resort.
+ * resort. This function may sleep and must be called from process context.
  */
 u32 mlx5_eq_poll_irq_disabled(struct mlx5_eq_comp *eq)
 {
 	u32 count_eqe;
 
+	might_sleep();
+	mutex_lock(&eq->poll_lock);
 	disable_irq(eq->core.irqn);
 	count_eqe = eq->core.cons_index;
 	mlx5_eq_comp_int(&eq->irq_nb, 0, NULL);
 	count_eqe = eq->core.cons_index - count_eqe;
 	enable_irq(eq->core.irqn);
+	mutex_unlock(&eq->poll_lock);
 
 	return count_eqe;
 }
+
+int mlx5_eq_reap(struct mlx5_core_dev *dev, struct mlx5_eq_comp *eq)
+{
+	u32 eqe_count;
+
+	if (!dev || !eq)
+		return -EINVAL;
+
+	mlx5_core_dbg(dev, "EQ 0x%x: Cons = 0x%x, irqn = 0x%x\n",
+		      eq->core.eqn, eq->core.cons_index, eq->core.irqn);
+
+	eqe_count = mlx5_eq_poll_irq_disabled(eq);
+	if (eqe_count)
+		mlx5_core_warn(dev, "Recovered %d EQEs on EQ 0x%x\n",
+			       eqe_count, eq->core.eqn);
+
+	return 0;
+}
+EXPORT_SYMBOL(mlx5_eq_reap);
 
 static void mlx5_eq_async_int_lock(struct mlx5_eq_async *eq, bool recovery,
 				   unsigned long *flags)
@@ -1012,6 +1034,7 @@ static int create_comp_eq(struct mlx5_core_dev *dev, u16 vecidx)
 	INIT_LIST_HEAD(&eq->tasklet_ctx.list);
 	INIT_LIST_HEAD(&eq->tasklet_ctx.process_list);
 	spin_lock_init(&eq->tasklet_ctx.lock);
+	mutex_init(&eq->poll_lock);
 	tasklet_setup(&eq->tasklet_ctx.task, mlx5_cq_tasklet_cb);
 
 	irq = xa_load(&table->comp_irqs, vecidx);
