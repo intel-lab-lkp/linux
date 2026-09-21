@@ -3476,6 +3476,11 @@ int drm_atomic_helper_disable_plane(struct drm_plane *plane,
 		goto fail;
 	}
 
+	if (!plane_state->crtc && !plane_state->fb) {
+		ret = 0;
+		goto fail;
+	}
+
 	if (plane_state->crtc && plane_state->crtc->cursor == plane)
 		plane_state->state->legacy_cursor_update = true;
 
