@@ -5598,6 +5598,34 @@ void mem_cgroup_replace_folio(struct folio *old, struct folio *new)
 	rcu_read_unlock();
 }
 
+#ifdef CONFIG_HUGETLB_PAGE
+static void move_hugetlb_lruvec_stat(struct obj_cgroup *objcg,
+				     struct folio *old, struct folio *new)
+{
+	long nr_pages = folio_nr_pages(old);
+	struct mem_cgroup *memcg;
+	int old_nid = folio_nid(old);
+	int new_nid = folio_nid(new);
+
+	if (old_nid == new_nid)
+		return;
+
+	rcu_read_lock();
+	memcg = obj_cgroup_memcg(objcg);
+	mod_memcg_lruvec_state(mem_cgroup_lruvec(memcg, NODE_DATA(old_nid)),
+			       NR_HUGETLB, -nr_pages);
+	mod_memcg_lruvec_state(mem_cgroup_lruvec(memcg, NODE_DATA(new_nid)),
+			       NR_HUGETLB, nr_pages);
+	rcu_read_unlock();
+}
+#else /* CONFIG_HUGETLB_PAGE */
+static inline void move_hugetlb_lruvec_stat(struct obj_cgroup *objcg,
+					    struct folio *old,
+					    struct folio *new)
+{
+}
+#endif /* CONFIG_HUGETLB_PAGE */
+
 /**
  * mem_cgroup_migrate - Transfer the memcg data from the old to the new folio.
  * @old: Currently circulating folio.
@@ -5634,6 +5662,9 @@ void mem_cgroup_migrate(struct folio *old, struct folio *new)
 		return;
 
 	new_objcg = get_migration_objcg(old, new);
+
+	if (folio_test_hugetlb(old))
+		move_hugetlb_lruvec_stat(new_objcg, old, new);
 
 	/*
 	 * @old was charged through a non-root objcg, so its charge is in the
