@@ -436,8 +436,15 @@ static int qcom_pas_stop(struct rproc *rproc)
 	if (handover)
 		qcom_pas_handover(&pas->q6v5);
 
-	if (pas->smem_host_id)
-		ret = qcom_smem_bust_hwspin_lock_by_host(pas->smem_host_id);
+	if (pas->smem_host_id) {
+		int lock_ret = qcom_smem_bust_hwspin_lock_by_host(pas->smem_host_id);
+
+		if (lock_ret) {
+			dev_err(pas->dev, "failed to bust hwspin_lock: %d\n", lock_ret);
+			if (!ret)
+				ret = lock_ret;
+		}
+	}
 
 	return ret;
 }
