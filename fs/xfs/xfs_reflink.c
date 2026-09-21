@@ -1081,6 +1081,8 @@ xfs_extlen_t
 xfs_reflink_max_atomic_cow(
 	struct xfs_mount	*mp)
 {
+	xfs_extlen_t		fsb;
+
 	/* We cannot do any atomic writes without out of place writes. */
 	if (!xfs_can_sw_atomic_write(mp))
 		return 0;
@@ -1089,7 +1091,10 @@ xfs_reflink_max_atomic_cow(
 	 * Atomic write limits must always be a power-of-2, according to
 	 * generic_atomic_write_valid.
 	 */
-	return rounddown_pow_of_two(xfs_calc_max_atomic_write_fsblocks(mp));
+	fsb = xfs_calc_max_atomic_write_fsblocks(mp);
+	if (!fsb)
+		return 0;
+	return rounddown_pow_of_two(fsb);
 }
 
 /*
