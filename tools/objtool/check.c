@@ -4271,12 +4271,6 @@ static bool ignore_unreachable_insn(struct objtool_file *file, struct instructio
 	    !strcmp(insn->sec->name, ".altinstr_aux"))
 		return true;
 
-	if (!func)
-		return false;
-
-	if (func->static_call_tramp)
-		return true;
-
 	/*
 	 * CONFIG_UBSAN_TRAP inserts a UD2 when it sees
 	 * __builtin_unreachable().  The BUG() macro has an unreachable() after
@@ -4290,6 +4284,12 @@ static bool ignore_unreachable_insn(struct objtool_file *file, struct instructio
 	    (insn->type == INSN_BUG ||
 	     (insn->type == INSN_JUMP_UNCONDITIONAL &&
 	      insn->jump_dest && insn->jump_dest->type == INSN_BUG)))
+		return true;
+
+	if (!func)
+		return false;
+
+	if (func->static_call_tramp)
 		return true;
 
 	/*
