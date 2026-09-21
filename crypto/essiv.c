@@ -189,6 +189,7 @@ static int essiv_aead_crypt(struct aead_request *req, bool enc)
 	int ivsize = crypto_aead_ivsize(tfm);
 	int ssize = req->assoclen - ivsize;
 	struct scatterlist *src = req->src;
+	void *assoc;
 	int err;
 
 	if (ssize < 0)
@@ -247,11 +248,12 @@ static int essiv_aead_crypt(struct aead_request *req, bool enc)
 				  essiv_aead_done, req);
 	aead_request_set_crypt(subreq, src, req->dst, req->cryptlen, req->iv);
 
+	assoc = rctx->assoc;
 	err = enc ? crypto_aead_encrypt(subreq) :
 		    crypto_aead_decrypt(subreq);
 
-	if (rctx->assoc && err != -EINPROGRESS && err != -EBUSY)
-		kfree(rctx->assoc);
+	if (assoc && err != -EINPROGRESS && err != -EBUSY)
+		kfree(assoc);
 	return err;
 }
 
