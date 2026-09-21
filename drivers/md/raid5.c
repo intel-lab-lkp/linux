@@ -8263,8 +8263,6 @@ static int raid5_run(struct mddev *mddev)
 abort:
 	md_unregister_thread(mddev, &mddev->thread);
 	print_raid5_conf(conf);
-	free_conf(conf);
-	mddev->private = NULL;
 	pr_warn("md/raid:%s: failed to run raid set.\n", mdname(mddev));
 	return ret;
 }
