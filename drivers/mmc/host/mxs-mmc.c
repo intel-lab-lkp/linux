@@ -143,7 +143,7 @@ static void mxs_mmc_request_done(struct mxs_mmc_host *host)
 		mxs_mmc_start_cmd(host, mrq->cmd);
 		return;
 	} else if (data) {
-		dma_unmap_sg(mmc_dev(host->mmc), data->sg,
+		dma_unmap_sg(dmaengine_get_dma_device(ssp->dmach), data->sg,
 			     data->sg_len, ssp->dma_dir);
 		/*
 		 * If there was an error on any block, we mark all
@@ -221,7 +221,7 @@ static struct dma_async_tx_descriptor *mxs_mmc_prep_dma(
 
 	if (data) {
 		/* data */
-		dma_map_sg(mmc_dev(host->mmc), data->sg,
+		dma_map_sg(dmaengine_get_dma_device(ssp->dmach), data->sg,
 			   data->sg_len, ssp->dma_dir);
 		sgl = data->sg;
 		sg_len = data->sg_len;
@@ -640,7 +640,7 @@ static int mxs_mmc_probe(struct platform_device *pdev)
 	mmc->max_blk_size = 1 << 0xf;
 	mmc->max_blk_count = (ssp_is_old(ssp)) ? 0xff : 0xffffff;
 	mmc->max_req_size = (ssp_is_old(ssp)) ? 0xffff : 0xffffffff;
-	mmc->max_seg_size = dma_get_max_seg_size(ssp->dmach->device->dev);
+	mmc->max_seg_size = dma_get_max_seg_size(dmaengine_get_dma_device(ssp->dmach));
 
 	platform_set_drvdata(pdev, mmc);
 
