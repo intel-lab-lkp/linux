@@ -723,15 +723,63 @@ static void test_kmem_buckets_type_fallback(struct kunit *test)
 				      "expected a DMA cache, got %s", c->name);
 	}
 
-	/* Nor can one that has to be accounted. */
-	if (IS_ENABLED(CONFIG_MEMCG) && !mem_cgroup_kmem_disabled()) {
-		p = kmem_buckets_alloc(b, 128, GFP_KERNEL | __GFP_ACCOUNT);
-		KUNIT_ASSERT_NOT_NULL(test, p);
-		c = virt_to_slab(p)->slab_cache;
-		kfree(p);
+	/*
+	 * An accounted allocation would fall back too, but a bucket set can
+	 * hold that type, so reaching the fallback means the create mask was
+	 * wrong and kmalloc_slab() warns. Not exercised here for that reason;
+	 * test_kmem_buckets_type_covered() checks the type that is asked for.
+	 */
+}
 
-		KUNIT_EXPECT_TRUE_MSG(test, strstarts(c->name, "kmalloc-cg-"),
-				      "expected an accounted cache, got %s", c->name);
+/*
+ * A bucket set created for a kmalloc type keeps those allocations isolated
+ * too, rather than sending them to the general caches. Where nothing creates
+ * accounted caches at all, the row aliases the normal one, so this also
+ * covers tearing down a set whose rows share their caches.
+ */
+static void test_kmem_buckets_type_covered(struct kunit *test)
+{
+	struct kmem_cache *c, *normal_cache;
+	kmem_buckets *b;
+	void *p;
+
+	if (!IS_ENABLED(CONFIG_SLAB_BUCKETS))
+		kunit_skip(test, "needs CONFIG_SLAB_BUCKETS");
+
+	b = kmem_buckets_create_types("covered_buckets", 0, 0, INT_MAX, NULL,
+				      BIT(KMEM_BUCKET_NORMAL) |
+				      BIT(KMEM_BUCKET_CGROUP));
+	KUNIT_ASSERT_BUCKETS_CREATED(test, b);
+
+	p = kmem_buckets_alloc(b, 128, GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, p);
+	normal_cache = cache_of(p);
+	kfree(p);
+	KUNIT_ASSERT_NOT_NULL(test, normal_cache);
+
+	KUNIT_EXPECT_TRUE_MSG(test, strstarts(normal_cache->name, "covered_buckets-128"),
+			      "expected the normal bucket cache, got %s",
+			      normal_cache->name);
+
+	/* Accounted, and still in the bucket set rather than kmalloc-cg-*. */
+	p = kmem_buckets_alloc(b, 128, GFP_KERNEL | __GFP_ACCOUNT);
+	KUNIT_ASSERT_NOT_NULL(test, p);
+	c = cache_of(p);
+	kfree(p);
+	KUNIT_ASSERT_NOT_NULL(test, c);
+
+	if (IS_ENABLED(CONFIG_MEMCG) && !mem_cgroup_kmem_disabled()) {
+		KUNIT_EXPECT_TRUE_MSG(test, strstarts(c->name, "covered_buckets-cg-"),
+				      "expected the accounted bucket cache, got %s",
+				      c->name);
+		KUNIT_EXPECT_TRUE(test, c->flags & SLAB_ACCOUNT);
+	} else {
+		/*
+		 * Nothing is creating accounted caches, so the row aliases
+		 * the normal one and the allocation lands there -- isolated
+		 * still, just not separately accounted.
+		 */
+		KUNIT_EXPECT_PTR_EQ(test, c, normal_cache);
 	}
 }
 
@@ -762,6 +810,7 @@ static struct kunit_case test_cases[] = {
 	KUNIT_CASE(test_kmem_buckets_disabled),
 	KUNIT_CASE(test_kmem_buckets_destroy),
 	KUNIT_CASE(test_kmem_buckets_type_fallback),
+	KUNIT_CASE(test_kmem_buckets_type_covered),
 	{}
 };
 
