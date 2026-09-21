@@ -42,7 +42,7 @@ __cmdline_find_option_bool(const char *cmdline, int max_cmdline_size,
 	} state = st_wordstart;
 
 	if (!cmdline)
-		return -1;      /* No command line */
+		return 0;	/* No command line */
 
 	/*
 	 * This 'pos' check ensures we do not overrun

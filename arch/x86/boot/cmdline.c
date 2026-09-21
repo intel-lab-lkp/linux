@@ -110,7 +110,7 @@ int __cmdline_find_option_bool(unsigned long cmdline_ptr, const char *option)
 	} state = st_wordstart;
 
 	if (!cmdline_ptr)
-		return -1;      /* No command line */
+		return 0;	/* No command line */
 
 	cptr = cmdline_ptr & 0xf;
 	set_fs(cmdline_ptr >> 4);

@@ -261,7 +261,7 @@ static inline int cmdline_find_option_bool(const char *option)
 	unsigned long cmd_line_ptr = boot_params.hdr.cmd_line_ptr;
 
 	if (cmd_line_ptr >= 0x100000)
-		return -1;      /* inaccessible */
+		return 0;	/* inaccessible */
 
 	return __cmdline_find_option_bool(cmd_line_ptr, option);
 }
