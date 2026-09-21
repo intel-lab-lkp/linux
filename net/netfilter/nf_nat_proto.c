@@ -54,9 +54,35 @@ __udp_manip_pkt(struct sk_buff *skb,
 		portptr = &hdr->dest;
 	}
 	if (do_csum) {
+		/* When udp_set_csum() takes the LCO branch (encapsulated
+		 * CHECKSUM_PARTIAL, non-GSO), uh->check holds a complete
+		 * (folded and complemented) checksum while csum_start
+		 * points at the inner transport header, not at this outer
+		 * udphdr.  In that state, inet_proto_csum_replace*() and
+		 * nf_csum_update() take the pseudo-header branch which
+		 * operates on an uncomplemented seed, applying the address
+		 * and port deltas with the wrong sign.  Temporarily flip
+		 * ip_summed so they use csum_replace*() instead.
+		 *
+		 * The seed/offload branch of udp_set_csum() sets csum_start
+		 * to the outer UDP header, so the offload-target test
+		 * below distinguishes the two states.
+		 */
+		bool lco = skb->ip_summed == CHECKSUM_PARTIAL &&
+			   !skb_is_gso(skb) &&
+			   (skb->head + skb->csum_start + skb->csum_offset) !=
+			   (unsigned char *)&hdr->check;
+
+		if (lco)
+			skb->ip_summed = CHECKSUM_NONE;
+
 		nf_csum_update(skb, iphdroff, &hdr->check, tuple, maniptype);
 		inet_proto_csum_replace2(&hdr->check, skb, *portptr, newport,
 					 false);
+
+		if (lco)
+			skb->ip_summed = CHECKSUM_PARTIAL;
+
 		if (!hdr->check)
 			hdr->check = CSUM_MANGLED_0;
 	}
