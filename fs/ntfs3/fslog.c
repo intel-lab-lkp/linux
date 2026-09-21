@@ -4987,6 +4987,15 @@ next_dirty_page:
 	if (!dp)
 		goto do_redo_1;
 
+	t32 = le32_to_cpu(dp->target_attr);
+	t16 = le16_to_cpu(oatbl->size);
+	if (t16 < sizeof(*oe) || t32 < sizeof(*oatbl) ||
+	    t32 >= bytes_per_rt(oatbl) ||
+	    (t32 - sizeof(*oatbl)) % t16) {
+		err = -EINVAL;
+		goto out;
+	}
+
 	oe = Add2Ptr(oatbl, le32_to_cpu(dp->target_attr));
 
 	if (oe->next != RESTART_ENTRY_ALLOCATED_LE)
