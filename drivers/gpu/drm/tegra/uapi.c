@@ -135,13 +135,13 @@ int tegra_drm_ioctl_channel_open(struct drm_device *drm, void *data, struct drm_
 		}
 	}
 
+	context->client = client;
+	xa_init_flags(&context->mappings, XA_FLAGS_ALLOC1);
+
 	err = xa_alloc(&fpriv->contexts, &args->context, context, XA_LIMIT(1, U32_MAX),
 		       GFP_KERNEL);
 	if (err < 0)
 		goto put_memctx;
-
-	context->client = client;
-	xa_init_flags(&context->mappings, XA_FLAGS_ALLOC1);
 
 	args->version = client->version;
 	args->capabilities = 0;
