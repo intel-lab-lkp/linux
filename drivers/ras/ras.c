@@ -59,6 +59,7 @@ void log_arm_hw_error(struct cper_sec_proc_arm *err, const u8 sev)
 	struct cper_arm_ctx_info *ctx_info;
 	u8 *ven_err_data;
 	s32 ctx_len = 0;
+	bool overflow = false;
 	int n, sz, cpu;
 	s32 vsei_len;
 	s32 pei_len;
@@ -74,15 +75,30 @@ void log_arm_hw_error(struct cper_sec_proc_arm *err, const u8 sev)
 	for (n = 0; n < err->context_info_num; n++) {
 		sz = sizeof(struct cper_arm_ctx_info);
 
-		if (sz + (long)ctx_info - (long)err <= err->section_length)
+		if ((sz + (long)ctx_info - (long)err <= err->section_length) &&
+		    ((u64)sz + ctx_info->size + ((long)ctx_info - (long)err) <=
+		    err->section_length)) {
 			sz += ctx_info->size;
+		} else {
+			overflow = true;
+			break;
+		}
 
 		ctx_info = (struct cper_arm_ctx_info *)((long)ctx_info + sz);
 		ctx_len += sz;
 	}
 
 	vsei_len = err->section_length - (sizeof(struct cper_sec_proc_arm) + pei_len + ctx_len);
-	if (vsei_len < 0) {
+	/*
+	 * There are two cases:
+	 *
+	 * 1. When err->context_info_num <= 0, overflow is always false. In this case,
+	 *    we use vsei_len to check whether section_length is too small.
+	 *
+	 * 2. When err->context_info_num > 0, overflow has already been set to true by
+	 *    the preceding for loop if section_length is too small.
+	 */
+	if (overflow || vsei_len < 0) {
 		pr_warn(FW_BUG "section length: %d\n", err->section_length);
 		pr_warn(FW_BUG "section length is too small\n");
 		pr_warn(FW_BUG "firmware-generated error record is incorrect\n");
