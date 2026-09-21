@@ -336,10 +336,8 @@ static void loongson2_cmc_dma_issue_pending(struct dma_chan *chan)
 
 	guard(spinlock_irqsave)(&lchan->vchan.lock);
 
-	if (vchan_issue_pending(&lchan->vchan) && !lchan->desc) {
-		dev_dbg(chan2dev(lchan), "vchan %pK: issued\n", &lchan->vchan);
+	if (vchan_issue_pending(&lchan->vchan) && !lchan->desc)
 		loongson2_cmc_dma_start_transfer(lchan);
-	}
 }
 
 static int loongson2_cmc_dma_set_xfer_param(struct loongson2_cmc_dma_chan *lchan,
