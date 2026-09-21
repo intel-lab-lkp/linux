@@ -817,10 +817,8 @@ struct device_link *device_link_add(struct device *consumer,
 		return NULL;
 
 	if (flags & DL_FLAG_PM_RUNTIME && flags & DL_FLAG_RPM_ACTIVE) {
-		if (pm_runtime_get_sync(supplier) < 0) {
-			pm_runtime_put_noidle(supplier);
+		if (pm_runtime_resume_and_get(supplier) < 0)
 			return NULL;
-		}
 	}
 
 	if (!(flags & DL_FLAG_STATELESS))
