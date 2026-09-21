@@ -1024,6 +1024,18 @@ static int wm8985_set_bias_level(struct snd_soc_component *component,
 	return 0;
 }
 
+static int wm8985_get_regulators(struct device *dev,
+				 struct wm8985_priv *wm8985)
+{
+	size_t i;
+
+	for (i = 0; i < ARRAY_SIZE(wm8985->supplies); i++)
+		wm8985->supplies[i].supply = wm8985_supply_names[i];
+
+	return devm_regulator_bulk_get(dev, ARRAY_SIZE(wm8985->supplies),
+				       wm8985->supplies);
+}
+
 static int wm8985_probe(struct snd_soc_component *component)
 {
 	size_t i;
@@ -1031,16 +1043,6 @@ static int wm8985_probe(struct snd_soc_component *component)
 	int ret;
 
 	wm8985 = snd_soc_component_get_drvdata(component);
-
-	for (i = 0; i < ARRAY_SIZE(wm8985->supplies); i++)
-		wm8985->supplies[i].supply = wm8985_supply_names[i];
-
-	ret = devm_regulator_bulk_get(component->dev, ARRAY_SIZE(wm8985->supplies),
-				 wm8985->supplies);
-	if (ret) {
-		dev_err(component->dev, "Failed to request supplies: %d\n", ret);
-		return ret;
-	}
 
 	ret = regulator_bulk_enable(ARRAY_SIZE(wm8985->supplies),
 				    wm8985->supplies);
@@ -1153,6 +1155,12 @@ static int wm8985_spi_probe(struct spi_device *spi)
 		return ret;
 	}
 
+	ret = wm8985_get_regulators(&spi->dev, wm8985);
+	if (ret) {
+		dev_err(&spi->dev, "Failed to request supplies: %d\n", ret);
+		return ret;
+	}
+
 	ret = devm_snd_soc_register_component(&spi->dev,
 				     &soc_component_dev_wm8985, &wm8985_dai, 1);
 	return ret;
@@ -1186,6 +1194,12 @@ static int wm8985_i2c_probe(struct i2c_client *i2c)
 		ret = PTR_ERR(wm8985->regmap);
 		dev_err(&i2c->dev, "Failed to allocate register map: %d\n",
 			ret);
+		return ret;
+	}
+
+	ret = wm8985_get_regulators(&i2c->dev, wm8985);
+	if (ret) {
+		dev_err(&i2c->dev, "Failed to request supplies: %d\n", ret);
 		return ret;
 	}
 
