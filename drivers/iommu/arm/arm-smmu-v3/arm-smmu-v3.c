@@ -2034,6 +2034,13 @@ arm_smmu_find_master(struct arm_smmu_device *smmu, u32 sid)
 	stream = xa_load(&smmu->streams, sid);
 	if (!stream)
 		return NULL;
+	/*
+	 * For shared SIDs (ref_count > 1) we cannot determine which master
+	 * triggered the fault, so return NULL to let the caller handle it
+	 * as an unresolvable event.
+	 */
+	if (stream->ref_count > 1)
+		return NULL;
 	return stream->master;
 }
 
@@ -2944,11 +2951,43 @@ arm_smmu_get_step_for_sid(struct arm_smmu_device *smmu, u32 sid)
 	}
 }
 
+/*
+ * For shared SIDs, check whether this master should skip the STE write.
+ *
+ * Setup path: only the first master writes the STE; subsequent masters
+ * skip because ste_installed is already true.
+ *
+ * Teardown path (ABORT): skip while other masters still share the SID
+ * (ref_count > 1).  Only the last remaining master writes the ABORT STE.
+ *
+ * Returns true if the STE write should be skipped for this SID.
+ */
+static bool arm_smmu_skip_shared_ste(struct arm_smmu_device *smmu,
+				     u32 sid, bool is_abort)
+{
+	struct arm_smmu_stream *stream;
+	bool skip = false;
+
+	mutex_lock(&smmu->streams_mutex);
+	stream = xa_load(&smmu->streams, sid);
+	if (stream) {
+		if (is_abort)
+			skip = stream->ref_count > 1;
+		else if (stream->ste_installed)
+			skip = true;
+		else
+			stream->ste_installed = true;
+	}
+	mutex_unlock(&smmu->streams_mutex);
+	return skip;
+}
+
 void arm_smmu_install_ste_for_dev(struct arm_smmu_master *master,
 				  const struct arm_smmu_ste *target)
 {
 	int i, j;
 	struct arm_smmu_device *smmu = master->smmu;
+	bool is_abort;
 
 	master->cd_table.in_ste =
 		FIELD_GET(STRTAB_STE_0_CFG, le64_to_cpu(target->data[0])) ==
@@ -2957,10 +2996,12 @@ void arm_smmu_install_ste_for_dev(struct arm_smmu_master *master,
 		FIELD_GET(STRTAB_STE_1_EATS, le64_to_cpu(target->data[1])) ==
 		STRTAB_STE_1_EATS_TRANS;
 
+	is_abort = (FIELD_GET(STRTAB_STE_0_CFG, le64_to_cpu(target->data[0])) ==
+		    STRTAB_STE_0_CFG_ABORT);
+
 	for (i = 0; i < master->num_streams; ++i) {
 		u32 sid = master->streams[i].id;
-		struct arm_smmu_ste *step =
-			arm_smmu_get_step_for_sid(smmu, sid);
+		struct arm_smmu_ste *step;
 
 		/* Bridged PCI devices may end up with duplicated IDs */
 		for (j = 0; j < i; j++)
@@ -2969,6 +3010,11 @@ void arm_smmu_install_ste_for_dev(struct arm_smmu_master *master,
 		if (j < i)
 			continue;
 
+		if (master->shared_sid &&
+		    arm_smmu_skip_shared_ste(smmu, sid, is_abort))
+			continue;
+
+		step = arm_smmu_get_step_for_sid(smmu, sid);
 		arm_smmu_write_ste(master, sid, step, target);
 	}
 }
@@ -3116,8 +3162,13 @@ static int arm_smmu_enable_iopf(struct arm_smmu_master *master,
 	if (!master->stall_enabled)
 		return 0;
 
-	/* We're not keeping track of SIDs in fault events */
-	if (master->num_streams != 1)
+	/*
+	 * We're not keeping track of SIDs in fault events, and stall/PRI
+	 * cannot be supported when multiple devices share a SID because page
+	 * fault responses are routed by RID/SID and we cannot distinguish
+	 * which device triggered the fault.
+	 */
+	if (master->num_streams != 1 || master->shared_sid)
 		return -EOPNOTSUPP;
 
 	if (master->iopf_refcount) {

@@ -308,8 +308,10 @@ static int arm_vsmmu_vdevice_init(struct iommufd_vdevice *vdev)
 	/*
 	 * arm_vsmmu_vsid_to_sid() maps a vSID to master->streams[0] alone, so
 	 * more streams would leave the rest stale and none reads out of bounds.
+	 * Shared SIDs are also unsupported for vSMMU since the STE is shared
+	 * between multiple masters.
 	 */
-	if (master->num_streams != 1)
+	if (master->num_streams != 1 || master->shared_sid)
 		return -EOPNOTSUPP;
 	return 0;
 }
