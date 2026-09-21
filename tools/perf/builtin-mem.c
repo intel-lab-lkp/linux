@@ -99,8 +99,8 @@ static int __cmd_record(int argc, const char **argv, struct perf_mem *mem,
 	argc = parse_options(argc, argv, options, record_usage,
 			     PARSE_OPT_KEEP_UNKNOWN);
 
-	/* Max number of arguments multiplied by number of PMUs that can support them. */
-	rec_argc = argc + 9 * (perf_pmu__mem_events_num_mem_pmus(pmu) + 1);
+	/* Max number of arguments per PMU plus the fixed ones added below. */
+	rec_argc = argc + 8 + 9 * (perf_pmu__mem_events_num_mem_pmus(pmu) + 1);
 
 	if (mem->cpu_list)
 		rec_argc += 2;
@@ -134,6 +134,13 @@ static int __cmd_record(int argc, const char **argv, struct perf_mem *mem,
 		rec_argv[i++] = "-W";
 
 	rec_argv[i++] = "-d";
+
+	/*
+	 * The data type profiling per-sample stream keys cross-CPU contention
+	 * on sample->cpu; without PERF_SAMPLE_CPU it is the (u32)-1 'no CPU
+	 * info' sentinel.
+	 */
+	rec_argv[i++] = "--sample-cpu";
 
 	if (mem->phys_addr)
 		rec_argv[i++] = "--phys-data";
