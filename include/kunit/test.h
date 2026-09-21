@@ -723,6 +723,7 @@ void __printf(2, 3) kunit_log_append(struct string_stream *log, const char *fmt,
 #define KUNIT_SUCCEED(test) _KUNIT_SAVE_LOC(test)
 
 void __noreturn __kunit_abort(struct kunit *test);
+ANNOTATE_EXPORTED_NORETURN(__kunit_abort);
 
 void __printf(6, 7) __kunit_do_failed_assertion(struct kunit *test,
 						const struct kunit_loc *loc,

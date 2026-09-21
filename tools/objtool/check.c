@@ -176,24 +176,6 @@ static bool is_sibling_call(struct instruction *insn)
 	return (is_static_jump(insn) && insn_call_dest(insn));
 }
 
-static bool is_listed_noreturn(struct symbol *func)
-{
-#define NORETURN(func) __stringify(func),
-	static const char * const global_noreturns[] = {
-#include "noreturns.h"
-	};
-#undef NORETURN
-
-	if (is_local_sym(func))
-		return false;
-
-	for (int i = 0; i < ARRAY_SIZE(global_noreturns); i++)
-		if (!strcmp(func->name, global_noreturns[i]))
-			return true;
-
-	return false;
-}
-
 /*
  * Use this rather than reading sym->_noreturn directly: the noreturn status
  * lives on the primary alias, and ANNOTATE_IGNORE_NORETURN() overrides it.
@@ -204,9 +186,6 @@ static bool is_noreturn(struct symbol *func)
 
 	if (func->ignore_noreturn)
 		return false;
-
-	if (is_listed_noreturn(func))
-		return true;
 
 	return func->_noreturn;
 }
@@ -4885,7 +4864,7 @@ static int validate_reachable_instructions(struct objtool_file *file)
 		if (prev_insn && prev_insn->dead_end) {
 			call_dest = insn_call_dest(prev_insn);
 			if (call_dest) {
-				WARN_INSN(insn, "%s() missing __noreturn in .c/.h or NORETURN() in noreturns.h",
+				WARN_INSN(insn, "%s() is missing __noreturn in .c/.h",
 					  call_dest->name);
 				warnings++;
 				continue;

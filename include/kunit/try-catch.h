@@ -10,6 +10,7 @@
 #ifndef _KUNIT_TRY_CATCH_H
 #define _KUNIT_TRY_CATCH_H
 
+#include <linux/annotate.h>
 #include <linux/types.h>
 
 typedef void (*kunit_try_catch_func_t)(void *);
@@ -54,6 +55,7 @@ struct kunit_try_catch {
 void kunit_try_catch_run(struct kunit_try_catch *try_catch, void *context);
 
 void __noreturn kunit_try_catch_throw(struct kunit_try_catch *try_catch);
+ANNOTATE_EXPORTED_NORETURN(kunit_try_catch_throw);
 
 static inline int kunit_try_catch_get_result(struct kunit_try_catch *try_catch)
 {

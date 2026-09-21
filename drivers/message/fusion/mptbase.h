@@ -49,6 +49,7 @@
 #define MPTBASE_H_INCLUDED
 /*{-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
 
+#include <linux/annotate.h>
 #include <linux/kernel.h>
 #include <linux/pci.h>
 #include <linux/mutex.h>
@@ -942,6 +943,7 @@ extern int	mpt_raid_phys_disk_get_num_paths(MPT_ADAPTER *ioc,
 extern int	 mpt_set_taskmgmt_in_progress_flag(MPT_ADAPTER *ioc);
 extern void	 mpt_clear_taskmgmt_in_progress_flag(MPT_ADAPTER *ioc);
 extern void __noreturn mpt_halt_firmware(MPT_ADAPTER *ioc);
+ANNOTATE_EXPORTED_NORETURN(mpt_halt_firmware);
 
 
 /*
