@@ -1107,6 +1107,13 @@ int sctp_assoc_update(struct sctp_association *asoc,
 	asoc->peer.rwnd = new->peer.rwnd;
 	asoc->peer.sack_needed = new->peer.sack_needed;
 	asoc->peer.auth_capable = new->peer.auth_capable;
+	asoc->peer.prsctp_capable = new->peer.prsctp_capable;
+	asoc->peer.ecn_capable = new->peer.ecn_capable;
+	asoc->peer.asconf_capable = new->peer.asconf_capable;
+	asoc->peer.reconf_capable = new->peer.reconf_capable;
+	asoc->peer.intl_capable = new->peer.intl_capable;
+	asoc->peer.ipv4_address = new->peer.ipv4_address;
+	asoc->peer.ipv6_address = new->peer.ipv6_address;
 	asoc->peer.i = new->peer.i;
 
 	if (!sctp_tsnmap_init(&asoc->peer.tsn_map, SCTP_TSN_MAP_INITIAL,
