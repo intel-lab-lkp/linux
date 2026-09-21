@@ -1588,8 +1588,9 @@ static int inetdev_event(struct notifier_block *this, unsigned long event,
 	if (!in_dev) {
 		if (event == NETDEV_REGISTER) {
 			in_dev = inetdev_init(dev);
-			if (IS_ERR(in_dev))
-				return notifier_from_errno(PTR_ERR(in_dev));
+			if (IS_ERR_OR_NULL(in_dev))
+				return notifier_from_errno(in_dev ?
+						PTR_ERR(in_dev) : -ENOMEM);
 			if (dev->flags & IFF_LOOPBACK) {
 				IN_DEV_CONF_SET(in_dev, NOXFRM, 1);
 				IN_DEV_CONF_SET(in_dev, NOPOLICY, 1);
