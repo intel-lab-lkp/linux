@@ -23,6 +23,7 @@
 
 #include "core.h"
 #include "card.h"
+#include "sdio_cdev.h"
 #include "sdio_cis.h"
 #include "sdio_bus.h"
 
@@ -400,8 +401,11 @@ int sdio_add_func(struct sdio_func *func)
 	sdio_acpi_set_handle(func);
 	device_enable_async_suspend(&func->dev);
 	ret = device_add(&func->dev);
-	if (ret == 0)
+	if (ret == 0) {
 		sdio_func_set_present(func);
+
+		sdio_cdev_create(func);
+	}
 
 	return ret;
 }
@@ -414,8 +418,12 @@ int sdio_add_func(struct sdio_func *func)
  */
 void sdio_remove_func(struct sdio_func *func)
 {
-	if (sdio_func_present(func))
+	if (sdio_func_present(func)) {
+		sdio_cdev_destroy(func);
+
 		device_del(&func->dev);
+	}
+
 
 	of_node_put(func->dev.of_node);
 	put_device(&func->dev);

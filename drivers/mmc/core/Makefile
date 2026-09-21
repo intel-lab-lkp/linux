@@ -4,6 +4,7 @@
 #
 
 obj-$(CONFIG_MMC)		+= mmc_core.o
+obj-$(CONFIG_MMC_SDIO_CDEV)	+= sdio_cdev.o
 mmc_core-y			:= core.o bus.o host.o \
 				   mmc.o mmc_ops.o sd.o sd_ops.o \
 				   sdio.o sdio_ops.o sdio_bus.o \

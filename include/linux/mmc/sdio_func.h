@@ -57,6 +57,10 @@ struct sdio_func {
 	const char		**info;		/* info strings */
 
 	struct sdio_func_tuple *tuples;
+
+#ifdef CONFIG_MMC_SDIO_CDEV
+	struct miscdevice	*miscdev;	/* userspace passthrough node */
+#endif
 };
 
 #define sdio_func_present(f)	((f)->state & SDIO_STATE_PRESENT)
