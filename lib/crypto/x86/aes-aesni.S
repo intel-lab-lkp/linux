@@ -58,6 +58,14 @@
 	// The AES round constants, used during key expansion
 	.long	0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36
 
+.Lcts_permute_table:
+	.byte	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80
+	.byte	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80
+	.byte	0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07
+	.byte	0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f
+	.byte	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80
+	.byte	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80
+
 .text
 
 // In 32-bit mode, push certain callee-saved GPRs and optionally load function
@@ -402,3 +410,241 @@ SYM_FUNC_END(aes_ecb_encrypt_aesni)
 SYM_FUNC_START(aes_ecb_decrypt_aesni)
 	_ecb_crypt	0
 SYM_FUNC_END(aes_ecb_decrypt_aesni)
+
+// void aes_cbc_encrypt_aesni(u8 *dst, const u8 *src, long nblocks,
+//			      u8 iv[AES_BLOCK_SIZE],
+//			      const struct aes_enckey *key);
+SYM_FUNC_START(aes_cbc_encrypt_aesni)
+	// Arguments
+	.set	DST,		ARG0
+	.set	SRC,		ARG1
+	.set	NBLOCKS,	ARG2
+	.set	IV_PTR,		ARG3
+	.set	KEY,		ARG4
+
+	// Other local variables
+#ifdef __x86_64__
+	.set	RNDKEY_PTR,	%r9
+#else
+	.set	RNDKEY_PTR,	IV_PTR // IV_PTR is clobbered and reloaded later
+#endif
+	.set	NROUNDS,	TMP_32
+	.set	AESDATA0,	%xmm0
+	.set	PTEXT,		%xmm1
+	_prologue	uses_arg3=2, uses_arg4=2
+
+	movdqu		(IV_PTR), AESDATA0
+.p2align 5
+.Lcbc_enc_loop:
+	movdqu		(SRC), PTEXT
+	pxor		PTEXT, AESDATA0
+	_do_aes		1, 0
+	movdqu		AESDATA0, (DST)
+	add		$16, DST
+	add		$16, SRC
+	dec		NBLOCKS
+	jnz		.Lcbc_enc_loop
+
+	// Store the next IV.  On 32-bit, reload IV_PTR from stack first.
+	_reload_arg3
+	movdqu		AESDATA0, (IV_PTR)
+	_epilogue
+SYM_FUNC_END(aes_cbc_encrypt_aesni)
+
+// void aes_cbc_decrypt_aesni(u8 *dst, const u8 *src, long nblocks,
+//			      u8 iv[AES_BLOCK_SIZE],
+//			      const struct aes_key *key);
+SYM_FUNC_START(aes_cbc_decrypt_aesni)
+	// Arguments
+	.set	DST,		ARG0
+	.set	SRC,		ARG1
+	.set	NBLOCKS,	ARG2
+	.set	NBLOCKS32,	ARG2_32	// Used for improved code density
+	.set	IV_PTR,		ARG3
+	.set	KEY,		ARG4
+
+	// Other local variables
+#ifdef __x86_64__
+	.set	RNDKEY_PTR,	%r9
+#else
+	.set	RNDKEY_PTR,	IV_PTR // IV_PTR is clobbered and reloaded later
+#endif
+	.set	NROUNDS, TMP_32
+	.set	AESDATA0,	%xmm0
+	.set	AESDATA1,	%xmm1
+	.set	AESDATA2,	%xmm2
+	.set	AESDATA3,	%xmm3
+	.set	RNDKEY,		%xmm4
+	.set	IV,		%xmm5
+	.set	CTEXT0,		%xmm6
+	.set	CTEXT1,		%xmm7
+#ifdef __x86_64__
+	.set	CTEXT2,		%xmm8
+	.set	CTEXT3,		%xmm9
+#endif
+	_prologue	uses_arg3=2, uses_arg4=2
+
+	movdqu		(IV_PTR), IV
+
+	sub		$4, NBLOCKS
+	jl		.Lcbc_dec_loop4_done
+
+.p2align 5
+.Lcbc_dec_loop4:
+	movdqu		0(SRC), AESDATA0
+	movdqu		16(SRC), AESDATA1
+	movdqu		32(SRC), AESDATA2
+	movdqu		48(SRC), AESDATA3
+	movdqa		AESDATA0, CTEXT0
+	movdqa		AESDATA1, CTEXT1
+#ifdef __x86_64__
+	movdqa		AESDATA2, CTEXT2
+	movdqa		AESDATA3, CTEXT3
+#endif
+	_do_aes		0, 0,1,2,3
+	pxor		IV, AESDATA0
+	pxor		CTEXT0, AESDATA1
+	pxor		CTEXT1, AESDATA2
+#ifdef __x86_64__
+	pxor		CTEXT2, AESDATA3
+	movdqa		CTEXT3, IV
+#else
+	movdqu		32(SRC), CTEXT0
+	pxor		CTEXT0, AESDATA3
+	movdqu		48(SRC), IV
+#endif
+	movdqu		AESDATA0, 0(DST)
+	movdqu		AESDATA1, 16(DST)
+	movdqu		AESDATA2, 32(DST)
+	movdqu		AESDATA3, 48(DST)
+	add		$64, DST
+	add		$64, SRC
+	sub		$4, NBLOCKS
+	jge		.Lcbc_dec_loop4
+.Lcbc_dec_loop4_done:
+	add		$4, NBLOCKS32
+	jz		.Lcbc_dec_done
+
+.Lcbc_dec_loop1:
+	movdqu		(SRC), AESDATA0
+	movdqa		AESDATA0, CTEXT0
+	_do_aes		0, 0
+	pxor		IV, AESDATA0
+	movdqa		CTEXT0, IV
+	movdqu		AESDATA0, (DST)
+	add		$16, DST
+	add		$16, SRC
+	dec		NBLOCKS32
+	jnz		.Lcbc_dec_loop1
+
+.Lcbc_dec_done:
+	// Store the next IV.  On 32-bit, reload IV_PTR from stack first.
+	_reload_arg3
+	movdqu		IV, (IV_PTR)
+	_epilogue
+SYM_FUNC_END(aes_cbc_decrypt_aesni)
+
+// void aes_cbc_cts_encrypt_aesni(u8 *dst, const u8 *src, long pn_len,
+//				  const u8 iv[AES_BLOCK_SIZE],
+//				  const struct aes_enckey *key);
+//
+// Encrypt the last two blocks using the CS3 variant of ciphertext stealing.
+// 1 <= pn_len <= 16 gives the length of the last plaintext block (i.e. P_n) in
+// bytes, so in total this processes 17 to 32 bytes inclusive.
+SYM_FUNC_START(aes_cbc_cts_encrypt_aesni)
+	.set	DST,		ARG0
+	.set	SRC,		ARG1
+	.set	PN_LEN,		ARG2
+	.set	IV_PTR,		ARG3
+	.set	KEY,		ARG4
+	.set	RNDKEY_PTR,	IV_PTR	// Temporary register for _do_aes
+	.set	NROUNDS,	TMP_32	// Temporary register for _do_aes
+	.set	AESDATA0,	%xmm0
+	.set	AESDATA1,	%xmm1
+	.set	RNDKEY,		%xmm2
+	.set	LSHIFT_MASK,	%xmm3 // [0x80, 0x80, ...] + range(PN_LEN)
+	.set	RSHIFT_MASK,	%xmm4 // range(16-PN_LEN,16) + [0x80, 0x80, ...]
+	.set	IV,		%xmm5
+
+	_prologue	uses_arg3=2, uses_arg4=2
+
+	lea		RODATA(.Lcts_permute_table), TMP
+	movdqu		(TMP,PN_LEN), LSHIFT_MASK
+	sub		PN_LEN, TMP
+	movdqu		32(TMP), RSHIFT_MASK
+
+	// Load the last two plaintext blocks.  Last one is left-aligned.
+	movdqu		(SRC), AESDATA0
+	movdqu		(SRC,PN_LEN), AESDATA1
+
+	// Encrypt the second-from-last block.
+	movdqu		(IV_PTR), IV
+	pxor		IV, AESDATA0
+	_do_aes		1, 0
+
+	// Right-align the last block, then encrypt it.
+	pshufb		RSHIFT_MASK, AESDATA1
+	pxor		AESDATA0, AESDATA1
+	_do_aes		1, 1
+
+	// Store the last two ciphertext blocks.
+	pshufb		LSHIFT_MASK, AESDATA0
+	movdqu		AESDATA0, (DST,PN_LEN)
+	movdqu		AESDATA1, (DST)
+
+	_epilogue
+SYM_FUNC_END(aes_cbc_cts_encrypt_aesni)
+
+// void aes_cbc_cts_decrypt_aesni(u8 *dst, const u8 *src, long pn_len,
+//				  const u8 iv[AES_BLOCK_SIZE],
+//				  const struct aes_key *key);
+//
+// Decrypt the last two blocks using the CS3 variant of ciphertext stealing.
+// 1 <= pn_len <= 16 gives the length of the last plaintext block (i.e. P_n) in
+// bytes, so in total this processes 17 to 32 bytes inclusive.
+SYM_FUNC_START(aes_cbc_cts_decrypt_aesni)
+	.set	DST,		ARG0
+	.set	SRC,		ARG1
+	.set	PN_LEN,		ARG2
+	.set	IV_PTR,		ARG3
+	.set	KEY,		ARG4
+	.set	RNDKEY_PTR,	IV_PTR	// Temporary register for _do_aes
+	.set	NROUNDS,	TMP_32	// Temporary register for _do_aes
+	.set	RSHIFT_MASK,	%xmm0 // range(16-PN_LEN,16) + [0x80, 0x80, ...]
+	.set	LSHIFT_MASK,	%xmm1 // [0x80, 0x80, ...] + range(PN_LEN)
+	.set	AESDATA0,	%xmm2
+	.set	AESDATA1,	%xmm3
+	.set	RNDKEY,		%xmm4
+	.set	IV,		%xmm5
+
+	_prologue	uses_arg3=2, uses_arg4=2
+
+	lea		RODATA(.Lcts_permute_table), TMP
+	movdqu		(TMP,PN_LEN), LSHIFT_MASK
+	sub		PN_LEN, TMP
+	movdqu		32(TMP), RSHIFT_MASK
+	movdqu		(IV_PTR), IV
+
+	// Load the last two ciphertext blocks.  Last one is left-aligned.
+	movdqu		(SRC), AESDATA0
+	movdqu		(SRC,PN_LEN), AESDATA1
+
+	// Decrypt the second-from-last ciphertext block.
+	_do_aes		0, 0
+
+	// Recover and store the last plaintext block, left-aligned.
+	movdqa		AESDATA0, %xmm6
+	pshufb		LSHIFT_MASK, %xmm6
+	pxor		AESDATA1, %xmm6
+	movdqu		%xmm6, (DST,PN_LEN)
+
+	// Recover and store the second-from-last plaintext block.
+	// Note that pblendvb uses %xmm0 (RSHIFT_MASK) as an implicit operand.
+	pshufb		RSHIFT_MASK, AESDATA1
+	pblendvb	AESDATA0, AESDATA1
+	_do_aes		0, 1
+	pxor		IV, AESDATA1
+	movdqu		AESDATA1, (DST)
+
+	_epilogue
+SYM_FUNC_END(aes_cbc_cts_decrypt_aesni)
