@@ -87,12 +87,8 @@ struct async_submit_ctl {
  */
 static inline void async_tx_issue_pending(struct dma_async_tx_descriptor *tx)
 {
-	if (likely(tx)) {
-		struct dma_chan *chan = tx->chan;
-		struct dma_device *dma = chan->device;
-
-		dma->device_issue_pending(chan);
-	}
+	if (likely(tx))
+		dma_async_issue_pending(tx->chan);
 }
 #ifdef CONFIG_ARCH_HAS_ASYNC_TX_FIND_CHANNEL
 #include <asm/async_tx.h>
