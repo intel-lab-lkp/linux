@@ -9039,19 +9039,38 @@ static void *raid5_takeover(struct mddev *mddev)
 	 *  raid4 - trivial - just use a raid4 layout.
 	 *  raid6 - Providing it is a *_6 layout
 	 */
-	if (mddev->level == 0)
-		return raid45_takeover_raid0(mddev, 5);
-	if (mddev->level == 1)
-		return raid5_takeover_raid1(mddev);
-	if (mddev->level == 4) {
+	void *ret = ERR_PTR(-EINVAL);
+	struct md_thread *thread;
+
+	thread = rcu_dereference_protected(mddev->thread,
+				lockdep_is_held(&mddev->reconfig_mutex));
+	/*
+	 * Set mddev->thread to NULL before setup_conf() to avoid waking up
+	 * wrong thread(eg. raid1), which can prevent the strips from being
+	 * left unreleased in the error handling path(free_conf) of raid5_run.
+	 */
+	rcu_assign_pointer(mddev->thread, NULL);
+
+	switch (mddev->level) {
+	case 0:
+		ret = raid45_takeover_raid0(mddev, 5);
+		break;
+	case 1:
+		ret = raid5_takeover_raid1(mddev);
+		break;
+	case 4:
 		mddev->new_layout = ALGORITHM_PARITY_N;
 		mddev->new_level = 5;
-		return setup_conf(mddev);
+		ret = setup_conf(mddev);
+		break;
+	case 6:
+		ret = raid5_takeover_raid6(mddev);
+		break;
 	}
-	if (mddev->level == 6)
-		return raid5_takeover_raid6(mddev);
 
-	return ERR_PTR(-EINVAL);
+	rcu_assign_pointer(mddev->thread, thread);
+
+	return ret;
 }
 
 static void *raid4_takeover(struct mddev *mddev)
