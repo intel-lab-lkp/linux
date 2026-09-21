@@ -176,49 +176,6 @@ static bool is_sibling_call(struct instruction *insn)
 	return (is_static_jump(insn) && insn_call_dest(insn));
 }
 
-/*
- * Checks if a function is a Rust "noreturn" one.
- */
-static bool is_rust_noreturn(const struct symbol *func)
-{
-	/*
-	 * If it does not start with "_R", then it is not a Rust symbol.
-	 */
-	if (strncmp(func->name, "_R", 2))
-		return false;
-
-	/*
-	 * These are just heuristics -- we do not control the precise symbol
-	 * name, due to the crate disambiguators (which depend on the compiler)
-	 * as well as changes to the source code itself between versions (since
-	 * these come from the Rust standard library).
-	 */
-	return str_ends_with(func->name, "_4core3num20from_str_radix_panic")				||
-	       str_ends_with(func->name, "_4core3num22from_ascii_radix_panic")				||
-	       str_ends_with(func->name, "_4core3num28from_ascii_bytes_radix_panic")			||
-	       str_ends_with(func->name, "_4core3str16slice_error_fail")				||
-	       str_ends_with(func->name, "_4core5sliceSp15copy_from_slice17len_mismatch_fail")		||
-	       str_ends_with(func->name, "_4core6option13expect_failed")				||
-	       str_ends_with(func->name, "_4core6option13unwrap_failed")				||
-	       str_ends_with(func->name, "_4core6result13unwrap_failed")				||
-	       str_ends_with(func->name, "_4core9panicking5panic")					||
-	       str_ends_with(func->name, "_4core9panicking9panic_fmt")					||
-	       str_ends_with(func->name, "_4core9panicking14panic_explicit")				||
-	       str_ends_with(func->name, "_4core9panicking14panic_nounwind")				||
-	       str_ends_with(func->name, "_4core9panicking18panic_bounds_check")			||
-	       str_ends_with(func->name, "_4core9panicking18panic_nounwind_fmt")			||
-	       str_ends_with(func->name, "_4core9panicking19assert_failed_inner")			||
-	       str_ends_with(func->name, "_4core9panicking30panic_null_pointer_dereference")		||
-	       str_ends_with(func->name, "_4core9panicking32panic_null_reference_constructed")		||
-	       str_ends_with(func->name, "_4core9panicking36panic_misaligned_pointer_dereference")	||
-	       str_ends_with(func->name, "_7___rustc17rust_begin_unwind")				||
-	       strstr(func->name, "_4core9panicking13assert_failed")					||
-	       strstr(func->name, "_4core9panicking11panic_const24panic_const_")			||
-	       (strstr(func->name, "_4core5slice5index") &&
-		strstr(func->name, "slice_") &&
-		str_ends_with(func->name, "_fail"));
-}
-
 static bool is_listed_noreturn(struct symbol *func)
 {
 #define NORETURN(func) __stringify(func),
@@ -229,9 +186,6 @@ static bool is_listed_noreturn(struct symbol *func)
 
 	if (is_local_sym(func))
 		return false;
-
-	if (is_rust_noreturn(func))
-		return true;
 
 	for (int i = 0; i < ARRAY_SIZE(global_noreturns); i++)
 		if (!strcmp(func->name, global_noreturns[i]))

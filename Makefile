@@ -1750,6 +1750,13 @@ KBUILD_BUILTIN := y
 modules: vmlinux
 endif
 
+# Objtool for modules (run before module link) needs to come after objtool for
+# vmlinux.o so it can read the generated exported noreturns file.
+ifdef CONFIG_OBJTOOL_CONTROL_FLOW
+KBUILD_BUILTIN := y
+modules: vmlinux.o
+endif
+
 modules: modules_prepare
 
 # Target to prepare building external modules
@@ -1780,6 +1787,7 @@ MRPROPER_FILES += include/config include/generated          \
 		  debian snap tar-install PKGBUILD pacman \
 		  .config .config.old .version \
 		  Module.symvers \
+		  scripts/noreturns.builtin \
 		  certs/signing_key.pem \
 		  certs/x509.genkey \
 		  vmlinux-gdb.py \
