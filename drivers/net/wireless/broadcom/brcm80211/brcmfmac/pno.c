@@ -533,6 +533,8 @@ void brcmf_pno_detach(struct brcmf_cfg80211_info *cfg)
 	brcmf_dbg(TRACE, "enter\n");
 	pi = cfg->pno;
 	cfg->pno = NULL;
+	if (!pi)
+		return;
 
 	WARN_ON(pi->n_reqs);
 	mutex_destroy(&pi->req_lock);
