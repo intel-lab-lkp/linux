@@ -947,11 +947,19 @@ static inline void *alloc_rsttbl_idx(struct RESTART_TABLE **tbl)
  */
 static inline void *alloc_rsttbl_from_idx(struct RESTART_TABLE **tbl, u32 vbo)
 {
+	u32 i;
 	u32 off;
+	u32 prev_off = 0;
 	__le32 *e;
+	__le32 *prev_e = NULL;
 	struct RESTART_TABLE *rt = *tbl;
 	u32 bytes = bytes_per_rt(rt);
+	u16 used;
 	u16 esize = le16_to_cpu(rt->size);
+
+	if (esize < sizeof(__le32) || vbo < sizeof(struct RESTART_TABLE) ||
+	    (vbo - sizeof(struct RESTART_TABLE)) % esize)
+		return NULL;
 
 	/* If the entry is not the table, we will have to extend the table. */
 	if (vbo >= bytes) {
@@ -968,7 +976,10 @@ static inline void *alloc_rsttbl_from_idx(struct RESTART_TABLE **tbl, u32 vbo)
 		*tbl = rt = extend_rsttbl(rt, bytes2idx / esize + 1, bytes);
 		if (!rt)
 			return NULL;
+		bytes = bytes_per_rt(rt);
 	}
+
+	used = le16_to_cpu(rt->used);
 
 	/* See if the entry is already allocated, and just return if it is. */
 	e = Add2Ptr(rt, vbo);
@@ -976,49 +987,38 @@ static inline void *alloc_rsttbl_from_idx(struct RESTART_TABLE **tbl, u32 vbo)
 	if (*e == RESTART_ENTRY_ALLOCATED_LE)
 		return e;
 
-	/*
-	 * Walk through the table, looking for the entry we're
-	 * interested and the previous entry.
-	 */
 	off = le32_to_cpu(rt->first_free);
-	e = Add2Ptr(rt, off);
 
-	if (off == vbo) {
-		/* this is a match */
-		rt->first_free = *e;
-		goto skip_looking;
-	}
+	for (i = 0; off; i++) {
+		if (i >= used || off == RESTART_ENTRY_ALLOCATED ||
+		    off < sizeof(struct RESTART_TABLE) ||
+		    off > bytes - sizeof(__le32) ||
+		    (off - sizeof(struct RESTART_TABLE)) % esize) {
+			return NULL;
+		}
 
-	/*
-	 * Need to walk through the list looking for the predecessor
-	 * of our entry.
-	 */
-	for (;;) {
-		/* Remember the entry just found */
-		u32 last_off = off;
-		__le32 *last_e = e;
-
-		/* Should never run of entries. */
-
-		/* Lookup up the next entry the list. */
-		off = le32_to_cpu(*last_e);
 		e = Add2Ptr(rt, off);
 
-		/* If this is our match we are done. */
 		if (off == vbo) {
-			*last_e = *e;
+			if (prev_e) {
+				*prev_e = *e;
 
-			/*
-			 * If this was the last entry, we update that
-			 * table as well.
-			 */
-			if (le32_to_cpu(rt->last_free) == off)
-				rt->last_free = cpu_to_le32(last_off);
-			break;
+				if (le32_to_cpu(rt->last_free) == off)
+					rt->last_free = cpu_to_le32(prev_off);
+			} else {
+				rt->first_free = *e;
+			}
+			goto found;
 		}
+
+		prev_e = e;
+		prev_off = off;
+		off = le32_to_cpu(*e);
 	}
 
-skip_looking:
+	return NULL;
+
+found:
 	/* If the list is now empty, we fix the last_free as well. */
 	if (!rt->first_free)
 		rt->last_free = 0;
