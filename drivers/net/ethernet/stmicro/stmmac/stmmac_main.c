@@ -5253,7 +5253,9 @@ static int stmmac_xdp_xmit_xdpf(struct stmmac_priv *priv, int queue,
 
 	tx_q->tx_count_frames++;
 
-	if (tx_q->tx_count_frames % priv->tx_coal_frames[queue] == 0)
+	if (!priv->tx_coal_frames[queue])
+		set_ic = false;
+	else if (tx_q->tx_count_frames % priv->tx_coal_frames[queue] == 0)
 		set_ic = true;
 	else
 		set_ic = false;
