@@ -8402,6 +8402,9 @@ static int wake_wide(struct task_struct *p)
  * wake_affine_idle() - only considers 'now', it check if the waking CPU is
  *			cache-affine and is (or	will be) idle.
  *
+ * wake_affine_slice() - only considers 'now', it check if the waking CPU can
+ *			 be preempted because using longer slice.
+ *
  * wake_affine_weight() - considers the weight to reflect the average
  *			  scheduling latency of the CPUs. This seems to work
  *			  for the overloaded case.
@@ -8433,6 +8436,20 @@ wake_affine_idle(int this_cpu, int prev_cpu, int sync)
 
 	if (available_idle_cpu(prev_cpu))
 		return prev_cpu;
+
+	return nr_cpumask_bits;
+}
+
+static int
+wake_affine_slice(struct task_struct *p, int this_cpu, int prev_cpu)
+{
+	struct sched_entity *se = &p->se;
+
+	if (se->slice < get_rq_min_slice(cpu_rq(prev_cpu)))
+		return prev_cpu;
+
+	if (se->slice < get_rq_min_slice(cpu_rq(this_cpu)))
+		return this_cpu;
 
 	return nr_cpumask_bits;
 }
@@ -8487,6 +8504,9 @@ static int wake_affine(struct sched_domain *sd, struct task_struct *p,
 
 	if (sched_feat(WA_IDLE))
 		target = wake_affine_idle(this_cpu, prev_cpu, sync);
+
+	if (sched_feat(PREEMPT_SHORT) && target == nr_cpumask_bits)
+		target = wake_affine_slice(p, this_cpu, prev_cpu);
 
 	if (sched_feat(WA_WEIGHT) && target == nr_cpumask_bits)
 		target = wake_affine_weight(sd, p, this_cpu, prev_cpu, sync);
