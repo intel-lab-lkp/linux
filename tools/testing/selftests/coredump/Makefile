@@ -4,7 +4,8 @@ CFLAGS += -Wall -O0 -g $(KHDR_INCLUDES) $(TOOLS_INCLUDES)
 TEST_GEN_PROGS := stackdump_test \
 		  coredump_socket_test \
 		  coredump_socket_protocol_test \
-		  coredump_signal_test
+		  coredump_signal_test \
+		  coredump_worker_test
 TEST_FILES := stackdump
 
 include ../lib.mk
@@ -13,3 +14,4 @@ $(OUTPUT)/stackdump_test: coredump_test_helpers.c
 $(OUTPUT)/coredump_socket_test: coredump_test_helpers.c
 $(OUTPUT)/coredump_socket_protocol_test: coredump_test_helpers.c
 $(OUTPUT)/coredump_signal_test: coredump_test_helpers.c
+$(OUTPUT)/coredump_worker_test: coredump_test_helpers.c
