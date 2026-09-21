@@ -581,9 +581,14 @@ static int iomap_dio_bio_iter(struct iomap_iter *iter, struct iomap_dio *dio)
 	    ((dio->flags & IOMAP_DIO_WRITE) && pos >= i_size_read(inode))) {
 		/* zero out from the end of the write to the end of the block */
 		pad = pos & (fs_block_size - 1);
-		if (pad)
-			ret = iomap_dio_zero(iter, dio, pos,
-					     fs_block_size - pad);
+		if (pad) {
+			ssize_t zerror;
+
+			zerror = iomap_dio_zero(iter, dio, pos,
+						fs_block_size - pad);
+			if (!ret)
+				ret = zerror;
+		}
 	}
 out:
 	/* Undo iter limitation to current extent */
