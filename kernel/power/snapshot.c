@@ -1867,11 +1867,32 @@ int hibernate_preallocate_memory(void)
 	highmem = save_highmem;
 	size = 0;
 	for_each_populated_zone(zone) {
+		unsigned long free, unusable;
+
 		size += snapshot_additional_pages(zone);
+
+		/*
+		 * Pages reserved for high-order atomic allocations
+		 * (MIGRATE_HIGHATOMIC) and free CMA pages cannot be used by
+		 * the order-0 non-movable GFP_KERNEL allocations that
+		 * preallocate the image, so do not count them as available.
+		 * This mirrors __zone_watermark_unusable_free().
+		 */
+		free = zone_page_state(zone, NR_FREE_PAGES);
+		unusable = zone->nr_reserved_highatomic;
+#ifdef CONFIG_CMA
+		unusable += zone_page_state(zone, NR_FREE_CMA_PAGES);
+#endif
+		/*
+		 * nr_reserved_highatomic counts whole reserved pageblocks,
+		 * so it can exceed the actual free pages.
+		 */
+		unusable = min(unusable, free);
+
 		if (is_highmem(zone))
-			highmem += zone_page_state(zone, NR_FREE_PAGES);
+			highmem += free - unusable;
 		else
-			count += zone_page_state(zone, NR_FREE_PAGES);
+			count += free - unusable;
 	}
 	avail_normal = count;
 	count += highmem;
