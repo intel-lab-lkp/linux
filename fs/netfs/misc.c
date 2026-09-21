@@ -6,6 +6,7 @@
  */
 
 #include <linux/swap.h>
+#include <linux/rmap.h>
 #include "internal.h"
 
 /**
@@ -582,3 +583,53 @@ void netfs_wait_for_put_ra_refs(struct netfs_io_request *rreq)
 	trace_netfs_rreq(rreq, netfs_rreq_trace_waited_put_ra_refs);
 	finish_wait(&rreq->waitq, &myself);
 }
+
+/**
+ * netfs_clear_stale_post_eof - Clear stale pagecache in a to-be-created hole
+ * @inode: The inode to act upon.
+ * @from: The base of the hole to be made (the current EOF).
+ * @to: The top of the hole to be made.
+ * @nowait: True to return -EAGAIN rather than block.
+ *
+ * Before extending a file, zero any data left in the pagecache within the
+ * [@from, @to) hole by a write through an mmap so that it isn't exposed as file
+ * content once the file is extended.  Only the uptodate folio straddling @from
+ * can hold such data as pages wholly beyond the EOF can't be faulted in, so the
+ * zeroing is limited to that folio.  The folio is zeroed rather than dropped so
+ * that a concurrent extending write can't lose data.
+ *
+ * Return: 0 on success, or -EAGAIN if @nowait is set and the folio would need
+ * to be waited on.
+ */
+int netfs_clear_stale_post_eof(struct inode *inode, unsigned long long from,
+			       unsigned long long to, bool nowait)
+{
+	struct address_space *mapping = inode->i_mapping;
+	fgf_t fgp = FGP_LOCK;
+	struct folio *folio;
+
+	if (from >= to)
+		return 0;
+
+	if (nowait)
+		fgp |= FGP_NOWAIT;
+
+	folio = __filemap_get_folio(mapping, from >> PAGE_SHIFT, fgp, 0);
+	if (IS_ERR(folio))
+		return PTR_ERR(folio) == -EAGAIN ? -EAGAIN : 0;
+
+	if (folio_mkclean(folio))
+		folio_mark_dirty(folio);
+
+	if (folio_test_uptodate(folio)) {
+		size_t end = umin(to - folio_pos(folio), folio_size(folio));
+		size_t offset = offset_in_folio(folio, from);
+
+		folio_zero_segment(folio, offset, end);
+	}
+
+	folio_unlock(folio);
+	folio_put(folio);
+	return 0;
+}
+EXPORT_SYMBOL(netfs_clear_stale_post_eof);
