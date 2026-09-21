@@ -372,11 +372,14 @@ static int amd_pstate_ut_epp(u32 index)
 	}
 
 	for (i = 0; i < ARRAY_SIZE(epp_strings); i++) {
+		u8 want_epp, got_epp;
+
 		memset(buf, 0, PAGE_SIZE);
 		snprintf(buf, PAGE_SIZE, "%s", epp_strings[i]);
 		ret = store_energy_performance_preference(policy, buf, strlen(buf));
 		if (ret < 0)
 			goto out;
+		want_epp = FIELD_GET(AMD_CPPC_EPP_PERF_MASK, cpudata->cppc_req_cached);
 
 		memset(buf, 0, PAGE_SIZE);
 		ret = show_energy_performance_preference(policy, buf);
@@ -385,12 +388,27 @@ static int amd_pstate_ut_epp(u32 index)
 		strreplace(buf, '\n', '\0');
 		/*
 		 * "dynamic" mode reports the EPP as "dynamic(profile:X)"
-		 * Trim at "(" and just compare tie the epp string.
+		 * Trim at "(" and just keep the preference name.
 		 */
 		strreplace(buf, '(', '\0');
 
-		if (strcmp(buf, epp_strings[i])) {
-			pr_err("String EPP value mismatch: %s != %s\n", buf, epp_strings[i]);
+		/*
+		 * The preference read back may legitimately differ from the one
+		 * written: some platforms (e.g. Zen6) program the same raw EPP
+		 * value for more than one named preference, so show() reports the
+		 * first name that matches that value. Rather than compare the
+		 * strings, re-write whatever name was reported and confirm it
+		 * programs the same raw EPP value. This verifies the show()/store()
+		 * mapping stays consistent while tolerating such aliasing.
+		 */
+		ret = store_energy_performance_preference(policy, buf, strlen(buf));
+		if (ret < 0)
+			goto out;
+		got_epp = FIELD_GET(AMD_CPPC_EPP_PERF_MASK, cpudata->cppc_req_cached);
+
+		if (want_epp != got_epp) {
+			pr_err("EPP mapping inconsistent: %s programmed %u but %s programmed %u\n",
+			       epp_strings[i], want_epp, buf, got_epp);
 			ret = -EINVAL;
 			goto out;
 		}
