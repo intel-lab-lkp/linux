@@ -2088,19 +2088,15 @@ static int bcm_sysport_stop(struct net_device *dev)
 	umac_enable_set(priv, CMD_RX_EN, 0);
 
 	ret = tdma_enable_set(priv, 0);
-	if (ret) {
+	if (ret)
 		netdev_err(dev, "timeout disabling TDMA\n");
-		return ret;
-	}
 
 	/* Wait for a maximum packet size to be drained */
 	usleep_range(2000, 3000);
 
 	ret = rdma_enable_set(priv, 0);
-	if (ret) {
+	if (ret)
 		netdev_err(dev, "timeout disabling RDMA\n");
-		return ret;
-	}
 
 	/* Disable UniMAC TX */
 	umac_enable_set(priv, CMD_TX_EN, 0);
