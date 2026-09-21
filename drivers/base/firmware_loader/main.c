@@ -1290,11 +1290,15 @@ EXPORT_SYMBOL_GPL(firmware_request_nowait_nowarn);
  * Cancel a pending request_firmware_nowait() request for @device, @context
  * and @cont. If the associated work has already started, this function waits
  * until the callback has returned. If the callback has already completed, this
- * function does nothing.
+ * function does nothing. This function may need to be called multiple times if
+ * the callback makes additional firmware requests.
  *
  * This function may sleep.
+ *
+ * Return: %true if a request was canceled, or %false if no requests matched
+ *         @device and @context.
  */
-void request_firmware_nowait_cancel(struct device *device, void *context,
+bool request_firmware_nowait_cancel(struct device *device, void *context,
 				    void (*cont)(const struct firmware *fw,
 						 void *context))
 {
@@ -1313,9 +1317,10 @@ void request_firmware_nowait_cancel(struct device *device, void *context,
 	spin_unlock_irq(&firmware_work_lock);
 
 	if (!fw_work)
-		return;
+		return false;
 	cancel_work_sync(&fw_work->work);
 	firmware_work_free(fw_work);
+	return true;
 }
 EXPORT_SYMBOL_GPL(request_firmware_nowait_cancel);
 
