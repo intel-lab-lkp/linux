@@ -17,7 +17,7 @@
 #define SERIAL_PORT_DFNS
 #endif
 
-static void start_serial_interrupt(int irq);
+static int start_serial_interrupt(int irq);
 
 static const struct old_serial_port rs_table[] = {
 	SERIAL_PORT_DFNS
@@ -106,7 +106,13 @@ const struct old_serial_port *spk_serial_init(int index)
 	speakup_info.port_tts = ser->port;
 	serstate = ser;
 
-	start_serial_interrupt(ser->irq);
+	err = start_serial_interrupt(ser->irq);
+	if (err) {
+		synth_release_region(ser->port, 8);
+		speakup_info.port_tts = 0;
+		serstate = NULL;
+		return NULL;
+	}
 
 	return ser;
 }
@@ -125,18 +131,20 @@ static irqreturn_t synth_readbuf_handler(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-static void start_serial_interrupt(int irq)
+static int start_serial_interrupt(int irq)
 {
 	int rv;
 
 	if (!synth->read_buff_add)
-		return;
+		return 0;
 
 	rv = request_irq(irq, synth_readbuf_handler, IRQF_SHARED,
 			 "serial", (void *)synth_readbuf_handler);
 
-	if (rv)
+	if (rv) {
 		pr_err("Unable to request Speakup serial I R Q\n");
+		return rv;
+	}
 	/* Set MCR */
 	outb(UART_MCR_DTR | UART_MCR_RTS | UART_MCR_OUT2,
 	     speakup_info.port_tts + UART_MCR);
@@ -148,6 +156,7 @@ static void start_serial_interrupt(int irq)
 	inb(speakup_info.port_tts + UART_IIR);
 	inb(speakup_info.port_tts + UART_MSR);
 	outb(1, speakup_info.port_tts + UART_FCR);	/* Turn FIFO On */
+	return 0;
 }
 
 static void spk_serial_send_xchar(struct spk_synth *synth, char ch)
