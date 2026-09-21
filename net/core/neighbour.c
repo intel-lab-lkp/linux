@@ -471,10 +471,13 @@ static int __neigh_ifdown(struct neigh_table *tbl, struct net_device *dev,
 	spin_unlock_bh(&tbl->lock);
 
 	pneigh_ifdown(tbl, dev, skip_perm);
+	/* The callback does not take this lock, so sync deletion can wait for it. */
+	spin_lock_bh(&tbl->proxy_timer_lock);
 	pneigh_queue_purge(&tbl->proxy_queue, dev ? dev_net(dev) : NULL,
 			   tbl->family);
 	if (skb_queue_empty_lockless(&tbl->proxy_queue))
 		timer_delete_sync(&tbl->proxy_timer);
+	spin_unlock_bh(&tbl->proxy_timer_lock);
 	return 0;
 }
 
@@ -1729,6 +1732,7 @@ void pneigh_enqueue(struct neigh_table *tbl, struct neigh_parms *p,
 	NEIGH_CB(skb)->sched_next = sched_next;
 	NEIGH_CB(skb)->flags |= LOCALLY_ENQUEUED;
 
+	spin_lock_bh(&tbl->proxy_timer_lock);
 	spin_lock(&tbl->proxy_queue.lock);
 	if (timer_delete(&tbl->proxy_timer)) {
 		if (time_before(tbl->proxy_timer.expires, sched_next))
@@ -1740,6 +1744,7 @@ void pneigh_enqueue(struct neigh_table *tbl, struct neigh_parms *p,
 	p->qlen++;
 	mod_timer(&tbl->proxy_timer, sched_next);
 	spin_unlock(&tbl->proxy_queue.lock);
+	spin_unlock_bh(&tbl->proxy_timer_lock);
 }
 EXPORT_SYMBOL(pneigh_enqueue);
 
@@ -1858,6 +1863,7 @@ void neigh_table_init(int index, struct neigh_table *tbl)
 		WARN_ON(tbl->entry_size % NEIGH_PRIV_ALIGN);
 
 	spin_lock_init(&tbl->lock);
+	spin_lock_init(&tbl->proxy_timer_lock);
 	mutex_init(&tbl->phash_lock);
 
 	INIT_DEFERRABLE_WORK(&tbl->gc_work, neigh_periodic_work);
