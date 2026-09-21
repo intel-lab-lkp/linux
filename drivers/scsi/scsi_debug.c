@@ -6202,6 +6202,7 @@ static int resp_atomic_write(struct scsi_cmnd *scp,
 	u8 *cmd = scp->cmnd;
 	u16 boundary, len;
 	u64 lba, lba_tmp;
+	bool lbp = scsi_debug_lbp();
 	int ret;
 
 	if (!scsi_debug_atomic_write()) {
@@ -6246,7 +6247,16 @@ static int resp_atomic_write(struct scsi_cmnd *scp,
 		}
 	}
 
+	if (lbp)
+		sdeb_meta_write_lock(sip);
+
 	ret = do_device_access(sip, scp, 0, lba, len, 0, true, true);
+	if (unlikely(lbp))
+		map_region(sip, lba, len);
+
+	if (lbp)
+		sdeb_meta_write_unlock(sip);
+
 	if (unlikely(ret == -1))
 		return DID_ERROR << 16;
 	if (unlikely(ret != len * sdebug_sector_size))
