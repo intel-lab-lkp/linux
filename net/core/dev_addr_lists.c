@@ -1337,6 +1337,27 @@ static void netif_rx_mode_queue(struct net_device *dev)
 	__netdev_work_core_sched(dev, NETDEV_WORK_RX_MODE);
 }
 
+/**
+ * netif_rx_mode_schedule_fresh() - schedule a fresh receive-mode update
+ * @dev: network device
+ *
+ * Cancel any pending retry and reset its backoff budget before scheduling an
+ * immediate receive-mode update. Callers use this after a state transition
+ * which requires the complete receive configuration to be replayed, rather
+ * than after a failed update (which uses netif_rx_mode_schedule_retry()).
+ *
+ * Context: sleepable. The caller must hold the device operations lock, or
+ * RTNL for a device which still uses RTNL-compatible operations.
+ */
+void netif_rx_mode_schedule_fresh(struct net_device *dev)
+{
+	might_sleep();
+	netdev_assert_locked_ops_compat(dev);
+	netif_rx_mode_cancel_retry(dev);
+	netif_rx_mode_queue(dev);
+}
+EXPORT_SYMBOL_GPL(netif_rx_mode_schedule_fresh);
+
 static void netif_rx_mode_retry(struct timer_list *t)
 {
 	struct net_device *dev =
