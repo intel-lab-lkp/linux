@@ -3579,8 +3579,31 @@ out_low_space:
 	return xfs_bmap_btalloc_low_space(ap, args);
 }
 
+static xfs_agnumber_t
+xfs_bmap_write_stream_agno(
+	struct xfs_inode	*ip,
+	unsigned int		stream_id)
+{
+	struct xfs_mount	*mp = ip->i_mount;
+	xfs_agnumber_t		nr_ags = mp->m_sb.sb_agcount;
+	unsigned int		nr_streams =
+		write_stream_pool_count(&mp->m_ddev_targp->bt_stream_pool);
+	xfs_agnumber_t		ag_set_size, start_agno;
+
+	stream_id -= 1;	/* convert from 1-based to 0-based */
+	ag_set_size = nr_ags / nr_streams;
+	start_agno = stream_id * ag_set_size;
+
+	/* last stream absorbs any uneven remainder */
+	if (stream_id == nr_streams - 1)
+		ag_set_size = nr_ags - start_agno;
+
+	return start_agno + I_INO(ip) % ag_set_size;
+}
+
+/* Core AG allocator.  The caller sets ap->blkno to the target AG start. */
 static int
-xfs_bmap_btalloc_best_length(
+xfs_bmap_btalloc_from_blkno(
 	struct xfs_bmalloca	*ap,
 	struct xfs_alloc_arg	*args,
 	int			stripe_align)
@@ -3588,7 +3611,6 @@ xfs_bmap_btalloc_best_length(
 	xfs_extlen_t		blen = 0;
 	int			error;
 
-	ap->blkno = XFS_INODE_TO_FSB(ap->ip);
 	if (!xfs_bmap_adjacent(ap))
 		ap->eof = false;
 
@@ -3621,6 +3643,32 @@ xfs_bmap_btalloc_best_length(
 	return xfs_bmap_btalloc_low_space(ap, args);
 }
 
+/* Start a write-stream file in the AG set that backs its stream. */
+static int
+xfs_bmap_btalloc_write_stream(
+	struct xfs_bmalloca	*ap,
+	struct xfs_alloc_arg	*args,
+	int			stripe_align,
+	unsigned int		stream_id)
+{
+	struct xfs_mount	*mp = ap->ip->i_mount;
+	xfs_agnumber_t		agno;
+
+	agno = xfs_bmap_write_stream_agno(ap->ip, stream_id);
+	ap->blkno = XFS_AGB_TO_FSB(mp, agno, 0);
+	return xfs_bmap_btalloc_from_blkno(ap, args, stripe_align);
+}
+
+static int
+xfs_bmap_btalloc_best_length(
+	struct xfs_bmalloca	*ap,
+	struct xfs_alloc_arg	*args,
+	int			stripe_align)
+{
+	ap->blkno = XFS_INODE_TO_FSB(ap->ip);
+	return xfs_bmap_btalloc_from_blkno(ap, args, stripe_align);
+}
+
 static int
 xfs_bmap_btalloc(
 	struct xfs_bmalloca	*ap)
@@ -3640,6 +3688,7 @@ xfs_bmap_btalloc(
 	};
 	xfs_fileoff_t		orig_offset;
 	xfs_extlen_t		orig_length;
+	unsigned int		stream_id;
 	int			error;
 	int			stripe_align;
 
@@ -3652,11 +3701,16 @@ xfs_bmap_btalloc(
 	/* Trim the allocation back to the maximum an AG can fit. */
 	args.maxlen = min(ap->length, mp->m_ag_max_usable);
 
+	stream_id = READ_ONCE(VFS_I(ap->ip)->i_write_stream);
+
 	if (unlikely(XFS_TEST_ERROR(mp, XFS_ERRTAG_BMAP_ALLOC_MINLEN_EXTENT)))
 		error = xfs_bmap_exact_minlen_extent_alloc(ap, &args);
 	else if ((ap->datatype & XFS_ALLOC_USERDATA) &&
 			xfs_inode_is_filestream(ap->ip))
 		error = xfs_bmap_btalloc_filestreams(ap, &args, stripe_align);
+	else if ((ap->datatype & XFS_ALLOC_USERDATA) && stream_id)
+		error = xfs_bmap_btalloc_write_stream(ap, &args, stripe_align,
+				stream_id);
 	else
 		error = xfs_bmap_btalloc_best_length(ap, &args, stripe_align);
 	if (error)
