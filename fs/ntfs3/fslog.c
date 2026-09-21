@@ -697,7 +697,7 @@ static bool check_log_rec(const struct LOG_REC_HDR *lr, u32 bytes, u32 tr,
 
 	if (bytes < sizeof(struct LOG_REC_HDR))
 		return false;
-	if (!tr)
+	if (tr < sizeof(struct RESTART_TABLE))
 		return false;
 
 	if ((tr - sizeof(struct RESTART_TABLE)) %
@@ -711,7 +711,7 @@ static bool check_log_rec(const struct LOG_REC_HDR *lr, u32 bytes, u32 tr,
 		return false;
 
 	if (lr->target_attr)
-		goto check_lcns;
+		goto check_target;
 
 	if (is_target_required(le16_to_cpu(lr->redo_op)))
 		return false;
@@ -719,12 +719,13 @@ static bool check_log_rec(const struct LOG_REC_HDR *lr, u32 bytes, u32 tr,
 	if (is_target_required(le16_to_cpu(lr->undo_op)))
 		return false;
 
-check_lcns:
-	if (!lr->lcns_follow)
+check_target:
+	if (!lr->lcns_follow && !lr->target_attr)
 		goto check_length;
 
 	t16 = le16_to_cpu(lr->target_attr);
-	if ((t16 - sizeof(struct RESTART_TABLE)) % bytes_per_attr_entry)
+	if (t16 < sizeof(struct RESTART_TABLE) ||
+	    (t16 - sizeof(struct RESTART_TABLE)) % bytes_per_attr_entry)
 		return false;
 
 check_length:
@@ -4737,6 +4738,12 @@ copy_lcns:
 
 	case OpenNonresidentAttribute:
 		t16 = le16_to_cpu(lrh->target_attr);
+		if (t16 < sizeof(*oatbl) ||
+		    (t16 - sizeof(*oatbl)) % le16_to_cpu(oatbl->size)) {
+			err = -EINVAL;
+			goto out;
+		}
+
 		if (t16 >= bytes_per_rt(oatbl)) {
 			/*
 			 * Compute how big the table needs to be.
