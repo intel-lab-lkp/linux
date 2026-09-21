@@ -10,6 +10,7 @@
 #include <linux/backing-dev.h>
 #include <linux/bio.h>
 #include <linux/blkdev.h>
+#include "blk-cgroup.h"
 #include <linux/blk-integrity.h>
 #include <linux/kmemleak.h>
 #include <linux/mm.h>
@@ -1400,6 +1401,73 @@ static void blk_add_rq_to_plug(struct blk_plug *plug, struct request *rq)
 	plug->rq_count++;
 }
 
+/*
+ * Passthrough bios are mapped directly onto requests via
+ * blk_rq_map_user() and never pass through submit_bio(), so they carry
+ * no blkcg association and are invisible to cgroup io.stat and to every
+ * rq_qos policy (iocost, blk-throttle, iolatency).  Charge the ones that
+ * carry data to the submitter's blkcg at dispatch time and run the
+ * regular bio accounting and rq_qos throttle paths with the associated
+ * bio.
+ *
+ * Gated by opcode (READ/WRITE/DRV_IN/DRV_OUT, the latter two mapped
+ * to READ/WRITE for io.stat classification) and to queues that
+ * already have a gendisk: commands issued during device probing (SCSI
+ * INQUIRY and friends) have no gendisk yet and stay exempt.  The
+ * request bios may carry a stale ->bi_blkg from the mempool; the
+ * association helper drops the old reference and re-associates.
+ */
+static void blk_mq_pt_charge(struct request *rq)
+{
+	struct bio *bio = rq->bio;
+	enum req_op op = req_op(rq);
+
+	if (!bio || !rq->q->disk)
+		return;
+
+	switch (op) {
+	case REQ_OP_READ:
+	case REQ_OP_WRITE:
+	case REQ_OP_DRV_IN:
+	case REQ_OP_DRV_OUT:
+		break;
+	default:
+		return;
+	}
+	if (op == REQ_OP_DRV_IN)
+		op = REQ_OP_READ;
+	else if (op == REQ_OP_DRV_OUT)
+		op = REQ_OP_WRITE;
+
+	if (!bio->bi_bdev)
+		bio->bi_bdev = rq->q->disk->part0;
+	bio->bi_opf &= ~REQ_OP_MASK;
+	bio->bi_opf |= op;
+#ifdef CONFIG_BLK_CGROUP
+	/*
+	 * Issued from kthreads the css is root and the charge is a
+	 * no-op through the root exemptions; data-op issuers that
+	 * matter run in the submitter's task context.
+	 */
+	{
+		struct cgroup_subsys_state *css;
+
+		rcu_read_lock();
+		css = task_css(current, io_cgrp_id);
+		bio_associate_blkg_from_css(bio, css);
+		rcu_read_unlock();
+	}
+#endif
+	blk_cgroup_bio_start(bio);
+
+	/*
+	 * The rq_qos throttle path may sleep on the waitqueues like any
+	 * bio submitter; all callers found (ioctl / uring_cmd submit,
+	 * target and error handling kthreads) run in sleepable context.
+	 */
+	rq_qos_throttle(rq->q, bio);
+}
+
 /**
  * blk_execute_rq_nowait - insert a request to I/O scheduler for execution
  * @rq:		request to insert
@@ -1412,6 +1480,7 @@ static void blk_add_rq_to_plug(struct blk_plug *plug, struct request *rq)
  * Note:
  *    This function will invoke @done directly if the queue is dead.
  */
+
 void blk_execute_rq_nowait(struct request *rq, bool at_head)
 {
 	struct blk_mq_hw_ctx *hctx = rq->mq_hctx;
@@ -1419,6 +1488,7 @@ void blk_execute_rq_nowait(struct request *rq, bool at_head)
 	WARN_ON(irqs_disabled());
 	WARN_ON(!blk_rq_is_passthrough(rq));
 
+	blk_mq_pt_charge(rq);
 	blk_account_io_start(rq);
 
 	if (current->plug && !at_head) {
@@ -1483,6 +1553,8 @@ blk_status_t blk_execute_rq(struct request *rq, bool at_head)
 
 	WARN_ON(irqs_disabled());
 	WARN_ON(!blk_rq_is_passthrough(rq));
+
+	blk_mq_pt_charge(rq);
 
 	rq->end_io_data = &wait;
 	rq->end_io = blk_end_sync_rq;
