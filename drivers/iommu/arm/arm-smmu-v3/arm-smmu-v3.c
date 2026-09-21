@@ -4095,6 +4095,7 @@ static int arm_smmu_insert_master(struct arm_smmu_device *smmu,
 
 		new_stream->id = fwspec->ids[i];
 		new_stream->master = master;
+		INIT_LIST_HEAD(&new_stream->shared_link);
 	}
 
 	/* Put the ids into order for sorted to_merge/to_unref arrays */
@@ -4118,31 +4119,46 @@ static int arm_smmu_insert_master(struct arm_smmu_device *smmu,
 
 		existing = xa_load(&smmu->streams, sid);
 		if (existing) {
-			dev_warn(master->dev,
-				 "Aliasing StreamID 0x%x (from %s) unsupported, expect DMA to be broken\n",
-				 sid, dev_name(existing->master->dev));
-			ret = -ENODEV;
-			break;
+			/*
+			 * Another master already owns this SID.  Bump the
+			 * refcount, mark both masters as sharing, and link
+			 * our stream so ownership can be transferred later.
+			 */
+			existing->ref_count++;
+			existing->master->shared_sid = true;
+			master->shared_sid = true;
+			list_add_tail(&new_stream->shared_link,
+				      &existing->shared_link);
+		} else {
+			new_stream->ref_count = 1;
+			new_stream->ste_installed = false;
+			ret = xa_err(xa_store(&smmu->streams, sid, new_stream,
+					      GFP_KERNEL));
+			if (ret)
+				break;
 		}
-
-		/*
-		 * xa_store() returns the old entry (void *) on success
-		 * or an ERR_PTR on allocation failure.  Use xa_err() to
-		 * convert to a standard errno.
-		 */
-		ret = xa_err(xa_store(&smmu->streams, sid, new_stream,
-				      GFP_KERNEL));
-		if (ret)
-			break;
 	}
 
 	if (ret) {
+		/* Undo any successful insertions / refcount bumps */
 		for (i--; i >= 0; i--) {
+			struct arm_smmu_stream *existing;
 			u32 sid = master->streams[i].id;
 
 			if (i > 0 && master->streams[i - 1].id == sid)
 				continue;
-			xa_erase(&smmu->streams, sid);
+
+			existing = xa_load(&smmu->streams, sid);
+			if (!existing)
+				continue;
+			if (existing->master == master) {
+				xa_erase(&smmu->streams, sid);
+			} else {
+				list_del_init(&master->streams[i].shared_link);
+				existing->ref_count--;
+				if (existing->ref_count == 1)
+					existing->master->shared_sid = false;
+			}
 		}
 		kfree(master->streams);
 		kfree(master->build_invs);
@@ -4163,11 +4179,49 @@ static void arm_smmu_remove_master(struct arm_smmu_master *master)
 	mutex_lock(&smmu->streams_mutex);
 	for (i = 0; i < master->num_streams; i++) {
 		u32 sid = master->streams[i].id;
+		struct arm_smmu_stream *stream;
 
 		/* Skip intra-master duplicate SIDs */
 		if (i > 0 && master->streams[i - 1].id == sid)
 			continue;
-		xa_erase(&smmu->streams, sid);
+
+		stream = xa_load(&smmu->streams, sid);
+		if (!stream)
+			continue;
+
+		if (stream->master == master) {
+			/*
+			 * This master owns the canonical XArray entry.
+			 * Erase when the last reference drops; otherwise
+			 * transfer ownership to the next sharer.
+			 */
+			stream->ref_count--;
+			if (stream->ref_count == 0) {
+				xa_erase(&smmu->streams, sid);
+			} else {
+				struct arm_smmu_stream *next;
+
+				next = list_first_entry(&stream->shared_link,
+						struct arm_smmu_stream,
+						shared_link);
+				list_del(&stream->shared_link);
+				next->ref_count = stream->ref_count;
+				next->ste_installed = stream->ste_installed;
+				xa_store(&smmu->streams, sid, next,
+					 GFP_KERNEL);
+				if (next->ref_count == 1)
+					next->master->shared_sid = false;
+			}
+		} else {
+			/*
+			 * Non-owning sharer: unlink from the shared list
+			 * and drop the refcount on the canonical entry.
+			 */
+			list_del_init(&master->streams[i].shared_link);
+			stream->ref_count--;
+			if (stream->ref_count == 1)
+				stream->master->shared_sid = false;
+		}
 	}
 	mutex_unlock(&smmu->streams_mutex);
 

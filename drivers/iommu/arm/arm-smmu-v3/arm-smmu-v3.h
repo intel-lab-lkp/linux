@@ -976,6 +976,24 @@ struct arm_smmu_device {
 struct arm_smmu_stream {
 	u32				id;
 	struct arm_smmu_master		*master;
+	/*
+	 * ref_count > 1 means multiple masters share this SID.  Protected by
+	 * smmu->streams_mutex.
+	 */
+	unsigned int			ref_count;
+	/*
+	 * When ref_count > 1 the STE has already been written by the first
+	 * master; subsequent masters must skip the write.
+	 */
+	bool				ste_installed;
+	/*
+	 * Links all arm_smmu_stream objects that share the same SID across
+	 * different masters.  The canonical (XArray-stored) entry is the list
+	 * head; non-owning sharers are linked into it.  Used to transfer
+	 * XArray ownership when the current owner is removed.
+	 * Protected by smmu->streams_mutex.
+	 */
+	struct list_head		shared_link;
 };
 
 struct arm_smmu_vmaster {
@@ -1024,6 +1042,11 @@ struct arm_smmu_master {
 	bool				ste_ats_enabled : 1;
 	bool				stall_enabled;
 	bool				ats_always_on;
+	/*
+	 * True when at least one of this master's SIDs is shared with another
+	 * master.  SVA, stall and IOPF are disabled for such masters.
+	 */
+	bool				shared_sid;
 	unsigned int			ssid_bits;
 	unsigned int			iopf_refcount;
 };
