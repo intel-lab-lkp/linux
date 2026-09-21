@@ -41,6 +41,9 @@ struct svc_sock {
 
 	struct page_frag_cache  sk_frag_cache;
 
+	/* reply bytes handed to the socket; protected by xpt_mutex */
+	u64			sk_send_pos;
+
 	struct completion	sk_handshake_done;
 
 	/* received data */
