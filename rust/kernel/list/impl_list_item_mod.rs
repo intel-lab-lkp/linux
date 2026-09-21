@@ -82,16 +82,26 @@ macro_rules! impl_has_list_links_self_ptr {
        for $self:ty
        { self$(.$field:ident)* }
     )*) => {$(
-        // SAFETY: The implementation of `raw_get_list_links` only compiles if the field has the
-        // right type.
+        // SAFETY: The implementation of `raw_get_list_links` returns the `inner` field of the
+        // `ListLinksSelfPtr<$item_type, ID>` selected by the field path.
         unsafe impl$(<$($generics)*>)? $crate::list::HasSelfPtr<$item_type $(, $id)?> for $self {}
 
-        // SAFETY: TODO.
+        // SAFETY: The implementation of `raw_get_list_links` only compiles if the field has type
+        // `ListLinksSelfPtr<$item_type, ID>`. Since `ListLinksSelfPtr` is `repr(C)` and `inner` is
+        // its first field, a pointer to the former is also a pointer to the latter.
         unsafe impl$(<$($generics)*>)? $crate::list::HasListLinks$(<$id>)? for $self {
             #[inline]
             unsafe fn raw_get_list_links(ptr: *mut Self) -> *mut $crate::list::ListLinks$(<$id>)? {
+                // Statically ensure that `$(.field)*` doesn't follow any pointers.
+                //
+                // Cannot be `const` because `$self` may contain generics and E0401 says constants
+                // "can't use {`Self`,generic parameters} from outer item".
+                if false { let _: usize = ::core::mem::offset_of!(Self, $($field).*); }
+
                 let ptr: *mut $crate::list::ListLinksSelfPtr<$item_type $(, $id)?> =
-                    // SAFETY: The caller promises that the pointer is not dangling.
+                    // SAFETY: The caller promises that the pointer points at a valid `Self`. We
+                    // know that this expression doesn't follow any pointers, as the `offset_of!`
+                    // invocation above would otherwise not compile.
                     unsafe { ::core::ptr::addr_of_mut!((*ptr)$(.$field)*) };
                 ptr.cast()
             }
@@ -274,14 +284,18 @@ macro_rules! impl_list_item {
                 // SAFETY: The caller promises that `me` points at a valid value of type `Self`.
                 let links_field = unsafe { <Self as $crate::list::ListItem<$num>>::view_links(me) };
 
-                // SAFETY: TODO.
+                // SAFETY: `links_field` was returned by `view_links`, which forwards the pointer
+                // returned by `HasListLinks::raw_get_list_links`. `HasSelfPtr` guarantees that
+                // this `ListLinks` is the `inner` field of a `ListLinksSelfPtr<Self, $num>`.
+                // Therefore, the resulting container pointer is in bounds of the same allocation.
                 let container = unsafe {
                     $crate::container_of!(
                         links_field, $crate::list::ListLinksSelfPtr<Self, $num>, inner
                     )
                 };
 
-                // SAFETY: By the same reasoning above, `links_field` is a valid pointer.
+                // SAFETY: By the reasoning above, `container` points at a valid
+                // `ListLinksSelfPtr<Self, $num>`.
                 let self_ptr = unsafe {
                     $crate::list::ListLinksSelfPtr::raw_get_self_ptr(container)
                 };
@@ -326,14 +340,20 @@ macro_rules! impl_list_item {
             //   `ListArc` containing `Self` until the next call to `post_remove`. The value cannot
             //   be destroyed while a `ListArc` reference exists.
             unsafe fn view_value(links_field: *mut $crate::list::ListLinks<$num>) -> *const Self {
-                // SAFETY: TODO.
+                // SAFETY: The caller guarantees that `links_field` either originated from the
+                // most recent `prepare_to_insert` or was returned by a subsequent `view_links`,
+                // and that `post_remove` has not been called since. In either case, the pointer
+                // originated from `HasListLinks::raw_get_list_links`, and `HasSelfPtr` guarantees
+                // that this `ListLinks` is the `inner` field of a `ListLinksSelfPtr<Self, $num>`.
+                // Therefore, the resulting container pointer is in bounds of the same allocation.
                 let container = unsafe {
                     $crate::container_of!(
                         links_field, $crate::list::ListLinksSelfPtr<Self, $num>, inner
                     )
                 };
 
-                // SAFETY: By the same reasoning above, `links_field` is a valid pointer.
+                // SAFETY: By the reasoning above, `container` points at a valid
+                // `ListLinksSelfPtr<Self, $num>`.
                 let self_ptr = unsafe {
                     $crate::list::ListLinksSelfPtr::raw_get_self_ptr(container)
                 };

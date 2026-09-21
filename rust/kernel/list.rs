@@ -599,7 +599,15 @@ impl<T: ?Sized + ListItem<ID>, const ID: u64> List<T, ID> {
     ///
     /// `item` must not be in a different linked list (with the same id).
     pub unsafe fn remove(&mut self, item: &T) -> Option<ListArc<T, ID>> {
-        // SAFETY: TODO.
+        // SAFETY:
+        // - `item` is a valid reference to a value of type `T`, satisfying the requirement of
+        //   `ListItem::view_links`.
+        // - If the item is not in a list, `ListItem::view_links` guarantees that the
+        //   returned pointer points at a read-only `ListLinks` with two null pointers,
+        //   which is dereferenceable.
+        // - If the item is in a list, `ListItem::view_links` guarantees that the
+        //   returned pointer is the same as the most recent `ListItem::prepare_to_insert`,
+        //   which is dereferenceable.
         let mut item = unsafe { ListLinks::fields(T::view_links(item)) };
         // SAFETY: The user provided a reference, and reference are never dangling.
         //
