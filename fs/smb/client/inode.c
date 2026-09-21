@@ -3071,8 +3071,16 @@ void cifs_setsize(struct inode *inode, loff_t offset)
 		inode->i_blocks = blocks;
 	spin_unlock(&inode->i_lock);
 	inode_set_mtime_to_ts(inode, inode_set_ctime_current(inode));
+	/*
+	 * When extending, zero the tail of the folio straddling the old EOF
+	 * so that data dirtied past EOF through an mmap isn't exposed once the
+	 * file is extended.  This mirrors pagecache_isize_extended(), which
+	 * can't be used here as it is a no-op when the block size is >=
+	 * PAGE_SIZE, as on CIFS.  truncate_pagecache() then drops the
+	 * pagecache beyond the new EOF, as in truncate_setsize().
+	 */
 	if (offset > old_size)
-		pagecache_isize_extended(inode, old_size, offset);
+		netfs_clear_stale_post_eof(inode, old_size, offset, false);
 	truncate_pagecache(inode, offset);
 	netfs_wait_for_outstanding_io(inode);
 }
