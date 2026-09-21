@@ -1469,12 +1469,12 @@ void flush_tlb_all(void)
 }
 
 /* Flush an arbitrarily large range of memory with INVLPGB. */
-static void invlpgb_kernel_range_flush(struct flush_tlb_info *info)
+static void invlpgb_kernel_range_flush(unsigned long start, unsigned long end)
 {
 	unsigned long addr, nr;
 
-	for (addr = info->start; addr < info->end; addr += nr << PAGE_SHIFT) {
-		nr = (info->end - addr) >> PAGE_SHIFT;
+	for (addr = start; addr < end; addr += nr << PAGE_SHIFT) {
+		nr = (end - addr) >> PAGE_SHIFT;
 
 		/*
 		 * INVLPGB has a limit on the size of ranges it can
@@ -1487,38 +1487,47 @@ static void invlpgb_kernel_range_flush(struct flush_tlb_info *info)
 	__tlbsync();
 }
 
+/* Preserve the alignment of the IPI payload shared with remote CPUs. */
+struct kernel_tlb_range {
+	unsigned long start;
+	unsigned long end;
+} __aligned(FLUSH_TLB_INFO_ALIGN);
+
 static void do_kernel_range_flush(void *info)
 {
-	struct flush_tlb_info *f = info;
+	const struct kernel_tlb_range *range = info;
 	unsigned long addr;
 
 	/* flush range by one by one 'invlpg' */
-	for (addr = f->start; addr < f->end; addr += PAGE_SIZE)
+	for (addr = range->start; addr < range->end; addr += PAGE_SIZE)
 		flush_tlb_one_kernel(addr);
 }
 
-static void kernel_tlb_flush_range(struct flush_tlb_info *info)
+static void kernel_tlb_flush_range(unsigned long start, unsigned long end)
 {
 	count_vm_tlb_event(NR_TLB_REMOTE_FLUSH);
 
-	if (cpu_feature_enabled(X86_FEATURE_INVLPGB))
-		invlpgb_kernel_range_flush(info);
-	else
-		on_each_cpu(do_kernel_range_flush, info, 1);
+	if (cpu_feature_enabled(X86_FEATURE_INVLPGB)) {
+		invlpgb_kernel_range_flush(start, end);
+	} else {
+		struct kernel_tlb_range range = {
+			.start = start,
+			.end = end,
+		};
+
+		on_each_cpu(do_kernel_range_flush, &range, 1);
+	}
 }
 
 void flush_tlb_kernel_range(unsigned long start, unsigned long end)
 {
-	struct flush_tlb_info info;
-
 	guard(preempt)();
-	init_flush_tlb_info(&info, NULL, start, end, PAGE_SHIFT, false,
-			    TLB_GENERATION_INVALID);
 
-	if (info.end == TLB_FLUSH_ALL)
+	if (end == TLB_FLUSH_ALL ||
+	    tlb_range_exceeds_ceiling(start, end, PAGE_SHIFT))
 		kernel_tlb_flush_all();
 	else
-		kernel_tlb_flush_range(&info);
+		kernel_tlb_flush_range(start, end);
 }
 
 /*
