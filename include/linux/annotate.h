@@ -25,6 +25,15 @@
 	"912: "								\
 	__stringify(__ASM_ANNOTATE(.discard.annotate_data, 912b, type))
 
+/*
+ * Annotate a symbol by name rather than by relocation, so it can optionally be
+ * used in a header file.
+ */
+#define ASM_ANNOTATE_NAME(section, sym)					\
+	".pushsection " section ", \"MS\", @progbits, 1\n\t"		\
+	".asciz \"" __stringify(sym) "\"\n\t"				\
+	".popsection"
+
 #else /* __ASSEMBLY__ */
 
 .macro ANNOTATE type
@@ -44,6 +53,7 @@
 #define ASM_ANNOTATE_LABEL(label, type) ""
 #define ASM_ANNOTATE(type)
 #define ASM_ANNOTATE_DATA(type)
+#define ASM_ANNOTATE_NAME(section, sym) ""
 #else /* __ASSEMBLY__ */
 .macro ANNOTATE type
 .endm
@@ -111,6 +121,13 @@
  * as noreturn.
  */
 #define ANNOTATE_IGNORE_NORETURN(sym)	asm(ASM_ANNOTATE_LABEL(sym, ANNOTYPE_IGNORE_NORETURN))
+
+/*
+ * Tell objtool running on a module that a function exported by another module
+ * is __noreturn.  Objtool has no way of communicating that between modules due
+ * to the parallel nature of module linking in kbuild.
+ */
+#define ANNOTATE_EXPORTED_NORETURN(sym)	asm(ASM_ANNOTATE_NAME(".discard.annotate_noreturn", sym))
 
 /*
  * Annotate a special section entry.  This emables livepatch module generation

@@ -409,6 +409,31 @@ static int read_noreturns(struct objtool_file *file)
 	return 0;
 }
 
+static void read_annotate_noreturn(struct objtool_file *file)
+{
+	struct section *sec;
+	struct symbol *func;
+	unsigned long off;
+	const char *name;
+
+	sec = find_section_by_name(file->elf, ".discard.annotate_noreturn");
+	if (!sec || !sec->data)
+		return;
+
+	for (off = 0; off < sec_size(sec); off += strlen(name) + 1) {
+		name = sec->data->d_buf + off;
+		if (!*name)
+			continue;
+
+		func = find_global_symbol_by_name(file->elf, name);
+		if (!func)
+			continue;
+
+		if (is_undef_sym(func))
+			func->_noreturn = 1;
+	}
+}
+
 static void init_cfi_state(struct cfi_state *cfi)
 {
 	int i;
@@ -4977,6 +5002,8 @@ int check(struct objtool_file *file)
 		if (ret)
 			goto out;
 	}
+
+	read_annotate_noreturn(file);
 
 	ret = decode_file(file);
 	if (ret)
