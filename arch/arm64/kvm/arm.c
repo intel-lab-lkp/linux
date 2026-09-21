@@ -1685,6 +1685,7 @@ static int kvm_setup_vcpu(struct kvm_vcpu *vcpu)
 static int __kvm_vcpu_set_target(struct kvm_vcpu *vcpu,
 				 const struct kvm_vcpu_init *init)
 {
+	DECLARE_BITMAP(old_features, KVM_VCPU_MAX_FEATURES);
 	unsigned long features = init->features[0];
 	struct kvm *kvm = vcpu->kvm;
 	int ret = -EINVAL;
@@ -1695,11 +1696,15 @@ static int __kvm_vcpu_set_target(struct kvm_vcpu *vcpu,
 	    kvm_vcpu_init_changed(vcpu, init))
 		goto out_unlock;
 
+	/* Setup reads the VM-wide bitmap, so undo the copy if setup fails. */
+	bitmap_copy(old_features, kvm->arch.vcpu_features, KVM_VCPU_MAX_FEATURES);
 	bitmap_copy(kvm->arch.vcpu_features, &features, KVM_VCPU_MAX_FEATURES);
 
 	ret = kvm_setup_vcpu(vcpu);
-	if (ret)
+	if (ret) {
+		bitmap_copy(kvm->arch.vcpu_features, old_features, KVM_VCPU_MAX_FEATURES);
 		goto out_unlock;
+	}
 
 	/* Now we know what it is, we can reset it. */
 	kvm_reset_vcpu(vcpu);
