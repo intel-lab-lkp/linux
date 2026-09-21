@@ -17,6 +17,7 @@ void kvm_update_stolen_time(struct kvm_vcpu *vcpu)
 	u64 last_steal = vcpu->arch.steal.last_steal;
 	u64 offset = offsetof(struct pvclock_vcpu_stolen_time, stolen_time);
 	u64 steal = 0;
+	u64 run_delay;
 	int idx;
 
 	if (base == INVALID_GPA)
@@ -25,9 +26,10 @@ void kvm_update_stolen_time(struct kvm_vcpu *vcpu)
 	idx = srcu_read_lock(&kvm->srcu);
 	if (!kvm_get_guest(kvm, base + offset, steal)) {
 		steal = le64_to_cpu(steal);
-		vcpu->arch.steal.last_steal = READ_ONCE(current->sched_info.run_delay);
-		steal += vcpu->arch.steal.last_steal - last_steal;
-		kvm_put_guest(kvm, base + offset, cpu_to_le64(steal));
+		run_delay = READ_ONCE(current->sched_info.run_delay);
+		steal += run_delay - last_steal;
+		if (!kvm_put_guest(kvm, base + offset, cpu_to_le64(steal)))
+			vcpu->arch.steal.last_steal = run_delay;
 	}
 	srcu_read_unlock(&kvm->srcu, idx);
 }
