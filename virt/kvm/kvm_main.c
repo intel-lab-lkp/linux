@@ -2457,13 +2457,22 @@ bool kvm_range_has_memory_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 		return (kvm_get_memory_attributes(kvm, start) & mask) == attrs;
 
 	guard(rcu)();
-	if (!attrs)
-		return !xas_find(&xas, end - 1);
 
+	/*
+	 * xas_retry() skips reserved (zero) entries.  For !attrs, find the
+	 * next non-NULL entry; not finding one means the range is clear, and
+	 * the xas index is bogus in that case, so don't check it.
+	 */
 	for (index = start; index < end; index++) {
 		do {
-			entry = xas_next(&xas);
+			entry = attrs ? xas_next(&xas) :
+					xas_next_entry(&xas, end - 1);
 		} while (xas_retry(&xas, entry));
+
+		if (!entry)
+			return !attrs;
+
+		WARN_ON_ONCE(!xa_to_value(entry));
 
 		if (xas.xa_index != index ||
 		    (xa_to_value(entry) & mask) != attrs)
@@ -2581,9 +2590,10 @@ static int kvm_vm_set_mem_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 
 	/*
 	 * Reserve memory ahead of time to avoid having to deal with failures
-	 * partway through setting the new attributes.
+	 * partway through setting the new attributes.  Storing NULL never
+	 * allocates, so no reservations are needed when clearing.
 	 */
-	for (i = start; i < end; i++) {
+	for (i = start; entry && i < end; i++) {
 		r = xa_reserve(&kvm->mem_attr_array, i, GFP_KERNEL_ACCOUNT);
 		if (r)
 			goto out_unlock;
