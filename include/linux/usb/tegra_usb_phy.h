@@ -76,7 +76,6 @@ struct tegra_usb_phy {
 	struct regulator *vbus;
 	struct regmap *pmc_regmap;
 	enum usb_dr_mode mode;
-	void *config;
 	const struct tegra_phy_soc_config *soc_config;
 	struct usb_phy *ulpi;
 	struct usb_phy u_phy;
@@ -87,6 +86,7 @@ struct tegra_usb_phy {
 	bool wakeup_enabled;
 	bool pad_wakeup;
 	bool powered_on;
+	struct tegra_utmip_config config;
 };
 
 #endif /* __TEGRA_USB_PHY_H */

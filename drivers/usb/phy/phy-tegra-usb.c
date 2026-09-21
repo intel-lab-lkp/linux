@@ -392,7 +392,7 @@ static int utmip_pad_close(struct tegra_usb_phy *phy)
 
 static int utmip_pad_power_on(struct tegra_usb_phy *phy)
 {
-	struct tegra_utmip_config *config = phy->config;
+	struct tegra_utmip_config *config = &phy->config;
 	void __iomem *base = phy->pad_regs;
 	u32 val;
 	int err;
@@ -549,7 +549,7 @@ static void utmi_phy_clk_enable(struct tegra_usb_phy *phy)
 
 static int utmi_phy_power_on(struct tegra_usb_phy *phy)
 {
-	struct tegra_utmip_config *config = phy->config;
+	struct tegra_utmip_config *config = &phy->config;
 	void __iomem *base = phy->regs;
 	u32 val;
 	int err;
@@ -888,7 +888,7 @@ static void tegra_hsic_writel(struct tegra_usb_phy *phy, u32 reg, u32 value)
 
 static int uhsic_phy_power_on(struct tegra_usb_phy *phy)
 {
-	struct tegra_utmip_config *config = phy->config;
+	struct tegra_utmip_config *config = &phy->config;
 	void __iomem *base = phy->regs;
 	u32 val;
 	int err = 0;
@@ -1324,7 +1324,7 @@ static int read_utmi_param(struct platform_device *pdev, const char *param,
 static int utmi_phy_probe(struct tegra_usb_phy *tegra_phy,
 			  struct platform_device *pdev)
 {
-	struct tegra_utmip_config *config;
+	struct tegra_utmip_config *config = &tegra_phy->config;
 	struct resource *res;
 	int err;
 
@@ -1344,13 +1344,6 @@ static int utmi_phy_probe(struct tegra_usb_phy *tegra_phy,
 		dev_err(&pdev->dev, "Failed to remap UTMI pad regs\n");
 		return -ENOMEM;
 	}
-
-	tegra_phy->config = devm_kzalloc(&pdev->dev, sizeof(*config),
-					 GFP_KERNEL);
-	if (!tegra_phy->config)
-		return -ENOMEM;
-
-	config = tegra_phy->config;
 
 	err = read_utmi_param(pdev, "nvidia,hssync-start-delay",
 			      &config->hssync_start_delay);
