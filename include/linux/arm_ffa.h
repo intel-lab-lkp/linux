@@ -519,4 +519,27 @@ struct ffa_ops {
 	const struct ffa_notifier_ops *notifier_ops;
 };
 
+struct page;
+
+#if IS_ENABLED(CONFIG_ARM_FFA_LEND_POOL)
+int ffa_lend_pool_attach(struct device *dev);
+void ffa_lend_pool_detach(struct device *dev);
+int ffa_prepare_lend(struct device *dev, struct page *page, u64 nr_pages);
+void ffa_lend_reclaimed(struct device *dev, struct page *page, u64 nr_pages);
+#else
+static inline int ffa_lend_pool_attach(struct device *dev)
+{
+	return -ENODEV;
+}
+static inline void ffa_lend_pool_detach(struct device *dev)
+{
+}
+static inline int ffa_prepare_lend(struct device *dev, struct page *page, u64 nr_pages)
+{
+	return -ENODEV;
+}
+static inline void ffa_lend_reclaimed(struct device *dev, struct page *page, u64 nr_pages)
+{
+}
+#endif
 #endif /* _LINUX_ARM_FFA_H */
