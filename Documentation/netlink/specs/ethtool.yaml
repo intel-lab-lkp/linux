@@ -1312,6 +1312,9 @@ attribute-sets:
         name: stats
         type: nest
         nested-attributes: fec-stat
+      -
+        name: stats-clear
+        type: u8
   -
     name: module-eeprom
     attr-cnt-name: __ethtool-a-module-eeprom-cnt

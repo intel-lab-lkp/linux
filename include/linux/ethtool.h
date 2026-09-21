@@ -1325,6 +1325,7 @@ struct ethtool_ops {
 	void	(*get_fec_stats)(struct net_device *dev,
 				 struct ethtool_fec_stats *fec_stats,
 				 struct ethtool_fec_hist *hist);
+	int	(*clear_fec_stats)(struct net_device *dev);
 	int	(*get_fecparam)(struct net_device *,
 				      struct ethtool_fecparam *);
 	int	(*set_fecparam)(struct net_device *,

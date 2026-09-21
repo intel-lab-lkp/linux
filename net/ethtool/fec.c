@@ -290,10 +290,11 @@ static int fec_fill_reply(struct sk_buff *skb,
 
 /* FEC_SET */
 
-const struct nla_policy ethnl_fec_set_policy[ETHTOOL_A_FEC_AUTO + 1] = {
+const struct nla_policy ethnl_fec_set_policy[ETHTOOL_A_FEC_MAX + 1] = {
 	[ETHTOOL_A_FEC_HEADER]	= NLA_POLICY_NESTED(ethnl_header_policy),
 	[ETHTOOL_A_FEC_MODES]	= { .type = NLA_NESTED },
 	[ETHTOOL_A_FEC_AUTO]	= NLA_POLICY_MAX(NLA_U8, 1),
+	[ETHTOOL_A_FEC_STATS_CLEAR] = NLA_POLICY_MAX(NLA_U8, 1),
 };
 
 static int
@@ -314,6 +315,14 @@ ethnl_set_fec(struct ethnl_req_info *req_info, struct genl_info *info)
 	bool mod = false;
 	u8 fec_auto;
 	int ret;
+
+	if (tb[ETHTOOL_A_FEC_STATS_CLEAR]) {
+		if (!dev->ethtool_ops->clear_fec_stats)
+			return -EOPNOTSUPP;
+
+		ret = dev->ethtool_ops->clear_fec_stats(dev);
+		return ret < 0 ? ret : 1;
+	}
 
 	ret = dev->ethtool_ops->get_fecparam(dev, &fec);
 	if (ret < 0)
