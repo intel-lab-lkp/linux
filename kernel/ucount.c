@@ -64,34 +64,38 @@ static struct ctl_table_root set_root = {
 static long ue_zero = 0;
 static long ue_int_max = INT_MAX;
 
-#define UCOUNT_ENTRY(name)					\
+#define UCOUNT_ENTRY(name, ucount)				\
 	{							\
 		.procname	= name,				\
-		.maxlen		= sizeof(long),			\
 		.mode		= 0644,				\
-		.proc_handler	= proc_doulongvec_minmax,	\
-		.extra1		= &ue_zero,			\
-		.extra2		= &ue_int_max,			\
+		.type		= SYSCTL_FIELD_LONG_MINMAX,	\
+		.data_offset	= SYSCTL_FIELD_LONG_OFFSET(struct user_namespace, \
+							   ucount_max[ucount]),   \
+		.long_limits	= {				\
+			.min	= &ue_zero,			\
+			.max	= &ue_int_max,			\
+		}						\
 	}
-static const struct ctl_table user_table[] = {
-	UCOUNT_ENTRY("max_user_namespaces"),
-	UCOUNT_ENTRY("max_pid_namespaces"),
-	UCOUNT_ENTRY("max_uts_namespaces"),
-	UCOUNT_ENTRY("max_ipc_namespaces"),
-	UCOUNT_ENTRY("max_net_namespaces"),
-	UCOUNT_ENTRY("max_mnt_namespaces"),
-	UCOUNT_ENTRY("max_cgroup_namespaces"),
-	UCOUNT_ENTRY("max_time_namespaces"),
+static const struct sysctl_field user_table[] = {
+	UCOUNT_ENTRY("max_user_namespaces",	UCOUNT_USER_NAMESPACES),
+	UCOUNT_ENTRY("max_pid_namespaces",	UCOUNT_PID_NAMESPACES),
+	UCOUNT_ENTRY("max_uts_namespaces",	UCOUNT_UTS_NAMESPACES),
+	UCOUNT_ENTRY("max_ipc_namespaces",	UCOUNT_IPC_NAMESPACES),
+	UCOUNT_ENTRY("max_net_namespaces",	UCOUNT_NET_NAMESPACES),
+	UCOUNT_ENTRY("max_mnt_namespaces",	UCOUNT_MNT_NAMESPACES),
+	UCOUNT_ENTRY("max_cgroup_namespaces",	UCOUNT_CGROUP_NAMESPACES),
+	UCOUNT_ENTRY("max_time_namespaces",	UCOUNT_TIME_NAMESPACES),
 #ifdef CONFIG_INOTIFY_USER
-	UCOUNT_ENTRY("max_inotify_instances"),
-	UCOUNT_ENTRY("max_inotify_watches"),
+	UCOUNT_ENTRY("max_inotify_instances",	UCOUNT_INOTIFY_INSTANCES),
+	UCOUNT_ENTRY("max_inotify_watches",	UCOUNT_INOTIFY_WATCHES),
 #endif
 #ifdef CONFIG_FANOTIFY
-	UCOUNT_ENTRY("max_fanotify_groups"),
-	UCOUNT_ENTRY("max_fanotify_marks"),
+	UCOUNT_ENTRY("max_fanotify_groups",	UCOUNT_FANOTIFY_GROUPS),
+	UCOUNT_ENTRY("max_fanotify_marks",	UCOUNT_FANOTIFY_MARKS),
 #endif
 #if IS_ENABLED(CONFIG_BINFMT_MISC)
-	UCOUNT_ENTRY("max_binfmt_misc_interpreters"),
+	UCOUNT_ENTRY("max_binfmt_misc_interpreters",
+		     UCOUNT_BINFMT_MISC_INTERPRETERS),
 #endif
 };
 #endif /* CONFIG_SYSCTL */
@@ -99,21 +103,17 @@ static const struct ctl_table user_table[] = {
 bool setup_userns_sysctls(struct user_namespace *ns)
 {
 #ifdef CONFIG_SYSCTL
-	struct ctl_table *tbl;
+	struct sysctl_context ctx = {
+		.type = SYSCTL_CONTEXT_USER_NS,
+		.object_size = sizeof(*ns),
+		.ns.user_ns = ns,
+	};
 
 	BUILD_BUG_ON(ARRAY_SIZE(user_table) != UCOUNT_COUNTS);
 	setup_sysctl_set(&ns->set, &set_root, set_is_seen);
-	tbl = kmemdup(user_table, sizeof(user_table), GFP_KERNEL);
-	if (tbl) {
-		int i;
-		for (i = 0; i < UCOUNT_COUNTS; i++) {
-			tbl[i].data = &ns->ucount_max[i];
-		}
-		ns->sysctls = __register_sysctl_table(&ns->set, "user", tbl,
-						      ARRAY_SIZE(user_table));
-	}
+	ns->sysctls = register_sysctl_fields(&ns->set, "user",
+					     user_table, &ctx);
 	if (!ns->sysctls) {
-		kfree(tbl);
 		retire_sysctl_set(&ns->set);
 		return false;
 	}
@@ -124,12 +124,8 @@ bool setup_userns_sysctls(struct user_namespace *ns)
 void retire_userns_sysctls(struct user_namespace *ns)
 {
 #ifdef CONFIG_SYSCTL
-	const struct ctl_table *tbl;
-
-	tbl = ns->sysctls->ctl_table_arg;
 	unregister_sysctl_table(ns->sysctls);
 	retire_sysctl_set(&ns->set);
-	kfree(tbl);
 #endif
 }
 
