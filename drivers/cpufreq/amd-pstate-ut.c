@@ -216,7 +216,14 @@ static int amd_pstate_ut_check_perf(u32 index)
 
 /*
  * Check if frequency values are reasonable.
- * max_freq >= nominal_freq > lowest_nonlinear_freq > min_freq > 0
+ * nominal_freq > lowest_nonlinear_freq >= min_freq > 0
+ * max_freq >= lowest_nonlinear_freq
+ *
+ * On most parts the boost frequency is the highest, i.e.
+ * max_freq >= nominal_freq. On heterogeneous designs (e.g. Zen6) a
+ * low-power core can have a maximum frequency below the shared nominal
+ * reference frequency, so only require the boost frequency to sit above
+ * the lowest nonlinear frequency here.
  * check max freq when set support boost mode.
  */
 static int amd_pstate_ut_check_freq(u32 index)
@@ -235,11 +242,11 @@ static int amd_pstate_ut_check_freq(u32 index)
 		cpudata = policy->driver_data;
 		perf = READ_ONCE(cpudata->perf);
 
-		if (!((policy->cpuinfo.max_freq >= cpudata->nominal_freq) &&
+		if (!((policy->cpuinfo.max_freq >= cpudata->lowest_nonlinear_freq) &&
 			(cpudata->nominal_freq > cpudata->lowest_nonlinear_freq) &&
 			(cpudata->lowest_nonlinear_freq >= policy->cpuinfo.min_freq) &&
 			(policy->cpuinfo.min_freq > 0))) {
-			pr_err("%s cpu%d max=%d >= nominal=%d > lowest_nonlinear=%d > min=%d > 0, the formula is incorrect!\n",
+			pr_err("%s cpu%d max=%d, nominal=%d, lowest_nonlinear=%d, min=%d, the formula is incorrect!\n",
 				__func__, cpu, policy->cpuinfo.max_freq, cpudata->nominal_freq,
 				cpudata->lowest_nonlinear_freq, policy->cpuinfo.min_freq);
 			return -EINVAL;
