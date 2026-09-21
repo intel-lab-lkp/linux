@@ -1,0 +1,73 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/display/panel/jdi,fhd-nt35596s.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: JDI FHD NT35596S MIPI-DSI Panel
+
+maintainers:
+  - Molly Sophia <mollysophia379@gmail.com>
+
+allOf:
+  - $ref: panel-common.yaml#
+
+properties:
+  compatible:
+    const: jdi,fhd-nt35596s
+
+  reg:
+    maxItems: 1
+
+  backlight: true
+  reset-gpios: true
+
+  vddio-supply:
+    description: I/O voltage rail
+
+  vddneg-supply:
+    description: Negative source voltage rail
+
+  vddpos-supply:
+    description: Positive source voltage rail
+
+  port: true
+
+required:
+  - compatible
+  - reg
+  - reset-gpios
+  - vddio-supply
+  - vddneg-supply
+  - vddpos-supply
+  - port
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+
+    dsi {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        panel@0 {
+            compatible = "jdi,fhd-nt35596s";
+            reg = <0>;
+
+            reset-gpios = <&tlmm 6 GPIO_ACTIVE_LOW>;
+            vddio-supply = <&vreg_l14a_1p8>;
+            backlight = <&pmi8998_wled>;
+            vddpos-supply = <&lab>;
+            vddneg-supply = <&ibb>;
+
+            port {
+                panel_in: endpoint {
+                    remote-endpoint = <&mdss_dsi0_out>;
+                };
+            };
+        };
+    };
+
+...
