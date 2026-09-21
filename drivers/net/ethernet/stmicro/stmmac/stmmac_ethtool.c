@@ -837,6 +837,8 @@ static int __stmmac_set_coalesce(struct net_device *dev,
 	struct stmmac_priv *priv = netdev_priv(dev);
 	bool all_queues = false;
 	unsigned int rx_riwt;
+	bool has_rx;
+	bool has_tx;
 	u32 max_cnt;
 	u32 rx_cnt;
 	u32 tx_cnt;
@@ -850,7 +852,20 @@ static int __stmmac_set_coalesce(struct net_device *dev,
 	else if (queue >= max_cnt)
 		return -EINVAL;
 
-	if (priv->use_riwt) {
+	has_rx = all_queues || queue < rx_cnt;
+	has_tx = all_queues || queue < tx_cnt;
+
+	/* An index can be RX-only or TX-only; ignore the missing side. */
+	if (has_tx &&
+	    ec->tx_coalesce_usecs == 0 && ec->tx_max_coalesced_frames == 0)
+		return -EINVAL;
+
+	if (has_tx &&
+	    (ec->tx_coalesce_usecs > STMMAC_MAX_COAL_TX_TICK ||
+	     ec->tx_max_coalesced_frames > STMMAC_TX_MAX_FRAMES))
+		return -EINVAL;
+
+	if (has_rx && priv->use_riwt) {
 		rx_riwt = stmmac_usec2riwt(ec->rx_coalesce_usecs, priv);
 
 		if ((rx_riwt > MAX_DMA_RIWT) || (rx_riwt < MIN_DMA_RIWT))
@@ -866,7 +881,7 @@ static int __stmmac_set_coalesce(struct net_device *dev,
 				priv->rx_coal_frames[i] =
 					ec->rx_max_coalesced_frames;
 			}
-		} else if (queue < rx_cnt) {
+		} else {
 			priv->rx_riwt[queue] = rx_riwt;
 			stmmac_rx_watchdog(priv, priv->ioaddr,
 					   rx_riwt, queue);
@@ -874,14 +889,6 @@ static int __stmmac_set_coalesce(struct net_device *dev,
 				ec->rx_max_coalesced_frames;
 		}
 	}
-
-	if ((ec->tx_coalesce_usecs == 0) &&
-	    (ec->tx_max_coalesced_frames == 0))
-		return -EINVAL;
-
-	if ((ec->tx_coalesce_usecs > STMMAC_MAX_COAL_TX_TICK) ||
-	    (ec->tx_max_coalesced_frames > STMMAC_TX_MAX_FRAMES))
-		return -EINVAL;
 
 	if (all_queues) {
 		int i;
@@ -892,7 +899,7 @@ static int __stmmac_set_coalesce(struct net_device *dev,
 			priv->tx_coal_timer[i] =
 				ec->tx_coalesce_usecs;
 		}
-	} else if (queue < tx_cnt) {
+	} else if (has_tx) {
 		priv->tx_coal_frames[queue] =
 			ec->tx_max_coalesced_frames;
 		priv->tx_coal_timer[queue] =
