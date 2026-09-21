@@ -17,6 +17,7 @@
 #include <linux/irq.h>
 #include <linux/irqdesc.h>
 #include <linux/kernel_stat.h>
+#include <linux/kstrtox.h>
 #include <linux/kvm_para.h>
 #include <linux/math64.h>
 #include <linux/mm.h>
@@ -422,8 +423,10 @@ static unsigned long soft_lockup_nmi_warn;
 
 static int __init softlockup_panic_setup(char *str)
 {
-	softlockup_panic = simple_strtoul(str, NULL, 0);
-	return 1;
+	int ret;
+
+	ret = kstrtouint(str, 0, &softlockup_panic);
+	return ret ? ret : 1;
 }
 __setup("softlockup_panic=", softlockup_panic_setup);
 
