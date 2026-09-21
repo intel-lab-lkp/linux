@@ -2314,6 +2314,27 @@ static int run_delalloc_inline(struct btrfs_inode *inode, struct folio *locked_f
 	int ret;
 
 	ASSERT(folio_pos(locked_folio) == 0);
+
+	/*
+	 * It's possible that the i_size is expanded while writeback is running.
+	 * There is no special locking to prevent isize being updated.
+	 *
+	 * But for unaligned i_size, btrfs_setsize() will need to lock the
+	 * folio (which is held by us) before updating the isize, so if
+	 * i_size < blocksize btrfs_setsize() will wait for us.
+	 *
+	 * The only problem is when i_size == blocksize and compression is on.
+	 * In that case we previously allowed inline as long as the compressed
+	 * data is smaller than blocksize.
+	 * But since the i_size is already aligned, btrfs_setsize() would not
+	 * need to lock the folio, so btrfs_setsize() can race with us.
+	 *
+	 * Thus here we reject i_size >= blocksize to prevent racing with
+	 * btrfs_setsize() expansion.
+	 */
+	if (i_size >= blocksize)
+		return 1;
+
 	/*
 	 * If an mmap writer could modify the folio while we copy it into an
 	 * inline extent we might see only part of their modification then
@@ -2331,12 +2352,7 @@ static int run_delalloc_inline(struct btrfs_inode *inode, struct folio *locked_f
 		} else if (inode->prop_compress) {
 			compress_type = inode->prop_compress;
 		}
-		/*
-		 * We need to pass blocksize and not i_size, otherwise we can't
-		 * create compressed inline extents for data smaller than sector
-		 * size with lzo.
-		 */
-		cb = btrfs_compress_bio(inode, 0, blocksize, compress_type, compress_level, 0);
+		cb = btrfs_compress_bio(inode, 0, i_size, compress_type, compress_level, 0);
 		if (IS_ERR(cb)) {
 			cb = NULL;
 			/* Just fall back to non-compressed case. */
