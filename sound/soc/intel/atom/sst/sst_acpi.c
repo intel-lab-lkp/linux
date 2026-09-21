@@ -352,7 +352,8 @@ static int sst_acpi_probe(struct platform_device *pdev)
 	if (IS_ERR(mdev)) {
 		dev_err(dev, "Failed to create machine device: %s\n",
 			mach->drv_name);
-		return PTR_ERR(mdev);
+		ret = PTR_ERR(mdev);
+		goto err_unregister_plat_dev;
 	}
 
 	/* Fill sst platform data */
@@ -361,14 +362,20 @@ static int sst_acpi_probe(struct platform_device *pdev)
 
 	ret = sst_platform_get_resources(ctx);
 	if (ret)
-		return ret;
+		goto err_unregister_mdev;
 
 	ret = sst_context_init(ctx);
 	if (ret < 0)
-		return ret;
+		goto err_unregister_mdev;
 
 	sst_configure_runtime_pm(ctx);
 	platform_set_drvdata(pdev, ctx);
+	return ret;
+
+err_unregister_mdev:
+	platform_device_unregister(mdev);
+err_unregister_plat_dev:
+	platform_device_unregister(plat_dev);
 	return ret;
 }
 
