@@ -41,6 +41,11 @@ properties:
       HVC #0, register assignments
       register assignments are specified in drivers/tee/optee/optee_smc.h
 
+  memory-region:
+    maxItems: 1
+    description: |
+      Phandle to a reserved-memory node for the OP-TEE lend pool.
+
 required:
   - compatible
   - method
