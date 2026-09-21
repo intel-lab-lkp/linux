@@ -6,6 +6,7 @@
 #ifndef __DMA_BUF_MAPPING_H__
 #define __DMA_BUF_MAPPING_H__
 #include <linux/dma-buf.h>
+#include <linux/pci-p2pdma.h>
 
 struct sg_table *dma_buf_phys_vec_to_sgt(struct dma_buf_attachment *attach,
 					 struct p2pdma_provider *provider,
