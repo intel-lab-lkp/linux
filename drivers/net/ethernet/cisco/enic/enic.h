@@ -382,6 +382,10 @@ struct enic {
 	 */
 	struct enic_mac_addr *mbox_reply_mac_addrs;
 	u16 mbox_reply_mac_count;
+	u16 vf_pkt_filter_requested;
+	u16 vf_pkt_filter_applied;
+	bool vf_pkt_filter_valid;
+	bool vf_pkt_filter_update_pending;
 	bool mbox_initialized;
 
 	/* PF: per-VF MBOX state, allocated when SRIOV V2 is enabled */
