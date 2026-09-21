@@ -101,6 +101,8 @@ static const struct option check_options[] = {
 	OPT_BOOLEAN(0,		 "module", &opts.module, "object is part of a kernel module"),
 	OPT_BOOLEAN(0,		 "mnop", &opts.mnop, "nop out mcount call sites"),
 	OPT_BOOLEAN(0,		 "no-unreachable", &opts.no_unreachable, "skip 'unreachable instruction' warnings"),
+	OPT_STRING(0,		 "noreturns-read", &opts.noreturns_read, "file", "read exported noreturns from a file"),
+	OPT_STRING(0,		 "noreturns-write", &opts.noreturns_write, "file", "write exported noreturns to a file"),
 	OPT_STRING('o',		 "output", &opts.output, "file", "output file name"),
 	OPT_BOOLEAN(0,		 "sec-address", &opts.sec_address, "print section addresses in warnings"),
 	OPT_BOOLEAN(0,		 "stats", &opts.stats, "print statistics"),
@@ -177,6 +179,16 @@ static bool opts_valid(void)
 
 	if (opts.klp_symids && !opts.link) {
 		ERROR("--klp-symids requires --link");
+		return false;
+	}
+
+	if (opts.noreturns_write && !opts.link) {
+		ERROR("--noreturns-write requires --link");
+		return false;
+	}
+
+	if (opts.noreturns_write && !opts.stackval && !opts.orc && !opts.uaccess) {
+		ERROR("--noreturns-write requires --stackval, --orc, or --uaccess");
 		return false;
 	}
 
