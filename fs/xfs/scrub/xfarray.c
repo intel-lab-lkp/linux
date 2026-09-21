@@ -193,6 +193,8 @@ xfarray_store(
 	if (ret)
 		return ret;
 
+	if (idx > array->nr)
+		array->possibly_sparse = true;
 	array->nr = max(array->nr, idx + 1);
 	return 0;
 }
@@ -844,6 +846,14 @@ xfarray_sort(
 		return 0;
 	if (array->nr >= QSORT_MAX_RECS)
 		return -E2BIG;
+	if (array->possibly_sparse) {
+		/*
+		 * What does it mean to sort an array with holes in it?
+		 * Currently none of the users need this ability.
+		 */
+		ASSERT(array->possibly_sparse);
+		return -EINVAL;
+	}
 
 	error = xfarray_sortinfo_alloc(array, cmp_fn, flags, &si);
 	if (error)
@@ -997,4 +1007,5 @@ xfarray_truncate(
 {
 	xfile_discard(array->xfile, 0, MAX_LFS_FILESIZE);
 	array->nr = 0;
+	array->possibly_sparse = false;
 }
