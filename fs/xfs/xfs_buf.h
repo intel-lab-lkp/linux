@@ -15,6 +15,7 @@
 #include <linux/uio.h>
 #include <linux/list_lru.h>
 #include <linux/lockref.h>
+#include <linux/write_streams.h>
 
 extern struct kmem_cache *xfs_buf_cache;
 
@@ -101,6 +102,9 @@ struct xfs_buftarg {
 	/* Hardware atomic write unit values, bytes */
 	unsigned int		bt_awu_min;
 	unsigned int		bt_awu_max;
+
+	/* slot pool for stream fds on this device */
+	struct write_stream_pool bt_stream_pool;
 
 	struct rhashtable	bt_hash;
 };
@@ -360,6 +364,8 @@ extern void xfs_buftarg_wait(struct xfs_buftarg *);
 extern void xfs_buftarg_drain(struct xfs_buftarg *);
 int xfs_configure_buftarg(struct xfs_buftarg *btp, unsigned int sectorsize,
 		xfs_fsblock_t nr_blocks);
+int xfs_buftarg_init_streams(struct xfs_buftarg *btp,
+		unsigned int nr_groups);
 
 #define xfs_readonly_buftarg(buftarg)	bdev_read_only((buftarg)->bt_bdev)
 

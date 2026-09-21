@@ -608,6 +608,11 @@ xfs_setup_devices(
 	if (error)
 		return error;
 
+	error = xfs_buftarg_init_streams(mp->m_ddev_targp,
+			mp->m_sb.sb_agcount);
+	if (error)
+		return error;
+
 	if (mp->m_logdev_targp && mp->m_logdev_targp != mp->m_ddev_targp) {
 		unsigned int	log_sector_size = BBSIZE;
 

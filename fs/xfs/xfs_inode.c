@@ -4,6 +4,7 @@
  * All Rights Reserved.
  */
 #include <linux/iversion.h>
+#include <linux/write_streams.h>
 
 #include "xfs_platform.h"
 #include "xfs_fs.h"
@@ -46,6 +47,74 @@
 #include "xfs_metafile.h"
 
 struct kmem_cache *xfs_inode_cache;
+
+/* Number of write streams available to this inode. */
+int
+xfs_inode_max_write_streams(
+	struct xfs_inode	*ip)
+{
+	xfs_assert_ilocked(ip, XFS_ILOCK_SHARED | XFS_ILOCK_EXCL);
+
+	if (xfs_inode_is_filestream(ip))
+		return 0;
+	if (XFS_IS_REALTIME_INODE(ip))
+		return 0;
+	return write_stream_pool_count(&xfs_inode_buftarg(ip)->bt_stream_pool);
+}
+
+/* Bind the write stream named by @stream_fd to @ip */
+int
+xfs_inode_set_write_stream(
+	struct xfs_inode	*ip,
+	int			stream_fd)
+{
+	CLASS(fd, f)(stream_fd);
+	struct xfs_buftarg	*target;
+	int			id, error = 0;
+
+	if (!fd_file(f))
+		return -EBADF;
+	xfs_ilock(ip, XFS_ILOCK_EXCL);
+	if (XFS_IS_REALTIME_INODE(ip)) {
+		error = -EINVAL;
+		goto out_unlock;
+	}
+
+	target = xfs_inode_buftarg(ip);
+	id = write_stream_get_id(fd_file(f), &target->bt_stream_pool);
+	if (id < 0) {
+		error = id;
+		goto out_unlock;
+	}
+
+	/* Filestream and write-stream are mutually exclusive */
+	if (xfs_inode_is_filestream(ip)) {
+		error = -EINVAL;
+		goto out_unlock;
+	}
+
+	/* keep write stream and write life time hint mutually exclusive */
+	spin_lock(&VFS_I(ip)->i_lock);
+	if (VFS_I(ip)->i_write_hint != WRITE_LIFE_NOT_SET) {
+		spin_unlock(&VFS_I(ip)->i_lock);
+		error = -EBUSY;
+		goto out_unlock;
+	}
+	WRITE_ONCE(VFS_I(ip)->i_write_stream, id);
+	spin_unlock(&VFS_I(ip)->i_lock);
+out_unlock:
+	xfs_iunlock(ip, XFS_ILOCK_EXCL);
+	return error;
+}
+
+void
+xfs_inode_clear_write_stream(
+	struct xfs_inode	*ip)
+{
+	xfs_ilock(ip, XFS_ILOCK_EXCL);
+	WRITE_ONCE(VFS_I(ip)->i_write_stream, 0);
+	xfs_iunlock(ip, XFS_ILOCK_EXCL);
+}
 
 /*
  * These two are wrapper routines around the xfs_ilock() routine used to
