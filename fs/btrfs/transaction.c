@@ -559,7 +559,7 @@ static bool may_wait_transaction(struct btrfs_fs_info *fs_info, int type)
 	if (test_bit(BTRFS_FS_LOG_RECOVERING, &fs_info->flags))
 		return false;
 
-	if (type == TRANS_START)
+	if ((type & TRANS_START) == TRANS_START)
 		return true;
 
 	return false;
@@ -719,8 +719,17 @@ again:
 	 * If we are ATTACH, it means we just want to catch the current
 	 * transaction and commit it, so we needn't do sb_start_intwrite(). 
 	 */
-	if (type & __TRANS_FREEZABLE)
-		sb_start_intwrite(fs_info->sb);
+	if (type & __TRANS_FREEZABLE) {
+		if (type & __TRANS_TRYLOCK) {
+			if (!sb_start_intwrite_trylock(fs_info->sb)) {
+				ret = -EINTR;
+				kmem_cache_free(btrfs_trans_handle_cachep, h);
+				goto alloc_fail;
+			}
+		} else {
+			sb_start_intwrite(fs_info->sb);
+		}
+	}
 
 	if (may_wait_transaction(fs_info, type))
 		wait_current_trans(fs_info, type);
@@ -838,6 +847,13 @@ struct btrfs_trans_handle *btrfs_start_transaction(struct btrfs_root *root,
 						   unsigned int num_items)
 {
 	return start_transaction(root, num_items, TRANS_START,
+				 BTRFS_RESERVE_FLUSH_ALL, true);
+}
+
+struct btrfs_trans_handle *btrfs_try_start_transaction(struct btrfs_root *root,
+						       unsigned int num_items)
+{
+	return start_transaction(root, num_items, TRANS_TRY_START,
 				 BTRFS_RESERVE_FLUSH_ALL, true);
 }
 
