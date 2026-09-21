@@ -33,6 +33,18 @@ macro_rules! define_panicking_intrinsics(
             pub extern "C" fn $ident() {
                 panic!($reason);
             }
+
+            // The redirected call sites were compiled against the real
+            // intrinsics, which return.  Tell objtool to ignore the noreturn
+            // status of the panicking intrinsics.
+            #[cfg(CONFIG_OBJTOOL_DEFERRED)]
+            ::core::arch::global_asm!(
+                include!(concat!(
+                    env!("OBJTREE"),
+                    "/rust/kernel/generated_ignore_noreturn_asm.rs"
+                )),
+                sym = sym $ident,
+            );
         )*
     }
 );

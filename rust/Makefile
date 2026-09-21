@@ -49,6 +49,8 @@ ifndef CONFIG_UML
 always-$(subst y,$(CONFIG_RUST),$(CONFIG_BUG)) += kernel/generated_arch_warn_asm.rs kernel/generated_arch_reachable_asm.rs
 endif
 
+always-$(subst y,$(CONFIG_RUST),$(CONFIG_OBJTOOL_DEFERRED)) += kernel/generated_ignore_noreturn_asm.rs
+
 # Avoids running `$(RUSTC)` when it may not be available.
 ifdef CONFIG_RUST
 
@@ -748,6 +750,10 @@ $(obj)/compiler_builtins.o: private skip_gendwarfksyms = 1
 $(obj)/compiler_builtins.o: private rustc_objcopy = -w -W '__*'
 $(obj)/compiler_builtins.o: $(src)/compiler_builtins.rs $(obj)/core.o FORCE
 	+$(call if_changed_rule,rustc_library)
+
+ifdef CONFIG_OBJTOOL_DEFERRED
+$(obj)/compiler_builtins.o: $(obj)/kernel/generated_ignore_noreturn_asm.rs
+endif
 
 $(obj)/zerocopy.o: private skip_clippy = 1
 $(obj)/zerocopy.o: private skip_gendwarfksyms = 1
