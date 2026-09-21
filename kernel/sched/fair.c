@@ -1089,6 +1089,21 @@ static inline bool min_vruntime_update(struct sched_entity *se, bool exit)
 RB_DECLARE_CALLBACKS(static, min_vruntime_cb, struct sched_entity,
 		     run_node, min_vruntime, min_vruntime_update);
 
+static DEFINE_PER_CPU(u64, rq_min_slice) = INT_MAX;
+
+static u64 get_rq_min_slice(struct rq *rq)
+{
+	return READ_ONCE(per_cpu(rq_min_slice, cpu_of(rq)));
+}
+
+static void __update_rq_min_slice(struct rq *rq)
+{
+	u64 min = cfs_rq_min_slice(&rq->cfs);
+
+	if (min != get_rq_min_slice(rq))
+		WRITE_ONCE(per_cpu(rq_min_slice, cpu_of(rq)), min);
+}
+
 /*
  * Enqueue an entity into the rb-tree:
  */
@@ -8073,6 +8088,8 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 		__enqueue_entity(cfs_rq, se);
 	}
 
+	__update_rq_min_slice(rq);
+
 	if (!rq_h_nr_queued && rq->cfs.h_nr_queued)
 		dl_server_start(&rq->fair_server);
 
@@ -8194,6 +8211,8 @@ static bool __dequeue_task(struct rq *rq, struct task_struct *p, int flags)
 	}
 	if (se != cfs_rq->curr)
 		__dequeue_entity(cfs_rq, se);
+
+	__update_rq_min_slice(rq);
 
 	sub_nr_running(rq, 1);
 
