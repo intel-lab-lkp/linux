@@ -36,6 +36,9 @@ static int nr_hugetlbsizes;
 static unsigned long hugetlbsizes[10];
 static int gup_fd;
 
+#define GUP_TEST_FILE	"/sys/kernel/debug/gup_test"
+#define NR_FD_OWNERSHIP_TESTS	3
+
 static __fsword_t get_fs_type(int fd)
 {
 	struct statfs fs;
@@ -500,6 +503,246 @@ static void run_test_case(struct test_case const *test_case)
 				       hugetlbsizes[i]);
 }
 
+static void test_fd_isolation(bool stop_fd2, bool gup_test_was_available)
+{
+	struct pin_longterm_test args = {
+		.size = pagesize,
+	};
+	char *mem1 = MAP_FAILED, *mem2 = MAP_FAILED;
+	char *read_buf = MAP_FAILED;
+	bool pin1 = false, pin2 = false;
+	__u64 read_addr;
+	int fd1 = -1, fd2 = -1;
+	int result = KSFT_FAIL;
+
+	log_test_start("Longterm GUP pin is isolated from fd2 %s",
+		       stop_fd2 ? "STOP" : "close");
+
+	fd1 = open(GUP_TEST_FILE, O_RDWR);
+	if (fd1 < 0) {
+		ksft_print_msg("gup_test not available (%s)\n",
+			       strerror(errno));
+		result = gup_test_was_available ? KSFT_FAIL : KSFT_SKIP;
+		goto report;
+	}
+
+	fd2 = open(GUP_TEST_FILE, O_RDWR);
+	if (fd2 < 0) {
+		ksft_print_msg("second gup_test open failed (%s)\n",
+			       strerror(errno));
+		goto report;
+	}
+
+	mem1 = mmap(NULL, pagesize, PROT_READ | PROT_WRITE,
+		    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	mem2 = mmap(NULL, pagesize, PROT_READ | PROT_WRITE,
+		    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	read_buf = mmap(NULL, pagesize, PROT_READ | PROT_WRITE,
+			MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	if (mem1 == MAP_FAILED || mem2 == MAP_FAILED ||
+	    read_buf == MAP_FAILED) {
+		ksft_print_msg("mmap() failed (%s)\n", strerror(errno));
+		goto report;
+	}
+
+	memset(mem1, 0x11, pagesize);
+	memset(mem2, 0x22, pagesize);
+
+	args.addr = (__u64)(uintptr_t)mem1;
+	if (ioctl(fd1, PIN_LONGTERM_TEST_START, &args)) {
+		ksft_print_msg("fd1 PIN_LONGTERM_TEST_START failed (%s)\n",
+			       strerror(errno));
+		goto report;
+	}
+	pin1 = true;
+
+	args.addr = (__u64)(uintptr_t)mem2;
+	if (ioctl(fd2, PIN_LONGTERM_TEST_START, &args)) {
+		ksft_print_msg("fd2 PIN_LONGTERM_TEST_START failed (%s)\n",
+			       strerror(errno));
+		goto report;
+	}
+	pin2 = true;
+
+	args.addr = (__u64)(uintptr_t)mem1;
+	if (ioctl(fd1, PIN_LONGTERM_TEST_START, &args) != -1 ||
+	    errno != EINVAL) {
+		ksft_print_msg("second START on fd1 was not rejected with EINVAL\n");
+		goto report;
+	}
+
+	if (stop_fd2) {
+		if (ioctl(fd2, PIN_LONGTERM_TEST_STOP)) {
+			ksft_print_msg("fd2 PIN_LONGTERM_TEST_STOP failed (%s)\n",
+				       strerror(errno));
+			goto report;
+		}
+		pin2 = false;
+
+		read_addr = (__u64)(uintptr_t)read_buf;
+		errno = 0;
+		if (ioctl(fd2, PIN_LONGTERM_TEST_READ, &read_addr) != -1 ||
+		    errno != EINVAL) {
+			ksft_print_msg("fd2 READ after STOP was not rejected with EINVAL\n");
+			goto report;
+		}
+	} else {
+		if (close(fd2)) {
+			ksft_print_msg("close(fd2) failed (%s)\n",
+				       strerror(errno));
+			fd2 = -1;
+			pin2 = false;
+			goto report;
+		}
+		fd2 = -1;
+		pin2 = false;
+	}
+
+	read_addr = (__u64)(uintptr_t)read_buf;
+	if (ioctl(fd1, PIN_LONGTERM_TEST_READ, &read_addr)) {
+		ksft_print_msg("fd1 PIN_LONGTERM_TEST_READ failed (%s)\n",
+			       strerror(errno));
+		goto report;
+	}
+	if (memcmp(mem1, read_buf, pagesize)) {
+		ksft_print_msg("fd1 PIN_LONGTERM_TEST_READ data mismatch\n");
+		goto report;
+	}
+
+	result = KSFT_PASS;
+
+report:
+	if (pin2 && ioctl(fd2, PIN_LONGTERM_TEST_STOP)) {
+		ksft_print_msg("fd2 cleanup STOP failed (%s)\n",
+			       strerror(errno));
+		result = KSFT_FAIL;
+	}
+	if (pin1 && ioctl(fd1, PIN_LONGTERM_TEST_STOP)) {
+		ksft_print_msg("fd1 cleanup STOP failed (%s)\n",
+			       strerror(errno));
+		result = KSFT_FAIL;
+	}
+	if (read_buf != MAP_FAILED)
+		munmap(read_buf, pagesize);
+	if (mem2 != MAP_FAILED)
+		munmap(mem2, pagesize);
+	if (mem1 != MAP_FAILED)
+		munmap(mem1, pagesize);
+	if (fd2 >= 0)
+		close(fd2);
+	if (fd1 >= 0)
+		close(fd1);
+	log_test_result(result);
+}
+
+static void test_dup_fd_shared_state(bool gup_test_was_available)
+{
+	struct pin_longterm_test args = {
+		.size = pagesize,
+	};
+	char *mem = MAP_FAILED, *read_buf = MAP_FAILED;
+	bool pin = false;
+	__u64 read_addr;
+	int fd = -1, dup_fd = -1;
+	int cleanup_fd;
+	int result = KSFT_FAIL;
+
+	log_test_start("Longterm GUP pin state is shared by dup() descriptors");
+
+	fd = open(GUP_TEST_FILE, O_RDWR);
+	if (fd < 0) {
+		ksft_print_msg("gup_test not available (%s)\n",
+			       strerror(errno));
+		result = gup_test_was_available ? KSFT_FAIL : KSFT_SKIP;
+		goto report;
+	}
+
+	dup_fd = dup(fd);
+	if (dup_fd < 0) {
+		ksft_print_msg("dup() failed (%s)\n", strerror(errno));
+		goto report;
+	}
+
+	mem = mmap(NULL, pagesize, PROT_READ | PROT_WRITE,
+		   MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	read_buf = mmap(NULL, pagesize, PROT_READ | PROT_WRITE,
+			MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	if (mem == MAP_FAILED || read_buf == MAP_FAILED) {
+		ksft_print_msg("mmap() failed (%s)\n", strerror(errno));
+		goto report;
+	}
+
+	memset(mem, 0x33, pagesize);
+
+	args.addr = (__u64)(uintptr_t)mem;
+	if (ioctl(fd, PIN_LONGTERM_TEST_START, &args)) {
+		ksft_print_msg("PIN_LONGTERM_TEST_START failed (%s)\n",
+			       strerror(errno));
+		goto report;
+	}
+	pin = true;
+
+	errno = 0;
+	if (ioctl(dup_fd, PIN_LONGTERM_TEST_START, &args) != -1 ||
+	    errno != EINVAL) {
+		ksft_print_msg("START through dup fd was not rejected with EINVAL\n");
+		goto report;
+	}
+
+	if (close(fd)) {
+		ksft_print_msg("close(original fd) failed (%s)\n",
+			       strerror(errno));
+		fd = -1;
+		goto report;
+	}
+	fd = -1;
+
+	read_addr = (__u64)(uintptr_t)read_buf;
+	if (ioctl(dup_fd, PIN_LONGTERM_TEST_READ, &read_addr)) {
+		ksft_print_msg("READ through dup fd failed (%s)\n",
+			       strerror(errno));
+		goto report;
+	}
+	if (memcmp(mem, read_buf, pagesize)) {
+		ksft_print_msg("READ through dup fd data mismatch\n");
+		goto report;
+	}
+
+	if (ioctl(dup_fd, PIN_LONGTERM_TEST_STOP)) {
+		ksft_print_msg("STOP through dup fd failed (%s)\n",
+			       strerror(errno));
+		goto report;
+	}
+	pin = false;
+
+	read_addr = (__u64)(uintptr_t)read_buf;
+	errno = 0;
+	if (ioctl(dup_fd, PIN_LONGTERM_TEST_READ, &read_addr) != -1 ||
+	    errno != EINVAL) {
+		ksft_print_msg("READ after STOP through dup fd was not rejected with EINVAL\n");
+		goto report;
+	}
+
+	result = KSFT_PASS;
+
+report:
+	cleanup_fd = dup_fd >= 0 ? dup_fd : fd;
+	if (pin && cleanup_fd >= 0 &&
+	    ioctl(cleanup_fd, PIN_LONGTERM_TEST_STOP)) {
+		ksft_print_msg("cleanup STOP failed (%s)\n", strerror(errno));
+		result = KSFT_FAIL;
+	}
+	if (read_buf != MAP_FAILED)
+		munmap(read_buf, pagesize);
+	if (mem != MAP_FAILED)
+		munmap(mem, pagesize);
+	if (dup_fd >= 0)
+		close(dup_fd);
+	if (fd >= 0)
+		close(fd);
+	log_test_result(result);
+}
+
 static int tests_per_test_case(void)
 {
 	return 3 + nr_hugetlbsizes;
@@ -507,6 +750,7 @@ static int tests_per_test_case(void)
 
 int main(int argc, char **argv)
 {
+	bool gup_test_was_available;
 	int i;
 
 	pagesize = getpagesize();
@@ -514,12 +758,22 @@ int main(int argc, char **argv)
 						    ARRAY_SIZE(hugetlbsizes));
 
 	ksft_print_header();
-	ksft_set_plan(ARRAY_SIZE(test_cases) * tests_per_test_case());
+	ksft_set_plan(ARRAY_SIZE(test_cases) * tests_per_test_case() +
+		      NR_FD_OWNERSHIP_TESTS);
 
-	gup_fd = open("/sys/kernel/debug/gup_test", O_RDWR);
+	gup_fd = open(GUP_TEST_FILE, O_RDWR);
+	gup_test_was_available = gup_fd >= 0;
 
 	for (i = 0; i < ARRAY_SIZE(test_cases); i++)
 		run_test_case(&test_cases[i]);
+
+	if (gup_fd >= 0)
+		close(gup_fd);
+	gup_fd = -1;
+
+	test_fd_isolation(true, gup_test_was_available);
+	test_fd_isolation(false, gup_test_was_available);
+	test_dup_fd_shared_state(gup_test_was_available);
 
 	ksft_finished();
 }
