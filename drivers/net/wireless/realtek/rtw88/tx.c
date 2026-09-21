@@ -208,7 +208,8 @@ void rtw_tx_report_enqueue(struct rtw_dev *rtwdev, struct sk_buff *skb, u8 sn)
 	__skb_queue_tail(&tx_report->queue, skb);
 	spin_unlock_irqrestore(&tx_report->q_lock, flags);
 
-	if ((rtwdev->chip->id == RTW_CHIP_TYPE_8723D &&
+	if (((rtwdev->chip->id == RTW_CHIP_TYPE_8723D ||
+	      rtwdev->chip->id == RTW_CHIP_TYPE_8822B) &&
 	     rtwdev->hci.type == RTW_HCI_TYPE_USB) ||
 	    rtw_is_8723bs(rtwdev))
 		timeout = msecs_to_jiffies(2500);
