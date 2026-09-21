@@ -323,8 +323,14 @@ __ww_mutex_die(struct MUTEX *lock, struct MUTEX_WAITER *waiter,
 		 * When waking up the task to die, be sure to set the
 		 * blocked_on to PROXY_WAKING. Otherwise we can see
 		 * circular blocked_on relationships that can't resolve.
+		 *
+		 * The blocked_on relation is only maintained for native
+		 * mutexes; on PREEMPT_RT an rt_mutex based lock relies on
+		 * priority inheritance instead.
 		 */
+#ifndef WW_RT
 		clear_task_blocked_on(waiter->task, lock);
+#endif
 		wake_q_add(wake_q, waiter->task);
 	}
 
@@ -375,15 +381,17 @@ static bool __ww_mutex_wound(struct MUTEX *lock,
 		 */
 		if (owner != current) {
 			/*
-			 * When waking up the task to wound, be sure to set the
-			 * blocked_on to PROXY_WAKING. Otherwise we can see
-			 * circular blocked_on relationships that can't resolve.
-			 *
-			 * NOTE: We pass NULL here instead of lock, because we
-			 * are waking the mutex owner, who may be currently
-			 * blocked on a different mutex.
-			 */
+		 * When waking up the task to wound, be sure to set the
+		 * blocked_on to PROXY_WAKING. Otherwise we can see
+		 * circular blocked_on relationships that can't resolve.
+		 *
+		 * NOTE: We pass NULL here instead of lock, because we
+		 * are waking the mutex owner, who may be currently
+		 * blocked on a different mutex.
+		 */
+#ifndef WW_RT
 			clear_task_blocked_on(owner, NULL);
+#endif
 			wake_q_add(wake_q, owner);
 		}
 		return true;
