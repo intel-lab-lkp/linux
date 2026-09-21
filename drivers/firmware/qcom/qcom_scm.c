@@ -27,6 +27,7 @@
 #include <linux/of_platform.h>
 #include <linux/of_reserved_mem.h>
 #include <linux/platform_device.h>
+#include <linux/reboot.h>
 #include <linux/reset-controller.h>
 #include <linux/remoteproc.h>
 #include <linux/sizes.h>
@@ -63,6 +64,8 @@ struct qcom_scm {
 
 	struct qcom_tzmem_pool *mempool;
 	unsigned int wq_cnt;
+
+	struct notifier_block reboot_nb;
 };
 
 struct qcom_scm_current_perm_info {
@@ -2790,6 +2793,20 @@ static const struct kernel_param_ops minidump_dest_param_ops = {
 module_param_cb(minidump_dest, &minidump_dest_param_ops, NULL, 0644);
 MODULE_PARM_DESC(minidump_dest, "Minidump SRAM destination: usb (default) or storage");
 
+/* reboot_notifier_list runs before device_shutdown(); RESTART_PREPARE does not. */
+static int qcom_scm_reboot_notify(struct notifier_block *nb, unsigned long action,
+				  void *data)
+{
+	struct qcom_scm *scm = container_of(nb, struct qcom_scm, reboot_nb);
+
+	qcom_scm_set_download_mode(scm, QCOM_DLOAD_NODUMP);
+
+	/* Separate latch: probe only disables SDI when download mode is off. */
+	qcom_scm_disable_sdi();
+
+	return NOTIFY_DONE;
+}
+
 static int qcom_scm_probe(struct platform_device *pdev)
 {
 	struct qcom_tzmem_pool_config pool_config;
@@ -2940,6 +2957,11 @@ static int qcom_scm_probe(struct platform_device *pdev)
 
 	/* Initialize the Gunyah watchdog platform device. */
 	qcom_scm_gunyah_wdt_init(scm);
+
+	scm->reboot_nb.notifier_call = qcom_scm_reboot_notify;
+	ret = devm_register_reboot_notifier(&pdev->dev, &scm->reboot_nb);
+	if (ret)
+		dev_warn(scm->dev, "failed to register reboot notifier: %d\n", ret);
 
 	return 0;
 
