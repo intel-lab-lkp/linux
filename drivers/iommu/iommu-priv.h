@@ -123,4 +123,15 @@ static inline void iommu_debug_init(void)
 
 #endif /* CONFIG_IOMMU_DEBUG_PAGEALLOC */
 
+#ifdef CONFIG_PCI
+struct pci_dev;
+int iommu_get_pci_resv_windows(struct pci_dev *dev, struct list_head *head);
+#else
+static inline int iommu_get_pci_resv_windows(struct pci_dev *dev,
+					     struct list_head *head)
+{
+	return 0;
+}
+#endif /* CONFIG_PCI */
+
 #endif /* __LINUX_IOMMU_PRIV_H */

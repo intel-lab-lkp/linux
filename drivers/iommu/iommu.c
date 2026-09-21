@@ -945,6 +945,84 @@ iommu_insert_device_resv_regions(struct list_head *dev_resv_regions,
 	return ret;
 }
 
+#ifdef CONFIG_PCI
+/**
+ * iommu_get_pci_resv_windows - collect PCI host bridge MMIO windows as
+ *                               reserved regions
+ * @dev: PCI device whose host bridge to scan
+ * @head: list head to append iommu_resv_region entries to
+ *
+ * Walks the MMIO windows of @dev's PCI host bridge and inserts an
+ * IOMMU_RESV_RESERVED region for each one using iommu_insert_resv_region(),
+ * keeping the entries sorted by start address and merging overlapping
+ * regions of the same type.  On success the inserted entries are appended
+ * to @head and the caller must free them with kfree() when done.  On
+ * failure any entries built so far are freed internally and @head is left
+ * unmodified.
+ *
+ * Returns 0 on success, negative errno on failure.
+ */
+int iommu_get_pci_resv_windows(struct pci_dev *dev, struct list_head *head)
+{
+	struct pci_host_bridge *bridge = pci_find_host_bridge(dev->bus);
+	struct iommu_resv_region *region, *next;
+	struct resource_entry *window;
+	LIST_HEAD(resv_windows);
+	int ret;
+
+	resource_list_for_each_entry(window, &bridge->windows) {
+		struct iommu_resv_region tmp = {
+			.type = IOMMU_RESV_RESERVED,
+		};
+
+		if (resource_type(window->res) != IORESOURCE_MEM)
+			continue;
+
+		tmp.start = window->res->start - window->offset;
+		tmp.length = window->res->end - window->res->start + 1;
+
+		ret = iommu_insert_resv_region(&tmp, &resv_windows);
+		if (ret)
+			goto err_free;
+	}
+
+	list_splice_tail(&resv_windows, head);
+	return 0;
+
+err_free:
+	list_for_each_entry_safe(region, next, &resv_windows, list) {
+		list_del(&region->list);
+		kfree(region);
+	}
+	return ret;
+}
+EXPORT_SYMBOL_GPL(iommu_get_pci_resv_windows);
+
+/*
+ * Reserve PCI host bridge MMIO windows as IOMMU_RESV_RESERVED regions.
+ * This prevents IOVA allocations from overlapping with PCI MMIO address
+ * ranges, which could cause PCIe switches to misroute DMA transactions.
+ *
+ * All PCI devices within the same IOMMU group share the same host bridge,
+ * so we only need to find the first PCI device.
+ *
+ * Caller must hold group->mutex.
+ */
+static int iommu_resv_pci_windows(struct iommu_group *group,
+				  struct list_head *head)
+{
+	struct group_device *gdev;
+
+	for_each_group_device(group, gdev) {
+		if (!dev_is_pci(gdev->dev))
+			continue;
+		return iommu_get_pci_resv_windows(to_pci_dev(gdev->dev),
+						  head);
+	}
+	return 0;
+}
+#endif /* CONFIG_PCI */
+
 int iommu_get_group_resv_regions(struct iommu_group *group,
 				 struct list_head *head)
 {
@@ -969,6 +1047,13 @@ int iommu_get_group_resv_regions(struct iommu_group *group,
 		if (ret)
 			break;
 	}
+
+	/* Reserve PCI host bridge MMIO windows to prevent IOVA conflicts */
+#ifdef CONFIG_PCI
+	if (!ret)
+		ret = iommu_resv_pci_windows(group, head);
+#endif
+
 	mutex_unlock(&group->mutex);
 	return ret;
 }
