@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: GPL-2.0
+# The symbols below are functions that are implemented by the startup code,
+# but called at runtime by the SEV code residing in the core kernel.  Undo the
+# __pi_ prefixing so the core kernel can call them.
+__pi_early_set_pages_state           early_set_pages_state
+__pi_early_snp_set_memory_private    early_snp_set_memory_private
+__pi_early_snp_set_memory_shared     early_snp_set_memory_shared
+__pi_get_hv_features                 get_hv_features
+__pi_sev_es_terminate                sev_es_terminate
+__pi_snp_cpuid                       snp_cpuid
+__pi_snp_cpuid_get_table             snp_cpuid_get_table
+__pi_svsm_issue_call                 svsm_issue_call
+__pi_svsm_process_result_codes       svsm_process_result_codes

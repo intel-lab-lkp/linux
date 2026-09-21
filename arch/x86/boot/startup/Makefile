@@ -41,12 +41,18 @@ $(pi-objs): objtool-args	= $(if $(CONFIG_OBJTOOL_DEFERRED),--dry-run,$(objtool-a
 #
 # Confine the startup code by prefixing all symbols with __pi_ (for position
 # independent). This ensures that startup code can only call other startup
-# code, or code that has explicitly been made accessible to it via a symbol
-# alias.
+# code.
 #
+# The few pi symbols which are allowed to be called by the core kernel are then
+# un-prefixed back to their original name using a second objcopy.
+#
+quiet_cmd_pi_objcopy = $(quiet_cmd_objcopy)
+      cmd_pi_objcopy = $(cmd_objcopy) && \
+		       $(OBJCOPY) --redefine-syms=$(src)/unprefix.syms $@
+
 $(obj)/%.pi.o: OBJCOPYFLAGS := --prefix-symbols=__pi_
-$(obj)/%.pi.o: $(obj)/%.o FORCE
-	$(call if_changed,objcopy)
+$(obj)/%.pi.o: $(obj)/%.o $(src)/unprefix.syms FORCE
+	$(call if_changed,pi_objcopy)
 
 targets	+= $(obj-y)
 obj-y	:= $(patsubst %.o,%.pi.o,$(obj-y))
