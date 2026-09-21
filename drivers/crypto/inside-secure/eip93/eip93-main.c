@@ -395,9 +395,21 @@ static int eip93_desc_init(struct eip93_device *eip93)
 
 static void eip93_cleanup(struct eip93_device *eip93)
 {
+	/* Stop HW from asserting IRQ first */
+	eip93_irq_clear(eip93, EIP93_INT_ALL);
+	eip93_irq_disable(eip93, EIP93_INT_ALL);
+
+	/* Synchronize and unregister the IRQ handler */
+	free_irq(eip93->irq, eip93);
+
+	/* Drain any tasklet scheduled before the IRQ was disabled */
 	tasklet_kill(&eip93->ring->done_task);
 
-	/* Clear/ack all interrupts before disable all */
+	/*
+	 * The tasklet re-enables the RDR interrupt when it drains the
+	 * result ring, so mask the device interrupts again before the
+	 * hardware is switched off.
+	 */
 	eip93_irq_clear(eip93, EIP93_INT_ALL);
 	eip93_irq_disable(eip93, EIP93_INT_ALL);
 
@@ -430,12 +442,6 @@ static int eip93_crypto_probe(struct platform_device *pdev)
 	if (eip93->irq < 0)
 		return eip93->irq;
 
-	ret = devm_request_threaded_irq(eip93->dev, eip93->irq, eip93_irq_handler,
-					NULL, IRQF_ONESHOT,
-					dev_name(eip93->dev), eip93);
-	if (ret)
-		return ret;
-
 	ret = eip93_desc_init(eip93);
 	if (ret)
 		return ret;
@@ -447,6 +453,11 @@ static int eip93_crypto_probe(struct platform_device *pdev)
 
 	spin_lock_init(&eip93->ring->idr_lock);
 	idr_init(&eip93->ring->crypto_async_idr);
+
+	ret = request_irq(eip93->irq, eip93_irq_handler, 0,
+			  dev_name(eip93->dev), eip93);
+	if (ret)
+		goto err_free_tasklet;
 
 	algo_flags = readl(eip93->base + EIP93_REG_PE_OPTION_1);
 
@@ -472,6 +483,12 @@ static int eip93_crypto_probe(struct platform_device *pdev)
 		 readl(eip93->base + EIP93_REG_PE_OPTION_0));
 
 	return 0;
+
+err_free_tasklet:
+	idr_destroy(&eip93->ring->crypto_async_idr);
+	tasklet_kill(&eip93->ring->done_task);
+	eip93_desc_free(eip93);
+	return ret;
 }
 
 static void eip93_crypto_remove(struct platform_device *pdev)
