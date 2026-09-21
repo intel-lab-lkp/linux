@@ -937,6 +937,8 @@
 				     <GIC_SPI 797 IRQ_TYPE_LEVEL_HIGH 0>,
 				     <GIC_SPI 798 IRQ_TYPE_LEVEL_HIGH 0>,
 				     <GIC_SPI 799 IRQ_TYPE_LEVEL_HIGH 0>;
+			interrupt-names = "bank0", "bank1", "bank2", "bank3",
+					  "bank4";
 			#iommu-cells = <1>;
 		};
 

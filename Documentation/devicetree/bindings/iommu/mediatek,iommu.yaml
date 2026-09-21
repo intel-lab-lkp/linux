@@ -100,7 +100,11 @@ properties:
     maxItems: 1
 
   interrupts:
-    maxItems: 1
+    minItems: 1
+    maxItems: 5
+
+  interrupt-names:
+    description: Names of IOMMU banks providing fault interrupts.
 
   clocks:
     items:
@@ -155,6 +159,30 @@ required:
   - '#iommu-cells'
 
 allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: mediatek,mt8195-iommu-infra
+    then:
+      properties:
+        interrupts:
+          minItems: 5
+        interrupt-names:
+          items:
+            - const: bank0
+            - const: bank1
+            - const: bank2
+            - const: bank3
+            - const: bank4
+      required:
+        - interrupt-names
+    else:
+      properties:
+        interrupts:
+          maxItems: 1
+        interrupt-names: false
+
   - if:
       properties:
         compatible:
