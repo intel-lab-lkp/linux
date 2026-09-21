@@ -55,3 +55,12 @@ Date:           Feb 2020
 KernelVersion:  5.7
 Contact:        linux-accelerators@lists.ozlabs.org
 Description:    Size (bytes) of dus region queue file
+
+What:           /sys/class/uacce/<dev_name>/dev_usage
+Date:           Sep 2026
+KernelVersion:  7.3
+Contact:        linux-accelerators@lists.ozlabs.org
+Description:    (R) Current usage of the device, reported as a driver-defined
+                string of up to PAGE_SIZE - 1 bytes. Usage is expressed as a
+                percentage (0-100). The attribute is hidden if the driver does
+                not implement the get_dev_usage callback.
