@@ -12,3 +12,4 @@ MMC/SD/SDIO card support
    mmc-async-req
    mmc-test
    mmc-tools
+   sdio-function-drivers
