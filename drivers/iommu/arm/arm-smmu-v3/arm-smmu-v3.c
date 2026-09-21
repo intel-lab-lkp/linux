@@ -2024,37 +2024,17 @@ static int arm_smmu_init_l2_strtab(struct arm_smmu_device *smmu, u32 sid)
 	return 0;
 }
 
-static int arm_smmu_streams_cmp_key(const void *lhs, const struct rb_node *rhs)
-{
-	struct arm_smmu_stream *stream_rhs =
-		rb_entry(rhs, struct arm_smmu_stream, node);
-	const u32 *sid_lhs = lhs;
-
-	if (*sid_lhs < stream_rhs->id)
-		return -1;
-	if (*sid_lhs > stream_rhs->id)
-		return 1;
-	return 0;
-}
-
-static int arm_smmu_streams_cmp_node(struct rb_node *lhs,
-				     const struct rb_node *rhs)
-{
-	return arm_smmu_streams_cmp_key(
-		&rb_entry(lhs, struct arm_smmu_stream, node)->id, rhs);
-}
-
 static struct arm_smmu_master *
 arm_smmu_find_master(struct arm_smmu_device *smmu, u32 sid)
 {
-	struct rb_node *node;
+	struct arm_smmu_stream *stream;
 
 	lockdep_assert_held(&smmu->streams_mutex);
 
-	node = rb_find(&sid, &smmu->streams, arm_smmu_streams_cmp_key);
-	if (!node)
+	stream = xa_load(&smmu->streams, sid);
+	if (!stream)
 		return NULL;
-	return rb_entry(node, struct arm_smmu_stream, node)->master;
+	return stream->master;
 }
 
 /* IRQ and event handlers */
@@ -4123,38 +4103,47 @@ static int arm_smmu_insert_master(struct arm_smmu_device *smmu,
 	     NULL);
 
 	mutex_lock(&smmu->streams_mutex);
-	for (i = 0; i < fwspec->num_ids; i++) {
+	for (i = 0; i < master->num_streams; i++) {
 		struct arm_smmu_stream *new_stream = &master->streams[i];
-		struct rb_node *existing;
+		struct arm_smmu_stream *existing;
 		u32 sid = new_stream->id;
 
 		ret = arm_smmu_init_sid_strtab(smmu, sid);
 		if (ret)
 			break;
 
-		/* Insert into SID tree */
-		existing = rb_find_add(&new_stream->node, &smmu->streams,
-				       arm_smmu_streams_cmp_node);
+		/* Bridged PCI devices may end up with duplicated IDs */
+		if (i > 0 && master->streams[i - 1].id == sid)
+			continue;
+
+		existing = xa_load(&smmu->streams, sid);
 		if (existing) {
-			struct arm_smmu_master *existing_master =
-				rb_entry(existing, struct arm_smmu_stream, node)
-					->master;
-
-			/* Bridged PCI devices may end up with duplicated IDs */
-			if (existing_master == master)
-				continue;
-
 			dev_warn(master->dev,
 				 "Aliasing StreamID 0x%x (from %s) unsupported, expect DMA to be broken\n",
-				 sid, dev_name(existing_master->dev));
+				 sid, dev_name(existing->master->dev));
 			ret = -ENODEV;
 			break;
 		}
+
+		/*
+		 * xa_store() returns the old entry (void *) on success
+		 * or an ERR_PTR on allocation failure.  Use xa_err() to
+		 * convert to a standard errno.
+		 */
+		ret = xa_err(xa_store(&smmu->streams, sid, new_stream,
+				      GFP_KERNEL));
+		if (ret)
+			break;
 	}
 
 	if (ret) {
-		for (i--; i >= 0; i--)
-			rb_erase(&master->streams[i].node, &smmu->streams);
+		for (i--; i >= 0; i--) {
+			u32 sid = master->streams[i].id;
+
+			if (i > 0 && master->streams[i - 1].id == sid)
+				continue;
+			xa_erase(&smmu->streams, sid);
+		}
 		kfree(master->streams);
 		kfree(master->build_invs);
 	}
@@ -4167,14 +4156,19 @@ static void arm_smmu_remove_master(struct arm_smmu_master *master)
 {
 	int i;
 	struct arm_smmu_device *smmu = master->smmu;
-	struct iommu_fwspec *fwspec = dev_iommu_fwspec_get(master->dev);
 
 	if (!smmu || !master->streams)
 		return;
 
 	mutex_lock(&smmu->streams_mutex);
-	for (i = 0; i < fwspec->num_ids; i++)
-		rb_erase(&master->streams[i].node, &smmu->streams);
+	for (i = 0; i < master->num_streams; i++) {
+		u32 sid = master->streams[i].id;
+
+		/* Skip intra-master duplicate SIDs */
+		if (i > 0 && master->streams[i - 1].id == sid)
+			continue;
+		xa_erase(&smmu->streams, sid);
+	}
 	mutex_unlock(&smmu->streams_mutex);
 
 	kfree(master->streams);
@@ -4602,7 +4596,7 @@ static int arm_smmu_init_structures(struct arm_smmu_device *smmu)
 	int ret;
 
 	mutex_init(&smmu->streams_mutex);
-	smmu->streams = RB_ROOT;
+	xa_init(&smmu->streams);
 
 	ret = arm_smmu_init_queues(smmu);
 	if (ret)
@@ -5627,6 +5621,7 @@ static void arm_smmu_device_remove(struct platform_device *pdev)
 
 	iommu_device_unregister(&smmu->iommu);
 	iommu_device_sysfs_remove(&smmu->iommu);
+	xa_destroy(&smmu->streams);
 }
 
 static void arm_smmu_device_shutdown(struct platform_device *pdev)

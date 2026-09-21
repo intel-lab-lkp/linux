@@ -14,6 +14,7 @@
 #include <linux/kernel.h>
 #include <linux/mmzone.h>
 #include <linux/sizes.h>
+#include <linux/xarray.h>
 
 struct arm_smmu_device;
 struct arm_vsmmu;
@@ -961,14 +962,20 @@ struct arm_smmu_device {
 	/* IOMMU core code handle */
 	struct iommu_device		iommu;
 
-	struct rb_root			streams;
+	/*
+	 * XArray of arm_smmu_stream, indexed by SID.
+	 * All accesses (reads and writes) are serialised by streams_mutex.
+	 * The mutex is held across xa_load() and all subsequent uses of the
+	 * returned pointer to prevent use-after-free from concurrent
+	 * arm_smmu_remove_master().
+	 */
+	struct xarray			streams;
 	struct mutex			streams_mutex;
 };
 
 struct arm_smmu_stream {
 	u32				id;
 	struct arm_smmu_master		*master;
-	struct rb_node			node;
 };
 
 struct arm_smmu_vmaster {
