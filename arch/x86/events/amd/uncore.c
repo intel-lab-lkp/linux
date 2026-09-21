@@ -246,19 +246,15 @@ out:
 
 static void amd_uncore_del(struct perf_event *event, int flags)
 {
-	int i;
 	struct amd_uncore_pmu *pmu = event_to_amd_uncore_pmu(event);
 	struct amd_uncore_ctx *ctx = *per_cpu_ptr(pmu->ctx, event->cpu);
 	struct hw_perf_event *hwc = &event->hw;
+	struct perf_event *old = event;
 
 	event->pmu->stop(event, PERF_EF_UPDATE);
 
-	for (i = 0; i < pmu->num_counters; i++) {
-		struct perf_event *tmp = event;
-
-		if (try_cmpxchg(&ctx->events[i], &tmp, NULL))
-			break;
-	}
+	/* ->del() follows a successful ->add(), so hwc->idx owns this slot. */
+	WARN_ON_ONCE(!try_cmpxchg(&ctx->events[hwc->idx], &old, NULL));
 
 	hwc->idx = -1;
 }
