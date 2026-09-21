@@ -580,12 +580,13 @@ static void coredump_finish(enum coredump_state state)
 static bool dump_interrupted(void)
 {
 	/*
-	 * SIGKILL or freezing() interrupt the coredumping. Perhaps we
-	 * can do try_to_freeze() and check __fatal_signal_pending(),
-	 * but then we need to teach dump_write() to restart and clear
-	 * TIF_SIGPENDING.
+	 * SIGKILL, freezing() or the cgroup v2 freezer trap interrupt the
+	 * coredumping. Perhaps we can do try_to_freeze() and check
+	 * __fatal_signal_pending(), but then we need to teach dump_write()
+	 * to restart and clear TIF_SIGPENDING.
 	 */
-	return fatal_signal_pending(current) || freezing(current);
+	return fatal_signal_pending(current) || freezing(current) ||
+	       (READ_ONCE(current->jobctl) & JOBCTL_TRAP_FREEZE);
 }
 
 static void wait_for_dump_helpers(struct file *file)
