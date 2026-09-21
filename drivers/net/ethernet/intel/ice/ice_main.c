@@ -3996,7 +3996,7 @@ int ice_init_pf(struct ice_pf *pf)
 		ice_mbx_init_snapshot(&pf->hw);
 
 	xa_init(&pf->dyn_ports);
-	xa_init(&pf->sf_nums);
+	xa_init_flags(&pf->sf_nums, XA_FLAGS_ALLOC);
 
 	pf->avail_txqs = bitmap_zalloc(pf->max_pf_txqs, GFP_KERNEL);
 	pf->avail_rxqs = bitmap_zalloc(pf->max_pf_rxqs, GFP_KERNEL);
