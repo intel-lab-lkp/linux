@@ -5278,16 +5278,28 @@ bool vmalloc_dump_obj(void *object)
 	unsigned long nr_pages;
 
 	addr = PAGE_ALIGN_DOWN((unsigned long) object);
-	vn = addr_to_node(addr);
 
-	if (!spin_trylock(&vn->busy.lock))
-		return false;
+	/*
+	 * A vmalloc allocation may span multiple vmap zones, so the
+	 * node whose rb-tree holds the VA may differ from the node
+	 * the address maps to.  Search all nodes.  Use trylock as
+	 * this function can be called from atomic dump contexts.
+	 */
+	va = NULL;
+	for_each_vmap_node(vn) {
+		if (!spin_trylock(&vn->busy.lock))
+			continue;
 
-	va = __find_vmap_area(addr, &vn->busy.root);
-	if (!va || !va->vm) {
+		va = __find_vmap_area(addr, &vn->busy.root);
+		if (va && va->vm)
+			break;
+
 		spin_unlock(&vn->busy.lock);
-		return false;
+		va = NULL;
 	}
+
+	if (!va)
+		return false;
 
 	vm = va->vm;
 	addr = (unsigned long) vm->addr;
