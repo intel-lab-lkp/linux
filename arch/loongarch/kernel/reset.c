@@ -11,6 +11,7 @@
 #include <linux/reboot.h>
 #include <linux/delay.h>
 #include <linux/console.h>
+#include <linux/annotate.h>
 
 #include <acpi/reboot.h>
 #include <asm/idle.h>
@@ -36,6 +37,7 @@ void machine_halt(void)
 		__asm__ __volatile__("idle 0" : : : "memory");
 	}
 }
+ANNOTATE_IGNORE_NORETURN(machine_halt);
 
 void machine_power_off(void)
 {
@@ -56,6 +58,7 @@ void machine_power_off(void)
 		__asm__ __volatile__("idle 0" : : : "memory");
 	}
 }
+ANNOTATE_IGNORE_NORETURN(machine_power_off);
 
 void machine_restart(char *command)
 {
@@ -77,3 +80,4 @@ void machine_restart(char *command)
 		__asm__ __volatile__("idle 0" : : : "memory");
 	}
 }
+ANNOTATE_IGNORE_NORETURN(machine_restart);
