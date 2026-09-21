@@ -2884,6 +2884,71 @@ static u32 hisi_qm_isolate_threshold_read(struct uacce_device *uacce)
 	return qm->isolate_data.err_threshold;
 }
 
+int qm_usage_percent(struct hisi_qm *qm, int chan_idx)
+{
+	u32 val, used_bw, max_bw;
+
+	/*
+	 * Channel-usage register: lower 16 bits = current used bandwidth,
+	 * upper 16 bits = per-channel maximum bandwidth (static capability,
+	 * non-zero once the device is initialized).
+	 */
+	val = readl(qm->io_base + QM_CHANNEL_USAGE_OFFSET +
+		    chan_idx * QM_CHANNEL_ADDR_INTRVL);
+	used_bw = lower_16_bits(val);
+	max_bw = upper_16_bits(val);
+	if (!max_bw)
+		return -EIO;
+
+	if (max_bw <= used_bw)
+		return QM_MAX_DEV_USAGE;
+
+	return (used_bw * QM_DEV_USAGE_RATE) / max_bw;
+}
+
+static int hisi_qm_get_dev_usage(struct uacce_device *uacce, char *buf, int size)
+{
+	struct hisi_qm *qm = uacce->priv;
+	struct qm_channel *channel_data = &qm->channel_data;
+	bool dev_is_active = true;
+	const char *sep = "";
+	int ret, i, len = 0;
+
+	if (qm->ver < QM_HW_V5)
+		return -ENODEV;
+
+	/* If runtime-suspended, skip register reads and report 0. */
+	ret = hisi_qm_get_dfx_access(qm);
+	if (ret == -EAGAIN) {
+		dev_is_active = false;
+		ret = 0;
+	} else if (ret) {
+		return ret;
+	}
+
+	for (i = 0; i < channel_data->channel_num; i++) {
+		if (dev_is_active) {
+			ret = qm_usage_percent(qm, i);
+			if (ret < 0)
+				goto out;
+		}
+
+		if (len >= size)
+			break;
+
+		len += scnprintf(buf + len, size - len, "%s%s: %d",
+				 sep, channel_data->channel_name[i], ret);
+		sep = "\n";
+	}
+
+	ret = len;
+out:
+	if (dev_is_active)
+		hisi_qm_put_dfx_access(qm);
+
+	return ret;
+}
+
 static const struct uacce_ops uacce_qm_ops = {
 	.get_available_instances = hisi_qm_get_available_instances,
 	.get_queue = hisi_qm_uacce_get_queue,
@@ -2896,6 +2961,7 @@ static const struct uacce_ops uacce_qm_ops = {
 	.get_isolate_state = hisi_qm_get_isolate_state,
 	.isolate_err_threshold_write = hisi_qm_isolate_threshold_write,
 	.isolate_err_threshold_read = hisi_qm_isolate_threshold_read,
+	.get_dev_usage = hisi_qm_get_dev_usage,
 };
 
 static void qm_remove_uacce(struct hisi_qm *qm)

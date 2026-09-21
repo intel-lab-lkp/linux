@@ -1040,23 +1040,6 @@ void hisi_qm_show_last_dfx_regs(struct hisi_qm *qm)
 	}
 }
 
-static int qm_usage_percent(struct hisi_qm *qm, int chan_num)
-{
-	u32 val, used_bw, total_bw;
-
-	val = readl(qm->io_base + QM_CHANNEL_USAGE_OFFSET +
-				chan_num * QM_CHANNEL_ADDR_INTRVL);
-	used_bw = lower_16_bits(val);
-	total_bw = upper_16_bits(val);
-	if (!total_bw)
-		return -EIO;
-
-	if (total_bw <= used_bw)
-		return QM_MAX_DEV_USAGE;
-
-	return (used_bw * QM_DEV_USAGE_RATE) / total_bw;
-}
-
 static int qm_usage_show(struct seq_file *s, void *unused)
 {
 	struct hisi_qm *qm = s->private;

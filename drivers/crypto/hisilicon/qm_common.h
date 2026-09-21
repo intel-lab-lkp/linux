@@ -75,5 +75,6 @@ struct qm_aeqc {
 int qm_set_and_get_xqc(struct hisi_qm *qm, u8 cmd, void *xqc, u32 qp_id, bool op);
 void hisi_qm_show_last_dfx_regs(struct hisi_qm *qm);
 void hisi_qm_set_algqos_init(struct hisi_qm *qm);
+int qm_usage_percent(struct hisi_qm *qm, int chan_idx);
 
 #endif
