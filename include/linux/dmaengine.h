@@ -1232,6 +1232,31 @@ static inline struct dma_async_tx_descriptor *dmaengine_prep_dma_memcpy(
 						    len, flags);
 }
 
+static inline struct dma_async_tx_descriptor *
+dmaengine_prep_dma_pq(struct dma_chan *chan, dma_addr_t *dst, dma_addr_t *src,
+		      unsigned int src_cnt, const unsigned char *scf,
+		      size_t len, unsigned long flags)
+{
+	if (!chan || !chan->device || !chan->device->device_prep_dma_pq)
+		return NULL;
+
+	return chan->device->device_prep_dma_pq(chan, dst, src,
+						src_cnt, scf, len, flags);
+}
+
+static inline struct dma_async_tx_descriptor *
+dmaengine_prep_dma_pq_val(struct dma_chan *chan, dma_addr_t *pq, dma_addr_t *src,
+			  unsigned int src_cnt, const unsigned char *scf,
+			  size_t len, enum sum_check_flags *pqres, unsigned long flags)
+{
+	if (!chan || !chan->device || !chan->device->device_prep_dma_pq_val)
+		return NULL;
+
+	return chan->device->device_prep_dma_pq_val(chan, pq, src,
+						    src_cnt, scf, len,
+						    pqres, flags);
+}
+
 static inline bool dmaengine_is_metadata_mode_supported(struct dma_chan *chan,
 		enum dma_desc_metadata_mode mode)
 {
