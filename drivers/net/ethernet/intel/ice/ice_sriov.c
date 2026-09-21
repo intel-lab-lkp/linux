@@ -508,6 +508,7 @@ teardown:
 		if (it_cnt == 0)
 			break;
 
+		ice_eswitch_detach_vf(pf, vf);
 		ice_dis_vf_mappings(vf);
 		ice_vf_vsi_release(vf);
 		it_cnt--;
