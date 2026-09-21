@@ -7,6 +7,8 @@
 
 #include <dt-bindings/arm/qcom,ids.h>
 #include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/leds/common.h>
+
 #include "msm8917.dtsi"
 #include "pm8937.dtsi"
 
@@ -82,6 +84,19 @@
 			reg = <0x0 0x90001000 0x0 (720 * 1280 * 3)>;
 			no-map;
 		};
+	};
+};
+
+&blsp1_i2c2 {
+	aw2013: led-controller@45 {
+		compatible = "awinic,aw2013";
+		reg = <0x45>;
+		vcc-supply = <&pm8937_l10>;
+		vio-supply = <&pm8937_l5>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		status = "disabled";
 	};
 };
 
