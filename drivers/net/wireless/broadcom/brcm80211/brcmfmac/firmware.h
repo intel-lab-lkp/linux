@@ -87,9 +87,23 @@ brcmf_fw_alloc_request(u32 chip, u32 chiprev,
  * Request firmware(s) asynchronously. When the asynchronous request
  * fails it will not use the callback, but call device_release_driver()
  * instead which will call the driver .remove() callback.
+ *
+ * ctxp is a (pointer to an) opaque pointer that may be passed to
+ * brcmf_fw_cancel().
  */
 int brcmf_fw_get_firmwares(struct device *dev, struct brcmf_fw_request *req,
 			   void (*fw_cb)(struct device *dev, int err,
-					 struct brcmf_fw_request *req));
+					 struct brcmf_fw_request *req),
+			   void **ctxp);
+
+/**
+ * brcmf_fw_cancel() - Cancel an outstanding firmware request
+ * @dev: Device requesting the firmware
+ * @ctxp: Opaque context pointer filled in by brcmf_fw_get_firmwares()
+ *
+ * Cancel an outstanding firmware request identified by @dev and @ctxp, which
+ * should be the same as passed to brcmf_fw_get_firmwares().
+ */
+void brcmf_fw_cancel(struct device *dev, void **ctxp);
 
 #endif /* BRCMFMAC_FIRMWARE_H */

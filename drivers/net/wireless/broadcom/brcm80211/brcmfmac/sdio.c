@@ -4417,8 +4417,6 @@ release:
 	sdio_release_host(sdiod->func1);
 fail:
 	brcmf_dbg(TRACE, "failed: dev=%s, err=%d\n", dev_name(dev), err);
-	device_release_driver(&sdiod->func2->dev);
-	device_release_driver(dev);
 }
 
 static struct brcmf_fw_request *
@@ -4546,7 +4544,8 @@ int brcmf_sdio_probe(struct brcmf_sdio_dev *sdiodev)
 	}
 
 	ret = brcmf_fw_get_firmwares(sdiodev->dev, fwreq,
-				     brcmf_sdio_firmware_callback);
+				     brcmf_sdio_firmware_callback,
+				     &sdiodev->bus_if->fwctx);
 	if (ret != 0) {
 		brcmf_err("async firmware request failed: %d\n", ret);
 		kfree(fwreq);
@@ -4580,6 +4579,9 @@ void brcmf_sdio_remove(struct brcmf_sdio *bus)
 			kthread_stop_put(bus->watchdog_tsk);
 			bus->watchdog_tsk = NULL;
 		}
+
+		brcmf_fw_cancel(bus->sdiodev->dev,
+				&bus->sdiodev->bus_if->fwctx);
 
 		/* De-register interrupt handler */
 		brcmf_sdiod_intr_unregister(bus->sdiodev);

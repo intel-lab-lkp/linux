@@ -459,6 +459,7 @@ struct brcmf_fw {
 	u32 curpos;
 	unsigned int board_index;
 	void (*done)(struct device *dev, int err, struct brcmf_fw_request *req);
+	void **ctxp;
 };
 
 #ifdef CONFIG_EFI
@@ -693,7 +694,7 @@ static void brcmf_fw_request_done(const struct firmware *fw, void *ctx)
 		fwctx->req = NULL;
 	}
 	fwctx->done(fwctx->dev, ret, fwctx->req);
-	kfree(fwctx);
+	kfree(xchg(fwctx->ctxp, NULL));
 }
 
 static void brcmf_fw_request_done_alt_path(const struct firmware *fw, void *ctx)
@@ -703,7 +704,7 @@ static void brcmf_fw_request_done_alt_path(const struct firmware *fw, void *ctx)
 	const char *board_type, *alt_path;
 	int ret = 0;
 
-	if (fw) {
+	if (fw || !READ_ONCE(*fwctx->ctxp)) {
 		brcmf_fw_request_done(fw, ctx);
 		return;
 	}
@@ -755,7 +756,8 @@ static bool brcmf_fw_request_is_valid(struct brcmf_fw_request *req)
 
 int brcmf_fw_get_firmwares(struct device *dev, struct brcmf_fw_request *req,
 			   void (*fw_cb)(struct device *dev, int err,
-					 struct brcmf_fw_request *req))
+					 struct brcmf_fw_request *req),
+			   void **ctxp)
 {
 	struct brcmf_fw_item *first = &req->items[0];
 	struct brcmf_fw *fwctx;
@@ -776,6 +778,8 @@ int brcmf_fw_get_firmwares(struct device *dev, struct brcmf_fw_request *req,
 	fwctx->dev = dev;
 	fwctx->req = req;
 	fwctx->done = fw_cb;
+	fwctx->ctxp = ctxp;
+	WRITE_ONCE(*ctxp, fwctx);
 
 	/* First try alternative board-specific path if any */
 	if (fwctx->req->board_types[0])
@@ -797,6 +801,22 @@ int brcmf_fw_get_firmwares(struct device *dev, struct brcmf_fw_request *req,
 		brcmf_fw_request_done(NULL, fwctx);
 
 	return 0;
+}
+
+void brcmf_fw_cancel(struct device *dev, void **ctxp)
+{
+	struct brcmf_fw *fwctx;
+
+	fwctx = xchg(ctxp, NULL);
+	if (!fwctx)
+		return;
+
+	/* Keep canceling requests until they see that we cleared ctxp */
+	while (request_firmware_nowait_cancel(dev, fwctx,
+					      brcmf_fw_request_done_alt_path))
+		;
+	request_firmware_nowait_cancel(dev, fwctx, brcmf_fw_request_done);
+	kfree(fwctx);
 }
 
 struct brcmf_fw_request *

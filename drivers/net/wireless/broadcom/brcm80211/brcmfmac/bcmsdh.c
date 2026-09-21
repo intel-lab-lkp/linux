@@ -1126,7 +1126,12 @@ static void brcmf_ops_sdio_remove(struct sdio_func *func)
 	if (bus_if) {
 		sdiodev = bus_if->bus_priv.sdio;
 
-		/* start by unregistering irqs */
+		/* Cancel any outstanding firmware request, as it may try to
+		 * call brcmf_sdiod_intr_register.
+		 */
+		brcmf_fw_cancel(sdiodev->dev, &bus_if->fwctx);
+
+		/* Now we can unregister irqs */
 		brcmf_sdiod_intr_unregister(sdiodev);
 
 		if (func->num != 1)

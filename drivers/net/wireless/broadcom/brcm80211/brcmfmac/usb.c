@@ -1306,7 +1306,8 @@ static int brcmf_usb_probe_cb(struct brcmf_usbdev_info *devinfo,
 	}
 
 	/* request firmware here */
-	ret = brcmf_fw_get_firmwares(dev, fwreq, brcmf_usb_probe_phase2);
+	ret = brcmf_fw_get_firmwares(dev, fwreq, brcmf_usb_probe_phase2,
+				     &bus->fwctx);
 	if (ret) {
 		brcmf_err("firmware request failed: %d\n", ret);
 		kfree(fwreq);
@@ -1524,7 +1525,8 @@ static int brcmf_usb_reset_resume(struct usb_interface *intf)
 	if (!fwreq)
 		return -ENOMEM;
 
-	ret = brcmf_fw_get_firmwares(&usb->dev, fwreq, brcmf_usb_probe_phase2);
+	ret = brcmf_fw_get_firmwares(&usb->dev, fwreq, brcmf_usb_probe_phase2,
+				     &devinfo->bus_pub->bus->fwctx);
 	if (ret < 0)
 		kfree(fwreq);
 

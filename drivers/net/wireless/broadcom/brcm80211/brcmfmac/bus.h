@@ -157,6 +157,7 @@ struct brcmf_bus_stats {
  * @chip: device identifier of the dongle chip.
  * @chiprev: revision of the dongle chip.
  * @fwvid: firmware vendor-support identifier of the device.
+ * @fwctx: firmware request cancellation context
  * @always_use_fws_queue: bus wants use queue also when fwsignal is inactive.
  * @wowl_supported: is wowl supported by bus driver.
  * @ops: callbacks for this bus instance.
@@ -178,6 +179,7 @@ struct brcmf_bus {
 	u32 chip;
 	u32 chiprev;
 	enum brcmf_fwvendor fwvid;
+	void *fwctx;
 	bool always_use_fws_queue;
 	bool wowl_supported;
 	bool removing;		/* device removal in progress; quiesce async work */

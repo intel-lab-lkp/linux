@@ -1555,6 +1555,8 @@ static int brcmf_pcie_reset(struct device *dev)
 	struct brcmf_fw_request *fwreq;
 	int err;
 
+	brcmf_fw_cancel(dev, &bus_if->fwctx);
+
 	brcmf_pcie_intr_disable(devinfo);
 
 	brcmf_pcie_bus_console_read(devinfo, true);
@@ -1572,7 +1574,8 @@ static int brcmf_pcie_reset(struct device *dev)
 		return -ENOMEM;
 	}
 
-	err = brcmf_fw_get_firmwares(dev, fwreq, brcmf_pcie_setup);
+	err = brcmf_fw_get_firmwares(dev, fwreq, brcmf_pcie_setup,
+				     &bus_if->fwctx);
 	if (err) {
 		dev_err(dev, "Failed to prepare FW request\n");
 		kfree(fwreq);
@@ -2231,7 +2234,6 @@ fail:
 	brcmf_err(bus, "Dongle setup failed\n");
 	brcmf_pcie_bus_console_read(devinfo, true);
 	brcmf_fw_crashed(dev);
-	device_release_driver(dev);
 }
 
 static struct brcmf_fw_request *
@@ -2554,7 +2556,8 @@ brcmf_pcie_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto fail_brcmf;
 	}
 
-	ret = brcmf_fw_get_firmwares(bus->dev, fwreq, brcmf_pcie_setup);
+	ret = brcmf_fw_get_firmwares(bus->dev, fwreq, brcmf_pcie_setup,
+				     &bus->fwctx);
 	if (ret < 0) {
 		kfree(fwreq);
 		goto fail_brcmf;
@@ -2594,6 +2597,8 @@ brcmf_pcie_remove(struct pci_dev *pdev)
 	devinfo = bus->bus_priv.pcie->devinfo;
 	brcmf_pcie_bus_console_read(devinfo, false);
 	brcmf_pcie_fwcon_timer(devinfo, false);
+
+	brcmf_fw_cancel(bus->dev, &bus->fwctx);
 
 	devinfo->state = BRCMFMAC_PCIE_STATE_DOWN;
 	if (devinfo->ci)
