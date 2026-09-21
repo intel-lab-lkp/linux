@@ -925,10 +925,8 @@ static int axp20x_usb_power_probe(struct platform_device *pdev)
 	const struct axp_data *axp_data;
 	int i, irq, ret;
 
-	if (!axp20x) {
-		dev_err(dev, "Parent drvdata not set\n");
-		return -EINVAL;
-	}
+	if (!axp20x)
+		return dev_err_probe(dev, -EINVAL, "Parent drvdata not set\n");
 
 	axp_data = of_device_get_match_data(dev);
 
@@ -998,7 +996,9 @@ static int axp20x_usb_power_probe(struct platform_device *pdev)
 			ret = axp_data->axp20x_cfg_adc_reg(power);
 
 		if (ret)
-			return ret;
+			return dev_err_probe(dev, ret,
+					     "Failed to initialize for %s usage\n",
+					     IS_ENABLED(CONFIG_AXP20X_ADC) ? "iio" : "adc");
 	}
 
 	if (power->usb_bc_en_bit) {
@@ -1015,12 +1015,14 @@ static int axp20x_usb_power_probe(struct platform_device *pdev)
 						   axp_data->power_desc,
 						   &psy_cfg);
 	if (IS_ERR(power->supply))
-		return PTR_ERR(power->supply);
+		return dev_err_probe(dev, PTR_ERR(power->supply),
+				     "Failed to register power supply\n");
 
 	/* Request irqs after registering, as irqs may trigger immediately */
 	for (i = 0; i < axp_data->num_irq_names; i++) {
 		irq = platform_get_irq_byname(pdev, axp_data->irq_names[i]);
 		if (irq < 0)
+			/* platform_get_irq_byname() already produced an error message */
 			return irq;
 
 		power->irqs[i] = regmap_irq_get_virq(axp20x->regmap_irqc, irq);
@@ -1028,6 +1030,7 @@ static int axp20x_usb_power_probe(struct platform_device *pdev)
 						   axp20x_usb_power_irq, 0,
 						   DRVNAME, power);
 		if (ret < 0)
+			/* devm_request_any_context_irq() already produced an error message */
 			return ret;
 	}
 
