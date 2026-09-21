@@ -1298,8 +1298,6 @@ static int brcmf_bus_started(struct brcmf_pub *drvr, struct cfg80211_ops *ops)
 #endif
 #endif /* CONFIG_INET */
 
-	INIT_WORK(&drvr->bus_reset, brcmf_core_bus_reset);
-
 	/* populate debugfs */
 	brcmf_debugfs_add_entry(drvr, "revinfo", brcmf_revinfo_read);
 	debugfs_create_file("reset", 0600, brcmf_debugfs_get_devdir(drvr), drvr,
@@ -1349,6 +1347,7 @@ int brcmf_alloc(struct device *dev, struct brcmf_mp_device *settings)
 	drvr = wiphy_priv(wiphy);
 	drvr->wiphy = wiphy;
 	drvr->ops = ops;
+	INIT_WORK(&drvr->bus_reset, brcmf_core_bus_reset);
 	drvr->bus_if = dev_get_drvdata(dev);
 	drvr->bus_if->drvr = drvr;
 	drvr->settings = settings;
