@@ -571,9 +571,12 @@ static irqreturn_t exynos_sysmmu_irq(int irq, void *dev_id)
 	struct sysmmu_fault fault;
 	int ret = -ENOSYS;
 
-	WARN_ON(!data->active);
-
 	spin_lock(&data->lock);
+	if (!data->active) {
+		spin_unlock(&data->lock);
+		return IRQ_NONE;
+	}
+
 	clk_enable(data->clk_master);
 
 	itype = __ffs(readl(SYSMMU_REG(data, int_status)));
@@ -746,13 +749,6 @@ static int exynos_sysmmu_probe(struct platform_device *pdev)
 	if (irq <= 0)
 		return irq;
 
-	ret = devm_request_irq(dev, irq, exynos_sysmmu_irq, 0,
-				dev_name(dev), data);
-	if (ret) {
-		dev_err(dev, "Unable to register handler of irq %d\n", irq);
-		return ret;
-	}
-
 	data->clk = devm_clk_get_optional(dev, "sysmmu");
 	if (IS_ERR(data->clk))
 		return PTR_ERR(data->clk);
@@ -777,6 +773,19 @@ static int exynos_sysmmu_probe(struct platform_device *pdev)
 	data->sysmmu = dev;
 
 	__sysmmu_get_version(data);
+
+	/* Keep the hardware quiesced before publishing the IRQ handler. */
+	__sysmmu_enable_clocks(data);
+	writel(CTRL_DISABLE, data->sfrbase + REG_MMU_CTRL);
+	writel(0, data->sfrbase + REG_MMU_CFG);
+	__sysmmu_disable_clocks(data);
+
+	ret = devm_request_irq(dev, irq, exynos_sysmmu_irq, 0,
+			       dev_name(dev), data);
+	if (ret) {
+		dev_err(dev, "Unable to register handler of irq %d\n", irq);
+		return ret;
+	}
 
 	ret = iommu_device_sysfs_add(&data->iommu, &pdev->dev, NULL,
 				     dev_name(data->sysmmu));
