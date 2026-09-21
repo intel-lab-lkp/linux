@@ -90,7 +90,7 @@ static void __init pci_xen_swiotlb_init(void)
 	/* Xen can use a SWIOTLB pool anywhere in directly mapped memory. */
 	x86_swiotlb_flags &= ~(SWIOTLB_INIT_ADDRESSING_LIMIT |
 			       SWIOTLB_INIT_DEFAULT_OFF);
-	x86_swiotlb_flags |= SWIOTLB_INIT_REMAP | SWIOTLB_ANY;
+	x86_swiotlb_flags |= SWIOTLB_INIT_REMAP;
 	swiotlb_init_remap(x86_swiotlb_flags, xen_swiotlb_fixup);
 	dma_ops = &xen_swiotlb_dma_ops;
 	if (IS_ENABLED(CONFIG_PCI))
