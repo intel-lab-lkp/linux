@@ -182,6 +182,11 @@ static void sgm3140_init_v4l2_flash_config(struct sgm3140 *priv,
 }
 #endif
 
+static void sgm3140_fwnode_put(void *data)
+{
+	fwnode_handle_put(data);
+}
+
 static int sgm3140_probe(struct platform_device *pdev)
 {
 	struct sgm3140 *priv;
@@ -220,6 +225,10 @@ static int sgm3140_probe(struct platform_device *pdev)
 			"No fwnode child node found for connected LED.\n");
 		return -EINVAL;
 	}
+	ret = devm_add_action_or_reset(&pdev->dev, sgm3140_fwnode_put,
+				       child_node);
+	if (ret)
+		return ret;
 
 	ret = fwnode_property_read_u32(child_node, "flash-max-timeout-us",
 				       &priv->max_timeout);
@@ -276,7 +285,6 @@ static int sgm3140_probe(struct platform_device *pdev)
 	return ret;
 
 err:
-	fwnode_handle_put(child_node);
 	return ret;
 }
 
