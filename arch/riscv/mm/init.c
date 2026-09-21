@@ -190,7 +190,11 @@ void __init arch_mm_preinit(void)
 		swiotlb_flags |= SWIOTLB_ANY;
 	}
 
-	swiotlb_init(swiotlb, swiotlb_flags);
+	if ((max_pfn > PFN_DOWN(dma32_phys_limit)) &&
+	     (memblock_start_of_DRAM() < dma32_phys_limit))
+		swiotlb_flags |= SWIOTLB_INIT_ADDRESSING_LIMIT;
+
+	swiotlb_init(swiotlb_flags);
 
 	print_vm_layout();
 }
