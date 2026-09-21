@@ -6,8 +6,25 @@
  *
  *  Copyright (C) 2004, 2005, 2006 Red Hat, Inc., Ingo Molnar <mingo@redhat.com>
  */
-#ifndef CONFIG_PREEMPT_RT
 #include <linux/mutex.h>
+
+/*
+ * Where a mutex keeps its wait_lock differs between the two mutex
+ * implementations: native mutexes embed it directly, while PREEMPT_RT mutexes
+ * wrap an rt_mutex and keep it in rt_mutex_base. Provide a common accessor for
+ * the scheduler's proxy-execution code, which takes this lock to pin down a
+ * mutex owner.
+ */
+static inline raw_spinlock_t *mutex_wait_lock(struct mutex *lock)
+{
+#ifdef CONFIG_PREEMPT_RT
+	return &lock->rtmutex.wait_lock;
+#else
+	return &lock->wait_lock;
+#endif
+}
+
+#ifndef CONFIG_PREEMPT_RT
 /*
  * This is the control structure for tasks blocked on mutex, which resides
  * on the blocked task's kernel stack:
@@ -76,4 +93,19 @@ extern void debug_mutex_init(struct mutex *lock);
 # define debug_mutex_unlock(lock)			do { } while (0)
 # define debug_mutex_init(lock)				do { } while (0)
 #endif /* !CONFIG_DEBUG_MUTEXES */
-#endif /* CONFIG_PREEMPT_RT */
+
+#else /* CONFIG_PREEMPT_RT */
+
+/*
+ * On PREEMPT_RT a mutex is an rt_mutex, which keeps track of its owner in
+ * rt_mutex_base::owner. Expose it through the same helper the native mutex
+ * path uses so that the proxy-execution scheduler code builds for both.
+ */
+static inline struct task_struct *__mutex_owner(struct mutex *lock)
+{
+	if (!lock)
+		return NULL;
+	return rt_mutex_owner(&lock->rtmutex);
+}
+
+#endif /* !CONFIG_PREEMPT_RT */

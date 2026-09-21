@@ -936,8 +936,6 @@ config UCLAMP_BUCKETS_COUNT
 
 config SCHED_PROXY_EXEC
 	bool "Proxy Execution"
-	# Avoid some build failures w/ PREEMPT_RT until it can be fixed
-	depends on !PREEMPT_RT
 	# Need to investigate how to inform sched_ext of split contexts
 	depends on !SCHED_CLASS_EXT
 	# Not particularly useful until we get to multi-rq proxying
@@ -945,6 +943,10 @@ config SCHED_PROXY_EXEC
 	help
 	  This option enables proxy execution, a mechanism for mutex-owning
 	  tasks to inherit the scheduling context of higher priority waiters.
+
+	  On PREEMPT_RT the mutex implementation already provides priority
+	  inheritance via rt_mutex, so proxy execution has no blocked_on
+	  chains to follow and the feature is effectively inactive there.
 
 endmenu
 
