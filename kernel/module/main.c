@@ -2287,6 +2287,18 @@ static int elf_validity_cache_index_versions(struct load_info *info, int flags)
 	 * number of entries in every section.
 	 */
 	if (vers_ext_crc) {
+		/*
+		 * SHT_NOBITS skips offset validation; both sections
+		 * contain file data.
+		 */
+		if (info->sechdrs[vers_ext_crc].sh_type != SHT_PROGBITS ||
+		    info->sechdrs[vers_ext_name].sh_type != SHT_PROGBITS) {
+			pr_err("Invalid ELF __version_ext_* type: crc=%u name=%u\n",
+			       info->sechdrs[vers_ext_crc].sh_type,
+			       info->sechdrs[vers_ext_name].sh_type);
+			return -ENOEXEC;
+		}
+
 		crc_count = info->sechdrs[vers_ext_crc].sh_size / sizeof(u32);
 		name = (void *)info->hdr +
 			info->sechdrs[vers_ext_name].sh_offset;
