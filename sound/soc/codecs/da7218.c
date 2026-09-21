@@ -2626,18 +2626,7 @@ static int da7218_handle_supplies(struct snd_soc_component *component)
 	struct da7218_priv *da7218 = snd_soc_component_get_drvdata(component);
 	struct regulator *vddio;
 	u8 io_voltage_lvl = DA7218_IO_VOLTAGE_LEVEL_2_5V_3_6V;
-	int i, ret;
-
-	/* Get required supplies */
-	for (i = 0; i < DA7218_NUM_SUPPLIES; ++i)
-		da7218->supplies[i].supply = da7218_supply_names[i];
-
-	ret = devm_regulator_bulk_get(component->dev, DA7218_NUM_SUPPLIES,
-				      da7218->supplies);
-	if (ret) {
-		dev_err(component->dev, "Failed to get supplies\n");
-		return ret;
-	}
+	int ret;
 
 	/* Determine VDDIO voltage provided */
 	vddio = da7218->supplies[DA7218_SUPPLY_VDDIO].consumer;
@@ -2883,13 +2872,6 @@ static int da7218_probe(struct snd_soc_component *component)
 
 	da7218_handle_pdata(component);
 
-	/* Check if MCLK provided, if not the clock is NULL */
-	da7218->mclk = devm_clk_get_optional(component->dev, "mclk");
-	if (IS_ERR(da7218->mclk)) {
-		ret = PTR_ERR(da7218->mclk);
-		goto err_disable_reg;
-	}
-
 	/* Default PC to free-running */
 	snd_soc_component_write(component, DA7218_PC_COUNT, DA7218_PC_FREERUN_MASK);
 
@@ -2953,10 +2935,10 @@ static int da7218_probe(struct snd_soc_component *component)
 	}
 
 	if (da7218->irq) {
-		ret = devm_request_threaded_irq(component->dev, da7218->irq, NULL,
-						da7218_irq_thread,
-						IRQF_TRIGGER_LOW | IRQF_ONESHOT,
-						"da7218", component);
+		ret = request_threaded_irq(da7218->irq, NULL,
+					   da7218_irq_thread,
+					   IRQF_TRIGGER_LOW | IRQF_ONESHOT,
+					   "da7218", component);
 		if (ret != 0) {
 			dev_err(component->dev, "Failed to request IRQ %d: %d\n",
 				da7218->irq, ret);
@@ -2976,6 +2958,9 @@ err_disable_reg:
 static void da7218_remove(struct snd_soc_component *component)
 {
 	struct da7218_priv *da7218 = snd_soc_component_get_drvdata(component);
+
+	if (da7218->irq)
+		free_irq(da7218->irq, component);
 
 	regulator_bulk_disable(DA7218_NUM_SUPPLIES, da7218->supplies);
 }
@@ -3247,7 +3232,7 @@ static const struct regmap_config da7218_regmap_config = {
 static int da7218_i2c_probe(struct i2c_client *i2c)
 {
 	struct da7218_priv *da7218;
-	int ret;
+	int i, ret;
 
 	da7218 = devm_kzalloc(&i2c->dev, sizeof(*da7218), GFP_KERNEL);
 	if (!da7218)
@@ -3271,6 +3256,22 @@ static int da7218_i2c_probe(struct i2c_client *i2c)
 		dev_err(&i2c->dev, "regmap_init() failed: %d\n", ret);
 		return ret;
 	}
+
+	/* Get required supplies */
+	for (i = 0; i < DA7218_NUM_SUPPLIES; ++i)
+		da7218->supplies[i].supply = da7218_supply_names[i];
+
+	ret = devm_regulator_bulk_get(&i2c->dev, DA7218_NUM_SUPPLIES,
+				      da7218->supplies);
+	if (ret) {
+		dev_err(&i2c->dev, "Failed to get supplies\n");
+		return ret;
+	}
+
+	/* Check if MCLK provided, if not the clock is NULL */
+	da7218->mclk = devm_clk_get_optional(&i2c->dev, "mclk");
+	if (IS_ERR(da7218->mclk))
+		return PTR_ERR(da7218->mclk);
 
 	ret = devm_snd_soc_register_component(&i2c->dev,
 			&soc_component_dev_da7218, &da7218_dai, 1);
