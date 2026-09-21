@@ -59,6 +59,12 @@ extern const int sysctl_vals[];
 #define SYSCTL_LONG_ONE		((void *)&sysctl_long_vals[1])
 #define SYSCTL_LONG_MAX		((void *)&sysctl_long_vals[2])
 
+#define SYSCTL_UINT_ZERO	((unsigned int *)&sysctl_uint_vals[0])
+#define SYSCTL_UINT_ONE		((unsigned int *)&sysctl_uint_vals[1])
+#define SYSCTL_UINT_TWO		((unsigned int *)&sysctl_uint_vals[2])
+#define SYSCTL_UINT_THREE	((unsigned int *)&sysctl_uint_vals[3])
+#define SYSCTL_UINT_FOUR	((unsigned int *)&sysctl_uint_vals[4])
+
 /*
  *
  * "dir" originates from read_iter (dir = 0) or write_iter (dir = 1)
@@ -73,6 +79,7 @@ extern const int sysctl_vals[];
 #define SYSCTL_KERN_TO_USER(dir) (!dir)
 
 extern const unsigned long sysctl_long_vals[];
+extern const unsigned int sysctl_uint_vals[];
 
 typedef int proc_handler(const struct ctl_table *ctl, int dir, void *buf,
 			 size_t *lenp, loff_t *ppos);
