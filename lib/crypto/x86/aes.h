@@ -307,6 +307,22 @@ void aes_xts_encrypt_aesni(u8 *dst, const u8 *src, long nblocks,
 			   u8 tweak[AES_BLOCK_SIZE], const struct aes_key *key);
 void aes_xts_decrypt_aesni(u8 *dst, const u8 *src, long nblocks,
 			   u8 tweak[AES_BLOCK_SIZE], const struct aes_key *key);
+void aes_xts_encrypt_iv(const struct aes_enckey *tweak_key,
+			u8 iv[AES_BLOCK_SIZE]);
+void aes_xts_encrypt_aesni_avx(const struct aes_key *key, const u8 *src,
+			       u8 *dst, long nblocks, u8 tweak[AES_BLOCK_SIZE]);
+void aes_xts_decrypt_aesni_avx(const struct aes_key *key, const u8 *src,
+			       u8 *dst, long nblocks, u8 tweak[AES_BLOCK_SIZE]);
+void aes_xts_encrypt_vaes_avx2(const struct aes_key *key, const u8 *src,
+			       u8 *dst, long nblocks, u8 tweak[AES_BLOCK_SIZE]);
+void aes_xts_decrypt_vaes_avx2(const struct aes_key *key, const u8 *src,
+			       u8 *dst, long nblocks, u8 tweak[AES_BLOCK_SIZE]);
+void aes_xts_encrypt_vaes_avx512(const struct aes_key *key, const u8 *src,
+				 u8 *dst, long nblocks,
+				 u8 tweak[AES_BLOCK_SIZE]);
+void aes_xts_decrypt_vaes_avx512(const struct aes_key *key, const u8 *src,
+				 u8 *dst, long nblocks,
+				 u8 tweak[AES_BLOCK_SIZE]);
 
 /* len is always a positive multiple of AES_BLOCK_SIZE here. */
 static __always_inline bool
@@ -319,12 +335,46 @@ aes_xts_crypt_x86(u8 *dst, const u8 *src, size_t len, u8 tweak[AES_BLOCK_SIZE],
 		return false;
 
 	kernel_fpu_begin();
-	if (!cont)
-		aes_encrypt_aesni(tweak, tweak, &key->tweak_key);
-	if (enc)
-		aes_xts_encrypt_aesni(dst, src, nblocks, tweak, &key->main_key);
-	else
-		aes_xts_decrypt_aesni(dst, src, nblocks, tweak, &key->main_key);
+	if (IS_ENABLED(CONFIG_X86_64) &&
+	    static_branch_likely(&have_vaes_avx512)) {
+		if (!cont)
+			aes_xts_encrypt_iv(&key->tweak_key, tweak);
+		if (enc)
+			aes_xts_encrypt_vaes_avx512(&key->main_key, src, dst,
+						    nblocks, tweak);
+		else
+			aes_xts_decrypt_vaes_avx512(&key->main_key, src, dst,
+						    nblocks, tweak);
+	} else if (IS_ENABLED(CONFIG_X86_64) &&
+		   static_branch_likely(&have_vaes_avx2)) {
+		if (!cont)
+			aes_xts_encrypt_iv(&key->tweak_key, tweak);
+		if (enc)
+			aes_xts_encrypt_vaes_avx2(&key->main_key, src, dst,
+						  nblocks, tweak);
+		else
+			aes_xts_decrypt_vaes_avx2(&key->main_key, src, dst,
+						  nblocks, tweak);
+	} else if (IS_ENABLED(CONFIG_X86_64) &&
+		   static_branch_likely(&have_aesni_avx)) {
+		if (!cont)
+			aes_xts_encrypt_iv(&key->tweak_key, tweak);
+		if (enc)
+			aes_xts_encrypt_aesni_avx(&key->main_key, src, dst,
+						  nblocks, tweak);
+		else
+			aes_xts_decrypt_aesni_avx(&key->main_key, src, dst,
+						  nblocks, tweak);
+	} else {
+		if (!cont)
+			aes_encrypt_aesni(tweak, tweak, &key->tweak_key);
+		if (enc)
+			aes_xts_encrypt_aesni(dst, src, nblocks, tweak,
+					      &key->main_key);
+		else
+			aes_xts_decrypt_aesni(dst, src, nblocks, tweak,
+					      &key->main_key);
+	}
 	kernel_fpu_end();
 	return true;
 }
