@@ -433,6 +433,20 @@ static ssize_t isolate_strategy_store(struct device *dev, struct device_attribut
 	return count;
 }
 
+static ssize_t dev_usage_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct uacce_device *uacce = to_uacce_device(dev);
+	int ret;
+
+	ret = uacce->ops->get_dev_usage(uacce, buf, PAGE_SIZE - 1);
+	if (ret < 0)
+		return ret;
+
+	buf[ret++] = '\n';
+
+	return ret;
+}
+
 static DEVICE_ATTR_RO(api);
 static DEVICE_ATTR_RO(flags);
 static DEVICE_ATTR_RO(available_instances);
@@ -441,6 +455,7 @@ static DEVICE_ATTR_RO(region_mmio_size);
 static DEVICE_ATTR_RO(region_dus_size);
 static DEVICE_ATTR_RO(isolate);
 static DEVICE_ATTR_RW(isolate_strategy);
+static DEVICE_ATTR_RO(dev_usage);
 
 static struct attribute *uacce_dev_attrs[] = {
 	&dev_attr_api.attr,
@@ -451,6 +466,7 @@ static struct attribute *uacce_dev_attrs[] = {
 	&dev_attr_region_dus_size.attr,
 	&dev_attr_isolate.attr,
 	&dev_attr_isolate_strategy.attr,
+	&dev_attr_dev_usage.attr,
 	NULL,
 };
 
@@ -472,6 +488,9 @@ static umode_t uacce_dev_is_visible(struct kobject *kobj,
 		return 0;
 
 	if (attr == &dev_attr_isolate.attr && !uacce->ops->get_isolate_state)
+		return 0;
+
+	if (attr == &dev_attr_dev_usage.attr && !uacce->ops->get_dev_usage)
 		return 0;
 
 	return attr->mode;

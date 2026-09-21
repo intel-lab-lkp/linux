@@ -34,6 +34,10 @@ struct uacce_qfile_region {
  * @get_isolate_state: get the device state after set the isolate strategy
  * @isolate_err_threshold_write: stored the isolate error threshold to the device
  * @isolate_err_threshold_read: read the isolate error threshold value from the device
+ * @get_dev_usage: get the device usage. Write a string describing current
+ *                 usage as a percentage (0-100) into @buf, at most @size
+ *                 bytes, without a trailing newline. Return the number of
+ *                 bytes written on success or a negative errno on failure.
  */
 struct uacce_ops {
 	int (*get_available_instances)(struct uacce_device *uacce);
@@ -50,6 +54,7 @@ struct uacce_ops {
 	enum uacce_dev_state (*get_isolate_state)(struct uacce_device *uacce);
 	int (*isolate_err_threshold_write)(struct uacce_device *uacce, u32 num);
 	u32 (*isolate_err_threshold_read)(struct uacce_device *uacce);
+	int (*get_dev_usage)(struct uacce_device *uacce, char *buf, int size);
 };
 
 /**
