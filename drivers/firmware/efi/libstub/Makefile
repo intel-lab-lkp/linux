@@ -155,6 +155,11 @@ STUBCOPY_FLAGS-$(CONFIG_LOONGARCH)	+= --prefix-alloc-sections=.init \
 					   --prefix-symbols=__efistub_
 STUBCOPY_RELOC-$(CONFIG_LOONGARCH)	:= R_LARCH_MARK_LA
 
+# Drop the section created by __ADDRESSABLE() from the absolute symbol check
+# and the objcopy, otherwise it gets prefixed and doesn't get discared.
+STUBCOPY_RM_SECTIONS			:= --remove-section=.discard.addressable
+STUBCOPY_FLAGS-y			+= $(STUBCOPY_RM_SECTIONS)
+
 $(obj)/%.stub.o: $(obj)/%.o FORCE
 	$(call if_changed,stubcopy)
 
@@ -166,7 +171,7 @@ $(obj)/%.stub.o: $(obj)/%.o FORCE
 #
 quiet_cmd_stubcopy = STUBCPY $@
       cmd_stubcopy =							\
-	$(STRIP) --strip-debug -o $@ $<;				\
+	$(STRIP) --strip-debug $(STUBCOPY_RM_SECTIONS) -o $@ $<;	\
 	if $(OBJDUMP) -r $@ | grep $(STUBCOPY_RELOC-y); then		\
 		echo "$@: absolute symbol references not allowed in the EFI stub" >&2; \
 		/bin/false;						\
