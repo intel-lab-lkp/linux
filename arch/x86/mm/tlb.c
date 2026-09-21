@@ -1473,6 +1473,9 @@ static void invlpgb_kernel_range_flush(unsigned long start, unsigned long end)
 {
 	unsigned long addr, nr;
 
+	/* Keep the INVLPGB operations and TLBSYNC on the same CPU. */
+	guard(preempt)();
+
 	for (addr = start; addr < end; addr += nr << PAGE_SHIFT) {
 		nr = (end - addr) >> PAGE_SHIFT;
 
@@ -1521,8 +1524,6 @@ static void kernel_tlb_flush_range(unsigned long start, unsigned long end)
 
 void flush_tlb_kernel_range(unsigned long start, unsigned long end)
 {
-	guard(preempt)();
-
 	if (end == TLB_FLUSH_ALL ||
 	    tlb_range_exceeds_ceiling(start, end, PAGE_SHIFT))
 		kernel_tlb_flush_all();
