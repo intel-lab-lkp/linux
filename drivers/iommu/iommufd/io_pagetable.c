@@ -1582,6 +1582,7 @@ int iopt_table_enforce_dev_resv_regions(struct io_pagetable *iopt,
 					phys_addr_t *sw_msi_start)
 {
 	struct iommu_resv_region *resv;
+	struct iommu_group *group;
 	LIST_HEAD(resv_regions);
 	unsigned int num_hw_msi = 0;
 	unsigned int num_sw_msi = 0;
@@ -1591,8 +1592,16 @@ int iopt_table_enforce_dev_resv_regions(struct io_pagetable *iopt,
 		return -EINVAL;
 
 	down_write(&iopt->iova_rwsem);
-	/* FIXME: drivers allocate memory but there is no failure propagated */
-	iommu_get_resv_regions(dev, &resv_regions);
+
+	group = iommu_group_get(dev);
+	if (!group) {
+		rc = -ENODEV;
+		goto out_unlock;
+	}
+
+	rc = iommu_get_group_resv_regions(group, &resv_regions);
+	if (rc)
+		goto out_free_resv;
 
 	list_for_each_entry(resv, &resv_regions, list) {
 		if (resv->type == IOMMU_RESV_DIRECT_RELAXABLE)
@@ -1624,6 +1633,8 @@ out_reserved:
 	__iopt_remove_reserved_iova(iopt, dev);
 out_free_resv:
 	iommu_put_resv_regions(dev, &resv_regions);
+	iommu_group_put(group);
+out_unlock:
 	up_write(&iopt->iova_rwsem);
 	return rc;
 }
