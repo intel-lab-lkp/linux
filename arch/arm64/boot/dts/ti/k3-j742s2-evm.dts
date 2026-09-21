@@ -24,3 +24,5 @@
 		bootph-all;
 	};
 };
+
+#include "k3-j742s2-ti-ipc-firmware.dtsi"
