@@ -3862,16 +3862,31 @@ out:
 	return ret;
 }
 
-static bool rescan_should_stop(struct btrfs_fs_info *fs_info)
+/*
+ * Return true if the rescan should be stopped.
+ * If returning true, update @clear_rescan_ret to indicate whether the rescan
+ * flag should be cleared.
+ *
+ * Return false if the rescan should continue.
+ */
+static bool rescan_should_stop(struct btrfs_fs_info *fs_info, bool *clear_rescan_ret)
 {
-	if (btrfs_fs_closing(fs_info))
+	if (btrfs_fs_closing(fs_info)) {
+		*clear_rescan_ret = false;
 		return true;
-	if (test_bit(BTRFS_FS_STATE_REMOUNTING, &fs_info->fs_state))
+	}
+	if (test_bit(BTRFS_FS_STATE_REMOUNTING, &fs_info->fs_state)) {
+		*clear_rescan_ret = false;
 		return true;
-	if (!btrfs_qgroup_enabled(fs_info))
+	}
+	if (!btrfs_qgroup_enabled(fs_info)) {
+		*clear_rescan_ret = true;
 		return true;
-	if (test_bit(BTRFS_QGROUP_RUNTIME_BIT_CANCEL_RESCAN, &fs_info->qgroup_flags))
+	}
+	if (test_bit(BTRFS_QGROUP_RUNTIME_BIT_CANCEL_RESCAN, &fs_info->qgroup_flags)) {
+		*clear_rescan_ret = true;
 		return true;
+	}
 	return false;
 }
 
@@ -3883,7 +3898,9 @@ static void btrfs_qgroup_rescan_worker(struct btrfs_work *work)
 	struct btrfs_trans_handle *trans = NULL;
 	int ret = 0;
 	bool stopped = false;
+	bool clear_rescan = false;
 	bool did_leaf_rescans = false;
+	bool canceled;
 
 	if (btrfs_qgroup_mode(fs_info) == BTRFS_QGROUP_MODE_SIMPLE)
 		return;
@@ -3900,7 +3917,7 @@ static void btrfs_qgroup_rescan_worker(struct btrfs_work *work)
 	path->search_commit_root = true;
 	path->skip_locking = true;
 
-	while (!ret && !(stopped = rescan_should_stop(fs_info))) {
+	while (!ret && !(stopped = rescan_should_stop(fs_info, &clear_rescan))) {
 		trans = btrfs_start_transaction(fs_info->fs_root, 0);
 		if (IS_ERR(trans)) {
 			ret = PTR_ERR(trans);
@@ -3947,8 +3964,8 @@ out:
 	}
 
 	mutex_lock(&fs_info->qgroup_rescan_lock);
-	if (!stopped || test_bit(BTRFS_QGROUP_RUNTIME_BIT_CANCEL_RESCAN,
-				 &fs_info->qgroup_flags))
+	if (!stopped || clear_rescan ||
+	    test_bit(BTRFS_QGROUP_RUNTIME_BIT_CANCEL_RESCAN, &fs_info->qgroup_flags))
 		clear_bit(BTRFS_QGROUP_STATUS_BIT_RESCAN, &fs_info->qgroup_flags);
 	if (trans) {
 		int ret2 = update_qgroup_status_item(trans);
@@ -3960,6 +3977,7 @@ out:
 	}
 	fs_info->qgroup_rescan_running = false;
 	clear_bit(BTRFS_QGROUP_RUNTIME_BIT_CANCEL_RESCAN, &fs_info->qgroup_flags);
+	canceled = !test_bit(BTRFS_QGROUP_STATUS_BIT_RESCAN, &fs_info->qgroup_flags);
 	complete_all(&fs_info->qgroup_rescan_completion);
 	mutex_unlock(&fs_info->qgroup_rescan_lock);
 
@@ -3969,9 +3987,10 @@ out:
 	btrfs_end_transaction(trans);
 
 	if (stopped) {
-		btrfs_info(fs_info, "qgroup scan paused");
-	} else if (test_bit(BTRFS_QGROUP_RUNTIME_BIT_CANCEL_RESCAN, &fs_info->qgroup_flags)) {
-		btrfs_info(fs_info, "qgroup scan cancelled");
+		if (canceled)
+			btrfs_info(fs_info, "qgroup scan cancelled");
+		else
+			btrfs_info(fs_info, "qgroup scan paused");
 	} else if (ret >= 0) {
 		btrfs_info(fs_info, "qgroup scan completed%s",
 			ret > 0 ? " (inconsistency flag cleared)" : "");
