@@ -55,6 +55,19 @@ struct mctp_fq_addr {
 #define MCTP_TAG_PREALLOC	0x10
 
 #define MCTP_OPT_ADDR_EXT	1
+#define MCTP_OPT_ROUTE_SRCADDR	2
+
+/* Query structure for MCTP_OPT_ROUTE_SRCADDR getsockopt.
+ *
+ * Caller fills in @net and @daddr before calling getsockopt.
+ * Performs a route lookup and returns the local source EID in @saddr.
+ */
+struct mctp_route_srcaddr {
+	unsigned int	net;
+	mctp_eid_t	daddr;
+	mctp_eid_t	saddr;
+	__u8		__pad[2];
+};
 
 #define SIOCMCTPALLOCTAG	(SIOCPROTOPRIVATE + 0)
 #define SIOCMCTPDROPTAG		(SIOCPROTOPRIVATE + 1)

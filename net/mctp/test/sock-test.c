@@ -379,10 +379,71 @@ static void mctp_test_assumptions(struct kunit *test)
 	KUNIT_ASSERT_EQ(test, mctp_default_net(&init_net), 1);
 }
 
+static void mctp_test_sockopt_init(sockopt_t *opt, struct kvec *vec,
+				   void *buf, size_t len)
+{
+	vec->iov_base = buf;
+	vec->iov_len = len;
+	iov_iter_kvec(&opt->iter_in, ITER_SOURCE, vec, 1, len);
+	iov_iter_kvec(&opt->iter_out, ITER_DEST, vec, 1, len);
+	opt->optlen = len;
+}
+
+static void mctp_test_getsockopt_route_srcaddr(struct kunit *test)
+{
+	struct mctp_route_srcaddr rsa = {
+		.net = MCTP_INITIAL_DEFAULT_NET,
+		.daddr = 9,
+	};
+	struct mctp_test_route *rt;
+	struct mctp_test_dev *dev;
+	struct socket *sock;
+	struct kvec vec;
+	sockopt_t opt;
+	int rc;
+
+	__mctp_sock_test_init(test, &dev, &rt, &sock);
+
+	/* Query the source EID for destination EID 9; the device has
+	 * local EID 8, so the route lookup should return saddr=8.
+	 */
+	mctp_test_sockopt_init(&opt, &vec, &rsa, sizeof(rsa));
+	rc = mctp_getsockopt(sock, SOL_MCTP, MCTP_OPT_ROUTE_SRCADDR, &opt);
+	KUNIT_EXPECT_EQ(test, rc, 0);
+	KUNIT_EXPECT_EQ(test, (int)rsa.saddr, 8);
+	KUNIT_EXPECT_EQ(test, opt.optlen, (int)sizeof(rsa));
+
+	__mctp_sock_test_fini(test, dev, rt, sock);
+}
+
+static void mctp_test_getsockopt_route_srcaddr_no_route(struct kunit *test)
+{
+	struct mctp_route_srcaddr rsa = {
+		.net = MCTP_INITIAL_DEFAULT_NET,
+		.daddr = 99,  /* no route for this EID */
+	};
+	struct mctp_test_route *rt;
+	struct mctp_test_dev *dev;
+	struct socket *sock;
+	struct kvec vec;
+	sockopt_t opt;
+	int rc;
+
+	__mctp_sock_test_init(test, &dev, &rt, &sock);
+
+	mctp_test_sockopt_init(&opt, &vec, &rsa, sizeof(rsa));
+	rc = mctp_getsockopt(sock, SOL_MCTP, MCTP_OPT_ROUTE_SRCADDR, &opt);
+	KUNIT_EXPECT_EQ(test, rc, -EHOSTUNREACH);
+
+	__mctp_sock_test_fini(test, dev, rt, sock);
+}
+
 static struct kunit_case mctp_test_cases[] = {
 	KUNIT_CASE(mctp_test_assumptions),
 	KUNIT_CASE(mctp_test_sock_sendmsg_extaddr),
 	KUNIT_CASE(mctp_test_sock_recvmsg_extaddr),
+	KUNIT_CASE(mctp_test_getsockopt_route_srcaddr),
+	KUNIT_CASE(mctp_test_getsockopt_route_srcaddr_no_route),
 	KUNIT_CASE_PARAM(mctp_test_bind_conflicts, mctp_bind_pair_gen_params),
 	KUNIT_CASE(mctp_test_bind_invalid),
 	{}
