@@ -2667,11 +2667,6 @@ static int rt5640_probe(struct snd_soc_component *component)
 	bool dmic_en = false;
 	u32 val;
 
-	/* Check if MCLK provided */
-	rt5640->mclk = devm_clk_get_optional(component->dev, "mclk");
-	if (IS_ERR(rt5640->mclk))
-		return PTR_ERR(rt5640->mclk);
-
 	rt5640->component = component;
 
 	snd_soc_dapm_force_bias_level(dapm, SND_SOC_BIAS_OFF);
@@ -3042,6 +3037,11 @@ static int rt5640_i2c_probe(struct i2c_client *i2c)
 
 	regmap_update_bits(rt5640->regmap, RT5640_GCTL1,
 				RT5640_MCLK_DET, RT5640_MCLK_DET);
+
+	/* Check if MCLK provided */
+	rt5640->mclk = devm_clk_get_optional(&i2c->dev, "mclk");
+	if (IS_ERR(rt5640->mclk))
+		return PTR_ERR(rt5640->mclk);
 
 	rt5640->hp_mute = true;
 	rt5640->irq = i2c->irq;
