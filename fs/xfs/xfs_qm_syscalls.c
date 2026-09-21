@@ -371,16 +371,13 @@ xfs_qm_scall_setqlim(
 	if (newlim->d_fieldmask & QC_INO_TIMER)
 		xfs_setqlim_timer(mp, res, qlim, newlim->d_ino_timer);
 
-	if (id != 0) {
-		/*
-		 * If the user is now over quota, start the timelimit.
-		 * The user will not be 'warned'.
-		 * Note that we keep the timers ticking, whether enforcement
-		 * is on or off. We don't really want to bother with iterating
-		 * over all ondisk dquots and turning the timers on/off.
-		 */
-		xfs_qm_adjust_dqtimers(dqp);
-	}
+	/*
+	 * If the user is now over quota, start the timelimit.  The user will
+	 * not be 'warned'.  Note that we keep the timers ticking, whether
+	 * enforcement is on or off. We don't really want to bother with
+	 * iterating over all ondisk dquots and turning the timers on/off.
+	 */
+	xfs_qm_adjust_dqenforcement(dqp);
 	dqp->q_flags |= XFS_DQFLAG_DIRTY;
 	xfs_trans_log_dquot(tp, dqp);
 
