@@ -1309,14 +1309,14 @@ static int bcmasp_probe(struct platform_device *pdev)
 					 sizeof(*priv->mda_filters), GFP_KERNEL);
 	if (!priv->mda_filters) {
 		ret = -ENOMEM;
-		goto err_clock_disable;
+		goto err_depopulate;
 	}
 
 	priv->net_filters = devm_kcalloc(dev, priv->num_net_filters,
 					 sizeof(*priv->net_filters), GFP_KERNEL);
 	if (!priv->net_filters) {
 		ret = -ENOMEM;
-		goto err_clock_disable;
+		goto err_depopulate;
 	}
 
 	bcmasp_core_init_filters(priv);
@@ -1327,7 +1327,7 @@ static int bcmasp_probe(struct platform_device *pdev)
 	if (!ports_node) {
 		dev_warn(dev, "No ports found\n");
 		ret = -EINVAL;
-		goto err_clock_disable;
+		goto err_depopulate;
 	}
 
 	i = 0;
@@ -1369,6 +1369,8 @@ static int bcmasp_probe(struct platform_device *pdev)
 
 err_cleanup:
 	bcmasp_remove_intfs(priv);
+err_depopulate:
+	of_platform_depopulate(dev);
 err_clock_disable:
 	clk_disable_unprepare(priv->clk);
 
@@ -1383,6 +1385,7 @@ static void bcmasp_remove(struct platform_device *pdev)
 		return;
 
 	bcmasp_remove_intfs(priv);
+	of_platform_depopulate(&pdev->dev);
 }
 
 static void bcmasp_shutdown(struct platform_device *pdev)
