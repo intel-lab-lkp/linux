@@ -570,6 +570,13 @@ config OBJTOOL_WERROR
 
 	  If unsure, say Y.
 
+# For when objtool defers its work to the linked image (vmlinux.o or module.o)
+# rather than running on individual translation units.
+config OBJTOOL_DEFERRED
+	def_bool y
+	depends on OBJTOOL
+	depends on LTO_CLANG || X86_KERNEL_IBT || KLP_BUILD
+
 config STACK_VALIDATION
 	bool "Compile-time stack metadata validation"
 	depends on HAVE_STACK_VALIDATION && UNWINDER_FRAME_POINTER
