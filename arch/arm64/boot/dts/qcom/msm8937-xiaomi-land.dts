@@ -81,6 +81,13 @@
 		gpios = <&tlmm 45 GPIO_ACTIVE_HIGH>;
 	};
 
+	multi-led {
+		compatible = "leds-group-multicolor";
+		color = <LED_COLOR_ID_RGB>;
+		function = LED_FUNCTION_STATUS;
+		leds = <&led0>, <&led1>, <&led2>;
+	};
+
 	reserved-memory {
 		reserved@84a00000 {
 			reg = <0x0 0x84a00000 0x0 0x1900000>;
@@ -115,23 +122,20 @@
 		vcc-supply = <&pm8937_l10>;
 		vio-supply = <&pm8937_l5>;
 
-		led@0 {
+		led0: led@0 {
 			reg = <0>;
-			function = LED_FUNCTION_STATUS;
 			led-max-microamp = <5000>;
 			color = <LED_COLOR_ID_RED>;
 		};
 
-		led@1 {
+		led1: led@1 {
 			reg = <1>;
-			function = LED_FUNCTION_STATUS;
 			led-max-microamp = <5000>;
 			color = <LED_COLOR_ID_GREEN>;
 		};
 
-		led@2 {
+		led2: led@2 {
 			reg = <2>;
-			function = LED_FUNCTION_STATUS;
 			led-max-microamp = <5000>;
 			color = <LED_COLOR_ID_BLUE>;
 		};
