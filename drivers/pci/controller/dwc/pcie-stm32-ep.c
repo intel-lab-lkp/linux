@@ -304,7 +304,6 @@ static void stm32_pcie_remove(struct platform_device *pdev)
 
 	dw_pcie_stop_link(pci);
 
-	pci_epc_deinit_notify(ep->epc);
 	dw_pcie_ep_deinit(ep);
 
 	stm32_pcie_disable_resources(stm32_pcie);

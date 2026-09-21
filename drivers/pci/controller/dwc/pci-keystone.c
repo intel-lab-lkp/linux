@@ -121,6 +121,7 @@ struct ks_pcie_of_data {
 
 struct keystone_pcie {
 	struct dw_pcie		*pci;
+	enum dw_pcie_device_mode mode;
 	/* PCI Device ID */
 	u32			device_id;
 	int			intx_host_irqs[PCI_NUM_INTX];
@@ -1226,6 +1227,7 @@ static int ks_pcie_probe(struct platform_device *pdev)
 
 	ks_pcie->np = np;
 	ks_pcie->pci = pci;
+	ks_pcie->mode = mode;
 	ks_pcie->link = link;
 	ks_pcie->num_lanes = num_lanes;
 	ks_pcie->phy = phy;
@@ -1349,8 +1351,12 @@ static void ks_pcie_remove(struct platform_device *pdev)
 {
 	struct keystone_pcie *ks_pcie = platform_get_drvdata(pdev);
 	struct device_link **link = ks_pcie->link;
+	struct dw_pcie *pci = ks_pcie->pci;
 	int num_lanes = ks_pcie->num_lanes;
 	struct device *dev = &pdev->dev;
+
+	if (ks_pcie->mode == DW_PCIE_EP_TYPE)
+		dw_pcie_ep_deinit(&pci->ep);
 
 	pm_runtime_put(dev);
 	pm_runtime_disable(dev);
