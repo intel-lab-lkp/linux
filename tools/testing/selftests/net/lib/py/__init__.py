@@ -16,6 +16,8 @@ from .utils import CmdExitFailure, fd_read_timeout, cmd, bkg, defer, \
     bpftool, ip, ethtool, bpftrace, rand_port, rand_ports, wait_port_listen, \
     ctl_file_write, wait_file, tool, tc
 from .bpf import bpf_map_set, bpf_map_dump, bpf_prog_map_ids
+from .rsskey import RSS_KEY_QMAX, rss_key_bit, rss_key_assign_bit, \
+    rss_key_window, rss_key_toeplitz, rss_key_full_rank, rss_key_layout
 from .ynl import NlError, NlctrlFamily, YnlFamily, \
     EthtoolFamily, NetdevFamily, RtnlFamily, RtnlAddrFamily, RtnlRouteFamily
 from .ynl import NetshaperFamily, DevlinkFamily, PSPFamily, Netlink
@@ -31,6 +33,9 @@ __all__ = ["KSRC",
            "bpftool", "ip", "ethtool", "bpftrace", "rand_port", "rand_ports",
            "wait_port_listen", "ctl_file_write", "wait_file", "tool", "tc",
            "bpf_map_set", "bpf_map_dump", "bpf_prog_map_ids",
+           "RSS_KEY_QMAX", "rss_key_bit", "rss_key_assign_bit",
+           "rss_key_window", "rss_key_toeplitz", "rss_key_full_rank",
+           "rss_key_layout",
            "NetdevSim", "NetdevSimDev",
            "NetshaperFamily", "DevlinkFamily", "PSPFamily", "NlError",
            "YnlFamily", "EthtoolFamily", "NetdevFamily", "RtnlFamily",
