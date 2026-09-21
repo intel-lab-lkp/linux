@@ -350,11 +350,14 @@ static int write_noreturns(struct objtool_file *file)
 	fp = fopen(opts.noreturns_write, "w");
 	if (!fp) {
 		ERROR_GLIBC("fopen");
+		free(buf);
 		return -1;
 	}
 
 	if (fwrite(buf, 1, len, fp) != len) {
 		ERROR_GLIBC("fwrite");
+		free(buf);
+		fclose(fp);
 		return -1;
 	}
 
