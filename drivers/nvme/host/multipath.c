@@ -623,6 +623,23 @@ static int nvme_ns_head_report_zones(struct gendisk *disk, sector_t sector,
 #define nvme_ns_head_report_zones	NULL
 #endif /* CONFIG_BLK_DEV_ZONED */
 
+static void nvme_ns_head_disk_changed(struct gendisk *disk)
+{
+	struct nvme_ns_head *head = disk->private_data;
+	struct nvme_ns *ns;
+	int srcu_idx;
+
+	lockdep_assert_held(&disk->open_mutex);
+
+	srcu_idx = srcu_read_lock(&head->srcu);
+	list_for_each_entry_srcu(ns, &head->list, siblings,
+				 srcu_read_lock_held(&head->srcu)) {
+		if (bdev_clone_partitions(head->disk, ns->disk))
+			clear_bit(NVME_NS_READY, &ns->flags);
+	}
+	srcu_read_unlock(&head->srcu, srcu_idx);
+}
+
 const struct block_device_operations nvme_ns_head_ops = {
 	.owner		= THIS_MODULE,
 	.submit_bio	= nvme_ns_head_submit_bio,
@@ -634,6 +651,7 @@ const struct block_device_operations nvme_ns_head_ops = {
 	.get_unique_id	= nvme_ns_head_get_unique_id,
 	.report_zones	= nvme_ns_head_report_zones,
 	.pr_ops		= &nvme_pr_ops,
+	.disk_changed_notify	= nvme_ns_head_disk_changed,
 };
 
 static const struct file_operations nvme_ns_head_chr_fops = {
@@ -1360,6 +1378,20 @@ void nvme_mpath_remove_sysfs_link(struct nvme_ns *ns)
 
 void nvme_mpath_add_disk(struct nvme_ns *ns, __le32 anagrpid)
 {
+	struct nvme_ns_head *head = ns->head;
+	int ret;
+
+	if (!head->disk)
+		return;
+
+	mutex_lock(&head->disk->open_mutex);
+	ret = bdev_clone_partitions(head->disk, ns->disk);
+	mutex_unlock(&head->disk->open_mutex);
+	if (ret) {
+		clear_bit(NVME_NS_READY, &ns->flags);
+		return;
+	}
+
 	if (nvme_ctrl_use_ana(ns->ctrl)) {
 		struct nvme_ana_group_desc desc = {
 			.grpid = anagrpid,
