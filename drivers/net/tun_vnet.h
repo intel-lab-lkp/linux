@@ -109,12 +109,9 @@ static inline long tun_vnet_ioctl(int *vnet_hdr_sz, unsigned int *flags,
 	}
 }
 
-static inline unsigned int tun_vnet_parse_size(netdev_features_t features)
+static inline unsigned int tun_vnet_parse_size(int vnet_hdr_sz)
 {
-	if (!(features & NETIF_F_GSO_UDP_TUNNEL))
-		return sizeof(struct virtio_net_hdr);
-
-	return TUN_VNET_TNL_SIZE;
+	return min_t(unsigned int, sizeof(struct virtio_net_common_hdr), vnet_hdr_sz);
 }
 
 static inline int __tun_vnet_hdr_get(int sz, unsigned int flags,
@@ -122,14 +119,19 @@ static inline int __tun_vnet_hdr_get(int sz, unsigned int flags,
 				     struct iov_iter *from,
 				     struct virtio_net_hdr *hdr)
 {
-	unsigned int parsed_size = tun_vnet_parse_size(features);
+	unsigned int parsed_size = tun_vnet_parse_size(sz);
+	u8 tmp[sizeof(struct virtio_net_common_hdr)]; // temp buffer with known size
 	u16 hdr_len;
 
 	if (iov_iter_count(from) < sz)
 		return -EINVAL;
 
-	if (!copy_from_iter_full(hdr, parsed_size, from))
+	/* copy parsed size data to the tmp buffer, otherwise compiler will complain */
+	if (!copy_from_iter_full(tmp, parsed_size, from))
 		return -EFAULT;
+
+	/* now copy the relevant data from tmp to hdr */
+	memcpy(hdr, tmp, min(parsed_size, sizeof(*hdr)));
 
 	hdr_len = tun_vnet16_to_cpu(flags, hdr->hdr_len);
 
@@ -155,14 +157,17 @@ static inline int tun_vnet_hdr_get(int sz, unsigned int flags,
 
 static inline int __tun_vnet_hdr_put(int sz, netdev_features_t features,
 				     struct iov_iter *iter,
-				     const struct virtio_net_hdr *hdr)
+				     const struct virtio_net_common_hdr *hdr)
 {
-	unsigned int parsed_size = tun_vnet_parse_size(features);
+	unsigned int parsed_size = tun_vnet_parse_size(sz);
+	u8 buf[sizeof(*hdr)];
 
 	if (unlikely(iov_iter_count(iter) < sz))
 		return -EINVAL;
 
-	if (unlikely(copy_to_iter(hdr, parsed_size, iter) != parsed_size))
+	memcpy(buf, hdr, parsed_size);
+
+	if (unlikely(copy_to_iter(buf, parsed_size, iter) != parsed_size))
 		return -EFAULT;
 
 	if (iov_iter_zero(sz - parsed_size, iter) != sz - parsed_size)
@@ -174,7 +179,7 @@ static inline int __tun_vnet_hdr_put(int sz, netdev_features_t features,
 static inline int tun_vnet_hdr_put(int sz, struct iov_iter *iter,
 				   const struct virtio_net_hdr *hdr)
 {
-	return __tun_vnet_hdr_put(sz, 0, iter, hdr);
+	return __tun_vnet_hdr_put(sz, 0, iter, (struct virtio_net_common_hdr *)hdr);
 }
 
 static inline int tun_vnet_hdr_to_skb(unsigned int flags, struct sk_buff *skb,

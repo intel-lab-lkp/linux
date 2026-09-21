@@ -238,6 +238,17 @@ struct virtio_net_hdr_mrg_rxbuf {
 	struct virtio_net_hdr hdr;
 	__virtio16 num_buffers;	/* Number of merged rx buffers */
 };
+
+struct virtio_net_common_hdr {
+	union {
+		struct virtio_net_hdr hdr;
+		struct virtio_net_hdr_mrg_rxbuf	mrg_hdr;
+		struct virtio_net_hdr_v1_hash hash_v1_hdr;
+		struct virtio_net_hdr_v1_hash_tunnel tnl_hdr;
+	};
+
+	__virtio16 tstamp[4];	/* 64-bit timestamp, 2-byte aligned */
+};
 #endif /* ...VIRTIO_NET_NO_LEGACY */
 
 /*

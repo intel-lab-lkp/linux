@@ -498,17 +498,6 @@ struct padded_vnet_hdr {
 	char padding[12];
 };
 
-struct virtio_net_common_hdr {
-	union {
-		struct virtio_net_hdr hdr;
-		struct virtio_net_hdr_mrg_rxbuf	mrg_hdr;
-		struct virtio_net_hdr_v1_hash hash_v1_hdr;
-		struct virtio_net_hdr_v1_hash_tunnel tnl_hdr;
-	};
-
-	__le16 tstamp[4];	/* 64-bit timestamp, 2-byte aligned */
-};
-
 static struct virtio_net_common_hdr xsk_hdr;
 
 static void virtnet_sq_free_unused_buf(struct virtqueue *vq, void *buf);

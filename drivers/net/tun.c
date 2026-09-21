@@ -2157,12 +2157,23 @@ static ssize_t tun_put_user(struct tun_struct *tun,
 	}
 
 	if (vnet_hdr_sz) {
-		struct virtio_net_hdr_v1_hash_tunnel hdr;
-		struct virtio_net_hdr *gso;
+		struct virtio_net_common_hdr hdr;
 
 		memset(&hdr, 0, sizeof(hdr));
+
+		/* hdr has at least the size up to and including the tstamp field. */
+		if (vnet_hdr_sz >= offsetof(struct virtio_net_common_hdr, tstamp) +
+				   sizeof_field(struct virtio_net_common_hdr, tstamp)) {
+			u64 tstamp = ktime_get_clocktai_ns();
+
+			hdr.tstamp[0] = (tstamp & 0x000000000000ffffULL) >> 0;
+			hdr.tstamp[1] = (tstamp & 0x00000000ffff0000ULL) >> 16;
+			hdr.tstamp[2] = (tstamp & 0x0000ffff00000000ULL) >> 32;
+			hdr.tstamp[3] = (tstamp & 0xffff000000000000ULL) >> 48;
+		}
+
 		ret = tun_vnet_hdr_tnl_from_skb(tun->flags, tun->dev, skb,
-						&hdr);
+						(struct virtio_net_hdr_v1_hash_tunnel *)&hdr);
 		if (ret)
 			return ret;
 
@@ -2170,9 +2181,8 @@ static ssize_t tun_put_user(struct tun_struct *tun,
 		 * Drop the packet if the configured header size is too small
 		 * WRT the enabled offloads.
 		 */
-		gso = (struct virtio_net_hdr *)&hdr;
 		ret = __tun_vnet_hdr_put(vnet_hdr_sz, tun->dev->features,
-					 iter, gso);
+					 iter, &hdr);
 		if (ret)
 			return ret;
 	}
