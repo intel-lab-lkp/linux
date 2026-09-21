@@ -599,15 +599,15 @@ copy_orig_objects() {
 
 	xtrace_save "copying original objects"
 	for _file in "${files[@]}"; do
-		local rel_file="${_file/.ko/.o}"
-		local file="$PWD/$rel_file"
+		local rel_file="${_file/%.ko/.o}"
+		local file="$PWD/${_file/%.ko/.ko.o}"
 		local orig_file="$ORIG_DIR/$rel_file"
 		local orig_dir="$(dirname "$orig_file")"
 
 		[[ ! -f "$file" ]] && die "missing $(basename "$file") for $_file"
 
 		mkdir -p "$orig_dir"
-		cp -f "$file" "$orig_dir"
+		cp -f "$file" "$orig_file"
 	done
 	xtrace_restore
 
@@ -635,8 +635,8 @@ copy_patched_objects() {
 
 	xtrace_save "copying changed objects"
 	for _file in "${files[@]}"; do
-		local rel_file="${_file/.ko/.o}"
-		local file="$PWD/$rel_file"
+		local rel_file="${_file/%.ko/.o}"
+		local file="$PWD/${_file/%.ko/.ko.o}"
 		local orig_file="$ORIG_DIR/$rel_file"
 		local patched_file="$PATCHED_DIR/$rel_file"
 		local patched_dir="$(dirname "$patched_file")"
@@ -646,7 +646,7 @@ copy_patched_objects() {
 		cmp -s "$orig_file" "$file" && continue
 
 		mkdir -p "$patched_dir"
-		cp -f "$file" "$patched_dir"
+		cp -f "$file" "$patched_file"
 		found=1
 	done
 	xtrace_restore
