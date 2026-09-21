@@ -678,9 +678,42 @@ int mtk_eth_setup_tc(struct net_device *dev, enum tc_setup_type type,
 	}
 }
 
+static void mtk_flow_offload_free(void *ptr, void *arg)
+{
+	struct mtk_flow_entry *entry = ptr;
+	struct mtk_eth *eth = arg;
+
+	mtk_foe_entry_clear(eth->ppe[entry->ppe_index], entry);
+
+	if (entry->wed_index >= 0)
+		mtk_wed_flow_remove(entry->wed_index);
+
+	kfree(entry);
+}
+
 int mtk_eth_offload_init(struct mtk_eth *eth, u8 id)
 {
-	if (!eth->ppe[id] || !eth->ppe[id]->foe_table)
+	int err;
+
+	if (!eth->ppe[id] || !eth->ppe[id]->foe_table ||
+	    eth->flow_table_initialized)
 		return 0;
-	return rhashtable_init(&eth->flow_table, &mtk_flow_ht_params);
+	err = rhashtable_init(&eth->flow_table, &mtk_flow_ht_params);
+	if (!err)
+		eth->flow_table_initialized = true;
+
+	return err;
+}
+
+void mtk_eth_offload_deinit(struct mtk_eth *eth)
+{
+	if (!eth->flow_table_initialized)
+		return;
+
+	mutex_lock(&mtk_flow_offload_mutex);
+	rhashtable_free_and_destroy(&eth->flow_table, mtk_flow_offload_free,
+				    eth);
+	mutex_unlock(&mtk_flow_offload_mutex);
+
+	eth->flow_table_initialized = false;
 }

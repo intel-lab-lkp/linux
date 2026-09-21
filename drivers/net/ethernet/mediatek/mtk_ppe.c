@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (C) 2020 Felix Fietkau <nbd@nbd.name> */
 
+#include <linux/debugfs.h>
 #include <linux/kernel.h>
 #include <linux/io.h>
 #include <linux/iopoll.h>
@@ -946,7 +947,17 @@ void mtk_ppe_deinit(struct mtk_eth *eth)
 
 	for (i = 0; i < ARRAY_SIZE(eth->ppe); i++) {
 		if (!eth->ppe[i])
-			return;
+			continue;
+
+		debugfs_lookup_and_remove(eth->ppe[i]->dirname, NULL);
+	}
+
+	mtk_eth_offload_deinit(eth);
+
+	for (i = 0; i < ARRAY_SIZE(eth->ppe); i++) {
+		if (!eth->ppe[i])
+			continue;
+
 		rhashtable_destroy(&eth->ppe[i]->l2_flows);
 	}
 }
