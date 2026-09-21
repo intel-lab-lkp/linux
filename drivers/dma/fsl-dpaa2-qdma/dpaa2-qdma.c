@@ -353,7 +353,8 @@ static int __cold dpaa2_qdma_setup(struct fsl_mc_device *ls_dev)
 	}
 
 	priv->num_pairs = min(priv->dpdmai_attr.num_of_priorities, prio_def);
-	ppriv = kzalloc_objs(*ppriv, priv->num_pairs);
+	ppriv = devm_kcalloc(dev, priv->num_pairs, sizeof(*ppriv),
+			     GFP_KERNEL);
 	if (!ppriv) {
 		err = -ENOMEM;
 		goto exit;
@@ -757,7 +758,6 @@ err_bind:
 	dpaa2_dpmai_store_free(priv);
 	dpaa2_dpdmai_dpio_free(priv);
 err_dpio_setup:
-	kfree(priv->ppriv);
 	dpdmai_close(priv->mc_io, 0, dpdmai_dev->mc_handle);
 err_dpdmai_setup:
 	fsl_mc_portal_free(priv->mc_io);
