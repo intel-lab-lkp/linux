@@ -353,6 +353,7 @@ enum {
 	I_LCOEF_WBPS,
 	I_LCOEF_WSEQIOPS,
 	I_LCOEF_WRANDIOPS,
+	I_LCOEF_FLUSHIOPS,
 	NR_I_LCOEFS,
 };
 
@@ -363,6 +364,7 @@ enum {
 	LCOEF_WPAGE,
 	LCOEF_WSEQIO,
 	LCOEF_WRANDIO,
+	LCOEF_FLUSH,
 	NR_LCOEFS,
 };
 
@@ -883,6 +885,9 @@ static void ioc_refresh_lcoefs(struct ioc *ioc)
 		    &c[LCOEF_RPAGE], &c[LCOEF_RSEQIO], &c[LCOEF_RRANDIO]);
 	calc_lcoefs(u[I_LCOEF_WBPS], u[I_LCOEF_WSEQIOPS], u[I_LCOEF_WRANDIOPS],
 		    &c[LCOEF_WPAGE], &c[LCOEF_WSEQIO], &c[LCOEF_WRANDIO]);
+
+	c[LCOEF_FLUSH] = u[I_LCOEF_FLUSHIOPS] ?
+		DIV64_U64_ROUND_UP(VTIME_PER_SEC, u[I_LCOEF_FLUSHIOPS]) : 0;
 }
 
 /*
@@ -2532,8 +2537,25 @@ static void calc_vtime_cost_builtin(struct bio *bio, struct ioc_gq *iocg,
 	u64 pages = max_t(u64, bio_sectors(bio) >> IOC_SECT_TO_PAGE_SHIFT, 1);
 	u64 seek_pages = 0;
 	u64 cost = 0;
+	u64 flush_cost = 0;
 
-	/* Can't calculate cost for empty bio */
+	/*
+	 * The flush machine runs a cache flush for REQ_PREFLUSH, either
+	 * standalone (dataless) or ahead of the data, and a post-flush for
+	 * REQ_FUA on devices without native FUA support.  Charge each
+	 * component on top of the data cost using the flush coefficient
+	 * (VTIME_PER_SEC / flushiops; zero when flushiops is unset).  Flush
+	 * bios are never merged.
+	 */
+	if (!is_merge) {
+		if (bio->bi_opf & REQ_PREFLUSH)
+			flush_cost += ioc->params.lcoefs[LCOEF_FLUSH];
+		if ((bio->bi_opf & REQ_FUA) &&
+		    !bdev_fua(bio->bi_bdev))
+			flush_cost += ioc->params.lcoefs[LCOEF_FLUSH];
+	}
+
+	/* Can't calculate data cost for empty bio */
 	if (!bio->bi_iter.bi_size)
 		goto out;
 
@@ -2566,7 +2588,7 @@ static void calc_vtime_cost_builtin(struct bio *bio, struct ioc_gq *iocg,
 	}
 	cost += pages * coef_page;
 out:
-	*costp = cost;
+	*costp = cost + flush_cost;
 }
 
 static u64 calc_vtime_cost(struct bio *bio, struct ioc_gq *iocg, bool is_merge)
@@ -2708,7 +2730,9 @@ static void ioc_rqos_throttle(struct rq_qos *rqos, struct bio *bio)
 	if (!iocg_activate(iocg, &now))
 		return;
 
-	iocg->cursor = bio_end_sector(bio);
+	/* dataless bios have no meaningful position for seq/rand detection */
+	if (bio->bi_iter.bi_size)
+		iocg->cursor = bio_end_sector(bio);
 	vtime = atomic64_read(&iocg->vtime);
 	cost = adjust_inuse_and_calc_cost(iocg, vtime, abs_cost, &now);
 
@@ -3440,10 +3464,12 @@ static u64 ioc_cost_model_prfill(struct seq_file *sf,
 	spin_lock_irq(&ioc->lock);
 	seq_printf(sf, "%s ctrl=%s model=linear "
 		   "rbps=%llu rseqiops=%llu rrandiops=%llu "
-		   "wbps=%llu wseqiops=%llu wrandiops=%llu\n",
+		   "wbps=%llu wseqiops=%llu wrandiops=%llu "
+		   "flushiops=%llu\n",
 		   dname, ioc->user_cost_model ? "user" : "auto",
 		   u[I_LCOEF_RBPS], u[I_LCOEF_RSEQIOPS], u[I_LCOEF_RRANDIOPS],
-		   u[I_LCOEF_WBPS], u[I_LCOEF_WSEQIOPS], u[I_LCOEF_WRANDIOPS]);
+		   u[I_LCOEF_WBPS], u[I_LCOEF_WSEQIOPS], u[I_LCOEF_WRANDIOPS],
+		   u[I_LCOEF_FLUSHIOPS]);
 	spin_unlock_irq(&ioc->lock);
 	return 0;
 }
@@ -3470,6 +3496,7 @@ static const match_table_t i_lcoef_tokens = {
 	{ I_LCOEF_WBPS,		"wbps=%u"	},
 	{ I_LCOEF_WSEQIOPS,	"wseqiops=%u"	},
 	{ I_LCOEF_WRANDIOPS,	"wrandiops=%u"	},
+	{ I_LCOEF_FLUSHIOPS,	"flushiops=%u"	},
 	{ NR_I_LCOEFS,		NULL		},
 };
 
