@@ -497,14 +497,12 @@ static void atkbd_receive_byte(struct ps2dev *ps2dev, u8 data)
 	case ATKBD_KEY_NULL:
 		break;
 	case ATKBD_KEY_UNKNOWN:
-		dev_warn(&serio->dev,
-			 "Unknown key %s (%s set %d, code %#x on %s).\n",
-			 atkbd->release ? "released" : "pressed",
-			 atkbd->translated ? "translated" : "raw",
-			 atkbd->set, code, serio->phys);
-		dev_warn(&serio->dev,
-			 "Use 'setkeycodes %s%02x <keycode>' to make it known.\n",
-			 code & 0x80 ? "e0" : "", code & 0x7f);
+		dev_warn_ratelimited(&serio->dev,
+				     "Unknown key %s (%s set %d, code %#x on %s); use 'setkeycodes %s%02x <keycode>' to make it known.\n",
+				     atkbd->release ? "released" : "pressed",
+				     atkbd->translated ? "translated" : "raw",
+				     atkbd->set, code, serio->phys,
+				     code & 0x80 ? "e0" : "", code & 0x7f);
 		input_sync(dev);
 		break;
 	case ATKBD_SCR_1:
