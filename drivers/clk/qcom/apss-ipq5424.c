@@ -206,14 +206,14 @@ static struct clk_regmap *apss_ipq5424_clks[] = {
 	[L3_CORE_CLK] = &l3_core_clk.clkr,
 };
 
-static struct clk_alpha_pll *ipa5424_apss_plls[] = {
+static struct clk_alpha_pll *ipq5424_apss_plls[] = {
 	&ipq5424_l3_pll,
 	&ipq5424_apss_pll,
 };
 
-static const struct qcom_cc_driver_data ipa5424_apss_driver_data = {
-	.alpha_plls = ipa5424_apss_plls,
-	.num_alpha_plls = ARRAY_SIZE(ipa5424_apss_plls),
+static const struct qcom_cc_driver_data ipq5424_apss_driver_data = {
+	.alpha_plls = ipq5424_apss_plls,
+	.num_alpha_plls = ARRAY_SIZE(ipq5424_apss_plls),
 };
 
 #define IPQ_APPS_PLL_ID			(5424 * 3)	/* some unique value */
@@ -229,7 +229,7 @@ static const struct qcom_cc_desc apss_ipq5424_desc = {
 	.icc_hws = icc_ipq5424_cpu_l3,
 	.num_icc_hws = ARRAY_SIZE(icc_ipq5424_cpu_l3),
 	.icc_first_node_id = IPQ_APPS_PLL_ID,
-	.driver_data = &ipa5424_apss_driver_data,
+	.driver_data = &ipq5424_apss_driver_data,
 };
 
 static int apss_ipq5424_probe(struct platform_device *pdev)
