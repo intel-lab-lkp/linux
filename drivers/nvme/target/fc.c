@@ -1647,6 +1647,8 @@ nvmet_fc_unregister_targetport(struct nvmet_fc_target_port *target_port)
 	__nvmet_fc_free_assocs(tgtport);
 
 	flush_workqueue(nvmet_wq);
+	/* assoc deletion sends an LS whose completion is queued while flushing */
+	flush_workqueue(nvmet_wq);
 
 	nvmet_fc_free_pending_reqs(tgtport);
 	nvmet_fc_tgtport_put(tgtport);
