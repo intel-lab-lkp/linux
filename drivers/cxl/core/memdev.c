@@ -802,6 +802,72 @@ err:
 	return ERR_PTR(rc);
 }
 
+static int match_memdev_by_parent_device(struct device *dev, const void *data)
+{
+	const struct device *pf_dev = data;
+	struct cxl_memdev *cxlmd;
+
+	if (!is_cxl_memdev(dev))
+		return 0;
+
+	cxlmd = to_cxl_memdev(dev);
+	return (cxlmd->cxlds->dev == pf_dev);
+}
+
+/**
+ * cxl_get_pf0_memdev - register a device link with the region PF0 memdev is
+ * attached to. The region release will imply the link consumer to be unbound
+ * from its driver first.
+ *
+ * @pf0: device to use for finding target memdev.
+ * @pfx: device to link to PF0's memdev region, the link consumer.
+ * @range: to be set with the PF0's memdev range.
+ *
+ * Return: PF0 memdev pointer or error.
+ */
+struct cxl_memdev *cxl_get_pf0_memdev(struct device *pf0, struct device *pfx,
+				      struct range *range)
+{
+	struct cxl_attach_region *attach;
+	struct cxl_memdev *cxlmd;
+	struct device *mem_dev __free(put_device) =
+		bus_find_device(&cxl_bus_type, NULL, pf0,
+				match_memdev_by_parent_device);
+
+	if (!mem_dev)
+		return ERR_PTR(-ENODEV);
+
+	cxlmd = to_cxl_memdev(mem_dev);
+
+	/*
+	 * we got the cxl_memdev and the implicit get_device in bus_find_device
+	 * makes the next steps safe.
+	 */
+	attach = container_of(cxlmd->attach, struct cxl_attach_region, attach);
+
+	/*
+	 * The cxlmd object does exist and it can be found in the cxl bus after
+	 * creation but before attach probe setting the proper HPA range. If so,
+	 * the caller will need to try later.
+	 */
+	if (attach->hpa_range.end == -1)
+		return ERR_PTR(-EPROBE_DEFER);
+
+	/*
+	 * Create the device link between the region and the consumer device.
+	 * AUTOREMOVE_CONSUMER means the link implicitly to be removed if the
+	 * consumer unbinds first with no consequences for the supplier.
+	 */
+	if (!device_link_add(pfx, &attach->cxlr->dev, DL_FLAG_AUTOREMOVE_CONSUMER))
+		return ERR_PTR(-ENODEV);
+
+	range->start = attach->hpa_range.start;
+	range->end = attach->hpa_range.end;
+
+	return to_cxl_memdev(mem_dev);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_get_pf0_memdev, "CXL");
+
 static long __cxl_memdev_ioctl(struct cxl_memdev *cxlmd, unsigned int cmd,
 			       unsigned long arg)
 {
