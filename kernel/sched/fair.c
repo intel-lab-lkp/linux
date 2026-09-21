@@ -9023,6 +9023,59 @@ static inline bool asym_fits_cpu(unsigned long util,
 	return true;
 }
 
+static int select_slice_cpu(struct task_struct *p, struct sched_domain *sd, int target)
+{
+	unsigned long task_util, util_min, util_max;
+	int cpu, nr = INT_MAX;
+	u64 slice = p->se.slice;
+	struct cpumask *cpus;
+
+	if (sched_feat(SIS_UTIL) && sd->shared) {
+		/*
+		 * Same nr_idle_scan hint as select_idle_cpu(), nr only limits
+		 * the scan when not preferring an idle core.
+		 */
+		nr = READ_ONCE(sd->shared->nr_idle_scan) + 1;
+		/* overloaded domain is unlikely to have idle cpu/core */
+		if (nr == 1)
+			return -1;
+	}
+
+	cpus = this_cpu_cpumask_var_ptr(select_rq_mask);
+	cpumask_and(cpus, sched_domain_span(sd), p->cpus_ptr);
+
+	if (sched_asym_cpucap_active()) {
+		task_util = task_util_est(p);
+		util_min = uclamp_eff_value(p, UCLAMP_MIN);
+		util_max = uclamp_eff_value(p, UCLAMP_MAX);
+	}
+
+	/* Those CPUs have been tested not being idle and fiting */
+	for_each_cpu_wrap(cpu, cpus, target) {
+		/*
+		 * Stop when the nr_idle_scan is exhausted (mirrors
+		 * select_idle_cpu() logic).
+		 */
+		if (--nr <= 0)
+			return -1;
+
+		if (slice >= get_rq_min_slice(cpu_rq(cpu)))
+			continue;
+
+		if (sched_asym_cpucap_active()) {
+			int fits = util_fits_cpu(task_util, util_min, util_max, cpu);
+
+			/* Perfect fit: capacity satisfies util + uclamp */
+			if (fits > 0)
+				return cpu;
+		} else {
+			return cpu;
+		}
+	}
+
+	return -1;
+}
+
 /*
  * Try and locate an idle core/thread in the LLC cache domain.
  */
@@ -9117,7 +9170,10 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
 		 */
 		if (sd) {
 			i = select_idle_capacity(p, sd, target);
-			return ((unsigned)i < nr_cpumask_bits) ? i : target;
+			if ((unsigned int)i < nr_cpumask_bits)
+				return i;
+
+			goto select_slice;
 		}
 	}
 
@@ -9149,6 +9205,11 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
 		return prev_aff;
 	if ((unsigned int)recent_used_cpu < nr_cpumask_bits)
 		return recent_used_cpu;
+
+select_slice:
+	i = select_slice_cpu(p, sd, target);
+	if ((unsigned int)i < nr_cpumask_bits)
+		return i;
 
 	return target;
 }
