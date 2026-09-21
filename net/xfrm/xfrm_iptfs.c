@@ -701,6 +701,8 @@ static void __iptfs_reassem_done(struct xfrm_iptfs_data *xtfs, bool free)
 
 	/* We don't care if it works locking takes care of things */
 	hrtimer_try_to_cancel(&xtfs->drop_timer);
+	if (xtfs->ra_newskb)
+		dev_put(xtfs->ra_newskb->dev);
 	if (free)
 		kfree_skb(xtfs->ra_newskb);
 	xtfs->ra_newskb = NULL;
@@ -837,6 +839,7 @@ static u32 iptfs_reassem_cont(struct xfrm_iptfs_data *xtfs, u64 seq,
 			goto abandon;
 		}
 		xtfs->ra_newskb = newskb;
+		dev_hold(newskb->dev);
 
 		/* Copy the runt data into the buffer, but leave data
 		 * pointers the same as normal non-runt case. The extra `rrem`
@@ -1153,6 +1156,7 @@ static bool __input_process_payload(struct xfrm_state *x, u32 data,
 			spin_lock(&xtfs->drop_lock);
 
 			xtfs->ra_newskb = skb;
+			dev_hold(skb->dev);
 			xtfs->ra_wantseq = seq + 1;
 			if (!hrtimer_is_queued(&xtfs->drop_timer)) {
 				/* softirq blocked lest the timer fire and interrupt us */
@@ -1373,6 +1377,7 @@ static void __reorder_this(struct xfrm_iptfs_data *xtfs, struct sk_buff *inskb,
 	u32 count = 0;
 
 	/* Got what we wanted. */
+	dev_hold(inskb->dev);
 	list_add_tail(&inskb->list, list);
 	++xtfs->w_wantseq;
 	if (!savedlen)
@@ -1467,6 +1472,7 @@ static void __reorder_future_fits(struct xfrm_iptfs_data *xtfs,
 	}
 
 	xtfs->w_saved[index].skb = inskb;
+	dev_hold(inskb->dev);
 	xtfs->w_savedlen = max(savedlen, index + 1);
 	iptfs_set_window_drop_times(xtfs, index);
 }
@@ -1602,6 +1608,7 @@ static void __reorder_future_shifts(struct xfrm_iptfs_data *xtfs,
 	/* We've shifted. plug the packet in at the end. */
 	xtfs->w_savedlen = nslots - 1;
 	xtfs->w_saved[xtfs->w_savedlen - 1].skb = inskb;
+	dev_hold(inskb->dev);
 	iptfs_set_window_drop_times(xtfs, xtfs->w_savedlen - 1);
 
 	/* if we don't have a slot0 then we must wait for it */
@@ -1691,13 +1698,18 @@ static enum hrtimer_restart iptfs_drop_timer(struct hrtimer *me)
 
 	spin_unlock(&xtfs->drop_lock);
 
-	if (skb)
+	if (skb) {
+		dev_put(skb->dev);
 		kfree_skb_reason(skb, SKB_DROP_REASON_FRAG_REASM_TIMEOUT);
+	}
 
 	if (count) {
 		list_for_each_entry_safe(skb, next, &list, list) {
+			struct net_device *dev = skb->dev;
+
 			skb_list_del_init(skb);
 			iptfs_input_ordered(x, skb);
+			dev_put(dev);
 		}
 	}
 
@@ -1737,8 +1749,11 @@ static int iptfs_input(struct xfrm_state *x, struct sk_buff *skb)
 	spin_unlock(&xtfs->drop_lock);
 
 	list_for_each_entry_safe(skb, next, &list, list) {
+		struct net_device *dev = skb->dev;
+
 		skb_list_del_init(skb);
 		iptfs_input_ordered(x, skb);
+		dev_put(dev);
 	}
 
 	list_for_each_entry_safe(skb, next, &freelist, list) {
@@ -2743,12 +2758,16 @@ static void iptfs_destroy_state(struct xfrm_state *x)
 
 	hrtimer_cancel(&xtfs->drop_timer);
 
-	if (xtfs->ra_newskb)
+	if (xtfs->ra_newskb) {
+		dev_put(xtfs->ra_newskb->dev);
 		kfree_skb(xtfs->ra_newskb);
+	}
 
 	for (s = xtfs->w_saved, se = s + xtfs->w_savedlen; s < se; s++) {
-		if (s->skb)
+		if (s->skb) {
+			dev_put(s->skb->dev);
 			kfree_skb(s->skb);
+		}
 	}
 
 	kfree_sensitive(xtfs->w_saved);
