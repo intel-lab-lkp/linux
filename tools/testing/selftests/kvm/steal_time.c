@@ -8,6 +8,8 @@
 #include <time.h>
 #include <sched.h>
 #include <pthread.h>
+#include <sys/mman.h>
+#include <unistd.h>
 #include <linux/kernel.h>
 #include <asm/kvm.h>
 #ifdef __riscv
@@ -162,6 +164,15 @@ static void guest_code(int cpu)
 
 	check_status(st);
 	WRITE_ONCE(guest_stolen_time[cpu], st->st_time);
+	if (!cpu) {
+		/*
+		 * Let userspace trigger a failed stolen-time update, then retry
+		 * the update after restoring write access.
+		 */
+		GUEST_SYNC(2);
+		GUEST_SYNC(3);
+		WRITE_ONCE(guest_stolen_time[cpu], st->st_time);
+	}
 	GUEST_DONE();
 }
 
@@ -469,9 +480,10 @@ static void check_steal_time_uapi(void)
 static void *do_steal_time(void *arg)
 {
 	struct timespec ts, stop;
+	unsigned long duration = arg ? *(unsigned long *)arg : MIN_RUN_DELAY_NS;
 
 	clock_gettime(CLOCK_MONOTONIC, &ts);
-	stop = timespec_add_ns(ts, MIN_RUN_DELAY_NS);
+	stop = timespec_add_ns(ts, duration);
 
 	while (1) {
 		clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -499,6 +511,45 @@ static void run_vcpu(struct kvm_vcpu *vcpu)
 			    exit_reason_str(vcpu->run->exit_reason));
 	}
 }
+
+#ifdef __aarch64__
+static void test_failed_stolen_time_update(struct kvm_vcpu *vcpu)
+{
+	struct kvm_vm *vm = vcpu->vm;
+	struct st_time *st = addr_gva2hva(vm, ST_GPA_BASE);
+	unsigned long duration = 100 * 1000 * 1000UL;
+	u64 stolen_time = st->st_time;
+	long run_delay;
+	pthread_t thread;
+
+	/*
+	 * Keep the page readable so that kvm_get_guest() succeeds, but make
+	 * kvm_put_guest() fail when KVM attempts to update stolen time.
+	 */
+	TEST_ASSERT(!mprotect(st, getpagesize(), PROT_READ),
+		    "Failed to make stolen time page read-only");
+
+	run_delay = get_run_delay();
+	kvm_pthread_create(&thread, NULL, do_steal_time, &duration);
+	do
+		sched_yield();
+	while (get_run_delay() - run_delay < duration / 5);
+	kvm_pthread_join(thread, NULL);
+	run_delay = get_run_delay() - run_delay;
+
+	/* The update fails, but the guest must still be able to run. */
+	run_vcpu(vcpu);
+	TEST_ASSERT(st->st_time == stolen_time,
+		    "Stolen time changed on a read-only page");
+
+	TEST_ASSERT(!mprotect(st, getpagesize(), PROT_READ | PROT_WRITE),
+		    "Failed to restore stolen time page write access");
+	run_vcpu(vcpu);
+	TEST_ASSERT(st->st_time - stolen_time >= run_delay,
+		    "Lost stolen time after a failed update: expected >= %ld, got %lu",
+		    run_delay, (unsigned long)(st->st_time - stolen_time));
+}
+#endif
 
 int main(int ac, char **av)
 {
@@ -568,6 +619,11 @@ int main(int ac, char **av)
 		TEST_ASSERT(stolen_time >= run_delay,
 			    "Expected stolen time >= %ld, got %ld",
 			    run_delay, stolen_time);
+
+#ifdef __aarch64__
+		if (!i)
+			test_failed_stolen_time_update(vcpus[i]);
+#endif
 
 		if (verbose) {
 			ksft_print_msg("VCPU%d: total-stolen-time=%ld test-stolen-time=%ld%s\n",
