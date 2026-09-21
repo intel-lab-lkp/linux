@@ -79,4 +79,6 @@ static inline struct i3c_master_controller *i3c_bus_to_i3c_master(struct i3c_bus
 	return container_of(i3cbus, struct i3c_master_controller, bus);
 }
 
+int i3c_for_each_dev(void *data, int (*fn)(struct device *, void *));
+
 #endif /* I3C_INTERNAL_H */

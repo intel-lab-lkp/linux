@@ -4011,6 +4011,12 @@ void i3c_dev_free_ibi_locked(struct i3c_dev_desc *dev)
 }
 EXPORT_SYMBOL_GPL(i3c_dev_free_ibi_locked);
 
+int i3c_for_each_dev(void *data, int (*fn)(struct device *, void *))
+{
+	return bus_for_each_dev(&i3c_bus_type, NULL, data, fn);
+}
+EXPORT_SYMBOL_GPL(i3c_for_each_dev);
+
 static int __init i3c_init(void)
 {
 	int res;
