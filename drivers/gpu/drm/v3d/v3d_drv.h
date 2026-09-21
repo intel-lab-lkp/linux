@@ -84,6 +84,8 @@ struct v3d_queue_state {
  * This way, only events related to a specific submission will be counted.
  */
 struct v3d_perfmon {
+	struct v3d_dev *v3d;
+
 	/* Tracks the number of users of the perfmon, when this counter reaches
 	 * zero the perfmon is destroyed.
 	 */
@@ -183,6 +185,11 @@ struct v3d_dev {
 
 		/* Perfmon currently programmed in HW (or NULL if none). */
 		struct v3d_perfmon *active;
+
+		/* Number of perfmons alive on this device. Jobs are not
+		 * serialized if the number is zero.
+		 */
+		atomic_t nperfmons;
 
 		/* Finished fence of the most recently submitted job that
 		 * opened a serialization window (i.e. a job with a non-global
