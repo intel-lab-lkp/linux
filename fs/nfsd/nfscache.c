@@ -47,8 +47,8 @@ static unsigned long nfsd_reply_cache_scan(struct shrinker *shrink,
 					   struct shrink_control *sc);
 
 /*
- * Put a cap on the size of the DRC based on the amount of available
- * low memory in the machine.
+ * Size the DRC by the amount of low memory in the machine. The
+ * limit scales with the square root of available memory:
  *
  *  64MB:    8192
  * 128MB:   11585
@@ -59,22 +59,24 @@ static unsigned long nfsd_reply_cache_scan(struct shrinker *shrink,
  *   4GB:   65536
  *   8GB:   92681
  *  16GB:  131072
+ *  32GB:  185363
+ *  64GB:  262144
+ * 128GB:  370727
+ * 256GB:  524288
+ * 512GB:  741455
+ *   1TB: 1048576
  *
- * ...with a hard cap of 256k entries. In the worst case, each entry will be
- * ~1k, so the above numbers should give a rough max of the amount of memory
- * used in k.
- *
- * XXX: these limits are per-container, so memory used will increase
- * linearly with number of containers.  Maybe that's OK.
+ * These limits are per-net-namespace, so memory used increases
+ * linearly with the number of namespaces. The shrinker frees only
+ * entries older than RC_EXPIRE, so a cache below its limit is not
+ * reclaimable under memory pressure.
  */
 static unsigned int
 nfsd_cache_size_limit(void)
 {
-	unsigned int limit;
 	unsigned long low_pages = totalram_pages() - totalhigh_pages();
 
-	limit = int_sqrt(low_pages << PAGE_SHIFT);
-	return min_t(unsigned int, limit, 256*1024);
+	return int_sqrt(low_pages << PAGE_SHIFT);
 }
 
 /*
