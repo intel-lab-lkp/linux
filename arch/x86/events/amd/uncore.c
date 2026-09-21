@@ -206,16 +206,14 @@ static int amd_uncore_add(struct perf_event *event, int flags)
 	struct amd_uncore_ctx *ctx = *per_cpu_ptr(pmu->ctx, event->cpu);
 	struct hw_perf_event *hwc = &event->hw;
 
-	/* are we already assigned? */
+	/*
+	 * Perf serializes ->add() and ->del() for an event. A successful
+	 * ->add() records the claimed slot in hwc->idx before returning, and
+	 * ->del() clears that slot before resetting hwc->idx. Therefore, an
+	 * existing assignment must be at hwc->idx.
+	 */
 	if (hwc->idx != -1 && ctx->events[hwc->idx] == event)
 		goto out;
-
-	for (i = 0; i < pmu->num_counters; i++) {
-		if (ctx->events[i] == event) {
-			hwc->idx = i;
-			goto out;
-		}
-	}
 
 	/* if not, take the first available counter */
 	hwc->idx = -1;
