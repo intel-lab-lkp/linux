@@ -830,22 +830,24 @@ xfarray_sort_scan(
 			return PTR_ERR(folio);
 		si->folio = folio;
 
-		si->first_folio_idx = xfarray_idx(si->array,
-				folio_pos(si->folio) + si->array->obj_size - 1);
+		if (si->folio) {
+			si->first_folio_idx = xfarray_idx(si->array,
+					folio_pos(si->folio) + si->array->obj_size - 1);
 
-		next_pos = folio_next_pos(si->folio);
-		si->last_folio_idx = xfarray_idx(si->array, next_pos - 1);
-		if (xfarray_pos(si->array, si->last_folio_idx + 1) > next_pos)
-			si->last_folio_idx--;
+			next_pos = folio_next_pos(si->folio);
+			si->last_folio_idx = xfarray_idx(si->array, next_pos - 1);
+			if (xfarray_pos(si->array, si->last_folio_idx + 1) > next_pos)
+				si->last_folio_idx--;
 
-		trace_xfarray_sort_scan(si, idx);
+			trace_xfarray_sort_scan(si, idx);
+		}
 	}
 
 	/*
 	 * If this folio still doesn't cover the desired element, it must cross
 	 * a folio boundary.  Read into the scratchpad and we're done.
 	 */
-	if (idx < si->first_folio_idx || idx > si->last_folio_idx) {
+	if (!si->folio || idx < si->first_folio_idx || idx > si->last_folio_idx) {
 		void		*temp = xfarray_scratch(si->array);
 
 		error = xfile_load(si->array->xfile, temp, si->array->obj_size,
