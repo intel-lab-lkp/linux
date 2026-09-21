@@ -73,6 +73,9 @@ additionalProperties:
         bias-disable: true
         bias-pull-down: true
         bias-pull-up: true
+        power-source:
+          description: I/O voltage in millivolts.
+          enum: [ 1800, 3300 ]
         drive-strength-microamp:
           # Superset of supported values
           enum: [ 1600, 1800, 2000, 3200, 3800, 4000, 6400, 7800, 8000,
