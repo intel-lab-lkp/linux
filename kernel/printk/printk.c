@@ -20,6 +20,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/kernel.h>
+#include <linux/hash.h>
 #include <linux/mm.h>
 #include <linux/tty.h>
 #include <linux/tty_driver.h>
@@ -103,6 +104,91 @@ DEFINE_STATIC_SRCU(console_srcu);
  * circumstances, like after kernel panic happens.
  */
 int __read_mostly suppress_printk;
+
+static u32 dedup_last_key;
+static u32 dedup_repeat;
+static bool dedup_active;
+static u64 dedup_window_start;
+#define PRINTK_DEDUP_WINDOW_NS	1000000000ULL	/* 1s */
+static bool printk_dedup = true;
+module_param(printk_dedup, bool, 0644);
+MODULE_PARM_DESC(printk_dedup, "fold consecutive duplicate printk messages");
+/* protects the dedup state above; never held while printing */
+static DEFINE_RAW_SPINLOCK(dedup_lock);
+
+static int __init printk_dedup_setup(char *str)
+{
+	return kstrtobool(str, &printk_dedup);
+}
+early_param("printk_dedup", printk_dedup_setup);
+
+/*
+ * Detect consecutive duplicate printk messages and fold them away.
+ * Returns true if this message should be dropped.
+ *
+ * The dedup key is built from facility, level and the format string.
+ * Format parameters are intentionally not part of the key: va_list
+ * can only be consumed once, and hashing rendered text would put
+ * string comparisons on the printk fast path.
+ */
+static bool outputs_dedupe(int facility, int level, const char *fmt)
+{
+	unsigned long flags;
+	bool drop;
+	u64 now;
+	u32 key;
+	u32 n;
+
+	/* error and above must never be folded */
+	if (level <= LOGLEVEL_ERR || !printk_dedup)
+		return false;
+
+	key = hash_64((unsigned long)(fmt ? : ""), 32) ^
+	      hash_32(facility ^ level, 32);
+	now = ktime_get_ns();
+
+	raw_spin_lock_irqsave(&dedup_lock, flags);
+
+	if (dedup_active && key == dedup_last_key) {
+		dedup_repeat++;
+		/*
+		 * Force a flush when 10 repeats have accumulated or
+		 * the 1s window has elapsed, so the summary shows up.
+		 */
+		if (dedup_repeat >= 10 ||
+		    now - dedup_window_start > PRINTK_DEDUP_WINDOW_NS) {
+			n = dedup_repeat;
+			dedup_repeat = 0;
+			dedup_window_start = now;
+			drop = false;
+		} else {
+			drop = true;
+		}
+	} else {
+		if (dedup_active && dedup_repeat) {
+			n = dedup_repeat;
+			drop = false;
+		} else {
+			n = 0;
+			drop = false;
+		}
+		dedup_last_key = key;
+		dedup_repeat = 0;
+		dedup_window_start = now;
+		dedup_active = true;
+	}
+
+	raw_spin_unlock_irqrestore(&dedup_lock, flags);
+
+	/*
+	 * Print only after dropping the lock: pr_info() re-enters
+	 * vprintk_emit() and would deadlock on dedup_lock otherwise.
+	 */
+	if (n)
+		pr_info("last message repeated %u times\n", n);
+
+	return drop;
+}
 
 #ifdef CONFIG_LOCKDEP
 static struct lockdep_map console_lock_dep_map = {
@@ -2439,6 +2525,9 @@ asmlinkage int vprintk_emit(int facility, int level,
 	if (panic_on_other_cpu() &&
 	    !debug_non_panic_cpus &&
 	    !panic_triggering_all_cpu_backtrace)
+		return 0;
+
+	if (outputs_dedupe(facility, level, fmt))
 		return 0;
 
 	printk_get_console_flush_type(&ft);
