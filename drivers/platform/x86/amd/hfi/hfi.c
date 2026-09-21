@@ -530,8 +530,10 @@ static int __init amd_hfi_init(void)
 	}
 
 	ret = platform_driver_register(&amd_hfi_driver);
-	if (ret)
+	if (ret) {
 		pr_err("failed to register HFI driver\n");
+		platform_device_unregister(device);
+	}
 
 	return ret;
 }
