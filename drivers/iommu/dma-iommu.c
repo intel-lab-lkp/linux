@@ -37,6 +37,7 @@
 
 #include "dma-iommu.h"
 #include "iommu-pages.h"
+#include "iommu-priv.h"
 
 struct iommu_dma_msi_page {
 	struct list_head	list;
@@ -508,18 +509,26 @@ static int iova_reserve_pci_windows(struct pci_dev *dev,
 		struct iova_domain *iovad)
 {
 	struct pci_host_bridge *bridge = pci_find_host_bridge(dev->bus);
+	struct iommu_resv_region *region, *next;
 	struct resource_entry *window;
 	unsigned long lo, hi;
 	phys_addr_t start = 0, end;
+	LIST_HEAD(pci_windows);
+	int ret;
 
-	resource_list_for_each_entry(window, &bridge->windows) {
-		if (resource_type(window->res) != IORESOURCE_MEM)
-			continue;
+	ret = iommu_get_pci_resv_windows(dev, &pci_windows);
 
-		lo = iova_pfn(iovad, window->res->start - window->offset);
-		hi = iova_pfn(iovad, window->res->end - window->offset);
-		reserve_iova(iovad, lo, hi);
+	list_for_each_entry_safe(region, next, &pci_windows, list) {
+		if (!ret) {
+			lo = iova_pfn(iovad, region->start);
+			hi = iova_pfn(iovad, region->start + region->length - 1);
+			reserve_iova(iovad, lo, hi);
+		}
+		list_del(&region->list);
+		kfree(region);
 	}
+	if (ret)
+		return ret;
 
 	/* Get reserved DMA windows from host bridge */
 	list_sort(NULL, &bridge->dma_ranges, iommu_dma_ranges_sort);
