@@ -777,7 +777,7 @@ asmlinkage void __div0(void)
 }
 EXPORT_SYMBOL(__div0);
 
-void abort(void)
+void __noreturn abort(void)
 {
 	BUG();
 

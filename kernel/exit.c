@@ -2031,7 +2031,7 @@ Efault:
  *
  * See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=88345#c11
  */
-__weak __function_aligned void abort(void)
+__weak __function_aligned void __noreturn abort(void)
 {
 	BUG();
 
