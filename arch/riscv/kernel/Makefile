@@ -130,3 +130,5 @@ obj-$(CONFIG_GENERIC_CPU_VULNERABILITIES) += bugs.o
 obj-$(CONFIG_RISCV_USER_CFI) += usercfi.o
 
 obj-$(CONFIG_RISCV_ISA_SSQOSID) += qos.o
+
+obj-$(CONFIG_PARAVIRT_SPINLOCKS) += qspinlock_paravirt.o
