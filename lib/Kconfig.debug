@@ -577,6 +577,12 @@ config OBJTOOL_DEFERRED
 	depends on OBJTOOL
 	depends on LTO_CLANG || X86_KERNEL_IBT || KLP_BUILD
 
+# Objtool reverse-engineers the control flow graph
+config OBJTOOL_CONTROL_FLOW
+	def_bool y
+	depends on OBJTOOL
+	depends on UNWINDER_ORC || STACK_VALIDATION || HAVE_UACCESS_VALIDATION
+
 config STACK_VALIDATION
 	bool "Compile-time stack metadata validation"
 	depends on HAVE_STACK_VALIDATION && UNWINDER_FRAME_POINTER
