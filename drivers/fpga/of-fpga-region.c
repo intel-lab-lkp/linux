@@ -429,6 +429,7 @@ static void of_fpga_region_remove(struct platform_device *pdev)
 	struct fpga_region *region = platform_get_drvdata(pdev);
 	struct fpga_manager *mgr = region->mgr;
 
+	of_platform_depopulate(&region->dev);
 	fpga_region_unregister(region);
 	fpga_mgr_put(mgr);
 }
