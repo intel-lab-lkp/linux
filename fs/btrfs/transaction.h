@@ -127,9 +127,11 @@ enum {
 	ENUM_BIT(__TRANS_JOIN_NOLOCK),
 	ENUM_BIT(__TRANS_DUMMY),
 	ENUM_BIT(__TRANS_JOIN_NOSTART),
+	ENUM_BIT(__TRANS_TRYLOCK),
 };
 
 #define TRANS_START		(__TRANS_START | __TRANS_FREEZABLE)
+#define TRANS_TRY_START		(__TRANS_START | __TRANS_FREEZABLE | __TRANS_TRYLOCK)
 #define TRANS_ATTACH		(__TRANS_ATTACH)
 #define TRANS_JOIN		(__TRANS_JOIN | __TRANS_FREEZABLE)
 #define TRANS_JOIN_NOLOCK	(__TRANS_JOIN_NOLOCK)
@@ -308,6 +310,8 @@ do {								\
 int btrfs_end_transaction(struct btrfs_trans_handle *trans);
 struct btrfs_trans_handle *btrfs_start_transaction(struct btrfs_root *root,
 						   unsigned int num_items);
+struct btrfs_trans_handle *btrfs_try_start_transaction(struct btrfs_root *root,
+						       unsigned int num_items);
 struct btrfs_trans_handle *btrfs_start_transaction_fallback_global_rsv(
 					struct btrfs_root *root,
 					unsigned int num_items);

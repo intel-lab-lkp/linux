@@ -3879,6 +3879,10 @@ static bool rescan_should_stop(struct btrfs_fs_info *fs_info, bool *clear_rescan
 		*clear_rescan_ret = false;
 		return true;
 	}
+	if (fs_info->sb->s_writers.frozen > SB_UNFROZEN) {
+		*clear_rescan_ret = true;
+		return true;
+	}
 	if (!btrfs_qgroup_enabled(fs_info)) {
 		*clear_rescan_ret = true;
 		return true;
@@ -3918,9 +3922,13 @@ static void btrfs_qgroup_rescan_worker(struct btrfs_work *work)
 	path->skip_locking = true;
 
 	while (!ret && !(stopped = rescan_should_stop(fs_info, &clear_rescan))) {
-		trans = btrfs_start_transaction(fs_info->fs_root, 0);
+		trans = btrfs_try_start_transaction(fs_info->fs_root, 0);
 		if (IS_ERR(trans)) {
 			ret = PTR_ERR(trans);
+			if (ret == -EINTR) {
+				stopped = true;
+				clear_rescan = true;
+			}
 			break;
 		}
 
@@ -3951,7 +3959,7 @@ out:
 	 * btrfs_quota_disable().
 	 */
 	if (did_leaf_rescans) {
-		trans = btrfs_start_transaction(fs_info->quota_root, 1);
+		trans = btrfs_try_start_transaction(fs_info->quota_root, 1);
 		if (IS_ERR(trans)) {
 			ret = PTR_ERR(trans);
 			trans = NULL;
