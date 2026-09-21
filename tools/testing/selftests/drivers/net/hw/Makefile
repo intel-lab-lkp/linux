@@ -46,6 +46,7 @@ TEST_PROGS = \
 	rss_drv.py \
 	rss_flow_label.py \
 	rss_input_xfrm.py \
+	rss_key.py \
 	toeplitz.py \
 	tso.py \
 	userns_devmem.py \

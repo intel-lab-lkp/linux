@@ -26,6 +26,8 @@ try:
         fd_read_timeout, ip, rand_port, rand_ports, wait_port_listen, \
         wait_file, ctl_file_write, tool
     from net.lib.py import bpf_map_set, bpf_map_dump, bpf_prog_map_ids
+    from net.lib.py import RSS_KEY_QMAX, rss_key_bit, rss_key_assign_bit, \
+        rss_key_window, rss_key_toeplitz, rss_key_full_rank, rss_key_layout
     from net.lib.py import KsftSkipEx, KsftFailEx, KsftXfailEx
     from net.lib.py import ksft_disruptive, ksft_exit, ksft_pr, ksft_run, \
         ksft_setup, ksft_variants, KsftNamedVariant
@@ -42,6 +44,9 @@ try:
                "fd_read_timeout", "ip", "rand_port", "rand_ports",
                "wait_port_listen", "wait_file", "ctl_file_write", "tool",
                "bpf_map_set", "bpf_map_dump", "bpf_prog_map_ids",
+               "RSS_KEY_QMAX", "rss_key_bit", "rss_key_assign_bit",
+               "rss_key_window", "rss_key_toeplitz", "rss_key_full_rank",
+               "rss_key_layout",
                "KsftSkipEx", "KsftFailEx", "KsftXfailEx",
                "ksft_disruptive", "ksft_exit", "ksft_pr", "ksft_run",
                "ksft_setup", "ksft_variants", "KsftNamedVariant",
