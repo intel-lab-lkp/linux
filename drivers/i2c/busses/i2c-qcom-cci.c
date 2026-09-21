@@ -27,6 +27,7 @@
 #define CCI_I2C_Mm_SDA_CTL_1(m)			(0x108 + 0x100 * (m))
 #define CCI_I2C_Mm_SDA_CTL_2(m)			(0x10c + 0x100 * (m))
 #define CCI_I2C_Mm_MISC_CTL(m)			(0x110 + 0x100 * (m))
+#define CCI_I2C_MISC_CTL_SCL_STRETCH_EN	BIT(8)
 
 #define CCI_I2C_Mm_READ_DATA(m)			(0x118 + 0x100 * (m))
 #define CCI_I2C_Mm_READ_BUF_LEVEL(m)		(0x11c + 0x100 * (m))
@@ -97,7 +98,6 @@ struct hw_params {
 	u16 thd_dat; /* data hold time */
 	u16 thd_sta; /* hold time (repeated) START condition */
 	u16 tbuf; /* bus free time between a STOP and START condition */
-	u8 scl_stretch_en;
 	u16 trdhld;
 	u16 tsp; /* pulse width of spikes suppressed by the input filter */
 };
@@ -263,7 +263,7 @@ static void cci_init(struct cci *cci)
 		val = hw->tbuf;
 		writel(val, cci->base + CCI_I2C_Mm_SDA_CTL_2(i));
 
-		val = hw->scl_stretch_en << 8 | hw->trdhld << 4 | hw->tsp;
+		val = CCI_I2C_MISC_CTL_SCL_STRETCH_EN | hw->trdhld << 4 | hw->tsp;
 		writel(val, cci->base + CCI_I2C_Mm_MISC_CTL(i));
 	}
 }
@@ -657,7 +657,6 @@ static const struct cci_data cci_v1_data = {
 		.thd_dat = 10,
 		.thd_sta = 77,
 		.tbuf = 118,
-		.scl_stretch_en = 0,
 		.trdhld = 6,
 		.tsp = 1
 	},
@@ -669,7 +668,6 @@ static const struct cci_data cci_v1_data = {
 		.thd_dat = 13,
 		.thd_sta = 18,
 		.tbuf = 32,
-		.scl_stretch_en = 0,
 		.trdhld = 6,
 		.tsp = 3
 	},
@@ -690,7 +688,6 @@ static const struct cci_data cci_v1_5_data = {
 		.thd_dat = 10,
 		.thd_sta = 77,
 		.tbuf = 118,
-		.scl_stretch_en = 0,
 		.trdhld = 6,
 		.tsp = 1
 	},
@@ -702,7 +699,6 @@ static const struct cci_data cci_v1_5_data = {
 		.thd_dat = 13,
 		.thd_sta = 18,
 		.tbuf = 32,
-		.scl_stretch_en = 0,
 		.trdhld = 6,
 		.tsp = 3
 	},
@@ -723,7 +719,6 @@ static const struct cci_data cci_v2_data = {
 		.thd_dat = 22,
 		.thd_sta = 162,
 		.tbuf = 227,
-		.scl_stretch_en = 0,
 		.trdhld = 6,
 		.tsp = 3
 	},
@@ -735,7 +730,6 @@ static const struct cci_data cci_v2_data = {
 		.thd_dat = 22,
 		.thd_sta = 35,
 		.tbuf = 62,
-		.scl_stretch_en = 0,
 		.trdhld = 6,
 		.tsp = 3
 	},
@@ -747,7 +741,6 @@ static const struct cci_data cci_v2_data = {
 		.thd_dat = 16,
 		.thd_sta = 15,
 		.tbuf = 24,
-		.scl_stretch_en = 0,
 		.trdhld = 3,
 		.tsp = 3
 	},
@@ -768,7 +761,6 @@ static const struct cci_data cci_msm8953_data = {
 		.thd_dat = 10,
 		.thd_sta = 77,
 		.tbuf = 118,
-		.scl_stretch_en = 0,
 		.trdhld = 6,
 		.tsp = 1
 	},
@@ -780,7 +772,6 @@ static const struct cci_data cci_msm8953_data = {
 		.thd_dat = 13,
 		.thd_sta = 18,
 		.tbuf = 32,
-		.scl_stretch_en = 0,
 		.trdhld = 6,
 		.tsp = 3
 	},
@@ -792,7 +783,6 @@ static const struct cci_data cci_msm8953_data = {
 		.thd_dat = 16,
 		.thd_sta = 15,
 		.tbuf = 19,
-		.scl_stretch_en = 1,
 		.trdhld = 3,
 		.tsp = 3
 	},
