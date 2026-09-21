@@ -1384,6 +1384,32 @@ out:
 	return ret;
 }
 
+/*
+ * Bytes the socket has not seen acknowledged all belong to the most
+ * recent replies, so sk_send_pos less that count is the acknowledged
+ * position. write_seq advances only under xpt_mutex, which the caller
+ * holds, and a stale snd_una only lowers the result.
+ *
+ * Under kTLS, tls_sw_sendmsg() can return the full plaintext count
+ * with part of a record still waiting for socket write space, leaving
+ * write_seq short of the reply. Whether a record is pending is private
+ * to net/tls, so a TLS session publishes no acknowledged position.
+ */
+static void svc_tcp_update_acked(struct svc_sock *svsk)
+{
+	struct tcp_sock *tp = tcp_sk(svsk->sk_sk);
+	u64 unacked, acked;
+
+	if (test_bit(XPT_TLS_SESSION, &svsk->sk_xprt.xpt_flags))
+		return;
+	unacked = READ_ONCE(tp->write_seq) - READ_ONCE(tp->snd_una);
+	if (unacked >= svsk->sk_send_pos)
+		return;
+	acked = svsk->sk_send_pos - unacked;
+	if (acked > atomic64_read(&svsk->sk_xprt.xpt_acked_pos))
+		atomic64_set(&svsk->sk_xprt.xpt_acked_pos, acked);
+}
+
 /**
  * svc_tcp_sendto - Send out a reply on a TCP socket
  * @rqstp: completed svc_rqst
@@ -1412,6 +1438,9 @@ static int svc_tcp_sendto(struct svc_rqst *rqstp)
 	trace_svcsock_tcp_send(xprt, sent);
 	if (sent < 0 || sent != (xdr->len + sizeof(marker)))
 		goto out_close;
+	svsk->sk_send_pos += sent;
+	rqstp->rq_reply_pos = svsk->sk_send_pos;
+	svc_tcp_update_acked(svsk);
 	mutex_unlock(&xprt->xpt_mutex);
 	return sent;
 
