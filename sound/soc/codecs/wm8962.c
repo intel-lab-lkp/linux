@@ -3890,6 +3890,16 @@ err:
 
 static void wm8962_i2c_remove(struct i2c_client *client)
 {
+	struct wm8962_priv *wm8962 = i2c_get_clientdata(client);
+
+	/*
+	 * The IRQ is devm-managed, so it is freed only after the component
+	 * has been unregistered and wm8962_remove() has already cancelled
+	 * mic_work.  Silence the producer here instead.
+	 */
+	if (wm8962->irq)
+		disable_irq(wm8962->irq);
+
 	pm_runtime_disable(&client->dev);
 }
 
