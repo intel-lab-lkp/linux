@@ -76,11 +76,11 @@ do_async_gen_syndrome(struct dma_chan *chan,
 		for (;;) {
 			dma_dest[0] = unmap->addr[disks - 2];
 			dma_dest[1] = unmap->addr[disks - 1];
-			tx = dma->device_prep_dma_pq(chan, dma_dest,
-						     &unmap->addr[src_off],
-						     pq_src_cnt,
-						     &scfs[src_off], unmap->len,
-						     dma_flags);
+			tx = dmaengine_prep_dma_pq(chan, dma_dest,
+						   &unmap->addr[src_off],
+						   pq_src_cnt,
+						   &scfs[src_off], unmap->len,
+						   dma_flags);
 			if (likely(tx))
 				break;
 			async_tx_quiesce(&submit->depend_tx);
@@ -357,12 +357,12 @@ async_syndrome_val(struct page **blocks, unsigned int *offsets, int disks,
 		if (submit->flags & ASYNC_TX_FENCE)
 			dma_flags |= DMA_PREP_FENCE;
 		for (;;) {
-			tx = device->device_prep_dma_pq_val(chan, pq,
-							    unmap->addr,
-							    src_cnt,
-							    coefs,
-							    len, pqres,
-							    dma_flags);
+			tx = dmaengine_prep_dma_pq_val(chan, pq,
+						       unmap->addr,
+						       src_cnt,
+						       coefs,
+						       len, pqres,
+						       dma_flags);
 			if (likely(tx))
 				break;
 			async_tx_quiesce(&submit->depend_tx);

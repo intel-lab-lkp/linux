@@ -52,8 +52,8 @@ async_sum_product(struct page *dest, unsigned int d_off,
 		pq[1] = unmap->addr[2];
 
 		unmap->len = len;
-		tx = dma->device_prep_dma_pq(chan, pq, unmap->addr, 2, coef,
-					     len, dma_flags);
+		tx = dmaengine_prep_dma_pq(chan, pq, unmap->addr, 2, coef,
+					   len, dma_flags);
 		if (tx) {
 			dma_set_unmap(tx, unmap);
 			async_tx_submit(chan, tx, submit);
@@ -120,8 +120,8 @@ async_mult(struct page *dest, unsigned int d_off, struct page *src,
 		 * dma_dest[1] and ignores dma_dest[0] as a dest
 		 * due to DMA_PREP_PQ_DISABLE_P
 		 */
-		tx = dma->device_prep_dma_pq(chan, dma_dest, unmap->addr,
-					     1, &coef, len, dma_flags);
+		tx = dmaengine_prep_dma_pq(chan, dma_dest, unmap->addr,
+					   1, &coef, len, dma_flags);
 
 		if (tx) {
 			dma_set_unmap(tx, unmap);
