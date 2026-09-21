@@ -22,7 +22,6 @@
 #include <linux/fs.h>
 #include <linux/dma-fence.h>
 #include <linux/wait.h>
-#include <linux/pci-p2pdma.h>
 
 struct device;
 struct dma_buf;
