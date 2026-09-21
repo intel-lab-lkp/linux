@@ -13,11 +13,12 @@ maintainers:
 description: |
   The XSPI controller allows SPI protocol communication in
   single, dual, quad or octal wire transmission modes for
-  read/write access to slaves such as SPI-NOR flash.
+  read/write access to slaves such as SPI-NOR and SPI-NAND flash.
 
 properties:
   compatible:
     enum:
+      - cdns,xspi-nand
       - cdns,xspi-nor
       - marvell,cn10-xspi-nor
 
