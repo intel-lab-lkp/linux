@@ -57,7 +57,7 @@ xfs_inode_max_write_streams(
 
 	if (xfs_inode_is_filestream(ip))
 		return 0;
-	if (XFS_IS_REALTIME_INODE(ip))
+	if (XFS_IS_REALTIME_INODE(ip) && xfs_has_zoned(ip->i_mount))
 		return 0;
 	return write_stream_pool_count(&xfs_inode_buftarg(ip)->bt_stream_pool);
 }
@@ -75,7 +75,7 @@ xfs_inode_set_write_stream(
 	if (!fd_file(f))
 		return -EBADF;
 	xfs_ilock(ip, XFS_ILOCK_EXCL);
-	if (XFS_IS_REALTIME_INODE(ip)) {
+	if (XFS_IS_REALTIME_INODE(ip) && xfs_has_zoned(ip->i_mount)) {
 		error = -EINVAL;
 		goto out_unlock;
 	}
