@@ -470,13 +470,18 @@ static const struct nla_policy vni_filter_policy[VXLAN_VNIFILTER_MAX + 1] = {
 	[VXLAN_VNIFILTER_ENTRY] = { .type = NLA_NESTED },
 };
 
-static int vxlan_update_default_fdb_entry(struct vxlan_dev *vxlan, __be32 vni,
-					  union vxlan_addr *old_remote_ip,
-					  union vxlan_addr *remote_ip,
-					  struct netlink_ext_ack *extack)
+int vxlan_update_default_fdb_entry(struct vxlan_dev *vxlan, __be32 vni,
+				   union vxlan_addr *old_remote_ip,
+				   union vxlan_addr *remote_ip,
+				   u32 old_ifindex, u32 new_ifindex,
+				   struct netlink_ext_ack *extack)
 {
-	struct vxlan_rdst *dst = &vxlan->default_dst;
 	int err = 0;
+
+	if (old_remote_ip && remote_ip &&
+	    vxlan_addr_equal(old_remote_ip, remote_ip) &&
+	    old_ifindex == new_ifindex)
+		return 0;
 
 	spin_lock_bh(&vxlan->hash_lock);
 	if (remote_ip && !vxlan_addr_any(remote_ip)) {
@@ -487,7 +492,7 @@ static int vxlan_update_default_fdb_entry(struct vxlan_dev *vxlan, __be32 vni,
 				       vxlan->cfg.dst_port,
 				       vni,
 				       vni,
-				       dst->remote_ifindex,
+				       new_ifindex,
 				       NTF_SELF, 0, true, extack);
 		if (err) {
 			spin_unlock_bh(&vxlan->hash_lock);
@@ -500,7 +505,7 @@ static int vxlan_update_default_fdb_entry(struct vxlan_dev *vxlan, __be32 vni,
 				   *old_remote_ip,
 				   vxlan->cfg.dst_port,
 				   vni, vni,
-				   dst->remote_ifindex,
+				   old_ifindex,
 				   true);
 	}
 	spin_unlock_bh(&vxlan->hash_lock);
@@ -546,6 +551,8 @@ static int vxlan_vni_update_group(struct vxlan_dev *vxlan,
 
 	ret = vxlan_update_default_fdb_entry(vxlan, vninode->vni,
 					     oldrip, newrip,
+					     dst->remote_ifindex,
+					     dst->remote_ifindex,
 					     extack);
 	if (ret)
 		goto out;
@@ -583,8 +590,10 @@ out:
 int vxlan_vnilist_update_group(struct vxlan_dev *vxlan,
 			       union vxlan_addr *old_remote_ip,
 			       union vxlan_addr *new_remote_ip,
+			       u32 old_ifindex, u32 new_ifindex,
 			       struct netlink_ext_ack *extack)
 {
+	union vxlan_addr *oldrip, *newrip;
 	struct list_head *headp, *hpos;
 	struct vxlan_vni_group *vg;
 	struct vxlan_vni_node *vent;
@@ -595,17 +604,46 @@ int vxlan_vnilist_update_group(struct vxlan_dev *vxlan,
 	headp = &vg->vni_list;
 	list_for_each_prev(hpos, headp) {
 		vent = list_entry(hpos, struct vxlan_vni_node, vlist);
+
 		if (vxlan_addr_any(&vent->remote_ip)) {
-			ret = vxlan_update_default_fdb_entry(vxlan, vent->vni,
-							     old_remote_ip,
-							     new_remote_ip,
-							     extack);
-			if (ret)
-				return ret;
+			oldrip = old_remote_ip;
+			newrip = new_remote_ip;
+		} else {
+			/* A vni with its own group keeps it, but its fdb entry
+			 * is still keyed on the device remote_ifindex.
+			 */
+			oldrip = &vent->remote_ip;
+			newrip = &vent->remote_ip;
 		}
+
+		ret = vxlan_update_default_fdb_entry(vxlan, vent->vni,
+						     oldrip, newrip,
+						     old_ifindex, new_ifindex,
+						     extack);
+		if (ret)
+			goto err_unwind;
 	}
 
 	return 0;
+
+err_unwind:
+	list_for_each_continue(hpos, headp) {
+		vent = list_entry(hpos, struct vxlan_vni_node, vlist);
+
+		if (vxlan_addr_any(&vent->remote_ip)) {
+			oldrip = old_remote_ip;
+			newrip = new_remote_ip;
+		} else {
+			oldrip = &vent->remote_ip;
+			newrip = &vent->remote_ip;
+		}
+
+		vxlan_update_default_fdb_entry(vxlan, vent->vni,
+					       newrip, oldrip,
+					       new_ifindex, old_ifindex,
+					       NULL);
+	}
+	return ret;
 }
 
 static void vxlan_vni_delete_group(struct vxlan_dev *vxlan,
