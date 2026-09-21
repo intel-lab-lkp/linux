@@ -4770,6 +4770,14 @@ int ice_init_dev(struct ice_pf *pf)
 	int err;
 
 	ice_set_pf_caps(pf);
+
+	err = ice_aq_set_port_params(pf->hw.port_info, ice_is_dvm_ena(&pf->hw),
+				     NULL);
+	if (err) {
+		dev_err(dev, "ice_aq_set_port_params failed: %d\n", err);
+		return err;
+	}
+
 	err = ice_init_interrupt_scheme(pf);
 	if (err) {
 		dev_err(dev, "ice_init_interrupt_scheme failed: %d\n", err);
@@ -4930,7 +4938,6 @@ static void ice_init_link(struct ice_pf *pf)
 
 static int ice_init_pf_sw(struct ice_pf *pf)
 {
-	bool dvm = ice_is_dvm_ena(&pf->hw);
 	struct ice_vsi *vsi;
 	int err;
 
@@ -4949,10 +4956,6 @@ static int ice_init_pf_sw(struct ice_pf *pf)
 	/* record the sw_id available for later use */
 	pf->first_sw->sw_id = pf->hw.port_info->sw_id;
 
-	err = ice_aq_set_port_params(pf->hw.port_info, dvm, NULL);
-	if (err)
-		goto err_aq_set_port_params;
-
 	vsi = ice_pf_vsi_setup(pf, pf->hw.port_info);
 	if (!vsi) {
 		err = -ENOMEM;
@@ -4962,7 +4965,6 @@ static int ice_init_pf_sw(struct ice_pf *pf)
 	return 0;
 
 err_pf_vsi_setup:
-err_aq_set_port_params:
 	kfree(pf->first_sw);
 	return err;
 }
