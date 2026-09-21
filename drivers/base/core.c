@@ -834,15 +834,26 @@ struct device_link *device_link_add(struct device *consumer,
 	device_pm_lock();
 
 	/*
-	 * If the supplier has not been fully registered yet or there is a
-	 * reverse (non-SYNC_STATE_ONLY) dependency between the consumer and
-	 * the supplier already in the graph, return NULL. If the link is a
-	 * SYNC_STATE_ONLY link, we don't check for reverse dependencies
-	 * because it only affects sync_state() callbacks.
+	 * If the supplier has not been fully registered yet with a driver
+	 * return NULL.
 	 */
-	if (!device_pm_initialized(supplier)
-	    || (!(flags & DL_FLAG_SYNC_STATE_ONLY) &&
-		  device_is_dependent(consumer, supplier))) {
+	scoped_guard(device, supplier) {
+		if (!device_is_bound(supplier)) {
+			link = NULL;
+			goto out;
+		}
+	}
+	/*
+	 * If consumer asks for PM to use the link and the supplier has not
+	 * PM initialized, or if there is a reverse (non-SYNC_STATE_ONLY)
+	 * dependency between the consumer and the supplier already in the
+	 * graph, return NULL. If the link is a SYNC_STATE_ONLY link, we
+	 * don't check for reverse dependencies because it only affects
+	 * sync_state() callbacks.
+	 */
+	if (((flags & DL_FLAG_PM_RUNTIME) && !device_pm_initialized(supplier)) ||
+	    (!(flags & DL_FLAG_SYNC_STATE_ONLY) &&
+	     device_is_dependent(consumer, supplier))) {
 		link = NULL;
 		goto out;
 	}
