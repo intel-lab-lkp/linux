@@ -596,9 +596,17 @@ static bool
 pnfs_cache_lseg_for_layoutreturn(struct pnfs_layout_hdr *lo,
 		struct pnfs_layout_segment *lseg)
 {
+	u32 seq = lo->plh_return_seq;
+
 	if (test_and_clear_bit(NFS_LSEG_LAYOUTRETURN, &lseg->pls_flags) &&
 	    pnfs_layout_is_valid(lo)) {
-		pnfs_set_plh_return_info(lo, lseg->pls_range.iomode, 0);
+		/*
+		 * Avoid resnapshotting the current layout stateid for an lseg that
+		 * is already covered by the pending return.
+		 */
+		if (!seq || pnfs_seqid_is_newer(lseg->pls_seq, seq))
+			seq = 0;
+		pnfs_set_plh_return_info(lo, lseg->pls_range.iomode, seq);
 		list_move_tail(&lseg->pls_list, &lo->plh_return_segs);
 		return true;
 	}
