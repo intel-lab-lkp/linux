@@ -1220,8 +1220,10 @@ static int ab8500_probe(struct platform_device *pdev)
 		ret = mfd_add_devices(ab8500->dev, 0, ab8500_devs,
 				ARRAY_SIZE(ab8500_devs), NULL,
 				0, ab8500->domain);
-	if (ret)
+	if (ret) {
+		mfd_remove_devices(ab8500->dev);
 		return ret;
+	}
 
 	/* Add battery management devices */
 	ret = mfd_add_devices(ab8500->dev, 0, ab8500_bm_devs,
@@ -1243,8 +1245,10 @@ static int ab8500_probe(struct platform_device *pdev)
 		ret = sysfs_create_group(&ab8500->dev->kobj,
 					 &ab8505_attr_group);
 
-	if (ret)
+	if (ret) {
 		dev_err(ab8500->dev, "error creating sysfs entries\n");
+		mfd_remove_devices(ab8500->dev);
+	}
 
 	return ret;
 }
