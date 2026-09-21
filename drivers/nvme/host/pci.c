@@ -2373,12 +2373,18 @@ static int nvme_pci_configure_admin_queue(struct nvme_dev *dev)
 		struct pci_dev *pdev = to_pci_dev(dev->dev);
 
 		/*
-		 * The NVMe Controller Reset method did not get an expected
-		 * CSTS.RDY transition, so something with the device appears to
-		 * be stuck. Use the lower level and bigger hammer PCIe
-		 * Function Level Reset to attempt restoring the device to its
-		 * initial state, and try again.
+		 * Controller Reset did not clear CSTS.RDY. FLR can recover
+		 * some devices, but it issues PCI config cycles with
+		 * pci_config_lock held. A wedged function can stall those
+		 * cycles and hard-lock unrelated PCI users.
+		 *
+		 * Only try FLR during initial probe. On I/O-timeout reset
+		 * the controller is already known stuck; fail the reset
+		 * instead of risking a host lockup.
 		 */
+		if (nvme_ctrl_state(&dev->ctrl) == NVME_CTRL_RESETTING)
+			return result;
+
 		result = pcie_reset_flr(pdev, false);
 		if (result < 0)
 			return result;
