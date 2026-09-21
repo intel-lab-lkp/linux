@@ -7311,7 +7311,6 @@ static int perf_mmap_rb(struct vm_area_struct *vma, struct perf_event *event,
 			 * Success -- managed to mmap() the same buffer
 			 * multiple times.
 			 */
-			perf_mmap_account(vma, user_extra, extra);
 			refcount_inc(&event->mmap_count);
 			return 0;
 		}
@@ -7399,7 +7398,6 @@ static int perf_mmap_aux(struct vm_area_struct *vma, struct perf_event *event,
 
 	if (rb_has_aux(rb)) {
 		refcount_inc(&rb->aux_mmap_count);
-
 	} else {
 		if (!perf_mmap_calc_limits(vma, &user_extra, &extra)) {
 			refcount_dec(&rb->mmap_count);
@@ -7420,9 +7418,9 @@ static int perf_mmap_aux(struct vm_area_struct *vma, struct perf_event *event,
 
 		refcount_set(&rb->aux_mmap_count, 1);
 		rb->aux_mmap_locked = extra;
+		perf_mmap_account(vma, user_extra, extra);
 	}
 
-	perf_mmap_account(vma, user_extra, extra);
 	refcount_inc(&event->mmap_count);
 
 	return 0;
