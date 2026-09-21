@@ -487,7 +487,8 @@ kmem_buckets *kmem_buckets_create(const char *name, slab_flags_t flags,
 			if (WARN_ON(!cache_name))
 				goto fail;
 			(*b)[aligned_idx] = kmem_cache_create_usercopy(cache_name, size,
-					0, flags, cache_useroffset,
+					kmalloc_caches[KMALLOC_NORMAL][idx]->align,
+					flags, cache_useroffset,
 					cache_usersize, ctor);
 			kfree(cache_name);
 			if (WARN_ON(!(*b)[aligned_idx]))
