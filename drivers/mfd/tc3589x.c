@@ -303,6 +303,7 @@ static int tc3589x_device_init(struct tc3589x *tc3589x)
 				      0, tc3589x->domain);
 		if (ret) {
 			dev_err(tc3589x->dev, "failed to keypad child\n");
+			mfd_remove_devices(tc3589x->dev);
 			return ret;
 		}
 		dev_info(tc3589x->dev, "added keypad block\n");
