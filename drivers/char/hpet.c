@@ -625,13 +625,18 @@ hpet_ioctl_common(struct hpet_dev *devp, unsigned int cmd, unsigned long arg,
 		devp->hd_flags &= ~HPET_PERIODIC;
 		break;
 	case HPET_IRQFREQ:
+		if (devp->hd_flags & HPET_IE) {
+			err = -EBUSY;
+			break;
+		}
+
 		if ((arg > hpet_max_freq) &&
 		    !capable(CAP_SYS_RESOURCE)) {
 			err = -EACCES;
 			break;
 		}
 
-		if (!arg) {
+		if (!arg || !hpet_time_div(hpetp, arg)) {
 			err = -EINVAL;
 			break;
 		}
