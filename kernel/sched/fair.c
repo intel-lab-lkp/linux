@@ -900,7 +900,7 @@ static __always_inline
 void decay_entity_lag(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 {
 	s64 vlag = se->vlag;
-	s64 delta_exec;
+	struct rq *rq;
 
 	WARN_ON_ONCE(se->on_rq);
 
@@ -908,18 +908,25 @@ void decay_entity_lag(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	if (vlag <= 0)
 		return;
 
-	if (flags & ENQUEUE_MIGRATED)
-		return;
+	rq = rq_of(cfs_rq);
 
-	/* Compute the sleep time */
-	delta_exec = rq_clock_task(rq_of(cfs_rq)) - se->exec_start;
-	if (unlikely(delta_exec <= 0))
-		return;
+	if (rq->curr == rq->idle) {
+		/* You can't claim any lag when waking on idle CPU */
+		vlag = 0;
+	} else if (!(flags & ENQUEUE_MIGRATED)) {
+		u64 now = rq_clock_task(rq);
+		s64 delta_exec;
 
-	vlag -= calc_delta_fair(delta_exec, se);
+		/* Compute the sleep time */
+		delta_exec = now - se->exec_start;
+		if (unlikely(delta_exec <= 0))
+			return;
 
-	/* vlag can't become negative while sleeping */
-	se->vlag = max(0, vlag);
+		vlag -= calc_delta_fair(delta_exec, se);
+
+		/* vlag can't become neg while sleeping */
+		se->vlag = max(0, vlag);
+	}
 }
 
 /*
