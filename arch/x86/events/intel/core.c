@@ -5323,7 +5323,7 @@ static struct perf_guest_switch_msr *intel_guest_get_msrs(int *nr,
 	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);
 	struct perf_guest_switch_msr *arr = cpuc->guest_switch_msrs;
 	u64 intel_ctrl = hybrid(cpuc->pmu, intel_ctrl);
-	u64 pebs_mask = cpuc->pebs_enabled & x86_pmu.pebs_capable;
+	u64 pebs_mask = intel_ctrl & cpuc->pebs_enabled & x86_pmu.pebs_capable;
 	u64 guest_pebs_mask;
 	int global_ctrl;
 
@@ -5375,7 +5375,7 @@ static struct perf_guest_switch_msr *intel_guest_get_msrs(int *nr,
 	 * the guest wants to use for PEBS, (c) are not excluded from counting
 	 * in the guest, and (d) _are_ excluded from counting in the host.
 	 */
-	guest_pebs_mask = pebs_mask & intel_ctrl & guest_pebs->enable &
+	guest_pebs_mask = pebs_mask & guest_pebs->enable &
 			  ~cpuc->intel_ctrl_exclude_guest_mask &
 			  cpuc->intel_ctrl_exclude_host_mask;
 
