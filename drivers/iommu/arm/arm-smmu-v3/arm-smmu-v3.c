@@ -4365,19 +4365,64 @@ static int arm_smmu_set_dirty_tracking(struct iommu_domain *domain,
 
 static struct iommu_group *arm_smmu_device_group(struct device *dev)
 {
-	struct iommu_group *group;
+	struct arm_smmu_master *master = dev_iommu_priv_get(dev);
+	struct arm_smmu_device *smmu = master->smmu;
+	struct iommu_fwspec *fwspec = dev_iommu_fwspec_get(dev);
+	struct iommu_group *group = NULL;
+	int i;
 
 	/*
-	 * We don't support devices sharing stream IDs other than PCI RID
-	 * aliases, since the necessary ID-to-device lookup becomes rather
-	 * impractical given a potential sparse 32-bit stream ID space.
+	 * If any of this device's SIDs are already owned by another master,
+	 * place this device in the same IOMMU group as that master.  This
+	 * ensures that aliasing devices share a single domain and therefore
+	 * a single cd_table, which is required because the STE can only
+	 * point to one cd_table at a time.
+	 *
+	 * arm_smmu_device_group() is called before arm_smmu_insert_master()
+	 * adds the current master's streams to the xarray, so any hit here
+	 * belongs to a different, already-probed master.
+	 *
+	 * streams_mutex is held to ensure the xarray is stable and the
+	 * returned stream object is not freed concurrently.
 	 */
-	if (dev_is_pci(dev))
-		group = pci_device_group(dev);
-	else
-		group = generic_device_group(dev);
+	mutex_lock(&smmu->streams_mutex);
+	for (i = 0; i < fwspec->num_ids; i++) {
+		struct arm_smmu_stream *stream =
+			xa_load(&smmu->streams, fwspec->ids[i]);
+		struct iommu_group *existing;
 
-	return group;
+		if (!stream)
+			continue;
+
+		existing = iommu_group_get(stream->master->dev);
+		if (!group) {
+			group = existing;
+		} else if (group != existing) {
+			/*
+			 * This device has SIDs in two different groups.
+			 * The IOMMU core has no group-merge API, so we
+			 * cannot fix this up.  Warn and keep the first
+			 * group — the mismatched SID will still be
+			 * inserted into the XArray and shared, but DMA
+			 * isolation is compromised.
+			 */
+			dev_warn(dev,
+				 "SID 0x%x already in a different IOMMU group than SID 0x%x, expect broken isolation\n",
+				 fwspec->ids[i], fwspec->ids[0]);
+			iommu_group_put(existing);
+		} else {
+			iommu_group_put(existing);
+		}
+	}
+	mutex_unlock(&smmu->streams_mutex);
+
+	if (group)
+		return group;
+
+	if (dev_is_pci(dev))
+		return pci_device_group(dev);
+
+	return generic_device_group(dev);
 }
 
 static int arm_smmu_of_xlate(struct device *dev,
