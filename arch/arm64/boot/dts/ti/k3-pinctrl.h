@@ -3,11 +3,12 @@
  * This header provides constants for pinctrl bindings for TI's K3 SoC
  * family.
  *
- * Copyright (C) 2018-2025 Texas Instruments Incorporated - https://www.ti.com/
+ * Copyright (C) 2018-2026 Texas Instruments Incorporated - https://www.ti.com/
  */
 #ifndef DTS_ARM64_TI_K3_PINCTRL_H
 #define DTS_ARM64_TI_K3_PINCTRL_H
 
+#define VGPIO_SEL_SHIFT         (4)
 #define WKUP_LVL_EN_SHIFT	(7)
 #define WKUP_LVL_POL_SHIFT	(8)
 #define DEBOUNCE_SHIFT		(11)
@@ -110,6 +111,11 @@
 #define PIN_WKUP_EN_LEVEL_LOW		(WKUP_ENABLE | WKUP_ON_LEVEL | WKUP_LEVEL_LOW)
 #define PIN_WKUP_EN_LEVEL_HIGH		(WKUP_ENABLE | WKUP_ON_LEVEL | WKUP_LEVEL_HIGH)
 #define PIN_WKUP_EN			(WKUP_ENABLE | WKUP_ON_EDGE)
+
+#define PIN_VGPIO_SEL0                  (0 << VGPIO_SEL_SHIFT)
+#define PIN_VGPIO_SEL1                  (1 << VGPIO_SEL_SHIFT)
+#define PIN_VGPIO_SEL2                  (2 << VGPIO_SEL_SHIFT)
+#define PIN_VGPIO_SEL3                  (3 << VGPIO_SEL_SHIFT)
 
 /* Default mux configuration for gpio-ranges to use with pinctrl */
 #define PIN_GPIO_RANGE_IOPAD	(PIN_INPUT | 7)
