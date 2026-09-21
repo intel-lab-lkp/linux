@@ -540,4 +540,18 @@ config NET_TEST
 
 	  If unsure, say N.
 
+config ETHTOOL_RSS_KEY_KUNIT_TEST
+	tristate "KUnit tests for the generated RSS key" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  KUnit tests checking the RSS key that netdev_rss_key_fill() hands
+	  to the drivers: flows differing only in the low order bits of one
+	  hashed header field have to spread over all the RX queues, for
+	  every field of the Toeplitz hash inputs, for every 16-bit aligned
+	  position of the key, and for every queue count up to
+	  2 ** NETDEV_RSS_KEY_QMAX.
+
+	  If unsure, say N.
+
 endif   # if NET

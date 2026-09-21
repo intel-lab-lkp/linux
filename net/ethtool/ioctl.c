@@ -31,6 +31,7 @@
 #include <linux/unaligned.h>
 #include <linux/utsname.h>
 #include <linux/ethtool_netlink.h>
+#include <kunit/visibility.h>
 #include <net/devlink.h>
 #include <net/ipv6.h>
 #include <net/flow_offload.h>
@@ -1334,7 +1335,6 @@ bool netdev_rss_key_initialized __read_mostly;
  * NETDEV_RSS_KEY_QMAX is both enough for 256 queues and the largest value
  * keeping the ranges of two adjacent positions disjoint.
  */
-#define NETDEV_RSS_KEY_QMAX	8
 #define NETDEV_RSS_KEY_SPAN	(2 * NETDEV_RSS_KEY_QMAX - 1)
 
 static bool netdev_rss_key_bit(const u8 *key, unsigned int bit)
@@ -1444,7 +1444,7 @@ static bool netdev_rss_key_aliases(const u8 *key, unsigned int bits)
 	return false;
 }
 
-static void netdev_rss_key_init(u8 *key, size_t len)
+VISIBLE_IF_KUNIT void netdev_rss_key_init(u8 *key, size_t len)
 {
 	unsigned int lsb, bits = len * BITS_PER_BYTE;
 
@@ -1469,6 +1469,7 @@ static void netdev_rss_key_init(u8 *key, size_t len)
 	smp_wmb();
 	WRITE_ONCE(netdev_rss_key_initialized, true);
 }
+EXPORT_SYMBOL_IF_KUNIT(netdev_rss_key_init);
 
 void netdev_rss_key_fill(void *buffer, size_t len)
 {

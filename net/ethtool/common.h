@@ -15,6 +15,17 @@
 #define __SOF_TIMESTAMPING_CNT (const_ilog2(SOF_TIMESTAMPING_LAST) + 1)
 #define __HWTSTAMP_FLAG_CNT (const_ilog2(HWTSTAMP_FLAG_LAST) + 1)
 
+/* netdev_rss_key_fill() guarantees that flows differing only in the low order
+ * bits of one hashed header field spread over all the RX queues, for any queue
+ * count up to 2 ** NETDEV_RSS_KEY_QMAX and any 16-bit aligned field of the
+ * hash input. See netdev_rss_key_init().
+ */
+#define NETDEV_RSS_KEY_QMAX	8
+
+#if IS_ENABLED(CONFIG_KUNIT)
+void netdev_rss_key_init(u8 *key, size_t len);
+#endif
+
 struct genl_info;
 struct hwtstamp_provider_desc;
 
