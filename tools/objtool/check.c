@@ -262,9 +262,6 @@ static bool might_return(struct objtool_file *file, struct symbol *func)
 	struct instruction *insn;
 	struct symbol *dest;
 
-	if (is_weak_sym(func))
-		return true;
-
 	func_for_each_insn(file, func, insn) {
 		if (insn->type == INSN_RETURN)
 			return true;
