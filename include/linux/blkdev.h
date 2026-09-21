@@ -978,6 +978,7 @@ static inline unsigned int bdev_nr_zones(struct block_device *bdev)
 }
 
 int bdev_disk_changed(struct gendisk *disk, bool invalidate);
+int bdev_clone_partitions(struct gendisk *disk, struct gendisk *mirror);
 
 void put_disk(struct gendisk *disk);
 struct gendisk *__blk_alloc_disk(struct queue_limits *lim, int node,
@@ -1599,6 +1600,7 @@ struct block_device_operations {
 	/* returns the length of the identifier or a negative errno: */
 	int (*get_unique_id)(struct gendisk *disk, u8 id[16],
 			enum blk_unique_id id_type);
+	void (*disk_changed_notify)(struct gendisk *disk);
 	struct module *owner;
 	const struct pr_ops *pr_ops;
 

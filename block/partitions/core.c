@@ -703,6 +703,9 @@ rescan:
 		kobject_uevent(&disk_to_dev(disk)->kobj, KOBJ_CHANGE);
 	}
 
+	if (disk->fops->disk_changed_notify)
+		disk->fops->disk_changed_notify(disk);
+
 	return ret;
 }
 /*
@@ -710,6 +713,46 @@ rescan:
  * code!
  */
 EXPORT_SYMBOL_GPL(bdev_disk_changed);
+
+int bdev_clone_partitions(struct gendisk *disk, struct gendisk *mirror)
+{
+	struct block_device *part;
+	unsigned long idx;
+
+	if (disk_has_partscan(mirror))
+		return -EINVAL;
+
+	lockdep_assert_held(&disk->open_mutex);
+	mutex_lock_nested(&mirror->open_mutex, SINGLE_DEPTH_NESTING);
+
+	xa_for_each_start(&mirror->part_tbl, idx, part, 1) {
+		/* Same as bdev_disk_changed() */
+		bdev_unhash(part);
+		WARN_ON_ONCE(atomic_read(&part->bd_openers));
+		invalidate_bdev(part);
+		drop_partition(part);
+	}
+
+	xa_for_each_start(&disk->part_tbl, idx, part, 1) {
+		struct block_device *part_added;
+
+		part_added = add_partition(mirror, idx, part->bd_start_sect,
+					part->bd_nr_sectors, ADDPART_FLAG_NONE,
+					part->bd_meta_info);
+		if (IS_ERR(part_added)) {
+			if (PTR_ERR(part_added) != -ENXIO) {
+				dev_err(disk_to_dev(mirror), "p%ld could not be added: %pe\n",
+				       idx, part_added);
+			}
+			mutex_unlock(&mirror->open_mutex);
+			return PTR_ERR(part_added);
+		}
+	}
+	mutex_unlock(&mirror->open_mutex);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(bdev_clone_partitions);
 
 void *read_part_sector(struct parsed_partitions *state, sector_t n, Sector *p)
 {
