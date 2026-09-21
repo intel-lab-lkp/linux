@@ -285,6 +285,10 @@ static int vfio_cdx_mmap(struct vfio_device *core_vdev,
 	    (vma->vm_flags & VM_WRITE))
 		return -EPERM;
 
+	/* Prevent read-only region mappings from being upgraded with mprotect() */
+	if (!(vdev->regions[index].flags & VFIO_REGION_INFO_FLAG_WRITE))
+		vm_flags_clear(vma, VM_MAYWRITE);
+
 	return vfio_cdx_mmap_mmio(vdev->regions[index], vma);
 }
 
