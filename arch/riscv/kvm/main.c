@@ -262,6 +262,9 @@ static void __exit riscv_kvm_exit(void)
 {
 	kvm_exit();
 
+	/* Wait for pending G-stage page-table RCU callbacks. */
+	rcu_barrier();
+
 	/* Unregister CPU PM notifier */
 	if (IS_ENABLED(CONFIG_CPU_PM))
 		cpu_pm_unregister_notifier(&kvm_riscv_cpu_pm_nb);
