@@ -12440,6 +12440,7 @@ F:	drivers/i3c/
 F:	include/dt-bindings/i3c/
 F:	include/linux/i3c/
 F:	include/uapi/linux/i3c/
+F:	tools/i3c/
 
 IBM Operation Panel Input Driver
 M:	Eddie James <eajames@linux.ibm.com>
