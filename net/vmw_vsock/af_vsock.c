@@ -1757,8 +1757,7 @@ static int vsock_connect(struct socket *sock, struct sockaddr_unsized *addr,
 		/* The hypervisor and well-known contexts do not have socket
 		 * endpoints.
 		 */
-		if (!transport ||
-		    !transport->stream_allow(vsk, remote_addr->svm_cid,
+		if (!transport->stream_allow(vsk, remote_addr->svm_cid,
 					     remote_addr->svm_port)) {
 			err = -ENETUNREACH;
 			goto out;
