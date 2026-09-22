@@ -5313,7 +5313,8 @@ static void free_event_rcu(struct rcu_head *head)
 		put_pid_ns(event->ns);
 	perf_event_free_filter(event);
 	kfree(event->addr_filter_ranges);
-	kmem_cache_free(perf_event_cache, event);
+	/* Pairs with the smp_store_release() in perf_event_init(). */
+	kmem_cache_free(smp_load_acquire(&perf_event_cache), event);
 }
 
 static void ring_buffer_attach(struct perf_event *event,
@@ -15404,7 +15405,8 @@ void __init perf_event_init(void)
 	ret = init_hw_breakpoint();
 	WARN(ret, "hw_breakpoint initialization failed with: %d", ret);
 
-	perf_event_cache = KMEM_CACHE(perf_event, SLAB_PANIC);
+	/* Pairs with the smp_load_acquire() in free_event_rcu(). */
+	smp_store_release(&perf_event_cache, KMEM_CACHE(perf_event, SLAB_PANIC));
 
 	/*
 	 * Build time assertion that we keep the data_head at the intended
