@@ -2864,7 +2864,8 @@ static void recalc_bh_state(void)
 	__this_cpu_write(bh_accounting.ratelimit, 0);
 	for_each_online_cpu(i)
 		tot += per_cpu(bh_accounting, i).nr;
-	buffer_heads_over_limit = (tot > max_buffer_heads);
+	/* Pairs with the smp_store_release() in buffer_init(). */
+	buffer_heads_over_limit = (tot > smp_load_acquire(&max_buffer_heads));
 }
 
 struct buffer_head *alloc_buffer_head(gfp_t gfp_flags)
@@ -2998,7 +2999,9 @@ void __init buffer_init(void)
 	 * Limit the bh occupancy to 10% of ZONE_NORMAL
 	 */
 	nrpages = (nr_free_buffer_pages() * 10) / 100;
-	max_buffer_heads = nrpages * (PAGE_SIZE / sizeof(struct buffer_head));
+	/* Pairs with the smp_load_acquire() in recalc_bh_state(). */
+	smp_store_release(&max_buffer_heads,
+			  nrpages * (PAGE_SIZE / sizeof(struct buffer_head)));
 	ret = cpuhp_setup_state_nocalls(CPUHP_FS_BUFF_DEAD, "fs/buffer:dead",
 					NULL, buffer_exit_cpu_dead);
 	WARN_ON(ret < 0);
