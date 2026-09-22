@@ -150,7 +150,9 @@ static void omap_musb_set_mailbox(struct omap2430_glue *glue)
 	struct musb *musb = glue_to_musb(glue);
 	int error;
 
-	pm_runtime_get_sync(musb->controller);
+	error = pm_runtime_resume_and_get(musb->controller);
+	if (error < 0)
+		return;
 
 	dev_dbg(musb->controller, "VBUS %s, devctl %02x\n",
 		usb_otg_state_string(musb->xceiv->otg->state),
@@ -579,12 +581,15 @@ static int omap2430_runtime_resume(struct device *dev)
 {
 	struct omap2430_glue		*glue = dev_get_drvdata(dev);
 	struct musb			*musb = glue_to_musb(glue);
+	int ret;
 
 	if (!musb)
 		return 0;
 
 	if (!glue->phy_suspended) {
-		omap2430_phy_power_on(glue);
+		ret = omap2430_phy_power_on(glue);
+		if (ret)
+			return ret;
 	}
 
 	omap2430_low_level_init(musb);
@@ -636,13 +641,16 @@ static int omap2430_suspend_late(struct device *dev)
 static int omap2430_resume_early(struct device *dev)
 {
 	struct omap2430_glue *glue = dev_get_drvdata(dev);
+	int ret;
 
 	if (!glue->needs_resume)
 		return 0;
 
-	glue->needs_resume = 0;
+	ret = omap2430_runtime_resume(dev);
+	if (!ret)
+		glue->needs_resume = 0;
 
-	return omap2430_runtime_resume(dev);
+	return ret;
 }
 
 static int omap2430_resume(struct device *dev)
