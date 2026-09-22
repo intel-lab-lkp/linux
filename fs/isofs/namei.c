@@ -68,6 +68,18 @@ isofs_find_entry(struct inode *dir, struct dentry *dentry,
 		int de_len, match, i, dlen;
 		char *dpnt;
 
+		/*
+		 * The previous record was validated to end within its
+		 * block; if it ended exactly at the end, the next record
+		 * starts at the beginning of the next block.
+		 */
+		if (offset == bufsize) {
+			brelse(bh);
+			bh = NULL;
+			block++;
+			offset = 0;
+		}
+
 		if (!bh) {
 			bh = isofs_bread(dir, block);
 			if (!bh)
