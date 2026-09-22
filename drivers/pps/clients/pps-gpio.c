@@ -163,10 +163,8 @@ static int pps_gpio_probe(struct platform_device *pdev)
 
 	/* IRQ setup */
 	ret = gpiod_to_irq(data->gpio_pin);
-	if (ret < 0) {
-		dev_err(dev, "failed to map GPIO to IRQ: %d\n", ret);
-		return -EINVAL;
-	}
+	if (ret < 0)
+		return dev_err_probe(dev, ret, "failed to map GPIO to IRQ\n");
 	data->irq = ret;
 
 	/* initialize PPS specific parts of the bookkeeping data structure. */
@@ -197,8 +195,8 @@ static int pps_gpio_probe(struct platform_device *pdev)
 			  data->info.name, data);
 	if (ret) {
 		pps_unregister_source(data->pps);
-		dev_err(dev, "failed to acquire IRQ %d\n", data->irq);
-		return -EINVAL;
+		return dev_err_probe(dev, ret, "failed to acquire IRQ %d\n",
+				     data->irq);
 	}
 
 	dev_dbg(&data->pps->dev, "Registered IRQ %d as PPS source\n",
