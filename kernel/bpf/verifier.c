@@ -694,24 +694,26 @@ static bool dynptr_type_referenced(enum bpf_dynptr_type type)
 
 static void __mark_dynptr_reg(struct bpf_reg_state *reg,
 			      enum bpf_dynptr_type type,
-			      bool first_slot, int id, int parent_id);
+			      bool first_slot, bool type_unknown,
+			      int id, int parent_id);
 
 static void mark_dynptr_stack_regs(struct bpf_verifier_env *env,
 				   struct bpf_reg_state *sreg1,
 				   struct bpf_reg_state *sreg2,
-				   enum bpf_dynptr_type type, int parent_id)
+				   enum bpf_dynptr_type type,
+				   bool type_unknown, int parent_id)
 {
 	int id = ++env->id_gen;
 
-	__mark_dynptr_reg(sreg1, type, true, id, parent_id);
-	__mark_dynptr_reg(sreg2, type, false, id, parent_id);
+	__mark_dynptr_reg(sreg1, type, true, type_unknown, id, parent_id);
+	__mark_dynptr_reg(sreg2, type, false, type_unknown, id, parent_id);
 }
 
 static void mark_dynptr_cb_reg(struct bpf_verifier_env *env,
 			       struct bpf_reg_state *reg,
 			       enum bpf_dynptr_type type)
 {
-	__mark_dynptr_reg(reg, type, true, ++env->id_gen, 0);
+	__mark_dynptr_reg(reg, type, true, false, ++env->id_gen, 0);
 }
 
 static int destroy_if_dynptr_stack_slot(struct bpf_verifier_env *env,
@@ -723,6 +725,7 @@ static int mark_stack_slots_dynptr(struct bpf_verifier_env *env, struct bpf_reg_
 {
 	struct bpf_func_state *state = bpf_func(env, reg);
 	int spi, i, err, parent_id = 0;
+	bool type_unknown = false;
 	enum bpf_dynptr_type type;
 
 	spi = dynptr_get_spi(env, reg);
@@ -778,10 +781,12 @@ static int mark_stack_slots_dynptr(struct bpf_verifier_env *env, struct bpf_reg_
 		}
 	} else { /* bpf_dynptr_clone() */
 		parent_id = dynptr->parent_id;
+		type_unknown = dynptr->type_unknown;
 	}
 
 	mark_dynptr_stack_regs(env, &state->stack[spi].spilled_ptr,
-			       &state->stack[spi - 1].spilled_ptr, type, parent_id);
+			       &state->stack[spi - 1].spilled_ptr, type,
+			       type_unknown, parent_id);
 
 	return 0;
 }
@@ -1951,7 +1956,8 @@ static void mark_reg_known_zero(struct bpf_verifier_env *env,
 }
 
 static void __mark_dynptr_reg(struct bpf_reg_state *reg, enum bpf_dynptr_type type,
-			      bool first_slot, int id, int parent_id)
+			      bool first_slot, bool type_unknown,
+			      int id, int parent_id)
 {
 	/* reg->type has no meaning for STACK_DYNPTR, but when we set reg for
 	 * callback arguments, it does need to be CONST_PTR_TO_DYNPTR, so simply
@@ -1963,6 +1969,7 @@ static void __mark_dynptr_reg(struct bpf_reg_state *reg, enum bpf_dynptr_type ty
 	reg->id = id;
 	reg->parent_id = parent_id;
 	reg->dynptr.type = type;
+	reg->dynptr.type_unknown = type_unknown;
 	reg->dynptr.first_slot = first_slot;
 }
 
@@ -7801,6 +7808,7 @@ static int process_dynptr_func(struct bpf_verifier_env *env, struct bpf_reg_stat
 		}
 
 		meta->dynptr.type = reg->dynptr.type;
+		meta->dynptr.type_unknown = reg->dynptr.type_unknown;
 		meta->dynptr.id = reg->id;
 		meta->dynptr.parent_id = reg->parent_id;
 	}
@@ -19963,8 +19971,9 @@ static int do_check_common(struct bpf_verifier_env *env, int subprog)
 				reg->type = SCALAR_VALUE;
 				mark_reg_unknown(env, regs, i);
 			} else if (arg->arg_type == ARG_PTR_TO_DYNPTR) {
-				/* assume unspecial LOCAL dynptr type */
-				__mark_dynptr_reg(reg, BPF_DYNPTR_TYPE_LOCAL, true, ++env->id_gen, 0);
+				/* Global subprog args may be backed by any dynptr type. */
+				__mark_dynptr_reg(reg, BPF_DYNPTR_TYPE_LOCAL, true, true,
+						  ++env->id_gen, 0);
 			} else if (base_type(arg->arg_type) == ARG_PTR_TO_MEM) {
 				reg->type = PTR_TO_MEM;
 				reg->type |= arg->arg_type &
