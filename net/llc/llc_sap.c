@@ -19,16 +19,6 @@
 #include <linux/llc.h>
 #include <linux/slab.h>
 
-static int llc_mac_header_len(unsigned short devtype)
-{
-	switch (devtype) {
-	case ARPHRD_ETHER:
-	case ARPHRD_LOOPBACK:
-		return sizeof(struct ethhdr);
-	}
-	return 0;
-}
-
 /**
  *	llc_alloc_frame - allocates sk_buff for frame
  *	@sk:  socket to allocate frame to
@@ -45,7 +35,7 @@ struct sk_buff *llc_alloc_frame(struct sock *sk, struct net_device *dev,
 	int hlen = type == LLC_PDU_TYPE_U ? 3 : 4;
 	struct sk_buff *skb;
 
-	hlen += llc_mac_header_len(dev->type);
+	hlen += LL_RESERVED_SPACE(dev);
 	skb = alloc_skb(hlen + data_size, GFP_ATOMIC);
 
 	if (skb) {
