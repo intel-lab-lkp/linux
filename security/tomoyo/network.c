@@ -152,6 +152,11 @@ static const u8 tomoyo_inet2mac
 		[TOMOYO_NETWORK_BIND]    = TOMOYO_MAC_NETWORK_INET_RAW_BIND,
 		[TOMOYO_NETWORK_SEND]    = TOMOYO_MAC_NETWORK_INET_RAW_SEND,
 	},
+	[SOCK_SEQPACKET] = {
+		[TOMOYO_NETWORK_BIND]    = TOMOYO_MAC_NETWORK_INET_SEQPACKET_BIND,
+		[TOMOYO_NETWORK_LISTEN]  = TOMOYO_MAC_NETWORK_INET_SEQPACKET_LISTEN,
+		[TOMOYO_NETWORK_CONNECT] = TOMOYO_MAC_NETWORK_INET_SEQPACKET_CONNECT,
+	},
 };
 
 /*
@@ -636,6 +641,7 @@ static u8 tomoyo_sock_family(struct sock *sk)
 	switch (family) {
 	case PF_INET:
 	case PF_INET6:
+	case PF_SMC:
 	case PF_UNIX:
 		return family;
 	default:
@@ -680,18 +686,17 @@ int tomoyo_socket_listen_permission(struct socket *sock)
 /**
  * tomoyo_socket_connect_permission - Check permission for setting the remote address of a socket.
  *
- * @sock:     Pointer to "struct socket".
+ * @sk:       Pointer to "struct sock".
  * @addr:     Pointer to "struct sockaddr".
  * @addr_len: Size of @addr.
  *
  * Returns 0 on success, negative value otherwise.
  */
-int tomoyo_socket_connect_permission(struct socket *sock,
-				     struct sockaddr *addr, int addr_len)
+int tomoyo_socket_connect_permission(struct sock *sk, struct sockaddr *addr, int addr_len)
 {
 	struct tomoyo_addr_info address;
-	const u8 family = tomoyo_sock_family(sock->sk);
-	const unsigned int type = sock->type;
+	const u8 family = tomoyo_sock_family(sk);
+	const unsigned int type = sk->sk_type;
 
 	if (!family)
 		return 0;
@@ -710,25 +715,23 @@ int tomoyo_socket_connect_permission(struct socket *sock,
 	}
 	if (family == PF_UNIX)
 		return tomoyo_check_unix_address(addr, addr_len, &address);
-	return tomoyo_check_inet_address(addr, addr_len, sock->sk->sk_protocol,
-					 &address);
+	return tomoyo_check_inet_address(addr, addr_len, sk->sk_protocol, &address);
 }
 
 /**
  * tomoyo_socket_bind_permission - Check permission for setting the local address of a socket.
  *
- * @sock:     Pointer to "struct socket".
+ * @sk:       Pointer to "struct sock".
  * @addr:     Pointer to "struct sockaddr".
  * @addr_len: Size of @addr.
  *
  * Returns 0 on success, negative value otherwise.
  */
-int tomoyo_socket_bind_permission(struct socket *sock, struct sockaddr *addr,
-				  int addr_len)
+int tomoyo_socket_bind_permission(struct sock *sk, struct sockaddr *addr, int addr_len)
 {
 	struct tomoyo_addr_info address;
-	const u8 family = tomoyo_sock_family(sock->sk);
-	const unsigned int type = sock->type;
+	const u8 family = tomoyo_sock_family(sk);
+	const unsigned int type = sk->sk_type;
 
 	if (!family)
 		return 0;
@@ -745,28 +748,33 @@ int tomoyo_socket_bind_permission(struct socket *sock, struct sockaddr *addr,
 	}
 	if (family == PF_UNIX)
 		return tomoyo_check_unix_address(addr, addr_len, &address);
-	return tomoyo_check_inet_address(addr, addr_len, sock->sk->sk_protocol,
-					 &address);
+	return tomoyo_check_inet_address(addr, addr_len, sk->sk_protocol, &address);
 }
 
 /**
  * tomoyo_socket_sendmsg_permission - Check permission for sending a datagram.
  *
- * @sock: Pointer to "struct socket".
+ * @sk:   Pointer to "struct sock".
  * @msg:  Pointer to "struct msghdr".
  * @size: Unused.
  *
  * Returns 0 on success, negative value otherwise.
  */
-int tomoyo_socket_sendmsg_permission(struct socket *sock, struct msghdr *msg,
-				     int size)
+int tomoyo_socket_sendmsg_permission(struct sock *sk, struct msghdr *msg, int size)
 {
 	struct tomoyo_addr_info address;
-	const u8 family = tomoyo_sock_family(sock->sk);
-	const unsigned int type = sock->type;
+	const u8 family = tomoyo_sock_family(sk);
+	const unsigned int type = sk->sk_type;
 
-	if (!msg->msg_name || !family ||
-	    (type != SOCK_DGRAM && type != SOCK_RAW))
+	if (!msg->msg_name || !family)
+		return 0;
+	if ((msg->msg_flags & MSG_FASTOPEN) && type == SOCK_STREAM && family != PF_UNIX) {
+		address.protocol = SOCK_STREAM;
+		address.operation = TOMOYO_NETWORK_CONNECT;
+		return tomoyo_check_inet_address((struct sockaddr *)msg->msg_name,
+						 msg->msg_namelen, 0, &address);
+	}
+	if (type != SOCK_DGRAM && type != SOCK_RAW)
 		return 0;
 	address.protocol = type;
 	address.operation = TOMOYO_NETWORK_SEND;
@@ -776,5 +784,5 @@ int tomoyo_socket_sendmsg_permission(struct socket *sock, struct msghdr *msg,
 						 msg->msg_namelen, &address);
 	return tomoyo_check_inet_address((struct sockaddr *) msg->msg_name,
 					 msg->msg_namelen,
-					 sock->sk->sk_protocol, &address);
+					 sk->sk_protocol, &address);
 }

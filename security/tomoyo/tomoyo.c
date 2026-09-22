@@ -8,6 +8,7 @@
 #include <linux/lsm_hooks.h>
 #include <uapi/linux/lsm.h>
 #include "common.h"
+#include <linux/sctp.h>
 
 /**
  * tomoyo_domain - Get "struct tomoyo_domain_info" for current thread.
@@ -468,7 +469,7 @@ static int tomoyo_socket_listen(struct socket *sock, int backlog)
 static int tomoyo_socket_connect(struct socket *sock, struct sockaddr *addr,
 				 int addr_len)
 {
-	return tomoyo_socket_connect_permission(sock, addr, addr_len);
+	return tomoyo_socket_connect_permission(sock->sk, addr, addr_len);
 }
 
 /**
@@ -483,7 +484,7 @@ static int tomoyo_socket_connect(struct socket *sock, struct sockaddr *addr,
 static int tomoyo_socket_bind(struct socket *sock, struct sockaddr *addr,
 			      int addr_len)
 {
-	return tomoyo_socket_bind_permission(sock, addr, addr_len);
+	return tomoyo_socket_bind_permission(sock->sk, addr, addr_len);
 }
 
 /**
@@ -498,7 +499,72 @@ static int tomoyo_socket_bind(struct socket *sock, struct sockaddr *addr,
 static int tomoyo_socket_sendmsg(struct socket *sock, struct msghdr *msg,
 				 int size)
 {
-	return tomoyo_socket_sendmsg_permission(sock, msg, size);
+	return tomoyo_socket_sendmsg_permission(sock->sk, msg, size);
+}
+
+/**
+ * tomoyo_sctp_bind_connect - Check permission for sctp's bind or connext.
+ *
+ * @sk:      Pointer to "struct sock".
+ * @optname: Type of operation.
+ * @address: Pointer to "struct sockaddr".
+ * @addrlen: Size of @address.
+ *
+ * Returns 0 on success, negative value otherwise.
+ */
+static int tomoyo_sctp_bind_connect(struct sock *sk, int optname, struct sockaddr *address,
+				    int addrlen)
+{
+	int len, err, walk_size = 0;
+	void *addr_buf;
+	struct sockaddr *addr;
+
+	/* Process one or more addresses that may be IPv4 or IPv6 */
+	addr_buf = address;
+
+	while (walk_size < addrlen) {
+		if (walk_size + sizeof(sa_family_t) > addrlen)
+			return -EINVAL;
+
+		addr = addr_buf;
+		switch (addr->sa_family) {
+		case AF_INET:
+			len = sizeof(struct sockaddr_in);
+			break;
+		case AF_INET6:
+			len = sizeof(struct sockaddr_in6);
+			break;
+		default:
+			return -EINVAL;
+		}
+		if (walk_size + len > addrlen)
+			return -EINVAL;
+
+		switch (optname) {
+		/* Bind checks */
+		case SCTP_PRIMARY_ADDR:
+		case SCTP_SET_PEER_PRIMARY_ADDR:
+		case SCTP_SOCKOPT_BINDX_ADD:
+			err = tomoyo_socket_bind_permission(sk, addr, len);
+			if (err)
+				return err;
+			break;
+		/* Connect checks */
+		case SCTP_SOCKOPT_CONNECTX:
+		case SCTP_PARAM_SET_PRIMARY:
+		case SCTP_PARAM_ADD_IP:
+		case SCTP_SENDMSG_CONNECT:
+			err = tomoyo_socket_connect_permission(sk, addr, len);
+			if (err)
+				return err;
+			break;
+		}
+
+		addr_buf += len;
+		walk_size += len;
+	}
+
+	return 0;
 }
 
 struct lsm_blob_sizes tomoyo_blob_sizes __ro_after_init = {
@@ -583,6 +649,7 @@ static struct security_hook_list tomoyo_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(socket_connect, tomoyo_socket_connect),
 	LSM_HOOK_INIT(socket_listen, tomoyo_socket_listen),
 	LSM_HOOK_INIT(socket_sendmsg, tomoyo_socket_sendmsg),
+	LSM_HOOK_INIT(sctp_bind_connect, tomoyo_sctp_bind_connect),
 };
 
 /* Lock for GC. */

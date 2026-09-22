@@ -354,6 +354,9 @@ enum tomoyo_mac_index {
 	TOMOYO_MAC_NETWORK_INET_DGRAM_SEND,
 	TOMOYO_MAC_NETWORK_INET_RAW_BIND,
 	TOMOYO_MAC_NETWORK_INET_RAW_SEND,
+	TOMOYO_MAC_NETWORK_INET_SEQPACKET_BIND,
+	TOMOYO_MAC_NETWORK_INET_SEQPACKET_LISTEN,
+	TOMOYO_MAC_NETWORK_INET_SEQPACKET_CONNECT,
 	TOMOYO_MAC_NETWORK_UNIX_STREAM_BIND,
 	TOMOYO_MAC_NETWORK_UNIX_STREAM_LISTEN,
 	TOMOYO_MAC_NETWORK_UNIX_STREAM_CONNECT,
@@ -1023,13 +1026,10 @@ int tomoyo_path_perm(const u8 operation, const struct path *path,
 		     const char *target);
 __poll_t tomoyo_poll_control(struct file *file, poll_table *wait);
 __poll_t tomoyo_poll_log(struct file *file, poll_table *wait);
-int tomoyo_socket_bind_permission(struct socket *sock, struct sockaddr *addr,
-				  int addr_len);
-int tomoyo_socket_connect_permission(struct socket *sock,
-				     struct sockaddr *addr, int addr_len);
+int tomoyo_socket_bind_permission(struct sock *sk, struct sockaddr *addr, int addr_len);
+int tomoyo_socket_connect_permission(struct sock *sk, struct sockaddr *addr, int addr_len);
 int tomoyo_socket_listen_permission(struct socket *sock);
-int tomoyo_socket_sendmsg_permission(struct socket *sock, struct msghdr *msg,
-				     int size);
+int tomoyo_socket_sendmsg_permission(struct sock *sk, struct msghdr *msg, int size);
 int tomoyo_supervisor(struct tomoyo_request_info *r, const char *fmt, ...)
 	__must_hold_shared(&tomoyo_ss)
 	__printf(2, 3);
