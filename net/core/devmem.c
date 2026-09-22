@@ -42,10 +42,10 @@ void __net_devmem_dmabuf_binding_free(struct work_struct *wq)
 {
 	struct net_devmem_dmabuf_binding *binding = container_of(wq, typeof(*binding), unbind_w);
 
-	if (binding->freelist)
-		WARN(binding->free_count != binding->area.num_niovs,
-		     "destroying dmabuf binding with outstanding net_iovs: total=%zu, free=%zu",
-		     binding->area.num_niovs, binding->free_count);
+	if (binding->area.freelist)
+		WARN(binding->area.free_count != binding->area.num_niovs,
+		     "destroying dmabuf binding with outstanding net_iovs: total=%u, free=%u",
+		     binding->area.num_niovs, binding->area.free_count);
 
 	kvfree(binding->area.niovs);
 	dma_buf_unmap_attachment_unlocked(binding->attachment, binding->sgt,
@@ -54,7 +54,7 @@ void __net_devmem_dmabuf_binding_free(struct work_struct *wq)
 	dma_buf_put(binding->dmabuf);
 	xa_destroy(&binding->bound_rxqs);
 	percpu_ref_exit(&binding->ref);
-	kvfree(binding->freelist);
+	kvfree(binding->area.freelist);
 	kvfree(binding->tx_vec);
 	kfree(binding);
 }
@@ -67,12 +67,10 @@ net_devmem_alloc_dmabuf_bulk(struct net_devmem_dmabuf_binding *binding,
 
 	spin_lock_bh(&binding->freelist_lock);
 
-	count = min_t(size_t, count, binding->free_count);
-	for (i = 0; i < count; i++) {
-		struct net_iov *niov = binding->freelist[--binding->free_count];
-
-		netmems[i] = net_iov_to_netmem(niov);
-	}
+	count = min(count, binding->area.free_count);
+	for (i = 0; i < count; i++)
+		netmems[i] =
+			net_iov_to_netmem(net_iov_area_pop(&binding->area));
 
 	spin_unlock_bh(&binding->freelist_lock);
 
@@ -84,12 +82,7 @@ void net_devmem_free_dmabuf(struct net_iov *niov)
 	struct net_devmem_dmabuf_binding *binding = net_devmem_iov_binding(niov);
 
 	spin_lock_bh(&binding->freelist_lock);
-	if (WARN_ON_ONCE(binding->free_count >= binding->area.num_niovs)) {
-		spin_unlock_bh(&binding->freelist_lock);
-		return;
-	}
-
-	binding->freelist[binding->free_count++] = niov;
+	net_iov_area_push(&binding->area, niov);
 	spin_unlock_bh(&binding->freelist_lock);
 }
 
@@ -228,6 +221,12 @@ net_devmem_bind_dmabuf(struct net_device *dev, void *vdev,
 		goto err_unmap;
 	}
 
+	if ((dmabuf->size >> niov_shift) > U32_MAX) {
+		err = -E2BIG;
+		NL_SET_ERR_MSG(extack, "dmabuf contains too many net_iovs");
+		goto err_unmap;
+	}
+
 	binding->area.base_virtual = 0;
 	binding->area.num_niovs = dmabuf->size >> niov_shift;
 	if (direction == DMA_TO_DEVICE) {
@@ -239,10 +238,11 @@ net_devmem_bind_dmabuf(struct net_device *dev, void *vdev,
 		}
 	} else {
 		spin_lock_init(&binding->freelist_lock);
-		binding->freelist = kvmalloc_array(binding->area.num_niovs,
-						   sizeof(binding->freelist[0]),
-						   GFP_KERNEL);
-		if (!binding->freelist) {
+		binding->area.freelist =
+			kvmalloc_array(binding->area.num_niovs,
+				       sizeof(binding->area.freelist[0]),
+				       GFP_KERNEL);
+		if (!binding->area.freelist) {
 			err = -ENOMEM;
 			goto err_unmap;
 		}
@@ -279,7 +279,7 @@ net_devmem_bind_dmabuf(struct net_device *dev, void *vdev,
 			if (direction == DMA_TO_DEVICE)
 				binding->tx_vec[niov_idx] = niov;
 			else
-				binding->freelist[binding->free_count++] = niov;
+				net_iov_area_push(&binding->area, niov);
 			dma_addr += niov_size;
 		}
 	}
@@ -297,7 +297,7 @@ net_devmem_bind_dmabuf(struct net_device *dev, void *vdev,
 err_free_niovs:
 	kvfree(binding->area.niovs);
 err_free_freelist:
-	kvfree(binding->freelist);
+	kvfree(binding->area.freelist);
 	kvfree(binding->tx_vec);
 err_unmap:
 	dma_buf_unmap_attachment_unlocked(binding->attachment, binding->sgt,

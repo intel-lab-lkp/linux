@@ -462,7 +462,7 @@ static void io_zcrx_free_area(struct io_zcrx_ifq *ifq,
 		io_unaccount_mem(ifq->user, ifq->mm_account,
 				 area->mem.account_pages);
 
-	kvfree(area->freelist);
+	kvfree(area->nia.freelist);
 	kvfree(area->nia.niovs);
 	kvfree(area->user_refs);
 	kfree(area);
@@ -548,9 +548,10 @@ static int __zcrx_create_area(struct io_zcrx_ifq *ifq,
 	if (!area->nia.niovs)
 		goto err;
 
-	area->freelist = kvmalloc_array(nr_iovs, sizeof(area->freelist[0]),
-					GFP_KERNEL_ACCOUNT | __GFP_ZERO);
-	if (!area->freelist)
+	area->nia.freelist = kvmalloc_array(nr_iovs,
+					    sizeof(area->nia.freelist[0]),
+					    GFP_KERNEL_ACCOUNT | __GFP_ZERO);
+	if (!area->nia.freelist)
 		goto err;
 
 	area->user_refs = kvmalloc_objs(area->user_refs[0], nr_iovs,
@@ -562,7 +563,7 @@ static int __zcrx_create_area(struct io_zcrx_ifq *ifq,
 		struct net_iov *niov = &area->nia.niovs[i];
 
 		net_iov_init(niov, &area->nia, NET_IOV_IOURING);
-		area->freelist[i] = i;
+		area->nia.freelist[i] = i;
 		atomic_set(&area->user_refs[i], 0);
 	}
 
@@ -572,7 +573,7 @@ static int __zcrx_create_area(struct io_zcrx_ifq *ifq,
 			goto err;
 	}
 
-	area->free_count = nr_iovs;
+	area->nia.free_count = nr_iovs;
 	/* we're only supporting one area per ifq for now */
 	area->area_id = zcrx_next_area_id(ifq);
 	area_reg->rq_area_token = zcrx_area_id_to_token(area->area_id);
@@ -689,22 +690,14 @@ static void io_zcrx_return_niov_freelist(struct net_iov *niov)
 	struct io_zcrx_ifq *ifq = area->ifq;
 
 	guard(spinlock_bh)(&ifq->alloc_lock);
-	if (WARN_ON_ONCE(area->free_count >= area->nia.num_niovs))
-		return;
-	area->freelist[area->free_count++] = net_iov_idx(niov);
+	net_iov_area_push(&area->nia, niov);
 }
 
 static struct net_iov *zcrx_get_free_niov(struct io_zcrx_area *area)
 {
-	unsigned niov_idx;
-
 	lockdep_assert_held(&area->ifq->alloc_lock);
 
-	if (unlikely(!area->free_count))
-		return NULL;
-
-	niov_idx = area->freelist[--area->free_count];
-	return &area->nia.niovs[niov_idx];
+	return net_iov_area_pop(&area->nia);
 }
 
 static void io_zcrx_return_niov(struct net_iov *niov)

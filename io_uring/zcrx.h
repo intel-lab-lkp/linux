@@ -36,10 +36,6 @@ struct io_zcrx_area {
 	bool			is_mapped;
 	u16			area_id;
 
-	/* freelist */
-	u32			free_count;
-	u32			*freelist;
-
 	struct io_zcrx_mem	mem;
 };
 

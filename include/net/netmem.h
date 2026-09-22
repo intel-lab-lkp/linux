@@ -101,10 +101,15 @@ struct net_iov {
 struct net_iov_area {
 	/* Array of net_iovs for this area. */
 	struct net_iov *niovs;
-	size_t num_niovs;
+
+	/* Stack of free net_iov indices. */
+	u32 *freelist;
 
 	/* Offset into the dma-buf where this chunk starts.  */
 	unsigned long base_virtual;
+
+	u32 num_niovs;
+	u32 free_count;
 };
 
 static inline struct net_iov_area *net_iov_owner(const struct net_iov *niov)
@@ -115,6 +120,27 @@ static inline struct net_iov_area *net_iov_owner(const struct net_iov *niov)
 static inline unsigned int net_iov_idx(const struct net_iov *niov)
 {
 	return niov - net_iov_owner(niov)->niovs;
+}
+
+static inline struct net_iov *net_iov_area_pop(struct net_iov_area *area)
+{
+	u32 idx;
+
+	if (unlikely(!area->free_count))
+		return NULL;
+
+	idx = area->freelist[--area->free_count];
+	return &area->niovs[idx];
+}
+
+static inline void net_iov_area_push(struct net_iov_area *area,
+				     struct net_iov *niov)
+{
+	if (WARN_ON_ONCE(net_iov_owner(niov) != area ||
+			 area->free_count >= area->num_niovs))
+		return;
+
+	area->freelist[area->free_count++] = net_iov_idx(niov);
 }
 
 /* Initialize a niov: stamp the owning area, the memory provider type.

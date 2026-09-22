@@ -17,6 +17,9 @@ struct netlink_ext_ack;
 
 struct net_devmem_dmabuf_binding {
 	struct net_iov_area area;
+	/* Protects area.freelist and area.free_count. */
+	spinlock_t freelist_lock;
+
 	struct dma_buf *dmabuf;
 	struct dma_buf_attachment *attachment;
 	struct sg_table *sgt;
@@ -56,10 +59,6 @@ struct net_devmem_dmabuf_binding {
 
 	/* rxq's this binding is active on. */
 	struct xarray bound_rxqs;
-
-	spinlock_t freelist_lock ____cacheline_aligned_in_smp;
-	size_t free_count;
-	struct net_iov **freelist;
 
 	/* ID of this binding. Globally unique to all bindings currently
 	 * active.
