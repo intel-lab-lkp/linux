@@ -11,6 +11,7 @@
 
 #include <linux/acpi.h>
 #include <linux/acpi_iort.h>
+#include <linux/auxiliary_bus.h>
 #include <linux/bitops.h>
 #include <linux/crash_dump.h>
 #include <linux/delay.h>
@@ -5202,6 +5203,72 @@ static struct platform_driver arm_smmu_driver = {
 };
 module_driver(arm_smmu_driver, platform_driver_register,
 	      arm_smmu_driver_unregister);
+
+#ifdef CONFIG_ARM_SMMU_V3_PKVM
+/*
+ * Now we have 2 devices, the aux device bound to this driver, and pdev
+ * which is the physical platform device bound to the KVM driver but not used.
+ * However, this driver keeps using the platform device for 2 reasons:
+ * 1) Simplicity: Avoiding changing big parts of the code assuming
+ *    the underlying device is a platform device.
+ * 2) Dealing with DMA-API, irqs(MSIs), RPM... requires the physical device.
+ *
+ * That means arm_smmu_device_probe() allocates its devm resources on the
+ * platform device, where they are not freed when the aux device unbinds.
+ * The devres group bounds them to the lifetime of this binding instead.
+ *
+ * The platform device is never unbound, as both drivers set
+ * suppress_bind_attrs and ARM_SMMU_V3_PKVM requires ARM_SMMU_V3=y.
+ */
+static int arm_smmu_device_probe_emu(struct auxiliary_device *auxdev,
+				     const struct auxiliary_device_id *id)
+{
+	struct device *parent = auxdev->dev.parent;
+	void *group;
+	int ret;
+
+	dev_info(&auxdev->dev, "Probing from %s\n", dev_name(parent));
+	group = devres_open_group(parent, NULL, GFP_KERNEL);
+	if (!group)
+		return -ENOMEM;
+
+	ret = arm_smmu_device_probe(to_platform_device(parent));
+	if (ret)
+		devres_release_group(parent, group);
+	else
+		devres_close_group(parent, group);
+	return ret;
+}
+
+static void arm_smmu_device_remove_emu(struct auxiliary_device *auxdev)
+{
+	arm_smmu_device_remove(to_platform_device(auxdev->dev.parent));
+}
+
+static void arm_smmu_device_shutdown_emu(struct auxiliary_device *auxdev)
+{
+	arm_smmu_device_shutdown(to_platform_device(auxdev->dev.parent));
+}
+
+static const struct auxiliary_device_id arm_smmu_aux_table[] = {
+	{ .name = "protected_kvm.smmu_v3_emu" },
+	{ },
+};
+MODULE_DEVICE_TABLE(auxiliary, arm_smmu_aux_table);
+
+static struct auxiliary_driver arm_smmu_driver_emu = {
+	.driver = {
+		.suppress_bind_attrs = true,
+	},
+	.name = "arm-smmu-v3-emu",
+	.id_table = arm_smmu_aux_table,
+	.probe = arm_smmu_device_probe_emu,
+	.remove = arm_smmu_device_remove_emu,
+	.shutdown = arm_smmu_device_shutdown_emu,
+};
+
+module_auxiliary_driver(arm_smmu_driver_emu);
+#endif
 
 MODULE_DESCRIPTION("IOMMU API for ARM architected SMMUv3 implementations");
 MODULE_AUTHOR("Will Deacon <will@kernel.org>");
