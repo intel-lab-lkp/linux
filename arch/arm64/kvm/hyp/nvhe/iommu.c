@@ -5,7 +5,10 @@
  * Copyright (C) 2022 Linaro Ltd.
  */
 #include <linux/iommu.h>
+#include <asm/kvm_hyp.h>
 #include <asm/kvm_pkvm.h>
+
+#include <hyp/adjust_pc.h>
 
 #include <nvhe/iommu.h>
 #include <nvhe/mem_protect.h>
@@ -157,4 +160,15 @@ void *pkvm_iommu_alloc_pages(u8 order)
 void pkvm_iommu_free_pages(void *ptr)
 {
 	hyp_put_page(&iommu_pages_pool, ptr);
+}
+
+bool pkvm_iommu_host_dabt_handler(struct user_pt_regs *regs, u64 esr, u64 addr)
+{
+	if (pkvm_iommu_ops && pkvm_iommu_ops->dabt_handler &&
+	    pkvm_iommu_ops->dabt_handler(regs, esr, addr)) {
+		/* DABT handled by the driver, skip to next instruction. */
+		kvm_skip_host_instr();
+		return true;
+	}
+	return false;
 }
