@@ -43,6 +43,12 @@ static asmlinkage void (*sdei_firmware_call)(unsigned long function_id,
 /* entry point from firmware to arch asm code */
 static unsigned long sdei_entry_point;
 
+static unsigned long sdei_get_entry_point(void)
+{
+	/* Pairs with the smp_store_release() in sdei_probe(). */
+	return smp_load_acquire(&sdei_entry_point);
+}
+
 static int sdei_hp_state;
 
 struct sdei_event {
@@ -582,7 +588,7 @@ static void _local_event_register(void *data)
 	struct sdei_crosscall_args *arg = data;
 
 	reg = per_cpu_ptr(arg->event->private_registered, smp_processor_id());
-	err = sdei_api_event_register(arg->event->event_num, sdei_entry_point,
+	err = sdei_api_event_register(arg->event->event_num, sdei_get_entry_point(),
 				      reg, 0, 0);
 
 	sdei_cross_call_return(arg, err);
@@ -612,7 +618,7 @@ int sdei_event_register(u32 event_num, sdei_event_callback *cb, void *arg)
 	cpus_read_lock();
 	if (event->type == SDEI_EVENT_TYPE_SHARED) {
 		err = sdei_api_event_register(event->event_num,
-					      sdei_entry_point,
+					      sdei_get_entry_point(),
 					      event->registered,
 					      SDEI_EVENT_REGISTER_RM_ANY, 0);
 	} else {
@@ -650,7 +656,7 @@ static int sdei_reregister_shared(void)
 
 		if (event->reregister) {
 			err = sdei_api_event_register(event->event_num,
-					sdei_entry_point, event->registered,
+					sdei_get_entry_point(), event->registered,
 					SDEI_EVENT_REGISTER_RM_ANY, 0);
 			if (err) {
 				pr_err("Failed to re-register event %u\n",
@@ -978,6 +984,7 @@ static int sdei_get_conduit(struct platform_device *pdev)
 
 static int sdei_probe(struct platform_device *pdev)
 {
+	unsigned long entry_point;
 	int err;
 	u64 ver = 0;
 	int conduit;
@@ -1007,12 +1014,14 @@ static int sdei_probe(struct platform_device *pdev)
 	if (err)
 		return err;
 
-	sdei_entry_point = sdei_arch_get_entry_point(conduit);
-	if (!sdei_entry_point) {
+	entry_point = sdei_arch_get_entry_point(conduit);
+	if (!entry_point) {
 		/* Not supported due to hardware or boot configuration */
 		sdei_mark_interface_broken();
 		return 0;
 	}
+	/* Pairs with the smp_load_acquire() in sdei_get_entry_point(). */
+	smp_store_release(&sdei_entry_point, entry_point);
 
 	err = cpu_pm_register_notifier(&sdei_pm_nb);
 	if (err) {
