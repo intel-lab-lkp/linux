@@ -13,6 +13,7 @@
 #include <nvhe/early_alloc.h>
 #include <nvhe/ffa.h>
 #include <nvhe/gfp.h>
+#include <nvhe/iommu.h>
 #include <nvhe/memory.h>
 #include <nvhe/mem_protect.h>
 #include <nvhe/mm.h>
@@ -325,6 +326,15 @@ void __noreturn __pkvm_init_finalise(void)
 		goto out;
 
 	ret = hyp_ffa_init(ffa_proxy_pages);
+	if (ret)
+		goto out;
+
+	/*
+	 * IOMMU init is done at the end, as it sets up and initializes many
+	 * resources that would be leaked if the hypervisor fails after as there
+	 * is no remove_iommu_driver() at the moment.
+	 */
+	ret = pkvm_iommu_init();
 	if (ret)
 		goto out;
 
