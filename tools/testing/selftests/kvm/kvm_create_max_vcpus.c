@@ -20,16 +20,29 @@
 void test_vcpu_creation(int first_vcpu_id, int num_vcpus)
 {
 	struct kvm_vm *vm;
-	int i;
+	struct kvm_vcpu *vcpu;
+	int i, created = 0;
 
 	pr_info("Testing creating %d vCPUs, with IDs %d...%d.\n",
 		num_vcpus, first_vcpu_id, first_vcpu_id + num_vcpus - 1);
 
 	vm = vm_create_barebones();
 
-	for (i = first_vcpu_id; i < first_vcpu_id + num_vcpus; i++)
-		/* This asserts that the vCPU was created. */
-		__vm_vcpu_add(vm, i);
+	for (i = first_vcpu_id; i < first_vcpu_id + num_vcpus; i++) {
+		vcpu = __vm_vcpu_try_add(vm, i);
+		if (vcpu) {
+			created++;
+			continue;
+		}
+
+		TEST_ASSERT(errno == ENOMEM && kvm_arch_vm_create_may_enomem(),
+			    "KVM_CREATE_VCPU failed for id %d, errno: %d (%s)",
+			    i, errno, strerror(errno));
+		TEST_ASSERT(created > 0,
+			    "KVM_CREATE_VCPU failed with ENOMEM before creating any vCPUs");
+		pr_info("Created %d vCPUs before ENOMEM at id %d\n", created, i);
+		break;
+	}
 
 	kvm_vm_free(vm);
 }

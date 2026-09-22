@@ -2113,6 +2113,11 @@ __weak bool kvm_arch_needs_naturally_aligned_page_tables(void)
 	return false;
 }
 
+__weak bool kvm_arch_vm_create_may_enomem(void)
+{
+	return false;
+}
+
 gpa_t __vm_phy_pages_alloc(struct kvm_vm *vm, size_t nr_pages,
 			   enum kvm_mem_region_type type, bool protected)
 {
