@@ -42,8 +42,8 @@ enum cxl_decoder_type {
  * @interleave_ways: number of cxl_dports in this decode
  * @interleave_granularity: data stride per dport
  * @target_type: accelerator vs expander (type2 vs type3) selector
- * @region: currently assigned region for this decoder
  * @flags: memory type capabilities and locking
+ * @region: currently assigned region for this decoder
  * @target_map: cached copy of hardware port-id list, available at init
  *              before all @dport objects have been instantiated. While
  *              dport id is 8bit, CFMWS interleave targets are 32bits.
@@ -52,16 +52,29 @@ enum cxl_decoder_type {
 */
 struct cxl_decoder {
 	struct device dev;
-	int id;
-	struct range hpa_range;
-	int interleave_ways;
-	int interleave_granularity;
-	enum cxl_decoder_type target_type;
+
+	struct_group_tagged(cxl_decoder_config, config,
+		int id;
+		struct range hpa_range;
+		int interleave_ways;
+		int interleave_granularity;
+		enum cxl_decoder_type target_type;
+		unsigned long flags;
+	);
 	struct cxl_region *region;
-	unsigned long flags;
 	u32 target_map[CXL_DECODER_MAX_INTERLEAVE];
 	int (*commit)(struct cxl_decoder *cxld);
 	void (*reset)(struct cxl_decoder *cxld);
+};
+
+/**
+ * struct cxl_decoder_settings - CXL HDM decoder programming snapshot
+ * @config: common decoder configuration
+ * @target_or_skip_reg_val: switch target list or endpoint skip register value
+ */
+struct cxl_decoder_settings {
+	struct cxl_decoder_config config;
+	u64 target_or_skip_reg_val;
 };
 
 /*
