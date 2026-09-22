@@ -70,8 +70,12 @@ static inline struct dpaa2_io *service_select_by_cpu(struct dpaa2_io *d,
 	if (cpu < 0)
 		cpu = raw_smp_processor_id();
 
-	/* If a specific cpu was requested, pick it up immediately */
-	return dpio_by_cpu[cpu];
+	/*
+	 * If a specific cpu was requested, pick it up immediately. Pairs with
+	 * the smp_store_release() in dpaa2_io_create(): the object is only
+	 * used once every field written before the publication is visible.
+	 */
+	return smp_load_acquire(&dpio_by_cpu[cpu]);
 }
 
 static inline struct dpaa2_io *service_select(struct dpaa2_io *d)
@@ -177,12 +181,6 @@ struct dpaa2_io *dpaa2_io_create(const struct dpaa2_io_desc *desc,
 	if (obj->dpio_desc.receives_notifications)
 		qbman_swp_push_set(obj->swp, 0, 1);
 
-	spin_lock(&dpio_list_lock);
-	list_add_tail(&obj->node, &dpio_list);
-	if (desc->cpu >= 0 && !dpio_by_cpu[desc->cpu])
-		dpio_by_cpu[desc->cpu] = obj;
-	spin_unlock(&dpio_list_lock);
-
 	obj->dev = dev;
 
 	memset(&obj->rx_dim, 0, sizeof(obj->rx_dim));
@@ -190,6 +188,19 @@ struct dpaa2_io *dpaa2_io_create(const struct dpaa2_io_desc *desc,
 	obj->event_ctr = 0;
 	obj->bytes = 0;
 	obj->frames = 0;
+
+	/*
+	 * dpaa2_io_service_select() reads dpio_by_cpu[] without taking
+	 * dpio_list_lock, so the object must be complete before it is
+	 * published and the publication needs release semantics.
+	 */
+	spin_lock(&dpio_list_lock);
+	list_add_tail(&obj->node, &dpio_list);
+	if (desc->cpu >= 0 && !dpio_by_cpu[desc->cpu]) {
+		/* Pairs with the smp_load_acquire() in service_select_by_cpu(). */
+		smp_store_release(&dpio_by_cpu[desc->cpu], obj);
+	}
+	spin_unlock(&dpio_list_lock);
 
 	return obj;
 }
