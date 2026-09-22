@@ -47,6 +47,7 @@ struct dwc3_xlnx {
 	struct device			*dev;
 	void __iomem			*regs;
 	int				(*pltfm_init)(struct dwc3_xlnx *data);
+	void				(*pltfm_exit)(struct dwc3_xlnx *data);
 	struct phy			*usb3_phy;
 	struct reset_control		*usb_crst;
 	struct reset_control		*usb_hibrst;
@@ -111,6 +112,21 @@ static int dwc3_xlnx_init_versal(struct dwc3_xlnx *priv_data)
 	dwc3_xlnx_set_coherency(priv_data, XLNX_USB2_TRAFFIC_ROUTE_CONFIG);
 
 	return 0;
+}
+
+static void dwc3_xlnx_exit_zynqmp(struct dwc3_xlnx *priv_data)
+{
+	if (!priv_data->usb_resets_released)
+		return;
+
+	phy_power_off(priv_data->usb3_phy);
+
+	reset_control_assert(priv_data->usb_hibrst);
+	reset_control_assert(priv_data->usb_crst);
+	reset_control_assert(priv_data->usb_apbrst);
+	priv_data->usb_resets_released = false;
+
+	phy_exit(priv_data->usb3_phy);
 }
 
 static int dwc3_xlnx_init_zynqmp(struct dwc3_xlnx *priv_data)
@@ -230,6 +246,7 @@ static int dwc3_xlnx_init_zynqmp(struct dwc3_xlnx *priv_data)
 	dwc3_xlnx_set_coherency(priv_data, XLNX_USB_TRAFFIC_ROUTE_CONFIG);
 
 	priv_data->usb_resets_released = true;
+	priv_data->pltfm_exit = dwc3_xlnx_exit_zynqmp;
 
 	return 0;
 
@@ -326,11 +343,11 @@ static int dwc3_xlnx_probe(struct platform_device *pdev)
 
 	ret = dwc3_set_swnode(dev);
 	if (ret)
-		goto err_clk_put;
+		goto err_pltfm_exit;
 
 	ret = of_platform_populate(np, NULL, NULL, dev);
 	if (ret)
-		goto err_clk_put;
+		goto err_pltfm_exit;
 
 	pm_runtime_set_active(dev);
 	ret = devm_pm_runtime_enable(dev);
@@ -348,6 +365,10 @@ err_pm_set_suspended:
 	of_platform_depopulate(dev);
 	pm_runtime_set_suspended(dev);
 
+err_pltfm_exit:
+	if (priv_data->pltfm_exit)
+		priv_data->pltfm_exit(priv_data);
+
 err_clk_put:
 	clk_bulk_disable_unprepare(priv_data->num_clocks, priv_data->clks);
 
@@ -360,6 +381,9 @@ static void dwc3_xlnx_remove(struct platform_device *pdev)
 	struct device		*dev = &pdev->dev;
 
 	of_platform_depopulate(dev);
+
+	if (priv_data->pltfm_exit)
+		priv_data->pltfm_exit(priv_data);
 
 	clk_bulk_disable_unprepare(priv_data->num_clocks, priv_data->clks);
 	priv_data->num_clocks = 0;
