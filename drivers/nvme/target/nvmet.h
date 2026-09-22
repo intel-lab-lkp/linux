@@ -334,6 +334,7 @@ struct nvmet_subsys {
 	bool			subsys_discovered;
 	char			*subsysnqn;
 	bool			pi_support;
+	bool			tbkas;
 
 	struct config_group	group;
 
