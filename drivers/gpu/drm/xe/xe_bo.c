@@ -1890,6 +1890,9 @@ static void xe_ttm_bo_destroy(struct ttm_buffer_object *ttm_bo)
 		list_del(&bo->vram_userfault_link);
 	mutex_unlock(&xe->mem_access.vram_userfault.lock);
 
+	if (bo->wedged_dummy_page)
+		__free_page(bo->wedged_dummy_page);
+
 	kfree(bo);
 }
 
@@ -2094,6 +2097,32 @@ out_pm:
 	return ret;
 }
 
+static vm_fault_t xe_bo_vm_dummy_page(struct vm_fault *vmf, struct xe_bo *bo)
+{
+	struct vm_area_struct *vma = vmf->vma;
+	struct page *page, *old;
+	unsigned long pfn;
+
+	page = READ_ONCE(bo->wedged_dummy_page);
+	if (!page) {
+		page = alloc_page(GFP_KERNEL | __GFP_ZERO);
+		if (!page)
+			return VM_FAULT_OOM;
+
+		old = cmpxchg(&bo->wedged_dummy_page, NULL, page);
+		if (old) {
+			__free_page(page);
+			page = old;
+		}
+	}
+
+	pfn = page_to_pfn(page);
+
+	/* Map other addresses on demand instead of walking the whole VMA. */
+	return vmf_insert_pfn_prot(vma, vmf->address, pfn,
+				   vma->vm_page_prot);
+}
+
 static vm_fault_t xe_bo_cpu_fault(struct vm_fault *vmf)
 {
 	struct ttm_buffer_object *tbo = vmf->vma->vm_private_data;
@@ -2109,7 +2138,7 @@ static vm_fault_t xe_bo_cpu_fault(struct vm_fault *vmf)
 	int io_idx;
 
 	if (xe_device_io_get(xe, &io_idx))
-		return ttm_bo_vm_dummy_page(vmf, vmf->vma->vm_page_prot);
+		return xe_bo_vm_dummy_page(vmf, bo);
 
 	ret = xe_bo_cpu_fault_fastpath(vmf, xe, bo, needs_rpm);
 	if (ret != VM_FAULT_RETRY)
@@ -2398,6 +2427,8 @@ struct xe_bo *xe_bo_init_locked(struct xe_device *xe, struct xe_bo *bo,
 		if (IS_ERR(bo))
 			return bo;
 	}
+
+	bo->wedged_dummy_page = NULL;
 
 	bo->ccs_cleared = false;
 	bo->tile = tile;
