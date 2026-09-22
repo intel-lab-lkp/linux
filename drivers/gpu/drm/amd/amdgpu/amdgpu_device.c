@@ -1435,10 +1435,10 @@ bool amdgpu_device_should_use_aspm(struct amdgpu_device *adev)
  * Enable/disable vga decode (all asics).
  * Returns VGA resource flags.
  */
-static unsigned int amdgpu_device_vga_set_decode(struct pci_dev *pdev,
+static unsigned int amdgpu_device_vga_set_decode(void *data,
 		bool state)
 {
-	struct amdgpu_device *adev = drm_to_adev(pci_get_drvdata(pdev));
+	struct amdgpu_device *adev = (struct amdgpu_device *)data;
 
 	amdgpu_asic_set_vga_state(adev, state);
 	if (state)
@@ -4208,7 +4208,7 @@ fence_driver_init:
 	 * ignore it
 	 */
 	if ((adev->pdev->class >> 8) == PCI_CLASS_DISPLAY_VGA)
-		vga_client_register(adev->pdev, amdgpu_device_vga_set_decode);
+		vga_client_register(adev->pdev, amdgpu_device_vga_set_decode, adev);
 
 	px = amdgpu_device_supports_px(adev);
 
