@@ -618,7 +618,8 @@ static void fn_boot_it(struct vc_data *vc)
 
 static void fn_compose(struct vc_data *vc)
 {
-	dead_key_next = true;
+	/* Pairs with the smp_load_acquire() in k_unicode(). */
+	smp_store_release(&dead_key_next, true);
 }
 
 static void fn_spawn_con(struct vc_data *vc)
@@ -672,7 +673,8 @@ static void k_unicode(struct vc_data *vc, unsigned int value, char up_flag)
 	if (diacr)
 		value = handle_diacr(vc, value);
 
-	if (dead_key_next) {
+	/* Pairs with the smp_store_release() in fn_compose(). */
+	if (smp_load_acquire(&dead_key_next)) {
 		dead_key_next = false;
 		diacr = value;
 		return;
