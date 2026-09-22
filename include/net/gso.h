@@ -23,6 +23,14 @@ struct skb_gso_cb {
 #define SKB_GSO_CB_OFFSET	32
 #define SKB_GSO_CB(skb) ((struct skb_gso_cb *)((skb)->cb + SKB_GSO_CB_OFFSET))
 
+#define GSO_MAX_HEADER	256
+
+static inline bool gso_header_len_exceeded(const struct sk_buff *skb)
+{
+	return skb_headroom(skb) - SKB_GSO_CB(skb)->mac_offset >=
+	       GSO_MAX_HEADER;
+}
+
 static inline int skb_tnl_header_len(const struct sk_buff *inner_skb)
 {
 	return (skb_mac_header(inner_skb) - inner_skb->head) -
