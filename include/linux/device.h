@@ -899,14 +899,20 @@ static inline bool device_has_driver_override(struct device *dev)
  *
  * Returns > 0 if a driver override is set and matches the given driver, 0 if a
  * driver override is set but does not match, or < 0 if a driver override is not
- * set at all.
+ * set at all or the driver opts out of the override mechanism.
  */
 static inline int device_match_driver_override(struct device *dev,
 					       const struct device_driver *drv)
 {
 	guard(spinlock)(&dev->driver_override.lock);
-	if (dev->driver_override.name)
-		return !strcmp(dev->driver_override.name, drv->name);
+	if (dev->driver_override.name) {
+		if (strcmp(dev->driver_override.name, drv->name) != 0)
+			return 0;
+
+		if (driver_allow_override(drv))
+			return 1;
+	}
+
 	return -1;
 }
 

@@ -57,6 +57,8 @@ enum probe_type {
  * @owner:	The module owner.
  * @mod_name:	Used for built-in modules.
  * @suppress_bind_attrs: Disables bind/unbind via sysfs.
+ * @disallow_override: Prevents the driver from being bound to a device via
+ *		driver_override.
  * @probe_type:	Type of the probe (synchronous or asynchronous) to use.
  * @of_match_table: The open firmware table.
  * @acpi_match_table: The ACPI match table.
@@ -105,6 +107,7 @@ struct device_driver {
 	const char		*mod_name;	/* used for built-in modules */
 
 	bool suppress_bind_attrs;	/* disables bind/unbind via sysfs */
+	bool disallow_override;
 	enum probe_type probe_type;
 
 	const struct of_device_id	*of_match_table;
@@ -248,6 +251,15 @@ driver_find_device_by_acpi_dev(const struct device_driver *drv, const void *adev
 void driver_deferred_probe_add(struct device *dev);
 int driver_deferred_probe_check_state(struct device *dev);
 void driver_init(void);
+
+static inline bool driver_allow_override(const struct device_driver *drv)
+{
+	if (drv->disallow_override)
+		pr_err("driver '%s' cannot be bound to via override\n",
+		       drv->name);
+
+	return !drv->disallow_override;
+}
 
 /**
  * module_driver() - Helper macro for drivers that don't do anything
