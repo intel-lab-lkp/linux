@@ -4294,6 +4294,24 @@ static int mac80211_hwsim_set_radar_background(struct ieee80211_hw *hw,
 	return 0;
 }
 
+/* The status code for a traffic description is set via debugfs for testing */
+static int mac80211_hwsim_sta_set_scs(struct ieee80211_hw *hw,
+				      struct ieee80211_vif *vif,
+				      struct ieee80211_sta *sta,
+				      struct cfg80211_scs_desc * const *desc,
+				      struct cfg80211_scs_result *res,
+				      u8 n_desc)
+{
+	struct mac80211_hwsim_data *data = hw->priv;
+	u8 i;
+
+	for (i = 0; i < n_desc; i++)
+		if (desc[i]->qos_char)
+			res[i].status = data->scs_status;
+
+	return 0;
+}
+
 #ifdef CONFIG_MAC80211_DEBUGFS
 #define HWSIM_DEBUGFS_OPS					\
 	.link_add_debugfs = mac80211_hwsim_link_add_debugfs,
@@ -4318,6 +4336,7 @@ static int mac80211_hwsim_set_radar_background(struct ieee80211_hw *hw,
 	.link_sta_rc_update = mac80211_hwsim_sta_rc_update,	\
 	.conf_tx = mac80211_hwsim_conf_tx,			\
 	.get_survey = mac80211_hwsim_get_survey,		\
+	.sta_set_scs = mac80211_hwsim_sta_set_scs,		\
 	CFG80211_TESTMODE_CMD(mac80211_hwsim_testmode_cmd)	\
 	.ampdu_action = mac80211_hwsim_ampdu_action,		\
 	.flush = mac80211_hwsim_flush,				\
@@ -5973,6 +5992,8 @@ static int mac80211_hwsim_new_radio(struct genl_info *info,
 			      NL80211_EXT_FEATURE_EXT_KEY_ID);
 	wiphy_ext_feature_set(hw->wiphy,
 			      NL80211_EXT_FEATURE_ASSOC_FRAME_ENCRYPTION);
+	wiphy_ext_feature_set(hw->wiphy, NL80211_EXT_FEATURE_SCS);
+	wiphy_ext_feature_set(hw->wiphy, NL80211_EXT_FEATURE_MSCS);
 
 	hw->wiphy->interface_modes = param->iftypes;
 
@@ -6162,6 +6183,8 @@ static int mac80211_hwsim_new_radio(struct genl_info *info,
 			    &hwsim_fops_group);
 	debugfs_create_file("rx_rssi", 0666, data->debugfs, data,
 			    &hwsim_fops_rx_rssi);
+	debugfs_create_u16("scs_status", 0600, data->debugfs,
+			   &data->scs_status);
 	if (!data->use_chanctx)
 		debugfs_create_file("dfs_simulate_radar", 0222,
 				    data->debugfs,

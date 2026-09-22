@@ -137,6 +137,9 @@ struct mac80211_hwsim_data {
 	/* RSSI in rx status of the receiver */
 	int rx_rssi;
 
+	/* Status code for a traffic description, 0 accepts */
+	u16 scs_status;
+
 	/* only used when pmsr capability is supplied */
 	struct cfg80211_pmsr_capabilities pmsr_capa;
 	struct cfg80211_pmsr_request *pmsr_request;
