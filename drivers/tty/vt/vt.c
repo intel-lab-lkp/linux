@@ -973,7 +973,8 @@ void redraw_screen(struct vc_data *vc, int is_switch)
 		if (!con_is_visible(vc))
 			redraw = 1;
 		*vc->vc_display_fg = vc;
-		fg_console = vc->vc_num;
+		/* Pairs with the smp_load_acquire() in vt_console_print(). */
+		smp_store_release(&fg_console, vc->vc_num);
 		hide_cursor(old_vc);
 		if (!con_is_visible(old_vc)) {
 			save_screen(old_vc);
@@ -3447,7 +3448,8 @@ int vt_kmsg_redirect(int new)
 
 static void vt_console_print(struct console *co, const char *b, unsigned count)
 {
-	struct vc_data *vc = vc_cons[fg_console].d;
+	/* Pairs with the smp_store_release() in redraw_screen(). */
+	struct vc_data *vc = vc_cons[smp_load_acquire(&fg_console)].d;
 	unsigned char c;
 	static DEFINE_SPINLOCK(printing_lock);
 	const ushort *start;
