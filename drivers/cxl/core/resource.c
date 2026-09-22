@@ -3,6 +3,7 @@
 #include <linux/delay.h>
 #include <linux/bug.h>
 #include <linux/errno.h>
+#include <linux/export.h>
 #include <linux/kernel.h>
 
 #include "cxl.h"
@@ -12,6 +13,7 @@ struct cxl_rwsem cxl_rwsem = {
 	.region = __RWSEM_INITIALIZER(cxl_rwsem.region),
 	.dpa = __RWSEM_INITIALIZER(cxl_rwsem.dpa),
 };
+EXPORT_SYMBOL_FOR_MODULES(cxl_rwsem, "cxl_core");
 
 static void cxld_set_interleave(struct cxl_decoder_config *config, u32 *ctrl)
 {
@@ -100,8 +102,10 @@ void cxl_commit_start(void __iomem *hdm, struct cxl_decoder_settings *settings)
 	lockdep_assert_held(&cxl_rwsem.dpa);
 	setup_hw_decoder(hdm, settings);
 }
+EXPORT_SYMBOL_FOR_MODULES(cxl_commit_start, "cxl_core");
 
 int cxl_commit_wait(void __iomem *hdm, struct cxl_decoder_settings *settings)
 {
 	return cxld_await_commit(hdm, settings->config.id);
 }
+EXPORT_SYMBOL_FOR_MODULES(cxl_commit_wait, "cxl_core");
