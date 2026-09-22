@@ -1208,6 +1208,14 @@ static int isofs_read_level3_size(struct inode *inode)
 			continue;
 		}
 
+		if (!isofs_dir_record_valid(de, offset, bufsize)) {
+			printk(KERN_NOTICE "iso9660: Corrupted directory entry in block %lu of inode %llu\n",
+			       block, inode->i_ino);
+			brelse(bh);
+			kfree(tmpde);
+			return -EIO;
+		}
+
 		block_saved = block;
 		offset_saved = offset;
 		offset += de_len;
