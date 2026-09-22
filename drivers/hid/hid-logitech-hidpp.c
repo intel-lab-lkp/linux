@@ -3891,6 +3891,19 @@ static int hidpp10_consumer_keys_raw_event(struct hidpp_device *hidpp,
 	return 1;
 }
 
+static bool hidpp_is_bolt_child(struct hid_device *hdev)
+{
+	struct device *parent = hdev->dev.parent;
+	struct hid_device *receiver_hdev;
+
+	if (!parent)
+		return false;
+
+	receiver_hdev = to_hid_device(parent);
+	return receiver_hdev->vendor == USB_VENDOR_ID_LOGITECH &&
+	       receiver_hdev->product == USB_DEVICE_ID_LOGITECH_BOLT_RECEIVER;
+}
+
 /* -------------------------------------------------------------------------- */
 /* High-resolution scroll wheels                                              */
 /* -------------------------------------------------------------------------- */
@@ -3901,7 +3914,9 @@ static int hi_res_scroll_enable(struct hidpp_device *hidpp)
 	u8 multiplier = 1;
 
 	if (hidpp->capabilities & HIDPP_CAPABILITY_HIDPP20_HI_RES_WHEEL) {
-		ret = hidpp_hrw_set_wheel_mode(hidpp, false, true, false);
+		bool use_hidpp = hidpp_is_bolt_child(hidpp->hid_dev);
+
+		ret = hidpp_hrw_set_wheel_mode(hidpp, false, true, use_hidpp);
 		if (ret == 0)
 			ret = hidpp_hrw_get_wheel_capability(hidpp, &multiplier);
 	} else if (hidpp->capabilities & HIDPP_CAPABILITY_HIDPP20_HI_RES_SCROLL) {
@@ -3986,6 +4001,19 @@ static int hidpp20_hires_wheel_raw_event(struct hidpp_device *hidpp,
 		int new_multiplier = (hires && hidpp->hires_wheel_multiplier > 0)
 			? hidpp->hires_wheel_multiplier : 1;
 		hidpp->vertical_wheel_counter.wheel_multiplier = new_multiplier;
+		return 1;
+	}
+
+	/* wheel movement event: 16-bit signed delta in HID++ ticks */
+	if ((data[3] & 0xf0) == 0x00 && size >= 7 && hidpp->input &&
+	    hidpp->vertical_wheel_counter.wheel_multiplier) {
+		s16 delta = get_unaligned_be16(&data[5]);
+
+		if (delta) {
+			hidpp_scroll_counter_handle_scroll(hidpp->input,
+				&hidpp->vertical_wheel_counter, delta);
+			input_sync(hidpp->input);
+		}
 		return 1;
 	}
 
@@ -4379,19 +4407,6 @@ static int hidpp_initialize_battery(struct hidpp_device *hidpp)
 	return ret;
 }
 
-static bool hidpp_is_bolt_child(struct hid_device *hdev)
-{
-	struct device *parent = hdev->dev.parent;
-	struct hid_device *receiver_hdev;
-
-	if (!parent)
-		return false;
-
-	receiver_hdev = to_hid_device(parent);
-	return receiver_hdev->vendor == USB_VENDOR_ID_LOGITECH &&
-	       receiver_hdev->product == USB_DEVICE_ID_LOGITECH_BOLT_RECEIVER;
-}
-
 static int hidpp_bolt_init(struct hidpp_device *hidpp)
 {
 	struct hid_device *hdev = hidpp->hid_dev;
@@ -4553,7 +4568,9 @@ static void hidpp_connect_event(struct work_struct *work)
 	}
 
 	hidpp_initialize_battery(hidpp);
-	if (!hid_is_usb(hidpp->hid_dev))
+
+	if (!hid_is_usb(hidpp->hid_dev) ||
+	    hidpp_is_bolt_child(hidpp->hid_dev))
 		hidpp_initialize_hires_scroll(hidpp);
 
 	/* forward current battery state */
