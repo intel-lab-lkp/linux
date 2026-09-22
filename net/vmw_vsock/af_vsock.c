@@ -1664,6 +1664,13 @@ static void vsock_unconnected_reset(struct sock *sk)
 	sock_owned_by_me(sk);
 
 	/*
+	 * listen() can race connect() on schedule_timeout().
+	 * Don't reset TCP_LISTEN.
+	 */
+	if (sk->sk_state == TCP_LISTEN)
+		return;
+
+	/*
 	 * Transport events are serviced by resetting each connected socket to
 	 * TCP_CLOSE. The reset is done under vsock_table_lock but without
 	 * taking lock_sock(), so it is effectively lockless from the
