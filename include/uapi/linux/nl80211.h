@@ -6078,6 +6078,23 @@ enum nl80211_tx_power_setting {
 };
 
 /**
+ * enum nl80211_scs_req_type - SCS or MSCS request type
+ *
+ * The values match the Request Type field of the descriptor on the air.
+ *
+ * @NL80211_SCS_REQ_ADD: create the stream, replacing an active one of the
+ *	same identifier
+ * @NL80211_SCS_REQ_REMOVE: terminate the stream
+ * @NL80211_SCS_REQ_CHANGE: modify an active stream, leaving it in force if
+ *	the request is declined
+ */
+enum nl80211_scs_req_type {
+	NL80211_SCS_REQ_ADD,
+	NL80211_SCS_REQ_REMOVE,
+	NL80211_SCS_REQ_CHANGE,
+};
+
+/**
  * enum nl80211_tid_config - TID config state
  * @NL80211_TID_CONFIG_ENABLE: Enable config for the TID
  * @NL80211_TID_CONFIG_DISABLE: Disable config for the TID

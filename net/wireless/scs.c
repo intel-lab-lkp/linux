@@ -886,3 +886,97 @@ void cfg80211_scs_evaluate(struct cfg80211_scs_desc * const *desc, u8 n_desc,
 	}
 }
 EXPORT_SYMBOL(cfg80211_scs_evaluate);
+
+/* Two elements of a match-all descriptor can require conflicting values */
+static bool tclas_conflict(const struct cfg80211_tclas *a,
+			   const struct cfg80211_tclas *b)
+{
+	struct cfg80211_flow_key ka, kb;
+	u32 common = a->fields & b->fields;
+
+	if (!common)
+		return false;
+
+	flow_key_select(&a->key, common, &ka);
+	flow_key_select(&b->key, common, &kb);
+
+	return memcmp(&ka, &kb, sizeof(ka));
+}
+
+/**
+ * cfg80211_scs_desc_valid - validate one SCS descriptor
+ *
+ * @desc: the descriptor, already parsed
+ *
+ * Checks the constraints between the request type, the classifier and the
+ * traffic description. cfg80211_parse_tclas() validates each element.
+ *
+ * Return: whether the descriptor may be installed. The caller reports a
+ *	refusal as a status code, not as an error.
+ */
+bool cfg80211_scs_desc_valid(const struct cfg80211_scs_desc *desc)
+{
+	bool want_tclas = true;
+	unsigned int i, j;
+
+	if (desc->req_type == NL80211_SCS_REQ_REMOVE)
+		return true;
+
+	/* Only a downlink stream is classified by the AP */
+	if (desc->qos_char &&
+	    ieee80211_qos_char_direction(desc->qos_char) !=
+	    IEEE80211_QOS_CHAR_DIR_DOWNLINK)
+		want_tclas = false;
+
+	if (want_tclas != !!desc->n_tclas)
+		return false;
+
+	if (!want_tclas)
+		return desc->tclas_processing ==
+		       CFG80211_TCLAS_PROCESSING_ABSENT;
+
+	switch (desc->tclas_processing) {
+	case CFG80211_TCLAS_PROCESSING_ALL:
+	case CFG80211_TCLAS_PROCESSING_ANY:
+		if (desc->n_tclas < 2)
+			return false;
+		break;
+	case CFG80211_TCLAS_PROCESSING_DEFAULT:
+		return false;
+	case CFG80211_TCLAS_PROCESSING_ABSENT:
+		if (desc->n_tclas > 1)
+			return false;
+		break;
+	default:
+		return false;
+	}
+
+	if (desc->tclas_processing != CFG80211_TCLAS_PROCESSING_ALL)
+		return true;
+
+	for (i = 0; i < desc->n_tclas; i++)
+		for (j = i + 1; j < desc->n_tclas; j++)
+			if (tclas_conflict(&desc->tclas[i], &desc->tclas[j]))
+				return false;
+
+	return true;
+}
+EXPORT_SYMBOL_IF_CFG80211_KUNIT(cfg80211_scs_desc_valid);
+
+/**
+ * cfg80211_mscs_desc_valid - validate an MSCS descriptor
+ *
+ * @desc: the descriptor, already parsed
+ *
+ * Return: whether the descriptor may be installed.
+ */
+bool cfg80211_mscs_desc_valid(const struct cfg80211_mscs_desc *desc)
+{
+	bool remove = desc->req_type == NL80211_SCS_REQ_REMOVE;
+
+	if (remove == !!desc->fields)
+		return false;
+
+	/* A zero timeout would expire every entry at the next collection */
+	return remove || desc->stream_timeout;
+}

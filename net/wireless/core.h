@@ -653,6 +653,8 @@ int cfg80211_parse_tclas(const u8 *elems, size_t len,
 			 struct cfg80211_tclas *out, u8 n_tclas,
 			 enum cfg80211_tclas_processing *processing);
 int cfg80211_parse_tclas_mask(const u8 *elems, size_t len, u32 *fields);
+bool cfg80211_scs_desc_valid(const struct cfg80211_scs_desc *desc);
+bool cfg80211_mscs_desc_valid(const struct cfg80211_mscs_desc *desc);
 
 #if IS_ENABLED(CONFIG_CFG80211_KUNIT_TEST)
 #define EXPORT_SYMBOL_IF_CFG80211_KUNIT(sym) EXPORT_SYMBOL_IF_KUNIT(sym)

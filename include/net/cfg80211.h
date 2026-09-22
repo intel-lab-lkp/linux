@@ -4247,18 +4247,43 @@ bool cfg80211_flow_key_build(const struct cfg80211_flow_info *info, u32 fields,
 /**
  * struct cfg80211_scs_desc - one SCS descriptor
  *
+ * @req_type: add, remove or change
  * @tclas_processing: how the elements of @tclas relate
+ * @qos_char: the whole QoS Characteristics element, or %NULL. Set only
+ *	after ieee80211_qos_char_size_ok() passed, so the accessors in
+ *	<linux/ieee80211-eht.h> may read it.
  * @id: SCSID, 1 to 255
  * @up: user priority to assign to a matching MSDU
+ * @qos_char_len: length of @qos_char
  * @n_tclas: number of entries in @tclas
  * @tclas: the classifier
  */
 struct cfg80211_scs_desc {
+	enum nl80211_scs_req_type req_type;
 	enum cfg80211_tclas_processing tclas_processing;
+	const struct ieee80211_qos_char_elem *qos_char;
 	u8 id;
 	u8 up;
+	u16 qos_char_len;
 	u8 n_tclas;
 	struct cfg80211_tclas tclas[] __counted_by(n_tclas);
+};
+
+/**
+ * struct cfg80211_mscs_desc - the MSCS of one peer
+ *
+ * @req_type: add, remove or change
+ * @up_bitmap: user priorities that the AP learns from, one bit each
+ * @up_limit: ceiling for the assigned user priority, 0 to 7
+ * @stream_timeout: minimum lifetime of a learned value, in TUs
+ * @fields: classifier parameters, a bitmap of &enum cfg80211_flow_field
+ */
+struct cfg80211_mscs_desc {
+	enum nl80211_scs_req_type req_type;
+	u8 up_bitmap;
+	u8 up_limit;
+	u32 stream_timeout;
+	u32 fields;
 };
 
 /**
