@@ -37,8 +37,20 @@ static inline void
 log_arm_hw_error(struct cper_sec_proc_arm *err, const u8 sev) { return; }
 #endif
 
+/* See "NA to DA Output Buffer" in the AMD ACPI Porting Guide. */
+struct atl_dram_addr {
+	u8 chip_select;
+	u8 bank_group;
+	u8 bank_addr;
+	u32 row_addr;
+	u16 col_addr;
+	u8 rank_mul;
+	u8 sub_ch;
+} __packed;
+
 /* Operations requested and completed through amd_translate_umc_mca_addr(). */
 #define ATL_OP_SPA		BIT(0)	/* System Physical Address */
+#define ATL_OP_DA		BIT(1)	/* DRAM address components */
 
 struct atl_err {
 	/* Identifiers; layout mirrors the PRM parameter buffer inputs */
@@ -57,6 +69,7 @@ struct atl_err {
 
 	/* Outputs */
 	u64 spa;			/* Valid if (@valid & ATL_OP_SPA) */
+	struct atl_dram_addr da;	/* Valid if (@valid & ATL_OP_DA) */
 };
 
 #if IS_ENABLED(CONFIG_AMD_ATL)

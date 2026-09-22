@@ -454,4 +454,14 @@ void amd_atl_umc_translate_addr(struct atl_err *err)
 			}
 		}
 	}
+
+	if (err->requested & ATL_OP_DA) {
+		struct param_buf p_buf = {
+			.addr		= err->umc_addr,
+			.out_buf	= &err->da,
+		};
+
+		if (!prm_umc_norm_to_addr(norm_to_dram_guid, &p_buf))
+			err->valid |= ATL_OP_DA;
+	}
 }
