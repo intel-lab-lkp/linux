@@ -431,7 +431,7 @@ static int kvm_ipi_create(struct kvm_device *dev, u32 type)
 
 err:
 	kfree(s);
-	return -EFAULT;
+	return ret;
 }
 
 static void kvm_ipi_destroy(struct kvm_device *dev)
