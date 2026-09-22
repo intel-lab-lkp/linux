@@ -1369,7 +1369,8 @@ struct vc_data *vc_deallocate(unsigned int currcons)
 		put_pid(vc->vt_pid);
 		vc_uniscr_set(vc, NULL);
 		kfree(vc->vc_screenbuf);
-		vc_cons[currcons].d = NULL;
+		/* Pairs with the smp_load_acquire() in console_callback(). */
+		smp_store_release(&vc_cons[currcons].d, NULL);
 		if (vc->vc_saved_screen != NULL) {
 			kfree(vc->vc_saved_screen);
 			vc->vc_saved_screen = NULL;
@@ -3368,7 +3369,8 @@ static void console_callback(struct work_struct *ignored)
 		poke_blanked_console();
 	}
 	if (scrollback_delta) {
-		struct vc_data *vc = vc_cons[fg_console].d;
+		/* Pairs with the smp_store_release() in vc_deallocate(). */
+		struct vc_data *vc = smp_load_acquire(&vc_cons[fg_console].d);
 		clear_selection();
 		if (vc->vc_mode == KD_TEXT && vc->vc_sw->con_scrolldelta)
 			vc->vc_sw->con_scrolldelta(vc, scrollback_delta);
