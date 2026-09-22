@@ -4362,6 +4362,10 @@ static const char readme_msg[] =
 	"\t   trigger: traceon, traceoff\n"
 	"\t            enable_event:<system>:<event>\n"
 	"\t            disable_event:<system>:<event>\n"
+#ifdef CONFIG_WPROBE_TRIGGERS
+	"\t            set_wprobe:<wprobe-event>:<field>[+|-<offset>]\n"
+	"\t            clear_wprobe:<wprobe-event>[:<field>[+|-<offset>]]\n"
+#endif
 #ifdef CONFIG_HIST_TRIGGERS
 	"\t            enable_hist:<system>:<event>\n"
 	"\t            disable_hist:<system>:<event>\n"
