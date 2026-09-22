@@ -2044,7 +2044,7 @@ ssize_t tls_sw_splice_read(struct socket *sock,  loff_t *ppos,
 
 	/* splice does not support reading control messages */
 	if (tlm->control != TLS_RECORD_TYPE_DATA) {
-		err = -EINVAL;
+		err = -EPROTO;
 		goto splice_requeue;
 	}
 
@@ -2132,7 +2132,7 @@ int tls_sw_read_sock(struct sock *sk, read_descriptor_t *desc,
 
 		/* read_sock does not support reading control messages */
 		if (tlm->control != TLS_RECORD_TYPE_DATA) {
-			err = -EINVAL;
+			err = -EPROTO;
 			goto read_sock_requeue;
 		}
 
