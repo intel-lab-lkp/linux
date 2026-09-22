@@ -1,0 +1,152 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/remoteproc/allwinner,sun55i-rproc.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Allwinner XuanTie E906/E907 RISC-V Remoteproc
+
+maintainers:
+  - Jernej Skrabec <jernej.skrabec@gmail.com>
+  - Samuel Holland <samuel@sholland.org>
+  - Tim Michals <tcmichals@gmail.com>
+
+description: |
+  The Allwinner T527, A527, and A523 (sun55i) SoCs integrate a T-Head
+  (XuanTie) E906 or E907 RISC-V co-processor alongside the ARM Cortex-A55
+  cluster. The co-processor runs bare-metal firmware loaded and lifecycle-
+  managed by the Linux remoteproc framework.
+
+  The driver controls CCU-integrated clocks (bus, core) and resets
+  (cfg, core), programs the hardware boot-vector register, maps
+  internal SRAM (SRAM_A3) windows, and connects to the Allwinner
+  hardware mailbox (CPUX_MSGBOX) for VirtIO RPMsg IPC.
+
+properties:
+  compatible:
+    enum:
+      - allwinner,sun55i-a523-rproc
+      - allwinner,sun55i-a527-rproc
+      - allwinner,sun55i-t527-rproc
+
+  reg:
+    minItems: 1
+    maxItems: 4
+    description: |
+      Memory-mapped register regions. The following named regions are
+      supported (all optional except at least one of r_sram or r_sram1):
+        "cfg"    - RISC-V core control and boot-vector registers (0x07130000)
+        "r_sram" - Dedicated MCU SRAM Space 0 (0x07280000 / 0x07200000; 256-512 KB)
+        "r_sram1"- Switchable MCU SRAM Space 1 / SRAMA3_2 (0x072c0000 / 0x07280000; 256-512 KB)
+        "remap"  - Hardware Remap Control Register (offset 0x364)
+
+  reg-names:
+    minItems: 1
+    maxItems: 4
+    items:
+      enum: [cfg, r_sram, r_sram1, remap]
+
+  clocks:
+    minItems: 1
+    maxItems: 5
+    description: |
+      CCU clocks required for co-processor operation. Typical clocks are
+      "parent" (PLL source), "bus" (interconnect gate), "core" (CPU gate),
+      "sram" (SRAM interconnect gate), and "msgbox" (mailbox interconnect gate).
+
+  clock-names:
+    minItems: 1
+    maxItems: 5
+    items:
+      enum: [parent, bus, core, sram, msgbox]
+
+  resets:
+    minItems: 1
+    maxItems: 4
+    description: |
+      CCU reset lines. Typical resets are "cfg" (configuration block),
+      "core" (CPU core), "sram" (SRAM interconnect), and "msgbox" (mailbox interconnect).
+
+  reset-names:
+    minItems: 1
+    maxItems: 4
+    items:
+      enum: [cfg, core, sram, msgbox]
+
+  mboxes:
+    minItems: 2
+    maxItems: 2
+    description:
+      Exactly two mailbox channels from the Allwinner CPUX_MSGBOX controller —
+      one receive channel (RISC-V-to-ARM) and one transmit channel
+      (ARM-to-RISC-V) — used for VirtIO RPMsg kick notifications.
+
+  mbox-names:
+    items:
+      - const: rx
+      - const: tx
+
+  firmware-name:
+    $ref: /schemas/types.yaml#/definitions/string
+    description:
+      Name of the ELF firmware image to load from /lib/firmware/.
+      Defaults to "riscv-firmware.elf" if not specified.
+
+  memory-region:
+    description:
+      Optional phandle list of reserved memory regions for VirtIO vring
+      buffers or DDR carveouts. Region names "vram" and "dram" are
+      recognized; "trace" selects the RemoteProc trace buffer carveout.
+
+  memory-region-names:
+    description:
+      Names corresponding to the memory-region phandle list entries.
+      Recognized values are "vram", "dram", and "trace".
+
+  interrupts:
+    maxItems: 1
+    description:
+      Optional hardware crash-notification interrupt. When present the
+      driver calls rproc_report_crash() on assertion.
+
+  interrupt-names:
+    items:
+      - const: crash
+
+  status: true
+
+required:
+  - compatible
+  - reg
+  - reg-names
+  - clocks
+  - clock-names
+  - resets
+  - reset-names
+  - mboxes
+  - mbox-names
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/clock/sun55i-a523-ccu.h>
+    #include <dt-bindings/reset/sun55i-a523-ccu.h>
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+    remoteproc@7130000 {
+        compatible = "allwinner,sun55i-a523-rproc";
+        reg = <0x07130000 0x1000>,
+              <0x07280000 0x40000>,
+              <0x072c0000 0x40000>,
+              <0x07010364 0x4>;
+        reg-names = "cfg", "r_sram", "r_sram1", "remap";
+        clocks = <&mcu_ccu CLK_BUS_MCU_RISCV_CFG>,
+                 <&mcu_ccu CLK_MCU_RISCV>;
+        clock-names = "bus", "core";
+        resets = <&mcu_ccu RST_BUS_MCU_RISCV_CFG>,
+                 <&mcu_ccu RST_BUS_MCU_RISCV_CORE>;
+        reset-names = "cfg", "core";
+        mboxes = <&msgbox 0>, <&msgbox 1>;
+        mbox-names = "rx", "tx";
+        firmware-name = "testBasic.elf";
