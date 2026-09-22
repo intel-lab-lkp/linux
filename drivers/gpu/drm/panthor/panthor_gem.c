@@ -1021,10 +1021,6 @@ panthor_gem_create(struct drm_device *dev, size_t size, uint32_t flags,
 	mapping_set_gfp_mask(bo->base.filp->f_mapping,
 			     GFP_HIGHUSER | __GFP_RETRY_MAYFAIL | __GFP_NOWARN);
 
-	ret = drm_gem_create_mmap_offset(&bo->base);
-	if (ret)
-		goto err_put;
-
 	if (exclusive_vm) {
 		bo->exclusive_vm_root_gem = panthor_vm_root_gem(exclusive_vm);
 		drm_gem_object_get(bo->exclusive_vm_root_gem);
