@@ -84,6 +84,37 @@ ieee80211_scs_sta_build(struct cfg80211_scs_desc * const *rule, u8 n_rules)
 	return scs;
 }
 
+/**
+ * ieee80211_flow_classify - give an MSDU the user priority of its stream
+ *
+ * @sta: the receiver
+ * @skb: the MSDU, in IEEE 802.3 format
+ *
+ * Return: %true when it set skb->priority, %false to leave the frame to the
+ *	QoS map.
+ */
+bool ieee80211_flow_classify(struct sta_info *sta, struct sk_buff *skb)
+{
+	struct cfg80211_scs_verdict verdict;
+	struct cfg80211_flow_info info;
+	struct ieee80211_scs_sta *scs;
+
+	scs = rcu_dereference(sta->scs);
+	if (!scs)
+		return false;
+
+	if (!cfg80211_flow_parse(skb, &info))
+		return false;
+
+	cfg80211_scs_evaluate(scs->rule, scs->n_rules, &info, &verdict);
+	if (!verdict.match)
+		return false;
+
+	skb->priority = verdict.up;
+
+	return true;
+}
+
 int ieee80211_set_scs(struct wiphy *wiphy, struct net_device *dev,
 		      const u8 *peer, struct cfg80211_scs_desc * const *desc,
 		      struct cfg80211_scs_result *res, u8 n_desc)

@@ -2221,6 +2221,7 @@ int ieee80211_set_scs(struct wiphy *wiphy, struct net_device *dev,
 int ieee80211_set_mscs(struct wiphy *wiphy, struct net_device *dev,
 		       const u8 *peer, struct cfg80211_mscs_desc *desc);
 void ieee80211_sta_scs_free(struct sta_info *sta);
+bool ieee80211_flow_classify(struct sta_info *sta, struct sk_buff *skb);
 
 /* link handling */
 void ieee80211_link_setup(struct ieee80211_link_data *link);
