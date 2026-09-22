@@ -127,6 +127,7 @@ static int pca995x_probe(struct i2c_client *client)
 	struct pca995x_chip *chip;
 	struct pca995x_led *led;
 	int i, reg, ret;
+	u32 iref;
 
 	chipdef = device_get_match_data(&client->dev);
 
@@ -154,6 +155,11 @@ static int pca995x_probe(struct i2c_client *client)
 
 	i2c_set_clientdata(client, chip);
 
+	if (device_property_read_u32(dev, "nxp,output-gain", &iref))
+		iref = PCA995X_IREFALL_HALF_CFG;
+	else if (iref > PCA995X_IREFALL_FULL_CFG)
+		return dev_err_probe(dev, -EINVAL, "invalid nxp,output-gain\n");
+
 	device_for_each_child_node_scoped(dev, child) {
 		ret = fwnode_property_read_u32(child, "reg", &reg);
 		if (ret)
@@ -178,7 +184,7 @@ static int pca995x_probe(struct i2c_client *client)
 		goto err_put_nodes;
 
 	/* IREF Output current value for all LEDn outputs */
-	ret = regmap_write(chip->regmap, chipdef->irefall, PCA995X_IREFALL_HALF_CFG);
+	ret = regmap_write(chip->regmap, chipdef->irefall, iref);
 	if (ret)
 		goto err_put_nodes;
 
