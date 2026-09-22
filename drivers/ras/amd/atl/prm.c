@@ -18,15 +18,7 @@
 
 #include <linux/prmt.h>
 
-/* See "PRM Parameter Buffer" in the AMD ACPI Porting Guide. */
-struct param_buf {
-	u64 norm_addr;
-	u8 socket;
-	u64 bank_id;
-	void *out_buf;
-} __packed;
-
-static int prm_umc_norm_to_addr(guid_t guid, struct param_buf *p_buf)
+int prm_umc_norm_to_addr(guid_t guid, struct param_buf *p_buf)
 {
 	int ret;
 
@@ -46,9 +38,11 @@ unsigned long prm_umc_norm_to_sys_addr(u8 socket_id, u64 bank_id, unsigned long 
 {
 	unsigned long sys_addr;
 	struct param_buf p_buf = {
-		.norm_addr	= addr,
-		.socket		= socket_id,
-		.bank_id	= bank_id,
+		.addr = {
+			.addr		= addr,
+			.socket_id	= socket_id,
+			.ipid		= bank_id,
+		},
 		.out_buf	= &sys_addr,
 	};
 	int ret;

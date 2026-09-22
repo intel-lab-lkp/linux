@@ -3,6 +3,8 @@
 #define __RAS_H__
 
 #include <asm/errno.h>
+#include <linux/bits.h>
+#include <linux/stddef.h>
 #include <linux/uuid.h>
 #include <linux/cper.h>
 
@@ -35,10 +37,26 @@ static inline void
 log_arm_hw_error(struct cper_sec_proc_arm *err, const u8 sev) { return; }
 #endif
 
+/* Operations requested and completed through amd_translate_umc_mca_addr(). */
+#define ATL_OP_SPA		BIT(0)	/* System Physical Address */
+
 struct atl_err {
-	u64 addr;
-	u64 ipid;
+	/* Identifiers; layout mirrors the PRM parameter buffer inputs */
+	__struct_group(atl_umc_addr, umc_addr, __packed,
+		u64 addr;
+		u8 socket_id;		/* Filled by the library from @cpu */
+		u64 ipid;
+	);
 	u32 cpu;
+
+	/* Requested operations (input) */
+	u8 requested;
+
+	/* Completed operations (output) */
+	u8 valid;
+
+	/* Outputs */
+	u64 spa;			/* Valid if (@valid & ATL_OP_SPA) */
 };
 
 #if IS_ENABLED(CONFIG_AMD_ATL)
@@ -46,10 +64,16 @@ void amd_atl_register_decoder(unsigned long (*f)(struct atl_err *));
 void amd_atl_unregister_decoder(void);
 void amd_retire_dram_row(struct atl_err *err);
 unsigned long amd_convert_umc_mca_addr_to_sys_addr(struct atl_err *err);
+
+void amd_atl_register_umc_translator(void (*f)(struct atl_err *));
+void amd_atl_unregister_umc_translator(void);
+void amd_translate_umc_mca_addr(struct atl_err *err);
 #else
 static inline void amd_retire_dram_row(struct atl_err *err) { }
 static inline unsigned long
 amd_convert_umc_mca_addr_to_sys_addr(struct atl_err *err) { return -EINVAL; }
+static inline void
+amd_translate_umc_mca_addr(struct atl_err *err) { err->valid = 0; }
 #endif /* CONFIG_AMD_ATL */
 
 #if defined(CONFIG_ARM) || defined(CONFIG_ARM64)
