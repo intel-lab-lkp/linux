@@ -342,8 +342,10 @@ int ocfs2_load_local_alloc(struct ocfs2_super *osb)
 		goto bail;
 	}
 
+	spin_lock(&osb->osb_lock);
 	osb->local_alloc_bh = alloc_bh;
 	osb->local_alloc_state = OCFS2_LA_ENABLED;
+	spin_unlock(&osb->osb_lock);
 
 bail:
 	if (status < 0)
@@ -392,7 +394,9 @@ void ocfs2_shutdown_local_alloc(struct ocfs2_super *osb)
 		goto out;
 	}
 
+	spin_lock(&osb->osb_lock);
 	osb->local_alloc_state = OCFS2_LA_DISABLED;
+	spin_unlock(&osb->osb_lock);
 
 	ocfs2_resmap_uninit(&osb->osb_la_resmap);
 
@@ -441,8 +445,10 @@ void ocfs2_shutdown_local_alloc(struct ocfs2_super *osb)
 	ocfs2_journal_dirty(handle, bh);
 
 	brelse(bh);
+	spin_lock(&osb->osb_lock);
 	osb->local_alloc_bh = NULL;
 	osb->local_alloc_state = OCFS2_LA_UNUSED;
+	spin_unlock(&osb->osb_lock);
 
 	status = ocfs2_sync_local_to_main(osb, handle, alloc_copy,
 					  main_bm_inode, main_bm_bh);
