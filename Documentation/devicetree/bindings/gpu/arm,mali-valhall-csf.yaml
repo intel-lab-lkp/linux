@@ -22,6 +22,7 @@ properties:
               - nxp,imx95-mali            # G310
               - rockchip,rk3588-mali
           - const: arm,mali-valhall-csf   # Mali Valhall GPU model/revision is fully discoverable
+      - const: arm,mali-gen5-am
 
   reg:
     maxItems: 1
@@ -146,6 +147,19 @@ allOf:
         - nvmem-cells
         - nvmem-cell-names
         - power-domains
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: arm,mali-gen5-am
+    then:
+      properties:
+        mali-supply: false
+        sram-supply: false
+        operating-points-v2: false
+        opp-table: false
+        "#cooling-cells": false
+        dynamic-power-coefficient: false
 
 examples:
   - |
@@ -195,5 +209,15 @@ examples:
         nvmem-cell-names = "shader-present";
         power-domains = <&gpufreq>;
     };
-
+  - |
+    gpu@100000 {
+        compatible = "arm,mali-gen5-am";
+        reg = <0x100000 0x480000>;
+        interrupts = <GIC_SPI 168 IRQ_TYPE_LEVEL_HIGH 0>,
+                     <GIC_SPI 168 IRQ_TYPE_LEVEL_HIGH 0>,
+                     <GIC_SPI 168 IRQ_TYPE_LEVEL_HIGH 0>;
+        interrupt-names = "job", "mmu", "gpu";
+        clocks = <&gpu_clock 0>, <&gpu_clock 1>, <&gpu_clock 2>;
+        clock-names = "core", "coregroup", "stacks";
+    };
 ...
