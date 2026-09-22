@@ -2403,10 +2403,12 @@ static int lpc32xx_get_frame(struct usb_gadget *gadget)
 	unsigned long flags;
 	struct lpc32xx_udc *udc = to_udc(gadget);
 
-	if (!udc->clocked)
-		return -EINVAL;
-
 	spin_lock_irqsave(&udc->lock, flags);
+
+	if (!udc->clocked) {
+		spin_unlock_irqrestore(&udc->lock, flags);
+		return -EINVAL;
+	}
 
 	frame = (int) udc_get_current_frame(udc);
 
