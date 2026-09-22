@@ -3179,6 +3179,13 @@ static void rt5663_remove(struct snd_soc_component *component)
 {
 	struct rt5663_priv *rt5663 = snd_soc_component_get_drvdata(component);
 
+	/*
+	 * Bound teardown runs this after snd_soc_link_exit().  set_jack()
+	 * there can queue jack_detect_work, which can queue jd_unplug_work.
+	 */
+	cancel_delayed_work_sync(&rt5663->jack_detect_work);
+	cancel_delayed_work_sync(&rt5663->jd_unplug_work);
+
 	regmap_write(rt5663->regmap, RT5663_RESET, 0);
 }
 
@@ -3727,6 +3734,13 @@ static void rt5663_i2c_remove(struct i2c_client *i2c)
 
 	if (i2c->irq)
 		free_irq(i2c->irq, rt5663);
+
+	/*
+	 * component .remove is skipped when component->card is NULL.
+	 * jack_detect_work can queue jd_unplug_work, so cancel it first.
+	 */
+	cancel_delayed_work_sync(&rt5663->jack_detect_work);
+	cancel_delayed_work_sync(&rt5663->jd_unplug_work);
 
 	regulator_bulk_disable(ARRAY_SIZE(rt5663->supplies), rt5663->supplies);
 }
