@@ -17,6 +17,7 @@
 #include <drm/drm_managed.h>
 #include <drm/drm_print.h>
 
+#include "panthor_aw.h"
 #include "panthor_device.h"
 #include "panthor_gpu.h"
 #include "panthor_gpu_regs.h"
@@ -376,7 +377,8 @@ int panthor_gpu_flush_caches(struct panthor_device *ptdev,
 				msecs_to_jiffies(100))) {
 		scoped_guard(spinlock, &ptdev->gpu->reqs_lock) {
 			if ((ptdev->gpu->pending_reqs & GPU_IRQ_CLEAN_CACHES_COMPLETED) != 0 &&
-			    !(gpu_read(gpu->irq.iomem, INT_RAWSTAT) & GPU_IRQ_CLEAN_CACHES_COMPLETED))
+			    !(gpu_read(gpu->irq.iomem, INT_RAWSTAT) &
+			      GPU_IRQ_CLEAN_CACHES_COMPLETED) && panthor_aw_has_gpu_access(ptdev))
 				ret = -ETIMEDOUT;
 			else
 				ptdev->gpu->pending_reqs &= ~GPU_IRQ_CLEAN_CACHES_COMPLETED;

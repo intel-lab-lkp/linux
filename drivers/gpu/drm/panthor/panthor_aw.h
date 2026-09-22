@@ -41,4 +41,6 @@ int panthor_aw_suspend(struct panthor_device *ptdev);
 
 int panthor_aw_ensure_gpu_access(struct panthor_device *ptdev);
 
+bool panthor_aw_has_gpu_access(struct panthor_device *ptdev);
+
 #endif

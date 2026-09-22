@@ -1140,9 +1140,10 @@ static int panthor_fw_start(struct panthor_device *ptdev)
 	gpu_write(fw->iomem, MCU_CONTROL, MCU_CONTROL_AUTO);
 
 	if (!wait_event_timeout(ptdev->fw->req_waitqueue,
-				ptdev->fw->booted,
+				(ptdev->fw->booted ||
+				 !panthor_aw_has_gpu_access(ptdev)),
 				msecs_to_jiffies(1000))) {
-		if (!ptdev->fw->booted &&
+		if (!ptdev->fw->booted && panthor_aw_has_gpu_access(ptdev) &&
 		    !(gpu_read(fw->irq.iomem, INT_STAT) & JOB_INT_GLOBAL_IF))
 			timedout = true;
 	}

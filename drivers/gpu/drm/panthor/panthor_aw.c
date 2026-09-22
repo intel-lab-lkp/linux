@@ -573,3 +573,11 @@ again:
 
 	goto again;
 }
+
+bool panthor_aw_has_gpu_access(struct panthor_device *ptdev)
+{
+	if (!ptdev->aw)
+		return true;
+
+	return (atomic_read(&ptdev->aw->state) == PANTHOR_AW_STATE_GPU_GRANTED);
+}
