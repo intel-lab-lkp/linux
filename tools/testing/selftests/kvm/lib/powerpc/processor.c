@@ -23,6 +23,16 @@ bool kvm_arch_needs_naturally_aligned_page_tables(void)
 	return true;
 }
 
+/*
+ * For nested guest case (L1 as pseries LPAR), L0 may fail with -44
+ * (H_NOT_ENOUGH_RESOURCES) during vm or vcpu creation, causing enomem
+ * due to limited resource/quotas.
+ */
+bool kvm_arch_vm_create_may_enomem(void)
+{
+	return is_pseries_lpar();
+}
+
 static void set_proc_table(struct kvm_vm *vm, int pid, u64 dw0, u64 dw1)
 {
 	u64 *proc_table;
