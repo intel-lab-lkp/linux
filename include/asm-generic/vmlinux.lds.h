@@ -275,9 +275,12 @@
 #define FTRACE_EVENTS()							\
 	. = ALIGN(8);							\
 	BOUNDED_SECTION(_ftrace_events)					\
+	. = ALIGN(8);							\
 	BOUNDED_SECTION_BY(_ftrace_eval_map, _ftrace_eval_maps)
+#define FTRACE_SYM_DEFS()	BOUNDED_SECTION(_ftrace_sym_defs)
 #else
 #define FTRACE_EVENTS()
+#define FTRACE_SYM_DEFS()
 #endif
 
 #ifdef CONFIG_TRACING
@@ -391,6 +394,7 @@
 	TRACE_PRINTKS()							\
 	BPF_RAW_TP()							\
 	TRACEPOINT_STR()						\
+	FTRACE_SYM_DEFS()						\
 	KUNIT_TABLE()
 
 /*

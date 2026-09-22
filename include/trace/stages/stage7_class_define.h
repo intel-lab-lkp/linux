@@ -45,6 +45,9 @@
 #define __event_in_softirq()	(REC->common_flags & 0x10)
 #define __event_in_irq()	(REC->common_flags & 0x18)
 
+#undef __print_sym
+#define __print_sym(value, symbol_id)	__print_sym(value:symbol_id)
+
 /*
  * The below is not executed in the kernel. It is only what is
  * displayed in the print format for userspace to parse.
