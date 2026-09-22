@@ -427,10 +427,21 @@ ieee80211_uhr_oper_dbe_info(const struct ieee80211_uhr_operation *oper)
 #define IEEE80211_UHR_MAC_CAP_DBE_EHT_MCS_MAP_160_PRES	0x08
 #define IEEE80211_UHR_MAC_CAP_DBE_EHT_MCS_MAP_320_PRES	0x10
 
+/* struct ieee80211_uhr_cap_dbe::bwcap[].cap */
+#define IEEE80211_UHR_MAC_CAP_DBE_CAP_NUM_SND_DIMS		0x07
+#define IEEE80211_UHR_MAC_CAP_DBE_CAP_NON_OFDMA_UL_MUMIMO	0x08
+#define IEEE80211_UHR_MAC_CAP_DBE_CAP_MU_BEAMFORMER		0x10
+#define IEEE80211_UHR_MAC_CAP_DBE_CAP_BEAMFORMEE_SS		0xe0
+
 struct ieee80211_uhr_cap_dbe {
 	u8 cap;
+	u8 max_switch_time_period;
+	u8 mode_change_intvl;
 	/* present 0, 1 or 2 times depending on _PRES bits */
-	struct ieee80211_eht_mcs_nss_supp_bw eht_mcs_map[];
+	struct {
+		struct ieee80211_eht_mcs_nss_supp_bw eht_mcs_map;
+		u8 cap;
+	} __packed bwcap[];
 } __packed;
 
 /**
@@ -520,10 +531,10 @@ static inline bool ieee80211_uhr_capa_size_ok(const u8 *data, u8 len,
 		dbe = (const void *)cap->variable;
 
 		if (dbe->cap & IEEE80211_UHR_MAC_CAP_DBE_EHT_MCS_MAP_160_PRES)
-			needed += sizeof(dbe->eht_mcs_map[0]);
+			needed += sizeof(dbe->bwcap[0]);
 
 		if (dbe->cap & IEEE80211_UHR_MAC_CAP_DBE_EHT_MCS_MAP_320_PRES)
-			needed += sizeof(dbe->eht_mcs_map[0]);
+			needed += sizeof(dbe->bwcap[0]);
 	}
 
 	return len >= needed;
