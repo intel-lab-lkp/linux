@@ -2,6 +2,7 @@
 #include "io_uring.h"
 #include "wait.h"
 #include "loop.h"
+#include "tctx.h"
 
 static inline int io_loop_nr_cqes(const struct io_ring_ctx *ctx,
 				  const struct iou_loop_params *lp)
@@ -83,6 +84,10 @@ int io_run_loop(struct io_ring_ctx *ctx)
 
 	if (!io_allowed_run_tw(ctx))
 		return -EEXIST;
+
+	ret = io_uring_add_tctx_node(ctx);
+	if (unlikely(ret))
+		return ret;
 
 	mutex_lock(&ctx->uring_lock);
 	ret = __io_run_loop(ctx);
