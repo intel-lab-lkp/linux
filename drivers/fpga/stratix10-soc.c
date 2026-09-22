@@ -183,6 +183,9 @@ static int s10_ops_write_init(struct fpga_manager *mgr,
 	uint i;
 	int ret;
 
+	/* Drop stale status bits left by a previous aborted write. */
+	priv->status = 0;
+
 	ctype.flags = 0;
 	if (info->flags & FPGA_MGR_PARTIAL_RECONFIG) {
 		dev_dbg(dev, "Requesting partial reconfiguration.\n");
@@ -319,17 +322,18 @@ static int s10_ops_write(struct fpga_manager *mgr, const char *buf,
 		wait_status = wait_for_completion_timeout(
 			&priv->status_return_completion, S10_BUFFER_TIMEOUT);
 
+		/* ERROR must win over BUFFER_DONE when both are set. */
+		if (test_and_clear_bit(SVC_STATUS_ERROR, &priv->status)) {
+			dev_err(dev, "ERROR - giving up - SVC_STATUS_ERROR\n");
+			ret = -EFAULT;
+			break;
+		}
+
 		if (test_and_clear_bit(SVC_STATUS_BUFFER_DONE, &priv->status) ||
 		    test_and_clear_bit(SVC_STATUS_BUFFER_SUBMITTED,
 				       &priv->status)) {
 			ret = 0;
 			continue;
-		}
-
-		if (test_and_clear_bit(SVC_STATUS_ERROR, &priv->status)) {
-			dev_err(dev, "ERROR - giving up - SVC_STATUS_ERROR\n");
-			ret = -EFAULT;
-			break;
 		}
 
 		if (!wait_status) {
