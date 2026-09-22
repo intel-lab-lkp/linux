@@ -932,6 +932,10 @@ static int gve_rx_dqo(struct napi_struct *napi, struct gve_rx_ring *rx,
 		if (xdp_act != XDP_PASS) {
 			gve_xdp_done_dqo(priv, rx, &gve_xdp.xdp, xprog, xdp_act,
 					 buf_state);
+			u64_stats_update_begin(&rx->statss);
+			rx->rpackets++;
+			rx->rbytes += compl_desc->packet_len;
+			u64_stats_update_end(&rx->statss);
 			return 0;
 		}
 
@@ -1090,6 +1094,7 @@ int gve_rx_poll_dqo(struct gve_notify_block *block, int budget)
 	struct gve_rx_ring *rx;
 	struct gve_priv *priv;
 	u64 xdp_redirects;
+	u32 rx_packets = 0;
 	u32 work_done = 0;
 	u64 bytes = 0;
 	u64 xdp_txs;
@@ -1150,19 +1155,23 @@ int gve_rx_poll_dqo(struct gve_notify_block *block, int budget)
 		/* Free running counter of completed descriptors */
 		rx->cnt++;
 
-		if (!rx->ctx.skb_head)
-			continue;
-
 		if (!compl_desc->end_of_packet)
 			continue;
 
 		work_done++;
+
+		if (!rx->ctx.skb_head)
+			continue;
+
 		pkt_bytes = rx->ctx.skb_head->len;
 		/* The ethernet header (first ETH_HLEN bytes) is snipped off
 		 * by eth_type_trans.
 		 */
 		if (skb_headlen(rx->ctx.skb_head))
 			pkt_bytes += ETH_HLEN;
+
+		rx_packets++;
+		bytes += pkt_bytes;
 
 		/* gve_rx_complete_skb() will consume skb if successful */
 		if (gve_rx_complete_skb(rx, napi, compl_desc, feat) != 0) {
@@ -1173,7 +1182,6 @@ int gve_rx_poll_dqo(struct gve_notify_block *block, int budget)
 			continue;
 		}
 
-		bytes += pkt_bytes;
 		rx->ctx.skb_head = NULL;
 		rx->ctx.skb_tail = NULL;
 	}
@@ -1187,7 +1195,7 @@ int gve_rx_poll_dqo(struct gve_notify_block *block, int budget)
 	gve_rx_post_buffers_dqo(rx);
 
 	u64_stats_update_begin(&rx->statss);
-	rx->rpackets += work_done;
+	rx->rpackets += rx_packets;
 	rx->rbytes += bytes;
 	u64_stats_update_end(&rx->statss);
 
