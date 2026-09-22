@@ -5018,9 +5018,16 @@ static int adva_x1_cpld_flash(struct ptp_ocp *bp, struct devlink *devlink,
 	 */
 	bp->cpld_in_config_mode = true;
 
+	/* wait_idle(), not wait_ready(): FAILED is latched across operations
+	 * and nothing here clears it, so treating it as fatal at the enable
+	 * step would make every later flash of a part that has failed once
+	 * return -EIO before reaching the ERASE and REFRESH that put it back
+	 * into a defined state.  ENAB below is what says the enable worked;
+	 * machxo2-spi.c likewise tests FAIL only after ISC_ENABLE completes.
+	 */
 	err = adva_x1_cpld_write(bp, CPLD_CMD_EN_CFG_TP);
 	if (!err)
-		err = adva_x1_cpld_wait_ready(bp, 5000);
+		err = adva_x1_cpld_wait_idle(bp, 5000);
 	if (err)
 		goto exit_config;
 
