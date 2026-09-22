@@ -15,19 +15,26 @@
  * Convert Unicode 16 to UTF-8 or ASCII.
  */
 static int
-uni16_to_x8(unsigned char *ascii, __be16 *uni, int len, struct nls_table *nls)
+uni16_to_x8(unsigned char *ascii, __be16 *uni, int len, struct nls_table *nls,
+	    int outsize)
 {
 	__be16 *ip, ch;
-	unsigned char *op;
+	unsigned char *op, *end;
 
 	ip = uni;
 	op = ascii;
+	end = ascii + outsize - 1;	/* leave room for the terminator */
 
 	while ((ch = get_unaligned(ip)) && len) {
 		int llen;
-		llen = nls->uni2char(be16_to_cpu(ch), op, NLS_MAX_CHARSET_SIZE);
+
+		if (op >= end)
+			break;
+		llen = nls->uni2char(be16_to_cpu(ch), op, end - op);
 		if (llen > 0)
 			op += llen;
+		else if (llen == -ENAMETOOLONG)
+			break;
 		else
 			*op++ = '?';
 		ip++;
@@ -59,7 +66,8 @@ get_joliet_filename(struct iso_directory_record * de, unsigned char *outname, st
 				outname, ISOFS_NAME_BUF_SIZE);
 	} else {
 		len = uni16_to_x8(outname, (__be16 *) de->name,
-				de->name_len[0] >> 1, nls);
+				de->name_len[0] >> 1, nls,
+				ISOFS_NAME_BUF_SIZE);
 	}
 	if ((len > 2) && (outname[len-2] == ';') && (outname[len-1] == '1'))
 		len -= 2;
