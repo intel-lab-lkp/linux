@@ -59,23 +59,30 @@ static inline int ti_sci_dev_is_on(struct ti_sci_dev *tsd, bool *r_state,
 	return ret;
 }
 
+/* Request power on to rproc through the TI-SCI PM domain */
 static inline int ti_sci_dev_get_device(struct ti_sci_dev *tsd)
 {
-	int ret;
+	int ret = 0;
 
-	ret = tsd->ops->get_device(tsd->sci, tsd->dev_id);
-	if (ret)
-		dev_err(tsd->dev, "ti-sci device get failed: %d\n", ret);
+	ret = pm_runtime_get_sync(tsd->dev);
+	if (ret < 0) {
+		dev_err(tsd->dev, "pm_runtime_get_sync failed, ret = %d\n", ret);
+		pm_runtime_put_noidle(tsd->dev);
+	}
+
 	return ret;
 }
 
+/* Request power off to a rproc through the TI-SCI PM domain */
 static inline int ti_sci_dev_put_device(struct ti_sci_dev *tsd)
 {
-	int ret;
+	int ret = 0;
 
-	ret = tsd->ops->put_device(tsd->sci, tsd->dev_id);
-	if (ret)
-		dev_err(tsd->dev, "ti-sci device put failed: %d\n", ret);
+	ret = pm_runtime_put_sync(tsd->dev);
+
+	if (ret < 0)
+		dev_err(tsd->dev, "pm_runtime_put_sync failed, ret = %d\n", ret);
+
 	return ret;
 }
 
