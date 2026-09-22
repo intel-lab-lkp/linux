@@ -922,6 +922,7 @@ static int mtu3_set_dma_mask(struct mtu3 *mtu)
 int ssusb_gadget_init(struct ssusb_mtk *ssusb)
 {
 	struct device *dev = ssusb->dev;
+	const struct mtu3_platform_data *pdata = device_get_match_data(dev);
 	struct platform_device *pdev = to_platform_device(dev);
 	struct mtu3 *mtu = NULL;
 	int ret = -ENOMEM;
@@ -929,6 +930,8 @@ int ssusb_gadget_init(struct ssusb_mtk *ssusb)
 	mtu = devm_kzalloc(dev, sizeof(struct mtu3), GFP_KERNEL);
 	if (mtu == NULL)
 		return -ENOMEM;
+
+	mtu->fifo_single_slot = pdata->fifo_single_slot;
 
 	mtu->irq = platform_get_irq_byname_optional(pdev, "device");
 	if (mtu->irq < 0) {
