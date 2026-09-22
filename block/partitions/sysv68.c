@@ -72,6 +72,10 @@ int sysv68_partition(struct parsed_partitions *state)
 	if (!data)
 		return -1;
 
+	if (slices < 1 || slices > (int)(SECTOR_SIZE / sizeof(struct slice))) {
+		put_dev_sector(sect);
+		return 0;
+	}
 	slices -= 1; /* last slice is the whole disk */
 	seq_buf_printf(&state->pp_buf, "sysV68: %s(s%u)", state->name, slices);
 	slice = (struct slice *)data;
