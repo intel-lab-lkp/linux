@@ -186,6 +186,49 @@ static void gve_unmap_packet(struct device *dev,
 	pkt->num_bufs = 0;
 }
 
+static struct gve_tx_pending_packet_dqo *
+gve_xsk_reorder_queue_head(struct gve_tx_ring *tx)
+{
+	u32 head = tx->dqo_compl.xsk_reorder_queue_head;
+
+	if (head == tx->dqo_compl.xsk_reorder_queue_tail) {
+		tx->dqo_compl.xsk_reorder_queue_tail =
+			atomic_read_acquire(&tx->dqo_tx.xsk_reorder_queue_tail);
+
+		if (head == tx->dqo_compl.xsk_reorder_queue_tail)
+			return NULL;
+	}
+
+	return &tx->dqo.pending_packets[tx->dqo.xsk_reorder_queue[head]];
+}
+
+static void gve_xsk_reorder_queue_pop_dqo(struct gve_tx_ring *tx)
+{
+	tx->dqo_compl.xsk_reorder_queue_head++;
+	tx->dqo_compl.xsk_reorder_queue_head &= tx->dqo.complq_mask;
+}
+
+static void gve_tx_process_xsk_completions(struct gve_tx_ring *tx)
+{
+	u32 num_xsks = 0;
+
+	while (true) {
+		struct gve_tx_pending_packet_dqo *pending_packet =
+			gve_xsk_reorder_queue_head(tx);
+
+		if (!pending_packet ||
+		    pending_packet->state != GVE_PACKET_STATE_XSK_COMPLETE)
+			break;
+
+		num_xsks++;
+		gve_xsk_reorder_queue_pop_dqo(tx);
+		gve_free_pending_packet(tx, pending_packet);
+	}
+
+	if (num_xsks)
+		xsk_tx_completed(tx->xsk_pool, num_xsks);
+}
+
 /* gve_tx_free_desc - Cleans up all pending tx requests and buffers.
  */
 static void gve_tx_clean_pending_packets(struct gve_tx_ring *tx)
@@ -201,11 +244,30 @@ static void gve_tx_clean_pending_packets(struct gve_tx_ring *tx)
 		else
 			gve_unmap_packet(tx->dev, cur_state);
 
-		if (cur_state->skb) {
-			dev_consume_skb_any(cur_state->skb);
-			cur_state->skb = NULL;
+		switch (cur_state->type) {
+		case GVE_TX_PENDING_PACKET_DQO_SKB:
+			if (cur_state->skb) {
+				dev_consume_skb_any(cur_state->skb);
+				cur_state->skb = NULL;
+			}
+			break;
+		case GVE_TX_PENDING_PACKET_DQO_XDP_FRAME:
+			if (cur_state->xdpf) {
+				xdp_return_frame(cur_state->xdpf);
+				cur_state->xdpf = NULL;
+			}
+			break;
+		case GVE_TX_PENDING_PACKET_DQO_XSK:
+			cur_state->state = GVE_PACKET_STATE_XSK_COMPLETE;
+			break;
+		default:
+			WARN_ON_ONCE(1);
+			break;
 		}
 	}
+
+	if (tx->xsk_pool)
+		gve_tx_process_xsk_completions(tx);
 }
 
 static void gve_tx_init_ring_state_dqo(struct gve_tx_ring *tx)
@@ -1089,28 +1151,6 @@ static void gve_xsk_reorder_queue_push_dqo(struct gve_tx_ring *tx,
 	atomic_set_release(&tx->dqo_tx.xsk_reorder_queue_tail, tail);
 }
 
-static struct gve_tx_pending_packet_dqo *
-gve_xsk_reorder_queue_head(struct gve_tx_ring *tx)
-{
-	u32 head = tx->dqo_compl.xsk_reorder_queue_head;
-
-	if (head == tx->dqo_compl.xsk_reorder_queue_tail) {
-		tx->dqo_compl.xsk_reorder_queue_tail =
-			atomic_read_acquire(&tx->dqo_tx.xsk_reorder_queue_tail);
-
-		if (head == tx->dqo_compl.xsk_reorder_queue_tail)
-			return NULL;
-	}
-
-	return &tx->dqo.pending_packets[tx->dqo.xsk_reorder_queue[head]];
-}
-
-static void gve_xsk_reorder_queue_pop_dqo(struct gve_tx_ring *tx)
-{
-	tx->dqo_compl.xsk_reorder_queue_head++;
-	tx->dqo_compl.xsk_reorder_queue_head &= tx->dqo.complq_mask;
-}
-
 /* Transmit a given skb and ring the doorbell. */
 netdev_tx_t gve_tx_dqo(struct sk_buff *skb, struct net_device *dev)
 {
@@ -1347,8 +1387,25 @@ static void gve_handle_miss_completion(struct gve_priv *priv,
 			secs_to_jiffies(GVE_REINJECT_COMPL_TIMEOUT);
 	add_to_list(tx, &tx->dqo_compl.miss_completions, pending_packet);
 
-	*bytes += pending_packet->skb->len;
-	(*pkts)++;
+	switch (pending_packet->type) {
+	case GVE_TX_PENDING_PACKET_DQO_SKB:
+		if (pending_packet->skb) {
+			*bytes += pending_packet->skb->len;
+			(*pkts)++;
+		}
+		break;
+	case GVE_TX_PENDING_PACKET_DQO_XDP_FRAME:
+		if (pending_packet->xdpf) {
+			*bytes += pending_packet->xdpf->len;
+			(*pkts)++;
+		}
+		break;
+	case GVE_TX_PENDING_PACKET_DQO_XSK:
+		break;
+	default:
+		WARN_ON_ONCE(1);
+		break;
+	}
 }
 
 static void remove_miss_completions(struct gve_priv *priv,
@@ -1377,9 +1434,26 @@ static void remove_miss_completions(struct gve_priv *priv,
 		else
 			gve_unmap_packet(tx->dev, pending_packet);
 
-		/* This indicates the packet was dropped. */
-		dev_kfree_skb_any(pending_packet->skb);
-		pending_packet->skb = NULL;
+		switch (pending_packet->type) {
+		case GVE_TX_PENDING_PACKET_DQO_SKB:
+			if (pending_packet->skb) {
+				/* This indicates the packet was dropped. */
+				dev_kfree_skb_any(pending_packet->skb);
+				pending_packet->skb = NULL;
+			}
+			break;
+		case GVE_TX_PENDING_PACKET_DQO_XDP_FRAME:
+			if (pending_packet->xdpf) {
+				xdp_return_frame(pending_packet->xdpf);
+				pending_packet->xdpf = NULL;
+			}
+			break;
+		case GVE_TX_PENDING_PACKET_DQO_XSK:
+			break;
+		default:
+			WARN_ON_ONCE(1);
+			break;
+		}
 
 		u64_stats_update_begin(&tx->statss);
 		tx->dropped_pkt++;
@@ -1424,27 +1498,6 @@ static void remove_timed_out_completions(struct gve_priv *priv,
 		else
 			gve_free_pending_packet(tx, pending_packet);
 	}
-}
-
-static void gve_tx_process_xsk_completions(struct gve_tx_ring *tx)
-{
-	u32 num_xsks = 0;
-
-	while (true) {
-		struct gve_tx_pending_packet_dqo *pending_packet =
-			gve_xsk_reorder_queue_head(tx);
-
-		if (!pending_packet ||
-		    pending_packet->state != GVE_PACKET_STATE_XSK_COMPLETE)
-			break;
-
-		num_xsks++;
-		gve_xsk_reorder_queue_pop_dqo(tx);
-		gve_free_pending_packet(tx, pending_packet);
-	}
-
-	if (num_xsks)
-		xsk_tx_completed(tx->xsk_pool, num_xsks);
 }
 
 int gve_clean_tx_done_dqo(struct gve_priv *priv, struct gve_tx_ring *tx,
