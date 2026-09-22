@@ -201,7 +201,8 @@ struct v3d_dev {
 		 * queue, which is used so that a new perfmon-carrying job can
 		 * depend on every job currently in-flight across all queues.
 		 *
-		 * Finished fences are only tracked if @nperfmons > 0.
+		 * Finished fences are only tracked if @nperfmons > 0 and no
+		 * global perfmon is set.
 		 */
 		struct dma_fence *last_hw_fence[V3D_MAX_QUEUES];
 	} perfmon_state;
