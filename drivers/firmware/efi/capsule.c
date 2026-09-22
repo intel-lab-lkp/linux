@@ -50,7 +50,8 @@ static DEFINE_MUTEX(capsule_mutex);
  */
 bool efi_capsule_pending(int *reset_type)
 {
-	if (!capsule_pending)
+	/* Pairs with the smp_store_release() in efi_capsule_update_locked(). */
+	if (!smp_load_acquire(&capsule_pending))
 		return false;
 
 	if (reset_type)
@@ -173,8 +174,14 @@ efi_capsule_update_locked(efi_capsule_header_t *capsule,
 
 	status = efi.update_capsule(&capsule, 1, sglist_phys);
 	if (status == EFI_SUCCESS) {
-		capsule_pending = true;
 		efi_reset_type = reset;
+		/*
+		 * efi_capsule_pending() reads the flag without capsule_mutex
+		 * and then the reset type, which is stored above. Publish the
+		 * flag with release semantics so that a reader that sees it
+		 * also sees the matching reset type.
+		 */
+		smp_store_release(&capsule_pending, true);
 	}
 
 	return efi_status_to_err(status);
