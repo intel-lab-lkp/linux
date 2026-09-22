@@ -4526,10 +4526,6 @@ static int adva_x1_mblaze_acquire(struct ptp_ocp *bp)
 			return 0;
 	}
 
-	/* Drop the request we gave up on.  Any error from the hand-back is
-	 * subsumed by the -ETIMEDOUT we are already returning.
-	 */
-	adva_x1_mblaze_release(bp);
 	return -ETIMEDOUT;
 }
 
@@ -4647,6 +4643,12 @@ static int adva_x1_bus_claim(struct ptp_ocp *bp)
 	i2c_lock_bus(adap, I2C_LOCK_ROOT_ADAPTER);
 	bp->cpld_adap = adap;
 
+	/* adva_x1_bus_release() runs the hand-back, so the acquire path does
+	 * not do it itself: both poll for the grant to drop for up to
+	 * MBLAZE_RETRIES * MBLAZE_RETRY_US with the adapter lock held, and
+	 * doing it twice only holds the shared controller for longer and
+	 * logs the same failure twice.
+	 */
 	ret = adva_x1_mblaze_acquire(bp);
 	if (ret) {
 		adva_x1_bus_release(bp);	/* keeps the acquire error */
