@@ -4,6 +4,7 @@
  * Copyright (c) 2015-2016 HGST, a Western Digital Company.
  */
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+#include <linux/cgroup.h>
 #include <linux/hex.h>
 #include <linux/module.h>
 #include <linux/random.h>
@@ -474,8 +475,77 @@ void nvmet_put_namespace(struct nvmet_ns *ns)
 	percpu_ref_put(&ns->ref);
 }
 
+#ifdef CONFIG_BLK_CGROUP
+static int nvmet_blkcg_ns_enable(struct nvmet_ns *ns)
+{
+	struct cgroup_subsys_state *css;
+	struct cgroup *cgrp;
+
+	if (!ns->cgroup_path)
+		return 0;
+
+	/*
+	 * Buffered writes will be handled by a separate thread,
+	 * these IOs have no namespace/cgroup information at that time,
+	 * so we don't support buffered io.
+	 */
+	if (ns->buffered_io) {
+		pr_err("cgroup_path is not supported with buffered_io: %s\n",
+		       ns->device_path);
+		return -EINVAL;
+	}
+
+	cgrp = cgroup_get_from_path(ns->cgroup_path);
+	if (IS_ERR(cgrp)) {
+		pr_err("failed to resolve cgroup path %s: %ld\n",
+		       ns->cgroup_path, PTR_ERR(cgrp));
+		return PTR_ERR(cgrp);
+	}
+
+	css = cgroup_get_e_css(cgrp, &io_cgrp_subsys);
+	if (!css || css->cgroup != cgrp) {
+		pr_err("the io controller is not enabled in cgroup %s\n",
+		       ns->cgroup_path);
+		if (css)
+			css_put(css);
+		cgroup_put(cgrp);
+		return -EINVAL;
+	}
+	ns->blkcg_css = css;
+	cgroup_put(cgrp);
+	return 0;
+}
+
+static void nvmet_blkcg_ns_disable(struct nvmet_ns *ns)
+{
+	if (ns->blkcg_css) {
+		css_put(ns->blkcg_css);
+		ns->blkcg_css = NULL;
+	}
+}
+
+static void nvmet_blkcg_ns_free(struct nvmet_ns *ns)
+{
+	kfree(ns->cgroup_path);
+}
+#else
+static inline int nvmet_blkcg_ns_enable(struct nvmet_ns *ns)
+{
+	return 0;
+}
+
+static inline void nvmet_blkcg_ns_disable(struct nvmet_ns *ns)
+{
+}
+
+static inline void nvmet_blkcg_ns_free(struct nvmet_ns *ns)
+{
+}
+#endif /* CONFIG_BLK_CGROUP */
+
 static void nvmet_ns_dev_disable(struct nvmet_ns *ns)
 {
+	nvmet_blkcg_ns_disable(ns);
 	nvmet_bdev_ns_disable(ns);
 	nvmet_file_ns_disable(ns);
 }
@@ -602,6 +672,10 @@ int nvmet_ns_enable(struct nvmet_ns *ns)
 	if (ret)
 		goto out_unlock;
 
+	ret = nvmet_blkcg_ns_enable(ns);
+	if (ret)
+		goto out_dev_disable;
+
 	ret = nvmet_p2pmem_ns_enable(ns);
 	if (ret)
 		goto out_dev_disable;
@@ -699,6 +773,7 @@ void nvmet_ns_free(struct nvmet_ns *ns)
 	up_write(&nvmet_ana_sem);
 
 	kfree(ns->device_path);
+	nvmet_blkcg_ns_free(ns);
 	kfree(ns);
 }
 
