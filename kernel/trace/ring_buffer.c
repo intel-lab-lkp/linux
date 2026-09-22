@@ -6467,6 +6467,7 @@ ring_buffer_read_start(struct trace_buffer *buffer, int cpu, gfp_t flags)
 {
 	struct ring_buffer_iter *iter __free(kfree) = kzalloc_obj(*iter, flags);
 	struct ring_buffer_per_cpu *cpu_buffer;
+	unsigned int max_event_size;
 
 	if (!iter)
 		return NULL;
@@ -6489,7 +6490,9 @@ ring_buffer_read_start(struct trace_buffer *buffer, int cpu, gfp_t flags)
 		mutex_unlock(&buffer->mutex);
 
 	/* Holds the entire event: data and meta data. */
-	iter->event = kmalloc(rb_subbuf_capacity(buffer), flags);
+	max_event_size = rb_subbuf_capacity(buffer);
+	iter->event = gfpflags_allow_blocking(flags) ?
+		kvmalloc(max_event_size, flags) : kmalloc(max_event_size, flags);
 	if (!iter->event) {
 		atomic_dec(&cpu_buffer->resize_disabled);
 		return NULL;
@@ -6520,7 +6523,7 @@ ring_buffer_read_finish(struct ring_buffer_iter *iter)
 	rb_check_pages(cpu_buffer);
 
 	atomic_dec(&cpu_buffer->resize_disabled);
-	kfree(iter->event);
+	kvfree(iter->event);
 	kfree(iter);
 }
 EXPORT_SYMBOL_GPL(ring_buffer_read_finish);
