@@ -38,4 +38,17 @@ config LOONGSON2_APB_CMC_DMA
 	  which has 4/8 channels internally, enabling bidirectional data transfer
 	  between devices and memory.
 
+config LOONGSON2_APB_DMAMUX
+	tristate "Loongson2 APB DMA Router (dmamux) support"
+	depends on LOONGSON2_APB_CMC_DMA
+	help
+	  Support for the DMA Mux controller found on Loongson-2 SoCs.
+
+	  On Loongson-2K0300, the DMA Mux routes peripheral DMA requests to
+	  one of the 8 physical channels of the on-chip CMC DMA controller
+	  by programming the CHIP_CTRL13/14/15 registers.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called loongson2-apb-dmamux.
+
 endif
