@@ -4,3 +4,4 @@ get_set_sud
 peeksiginfo
 vmaccess
 set_syscall_info
+sysemu_singlestep
