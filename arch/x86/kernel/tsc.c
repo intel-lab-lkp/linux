@@ -342,6 +342,17 @@ __setup("tsc=", tsc_setup);
 #define TSC_DEFAULT_THRESHOLD	0x20000
 
 /*
+ * Two frequency measurements are considered to describe the same clock
+ * when they agree within 2^-11 (~500ppm). That is the error bound of
+ * quick_pit_calibrate() and the skew which the clocksource watchdog
+ * tolerates between two CLOCK_SOURCE_CALIBRATED clocksources.
+ */
+#define TSC_FREQ_MATCH_SHIFT	11
+
+/* Maximum number of refined calibration samples */
+#define TSC_REFINE_MAX_SAMPLES	3
+
+/*
  * Read TSC and the reference counters. Take care of any disturbances
  */
 static u64 tsc_read_refs(u64 *p, int hpet)
@@ -1279,6 +1290,13 @@ int unsynchronized_tsc(void)
 	return 0;
 }
 
+static bool tsc_freq_matches(unsigned long a, unsigned long b)
+{
+	unsigned long hi = max(a, b), lo = min(a, b);
+
+	return hi - lo <= (hi >> TSC_FREQ_MATCH_SHIFT);
+}
+
 static void tsc_refine_calibration_work(struct work_struct *work);
 static DECLARE_DELAYED_WORK(tsc_irqwork, tsc_refine_calibration_work);
 /**
@@ -1292,15 +1310,19 @@ static DECLARE_DELAYED_WORK(tsc_irqwork, tsc_refine_calibration_work);
  *
  * If there are any calibration anomalies (too many SMIs, etc),
  * or the refined calibration is off by 1% of the fast early
- * calibration, we throw out the new calibration and use the
- * early calibration.
+ * calibration, or it deviates from the early calibration and
+ * cannot be reproduced, we throw out the new calibration and use
+ * the early calibration.
  */
 static void tsc_refine_calibration_work(struct work_struct *work)
 {
+	static unsigned long seen[TSC_REFINE_MAX_SAMPLES];
 	static u64 tsc_start = ULLONG_MAX, ref_start;
+	static unsigned int nr_seen;
 	static int hpet;
 	u64 tsc_stop, ref_stop, delta;
 	unsigned long freq;
+	unsigned int i;
 	int cpu;
 
 	/* Don't bother refining TSC on unstable systems */
@@ -1363,6 +1385,40 @@ restart:
 	/* Make sure we're within 1% */
 	if (abs(tsc_khz - freq) > tsc_khz/100)
 		goto out;
+
+	/*
+	 * tsc_read_refs() bounds the latency of the individual readouts, but
+	 * not what happens between them. If either counter is disturbed in the
+	 * middle of the window, e.g. the TSC steps forward once, then all
+	 * readouts are valid and the result is nevertheless off by hundreds of
+	 * ppm.
+	 *
+	 * The refined value is installed along with CLOCK_SOURCE_CALIBRATED,
+	 * which makes the clocksource watchdog apply its 500ppm limit. A
+	 * disturbed sample beyond that limit gets the TSC marked unstable in
+	 * the next watchdog period, which is worse than not refining at all.
+	 *
+	 * Therefore accept a sample only when it matches a previous
+	 * measurement, which is either the early calibration or an earlier
+	 * sample of the refinement. If no two measurements match, keep the
+	 * early calibration and leave the clocksource uncalibrated.
+	 */
+	if (!nr_seen)
+		seen[nr_seen++] = tsc_khz;
+
+	for (i = 0; i < nr_seen; i++) {
+		if (tsc_freq_matches(seen[i], freq))
+			break;
+	}
+
+	if (i == nr_seen) {
+		if (nr_seen == ARRAY_SIZE(seen)) {
+			pr_info("Refined TSC calibration not reproducible, using early calibration\n");
+			goto out;
+		}
+		seen[nr_seen++] = freq;
+		goto restart;
+	}
 
 	tsc_khz = freq;
 	pr_info("Refined TSC clocksource calibration: %lu.%03lu MHz\n",
