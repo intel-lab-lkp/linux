@@ -46,6 +46,7 @@
 #include <linux/hardirq.h>
 #include <linux/kexec.h>
 #include <linux/vmcore_info.h>
+#include <linux/seq_buf.h>
 
 #include <asm/fred.h>
 #include <asm/cpu_device_id.h>
@@ -173,9 +174,14 @@ void mce_unregister_decode_chain(struct notifier_block *nb)
 }
 EXPORT_SYMBOL_GPL(mce_unregister_decode_chain);
 
+/* 8 fields, widest is "SYND1 " plus 16 hex digits and a space. */
+#define MCE_AUX_LEN	(8 * (sizeof("SYND1 ") + 16 + 1))
+
 static void __print_mce(struct mce_hw_err *err)
 {
 	struct mce *m = &err->m;
+	char aux[MCE_AUX_LEN];
+	struct seq_buf s;
 
 	pr_emerg(HW_ERR "CPU %d: Machine Check%s: %llx Bank %d: %016llx\n",
 		 m->extcpu,
@@ -183,35 +189,45 @@ static void __print_mce(struct mce_hw_err *err)
 		 m->mcgstatus, m->bank, m->status);
 
 	if (m->ip) {
-		pr_emerg(HW_ERR "RIP%s %02x:<%016llx> ",
-			 !(m->mcgstatus & MCG_STATUS_EIPV) ? " !INEXACT!" : "",
-			 m->cs, m->ip);
+		const char *inexact = "";
 
+		if (!(m->mcgstatus & MCG_STATUS_EIPV))
+			inexact = " !INEXACT!";
+
+		/* The space after '>' is part of the existing output. */
 		if (m->cs == __KERNEL_CS)
-			pr_cont("{%pS}", (void *)(unsigned long)m->ip);
-		pr_cont("\n");
+			pr_emerg(HW_ERR "RIP%s %02x:<%016llx> {%pS}\n",
+				 inexact, m->cs, m->ip,
+				 (void *)(unsigned long)m->ip);
+		else
+			pr_emerg(HW_ERR "RIP%s %02x:<%016llx> \n",
+				 inexact, m->cs, m->ip);
 	}
 
-	pr_emerg(HW_ERR "TSC %llx ", m->tsc);
+	seq_buf_init(&s, aux, sizeof(aux));
+
+	seq_buf_printf(&s, "TSC %llx ", m->tsc);
 	if (m->addr)
-		pr_cont("ADDR %llx ", m->addr);
+		seq_buf_printf(&s, "ADDR %llx ", m->addr);
 	if (m->misc)
-		pr_cont("MISC %llx ", m->misc);
+		seq_buf_printf(&s, "MISC %llx ", m->misc);
 	if (m->ppin)
-		pr_cont("PPIN %llx ", m->ppin);
+		seq_buf_printf(&s, "PPIN %llx ", m->ppin);
 
 	if (mce_flags.smca) {
 		if (m->synd)
-			pr_cont("SYND %llx ", m->synd);
+			seq_buf_printf(&s, "SYND %llx ", m->synd);
 		if (err->vendor.amd.synd1)
-			pr_cont("SYND1 %llx ", err->vendor.amd.synd1);
+			seq_buf_printf(&s, "SYND1 %llx ",
+				       err->vendor.amd.synd1);
 		if (err->vendor.amd.synd2)
-			pr_cont("SYND2 %llx ", err->vendor.amd.synd2);
+			seq_buf_printf(&s, "SYND2 %llx ",
+				       err->vendor.amd.synd2);
 		if (m->ipid)
-			pr_cont("IPID %llx ", m->ipid);
+			seq_buf_printf(&s, "IPID %llx ", m->ipid);
 	}
 
-	pr_cont("\n");
+	pr_emerg(HW_ERR "%s\n", seq_buf_str(&s));
 
 	/*
 	 * Note this output is parsed by external tools and old fields
