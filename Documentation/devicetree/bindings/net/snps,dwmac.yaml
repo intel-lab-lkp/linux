@@ -119,6 +119,7 @@ properties:
         - starfive,jh7110-dwmac
         - tesla,fsd-ethqos
         - thead,th1520-gmac
+        - ultrarisc,dp1000-gmac
 
   reg:
     minItems: 1
@@ -174,7 +175,7 @@ properties:
     minItems: 1
     items:
       - description: GMAC stmmaceth reset
-      - description: AHB reset
+      - description: AHB or OCP reset
 
   reset-names:
     oneOf:
@@ -182,7 +183,7 @@ properties:
           - enum: [stmmaceth, ahb]
       - items:
           - const: stmmaceth
-          - const: ahb
+          - enum: [ahb, stmmaceth-ocp]
 
   power-domains:
     maxItems: 1
