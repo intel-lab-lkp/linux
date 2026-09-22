@@ -1224,7 +1224,7 @@ compat_fetch_robust_entry(compat_uptr_t *uentry, struct robust_list __user **ent
  */
 static void compat_exit_robust_list(struct task_struct *curr)
 {
-	struct compat_robust_list_head __user *head = current->futex.compat_robust_list;
+	struct compat_robust_list_head __user *head = curr->futex.compat_robust_list;
 	unsigned int limit = ROBUST_LIST_LIMIT, cur_mod, next_mod, pend_mod;
 	struct robust_list __user *entry, *next_entry, *pending;
 	compat_uptr_t uentry, next_uentry, upending;
