@@ -910,6 +910,7 @@ static void sm750fb_framebuffer_release(struct sm750_dev *sm750_dev)
 	while (sm750_dev->fb_count) {
 		fb_info = sm750_dev->fbinfo[sm750_dev->fb_count - 1];
 		unregister_framebuffer(fb_info);
+		fb_dealloc_cmap(&fb_info->cmap);
 		framebuffer_release(fb_info);
 		sm750_dev->fb_count--;
 	}
@@ -943,6 +944,7 @@ static int sm750fb_framebuffer_alloc(struct sm750_dev *sm750_dev, int fbidx)
 	return 0;
 
 release_fb:
+	fb_dealloc_cmap(&fb_info->cmap);
 	framebuffer_release(fb_info);
 	return err;
 }
