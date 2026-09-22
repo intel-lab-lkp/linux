@@ -19,7 +19,14 @@
 #include <linux/hugetlb.h>
 #include <linux/mount.h>
 #include <linux/sched.h>
+#include <linux/cred.h>
+#include <linux/rcupdate.h>
+#include <linux/sched/signal.h>
+#include <linux/sched/task.h>
+#include <linux/slab.h>
+#include <linux/task_work.h>
 #include <linux/prctl.h>
+#include <linux/printk.h>
 #include <linux/securebits.h>
 #include <linux/user_namespace.h>
 #include <linux/binfmts.h>
@@ -1283,6 +1290,123 @@ static int cap_prctl_drop(unsigned long cap)
 	return commit_creds(new);
 }
 
+/*
+ * Structure used to queue process-wide bounding set drops via task_work.
+ */
+struct cap_bset_drop_work {
+	struct callback_head work;
+	struct task_struct *task;
+	kernel_cap_t mask;
+	struct cap_bset_drop_work *next;
+};
+
+static void cap_bset_drop_work_fn(struct callback_head *work)
+{
+	struct cap_bset_drop_work *w = container_of(work, struct cap_bset_drop_work, work);
+	struct cred *new = prepare_creds();
+
+	if (!new) {
+		/* Out of memory: bounding set drop failed silently for this thread. */
+		pr_warn_ratelimited("capability bounding set drop failed for pid %d (%s)\n",
+				    task_pid_nr(current), current->comm);
+		goto out;
+	}
+
+	new->cap_bset = cap_drop(new->cap_bset, w->mask);
+	commit_creds(new);
+
+out:
+	put_task_struct(w->task);
+	kfree(w);
+}
+
+/*
+ * cap_bset_drop_process - Drop capabilities from all threads in the group.
+ * @mask: Mask of capabilities to drop from the bounding set.
+ *
+ * Drops @mask from the calling thread synchronously, and queues a task_work
+ * item for each sibling thread to safely apply the drop in its own context.
+ *
+ * The caller must hold CAP_SETPCAP. Thread group must be quiescent to avoid
+ * racing with concurrent thread creation.
+ *
+ * Returns 0 on success, or -ENOMEM if allocations fail (all-or-nothing).
+ */
+static int cap_bset_drop_process(kernel_cap_t mask)
+{
+	struct cap_bset_drop_work *list = NULL, *w, *next;
+	struct task_struct *thread;
+	struct cred *new = NULL;
+	int ret = 0;
+
+	rcu_read_lock();
+	for_each_thread(current, thread) {
+		const struct cred *cred;
+
+		if (thread == current || (thread->flags & PF_EXITING))
+			continue;
+
+		cred = __task_cred(thread);
+		if (cap_isclear(cap_intersect(cred->cap_bset, mask)))
+			continue;
+
+		w = kmalloc_obj(*w, GFP_ATOMIC);
+		if (!w) {
+			ret = -ENOMEM;
+			break;
+		}
+
+		w->task = get_task_struct(thread);
+		w->mask = mask;
+		w->next = list;
+		list = w;
+	}
+	rcu_read_unlock();
+
+	if (!ret) {
+		new = prepare_creds();
+		if (!new)
+			ret = -ENOMEM;
+	}
+
+	if (ret) {
+		while (list) {
+			next = list->next;
+			put_task_struct(list->task);
+			kfree(list);
+			list = next;
+		}
+		return ret;
+	}
+
+	for (w = list; w; w = next) {
+		next = w->next;
+		init_task_work(&w->work, cap_bset_drop_work_fn);
+		if (task_work_add(w->task, &w->work, TWA_SIGNAL)) {
+			put_task_struct(w->task);
+			kfree(w);
+		}
+	}
+
+	new->cap_bset = cap_drop(new->cap_bset, mask);
+	commit_creds(new);
+
+	return 0;
+}
+
+static int cap_prctl_drop_mask(unsigned long low, unsigned long high)
+{
+	kernel_cap_t mask = mk_kernel_cap((u32)low, (u32)high);
+
+	if (cap_isclear(mask))
+		return 0;
+
+	if (!ns_capable(current_user_ns(), CAP_SETPCAP))
+		return -EPERM;
+
+	return cap_bset_drop_process(mask);
+}
+
 /**
  * cap_task_prctl - Implement process control functions for this security module
  * @option: The process control function requested
@@ -1312,6 +1436,11 @@ int cap_task_prctl(int option, unsigned long arg2, unsigned long arg3,
 
 	case PR_CAPBSET_DROP:
 		return cap_prctl_drop(arg2);
+
+	case PR_CAPBSET_DROP_MASK:
+		if (arg4 || arg5)
+			return -EINVAL;
+		return cap_prctl_drop_mask(arg2, arg3);
 
 	/*
 	 * The next four prctl's remain to assist with transitioning a
