@@ -456,6 +456,30 @@ static bool hwrm_wait_must_abort(struct bnxt *bp, u32 req_type, u32 *fw_status)
 	return *fw_status && !BNXT_FW_IS_HEALTHY(*fw_status);
 }
 
+/* Wait for the firmware to set the valid byte at the end of the response.
+ * Returns the number of usec spent waiting; a return of
+ * HWRM_VALID_BIT_DELAY_USEC or more means the byte never appeared.
+ */
+static int hwrm_wait_for_valid(u8 *valid)
+{
+	int j;
+
+	for (j = 0; j < HWRM_VALID_BIT_DELAY_USEC; ) {
+		/* make sure we read from updated DMA memory */
+		dma_rmb();
+		if (*valid)
+			break;
+		if (j < 10) {
+			udelay(1);
+			j++;
+		} else {
+			usleep_range(20, 30);
+			j += 20;
+		}
+	}
+	return j;
+}
+
 static int __hwrm_send(struct bnxt *bp, struct bnxt_hwrm_ctx *ctx)
 {
 	u32 doorbell_offset = BNXT_GRCPF_REG_CHIMP_COMM_TRIGGER;
@@ -582,12 +606,39 @@ static int __hwrm_send(struct bnxt *bp, struct bnxt_hwrm_ctx *ctx)
 		}
 
 		if (READ_ONCE(token->state) != BNXT_HWRM_COMPLETE) {
-			hwrm_err(bp, ctx, "Resp cmpl intr err msg: 0x%x\n",
-				 req_type);
-			goto exit;
+			bool completed = false;
+			u8 valid_byte = 0;
+
+			/* The completion ring entry was not delivered for
+			 * some reason. It might be possible that the command
+			 * was carried out even without a completion being
+			 * posted. Check the response before giving up and log
+			 * the state.
+			 */
+			len = le16_to_cpu(READ_ONCE(ctx->resp->resp_len));
+			if (len &&
+			    READ_ONCE(ctx->resp->seq_id) == ctx->req->seq_id) {
+				valid = (u8 *)ctx->resp + len - 1;
+				completed = hwrm_wait_for_valid(valid) <
+					    HWRM_VALID_BIT_DELAY_USEC;
+				valid_byte = *valid;
+			}
+			if (!completed) {
+				hwrm_err(bp, ctx,
+					 "Resp cmpl intr err msg: 0x%x len:%d valid:0x%x seq:0x%x/0x%x\n",
+					 req_type, len, valid_byte,
+					 le16_to_cpu(READ_ONCE(ctx->resp->seq_id)),
+					 le16_to_cpu(ctx->req->seq_id));
+				goto exit;
+			}
+			netdev_warn(bp->dev,
+				    "Resp cmpl intr not delivered, msg: 0x%x completed anyway (len:%d valid:0x%x err:0x%x)\n",
+				    req_type, len, valid_byte,
+				    le16_to_cpu(ctx->resp->error_code));
+		} else {
+			len = le16_to_cpu(READ_ONCE(ctx->resp->resp_len));
+			valid = ((u8 *)ctx->resp) + len - 1;
 		}
-		len = le16_to_cpu(READ_ONCE(ctx->resp->resp_len));
-		valid = ((u8 *)ctx->resp) + len - 1;
 	} else {
 		__le16 seen_out_of_seq = ctx->req->seq_id; /* will never see */
 		int j;
@@ -647,19 +698,7 @@ static int __hwrm_send(struct bnxt *bp, struct bnxt_hwrm_ctx *ctx)
 
 		/* Last byte of resp contains valid bit */
 		valid = ((u8 *)ctx->resp) + len - 1;
-		for (j = 0; j < HWRM_VALID_BIT_DELAY_USEC; ) {
-			/* make sure we read from updated DMA memory */
-			dma_rmb();
-			if (*valid)
-				break;
-			if (j < 10) {
-				udelay(1);
-				j++;
-			} else {
-				usleep_range(20, 30);
-				j += 20;
-			}
-		}
+		j = hwrm_wait_for_valid(valid);
 
 		if (j >= HWRM_VALID_BIT_DELAY_USEC) {
 			hwrm_err(bp, ctx, "Error (timeout: %u) msg {0x%x 0x%x} len:%d v:%d\n",
