@@ -45,10 +45,27 @@ struct qcom_icc_provider {
  * @width: multiplier used to convert bytes/sec bw value to an RPMh msg
  * @vcd: virtual clock domain that this bcm belongs to
  * @reserved: reserved field
+ *
+ * This is the little-endian on-disk format returned by
+ * cmd_db_read_aux_data().
  */
 struct bcm_db {
 	__le32 unit;
 	__le16 width;
+	u8 vcd;
+	u8 reserved;
+};
+
+/**
+ * struct bcm_aux_data - Auxiliary data of a BCM in native byte order
+ * @unit: divisor used to convert bytes/sec bw value to an RPMh msg
+ * @width: multiplier used to convert bytes/sec bw value to an RPMh msg
+ * @vcd: virtual clock domain that this bcm belongs to
+ * @reserved: reserved field
+ */
+struct bcm_aux_data {
+	u32 unit;
+	u16 width;
 	u8 vcd;
 	u8 reserved;
 };
@@ -135,7 +152,7 @@ struct qcom_icc_bcm {
 	u32 enable_mask;
 	bool dirty;
 	bool keepalive;
-	struct bcm_db aux_data;
+	struct bcm_aux_data aux_data;
 	struct list_head list;
 	struct list_head ws_list;
 	size_t num_nodes;
