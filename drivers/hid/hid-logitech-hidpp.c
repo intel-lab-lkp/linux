@@ -213,6 +213,7 @@ struct hidpp_device {
 
 	int hires_wheel_multiplier;
 	u8 hires_wheel_feature_index;
+	bool hires_wheel_diverted; /* whether wheel events use HID++ notifications */
 
 	bool connected_once;
 };
@@ -2043,8 +2044,14 @@ static int hidpp_hrs_set_highres_scrolling_mode(struct hidpp_device *hidpp,
 
 #define HIDPP_PAGE_HIRES_WHEEL		0x2121
 
+#define EVENT_HIRES_WHEEL_MOVEMENT		0x00
 #define CMD_HIRES_WHEEL_GET_WHEEL_CAPABILITY	0x00
+#define CMD_HIRES_WHEEL_GET_WHEEL_MODE		0x10
 #define CMD_HIRES_WHEEL_SET_WHEEL_MODE		0x20
+#define HIRES_WHEEL_MODE_USE_HIDPP		BIT(0)
+#define HIRES_WHEEL_MODE_HIGH_RESOLUTION	BIT(1)
+#define HIRES_WHEEL_MODE_INVERT			BIT(2)
+#define HIRES_WHEEL_EVENT_HIGH_RESOLUTION	BIT(4)
 
 static int hidpp_hrw_get_wheel_capability(struct hidpp_device *hidpp,
 	u8 *multiplier)
@@ -2072,6 +2079,26 @@ return_default:
 	return ret;
 }
 
+static int hidpp_hrw_get_wheel_mode(struct hidpp_device *hidpp, u8 *mode)
+{
+	u8 feature_index;
+	struct hidpp_report response;
+
+	int ret = hidpp_root_get_feature(hidpp, HIDPP_PAGE_HIRES_WHEEL,
+					 &feature_index);
+	if (ret)
+		return ret;
+
+	ret = hidpp_send_fap_command_sync(hidpp, feature_index,
+					  CMD_HIRES_WHEEL_GET_WHEEL_MODE,
+					  NULL, 0, &response);
+	if (ret)
+		return ret;
+
+	*mode = response.fap.params[0];
+	return 0;
+}
+
 static int hidpp_hrw_set_wheel_mode(struct hidpp_device *hidpp, bool invert,
 	bool high_resolution, bool use_hidpp)
 {
@@ -2085,9 +2112,9 @@ static int hidpp_hrw_set_wheel_mode(struct hidpp_device *hidpp, bool invert,
 	if (ret)
 		return ret;
 
-	params[0] = (invert          ? BIT(2) : 0) |
-		    (high_resolution ? BIT(1) : 0) |
-		    (use_hidpp       ? BIT(0) : 0);
+	params[0] = (invert          ? HIRES_WHEEL_MODE_INVERT : 0) |
+		    (high_resolution ? HIRES_WHEEL_MODE_HIGH_RESOLUTION : 0) |
+		    (use_hidpp       ? HIRES_WHEEL_MODE_USE_HIDPP : 0);
 
 	return hidpp_send_fap_command_sync(hidpp, feature_index,
 					   CMD_HIRES_WHEEL_SET_WHEEL_MODE,
@@ -3912,16 +3939,43 @@ static int hi_res_scroll_enable(struct hidpp_device *hidpp)
 {
 	int ret;
 	u8 multiplier = 1;
+	bool high_resolution = true;
+	const bool is_bolt = hidpp_is_bolt_child(hidpp->hid_dev);
+
+	if (is_bolt)
+		hidpp->hires_wheel_diverted = false;
 
 	if (hidpp->capabilities & HIDPP_CAPABILITY_HIDPP20_HI_RES_WHEEL) {
-		bool use_hidpp = hidpp_is_bolt_child(hidpp->hid_dev);
+		u8 mode;
 
-		ret = hidpp_hrw_set_wheel_mode(hidpp, false, true, use_hidpp);
-		if (ret == 0)
-			ret = hidpp_hrw_get_wheel_capability(hidpp, &multiplier);
+		/* Preserve the persistent mode, except for Bolt event routing. */
+		ret = hidpp_hrw_get_wheel_mode(hidpp, &mode);
+		if (ret == 0) {
+			bool invert = mode & HIRES_WHEEL_MODE_INVERT;
+			bool use_hidpp = mode & HIRES_WHEEL_MODE_USE_HIDPP;
+
+			high_resolution = mode & HIRES_WHEEL_MODE_HIGH_RESOLUTION;
+
+			/* Preserve user-set resolution and inversion; enable HID++ for Bolt. */
+			if (is_bolt && high_resolution && !use_hidpp) {
+				ret = hidpp_hrw_set_wheel_mode(hidpp, invert,
+							       high_resolution, true);
+				if (ret == 0)
+					use_hidpp = true;
+			}
+
+			if (ret == 0)
+				ret = hidpp_hrw_get_wheel_capability(hidpp, &multiplier);
+			if (ret == 0)
+				hidpp->hires_wheel_diverted = use_hidpp;
+		}
 	} else if (hidpp->capabilities & HIDPP_CAPABILITY_HIDPP20_HI_RES_SCROLL) {
-		ret = hidpp_hrs_set_highres_scrolling_mode(hidpp, true,
+		/* Bolt reports for this feature also bypass hid-logitech-hidpp. */
+		high_resolution = !is_bolt;
+		ret = hidpp_hrs_set_highres_scrolling_mode(hidpp, !is_bolt,
 							   &multiplier);
+		if (!ret && is_bolt)
+			multiplier = 1;
 	} else /* if (hidpp->capabilities & HIDPP_CAPABILITY_HIDPP10_FAST_SCROLL) */ {
 		ret = hidpp10_enable_scrolling_acceleration(hidpp);
 		multiplier = 8;
@@ -3938,8 +3992,12 @@ static int hi_res_scroll_enable(struct hidpp_device *hidpp)
 		multiplier = 1;
 	}
 
+	/* Keep the device-reported multiplier for HID++ event conversion. */
 	hidpp->hires_wheel_multiplier = multiplier;
-	hidpp->vertical_wheel_counter.wheel_multiplier = multiplier;
+	/* Apply the multiplier only while high-resolution mode or HID++ diversion is active. */
+	hidpp->vertical_wheel_counter.wheel_multiplier =
+	(high_resolution || hidpp->hires_wheel_diverted) ?
+		multiplier : 1;
 	hid_dbg(hidpp->hid_dev, "wheel multiplier = %d\n", multiplier);
 	return 0;
 }
@@ -3997,17 +4055,41 @@ static int hidpp20_hires_wheel_raw_event(struct hidpp_device *hidpp,
 
 	if ((data[3] & 0xf0) == CMD_HIRES_WHEEL_SET_WHEEL_MODE) {
 		u8 mode = data[4];
-		bool hires = (mode & 0x02) != 0;
-		int new_multiplier = (hires && hidpp->hires_wheel_multiplier > 0)
+		bool hires = mode & HIRES_WHEEL_MODE_HIGH_RESOLUTION;
+		bool use_hidpp = mode & HIRES_WHEEL_MODE_USE_HIDPP;
+		int new_multiplier = ((hires || use_hidpp) &&
+				      hidpp->hires_wheel_multiplier > 0)
 			? hidpp->hires_wheel_multiplier : 1;
+
+		hidpp->hires_wheel_diverted = use_hidpp;
 		hidpp->vertical_wheel_counter.wheel_multiplier = new_multiplier;
 		return 1;
 	}
 
-	/* wheel movement event: 16-bit signed delta in HID++ ticks */
-	if ((data[3] & 0xf0) == 0x00 && size >= 7 && hidpp->input &&
-	    hidpp->vertical_wheel_counter.wheel_multiplier) {
-		s16 delta = get_unaligned_be16(&data[5]);
+	/*
+	 * HID++ 0x2121 wheelMovement event:
+	 *   data[3]    = event/function index in the upper nibble (0x0),
+	 *                client ID in the lower nibble
+	 *   data[4]    = event flags; bit 4 indicates high-resolution units
+	 *   data[5:6]  = signed 16-bit big-endian vertical wheel delta
+	 *
+	 * The outer HID++ path normally validates long reports as 20 bytes, but
+	 * keep the size check below before reading data[5:6] from the buffer.
+	 * Low-resolution deltas are converted using the device's multiplier
+	 * before being passed to the scroll counter.
+	 */
+	if (data[3] == EVENT_HIRES_WHEEL_MOVEMENT && hidpp->hires_wheel_diverted) {
+		int delta;
+
+		if (size < 7 || !hidpp->input ||
+		    !hidpp->vertical_wheel_counter.wheel_multiplier ||
+		    !hidpp->hires_wheel_multiplier)
+			return 1;
+
+		delta = (s16)get_unaligned_be16(&data[5]);
+		if (!(data[4] & HIRES_WHEEL_EVENT_HIGH_RESOLUTION))
+			/* low-resolution delta: convert to hi-res units */
+			delta *= hidpp->hires_wheel_multiplier;
 
 		if (delta) {
 			hidpp_scroll_counter_handle_scroll(hidpp->input,
