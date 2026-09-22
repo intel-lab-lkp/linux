@@ -330,8 +330,13 @@ macro_rules! bitfield {
             }
         }
 
-        // SAFETY: `$storage` is `Zeroable` and `$name` is transparent.
-        unsafe impl ::pin_init::Zeroable for $name {}
+        // SAFETY:
+        // - `$storage: Integer` is sealed to primitive integer types, for which the all-zero bit
+        //   pattern is valid.
+        // - `$name` is `repr(transparent)` over `$storage`.
+        unsafe impl ::pin_init::Zeroable for $name
+        where $storage: ::kernel::num::Integer
+        {}
 
         impl ::core::convert::From<$name> for $storage {
             #[inline(always)]
