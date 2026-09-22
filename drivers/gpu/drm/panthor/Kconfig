@@ -20,3 +20,13 @@ config DRM_PANTHOR
 
 	  Note that the Mali-G68 and Mali-G78, while Valhall architecture, will
 	  be supported with the panfrost driver as they are not CSF GPUs.
+
+config DRM_PANTHOR_SYSTEM
+	tristate "GPU-wide configuration for Arm Mali 5th Gen AM GPUs"
+	depends on DRM_PANTHOR
+	depends on OF
+	help
+	  Enable support for the AM_SYSTEM block found on Arm Mali 5th Gen
+	  AM GPUs. This block provides GPU-wide control outside the main GPU
+	  register window, including reset handling and management of shared
+	  clock and regulator resources.

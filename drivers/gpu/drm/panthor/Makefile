@@ -14,5 +14,6 @@ panthor-y := \
 	panthor_sched.o
 
 obj-$(CONFIG_DRM_PANTHOR) += panthor.o
+obj-$(CONFIG_DRM_PANTHOR_SYSTEM) += system/
 
 CFLAGS_panthor_gpu.o := -I$(src)
