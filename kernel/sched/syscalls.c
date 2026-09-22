@@ -553,10 +553,10 @@ recheck:
 	}
 
 	/*
-	 * SCHED_DEADLINE bandwidth accounting relies on stable cpusets
-	 * information.
+	 * SCHED_DEADLINE needs stable cpusets.  However, the pi == false
+	 * caller normalize_rt_tasks() must skip the lock to avoid sleeping.
 	 */
-	if (dl_policy(policy) || dl_policy(p->policy)) {
+	if (pi && (dl_policy(policy) || dl_policy(p->policy))) {
 		cpuset_locked = true;
 		cpuset_lock();
 	}
