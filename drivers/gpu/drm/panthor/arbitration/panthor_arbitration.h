@@ -75,4 +75,6 @@ int panthor_arbitration_on_grant(struct panthor_arbitration *adev, u8 aw_id);
 int panthor_arbitration_on_stop(struct panthor_arbitration *adev, u8 aw_id);
 int panthor_arbitration_on_close(struct panthor_arbitration *adev, u8 aw_id);
 
+int panthor_arbitration_notify_err(struct panthor_arbitration *adev, u8 aw_id);
+
 #endif

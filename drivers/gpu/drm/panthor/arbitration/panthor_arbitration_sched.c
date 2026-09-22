@@ -729,3 +729,13 @@ void panthor_arbitration_sched_disable_clear(struct panthor_arbitration_sched *s
 
 	sched->disabled &= ~BIT(reason);
 }
+
+void panthor_arbitration_sched_reset(struct panthor_arbitration_sched *sched, u8 aw_id)
+{
+	guard(spinlock_irqsave)(&sched->lock);
+
+	if (aw_id != sched->active_aw_id)
+		return;
+
+	arb_sched_queue_work(sched, &sched->reset_work);
+}

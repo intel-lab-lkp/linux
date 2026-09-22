@@ -298,6 +298,18 @@ int panthor_arbitration_on_close(struct panthor_arbitration *adev, u8 aw_id)
 	return panthor_partition_control_close_window(adev->pc[idx]);
 }
 
+int panthor_arbitration_notify_err(struct panthor_arbitration *adev, u8 aw_id)
+{
+	int idx = to_assigned_sched_idx(adev, aw_id);
+
+	if (idx < 0)
+		return idx;
+
+	panthor_arbitration_sched_reset(adev->sched[idx], aw_id);
+
+	return 0;
+}
+
 static int panthor_arbitration_probe(struct platform_device *pdev)
 {
 	struct panthor_arbitration *adev;

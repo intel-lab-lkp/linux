@@ -28,6 +28,7 @@
 
 #define AM_PART_COMMAND				0x100
 #define   AM_PART_SET_COMMAND(x)		FIELD_PREP(GENMASK(7, 0), x)
+#define   AM_PART_GET_COMMAND(x)		FIELD_GET(GENMASK(7, 0), x)
 #define     PART_CMD_YIELD_IDLE			0x10
 #define     PART_CMD_YIELD_NOW			0x11
 #define     PART_CMD_CLOSE_WINDOW		0x20
@@ -39,6 +40,15 @@
 
 #define PART_REG_POLL_SLEEP_US			10
 #define PART_STATE_TRANSITION_TIMEOUT_US	5000000
+
+/** struct panthor_partition_cmd - Partition command data */
+struct panthor_partition_cmd {
+	/** @cmd: AM_PARTITION_COMMAND value */
+	u32 cmd;
+
+	/** @aw_id: AW ID the command was sent for */
+	int aw_id;
+};
 
 /**
  * struct panthor_partition_control - Partition control data
@@ -64,6 +74,9 @@ struct panthor_partition_control {
 
 	/** @closing: synchronous closing of the partition */
 	bool closing;
+
+	/** @last_cmd: Last sent command */
+	struct panthor_partition_cmd last_cmd;
 };
 
 static void partition_irq_suspend(struct panthor_partition_control *pc)
@@ -101,18 +114,45 @@ static int partition_state_wait(struct panthor_partition_control *pc, u32 state)
 					false, pc);
 }
 
+static inline void
+partition_command_write_untracked(struct panthor_partition_control *pc, u32 cmd)
+{
+	gpu_write(pc->iomem, AM_PART_COMMAND, cmd);
+}
+
+static void partition_command_write(struct panthor_partition_control *pc,
+				    u32 cmd, int aw_id)
+{
+	lockdep_assert_held(&pc->lock);
+
+	partition_command_write_untracked(pc, cmd);
+
+	pc->last_cmd.cmd = cmd;
+	pc->last_cmd.aw_id = aw_id;
+}
+
 static int yield_now(struct panthor_partition_control *pc)
 {
-	gpu_write(pc->iomem, AM_PART_COMMAND,
-		  AM_PART_SET_COMMAND(PART_CMD_YIELD_NOW));
+	guard(spinlock_irqsave)(&pc->lock);
+
+	partition_command_write(pc, AM_PART_SET_COMMAND(PART_CMD_YIELD_NOW),
+				pc->current_aw);
 
 	return 0;
 }
 
 static int yield_idle(struct panthor_partition_control *pc)
 {
-	gpu_write(pc->iomem, AM_PART_COMMAND,
-		  AM_PART_SET_COMMAND(PART_CMD_YIELD_IDLE));
+	guard(spinlock_irqsave)(&pc->lock);
+
+	/*
+	 * This is a notification to yield the GPU once FW is idle. It is not
+	 * a command that must succeed. Nothing of note is lost if the command
+	 * fails apart from some minor scheduling optimisation losses. We can
+	 * skip tracking this command.
+	 */
+	partition_command_write_untracked(
+		pc, AM_PART_SET_COMMAND(PART_CMD_YIELD_IDLE));
 
 	return 0;
 }
@@ -127,8 +167,8 @@ static int window_close(struct panthor_partition_control *pc)
 
 	pc->closing = true;
 
-	gpu_write(pc->iomem, AM_PART_COMMAND,
-		  AM_PART_SET_COMMAND(PART_CMD_CLOSE_WINDOW));
+	partition_command_write(pc, AM_PART_SET_COMMAND(PART_CMD_CLOSE_WINDOW),
+				pc->current_aw);
 
 	return 0;
 }
@@ -153,8 +193,8 @@ static int window_open(struct panthor_partition_control *pc, u8 aw_id)
 
 	guard(spinlock_irqsave)(&pc->lock);
 
-	gpu_write(pc->iomem, AM_PART_COMMAND,
-		  AM_PART_SET_COMMAND(PART_CMD_OPEN_WINDOW) | AM_PART_SET_WINDOW(aw_id));
+	partition_command_write(pc, (AM_PART_SET_COMMAND(PART_CMD_OPEN_WINDOW) |
+				     AM_PART_SET_WINDOW(aw_id)), aw_id);
 
 	pc->current_aw = aw_id;
 
@@ -165,6 +205,8 @@ static void partition_handle_reset_done(struct panthor_partition_control *pc)
 {
 	bool notify_stopped = false;
 	int aw_id;
+
+	gpu_write(pc->iomem, AM_PART_IRQ_CLEAR, PART_RESET_DONE);
 
 	scoped_guard(spinlock_irqsave, &pc->lock) {
 		aw_id = pc->current_aw;
@@ -181,6 +223,52 @@ static void partition_handle_reset_done(struct panthor_partition_control *pc)
 		panthor_arbitration_on_stopped(dev_get_drvdata(pc->dev), aw_id);
 }
 
+static void partition_handle_invalid_cmd(struct panthor_partition_control *pc)
+{
+	bool on_err = false;
+	int aw_id;
+
+	gpu_write(pc->iomem, AM_PART_IRQ_CLEAR, PART_INVALID_COMMAND);
+
+	scoped_guard(spinlock_irqsave, &pc->lock) {
+		if (!pc->last_cmd.cmd)
+			return;
+
+		if (pc->last_cmd.aw_id < 0)
+			return;
+
+		if (pc->last_cmd.aw_id != pc->current_aw)
+			return;
+
+		switch (AM_PART_GET_COMMAND(pc->last_cmd.cmd)) {
+		case PART_CMD_YIELD_NOW:
+		case PART_CMD_CLOSE_WINDOW:
+			if (partition_state_get(pc) == PART_STATE_WINDOW_OPEN) {
+				partition_command_write_untracked(pc, pc->last_cmd.cmd);
+				return;
+			}
+			break;
+		case PART_CMD_OPEN_WINDOW:
+			if (partition_state_get(pc) == PART_STATE_RESET) {
+				partition_command_write_untracked(pc, pc->last_cmd.cmd);
+				return;
+			} else if (partition_aw_get(pc) == pc->last_cmd.aw_id) {
+				return;
+			}
+
+			on_err = true;
+			aw_id = pc->last_cmd.aw_id;
+
+			break;
+		default:
+			return;
+		}
+	}
+
+	if (on_err)
+		panthor_arbitration_notify_err(dev_get_drvdata(pc->dev), aw_id);
+}
+
 static irqreturn_t partition_irq_raw_handler(int irq, void *data)
 {
 	struct panthor_partition_control *pc = data;
@@ -194,9 +282,7 @@ static irqreturn_t partition_irq_raw_handler(int irq, void *data)
 		partition_handle_reset_done(pc);
 
 	if (status & PART_INVALID_COMMAND)
-		dev_warn(pc->dev, "%s: Invalid command", pc->name);
-
-	gpu_write(pc->iomem, AM_PART_IRQ_CLEAR, status);
+		partition_handle_invalid_cmd(pc);
 
 	return IRQ_HANDLED;
 }
