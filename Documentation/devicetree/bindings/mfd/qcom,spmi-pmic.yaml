@@ -148,7 +148,15 @@ patternProperties:
 
   "^audio-codec@[0-9a-f]+$":
     type: object
-    $ref: /schemas/sound/qcom,pm8916-wcd-analog-codec.yaml#
+    properties:
+      compatible:
+        contains:
+          enum:
+            - qcom,pm4125-codec
+            - qcom,pm8916-wcd-analog-codec
+
+    required:
+      - compatible
 
   "^battery@[0-9a-f]+$":
     type: object
