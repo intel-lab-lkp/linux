@@ -1255,6 +1255,19 @@ config REGULATOR_RC5T583
 	  through regulator interface. The device supports multiple DCDC/LDO
 	  outputs which can be controlled by i2c communication.
 
+config REGULATOR_RISCV_RPMI
+	tristate "RISC-V RPMI based regulator driver"
+	depends on MAILBOX || COMPILE_TEST
+	default RISCV
+	help
+	  Support for regulators based on the voltage service group defined
+	  by the RISC-V platform management interface (RPMI) specification.
+	  The voltage domains advertised by the platform microcontroller are
+	  registered as regulators.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called riscv-rpmi-regulator.
+
 config REGULATOR_RK808
 	tristate "Rockchip RK805/RK808/RK809/RK817/RK818 Power regulators"
 	depends on MFD_RK8XX

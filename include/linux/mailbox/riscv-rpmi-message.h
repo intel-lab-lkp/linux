@@ -92,8 +92,22 @@ static inline int rpmi_to_linux_error(int rpmi_error)
 
 /* RPMI service group IDs */
 #define RPMI_SRVGRP_SYSTEM_MSI		0x00002
+#define RPMI_SRVGRP_VOLTAGE		0x00007
 #define RPMI_SRVGRP_CLOCK		0x00008
 #define RPMI_SRVGRP_DEVICE_POWER	0x00009
+
+/* RPMI Voltage Service IDs */
+enum rpmi_voltage_service_id {
+	RPMI_VOLT_SRV_ENABLE_NOTIFICATION = 0x01,
+	RPMI_VOLT_SRV_GET_NUM_DOMAINS = 0x02,
+	RPMI_VOLT_SRV_GET_ATTRIBUTES = 0x03,
+	RPMI_VOLT_SRV_GET_SUPPORTED_LEVELS = 0x04,
+	RPMI_VOLT_SRV_SET_CONFIG = 0x05,
+	RPMI_VOLT_SRV_GET_CONFIG = 0x06,
+	RPMI_VOLT_SRV_SET_LEVEL = 0x07,
+	RPMI_VOLT_SRV_GET_LEVEL = 0x08,
+	RPMI_VOLT_SRV_ID_MAX_COUNT,
+};
 
 /* RPMI clock service IDs */
 enum rpmi_clock_service_id {
