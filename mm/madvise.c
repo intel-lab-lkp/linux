@@ -553,66 +553,66 @@ madvise_lru_pte_range_locked(pte_t *pte, unsigned long *addr,
 	return NULL;
 }
 
-static int madvise_lru_pmd_entry(pmd_t *pmd, unsigned long addr,
-		unsigned long end, struct mm_walk *walk)
+static void madvise_lru_pte_range(pmd_t *pmd, unsigned long addr,
+		unsigned long end, struct mm_walk *walk,
+		bool pageout_anon_only)
 {
-	struct madvise_walk_private *private = walk->private;
-	struct mmu_gather *tlb = private->tlb;
-	bool pageout = private->pageout;
-	struct mm_struct *mm = tlb->mm;
-	struct vm_area_struct *vma = walk->vma;
+	const struct madvise_walk_private *private = walk->private;
+	struct mm_struct *mm = private->tlb->mm;
+	LIST_HEAD(folio_list);
 	pte_t *start_pte, *pte;
 	spinlock_t *ptl;
-	struct folio *folio = NULL;
-	LIST_HEAD(folio_list);
+	struct folio *folio;
 	unsigned int batch_count = 0;
-	bool pageout_anon_only;
 	int nr;
+
+	tlb_change_page_size(private->tlb, PAGE_SIZE);
+	while (addr < end) {
+		start_pte = pte_offset_map_lock(mm, pmd, addr, &ptl);
+		if (!start_pte)
+			break;
+		pte = start_pte;
+		flush_tlb_batched_pending(mm);
+		lazy_mmu_mode_enable();
+		folio = madvise_lru_pte_range_locked(pte, &addr, end, walk,
+				&folio_list, pageout_anon_only, &nr, &batch_count);
+
+		lazy_mmu_mode_disable();
+		pte_unmap_unlock(start_pte, ptl);
+
+		if (!folio && addr < end) {
+			cond_resched();
+			continue;
+		}
+		if (folio) {
+			if (!split_folio(folio))
+				nr = 0;
+			folio_unlock(folio);
+			folio_put(folio);
+			addr += nr * PAGE_SIZE;
+		}
+	}
+	if (private->pageout)
+		reclaim_pages(&folio_list);
+	cond_resched();
+}
+
+static int madvise_lru_pmd_entry(pmd_t *pmd, unsigned long addr,
+		unsigned long next, struct mm_walk *walk)
+{
+	const struct madvise_walk_private *private = walk->private;
+	struct vm_area_struct *vma = walk->vma;
+	bool pageout_anon_only;
 
 	if (fatal_signal_pending(current))
 		return -EINTR;
-	pageout_anon_only = pageout && !vma_is_anonymous(vma) &&
-				       !can_do_file_pageout(vma);
+	pageout_anon_only = private->pageout && !vma_is_anonymous(vma) &&
+			    !can_do_file_pageout(vma);
 
 	if (pmd_trans_huge(*pmd) &&
-	    madvise_lru_huge_pmd(pmd, addr, end, walk, pageout_anon_only))
+	    madvise_lru_huge_pmd(pmd, addr, next, walk, pageout_anon_only))
 		return 0;
-	tlb_change_page_size(tlb, PAGE_SIZE);
-restart:
-	start_pte = pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
-	if (!start_pte)
-		goto out;
-	flush_tlb_batched_pending(mm);
-	lazy_mmu_mode_enable();
-	folio = madvise_lru_pte_range_locked(pte, &addr, end, walk,
-			&folio_list, pageout_anon_only, &nr, &batch_count);
-	if (!folio && addr < end) {
-		lazy_mmu_mode_disable();
-		pte_unmap_unlock(start_pte, ptl);
-		cond_resched();
-		goto restart;
-	}
-	if (!folio)
-		goto out;
-
-	lazy_mmu_mode_disable();
-	pte_unmap_unlock(start_pte, ptl);
-	start_pte = NULL;
-	if (!split_folio(folio))
-		nr = 0;
-	folio_unlock(folio);
-	folio_put(folio);
-	addr += nr * PAGE_SIZE;
-	goto restart;
-
-out:
-	if (start_pte) {
-		lazy_mmu_mode_disable();
-		pte_unmap_unlock(start_pte, ptl);
-	}
-	if (pageout)
-		reclaim_pages(&folio_list);
-	cond_resched();
+	madvise_lru_pte_range(pmd, addr, next, walk, pageout_anon_only);
 
 	return 0;
 }
