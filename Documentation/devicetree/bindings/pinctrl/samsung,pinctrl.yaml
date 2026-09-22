@@ -140,6 +140,7 @@ allOf:
             enum:
               - google,gs101-pinctrl
               - samsung,exynos8890-pinctrl
+              - samsung,exynos9610-pinctrl
     then:
       required:
         - clocks
