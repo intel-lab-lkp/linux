@@ -254,16 +254,22 @@ nvkm_uoutp_mthd_hdmi(struct nvkm_outp *outp, void *argv, u32 argc)
 	if (!ior->func->hdmi ||
 	    args->v0.max_ac_packet > 0x1f ||
 	    args->v0.rekey > 0x7f ||
+	    args->v0.gcp_cd > 0x0f ||
+	    args->v0.gcp_pp > 0x0f ||
 	    (args->v0.scdc && !ior->func->hdmi->scdc))
 		return -EINVAL;
 
 	if (!args->v0.enable) {
+		ior->tmds.gcp_cd = 0;
+		ior->tmds.gcp_pp = 0;
 		ior->func->hdmi->infoframe_avi(ior, args->v0.head, NULL, 0);
 		ior->func->hdmi->infoframe_vsi(ior, args->v0.head, NULL, 0);
 		ior->func->hdmi->ctrl(ior, args->v0.head, false, 0, 0);
 		return 0;
 	}
 
+	ior->tmds.gcp_cd = args->v0.gcp_cd;
+	ior->tmds.gcp_pp = args->v0.gcp_pp;
 	ior->func->hdmi->ctrl(ior, args->v0.head, args->v0.enable,
 			      args->v0.max_ac_packet, args->v0.rekey);
 	if (ior->func->hdmi->scdc)
