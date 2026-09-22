@@ -197,6 +197,8 @@ static int scmi_limit_notify_cb(struct notifier_block *nb, unsigned long event, 
 
 static int scmi_cpufreq_init(struct cpufreq_policy *policy)
 {
+	/* Pairs with the smp_store_release() in scmi_cpufreq_probe(). */
+	const struct scmi_perf_proto_ops *ops = smp_load_acquire(&perf_ops);
 	int ret, nr_opp, domain;
 	unsigned int latency;
 	struct device *cpu_dev;
@@ -252,7 +254,7 @@ static int scmi_cpufreq_init(struct cpufreq_policy *policy)
 	  */
 	nr_opp = dev_pm_opp_get_opp_count(cpu_dev);
 	if (nr_opp <= 0) {
-		ret = perf_ops->device_opps_add(ph, cpu_dev, domain);
+		ret = ops->device_opps_add(ph, cpu_dev, domain);
 		if (ret) {
 			dev_warn(cpu_dev, "failed to add opps to the device\n");
 			goto out_free_cpumask;
@@ -293,14 +295,14 @@ static int scmi_cpufreq_init(struct cpufreq_policy *policy)
 	/* SCMI allows DVFS request for any domain from any CPU */
 	policy->dvfs_possible_from_any_cpu = true;
 
-	latency = perf_ops->transition_latency_get(ph, domain);
+	latency = ops->transition_latency_get(ph, domain);
 	if (!latency)
 		latency = CPUFREQ_DEFAULT_TRANSITION_LATENCY_NS;
 
 	policy->cpuinfo.transition_latency = latency;
 
 	policy->fast_switch_possible =
-		perf_ops->fast_switch_possible(ph, domain);
+		ops->fast_switch_possible(ph, domain);
 
 	policy->transition_delay_us =
 		scmi_get_rate_limit(domain, policy->fast_switch_possible);
@@ -443,6 +445,7 @@ static int scmi_cpufreq_probe(struct scmi_device *sdev)
 	int ret;
 	struct device *dev = &sdev->dev;
 	const struct scmi_handle *handle;
+	const struct scmi_perf_proto_ops *ops;
 
 	handle = sdev->handle;
 
@@ -451,9 +454,15 @@ static int scmi_cpufreq_probe(struct scmi_device *sdev)
 
 	scmi_cpufreq_driver.driver_data = sdev;
 
-	perf_ops = handle->devm_protocol_get(sdev, SCMI_PROTOCOL_PERF, &ph);
-	if (IS_ERR(perf_ops))
-		return PTR_ERR(perf_ops);
+	ops = handle->devm_protocol_get(sdev, SCMI_PROTOCOL_PERF, &ph);
+	if (IS_ERR(ops))
+		return PTR_ERR(ops);
+	/*
+	 * The cpufreq callbacks read perf_ops after cpufreq_register_driver()
+	 * below. Publish it with release semantics so that ph and the ops are
+	 * visible together.
+	 */
+	smp_store_release(&perf_ops, ops);
 
 #ifdef CONFIG_COMMON_CLK
 	/* dummy clock provider as needed by OPP if clocks property is used */
