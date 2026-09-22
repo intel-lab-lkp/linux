@@ -221,6 +221,13 @@ static bool data_type_less(struct rb_node *node_a, const struct rb_node *node_b)
 	return strcmp(a->self.type_name, b->self.type_name) < 0;
 }
 
+/*
+ * Members are added recursively; bound the nesting so that a broken
+ * type that points back at one of its own ancestors doesn't recurse
+ * until the stack is gone.
+ */
+#define MAX_MEMBER_DEPTH 32
+
 /* Recursively add new members for struct/union */
 static int __add_member_cb(Dwarf_Die *die, void *arg)
 {
@@ -235,18 +242,22 @@ static int __add_member_cb(Dwarf_Die *die, void *arg)
 	if (dwarf_tag(die) != DW_TAG_member)
 		return DIE_FIND_CB_SIBLING;
 
+	if (__die_get_real_type(die, &member_type) == NULL)
+		return DIE_FIND_CB_SIBLING;
+
+	if (dwarf_tag(&member_type) == DW_TAG_typedef) {
+		if (die_get_real_type(&member_type, &die_mem) == NULL)
+			return DIE_FIND_CB_SIBLING;
+	} else {
+		die_mem = member_type;
+	}
+
 	member = zalloc(sizeof(*member));
 	if (member == NULL)
 		return DIE_FIND_CB_END;
 
 	strbuf_init(&sb, 32);
 	die_get_typename(die, &sb);
-
-	__die_get_real_type(die, &member_type);
-	if (dwarf_tag(&member_type) == DW_TAG_typedef)
-		die_get_real_type(&member_type, &die_mem);
-	else
-		die_mem = member_type;
 
 	if (dwarf_aggregate_size(&die_mem, &size) < 0)
 		size = 0;
@@ -289,6 +300,7 @@ static int __add_member_cb(Dwarf_Die *die, void *arg)
 	}
 	member->size = size;
 	member->offset = loc + parent->offset;
+	member->depth = parent->depth + 1;
 	INIT_LIST_HEAD(&member->children);
 	list_add_tail(&member->node, &parent->children);
 
@@ -296,6 +308,18 @@ static int __add_member_cb(Dwarf_Die *die, void *arg)
 	switch (tag) {
 	case DW_TAG_structure_type:
 	case DW_TAG_union_type:
+		/*
+		 * Only aggregates have children to expand: a primitive
+		 * member that happens to land on the limit is complete,
+		 * not truncated.
+		 */
+		if (member->depth >= MAX_MEMBER_DEPTH) {
+			/* Reported by the JSON exporter so consumers can tell a truncated tree. */
+			member->truncated = true;
+			pr_debug_dtp("member nesting limit reached at %s\n",
+				     member->type_name ?: "(unknown type)");
+			break;
+		}
 		die_find_child(&die_mem, __add_member_cb, member, &die_mem);
 		break;
 	default:
