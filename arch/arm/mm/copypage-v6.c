@@ -32,11 +32,11 @@ static void v6_copy_user_highpage_nonaliasing(struct page *to,
 {
 	void *kto, *kfrom;
 
-	kfrom = kmap_atomic(from);
-	kto = kmap_atomic(to);
+	kfrom = kmap_local_page(from);
+	kto = kmap_local_page(to);
 	copy_page(kto, kfrom);
-	kunmap_atomic(kto);
-	kunmap_atomic(kfrom);
+	kunmap_local(kto);
+	kunmap_local(kfrom);
 }
 
 /*
@@ -45,9 +45,9 @@ static void v6_copy_user_highpage_nonaliasing(struct page *to,
  */
 static void v6_clear_user_highpage_nonaliasing(struct page *page, unsigned long vaddr)
 {
-	void *kaddr = kmap_atomic(page);
+	void *kaddr = kmap_local_page(page);
 	clear_page(kaddr);
-	kunmap_atomic(kaddr);
+	kunmap_local(kaddr);
 }
 
 /*
