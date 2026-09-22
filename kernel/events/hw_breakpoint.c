@@ -577,7 +577,8 @@ static int __reserve_bp_slot(struct perf_event *bp, u64 bp_type)
 	int weight;
 
 	/* We couldn't initialize breakpoint constraints on boot */
-	if (!constraints_initialized)
+	/* Pairs with the smp_store_release() in init_breakpoint_slots(). */
+	if (!smp_load_acquire(&constraints_initialized))
 		return -ENOMEM;
 
 	/* Basic checks */
@@ -897,7 +898,8 @@ bool hw_breakpoint_is_used(void)
 {
 	int cpu;
 
-	if (!constraints_initialized)
+	/* Pairs with the smp_store_release() in init_breakpoint_slots(). */
+	if (!smp_load_acquire(&constraints_initialized))
 		return false;
 
 	for_each_possible_cpu(cpu) {
@@ -1017,7 +1019,8 @@ int __init init_hw_breakpoint(void)
 	if (ret)
 		return ret;
 
-	constraints_initialized = true;
+	/* Pairs with the smp_load_acquire() in the slot reservation paths. */
+	smp_store_release(&constraints_initialized, true);
 
 	perf_pmu_register(&perf_breakpoint, "breakpoint", PERF_TYPE_BREAKPOINT);
 
