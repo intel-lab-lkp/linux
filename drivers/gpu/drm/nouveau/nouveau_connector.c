@@ -298,6 +298,9 @@ nouveau_conn_attach_properties(struct drm_connector *connector)
 		drm_object_attach_property(&connector->base, dev->mode_config.
 					   dvi_i_subconnector_property, 0);
 
+	if (connector->connector_type == DRM_MODE_CONNECTOR_HDMIA)
+		drm_connector_attach_max_bpc_property(connector, 8, 16);
+
 	/* Add overscan compensation options to digital outputs. */
 	if (disp->underscan_property &&
 	    (connector->connector_type == DRM_MODE_CONNECTOR_DVID ||
@@ -1101,8 +1104,8 @@ nouveau_connector_get_modes(struct drm_connector *connector)
 	return ret;
 }
 
-static unsigned
-get_tmds_link_bandwidth(struct drm_connector *connector)
+unsigned int
+nouveau_connector_get_tmds_link_bandwidth(struct drm_connector *connector)
 {
 	struct nouveau_connector *nv_connector = nouveau_connector(connector);
 	struct nouveau_encoder *nv_encoder = nv_connector->detected_encoder;
@@ -1168,7 +1171,7 @@ nouveau_connector_mode_valid(struct drm_connector *connector,
 		max_clock = 400000;
 		break;
 	case DCB_OUTPUT_TMDS:
-		max_clock = get_tmds_link_bandwidth(connector);
+		max_clock = nouveau_connector_get_tmds_link_bandwidth(connector);
 		break;
 	case DCB_OUTPUT_ANALOG:
 		max_clock = nv_encoder->dcb->crtconf.maxfreq;
