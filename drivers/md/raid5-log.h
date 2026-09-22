@@ -51,7 +51,7 @@ static inline bool raid5_has_log(struct r5conf *conf)
 
 static inline bool raid5_has_ppl(struct r5conf *conf)
 {
-	return test_bit(MD_HAS_PPL, &conf->mddev->flags);
+	return conf->mddev && test_bit(MD_HAS_PPL, &conf->mddev->flags);
 }
 
 static inline int log_stripe(struct stripe_head *sh, struct stripe_head_state *s)
