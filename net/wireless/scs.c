@@ -694,3 +694,195 @@ bool cfg80211_flow_key_build(const struct cfg80211_flow_info *info, u32 fields,
 	return true;
 }
 EXPORT_SYMBOL(cfg80211_flow_key_build);
+
+/* Find the payload behind the @instance-th occurrence of the protocol */
+static bool tclas_filter_offset(const struct cfg80211_flow_info *info,
+				const struct cfg80211_tclas_filter *f,
+				unsigned int *off)
+{
+	struct ipv6hdr ip6h_buf, *ip6h;
+	unsigned int pos = info->l3_off;
+	unsigned int hdrs = 0;
+	u8 instance = 0;
+	u8 nexthdr;
+
+	if (info->key.ip_version == 4) {
+		struct iphdr iph_buf, *iph;
+
+		iph = skb_header_pointer(info->skb, pos, sizeof(*iph),
+					 &iph_buf);
+		if (!iph || iph->protocol != f->protocol || f->instance)
+			return false;
+
+		*off = pos + iph->ihl * 4;
+
+		return true;
+	}
+
+	if (info->key.ip_version != 6)
+		return false;
+
+	ip6h = skb_header_pointer(info->skb, pos, sizeof(*ip6h), &ip6h_buf);
+	if (!ip6h)
+		return false;
+
+	nexthdr = ip6h->nexthdr;
+	pos += sizeof(*ip6h);
+
+	while (hdrs++ < 8) {
+		struct ipv6_opt_hdr hdr_buf, *hdr;
+
+		if (nexthdr == f->protocol && instance++ == f->instance) {
+			*off = pos;
+
+			return true;
+		}
+
+		if (!ipv6_ext_hdr(nexthdr) || nexthdr == NEXTHDR_NONE)
+			return false;
+
+		hdr = skb_header_pointer(info->skb, pos, sizeof(*hdr),
+					 &hdr_buf);
+		if (!hdr)
+			return false;
+
+		if (nexthdr == NEXTHDR_FRAGMENT)
+			pos += 8;
+		else if (nexthdr == NEXTHDR_AUTH)
+			pos += ipv6_authlen(hdr);
+		else
+			pos += ipv6_optlen(hdr);
+
+		nexthdr = hdr->nexthdr;
+	}
+
+	return false;
+}
+
+static bool tclas_filter_match(const struct cfg80211_tclas *t,
+			       const struct cfg80211_flow_info *info)
+{
+	const struct cfg80211_tclas_filter *f = &t->filter;
+	u8 buf[CFG80211_TCLAS_FILTER_LEN], *p;
+	unsigned int i, off;
+
+	if (!info->skb)
+		return false;
+
+	if (!tclas_filter_offset(info, f, &off))
+		return false;
+
+	p = skb_header_pointer(info->skb, off, f->len, buf);
+	if (!p)
+		return false;
+
+	for (i = 0; i < f->len; i++)
+		if ((p[i] ^ f->value[i]) & f->mask[i])
+			return false;
+
+	return true;
+}
+
+static bool tclas_match(const struct cfg80211_tclas *t,
+			const struct cfg80211_flow_info *info)
+{
+	struct cfg80211_flow_key key;
+
+	if (t->type == CFG80211_TCLAS_FILTER)
+		return tclas_filter_match(t, info);
+
+	if (!cfg80211_flow_key_build(info, t->fields, CFG80211_FLOW_AS_IS,
+				     &key))
+		return false;
+
+	return !memcmp(&key, &t->key, sizeof(key));
+}
+
+/* Number of classifier parameters required for a match, see 11.25.2 */
+static u16 tclas_param_count(const struct cfg80211_tclas *t)
+{
+	if (t->type == CFG80211_TCLAS_FILTER)
+		return 1;
+
+	if (t->type == CFG80211_TCLAS_VLAN)
+		return 3;
+
+	return hweight32(t->fields & ~FLOW_F(IP_VERSION));
+}
+
+static bool scs_desc_match(const struct cfg80211_scs_desc *desc,
+			   const struct cfg80211_flow_info *info)
+{
+	unsigned int i;
+	bool any = false;
+
+	for (i = 0; i < desc->n_tclas; i++) {
+		if (tclas_match(&desc->tclas[i], info)) {
+			any = true;
+			continue;
+		}
+
+		if (desc->tclas_processing == CFG80211_TCLAS_PROCESSING_ALL)
+			return false;
+	}
+
+	return any;
+}
+
+static u16 scs_desc_param_count(const struct cfg80211_scs_desc *desc)
+{
+	unsigned int i;
+	u16 count;
+
+	if (desc->tclas_processing != CFG80211_TCLAS_PROCESSING_ALL) {
+		count = U16_MAX;
+		for (i = 0; i < desc->n_tclas; i++)
+			count = min(count, tclas_param_count(&desc->tclas[i]));
+
+		return count == U16_MAX ? 0 : count;
+	}
+
+	count = 0;
+	for (i = 0; i < desc->n_tclas; i++)
+		count += tclas_param_count(&desc->tclas[i]);
+
+	return count;
+}
+
+/**
+ * cfg80211_scs_evaluate - pick the SCS descriptor that matches a flow
+ *
+ * @desc: the active descriptors of one peer
+ * @n_desc: number of entries in @desc
+ * @info: the flow, from cfg80211_flow_parse()
+ * @verdict: receives the result
+ *
+ * When several descriptors match, the one with the most classifier parameters
+ * wins. An equal count keeps the first.
+ */
+void cfg80211_scs_evaluate(struct cfg80211_scs_desc * const *desc, u8 n_desc,
+			   const struct cfg80211_flow_info *info,
+			   struct cfg80211_scs_verdict *verdict)
+{
+	unsigned int i;
+	int best = -1;
+
+	memset(verdict, 0, sizeof(*verdict));
+
+	for (i = 0; i < n_desc; i++) {
+		u16 count;
+
+		if (!scs_desc_match(desc[i], info))
+			continue;
+
+		count = scs_desc_param_count(desc[i]);
+		if (count <= best)
+			continue;
+
+		best = count;
+		verdict->match = true;
+		verdict->scsid = desc[i]->id;
+		verdict->up = desc[i]->up;
+	}
+}
+EXPORT_SYMBOL(cfg80211_scs_evaluate);
