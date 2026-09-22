@@ -33,5 +33,6 @@ config ACPI_WMI_LEGACY_DEVICE_NAMES
 	  the same GUID to fail in some corner cases.
 
 source "drivers/platform/wmi/tests/Kconfig"
+source "drivers/platform/wmi/asus/Kconfig"
 
 endif # ACPI_WMI

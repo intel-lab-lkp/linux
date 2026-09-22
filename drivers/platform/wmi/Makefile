@@ -6,6 +6,7 @@
 
 wmi-y			:= core.o marshalling.o string.o
 obj-$(CONFIG_ACPI_WMI)	+= wmi.o
+obj-$(CONFIG_ASUS_WMI) += asus/
 
 # Unit tests
 obj-y			+= tests/
