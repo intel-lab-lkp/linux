@@ -7760,7 +7760,14 @@ void perf_register_guest_info_callbacks(struct perf_guest_info_callbacks *cbs)
 		return;
 
 	rcu_assign_pointer(perf_guest_cbs, cbs);
-	static_call_update(__perf_guest_state, cbs->state);
+
+	/*
+	 * perf_guest_state() is the gate the PMI paths test before they call
+	 * perf_guest_get_ip() and the interrupt handlers. On architectures
+	 * without inline static calls the updates are plain pointer stores,
+	 * so install the callees first and the gate last, behind a write
+	 * barrier.
+	 */
 	static_call_update(__perf_guest_get_ip, cbs->get_ip);
 
 	/* Implementing ->handle_intel_pt_intr is optional. */
@@ -7771,6 +7778,10 @@ void perf_register_guest_info_callbacks(struct perf_guest_info_callbacks *cbs)
 	if (cbs->handle_mediated_pmi)
 		static_call_update(__perf_guest_handle_mediated_pmi,
 				   cbs->handle_mediated_pmi);
+
+	/* Order the callee updates above before the gate below. */
+	smp_wmb();
+	static_call_update(__perf_guest_state, cbs->state);
 }
 EXPORT_SYMBOL_GPL(perf_register_guest_info_callbacks);
 
