@@ -578,8 +578,11 @@ static void wakeup_source_activate(struct wakeup_source *ws)
 static void wakeup_source_report_event(struct wakeup_source *ws, bool hard)
 {
 	ws->event_count++;
-	/* This is racy, but the counter is approximate anyway. */
-	if (events_check_enabled)
+	/*
+	 * This is racy, but the counter is approximate anyway. The acquire
+	 * pairs with the release in pm_save_wakeup_count().
+	 */
+	if (smp_load_acquire(&events_check_enabled))
 		ws->wakeup_count++;
 
 	if (!ws->active)
@@ -1003,7 +1006,8 @@ bool pm_save_wakeup_count(unsigned int count)
 	split_counters(&cnt, &inpr);
 	if (cnt == count && inpr == 0) {
 		saved_count = count;
-		events_check_enabled = true;
+		/* Pairs with the smp_load_acquire() in wakeup_source_report_event(). */
+		smp_store_release(&events_check_enabled, true);
 	}
 	raw_spin_unlock_irqrestore(&events_lock, flags);
 	return events_check_enabled;
