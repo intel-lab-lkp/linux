@@ -462,6 +462,14 @@ ecryptfs_verify_auth_tok_from_key(struct key *auth_tok_key,
 		goto out;
 	}
 
+	if (auth_tok_key->datalen < sizeof(struct ecryptfs_auth_tok)) {
+		printk(KERN_ERR "Auth tok key payload too small (have %d bytes; need %zu)\n",
+		       auth_tok_key->datalen, sizeof(struct ecryptfs_auth_tok));
+		rc = -EINVAL;
+		*auth_tok = NULL;
+		goto out;
+	}
+
 	if (ecryptfs_verify_version((*auth_tok)->version)) {
 		printk(KERN_ERR "Data structure version mismatch. Userspace "
 		       "tools must match eCryptfs kernel module with major "
