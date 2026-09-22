@@ -176,8 +176,6 @@ void xe_display_shutdown(struct xe_device *xe)
 		return;
 
 	intel_display_driver_shutdown(display);
-
-	intel_opregion_suspend(display, PCI_D3cold);
 }
 
 void xe_display_shutdown_late(struct xe_device *xe)

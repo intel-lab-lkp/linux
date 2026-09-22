@@ -704,6 +704,8 @@ void intel_display_driver_shutdown(struct intel_display *display)
 	__intel_display_driver_pm_suspend(display, true);
 
 	intel_encoder_shutdown_all(display);
+
+	intel_opregion_suspend(display, PCI_D3cold);
 }
 
 void intel_display_driver_shutdown_late(struct intel_display *display)
