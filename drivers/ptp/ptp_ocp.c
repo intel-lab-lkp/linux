@@ -448,6 +448,8 @@ struct ptp_ocp {
 	unsigned int		cpld_id_attempts;
 	/* x1 TAP CPLD present */
 	bool			has_cpld;
+	/* the TMC segment was never handed back; routing is unknown */
+	bool			cpld_bus_stuck;
 	/* EN_CFG_TP issued but not yet REFRESH'd */
 	bool			cpld_in_config_mode;
 };
@@ -2021,6 +2023,18 @@ ptp_ocp_read_eeprom(struct ptp_ocp *bp)
 
 	if (!bp->i2c_ctrl)
 		return;
+
+	/* A hand-back that timed out leaves the controller possibly still
+	 * routed to the TMC segment.  Reading now would latch whatever
+	 * answers 0x50/0x58 there as the serial and board id, and those are
+	 * published over the unprivileged devlink info path, so refuse
+	 * rather than cache something that was never read from the EEPROMs.
+	 */
+	if (READ_ONCE(bp->cpld_bus_stuck)) {
+		dev_dbg(&bp->pdev->dev,
+			"skipping EEPROM read, TMC bus routing unknown\n");
+		return;
+	}
 
 	tag = NULL;
 	nvmem = NULL;
@@ -4537,6 +4551,8 @@ static int adva_x1_bus_release(struct ptp_ocp *bp)
 		return 0;
 
 	err = adva_x1_mblaze_release(bp);
+	if (err)
+		WRITE_ONCE(bp->cpld_bus_stuck, true);
 	bp->cpld_adap = NULL;
 	kfree(bp->cpld_buf);
 	bp->cpld_buf = NULL;
@@ -4632,10 +4648,17 @@ static int adva_x1_bus_claim(struct ptp_ocp *bp)
 	bp->cpld_adap = adap;
 
 	ret = adva_x1_mblaze_acquire(bp);
-	if (ret)
+	if (ret) {
 		adva_x1_bus_release(bp);	/* keeps the acquire error */
+		return ret;
+	}
 
-	return ret;
+	/* The firmware granted the segment, so it is answering the handshake
+	 * again and the routing is known once more.
+	 */
+	WRITE_ONCE(bp->cpld_bus_stuck, false);
+
+	return 0;
 }
 
 /* Select a mux channel, or deselect all with ch < 0 - the power-on state.
