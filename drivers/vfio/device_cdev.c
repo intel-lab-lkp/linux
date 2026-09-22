@@ -11,6 +11,10 @@ static dev_t device_devt;
 
 void vfio_init_device_cdev(struct vfio_device *device)
 {
+	if (vfio_device_is_noiommu(device) &&
+	    !IS_ENABLED(CONFIG_IOMMUFD_NOIOMMU))
+		return;
+
 	device->device.devt = MKDEV(MAJOR(device_devt), device->index);
 	cdev_init(&device->cdev, &vfio_device_fops);
 	device->cdev.owner = THIS_MODULE;
@@ -30,6 +34,11 @@ int vfio_device_fops_cdev_open(struct inode *inode, struct file *filep)
 	/* Paired with the put in vfio_device_fops_release() */
 	if (!vfio_device_try_get_registration(device))
 		return -ENODEV;
+
+	if (vfio_device_is_noiommu(device) && !capable(CAP_SYS_RAWIO)) {
+		ret = -EPERM;
+		goto err_put_registration;
+	}
 
 	df = vfio_allocate_device_file(device);
 	if (IS_ERR(df)) {
@@ -60,22 +69,50 @@ static void vfio_df_get_kvm_safe(struct vfio_device_file *df)
 	spin_unlock(&df->kvm_ref_lock);
 }
 
+static int vfio_df_check_token(struct vfio_device *device,
+			       const struct vfio_device_bind_iommufd *bind)
+{
+	uuid_t uuid;
+
+	if (!device->ops->match_token_uuid) {
+		if (bind->flags & VFIO_DEVICE_BIND_FLAG_TOKEN)
+			return -EINVAL;
+		return 0;
+	}
+
+	if (!(bind->flags & VFIO_DEVICE_BIND_FLAG_TOKEN))
+		return device->ops->match_token_uuid(device, NULL);
+
+	if (copy_from_user(&uuid, u64_to_user_ptr(bind->token_uuid_ptr),
+			   sizeof(uuid)))
+		return -EFAULT;
+	return device->ops->match_token_uuid(device, &uuid);
+}
+
 long vfio_df_ioctl_bind_iommufd(struct vfio_device_file *df,
 				struct vfio_device_bind_iommufd __user *arg)
 {
+	const u32 VALID_FLAGS = VFIO_DEVICE_BIND_FLAG_TOKEN;
 	struct vfio_device *device = df->device;
 	struct vfio_device_bind_iommufd bind;
 	unsigned long minsz;
+	u32 user_size;
 	int ret;
 
 	static_assert(__same_type(arg->out_devid, df->devid));
 
 	minsz = offsetofend(struct vfio_device_bind_iommufd, out_devid);
 
-	if (copy_from_user(&bind, arg, minsz))
-		return -EFAULT;
+	ret = get_user(user_size, &arg->argsz);
+	if (ret)
+		return ret;
+	if (user_size < minsz)
+		return -EINVAL;
+	ret = copy_struct_from_user(&bind, sizeof(bind), arg, user_size);
+	if (ret)
+		return ret;
 
-	if (bind.argsz < minsz || bind.flags || bind.iommufd < 0)
+	if (bind.iommufd < 0 || bind.flags & ~VALID_FLAGS)
 		return -EINVAL;
 
 	/* BIND_IOMMUFD only allowed for cdev fds */
@@ -92,6 +129,10 @@ long vfio_df_ioctl_bind_iommufd(struct vfio_device_file *df,
 		ret = -EINVAL;
 		goto out_unlock;
 	}
+
+	ret = vfio_df_check_token(device, &bind);
+	if (ret)
+		goto out_unlock;
 
 	df->iommufd = iommufd_ctx_from_fd(bind.iommufd);
 	if (IS_ERR(df->iommufd)) {
@@ -261,14 +302,8 @@ int vfio_df_ioctl_detach_pt(struct vfio_device_file *df,
 	return 0;
 }
 
-static char *vfio_device_devnode(const struct device *dev, umode_t *mode)
+int vfio_cdev_init(void)
 {
-	return kasprintf(GFP_KERNEL, "vfio/devices/%s", dev_name(dev));
-}
-
-int vfio_cdev_init(struct class *device_class)
-{
-	device_class->devnode = vfio_device_devnode;
 	return alloc_chrdev_region(&device_devt, 0,
 				   MINORMASK + 1, "vfio-dev");
 }

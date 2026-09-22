@@ -252,7 +252,7 @@ static int rts51x_bulk_transport(struct us_data *us, u8 lun,
 		return USB_STOR_TRANSPORT_ERROR;
 	}
 
-	residue = bcs->Residue;
+	residue = le32_to_cpu(bcs->Residue);
 	if (bcs->Tag != us->tag)
 		return USB_STOR_TRANSPORT_ERROR;
 
@@ -260,8 +260,8 @@ static int rts51x_bulk_transport(struct us_data *us, u8 lun,
 	 * try to compute the actual residue, based on how much data
 	 * was really transferred and what the device tells us
 	 */
-	if (residue)
-		residue = residue < buf_len ? residue : buf_len;
+	if (residue > buf_len)
+		residue = buf_len;
 
 	if (act_len)
 		*act_len = buf_len - residue;
@@ -748,7 +748,7 @@ static void rts51x_modi_suspend_timer(struct rts51x_chip *chip)
 
 	usb_stor_dbg(us, "state:%d\n", rts51x_get_stat(chip));
 
-	chip->timer_expires = jiffies + msecs_to_jiffies(1000*ss_delay);
+	chip->timer_expires = jiffies + secs_to_jiffies(ss_delay);
 	mod_timer(&chip->rts51x_suspend_timer, chip->timer_expires);
 }
 
@@ -916,7 +916,6 @@ static int realtek_cr_autosuspend_setup(struct us_data *us)
 	us->proto_handler = rts51x_invoke_transport;
 
 	chip->timer_expires = 0;
-	timer_setup(&chip->rts51x_suspend_timer, rts51x_suspend_timer_fn, 0);
 	fw5895_init(us);
 
 	/* enable autosuspend function of the usb device */
@@ -934,10 +933,7 @@ static void realtek_cr_destructor(void *extra)
 		return;
 
 #ifdef CONFIG_REALTEK_AUTOPM
-	if (ss_en) {
-		timer_delete(&chip->rts51x_suspend_timer);
-		chip->timer_expires = 0;
-	}
+	timer_shutdown_sync(&chip->rts51x_suspend_timer);
 #endif
 	kfree(chip->status);
 }
@@ -976,12 +972,15 @@ static int init_realtek_cr(struct us_data *us)
 	struct rts51x_chip *chip;
 	int size, i, retval;
 
-	chip = kzalloc(sizeof(struct rts51x_chip), GFP_KERNEL);
+	chip = kzalloc_obj(struct rts51x_chip);
 	if (!chip)
 		return -ENOMEM;
 
 	us->extra = chip;
 	us->extra_destructor = realtek_cr_destructor;
+#ifdef CONFIG_REALTEK_AUTOPM
+	timer_setup(&chip->rts51x_suspend_timer, rts51x_suspend_timer_fn, 0);
+#endif
 	us->max_lun = chip->max_lun = rts51x_get_max_lun(us);
 	chip->us = us;
 

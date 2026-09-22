@@ -5,10 +5,11 @@
 
 #include <linux/debugfs.h>
 
-#include "i915_drv.h"
-#include "i915_reg.h"
+#include <drm/drm_print.h>
+
 #include "intel_atomic.h"
 #include "intel_de.h"
+#include "intel_display_regs.h"
 #include "intel_display_types.h"
 #include "intel_drrs.h"
 #include "intel_frontbuffer.h"
@@ -123,9 +124,9 @@ static void intel_drrs_set_state(struct intel_crtc *crtc,
 
 static void intel_drrs_schedule_work(struct intel_crtc *crtc)
 {
-	struct drm_i915_private *i915 = to_i915(crtc->base.dev);
+	struct intel_display *display = to_intel_display(crtc);
 
-	mod_delayed_work(i915->unordered_wq, &crtc->drrs.work, msecs_to_jiffies(1000));
+	mod_delayed_work(display->wq.unordered, &crtc->drrs.work, msecs_to_jiffies(1000));
 }
 
 static unsigned int intel_drrs_frontbuffer_bits(const struct intel_crtc_state *crtc_state)
@@ -136,7 +137,7 @@ static unsigned int intel_drrs_frontbuffer_bits(const struct intel_crtc_state *c
 
 	frontbuffer_bits = INTEL_FRONTBUFFER_ALL_MASK(crtc->pipe);
 
-	for_each_intel_crtc_in_pipe_mask(display->drm, crtc,
+	for_each_intel_crtc_in_pipe_mask(display, crtc,
 					 crtc_state->joiner_pipes)
 		frontbuffer_bits |= INTEL_FRONTBUFFER_ALL_MASK(crtc->pipe);
 
@@ -226,7 +227,7 @@ static void intel_drrs_frontbuffer_update(struct intel_display *display,
 {
 	struct intel_crtc *crtc;
 
-	for_each_intel_crtc(display->drm, crtc) {
+	for_each_intel_crtc(display, crtc) {
 		unsigned int frontbuffer_bits;
 
 		mutex_lock(&crtc->drrs.mutex);

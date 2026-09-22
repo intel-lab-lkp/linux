@@ -13,10 +13,14 @@
 
 #include <linux/acpi.h>
 #include <linux/build_bug.h>
+#include <linux/cleanup.h>
 #include <linux/device.h>
+#include <linux/dev_printk.h>
+#include <linux/kconfig.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/platform_device.h>
+#include <linux/rwsem.h>
 #include <linux/sysfs.h>
 
 #include <asm/amd/node.h>
@@ -91,7 +95,7 @@ static_assert(MAX_AMD_NUM_NODES == 8);
 static const struct bin_attribute attr##index = {			\
 	.attr = { .name = HSMP_METRICS_TABLE_NAME, .mode = 0444},	\
 	.private = (void *)index,					\
-	.read_new = hsmp_metric_tbl_plat_read,				\
+	.read = hsmp_metric_tbl_plat_read,				\
 	.size = sizeof(struct hsmp_metric_table),			\
 };									\
 static const struct bin_attribute _list[] = {				\
@@ -110,7 +114,7 @@ HSMP_BIN_ATTR(7, *sock7_attr_list);
 
 #define HSMP_BIN_ATTR_GRP(index, _list, _name)			\
 static const struct attribute_group sock##index##_attr_grp = {	\
-	.bin_attrs_new = _list,					\
+	.bin_attrs = _list,					\
 	.is_bin_visible = hsmp_is_sock_attr_visible,		\
 	.name = #_name,						\
 }
@@ -187,16 +191,35 @@ static int init_platform_device(struct device *dev)
 		if (hsmp_pdev->proto_ver == HSMP_PROTO_VER6) {
 			ret = hsmp_get_tbl_dram_base(i);
 			if (ret)
-				dev_err(dev, "Failed to init metric table\n");
+				dev_info(dev, "Failed to init metric table\n");
 		}
 
 		/* Register with hwmon interface for reporting power */
 		ret = hsmp_create_sensor(dev, i);
 		if (ret)
-			dev_err(dev, "Failed to register HSMP sensors with hwmon\n");
+			dev_info(dev, "Failed to register HSMP sensors with hwmon\n");
 	}
 
 	return 0;
+}
+
+/*
+ * The socket array is devm-managed and freed by the driver core, but the
+ * metric-table DRAM regions are mapped with plain ioremap() during probe and
+ * the per-socket mutexes need an explicit mutex_destroy(), neither of which
+ * devres covers.
+ *
+ * Take the data-plane rwsem for write to drain any in-flight
+ * hsmp_send_message(), unmap the metric tables, destroy the mutexes and drop
+ * the global socket pointer, all before devres frees the array. Registered as
+ * a devres action so it runs on both remove and probe failure.
+ */
+static void hsmp_pltdrv_release(void *data)
+{
+	guard(rwsem_write)(&hsmp_sock_rwsem);
+	hsmp_unmap_metric_tbls(hsmp_pdev);
+	hsmp_destroy_metric_read_locks(hsmp_pdev);
+	hsmp_pdev->sock = NULL;
 }
 
 static int hsmp_pltdrv_probe(struct platform_device *pdev)
@@ -209,13 +232,35 @@ static int hsmp_pltdrv_probe(struct platform_device *pdev)
 	if (!hsmp_pdev->sock)
 		return -ENOMEM;
 
-	ret = init_platform_device(&pdev->dev);
+	hsmp_init_metric_read_locks(hsmp_pdev);
+
+	ret = devm_add_action_or_reset(&pdev->dev, hsmp_pltdrv_release, NULL);
+	if (ret)
+		return ret;
+
+	/*
+	 * init_platform_device() runs the mailbox handshake via the probe-only
+	 * senders, which issue messages through hsmp_send_message_locked() and
+	 * so require hsmp_sock_rwsem held. Hold it for write, matching probe's
+	 * role as a socket bring-up path. The lock is not held across
+	 * devm_add_action_or_reset() above so the release action, which also
+	 * takes it for write, does not deadlock if that registration fails.
+	 */
+	scoped_guard(rwsem_write, &hsmp_sock_rwsem)
+		ret = init_platform_device(&pdev->dev);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to init HSMP mailbox\n");
 		return ret;
 	}
 
-	return hsmp_misc_register(&pdev->dev);
+	ret = hsmp_misc_register(&pdev->dev);
+	if (ret) {
+		dev_err(&pdev->dev, "Failed to register misc device\n");
+		return ret;
+	}
+
+	dev_dbg(&pdev->dev, "AMD HSMP is probed successfully\n");
+	return 0;
 }
 
 static void hsmp_pltdrv_remove(struct platform_device *pdev)
@@ -287,14 +332,19 @@ static int __init hsmp_plt_init(void)
 {
 	int ret = -ENODEV;
 
+	if (acpi_dev_present(ACPI_HSMP_DEVICE_HID, NULL, -1)) {
+		if (IS_ENABLED(CONFIG_AMD_HSMP_ACPI))
+			pr_debug("HSMP is supported through ACPI on this platform, please use hsmp_acpi.ko\n");
+		else
+			pr_info("HSMP is supported through ACPI on this platform, please enable AMD_HSMP_ACPI config\n");
+		return -ENODEV;
+	}
+
 	if (!legacy_hsmp_support()) {
-		pr_info("HSMP is not supported on Family:%x model:%x\n",
+		pr_info("HSMP interface is either disabled or not supported on family:%x model:%x\n",
 			boot_cpu_data.x86, boot_cpu_data.x86_model);
 		return ret;
 	}
-
-	if (acpi_dev_present(ACPI_HSMP_DEVICE_HID, NULL, -1))
-		return -ENODEV;
 
 	hsmp_pdev = get_hsmp_pdev();
 	if (!hsmp_pdev)
@@ -305,8 +355,10 @@ static int __init hsmp_plt_init(void)
 	 * if we have N SMN/DF interfaces that ideally means N sockets
 	 */
 	hsmp_pdev->num_sockets = amd_num_nodes();
-	if (hsmp_pdev->num_sockets == 0 || hsmp_pdev->num_sockets > MAX_AMD_NUM_NODES)
+	if (hsmp_pdev->num_sockets == 0 || hsmp_pdev->num_sockets > MAX_AMD_NUM_NODES) {
+		pr_err("Wrong number of sockets\n");
 		return ret;
+	}
 
 	ret = platform_driver_register(&amd_hsmp_driver);
 	if (ret)

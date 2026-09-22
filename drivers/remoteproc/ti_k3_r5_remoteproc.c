@@ -1007,7 +1007,7 @@ static int k3_r5_core_of_get_sram_memories(struct platform_device *pdev,
 			return -ENOMEM;
 		}
 
-		dev_dbg(dev, "memory sram%d: bus addr %pa size 0x%zx va %pK da 0x%x\n",
+		dev_dbg(dev, "memory sram%d: bus addr %pa size 0x%zx va %p da 0x%x\n",
 			i, &core->sram[i].bus_addr,
 			core->sram[i].size, core->sram[i].cpu_addr,
 			core->sram[i].dev_addr);
@@ -1074,11 +1074,9 @@ static int k3_r5_cluster_rproc_init(struct platform_device *pdev)
 		}
 
 		kproc->reset = devm_reset_control_get_exclusive(cdev, NULL);
-		if (IS_ERR_OR_NULL(kproc->reset)) {
-			ret = PTR_ERR_OR_ZERO(kproc->reset);
-			if (!ret)
-				ret = -ENODEV;
-			dev_err_probe(cdev, ret, "failed to get reset handle\n");
+		if (IS_ERR(kproc->reset)) {
+			ret = dev_err_probe(cdev, PTR_ERR(kproc->reset),
+					    "failed to get reset handle\n");
 			goto out;
 		}
 
@@ -1206,8 +1204,6 @@ static void k3_r5_cluster_rproc_exit(void *data)
 				return;
 			}
 		}
-
-		mbox_free_channel(kproc->mbox);
 	}
 }
 

@@ -8,10 +8,12 @@ Next (GCN), Radeon DNA (RDNA), and Compute DNA (CDNA) architectures.
 .. toctree::
 
    driver-core
+   ring-buffer
    amd-hardware-list-info
    module-parameters
    gc/index
    display/index
+   userq
    flashing
    xgmi
    ras
@@ -21,3 +23,4 @@ Next (GCN), Radeon DNA (RDNA), and Compute DNA (CDNA) architectures.
    debugfs
    process-isolation
    amdgpu-glossary
+   ptl

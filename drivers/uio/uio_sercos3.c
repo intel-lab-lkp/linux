@@ -191,7 +191,7 @@ static void sercos3_pci_remove(struct pci_dev *dev)
 	}
 }
 
-static struct pci_device_id sercos3_pci_ids[] = {
+static const struct pci_device_id sercos3_pci_ids[] = {
 	{
 		.vendor =       PCI_VENDOR_ID_PLX,
 		.device =       PCI_DEVICE_ID_PLX_9030,
@@ -212,6 +212,7 @@ static struct pci_device_id sercos3_pci_ids[] = {
 	},
 	{ 0, }
 };
+MODULE_DEVICE_TABLE(pci, sercos3_pci_ids);
 
 static struct pci_driver sercos3_pci_driver = {
 	.name = "sercos3",

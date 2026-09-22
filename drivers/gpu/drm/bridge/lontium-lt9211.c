@@ -121,8 +121,7 @@ static int lt9211_read_chipid(struct lt9211 *ctx)
 	}
 
 	/* Test for known Chip ID. */
-	if (chipid[0] != REG_CHIPID0_VALUE || chipid[1] != REG_CHIPID1_VALUE ||
-	    chipid[2] != REG_CHIPID2_VALUE) {
+	if (chipid[0] != REG_CHIPID0_VALUE || chipid[1] != REG_CHIPID1_VALUE) {
 		dev_err(ctx->dev, "Unknown Chip ID: 0x%02x 0x%02x 0x%02x\n",
 			chipid[0], chipid[1], chipid[2]);
 		return -EINVAL;
@@ -456,7 +455,7 @@ static int lt9211_configure_tx(struct lt9211 *ctx, bool jeida,
 }
 
 static void lt9211_atomic_enable(struct drm_bridge *bridge,
-				 struct drm_atomic_state *state)
+				 struct drm_atomic_commit *state)
 {
 	struct lt9211 *ctx = bridge_to_lt9211(bridge);
 	const struct drm_bridge_state *bridge_state;
@@ -553,7 +552,7 @@ static void lt9211_atomic_enable(struct drm_bridge *bridge,
 }
 
 static void lt9211_atomic_disable(struct drm_bridge *bridge,
-				  struct drm_atomic_state *state)
+				  struct drm_atomic_commit *state)
 {
 	struct lt9211 *ctx = bridge_to_lt9211(bridge);
 	int ret;
@@ -620,7 +619,7 @@ static const struct drm_bridge_funcs lt9211_funcs = {
 	.atomic_duplicate_state = drm_atomic_helper_bridge_duplicate_state,
 	.atomic_destroy_state	= drm_atomic_helper_bridge_destroy_state,
 	.atomic_get_input_bus_fmts = lt9211_atomic_get_input_bus_fmts,
-	.atomic_reset		= drm_atomic_helper_bridge_reset,
+	.atomic_create_state		= drm_atomic_helper_bridge_create_state,
 };
 
 static int lt9211_parse_dt(struct lt9211 *ctx)
@@ -661,6 +660,7 @@ static int lt9211_parse_dt(struct lt9211 *ctx)
 		return ret;
 	if (panel) {
 		panel_bridge = devm_drm_panel_bridge_add(dev, panel);
+		drm_panel_put(panel);
 		if (IS_ERR(panel_bridge))
 			return PTR_ERR(panel_bridge);
 	}
@@ -727,9 +727,9 @@ static int lt9211_probe(struct i2c_client *client)
 	struct lt9211 *ctx;
 	int ret;
 
-	ctx = devm_kzalloc(dev, sizeof(*ctx), GFP_KERNEL);
-	if (!ctx)
-		return -ENOMEM;
+	ctx = devm_drm_bridge_alloc(dev, struct lt9211, bridge, &lt9211_funcs);
+	if (IS_ERR(ctx))
+		return PTR_ERR(ctx);
 
 	ctx->dev = dev;
 
@@ -755,7 +755,6 @@ static int lt9211_probe(struct i2c_client *client)
 	dev_set_drvdata(dev, ctx);
 	i2c_set_clientdata(client, ctx);
 
-	ctx->bridge.funcs = &lt9211_funcs;
 	ctx->bridge.of_node = dev->of_node;
 	drm_bridge_add(&ctx->bridge);
 
@@ -774,8 +773,8 @@ static void lt9211_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id lt9211_id[] = {
-	{ "lontium,lt9211" },
-	{},
+	{ .name = "lontium,lt9211" },
+	{ }
 };
 MODULE_DEVICE_TABLE(i2c, lt9211_id);
 

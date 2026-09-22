@@ -2,7 +2,7 @@
 /*
  * Copyright (C) 2005-2014, 2018-2021 Intel Corporation
  * Copyright (C) 2016-2017 Intel Deutschland GmbH
- * Copyright (C) 2018-2025 Intel Corporation
+ * Copyright (C) 2018-2026 Intel Corporation
  */
 #ifndef __IWL_CONFIG_H__
 #define __IWL_CONFIG_H__
@@ -11,6 +11,7 @@
 #include <linux/netdevice.h>
 #include <linux/ieee80211.h>
 #include <linux/nl80211.h>
+#include <linux/module.h>
 #include <linux/mod_devicetable.h>
 #include "iwl-csr.h"
 #include "iwl-drv.h"
@@ -84,7 +85,6 @@ enum iwl_nvm_type {
 #define IWL_WATCHDOG_DISABLED	0
 #define IWL_DEF_WD_TIMEOUT	2500
 #define IWL_LONG_WD_TIMEOUT	10000
-#define IWL_MAX_WD_TIMEOUT	120000
 
 #define IWL_DEFAULT_MAX_TX_POWER 22
 #define IWL_TX_CSUM_NETIF_FLAGS (NETIF_F_IPV6_CSUM | NETIF_F_IP_CSUM |\
@@ -106,6 +106,9 @@ enum iwl_nvm_type {
 #define IWL_FW_AND_PNVM(pfx, api)				\
 	MODULE_FIRMWARE(pfx "-" __stringify(api) ".ucode");	\
 	MODULE_FIRMWARE(pfx ".pnvm")
+
+#define IWL_CORE_FW(pfx, core)					\
+	MODULE_FIRMWARE(pfx "-c" __stringify(core) ".ucode")
 
 static inline u8 num_of_ant(u8 mask)
 {
@@ -166,7 +169,6 @@ struct iwl_fw_mon_regs {
  *	for aggregation
  * @min_txq_size: minimum number of slots required in a TX queue
  * @gp2_reg_addr: GP2 (timer) register address
- * @min_umac_error_event_table: minimum SMEM location of UMAC error table
  * @mon_dbgi_regs: monitor DBGI registers
  * @mon_dram_regs: monitor DRAM registers
  * @mon_smem_regs: monitor SMEM registers
@@ -192,14 +194,13 @@ struct iwl_family_base_params {
 
 	u8 max_ll_items;
 	u8 led_compensation;
-	u8 ucode_api_max;
-	u8 ucode_api_min;
+	u16 ucode_api_max;
+	u16 ucode_api_min;
 	u32 mac_addr_from_csr:10;
 	u8 nvm_hw_section_num;
 	netdev_features_t features;
 	u32 smem_offset;
 	u32 smem_len;
-	u32 min_umac_error_event_table;
 	u32 d3_debug_data_base_addr;
 	u32 d3_debug_data_length;
 	u32 min_txq_size;
@@ -209,6 +210,34 @@ struct iwl_family_base_params {
 	const struct iwl_fw_mon_regs mon_smem_regs;
 	const struct iwl_fw_mon_regs mon_dbgi_regs;
 };
+
+/*
+ * FW is released as "core N release", and we used to have a
+ * gap of 3 between the API version and core number. Now the
+ * reported API version will be 1000 + core and we encode it
+ * in the filename as "c<core>".
+ */
+#define API_IS_CORE_START		1000
+#define API_TO_CORE_OFFS		3
+#define ENCODE_CORE_AS_API(core)	(API_IS_CORE_START + (core))
+
+static inline bool iwl_api_is_core_number(int api)
+{
+	return api >= API_IS_CORE_START;
+}
+
+static inline int iwl_api_to_core(int api)
+{
+	if (iwl_api_is_core_number(api))
+		return api - API_IS_CORE_START;
+
+	return api - API_TO_CORE_OFFS;
+}
+
+#define FW_API_FMT			"%s%d"
+#define FW_API_ARG(n)						\
+	iwl_api_is_core_number(n) ? "c" : "",			\
+	iwl_api_is_core_number(n) ? (n) - API_IS_CORE_START : (n)
 
 /*
  * @stbc: support Tx STBC and 1*SS Rx STBC
@@ -343,7 +372,7 @@ struct iwl_mac_cfg {
 };
 
 /*
- * These sizes were picked according to 8 MSDUs inside 64/256/612 A-MSDUs
+ * These sizes were picked according to 8 MSDUs inside 64/256/512 A-MSDUs
  * in an A-MPDU, with additional overhead to account for processing time.
  * They will be doubled for MACs starting from So/Ty that don't support
  * putting multiple frames into a single buffer.
@@ -353,7 +382,7 @@ struct iwl_mac_cfg {
 #define IWL_NUM_RBDS_EHT		(512 * 8)
 
 /**
- * struct iwl_rf_cfg
+ * struct iwl_rf_cfg - RF/CRF configuration data
  * @fw_name_pre: Firmware filename prefix. The api version and extension
  *	(.ucode) will be added to filename before loading from disk. The
  *	filename is constructed as <fw_name_pre>-<api>.ucode.
@@ -386,6 +415,9 @@ struct iwl_mac_cfg {
  * @vht_mu_mimo_supported: VHT MU-MIMO support
  * @nvm_type: see &enum iwl_nvm_type
  * @uhb_supported: ultra high band channels supported
+ * @unii9_supported: UNII-9 channels supported
+ * @eht_supported: EHT supported
+ * @uhr_supported: UHR supported
  * @num_rbds: number of receive buffer descriptors to use
  *	(only used for multi-queue capable devices)
  *
@@ -418,12 +450,15 @@ struct iwl_rf_cfg {
 	    host_interrupt_operation_mode:1,
 	    lp_xtal_workaround:1,
 	    vht_mu_mimo_supported:1,
-	    uhb_supported:1;
+	    uhb_supported:1,
+	    unii9_supported:1,
+	    eht_supported:1,
+	    uhr_supported:1;
 	u8 valid_tx_ant;
 	u8 valid_rx_ant;
 	u8 non_shared_ant;
-	u8 ucode_api_max;
-	u8 ucode_api_min;
+	u16 ucode_api_max;
+	u16 ucode_api_min;
 	u16 num_rbds;
 };
 
@@ -488,8 +523,8 @@ struct iwl_dev_info {
 	    rf_type:9,
 	    match_bw_limit:1,
 	    bw_limit:1,
-	    match_rf_step:1,
-	    rf_step:4,
+	    match_discrete:1,
+	    discrete:1,
 	    match_rf_id:1,
 	    rf_id:4,
 	    match_cdb:1,
@@ -499,11 +534,12 @@ struct iwl_dev_info {
 #if IS_ENABLED(CONFIG_IWLWIFI_KUNIT_TESTS)
 extern const struct iwl_dev_info iwl_dev_info_table[];
 extern const unsigned int iwl_dev_info_table_size;
-const struct iwl_dev_info *
-iwl_pci_find_dev_info(u16 device, u16 subsystem_device, u16 rf_type, u8 cdb,
-		      u8 rf_id, u8 bw_limit, u8 rf_step);
 extern const struct pci_device_id iwl_hw_card_ids[];
 #endif
+
+const struct iwl_dev_info *
+iwl_pci_find_dev_info(u16 device, u16 subsystem_device, u16 rf_type, u8 cdb,
+		      u8 rf_id, u8 bw_limit, bool discrete);
 
 /*
  * This list declares the config structures for all devices.
@@ -635,6 +671,7 @@ extern const char iwl_ax411_killer_1690s_name[];
 extern const char iwl_ax411_killer_1690i_name[];
 extern const char iwl_ax210_name[];
 extern const char iwl_ax211_name[];
+extern const char iwl_ax231_name[];
 extern const char iwl_ax411_name[];
 extern const char iwl_killer_be1750s_name[];
 extern const char iwl_killer_be1750i_name[];
@@ -642,6 +679,7 @@ extern const char iwl_killer_be1750w_name[];
 extern const char iwl_killer_be1750x_name[];
 extern const char iwl_killer_be1790s_name[];
 extern const char iwl_killer_be1790i_name[];
+extern const char iwl_killer_be1730x_name[];
 extern const char iwl_be201_name[];
 extern const char iwl_be200_name[];
 extern const char iwl_be202_name[];
@@ -649,12 +687,14 @@ extern const char iwl_be401_name[];
 extern const char iwl_be213_name[];
 extern const char iwl_killer_be1775s_name[];
 extern const char iwl_killer_be1775i_name[];
+extern const char iwl_killer_be1735x_name[];
 extern const char iwl_be211_name[];
 extern const char iwl_killer_bn1850w2_name[];
 extern const char iwl_killer_bn1850i_name[];
 extern const char iwl_bn201_name[];
-extern const char iwl_be221_name[];
+extern const char iwl_bn203_name[];
 extern const char iwl_be223_name[];
+extern const char iwl_ax221_name[];
 #if IS_ENABLED(CONFIG_IWLDVM)
 extern const struct iwl_rf_cfg iwl5300_agn_cfg;
 extern const struct iwl_rf_cfg iwl5350_agn_cfg;
@@ -703,6 +743,7 @@ extern const struct iwl_rf_cfg iwl_rf_hr;
 extern const struct iwl_rf_cfg iwl_rf_hr_80mhz;
 
 extern const struct iwl_rf_cfg iwl_rf_gf;
+#define iwl_rf_ot iwl_rf_hr_80mhz
 #endif /* CONFIG_IWLMVM */
 
 #if IS_ENABLED(CONFIG_IWLMLD)
@@ -710,7 +751,9 @@ extern const struct iwl_rf_cfg iwl_rf_fm;
 extern const struct iwl_rf_cfg iwl_rf_fm_160mhz;
 #define iwl_rf_wh iwl_rf_fm
 #define iwl_rf_wh_160mhz iwl_rf_fm_160mhz
-#define iwl_rf_pe iwl_rf_fm
+extern const struct iwl_rf_cfg iwl_rf_wh_non_eht;
+extern const struct iwl_rf_cfg iwl_rf_pe;
+#define iwl_rf_pe_no_uhr iwl_rf_fm
 #endif /* CONFIG_IWLMLD */
 
 #endif /* __IWL_CONFIG_H__ */

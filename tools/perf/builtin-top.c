@@ -56,6 +56,7 @@
 #include "util/debug.h"
 #include "util/ordered-events.h"
 #include "util/pfm.h"
+#include "dwarf-regs.h"
 
 #include <assert.h>
 #include <elf.h>
@@ -140,7 +141,7 @@ static int perf_top__parse_source(struct perf_top *top, struct hist_entry *he)
 	notes = symbol__annotation(sym);
 	annotation__lock(notes);
 
-	if (!symbol__hists(sym, top->evlist->core.nr_entries)) {
+	if (!symbol__hists(sym, evlist__nr_entries(top->evlist))) {
 		annotation__unlock(notes);
 		pr_err("Not enough memory for annotating '%s' symbol!\n",
 		       sym->name);
@@ -185,8 +186,8 @@ static void ui__warn_map_erange(struct map *map, struct symbol *sym, u64 ip)
 		    "Please report to linux-kernel@vger.kernel.org\n",
 		    ip, dso__long_name(dso), dso__symtab_origin(dso),
 		    map__start(map), map__end(map), sym->start, sym->end,
-		    sym->binding == STB_GLOBAL ? 'g' :
-		    sym->binding == STB_LOCAL  ? 'l' : 'w', sym->name,
+		    symbol__binding(sym) == STB_GLOBAL ? 'g' :
+		    symbol__binding(sym) == STB_LOCAL  ? 'l' : 'w', sym->name,
 		    err ? "[unknown]" : uts.machine,
 		    err ? "[unknown]" : uts.release, perf_version_string);
 	if (use_browser <= 0)
@@ -198,7 +199,7 @@ static void ui__warn_map_erange(struct map *map, struct symbol *sym, u64 ip)
 static void perf_top__record_precise_ip(struct perf_top *top,
 					struct hist_entry *he,
 					struct perf_sample *sample,
-					struct evsel *evsel, u64 ip)
+					u64 ip)
 	EXCLUSIVE_LOCKS_REQUIRED(he->hists->lock)
 {
 	struct annotation *notes;
@@ -215,7 +216,7 @@ static void perf_top__record_precise_ip(struct perf_top *top,
 	if (!annotation__trylock(notes))
 		return;
 
-	err = hist_entry__inc_addr_samples(he, sample, evsel, ip);
+	err = hist_entry__inc_addr_samples(he, sample, ip);
 
 	annotation__unlock(notes);
 
@@ -266,7 +267,7 @@ static void perf_top__show_details(struct perf_top *top)
 
 	more = hist_entry__annotate_printf(he, top->sym_evsel);
 
-	if (top->evlist->enabled) {
+	if (evlist__enabled(top->evlist)) {
 		if (top->zero)
 			symbol__annotate_zero_histogram(symbol, top->sym_evsel);
 		else
@@ -292,7 +293,7 @@ static void perf_top__resort_hists(struct perf_top *t)
 		 */
 		hists__unlink(hists);
 
-		if (evlist->enabled) {
+		if (evlist__enabled(evlist)) {
 			if (t->zero) {
 				hists__delete_entries(hists);
 			} else {
@@ -333,13 +334,13 @@ static void perf_top__print_sym_table(struct perf_top *top)
 	printf("%-*.*s\n", win_width, win_width, graph_dotted_line);
 
 	if (!top->record_opts.overwrite &&
-	    (top->evlist->stats.nr_lost_warned !=
-	     top->evlist->stats.nr_events[PERF_RECORD_LOST])) {
-		top->evlist->stats.nr_lost_warned =
-			      top->evlist->stats.nr_events[PERF_RECORD_LOST];
+	    (evlist__stats(top->evlist)->nr_lost_warned !=
+	     evlist__stats(top->evlist)->nr_events[PERF_RECORD_LOST])) {
+		evlist__stats(top->evlist)->nr_lost_warned =
+			      evlist__stats(top->evlist)->nr_events[PERF_RECORD_LOST];
 		color_fprintf(stdout, PERF_COLOR_RED,
 			      "WARNING: LOST %d chunks, Check IO/CPU overload",
-			      top->evlist->stats.nr_lost_warned);
+			      evlist__stats(top->evlist)->nr_lost_warned);
 		++printed;
 	}
 
@@ -446,7 +447,7 @@ static void perf_top__print_mapped_keys(struct perf_top *top)
 	fprintf(stdout, "\t[d]     display refresh delay.             \t(%d)\n", top->delay_secs);
 	fprintf(stdout, "\t[e]     display entries (lines).           \t(%d)\n", top->print_entries);
 
-	if (top->evlist->core.nr_entries > 1)
+	if (evlist__nr_entries(top->evlist) > 1)
 		fprintf(stdout, "\t[E]     active event counter.              \t(%s)\n", evsel__name(top->sym_evsel));
 
 	fprintf(stdout, "\t[f]     profile display filter (count).    \t(%d)\n", top->count_filter);
@@ -481,7 +482,7 @@ static int perf_top__key_mapped(struct perf_top *top, int c)
 		case 'S':
 			return 1;
 		case 'E':
-			return top->evlist->core.nr_entries > 1 ? 1 : 0;
+			return evlist__nr_entries(top->evlist) > 1 ? 1 : 0;
 		default:
 			break;
 	}
@@ -527,7 +528,7 @@ static bool perf_top__handle_keypress(struct perf_top *top, int c)
 			}
 			break;
 		case 'E':
-			if (top->evlist->core.nr_entries > 1) {
+			if (evlist__nr_entries(top->evlist) > 1) {
 				/* Select 0 as the default event: */
 				int counter = 0;
 
@@ -538,7 +539,7 @@ static bool perf_top__handle_keypress(struct perf_top *top, int c)
 
 				prompt_integer(&counter, "Enter details event counter");
 
-				if (counter >= top->evlist->core.nr_entries) {
+				if (counter >= evlist__nr_entries(top->evlist)) {
 					top->sym_evsel = evlist__first(top->evlist);
 					fprintf(stderr, "Sorry, no such event, using %s.\n", evsel__name(top->sym_evsel));
 					sleep(1);
@@ -597,8 +598,8 @@ static void perf_top__sort_new_samples(void *arg)
 {
 	struct perf_top *t = arg;
 
-	if (t->evlist->selected != NULL)
-		t->sym_evsel = t->evlist->selected;
+	if (evlist__selected(t->evlist) != NULL)
+		t->sym_evsel = evlist__selected(t->evlist);
 
 	perf_top__resort_hists(t);
 
@@ -643,11 +644,12 @@ repeat:
 	 */
 	evlist__for_each_entry(top->evlist, pos) {
 		struct hists *hists = evsel__hists(pos);
-		hists->uid_filter_str = top->record_opts.target.uid_str;
+		hists->uid_filter_str = top->uid_str;
 	}
 
 	ret = evlist__tui_browse_hists(top->evlist, help, &hbt, top->min_percent,
-				       &top->session->header.env, !top->record_opts.overwrite);
+				       perf_session__env(top->session),
+				       !top->record_opts.overwrite);
 	if (ret == K_RELOAD) {
 		top->zero = true;
 		goto repeat;
@@ -730,20 +732,18 @@ static int hist_iter__top_callback(struct hist_entry_iter *iter,
 	EXCLUSIVE_LOCKS_REQUIRED(iter->he->hists->lock)
 {
 	struct perf_top *top = arg;
-	struct evsel *evsel = iter->evsel;
 
 	if (perf_hpp_list.sym && single)
-		perf_top__record_precise_ip(top, iter->he, iter->sample, evsel, al->addr);
+		perf_top__record_precise_ip(top, iter->he, iter->sample, al->addr);
 
 	hist__account_cycles(iter->sample->branch_stack, al, iter->sample,
 			     !(top->record_opts.branch_stack & PERF_SAMPLE_BRANCH_ANY),
-			     NULL, evsel);
+			     /*total_cycles=*/NULL);
 	return 0;
 }
 
 static void perf_event__process_sample(const struct perf_tool *tool,
 				       const union perf_event *event,
-				       struct evsel *evsel,
 				       struct perf_sample *sample,
 				       struct machine *machine)
 {
@@ -766,7 +766,7 @@ static void perf_event__process_sample(const struct perf_tool *tool,
 
 	if (!machine) {
 		pr_err("%u unprocessable samples recorded.\r",
-		       top->session->evlist->stats.nr_unprocessable_samples++);
+		       evlist__stats(top->session->evlist)->nr_unprocessable_samples++);
 		return;
 	}
 
@@ -828,10 +828,10 @@ static void perf_event__process_sample(const struct perf_tool *tool,
 		}
 	}
 
-	if (al.sym == NULL || !al.sym->idle) {
-		struct hists *hists = evsel__hists(evsel);
+	if (al.sym == NULL ||
+	    !symbol__is_idle(al.sym, al.map ? map__dso(al.map) : NULL, machine->env)) {
+		struct hists *hists = evsel__hists(sample->evsel);
 		struct hist_entry_iter iter = {
-			.evsel		= evsel,
 			.sample 	= sample,
 			.add_entry_cb 	= hist_iter__top_callback,
 		};
@@ -859,7 +859,7 @@ perf_top__process_lost(struct perf_top *top, union perf_event *event,
 {
 	top->lost += event->lost.lost;
 	top->lost_total += event->lost.lost;
-	evsel->evlist->stats.total_lost += event->lost.lost;
+	evlist__stats(evsel->evlist)->total_lost += event->lost.lost;
 }
 
 static void
@@ -869,7 +869,7 @@ perf_top__process_lost_samples(struct perf_top *top,
 {
 	top->lost += event->lost_samples.lost;
 	top->lost_total += event->lost_samples.lost;
-	evsel->evlist->stats.total_lost_samples += event->lost_samples.lost;
+	evlist__stats(evsel->evlist)->total_lost_samples += event->lost_samples.lost;
 }
 
 static u64 last_timestamp;
@@ -881,7 +881,7 @@ static void perf_top__mmap_read_idx(struct perf_top *top, int idx)
 	struct mmap *md;
 	union perf_event *event;
 
-	md = opts->overwrite ? &evlist->overwrite_mmap[idx] : &evlist->mmap[idx];
+	md = opts->overwrite ? &evlist__overwrite_mmap(evlist)[idx] : &evlist__mmap(evlist)[idx];
 	if (perf_mmap__read_init(&md->core) < 0)
 		return;
 
@@ -918,7 +918,7 @@ static void perf_top__mmap_read(struct perf_top *top)
 	if (overwrite)
 		evlist__toggle_bkw_mmap(evlist, BKW_MMAP_DATA_PENDING);
 
-	for (i = 0; i < top->evlist->core.nr_mmaps; i++)
+	for (i = 0; i < evlist__core(top->evlist)->nr_mmaps; i++)
 		perf_top__mmap_read_idx(top, i);
 
 	if (overwrite) {
@@ -1063,7 +1063,7 @@ try_again:
 		goto out_err;
 	}
 
-	if (evlist__mmap(evlist, opts->mmap_pages) < 0) {
+	if (evlist__do_mmap(evlist, opts->mmap_pages) < 0) {
 		ui__error("Failed to mmap with %d (%s)\n",
 			    errno, str_error_r(errno, msg, sizeof(msg)));
 		goto out_err;
@@ -1165,7 +1165,9 @@ static int deliver_event(struct ordered_events *qe,
 		goto next_event;
 	}
 
-	evsel = evlist__id2evsel(session->evlist, sample.id);
+	evsel = sample.evsel;
+	if (!evsel)
+		evsel = evlist__id2evsel(session->evlist, sample.id);
 	assert(evsel != NULL);
 
 	if (event->header.type == PERF_RECORD_SAMPLE) {
@@ -1209,17 +1211,17 @@ static int deliver_event(struct ordered_events *qe,
 	}
 
 	if (event->header.type == PERF_RECORD_SAMPLE) {
-		perf_event__process_sample(&top->tool, event, evsel,
+		perf_event__process_sample(&top->tool, event,
 					   &sample, machine);
 	} else if (event->header.type == PERF_RECORD_LOST) {
 		perf_top__process_lost(top, event, evsel);
 	} else if (event->header.type == PERF_RECORD_LOST_SAMPLES) {
 		perf_top__process_lost_samples(top, event, evsel);
 	} else if (event->header.type < PERF_RECORD_MAX) {
-		events_stats__inc(&session->evlist->stats, event->header.type);
+		events_stats__inc(evlist__stats(session->evlist), event->header.type);
 		machine__process_event(machine, event, &sample);
 	} else
-		++session->evlist->stats.nr_unknown_events;
+		++evlist__stats(session->evlist)->nr_unknown_events;
 
 	ret = 0;
 next_event:
@@ -1253,7 +1255,7 @@ static int __cmd_top(struct perf_top *top)
 	int ret;
 
 	if (!annotate_opts.objdump_path) {
-		ret = perf_env__lookup_objdump(&top->session->header.env,
+		ret = perf_env__lookup_objdump(perf_session__env(top->session),
 					       &annotate_opts.objdump_path);
 		if (ret)
 			return ret;
@@ -1294,13 +1296,13 @@ static int __cmd_top(struct perf_top *top)
 		pr_debug("Couldn't synthesize cgroup events.\n");
 
 	machine__synthesize_threads(&top->session->machines.host, &opts->target,
-				    top->evlist->core.threads, true, false,
+				    evlist__core(top->evlist)->threads, true, false,
 				    top->nr_threads_synthesize);
 
 	perf_set_multithreaded();
 
 	if (perf_hpp_list.socket) {
-		ret = perf_env__read_cpu_topology_map(&perf_env);
+		ret = perf_env__read_cpu_topology_map(perf_session__env(top->session));
 		if (ret < 0) {
 			char errbuf[BUFSIZ];
 			const char *err = str_error_r(-ret, errbuf, sizeof(errbuf));
@@ -1386,13 +1388,6 @@ out_join_thread:
 }
 
 static int
-callchain_opt(const struct option *opt, const char *arg, int unset)
-{
-	symbol_conf.use_callchain = true;
-	return record_callchain_opt(opt, arg, unset);
-}
-
-static int
 parse_callchain_opt(const struct option *opt, const char *arg, int unset)
 {
 	struct callchain_param *callchain = opt->value;
@@ -1411,6 +1406,24 @@ parse_callchain_opt(const struct option *opt, const char *arg, int unset)
 
 	return parse_callchain_top_opt(arg);
 }
+
+static int
+callchain_opt(const struct option *opt, const char *arg __maybe_unused, int unset)
+{
+	struct callchain_param *callchain = opt->value;
+
+	/*
+	 * The -g option only sets the callchain if not already configured by
+	 * .perfconfig. It does, however, enable it.
+	 */
+	if (callchain->record_mode != CALLCHAIN_NONE) {
+		callchain->enabled = true;
+		return 0;
+	}
+
+	return parse_callchain_opt(opt, EM_HOST != EM_S390 ? "fp" : "dwarf", unset);
+}
+
 
 static int perf_top_config(const char *var, const char *value, void *cb __maybe_unused)
 {
@@ -1436,11 +1449,10 @@ parse_percent_limit(const struct option *opt, const char *arg,
 	return 0;
 }
 
-const char top_callchain_help[] = CALLCHAIN_RECORD_HELP CALLCHAIN_REPORT_HELP
-	"\n\t\t\t\tDefault: fp,graph,0.5,caller,function";
-
 int cmd_top(int argc, const char **argv)
 {
+	static const char top_callchain_help[] = CALLCHAIN_RECORD_HELP CALLCHAIN_REPORT_HELP
+		"\n\t\t\t\tDefault: fp,graph,0.5,caller,function";
 	char errbuf[BUFSIZ];
 	struct perf_top top = {
 		.count_filter	     = 5,
@@ -1571,7 +1583,7 @@ int cmd_top(int argc, const char **argv)
 		    "Add prefix to source file path names in programs (with --prefix-strip)"),
 	OPT_STRING(0, "prefix-strip", &annotate_opts.prefix_strip, "N",
 		    "Strip first N entries of source file path name in programs (with --prefix)"),
-	OPT_STRING('u', "uid", &target->uid_str, "user", "user to profile"),
+	OPT_STRING('u', "uid", &top.uid_str, "user", "user to profile"),
 	OPT_CALLBACK(0, "percent-limit", &top, "percent",
 		     "Don't show entries under that percent", parse_percent_limit),
 	OPT_CALLBACK(0, "percentage", NULL, "relative|absolute",
@@ -1623,6 +1635,7 @@ int cmd_top(int argc, const char **argv)
 		NULL
 	};
 	int status = hists__init();
+	struct perf_env host_env;
 
 	if (status < 0)
 		return status;
@@ -1636,14 +1649,19 @@ int cmd_top(int argc, const char **argv)
 	if (top.evlist == NULL)
 		return -ENOMEM;
 
+	perf_env__init(&host_env);
 	status = perf_config(perf_top_config, &top);
 	if (status)
-		return status;
+		goto out_put_evlist;
 	/*
 	 * Since the per arch annotation init routine may need the cpuid, read
 	 * it here, since we are not getting this from the perf.data header.
 	 */
-	status = perf_env__read_cpuid(&perf_env);
+	status = perf_env__set_cmdline(&host_env, argc, argv);
+	if (status)
+		goto out_put_evlist;
+
+	status = perf_env__read_cpuid(&host_env);
 	if (status) {
 		/*
 		 * Some arches do not provide a get_cpuid(), so just use pr_debug, otherwise
@@ -1653,7 +1671,6 @@ int cmd_top(int argc, const char **argv)
 			"Couldn't read the cpuid for this machine: %s\n",
 			str_error_r(errno, errbuf, sizeof(errbuf)));
 	}
-	top.evlist->env = &perf_env;
 
 	argc = parse_options(argc, argv, options, top_usage, 0);
 	if (argc)
@@ -1661,38 +1678,55 @@ int cmd_top(int argc, const char **argv)
 
 	if (disassembler_style) {
 		annotate_opts.disassembler_style = strdup(disassembler_style);
-		if (!annotate_opts.disassembler_style)
-			return -ENOMEM;
+		if (!annotate_opts.disassembler_style) {
+			status = -ENOMEM;
+			goto out_put_evlist;
+		}
 	}
 	if (objdump_path) {
 		annotate_opts.objdump_path = strdup(objdump_path);
-		if (!annotate_opts.objdump_path)
-			return -ENOMEM;
+		if (!annotate_opts.objdump_path) {
+			status = -ENOMEM;
+			goto out_put_evlist;
+		}
 	}
 	if (addr2line_path) {
 		symbol_conf.addr2line_path = strdup(addr2line_path);
-		if (!symbol_conf.addr2line_path)
-			return -ENOMEM;
+		if (!symbol_conf.addr2line_path) {
+			status = -ENOMEM;
+			goto out_put_evlist;
+		}
 	}
 
 	status = symbol__validate_sym_arguments();
 	if (status)
-		goto out_delete_evlist;
+		goto out_put_evlist;
 
 	if (annotate_check_args() < 0)
-		goto out_delete_evlist;
+		goto out_put_evlist;
 
-	if (!top.evlist->core.nr_entries) {
-		bool can_profile_kernel = perf_event_paranoid_check(1);
-		int err = parse_event(top.evlist, can_profile_kernel ? "cycles:P" : "cycles:Pu");
+	status = target__validate(target);
+	if (status) {
+		target__strerror(target, status, errbuf, BUFSIZ);
+		ui__warning("%s\n", errbuf);
+	}
 
-		if (err)
-			goto out_delete_evlist;
+	if (target__none(target))
+		target->system_wide = true;
+
+	if (!evlist__nr_entries(top.evlist)) {
+		struct evlist *def_evlist = evlist__new_default(target, callchain_param.enabled);
+
+		if (!def_evlist)
+			goto out_put_evlist;
+
+		evlist__splice_list_tail(top.evlist, &evlist__core(def_evlist)->entries);
+		evlist__put(def_evlist);
 	}
 
 	status = evswitch__init(&top.evswitch, top.evlist, stderr);
 	if (status)
-		goto out_delete_evlist;
+		goto out_put_evlist;
 
 	if (symbol_conf.report_hierarchy) {
 		/* disable incompatible options */
@@ -1703,18 +1737,18 @@ int cmd_top(int argc, const char **argv)
 			pr_err("Error: --hierarchy and --fields options cannot be used together\n");
 			parse_options_usage(top_usage, options, "fields", 0);
 			parse_options_usage(NULL, options, "hierarchy", 0);
-			goto out_delete_evlist;
+			goto out_put_evlist;
 		}
 	}
 
 	if (top.stitch_lbr && !(callchain_param.record_mode == CALLCHAIN_LBR)) {
 		pr_err("Error: --stitch-lbr must be used with --call-graph lbr\n");
-		goto out_delete_evlist;
+		goto out_put_evlist;
 	}
 
 	if (nr_cgroups > 0 && opts->record_cgroup) {
 		pr_err("--cgroup and --all-cgroups cannot be used together\n");
-		goto out_delete_evlist;
+		goto out_put_evlist;
 	}
 
 	if (branch_call_mode) {
@@ -1734,6 +1768,14 @@ int cmd_top(int argc, const char **argv)
 	if (opts->branch_stack && callchain_param.enabled)
 		symbol_conf.show_branchflag_count = true;
 
+	if (opts->branch_stack) {
+		status = perf_env__read_core_pmu_caps(&host_env);
+		if (status) {
+			pr_err("PMU capability data is not available\n");
+			goto out_put_evlist;
+		}
+	}
+
 	sort__mode = SORT_MODE__TOP;
 	/* display thread wants entries to be collapsed in a different tree */
 	perf_hpp_list.need_collapse = 1;
@@ -1747,40 +1789,43 @@ int cmd_top(int argc, const char **argv)
 
 	setup_browser(false);
 
-	if (setup_sorting(top.evlist) < 0) {
+	top.session = __perf_session__new(/*data=*/NULL, /*tool=*/NULL,
+					  /*trace_event_repipe=*/false,
+					  &host_env);
+	if (IS_ERR(top.session)) {
+		status = PTR_ERR(top.session);
+		top.session = NULL;
+		goto out_put_evlist;
+	}
+	evlist__set_session(top.evlist, top.session);
+
+	if (setup_sorting(top.evlist, perf_session__env(top.session)) < 0) {
 		if (sort_order)
 			parse_options_usage(top_usage, options, "s", 1);
 		if (field_order)
 			parse_options_usage(sort_order ? NULL : top_usage,
 					    options, "fields", 0);
-		goto out_delete_evlist;
+		goto out_put_evlist;
 	}
 
-	status = target__validate(target);
-	if (status) {
-		target__strerror(target, status, errbuf, BUFSIZ);
-		ui__warning("%s\n", errbuf);
+	if (top.uid_str) {
+		uid_t uid = parse_uid(top.uid_str);
+
+		if (uid == UINT_MAX) {
+			ui__error("Invalid User: %s", top.uid_str);
+			status = -EINVAL;
+			goto out_put_evlist;
+		}
+		status = parse_uid_filter(top.evlist, uid);
+		if (status)
+			goto out_put_evlist;
 	}
-
-	status = target__parse_uid(target);
-	if (status) {
-		int saved_errno = errno;
-
-		target__strerror(target, status, errbuf, BUFSIZ);
-		ui__error("%s\n", errbuf);
-
-		status = -saved_errno;
-		goto out_delete_evlist;
-	}
-
-	if (target__none(target))
-		target->system_wide = true;
 
 	if (evlist__create_maps(top.evlist, target) < 0) {
 		ui__error("Couldn't create thread/CPU maps: %s\n",
 			  errno == ENOENT ? "No such process" : str_error_r(errno, errbuf, sizeof(errbuf)));
 		status = -errno;
-		goto out_delete_evlist;
+		goto out_put_evlist;
 	}
 
 	if (top.delay_secs < 1)
@@ -1788,7 +1833,7 @@ int cmd_top(int argc, const char **argv)
 
 	if (record_opts__config(opts)) {
 		status = -EINVAL;
-		goto out_delete_evlist;
+		goto out_put_evlist;
 	}
 
 	top.sym_evsel = evlist__first(top.evlist);
@@ -1803,14 +1848,14 @@ int cmd_top(int argc, const char **argv)
 
 	status = symbol__annotation_init();
 	if (status < 0)
-		goto out_delete_evlist;
+		goto out_put_evlist;
 
 	annotation_config__init();
 
 	symbol_conf.try_vmlinux_path = (symbol_conf.vmlinux_name == NULL);
 	status = symbol__init(NULL);
 	if (status < 0)
-		goto out_delete_evlist;
+		goto out_put_evlist;
 
 	sort__setup_elide(stdout);
 
@@ -1818,13 +1863,6 @@ int cmd_top(int argc, const char **argv)
 	if (top.print_entries == 0) {
 		perf_top__update_print_entries(&top);
 		signal(SIGWINCH, winch_sig);
-	}
-
-	top.session = perf_session__new(NULL, NULL);
-	if (IS_ERR(top.session)) {
-		status = PTR_ERR(top.session);
-		top.session = NULL;
-		goto out_delete_evlist;
 	}
 
 	if (!evlist__needs_bpf_sb_event(top.evlist))
@@ -1837,13 +1875,15 @@ int cmd_top(int argc, const char **argv)
 		if (top.sb_evlist == NULL) {
 			pr_err("Couldn't create side band evlist.\n.");
 			status = -EINVAL;
-			goto out_delete_evlist;
+			goto out_put_evlist;
 		}
 
-		if (evlist__add_bpf_sb_event(top.sb_evlist, &perf_env)) {
+		if (evlist__add_bpf_sb_event(top.sb_evlist, &host_env)) {
 			pr_err("Couldn't ask for PERF_RECORD_BPF_EVENT side band events.\n.");
 			status = -EINVAL;
-			goto out_delete_evlist;
+			evlist__put(top.sb_evlist);
+			top.sb_evlist = NULL;
+			goto out_put_evlist;
 		}
 	}
 #endif
@@ -1858,10 +1898,11 @@ int cmd_top(int argc, const char **argv)
 	if (!opts->no_bpf_event)
 		evlist__stop_sb_thread(top.sb_evlist);
 
-out_delete_evlist:
-	evlist__delete(top.evlist);
+out_put_evlist:
+	evlist__put(top.evlist);
 	perf_session__delete(top.session);
 	annotation_options__exit();
+	perf_env__exit(&host_env);
 
 	return status;
 }

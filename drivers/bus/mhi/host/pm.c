@@ -418,6 +418,7 @@ static int mhi_pm_mission_mode_transition(struct mhi_controller *mhi_cntrl)
 	device_for_each_child(&mhi_cntrl->mhi_dev->dev, &current_ee,
 			      mhi_destroy_device);
 	mhi_cntrl->status_cb(mhi_cntrl, MHI_CB_EE_MISSION_MODE);
+	mhi_uevent_notify(mhi_cntrl, mhi_cntrl->ee);
 
 	/* Force MHI to be in M0 state before continuing */
 	ret = __mhi_device_get_sync(mhi_cntrl);
@@ -631,6 +632,8 @@ static void mhi_pm_sys_error_transition(struct mhi_controller *mhi_cntrl)
 	/* Wake up threads waiting for state transition */
 	wake_up_all(&mhi_cntrl->state_event);
 
+	mhi_uevent_notify(mhi_cntrl, mhi_cntrl->ee);
+
 	if (MHI_REG_ACCESS_VALID(prev_state)) {
 		/*
 		 * If the device is in PBL or SBL, it will only respond to
@@ -648,21 +651,13 @@ static void mhi_pm_sys_error_transition(struct mhi_controller *mhi_cntrl)
 
 	/* Trigger MHI RESET so that the device will not access host memory */
 	if (reset_device) {
-		u32 in_reset = -1;
-		unsigned long timeout = msecs_to_jiffies(mhi_cntrl->timeout_ms);
-
 		dev_dbg(dev, "Triggering MHI Reset in device\n");
 		mhi_set_mhi_state(mhi_cntrl, MHI_STATE_RESET);
 
 		/* Wait for the reset bit to be cleared by the device */
-		ret = wait_event_timeout(mhi_cntrl->state_event,
-					 mhi_read_reg_field(mhi_cntrl,
-							    mhi_cntrl->regs,
-							    MHICTRL,
-							    MHICTRL_RESET_MASK,
-							    &in_reset) ||
-					!in_reset, timeout);
-		if (!ret || in_reset) {
+		ret = mhi_poll_reg_field(mhi_cntrl, mhi_cntrl->regs, MHICTRL,
+				 MHICTRL_RESET_MASK, 0, 25000, mhi_cntrl->timeout_ms);
+		if (ret) {
 			dev_err(dev, "Device failed to exit MHI Reset state\n");
 			write_lock_irq(&mhi_cntrl->pm_lock);
 			cur_state = mhi_tryset_pm_state(mhi_cntrl,
@@ -761,7 +756,7 @@ exit_sys_error_transition:
 int mhi_queue_state_transition(struct mhi_controller *mhi_cntrl,
 			       enum dev_st_transition state)
 {
-	struct state_transition *item = kmalloc(sizeof(*item), GFP_ATOMIC);
+	struct state_transition *item = kmalloc_obj(*item, GFP_ATOMIC);
 	unsigned long flags;
 
 	if (!item)
@@ -829,6 +824,8 @@ void mhi_pm_st_worker(struct work_struct *work)
 			mhi_create_devices(mhi_cntrl);
 			if (mhi_cntrl->fbc_download)
 				mhi_download_amss_image(mhi_cntrl);
+
+			mhi_uevent_notify(mhi_cntrl, mhi_cntrl->ee);
 			break;
 		case DEV_ST_TRANSITION_MISSION_MODE:
 			mhi_pm_mission_mode_transition(mhi_cntrl);
@@ -838,6 +835,7 @@ void mhi_pm_st_worker(struct work_struct *work)
 			mhi_cntrl->ee = MHI_EE_FP;
 			write_unlock_irq(&mhi_cntrl->pm_lock);
 			mhi_create_devices(mhi_cntrl);
+			mhi_uevent_notify(mhi_cntrl, mhi_cntrl->ee);
 			break;
 		case DEV_ST_TRANSITION_READY:
 			mhi_ready_state_transition(mhi_cntrl);
@@ -916,22 +914,39 @@ int mhi_pm_suspend(struct mhi_controller *mhi_cntrl)
 		return -EIO;
 	}
 
-	/* Set MHI to M3 and wait for completion */
-	mhi_set_mhi_state(mhi_cntrl, MHI_STATE_M3);
-	write_unlock_irq(&mhi_cntrl->pm_lock);
-	dev_dbg(dev, "Waiting for M3 completion\n");
+	/*
+	 * For devices without M3 support, just set the host state to M3. This
+	 * host transition is needed to prevent the client drivers from
+	 * accessing the device during suspend.
+	 */
+	if (mhi_cntrl->no_m3) {
+		new_state = mhi_tryset_pm_state(mhi_cntrl, MHI_PM_M3);
+		write_unlock_irq(&mhi_cntrl->pm_lock);
+		if (new_state != MHI_PM_M3) {
+			dev_err(dev,
+				"Error setting to PM state: %s from: %s\n",
+				to_mhi_pm_state_str(MHI_PM_M3),
+				to_mhi_pm_state_str(mhi_cntrl->pm_state));
+			return -EIO;
+		}
+	} else {
+		/* Set MHI to M3 and wait for completion */
+		mhi_set_mhi_state(mhi_cntrl, MHI_STATE_M3);
+		write_unlock_irq(&mhi_cntrl->pm_lock);
+		dev_dbg(dev, "Waiting for M3 completion\n");
 
-	ret = wait_event_timeout(mhi_cntrl->state_event,
-				 mhi_cntrl->dev_state == MHI_STATE_M3 ||
-				 MHI_PM_IN_ERROR_STATE(mhi_cntrl->pm_state),
-				 msecs_to_jiffies(mhi_cntrl->timeout_ms));
+		ret = wait_event_timeout(mhi_cntrl->state_event,
+					 mhi_cntrl->dev_state == MHI_STATE_M3 ||
+					 MHI_PM_IN_ERROR_STATE(mhi_cntrl->pm_state),
+					 msecs_to_jiffies(mhi_cntrl->timeout_ms));
 
-	if (!ret || MHI_PM_IN_ERROR_STATE(mhi_cntrl->pm_state)) {
-		dev_err(dev,
-			"Did not enter M3 state, MHI state: %s, PM state: %s\n",
-			mhi_state_str(mhi_cntrl->dev_state),
-			to_mhi_pm_state_str(mhi_cntrl->pm_state));
-		return -EIO;
+		if (!ret || MHI_PM_IN_ERROR_STATE(mhi_cntrl->pm_state)) {
+			dev_err(dev,
+				"Did not enter M3 state, MHI state: %s, PM state: %s\n",
+				mhi_state_str(mhi_cntrl->dev_state),
+				to_mhi_pm_state_str(mhi_cntrl->pm_state));
+			return -EIO;
+		}
 	}
 
 	/* Notify clients about entering LPM */
@@ -963,7 +978,8 @@ static int __mhi_pm_resume(struct mhi_controller *mhi_cntrl, bool force)
 	if (MHI_PM_IN_ERROR_STATE(mhi_cntrl->pm_state))
 		return -EIO;
 
-	if (mhi_get_mhi_state(mhi_cntrl) != MHI_STATE_M3) {
+	if (!mhi_cntrl->no_m3 &&
+	    mhi_get_mhi_state(mhi_cntrl) != MHI_STATE_M3) {
 		dev_warn(dev, "Resuming from non M3 state (%s)\n",
 			 mhi_state_str(mhi_get_mhi_state(mhi_cntrl)));
 		if (!force)
@@ -987,6 +1003,15 @@ static int __mhi_pm_resume(struct mhi_controller *mhi_cntrl, bool force)
 			 to_mhi_pm_state_str(MHI_PM_M3_EXIT),
 			 to_mhi_pm_state_str(mhi_cntrl->pm_state));
 		return -EIO;
+	}
+
+	/*
+	 * For devices without M3 support, just move the host back to M0
+	 * directly.
+	 */
+	if (mhi_cntrl->no_m3) {
+		write_unlock_irq(&mhi_cntrl->pm_lock);
+		return mhi_pm_m0_transition(mhi_cntrl);
 	}
 
 	/* Set MHI to M0 and wait for completion */
@@ -1240,6 +1265,8 @@ static void __mhi_power_down(struct mhi_controller *mhi_cntrl, bool graceful,
 	write_unlock_irq(&mhi_cntrl->pm_lock);
 	mutex_unlock(&mhi_cntrl->pm_mutex);
 
+	mhi_uevent_notify(mhi_cntrl, mhi_cntrl->ee);
+
 	if (destroy_device)
 		mhi_queue_state_transition(mhi_cntrl,
 					   DEV_ST_TRANSITION_DISABLE_DESTROY_DEVICE);
@@ -1279,7 +1306,7 @@ int mhi_sync_power_up(struct mhi_controller *mhi_cntrl)
 		mhi_cntrl->ready_timeout_ms : mhi_cntrl->timeout_ms;
 	wait_event_timeout(mhi_cntrl->state_event,
 			   MHI_IN_MISSION_MODE(mhi_cntrl->ee) ||
-			   MHI_PM_IN_ERROR_STATE(mhi_cntrl->pm_state),
+			   MHI_PM_FATAL_ERROR(mhi_cntrl->pm_state),
 			   msecs_to_jiffies(timeout_ms));
 
 	ret = (MHI_IN_MISSION_MODE(mhi_cntrl->ee)) ? 0 : -ETIMEDOUT;
@@ -1338,3 +1365,22 @@ void mhi_device_put(struct mhi_device *mhi_dev)
 	read_unlock_bh(&mhi_cntrl->pm_lock);
 }
 EXPORT_SYMBOL_GPL(mhi_device_put);
+
+void mhi_uevent_notify(struct mhi_controller *mhi_cntrl, enum mhi_ee_type ee)
+{
+	struct device *dev = &mhi_cntrl->mhi_dev->dev;
+	char *buf[2];
+	int ret;
+
+	buf[0] = kasprintf(GFP_KERNEL, "EXEC_ENV=%s", TO_MHI_EXEC_STR(ee));
+	buf[1] = NULL;
+
+	if (!buf[0])
+		return;
+
+	ret = kobject_uevent_env(&dev->kobj, KOBJ_CHANGE, buf);
+	if (ret)
+		dev_err(dev, "Failed to send %s uevent\n", TO_MHI_EXEC_STR(ee));
+
+	kfree(buf[0]);
+}

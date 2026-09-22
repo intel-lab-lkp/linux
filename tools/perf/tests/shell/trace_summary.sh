@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # perf trace summary (exclusive)
 # SPDX-License-Identifier: GPL-2.0
 
@@ -14,7 +14,7 @@ OUTPUT=$(mktemp /tmp/perf_trace_test.XXXXX)
 
 test_perf_trace() {
     args=$1
-    workload="true"
+    workload="cat /dev/null"
     search="^\s*(open|read|close).*[0-9]+%$"
 
     echo "testing: perf trace ${args} -- ${workload}"

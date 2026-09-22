@@ -62,7 +62,7 @@ properties:
   default-state:
     description:
       The initial state of the LED. If the LED is already on or off and the
-      default-state property is set the to same value, then no glitch should be
+      default-state property is set to the same value, then no glitch should be
       produced where the LED momentarily turns off (or on). The "keep" setting
       will keep the LED at whatever its current state is, without producing a
       glitch.
@@ -72,6 +72,16 @@ properties:
       - off
       - keep
     default: off
+
+  default-intensity:
+    description:
+      The initial intensity of the LED color component. As the intensity of
+      each sub-LED is multiplied with the overall brightness, without this
+      property on a sub-LED, it may effectively be initialized at minimum
+      brightness regardless of its linux,default-trigger and default-brightness
+      properties.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 0
 
   linux,default-trigger:
     description:
@@ -106,6 +116,8 @@ properties:
           - bluetooth-power
             # LED indicates camera flash state
           - flash
+            # LED indicates level of GPIO input referenced by trigger-sources
+          - gpio
             # LED indicated keyboard capslock
           - kbd-capslock
             # LED indicates MTD memory activity
@@ -171,6 +183,12 @@ properties:
       Note that this flag is mainly used for PWM-LEDs, where it is not possible
       to map brightness to current. Drivers for other controllers should use
       led-max-microamp.
+    $ref: /schemas/types.yaml#/definitions/uint32
+
+  default-brightness:
+    description:
+      Brightness to be set if LED's default state is on. Used only during
+      initialization. If the option is not set then max brightness is used.
     $ref: /schemas/types.yaml#/definitions/uint32
 
   panic-indicator:

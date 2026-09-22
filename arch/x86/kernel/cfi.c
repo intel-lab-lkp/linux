@@ -27,7 +27,7 @@ static bool decode_cfi_insn(struct pt_regs *regs, unsigned long *target,
 	 * for indirect call checks:
 	 *
 	 *   movl    -<id>, %r10d       ; 6 bytes
-	 *   addl    -4(%reg), %r10d    ; 4 bytes
+	 *   addl    -<pos>(%reg), %r10d; 4 bytes
 	 *   je      .Ltmp1             ; 2 bytes
 	 *   ud2                        ; <- regs->ip
 	 *   .Ltmp1:
@@ -72,8 +72,15 @@ enum bug_trap_type handle_cfi_failure(struct pt_regs *regs)
 
 	switch (cfi_mode) {
 	case CFI_KCFI:
-		if (!is_cfi_trap(addr))
-			return BUG_TRAP_TYPE_NONE;
+		if (!is_cfi_trap(addr)) {
+			/*
+			 * The updated kCFI sequence has "test $0xd6, %al" instead of
+			 * "ud2", adjust the offset.
+			 */
+			addr -= 1;
+			if (!is_cfi_trap(addr))
+				return BUG_TRAP_TYPE_NONE;
+		}
 
 		if (!decode_cfi_insn(regs, &target, &type))
 			return report_cfi_failure_noaddr(regs, addr);

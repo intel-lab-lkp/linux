@@ -344,6 +344,36 @@ hws_send_engine_update_rule_resize(struct mlx5hws_send_engine *queue,
 	}
 }
 
+static const char *hws_rule_status_to_string(enum mlx5hws_rule_status status)
+{
+	switch (status) {
+	case MLX5HWS_RULE_STATUS_CREATING: return "CREATING";
+	case MLX5HWS_RULE_STATUS_UPDATING: return "UPDATING";
+	case MLX5HWS_RULE_STATUS_DELETING: return "DELETING";
+	case MLX5HWS_RULE_STATUS_FAILING: return "FAILING";
+	default: return "NA";
+	}
+}
+
+static const char *hws_rule_resize_state_to_string(u8 state)
+{
+	switch (state) {
+	case MLX5HWS_RULE_RESIZE_STATE_IDLE: return "IDLE";
+	case MLX5HWS_RULE_RESIZE_STATE_WRITING: return "WRITING";
+	case MLX5HWS_RULE_RESIZE_STATE_DELETING: return "DELETING";
+	default: return "UNKNOWN";
+	}
+}
+
+static const char *hws_gta_syndrome_to_string(u8 syndrome)
+{
+	switch (syndrome) {
+	case 1: return "SET_FLOW_FAIL";
+	case 2: return "DISABLE_FLOW_FAIL";
+	default: return "UNKNOWN";
+	}
+}
+
 static void hws_send_engine_dump_error_cqe(struct mlx5hws_send_engine *queue,
 					   struct mlx5hws_send_ring_priv *priv,
 					   struct mlx5_cqe64 *cqe)
@@ -352,6 +382,7 @@ static void hws_send_engine_dump_error_cqe(struct mlx5hws_send_engine *queue,
 	struct mlx5hws_context *ctx = priv->rule->matcher->tbl->ctx;
 	u32 opcode = cqe ? get_cqe_opcode(cqe) : 0;
 	struct mlx5hws_rule *rule = priv->rule;
+	u8 syndrome;
 
 	/* If something bad happens and lots of rules are failing, we don't
 	 * want to pollute dmesg. Print only the first bad cqe per engine,
@@ -364,26 +395,17 @@ static void hws_send_engine_dump_error_cqe(struct mlx5hws_send_engine *queue,
 
 	if (mlx5hws_rule_move_in_progress(rule))
 		mlx5hws_err(ctx,
-			    "--- rule 0x%08llx: error completion moving rule: phase %s, wqes left %d\n",
+			    "--- rule 0x%08llx: error completion moving rule: phase %s (%d), wqes left %d\n",
 			    HWS_PTR_TO_ID(rule),
-			    rule->resize_info->state ==
-			    MLX5HWS_RULE_RESIZE_STATE_WRITING ? "WRITING" :
-			    rule->resize_info->state ==
-			    MLX5HWS_RULE_RESIZE_STATE_DELETING ? "DELETING" :
-			    "UNKNOWN",
+			    hws_rule_resize_state_to_string
+				(rule->resize_info->state),
+			    rule->resize_info->state,
 			    rule->pending_wqes);
 	else
 		mlx5hws_err(ctx,
 			    "--- rule 0x%08llx: error completion %s (%d), wqes left %d\n",
 			    HWS_PTR_TO_ID(rule),
-			    rule->status ==
-			    MLX5HWS_RULE_STATUS_CREATING ? "CREATING" :
-			    rule->status ==
-			    MLX5HWS_RULE_STATUS_DELETING ? "DELETING" :
-			    rule->status ==
-			    MLX5HWS_RULE_STATUS_FAILING ? "FAILING" :
-			    rule->status ==
-			    MLX5HWS_RULE_STATUS_UPDATING ? "UPDATING" : "NA",
+			    hws_rule_status_to_string(rule->status),
 			    rule->status,
 			    rule->pending_wqes);
 
@@ -423,6 +445,10 @@ static void hws_send_engine_dump_error_cqe(struct mlx5hws_send_engine *queue,
 			    "    rule 0x%08llx:  |--- syndrome = 0x%x\n",
 			    HWS_PTR_TO_ID(rule),
 			    err_cqe->syndrome);
+		mlx5hws_err(ctx,
+			    "    rule 0x%08llx:  |--- WQE_CNT = 0x%04x\n",
+			    HWS_PTR_TO_ID(rule),
+			    (u32)be16_to_cpu(err_cqe->wqe_counter));
 	}
 
 	mlx5hws_err(ctx,
@@ -433,13 +459,12 @@ static void hws_send_engine_dump_error_cqe(struct mlx5hws_send_engine *queue,
 		    HWS_PTR_TO_ID(rule),
 		    (be32_to_cpu(cqe->byte_cnt) & 0x80000000) ?
 		    "FAILURE" : "SUCCESS");
+	/* syndrome is in the lower 2 bits of byte_cnt */
+	syndrome = be32_to_cpu(cqe->byte_cnt) & 3;
 	mlx5hws_err(ctx,
-		    "    rule 0x%08llx:  |------- SYNDROME = %s\n",
+		    "    rule 0x%08llx:  |------- SYNDROME = %s (%u)\n",
 		    HWS_PTR_TO_ID(rule),
-		    ((be32_to_cpu(cqe->byte_cnt) & 0x00000003) == 1) ?
-		    "SET_FLOW_FAIL" :
-		    ((be32_to_cpu(cqe->byte_cnt) & 0x00000003) == 2) ?
-		    "DISABLE_FLOW_FAIL" : "UNKNOWN");
+		    hws_gta_syndrome_to_string(syndrome), syndrome);
 	mlx5hws_err(ctx,
 		    "    rule 0x%08llx: cqe->sop_drop_qpn  = 0x%08x\n",
 		    HWS_PTR_TO_ID(rule), be32_to_cpu(cqe->sop_drop_qpn));
@@ -690,7 +715,7 @@ static int hws_send_ring_alloc_sq(struct mlx5_core_dev *mdev,
 	size_t buf_sz;
 	int err;
 
-	sq->uar_map = mdev->mlx5e_res.hw_objs.bfreg.map;
+	sq->uar_map = mdev->priv.bfreg.map;
 	sq->mdev = mdev;
 
 	param.db_numa_node = numa_node;
@@ -701,7 +726,7 @@ static int hws_send_ring_alloc_sq(struct mlx5_core_dev *mdev,
 	wq->db = &wq->db[MLX5_SND_DBR];
 
 	buf_sz = queue->num_entries * MAX_WQES_PER_RULE;
-	sq->dep_wqe = kcalloc(queue->num_entries, sizeof(*sq->dep_wqe), GFP_KERNEL);
+	sq->dep_wqe = kzalloc_objs(*sq->dep_wqe, queue->num_entries);
 	if (!sq->dep_wqe) {
 		err = -ENOMEM;
 		goto destroy_wq_cyc;
@@ -764,7 +789,7 @@ static int hws_send_ring_create_sq(struct mlx5_core_dev *mdev, u32 pdn,
 	MLX5_SET(sqc, sqc, ts_format, ts_format);
 
 	MLX5_SET(wq, wq, wq_type, MLX5_WQ_TYPE_CYCLIC);
-	MLX5_SET(wq, wq, uar_page, mdev->mlx5e_res.hw_objs.bfreg.index);
+	MLX5_SET(wq, wq, uar_page, mdev->priv.bfreg.index);
 	MLX5_SET(wq, wq, log_wq_pg_sz, sq->wq_ctrl.buf.page_shift - MLX5_ADAPTER_PAGE_SHIFT);
 	MLX5_SET64(wq, wq, dbr_addr, sq->wq_ctrl.db.dma);
 
@@ -873,12 +898,6 @@ err_free_sqc:
 	return err;
 }
 
-static void hws_cq_complete(struct mlx5_core_cq *mcq,
-			    struct mlx5_eqe *eqe)
-{
-	pr_err("CQ completion CQ: #%u\n", mcq->cqn);
-}
-
 static int hws_send_ring_alloc_cq(struct mlx5_core_dev *mdev,
 				  int numa_node,
 				  struct mlx5hws_send_engine *queue,
@@ -901,7 +920,6 @@ static int hws_send_ring_alloc_cq(struct mlx5_core_dev *mdev,
 	mcq->cqe_sz = 64;
 	mcq->set_ci_db = cq->wq_ctrl.db.db;
 	mcq->arm_db = cq->wq_ctrl.db.db + 1;
-	mcq->comp = hws_cq_complete;
 
 	for (i = 0; i < mlx5_cqwq_get_size(&cq->wq); i++) {
 		cqe = mlx5_cqwq_get_wqe(&cq->wq, i);
@@ -940,7 +958,7 @@ static int hws_send_ring_create_cq(struct mlx5_core_dev *mdev,
 				  (__be64 *)MLX5_ADDR_OF(create_cq_in, in, pas));
 
 	MLX5_SET(cqc, cqc, c_eqn_or_apu_element, eqn);
-	MLX5_SET(cqc, cqc, uar_page, mdev->priv.uar->index);
+	MLX5_SET(cqc, cqc, uar_page, mdev->priv.bfreg.up->index);
 	MLX5_SET(cqc, cqc, log_page_size, cq->wq_ctrl.buf.page_shift - MLX5_ADAPTER_PAGE_SHIFT);
 	MLX5_SET64(cqc, cqc, dbr_addr, cq->wq_ctrl.db.dma);
 
@@ -963,8 +981,7 @@ static int hws_send_ring_open_cq(struct mlx5_core_dev *mdev,
 	if (!cqc_data)
 		return -ENOMEM;
 
-	MLX5_SET(cqc, cqc_data, uar_page, mdev->priv.uar->index);
-	MLX5_SET(cqc, cqc_data, cqe_sz, queue->num_entries);
+	MLX5_SET(cqc, cqc_data, uar_page, mdev->priv.bfreg.up->index);
 	MLX5_SET(cqc, cqc_data, log_cq_size, ilog2(queue->num_entries));
 
 	err = hws_send_ring_alloc_cq(mdev, numa_node, queue, cqc_data, cq);
@@ -1041,9 +1058,8 @@ static int mlx5hws_send_queue_open(struct mlx5hws_context *ctx,
 	queue->num_entries = roundup_pow_of_two(queue_size);
 	queue->used_entries = 0;
 
-	queue->completed.entries = kcalloc(queue->num_entries,
-					   sizeof(queue->completed.entries[0]),
-					   GFP_KERNEL);
+	queue->completed.entries = kzalloc_objs(queue->completed.entries[0],
+						queue->num_entries);
 	if (!queue->completed.entries)
 		return -ENOMEM;
 
@@ -1100,20 +1116,18 @@ static int hws_bwc_send_queues_init(struct mlx5hws_context *ctx)
 	if (!mlx5hws_context_bwc_supported(ctx))
 		return 0;
 
-	ctx->queues += bwc_queues;
-
-	ctx->bwc_send_queue_locks = kcalloc(bwc_queues,
-					    sizeof(*ctx->bwc_send_queue_locks),
-					    GFP_KERNEL);
+	ctx->bwc_send_queue_locks = kzalloc_objs(*ctx->bwc_send_queue_locks,
+						 bwc_queues);
 
 	if (!ctx->bwc_send_queue_locks)
 		return -ENOMEM;
 
-	ctx->bwc_lock_class_keys = kcalloc(bwc_queues,
-					   sizeof(*ctx->bwc_lock_class_keys),
-					   GFP_KERNEL);
+	ctx->bwc_lock_class_keys = kzalloc_objs(*ctx->bwc_lock_class_keys,
+						bwc_queues);
 	if (!ctx->bwc_lock_class_keys)
 		goto err_lock_class_keys;
+
+	ctx->queues += bwc_queues;
 
 	for (i = 0; i < bwc_queues; i++) {
 		mutex_init(&ctx->bwc_send_queue_locks[i]);
@@ -1143,7 +1157,7 @@ int mlx5hws_send_queues_open(struct mlx5hws_context *ctx,
 	if (err)
 		return err;
 
-	ctx->send_queue = kcalloc(ctx->queues, sizeof(*ctx->send_queue), GFP_KERNEL);
+	ctx->send_queue = kzalloc_objs(*ctx->send_queue, ctx->queues);
 	if (!ctx->send_queue) {
 		err = -ENOMEM;
 		goto free_bwc_locks;

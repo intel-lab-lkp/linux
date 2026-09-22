@@ -7,7 +7,6 @@
 
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/mod_devicetable.h>
 #include <linux/types.h>
 #include <linux/err.h>
 #include <linux/device.h>
@@ -553,7 +552,7 @@ static const struct bin_attribute olpc_bat_eeprom = {
 		.mode = S_IRUGO,
 	},
 	.size = EEPROM_SIZE,
-	.read_new = olpc_bat_eeprom_read,
+	.read = olpc_bat_eeprom_read,
 };
 
 /* Allow userspace to see the specific error value pulled from the EC */
@@ -591,7 +590,7 @@ static const struct bin_attribute *const olpc_bat_sysfs_bin_attrs[] = {
 
 static const struct attribute_group olpc_bat_sysfs_group = {
 	.attrs = olpc_bat_sysfs_attrs,
-	.bin_attrs_new = olpc_bat_sysfs_bin_attrs,
+	.bin_attrs = olpc_bat_sysfs_bin_attrs,
 };
 
 static const struct attribute_group *olpc_bat_sysfs_groups[] = {

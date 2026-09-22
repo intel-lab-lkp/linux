@@ -15,6 +15,7 @@
 #include "util/strbuf.h"
 #include "util/thread_map.h"
 
+#include <errno.h>
 #include <string.h>
 #include <linux/kernel.h>
 #include <perfmon/pfmlib_perf_event.h>
@@ -47,10 +48,6 @@ int parse_libpfm_events_option(const struct option *opt, const char *str,
 	p_orig = p = strdup(str);
 	if (!p)
 		return -1;
-	/*
-	 * force loading of the PMU list
-	 */
-	perf_pmus__scan(NULL);
 
 	for (q = p; strsep(&p, ",{}"); q = p) {
 		sep = p ? str + (p - p_orig - 1) : "";
@@ -88,7 +85,7 @@ int parse_libpfm_events_option(const struct option *opt, const char *str,
 		}
 
 		pmu = perf_pmus__find_by_type((unsigned int)attr.type);
-		evsel = parse_events__add_event(evlist->core.nr_entries,
+		evsel = parse_events__add_event(evlist__nr_entries(evlist),
 						&attr, q, /*metric_id=*/NULL,
 						pmu);
 		if (evsel == NULL)
@@ -162,7 +159,7 @@ static bool is_libpfm_event_supported(const char *name, struct perf_cpu_map *cpu
 		result = false;
 
 	evsel__close(evsel);
-	evsel__delete(evsel);
+	evsel__put(evsel);
 
 	return result;
 }
@@ -234,6 +231,7 @@ print_libpfm_event(const struct print_callbacks *print_cb, void *print_state,
 
 	if (is_libpfm_event_supported(name, cpus, threads)) {
 		print_cb->print_event(print_state, topic, pinfo->name,
+				      /*pmu_type=*/PERF_TYPE_RAW,
 				      name, info->equiv,
 				      /*scale_unit=*/NULL,
 				      /*deprecated=*/NULL, "PFM event",
@@ -269,6 +267,7 @@ print_libpfm_event(const struct print_callbacks *print_cb, void *print_state,
 			print_cb->print_event(print_state,
 					topic,
 					pinfo->name,
+					/*pmu_type=*/PERF_TYPE_RAW,
 					name, /*alias=*/NULL,
 					/*scale_unit=*/NULL,
 					/*deprecated=*/NULL, "PFM event",

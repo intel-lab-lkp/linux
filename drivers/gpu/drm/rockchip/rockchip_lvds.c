@@ -22,8 +22,8 @@
 #include <drm/drm_bridge_connector.h>
 #include <drm/drm_of.h>
 #include <drm/drm_panel.h>
+#include <drm/drm_print.h>
 #include <drm/drm_probe_helper.h>
-#include <drm/drm_simple_kms_helper.h>
 
 #include "rockchip_drm_drv.h"
 #include "rockchip_lvds.h"
@@ -56,14 +56,13 @@ struct rockchip_lvds {
 	struct drm_device *drm_dev;
 	struct drm_panel *panel;
 	struct drm_bridge *bridge;
-	struct drm_connector connector;
 	struct rockchip_encoder encoder;
 	struct dev_pin_info *pins;
 };
 
-static inline struct rockchip_lvds *connector_to_lvds(struct drm_connector *connector)
+static inline struct rockchip_lvds *brige_to_lvds(struct drm_bridge *bridge)
 {
-	return container_of(connector, struct rockchip_lvds, connector);
+	return (struct rockchip_lvds *)bridge->driver_private;
 }
 
 static inline struct rockchip_lvds *encoder_to_lvds(struct drm_encoder *encoder)
@@ -106,25 +105,21 @@ static inline int rockchip_lvds_name_to_output(const char *s)
 	return -EINVAL;
 }
 
-static const struct drm_connector_funcs rockchip_lvds_connector_funcs = {
-	.fill_modes = drm_helper_probe_single_connector_modes,
-	.destroy = drm_connector_cleanup,
-	.reset = drm_atomic_helper_connector_reset,
-	.atomic_duplicate_state = drm_atomic_helper_connector_duplicate_state,
-	.atomic_destroy_state = drm_atomic_helper_connector_destroy_state,
-};
-
-static int rockchip_lvds_connector_get_modes(struct drm_connector *connector)
+static int
+rockchip_lvds_bridge_get_modes(struct drm_bridge *bridge, struct drm_connector *connector)
 {
-	struct rockchip_lvds *lvds = connector_to_lvds(connector);
+	struct rockchip_lvds *lvds = brige_to_lvds(bridge);
 	struct drm_panel *panel = lvds->panel;
 
 	return drm_panel_get_modes(panel, connector);
 }
 
 static const
-struct drm_connector_helper_funcs rockchip_lvds_connector_helper_funcs = {
-	.get_modes = rockchip_lvds_connector_get_modes,
+struct drm_bridge_funcs rockchip_lvds_bridge_funcs = {
+	.atomic_duplicate_state = drm_atomic_helper_bridge_duplicate_state,
+	.atomic_destroy_state = drm_atomic_helper_bridge_destroy_state,
+	.atomic_create_state = drm_atomic_helper_bridge_create_state,
+	.get_modes = rockchip_lvds_bridge_get_modes,
 };
 
 static int
@@ -431,6 +426,10 @@ static void px30_lvds_encoder_disable(struct drm_encoder *encoder)
 	drm_panel_unprepare(lvds->panel);
 }
 
+static const struct drm_encoder_funcs rockchip_lvds_encoder_funcs = {
+	.destroy = drm_encoder_cleanup,
+};
+
 static const
 struct drm_encoder_helper_funcs rk3288_lvds_encoder_helper_funcs = {
 	.enable = rk3288_lvds_encoder_enable,
@@ -598,7 +597,9 @@ static int rockchip_lvds_bind(struct device *dev, struct device *master,
 	encoder->possible_crtcs = drm_of_find_possible_crtcs(drm_dev,
 							     dev->of_node);
 
-	ret = drm_simple_encoder_init(drm_dev, encoder, DRM_MODE_ENCODER_LVDS);
+	ret = drm_encoder_init(drm_dev, encoder,
+			       &rockchip_lvds_encoder_funcs,
+			       DRM_MODE_ENCODER_LVDS, NULL);
 	if (ret < 0) {
 		drm_err(drm_dev,
 			"failed to initialize encoder: %d\n", ret);
@@ -606,26 +607,25 @@ static int rockchip_lvds_bind(struct device *dev, struct device *master,
 	}
 
 	drm_encoder_helper_add(encoder, lvds->soc_data->helper_funcs);
-	connector = &lvds->connector;
 
 	if (lvds->panel) {
-		connector->dpms = DRM_MODE_DPMS_OFF;
-		ret = drm_connector_init(drm_dev, connector,
-					 &rockchip_lvds_connector_funcs,
-					 DRM_MODE_CONNECTOR_LVDS);
-		if (ret < 0) {
-			drm_err(drm_dev,
-				"failed to initialize connector: %d\n", ret);
+		lvds->bridge = drm_panel_bridge_add_typed(lvds->panel, DRM_MODE_CONNECTOR_LVDS);
+		drm_panel_put(lvds->panel);
+		lvds->panel = NULL;
+		if (IS_ERR(lvds->bridge)) {
+			ret = PTR_ERR(lvds->bridge);
 			goto err_free_encoder;
 		}
+	}
 
-		drm_connector_helper_add(connector,
-					 &rockchip_lvds_connector_helper_funcs);
-	} else {
-		ret = drm_bridge_attach(encoder, lvds->bridge, NULL,
-					DRM_BRIDGE_ATTACH_NO_CONNECTOR);
+	if (lvds->bridge) {
+		lvds->bridge->driver_private = lvds;
+		lvds->bridge->ops = DRM_BRIDGE_OP_MODES;
+		lvds->bridge->funcs = &rockchip_lvds_bridge_funcs;
+
+		ret = drm_bridge_attach(encoder, lvds->bridge, NULL, DRM_BRIDGE_ATTACH_NO_CONNECTOR);
 		if (ret)
-			goto err_free_encoder;
+			goto err_free_bridge;
 
 		connector = drm_bridge_connector_init(lvds->drm_dev, encoder);
 		if (IS_ERR(connector)) {
@@ -633,14 +633,8 @@ static int rockchip_lvds_bind(struct device *dev, struct device *master,
 				"failed to initialize bridge connector: %pe\n",
 				connector);
 			ret = PTR_ERR(connector);
-			goto err_free_encoder;
+			goto err_free_bridge;
 		}
-	}
-
-	ret = drm_connector_attach_encoder(connector, encoder);
-	if (ret < 0) {
-		drm_err(drm_dev, "failed to attach encoder: %d\n", ret);
-		goto err_free_connector;
 	}
 
 	pm_runtime_enable(dev);
@@ -649,11 +643,13 @@ static int rockchip_lvds_bind(struct device *dev, struct device *master,
 
 	return 0;
 
-err_free_connector:
-	drm_connector_cleanup(connector);
+err_free_bridge:
+	drm_panel_bridge_remove(lvds->bridge);
 err_free_encoder:
 	drm_encoder_cleanup(encoder);
 err_put_remote:
+	if (lvds->panel)
+		drm_panel_put(lvds->panel);
 	of_node_put(remote);
 err_put_port:
 	of_node_put(port);
@@ -670,8 +666,6 @@ static void rockchip_lvds_unbind(struct device *dev, struct device *master,
 	encoder_funcs = lvds->soc_data->helper_funcs;
 	encoder_funcs->disable(&lvds->encoder.encoder);
 	pm_runtime_disable(dev);
-	drm_connector_cleanup(&lvds->connector);
-	drm_encoder_cleanup(&lvds->encoder.encoder);
 }
 
 static const struct component_ops rockchip_lvds_component_ops = {

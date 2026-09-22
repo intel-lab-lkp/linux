@@ -23,8 +23,7 @@ static inline bool __must_check rdrand_long(unsigned long *v)
 	unsigned int retry = RDRAND_RETRY_LOOPS;
 	do {
 		asm volatile("rdrand %[out]"
-			     CC_SET(c)
-			     : CC_OUT(c) (ok), [out] "=r" (*v));
+			     : "=@ccc" (ok), [out] "=r" (*v));
 		if (ok)
 			return true;
 	} while (--retry);
@@ -35,8 +34,7 @@ static inline bool __must_check rdseed_long(unsigned long *v)
 {
 	bool ok;
 	asm volatile("rdseed %[out]"
-		     CC_SET(c)
-		     : CC_OUT(c) (ok), [out] "=r" (*v));
+		     : "=@ccc" (ok), [out] "=r" (*v));
 	return ok;
 }
 
@@ -47,12 +45,12 @@ static inline bool __must_check rdseed_long(unsigned long *v)
 
 static inline size_t __must_check arch_get_random_longs(unsigned long *v, size_t max_longs)
 {
-	return max_longs && static_cpu_has(X86_FEATURE_RDRAND) && rdrand_long(v) ? 1 : 0;
+	return max_longs && cpu_feature_enabled(X86_FEATURE_RDRAND) && rdrand_long(v) ? 1 : 0;
 }
 
 static inline size_t __must_check arch_get_random_seed_longs(unsigned long *v, size_t max_longs)
 {
-	return max_longs && static_cpu_has(X86_FEATURE_RDSEED) && rdseed_long(v) ? 1 : 0;
+	return max_longs && cpu_feature_enabled(X86_FEATURE_RDSEED) && rdseed_long(v) ? 1 : 0;
 }
 
 #ifndef CONFIG_UML

@@ -336,7 +336,8 @@ static const struct backlight_ops ps8622_backlight_ops = {
 	.update_status	= ps8622_backlight_update,
 };
 
-static void ps8622_pre_enable(struct drm_bridge *bridge)
+static void ps8622_pre_enable(struct drm_bridge *bridge,
+			      struct drm_atomic_commit *commit)
 {
 	struct ps8622_bridge *ps8622 = bridge_to_ps8622(bridge);
 	int ret;
@@ -381,13 +382,15 @@ static void ps8622_pre_enable(struct drm_bridge *bridge)
 	ps8622->enabled = true;
 }
 
-static void ps8622_disable(struct drm_bridge *bridge)
+static void ps8622_disable(struct drm_bridge *bridge,
+			   struct drm_atomic_commit *commit)
 {
 	/* Delay after panel is disabled */
 	msleep(PS8622_PWMO_END_T12_MS);
 }
 
-static void ps8622_post_disable(struct drm_bridge *bridge)
+static void ps8622_post_disable(struct drm_bridge *bridge,
+				struct drm_atomic_commit *commit)
 {
 	struct ps8622_bridge *ps8622 = bridge_to_ps8622(bridge);
 
@@ -428,9 +431,12 @@ static int ps8622_attach(struct drm_bridge *bridge,
 }
 
 static const struct drm_bridge_funcs ps8622_bridge_funcs = {
-	.pre_enable = ps8622_pre_enable,
-	.disable = ps8622_disable,
-	.post_disable = ps8622_post_disable,
+	.atomic_create_state = drm_atomic_helper_bridge_create_state,
+	.atomic_destroy_state = drm_atomic_helper_bridge_destroy_state,
+	.atomic_duplicate_state = drm_atomic_helper_bridge_duplicate_state,
+	.atomic_pre_enable = ps8622_pre_enable,
+	.atomic_disable = ps8622_disable,
+	.atomic_post_disable = ps8622_post_disable,
 	.attach = ps8622_attach,
 };
 
@@ -449,9 +455,10 @@ static int ps8622_probe(struct i2c_client *client)
 	struct drm_bridge *panel_bridge;
 	int ret;
 
-	ps8622 = devm_kzalloc(dev, sizeof(*ps8622), GFP_KERNEL);
-	if (!ps8622)
-		return -ENOMEM;
+	ps8622 = devm_drm_bridge_alloc(dev, struct ps8622_bridge, bridge,
+				       &ps8622_bridge_funcs);
+	if (IS_ERR(ps8622))
+		return PTR_ERR(ps8622);
 
 	panel_bridge = devm_drm_of_get_bridge(dev, dev->of_node, 0, 0);
 	if (IS_ERR(panel_bridge))
@@ -509,7 +516,6 @@ static int ps8622_probe(struct i2c_client *client)
 		ps8622->bl->props.brightness = PS8622_MAX_BRIGHTNESS;
 	}
 
-	ps8622->bridge.funcs = &ps8622_bridge_funcs;
 	ps8622->bridge.type = DRM_MODE_CONNECTOR_LVDS;
 	ps8622->bridge.of_node = dev->of_node;
 	drm_bridge_add(&ps8622->bridge);
@@ -528,10 +534,10 @@ static void ps8622_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id ps8622_i2c_table[] = {
-	/* Device type, max_lane_count */
-	{"ps8622", 1},
-	{"ps8625", 2},
-	{},
+	/* Device type, driver_data holds the maximal lane_count */
+	{ .name = "ps8622", .driver_data = 1 },
+	{ .name = "ps8625", .driver_data = 2 },
+	{ }
 };
 MODULE_DEVICE_TABLE(i2c, ps8622_i2c_table);
 

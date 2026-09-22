@@ -18,8 +18,7 @@
 static int orangefs_create(struct mnt_idmap *idmap,
 			struct inode *dir,
 			struct dentry *dentry,
-			umode_t mode,
-			bool exclusive)
+			umode_t mode)
 {
 	struct orangefs_inode_s *parent = ORANGEFS_I(dir);
 	struct orangefs_kernel_op_s *new_op;
@@ -38,8 +37,7 @@ static int orangefs_create(struct mnt_idmap *idmap,
 
 	new_op->upcall.req.create.parent_refn = parent->refn;
 
-	fill_default_sys_attrs(new_op->upcall.req.create.attributes,
-			       ORANGEFS_TYPE_METAFILE, mode);
+	fill_default_sys_attrs(new_op->upcall.req.create.attributes, mode);
 
 	strscpy(new_op->upcall.req.create.d_name, dentry->d_name.name);
 
@@ -240,9 +238,7 @@ static int orangefs_symlink(struct mnt_idmap *idmap,
 
 	new_op->upcall.req.sym.parent_refn = parent->refn;
 
-	fill_default_sys_attrs(new_op->upcall.req.sym.attributes,
-			       ORANGEFS_TYPE_SYMLINK,
-			       mode);
+	fill_default_sys_attrs(new_op->upcall.req.sym.attributes, mode);
 
 	strscpy(new_op->upcall.req.sym.entry_name, dentry->d_name.name);
 	strscpy(new_op->upcall.req.sym.target, symname);
@@ -316,8 +312,7 @@ static struct dentry *orangefs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 
 	new_op->upcall.req.mkdir.parent_refn = parent->refn;
 
-	fill_default_sys_attrs(new_op->upcall.req.mkdir.attributes,
-			      ORANGEFS_TYPE_DIRECTORY, mode);
+	fill_default_sys_attrs(new_op->upcall.req.mkdir.attributes, mode);
 
 	strscpy(new_op->upcall.req.mkdir.d_name, dentry->d_name.name);
 
@@ -337,7 +332,7 @@ static struct dentry *orangefs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 
 	ref = new_op->downcall.resp.mkdir.refn;
 
-	inode = orangefs_new_inode(dir->i_sb, dir, S_IFDIR | mode, 0, &ref);
+	inode = orangefs_new_inode(dir->i_sb, dir, mode, 0, &ref);
 	if (IS_ERR(inode)) {
 		gossip_err("*** Failed to allocate orangefs dir inode\n");
 		ret = PTR_ERR(inode);
@@ -366,7 +361,7 @@ static struct dentry *orangefs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 	__orangefs_setattr(dir, &iattr);
 out:
 	op_release(new_op);
-	return ERR_PTR(ret);
+	return ret ? ERR_PTR(ret) : NULL;
 }
 
 static int orangefs_rename(struct mnt_idmap *idmap,

@@ -38,7 +38,7 @@ union expr_data {
  * struct expr - expression
  *
  * @node:  link node for the hash table
- * @type:  expressoin type
+ * @type:  expression type
  * @val: calculated tristate value
  * @val_is_valid: indicate whether the value is valid
  * @left:  left node
@@ -145,6 +145,7 @@ struct symbol {
 #define SYMBOL_CONST      0x0001  /* symbol is const */
 #define SYMBOL_CHECK      0x0008  /* used during dependency checking */
 #define SYMBOL_VALID      0x0080  /* set when symbol.curr is calculated */
+#define SYMBOL_TRANS      0x0100  /* symbol is transitional only (not visible)*/
 #define SYMBOL_WRITE      0x0200  /* write symbol to file (KCONFIG_CONFIG) */
 #define SYMBOL_WRITTEN    0x0800  /* track info to avoid double-write to .config */
 #define SYMBOL_CHECKED    0x2000  /* used during dependency checking */
@@ -159,7 +160,7 @@ struct symbol {
 
 #define SYMBOL_MAXLENGTH	256
 
-/* A property represent the config options that can be associated
+/* A property represents the config options that can be associated
  * with a config "symbol".
  * Sample:
  * config FOO
@@ -306,6 +307,7 @@ tristate expr_calc_value(struct expr *e);
 struct expr *expr_eliminate_dups(struct expr *e);
 struct expr *expr_transform(struct expr *e);
 bool expr_contains_symbol(struct expr *dep, struct symbol *sym);
+bool expr_contains_symbol_negated(struct expr *dep, struct symbol *sym);
 bool expr_depends_symbol(struct expr *dep, struct symbol *sym);
 struct expr *expr_trans_compare(struct expr *e, enum expr_type type, struct symbol *sym);
 

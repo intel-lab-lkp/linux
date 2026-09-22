@@ -18,3 +18,21 @@ int BPF_PROG(test_spin_unlock, struct bpf_spin_lock *lock)
 {
 	return 0;
 }
+
+SEC("?fentry/__rcu_read_lock")
+int BPF_PROG(tracing_deny)
+{
+	return 0;
+}
+
+SEC("?fexit/do_exit")
+int BPF_PROG(fexit_noreturns)
+{
+	return 0;
+}
+
+SEC("?fexit/bpf_testmod_test_int128_ret")
+int BPF_PROG(fexit_int128_ret)
+{
+	return 0;
+}

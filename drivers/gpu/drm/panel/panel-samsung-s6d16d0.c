@@ -11,7 +11,6 @@
 #include <linux/gpio/consumer.h>
 #include <linux/regulator/consumer.h>
 #include <linux/delay.h>
-#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 
 struct s6d16d0 {
@@ -89,16 +88,22 @@ static int s6d16d0_prepare(struct drm_panel *panel)
 				       MIPI_DSI_DCS_TEAR_MODE_VBLANK);
 	if (ret) {
 		dev_err(s6->dev, "failed to enable vblank TE (%d)\n", ret);
-		return ret;
+		goto err_power_off;
 	}
 	/* Exit sleep mode and power on */
 	ret = mipi_dsi_dcs_exit_sleep_mode(dsi);
 	if (ret) {
 		dev_err(s6->dev, "failed to exit sleep mode (%d)\n", ret);
-		return ret;
+		goto err_power_off;
 	}
 
 	return 0;
+
+err_power_off:
+	gpiod_set_value_cansleep(s6->reset_gpio, 1);
+	regulator_disable(s6->supply);
+
+	return ret;
 }
 
 static int s6d16d0_enable(struct drm_panel *panel)
@@ -166,9 +171,11 @@ static int s6d16d0_probe(struct mipi_dsi_device *dsi)
 	struct s6d16d0 *s6;
 	int ret;
 
-	s6 = devm_kzalloc(dev, sizeof(struct s6d16d0), GFP_KERNEL);
-	if (!s6)
-		return -ENOMEM;
+	s6 = devm_drm_panel_alloc(dev, struct s6d16d0, panel,
+				  &s6d16d0_drm_funcs,
+				  DRM_MODE_CONNECTOR_DSI);
+	if (IS_ERR(s6))
+		return PTR_ERR(s6);
 
 	mipi_dsi_set_drvdata(dsi, s6);
 	s6->dev = dev;
@@ -199,9 +206,6 @@ static int s6d16d0_probe(struct mipi_dsi_device *dsi)
 			dev_err(dev, "failed to request GPIO (%d)\n", ret);
 		return ret;
 	}
-
-	drm_panel_init(&s6->panel, dev, &s6d16d0_drm_funcs,
-		       DRM_MODE_CONNECTOR_DSI);
 
 	drm_panel_add(&s6->panel);
 

@@ -10,7 +10,6 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/module.h>
-#include <linux/mod_devicetable.h>
 #include <linux/perf_event.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
@@ -538,7 +537,7 @@ static ssize_t arm_ccn_pmu_cpumask_show(struct device *dev,
 {
 	struct arm_ccn *ccn = pmu_to_arm_ccn(dev_get_drvdata(dev));
 
-	return cpumap_print_to_pagebuf(true, buf, cpumask_of(ccn->dt.cpu));
+	return sysfs_emit(buf, "%*pbl\n", cpumask_pr_args(cpumask_of(ccn->dt.cpu)));
 }
 
 static struct device_attribute arm_ccn_pmu_cpumask_attr =
@@ -565,7 +564,7 @@ module_param_named(pmu_poll_period_us, arm_ccn_pmu_poll_period_us, uint,
 
 static ktime_t arm_ccn_pmu_timer_period(void)
 {
-	return ns_to_ktime((u64)arm_ccn_pmu_poll_period_us * 1000);
+	return us_to_ktime((u64)arm_ccn_pmu_poll_period_us);
 }
 
 

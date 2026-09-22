@@ -140,7 +140,8 @@ static int sy8827n_i2c_probe(struct i2c_client *client)
 		return -EINVAL;
 	}
 
-	di->en_gpio = devm_gpiod_get_optional(dev, "enable", GPIOD_OUT_HIGH);
+	di->en_gpio = devm_gpiod_get_optional(dev, "enable",
+			GPIOD_OUT_HIGH | GPIOD_FLAGS_BIT_NONEXCLUSIVE);
 	if (IS_ERR(di->en_gpio))
 		return PTR_ERR(di->en_gpio);
 
@@ -179,8 +180,8 @@ static const struct of_device_id sy8827n_dt_ids[] = {
 MODULE_DEVICE_TABLE(of, sy8827n_dt_ids);
 
 static const struct i2c_device_id sy8827n_id[] = {
-	{ "sy8827n", },
-	{ },
+	{ .name = "sy8827n" },
+	{ }
 };
 MODULE_DEVICE_TABLE(i2c, sy8827n_id);
 

@@ -46,24 +46,24 @@
 
 #define SPINAND_RESET			0xff
 #define SPINAND_READID			0x9f
+#define SPINAND_FEATURE_ADDR		0xb0
 #define SPINAND_GET_FEATURE		0x0f
 #define SPINAND_SET_FEATURE		0x1f
+#define SPINAND_READ_CACHE		0x0b
 #define SPINAND_READ			0x13
+#define SPINAND_READ_QUAD		0xeb
+#define SPINAND_READ_MACRONIX		0x6b
 #define SPINAND_ERASE			0xd8
 #define SPINAND_WRITE_EN		0x06
 #define SPINAND_PROGRAM_EXECUTE		0x10
 #define SPINAND_PROGRAM_LOAD		0x84
+#define SPINAND_PROGRAM_LOAD_QUAD	0x34
 
+#define QUAD_WIDTH			0x4
 #define ACC_FEATURE			0xe
 #define BAD_BLOCK_MARKER_SIZE		0x2
 #define OOB_BUF_SIZE			128
 #define ecceng_to_qspi(eng)		container_of(eng, struct qpic_spi_nand, ecc_eng)
-
-struct qpic_snand_op {
-	u32 cmd_reg;
-	u32 addr1_reg;
-	u32 addr2_reg;
-};
 
 struct snandc_read_status {
 	__le32 snandc_flash;
@@ -84,7 +84,6 @@ struct qcom_ecc_stats {
 };
 
 struct qpic_ecc {
-	struct device *dev;
 	int ecc_bytes_hw;
 	int spare_bytes;
 	int bbm_size;
@@ -101,8 +100,6 @@ struct qpic_ecc {
 	u32 cfg1_raw;
 	u32 ecc_buf_cfg;
 	u32 ecc_bch_cfg;
-	u32 clrflashstatus;
-	u32 clrreadstatus;
 	bool bch_enabled;
 };
 
@@ -123,6 +120,7 @@ struct qpic_spi_nand {
 	bool oob_rw;
 	bool page_rw;
 	bool raw_rw;
+	bool quad_mode;
 };
 
 static void qcom_spi_set_read_loc_first(struct qcom_nand_controller *snandc,
@@ -216,13 +214,21 @@ static int qcom_spi_ooblayout_ecc(struct mtd_info *mtd, int section,
 	struct qcom_nand_controller *snandc = nand_to_qcom_snand(nand);
 	struct qpic_ecc *qecc = snandc->qspi->ecc;
 
-	if (section > 1)
-		return -ERANGE;
+	switch (section) {
+	case 0:
+		oobregion->offset = 0;
+		oobregion->length = qecc->bytes * (qecc->steps - 1) +
+				    qecc->bbm_size;
+		return 0;
+	case 1:
+		oobregion->offset = qecc->bytes * (qecc->steps - 1) +
+				    qecc->bbm_size +
+				    qecc->steps * 4;
+		oobregion->length = mtd->oobsize - oobregion->offset;
+		return 0;
+	}
 
-	oobregion->length = qecc->ecc_bytes_hw + qecc->spare_bytes;
-	oobregion->offset = mtd->oobsize - oobregion->length;
-
-	return 0;
+	return -ERANGE;
 }
 
 static int qcom_spi_ooblayout_free(struct mtd_info *mtd, int section,
@@ -259,7 +265,7 @@ static int qcom_spi_ecc_init_ctx_pipelined(struct nand_device *nand)
 	cwperpage = mtd->writesize / NANDC_STEP_SIZE;
 	snandc->qspi->num_cw = cwperpage;
 
-	ecc_cfg = kzalloc(sizeof(*ecc_cfg), GFP_KERNEL);
+	ecc_cfg = kzalloc_obj(*ecc_cfg);
 	if (!ecc_cfg)
 		return -ENOMEM;
 
@@ -275,6 +281,19 @@ static int qcom_spi_ecc_init_ctx_pipelined(struct nand_device *nand)
 		ecc_cfg->strength = 4;
 	}
 
+	/*
+	 * Override ECC strength based on OOB size to avoid weak ECC warning.
+	 * If OOB size is more than 128 bytes, use 8-bit ECC for better
+	 * error correction capability, which is required by chips with
+	 * larger OOB areas like Macronix SPI NAND with 256 bytes OOB.
+	 */
+	if (mtd->oobsize >= 128 && ecc_cfg->strength < 8) {
+		dev_info(snandc->dev,
+			 "Upgrading ECC strength from %d to 8 bits (OOB size: %d bytes)\n",
+			 ecc_cfg->strength, mtd->oobsize);
+		ecc_cfg->strength = 8;
+	}
+
 	if (ecc_cfg->step_size != NANDC_STEP_SIZE) {
 		dev_err(snandc->dev,
 			"only %u bytes ECC step size is supported\n",
@@ -283,9 +302,22 @@ static int qcom_spi_ecc_init_ctx_pipelined(struct nand_device *nand)
 		goto err_free_ecc_cfg;
 	}
 
-	if (ecc_cfg->strength != 4) {
+	switch (ecc_cfg->strength) {
+	case 4:
+		ecc_cfg->ecc_mode = ECC_MODE_4BIT;
+		ecc_cfg->ecc_bytes_hw = 7;
+		ecc_cfg->spare_bytes = 4;
+		break;
+
+	case 8:
+		ecc_cfg->ecc_mode = ECC_MODE_8BIT;
+		ecc_cfg->ecc_bytes_hw = 13;
+		ecc_cfg->spare_bytes = 2;
+		break;
+
+	default:
 		dev_err(snandc->dev,
-			"only 4 bits ECC strength is supported\n");
+			"only 4 or 8 bits ECC strength is supported\n");
 		ret = -EOPNOTSUPP;
 		goto err_free_ecc_cfg;
 	}
@@ -302,13 +334,11 @@ static int qcom_spi_ecc_init_ctx_pipelined(struct nand_device *nand)
 	nand->ecc.ctx.priv = ecc_cfg;
 	snandc->qspi->mtd = mtd;
 
-	ecc_cfg->ecc_bytes_hw = 7;
-	ecc_cfg->spare_bytes = 4;
 	ecc_cfg->bbm_size = 1;
 	ecc_cfg->bch_enabled = true;
 	ecc_cfg->bytes = ecc_cfg->ecc_bytes_hw + ecc_cfg->spare_bytes + ecc_cfg->bbm_size;
 
-	ecc_cfg->steps = 4;
+	ecc_cfg->steps = cwperpage;
 	ecc_cfg->cw_data = 516;
 	ecc_cfg->cw_size = ecc_cfg->cw_data + ecc_cfg->bytes;
 	bad_block_byte = mtd->writesize - ecc_cfg->cw_size * (cwperpage - 1) + 1;
@@ -365,16 +395,16 @@ static int qcom_spi_ecc_init_ctx_pipelined(struct nand_device *nand)
 			       FIELD_PREP(ECC_SW_RESET, 0) |
 			       FIELD_PREP(ECC_NUM_DATA_BYTES_MASK, ecc_cfg->cw_data) |
 			       FIELD_PREP(ECC_FORCE_CLK_OPEN, 1) |
-			       FIELD_PREP(ECC_MODE_MASK, 0) |
+			       FIELD_PREP(ECC_MODE_MASK, ecc_cfg->ecc_mode) |
 			       FIELD_PREP(ECC_PARITY_SIZE_BYTES_BCH_MASK, ecc_cfg->ecc_bytes_hw);
 
 	ecc_cfg->ecc_buf_cfg = FIELD_PREP(NUM_STEPS_MASK, 0x203);
-	ecc_cfg->clrflashstatus = FS_READY_BSY_N;
-	ecc_cfg->clrreadstatus = 0xc0;
 
 	conf->step_size = ecc_cfg->step_size;
 	conf->strength = ecc_cfg->strength;
 
+	snandc->regs->clrflashstatus = cpu_to_le32(FS_READY_BSY_N);
+	snandc->regs->clrreadstatus = cpu_to_le32(0xc0);
 	snandc->regs->erased_cw_detect_cfg_clr = cpu_to_le32(CLR_ERASED_PAGE_DET);
 	snandc->regs->erased_cw_detect_cfg_set = cpu_to_le32(SET_ERASED_PAGE_DET);
 
@@ -384,14 +414,19 @@ static int qcom_spi_ecc_init_ctx_pipelined(struct nand_device *nand)
 	return 0;
 
 err_free_ecc_cfg:
+	kfree(snandc->qspi->oob_buf);
+	snandc->qspi->oob_buf = NULL;
 	kfree(ecc_cfg);
 	return ret;
 }
 
 static void qcom_spi_ecc_cleanup_ctx_pipelined(struct nand_device *nand)
 {
+	struct qcom_nand_controller *snandc = nand_to_qcom_snand(nand);
 	struct qpic_ecc *ecc_cfg = nand_to_ecc_ctx(nand);
 
+	kfree(snandc->qspi->oob_buf);
+	snandc->qspi->oob_buf = NULL;
 	kfree(ecc_cfg);
 }
 
@@ -438,7 +473,7 @@ static int qcom_spi_ecc_finish_io_req_pipelined(struct nand_device *nand,
 		return snandc->qspi->ecc_stats.bitflips;
 }
 
-static struct nand_ecc_engine_ops qcom_spi_ecc_engine_ops_pipelined = {
+static const struct nand_ecc_engine_ops qcom_spi_ecc_engine_ops_pipelined = {
 	.init_ctx = qcom_spi_ecc_init_ctx_pipelined,
 	.cleanup_ctx = qcom_spi_ecc_cleanup_ctx_pipelined,
 	.prepare_io_req = qcom_spi_ecc_prepare_io_req_pipelined,
@@ -481,9 +516,14 @@ qcom_spi_config_cw_read(struct qcom_nand_controller *snandc, bool use_ecc, int c
 	qcom_write_reg_dma(snandc, &snandc->regs->cmd, NAND_FLASH_CMD, 1, NAND_BAM_NEXT_SGL);
 	qcom_write_reg_dma(snandc, &snandc->regs->exec, NAND_EXEC_CMD, 1, NAND_BAM_NEXT_SGL);
 
-	qcom_read_reg_dma(snandc, NAND_FLASH_STATUS, 2, 0);
-	qcom_read_reg_dma(snandc, NAND_ERASED_CW_DETECT_STATUS, 1,
-			  NAND_BAM_NEXT_SGL);
+	if (use_ecc) {
+		qcom_read_reg_dma(snandc, NAND_FLASH_STATUS, 2, 0);
+		qcom_read_reg_dma(snandc, NAND_ERASED_CW_DETECT_STATUS, 1,
+				  NAND_BAM_NEXT_SGL);
+	} else {
+		qcom_read_reg_dma(snandc, NAND_FLASH_STATUS, 1,
+				  NAND_BAM_NEXT_SGL);
+	}
 }
 
 static int qcom_spi_block_erase(struct qcom_nand_controller *snandc)
@@ -586,8 +626,6 @@ static int qcom_spi_read_last_cw(struct qcom_nand_controller *snandc,
 	snandc->regs->cfg0 = cpu_to_le32(cfg0);
 	snandc->regs->cfg1 = cpu_to_le32(cfg1);
 	snandc->regs->ecc_bch_cfg = cpu_to_le32(ecc_bch_cfg);
-	snandc->regs->clrflashstatus = cpu_to_le32(ecc_cfg->clrflashstatus);
-	snandc->regs->clrreadstatus = cpu_to_le32(ecc_cfg->clrreadstatus);
 	snandc->regs->exec = cpu_to_le32(1);
 
 	qcom_spi_set_read_loc(snandc, num_cw - 1, 0, 0, ecc_cfg->cw_size, 1);
@@ -608,10 +646,16 @@ static int qcom_spi_read_last_cw(struct qcom_nand_controller *snandc,
 
 	bbpos = mtd->writesize - ecc_cfg->cw_size * (num_cw - 1);
 
-	if (snandc->data_buffer[bbpos] == 0xff)
-		snandc->data_buffer[bbpos + 1] = 0xff;
-	if (snandc->data_buffer[bbpos] != 0xff)
-		snandc->data_buffer[bbpos + 1] = snandc->data_buffer[bbpos];
+	/*
+	 * TODO: The SPINAND code expects two bad block marker bytes
+	 * at the beginning of the OOB area, but the OOB layout used by
+	 * the driver has only one. Duplicate that for now in order to
+	 * avoid certain blocks to be marked as bad.
+	 *
+	 * This can be removed once single-byte bad block marker support
+	 * gets implemented in the SPINAND code.
+	 */
+	snandc->data_buffer[bbpos + 1] = snandc->data_buffer[bbpos];
 
 	memcpy(op->data.buf.in, snandc->data_buffer + bbpos, op->data.nbytes);
 
@@ -715,8 +759,6 @@ static int qcom_spi_read_cw_raw(struct qcom_nand_controller *snandc, u8 *data_bu
 	snandc->regs->cfg0 = cpu_to_le32(cfg0);
 	snandc->regs->cfg1 = cpu_to_le32(cfg1);
 	snandc->regs->ecc_bch_cfg = cpu_to_le32(ecc_bch_cfg);
-	snandc->regs->clrflashstatus = cpu_to_le32(ecc_cfg->clrflashstatus);
-	snandc->regs->clrreadstatus = cpu_to_le32(ecc_cfg->clrreadstatus);
 	snandc->regs->exec = cpu_to_le32(1);
 
 	qcom_spi_set_read_loc(snandc, raw_cw, 0, 0, ecc_cfg->cw_size, 1);
@@ -831,11 +873,7 @@ static int qcom_spi_read_page_ecc(struct qcom_nand_controller *snandc,
 	snandc->regs->cfg0 = cpu_to_le32(cfg0);
 	snandc->regs->cfg1 = cpu_to_le32(cfg1);
 	snandc->regs->ecc_bch_cfg = cpu_to_le32(ecc_bch_cfg);
-	snandc->regs->clrflashstatus = cpu_to_le32(ecc_cfg->clrflashstatus);
-	snandc->regs->clrreadstatus = cpu_to_le32(ecc_cfg->clrreadstatus);
 	snandc->regs->exec = cpu_to_le32(1);
-
-	qcom_spi_set_read_loc(snandc, 0, 0, 0, ecc_cfg->cw_data, 1);
 
 	qcom_clear_bam_transaction(snandc);
 
@@ -851,7 +889,7 @@ static int qcom_spi_read_page_ecc(struct qcom_nand_controller *snandc,
 		int data_size, oob_size;
 
 		if (i == (num_cw - 1)) {
-			data_size = 512 - ((num_cw - 1) << 2);
+			data_size = NANDC_STEP_SIZE - ((num_cw - 1) << 2);
 			oob_size = (num_cw << 2) + ecc_cfg->ecc_bytes_hw +
 				    ecc_cfg->spare_bytes;
 		} else {
@@ -924,11 +962,7 @@ static int qcom_spi_read_page_oob(struct qcom_nand_controller *snandc,
 	snandc->regs->cfg0 = cpu_to_le32(cfg0);
 	snandc->regs->cfg1 = cpu_to_le32(cfg1);
 	snandc->regs->ecc_bch_cfg = cpu_to_le32(ecc_bch_cfg);
-	snandc->regs->clrflashstatus = cpu_to_le32(ecc_cfg->clrflashstatus);
-	snandc->regs->clrreadstatus = cpu_to_le32(ecc_cfg->clrreadstatus);
 	snandc->regs->exec = cpu_to_le32(1);
-
-	qcom_spi_set_read_loc(snandc, 0, 0, 0, ecc_cfg->cw_data, 1);
 
 	qcom_write_reg_dma(snandc, &snandc->regs->addr0, NAND_ADDR0, 2, 0);
 	qcom_write_reg_dma(snandc, &snandc->regs->cfg0, NAND_DEV0_CFG0, 3, 0);
@@ -977,9 +1011,80 @@ static int qcom_spi_read_page_oob(struct qcom_nand_controller *snandc,
 	return qcom_spi_check_error(snandc);
 }
 
+static int qcom_spi_cmd_mapping(struct qcom_nand_controller *snandc,
+				const struct spi_mem_op *op, u32 *cmd)
+{
+	u32 opcode = op->cmd.opcode;
+	u32 transfer_mode = SPI_TRANSFER_MODE_x1;
+
+	if (snandc->qspi->quad_mode && op->data.buswidth == QUAD_WIDTH)
+		transfer_mode = SPI_TRANSFER_MODE_x4;
+
+	switch (opcode) {
+	case SPINAND_RESET:
+		*cmd = (SPI_WP | SPI_HOLD | SPI_TRANSFER_MODE_x1 | OP_RESET_DEVICE);
+		break;
+	case SPINAND_READID:
+		*cmd = (SPI_WP | SPI_HOLD | SPI_TRANSFER_MODE_x1 | OP_FETCH_ID);
+		break;
+	case SPINAND_GET_FEATURE:
+		*cmd = (SPI_TRANSFER_MODE_x1 | SPI_WP | SPI_HOLD | ACC_FEATURE);
+		break;
+	case SPINAND_SET_FEATURE:
+		*cmd = (SPI_TRANSFER_MODE_x1 | SPI_WP | SPI_HOLD | ACC_FEATURE |
+			QPIC_SET_FEATURE);
+		break;
+	case SPINAND_READ:
+	case SPINAND_READ_QUAD:
+	case SPINAND_READ_CACHE:
+	case SPINAND_READ_MACRONIX:
+		if (snandc->qspi->raw_rw) {
+			*cmd = (PAGE_ACC | LAST_PAGE | transfer_mode |
+					SPI_WP | SPI_HOLD | OP_PAGE_READ);
+		} else {
+			*cmd = (PAGE_ACC | LAST_PAGE | transfer_mode |
+					SPI_WP | SPI_HOLD | OP_PAGE_READ_WITH_ECC);
+		}
+
+		break;
+	case SPINAND_ERASE:
+		*cmd = OP_BLOCK_ERASE | PAGE_ACC | LAST_PAGE | SPI_WP |
+			SPI_HOLD | SPI_TRANSFER_MODE_x1;
+		break;
+	case SPINAND_WRITE_EN:
+		*cmd = SPINAND_WRITE_EN;
+		break;
+	case SPINAND_PROGRAM_EXECUTE:
+		*cmd = (PAGE_ACC | LAST_PAGE | transfer_mode |
+			SPI_WP | SPI_HOLD | OP_PROGRAM_PAGE);
+		break;
+	case SPINAND_PROGRAM_LOAD:
+		*cmd = SPINAND_PROGRAM_LOAD;
+		break;
+	case SPINAND_PROGRAM_LOAD_QUAD:
+		*cmd = SPINAND_PROGRAM_LOAD_QUAD;
+		break;
+	default:
+		dev_err(snandc->dev, "Opcode not supported: %u\n", opcode);
+		return -EOPNOTSUPP;
+	}
+
+	return 0;
+}
+
 static int qcom_spi_read_page(struct qcom_nand_controller *snandc,
 			      const struct spi_mem_op *op)
 {
+	int ret;
+	u32 cmd;
+
+	/* Update the cached command for the cache-read opcode and bus width. */
+	ret = qcom_spi_cmd_mapping(snandc, op, &cmd);
+	if (ret < 0)
+		return ret;
+
+	snandc->qspi->cmd = cpu_to_le32(cmd);
+
 	if (snandc->qspi->page_rw && snandc->qspi->raw_rw)
 		return qcom_spi_read_page_raw(snandc, op);
 
@@ -1045,8 +1150,6 @@ static int qcom_spi_program_raw(struct qcom_nand_controller *snandc,
 	snandc->regs->cfg0 = cpu_to_le32(cfg0);
 	snandc->regs->cfg1 = cpu_to_le32(cfg1);
 	snandc->regs->ecc_bch_cfg = cpu_to_le32(ecc_bch_cfg);
-	snandc->regs->clrflashstatus = cpu_to_le32(ecc_cfg->clrflashstatus);
-	snandc->regs->clrreadstatus = cpu_to_le32(ecc_cfg->clrreadstatus);
 	snandc->regs->exec = cpu_to_le32(1);
 
 	qcom_spi_config_page_write(snandc);
@@ -1185,7 +1288,7 @@ static int qcom_spi_program_oob(struct qcom_nand_controller *snandc,
 	u32 cfg0, cfg1, ecc_bch_cfg, ecc_buf_cfg;
 
 	cfg0 = (ecc_cfg->cfg0 & ~CW_PER_PAGE_MASK) |
-	       FIELD_PREP(CW_PER_PAGE_MASK, num_cw - 1);
+	       FIELD_PREP(CW_PER_PAGE_MASK, 0);
 	cfg1 = ecc_cfg->cfg1;
 	ecc_bch_cfg = ecc_cfg->ecc_bch_cfg;
 	ecc_buf_cfg = ecc_cfg->ecc_buf_cfg;
@@ -1243,65 +1346,18 @@ static int qcom_spi_program_execute(struct qcom_nand_controller *snandc,
 	return 0;
 }
 
-static int qcom_spi_cmd_mapping(struct qcom_nand_controller *snandc, u32 opcode, u32 *cmd)
-{
-	switch (opcode) {
-	case SPINAND_RESET:
-		*cmd = (SPI_WP | SPI_HOLD | SPI_TRANSFER_MODE_x1 | OP_RESET_DEVICE);
-		break;
-	case SPINAND_READID:
-		*cmd = (SPI_WP | SPI_HOLD | SPI_TRANSFER_MODE_x1 | OP_FETCH_ID);
-		break;
-	case SPINAND_GET_FEATURE:
-		*cmd = (SPI_TRANSFER_MODE_x1 | SPI_WP | SPI_HOLD | ACC_FEATURE);
-		break;
-	case SPINAND_SET_FEATURE:
-		*cmd = (SPI_TRANSFER_MODE_x1 | SPI_WP | SPI_HOLD | ACC_FEATURE |
-			QPIC_SET_FEATURE);
-		break;
-	case SPINAND_READ:
-		if (snandc->qspi->raw_rw) {
-			*cmd = (PAGE_ACC | LAST_PAGE | SPI_TRANSFER_MODE_x1 |
-					SPI_WP | SPI_HOLD | OP_PAGE_READ);
-		} else {
-			*cmd = (PAGE_ACC | LAST_PAGE | SPI_TRANSFER_MODE_x1 |
-					SPI_WP | SPI_HOLD | OP_PAGE_READ_WITH_ECC);
-		}
-
-		break;
-	case SPINAND_ERASE:
-		*cmd = OP_BLOCK_ERASE | PAGE_ACC | LAST_PAGE | SPI_WP |
-			SPI_HOLD | SPI_TRANSFER_MODE_x1;
-		break;
-	case SPINAND_WRITE_EN:
-		*cmd = SPINAND_WRITE_EN;
-		break;
-	case SPINAND_PROGRAM_EXECUTE:
-		*cmd = (PAGE_ACC | LAST_PAGE | SPI_TRANSFER_MODE_x1 |
-				SPI_WP | SPI_HOLD | OP_PROGRAM_PAGE);
-		break;
-	case SPINAND_PROGRAM_LOAD:
-		*cmd = SPINAND_PROGRAM_LOAD;
-		break;
-	default:
-		dev_err(snandc->dev, "Opcode not supported: %u\n", opcode);
-		return -EOPNOTSUPP;
-	}
-
-	return 0;
-}
-
 static int qcom_spi_write_page(struct qcom_nand_controller *snandc,
 			       const struct spi_mem_op *op)
 {
 	int ret;
 	u32 cmd;
 
-	ret = qcom_spi_cmd_mapping(snandc, op->cmd.opcode, &cmd);
+	ret = qcom_spi_cmd_mapping(snandc, op, &cmd);
 	if (ret < 0)
 		return ret;
 
-	if (op->cmd.opcode == SPINAND_PROGRAM_LOAD)
+	if (op->cmd.opcode == SPINAND_PROGRAM_LOAD ||
+	    op->cmd.opcode == SPINAND_PROGRAM_LOAD_QUAD)
 		snandc->qspi->data_buf = (u8 *)op->data.buf.out;
 
 	return 0;
@@ -1310,17 +1366,12 @@ static int qcom_spi_write_page(struct qcom_nand_controller *snandc,
 static int qcom_spi_send_cmdaddr(struct qcom_nand_controller *snandc,
 				 const struct spi_mem_op *op)
 {
-	struct qpic_snand_op s_op = {};
 	u32 cmd;
 	int ret, opcode;
 
-	ret = qcom_spi_cmd_mapping(snandc, op->cmd.opcode, &cmd);
+	ret = qcom_spi_cmd_mapping(snandc, op, &cmd);
 	if (ret < 0)
 		return ret;
-
-	s_op.cmd_reg = cmd;
-	s_op.addr1_reg = op->addr.val;
-	s_op.addr2_reg = 0;
 
 	opcode = op->cmd.opcode;
 
@@ -1328,24 +1379,18 @@ static int qcom_spi_send_cmdaddr(struct qcom_nand_controller *snandc,
 	case SPINAND_WRITE_EN:
 		return 0;
 	case SPINAND_PROGRAM_EXECUTE:
-		s_op.addr1_reg = op->addr.val << 16;
-		s_op.addr2_reg = op->addr.val >> 16 & 0xff;
-		snandc->qspi->addr1 = cpu_to_le32(s_op.addr1_reg);
-		snandc->qspi->addr2 = cpu_to_le32(s_op.addr2_reg);
+		snandc->qspi->addr1 = cpu_to_le32(op->addr.val << 16);
+		snandc->qspi->addr2 = cpu_to_le32(op->addr.val >> 16 & 0xff);
 		snandc->qspi->cmd = cpu_to_le32(cmd);
 		return qcom_spi_program_execute(snandc, op);
 	case SPINAND_READ:
-		s_op.addr1_reg = (op->addr.val << 16);
-		s_op.addr2_reg = op->addr.val >> 16 & 0xff;
-		snandc->qspi->addr1 = cpu_to_le32(s_op.addr1_reg);
-		snandc->qspi->addr2 = cpu_to_le32(s_op.addr2_reg);
+		snandc->qspi->addr1 = cpu_to_le32(op->addr.val << 16);
+		snandc->qspi->addr2 = cpu_to_le32(op->addr.val >> 16 & 0xff);
 		snandc->qspi->cmd = cpu_to_le32(cmd);
 		return 0;
 	case SPINAND_ERASE:
-		s_op.addr2_reg = (op->addr.val >> 16) & 0xffff;
-		s_op.addr1_reg = op->addr.val;
-		snandc->qspi->addr1 = cpu_to_le32(s_op.addr1_reg << 16);
-		snandc->qspi->addr2 = cpu_to_le32(s_op.addr2_reg);
+		snandc->qspi->addr1 = cpu_to_le32(op->addr.val << 16);
+		snandc->qspi->addr2 = cpu_to_le32(op->addr.val >> 16 & 0xffff);
 		snandc->qspi->cmd = cpu_to_le32(cmd);
 		return qcom_spi_block_erase(snandc);
 	default:
@@ -1357,10 +1402,26 @@ static int qcom_spi_send_cmdaddr(struct qcom_nand_controller *snandc,
 	qcom_clear_read_regs(snandc);
 	qcom_clear_bam_transaction(snandc);
 
-	snandc->regs->cmd = cpu_to_le32(s_op.cmd_reg);
+	snandc->regs->cmd = cpu_to_le32(cmd);
 	snandc->regs->exec = cpu_to_le32(1);
-	snandc->regs->addr0 = cpu_to_le32(s_op.addr1_reg);
-	snandc->regs->addr1 = cpu_to_le32(s_op.addr2_reg);
+	snandc->regs->addr0 = cpu_to_le32(op->addr.val);
+	snandc->regs->addr1 = cpu_to_le32(0);
+
+	/*
+	 * The feature value has to reach NAND_FLASH_FEATURES before the
+	 * command is executed, otherwise the controller programs the chip
+	 * with whatever the register happened to hold from a previous
+	 * operation.
+	 */
+	if (opcode == SPINAND_SET_FEATURE) {
+		u32 ftr = 0;
+
+		memcpy(&ftr, op->data.buf.out,
+		       min_t(size_t, op->data.nbytes, sizeof(ftr)));
+		snandc->regs->flash_feature = cpu_to_le32(ftr);
+		qcom_write_reg_dma(snandc, &snandc->regs->flash_feature,
+				   NAND_FLASH_FEATURES, 1, NAND_BAM_NEXT_SGL);
+	}
 
 	qcom_write_reg_dma(snandc, &snandc->regs->cmd, NAND_FLASH_CMD, 3, NAND_BAM_NEXT_SGL);
 	qcom_write_reg_dma(snandc, &snandc->regs->exec, NAND_EXEC_CMD, 1, NAND_BAM_NEXT_SGL);
@@ -1399,10 +1460,8 @@ static int qcom_spi_io_op(struct qcom_nand_controller *snandc, const struct spi_
 		copy_ftr = true;
 		break;
 	case SPINAND_SET_FEATURE:
-		snandc->regs->flash_feature = cpu_to_le32(*(u32 *)op->data.buf.out);
-		qcom_write_reg_dma(snandc, &snandc->regs->flash_feature,
-				   NAND_FLASH_FEATURES, 1, NAND_BAM_NEXT_SGL);
-		break;
+		/* fully handled by qcom_spi_send_cmdaddr() */
+		return 0;
 	case SPINAND_PROGRAM_EXECUTE:
 	case SPINAND_WRITE_EN:
 	case SPINAND_RESET:
@@ -1429,6 +1488,22 @@ static int qcom_spi_io_op(struct qcom_nand_controller *snandc, const struct spi_
 		val = le32_to_cpu(*(__le32 *)snandc->reg_read_buf);
 		val >>= 8;
 		memcpy(op->data.buf.in, &val, snandc->buf_count);
+
+		/*
+		 * Track QUAD mode state from configuration register.
+		 * When core layer reads register 0xB0 (CFG), check if
+		 * QUAD enable bit (bit 0) is set and update our state
+		 * accordingly for future READ/WRITE operations.
+		 */
+		if (op->addr.val == SPINAND_FEATURE_ADDR) {
+			bool quad_enabled = !!((u8)val & BIT(0));
+
+			if (snandc->qspi->quad_mode != quad_enabled) {
+				snandc->qspi->quad_mode = quad_enabled;
+				dev_info(snandc->dev, "SPI NAND QUAD mode: %s\n",
+					 quad_enabled ? "enabled" : "disabled");
+			}
+		}
 	}
 
 	return 0;
@@ -1469,7 +1544,8 @@ static bool qcom_spi_supports_op(struct spi_mem *mem, const struct spi_mem_op *o
 
 	return ((!op->addr.nbytes || op->addr.buswidth == 1) &&
 		(!op->dummy.nbytes || op->dummy.buswidth == 1) &&
-		(!op->data.nbytes || op->data.buswidth == 1));
+		(!op->data.nbytes || op->data.buswidth == 1 ||
+		 op->data.buswidth == 4));
 }
 
 static int qcom_spi_exec_op(struct spi_mem *mem, const struct spi_mem_op *op)
@@ -1520,6 +1596,9 @@ static int qcom_spi_probe(struct platform_device *pdev)
 	if (!qspi)
 		return -ENOMEM;
 
+	/* Initialize QUAD mode state */
+	qspi->quad_mode = false;
+
 	ctlr = __devm_spi_alloc_controller(dev, sizeof(*snandc), false);
 	if (!ctlr)
 		return -ENOMEM;
@@ -1541,17 +1620,16 @@ static int qcom_spi_probe(struct platform_device *pdev)
 	}
 
 	snandc->props = dev_data;
-	snandc->dev = &pdev->dev;
 
-	snandc->core_clk = devm_clk_get(dev, "core");
+	snandc->core_clk = devm_clk_get_enabled(dev, "core");
 	if (IS_ERR(snandc->core_clk))
 		return PTR_ERR(snandc->core_clk);
 
-	snandc->aon_clk = devm_clk_get(dev, "aon");
+	snandc->aon_clk = devm_clk_get_enabled(dev, "aon");
 	if (IS_ERR(snandc->aon_clk))
 		return PTR_ERR(snandc->aon_clk);
 
-	snandc->qspi->iomacro_clk = devm_clk_get(dev, "iom");
+	snandc->qspi->iomacro_clk = devm_clk_get_enabled(dev, "iom");
 	if (IS_ERR(snandc->qspi->iomacro_clk))
 		return PTR_ERR(snandc->qspi->iomacro_clk);
 
@@ -1564,18 +1642,6 @@ static int qcom_spi_probe(struct platform_device *pdev)
 					    DMA_BIDIRECTIONAL, 0);
 	if (dma_mapping_error(dev, snandc->base_dma))
 		return -ENXIO;
-
-	ret = clk_prepare_enable(snandc->core_clk);
-	if (ret)
-		goto err_dis_core_clk;
-
-	ret = clk_prepare_enable(snandc->aon_clk);
-	if (ret)
-		goto err_dis_aon_clk;
-
-	ret = clk_prepare_enable(snandc->qspi->iomacro_clk);
-	if (ret)
-		goto err_dis_iom_clk;
 
 	ret = qcom_nandc_alloc(snandc);
 	if (ret)
@@ -1600,27 +1666,22 @@ static int qcom_spi_probe(struct platform_device *pdev)
 	ctlr->num_chipselect = QPIC_QSPI_NUM_CS;
 	ctlr->mem_ops = &qcom_spi_mem_ops;
 	ctlr->mem_caps = &qcom_spi_mem_caps;
-	ctlr->dev.of_node = pdev->dev.of_node;
 	ctlr->mode_bits = SPI_TX_DUAL | SPI_RX_DUAL |
 			    SPI_TX_QUAD | SPI_RX_QUAD;
 
 	ret = spi_register_controller(ctlr);
 	if (ret) {
 		dev_err(&pdev->dev, "spi_register_controller failed.\n");
-		goto err_spi_init;
+		goto err_register_controller;
 	}
 
 	return 0;
 
+err_register_controller:
+	nand_ecc_unregister_on_host_hw_engine(&snandc->qspi->ecc_eng);
 err_spi_init:
 	qcom_nandc_unalloc(snandc);
 err_snand_alloc:
-	clk_disable_unprepare(snandc->qspi->iomacro_clk);
-err_dis_iom_clk:
-	clk_disable_unprepare(snandc->aon_clk);
-err_dis_aon_clk:
-	clk_disable_unprepare(snandc->core_clk);
-err_dis_core_clk:
 	dma_unmap_resource(dev, res->start, resource_size(res),
 			   DMA_BIDIRECTIONAL, 0);
 	return ret;
@@ -1633,13 +1694,8 @@ static void qcom_spi_remove(struct platform_device *pdev)
 	struct resource *res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 
 	spi_unregister_controller(ctlr);
-
+	nand_ecc_unregister_on_host_hw_engine(&snandc->qspi->ecc_eng);
 	qcom_nandc_unalloc(snandc);
-
-	clk_disable_unprepare(snandc->aon_clk);
-	clk_disable_unprepare(snandc->core_clk);
-	clk_disable_unprepare(snandc->qspi->iomacro_clk);
-
 	dma_unmap_resource(&pdev->dev, snandc->base_dma, resource_size(res),
 			   DMA_BIDIRECTIONAL, 0);
 }
@@ -1672,4 +1728,3 @@ module_platform_driver(qcom_spi_driver);
 MODULE_DESCRIPTION("SPI driver for QPIC QSPI cores");
 MODULE_AUTHOR("Md Sadre Alam <quic_mdalam@quicinc.com>");
 MODULE_LICENSE("GPL");
-

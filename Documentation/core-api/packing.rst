@@ -319,7 +319,7 @@ Here is an example of how to use the fields APIs:
 
    #define SIZE 13
 
-   typdef struct __packed { u8 buf[SIZE]; } packed_buf_t;
+   typedef struct __packed { u8 buf[SIZE]; } packed_buf_t;
 
    static const struct packed_field_u8 fields[] = {
            PACKED_FIELD(100, 90, struct data, field1),
@@ -330,7 +330,7 @@ Here is an example of how to use the fields APIs:
 
    void unpack_your_data(const packed_buf_t *buf, struct data *unpacked)
    {
-           BUILD_BUG_ON(sizeof(*buf) != SIZE;
+           BUILD_BUG_ON(sizeof(*buf) != SIZE);
 
            unpack_fields(buf, sizeof(*buf), unpacked, fields,
                          QUIRK_LITTLE_ENDIAN);
@@ -338,7 +338,7 @@ Here is an example of how to use the fields APIs:
 
    void pack_your_data(const struct data *unpacked, packed_buf_t *buf)
    {
-           BUILD_BUG_ON(sizeof(*buf) != SIZE;
+           BUILD_BUG_ON(sizeof(*buf) != SIZE);
 
            pack_fields(buf, sizeof(*buf), unpacked, fields,
                        QUIRK_LITTLE_ENDIAN);

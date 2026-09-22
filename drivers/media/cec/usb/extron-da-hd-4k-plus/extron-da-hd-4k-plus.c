@@ -19,6 +19,7 @@
 #include <linux/completion.h>
 #include <linux/ctype.h>
 #include <linux/delay.h>
+#include <linux/hex.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
@@ -28,7 +29,7 @@
 
 #include "extron-da-hd-4k-plus.h"
 
-MODULE_AUTHOR("Hans Verkuil <hansverk@cisco.com>");
+MODULE_AUTHOR("Hans Verkuil <hverkuil@kernel.org>");
 MODULE_DESCRIPTION("Extron DA HD 4K PLUS HDMI CEC driver");
 MODULE_LICENSE("GPL");
 
@@ -656,7 +657,8 @@ static void extron_process_received(struct extron_port *port, const char *data)
 	if (!port || port->disconnected)
 		return;
 
-	if (len < 5 || (len - 2) % 3 || data[len - 2] != '*')
+	if (len < 5 || ((len - 2) / 3 > sizeof(msg.msg)) ||
+	    (len - 2) % 3 || data[len - 2] != '*')
 		goto malformed;
 
 	while (*data != '*') {
@@ -1252,7 +1254,7 @@ static int extron_s_output(struct file *file, void *priv, unsigned int o)
 	return o ? -EINVAL : 0;
 }
 
-static int extron_g_edid(struct file *file, void *_fh,
+static int extron_g_edid(struct file *file, void *priv,
 			 struct v4l2_edid *edid)
 {
 	struct extron_port *port = video_drvdata(file);
@@ -1280,7 +1282,7 @@ static int extron_g_edid(struct file *file, void *_fh,
 	return 0;
 }
 
-static int extron_s_edid(struct file *file, void *_fh, struct v4l2_edid *edid)
+static int extron_s_edid(struct file *file, void *priv, struct v4l2_edid *edid)
 {
 	struct extron_port *port = video_drvdata(file);
 
@@ -1493,7 +1495,7 @@ static int extron_setup(struct extron *extron)
 
 		if (vendor_id)
 			caps &= ~CEC_CAP_LOG_ADDRS;
-		port = kzalloc(sizeof(*port), GFP_KERNEL);
+		port = kzalloc_obj(*port);
 		if (!port)
 			return -ENOMEM;
 
@@ -1768,7 +1770,7 @@ static int extron_connect(struct serio *serio, struct serio_driver *drv)
 		manufacturer_name[0] = 0;
 	}
 
-	extron = kzalloc(sizeof(*extron), GFP_KERNEL);
+	extron = kzalloc_obj(*extron);
 
 	if (!extron)
 		return -ENOMEM;

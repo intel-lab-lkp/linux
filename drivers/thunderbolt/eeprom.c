@@ -21,7 +21,7 @@ static int tb_eeprom_ctl_write(struct tb_switch *sw, struct tb_eeprom_ctl *ctl)
 }
 
 /*
- * tb_eeprom_ctl_write() - read control word
+ * tb_eeprom_ctl_read() - read control word
  */
 static int tb_eeprom_ctl_read(struct tb_switch *sw, struct tb_eeprom_ctl *ctl)
 {
@@ -298,6 +298,8 @@ struct tb_drom_entry_desc {
  *
  * Does not use the cached copy in sw->drom. Used during resume to check switch
  * identity.
+ *
+ * Return: %0 on success, negative errno otherwise.
  */
 int tb_drom_read_uid_only(struct tb_switch *sw, u64 *uid)
 {
@@ -392,9 +394,16 @@ static int tb_drom_parse_entry_port(struct tb_switch *sw,
 			return -EIO;
 		}
 		port->link_nr = entry->link_nr;
-		if (entry->has_dual_link_port)
+		if (entry->has_dual_link_port) {
+			if (entry->dual_link_port_nr > sw->config.max_port_number) {
+				tb_sw_warn(sw,
+					"port entry has invalid dual link port number %u\n",
+					entry->dual_link_port_nr);
+				return -EIO;
+			}
 			port->dual_link_port =
 				&port->sw->ports[entry->dual_link_port_nr];
+		}
 	}
 	return 0;
 }
@@ -463,7 +472,7 @@ static void tb_switch_drom_free(struct tb_switch *sw)
  */
 static int tb_drom_copy_efi(struct tb_switch *sw, u16 *size)
 {
-	struct device *dev = &sw->tb->nhi->pdev->dev;
+	struct device *dev = sw->tb->nhi->dev;
 	int len, res;
 
 	len = device_property_count_u8(dev, "ThunderboltDROM");
@@ -709,7 +718,7 @@ static int tb_drom_device_read(struct tb_switch *sw)
  * populates the fields in @sw accordingly. Can be called for any router
  * generation.
  *
- * Returns %0 in case of success and negative errno otherwise.
+ * Return: %0 on success, negative errno otherwise.
  */
 int tb_drom_read(struct tb_switch *sw)
 {

@@ -5,6 +5,7 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 
+#include <drm/drm_atomic_state_helper.h>
 #include <drm/drm_bridge.h>
 #include <drm/drm_mipi_dsi.h>
 
@@ -222,6 +223,9 @@ static int adp_dsi_bridge_attach(struct drm_bridge *bridge,
 }
 
 static const struct drm_bridge_funcs adp_dsi_bridge_funcs = {
+	.atomic_create_state = drm_atomic_helper_bridge_create_state,
+	.atomic_destroy_state = drm_atomic_helper_bridge_destroy_state,
+	.atomic_duplicate_state = drm_atomic_helper_bridge_duplicate_state,
 	.attach	= adp_dsi_bridge_attach,
 };
 
@@ -229,9 +233,10 @@ static int adp_mipi_probe(struct platform_device *pdev)
 {
 	struct adp_mipi_drv_private *adp;
 
-	adp = devm_kzalloc(&pdev->dev, sizeof(*adp), GFP_KERNEL);
-	if (!adp)
-		return -ENOMEM;
+	adp = devm_drm_bridge_alloc(&pdev->dev, struct adp_mipi_drv_private,
+				    bridge, &adp_dsi_bridge_funcs);
+	if (IS_ERR(adp))
+		return PTR_ERR(adp);
 
 	adp->mipi = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(adp->mipi)) {
@@ -241,7 +246,6 @@ static int adp_mipi_probe(struct platform_device *pdev)
 
 	adp->dsi.dev = &pdev->dev;
 	adp->dsi.ops = &adp_dsi_host_ops;
-	adp->bridge.funcs = &adp_dsi_bridge_funcs;
 	adp->bridge.of_node = pdev->dev.of_node;
 	adp->bridge.type = DRM_MODE_CONNECTOR_DSI;
 	dev_set_drvdata(&pdev->dev, adp);

@@ -42,6 +42,12 @@ register/unregister functions::
 
   char *devm_hwmon_sanitize_name(struct device *dev, const char *name);
 
+  int hwmon_notify_event(struct device *dev, enum hwmon_sensor_types type,
+			 u32 attr, int channel);
+
+  void hwmon_lock(struct device *dev);
+  void hwmon_unlock(struct device *dev);
+
 hwmon_device_register_with_info registers a hardware monitoring device.
 It creates the standard sysfs attributes in the hardware monitoring core,
 letting the driver focus on reading from and writing to the chip instead
@@ -78,6 +84,26 @@ removed.
 devm_hwmon_sanitize_name is the resource managed version of
 hwmon_sanitize_name; the memory will be freed automatically on device
 removal.
+
+When using ``[devm_]hwmon_device_register_with_info()`` to register the
+hardware monitoring device, accesses using the associated access functions
+are serialised by the hardware monitoring core. If a driver needs locking
+for other functions such as interrupt handlers, attributes which are fully
+implemented in the driver, or debugfs functions, hwmon_lock() and hwmon_unlock()
+can be used to ensure that calls to those functions are serialized. Those
+functions also support guard() and scoped_guard() variants.
+
+Drivers can call hwmon_notify_event() to notify userspace and the thermal
+subsystem when a hardware monitoring event (such as an alarm or a fault
+condition) occurs or clears. The parameters are the hwmon device, the sensor
+type, the attribute identifier associated with the event (such as
+hwmon_temp_max_alarm or hwmon_fan_fault), and the sensor channel number.
+hwmon_notify_event() generates a sysfs event (calling sysfs_notify()) and a
+udev event with the attribute name passed in the NAME environment property
+(e.g., "NAME=temp1_max_alarm"). If the event is for a temperature sensor and
+the sensor is attached to a thermal zone, it also notifies the thermal
+subsystem to update the thermal zone. hwmon_notify_event() returns 0 on
+success or a negative error code on failure.
 
 Using devm_hwmon_device_register_with_info()
 --------------------------------------------
@@ -159,6 +185,7 @@ It contains following fields:
      hwmon_curr		Current sensor
      hwmon_power		Power sensor
      hwmon_energy	Energy sensor
+     hwmon_energy64	Energy sensor, reported as 64-bit signed value
      hwmon_humidity	Humidity sensor
      hwmon_fan		Fan speed sensor
      hwmon_pwm		PWM control
@@ -288,6 +315,8 @@ Parameters:
 		The sensor channel number.
 	val:
 		Pointer to attribute value.
+		For hwmon_energy64, `'val`' is passed as `long *` but needs
+		a typecast to `s64 *`.
 
 Return value:
 	0 on success, a negative error number otherwise.

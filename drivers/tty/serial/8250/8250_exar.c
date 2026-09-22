@@ -40,6 +40,8 @@
 #define PCI_DEVICE_ID_ACCESSIO_COM_4SM		0x10db
 #define PCI_DEVICE_ID_ACCESSIO_COM_8SM		0x10ea
 
+#define PCI_DEVICE_ID_ADVANTECH_XR17V352	0x0018
+
 #define PCI_DEVICE_ID_COMMTECH_4224PCI335	0x0002
 #define PCI_DEVICE_ID_COMMTECH_4222PCI335	0x0004
 #define PCI_DEVICE_ID_COMMTECH_2324PCI335	0x000a
@@ -503,7 +505,7 @@ static int default_setup(struct exar8250 *priv, struct pci_dev *pcidev,
 	unsigned char status;
 	int err;
 
-	err = serial8250_pci_setup_port(pcidev, port, 0, offset, board->reg_shift);
+	err = serial8250_pci_setup_port(pcidev, port, 0, offset, board->reg_shift, priv->virt);
 	if (err)
 		return err;
 
@@ -831,7 +833,7 @@ static int cti_port_setup_common(struct exar8250 *priv,
 	port->port.port_id = idx;
 	port->port.uartclk = priv->osc_freq;
 
-	ret = serial8250_pci_setup_port(pcidev, port, 0, offset, 0);
+	ret = serial8250_pci_setup_port(pcidev, port, 0, offset, 0, priv->virt);
 	if (ret)
 		return ret;
 
@@ -1138,22 +1140,15 @@ static void setup_gpio(struct pci_dev *pcidev, u8 __iomem *p)
 static struct platform_device *__xr17v35x_register_gpio(struct pci_dev *pcidev,
 							const struct software_node *node)
 {
-	struct platform_device *pdev;
+	struct platform_device_info pdevinfo = {
+		.name = "gpio_exar",
+		.id = PLATFORM_DEVID_AUTO,
+		.parent = &pcidev->dev,
+		.fwnode = dev_fwnode(&pcidev->dev),
+		.swnode = node,
+	};
 
-	pdev = platform_device_alloc("gpio_exar", PLATFORM_DEVID_AUTO);
-	if (!pdev)
-		return NULL;
-
-	pdev->dev.parent = &pcidev->dev;
-	device_set_node(&pdev->dev, dev_fwnode(&pcidev->dev));
-
-	if (device_add_software_node(&pdev->dev, node) < 0 ||
-	    platform_device_add(pdev) < 0) {
-		platform_device_put(pdev);
-		return NULL;
-	}
-
-	return pdev;
+	return platform_device_register_full(&pdevinfo);
 }
 
 static void __xr17v35x_unregister_gpio(struct platform_device *pdev)
@@ -1622,6 +1617,12 @@ static const struct exar8250_board pbn_fastcom35x_8 = {
 	.exit		= pci_xr17v35x_exit,
 };
 
+static const struct exar8250_board pbn_adv_XR17V352 = {
+	.num_ports	= 2,
+	.setup		= pci_xr17v35x_setup,
+	.exit		= pci_xr17v35x_exit,
+};
+
 static const struct exar8250_board pbn_exar_XR17V4358 = {
 	.num_ports	= 12,
 	.setup		= pci_xr17v35x_setup,
@@ -1634,14 +1635,14 @@ static const struct exar8250_board pbn_exar_XR17V8358 = {
 	.exit		= pci_xr17v35x_exit,
 };
 
-#define CTI_EXAR_DEVICE(devid, bd) {                    \
-	PCI_DEVICE_SUB(                                 \
-		PCI_VENDOR_ID_EXAR,                     \
-		PCI_DEVICE_ID_EXAR_##devid,             \
-		PCI_SUBVENDOR_ID_CONNECT_TECH,          \
-		PCI_ANY_ID), 0, 0,                      \
-		(kernel_ulong_t)&bd                     \
-	}
+#define CTI_EXAR_DEVICE(devid, bd) {			\
+	PCI_DEVICE_SUB(					\
+		PCI_VENDOR_ID_EXAR,			\
+		PCI_DEVICE_ID_EXAR_##devid,		\
+		PCI_SUBVENDOR_ID_CONNECT_TECH,		\
+		PCI_ANY_ID),				\
+	.driver_data = (kernel_ulong_t)&bd		\
+}
 
 #define EXAR_DEVICE(vend, devid, bd) { PCI_DEVICE_DATA(vend, devid, &bd) }
 
@@ -1650,18 +1651,18 @@ static const struct exar8250_board pbn_exar_XR17V8358 = {
 		PCI_VENDOR_ID_EXAR,			\
 		PCI_DEVICE_ID_EXAR_##devid,		\
 		PCI_SUBVENDOR_ID_IBM,			\
-		PCI_SUBDEVICE_ID_IBM_##sdevid), 0, 0,	\
-		(kernel_ulong_t)&bd			\
-	}
+		PCI_SUBDEVICE_ID_IBM_##sdevid),		\
+	.driver_data = (kernel_ulong_t)&bd		\
+}
 
 #define USR_DEVICE(devid, sdevid, bd) {			\
 	PCI_DEVICE_SUB(					\
 		PCI_VENDOR_ID_USR,			\
 		PCI_DEVICE_ID_EXAR_##devid,		\
 		PCI_VENDOR_ID_EXAR,			\
-		PCI_SUBDEVICE_ID_USR_##sdevid), 0, 0,	\
-		(kernel_ulong_t)&bd			\
-	}
+		PCI_SUBDEVICE_ID_USR_##sdevid),		\
+	.driver_data = (kernel_ulong_t)&bd		\
+}
 
 static const struct pci_device_id exar_pci_tbl[] = {
 	EXAR_DEVICE(ACCESSIO, COM_2S, pbn_exar_XR17C15x),
@@ -1696,6 +1697,9 @@ static const struct pci_device_id exar_pci_tbl[] = {
 	USR_DEVICE(XR17C152, 2980, pbn_exar_XR17C15x),
 	USR_DEVICE(XR17C152, 2981, pbn_exar_XR17C15x),
 
+	/* ADVANTECH devices */
+	EXAR_DEVICE(ADVANTECH, XR17V352, pbn_adv_XR17V352),
+
 	/* Exar Corp. XR17C15[248] Dual/Quad/Octal UART */
 	EXAR_DEVICE(EXAR, XR17C152, pbn_exar_XR17C15x),
 	EXAR_DEVICE(EXAR, XR17C154, pbn_exar_XR17C15x),
@@ -1715,7 +1719,7 @@ static const struct pci_device_id exar_pci_tbl[] = {
 	EXAR_DEVICE(COMMTECH, 4224PCI335, pbn_fastcom335_4),
 	EXAR_DEVICE(COMMTECH, 2324PCI335, pbn_fastcom335_4),
 	EXAR_DEVICE(COMMTECH, 2328PCI335, pbn_fastcom335_8),
-	{ 0, }
+	{ }
 };
 MODULE_DEVICE_TABLE(pci, exar_pci_tbl);
 

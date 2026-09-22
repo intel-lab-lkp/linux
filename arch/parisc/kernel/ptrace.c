@@ -326,7 +326,7 @@ long compat_arch_ptrace(struct task_struct *child, compat_long_t request,
 long do_syscall_trace_enter(struct pt_regs *regs)
 {
 	if (test_thread_flag(TIF_SYSCALL_TRACE)) {
-		int rc = ptrace_report_syscall_entry(regs);
+		bool permit = ptrace_report_syscall_permit_entry(regs);
 
 		/*
 		 * As tracesys_next does not set %r28 to -ENOSYS
@@ -334,12 +334,10 @@ long do_syscall_trace_enter(struct pt_regs *regs)
 		 */
 		regs->gr[28] = -ENOSYS;
 
-		if (rc) {
+		if (!permit) {
 			/*
-			 * A nonzero return code from
-			 * ptrace_report_syscall_entry() tells us
-			 * to prevent the syscall execution.  Skip
-			 * the syscall call and the syscall restart handling.
+			 * Skip the syscall call and the syscall restart
+			 * handling.
 			 *
 			 * Note that the tracer may also just change
 			 * regs->gr[20] to an invalid syscall number,
@@ -351,7 +349,7 @@ long do_syscall_trace_enter(struct pt_regs *regs)
 	}
 
 	/* Do the secure computing check after ptrace. */
-	if (secure_computing() == -1)
+	if (!seccomp_permit_syscall())
 		return -1;
 
 #ifdef CONFIG_HAVE_SYSCALL_TRACEPOINTS
@@ -562,12 +560,12 @@ static int gpr_set(struct task_struct *target,
 
 static const struct user_regset native_regsets[] = {
 	[REGSET_GENERAL] = {
-		.core_note_type = NT_PRSTATUS, .n = ELF_NGREG,
+		USER_REGSET_NOTE_TYPE(PRSTATUS), .n = ELF_NGREG,
 		.size = sizeof(long), .align = sizeof(long),
 		.regset_get = gpr_get, .set = gpr_set
 	},
 	[REGSET_FP] = {
-		.core_note_type = NT_PRFPREG, .n = ELF_NFPREG,
+		USER_REGSET_NOTE_TYPE(PRFPREG), .n = ELF_NFPREG,
 		.size = sizeof(__u64), .align = sizeof(__u64),
 		.regset_get = fpr_get, .set = fpr_set
 	}
@@ -629,12 +627,12 @@ static int gpr32_set(struct task_struct *target,
  */
 static const struct user_regset compat_regsets[] = {
 	[REGSET_GENERAL] = {
-		.core_note_type = NT_PRSTATUS, .n = ELF_NGREG,
+		USER_REGSET_NOTE_TYPE(PRSTATUS), .n = ELF_NGREG,
 		.size = sizeof(compat_long_t), .align = sizeof(compat_long_t),
 		.regset_get = gpr32_get, .set = gpr32_set
 	},
 	[REGSET_FP] = {
-		.core_note_type = NT_PRFPREG, .n = ELF_NFPREG,
+		USER_REGSET_NOTE_TYPE(PRFPREG), .n = ELF_NFPREG,
 		.size = sizeof(__u64), .align = sizeof(__u64),
 		.regset_get = fpr_get, .set = fpr_set
 	}

@@ -152,6 +152,11 @@
 
 #define SO_PASSRIGHTS		83
 
+#define SO_INQ			84
+#define SCM_INQ			SO_INQ
+
+#define SO_RIGHTS_NOTRUNC      85
+
 #if !defined(__KERNEL__)
 
 #if __BITS_PER_LONG == 64

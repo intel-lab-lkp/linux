@@ -26,7 +26,7 @@ static int cs35l56_spi_probe(struct spi_device *spi)
 
 	spi_set_drvdata(spi, cs35l56);
 
-	cs35l56->base.fw_reg = &cs35l56_fw_reg;
+	cs35l56->base.type = 0x56;
 
 	cs35l56->base.regmap = devm_regmap_init_spi(spi, regmap_config);
 	if (IS_ERR(cs35l56->base.regmap)) {
@@ -40,17 +40,7 @@ static int cs35l56_spi_probe(struct spi_device *spi)
 	if (ret)
 		return ret;
 
-	ret = cs35l56_common_probe(cs35l56);
-	if (ret != 0)
-		return ret;
-
-	ret = cs35l56_init(cs35l56);
-	if (ret == 0)
-		ret = cs35l56_irq_request(&cs35l56->base, spi->irq);
-	if (ret < 0)
-		cs35l56_remove(cs35l56);
-
-	return ret;
+	return cs35l56_common_probe(cs35l56, spi->irq);
 }
 
 static void cs35l56_spi_remove(struct spi_device *spi)

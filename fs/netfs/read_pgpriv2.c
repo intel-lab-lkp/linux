@@ -53,8 +53,9 @@ static void netfs_pgpriv2_copy_folio(struct netfs_io_request *creq, struct folio
 	trace_netfs_folio(folio, netfs_folio_trace_store_copy);
 
 	/* Attach the folio to the rolling buffer. */
-	if (rolling_buffer_append(&creq->buffer, folio, 0) < 0) {
-		clear_bit(NETFS_RREQ_FOLIO_COPY_TO_CACHE, &creq->flags);
+	if (rolling_buffer_append(&creq->buffer, folio, 0, creq->gfp) < 0) {
+		set_bit(NETFS_RREQ_CANCEL_CACHING, &creq->flags);
+		folio_end_private_2(folio);
 		return;
 	}
 
@@ -110,22 +111,25 @@ static struct netfs_io_request *netfs_pgpriv2_begin_copy_to_cache(
 	if (!creq->io_streams[1].avail)
 		goto cancel_put;
 
+	__set_bit(NETFS_RREQ_OFFLOAD_COLLECTION, &creq->flags);
+	trace_netfs_copy2cache(rreq, creq);
 	trace_netfs_write(creq, netfs_write_trace_copy_to_cache);
 	netfs_stat(&netfs_n_wh_copy_to_cache);
 	rreq->copy_to_cache = creq;
 	return creq;
 
 cancel_put:
-	netfs_put_request(creq, netfs_rreq_trace_put_return);
+	netfs_put_failed_request(creq);
 cancel:
 	rreq->copy_to_cache = ERR_PTR(-ENOBUFS);
-	clear_bit(NETFS_RREQ_FOLIO_COPY_TO_CACHE, &rreq->flags);
+	set_bit(NETFS_RREQ_CANCEL_CACHING, &rreq->flags);
 	return ERR_PTR(-ENOBUFS);
 }
 
 /*
  * [DEPRECATED] Mark page as requiring copy-to-cache using PG_private_2 and add
- * it to the copy write request.
+ * it to the copy write request.  PG_private_2 should already be set on the
+ * folio.
  */
 void netfs_pgpriv2_copy_to_cache(struct netfs_io_request *rreq, struct folio *folio)
 {
@@ -133,11 +137,13 @@ void netfs_pgpriv2_copy_to_cache(struct netfs_io_request *rreq, struct folio *fo
 
 	if (!creq)
 		creq = netfs_pgpriv2_begin_copy_to_cache(rreq, folio);
-	if (IS_ERR(creq))
+	if (IS_ERR(creq)) {
+		set_bit(NETFS_RREQ_CANCEL_CACHING, &rreq->flags);
+		netfs_cancel_copy_to_cache(rreq, folio);
 		return;
+	}
 
-	trace_netfs_folio(folio, netfs_folio_trace_copy_to_cache);
-	folio_start_private_2(folio);
+	trace_netfs_folio(folio, netfs_folio_trace_pgpriv2_copy);
 	netfs_pgpriv2_copy_folio(creq, folio);
 }
 
@@ -154,6 +160,9 @@ void netfs_pgpriv2_end_copy_to_cache(struct netfs_io_request *rreq)
 	netfs_issue_write(creq, &creq->io_streams[1]);
 	smp_wmb(); /* Write lists before ALL_QUEUED. */
 	set_bit(NETFS_RREQ_ALL_QUEUED, &creq->flags);
+	trace_netfs_rreq(rreq, netfs_rreq_trace_end_copy_to_cache);
+	if (list_empty_careful(&creq->io_streams[1].subrequests))
+		netfs_wake_collector(creq);
 
 	netfs_put_request(creq, netfs_rreq_trace_put_return);
 	creq->copy_to_cache = NULL;

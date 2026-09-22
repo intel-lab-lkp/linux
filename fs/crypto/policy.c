@@ -10,11 +10,13 @@
  * Modified by Eric Biggers, 2019 for v2 policy support.
  */
 
+#include <linux/export.h>
 #include <linux/fs_context.h>
+#include <linux/mount.h>
 #include <linux/random.h>
 #include <linux/seq_file.h>
 #include <linux/string.h>
-#include <linux/mount.h>
+
 #include "fscrypt_private.h"
 
 /**
@@ -175,6 +177,23 @@ static bool supported_iv_ino_lblk_policy(const struct fscrypt_policy_v2 *policy,
 			     type, sb->s_id);
 		return false;
 	}
+
+	/*
+	 * IV_INO_LBLK_32 isn't compatible with inline encryption when
+	 * s_blocksize != PAGE_SIZE.  In that case the DUN can wrap around in
+	 * the middle of a page, but sometimes fscrypt_mergeable_bio() is called
+	 * only for the first block per page.  Since IV_INO_LBLK_32 exists only
+	 * to support inline encryption hardware that is limited to 32-bit DUNs,
+	 * just disallow IV_INO_LBLK_32 with s_blocksize != PAGE_SIZE entirely.
+	 */
+	if ((policy->flags & FSCRYPT_POLICY_FLAG_IV_INO_LBLK_32) &&
+	    sb->s_blocksize != PAGE_SIZE) {
+		fscrypt_warn(inode,
+			     "Can't use %s policy on filesystem '%s' with block size != PAGE_SIZE",
+			     type, sb->s_id);
+		return false;
+	}
+
 	return true;
 }
 
@@ -505,7 +524,6 @@ int fscrypt_ioctl_set_policy(struct file *filp, const void __user *arg)
 	union fscrypt_policy policy;
 	union fscrypt_policy existing_policy;
 	struct inode *inode = file_inode(filp);
-	u8 version;
 	int size;
 	int ret;
 
@@ -516,23 +534,11 @@ int fscrypt_ioctl_set_policy(struct file *filp, const void __user *arg)
 	if (size <= 0)
 		return -EINVAL;
 
-	/*
-	 * We should just copy the remaining 'size - 1' bytes here, but a
-	 * bizarre bug in gcc 7 and earlier (fixed by gcc r255731) causes gcc to
-	 * think that size can be 0 here (despite the check above!) *and* that
-	 * it's a compile-time constant.  Thus it would think copy_from_user()
-	 * is passed compile-time constant ULONG_MAX, causing the compile-time
-	 * buffer overflow check to fail, breaking the build. This only occurred
-	 * when building an i386 kernel with -Os and branch profiling enabled.
-	 *
-	 * Work around it by just copying the first byte again...
-	 */
-	version = policy.version;
-	if (copy_from_user(&policy, arg, size))
+	if (copy_from_user((u8 *)&policy + 1, (const u8 __user *)arg + 1,
+			   size - 1))
 		return -EFAULT;
-	policy.version = version;
 
-	if (!inode_owner_or_capable(&nop_mnt_idmap, inode))
+	if (!inode_owner_or_capable(file_mnt_idmap(filp), inode))
 		return -EACCES;
 
 	ret = mnt_want_write_file(filp);
@@ -725,7 +731,7 @@ const union fscrypt_policy *fscrypt_policy_to_inherit(struct inode *dir)
 		err = fscrypt_require_key(dir);
 		if (err)
 			return ERR_PTR(err);
-		return &dir->i_crypt_info->ci_policy;
+		return &fscrypt_get_inode_info_raw(dir)->ci_policy;
 	}
 
 	return fscrypt_get_dummy_policy(dir->i_sb);
@@ -744,7 +750,7 @@ const union fscrypt_policy *fscrypt_policy_to_inherit(struct inode *dir)
  */
 int fscrypt_context_for_new_inode(void *ctx, struct inode *inode)
 {
-	struct fscrypt_inode_info *ci = inode->i_crypt_info;
+	struct fscrypt_inode_info *ci = fscrypt_get_inode_info_raw(inode);
 
 	BUILD_BUG_ON(sizeof(union fscrypt_context) !=
 			FSCRYPT_SET_CONTEXT_MAX_SIZE);
@@ -769,7 +775,7 @@ EXPORT_SYMBOL_GPL(fscrypt_context_for_new_inode);
  */
 int fscrypt_set_context(struct inode *inode, void *fs_data)
 {
-	struct fscrypt_inode_info *ci = inode->i_crypt_info;
+	struct fscrypt_inode_info *ci;
 	union fscrypt_context ctx;
 	int ctxsize;
 
@@ -781,6 +787,7 @@ int fscrypt_set_context(struct inode *inode, void *fs_data)
 	 * This may be the first time the inode number is available, so do any
 	 * delayed key setup that requires the inode number.
 	 */
+	ci = fscrypt_get_inode_info_raw(inode);
 	if (ci->ci_policy.version == FSCRYPT_POLICY_V2 &&
 	    (ci->ci_policy.v2.flags & FSCRYPT_POLICY_FLAG_IV_INO_LBLK_32))
 		fscrypt_hash_inode_number(ci, ci->ci_master_key);
@@ -810,7 +817,7 @@ int fscrypt_parse_test_dummy_encryption(const struct fs_parameter *param,
 	if (param->type == fs_value_is_string && *param->string)
 		arg = param->string;
 
-	policy = kzalloc(sizeof(*policy), GFP_KERNEL);
+	policy = kzalloc_obj(*policy);
 	if (!policy)
 		return -ENOMEM;
 
@@ -824,10 +831,8 @@ int fscrypt_parse_test_dummy_encryption(const struct fs_parameter *param,
 		policy->version = FSCRYPT_POLICY_V2;
 		policy->v2.contents_encryption_mode = FSCRYPT_MODE_AES_256_XTS;
 		policy->v2.filenames_encryption_mode = FSCRYPT_MODE_AES_256_CTS;
-		err = fscrypt_get_test_dummy_key_identifier(
+		fscrypt_get_test_dummy_key_identifier(
 				policy->v2.master_key_identifier);
-		if (err)
-			goto out;
 	} else {
 		err = -EINVAL;
 		goto out;

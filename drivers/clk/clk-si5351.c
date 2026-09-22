@@ -655,7 +655,7 @@ static int si5351_msynth_determine_rate(struct clk_hw *hw,
 	unsigned long a, b, c;
 	int divby4;
 
-	/* multisync6-7 can only handle freqencies < 150MHz */
+	/* multisync6-7 can only handle frequencies < 150MHz */
 	if (hwdata->num >= 6 && rate > SI5351_MULTISYNTH67_MAX_FREQ)
 		rate = SI5351_MULTISYNTH67_MAX_FREQ;
 
@@ -1048,11 +1048,11 @@ static int si5351_clkout_determine_rate(struct clk_hw *hw,
 	unsigned long rate = req->rate;
 	unsigned char rdiv;
 
-	/* clkout6/7 can only handle output freqencies < 150MHz */
+	/* clkout6/7 can only handle output frequencies < 150MHz */
 	if (hwdata->num >= 6 && rate > SI5351_CLKOUT67_MAX_FREQ)
 		rate = SI5351_CLKOUT67_MAX_FREQ;
 
-	/* clkout freqency is 8kHz - 160MHz */
+	/* clkout frequency is 8kHz - 160MHz */
 	if (rate > SI5351_CLKOUT_MAX_FREQ)
 		rate = SI5351_CLKOUT_MAX_FREQ;
 	if (rate < SI5351_CLKOUT_MIN_FREQ)
@@ -1425,10 +1425,10 @@ si53351_of_clk_get(struct of_phandle_args *clkspec, void *data)
 #endif /* CONFIG_OF */
 
 static const struct i2c_device_id si5351_i2c_ids[] = {
-	{ "si5351a", SI5351_VARIANT_A },
-	{ "si5351a-msop", SI5351_VARIANT_A3 },
-	{ "si5351b", SI5351_VARIANT_B },
-	{ "si5351c", SI5351_VARIANT_C },
+	{ .name = "si5351a", .driver_data = SI5351_VARIANT_A },
+	{ .name = "si5351a-msop", .driver_data = SI5351_VARIANT_A3 },
+	{ .name = "si5351b", .driver_data = SI5351_VARIANT_B },
+	{ .name = "si5351c", .driver_data = SI5351_VARIANT_C },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, si5351_i2c_ids);

@@ -7,7 +7,7 @@
 #include <asm/feature-fixups.h>
 #include <asm/ppc-opcode.h>
 
-#ifndef __ASSEMBLY__
+#ifndef __ASSEMBLER__
 extern unsigned int __start___lwsync_fixup, __stop___lwsync_fixup;
 extern void do_lwsync_fixups(unsigned long value, void *fixup_start,
 			     void *fixup_end);
@@ -37,10 +37,14 @@ static inline void ppc_after_tlbiel_barrier(void)
 	 * accelerators mapped will use tlbie (which does invalidate the copy)
 	 * to invalidate translations. It's not possible to limit POWER10 this
 	 * way due to local copy-paste.
+	 *
+	 * POWER12 does not need it.
 	 */
-	asm volatile(ASM_FTR_IFSET(PPC_CP_ABORT, "", %0) : : "i" (CPU_FTR_ARCH_31) : "memory");
+	asm volatile(ASM_FTR_IF(PPC_CP_ABORT, "", %0, %1) :
+		: "i" (CPU_FTR_ARCH_31|CPU_FTR_ARCH_32), "i" (CPU_FTR_ARCH_31)
+		: "memory");
 }
-#endif /* __ASSEMBLY__ */
+#endif /* __ASSEMBLER__ */
 
 #if defined(__powerpc64__)
 #    define LWSYNC	lwsync

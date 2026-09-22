@@ -191,6 +191,16 @@ static bool imx_scu_clk_is_valid(u32 rsrc_id)
 	return p != NULL;
 }
 
+int __init imx_clk_scu_module_init(void)
+{
+	return platform_driver_register(&imx_clk_scu_driver);
+}
+
+void __exit imx_clk_scu_module_exit(void)
+{
+	return platform_driver_unregister(&imx_clk_scu_driver);
+}
+
 int imx_clk_scu_init(struct device_node *np,
 		     const struct imx_clk_scu_rsrc_table *data)
 {
@@ -215,7 +225,7 @@ int imx_clk_scu_init(struct device_node *np,
 		rsrc_table = data;
 	}
 
-	return platform_driver_register(&imx_clk_scu_driver);
+	return 0;
 }
 
 /*
@@ -250,41 +260,6 @@ static unsigned long clk_scu_recalc_rate(struct clk_hw *hw,
 	}
 
 	return le32_to_cpu(msg.data.resp.rate);
-}
-
-/*
- * clk_scu_determine_rate - Returns the closest rate for a SCU clock
- * @hw: clock to round rate for
- * @req: clock rate request
- *
- * Returns 0 on success, a negative error on failure
- */
-static int clk_scu_determine_rate(struct clk_hw *hw,
-				  struct clk_rate_request *req)
-{
-	/*
-	 * Assume we support all the requested rate and let the SCU firmware
-	 * to handle the left work
-	 */
-	return 0;
-}
-
-/*
- * clk_scu_round_rate - Round clock rate for a SCU clock
- * @hw: clock to round rate for
- * @rate: rate to round
- * @parent_rate: parent rate provided by common clock framework, not used
- *
- * Returns the current clock rate, or zero in failure.
- */
-static long clk_scu_round_rate(struct clk_hw *hw, unsigned long rate,
-			       unsigned long *parent_rate)
-{
-	/*
-	 * Assume we support all the requested rate and let the SCU firmware
-	 * to handle the left work
-	 */
-	return rate;
 }
 
 static int clk_scu_atf_set_cpu_rate(struct clk_hw *hw, unsigned long rate,
@@ -444,7 +419,7 @@ static void clk_scu_unprepare(struct clk_hw *hw)
 
 static const struct clk_ops clk_scu_ops = {
 	.recalc_rate = clk_scu_recalc_rate,
-	.determine_rate = clk_scu_determine_rate,
+	.determine_rate = clk_determine_rate_noop,
 	.set_rate = clk_scu_set_rate,
 	.get_parent = clk_scu_get_parent,
 	.set_parent = clk_scu_set_parent,
@@ -454,7 +429,7 @@ static const struct clk_ops clk_scu_ops = {
 
 static const struct clk_ops clk_scu_cpu_ops = {
 	.recalc_rate = clk_scu_recalc_rate,
-	.round_rate = clk_scu_round_rate,
+	.determine_rate = clk_determine_rate_noop,
 	.set_rate = clk_scu_atf_set_cpu_rate,
 	.prepare = clk_scu_prepare,
 	.unprepare = clk_scu_unprepare,
@@ -462,7 +437,7 @@ static const struct clk_ops clk_scu_cpu_ops = {
 
 static const struct clk_ops clk_scu_pi_ops = {
 	.recalc_rate = clk_scu_recalc_rate,
-	.round_rate  = clk_scu_round_rate,
+	.determine_rate = clk_determine_rate_noop,
 	.set_rate    = clk_scu_set_rate,
 };
 
@@ -475,7 +450,7 @@ struct clk_hw *__imx_clk_scu(struct device *dev, const char *name,
 	struct clk_hw *hw;
 	int ret;
 
-	clk = kzalloc(sizeof(*clk), GFP_KERNEL);
+	clk = kzalloc_obj(*clk);
 	if (!clk)
 		return ERR_PTR(-ENOMEM);
 
@@ -483,7 +458,6 @@ struct clk_hw *__imx_clk_scu(struct device *dev, const char *name,
 	clk->clk_type = clk_type;
 
 	init.name = name;
-	init.ops = &clk_scu_ops;
 	if (rsrc_id == IMX_SC_R_A35 || rsrc_id == IMX_SC_R_A53 || rsrc_id == IMX_SC_R_A72)
 		init.ops = &clk_scu_cpu_ops;
 	else if (rsrc_id == IMX_SC_R_PI_0_PLL)
@@ -567,7 +541,6 @@ static int imx_clk_scu_probe(struct platform_device *pdev)
 
 	if (!((clk->rsrc == IMX_SC_R_A35) || (clk->rsrc == IMX_SC_R_A53) ||
 	    (clk->rsrc == IMX_SC_R_A72))) {
-		pm_runtime_mark_last_busy(&pdev->dev);
 		pm_runtime_put_autosuspend(&pdev->dev);
 	}
 
@@ -715,8 +688,7 @@ struct clk_hw *imx_clk_scu_alloc_dev(const char *name,
 	if (ret)
 		goto put_device;
 
-	ret = driver_set_override(&pdev->dev, &pdev->driver_override,
-				  "imx-scu-clk", strlen("imx-scu-clk"));
+	ret = device_set_driver_override(&pdev->dev, "imx-scu-clk");
 	if (ret)
 		goto put_device;
 
@@ -729,7 +701,7 @@ struct clk_hw *imx_clk_scu_alloc_dev(const char *name,
 	if (ret)
 		goto put_device;
 
-	/* For API backwards compatiblilty, simply return NULL for success */
+	/* For API backwards compatibility, simply return NULL for success */
 	return NULL;
 
 put_device:
@@ -766,15 +738,15 @@ static unsigned long clk_gpr_div_scu_recalc_rate(struct clk_hw *hw,
 	return err ? 0 : rate;
 }
 
-static long clk_gpr_div_scu_round_rate(struct clk_hw *hw, unsigned long rate,
-				   unsigned long *prate)
+static int clk_gpr_div_scu_determine_rate(struct clk_hw *hw,
+					  struct clk_rate_request *req)
 {
-	if (rate < *prate)
-		rate = *prate / 2;
+	if (req->rate < req->best_parent_rate)
+		req->rate = req->best_parent_rate / 2;
 	else
-		rate = *prate;
+		req->rate = req->best_parent_rate;
 
-	return rate;
+	return 0;
 }
 
 static int clk_gpr_div_scu_set_rate(struct clk_hw *hw, unsigned long rate,
@@ -793,7 +765,7 @@ static int clk_gpr_div_scu_set_rate(struct clk_hw *hw, unsigned long rate,
 
 static const struct clk_ops clk_gpr_div_scu_ops = {
 	.recalc_rate = clk_gpr_div_scu_recalc_rate,
-	.round_rate = clk_gpr_div_scu_round_rate,
+	.determine_rate = clk_gpr_div_scu_determine_rate,
 	.set_rate = clk_gpr_div_scu_set_rate,
 };
 
@@ -875,7 +847,7 @@ struct clk_hw *__imx_clk_gpr_scu(const char *name, const char * const *parent_na
 	if (rsrc_id >= IMX_SC_R_LAST || gpr_id >= IMX_SC_C_LAST)
 		return ERR_PTR(-EINVAL);
 
-	clk_node = kzalloc(sizeof(*clk_node), GFP_KERNEL);
+	clk_node = kzalloc_obj(*clk_node);
 	if (!clk_node)
 		return ERR_PTR(-ENOMEM);
 
@@ -889,7 +861,7 @@ struct clk_hw *__imx_clk_gpr_scu(const char *name, const char * const *parent_na
 		return NULL;
 	}
 
-	clk = kzalloc(sizeof(*clk), GFP_KERNEL);
+	clk = kzalloc_obj(*clk);
 	if (!clk) {
 		kfree(clk_node);
 		return ERR_PTR(-ENOMEM);

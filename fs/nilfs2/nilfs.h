@@ -14,6 +14,7 @@
 #include <linux/buffer_head.h>
 #include <linux/spinlock.h>
 #include <linux/blkdev.h>
+#include <linux/fs_struct.h>
 #include <linux/nilfs2_api.h>
 #include <linux/nilfs2_ondisk.h>
 #include "the_nilfs.h"
@@ -143,7 +144,7 @@ enum {
 	 ((ino) < NILFS_USER_INO && (NILFS_SYS_INO_BITS & BIT(ino))))
 
 #define NILFS_PRIVATE_INODE(ino) ({					\
-	ino_t __ino = (ino);						\
+	u64 __ino = (ino);						\
 	((__ino) < NILFS_USER_INO && (__ino) != NILFS_ROOT_INO &&	\
 	 (__ino) != NILFS_SKETCH_INO); })
 
@@ -254,7 +255,7 @@ static inline __u32 nilfs_mask_flags(umode_t mode, __u32 flags)
 
 /* dir.c */
 int nilfs_add_link(struct dentry *, struct inode *);
-int nilfs_inode_by_name(struct inode *dir, const struct qstr *qstr, ino_t *ino);
+int nilfs_inode_by_name(struct inode *dir, const struct qstr *qstr, u64 *ino);
 int nilfs_make_empty(struct inode *, struct inode *);
 struct nilfs_dir_entry *nilfs_find_entry(struct inode *, const struct qstr *,
 		struct folio **);
@@ -268,9 +269,9 @@ int nilfs_set_link(struct inode *dir, struct nilfs_dir_entry *de,
 extern int nilfs_sync_file(struct file *, loff_t, loff_t, int);
 
 /* ioctl.c */
-int nilfs_fileattr_get(struct dentry *dentry, struct fileattr *m);
+int nilfs_fileattr_get(struct dentry *dentry, struct file_kattr *m);
 int nilfs_fileattr_set(struct mnt_idmap *idmap,
-		       struct dentry *dentry, struct fileattr *fa);
+		       struct dentry *dentry, struct file_kattr *fa);
 long nilfs_ioctl(struct file *, unsigned int, unsigned long);
 long nilfs_compat_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 int nilfs_ioctl_prepare_clean_segments(struct the_nilfs *, struct nilfs_argv *,
@@ -286,13 +287,12 @@ extern int nilfs_read_inode_common(struct inode *, struct nilfs_inode *);
 void nilfs_write_inode_common(struct inode *inode,
 			      struct nilfs_inode *raw_inode);
 struct inode *nilfs_ilookup(struct super_block *sb, struct nilfs_root *root,
-			    unsigned long ino);
-struct inode *nilfs_iget_locked(struct super_block *sb, struct nilfs_root *root,
-				unsigned long ino);
+			    u64 ino);
+struct inode *nilfs_iget_locked(struct super_block *sb,
+				struct nilfs_root *root, u64 ino);
 struct inode *nilfs_iget(struct super_block *sb, struct nilfs_root *root,
-			 unsigned long ino);
-extern struct inode *nilfs_iget_for_gc(struct super_block *sb,
-				       unsigned long ino, __u64 cno);
+			 u64 ino);
+struct inode *nilfs_iget_for_gc(struct super_block *sb, u64 ino, __u64 cno);
 int nilfs_attach_btree_node_cache(struct inode *inode);
 void nilfs_detach_btree_node_cache(struct inode *inode);
 struct inode *nilfs_iget_for_shadow(struct inode *inode);

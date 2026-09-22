@@ -254,7 +254,8 @@ static int tca8418_configure(struct tca8418_keypad *keypad_data,
 		return error;
 
 	error = tca8418_write_byte(keypad_data, REG_CFG,
-				CFG_INT_CFG | CFG_OVR_FLOW_IEN | CFG_KE_IEN);
+				   CFG_INT_CFG | CFG_OVR_FLOW_IEN |
+					CFG_OVR_FLOW_M | CFG_KE_IEN);
 
 	return error;
 }
@@ -354,7 +355,7 @@ static int tca8418_keypad_probe(struct i2c_client *client)
 }
 
 static const struct i2c_device_id tca8418_id[] = {
-	{ "tca8418", 8418, },
+	{ .name = "tca8418", .driver_data = 8418 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, tca8418_id);
@@ -373,18 +374,7 @@ static struct i2c_driver tca8418_keypad_driver = {
 	.probe		= tca8418_keypad_probe,
 	.id_table	= tca8418_id,
 };
-
-static int __init tca8418_keypad_init(void)
-{
-	return i2c_add_driver(&tca8418_keypad_driver);
-}
-subsys_initcall(tca8418_keypad_init);
-
-static void __exit tca8418_keypad_exit(void)
-{
-	i2c_del_driver(&tca8418_keypad_driver);
-}
-module_exit(tca8418_keypad_exit);
+module_i2c_driver(tca8418_keypad_driver);
 
 MODULE_AUTHOR("Kyle Manna <kyle.manna@fuel7.com>");
 MODULE_DESCRIPTION("Keypad driver for TCA8418");

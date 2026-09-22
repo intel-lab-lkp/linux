@@ -12,8 +12,36 @@ maintainers:
   - Matteo Martelli <matteomartelli3@gmail.com>
   - Binbin Zhou <zhoubinbin@loongson.cn>
 
+description: |
+  Everest ES8311, ES8316 and ES8323 audio CODECs
+
+  Pins on the device (for linking into audio routes):
+
+    Outputs:
+      * LOUT:     Left Analog Output
+      * ROUT:     Right Analog Output
+      * MICBIAS:  Microphone Bias
+
+    Inputs:
+      * MIC1P:    Microphone 1 Positive Analog Input
+      * MIC1N:    Microphone 1 Negative Analog Input
+      * MIC2P:    Microphone 2 Positive Analog Input
+      * MIC2N:    Microphone 2 Negative Analog Input
+
 allOf:
   - $ref: dai-common.yaml#
+  - if:
+      properties:
+        compatible:
+          not:
+            contains:
+              const: everest,es8316
+    then:
+      properties:
+        avdd-supply: false
+        cpvdd-supply: false
+        dvdd-supply: false
+        pvdd-supply: false
 
 properties:
   compatible:
@@ -32,6 +60,22 @@ properties:
   clock-names:
     items:
       - const: mclk
+
+  avdd-supply:
+    description: Regulator providing the analog supply, from 2.0 V to 3.6 V
+
+  cpvdd-supply:
+    description: Regulator providing the charge pump supply, from 1.6 V to 2.0 V
+
+  dvdd-supply:
+    description: Regulator providing the digital core supply, from 1.6 V to 3.6 V
+
+  pvdd-supply:
+    description: Regulator providing the digital I/O supply, from 1.6 V to 3.6 V
+
+  interrupts:
+    maxItems: 1
+    description: Headphone detect interrupt
 
   port:
     $ref: audio-graph-port.yaml#
@@ -57,6 +101,10 @@ examples:
         reg = <0x11>;
         clocks = <&clks 10>;
         clock-names = "mclk";
+        avdd-supply = <&reg_3p3v>;
+        cpvdd-supply = <&reg_1p8v>;
+        dvdd-supply = <&reg_1p8v>;
+        pvdd-supply = <&reg_1p8v>;
         #sound-dai-cells = <0>;
       };
     };

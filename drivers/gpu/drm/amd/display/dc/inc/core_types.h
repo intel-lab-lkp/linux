@@ -33,8 +33,10 @@
 #include "dc_bios_types.h"
 #include "mem_input.h"
 #include "hubp.h"
+#include "hw/dchubbub.h"
 #include "mpc.h"
 #include "dwb.h"
+#include "hw/dio.h"
 #include "mcif_wb.h"
 #include "panel_cntl.h"
 #include "dmub/inc/dmub_cmd.h"
@@ -58,14 +60,16 @@
 #include "transform.h"
 #include "dpp.h"
 
-#include "dml2/dml21/inc/dml_top_dchub_registers.h"
-#include "dml2/dml21/inc/dml_top_types.h"
+#include "dml2_0/dml21/inc/dml_top_dchub_registers.h"
+#include "dml2_0/dml21/inc/dml_top_types.h"
 
 struct resource_pool;
 struct dc_state;
 struct resource_context;
 struct clk_bw_params;
 struct dc_mcache_params;
+
+#define MAX_RMCM_INST  2
 
 struct resource_funcs {
 	enum engine_id (*get_preferred_eng_id_dpia)(unsigned int dpia_index);
@@ -79,10 +83,13 @@ struct resource_funcs {
 	/* Create a minimal link encoder object with no dc_link object
 	 * associated with it. */
 	struct link_encoder *(*link_enc_create_minimal)(struct dc_context *ctx, enum engine_id eng_id);
+	struct hpo_frl_link_encoder *(*hpo_frl_link_enc_create)(
+			enum engine_id eng_id,
+			struct dc_context *ctx);
 	enum dc_status (*validate_bandwidth)(
 					struct dc *dc,
 					struct dc_state *context,
-					bool fast_validate);
+					enum dc_validate_mode validate_mode);
 	void (*calculate_wm_and_dlg)(
 				struct dc *dc, struct dc_state *context,
 				display_e2e_pipe_params_st *pipes,
@@ -107,7 +114,7 @@ struct resource_funcs {
 		struct dc *dc,
 		struct dc_state *context,
 		display_e2e_pipe_params_st *pipes,
-		bool fast_validate);
+		enum dc_validate_mode validate_mode);
 
 	/*
 	 * Algorithm for assigning available link encoders to links.
@@ -211,6 +218,7 @@ struct resource_funcs {
             unsigned int index);
 
 	void (*get_panel_config_defaults)(struct dc_panel_config *panel_config);
+	void (*get_default_tiling_info)(struct dc_tiling_info *tiling_info);
 	void (*build_pipe_pix_clk_params)(struct pipe_ctx *pipe_ctx);
 	/*
 	 * Get indicator of power from a context that went through full validation
@@ -223,6 +231,11 @@ struct resource_funcs {
 			const struct dc_stream_state *stream);
 	bool (*program_mcache_pipe_config)(struct dc_state *context,
 		const struct dc_mcache_params *mcache_params);
+	enum dc_status (*update_dc_state_for_encoder_switch)(struct dc_link *link,
+		struct dc_link_settings *link_setting,
+		uint8_t pipe_count,
+		struct pipe_ctx *pipes,
+		struct audio_output *audio_output);
 };
 
 struct audio_support{
@@ -243,6 +256,7 @@ struct resource_pool {
 	struct timing_generator *timing_generators[MAX_PIPES];
 	struct stream_encoder *stream_enc[MAX_PIPES * 2];
 	struct hubbub *hubbub;
+	struct dio *dio;
 	struct mpc *mpc;
 	struct pp_smu_funcs *pp_smu;
 	struct dce_aux *engines[MAX_PIPES];
@@ -267,7 +281,7 @@ struct resource_pool {
 	/* An array for accessing the link encoder objects that have been created.
 	 * Index in array corresponds to engine ID - viz. 0: ENGINE_ID_DIGA
 	 */
-	struct link_encoder *link_encoders[MAX_DIG_LINK_ENCODERS];
+	struct link_encoder *link_encoders[MAX_LINK_ENCODERS];
 	/* Number of DIG link encoder objects created - i.e. number of valid
 	 * entries in link_encoders array.
 	 */
@@ -275,12 +289,17 @@ struct resource_pool {
 	/* Number of USB4 DPIA (DisplayPort Input Adapter) link objects created.*/
 	unsigned int usb4_dpia_count;
 
+	unsigned int hpo_frl_stream_enc_count;
+	struct hpo_frl_stream_encoder *hpo_frl_stream_enc[MAX_HDMI_FRL_ENCODERS];
+	unsigned int hpo_frl_link_enc_count;
+	struct hpo_frl_link_encoder *hpo_frl_link_enc[MAX_HDMI_FRL_ENCODERS];
 	unsigned int hpo_dp_stream_enc_count;
 	struct hpo_dp_stream_encoder *hpo_dp_stream_enc[MAX_HPO_DP2_ENCODERS];
 	unsigned int hpo_dp_link_enc_count;
 	struct hpo_dp_link_encoder *hpo_dp_link_enc[MAX_HPO_DP2_LINK_ENCODERS];
 	struct dc_3dlut *mpc_lut[MAX_PIPES];
 	struct dc_transfer_func *mpc_shaper[MAX_PIPES];
+	struct dc_rmcm_3dlut rmcm_3dlut[MAX_RMCM_INST];
 
 	struct {
 		unsigned int xtalin_clock_inKhz;
@@ -340,6 +359,7 @@ struct stream_resource {
 	struct display_stream_compressor *dsc;
 	struct timing_generator *tg;
 	struct stream_encoder *stream_enc;
+	struct hpo_frl_stream_encoder *hpo_frl_stream_enc;
 	struct hpo_dp_stream_encoder *hpo_dp_stream_enc;
 	struct audio *audio;
 
@@ -383,6 +403,7 @@ struct plane_resource {
 struct link_resource {
 	struct link_encoder *dio_link_enc;
 	struct hpo_dp_link_encoder *hpo_dp_link_enc;
+	struct hpo_frl_link_encoder *hpo_frl_link_enc;
 };
 
 struct link_config {
@@ -425,7 +446,15 @@ enum p_state_switch_method {
 	P_STATE_V_ACTIVE,
 	P_STATE_SUB_VP,
 	P_STATE_DRR_SUB_VP,
-	P_STATE_V_BLANK_SUB_VP
+	P_STATE_V_BLANK_SUB_VP,
+	P_STATE_ALT,
+};
+
+struct dsc_padding_params {
+	/* pixels borrowed from hblank to hactive */
+	uint8_t dsc_hactive_padding;
+	uint32_t dsc_htotal_padding;
+	uint32_t dsc_pix_clk_100hz;
 };
 
 struct pipe_ctx {
@@ -485,8 +514,7 @@ struct pipe_ctx {
 	/* subvp_index: only valid if the pipe is a SUBVP_MAIN*/
 	uint8_t subvp_index;
 	struct pixel_rate_divider pixel_rate_divider;
-	/* pixels borrowed from hblank to hactive */
-	uint8_t hblank_borrow;
+	struct dsc_padding_params dsc_padding_params;
 	/* next vupdate */
 	uint32_t next_vupdate;
 	uint32_t wait_frame_count;
@@ -500,7 +528,7 @@ struct pipe_ctx {
 struct link_enc_cfg_context {
 	enum link_enc_cfg_mode mode;
 	struct link_enc_assignment link_enc_assignments[MAX_PIPES];
-	enum engine_id link_enc_avail[MAX_DIG_LINK_ENCODERS];
+	enum engine_id link_enc_avail[MAX_LINK_ENCODERS];
 	struct link_enc_assignment transient_assignments[MAX_PIPES];
 };
 
@@ -512,8 +540,11 @@ struct resource_context {
 	uint8_t dp_clock_source_ref_count;
 	bool is_dsc_acquired[MAX_PIPES];
 	struct link_enc_cfg_context link_enc_cfg_ctx;
-	unsigned int dio_link_enc_to_link_idx[MAX_DIG_LINK_ENCODERS];
-	int dio_link_enc_ref_cnts[MAX_DIG_LINK_ENCODERS];
+	unsigned int dio_link_enc_to_link_idx[MAX_LINK_ENCODERS];
+	int dio_link_enc_ref_cnts[MAX_LINK_ENCODERS];
+	bool is_hpo_frl_stream_enc_acquired[MAX_HDMI_FRL_ENCODERS];
+	unsigned int hpo_frl_link_enc_to_link_idx[MAX_HDMI_FRL_ENCODERS];
+	int hpo_frl_link_enc_ref_cnts[MAX_HDMI_FRL_ENCODERS];
 	bool is_hpo_dp_stream_enc_acquired[MAX_HPO_DP2_ENCODERS];
 	unsigned int hpo_dp_link_enc_to_link_idx[MAX_HPO_DP2_LINK_ENCODERS];
 	int hpo_dp_link_enc_ref_cnts[MAX_HPO_DP2_LINK_ENCODERS];
@@ -556,7 +587,10 @@ struct dcn_bw_output {
 	struct dml2_mcache_surface_allocation mcache_allocations[DML2_MAX_PLANES];
 	struct dmub_cmd_fams2_global_config fams2_global_config;
 	union dmub_cmd_fams2_config fams2_stream_base_params[DML2_MAX_PLANES];
-	union dmub_cmd_fams2_config fams2_stream_sub_params[DML2_MAX_PLANES];
+	union {
+		union dmub_cmd_fams2_config fams2_stream_sub_params[DML2_MAX_PLANES];
+		union dmub_fams2_stream_static_sub_state_v2 fams2_stream_sub_params_v2[DML2_MAX_PLANES];
+	};
 	struct dml2_display_arb_regs arb_regs;
 };
 
@@ -590,6 +624,7 @@ struct dc_state {
 	 * @stream_status: Planes status on a given stream
 	 */
 	struct dc_stream_status stream_status[MAX_PIPES];
+
 	/**
 	 * @phantom_streams: Stream state properties for phantoms
 	 */
@@ -613,6 +648,22 @@ struct dc_state {
 	 * @stream_count: Total phantom planes in use
 	 */
 	uint8_t phantom_plane_count;
+
+	/**
+	 * @probes: Committed absolute set of probe descriptors.
+	 */
+	struct dc_probe_state probes[MAX_PROBES];
+
+	/**
+	 * @probe_status: Committed absolute set of probe results.
+	 */
+	struct dc_probe_status probe_status[MAX_PROBES];
+
+	/**
+	 * @probe_count: Number of valid entries in @probes.
+	 */
+	int probe_count;
+
 	/**
 	 * @res_ctx: Persistent state of resources
 	 */
@@ -672,6 +723,7 @@ struct replay_context {
 	/* Controller Id used for Dig Fe source select */
 	enum controller_id controllerId;
 	unsigned int line_time_in_ns;
+	bool os_request_force_ffu;
 };
 
 enum dc_replay_enable {
@@ -684,6 +736,57 @@ struct dc_bounding_box_max_clk {
 	int max_dispclk_mhz;
 	int max_dppclk_mhz;
 	int max_phyclk_mhz;
+};
+
+struct dc_measured_memory_qos {
+	uint32_t peak_bw_mbps;
+	uint32_t avg_bw_mbps;
+	uint32_t max_latency_ns;
+	uint32_t min_latency_ns;
+	uint32_t avg_latency_ns;
+};
+
+struct dc_requested_memory_qos {
+	uint32_t bandwidth_lb_in_mbps;
+	uint32_t calculated_avg_bw_in_mbps;
+	uint32_t max_latency_ub_in_ns;
+	uint32_t avg_latency_ub_in_ns;
+	uint32_t max_bw_budget_in_mbps;
+};
+
+enum update_v3_flow {
+	UPDATE_V3_FLOW_INVALID,
+	UPDATE_V3_FLOW_NO_NEW_CONTEXT_CONTEXT_FAST,
+	UPDATE_V3_FLOW_NO_NEW_CONTEXT_CONTEXT_FULL,
+	UPDATE_V3_FLOW_NEW_CONTEXT_SEAMLESS,
+	UPDATE_V3_FLOW_NEW_CONTEXT_MINIMAL_NEW,
+	UPDATE_V3_FLOW_NEW_CONTEXT_MINIMAL_CURRENT,
+};
+
+struct pipe_split_policy_backup {
+	bool dynamic_odm_policy;
+	bool subvp_policy;
+	enum pipe_split_policy mpc_policy;
+	char force_odm[MAX_PIPES];
+};
+
+struct dc_update_scratch_space {
+	struct dc *dc;
+	struct dc_surface_update *surface_updates;
+	int surface_count;
+	struct dc_stream_state *stream;
+	struct dc_stream_update *stream_update;
+	const struct dc_probe_updates *probe_updates;
+	bool update_v3;
+	bool do_clear_update_bits;
+	enum dc_update_type update_type;
+	struct dc_state *new_context;
+	enum update_v3_flow flow;
+	struct dc_state *backup_context;
+	struct dc_state *intermediate_context;
+	struct pipe_split_policy_backup intermediate_policy;
+	struct dc_surface_update intermediate_updates[MAX_SURFACES];
+	int intermediate_count;
 };
 
 #endif /* _CORE_TYPES_H_ */

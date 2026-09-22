@@ -294,7 +294,6 @@ void led_remove_lookup(struct led_lookup_data *led_lookup);
 struct led_classdev *__must_check led_get(struct device *dev, char *con_id);
 struct led_classdev *__must_check devm_led_get(struct device *dev, char *con_id);
 
-extern struct led_classdev *of_led_get(struct device_node *np, int index);
 extern void led_put(struct led_classdev *led_cdev);
 struct led_classdev *__must_check devm_of_led_get(struct device *dev,
 						  int index);
@@ -608,6 +607,10 @@ enum led_trigger_netdev_modes {
 	TRIGGER_NETDEV_LINK_2500,
 	TRIGGER_NETDEV_LINK_5000,
 	TRIGGER_NETDEV_LINK_10000,
+	TRIGGER_NETDEV_LINK_25000,
+	TRIGGER_NETDEV_LINK_40000,
+	TRIGGER_NETDEV_LINK_50000,
+	TRIGGER_NETDEV_LINK_100000,
 	TRIGGER_NETDEV_HALF_DUPLEX,
 	TRIGGER_NETDEV_FULL_DUPLEX,
 	TRIGGER_NETDEV_TX,
@@ -677,8 +680,10 @@ typedef int (*gpio_blink_set_t)(struct gpio_desc *desc, int state,
 struct gpio_led {
 	const char *name;
 	const char *default_trigger;
+#ifdef CONFIG_GPIOLIB_LEGACY
 	unsigned 	gpio;
 	unsigned	active_low : 1;
+#endif
 	unsigned	retain_state_suspended : 1;
 	unsigned	panic_indicator : 1;
 	unsigned	default_state : 2;

@@ -3,16 +3,20 @@
  * Copyright (C) 2020 Invensense, Inc.
  */
 
-#include <linux/kernel.h>
+#include <linux/delay.h>
 #include <linux/device.h>
+#include <linux/kernel.h>
+#include <linux/minmax.h>
 #include <linux/mutex.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
-#include <linux/delay.h>
+#include <linux/stringify.h>
 
 #include <linux/iio/buffer.h>
-#include <linux/iio/common/inv_sensors_timestamp.h>
 #include <linux/iio/iio.h>
+#include <linux/iio/sysfs.h>
+
+#include <linux/iio/common/inv_sensors_timestamp.h>
 
 #include "inv_icm42600.h"
 #include "inv_icm42600_buffer.h"
@@ -26,28 +30,28 @@
 #define INV_ICM42600_FIFO_HEADER_ODR_GYRO	BIT(0)
 
 struct inv_icm42600_fifo_1sensor_packet {
-	uint8_t header;
+	u8 header;
 	struct inv_icm42600_fifo_sensor_data data;
-	int8_t temp;
+	s8 temp;
 } __packed;
 #define INV_ICM42600_FIFO_1SENSOR_PACKET_SIZE		8
 
 struct inv_icm42600_fifo_2sensors_packet {
-	uint8_t header;
+	u8 header;
 	struct inv_icm42600_fifo_sensor_data accel;
 	struct inv_icm42600_fifo_sensor_data gyro;
-	int8_t temp;
+	s8 temp;
 	__be16 timestamp;
 } __packed;
 #define INV_ICM42600_FIFO_2SENSORS_PACKET_SIZE		16
 
 ssize_t inv_icm42600_fifo_decode_packet(const void *packet, const void **accel,
-					const void **gyro, const int8_t **temp,
+					const void **gyro, const s8 **temp,
 					const void **timestamp, unsigned int *odr)
 {
 	const struct inv_icm42600_fifo_1sensor_packet *pack1 = packet;
 	const struct inv_icm42600_fifo_2sensors_packet *pack2 = packet;
-	uint8_t header = *((const uint8_t *)packet);
+	u8 header = *((const u8 *)packet);
 
 	/* FIFO empty */
 	if (header & INV_ICM42600_FIFO_HEADER_MSG) {
@@ -100,7 +104,7 @@ ssize_t inv_icm42600_fifo_decode_packet(const void *packet, const void **accel,
 
 void inv_icm42600_buffer_update_fifo_period(struct inv_icm42600_state *st)
 {
-	uint32_t period_gyro, period_accel, period;
+	u32 period_gyro, period_accel;
 
 	if (st->fifo.en & INV_ICM42600_SENSOR_GYRO)
 		period_gyro = inv_icm42600_odr_to_period(st->conf.gyro.odr);
@@ -112,12 +116,7 @@ void inv_icm42600_buffer_update_fifo_period(struct inv_icm42600_state *st)
 	else
 		period_accel = U32_MAX;
 
-	if (period_gyro <= period_accel)
-		period = period_gyro;
-	else
-		period = period_accel;
-
-	st->fifo.period = period;
+	st->fifo.period = min(period_gyro, period_accel);
 }
 
 int inv_icm42600_buffer_set_fifo_en(struct inv_icm42600_state *st,
@@ -190,7 +189,7 @@ static unsigned int inv_icm42600_wm_truncate(unsigned int watermark,
  * smallest latency but this is not as simple as choosing the smallest watermark
  * value. Latency depends on watermark and ODR. It requires several steps:
  * 1) compute gyro and accel latencies and choose the smallest value.
- * 2) adapt the choosen latency so that it is a multiple of both gyro and accel
+ * 2) adapt the chosen latency so that it is a multiple of both gyro and accel
  *    ones. Otherwise it is possible that you don't meet a requirement. (for
  *    example with gyro @100Hz wm 4 and accel @100Hz with wm 6, choosing the
  *    value of 4 will not meet accel latency requirement because 6 is not a
@@ -204,8 +203,8 @@ int inv_icm42600_buffer_update_watermark(struct inv_icm42600_state *st)
 {
 	size_t packet_size, wm_size;
 	unsigned int wm_gyro, wm_accel, watermark;
-	uint32_t period_gyro, period_accel, period;
-	uint32_t latency_gyro, latency_accel, latency;
+	u32 period_gyro, period_accel;
+	u32 latency_gyro, latency_accel, latency;
 	bool restore;
 	__le16 raw_wm;
 	int ret;
@@ -237,13 +236,8 @@ int inv_icm42600_buffer_update_watermark(struct inv_icm42600_state *st)
 			latency = latency_gyro - (latency_accel % latency_gyro);
 		else
 			latency = latency_accel - (latency_gyro % latency_accel);
-		/* use the shortest period */
-		if (period_gyro <= period_accel)
-			period = period_gyro;
-		else
-			period = period_accel;
 		/* all this works because periods are multiple of each others */
-		watermark = latency / period;
+		watermark = latency / min(period_gyro, period_accel);
 		if (watermark < 1)
 			watermark = 1;
 		/* update effective watermark */
@@ -257,6 +251,7 @@ int inv_icm42600_buffer_update_watermark(struct inv_icm42600_state *st)
 
 	/* compute watermark value in bytes */
 	wm_size = watermark * packet_size;
+	st->fifo.watermark.value = watermark;
 
 	/* changing FIFO watermark requires to turn off watermark interrupt */
 	ret = regmap_update_bits_check(st->map, INV_ICM42600_REG_INT_SOURCE0,
@@ -292,9 +287,8 @@ static int inv_icm42600_buffer_preenable(struct iio_dev *indio_dev)
 
 	pm_runtime_get_sync(dev);
 
-	mutex_lock(&st->lock);
+	guard(mutex)(&st->lock);
 	inv_sensors_timestamp_reset(ts);
-	mutex_unlock(&st->lock);
 
 	return 0;
 }
@@ -308,43 +302,39 @@ static int inv_icm42600_buffer_postenable(struct iio_dev *indio_dev)
 	struct inv_icm42600_state *st = iio_device_get_drvdata(indio_dev);
 	int ret;
 
-	mutex_lock(&st->lock);
+	guard(mutex)(&st->lock);
 
-	/* exit if FIFO is already on */
 	if (st->fifo.on) {
-		ret = 0;
-		goto out_on;
+		st->fifo.on++;
+		return 0;
 	}
 
 	/* set FIFO threshold interrupt */
 	ret = regmap_set_bits(st->map, INV_ICM42600_REG_INT_SOURCE0,
 			      INV_ICM42600_INT_SOURCE0_FIFO_THS_INT1_EN);
 	if (ret)
-		goto out_unlock;
+		return ret;
 
 	/* flush FIFO data */
 	ret = regmap_write(st->map, INV_ICM42600_REG_SIGNAL_PATH_RESET,
 			   INV_ICM42600_SIGNAL_PATH_RESET_FIFO_FLUSH);
 	if (ret)
-		goto out_unlock;
+		return ret;
 
 	/* set FIFO in streaming mode */
 	ret = regmap_write(st->map, INV_ICM42600_REG_FIFO_CONFIG,
 			   INV_ICM42600_FIFO_CONFIG_STREAM);
 	if (ret)
-		goto out_unlock;
+		return ret;
 
 	/* workaround: first read of FIFO count after reset is always 0 */
 	ret = regmap_bulk_read(st->map, INV_ICM42600_REG_FIFO_COUNT, st->buffer, 2);
 	if (ret)
-		goto out_unlock;
+		return ret;
 
-out_on:
-	/* increase FIFO on counter */
 	st->fifo.on++;
-out_unlock:
-	mutex_unlock(&st->lock);
-	return ret;
+
+	return 0;
 }
 
 static int inv_icm42600_buffer_predisable(struct iio_dev *indio_dev)
@@ -352,43 +342,41 @@ static int inv_icm42600_buffer_predisable(struct iio_dev *indio_dev)
 	struct inv_icm42600_state *st = iio_device_get_drvdata(indio_dev);
 	int ret;
 
-	mutex_lock(&st->lock);
+	guard(mutex)(&st->lock);
 
-	/* exit if there are several sensors using the FIFO */
 	if (st->fifo.on > 1) {
-		ret = 0;
-		goto out_off;
+		st->fifo.on--;
+		return 0;
 	}
 
 	/* set FIFO in bypass mode */
 	ret = regmap_write(st->map, INV_ICM42600_REG_FIFO_CONFIG,
 			   INV_ICM42600_FIFO_CONFIG_BYPASS);
 	if (ret)
-		goto out_unlock;
+		return ret;
 
 	/* flush FIFO data */
 	ret = regmap_write(st->map, INV_ICM42600_REG_SIGNAL_PATH_RESET,
 			   INV_ICM42600_SIGNAL_PATH_RESET_FIFO_FLUSH);
 	if (ret)
-		goto out_unlock;
+		return ret;
 
 	/* disable FIFO threshold interrupt */
 	ret = regmap_clear_bits(st->map, INV_ICM42600_REG_INT_SOURCE0,
 				INV_ICM42600_INT_SOURCE0_FIFO_THS_INT1_EN);
 	if (ret)
-		goto out_unlock;
+		return ret;
 
-out_off:
-	/* decrease FIFO on counter */
 	st->fifo.on--;
-out_unlock:
-	mutex_unlock(&st->lock);
-	return ret;
+
+	return 0;
 }
 
 static int inv_icm42600_buffer_postdisable(struct iio_dev *indio_dev)
 {
 	struct inv_icm42600_state *st = iio_device_get_drvdata(indio_dev);
+	struct inv_icm42600_sensor_state *sensor_st = iio_priv(indio_dev);
+	struct inv_sensors_timestamp *ts = &sensor_st->ts;
 	struct device *dev = regmap_get_device(st->map);
 	unsigned int sensor;
 	unsigned int *watermark;
@@ -410,6 +398,8 @@ static int inv_icm42600_buffer_postdisable(struct iio_dev *indio_dev)
 
 	mutex_lock(&st->lock);
 
+	inv_sensors_timestamp_apply_odr(ts, 0, 0, 0);
+
 	ret = inv_icm42600_buffer_set_fifo_en(st, st->fifo.en & ~sensor);
 	if (ret)
 		goto out_unlock;
@@ -422,7 +412,7 @@ static int inv_icm42600_buffer_postdisable(struct iio_dev *indio_dev)
 	conf.mode = INV_ICM42600_SENSOR_MODE_OFF;
 	if (sensor == INV_ICM42600_SENSOR_GYRO)
 		ret = inv_icm42600_set_gyro_conf(st, &conf, &sleep_sensor);
-	else
+	else if (!st->apex.on)
 		ret = inv_icm42600_set_accel_conf(st, &conf, &sleep_sensor);
 	if (ret)
 		goto out_unlock;
@@ -439,7 +429,6 @@ out_unlock:
 	if (sleep)
 		msleep(sleep);
 
-	pm_runtime_mark_last_busy(dev);
 	pm_runtime_put_autosuspend(dev);
 
 	return ret;
@@ -452,6 +441,40 @@ const struct iio_buffer_setup_ops inv_icm42600_buffer_ops = {
 	.postdisable = inv_icm42600_buffer_postdisable,
 };
 
+static ssize_t hwfifo_watermark_show(struct device *dev,
+				     struct device_attribute *attr,
+				     char *buf)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct inv_icm42600_state *st = iio_device_get_drvdata(indio_dev);
+	unsigned int wm;
+
+	guard(mutex)(&st->lock);
+
+	if (indio_dev == st->indio_accel)
+		wm = st->fifo.watermark.eff_accel;
+	else if (indio_dev == st->indio_gyro)
+		wm = st->fifo.watermark.eff_gyro;
+	else
+		return -EINVAL;
+
+	return sysfs_emit(buf, "%u\n", wm);
+}
+
+IIO_STATIC_CONST_DEVICE_ATTR(hwfifo_watermark_min, "1");
+IIO_STATIC_CONST_DEVICE_ATTR(hwfifo_watermark_max,
+			     __stringify(INV_ICM42600_FIFO_WATERMARK_MAX_SAMPLES));
+static IIO_DEVICE_ATTR_RO(hwfifo_watermark, 0);
+IIO_STATIC_CONST_DEVICE_ATTR(hwfifo_enabled, "1");
+
+const struct iio_dev_attr *inv_icm42600_buffer_attrs[] = {
+	&iio_dev_attr_hwfifo_watermark_min,
+	&iio_dev_attr_hwfifo_watermark_max,
+	&iio_dev_attr_hwfifo_watermark,
+	&iio_dev_attr_hwfifo_enabled,
+	NULL
+};
+
 int inv_icm42600_buffer_fifo_read(struct inv_icm42600_state *st,
 				  unsigned int max)
 {
@@ -459,7 +482,7 @@ int inv_icm42600_buffer_fifo_read(struct inv_icm42600_state *st,
 	__be16 *raw_fifo_count;
 	ssize_t i, size;
 	const void *accel, *gyro, *timestamp;
-	const int8_t *temp;
+	const s8 *temp;
 	unsigned int odr;
 	int ret;
 
@@ -469,11 +492,10 @@ int inv_icm42600_buffer_fifo_read(struct inv_icm42600_state *st,
 	st->fifo.nb.accel = 0;
 	st->fifo.nb.total = 0;
 
-	/* compute maximum FIFO read size */
+	/* compute maximum FIFO read size (watermark for max = 0 interrupt case) */
 	if (max == 0)
-		max_count = sizeof(st->fifo.data);
-	else
-		max_count = max * inv_icm42600_get_packet_size(st->fifo.en);
+		max = st->fifo.watermark.value;
+	max_count = max * inv_icm42600_get_packet_size(st->fifo.en);
 
 	/* read FIFO count value */
 	raw_fifo_count = (__be16 *)st->buffer;
@@ -550,7 +572,7 @@ int inv_icm42600_buffer_hwfifo_flush(struct inv_icm42600_state *st,
 	struct inv_icm42600_sensor_state *gyro_st = iio_priv(st->indio_gyro);
 	struct inv_icm42600_sensor_state *accel_st = iio_priv(st->indio_accel);
 	struct inv_sensors_timestamp *ts;
-	int64_t gyro_ts, accel_ts;
+	s64 gyro_ts, accel_ts;
 	int ret;
 
 	gyro_ts = iio_get_time_ns(st->indio_gyro);
@@ -589,6 +611,7 @@ int inv_icm42600_buffer_init(struct inv_icm42600_state *st)
 
 	st->fifo.watermark.eff_gyro = 1;
 	st->fifo.watermark.eff_accel = 1;
+	st->fifo.watermark.value = 1;
 
 	/*
 	 * Default FIFO configuration (bits 7 to 5)

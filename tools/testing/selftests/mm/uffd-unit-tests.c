@@ -7,6 +7,8 @@
 
 #include "uffd-common.h"
 
+#include <linux/fs.h>
+#include <sys/uio.h>
 #include "../../../../mm/gup_test.h"
 
 #ifdef __NR_userfaultfd
@@ -76,7 +78,7 @@ struct uffd_test_args {
 typedef struct uffd_test_args uffd_test_args_t;
 
 /* Returns: UFFD_TEST_* */
-typedef void (*uffd_test_fn)(uffd_test_args_t *);
+typedef void (*uffd_test_fn)(uffd_global_test_opts_t *, uffd_test_args_t *);
 
 typedef struct {
 	const char *name;
@@ -86,48 +88,33 @@ typedef struct {
 	uffd_test_case_ops_t *test_case_ops;
 } uffd_test_case_t;
 
-static void uffd_test_report(void)
-{
-	printf("Userfaults unit tests: pass=%u, skip=%u, fail=%u (total=%u)\n",
-	       ksft_get_pass_cnt(),
-	       ksft_get_xskip_cnt(),
-	       ksft_get_fail_cnt(),
-	       ksft_test_num());
-}
+static char current_test[256];
 
 static void uffd_test_pass(void)
 {
-	printf("done\n");
-	ksft_inc_pass_cnt();
+	ksft_test_result_pass("%s\n", current_test);
 }
 
 #define  uffd_test_start(...)  do {		\
-		printf("Testing ");		\
-		printf(__VA_ARGS__);		\
-		printf("... ");			\
-		fflush(stdout);			\
+		snprintf(current_test, sizeof(current_test), __VA_ARGS__); \
 	} while (0)
 
-#define  uffd_test_fail(...)  do {		\
-		printf("failed [reason: ");	\
-		printf(__VA_ARGS__);		\
-		printf("]\n");			\
-		ksft_inc_fail_cnt();		\
+#define  uffd_test_fail(fmt, ...)  do {					\
+		ksft_print_msg("failed reason: [" fmt "]\n", ##__VA_ARGS__); \
+		ksft_test_result_fail("%s\n", current_test);		\
 	} while (0)
 
 static void uffd_test_skip(const char *message)
 {
-	printf("skipped [reason: %s]\n", message);
-	ksft_inc_xskip_cnt();
+	ksft_test_result_skip("%s (%s)\n", current_test, message);
 }
 
-/*
- * Returns 1 if specific userfaultfd supported, 0 otherwise.  Note, we'll
- * return 1 even if some test failed as long as uffd supported, because in
- * that case we still want to proceed with the rest uffd unit tests.
- */
-static int test_uffd_api(bool use_dev)
+static void test_uffd_api(bool use_dev)
 {
+	const uint64_t expected_ioctls =
+		BIT_ULL(_UFFDIO_REGISTER) |
+		BIT_ULL(_UFFDIO_UNREGISTER) |
+		BIT_ULL(_UFFDIO_API);
 	struct uffdio_api uffdio_api;
 	int uffd;
 
@@ -140,7 +127,7 @@ static int test_uffd_api(bool use_dev)
 		uffd = uffd_open_sys(UFFD_FLAGS);
 	if (uffd < 0) {
 		uffd_test_skip("cannot open userfaultfd handle");
-		return 0;
+		return;
 	}
 
 	/* Test wrong UFFD_API */
@@ -167,6 +154,15 @@ static int test_uffd_api(bool use_dev)
 		goto out;
 	}
 
+	/* Verify returned fd-level ioctls bitmask */
+	if ((uffdio_api.ioctls & expected_ioctls) != expected_ioctls) {
+		uffd_test_fail("UFFDIO_API missing expected ioctls: "
+			       "got=0x%"PRIx64", expected=0x%"PRIx64,
+			       (uint64_t)uffdio_api.ioctls,
+			       expected_ioctls);
+		goto out;
+	}
+
 	/* Test double requests of UFFDIO_API with a random feature set */
 	uffdio_api.features = BIT_ULL(0);
 	if (ioctl(uffd, UFFDIO_API, &uffdio_api) == 0) {
@@ -177,37 +173,8 @@ static int test_uffd_api(bool use_dev)
 	uffd_test_pass();
 out:
 	close(uffd);
-	/* We have a valid uffd handle */
-	return 1;
 }
 
-/*
- * This function initializes the global variables.  TODO: remove global
- * vars and then remove this.
- */
-static int
-uffd_setup_environment(uffd_test_args_t *args, uffd_test_case_t *test,
-		       mem_type_t *mem_type, const char **errmsg)
-{
-	map_shared = mem_type->shared;
-	uffd_test_ops = mem_type->mem_ops;
-	uffd_test_case_ops = test->test_case_ops;
-
-	if (mem_type->mem_flag & (MEM_HUGETLB_PRIVATE | MEM_HUGETLB))
-		page_size = default_huge_page_size();
-	else
-		page_size = psize();
-
-	/* Ensure we have at least 2 pages */
-	nr_pages = MAX(UFFD_TEST_MEM_SIZE, page_size * 2) / page_size;
-	/* TODO: remove this global var.. it's so ugly */
-	nr_parallel = 1;
-
-	/* Initialize test arguments */
-	args->mem_type = mem_type;
-
-	return uffd_test_ctx_init(test->uffd_feature_required, errmsg);
-}
 
 static bool uffd_feature_supported(uffd_test_case_t *test)
 {
@@ -237,7 +204,8 @@ static int pagemap_open(void)
 	} while (0)
 
 typedef struct {
-	int parent_uffd, child_uffd;
+	uffd_global_test_opts_t *gopts;
+	int child_uffd;
 } fork_event_args;
 
 static void *fork_event_consumer(void *data)
@@ -245,10 +213,10 @@ static void *fork_event_consumer(void *data)
 	fork_event_args *args = data;
 	struct uffd_msg msg = { 0 };
 
-	ready_for_fork = true;
+	args->gopts->ready_for_fork = true;
 
 	/* Read until a full msg received */
-	while (uffd_read_msg(args->parent_uffd, &msg));
+	while (uffd_read_msg(args->gopts, &msg));
 
 	if (msg.event != UFFD_EVENT_FORK)
 		err("wrong message: %u\n", msg.event);
@@ -304,9 +272,9 @@ static void unpin_pages(pin_args *args)
 	args->pinned = false;
 }
 
-static int pagemap_test_fork(int uffd, bool with_event, bool test_pin)
+static int pagemap_test_fork(uffd_global_test_opts_t *gopts, bool with_event, bool test_pin)
 {
-	fork_event_args args = { .parent_uffd = uffd, .child_uffd = -1 };
+	fork_event_args args = { .gopts = gopts, .child_uffd = -1 };
 	pthread_t thread;
 	pid_t child;
 	uint64_t value;
@@ -314,10 +282,10 @@ static int pagemap_test_fork(int uffd, bool with_event, bool test_pin)
 
 	/* Prepare a thread to resolve EVENT_FORK */
 	if (with_event) {
-		ready_for_fork = false;
+		gopts->ready_for_fork = false;
 		if (pthread_create(&thread, NULL, fork_event_consumer, &args))
 			err("pthread_create()");
-		while (!ready_for_fork)
+		while (!gopts->ready_for_fork)
 			; /* Wait for the poll_thread to start executing before forking */
 	}
 
@@ -328,14 +296,14 @@ static int pagemap_test_fork(int uffd, bool with_event, bool test_pin)
 
 		fd = pagemap_open();
 
-		if (test_pin && pin_pages(&args, area_dst, page_size))
+		if (test_pin && pin_pages(&args, gopts->area_dst, gopts->page_size))
 			/*
 			 * Normally when reach here we have pinned in
 			 * previous tests, so shouldn't fail anymore
 			 */
 			err("pin page failed in child");
 
-		value = pagemap_get_entry(fd, area_dst);
+		value = pagemap_get_entry(fd, gopts->area_dst);
 		/*
 		 * After fork(), we should handle uffd-wp bit differently:
 		 *
@@ -346,7 +314,7 @@ static int pagemap_test_fork(int uffd, bool with_event, bool test_pin)
 		if (test_pin)
 			unpin_pages(&args);
 		/* Succeed */
-		exit(0);
+		_exit(0);
 	}
 	waitpid(child, &result, 0);
 
@@ -361,70 +329,70 @@ static int pagemap_test_fork(int uffd, bool with_event, bool test_pin)
 	return result;
 }
 
-static void uffd_wp_unpopulated_test(uffd_test_args_t *args)
+static void uffd_wp_unpopulated_test(uffd_global_test_opts_t *gopts, uffd_test_args_t *args)
 {
 	uint64_t value;
 	int pagemap_fd;
 
-	if (uffd_register(uffd, area_dst, nr_pages * page_size,
+	if (uffd_register(gopts->uffd, gopts->area_dst, gopts->nr_pages * gopts->page_size,
 			  false, true, false))
 		err("register failed");
 
 	pagemap_fd = pagemap_open();
 
 	/* Test applying pte marker to anon unpopulated */
-	wp_range(uffd, (uint64_t)area_dst, page_size, true);
-	value = pagemap_get_entry(pagemap_fd, area_dst);
+	wp_range(gopts->uffd, (uint64_t)gopts->area_dst, gopts->page_size, true);
+	value = pagemap_get_entry(pagemap_fd, gopts->area_dst);
 	pagemap_check_wp(value, true);
 
 	/* Test unprotect on anon pte marker */
-	wp_range(uffd, (uint64_t)area_dst, page_size, false);
-	value = pagemap_get_entry(pagemap_fd, area_dst);
+	wp_range(gopts->uffd, (uint64_t)gopts->area_dst, gopts->page_size, false);
+	value = pagemap_get_entry(pagemap_fd, gopts->area_dst);
 	pagemap_check_wp(value, false);
 
 	/* Test zap on anon marker */
-	wp_range(uffd, (uint64_t)area_dst, page_size, true);
-	if (madvise(area_dst, page_size, MADV_DONTNEED))
+	wp_range(gopts->uffd, (uint64_t)gopts->area_dst, gopts->page_size, true);
+	if (madvise(gopts->area_dst, gopts->page_size, MADV_DONTNEED))
 		err("madvise(MADV_DONTNEED) failed");
-	value = pagemap_get_entry(pagemap_fd, area_dst);
+	value = pagemap_get_entry(pagemap_fd, gopts->area_dst);
 	pagemap_check_wp(value, false);
 
 	/* Test fault in after marker removed */
-	*area_dst = 1;
-	value = pagemap_get_entry(pagemap_fd, area_dst);
+	*gopts->area_dst = 1;
+	value = pagemap_get_entry(pagemap_fd, gopts->area_dst);
 	pagemap_check_wp(value, false);
 	/* Drop it to make pte none again */
-	if (madvise(area_dst, page_size, MADV_DONTNEED))
+	if (madvise(gopts->area_dst, gopts->page_size, MADV_DONTNEED))
 		err("madvise(MADV_DONTNEED) failed");
 
 	/* Test read-zero-page upon pte marker */
-	wp_range(uffd, (uint64_t)area_dst, page_size, true);
-	*(volatile char *)area_dst;
+	wp_range(gopts->uffd, (uint64_t)gopts->area_dst, gopts->page_size, true);
+	*(volatile char *)gopts->area_dst;
 	/* Drop it to make pte none again */
-	if (madvise(area_dst, page_size, MADV_DONTNEED))
+	if (madvise(gopts->area_dst, gopts->page_size, MADV_DONTNEED))
 		err("madvise(MADV_DONTNEED) failed");
 
 	uffd_test_pass();
 }
 
-static void uffd_wp_fork_test_common(uffd_test_args_t *args,
+static void uffd_wp_fork_test_common(uffd_global_test_opts_t *gopts, uffd_test_args_t *args,
 				     bool with_event)
 {
 	int pagemap_fd;
 	uint64_t value;
 
-	if (uffd_register(uffd, area_dst, nr_pages * page_size,
+	if (uffd_register(gopts->uffd, gopts->area_dst, gopts->nr_pages * gopts->page_size,
 			  false, true, false))
 		err("register failed");
 
 	pagemap_fd = pagemap_open();
 
 	/* Touch the page */
-	*area_dst = 1;
-	wp_range(uffd, (uint64_t)area_dst, page_size, true);
-	value = pagemap_get_entry(pagemap_fd, area_dst);
+	*gopts->area_dst = 1;
+	wp_range(gopts->uffd, (uint64_t)gopts->area_dst, gopts->page_size, true);
+	value = pagemap_get_entry(pagemap_fd, gopts->area_dst);
 	pagemap_check_wp(value, true);
-	if (pagemap_test_fork(uffd, with_event, false)) {
+	if (pagemap_test_fork(gopts, with_event, false)) {
 		uffd_test_fail("Detected %s uffd-wp bit in child in present pte",
 			       with_event ? "missing" : "stall");
 		goto out;
@@ -442,79 +410,80 @@ static void uffd_wp_fork_test_common(uffd_test_args_t *args,
 	 * to expose pte markers.
 	 */
 	if (args->mem_type->shared) {
-		if (madvise(area_dst, page_size, MADV_DONTNEED))
+		if (madvise(gopts->area_dst, gopts->page_size, MADV_DONTNEED))
 			err("MADV_DONTNEED");
 	} else {
 		/*
 		 * NOTE: ignore retval because private-hugetlb doesn't yet
 		 * support swapping, so it could fail.
 		 */
-		madvise(area_dst, page_size, MADV_PAGEOUT);
+		madvise(gopts->area_dst, gopts->page_size, MADV_PAGEOUT);
 	}
 
 	/* Uffd-wp should persist even swapped out */
-	value = pagemap_get_entry(pagemap_fd, area_dst);
+	value = pagemap_get_entry(pagemap_fd, gopts->area_dst);
 	pagemap_check_wp(value, true);
-	if (pagemap_test_fork(uffd, with_event, false)) {
+	if (pagemap_test_fork(gopts, with_event, false)) {
 		uffd_test_fail("Detected %s uffd-wp bit in child in zapped pte",
 			       with_event ? "missing" : "stall");
 		goto out;
 	}
 
 	/* Unprotect; this tests swap pte modifications */
-	wp_range(uffd, (uint64_t)area_dst, page_size, false);
-	value = pagemap_get_entry(pagemap_fd, area_dst);
+	wp_range(gopts->uffd, (uint64_t)gopts->area_dst, gopts->page_size, false);
+	value = pagemap_get_entry(pagemap_fd, gopts->area_dst);
 	pagemap_check_wp(value, false);
 
 	/* Fault in the page from disk */
-	*area_dst = 2;
-	value = pagemap_get_entry(pagemap_fd, area_dst);
+	*gopts->area_dst = 2;
+	value = pagemap_get_entry(pagemap_fd, gopts->area_dst);
 	pagemap_check_wp(value, false);
 	uffd_test_pass();
 out:
-	if (uffd_unregister(uffd, area_dst, nr_pages * page_size))
+	if (uffd_unregister(gopts->uffd, gopts->area_dst, gopts->nr_pages * gopts->page_size))
 		err("unregister failed");
 	close(pagemap_fd);
 }
 
-static void uffd_wp_fork_test(uffd_test_args_t *args)
+static void uffd_wp_fork_test(uffd_global_test_opts_t *gopts, uffd_test_args_t *args)
 {
-	uffd_wp_fork_test_common(args, false);
+	uffd_wp_fork_test_common(gopts, args, false);
 }
 
-static void uffd_wp_fork_with_event_test(uffd_test_args_t *args)
+static void uffd_wp_fork_with_event_test(uffd_global_test_opts_t *gopts, uffd_test_args_t *args)
 {
-	uffd_wp_fork_test_common(args, true);
+	uffd_wp_fork_test_common(gopts, args, true);
 }
 
-static void uffd_wp_fork_pin_test_common(uffd_test_args_t *args,
+static void uffd_wp_fork_pin_test_common(uffd_global_test_opts_t *gopts,
+					 uffd_test_args_t *args,
 					 bool with_event)
 {
 	int pagemap_fd;
 	pin_args pin_args = {};
 
-	if (uffd_register(uffd, area_dst, page_size, false, true, false))
+	if (uffd_register(gopts->uffd, gopts->area_dst, gopts->page_size, false, true, false))
 		err("register failed");
 
 	pagemap_fd = pagemap_open();
 
 	/* Touch the page */
-	*area_dst = 1;
-	wp_range(uffd, (uint64_t)area_dst, page_size, true);
+	*gopts->area_dst = 1;
+	wp_range(gopts->uffd, (uint64_t)gopts->area_dst, gopts->page_size, true);
 
 	/*
 	 * 1. First pin, then fork().  This tests fork() special path when
 	 * doing early CoW if the page is private.
 	 */
-	if (pin_pages(&pin_args, area_dst, page_size)) {
+	if (pin_pages(&pin_args, gopts->area_dst, gopts->page_size)) {
 		uffd_test_skip("Possibly CONFIG_GUP_TEST missing "
 			       "or unprivileged");
 		close(pagemap_fd);
-		uffd_unregister(uffd, area_dst, page_size);
+		uffd_unregister(gopts->uffd, gopts->area_dst, gopts->page_size);
 		return;
 	}
 
-	if (pagemap_test_fork(uffd, with_event, false)) {
+	if (pagemap_test_fork(gopts, with_event, false)) {
 		uffd_test_fail("Detected %s uffd-wp bit in early CoW of fork()",
 			       with_event ? "missing" : "stall");
 		unpin_pages(&pin_args);
@@ -527,49 +496,50 @@ static void uffd_wp_fork_pin_test_common(uffd_test_args_t *args,
 	 * 2. First fork(), then pin (in the child, where test_pin==true).
 	 * This tests COR, aka, page unsharing on private memories.
 	 */
-	if (pagemap_test_fork(uffd, with_event, true)) {
+	if (pagemap_test_fork(gopts, with_event, true)) {
 		uffd_test_fail("Detected %s uffd-wp bit when RO pin",
 			       with_event ? "missing" : "stall");
 		goto out;
 	}
 	uffd_test_pass();
 out:
-	if (uffd_unregister(uffd, area_dst, page_size))
+	if (uffd_unregister(gopts->uffd, gopts->area_dst, gopts->page_size))
 		err("register failed");
 	close(pagemap_fd);
 }
 
-static void uffd_wp_fork_pin_test(uffd_test_args_t *args)
+static void uffd_wp_fork_pin_test(uffd_global_test_opts_t *gopts, uffd_test_args_t *args)
 {
-	uffd_wp_fork_pin_test_common(args, false);
+	uffd_wp_fork_pin_test_common(gopts, args, false);
 }
 
-static void uffd_wp_fork_pin_with_event_test(uffd_test_args_t *args)
+static void uffd_wp_fork_pin_with_event_test(uffd_global_test_opts_t *gopts, uffd_test_args_t *args)
 {
-	uffd_wp_fork_pin_test_common(args, true);
+	uffd_wp_fork_pin_test_common(gopts, args, true);
 }
 
-static void check_memory_contents(char *p)
+static void check_memory_contents(uffd_global_test_opts_t *gopts, char *p)
 {
 	unsigned long i, j;
 	uint8_t expected_byte;
 
-	for (i = 0; i < nr_pages; ++i) {
+	for (i = 0; i < gopts->nr_pages; ++i) {
 		expected_byte = ~((uint8_t)(i % ((uint8_t)-1)));
-		for (j = 0; j < page_size; j++) {
-			uint8_t v = *(uint8_t *)(p + (i * page_size) + j);
+		for (j = 0; j < gopts->page_size; j++) {
+			uint8_t v = *(uint8_t *)(p + (i * gopts->page_size) + j);
 			if (v != expected_byte)
 				err("unexpected page contents");
 		}
 	}
 }
 
-static void uffd_minor_test_common(bool test_collapse, bool test_wp)
+static void uffd_minor_test_common(uffd_global_test_opts_t *gopts, bool test_collapse, bool test_wp)
 {
 	unsigned long p;
 	pthread_t uffd_mon;
-	char c;
+	char c = '\0';
 	struct uffd_args args = { 0 };
+	args.gopts = gopts;
 
 	/*
 	 * NOTE: MADV_COLLAPSE is not yet compatible with WP, so testing
@@ -577,7 +547,7 @@ static void uffd_minor_test_common(bool test_collapse, bool test_wp)
 	 */
 	assert(!(test_collapse && test_wp));
 
-	if (uffd_register(uffd, area_dst_alias, nr_pages * page_size,
+	if (uffd_register(gopts->uffd, gopts->area_dst_alias, gopts->nr_pages * gopts->page_size,
 			  /* NOTE! MADV_COLLAPSE may not work with uffd-wp */
 			  false, test_wp, true))
 		err("register failure");
@@ -586,9 +556,9 @@ static void uffd_minor_test_common(bool test_collapse, bool test_wp)
 	 * After registering with UFFD, populate the non-UFFD-registered side of
 	 * the shared mapping. This should *not* trigger any UFFD minor faults.
 	 */
-	for (p = 0; p < nr_pages; ++p)
-		memset(area_dst + (p * page_size), p % ((uint8_t)-1),
-		       page_size);
+	for (p = 0; p < gopts->nr_pages; ++p)
+		memset(gopts->area_dst + (p * gopts->page_size), p % ((uint8_t)-1),
+		       gopts->page_size);
 
 	args.apply_wp = test_wp;
 	if (pthread_create(&uffd_mon, NULL, uffd_poll_thread, &args))
@@ -600,50 +570,859 @@ static void uffd_minor_test_common(bool test_collapse, bool test_wp)
 	 * fault. uffd_poll_thread will resolve the fault by bit-flipping the
 	 * page's contents, and then issuing a CONTINUE ioctl.
 	 */
-	check_memory_contents(area_dst_alias);
+	check_memory_contents(gopts, gopts->area_dst_alias);
 
-	if (write(pipefd[1], &c, sizeof(c)) != sizeof(c))
+	if (write(gopts->pipefd[1], &c, sizeof(c)) != sizeof(c))
 		err("pipe write");
 	if (pthread_join(uffd_mon, NULL))
 		err("join() failed");
 
 	if (test_collapse) {
-		if (madvise(area_dst_alias, nr_pages * page_size,
+		if (madvise(gopts->area_dst_alias, gopts->nr_pages * gopts->page_size,
 			    MADV_COLLAPSE)) {
 			/* It's fine to fail for this one... */
 			uffd_test_skip("MADV_COLLAPSE failed");
 			return;
 		}
 
-		uffd_test_ops->check_pmd_mapping(area_dst,
-						 nr_pages * page_size /
+		uffd_test_ops->check_pmd_mapping(gopts,
+						 gopts->area_dst,
+						 gopts->nr_pages * gopts->page_size /
 						 read_pmd_pagesize());
 		/*
 		 * This won't cause uffd-fault - it purely just makes sure there
 		 * was no corruption.
 		 */
-		check_memory_contents(area_dst_alias);
+		check_memory_contents(gopts, gopts->area_dst_alias);
 	}
 
-	if (args.missing_faults != 0 || args.minor_faults != nr_pages)
+	if (args.missing_faults != 0 || args.minor_faults != gopts->nr_pages)
 		uffd_test_fail("stats check error");
 	else
 		uffd_test_pass();
 }
 
-void uffd_minor_test(uffd_test_args_t *args)
+void uffd_minor_test(uffd_global_test_opts_t *gopts, uffd_test_args_t *args)
 {
-	uffd_minor_test_common(false, false);
+	uffd_minor_test_common(gopts, false, false);
 }
 
-void uffd_minor_wp_test(uffd_test_args_t *args)
+void uffd_minor_wp_test(uffd_global_test_opts_t *gopts, uffd_test_args_t *args)
 {
-	uffd_minor_test_common(false, true);
+	uffd_minor_test_common(gopts, false, true);
 }
 
-void uffd_minor_collapse_test(uffd_test_args_t *args)
+void uffd_minor_collapse_test(uffd_global_test_opts_t *gopts, uffd_test_args_t *args)
 {
-	uffd_minor_test_common(true, false);
+	uffd_minor_test_common(gopts, true, false);
+}
+
+static int uffd_register_rwp(int uffd, void *addr, uint64_t len)
+{
+	struct uffdio_register reg = {
+		.range = { .start = (unsigned long)addr, .len = len },
+		.mode = UFFDIO_REGISTER_MODE_RWP,
+	};
+
+	if (ioctl(uffd, UFFDIO_REGISTER, &reg) == -1)
+		return -errno;
+	return 0;
+}
+
+static void rwprotect_range(int uffd, __u64 start, __u64 len, bool protect)
+{
+	struct uffdio_rwprotect rwp = {
+		.range = { .start = start, .len = len },
+		.mode = protect ? UFFDIO_RWPROTECT_MODE_RWP : 0,
+	};
+
+	if (ioctl(uffd, UFFDIO_RWPROTECT, &rwp))
+		err("UFFDIO_RWPROTECT failed");
+}
+
+static void set_async_mode(int uffd, bool enable)
+{
+	struct uffdio_set_mode mode = { };
+
+	if (enable)
+		mode.enable = UFFD_FEATURE_RWP_ASYNC;
+	else
+		mode.disable = UFFD_FEATURE_RWP_ASYNC;
+
+	if (ioctl(uffd, UFFDIO_SET_MODE, &mode))
+		err("UFFDIO_SET_MODE failed");
+}
+
+/*
+ * Test async RWP faults on anonymous memory.
+ * Populate pages, register MODE_RWP with RWP_ASYNC,
+ * RW-protect, re-access, verify content preserved and no faults delivered.
+ */
+static void uffd_rwp_async_test(uffd_global_test_opts_t *gopts,
+				       uffd_test_args_t *args)
+{
+	unsigned long nr_pages = gopts->nr_pages;
+	unsigned long page_size = gopts->page_size;
+	unsigned long p;
+
+	/* Populate all pages with known content */
+	for (p = 0; p < nr_pages; p++)
+		memset(gopts->area_dst + p * page_size, p % 255 + 1, page_size);
+
+	/* Register MODE_RWP */
+	if (uffd_register_rwp(gopts->uffd, gopts->area_dst,
+			  nr_pages * page_size))
+		err("register failure");
+
+	/* RW-protect all pages (sets protnone) */
+	rwprotect_range(gopts->uffd, (uint64_t)gopts->area_dst,
+			 nr_pages * page_size, true);
+
+	/* Access all pages — should auto-resolve, no faults */
+	for (p = 0; p < nr_pages; p++) {
+		unsigned char *page = (unsigned char *)gopts->area_dst +
+				      p * page_size;
+		unsigned char expected = p % 255 + 1;
+
+		if (page[0] != expected) {
+			uffd_test_fail("page %lu content mismatch: %u != %u",
+				       p, page[0], expected);
+			return;
+		}
+	}
+
+	uffd_test_pass();
+}
+
+/*
+ * Fault handler for RWP — unprotect the page via UFFDIO_RWPROTECT.
+ */
+static void uffd_handle_rwp_fault(uffd_global_test_opts_t *gopts,
+				  struct uffd_msg *msg,
+				  struct uffd_args *uargs)
+{
+	if (!(msg->arg.pagefault.flags & UFFD_PAGEFAULT_FLAG_RWP))
+		err("expected RWP fault, got 0x%llx",
+		    msg->arg.pagefault.flags);
+
+	rwprotect_range(gopts->uffd, msg->arg.pagefault.address,
+			gopts->page_size, false);
+	uargs->minor_faults++;
+}
+
+/*
+ * Test sync RWP faults on anonymous memory.
+ * Populate pages, register MODE_RWP (sync), RW-protect,
+ * access from worker thread, verify fault delivered, UFFDIO_RWPROTECT resolves.
+ */
+static void uffd_rwp_sync_test(uffd_global_test_opts_t *gopts,
+				      uffd_test_args_t *args)
+{
+	unsigned long nr_pages = gopts->nr_pages;
+	unsigned long page_size = gopts->page_size;
+	pthread_t uffd_mon;
+	struct uffd_args uargs = { };
+	bool failed = false;
+	char c = '\0';
+	unsigned long p;
+
+	uargs.gopts = gopts;
+	uargs.handle_fault = uffd_handle_rwp_fault;
+
+	/* Populate all pages */
+	for (p = 0; p < nr_pages; p++)
+		memset(gopts->area_dst + p * page_size, p % 255 + 1, page_size);
+
+	/* Register MODE_RWP */
+	if (uffd_register_rwp(gopts->uffd, gopts->area_dst,
+			  nr_pages * page_size))
+		err("register failure");
+
+	/* RW-protect all pages */
+	rwprotect_range(gopts->uffd, (uint64_t)gopts->area_dst,
+			 nr_pages * page_size, true);
+
+	/* Start fault handler thread */
+	if (pthread_create(&uffd_mon, NULL, uffd_poll_thread, &uargs))
+		err("uffd_poll_thread create");
+
+	/* Access all pages — triggers sync RWP faults, handler unprotects */
+	for (p = 0; p < nr_pages; p++) {
+		unsigned char *page = (unsigned char *)gopts->area_dst +
+				      p * page_size;
+
+		if (page[0] != (p % 255 + 1)) {
+			uffd_test_fail("page %lu content mismatch", p);
+			failed = true;
+			goto out;
+		}
+	}
+
+out:
+	/*
+	 * Stop the handler before reading minor_faults: the last fault
+	 * resolution rwprotect_range()s before incrementing the counter,
+	 * so the main thread can race ahead of the increment.
+	 */
+	if (write(gopts->pipefd[1], &c, sizeof(c)) != sizeof(c))
+		err("pipe write");
+	if (pthread_join(uffd_mon, NULL))
+		err("join() failed");
+
+	if (failed)
+		return;
+	if (uargs.minor_faults == 0)
+		uffd_test_fail("expected RWP faults, got 0");
+	else
+		uffd_test_pass();
+}
+
+/*
+ * Test PAGEMAP_SCAN working-set discovery via the "hot" (accessed) scan.
+ *
+ * The working-set primitive is to find pages that were accessed: scan for
+ * PAGE_IS_ACCESSED, which is set once an access clears the protnone+uffd
+ * marker.  A VMM treats every access fault as "hot" (RWP here; MINOR/MISSING
+ * for non-resident pages) and reclaims the rest from the backing file.
+ *
+ * We deliberately do NOT use an inverted "cold" scan: that only sees
+ * VMA-resident ptes, so for a file mapping it misses cached-but-unmapped (and
+ * never-faulted, pre-populated) pages, which are pte_none and thus invisible.
+ * Hot tracking + file-level reclaim covers them; a cold pte scan cannot.
+ */
+static void uffd_rwp_pagemap_test(uffd_global_test_opts_t *gopts,
+					  uffd_test_args_t *args)
+{
+	unsigned long nr_pages = gopts->nr_pages;
+	unsigned long page_size = gopts->page_size;
+	unsigned long p;
+	struct page_region regions[16];
+	struct pm_scan_arg pm_arg;
+	int pagemap_fd;
+	long ret;
+
+	/* Need at least 4 pages */
+	if (nr_pages < 4) {
+		uffd_test_skip("need at least 4 pages");
+		return;
+	}
+
+	/* Populate all pages */
+	for (p = 0; p < nr_pages; p++)
+		memset(gopts->area_dst + p * page_size, 0xab, page_size);
+
+	/* Register and RW-protect */
+	if (uffd_register_rwp(gopts->uffd, gopts->area_dst,
+			  nr_pages * page_size))
+		err("register failure");
+
+	rwprotect_range(gopts->uffd, (uint64_t)gopts->area_dst,
+			 nr_pages * page_size, true);
+
+	/* Touch first half of pages to re-activate them (async auto-resolve) */
+	for (p = 0; p < nr_pages / 2; p++) {
+		volatile char *page = gopts->area_dst + p * page_size;
+		(void)*page;
+	}
+
+	uint64_t start = (uint64_t)gopts->area_dst;
+	uint64_t boundary = start + (nr_pages / 2) * page_size;
+	uint64_t end = start + nr_pages * page_size;
+
+	pagemap_fd = open("/proc/self/pagemap", O_RDONLY);
+	if (pagemap_fd < 0)
+		err("open pagemap");
+
+	/*
+	 * Hot scan: report the pages that were accessed.  PAGE_IS_ACCESSED is
+	 * set once the protnone+uffd marker is cleared (by the access, async
+	 * auto-resolve here).  The touched first half must come back as exactly
+	 * one hot region [start, boundary); the untouched second half must not
+	 * appear.
+	 */
+	memset(&pm_arg, 0, sizeof(pm_arg));
+	pm_arg.size = sizeof(pm_arg);
+	pm_arg.start = start;
+	pm_arg.end = end;
+	pm_arg.vec = (uint64_t)regions;
+	pm_arg.vec_len = ARRAY_SIZE(regions);
+	pm_arg.category_mask = PAGE_IS_ACCESSED;
+	pm_arg.return_mask = PAGE_IS_ACCESSED;
+
+	ret = ioctl(pagemap_fd, PAGEMAP_SCAN, &pm_arg);
+	close(pagemap_fd);
+
+	if (ret < 0) {
+		uffd_test_fail("PAGEMAP_SCAN failed: %s", strerror(errno));
+		return;
+	}
+
+	if (ret != 1 || regions[0].start != start ||
+	    regions[0].end != boundary) {
+		uffd_test_fail("hot set wrong: got %ld regions [0x%lx,0x%lx), expected 1 [0x%lx,0x%lx)",
+			       ret, (unsigned long)regions[0].start,
+			       (unsigned long)regions[0].end,
+			       (unsigned long)start, (unsigned long)boundary);
+		return;
+	}
+
+	uffd_test_pass();
+}
+
+/*
+ * Test that RWP protection survives a mprotect(PROT_NONE) ->
+ * mprotect(PROT_READ|PROT_WRITE) round-trip. The uffd-wp bit on a
+ * VM_UFFD_RWP VMA must continue to carry PROT_NONE semantics after
+ * mprotect() changes the base protection; otherwise accesses would
+ * silently succeed and the pagemap bit would stick without a fault
+ * ever clearing it.
+ */
+static void uffd_rwp_mprotect_test(uffd_global_test_opts_t *gopts,
+				   uffd_test_args_t *args)
+{
+	unsigned long nr_pages = gopts->nr_pages;
+	unsigned long page_size = gopts->page_size;
+	unsigned long p;
+	struct page_region regions[16];
+	struct pm_scan_arg pm_arg;
+	int pagemap_fd;
+	uint64_t value;
+	long ret;
+
+	/* Populate all pages */
+	for (p = 0; p < nr_pages; p++)
+		memset(gopts->area_dst + p * page_size, 0xab, page_size);
+
+	/* Register and RW-protect the whole range */
+	if (uffd_register_rwp(gopts->uffd, gopts->area_dst,
+			      nr_pages * page_size))
+		err("register failure");
+	rwprotect_range(gopts->uffd, (uint64_t)gopts->area_dst,
+			nr_pages * page_size, true);
+
+	/* Round-trip mprotect(): PROT_NONE -> PROT_READ|PROT_WRITE */
+	if (mprotect(gopts->area_dst, nr_pages * page_size, PROT_NONE))
+		err("mprotect() PROT_NONE");
+	if (mprotect(gopts->area_dst, nr_pages * page_size,
+		     PROT_READ | PROT_WRITE))
+		err("mprotect() PROT_READ|PROT_WRITE");
+
+	/*
+	 * The marker must survive the round-trip; if mprotect() dropped it,
+	 * the touches below would not fault and the scan would pass
+	 * vacuously.
+	 */
+	pagemap_fd = pagemap_open();
+	value = pagemap_get_entry(pagemap_fd, gopts->area_dst);
+	close(pagemap_fd);
+	if (!(value & PM_UFFD_WP)) {
+		uffd_test_fail("RWP marker lost across mprotect()");
+		return;
+	}
+
+	/* Touch every page. Async RWP must auto-resolve each fault. */
+	for (p = 0; p < nr_pages; p++) {
+		volatile char *page = gopts->area_dst + p * page_size;
+		(void)*page;
+	}
+
+	/*
+	 * After touching, no page should remain RW-protected. A stuck
+	 * uffd-wp bit would mean mprotect() silently dropped PROT_NONE and
+	 * the access never faulted.
+	 */
+	pagemap_fd = open("/proc/self/pagemap", O_RDONLY);
+	if (pagemap_fd < 0)
+		err("open pagemap");
+
+	memset(&pm_arg, 0, sizeof(pm_arg));
+	pm_arg.size = sizeof(pm_arg);
+	pm_arg.start = (uint64_t)gopts->area_dst;
+	pm_arg.end = (uint64_t)gopts->area_dst + nr_pages * page_size;
+	pm_arg.vec = (uint64_t)regions;
+	pm_arg.vec_len = ARRAY_SIZE(regions);
+	pm_arg.category_mask = PAGE_IS_ACCESSED;
+	pm_arg.category_inverted = PAGE_IS_ACCESSED;
+	pm_arg.return_mask = PAGE_IS_ACCESSED;
+
+	ret = ioctl(pagemap_fd, PAGEMAP_SCAN, &pm_arg);
+	close(pagemap_fd);
+
+	if (ret < 0) {
+		uffd_test_fail("PAGEMAP_SCAN failed: %s", strerror(errno));
+		return;
+	}
+	if (ret != 0) {
+		uffd_test_fail("expected no cold pages after mprotect()+touch, got %ld regions",
+			       ret);
+		return;
+	}
+
+	uffd_test_pass();
+}
+
+/*
+ * Test that GUP resolves through protnone PTEs (async mode).
+ * vmsplice() into a pipe pins user pages via get_user_pages_fast() --
+ * unlike write(), which goes through copy_from_user() and ordinary
+ * hardware page faults -- so it exercises gup_can_follow_protnone() on
+ * the RW-protected PTE. In async mode the kernel auto-restores
+ * permissions and GUP returns the page.
+ */
+static void uffd_rwp_gup_test(uffd_global_test_opts_t *gopts,
+				     uffd_test_args_t *args)
+{
+	struct iovec iov;
+	char buf;
+	int pipefd[2];
+
+	/* Populate first page with known content */
+	memset(gopts->area_dst, 0xCD, gopts->page_size);
+
+	if (uffd_register_rwp(gopts->uffd, gopts->area_dst, gopts->page_size))
+		err("register failure");
+
+	rwprotect_range(gopts->uffd, (uint64_t)gopts->area_dst,
+			gopts->page_size, true);
+
+	if (pipe(pipefd))
+		err("pipe");
+
+	/*
+	 * One byte's worth of iov is enough to GUP the containing page and
+	 * keeps the pipe transfer well under any pipe-capacity limit even on
+	 * hugetlb-backed runs.
+	 */
+	iov.iov_base = gopts->area_dst;
+	iov.iov_len = 1;
+	if (vmsplice(pipefd[1], &iov, 1, 0) != 1) {
+		uffd_test_fail("vmsplice from RW-protected page failed: %s",
+			       strerror(errno));
+		goto out;
+	}
+
+	if (read(pipefd[0], &buf, 1) != 1) {
+		uffd_test_fail("read from pipe failed");
+		goto out;
+	}
+
+	if (buf != (char)0xCD) {
+		uffd_test_fail("content mismatch: got 0x%02x, expected 0xCD",
+			       (unsigned char)buf);
+		goto out;
+	}
+
+	uffd_test_pass();
+out:
+	close(pipefd[0]);
+	close(pipefd[1]);
+}
+
+/*
+ * Test runtime toggle between async and sync modes.
+ * Start in async mode (detection), flip to sync (eviction), verify faults
+ * block, resolve them, flip back to async.
+ */
+static void uffd_rwp_async_toggle_test(uffd_global_test_opts_t *gopts,
+					      uffd_test_args_t *args)
+{
+	unsigned long nr_pages = gopts->nr_pages;
+	unsigned long page_size = gopts->page_size;
+	struct uffd_args uargs = { };
+	pthread_t uffd_mon;
+	char c = '\0';
+	unsigned long p;
+
+	uargs.gopts = gopts;
+	uargs.handle_fault = uffd_handle_rwp_fault;
+
+	/* Populate */
+	for (p = 0; p < nr_pages; p++)
+		memset(gopts->area_dst + p * page_size, p % 255 + 1, page_size);
+
+	if (uffd_register_rwp(gopts->uffd, gopts->area_dst,
+			  nr_pages * page_size))
+		err("register failure");
+
+	/* Phase 1: async detection — RW-protect, access first half */
+	rwprotect_range(gopts->uffd, (uint64_t)gopts->area_dst,
+			 nr_pages * page_size, true);
+
+	for (p = 0; p < nr_pages / 2; p++) {
+		volatile char *page = gopts->area_dst + p * page_size;
+		(void)*page;  /* auto-resolves in async mode */
+	}
+
+	/* Phase 2: flip to sync for eviction */
+	set_async_mode(gopts->uffd, false);
+
+	/* Start handler — will receive faults for cold pages */
+	if (pthread_create(&uffd_mon, NULL, uffd_poll_thread, &uargs))
+		err("uffd_poll_thread create");
+
+	/* Access second half (cold pages) — should trigger sync faults */
+	for (p = nr_pages / 2; p < nr_pages; p++) {
+		unsigned char *page = (unsigned char *)gopts->area_dst +
+				      p * page_size;
+		if (page[0] != (p % 255 + 1)) {
+			uffd_test_fail("page %lu content mismatch", p);
+			goto out;
+		}
+	}
+
+	/*
+	 * Stop the handler before reading minor_faults: the last fault
+	 * resolution rwprotect_range()s before incrementing the counter,
+	 * so the main thread can race ahead of the increment. Stopping
+	 * here also makes Phase 3 a clean async-only test -- with the
+	 * handler still running it would silently resolve any sync fault
+	 * the kernel erroneously delivers, masking a regression.
+	 */
+	if (write(gopts->pipefd[1], &c, sizeof(c)) != sizeof(c))
+		err("pipe write");
+	if (pthread_join(uffd_mon, NULL))
+		err("join() failed");
+
+	if (uargs.minor_faults == 0) {
+		uffd_test_fail("expected sync faults, got 0");
+		return;
+	}
+
+	/* Phase 3: flip back to async */
+	set_async_mode(gopts->uffd, true);
+
+	/* RW-protect and access again — should auto-resolve */
+	rwprotect_range(gopts->uffd, (uint64_t)gopts->area_dst,
+			 nr_pages * page_size, true);
+
+	for (p = 0; p < nr_pages; p++) {
+		volatile char *page = gopts->area_dst + p * page_size;
+		(void)*page;
+	}
+
+	uffd_test_pass();
+	return;
+out:
+	if (write(gopts->pipefd[1], &c, sizeof(c)) != sizeof(c))
+		err("pipe write");
+	if (pthread_join(uffd_mon, NULL))
+		err("join() failed");
+}
+
+/*
+ * Test that RW-protected pages become accessible after closing uffd.
+ */
+static void uffd_rwp_close_test(uffd_global_test_opts_t *gopts,
+				       uffd_test_args_t *args)
+{
+	unsigned long nr_pages = gopts->nr_pages;
+	unsigned long page_size = gopts->page_size;
+	unsigned long p;
+
+	/* Populate */
+	for (p = 0; p < nr_pages; p++)
+		memset(gopts->area_dst + p * page_size, p % 255 + 1, page_size);
+
+	if (uffd_register_rwp(gopts->uffd, gopts->area_dst,
+			  nr_pages * page_size))
+		err("register failure");
+
+	rwprotect_range(gopts->uffd, (uint64_t)gopts->area_dst,
+			 nr_pages * page_size, true);
+
+	/* Close uffd — should restore protnone PTEs */
+	close(gopts->uffd);
+	gopts->uffd = -1;
+
+	/* All pages should be accessible with original content */
+	for (p = 0; p < nr_pages; p++) {
+		unsigned char *page = (unsigned char *)gopts->area_dst +
+				      p * page_size;
+		unsigned char expected = p % 255 + 1;
+
+		if (page[0] != expected) {
+			uffd_test_fail("page %lu not accessible after close", p);
+			return;
+		}
+	}
+
+	uffd_test_pass();
+}
+
+/*
+ * Test that RWP protection is preserved across fork() when
+ * UFFD_FEATURE_EVENT_FORK is enabled. Without preservation, the child's
+ * PTEs would lose the uffd-wp marker and RWP-protected accesses would
+ * silently fall through to do_numa_page().
+ */
+static void uffd_rwp_fork_test(uffd_global_test_opts_t *gopts,
+			       uffd_test_args_t *args)
+{
+	unsigned long nr_pages = gopts->nr_pages;
+	unsigned long page_size = gopts->page_size;
+	int pagemap_fd;
+	uint64_t value;
+
+	if (uffd_register_rwp(gopts->uffd, gopts->area_dst,
+			      nr_pages * page_size))
+		err("register failed");
+
+	/* Populate + RWP-protect */
+	*gopts->area_dst = 1;
+	rwprotect_range(gopts->uffd, (uint64_t)gopts->area_dst,
+			page_size, true);
+
+	/* Parent: verify uffd-wp bit is set before fork */
+	pagemap_fd = pagemap_open();
+	value = pagemap_get_entry(pagemap_fd, gopts->area_dst);
+	pagemap_check_wp(value, true);
+
+	/*
+	 * Fork with EVENT_FORK: child inherits VM_UFFD_RWP. Child reads
+	 * its own pagemap and must still see the uffd-wp bit set.
+	 */
+	if (pagemap_test_fork(gopts, true, false)) {
+		uffd_test_fail("RWP marker lost in child after fork");
+		goto out;
+	}
+
+	uffd_test_pass();
+out:
+	close(pagemap_fd);
+}
+
+/*
+ * Test that RWP protection on a pinned anon page is preserved across fork().
+ * Pinning forces copy_present_page() in the child path, which must restore
+ * PAGE_NONE on top of the uffd bit. Using async mode, a read in the child
+ * auto-resolves if — and only if — the PTE was actually protnone+uffd; the
+ * cleared uffd bit afterward proves the fault path ran.
+ */
+static void uffd_rwp_fork_pin_test(uffd_global_test_opts_t *gopts,
+				   uffd_test_args_t *args)
+{
+	unsigned long page_size = gopts->page_size;
+	fork_event_args fevent_args = { .gopts = gopts, .child_uffd = -1 };
+	pin_args pin_args = {};
+	int pagemap_fd, status;
+	pthread_t fevent_thread;
+	uint64_t value;
+	pid_t child;
+
+	if (uffd_register_rwp(gopts->uffd, gopts->area_dst, page_size))
+		err("register failed");
+
+	/* Populate. */
+	*gopts->area_dst = 1;
+
+	/* RO-longterm pin so fork() takes copy_present_page() for this PTE. */
+	if (pin_pages(&pin_args, gopts->area_dst, page_size)) {
+		uffd_test_skip("Possibly CONFIG_GUP_TEST missing or unprivileged");
+		uffd_unregister(gopts->uffd, gopts->area_dst, page_size);
+		return;
+	}
+
+	/* RWP-protect: PTE is now PAGE_NONE + uffd bit. */
+	rwprotect_range(gopts->uffd, (uint64_t)gopts->area_dst, page_size, true);
+
+	pagemap_fd = pagemap_open();
+	value = pagemap_get_entry(pagemap_fd, gopts->area_dst);
+	pagemap_check_wp(value, true);
+
+	/*
+	 * UFFD_FEATURE_EVENT_FORK is required so the child inherits
+	 * VM_UFFD_RWP and the marker; without it dup_userfaultfd() resets
+	 * the child VMA and the test would pass for the wrong reason.
+	 * dup_userfaultfd() blocks until the EVENT_FORK message is consumed,
+	 * so spawn a reader before the fork().
+	 */
+	gopts->ready_for_fork = false;
+	if (pthread_create(&fevent_thread, NULL, fork_event_consumer,
+			   &fevent_args))
+		err("pthread_create() for fork event consumer");
+	while (!gopts->ready_for_fork)
+		; /* Wait for consumer to start polling. */
+
+	child = fork();
+	if (child < 0)
+		err("fork");
+	if (child == 0) {
+		volatile char c;
+		int cfd;
+
+		/*
+		 * Precondition: the child must have inherited the marker.
+		 * If copy_present_page() dropped it together with PAGE_NONE,
+		 * the read below would succeed without the fault path and
+		 * the after-read check would pass for the wrong reason.
+		 */
+		cfd = pagemap_open();
+		value = pagemap_get_entry(cfd, gopts->area_dst);
+		if (!(value & PM_UFFD_WP)) {
+			close(cfd);
+			_exit(2);
+		}
+
+		/*
+		 * Read the pinned page. Only reaches the fault path if the
+		 * child PTE is protnone + uffd; async mode auto-resolves and
+		 * clears the uffd bit. If copy_present_page() dropped
+		 * PAGE_NONE, the read would silently succeed and the bit
+		 * would still be set.
+		 */
+		c = *(volatile char *)gopts->area_dst;
+		(void)c;
+
+		value = pagemap_get_entry(cfd, gopts->area_dst);
+		close(cfd);
+		_exit((value & PM_UFFD_WP) ? 1 : 0);
+	}
+	if (waitpid(child, &status, 0) < 0)
+		err("waitpid");
+	if (pthread_join(fevent_thread, NULL))
+		err("pthread_join() for fork event consumer");
+	if (fevent_args.child_uffd >= 0)
+		close(fevent_args.child_uffd);
+
+	unpin_pages(&pin_args);
+	close(pagemap_fd);
+	if (uffd_unregister(gopts->uffd, gopts->area_dst, page_size))
+		err("unregister failed");
+
+	if (WIFEXITED(status) && WEXITSTATUS(status) == 2) {
+		uffd_test_fail("RWP marker not inherited by child");
+		return;
+	}
+	if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+		uffd_test_fail("RWP not enforced in child after pinned fork");
+		return;
+	}
+
+	uffd_test_pass();
+}
+
+/*
+ * A non-exclusive (forked, COW-shared) anon page that is RWP-protected and
+ * then swapped out must keep tracking across swap-in. On the write that
+ * swaps it back in, do_swap_page() restores PAGE_NONE and the access retries
+ * through the RWP fault path, instead of being COWed straight to a fresh
+ * accessible page -- which would silently drop the marker for a non-exclusive
+ * folio. Sync mode lets us observe the fault directly: with the bug, the
+ * write COWs without delivering any RWP fault.
+ *
+ * Needs a swap device; skipped if MADV_PAGEOUT cannot evict the page.
+ */
+static void uffd_rwp_swap_cow_test(uffd_global_test_opts_t *gopts,
+				   uffd_test_args_t *args)
+{
+	unsigned long page_size = gopts->page_size;
+	struct uffd_args uargs = { };
+	int pagemap_fd, go[2], i;
+	pthread_t uffd_mon;
+	char c = '\0';
+	pid_t child;
+
+	uargs.gopts = gopts;
+	uargs.handle_fault = uffd_handle_rwp_fault;
+
+	if (uffd_register_rwp(gopts->uffd, gopts->area_dst, page_size))
+		err("register failed");
+
+	/* Populate one page (exclusive at this point). */
+	*gopts->area_dst = 0x11;
+
+	/* RWP-protect: PTE becomes PAGE_NONE + uffd bit (still exclusive). */
+	rwprotect_range(gopts->uffd, (uint64_t)gopts->area_dst, page_size, true);
+
+	/*
+	 * Swap the page out while it is still exclusive: a shared (forked)
+	 * folio does not get reclaimed by MADV_PAGEOUT. Retry, since a hot
+	 * page may just be rotated on the first reclaim pass.
+	 */
+	pagemap_fd = pagemap_open();
+	for (i = 0; i < 100; i++) {
+		if (madvise(gopts->area_dst, page_size, MADV_PAGEOUT))
+			err("MADV_PAGEOUT");
+		if (pagemap_is_swapped(pagemap_fd, gopts->area_dst))
+			break;
+		usleep(10000);
+	}
+	if (!pagemap_is_swapped(pagemap_fd, gopts->area_dst)) {
+		uffd_test_skip("MADV_PAGEOUT did not swap the page; is swap enabled?");
+		close(pagemap_fd);
+		uffd_unregister(gopts->uffd, gopts->area_dst, page_size);
+		return;
+	}
+
+	/*
+	 * fork() now: the child duplicates the swap entry, so the slot becomes
+	 * non-exclusive. The child parks (keeping the reference) until the
+	 * parent has faulted the page back in.
+	 */
+	if (pipe(go))
+		err("pipe");
+	child = fork();
+	if (child < 0)
+		err("fork");
+	if (child == 0) {
+		close(go[1]);
+		read(go[0], &c, 1);
+		_exit(0);
+	}
+	close(go[0]);
+
+	if (pthread_create(&uffd_mon, NULL, uffd_poll_thread, &uargs))
+		err("uffd_poll_thread create");
+
+	/*
+	 * Write the page: swaps it back in (do_swap_page) on a non-exclusive
+	 * folio with FAULT_FLAG_WRITE. The marker must survive and deliver an
+	 * RWP fault rather than COW silently.
+	 */
+	*gopts->area_dst = 0x22;
+
+	if (write(gopts->pipefd[1], &c, sizeof(c)) != sizeof(c))
+		err("pipe write");
+	if (pthread_join(uffd_mon, NULL))
+		err("join failed");
+
+	if (uargs.minor_faults == 0)
+		uffd_test_fail("no RWP fault on swapped-in non-exclusive page");
+	else
+		uffd_test_pass();
+
+	close(pagemap_fd);
+	if (write(go[1], &c, 1) != 1)
+		err("child release");
+	close(go[1]);
+	waitpid(child, NULL, 0);
+}
+
+/*
+ * WP and RWP share the uffd-wp PTE bit and cannot coexist in the same VMA.
+ * Registration requesting both modes must be rejected.
+ */
+static void uffd_rwp_wp_exclusive_test(uffd_global_test_opts_t *gopts,
+				       uffd_test_args_t *args)
+{
+	unsigned long nr_pages = gopts->nr_pages;
+	unsigned long page_size = gopts->page_size;
+	struct uffdio_register reg = { };
+
+	reg.range.start = (unsigned long)gopts->area_dst;
+	reg.range.len = nr_pages * page_size;
+	reg.mode = UFFDIO_REGISTER_MODE_WP | UFFDIO_REGISTER_MODE_RWP;
+
+	if (ioctl(gopts->uffd, UFFDIO_REGISTER, &reg) == 0) {
+		uffd_test_fail("register with WP|RWP unexpectedly succeeded");
+		return;
+	}
+	if (errno != EINVAL) {
+		uffd_test_fail("register with WP|RWP: expected EINVAL, got %d",
+			       errno);
+		return;
+	}
+	uffd_test_pass();
 }
 
 static sigjmp_buf jbuf, *sigbuf;
@@ -678,7 +1457,7 @@ static void sighndl(int sig, siginfo_t *siginfo, void *ptr)
  * This also tests UFFD_FEATURE_EVENT_FORK event along with the signal
  * feature. Using monitor thread, verify no userfault events are generated.
  */
-static int faulting_process(int signal_test, bool wp)
+static int faulting_process(uffd_global_test_opts_t *gopts, int signal_test, bool wp)
 {
 	unsigned long nr, i;
 	unsigned long long count;
@@ -687,7 +1466,7 @@ static int faulting_process(int signal_test, bool wp)
 	struct sigaction act;
 	volatile unsigned long signalled = 0;
 
-	split_nr_pages = (nr_pages + 1) / 2;
+	split_nr_pages = (gopts->nr_pages + 1) / 2;
 
 	if (signal_test) {
 		sigbuf = &jbuf;
@@ -701,7 +1480,7 @@ static int faulting_process(int signal_test, bool wp)
 
 	for (nr = 0; nr < split_nr_pages; nr++) {
 		volatile int steps = 1;
-		unsigned long offset = nr * page_size;
+		unsigned long offset = nr * gopts->page_size;
 
 		if (signal_test) {
 			if (sigsetjmp(*sigbuf, 1) != 0) {
@@ -713,15 +1492,15 @@ static int faulting_process(int signal_test, bool wp)
 					if (steps == 1) {
 						/* This is a MISSING request */
 						steps++;
-						if (copy_page(uffd, offset, wp))
+						if (copy_page(gopts, offset, wp))
 							signalled++;
 					} else {
 						/* This is a WP request */
 						assert(steps == 2);
-						wp_range(uffd,
-							 (__u64)area_dst +
+						wp_range(gopts->uffd,
+							 (__u64)gopts->area_dst +
 							 offset,
-							 page_size, false);
+							 gopts->page_size, false);
 					}
 				} else {
 					signalled++;
@@ -730,77 +1509,80 @@ static int faulting_process(int signal_test, bool wp)
 			}
 		}
 
-		count = *area_count(area_dst, nr);
-		if (count != count_verify[nr])
+		count = *area_count(gopts->area_dst, nr, gopts);
+		if (count != gopts->count_verify[nr])
 			err("nr %lu memory corruption %llu %llu\n",
-			    nr, count, count_verify[nr]);
+			    nr, count, gopts->count_verify[nr]);
 		/*
 		 * Trigger write protection if there is by writing
 		 * the same value back.
 		 */
-		*area_count(area_dst, nr) = count;
+		*area_count(gopts->area_dst, nr, gopts) = count;
 	}
 
 	if (signal_test)
 		return signalled != split_nr_pages;
 
-	area_dst = mremap(area_dst, nr_pages * page_size,  nr_pages * page_size,
-			  MREMAP_MAYMOVE | MREMAP_FIXED, area_src);
-	if (area_dst == MAP_FAILED)
+	gopts->area_dst = mremap(gopts->area_dst, gopts->nr_pages * gopts->page_size,
+				 gopts->nr_pages * gopts->page_size,
+				 MREMAP_MAYMOVE | MREMAP_FIXED,
+				 gopts->area_src);
+	if (gopts->area_dst == MAP_FAILED)
 		err("mremap");
 	/* Reset area_src since we just clobbered it */
-	area_src = NULL;
+	gopts->area_src = NULL;
 
-	for (; nr < nr_pages; nr++) {
-		count = *area_count(area_dst, nr);
-		if (count != count_verify[nr]) {
+	for (; nr < gopts->nr_pages; nr++) {
+		count = *area_count(gopts->area_dst, nr, gopts);
+		if (count != gopts->count_verify[nr]) {
 			err("nr %lu memory corruption %llu %llu\n",
-			    nr, count, count_verify[nr]);
+			    nr, count, gopts->count_verify[nr]);
 		}
 		/*
 		 * Trigger write protection if there is by writing
 		 * the same value back.
 		 */
-		*area_count(area_dst, nr) = count;
+		*area_count(gopts->area_dst, nr, gopts) = count;
 	}
 
-	uffd_test_ops->release_pages(area_dst);
+	uffd_test_ops->release_pages(gopts, gopts->area_dst);
 
-	for (nr = 0; nr < nr_pages; nr++)
-		for (i = 0; i < page_size; i++)
-			if (*(area_dst + nr * page_size + i) != 0)
+	for (nr = 0; nr < gopts->nr_pages; nr++)
+		for (i = 0; i < gopts->page_size; i++)
+			if (*(gopts->area_dst + nr * gopts->page_size + i) != 0)
 				err("page %lu offset %lu is not zero", nr, i);
 
 	return 0;
 }
 
-static void uffd_sigbus_test_common(bool wp)
+static void uffd_sigbus_test_common(uffd_global_test_opts_t *gopts, bool wp)
 {
 	unsigned long userfaults;
 	pthread_t uffd_mon;
 	pid_t pid;
 	int err;
-	char c;
+	char c = '\0';
 	struct uffd_args args = { 0 };
+	args.gopts = gopts;
 
-	ready_for_fork = false;
+	gopts->ready_for_fork = false;
 
-	fcntl(uffd, F_SETFL, uffd_flags | O_NONBLOCK);
+	fcntl(gopts->uffd, F_SETFL, gopts->uffd_flags | O_NONBLOCK);
 
-	if (uffd_register(uffd, area_dst, nr_pages * page_size,
+	if (uffd_register(gopts->uffd, gopts->area_dst, gopts->nr_pages * gopts->page_size,
 			  true, wp, false))
 		err("register failure");
 
-	if (faulting_process(1, wp))
+	if (faulting_process(gopts, 1, wp))
 		err("faulting process failed");
 
-	uffd_test_ops->release_pages(area_dst);
+	uffd_test_ops->release_pages(gopts, gopts->area_dst);
 
 	args.apply_wp = wp;
 	if (pthread_create(&uffd_mon, NULL, uffd_poll_thread, &args))
 		err("uffd_poll_thread create");
 
-	while (!ready_for_fork)
+	while (!gopts->ready_for_fork)
 		; /* Wait for the poll_thread to start executing before forking */
 
 	pid = fork();
@@ -808,12 +1590,12 @@ static void uffd_sigbus_test_common(bool wp)
 		err("fork");
 
 	if (!pid)
-		exit(faulting_process(2, wp));
+		_exit(faulting_process(gopts, 2, wp));
 
 	waitpid(pid, &err, 0);
 	if (err)
 		err("faulting process failed");
-	if (write(pipefd[1], &c, sizeof(c)) != sizeof(c))
+	if (write(gopts->pipefd[1], &c, sizeof(c)) != sizeof(c))
 		err("pipe write");
 	if (pthread_join(uffd_mon, (void **)&userfaults))
 		err("pthread_join()");
@@ -824,28 +1606,29 @@ static void uffd_sigbus_test_common(bool wp)
 		uffd_test_pass();
 }
 
-static void uffd_sigbus_test(uffd_test_args_t *args)
+static void uffd_sigbus_test(uffd_global_test_opts_t *gopts, uffd_test_args_t *args)
 {
-	uffd_sigbus_test_common(false);
+	uffd_sigbus_test_common(gopts, false);
 }
 
-static void uffd_sigbus_wp_test(uffd_test_args_t *args)
+static void uffd_sigbus_wp_test(uffd_global_test_opts_t *gopts, uffd_test_args_t *args)
 {
-	uffd_sigbus_test_common(true);
+	uffd_sigbus_test_common(gopts, true);
 }
 
-static void uffd_events_test_common(bool wp)
+static void uffd_events_test_common(uffd_global_test_opts_t *gopts, bool wp)
 {
 	pthread_t uffd_mon;
 	pid_t pid;
 	int err;
-	char c;
+	char c = '\0';
 	struct uffd_args args = { 0 };
+	args.gopts = gopts;
 
-	ready_for_fork = false;
+	gopts->ready_for_fork = false;
 
-	fcntl(uffd, F_SETFL, uffd_flags | O_NONBLOCK);
-	if (uffd_register(uffd, area_dst, nr_pages * page_size,
+	fcntl(gopts->uffd, F_SETFL, gopts->uffd_flags | O_NONBLOCK);
+	if (uffd_register(gopts->uffd, gopts->area_dst, gopts->nr_pages * gopts->page_size,
 			  true, wp, false))
 		err("register failure");
 
@@ -853,7 +1636,7 @@ static void uffd_events_test_common(bool wp)
 	if (pthread_create(&uffd_mon, NULL, uffd_poll_thread, &args))
 		err("uffd_poll_thread create");
 
-	while (!ready_for_fork)
+	while (!gopts->ready_for_fork)
 		; /* Wait for the poll_thread to start executing before forking */
 
 	pid = fork();
@@ -861,39 +1644,39 @@ static void uffd_events_test_common(bool wp)
 		err("fork");
 
 	if (!pid)
-		exit(faulting_process(0, wp));
+		_exit(faulting_process(gopts, 0, wp));
 
 	waitpid(pid, &err, 0);
 	if (err)
 		err("faulting process failed");
-	if (write(pipefd[1], &c, sizeof(c)) != sizeof(c))
+	if (write(gopts->pipefd[1], &c, sizeof(c)) != sizeof(c))
 		err("pipe write");
 	if (pthread_join(uffd_mon, NULL))
 		err("pthread_join()");
 
-	if (args.missing_faults != nr_pages)
+	if (args.missing_faults != gopts->nr_pages)
 		uffd_test_fail("Fault counts wrong");
 	else
 		uffd_test_pass();
 }
 
-static void uffd_events_test(uffd_test_args_t *args)
+static void uffd_events_test(uffd_global_test_opts_t *gopts, uffd_test_args_t *args)
 {
-	uffd_events_test_common(false);
+	uffd_events_test_common(gopts, false);
 }
 
-static void uffd_events_wp_test(uffd_test_args_t *args)
+static void uffd_events_wp_test(uffd_global_test_opts_t *gopts, uffd_test_args_t *args)
 {
-	uffd_events_test_common(true);
+	uffd_events_test_common(gopts, true);
 }
 
-static void retry_uffdio_zeropage(int ufd,
+static void retry_uffdio_zeropage(uffd_global_test_opts_t *gopts,
 				  struct uffdio_zeropage *uffdio_zeropage)
 {
-	uffd_test_ops->alias_mapping(&uffdio_zeropage->range.start,
+	uffd_test_ops->alias_mapping(gopts, &uffdio_zeropage->range.start,
 				     uffdio_zeropage->range.len,
 				     0);
-	if (ioctl(ufd, UFFDIO_ZEROPAGE, uffdio_zeropage)) {
+	if (ioctl(gopts->uffd, UFFDIO_ZEROPAGE, uffdio_zeropage)) {
 		if (uffdio_zeropage->zeropage != -EEXIST)
 			err("UFFDIO_ZEROPAGE error: %"PRId64,
 			    (int64_t)uffdio_zeropage->zeropage);
@@ -903,16 +1686,16 @@ static void retry_uffdio_zeropage(int ufd,
 	}
 }
 
-static bool do_uffdio_zeropage(int ufd, bool has_zeropage)
+static bool do_uffdio_zeropage(uffd_global_test_opts_t *gopts, bool has_zeropage)
 {
 	struct uffdio_zeropage uffdio_zeropage = { 0 };
 	int ret;
 	__s64 res;
 
-	uffdio_zeropage.range.start = (unsigned long) area_dst;
-	uffdio_zeropage.range.len = page_size;
+	uffdio_zeropage.range.start = (unsigned long) gopts->area_dst;
+	uffdio_zeropage.range.len = gopts->page_size;
 	uffdio_zeropage.mode = 0;
-	ret = ioctl(ufd, UFFDIO_ZEROPAGE, &uffdio_zeropage);
+	ret = ioctl(gopts->uffd, UFFDIO_ZEROPAGE, &uffdio_zeropage);
 	res = uffdio_zeropage.zeropage;
 	if (ret) {
 		/* real retval in ufdio_zeropage.zeropage */
@@ -921,10 +1704,10 @@ static bool do_uffdio_zeropage(int ufd, bool has_zeropage)
 		else if (res != -EINVAL)
 			err("UFFDIO_ZEROPAGE not -EINVAL");
 	} else if (has_zeropage) {
-		if (res != page_size)
+		if (res != gopts->page_size)
 			err("UFFDIO_ZEROPAGE unexpected size");
 		else
-			retry_uffdio_zeropage(ufd, &uffdio_zeropage);
+			retry_uffdio_zeropage(gopts, &uffdio_zeropage);
 		return true;
 	} else
 		err("UFFDIO_ZEROPAGE succeeded");
@@ -950,25 +1733,29 @@ uffd_register_detect_zeropage(int uffd, void *addr, uint64_t len)
 }
 
 /* exercise UFFDIO_ZEROPAGE */
-static void uffd_zeropage_test(uffd_test_args_t *args)
+static void uffd_zeropage_test(uffd_global_test_opts_t *gopts, uffd_test_args_t *args)
 {
 	bool has_zeropage;
 	int i;
 
-	has_zeropage = uffd_register_detect_zeropage(uffd, area_dst, page_size);
-	if (area_dst_alias)
+	has_zeropage = uffd_register_detect_zeropage(gopts->uffd,
+						     gopts->area_dst,
+						     gopts->page_size);
+	if (gopts->area_dst_alias)
 		/* Ignore the retval; we already have it */
-		uffd_register_detect_zeropage(uffd, area_dst_alias, page_size);
+		uffd_register_detect_zeropage(gopts->uffd, gopts->area_dst_alias, gopts->page_size);
 
-	if (do_uffdio_zeropage(uffd, has_zeropage))
-		for (i = 0; i < page_size; i++)
-			if (area_dst[i] != 0)
+	if (do_uffdio_zeropage(gopts, has_zeropage))
+		for (i = 0; i < gopts->page_size; i++)
+			if (gopts->area_dst[i] != 0)
 				err("data non-zero at offset %d\n", i);
 
-	if (uffd_unregister(uffd, area_dst, page_size))
+	if (uffd_unregister(gopts->uffd, gopts->area_dst, gopts->page_size))
 		err("unregister");
 
-	if (area_dst_alias && uffd_unregister(uffd, area_dst_alias, page_size))
+	if (gopts->area_dst_alias && uffd_unregister(gopts->uffd,
+						     gopts->area_dst_alias,
+						     gopts->page_size))
 		err("unregister");
 
 	uffd_test_pass();
@@ -987,26 +1774,27 @@ static void uffd_register_poison(int uffd, void *addr, uint64_t len)
 		err("registered area doesn't support COPY and POISON ioctls");
 }
 
-static void do_uffdio_poison(int uffd, unsigned long offset)
+static void do_uffdio_poison(uffd_global_test_opts_t *gopts, unsigned long offset)
 {
 	struct uffdio_poison uffdio_poison = { 0 };
 	int ret;
 	__s64 res;
 
-	uffdio_poison.range.start = (unsigned long) area_dst + offset;
-	uffdio_poison.range.len = page_size;
+	uffdio_poison.range.start = (unsigned long) gopts->area_dst + offset;
+	uffdio_poison.range.len = gopts->page_size;
 	uffdio_poison.mode = 0;
-	ret = ioctl(uffd, UFFDIO_POISON, &uffdio_poison);
+	ret = ioctl(gopts->uffd, UFFDIO_POISON, &uffdio_poison);
 	res = uffdio_poison.updated;
 
 	if (ret)
 		err("UFFDIO_POISON error: %"PRId64, (int64_t)res);
-	else if (res != page_size)
+	else if (res != gopts->page_size)
 		err("UFFDIO_POISON unexpected size: %"PRId64, (int64_t)res);
 }
 
-static void uffd_poison_handle_fault(
-	struct uffd_msg *msg, struct uffd_args *args)
+static void uffd_poison_handle_fault(uffd_global_test_opts_t *gopts,
+				     struct uffd_msg *msg,
+				     struct uffd_args *args)
 {
 	unsigned long offset;
 
@@ -1017,29 +1805,39 @@ static void uffd_poison_handle_fault(
 	    (UFFD_PAGEFAULT_FLAG_WP | UFFD_PAGEFAULT_FLAG_MINOR))
 		err("unexpected fault type %llu", msg->arg.pagefault.flags);
 
-	offset = (char *)(unsigned long)msg->arg.pagefault.address - area_dst;
-	offset &= ~(page_size-1);
+	offset = (char *)(unsigned long)msg->arg.pagefault.address - gopts->area_dst;
+	offset &= ~(gopts->page_size-1);
 
 	/* Odd pages -> copy zeroed page; even pages -> poison. */
-	if (offset & page_size)
-		copy_page(uffd, offset, false);
+	if (offset & gopts->page_size)
+		copy_page(gopts, offset, false);
 	else
-		do_uffdio_poison(uffd, offset);
+		do_uffdio_poison(gopts, offset);
 }
 
-static void uffd_poison_test(uffd_test_args_t *targs)
+/* Make sure to cover odd/even, and minimum duplications */
+#define  UFFD_POISON_TEST_NPAGES  4
+
+static void uffd_poison_test(uffd_global_test_opts_t *gopts, uffd_test_args_t *targs)
 {
 	pthread_t uffd_mon;
 	char c;
 	struct uffd_args args = { 0 };
 	struct sigaction act = { 0 };
 	unsigned long nr_sigbus = 0;
-	unsigned long nr;
+	unsigned long nr, poison_pages = UFFD_POISON_TEST_NPAGES;
 
-	fcntl(uffd, F_SETFL, uffd_flags | O_NONBLOCK);
+	if (gopts->nr_pages < poison_pages) {
+		uffd_test_skip("Too less pages for POISON test");
+		return;
+	}
 
-	uffd_register_poison(uffd, area_dst, nr_pages * page_size);
-	memset(area_src, 0, nr_pages * page_size);
+	args.gopts = gopts;
+
+	fcntl(gopts->uffd, F_SETFL, gopts->uffd_flags | O_NONBLOCK);
+
+	uffd_register_poison(gopts->uffd, gopts->area_dst, poison_pages * gopts->page_size);
+	memset(gopts->area_src, 0, poison_pages * gopts->page_size);
 
 	args.handle_fault = uffd_poison_handle_fault;
 	if (pthread_create(&uffd_mon, NULL, uffd_poll_thread, &args))
@@ -1051,9 +1849,9 @@ static void uffd_poison_test(uffd_test_args_t *targs)
 	if (sigaction(SIGBUS, &act, 0))
 		err("sigaction");
 
-	for (nr = 0; nr < nr_pages; ++nr) {
-		unsigned long offset = nr * page_size;
-		const char *bytes = (const char *) area_dst + offset;
+	for (nr = 0; nr < poison_pages; ++nr) {
+		unsigned long offset = nr * gopts->page_size;
+		const char *bytes = (const char *) gopts->area_dst + offset;
 		const char *i;
 
 		if (sigsetjmp(*sigbuf, 1)) {
@@ -1066,27 +1864,29 @@ static void uffd_poison_test(uffd_test_args_t *targs)
 			continue;
 		}
 
-		for (i = bytes; i < bytes + page_size; ++i) {
+		for (i = bytes; i < bytes + gopts->page_size; ++i) {
 			if (*i)
 				err("nonzero byte in area_dst (%p) at %p: %u",
-				    area_dst, i, *i);
+				    gopts->area_dst, i, *i);
 		}
 	}
 
-	if (write(pipefd[1], &c, sizeof(c)) != sizeof(c))
+	if (write(gopts->pipefd[1], &c, sizeof(c)) != sizeof(c))
 		err("pipe write");
 	if (pthread_join(uffd_mon, NULL))
 		err("pthread_join()");
 
-	if (nr_sigbus != nr_pages / 2)
+	if (nr_sigbus != poison_pages / 2)
 		err("expected to receive %lu SIGBUS, actually received %lu",
-		    nr_pages / 2, nr_sigbus);
+		    poison_pages / 2, nr_sigbus);
 
 	uffd_test_pass();
 }
 
 static void
-uffd_move_handle_fault_common(struct uffd_msg *msg, struct uffd_args *args,
+uffd_move_handle_fault_common(uffd_global_test_opts_t *gopts,
+			      struct uffd_msg *msg,
+			      struct uffd_args *args,
 			      unsigned long len)
 {
 	unsigned long offset;
@@ -1098,32 +1898,36 @@ uffd_move_handle_fault_common(struct uffd_msg *msg, struct uffd_args *args,
 	    (UFFD_PAGEFAULT_FLAG_WP | UFFD_PAGEFAULT_FLAG_MINOR | UFFD_PAGEFAULT_FLAG_WRITE))
 		err("unexpected fault type %llu", msg->arg.pagefault.flags);
 
-	offset = (char *)(unsigned long)msg->arg.pagefault.address - area_dst;
+	offset = (char *)(unsigned long)msg->arg.pagefault.address - gopts->area_dst;
 	offset &= ~(len-1);
 
-	if (move_page(uffd, offset, len))
+	if (move_page(gopts, offset, len))
 		args->missing_faults++;
 }
 
-static void uffd_move_handle_fault(struct uffd_msg *msg,
+static void uffd_move_handle_fault(uffd_global_test_opts_t *gopts, struct uffd_msg *msg,
 				   struct uffd_args *args)
 {
-	uffd_move_handle_fault_common(msg, args, page_size);
+	uffd_move_handle_fault_common(gopts, msg, args, gopts->page_size);
 }
 
-static void uffd_move_pmd_handle_fault(struct uffd_msg *msg,
+static void uffd_move_pmd_handle_fault(uffd_global_test_opts_t *gopts, struct uffd_msg *msg,
 				       struct uffd_args *args)
 {
-	uffd_move_handle_fault_common(msg, args, read_pmd_pagesize());
+	uffd_move_handle_fault_common(gopts, msg, args, read_pmd_pagesize());
 }
 
 static void
-uffd_move_test_common(uffd_test_args_t *targs, unsigned long chunk_size,
-		      void (*handle_fault)(struct uffd_msg *msg, struct uffd_args *args))
+uffd_move_test_common(uffd_global_test_opts_t *gopts,
+		      uffd_test_args_t *targs,
+		      unsigned long chunk_size,
+		      void (*handle_fault)(struct uffd_global_test_opts *gopts,
+		      struct uffd_msg *msg, struct uffd_args *args)
+)
 {
 	unsigned long nr;
 	pthread_t uffd_mon;
-	char c;
+	char c = '\0';
 	unsigned long long count;
 	struct uffd_args args = { 0 };
 	char *orig_area_src = NULL, *orig_area_dst = NULL;
@@ -1131,11 +1935,13 @@ uffd_move_test_common(uffd_test_args_t *targs, unsigned long chunk_size,
 	unsigned long src_offs = 0;
 	unsigned long dst_offs = 0;
 
+	args.gopts = gopts;
+
 	/* Prevent source pages from being mapped more than once */
-	if (madvise(area_src, nr_pages * page_size, MADV_DONTFORK))
+	if (madvise(gopts->area_src, gopts->nr_pages * gopts->page_size, MADV_DONTFORK))
 		err("madvise(MADV_DONTFORK) failure");
 
-	if (uffd_register(uffd, area_dst, nr_pages * page_size,
+	if (uffd_register(gopts->uffd, gopts->area_dst, gopts->nr_pages * gopts->page_size,
 			  true, false, false))
 		err("register failure");
 
@@ -1143,22 +1949,22 @@ uffd_move_test_common(uffd_test_args_t *targs, unsigned long chunk_size,
 	if (pthread_create(&uffd_mon, NULL, uffd_poll_thread, &args))
 		err("uffd_poll_thread create");
 
-	step_size = chunk_size / page_size;
-	step_count = nr_pages / step_size;
+	step_size = chunk_size / gopts->page_size;
+	step_count = gopts->nr_pages / step_size;
 
-	if (chunk_size > page_size) {
-		char *aligned_src = ALIGN_UP(area_src, chunk_size);
-		char *aligned_dst = ALIGN_UP(area_dst, chunk_size);
+	if (chunk_size > gopts->page_size) {
+		char *aligned_src = ALIGN_UP(gopts->area_src, chunk_size);
+		char *aligned_dst = ALIGN_UP(gopts->area_dst, chunk_size);
 
-		if (aligned_src != area_src || aligned_dst != area_dst) {
-			src_offs = (aligned_src - area_src) / page_size;
-			dst_offs = (aligned_dst - area_dst) / page_size;
+		if (aligned_src != gopts->area_src || aligned_dst != gopts->area_dst) {
+			src_offs = (aligned_src - gopts->area_src) / gopts->page_size;
+			dst_offs = (aligned_dst - gopts->area_dst) / gopts->page_size;
 			step_count--;
 		}
-		orig_area_src = area_src;
-		orig_area_dst = area_dst;
-		area_src = aligned_src;
-		area_dst = aligned_dst;
+		orig_area_src = gopts->area_src;
+		orig_area_dst = gopts->area_dst;
+		gopts->area_src = aligned_src;
+		gopts->area_dst = aligned_dst;
 	}
 
 	/*
@@ -1172,34 +1978,34 @@ uffd_move_test_common(uffd_test_args_t *targs, unsigned long chunk_size,
 
 		/* Check area_src content */
 		for (i = 0; i < step_size; i++) {
-			count = *area_count(area_src, nr + i);
-			if (count != count_verify[src_offs + nr + i])
+			count = *area_count(gopts->area_src, nr + i, gopts);
+			if (count != gopts->count_verify[src_offs + nr + i])
 				err("nr %lu source memory invalid %llu %llu\n",
-				    nr + i, count, count_verify[src_offs + nr + i]);
+				    nr + i, count, gopts->count_verify[src_offs + nr + i]);
 		}
 
 		/* Faulting into area_dst should move the page or the huge page */
 		for (i = 0; i < step_size; i++) {
-			count = *area_count(area_dst, nr + i);
-			if (count != count_verify[dst_offs + nr + i])
+			count = *area_count(gopts->area_dst, nr + i, gopts);
+			if (count != gopts->count_verify[dst_offs + nr + i])
 				err("nr %lu memory corruption %llu %llu\n",
-				    nr, count, count_verify[dst_offs + nr + i]);
+				    nr, count, gopts->count_verify[dst_offs + nr + i]);
 		}
 
 		/* Re-check area_src content which should be empty */
 		for (i = 0; i < step_size; i++) {
-			count = *area_count(area_src, nr + i);
+			count = *area_count(gopts->area_src, nr + i, gopts);
 			if (count != 0)
 				err("nr %lu move failed %llu %llu\n",
-				    nr, count, count_verify[src_offs + nr + i]);
+				    nr, count, gopts->count_verify[src_offs + nr + i]);
 		}
 	}
-	if (chunk_size > page_size) {
-		area_src = orig_area_src;
-		area_dst = orig_area_dst;
+	if (chunk_size > gopts->page_size) {
+		gopts->area_src = orig_area_src;
+		gopts->area_dst = orig_area_dst;
 	}
 
-	if (write(pipefd[1], &c, sizeof(c)) != sizeof(c))
+	if (write(gopts->pipefd[1], &c, sizeof(c)) != sizeof(c))
 		err("pipe write");
 	if (pthread_join(uffd_mon, NULL))
 		err("join() failed");
@@ -1210,24 +2016,24 @@ uffd_move_test_common(uffd_test_args_t *targs, unsigned long chunk_size,
 		uffd_test_pass();
 }
 
-static void uffd_move_test(uffd_test_args_t *targs)
+static void uffd_move_test(uffd_global_test_opts_t *gopts, uffd_test_args_t *targs)
 {
-	uffd_move_test_common(targs, page_size, uffd_move_handle_fault);
+	uffd_move_test_common(gopts, targs, gopts->page_size, uffd_move_handle_fault);
 }
 
-static void uffd_move_pmd_test(uffd_test_args_t *targs)
+static void uffd_move_pmd_test(uffd_global_test_opts_t *gopts, uffd_test_args_t *targs)
 {
-	if (madvise(area_dst, nr_pages * page_size, MADV_HUGEPAGE))
+	if (madvise(gopts->area_dst, gopts->nr_pages * gopts->page_size, MADV_HUGEPAGE))
 		err("madvise(MADV_HUGEPAGE) failure");
-	uffd_move_test_common(targs, read_pmd_pagesize(),
+	uffd_move_test_common(gopts, targs, read_pmd_pagesize(),
 			      uffd_move_pmd_handle_fault);
 }
 
-static void uffd_move_pmd_split_test(uffd_test_args_t *targs)
+static void uffd_move_pmd_split_test(uffd_global_test_opts_t *gopts, uffd_test_args_t *targs)
 {
-	if (madvise(area_dst, nr_pages * page_size, MADV_NOHUGEPAGE))
+	if (madvise(gopts->area_dst, gopts->nr_pages * gopts->page_size, MADV_NOHUGEPAGE))
 		err("madvise(MADV_NOHUGEPAGE) failure");
-	uffd_move_test_common(targs, read_pmd_pagesize(),
+	uffd_move_test_common(gopts, targs, read_pmd_pagesize(),
 			      uffd_move_pmd_handle_fault);
 }
 
@@ -1287,6 +2093,11 @@ typedef enum {
 	THR_STATE_UNINTERRUPTIBLE,
 } thread_state;
 
+typedef struct {
+	uffd_global_test_opts_t *gopts;
+	volatile pid_t *pid;
+} mmap_changing_thread_args;
+
 static void sleep_short(void)
 {
 	usleep(1000);
@@ -1308,7 +2119,7 @@ static thread_state thread_state_get(pid_t tid)
 		p = strstr(tmp, header);
 		if (p) {
 			/* For example, "State:\tD (disk sleep)" */
-			c = *(p + sizeof(header) - 1);
+			c = *(p + strlen(header));
 			return c == 'D' ?
 			    THR_STATE_UNINTERRUPTIBLE : THR_STATE_UNKNOWN;
 		}
@@ -1329,7 +2140,9 @@ static void thread_state_until(pid_t tid, thread_state state)
 
 static void *uffd_mmap_changing_thread(void *opaque)
 {
-	volatile pid_t *pid = opaque;
+	mmap_changing_thread_args *args = opaque;
+	uffd_global_test_opts_t *gopts = args->gopts;
+	volatile pid_t *pid = args->pid;
 	int ret;
 
 	/* Unfortunately, it's only fetch-able from the thread itself.. */
@@ -1337,21 +2150,21 @@ static void *uffd_mmap_changing_thread(void *opaque)
 	*pid = syscall(SYS_gettid);
 
 	/* Inject an event, this will hang solid until the event read */
-	ret = madvise(area_dst, page_size, MADV_REMOVE);
+	ret = madvise(gopts->area_dst, gopts->page_size, MADV_REMOVE);
 	if (ret)
 		err("madvise(MADV_REMOVE) failed");
 
 	return NULL;
 }
 
-static void uffd_consume_message(int fd)
+static void uffd_consume_message(uffd_global_test_opts_t *gopts)
 {
 	struct uffd_msg msg = { 0 };
 
-	while (uffd_read_msg(fd, &msg));
+	while (uffd_read_msg(gopts, &msg));
 }
 
-static void uffd_mmap_changing_test(uffd_test_args_t *targs)
+static void uffd_mmap_changing_test(uffd_global_test_opts_t *gopts, uffd_test_args_t *targs)
 {
 	/*
 	 * This stores the real PID (which can be different from how tid is
@@ -1360,13 +2173,14 @@ static void uffd_mmap_changing_test(uffd_test_args_t *targs)
 	pid_t pid = 0;
 	pthread_t tid;
 	int ret;
+	mmap_changing_thread_args args = { gopts, &pid };
 
-	if (uffd_register(uffd, area_dst, nr_pages * page_size,
+	if (uffd_register(gopts->uffd, gopts->area_dst, gopts->nr_pages * gopts->page_size,
 			  true, false, false))
 		err("uffd_register() failed");
 
 	/* Create a thread to generate the racy event */
-	ret = pthread_create(&tid, NULL, uffd_mmap_changing_thread, &pid);
+	ret = pthread_create(&tid, NULL, uffd_mmap_changing_thread, &args);
 	if (ret)
 		err("pthread_create() failed");
 
@@ -1380,26 +2194,26 @@ static void uffd_mmap_changing_test(uffd_test_args_t *targs)
 	/* Wait until the thread hangs at REMOVE event */
 	thread_state_until(pid, THR_STATE_UNINTERRUPTIBLE);
 
-	if (!uffdio_mmap_changing_test_copy(uffd))
+	if (!uffdio_mmap_changing_test_copy(gopts->uffd))
 		return;
 
-	if (!uffdio_mmap_changing_test_zeropage(uffd))
+	if (!uffdio_mmap_changing_test_zeropage(gopts->uffd))
 		return;
 
-	if (!uffdio_mmap_changing_test_move(uffd))
+	if (!uffdio_mmap_changing_test_move(gopts->uffd))
 		return;
 
-	if (!uffdio_mmap_changing_test_poison(uffd))
+	if (!uffdio_mmap_changing_test_poison(gopts->uffd))
 		return;
 
-	if (!uffdio_mmap_changing_test_continue(uffd))
+	if (!uffdio_mmap_changing_test_continue(gopts->uffd))
 		return;
 
 	/*
 	 * All succeeded above!  Recycle everything.  Start by reading the
 	 * event so as to kick the thread roll again..
 	 */
-	uffd_consume_message(uffd);
+	uffd_consume_message(gopts);
 
 	ret = pthread_join(tid, NULL);
 	assert(ret == 0);
@@ -1407,10 +2221,10 @@ static void uffd_mmap_changing_test(uffd_test_args_t *targs)
 	uffd_test_pass();
 }
 
-static int prevent_hugepages(const char **errmsg)
+static int prevent_hugepages(uffd_global_test_opts_t *gopts, const char **errmsg)
 {
 	/* This should be done before source area is populated */
-	if (madvise(area_src, nr_pages * page_size, MADV_NOHUGEPAGE)) {
+	if (madvise(gopts->area_src, gopts->nr_pages * gopts->page_size, MADV_NOHUGEPAGE)) {
 		/* Ignore only if CONFIG_TRANSPARENT_HUGEPAGE=n */
 		if (errno != EINVAL) {
 			if (errmsg)
@@ -1421,10 +2235,10 @@ static int prevent_hugepages(const char **errmsg)
 	return 0;
 }
 
-static int request_hugepages(const char **errmsg)
+static int request_hugepages(uffd_global_test_opts_t *gopts, const char **errmsg)
 {
 	/* This should be done before source area is populated */
-	if (madvise(area_src, nr_pages * page_size, MADV_HUGEPAGE)) {
+	if (madvise(gopts->area_src, gopts->nr_pages * gopts->page_size, MADV_HUGEPAGE)) {
 		if (errmsg) {
 			*errmsg = (errno == EINVAL) ?
 				"CONFIG_TRANSPARENT_HUGEPAGE is not set" :
@@ -1448,13 +2262,17 @@ struct uffd_test_case_ops uffd_move_test_pmd_case_ops = {
  * Note that _UFFDIO_ZEROPAGE is tested separately in the zeropage test.
  */
 static void
-do_register_ioctls_test(uffd_test_args_t *args, bool miss, bool wp, bool minor)
+do_register_ioctls_test(uffd_global_test_opts_t *gopts,
+			uffd_test_args_t *args,
+			bool miss,
+			bool wp,
+			bool minor)
 {
 	uint64_t ioctls = 0, expected = BIT_ULL(_UFFDIO_WAKE);
 	mem_type_t *mem_type = args->mem_type;
 	int ret;
 
-	ret = uffd_register_with_ioctls(uffd, area_dst, page_size,
+	ret = uffd_register_with_ioctls(gopts->uffd, gopts->area_dst, gopts->page_size,
 					miss, wp, minor, &ioctls);
 
 	/*
@@ -1485,18 +2303,18 @@ do_register_ioctls_test(uffd_test_args_t *args, bool miss, bool wp, bool minor)
 		    "(miss=%d, wp=%d, minor=%d): expected=0x%"PRIx64", "
 		    "returned=0x%"PRIx64, miss, wp, minor, expected, ioctls);
 
-	if (uffd_unregister(uffd, area_dst, page_size))
+	if (uffd_unregister(gopts->uffd, gopts->area_dst, gopts->page_size))
 		err("unregister");
 }
 
-static void uffd_register_ioctls_test(uffd_test_args_t *args)
+static void uffd_register_ioctls_test(uffd_global_test_opts_t *gopts, uffd_test_args_t *args)
 {
 	int miss, wp, minor;
 
 	for (miss = 0; miss <= 1; miss++)
 		for (wp = 0; wp <= 1; wp++)
 			for (minor = 0; minor <= 1; minor++)
-				do_register_ioctls_test(args, miss, wp, minor);
+				do_register_ioctls_test(gopts, args, miss, wp, minor);
 
 	uffd_test_pass();
 }
@@ -1610,6 +2428,83 @@ uffd_test_case_t uffd_tests[] = {
 		.uffd_feature_required = UFFD_FEATURE_MINOR_SHMEM,
 	},
 	{
+		.name = "rwp-async",
+		.uffd_fn = uffd_rwp_async_test,
+		.mem_targets = MEM_ALL,
+		.uffd_feature_required =
+		UFFD_FEATURE_RWP | UFFD_FEATURE_RWP_ASYNC,
+	},
+	{
+		.name = "rwp-sync",
+		.uffd_fn = uffd_rwp_sync_test,
+		.mem_targets = MEM_ALL,
+		.uffd_feature_required = UFFD_FEATURE_RWP,
+	},
+	{
+		.name = "rwp-pagemap",
+		.uffd_fn = uffd_rwp_pagemap_test,
+		.mem_targets = MEM_ALL,
+		.uffd_feature_required =
+		UFFD_FEATURE_RWP | UFFD_FEATURE_RWP_ASYNC,
+	},
+	{
+		.name = "rwp-mprotect",
+		.uffd_fn = uffd_rwp_mprotect_test,
+		.mem_targets = MEM_ALL,
+		.uffd_feature_required =
+		UFFD_FEATURE_RWP | UFFD_FEATURE_RWP_ASYNC,
+	},
+	{
+		.name = "rwp-gup",
+		.uffd_fn = uffd_rwp_gup_test,
+		.mem_targets = MEM_ALL,
+		.uffd_feature_required =
+		UFFD_FEATURE_RWP | UFFD_FEATURE_RWP_ASYNC,
+	},
+	{
+		.name = "rwp-async-toggle",
+		.uffd_fn = uffd_rwp_async_toggle_test,
+		.mem_targets = MEM_ALL,
+		.uffd_feature_required =
+		UFFD_FEATURE_RWP | UFFD_FEATURE_RWP_ASYNC,
+	},
+	{
+		.name = "rwp-close",
+		.uffd_fn = uffd_rwp_close_test,
+		.mem_targets = MEM_ALL,
+		.uffd_feature_required = UFFD_FEATURE_RWP,
+	},
+	{
+		.name = "rwp-fork",
+		.uffd_fn = uffd_rwp_fork_test,
+		.mem_targets = MEM_ALL,
+		.uffd_feature_required =
+		UFFD_FEATURE_RWP | UFFD_FEATURE_EVENT_FORK,
+	},
+	{
+		.name = "rwp-fork-pin",
+		.uffd_fn = uffd_rwp_fork_pin_test,
+		.mem_targets = MEM_ANON,
+		.uffd_feature_required =
+		UFFD_FEATURE_RWP | UFFD_FEATURE_RWP_ASYNC |
+		UFFD_FEATURE_EVENT_FORK,
+	},
+	{
+		.name = "rwp-swap-cow",
+		.uffd_fn = uffd_rwp_swap_cow_test,
+		.mem_targets = MEM_ANON,
+		.uffd_feature_required = UFFD_FEATURE_RWP,
+	},
+	{
+		.name = "rwp-wp-exclusive",
+		.uffd_fn = uffd_rwp_wp_exclusive_test,
+		.mem_targets = MEM_ALL,
+		.uffd_feature_required =
+		UFFD_FEATURE_RWP |
+		UFFD_FEATURE_PAGEFAULT_FLAG_WP |
+		UFFD_FEATURE_WP_HUGETLBFS_SHMEM,
+	},
+	{
 		.name = "sigbus",
 		.uffd_fn = uffd_sigbus_test,
 		.mem_targets = MEM_ALL,
@@ -1685,18 +2580,58 @@ static void usage(const char *prog)
 	exit(KSFT_FAIL);
 }
 
+static int uffd_count_tests(int n_tests, int n_mems, const char *test_filter)
+{
+	uffd_test_case_t *test;
+	int i, j, count = 0;
+
+	if (!test_filter)
+		count += 2;	/* test_uffd_api(false) + test_uffd_api(true) */
+
+	for (i = 0; i < n_tests; i++) {
+		test = &uffd_tests[i];
+		if (test_filter && !strstr(test->name, test_filter))
+			continue;
+		for (j = 0; j < n_mems; j++)
+			if (test->mem_targets & mem_types[j].mem_flag)
+				count++;
+	}
+
+	return count;
+}
+
+static unsigned long uffd_setup_hugetlb(void)
+{
+	unsigned long nr_hugepages, hp_size;
+
+	hugetlb_save_settings();
+	hp_size = default_huge_page_size();
+
+	if (!hp_size)
+		return 0;
+
+	/* need twice UFFD_TEST_MEM_SIZE, one for src area and one for dst */
+	nr_hugepages = 2 * MAX(UFFD_TEST_MEM_SIZE, hp_size * 2) / hp_size;
+	hugetlb_set_nr_default_pages(nr_hugepages);
+
+	if (hugetlb_free_default_pages() < nr_hugepages)
+		return 0;
+
+	return hp_size;
+}
+
 int main(int argc, char *argv[])
 {
 	int n_tests = sizeof(uffd_tests) / sizeof(uffd_test_case_t);
 	int n_mems = sizeof(mem_types) / sizeof(mem_type_t);
 	const char *test_filter = NULL;
+	unsigned long hugepage_size;
 	bool list_only = false;
 	uffd_test_case_t *test;
 	mem_type_t *mem_type;
 	uffd_test_args_t args;
 	const char *errmsg;
-	int has_uffd, opt;
-	int i, j;
+	int i, j, opt;
 
 	while ((opt = getopt(argc, argv, "f:hl")) != -1) {
 		switch (opt) {
@@ -1714,54 +2649,96 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (!test_filter && !list_only) {
-		has_uffd = test_uffd_api(false);
-		has_uffd |= test_uffd_api(true);
-
-		if (!has_uffd) {
-			printf("Userfaultfd not supported or unprivileged, skip all tests\n");
-			exit(KSFT_SKIP);
+	if (list_only) {
+		for (i = 0; i < n_tests; i++) {
+			test = &uffd_tests[i];
+			if (test_filter && !strstr(test->name, test_filter))
+				continue;
+			printf("%s\n", test->name);
 		}
+		return KSFT_PASS;
+	}
+
+	hugepage_size = uffd_setup_hugetlb();
+
+	ksft_print_header();
+	ksft_set_plan(uffd_count_tests(n_tests, n_mems, test_filter));
+
+	if (!test_filter) {
+		test_uffd_api(false);
+		test_uffd_api(true);
 	}
 
 	for (i = 0; i < n_tests; i++) {
 		test = &uffd_tests[i];
 		if (test_filter && !strstr(test->name, test_filter))
 			continue;
-		if (list_only) {
-			printf("%s\n", test->name);
-			continue;
-		}
 		for (j = 0; j < n_mems; j++) {
 			mem_type = &mem_types[j];
+
+			/* Initialize global test options */
+			uffd_global_test_opts_t gopts = { 0 };
+
+			gopts.map_shared = mem_type->shared;
+			uffd_test_ops = mem_type->mem_ops;
+			uffd_test_case_ops = test->test_case_ops;
+
 			if (!(test->mem_targets & mem_type->mem_flag))
 				continue;
 
 			uffd_test_start("%s on %s", test->name, mem_type->name);
-			if ((mem_type->mem_flag == MEM_HUGETLB ||
-			    mem_type->mem_flag == MEM_HUGETLB_PRIVATE) &&
-			    (default_huge_page_size() == 0)) {
-				uffd_test_skip("huge page size is 0, feature missing?");
-				continue;
+			if (mem_type->mem_flag & (MEM_HUGETLB_PRIVATE | MEM_HUGETLB)) {
+				gopts.page_size = hugepage_size;
+				if (gopts.page_size == 0) {
+					uffd_test_skip("not enough HugeTLB pages");
+					continue;
+				}
+			} else {
+				gopts.page_size = psize();
 			}
+
+			/* Ensure we have at least 2 pages */
+			gopts.nr_pages = MAX(UFFD_TEST_MEM_SIZE, gopts.page_size * 2)
+				/ gopts.page_size;
+
+			gopts.nr_parallel = 1;
+
+			/* Initialize test arguments */
+			args.mem_type = mem_type;
+
 			if (!uffd_feature_supported(test)) {
 				uffd_test_skip("feature missing");
 				continue;
 			}
-			if (uffd_setup_environment(&args, test, mem_type,
-						   &errmsg)) {
+			if (uffd_test_ctx_init(&gopts, test->uffd_feature_required, &errmsg)) {
 				uffd_test_skip(errmsg);
 				continue;
 			}
-			test->uffd_fn(&args);
-			uffd_test_ctx_clear();
+			/*
+			 * RWP tracks protection on ptes; a THP-backed shmem/anon
+			 * range (e.g. shmem_enabled=always) would split on
+			 * rwprotect and change behaviour under the test. Keep
+			 * such ranges off THP. hugetlb is huge by definition and
+			 * rejects MADV_NOHUGEPAGE, so skip it.
+			 */
+			if ((test->uffd_feature_required & UFFD_FEATURE_RWP) &&
+			    !(mem_type->mem_flag & (MEM_HUGETLB | MEM_HUGETLB_PRIVATE))) {
+				unsigned long len = gopts.nr_pages * gopts.page_size;
+
+				/*
+				 * EINVAL means CONFIG_TRANSPARENT_HUGEPAGE=n:
+				 * nothing to opt out of.
+				 */
+				if (madvise(gopts.area_dst, len, MADV_NOHUGEPAGE) &&
+				    errno != EINVAL)
+					err("madvise(MADV_NOHUGEPAGE)");
+			}
+			test->uffd_fn(&gopts, &args);
+			uffd_test_ctx_clear(&gopts);
 		}
 	}
 
-	if (!list_only)
-		uffd_test_report();
-
-	return ksft_get_fail_cnt() ? KSFT_FAIL : KSFT_PASS;
+	ksft_finished();
 }
 
 #else /* __NR_userfaultfd */
@@ -1770,8 +2747,8 @@ int main(int argc, char *argv[])
 
 int main(void)
 {
-	printf("Skipping %s (missing __NR_userfaultfd)\n", __file__);
-	return KSFT_SKIP;
+	ksft_print_header();
+	ksft_exit_skip("missing __NR_userfaultfd definition\n");
 }
 
 #endif /* __NR_userfaultfd */

@@ -67,10 +67,6 @@ module_param(pass_through, int, 0644);
 MODULE_PARM_DESC(pass_through,
 		 "Pass TV signal through to TV-out when idling");
 
-int zr36067_debug = 1;
-module_param_named(debug, zr36067_debug, int, 0644);
-MODULE_PARM_DESC(debug, "Debug level (0-5)");
-
 #define ZORAN_VERSION "0.10.1"
 
 MODULE_DESCRIPTION("Zoran-36057/36067 JPEG codec driver");
@@ -79,8 +75,9 @@ MODULE_LICENSE("GPL");
 MODULE_VERSION(ZORAN_VERSION);
 
 #define ZR_DEVICE(subven, subdev, data)	{ \
-	.vendor = PCI_VENDOR_ID_ZORAN, .device = PCI_DEVICE_ID_ZORAN_36057, \
-	.subvendor = (subven), .subdevice = (subdev), .driver_data = (data) }
+	PCI_DEVICE_SUB(PCI_VENDOR_ID_ZORAN, PCI_DEVICE_ID_ZORAN_36057, \
+		       (subven), (subdev)), \
+	.driver_data = (data) }
 
 static const struct pci_device_id zr36067_pci_tbl[] = {
 	ZR_DEVICE(PCI_VENDOR_ID_MIRO, PCI_DEVICE_ID_MIRO_DC10PLUS, DC10_PLUS),
@@ -88,7 +85,7 @@ static const struct pci_device_id zr36067_pci_tbl[] = {
 	ZR_DEVICE(PCI_VENDOR_ID_ELECTRONICDESIGNGMBH, PCI_DEVICE_ID_LML_33R10, LML33R10),
 	ZR_DEVICE(PCI_VENDOR_ID_IOMEGA, PCI_DEVICE_ID_IOMEGA_BUZ, BUZ),
 	ZR_DEVICE(PCI_ANY_ID, PCI_ANY_ID, NUM_CARDS),
-	{0}
+	{ }
 };
 MODULE_DEVICE_TABLE(pci, zr36067_pci_tbl);
 
@@ -889,7 +886,7 @@ static int zoran_init_video_device(struct zoran *zr, struct video_device *video_
 static void zoran_exit_video_devices(struct zoran *zr)
 {
 	video_unregister_device(zr->video_dev);
-	kfree(zr->video_dev);
+	zr->video_dev = NULL;
 }
 
 static int zoran_init_video_devices(struct zoran *zr)
@@ -1377,7 +1374,7 @@ static int zoran_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		}
 		if (zr->codec->type != zr->card.video_codec) {
 			pci_err(pdev, "%s - wrong codec\n", __func__);
-			goto zr_unreg_videocodec;
+			goto zr_detach_codec;
 		}
 	}
 	if (zr->card.video_vfe != 0) {

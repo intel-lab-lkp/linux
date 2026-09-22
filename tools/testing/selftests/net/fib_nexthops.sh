@@ -30,6 +30,7 @@ IPV4_TESTS="
 	ipv4_large_res_grp
 	ipv4_compat_mode
 	ipv4_fdb_grp_fcnal
+	ipv4_fdb_port_fcnal
 	ipv4_mpath_select
 	ipv4_torture
 	ipv4_res_torture
@@ -44,6 +45,7 @@ IPV6_TESTS="
 	ipv6_large_res_grp
 	ipv6_compat_mode
 	ipv6_fdb_grp_fcnal
+	ipv6_fdb_port_fcnal
 	ipv6_mpath_select
 	ipv6_torture
 	ipv6_res_torture
@@ -432,6 +434,15 @@ check_nexthop_fdb_support()
 	fi
 }
 
+check_nexthop_fdb_port_support()
+{
+	$IP nexthop help 2>&1 | grep -q "dst_port"
+	if [ $? -ne 0 ]; then
+		echo "SKIP: iproute2 too old, missing nexthop dst_port support"
+		return $ksft_skip
+	fi
+}
+
 check_nexthop_res_support()
 {
 	$IP nexthop help 2>&1 | grep -q resilient
@@ -467,8 +478,8 @@ ipv6_fdb_grp_fcnal()
 	log_test $? 0 "Get Fdb nexthop group by id"
 
 	# fdb nexthop group can only contain fdb nexthops
-	run_cmd "$IP nexthop add id 63 via 2001:db8:91::4"
-	run_cmd "$IP nexthop add id 64 via 2001:db8:91::5"
+	run_cmd "$IP nexthop add id 63 via 2001:db8:91::4 dev veth1"
+	run_cmd "$IP nexthop add id 64 via 2001:db8:91::5 dev veth1"
 	run_cmd "$IP nexthop add id 103 group 63/64 fdb"
 	log_test $? 2 "Fdb Nexthop group with non-fdb nexthops"
 
@@ -494,6 +505,26 @@ ipv6_fdb_grp_fcnal()
 	run_cmd "$IP nexthop add id 69 encap mpls 101 via 2001:db8:91::8 dev veth1 fdb"
 	log_test $? 2 "Fdb Nexthop with encap"
 
+	# Replace FDB nexthop to non-FDB and vice versa
+	run_cmd "$IP nexthop add id 70 via 2001:db8:91::2 fdb"
+	run_cmd "$IP nexthop replace id 70 via 2001:db8:91::2 dev veth1"
+	log_test $? 0 "Replace FDB nexthop to non-FDB nexthop"
+	run_cmd "$IP nexthop replace id 70 via 2001:db8:91::2 fdb"
+	log_test $? 0 "Replace non-FDB nexthop to FDB nexthop"
+
+	# Replace FDB nexthop address while in a group
+	run_cmd "$IP nexthop add id 71 group 70 fdb"
+	run_cmd "$IP nexthop replace id 70 via 2001:db8:91::3 fdb"
+	log_test $? 0 "Replace FDB nexthop address while in a group"
+
+	# Cannot replace FDB nexthop to non-FDB and vice versa while in a group
+	run_cmd "$IP nexthop replace id 70 via 2001:db8:91::2 dev veth1"
+	log_test $? 2 "Replace FDB nexthop to non-FDB nexthop while in a group"
+	run_cmd "$IP nexthop add id 72 via 2001:db8:91::2 dev veth1"
+	run_cmd "$IP nexthop add id 73 group 72"
+	run_cmd "$IP nexthop replace id 72 via 2001:db8:91::2 fdb"
+	log_test $? 2 "Replace non-FDB nexthop to FDB nexthop while in a group"
+
 	run_cmd "$IP link add name vx10 type vxlan id 1010 local 2001:db8:91::9 remote 2001:db8:91::10 dstport 4789 nolearning noudpcsum tos inherit ttl 100"
 	run_cmd "$BRIDGE fdb add 02:02:00:00:00:13 dev vx10 nhid 102 self"
 	log_test $? 0 "Fdb mac add with nexthop group"
@@ -501,6 +532,20 @@ ipv6_fdb_grp_fcnal()
 	## fdb nexthops can only reference nexthop groups and not nexthops
 	run_cmd "$BRIDGE fdb add 02:02:00:00:00:14 dev vx10 nhid 61 self"
 	log_test $? 255 "Fdb mac add with nexthop"
+
+	# fdb entries with a nexthop group cannot be aged out
+	run_cmd "$BRIDGE fdb add 02:02:00:00:00:15 dev vx10 nhid 102 self static"
+	log_test $? 0 "Fdb mac add with nexthop group and static state"
+
+	run_cmd "$BRIDGE fdb add 02:02:00:00:00:16 dev vx10 nhid 102 self dynamic"
+	log_test $? 255 "Fdb mac add with nexthop group and dynamic state"
+
+	run_cmd "$BRIDGE fdb add 02:02:00:00:00:17 dev vx10 nhid 102 self"
+	run_cmd "$BRIDGE fdb replace 02:02:00:00:00:17 dev vx10 dst 2001:db8:91::11 self dynamic"
+	log_test $? 255 "Fdb mac replace with nexthop group and dynamic state"
+
+	run_cmd "$BRIDGE fdb append 02:02:00:00:00:17 dev vx10 dst 2001:db8:91::11 self dynamic"
+	log_test $? 255 "Fdb mac append with nexthop group and dynamic state"
 
 	run_cmd "$IP -6 ro add 2001:db8:101::1/128 nhid 66"
 	log_test $? 2 "Route add with fdb nexthop"
@@ -519,6 +564,42 @@ ipv6_fdb_grp_fcnal()
 	log_test $? 254 "Fdb entry after deleting a nexthop group"
 
 	$IP link del dev vx10
+}
+
+ipv6_fdb_port_fcnal()
+{
+	echo
+	echo "IPv6 fdb nexthop dst_port functional"
+	echo "------------------------------------"
+
+	check_nexthop_fdb_port_support
+	if [ $? -eq $ksft_skip ]; then
+		return $ksft_skip
+	fi
+
+	# NHA_DST_PORT: optional per-nexthop VXLAN destination UDP port,
+	# letting an fdb nexthop group balance a flow across legs that share
+	# an underlay IP but listen on different UDP ports.
+	run_cmd "$IP nexthop add id 80 via 2001:db8:91::2 fdb dst_port 4790"
+	check_nexthop "id 80" \
+		"id 80 via 2001:db8:91::2 scope link fdb dst_port 4790"
+	log_test $? 0 "Fdb nexthop with dst_port"
+
+	run_cmd "$IP nexthop add id 81 fdb dst_port 4790"
+	log_test $? 2 "Fdb nexthop with dst_port but no gateway"
+
+	run_cmd "$IP nexthop add id 81 via 2001:db8:91::2 fdb dst_port 0"
+	log_test $? 2 "Fdb nexthop with dst_port 0"
+
+	run_cmd "$IP nexthop add id 82 via 2001:db8:91::2 fdb dst_port 4789"
+	run_cmd "$IP nexthop add id 83 via 2001:db8:91::3 fdb dst_port 5789"
+	run_cmd "$IP nexthop add id 106 group 82/83 fdb"
+	check_nexthop "id 106" "id 106 group 82/83 fdb"
+	log_test $? 0 "Fdb nexthop group with legs differing in dst_port"
+
+	run_cmd "$IP nexthop add id 84 via 2001:db8:91::2 fdb"
+	check_nexthop "id 84" "id 84 via 2001:db8:91::2 scope link fdb"
+	log_test $? 0 "Fdb nexthop without dst_port omits dst_port"
 }
 
 ipv4_fdb_grp_fcnal()
@@ -547,15 +628,15 @@ ipv4_fdb_grp_fcnal()
 	log_test $? 0 "Get Fdb nexthop group by id"
 
 	# fdb nexthop group can only contain fdb nexthops
-	run_cmd "$IP nexthop add id 14 via 172.16.1.2"
-	run_cmd "$IP nexthop add id 15 via 172.16.1.3"
+	run_cmd "$IP nexthop add id 14 via 172.16.1.2 dev veth1"
+	run_cmd "$IP nexthop add id 15 via 172.16.1.3 dev veth1"
 	run_cmd "$IP nexthop add id 103 group 14/15 fdb"
 	log_test $? 2 "Fdb Nexthop group with non-fdb nexthops"
 
 	# Non fdb nexthop group can not contain fdb nexthops
 	run_cmd "$IP nexthop add id 16 via 172.16.1.2 fdb"
 	run_cmd "$IP nexthop add id 17 via 172.16.1.3 fdb"
-	run_cmd "$IP nexthop add id 104 group 14/15"
+	run_cmd "$IP nexthop add id 104 group 16/17"
 	log_test $? 2 "Non-Fdb Nexthop group with fdb nexthops"
 
 	# fdb nexthop cannot have blackhole
@@ -574,6 +655,26 @@ ipv4_fdb_grp_fcnal()
 	run_cmd "$IP nexthop add id 17 encap mpls 101 via 172.16.1.2 dev veth1 fdb"
 	log_test $? 2 "Fdb Nexthop with encap"
 
+	# Replace FDB nexthop to non-FDB and vice versa
+	run_cmd "$IP nexthop add id 18 via 172.16.1.2 fdb"
+	run_cmd "$IP nexthop replace id 18 via 172.16.1.2 dev veth1"
+	log_test $? 0 "Replace FDB nexthop to non-FDB nexthop"
+	run_cmd "$IP nexthop replace id 18 via 172.16.1.2 fdb"
+	log_test $? 0 "Replace non-FDB nexthop to FDB nexthop"
+
+	# Replace FDB nexthop address while in a group
+	run_cmd "$IP nexthop add id 19 group 18 fdb"
+	run_cmd "$IP nexthop replace id 18 via 172.16.1.3 fdb"
+	log_test $? 0 "Replace FDB nexthop address while in a group"
+
+	# Cannot replace FDB nexthop to non-FDB and vice versa while in a group
+	run_cmd "$IP nexthop replace id 18 via 172.16.1.2 dev veth1"
+	log_test $? 2 "Replace FDB nexthop to non-FDB nexthop while in a group"
+	run_cmd "$IP nexthop add id 20 via 172.16.1.2 dev veth1"
+	run_cmd "$IP nexthop add id 21 group 20"
+	run_cmd "$IP nexthop replace id 20 via 172.16.1.2 fdb"
+	log_test $? 2 "Replace non-FDB nexthop to FDB nexthop while in a group"
+
 	run_cmd "$IP link add name vx10 type vxlan id 1010 local 10.0.0.1 remote 10.0.0.2 dstport 4789 nolearning noudpcsum tos inherit ttl 100"
 	run_cmd "$BRIDGE fdb add 02:02:00:00:00:13 dev vx10 nhid 102 self"
 	log_test $? 0 "Fdb mac add with nexthop group"
@@ -582,7 +683,21 @@ ipv4_fdb_grp_fcnal()
 	run_cmd "$BRIDGE fdb add 02:02:00:00:00:14 dev vx10 nhid 12 self"
 	log_test $? 255 "Fdb mac add with nexthop"
 
-	run_cmd "$IP ro add 172.16.0.0/22 nhid 15"
+	# fdb entries with a nexthop group cannot be aged out
+	run_cmd "$BRIDGE fdb add 02:02:00:00:00:15 dev vx10 nhid 102 self static"
+	log_test $? 0 "Fdb mac add with nexthop group and static state"
+
+	run_cmd "$BRIDGE fdb add 02:02:00:00:00:16 dev vx10 nhid 102 self dynamic"
+	log_test $? 255 "Fdb mac add with nexthop group and dynamic state"
+
+	run_cmd "$BRIDGE fdb add 02:02:00:00:00:17 dev vx10 nhid 102 self"
+	run_cmd "$BRIDGE fdb replace 02:02:00:00:00:17 dev vx10 dst 10.0.0.3 self dynamic"
+	log_test $? 255 "Fdb mac replace with nexthop group and dynamic state"
+
+	run_cmd "$BRIDGE fdb append 02:02:00:00:00:17 dev vx10 dst 10.0.0.3 self dynamic"
+	log_test $? 255 "Fdb mac append with nexthop group and dynamic state"
+
+	run_cmd "$IP ro add 172.16.0.0/22 nhid 16"
 	log_test $? 2 "Route add with fdb nexthop"
 
 	run_cmd "$IP ro add 172.16.0.0/22 nhid 103"
@@ -599,6 +714,42 @@ ipv4_fdb_grp_fcnal()
 	log_test $? 254 "Fdb entry after deleting a nexthop group"
 
 	$IP link del dev vx10
+}
+
+ipv4_fdb_port_fcnal()
+{
+	echo
+	echo "IPv4 fdb nexthop dst_port functional"
+	echo "------------------------------------"
+
+	check_nexthop_fdb_port_support
+	if [ $? -eq $ksft_skip ]; then
+		return $ksft_skip
+	fi
+
+	# NHA_DST_PORT: optional per-nexthop VXLAN destination UDP port,
+	# letting an fdb nexthop group balance a flow across legs that share
+	# an underlay IP but listen on different UDP ports.
+	run_cmd "$IP nexthop add id 30 via 172.16.1.2 fdb dst_port 4790"
+	check_nexthop "id 30" \
+		"id 30 via 172.16.1.2 scope link fdb dst_port 4790"
+	log_test $? 0 "Fdb nexthop with dst_port"
+
+	run_cmd "$IP nexthop add id 31 fdb dst_port 4790"
+	log_test $? 2 "Fdb nexthop with dst_port but no gateway"
+
+	run_cmd "$IP nexthop add id 31 via 172.16.1.2 fdb dst_port 0"
+	log_test $? 2 "Fdb nexthop with dst_port 0"
+
+	run_cmd "$IP nexthop add id 32 via 172.16.1.2 fdb dst_port 4789"
+	run_cmd "$IP nexthop add id 33 via 172.16.1.3 fdb dst_port 5789"
+	run_cmd "$IP nexthop add id 105 group 32/33 fdb"
+	check_nexthop "id 105" "id 105 group 32/33 fdb"
+	log_test $? 0 "Fdb nexthop group with legs differing in dst_port"
+
+	run_cmd "$IP nexthop add id 34 via 172.16.1.2 fdb"
+	check_nexthop "id 34" "id 34 via 172.16.1.2 scope link fdb"
+	log_test $? 0 "Fdb nexthop without dst_port omits dst_port"
 }
 
 ipv4_mpath_select()
@@ -760,6 +911,14 @@ ipv6_fcnal()
 	set +e
 	check_nexthop "dev veth1" ""
 	log_test $? 0 "Nexthops removed on admin down"
+
+	# error routes should be deleted when their nexthop is deleted
+	run_cmd "$IP li set dev veth1 up"
+	run_cmd "$IP -6 nexthop add id 58 dev veth1"
+	run_cmd "$IP ro add blackhole 2001:db8:101::1/128 nhid 58"
+	run_cmd "$IP nexthop del id 58"
+	check_route6 "2001:db8:101::1" ""
+	log_test $? 0 "Error route removed on nexthop deletion"
 }
 
 ipv6_grp_refs()
@@ -1161,6 +1320,28 @@ ipv6_fcnal_runtime()
 	run_cmd "$IP ro replace 2001:db8:101::1/128 nhid 124"
 	log_test $? 0 "IPv6 route using a group after replacing v4 gateways"
 
+	# Replacing an IPv6 nexthop with an IPv4 nexthop should update has_v4
+	# for all groups using it, preventing IPv6 routes from referencing the
+	# group after the replace.
+	run_cmd "$IP nexthop add id 89 via 2001:db8:91::2 dev veth1"
+	run_cmd "$IP nexthop add id 125 group 89"
+	run_cmd "$IP nexthop replace id 89 via 172.16.1.1 dev veth1"
+	run_cmd "$IP ro replace 2001:db8:101::1/128 nhid 125"
+	log_test $? 2 "IPv6 route can not use group after v6 nexthop replaced by v4"
+
+	# Same scenario but with a blackhole nexthop: the group has no IPv6
+	# routes yet when the replace happens, so fib6_check_nh_list returns
+	# early without checking. has_v4 must still be updated to block
+	# subsequent IPv6 route additions.
+	run_cmd "$IP nexthop flush >/dev/null 2>&1"
+	run_cmd "$IP -6 nexthop add id 90 blackhole"
+	run_cmd "$IP nexthop add id 125 group 90"
+	run_cmd "$IP nexthop replace id 90 blackhole"
+	run_cmd "$IP -6 ro add 2001:db8:101::1/128 nhid 125"
+	log_test $? 2 "IPv6 route reject v6 blackhole replaced by v4 blackhole"
+	run_cmd "ip netns exec $me ping -6 2001:db8:101::1 -c1 -w$PING_TIMEOUT"
+	log_test $? 2 "Ping unreachable after rejected route"
+
 	$IP nexthop flush >/dev/null 2>&1
 
 	#
@@ -1419,6 +1600,13 @@ ipv4_fcnal()
 
 	run_cmd "$IP ro del 172.16.102.0/24"
 	log_test $? 0 "Delete route when not specifying nexthop attributes"
+
+	# error routes should be deleted when their nexthop is deleted
+	run_cmd "$IP nexthop add id 23 dev veth1"
+	run_cmd "$IP ro add blackhole 172.16.102.100/32 nhid 23"
+	run_cmd "$IP nexthop del id 23"
+	check_route "172.16.102.100" ""
+	log_test $? 0 "Error route removed on nexthop deletion"
 }
 
 ipv4_grp_fcnal()
@@ -1617,6 +1805,17 @@ ipv4_withv6_fcnal()
 
 	run_cmd "$IP ro replace 172.16.101.1/32 via inet6 2001:db8:50::1 dev veth1"
 	log_test $? 2 "IPv4 route with invalid IPv6 gateway"
+
+	# Test IPv4 route with loopback IPv6 nexthop
+	# Regression test: loopback IPv6 nexthop was misclassified as reject
+	# route, skipping nhc_pcpu_rth_output allocation, causing panic when
+	# an IPv4 route references it and triggers __mkroute_output().
+	run_cmd "$IP -6 nexthop add id 20 dev lo"
+	run_cmd "$IP ro add 172.20.20.0/24 nhid 20"
+	run_cmd "ip netns exec $me ping -c1 -W1 172.20.20.1"
+	log_test $? 1 "IPv4 route with loopback IPv6 nexthop (no crash)"
+	run_cmd "$IP ro del 172.20.20.0/24"
+	run_cmd "$IP nexthop del id 20"
 }
 
 ipv4_fcnal_runtime()

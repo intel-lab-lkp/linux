@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <asm/byteorder.h>
 #include <linux/filter.h>
 #include <sys/param.h>
 #include "btf.h"
@@ -13,8 +14,6 @@
 #include "hashmap.h"
 #include "bpf_gen_internal.h"
 #include "skel_internal.h"
-#include <asm/byteorder.h>
-#include "str_error.h"
 
 #define MAX_USED_MAPS	64
 #define MAX_USED_PROGS	32
@@ -64,6 +63,7 @@ static int realloc_insn_buf(struct bpf_gen *gen, __u32 size)
 		gen->error = -ENOMEM;
 		free(gen->insn_start);
 		gen->insn_start = NULL;
+		gen->insn_cur = NULL;
 		return -ENOMEM;
 	}
 	gen->insn_start = insn_start;
@@ -87,6 +87,7 @@ static int realloc_data_buf(struct bpf_gen *gen, __u32 size)
 		gen->error = -ENOMEM;
 		free(gen->data_start);
 		gen->data_start = NULL;
+		gen->data_cur = NULL;
 		return -ENOMEM;
 	}
 	gen->data_start = data_start;
@@ -156,9 +157,15 @@ void bpf_gen__init(struct bpf_gen *gen, int log_level, int nr_progs, int nr_maps
 
 static int add_data(struct bpf_gen *gen, const void *data, __u32 size)
 {
-	__u32 size8 = roundup(size, 8);
 	__u64 zero = 0;
+	__u32 size8;
 	void *prev;
+
+	if (size > INT32_MAX) {
+		gen->error = -ERANGE;
+		return 0;
+	}
+	size8 = roundup(size, 8);
 
 	if (realloc_data_buf(gen, size8))
 		return 0;
@@ -291,7 +298,6 @@ static void emit_check_err(struct bpf_gen *gen)
 		emit(gen, BPF_JMP_IMM(BPF_JSLT, BPF_REG_7, 0, off));
 	} else {
 		gen->error = -ERANGE;
-		emit(gen, BPF_JMP_IMM(BPF_JA, 0, 0, -1));
 	}
 }
 
@@ -373,7 +379,7 @@ int bpf_gen__finish(struct bpf_gen *gen, int nr_progs, int nr_maps)
 	int i;
 
 	if (nr_progs < gen->nr_progs || nr_maps != gen->nr_maps) {
-		pr_warn("nr_progs %d/%d nr_maps %d/%d mismatch\n",
+		pr_warn("nr_progs %d/%u nr_maps %d/%u mismatch\n",
 			nr_progs, gen->nr_progs, nr_maps, gen->nr_maps);
 		gen->error = -EFAULT;
 		return gen->error;
@@ -394,7 +400,6 @@ int bpf_gen__finish(struct bpf_gen *gen, int nr_progs, int nr_maps)
 			      blob_fd_array_off(gen, i));
 	emit(gen, BPF_MOV64_IMM(BPF_REG_0, 0));
 	emit(gen, BPF_EXIT_INSN());
-	pr_debug("gen: finish %s\n", errstr(gen->error));
 	if (!gen->error) {
 		struct gen_loader_opts *opts = gen->opts;
 
@@ -412,6 +417,7 @@ int bpf_gen__finish(struct bpf_gen *gen, int nr_progs, int nr_maps)
 				bpf_insn_bswap(insn++);
 		}
 	}
+	pr_debug("gen: finish %s\n", errstr(gen->error));
 	return gen->error;
 }
 
@@ -458,7 +464,7 @@ void bpf_gen__load_btf(struct bpf_gen *gen, const void *btf_raw_data,
 
 	attr.btf_size = tgt_endian(btf_raw_size);
 	btf_load_attr = add_data(gen, &attr, attr_size);
-	pr_debug("gen: load_btf: off %d size %d, attr: off %d size %d\n",
+	pr_debug("gen: load_btf: off %d size %u, attr: off %d size %d\n",
 		 btf_data, btf_raw_size, btf_load_attr, attr_size);
 
 	/* populate union bpf_attr with user provided log details */
@@ -504,7 +510,7 @@ void bpf_gen__map_create(struct bpf_gen *gen,
 	attr.btf_value_type_id = tgt_endian(map_attr->btf_value_type_id);
 
 	map_create_attr = add_data(gen, &attr, attr_size);
-	pr_debug("gen: map_create: %s idx %d type %d value_type_id %d, attr: off %d size %d\n",
+	pr_debug("gen: map_create: %s idx %d type %u value_type_id %u, attr: off %d size %d\n",
 		 map_name, map_idx, map_type, map_attr->btf_value_type_id,
 		 map_create_attr, attr_size);
 
@@ -522,13 +528,23 @@ void bpf_gen__map_create(struct bpf_gen *gen,
 	default:
 		break;
 	}
-	/* conditionally update max_entries */
-	if (map_idx >= 0)
+
+	/*
+	 * Conditionally update max_entries from the host-supplied loader
+	 * ctx. This sizes the map at runtime, but for a signed loader
+	 * (gen_hash) it would let an untrusted host re-dimension the
+	 * program's maps, outside what the signature attests to: the
+	 * metadata blob is covered by the program signature and verified
+	 * by the kernel at load time. Keep the signer-provided max_entries
+	 * baked into the blob in that case.
+	 */
+	if (map_idx >= 0 && !OPTS_GET(gen->opts, gen_hash, false))
 		move_ctx2blob(gen, attr_field(map_create_attr, max_entries), 4,
 			      sizeof(struct bpf_loader_ctx) +
 			      sizeof(struct bpf_map_desc) * map_idx +
 			      offsetof(struct bpf_map_desc, max_entries),
 			      true /* check that max_entries != 0 */);
+
 	/* emit MAP_CREATE command */
 	emit_sys_bpf(gen, BPF_MAP_CREATE, map_create_attr, attr_size);
 	debug_ret(gen, "map_create %s idx %d type %d value_size %d value_btf_id %d",
@@ -1004,11 +1020,11 @@ void bpf_gen__prog_load(struct bpf_gen *gen,
 	license_off = add_data(gen, license, strlen(license) + 1);
 	/* add insns to blob of bytes */
 	insns_off = add_data(gen, insns, insn_cnt * sizeof(struct bpf_insn));
-	pr_debug("gen: prog_load: prog_idx %d type %d insn off %d insns_cnt %zd license off %d\n",
+	pr_debug("gen: prog_load: prog_idx %d type %u insn off %d insns_cnt %zu license off %d\n",
 		 prog_idx, prog_type, insns_off, insn_cnt, license_off);
 
 	/* convert blob insns to target endianness */
-	if (gen->swapped_endian) {
+	if (gen->swapped_endian && !gen->error) {
 		struct bpf_insn *insn = gen->data_start + insns_off;
 		int i;
 
@@ -1027,26 +1043,26 @@ void bpf_gen__prog_load(struct bpf_gen *gen,
 	attr.func_info_rec_size = tgt_endian(load_attr->func_info_rec_size);
 	attr.func_info_cnt = tgt_endian(load_attr->func_info_cnt);
 	func_info = add_data(gen, load_attr->func_info, func_info_tot_sz);
-	pr_debug("gen: prog_load: func_info: off %d cnt %d rec size %d\n",
+	pr_debug("gen: prog_load: func_info: off %d cnt %u rec size %u\n",
 		 func_info, load_attr->func_info_cnt,
 		 load_attr->func_info_rec_size);
 
 	attr.line_info_rec_size = tgt_endian(load_attr->line_info_rec_size);
 	attr.line_info_cnt = tgt_endian(load_attr->line_info_cnt);
 	line_info = add_data(gen, load_attr->line_info, line_info_tot_sz);
-	pr_debug("gen: prog_load: line_info: off %d cnt %d rec size %d\n",
+	pr_debug("gen: prog_load: line_info: off %d cnt %u rec size %u\n",
 		 line_info, load_attr->line_info_cnt,
 		 load_attr->line_info_rec_size);
 
 	attr.core_relo_rec_size = tgt_endian((__u32)sizeof(struct bpf_core_relo));
 	attr.core_relo_cnt = tgt_endian(gen->core_relo_cnt);
 	core_relos = add_data(gen, gen->core_relos, core_relo_tot_sz);
-	pr_debug("gen: prog_load: core_relos: off %d cnt %d rec size %zd\n",
+	pr_debug("gen: prog_load: core_relos: off %d cnt %d rec size %zu\n",
 		 core_relos, gen->core_relo_cnt,
 		 sizeof(struct bpf_core_relo));
 
 	/* convert all info blobs to target endianness */
-	if (gen->swapped_endian)
+	if (gen->swapped_endian && !gen->error)
 		info_blob_bswap(gen, func_info, line_info, core_relos, load_attr);
 
 	libbpf_strlcpy(attr.prog_name, prog_name, sizeof(attr.prog_name));
@@ -1112,7 +1128,7 @@ void bpf_gen__prog_load(struct bpf_gen *gen,
 }
 
 void bpf_gen__map_update_elem(struct bpf_gen *gen, int map_idx, void *pvalue,
-			      __u32 value_size)
+			      __u32 value_size, __u64 flags)
 {
 	int attr_size = offsetofend(union bpf_attr, flags);
 	int map_update_attr, value, key;
@@ -1120,34 +1136,44 @@ void bpf_gen__map_update_elem(struct bpf_gen *gen, int map_idx, void *pvalue,
 	int zero = 0;
 
 	memset(&attr, 0, attr_size);
+	attr.flags = tgt_endian(flags);
 
 	value = add_data(gen, pvalue, value_size);
 	key = add_data(gen, &zero, sizeof(zero));
 
-	/* if (map_desc[map_idx].initial_value) {
+	/*
+	 * if (map_desc[map_idx].initial_value) {
 	 *    if (ctx->flags & BPF_SKEL_KERNEL)
 	 *        bpf_probe_read_kernel(value, value_size, initial_value);
 	 *    else
 	 *        bpf_copy_from_user(value, value_size, initial_value);
 	 * }
+	 *
+	 * The runtime initial_value comes from the host-supplied loader
+	 * ctx and would overwrite the blob value that the program signature
+	 * covers and the kernel verifies at load time. For a signed loader
+	 * (gen_hash) the attested blob value must be authoritative, so skip
+	 * the override and leave the signed value in place.
 	 */
-	emit(gen, BPF_LDX_MEM(BPF_DW, BPF_REG_3, BPF_REG_6,
-			      sizeof(struct bpf_loader_ctx) +
-			      sizeof(struct bpf_map_desc) * map_idx +
-			      offsetof(struct bpf_map_desc, initial_value)));
-	emit(gen, BPF_JMP_IMM(BPF_JEQ, BPF_REG_3, 0, 8));
-	emit2(gen, BPF_LD_IMM64_RAW_FULL(BPF_REG_1, BPF_PSEUDO_MAP_IDX_VALUE,
-					 0, 0, 0, value));
-	emit(gen, BPF_MOV64_IMM(BPF_REG_2, value_size));
-	emit(gen, BPF_LDX_MEM(BPF_W, BPF_REG_0, BPF_REG_6,
-			      offsetof(struct bpf_loader_ctx, flags)));
-	emit(gen, BPF_JMP_IMM(BPF_JSET, BPF_REG_0, BPF_SKEL_KERNEL, 2));
-	emit(gen, BPF_EMIT_CALL(BPF_FUNC_copy_from_user));
-	emit(gen, BPF_JMP_IMM(BPF_JA, 0, 0, 1));
-	emit(gen, BPF_EMIT_CALL(BPF_FUNC_probe_read_kernel));
+	if (!OPTS_GET(gen->opts, gen_hash, false)) {
+		emit(gen, BPF_LDX_MEM(BPF_DW, BPF_REG_3, BPF_REG_6,
+				      sizeof(struct bpf_loader_ctx) +
+				      sizeof(struct bpf_map_desc) * map_idx +
+				      offsetof(struct bpf_map_desc, initial_value)));
+		emit(gen, BPF_JMP_IMM(BPF_JEQ, BPF_REG_3, 0, 8));
+		emit2(gen, BPF_LD_IMM64_RAW_FULL(BPF_REG_1, BPF_PSEUDO_MAP_IDX_VALUE,
+						 0, 0, 0, value));
+		emit(gen, BPF_MOV64_IMM(BPF_REG_2, value_size));
+		emit(gen, BPF_LDX_MEM(BPF_W, BPF_REG_0, BPF_REG_6,
+				      offsetof(struct bpf_loader_ctx, flags)));
+		emit(gen, BPF_JMP_IMM(BPF_JSET, BPF_REG_0, BPF_SKEL_KERNEL, 2));
+		emit(gen, BPF_EMIT_CALL(BPF_FUNC_copy_from_user));
+		emit(gen, BPF_JMP_IMM(BPF_JA, 0, 0, 1));
+		emit(gen, BPF_EMIT_CALL(BPF_FUNC_probe_read_kernel));
+	}
 
 	map_update_attr = add_data(gen, &attr, attr_size);
-	pr_debug("gen: map_update_elem: idx %d, value: off %d size %d, attr: off %d size %d\n",
+	pr_debug("gen: map_update_elem: idx %d, value: off %d size %u, attr: off %d size %d\n",
 		 map_idx, value, value_size, map_update_attr, attr_size);
 	move_blob2blob(gen, attr_field(map_update_attr, map_fd), 4,
 		       blob_fd_array_off(gen, map_idx));

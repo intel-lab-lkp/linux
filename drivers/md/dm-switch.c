@@ -62,7 +62,7 @@ static struct switch_ctx *alloc_switch_ctx(struct dm_target *ti, unsigned int nr
 {
 	struct switch_ctx *sctx;
 
-	sctx = kzalloc(struct_size(sctx, path_list, nr_paths), GFP_KERNEL);
+	sctx = kzalloc_flex(*sctx, path_list, nr_paths);
 	if (!sctx)
 		return NULL;
 
@@ -114,8 +114,8 @@ static int alloc_region_table(struct dm_target *ti, unsigned int nr_paths)
 		return -EINVAL;
 	}
 
-	sctx->region_table = vmalloc(array_size(nr_slots,
-						sizeof(region_table_slot_t)));
+	sctx->region_table = vmalloc_array(nr_slots,
+					   sizeof(region_table_slot_t));
 	if (!sctx->region_table) {
 		ti->error = "Cannot allocate region table";
 		return -ENOMEM;
@@ -184,7 +184,7 @@ static void switch_region_table_write(struct switch_ctx *sctx, unsigned long reg
 	pte = sctx->region_table[region_index];
 	pte &= ~((((region_table_slot_t)1 << sctx->region_table_entry_bits) - 1) << bit);
 	pte |= (region_table_slot_t)value << bit;
-	sctx->region_table[region_index] = pte;
+	WRITE_ONCE(sctx->region_table[region_index], pte);
 }
 
 /*

@@ -25,6 +25,13 @@ struct icc_info {
 #define IRIS_FW_VERSION_LENGTH		128
 #define IFACEQ_CORE_PKT_SIZE		(1024 * 4)
 
+enum domain_type {
+	ENCODER	= BIT(0),
+	DECODER	= BIT(1),
+};
+
+struct qcom_ubwc_cfg_data;
+
 /**
  * struct iris_core - holds core parameters valid for all instances
  *
@@ -33,8 +40,10 @@ struct icc_info {
  * @irq: iris irq
  * @v4l2_dev: a holder for v4l2 device structure
  * @vdev_dec: iris video device structure for decoder
+ * @vdev_enc: iris video device structure for encoder
  * @iris_v4l2_file_ops: iris v4l2 file ops
- * @iris_v4l2_ioctl_ops: iris v4l2 ioctl ops
+ * @iris_v4l2_ioctl_ops_dec: iris v4l2 ioctl ops for decoder
+ * @iris_v4l2_ioctl_ops_enc: iris v4l2 ioctl ops for encoder
  * @iris_vb2_ops: iris vb2 ops
  * @icc_tbl: table of iris interconnects
  * @icc_count: count of iris interconnects
@@ -45,6 +54,9 @@ struct icc_info {
  * @resets: table of iris reset clocks
  * @controller_resets: table of controller reset clocks
  * @iris_platform_data: a structure for platform data
+ * @iris_firmware_data: a pointer to the firmware (or HFI) specific data
+ * @iris_firmware_desc: a pointer to the firmware-specific descriptive data
+ * @ubwc_cfg: UBWC configuration for the platform
  * @state: current state of core
  * @iface_q_table_daddr: device address for interface queue table memory
  * @sfr_daddr: device address for SFR (Sub System Failure Reason) register memory
@@ -58,13 +70,13 @@ struct icc_info {
  * @header_id: id of packet header
  * @packet_id: id of packet
  * @power: a structure for clock and bw information
- * @hfi_ops: iris hfi command ops
- * @hfi_response_ops: iris hfi response ops
+ * @hfi_sys_ops: iris HFI system ops
  * @core_init_done: structure of signal completion for system response
  * @intr_status: interrupt status
  * @sys_error_handler: a delayed work for handling system fatal error
  * @instances: a list_head of all instances
- * @inst_fw_caps: an array of supported instance capabilities
+ * @inst_fw_caps_dec: an array of supported instance capabilities by decoder
+ * @inst_fw_caps_enc: an array of supported instance capabilities by encoder
  */
 
 struct iris_core {
@@ -73,8 +85,10 @@ struct iris_core {
 	int					irq;
 	struct v4l2_device			v4l2_dev;
 	struct video_device			*vdev_dec;
+	struct video_device			*vdev_enc;
 	const struct v4l2_file_operations	*iris_v4l2_file_ops;
-	const struct v4l2_ioctl_ops		*iris_v4l2_ioctl_ops;
+	const struct v4l2_ioctl_ops		*iris_v4l2_ioctl_ops_dec;
+	const struct v4l2_ioctl_ops		*iris_v4l2_ioctl_ops_enc;
 	const struct vb2_ops			*iris_vb2_ops;
 	struct icc_bulk_data			*icc_tbl;
 	u32					icc_count;
@@ -85,6 +99,9 @@ struct iris_core {
 	struct reset_control_bulk_data		*resets;
 	struct reset_control_bulk_data		*controller_resets;
 	const struct iris_platform_data		*iris_platform_data;
+	const struct iris_firmware_data		*iris_firmware_data;
+	const struct iris_firmware_desc		*iris_firmware_desc;
+	const struct qcom_ubwc_cfg_data		*ubwc_cfg;
 	enum iris_core_state			state;
 	dma_addr_t				iface_q_table_daddr;
 	dma_addr_t				sfr_daddr;
@@ -98,13 +115,14 @@ struct iris_core {
 	u32					header_id;
 	u32					packet_id;
 	struct iris_core_power			power;
-	const struct iris_hfi_command_ops	*hfi_ops;
-	const struct iris_hfi_response_ops	*hfi_response_ops;
+	const struct iris_hfi_sys_ops		*hfi_sys_ops;
 	struct completion			core_init_done;
 	u32					intr_status;
 	struct delayed_work			sys_error_handler;
 	struct list_head			instances;
-	struct platform_inst_fw_cap		inst_fw_caps[INST_FW_CAP_MAX];
+	/* encoder and decoder have overlapping caps, so two different arrays are required */
+	struct platform_inst_fw_cap		inst_fw_caps_dec[INST_FW_CAP_MAX];
+	struct platform_inst_fw_cap		inst_fw_caps_enc[INST_FW_CAP_MAX];
 };
 
 int iris_core_init(struct iris_core *core);

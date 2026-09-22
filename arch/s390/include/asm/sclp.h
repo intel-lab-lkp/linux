@@ -20,8 +20,12 @@
 #define SCLP_ERRNOTIFY_AQ_REPAIR		1
 #define SCLP_ERRNOTIFY_AQ_INFO_LOG		2
 #define SCLP_ERRNOTIFY_AQ_OPTICS_DATA		3
+#define SCLP_ERRNOTIFY_AQ_NVME_SMART_LOG	4
+#define SCLP_ERRNOTIFY_AQ_ADAPTER_INITIALIZED	5
+#define SCLP_ERRNOTIFY_AQ_RECOVERABLE_ERROR	6
+#define SCLP_ERRNOTIFY_AQ_TELEMETRY_DATA	7
 
-#ifndef __ASSEMBLY__
+#ifndef __ASSEMBLER__
 #include <linux/uio.h>
 #include <asm/chpid.h>
 #include <asm/cpu.h>
@@ -104,6 +108,7 @@ struct sclp_info {
 	unsigned char has_aisii : 1;
 	unsigned char has_aeni : 1;
 	unsigned char has_aisi : 1;
+	unsigned char has_astfleie2 : 1;
 	unsigned int ibc;
 	unsigned int mtid;
 	unsigned int mtid_cp;
@@ -199,5 +204,5 @@ static inline int sclp_get_core_info(struct sclp_core_info *info, int early)
 	return _sclp_get_core_info(info);
 }
 
-#endif /* __ASSEMBLY__ */
+#endif /* __ASSEMBLER__ */
 #endif /* _ASM_S390_SCLP_H */

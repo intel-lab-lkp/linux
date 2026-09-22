@@ -107,7 +107,7 @@ skl_int3472_gpiod_get_from_temp_lookup(struct int3472_discrete_device *int3472,
 	int ret;
 
 	struct gpiod_lookup_table *lookup __free(kfree) =
-			kzalloc(struct_size(lookup, table, 2), GFP_KERNEL);
+			kzalloc_flex(*lookup, table, 2);
 	if (!lookup)
 		return ERR_PTR(-ENOMEM);
 
@@ -123,33 +123,91 @@ skl_int3472_gpiod_get_from_temp_lookup(struct int3472_discrete_device *int3472,
 	return desc;
 }
 
+/*
+ * Other vana-supply users (e.g. ST, Toshiba, Sony sensors) can be added to
+ * this array instead of adding new quirk table entries.
+ */
+static const char * const power_enable_hids_vana[] = {
+	"SONY471A", /* imx471 on Lenovo X9-14 and X9-15 */
+	"TBE20A0", /* imx471 on Lenovo X1 Carbon G14 */
+	NULL
+};
+
+static const char * const power_enable_hids_vdd[] = {
+	"INT33F0", /* mt9m114 */
+	NULL
+};
+
+static const char * const power_enable_hids_enable[] = {
+	"INT347E", /* ov7251 */
+	NULL
+};
+
 /**
  * struct int3472_gpio_map - Map GPIOs to whatever is expected by the
  * sensor driver (as in DT bindings)
- * @hid: The ACPI HID of the device without the instance number e.g. INT347E
+ * @hids: NULL-terminated array of ACPI HIDs of the devices without the
+ * instance number e.g. INT347E
  * @type_from: The GPIO type from ACPI ?SDT
  * @type_to: The assigned GPIO type, typically same as @type_from
+ * @enable_time_us: Enable time in usec for GPIOs mapped to regulators
  * @con_id: The name of the GPIO for the device
  * @polarity_low: GPIO_ACTIVE_LOW true if the @polarity_low is true,
  * GPIO_ACTIVE_HIGH otherwise
  */
 struct int3472_gpio_map {
-	const char *hid;
+	const char * const *hids;
 	u8 type_from;
 	u8 type_to;
 	bool polarity_low;
+	unsigned int enable_time_us;
 	const char *con_id;
 };
 
 static const struct int3472_gpio_map int3472_gpio_map[] = {
-	/* mt9m114 designs declare a powerdown pin which controls the regulators */
-	{ "INT33F0", INT3472_GPIO_TYPE_POWERDOWN, INT3472_GPIO_TYPE_POWER_ENABLE, false, "vdd" },
-	/* ov7251 driver / DT-bindings expect "enable" as con_id for reset */
-	{ "INT347E", INT3472_GPIO_TYPE_RESET, INT3472_GPIO_TYPE_RESET, false, "enable" },
+	{	/* mt9m114 designs declare a powerdown pin which controls the regulators */
+		.hids = power_enable_hids_vdd,
+		.type_from = INT3472_GPIO_TYPE_POWERDOWN,
+		.type_to = INT3472_GPIO_TYPE_POWER_ENABLE,
+		.con_id = "vdd",
+		.enable_time_us = GPIO_REGULATOR_ENABLE_TIME,
+	},
+	{	/* ov7251 driver / DT-bindings expect "enable" as con_id for reset */
+		.hids = power_enable_hids_enable,
+		.type_from = INT3472_GPIO_TYPE_RESET,
+		.type_to = INT3472_GPIO_TYPE_RESET,
+		.con_id = "enable",
+	},
+	{	/* ov08x40's handshake pin needs a 45 ms delay on some HP laptops */
+		.hids = (const char * const[]) { "OVTI08F4", NULL },
+		.type_from = INT3472_GPIO_TYPE_HANDSHAKE,
+		.type_to = INT3472_GPIO_TYPE_HANDSHAKE,
+		.con_id = "dvdd",
+		.enable_time_us = 45 * USEC_PER_MSEC,
+	},
+	{	/* Sensors which expect "vana" as con_id for power enable */
+		.hids = power_enable_hids_vana,
+		.type_from = INT3472_GPIO_TYPE_POWER_ENABLE,
+		.type_to = INT3472_GPIO_TYPE_POWER_ENABLE,
+		.con_id = "vana",
+		.enable_time_us = GPIO_REGULATOR_ENABLE_TIME,
+	},
 };
 
+static bool int3472_gpio_map_hids_match(struct acpi_device *adev,
+					const char * const *hids)
+{
+	for (unsigned int i = 0; hids[i]; i++) {
+		if (acpi_dev_hid_uid_match(adev, hids[i], NULL))
+			return true;
+	}
+
+	return false;
+}
+
 static void int3472_get_con_id_and_polarity(struct int3472_discrete_device *int3472, u8 *type,
-					    const char **con_id, unsigned long *gpio_flags)
+					    const char **con_id, unsigned long *gpio_flags,
+					    unsigned int *enable_time_us)
 {
 	struct acpi_device *adev = int3472->sensor;
 	unsigned int i;
@@ -163,7 +221,7 @@ static void int3472_get_con_id_and_polarity(struct int3472_discrete_device *int3
 		if (*type != int3472_gpio_map[i].type_from)
 			continue;
 
-		if (!acpi_dev_hid_uid_match(adev, int3472_gpio_map[i].hid, NULL))
+		if (!int3472_gpio_map_hids_match(adev, int3472_gpio_map[i].hids))
 			continue;
 
 		dev_dbg(int3472->dev, "mapping type 0x%02x pin to 0x%02x %s\n",
@@ -173,8 +231,11 @@ static void int3472_get_con_id_and_polarity(struct int3472_discrete_device *int3
 		*gpio_flags = int3472_gpio_map[i].polarity_low ?
 			      GPIO_ACTIVE_LOW : GPIO_ACTIVE_HIGH;
 		*con_id = int3472_gpio_map[i].con_id;
+		*enable_time_us = int3472_gpio_map[i].enable_time_us;
 		return;
 	}
+
+	*enable_time_us = GPIO_REGULATOR_ENABLE_TIME;
 
 	switch (*type) {
 	case INT3472_GPIO_TYPE_RESET:
@@ -190,16 +251,30 @@ static void int3472_get_con_id_and_polarity(struct int3472_discrete_device *int3
 		*gpio_flags = GPIO_ACTIVE_HIGH;
 		break;
 	case INT3472_GPIO_TYPE_PRIVACY_LED:
-		*con_id = "privacy-led";
+		*con_id = "privacy";
+		*gpio_flags = GPIO_ACTIVE_HIGH;
+		break;
+	case INT3472_GPIO_TYPE_STROBE:
+		*con_id = "ir_flood";
+		*gpio_flags = GPIO_ACTIVE_HIGH;
+		break;
+	case INT3472_GPIO_TYPE_HOTPLUG_DETECT:
+		*con_id = "hpd";
 		*gpio_flags = GPIO_ACTIVE_HIGH;
 		break;
 	case INT3472_GPIO_TYPE_POWER_ENABLE:
 		*con_id = "avdd";
 		*gpio_flags = GPIO_ACTIVE_HIGH;
 		break;
+	case INT3472_GPIO_TYPE_DOVDD:
+		*con_id = "dovdd";
+		*gpio_flags = GPIO_ACTIVE_HIGH;
+		break;
 	case INT3472_GPIO_TYPE_HANDSHAKE:
 		*con_id = "dvdd";
 		*gpio_flags = GPIO_ACTIVE_HIGH;
+		/* Setups using a handshake pin need 25 ms enable delay */
+		*enable_time_us = 25 * USEC_PER_MSEC;
 		break;
 	default:
 		*con_id = "unknown";
@@ -220,9 +295,12 @@ static void int3472_get_con_id_and_polarity(struct int3472_discrete_device *int3
  *
  * 0x00 Reset
  * 0x01 Power down
+ * 0x02 Strobe
  * 0x0b Power enable
  * 0x0c Clock enable
  * 0x0d Privacy LED
+ * 0x10 DOVDD (digital I/O voltage)
+ * 0x13 Hotplug detect
  *
  * There are some known platform specific quirks where that does not quite
  * hold up; for example where a pin with type 0x01 (Power down) is mapped to
@@ -244,13 +322,15 @@ static int skl_int3472_handle_gpio_resources(struct acpi_resource *ares,
 					     void *data)
 {
 	struct int3472_discrete_device *int3472 = data;
+	const char *second_sensor = NULL;
 	struct acpi_resource_gpio *agpio;
+	unsigned int enable_time_us;
 	u8 active_value, pin, type;
+	unsigned long gpio_flags;
 	union acpi_object *obj;
 	struct gpio_desc *gpio;
 	const char *err_msg;
 	const char *con_id;
-	unsigned long gpio_flags;
 	int ret;
 
 	if (!acpi_gpio_get_io_resource(ares, &agpio))
@@ -273,7 +353,7 @@ static int skl_int3472_handle_gpio_resources(struct acpi_resource *ares,
 
 	type = FIELD_GET(INT3472_GPIO_DSM_TYPE, obj->integer.value);
 
-	int3472_get_con_id_and_polarity(int3472, &type, &con_id, &gpio_flags);
+	int3472_get_con_id_and_polarity(int3472, &type, &con_id, &gpio_flags, &enable_time_us);
 
 	pin = FIELD_GET(INT3472_GPIO_DSM_PIN, obj->integer.value);
 	/* Pin field is not really used under Windows and wraps around at 8 bits */
@@ -292,6 +372,7 @@ static int skl_int3472_handle_gpio_resources(struct acpi_resource *ares,
 	switch (type) {
 	case INT3472_GPIO_TYPE_RESET:
 	case INT3472_GPIO_TYPE_POWERDOWN:
+	case INT3472_GPIO_TYPE_HOTPLUG_DETECT:
 		ret = skl_int3472_map_gpio_to_sensor(int3472, agpio, con_id, gpio_flags);
 		if (ret)
 			err_msg = "Failed to map GPIO pin to sensor\n";
@@ -299,7 +380,9 @@ static int skl_int3472_handle_gpio_resources(struct acpi_resource *ares,
 		break;
 	case INT3472_GPIO_TYPE_CLK_ENABLE:
 	case INT3472_GPIO_TYPE_PRIVACY_LED:
+	case INT3472_GPIO_TYPE_STROBE:
 	case INT3472_GPIO_TYPE_POWER_ENABLE:
+	case INT3472_GPIO_TYPE_DOVDD:
 	case INT3472_GPIO_TYPE_HANDSHAKE:
 		gpio = skl_int3472_gpiod_get_from_temp_lookup(int3472, agpio, con_id, gpio_flags);
 		if (IS_ERR(gpio)) {
@@ -316,27 +399,21 @@ static int skl_int3472_handle_gpio_resources(struct acpi_resource *ares,
 
 			break;
 		case INT3472_GPIO_TYPE_PRIVACY_LED:
-			ret = skl_int3472_register_pled(int3472, gpio);
+		case INT3472_GPIO_TYPE_STROBE:
+			ret = skl_int3472_register_led(int3472, gpio, con_id);
 			if (ret)
 				err_msg = "Failed to register LED\n";
 
 			break;
 		case INT3472_GPIO_TYPE_POWER_ENABLE:
-			ret = skl_int3472_register_regulator(int3472, gpio,
-							     GPIO_REGULATOR_ENABLE_TIME,
-							     con_id,
-							     int3472->quirks.avdd_second_sensor);
-			if (ret)
-				err_msg = "Failed to map power-enable to sensor\n";
-
-			break;
+			second_sensor = int3472->quirks.avdd_second_sensor;
+			fallthrough;
+		case INT3472_GPIO_TYPE_DOVDD:
 		case INT3472_GPIO_TYPE_HANDSHAKE:
-			/* Setups using a handshake pin need 25 ms enable delay */
-			ret = skl_int3472_register_regulator(int3472, gpio,
-							     25 * USEC_PER_MSEC,
-							     con_id, NULL);
+			ret = skl_int3472_register_regulator(int3472, gpio, enable_time_us,
+							     con_id, second_sensor);
 			if (ret)
-				err_msg = "Failed to map handshake to sensor\n";
+				err_msg = "Failed to register regulator\n";
 
 			break;
 		default: /* Never reached */
@@ -398,7 +475,7 @@ void int3472_discrete_cleanup(struct int3472_discrete_device *int3472)
 	gpiod_remove_lookup_table(&int3472->gpios);
 
 	skl_int3472_unregister_clock(int3472);
-	skl_int3472_unregister_pled(int3472);
+	skl_int3472_unregister_leds(int3472);
 	skl_int3472_unregister_regulator(int3472);
 }
 EXPORT_SYMBOL_NS_GPL(int3472_discrete_cleanup, "INTEL_INT3472_DISCRETE");

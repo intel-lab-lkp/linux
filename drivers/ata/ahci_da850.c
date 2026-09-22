@@ -137,13 +137,13 @@ static int ahci_da850_hardreset(struct ata_link *link,
 
 static struct ata_port_operations ahci_da850_port_ops = {
 	.inherits = &ahci_platform_ops,
-	.softreset = ahci_da850_softreset,
+	.reset.softreset = ahci_da850_softreset,
 	/*
 	 * No need to override .pmp_softreset - it's only used for actual
 	 * PMP-enabled ports.
 	 */
-	.hardreset = ahci_da850_hardreset,
-	.pmp_hardreset = ahci_da850_hardreset,
+	.reset.hardreset = ahci_da850_hardreset,
+	.pmp_reset.hardreset = ahci_da850_hardreset,
 };
 
 static const struct ata_port_info ahci_da850_port_info = {
@@ -162,7 +162,6 @@ static int ahci_da850_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct ahci_host_priv *hpriv;
 	void __iomem *pwrdn_reg;
-	struct resource *res;
 	u32 mpy;
 	int rc;
 
@@ -198,21 +197,13 @@ static int ahci_da850_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
+	pwrdn_reg = devm_platform_ioremap_resource(pdev, 1);
+	if (IS_ERR(pwrdn_reg))
+		return PTR_ERR(pwrdn_reg);
+
 	rc = ahci_platform_enable_resources(hpriv);
 	if (rc)
 		return rc;
-
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
-	if (!res) {
-		rc = -ENODEV;
-		goto disable_resources;
-	}
-
-	pwrdn_reg = devm_ioremap(dev, res->start, resource_size(res));
-	if (!pwrdn_reg) {
-		rc = -ENOMEM;
-		goto disable_resources;
-	}
 
 	da850_sata_init(dev, pwrdn_reg, hpriv->mmio, mpy);
 

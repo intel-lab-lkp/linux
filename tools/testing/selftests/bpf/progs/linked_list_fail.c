@@ -167,6 +167,16 @@ CHECK_OP(push_back);
 #undef CHECK_OP
 #undef INIT
 
+struct obj_new_flex_elem {
+	int lo;
+	int hi;
+};
+
+struct obj_new_flex {
+	int hdr;
+	struct obj_new_flex_elem cells[];
+};
+
 SEC("?kprobe/xyz")
 int map_compat_kprobe(void *ctx)
 {
@@ -226,8 +236,20 @@ int obj_new_no_composite(void *ctx)
 SEC("?tc")
 int obj_new_no_struct(void *ctx)
 {
+	(void)bpf_obj_new(union { int data; unsigned udata; });
+	return 0;
+}
 
-	bpf_obj_new(union { int data; unsigned udata; });
+SEC("?tc")
+int obj_new_flex_array(void *ctx)
+{
+	struct obj_new_flex *p;
+
+	p = bpf_obj_new_impl(bpf_core_type_id_local(struct obj_new_flex), NULL);
+	if (!p)
+		return 0;
+	p->cells[0].hi = 42;
+	bpf_obj_drop_impl(p, NULL);
 	return 0;
 }
 
@@ -252,7 +274,7 @@ int new_null_ret(void *ctx)
 SEC("?tc")
 int obj_new_acq(void *ctx)
 {
-	bpf_obj_new(struct foo);
+	(void)bpf_obj_new(struct foo);
 	return 0;
 }
 

@@ -7,6 +7,8 @@
  *   Copyright (c) 2002 by Takashi Iwai <tiwai@suse.de>
  */
 
+#include <sound/core.h>
+
 /* handling of USB vendor/product ID pairs as 32-bit numbers */
 #define USB_ID(vendor, product) (((unsigned int)(vendor) << 16) | (product))
 #define USB_ID_VENDOR(id) ((id) >> 16)
@@ -41,9 +43,8 @@ struct snd_usb_audio {
 	unsigned int system_suspend;
 	atomic_t active;
 	atomic_t shutdown;
-	atomic_t usage_count;
-	wait_queue_head_t shutdown_wait;
-	unsigned int quirk_flags;
+	struct snd_refcount usage_count;
+	u64 quirk_flags;
 	unsigned int need_delayed_register:1; /* warn for delayed registration */
 	int num_interfaces;
 	int last_iface;
@@ -139,6 +140,29 @@ struct snd_usb_audio_quirk {
 int snd_usb_lock_shutdown(struct snd_usb_audio *chip);
 void snd_usb_unlock_shutdown(struct snd_usb_audio *chip);
 
+/* auto-cleanup */
+struct __snd_usb_lock {
+	struct snd_usb_audio *chip;
+	int err;
+};
+
+static inline struct __snd_usb_lock __snd_usb_lock_shutdown(struct snd_usb_audio *chip)
+{
+	struct __snd_usb_lock T = { .chip = chip };
+	T.err = snd_usb_lock_shutdown(chip);
+	return T;
+}
+
+static inline void __snd_usb_unlock_shutdown(struct __snd_usb_lock *lock)
+{
+	if (!lock->err)
+		snd_usb_unlock_shutdown(lock->chip);
+}
+
+DEFINE_CLASS(snd_usb_lock, struct __snd_usb_lock,
+	     __snd_usb_unlock_shutdown(&(_T)), __snd_usb_lock_shutdown(chip),
+	     struct snd_usb_audio *chip)
+
 extern bool snd_usb_use_vmalloc;
 extern bool snd_usb_skip_validation;
 
@@ -196,31 +220,117 @@ extern bool snd_usb_skip_validation;
  *  for the given endpoint.
  * QUIRK_FLAG_MIC_RES_16 and QUIRK_FLAG_MIC_RES_384
  *  Set the fixed resolution for Mic Capture Volume (mostly for webcams)
+ * QUIRK_FLAG_MIXER_PLAYBACK_MIN_MUTE
+ *  Set minimum volume control value as mute for devices where the lowest
+ *  playback value represents muted state instead of minimum audible volume
+ * QUIRK_FLAG_MIXER_CAPTURE_MIN_MUTE
+ *  Similar to QUIRK_FLAG_MIXER_PLAYBACK_MIN_MUTE, but for capture streams
+ * QUIRK_FLAG_SKIP_IFACE_SETUP
+ *  Skip the probe-time interface setup (usb_set_interface,
+ *  init_pitch, init_sample_rate); redundant with
+ *  snd_usb_endpoint_prepare() at stream-open time
+ * QUIRK_FLAG_MIXER_PLAYBACK_LINEAR_VOL
+ *  Set linear volume mapping for devices where the playback volume control
+ *  value is mapped to voltage (instead of dB) level linearly. In short:
+ *  x(raw) = (raw - raw_min) / (raw_max - raw_min); V(x) = k * x;
+ *  dB(x) = 20 * log10(x). Overrides QUIRK_FLAG_MIXER_PLAYBACK_MIN_MUTE
+ * QUIRK_FLAG_MIXER_CAPTURE_LINEAR_VOL
+ *  Similar to QUIRK_FLAG_MIXER_PLAYBACK_LINEAR_VOL, but for capture streams.
+ *  Overrides QUIRK_FLAG_MIXER_CAPTURE_MIN_MUTE
+ * QUIRK_FLAG_IFB_SILENCE_ON_EMPTY
+ *  In implicit feedback mode, when an entire capture URB returns with
+ *  all iso_frame_desc[i].status != 0 (bytes==0), do not silently return
+ *  from snd_usb_handle_sync_urb. Instead fall through and enqueue a
+ *  packet_info containing only size-0 packets, so the OUT ring keeps
+ *  moving (emits silence). Needed by Behringer Flow 8 (1397:050c).
+ * QUIRK_FLAG_MIXER_GET_CUR_OK
+ *  On some devices, whether their GET_CUR being sticky depends on whether
+ *  hotpluggable components are present. When the hotpluggable components are
+ *  missing on probe, their GET_CUR behavior is classified as broken. Set the
+ *  flag to prevent the heuristics from gating GET_CUR.
+ * QUIRK_FLAG_PLAYBACK_URB_FIXUP
+ *  Set URB_ISO_ASAP flag for isochronous URBs and force nurbs to MAX_URBS.
+ *  This is needed for devices that exhibit boot-time audio stuttering due
+ *  to insufficient buffer depth combined with xHCI scheduling variability.
+ *  The larger buffer (MAX_URBS = 12, ~64ms) absorbs system scheduling
+ *  jitter during boot, while URB_ISO_ASAP ensures consistent xHCI scheduling.
+ * QUIRK_FLAG_ALWAYS_SET_RATE
+ *  Issue SET_CUR for the sample rate even when the clock already reports the
+ *  requested rate.  A device advertising a single rate is otherwise never sent
+ *  the request at all, and some require it before streaming will start.
  */
 
-#define QUIRK_FLAG_GET_SAMPLE_RATE	(1U << 0)
-#define QUIRK_FLAG_SHARE_MEDIA_DEVICE	(1U << 1)
-#define QUIRK_FLAG_ALIGN_TRANSFER	(1U << 2)
-#define QUIRK_FLAG_TX_LENGTH		(1U << 3)
-#define QUIRK_FLAG_PLAYBACK_FIRST	(1U << 4)
-#define QUIRK_FLAG_SKIP_CLOCK_SELECTOR	(1U << 5)
-#define QUIRK_FLAG_IGNORE_CLOCK_SOURCE	(1U << 6)
-#define QUIRK_FLAG_ITF_USB_DSD_DAC	(1U << 7)
-#define QUIRK_FLAG_CTL_MSG_DELAY	(1U << 8)
-#define QUIRK_FLAG_CTL_MSG_DELAY_1M	(1U << 9)
-#define QUIRK_FLAG_CTL_MSG_DELAY_5M	(1U << 10)
-#define QUIRK_FLAG_IFACE_DELAY		(1U << 11)
-#define QUIRK_FLAG_VALIDATE_RATES	(1U << 12)
-#define QUIRK_FLAG_DISABLE_AUTOSUSPEND	(1U << 13)
-#define QUIRK_FLAG_IGNORE_CTL_ERROR	(1U << 14)
-#define QUIRK_FLAG_DSD_RAW		(1U << 15)
-#define QUIRK_FLAG_SET_IFACE_FIRST	(1U << 16)
-#define QUIRK_FLAG_GENERIC_IMPLICIT_FB	(1U << 17)
-#define QUIRK_FLAG_SKIP_IMPLICIT_FB	(1U << 18)
-#define QUIRK_FLAG_IFACE_SKIP_CLOSE	(1U << 19)
-#define QUIRK_FLAG_FORCE_IFACE_RESET	(1U << 20)
-#define QUIRK_FLAG_FIXED_RATE		(1U << 21)
-#define QUIRK_FLAG_MIC_RES_16		(1U << 22)
-#define QUIRK_FLAG_MIC_RES_384		(1U << 23)
+enum {
+	QUIRK_TYPE_GET_SAMPLE_RATE		= 0,
+	QUIRK_TYPE_SHARE_MEDIA_DEVICE		= 1,
+	QUIRK_TYPE_ALIGN_TRANSFER		= 2,
+	QUIRK_TYPE_TX_LENGTH			= 3,
+	QUIRK_TYPE_PLAYBACK_FIRST		= 4,
+	QUIRK_TYPE_SKIP_CLOCK_SELECTOR		= 5,
+	QUIRK_TYPE_IGNORE_CLOCK_SOURCE		= 6,
+	QUIRK_TYPE_ITF_USB_DSD_DAC		= 7,
+	QUIRK_TYPE_CTL_MSG_DELAY		= 8,
+	QUIRK_TYPE_CTL_MSG_DELAY_1M		= 9,
+	QUIRK_TYPE_CTL_MSG_DELAY_5M		= 10,
+	QUIRK_TYPE_IFACE_DELAY			= 11,
+	QUIRK_TYPE_VALIDATE_RATES		= 12,
+	QUIRK_TYPE_DISABLE_AUTOSUSPEND		= 13,
+	QUIRK_TYPE_IGNORE_CTL_ERROR		= 14,
+	QUIRK_TYPE_DSD_RAW			= 15,
+	QUIRK_TYPE_SET_IFACE_FIRST		= 16,
+	QUIRK_TYPE_GENERIC_IMPLICIT_FB		= 17,
+	QUIRK_TYPE_SKIP_IMPLICIT_FB		= 18,
+	QUIRK_TYPE_IFACE_SKIP_CLOSE		= 19,
+	QUIRK_TYPE_FORCE_IFACE_RESET		= 20,
+	QUIRK_TYPE_FIXED_RATE			= 21,
+	QUIRK_TYPE_MIC_RES_16			= 22,
+	QUIRK_TYPE_MIC_RES_384			= 23,
+	QUIRK_TYPE_MIXER_PLAYBACK_MIN_MUTE	= 24,
+	QUIRK_TYPE_MIXER_CAPTURE_MIN_MUTE	= 25,
+	QUIRK_TYPE_SKIP_IFACE_SETUP		= 26,
+	QUIRK_TYPE_MIXER_PLAYBACK_LINEAR_VOL	= 27,
+	QUIRK_TYPE_MIXER_CAPTURE_LINEAR_VOL	= 28,
+	QUIRK_TYPE_IFB_SILENCE_ON_EMPTY		= 29,
+	QUIRK_TYPE_MIXER_GET_CUR_OK		= 30,
+	QUIRK_TYPE_PLAYBACK_URB_FIXUP		= 31,
+	QUIRK_TYPE_ALWAYS_SET_RATE		= 32,
+/* Please also edit snd_usb_audio_quirk_flag_names and alsa-configuration.rst */
+};
+
+#define QUIRK_FLAG(x)	BIT_U64(QUIRK_TYPE_ ## x)
+
+#define QUIRK_FLAG_GET_SAMPLE_RATE		QUIRK_FLAG(GET_SAMPLE_RATE)
+#define QUIRK_FLAG_SHARE_MEDIA_DEVICE		QUIRK_FLAG(SHARE_MEDIA_DEVICE)
+#define QUIRK_FLAG_ALIGN_TRANSFER		QUIRK_FLAG(ALIGN_TRANSFER)
+#define QUIRK_FLAG_TX_LENGTH			QUIRK_FLAG(TX_LENGTH)
+#define QUIRK_FLAG_PLAYBACK_FIRST		QUIRK_FLAG(PLAYBACK_FIRST)
+#define QUIRK_FLAG_SKIP_CLOCK_SELECTOR		QUIRK_FLAG(SKIP_CLOCK_SELECTOR)
+#define QUIRK_FLAG_IGNORE_CLOCK_SOURCE		QUIRK_FLAG(IGNORE_CLOCK_SOURCE)
+#define QUIRK_FLAG_ITF_USB_DSD_DAC		QUIRK_FLAG(ITF_USB_DSD_DAC)
+#define QUIRK_FLAG_CTL_MSG_DELAY		QUIRK_FLAG(CTL_MSG_DELAY)
+#define QUIRK_FLAG_CTL_MSG_DELAY_1M		QUIRK_FLAG(CTL_MSG_DELAY_1M)
+#define QUIRK_FLAG_CTL_MSG_DELAY_5M		QUIRK_FLAG(CTL_MSG_DELAY_5M)
+#define QUIRK_FLAG_IFACE_DELAY			QUIRK_FLAG(IFACE_DELAY)
+#define QUIRK_FLAG_VALIDATE_RATES		QUIRK_FLAG(VALIDATE_RATES)
+#define QUIRK_FLAG_DISABLE_AUTOSUSPEND		QUIRK_FLAG(DISABLE_AUTOSUSPEND)
+#define QUIRK_FLAG_IGNORE_CTL_ERROR		QUIRK_FLAG(IGNORE_CTL_ERROR)
+#define QUIRK_FLAG_DSD_RAW			QUIRK_FLAG(DSD_RAW)
+#define QUIRK_FLAG_SET_IFACE_FIRST		QUIRK_FLAG(SET_IFACE_FIRST)
+#define QUIRK_FLAG_GENERIC_IMPLICIT_FB		QUIRK_FLAG(GENERIC_IMPLICIT_FB)
+#define QUIRK_FLAG_SKIP_IMPLICIT_FB		QUIRK_FLAG(SKIP_IMPLICIT_FB)
+#define QUIRK_FLAG_IFACE_SKIP_CLOSE		QUIRK_FLAG(IFACE_SKIP_CLOSE)
+#define QUIRK_FLAG_FORCE_IFACE_RESET		QUIRK_FLAG(FORCE_IFACE_RESET)
+#define QUIRK_FLAG_FIXED_RATE			QUIRK_FLAG(FIXED_RATE)
+#define QUIRK_FLAG_MIC_RES_16			QUIRK_FLAG(MIC_RES_16)
+#define QUIRK_FLAG_MIC_RES_384			QUIRK_FLAG(MIC_RES_384)
+#define QUIRK_FLAG_MIXER_PLAYBACK_MIN_MUTE	QUIRK_FLAG(MIXER_PLAYBACK_MIN_MUTE)
+#define QUIRK_FLAG_MIXER_CAPTURE_MIN_MUTE	QUIRK_FLAG(MIXER_CAPTURE_MIN_MUTE)
+#define QUIRK_FLAG_SKIP_IFACE_SETUP		QUIRK_FLAG(SKIP_IFACE_SETUP)
+#define QUIRK_FLAG_MIXER_PLAYBACK_LINEAR_VOL	QUIRK_FLAG(MIXER_PLAYBACK_LINEAR_VOL)
+#define QUIRK_FLAG_MIXER_CAPTURE_LINEAR_VOL	QUIRK_FLAG(MIXER_CAPTURE_LINEAR_VOL)
+#define QUIRK_FLAG_IFB_SILENCE_ON_EMPTY		QUIRK_FLAG(IFB_SILENCE_ON_EMPTY)
+#define QUIRK_FLAG_MIXER_GET_CUR_OK		QUIRK_FLAG(MIXER_GET_CUR_OK)
+#define QUIRK_FLAG_PLAYBACK_URB_FIXUP		QUIRK_FLAG(PLAYBACK_URB_FIXUP)
+#define QUIRK_FLAG_ALWAYS_SET_RATE		QUIRK_FLAG(ALWAYS_SET_RATE)
 
 #endif /* __USBAUDIO_H */

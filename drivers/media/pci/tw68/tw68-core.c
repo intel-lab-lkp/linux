@@ -14,7 +14,7 @@
  *
  *  Refactored and updated to the latest v4l core frameworks:
  *
- *  Copyright (C) 2014 Hans Verkuil <hverkuil@xs4all.nl>
+ *  Copyright (C) 2014 Hans Verkuil <hverkuil@kernel.org>
  */
 
 #include <linux/init.h>
@@ -37,7 +37,7 @@
 
 MODULE_DESCRIPTION("v4l2 driver module for tw6800 based video capture cards");
 MODULE_AUTHOR("William M. Brack");
-MODULE_AUTHOR("Hans Verkuil <hverkuil@xs4all.nl>");
+MODULE_AUTHOR("Hans Verkuil <hverkuil@kernel.org>");
 MODULE_LICENSE("GPL");
 
 static unsigned int latency = UNSET;
@@ -62,14 +62,14 @@ static atomic_t tw68_instance = ATOMIC_INIT(0);
  * added under vendor 0x1797 (Techwell Inc.) as subsystem IDs.
  */
 static const struct pci_device_id tw68_pci_tbl[] = {
-	{PCI_DEVICE(PCI_VENDOR_ID_TECHWELL, PCI_DEVICE_ID_TECHWELL_6800)},
-	{PCI_DEVICE(PCI_VENDOR_ID_TECHWELL, PCI_DEVICE_ID_TECHWELL_6801)},
-	{PCI_DEVICE(PCI_VENDOR_ID_TECHWELL, PCI_DEVICE_ID_TECHWELL_6804)},
-	{PCI_DEVICE(PCI_VENDOR_ID_TECHWELL, PCI_DEVICE_ID_TECHWELL_6816_1)},
-	{PCI_DEVICE(PCI_VENDOR_ID_TECHWELL, PCI_DEVICE_ID_TECHWELL_6816_2)},
-	{PCI_DEVICE(PCI_VENDOR_ID_TECHWELL, PCI_DEVICE_ID_TECHWELL_6816_3)},
-	{PCI_DEVICE(PCI_VENDOR_ID_TECHWELL, PCI_DEVICE_ID_TECHWELL_6816_4)},
-	{0,}
+	{ PCI_VDEVICE(TECHWELL, PCI_DEVICE_ID_TECHWELL_6800) },
+	{ PCI_VDEVICE(TECHWELL, PCI_DEVICE_ID_TECHWELL_6801) },
+	{ PCI_VDEVICE(TECHWELL, PCI_DEVICE_ID_TECHWELL_6804) },
+	{ PCI_VDEVICE(TECHWELL, PCI_DEVICE_ID_TECHWELL_6816_1) },
+	{ PCI_VDEVICE(TECHWELL, PCI_DEVICE_ID_TECHWELL_6816_2) },
+	{ PCI_VDEVICE(TECHWELL, PCI_DEVICE_ID_TECHWELL_6816_3) },
+	{ PCI_VDEVICE(TECHWELL, PCI_DEVICE_ID_TECHWELL_6816_4) },
+	{ }
 };
 
 /* ------------------------------------------------------------------ */

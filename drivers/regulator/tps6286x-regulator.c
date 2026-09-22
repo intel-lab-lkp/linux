@@ -19,13 +19,22 @@
 #define TPS6286X_CONTROL_FPWM	BIT(4)
 #define TPS6286X_CONTROL_SWEN	BIT(5)
 
+#define TPS6286X_STATUS		0x05
+
 #define TPS6286X_MIN_MV		400
 #define TPS6286X_MAX_MV		1675
 #define TPS6286X_STEP_MV	5
 
+static bool tps6286x_volatile_reg(struct device *dev, unsigned int reg)
+{
+	return reg == TPS6286X_STATUS;
+}
+
 static const struct regmap_config tps6286x_regmap_config = {
 	.reg_bits = 8,
 	.val_bits = 8,
+	.cache_type = REGCACHE_MAPLE,
+	.volatile_reg = tps6286x_volatile_reg,
 };
 
 static int tps6286x_set_mode(struct regulator_dev *rdev, unsigned int mode)
@@ -136,11 +145,11 @@ static int tps6286x_i2c_probe(struct i2c_client *i2c)
 }
 
 static const struct i2c_device_id tps6286x_i2c_id[] = {
-	{ "tps62864" },
-	{ "tps62866" },
-	{ "tps62868" },
-	{ "tps62869" },
-	{}
+	{ .name = "tps62864" },
+	{ .name = "tps62866" },
+	{ .name = "tps62868" },
+	{ .name = "tps62869" },
+	{ }
 };
 MODULE_DEVICE_TABLE(i2c, tps6286x_i2c_id);
 

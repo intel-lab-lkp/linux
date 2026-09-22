@@ -33,9 +33,12 @@ struct avs_tplg {
 	u32 num_pplcfgs;
 	struct avs_tplg_binding *bindings;
 	u32 num_bindings;
+	struct avs_tplg_path_template *condpath_tmpls;
 	u32 num_condpath_tmpls;
 	struct avs_tplg_init_config *init_configs;
 	u32 num_init_configs;
+	struct avs_tplg_nhlt_config *nhlt_configs;
+	u32 num_nhlt_configs;
 
 	struct list_head path_tmpl_list;
 };
@@ -155,6 +158,10 @@ struct avs_tplg_path_template {
 
 	struct snd_soc_dapm_widget *w;
 
+	/* Conditional path. */
+	struct avs_tplg_path_template_id source;
+	struct avs_tplg_path_template_id sink;
+
 	struct list_head path_list;
 
 	struct avs_tplg *owner;
@@ -170,12 +177,20 @@ struct avs_tplg_init_config {
 	void *data;
 };
 
+struct avs_tplg_nhlt_config {
+	u32 id;
+	struct acpi_nhlt_config *blob;
+};
+
 struct avs_tplg_path {
 	u32 id;
 
 	/* Path format requirements. */
 	struct avs_audio_format *fe_fmt;
 	struct avs_audio_format *be_fmt;
+	/* Condpath path-variant requirements. */
+	u32 source_path_id;
+	u32 sink_path_id;
 
 	struct list_head ppl_list;
 
@@ -206,14 +221,16 @@ struct avs_tplg_module {
 	u8 domain;
 	struct avs_tplg_modcfg_ext *cfg_ext;
 	u32 ctl_id;
-	u32 num_config_ids;
-	u32 *config_ids;
+	u32 num_init_configs;
+	struct avs_tplg_init_config **init_configs;
+	struct avs_tplg_nhlt_config *nhlt_config;
 
 	struct avs_tplg_pipeline *owner;
 	/* Pipeline modules management. */
 	struct list_head node;
 };
 
+extern const struct snd_soc_tplg_ops avs_tplg_ops;
 struct avs_tplg *avs_tplg_new(struct snd_soc_component *comp);
 
 int avs_load_topology(struct snd_soc_component *comp, const char *filename);

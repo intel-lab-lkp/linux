@@ -18,6 +18,8 @@
 #include <kvm/iodev.h>
 #include "lapic.h"
 
+#ifdef CONFIG_KVM_IOAPIC
+
 #define PIC_NUM_PINS 16
 #define SELECT_PIC(irq) \
 	((irq) < 8 ? KVM_IRQCHIP_PIC_MASTER : KVM_IRQCHIP_PIC_SLAVE)
@@ -63,6 +65,34 @@ int kvm_pic_init(struct kvm *kvm);
 void kvm_pic_destroy(struct kvm *kvm);
 int kvm_pic_read_irq(struct kvm *kvm);
 void kvm_pic_update_irq(struct kvm_pic *s);
+int kvm_pic_set_irq(struct kvm_kernel_irq_routing_entry *e, struct kvm *kvm,
+		    int irq_source_id, int level, bool line_status);
+
+int kvm_setup_default_ioapic_and_pic_routing(struct kvm *kvm);
+
+int kvm_vm_ioctl_get_irqchip(struct kvm *kvm, struct kvm_irqchip *chip);
+int kvm_vm_ioctl_set_irqchip(struct kvm *kvm, struct kvm_irqchip *chip);
+
+static inline int irqchip_full(struct kvm *kvm)
+{
+	int mode = kvm->arch.irqchip_mode;
+
+	/* Matches smp_wmb() when setting irqchip_mode */
+	smp_rmb();
+	return mode == KVM_IRQCHIP_KERNEL;
+}
+#else /* CONFIG_KVM_IOAPIC */
+static __always_inline int irqchip_full(struct kvm *kvm)
+{
+	return false;
+}
+#endif
+
+static inline int pic_in_kernel(struct kvm *kvm)
+{
+	return irqchip_full(kvm);
+}
+
 
 static inline int irqchip_split(struct kvm *kvm)
 {
@@ -71,20 +101,6 @@ static inline int irqchip_split(struct kvm *kvm)
 	/* Matches smp_wmb() when setting irqchip_mode */
 	smp_rmb();
 	return mode == KVM_IRQCHIP_SPLIT;
-}
-
-static inline int irqchip_kernel(struct kvm *kvm)
-{
-	int mode = kvm->arch.irqchip_mode;
-
-	/* Matches smp_wmb() when setting irqchip_mode */
-	smp_rmb();
-	return mode == KVM_IRQCHIP_KERNEL;
-}
-
-static inline int pic_in_kernel(struct kvm *kvm)
-{
-	return irqchip_kernel(kvm);
 }
 
 static inline int irqchip_in_kernel(struct kvm *kvm)
@@ -96,6 +112,32 @@ static inline int irqchip_in_kernel(struct kvm *kvm)
 	return mode != KVM_IRQCHIP_NONE;
 }
 
+int kvm_cpu_has_injectable_intr(struct kvm_vcpu *v);
+int kvm_cpu_has_interrupt(struct kvm_vcpu *vcpu);
+int kvm_cpu_has_extint(struct kvm_vcpu *v);
+int kvm_cpu_get_extint(struct kvm_vcpu *v);
+int kvm_cpu_get_interrupt(struct kvm_vcpu *v);
+
+static inline void kvm_warn_on_lost_irq(struct kvm_vcpu *vcpu)
+{
+	/*
+	 * WARN if an IRQ was lost between detecting the IRQ and grabbing the
+	 * IRQ for injection, unless it's possible the lost IRQ was due to one
+	 * of the exceptional cases below.
+	 *
+	 * If the VM has an in-kernel PIC, the ExtINT handling that's routed
+	 * through KVM's virtual PIC is tracked per-VM, not per-vCPU.  If
+	 * another vCPU grabs the IRQ, or deasserts the interrupt (which is
+	 * level-triggered), then it's both expected and "fine" for an IRQ
+	 * seemingly be "lost" from this vCPU's perspective.
+	 *
+	 * Similarly, Xen's event channel isn't entirely within KVM's control,
+	 * e.g. Xen emulation can be disabled entirely per-VM, or the guest
+	 * can desassert an IRQ by writing to shared memory.
+	 */
+	WARN_ON_ONCE(!pic_in_kernel(vcpu->kvm) && !IS_ENABLED(CONFIG_KVM_XEN));
+}
+
 void kvm_inject_pending_timer_irqs(struct kvm_vcpu *vcpu);
 void kvm_inject_apic_timer_irqs(struct kvm_vcpu *vcpu);
 void kvm_apic_nmi_wd_deliver(struct kvm_vcpu *vcpu);
@@ -104,10 +146,5 @@ void __kvm_migrate_pit_timer(struct kvm_vcpu *vcpu);
 void __kvm_migrate_timers(struct kvm_vcpu *vcpu);
 
 int apic_has_pending_timer(struct kvm_vcpu *vcpu);
-
-int kvm_setup_default_irq_routing(struct kvm *kvm);
-int kvm_irq_delivery_to_apic(struct kvm *kvm, struct kvm_lapic *src,
-			     struct kvm_lapic_irq *irq,
-			     struct dest_map *dest_map);
 
 #endif

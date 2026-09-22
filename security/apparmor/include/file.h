@@ -72,17 +72,22 @@ struct path_cond {
 #define COMBINED_PERM_MASK(X) ((X).allow | (X).audit | (X).quiet | (X).kill)
 
 int aa_audit_file(const struct cred *cred,
-		  struct aa_profile *profile, struct aa_perms *perms,
+		  struct aa_profile *profile, const struct aa_perms *perms,
 		  const char *op, u32 request, const char *name,
 		  const char *target, struct aa_label *tlabel, kuid_t ouid,
 		  const char *info, int error);
 
-struct aa_perms *aa_lookup_fperms(struct aa_policydb *file_rules,
-				  aa_state_t state, struct path_cond *cond);
+struct aa_perms *aa_lookup_condperms(kuid_t subj_uid,
+				     struct aa_policydb *file_rules,
+				     aa_state_t state, struct path_cond *cond);
 aa_state_t aa_str_perms(struct aa_policydb *file_rules, aa_state_t start,
 			const char *name, struct path_cond *cond,
 			struct aa_perms *perms);
 
+int __aa_path_perm(const char *op, const struct cred *subj_cred,
+		   struct aa_profile *profile, const char *name,
+		   u32 request, struct path_cond *cond, int flags,
+		   struct aa_perms *perms);
 int aa_path_perm(const char *op, const struct cred *subj_cred,
 		 struct aa_label *label, const struct path *path,
 		 int flags, u32 request, struct path_cond *cond);
@@ -99,7 +104,7 @@ void aa_inherit_files(const struct cred *cred, struct files_struct *files);
 
 
 /**
- * aa_map_file_perms - map file flags to AppArmor permissions
+ * aa_map_file_to_perms - map file flags to AppArmor permissions
  * @file: open file to map flags to AppArmor permissions
  *
  * Returns: apparmor permission set for the file

@@ -13,7 +13,6 @@
 #include <linux/dm-io.h>
 #include <linux/dm-kcopyd.h>
 #include <linux/dax.h>
-#include <linux/pfn_t.h>
 #include <linux/libnvdimm.h>
 #include <linux/delay.h>
 #include "dm-io-tracker.h"
@@ -256,7 +255,7 @@ static int persistent_memory_claim(struct dm_writecache *wc)
 	int r;
 	loff_t s;
 	long p, da;
-	pfn_t pfn;
+	unsigned long pfn;
 	int id;
 	struct page **pages;
 	sector_t offset;
@@ -290,7 +289,7 @@ static int persistent_memory_claim(struct dm_writecache *wc)
 		r = da;
 		goto err2;
 	}
-	if (!pfn_t_has_page(pfn)) {
+	if (!pfn_valid(pfn)) {
 		wc->memory_map = NULL;
 		r = -EOPNOTSUPP;
 		goto err2;
@@ -314,13 +313,13 @@ static int persistent_memory_claim(struct dm_writecache *wc)
 				r = daa ? daa : -EINVAL;
 				goto err3;
 			}
-			if (!pfn_t_has_page(pfn)) {
+			if (!pfn_valid(pfn)) {
 				r = -EOPNOTSUPP;
 				goto err3;
 			}
 			while (daa-- && i < p) {
-				pages[i++] = pfn_t_to_page(pfn);
-				pfn.val++;
+				pages[i++] = pfn_to_page(pfn);
+				pfn++;
 				if (!(i & 15))
 					cond_resched();
 			}
@@ -475,12 +474,14 @@ struct io_notify {
 	atomic_t count;
 };
 
-static void writecache_notify_io(unsigned long error, void *context)
+static void writecache_notify_io(unsigned long error, unsigned long unsup, void *context)
 {
 	struct io_notify *endio = context;
 
 	if (unlikely(error != 0))
 		writecache_error(endio->wc, -EIO, "error writing metadata");
+	else if (unlikely(unsup != 0))
+		writecache_error(endio->wc, -EOPNOTSUPP, "error writing metadata");
 	BUG_ON(atomic_read(&endio->count) <= 0);
 	if (atomic_dec_and_test(&endio->count))
 		complete(&endio->c);
@@ -531,11 +532,11 @@ static void ssd_commit_flushed(struct dm_writecache *wc, bool wait_for_ios)
 		req.notify.context = &endio;
 
 		/* writing via async dm-io (implied by notify.fn above) won't return an error */
-		(void) dm_io(&req, 1, &region, NULL, IOPRIO_DEFAULT);
+		(void) dm_io(&req, 1, &region, NULL, NULL, IOPRIO_DEFAULT);
 		i = j;
 	}
 
-	writecache_notify_io(0, &endio);
+	writecache_notify_io(0, 0, &endio);
 	wait_for_completion_io(&endio.c);
 
 	if (wait_for_ios)
@@ -568,7 +569,7 @@ static void ssd_commit_superblock(struct dm_writecache *wc)
 	req.notify.fn = NULL;
 	req.notify.context = NULL;
 
-	r = dm_io(&req, 1, &region, NULL, IOPRIO_DEFAULT);
+	r = dm_io(&req, 1, &region, NULL, NULL, IOPRIO_DEFAULT);
 	if (unlikely(r))
 		writecache_error(wc, r, "error writing superblock");
 }
@@ -596,7 +597,7 @@ static void writecache_disk_flush(struct dm_writecache *wc, struct dm_dev *dev)
 	req.client = wc->dm_io;
 	req.notify.fn = NULL;
 
-	r = dm_io(&req, 1, &region, NULL, IOPRIO_DEFAULT);
+	r = dm_io(&req, 1, &region, NULL, NULL, IOPRIO_DEFAULT);
 	if (unlikely(r))
 		writecache_error(wc, r, "error flushing metadata: %d", r);
 }
@@ -990,7 +991,7 @@ static int writecache_read_metadata(struct dm_writecache *wc, sector_t n_sectors
 	req.client = wc->dm_io;
 	req.notify.fn = NULL;
 
-	return dm_io(&req, 1, &region, NULL, IOPRIO_DEFAULT);
+	return dm_io(&req, 1, &region, NULL, NULL, IOPRIO_DEFAULT);
 }
 
 static void writecache_resume(struct dm_target *ti)
@@ -1228,7 +1229,7 @@ static void memcpy_flushcache_optimized(void *dest, void *source, size_t size)
 	 * advantage seen with cache-allocating-writes plus flushing.
 	 */
 #ifdef CONFIG_X86
-	if (static_cpu_has(X86_FEATURE_CLFLUSHOPT) &&
+	if (cpu_feature_enabled(X86_FEATURE_CLFLUSHOPT) &&
 	    likely(boot_cpu_data.x86_clflush_size == 64) &&
 	    likely(size >= 768)) {
 		do {
@@ -1641,16 +1642,8 @@ static void writecache_io_hints(struct dm_target *ti, struct queue_limits *limit
 {
 	struct dm_writecache *wc = ti->private;
 
-	if (limits->logical_block_size < wc->block_size)
-		limits->logical_block_size = wc->block_size;
-
-	if (limits->physical_block_size < wc->block_size)
-		limits->physical_block_size = wc->block_size;
-
-	if (limits->io_min < wc->block_size)
-		limits->io_min = wc->block_size;
+	dm_stack_bs_limits(limits, wc->block_size);
 }
-
 
 static void writecache_writeback_endio(struct bio *bio)
 {
@@ -1849,9 +1842,8 @@ static void __writecache_writeback_pmem(struct dm_writecache *wc, struct writeba
 		bio->bi_iter.bi_sector = read_original_sector(wc, e);
 
 		if (unlikely(max_pages > WB_LIST_INLINE))
-			wb->wc_list = kmalloc_array(max_pages, sizeof(struct wc_entry *),
-						    GFP_NOIO | __GFP_NORETRY |
-						    __GFP_NOMEMALLOC | __GFP_NOWARN);
+			wb->wc_list = kmalloc_objs(struct wc_entry *, max_pages,
+						   GFP_NOIO | __GFP_NORETRY | __GFP_NOMEMALLOC | __GFP_NOWARN);
 
 		if (likely(max_pages <= WB_LIST_INLINE) || unlikely(!wb->wc_list)) {
 			wb->wc_list = wb->wc_list_inline;
@@ -2247,7 +2239,7 @@ static int writecache_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	as.argc = argc;
 	as.argv = argv;
 
-	wc = kzalloc(sizeof(struct dm_writecache), GFP_KERNEL);
+	wc = kzalloc_obj(struct dm_writecache);
 	if (!wc) {
 		ti->error = "Cannot allocate writecache structure";
 		r = -ENOMEM;
@@ -2276,7 +2268,8 @@ static int writecache_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 		goto bad;
 	}
 
-	wc->writeback_wq = alloc_workqueue("writecache-writeback", WQ_MEM_RECLAIM, 1);
+	wc->writeback_wq = alloc_workqueue("writecache-writeback",
+					   WQ_MEM_RECLAIM | WQ_PERCPU, 1);
 	if (!wc->writeback_wq) {
 		r = -ENOMEM;
 		ti->error = "Could not allocate writeback workqueue";

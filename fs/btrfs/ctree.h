@@ -17,9 +17,7 @@
 #include <linux/refcount.h>
 #include <uapi/linux/btrfs_tree.h>
 #include "locking.h"
-#include "fs.h"
 #include "accessors.h"
-#include "extent-io-tree.h"
 
 struct extent_buffer;
 struct btrfs_block_rsv;
@@ -67,25 +65,33 @@ struct btrfs_path {
 	 * set by btrfs_split_item, tells search_slot to keep all locks
 	 * and to force calls to keep space in the nodes
 	 */
-	unsigned int search_for_split:1;
+	bool search_for_split:1;
 	/* Keep some upper locks as we walk down. */
-	unsigned int keep_locks:1;
-	unsigned int skip_locking:1;
-	unsigned int search_commit_root:1;
-	unsigned int need_commit_sem:1;
-	unsigned int skip_release_on_error:1;
+	bool keep_locks:1;
+	bool skip_locking:1;
+	bool search_commit_root:1;
+	bool need_commit_sem:1;
+	bool skip_release_on_error:1;
 	/*
 	 * Indicate that new item (btrfs_search_slot) is extending already
 	 * existing item and ins_len contains only the data size and not item
 	 * header (ie. sizeof(struct btrfs_item) is not included).
 	 */
-	unsigned int search_for_extension:1;
+	bool search_for_extension:1;
 	/* Stop search if any locks need to be taken (for read) */
-	unsigned int nowait:1;
+	bool nowait:1;
 };
 
 #define BTRFS_PATH_AUTO_FREE(path_name)					\
 	struct btrfs_path *path_name __free(btrfs_free_path) = NULL
+
+/*
+ * This defines an on-stack path that will be auto released when exiting the scope.
+ *
+ * It is compatible with any existing manual btrfs_release_path() calls.
+ */
+#define BTRFS_PATH_AUTO_RELEASE(path_name)					\
+	struct btrfs_path path_name __free(btrfs_release_path) = { 0 }
 
 /*
  * The state of btrfs root
@@ -125,7 +131,6 @@ enum {
 	BTRFS_ROOT_ORPHAN_ITEM_INSERTED,
 	BTRFS_ROOT_DEFRAG_RUNNING,
 	BTRFS_ROOT_FORCE_COW,
-	BTRFS_ROOT_MULTI_LOG_TASKS,
 	BTRFS_ROOT_DIRTY,
 	BTRFS_ROOT_DELETING,
 
@@ -190,9 +195,7 @@ struct btrfs_root {
 	struct list_head log_ctxs[2];
 	/* Used only for log trees of subvolumes, not for the log root tree */
 	atomic_t log_writers;
-	atomic_t log_commit[2];
-	/* Used only for log trees of subvolumes, not for the log root tree */
-	atomic_t log_batch;
+	bool log_commit[2];
 	/*
 	 * Protected by the 'log_mutex' lock but can be read without holding
 	 * that lock to avoid unnecessary lock contention, in which case it
@@ -210,7 +213,6 @@ struct btrfs_root {
 	 * to access this field.
 	 */
 	int last_log_commit;
-	pid_t log_start_pid;
 
 	u64 last_trans;
 
@@ -224,16 +226,10 @@ struct btrfs_root {
 
 	struct list_head root_list;
 
-	/*
-	 * Xarray that keeps track of in-memory inodes, protected by the lock
-	 * @inode_lock.
-	 */
+	/* Xarray that keeps track of in-memory inodes. */
 	struct xarray inodes;
 
-	/*
-	 * Xarray that keeps track of delayed nodes of every inode, protected
-	 * by @inode_lock.
-	 */
+	/* Xarray that keeps track of delayed nodes of every inode. */
 	struct xarray delayed_nodes;
 	/*
 	 * right now this just gets used so that a root has its own devid
@@ -508,7 +504,7 @@ static inline u32 BTRFS_MAX_XATTR_SIZE(const struct btrfs_fs_info *info)
 int __init btrfs_ctree_init(void);
 void __cold btrfs_ctree_exit(void);
 
-int btrfs_bin_search(struct extent_buffer *eb, int first_slot,
+int btrfs_bin_search(const struct extent_buffer *eb, int first_slot,
 		     const struct btrfs_key *key, int *slot);
 
 int __pure btrfs_comp_cpu_keys(const struct btrfs_key *k1, const struct btrfs_key *k2);
@@ -576,9 +572,9 @@ int btrfs_copy_root(struct btrfs_trans_handle *trans,
 		      struct btrfs_root *root,
 		      struct extent_buffer *buf,
 		      struct extent_buffer **cow_ret, u64 new_root_objectid);
-bool btrfs_block_can_be_shared(struct btrfs_trans_handle *trans,
-			       struct btrfs_root *root,
-			       struct extent_buffer *buf);
+bool btrfs_block_can_be_shared(const struct btrfs_trans_handle *trans,
+			       const struct btrfs_root *root,
+			       const struct extent_buffer *buf);
 int btrfs_del_ptr(struct btrfs_trans_handle *trans, struct btrfs_root *root,
 		  struct btrfs_path *path, int level, int slot);
 void btrfs_extend_item(struct btrfs_trans_handle *trans,
@@ -609,6 +605,7 @@ void btrfs_release_path(struct btrfs_path *p);
 struct btrfs_path *btrfs_alloc_path(void);
 void btrfs_free_path(struct btrfs_path *p);
 DEFINE_FREE(btrfs_free_path, struct btrfs_path *, btrfs_free_path(_T))
+DEFINE_FREE(btrfs_release_path, struct btrfs_path, btrfs_release_path(&_T))
 
 int btrfs_del_items(struct btrfs_trans_handle *trans, struct btrfs_root *root,
 		   struct btrfs_path *path, int slot, int nr);
@@ -727,13 +724,18 @@ static inline int btrfs_next_item(struct btrfs_root *root, struct btrfs_path *p)
 }
 int btrfs_leaf_free_space(const struct extent_buffer *leaf);
 
-static inline int is_fstree(u64 rootid)
+static inline bool btrfs_is_fstree(u64 rootid)
 {
-	if (rootid == BTRFS_FS_TREE_OBJECTID ||
-	    ((s64)rootid >= (s64)BTRFS_FIRST_FREE_OBJECTID &&
-	      !btrfs_qgroup_level(rootid)))
-		return 1;
-	return 0;
+	if (rootid == BTRFS_FS_TREE_OBJECTID)
+		return true;
+
+	if ((s64)rootid < (s64)BTRFS_FIRST_FREE_OBJECTID)
+		return false;
+
+	if (btrfs_qgroup_level(rootid) != 0)
+		return false;
+
+	return true;
 }
 
 static inline bool btrfs_is_data_reloc_root(const struct btrfs_root *root)

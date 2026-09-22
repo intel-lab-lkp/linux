@@ -173,6 +173,9 @@ void acpi_processor_ppc_init(struct cpufreq_policy *policy)
 {
 	unsigned int cpu;
 
+	if (ignore_ppc == 1)
+		return;
+
 	for_each_cpu(cpu, policy->related_cpus) {
 		struct acpi_processor *pr = per_cpu(processors, cpu);
 		int ret;
@@ -192,6 +195,14 @@ void acpi_processor_ppc_init(struct cpufreq_policy *policy)
 					   FREQ_QOS_MAX_DEFAULT_VALUE);
 		if (ret < 0)
 			pr_err("Failed to add freq constraint for CPU%d (%d)\n",
+			       cpu, ret);
+
+		if (!pr->performance)
+			continue;
+
+		ret = acpi_processor_get_platform_limit(pr);
+		if (ret)
+			pr_err("Failed to update freq constraint for CPU%d (%d)\n",
 			       cpu, ret);
 	}
 }
@@ -276,7 +287,8 @@ end:
  */
 static void amd_fixup_frequency(struct acpi_processor_px *px, int i)
 {
-	u32 hi, lo, fid, did;
+	struct msr val;
+	u32 fid, did;
 	int index = px->control & 0x00000007;
 
 	if (boot_cpu_data.x86_vendor != X86_VENDOR_AMD)
@@ -284,16 +296,16 @@ static void amd_fixup_frequency(struct acpi_processor_px *px, int i)
 
 	if ((boot_cpu_data.x86 == 0x10 && boot_cpu_data.x86_model < 10) ||
 	    boot_cpu_data.x86 == 0x11) {
-		rdmsr(MSR_AMD_PSTATE_DEF_BASE + index, lo, hi);
+		rdmsrq(MSR_AMD_PSTATE_DEF_BASE + index, val.q);
 		/*
 		 * MSR C001_0064+:
 		 * Bit 63: PstateEn. Read-write. If set, the P-state is valid.
 		 */
-		if (!(hi & BIT(31)))
+		if (!(val.h & BIT(31)))
 			return;
 
-		fid = lo & 0x3f;
-		did = (lo >> 6) & 7;
+		fid = val.l & 0x3f;
+		did = (val.l >> 6) & 7;
 		if (boot_cpu_data.x86 == 0x10)
 			px->core_frequency = (100 * (fid + 0x10)) >> did;
 		else
@@ -330,9 +342,7 @@ static int acpi_processor_get_performance_states(struct acpi_processor *pr)
 
 	pr->performance->state_count = pss->package.count;
 	pr->performance->states =
-	    kmalloc_array(pss->package.count,
-			  sizeof(struct acpi_processor_px),
-			  GFP_KERNEL);
+	    kmalloc_objs(struct acpi_processor_px, pss->package.count);
 	if (!pr->performance->states) {
 		result = -ENOMEM;
 		goto end;

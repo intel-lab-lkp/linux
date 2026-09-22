@@ -66,8 +66,7 @@ static int brcmf_cyw_alloc_fweh_info(struct brcmf_pub *drvr)
 {
 	struct brcmf_fweh_info *fweh;
 
-	fweh = kzalloc(struct_size(fweh, evt_handler, BRCMF_CYW_E_LAST),
-		       GFP_KERNEL);
+	fweh = kzalloc_flex(*fweh, evt_handler, BRCMF_CYW_E_LAST);
 	if (!fweh)
 		return -ENOMEM;
 
@@ -101,7 +100,7 @@ static int brcmf_cyw_activate_events(struct brcmf_if *ifp)
 
 static
 int brcmf_cyw_mgmt_tx(struct wiphy *wiphy, struct wireless_dev *wdev,
-		      struct cfg80211_mgmt_tx_params *params, u64 *cookie)
+		      struct cfg80211_mgmt_tx_params *params, u64 cookie)
 {
 	struct brcmf_cfg80211_info *cfg = wiphy_to_cfg(wiphy);
 	struct ieee80211_channel *chan = params->chan;
@@ -112,8 +111,7 @@ int brcmf_cyw_mgmt_tx(struct wiphy *wiphy, struct wireless_dev *wdev,
 	struct brcmf_cfg80211_vif *vif;
 	s32 err = 0;
 	bool ack = false;
-	s32 chan_nr;
-	u32 freq;
+	__le16 hw_ch;
 	struct brcmf_mf_params_le *mf_params;
 	u32 mf_params_len;
 	s32 ready;
@@ -125,7 +123,6 @@ int brcmf_cyw_mgmt_tx(struct wiphy *wiphy, struct wireless_dev *wdev,
 	if (!ieee80211_is_auth(mgmt->frame_control))
 		return brcmf_cfg80211_mgmt_tx(wiphy, wdev, params, cookie);
 
-	*cookie = 0;
 	vif = container_of(wdev, struct brcmf_cfg80211_vif, wdev);
 
 	reinit_completion(&vif->mgmt_tx);
@@ -143,23 +140,29 @@ int brcmf_cyw_mgmt_tx(struct wiphy *wiphy, struct wireless_dev *wdev,
 	mf_params->len = cpu_to_le16(len - DOT11_MGMT_HDR_LEN);
 	mf_params->frame_control = mgmt->frame_control;
 
-	if (chan)
-		freq = chan->center_freq;
-	else
-		brcmf_fil_cmd_int_get(vif->ifp, BRCMF_C_GET_CHANNEL,
-				      &freq);
-	chan_nr = ieee80211_frequency_to_channel(freq);
-	mf_params->channel = cpu_to_le16(chan_nr);
+	if (chan) {
+		hw_ch = cpu_to_le16(chan->hw_value);
+	} else {
+		err = brcmf_fil_cmd_data_get(vif->ifp, BRCMF_C_GET_CHANNEL,
+					     &hw_ch, sizeof(hw_ch));
+		if (err) {
+			bphy_err(drvr, "unable to get current hw channel\n");
+			goto free;
+		}
+	}
+	mf_params->channel = hw_ch;
+
 	memcpy(&mf_params->da[0], &mgmt->da[0], ETH_ALEN);
 	memcpy(&mf_params->bssid[0], &mgmt->bssid[0], ETH_ALEN);
-	mf_params->packet_id = cpu_to_le32(*cookie);
+	mf_params->packet_id = cpu_to_le32(cookie);
 	memcpy(mf_params->data, &buf[DOT11_MGMT_HDR_LEN],
 	       le16_to_cpu(mf_params->len));
 
 	brcmf_dbg(TRACE, "Auth frame, cookie=%d, fc=%04x, len=%d, channel=%d\n",
 		  le32_to_cpu(mf_params->packet_id),
 		  le16_to_cpu(mf_params->frame_control),
-		  le16_to_cpu(mf_params->len), chan_nr);
+		  le16_to_cpu(mf_params->len),
+		  le16_to_cpu(mf_params->channel));
 
 	vif->mgmt_tx_id = le32_to_cpu(mf_params->packet_id);
 	set_bit(BRCMF_MGMT_TX_SEND_FRAME, &vif->mgmt_tx_status);
@@ -183,8 +186,8 @@ int brcmf_cyw_mgmt_tx(struct wiphy *wiphy, struct wireless_dev *wdev,
 	}
 
 tx_status:
-	cfg80211_mgmt_tx_status(wdev, *cookie, buf, len, ack,
-				GFP_KERNEL);
+	cfg80211_mgmt_tx_status(wdev, cookie, buf, len, ack, GFP_KERNEL);
+free:
 	kfree(mf_params);
 	return err;
 }
@@ -195,7 +198,7 @@ brcmf_cyw_external_auth(struct wiphy *wiphy, struct net_device *dev,
 {
 	struct brcmf_if *ifp;
 	struct brcmf_pub *drvr;
-	struct brcmf_auth_req_status_le auth_status;
+	struct brcmf_auth_req_status_le auth_status = {};
 	int ret = 0;
 
 	brcmf_dbg(TRACE, "Enter\n");
@@ -203,6 +206,9 @@ brcmf_cyw_external_auth(struct wiphy *wiphy, struct net_device *dev,
 	ifp = netdev_priv(dev);
 	drvr = ifp->drvr;
 	if (params->status == WLAN_STATUS_SUCCESS) {
+		if (params->pmkid)
+			memcpy(auth_status.pmkid, params->pmkid,
+			       WLAN_PMKID_LEN);
 		auth_status.flags = cpu_to_le16(BRCMF_EXTAUTH_SUCCESS);
 	} else {
 		bphy_err(drvr, "External authentication failed: status=%d\n",
@@ -284,6 +290,12 @@ brcmf_notify_auth_frame_rx(struct brcmf_if *ifp,
 
 	if (e->datalen < sizeof(*rxframe)) {
 		bphy_err(drvr, "Event %s (%d) data too small. Ignore\n",
+			 brcmf_fweh_event_name(e->event_code), e->event_code);
+		return -EINVAL;
+	}
+
+	if (mgmt_frame_len < offsetof(struct ieee80211_mgmt, u)) {
+		bphy_err(drvr, "Event %s (%d) frame too small. Ignore\n",
 			 brcmf_fweh_event_name(e->event_code), e->event_code);
 		return -EINVAL;
 	}

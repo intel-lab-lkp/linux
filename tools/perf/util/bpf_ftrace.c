@@ -1,8 +1,10 @@
-#include <stdio.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 
+#include <bpf/bpf.h>
 #include <linux/err.h>
 
 #include "util/ftrace.h"
@@ -21,15 +23,26 @@ int perf_ftrace__latency_prepare_bpf(struct perf_ftrace *ftrace)
 {
 	int fd, err;
 	int i, ncpus = 1, ntasks = 1;
-	struct filter_entry *func;
+	struct filter_entry *func = NULL;
 
-	if (!list_is_singular(&ftrace->filters)) {
-		pr_err("ERROR: %s target function(s).\n",
-		       list_empty(&ftrace->filters) ? "No" : "Too many");
-		return -1;
+	if (!list_empty(&ftrace->filters)) {
+		if (!list_is_singular(&ftrace->filters)) {
+			pr_err("ERROR: Too many target functions.\n");
+			return -1;
+		}
+		func = list_first_entry(&ftrace->filters, struct filter_entry, list);
+	} else {
+		int count = 0;
+		struct list_head *pos;
+
+		list_for_each(pos, &ftrace->event_pair)
+			count++;
+
+		if (count != 2) {
+			pr_err("ERROR: Needs two target events.\n");
+			return -1;
+		}
 	}
-
-	func = list_first_entry(&ftrace->filters, struct filter_entry, list);
 
 	skel = func_latency_bpf__open();
 	if (!skel) {
@@ -46,13 +59,13 @@ int perf_ftrace__latency_prepare_bpf(struct perf_ftrace *ftrace)
 
 	/* don't need to set cpu filter for system-wide mode */
 	if (ftrace->target.cpu_list) {
-		ncpus = perf_cpu_map__nr(ftrace->evlist->core.user_requested_cpus);
+		ncpus = perf_cpu_map__nr(evlist__core(ftrace->evlist)->user_requested_cpus);
 		bpf_map__set_max_entries(skel->maps.cpu_filter, ncpus);
 		skel->rodata->has_cpu = 1;
 	}
 
 	if (target__has_task(&ftrace->target) || target__none(&ftrace->target)) {
-		ntasks = perf_thread_map__nr(ftrace->evlist->core.threads);
+		ntasks = perf_thread_map__nr(evlist__core(ftrace->evlist)->threads);
 		bpf_map__set_max_entries(skel->maps.task_filter, ntasks);
 		skel->rodata->has_task = 1;
 	}
@@ -74,7 +87,8 @@ int perf_ftrace__latency_prepare_bpf(struct perf_ftrace *ftrace)
 		fd = bpf_map__fd(skel->maps.cpu_filter);
 
 		for (i = 0; i < ncpus; i++) {
-			cpu = perf_cpu_map__cpu(ftrace->evlist->core.user_requested_cpus, i).cpu;
+			cpu = perf_cpu_map__cpu(
+				evlist__core(ftrace->evlist)->user_requested_cpus, i).cpu;
 			bpf_map_update_elem(fd, &cpu, &val, BPF_ANY);
 		}
 	}
@@ -86,27 +100,51 @@ int perf_ftrace__latency_prepare_bpf(struct perf_ftrace *ftrace)
 		fd = bpf_map__fd(skel->maps.task_filter);
 
 		for (i = 0; i < ntasks; i++) {
-			pid = perf_thread_map__pid(ftrace->evlist->core.threads, i);
+			pid = perf_thread_map__pid(evlist__core(ftrace->evlist)->threads, i);
 			bpf_map_update_elem(fd, &pid, &val, BPF_ANY);
 		}
 	}
 
 	skel->bss->min = INT64_MAX;
 
-	skel->links.func_begin = bpf_program__attach_kprobe(skel->progs.func_begin,
-							    false, func->name);
-	if (IS_ERR(skel->links.func_begin)) {
-		pr_err("Failed to attach fentry program\n");
-		err = PTR_ERR(skel->links.func_begin);
-		goto out;
-	}
+	if (func) {
+		skel->links.func_begin = bpf_program__attach_kprobe(skel->progs.func_begin,
+								    false, func->name);
+		if (IS_ERR(skel->links.func_begin)) {
+			pr_err("Failed to attach fentry program\n");
+			err = PTR_ERR(skel->links.func_begin);
+			goto out;
+		}
 
-	skel->links.func_end = bpf_program__attach_kprobe(skel->progs.func_end,
-							  true, func->name);
-	if (IS_ERR(skel->links.func_end)) {
-		pr_err("Failed to attach fexit program\n");
-		err = PTR_ERR(skel->links.func_end);
-		goto out;
+		skel->links.func_end = bpf_program__attach_kprobe(skel->progs.func_end,
+								  true, func->name);
+		if (IS_ERR(skel->links.func_end)) {
+			pr_err("Failed to attach fexit program\n");
+			err = PTR_ERR(skel->links.func_end);
+			goto out;
+		}
+	} else {
+		struct filter_entry *event;
+
+		event = list_first_entry(&ftrace->event_pair, struct filter_entry, list);
+
+		skel->links.event_begin = bpf_program__attach_raw_tracepoint(skel->progs.event_begin,
+									     event->name);
+		if (IS_ERR(skel->links.event_begin)) {
+			pr_err("Failed to attach first tracepoint program\n");
+			err = PTR_ERR(skel->links.event_begin);
+			goto out;
+		}
+
+		event = list_next_entry(event, list);
+
+		skel->links.event_end = bpf_program__attach_raw_tracepoint(skel->progs.event_end,
+									     event->name);
+		if (IS_ERR(skel->links.event_end)) {
+			pr_err("Failed to attach second tracepoint program\n");
+			err = PTR_ERR(skel->links.event_end);
+			goto out;
+		}
 	}
 
 	/* XXX: we don't actually use this fd - just for poll() */

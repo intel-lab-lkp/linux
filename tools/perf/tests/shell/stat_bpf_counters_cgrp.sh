@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # perf stat --bpf-counters --for-each-cgroup test
 # SPDX-License-Identifier: GPL-2.0
 
@@ -58,9 +58,24 @@ check_system_wide_counted()
 	fi
 }
 
+# Missing flags in evlist__clone() resulted in different output.
+# Just check the number of output lines for simple verification.
+check_evlist_expand()
+{
+	normal_output=$(perf stat -a -x, true 2>&1 | wc -l)
+	expand_output=$(perf stat -a -x, --bpf-counters --for-each-cgroup / true 2>&1 | wc -l)
+	if [ "${normal_output}" != "${expand_output}" ]; then
+		if [ "${verbose}" = "1" ]; then
+			echo "Normal output has ${normal_output} lines, but it now has ${expand_output}"
+		fi
+		exit 1
+	fi
+}
+
 check_bpf_counter
 find_cgroups
 
 check_system_wide_counted
+check_evlist_expand
 
 exit 0

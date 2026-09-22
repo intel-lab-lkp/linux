@@ -5,6 +5,8 @@
 
 #include <linux/hyperv.h>
 
+#include <drm/drm_atomic.h>
+#include <drm/drm_crtc_helper.h>
 #include <drm/drm_damage_helper.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_edid.h>
@@ -15,15 +17,19 @@
 #include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_gem_shmem_helper.h>
 #include <drm/drm_probe_helper.h>
-#include <drm/drm_simple_kms_helper.h>
+#include <drm/drm_panic.h>
+#include <drm/drm_plane.h>
+#include <drm/drm_print.h>
+#include <drm/drm_vblank.h>
+#include <drm/drm_vblank_helper.h>
 
 #include "hyperv_drm.h"
 
-static int hyperv_blit_to_vram_rect(struct drm_framebuffer *fb,
+static int hv_drm_blit_to_vram_rect(struct drm_framebuffer *fb,
 				    const struct iosys_map *vmap,
 				    struct drm_rect *rect)
 {
-	struct hyperv_drm_device *hv = to_hv(fb->dev);
+	struct hv_drm_device *hv = to_hv_drm(fb->dev);
 	struct iosys_map dst = IOSYS_MAP_INIT_VADDR_IOMEM(hv->vram);
 	int idx;
 
@@ -38,21 +44,9 @@ static int hyperv_blit_to_vram_rect(struct drm_framebuffer *fb,
 	return 0;
 }
 
-static int hyperv_blit_to_vram_fullscreen(struct drm_framebuffer *fb,
-					  const struct iosys_map *map)
+static int hv_drm_connector_get_modes(struct drm_connector *connector)
 {
-	struct drm_rect fullscreen = {
-		.x1 = 0,
-		.x2 = fb->width,
-		.y1 = 0,
-		.y2 = fb->height,
-	};
-	return hyperv_blit_to_vram_rect(fb, map, &fullscreen);
-}
-
-static int hyperv_connector_get_modes(struct drm_connector *connector)
-{
-	struct hyperv_drm_device *hv = to_hv(connector->dev);
+	struct hv_drm_device *hv = to_hv_drm(connector->dev);
 	int count;
 
 	count = drm_add_modes_noedid(connector,
@@ -64,11 +58,11 @@ static int hyperv_connector_get_modes(struct drm_connector *connector)
 	return count;
 }
 
-static const struct drm_connector_helper_funcs hyperv_connector_helper_funcs = {
-	.get_modes = hyperv_connector_get_modes,
+static const struct drm_connector_helper_funcs hv_drm_connector_helper_funcs = {
+	.get_modes = hv_drm_connector_get_modes,
 };
 
-static const struct drm_connector_funcs hyperv_connector_funcs = {
+static const struct drm_connector_funcs hv_drm_connector_funcs = {
 	.fill_modes = drm_helper_probe_single_connector_modes,
 	.destroy = drm_connector_cleanup,
 	.reset = drm_atomic_helper_connector_reset,
@@ -76,15 +70,15 @@ static const struct drm_connector_funcs hyperv_connector_funcs = {
 	.atomic_destroy_state = drm_atomic_helper_connector_destroy_state,
 };
 
-static inline int hyperv_conn_init(struct hyperv_drm_device *hv)
+static inline int hv_drm_conn_init(struct hv_drm_device *hv)
 {
-	drm_connector_helper_add(&hv->connector, &hyperv_connector_helper_funcs);
+	drm_connector_helper_add(&hv->connector, &hv_drm_connector_helper_funcs);
 	return drm_connector_init(&hv->dev, &hv->connector,
-				  &hyperv_connector_funcs,
+				  &hv_drm_connector_funcs,
 				  DRM_MODE_CONNECTOR_VIRTUAL);
 }
 
-static int hyperv_check_size(struct hyperv_drm_device *hv, int w, int h,
+static int hv_drm_check_size(struct hv_drm_device *hv, int w, int h,
 			     struct drm_framebuffer *fb)
 {
 	u32 pitch = w * (hv->screen_depth / 8);
@@ -98,30 +92,71 @@ static int hyperv_check_size(struct hyperv_drm_device *hv, int w, int h,
 	return 0;
 }
 
-static void hyperv_pipe_enable(struct drm_simple_display_pipe *pipe,
-			       struct drm_crtc_state *crtc_state,
-			       struct drm_plane_state *plane_state)
-{
-	struct hyperv_drm_device *hv = to_hv(pipe->crtc.dev);
-	struct drm_shadow_plane_state *shadow_plane_state = to_drm_shadow_plane_state(plane_state);
+static const uint32_t hv_drm_formats[] = {
+	DRM_FORMAT_XRGB8888,
+};
 
-	hyperv_hide_hw_ptr(hv->hdev);
-	hyperv_update_situation(hv->hdev, 1,  hv->screen_depth,
+static const uint64_t hv_drm_modifiers[] = {
+	DRM_FORMAT_MOD_LINEAR,
+	DRM_FORMAT_MOD_INVALID
+};
+
+static void hv_drm_crtc_helper_atomic_enable(struct drm_crtc *crtc,
+					     struct drm_atomic_commit *state)
+{
+	struct hv_drm_device *hv = to_hv_drm(crtc->dev);
+	struct drm_plane *plane = &hv->plane;
+	struct drm_plane_state *plane_state = plane->state;
+	struct drm_crtc_state *crtc_state = crtc->state;
+
+	hv_drm_hide_hw_ptr(hv->hdev);
+	hv_drm_update_situation(hv->hdev, 1,  hv->screen_depth,
 				crtc_state->mode.hdisplay,
 				crtc_state->mode.vdisplay,
 				plane_state->fb->pitches[0]);
-	hyperv_blit_to_vram_fullscreen(plane_state->fb, &shadow_plane_state->data[0]);
+
+	drm_crtc_vblank_on(crtc);
 }
 
-static int hyperv_pipe_check(struct drm_simple_display_pipe *pipe,
-			     struct drm_plane_state *plane_state,
-			     struct drm_crtc_state *crtc_state)
-{
-	struct hyperv_drm_device *hv = to_hv(pipe->crtc.dev);
-	struct drm_framebuffer *fb = plane_state->fb;
+static const struct drm_crtc_helper_funcs hv_drm_crtc_helper_funcs = {
+	.atomic_check = drm_crtc_helper_atomic_check,
+	.atomic_flush = drm_crtc_vblank_atomic_flush,
+	.atomic_enable = hv_drm_crtc_helper_atomic_enable,
+	.atomic_disable = drm_crtc_vblank_atomic_disable,
+};
 
-	if (fb->format->format != DRM_FORMAT_XRGB8888)
-		return -EINVAL;
+static const struct drm_crtc_funcs hv_drm_crtc_funcs = {
+	.reset = drm_atomic_helper_crtc_reset,
+	.destroy = drm_crtc_cleanup,
+	.set_config = drm_atomic_helper_set_config,
+	.page_flip = drm_atomic_helper_page_flip,
+	.atomic_duplicate_state = drm_atomic_helper_crtc_duplicate_state,
+	.atomic_destroy_state = drm_atomic_helper_crtc_destroy_state,
+	DRM_CRTC_VBLANK_TIMER_FUNCS,
+};
+
+static int hv_drm_plane_atomic_check(struct drm_plane *plane,
+				     struct drm_atomic_commit *state)
+{
+	struct drm_plane_state *plane_state = drm_atomic_get_new_plane_state(state, plane);
+	struct hv_drm_device *hv = to_hv_drm(plane->dev);
+	struct drm_framebuffer *fb = plane_state->fb;
+	struct drm_crtc *crtc = plane_state->crtc;
+	struct drm_crtc_state *crtc_state = NULL;
+	int ret;
+
+	if (crtc)
+		crtc_state = drm_atomic_get_new_crtc_state(state, crtc);
+
+	ret = drm_atomic_helper_check_plane_state(plane_state, crtc_state,
+						  DRM_PLANE_NO_SCALING,
+						  DRM_PLANE_NO_SCALING,
+						  false, false);
+	if (ret)
+		return ret;
+
+	if (!plane_state->visible)
+		return 0;
 
 	if (fb->pitches[0] * fb->height > hv->fb_size) {
 		drm_err(&hv->dev, "fb size requested by %s for %dX%d (pitch %d) greater than %ld\n",
@@ -132,75 +167,143 @@ static int hyperv_pipe_check(struct drm_simple_display_pipe *pipe,
 	return 0;
 }
 
-static void hyperv_pipe_update(struct drm_simple_display_pipe *pipe,
-			       struct drm_plane_state *old_state)
+static void hv_drm_plane_atomic_update(struct drm_plane *plane,
+				       struct drm_atomic_commit *state)
 {
-	struct hyperv_drm_device *hv = to_hv(pipe->crtc.dev);
-	struct drm_plane_state *state = pipe->plane.state;
-	struct drm_shadow_plane_state *shadow_plane_state = to_drm_shadow_plane_state(state);
-	struct drm_rect rect;
+	struct hv_drm_device *hv = to_hv_drm(plane->dev);
+	struct drm_plane_state *old_state = drm_atomic_get_old_plane_state(state, plane);
+	struct drm_plane_state *new_state = drm_atomic_get_new_plane_state(state, plane);
+	struct drm_shadow_plane_state *shadow_plane_state = to_drm_shadow_plane_state(new_state);
+	struct drm_rect damage;
+	struct drm_rect dst_clip;
+	struct drm_atomic_helper_damage_iter iter;
 
-	if (drm_atomic_helper_damage_merged(old_state, state, &rect)) {
-		hyperv_blit_to_vram_rect(state->fb, &shadow_plane_state->data[0], &rect);
-		hyperv_update_dirt(hv->hdev, &rect);
+	drm_atomic_helper_damage_iter_init(&iter, old_state, new_state);
+	drm_atomic_for_each_plane_damage(&iter, &damage) {
+		dst_clip = new_state->dst;
+
+		if (!drm_rect_intersect(&dst_clip, &damage))
+			continue;
+
+		hv_drm_blit_to_vram_rect(new_state->fb, &shadow_plane_state->data[0], &damage);
+		hv_drm_update_dirt(hv->hdev, &damage);
 	}
 }
 
-static const struct drm_simple_display_pipe_funcs hyperv_pipe_funcs = {
-	.enable	= hyperv_pipe_enable,
-	.check = hyperv_pipe_check,
-	.update	= hyperv_pipe_update,
-	DRM_GEM_SIMPLE_DISPLAY_PIPE_SHADOW_PLANE_FUNCS,
-};
-
-static const uint32_t hyperv_formats[] = {
-	DRM_FORMAT_XRGB8888,
-};
-
-static const uint64_t hyperv_modifiers[] = {
-	DRM_FORMAT_MOD_LINEAR,
-	DRM_FORMAT_MOD_INVALID
-};
-
-static inline int hyperv_pipe_init(struct hyperv_drm_device *hv)
+static int hv_drm_plane_get_scanout_buffer(struct drm_plane *plane,
+					   struct drm_scanout_buffer *sb)
 {
+	struct hv_drm_device *hv = to_hv_drm(plane->dev);
+	struct iosys_map map = IOSYS_MAP_INIT_VADDR_IOMEM(hv->vram);
+
+	if (plane->state && plane->state->fb) {
+		sb->format = plane->state->fb->format;
+		sb->width = plane->state->fb->width;
+		sb->height = plane->state->fb->height;
+		sb->pitch[0] = plane->state->fb->pitches[0];
+		sb->map[0] = map;
+		return 0;
+	}
+	return -ENODEV;
+}
+
+static void hv_drm_plane_panic_flush(struct drm_plane *plane)
+{
+	struct hv_drm_device *hv = to_hv_drm(plane->dev);
+	struct drm_rect rect;
+
+	if (plane->state && plane->state->fb) {
+		rect.x1 = 0;
+		rect.y1 = 0;
+		rect.x2 = plane->state->fb->width;
+		rect.y2 = plane->state->fb->height;
+
+		hv_drm_update_dirt(hv->hdev, &rect);
+	}
+
+	vmbus_initiate_unload(true);
+}
+
+static const struct drm_plane_helper_funcs hv_drm_plane_helper_funcs = {
+	DRM_GEM_SHADOW_PLANE_HELPER_FUNCS,
+	.atomic_check = hv_drm_plane_atomic_check,
+	.atomic_update = hv_drm_plane_atomic_update,
+	.get_scanout_buffer = hv_drm_plane_get_scanout_buffer,
+	.panic_flush = hv_drm_plane_panic_flush,
+};
+
+static const struct drm_plane_funcs hv_drm_plane_funcs = {
+	.update_plane		= drm_atomic_helper_update_plane,
+	.disable_plane		= drm_atomic_helper_disable_plane,
+	.destroy		= drm_plane_cleanup,
+	DRM_GEM_SHADOW_PLANE_FUNCS,
+};
+
+static const struct drm_encoder_funcs hv_drm_simple_encoder_funcs_cleanup = {
+	.destroy = drm_encoder_cleanup,
+};
+
+static inline int hv_drm_pipe_init(struct hv_drm_device *hv)
+{
+	struct drm_device *dev = &hv->dev;
+	struct drm_encoder *encoder = &hv->encoder;
+	struct drm_plane *plane = &hv->plane;
+	struct drm_crtc *crtc = &hv->crtc;
+	struct drm_connector *connector = &hv->connector;
 	int ret;
 
-	ret = drm_simple_display_pipe_init(&hv->dev,
-					   &hv->pipe,
-					   &hyperv_pipe_funcs,
-					   hyperv_formats,
-					   ARRAY_SIZE(hyperv_formats),
-					   hyperv_modifiers,
-					   &hv->connector);
+	ret = drm_universal_plane_init(dev, plane, 0,
+				       &hv_drm_plane_funcs,
+				       hv_drm_formats, ARRAY_SIZE(hv_drm_formats),
+				       hv_drm_modifiers,
+				       DRM_PLANE_TYPE_PRIMARY, NULL);
+	if (ret)
+		return ret;
+	drm_plane_helper_add(plane, &hv_drm_plane_helper_funcs);
+	drm_plane_enable_fb_damage_clips(plane);
+
+	ret = drm_crtc_init_with_planes(dev, crtc, plane, NULL,
+					&hv_drm_crtc_funcs, NULL);
+	if (ret)
+		return ret;
+	drm_crtc_helper_add(crtc, &hv_drm_crtc_helper_funcs);
+
+	encoder->possible_crtcs = drm_crtc_mask(crtc);
+	ret = drm_encoder_init(dev, encoder,
+			       &hv_drm_simple_encoder_funcs_cleanup,
+			       DRM_MODE_ENCODER_NONE, NULL);
 	if (ret)
 		return ret;
 
-	drm_plane_enable_fb_damage_clips(&hv->pipe.plane);
+	ret = hv_drm_conn_init(hv);
+	if (ret) {
+		drm_err(dev, "Failed to initialized connector.\n");
+		return ret;
+	}
 
-	return 0;
+	return drm_connector_attach_encoder(connector, encoder);
 }
 
 static enum drm_mode_status
-hyperv_mode_valid(struct drm_device *dev,
+hv_drm_mode_valid(struct drm_device *dev,
 		  const struct drm_display_mode *mode)
 {
-	struct hyperv_drm_device *hv = to_hv(dev);
+	struct hv_drm_device *hv = to_hv_drm(dev);
 
-	if (hyperv_check_size(hv, mode->hdisplay, mode->vdisplay, NULL))
+	if (hv_drm_check_size(hv, mode->hdisplay, mode->vdisplay, NULL))
 		return MODE_BAD;
 
 	return MODE_OK;
 }
 
-static const struct drm_mode_config_funcs hyperv_mode_config_funcs = {
+static const struct drm_mode_config_funcs hv_drm_mode_config_funcs = {
 	.fb_create = drm_gem_fb_create_with_dirty,
-	.mode_valid = hyperv_mode_valid,
+	.mode_valid = hv_drm_mode_valid,
 	.atomic_check = drm_atomic_helper_check,
 	.atomic_commit = drm_atomic_helper_commit,
 };
 
-int hyperv_mode_config_init(struct hyperv_drm_device *hv)
+int hv_drm_mode_config_init(struct hv_drm_device *hv)
 {
 	struct drm_device *dev = &hv->dev;
 	int ret;
@@ -219,19 +322,17 @@ int hyperv_mode_config_init(struct hyperv_drm_device *hv)
 	dev->mode_config.preferred_depth = hv->screen_depth;
 	dev->mode_config.prefer_shadow = 0;
 
-	dev->mode_config.funcs = &hyperv_mode_config_funcs;
+	dev->mode_config.funcs = &hv_drm_mode_config_funcs;
 
-	ret = hyperv_conn_init(hv);
-	if (ret) {
-		drm_err(dev, "Failed to initialized connector.\n");
-		return ret;
-	}
-
-	ret = hyperv_pipe_init(hv);
+	ret = hv_drm_pipe_init(hv);
 	if (ret) {
 		drm_err(dev, "Failed to initialized pipe.\n");
 		return ret;
 	}
+
+	ret = drm_vblank_init(dev, 1);
+	if (ret)
+		return ret;
 
 	drm_mode_config_reset(dev);
 

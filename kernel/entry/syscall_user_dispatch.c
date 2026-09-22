@@ -2,20 +2,21 @@
 /*
  * Copyright (C) 2020 Collabora Ltd.
  */
-#include <linux/sched.h>
+#include <linux/elf.h>
+#include <linux/entry-common.h>
 #include <linux/prctl.h>
 #include <linux/ptrace.h>
-#include <linux/syscall_user_dispatch.h>
-#include <linux/uaccess.h>
-#include <linux/signal.h>
-#include <linux/elf.h>
-
+#include <linux/sched.h>
 #include <linux/sched/signal.h>
 #include <linux/sched/task_stack.h>
+#include <linux/signal.h>
+#include <linux/syscall_user_dispatch.h>
+#include <linux/sysctl.h>
+#include <linux/uaccess.h>
 
 #include <asm/syscall.h>
 
-#include "common.h"
+static bool syscall_user_dispatch_allowed __read_mostly = true;
 
 static void trigger_sigsys(struct pt_regs *regs)
 {
@@ -78,7 +79,7 @@ static int task_set_syscall_user_dispatch(struct task_struct *task, unsigned lon
 		if (offset || len || selector)
 			return -EINVAL;
 		break;
-	case PR_SYS_DISPATCH_ON:
+	case PR_SYS_DISPATCH_EXCLUSIVE_ON:
 		/*
 		 * Validate the direct dispatcher region just for basic
 		 * sanity against overflow and a 0-sized dispatcher
@@ -87,30 +88,44 @@ static int task_set_syscall_user_dispatch(struct task_struct *task, unsigned lon
 		 */
 		if (offset && offset + len <= offset)
 			return -EINVAL;
-
+		break;
+	case PR_SYS_DISPATCH_INCLUSIVE_ON:
+		if (len == 0 || offset + len <= offset)
+			return -EINVAL;
 		/*
-		 * access_ok() will clear memory tags for tagged addresses
-		 * if current has memory tagging enabled.
-
-		 * To enable a tracer to set a tracees selector the
-		 * selector address must be untagged for access_ok(),
-		 * otherwise an untagged tracer will always fail to set a
-		 * tagged tracees selector.
+		 * Invert the range, the check in syscall_user_dispatch()
+		 * supports wrap-around.
 		 */
-		if (selector && !access_ok(untagged_addr(selector), sizeof(*selector)))
-			return -EFAULT;
-
+		offset = offset + len;
+		len = -len;
 		break;
 	default:
 		return -EINVAL;
 	}
+
+	/* Arming can be denied at runtime via sysctl, disarming is allowed */
+	if (mode != PR_SYS_DISPATCH_OFF && !syscall_user_dispatch_allowed)
+		return -EPERM;
+
+	/*
+	 * access_ok() will clear memory tags for tagged addresses
+	 * if current has memory tagging enabled.
+	 *
+	 * To enable a tracer to set a tracees selector the
+	 * selector address must be untagged for access_ok(),
+	 * otherwise an untagged tracer will always fail to set a
+	 * tagged tracees selector.
+	 */
+	if (mode != PR_SYS_DISPATCH_OFF && selector &&
+		!access_ok(untagged_addr(selector), sizeof(*selector)))
+		return -EFAULT;
 
 	task->syscall_dispatch.selector = selector;
 	task->syscall_dispatch.offset = offset;
 	task->syscall_dispatch.len = len;
 	task->syscall_dispatch.on_dispatch = false;
 
-	if (mode == PR_SYS_DISPATCH_ON)
+	if (mode != PR_SYS_DISPATCH_OFF)
 		set_task_syscall_work(task, SYSCALL_USER_DISPATCH);
 	else
 		clear_task_syscall_work(task, SYSCALL_USER_DISPATCH);
@@ -162,3 +177,22 @@ int syscall_user_dispatch_set_config(struct task_struct *task, unsigned long siz
 	return task_set_syscall_user_dispatch(task, cfg.mode, cfg.offset, cfg.len,
 					      (char __user *)(uintptr_t)cfg.selector);
 }
+
+#ifdef CONFIG_SYSCTL
+static const struct ctl_table syscall_user_dispatch_sysctls[] = {
+	{
+		.procname	= "syscall_user_dispatch",
+		.data		= &syscall_user_dispatch_allowed,
+		.maxlen		= sizeof(syscall_user_dispatch_allowed),
+		.mode		= 0644,
+		.proc_handler	= proc_dobool,
+	},
+};
+
+static int __init syscall_user_dispatch_sysctl_init(void)
+{
+	register_sysctl_init("kernel", syscall_user_dispatch_sysctls);
+	return 0;
+}
+late_initcall(syscall_user_dispatch_sysctl_init);
+#endif /* CONFIG_SYSCTL */

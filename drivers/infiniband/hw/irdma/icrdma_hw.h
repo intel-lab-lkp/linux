@@ -40,6 +40,8 @@
 #define GLHMC_VFPDINV(_i)	(0x00528300 + ((_i) * 4)) /* _i=0...31 */
 #define GLPE_CRITERR		0x00534000
 #define GLINT_RATE(_INT)	(0x0015A000 + ((_INT) * 4)) /* _i=0...2047 */ /* Reset Source: CORER */
+#define PFHMC_ERRORINFO		0x00520400
+#define PFHMC_ERRORDATA		0x00520500
 
 #define ICRDMA_DB_ADDR_OFFSET		(8 * 1024 * 1024 - 64 * 1024)
 
@@ -58,14 +60,15 @@
 #define ICRDMA_CQPSQ_CQ_CQID GENMASK_ULL(18, 0)
 #define ICRDMA_COMMIT_FPM_CQCNT_S 0
 #define ICRDMA_COMMIT_FPM_CQCNT GENMASK_ULL(19, 0)
-
+#define ICRDMA_CQPSQ_UPESD_HMCFNID_S 0
+#define ICRDMA_CQPSQ_UPESD_HMCFNID GENMASK_ULL(5, 0)
 enum icrdma_device_caps_const {
 	ICRDMA_MAX_STATS_COUNT = 128,
 
 	ICRDMA_MAX_IRD_SIZE			= 127,
 	ICRDMA_MAX_ORD_SIZE			= 255,
 	ICRDMA_MIN_WQ_SIZE                      = 8 /* WQEs */,
-
+	ICRDMA_MAX_PUSH_PAGE_COUNT		= 256,
 };
 
 void icrdma_init_hw(struct irdma_sc_dev *dev);

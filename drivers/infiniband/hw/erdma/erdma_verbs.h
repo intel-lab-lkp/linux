@@ -7,6 +7,9 @@
 #ifndef __ERDMA_VERBS_H__
 #define __ERDMA_VERBS_H__
 
+#include <linux/completion.h>
+#include <linux/refcount.h>
+
 #include "erdma.h"
 
 /* RDMA Capability. */
@@ -99,8 +102,8 @@ struct erdma_mtt {
 	union {
 		dma_addr_t buf_dma;
 		struct {
-			struct scatterlist *sglist;
-			u32 nsg;
+			dma_addr_t *dma_addrs;
+			u32 npages;
 			u32 level;
 		};
 	};
@@ -341,6 +344,8 @@ struct erdma_cq {
 
 	u32 depth;
 	u32 assoc_eqn;
+	refcount_t refcount;
+	struct completion free;
 
 	union {
 		struct erdma_kcq_info kern_cq;
@@ -355,9 +360,40 @@ static inline struct erdma_qp *find_qp_by_qpn(struct erdma_dev *dev, int id)
 	return (struct erdma_qp *)xa_load(&dev->qp_xa, id);
 }
 
-static inline struct erdma_cq *find_cq_by_cqn(struct erdma_dev *dev, int id)
+static inline struct erdma_qp *erdma_qp_get_by_qpn(struct erdma_dev *dev,
+						   int id)
 {
-	return (struct erdma_cq *)xa_load(&dev->cq_xa, id);
+	struct erdma_qp *qp;
+	unsigned long flags;
+
+	xa_lock_irqsave(&dev->qp_xa, flags);
+	qp = xa_load(&dev->qp_xa, id);
+	if (qp && !kref_get_unless_zero(&qp->ref))
+		qp = NULL;
+	xa_unlock_irqrestore(&dev->qp_xa, flags);
+
+	return qp;
+}
+
+static inline struct erdma_cq *erdma_cq_get_by_cqn(struct erdma_dev *dev,
+						   int id)
+{
+	struct erdma_cq *cq;
+	unsigned long flags;
+
+	xa_lock_irqsave(&dev->cq_xa, flags);
+	cq = xa_load(&dev->cq_xa, id);
+	if (cq && !refcount_inc_not_zero(&cq->refcount))
+		cq = NULL;
+	xa_unlock_irqrestore(&dev->cq_xa, flags);
+
+	return cq;
+}
+
+static inline void erdma_cq_put(struct erdma_cq *cq)
+{
+	if (refcount_dec_and_test(&cq->refcount))
+		complete(&cq->free);
 }
 
 void erdma_qp_get(struct erdma_qp *qp);
@@ -452,7 +488,8 @@ int erdma_destroy_cq(struct ib_cq *ibcq, struct ib_udata *udata);
 void erdma_disassociate_ucontext(struct ib_ucontext *ibcontext);
 int erdma_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags flags);
 struct ib_mr *erdma_reg_user_mr(struct ib_pd *ibpd, u64 start, u64 len,
-				u64 virt, int access, struct ib_udata *udata);
+				u64 virt, int access, struct ib_dmah *dmah,
+				struct ib_udata *udata);
 struct ib_mr *erdma_get_dma_mr(struct ib_pd *ibpd, int rights);
 int erdma_dereg_mr(struct ib_mr *ibmr, struct ib_udata *data);
 int erdma_mmap(struct ib_ucontext *ctx, struct vm_area_struct *vma);

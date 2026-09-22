@@ -7,12 +7,20 @@
  * IIO driver for STK8312; 7-bit I2C address: 0x3D.
  */
 
+#include <linux/array_size.h>
+#include <linux/bits.h>
+#include <linux/delay.h>
+#include <linux/dev_printk.h>
+#include <linux/errno.h>
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
-#include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/delay.h>
+#include <linux/mod_devicetable.h>
+#include <linux/mutex.h>
+#include <linux/pm.h>
+#include <linux/sysfs.h>
 #include <linux/types.h>
+
 #include <linux/iio/buffer.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
@@ -46,7 +54,6 @@
 #define STK8312_ALL_CHANNEL_SIZE	3
 
 #define STK8312_DRIVER_NAME		"stk8312"
-#define STK8312_IRQ_NAME		"stk8312_event"
 
 /*
  * The accelerometer has two measurement ranges:
@@ -505,10 +512,8 @@ static int stk8312_probe(struct i2c_client *client)
 	struct stk8312_data *data;
 
 	indio_dev = devm_iio_device_alloc(&client->dev, sizeof(*data));
-	if (!indio_dev) {
-		dev_err(&client->dev, "iio allocation failed!\n");
+	if (!indio_dev)
 		return -ENOMEM;
-	}
 
 	data = iio_priv(indio_dev);
 	data->client = client;
@@ -543,13 +548,10 @@ static int stk8312_probe(struct i2c_client *client)
 						NULL,
 						IRQF_TRIGGER_RISING |
 						IRQF_ONESHOT,
-						STK8312_IRQ_NAME,
+						"stk8312_event",
 						indio_dev);
-		if (ret < 0) {
-			dev_err(&client->dev, "request irq %d failed\n",
-				client->irq);
+		if (ret)
 			goto err_power_off;
-		}
 
 		data->dready_trig = devm_iio_trigger_alloc(&client->dev,
 							   "%s-dev%d",
@@ -633,8 +635,8 @@ static DEFINE_SIMPLE_DEV_PM_OPS(stk8312_pm_ops, stk8312_suspend,
 
 static const struct i2c_device_id stk8312_i2c_id[] = {
 	/* Deprecated in favour of lowercase form */
-	{ "STK8312" },
-	{ "stk8312" },
+	{ .name = "STK8312" },
+	{ .name = "stk8312" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, stk8312_i2c_id);

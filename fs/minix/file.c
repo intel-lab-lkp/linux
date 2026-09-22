@@ -7,6 +7,7 @@
  *  minix regular file handling primitives
  */
 
+#include <linux/buffer_head.h>
 #include "minix.h"
 
 /*
@@ -17,8 +18,8 @@ const struct file_operations minix_file_operations = {
 	.llseek		= generic_file_llseek,
 	.read_iter	= generic_file_read_iter,
 	.write_iter	= generic_file_write_iter,
-	.mmap		= generic_file_mmap,
-	.fsync		= generic_file_fsync,
+	.mmap_prepare	= generic_file_mmap_prepare,
+	.fsync		= simple_fsync,
 	.splice_read	= filemap_splice_read,
 };
 

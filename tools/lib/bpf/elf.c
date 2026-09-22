@@ -9,7 +9,6 @@
 #include <linux/kernel.h>
 
 #include "libbpf_internal.h"
-#include "str_error.h"
 
 /* A SHT_GNU_versym section holds 16-bit words. This bit is set if
  * the symbol is hidden and can only be seen when referenced using an
@@ -355,7 +354,7 @@ long elf_find_func_offset(Elf *elf, const char *binary_path, const char *name)
 
 	if (ret > 0) {
 		pr_debug("elf: symbol address match for '%s' in '%s': 0x%lx\n", name, binary_path,
-			 ret);
+			 (unsigned long)ret);
 	} else {
 		if (ret == 0) {
 			pr_warn("elf: '%s' is 0 in symtab for '%s': %s\n", name, binary_path,

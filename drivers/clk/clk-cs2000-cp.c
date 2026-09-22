@@ -122,8 +122,8 @@ static const struct of_device_id cs2000_of_match[] = {
 MODULE_DEVICE_TABLE(of, cs2000_of_match);
 
 static const struct i2c_device_id cs2000_id[] = {
-	{ "cs2000-cp", },
-	{}
+	{ .name = "cs2000-cp" },
+	{ }
 };
 MODULE_DEVICE_TABLE(i2c, cs2000_id);
 
@@ -305,15 +305,19 @@ static unsigned long cs2000_recalc_rate(struct clk_hw *hw,
 	return cs2000_ratio_to_rate(ratio, parent_rate, priv->lf_ratio);
 }
 
-static long cs2000_round_rate(struct clk_hw *hw, unsigned long rate,
-			      unsigned long *parent_rate)
+static int cs2000_determine_rate(struct clk_hw *hw,
+				 struct clk_rate_request *req)
 {
 	struct cs2000_priv *priv = hw_to_priv(hw);
 	u32 ratio;
 
-	ratio = cs2000_rate_to_ratio(*parent_rate, rate, priv->lf_ratio);
+	ratio = cs2000_rate_to_ratio(req->best_parent_rate, req->rate,
+				     priv->lf_ratio);
 
-	return cs2000_ratio_to_rate(ratio, *parent_rate, priv->lf_ratio);
+	req->rate = cs2000_ratio_to_rate(ratio, req->best_parent_rate,
+					 priv->lf_ratio);
+
+	return 0;
 }
 
 static int cs2000_select_ratio_mode(struct cs2000_priv *priv,
@@ -400,11 +404,7 @@ static int cs2000_enable(struct clk_hw *hw)
 	if (ret < 0)
 		return ret;
 
-	ret = cs2000_wait_pll_lock(priv);
-	if (ret < 0)
-		return ret;
-
-	return ret;
+	return cs2000_wait_pll_lock(priv);
 }
 
 static void cs2000_disable(struct clk_hw *hw)
@@ -430,7 +430,7 @@ static u8 cs2000_get_parent(struct clk_hw *hw)
 static const struct clk_ops cs2000_ops = {
 	.get_parent	= cs2000_get_parent,
 	.recalc_rate	= cs2000_recalc_rate,
-	.round_rate	= cs2000_round_rate,
+	.determine_rate = cs2000_determine_rate,
 	.set_rate	= cs2000_set_rate,
 	.prepare	= cs2000_enable,
 	.unprepare	= cs2000_disable,

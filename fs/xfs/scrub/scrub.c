@@ -3,7 +3,7 @@
  * Copyright (C) 2017-2023 Oracle.  All Rights Reserved.
  * Author: Darrick J. Wong <djwong@kernel.org>
  */
-#include "xfs.h"
+#include "xfs_platform.h"
 #include "xfs_fs.h"
 #include "xfs_shared.h"
 #include "xfs_format.h"
@@ -632,9 +632,9 @@ xchk_scrub_create_subord(
 {
 	struct xfs_scrub_subord	*sub;
 
-	sub = kzalloc(sizeof(*sub), XCHK_GFP_FLAGS);
+	sub = kzalloc_obj(*sub, XCHK_GFP_FLAGS);
 	if (!sub)
-		return ERR_PTR(-ENOMEM);
+		return NULL;
 
 	sub->old_smtype = sc->sm->sm_type;
 	sub->old_smflags = sc->sm->sm_flags;
@@ -680,7 +680,7 @@ xfs_scrub_metadata(
 	if (error)
 		goto out;
 
-	sc = kzalloc(sizeof(struct xfs_scrub), XCHK_GFP_FLAGS);
+	sc = kzalloc_obj(struct xfs_scrub, XCHK_GFP_FLAGS);
 	if (!sc) {
 		error = -ENOMEM;
 		goto out;
@@ -765,8 +765,7 @@ out_nofix:
 out_teardown:
 	error = xchk_teardown(sc, error);
 out_sc:
-	if (error != -ENOENT)
-		xchk_stats_merge(mp, sm, &run);
+	xchk_stats_merge(mp, sm, error, &run);
 	kfree(sc);
 out:
 	trace_xchk_done(XFS_I(file_inode(file)), sm, error);
@@ -876,10 +875,7 @@ xchk_scrubv_open_by_handle(
 	struct xfs_inode		*ip;
 	int				error;
 
-	error = xfs_trans_alloc_empty(mp, &tp);
-	if (error)
-		return NULL;
-
+	tp = xfs_trans_alloc_empty(mp);
 	error = xfs_iget(mp, tp, head->svh_ino, XCHK_IGET_FLAGS, 0, &ip);
 	xfs_trans_cancel(tp);
 	if (error)
@@ -958,7 +954,7 @@ xfs_ioc_scrubv_metadata(
 	 * because each scrubber gets to decide its own strategy and return
 	 * values for getting an inode.
 	 */
-	if (head.svh_ino && head.svh_ino != ip_in->i_ino)
+	if (head.svh_ino && head.svh_ino != I_INO(ip_in))
 		handle_ip = xchk_scrubv_open_by_handle(mp, &head);
 
 	/* Run all the scrubbers. */

@@ -32,7 +32,7 @@ typedef int (*exit_handle_fn)(struct kvm_vcpu *);
 static void kvm_handle_guest_serror(struct kvm_vcpu *vcpu, u64 esr)
 {
 	if (!arm64_is_ras_serror(esr) || arm64_is_fatal_ras_serror(NULL, esr))
-		kvm_inject_vabt(vcpu);
+		kvm_inject_serror(vcpu);
 }
 
 static int handle_hvc(struct kvm_vcpu *vcpu)
@@ -147,7 +147,12 @@ static int kvm_handle_wfx(struct kvm_vcpu *vcpu)
 		if (esr & ESR_ELx_WFx_ISS_RV) {
 			u64 val, now;
 
-			now = kvm_arm_timer_get_reg(vcpu, KVM_REG_ARM_TIMER_CNT);
+			now = kvm_phys_timer_read();
+			if (is_hyp_ctxt(vcpu) && vcpu_el2_e2h_is_set(vcpu))
+				now -= timer_get_offset(vcpu_hvtimer(vcpu));
+			else
+				now -= timer_get_offset(vcpu_vtimer(vcpu));
+
 			val = vcpu_get_reg(vcpu, kvm_vcpu_sys_get_rt(vcpu));
 
 			if (now >= val)
@@ -252,7 +257,7 @@ static int kvm_handle_ptrauth(struct kvm_vcpu *vcpu)
 		return 1;
 	}
 
-	if (vcpu_has_nv(vcpu) && !is_hyp_ctxt(vcpu)) {
+	if (is_nested_ctxt(vcpu)) {
 		kvm_inject_nested_sync(vcpu, kvm_vcpu_get_esr(vcpu));
 		return 1;
 	}
@@ -311,12 +316,11 @@ static int kvm_handle_gcs(struct kvm_vcpu *vcpu)
 
 static int handle_other(struct kvm_vcpu *vcpu)
 {
-	bool is_l2 = vcpu_has_nv(vcpu) && !is_hyp_ctxt(vcpu);
+	bool allowed, fwd = is_nested_ctxt(vcpu);
 	u64 hcrx = __vcpu_sys_reg(vcpu, HCRX_EL2);
 	u64 esr = kvm_vcpu_get_esr(vcpu);
 	u64 iss = ESR_ELx_ISS(esr);
 	struct kvm *kvm = vcpu->kvm;
-	bool allowed, fwd = false;
 
 	/*
 	 * We only trap for two reasons:
@@ -335,28 +339,23 @@ static int handle_other(struct kvm_vcpu *vcpu)
 	switch (iss) {
 	case ESR_ELx_ISS_OTHER_ST64BV:
 		allowed = kvm_has_feat(kvm, ID_AA64ISAR1_EL1, LS64, LS64_V);
-		if (is_l2)
-			fwd = !(hcrx & HCRX_EL2_EnASR);
+		fwd &= !(hcrx & HCRX_EL2_EnASR);
 		break;
 	case ESR_ELx_ISS_OTHER_ST64BV0:
 		allowed = kvm_has_feat(kvm, ID_AA64ISAR1_EL1, LS64, LS64_ACCDATA);
-		if (is_l2)
-			fwd = !(hcrx & HCRX_EL2_EnAS0);
+		fwd &= !(hcrx & HCRX_EL2_EnAS0);
 		break;
 	case ESR_ELx_ISS_OTHER_LDST64B:
 		allowed = kvm_has_feat(kvm, ID_AA64ISAR1_EL1, LS64, LS64);
-		if (is_l2)
-			fwd = !(hcrx & HCRX_EL2_EnALS);
+		fwd &= !(hcrx & HCRX_EL2_EnALS);
 		break;
 	case ESR_ELx_ISS_OTHER_TSBCSYNC:
 		allowed = kvm_has_feat(kvm, ID_AA64DFR0_EL1, TraceBuffer, TRBE_V1P1);
-		if (is_l2)
-			fwd = (__vcpu_sys_reg(vcpu, HFGITR2_EL2) & HFGITR2_EL2_TSBCSYNC);
+		fwd &= (__vcpu_sys_reg(vcpu, HFGITR2_EL2) & HFGITR2_EL2_TSBCSYNC);
 		break;
 	case ESR_ELx_ISS_OTHER_PSBCSYNC:
 		allowed = kvm_has_feat(kvm, ID_AA64DFR0_EL1, PMSVer, V1P5);
-		if (is_l2)
-			fwd = (__vcpu_sys_reg(vcpu, HFGITR_EL2) & HFGITR_EL2_PSBCSYNC);
+		fwd &= (__vcpu_sys_reg(vcpu, HFGITR_EL2) & HFGITR_EL2_PSBCSYNC);
 		break;
 	default:
 		/* Clearly, we're missing something. */
@@ -487,16 +486,39 @@ int handle_exit(struct kvm_vcpu *vcpu, int exception_index)
 	}
 }
 
+static void handle_exit_pkvm_state(struct kvm_vcpu *vcpu, int exception_index)
+{
+	int exception_code = ARM_EXCEPTION_CODE(exception_index);
+
+	if (!is_protected_kvm_enabled() || kvm_vm_is_protected(vcpu->kvm))
+		return;
+
+	/*
+	 * Sync the context back when the host will read (trap) or write
+	 * (SError) it. Preempt-off here, so the loaded hyp vCPU is stable.
+	 */
+	if (exception_code == ARM_EXCEPTION_TRAP ||
+	    exception_code == ARM_EXCEPTION_EL1_SERROR ||
+	    ARM_SERROR_PENDING(exception_index)) {
+		kvm_call_hyp_nvhe(__pkvm_vcpu_sync_state);
+		vcpu_set_flag(vcpu, PKVM_HOST_STATE_DIRTY);
+	} else {
+		vcpu_clear_flag(vcpu, PKVM_HOST_STATE_DIRTY);
+	}
+}
+
 /* For exit types that need handling before we can be preempted */
 void handle_exit_early(struct kvm_vcpu *vcpu, int exception_index)
 {
+	handle_exit_pkvm_state(vcpu, exception_index);
+
 	if (ARM_SERROR_PENDING(exception_index)) {
 		if (this_cpu_has_cap(ARM64_HAS_RAS_EXTN)) {
 			u64 disr = kvm_vcpu_get_disr(vcpu);
 
 			kvm_handle_guest_serror(vcpu, disr_to_esr(disr));
 		} else {
-			kvm_inject_vabt(vcpu);
+			kvm_inject_serror(vcpu);
 		}
 
 		return;
@@ -508,10 +530,20 @@ void handle_exit_early(struct kvm_vcpu *vcpu, int exception_index)
 		kvm_handle_guest_serror(vcpu, kvm_vcpu_get_esr(vcpu));
 }
 
+static bool nvhe_hyp_panic_host_s2_disabled(void)
+{
+	return !is_protected_kvm_enabled() ||
+	       IS_ENABLED(CONFIG_PKVM_DISABLE_STAGE2_ON_PANIC);
+}
+
 static void print_nvhe_hyp_panic(const char *name, u64 panic_addr)
 {
-	kvm_err("nVHE hyp %s at: [<%016llx>] %pB!\n", name, panic_addr,
-		(void *)(panic_addr + kaslr_offset()));
+	/* Kallsyms might not be mapped in the host stage-2 */
+	if (nvhe_hyp_panic_host_s2_disabled())
+		kvm_err("nVHE hyp %s at: [<%016llx>] %pB!\n", name, panic_addr,
+			(void *)(panic_addr + kaslr_offset()));
+	else
+		kvm_err("nVHE hyp %s at: %016llx!\n", name, panic_addr);
 }
 
 static void kvm_nvhe_report_cfi_failure(u64 panic_addr)
@@ -539,8 +571,7 @@ void __noreturn __cold nvhe_hyp_panic_handler(u64 esr, u64 spsr,
 		unsigned int line = 0;
 
 		/* All hyp bugs, including warnings, are treated as fatal. */
-		if (!is_protected_kvm_enabled() ||
-		    IS_ENABLED(CONFIG_NVHE_EL2_DEBUG)) {
+		if (nvhe_hyp_panic_host_s2_disabled()) {
 			struct bug_entry *bug = find_bug(elr_in_kimg);
 
 			if (bug)
@@ -551,7 +582,7 @@ void __noreturn __cold nvhe_hyp_panic_handler(u64 esr, u64 spsr,
 			kvm_err("nVHE hyp BUG at: %s:%u!\n", file, line);
 		else
 			print_nvhe_hyp_panic("BUG", panic_addr);
-	} else if (IS_ENABLED(CONFIG_CFI_CLANG) && esr_is_cfi_brk(esr)) {
+	} else if (IS_ENABLED(CONFIG_CFI) && esr_is_cfi_brk(esr)) {
 		kvm_nvhe_report_cfi_failure(panic_addr);
 	} else if (IS_ENABLED(CONFIG_UBSAN_KVM_EL2) &&
 		   ESR_ELx_EC(esr) == ESR_ELx_EC_BRK64 &&
@@ -564,6 +595,9 @@ void __noreturn __cold nvhe_hyp_panic_handler(u64 esr, u64 spsr,
 
 	/* Dump the nVHE hypervisor backtrace */
 	kvm_nvhe_dump_backtrace(hyp_offset);
+
+	/* Dump the faulting instruction */
+	dump_kernel_instr(panic_addr + kaslr_offset());
 
 	/*
 	 * Hyp has panicked and we're going to handle that by panicking the

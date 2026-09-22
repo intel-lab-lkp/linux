@@ -862,6 +862,12 @@ static int pl35x_nfc_setup_interface(struct nand_chip *chip, int cs,
 			  PL35X_SMC_NAND_TAR_CYCLES(tmgs.t_ar) |
 			  PL35X_SMC_NAND_TRR_CYCLES(tmgs.t_rr);
 
+	/*
+	 * Reset nfc->selected_chip so the next command will cause the timing
+	 * registers to be updated in ->*_select_target().
+	 */
+	nfc->selected_chip = NULL;
+
 	return 0;
 }
 
@@ -911,7 +917,6 @@ static int pl35x_nand_init_hw_ecc_controller(struct pl35x_nandc *nfc,
 	chip->ecc.steps = mtd->writesize / chip->ecc.size;
 	chip->ecc.read_page = pl35x_nand_read_page_hwecc;
 	chip->ecc.write_page = pl35x_nand_write_page_hwecc;
-	chip->ecc.write_page_raw = nand_monolithic_write_page_raw;
 	pl35x_smc_set_ecc_pg_size(nfc, chip, mtd->writesize);
 
 	nfc->ecc_buf = devm_kmalloc(nfc->dev, chip->ecc.bytes * chip->ecc.steps,
@@ -970,14 +975,19 @@ static int pl35x_nand_attach_chip(struct nand_chip *chip)
 
 	switch (chip->ecc.engine_type) {
 	case NAND_ECC_ENGINE_TYPE_ON_DIE:
+		dev_dbg(nfc->dev, "Using on-die hardware ECC\n");
 		/* Keep these legacy BBT descriptors for ON_DIE situations */
 		chip->bbt_td = &bbt_main_descr;
 		chip->bbt_md = &bbt_mirror_descr;
 		fallthrough;
 	case NAND_ECC_ENGINE_TYPE_NONE:
+		dev_dbg(nfc->dev, "Using no ECC engine\n");
+		break;
 	case NAND_ECC_ENGINE_TYPE_SOFT:
+		dev_dbg(nfc->dev, "Using software ECC\n");
 		break;
 	case NAND_ECC_ENGINE_TYPE_ON_HOST:
+		dev_dbg(nfc->dev, "Using on-host hardware ECC\n");
 		ret = pl35x_nand_init_hw_ecc_controller(nfc, chip);
 		if (ret)
 			return ret;
@@ -987,6 +997,9 @@ static int pl35x_nand_attach_chip(struct nand_chip *chip)
 			chip->ecc.engine_type);
 		return -EINVAL;
 	}
+
+	chip->ecc.read_page_raw = nand_monolithic_read_page_raw;
+	chip->ecc.write_page_raw = nand_monolithic_write_page_raw;
 
 	return 0;
 }
@@ -1137,7 +1150,7 @@ static int pl35x_nand_probe(struct platform_device *pdev)
 	struct device *smc_dev = pdev->dev.parent;
 	struct amba_device *smc_amba = to_amba_device(smc_dev);
 	struct pl35x_nandc *nfc;
-	u32 ret;
+	int ret;
 
 	nfc = devm_kzalloc(&pdev->dev, sizeof(*nfc), GFP_KERNEL);
 	if (!nfc)
@@ -1148,7 +1161,7 @@ static int pl35x_nand_probe(struct platform_device *pdev)
 	nfc->controller.ops = &pl35x_nandc_ops;
 	INIT_LIST_HEAD(&nfc->chips);
 
-	nfc->conf_regs = devm_ioremap_resource(&smc_amba->dev, &smc_amba->res);
+	nfc->conf_regs = devm_ioremap_resource(nfc->dev, &smc_amba->res);
 	if (IS_ERR(nfc->conf_regs))
 		return PTR_ERR(nfc->conf_regs);
 
@@ -1193,6 +1206,5 @@ static struct platform_driver pl35x_nandc_driver = {
 module_platform_driver(pl35x_nandc_driver);
 
 MODULE_AUTHOR("Xilinx, Inc.");
-MODULE_ALIAS("platform:" PL35X_NANDC_DRIVER_NAME);
 MODULE_DESCRIPTION("ARM PL35X NAND controller driver");
 MODULE_LICENSE("GPL");

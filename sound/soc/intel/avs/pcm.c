@@ -6,6 +6,7 @@
 //          Amadeusz Slawinski <amadeuszx.slawinski@linux.intel.com>
 //
 
+#include <linux/cleanup.h>
 #include <linux/debugfs.h>
 #include <linux/device.h>
 #include <sound/hda_register.h>
@@ -130,7 +131,7 @@ static int avs_dai_startup(struct snd_pcm_substream *substream, struct snd_soc_d
 		return -EINVAL;
 	}
 
-	data = kzalloc(sizeof(*data), GFP_KERNEL);
+	data = kzalloc_obj(*data);
 	if (!data)
 		return -ENOMEM;
 
@@ -651,6 +652,7 @@ static void avs_dai_fe_shutdown(struct snd_pcm_substream *substream, struct snd_
 
 	data = snd_soc_dai_get_dma_data(dai, substream);
 
+	disable_work_sync(&data->period_elapsed_work);
 	snd_hdac_ext_stream_release(data->host_stream, HDAC_EXT_STREAM_TYPE_HOST);
 	avs_dai_shutdown(substream, dai);
 }
@@ -754,6 +756,8 @@ static int avs_dai_fe_prepare(struct snd_pcm_substream *substream, struct snd_so
 	data = snd_soc_dai_get_dma_data(dai, substream);
 	host_stream = data->host_stream;
 
+	if (runtime->state == SNDRV_PCM_STATE_XRUN)
+		hdac_stream(host_stream)->prepared = false;
 	if (hdac_stream(host_stream)->prepared)
 		return 0;
 
@@ -955,7 +959,7 @@ static const struct file_operations topology_name_fops = {
 static int avs_component_load_libraries(struct avs_soc_component *acomp)
 {
 	struct avs_tplg *tplg = acomp->tplg;
-	struct avs_dev *adev = to_avs_dev(acomp->base.dev);
+	struct avs_dev *adev = to_avs_dev(acomp->base->dev);
 	int ret;
 
 	if (!tplg->num_libs)
@@ -979,10 +983,21 @@ static int avs_component_load_libraries(struct avs_soc_component *acomp)
 	if (!ret)
 		ret = avs_module_info_init(adev, false);
 
-	pm_runtime_mark_last_busy(adev->dev);
 	pm_runtime_put_autosuspend(adev->dev);
 
 	return ret;
+}
+
+static int avs_request_topology(struct snd_soc_component *component, const char *name,
+				const struct firmware **fw)
+{
+	char *fullname __free(kfree) = NULL;
+
+	fullname = kasprintf(GFP_KERNEL, "%s/%s", component->driver->topology_name_prefix, name);
+	if (!fullname)
+		return -ENOMEM;
+
+	return request_firmware(fw, fullname, component->dev);
 }
 
 static int avs_component_probe(struct snd_soc_component *component)
@@ -990,8 +1005,8 @@ static int avs_component_probe(struct snd_soc_component *component)
 	struct snd_soc_card *card = component->card;
 	struct snd_soc_acpi_mach *mach;
 	struct avs_soc_component *acomp;
+	const struct firmware *fw;
 	struct avs_dev *adev;
-	char *filename;
 	int ret;
 
 	dev_dbg(card->dev, "probing %s card %s\n", component->name, card->name);
@@ -1007,13 +1022,7 @@ static int avs_component_probe(struct snd_soc_component *component)
 		goto finalize;
 
 	/* Load specified topology and create debugfs for it. */
-	filename = kasprintf(GFP_KERNEL, "%s/%s", component->driver->topology_name_prefix,
-			     mach->tplg_filename);
-	if (!filename)
-		return -ENOMEM;
-
-	ret = avs_load_topology(component, filename);
-	kfree(filename);
+	ret = avs_request_topology(component, mach->tplg_filename, &fw);
 	if (ret == -ENOENT && !strncmp(mach->tplg_filename, "hda-", 4)) {
 		unsigned int vendor_id;
 
@@ -1028,16 +1037,15 @@ static int avs_component_probe(struct snd_soc_component *component)
 							     "hda-generic-tplg.bin");
 		if (!mach->tplg_filename)
 			return -ENOMEM;
-		filename = kasprintf(GFP_KERNEL, "%s/%s", component->driver->topology_name_prefix,
-				     mach->tplg_filename);
-		if (!filename)
-			return -ENOMEM;
 
 		dev_info(card->dev, "trying to load fallback topology %s\n", mach->tplg_filename);
-		ret = avs_load_topology(component, filename);
-		kfree(filename);
+		ret = avs_request_topology(component, mach->tplg_filename, &fw);
 	}
 	if (ret < 0)
+		return ret;
+
+	ret = snd_soc_tplg_component_load(component, &avs_tplg_ops, fw);
+	if (ret)
 		return ret;
 
 	ret = avs_component_load_libraries(acomp);
@@ -1347,8 +1355,8 @@ static int avs_component_mmap(struct snd_soc_component *component,
 
 #define MAX_PREALLOC_SIZE	(32 * 1024 * 1024)
 
-static int avs_component_construct(struct snd_soc_component *component,
-				   struct snd_soc_pcm_runtime *rtd)
+static int avs_component_new(struct snd_soc_component *component,
+			     struct snd_soc_pcm_runtime *rtd)
 {
 	struct snd_soc_dai *dai = snd_soc_rtd_to_cpu(rtd, 0);
 	struct snd_pcm *pcm = rtd->pcm;
@@ -1375,33 +1383,38 @@ static struct snd_soc_component_driver avs_component_driver = {
 	.open			= avs_component_open,
 	.pointer		= avs_component_pointer,
 	.mmap			= avs_component_mmap,
-	.pcm_construct		= avs_component_construct,
+	.pcm_new		= avs_component_new,
 	.module_get_upon_open	= 1, /* increment refcount when a pcm is opened */
 	.topology_name_prefix	= "intel/avs",
 };
 
-int avs_soc_component_register(struct device *dev, const char *name,
-			       struct snd_soc_component_driver *drv,
-			       struct snd_soc_dai_driver *cpu_dais, int num_cpu_dais)
+int avs_register_component(struct device *dev, const char *name,
+			   struct snd_soc_component_driver *drv,
+			   struct snd_soc_dai_driver *cpu_dais, int num_cpu_dais)
 {
 	struct avs_soc_component *acomp;
-	int ret;
+	const char *comp_name;
 
 	acomp = devm_kzalloc(dev, sizeof(*acomp), GFP_KERNEL);
 	if (!acomp)
 		return -ENOMEM;
 
-	ret = snd_soc_component_initialize(&acomp->base, drv, dev);
-	if (ret < 0)
-		return ret;
+	acomp->base = snd_soc_component_alloc(dev);
+	if (!acomp->base)
+		return -ENOMEM;
 
-	/* force name change after ASoC is done with its init */
-	acomp->base.name = name;
+	comp_name = devm_kstrdup(dev, name, GFP_KERNEL);
+	if (!comp_name)
+		return -ENOMEM;
+
 	INIT_LIST_HEAD(&acomp->node);
 
 	drv->use_dai_pcm_id = !obsolete_card_names;
 
-	return snd_soc_add_component(&acomp->base, cpu_dais, num_cpu_dais);
+	snd_soc_component_set_name(acomp->base, comp_name);
+	snd_soc_component_set_priv(acomp->base, acomp);
+
+	return snd_soc_register_component(acomp->base, drv, cpu_dais, num_cpu_dais);
 }
 
 static struct snd_soc_dai_driver dmic_cpu_dais[] = {
@@ -1427,7 +1440,7 @@ static struct snd_soc_dai_driver dmic_cpu_dais[] = {
 },
 };
 
-int avs_dmic_platform_register(struct avs_dev *adev, const char *name)
+int avs_register_dmic_component(struct avs_dev *adev, const char *name)
 {
 	const struct snd_soc_dai_ops *ops;
 
@@ -1438,8 +1451,8 @@ int avs_dmic_platform_register(struct avs_dev *adev, const char *name)
 
 	dmic_cpu_dais[0].ops = ops;
 	dmic_cpu_dais[1].ops = ops;
-	return avs_soc_component_register(adev->dev, name, &avs_component_driver, dmic_cpu_dais,
-					  ARRAY_SIZE(dmic_cpu_dais));
+	return avs_register_component(adev->dev, name, &avs_component_driver, dmic_cpu_dais,
+				      ARRAY_SIZE(dmic_cpu_dais));
 }
 
 static const struct snd_soc_dai_driver i2s_dai_template = {
@@ -1471,8 +1484,8 @@ static const struct snd_soc_dai_driver i2s_dai_template = {
 	},
 };
 
-int avs_i2s_platform_register(struct avs_dev *adev, const char *name, unsigned long port_mask,
-			      unsigned long *tdms)
+int avs_register_i2s_component(struct avs_dev *adev, const char *name, unsigned long port_mask,
+			       unsigned long *tdms)
 {
 	struct snd_soc_dai_driver *cpus, *dai;
 	const struct snd_soc_dai_ops *ops;
@@ -1538,7 +1551,7 @@ int avs_i2s_platform_register(struct avs_dev *adev, const char *name, unsigned l
 	}
 
 plat_register:
-	return avs_soc_component_register(adev->dev, name, &avs_component_driver, cpus, cpu_count);
+	return avs_register_component(adev->dev, name, &avs_component_driver, cpus, cpu_count);
 }
 
 /* HD-Audio CPU DAI template */
@@ -1570,11 +1583,13 @@ static void avs_component_hda_unregister_dais(struct snd_soc_component *componen
 {
 	struct snd_soc_acpi_mach *mach;
 	struct snd_soc_dai *dai, *save;
+	struct avs_mach_pdata *pdata;
 	struct hda_codec *codec;
 	char name[32];
 
 	mach = dev_get_platdata(component->card->dev);
-	codec = mach->pdata;
+	pdata = mach->pdata;
+	codec = pdata->codec;
 	snprintf(name, sizeof(name), "%s-cpu", dev_name(&codec->core.dev));
 
 	for_each_component_dais_safe(component, dai, save) {
@@ -1618,7 +1633,7 @@ static int avs_component_hda_probe(struct snd_soc_component *component)
 		return -ENOMEM;
 
 	cname = dev_name(&codec->core.dev);
-	dapm = snd_soc_component_get_dapm(component);
+	dapm = snd_soc_component_to_dapm(component);
 	pcm = list_first_entry(&codec->pcm_list_head, struct hda_pcm, list);
 
 	for (i = 0; i < pcm_count; i++, pcm = list_next_entry(pcm, list)) {
@@ -1749,7 +1764,7 @@ static struct snd_soc_component_driver avs_hda_component_driver = {
 	.open			= avs_component_hda_open,
 	.pointer		= avs_component_pointer,
 	.mmap			= avs_component_mmap,
-	.pcm_construct		= avs_component_construct,
+	.pcm_new		= avs_component_new,
 	/*
 	 * hda platform component's probe() is dependent on
 	 * codec->pcm_list_head, it needs to be initialized after codec
@@ -1761,8 +1776,7 @@ static struct snd_soc_component_driver avs_hda_component_driver = {
 	.topology_name_prefix	= "intel/avs",
 };
 
-int avs_hda_platform_register(struct avs_dev *adev, const char *name)
+int avs_register_hda_component(struct avs_dev *adev, const char *name)
 {
-	return avs_soc_component_register(adev->dev, name,
-					  &avs_hda_component_driver, NULL, 0);
+	return avs_register_component(adev->dev, name, &avs_hda_component_driver, NULL, 0);
 }

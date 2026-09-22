@@ -19,7 +19,7 @@
 #include <sound/tlv.h>
 #include "max98927.h"
 
-static struct reg_default max98927_reg[] = {
+static const struct reg_default max98927_reg[] = {
 	{MAX98927_R0001_INT_RAW1,  0x00},
 	{MAX98927_R0002_INT_RAW2,  0x00},
 	{MAX98927_R0003_INT_RAW3,  0x00},
@@ -742,11 +742,17 @@ static int max98927_suspend(struct device *dev)
 static int max98927_resume(struct device *dev)
 {
 	struct max98927_priv *max98927 = dev_get_drvdata(dev);
+	int ret;
 
 	regmap_write(max98927->regmap, MAX98927_R0100_SOFT_RESET,
 		     MAX98927_SOFT_RESET);
 	regcache_cache_only(max98927->regmap, false);
-	regcache_sync(max98927->regmap);
+	ret = regcache_sync(max98927->regmap);
+	if (ret) {
+		regcache_cache_only(max98927->regmap, true);
+		regcache_mark_dirty(max98927->regmap);
+		return ret;
+	}
 	return 0;
 }
 
@@ -873,8 +879,8 @@ static void max98927_i2c_remove(struct i2c_client *i2c)
 }
 
 static const struct i2c_device_id max98927_i2c_id[] = {
-	{ "max98927"},
-	{ },
+	{ .name = "max98927" },
+	{ }
 };
 
 MODULE_DEVICE_TABLE(i2c, max98927_i2c_id);

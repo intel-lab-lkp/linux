@@ -31,7 +31,6 @@
 #include "ta_ras_if.h"
 #include "amdgpu_ras_eeprom.h"
 #include "amdgpu_smuio.h"
-#include "amdgpu_aca.h"
 
 struct amdgpu_iv_entry;
 
@@ -466,14 +465,6 @@ struct ras_query_context {
 typedef int (*pasid_notify)(struct amdgpu_device *adev,
 		uint16_t pasid, void *data);
 
-struct ras_poison_msg {
-	enum amdgpu_ras_block block;
-	uint16_t pasid;
-	uint32_t reset;
-	pasid_notify pasid_fn;
-	void *data;
-};
-
 struct ras_err_pages {
 	uint32_t count;
 	uint64_t *pfn;
@@ -492,11 +483,17 @@ struct ras_ecc_err {
 struct ras_ecc_log_info {
 	struct mutex lock;
 	struct radix_tree_root de_page_tree;
-	uint64_t	de_queried_count;
-	uint64_t	prev_de_queried_count;
+};
+
+struct ras_critical_region {
+	struct list_head node;
+	struct amdgpu_bo *bo;
+	uint64_t start;
+	uint64_t size;
 };
 
 struct amdgpu_ras {
+	void *ras_mgr;
 	/* ras infrastructure */
 	/* for ras itself. */
 	uint32_t features;
@@ -546,21 +543,15 @@ struct amdgpu_ras {
 	/* Indicates smu whether need update bad channel info */
 	bool update_channel_flag;
 	/* Record status of smu mca debug mode */
-	bool is_aca_debug_mode;
+	bool is_mca_debug_mode;
 	bool is_rma;
 
 	/* Record special requirements of gpu reset caller */
 	uint32_t  gpu_reset_flags;
 
-	struct task_struct *page_retirement_thread;
-	wait_queue_head_t page_retirement_wq;
 	struct mutex page_retirement_lock;
-	atomic_t page_retirement_req_cnt;
-	atomic_t poison_creation_count;
 	struct mutex page_rsv_lock;
-	DECLARE_KFIFO(poison_fifo, struct ras_poison_msg, 128);
 	struct ras_ecc_log_info  umc_ecc_log;
-	struct delayed_work page_retirement_dwork;
 
 	/* ras errors detected */
 	unsigned long ras_err_state;
@@ -570,6 +561,17 @@ struct amdgpu_ras {
 	struct ras_event_manager *event_mgr;
 
 	uint64_t reserved_pages_in_bytes;
+
+	pid_t init_task_pid;
+	char init_task_comm[TASK_COMM_LEN];
+
+	int bad_page_num;
+
+	struct list_head critical_region_head;
+	struct mutex critical_region_lock;
+
+	/* Disable/Enable uniras switch */
+	bool uniras_enabled;
 };
 
 struct ras_fs_data {
@@ -608,6 +610,7 @@ struct ras_err_handler_data {
 	struct eeprom_table_record *bps;
 	/* the count of entries */
 	int count;
+	int count_saved;
 	/* the space can place new entries */
 	int space_left;
 };
@@ -650,8 +653,6 @@ struct ras_manager {
 	struct ras_ih_data ih_data;
 
 	struct ras_err_data err_data;
-
-	struct aca_handle aca_handle;
 };
 
 struct ras_badpage {
@@ -710,6 +711,7 @@ struct amdgpu_ras_block_object {
 	int (*ras_block_match)(struct amdgpu_ras_block_object *block_obj,
 				enum amdgpu_ras_block block, uint32_t sub_block_index);
 	int (*ras_late_init)(struct amdgpu_device *adev, struct ras_common_if *ras_block);
+	void (*ras_suspend)(struct amdgpu_device *adev, struct ras_common_if *ras_block);
 	void (*ras_fini)(struct amdgpu_device *adev, struct ras_common_if *ras_block);
 	ras_ih_cb ras_cb;
 	const struct amdgpu_ras_block_hw_ops *hw_ops;
@@ -888,7 +890,7 @@ static inline void amdgpu_ras_intr_cleared(void)
 	atomic_set(&amdgpu_ras_in_intr, 0);
 }
 
-void amdgpu_ras_global_ras_isr(struct amdgpu_device *adev);
+int amdgpu_ras_global_ras_isr(struct amdgpu_device *adev);
 
 void amdgpu_ras_set_error_query_ready(struct amdgpu_device *adev, bool ready);
 
@@ -911,8 +913,7 @@ struct amdgpu_ras* amdgpu_ras_get_context(struct amdgpu_device *adev);
 int amdgpu_ras_set_context(struct amdgpu_device *adev, struct amdgpu_ras *ras_con);
 
 int amdgpu_ras_set_mca_debug_mode(struct amdgpu_device *adev, bool enable);
-int amdgpu_ras_set_aca_debug_mode(struct amdgpu_device *adev, bool enable);
-bool amdgpu_ras_get_aca_debug_mode(struct amdgpu_device *adev);
+bool amdgpu_ras_get_mca_debug_mode(struct amdgpu_device *adev);
 bool amdgpu_ras_get_error_query_mode(struct amdgpu_device *adev,
 				     unsigned int *mode);
 
@@ -949,16 +950,7 @@ int amdgpu_ras_error_statistic_ce_count(struct ras_err_data *err_data,
 int amdgpu_ras_error_statistic_ue_count(struct ras_err_data *err_data,
 					struct amdgpu_smuio_mcm_config_info *mcm_info,
 					u64 count);
-int amdgpu_ras_error_statistic_de_count(struct ras_err_data *err_data,
-					struct amdgpu_smuio_mcm_config_info *mcm_info,
-					u64 count);
 void amdgpu_ras_query_boot_status(struct amdgpu_device *adev, u32 num_instances);
-int amdgpu_ras_bind_aca(struct amdgpu_device *adev, enum amdgpu_ras_block blk,
-			       const struct aca_info *aca_info, void *data);
-int amdgpu_ras_unbind_aca(struct amdgpu_device *adev, enum amdgpu_ras_block blk);
-
-ssize_t amdgpu_ras_aca_sysfs_read(struct device *dev, struct device_attribute *attr,
-				  struct aca_handle *handle, char *buf, void *data);
 
 void amdgpu_ras_set_fed(struct amdgpu_device *adev, bool status);
 bool amdgpu_ras_get_fed_status(struct amdgpu_device *adev);
@@ -973,9 +965,8 @@ int amdgpu_ras_mark_ras_event_caller(struct amdgpu_device *adev, enum ras_event_
 
 int amdgpu_ras_reserve_page(struct amdgpu_device *adev, uint64_t pfn);
 
-int amdgpu_ras_put_poison_req(struct amdgpu_device *adev,
-		enum amdgpu_ras_block block, uint16_t pasid,
-		pasid_notify pasid_fn, void *data, uint32_t reset);
+int amdgpu_ras_add_critical_region(struct amdgpu_device *adev, struct amdgpu_bo *bo);
+bool amdgpu_ras_check_critical_address(struct amdgpu_device *adev, uint64_t addr);
 
 bool amdgpu_ras_in_recovery(struct amdgpu_device *adev);
 
@@ -984,4 +975,10 @@ void amdgpu_ras_event_log_print(struct amdgpu_device *adev, u64 event_id,
 				const char *fmt, ...);
 
 bool amdgpu_ras_is_rma(struct amdgpu_device *adev);
+
+void amdgpu_ras_pre_reset(struct amdgpu_device *adev,
+					  struct list_head *device_list);
+void amdgpu_ras_post_reset(struct amdgpu_device *adev,
+					  struct list_head *device_list);
+int amdgpu_ras_resume_after_reset(struct amdgpu_device *adev);
 #endif

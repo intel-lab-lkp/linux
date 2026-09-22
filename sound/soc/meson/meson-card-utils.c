@@ -50,25 +50,20 @@ int meson_card_reallocate_links(struct snd_soc_card *card,
 			 num_links * sizeof(*priv->card.dai_link),
 			 GFP_KERNEL | __GFP_ZERO);
 	if (!links)
-		goto err_links;
+		return -ENOMEM;
+
+	priv->card.dai_link = links;
+	priv->card.num_links = num_links;
 
 	ldata = krealloc(priv->link_data,
 			 num_links * sizeof(*priv->link_data),
 			 GFP_KERNEL | __GFP_ZERO);
+	/* meson_card_clean_references() will free the links on this error path */
 	if (!ldata)
-		goto err_ldata;
+		return -ENOMEM;
 
-	priv->card.dai_link = links;
 	priv->link_data = ldata;
-	priv->card.num_links = num_links;
 	return 0;
-
-err_ldata:
-	kfree(links);
-err_links:
-	dev_err(priv->card.dev, "failed to allocate links\n");
-	return -ENOMEM;
-
 }
 EXPORT_SYMBOL_GPL(meson_card_reallocate_links);
 
@@ -76,6 +71,7 @@ int meson_card_parse_dai(struct snd_soc_card *card,
 			 struct device_node *node,
 			 struct snd_soc_dai_link_component *dlc)
 {
+	struct device *dev = card->dev;
 	int ret;
 
 	if (!dlc || !node)
@@ -83,7 +79,7 @@ int meson_card_parse_dai(struct snd_soc_card *card,
 
 	ret = snd_soc_of_get_dlc(node, NULL, dlc, 0);
 	if (ret)
-		return dev_err_probe(card->dev, ret, "can't parse dai\n");
+		return dev_err_probe(dev, ret, "can't parse dai\n");
 
 	return ret;
 }
@@ -94,7 +90,8 @@ static int meson_card_set_link_name(struct snd_soc_card *card,
 				    struct device_node *node,
 				    const char *prefix)
 {
-	char *name = devm_kasprintf(card->dev, GFP_KERNEL, "%s.%s",
+	struct device *dev = card->dev;
+	char *name = devm_kasprintf(dev, GFP_KERNEL, "%s.%s",
 				    prefix, node->full_name);
 	if (!name)
 		return -ENOMEM;
@@ -137,36 +134,34 @@ int meson_card_set_be_link(struct snd_soc_card *card,
 			   struct device_node *node)
 {
 	struct snd_soc_dai_link_component *codec;
-	struct device_node *np;
+	struct device *dev = card->dev;
 	int ret, num_codecs;
 
 	num_codecs = of_get_child_count(node);
 	if (!num_codecs) {
-		dev_err(card->dev, "be link %s has no codec\n",
+		dev_err(dev, "be link %s has no codec\n",
 			node->full_name);
 		return -EINVAL;
 	}
 
-	codec = devm_kcalloc(card->dev, num_codecs, sizeof(*codec), GFP_KERNEL);
+	codec = devm_kcalloc(dev, num_codecs, sizeof(*codec), GFP_KERNEL);
 	if (!codec)
 		return -ENOMEM;
 
 	link->codecs = codec;
 	link->num_codecs = num_codecs;
 
-	for_each_child_of_node(node, np) {
+	for_each_child_of_node_scoped(node, np) {
 		ret = meson_card_parse_dai(card, np, codec);
-		if (ret) {
-			of_node_put(np);
+		if (ret)
 			return ret;
-		}
 
 		codec++;
 	}
 
 	ret = meson_card_set_link_name(card, link, node, "be");
 	if (ret)
-		dev_err(card->dev, "error setting %pOFn link name\n", np);
+		dev_err(dev, "error setting %pOFn link name\n", node);
 
 	return ret;
 }
@@ -197,13 +192,13 @@ EXPORT_SYMBOL_GPL(meson_card_set_fe_link);
 static int meson_card_add_links(struct snd_soc_card *card)
 {
 	struct meson_card *priv = snd_soc_card_get_drvdata(card);
-	struct device_node *node = card->dev->of_node;
-	struct device_node *np;
+	struct device *dev = card->dev;
+	struct device_node *node = dev->of_node;
 	int num, i, ret;
 
 	num = of_get_child_count(node);
 	if (!num) {
-		dev_err(card->dev, "card has no links\n");
+		dev_err(dev, "card has no links\n");
 		return -EINVAL;
 	}
 
@@ -212,12 +207,10 @@ static int meson_card_add_links(struct snd_soc_card *card)
 		return ret;
 
 	i = 0;
-	for_each_child_of_node(node, np) {
+	for_each_child_of_node_scoped(node, np) {
 		ret = priv->match_data->add_link(card, np, &i);
-		if (ret) {
-			of_node_put(np);
+		if (ret)
 			return ret;
-		}
 
 		i++;
 	}
@@ -230,8 +223,10 @@ static int meson_card_parse_of_optional(struct snd_soc_card *card,
 					int (*func)(struct snd_soc_card *c,
 						    const char *p))
 {
+	struct device *dev = card->dev;
+
 	/* If property is not provided, don't fail ... */
-	if (!of_property_present(card->dev->of_node, propname))
+	if (!of_property_present(dev->of_node, propname))
 		return 0;
 
 	/* ... but do fail if it is provided and the parsing fails */

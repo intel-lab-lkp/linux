@@ -451,10 +451,10 @@
 	};
 
 	pinctrl_i2c1_gpio: i2c1_gpio {
-                pinmux = <PIN_PD19__GPIO>,
-                         <PIN_PD20__GPIO>;
-                bias-disable;
-        };
+		pinmux = <PIN_PD19__GPIO>,
+			 <PIN_PD20__GPIO>;
+		bias-disable;
+	};
 
 	pinctrl_key_gpio_default: key_gpio_default {
 		pinmux = <PIN_PD0__GPIO>;
@@ -714,7 +714,7 @@
 		compatible = "jedec,spi-nor";
 		reg = <0>;
 		spi-max-frequency = <104000000>;
-		spi-cs-setup-ns = <7>;
+		spi-cs-setup-delay-ns = <7>;
 		spi-tx-bus-width = <4>;
 		spi-rx-bus-width = <4>;
 		m25p,fast-read;

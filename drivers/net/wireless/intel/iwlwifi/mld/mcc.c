@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2024-2025 Intel Corporation
+ * Copyright (C) 2024-2026 Intel Corporation
  */
 
 #include <net/cfg80211.h>
@@ -15,12 +15,18 @@
 
 /* It is the caller's responsibility to free the pointer returned here */
 static struct iwl_mcc_update_resp_v8 *
-iwl_mld_parse_mcc_update_resp_v8(const struct iwl_rx_packet *pkt)
+iwl_mld_copy_mcc_resp(const struct iwl_rx_packet *pkt)
 {
 	const struct iwl_mcc_update_resp_v8 *mcc_resp_v8 = (const void *)pkt->data;
-	int n_channels = __le32_to_cpu(mcc_resp_v8->n_channels);
 	struct iwl_mcc_update_resp_v8 *resp_cp;
-	int notif_len = struct_size(resp_cp, channels, n_channels);
+	int n_channels;
+	int notif_len;
+
+	if (iwl_rx_packet_payload_len(pkt) < sizeof(*mcc_resp_v8))
+		return ERR_PTR(-EINVAL);
+
+	n_channels = __le32_to_cpu(mcc_resp_v8->n_channels);
+	notif_len = struct_size(resp_cp, channels, n_channels);
 
 	if (iwl_rx_packet_payload_len(pkt) != notif_len)
 		return ERR_PTR(-EINVAL);
@@ -34,41 +40,9 @@ iwl_mld_parse_mcc_update_resp_v8(const struct iwl_rx_packet *pkt)
 
 /* It is the caller's responsibility to free the pointer returned here */
 static struct iwl_mcc_update_resp_v8 *
-iwl_mld_parse_mcc_update_resp_v5_v6(const struct iwl_rx_packet *pkt)
-{
-	const struct iwl_mcc_update_resp_v4 *mcc_resp_v4 = (const void *)pkt->data;
-	struct iwl_mcc_update_resp_v8 *resp_cp;
-	int n_channels = __le32_to_cpu(mcc_resp_v4->n_channels);
-	int resp_len;
-
-	if (iwl_rx_packet_payload_len(pkt) !=
-	    struct_size(mcc_resp_v4, channels, n_channels))
-		return ERR_PTR(-EINVAL);
-
-	resp_len = struct_size(resp_cp, channels, n_channels);
-	resp_cp = kzalloc(resp_len, GFP_KERNEL);
-	if (!resp_cp)
-		return ERR_PTR(-ENOMEM);
-
-	resp_cp->status = mcc_resp_v4->status;
-	resp_cp->mcc = mcc_resp_v4->mcc;
-	resp_cp->cap = cpu_to_le32(le16_to_cpu(mcc_resp_v4->cap));
-	resp_cp->source_id = mcc_resp_v4->source_id;
-	resp_cp->geo_info = mcc_resp_v4->geo_info;
-	resp_cp->n_channels = mcc_resp_v4->n_channels;
-	memcpy(resp_cp->channels, mcc_resp_v4->channels,
-	       n_channels * sizeof(__le32));
-
-	return resp_cp;
-}
-
-/* It is the caller's responsibility to free the pointer returned here */
-static struct iwl_mcc_update_resp_v8 *
 iwl_mld_update_mcc(struct iwl_mld *mld, const char *alpha2,
 		   enum iwl_mcc_source src_id)
 {
-	int resp_ver = iwl_fw_lookup_notif_ver(mld->fw, LONG_GROUP,
-					       MCC_UPDATE_CMD, 0);
 	struct iwl_mcc_update_cmd mcc_update_cmd = {
 		.mcc = cpu_to_le16(alpha2[0] << 8 | alpha2[1]),
 		.source_id = (u8)src_id,
@@ -93,23 +67,7 @@ iwl_mld_update_mcc(struct iwl_mld *mld, const char *alpha2,
 
 	pkt = cmd.resp_pkt;
 
-	/* For Wifi-7 radios, we get version 8
-	 * For Wifi-6E radios, we get version 6
-	 * For Wifi-6 radios, we get version 5, but 5, 6, and 4 are compatible.
-	 */
-	switch (resp_ver) {
-	case 5:
-	case 6:
-		resp_cp = iwl_mld_parse_mcc_update_resp_v5_v6(pkt);
-		break;
-	case 8:
-		resp_cp = iwl_mld_parse_mcc_update_resp_v8(pkt);
-		break;
-	default:
-		IWL_FW_CHECK_FAILED(mld, "Unknown MCC_UPDATE_CMD version %d\n", resp_ver);
-		resp_cp = ERR_PTR(-EINVAL);
-	}
-
+	resp_cp = iwl_mld_copy_mcc_resp(pkt);
 	if (IS_ERR(resp_cp))
 		goto exit;
 
@@ -137,6 +95,8 @@ iwl_mld_get_regdomain(struct iwl_mld *mld,
 	struct iwl_mcc_update_resp_v8 *resp;
 	u8 resp_ver = iwl_fw_lookup_notif_ver(mld->fw, IWL_ALWAYS_LONG_GROUP,
 					      MCC_UPDATE_CMD, 0);
+	enum iwl_puncturing_status puncturing_status;
+	u16 mcc;
 
 	IWL_DEBUG_LAR(mld, "Getting regdomain data for %s from FW\n", alpha2);
 
@@ -158,12 +118,13 @@ iwl_mld_get_regdomain(struct iwl_mld *mld,
 	}
 	IWL_DEBUG_LAR(mld, "MCC update response version: %d\n", resp_ver);
 
+	mcc = le16_to_cpu(resp->mcc);
 	regd = iwl_parse_nvm_mcc_info(mld->trans,
 				      __le32_to_cpu(resp->n_channels),
-				      resp->channels,
-				      __le16_to_cpu(resp->mcc),
+				      resp->channels, mcc,
 				      __le16_to_cpu(resp->geo_info),
-				      le32_to_cpu(resp->cap), resp_ver);
+				      le32_to_cpu(resp->cap), resp_ver,
+				      &puncturing_status);
 
 	if (IS_ERR(regd)) {
 		IWL_DEBUG_LAR(mld, "Could not get parse update from FW %ld\n",
@@ -177,11 +138,31 @@ iwl_mld_get_regdomain(struct iwl_mld *mld,
 
 	mld->mcc_src = resp->source_id;
 
-	if (!iwl_puncturing_is_allowed_in_bios(mld->bios_enable_puncturing,
-					       le16_to_cpu(resp->mcc)))
+	if (puncturing_status == IWL_PUNCTURING_STATUS_ENABLED)
+		__clear_bit(IEEE80211_HW_DISALLOW_PUNCTURING,
+			    mld->hw->flags);
+	else if (puncturing_status == IWL_PUNCTURING_STATUS_DISABLED)
 		ieee80211_hw_set(mld->hw, DISALLOW_PUNCTURING);
-	else
-		__clear_bit(IEEE80211_HW_DISALLOW_PUNCTURING, mld->hw->flags);
+
+	if (resp_ver >= 10)
+		goto out;
+
+	/* FM follows BIOS/MCC policy, WH disallows puncturing only in US/CA. */
+	if (CSR_HW_RFID_TYPE(mld->trans->info.hw_rf_id) == IWL_CFG_RF_TYPE_FM) {
+		if (!iwl_puncturing_is_allowed_in_bios(mld->fwrt.bios_puncturing,
+						       mcc))
+			ieee80211_hw_set(mld->hw, DISALLOW_PUNCTURING);
+		else
+			__clear_bit(IEEE80211_HW_DISALLOW_PUNCTURING,
+				    mld->hw->flags);
+	} else if (CSR_HW_RFID_TYPE(mld->trans->info.hw_rf_id) ==
+		   IWL_CFG_RF_TYPE_WH) {
+		if (mcc == IWL_MCC_US || mcc == IWL_MCC_CANADA)
+			ieee80211_hw_set(mld->hw, DISALLOW_PUNCTURING);
+		else
+			__clear_bit(IEEE80211_HW_DISALLOW_PUNCTURING,
+				    mld->hw->flags);
+	}
 
 out:
 	kfree(resp);

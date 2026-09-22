@@ -2,14 +2,16 @@
 
 //! Kernel errors.
 //!
-//! C header: [`include/uapi/asm-generic/errno-base.h`](srctree/include/uapi/asm-generic/errno-base.h)
+//! C header: [`include/uapi/asm-generic/errno-base.h`](srctree/include/uapi/asm-generic/errno-base.h)\
+//! C header: [`include/uapi/asm-generic/errno.h`](srctree/include/uapi/asm-generic/errno.h)\
+//! C header: [`include/linux/errno.h`](srctree/include/linux/errno.h)
 
 use crate::{
     alloc::{layout::LayoutError, AllocError},
+    fmt,
     str::CStr,
 };
 
-use core::fmt;
 use core::num::NonZeroI32;
 use core::num::TryFromIntError;
 use core::str::Utf8Error;
@@ -23,13 +25,12 @@ pub mod code {
             #[doc = $doc]
             )*
             pub const $err: super::Error =
-                match super::Error::try_from_errno(-(crate::bindings::$err as i32)) {
-                    Some(err) => err,
-                    None => panic!("Invalid errno in `declare_err!`"),
-                };
+                super::Error::try_from_errno(-(crate::bindings::$err as i32))
+                    .expect("Invalid errno in `declare_err!`");
         };
     }
 
+    // From `include/uapi/asm-generic/errno-base.h`.
     declare_err!(EPERM, "Operation not permitted.");
     declare_err!(ENOENT, "No such file or directory.");
     declare_err!(ESRCH, "No such process.");
@@ -64,7 +65,110 @@ pub mod code {
     declare_err!(EPIPE, "Broken pipe.");
     declare_err!(EDOM, "Math argument out of domain of func.");
     declare_err!(ERANGE, "Math result not representable.");
+
+    // From `include/uapi/asm-generic/errno.h`.
+    declare_err!(EDEADLK, "Resource deadlock would occur.");
+    declare_err!(ENAMETOOLONG, "File name too long.");
+    declare_err!(ENOLCK, "No record locks available.");
+    declare_err!(ENOSYS, "Invalid system call number.");
+    declare_err!(ENOTEMPTY, "Directory not empty.");
+    declare_err!(ELOOP, "Too many symbolic links encountered.");
+    declare_err!(ENOMSG, "No message of desired type.");
+    declare_err!(EIDRM, "Identifier removed.");
+    declare_err!(ECHRNG, "Channel number out of range.");
+    declare_err!(EL2NSYNC, "Level 2 not synchronized.");
+    declare_err!(EL3HLT, "Level 3 halted.");
+    declare_err!(EL3RST, "Level 3 reset.");
+    declare_err!(ELNRNG, "Link number out of range.");
+    declare_err!(EUNATCH, "Protocol driver not attached.");
+    declare_err!(ENOCSI, "No CSI structure available.");
+    declare_err!(EL2HLT, "Level 2 halted.");
+    declare_err!(EBADE, "Invalid exchange.");
+    declare_err!(EBADR, "Invalid request descriptor.");
+    declare_err!(EXFULL, "Exchange full.");
+    declare_err!(ENOANO, "No anode.");
+    declare_err!(EBADRQC, "Invalid request code.");
+    declare_err!(EBADSLT, "Invalid slot.");
+    declare_err!(EBFONT, "Bad font file format.");
+    declare_err!(ENOSTR, "Device not a stream.");
+    declare_err!(ENODATA, "No data available.");
+    declare_err!(ETIME, "Timer expired.");
+    declare_err!(ENOSR, "Out of streams resources.");
+    declare_err!(ENONET, "Machine is not on the network.");
+    declare_err!(ENOPKG, "Package not installed.");
+    declare_err!(EREMOTE, "Object is remote.");
+    declare_err!(ENOLINK, "Link has been severed.");
+    declare_err!(EADV, "Advertise error.");
+    declare_err!(ESRMNT, "Srmount error.");
+    declare_err!(ECOMM, "Communication error on send.");
+    declare_err!(EPROTO, "Protocol error.");
+    declare_err!(EMULTIHOP, "Multihop attempted.");
+    declare_err!(EDOTDOT, "RFS specific error.");
+    declare_err!(EBADMSG, "Not a data message.");
+    declare_err!(EFSBADCRC, "Bad CRC detected.");
     declare_err!(EOVERFLOW, "Value too large for defined data type.");
+    declare_err!(ENOTUNIQ, "Name not unique on network.");
+    declare_err!(EBADFD, "File descriptor in bad state.");
+    declare_err!(EREMCHG, "Remote address changed.");
+    declare_err!(ELIBACC, "Can not access a needed shared library.");
+    declare_err!(ELIBBAD, "Accessing a corrupted shared library.");
+    declare_err!(ELIBSCN, ".lib section in a.out corrupted.");
+    declare_err!(ELIBMAX, "Attempting to link in too many shared libraries.");
+    declare_err!(ELIBEXEC, "Cannot exec a shared library directly.");
+    declare_err!(EILSEQ, "Illegal byte sequence.");
+    declare_err!(ERESTART, "Interrupted system call should be restarted.");
+    declare_err!(ESTRPIPE, "Streams pipe error.");
+    declare_err!(EUSERS, "Too many users.");
+    declare_err!(ENOTSOCK, "Socket operation on non-socket.");
+    declare_err!(EDESTADDRREQ, "Destination address required.");
+    declare_err!(EMSGSIZE, "Message too long.");
+    declare_err!(EPROTOTYPE, "Protocol wrong type for socket.");
+    declare_err!(ENOPROTOOPT, "Protocol not available.");
+    declare_err!(EPROTONOSUPPORT, "Protocol not supported.");
+    declare_err!(ESOCKTNOSUPPORT, "Socket type not supported.");
+    declare_err!(EOPNOTSUPP, "Operation not supported on transport endpoint.");
+    declare_err!(EPFNOSUPPORT, "Protocol family not supported.");
+    declare_err!(EAFNOSUPPORT, "Address family not supported by protocol.");
+    declare_err!(EADDRINUSE, "Address already in use.");
+    declare_err!(EADDRNOTAVAIL, "Cannot assign requested address.");
+    declare_err!(ENETDOWN, "Network is down.");
+    declare_err!(ENETUNREACH, "Network is unreachable.");
+    declare_err!(ENETRESET, "Network dropped connection because of reset.");
+    declare_err!(ECONNABORTED, "Software caused connection abort.");
+    declare_err!(ECONNRESET, "Connection reset by peer.");
+    declare_err!(ENOBUFS, "No buffer space available.");
+    declare_err!(EISCONN, "Transport endpoint is already connected.");
+    declare_err!(ENOTCONN, "Transport endpoint is not connected.");
+    declare_err!(ESHUTDOWN, "Cannot send after transport endpoint shutdown.");
+    declare_err!(ETOOMANYREFS, "Too many references: cannot splice.");
+    declare_err!(ETIMEDOUT, "Connection timed out.");
+    declare_err!(ECONNREFUSED, "Connection refused.");
+    declare_err!(EHOSTDOWN, "Host is down.");
+    declare_err!(EHOSTUNREACH, "No route to host.");
+    declare_err!(EALREADY, "Operation already in progress.");
+    declare_err!(EINPROGRESS, "Operation now in progress.");
+    declare_err!(ESTALE, "Stale file handle.");
+    declare_err!(EUCLEAN, "Structure needs cleaning.");
+    declare_err!(EFSCORRUPTED, "Filesystem is corrupted.");
+    declare_err!(ENOTNAM, "Not a XENIX named type file.");
+    declare_err!(ENAVAIL, "No XENIX semaphores available.");
+    declare_err!(EISNAM, "Is a named type file.");
+    declare_err!(EREMOTEIO, "Remote I/O error.");
+    declare_err!(EDQUOT, "Quota exceeded.");
+    declare_err!(ENOMEDIUM, "No medium found.");
+    declare_err!(EMEDIUMTYPE, "Wrong medium type.");
+    declare_err!(ECANCELED, "Operation Canceled.");
+    declare_err!(ENOKEY, "Required key not available.");
+    declare_err!(EKEYEXPIRED, "Key has expired.");
+    declare_err!(EKEYREVOKED, "Key has been revoked.");
+    declare_err!(EKEYREJECTED, "Key was rejected by service.");
+    declare_err!(EOWNERDEAD, "Owner died.");
+    declare_err!(ENOTRECOVERABLE, "State not recoverable.");
+    declare_err!(ERFKILL, "Operation not possible due to RF-kill.");
+    declare_err!(EHWPOISON, "Memory page has hardware error.");
+    declare_err!(EFTYPE, "Wrong file type for the intended operation.");
+
+    // From `include/linux/errno.h`.
     declare_err!(ERESTARTSYS, "Restart the system call.");
     declare_err!(ERESTARTNOINTR, "System call was interrupted by a signal and will be restarted.");
     declare_err!(ERESTARTNOHAND, "Restart if no handler.");
@@ -100,8 +204,23 @@ pub struct Error(NonZeroI32);
 impl Error {
     /// Creates an [`Error`] from a kernel error code.
     ///
-    /// It is a bug to pass an out-of-range `errno`. `EINVAL` would
-    /// be returned in such a case.
+    /// `errno` must be within error code range (i.e. `>= -MAX_ERRNO && < 0`).
+    ///
+    /// It is a bug to pass an out-of-range `errno`. [`code::EINVAL`] is returned in such a case.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// assert_eq!(Error::from_errno(-1), EPERM);
+    /// assert_eq!(Error::from_errno(-2), ENOENT);
+    /// ```
+    ///
+    /// The following calls are considered a bug:
+    ///
+    /// ```
+    /// assert_eq!(Error::from_errno(0), EINVAL);
+    /// assert_eq!(Error::from_errno(-1000000), EINVAL);
+    /// ```
     pub fn from_errno(errno: crate::ffi::c_int) -> Error {
         if let Some(error) = Self::try_from_errno(errno) {
             error
@@ -153,17 +272,19 @@ impl Error {
     /// Returns the error encoded as a pointer.
     pub fn to_ptr<T>(self) -> *mut T {
         // SAFETY: `self.0` is a valid error due to its invariant.
-        unsafe { bindings::ERR_PTR(self.0.get() as _) as *mut _ }
+        unsafe { bindings::ERR_PTR(self.0.get() as crate::ffi::c_long).cast() }
     }
 
     /// Returns a string representing the error, if one exists.
-    #[cfg(not(any(test, testlib)))]
+    #[cfg(not(testlib))]
     pub fn name(&self) -> Option<&'static CStr> {
         // SAFETY: Just an FFI call, there are no extra safety requirements.
         let ptr = unsafe { bindings::errname(-self.0.get()) };
         if ptr.is_null() {
             None
         } else {
+            use crate::str::CStrExt as _;
+
             // SAFETY: The string returned by `errname` is static and `NUL`-terminated.
             Some(unsafe { CStr::from_char_ptr(ptr) })
         }
@@ -174,7 +295,7 @@ impl Error {
     /// When `testlib` is configured, this always returns `None` to avoid the dependency on a
     /// kernel function so that tests that use this (e.g., by calling [`Result::unwrap`]) can still
     /// run in userspace.
-    #[cfg(any(test, testlib))]
+    #[cfg(testlib)]
     pub fn name(&self) -> Option<&'static CStr> {
         None
     }
@@ -188,7 +309,7 @@ impl fmt::Debug for Error {
             Some(name) => f
                 .debug_tuple(
                     // SAFETY: These strings are ASCII-only.
-                    unsafe { core::str::from_utf8_unchecked(name) },
+                    unsafe { core::str::from_utf8_unchecked(name.to_bytes()) },
                 )
                 .finish(),
         }
@@ -196,36 +317,42 @@ impl fmt::Debug for Error {
 }
 
 impl From<AllocError> for Error {
+    #[inline]
     fn from(_: AllocError) -> Error {
         code::ENOMEM
     }
 }
 
 impl From<TryFromIntError> for Error {
+    #[inline]
     fn from(_: TryFromIntError) -> Error {
         code::EINVAL
     }
 }
 
 impl From<Utf8Error> for Error {
+    #[inline]
     fn from(_: Utf8Error) -> Error {
         code::EINVAL
     }
 }
 
 impl From<LayoutError> for Error {
+    #[inline]
     fn from(_: LayoutError) -> Error {
         code::ENOMEM
     }
 }
 
-impl From<core::fmt::Error> for Error {
-    fn from(_: core::fmt::Error) -> Error {
+impl From<fmt::Error> for Error {
+    #[inline]
+    fn from(_: fmt::Error) -> Error {
         code::EINVAL
     }
 }
 
 impl From<core::convert::Infallible> for Error {
+    #[inline]
     fn from(e: core::convert::Infallible) -> Error {
         match e {}
     }
@@ -374,8 +501,43 @@ impl From<core::convert::Infallible> for Error {
 /// [Rust documentation]: https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html
 pub type Result<T = (), E = Error> = core::result::Result<T, E>;
 
-/// Converts an integer as returned by a C kernel function to an error if it's negative, and
-/// `Ok(())` otherwise.
+/// Converts an integer as returned by a C kernel function to a [`Result`].
+///
+/// If the integer is negative, an [`Err`] with an [`Error`] as given by [`Error::from_errno`] is
+/// returned. This means the integer must be `>= -MAX_ERRNO`.
+///
+/// Otherwise, it returns [`Ok`].
+///
+/// It is a bug to pass an out-of-range negative integer. `Err(EINVAL)` is returned in such a case.
+///
+/// # Examples
+///
+/// This function may be used to easily perform early returns with the [`?`] operator when working
+/// with C APIs within Rust abstractions:
+///
+/// ```
+/// # use kernel::error::to_result;
+/// # mod bindings {
+/// #     #![expect(clippy::missing_safety_doc)]
+/// #     use kernel::prelude::*;
+/// #     pub(super) unsafe fn f1() -> c_int { 0 }
+/// #     pub(super) unsafe fn f2() -> c_int { EINVAL.to_errno() }
+/// # }
+/// fn f() -> Result {
+///     // SAFETY: ...
+///     to_result(unsafe { bindings::f1() })?;
+///
+///     // SAFETY: ...
+///     to_result(unsafe { bindings::f2() })?;
+///
+///     // ...
+///
+///     Ok(())
+/// }
+/// # assert_eq!(f(), Err(EINVAL));
+/// ```
+///
+/// [`?`]: https://doc.rust-lang.org/reference/expressions/operator-expr.html#the-question-mark-operator
 pub fn to_result(err: crate::ffi::c_int) -> Result {
     if err < 0 {
         Err(Error::from_errno(err))
@@ -391,6 +553,9 @@ pub fn to_result(err: crate::ffi::c_int) -> Result {
 /// for errors. This function performs the check and converts the "error pointer"
 /// to a normal pointer in an idiomatic fashion.
 ///
+/// Note that a `NULL` pointer is not considered an error pointer, and is returned
+/// as-is, wrapped in [`Ok`].
+///
 /// # Examples
 ///
 /// ```ignore
@@ -404,6 +569,34 @@ pub fn to_result(err: crate::ffi::c_int) -> Result {
 ///     // on `index`.
 ///     from_err_ptr(unsafe { bindings::devm_platform_ioremap_resource(pdev.to_ptr(), index) })
 /// }
+/// ```
+///
+/// ```
+/// # use kernel::error::from_err_ptr;
+/// # mod bindings {
+/// #     #![expect(clippy::missing_safety_doc)]
+/// #     use kernel::prelude::*;
+/// #     pub(super) unsafe fn einval_err_ptr() -> *mut kernel::ffi::c_void {
+/// #         EINVAL.to_ptr()
+/// #     }
+/// #     pub(super) unsafe fn null_ptr() -> *mut kernel::ffi::c_void {
+/// #         core::ptr::null_mut()
+/// #     }
+/// #     pub(super) unsafe fn non_null_ptr() -> *mut kernel::ffi::c_void {
+/// #         0x1234 as *mut kernel::ffi::c_void
+/// #     }
+/// # }
+/// // SAFETY: ...
+/// let einval_err = from_err_ptr(unsafe { bindings::einval_err_ptr() });
+/// assert_eq!(einval_err, Err(EINVAL));
+///
+/// // SAFETY: ...
+/// let null_ok = from_err_ptr(unsafe { bindings::null_ptr() });
+/// assert_eq!(null_ok, Ok(core::ptr::null_mut()));
+///
+/// // SAFETY: ...
+/// let non_null = from_err_ptr(unsafe { bindings::non_null_ptr() }).unwrap();
+/// assert_ne!(non_null, core::ptr::null_mut());
 /// ```
 pub fn from_err_ptr<T>(ptr: *mut T) -> Result<*mut T> {
     // CAST: Casting a pointer to `*const crate::ffi::c_void` is always valid.

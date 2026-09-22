@@ -17,6 +17,7 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
+#include <linux/string_choices.h>
 
 static LIST_HEAD(container_list);
 static DEFINE_MUTEX(container_list_lock);
@@ -116,7 +117,7 @@ enclosure_register(struct device *dev, const char *name, int components,
 		   struct enclosure_component_callbacks *cb)
 {
 	struct enclosure_device *edev =
-		kzalloc(struct_size(edev, component, components), GFP_KERNEL);
+		kzalloc_flex(*edev, component, components);
 	int err, i;
 
 	BUG_ON(!cb);
@@ -183,8 +184,8 @@ EXPORT_SYMBOL_GPL(enclosure_unregister);
 
 static void enclosure_link_name(struct enclosure_component *cdev, char *name)
 {
-	strcpy(name, "enclosure_device:");
-	strcat(name, dev_name(&cdev->cdev));
+	snprintf(name, ENCLOSURE_NAME_SIZE, "enclosure_device:%s",
+		 dev_name(&cdev->cdev));
 }
 
 static void enclosure_remove_links(struct enclosure_component *cdev)
@@ -592,7 +593,7 @@ static ssize_t get_component_power_status(struct device *cdev,
 	if (ecomp->power_status == -1)
 		return (edev->cb->get_power_status) ? -EIO : -ENOTTY;
 
-	return sysfs_emit(buf, "%s\n", ecomp->power_status ? "on" : "off");
+	return sysfs_emit(buf, "%s\n", str_on_off(ecomp->power_status));
 }
 
 static ssize_t set_component_power_status(struct device *cdev,

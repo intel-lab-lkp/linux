@@ -14,6 +14,7 @@ struct drm_connector;
 struct drm_connector_state;
 struct drm_display_mode;
 struct drm_edid;
+struct intel_atomic_state;
 struct intel_connector;
 struct intel_crtc_state;
 struct intel_display;
@@ -23,6 +24,8 @@ void intel_panel_init_alloc(struct intel_connector *connector);
 int intel_panel_init(struct intel_connector *connector,
 		     const struct drm_edid *fixed_edid);
 void intel_panel_fini(struct intel_connector *connector);
+int intel_panel_register(struct intel_connector *connector);
+void intel_panel_unregister(struct intel_connector *connector);
 enum drm_connector_status
 intel_panel_detect(struct drm_connector *connector, bool force);
 bool intel_panel_use_ssc(struct intel_display *display);
@@ -41,14 +44,20 @@ int intel_panel_get_modes(struct intel_connector *connector);
 enum drrs_type intel_panel_drrs_type(struct intel_connector *connector);
 enum drm_mode_status
 intel_panel_mode_valid(struct intel_connector *connector,
-		       const struct drm_display_mode *mode);
-int intel_panel_compute_config(struct intel_connector *connector,
-			       struct drm_display_mode *adjusted_mode);
+		       const struct drm_display_mode *mode,
+		       int *target_clock);
+int intel_panel_compute_config(struct intel_atomic_state *state,
+			       struct intel_crtc_state *crtc_state,
+			       struct intel_connector *connector);
 void intel_panel_add_edid_fixed_modes(struct intel_connector *connector,
 				      bool use_alt_fixed_modes);
 void intel_panel_add_vbt_lfp_fixed_mode(struct intel_connector *connector);
 void intel_panel_add_vbt_sdvo_fixed_mode(struct intel_connector *connector);
 void intel_panel_add_encoder_fixed_mode(struct intel_connector *connector,
 					struct intel_encoder *encoder);
+
+void intel_panel_prepare(const struct intel_crtc_state *crtc_state,
+			 const struct drm_connector_state *conn_state);
+void intel_panel_unprepare(const struct drm_connector_state *old_conn_state);
 
 #endif /* __INTEL_PANEL_H__ */

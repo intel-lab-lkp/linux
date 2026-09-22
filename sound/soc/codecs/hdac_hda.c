@@ -405,12 +405,10 @@ static int hdac_hda_codec_probe(struct snd_soc_component *component)
 {
 	struct hdac_hda_priv *hda_pvt =
 			snd_soc_component_get_drvdata(component);
-	struct snd_soc_dapm_context *dapm =
-			snd_soc_component_get_dapm(component);
 	struct hdac_device *hdev = &hda_pvt->codec->core;
 	struct hda_codec *hcodec = hda_pvt->codec;
+	struct hda_codec_driver *driver = hda_codec_to_driver(hcodec);
 	struct hdac_ext_link *hlink;
-	hda_codec_patch_t patch;
 	int ret;
 
 	hlink = snd_hdac_ext_bus_get_hlink_by_name(hdev->bus, dev_name(&hdev->dev));
@@ -439,7 +437,7 @@ static int hdac_hda_codec_probe(struct snd_soc_component *component)
 
 #ifdef CONFIG_SND_HDA_PATCH_LOADER
 	if (loadable_patch[hda_pvt->dev_index] && *loadable_patch[hda_pvt->dev_index]) {
-		const struct firmware *fw;
+		const struct firmware *fw __free(firmware) = NULL;
 
 		dev_info(&hdev->dev, "Applying patch firmware '%s'\n",
 			 loadable_patch[hda_pvt->dev_index]);
@@ -453,7 +451,6 @@ static int hdac_hda_codec_probe(struct snd_soc_component *component)
 				dev_err(&hdev->dev, "%s: failed to load hda patch %d\n", __func__, ret);
 				goto error_no_pm;
 			}
-			release_firmware(fw);
 		}
 	}
 #endif
@@ -470,7 +467,7 @@ static int hdac_hda_codec_probe(struct snd_soc_component *component)
 	 */
 	pm_runtime_get_noresume(&hdev->dev);
 
-	hcodec->bus->card = dapm->card->snd_card;
+	hcodec->bus->card = component->card->snd_card;
 
 	ret = snd_hda_codec_set_name(hcodec, hcodec->preset->name);
 	if (ret < 0) {
@@ -484,15 +481,15 @@ static int hdac_hda_codec_probe(struct snd_soc_component *component)
 		goto error_pm;
 	}
 
-	patch = (hda_codec_patch_t)hcodec->preset->driver_data;
-	if (patch) {
-		ret = patch(hcodec);
-		if (ret < 0) {
-			dev_err(&hdev->dev, "%s: patch failed %d\n", __func__, ret);
-			goto error_regmap;
-		}
-	} else {
-		dev_dbg(&hdev->dev, "%s: no patch file found\n", __func__);
+	if (WARN_ON(!(driver->ops && driver->ops->probe))) {
+		ret = -EINVAL;
+		goto error_regmap;
+	}
+
+	ret = driver->ops->probe(hcodec, hcodec->preset);
+	if (ret < 0) {
+		dev_err(&hdev->dev, "%s: probe failed %d\n", __func__, ret);
+		goto error_regmap;
 	}
 
 	ret = snd_hda_codec_parse_pcms(hcodec);
@@ -531,8 +528,8 @@ static int hdac_hda_codec_probe(struct snd_soc_component *component)
 	return 0;
 
 error_patch:
-	if (hcodec->patch_ops.free)
-		hcodec->patch_ops.free(hcodec);
+	if (driver->ops->remove)
+		driver->ops->remove(hcodec);
 error_regmap:
 	snd_hdac_regmap_exit(hdev);
 error_pm:
@@ -548,6 +545,7 @@ static void hdac_hda_codec_remove(struct snd_soc_component *component)
 		      snd_soc_component_get_drvdata(component);
 	struct hdac_device *hdev = &hda_pvt->codec->core;
 	struct hda_codec *codec = hda_pvt->codec;
+	struct hda_codec_driver *driver = hda_codec_to_driver(codec);
 	struct hdac_ext_link *hlink = NULL;
 
 	hlink = snd_hdac_ext_bus_get_hlink_by_name(hdev->bus, dev_name(&hdev->dev));
@@ -559,8 +557,8 @@ static void hdac_hda_codec_remove(struct snd_soc_component *component)
 	pm_runtime_disable(&hdev->dev);
 	snd_hdac_ext_bus_link_put(hdev->bus, hlink);
 
-	if (codec->patch_ops.free)
-		codec->patch_ops.free(codec);
+	if (driver->ops->remove)
+		driver->ops->remove(codec);
 
 	snd_hda_codec_cleanup_for_unbind(codec);
 }
@@ -643,10 +641,8 @@ static int hdac_hda_dev_probe(struct hdac_device *hdev)
 						&hdac_hda_codec, hdac_hda_dais,
 						ARRAY_SIZE(hdac_hda_dais));
 
-	if (ret < 0) {
+	if (ret < 0)
 		dev_err(&hdev->dev, "%s: failed to register HDA codec %d\n", __func__, ret);
-		return ret;
-	}
 
 	snd_hdac_ext_bus_link_put(hdev->bus, hlink);
 

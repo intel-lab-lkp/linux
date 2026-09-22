@@ -13,6 +13,7 @@
 #include <linux/netdevice.h>
 #include <linux/net_tstamp.h>
 #include <linux/pci.h>
+#include <linux/timer.h>
 #include <linux/ptp_clock_kernel.h>
 #include <linux/u64_stats_sync.h>
 #include <net/page_pool/helpers.h>
@@ -41,6 +42,7 @@
 
 /* Interval to schedule a stats report update, 20000ms. */
 #define GVE_STATS_REPORT_TIMER_PERIOD	20000
+#define GVE_RX_NAPI_RESCHED_MS 20 /* msecs */
 
 /* Numbers of NIC tx/rx stats in stats report. */
 #define NIC_TX_STATS_REPORT_NUM	0
@@ -58,8 +60,6 @@
 #define GVE_DEFAULT_MIN_RX_RING_SIZE 512
 
 #define GVE_DEFAULT_RX_BUFFER_SIZE 2048
-
-#define GVE_MAX_RX_BUFFER_SIZE 4096
 
 #define GVE_XDP_RX_BUFFER_SIZE_DQO 4096
 
@@ -81,8 +81,6 @@
 
 #define GVE_DEFAULT_HEADER_BUFFER_SIZE 128
 
-#define DQO_QPL_DEFAULT_TX_PAGES 512
-
 /* Maximum TSO size supported on DQO */
 #define GVE_DQO_TX_MAX	0x3FFFF
 
@@ -99,6 +97,8 @@
  * Value is set big enough to post at least 3 64K LRO packet via 2K buffer to NIC.
  */
 #define GVE_DQO_QPL_ONDEMAND_ALLOC_THRESHOLD 96
+
+#define GVE_DQO_RX_HWTSTAMP_VALID 0x1
 
 /* Each slot in the desc ring has a 1:1 mapping to a slot in the data ring */
 struct gve_rx_desc_queue {
@@ -190,6 +190,9 @@ struct gve_rx_buf_state_dqo {
 	/* The page posted to HW. */
 	struct gve_rx_slot_page_info page_info;
 
+	/* XSK buffer */
+	struct xdp_buff *xsk_buff;
+
 	/* The DMA address corresponding to `page_info`. */
 	dma_addr_t addr;
 
@@ -200,6 +203,13 @@ struct gve_rx_buf_state_dqo {
 
 	/* Linked list index to next element in the list, or -1 if none */
 	s16 next;
+};
+
+/* Wrapper for XDP Rx metadata */
+struct gve_xdp_buff {
+	struct xdp_buff xdp;
+	struct gve_priv *gve;
+	const struct gve_rx_compl_desc_dqo *compl_desc;
 };
 
 /* `head` and `tail` are indices into an array, or -1 if empty. */
@@ -331,9 +341,9 @@ struct gve_rx_ring {
 
 	/* XDP stuff */
 	struct xdp_rxq_info xdp_rxq;
-	struct xdp_rxq_info xsk_rxq;
 	struct xsk_buff_pool *xsk_pool;
 	struct page_frag_cache page_cache; /* Page cache to allocate XDP frames */
+	struct timer_list starvation_timer; /* for queue starvation recovery */
 };
 
 /* A TX desc ring entry */
@@ -400,11 +410,17 @@ enum gve_packet_state {
 	GVE_PACKET_STATE_PENDING_REINJECT_COMPL,
 	/* No valid completion received within the specified timeout. */
 	GVE_PACKET_STATE_TIMED_OUT_COMPL,
+	/* XSK pending packet has received a packet/reinjection completion, or
+	 * has timed out. At this point, the pending packet can be counted by
+	 * xsk_tx_complete and freed.
+	 */
+	GVE_PACKET_STATE_XSK_COMPLETE,
 };
 
 enum gve_tx_pending_packet_dqo_type {
 	GVE_TX_PENDING_PACKET_DQO_SKB,
-	GVE_TX_PENDING_PACKET_DQO_XDP_FRAME
+	GVE_TX_PENDING_PACKET_DQO_XDP_FRAME,
+	GVE_TX_PENDING_PACKET_DQO_XSK,
 };
 
 struct gve_tx_pending_packet_dqo {
@@ -441,10 +457,10 @@ struct gve_tx_pending_packet_dqo {
 	/* Identifies the current state of the packet as defined in
 	 * `enum gve_packet_state`.
 	 */
-	u8 state : 2;
+	u8 state : 3;
 
 	/* gve_tx_pending_packet_dqo_type */
-	u8 type : 1;
+	u8 type : 2;
 
 	/* If packet is an outstanding miss completion, then the packet is
 	 * freed if the corresponding re-injection completion is not received
@@ -513,6 +529,8 @@ struct gve_tx_ring {
 				/* Cached value of `dqo_compl.free_tx_qpl_buf_cnt` */
 				u32 free_tx_qpl_buf_cnt;
 			};
+
+			atomic_t xsk_reorder_queue_tail;
 		} dqo_tx;
 	};
 
@@ -545,6 +563,9 @@ struct gve_tx_ring {
 
 			/* Last TX ring index fetched by HW */
 			atomic_t hw_tx_head;
+
+			u16 xsk_reorder_queue_head;
+			u16 xsk_reorder_queue_tail;
 
 			/* List to track pending packets which received a miss
 			 * completion but not a corresponding reinjection.
@@ -598,6 +619,8 @@ struct gve_tx_ring {
 
 			struct gve_tx_pending_packet_dqo *pending_packets;
 			s16 num_pending_packets;
+
+			u16 *xsk_reorder_queue;
 
 			u32 complq_mask; /* complq size is complq_mask + 1 */
 
@@ -689,6 +712,7 @@ struct gve_ptype_lut {
 /* Parameters for allocating resources for tx queues */
 struct gve_tx_alloc_rings_cfg {
 	struct gve_tx_queue_config *qcfg;
+	u16 pages_per_qpl;
 
 	u16 num_xdp_rings;
 
@@ -704,6 +728,7 @@ struct gve_rx_alloc_rings_cfg {
 	/* tx config is also needed to determine QPL ids */
 	struct gve_rx_queue_config *qcfg_rx;
 	struct gve_tx_queue_config *qcfg_tx;
+	u16 pages_per_qpl;
 
 	u16 ring_size;
 	u16 packet_buffer_size;
@@ -794,7 +819,8 @@ struct gve_priv {
 	u16 min_rx_desc_cnt;
 	bool modify_ring_size_enabled;
 	bool default_min_ring_size;
-	u16 tx_pages_per_qpl; /* Suggested number of pages per qpl for TX queues by NIC */
+	u16 tx_pages_per_qpl;
+	u16 rx_pages_per_qpl;
 	u64 max_registered_pages;
 	u64 num_registered_pages; /* num pages registered with NIC */
 	struct bpf_prog *xdp_prog; /* XDP BPF program */
@@ -803,7 +829,9 @@ struct gve_priv {
 
 	struct gve_tx_queue_config tx_cfg;
 	struct gve_rx_queue_config rx_cfg;
+	unsigned long *xsk_pools; /* bitmap of RX queues with XSK pools */
 	u32 num_ntfy_blks; /* split between TX and RX so must be even */
+	int numa_node;
 
 	struct gve_registers __iomem *reg_bar0; /* see gve_register.h */
 	__be32 __iomem *db_bar2; /* "array" of doorbells */
@@ -1126,14 +1154,6 @@ static inline u32 gve_rx_start_qpl_id(const struct gve_tx_queue_config *tx_cfg)
 	return gve_get_rx_qpl_id(tx_cfg, 0);
 }
 
-static inline u32 gve_get_rx_pages_per_qpl_dqo(u32 rx_desc_cnt)
-{
-	/* For DQO, page count should be more than ring size for
-	 * out-of-order completions. Set it to two times of ring size.
-	 */
-	return 2 * rx_desc_cnt;
-}
-
 /* Returns the correct dma direction for tx and rx qpls */
 static inline enum dma_data_direction gve_qpl_dma_dir(struct gve_priv *priv,
 						      int id)
@@ -1148,6 +1168,12 @@ static inline bool gve_is_gqi(struct gve_priv *priv)
 {
 	return priv->queue_format == GVE_GQI_RDA_FORMAT ||
 		priv->queue_format == GVE_GQI_QPL_FORMAT;
+}
+
+static inline bool gve_is_dqo(struct gve_priv *priv)
+{
+	return priv->queue_format == GVE_DQO_RDA_FORMAT ||
+	       priv->queue_format == GVE_DQO_QPL_FORMAT;
 }
 
 static inline u32 gve_num_tx_queues(struct gve_priv *priv)
@@ -1174,6 +1200,11 @@ static inline bool gve_supports_xdp_xmit(struct gve_priv *priv)
 	default:
 		return false;
 	}
+}
+
+static inline bool gve_is_clock_enabled(struct gve_priv *priv)
+{
+	return priv->nic_ts_report;
 }
 
 /* gqi napi handler defined in gve_main.c */
@@ -1230,9 +1261,12 @@ void gve_rx_free_rings_gqi(struct gve_priv *priv,
 			   struct gve_rx_alloc_rings_cfg *cfg);
 void gve_rx_start_ring_gqi(struct gve_priv *priv, int idx);
 void gve_rx_stop_ring_gqi(struct gve_priv *priv, int idx);
-u16 gve_get_pkt_buf_size(const struct gve_priv *priv, bool enable_hplit);
 bool gve_header_split_supported(const struct gve_priv *priv);
-int gve_set_hsplit_config(struct gve_priv *priv, u8 tcp_data_split);
+int gve_set_rx_buf_len_config(struct gve_priv *priv, u32 rx_buf_len,
+			      struct netlink_ext_ack *extack,
+			      struct gve_rx_alloc_rings_cfg *rx_alloc_cfg);
+int gve_set_hsplit_config(struct gve_priv *priv, u8 tcp_data_split,
+			  struct gve_rx_alloc_rings_cfg *rx_alloc_cfg);
 /* rx buffer handling */
 int gve_buf_ref_cnt(struct gve_rx_buf_state_dqo *bs);
 void gve_free_page_dqo(struct gve_priv *priv, struct gve_rx_buf_state_dqo *bs,
@@ -1270,6 +1304,9 @@ int gve_reset(struct gve_priv *priv, bool attempt_teardown);
 void gve_get_curr_alloc_cfgs(struct gve_priv *priv,
 			     struct gve_tx_alloc_rings_cfg *tx_alloc_cfg,
 			     struct gve_rx_alloc_rings_cfg *rx_alloc_cfg);
+void gve_update_num_qpl_pages(struct gve_priv *priv,
+			      struct gve_rx_alloc_rings_cfg *rx_alloc_cfg,
+			      struct gve_tx_alloc_rings_cfg *tx_alloc_cfg);
 int gve_adjust_config(struct gve_priv *priv,
 		      struct gve_tx_alloc_rings_cfg *tx_alloc_cfg,
 		      struct gve_rx_alloc_rings_cfg *rx_alloc_cfg);

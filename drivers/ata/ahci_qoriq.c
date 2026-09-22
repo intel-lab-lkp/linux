@@ -80,7 +80,7 @@ static const struct of_device_id ahci_qoriq_of_match[] = {
 MODULE_DEVICE_TABLE(of, ahci_qoriq_of_match);
 
 static const struct acpi_device_id ahci_qoriq_acpi_match[] = {
-	{"NXP0004", .driver_data = (kernel_ulong_t)AHCI_LX2160A},
+	{ .id = "NXP0004", .driver_data = (kernel_ulong_t)AHCI_LX2160A },
 	{ }
 };
 MODULE_DEVICE_TABLE(acpi, ahci_qoriq_acpi_match);
@@ -146,8 +146,8 @@ static int ahci_qoriq_hardreset(struct ata_link *link, unsigned int *class,
 }
 
 static struct ata_port_operations ahci_qoriq_ops = {
-	.inherits	= &ahci_ops,
-	.hardreset	= ahci_qoriq_hardreset,
+	.inherits		= &ahci_ops,
+	.reset.hardreset	= ahci_qoriq_hardreset,
 };
 
 static const struct ata_port_info ahci_qoriq_port_info = {

@@ -5,6 +5,7 @@
  * Copyright 2020 Google LLC
  */
 
+#include <drm/drm_atomic_state_helper.h>
 #include <drm/drm_bridge.h>
 #include <drm/drm_print.h>
 #include <linux/i2c.h>
@@ -92,6 +93,9 @@ static bool cros_ec_anx7688_bridge_mode_fixup(struct drm_bridge *bridge,
 }
 
 static const struct drm_bridge_funcs cros_ec_anx7688_bridge_funcs = {
+	.atomic_create_state = drm_atomic_helper_bridge_create_state,
+	.atomic_destroy_state = drm_atomic_helper_bridge_destroy_state,
+	.atomic_duplicate_state = drm_atomic_helper_bridge_duplicate_state,
 	.mode_fixup = cros_ec_anx7688_bridge_mode_fixup,
 };
 
@@ -103,9 +107,10 @@ static int cros_ec_anx7688_bridge_probe(struct i2c_client *client)
 	u8 buffer[4];
 	int ret;
 
-	anx7688 = devm_kzalloc(dev, sizeof(*anx7688), GFP_KERNEL);
-	if (!anx7688)
-		return -ENOMEM;
+	anx7688 = devm_drm_bridge_alloc(dev, struct cros_ec_anx7688, bridge,
+					&cros_ec_anx7688_bridge_funcs);
+	if (IS_ERR(anx7688))
+		return PTR_ERR(anx7688);
 
 	anx7688->client = client;
 	i2c_set_clientdata(client, anx7688);
@@ -153,7 +158,6 @@ static int cros_ec_anx7688_bridge_probe(struct i2c_client *client)
 		DRM_WARN("Old ANX7688 FW version (0x%04x), not filtering\n",
 			 fw_version);
 
-	anx7688->bridge.funcs = &cros_ec_anx7688_bridge_funcs;
 	drm_bridge_add(&anx7688->bridge);
 
 	return 0;

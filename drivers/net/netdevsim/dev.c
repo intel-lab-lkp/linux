@@ -18,6 +18,7 @@
 #include <linux/debugfs.h>
 #include <linux/device.h>
 #include <linux/etherdevice.h>
+#include <linux/hex.h>
 #include <linux/inet.h>
 #include <linux/jiffies.h>
 #include <linux/kernel.h>
@@ -224,78 +225,6 @@ static const struct file_operations nsim_dev_trap_fa_cookie_fops = {
 	.owner = THIS_MODULE,
 };
 
-static ssize_t nsim_bus_dev_max_vfs_read(struct file *file, char __user *data,
-					 size_t count, loff_t *ppos)
-{
-	struct nsim_dev *nsim_dev = file->private_data;
-	char buf[11];
-	ssize_t len;
-
-	len = scnprintf(buf, sizeof(buf), "%u\n",
-			READ_ONCE(nsim_dev->nsim_bus_dev->max_vfs));
-
-	return simple_read_from_buffer(data, count, ppos, buf, len);
-}
-
-static ssize_t nsim_bus_dev_max_vfs_write(struct file *file,
-					  const char __user *data,
-					  size_t count, loff_t *ppos)
-{
-	struct nsim_vf_config *vfconfigs;
-	struct nsim_dev *nsim_dev;
-	char buf[10];
-	ssize_t ret;
-	u32 val;
-
-	if (*ppos != 0)
-		return 0;
-
-	if (count >= sizeof(buf))
-		return -ENOSPC;
-
-	ret = copy_from_user(buf, data, count);
-	if (ret)
-		return -EFAULT;
-	buf[count] = '\0';
-
-	ret = kstrtouint(buf, 10, &val);
-	if (ret)
-		return -EINVAL;
-
-	/* max_vfs limited by the maximum number of provided port indexes */
-	if (val > NSIM_DEV_VF_PORT_INDEX_MAX - NSIM_DEV_VF_PORT_INDEX_BASE)
-		return -ERANGE;
-
-	vfconfigs = kcalloc(val, sizeof(struct nsim_vf_config),
-			    GFP_KERNEL | __GFP_NOWARN);
-	if (!vfconfigs)
-		return -ENOMEM;
-
-	nsim_dev = file->private_data;
-	devl_lock(priv_to_devlink(nsim_dev));
-	/* Reject if VFs are configured */
-	if (nsim_dev_get_vfs(nsim_dev)) {
-		ret = -EBUSY;
-	} else {
-		swap(nsim_dev->vfconfigs, vfconfigs);
-		WRITE_ONCE(nsim_dev->nsim_bus_dev->max_vfs, val);
-		*ppos += count;
-		ret = count;
-	}
-	devl_unlock(priv_to_devlink(nsim_dev));
-
-	kfree(vfconfigs);
-	return ret;
-}
-
-static const struct file_operations nsim_dev_max_vfs_fops = {
-	.open = simple_open,
-	.read = nsim_bus_dev_max_vfs_read,
-	.write = nsim_bus_dev_max_vfs_write,
-	.llseek = generic_file_llseek,
-	.owner = THIS_MODULE,
-};
-
 static int nsim_dev_debugfs_init(struct nsim_dev *nsim_dev)
 {
 	char dev_ddir_name[sizeof(DRV_NAME) + 10];
@@ -314,10 +243,14 @@ static int nsim_dev_debugfs_init(struct nsim_dev *nsim_dev)
 			    &nsim_dev->fw_update_status);
 	debugfs_create_u32("fw_update_overwrite_mask", 0600, nsim_dev->ddir,
 			    &nsim_dev->fw_update_overwrite_mask);
+	debugfs_create_u32("fw_update_flash_chunk_time_ms", 0600, nsim_dev->ddir,
+			   &nsim_dev->fw_update_flash_chunk_time_ms);
 	debugfs_create_u32("max_macs", 0600, nsim_dev->ddir,
 			   &nsim_dev->max_macs);
 	debugfs_create_bool("test1", 0600, nsim_dev->ddir,
 			    &nsim_dev->test1);
+	debugfs_create_u32("test2", 0600, nsim_dev->ddir,
+			   &nsim_dev->test2);
 	nsim_dev->take_snapshot = debugfs_create_file("take_snapshot",
 						      0200,
 						      nsim_dev->ddir,
@@ -338,9 +271,6 @@ static int nsim_dev_debugfs_init(struct nsim_dev *nsim_dev)
 	debugfs_create_bool("fail_trap_policer_counter_get", 0600,
 			    nsim_dev->ddir,
 			    &nsim_dev->fail_trap_policer_counter_get);
-	/* caution, dev_max_vfs write takes devlink lock */
-	debugfs_create_file("max_vfs", 0600, nsim_dev->ddir,
-			    nsim_dev, &nsim_dev_max_vfs_fops);
 
 	nsim_dev->nodes_ddir = debugfs_create_dir("rate_nodes", nsim_dev->ddir);
 	if (IS_ERR(nsim_dev->nodes_ddir)) {
@@ -519,7 +449,52 @@ err_out:
 enum nsim_devlink_param_id {
 	NSIM_DEVLINK_PARAM_ID_BASE = DEVLINK_PARAM_GENERIC_ID_MAX,
 	NSIM_DEVLINK_PARAM_ID_TEST1,
+	NSIM_DEVLINK_PARAM_ID_TEST2,
 };
+
+static int
+nsim_devlink_param_test2_get(struct devlink *devlink, u32 id,
+			     struct devlink_param_gset_ctx *ctx,
+			     struct netlink_ext_ack *extack)
+{
+	struct nsim_dev *nsim_dev = devlink_priv(devlink);
+
+	ctx->val.vu32 = nsim_dev->test2;
+	return 0;
+}
+
+static int
+nsim_devlink_param_test2_set(struct devlink *devlink, u32 id,
+			     struct devlink_param_gset_ctx *ctx,
+			     struct netlink_ext_ack *extack)
+{
+	struct nsim_dev *nsim_dev = devlink_priv(devlink);
+
+	nsim_dev->test2 = ctx->val.vu32;
+	return 0;
+}
+
+#define NSIM_DEV_TEST2_DEFAULT 1234
+
+static int
+nsim_devlink_param_test2_get_default(struct devlink *devlink, u32 id,
+				     struct devlink_param_gset_ctx *ctx,
+				     struct netlink_ext_ack *extack)
+{
+	ctx->val.vu32 = NSIM_DEV_TEST2_DEFAULT;
+	return 0;
+}
+
+static int
+nsim_devlink_param_test2_reset_default(struct devlink *devlink, u32 id,
+				       enum devlink_param_cmode cmode,
+				       struct netlink_ext_ack *extack)
+{
+	struct nsim_dev *nsim_dev = devlink_priv(devlink);
+
+	nsim_dev->test2 = NSIM_DEV_TEST2_DEFAULT;
+	return 0;
+}
 
 static const struct devlink_param nsim_devlink_params[] = {
 	DEVLINK_PARAM_GENERIC(MAX_MACS,
@@ -529,6 +504,14 @@ static const struct devlink_param nsim_devlink_params[] = {
 			     "test1", DEVLINK_PARAM_TYPE_BOOL,
 			     BIT(DEVLINK_PARAM_CMODE_DRIVERINIT),
 			     NULL, NULL, NULL),
+	DEVLINK_PARAM_DRIVER_WITH_DEFAULTS(NSIM_DEVLINK_PARAM_ID_TEST2,
+					   "test2", DEVLINK_PARAM_TYPE_U32,
+					   BIT(DEVLINK_PARAM_CMODE_RUNTIME),
+					   nsim_devlink_param_test2_get,
+					   nsim_devlink_param_test2_set,
+					   NULL,
+					   nsim_devlink_param_test2_get_default,
+					   nsim_devlink_param_test2_reset_default),
 };
 
 static void nsim_devlink_set_params_init_values(struct nsim_dev *nsim_dev,
@@ -539,11 +522,11 @@ static void nsim_devlink_set_params_init_values(struct nsim_dev *nsim_dev,
 	value.vu32 = nsim_dev->max_macs;
 	devl_param_driverinit_value_set(devlink,
 					DEVLINK_PARAM_GENERIC_ID_MAX_MACS,
-					value);
+					&value);
 	value.vbool = nsim_dev->test1;
 	devl_param_driverinit_value_set(devlink,
 					NSIM_DEVLINK_PARAM_ID_TEST1,
-					value);
+					&value);
 }
 
 static void nsim_devlink_param_load_driverinit_values(struct devlink *devlink)
@@ -589,7 +572,7 @@ static void nsim_dev_dummy_region_exit(struct nsim_dev *nsim_dev)
 
 static int
 __nsim_dev_port_add(struct nsim_dev *nsim_dev, enum nsim_dev_port_type type,
-		    unsigned int port_index);
+		    unsigned int port_index, u8 perm_addr[ETH_ALEN]);
 static void __nsim_dev_port_del(struct nsim_dev_port *nsim_dev_port);
 
 static int nsim_esw_legacy_enable(struct nsim_dev *nsim_dev,
@@ -613,7 +596,7 @@ static int nsim_esw_switchdev_enable(struct nsim_dev *nsim_dev,
 	int i, err;
 
 	for (i = 0; i < nsim_dev_get_vfs(nsim_dev); i++) {
-		err = __nsim_dev_port_add(nsim_dev, NSIM_DEV_PORT_TYPE_VF, i);
+		err = __nsim_dev_port_add(nsim_dev, NSIM_DEV_PORT_TYPE_VF, i, NULL);
 		if (err) {
 			NL_SET_ERR_MSG_MOD(extack, "Failed to initialize VFs' netdevsim ports");
 			pr_err("Failed to initialize VF id=%d. %d.\n", i, err);
@@ -771,7 +754,7 @@ static struct sk_buff *nsim_dev_trap_skb_build(void)
 	skb->protocol = htons(ETH_P_IP);
 
 	skb_set_network_header(skb, skb->len);
-	iph = skb_put(skb, sizeof(struct iphdr));
+	iph = skb_put_zero(skb, sizeof(struct iphdr));
 	iph->protocol = IPPROTO_UDP;
 	iph->saddr = in_aton("192.0.2.1");
 	iph->daddr = in_aton("198.51.100.1");
@@ -787,7 +770,7 @@ static struct sk_buff *nsim_dev_trap_skb_build(void)
 	udph = skb_put_zero(skb, sizeof(struct udphdr) + data_len);
 	get_random_bytes(&udph->source, sizeof(u16));
 	get_random_bytes(&udph->dest, sizeof(u16));
-	udph->len = htons(sizeof(struct udphdr) + data_len);
+	udp_set_len_short(udph, sizeof(struct udphdr) + data_len);
 
 	return skb;
 }
@@ -849,7 +832,7 @@ static void nsim_dev_trap_report_work(struct work_struct *work)
 	nsim_dev = nsim_trap_data->nsim_dev;
 
 	if (!devl_trylock(priv_to_devlink(nsim_dev))) {
-		queue_delayed_work(system_unbound_wq,
+		queue_delayed_work(system_dfl_wq,
 				   &nsim_dev->trap_data->trap_report_dw, 1);
 		return;
 	}
@@ -865,7 +848,7 @@ static void nsim_dev_trap_report_work(struct work_struct *work)
 		cond_resched();
 	}
 	devl_unlock(priv_to_devlink(nsim_dev));
-	queue_delayed_work(system_unbound_wq,
+	queue_delayed_work(system_dfl_wq,
 			   &nsim_dev->trap_data->trap_report_dw,
 			   msecs_to_jiffies(NSIM_TRAP_REPORT_INTERVAL_MS));
 }
@@ -877,13 +860,12 @@ static int nsim_dev_traps_init(struct devlink *devlink)
 	struct nsim_trap_data *nsim_trap_data;
 	int err;
 
-	nsim_trap_data = kzalloc(sizeof(*nsim_trap_data), GFP_KERNEL);
+	nsim_trap_data = kzalloc_obj(*nsim_trap_data);
 	if (!nsim_trap_data)
 		return -ENOMEM;
 
-	nsim_trap_data->trap_items_arr = kcalloc(ARRAY_SIZE(nsim_traps_arr),
-						 sizeof(struct nsim_trap_item),
-						 GFP_KERNEL);
+	nsim_trap_data->trap_items_arr = kzalloc_objs(struct nsim_trap_item,
+						      ARRAY_SIZE(nsim_traps_arr));
 	if (!nsim_trap_data->trap_items_arr) {
 		err = -ENOMEM;
 		goto err_trap_data_free;
@@ -922,7 +904,7 @@ static int nsim_dev_traps_init(struct devlink *devlink)
 
 	INIT_DELAYED_WORK(&nsim_dev->trap_data->trap_report_dw,
 			  nsim_dev_trap_report_work);
-	queue_delayed_work(system_unbound_wq,
+	queue_delayed_work(system_dfl_wq,
 			   &nsim_dev->trap_data->trap_report_dw,
 			   msecs_to_jiffies(NSIM_TRAP_REPORT_INTERVAL_MS));
 
@@ -1015,9 +997,9 @@ static int nsim_dev_info_get(struct devlink *devlink,
 						    DEVLINK_INFO_VERSION_TYPE_COMPONENT);
 }
 
-#define NSIM_DEV_FLASH_SIZE 500000
+#define NSIM_DEV_FLASH_SIZE 50000
 #define NSIM_DEV_FLASH_CHUNK_SIZE 1000
-#define NSIM_DEV_FLASH_CHUNK_TIME_MS 10
+#define NSIM_DEV_FLASH_CHUNK_TIME_MS_DEFAULT 100
 
 static int nsim_dev_flash_update(struct devlink *devlink,
 				 struct devlink_flash_update_params *params,
@@ -1041,7 +1023,7 @@ static int nsim_dev_flash_update(struct devlink *devlink,
 							   params->component,
 							   i * NSIM_DEV_FLASH_CHUNK_SIZE,
 							   NSIM_DEV_FLASH_SIZE);
-		msleep(NSIM_DEV_FLASH_CHUNK_TIME_MS);
+		msleep(nsim_dev->fw_update_flash_chunk_time_ms ?: 1);
 	}
 
 	if (nsim_dev->fw_update_status) {
@@ -1290,7 +1272,7 @@ static int nsim_rate_node_new(struct devlink_rate *node, void **priv,
 		return -EOPNOTSUPP;
 	}
 
-	nsim_node = kzalloc(sizeof(*nsim_node), GFP_KERNEL);
+	nsim_node = kzalloc_obj(*nsim_node);
 	if (!nsim_node)
 		return -ENOMEM;
 
@@ -1396,7 +1378,7 @@ static const struct devlink_ops nsim_dev_devlink_ops = {
 #define NSIM_DEV_TEST1_DEFAULT true
 
 static int __nsim_dev_port_add(struct nsim_dev *nsim_dev, enum nsim_dev_port_type type,
-			       unsigned int port_index)
+			       unsigned int port_index, u8 perm_addr[ETH_ALEN])
 {
 	struct devlink_port_attrs attrs = {};
 	struct nsim_dev_port *nsim_dev_port;
@@ -1406,7 +1388,7 @@ static int __nsim_dev_port_add(struct nsim_dev *nsim_dev, enum nsim_dev_port_typ
 	if (type == NSIM_DEV_PORT_TYPE_VF && !nsim_dev_get_vfs(nsim_dev))
 		return -EINVAL;
 
-	nsim_dev_port = kzalloc(sizeof(*nsim_dev_port), GFP_KERNEL);
+	nsim_dev_port = kzalloc_obj(*nsim_dev_port);
 	if (!nsim_dev_port)
 		return -ENOMEM;
 	nsim_dev_port->port_index = nsim_dev_port_index(type, port_index);
@@ -1429,11 +1411,27 @@ static int __nsim_dev_port_add(struct nsim_dev *nsim_dev, enum nsim_dev_port_typ
 	if (err)
 		goto err_port_free;
 
+	if (nsim_dev_port_is_pf(nsim_dev_port)) {
+		u64 parent_id = DEVLINK_RESOURCE_ID_PARENT_TOP;
+		struct devlink_resource_size_params params = {
+			.size_max = 100,
+			.size_granularity = 1,
+			.unit = DEVLINK_RESOURCE_UNIT_ENTRY
+		};
+
+		err = devl_port_resource_register(devlink_port,
+						  "test_resource", 20,
+						  NSIM_PORT_RESOURCE_TEST,
+						  parent_id, &params);
+		if (err)
+			goto err_dl_port_unregister;
+	}
+
 	err = nsim_dev_port_debugfs_init(nsim_dev, nsim_dev_port);
 	if (err)
-		goto err_dl_port_unregister;
+		goto err_port_resource_unregister;
 
-	nsim_dev_port->ns = nsim_create(nsim_dev, nsim_dev_port);
+	nsim_dev_port->ns = nsim_create(nsim_dev, nsim_dev_port, perm_addr);
 	if (IS_ERR(nsim_dev_port->ns)) {
 		err = PTR_ERR(nsim_dev_port->ns);
 		goto err_port_debugfs_exit;
@@ -1454,6 +1452,9 @@ err_nsim_destroy:
 	nsim_destroy(nsim_dev_port->ns);
 err_port_debugfs_exit:
 	nsim_dev_port_debugfs_exit(nsim_dev_port);
+err_port_resource_unregister:
+	if (nsim_dev_port_is_pf(nsim_dev_port))
+		devl_port_resources_unregister(devlink_port);
 err_dl_port_unregister:
 	devl_port_unregister(devlink_port);
 err_port_free:
@@ -1470,6 +1471,8 @@ static void __nsim_dev_port_del(struct nsim_dev_port *nsim_dev_port)
 		devl_rate_leaf_destroy(&nsim_dev_port->devlink_port);
 	nsim_destroy(nsim_dev_port->ns);
 	nsim_dev_port_debugfs_exit(nsim_dev_port);
+	if (nsim_dev_port_is_pf(nsim_dev_port))
+		devl_port_resources_unregister(devlink_port);
 	devl_port_unregister(devlink_port);
 	kfree(nsim_dev_port);
 }
@@ -1489,7 +1492,7 @@ static int nsim_dev_port_add_all(struct nsim_dev *nsim_dev,
 	int i, err;
 
 	for (i = 0; i < port_count; i++) {
-		err = __nsim_dev_port_add(nsim_dev, NSIM_DEV_PORT_TYPE_PF, i);
+		err = __nsim_dev_port_add(nsim_dev, NSIM_DEV_PORT_TYPE_PF, i, NULL);
 		if (err)
 			goto err_port_del_all;
 	}
@@ -1585,15 +1588,18 @@ int nsim_drv_probe(struct nsim_bus_dev *nsim_bus_dev)
 	INIT_LIST_HEAD(&nsim_dev->port_list);
 	nsim_dev->fw_update_status = true;
 	nsim_dev->fw_update_overwrite_mask = 0;
+	nsim_dev->fw_update_flash_chunk_time_ms = NSIM_DEV_FLASH_CHUNK_TIME_MS_DEFAULT;
 	nsim_dev->max_macs = NSIM_DEV_MAX_MACS_DEFAULT;
 	nsim_dev->test1 = NSIM_DEV_TEST1_DEFAULT;
+	nsim_dev->test2 = NSIM_DEV_TEST2_DEFAULT;
 	spin_lock_init(&nsim_dev->fa_cookie_lock);
+	mutex_init(&nsim_dev->progs_list_lock);
 
 	dev_set_drvdata(&nsim_bus_dev->dev, nsim_dev);
 
-	nsim_dev->vfconfigs = kcalloc(nsim_bus_dev->max_vfs,
-				      sizeof(struct nsim_vf_config),
-				      GFP_KERNEL | __GFP_NOWARN);
+	nsim_dev->vfconfigs = kzalloc_objs(struct nsim_vf_config,
+					   NSIM_BUS_DEV_MAX_VFS,
+					   GFP_KERNEL | __GFP_NOWARN);
 	if (!nsim_dev->vfconfigs) {
 		err = -ENOMEM;
 		goto err_devlink_unlock;
@@ -1726,6 +1732,7 @@ void nsim_drv_remove(struct nsim_bus_dev *nsim_bus_dev)
 	devl_unregister(devlink);
 	kfree(nsim_dev->vfconfigs);
 	kfree(nsim_dev->fa_cookie);
+	mutex_destroy(&nsim_dev->progs_list_lock);
 	devl_unlock(devlink);
 	devlink_free(devlink);
 	dev_set_drvdata(&nsim_bus_dev->dev, NULL);
@@ -1745,7 +1752,7 @@ __nsim_dev_port_lookup(struct nsim_dev *nsim_dev, enum nsim_dev_port_type type,
 }
 
 int nsim_drv_port_add(struct nsim_bus_dev *nsim_bus_dev, enum nsim_dev_port_type type,
-		      unsigned int port_index)
+		      unsigned int port_index, u8 perm_addr[ETH_ALEN])
 {
 	struct nsim_dev *nsim_dev = dev_get_drvdata(&nsim_bus_dev->dev);
 	int err;
@@ -1754,7 +1761,7 @@ int nsim_drv_port_add(struct nsim_bus_dev *nsim_bus_dev, enum nsim_dev_port_type
 	if (__nsim_dev_port_lookup(nsim_dev, type, port_index))
 		err = -EEXIST;
 	else
-		err = __nsim_dev_port_add(nsim_dev, type, port_index);
+		err = __nsim_dev_port_add(nsim_dev, type, port_index, perm_addr);
 	devl_unlock(priv_to_devlink(nsim_dev));
 	return err;
 }
@@ -1790,7 +1797,7 @@ int nsim_drv_configure_vfs(struct nsim_bus_dev *nsim_bus_dev,
 		ret = -EBUSY;
 		goto exit_unlock;
 	}
-	if (nsim_bus_dev->max_vfs < num_vfs) {
+	if (num_vfs > NSIM_BUS_DEV_MAX_VFS) {
 		ret = -ENOMEM;
 		goto exit_unlock;
 	}

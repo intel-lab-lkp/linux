@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 /*
- * Functions for initialisaing, allocating, freeing and duplicating VMAs. Shared
+ * Functions for initializing, allocating, freeing and duplicating VMAs. Shared
  * between CONFIG_MMU and non-CONFIG_MMU kernel configurations.
  */
 
+/*
+ * To allow for userland testing we place internal dependencies in
+ * vma_internal.h and external VMA API declarations in vma.h.
+ */
 #include "vma_internal.h"
 #include "vma.h"
 
@@ -16,6 +20,7 @@ void __init vma_state_init(void)
 	struct kmem_cache_args args = {
 		.use_freeptr_offset = true,
 		.freeptr_offset = offsetof(struct vm_area_struct, vm_freeptr),
+		.sheaf_capacity = 32,
 	};
 
 	vm_area_cachep = kmem_cache_create("vm_area_struct",
@@ -45,7 +50,8 @@ static void vm_area_init_from(const struct vm_area_struct *src,
 	dest->vm_start = src->vm_start;
 	dest->vm_end = src->vm_end;
 	dest->anon_vma = src->anon_vma;
-	dest->vm_pgoff = src->vm_pgoff;
+	dest->vm_pgoff = vma_start_pgoff(src);
+	__vma_set_anon_pgoff(dest, vma_start_anon_pgoff(src));
 	dest->vm_file = src->vm_file;
 	dest->vm_private_data = src->vm_private_data;
 	vm_flags_init(dest, src->vm_flags);

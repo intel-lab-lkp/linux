@@ -3,6 +3,7 @@
 //
 // Copyright (C) 2015 Google, Inc
 
+#include <linux/cleanup.h>
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/limits.h>
@@ -946,6 +947,27 @@ u32 cros_ec_get_host_event(struct cros_ec_device *ec_dev)
 EXPORT_SYMBOL(cros_ec_get_host_event);
 
 /**
+ * cros_ec_read_features() - Read EC features
+ *
+ * @ec: EC device.
+ *
+ * Return: >= 0 on success, negative error number on failure.
+ */
+int cros_ec_read_features(struct cros_ec_dev *ec)
+{
+	int ret = cros_ec_cmd(ec->ec_dev, 0, EC_CMD_GET_FEATURES + ec->cmd_offset,
+			      NULL, 0, &ec->features, sizeof(ec->features));
+
+	if (ret < 0) {
+		dev_warn(ec->dev, "cannot get EC features: %d\n", ret);
+		memset(&ec->features, 0, sizeof(ec->features));
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(cros_ec_read_features);
+
+/**
  * cros_ec_check_features() - Test for the presence of EC features
  *
  * @ec: EC device, does not have to be connected directly to the AP,
@@ -959,17 +981,10 @@ EXPORT_SYMBOL(cros_ec_get_host_event);
 bool cros_ec_check_features(struct cros_ec_dev *ec, int feature)
 {
 	struct ec_response_get_features *features = &ec->features;
-	int ret;
 
 	if (features->flags[0] == -1U && features->flags[1] == -1U) {
 		/* features bitmap not read yet */
-		ret = cros_ec_cmd(ec->ec_dev, 0, EC_CMD_GET_FEATURES + ec->cmd_offset,
-				  NULL, 0, features, sizeof(*features));
-		if (ret < 0) {
-			dev_warn(ec->dev, "cannot get EC features: %d\n", ret);
-			memset(features, 0, sizeof(*features));
-		}
-
+		cros_ec_read_features(ec);
 		dev_dbg(ec->dev, "EC features %08x %08x\n",
 			features->flags[0], features->flags[1]);
 	}
@@ -1152,6 +1167,20 @@ int cros_ec_get_cmd_versions(struct cros_ec_device *ec_dev, u16 cmd)
 		return resp.version_mask;
 }
 EXPORT_SYMBOL_GPL(cros_ec_get_cmd_versions);
+
+/**
+ * cros_ec_device_registered - Return if the ec_dev is registered.
+ *
+ * @ec_dev: EC device
+ *
+ * Return: true if registered.  Otherwise, false.
+ */
+bool cros_ec_device_registered(struct cros_ec_device *ec_dev)
+{
+	guard(mutex)(&ec_dev->lock);
+	return ec_dev->registered;
+}
+EXPORT_SYMBOL_GPL(cros_ec_device_registered);
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("ChromeOS EC communication protocol helpers");

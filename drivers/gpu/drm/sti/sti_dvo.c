@@ -97,7 +97,7 @@ struct sti_dvo {
 	struct dvo_config *config;
 	bool enabled;
 	struct drm_encoder *encoder;
-	struct drm_bridge *bridge;
+	struct drm_bridge bridge;
 };
 
 struct sti_dvo_connector {
@@ -209,7 +209,8 @@ static void dvo_debugfs_init(struct sti_dvo *dvo, struct drm_minor *minor)
 				 minor->debugfs_root, minor);
 }
 
-static void sti_dvo_disable(struct drm_bridge *bridge)
+static void sti_dvo_disable(struct drm_bridge *bridge,
+			    struct drm_atomic_commit *commit)
 {
 	struct sti_dvo *dvo = bridge->driver_private;
 
@@ -232,7 +233,8 @@ static void sti_dvo_disable(struct drm_bridge *bridge)
 	dvo->enabled = false;
 }
 
-static void sti_dvo_pre_enable(struct drm_bridge *bridge)
+static void sti_dvo_pre_enable(struct drm_bridge *bridge,
+			       struct drm_atomic_commit *commit)
 {
 	struct sti_dvo *dvo = bridge->driver_private;
 	struct dvo_config *config = dvo->config;
@@ -320,16 +322,20 @@ static void sti_dvo_set_mode(struct drm_bridge *bridge,
 	dvo->config = &rgb_24bit_de_cfg;
 }
 
-static void sti_dvo_bridge_nope(struct drm_bridge *bridge)
+static void sti_dvo_bridge_nope(struct drm_bridge *bridge,
+				struct drm_atomic_commit *commit)
 {
 	/* do nothing */
 }
 
 static const struct drm_bridge_funcs sti_dvo_bridge_funcs = {
-	.pre_enable = sti_dvo_pre_enable,
-	.enable = sti_dvo_bridge_nope,
-	.disable = sti_dvo_disable,
-	.post_disable = sti_dvo_bridge_nope,
+	.atomic_create_state = drm_atomic_helper_bridge_create_state,
+	.atomic_destroy_state = drm_atomic_helper_bridge_destroy_state,
+	.atomic_duplicate_state = drm_atomic_helper_bridge_duplicate_state,
+	.atomic_pre_enable = sti_dvo_pre_enable,
+	.atomic_enable = sti_dvo_bridge_nope,
+	.atomic_disable = sti_dvo_disable,
+	.atomic_post_disable = sti_dvo_bridge_nope,
 	.mode_set = sti_dvo_set_mode,
 };
 
@@ -439,7 +445,6 @@ static int sti_dvo_bind(struct device *dev, struct device *master, void *data)
 	struct drm_encoder *encoder;
 	struct sti_dvo_connector *connector;
 	struct drm_connector *drm_connector;
-	struct drm_bridge *bridge;
 	int err;
 
 	/* Set the drm device handle */
@@ -455,20 +460,14 @@ static int sti_dvo_bind(struct device *dev, struct device *master, void *data)
 
 	connector->dvo = dvo;
 
-	bridge = devm_kzalloc(dev, sizeof(*bridge), GFP_KERNEL);
-	if (!bridge)
-		return -ENOMEM;
+	dvo->bridge.driver_private = dvo;
+	dvo->bridge.of_node = dvo->dev.of_node;
+	drm_bridge_add(&dvo->bridge);
 
-	bridge->driver_private = dvo;
-	bridge->funcs = &sti_dvo_bridge_funcs;
-	bridge->of_node = dvo->dev.of_node;
-	drm_bridge_add(bridge);
-
-	err = drm_bridge_attach(encoder, bridge, NULL, 0);
+	err = drm_bridge_attach(encoder, &dvo->bridge, NULL, 0);
 	if (err)
 		return err;
 
-	dvo->bridge = bridge;
 	connector->encoder = encoder;
 	dvo->encoder = encoder;
 
@@ -490,7 +489,7 @@ static int sti_dvo_bind(struct device *dev, struct device *master, void *data)
 	return 0;
 
 err_sysfs:
-	drm_bridge_remove(bridge);
+	drm_bridge_remove(&dvo->bridge);
 	return -EINVAL;
 }
 
@@ -499,7 +498,10 @@ static void sti_dvo_unbind(struct device *dev,
 {
 	struct sti_dvo *dvo = dev_get_drvdata(dev);
 
-	drm_bridge_remove(dvo->bridge);
+	if (dvo->panel)
+		drm_panel_put(dvo->panel);
+
+	drm_bridge_remove(&dvo->bridge);
 }
 
 static const struct component_ops sti_dvo_ops = {
@@ -515,10 +517,10 @@ static int sti_dvo_probe(struct platform_device *pdev)
 
 	DRM_INFO("%s\n", __func__);
 
-	dvo = devm_kzalloc(dev, sizeof(*dvo), GFP_KERNEL);
-	if (!dvo) {
-		DRM_ERROR("Failed to allocate memory for DVO\n");
-		return -ENOMEM;
+	dvo = devm_drm_bridge_alloc(dev, struct sti_dvo, bridge, &sti_dvo_bridge_funcs);
+	if (IS_ERR(dvo)) {
+		DRM_ERROR("Failed to allocate DVO\n");
+		return PTR_ERR(dvo);
 	}
 
 	dvo->dev = pdev->dev;

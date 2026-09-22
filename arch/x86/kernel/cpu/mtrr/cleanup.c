@@ -1,21 +1,8 @@
+// SPDX-License-Identifier: LGPL-2.0+
 /*
  * MTRR (Memory Type Range Register) cleanup
  *
  *  Copyright (C) 2009 Yinghai Lu
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Library General Public
- * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Library General Public License for more details.
- *
- * You should have received a copy of the GNU Library General Public
- * License along with this library; if not, write to the Free
- * Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 #include <linux/init.h>
 #include <linux/pci.h>
@@ -450,9 +437,10 @@ static unsigned long nr_mtrr_spare_reg __initdata =
 
 static int __init parse_mtrr_spare_reg(char *arg)
 {
-	if (arg)
-		nr_mtrr_spare_reg = simple_strtoul(arg, NULL, 0);
-	return 0;
+	if (!arg)
+		return -EINVAL;
+
+	return kstrtoul(arg, 0, &nr_mtrr_spare_reg);
 }
 early_param("mtrr_spare_reg_nr", parse_mtrr_spare_reg);
 
@@ -670,8 +658,8 @@ static int __init mtrr_search_optimal_index(void)
 int __init mtrr_cleanup(void)
 {
 	unsigned long x_remove_base, x_remove_size;
-	unsigned long base, size, def, dummy;
-	u64 chunk_size, gran_size;
+	u64 def, chunk_size, gran_size;
+	unsigned long base, size;
 	mtrr_type type;
 	int index_good;
 	int i;
@@ -682,7 +670,7 @@ int __init mtrr_cleanup(void)
 	if (!cpu_feature_enabled(X86_FEATURE_MTRR) || enable_mtrr_cleanup < 1)
 		return 0;
 
-	rdmsr(MSR_MTRRdefType, def, dummy);
+	rdmsrq(MSR_MTRRdefType, def);
 	def &= 0xff;
 	if (def != MTRR_TYPE_UNCACHABLE)
 		return 0;
@@ -818,7 +806,7 @@ early_param("disable_mtrr_trim", disable_mtrr_trim_setup);
 
 int __init amd_special_default_mtrr(void)
 {
-	u32 l, h;
+	u64 q;
 
 	if (boot_cpu_data.x86_vendor != X86_VENDOR_AMD &&
 	    boot_cpu_data.x86_vendor != X86_VENDOR_HYGON)
@@ -826,13 +814,13 @@ int __init amd_special_default_mtrr(void)
 	if (boot_cpu_data.x86 < 0xf)
 		return 0;
 	/* In case some hypervisor doesn't pass SYSCFG through: */
-	if (rdmsr_safe(MSR_AMD64_SYSCFG, &l, &h) < 0)
+	if (rdmsrq_safe(MSR_AMD64_SYSCFG, &q) < 0)
 		return 0;
 	/*
 	 * Memory between 4GB and top of mem is forced WB by this magic bit.
 	 * Reserved before K8RevF, but should be zero there.
 	 */
-	if ((l & (Tom2Enabled | Tom2ForceMemTypeWB)) ==
+	if ((q & (Tom2Enabled | Tom2ForceMemTypeWB)) ==
 		 (Tom2Enabled | Tom2ForceMemTypeWB))
 		return 1;
 	return 0;
@@ -866,9 +854,9 @@ real_trim_memory(unsigned long start_pfn, unsigned long limit_pfn)
  */
 int __init mtrr_trim_uncached_memory(unsigned long end_pfn)
 {
-	unsigned long i, base, size, highest_pfn = 0, def, dummy;
+	unsigned long i, base, size, highest_pfn = 0;
 	mtrr_type type;
-	u64 total_trim_size;
+	u64 def, total_trim_size;
 	/* extra one for all 0 */
 	int num[MTRR_NUM_TYPES + 1];
 
@@ -882,7 +870,7 @@ int __init mtrr_trim_uncached_memory(unsigned long end_pfn)
 	if (!cpu_feature_enabled(X86_FEATURE_MTRR) || disable_mtrr_trim)
 		return 0;
 
-	rdmsr(MSR_MTRRdefType, def, dummy);
+	rdmsrq(MSR_MTRRdefType, def);
 	def &= MTRR_DEF_TYPE_TYPE;
 	if (def != MTRR_TYPE_UNCACHABLE)
 		return 0;

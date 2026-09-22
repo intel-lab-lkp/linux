@@ -175,7 +175,7 @@ struct lock_class_stats {
 	unsigned long			bounces[nr_bounce_types];
 };
 
-struct lock_class_stats lock_stats(struct lock_class *class);
+void lock_stats(struct lock_class *class, struct lock_class_stats *stats);
 void clear_lock_stats(struct lock_class *class);
 #endif
 
@@ -253,7 +253,8 @@ struct held_lock {
 	unsigned int hardirqs_off:1;
 	unsigned int sync:1;
 	unsigned int references:11;					/* 32 bits */
-	unsigned int pin_count;
+	unsigned int pin_count:24;
+	unsigned int seq_count:8;
 };
 
 #else /* !CONFIG_LOCKDEP */

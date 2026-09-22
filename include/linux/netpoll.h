@@ -13,12 +13,11 @@
 #include <linux/rcupdate.h>
 #include <linux/list.h>
 #include <linux/refcount.h>
+#include <linux/ip.h>
+#include <linux/udp.h>
 
 union inet_addr {
-	__u32		all[4];
 	__be32		ip;
-	__be32		ip6[4];
-	struct in_addr	in;
 	struct in6_addr	in6;
 };
 
@@ -33,13 +32,6 @@ struct netpoll {
 	char dev_name[IFNAMSIZ];
 	u8 dev_mac[ETH_ALEN];
 	const char *name;
-
-	union inet_addr local_ip, remote_ip;
-	bool ipv6;
-	u16 local_port, remote_port;
-	u8 remote_mac[ETH_ALEN];
-	struct sk_buff_head skb_pool;
-	struct work_struct refill_wq;
 };
 
 #define np_info(np, fmt, ...)				\
@@ -58,7 +50,6 @@ struct netpoll_info {
 
 	struct delayed_work tx_work;
 
-	struct netpoll *netpoll;
 	struct rcu_head rcu;
 };
 
@@ -71,13 +62,13 @@ static inline void netpoll_poll_disable(struct net_device *dev) { return; }
 static inline void netpoll_poll_enable(struct net_device *dev) { return; }
 #endif
 
-int netpoll_send_udp(struct netpoll *np, const char *msg, int len);
 int __netpoll_setup(struct netpoll *np, struct net_device *ndev);
-int netpoll_setup(struct netpoll *np);
 void __netpoll_free(struct netpoll *np);
 void netpoll_cleanup(struct netpoll *np);
 void do_netpoll_cleanup(struct netpoll *np);
 netdev_tx_t netpoll_send_skb(struct netpoll *np, struct sk_buff *skb);
+void netpoll_zap_completion_queue(void);
+unsigned int netpoll_get_carrier_timeout(void);
 
 #ifdef CONFIG_NETPOLL
 static inline void *netpoll_poll_lock(struct napi_struct *napi)

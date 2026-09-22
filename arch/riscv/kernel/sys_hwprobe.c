@@ -15,10 +15,19 @@
 #include <asm/uaccess.h>
 #include <asm/unistd.h>
 #include <asm/vector.h>
+#include <asm/vendor_extensions/mips_hwprobe.h>
 #include <asm/vendor_extensions/sifive_hwprobe.h>
 #include <asm/vendor_extensions/thead_hwprobe.h>
 #include <vdso/vsyscall.h>
 
+
+#define EXT_KEY(isa_arg, ext, pv, missing)					\
+	do {										\
+		if (__riscv_isa_extension_available(isa_arg, RISCV_ISA_EXT_##ext))	\
+			pv |= RISCV_HWPROBE_EXT_##ext;				\
+		else									\
+			missing |= RISCV_HWPROBE_EXT_##ext;				\
+	} while (false)
 
 static void hwprobe_arch_id(struct riscv_hwprobe *pair,
 			    const struct cpumask *cpus)
@@ -26,6 +35,11 @@ static void hwprobe_arch_id(struct riscv_hwprobe *pair,
 	u64 id = -1ULL;
 	bool first = true;
 	int cpu;
+
+	if (pair->key != RISCV_HWPROBE_KEY_MVENDORID &&
+	    pair->key != RISCV_HWPROBE_KEY_MIMPID &&
+	    pair->key != RISCV_HWPROBE_KEY_MARCHID)
+		goto out;
 
 	for_each_cpu(cpu, cpus) {
 		u64 cpu_id;
@@ -57,6 +71,7 @@ static void hwprobe_arch_id(struct riscv_hwprobe *pair,
 		}
 	}
 
+out:
 	pair->value = id;
 }
 
@@ -70,10 +85,10 @@ static void hwprobe_isa_ext0(struct riscv_hwprobe *pair,
 	if (has_fpu())
 		pair->value |= RISCV_HWPROBE_IMA_FD;
 
-	if (riscv_isa_extension_available(NULL, c))
+	if (riscv_isa_extension_available(NULL, C))
 		pair->value |= RISCV_HWPROBE_IMA_C;
 
-	if (has_vector() && riscv_isa_extension_available(NULL, v))
+	if (has_vector() && riscv_isa_extension_available(NULL, V))
 		pair->value |= RISCV_HWPROBE_IMA_V;
 
 	/*
@@ -83,88 +98,115 @@ static void hwprobe_isa_ext0(struct riscv_hwprobe *pair,
 	for_each_cpu(cpu, cpus) {
 		struct riscv_isainfo *isainfo = &hart_isa[cpu];
 
-#define EXT_KEY(ext)									\
-	do {										\
-		if (__riscv_isa_extension_available(isainfo->isa, RISCV_ISA_EXT_##ext))	\
-			pair->value |= RISCV_HWPROBE_EXT_##ext;				\
-		else									\
-			missing |= RISCV_HWPROBE_EXT_##ext;				\
-	} while (false)
-
 		/*
 		 * Only use EXT_KEY() for extensions which can be exposed to userspace,
 		 * regardless of the kernel's configuration, as no other checks, besides
 		 * presence in the hart_isa bitmap, are made.
 		 */
-		EXT_KEY(ZAAMO);
-		EXT_KEY(ZABHA);
-		EXT_KEY(ZACAS);
-		EXT_KEY(ZALRSC);
-		EXT_KEY(ZAWRS);
-		EXT_KEY(ZBA);
-		EXT_KEY(ZBB);
-		EXT_KEY(ZBC);
-		EXT_KEY(ZBKB);
-		EXT_KEY(ZBKC);
-		EXT_KEY(ZBKX);
-		EXT_KEY(ZBS);
-		EXT_KEY(ZCA);
-		EXT_KEY(ZCB);
-		EXT_KEY(ZCMOP);
-		EXT_KEY(ZICBOM);
-		EXT_KEY(ZICBOZ);
-		EXT_KEY(ZICNTR);
-		EXT_KEY(ZICOND);
-		EXT_KEY(ZIHINTNTL);
-		EXT_KEY(ZIHINTPAUSE);
-		EXT_KEY(ZIHPM);
-		EXT_KEY(ZIMOP);
-		EXT_KEY(ZKND);
-		EXT_KEY(ZKNE);
-		EXT_KEY(ZKNH);
-		EXT_KEY(ZKSED);
-		EXT_KEY(ZKSH);
-		EXT_KEY(ZKT);
-		EXT_KEY(ZTSO);
+		EXT_KEY(isainfo->isa, ZAAMO, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZABHA, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZACAS, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZALASR, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZALRSC, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZAWRS, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZBA, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZBB, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZBC, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZBKB, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZBKC, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZBKX, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZBS, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZCA, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZCB, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZCLSD, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZCMOP, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZICBOM, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZICBOP, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZICBOZ, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZICFILP, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZICNTR, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZICOND, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZIHINTNTL, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZIHINTPAUSE, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZIHPM, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZILSD, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZIMOP, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZKND, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZKNE, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZKNH, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZKSED, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZKSH, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZKT, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZTSO, pair->value, missing);
 
 		/*
 		 * All the following extensions must depend on the kernel
 		 * support of V.
 		 */
 		if (has_vector()) {
-			EXT_KEY(ZVBB);
-			EXT_KEY(ZVBC);
-			EXT_KEY(ZVE32F);
-			EXT_KEY(ZVE32X);
-			EXT_KEY(ZVE64D);
-			EXT_KEY(ZVE64F);
-			EXT_KEY(ZVE64X);
-			EXT_KEY(ZVFBFMIN);
-			EXT_KEY(ZVFBFWMA);
-			EXT_KEY(ZVFH);
-			EXT_KEY(ZVFHMIN);
-			EXT_KEY(ZVKB);
-			EXT_KEY(ZVKG);
-			EXT_KEY(ZVKNED);
-			EXT_KEY(ZVKNHA);
-			EXT_KEY(ZVKNHB);
-			EXT_KEY(ZVKSED);
-			EXT_KEY(ZVKSH);
-			EXT_KEY(ZVKT);
+			EXT_KEY(isainfo->isa, ZVBB, pair->value, missing);
+			EXT_KEY(isainfo->isa, ZVBC, pair->value, missing);
+			EXT_KEY(isainfo->isa, ZVE32F, pair->value, missing);
+			EXT_KEY(isainfo->isa, ZVE32X, pair->value, missing);
+			EXT_KEY(isainfo->isa, ZVE64D, pair->value, missing);
+			EXT_KEY(isainfo->isa, ZVE64F, pair->value, missing);
+			EXT_KEY(isainfo->isa, ZVE64X, pair->value, missing);
+			EXT_KEY(isainfo->isa, ZVFBFMIN, pair->value, missing);
+			EXT_KEY(isainfo->isa, ZVFBFWMA, pair->value, missing);
+			EXT_KEY(isainfo->isa, ZVFH, pair->value, missing);
+			EXT_KEY(isainfo->isa, ZVFHMIN, pair->value, missing);
+			EXT_KEY(isainfo->isa, ZVKB, pair->value, missing);
+			EXT_KEY(isainfo->isa, ZVKG, pair->value, missing);
+			EXT_KEY(isainfo->isa, ZVKNED, pair->value, missing);
+			EXT_KEY(isainfo->isa, ZVKNHA, pair->value, missing);
+			EXT_KEY(isainfo->isa, ZVKNHB, pair->value, missing);
+			EXT_KEY(isainfo->isa, ZVKSED, pair->value, missing);
+			EXT_KEY(isainfo->isa, ZVKSH, pair->value, missing);
+			EXT_KEY(isainfo->isa, ZVKT, pair->value, missing);
 		}
 
-		if (has_fpu()) {
-			EXT_KEY(ZCD);
-			EXT_KEY(ZCF);
-			EXT_KEY(ZFA);
-			EXT_KEY(ZFBFMIN);
-			EXT_KEY(ZFH);
-			EXT_KEY(ZFHMIN);
-		}
+		EXT_KEY(isainfo->isa, ZCD, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZCF, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZFA, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZFBFMIN, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZFH, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZFHMIN, pair->value, missing);
 
 		if (IS_ENABLED(CONFIG_RISCV_ISA_SUPM))
-			EXT_KEY(SUPM);
-#undef EXT_KEY
+			EXT_KEY(isainfo->isa, SUPM, pair->value, missing);
+	}
+
+	/* Now turn off reporting features if any CPU is missing it. */
+	pair->value &= ~missing;
+}
+
+static void hwprobe_isa_ext1(struct riscv_hwprobe *pair,
+			     const struct cpumask *cpus)
+{
+	int cpu;
+	u64 missing = 0;
+
+	pair->value = 0;
+
+	/*
+	 * Loop through and record extensions that 1) anyone has, and 2) anyone
+	 * doesn't have.
+	 */
+	for_each_cpu(cpu, cpus) {
+		struct riscv_isainfo *isainfo = &hart_isa[cpu];
+
+		/*
+		 * Only use EXT_KEY() for extensions which can be
+		 * exposed to userspace, regardless of the kernel's
+		 * configuration, as no other checks, besides presence
+		 * in the hart_isa bitmap, are made.
+		 */
+		EXT_KEY(isainfo->isa, ZICFISS, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZICCLSM, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZICCAMOA, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZICCIF, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZICCRSE, pair->value, missing);
+		EXT_KEY(isainfo->isa, ZA64RS, pair->value, missing);
 	}
 
 	/* Now turn off reporting features if any CPU is missing it. */
@@ -255,6 +297,8 @@ static u64 hwprobe_vec_misaligned(const struct cpumask *cpus)
 static void hwprobe_one_pair(struct riscv_hwprobe *pair,
 			     const struct cpumask *cpus)
 {
+	pair->value = 0;
+
 	switch (pair->key) {
 	case RISCV_HWPROBE_KEY_MVENDORID:
 	case RISCV_HWPROBE_KEY_MARCHID:
@@ -275,6 +319,10 @@ static void hwprobe_one_pair(struct riscv_hwprobe *pair,
 		hwprobe_isa_ext0(pair, cpus);
 		break;
 
+	case RISCV_HWPROBE_KEY_IMA_EXT_1:
+		hwprobe_isa_ext1(pair, cpus);
+		break;
+
 	case RISCV_HWPROBE_KEY_CPUPERF_0:
 	case RISCV_HWPROBE_KEY_MISALIGNED_SCALAR_PERF:
 		pair->value = hwprobe_misaligned(cpus);
@@ -285,14 +333,16 @@ static void hwprobe_one_pair(struct riscv_hwprobe *pair,
 		break;
 
 	case RISCV_HWPROBE_KEY_ZICBOZ_BLOCK_SIZE:
-		pair->value = 0;
 		if (hwprobe_ext0_has(cpus, RISCV_HWPROBE_EXT_ZICBOZ))
 			pair->value = riscv_cboz_block_size;
 		break;
 	case RISCV_HWPROBE_KEY_ZICBOM_BLOCK_SIZE:
-		pair->value = 0;
 		if (hwprobe_ext0_has(cpus, RISCV_HWPROBE_EXT_ZICBOM))
 			pair->value = riscv_cbom_block_size;
+		break;
+	case RISCV_HWPROBE_KEY_ZICBOP_BLOCK_SIZE:
+		if (hwprobe_ext0_has(cpus, RISCV_HWPROBE_EXT_ZICBOP))
+			pair->value = riscv_cbop_block_size;
 		break;
 	case RISCV_HWPROBE_KEY_HIGHEST_VIRT_ADDRESS:
 		pair->value = user_max_virt_addr();
@@ -308,6 +358,9 @@ static void hwprobe_one_pair(struct riscv_hwprobe *pair,
 
 	case RISCV_HWPROBE_KEY_VENDOR_EXT_THEAD_0:
 		hwprobe_isa_vendor_ext_thead_0(pair, cpus);
+		break;
+	case RISCV_HWPROBE_KEY_VENDOR_EXT_MIPS_0:
+		hwprobe_isa_vendor_ext_mips_0(pair, cpus);
 		break;
 
 	/*
@@ -398,6 +451,7 @@ static int hwprobe_get_cpus(struct riscv_hwprobe __user *pairs,
 	if (cpusetsize > cpumask_size())
 		cpusetsize = cpumask_size();
 
+	cpumask_clear(&cpus);
 	ret = copy_from_user(&cpus, cpus_user, cpusetsize);
 	if (ret)
 		return -EFAULT;

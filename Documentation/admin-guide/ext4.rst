@@ -385,11 +385,9 @@ When mounting an ext4 filesystem, the following option are accepted:
         incompatible with data=journal.
 
   inlinecrypt
-        When possible, encrypt/decrypt the contents of encrypted files using the
-        blk-crypto framework rather than filesystem-layer encryption. This
-        allows the use of inline encryption hardware. The on-disk format is
-        unaffected. For more details, see
-        Documentation/block/inline-encryption.rst.
+        When possible, encrypt/decrypt the contents of encrypted files using
+        inline encryption hardware rather than the CPU. For more details, see
+        Documentation/filesystems/fscrypt.rst.
 
 Data Mode
 =========
@@ -398,7 +396,7 @@ There are 3 different data modes:
 * writeback mode
 
   In data=writeback mode, ext4 does not journal data at all.  This mode provides
-  a similar level of journaling as that of XFS, JFS, and ReiserFS in its default
+  a similar level of journaling as that of XFS and JFS in its default
   mode - metadata journaling.  A crash+recovery can cause incorrect data to
   appear in files which were written shortly before the crash.  This mode will
   typically provide the best ext4 performance.

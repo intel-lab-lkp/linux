@@ -72,7 +72,6 @@
 #define use_unicode(inode)	(iminor(inode) & 64)
 #define use_attributes(inode)	(iminor(inode) & 128)
 
-
 struct vcs_poll_data {
 	struct notifier_block notifier;
 	unsigned int cons_num;
@@ -130,7 +129,7 @@ vcs_poll_data_get(struct file *file)
 	if (poll)
 		return poll;
 
-	poll = kzalloc(sizeof(*poll), GFP_KERNEL);
+	poll = kzalloc_obj(*poll);
 	if (!poll)
 		return NULL;
 	poll->cons_num = console(file_inode(file));
@@ -231,15 +230,13 @@ static loff_t vcs_lseek(struct file *file, loff_t offset, int orig)
 	struct vc_data *vc;
 	int size;
 
-	console_lock();
-	vc = vcs_vc(inode, NULL);
-	if (!vc) {
-		console_unlock();
-		return -ENXIO;
-	}
+	scoped_guard(console_lock) {
+		vc = vcs_vc(inode, NULL);
+		if (!vc)
+			return -ENXIO;
 
-	size = vcs_size(vc, use_attributes(inode), use_unicode(inode));
-	console_unlock();
+		size = vcs_size(vc, use_attributes(inode), use_unicode(inode));
+	}
 	if (size < 0)
 		return size;
 	return fixed_size_llseek(file, offset, orig, size);
@@ -369,11 +366,10 @@ vcs_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 	struct vcs_poll_data *poll;
 	unsigned int read;
 	ssize_t ret;
-	char *con_buf;
 	loff_t pos;
 	bool viewed, attr, uni_mode;
 
-	con_buf = (char *) __get_free_page(GFP_KERNEL);
+	char *con_buf __free(kfree) = kmalloc(PAGE_SIZE, GFP_KERNEL);
 	if (!con_buf)
 		return -ENOMEM;
 
@@ -382,17 +378,16 @@ vcs_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 	/* Select the proper current console and verify
 	 * sanity of the situation under the console lock.
 	 */
-	console_lock();
+	guard(console_lock)();
 
 	uni_mode = use_unicode(inode);
 	attr = use_attributes(inode);
 
-	ret = -EINVAL;
 	if (pos < 0)
-		goto unlock_out;
+		return -EINVAL;
 	/* we enforce 32-bit alignment for pos and count in unicode mode */
 	if (uni_mode && (pos | count) & 3)
-		goto unlock_out;
+		return -EINVAL;
 
 	poll = file->private_data;
 	if (count && poll)
@@ -468,10 +463,8 @@ vcs_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 	}
 	*ppos += read;
 	if (read)
-		ret = read;
-unlock_out:
-	console_unlock();
-	free_page((unsigned long) con_buf);
+		return read;
+
 	return ret;
 }
 
@@ -591,7 +584,6 @@ vcs_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
 {
 	struct inode *inode = file_inode(file);
 	struct vc_data *vc;
-	char *con_buf;
 	u16 *org0, *org;
 	unsigned int written;
 	int size;
@@ -602,7 +594,7 @@ vcs_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
 	if (use_unicode(inode))
 		return -EOPNOTSUPP;
 
-	con_buf = (char *) __get_free_page(GFP_KERNEL);
+	char *con_buf __free(kfree) = kmalloc(PAGE_SIZE, GFP_KERNEL);
 	if (!con_buf)
 		return -ENOMEM;
 
@@ -611,22 +603,18 @@ vcs_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
 	/* Select the proper current console and verify
 	 * sanity of the situation under the console lock.
 	 */
-	console_lock();
+	guard(console_lock)();
 
 	attr = use_attributes(inode);
-	ret = -ENXIO;
 	vc = vcs_vc(inode, &viewed);
 	if (!vc)
-		goto unlock_out;
+		return -ENXIO;
 
 	size = vcs_size(vc, attr, false);
-	if (size < 0) {
-		ret = size;
-		goto unlock_out;
-	}
-	ret = -EINVAL;
+	if (size < 0)
+		return size;
 	if (pos < 0 || pos > size)
-		goto unlock_out;
+		return -EINVAL;
 	if (count > size - pos)
 		count = size - pos;
 	written = 0;
@@ -651,8 +639,7 @@ vcs_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
 				 */
 				if (written)
 					break;
-				ret = -EFAULT;
-				goto unlock_out;
+				return -EFAULT;
 			}
 		}
 
@@ -664,15 +651,13 @@ vcs_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
 		if (!vc) {
 			if (written)
 				break;
-			ret = -ENXIO;
-			goto unlock_out;
+			return -ENXIO;
 		}
 		size = vcs_size(vc, attr, false);
 		if (size < 0) {
 			if (written)
 				break;
-			ret = size;
-			goto unlock_out;
+			return size;
 		}
 		if (pos >= size)
 			break;
@@ -699,12 +684,9 @@ vcs_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
 	}
 	*ppos += written;
 	ret = written;
-	if (written)
+	if (written && vc)
 		vcs_scr_updated(vc);
 
-unlock_out:
-	console_unlock();
-	free_page((unsigned long) con_buf);
 	return ret;
 }
 
@@ -754,17 +736,17 @@ vcs_open(struct inode *inode, struct file *filp)
 	unsigned int currcons = console(inode);
 	bool attr = use_attributes(inode);
 	bool uni_mode = use_unicode(inode);
-	int ret = 0;
 
 	/* we currently don't support attributes in unicode mode */
 	if (attr && uni_mode)
 		return -EOPNOTSUPP;
 
-	console_lock();
-	if(currcons && !vc_cons_allocated(currcons-1))
-		ret = -ENXIO;
-	console_unlock();
-	return ret;
+	guard(console_lock)();
+
+	if (currcons && !vc_cons_allocated(currcons - 1))
+		return -ENXIO;
+
+	return 0;
 }
 
 static int vcs_release(struct inode *inode, struct file *file)

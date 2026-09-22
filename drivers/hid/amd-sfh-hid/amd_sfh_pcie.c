@@ -8,11 +8,13 @@
  *	    Basavaraj Natikar <Basavaraj.Natikar@amd.com>
  */
 
+#include <linux/auxiliary_bus.h>
 #include <linux/bitops.h>
 #include <linux/delay.h>
 #include <linux/devm-helpers.h>
 #include <linux/dma-mapping.h>
 #include <linux/dmi.h>
+#include <linux/idr.h>
 #include <linux/interrupt.h>
 #include <linux/io-64-nonatomic-lo-hi.h>
 #include <linux/iopoll.h>
@@ -29,6 +31,7 @@
 #define ACEL_EN		BIT(0)
 #define GYRO_EN		BIT(1)
 #define MAGNO_EN	BIT(2)
+#define OP_EN		BIT(15)
 #define HPD_EN		BIT(16)
 #define ALS_EN		BIT(19)
 #define ACS_EN		BIT(22)
@@ -121,19 +124,10 @@ static irqreturn_t amd_sfh_irq_handler(int irq, void *data)
 
 int amd_sfh_irq_init_v2(struct amd_mp2_dev *privdata)
 {
-	int rc;
-
 	pcim_intx(privdata->pdev, true);
 
-	rc = devm_request_irq(&privdata->pdev->dev, privdata->pdev->irq,
-			      amd_sfh_irq_handler, 0, DRIVER_NAME, privdata);
-	if (rc) {
-		dev_err(&privdata->pdev->dev, "failed to request irq %d err=%d\n",
-			privdata->pdev->irq, rc);
-		return rc;
-	}
-
-	return 0;
+	return devm_request_irq(&privdata->pdev->dev, privdata->pdev->irq,
+				amd_sfh_irq_handler, 0, DRIVER_NAME, privdata);
 }
 
 static int amd_sfh_dis_sts_v2(struct amd_mp2_dev *privdata)
@@ -232,6 +226,9 @@ int amd_mp2_get_sensor_num(struct amd_mp2_dev *privdata, u8 *sensor_id)
 	if (MAGNO_EN & activestatus)
 		sensor_id[num_of_sensors++] = mag_idx;
 
+	if (OP_EN & activestatus)
+		sensor_id[num_of_sensors++] = op_idx;
+
 	if (ALS_EN & activestatus)
 		sensor_id[num_of_sensors++] = als_idx;
 
@@ -247,6 +244,8 @@ int amd_mp2_get_sensor_num(struct amd_mp2_dev *privdata, u8 *sensor_id)
 static void amd_mp2_pci_remove(void *privdata)
 {
 	struct amd_mp2_dev *mp2 = privdata;
+
+	sfh_deinit_emp2();
 	amd_sfh_hid_client_deinit(privdata);
 	mp2->mp2_ops->stop_all(mp2);
 	pcim_intx(mp2->pdev, false);
@@ -281,6 +280,7 @@ static void mp2_select_ops(struct amd_mp2_dev *privdata)
 	switch (acs) {
 	case V2_STATUS:
 		privdata->mp2_ops = &amd_sfh_ops_v2;
+		privdata->mp2_ver = MP2_VER_V2;
 		break;
 	default:
 		privdata->mp2_ops = &amd_sfh_ops;
@@ -382,6 +382,51 @@ static const struct attribute_group *amd_sfh_groups[] = {
 	NULL,
 };
 
+static DEFINE_IDA(sfh_tm_ida);
+
+static void amd_sfh_maybe_register_tm(struct amd_mp2_dev *mp2)
+{
+	struct auxiliary_device *adev;
+	bool present;
+	int id;
+
+	if (mp2->tm_auxdev)
+		return;
+
+	present = mp2->sfh1_1_ops ? mp2->dev_en.is_sra_present
+				  : (mp2->mp2_ver == MP2_VER_V2 &&
+				     amd_sfh_op_idx_enabled(mp2));
+	if (!present)
+		return;
+
+	id = ida_alloc(&sfh_tm_ida, GFP_KERNEL);
+	if (id < 0)
+		return;
+
+	adev = auxiliary_device_create(&mp2->pdev->dev, KBUILD_MODNAME,
+				       "tabletmode", NULL, id);
+	if (!adev) {
+		ida_free(&sfh_tm_ida, id);
+		dev_warn(&mp2->pdev->dev, "tabletmode auxdev create failed\n");
+		return;
+	}
+
+	mp2->tm_auxdev = adev;
+}
+
+static void amd_sfh_unregister_tm(struct amd_mp2_dev *mp2)
+{
+	int id;
+
+	if (!mp2->tm_auxdev)
+		return;
+
+	id = mp2->tm_auxdev->id;
+	auxiliary_device_destroy(mp2->tm_auxdev);
+	mp2->tm_auxdev = NULL;
+	ida_free(&sfh_tm_ida, id);
+}
+
 static void sfh1_1_init_work(struct work_struct *work)
 {
 	struct amd_mp2_dev *mp2 = container_of(work, struct amd_mp2_dev, work);
@@ -398,6 +443,7 @@ static void sfh1_1_init_work(struct work_struct *work)
 	if (rc)
 		dev_warn(&mp2->pdev->dev, "failed to update sysfs group\n");
 
+	amd_sfh_maybe_register_tm(mp2);
 }
 
 static void sfh_init_work(struct work_struct *work)
@@ -409,12 +455,15 @@ static void sfh_init_work(struct work_struct *work)
 	rc = amd_sfh_hid_client_init(mp2);
 	if (rc) {
 		amd_sfh_clear_intr(mp2);
-		dev_err(&pdev->dev, "amd_sfh_hid_client_init failed err %d\n", rc);
+		if (rc != -EOPNOTSUPP)
+			dev_err(&pdev->dev, "amd_sfh_hid_client_init failed err %d\n", rc);
 		return;
 	}
 
+	sfh_set_emp2(mp2);
 	amd_sfh_clear_intr(mp2);
 	mp2->init_done = 1;
+	amd_sfh_maybe_register_tm(mp2);
 }
 
 static void amd_sfh_remove(struct pci_dev *pdev)
@@ -422,6 +471,7 @@ static void amd_sfh_remove(struct pci_dev *pdev)
 	struct amd_mp2_dev *mp2 = pci_get_drvdata(pdev);
 
 	flush_work(&mp2->work);
+	amd_sfh_unregister_tm(mp2);
 	if (mp2->init_done)
 		mp2->mp2_ops->remove(mp2);
 }
@@ -442,6 +492,7 @@ static int amd_mp2_pci_probe(struct pci_dev *pdev, const struct pci_device_id *i
 
 	privdata->pdev = pdev;
 	dev_set_drvdata(&pdev->dev, privdata);
+
 	rc = pcim_enable_device(pdev);
 	if (rc)
 		return rc;
@@ -462,8 +513,13 @@ static int amd_mp2_pci_probe(struct pci_dev *pdev, const struct pci_device_id *i
 	if (!privdata->cl_data)
 		return -ENOMEM;
 
-	privdata->sfh1_1_ops = (const struct amd_sfh1_1_ops *)id->driver_data;
-	if (privdata->sfh1_1_ops) {
+	rc = devm_mutex_init(&pdev->dev, &privdata->lock);
+	if (rc)
+		return rc;
+
+	privdata->mp2_ver = (enum amd_mp2_version)id->driver_data;
+	if (privdata->mp2_ver >= MP2_VER_1_1) {
+		privdata->sfh1_1_ops = &sfh1_1_ops;
 		if (boot_cpu_data.x86 >= 0x1A)
 			privdata->rver = 1;
 
@@ -531,8 +587,7 @@ static SIMPLE_DEV_PM_OPS(amd_mp2_pm_ops, amd_mp2_pci_suspend,
 
 static const struct pci_device_id amd_mp2_pci_tbl[] = {
 	{ PCI_VDEVICE(AMD, PCI_DEVICE_ID_AMD_MP2) },
-	{ PCI_VDEVICE(AMD, PCI_DEVICE_ID_AMD_MP2_1_1),
-	  .driver_data = (kernel_ulong_t)&sfh1_1_ops },
+	{ PCI_DEVICE_DATA(AMD, MP2_1_1, MP2_VER_1_1) },
 	{ }
 };
 MODULE_DEVICE_TABLE(pci, amd_mp2_pci_tbl);

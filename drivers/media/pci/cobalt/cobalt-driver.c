@@ -26,9 +26,8 @@
 
 /* add your revision and whatnot here */
 static const struct pci_device_id cobalt_pci_tbl[] = {
-	{PCI_VENDOR_ID_CISCO, PCI_DEVICE_ID_COBALT,
-	 PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0},
-	{0,}
+	{ PCI_VDEVICE(CISCO, PCI_DEVICE_ID_COBALT) },
+	{ }
 };
 
 MODULE_DEVICE_TABLE(pci, cobalt_pci_tbl);
@@ -44,7 +43,7 @@ module_param_named(ignore_err, cobalt_ignore_err, int, 0644);
 MODULE_PARM_DESC(ignore_err,
 	"If set then ignore missing i2c adapters/receivers. Default: 0\n");
 
-MODULE_AUTHOR("Hans Verkuil <hansverk@cisco.com> & Morten Hestnes");
+MODULE_AUTHOR("Hans Verkuil <hverkuil@kernel.org> & Morten Hestnes");
 MODULE_DESCRIPTION("cobalt driver");
 MODULE_LICENSE("GPL");
 
@@ -663,7 +662,7 @@ static int cobalt_probe(struct pci_dev *pci_dev,
 	/* FIXME - module parameter arrays constrain max instances */
 	i = atomic_inc_return(&cobalt_instance) - 1;
 
-	cobalt = kzalloc(sizeof(struct cobalt), GFP_KERNEL);
+	cobalt = kzalloc_obj(struct cobalt);
 	if (cobalt == NULL)
 		return -ENOMEM;
 	cobalt->pci_dev = pci_dev;

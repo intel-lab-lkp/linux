@@ -168,6 +168,20 @@ config BINFMT_MISC
 	  you have use for it; the module is called binfmt_misc. If you
 	  don't know what to answer at this point, say Y.
 
+config BINFMT_MISC_BPF
+	bool "BPF-selected interpreters for misc binaries"
+	depends on BINFMT_MISC=y
+	depends on BPF_SYSCALL && BPF_JIT && DEBUG_INFO_BTF
+	help
+	  Allow binfmt_misc binary type handlers to be implemented as bpf
+	  struct_ops programs. Instead of matching a fixed magic and
+	  redirecting to a fixed interpreter recorded at registration time
+	  such handlers match binaries programmatically and compute the
+	  interpreter to use per binary, e.g. relative to the location of
+	  the binary itself.
+
+	  If you don't know what to answer at this point, say N.
+
 config COREDUMP
 	bool "Enable core dump support" if EXPERT
 	default y
@@ -183,5 +197,14 @@ config EXEC_KUNIT_TEST
 	help
 	  This builds the exec KUnit tests, which tests boundary conditions
 	  of various aspects of the exec internals.
+
+config ARCH_HAS_ELF_CORE_EFLAGS
+	bool
+	depends on BINFMT_ELF && ELF_CORE
+	default n
+	help
+	  Select this option if the architecture makes use of the e_flags
+	  field in the ELF header to store ABI or other architecture-specific
+	  information that should be preserved in core dumps.
 
 endmenu

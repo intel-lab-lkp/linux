@@ -25,10 +25,17 @@
 #define __AMDGPU_JPEG_H__
 
 #include "amdgpu_ras.h"
+#include "amdgpu_cs.h"
 
 #define AMDGPU_MAX_JPEG_INSTANCES	4
 #define AMDGPU_MAX_JPEG_RINGS           10
 #define AMDGPU_MAX_JPEG_RINGS_4_0_3     8
+
+#define JPEG_REG_RANGE_START            0x4000
+#define JPEG_REG_RANGE_END              0x41c2
+#define JPEG_ATOMIC_RANGE_START         0x4120
+#define JPEG_ATOMIC_RANGE_END           0x412A
+
 
 #define AMDGPU_JPEG_HARVEST_JPEG0 (1 << 0)
 #define AMDGPU_JPEG_HARVEST_JPEG1 (1 << 1)
@@ -142,6 +149,9 @@ struct amdgpu_jpeg {
 	u32 *ip_dump;
 	u32 reg_count;
 	const struct amdgpu_hwip_reg_entry *reg_list;
+
+	bool disable_uq;
+	bool disable_kq;
 };
 
 int amdgpu_jpeg_sw_init(struct amdgpu_device *adev);
@@ -170,5 +180,8 @@ int amdgpu_jpeg_reg_dump_init(struct amdgpu_device *adev,
 			       const struct amdgpu_hwip_reg_entry *reg, u32 count);
 void amdgpu_jpeg_dump_ip_state(struct amdgpu_ip_block *ip_block);
 void amdgpu_jpeg_print_ip_state(struct amdgpu_ip_block *ip_block, struct drm_printer *p);
+int amdgpu_jpeg_dec_parse_cs(struct amdgpu_cs_parser *parser,
+			     struct amdgpu_job *job,
+			     struct amdgpu_ib *ib);
 
 #endif /*__AMDGPU_JPEG_H__*/

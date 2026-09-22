@@ -119,7 +119,7 @@
 #define __read_mostly
 
 #ifndef __attribute_const__
-# define __attribute_const__
+# define __attribute_const__ __attribute__ ((__const__))
 #endif
 
 #ifndef __maybe_unused
@@ -136,6 +136,10 @@
 
 #ifndef __force
 # define __force
+#endif
+
+#ifndef __iomem
+# define __iomem
 #endif
 
 #ifndef __weak

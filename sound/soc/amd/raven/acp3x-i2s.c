@@ -149,8 +149,9 @@ static int acp3x_i2s_trigger(struct snd_pcm_substream *substream,
 				int cmd, struct snd_soc_dai *dai)
 {
 	struct i2s_stream_instance *rtd;
-	u32 ret, val, period_bytes, reg_val, ier_val, water_val;
+	u32 val, period_bytes, reg_val, ier_val, water_val;
 	u32 buf_size, buf_reg;
+	int ret;
 
 	rtd = substream->runtime->private_data;
 	period_bytes = frames_to_bytes(substream->runtime,
@@ -249,11 +250,17 @@ static int acp3x_i2s_trigger(struct snd_pcm_substream *substream,
 	return ret;
 }
 
+static const u64 acp3x_i2s_selectable_formats =
+	SND_SOC_POSSIBLE_DAIFMT_I2S	|
+	SND_SOC_POSSIBLE_DAIFMT_DSP_A;
+
 static const struct snd_soc_dai_ops acp3x_i2s_dai_ops = {
 	.hw_params = acp3x_i2s_hwparams,
 	.trigger = acp3x_i2s_trigger,
 	.set_fmt = acp3x_i2s_set_fmt,
 	.set_tdm_slot = acp3x_i2s_set_tdm_slot,
+	.auto_selectable_formats = &acp3x_i2s_selectable_formats,
+	.num_auto_selectable_formats = 1,
 };
 
 static const struct snd_soc_component_driver acp3x_dai_component = {

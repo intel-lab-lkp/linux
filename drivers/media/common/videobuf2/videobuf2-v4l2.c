@@ -635,19 +635,6 @@ struct vb2_buffer *vb2_find_buffer(struct vb2_queue *q, u64 timestamp)
 }
 EXPORT_SYMBOL_GPL(vb2_find_buffer);
 
-/*
- * vb2_querybuf() - query video buffer information
- * @q:		vb2 queue
- * @b:		buffer struct passed from userspace to vidioc_querybuf handler
- *		in driver
- *
- * Should be called from vidioc_querybuf ioctl handler in driver.
- * This function will verify the passed v4l2_buffer structure and fill the
- * relevant information for the userspace.
- *
- * The return values from this function are intended to be directly returned
- * from vidioc_querybuf handler in driver.
- */
 int vb2_querybuf(struct vb2_queue *q, struct v4l2_buffer *b)
 {
 	struct vb2_buffer *vb;
@@ -973,18 +960,14 @@ EXPORT_SYMBOL_GPL(vb2_queue_change_type);
 
 __poll_t vb2_poll(struct vb2_queue *q, struct file *file, poll_table *wait)
 {
-	struct video_device *vfd = video_devdata(file);
+	struct v4l2_fh *fh = file_to_v4l2_fh(file);
 	__poll_t res;
 
 	res = vb2_core_poll(q, file, wait);
 
-	if (test_bit(V4L2_FL_USES_V4L2_FH, &vfd->flags)) {
-		struct v4l2_fh *fh = file->private_data;
-
-		poll_wait(file, &fh->wait, wait);
-		if (v4l2_event_pending(fh))
-			res |= EPOLLPRI;
-	}
+	poll_wait(file, &fh->wait, wait);
+	if (v4l2_event_pending(fh))
+		res |= EPOLLPRI;
 
 	return res;
 }
@@ -1013,6 +996,11 @@ int vb2_ioctl_remove_bufs(struct file *file, void *priv,
 
 	if (vb2_queue_is_busy(vdev->queue, file))
 		return -EBUSY;
+
+	if (vb2_fileio_is_active(vdev->queue)) {
+		dprintk(vdev->queue, 1, "file io in progress\n");
+		return -EBUSY;
+	}
 
 	return vb2_core_remove_bufs(vdev->queue, d->index, d->count);
 }
@@ -1300,20 +1288,6 @@ void vb2_video_unregister_device(struct video_device *vdev)
 	put_device(&vdev->dev);
 }
 EXPORT_SYMBOL_GPL(vb2_video_unregister_device);
-
-/* vb2_ops helpers. Only use if vq->lock is non-NULL. */
-
-void vb2_ops_wait_prepare(struct vb2_queue *vq)
-{
-	mutex_unlock(vq->lock);
-}
-EXPORT_SYMBOL_GPL(vb2_ops_wait_prepare);
-
-void vb2_ops_wait_finish(struct vb2_queue *vq)
-{
-	mutex_lock(vq->lock);
-}
-EXPORT_SYMBOL_GPL(vb2_ops_wait_finish);
 
 /*
  * Note that this function is called during validation time and

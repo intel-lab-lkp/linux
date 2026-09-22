@@ -479,7 +479,10 @@ for details.
 
 To maximize the number of tests passing, the .config of the kernel
 under test should match the config file fragment in
-tools/testing/selftests/bpf as closely as possible.
+tools/testing/selftests/bpf as closely as possible. If not possible,
+however, you can set ``BPF_STRICT_BUILD=0`` when invoking ``make``
+to tolerate individual compilation failures and continue building
+the remaining tests rather than treating each failure as fatal.
 
 Finally to ensure support for latest BPF Type Format features -
 discussed in Documentation/bpf/btf.rst - pahole version 1.16
@@ -611,9 +614,10 @@ Q: I have added a new BPF instruction to the kernel, how can I integrate
 it into LLVM?
 
 A: LLVM has a ``-mcpu`` selector for the BPF back end in order to allow
-the selection of BPF instruction set extensions. By default the
-``generic`` processor target is used, which is the base instruction set
-(v1) of BPF.
+the selection of BPF instruction set extensions. Before llvm version 20,
+the ``generic`` processor target is used, which is the base instruction
+set (v1) of BPF. Since llvm 20, the default processor target has changed
+to instruction set v3.
 
 LLVM has an option to select ``-mcpu=probe`` where it will probe the host
 kernel for supported BPF instruction set extensions and selects the

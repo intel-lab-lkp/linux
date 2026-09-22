@@ -83,6 +83,10 @@ enum {
 	POWER_SUPPLY_TECHNOLOGY_LiFe,
 	POWER_SUPPLY_TECHNOLOGY_NiCd,
 	POWER_SUPPLY_TECHNOLOGY_LiMn,
+	POWER_SUPPLY_TECHNOLOGY_PbAc,
+	POWER_SUPPLY_TECHNOLOGY_NiZn,
+	POWER_SUPPLY_TECHNOLOGY_RAM,
+	POWER_SUPPLY_TECHNOLOGY_ZnAr,
 };
 
 enum {
@@ -176,6 +180,8 @@ enum power_supply_property {
 	POWER_SUPPLY_PROP_MANUFACTURE_YEAR,
 	POWER_SUPPLY_PROP_MANUFACTURE_MONTH,
 	POWER_SUPPLY_PROP_MANUFACTURE_DAY,
+	POWER_SUPPLY_PROP_INTERNAL_RESISTANCE,
+	POWER_SUPPLY_PROP_STATE_OF_HEALTH,
 	/* Properties of type `const char *' */
 	POWER_SUPPLY_PROP_MODEL_NAME,
 	POWER_SUPPLY_PROP_MANUFACTURER,
@@ -208,6 +214,9 @@ enum power_supply_usb_type {
 	POWER_SUPPLY_USB_TYPE_PD,		/* Power Delivery Port */
 	POWER_SUPPLY_USB_TYPE_PD_DRP,		/* PD Dual Role Port */
 	POWER_SUPPLY_USB_TYPE_PD_PPS,		/* PD Programmable Power Supply */
+	/* PD Standard Power Range Adjustable Voltage Supply */
+	POWER_SUPPLY_USB_TYPE_PD_SPR_AVS,
+	POWER_SUPPLY_USB_TYPE_PD_PPS_SPR_AVS,	/* Supports both PD PPS + SPR AVS */
 	POWER_SUPPLY_USB_TYPE_APPLE_BRICK_ID,	/* Apple Charging Method */
 };
 
@@ -232,7 +241,6 @@ struct power_supply;
 
 /* Run-time specific power supply configuration */
 struct power_supply_config {
-	struct device_node *of_node;
 	struct fwnode_handle *fwnode;
 
 	/* Driver private data */
@@ -277,6 +285,15 @@ struct power_supply_desc {
 	int (*property_is_writeable)(struct power_supply *psy,
 				     enum power_supply_property psp);
 	void (*external_power_changed)(struct power_supply *psy);
+	/*
+	 * Optional registration-time initialization. This runs in sleepable
+	 * process context after driver data and any battery info are available,
+	 * but before the device is added. The callback must not publish changes or
+	 * start asynchronous activity that can access the power supply before
+	 * registration completes. Return 0 on success or a negative errno on
+	 * failure.
+	 */
+	int (*init)(struct power_supply *psy);
 
 	/*
 	 * Set if thermal zone should not be created for this power supply.
@@ -342,7 +359,8 @@ struct power_supply {
 #endif
 
 #ifdef CONFIG_LEDS_TRIGGERS
-	struct led_trigger *trig;
+	struct led_trigger *charging_or_full_trig;
+	struct led_trigger *online_trig;
 	struct led_trigger *charging_trig;
 	struct led_trigger *full_trig;
 	struct led_trigger *charging_blink_full_solid_trig;
@@ -798,29 +816,38 @@ struct power_supply_battery_info {
 	int bti_resistance_tolerance;
 };
 
+#if IS_ENABLED(CONFIG_POWER_SUPPLY)
 extern int power_supply_reg_notifier(struct notifier_block *nb);
 extern void power_supply_unreg_notifier(struct notifier_block *nb);
-#if IS_ENABLED(CONFIG_POWER_SUPPLY)
 extern struct power_supply *power_supply_get_by_name(const char *name);
+extern int __must_check power_supply_get_system_batteries(struct device *dev,
+							  struct power_supply ***psys);
+extern void power_supply_put_system_batteries(struct power_supply **psys, int count);
 extern void power_supply_put(struct power_supply *psy);
 #else
+static inline int power_supply_reg_notifier(struct notifier_block *nb)
+{ return -EOPNOTSUPP; }
+static inline void power_supply_unreg_notifier(struct notifier_block *nb) {}
 static inline void power_supply_put(struct power_supply *psy) {}
 static inline struct power_supply *power_supply_get_by_name(const char *name)
 { return NULL; }
+static inline int __must_check power_supply_get_system_batteries(struct device *dev,
+								 struct power_supply ***psys)
+{
+	if (psys)
+		*psys = NULL;
+	return 0;
+}
+
+static inline void power_supply_put_system_batteries(struct power_supply **psys,
+						     int count)
+{
+}
 #endif
-#ifdef CONFIG_OF
-extern struct power_supply *power_supply_get_by_phandle(struct device_node *np,
-							const char *property);
-extern struct power_supply *devm_power_supply_get_by_phandle(
+extern struct power_supply *power_supply_get_by_reference(struct fwnode_handle *fwnode,
+							  const char *property);
+extern struct power_supply *devm_power_supply_get_by_reference(
 				    struct device *dev, const char *property);
-#else /* !CONFIG_OF */
-static inline struct power_supply *
-power_supply_get_by_phandle(struct device_node *np, const char *property)
-{ return NULL; }
-static inline struct power_supply *
-devm_power_supply_get_by_phandle(struct device *dev, const char *property)
-{ return NULL; }
-#endif /* CONFIG_OF */
 
 extern const enum power_supply_property power_supply_battery_info_properties[];
 extern const size_t power_supply_battery_info_properties_size;
@@ -888,14 +915,22 @@ static inline int power_supply_is_system_supplied(void) { return -ENOSYS; }
 extern int power_supply_get_property(struct power_supply *psy,
 			    enum power_supply_property psp,
 			    union power_supply_propval *val);
+int power_supply_get_property_direct(struct power_supply *psy, enum power_supply_property psp,
+				     union power_supply_propval *val);
 #if IS_ENABLED(CONFIG_POWER_SUPPLY)
 extern int power_supply_set_property(struct power_supply *psy,
 			    enum power_supply_property psp,
 			    const union power_supply_propval *val);
+int power_supply_set_property_direct(struct power_supply *psy, enum power_supply_property psp,
+				     const union power_supply_propval *val);
 #else
 static inline int power_supply_set_property(struct power_supply *psy,
 			    enum power_supply_property psp,
 			    const union power_supply_propval *val)
+{ return 0; }
+static inline int power_supply_set_property_direct(struct power_supply *psy,
+						   enum power_supply_property psp,
+						   const union power_supply_propval *val)
 { return 0; }
 #endif
 extern void power_supply_external_power_changed(struct power_supply *psy);

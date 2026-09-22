@@ -76,7 +76,7 @@ static int tidss_bridge_atomic_check(struct drm_bridge *bridge,
 static const struct drm_bridge_funcs tidss_bridge_funcs = {
 	.attach				= tidss_bridge_attach,
 	.atomic_check			= tidss_bridge_atomic_check,
-	.atomic_reset			= drm_atomic_helper_bridge_reset,
+	.atomic_create_state			= drm_atomic_helper_bridge_create_state,
 	.atomic_duplicate_state		= drm_atomic_helper_bridge_duplicate_state,
 	.atomic_destroy_state		= drm_atomic_helper_bridge_destroy_state,
 };
@@ -90,17 +90,23 @@ int tidss_encoder_create(struct tidss_device *tidss,
 	struct drm_connector *connector;
 	int ret;
 
-	t_enc = drmm_simple_encoder_alloc(&tidss->ddev, struct tidss_encoder,
-					  encoder, encoder_type);
+	t_enc = devm_drm_bridge_alloc(tidss->dev, struct tidss_encoder,
+				      bridge, &tidss_bridge_funcs);
 	if (IS_ERR(t_enc))
 		return PTR_ERR(t_enc);
 
+	ret = drm_simple_encoder_init(&tidss->ddev, &t_enc->encoder,
+				      encoder_type);
+	if (ret)
+		return ret;
+
 	t_enc->tidss = tidss;
 	t_enc->next_bridge = next_bridge;
-	t_enc->bridge.funcs = &tidss_bridge_funcs;
 
 	enc = &t_enc->encoder;
 	enc->possible_crtcs = possible_crtcs;
+
+	devm_drm_bridge_add(tidss->dev, &t_enc->bridge);
 
 	/* Attaching first bridge to the encoder */
 	ret = drm_bridge_attach(enc, &t_enc->bridge, NULL,
@@ -115,12 +121,6 @@ int tidss_encoder_create(struct tidss_device *tidss,
 	if (IS_ERR(connector)) {
 		dev_err(tidss->dev, "bridge_connector create failed\n");
 		return PTR_ERR(connector);
-	}
-
-	ret = drm_connector_attach_encoder(connector, enc);
-	if (ret) {
-		dev_err(tidss->dev, "attaching encoder to connector failed\n");
-		return ret;
 	}
 
 	t_enc->connector = connector;

@@ -49,7 +49,7 @@
 #define LOONGSON_PWM_CTRL_REG_DZONE	BIT(10) /* Anti-dead Zone Enable Bit */
 
 /* default input clk frequency for the ACPI case */
-#define LOONGSON_PWM_FREQ_DEFAULT	50000 /* Hz */
+#define LOONGSON_PWM_FREQ_DEFAULT	50000000 /* Hz */
 
 struct pwm_loongson_ddata {
 	struct clk *clk;
@@ -269,7 +269,7 @@ static const struct of_device_id pwm_loongson_of_ids[] = {
 MODULE_DEVICE_TABLE(of, pwm_loongson_of_ids);
 
 static const struct acpi_device_id pwm_loongson_acpi_ids[] = {
-	{ "LOON0006" },
+	{ .id = "LOON0006" },
 	{ }
 };
 MODULE_DEVICE_TABLE(acpi, pwm_loongson_acpi_ids);

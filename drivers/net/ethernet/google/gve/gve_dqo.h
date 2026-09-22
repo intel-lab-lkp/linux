@@ -36,8 +36,10 @@ netdev_tx_t gve_tx_dqo(struct sk_buff *skb, struct net_device *dev);
 netdev_features_t gve_features_check_dqo(struct sk_buff *skb,
 					 struct net_device *dev,
 					 netdev_features_t features);
+int gve_xdp_rx_timestamp(const struct xdp_md *_ctx, u64 *timestamp);
 bool gve_tx_poll_dqo(struct gve_notify_block *block, bool do_clean);
 bool gve_xdp_poll_dqo(struct gve_notify_block *block);
+bool gve_xsk_tx_poll_dqo(struct gve_notify_block *block, int budget);
 int gve_rx_poll_dqo(struct gve_notify_block *block, int budget);
 int gve_tx_alloc_rings_dqo(struct gve_priv *priv,
 			   struct gve_tx_alloc_rings_cfg *cfg);

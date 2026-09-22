@@ -1620,7 +1620,7 @@ static int bttv_g_std(struct file *file, void *priv, v4l2_std_id *id)
 	return 0;
 }
 
-static int bttv_querystd(struct file *file, void *f, v4l2_std_id *id)
+static int bttv_querystd(struct file *file, void *priv, v4l2_std_id *id)
 {
 	struct bttv *btv = video_drvdata(file);
 
@@ -1750,7 +1750,7 @@ static int bttv_s_frequency(struct file *file, void *priv,
 	return 0;
 }
 
-static int bttv_log_status(struct file *file, void *f)
+static int bttv_log_status(struct file *file, void *priv)
 {
 	struct video_device *vdev = video_devdata(file);
 	struct bttv *btv = video_drvdata(file);
@@ -1761,7 +1761,7 @@ static int bttv_log_status(struct file *file, void *f)
 }
 
 #ifdef CONFIG_VIDEO_ADV_DEBUG
-static int bttv_g_register(struct file *file, void *f,
+static int bttv_g_register(struct file *file, void *priv,
 					struct v4l2_dbg_register *reg)
 {
 	struct bttv *btv = video_drvdata(file);
@@ -1774,7 +1774,7 @@ static int bttv_g_register(struct file *file, void *f,
 	return 0;
 }
 
-static int bttv_s_register(struct file *file, void *f,
+static int bttv_s_register(struct file *file, void *priv,
 					const struct v4l2_dbg_register *reg)
 {
 	struct bttv *btv = video_drvdata(file);
@@ -2159,7 +2159,7 @@ static int bttv_enum_fmt_vid_cap(struct file *file, void  *priv,
 	return 0;
 }
 
-static int bttv_g_parm(struct file *file, void *f,
+static int bttv_g_parm(struct file *file, void *priv,
 				struct v4l2_streamparm *parm)
 {
 	struct bttv *btv = video_drvdata(file);
@@ -2208,7 +2208,7 @@ static int bttv_g_pixelaspect(struct file *file, void *priv,
 	return 0;
 }
 
-static int bttv_g_selection(struct file *file, void *f, struct v4l2_selection *sel)
+static int bttv_g_selection(struct file *file, void *priv, struct v4l2_selection *sel)
 {
 	struct bttv *btv = video_drvdata(file);
 
@@ -2232,7 +2232,7 @@ static int bttv_g_selection(struct file *file, void *f, struct v4l2_selection *s
 	return 0;
 }
 
-static int bttv_s_selection(struct file *file, void *f, struct v4l2_selection *sel)
+static int bttv_s_selection(struct file *file, void *priv, struct v4l2_selection *sel)
 {
 	struct bttv *btv = video_drvdata(file);
 	const struct v4l2_rect *b;
@@ -3216,7 +3216,7 @@ static int bttv_probe(struct pci_dev *dev, const struct pci_device_id *pci_id)
 	if (bttv_num == BTTV_MAX)
 		return -ENOMEM;
 	pr_info("Bt8xx card found (%d)\n", bttv_num);
-	bttvs[bttv_num] = btv = kzalloc(sizeof(*btv), GFP_KERNEL);
+	bttvs[bttv_num] = btv = kzalloc_obj(*btv);
 	if (btv == NULL) {
 		pr_err("out of memory\n");
 		return -ENOMEM;
@@ -3563,12 +3563,12 @@ static int __maybe_unused bttv_resume(struct device *dev)
 }
 
 static const struct pci_device_id bttv_pci_tbl[] = {
-	{PCI_VDEVICE(BROOKTREE, PCI_DEVICE_ID_BT848), 0},
-	{PCI_VDEVICE(BROOKTREE, PCI_DEVICE_ID_BT849), 0},
-	{PCI_VDEVICE(BROOKTREE, PCI_DEVICE_ID_BT878), 0},
-	{PCI_VDEVICE(BROOKTREE, PCI_DEVICE_ID_BT879), 0},
-	{PCI_VDEVICE(BROOKTREE, PCI_DEVICE_ID_FUSION879), 0},
-	{0,}
+	{ PCI_VDEVICE(BROOKTREE, PCI_DEVICE_ID_BT848) },
+	{ PCI_VDEVICE(BROOKTREE, PCI_DEVICE_ID_BT849) },
+	{ PCI_VDEVICE(BROOKTREE, PCI_DEVICE_ID_BT878) },
+	{ PCI_VDEVICE(BROOKTREE, PCI_DEVICE_ID_BT879) },
+	{ PCI_VDEVICE(BROOKTREE, PCI_DEVICE_ID_FUSION879) },
+	{ }
 };
 
 MODULE_DEVICE_TABLE(pci, bttv_pci_tbl);
