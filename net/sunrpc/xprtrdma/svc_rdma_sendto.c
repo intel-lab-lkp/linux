@@ -294,6 +294,23 @@ void svc_rdma_send_ctxts_drain(struct svcxprt_rdma *rdma)
 }
 
 /**
+ * svc_rdma_send_ctxts_stranded_release - Release stranded send_ctxts
+ * @rdma: svcxprt_rdma being torn down
+ *
+ * Context: transport destructor only, after the QP has been drained
+ * and before its rw contexts are destroyed.
+ */
+void svc_rdma_send_ctxts_stranded_release(struct svcxprt_rdma *rdma)
+{
+	struct svc_rdma_send_ctxt *ctxt, *next;
+	struct llist_node *node;
+
+	node = llist_del_all(&rdma->sc_send_stranded_ctxts);
+	llist_for_each_entry_safe(ctxt, next, node, sc_node)
+		svc_rdma_send_ctxt_release(rdma, ctxt);
+}
+
+/**
  * svc_rdma_send_ctxt_put - Queue send_ctxt for deferred release
  * @rdma: controlling svcxprt_rdma
  * @ctxt: send_ctxt to queue for deferred release
@@ -428,9 +445,15 @@ out_close:
  * @sqecount: number of SQ entries that were reserved
  * @ret: error code from ib_post_send
  *
+ * The transport is closing on return. Who owns the caller's context
+ * depends on how much of the chain was posted.
+ *
  * Return values:
- *   %0: At least one WR was posted; a completion handles cleanup
- *   %-ENOTCONN: No WRs were posted; SQ slots are released
+ *   %0: A prefix of the chain was posted. Its signaled tail was not,
+ *       so no completion will release the caller's context. The
+ *       caller keeps ownership. The SQ reservation stays debited.
+ *   %-ENOTCONN: No WR was posted; SQ slots are released and the
+ *       caller owns its context.
  */
 int svc_rdma_post_send_err(struct svcxprt_rdma *rdma,
 			   const struct rpc_rdma_cid *cid,
@@ -441,9 +464,6 @@ int svc_rdma_post_send_err(struct svcxprt_rdma *rdma,
 	trace_svcrdma_sq_post_err(rdma, cid, ret);
 	svc_rdma_xprt_deferred_close(rdma);
 
-	/* If even one WR was posted, a Send completion will
-	 * return the reserved SQ slots.
-	 */
 	if (bad_wr != first_wr)
 		return 0;
 
@@ -501,7 +521,8 @@ flushed:
  * @ctxt publishes its position in xpt_acked_pos.
  *
  * Return values:
- *   %0: @ctxt's WR chain was posted successfully
+ *   %0: The transport owns @ctxt; a Send completion or the
+ *       transport destructor releases it
  *   %-ENOTCONN: The connection was lost
  */
 int svc_rdma_post_send(struct svcxprt_rdma *rdma,
@@ -538,9 +559,18 @@ int svc_rdma_post_send(struct svcxprt_rdma *rdma,
 	ctxt->sc_pos = seq;
 	ret = ib_post_send(rdma->sc_qp, first_wr, &bad_wr);
 	spin_unlock(&rdma->sc_post_lock);
-	if (ret)
-		return svc_rdma_post_send_err(rdma, &cid, bad_wr,
-					      first_wr, sqecount, ret);
+	if (ret) {
+		ret = svc_rdma_post_send_err(rdma, &cid, bad_wr,
+					     first_wr, sqecount, ret);
+		if (ret)
+			return ret;
+
+		/* The posted prefix still references @ctxt. Only the
+		 * transport destructor may release it.
+		 */
+		llist_add(&ctxt->sc_node, &rdma->sc_send_stranded_ctxts);
+		return 0;
+	}
 	if (pos)
 		*pos = seq;
 	return 0;
