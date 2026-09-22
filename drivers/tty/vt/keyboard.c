@@ -403,10 +403,9 @@ static void set_leds(void)
 
 static void do_compute_shiftstate(void)
 {
+	unsigned char down[NR_SHIFT] = { 0 };
 	unsigned int k, sym, val;
-
-	shift_state = 0;
-	memset(shift_down, 0, sizeof(shift_down));
+	int state = 0;
 
 	for_each_set_bit(k, key_down, min(NR_KEYS, KEY_CNT)) {
 		sym = U(key_maps[0][k]);
@@ -417,9 +416,17 @@ static void do_compute_shiftstate(void)
 		if (val == KVAL(K_CAPSSHIFT))
 			val = KVAL(K_SHIFT);
 
-		shift_down[val]++;
-		shift_state |= BIT(val);
+		down[val]++;
+		state |= BIT(val);
 	}
+
+	memcpy(shift_down, down, sizeof(shift_down));
+	/*
+	 * Publish the recomputed state in one step. vt_get_shift_state()
+	 * reads shift_state without kbd_event_lock; pairs with its
+	 * smp_load_acquire().
+	 */
+	smp_store_release(&shift_state, state);
 }
 
 /* We still have to export this method to vt.c */
