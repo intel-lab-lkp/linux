@@ -106,15 +106,19 @@ static int rcar_sysc_power(const struct rcar_sysc_pd *pd, bool on)
 	unsigned int chan_mask = BIT(pd->chan_bit);
 	unsigned int status, k;
 	unsigned long flags;
+	u32 extmask_val;
 	int ret;
 
 	spin_lock_irqsave(&rcar_sysc_lock, flags);
 
+	/* Pairs with the smp_store_release() in rcar_sysc_pd_init(). */
+	extmask_val = smp_load_acquire(&rcar_sysc_extmask_val);
+
 	/*
 	 * Mask external power requests for CPU or 3DG domains
 	 */
-	if (rcar_sysc_extmask_val) {
-		iowrite32(rcar_sysc_extmask_val,
+	if (extmask_val) {
+		iowrite32(extmask_val,
 			  rcar_sysc_base + rcar_sysc_extmask_offs);
 	}
 
@@ -157,7 +161,7 @@ static int rcar_sysc_power(const struct rcar_sysc_pd *pd, bool on)
 	iowrite32(isr_mask, rcar_sysc_base + SYSCISCR);
 
  out:
-	if (rcar_sysc_extmask_val)
+	if (extmask_val)
 		iowrite32(0, rcar_sysc_base + rcar_sysc_extmask_offs);
 
 	spin_unlock_irqrestore(&rcar_sysc_lock, flags);
@@ -381,7 +385,12 @@ static int __init rcar_sysc_pd_init(void)
 
 	/* Optional External Request Mask Register */
 	rcar_sysc_extmask_offs = info->extmask_offs;
-	rcar_sysc_extmask_val = info->extmask_val;
+	/*
+	 * rcar_sysc_power() tests rcar_sysc_extmask_val and then uses
+	 * rcar_sysc_base and the offset, so publish the value last, with
+	 * release semantics.
+	 */
+	smp_store_release(&rcar_sysc_extmask_val, info->extmask_val);
 
 	domains = kzalloc_obj(*domains);
 	if (!domains) {
