@@ -604,6 +604,9 @@ int vsock_assign_transport(struct vsock_sock *vsk, struct vsock_sock *psk)
 	__u8 remote_flags;
 	int ret;
 
+	if (WARN_ON_ONCE(vsk->transport || vsk->trans))
+		return -EINVAL;
+
 	/* If the packet is coming with the source and destination CIDs higher
 	 * than VMADDR_CID_HOST, then a vsock channel where all the packets are
 	 * forwarded to the host should be established. Then the host will
@@ -649,11 +652,6 @@ int vsock_assign_transport(struct vsock_sock *vsk, struct vsock_sock *psk)
 		goto err;
 	}
 
-	if (vsk->transport && vsk->transport == new_transport) {
-		ret = 0;
-		goto err;
-	}
-
 	/* We increase the module refcnt to prevent the transport unloading
 	 * while there are open sockets assigned to it.
 	 */
@@ -667,26 +665,6 @@ int vsock_assign_transport(struct vsock_sock *vsk, struct vsock_sock *psk)
 	 * the last module_put() below or in vsock_deassign_transport().
 	 */
 	mutex_unlock(&vsock_register_mutex);
-
-	if (vsk->transport) {
-		/* transport->release() must be called with sock lock acquired.
-		 * This path can only be taken during vsock_connect(), where we
-		 * have already held the sock lock. In the other cases, this
-		 * function is called on a new socket which is not assigned to
-		 * any transport.
-		 */
-		vsk->transport->release(vsk);
-		vsock_deassign_transport(vsk);
-
-		/* transport's release() and destruct() can touch some socket
-		 * state, since we are reassigning the socket to a new transport
-		 * during vsock_connect(), let's reset these fields to have a
-		 * clean state.
-		 */
-		sock_reset_flag(sk, SOCK_DONE);
-		sk->sk_state = TCP_CLOSE;
-		WRITE_ONCE(vsk->peer_shutdown, 0);
-	}
 
 	if (sk->sk_type == SOCK_SEQPACKET) {
 		if (!new_transport->seqpacket_allow ||
