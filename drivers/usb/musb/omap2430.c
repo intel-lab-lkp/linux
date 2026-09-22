@@ -34,13 +34,70 @@ struct omap2430_glue {
 	enum musb_vbus_id_status status;
 	struct work_struct	omap_musb_mailbox_work;
 	struct device		*control_otghs;
+	struct phy		*phy;
 	unsigned int		is_runtime_suspended:1;
 	unsigned int		needs_resume:1;
+	/* Defer PHY access until the normal system-resume phase. */
 	unsigned int		phy_suspended:1;
+	unsigned int		phy_initialized:1;
+	unsigned int		phy_powered:1;
 };
 #define glue_to_musb(g)		platform_get_drvdata(g->musb)
 
 static struct omap2430_glue	*_glue;
+
+static int omap2430_phy_power_on(struct omap2430_glue *glue)
+{
+	int ret;
+
+	if (!glue->phy)
+		return 0;
+
+	if (!glue->phy_initialized) {
+		ret = phy_init(glue->phy);
+		if (ret)
+			return ret;
+		glue->phy_initialized = 1;
+	}
+
+	if (glue->phy_powered)
+		return 0;
+
+	ret = phy_power_on(glue->phy);
+	if (ret) {
+		/* Keep ownership if phy_exit() itself cannot release the reference. */
+		if (!phy_exit(glue->phy))
+			glue->phy_initialized = 0;
+		return ret;
+	}
+	glue->phy_powered = 1;
+
+	return 0;
+}
+
+static int omap2430_phy_power_off(struct omap2430_glue *glue)
+{
+	int ret;
+
+	if (!glue->phy)
+		return 0;
+
+	if (glue->phy_powered) {
+		ret = phy_power_off(glue->phy);
+		if (ret)
+			return ret;
+		glue->phy_powered = 0;
+	}
+
+	if (glue->phy_initialized) {
+		ret = phy_exit(glue->phy);
+		if (ret)
+			return ret;
+		glue->phy_initialized = 0;
+	}
+
+	return 0;
+}
 
 static inline void omap2430_low_level_exit(struct musb *musb)
 {
@@ -192,6 +249,7 @@ static int omap2430_musb_init(struct musb *musb)
 	struct device *dev = musb->controller;
 	struct musb_hdrc_platform_data *plat = dev_get_platdata(dev);
 	struct omap_musb_board_data *data = plat->board_data;
+	struct omap2430_glue *glue = dev_get_drvdata(dev->parent);
 
 	/* We require some kind of external transceiver, hooked
 	 * up through ULPI.  TWL4030-family PMICs include one,
@@ -222,8 +280,10 @@ static int omap2430_musb_init(struct musb *musb)
 		return PTR_ERR(musb->phy);
 	}
 	musb->isr = omap2430_musb_interrupt;
-	phy_init(musb->phy);
-	phy_power_on(musb->phy);
+	glue->phy = musb->phy;
+	status = omap2430_phy_power_on(glue);
+	if (status)
+		return status;
 
 	l = musb_readl(musb->mregs, OTG_INTERFSEL);
 
@@ -272,10 +332,12 @@ static int omap2430_musb_exit(struct musb *musb)
 {
 	struct device *dev = musb->controller;
 	struct omap2430_glue *glue = dev_get_drvdata(dev->parent);
+	int ret;
 
 	omap2430_low_level_exit(musb);
-	phy_power_off(musb->phy);
-	phy_exit(musb->phy);
+	ret = omap2430_phy_power_off(glue);
+	if (ret)
+		dev_err(dev, "failed to shut down PHY: %d\n", ret);
 	musb->phy = NULL;
 	cancel_work_sync(&glue->omap_musb_mailbox_work);
 
@@ -471,9 +533,13 @@ err_put_musb:
 static void omap2430_remove(struct platform_device *pdev)
 {
 	struct omap2430_glue *glue = platform_get_drvdata(pdev);
+	int ret;
 
 	platform_device_unregister(glue->musb);
 	pm_runtime_disable(glue->dev);
+	ret = omap2430_phy_power_off(glue);
+	if (ret)
+		dev_err(&pdev->dev, "failed to release PHY references: %d\n", ret);
 	if (!IS_ERR(glue->control_otghs))
 		put_device(glue->control_otghs);
 }
@@ -484,6 +550,7 @@ static int omap2430_runtime_suspend(struct device *dev)
 {
 	struct omap2430_glue		*glue = dev_get_drvdata(dev);
 	struct musb			*musb = glue_to_musb(glue);
+	int ret;
 
 	if (!musb)
 		return 0;
@@ -494,8 +561,13 @@ static int omap2430_runtime_suspend(struct device *dev)
 	omap2430_low_level_exit(musb);
 
 	if (!glue->phy_suspended) {
-		phy_power_off(musb->phy);
-		phy_exit(musb->phy);
+		ret = omap2430_phy_power_off(glue);
+		if (ret) {
+			if (omap2430_phy_power_on(glue))
+				dev_err(dev, "failed to restore PHY after suspend error\n");
+			omap2430_low_level_init(musb);
+			return ret;
+		}
 	}
 
 	glue->is_runtime_suspended = 1;
@@ -512,8 +584,7 @@ static int omap2430_runtime_resume(struct device *dev)
 		return 0;
 
 	if (!glue->phy_suspended) {
-		phy_init(musb->phy);
-		phy_power_on(musb->phy);
+		omap2430_phy_power_on(glue);
 	}
 
 	omap2430_low_level_init(musb);
@@ -533,9 +604,17 @@ static int omap2430_suspend(struct device *dev)
 {
 	struct omap2430_glue *glue = dev_get_drvdata(dev);
 	struct musb *musb = glue_to_musb(glue);
+	int ret;
 
-	phy_power_off(musb->phy);
-	phy_exit(musb->phy);
+	if (!musb)
+		return 0;
+
+	ret = omap2430_phy_power_off(glue);
+	if (ret) {
+		if (omap2430_phy_power_on(glue))
+			dev_err(dev, "failed to restore PHY after suspend error\n");
+		return ret;
+	}
 	glue->phy_suspended = 1;
 
 	return 0;
@@ -571,8 +650,10 @@ static int omap2430_resume(struct device *dev)
 	struct omap2430_glue *glue = dev_get_drvdata(dev);
 	struct musb *musb = glue_to_musb(glue);
 
-	phy_init(musb->phy);
-	phy_power_on(musb->phy);
+	if (!musb)
+		return 0;
+
+	omap2430_phy_power_on(glue);
 	glue->phy_suspended = 0;
 
 	return 0;
