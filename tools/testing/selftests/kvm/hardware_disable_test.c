@@ -20,6 +20,7 @@
 #define NR_VCPUS		4
 #define NR_SLEEPERS_PER_VCPU	16
 #define NR_ITERATIONS		512
+#define NR_ITERATIONS_LIMIT	4
 #define DELAY_US_MAX		2000
 
 static cpu_set_t threads_cpu_set;
@@ -127,7 +128,7 @@ void wait_for_child_setup(pid_t pid)
 int main(int argc, char **argv)
 {
 	cpu_set_t allowed_cpu_set;
-	int s, r, cpu, i;
+	int s, r, cpu, i, nr_iterations;
 	pid_t pid;
 
 	kvm_sched_getaffinity(0, sizeof(cpu_set_t), &allowed_cpu_set);
@@ -141,7 +142,9 @@ int main(int argc, char **argv)
 	sem = sem_open("vm_sem", O_CREAT | O_EXCL, 0644, 0);
 	sem_unlink("vm_sem");
 
-	for (i = 0; i < NR_ITERATIONS; ++i) {
+	nr_iterations = kvm_arch_vm_create_may_enomem() ? NR_ITERATIONS_LIMIT :
+							  NR_ITERATIONS;
+	for (i = 0; i < nr_iterations; ++i) {
 		pid = fork();
 		TEST_ASSERT(pid >= 0, "%s: unable to fork", __func__);
 		if (pid == 0)
