@@ -321,6 +321,7 @@ __sys_trace_return:
 	.macro	syscall_table_start, sym
 	.equ	__sys_nr, 0
 	.type	\sym, #object
+	.align	2
 ENTRY(\sym)
 	.endm
 
