@@ -680,7 +680,6 @@ struct ring_buffer_iter {
 	u64				read_stamp;
 	u64				page_stamp;
 	struct ring_buffer_event	*event;
-	size_t				event_size;
 	int				missed_events;
 };
 
@@ -3558,9 +3557,11 @@ rb_iter_head_event(struct ring_buffer_iter *iter)
 	 */
 	barrier();
 
-	if ((iter->head + length) > commit || length > iter->event_size)
+	if ((iter->head + length) > commit ||
+	    length > rb_subbuf_capacity(iter->cpu_buffer->buffer)) {
 		/* Writer corrupted the read? */
 		goto reset;
+	}
 
 	memcpy(iter->event, event, length);
 	/*
@@ -6488,8 +6489,7 @@ ring_buffer_read_start(struct trace_buffer *buffer, int cpu, gfp_t flags)
 		mutex_unlock(&buffer->mutex);
 
 	/* Holds the entire event: data and meta data. */
-	iter->event_size = rb_page_capacity(READ_ONCE(cpu_buffer->reader_page));
-	iter->event = kmalloc(iter->event_size, flags);
+	iter->event = kmalloc(rb_subbuf_capacity(buffer), flags);
 	if (!iter->event) {
 		atomic_dec(&cpu_buffer->resize_disabled);
 		return NULL;
