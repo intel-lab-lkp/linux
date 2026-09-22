@@ -78,7 +78,8 @@ static int async_error;
  */
 bool pm_hibernate_is_recovering(void)
 {
-	return pm_transition.event == PM_EVENT_RECOVER;
+	/* Pairs with the smp_store_release() in the dpm_*() phase functions. */
+	return smp_load_acquire(&pm_transition.event) == PM_EVENT_RECOVER;
 }
 EXPORT_SYMBOL_GPL(pm_hibernate_is_recovering);
 
@@ -682,10 +683,13 @@ static void dpm_watchdog_clear(struct dpm_watchdog *wd)
  */
 bool dev_pm_skip_resume(struct device *dev)
 {
-	if (pm_transition.event == PM_EVENT_RESTORE)
+	/* Pairs with the smp_store_release() in the dpm_*() phase functions. */
+	int event = smp_load_acquire(&pm_transition.event);
+
+	if (event == PM_EVENT_RESTORE)
 		return false;
 
-	if (pm_transition.event == PM_EVENT_THAW)
+	if (event == PM_EVENT_THAW)
 		return dev_pm_skip_suspend(dev);
 
 	return !dev->power.must_resume;
@@ -902,7 +906,8 @@ static void dpm_noirq_resume_devices(pm_message_t state)
 	trace_suspend_resume(TPS("dpm_resume_noirq"), state.event, true);
 
 	async_error = 0;
-	pm_transition = state;
+	/* Pairs with the smp_load_acquire() in dev_pm_skip_resume(). */
+	smp_store_release(&pm_transition.event, state.event);
 
 	mutex_lock(&dpm_list_mtx);
 
@@ -1052,7 +1057,8 @@ void dpm_resume_early(pm_message_t state)
 	trace_suspend_resume(TPS("dpm_resume_early"), state.event, true);
 
 	async_error = 0;
-	pm_transition = state;
+	/* Pairs with the smp_load_acquire() in dev_pm_skip_resume(). */
+	smp_store_release(&pm_transition.event, state.event);
 
 	mutex_lock(&dpm_list_mtx);
 
@@ -1230,7 +1236,8 @@ void dpm_resume(pm_message_t state)
 
 	trace_suspend_resume(TPS("dpm_resume"), state.event, true);
 
-	pm_transition = state;
+	/* Pairs with the smp_load_acquire() in dev_pm_skip_resume(). */
+	smp_store_release(&pm_transition.event, state.event);
 	async_error = 0;
 
 	mutex_lock(&dpm_list_mtx);
@@ -1595,7 +1602,8 @@ static int dpm_noirq_suspend_devices(pm_message_t state)
 
 	trace_suspend_resume(TPS("dpm_suspend_noirq"), state.event, true);
 
-	pm_transition = state;
+	/* Pairs with the smp_load_acquire() in dev_pm_skip_resume(). */
+	smp_store_release(&pm_transition.event, state.event);
 	async_error = 0;
 
 	mutex_lock(&dpm_list_mtx);
@@ -1798,7 +1806,8 @@ int dpm_suspend_late(pm_message_t state)
 
 	trace_suspend_resume(TPS("dpm_suspend_late"), state.event, true);
 
-	pm_transition = state;
+	/* Pairs with the smp_load_acquire() in dev_pm_skip_resume(). */
+	smp_store_release(&pm_transition.event, state.event);
 	async_error = 0;
 
 	wake_up_all_idle_cpus();
@@ -2091,7 +2100,8 @@ int dpm_suspend(pm_message_t state)
 	devfreq_suspend();
 	cpufreq_suspend();
 
-	pm_transition = state;
+	/* Pairs with the smp_load_acquire() in dev_pm_skip_resume(). */
+	smp_store_release(&pm_transition.event, state.event);
 	async_error = 0;
 
 	mutex_lock(&dpm_list_mtx);
