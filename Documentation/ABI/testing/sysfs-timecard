@@ -31,10 +31,10 @@ Description:	(RO, root only) The flags set in the status register of the
 
 		A read arbitrates for the shared I2C bus and reprograms the
 		on-card mux, so it is restricted to root.  The Lattice device
-		ID of the CPLD is read by the driver shortly after probe,
-		and again after a successful CPLD update, and reported from
-		that cached value as the fixed "cpld.id" version by
-		devlink dev info.
+		ID of the CPLD is read by the driver shortly after probe and
+		reported from that cached value as the fixed "cpld.id"
+		version by devlink dev info.  It identifies the silicon, so a
+		CPLD update does not change it.
 
 		New CPLD firmware is programmed with devlink dev flash,
 		selecting the "fw.cpld" component; see

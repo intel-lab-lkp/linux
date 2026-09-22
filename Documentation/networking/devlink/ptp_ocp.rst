@@ -32,14 +32,17 @@ The ``ptp_ocp`` driver reports the following versions
        carrying that CPLD.  Reading it claims the shared I2C bus and
        reprograms the on-card mux, so the driver does that from its own
        worker and reports the cached value here; the version is omitted
-       until that read has succeeded.  The read is made once per binding
-       and again after a successful CPLD update.
+       until that read has succeeded.  The IDCODE identifies the silicon,
+       so it is not affected by a CPLD update.
    * - ``fw.cpld``
      - running
      - USERCODE of the image programmed into the TAP CPLD, formatted as
        ``0x%08x``.  Read together with ``cpld.id`` and reported the same
-       way.  This is the component name to pass to ``devlink dev flash``
-       to update the CPLD.
+       way; it is dropped when an update erases the part and reported
+       again once the new image has been read back.  This is the
+       component name to pass to ``devlink dev flash`` to update the
+       CPLD, and the name is reported even while the value is not, so a
+       part left holding a bad image can still be reflashed.
 
 Flash update
 ============
@@ -59,12 +62,17 @@ selected with the component name.
      - The configuration flash of the TAP CPLD on ADVA TimeCard X1 boards,
        programmed over I2C with the MachXO3 in-system programming commands
        and activated with a REFRESH, so the new image runs immediately.
-       The image is the raw configuration bitstream.  The only check the
-       driver makes is that its length is a non-zero multiple of the
-       16-byte page size, so a container such as ``.jed`` has to be
-       converted first rather than passed through - one whose length
-       happens to be a multiple of 16 would be programmed as if it were
-       a bitstream.
+       The image is the raw configuration bitstream.  The driver checks
+       only that its length is a non-zero multiple of the 16-byte page
+       size and that it is not larger than the part takes, so a container
+       such as ``.jed`` has to be converted first rather than passed
+       through - one whose length happens to be a multiple of 16 would be
+       programmed as if it were a bitstream.
+
+       The erase clears the configuration flash before the first page is
+       written, so any failure from that point on - including an abort on
+       a fatal signal - leaves the CPLD unconfigured until a valid image
+       is written.  The component stays available for that.
 
 Programming the CPLD claims the shared I2C bus for the whole cycle, so
 reads of the card's EEPROM block until it completes.  Progress is reported

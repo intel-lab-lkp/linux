@@ -5043,6 +5043,21 @@ static int adva_x1_cpld_flash(struct ptp_ocp *bp, struct devlink *devlink,
 		goto exit_config;
 	}
 
+	/* Once the erase is issued the image is gone whatever happens next -
+	 * an ACKed ERASE runs in the part even if the wait for it fails - so
+	 * stop reporting the USERCODE before sending it rather than after
+	 * the whole sequence has succeeded.
+	 *
+	 * cpld.id is left alone: it is the Lattice IDCODE, a property of the
+	 * silicon that erasing the configuration flash cannot change, so
+	 * dropping it on a failed update only hid information that was still
+	 * correct.  Written under cpld_lock, which adva_x1_cpld_read_id()
+	 * also holds across its own bookkeeping.
+	 */
+	WRITE_ONCE(bp->cpld_usercode_ok, false);
+	WRITE_ONCE(bp->cpld_id_tried, false);
+	bp->cpld_id_attempts = 0;
+
 	devlink_flash_update_status_notify(devlink, "Erasing",
 					   ADVA_CPLD_COMPONENT, 0, 0);
 	err = adva_x1_cpld_write(bp, CPLD_CMD_ERASE);
@@ -5050,16 +5065,6 @@ static int adva_x1_cpld_flash(struct ptp_ocp *bp, struct devlink *devlink,
 		err = adva_x1_cpld_wait_ready(bp, CPLD_ERASE_MS);
 	if (err)
 		goto exit_config;
-
-	/* The old image is gone from here on, so stop reporting its
-	 * identity even if the rest of the sequence fails.  Written under
-	 * cpld_lock, which adva_x1_cpld_read_id() also holds across its own
-	 * bookkeeping, so the worker cannot resurrect any of it.
-	 */
-	WRITE_ONCE(bp->cpld_id, 0);
-	WRITE_ONCE(bp->cpld_usercode_ok, false);
-	WRITE_ONCE(bp->cpld_id_tried, false);
-	bp->cpld_id_attempts = 0;
 
 	err = adva_x1_cpld_write(bp, CPLD_CMD_RESET_ADDR);
 	if (err)
