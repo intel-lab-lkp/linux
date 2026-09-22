@@ -12,6 +12,7 @@
 
 #include "panthor_arbitration.h"
 #include "panthor_partition_control.h"
+#include "panthor_resource_group.h"
 
 #define PANTHOR_PM_AUTOSUSPEND_DELAY_MS 100
 
@@ -55,6 +56,10 @@ static int panthor_arbitration_runtime_suspend(struct device *dev)
 	struct panthor_arbitration *adev = dev_get_drvdata(dev);
 	int ret = 0;
 
+	ret = panthor_resource_group_suspend(adev);
+	if (ret)
+		return ret;
+
 	ret = panthor_partition_control_suspend(adev);
 	if (ret)
 		return ret;
@@ -68,6 +73,10 @@ static int panthor_arbitration_runtime_resume(struct device *dev)
 	int ret = 0;
 
 	ret = panthor_partition_control_resume(adev);
+	if (ret)
+		return ret;
+
+	ret = panthor_resource_group_resume(adev);
 	if (ret)
 		return ret;
 
@@ -103,6 +112,10 @@ static int panthor_arbitration_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_term_pc;
 
+	ret = panthor_resource_group_init(adev);
+	if (ret)
+		goto err_term_rg;
+
 	ret = of_platform_populate(dev->of_node, NULL, NULL, dev);
 	if (ret)
 		goto err_depopulate;
@@ -116,7 +129,9 @@ static int panthor_arbitration_probe(struct platform_device *pdev)
 
 err_depopulate:
 	of_platform_depopulate(dev);
-
+err_term_rg:
+	panthor_resource_group_cancel_work(adev);
+	panthor_resource_group_term(adev);
 err_term_pc:
 	panthor_partition_control_term(adev);
 	pm_runtime_put_noidle(dev);
@@ -136,8 +151,10 @@ static void panthor_arbitration_remove(struct platform_device *pdev)
 		dev_warn(adev->dev, "failed to resume during remove: %d", ret);
 
 	of_platform_depopulate(adev->dev);
+	panthor_resource_group_cancel_work(adev);
 
 	if (ret >= 0) {
+		panthor_resource_group_term(adev);
 		panthor_partition_control_term(adev);
 		pm_runtime_put_noidle(adev->dev);
 	}

@@ -9,8 +9,10 @@
 
 struct device;
 struct panthor_partition_control;
+struct panthor_resource_group;
 
 #define AM_ARB_MAX_PC_COUNT			1
+#define AM_ARB_MAX_RG_COUNT			1
 #define AM_ARB_MAX_AW_COUNT			16
 
 /** struct panthor_arbitration_resource - Arbitration resource */
@@ -31,6 +33,9 @@ struct panthor_arbitration {
 
 	/** @pc: Pointer array to partition control data */
 	struct panthor_partition_control *pc[AM_ARB_MAX_PC_COUNT];
+
+	/** @rg: Pointer array to resource group data */
+	struct panthor_resource_group *rg[AM_ARB_MAX_RG_COUNT];
 };
 
 int panthor_arbitration_parse_resource(struct device *dev,

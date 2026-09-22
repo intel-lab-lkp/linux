@@ -4,7 +4,8 @@
 obj-$(CONFIG_DRM_PANTHOR_ARBITRATION) += panthor_arbitration.o
 panthor_arbitration-y := \
 	panthor_arbitration_drv.o \
-	panthor_partition_control.o
+	panthor_partition_control.o \
+	panthor_resource_group.o
 
 INCLUDES = \
 	-I$(src)/..
