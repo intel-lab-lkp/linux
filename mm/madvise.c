@@ -394,6 +394,49 @@ static bool madvise_lru_folio_is_filtered(struct folio *folio,
 	       (pageout_anon_only && !folio_test_anon(folio));
 }
 
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+static void madvise_cold_pmd(struct mmu_gather *tlb, struct vm_area_struct *vma,
+		pmd_t *pmd, unsigned long addr, pmd_t orig_pmd)
+{
+	if (!pmd_young(orig_pmd))
+		return;
+
+	pmdp_invalidate(vma, addr, pmd);
+	orig_pmd = pmd_mkold(orig_pmd);
+	set_pmd_at(tlb->mm, addr, pmd, orig_pmd);
+	tlb_remove_pmd_tlb_entry(tlb, pmd, addr);
+}
+
+/* Return a locked, referenced folio only when it must be split. */
+static struct folio *
+madvise_lru_huge_pmd_locked(pmd_t *pmd, pmd_t orig_pmd,
+		unsigned long addr, unsigned long next, struct mm_walk *walk,
+		struct list_head *folio_list, bool pageout_anon_only)
+{
+	const struct madvise_walk_private *private = walk->private;
+	struct vm_area_struct *vma = walk->vma;
+	struct folio *folio;
+
+	folio = vm_normal_folio_pmd(vma, addr, orig_pmd);
+	if (!folio || folio_is_zone_device(folio))
+		return NULL;
+	if (madvise_lru_folio_is_filtered(folio, pageout_anon_only))
+		return NULL;
+
+	if (next - addr != HPAGE_PMD_SIZE) {
+		if (!folio_trylock(folio))
+			return NULL;
+		folio_get(folio);
+		return folio;
+	}
+
+	if (!private->pageout)
+		madvise_cold_pmd(private->tlb, vma, pmd, addr, orig_pmd);
+	madvise_lru_folio(folio, private->pageout, folio_list);
+	return NULL;
+}
+#endif
+
 static int madvise_lru_pmd_entry(pmd_t *pmd, unsigned long addr,
 		unsigned long end, struct mm_walk *walk)
 {
@@ -431,22 +474,11 @@ static int madvise_lru_pmd_entry(pmd_t *pmd, unsigned long addr,
 			goto huge_unlock;
 		}
 
-		folio = vm_normal_folio_pmd(vma, addr, orig_pmd);
-		if (!folio)
-			goto huge_unlock;
-
-		if (folio_is_zone_device(folio))
-			goto huge_unlock;
-
-		if (madvise_lru_folio_is_filtered(folio, pageout_anon_only))
-			goto huge_unlock;
-
-		if (next - addr != HPAGE_PMD_SIZE) {
+		folio = madvise_lru_huge_pmd_locked(pmd, orig_pmd, addr, next,
+				walk, &folio_list, pageout_anon_only);
+		if (folio) {
 			int err;
 
-			if (!folio_trylock(folio))
-				goto huge_unlock;
-			folio_get(folio);
 			spin_unlock(ptl);
 			err = split_folio(folio);
 			folio_unlock(folio);
@@ -455,16 +487,6 @@ static int madvise_lru_pmd_entry(pmd_t *pmd, unsigned long addr,
 				goto regular_folio;
 			return 0;
 		}
-
-		if (!pageout && pmd_young(orig_pmd)) {
-			pmdp_invalidate(vma, addr, pmd);
-			orig_pmd = pmd_mkold(orig_pmd);
-
-			set_pmd_at(mm, addr, pmd, orig_pmd);
-			tlb_remove_pmd_tlb_entry(tlb, pmd, addr);
-		}
-
-		madvise_lru_folio(folio, pageout, &folio_list);
 huge_unlock:
 		spin_unlock(ptl);
 		if (pageout)
