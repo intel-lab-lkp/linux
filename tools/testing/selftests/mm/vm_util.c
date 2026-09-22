@@ -373,8 +373,8 @@ err_out:
 	return thp == (nr_hpages * (hpage_size >> 10));
 }
 
-static bool check_large_folios(void *addr, size_t len, int nr_hpages,
-		uint64_t hpage_size)
+bool check_large_folios(void *addr, size_t len, int nr_hpages,
+			uint64_t hpage_size)
 {
 	int order = 0, pagesize = getpagesize();
 	unsigned int nr_pages = hpage_size / pagesize;

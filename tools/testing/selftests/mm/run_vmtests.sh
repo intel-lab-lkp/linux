@@ -51,6 +51,8 @@ separated by spaces:
 	hmm smoke tests
 - madv_guard
 	test madvise(2) MADV_GUARD_INSTALL and MADV_GUARD_REMOVE options
+- madvise
+	test MADV_COLD and MADV_PAGEOUT
 - madv_populate
 	test memadvise(2) MADV_POPULATE_{READ,WRITE} options
 - memfd_secret
@@ -361,6 +363,9 @@ CATEGORY="hmm" run_test bash ./test_hmm.sh smoke
 
 # MADV_GUARD_INSTALL and MADV_GUARD_REMOVE tests
 CATEGORY="madv_guard" run_test ./guard-regions
+
+# MADV_COLD and MADV_PAGEOUT tests
+CATEGORY="madvise" run_test ./madvise
 
 # MADV_POPULATE_READ and MADV_POPULATE_WRITE tests
 CATEGORY="madv_populate" run_test ./madv_populate
