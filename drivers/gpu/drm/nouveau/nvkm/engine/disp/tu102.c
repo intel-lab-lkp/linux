@@ -39,9 +39,11 @@ tu102_sor_hdmi_gcp(struct nvkm_ior *sor, int head, bool enable)
 {
 	struct nvkm_device *device = sor->disp->engine.subdev.device;
 	const u32 hdmi = head * 0x400;
+	const u32 gcp = (!enable ? 0x00000001 : 0x00000010) |
+			 sor->tmds.gcp_cd << 8 | sor->tmds.gcp_pp << 12;
 
 	nvkm_mask(device, 0x6f00c0 + hdmi, 0x00000001, 0x00000000);
-	nvkm_wr32(device, 0x6f00cc + hdmi, !enable ? 0x00000001 : 0x00000010);
+	nvkm_mask(device, 0x6f00cc + hdmi, 0x00ffffff, gcp);
 	nvkm_mask(device, 0x6f00c0 + hdmi, 0x00000001, 0x00000001);
 }
 

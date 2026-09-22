@@ -149,6 +149,8 @@ gv100_sor_hdmi_ctrl(struct nvkm_ior *ior, int head, bool enable, u8 max_ac_packe
 	const u32 ctrl = 0x40000000 * enable |
 			 max_ac_packet << 16 |
 			 rekey;
+	const u32 gcp = 0x00000010 | ior->tmds.gcp_cd << 8 |
+					   ior->tmds.gcp_pp << 12;
 	const u32 hoff = head * 0x800;
 	const u32 hdmi = head * 0x400;
 
@@ -162,7 +164,7 @@ gv100_sor_hdmi_ctrl(struct nvkm_ior *ior, int head, bool enable, u8 max_ac_packe
 
 	/* General Control (GCP). */
 	nvkm_mask(device, 0x6f00c0 + hdmi, 0x00000001, 0x00000000);
-	nvkm_wr32(device, 0x6f00cc + hdmi, 0x00000010);
+	nvkm_mask(device, 0x6f00cc + hdmi, 0x00ffffff, gcp);
 	nvkm_mask(device, 0x6f00c0 + hdmi, 0x00000001, 0x00000001);
 
 	/* Audio Clock Regeneration (ACR). */
