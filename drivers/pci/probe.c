@@ -670,7 +670,7 @@ static void pci_init_host_bridge(struct pci_host_bridge *bridge)
 	 * may implement its own AER handling and use _OSC to prevent the
 	 * OS from interfering.
 	 */
-	bridge->native_aer = port_services;
+	bridge->native_aer = pci_aer_available();
 	bridge->native_pcie_hotplug = port_services;
 	bridge->native_shpc_hotplug = 1;
 	bridge->native_pme = port_services;
