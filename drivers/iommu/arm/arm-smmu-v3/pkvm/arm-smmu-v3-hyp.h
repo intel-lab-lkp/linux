@@ -29,6 +29,7 @@
  * @cmdq_host		Host view of the CMDQ, only q_base and llq used.
  * @cmdq_max_shift	Max shift for the CMDQ probed from HW.
  * @cr0			Last value of CR0
+ * @cmdq_active		Is SMMU HW cmdq usable, protected by hw_lock
  * @host_ste_cfg	Host stream table config
  * @host_ste_base	Host stream table base
  * @strtab_cfg		Stream table as seen by HW
@@ -57,6 +58,7 @@ struct hyp_arm_smmu_v3_device {
 	struct arm_smmu_queue	cmdq_host;
 	u32			cmdq_max_shift;
 	u32			cr0;
+	bool			cmdq_active;
 	dma_addr_t		strtab_dma;
 	size_t			strtab_size;
 	u64			host_ste_cfg;
