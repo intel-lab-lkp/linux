@@ -42,6 +42,7 @@ obj-$(CONFIG_SND_SOC_ACPI) += snd-soc-acpi.o
 obj-$(CONFIG_SND_SOC_USB) += soc-usb.o
 
 obj-$(CONFIG_SND_SOC)	+= snd-soc-core.o
+obj-$(CONFIG_SND_SOC)	+= cdns/
 obj-$(CONFIG_SND_SOC)	+= codecs/
 obj-$(CONFIG_SND_SOC)	+= generic/
 obj-$(CONFIG_SND_SOC)	+= apple/
