@@ -1,0 +1,125 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+# Copyright 2026 ARM Limited. All rights reserved.
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/gpu/arm,mali-gen5-am-arbitration.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: ARM Mali 5th-Gen GPU Arbitration Device
+
+maintainers:
+  - Liviu Dudau <liviu.dudau@arm.com>
+  - Boris Brezillon <boris.brezillon@collabora.com>
+
+description:
+  The arbitration device manages partition-control and resource-group blocks.
+  Each block is described by a child node with its own register range,
+  interrupt and hardware ID. Partition and resource-group IDs are separate
+  namespaces. Access-window IDs are global to the GPU.
+
+properties:
+  $nodename:
+    const: panthor-arbitration
+
+  compatible:
+    const: arm,mali-gen5-am-arbitration
+
+  "#address-cells": true
+
+  "#size-cells": true
+
+  ranges: true
+
+patternProperties:
+  "^partition@[0-9a-f]+$":
+    type: object
+    additionalProperties: false
+    description:
+      Partition control block and its initial resource assignments.
+
+    properties:
+      reg:
+        maxItems: 1
+        description: Partition control register range.
+
+      interrupts:
+        maxItems: 1
+        description: Partition control interrupt.
+
+      arm,id:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        description:
+          Hardware partition control index. Must identify a partition present on
+          the GPU and be unique among this device's partition nodes.
+
+    required:
+      - reg
+      - interrupts
+      - arm,id
+
+  "^resource-group@[0-9a-f]+$":
+    type: object
+    additionalProperties: false
+    description:
+      Resource group block used for access-window messaging.
+
+    properties:
+      reg:
+        maxItems: 1
+        description: Resource group register range.
+
+      interrupts:
+        maxItems: 1
+        description: Resource group interrupt.
+
+      arm,id:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        description:
+          Hardware resource group index. Must identify a resource group
+          present on the GPU and be unique among this device's resource group
+          nodes.
+
+    required:
+      - reg
+      - interrupts
+      - arm,id
+
+  "^gpu@[0-9a-f]+$":
+    $ref: arm,mali-valhall-csf.yaml#
+    properties:
+      compatible:
+        const: arm,mali-gen5-am
+
+required:
+  - compatible
+  - "#address-cells"
+  - "#size-cells"
+  - ranges
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+    panthor-arbitration {
+        compatible = "arm,mali-gen5-am-arbitration";
+        #address-cells = <1>;
+        #size-cells = <1>;
+        ranges;
+
+        partition@50000 {
+            reg = <0x50000 0x10000>;
+            interrupts = <GIC_SPI 92 IRQ_TYPE_LEVEL_HIGH 0>;
+            arm,id = <0>;
+        };
+
+        resource-group@c0000 {
+            reg = <0xc0000 0x10000>;
+            interrupts = <GIC_SPI 92 IRQ_TYPE_LEVEL_HIGH 0>;
+            arm,id = <0>;
+        };
+    };
+
+...

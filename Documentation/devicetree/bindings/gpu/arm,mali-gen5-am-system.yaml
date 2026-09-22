@@ -41,6 +41,15 @@ properties:
 
   dma-coherent: true
 
+  "#address-cells": true
+
+  "#size-cells": true
+
+  ranges: true
+
+  panthor-arbitration:
+    $ref: arm,mali-gen5-am-arbitration.yaml#
+
 required:
   - compatible
   - reg
