@@ -988,6 +988,27 @@ void kgdb_roundup_cpus(void)
 }
 #endif
 
+static void ipi_eoi(int ipinr)
+{
+	unsigned int cpu = smp_processor_id();
+	struct irq_desc *desc;
+	struct irq_chip *chip;
+	struct irq_data *d;
+
+	if (ipinr >= MAX_IPI)
+		return;
+
+	desc = get_ipi_desc(cpu, ipinr);
+
+	if (desc) {
+		chip = irq_desc_get_chip(desc);
+		d = irq_desc_get_irq_data(desc);
+
+		if (chip && chip->irq_eoi)
+			chip->irq_eoi(d);
+	}
+}
+
 /*
  * Main handler for inter-processor interrupts
  */
@@ -1009,6 +1030,7 @@ static void do_handle_IPI(int ipinr)
 
 	case IPI_CPU_STOP:
 	case IPI_CPU_STOP_NMI:
+		ipi_eoi(ipinr);
 		arm64_nmi_cpu_stop(get_irq_regs(), true);
 		break;
 
