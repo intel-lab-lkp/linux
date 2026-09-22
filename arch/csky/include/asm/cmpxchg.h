@@ -57,13 +57,16 @@
 #define __cmpxchg_relaxed(ptr, old, new, size)			\
 ({								\
 	__typeof__(ptr) __ptr = (ptr);				\
-	__typeof__(new) __new = (new);				\
-	__typeof__(new) __tmp;					\
-	__typeof__(old) __old = (old);				\
+	unsigned long __old = (unsigned long)(0 ? *(ptr) : (old));	\
+	unsigned long __new = (unsigned long)(0 ? *(ptr) : (new));	\
+	unsigned long __tmp;					\
 	__typeof__(*(ptr)) __ret;				\
 	switch (size) {						\
 	case 1:							\
-		__ret = (__typeof__(*(ptr)))cmpxchg_emu_u8((volatile u8 *)__ptr, (uintptr_t)__old, (uintptr_t)__new); \
+		__ret = (__typeof__(*(ptr)))cmpxchg_emu_u8((volatile u8 *)__ptr, __old, __new); \
+		break;						\
+	case 2:							\
+		__ret = (__typeof__(*(ptr)))cmpxchg_emu_u16((volatile u16 *)__ptr, __old, __new); \
 		break;						\
 	case 4:							\
 		asm volatile (					\
@@ -90,13 +93,16 @@
 #define __cmpxchg_acquire(ptr, old, new, size)			\
 ({								\
 	__typeof__(ptr) __ptr = (ptr);				\
-	__typeof__(new) __new = (new);				\
-	__typeof__(new) __tmp;					\
-	__typeof__(old) __old = (old);				\
+	unsigned long __old = (unsigned long)(0 ? *(ptr) : (old));	\
+	unsigned long __new = (unsigned long)(0 ? *(ptr) : (new));	\
+	unsigned long __tmp;					\
 	__typeof__(*(ptr)) __ret;				\
 	switch (size) {						\
 	case 1:							\
-		__ret = (__typeof__(*(ptr)))cmpxchg_emu_u8((volatile u8 *)__ptr, (uintptr_t)__old, (uintptr_t)__new); \
+		__ret = (__typeof__(*(ptr)))cmpxchg_emu_u8((volatile u8 *)__ptr, __old, __new); \
+		break;						\
+	case 2:							\
+		__ret = (__typeof__(*(ptr)))cmpxchg_emu_u16((volatile u16 *)__ptr, __old, __new); \
 		break;						\
 	case 4:							\
 		asm volatile (					\
@@ -124,13 +130,16 @@
 #define __cmpxchg(ptr, old, new, size)				\
 ({								\
 	__typeof__(ptr) __ptr = (ptr);				\
-	__typeof__(new) __new = (new);				\
-	__typeof__(new) __tmp;					\
-	__typeof__(old) __old = (old);				\
+	unsigned long __old = (unsigned long)(0 ? *(ptr) : (old));	\
+	unsigned long __new = (unsigned long)(0 ? *(ptr) : (new));	\
+	unsigned long __tmp;					\
 	__typeof__(*(ptr)) __ret;				\
 	switch (size) {						\
 	case 1:							\
-		__ret = (__typeof__(*(ptr)))cmpxchg_emu_u8((volatile u8 *)__ptr, (uintptr_t)__old, (uintptr_t)__new); \
+		__ret = (__typeof__(*(ptr)))cmpxchg_emu_u8((volatile u8 *)__ptr, __old, __new); \
+		break;						\
+	case 2:							\
+		__ret = (__typeof__(*(ptr)))cmpxchg_emu_u16((volatile u16 *)__ptr, __old, __new); \
 		break;						\
 	case 4:							\
 		asm volatile (					\
