@@ -898,10 +898,13 @@ static void k_shift(struct vc_data *vc, unsigned char value, char up_flag)
 
 	/* kludge */
 	if (up_flag && shift_state != old_state && npadch_active) {
+		/* Pairs with the smp_store_release() in k_ascii(). */
+		unsigned int npadch = smp_load_acquire(&npadch_value);
+
 		if (kbd->kbdmode == VC_UNICODE)
-			to_utf8(vc, npadch_value);
+			to_utf8(vc, npadch);
 		else
-			put_queue(vc, npadch_value & 0xff);
+			put_queue(vc, npadch & 0xff);
 		npadch_active = false;
 	}
 }
@@ -939,7 +942,8 @@ static void k_ascii(struct vc_data *vc, unsigned char value, char up_flag)
 		npadch_active = true;
 	}
 
-	npadch_value = npadch_value * base + value;
+	/* Pairs with the smp_load_acquire() in k_shift(). */
+	smp_store_release(&npadch_value, npadch_value * base + value);
 }
 
 static void k_lock(struct vc_data *vc, unsigned char value, char up_flag)
