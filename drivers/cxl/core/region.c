@@ -2954,8 +2954,10 @@ static int cxl_get_poison_unmapped(struct cxl_memdev *cxlmd,
 		if (!length)
 			continue;
 		rc = cxl_mem_get_poison(cxlmd, offset, length, NULL);
-		if (poison_efault_forgiven(rc, cxlds->part[i].mode))
+		if (poison_efault_forgiven(rc, cxlds->part[i].mode)) {
+			rc = 0;
 			continue;
+		}
 		if (rc)
 			break;
 	}
