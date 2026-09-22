@@ -2109,8 +2109,9 @@ static __always_inline void exc_machine_check_kernel(struct pt_regs *regs)
 {
 	irqentry_state_t irq_state;
 	unsigned long dr7;
+	unsigned int dr7_seq;
 
-	dr7 = local_db_save();
+	local_db_save(&dr7, &dr7_seq);
 
 	WARN_ON_ONCE(user_mode(regs));
 
@@ -2127,18 +2128,19 @@ static __always_inline void exc_machine_check_kernel(struct pt_regs *regs)
 
 	irqentry_nmi_exit(regs, irq_state);
 out:
-	local_db_restore(dr7);
+	local_db_restore(dr7, dr7_seq);
 }
 
 static __always_inline void exc_machine_check_user(struct pt_regs *regs)
 {
 	unsigned long dr7;
+	unsigned int dr7_seq;
 
 	irqentry_enter_from_user_mode(regs);
 
-	dr7 = local_db_save();
+	local_db_save(&dr7, &dr7_seq);
 	do_machine_check(regs);
-	local_db_restore(dr7);
+	local_db_restore(dr7, dr7_seq);
 
 	irqentry_exit_to_user_mode(regs);
 }
