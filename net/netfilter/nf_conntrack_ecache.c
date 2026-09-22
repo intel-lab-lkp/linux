@@ -31,6 +31,7 @@ static DEFINE_MUTEX(nf_ct_ecache_mutex);
 #define DYING_NULLS_VAL			((1 << 30) + 1)
 #define ECACHE_MAX_JIFFIES		msecs_to_jiffies(10)
 #define ECACHE_RETRY_JIFFIES		msecs_to_jiffies(10)
+#define ECACHE_RETRY_TIMEOUT		(15 * HZ)
 
 enum retry_state {
 	STATE_CONGESTED,
@@ -52,8 +53,8 @@ static enum retry_state ecache_work_evict_list(struct nf_conntrack_net *cnet)
 {
 	unsigned long stop = jiffies + ECACHE_MAX_JIFFIES;
 	struct hlist_nulls_head evicted_list;
-	enum retry_state ret = STATE_DONE;
 	struct nf_conntrack_tuple_hash *h;
+	enum retry_state ret = STATE_DONE;
 	struct hlist_nulls_node *n;
 	unsigned int sent;
 
@@ -62,6 +63,22 @@ static enum retry_state ecache_work_evict_list(struct nf_conntrack_net *cnet)
 next:
 	sent = 0;
 	spin_lock_bh(&cnet->ecache.dying_lock);
+
+	if (!cnet->ecache.retry_deadline)
+		cnet->ecache.retry_deadline = jiffies + ECACHE_RETRY_TIMEOUT;
+
+	if (time_after_eq(jiffies, cnet->ecache.retry_deadline)) {
+		hlist_nulls_for_each_entry_safe(h, n, &cnet->ecache.dying_list,
+						hnnode) {
+			struct nf_conn *ct = nf_ct_tuplehash_to_ctrack(h);
+
+			hlist_nulls_del_rcu(&ct->tuplehash[IP_CT_DIR_ORIGINAL].hnnode);
+			hlist_nulls_add_head(&ct->tuplehash[IP_CT_DIR_REPLY].hnnode,
+					     &evicted_list);
+		}
+		ret = STATE_DONE;
+		goto out_unlock;
+	}
 
 	hlist_nulls_for_each_entry_safe(h, n, &cnet->ecache.dying_list, hnnode) {
 		struct nf_conn *ct = nf_ct_tuplehash_to_ctrack(h);
@@ -88,6 +105,10 @@ next:
 			goto next;
 		}
 	}
+
+out_unlock:
+	if (hlist_nulls_empty(&cnet->ecache.dying_list))
+		cnet->ecache.retry_deadline = 0;
 
 	spin_unlock_bh(&cnet->ecache.dying_lock);
 

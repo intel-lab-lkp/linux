@@ -46,6 +46,7 @@ struct nf_conntrack_net_ecache {
 	struct delayed_work dwork;
 	spinlock_t dying_lock;
 	struct hlist_nulls_head dying_list;
+	unsigned long retry_deadline;
 };
 
 struct nf_conntrack_net {
