@@ -1719,7 +1719,8 @@ long kvm_get_cap_for_kvm_ioctl(unsigned int ioctl, long *ext);
 
 #ifndef __KVM_NVHE_HYPERVISOR__
 struct pkvm_iommu_ops;
-int pkvm_iommu_register_driver(struct pkvm_iommu_ops *hyp_ops);
+int pkvm_iommu_register_driver(struct pkvm_iommu_ops *hyp_ops, unsigned int nr_pages);
+unsigned int pkvm_iommu_pages(void);
 #endif
 
 #endif /* __ARM64_KVM_HOST_H__ */
