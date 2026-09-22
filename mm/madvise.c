@@ -622,21 +622,19 @@ static const struct mm_walk_ops cold_walk_ops = {
 	.walk_lock = PGWALK_RDLOCK,
 };
 
-static void madvise_cold_page_range(struct mmu_gather *tlb,
-		struct madvise_behavior *madv_behavior)
-
+static void
+madvise_lru_vma_range(struct madvise_behavior *madv_behavior,
+		struct madvise_walk_private *walk_private)
 {
 	struct vm_area_struct *vma = madv_behavior->vma;
 	struct madvise_behavior_range *range = &madv_behavior->range;
-	struct madvise_walk_private walk_private = {
-		.pageout = false,
-		.tlb = tlb,
-	};
 
-	tlb_start_vma(tlb, vma);
+	tlb_gather_mmu(walk_private->tlb, madv_behavior->mm);
+	tlb_start_vma(walk_private->tlb, vma);
 	walk_page_range_vma(vma, range->start, range->end, &cold_walk_ops,
-			&walk_private);
-	tlb_end_vma(tlb, vma);
+			    walk_private);
+	tlb_end_vma(walk_private->tlb, vma);
+	tlb_finish_mmu(walk_private->tlb);
 }
 
 static inline bool can_madv_lru_vma(struct vm_area_struct *vma)
@@ -647,38 +645,27 @@ static inline bool can_madv_lru_vma(struct vm_area_struct *vma)
 static long madvise_cold(struct madvise_behavior *madv_behavior)
 {
 	struct vm_area_struct *vma = madv_behavior->vma;
-	struct mmu_gather tlb;
+	struct madvise_walk_private walk_private = {
+		.tlb = madv_behavior->tlb,
+		.pageout = false,
+	};
 
 	if (!can_madv_lru_vma(vma))
 		return -EINVAL;
 
 	lru_add_drain();
-	tlb_gather_mmu(&tlb, madv_behavior->mm);
-	madvise_cold_page_range(&tlb, madv_behavior);
-	tlb_finish_mmu(&tlb);
+	madvise_lru_vma_range(madv_behavior, &walk_private);
 
 	return 0;
 }
 
-static void madvise_pageout_page_range(struct mmu_gather *tlb,
-		struct vm_area_struct *vma,
-		struct madvise_behavior_range *range)
-{
-	struct madvise_walk_private walk_private = {
-		.pageout = true,
-		.tlb = tlb,
-	};
-
-	tlb_start_vma(tlb, vma);
-	walk_page_range_vma(vma, range->start, range->end, &cold_walk_ops,
-			    &walk_private);
-	tlb_end_vma(tlb, vma);
-}
-
 static long madvise_pageout(struct madvise_behavior *madv_behavior)
 {
-	struct mmu_gather tlb;
 	struct vm_area_struct *vma = madv_behavior->vma;
+	struct madvise_walk_private walk_private = {
+		.tlb = madv_behavior->tlb,
+		.pageout = true,
+	};
 
 	if (!can_madv_lru_vma(vma))
 		return -EINVAL;
@@ -694,9 +681,7 @@ static long madvise_pageout(struct madvise_behavior *madv_behavior)
 		return 0;
 
 	lru_add_drain();
-	tlb_gather_mmu(&tlb, madv_behavior->mm);
-	madvise_pageout_page_range(&tlb, vma, &madv_behavior->range);
-	tlb_finish_mmu(&tlb);
+	madvise_lru_vma_range(madv_behavior, &walk_private);
 
 	return 0;
 }
