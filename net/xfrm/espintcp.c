@@ -311,6 +311,7 @@ static int espintcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
 	struct espintcp_msg *emsg = &ctx->partial;
 	struct iov_iter pfx_iter;
 	struct kvec pfx_iov = {};
+	struct sk_msg *skmsg;
 	size_t msglen = size + 2;
 	char buf[2] = {0};
 	int err, end;
@@ -323,6 +324,11 @@ static int espintcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
 
 	if (msg->msg_controllen)
 		return -EOPNOTSUPP;
+
+	skmsg = kmalloc_obj(*skmsg);
+	if (!skmsg)
+		return -ENOMEM;
+	sk_msg_init(skmsg);
 
 	lock_sock(sk);
 
@@ -337,10 +343,9 @@ static int espintcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
 		goto unlock;
 	}
 
-	sk_msg_init(&emsg->skmsg);
 	while (1) {
 		/* only -ENOMEM is possible since we don't coalesce */
-		err = sk_msg_alloc(sk, &emsg->skmsg, msglen, 0);
+		err = sk_msg_alloc(sk, skmsg, msglen, 0);
 		if (!err)
 			break;
 
@@ -348,25 +353,30 @@ static int espintcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
 		if (err)
 			goto fail;
 	}
+	if (emsg->len) {
+		err = -ENOBUFS;
+		goto fail;
+	}
 
 	*((__be16 *)buf) = cpu_to_be16(msglen);
 	pfx_iov.iov_base = buf;
 	pfx_iov.iov_len = sizeof(buf);
 	iov_iter_kvec(&pfx_iter, ITER_SOURCE, &pfx_iov, 1, pfx_iov.iov_len);
 
-	err = sk_msg_memcopy_from_iter(sk, &pfx_iter, &emsg->skmsg,
+	err = sk_msg_memcopy_from_iter(sk, &pfx_iter, skmsg,
 				       pfx_iov.iov_len);
 	if (err < 0)
 		goto fail;
 
-	err = sk_msg_memcopy_from_iter(sk, &msg->msg_iter, &emsg->skmsg, size);
+	err = sk_msg_memcopy_from_iter(sk, &msg->msg_iter, skmsg, size);
 	if (err < 0)
 		goto fail;
 
-	end = emsg->skmsg.sg.end;
-	emsg->len = size;
+	end = skmsg->sg.end;
 	sk_msg_iter_var_prev(end);
-	sg_mark_end(sk_msg_elem(&emsg->skmsg, end));
+	sg_mark_end(sk_msg_elem(skmsg, end));
+	sk_msg_xfer_full(&emsg->skmsg, skmsg);
+	emsg->len = size;
 
 	tcp_rate_check_app_limited(sk);
 
@@ -374,14 +384,15 @@ static int espintcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
 	/* this message could be partially sent, keep it */
 
 	release_sock(sk);
+	kfree(skmsg);
 
 	return size;
 
 fail:
-	sk_msg_free(sk, &emsg->skmsg);
-	memset(emsg, 0, sizeof(*emsg));
+	sk_msg_free(sk, skmsg);
 unlock:
 	release_sock(sk);
+	kfree(skmsg);
 	return err;
 }
 
