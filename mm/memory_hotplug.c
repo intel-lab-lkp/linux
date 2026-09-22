@@ -784,6 +784,19 @@ struct auto_movable_stats {
 	unsigned long movable_pages;
 };
 
+/*
+ * Cached stats for all populated zones across all nodes. Modified (incl.
+ * invalidation) only while holding the mem_hotplug_lock in write mode and
+ * the device_lock() of the memory block device.
+ */
+static struct auto_movable_stats auto_movable_zone_stats;
+static bool auto_movable_zone_stats_valid;
+
+static void auto_movable_zone_stats_invalidate(void)
+{
+	auto_movable_zone_stats_valid = false;
+}
+
 static void auto_movable_stats_account_zone(struct auto_movable_stats *stats,
 					    struct zone *zone)
 {
@@ -844,9 +857,14 @@ static bool auto_movable_can_online_movable(int nid, struct memory_group *group,
 
 	/* Walk all relevant zones and collect MOVABLE vs. KERNEL stats. */
 	if (nid == NUMA_NO_NODE) {
-		/* TODO: cache values */
-		for_each_populated_zone(zone)
-			auto_movable_stats_account_zone(&stats, zone);
+		if (auto_movable_zone_stats_valid) {
+			stats = auto_movable_zone_stats;
+		} else {
+			for_each_populated_zone(zone)
+				auto_movable_stats_account_zone(&stats, zone);
+			auto_movable_zone_stats = stats;
+			auto_movable_zone_stats_valid = true;
+		}
 	} else {
 		for (i = 0; i < MAX_NR_ZONES; i++) {
 			pg_data_t *pgdat = NODE_DATA(nid);
@@ -1073,6 +1091,8 @@ void adjust_present_page_count(struct page *page, struct memory_group *group,
 		zone->present_early_pages += nr_pages;
 	zone->present_pages += nr_pages;
 	zone->zone_pgdat->node_present_pages += nr_pages;
+
+	auto_movable_zone_stats_invalidate();
 
 	if (group && movable)
 		group->present_movable_pages += nr_pages;
