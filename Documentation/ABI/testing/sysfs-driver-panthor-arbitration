@@ -1,0 +1,18 @@
+What:		/sys/module/panthor_arbitration/parameters/request_timeout
+Date:		September 2026
+KernelVersion:	7.2.0
+Contact:	Arm Ltd.
+Description:
+		Controls how long, in milliseconds, the arbitration scheduler
+		allows an access window to keep the GPU before asking it to
+		yield when another access window is waiting.
+
+What:		/sys/module/panthor_arbitration/parameters/yield_timeout
+Date:		September 2026
+KernelVersion:	7.2.0
+Contact:	Arm Ltd.
+Description:
+		Controls how long, in milliseconds, the arbitration scheduler
+		waits for an access window to yield the GPU after a stop request.
+		If the timeout expires, the scheduler force-closes the access
+		window.

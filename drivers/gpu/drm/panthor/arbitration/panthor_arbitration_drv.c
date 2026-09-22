@@ -11,6 +11,7 @@
 #include <linux/of.h>
 
 #include "panthor_arbitration.h"
+#include "panthor_arbitration_sched.h"
 #include "panthor_partition_control.h"
 #include "panthor_resource_group.h"
 
@@ -56,6 +57,13 @@ static int panthor_arbitration_runtime_suspend(struct device *dev)
 	struct panthor_arbitration *adev = dev_get_drvdata(dev);
 	int ret = 0;
 
+	if (adev->tearing_down)
+		return 0;
+
+	ret = panthor_arbitration_sched_suspend(adev);
+	if (ret)
+		return ret;
+
 	ret = panthor_resource_group_suspend(adev);
 	if (ret)
 		return ret;
@@ -80,6 +88,26 @@ static int panthor_arbitration_runtime_resume(struct device *dev)
 	if (ret)
 		return ret;
 
+	ret = panthor_arbitration_sched_resume(adev);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+/* Arbiter to AW events */
+int panthor_arbitration_on_grant(struct panthor_arbitration *adev, u8 aw_id)
+{
+	return 0;
+}
+
+int panthor_arbitration_on_stop(struct panthor_arbitration *adev, u8 aw_id)
+{
+	return 0;
+}
+
+int panthor_arbitration_on_close(struct panthor_arbitration *adev, u8 aw_id)
+{
 	return 0;
 }
 
@@ -116,6 +144,10 @@ static int panthor_arbitration_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_term_rg;
 
+	ret = panthor_arbitration_sched_init(adev);
+	if (ret)
+		goto err_term_sched;
+
 	ret = of_platform_populate(dev->of_node, NULL, NULL, dev);
 	if (ret)
 		goto err_depopulate;
@@ -129,6 +161,8 @@ static int panthor_arbitration_probe(struct platform_device *pdev)
 
 err_depopulate:
 	of_platform_depopulate(dev);
+err_term_sched:
+	panthor_arbitration_sched_term(adev);
 err_term_rg:
 	panthor_resource_group_cancel_work(adev);
 	panthor_resource_group_term(adev);
@@ -151,15 +185,20 @@ static void panthor_arbitration_remove(struct platform_device *pdev)
 		dev_warn(adev->dev, "failed to resume during remove: %d", ret);
 
 	of_platform_depopulate(adev->dev);
-	panthor_resource_group_cancel_work(adev);
 
 	if (ret >= 0) {
+		adev->tearing_down = true;
+
+		panthor_arbitration_sched_term(adev);
+		panthor_resource_group_cancel_work(adev);
 		panthor_resource_group_term(adev);
 		panthor_partition_control_term(adev);
-		pm_runtime_put_noidle(adev->dev);
+		pm_runtime_put_sync_suspend(adev->dev);
+	} else {
+		panthor_arbitration_sched_cancel(adev);
+		panthor_resource_group_cancel_work(adev);
+		pm_runtime_set_suspended(adev->dev);
 	}
-
-	pm_runtime_set_suspended(adev->dev);
 }
 
 static const struct dev_pm_ops panthor_arbitration_pm_ops = {
