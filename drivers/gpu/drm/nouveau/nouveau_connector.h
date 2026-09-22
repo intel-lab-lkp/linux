@@ -216,6 +216,7 @@ extern int nouveau_duallink;
 extern int nouveau_hdmimhz;
 
 void nouveau_conn_attach_properties(struct drm_connector *);
+unsigned int nouveau_connector_get_tmds_link_bandwidth(struct drm_connector *connector);
 void nouveau_conn_reset(struct drm_connector *);
 struct drm_connector_state *
 nouveau_conn_atomic_duplicate_state(struct drm_connector *);

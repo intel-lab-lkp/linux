@@ -35,6 +35,12 @@ headca7d_or(struct nv50_head *head, struct nv50_head_atom *asyh)
 	int ret;
 
 	switch (asyh->or.depth) {
+	case 9:
+		depth = NVCA7D_HEAD_SET_CONTROL_OUTPUT_RESOURCE_PIXEL_DEPTH_BPP_48_444;
+		break;
+	case 8:
+		depth = NVCA7D_HEAD_SET_CONTROL_OUTPUT_RESOURCE_PIXEL_DEPTH_BPP_36_444;
+		break;
 	case 6:
 		depth = NVCA7D_HEAD_SET_CONTROL_OUTPUT_RESOURCE_PIXEL_DEPTH_BPP_30_444;
 		break;

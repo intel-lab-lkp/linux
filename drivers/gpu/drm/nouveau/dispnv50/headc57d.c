@@ -52,6 +52,12 @@ headc57d_or(struct nv50_head *head, struct nv50_head_atom *asyh)
 	 *     improved later for deep colour etc.
 	 */
 	switch (asyh->or.depth) {
+	case 9:
+		depth = 8;
+		break;
+	case 8:
+		depth = 7;
+		break;
 	case 6: depth = 5; break;
 	case 5: depth = 4; break;
 	case 2: depth = 1; break;

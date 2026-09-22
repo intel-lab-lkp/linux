@@ -375,10 +375,12 @@ nv50_outp_atomic_check_view(struct drm_encoder *encoder,
 }
 
 static void
-nv50_outp_atomic_fix_depth(struct drm_encoder *encoder, struct drm_crtc_state *crtc_state)
+nv50_outp_atomic_fix_depth(struct drm_encoder *encoder, struct drm_crtc_state *crtc_state,
+			   struct drm_connector_state *conn_state)
 {
 	struct nv50_head_atom *asyh = nv50_head_atom(crtc_state);
 	struct nouveau_encoder *nv_encoder = nouveau_encoder(encoder);
+	struct drm_connector *connector = conn_state->connector;
 	struct drm_display_mode *mode = &asyh->state.adjusted_mode;
 	unsigned int max_rate, mode_rate;
 
@@ -397,6 +399,36 @@ nv50_outp_atomic_fix_depth(struct drm_encoder *encoder, struct drm_crtc_state *c
 
 			asyh->or.bpc -= 2;
 		}
+		break;
+	case DCB_OUTPUT_TMDS:
+		if (!connector->display_info.is_hdmi)
+			break;
+
+		max_rate = nouveau_connector_get_tmds_link_bandwidth(connector);
+		asyh->or.bpc = 8;
+
+		if (conn_state->max_requested_bpc >= 16 &&
+		    connector->display_info.edid_hdmi_rgb444_dc_modes & DRM_EDID_HDMI_DC_48) {
+			mode_rate = DIV_ROUND_UP(mode->clock * 16, 8);
+			if (mode_rate <= max_rate)
+				asyh->or.bpc = 16;
+		}
+
+		if (asyh->or.bpc == 8 && conn_state->max_requested_bpc >= 12 &&
+		    connector->display_info.edid_hdmi_rgb444_dc_modes & DRM_EDID_HDMI_DC_36) {
+			mode_rate = DIV_ROUND_UP(mode->clock * 12, 8);
+			if (mode_rate <= max_rate)
+				asyh->or.bpc = 12;
+		}
+
+		if (asyh->or.bpc == 8 && conn_state->max_requested_bpc >= 10 &&
+		    connector->display_info.edid_hdmi_rgb444_dc_modes & DRM_EDID_HDMI_DC_30) {
+			mode_rate = DIV_ROUND_UP(mode->clock * 10, 8);
+			if (mode_rate <= max_rate)
+				asyh->or.bpc = 10;
+		}
+
+		conn_state->max_bpc = asyh->or.bpc;
 		break;
 	default:
 		break;
@@ -422,7 +454,7 @@ nv50_outp_atomic_check(struct drm_encoder *encoder,
 		asyh->or.bpc = connector->display_info.bpc;
 
 	/* We might have to reduce the bpc */
-	nv50_outp_atomic_fix_depth(encoder, crtc_state);
+	nv50_outp_atomic_fix_depth(encoder, crtc_state, conn_state);
 
 	return 0;
 }
@@ -1776,6 +1808,27 @@ nv50_sor_atomic_enable(struct drm_encoder *encoder, struct drm_atomic_commit *st
 
 	switch (nv_encoder->dcb->type) {
 	case DCB_OUTPUT_TMDS:
+		switch (asyh->or.bpc) {
+		case 16:
+			depth = NV837D_SOR_SET_CONTROL_PIXEL_DEPTH_BPP_48_444;
+			break;
+		case 12:
+			depth = NV837D_SOR_SET_CONTROL_PIXEL_DEPTH_BPP_36_444;
+			break;
+		case 10:
+			depth = NV837D_SOR_SET_CONTROL_PIXEL_DEPTH_BPP_30_444;
+			break;
+		case 8:
+			depth = NV837D_SOR_SET_CONTROL_PIXEL_DEPTH_BPP_24_444;
+			break;
+		case 6:
+			depth = NV837D_SOR_SET_CONTROL_PIXEL_DEPTH_BPP_18_444;
+			break;
+		default:
+			depth = NV837D_SOR_SET_CONTROL_PIXEL_DEPTH_DEFAULT;
+			break;
+		}
+
 		if (disp->disp->object.oclass != NV50_DISP &&
 		    nv_connector->base.display_info.is_hdmi)
 			nv50_hdmi_enable(encoder, nv_crtc, nv_connector, state, mode, hda);
