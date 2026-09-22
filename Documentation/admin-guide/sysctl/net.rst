@@ -529,6 +529,29 @@ their hosts. The behavior of VSOCK sockets in a network namespace is determined
 by the namespace's mode (``global`` or ``local``), which controls how CIDs
 (Context IDs) are allocated and how sockets interact across namespaces.
 
+In a guest, the vsock device owned by the guest-to-host (G2H) transport belongs
+to one network namespace at a time. The ``VSOCK_CMD_DEV_NETNS_SET`` command of
+the ``vsock`` netlink family, described in
+Documentation/netlink/specs/vsock.yaml, moves it to the namespace the request
+was sent from, which requires ``CAP_NET_ADMIN`` in the initial user namespace.
+The namespace's mode decides who may then use the device:
+
+- ``global`` - every ``global`` mode namespace may use it.
+- ``local`` - only that namespace may use it, which reserves the connection to
+  the host for it alone.
+
+The device starts out in the initial namespace, so until the command is issued
+nothing has moved and no mode has changed.
+
+Support is transport dependent. A G2H transport that does not implement the
+move refuses the command with ``EOPNOTSUPP``; of the in-tree guest transports
+only virtio-vsock implements it.
+
+Connections made before the move, from a namespace that can no longer reach the
+device, are reset. The device returns to the initial namespace when the
+namespace it was moved to is deleted, so assigning it to the initial namespace
+is how an assignment is undone.
+
 ns_mode
 -------
 

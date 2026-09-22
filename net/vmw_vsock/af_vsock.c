@@ -130,6 +130,24 @@
  *       a different transport that *does* support local mode. For
  *       example, virtio-vsock may not support local mode, but the socket
  *       may still accept a connection from vhost-vsock which does.
+ *
+ * - A guest has a single vsock device, owned by the guest->host transport.
+ *   The VSOCK_CMD_DEV_NETNS_SET netlink command moves it to the namespace the
+ *   request was sent from. It starts out in init_net. The mode rules then
+ *   decide who may use it, and which namespace packets from the host are
+ *   delivered to:
+ *
+ *   - assigned to a global mode namespace - every global mode namespace may
+ *     use it. Until the command is issued nothing has moved and no mode has
+ *     changed, so the default is the behaviour that predates it.
+ *   - assigned to a local mode namespace - only that namespace may use it.
+ *     This is how a nested VM is isolated from the rest of the guest.
+ *
+ *   Connections made before an assignment, from a namespace that can no
+ *   longer reach the device, are reset.
+ *
+ *   No reference is taken on the assigned namespace. As is done for netdevs,
+ *   the device is moved back to init_net when that namespace is destroyed.
  */
 
 #include <linux/compat.h>
@@ -161,9 +179,13 @@
 #include <linux/workqueue.h>
 #include <net/sock.h>
 #include <net/af_vsock.h>
+#include <linux/net_namespace.h>
+#include <net/genetlink.h>
 #include <net/netns/vsock.h>
 #include <uapi/linux/vm_sockets.h>
 #include <uapi/asm-generic/ioctls.h>
+
+#include "vsock_nl_gen.h"
 
 #define VSOCK_NET_MODE_STR_GLOBAL "global"
 #define VSOCK_NET_MODE_STR_LOCAL "local"
@@ -207,6 +229,11 @@ static const struct vsock_transport *transport_dgram;
 /* Transport used for local communication */
 static const struct vsock_transport *transport_local;
 static DEFINE_MUTEX(vsock_register_mutex);
+
+/* Network namespace of the g2h device. Protected by
+ * vsock_register_mutex/RCU.
+ */
+static struct net __rcu *vsock_g2h_net = RCU_INITIALIZER(&init_net);
 
 /**** UTILS ****/
 
@@ -553,7 +580,37 @@ void vsock_enqueue_accept(struct sock *listener, struct sock *connected)
 }
 EXPORT_SYMBOL_GPL(vsock_enqueue_accept);
 
-static bool vsock_use_local_transport(unsigned int remote_cid)
+/* Return true if @t honours namespace assignment. One that does not keeps the
+ * reachability rules it had before VSOCK_CMD_DEV_NETNS_SET existed.
+ */
+static bool vsock_netns_assignable(const struct vsock_transport *t)
+{
+	return t && t->netns_assign_allow && t->reset;
+}
+
+/* Return the CID of the transport in @transport, as seen from @net.
+ *
+ * The g2h device is the one that can move between namespaces, so a @net that
+ * cannot reach it is told VMADDR_CID_ANY: the same answer it would get if no
+ * g2h transport were registered at all.
+ */
+static u32
+__vsock_registered_transport_cid(const struct vsock_transport **transport,
+				 struct net *net)
+{
+	lockdep_assert_held(&vsock_register_mutex);
+
+	if (!*transport)
+		return VMADDR_CID_ANY;
+
+	if (transport == &transport_g2h && vsock_netns_assignable(*transport) &&
+	    !vsock_g2h_net_reachable(net))
+		return VMADDR_CID_ANY;
+
+	return (*transport)->get_local_cid();
+}
+
+static bool vsock_use_local_transport(struct net *net, unsigned int remote_cid)
 {
 	lockdep_assert_held(&vsock_register_mutex);
 
@@ -564,7 +621,12 @@ static bool vsock_use_local_transport(unsigned int remote_cid)
 		return true;
 
 	if (transport_g2h) {
-		return remote_cid == transport_g2h->get_local_cid();
+		u32 cid = __vsock_registered_transport_cid(&transport_g2h, net);
+
+		/* The device may be unreachable from @net, in which case
+		 * @remote_cid is not the local CID.
+		 */
+		return cid != VMADDR_CID_ANY && remote_cid == cid;
 	} else {
 		return remote_cid == VMADDR_CID_HOST;
 	}
@@ -626,7 +688,7 @@ int vsock_assign_transport(struct vsock_sock *vsk, struct vsock_sock *psk)
 		break;
 	case SOCK_STREAM:
 	case SOCK_SEQPACKET:
-		if (vsock_use_local_transport(remote_cid))
+		if (vsock_use_local_transport(sock_net(sk), remote_cid))
 			new_transport = transport_local;
 		else if (remote_cid <= VMADDR_CID_HOST ||
 			 (remote_flags & VMADDR_FLAG_TO_HOST))
@@ -651,6 +713,13 @@ int vsock_assign_transport(struct vsock_sock *vsk, struct vsock_sock *psk)
 
 	if (vsk->transport && vsk->transport == new_transport) {
 		ret = 0;
+		goto err;
+	}
+
+	if (new_transport && new_transport == transport_g2h &&
+	    vsock_netns_assignable(new_transport) &&
+	    !vsock_g2h_net_reachable(sock_net(sk))) {
+		ret = -ENETUNREACH;
 		goto err;
 	}
 
@@ -715,21 +784,22 @@ EXPORT_SYMBOL_GPL(vsock_assign_transport);
  * Provide safe access to static transport_{h2g,g2h,dgram,local} callbacks.
  * Otherwise we may race with module removal. Do not use on `vsk->transport`.
  */
-static u32 vsock_registered_transport_cid(const struct vsock_transport **transport)
+static u32
+vsock_registered_transport_cid(const struct vsock_transport **transport,
+			       struct net *net)
 {
-	u32 cid = VMADDR_CID_ANY;
+	u32 cid;
 
 	mutex_lock(&vsock_register_mutex);
-	if (*transport)
-		cid = (*transport)->get_local_cid();
+	cid = __vsock_registered_transport_cid(transport, net);
 	mutex_unlock(&vsock_register_mutex);
 
 	return cid;
 }
 
-bool vsock_find_cid(unsigned int cid)
+bool vsock_find_cid(struct net *net, unsigned int cid)
 {
-	if (cid == vsock_registered_transport_cid(&transport_g2h))
+	if (cid == vsock_registered_transport_cid(&transport_g2h, net))
 		return true;
 
 	if (transport_h2g && cid == VMADDR_CID_HOST)
@@ -741,6 +811,173 @@ bool vsock_find_cid(unsigned int cid)
 	return false;
 }
 EXPORT_SYMBOL_GPL(vsock_find_cid);
+
+/* Return the namespace the g2h device is assigned to, with a reference held,
+ * or NULL when that namespace is going away and the init_net cannot stand in
+ * for it.
+ */
+struct net *vsock_g2h_net_get(void)
+{
+	struct net *assigned;
+	struct net *net;
+
+	rcu_read_lock();
+	assigned = rcu_dereference(vsock_g2h_net);
+	net = maybe_get_net(assigned);
+
+	/* !net means the net is about to be destroyed, at which point the g2h
+	 * device will move to the init_net.  If the init_net and the dying net
+	 * are both global mode, we use the init_net as a fallback to avoid
+	 * disrupting global-mode flows. The per-net destructor hook will
+	 * eventually move the g2h device to the init_net anyway.
+	 *
+	 * vsock_net_check_mode() is safe here because 'assigned' is pointing
+	 * to a net that won't be freed until the following rcu grace period.
+	 */
+	if (!net && vsock_net_check_mode(&init_net, assigned))
+		net = get_net(&init_net);
+	rcu_read_unlock();
+
+	return net;
+}
+EXPORT_SYMBOL_GPL(vsock_g2h_net_get);
+
+bool vsock_g2h_net_reachable(struct net *net)
+{
+	bool reachable;
+
+	rcu_read_lock();
+	reachable = vsock_net_check_mode(net, rcu_dereference(vsock_g2h_net));
+	rcu_read_unlock();
+
+	return reachable;
+}
+EXPORT_SYMBOL_GPL(vsock_g2h_net_reachable);
+
+static bool vsock_g2h_reachable_sk(struct vsock_sock *vsk)
+{
+	if (!vsock_netns_assignable(vsk->transport))
+		return true;
+
+	return vsock_g2h_net_reachable(sock_net(sk_vsock(vsk)));
+}
+
+/* Move @vsk to TCP_ESTABLISHED and into the connected table, unless the device
+ * has moved to a namespace @vsk cannot reach. Returns false without doing
+ * either in that case.
+ *
+ * The reset sweep walks the same table under the same lock, so an assign
+ * cannot land between the check and the insert: either the sweep finds @vsk
+ * and resets it, or @vsk is never added.
+ */
+bool vsock_maybe_set_connected(struct vsock_sock *vsk)
+{
+	struct list_head *list;
+	bool reachable;
+
+	list = vsock_connected_sockets(&vsk->remote_addr, &vsk->local_addr);
+
+	spin_lock_bh(&vsock_table_lock);
+	reachable = vsock_g2h_reachable_sk(vsk);
+	if (reachable) {
+		sk_vsock(vsk)->sk_state = TCP_ESTABLISHED;
+		__vsock_insert_connected(list, vsk);
+	}
+	spin_unlock_bh(&vsock_table_lock);
+
+	return reachable;
+}
+EXPORT_SYMBOL_GPL(vsock_maybe_set_connected);
+
+/* Reset every connected socket of @t that can no longer reach the g2h device,
+ * and let the transport tell each peer.
+ */
+static void vsock_g2h_reset_unreachable(const struct vsock_transport *t)
+{
+	struct vsock_sock *vsk, *tmp;
+	LIST_HEAD(reset_list);
+	struct sock *sk;
+	int i;
+
+	/* The calling context must hold vsock_register_mutex, which serializes
+	 * concurrent netns assignments' use of vsk->pending_reset.
+	 */
+	lockdep_assert_held(&vsock_register_mutex);
+
+	spin_lock_bh(&vsock_table_lock);
+
+	for (i = 0; i < ARRAY_SIZE(vsock_connected_table); i++) {
+		list_for_each_entry(vsk, &vsock_connected_table[i],
+				    connected_table) {
+			sk = sk_vsock(vsk);
+
+			if (vsk->transport != t ||
+			    sk->sk_state == TCP_CLOSE ||
+			    vsock_g2h_reachable_sk(vsk))
+				continue;
+
+			sk->sk_state = TCP_CLOSE;
+			sk->sk_err = ECONNRESET;
+			sk_error_report(sk);
+
+			sock_hold(sk);
+			list_add_tail(&vsk->pending_reset, &reset_list);
+		}
+	}
+
+	spin_unlock_bh(&vsock_table_lock);
+
+	/* Reset outside of spinlock because the transport may sleep
+	 * (e.g., GFP_KERNEL alloc).
+	 */
+	list_for_each_entry_safe(vsk, tmp, &reset_list, pending_reset) {
+		list_del_init(&vsk->pending_reset);
+		t->reset(vsk, NULL);
+		sock_put(sk_vsock(vsk));
+	}
+}
+
+/* Move the g2h device to @net. Returns -ENODEV if no g2h transport is loaded
+ * and -EOPNOTSUPP if the loaded one cannot be moved.
+ */
+static int vsock_g2h_net_assign(struct net *net)
+{
+	int ret = 0;
+
+	mutex_lock(&vsock_register_mutex);
+	if (!transport_g2h) {
+		ret = -ENODEV;
+	} else if (!vsock_netns_assignable(transport_g2h)) {
+		ret = -EOPNOTSUPP;
+	} else {
+		/* See vsock_maybe_set_connected() comment about synchronizing
+		 * with connecting sockets.
+		 */
+		rcu_assign_pointer(vsock_g2h_net, net);
+		vsock_g2h_reset_unreachable(transport_g2h);
+	}
+	mutex_unlock(&vsock_register_mutex);
+
+	return ret;
+}
+
+/* Move the g2h device back to init_net if it lives in @net, which is about to
+ * be destroyed.
+ */
+/* Runs as .pre_exit: pernet_operations guarantees a synchronize_rcu()
+ * between pre_exit() and exit(), which drains the readers this drops.
+ */
+static void __net_exit vsock_g2h_net_reset(struct net *net)
+{
+	/* Avoid taking the mutex if the namespaces don't match. */
+	if (likely(rcu_access_pointer(vsock_g2h_net) != net))
+		return;
+
+	mutex_lock(&vsock_register_mutex);
+	if (rcu_access_pointer(vsock_g2h_net) == net)
+		rcu_assign_pointer(vsock_g2h_net, &init_net);
+	mutex_unlock(&vsock_register_mutex);
+}
 
 static struct sock *vsock_dequeue_accept(struct sock *listener)
 {
@@ -908,7 +1145,8 @@ static int __vsock_bind(struct sock *sk, struct sockaddr_vm *addr)
 	 * like AF_INET prevents binding to a non-local IP address (in most
 	 * cases), we only allow binding to a local CID.
 	 */
-	if (addr->svm_cid != VMADDR_CID_ANY && !vsock_find_cid(addr->svm_cid))
+	if (addr->svm_cid != VMADDR_CID_ANY &&
+	    !vsock_find_cid(sock_net(sk_vsock(vsk)), addr->svm_cid))
 		return -EADDRNOTAVAIL;
 
 	switch (sk->sk_socket->type) {
@@ -967,6 +1205,7 @@ static struct sock *__vsock_create(struct net *net,
 
 	INIT_LIST_HEAD(&vsk->bound_table);
 	INIT_LIST_HEAD(&vsk->connected_table);
+	INIT_LIST_HEAD(&vsk->pending_reset);
 	vsk->listener = NULL;
 	INIT_LIST_HEAD(&vsk->pending_links);
 	INIT_LIST_HEAD(&vsk->accept_queue);
@@ -2760,6 +2999,7 @@ static long vsock_dev_do_ioctl(struct file *filp,
 {
 	u32 __user *p = ptr;
 	int retval = 0;
+	struct net *net;
 	u32 cid;
 
 	switch (cmd) {
@@ -2767,11 +3007,14 @@ static long vsock_dev_do_ioctl(struct file *filp,
 		/* To be compatible with the VMCI behavior, we prioritize the
 		 * guest CID instead of well-know host CID (VMADDR_CID_HOST).
 		 */
-		cid = vsock_registered_transport_cid(&transport_g2h);
+		net = current->nsproxy->net_ns;
+		cid = vsock_registered_transport_cid(&transport_g2h, net);
 		if (cid == VMADDR_CID_ANY)
-			cid = vsock_registered_transport_cid(&transport_h2g);
+			cid = vsock_registered_transport_cid(&transport_h2g,
+							     net);
 		if (cid == VMADDR_CID_ANY)
-			cid = vsock_registered_transport_cid(&transport_local);
+			cid = vsock_registered_transport_cid(&transport_local,
+							     net);
 
 		if (put_user(cid, p) != 0)
 			retval = -EFAULT;
@@ -2811,6 +3054,81 @@ static struct miscdevice vsock_device = {
 	.name		= "vsock",
 	.fops		= &vsock_device_ops,
 };
+
+int vsock_nl_dev_netns_get_doit(struct sk_buff *skb, struct genl_info *info)
+{
+	struct net *net = genl_info_net(info);
+	struct net *assigned;
+	struct sk_buff *msg;
+	bool report;
+	void *hdr;
+	s32 id;
+	int err;
+
+	mutex_lock(&vsock_register_mutex);
+	if (!transport_g2h) {
+		mutex_unlock(&vsock_register_mutex);
+		NL_SET_ERR_MSG(info->extack,
+			       "no guest-to-host transport is loaded");
+		return -ENODEV;
+	}
+
+	rcu_read_lock();
+	assigned = rcu_dereference(vsock_g2h_net);
+	report = !net_eq(net, assigned);
+	if (report) {
+		/* Hide the assignment on the same terms the CID is hidden:
+		 * only a transport that honours namespace assignment keeps it
+		 * from a namespace that cannot reach the device.
+		 */
+		if (vsock_netns_assignable(transport_g2h) &&
+		    !vsock_net_check_mode(net, assigned))
+			id = NETNSA_NSID_NOT_ASSIGNED;
+		else
+			id = peernet2id_alloc(net, assigned, GFP_ATOMIC);
+	}
+	rcu_read_unlock();
+	mutex_unlock(&vsock_register_mutex);
+
+	msg = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
+	if (!msg)
+		return -ENOMEM;
+
+	hdr = genlmsg_iput(msg, info);
+	if (!hdr) {
+		err = -EMSGSIZE;
+		goto err_free;
+	}
+
+	if (report && nla_put_s32(msg, VSOCK_A_NETNS_ID, id)) {
+		err = -EMSGSIZE;
+		goto err_cancel;
+	}
+
+	genlmsg_end(msg, hdr);
+
+	return genlmsg_reply(msg, info);
+
+err_cancel:
+	genlmsg_cancel(msg, hdr);
+err_free:
+	nlmsg_free(msg);
+	return err;
+}
+
+int vsock_nl_dev_netns_set_doit(struct sk_buff *skb, struct genl_info *info)
+{
+	int err = vsock_g2h_net_assign(genl_info_net(info));
+
+	if (err == -ENODEV)
+		NL_SET_ERR_MSG(info->extack,
+			       "no guest-to-host transport is loaded");
+	else if (err == -EOPNOTSUPP)
+		NL_SET_ERR_MSG(info->extack,
+			       "the loaded guest-to-host transport does not support namespace assignment");
+
+	return err;
+}
 
 static int __vsock_net_mode_string(const struct ctl_table *table, int write,
 				   void *buffer, size_t *lenp, loff_t *ppos,
@@ -3015,6 +3333,7 @@ static __net_exit void vsock_pernet_exit(struct net *net)
 
 static struct pernet_operations vsock_pernet_ops = {
 	.init = vsock_pernet_init,
+	.pre_exit = vsock_g2h_net_reset,
 	.exit = vsock_pernet_exit,
 };
 
@@ -3050,10 +3369,18 @@ static int __init vsock_init(void)
 		goto err_unregister_sock;
 	}
 
+	err = genl_register_family(&vsock_nl_family);
+	if (err) {
+		pr_err("Cannot register vsock netlink family: %d\n", err);
+		goto err_unregister_pernet;
+	}
+
 	vsock_bpf_build_proto();
 
 	return 0;
 
+err_unregister_pernet:
+	unregister_pernet_subsys(&vsock_pernet_ops);
 err_unregister_sock:
 	sock_unregister(AF_VSOCK);
 err_unregister_proto:
@@ -3066,6 +3393,7 @@ err_reset_transport:
 
 static void __exit vsock_exit(void)
 {
+	genl_unregister_family(&vsock_nl_family);
 	misc_deregister(&vsock_device);
 	sock_unregister(AF_VSOCK);
 	proto_unregister(&vsock_proto);
@@ -3141,8 +3469,10 @@ void vsock_core_unregister(const struct vsock_transport *t)
 	if (transport_h2g == t)
 		transport_h2g = NULL;
 
-	if (transport_g2h == t)
+	if (transport_g2h == t) {
 		transport_g2h = NULL;
+		rcu_assign_pointer(vsock_g2h_net, &init_net);
+	}
 
 	if (transport_dgram == t)
 		transport_dgram = NULL;

@@ -35,6 +35,8 @@ struct vsock_sock {
 	/* Links for the global tables of bound and connected sockets. */
 	struct list_head bound_table;
 	struct list_head connected_table;
+	/* Protected by vsock_register_mutex. */
+	struct list_head pending_reset;
 	/* Accessed without the socket lock held. This means it can never be
 	 * modified outsided of socket create or destruct.
 	 */
@@ -190,6 +192,16 @@ struct vsock_transport {
 
 	/* Zero-copy. */
 	bool (*msgzerocopy_allow)(void);
+
+	/* True if the G2H transport honours VSOCK_CMD_DEV_NETNS_SET. A
+	 * transport that sets this must also implement reset.
+	 */
+	bool netns_assign_allow;
+
+	/* Send a reset to @vsk's peer. @skb is the packet being replied to, or
+	 * NULL when the reset is not a reply. May sleep.
+	 */
+	int (*reset)(struct vsock_sock *vsk, struct sk_buff *skb);
 };
 
 /**** CORE ****/
@@ -236,8 +248,11 @@ void vsock_remove_sock(struct vsock_sock *vsk);
 void vsock_for_each_connected_socket(const struct vsock_transport *transport,
 				     void (*fn)(struct sock *sk));
 int vsock_assign_transport(struct vsock_sock *vsk, struct vsock_sock *psk);
-bool vsock_find_cid(unsigned int cid);
+bool vsock_find_cid(struct net *net, unsigned int cid);
 void vsock_linger(struct sock *sk);
+struct net *vsock_g2h_net_get(void);
+bool vsock_g2h_net_reachable(struct net *net);
+bool vsock_maybe_set_connected(struct vsock_sock *vsk);
 
 /**** TAP ****/
 

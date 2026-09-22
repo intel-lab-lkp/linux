@@ -828,9 +828,11 @@ static int vhost_vsock_set_cid(struct vhost_vsock *vsock, u64 guest_cid)
 		return -EINVAL;
 
 	/* Refuse if CID is assigned to the guest->host transport (i.e. nested
-	 * VM), to make the loopback work.
+	 * VM), to make the loopback work. Only when that device is reachable
+	 * from this VM's namespace, which is the same test the guest CID
+	 * collision check below applies.
 	 */
-	if (vsock_find_cid(guest_cid))
+	if (vsock_find_cid(vsock->net, guest_cid))
 		return -EADDRINUSE;
 
 	/* Refuse if CID is already in use */
