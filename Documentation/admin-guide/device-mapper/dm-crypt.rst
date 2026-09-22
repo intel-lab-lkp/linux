@@ -153,8 +153,14 @@ integrity_key_size:<bytes>
 
 sector_size:<bytes>
     Use <bytes> as the encryption unit instead of 512 bytes sectors.
-    This option can be in range 512 - 4096 bytes and must be power of two.
+    This option can be in range 512 - PAGE_SIZE bytes, with an upper bound
+    of 65536, and must be power of two.
     Virtual device will announce this size as a minimal IO and logical sector.
+
+    An encryption unit larger than 4096 bytes can only be used on a system
+    whose PAGE_SIZE is at least that large, so such a mapping is not
+    portable across architectures and is unsuitable for portable on-disk
+    formats such as LUKS.
 
 iv_large_sectors
    IV generators will use sector number counted in <sector_size> units
