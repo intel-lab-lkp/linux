@@ -1371,7 +1371,8 @@ static struct uart_port *console_port;
 static void cdns_uart_console_write(struct console *co, const char *s,
 				unsigned int count)
 {
-	struct uart_port *port = console_port;
+	/* Pairs with the smp_store_release() in cdns_uart_probe(). */
+	struct uart_port *port = smp_load_acquire(&console_port);
 	unsigned long flags;
 	unsigned int imr, ctrl;
 	int locked = 1;
@@ -1414,7 +1415,8 @@ static void cdns_uart_console_write(struct console *co, const char *s,
  */
 static int cdns_uart_console_setup(struct console *co, char *options)
 {
-	struct uart_port *port = console_port;
+	/* Pairs with the smp_store_release() in cdns_uart_probe(). */
+	struct uart_port *port = smp_load_acquire(&console_port);
 
 	int baud = 9600;
 	int bits = 8;
@@ -1812,7 +1814,8 @@ static int cdns_uart_probe(struct platform_device *pdev)
 	 */
 	if (!console_port) {
 		cdns_uart_console.index = id;
-		console_port = port;
+		/* Pairs with the smp_load_acquire() in the console callbacks. */
+		smp_store_release(&console_port, port);
 	}
 #endif
 	if (cdns_uart_data->port->rs485.flags & SER_RS485_ENABLED)
