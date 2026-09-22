@@ -954,7 +954,7 @@ static int ngbe_resume(struct pci_dev *pdev)
 {
 	struct net_device *netdev;
 	struct wx *wx;
-	u32 err;
+	int err;
 
 	wx = pci_get_drvdata(pdev);
 	netdev = wx->netdev;
@@ -968,7 +968,9 @@ static int ngbe_resume(struct pci_dev *pdev)
 	pci_set_master(pdev);
 	device_wakeup_disable(&pdev->dev);
 
-	ngbe_reset_hw(wx);
+	err = ngbe_reset_hw(wx);
+	if (err)
+		return err;
 	rtnl_lock();
 	err = wx_init_interrupt_scheme(wx);
 	if (!err && netif_running(netdev))
@@ -977,7 +979,7 @@ static int ngbe_resume(struct pci_dev *pdev)
 		netif_device_attach(netdev);
 	rtnl_unlock();
 
-	return 0;
+	return err;
 }
 
 static struct pci_driver ngbe_driver = {
