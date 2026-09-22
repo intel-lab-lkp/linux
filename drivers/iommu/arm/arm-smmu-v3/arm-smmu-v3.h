@@ -1088,11 +1088,6 @@ void arm_smmu_make_s2_domain_ste(struct arm_smmu_ste *target,
 				 bool ats_enabled);
 
 #if IS_ENABLED(CONFIG_KUNIT)
-void arm_smmu_get_ste_used(const __le64 *ent, __le64 *used_bits);
-void arm_smmu_get_ste_update_safe(const __le64 *cur, const __le64 *target,
-				  __le64 *safe_bits);
-void arm_smmu_write_entry(struct arm_smmu_entry_writer *writer, __le64 *cur,
-			  const __le64 *target);
 void arm_smmu_get_cd_used(const __le64 *ent, __le64 *used_bits);
 void arm_smmu_make_bypass_ste(struct arm_smmu_device *smmu,
 			      struct arm_smmu_ste *target);
@@ -1320,6 +1315,8 @@ static inline u64 arm_smmu_tlb_inv_range_enc(u8 num, u8 scale)
 	return FIELD_PREP(CMDQ_TLBI_0_NUM, num - 1) |
 		FIELD_PREP(CMDQ_TLBI_0_SCALE, scale & 0x1f);
 }
+
+#define NUM_ENTRY_QWORDS 8
 
 #ifdef CONFIG_ARM_SMMU_V3_SVA
 bool arm_smmu_sva_supported(struct arm_smmu_device *smmu);

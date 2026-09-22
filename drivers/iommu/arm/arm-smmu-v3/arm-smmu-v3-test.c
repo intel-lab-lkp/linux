@@ -6,6 +6,7 @@
 #include <linux/io-pgtable.h>
 
 #include "arm-smmu-v3.h"
+#include "arm-smmu-v3-common-lib.h"
 
 struct arm_smmu_test_writer {
 	struct arm_smmu_entry_writer writer;

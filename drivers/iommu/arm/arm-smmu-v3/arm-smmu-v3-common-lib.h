@@ -28,4 +28,10 @@ u32 arm_smmu_idr0_probe(ARM_SMMU_OBJ *smmu);
 void arm_smmu_idr3_probe(ARM_SMMU_OBJ *smmu);
 u32 arm_smmu_idr5_probe(ARM_SMMU_OBJ *smmu);
 
+void arm_smmu_get_ste_used(const __le64 *ent, __le64 *used_bits);
+void arm_smmu_get_ste_update_safe(const __le64 *cur, const __le64 *target,
+				  __le64 *safe_bits);
+void arm_smmu_write_entry(struct arm_smmu_entry_writer *writer, __le64 *cur,
+			  const __le64 *target);
+
 #endif /* __ARM_SMMU_V3_COMMON_LIB_H */
