@@ -7,6 +7,8 @@
 #ifndef __LINUX_PAGE_TABLE_CHECK_H
 #define __LINUX_PAGE_TABLE_CHECK_H
 
+#include <linux/pgtable_types.h>
+
 #ifdef CONFIG_PAGE_TABLE_CHECK
 #include <linux/jump_label.h>
 
@@ -21,7 +23,7 @@ void __page_table_check_pmd_clear(struct mm_struct *mm, unsigned long addr,
 void __page_table_check_pud_clear(struct mm_struct *mm, unsigned long addr,
 				  pud_t pud);
 void __page_table_check_ptes_set(struct mm_struct *mm, unsigned long addr,
-		pte_t *ptep, pte_t pte, unsigned int nr);
+		hw_pte_t *ptep, pte_t pte, unsigned int nr);
 void __page_table_check_pmds_set(struct mm_struct *mm, unsigned long addr,
 		pmd_t *pmdp, pmd_t pmd, unsigned int nr);
 void __page_table_check_puds_set(struct mm_struct *mm, unsigned long addr,
@@ -74,7 +76,8 @@ static inline void page_table_check_pud_clear(struct mm_struct *mm,
 }
 
 static inline void page_table_check_ptes_set(struct mm_struct *mm,
-					     unsigned long addr, pte_t *ptep,
+					     unsigned long addr,
+					     hw_pte_t *ptep,
 					     pte_t pte, unsigned int nr)
 {
 	if (static_branch_likely(&page_table_check_disabled))
@@ -137,7 +140,8 @@ static inline void page_table_check_pud_clear(struct mm_struct *mm,
 }
 
 static inline void page_table_check_ptes_set(struct mm_struct *mm,
-					     unsigned long addr, pte_t *ptep,
+					     unsigned long addr,
+					     hw_pte_t *ptep,
 					     pte_t pte, unsigned int nr)
 {
 }

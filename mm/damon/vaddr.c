@@ -268,7 +268,7 @@ lock_mmap:
 static int damon_mkold_pmd_entry(pmd_t *pmd, unsigned long addr,
 		unsigned long next, struct mm_walk *walk)
 {
-	pte_t *pte;
+	hw_pte_t *pte;
 	spinlock_t *ptl;
 
 	ptl = pmd_trans_huge_lock(pmd, walk->vma);
@@ -293,7 +293,7 @@ out:
 }
 
 #ifdef CONFIG_HUGETLB_PAGE
-static void damon_hugetlb_mkold(pte_t *pte, struct mm_struct *mm,
+static void damon_hugetlb_mkold(hw_pte_t *pte, struct mm_struct *mm,
 				struct vm_area_struct *vma, unsigned long addr)
 {
 	bool referenced = false;
@@ -320,7 +320,7 @@ static void damon_hugetlb_mkold(pte_t *pte, struct mm_struct *mm,
 	folio_put(folio);
 }
 
-static int damon_mkold_hugetlb_entry(pte_t *pte, unsigned long hmask,
+static int damon_mkold_hugetlb_entry(hw_pte_t *pte, unsigned long hmask,
 				     unsigned long addr, unsigned long end,
 				     struct mm_walk *walk)
 {
@@ -389,7 +389,7 @@ struct damon_young_walk_private {
 static int damon_young_pmd_entry(pmd_t *pmd, unsigned long addr,
 		unsigned long next, struct mm_walk *walk)
 {
-	pte_t *pte;
+	hw_pte_t *pte;
 	pte_t ptent;
 	spinlock_t *ptl;
 	struct folio *folio;
@@ -433,7 +433,7 @@ out:
 }
 
 #ifdef CONFIG_HUGETLB_PAGE
-static int damon_young_hugetlb_entry(pte_t *pte, unsigned long hmask,
+static int damon_young_hugetlb_entry(hw_pte_t *pte, unsigned long hmask,
 				     unsigned long addr, unsigned long end,
 				     struct mm_walk *walk)
 {
@@ -522,7 +522,7 @@ static unsigned int damon_va_check_accesses(struct damon_ctx *ctx)
 
 static bool damos_va_filter_young_match(struct damos_filter *filter,
 		struct folio *folio, struct vm_area_struct *vma,
-		unsigned long addr, pte_t *ptep, pmd_t *pmdp)
+		unsigned long addr, hw_pte_t *ptep, pmd_t *pmdp)
 {
 	bool young = false;
 
@@ -544,7 +544,7 @@ static bool damos_va_filter_young_match(struct damos_filter *filter,
 
 static bool damos_va_filter_out(struct damos *scheme, struct folio *folio,
 		struct vm_area_struct *vma, unsigned long addr,
-		pte_t *ptep, pmd_t *pmdp)
+		hw_pte_t *ptep, pmd_t *pmdp)
 {
 	struct damos_filter *filter;
 	bool matched;
@@ -641,7 +641,8 @@ static int damos_va_migrate_pmd_entry(pmd_t *pmd, unsigned long addr,
 	struct damos_migrate_dests *dests = &s->migrate_dests;
 	struct folio *folio;
 	spinlock_t *ptl;
-	pte_t *start_pte, *pte, ptent;
+	hw_pte_t *start_pte, *pte;
+	pte_t ptent;
 	int nr;
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
@@ -801,7 +802,8 @@ static int damos_va_stat_pmd_entry(pmd_t *pmd, unsigned long addr,
 	struct vm_area_struct *vma = walk->vma;
 	struct folio *folio;
 	spinlock_t *ptl;
-	pte_t *start_pte, *pte, ptent;
+	hw_pte_t *start_pte, *pte;
+	pte_t ptent;
 	int nr;
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE

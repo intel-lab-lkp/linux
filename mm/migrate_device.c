@@ -254,7 +254,7 @@ static int migrate_vma_collect_pmd(pmd_t *pmdp,
 	spinlock_t *ptl;
 	struct folio *fault_folio = migrate->fault_page ?
 		page_folio(migrate->fault_page) : NULL;
-	pte_t *ptep;
+	hw_pte_t *ptep;
 
 again:
 	if (pmd_trans_huge(*pmdp) || !pmd_present(*pmdp)) {
@@ -989,7 +989,7 @@ static void migrate_vma_insert_page(struct migrate_vma *migrate,
 	p4d_t *p4dp;
 	pud_t *pudp;
 	pmd_t *pmdp;
-	pte_t *ptep;
+	hw_pte_t *ptep;
 	pte_t orig_pte;
 
 	/* Only allow populating anonymous memory */

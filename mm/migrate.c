@@ -494,7 +494,7 @@ void migration_entry_wait(struct mm_struct *mm, pmd_t *pmd,
 			  unsigned long address)
 {
 	spinlock_t *ptl;
-	pte_t *ptep;
+	hw_pte_t *ptep;
 	pte_t pte;
 	softleaf_t entry;
 
@@ -525,7 +525,7 @@ out:
  *
  * This function will release the vma lock before returning.
  */
-void migration_entry_wait_huge(struct vm_area_struct *vma, unsigned long addr, pte_t *ptep)
+void migration_entry_wait_huge(struct vm_area_struct *vma, unsigned long addr, hw_pte_t *ptep)
 {
 	spinlock_t *ptl = huge_pte_lockptr(hstate_vma(vma), vma->vm_mm, ptep);
 	softleaf_t entry;
