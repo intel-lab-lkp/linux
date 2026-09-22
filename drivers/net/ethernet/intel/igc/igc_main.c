@@ -4240,8 +4240,8 @@ static void igc_assign_vector(struct igc_q_vector *q_vector, int msix_vector)
 {
 	struct igc_adapter *adapter = q_vector->adapter;
 	struct igc_hw *hw = &adapter->hw;
-	int rx_queue = IGC_N0_QUEUE;
-	int tx_queue = IGC_N0_QUEUE;
+	int rx_queue = IGC_NO_QUEUE;
+	int tx_queue = IGC_NO_QUEUE;
 
 	if (q_vector->rx.ring)
 		rx_queue = q_vector->rx.ring->reg_idx;
@@ -4250,11 +4250,11 @@ static void igc_assign_vector(struct igc_q_vector *q_vector, int msix_vector)
 
 	switch (hw->mac.type) {
 	case igc_i225:
-		if (rx_queue > IGC_N0_QUEUE)
+		if (rx_queue > IGC_NO_QUEUE)
 			igc_write_ivar(hw, msix_vector,
 				       rx_queue >> 1,
 				       (rx_queue & 0x1) << 4);
-		if (tx_queue > IGC_N0_QUEUE)
+		if (tx_queue > IGC_NO_QUEUE)
 			igc_write_ivar(hw, msix_vector,
 				       tx_queue >> 1,
 				       ((tx_queue & 0x1) << 4) + 8);
