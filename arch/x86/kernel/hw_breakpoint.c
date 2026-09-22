@@ -102,6 +102,9 @@ int arch_install_hw_breakpoint(struct perf_event *bp)
 
 	lockdep_assert_irqs_disabled();
 
+	if (perf_guest_in_guest())
+		return -EBUSY;
+
 	for (i = 0; i < HBP_NUM; i++) {
 		struct perf_event **slot = this_cpu_ptr(&bp_per_reg[i]);
 

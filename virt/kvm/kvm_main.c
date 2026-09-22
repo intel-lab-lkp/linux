@@ -6476,11 +6476,23 @@ static unsigned long kvm_guest_get_ip(void)
 	return kvm_arch_vcpu_get_ip(vcpu);
 }
 
+static bool kvm_guest_in_guest(void)
+{
+	struct kvm_vcpu *vcpu = kvm_get_running_vcpu();
+
+	if (!vcpu)
+		return false;
+
+	return READ_ONCE(vcpu->mode) == IN_GUEST_MODE ||
+	       READ_ONCE(vcpu->mode) == EXITING_GUEST_MODE;
+}
+
 static struct perf_guest_info_callbacks kvm_guest_cbs = {
 	.state			= kvm_guest_state,
 	.get_ip			= kvm_guest_get_ip,
 	.handle_intel_pt_intr	= NULL,
 	.handle_mediated_pmi	= NULL,
+	.in_guest		= kvm_guest_in_guest,
 };
 
 void __kvm_register_perf_callbacks(unsigned int (*pt_intr_handler)(void),

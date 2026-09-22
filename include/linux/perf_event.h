@@ -1677,8 +1677,8 @@ struct perf_guest_info_callbacks {
 	unsigned int			(*state)(void);
 	unsigned long			(*get_ip)(void);
 	unsigned int			(*handle_intel_pt_intr)(void);
-
 	void				(*handle_mediated_pmi)(void);
+	bool				(*in_guest)(void);
 };
 
 #ifdef CONFIG_GUEST_PERF_EVENTS
@@ -1689,6 +1689,7 @@ DECLARE_STATIC_CALL(__perf_guest_state, *perf_guest_cbs->state);
 DECLARE_STATIC_CALL(__perf_guest_get_ip, *perf_guest_cbs->get_ip);
 DECLARE_STATIC_CALL(__perf_guest_handle_intel_pt_intr, *perf_guest_cbs->handle_intel_pt_intr);
 DECLARE_STATIC_CALL(__perf_guest_handle_mediated_pmi, *perf_guest_cbs->handle_mediated_pmi);
+DECLARE_STATIC_CALL(__perf_guest_in_guest, *perf_guest_cbs->in_guest);
 
 static inline unsigned int perf_guest_state(void)
 {
@@ -1710,6 +1711,11 @@ static inline void perf_guest_handle_mediated_pmi(void)
 	static_call(__perf_guest_handle_mediated_pmi)();
 }
 
+static inline bool perf_guest_in_guest(void)
+{
+	return static_call(__perf_guest_in_guest)();
+}
+
 extern void perf_register_guest_info_callbacks(struct perf_guest_info_callbacks *cbs);
 extern void perf_unregister_guest_info_callbacks(struct perf_guest_info_callbacks *cbs);
 
@@ -1718,6 +1724,7 @@ extern void perf_unregister_guest_info_callbacks(struct perf_guest_info_callback
 static inline unsigned int perf_guest_state(void)		 { return 0; }
 static inline unsigned long perf_guest_get_ip(void)		 { return 0; }
 static inline unsigned int perf_guest_handle_intel_pt_intr(void) { return 0; }
+static inline bool perf_guest_in_guest(void)			 { return false; }
 
 #endif /* !CONFIG_GUEST_PERF_EVENTS */
 
