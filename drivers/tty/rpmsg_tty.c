@@ -49,12 +49,19 @@ static int rpmsg_tty_cb(struct rpmsg_device *rpdev, void *data, int len, void *p
 
 static int rpmsg_tty_install(struct tty_driver *driver, struct tty_struct *tty)
 {
-	struct rpmsg_tty_port *cport = idr_find(&tty_idr, tty->index);
-	struct tty_port *port;
+	struct rpmsg_tty_port *cport;
+	struct tty_port *port = NULL;
+
+	mutex_lock(&idr_lock);
+	cport = idr_find(&tty_idr, tty->index);
+	if (cport)
+		port = tty_port_get(&cport->port);
+	mutex_unlock(&idr_lock);
+
+	if (!port)
+		return -ENODEV;
 
 	tty->driver_data = cport;
-
-	port = tty_port_get(&cport->port);
 	return tty_port_install(port, driver, tty);
 }
 
