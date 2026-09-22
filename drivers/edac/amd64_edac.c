@@ -2704,11 +2704,15 @@ static int get_channel_from_ecc_syndrome(struct mem_ctl_info *mci, u16 syndrome)
 	return map_err_sym_to_channel(err_sym, pvt->ecc_sym_sz);
 }
 
+#define MSG_SIZE 256
 static void __log_ecc_error(struct mem_ctl_info *mci, struct err_info *err,
 			    u8 ecc_type)
 {
 	enum hw_event_mc_err_type err_type;
 	const char *string;
+	char s[MSG_SIZE];
+
+	s[0] = '\0';
 
 	if (ecc_type == 2)
 		err_type = HW_EVENT_ERR_CORRECTED;
@@ -2745,10 +2749,27 @@ static void __log_ecc_error(struct mem_ctl_info *mci, struct err_info *err,
 		break;
 	}
 
+	if (err->a_err.valid & ATL_OP_DA) {
+		struct atl_dram_addr *da = &err->a_err.da;
+		char *p = s, *end = p + sizeof(s);
+
+		/* Include a version prefix in case the format needs to change later. */
+		p += scnprintf(p, end - p, "[AMDv1]");
+		p += scnprintf(p, end - p, " SocketId:0x%x",   err->a_err.socket_id);
+		p += scnprintf(p, end - p, " IPID:0x%llx",     err->a_err.ipid);
+		p += scnprintf(p, end - p, " ChipSelect:0x%x", da->chip_select);
+		p += scnprintf(p, end - p, " Row:0x%x",        da->row_addr);
+		p += scnprintf(p, end - p, " Column:0x%x",     da->col_addr);
+		p += scnprintf(p, end - p, " Bank:0x%x",       da->bank_addr);
+		p += scnprintf(p, end - p, " BankGroup:0x%x",  da->bank_group);
+		p += scnprintf(p, end - p, " RankMul:0x%x",    da->rank_mul);
+		p += scnprintf(p, end - p, " SubChannel:0x%x", da->sub_ch);
+	}
+
 	edac_mc_handle_error(err_type, mci, 1,
 			     err->page, err->offset, err->syndrome,
 			     err->csrow, err->channel, -1,
-			     string, "");
+			     string, s);
 }
 
 static inline void decode_bus_error(int node_id, struct mce *m)
@@ -2844,7 +2865,7 @@ static void decode_umc_error(int node_id, struct mce *m)
 	err.a_err.addr      = m->addr;
 	err.a_err.ipid      = m->ipid;
 	err.a_err.cpu       = m->extcpu;
-	err.a_err.requested = ATL_OP_SPA;
+	err.a_err.requested = ATL_OP_SPA | ATL_OP_DA;
 
 	amd_translate_umc_mca_addr(&err.a_err);
 	if (!(err.a_err.valid & ATL_OP_SPA)) {
