@@ -91,7 +91,8 @@ static int count_cb(void *data, const char *name, unsigned long addr)
 	return 0;
 }
 
-static void run_name_lookup_bench(unsigned int iters)
+static void run_name_lookup_bench(const char *mode, unsigned int iters,
+				  u64 *avg_hit_ns, u64 *avg_miss_ns)
 {
 	u64 t0, t1, dt_hit = 0, dt_miss = 0;
 	unsigned long addr = 0;
@@ -153,10 +154,15 @@ static void run_name_lookup_bench(unsigned int iters)
 		dt_miss += t1 - t0;
 	}
 
-	pr_info("Name Search Hit:  %llu ns/lookup (%llu ms total, %u iters)\n",
-		div_u64(dt_hit, iters), div_u64(dt_hit, 1000000), iters);
-	pr_info("Name Search Miss: %llu ns/lookup (%llu ms total, %u iters)\n",
-		div_u64(dt_miss, iters), div_u64(dt_miss, 1000000), iters);
+	if (avg_hit_ns)
+		*avg_hit_ns = div_u64(dt_hit, iters);
+	if (avg_miss_ns)
+		*avg_miss_ns = div_u64(dt_miss, iters);
+
+	pr_info("[%s] Name Search Hit:  %llu ns/lookup (%llu ms total, %u iters)\n",
+		mode, div_u64(dt_hit, iters), div_u64(dt_hit, 1000000), iters);
+	pr_info("[%s] Name Search Miss: %llu ns/lookup (%llu ms total, %u iters)\n",
+		mode, div_u64(dt_miss, iters), div_u64(dt_miss, 1000000), iters);
 }
 
 static void run_address_lookup_bench(unsigned int iters)
@@ -243,6 +249,9 @@ static void run_table_walk_bench(void)
 static int run_kallsyms_benchmark(void)
 {
 	unsigned int iters;
+	u64 unindexed_hit = 0, unindexed_miss = 0;
+	u64 dyn_hit = 0, dyn_miss = 0;
+	u64 t0, t1, dt_start = 0, dt_end = 0;
 	int ret = 0;
 
 	if (!mutex_trylock(&bench_lock)) {
@@ -261,7 +270,37 @@ static int run_kallsyms_benchmark(void)
 	pr_info("Starting kallsyms performance benchmark (iters=%u)\n", iters);
 	pr_info("==================================================\n");
 
-	run_name_lookup_bench(iters);
+	/* 1. Benchmark baseline unindexed marker scan */
+	run_name_lookup_bench("Unindexed (markers)", iters, &unindexed_hit, &unindexed_miss);
+
+	/* 2. Benchmark dynamic lookup index */
+	t0 = ktime_get_ns();
+	ret = kallsyms_lookup_batch_start();
+	t1 = ktime_get_ns();
+	dt_start = t1 - t0;
+
+	if (ret) {
+		pr_err("Failed to start kallsyms lookup batch: %d\n", ret);
+	} else {
+		run_name_lookup_bench("Dynamic Index", iters, &dyn_hit, &dyn_miss);
+
+		t0 = ktime_get_ns();
+		kallsyms_lookup_batch_end();
+		t1 = ktime_get_ns();
+		dt_end = t1 - t0;
+
+		pr_info("[Dynamic Index] Batch setup: %llu us, teardown: %llu us\n",
+			div_u64(dt_start, 1000), div_u64(dt_end, 1000));
+
+		if (unindexed_hit > dyn_hit) {
+			u64 saved = unindexed_hit - dyn_hit;
+
+			pr_info("[Dynamic Index] Amortization break-even: %llu queries (setup), %llu queries (total)\n",
+				DIV_ROUND_UP_ULL(dt_start, saved),
+				DIV_ROUND_UP_ULL(dt_start + dt_end, saved));
+		}
+	}
+
 	run_address_lookup_bench(iters);
 	run_table_walk_bench();
 

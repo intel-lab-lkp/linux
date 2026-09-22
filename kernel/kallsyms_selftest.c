@@ -178,11 +178,27 @@ static int lookup_name(void *data, const char *name, unsigned long addr)
 static void test_perf_kallsyms_lookup_name(void)
 {
 	struct test_stat stat;
+	int ret;
 
 	memset(&stat, 0, sizeof(stat));
 	stat.min = INT_MAX;
 	kallsyms_on_each_symbol(lookup_name, &stat);
 	pr_info("kallsyms_lookup_name() looked up %d symbols\n", stat.real_cnt);
+	pr_info("The time spent on each symbol is (ns): min=%d, max=%d, avg=%lld\n",
+		stat.min, stat.max, div_u64(stat.sum, stat.real_cnt));
+
+	ret = kallsyms_lookup_batch_start();
+	if (ret) {
+		pr_err("kallsyms_lookup_batch_start() failed: %d\n", ret);
+		return;
+	}
+
+	memset(&stat, 0, sizeof(stat));
+	stat.min = INT_MAX;
+	kallsyms_on_each_symbol(lookup_name, &stat);
+	kallsyms_lookup_batch_end();
+
+	pr_info("kallsyms_lookup_name() (batch) looked up %d symbols\n", stat.real_cnt);
 	pr_info("The time spent on each symbol is (ns): min=%d, max=%d, avg=%lld\n",
 		stat.min, stat.max, div_u64(stat.sum, stat.real_cnt));
 }
