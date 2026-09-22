@@ -101,13 +101,16 @@ int tee_bnxt_fw_load(void)
 	int ret = 0;
 	struct tee_ioctl_invoke_arg arg;
 	struct tee_param param[MAX_TEE_PARAM_ARRY_MEMB];
+	struct tee_context *ctx;
 
-	if (!pvt_data.ctx)
+	/* Pairs with the smp_store_release() in tee_bnxt_fw_probe(). */
+	ctx = smp_load_acquire(&pvt_data.ctx);
+	if (!ctx)
 		return -ENODEV;
 
 	prepare_args(TA_CMD_BNXT_FASTBOOT, &arg, param);
 
-	ret = tee_client_invoke_func(pvt_data.ctx, &arg, param);
+	ret = tee_client_invoke_func(ctx, &arg, param);
 	if (ret < 0 || arg.ret != 0) {
 		dev_err(pvt_data.dev,
 			"TA_CMD_BNXT_FASTBOOT invoke failed TEE err: %x, ret:%x\n",
@@ -136,8 +139,11 @@ int tee_bnxt_copy_coredump(void *buf, u32 offset, u32 size)
 	u32 rbytes = size;
 	u32 nbytes = 0;
 	int ret = 0;
+	struct tee_context *ctx;
 
-	if (!pvt_data.ctx)
+	/* Pairs with the smp_store_release() in tee_bnxt_fw_probe(). */
+	ctx = smp_load_acquire(&pvt_data.ctx);
+	if (!ctx)
 		return -ENODEV;
 
 	prepare_args(TA_CMD_BNXT_COPY_COREDUMP, &arg, param);
@@ -151,7 +157,7 @@ int tee_bnxt_copy_coredump(void *buf, u32 offset, u32 size)
 		param[1].u.value.a = offset;
 		param[1].u.value.b = nbytes;
 
-		ret = tee_client_invoke_func(pvt_data.ctx, &arg, param);
+		ret = tee_client_invoke_func(ctx, &arg, param);
 		if (ret < 0 || arg.ret != 0) {
 			dev_err(pvt_data.dev,
 				"TA_CMD_BNXT_COPY_COREDUMP invoke failed TEE err: %x, ret:%x\n",
@@ -187,13 +193,13 @@ static int tee_bnxt_fw_probe(struct tee_client_device *bnxt_device)
 	int ret, err = -ENODEV;
 	struct tee_ioctl_open_session_arg sess_arg;
 	struct tee_shm *fw_shm_pool;
+	struct tee_context *ctx;
 
 	memset(&sess_arg, 0, sizeof(sess_arg));
 
 	/* Open context with TEE driver */
-	pvt_data.ctx = tee_client_open_context(NULL, optee_ctx_match, NULL,
-					       NULL);
-	if (IS_ERR(pvt_data.ctx))
+	ctx = tee_client_open_context(NULL, optee_ctx_match, NULL, NULL);
+	if (IS_ERR(ctx))
 		return -ENODEV;
 
 	/* Open session with Bnxt load Trusted App */
@@ -201,7 +207,7 @@ static int tee_bnxt_fw_probe(struct tee_client_device *bnxt_device)
 	sess_arg.clnt_login = TEE_IOCTL_LOGIN_PUBLIC;
 	sess_arg.num_params = 0;
 
-	ret = tee_client_open_session(pvt_data.ctx, &sess_arg, NULL);
+	ret = tee_client_open_session(ctx, &sess_arg, NULL);
 	if (ret < 0 || sess_arg.ret != 0) {
 		dev_err(dev, "tee_client_open_session failed, err: %x\n",
 			sess_arg.ret);
@@ -212,21 +218,29 @@ static int tee_bnxt_fw_probe(struct tee_client_device *bnxt_device)
 
 	pvt_data.dev = dev;
 
-	fw_shm_pool = tee_shm_alloc_kernel_buf(pvt_data.ctx, MAX_SHM_MEM_SZ);
+	fw_shm_pool = tee_shm_alloc_kernel_buf(ctx, MAX_SHM_MEM_SZ);
 	if (IS_ERR(fw_shm_pool)) {
-		dev_err(pvt_data.dev, "tee_shm_alloc_kernel_buf failed\n");
+		dev_err(dev, "tee_shm_alloc_kernel_buf failed\n");
 		err = PTR_ERR(fw_shm_pool);
 		goto out_sess;
 	}
 
 	pvt_data.fw_shm_pool = fw_shm_pool;
 
+	/*
+	 * tee_bnxt_fw_load() and tee_bnxt_copy_coredump() test pvt_data.ctx
+	 * and then use the session and the shared memory pool. Publish the
+	 * context last, with release semantics, so that a caller that sees
+	 * the context also sees the session and the pool.
+	 */
+	smp_store_release(&pvt_data.ctx, ctx);
+
 	return 0;
 
 out_sess:
-	tee_client_close_session(pvt_data.ctx, pvt_data.session_id);
+	tee_client_close_session(ctx, pvt_data.session_id);
 out_ctx:
-	tee_client_close_context(pvt_data.ctx);
+	tee_client_close_context(ctx);
 
 	return err;
 }
