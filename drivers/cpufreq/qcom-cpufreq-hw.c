@@ -554,6 +554,8 @@ static int qcom_cpufreq_hw_cpu_init(struct cpufreq_policy *policy)
 		return ret;
 
 	index = args.args[0];
+	/* Pairs with the smp_wmb() before cpufreq_register_driver() in probe. */
+	smp_rmb();
 	data = &qcom_cpufreq.data[index];
 
 	/* HW should be in enabled state to proceed */
@@ -738,6 +740,13 @@ static int qcom_cpufreq_hw_driver_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	/*
+	 * qcom_cpufreq_hw_cpu_init() runs on other CPUs through the cpufreq
+	 * core once the driver is registered and reads xo_rate, cpu_hw_rate,
+	 * qcom_cpufreq.soc_data and qcom_cpufreq.data[]. Order those stores
+	 * before the registration. Pairs with the smp_rmb() in cpu_init.
+	 */
+	smp_wmb();
 	ret = cpufreq_register_driver(&cpufreq_qcom_hw_driver);
 	if (ret)
 		dev_err(dev, "CPUFreq HW driver failed to register\n");
