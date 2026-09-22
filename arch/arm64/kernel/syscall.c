@@ -2,6 +2,7 @@
 
 #include <linux/compiler.h>
 #include <linux/context_tracking.h>
+#include <linux/entry-common.h>
 #include <linux/errno.h>
 #include <linux/nospec.h>
 #include <linux/ptrace.h>
@@ -58,6 +59,7 @@ static void el0_svc_common(struct pt_regs *regs, int scno, int sc_nr,
 			   const syscall_fn_t syscall_table[])
 {
 	unsigned long flags = read_thread_flags();
+	unsigned long work;
 
 	regs->orig_x0 = regs->regs[0];
 	regs->syscallno = scno;
@@ -90,7 +92,8 @@ static void el0_svc_common(struct pt_regs *regs, int scno, int sc_nr,
 		return;
 	}
 
-	if (unlikely(flags & _TIF_SYSCALL_WORK)) {
+	work = READ_ONCE(current_thread_info()->syscall_work);
+	if (unlikely(work & SYSCALL_WORK_ENTER)) {
 		/*
 		 * The de-facto standard way to skip a system call using ptrace
 		 * is to set the system call to -1 (NO_SYSCALL) and set x0 to a
@@ -108,7 +111,7 @@ static void el0_svc_common(struct pt_regs *regs, int scno, int sc_nr,
 		 */
 		if (scno == NO_SYSCALL)
 			syscall_set_return_value(current, regs, -ENOSYS, 0);
-		if (!arm64_syscall_trace_enter(regs, read_thread_flags()))
+		if (!syscall_trace_enter(regs, work, scno))
 			goto trace_exit;
 
 		/* Reread the syscall number as it might have been modified */
@@ -119,7 +122,7 @@ static void el0_svc_common(struct pt_regs *regs, int scno, int sc_nr,
 
 	invoke_syscall(regs, scno, sc_nr, syscall_table);
 trace_exit:
-	arm64_syscall_exit_to_user_mode_work(regs);
+	syscall_exit_to_user_mode_work(regs);
 }
 
 void do_el0_svc(struct pt_regs *regs)
