@@ -428,9 +428,12 @@ struct ptp_ocp {
 	/* adva_x1 CPLD I2C (internal use only) */
 	/* serialises CPLD operations */
 	struct mutex		cpld_lock;
-	/* guards cpld_i2c_adap_nr against the bus notifier */
+	/* serialises the cpld_i2c_adap_nr writers against each other */
 	spinlock_t		cpld_adap_lock;
-	/* I2C adapter nr; -1 if absent.  Under cpld_adap_lock */
+	/* I2C adapter nr, -1 if absent.  Writers hold cpld_adap_lock;
+	 * readers take no lock and re-validate what they got, since the
+	 * number can be recycled - see adva_x1_bus_claim().
+	 */
 	int			cpld_i2c_adap_nr;
 	/* claimed adapter; valid under cpld_lock */
 	struct i2c_adapter	*cpld_adap;
@@ -442,9 +445,12 @@ struct ptp_ocp {
 	u32			cpld_usercode;
 	/* cpld_usercode has been read since the last flash */
 	bool			cpld_usercode_ok;
-	/* one-shot ID read finished, successfully or not; under cpld_lock */
+	/* one-shot ID read finished, successfully or not.  Written under
+	 * cpld_lock; the worker reads it unlocked, where a stale value only
+	 * costs one extra attempt.
+	 */
 	bool			cpld_id_tried;
-	/* failed ID read attempts so far; under cpld_lock */
+	/* failed ID read attempts so far; cpld_lock */
 	unsigned int		cpld_id_attempts;
 	/* x1 TAP CPLD present */
 	bool			has_cpld;
@@ -4616,7 +4622,7 @@ static void adva_x1_cache_i2c_adap(struct ptp_ocp *bp)
 	 * the rest of the binding.
 	 */
 	scoped_guard(mutex, &bp->cpld_lock) {
-		bp->cpld_id_tried = false;
+		WRITE_ONCE(bp->cpld_id_tried, false);
 		bp->cpld_id_attempts = 0;
 	}
 
@@ -4900,7 +4906,7 @@ out:
 	 * worker that had already finished reading.
 	 */
 	if (!ret || ++bp->cpld_id_attempts >= CPLD_ID_MAX_ATTEMPTS)
-		bp->cpld_id_tried = true;
+		WRITE_ONCE(bp->cpld_id_tried, true);
 	mutex_unlock(&bp->cpld_lock);
 	if (ret)
 		dev_dbg(&bp->pdev->dev,
@@ -5047,7 +5053,7 @@ static int adva_x1_cpld_flash(struct ptp_ocp *bp, struct devlink *devlink,
 	 */
 	WRITE_ONCE(bp->cpld_id, 0);
 	WRITE_ONCE(bp->cpld_usercode_ok, false);
-	bp->cpld_id_tried = false;
+	WRITE_ONCE(bp->cpld_id_tried, false);
 	bp->cpld_id_attempts = 0;
 
 	err = adva_x1_cpld_write(bp, CPLD_CMD_RESET_ADDR);
@@ -5056,6 +5062,7 @@ static int adva_x1_cpld_flash(struct ptp_ocp *bp, struct devlink *devlink,
 
 	for (offset = 0; offset < fw->size; offset += CPLD_PAGE_SIZE) {
 		u8 args[3 + CPLD_PAGE_SIZE] = { 0x00, 0x00, 0x01 };
+		size_t done;
 
 		/* The loop holds cpld_lock and the i2c root lock for the
 		 * whole image, so give a dying task a way out.  The part is
@@ -5075,11 +5082,12 @@ static int adva_x1_cpld_flash(struct ptp_ocp *bp, struct devlink *devlink,
 		if (err)
 			goto exit_config;
 
+		done = offset + CPLD_PAGE_SIZE;
 		if (!(offset % (CPLD_PAGE_SIZE * 64)))
 			devlink_flash_update_status_notify(devlink,
 							   "Programming",
 							   ADVA_CPLD_COMPONENT,
-							   offset, fw->size);
+							   done, fw->size);
 	}
 	devlink_flash_update_status_notify(devlink, "Programming",
 					   ADVA_CPLD_COMPONENT,
