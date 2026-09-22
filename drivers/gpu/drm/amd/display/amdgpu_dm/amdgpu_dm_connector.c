@@ -3777,12 +3777,16 @@ VISIBLE_IF_KUNIT int get_amd_vsdb(struct amdgpu_dm_connector *aconnector,
 
 	vsdb_info->replay_mode = connector->display_info.amd_vsdb.replay_mode;
 	vsdb_info->amd_vsdb_version = connector->display_info.amd_vsdb.version;
+	vsdb_info->freesync_supported = connector->display_info.amd_vsdb.freesync_supported;
+	vsdb_info->min_refresh_rate_hz = connector->display_info.amd_vsdb.min_frame_rate;
+	vsdb_info->max_refresh_rate_hz = connector->display_info.amd_vsdb.max_frame_rate;
+	vsdb_info->freesync_mccs_vcp_code = connector->display_info.amd_vsdb.freesync_vcp_code;
 
 	return connector->display_info.amd_vsdb.version != 0;
 }
 EXPORT_SYMBOL_IF_KUNIT(get_amd_vsdb);
 
-VISIBLE_IF_KUNIT int parse_hdmi_amd_vsdb(struct amdgpu_dm_connector *aconnector,
+VISIBLE_IF_KUNIT __maybe_unused int parse_hdmi_amd_vsdb(struct amdgpu_dm_connector *aconnector,
 			       const struct edid *edid,
 			       struct amdgpu_hdmi_vsdb_info *vsdb_info)
 {
@@ -3833,7 +3837,7 @@ EXPORT_SYMBOL_IF_KUNIT(parse_hdmi_amd_vsdb);
 void amdgpu_dm_update_freesync_caps(struct drm_connector *connector,
 				    const struct drm_edid *drm_edid, bool do_mccs)
 {
-	int i = 0;
+	bool has_vsdb = false;
 	struct amdgpu_dm_connector *amdgpu_dm_connector =
 			to_amdgpu_dm_connector(connector);
 	struct dm_connector_state *dm_con_state = NULL;
@@ -3897,7 +3901,7 @@ void amdgpu_dm_update_freesync_caps(struct drm_connector *connector,
 				freesync_capable = true;
 		}
 
-		get_amd_vsdb(amdgpu_dm_connector, &vsdb_info);
+		has_vsdb = get_amd_vsdb(amdgpu_dm_connector, &vsdb_info);
 
 		if (vsdb_info.replay_mode) {
 			amdgpu_dm_connector->vsdb_info.replay_mode = vsdb_info.replay_mode;
@@ -3908,8 +3912,8 @@ void amdgpu_dm_update_freesync_caps(struct drm_connector *connector,
 	} else if (drm_edid &&
 		  (sink->sink_signal == SIGNAL_TYPE_HDMI_TYPE_A ||
 		   sink->sink_signal == SIGNAL_TYPE_HDMI_FRL)) {
-		i = parse_hdmi_amd_vsdb(amdgpu_dm_connector, edid, &vsdb_info);
-		if (i >= 0) {
+		has_vsdb = get_amd_vsdb(amdgpu_dm_connector, &vsdb_info);
+		if (has_vsdb) {
 			amdgpu_dm_connector->vsdb_info = vsdb_info;
 			sink->edid_caps.freesync_vcp_code = vsdb_info.freesync_mccs_vcp_code;
 
@@ -3926,7 +3930,7 @@ void amdgpu_dm_update_freesync_caps(struct drm_connector *connector,
 
 		drm_dbg_driver(adev_to_drm(adev),
 			       "VRR: amd_vsdb i=%d fs_sup=%d min=%d max=%d fs_capable=%d\n",
-			       i, vsdb_info.freesync_supported,
+					has_vsdb, vsdb_info.freesync_supported,
 			       vsdb_info.min_refresh_rate_hz,
 			       vsdb_info.max_refresh_rate_hz, freesync_capable);
 
@@ -3982,8 +3986,8 @@ void amdgpu_dm_update_freesync_caps(struct drm_connector *connector,
 		as_type = dm_get_adaptive_sync_support_type(amdgpu_dm_connector->dc_link);
 
 	if (as_type == FREESYNC_TYPE_PCON_IN_WHITELIST) {
-		i = parse_hdmi_amd_vsdb(amdgpu_dm_connector, edid, &vsdb_info);
-		if (i >= 0) {
+		has_vsdb = get_amd_vsdb(amdgpu_dm_connector, &vsdb_info);
+		if (has_vsdb) {
 			amdgpu_dm_connector->vsdb_info = vsdb_info;
 			sink->edid_caps.freesync_vcp_code = vsdb_info.freesync_mccs_vcp_code;
 
