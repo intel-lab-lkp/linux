@@ -7,6 +7,7 @@
 #include <linux/completion.h>
 #include <linux/fpga/fpga-mgr.h>
 #include <linux/firmware/intel/stratix10-svc-client.h>
+#include <linux/minmax.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_platform.h>
@@ -360,7 +361,15 @@ static int s10_ops_write_complete(struct fpga_manager *mgr,
 	unsigned long timeout;
 	int ret;
 
-	timeout = usecs_to_jiffies(info->config_complete_timeout_us);
+	/*
+	 * Keep config_complete_timeout_us configurable. of-fpga-region leaves
+	 * it at 0 when the DT property is absent, and usecs_to_jiffies(0)
+	 * makes the wait return immediately. Reconfiguration also takes
+	 * ~600ms in practice, so enforce S10_RECONFIG_TIMEOUT as a minimum
+	 * floor while still honouring any larger caller-supplied value.
+	 */
+	timeout = max(usecs_to_jiffies(info->config_complete_timeout_us),
+		      S10_RECONFIG_TIMEOUT);
 
 	do {
 		reinit_completion(&priv->status_return_completion);
