@@ -6,6 +6,7 @@
 #ifndef _XE_DEVICE_H_
 #define _XE_DEVICE_H_
 
+#include <drm/drm_drv.h>
 #include <drm/drm_util.h>
 
 #include "xe_device_types.h"
@@ -223,6 +224,34 @@ static inline bool xe_device_io_blocked(struct xe_device *xe)
 {
 	return xe_device_wedged(xe) || xe_device_is_in_reset(xe);
 }
+
+/**
+ * xe_device_io_get - Enter a device access critical section
+ * @xe: Xe device
+ * @idx: SRCU index returned on success
+ *
+ * Return: 0 on success, -ENODEV after unplug, or -ECANCELED when
+ * device I/O is blocked.
+ */
+static inline int xe_device_io_get(struct xe_device *xe, int *idx)
+{
+	if (!drm_dev_enter(&xe->drm, idx))
+		return -ENODEV;
+
+	if (xe_device_io_blocked(xe)) {
+		drm_dev_exit(*idx);
+		return -ECANCELED;
+	}
+
+	return 0;
+}
+
+static inline void xe_device_io_put(int idx)
+{
+	drm_dev_exit(idx);
+}
+
+void xe_device_io_drain(struct xe_device *xe);
 
 #ifdef CONFIG_DRM_XE_DEBUG_PAGE_SIZE
 static inline bool xe_debug_page_size_supported(struct xe_device *xe)

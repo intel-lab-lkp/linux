@@ -1059,6 +1059,8 @@ static int __guc_ct_send_locked(struct xe_guc_ct *ct, const u32 *action,
 				struct g2h_fence *g2h_fence, bool defer_flush)
 {
 	struct xe_gt *gt = ct_to_gt(ct);
+	bool io_held = false;
+	int io_idx;
 	u16 seqno;
 	int ret;
 
@@ -1069,10 +1071,12 @@ static int __guc_ct_send_locked(struct xe_guc_ct *ct, const u32 *action,
 	xe_gt_assert(gt, g2h_len || !num_g2h);
 	lockdep_assert_held(&ct->lock);
 
-	if (xe_device_io_blocked(ct_to_xe(ct))) {
+	if (xe_device_io_get(ct_to_xe(ct), &io_idx)) {
 		ret = guc_ct_cancel_errno(ct);
 		goto out;
 	}
+
+	io_held = true;
 
 	if (unlikely(ct->ctbs.h2g.info.broken)) {
 		ret = -EPIPE;
@@ -1130,6 +1134,9 @@ out_unlock:
 	if (g2h_len)
 		spin_unlock_irq(&ct->fast_lock);
 out:
+	if (io_held)
+		xe_device_io_put(io_idx);
+
 	return ret;
 }
 

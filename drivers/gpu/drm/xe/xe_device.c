@@ -235,16 +235,20 @@ static long xe_drm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct drm_file *file_priv = file->private_data;
 	struct xe_device *xe = to_xe_device(file_priv->minor->dev);
+	int io_idx;
 	long ret;
 
-	if (xe_device_io_blocked(xe))
-		return -ECANCELED;
+	ret = xe_device_io_get(xe, &io_idx);
+	if (ret)
+		return ret;
 
-	ACQUIRE(xe_pm_runtime_ioctl, pm)(xe);
-	ret = ACQUIRE_ERR(xe_pm_runtime_ioctl, &pm);
-	if (ret >= 0)
+	scoped_cond_guard(xe_pm_runtime_ioctl,
+			  ret = ACQUIRE_ERR(xe_pm_runtime_ioctl, &scope),
+			  xe) {
 		ret = drm_ioctl(file, cmd, arg);
+	}
 
+	xe_device_io_put(io_idx);
 	return ret;
 }
 
@@ -253,16 +257,20 @@ static long xe_drm_compat_ioctl(struct file *file, unsigned int cmd, unsigned lo
 {
 	struct drm_file *file_priv = file->private_data;
 	struct xe_device *xe = to_xe_device(file_priv->minor->dev);
+	int io_idx;
 	long ret;
 
-	if (xe_device_io_blocked(xe))
-		return -ECANCELED;
+	ret = xe_device_io_get(xe, &io_idx);
+	if (ret)
+		return ret;
 
-	ACQUIRE(xe_pm_runtime_ioctl, pm)(xe);
-	ret = ACQUIRE_ERR(xe_pm_runtime_ioctl, &pm);
-	if (ret >= 0)
+	scoped_cond_guard(xe_pm_runtime_ioctl,
+			  ret = ACQUIRE_ERR(xe_pm_runtime_ioctl, &scope),
+			  xe) {
 		ret = drm_compat_ioctl(file, cmd, arg);
+	}
 
+	xe_device_io_put(io_idx);
 	return ret;
 }
 #else
@@ -431,6 +439,11 @@ struct xe_device *xe_device_create(struct pci_dev *pdev)
 	return xe;
 }
 ALLOW_ERROR_INJECTION(xe_device_create, ERRNO); /* See xe_pci_probe() */
+
+void xe_device_io_drain(struct xe_device *xe)
+{
+	drm_dev_srcu_synchronize(&xe->drm);
+}
 
 static void xe_device_parse_modparam(struct xe_device *xe)
 {

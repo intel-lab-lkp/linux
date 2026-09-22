@@ -25,6 +25,12 @@ static void prepare_device_for_reset(struct pci_dev *pdev)
 	for_each_gt(gt, xe, id)
 		xe_gt_declare_wedged(gt);
 
+	/*
+	 * GT wedging signals pending fences. Existing hardware users can now
+	 * finish without blocking reset.
+	 */
+	xe_device_io_drain(xe);
+
 	pci_disable_device(pdev);
 }
 

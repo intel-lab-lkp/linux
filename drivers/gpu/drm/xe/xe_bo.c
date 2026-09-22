@@ -2106,9 +2106,9 @@ static vm_fault_t xe_bo_cpu_fault(struct vm_fault *vmf)
 	struct drm_exec exec;
 	vm_fault_t ret;
 	int err = 0;
-	int idx;
+	int io_idx;
 
-	if (xe_device_io_blocked(xe) || !drm_dev_enter(&xe->drm, &idx))
+	if (xe_device_io_get(xe, &io_idx))
 		return ttm_bo_vm_dummy_page(vmf, vmf->vma->vm_page_prot);
 
 	ret = xe_bo_cpu_fault_fastpath(vmf, xe, bo, needs_rpm);
@@ -2195,7 +2195,7 @@ static vm_fault_t xe_bo_cpu_fault(struct vm_fault *vmf)
 	if (retry_after_wait)
 		xe_bo_put(bo);
 out:
-	drm_dev_exit(idx);
+	xe_device_io_put(io_idx);
 
 	return ret;
 }
