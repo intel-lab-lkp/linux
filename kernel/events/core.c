@@ -2332,7 +2332,8 @@ static int perf_get_aux_event(struct perf_event *event,
 	 * group in torn down, the aux_output events loose their
 	 * link to the aux_event and can't schedule any more.
 	 */
-	event->aux_event = group_leader;
+	/* Pairs with the smp_load_acquire() in the AUX output paths. */
+	smp_store_release(&event->aux_event, group_leader);
 
 	return 1;
 }
@@ -7974,7 +7975,8 @@ static unsigned long perf_prepare_sample_aux(struct perf_event *event,
 					  struct perf_sample_data *data,
 					  size_t size)
 {
-	struct perf_event *sampler = event->aux_event;
+	/* Pairs with the smp_store_release() in perf_get_aux_event(). */
+	struct perf_event *sampler = smp_load_acquire(&event->aux_event);
 	struct perf_buffer *rb;
 
 	data->aux_size = 0;
@@ -8046,7 +8048,8 @@ static void perf_aux_sample_output(struct perf_event *event,
 				   struct perf_output_handle *handle,
 				   struct perf_sample_data *data)
 {
-	struct perf_event *sampler = event->aux_event;
+	/* Pairs with the smp_store_release() in perf_get_aux_event(). */
+	struct perf_event *sampler = smp_load_acquire(&event->aux_event);
 	struct perf_buffer *rb;
 	unsigned long pad;
 	long size;
