@@ -7142,6 +7142,10 @@ enum nl80211_feature_flags {
  * @NL80211_EXT_FEATURE_FAST_ROAM_OFFLOAD: Driver supports fast roaming
  *	offload in station mode, including Fast Transition or Opportunistic
  *	Key Caching.
+ * @NL80211_EXT_FEATURE_SCS: Driver supports the stream classification
+ *	service, configured with %NL80211_CMD_SET_SCS.
+ * @NL80211_EXT_FEATURE_MSCS: Driver supports the mirrored stream
+ *	classification service, configured with %NL80211_CMD_SET_MSCS.
  *
  * @NUM_NL80211_EXT_FEATURES: number of extended features.
  * @MAX_NL80211_EXT_FEATURES: highest extended feature index.
@@ -7226,6 +7230,8 @@ enum nl80211_ext_feature_index {
 	NL80211_EXT_FEATURE_SET_KEY_LTF_SEED,
 	NL80211_EXT_FEATURE_PROBE_AP,
 	NL80211_EXT_FEATURE_FAST_ROAM_OFFLOAD,
+	NL80211_EXT_FEATURE_SCS,
+	NL80211_EXT_FEATURE_MSCS,
 
 	/* add new features before the definition below */
 	NUM_NL80211_EXT_FEATURES,

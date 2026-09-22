@@ -1188,6 +1188,38 @@ static inline int rdev_set_qos_map(struct cfg80211_registered_device *rdev,
 	return ret;
 }
 
+static inline int rdev_set_scs(struct cfg80211_registered_device *rdev,
+			       struct net_device *dev, const u8 *peer,
+			       struct cfg80211_scs_desc * const *desc,
+			       struct cfg80211_scs_result *res, u8 n_desc)
+{
+	int ret = -EOPNOTSUPP;
+
+	if (rdev->ops->set_scs) {
+		trace_rdev_set_scs(&rdev->wiphy, dev, peer, n_desc);
+		ret = rdev->ops->set_scs(&rdev->wiphy, dev, peer, desc, res,
+					 n_desc);
+		trace_rdev_return_int(&rdev->wiphy, ret);
+	}
+
+	return ret;
+}
+
+static inline int rdev_set_mscs(struct cfg80211_registered_device *rdev,
+				struct net_device *dev, const u8 *peer,
+				struct cfg80211_mscs_desc *desc)
+{
+	int ret = -EOPNOTSUPP;
+
+	if (rdev->ops->set_mscs) {
+		trace_rdev_set_mscs(&rdev->wiphy, dev, peer, desc);
+		ret = rdev->ops->set_mscs(&rdev->wiphy, dev, peer, desc);
+		trace_rdev_return_int(&rdev->wiphy, ret);
+	}
+
+	return ret;
+}
+
 static inline int
 rdev_set_ap_chanwidth(struct cfg80211_registered_device *rdev,
 		      struct net_device *dev,

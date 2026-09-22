@@ -2636,6 +2636,55 @@ TRACE_EVENT(rdev_set_ap_chanwidth,
 		  __entry->link_id)
 );
 
+TRACE_EVENT(rdev_set_scs,
+	TP_PROTO(struct wiphy *wiphy, struct net_device *netdev,
+		 const u8 *peer, u8 n_desc),
+	TP_ARGS(wiphy, netdev, peer, n_desc),
+	TP_STRUCT__entry(
+		WIPHY_ENTRY
+		NETDEV_ENTRY
+		MAC_ENTRY(peer)
+		__field(u8, n_desc)
+	),
+	TP_fast_assign(
+		WIPHY_ASSIGN;
+		NETDEV_ASSIGN;
+		MAC_ASSIGN(peer, peer);
+		__entry->n_desc = n_desc;
+	),
+	TP_printk(WIPHY_PR_FMT ", " NETDEV_PR_FMT ", %pM, %d descriptors",
+		  WIPHY_PR_ARG, NETDEV_PR_ARG, __entry->peer, __entry->n_desc)
+);
+
+TRACE_EVENT(rdev_set_mscs,
+	TP_PROTO(struct wiphy *wiphy, struct net_device *netdev,
+		 const u8 *peer, const struct cfg80211_mscs_desc *desc),
+	TP_ARGS(wiphy, netdev, peer, desc),
+	TP_STRUCT__entry(
+		WIPHY_ENTRY
+		NETDEV_ENTRY
+		MAC_ENTRY(peer)
+		__field(u32, fields)
+		__field(u32, stream_timeout)
+		__field(u8, up_bitmap)
+		__field(u8, up_limit)
+	),
+	TP_fast_assign(
+		WIPHY_ASSIGN;
+		NETDEV_ASSIGN;
+		MAC_ASSIGN(peer, peer);
+		__entry->fields = desc ? desc->fields : 0;
+		__entry->stream_timeout = desc ? desc->stream_timeout : 0;
+		__entry->up_bitmap = desc ? desc->up_bitmap : 0;
+		__entry->up_limit = desc ? desc->up_limit : 0;
+	),
+	TP_printk(WIPHY_PR_FMT ", " NETDEV_PR_FMT
+		  ", %pM, fields %x, UP bitmap %x, UP limit %d, timeout %d",
+		  WIPHY_PR_ARG, NETDEV_PR_ARG, __entry->peer, __entry->fields,
+		  __entry->up_bitmap, __entry->up_limit,
+		  __entry->stream_timeout)
+);
+
 TRACE_EVENT(rdev_add_tx_ts,
 	TP_PROTO(struct wiphy *wiphy, struct net_device *netdev,
 		 u8 tsid, const u8 *peer, u8 user_prio, u16 admitted_time),

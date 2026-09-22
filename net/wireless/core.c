@@ -999,6 +999,16 @@ int wiphy_register(struct wiphy *wiphy)
 		    rdev->ops->update_connect_params))
 		return -EINVAL;
 
+	if (WARN_ON(wiphy_ext_feature_isset(&rdev->wiphy,
+					    NL80211_EXT_FEATURE_SCS) &&
+		    !rdev->ops->set_scs))
+		return -EINVAL;
+
+	if (WARN_ON(wiphy_ext_feature_isset(&rdev->wiphy,
+					    NL80211_EXT_FEATURE_MSCS) &&
+		    !rdev->ops->set_mscs))
+		return -EINVAL;
+
 	if (wiphy->addresses)
 		memcpy(wiphy->perm_addr, wiphy->addresses[0].addr, ETH_ALEN);
 
