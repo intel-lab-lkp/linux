@@ -1086,7 +1086,8 @@ static struct clocksource *clocksource_find_best(bool oneshot, bool skipcur)
 {
 	struct clocksource *cs;
 
-	if (!finished_booting || list_empty(&clocksource_list))
+	/* Pairs with the smp_store_release() in clocksource_done_booting(). */
+	if (!smp_load_acquire(&finished_booting) || list_empty(&clocksource_list))
 		return NULL;
 
 	/*
@@ -1188,7 +1189,8 @@ static int __init clocksource_done_booting(void)
 {
 	mutex_lock(&clocksource_mutex);
 	curr_clocksource = clocksource_default_clock();
-	finished_booting = 1;
+	/* Pairs with the smp_load_acquire() in clocksource_find_best(). */
+	smp_store_release(&finished_booting, 1);
 	/*
 	 * Run the watchdog first to eliminate unstable clock sources
 	 */
