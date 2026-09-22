@@ -1664,6 +1664,19 @@ static void vsock_unconnected_reset(struct sock *sk)
 	sock_owned_by_me(sk);
 
 	/*
+	 * Transport events are serviced by resetting each connected socket to
+	 * TCP_CLOSE. The reset is done under vsock_table_lock but without
+	 * taking lock_sock(), so it is effectively lockless from the
+	 * perspective of connect().
+	 *
+	 * Preserve socket's bricked status. Also check SS_DISCONNECTING, since
+	 * shutdown() may race us.
+	 */
+	if (sk->sk_socket->state == SS_CONNECTED ||
+	    sk->sk_socket->state == SS_DISCONNECTING)
+		return;
+
+	/*
 	 * Only connected socks may have peer_shutdown or SOCK_DONE set.
 	 *
 	 * Once established (TCP_ESTABLISHED, TCP_CLOSING), a socket can be
