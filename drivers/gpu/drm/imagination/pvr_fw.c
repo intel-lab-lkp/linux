@@ -1425,6 +1425,14 @@ pvr_fw_object_create_and_map_offset(struct pvr_device *pvr_dev,
  */
 void pvr_fw_object_destroy(struct pvr_fw_object *fw_obj)
 {
+	if (!fw_obj)
+		return;
+
+	if (!fw_obj->gem) {
+		kfree(fw_obj);
+		return;
+	}
+
 	struct pvr_gem_object *pvr_obj = fw_obj->gem;
 	struct drm_gem_object *gem_obj = gem_from_pvr_gem(pvr_obj);
 	struct pvr_device *pvr_dev = to_pvr_device(gem_obj->dev);
@@ -1439,8 +1447,7 @@ void pvr_fw_object_destroy(struct pvr_fw_object *fw_obj)
 			return;
 	}
 
-	if (fw_obj->gem)
-		pvr_gem_object_put(fw_obj->gem);
+	pvr_gem_object_put(fw_obj->gem);
 
 	kfree(fw_obj);
 }
