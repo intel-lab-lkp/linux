@@ -15,6 +15,10 @@
  */
 #ifndef __KVM_NVHE_HYPERVISOR__
 typedef struct arm_smmu_device ARM_SMMU_OBJ;
+#else
+#include "pkvm/arm-smmu-v3-hyp.h"
+
+typedef struct hyp_arm_smmu_v3_device ARM_SMMU_OBJ;
 #endif
 
 static_assert(__same_type(typeof_member(ARM_SMMU_OBJ, features), u32));
