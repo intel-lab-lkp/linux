@@ -138,18 +138,27 @@ static void panthor_device_reset_work(struct work_struct *work)
 	if (!drm_dev_enter(&ptdev->base, &cookie))
 		return;
 
+	if (!panthor_aw_has_gpu_access(ptdev))
+		goto out_clear_pending;
+
 	panthor_sched_pre_reset(ptdev);
+	panthor_aw_pre_reset(ptdev);
 	panthor_fw_pre_reset(ptdev, true);
 	panthor_mmu_pre_reset(ptdev);
+
 	panthor_hw_soft_reset(ptdev);
+
 	panthor_hw_l2_power_on(ptdev);
 	panthor_mmu_post_reset(ptdev);
 	ret = panthor_fw_post_reset(ptdev);
-	atomic_set(&ptdev->reset.pending, 0);
+	panthor_aw_post_reset(ptdev);
 	panthor_sched_post_reset(ptdev, ret != 0);
+
+out_clear_pending:
+	atomic_set(&ptdev->reset.pending, 0);
 	drm_dev_exit(cookie);
 
-	if (ret) {
+	if (ret && panthor_aw_has_gpu_access(ptdev)) {
 		panthor_device_unplug(ptdev);
 		drm_err(&ptdev->base, "Failed to boot MCU after reset, making device unusable.");
 	}

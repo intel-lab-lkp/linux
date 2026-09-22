@@ -24,6 +24,9 @@ enum aw_states {
 	/** @PANTHOR_AW_STATE_GPU_GRANTED: AW is granted GPU access. */
 	PANTHOR_AW_STATE_GPU_GRANTED,
 
+	/** @PANTHOR_AW_STATE_RESET_ACTIVE: AW is being reset. */
+	PANTHOR_AW_STATE_RESET_ACTIVE,
+
 	/** @PANTHOR_AW_STATE_STOPPED_IDLE: AW has stopped GPU access. */
 	PANTHOR_AW_STATE_STOPPED_IDLE,
 
@@ -42,5 +45,9 @@ int panthor_aw_suspend(struct panthor_device *ptdev);
 int panthor_aw_ensure_gpu_access(struct panthor_device *ptdev);
 
 bool panthor_aw_has_gpu_access(struct panthor_device *ptdev);
+
+void panthor_aw_pre_reset(struct panthor_device *ptdev);
+
+void panthor_aw_post_reset(struct panthor_device *ptdev);
 
 #endif

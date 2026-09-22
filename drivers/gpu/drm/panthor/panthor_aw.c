@@ -248,7 +248,7 @@ static void panthor_aw_handle_window_closed(struct panthor_aw *aw)
 	struct panthor_device *ptdev = aw->ptdev;
 
 	/* Ignore this WINDOW_CLOSED as part of reset operation. */
-	if (panthor_device_reset_is_pending(ptdev))
+	if (atomic_read(&aw->state) == PANTHOR_AW_STATE_RESET_ACTIVE)
 		return;
 
 	if (atomic_read(&aw->state) == PANTHOR_AW_STATE_GPU_STOPPED ||
@@ -260,19 +260,30 @@ static void panthor_aw_handle_window_closed(struct panthor_aw *aw)
 
 	/*
 	 * Window may have been closed immediately after opening.
-	 * Setting state back to READY will prevent WINDOW_OPENDED from
+	 * Setting state back to READY will prevent WINDOW_OPENED from
 	 * mistakenly transitioning the state to GRANTED.
 	 */
 	if (panthor_aw_state_try_set(aw, PANTHOR_AW_STATE_GPU_REQUEST,
 				     PANTHOR_AW_STATE_READY))
 		return;
 
-	/* Triggerred from messaged-based yield. Unblock its wait */
+	/* Triggered from messaged-based yield. Unblock its wait */
 	if (panthor_aw_state_try_set(aw, PANTHOR_AW_STATE_STOPPED_IDLE,
 				     PANTHOR_AW_STATE_READY))
 		return;
 
 	panthor_aw_schedule_post_yield_work(aw);
+}
+
+static void panthor_aw_handle_window_opened(struct panthor_aw *aw)
+{
+	/* Ignore this WINDOW_OPENED as part of reset operation. */
+	if (atomic_read(&aw->state) == PANTHOR_AW_STATE_RESET_ACTIVE)
+		return;
+
+	/* Window opened due to GPU_REQUEST */
+	panthor_aw_state_try_set(aw, PANTHOR_AW_STATE_GPU_REQUEST,
+				     PANTHOR_AW_STATE_GPU_GRANTED);
 }
 
 static irqreturn_t panthor_aw_irq_raw_hander(int irq, void *data)
@@ -297,10 +308,8 @@ static irqreturn_t panthor_aw_irq_raw_hander(int irq, void *data)
 	if (status & WINDOW_IRQ_WINDOW_CLOSED)
 		panthor_aw_handle_window_closed(aw);
 
-
 	if ((status & WINDOW_IRQ_WINDOW_OPENED) && panthor_aw_is_open(aw))
-		panthor_aw_state_try_set(aw, PANTHOR_AW_STATE_GPU_REQUEST,
-					 PANTHOR_AW_STATE_GPU_GRANTED);
+		panthor_aw_handle_window_opened(aw);
 
 	gpu_write(pirq->iomem, INT_CLEAR, status);
 
@@ -579,5 +588,36 @@ bool panthor_aw_has_gpu_access(struct panthor_device *ptdev)
 	if (!ptdev->aw)
 		return true;
 
-	return (atomic_read(&ptdev->aw->state) == PANTHOR_AW_STATE_GPU_GRANTED);
+	switch (atomic_read(&ptdev->aw->state)) {
+	case PANTHOR_AW_STATE_GPU_GRANTED:
+	case PANTHOR_AW_STATE_RESET_ACTIVE:
+		return true;
+	}
+
+	return false;
+}
+
+void panthor_aw_pre_reset(struct panthor_device *ptdev)
+{
+	struct panthor_aw *aw = ptdev->aw;
+
+	if (!aw)
+		return;
+
+	panthor_aw_state_try_set(ptdev->aw, PANTHOR_AW_STATE_GPU_GRANTED,
+				 PANTHOR_AW_STATE_RESET_ACTIVE);
+}
+
+void panthor_aw_post_reset(struct panthor_device *ptdev)
+{
+	struct panthor_aw *aw = ptdev->aw;
+
+	if (!aw)
+		return;
+
+	panthor_aw_state_try_set(aw, PANTHOR_AW_STATE_RESET_ACTIVE,
+				 PANTHOR_AW_STATE_GPU_GRANTED);
+
+	if (!panthor_aw_is_open(aw))
+		panthor_aw_schedule_post_yield_work(aw);
 }
