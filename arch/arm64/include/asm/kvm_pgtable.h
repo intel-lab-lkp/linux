@@ -712,6 +712,7 @@ int kvm_pgtable_stage2_annotate(struct kvm_pgtable *pgt, u64 addr, u64 size,
  * containing the cleared entry is decremented, with unreferenced pages being
  * freed. Unmapping a cacheable page will ensure that it is clean to the PoC if
  * FWB is not supported by the CPU.
+ * This function can't be used to clear invalid counted PTEs (annotations).
  *
  * Return: 0 on success, negative error code on failure.
  */
