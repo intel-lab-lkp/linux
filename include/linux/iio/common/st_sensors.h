@@ -206,7 +206,7 @@ struct st_sensor_settings {
 	u8 wai;
 	u8 wai_addr;
 	char sensors_supported[ST_SENSORS_MAX_4WAI][ST_SENSORS_MAX_NAME];
-	struct iio_chan_spec *ch;
+	struct iio_chan_spec *ch __counted_by_ptr(num_ch);
 	int num_ch;
 	struct st_sensor_odr odr;
 	struct st_sensor_power pw;
