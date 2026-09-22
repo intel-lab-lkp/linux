@@ -266,10 +266,14 @@ int sunxi_sram_claim(struct device *dev)
 	int err;
 	int count = 0;
 
-	if (IS_ERR(base))
-		return PTR_ERR(base);
+	void __iomem *regs;
 
-	if (!base)
+	/* Pairs with smp_store_release() in sunxi_sram_probe(). */
+	regs = smp_load_acquire(&base);
+	if (IS_ERR(regs))
+		return PTR_ERR(regs);
+
+	if (!regs)
 		return -EPROBE_DEFER;
 
 	if (!dev || !dev->of_node)
@@ -410,6 +414,7 @@ static int __init sunxi_sram_probe(struct platform_device *pdev)
 	const struct sunxi_sramc_variant *variant;
 	struct device *dev = &pdev->dev;
 	struct regmap *regmap;
+	void __iomem *regs;
 	int ret;
 
 	sram_dev = &pdev->dev;
@@ -420,12 +425,21 @@ static int __init sunxi_sram_probe(struct platform_device *pdev)
 
 	dev_set_drvdata(dev, (struct sunxi_sramc_variant *)variant);
 
-	base = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(base))
-		return PTR_ERR(base);
+	regs = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(regs)) {
+		base = regs;
+		return PTR_ERR(regs);
+	}
+
+	/*
+	 * base is the gate that sunxi_sram_claim() tests before it walks
+	 * sram_dev->of_node. Publish it after sram_dev so that a claimer on
+	 * another CPU that passes the gate also sees sram_dev.
+	 */
+	smp_store_release(&base, regs);
 
 	if (variant->num_emac_clocks || variant->has_ldo_ctrl) {
-		regmap = devm_regmap_init_mmio(dev, base, &sunxi_sram_regmap_config);
+		regmap = devm_regmap_init_mmio(dev, regs, &sunxi_sram_regmap_config);
 		if (IS_ERR(regmap))
 			return PTR_ERR(regmap);
 
