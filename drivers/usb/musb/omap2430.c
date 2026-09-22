@@ -657,14 +657,16 @@ static int omap2430_resume(struct device *dev)
 {
 	struct omap2430_glue *glue = dev_get_drvdata(dev);
 	struct musb *musb = glue_to_musb(glue);
+	int ret;
 
 	if (!musb)
 		return 0;
 
-	omap2430_phy_power_on(glue);
+	ret = omap2430_phy_power_on(glue);
+	/* End system-sleep deferral so a later runtime resume can retry. */
 	glue->phy_suspended = 0;
 
-	return 0;
+	return ret;
 }
 
 static const struct dev_pm_ops omap2430_pm_ops = {
