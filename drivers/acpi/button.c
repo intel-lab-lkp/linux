@@ -203,6 +203,7 @@ struct acpi_button {
 	bool last_state;
 	ktime_t last_time;
 	bool suspended;
+	bool wakeup_pending;
 	bool lid_state_initialized;
 	bool gpe_enabled;
 };
@@ -409,6 +410,34 @@ static void acpi_lid_forget(struct acpi_device *adev)
 }
 
 /* Driver Interface */
+/**
+ * acpi_button_power_wakeup_pending - Mark fixed power button wakeup pending.
+ *
+ * Used when the fixed power-button status bit is observed and cleared during
+ * early S3 resume, so KEY_WAKEUP can still be reported from button resume
+ * without delivering a deferred KEY_POWER to userspace.
+ */
+void acpi_button_power_wakeup_pending(void)
+{
+	struct acpi_device *adev;
+	struct device *phys_dev;
+	struct acpi_button *button;
+
+	adev = acpi_dev_get_first_match_dev(ACPI_BUTTON_HID_POWERF, NULL, -1);
+	if (!adev)
+		return;
+
+	phys_dev = acpi_get_first_physical_node(adev);
+	if (phys_dev) {
+		button = dev_get_drvdata(phys_dev);
+		if (button && button->type == ACPI_BUTTON_TYPE_POWER)
+			button->wakeup_pending = true;
+	}
+
+	acpi_dev_put(adev);
+}
+EXPORT_SYMBOL_GPL(acpi_button_power_wakeup_pending);
+
 int acpi_lid_open(void)
 {
 	guard(mutex)(&acpi_lid_lock);
@@ -488,6 +517,9 @@ static void acpi_button_notify(acpi_handle handle, u32 event, void *data)
 
 	acpi_pm_wakeup_event(button->dev);
 
+	if (button->type == ACPI_BUTTON_TYPE_POWER && button->suspended)
+		button->wakeup_pending = true;
+
 	if (button->suspended || event == ACPI_BUTTON_NOTIFY_WAKE)
 		return;
 
@@ -510,6 +542,11 @@ static void acpi_button_notify_run(void *data)
 
 static u32 acpi_button_event(void *data)
 {
+	struct acpi_button *button = data;
+
+	if (button->type == ACPI_BUTTON_TYPE_POWER && button->suspended)
+		button->wakeup_pending = true;
+
 	acpi_os_execute(OSL_NOTIFY_HANDLER, acpi_button_notify_run, data);
 	return ACPI_INTERRUPT_HANDLED;
 }
@@ -519,6 +556,12 @@ static int acpi_button_suspend(struct device *dev)
 {
 	struct acpi_button *button = dev_get_drvdata(dev);
 
+	/*
+	 * Clear wakeup_pending before marking suspended. Otherwise a power
+	 * button SCI between the two stores could set wakeup_pending and then
+	 * be overwritten here, losing a real wakeup.
+	 */
+	button->wakeup_pending = false;
 	button->suspended = true;
 	return 0;
 }
@@ -535,12 +578,13 @@ static int acpi_button_resume(struct device *dev)
 		acpi_lid_initialize_state(button);
 	}
 
-	if (button->type == ACPI_BUTTON_TYPE_POWER) {
+	if (button->type == ACPI_BUTTON_TYPE_POWER && button->wakeup_pending) {
 		input = button->input;
 		input_report_key(input, KEY_WAKEUP, 1);
 		input_sync(input);
 		input_report_key(input, KEY_WAKEUP, 0);
 		input_sync(input);
+		button->wakeup_pending = false;
 	}
 	return 0;
 }
