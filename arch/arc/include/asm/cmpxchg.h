@@ -42,16 +42,19 @@
 #define arch_cmpxchg_relaxed(ptr, old, new)				\
 ({									\
 	__typeof__(ptr) _p_ = (ptr);					\
-	__typeof__(*(ptr)) _o_ = (old);					\
-	__typeof__(*(ptr)) _n_ = (new);					\
+	unsigned long _old_ = (unsigned long)(0 ? *(_p_) : (old));		\
+	unsigned long _new_ = (unsigned long)(0 ? *(_p_) : (new));		\
 	__typeof__(*(ptr)) _prev_;					\
 									\
-	switch(sizeof((_p_))) {						\
+	switch (sizeof(*(_p_))) {						\
 	case 1:								\
-		_prev_ = (__typeof__(*(ptr)))cmpxchg_emu_u8((volatile u8 *__force)_p_, (uintptr_t)_o_, (uintptr_t)_n_);	\
+		_prev_ = (__typeof__(*(ptr)))cmpxchg_emu_u8((volatile u8 *__force)_p_, _old_, _new_);	\
+		break;							\
+	case 2:								\
+		_prev_ = (__typeof__(*(ptr)))cmpxchg_emu_u16((volatile u16 *__force)_p_, _old_, _new_);	\
 		break;							\
 	case 4:								\
-		_prev_ = __cmpxchg(_p_, _o_, _n_);			\
+		_prev_ = (__typeof__(*(ptr)))__cmpxchg(_p_, _old_, _new_);			\
 		break;							\
 	default:							\
 		BUILD_BUG();						\
@@ -64,8 +67,8 @@
 #define arch_cmpxchg(ptr, old, new)				        \
 ({									\
 	volatile __typeof__(ptr) _p_ = (ptr);				\
-	__typeof__(*(ptr)) _o_ = (old);					\
-	__typeof__(*(ptr)) _n_ = (new);					\
+	unsigned long _old_ = (unsigned long)(0 ? *(_p_) : (old));		\
+	unsigned long _new_ = (unsigned long)(0 ? *(_p_) : (new));		\
 	__typeof__(*(ptr)) _prev_;					\
 	unsigned long __flags;						\
 									\
@@ -102,7 +105,7 @@
 	__typeof__(ptr) _p_ = (ptr);					\
 	__typeof__(*(ptr)) _val_ = (val);				\
 									\
-	switch(sizeof(*(_p_))) {					\
+	switch (sizeof(*(_p_))) {					\
 	case 4:								\
 		_val_ = __arch_xchg(_p_, _val_);			\
 		break;							\
