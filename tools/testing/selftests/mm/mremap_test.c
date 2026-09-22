@@ -743,14 +743,19 @@ static void mremap_move_multi_invalid_vmas(FILE *maps_fp,
 
 	uffd = syscall(__NR_userfaultfd, O_NONBLOCK);
 	if (uffd == -1) {
-		err = errno;
-		perror("userfaultfd");
-		if (err == EPERM) {
-			ksft_test_result_skip("%s - missing uffd", test_name);
+		switch (errno) {
+		case EPERM:
+			ksft_test_result_skip("%s - no uffd permissions, try running as root\n",
+					      test_name);
 			return;
+		case ENOSYS:
+			ksft_test_result_skip("%s - missing uffd\n", test_name);
+			return;
+		default:
+			perror("userfaultfd");
+			success = false;
+			goto out;
 		}
-		success = false;
-		goto out;
 	}
 	if (ioctl(uffd, UFFDIO_API, &api)) {
 		perror("ioctl UFFDIO_API");
@@ -965,7 +970,7 @@ static void mremap_move_multi_invalid_vmas(FILE *maps_fp, unsigned long page_siz
 {
 	char *test_name = "mremap move multiple invalid vmas";
 
-	ksft_test_result_skip("%s - missing uffd", test_name);
+	ksft_test_result_skip("%s - missing uffd\n", test_name);
 }
 #endif /* __NR_userfaultfd */
 
