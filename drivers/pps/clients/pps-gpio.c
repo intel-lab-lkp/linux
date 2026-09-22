@@ -211,9 +211,11 @@ static void pps_gpio_remove(struct platform_device *pdev)
 
 	free_irq(data->irq, data);
 	pps_unregister_source(data->pps);
-	timer_delete_sync(&data->echo_timer);
-	/* reset echo pin in any case */
-	gpiod_set_value(data->echo_pin, 0);
+	/* reset the echo state, if the board has an echo GPIO */
+	if (data->echo_pin) {
+		timer_delete_sync(&data->echo_timer);
+		gpiod_set_value(data->echo_pin, 0);
+	}
 	dev_info(&pdev->dev, "removed IRQ %d as PPS source\n", data->irq);
 }
 
