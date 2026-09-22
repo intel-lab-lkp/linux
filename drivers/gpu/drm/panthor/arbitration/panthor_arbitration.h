@@ -50,6 +50,12 @@ int panthor_arbitration_parse_resource(struct device *dev,
 				       const struct fwnode_handle *child,
 				       struct panthor_arbitration_resource *res);
 
+/* AW to Arbiter events */
+int panthor_arbitration_on_request(struct panthor_arbitration *adev, u8 aw_id);
+int panthor_arbitration_on_idle(struct panthor_arbitration *adev, u8 aw_id);
+int panthor_arbitration_on_stopped(struct panthor_arbitration *adev, u8 aw_id);
+
+/* Arbiter to AW events */
 int panthor_arbitration_on_grant(struct panthor_arbitration *adev, u8 aw_id);
 int panthor_arbitration_on_stop(struct panthor_arbitration *adev, u8 aw_id);
 int panthor_arbitration_on_close(struct panthor_arbitration *adev, u8 aw_id);
