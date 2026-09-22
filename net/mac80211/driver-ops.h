@@ -1552,6 +1552,32 @@ static inline void drv_del_nan_func(struct ieee80211_local *local,
 	trace_drv_return_void(local);
 }
 
+static inline int drv_sta_set_scs(struct ieee80211_local *local,
+				  struct ieee80211_sub_if_data *sdata,
+				  struct sta_info *sta,
+				  struct cfg80211_scs_desc * const *desc,
+				  struct cfg80211_scs_result *res, u8 n_desc)
+{
+	int ret;
+
+	might_sleep();
+	lockdep_assert_wiphy(local->hw.wiphy);
+
+	if (!local->ops->sta_set_scs || !sta->uploaded)
+		return 0;
+
+	sdata = get_bss_sdata(sdata);
+	if (!check_sdata_in_driver(sdata))
+		return -EIO;
+
+	trace_drv_sta_set_scs(local, sdata, &sta->sta, n_desc);
+	ret = local->ops->sta_set_scs(&local->hw, &sdata->vif, &sta->sta, desc,
+				      res, n_desc);
+	trace_drv_return_int(local, ret);
+
+	return ret;
+}
+
 static inline int drv_set_tid_config(struct ieee80211_local *local,
 				     struct ieee80211_sub_if_data *sdata,
 				     struct ieee80211_sta *sta,

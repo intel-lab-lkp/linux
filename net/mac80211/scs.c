@@ -6,6 +6,7 @@
  */
 #include <linux/ieee80211.h>
 #include <net/cfg80211.h>
+#include "driver-ops.h"
 #include "ieee80211_i.h"
 #include "sta_info.h"
 
@@ -39,6 +40,8 @@ static void *ieee80211_scs_rule_copy(const struct cfg80211_scs_desc *src,
 	struct cfg80211_scs_desc *dst = pos;
 
 	memcpy(dst, src, len);
+	/* A stored rule is always handed back to the driver as an install */
+	dst->req_type = NL80211_SCS_REQ_ADD;
 	pos += len;
 
 	if (src->qos_char_len) {
@@ -63,39 +66,52 @@ static u8 ieee80211_scs_rule_find(struct cfg80211_scs_desc * const *rule,
 	return i;
 }
 
-/* @rule points into the old set and into the request, so copy each rule */
-static struct ieee80211_scs_sta *
-ieee80211_scs_sta_build(struct cfg80211_scs_desc * const *rule, u8 n_rules)
+static size_t ieee80211_scs_sta_head(unsigned int n_rules)
 {
 	struct ieee80211_scs_sta *scs;
-	size_t head, size;
-	void *pos;
+
+	return ALIGN(struct_size(scs, rule, n_rules),
+		     __alignof__(struct cfg80211_scs_desc));
+}
+
+/*
+ * Size for every rule that can end up in the set, so that no allocation
+ * fails after the driver programmed the accepted descriptors.
+ */
+static size_t ieee80211_scs_sta_size(const struct ieee80211_scs_sta *old,
+				     struct cfg80211_scs_desc * const *desc,
+				     u8 n_desc, unsigned int n_alloc)
+{
+	size_t size = ieee80211_scs_sta_head(n_alloc);
+	unsigned int i;
+
+	for (i = 0; old && i < old->n_rules; i++)
+		size += ieee80211_scs_rule_size(old->rule[i]);
+
+	for (i = 0; i < n_desc; i++)
+		size += ieee80211_scs_rule_size(desc[i]);
+
+	return size;
+}
+
+/*
+ * @rule points into the old set and into the request, so copy each rule.
+ * The block was sized for @n_alloc rules.
+ */
+static void ieee80211_scs_sta_fill(struct ieee80211_scs_sta *scs,
+				   struct cfg80211_scs_desc * const *rule,
+				   u8 n_rules, unsigned int n_alloc)
+{
+	void *pos = (void *)scs + ieee80211_scs_sta_head(n_alloc);
 	u8 i;
-
-	if (!n_rules)
-		return NULL;
-
-	head = ALIGN(struct_size(scs, rule, n_rules), __alignof__(**rule));
-
-	size = head;
-	for (i = 0; i < n_rules; i++)
-		size += ieee80211_scs_rule_size(rule[i]);
-
-	/* 255 rules with 255 classifiers each exceed what kmalloc hands out */
-	scs = kvzalloc(size, GFP_KERNEL);
-	if (!scs)
-		return ERR_PTR(-ENOMEM);
 
 	/* Set before the array is filled, for __counted_by() */
 	scs->n_rules = n_rules;
 
-	pos = (void *)scs + head;
 	for (i = 0; i < n_rules; i++) {
 		scs->rule[i] = pos;
 		pos = ieee80211_scs_rule_copy(rule[i], pos);
 	}
-
-	return scs;
 }
 
 /**
@@ -369,7 +385,9 @@ int ieee80211_set_scs(struct wiphy *wiphy, struct net_device *dev,
 	struct ieee80211_scs_sta *scs, *old;
 	struct cfg80211_scs_desc **rule;
 	struct sta_info *sta;
+	unsigned int n_alloc;
 	u8 i, n_rules = 0;
+	int ret;
 
 	lockdep_assert_wiphy(wiphy);
 
@@ -380,10 +398,31 @@ int ieee80211_set_scs(struct wiphy *wiphy, struct net_device *dev,
 	old = wiphy_dereference(wiphy, sta->scs);
 
 	/* One rule per SCSID bounds the size of the new set */
-	rule = kcalloc((old ? old->n_rules : 0) + n_desc, sizeof(*rule),
-		       GFP_KERNEL);
+	n_alloc = (old ? old->n_rules : 0) + n_desc;
+
+	rule = kcalloc(n_alloc, sizeof(*rule), GFP_KERNEL);
 	if (!rule)
 		return -ENOMEM;
+
+	/* 255 rules with 255 classifiers each exceed what kmalloc hands out */
+	scs = kvzalloc(ieee80211_scs_sta_size(old, desc, n_desc, n_alloc),
+		       GFP_KERNEL);
+	if (!scs) {
+		ret = -ENOMEM;
+		goto free;
+	}
+
+	if (sdata->local->ops->sta_set_scs && sta->uploaded) {
+		ret = drv_sta_set_scs(sdata->local, sdata, sta, desc, res,
+				      n_desc);
+		if (ret)
+			goto free;
+	} else {
+		/* Without a driver, no traffic description can be served */
+		for (i = 0; i < n_desc; i++)
+			if (desc[i]->qos_char)
+				res[i].status = WLAN_STATUS_REQUEST_DECLINED;
+	}
 
 	if (old) {
 		n_rules = old->n_rules;
@@ -406,22 +445,35 @@ int ieee80211_set_scs(struct wiphy *wiphy, struct net_device *dev,
 			continue;
 		}
 
+		if (res[i].status != WLAN_STATUS_SUCCESS)
+			continue;
+
 		if (at < n_rules)
 			rule[at] = desc[i];
 		else
 			rule[n_rules++] = desc[i];
 	}
 
-	scs = ieee80211_scs_sta_build(rule, n_rules);
+	if (n_rules) {
+		ieee80211_scs_sta_fill(scs, rule, n_rules, n_alloc);
+	} else {
+		kvfree(scs);
+		scs = NULL;
+	}
+
 	kfree(rule);
-	if (IS_ERR(scs))
-		return PTR_ERR(scs);
 
 	rcu_assign_pointer(sta->scs, scs);
 	if (old)
 		kvfree_rcu(old, rcu_head);
 
 	return 0;
+
+free:
+	kvfree(scs);
+	kfree(rule);
+
+	return ret;
 }
 
 int ieee80211_set_mscs(struct wiphy *wiphy, struct net_device *dev,
@@ -476,6 +528,30 @@ int ieee80211_set_mscs(struct wiphy *wiphy, struct net_device *dev,
 	}
 
 	return 0;
+}
+
+/*
+ * A restarted device lost every stream, so program them again. A refusal
+ * changes nothing here: the rule stays and mac80211 keeps classifying for it.
+ */
+void ieee80211_sta_scs_reconfig(struct sta_info *sta)
+{
+	struct ieee80211_local *local = sta->local;
+	struct ieee80211_scs_sta *scs;
+	u8 i;
+
+	lockdep_assert_wiphy(local->hw.wiphy);
+
+	scs = wiphy_dereference(local->hw.wiphy, sta->scs);
+	if (!scs)
+		return;
+
+	/* One rule per call, so no result array has to be allocated */
+	for (i = 0; i < scs->n_rules; i++) {
+		struct cfg80211_scs_result res = {};
+
+		drv_sta_set_scs(local, sta->sdata, sta, &scs->rule[i], &res, 1);
+	}
 }
 
 void ieee80211_sta_scs_free(struct sta_info *sta)

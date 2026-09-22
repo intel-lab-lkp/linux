@@ -5082,6 +5082,34 @@ struct ieee80211_ops {
 			  struct cfg80211_pmsr_request *request);
 	void (*abort_pmsr)(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 			   struct cfg80211_pmsr_request *request);
+	/**
+	 * @sta_set_scs:
+	 * Called with the SCS descriptors that a station requested, after
+	 * cfg80211 validated them. Optional, only reached when the wiphy
+	 * advertises %NL80211_EXT_FEATURE_SCS. Without it, every descriptor
+	 * with a QoS Characteristics element is declined.
+	 *
+	 * - The results arrive zeroed, which means accepted. Write only
+	 *   refusals, in the result entry of the same index.
+	 * - Decline a descriptor only when its traffic description cannot
+	 *   be served. mac80211 classifies frames in software either way.
+	 * - A declined add or change keeps the previous descriptor of that
+	 *   SCSID. An accepted one without a traffic description replaces
+	 *   the device state of that SCSID.
+	 * - A removal only drops driver state, the result is ignored. A
+	 *   station going away drops its rules without a call.
+	 * - After a hardware restart every stored rule is passed again as
+	 *   an add, one per call, and the result is ignored.
+	 * - A negative return fails the whole request and leaves the rule
+	 *   set unchanged, so the driver must leave the device as it was.
+	 * - The descriptors belong to the MLD, not to one link.
+	 *
+	 * Called with the wiphy mutex held. This callback may sleep.
+	 */
+	int (*sta_set_scs)(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
+			   struct ieee80211_sta *sta,
+			   struct cfg80211_scs_desc * const *desc,
+			   struct cfg80211_scs_result *res, u8 n_desc);
 	int (*set_tid_config)(struct ieee80211_hw *hw,
 			      struct ieee80211_vif *vif,
 			      struct ieee80211_sta *sta,
