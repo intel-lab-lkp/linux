@@ -4574,6 +4574,19 @@ static int adva_x1_i2c_adap_match(struct device *dev, const void *data)
  * both the notifier and a single lookup here can miss the same adapter.
  * Retrying costs a short klist walk per tick until one of them succeeds.
  */
+/*
+ * Forget the cached adapter number so the next sweep resolves it again.
+ * @nr < 0 forgets whatever is cached; otherwise only that number, so a
+ * caller that raced the notifier cannot clear a newer one.
+ */
+static void adva_x1_forget_i2c_adap(struct ptp_ocp *bp, int nr)
+{
+	scoped_guard(spinlock, &bp->cpld_adap_lock) {
+		if (nr < 0 || bp->cpld_i2c_adap_nr == nr)
+			bp->cpld_i2c_adap_nr = -1;
+	}
+}
+
 static void adva_x1_cache_i2c_adap(struct ptp_ocp *bp)
 {
 	struct device *child;
@@ -4598,6 +4611,15 @@ static void adva_x1_cache_i2c_adap(struct ptp_ocp *bp)
 			bp->cpld_i2c_adap_nr = i2c_verify_adapter(child)->nr;
 	}
 
+	/* A different adapter may answer differently, so let the one-shot
+	 * identification run again rather than leaving cpld.id absent for
+	 * the rest of the binding.
+	 */
+	scoped_guard(mutex, &bp->cpld_lock) {
+		bp->cpld_id_tried = false;
+		bp->cpld_id_attempts = 0;
+	}
+
 	put_device(child);
 }
 
@@ -4614,8 +4636,14 @@ static int adva_x1_bus_claim(struct ptp_ocp *bp)
 	lockdep_assert_held(&bp->cpld_lock);
 
 	adap = i2c_get_adapter(READ_ONCE(bp->cpld_i2c_adap_nr));
-	if (!adap)
+	if (!adap) {
+		/* The adapter behind the cached number is gone.  Forget it,
+		 * or adva_x1_cache_i2c_adap() keeps bailing out on its first
+		 * test and never resolves the adapter again.
+		 */
+		adva_x1_forget_i2c_adap(bp, -1);
 		return -ENODEV;
+	}
 
 	/* The number is freed before the notifier clears it, so it can
 	 * already be another adapter's.  Check this is still ours, and drop
@@ -4623,10 +4651,7 @@ static int adva_x1_bus_claim(struct ptp_ocp *bp)
 	 * way, where forgetting it lets the worker look the adapter up again.
 	 */
 	if (!bp->i2c_ctrl || adap->dev.parent != &bp->i2c_ctrl->dev) {
-		scoped_guard(spinlock, &bp->cpld_adap_lock) {
-			if (bp->cpld_i2c_adap_nr == adap->nr)
-				bp->cpld_i2c_adap_nr = -1;
-		}
+		adva_x1_forget_i2c_adap(bp, adap->nr);
 		i2c_put_adapter(adap);
 		return -ENODEV;
 	}
