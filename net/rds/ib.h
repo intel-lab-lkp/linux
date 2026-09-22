@@ -159,8 +159,8 @@ struct rds_ib_connection {
 	atomic_t		i_fastreg_inuse_count;
 
 	/* interrupt handling */
-	struct tasklet_struct	i_send_tasklet;
-	struct tasklet_struct	i_recv_tasklet;
+	struct work_struct	i_send_work;
+	struct work_struct	i_recv_work;
 
 	/* tx */
 	struct rds_ib_work_ring	i_send_ring;
@@ -276,6 +276,7 @@ struct rds_ib_statistics {
 	uint64_t	s_ib_connect_raced;
 	uint64_t	s_ib_listen_closed_stale;
 	uint64_t	s_ib_evt_handler_call;
+	/* Retained as s_ib_tasklet_call for userspace rds-info -I ABI */
 	uint64_t	s_ib_tasklet_call;
 	uint64_t	s_ib_tx_cq_event;
 	uint64_t	s_ib_tx_ring_full;
@@ -451,5 +452,7 @@ extern unsigned long rds_ib_sysctl_max_unsig_wrs;
 extern unsigned long rds_ib_sysctl_max_unsig_bytes;
 extern unsigned long rds_ib_sysctl_max_recv_allocation;
 extern unsigned int rds_ib_sysctl_flow_control;
+
+extern struct workqueue_struct *rds_ib_wq;
 
 #endif

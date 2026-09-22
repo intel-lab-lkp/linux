@@ -50,6 +50,7 @@ static unsigned int rds_ib_mr_1m_pool_size = RDS_MR_1M_POOL_SIZE;
 static unsigned int rds_ib_mr_8k_pool_size = RDS_MR_8K_POOL_SIZE;
 unsigned int rds_ib_retry_count = RDS_IB_DEFAULT_RETRY_COUNT;
 static atomic_t rds_ib_unloading;
+struct workqueue_struct *rds_ib_wq;
 
 module_param(rds_ib_mr_1m_pool_size, int, 0444);
 MODULE_PARM_DESC(rds_ib_mr_1m_pool_size, " Max number of 1M mr per HCA");
@@ -533,6 +534,8 @@ static bool rds_ib_is_unloading(struct rds_connection *conn)
 
 void rds_ib_exit(void)
 {
+	struct workqueue_struct *wq = rds_ib_wq;
+
 	rds_ib_set_unloading();
 	synchronize_rcu();
 	rds_info_deregister_func(RDS_INFO_IB_CONNECTIONS, rds_ib_ic_info);
@@ -545,6 +548,10 @@ void rds_ib_exit(void)
 	rds_ib_recv_exit();
 	rds_trans_unregister(&rds_ib_transport);
 	rds_ib_mr_exit();
+
+	rds_ib_wq = NULL;
+	if (wq)
+		destroy_workqueue(wq);
 }
 
 static u8 rds_ib_get_tos_map(u8 tos)
@@ -587,6 +594,7 @@ struct rds_transport rds_ib_transport = {
 
 int rds_ib_init(void)
 {
+	struct workqueue_struct *wq;
 	int ret;
 
 	INIT_LIST_HEAD(&rds_ib_devices);
@@ -595,9 +603,16 @@ int rds_ib_init(void)
 	if (ret)
 		goto out;
 
+	rds_ib_wq = alloc_workqueue("rds_ib_wq",
+				    WQ_HIGHPRI | WQ_MEM_RECLAIM, 0);
+	if (!rds_ib_wq) {
+		ret = -ENOMEM;
+		goto out_mr_exit;
+	}
+
 	ret = ib_register_client(&rds_ib_client);
 	if (ret)
-		goto out_mr_exit;
+		goto out_wq;
 
 	ret = rds_ib_sysctl_init();
 	if (ret)
@@ -620,6 +635,11 @@ out_sysctl:
 	rds_ib_sysctl_exit();
 out_ibreg:
 	rds_ib_unregister_client();
+out_wq:
+	wq = rds_ib_wq;
+	rds_ib_wq = NULL;
+	if (wq)
+		destroy_workqueue(wq);
 out_mr_exit:
 	rds_ib_mr_exit();
 out:

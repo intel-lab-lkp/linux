@@ -253,7 +253,10 @@ static void rds_ib_cq_comp_handler_recv(struct ib_cq *cq, void *context)
 
 	rds_ib_stats_inc(s_ib_evt_handler_call);
 
-	tasklet_schedule(&ic->i_recv_tasklet);
+	if (unlikely(!rds_ib_wq || atomic_read_acquire(&ic->i_cq_quiesce)))
+		return;
+
+	queue_work(rds_ib_wq, &ic->i_recv_work);
 }
 
 static void poll_scq(struct rds_ib_connection *ic, struct ib_cq *cq,
@@ -279,9 +282,10 @@ static void poll_scq(struct rds_ib_connection *ic, struct ib_cq *cq,
 	}
 }
 
-static void rds_ib_tasklet_fn_send(unsigned long data)
+static void rds_ib_send_worker(struct work_struct *work)
 {
-	struct rds_ib_connection *ic = (struct rds_ib_connection *)data;
+	struct rds_ib_connection *ic =
+		container_of(work, struct rds_ib_connection, i_send_work);
 	struct rds_connection *conn = ic->conn;
 
 	rds_ib_stats_inc(s_ib_tasklet_call);
@@ -319,9 +323,10 @@ static void poll_rcq(struct rds_ib_connection *ic, struct ib_cq *cq,
 	}
 }
 
-static void rds_ib_tasklet_fn_recv(unsigned long data)
+static void rds_ib_recv_worker(struct work_struct *work)
 {
-	struct rds_ib_connection *ic = (struct rds_ib_connection *)data;
+	struct rds_ib_connection *ic =
+		container_of(work, struct rds_ib_connection, i_recv_work);
 	struct rds_connection *conn = ic->conn;
 	struct rds_ib_device *rds_ibdev = ic->rds_ibdev;
 	struct rds_ib_ack_state state;
@@ -381,7 +386,10 @@ static void rds_ib_cq_comp_handler_send(struct ib_cq *cq, void *context)
 
 	rds_ib_stats_inc(s_ib_evt_handler_call);
 
-	tasklet_schedule(&ic->i_send_tasklet);
+	if (unlikely(!rds_ib_wq || atomic_read_acquire(&ic->i_cq_quiesce)))
+		return;
+
+	queue_work(rds_ib_wq, &ic->i_send_work);
 }
 
 static inline int ibdev_get_unused_vector(struct rds_ib_device *rds_ibdev)
@@ -1099,14 +1107,15 @@ void rds_ib_conn_path_shutdown(struct rds_conn_path *cp)
 		while (!wait_event_timeout(rds_ib_ring_empty_wait,
 					   rds_ib_conn_path_shutdown_check_wait(cp) == 0,
 					   msecs_to_jiffies(1000))) {
-			tasklet_schedule(&ic->i_send_tasklet);
-			tasklet_schedule(&ic->i_recv_tasklet);
+			if (rds_ib_wq) {
+				queue_work(rds_ib_wq, &ic->i_send_work);
+				queue_work(rds_ib_wq, &ic->i_recv_work);
+			}
 		}
 
-		tasklet_kill(&ic->i_send_tasklet);
-		tasklet_kill(&ic->i_recv_tasklet);
-
-		atomic_set(&ic->i_cq_quiesce, 1);
+		atomic_set_release(&ic->i_cq_quiesce, 1);
+		cancel_work_sync(&ic->i_send_work);
+		cancel_work_sync(&ic->i_recv_work);
 
 		/* first destroy the ib state that generates callbacks */
 		if (ic->i_cm_id->qp)
@@ -1234,10 +1243,8 @@ int rds_ib_conn_alloc(struct rds_connection *conn, gfp_t gfp)
 	}
 
 	INIT_LIST_HEAD(&ic->ib_node);
-	tasklet_init(&ic->i_send_tasklet, rds_ib_tasklet_fn_send,
-		     (unsigned long)ic);
-	tasklet_init(&ic->i_recv_tasklet, rds_ib_tasklet_fn_recv,
-		     (unsigned long)ic);
+	INIT_WORK(&ic->i_send_work, rds_ib_send_worker);
+	INIT_WORK(&ic->i_recv_work, rds_ib_recv_worker);
 	mutex_init(&ic->i_recv_mutex);
 #ifndef KERNEL_HAS_ATOMIC64
 	spin_lock_init(&ic->i_ack_lock);
