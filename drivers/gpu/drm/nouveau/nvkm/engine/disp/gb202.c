@@ -66,20 +66,20 @@ gb202_sor_hdmi_infoframe_vsi(struct nvkm_ior *ior, int head, void *data, u32 siz
 }
 
 /* General Control Packet AVMute bracket. The GCP unit moved to slot 1 on
- * NVD5.0. Only SB0 (the AVMute bit) is ours to write so we must not do a
- * full write here: SB1 carries the deep-color CD/PP fields, and SB1_CTRL
- * (bit 24, new with clc871.h) controls where their generation happens (HW
- * or driver) on these chips, with the default being HW.
+ * NVD5.0. SB0 carries AVMute, SB1 carries the deep-color CD/PP fields, and
+ * SB1_CTRL (bit 24, new with clc871.h) controls where their generation
+ * happens (HW or driver). Preserve SB1_CTRL while updating SB0..SB2.
  */
 static void
 gb202_sor_hdmi_gcp(struct nvkm_ior *sor, int head, bool enable)
 {
 	struct nvkm_device *device = sor->disp->engine.subdev.device;
 	const u32 hdmi = head * 0x400;
+	const u32 gcp = (!enable ? 0x00000001 : 0x00000010) |
+			 sor->tmds.gcp_cd << 8 | sor->tmds.gcp_pp << 12;
 
 	nvkm_mask(device, 0x6f0040 + hdmi, 0x00000001, 0x00000000);
-	nvkm_mask(device, 0x6f004c + hdmi, 0x000000ff, !enable ? 0x00000001 :
-								 0x00000010);
+	nvkm_mask(device, 0x6f004c + hdmi, 0x00ffffff, gcp);
 	nvkm_mask(device, 0x6f0040 + hdmi, 0x00000001, 0x00000001);
 }
 
