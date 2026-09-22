@@ -59,11 +59,14 @@ void exynos_sys_powerdown_conf(enum sys_powerdown mode)
 {
 	unsigned int i;
 	const struct exynos_pmu_data *pmu_data;
+	struct exynos_pmu_context *ctx;
 
-	if (!pmu_context || !pmu_context->pmu_data)
+	/* Pairs with the smp_store_release() in exynos_pmu_probe(). */
+	ctx = smp_load_acquire(&pmu_context);
+	if (!ctx || !ctx->pmu_data)
 		return;
 
-	pmu_data = pmu_context->pmu_data;
+	pmu_data = ctx->pmu_data;
 
 	if (pmu_data->powerdown_conf)
 		pmu_data->powerdown_conf(mode);
@@ -474,6 +477,7 @@ static int exynos_pmu_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct regmap_config pmu_regmcfg;
+	struct exynos_pmu_context *ctx;
 	struct regmap *regmap;
 	struct resource *res;
 	int ret;
@@ -482,11 +486,18 @@ static int exynos_pmu_probe(struct platform_device *pdev)
 	if (IS_ERR(pmu_base_addr))
 		return PTR_ERR(pmu_base_addr);
 
-	pmu_context = devm_kzalloc(&pdev->dev,
-			sizeof(struct exynos_pmu_context),
-			GFP_KERNEL);
-	if (!pmu_context)
+	ctx = devm_kzalloc(&pdev->dev, sizeof(struct exynos_pmu_context),
+			   GFP_KERNEL);
+	if (!ctx)
 		return -ENOMEM;
+
+	/*
+	 * exynos_sys_powerdown_conf() gates on pmu_context and then writes
+	 * through pmu_base_addr, which is a separate global. Publish the
+	 * context with release semantics so that the mapping is visible to
+	 * a CPU that passes the gate.
+	 */
+	smp_store_release(&pmu_context, ctx);
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!res)
