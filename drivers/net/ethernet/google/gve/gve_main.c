@@ -1715,15 +1715,56 @@ err_xsk_pool_dma_mapped:
 	return err;
 }
 
+static int gve_unreg_xsk_pool_live(struct gve_priv *priv,
+				   struct net_device *dev, u16 qid)
+{
+	struct gve_rx_ring *rx;
+	int err;
+
+	rx = &priv->rx[qid];
+	gve_disable_xsk_napis(priv, qid);
+
+	gve_unreg_xsk_pool(priv, qid);
+	if (gve_is_qpl(priv))
+		err = xdp_rxq_info_reg_mem_model(&rx->xdp_rxq,
+						 MEM_TYPE_PAGE_SHARED,
+						 NULL);
+	else
+		err = xdp_rxq_info_reg_mem_model(&rx->xdp_rxq,
+						 MEM_TYPE_PAGE_POOL,
+						 rx->dqo.page_pool);
+	if (err)
+		netdev_warn(dev,
+			    "Failed to register memory model after unregistering XSK pool");
+
+	smp_mb(); /* Make sure it is visible to the workers on datapath */
+
+	gve_enable_xsk_napis(priv, qid);
+
+	return err;
+}
+
+static int gve_restart_rings(struct gve_priv *priv)
+{
+	struct gve_tx_alloc_rings_cfg tx_alloc_cfg = {0};
+	struct gve_rx_alloc_rings_cfg rx_alloc_cfg = {0};
+	int err;
+
+	gve_get_curr_alloc_cfgs(priv, &tx_alloc_cfg, &rx_alloc_cfg);
+	err = gve_queues_stop(priv);
+	if (err)
+		return err;
+
+	err = gve_queues_start(priv, &tx_alloc_cfg, &rx_alloc_cfg);
+	return err;
+}
+
 static int gve_xsk_pool_disable(struct net_device *dev,
 				u16 qid)
 {
 	struct gve_priv *priv = netdev_priv(dev);
-	struct napi_struct *napi_rx;
-	struct napi_struct *napi_tx;
 	struct xsk_buff_pool *pool;
 	int err = 0;
-	int tx_qid;
 
 	if (qid >= priv->rx_cfg.num_queues) {
 		err = -EINVAL;
@@ -1735,31 +1776,11 @@ static int gve_xsk_pool_disable(struct net_device *dev,
 	if (!netif_running(dev) || !priv->tx_cfg.num_xdp_queues)
 		goto unmap_and_return;
 
-	/* Stop and start RDA queues to repost buffers. */
-	if (!gve_is_qpl(priv) && priv->xdp_prog) {
-		err = gve_configure_rings_xdp(priv, priv->rx_cfg.num_queues);
-		if (err)
-			return err;
-	}
-
-	napi_rx = &priv->ntfy_blocks[priv->rx[qid].ntfy_id].napi;
-	napi_disable_locked(napi_rx); /* make sure current rx poll is done */
-
-	tx_qid = gve_xdp_tx_queue_id(priv, qid);
-	napi_tx = &priv->ntfy_blocks[priv->tx[tx_qid].ntfy_id].napi;
-	napi_disable_locked(napi_tx); /* make sure current tx poll is done */
-
-	gve_unreg_xsk_pool(priv, qid);
-	smp_mb(); /* Make sure it is visible to the workers on datapath */
-
-	napi_enable_locked(napi_rx);
-	napi_enable_locked(napi_tx);
-	if (gve_is_gqi(priv)) {
-		if (gve_rx_work_pending(&priv->rx[qid]))
-			napi_schedule(napi_rx);
-
-		if (gve_tx_clean_pending(priv, &priv->tx[tx_qid]))
-			napi_schedule(napi_tx);
+	if (gve_is_qpl(priv)) {
+		err = gve_unreg_xsk_pool_live(priv, dev, qid);
+	} else {
+		/* Stop and start RDA queues to repost buffers. */
+		err = gve_restart_rings(priv);
 	}
 
 unmap_and_return:

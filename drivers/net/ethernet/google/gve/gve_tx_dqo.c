@@ -208,6 +208,78 @@ static void gve_tx_clean_pending_packets(struct gve_tx_ring *tx)
 	}
 }
 
+static void gve_tx_init_ring_state_dqo(struct gve_tx_ring *tx)
+{
+	int i;
+
+	atomic_set_release(&tx->dqo_compl.hw_tx_head, 0);
+
+	/* Set up linked list of pending packets */
+	for (i = 0; i < tx->dqo.num_pending_packets - 1; i++)
+		tx->dqo.pending_packets[i].next = i + 1;
+
+	tx->dqo.pending_packets[tx->dqo.num_pending_packets - 1].next = -1;
+	atomic_set_release(&tx->dqo_compl.free_pending_packets, -1);
+
+	tx->dqo_compl.miss_completions.head = -1;
+	tx->dqo_compl.miss_completions.tail = -1;
+	tx->dqo_compl.timed_out_completions.head = -1;
+	tx->dqo_compl.timed_out_completions.tail = -1;
+
+	/* Generate free TX buf list */
+	if (tx->dqo.tx_qpl_buf_next) {
+		for (i = 0; i < tx->dqo.num_tx_qpl_bufs - 1; i++)
+			tx->dqo.tx_qpl_buf_next[i] = i + 1;
+		tx->dqo.tx_qpl_buf_next[tx->dqo.num_tx_qpl_bufs - 1] = -1;
+
+		atomic_set_release(&tx->dqo_compl.free_tx_qpl_buf_head, -1);
+		atomic_set_release(&tx->dqo_compl.free_tx_qpl_buf_cnt, 0);
+	}
+}
+
+static void gve_tx_reset_ring_dqo(struct gve_tx_ring *tx)
+{
+	size_t size;
+
+	/* Reset dqo_tx fields. */
+	tx->dqo_tx.head = 0;
+	tx->dqo_tx.tail = 0;
+	tx->dqo_tx.last_re_idx = 0;
+	tx->dqo_tx.posted_packet_desc_cnt = 0;
+	tx->dqo_tx.completed_packet_desc_cnt = 0;
+	tx->dqo_tx.free_pending_packets = 0;
+
+	/* Reset dqo_compl fields. */
+	tx->dqo_compl.head = 0;
+	tx->dqo_compl.cur_gen_bit = 0;
+	tx->dqo_compl.xsk_reorder_queue_head = 0;
+	tx->dqo_compl.xsk_reorder_queue_tail = 0;
+
+	if (tx->dqo.xsk_reorder_queue) {
+		size = (tx->dqo.complq_mask + 1) *
+			sizeof(*tx->dqo.xsk_reorder_queue);
+		memset(tx->dqo.xsk_reorder_queue, 0, size);
+		atomic_set(&tx->dqo_tx.xsk_reorder_queue_tail, 0);
+	}
+
+	size = sizeof(tx->dqo.tx_ring[0]) * (tx->mask + 1);
+	memset(tx->dqo.tx_ring, 0, size);
+
+	size = sizeof(tx->dqo.compl_ring[0]) * (tx->dqo.complq_mask + 1);
+	memset(tx->dqo.compl_ring, 0, size);
+
+	memset(tx->q_resources, 0, sizeof(*tx->q_resources));
+
+	if (tx->dqo.tx_qpl_buf_next) {
+		tx->dqo_tx.free_tx_qpl_buf_head = 0;
+		size = sizeof(tx->dqo.tx_qpl_buf_next[0]) *
+			tx->dqo.num_tx_qpl_bufs;
+		memset(tx->dqo.tx_qpl_buf_next, 0, size);
+	}
+
+	gve_tx_init_ring_state_dqo(tx);
+}
+
 void gve_tx_stop_ring_dqo(struct gve_priv *priv, int idx)
 {
 	int ntfy_idx = gve_tx_idx_to_ntfy(priv, idx);
@@ -222,6 +294,7 @@ void gve_tx_stop_ring_dqo(struct gve_priv *priv, int idx)
 		netdev_tx_reset_queue(tx->netdev_txq);
 	gve_tx_clean_pending_packets(tx);
 	gve_tx_remove_from_block(priv, idx);
+	gve_tx_reset_ring_dqo(tx);
 }
 
 static void gve_tx_free_ring_dqo(struct gve_priv *priv, struct gve_tx_ring *tx,
@@ -270,11 +343,10 @@ static void gve_tx_free_ring_dqo(struct gve_priv *priv, struct gve_tx_ring *tx,
 	netif_dbg(priv, drv, priv->dev, "freed tx queue %d\n", idx);
 }
 
-static int gve_tx_qpl_buf_init(struct gve_tx_ring *tx)
+static int gve_tx_qpl_buf_list_alloc(struct gve_tx_ring *tx)
 {
 	int num_tx_qpl_bufs = GVE_TX_BUFS_PER_PAGE_DQO *
 		tx->dqo.qpl->num_entries;
-	int i;
 
 	tx->dqo.tx_qpl_buf_next = kvzalloc_objs(tx->dqo.tx_qpl_buf_next[0],
 						num_tx_qpl_bufs);
@@ -282,13 +354,6 @@ static int gve_tx_qpl_buf_init(struct gve_tx_ring *tx)
 		return -ENOMEM;
 
 	tx->dqo.num_tx_qpl_bufs = num_tx_qpl_bufs;
-
-	/* Generate free TX buf list */
-	for (i = 0; i < num_tx_qpl_bufs - 1; i++)
-		tx->dqo.tx_qpl_buf_next[i] = i + 1;
-	tx->dqo.tx_qpl_buf_next[num_tx_qpl_bufs - 1] = -1;
-
-	atomic_set_release(&tx->dqo_compl.free_tx_qpl_buf_head, -1);
 	return 0;
 }
 
@@ -304,6 +369,7 @@ void gve_tx_start_ring_dqo(struct gve_priv *priv, int idx)
 	gve_add_napi(priv, ntfy_idx, gve_napi_poll_dqo);
 }
 
+
 static int gve_tx_alloc_ring_dqo(struct gve_priv *priv,
 				 struct gve_tx_alloc_rings_cfg *cfg,
 				 struct gve_tx_ring *tx,
@@ -313,13 +379,11 @@ static int gve_tx_alloc_ring_dqo(struct gve_priv *priv,
 	int num_pending_packets;
 	size_t bytes;
 	u32 qpl_id;
-	int i;
 
 	memset(tx, 0, sizeof(*tx));
 	tx->q_num = idx;
 	tx->dev = hdev;
 	spin_lock_init(&tx->dqo_tx.xdp_lock);
-	atomic_set_release(&tx->dqo_compl.hw_tx_head, 0);
 
 	/* Queue sizes must be a power of 2 */
 	tx->mask = cfg->ring_size - 1;
@@ -350,13 +414,6 @@ static int gve_tx_alloc_ring_dqo(struct gve_priv *priv,
 	if (!tx->dqo.pending_packets)
 		goto err;
 
-	/* Set up linked list of pending packets */
-	for (i = 0; i < tx->dqo.num_pending_packets - 1; i++)
-		tx->dqo.pending_packets[i].next = i + 1;
-
-	tx->dqo.pending_packets[tx->dqo.num_pending_packets - 1].next = -1;
-	atomic_set_release(&tx->dqo_compl.free_pending_packets, -1);
-
 	/* Only alloc xsk pool for XDP queues */
 	if (idx >= cfg->qcfg->num_queues && cfg->num_xdp_rings) {
 		tx->dqo.xsk_reorder_queue =
@@ -366,11 +423,6 @@ static int gve_tx_alloc_ring_dqo(struct gve_priv *priv,
 		if (!tx->dqo.xsk_reorder_queue)
 			goto err;
 	}
-
-	tx->dqo_compl.miss_completions.head = -1;
-	tx->dqo_compl.miss_completions.tail = -1;
-	tx->dqo_compl.timed_out_completions.head = -1;
-	tx->dqo_compl.timed_out_completions.tail = -1;
 
 	bytes = sizeof(tx->dqo.tx_ring[0]) * (tx->mask + 1);
 	tx->dqo.tx_ring = dma_alloc_coherent(hdev, bytes, &tx->bus, GFP_KERNEL);
@@ -397,10 +449,11 @@ static int gve_tx_alloc_ring_dqo(struct gve_priv *priv,
 		if (!tx->dqo.qpl)
 			goto err;
 
-		if (gve_tx_qpl_buf_init(tx))
+		if (gve_tx_qpl_buf_list_alloc(tx))
 			goto err;
 	}
 
+	gve_tx_init_ring_state_dqo(tx);
 	return 0;
 
 err:
