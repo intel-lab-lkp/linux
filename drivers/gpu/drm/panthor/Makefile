@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0 or MIT
 
 panthor-y := \
+	panthor_aw.o \
 	panthor_devfreq.o \
 	panthor_device.o \
 	panthor_drv.o \
