@@ -52,6 +52,15 @@ patternProperties:
           Hardware partition control index. Must identify a partition present on
           the GPU and be unique among this device's partition nodes.
 
+      arm,access-window-mask:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        maximum: 0xffff
+        default: 0
+        description:
+          Initial access window assignment mask. Bit N selects global
+          access window ID N. Masks must be disjoint across partitions.
+          If omitted, no access windows are assigned by default.
+
     required:
       - reg
       - interrupts
@@ -113,6 +122,7 @@ examples:
             reg = <0x50000 0x10000>;
             interrupts = <GIC_SPI 92 IRQ_TYPE_LEVEL_HIGH 0>;
             arm,id = <0>;
+            arm,access-window-mask = <0xffff>;
         };
 
         resource-group@c0000 {
