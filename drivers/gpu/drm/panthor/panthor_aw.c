@@ -282,8 +282,13 @@ static void panthor_aw_handle_window_opened(struct panthor_aw *aw)
 		return;
 
 	/* Window opened due to GPU_REQUEST */
-	panthor_aw_state_try_set(aw, PANTHOR_AW_STATE_GPU_REQUEST,
-				     PANTHOR_AW_STATE_GPU_GRANTED);
+	if (panthor_aw_state_try_set(aw, PANTHOR_AW_STATE_GPU_REQUEST,
+				     PANTHOR_AW_STATE_GPU_GRANTED))
+		return;
+
+	if (panthor_aw_state_try_set(aw, PANTHOR_AW_STATE_READY,
+				     PANTHOR_AW_STATE_STOPPED_IDLE))
+		panthor_aw_send_msg(aw, VM_ARB_GPU_STOPPED);
 }
 
 static irqreturn_t panthor_aw_irq_raw_hander(int irq, void *data)
