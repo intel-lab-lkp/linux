@@ -905,7 +905,7 @@ static void dpm_noirq_resume_devices(pm_message_t state)
 
 	trace_suspend_resume(TPS("dpm_resume_noirq"), state.event, true);
 
-	async_error = 0;
+	WRITE_ONCE(async_error, 0);
 	/* Pairs with the smp_load_acquire() in dev_pm_skip_resume(). */
 	smp_store_release(&pm_transition.event, state.event);
 
@@ -1056,7 +1056,7 @@ void dpm_resume_early(pm_message_t state)
 
 	trace_suspend_resume(TPS("dpm_resume_early"), state.event, true);
 
-	async_error = 0;
+	WRITE_ONCE(async_error, 0);
 	/* Pairs with the smp_load_acquire() in dev_pm_skip_resume(). */
 	smp_store_release(&pm_transition.event, state.event);
 
@@ -1238,7 +1238,7 @@ void dpm_resume(pm_message_t state)
 
 	/* Pairs with the smp_load_acquire() in dev_pm_skip_resume(). */
 	smp_store_release(&pm_transition.event, state.event);
-	async_error = 0;
+	WRITE_ONCE(async_error, 0);
 
 	mutex_lock(&dpm_list_mtx);
 
@@ -1604,7 +1604,7 @@ static int dpm_noirq_suspend_devices(pm_message_t state)
 
 	/* Pairs with the smp_load_acquire() in dev_pm_skip_resume(). */
 	smp_store_release(&pm_transition.event, state.event);
-	async_error = 0;
+	WRITE_ONCE(async_error, 0);
 
 	mutex_lock(&dpm_list_mtx);
 
@@ -1808,7 +1808,7 @@ int dpm_suspend_late(pm_message_t state)
 
 	/* Pairs with the smp_load_acquire() in dev_pm_skip_resume(). */
 	smp_store_release(&pm_transition.event, state.event);
-	async_error = 0;
+	WRITE_ONCE(async_error, 0);
 
 	wake_up_all_idle_cpus();
 
@@ -2102,7 +2102,7 @@ int dpm_suspend(pm_message_t state)
 
 	/* Pairs with the smp_load_acquire() in dev_pm_skip_resume(). */
 	smp_store_release(&pm_transition.event, state.event);
-	async_error = 0;
+	WRITE_ONCE(async_error, 0);
 
 	mutex_lock(&dpm_list_mtx);
 
