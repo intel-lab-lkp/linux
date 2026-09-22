@@ -51,6 +51,9 @@ struct zynqmp_pm_event_info {
 
 static struct zynqmp_pm_work_struct *zynqmp_pm_init_suspend_work, *zynqmp_pm_init_restart_work;
 static struct mbox_chan *rx_chan;
+/* Serialises rx_chan and rx_ack_pending between probe and the rx callback. */
+static DEFINE_SPINLOCK(rx_chan_lock);
+static bool rx_ack_pending;
 
 enum pm_suspend_mode {
 	PM_SUSPEND_MODE_FIRST = 0,
@@ -128,6 +131,7 @@ static void ipi_receive_callback(struct mbox_client *cl, void *data)
 {
 	struct zynqmp_ipi_message *msg = (struct zynqmp_ipi_message *)data;
 	u32 payload[CB_PAYLOAD_SIZE];
+	unsigned long flags;
 	int ret;
 
 	memcpy(payload, msg->data, sizeof(msg->len));
@@ -143,10 +147,21 @@ static void ipi_receive_callback(struct mbox_client *cl, void *data)
 		queue_work(system_dfl_wq,
 			   &zynqmp_pm_init_suspend_work->callback_work);
 
-		/* Send NULL message to mbox controller to ack the message */
-		ret = mbox_send_message(rx_chan, NULL);
-		if (ret)
-			pr_err("IPI ack failed. Error %d\n", ret);
+		/*
+		 * Send NULL message to mbox controller to ack the message. The
+		 * mailbox core can deliver as soon as the channel is started,
+		 * before mbox_request_channel_byname() has returned the channel
+		 * to probe; in that case leave the ack to probe.
+		 */
+		spin_lock_irqsave(&rx_chan_lock, flags);
+		if (rx_chan) {
+			ret = mbox_send_message(rx_chan, NULL);
+			if (ret)
+				pr_err("IPI ack failed. Error %d\n", ret);
+		} else {
+			rx_ack_pending = true;
+		}
+		spin_unlock_irqrestore(&rx_chan_lock, flags);
 	}
 }
 
@@ -287,6 +302,8 @@ static int zynqmp_pm_probe(struct platform_device *pdev)
 	int ret, irq;
 	u32 pm_api_version, pm_family_code, node_id;
 	struct mbox_client *client;
+	struct mbox_chan *chan;
+	bool ack_pending;
 
 	ret = zynqmp_pm_get_api_version(&pm_api_version);
 	if (ret)
@@ -353,10 +370,27 @@ static int zynqmp_pm_probe(struct platform_device *pdev)
 		client->dev = &pdev->dev;
 		client->rx_callback = ipi_receive_callback;
 
-		rx_chan = mbox_request_channel_byname(client, "rx");
-		if (IS_ERR(rx_chan)) {
+		chan = mbox_request_channel_byname(client, "rx");
+		if (IS_ERR(chan)) {
 			dev_err(&pdev->dev, "Failed to request rx channel\n");
-			return PTR_ERR(rx_chan);
+			return PTR_ERR(chan);
+		}
+
+		/*
+		 * The channel is live from the moment the mailbox core started
+		 * it. Publish it to the rx callback and ack any message that
+		 * arrived before this point.
+		 */
+		spin_lock_irq(&rx_chan_lock);
+		rx_chan = chan;
+		ack_pending = rx_ack_pending;
+		rx_ack_pending = false;
+		spin_unlock_irq(&rx_chan_lock);
+
+		if (ack_pending) {
+			ret = mbox_send_message(chan, NULL);
+			if (ret)
+				dev_err(&pdev->dev, "IPI ack failed. Error %d\n", ret);
 		}
 	} else if (of_property_present(pdev->dev.of_node, "interrupts")) {
 		irq = platform_get_irq(pdev, 0);
