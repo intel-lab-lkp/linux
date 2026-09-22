@@ -5,6 +5,15 @@
 #include <linux/iso_fs.h>
 #include <linux/unaligned.h>
 
+/*
+ * Scratch buffer for converting an on-disk name to its in-kernel form.
+ * Allocated by isofs_readdir() and isofs_lookup(), written by
+ * get_rock_ridge_filename(), get_joliet_filename(), get_acorn_filename()
+ * and isofs_name_translate().  Each of those asserts that its own worst
+ * case fits, next to the code that does the writing.
+ */
+#define ISOFS_NAME_BUF_SIZE 1024
+
 enum isofs_file_format {
 	isofs_file_normal = 0,
 	isofs_file_sparse = 1,

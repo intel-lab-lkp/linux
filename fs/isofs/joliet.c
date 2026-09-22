@@ -38,6 +38,13 @@ uni16_to_x8(unsigned char *ascii, __be16 *uni, int len, struct nls_table *nls)
 	return (op - ascii);
 }
 
+/*
+ * The worst case is the iocharset path: de->name_len is a single byte, so
+ * at most 255 >> 1 UTF-16 units, each of which uni2char() may expand to
+ * NLS_MAX_CHARSET_SIZE bytes, plus the terminator.
+ */
+static_assert((255 >> 1) * NLS_MAX_CHARSET_SIZE + 1 <= ISOFS_NAME_BUF_SIZE);
+
 int
 get_joliet_filename(struct iso_directory_record * de, unsigned char *outname, struct inode * inode)
 {
@@ -49,7 +56,7 @@ get_joliet_filename(struct iso_directory_record * de, unsigned char *outname, st
 	if (!nls) {
 		len = utf16s_to_utf8s((const wchar_t *) de->name,
 				de->name_len[0] >> 1, UTF16_BIG_ENDIAN,
-				outname, PAGE_SIZE);
+				outname, ISOFS_NAME_BUF_SIZE);
 	} else {
 		len = uni16_to_x8(outname, (__be16 *) de->name,
 				de->name_len[0] >> 1, nls);

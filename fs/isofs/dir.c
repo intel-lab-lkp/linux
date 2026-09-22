@@ -50,6 +50,13 @@ int isofs_name_translate(struct iso_directory_record *de, char *new, struct inod
 }
 
 /* Acorn extensions written by Matthew Wilcox <willy@infradead.org> 1998 */
+/*
+ * isofs_name_translate() copies at most de->name_len[0] bytes one for one,
+ * and get_acorn_filename() may append "," plus three hex digits and a NUL.
+ * de->name_len is a single byte.
+ */
+static_assert(255 + 5 <= ISOFS_NAME_BUF_SIZE);
+
 int get_acorn_filename(struct iso_directory_record *de,
 			    char *retname, struct inode *inode)
 {
@@ -237,7 +244,7 @@ static int isofs_readdir(struct file *file, struct dir_context *ctx)
 	char *tmpname;
 	struct inode *inode = file_inode(file);
 
-	tmpname = kmalloc(1024, GFP_KERNEL);
+	tmpname = kmalloc(ISOFS_NAME_BUF_SIZE, GFP_KERNEL);
 	if (tmpname == NULL)
 		return -ENOMEM;
 

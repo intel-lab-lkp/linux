@@ -204,6 +204,9 @@ static int rock_check_overflow(struct rock_state *rs, int sig)
 /*
  * return length of name field; 0: not found, -1: to be ignored
  */
+/* get_rock_ridge_filename() bounds the name it builds by NAME_MAX, plus a NUL. */
+static_assert(NAME_MAX + 1 <= ISOFS_NAME_BUF_SIZE);
+
 int get_rock_ridge_filename(struct iso_directory_record *de,
 			    char *retname, struct inode *inode)
 {
