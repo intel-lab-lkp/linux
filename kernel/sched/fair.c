@@ -1470,7 +1470,7 @@ static inline int get_sched_cache_scale(int mul)
 	return (1 + (tol - 1) * mul);
 }
 
-static bool exceed_llc_capacity(struct mm_struct *mm, int cpu)
+static bool exceed_llc_capacity(struct sched_cache_group *grp, int cpu)
 {
 #ifdef CONFIG_NUMA_BALANCING
 	unsigned long llc, footprint;
@@ -1484,11 +1484,6 @@ static bool exceed_llc_capacity(struct mm_struct *mm, int cpu)
 		return true;
 
 	if (static_branch_likely(&sched_numa_balancing)) {
-		struct sched_cache_group *grp = READ_ONCE(mm->sched_cache_grp);
-
-		if (!grp)
-			return true;
-
 		/*
 		 * TBD: RDT exclusive LLC ways reserved should be
 		 * excluded.
@@ -1523,10 +1518,9 @@ static bool exceed_llc_capacity(struct mm_struct *mm, int cpu)
 	return false;
 }
 
-static bool invalid_llc_nr(struct mm_struct *mm, struct task_struct *p,
+static bool invalid_llc_nr(struct sched_cache_group *grp, struct task_struct *p,
 			   int cpu)
 {
-	struct sched_cache_group *grp;
 	int scale;
 
 	if (get_nr_threads(p) <= 1)
@@ -1539,10 +1533,6 @@ static bool invalid_llc_nr(struct mm_struct *mm, struct task_struct *p,
 	scale = get_sched_cache_scale(1);
 	if (scale == INT_MAX)
 		return false;
-
-	grp = READ_ONCE(mm->sched_cache_grp);
-	if (!grp)
-		return true;
 
 	return !fits_capacity((READ_ONCE(grp->nr_running_avg) * cpu_smt_num_threads),
 			(scale * per_cpu(sd_llc_size, cpu)));
@@ -1752,15 +1742,10 @@ static unsigned long fraction_mm_sched(struct rq *rq,
 	return div64_u64(NICE_0_LOAD * pcpu_sched->runtime, rq->cpu_runtime + 1);
 }
 
-static int get_pref_llc(struct task_struct *p, struct mm_struct *mm)
+static int get_pref_llc(struct task_struct *p, struct sched_cache_group *grp)
 {
 	int mm_sched_llc = -1, mm_sched_cpu;
-	struct sched_cache_group *grp;
 
-	if (!mm)
-		return -1;
-
-	grp = READ_ONCE(mm->sched_cache_grp);
 	if (!grp)
 		return -1;
 
@@ -1794,9 +1779,8 @@ static unsigned int task_running_on_cpu(int cpu, struct task_struct *p);
 static inline
 void account_mm_sched(struct rq *rq, struct task_struct *p, s64 delta_exec)
 {
+	struct sched_cache_group *grp = rcu_dereference_all(p->sched_cache_grp);
 	struct sched_cache_time *pcpu_sched;
-	struct sched_cache_group *grp;
-	struct mm_struct *mm = p->mm;
 	int mm_sched_llc = -1;
 	unsigned long epoch;
 
@@ -1807,12 +1791,8 @@ void account_mm_sched(struct rq *rq, struct task_struct *p, s64 delta_exec)
 		return;
 	/*
 	 * init_task, kthreads and user thread created
-	 * by user_mode_thread() don't have mm.
+	 * by user_mode_thread() don't have a cache group.
 	 */
-	if (!mm)
-		return;
-
-	grp = READ_ONCE(mm->sched_cache_grp);
 	if (!grp || !grp->pcpu_sched)
 		return;
 
@@ -1830,13 +1810,13 @@ void account_mm_sched(struct rq *rq, struct task_struct *p, s64 delta_exec)
 	 * its preferred state.
 	 */
 	if ((long)(epoch - READ_ONCE(grp->epoch)) > llc_epoch_affinity_timeout ||
-	    invalid_llc_nr(mm, p, cpu_of(rq)) ||
-	    exceed_llc_capacity(mm, cpu_of(rq))) {
+	    invalid_llc_nr(grp, p, cpu_of(rq)) ||
+	    exceed_llc_capacity(grp, cpu_of(rq))) {
 		if (READ_ONCE(grp->cpu) != -1)
 			WRITE_ONCE(grp->cpu, -1);
 	}
 
-	mm_sched_llc = get_pref_llc(p, mm);
+	mm_sched_llc = get_pref_llc(p, grp);
 
 	/* task not on rq accounted later in account_entity_enqueue() */
 	if (task_running_on_cpu(rq->cpu, p) &&
@@ -1849,19 +1829,15 @@ void account_mm_sched(struct rq *rq, struct task_struct *p, s64 delta_exec)
 
 static void task_tick_cache(struct rq *rq, struct task_struct *p)
 {
+	struct sched_cache_group *grp = rcu_dereference_all(p->sched_cache_grp);
 	struct callback_head *work = &p->cache_work;
-	struct sched_cache_group *grp;
-	struct mm_struct *mm = p->mm;
 	unsigned long epoch;
 
 	if (!sched_cache_enabled())
 		return;
 
-	if (!mm || p->flags & PF_KTHREAD)
-		return;
-
-	grp = READ_ONCE(mm->sched_cache_grp);
-	if (!grp || !grp->pcpu_sched)
+	if (!grp || p->flags & PF_KTHREAD ||
+	    !grp->pcpu_sched)
 		return;
 
 	epoch = rq->cpu_epoch;
@@ -1943,14 +1919,13 @@ static inline void update_avg_scale(u64 *avg, u64 sample)
 
 static void task_cache_work(struct callback_head *work)
 {
+	struct sched_cache_group *grp __free(sched_cache_group_put) = NULL;
+	cpumask_var_t cpus __free(free_cpumask_var) = CPUMASK_VAR_NULL;
 	int cpu, m_a_cpu = -1, nr_running = 0, curr_cpu;
 	unsigned long next_scan, now = jiffies;
 	struct task_struct *p = current, *cur;
 	unsigned long curr_m_a_occ = 0;
-	struct sched_cache_group *grp;
-	struct mm_struct *mm = p->mm;
 	unsigned long m_a_occ = 0;
-	cpumask_var_t cpus;
 
 	WARN_ON_ONCE(work != &p->cache_work);
 
@@ -1959,7 +1934,12 @@ static void task_cache_work(struct callback_head *work)
 	if (p->flags & PF_EXITING)
 		return;
 
-	grp = READ_ONCE(mm->sched_cache_grp);
+	/*
+	 * A reference makes sure grp is not released by others. The rcu
+	 * lock can not be held till after zalloc_cpumask_var() below,
+	 * because the latter might sleep.
+	 */
+	grp = task_cache_group_get(p);
 	if (!grp)
 		return;
 
@@ -1974,8 +1954,8 @@ static void task_cache_work(struct callback_head *work)
 		return;
 
 	curr_cpu = task_cpu(p);
-	if (invalid_llc_nr(mm, p, curr_cpu) ||
-	    exceed_llc_capacity(mm, curr_cpu)) {
+	if (invalid_llc_nr(grp, p, curr_cpu) ||
+	    exceed_llc_capacity(grp, curr_cpu)) {
 		if (READ_ONCE(grp->cpu) != -1)
 			WRITE_ONCE(grp->cpu, -1);
 
@@ -2008,9 +1988,13 @@ static void task_cache_work(struct callback_head *work)
 					m_cpu = i;
 				}
 
+				/*
+				 * rcu_access_pointer() is used because the
+				 * pointer is only compared, never dereferenced.
+				 */
 				cur = rcu_dereference_all(cpu_rq(i)->curr);
 				if (cur && !(cur->flags & (PF_EXITING | PF_KTHREAD)) &&
-				    cur->mm == mm)
+				    rcu_access_pointer(cur->sched_cache_grp) == grp)
 					nr_running++;
 			}
 
@@ -2056,7 +2040,6 @@ static void task_cache_work(struct callback_head *work)
 	}
 
 	update_avg_scale(&grp->nr_running_avg, nr_running);
-	free_cpumask_var(cpus);
 }
 
 void init_sched_mm(struct task_struct *p)
@@ -2065,6 +2048,13 @@ void init_sched_mm(struct task_struct *p)
 
 	init_task_work(work, task_cache_work);
 	work->next = work;
+	/*
+	 * dup_task_struct() copies the parent's task_struct, including its
+	 * sched_cache_grp, for which the child holds no reference.  Clear it
+	 * here - before copy_mm() runs - so the child never carries a
+	 * borrowed pointer that the fork error path would put.
+	 */
+	RCU_INIT_POINTER(p->sched_cache_grp, NULL);
 	/*
 	 * Reset new task's preference to avoid
 	 * polluting account_llc_enqueue().
@@ -3868,10 +3858,9 @@ static void task_numa_placement(struct task_struct *p)
 			 * heuristic and occasional lost updates are tolerable.
 			 *
 			 * If a task exits, its corresponding footprint must
-			 * be subtracted from the mm->sched_cache_grp->footprint,
-			 * otherwise the mm->sched_cache_grp->footprint will not
-			 * converge: the exiting thread's footprint remains
-			 * unchanged/undecayed in mm->sched_cache_grp->footprint.
+			 * be subtracted from p->sched_cache_grp->footprint,
+			 * otherwise the footprint will not converge: the
+			 * exiting thread's footprint remains unchanged/undecayed.
 			 * See exit_mm().
 			 *
 			 * Lost updates and unsynchronized subtraction
@@ -3879,12 +3868,14 @@ static void task_numa_placement(struct task_struct *p)
 			 * go negative. Clamp to zero to prevent the
 			 * unsigned footprint from wrapping.
 			 */
-			grp = READ_ONCE(p->mm->sched_cache_grp);
-			if (!grp)
-				continue;
+			scoped_guard(rcu) {
+				grp = rcu_dereference(p->sched_cache_grp);
 
-			new_fp = (long)READ_ONCE(grp->footprint) + diff;
-			WRITE_ONCE(grp->footprint, max(new_fp, 0L));
+				if (grp) {
+					new_fp = (long)READ_ONCE(grp->footprint) + diff;
+					WRITE_ONCE(grp->footprint, max(new_fp, 0L));
+				}
+			}
 #endif
 		}
 
@@ -10833,7 +10824,6 @@ static enum llc_mig can_migrate_llc_task(struct lb_env *env,
 					 struct task_struct *p)
 {
 	struct sched_cache_group *grp;
-	struct mm_struct *mm;
 	bool to_pref;
 	int cpu, src_cpu, dst_cpu;
 
@@ -10842,11 +10832,7 @@ static enum llc_mig can_migrate_llc_task(struct lb_env *env,
 
 	src_cpu = env->src_cpu;
 	dst_cpu = env->dst_cpu;
-	mm = p->mm;
-	if (!mm)
-		return mig_unrestricted;
-
-	grp = READ_ONCE(mm->sched_cache_grp);
+	grp = rcu_dereference_all(p->sched_cache_grp);
 	if (!grp)
 		return mig_unrestricted;
 
@@ -10855,8 +10841,8 @@ static enum llc_mig can_migrate_llc_task(struct lb_env *env,
 		return mig_unrestricted;
 
 	/* skip cache aware load balance for too many threads */
-	if (invalid_llc_nr(mm, p, dst_cpu) ||
-	    exceed_llc_capacity(mm, dst_cpu)) {
+	if (invalid_llc_nr(grp, p, dst_cpu) ||
+	    exceed_llc_capacity(grp, dst_cpu)) {
 		if (READ_ONCE(grp->cpu) != -1)
 			WRITE_ONCE(grp->cpu, -1);
 		return mig_unrestricted;
