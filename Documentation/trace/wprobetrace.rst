@@ -47,6 +47,14 @@ Synopsis of wprobe-events
                   (u8/u16/u32/u64/s8/s16/s32/s64), hexadecimal types
                   (x8/x16/x32/x64), "char", "string", "ustring", "symbol", "symstr"
                   and bitfield are supported.
+   (STRUCT[,ASGN])FETCHARG->MEMBER[->MEMBER] : If BTF is supported, typecast
+                  FETCHARG to a pointer to STRUCT and then dereference the
+                  pointer defined by ->MEMBER. ASGN can be specified optionally.
+                  If ASGN is specified, FETCHARG will be cast to the same offset
+                  position as the ASGN member, rather than to the beginning of
+                  the STRUCT.
+   (STRUCT[,ASGN])(FETCHARG)->MEMBER[->MEMBER] : typecast can nest, so the above
+                  can also be used with another FETCHARG.
 
    (\*1) This is useful for fetching a field of data structures.
    (\*2) "u" means user-space dereference.
