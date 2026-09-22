@@ -1626,6 +1626,40 @@ static int gve_xdp_xmit(struct net_device *dev, int n,
 	return -EOPNOTSUPP;
 }
 
+static void gve_disable_xsk_napis(struct gve_priv *priv, u16 qid)
+{
+	struct napi_struct *napi_rx, *napi_tx;
+	u16 tx_qid;
+
+	napi_rx = &priv->ntfy_blocks[priv->rx[qid].ntfy_id].napi;
+	napi_disable_locked(napi_rx);
+
+	tx_qid = gve_xdp_tx_queue_id(priv, qid);
+	napi_tx = &priv->ntfy_blocks[priv->tx[tx_qid].ntfy_id].napi;
+	napi_disable_locked(napi_tx);
+}
+
+static void gve_enable_xsk_napis(struct gve_priv *priv, u16 qid)
+{
+	struct napi_struct *napi_rx, *napi_tx;
+	u16 tx_qid;
+
+	napi_rx = &priv->ntfy_blocks[priv->rx[qid].ntfy_id].napi;
+	napi_enable_locked(napi_rx);
+
+	tx_qid = gve_xdp_tx_queue_id(priv, qid);
+	napi_tx = &priv->ntfy_blocks[priv->tx[tx_qid].ntfy_id].napi;
+	napi_enable_locked(napi_tx);
+
+	if (gve_is_gqi(priv)) {
+		if (gve_rx_work_pending(&priv->rx[qid]))
+			napi_schedule(napi_rx);
+
+		if (gve_tx_clean_pending(priv, &priv->tx[tx_qid]))
+			napi_schedule(napi_tx);
+	}
+}
+
 static int gve_xsk_pool_enable(struct net_device *dev,
 			       struct xsk_buff_pool *pool,
 			       u16 qid)
@@ -1655,7 +1689,14 @@ static int gve_xsk_pool_enable(struct net_device *dev,
 		return 0;
 
 	if (gve_is_qpl(priv)) {
+		gve_disable_xsk_napis(priv, qid);
+
 		err = gve_reg_xsk_pool(priv, dev, pool, qid);
+		/* Make sure it is visible to the workers on datapath */
+		smp_mb();
+
+		gve_enable_xsk_napis(priv, qid);
+
 		if (err)
 			goto err_xsk_pool_dma_mapped;
 	} else {
