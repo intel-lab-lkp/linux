@@ -4224,7 +4224,8 @@ retry_pids:
 		 * under cache pressure can drive considerable bandwidth.
 		 */
 		placement_scan = !(vma->vm_file &&
-			(vma->vm_flags & (VM_READ | VM_WRITE)) == VM_READ);
+		    vma_test(vma, VMA_READ_BIT) &&
+		    !vma_test(vma, VMA_WRITE_BIT));
 
 		if (!vma->vm_mm || (!placement_scan && !tiering)) {
 			trace_sched_skip_vma_numa(mm, vma, NUMAB_SKIP_SHARED_RO);
