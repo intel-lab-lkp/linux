@@ -109,22 +109,46 @@ ieee80211_scs_sta_build(struct cfg80211_scs_desc * const *rule, u8 n_rules)
  */
 bool ieee80211_flow_classify(struct sta_info *sta, struct sk_buff *skb)
 {
+	struct ieee80211_flow_entry *entry;
 	struct cfg80211_scs_verdict verdict;
+	struct ieee80211_mscs_sta *mscs;
+	struct ieee80211_flow_hkey hkey;
 	struct cfg80211_flow_info info;
 	struct ieee80211_scs_sta *scs;
 
 	scs = rcu_dereference(sta->scs);
-	if (!scs)
+	mscs = rcu_dereference(sta->mscs);
+	if (!scs && !mscs)
 		return false;
 
 	if (!cfg80211_flow_parse(skb, &info))
 		return false;
 
-	cfg80211_scs_evaluate(scs->rule, scs->n_rules, &info, &verdict);
-	if (!verdict.match)
+	if (scs) {
+		cfg80211_scs_evaluate(scs->rule, scs->n_rules, &info,
+				      &verdict);
+		if (verdict.match) {
+			skb->priority = verdict.up;
+
+			return true;
+		}
+	}
+
+	/* An SCS match takes precedence over the MSCS */
+	if (!mscs)
 		return false;
 
-	skb->priority = verdict.up;
+	hkey.sta = sta;
+	if (!cfg80211_flow_key_build(&info, mscs->layout, CFG80211_FLOW_AS_IS,
+				     &hkey.key))
+		return false;
+
+	entry = rhashtable_lookup(&sta->sdata->bss->flow_tbl, &hkey,
+				  flow_rht_params);
+	if (!entry)
+		return false;
+
+	skb->priority = min_t(u8, READ_ONCE(entry->up), mscs->up_limit);
 
 	return true;
 }
