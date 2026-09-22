@@ -84,6 +84,7 @@
  * @dr_mode:		drd static host/device config
  * @rstc_pwrdn:		rest controller for powerdown signal
  * @rstc_rst:		reset controller for softreset signal
+ * @resets_active:	whether this driver holds its deasserted reset pair
  */
 
 struct st_dwc3 {
@@ -94,6 +95,7 @@ struct st_dwc3 {
 	enum usb_dr_mode dr_mode;
 	struct reset_control *rstc_pwrdn;
 	struct reset_control *rstc_rst;
+	bool resets_active;
 };
 
 static inline u32 st_dwc3_readl(void __iomem *base, u32 offset)
@@ -242,7 +244,9 @@ static int st_dwc3_probe(struct platform_device *pdev)
 				     "could not get power controller\n");
 
 	/* Manage PowerDown */
-	reset_control_deassert(dwc3_data->rstc_pwrdn);
+	ret = reset_control_deassert(dwc3_data->rstc_pwrdn);
+	if (ret)
+		return ret;
 
 	dwc3_data->rstc_rst =
 		devm_reset_control_get_shared(dev, "softreset");
@@ -253,7 +257,10 @@ static int st_dwc3_probe(struct platform_device *pdev)
 	}
 
 	/* Manage SoftReset */
-	reset_control_deassert(dwc3_data->rstc_rst);
+	ret = reset_control_deassert(dwc3_data->rstc_rst);
+	if (ret)
+		goto undo_softreset;
+	dwc3_data->resets_active = true;
 
 	/* Allocate and initialize the core */
 	ret = of_platform_populate(node, NULL, NULL, dev);
@@ -305,16 +312,22 @@ static void st_dwc3_remove(struct platform_device *pdev)
 
 	of_platform_depopulate(&pdev->dev);
 
-	reset_control_assert(dwc3_data->rstc_pwrdn);
-	reset_control_assert(dwc3_data->rstc_rst);
+	if (dwc3_data->resets_active) {
+		reset_control_assert(dwc3_data->rstc_pwrdn);
+		reset_control_assert(dwc3_data->rstc_rst);
+		dwc3_data->resets_active = false;
+	}
 }
 
 static int st_dwc3_suspend(struct device *dev)
 {
 	struct st_dwc3 *dwc3_data = dev_get_drvdata(dev);
 
-	reset_control_assert(dwc3_data->rstc_pwrdn);
-	reset_control_assert(dwc3_data->rstc_rst);
+	if (dwc3_data->resets_active) {
+		reset_control_assert(dwc3_data->rstc_pwrdn);
+		reset_control_assert(dwc3_data->rstc_rst);
+		dwc3_data->resets_active = false;
+	}
 
 	pinctrl_pm_select_sleep_state(dev);
 
@@ -326,21 +339,36 @@ static int st_dwc3_resume(struct device *dev)
 	struct st_dwc3 *dwc3_data = dev_get_drvdata(dev);
 	int ret;
 
+	if (dwc3_data->resets_active)
+		return 0;
+
 	pinctrl_pm_select_default_state(dev);
 
-	reset_control_deassert(dwc3_data->rstc_pwrdn);
-	reset_control_deassert(dwc3_data->rstc_rst);
+	ret = reset_control_deassert(dwc3_data->rstc_pwrdn);
+	if (ret)
+		return ret;
+
+	ret = reset_control_deassert(dwc3_data->rstc_rst);
+	if (ret)
+		goto undo_softreset;
 
 	ret = st_dwc3_drd_init(dwc3_data);
 	if (ret) {
 		dev_err(dev, "drd initialisation failed\n");
-		return ret;
+		goto undo_softreset;
 	}
 
 	/* ST glue logic init */
 	st_dwc3_init(dwc3_data);
+	dwc3_data->resets_active = true;
 
 	return 0;
+
+undo_softreset:
+	/* A shared deassert holds its reference even if the provider fails. */
+	reset_control_assert(dwc3_data->rstc_rst);
+	reset_control_assert(dwc3_data->rstc_pwrdn);
+	return ret;
 }
 
 static DEFINE_SIMPLE_DEV_PM_OPS(st_dwc3_dev_pm_ops, st_dwc3_suspend, st_dwc3_resume);
