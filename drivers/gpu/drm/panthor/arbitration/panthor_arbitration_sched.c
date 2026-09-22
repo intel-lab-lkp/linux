@@ -347,6 +347,10 @@ static int arb_sched_next_locked(struct panthor_arbitration_sched *sched)
 
 	arb_sched_grant_locked(sched);
 
+	if (sched->phase == ARB_SCHED_PHASE_GRANTED &&
+	    !kfifo_is_empty(&sched->queue))
+		panthor_arbitration_notify_yield_idle(to_adev(sched), aw_id);
+
 	wake_up_all(&sched->waitqueue);
 
 	return 0;
@@ -475,8 +479,18 @@ int panthor_arbitration_sched_on_request(struct panthor_arbitration_sched *sched
 	 * Grant timer for the current AW has previously expired, request it to
 	 * yield the GPU.
 	 */
-	if (sched->grant_previously_expired)
+	if (sched->grant_previously_expired) {
 		arb_sched_request_stop_locked(sched);
+		return 0;
+	}
+
+	/*
+	 * GPU was previously granted to a lone requesting AW, YIELD_IDLE was
+	 * not sent to it. Send YIELD_IDLE to it now that multiple AWs are
+	 * requesting for the GPU.
+	 */
+	if (sched->phase == ARB_SCHED_PHASE_GRANTED && kfifo_len(&sched->queue) == 1)
+		panthor_arbitration_notify_yield_idle(to_adev(sched), sched->active_aw_id);
 
 	return 0;
 }

@@ -298,6 +298,16 @@ int panthor_arbitration_on_close(struct panthor_arbitration *adev, u8 aw_id)
 	return panthor_partition_control_close_window(adev->pc[idx]);
 }
 
+int panthor_arbitration_notify_yield_idle(struct panthor_arbitration *adev, u8 aw_id)
+{
+	int idx = to_assigned_sched_idx(adev, aw_id);
+
+	if (idx < 0)
+		return idx;
+
+	return panthor_partition_control_yield_idle(adev->pc[idx]);
+}
+
 int panthor_arbitration_notify_err(struct panthor_arbitration *adev, u8 aw_id)
 {
 	int idx = to_assigned_sched_idx(adev, aw_id);
