@@ -89,14 +89,19 @@ static bool rproc_virtio_notify(struct virtqueue *vq)
 irqreturn_t rproc_vq_interrupt(struct rproc *rproc, int notifyid)
 {
 	struct rproc_vring *rvring;
+	struct virtqueue *vq;
 
 	dev_dbg(&rproc->dev, "vq index %d is interrupted\n", notifyid);
 
 	rvring = idr_find(&rproc->notifyids, notifyid);
-	if (!rvring || !rvring->vq)
+	if (!rvring)
 		return IRQ_NONE;
 
-	return vring_interrupt(0, rvring->vq);
+	vq = READ_ONCE(rvring->vq);
+	if (!vq)
+		return IRQ_NONE;
+
+	return vring_interrupt(0, vq);
 }
 EXPORT_SYMBOL(rproc_vq_interrupt);
 
@@ -170,7 +175,7 @@ static void __rproc_virtio_del_vqs(struct virtio_device *vdev)
 
 	list_for_each_entry_safe(vq, n, &vdev->vqs, list) {
 		rvring = vq->priv;
-		rvring->vq = NULL;
+		WRITE_ONCE(rvring->vq, NULL);
 		vring_del_virtqueue(vq);
 	}
 }
