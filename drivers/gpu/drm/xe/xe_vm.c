@@ -483,6 +483,7 @@ static void preempt_rebind_work_func(struct work_struct *w)
 	unsigned int fence_count = 0;
 	LIST_HEAD(preempt_fences);
 	int err = 0;
+	int io_idx;
 	long wait;
 	int __maybe_unused tries = 0;
 
@@ -516,6 +517,12 @@ retry:
 	if (err)
 		goto out_unlock_outer;
 
+	if (xe_device_io_get(vm->xe, &io_idx)) {
+		xe_validation_ctx_fini(&ctx);
+		err = 0;
+		goto out_unlock_outer;
+	}
+
 	drm_exec_until_all_locked(&exec) {
 		bool done = false;
 
@@ -523,8 +530,7 @@ retry:
 		drm_exec_retry_on_contention(&exec);
 		xe_validation_retry_on_oom(&ctx, &err);
 		if (err || done) {
-			xe_validation_ctx_fini(&ctx);
-			goto out_unlock_outer;
+			goto out_unlock;
 		}
 	}
 
@@ -572,6 +578,7 @@ retry:
 
 out_unlock:
 	xe_validation_ctx_fini(&ctx);
+	xe_device_io_put(io_idx);
 out_unlock_outer:
 	if (err == -EAGAIN) {
 		trace_xe_vm_rebind_worker_retry(vm);

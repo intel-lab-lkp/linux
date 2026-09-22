@@ -11,6 +11,7 @@
 #include <drm/drm_pagemap_util.h>
 
 #include "xe_bo.h"
+#include "xe_device.h"
 #include "xe_exec_queue_types.h"
 #include "xe_gt_stats.h"
 #include "xe_log.h"
@@ -242,6 +243,7 @@ static void xe_svm_invalidate(struct drm_gpusvm *gpusvm,
 	ktime_t start = xe_gt_stats_ktime_get();
 	u64 adj_start = mmu_range->start, adj_end = mmu_range->end;
 	u8 tile_mask = 0, id;
+	int io_idx;
 	long err;
 
 	xe_svm_assert_in_notifier(vm);
@@ -267,6 +269,9 @@ static void xe_svm_invalidate(struct drm_gpusvm *gpusvm,
 	if (xe_vm_is_closed(vm))
 		goto range_notifier_event_end;
 
+	if (xe_device_io_get(xe, &io_idx))
+		goto range_notifier_event_end;
+
 	/*
 	 * XXX: Less than ideal to always wait on VM's resv slots if an
 	 * invalidation is not required. Could walk range list twice to figure
@@ -283,7 +288,7 @@ static void xe_svm_invalidate(struct drm_gpusvm *gpusvm,
 							       &adj_start,
 							       &adj_end);
 	if (!tile_mask)
-		goto range_notifier_event_end;
+		goto out_io;
 
 	xe_device_wmb(xe);
 
@@ -291,6 +296,9 @@ static void xe_svm_invalidate(struct drm_gpusvm *gpusvm,
 						 tile_mask, &batch);
 	if (!WARN_ON_ONCE(err))
 		xe_tlb_inval_batch_wait(&batch);
+
+out_io:
+	xe_device_io_put(io_idx);
 
 range_notifier_event_end:
 	r = first;
@@ -599,6 +607,8 @@ static int xe_svm_copy(struct page **pages,
 #define XE_VRAM_ADDR_INVALID	~0x0ull
 	u64 vram_addr = XE_VRAM_ADDR_INVALID;
 	int err = 0, pos = 0;
+	bool io_held = false;
+	int io_idx;
 	bool sram = dir == XE_SVM_COPY_TO_SRAM;
 	ktime_t start = xe_gt_stats_ktime_get();
 
@@ -629,6 +639,12 @@ static int xe_svm_copy(struct page **pages,
 			vr = xe_page_to_vr(spage);
 			gt = xe_migrate_exec_queue(vr->migrate)->gt;
 			xe = vr->xe;
+
+			err = xe_device_io_get(xe, &io_idx);
+			if (err)
+				goto err_out;
+
+			io_held = true;
 		}
 		XE_WARN_ON(spage && xe_page_to_vr(spage) != vr);
 
@@ -748,6 +764,9 @@ err_out:
 	}
 	if (pre_migrate_fence)
 		dma_fence_wait(pre_migrate_fence, false);
+
+	if (io_held)
+		xe_device_io_put(io_idx);
 
 	/*
 	 * XXX: We can't derive the GT here (or anywhere in this functions, but
@@ -1123,8 +1142,9 @@ static int xe_drm_pagemap_populate_mm(struct drm_pagemap *dpagemap,
 	struct xe_bo *bo;
 	int err = 0, idx;
 
-	if (!drm_dev_enter(&xe->drm, &idx))
-		return -ENODEV;
+	err = xe_device_io_get(xe, &idx);
+	if (err)
+		return err;
 
 	xe_pm_runtime_get(xe);
 
@@ -1166,7 +1186,8 @@ static int xe_drm_pagemap_populate_mm(struct drm_pagemap *dpagemap,
 		xe_bo_put(bo);
 	}
 	xe_pm_runtime_put(xe);
-	drm_dev_exit(idx);
+
+	xe_device_io_put(idx);
 
 	return err;
 }
