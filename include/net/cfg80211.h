@@ -4070,6 +4070,144 @@ struct cfg80211_qos_map {
 };
 
 /**
+ * enum cfg80211_tclas_processing - how the TCLAS elements relate
+ *
+ * @CFG80211_TCLAS_PROCESSING_ALL: an MSDU has to match every element
+ * @CFG80211_TCLAS_PROCESSING_ANY: one matching element is enough
+ * @CFG80211_TCLAS_PROCESSING_DEFAULT: matches every MSDU that no other
+ *	descriptor matches, and carries no element
+ * @CFG80211_TCLAS_PROCESSING_ABSENT: the descriptor carries no TCLAS
+ *	Processing element. Not a value of the Processing field.
+ */
+enum cfg80211_tclas_processing {
+	CFG80211_TCLAS_PROCESSING_ALL		= 0,
+	CFG80211_TCLAS_PROCESSING_ANY		= 1,
+	CFG80211_TCLAS_PROCESSING_DEFAULT	= 2,
+
+	CFG80211_TCLAS_PROCESSING_ABSENT	= 0xff,
+};
+
+/**
+ * enum cfg80211_flow_field - classifier parameter of one MSDU
+ *
+ * A set of these is held as a bitmap of BIT(field) in a u32.
+ *
+ * @CFG80211_FLOW_F_ETH_SA: Ethernet source address
+ * @CFG80211_FLOW_F_ETH_DA: Ethernet destination address
+ * @CFG80211_FLOW_F_ETH_TYPE: ethertype
+ * @CFG80211_FLOW_F_VLAN_PCP: IEEE 802.1Q priority code point
+ * @CFG80211_FLOW_F_VLAN_DEI: IEEE 802.1Q drop eligibility indicator
+ * @CFG80211_FLOW_F_VLAN_VID: IEEE 802.1Q VLAN identifier
+ * @CFG80211_FLOW_F_IP_VERSION: IP version
+ * @CFG80211_FLOW_F_IP_SRC: IP source address
+ * @CFG80211_FLOW_F_IP_DST: IP destination address
+ * @CFG80211_FLOW_F_SRC_PORT: layer 4 source port
+ * @CFG80211_FLOW_F_DST_PORT: layer 4 destination port
+ * @CFG80211_FLOW_F_DSCP: differentiated services code point
+ * @CFG80211_FLOW_F_PROTO: IPv4 protocol or IPv6 next header
+ * @CFG80211_FLOW_F_FLOW_LABEL: IPv6 flow label
+ * @NUM_CFG80211_FLOW_FIELDS: number of fields
+ */
+enum cfg80211_flow_field {
+	CFG80211_FLOW_F_ETH_SA,
+	CFG80211_FLOW_F_ETH_DA,
+	CFG80211_FLOW_F_ETH_TYPE,
+	CFG80211_FLOW_F_VLAN_PCP,
+	CFG80211_FLOW_F_VLAN_DEI,
+	CFG80211_FLOW_F_VLAN_VID,
+	CFG80211_FLOW_F_IP_VERSION,
+	CFG80211_FLOW_F_IP_SRC,
+	CFG80211_FLOW_F_IP_DST,
+	CFG80211_FLOW_F_SRC_PORT,
+	CFG80211_FLOW_F_DST_PORT,
+	CFG80211_FLOW_F_DSCP,
+	CFG80211_FLOW_F_PROTO,
+	CFG80211_FLOW_F_FLOW_LABEL,
+
+	NUM_CFG80211_FLOW_FIELDS,
+};
+
+/**
+ * struct cfg80211_flow_key - masked classifier parameters of one MSDU
+ *
+ * Unselected fields are zero. The whole structure is hashed and compared as a
+ * byte string, so it must contain no undefined octet.
+ *
+ * @src: IP source address, IPv4 in the first four octets
+ * @dst: IP destination address, IPv4 in the first four octets
+ * @flow_label: IPv6 flow label
+ * @sa: Ethernet source address
+ * @da: Ethernet destination address
+ * @eth_type: ethertype
+ * @vlan_tci: IEEE 802.1Q tag control information
+ * @src_port: layer 4 source port
+ * @dst_port: layer 4 destination port
+ * @ip_version: IP version, which keeps IPv4 and IPv6 keys apart
+ * @dscp: differentiated services code point, in the six LSBs
+ * @proto: IPv4 protocol or IPv6 next header
+ * @pad: must be zero
+ */
+struct cfg80211_flow_key {
+	struct in6_addr src;
+	struct in6_addr dst;
+	__be32 flow_label;
+	u8 sa[ETH_ALEN];
+	u8 da[ETH_ALEN];
+	__be16 eth_type;
+	__be16 vlan_tci;
+	__be16 src_port;
+	__be16 dst_port;
+	u8 ip_version;
+	u8 dscp;
+	u8 proto;
+	u8 pad;
+};
+
+/* Longest Filter Value and Filter Mask a filter classifier may carry */
+#define CFG80211_TCLAS_FILTER_LEN	28
+
+/**
+ * struct cfg80211_tclas_filter - octet filter on a protocol payload
+ *
+ * @protocol: IPv4 protocol or IPv6 next header value that locates the
+ *	payload to compare
+ * @instance: which occurrence of @protocol to use, counted from zero
+ * @len: length of @value and @mask
+ * @value: octets to compare against the payload
+ * @mask: the bits of @value that are compared
+ */
+struct cfg80211_tclas_filter {
+	u8 protocol;
+	u8 instance;
+	u8 len;
+	u8 value[CFG80211_TCLAS_FILTER_LEN];
+	u8 mask[CFG80211_TCLAS_FILTER_LEN];
+};
+
+/**
+ * struct cfg80211_tclas - parsed TCLAS element
+ *
+ * Only the classifier types the kernel can evaluate are represented, see
+ * cfg80211_parse_tclas().
+ *
+ * @type: classifier type
+ * @fields: the parameters the classifier mask selects, as a bitmap of
+ *	&enum cfg80211_flow_field. Zero for a filter classifier, which
+ *	selects no field of its own.
+ * @key: the required values, with unselected fields zero, so that a match is
+ *	a comparison of two keys
+ * @filter: the octet filter, when @type is a filter classifier
+ */
+struct cfg80211_tclas {
+	u8 type;
+	u32 fields;
+	union {
+		struct cfg80211_flow_key key;
+		struct cfg80211_tclas_filter filter;
+	};
+};
+
+/**
  * DOC: Neighbor Awareness Networking (NAN)
  *
  * NAN uses two interface types:
