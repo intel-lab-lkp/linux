@@ -1657,7 +1657,6 @@ int drbd_nl_chg_disk_opts_doit(struct sk_buff *skb, struct genl_info *info)
 		old_plan = device->rs_plan_s;
 		rcu_assign_pointer(device->rs_plan_s, new_plan);
 	}
-
 	mutex_unlock(&device->resource->conf_update);
 
 	if (new_disk_conf->al_updates)
@@ -1687,7 +1686,16 @@ int drbd_nl_chg_disk_opts_doit(struct sk_buff *skb, struct genl_info *info)
 	}
 
 	kvfree_rcu_mightsleep(old_disk_conf);
-	kfree(old_plan);
+	if (old_plan) {
+		/*
+		 * rs_plan_s is dereferenced by the resync controller
+		 * (drbd_rs_controller()) under rcu_read_lock(), so wait for
+		 * a grace period before releasing the previous plan, like
+		 * receive_SyncParam() does.
+		 */
+		synchronize_rcu();
+		kfree(old_plan);
+	}
 	mod_timer(&device->request_timer, jiffies + HZ);
 	goto success;
 
