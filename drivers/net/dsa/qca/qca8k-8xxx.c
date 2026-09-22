@@ -8,6 +8,7 @@
 
 #include <linux/module.h>
 #include <linux/phy.h>
+#include <linux/qca83xx.h>
 #include <linux/netdevice.h>
 #include <linux/bitfield.h>
 #include <linux/regmap.h>
@@ -1744,17 +1745,17 @@ exit:
 static u32 qca8k_get_phy_flags(struct dsa_switch *ds, int port)
 {
 	struct qca8k_priv *priv = ds->priv;
+	u32 flags;
 
-	/* Communicate to the phy internal driver the switch revision.
-	 * Based on the switch revision different values needs to be
-	 * set to the dbg and mmd reg on the phy.
-	 * The first 2 bit are used to communicate the switch revision
-	 * to the phy driver.
-	 */
-	if (port > 0 && port < 6)
-		return priv->switch_revision;
+	if (port <= 0 || port >= 6)
+		return 0;
 
-	return 0;
+	/* The PHY driver uses the switch revision for analog initialization. */
+	flags = priv->switch_revision;
+	if (priv->switch_id == QCA8K_ID_QCA8337 && dsa_is_cpu_port(ds, port))
+		flags |= QCA8K_DEVFLAGS_NO_SMARTSPEED;
+
+	return flags;
 }
 
 static enum dsa_tag_protocol
