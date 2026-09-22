@@ -177,15 +177,15 @@ static void __print_mce(struct mce_hw_err *err)
 {
 	struct mce *m = &err->m;
 
-	pr_emerg(HW_ERR "CPU %d: Machine Check%s: %Lx Bank %d: %016Lx\n",
+	pr_emerg(HW_ERR "CPU %d: Machine Check%s: %llx Bank %d: %016llx\n",
 		 m->extcpu,
 		 (m->mcgstatus & MCG_STATUS_MCIP ? " Exception" : ""),
 		 m->mcgstatus, m->bank, m->status);
 
 	if (m->ip) {
-		pr_emerg(HW_ERR "RIP%s %02x:<%016Lx> ",
-			!(m->mcgstatus & MCG_STATUS_EIPV) ? " !INEXACT!" : "",
-			m->cs, m->ip);
+		pr_emerg(HW_ERR "RIP%s %02x:<%016llx> ",
+			 !(m->mcgstatus & MCG_STATUS_EIPV) ? " !INEXACT!" : "",
+			 m->cs, m->ip);
 
 		if (m->cs == __KERNEL_CS)
 			pr_cont("{%pS}", (void *)(unsigned long)m->ip);
