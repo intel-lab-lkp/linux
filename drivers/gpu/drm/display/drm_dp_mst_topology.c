@@ -4536,12 +4536,23 @@ int drm_dp_atomic_release_time_slots(struct drm_atomic_commit *state,
 	struct drm_connector_state *old_conn_state, *new_conn_state;
 	bool update_payload = true;
 
+	/*
+	 * Port may outlive its DRM connector across MST teardown/reprobe
+	 * (unplug, topology restart). The helper is documented as safe to
+	 * call in that case.
+	 */
+	if (!port || !port->connector)
+		return 0;
+
 	old_conn_state = drm_atomic_get_old_connector_state(state, port->connector);
-	if (!old_conn_state->crtc)
+	if (!old_conn_state || !old_conn_state->crtc)
 		return 0;
 
 	/* If the CRTC isn't disabled by this state, don't release it's payload */
 	new_conn_state = drm_atomic_get_new_connector_state(state, port->connector);
+	if (!new_conn_state)
+		return 0;
+
 	if (new_conn_state->crtc) {
 		struct drm_crtc_state *crtc_state =
 			drm_atomic_get_new_crtc_state(state, new_conn_state->crtc);
