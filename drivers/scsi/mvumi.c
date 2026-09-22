@@ -2111,12 +2111,24 @@ out_return_cmd:
 
 static enum scsi_timeout_action mvumi_timed_out(struct scsi_cmnd *scmd)
 {
-	struct mvumi_cmd *cmd = mvumi_priv(scmd)->cmd_priv;
 	struct Scsi_Host *host = scmd->device->host;
 	struct mvumi_hba *mhba = shost_priv(host);
+	struct mvumi_cmd *cmd;
 	unsigned long flags;
 
 	spin_lock_irqsave(mhba->shost->host_lock, flags);
+
+	/*
+	 * The command may have been completed by the interrupt handler just
+	 * before the timeout fired, in which case mvumi_complete_cmd() has
+	 * already cleared cmd_priv.  Read the pointer under host_lock so that
+	 * it is consistent with the state of the command.
+	 */
+	cmd = mvumi_priv(scmd)->cmd_priv;
+	if (!cmd) {
+		spin_unlock_irqrestore(mhba->shost->host_lock, flags);
+		return SCSI_EH_NOT_HANDLED;
+	}
 
 	if (mhba->tag_cmd[cmd->frame->tag]) {
 		mhba->tag_cmd[cmd->frame->tag] = NULL;
