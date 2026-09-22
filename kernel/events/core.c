@@ -8828,6 +8828,8 @@ void perf_prepare_sample(struct perf_sample_data *data,
 		u16 header_size = perf_sample_data_size(data, event);
 		u16 size = sizeof(u64);
 
+		if (data->regs_user.regs)
+			perf_arch_prepare_ustack();
 		stack_size = perf_sample_ustack_size(stack_size, header_size,
 						     data->regs_user.regs);
 

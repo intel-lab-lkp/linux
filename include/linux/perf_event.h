@@ -1838,6 +1838,13 @@ extern unsigned long perf_instruction_pointer(struct perf_event *event,
 #ifndef perf_arch_bpf_user_pt_regs
 # define perf_arch_bpf_user_pt_regs(regs) regs
 #endif
+/*
+ * Called before the user stack of the current task is dumped, for an arch
+ * that still holds part of the user's stack state in registers.
+ */
+#ifndef perf_arch_prepare_ustack
+static inline void perf_arch_prepare_ustack(void) { }
+#endif
 
 #ifndef perf_arch_guest_misc_flags
 static inline unsigned long perf_arch_guest_misc_flags(struct pt_regs *regs)
