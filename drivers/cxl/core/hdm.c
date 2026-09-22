@@ -1274,6 +1274,16 @@ int devm_cxl_endpoint_decoders_setup(struct cxl_port *port)
 	if (rc)
 		return rc;
 
+	/*
+	 * Between the port's HDM state and its decoders: devres,
+	 * unwinding in reverse, brings BI down only after the decoders
+	 * quiesce, while its slow walk still precedes the HDM state
+	 * free.
+	 */
+	rc = cxl_bi_setup(port);
+	if (rc)
+		dev_dbg(&port->dev, "BI setup failed rc=%d\n", rc);
+
 	return devm_cxl_enumerate_decoders(cxlhdm, &info);
 }
 EXPORT_SYMBOL_NS_GPL(devm_cxl_endpoint_decoders_setup, "CXL");
