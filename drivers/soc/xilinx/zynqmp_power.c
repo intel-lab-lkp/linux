@@ -77,28 +77,32 @@ static void zynqmp_pm_get_callback_data(u32 *buf)
 
 static void subsystem_restart_event_callback(const u32 *payload, void *data)
 {
+	/* Pairs with the smp_store_release() in zynqmp_pm_probe(). */
+	struct zynqmp_pm_work_struct *work = smp_load_acquire(&zynqmp_pm_init_restart_work);
+
 	/* First element is callback API ID, others are callback arguments */
-	if (work_pending(&zynqmp_pm_init_restart_work->callback_work))
+	if (work_pending(&work->callback_work))
 		return;
 
 	/* Copy callback arguments into work's structure */
-	memcpy(zynqmp_pm_init_restart_work->args, &payload[0],
-	       sizeof(zynqmp_pm_init_restart_work->args));
+	memcpy(work->args, &payload[0], sizeof(work->args));
 
-	queue_work(system_dfl_wq, &zynqmp_pm_init_restart_work->callback_work);
+	queue_work(system_dfl_wq, &work->callback_work);
 }
 
 static void suspend_event_callback(const u32 *payload, void *data)
 {
+	/* Pairs with the smp_store_release() in zynqmp_pm_probe(). */
+	struct zynqmp_pm_work_struct *work = smp_load_acquire(&zynqmp_pm_init_suspend_work);
+
 	/* First element is callback API ID, others are callback arguments */
-	if (work_pending(&zynqmp_pm_init_suspend_work->callback_work))
+	if (work_pending(&work->callback_work))
 		return;
 
 	/* Copy callback arguments into work's structure */
-	memcpy(zynqmp_pm_init_suspend_work->args, &payload[1],
-	       sizeof(zynqmp_pm_init_suspend_work->args));
+	memcpy(work->args, &payload[1], sizeof(work->args));
 
-	queue_work(system_dfl_wq, &zynqmp_pm_init_suspend_work->callback_work);
+	queue_work(system_dfl_wq, &work->callback_work);
 }
 
 static irqreturn_t zynqmp_pm_isr(int irq, void *data)
@@ -137,15 +141,17 @@ static void ipi_receive_callback(struct mbox_client *cl, void *data)
 	memcpy(payload, msg->data, sizeof(msg->len));
 	/* First element is callback API ID, others are callback arguments */
 	if (payload[0] == PM_INIT_SUSPEND_CB) {
-		if (work_pending(&zynqmp_pm_init_suspend_work->callback_work))
+		struct zynqmp_pm_work_struct *work;
+
+		/* Pairs with the smp_store_release() in zynqmp_pm_probe(). */
+		work = smp_load_acquire(&zynqmp_pm_init_suspend_work);
+		if (work_pending(&work->callback_work))
 			return;
 
 		/* Copy callback arguments into work's structure */
-		memcpy(zynqmp_pm_init_suspend_work->args, &payload[1],
-		       sizeof(zynqmp_pm_init_suspend_work->args));
+		memcpy(work->args, &payload[1], sizeof(work->args));
 
-		queue_work(system_dfl_wq,
-			   &zynqmp_pm_init_suspend_work->callback_work);
+		queue_work(system_dfl_wq, &work->callback_work);
 
 		/*
 		 * Send NULL message to mbox controller to ack the message. The
@@ -299,6 +305,7 @@ static int register_event(struct device *dev, const enum pm_api_cb_id cb_type, c
 
 static int zynqmp_pm_probe(struct platform_device *pdev)
 {
+	struct zynqmp_pm_work_struct *suspend_work, *restart_work;
 	int ret, irq;
 	u32 pm_api_version, pm_family_code, node_id;
 	struct mbox_client *client;
@@ -320,14 +327,20 @@ static int zynqmp_pm_probe(struct platform_device *pdev)
 	 * is not available to use) or -ENODEV(Xilinx Event Manager not compiled),
 	 * then use ipi-mailbox or interrupt method.
 	 */
-	zynqmp_pm_init_suspend_work = devm_kzalloc(&pdev->dev,
-						   sizeof(struct zynqmp_pm_work_struct),
-						   GFP_KERNEL);
-	if (!zynqmp_pm_init_suspend_work)
+	suspend_work = devm_kzalloc(&pdev->dev,
+				    sizeof(struct zynqmp_pm_work_struct),
+				    GFP_KERNEL);
+	if (!suspend_work)
 		return -ENOMEM;
 
-	INIT_WORK(&zynqmp_pm_init_suspend_work->callback_work,
+	INIT_WORK(&suspend_work->callback_work,
 		  zynqmp_pm_init_suspend_work_fn);
+	/*
+	 * The event manager and mailbox callbacks registered below
+	 * dereference the work pointer as soon as they run. Publish it with
+	 * release semantics; pairs with the smp_load_acquire() there.
+	 */
+	smp_store_release(&zynqmp_pm_init_suspend_work, suspend_work);
 
 	ret = register_event(&pdev->dev, PM_INIT_SUSPEND_CB, 0, 0, false,
 			     suspend_event_callback);
@@ -343,14 +356,16 @@ static int zynqmp_pm_probe(struct platform_device *pdev)
 		else
 			return -ENODEV;
 
-		zynqmp_pm_init_restart_work = devm_kzalloc(&pdev->dev,
-							   sizeof(struct zynqmp_pm_work_struct),
-							   GFP_KERNEL);
-		if (!zynqmp_pm_init_restart_work)
+		restart_work = devm_kzalloc(&pdev->dev,
+					    sizeof(struct zynqmp_pm_work_struct),
+					    GFP_KERNEL);
+		if (!restart_work)
 			return -ENOMEM;
 
-		INIT_WORK(&zynqmp_pm_init_restart_work->callback_work,
+		INIT_WORK(&restart_work->callback_work,
 			  zynqmp_pm_subsystem_restart_work_fn);
+		/* Pairs with the smp_load_acquire() in the event callbacks. */
+		smp_store_release(&zynqmp_pm_init_restart_work, restart_work);
 
 		ret = register_event(&pdev->dev, PM_NOTIFY_CB, node_id, EVENT_SUBSYSTEM_RESTART,
 				     false, subsystem_restart_event_callback);
