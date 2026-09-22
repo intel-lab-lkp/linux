@@ -1922,7 +1922,7 @@ static int mlx5_handle_changeupper_event(struct mlx5_lag *ldev,
 	int changed = 0;
 	int i, idx = -1;
 
-	if (!netif_is_lag_master(upper))
+	if (!netif_is_bond_master(upper))
 		return 0;
 
 	if (info->linking)
@@ -2029,7 +2029,7 @@ static int mlx5_handle_changeinfodata_event(struct mlx5_lag *ldev,
 	bool has_inactive = 0;
 	int idx;
 
-	if (!netif_is_lag_master(ndev))
+	if (!netif_is_bond_master(ndev))
 		return 0;
 
 	rcu_read_lock();
