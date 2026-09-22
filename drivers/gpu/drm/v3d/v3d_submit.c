@@ -357,6 +357,10 @@ v3d_attach_perfmon_to_jobs(struct v3d_submit *submit, u32 perfmon_id)
  *
  * We don't serialize the jobs when using a global perfmon as it's expected to
  * track concurrent activity from all jobs.
+ *
+ * Keeping track of the in-flight jobs costs a fence merge per job, so it is
+ * only done while at least one perfmon is alive. Jobs submitted while no
+ * perfmon exists go untracked and may overlap the first measured job.
  */
 static int
 v3d_serialize_for_perfmon(struct v3d_job *job)
@@ -367,6 +371,9 @@ v3d_serialize_for_perfmon(struct v3d_job *job)
 	int ret;
 
 	lockdep_assert_held(&v3d->sched_lock);
+
+	if (!atomic_read(&v3d->perfmon_state.nperfmons))
+		return 0;
 
 	scoped_guard(spinlock_irqsave, &v3d->perfmon_state.lock)
 		is_global_perfmon = !!v3d->global_perfmon;
