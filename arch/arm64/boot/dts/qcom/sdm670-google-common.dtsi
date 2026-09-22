@@ -196,6 +196,11 @@
 	};
 };
 
+&adsp_pas {
+	status = "okay";
+	firmware-name = "qcom/sdm670/sargo/adsp.mbn";
+};
+
 &apps_rsc {
 	regulators-0 {
 		compatible = "qcom,pm660-rpmh-regulators";
