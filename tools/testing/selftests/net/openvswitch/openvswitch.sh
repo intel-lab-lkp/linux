@@ -234,7 +234,7 @@ ovs_drop_reason_count()
 	local reason=$1
 
 	local perf_output=`perf script -i ${ovs_dir}/perf.data -F trace:event,trace`
-	local pattern="skb:kfree_skb:.*reason: $reason"
+	local pattern="skb:kfree_skb:.*reason: $reason$"
 
 	return `echo "$perf_output" | grep "$pattern" | wc -l`
 }
@@ -790,15 +790,6 @@ test_psample() {
 # - drop packets and verify the right drop reason is reported
 test_drop_reason() {
 	which perf >/dev/null 2>&1 || return $ksft_skip
-	which pahole >/dev/null 2>&1 || return $ksft_skip
-
-	ovs_drop_subsys=$(pahole -C skb_drop_reason_subsys |
-			      awk '/OPENVSWITCH/ { print $3; }' |
-			      tr -d ,)
-	if [ -z "$ovs_drop_subsys" ]; then
-		info "failed to get OVS drop subsys ID"
-		return $ksft_skip
-	fi
 
 	sbx_add "test_drop_reason" || return $?
 
@@ -842,7 +833,7 @@ test_drop_reason() {
 		"in_port(2),eth(),eth_type(0x0800),ipv4(src=172.31.110.20,proto=1),icmp()" 'drop'
 
 	ovs_drop_record_and_run "test_drop_reason" ip netns exec client ping -c 2 172.31.110.20
-	ovs_drop_reason_count 0x${ovs_drop_subsys}0001 # OVS_DROP_FLOW_ACTION
+	ovs_drop_reason_count OVS_DROP_LAST_ACTION
 	if [[ "$?" -ne "2" ]]; then
 		info "Did not detect expected drops: $?"
 		return 1
@@ -859,7 +850,7 @@ test_drop_reason() {
 
 	ovs_drop_record_and_run \
             "test_drop_reason" ip netns exec client nc -i 1 -zuv 172.31.110.20 6000
-	ovs_drop_reason_count 0x${ovs_drop_subsys}0004 # OVS_DROP_EXPLICIT_ACTION_ERROR
+	ovs_drop_reason_count OVS_DROP_EXPLICIT_WITH_ERROR
 	if [[ "$?" -ne "1" ]]; then
 		info "Did not detect expected explicit error drops: $?"
 		return 1
@@ -867,7 +858,7 @@ test_drop_reason() {
 
 	ovs_drop_record_and_run \
             "test_drop_reason" ip netns exec client nc -i 1 -zuv 172.31.110.20 7000
-	ovs_drop_reason_count 0x${ovs_drop_subsys}0003 # OVS_DROP_EXPLICIT_ACTION
+	ovs_drop_reason_count OVS_DROP_EXPLICIT
 	if [[ "$?" -ne "1" ]]; then
 		info "Did not detect expected explicit drops: $?"
 		return 1
