@@ -1990,8 +1990,15 @@ static DEFINE_MUTEX(cbb_err_mutex);
 static int tegra194_cbb_debugfs_show(struct tegra_cbb *cbb, struct seq_file *file, void *data)
 {
 	struct tegra_cbb *noc;
+	unsigned long flags;
 
 	mutex_lock(&cbb_err_mutex);
+
+	/*
+	 * cbb_list is modified under cbb_lock by the probe and remove paths of
+	 * the other CBB instances; cbb_err_mutex alone does not exclude them.
+	 */
+	spin_lock_irqsave(&cbb_lock, flags);
 
 	list_for_each_entry(noc, &cbb_list, node) {
 		struct tegra194_cbb *priv = to_tegra194_cbb(noc);
@@ -2001,6 +2008,8 @@ static int tegra194_cbb_debugfs_show(struct tegra_cbb *cbb, struct seq_file *fil
 		if (status)
 			print_errlog(file, priv, status);
 	}
+
+	spin_unlock_irqrestore(&cbb_lock, flags);
 
 	mutex_unlock(&cbb_err_mutex);
 
