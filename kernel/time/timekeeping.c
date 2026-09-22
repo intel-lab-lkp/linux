@@ -2141,7 +2141,8 @@ static void __timekeeping_inject_sleeptime(struct timekeeper *tk,
  */
 bool timekeeping_rtc_skipresume(void)
 {
-	return !suspend_timing_needed;
+	/* Pairs with the smp_store_release() in timekeeping_suspend(). */
+	return !smp_load_acquire(&suspend_timing_needed);
 }
 
 /*
@@ -2272,7 +2273,8 @@ int timekeeping_suspend(void)
 	if (timekeeping_suspend_time.tv_sec || timekeeping_suspend_time.tv_nsec)
 		persistent_clock_exists = true;
 
-	suspend_timing_needed = true;
+	/* Pairs with the smp_load_acquire() in timekeeping_rtc_skipresume(). */
+	smp_store_release(&suspend_timing_needed, true);
 
 	raw_spin_lock_irqsave(&tk_core.lock, flags);
 	timekeeping_forward_now(tks);
