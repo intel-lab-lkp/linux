@@ -5135,6 +5135,9 @@ static int adva_x1_cpld_flash(struct ptp_ocp *bp, struct devlink *devlink,
 
 	/* REFRESH reboots the CPLD out of configuration mode, so the exit
 	 * path must not send DIS_CFG afterwards even if a check below fails.
+	 * The ENAB test below confirms it really left; until then assume it
+	 * did, because sending DIS_CFG to a part that has rebooted is what
+	 * this flag exists to avoid.
 	 */
 	bp->cpld_in_config_mode = false;
 
@@ -5156,12 +5159,21 @@ static int adva_x1_cpld_flash(struct ptp_ocp *bp, struct devlink *devlink,
 	/* Require DONE set, not busy and no error code, as machxo2-spi.c does
 	 * after a refresh: without it a CRC or preamble error reads back as a
 	 * successful update.
+	 *
+	 * ENAB has to be clear too.  Those three conditions are already met
+	 * by the state SET_DONE leaves behind, so on their own they cannot
+	 * tell a REFRESH that rebooted the part from one whose frame was
+	 * ACKed but never latched - which leaves the part in configuration
+	 * mode still running the old image.  Leaving configuration mode is
+	 * the one thing only a REFRESH does.
 	 */
 	err = adva_x1_cpld_read_status(bp, &st);
 	if (err)
 		goto deselect;
+	if (st & CPLD_STATUS_ENAB)
+		bp->cpld_in_config_mode = true;
 	if (!(st & CPLD_STATUS_DONE) || (st & CPLD_STATUS_BUSY) ||
-	    (st & CPLD_STATUS_ERR)) {
+	    (st & CPLD_STATUS_ERR) || (st & CPLD_STATUS_ENAB)) {
 		dev_err(&bp->pdev->dev,
 			"CPLD refresh left status 0x%08x\n", st);
 		NL_SET_ERR_MSG_MOD(extack, "CPLD did not come back configured");
