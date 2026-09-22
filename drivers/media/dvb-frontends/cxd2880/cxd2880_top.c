@@ -764,6 +764,12 @@ static int cxd2880_set_ber_per_period_t(struct dvb_frontend *fe)
 		}
 	}
 
+	/*
+	 * A zero rate can be derived from bogus or not yet locked
+	 * demodulator registers. Avoid dividing by it below.
+	 */
+	if (!pre_ber_rate)
+		pre_ber_rate = 1;
 	mes_exp = pre_ber_rate < 8192 ? 8 : intlog2(pre_ber_rate) >> 24;
 	priv->pre_ber_interval =
 		((1U << mes_exp) * 1000 + (pre_ber_rate / 2)) /
@@ -772,6 +778,8 @@ static int cxd2880_set_ber_per_period_t(struct dvb_frontend *fe)
 			       CXD2880_TNRDMD_CFG_DVBT_VBER_PERIOD,
 			       mes_exp == 8 ? 0 : mes_exp - 12);
 
+	if (!post_ber_rate)
+		post_ber_rate = 1;
 	mes_exp = intlog2(post_ber_rate) >> 24;
 	priv->post_ber_interval =
 		((1U << mes_exp) * 1000 + (post_ber_rate / 2)) /
@@ -780,6 +788,8 @@ static int cxd2880_set_ber_per_period_t(struct dvb_frontend *fe)
 			       CXD2880_TNRDMD_CFG_DVBT_BERN_PERIOD,
 			       mes_exp);
 
+	if (!ucblock_rate)
+		ucblock_rate = 1;
 	mes_exp = intlog2(ucblock_rate) >> 24;
 	priv->ucblock_interval =
 		((1U << mes_exp) * 1000 + (ucblock_rate / 2)) /
@@ -886,6 +896,13 @@ static int cxd2880_set_ber_per_period_t2(struct dvb_frontend *fe)
 
 	post_ber_rate = pre_ber_rate;
 
+	/*
+	 * A zero rate can be derived from bogus or not yet locked
+	 * demodulator registers (e.g. plp.num_blocks_max == 0).
+	 * Avoid dividing by it below.
+	 */
+	if (!pre_ber_rate)
+		pre_ber_rate = 1;
 	mes_exp = intlog2(pre_ber_rate) >> 24;
 	priv->pre_ber_interval =
 		((1U << mes_exp) * 1000 + (pre_ber_rate / 2)) /
@@ -894,6 +911,8 @@ static int cxd2880_set_ber_per_period_t2(struct dvb_frontend *fe)
 			       CXD2880_TNRDMD_CFG_DVBT2_LBER_MES,
 			       mes_exp);
 
+	if (!post_ber_rate)
+		post_ber_rate = 1;
 	mes_exp = intlog2(post_ber_rate) >> 24;
 	priv->post_ber_interval =
 		((1U << mes_exp) * 1000 + (post_ber_rate / 2)) /
@@ -929,6 +948,8 @@ static int cxd2880_set_ber_per_period_t2(struct dvb_frontend *fe)
 		goto error_ucblock_setting;
 	}
 
+	if (!ucblock_rate)
+		ucblock_rate = 1;
 	mes_exp = intlog2(ucblock_rate) >> 24;
 	priv->ucblock_interval =
 		((1U << mes_exp) * 1000 + (ucblock_rate / 2)) /
