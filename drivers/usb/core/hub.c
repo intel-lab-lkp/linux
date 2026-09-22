@@ -1462,6 +1462,8 @@ static int hub_configure(struct usb_hub *hub,
 	unsigned int pipe;
 	int maxp, ret, i;
 	char *message = "out of memory";
+	/* Used to hold and clean up kasprintf()-ed failure message */
+	char *msg_alloc = NULL;
 	unsigned unit_load;
 	unsigned full_load;
 	unsigned maxchild;
@@ -1738,8 +1740,11 @@ static int hub_configure(struct usb_hub *hub,
 	for (i = 0; i < maxchild; i++) {
 		ret = usb_hub_create_port_device(hub, i + 1);
 		if (ret < 0) {
-			dev_err(hub->intfdev,
-				"couldn't create port%d device.\n", i + 1);
+			msg_alloc = kasprintf(GFP_KERNEL, "couldn't create port%d device", i + 1);
+			if (msg_alloc)
+				message = msg_alloc;
+			else
+				message = "couldn't create port device";
 			break;
 		}
 	}
@@ -1774,6 +1779,7 @@ static int hub_configure(struct usb_hub *hub,
 fail:
 	dev_err(hub_dev, "config failed, %s (err %d)\n",
 			message, ret);
+	kfree(msg_alloc);
 	/* hub_disconnect() frees urb and descriptor */
 	return ret;
 }
