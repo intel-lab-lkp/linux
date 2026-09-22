@@ -2214,6 +2214,14 @@ void ieee80211_recalc_txpower(struct ieee80211_link_data *link,
 			      bool update_bss);
 void ieee80211_recalc_offload(struct ieee80211_local *local);
 
+/* SCS and MSCS */
+int ieee80211_set_scs(struct wiphy *wiphy, struct net_device *dev,
+		      const u8 *peer, struct cfg80211_scs_desc * const *desc,
+		      struct cfg80211_scs_result *res, u8 n_desc);
+int ieee80211_set_mscs(struct wiphy *wiphy, struct net_device *dev,
+		       const u8 *peer, struct cfg80211_mscs_desc *desc);
+void ieee80211_sta_scs_free(struct sta_info *sta);
+
 /* link handling */
 void ieee80211_link_setup(struct ieee80211_link_data *link);
 void ieee80211_link_init(struct ieee80211_sub_if_data *sdata,
