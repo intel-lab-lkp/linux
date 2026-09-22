@@ -581,8 +581,12 @@ xfsaild_push(
 	lsn = lip->li_lsn;
 	while ((XFS_LSN_CMP(lip->li_lsn, ailp->ail_target) <= 0)) {
 
-		if (test_bit(XFS_LI_FLUSHING, &lip->li_flags))
+		if (test_bit(XFS_LI_FLUSHING, &lip->li_flags)) {
+			flushing++;
+			count++;
+			ailp->ail_last_pushed_lsn = lsn;
 			goto next_item;
+		}
 
 		xfsaild_process_logitem(ailp, lip, &stuck, &flushing);
 		count++;
