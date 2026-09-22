@@ -181,6 +181,7 @@
 		      <0x00 0x5040000 0x00 0x10000>;
 		reg-names = "iram", "dram";
 		resets = <&k3_reset 9 1>;
+		power-domains = <&k3_pds 7 TI_SCI_PD_EXCLUSIVE>;
 		firmware-name = "am62-mcu-m4f0_0-fw";
 		ti,sci = <&dmsc>;
 		ti,sci-dev-id = <9>;
