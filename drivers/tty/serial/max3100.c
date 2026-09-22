@@ -236,6 +236,7 @@ static void max3100_work(struct work_struct *w)
 	struct tty_port *tport = &s->port.state->port;
 	unsigned char ch;
 	int conf, cconf, cloopback, crts;
+	bool rts;
 	int rxchars;
 	u16 tx, rx;
 
@@ -249,6 +250,7 @@ static void max3100_work(struct work_struct *w)
 		s->conf_commit = 0;
 		cloopback = s->loopback_commit;
 		s->loopback_commit = 0;
+		rts = s->rts;
 		crts = s->rts_commit;
 		s->rts_commit = 0;
 		spin_unlock(&s->conf_lock);
@@ -258,7 +260,7 @@ static void max3100_work(struct work_struct *w)
 			max3100_sr(s, 0x4001, &rx);
 		if (crts) {
 			max3100_sr(s, MAX3100_WD | MAX3100_TE |
-				   (s->rts ? MAX3100_RTS : 0), &rx);
+				   (rts ? MAX3100_RTS : 0), &rx);
 			rxchars += max3100_handlerx(s, rx);
 		}
 
@@ -277,7 +279,7 @@ static void max3100_work(struct work_struct *w)
 			}
 			if (tx != 0xffff) {
 				max3100_calc_parity(s, &tx);
-				tx |= MAX3100_WD | (s->rts ? MAX3100_RTS : 0);
+				tx |= MAX3100_WD | (rts ? MAX3100_RTS : 0);
 				max3100_sr(s, tx, &rx);
 				rxchars += max3100_handlerx(s, rx);
 			}
