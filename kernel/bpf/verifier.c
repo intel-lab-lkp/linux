@@ -8278,6 +8278,7 @@ static bool is_kfunc_arg_scalar_with_name(const struct btf *btf,
 					  const char *name);
 static bool is_bpf_cast_to_kern_ctx_kfunc(const struct bpf_call_arg_meta *meta);
 static bool is_bpf_dynptr_clone_kfunc(const struct bpf_call_arg_meta *meta);
+static bool is_kfunc_dynptr_may_clobber_pkt_ptr(struct bpf_call_arg_meta *meta);
 static bool is_bpf_iter_css_task_new_kfunc(const struct bpf_call_arg_meta *meta);
 static bool is_bpf_obj_drop_kfunc(u32 func_id);
 static bool is_bpf_percpu_obj_drop_kfunc(u32 func_id);
@@ -9320,6 +9321,15 @@ static int check_func_arg(struct bpf_verifier_env *env, u32 arg, u32 slot, u32 p
 		err = process_dynptr_func(env, reg, argno, insn_idx, arg_type, meta);
 		if (err)
 			return err;
+		/*
+		 * These kfuncs only clobber packet pointers when their
+		 * destination dynptr, argument 0, is backed by skb packet data.
+		 */
+		if (arg == 0 && is_kfunc_dynptr_may_clobber_pkt_ptr(meta) &&
+		    (meta->dynptr.type_unknown ||
+		     meta->dynptr.type == BPF_DYNPTR_TYPE_SKB ||
+		     meta->dynptr.type == BPF_DYNPTR_TYPE_SKB_META))
+			meta->dynptr_may_clobber_pkt_ptr = true;
 		break;
 	}
 	case ARG_PTR_TO_ITER:
@@ -11759,7 +11769,8 @@ static int check_helper_call(struct bpf_verifier_env *env, struct bpf_insn *insn
 		if (dynptr_type == BPF_DYNPTR_TYPE_INVALID)
 			return -EFAULT;
 
-		if (dynptr_type == BPF_DYNPTR_TYPE_SKB ||
+		if (meta.dynptr.type_unknown ||
+		    dynptr_type == BPF_DYNPTR_TYPE_SKB ||
 		    dynptr_type == BPF_DYNPTR_TYPE_SKB_META)
 			/* this will trigger clear_all_pkt_pointers(), which will
 			 * invalidate all dynptr slices associated with the skb
@@ -12787,9 +12798,45 @@ static bool is_kfunc_bpf_preempt_enable(struct bpf_call_arg_meta *meta)
 	return is_kfunc_call(meta, special_kfunc_list[KF_bpf_preempt_enable]);
 }
 
+/*
+ * Dynptr kfuncs that may clobber packet pointers when called with an skb or
+ * skb_meta backed destination dynptr by pulling the packet.
+ */
+BTF_SET_START(dynptr_may_clobber_pkt_ptr_kfuncs)
+BTF_ID(func, bpf_dynptr_memset)
+BTF_ID(func, bpf_dynptr_copy)
+#ifdef CONFIG_BPF_EVENTS
+BTF_ID(func, bpf_probe_read_user_dynptr)
+BTF_ID(func, bpf_probe_read_kernel_dynptr)
+BTF_ID(func, bpf_probe_read_user_str_dynptr)
+BTF_ID(func, bpf_probe_read_kernel_str_dynptr)
+BTF_ID(func, bpf_copy_from_user_dynptr)
+BTF_ID(func, bpf_copy_from_user_str_dynptr)
+BTF_ID(func, bpf_copy_from_user_task_dynptr)
+BTF_ID(func, bpf_copy_from_user_task_str_dynptr)
+#endif
+BTF_SET_END(dynptr_may_clobber_pkt_ptr_kfuncs)
+
+static bool is_kfunc_dynptr_may_clobber_pkt_ptr(struct bpf_call_arg_meta *meta)
+{
+	return meta->btf && btf_id_set_contains(&dynptr_may_clobber_pkt_ptr_kfuncs,
+						meta->func_id);
+}
+
 bool bpf_is_kfunc_pkt_changing(struct bpf_call_arg_meta *meta)
 {
-	return is_kfunc_call(meta, special_kfunc_list[KF_bpf_xdp_pull_data]);
+	return is_kfunc_call(meta, special_kfunc_list[KF_bpf_xdp_pull_data]) ||
+	       meta->dynptr_may_clobber_pkt_ptr;
+}
+
+/*
+ * More conservative version of the above used in check_cfg(),
+ * where no register state exists and the dynptr type is unknown.
+ */
+bool bpf_is_kfunc_maybe_pkt_changing(struct bpf_call_arg_meta *meta)
+{
+	return bpf_is_kfunc_pkt_changing(meta) ||
+	       is_kfunc_dynptr_may_clobber_pkt_ptr(meta);
 }
 
 static u32 kfunc_abi_slots(const struct btf_func_model *fm)

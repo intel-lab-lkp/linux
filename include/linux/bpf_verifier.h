@@ -1589,6 +1589,7 @@ struct bpf_call_arg_meta {
 
 	/* Only set by kfunc */
 	bool r0_rdonly;
+	bool dynptr_may_clobber_pkt_ptr;
 	u32 kfunc_flags;
 	const struct btf_type *func_proto;
 	const char *func_name;
@@ -1642,6 +1643,7 @@ static inline bool bpf_is_kfunc_sleepable(struct bpf_call_arg_meta *meta)
 	return meta->kfunc_flags & KF_SLEEPABLE;
 }
 bool bpf_is_kfunc_pkt_changing(struct bpf_call_arg_meta *meta);
+bool bpf_is_kfunc_maybe_pkt_changing(struct bpf_call_arg_meta *meta);
 struct bpf_iarray *bpf_iarray_realloc(struct bpf_iarray *old, size_t n_elem);
 int bpf_copy_insn_array_uniq(struct bpf_map *map, u32 start, u32 end, u32 *off);
 bool bpf_insn_is_cond_jump(u8 code);
