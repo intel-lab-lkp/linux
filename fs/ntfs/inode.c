@@ -2150,7 +2150,9 @@ int ntfs_read_inode_mount(struct inode *vi)
 			 * ntfs_read_inode() on extents of $MFT/$DATA. But lets
 			 * hope this never happens...
 			 */
+			NVolSetMftBootstrap(vol);
 			err = ntfs_read_locked_inode(vi);
+			NVolClearMftBootstrap(vol);
 			if (err) {
 				ntfs_error(sb, "ntfs_read_inode() of $MFT failed.\n");
 				ntfs_attr_put_search_ctx(ctx);
