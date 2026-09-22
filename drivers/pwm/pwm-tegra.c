@@ -486,6 +486,7 @@ static struct platform_driver tegra_pwm_driver = {
 		.name = "tegra-pwm",
 		.of_match_table = tegra_pwm_of_match,
 		.pm = &tegra_pwm_pm_ops,
+		.disallow_override = true,
 	},
 	.probe = tegra_pwm_probe,
 	.remove = tegra_pwm_remove,
