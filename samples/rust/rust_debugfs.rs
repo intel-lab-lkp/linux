@@ -34,6 +34,7 @@
 use core::str::FromStr;
 use kernel::{
     acpi,
+    c_str,
     debugfs::{
         Dir,
         File, //
@@ -79,12 +80,44 @@ struct RustDebugFs {
     array_blob: File<Mutex<[u8; 4]>>,
     #[pin]
     vector_blob: File<Mutex<KVec<u8>>>,
+    #[pin]
+    primitive_values: PrimitiveValues,
 }
 
 #[derive(Debug)]
 struct Inner {
     x: u32,
     y: u32,
+}
+
+struct PrimitiveValues {
+    u8: u8,
+    u16: u16,
+    u32: u32,
+    u64: u64,
+    x8: u8,
+    x16: u16,
+    x32: u32,
+    x64: u64,
+    size_t: usize,
+    bool: bool,
+}
+
+impl PrimitiveValues {
+    fn new() -> Self {
+        Self {
+            u8: 8,
+            u16: 16,
+            u32: 32,
+            u64: 64,
+            x8: 0x88,
+            x16: 0x1616,
+            x32: 0x32323232,
+            x64: 0x6464646464646464,
+            size_t: 12345678,
+            bool: true,
+        }
+    }
 }
 
 impl FromStr for Inner {
@@ -171,9 +204,67 @@ impl RustDebugFs {
                     c"vector_blob",
                     new_mutex!(kernel::kvec!(0x42; SZ_4K)?),
                 ),
+                primitive_values <- PrimitiveValues::new(),
                 _debugfs: debugfs,
                 pdev: pdev.into(),
             }
         }
+        .pin_chain(|this| {
+            // SAFETY: primitive values live until the module is dropped
+            unsafe {
+                this._debugfs.create_u8(
+                    c_str!("u8"),
+                    0644,
+                    core::ptr::addr_of!(this.primitive_values.u8) as *mut _,
+                );
+                this._debugfs.create_u16(
+                    c_str!("u16"),
+                    0644,
+                    core::ptr::addr_of!(this.primitive_values.u16) as *mut _,
+                );
+                this._debugfs.create_u32(
+                    c_str!("u32"),
+                    0644,
+                    core::ptr::addr_of!(this.primitive_values.u32) as *mut _,
+                );
+                this._debugfs.create_u64(
+                    c_str!("u64"),
+                    0644,
+                    core::ptr::addr_of!(this.primitive_values.u64) as *mut _,
+                );
+                this._debugfs.create_x8(
+                    c_str!("x8"),
+                    0644,
+                    core::ptr::addr_of!(this.primitive_values.x8) as *mut _,
+                );
+                this._debugfs.create_x16(
+                    c_str!("x16"),
+                    0644,
+                    core::ptr::addr_of!(this.primitive_values.x16) as *mut _,
+                );
+                this._debugfs.create_x32(
+                    c_str!("x32"),
+                    0644,
+                    core::ptr::addr_of!(this.primitive_values.x32) as *mut _,
+                );
+                this._debugfs.create_x64(
+                    c_str!("x64"),
+                    0644,
+                    core::ptr::addr_of!(this.primitive_values.x64) as *mut _,
+                );
+                this._debugfs.create_bool(
+                    c_str!("bool"),
+                    0644,
+                    core::ptr::addr_of!(this.primitive_values.bool) as *mut _,
+                );
+                this._debugfs.create_size_t(
+                    c_str!("usize"),
+                    0644,
+                    core::ptr::addr_of!(this.primitive_values.size_t) as *mut _,
+                );
+            }
+
+            Ok(())
+        })
     }
 }

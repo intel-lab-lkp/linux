@@ -400,6 +400,58 @@ impl Dir {
     }
 }
 
+/// Implements `debugfs` interface operations for a single primitive type.
+///
+/// This macro generates the necessary FFI wrappers and glue code to expose
+/// a specific primitive type (e.g., `u32`, `bool`) to the `debugfs` filesystem.
+///
+/// # Type Support
+///
+/// Accepts standard integer primitives (`u8` through `u64`, `x8` through `x64`),
+/// `bool`, and `usize`.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// impl_debugfs_primitive!(u32, create_u32, debugfs_create_u32);
+/// ```
+macro_rules! impl_debugfs_primitive {
+    ($type:ty, $fn_name:ident,$c_func:ident) => {
+        impl Dir {
+            /// Creates a debugfs entry for a primitive `$type` value inside this directory.
+            ///
+            /// # Safety
+            ///
+            /// `value` must point to a valid memory location that outlives this directory `Dir`
+            /// (e.g., inside a pinned driver state structure or a `static` location).
+            pub unsafe fn $fn_name(&self, name: &CStr, mode: u16, value: *mut $type) {
+                let parent_ptr = match self.0.as_deref() {
+                    Some(entry) => entry.as_ptr(),
+                    None => core::ptr::null_mut(),
+                };
+
+                // SAFETY: `name` is a valid CStr. `parent_ptr` points to a valid parent
+                // dentry or NULL. The caller guarantees that `value` outlives the debugfs node.
+                unsafe {
+                    bindings::$c_func(name.as_char_ptr(), mode, parent_ptr, value);
+                }
+            }
+        }
+    };
+}
+
+// Bind native Rust primitive types to their corresponding C debugfs helpers.
+impl_debugfs_primitive!(u8, create_u8, debugfs_create_u8);
+impl_debugfs_primitive!(u16, create_u16, debugfs_create_u16);
+impl_debugfs_primitive!(u32, create_u32, debugfs_create_u32);
+impl_debugfs_primitive!(u64, create_u64, debugfs_create_u64);
+impl_debugfs_primitive!(u8, create_x8, debugfs_create_x8);
+impl_debugfs_primitive!(u16, create_x16, debugfs_create_x16);
+impl_debugfs_primitive!(u32, create_x32, debugfs_create_x32);
+impl_debugfs_primitive!(u64, create_x64, debugfs_create_x64);
+impl_debugfs_primitive!(bool, create_bool, debugfs_create_bool);
+impl_debugfs_primitive!(usize, create_size_t, debugfs_create_size_t);
+
 #[pin_data]
 /// Handle to a DebugFS scope, which ensures that attached `data` will outlive the DebugFS entry
 /// without moving.
