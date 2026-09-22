@@ -823,7 +823,8 @@ static void k_pad(struct vc_data *vc, unsigned char value, char up_flag)
 		return;		/* no action, if this is a key release */
 
 	/* kludge... shift forces cursor/number keys */
-	if (vc_kbd_mode(kbd, VC_APPLIC) && !shift_down[KG_SHIFT]) {
+	/* Pairs with the smp_store_release() in k_shift(). */
+	if (vc_kbd_mode(kbd, VC_APPLIC) && !smp_load_acquire(&shift_down[KG_SHIFT])) {
 		applkey(vc, app_map[value], 1);
 		return;
 	}
@@ -877,6 +878,7 @@ static void k_shift(struct vc_data *vc, unsigned char value, char up_flag)
 {
 	int old_state = shift_state;
 	int state;
+	unsigned char cnt;
 
 	if (rep)
 		return;
@@ -890,15 +892,18 @@ static void k_shift(struct vc_data *vc, unsigned char value, char up_flag)
 			clr_vc_kbd_led(kbd, VC_CAPSLOCK);
 	}
 
+	cnt = shift_down[value];
 	if (up_flag) {
 		/*
 		 * handle the case that two shift or control
 		 * keys are depressed simultaneously
 		 */
-		if (shift_down[value])
-			shift_down[value]--;
+		if (cnt)
+			cnt--;
 	} else
-		shift_down[value]++;
+		cnt++;
+	/* Pairs with the smp_load_acquire() in k_pad(). */
+	smp_store_release(&shift_down[value], cnt);
 
 	if (shift_down[value])
 		state = shift_state | BIT(value);
