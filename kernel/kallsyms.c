@@ -22,6 +22,9 @@
 #include <linux/sched.h>	/* for cond_resched */
 #include <linux/ctype.h>
 #include <linux/slab.h>
+#include <linux/vmalloc.h>
+#include <linux/mutex.h>
+#include <linux/rcupdate.h>
 #include <linux/filter.h>
 #include <linux/ftrace.h>
 #include <linux/kprobes.h>
@@ -90,7 +93,7 @@ tail:
 	if (maxlen)
 		*result = '\0';
 
-	/* Return to offset to the next symbol. */
+	/* Return offset to the next symbol. */
 	return off;
 }
 
@@ -139,12 +142,11 @@ static int kallsyms_strcmp_symbol(unsigned int off, const char *name)
 	return (unsigned char)*name;
 }
 
-
 /*
- * Find the offset on the compressed stream given and index in the
- * kallsyms array.
+ * Find the offset on the compressed stream given an index in the
+ * kallsyms array using legacy markers.
  */
-static unsigned int get_symbol_offset(unsigned long pos)
+static unsigned int get_symbol_offset_marker(unsigned long pos)
 {
 	const u8 *name;
 	int i, len;
@@ -177,6 +179,100 @@ static unsigned int get_symbol_offset(unsigned long pos)
 	return name - kallsyms_names;
 }
 
+/*
+ * Dynamic symbol offset table.
+ * Allocated on demand during high-volume lookup batches and reclaimed after.
+ */
+static u32 *dyn_kallsyms_offsets __read_mostly;
+static DEFINE_MUTEX(dyn_kallsyms_mutex);
+static unsigned int dyn_kallsyms_refcnt;
+
+static u32 *kallsyms_build_offsets(void)
+{
+	const u8 *name = kallsyms_names;
+	u32 *offsets;
+	unsigned int i;
+
+	offsets = kvmalloc_array(kallsyms_num_syms, sizeof(u32), GFP_KERNEL);
+	if (!offsets)
+		return NULL;
+
+	for (i = 0; i < kallsyms_num_syms; i++) {
+		unsigned int len;
+		const u8 *data;
+
+		offsets[i] = name - kallsyms_names;
+		data = get_symbol_data(offsets[i], &len);
+		name = data + len;
+	}
+
+	return offsets;
+}
+
+int kallsyms_lookup_batch_start(void)
+{
+	int ret = 0;
+
+	mutex_lock(&dyn_kallsyms_mutex);
+	if (!dyn_kallsyms_refcnt) {
+		u32 *offsets = kallsyms_build_offsets();
+
+		if (!offsets) {
+			ret = -ENOMEM;
+			goto out;
+		}
+		rcu_assign_pointer(dyn_kallsyms_offsets, offsets);
+	}
+	dyn_kallsyms_refcnt++;
+out:
+	mutex_unlock(&dyn_kallsyms_mutex);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(kallsyms_lookup_batch_start);
+
+void kallsyms_lookup_batch_end(void)
+{
+	u32 *offsets = NULL;
+
+	mutex_lock(&dyn_kallsyms_mutex);
+	if (WARN_ON(!dyn_kallsyms_refcnt))
+		goto out;
+
+	if (--dyn_kallsyms_refcnt == 0) {
+		offsets = dyn_kallsyms_offsets;
+		rcu_assign_pointer(dyn_kallsyms_offsets, NULL);
+	}
+out:
+	mutex_unlock(&dyn_kallsyms_mutex);
+
+	if (offsets) {
+		synchronize_rcu();
+		kvfree(offsets);
+	}
+}
+EXPORT_SYMBOL_GPL(kallsyms_lookup_batch_end);
+
+/*
+ * Find the offset on the compressed table given an index in the
+ * kallsyms array.
+ */
+static inline unsigned int get_symbol_offset(unsigned long pos)
+{
+	unsigned int off;
+	u32 *offsets;
+
+	rcu_read_lock();
+	offsets = rcu_dereference(dyn_kallsyms_offsets);
+	if (offsets) {
+		off = offsets[pos];
+		rcu_read_unlock();
+		return off;
+	}
+	rcu_read_unlock();
+
+	return get_symbol_offset_marker(pos);
+}
+
 unsigned long kallsyms_sym_address(int idx)
 {
 	/* non-relocatable 32-bit kernels just embed the value directly */
@@ -206,6 +302,7 @@ static int kallsyms_lookup_names(const char *name,
 	low = 0;
 	high = kallsyms_num_syms - 1;
 
+	rcu_read_lock();
 	while (low <= high) {
 		mid = low + (high - low) / 2;
 		seq = get_symbol_seq(mid);
@@ -219,8 +316,10 @@ static int kallsyms_lookup_names(const char *name,
 			break;
 	}
 
-	if (low > high)
+	if (low > high) {
+		rcu_read_unlock();
 		return -ESRCH;
+	}
 
 	low = mid;
 	while (low) {
@@ -243,6 +342,7 @@ static int kallsyms_lookup_names(const char *name,
 		}
 		*end = high;
 	}
+	rcu_read_unlock();
 
 	return 0;
 }

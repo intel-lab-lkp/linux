@@ -74,6 +74,10 @@ int kallsyms_on_each_symbol(int (*fn)(void *, const char *, unsigned long),
 int kallsyms_on_each_match_symbol(int (*fn)(void *, unsigned long),
 				  const char *name, void *data);
 
+/* Transient dynamic lookup index bracketing */
+int kallsyms_lookup_batch_start(void);
+void kallsyms_lookup_batch_end(void);
+
 /* Lookup the address for a symbol. Returns 0 if not found. */
 unsigned long kallsyms_lookup_name(const char *name);
 
@@ -163,6 +167,15 @@ static inline int kallsyms_on_each_match_symbol(int (*fn)(void *, unsigned long)
 						const char *name, void *data)
 {
 	return -EOPNOTSUPP;
+}
+
+static inline int kallsyms_lookup_batch_start(void)
+{
+	return 0;
+}
+
+static inline void kallsyms_lookup_batch_end(void)
+{
 }
 #endif /*CONFIG_KALLSYMS*/
 
