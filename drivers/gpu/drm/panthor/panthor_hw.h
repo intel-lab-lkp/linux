@@ -101,4 +101,10 @@ static inline u64 panthor_hw_get_l2_features(struct panthor_device *ptdev)
 	return ptdev->gpu_info.l2_features;
 }
 
+static inline bool panthor_hw_is_gen5_am(struct device *dev)
+{
+	return device_property_match_string(dev, "compatible",
+					    "arm,mali-gen5-am") >= 0;
+}
+
 #endif /* __PANTHOR_HW_H__ */

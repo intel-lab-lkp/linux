@@ -12,6 +12,7 @@
 
 #include "panthor_devfreq.h"
 #include "panthor_device.h"
+#include "panthor_hw.h"
 
 /**
  * struct panthor_devfreq - Device frequency management
@@ -164,6 +165,19 @@ int panthor_devfreq_init(struct panthor_device *ptdev)
 	 */
 	table = dev_pm_opp_get_opp_table(dev);
 	if (IS_ERR_OR_NULL(table)) {
+		/*
+		 * On v15 GPUs, frequency scaling is handled outside of panthor
+		 * by the AM_GOVERNOR block, so the GPU DT node may not provide
+		 * an OPP table. In such cases, do not initialize devfreq for
+		 * panthor.
+		 */
+		if (panthor_hw_is_gen5_am(ptdev->base.dev) &&
+		    PTR_ERR(table) == -ENODEV) {
+			drmm_kfree(&ptdev->base, pdevfreq);
+			ptdev->devfreq = NULL;
+			return 0;
+		}
+
 		ret = devm_pm_opp_set_regulators(dev, reg_names);
 		if (ret && ret != -ENODEV) {
 			if (ret != -EPROBE_DEFER)
@@ -267,7 +281,7 @@ void panthor_devfreq_resume(struct panthor_device *ptdev)
 {
 	struct panthor_devfreq *pdevfreq = ptdev->devfreq;
 
-	if (!pdevfreq->devfreq)
+	if (!pdevfreq || !pdevfreq->devfreq)
 		return;
 
 	panthor_devfreq_reset(pdevfreq);
@@ -279,7 +293,7 @@ void panthor_devfreq_suspend(struct panthor_device *ptdev)
 {
 	struct panthor_devfreq *pdevfreq = ptdev->devfreq;
 
-	if (!pdevfreq->devfreq)
+	if (!pdevfreq || !pdevfreq->devfreq)
 		return;
 
 	drm_WARN_ON(&ptdev->base, devfreq_suspend_device(pdevfreq->devfreq));
@@ -290,7 +304,7 @@ void panthor_devfreq_record_busy(struct panthor_device *ptdev)
 	struct panthor_devfreq *pdevfreq = ptdev->devfreq;
 	unsigned long irqflags;
 
-	if (!pdevfreq->devfreq)
+	if (!pdevfreq || !pdevfreq->devfreq)
 		return;
 
 	spin_lock_irqsave(&pdevfreq->lock, irqflags);
@@ -306,7 +320,7 @@ void panthor_devfreq_record_idle(struct panthor_device *ptdev)
 	struct panthor_devfreq *pdevfreq = ptdev->devfreq;
 	unsigned long irqflags;
 
-	if (!pdevfreq->devfreq)
+	if (!pdevfreq || !pdevfreq->devfreq)
 		return;
 
 	spin_lock_irqsave(&pdevfreq->lock, irqflags);
@@ -319,14 +333,17 @@ void panthor_devfreq_record_idle(struct panthor_device *ptdev)
 
 unsigned long panthor_devfreq_get_freq(struct panthor_device *ptdev)
 {
+	int (*get_cur_freq)(struct device *dev, unsigned long *freq);
 	struct panthor_devfreq *pdevfreq = ptdev->devfreq;
 	unsigned long freq = 0;
 	int ret;
 
-	if (!pdevfreq->devfreq)
-		return 0;
+	if (!pdevfreq || !pdevfreq->devfreq)
+		get_cur_freq = panthor_devfreq_get_cur_freq;
+	else
+		get_cur_freq = pdevfreq->devfreq->profile->get_cur_freq;
 
-	ret = pdevfreq->devfreq->profile->get_cur_freq(ptdev->base.dev, &freq);
+	ret = get_cur_freq(ptdev->base.dev, &freq);
 	if (ret)
 		return 0;
 
