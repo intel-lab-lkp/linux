@@ -4910,6 +4910,9 @@ int ice_init_dev(struct ice_pf *pf)
 		return -EIO;
 	}
 
+	mutex_init(&pf->dplls.lock);
+	init_rwsem(&pf->dplls.health_notify_rwsem);
+
 	ice_start_service_task(pf);
 
 	return 0;
@@ -4919,6 +4922,8 @@ void ice_deinit_dev(struct ice_pf *pf)
 {
 	ice_service_task_stop(pf);
 
+	mutex_destroy(&pf->dplls.lock);
+
 	/* Service task is already stopped, so call reset directly. */
 	ice_reset(&pf->hw, ICE_RESET_PFR);
 	pci_wait_for_pending_transaction(pf->pdev);
@@ -4927,18 +4932,12 @@ void ice_deinit_dev(struct ice_pf *pf)
 
 static void ice_init_features(struct ice_pf *pf)
 {
+	u16 code = ICE_AQC_HEALTH_STATUS_INFO_LOSS_OF_LOCK;
 	struct device *dev = ice_pf_to_dev(pf);
+	int err;
 
 	if (ice_is_safe_mode(pf))
 		return;
-
-	/* pf->dplls.lock guards TSPLL/CGU access shared between the DPLL
-	 * subsystem callbacks and the PTP periodic worker's TSPLL monitor.
-	 * Initialize it before ice_ptp_init() so the PTP kworker never sees
-	 * an uninitialized mutex, and destroy it in ice_deinit_features()
-	 * only after ice_ptp_release() has drained the kworker.
-	 */
-	mutex_init(&pf->dplls.lock);
 
 	/* initialize DDP driven features */
 	if (test_bit(ICE_FLAG_PTP_SUPPORTED, pf->flags))
@@ -4947,8 +4946,28 @@ static void ice_init_features(struct ice_pf *pf)
 	if (ice_is_feature_supported(pf, ICE_F_GNSS))
 		ice_gnss_init(pf);
 
+	/* Initialize unmanaged DPLL detection. Check the cheap, purely local
+	 * conditions first and only issue the health-status-code AQ command
+	 * when they all hold, instead of doing an unconditional round trip
+	 * to firmware on hardware that can never support this mode.
+	 * ice_cgu_get_num_pins() also doubles as an E835 exclusion: E835
+	 * device IDs share ICE_MAC_E830 with true E830 parts but have no
+	 * entry in ice_cgu_get_pin_desc()'s switch, so it returns 0 pins
+	 * for them.
+	 */
+	pf->dplls.unmanaged = false;
+	if (pf->hw.mac_type == ICE_MAC_E830 &&
+	    ice_cgu_get_num_pins(&pf->hw, true) &&
+	    ice_is_unmanaged_cgu_in_netlist(&pf->hw)) {
+		err = ice_is_health_status_code_supported(&pf->hw, code,
+							  &pf->dplls.unmanaged);
+		if (err)
+			pf->dplls.unmanaged = false;
+	}
+
 	if (ice_is_feature_supported(pf, ICE_F_CGU) ||
-	    ice_is_feature_supported(pf, ICE_F_PHY_RCLK))
+	    ice_is_feature_supported(pf, ICE_F_PHY_RCLK) ||
+	    pf->dplls.unmanaged)
 		ice_dpll_init(pf);
 
 	/* Note: Flow director init failure is non-fatal to load */
@@ -4989,7 +5008,6 @@ static void ice_deinit_features(struct ice_pf *pf)
 		ice_ptp_release(pf);
 	if (test_bit(ICE_FLAG_DPLL, pf->flags))
 		ice_dpll_deinit(pf);
-	mutex_destroy(&pf->dplls.lock);
 	if (pf->eswitch_mode == DEVLINK_ESWITCH_MODE_SWITCHDEV)
 		xa_destroy(&pf->eswitch.reprs);
 	ice_hwmon_exit(pf);
