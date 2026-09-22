@@ -51,8 +51,10 @@ static ssize_t features_show(struct device *_d,
 	unsigned int i;
 	ssize_t len = 0;
 
-	/* We actually represent this as a bitstring, as it could be
-	 * arbitrary length in future. */
+	/*
+	 * We actually represent this as a bitstring, as it could be
+	 * arbitrary length in future.
+	 */
 	for (i = 0; i < VIRTIO_FEATURES_BITS; i++)
 		len += sysfs_emit_at(buf, len, "%c",
 			       __virtio_test_bit(dev, i) ? '1' : '0');
@@ -80,8 +82,10 @@ static inline int virtio_id_match(const struct virtio_device *dev,
 	return id->vendor == VIRTIO_DEV_ANY_ID || id->vendor == dev->id.vendor;
 }
 
-/* This looks through all the IDs a driver claims to support.  If any of them
- * match, we return 1 and the kernel will call virtio_dev_probe(). */
+/*
+ * This looks through all the IDs a driver claims to support.
+ * If any of them match, we return 1 and the kernel will call virtio_dev_probe().
+ */
 static int virtio_dev_match(struct device *_dv, const struct device_driver *_dr)
 {
 	unsigned int i;
@@ -567,8 +571,12 @@ int register_virtio_device(struct virtio_device *dev)
 	INIT_LIST_HEAD(&dev->vqs);
 	spin_lock_init(&dev->vqs_list_lock);
 
-	/* We always start by resetting the device, in case a previous
-	 * driver messed it up.  This also tests that code path a little. */
+	/*
+	 * We always start by resetting the device, in case a previous
+	 * driver messed it up.
+	 *
+	 * This also tests that code path a little.
+	 */
 	virtio_reset_device(dev);
 
 	/* Acknowledge that we've seen the device. */
@@ -617,15 +625,19 @@ static int virtio_device_restore_priv(struct virtio_device *dev, bool restore)
 	struct virtio_driver *drv = drv_to_virtio(dev->dev.driver);
 	int ret;
 
-	/* We always start by resetting the device, in case a previous
-	 * driver messed it up. */
+	/*
+	 * We always start by resetting the device, in case a previous
+	 * driver messed it up.
+	 */
 	virtio_reset_device(dev);
 
 	/* Acknowledge that we've seen the device. */
 	virtio_add_status(dev, VIRTIO_CONFIG_S_ACKNOWLEDGE);
 
-	/* Maybe driver failed before freeze.
-	 * Restore the failed status, for debugging. */
+	/*
+	 * Maybe driver failed before freeze.
+	 * Restore the failed status, for debugging.
+	 */
 	if (dev->failed)
 		virtio_add_status(dev, VIRTIO_CONFIG_S_FAILED);
 
