@@ -76,8 +76,8 @@ struct k3_rproc_dev_data {
  * @reset: reset control handle
  * @data: pointer to DSP-specific device data
  * @tsp: TI-SCI processor control handle
+ * @tsd: TI-SCI device control handle
  * @ti_sci: TI-SCI handle
- * @ti_sci_id: TI-SCI device identifier
  * @mbox: mailbox channel handle
  * @client: mailbox client to request the mailbox channel
  * @priv: void pointer to carry any private data
@@ -92,8 +92,8 @@ struct k3_rproc {
 	struct reset_control *reset;
 	const struct k3_rproc_dev_data *data;
 	struct ti_sci_proc *tsp;
+	struct ti_sci_dev *tsd;
 	const struct ti_sci_handle *ti_sci;
-	u32 ti_sci_id;
 	struct mbox_chan *mbox;
 	struct mbox_client client;
 	void *priv;

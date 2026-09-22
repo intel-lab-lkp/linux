@@ -20,6 +20,7 @@
 
 #include "omap_remoteproc.h"
 #include "remoteproc_internal.h"
+#include "ti_sci_dev.h"
 #include "ti_sci_proc.h"
 #include "ti_k3_common.h"
 
@@ -135,8 +136,7 @@ static int k3_r5_split_reset(struct k3_rproc *kproc)
 		return ret;
 	}
 
-	ret = kproc->ti_sci->ops.dev_ops.put_device(kproc->ti_sci,
-						    kproc->ti_sci_id);
+	ret = ti_sci_dev_put_device(kproc->tsd);
 	if (ret) {
 		dev_err(kproc->dev, "module-reset assert failed, ret = %d\n",
 			ret);
@@ -151,8 +151,7 @@ static int k3_r5_split_release(struct k3_rproc *kproc)
 {
 	int ret;
 
-	ret = kproc->ti_sci->ops.dev_ops.get_device(kproc->ti_sci,
-						    kproc->ti_sci_id);
+	ret = ti_sci_dev_get_device(kproc->tsd);
 	if (ret) {
 		dev_err(kproc->dev, "module-reset deassert failed, ret = %d\n",
 			ret);
@@ -163,8 +162,7 @@ static int k3_r5_split_release(struct k3_rproc *kproc)
 	if (ret) {
 		dev_err(kproc->dev, "local-reset deassert failed, ret = %d\n",
 			ret);
-		if (kproc->ti_sci->ops.dev_ops.put_device(kproc->ti_sci,
-							  kproc->ti_sci_id))
+		if (ti_sci_dev_put_device(kproc->tsd))
 			dev_warn(kproc->dev, "module-reset assert back failed\n");
 	}
 
@@ -191,8 +189,7 @@ static int k3_r5_lockstep_reset(struct k3_r5_cluster *cluster)
 	/* disable PSC modules on all applicable cores */
 	list_for_each_entry(core, &cluster->cores, elem) {
 		kproc = core->kproc;
-		ret = kproc->ti_sci->ops.dev_ops.put_device(kproc->ti_sci,
-							    kproc->ti_sci_id);
+		ret = ti_sci_dev_put_device(kproc->tsd);
 		if (ret) {
 			dev_err(core->dev, "module-reset assert failed, ret = %d\n",
 				ret);
@@ -205,8 +202,7 @@ static int k3_r5_lockstep_reset(struct k3_r5_cluster *cluster)
 unroll_module_reset:
 	list_for_each_entry_continue_reverse(core, &cluster->cores, elem) {
 		kproc = core->kproc;
-		if (kproc->ti_sci->ops.dev_ops.put_device(kproc->ti_sci,
-							  kproc->ti_sci_id))
+		if (ti_sci_dev_put_device(kproc->tsd))
 			dev_warn(core->dev, "module-reset assert back failed\n");
 	}
 	core = list_last_entry(&cluster->cores, struct k3_r5_core, elem);
@@ -228,8 +224,7 @@ static int k3_r5_lockstep_release(struct k3_r5_cluster *cluster)
 	/* enable PSC modules on all applicable cores */
 	list_for_each_entry_reverse(core, &cluster->cores, elem) {
 		kproc = core->kproc;
-		ret = kproc->ti_sci->ops.dev_ops.get_device(kproc->ti_sci,
-							    kproc->ti_sci_id);
+		ret = ti_sci_dev_get_device(kproc->tsd);
 		if (ret) {
 			dev_err(core->dev, "module-reset deassert failed, ret = %d\n",
 				ret);
@@ -259,8 +254,7 @@ unroll_local_reset:
 unroll_module_reset:
 	list_for_each_entry_from(core, &cluster->cores, elem) {
 		kproc = core->kproc;
-		if (kproc->ti_sci->ops.dev_ops.put_device(kproc->ti_sci,
-							  kproc->ti_sci_id))
+		if (ti_sci_dev_put_device(kproc->tsd))
 			dev_warn(core->dev, "module-reset assert back failed\n");
 	}
 
@@ -822,8 +816,7 @@ static int k3_r5_rproc_configure_mode(struct k3_rproc *kproc)
 
 	core0 = list_first_entry(&cluster->cores, struct k3_r5_core, elem);
 
-	ret = kproc->ti_sci->ops.dev_ops.is_on(kproc->ti_sci, kproc->ti_sci_id,
-					       &r_state, &c_state);
+	ret = ti_sci_dev_is_on(kproc->tsd, &r_state, &c_state);
 	if (ret) {
 		dev_err(cdev, "failed to get initial state, mode cannot be determined, ret = %d\n",
 			ret);
@@ -1018,7 +1011,6 @@ static int k3_r5_cluster_rproc_init(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct k3_rproc *kproc;
 	struct k3_r5_core *core, *core1;
-	struct device_node *np;
 	struct device *cdev;
 	const char *fw_name;
 	struct rproc *rproc;
@@ -1027,7 +1019,6 @@ static int k3_r5_cluster_rproc_init(struct platform_device *pdev)
 	core1 = list_last_entry(&cluster->cores, struct k3_r5_core, elem);
 	list_for_each_entry(core, &cluster->cores, elem) {
 		cdev = core->dev;
-		np = dev_of_node(cdev);
 		ret = rproc_of_parse_firmware(cdev, 0, &fw_name);
 		if (ret) {
 			dev_err(dev, "failed to parse firmware-name property, ret = %d\n",
@@ -1066,12 +1057,6 @@ static int k3_r5_cluster_rproc_init(struct platform_device *pdev)
 			goto out;
 		}
 
-		ret = of_property_read_u32(np, "ti,sci-dev-id", &kproc->ti_sci_id);
-		if (ret) {
-			dev_err(cdev, "missing 'ti,sci-dev-id' property\n");
-			goto out;
-		}
-
 		kproc->reset = devm_reset_control_get_exclusive(cdev, NULL);
 		if (IS_ERR(kproc->reset)) {
 			ret = dev_err_probe(cdev, PTR_ERR(kproc->reset),
@@ -1083,6 +1068,13 @@ static int k3_r5_cluster_rproc_init(struct platform_device *pdev)
 		if (IS_ERR(kproc->tsp)) {
 			ret = dev_err_probe(cdev, PTR_ERR(kproc->tsp),
 					    "failed to construct ti-sci proc control\n");
+			goto out;
+		}
+
+		kproc->tsd = ti_sci_dev_of_get_tsd(cdev, kproc->ti_sci);
+		if (IS_ERR(kproc->tsd)) {
+			ret = dev_err_probe(cdev, PTR_ERR(kproc->tsd),
+					    "failed to construct ti-sci dev control\n");
 			goto out;
 		}
 

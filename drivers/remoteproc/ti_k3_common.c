@@ -32,6 +32,7 @@
 
 #include "omap_remoteproc.h"
 #include "remoteproc_internal.h"
+#include "ti_sci_dev.h"
 #include "ti_sci_proc.h"
 #include "ti_k3_common.h"
 
@@ -114,8 +115,7 @@ int k3_rproc_reset(struct k3_rproc *kproc)
 		if (ret)
 			dev_err(dev, "local-reset assert failed (%pe)\n", ERR_PTR(ret));
 	} else {
-		ret = kproc->ti_sci->ops.dev_ops.put_device(kproc->ti_sci,
-							    kproc->ti_sci_id);
+		ret = ti_sci_dev_put_device(kproc->tsd);
 		if (ret)
 			dev_err(dev, "module-reset assert failed (%pe)\n", ERR_PTR(ret));
 	}
@@ -134,13 +134,11 @@ int k3_rproc_release(struct k3_rproc *kproc)
 		ret = reset_control_deassert(kproc->reset);
 		if (ret) {
 			dev_err(dev, "local-reset deassert failed, (%pe)\n", ERR_PTR(ret));
-			if (kproc->ti_sci->ops.dev_ops.put_device(kproc->ti_sci,
-								  kproc->ti_sci_id))
+			if (ti_sci_dev_put_device(kproc->tsd))
 				dev_warn(dev, "module-reset assert back failed\n");
 		}
 	} else {
-		ret = kproc->ti_sci->ops.dev_ops.get_device(kproc->ti_sci,
-							    kproc->ti_sci_id);
+		ret = ti_sci_dev_get_device(kproc->tsd);
 		if (ret)
 			dev_err(dev, "module-reset deassert failed (%pe)\n", ERR_PTR(ret));
 	}
@@ -217,8 +215,7 @@ int k3_rproc_prepare(struct rproc *rproc)
 		}
 	}
 
-	ret = kproc->ti_sci->ops.dev_ops.get_device(kproc->ti_sci,
-						    kproc->ti_sci_id);
+	ret = ti_sci_dev_get_device(kproc->tsd);
 	if (ret) {
 		dev_err(dev, "could not deassert module-reset for internal RAM loading\n");
 		return ret;
@@ -247,8 +244,7 @@ int k3_rproc_unprepare(struct rproc *rproc)
 	if (rproc->state == RPROC_DETACHED)
 		return 0;
 
-	ret = kproc->ti_sci->ops.dev_ops.put_device(kproc->ti_sci,
-						    kproc->ti_sci_id);
+	ret = ti_sci_dev_put_device(kproc->tsd);
 	if (ret) {
 		dev_err(dev, "module-reset assert failed\n");
 		return ret;

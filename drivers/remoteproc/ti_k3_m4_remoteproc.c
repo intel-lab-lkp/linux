@@ -16,6 +16,7 @@
 
 #include "omap_remoteproc.h"
 #include "remoteproc_internal.h"
+#include "ti_sci_dev.h"
 #include "ti_sci_proc.h"
 #include "ti_k3_common.h"
 
@@ -68,10 +69,6 @@ static int k3_m4_rproc_probe(struct platform_device *pdev)
 		return dev_err_probe(dev, PTR_ERR(kproc->ti_sci),
 				     "failed to get ti-sci handle\n");
 
-	ret = of_property_read_u32(dev->of_node, "ti,sci-dev-id", &kproc->ti_sci_id);
-	if (ret)
-		return dev_err_probe(dev, ret, "missing 'ti,sci-dev-id' property\n");
-
 	kproc->reset = devm_reset_control_get_exclusive(dev, NULL);
 	if (IS_ERR(kproc->reset))
 		return dev_err_probe(dev, PTR_ERR(kproc->reset), "failed to get reset\n");
@@ -80,6 +77,11 @@ static int k3_m4_rproc_probe(struct platform_device *pdev)
 	if (IS_ERR(kproc->tsp))
 		return dev_err_probe(dev, PTR_ERR(kproc->tsp),
 				     "failed to construct ti-sci proc control\n");
+
+	kproc->tsd = ti_sci_dev_of_get_tsd(dev, kproc->ti_sci);
+	if (IS_ERR(kproc->tsd))
+		return dev_err_probe(dev, PTR_ERR(kproc->tsd),
+				     "failed to construct ti-sci dev control\n");
 
 	ret = ti_sci_proc_request(kproc->tsp);
 	if (ret < 0)
@@ -96,8 +98,7 @@ static int k3_m4_rproc_probe(struct platform_device *pdev)
 	if (ret)
 		return dev_err_probe(dev, ret, "reserved memory init failed\n");
 
-	ret = kproc->ti_sci->ops.dev_ops.is_on(kproc->ti_sci, kproc->ti_sci_id,
-					       &r_state, &p_state);
+	ret = ti_sci_dev_is_on(kproc->tsd, &r_state, &p_state);
 	if (ret)
 		return dev_err_probe(dev, ret,
 				     "failed to get initial state, mode cannot be determined\n");
