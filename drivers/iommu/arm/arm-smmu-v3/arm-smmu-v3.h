@@ -1285,6 +1285,36 @@ static inline void arm_smmu_write_strtab_l1_desc(struct arm_smmu_strtab_l1 *dst,
 	WRITE_ONCE(dst->l2ptr, cpu_to_le64(val));
 }
 
+/* Convert page size of 12,14,16 (log2) to 1,2,3 */
+static inline u8 arm_smmu_tlb_inv_tg_enc(size_t tg)
+{
+	return (tg - 10) / 2;
+}
+
+/* Only valid for leaf invalidations, non-leaf must use TTL=0 */
+static inline u8 arm_smmu_tlb_inv_ttl(size_t granule, size_t tg)
+{
+	return 4 - ((ilog2(granule) - 3) / (tg - 3));
+}
+
+static inline u64 arm_smmu_tlb_inv_addr(unsigned long iova, bool leaf, u8 ttl, u8 tg_enc)
+{
+	return FIELD_PREP(CMDQ_TLBI_1_LEAF, leaf) |
+		FIELD_PREP(CMDQ_TLBI_1_TTL, ttl) |
+		FIELD_PREP(CMDQ_TLBI_1_TG, tg_enc) |
+		(iova & ~GENMASK_U64(11, 0));
+}
+
+/*
+ * @num: Number of 2^scale granules, must be >= 1.
+ */
+static inline u64 arm_smmu_tlb_inv_range_enc(u8 num, u8 scale)
+{
+	/* Keep the pre-DS 5-bit truncation when scale > 31 */
+	return FIELD_PREP(CMDQ_TLBI_0_NUM, num - 1) |
+		FIELD_PREP(CMDQ_TLBI_0_SCALE, scale & 0x1f);
+}
+
 #ifdef CONFIG_ARM_SMMU_V3_SVA
 bool arm_smmu_sva_supported(struct arm_smmu_device *smmu);
 void arm_smmu_sva_notifier_synchronize(void);
