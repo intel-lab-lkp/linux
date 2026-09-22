@@ -1,0 +1,62 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/leds/lltc,lt3593.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Linear Technology LT3593 LED controller
+
+maintainers:
+  - Daniel Mack <daniel@zonque.org>
+
+description: |
+  The LT3593 is a step-up DC/DC converter designed to drive a single LED
+  string. Its output current is programmed by the number of pulses applied to
+  the CTRL pin, which also acts as the enable input.
+
+  The hardware supports only one LED. The properties of this LED are
+  configured in a sub-node in the device node. If multiple chips of this type
+  are found in a design, each one needs to be handled by its own device node.
+
+properties:
+  compatible:
+    const: lltc,lt3593
+
+  lltc,ctrl-gpios:
+    maxItems: 1
+    description:
+      A handle to the GPIO that is connected to the 'CTRL' pin of the chip.
+
+  led:
+    type: object
+    $ref: common.yaml#
+    unevaluatedProperties: false
+    description:
+      Properties of the LED driven by the controller.
+
+required:
+  - compatible
+  - lltc,ctrl-gpios
+  - led
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    #include <dt-bindings/leds/common.h>
+
+    led-controller {
+        compatible = "lltc,lt3593";
+        pinctrl-names = "default";
+        pinctrl-0 = <&lt3593_pins>;
+        lltc,ctrl-gpios = <&gpio 17 GPIO_ACTIVE_HIGH>;
+
+        led {
+            function = LED_FUNCTION_BACKLIGHT;
+            color = <LED_COLOR_ID_WHITE>;
+            default-state = "on";
+        };
+    };
+
+...
