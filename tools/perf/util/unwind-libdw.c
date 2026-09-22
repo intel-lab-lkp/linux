@@ -4,7 +4,9 @@
 #include <elfutils/libdw.h>
 #include <elfutils/libdwfl.h>
 #include <inttypes.h>
+#include <elf.h>
 #include <errno.h>
+#include <string.h>
 #include "debug.h"
 #include "dso.h"
 #include <dwarf-regs.h>
@@ -261,10 +263,42 @@ static bool memory_read(Dwfl *dwfl __maybe_unused, Dwarf_Addr addr, Dwarf_Word *
 	}
 
 	offset  = addr - start;
-	*result = *(Dwarf_Word *)&stack->data[offset];
+	memcpy(result, &stack->data[offset], sizeof(*result));
 	pr_debug("unwind: access_mem addr 0x%" PRIx64 ", val %lx, offset %d\n",
 		 addr, (unsigned long)*result, offset);
 	return true;
+}
+
+/*
+ * The sampled window's %l and %i registers (DWARF 16-31) are not in the
+ * sample; the kernel flushed them to the register save area at the top of
+ * the dumped stack.
+ */
+static void libdw_set_sparc_window_registers(struct unwind_info *ui,
+					     struct regs_dump *user_regs,
+					     Dwarf_Word *dwarf_regs)
+{
+	struct stack_dump *stack = &ui->sample->user_stack;
+	bool abi64 = user_regs->abi == PERF_SAMPLE_REGS_ABI_64;
+	size_t wsize = abi64 ? sizeof(u64) : sizeof(u32);
+	u64 sp, offset = abi64 ? 2047 : 0;
+
+	if (perf_reg_value(&sp, user_regs, perf_arch_reg_sp(ui->e_machine)))
+		return;
+	if (offset + 16 * wsize > stack->size)
+		return;
+
+	for (int i = 0; i < 16; i++) {
+		const char *p = &stack->data[offset + i * wsize];
+		u32 w32;
+
+		if (abi64) {
+			memcpy(&dwarf_regs[16 + i], p, sizeof(u64));
+		} else {
+			memcpy(&w32, p, sizeof(w32));
+			dwarf_regs[16 + i] = w32;
+		}
+	}
 }
 
 static bool libdw_set_initial_registers(Dwfl_Thread *thread, void *arg)
@@ -276,6 +310,7 @@ static bool libdw_set_initial_registers(Dwfl_Thread *thread, void *arg)
 	int max_dwarf_reg = 0;
 	bool ret;
 	uint16_t e_machine = ui->e_machine;
+	bool is_sparc = e_machine == EM_SPARC || e_machine == EM_SPARCV9;
 	int e_flags = ui->e_flags;
 	uint64_t ip_perf_reg = perf_arch_reg_ip(e_machine);
 	Dwarf_Word val = 0;
@@ -295,6 +330,8 @@ static bool libdw_set_initial_registers(Dwfl_Thread *thread, void *arg)
 				max_dwarf_reg = dwarf_reg;
 		}
 	}
+	if (is_sparc && max_dwarf_reg < 31)
+		max_dwarf_reg = 31;
 
 	dwarf_regs = calloc(max_dwarf_reg + 1, sizeof(*dwarf_regs));
 	if (!dwarf_regs)
@@ -313,6 +350,8 @@ static bool libdw_set_initial_registers(Dwfl_Thread *thread, void *arg)
 			}
 		}
 	}
+	if (is_sparc)
+		libdw_set_sparc_window_registers(ui, user_regs, dwarf_regs);
 	if (perf_reg_value(&val, user_regs, ip_perf_reg) == 0)
 		dwfl_thread_state_register_pc(thread, val);
 

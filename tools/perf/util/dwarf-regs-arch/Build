@@ -6,4 +6,5 @@ perf-util-$(CONFIG_LIBDW) += dwarf-regs-mips.o
 perf-util-$(CONFIG_LIBDW) += dwarf-regs-powerpc.o
 perf-util-$(CONFIG_LIBDW) += dwarf-regs-riscv.o
 perf-util-$(CONFIG_LIBDW) += dwarf-regs-s390.o
+perf-util-$(CONFIG_LIBDW) += dwarf-regs-sparc.o
 perf-util-$(CONFIG_LIBDW) += dwarf-regs-x86.o
