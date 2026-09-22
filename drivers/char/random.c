@@ -83,7 +83,11 @@ static enum {
 	CRNG_READY = 2  /* Fully initialized with POOL_READY_BITS collected */
 } crng_init __read_mostly = CRNG_EMPTY;
 static DEFINE_STATIC_KEY_FALSE(crng_is_ready);
-#define crng_ready() (static_branch_likely(&crng_is_ready) || crng_init >= CRNG_READY)
+static inline bool crng_ready(void)
+{
+	/* Pairs with the smp_store_release() of crng_init in crng_reseed(). */
+	return static_branch_likely(&crng_is_ready) || smp_load_acquire(&crng_init) >= CRNG_READY;
+}
 /* Various types of waiters for crng_init->CRNG_READY transition. */
 static DECLARE_WAIT_QUEUE_HEAD(crng_init_wait);
 static struct fasync_struct *fasync;
@@ -282,8 +286,14 @@ static void crng_reseed(struct work_struct *work)
 	if (IS_ENABLED(CONFIG_VDSO_GETRANDOM))
 		smp_store_release((unsigned long *)&vdso_k_rng_data->generation, next_gen + 1);
 
-	if (!static_branch_likely(&crng_is_ready))
-		crng_init = CRNG_READY;
+	if (!static_branch_likely(&crng_is_ready)) {
+		/*
+		 * crng_ready() tests crng_init without base_crng.lock on the
+		 * fast paths. Publish the state after the new key and the
+		 * generation with release semantics.
+		 */
+		smp_store_release(&crng_init, CRNG_READY);
+	}
 	spin_unlock_irqrestore(&base_crng.lock, flags);
 	memzero_explicit(key, sizeof(key));
 }
