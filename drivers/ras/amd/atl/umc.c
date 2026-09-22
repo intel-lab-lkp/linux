@@ -401,20 +401,15 @@ static u8 get_coh_st_inst_id(struct atl_err *err)
 	return FIELD_GET(UMC_CHANNEL_NUM, err->ipid);
 }
 
-unsigned long convert_umc_mca_addr_to_sys_addr(struct atl_err *err)
+static unsigned long convert_umc_mca_addr_to_sys_addr(struct atl_err *err)
 {
-	u8 socket_id = topology_physical_package_id(err->cpu);
 	u8 coh_st_inst_id = get_coh_st_inst_id(err);
 	unsigned long addr = get_addr(err->addr);
+	u8 socket_id = err->socket_id;
 	u8 die_id = get_die_id(err);
-	unsigned long ret_addr;
 
 	pr_debug("socket_id=0x%x die_id=0x%x coh_st_inst_id=0x%x addr=0x%016lx",
 		 socket_id, die_id, coh_st_inst_id, addr);
-
-	ret_addr = prm_umc_norm_to_sys_addr(socket_id, err->ipid, addr);
-	if (!IS_ERR_VALUE(ret_addr) || df_cfg.flags.prm_only)
-		return ret_addr;
 
 	return norm_to_sys_addr(socket_id, die_id, coh_st_inst_id, addr);
 }
