@@ -267,8 +267,10 @@ static struct xe_vm *xe_pagefault_asid_to_vm(struct xe_pagefault *pf, u32 asid)
 static int xe_pagefault_service(struct xe_pagefault *pf)
 {
 	struct xe_gt *gt = pf->gt;
+	struct xe_device *xe = gt_to_xe(gt);
 	struct xe_vm *vm;
 	struct xe_vma *vma = NULL;
+	int io_idx;
 	int err;
 	bool atomic;
 	u32 asid = FIELD_GET(XE_PAGEFAULT_ASID_MASK, pf->consumer.id);
@@ -277,9 +279,15 @@ static int xe_pagefault_service(struct xe_pagefault *pf)
 	if (pf->consumer.fault_type_level == XE_PAGEFAULT_TYPE_LEVEL_NACK)
 		return -EFAULT;
 
+	err = xe_device_io_get(xe, &io_idx);
+	if (err)
+		return err;
+
 	vm = xe_pagefault_asid_to_vm(pf, asid);
-	if (IS_ERR(vm))
-		return PTR_ERR(vm);
+	if (IS_ERR(vm)) {
+		err = PTR_ERR(vm);
+		goto out_io;
+	}
 
 	down_read(&vm->lock);
 
@@ -315,6 +323,8 @@ unlock_vm:
 	up_read(&vm->lock);
 	xe_vm_put(vm);
 
+out_io:
+	xe_device_io_put(io_idx);
 	return err;
 }
 
@@ -503,6 +513,12 @@ static bool xe_pagefault_queue_pop(struct xe_pagefault_queue *pf_queue,
 		if (lpf->consumer.alloc_state !=
 		    XE_PAGEFAULT_ALLOC_STATE_QUEUED)
 			continue;
+
+		if (xe_device_io_blocked(xe)) {
+			lpf->consumer.alloc_state =
+				XE_PAGEFAULT_ALLOC_STATE_FREE;
+			continue;
+		}
 
 		if (xe_pagefault_try_chain(pf_queue, lpf))
 			continue;
