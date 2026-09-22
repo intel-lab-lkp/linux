@@ -58,6 +58,7 @@
 #include <linux/context_tracking.h>
 #include <linux/console.h>
 #include <linux/kasan.h>
+#include <linux/hazptr.h>
 
 #include <asm/sections.h>
 
@@ -1308,14 +1309,24 @@ static bool is_dynamic_key(const struct lock_class_key *key)
 
 	hash_head = keyhashentry(key);
 
-	rcu_read_lock();
-	hlist_for_each_entry_rcu(k, hash_head, hash_entry) {
-		if (k == key) {
-			found = true;
-			break;
+	/*
+	 * The traversal is protected by a hazard pointer rather
+	 * than an RCU read-side critical section.
+	 */
+	{
+		struct hazptr_ctx ctx;
+		void *bucket = hash_head;
+		void *addr;
+
+		addr = hazptr_acquire(&ctx, &bucket);
+		hlist_for_each_entry_rcu(k, hash_head, hash_entry, 1) {
+			if (k == key) {
+				found = true;
+				break;
+			}
 		}
+		hazptr_release(&ctx, addr);
 	}
-	rcu_read_unlock();
 
 	return found;
 }
@@ -6717,11 +6728,10 @@ void lockdep_unregister_key(struct lock_class_key *key)
 	 *
 	 * Some operations like __qdisc_destroy() will call this in a debug
 	 * kernel, and the network traffic is disabled while waiting, hence
-	 * the delay of the wait matters in debugging cases. Currently use a
-	 * synchronize_rcu_expedited() to speed up the wait at the cost of
-	 * system IPIs. TODO: Replace RCU with hazptr for this.
+	 * the delay of the wait matters in debugging cases. Replace the
+	 * expedited RCU wait with hazptr_synchronize().
 	 */
-	synchronize_rcu_expedited();
+	hazptr_synchronize(keyhashentry(key));
 }
 EXPORT_SYMBOL_GPL(lockdep_unregister_key);
 
