@@ -6637,11 +6637,19 @@ nfsd4_encode_operation(struct nfsd4_compoundres *resp, struct nfsd4_op *op)
 	unsigned int op_status_offset;
 	nfsd4_enc encoder;
 
-	if (xdr_stream_encode_u32(xdr, op->opnum) != XDR_UNIT)
+	/*
+	 * nfsd4_proc_compound() stops only when op->status records an error.
+	 * Do not leave an operation that has no encoded header marked nfs_ok.
+	 */
+	if (xdr_stream_encode_u32(xdr, op->opnum) != XDR_UNIT) {
+		op->status = nfsd4_check_resp_size(resp, XDR_UNIT * 2);
 		goto release;
+	}
 	op_status_offset = xdr->buf->len;
-	if (!xdr_reserve_space(xdr, XDR_UNIT))
+	if (!xdr_reserve_space(xdr, XDR_UNIT)) {
+		op->status = nfsd4_check_resp_size(resp, XDR_UNIT);
 		goto release;
+	}
 
 	if (op->opnum == OP_ILLEGAL)
 		goto status;
