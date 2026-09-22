@@ -1654,20 +1654,18 @@ static int gve_xsk_pool_enable(struct net_device *dev,
 	if (!priv->xdp_prog || !netif_running(dev))
 		return 0;
 
-	err = gve_reg_xsk_pool(priv, dev, pool, qid);
-	if (err)
-		goto err_xsk_pool_dma_mapped;
-
-	/* Stop and start RDA queues to repost buffers. */
-	if (!gve_is_qpl(priv)) {
+	if (gve_is_qpl(priv)) {
+		err = gve_reg_xsk_pool(priv, dev, pool, qid);
+		if (err)
+			goto err_xsk_pool_dma_mapped;
+	} else {
+		/* Stop and start RDA queues to repost buffers. */
 		err = gve_configure_rings_xdp(priv, priv->rx_cfg.num_queues);
 		if (err)
-			goto err_xsk_pool_registered;
+			goto err_xsk_pool_dma_mapped;
 	}
 	return 0;
 
-err_xsk_pool_registered:
-	gve_unreg_xsk_pool(priv, qid);
 err_xsk_pool_dma_mapped:
 	clear_bit(qid, priv->xsk_pools);
 	xsk_pool_dma_unmap(pool,
