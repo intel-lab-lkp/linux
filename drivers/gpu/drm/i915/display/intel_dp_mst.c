@@ -350,6 +350,7 @@ int intel_dp_mtp_tu_compute_config(struct intel_dp *intel_dp,
 		if (is_mst) {
 			int remote_bw_overhead;
 			int remote_tu;
+			int raw_pbn;
 			fixed20_12 pbn;
 
 			remote_bw_overhead = intel_dp_mst_bw_overhead(crtc_state,
@@ -369,9 +370,10 @@ int intel_dp_mtp_tu_compute_config(struct intel_dp *intel_dp,
 			 * crtc_state->dp_m_n.tu), provided that the driver doesn't
 			 * enable SSC on the corresponding link.
 			 */
-			pbn.full = dfixed_const(intel_dp_mst_calc_pbn(adjusted_mode->crtc_clock,
-								      link_bpp_x16,
-								      remote_bw_overhead));
+			raw_pbn = intel_dp_mst_calc_pbn(adjusted_mode->crtc_clock,
+							 link_bpp_x16,
+							 remote_bw_overhead);
+			pbn.full = dfixed_const(raw_pbn);
 			remote_tu = DIV_ROUND_UP(pbn.full, mst_state->pbn_div.full);
 
 			/*
@@ -384,11 +386,10 @@ int intel_dp_mtp_tu_compute_config(struct intel_dp *intel_dp,
 			remote_tu = ALIGN(remote_tu, 4 / crtc_state->lane_count);
 
 			/*
-			 * Also align PBNs accordingly, since MST core will derive its
-			 * own copy of TU from the PBN in drm_dp_atomic_find_time_slots().
-			 * The above comment about the difference between the PBN
-			 * allocated for the whole path and the TUs allocated for the
-			 * first branch device's link also applies here.
+			 * Keep the PBN corresponding to the aligned hardware TU separate
+			 * from raw_pbn. The aligned value describes the TU granularity of
+			 * the first downstream branch link; raw_pbn is the video bandwidth
+			 * value passed to the MST payload allocator and ALLOCATE_PAYLOAD.
 			 */
 			pbn.full = remote_tu * mst_state->pbn_div.full;
 
@@ -397,7 +398,21 @@ int intel_dp_mtp_tu_compute_config(struct intel_dp *intel_dp,
 
 			slots = drm_dp_atomic_find_time_slots(state, &intel_dp->mst.mgr,
 							      connector->mst.port,
-							      dfixed_trunc(pbn));
+							      raw_pbn);
+
+			drm_dbg_kms(display->drm,
+				    "MST TU %s pipe %c: clock=%d lanes=%d bpp=%d link_bpp=%d fec=%d\n",
+				    connector->base.name,
+				    pipe_name(to_intel_crtc(crtc_state->uapi.crtc)->pipe),
+				    crtc_state->port_clock, crtc_state->lane_count,
+				    fxp_q4_to_int(bpp_x16), fxp_q4_to_int(link_bpp_x16),
+				    crtc_state->fec_enable);
+			drm_dbg_kms(display->drm,
+				    "MST TU %s: overhead=%d raw_pbn=%d pbn=%d pbn_div=%d tu=%d slots=%d full_pbn=%d\n",
+				    connector->base.name,
+				    remote_bw_overhead, raw_pbn,
+				    dfixed_trunc(pbn), dfixed_trunc(mst_state->pbn_div),
+				    remote_tu, slots, connector->mst.port->full_pbn);
 
 			/* TODO: Check this already in drm_dp_atomic_find_time_slots(). */
 			if (slots > mst_state->total_avail_slots)
