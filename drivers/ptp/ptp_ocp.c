@@ -402,6 +402,8 @@ struct ptp_ocp {
 	bool			sync;
 	time64_t		gnss_lost;
 	struct delayed_work	sync_work;
+	/* CPLD identification, off the 1 Hz sync poller */
+	struct delayed_work	cpld_work;
 	int			id;
 	int			n_irqs;
 	struct ptp_ocp_serial_port	port[__PORT_COUNT];
@@ -5935,18 +5937,32 @@ ptp_ocp_sync_work(struct work_struct *work)
 
 	bp->sync = sync;
 
-	/* Resolve the adapter here rather than once in probe, where it can
-	 * race the adapter's own registration, and read the ID as soon as it
-	 * turns up.  A claim can fail transiently - the firmware may not
-	 * grant the segment straight after power-up - so adva_x1_cpld_read_id()
-	 * retries a bounded number of times before giving up.
-	 */
+	queue_delayed_work(system_power_efficient_wq, &bp->sync_work, HZ);
+}
+
+/*
+ * Resolve the i2c adapter and read the CPLD identification.
+ *
+ * Kept off ptp_ocp_sync_work(): a claim can block for seconds - the
+ * MicroBlaze handshake polls for up to MBLAZE_RETRIES * MBLAZE_RETRY_US and
+ * the hand-back does the same - which would delay the in-sync sampling and
+ * the dpll change notification, and stall the cancel_delayed_work_sync() on
+ * the unbind and shutdown paths for as long.
+ *
+ * Reschedules only while there is something left to do, so a board without
+ * the part, or one whose identification is settled, costs nothing.
+ */
+static void ptp_ocp_cpld_work(struct work_struct *work)
+{
+	struct ptp_ocp *bp = container_of(work, struct ptp_ocp, cpld_work.work);
+
 	adva_x1_cache_i2c_adap(bp);
-	if (bp->has_cpld && !READ_ONCE(bp->cpld_id_tried) &&
-	    READ_ONCE(bp->cpld_i2c_adap_nr) >= 0)
+	if (READ_ONCE(bp->cpld_i2c_adap_nr) >= 0)
 		adva_x1_cpld_read_id(bp);
 
-	queue_delayed_work(system_power_efficient_wq, &bp->sync_work, HZ);
+	if (!READ_ONCE(bp->cpld_id_tried))
+		queue_delayed_work(system_power_efficient_wq, &bp->cpld_work,
+				   HZ);
 }
 
 static int
@@ -5984,6 +6000,7 @@ ptp_ocp_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	bp->cpld_i2c_adap_nr = -1;
 
 	INIT_DELAYED_WORK(&bp->sync_work, ptp_ocp_sync_work);
+	INIT_DELAYED_WORK(&bp->cpld_work, ptp_ocp_cpld_work);
 
 	/* compat mode.
 	 * Older FPGA firmware only returns 2 irq's.
@@ -6046,6 +6063,9 @@ ptp_ocp_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		}
 	}
 	queue_delayed_work(system_power_efficient_wq, &bp->sync_work, HZ);
+	if (bp->has_cpld)
+		queue_delayed_work(system_power_efficient_wq, &bp->cpld_work,
+				   HZ);
 
 	return 0;
 out_dpll:
@@ -6080,6 +6100,7 @@ ptp_ocp_remove(struct pci_dev *pdev)
 	int i;
 
 	cancel_delayed_work_sync(&bp->sync_work);
+	cancel_delayed_work_sync(&bp->cpld_work);
 	for (i = 0; i < OCP_SMA_NUM; i++) {
 		if (bp->sma[i].dpll_pin) {
 			dpll_pin_unregister(bp->dpll, bp->sma[i].dpll_pin, &dpll_pins_ops, &bp->sma[i]);
