@@ -811,6 +811,9 @@ int sdhci_cdns6_set_tune_val(struct sdhci_host *host, unsigned int val)
 	if (ret)
 		dev_warn(mmc_dev(host->mmc), "%s: DLL reset release failed: %d\n", __func__, ret);
 
+	/* Allow 5 to 5.5 ms for clock and PHY signals to stabilize after configuration */
+	usleep_range(5000, 5500);
+
 	return ret;
 }
 
