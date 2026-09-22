@@ -469,6 +469,7 @@ int xe_device_init_early(struct xe_device *xe)
 	int err;
 
 	INIT_WORK(&xe->wedged.work, xe_device_wedged_work);
+	init_completion(&xe->wedged.prepared);
 	xe->wedged.reported_method = ~0UL;
 
 	err = ttm_device_init(&xe->ttm, &xe_ttm_funcs, xe->drm.dev,
@@ -889,6 +890,41 @@ static int xe_debug_page_size_alloc_ctrl_init(struct xe_device *xe)
 }
 #endif
 
+/*
+ * Isolate a permanently wedged device.
+ *
+ * May sleep and must be called from process context.
+ */
+static void xe_device_wedged_isolate(struct xe_device *xe)
+{
+	/*
+	 * Wait until xe_device_declare_wedged() has finished scanning GT
+	 * submission state before isolating the device.
+	 */
+	wait_for_completion(&xe->wedged.prepared);
+
+	if (xe->wedged.isolated)
+		return;
+
+	/*
+	 * GT wedging has signalled pending fences. Drain existing hardware
+	 * users before isolation starts.
+	 */
+	xe_device_io_drain(xe);
+
+	/* Shut down display hardware before stopping device access. */
+	xe_display_shutdown(xe);
+	xe_display_unregister(xe);
+
+	/* Stop interrupt and DMA activity before changing mappings. */
+	xe_irq_suspend(xe);
+	pci_clear_master(to_pci_dev(xe->drm.dev));
+
+	xe_bo_wedged_invalidate_mmaps(xe);
+
+	xe->wedged.isolated = true;
+}
+
 static void xe_device_wedged_work(struct work_struct *work)
 {
 	struct xe_device *xe =
@@ -896,9 +932,7 @@ static void xe_device_wedged_work(struct work_struct *work)
 	unsigned long method;
 	int err;
 
-	/* Drain active faults before invalidating VRAM mappings. */
-	xe_device_io_drain(xe);
-	xe_bo_wedged_invalidate_mmaps(xe);
+	xe_device_wedged_isolate(xe);
 
 	/* Report at most one recovery method per worker invocation. */
 	method = READ_ONCE(xe->wedged.method);
@@ -1164,7 +1198,6 @@ err_unregister_display:
 void xe_device_remove(struct xe_device *xe)
 {
 	xe_device_wedged_disable(xe);
-
 	xe_display_unregister(xe);
 
 	drm_dev_unplug(&xe->drm);
@@ -1180,7 +1213,6 @@ void xe_device_shutdown(struct xe_device *xe)
 	drm_dbg(&xe->drm, "Shutting down device\n");
 
 	xe_device_wedged_disable(xe);
-
 	xe_display_shutdown(xe);
 
 	xe_irq_suspend(xe);
@@ -1502,6 +1534,9 @@ void xe_device_declare_wedged(struct xe_device *xe)
 	     READ_ONCE(xe->wedged.method) !=
 	     READ_ONCE(xe->wedged.reported_method)))
 		queue_work(xe->unordered_wq, &xe->wedged.work);
+
+	if (first)
+		complete_all(&xe->wedged.prepared);
 }
 
 /**

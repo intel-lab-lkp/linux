@@ -1325,19 +1325,38 @@ static int xe_pci_suspend(struct device *dev)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
 	struct xe_device *xe = pdev_to_xe_device(pdev);
+	int io_idx;
 	int err;
 
 	if (xe_survivability_mode_is_boot_enabled(xe))
 		return -EBUSY;
 
-	err = xe_pm_suspend(xe);
-	if (err)
-		return err;
+	/*
+	 * Wait until wedge work is queued, then wait for isolation to
+	 * finish before skipping driver-level suspend.
+	 */
+	err = xe_device_io_get(xe, &io_idx);
+	if (err) {
+		if (!xe_device_wedged(xe))
+			return err;
+
+		wait_for_completion(&xe->wedged.prepared);
+		flush_work(&xe->wedged.work);
+	} else {
+		err = xe_pm_suspend(xe);
+		xe_device_io_put(io_idx);
+
+		if (xe_device_wedged(xe)) {
+			wait_for_completion(&xe->wedged.prepared);
+			flush_work(&xe->wedged.work);
+		} else if (err) {
+			return err;
+		}
+	}
 
 	/*
-	 * Enabling D3Cold is needed for S2Idle/S0ix.
-	 * It is save to allow here since xe_pm_suspend has evicted
-	 * the local memory and the direct complete optimization is disabled.
+	 * Keep PCI suspend common to both paths so resume performs
+	 * matching PCI enable and D3Cold operations.
 	 */
 	d3cold_toggle(pdev, D3COLD_ENABLE);
 
@@ -1351,6 +1370,8 @@ static int xe_pci_suspend(struct device *dev)
 static int xe_pci_resume(struct device *dev)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
+	struct xe_device *xe = pdev_to_xe_device(pdev);
+	int io_idx;
 	int err;
 
 	/* Give back the D3Cold decision to the runtime P M*/
@@ -1362,13 +1383,29 @@ static int xe_pci_resume(struct device *dev)
 
 	pci_restore_state(pdev);
 
+	/* Balance PCI suspend regardless of the current wedge state. */
 	err = pci_enable_device(pdev);
 	if (err)
 		return err;
 
+	err = xe_device_io_get(xe, &io_idx);
+	if (err) {
+		pci_clear_master(pdev);
+		return xe_device_wedged(xe) ? 0 : err;
+	}
+
 	pci_set_master(pdev);
 
-	err = xe_pm_resume(pdev_to_xe_device(pdev));
+	err = xe_pm_resume(xe);
+	xe_device_io_put(io_idx);
+
+	if (xe_device_wedged(xe)) {
+		wait_for_completion(&xe->wedged.prepared);
+		flush_work(&xe->wedged.work);
+		pci_clear_master(pdev);
+		return 0;
+	}
+
 	if (err)
 		return err;
 

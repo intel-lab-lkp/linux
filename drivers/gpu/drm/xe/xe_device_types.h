@@ -6,6 +6,7 @@
 #ifndef _XE_DEVICE_TYPES_H_
 #define _XE_DEVICE_TYPES_H_
 
+#include <linux/completion.h>
 #include <linux/mutex.h>
 #include <linux/pci.h>
 
@@ -113,6 +114,10 @@ struct xe_device {
 #if IS_ENABLED(CONFIG_DRM_XE_DISPLAY)
 	/** @display: display device data, must be placed after drm device member */
 	struct intel_display *display;
+	/** @display_registered: Display userspace interfaces are registered */
+	bool display_registered;
+	/** @display_shutdown: Display hardware shutdown has completed */
+	bool display_shutdown;
 #endif
 
 	/** @devcoredump: device coredump */
@@ -549,8 +554,12 @@ struct xe_device {
 		struct work_struct work;
 		/** @wedged.stopping: Blocks worker requeue and repeated disable */
 		atomic_t stopping;
+		/** @wedged.prepared: First wedge declaration finished and work was queued */
+		struct completion prepared;
 		/** @wedged.reported_method: Last recovery method reported to userspace */
 		unsigned long reported_method;
+		/** @wedged.isolated: Terminal device isolation has completed */
+		bool isolated;
 	} wedged;
 
 	/** @devres_group: devres group */
