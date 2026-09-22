@@ -264,7 +264,16 @@ struct dma_fence_ops {
 	 * an upcoming deadline, such as vblank, by which point the waiter
 	 * would prefer the fence to be signaled by.  This is intended to
 	 * give feedback to the fence signaler to aid in power management
-	 * decisions, such as boosting GPU frequency.
+	 * decisions, such as boosting GPU frequency if the deadline has
+	 * not yet been met, or reducing GPU frequency if the fence was
+	 * signaled significantly ahead of the deadline.
+	 *
+	 * This callback may be invoked even after the fence has been
+	 * signaled.  In this case, the signaler may use the deadline and
+	 * the fence's signal time to evaluate whether the GPU frequency
+	 * should be adjusted for future workloads.  Implementations must
+	 * therefore be prepared to handle calls on already-signaled fences
+	 * without error.
 	 *
 	 * This is called without &dma_fence.lock held, it can be called
 	 * multiple times and from any context.  Locking is up to the callee

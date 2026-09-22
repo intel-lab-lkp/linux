@@ -136,6 +136,9 @@ static void msm_fence_set_deadline(struct dma_fence *fence, ktime_t deadline)
 	unsigned long flags;
 	ktime_t now;
 
+	if (dma_fence_is_signaled(fence))
+		return;
+
 	spin_lock_irqsave(&fctx->spinlock, flags);
 	now = ktime_get();
 

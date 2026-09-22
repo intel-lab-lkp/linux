@@ -999,8 +999,19 @@ EXPORT_SYMBOL(dma_fence_wait_any_timeout);
  * Multiple deadlines may be set on a given fence, even in parallel.  See the
  * documentation for &dma_fence_ops.set_deadline.
  *
+ * The deadline hint may also be delivered *after* the fence has already been
+ * signaled.  This is intentional and supports the case where a fence signaler
+ * aware of a periodic deadline (e.g. vblank) and the fence's signal time can
+ * evaluate the headroom between the two.  In triple-buffered rendering, for
+ * example, a staged frame that is completed well ahead of the vblank deadline
+ * represents excess headroom; delivering the deadline hint post-signal allows
+ * the fence signaler to consider reducing frequency for subsequent workloads,
+ * rather than holding an unnecessarily high frequency.  Implementations
+ * of &dma_fence_ops.set_deadline must therefore tolerate invocation on
+ * already-signaled fences.
+ *
  * The deadline hint is just that, a hint.  The driver that created the fence
- * may react by increasing frequency, making different scheduling choices, etc.
+ * may react by changing frequency, making different scheduling choices, etc.
  * Or doing nothing at all.
  */
 
@@ -1016,6 +1027,13 @@ EXPORT_SYMBOL(dma_fence_wait_any_timeout);
  * to aid in power management decisions, such as boosting GPU frequency
  * if a periodic vblank deadline is approaching but the fence is not
  * yet signaled..
+ *
+ * This function may also be called after the fence has already been
+ * signaled.  In that case the fence signaler can compare the fence's signal
+ * time against the deadline to determine the available headroom.  If the
+ * fence was signaled significantly ahead of the deadline, the fence
+ * signaler may choose to reduce frequency for subsequent workloads to
+ * avoid unnecessarily high power consumption.
  */
 void dma_fence_set_deadline(struct dma_fence *fence, ktime_t deadline)
 {
@@ -1023,7 +1041,7 @@ void dma_fence_set_deadline(struct dma_fence *fence, ktime_t deadline)
 
 	rcu_read_lock();
 	ops = rcu_dereference(fence->ops);
-	if (ops && ops->set_deadline && !dma_fence_is_signaled(fence))
+	if (ops && ops->set_deadline)
 		ops->set_deadline(fence, deadline);
 	rcu_read_unlock();
 }
