@@ -542,6 +542,8 @@ static void ieee80211_do_stop(struct ieee80211_sub_if_data *sdata, bool going_do
 		atomic_dec(&local->iff_allmultis);
 
 	if (sdata->vif.type == NL80211_IFTYPE_AP) {
+		ieee80211_flow_tbl_destroy(sdata);
+
 		local->fif_pspoll--;
 		local->fif_probe_req--;
 	} else if (sdata->vif.type == NL80211_IFTYPE_ADHOC) {
@@ -1435,6 +1437,10 @@ int ieee80211_do_open(struct wireless_dev *wdev, bool coming_up)
 		break;
 		}
 	case NL80211_IFTYPE_AP:
+		res = ieee80211_flow_tbl_init(sdata);
+		if (res)
+			return res;
+		break;
 	case NL80211_IFTYPE_MESH_POINT:
 	case NL80211_IFTYPE_STATION:
 	case NL80211_IFTYPE_MONITOR:
@@ -1469,7 +1475,7 @@ int ieee80211_do_open(struct wireless_dev *wdev, bool coming_up)
 			 * no need to worry about AP_VLAN/NAN_DATA cleanup since
 			 * in that case we can't have open_count == 0
 			 */
-			return res;
+			goto err_flow_tbl;
 		}
 		ieee80211_led_radio(local, true);
 		ieee80211_mod_tpt_led_trig(local,
@@ -1645,6 +1651,9 @@ int ieee80211_do_open(struct wireless_dev *wdev, bool coming_up)
 		list_del(&sdata->u.vlan.list);
 	/* Might not be initialized yet, but it is harmless */
 	sdata->bss = NULL;
+ err_flow_tbl:
+	if (sdata->vif.type == NL80211_IFTYPE_AP)
+		ieee80211_flow_tbl_destroy(sdata);
 	return res;
 }
 

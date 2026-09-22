@@ -658,6 +658,9 @@ struct ieee80211_scs_sta {
  * @up_bitmap: user priorities that the AP learns from, one bit each
  * @up_limit: ceiling for the assigned user priority
  * @timeout: minimum lifetime of a learned value, in jiffies
+ * @lock: protects @entries and @n_entries
+ * @entries: the learned entries of this station, for teardown
+ * @n_entries: number of entries in @entries
  */
 struct ieee80211_mscs_sta {
 	struct rcu_head rcu_head;
@@ -665,6 +668,43 @@ struct ieee80211_mscs_sta {
 	u8 up_bitmap;
 	u8 up_limit;
 	unsigned long timeout;
+
+	spinlock_t lock; /* protects @entries and @n_entries */
+	struct list_head entries;
+	u32 n_entries;
+};
+
+/**
+ * struct ieee80211_flow_hkey - what a learned entry is looked up by
+ *
+ * @sta: the peer, so that a flow of one station never answers for another
+ * @key: the masked tuple, in the downlink direction
+ *
+ * Not packed: the whole of it is compared, but a packed aggregate would force
+ * byte-wise access to @sta.
+ */
+struct ieee80211_flow_hkey {
+	struct sta_info *sta;
+	struct cfg80211_flow_key key;
+};
+
+/**
+ * struct ieee80211_flow_entry - the user priority learned for one flow
+ *
+ * @hkey: what it is looked up by
+ * @node: hash table linkage
+ * @list: linkage in &ieee80211_mscs_sta.entries
+ * @last_update: jiffies of the last uplink frame of this flow
+ * @up: the learned user priority
+ * @rcu_head: for freeing
+ */
+struct ieee80211_flow_entry {
+	struct ieee80211_flow_hkey hkey;
+	struct rhash_head node;
+	struct list_head list;
+	unsigned long last_update;
+	u8 up;
+	struct rcu_head rcu_head;
 };
 
 /**

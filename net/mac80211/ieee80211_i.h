@@ -345,6 +345,10 @@ struct ieee80211_if_ap {
 
 	bool multicast_to_unicast;
 	bool active;
+
+	/* learned MSCS entries of every station of this BSS, and its VLANs */
+	struct rhashtable flow_tbl;
+	struct wiphy_delayed_work flow_gc_work;
 };
 
 struct ieee80211_if_vlan {
@@ -2222,6 +2226,9 @@ int ieee80211_set_mscs(struct wiphy *wiphy, struct net_device *dev,
 		       const u8 *peer, struct cfg80211_mscs_desc *desc);
 void ieee80211_sta_scs_free(struct sta_info *sta);
 bool ieee80211_flow_classify(struct sta_info *sta, struct sk_buff *skb);
+void ieee80211_flow_learn(struct ieee80211_rx_data *rx);
+int ieee80211_flow_tbl_init(struct ieee80211_sub_if_data *sdata);
+void ieee80211_flow_tbl_destroy(struct ieee80211_sub_if_data *sdata);
 
 /* link handling */
 void ieee80211_link_setup(struct ieee80211_link_data *link);

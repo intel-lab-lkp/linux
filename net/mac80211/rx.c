@@ -2790,6 +2790,9 @@ ieee80211_deliver_skb(struct ieee80211_rx_data *rx)
 		u64_stats_update_end(&rx->link_sta->rx_stats.syncp);
 	}
 
+	if (rx->sta)
+		ieee80211_flow_learn(rx);
+
 	if ((sdata->vif.type == NL80211_IFTYPE_AP ||
 	     sdata->vif.type == NL80211_IFTYPE_AP_VLAN) &&
 	    !(sdata->flags & IEEE80211_SDATA_DONT_BRIDGE_PACKETS) &&
@@ -4994,6 +4997,8 @@ static void ieee80211_rx_8023(struct ieee80211_rx_data *rx,
 	u64_stats_inc(&stats->msdu[rx->seqno_idx]);
 	u64_stats_add(&stats->bytes, orig_len);
 	u64_stats_update_end(&stats->syncp);
+
+	ieee80211_flow_learn(rx);
 
 	if (fast_rx->internal_forward) {
 		struct sk_buff *xmit_skb = NULL;
