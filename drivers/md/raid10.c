@@ -3972,7 +3972,7 @@ static int raid10_run(struct mddev *mddev)
 		if (fc > 1 || fo > 0) {
 			pr_err("only near layout is supported by clustered"
 				" raid10\n");
-			goto out_free_conf;
+			goto out_unregister_thread;
 		}
 	}
 
@@ -3989,11 +3989,11 @@ static int raid10_run(struct mddev *mddev)
 
 		if (test_bit(Replacement, &rdev->flags)) {
 			if (disk->replacement)
-				goto out_free_conf;
+				goto out_unregister_thread;
 			disk->replacement = rdev;
 		} else {
 			if (disk->rdev)
-				goto out_free_conf;
+				goto out_unregister_thread;
 			disk->rdev = rdev;
 		}
 		diff = (rdev->new_data_offset - rdev->data_offset);
@@ -4013,7 +4013,7 @@ static int raid10_run(struct mddev *mddev)
 
 		if (err) {
 			ret = err;
-			goto out_free_conf;
+			goto out_unregister_thread;
 		}
 	}
 
@@ -4021,17 +4021,17 @@ static int raid10_run(struct mddev *mddev)
 	if (!enough(conf, -1)) {
 		pr_err("md/raid10:%s: not enough operational mirrors.\n",
 		       mdname(mddev));
-		goto out_free_conf;
+		goto out_unregister_thread;
 	}
 
 	if (conf->reshape_progress != MaxSector) {
 		/* must ensure that shape change is supported */
 		if (conf->geo.far_copies != 1 &&
 		    conf->geo.far_offset == 0)
-			goto out_free_conf;
+			goto out_unregister_thread;
 		if (conf->prev.far_copies != 1 &&
 		    conf->prev.far_offset == 0)
-			goto out_free_conf;
+			goto out_unregister_thread;
 	}
 
 	mddev->degraded = 0;
@@ -4081,7 +4081,7 @@ static int raid10_run(struct mddev *mddev)
 	set_bit(MD_FAILFAST_SUPPORTED, &mddev->flags);
 
 	if (md_integrity_register(mddev))
-		goto out_free_conf;
+		goto out_unregister_thread;
 
 	if (conf->reshape_progress != MaxSector) {
 		unsigned long before_length, after_length;
@@ -4094,7 +4094,7 @@ static int raid10_run(struct mddev *mddev)
 		if (max(before_length, after_length) > min_offset_diff) {
 			/* This cannot work */
 			pr_warn("md/raid10: offset difference not enough to continue reshape\n");
-			goto out_free_conf;
+			goto out_unregister_thread;
 		}
 		conf->offset_diff = min_offset_diff;
 
@@ -4106,10 +4106,8 @@ static int raid10_run(struct mddev *mddev)
 
 	return 0;
 
-out_free_conf:
+out_unregister_thread:
 	md_unregister_thread(mddev, &mddev->thread);
-	raid10_free_conf(conf);
-	mddev->private = NULL;
 out:
 	return ret;
 }
