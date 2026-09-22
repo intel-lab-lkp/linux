@@ -447,7 +447,7 @@ void vt_set_leds_compute_shiftstate(void)
 static unsigned int handle_diacr(struct vc_data *vc, unsigned int ch)
 {
 	unsigned int d = diacr;
-	unsigned int i;
+	unsigned int i, n;
 
 	diacr = 0;
 
@@ -455,7 +455,9 @@ static unsigned int handle_diacr(struct vc_data *vc, unsigned int ch)
 		if ((ch & ~0xff) == BRL_UC_ROW)
 			return d | ch;
 	} else {
-		for (i = 0; i < accent_table_size; i++)
+		/* Pairs with the smp_store_release() in vt_do_diacrit(). */
+		n = smp_load_acquire(&accent_table_size);
+		for (i = 0; i < n; i++)
 			if (accent_table[i].diacr == d && accent_table[i].base == ch)
 				return accent_table[i].result;
 	}
@@ -1810,7 +1812,6 @@ static int vt_do_kdskbdiacr(void __user *udp, int perm)
 	}
 
 	guard(spinlock_irqsave)(&kbd_event_lock);
-	accent_table_size = ct;
 	for (i = 0; i < ct; i++) {
 		accent_table[i].diacr =
 				conv_8bit_to_uni(dia[i].diacr);
@@ -1819,6 +1820,8 @@ static int vt_do_kdskbdiacr(void __user *udp, int perm)
 		accent_table[i].result =
 				conv_8bit_to_uni(dia[i].result);
 	}
+	/* Pairs with the smp_load_acquire() in handle_diacr(). */
+	smp_store_release(&accent_table_size, ct);
 
 	return 0;
 }
@@ -1848,7 +1851,8 @@ static int vt_do_kdskbdiacruc(void __user *udp, int perm)
 	if (ct)
 		memcpy(accent_table, buf,
 				ct * sizeof(struct kbdiacruc));
-	accent_table_size = ct;
+	/* Pairs with the smp_load_acquire() in handle_diacr(). */
+	smp_store_release(&accent_table_size, ct);
 	return 0;
 }
 
