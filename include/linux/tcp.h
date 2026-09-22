@@ -307,6 +307,10 @@ struct tcp_sock {
 		accecn_opt_demand:2,/* Demand AccECN option for n next ACKs */
 		prev_ecnfield:2; /* ECN bits from the previous segment */
 	__be32	pred_flags;
+	u8	tcp_nospace;	/* mirrors SOCK_NOSPACE, but in a cache line
+				 * that tcp_check_space() already needs.
+				 * Can only be set if SOCK_NOSPACE is set.
+				 */
 	u64	tcp_clock_cache; /* cache last tcp_clock_ns() (see tcp_mstamp_refresh()) */
 	u64	tcp_mstamp;	/* most recent packet received/sent */
 	u32	rcv_nxt;	/* What we want to receive next		*/

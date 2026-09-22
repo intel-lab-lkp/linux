@@ -2969,8 +2969,13 @@ void sk_set_nospace(struct sock *sk)
 {
 	struct socket *sock = sk->sk_socket;
 
-	if (sock)
-		set_bit(SOCK_NOSPACE, &sock->flags);
+	if (!sock)
+		return;
+	/* Mirror first: callers relying on the barrier implied by
+	 * set_bit() + smp_mb__after_atomic() are then also covered.
+	 */
+	tcp_set_nospace(sk);
+	set_bit(SOCK_NOSPACE, &sock->flags);
 }
 EXPORT_SYMBOL(sk_set_nospace);
 
@@ -2985,8 +2990,13 @@ void sk_clear_nospace(struct sock *sk)
 {
 	struct socket *sock = sk->sk_socket;
 
-	if (sock)
-		clear_bit(SOCK_NOSPACE, &sock->flags);
+	if (!sock)
+		return;
+	clear_bit(SOCK_NOSPACE, &sock->flags);
+	/* Mirror last: a stale mirror only costs a slow path, while a
+	 * stale SOCK_NOSPACE would cost a missed EPOLLOUT.
+	 */
+	tcp_clear_nospace(sk);
 }
 EXPORT_SYMBOL(sk_clear_nospace);
 
