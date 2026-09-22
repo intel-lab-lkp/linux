@@ -251,6 +251,7 @@ struct mt76_queue {
 	int buf_size;
 	bool stopped;
 	bool blocked;
+	bool napified;
 
 	u8 buf_offset;
 	u16 flags;
@@ -1286,9 +1287,15 @@ static inline int mt76_wed_dma_setup(struct mt76_dev *dev, struct mt76_queue *q,
 #define mt76_queue_kick(dev, ...)	(dev)->mt76.queue_ops->kick(&((dev)->mt76), __VA_ARGS__)
 #define mt76_queue_reset(dev, ...)	(dev)->mt76.queue_ops->reset_q(&((dev)->mt76), __VA_ARGS__)
 
+/* For all rx queues that have ndesc > 0 */
 #define mt76_for_each_q_rx(dev, i)	\
 	for (i = 0; i < ARRAY_SIZE((dev)->q_rx); i++)	\
 		if ((dev)->q_rx[i].ndesc)
+
+/* For all rx queues that have ndesc or NAPI enabled */
+#define mt76_for_each_q_rx_napi(dev, i)			\
+	for (i = 0; i < ARRAY_SIZE((dev)->q_rx); i++)	\
+		if ((dev)->q_rx[i].napified || (dev)->q_rx[i].ndesc)
 
 
 #define mt76_dereference(p, dev) \

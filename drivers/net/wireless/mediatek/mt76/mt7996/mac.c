@@ -2311,13 +2311,12 @@ mt7996_mac_restart(struct mt7996_dev *dev)
 
 	/* disable all tx/rx napi */
 	mt76_worker_disable(&dev->mt76.tx_worker);
-	mt76_for_each_q_rx(mdev, i) {
+	mt76_for_each_q_rx_napi(mdev, i) {
 		if (mtk_wed_device_active(&dev->mt76.mmio.wed) &&
 		    mt76_queue_is_wed_rro(&mdev->q_rx[i]))
 			continue;
 
-		if (mdev->q_rx[i].ndesc)
-			napi_disable(&dev->mt76.napi[i]);
+		napi_disable(&dev->mt76.napi[i]);
 	}
 	napi_disable(&dev->mt76.tx_napi);
 
@@ -2327,17 +2326,15 @@ mt7996_mac_restart(struct mt7996_dev *dev)
 
 	mt7996_dma_reset(dev, true);
 
-	mt76_for_each_q_rx(mdev, i) {
+	mt76_for_each_q_rx_napi(mdev, i) {
 		if (mtk_wed_device_active(&dev->mt76.mmio.wed) &&
 		    mt76_queue_is_wed_rro(&mdev->q_rx[i]))
 			continue;
 
-		if (mdev->q_rx[i].ndesc) {
-			napi_enable(&dev->mt76.napi[i]);
-			local_bh_disable();
-			napi_schedule(&dev->mt76.napi[i]);
-			local_bh_enable();
-		}
+		napi_enable(&dev->mt76.napi[i]);
+		local_bh_disable();
+		napi_schedule(&dev->mt76.napi[i]);
+		local_bh_enable();
 	}
 	clear_bit(MT76_MCU_RESET, &dev->mphy.state);
 	clear_bit(MT76_STATE_MCU_RUNNING, &dev->mphy.state);
@@ -2585,7 +2582,7 @@ void mt7996_mac_reset_work(struct work_struct *work)
 	mutex_lock(&dev->mt76.mutex);
 
 	mt76_worker_disable(&dev->mt76.tx_worker);
-	mt76_for_each_q_rx(&dev->mt76, i) {
+	mt76_for_each_q_rx_napi(&dev->mt76, i) {
 		if (mtk_wed_device_active(&dev->mt76.mmio.wed) &&
 		    mt76_queue_is_wed_rro(&dev->mt76.q_rx[i]))
 			continue;
@@ -2645,7 +2642,7 @@ void mt7996_mac_reset_work(struct work_struct *work)
 	mt7996_for_each_phy(dev, phy)
 		clear_bit(MT76_RESET, &phy->mt76->state);
 
-	mt76_for_each_q_rx(&dev->mt76, i) {
+	mt76_for_each_q_rx_napi(&dev->mt76, i) {
 		if (mtk_wed_device_active(&dev->mt76.mmio.wed) &&
 		    mt76_queue_is_wed_rro(&dev->mt76.q_rx[i]))
 			continue;

@@ -1127,8 +1127,10 @@ static void
 mt76_dma_rx_queue_init(struct mt76_dev *dev, enum mt76_rxq_id qid,
 		       int (*poll)(struct napi_struct *napi, int budget))
 {
-	netif_napi_add(dev->napi_dev, &dev->napi[qid], poll);
+	/* This may or may not assign ndesc > 0, add NAPI regardless. */
 	mt76_dma_rx_fill_buf(dev, &dev->q_rx[qid], false);
+	dev->q_rx[qid].napified = true;
+	netif_napi_add(dev->napi_dev, &dev->napi[qid], poll);
 	napi_enable(&dev->napi[qid]);
 }
 
@@ -1214,13 +1216,17 @@ void mt76_dma_cleanup(struct mt76_dev *dev)
 	for (i = 0; i < ARRAY_SIZE(dev->q_mcu); i++)
 		mt76_dma_tx_cleanup(dev, dev->q_mcu[i], true);
 
-	mt76_for_each_q_rx(dev, i) {
+	mt76_for_each_q_rx_napi(dev, i) {
 		struct mt76_queue *q = &dev->q_rx[i];
 
-		netif_napi_del(&dev->napi[i]);
-		mt76_dma_rx_cleanup(dev, q);
-
-		page_pool_destroy(q->page_pool);
+		if (q->napified) {
+			netif_napi_del(&dev->napi[i]);
+			q->napified = false;
+		}
+		if (q->ndesc) {
+			mt76_dma_rx_cleanup(dev, q);
+			page_pool_destroy(q->page_pool);
+		}
 	}
 
 	if (mtk_wed_device_active(&dev->mmio.wed))

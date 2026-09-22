@@ -1051,7 +1051,17 @@ void mt7996_dma_reset(struct mt7996_dev *dev, bool force)
 
 void mt7996_dma_cleanup(struct mt7996_dev *dev)
 {
+	int i;
+
 	mt7996_dma_disable(dev, true);
+
+	/* mt76_dma_cleanup will delete the napi and clean up rx-queues,
+	 * we just need to disable it here to match whatever mt7921 is doing.
+	 */
+	mt76_for_each_q_rx_napi(&dev->mt76, i) {
+		if (dev->mt76.q_rx[i].napified)
+			napi_disable(&dev->mt76.napi[i]);
+	}
 
 	mt76_dma_cleanup(&dev->mt76);
 }
