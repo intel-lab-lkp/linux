@@ -809,7 +809,10 @@ static struct scpi_ops scpi_ops = {
 
 struct scpi_ops *get_scpi_ops(void)
 {
-	return scpi_info ? scpi_info->scpi_ops : NULL;
+	struct scpi_drvinfo *info = READ_ONCE(scpi_info);
+
+	/* Pairs with the smp_store_release() of scpi_ops in scpi_probe(). */
+	return info ? smp_load_acquire(&info->scpi_ops) : NULL;
 }
 EXPORT_SYMBOL_GPL(get_scpi_ops);
 
@@ -1029,7 +1032,13 @@ static int scpi_probe(struct platform_device *pdev)
 			 FIELD_GET(FW_REV_PATCH_MASK,
 				   scpi_drvinfo->firmware_version));
 
-	scpi_drvinfo->scpi_ops = &scpi_ops;
+	/*
+	 * scpi_info is already visible (scpi_init_versions() needs it), so the
+	 * scpi_ops field is what get_scpi_ops() callers gate on. Publish it
+	 * with release semantics so that a consumer that sees the ops also
+	 * sees the channels, the command table and the version fields.
+	 */
+	smp_store_release(&scpi_drvinfo->scpi_ops, &scpi_ops);
 
 	ret = devm_of_platform_populate(dev);
 	if (ret)
