@@ -7,6 +7,7 @@
 #include <linux/ioport.h>
 #include <linux/fwnode.h>
 #include <linux/types.h>
+#include <linux/mutex.h>
 
 struct device;
 struct panthor_arbitration_sched;
@@ -24,6 +25,11 @@ struct panthor_arbitration_resource {
 
 	/** @id: id parsed from child 'arm,id' property */
 	u32 id;
+};
+
+struct panthor_arbitration_dt_info {
+	/** @default_aw_masks: Default per-partition AW assignments */
+	u32 default_aw_masks[AM_ARB_MAX_PC_COUNT];
 };
 
 /**
@@ -44,6 +50,15 @@ struct panthor_arbitration {
 
 	/** @sched: Pointer to scheduler data. 1 sched per partition */
 	struct panthor_arbitration_sched *sched[AM_ARB_MAX_PC_COUNT];
+
+	/** @dt_info: Properties parsed from the device tree */
+	struct panthor_arbitration_dt_info dt_info;
+
+	/** @assignment_lock: Protects AW and slice assignment */
+	struct mutex assignment_lock;
+
+	/** @aw_sched_map: Tracks assignment of AW to sched instance */
+	s8 aw_sched_map[AM_ARB_MAX_AW_COUNT];
 };
 
 int panthor_arbitration_parse_resource(struct device *dev,

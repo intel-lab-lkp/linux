@@ -585,6 +585,8 @@ static int arbitration_sched_init(struct panthor_arbitration *adev, int i)
 	INIT_KFIFO(sched->queue);
 	sched->active_aw_id = -1;
 	sched->phase = ARB_SCHED_PHASE_IDLE;
+	/* Scheduler is disabled until its resources are configured */
+	sched->disabled = BIT(ARB_SCHED_DISABLE_RESOURCE);
 
 	hrtimer_setup(&sched->grant_timer.timer,
 		      panthor_arbitration_sched_on_grant_timeout,

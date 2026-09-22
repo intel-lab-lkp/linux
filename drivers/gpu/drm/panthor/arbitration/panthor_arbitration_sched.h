@@ -15,6 +15,9 @@ enum panthor_arb_sched_disable_reason {
 
 	/** @ARB_SCHED_DISABLE_TERM: scheduler disabled for termination */
 	ARB_SCHED_DISABLE_TERM,
+
+	/** @ARB_SCHED_DISABLE_RESOURCE: No resource assigned. scheduler disabled. */
+	ARB_SCHED_DISABLE_RESOURCE,
 };
 
 int panthor_arbitration_sched_init(struct panthor_arbitration *adev);
