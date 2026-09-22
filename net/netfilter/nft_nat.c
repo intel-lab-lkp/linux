@@ -70,7 +70,7 @@ static void nft_nat_setup_netmap(struct nf_nat_range2 *range,
 	int i, len = 0;
 
 	switch (priv->type) {
-	case NFT_NAT_SNAT:
+	case NF_NAT_MANIP_SRC:
 		if (nft_pf(pkt) == NFPROTO_IPV4) {
 			new_addr.ip = ip_hdr(skb)->saddr;
 			len = sizeof(struct in_addr);
@@ -79,7 +79,7 @@ static void nft_nat_setup_netmap(struct nf_nat_range2 *range,
 			len = sizeof(struct in6_addr);
 		}
 		break;
-	case NFT_NAT_DNAT:
+	case NF_NAT_MANIP_DST:
 		if (nft_pf(pkt) == NFPROTO_IPV4) {
 			new_addr.ip = ip_hdr(skb)->daddr;
 			len = sizeof(struct in_addr);
@@ -152,12 +152,12 @@ static int nft_nat_validate(const struct nft_ctx *ctx,
 		return err;
 
 	switch (priv->type) {
-	case NFT_NAT_SNAT:
+	case NF_NAT_MANIP_SRC:
 		err = nft_chain_validate_hooks(ctx->chain,
 					       (1 << NF_INET_POST_ROUTING) |
 					       (1 << NF_INET_LOCAL_IN));
 		break;
-	case NFT_NAT_DNAT:
+	case NF_NAT_MANIP_DST:
 		err = nft_chain_validate_hooks(ctx->chain,
 					       (1 << NF_INET_PRE_ROUTING) |
 					       (1 << NF_INET_LOCAL_OUT));
