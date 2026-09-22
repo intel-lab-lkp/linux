@@ -475,6 +475,21 @@ void drm_dev_exit(int idx)
 }
 EXPORT_SYMBOL(drm_dev_exit);
 
+/**
+ * drm_dev_srcu_synchronize - Drain device SRCU readers
+ * @dev: DRM device whose state change is being synchronized
+ *
+ * Wait for existing drm_dev_enter() users to finish.
+ *
+ * The SRCU domain is shared by all DRM devices. Readers for other DRM
+ * devices may also delay this function.
+ */
+void drm_dev_srcu_synchronize(struct drm_device *dev)
+{
+	synchronize_srcu(&drm_unplug_srcu);
+}
+EXPORT_SYMBOL(drm_dev_srcu_synchronize);
+
 /*
  * Mark the device as unplugged and wait for any in-flight drm_dev_enter()
  * critical sections to complete.
@@ -488,7 +503,7 @@ static void drm_dev_synchronize_unplug(struct drm_device *dev)
 	 * finished.
 	 */
 	dev->unplugged = true;
-	synchronize_srcu(&drm_unplug_srcu);
+	drm_dev_srcu_synchronize(dev);
 }
 
 /**
