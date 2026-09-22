@@ -2264,15 +2264,20 @@ ptp_ocp_devlink_info_get(struct devlink *devlink, struct devlink_info_req *req,
 		/* The flashable component.  Naming it here is what lets
 		 * "devlink dev flash ... component fw.cpld" through, as the
 		 * core matches the name against the versions reported here,
-		 * so it is reported for every board that has the part and not
+		 * so it is named for every board that has the part and not
 		 * only once its USERCODE has been read: a part left holding a
 		 * bad image answers neither, and gating the component on the
 		 * read would make that state unrecoverable.
+		 *
+		 * An empty value still registers the name with the core -
+		 * devlink_info_version_put() runs its version_cb before the
+		 * empty-value early-out - while emitting no version attribute,
+		 * so nothing is published until the USERCODE has been read.
 		 */
 		if (smp_load_acquire(&bp->cpld_usercode_ok))
 			sprintf(buf, "0x%08x", READ_ONCE(bp->cpld_usercode));
 		else
-			strscpy(buf, "unknown", sizeof(buf));
+			buf[0] = '\0';
 		err = devlink_info_version_running_put_ext(req, "fw.cpld", buf,
 							   ver_type);
 		if (err)
