@@ -2527,8 +2527,13 @@ static inline int task_on_rq_migrating(struct task_struct *p)
 #define WF_EXEC			0x02 /* Wakeup after exec; maps to SD_BALANCE_EXEC */
 #define WF_FORK			0x04 /* Wakeup after fork; maps to SD_BALANCE_FORK */
 #define WF_TTWU			0x08 /* Wakeup;            maps to SD_BALANCE_WAKE */
-
-#define WF_SYNC			0x10 /* Waker goes to sleep after wakeup */
+/*
+ * Hint that the caller expects the waker to sleep soon.
+ * Scheduler classes may use it for placement or preemption.
+ * Callers must not rely on it to prevent migration,
+ * preserve CPU locality or make the wakee run next.
+ */
+#define WF_SYNC			0x10
 #define WF_MIGRATED		0x20 /* Internal use, task got migrated */
 #define WF_CURRENT_CPU		0x40 /* Prefer to move the wakee to the current CPU. */
 #define WF_RQ_SELECTED		0x80 /* ->select_task_rq() was called */
