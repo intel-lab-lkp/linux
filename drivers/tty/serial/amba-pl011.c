@@ -2536,7 +2536,8 @@ static int pl011_console_setup(struct console *co, char *options)
 	 */
 	if (co->index >= UART_NR)
 		co->index = 0;
-	uap = amba_ports[co->index];
+	/* Pairs with the smp_store_release() in pl011_setup_port(). */
+	uap = smp_load_acquire(&amba_ports[co->index]);
 	if (!uap)
 		return -ENODEV;
 
@@ -2574,7 +2575,8 @@ static int pl011_console_setup(struct console *co, char *options)
 
 static int pl011_console_exit(struct console *co)
 {
-	struct uart_amba_port *uap = amba_ports[co->index];
+	/* Pairs with the smp_store_release() in pl011_setup_port(). */
+	struct uart_amba_port *uap = smp_load_acquire(&amba_ports[co->index]);
 
 	clk_disable_unprepare(uap->clk);
 
@@ -2644,7 +2646,8 @@ static int pl011_console_match(struct console *co, char *name, int idx,
 static void
 pl011_console_write_atomic(struct console *co, struct nbcon_write_context *wctxt)
 {
-	struct uart_amba_port *uap = amba_ports[co->index];
+	/* Pairs with the smp_store_release() in pl011_setup_port(). */
+	struct uart_amba_port *uap = smp_load_acquire(&amba_ports[co->index]);
 	unsigned int old_cr = 0;
 
 	if (!nbcon_enter_unsafe(wctxt))
@@ -2672,7 +2675,8 @@ pl011_console_write_atomic(struct console *co, struct nbcon_write_context *wctxt
 static void
 pl011_console_write_thread(struct console *co, struct nbcon_write_context *wctxt)
 {
-	struct uart_amba_port *uap = amba_ports[co->index];
+	/* Pairs with the smp_store_release() in pl011_setup_port(). */
+	struct uart_amba_port *uap = smp_load_acquire(&amba_ports[co->index]);
 	unsigned int old_cr = 0;
 
 	if (!nbcon_enter_unsafe(wctxt))
@@ -2983,7 +2987,8 @@ static int pl011_setup_port(struct device *dev, struct uart_amba_port *uap,
 	if (ret)
 		return ret;
 
-	amba_ports[index] = uap;
+	/* Pairs with the smp_load_acquire() in the console callbacks. */
+	smp_store_release(&amba_ports[index], uap);
 
 	return 0;
 }
