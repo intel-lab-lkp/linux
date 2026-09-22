@@ -865,6 +865,7 @@ static void k_pad(struct vc_data *vc, unsigned char value, char up_flag)
 static void k_shift(struct vc_data *vc, unsigned char value, char up_flag)
 {
 	int old_state = shift_state;
+	int state;
 
 	if (rep)
 		return;
@@ -889,9 +890,11 @@ static void k_shift(struct vc_data *vc, unsigned char value, char up_flag)
 		shift_down[value]++;
 
 	if (shift_down[value])
-		shift_state |= BIT(value);
+		state = shift_state | BIT(value);
 	else
-		shift_state &= ~BIT(value);
+		state = shift_state & ~BIT(value);
+	/* Pairs with the smp_load_acquire() in vt_get_shift_state(). */
+	smp_store_release(&shift_state, state);
 
 	/* kludge */
 	if (up_flag && shift_state != old_state && npadch_active) {
@@ -2212,8 +2215,11 @@ void vt_reset_unicode(unsigned int console)
  */
 int vt_get_shift_state(void)
 {
-        /* Don't lock as this is a transient report */
-        return shift_state;
+	/*
+	 * Don't lock as this is a transient report. Pairs with the
+	 * smp_store_release() in k_shift().
+	 */
+	return smp_load_acquire(&shift_state);
 }
 
 /**
