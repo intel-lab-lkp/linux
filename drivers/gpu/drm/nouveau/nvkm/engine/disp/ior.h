@@ -46,6 +46,8 @@ struct nvkm_ior {
 	/* Armed TMDS state. */
 	struct {
 		bool high_speed;
+		u8 gcp_cd;
+		u8 gcp_pp;
 	} tmds;
 };
 

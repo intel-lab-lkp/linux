@@ -809,13 +809,14 @@ nv50_audio_enable(struct drm_encoder *encoder, struct nouveau_crtc *nv_crtc,
 static void
 nv50_hdmi_enable(struct drm_encoder *encoder, struct nouveau_crtc *nv_crtc,
 		 struct nouveau_connector *nv_connector, struct drm_atomic_commit *state,
-		 struct drm_display_mode *mode, bool hda)
+		 struct drm_display_mode *mode, bool hda, u8 bpc)
 {
 	struct nouveau_drm *drm = nouveau_drm(encoder->dev);
 	struct nouveau_encoder *nv_encoder = nouveau_encoder(encoder);
 	struct drm_hdmi_info *hdmi = &nv_connector->base.display_info.hdmi;
 	union hdmi_infoframe infoframe = { 0 };
 	const u8 rekey = 56; /* binary driver, and tegra, constant */
+	u8 gcp_cd = 0, gcp_pp = 0;
 	u32 max_ac_packet;
 	DEFINE_RAW_FLEX(struct nvif_outp_infoframe_v0, args, data, 17);
 	const u8 data_len = __member_size(args->data);
@@ -825,6 +826,19 @@ nv50_hdmi_enable(struct drm_encoder *encoder, struct nouveau_crtc *nv_crtc,
 	max_ac_packet -= rekey;
 	max_ac_packet -= 18; /* constant from tegra */
 	max_ac_packet /= 32;
+
+	/* Match NVIDIA's 36-bpp GCP construction and extend the same HDMI
+	 * color-depth encoding to 48-bpp.  48-bpp groups contain one pixel,
+	 * so their last packing phase is phase 4 (zero).
+	 */
+	if (bpc == 16) {
+		gcp_cd = 7;
+	} else if (bpc == 12) {
+		const u32 hbp = mode->crtc_hblank_end - mode->crtc_hsync_end;
+
+		gcp_cd = 6;
+		gcp_pp = ((mode->crtc_hdisplay + hbp) & 1) ? 1 : 2;
+	}
 
 	if (nv_encoder->i2c && hdmi->scdc.scrambling.supported) {
 		const bool high_tmds_clock_ratio = mode->clock > 340000;
@@ -850,7 +864,7 @@ nv50_hdmi_enable(struct drm_encoder *encoder, struct nouveau_crtc *nv_crtc,
 
 	ret = nvif_outp_hdmi(&nv_encoder->outp, nv_crtc->index, true, max_ac_packet, rekey,
 			     mode->clock, hdmi->scdc.supported, hdmi->scdc.scrambling.supported,
-			     hdmi->scdc.scrambling.low_rates);
+			     hdmi->scdc.scrambling.low_rates, gcp_cd, gcp_pp);
 	if (ret)
 		return;
 
@@ -1615,7 +1629,7 @@ nv50_sor_atomic_disable(struct drm_encoder *encoder, struct drm_atomic_commit *s
 
 	if (nv_encoder->dcb->type == DCB_OUTPUT_TMDS && nv_encoder->hdmi.enabled) {
 		nvif_outp_hdmi(&nv_encoder->outp, head->base.index,
-			       false, 0, 0, 0, false, false, false);
+			       false, 0, 0, 0, false, false, false, 0, 0);
 		nv_encoder->hdmi.enabled = false;
 	}
 
@@ -1831,7 +1845,8 @@ nv50_sor_atomic_enable(struct drm_encoder *encoder, struct drm_atomic_commit *st
 
 		if (disp->disp->object.oclass != NV50_DISP &&
 		    nv_connector->base.display_info.is_hdmi)
-			nv50_hdmi_enable(encoder, nv_crtc, nv_connector, state, mode, hda);
+			nv50_hdmi_enable(encoder, nv_crtc, nv_connector, state, mode, hda,
+					 asyh->or.bpc);
 
 		if (nv_encoder->outp.or.link & 1) {
 			proto = NV507D_SOR_SET_CONTROL_PROTOCOL_SINGLE_TMDS_A;

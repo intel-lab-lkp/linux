@@ -224,9 +224,10 @@ nvif_outp_infoframe(struct nvif_outp *outp, u8 type, struct nvif_outp_infoframe_
 
 int
 nvif_outp_hdmi(struct nvif_outp *outp, int head, bool enable, u8 max_ac_packet, u8 rekey,
-	       u32 khz, bool scdc, bool scdc_scrambling, bool scdc_low_rates)
+	       u32 khz, bool scdc, bool scdc_scrambling, bool scdc_low_rates,
+	       u8 gcp_cd, u8 gcp_pp)
 {
-	struct nvif_outp_hdmi_v0 args;
+	struct nvif_outp_hdmi_v0 args = {};
 	int ret;
 
 	args.version = 0;
@@ -238,6 +239,8 @@ nvif_outp_hdmi(struct nvif_outp *outp, int head, bool enable, u8 max_ac_packet, 
 	args.scdc = scdc;
 	args.scdc_scrambling = scdc_scrambling;
 	args.scdc_low_rates = scdc_low_rates;
+	args.gcp_cd = gcp_cd;
+	args.gcp_pp = gcp_pp;
 
 	ret = nvif_mthd(&outp->object, NVIF_OUTP_V0_HDMI, &args, sizeof(args));
 	NVIF_ERRON(ret, &outp->object,

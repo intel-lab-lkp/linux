@@ -90,7 +90,7 @@ int nvif_outp_bl_set(struct nvif_outp *, int level);
 int nvif_outp_lvds(struct nvif_outp *, bool dual, bool bpc8);
 
 int nvif_outp_hdmi(struct nvif_outp *, int head, bool enable, u8 max_ac_packet, u8 rekey, u32 khz,
-		   bool scdc, bool scdc_scrambling, bool scdc_low_rates);
+		   bool scdc, bool scdc_scrambling, bool scdc_low_rates, u8 gcp_cd, u8 gcp_pp);
 
 int nvif_outp_infoframe(struct nvif_outp *, u8 type, struct nvif_outp_infoframe_v0 *, u32 size);
 int nvif_outp_hda_eld(struct nvif_outp *, int head, void *data, u32 size);

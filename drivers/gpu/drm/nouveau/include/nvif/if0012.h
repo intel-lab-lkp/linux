@@ -176,6 +176,9 @@ union nvif_outp_hdmi_args {
 		__u8 scdc_scrambling;
 		__u8 scdc_low_rates;
 		__u32 khz;
+		__u8 gcp_cd;
+		__u8 gcp_pp;
+		__u8 pad14[2];
 	} v0;
 };
 
