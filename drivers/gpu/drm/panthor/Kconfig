@@ -30,3 +30,13 @@ config DRM_PANTHOR_SYSTEM
 	  AM GPUs. This block provides GPU-wide control outside the main GPU
 	  register window, including reset handling and management of shared
 	  clock and regulator resources.
+
+config DRM_PANTHOR_ARBITRATION
+	tristate "HW-assisted virtualization for Mali 5th Gen AM GPUs"
+	depends on DRM_PANTHOR
+	depends on OF
+	help
+	  Enable support for the arbitration blocks found on Arm Mali 5th Gen
+	  AM GPUs. These blocks manage partition controls, resource groups and
+	  access-window scheduling, allowing multiple access windows to share
+	  GPU resources under hardware-assisted arbitration.
