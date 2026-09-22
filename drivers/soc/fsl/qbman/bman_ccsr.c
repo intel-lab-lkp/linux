@@ -180,7 +180,8 @@ static irqreturn_t bman_isr(int irq, void *ptr)
 
 int bman_is_probed(void)
 {
-	return __bman_probed;
+	/* Pairs with smp_store_release() in fsl_bman_probe(). */
+	return smp_load_acquire(&__bman_probed);
 }
 EXPORT_SYMBOL_GPL(bman_is_probed);
 
@@ -279,7 +280,8 @@ static int fsl_bman_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	__bman_probed = 1;
+	/* Order bm_ccsr_start, bman_ip_rev and the pool allocator before the flag. */
+	smp_store_release(&__bman_probed, 1);
 
 	return 0;
 };

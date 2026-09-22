@@ -711,7 +711,8 @@ static int qman_resource_init(struct device *dev)
 
 int qman_is_probed(void)
 {
-	return __qman_probed;
+	/* Pairs with smp_store_release() in fsl_qman_probe(). */
+	return smp_load_acquire(&__qman_probed);
 }
 EXPORT_SYMBOL_GPL(qman_is_probed);
 
@@ -864,7 +865,13 @@ static int fsl_qman_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	__qman_probed = 1;
+	/*
+	 * Publish the flag only after every store made above (qman_ip_rev,
+	 * qm_ccsr_start, the FQD/PFDR bases, the work queue) is visible to
+	 * the consumers that poll qman_is_probed() and then call into
+	 * qman_set_sdest(), qman_liodn_fixup(), qman_alloc_*().
+	 */
+	smp_store_release(&__qman_probed, 1);
 
 	return 0;
 }

@@ -90,7 +90,8 @@ static int bman_online_cpu(unsigned int cpu)
 
 int bman_portals_probed(void)
 {
-	return __bman_portals_probed;
+	/* Pairs with smp_store_release() in bman_portal_probe(). */
+	return smp_load_acquire(&__bman_portals_probed);
 }
 EXPORT_SYMBOL_GPL(bman_portals_probed);
 
@@ -157,7 +158,8 @@ static int bman_portal_probe(struct platform_device *pdev)
 	spin_lock(&bman_lock);
 	cpu = cpumask_first_zero(&portal_cpus);
 	if (cpu >= nr_cpu_ids) {
-		__bman_portals_probed = 1;
+		/* All CPU-bound portals are initialised and in affine_bportals. */
+		smp_store_release(&__bman_portals_probed, 1);
 		/* unassigned portal, skip init */
 		spin_unlock(&bman_lock);
 		goto check_cleanup;
