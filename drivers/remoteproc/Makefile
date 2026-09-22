@@ -41,3 +41,4 @@ obj-$(CONFIG_TI_K3_M4_REMOTEPROC)	+= ti_k3_m4_remoteproc.o ti_k3_common.o
 obj-$(CONFIG_TI_K3_R5_REMOTEPROC)	+= ti_k3_r5_remoteproc.o ti_k3_common.o
 obj-$(CONFIG_XLNX_R5_REMOTEPROC)	+= xlnx_r5_remoteproc.o
 obj-$(CONFIG_SUNXI_REMOTEPROC)		+= sunxi_rproc.o
+obj-$(CONFIG_SUNXI_REMOTEPROC_KUNIT_TEST)	+= sunxi_rproc_test.o
