@@ -44,6 +44,10 @@ static struct panthor_hw panthor_hw_arch_v10 = {
 		.mcu_control = {
 			.offset = 0x700,
 		},
+		.mmu_as_control = {
+			.offset = 0x2400,
+			.stride = 0x40,
+		},
 	},
 };
 
@@ -62,6 +66,10 @@ static struct panthor_hw panthor_hw_arch_v14 = {
 		},
 		.pwr_control = {
 			.offset = 0x800,
+		},
+		.mmu_as_control = {
+			.offset = 0x2400,
+			.stride = 0x40,
 		},
 	},
 };
