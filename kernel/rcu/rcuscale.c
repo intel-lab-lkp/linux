@@ -39,6 +39,7 @@
 #include <linux/torture.h>
 #include <linux/vmalloc.h>
 #include <linux/rcupdate_trace.h>
+#include <linux/hazptr.h>
 #include <linux/sched/debug.h>
 
 #include "rcu.h"
@@ -417,6 +418,66 @@ static struct rcu_scale_ops tasks_tracing_ops = {
 #define TASKS_TRACING_OPS
 
 #endif // #else // #ifdef CONFIG_TASKS_TRACE_RCU
+
+#if IS_ENABLED(CONFIG_HAZPTR_TORTURE_TEST)
+
+static int hazptr_scale_obj;	/* Stable, non-NULL, never reclaimed. */
+static void *hazptr_scale_ptr = &hazptr_scale_obj;
+
+struct hazptr_scale_state {
+	struct hazptr_ctx ctx;
+	void *addr;
+};
+static DEFINE_PER_CPU(struct hazptr_scale_state, hazptr_scale_state);
+
+static int hazptr_scale_read_lock(void)
+{
+	struct hazptr_scale_state *state = this_cpu_ptr(&hazptr_scale_state);
+
+	preempt_disable();
+	state->addr = hazptr_acquire(&state->ctx, &hazptr_scale_ptr);
+	return 0;
+}
+
+static void hazptr_scale_read_unlock(int idx)
+{
+	struct hazptr_scale_state *state = this_cpu_ptr(&hazptr_scale_state);
+
+	udelay(10);
+	hazptr_release(&state->ctx, state->addr);
+	preempt_enable();
+}
+
+static unsigned long hazptr_scale_completed(void)
+{
+	return 0;
+}
+
+static void hazptr_scale_sync(void)
+{
+	hazptr_synchronize(hazptr_scale_ptr);
+}
+
+static void hazptr_scale_sync_exp(void)
+{
+	hazptr_synchronize(hazptr_scale_ptr);
+}
+
+static struct rcu_scale_ops hazptr_scale_ops = {
+	.ptype		= 0,
+	.readlock	= hazptr_scale_read_lock,
+	.readunlock	= hazptr_scale_read_unlock,
+	.get_gp_seq	= hazptr_scale_completed,
+	.gp_diff	= NULL,
+	.sync		= hazptr_scale_sync,
+	.exp_sync	= hazptr_scale_sync_exp,
+	.name		= "hazptr",
+};
+
+#define HAZPTR_SCALE_OPS &hazptr_scale_ops,
+#else
+#define HAZPTR_SCALE_OPS
+#endif
 
 static unsigned long rcuscale_seq_diff(unsigned long new, unsigned long old)
 {
@@ -1110,7 +1171,9 @@ rcu_scale_init(void)
 	long i;
 	long j;
 	static struct rcu_scale_ops *scale_ops[] = {
-		&rcu_ops, &srcu_ops, &srcud_ops, TASKS_OPS TASKS_RUDE_OPS TASKS_TRACING_OPS
+		&rcu_ops, &srcu_ops, &srcud_ops,
+		TASKS_OPS TASKS_RUDE_OPS TASKS_TRACING_OPS
+		HAZPTR_SCALE_OPS
 	};
 
 	if (!torture_init_begin(scale_type, verbose))
