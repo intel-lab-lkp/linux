@@ -91,6 +91,28 @@ static int qca83xx_probe(struct phy_device *phydev)
 	return 0;
 }
 
+static int qca8337_disable_smartspeed(struct phy_device *phydev)
+{
+	if (!(phydev->dev_flags & QCA8K_DEVFLAGS_NO_SMARTSPEED))
+		return 0;
+
+	/* SmartSpeed settings take effect at software reset. */
+	return phy_clear_bits(phydev, AT803X_SMART_SPEED,
+			      AT803X_SMART_SPEED_ENABLE |
+			      AT803X_SMART_SPEED_BYPASS_TIMER);
+}
+
+static int qca8337_soft_reset(struct phy_device *phydev)
+{
+	int ret;
+
+	ret = qca8337_disable_smartspeed(phydev);
+	if (ret)
+		return ret;
+
+	return genphy_soft_reset(phydev);
+}
+
 static int qca83xx_config_init(struct phy_device *phydev)
 {
 	u8 switch_revision;
@@ -160,6 +182,11 @@ static int qca83xx_resume(struct phy_device *phydev)
 	/* Reinit the port, reset values set by suspend */
 	qca83xx_config_init(phydev);
 
+	/* Reapply the CPU PHY quirk before the resume reset. */
+	ret = qca8337_disable_smartspeed(phydev);
+	if (ret)
+		return ret;
+
 	/* Reset the port on port resume */
 	phy_set_bits(phydev, MII_BMCR, BMCR_RESET | BMCR_ANENABLE);
 
@@ -218,7 +245,7 @@ static struct phy_driver qca83xx_driver[] = {
 	.probe			= qca83xx_probe,
 	.flags			= PHY_IS_INTERNAL,
 	.config_init		= qca83xx_config_init,
-	.soft_reset		= genphy_soft_reset,
+	.soft_reset		= qca8337_soft_reset,
 	.get_sset_count		= qca83xx_get_sset_count,
 	.get_strings		= qca83xx_get_strings,
 	.get_stats		= qca83xx_get_stats,
