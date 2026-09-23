@@ -167,7 +167,7 @@ conntrack_mt(const struct sk_buff *skb, struct xt_action_param *par,
 	const struct nf_conn *ct;
 	unsigned int statebit;
 
-	ct = nf_ct_get(skb, &ctinfo);
+	ct = nf_ct_get_real(skb, &ctinfo);
 
 	if (ct)
 		statebit = XT_CONNTRACK_STATE_BIT(ctinfo);

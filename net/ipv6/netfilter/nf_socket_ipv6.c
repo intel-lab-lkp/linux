@@ -145,7 +145,7 @@ struct sock *nf_sk_lookup_slow_v6(struct net *net, const struct sk_buff *skb,
 	 * case this is a reply packet of an established
 	 * SNAT-ted connection.
 	 */
-	ct = nf_ct_get(skb, &ctinfo);
+	ct = nf_ct_get_real(skb, &ctinfo);
 	if (ct &&
 	    ((tproto != IPPROTO_ICMPV6 &&
 	      ctinfo == IP_CT_ESTABLISHED_REPLY) ||

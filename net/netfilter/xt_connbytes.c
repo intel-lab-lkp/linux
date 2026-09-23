@@ -30,7 +30,7 @@ connbytes_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	const struct nf_conn_acct *acct;
 	const struct nf_conn_counter *counters;
 
-	ct = nf_ct_get(skb, &ctinfo);
+	ct = nf_ct_get_real(skb, &ctinfo);
 	if (!ct)
 		return false;
 

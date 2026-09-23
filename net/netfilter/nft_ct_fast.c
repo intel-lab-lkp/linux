@@ -14,7 +14,7 @@ void nft_ct_get_fast_eval(const struct nft_expr *expr,
 	const struct nf_conn *ct;
 	unsigned int state;
 
-	ct = nf_ct_get(pkt->skb, &ctinfo);
+	ct = nf_ct_get_real(pkt->skb, &ctinfo);
 
 	switch (priv->key) {
 	case NFT_CT_STATE:
@@ -30,7 +30,7 @@ void nft_ct_get_fast_eval(const struct nft_expr *expr,
 		break;
 	}
 
-	if (!ct || nf_ct_is_template(ct)) {
+	if (!ct) {
 		regs->verdict.code = NFT_BREAK;
 		return;
 	}

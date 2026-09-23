@@ -115,7 +115,7 @@ ipvs_mt(const struct sk_buff *skb, struct xt_action_param *par)
 
 	if (data->bitmask & XT_IPVS_DIR) {
 		enum ip_conntrack_info ctinfo;
-		struct nf_conn *ct = nf_ct_get(skb, &ctinfo);
+		struct nf_conn *ct = nf_ct_get_real(skb, &ctinfo);
 
 		if (ct == NULL) {
 			match = false;

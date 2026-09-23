@@ -62,7 +62,7 @@ static void nft_ct_get_eval(const struct nft_expr *expr,
 	const struct nf_conntrack_helper *helper;
 	unsigned int state;
 
-	ct = nf_ct_get(pkt->skb, &ctinfo);
+	ct = nf_ct_get_real(pkt->skb, &ctinfo);
 
 	switch (priv->key) {
 	case NFT_CT_STATE:
@@ -78,7 +78,7 @@ static void nft_ct_get_eval(const struct nft_expr *expr,
 		break;
 	}
 
-	if (!ct || nf_ct_is_template(ct))
+	if (!ct)
 		goto err;
 
 	switch (priv->key) {

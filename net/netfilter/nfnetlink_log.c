@@ -787,7 +787,7 @@ nfulnl_log_packet(struct net *net,
 	if (inst->flags & NFULNL_CFG_F_CONNTRACK) {
 		nfnl_ct = rcu_dereference(nfnl_ct_hook);
 		if (nfnl_ct != NULL) {
-			ct = nf_ct_get(skb, &ctinfo);
+			ct = nf_ct_get_real(skb, &ctinfo);
 			if (ct != NULL)
 				size += nfnl_ct->build_size(ct);
 		}

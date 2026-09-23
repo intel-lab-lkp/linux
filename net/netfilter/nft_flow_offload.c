@@ -64,7 +64,7 @@ static void nft_flow_offload_eval(const struct nft_expr *expr,
 	if (nft_flow_offload_skip(pkt->skb, nft_pf(pkt)))
 		goto out;
 
-	ct = nf_ct_get(pkt->skb, &ctinfo);
+	ct = nf_ct_get_real(pkt->skb, &ctinfo);
 	if (!ct)
 		goto out;
 

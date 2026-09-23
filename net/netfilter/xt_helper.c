@@ -30,7 +30,7 @@ helper_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	enum ip_conntrack_info ctinfo;
 	bool ret = info->invert;
 
-	ct = nf_ct_get(skb, &ctinfo);
+	ct = nf_ct_get_real(skb, &ctinfo);
 	if (!ct || !ct->master)
 		return ret;
 
