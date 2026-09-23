@@ -2367,13 +2367,18 @@ static irqreturn_t arm_smmu_gerror_handler(int irq, void *dev)
 {
 	u32 gerror, gerrorn, active;
 	struct arm_smmu_device *smmu = dev;
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&smmu->cmdq.cmdq_err_lock, flags);
 
 	gerror = readl_relaxed(smmu->base + ARM_SMMU_GERROR);
 	gerrorn = readl_relaxed(smmu->base + ARM_SMMU_GERRORN);
 
 	active = gerror ^ gerrorn;
-	if (!(active & GERROR_ERR_MASK))
+	if (!(active & GERROR_ERR_MASK)) {
+		raw_spin_unlock_irqrestore(&smmu->cmdq.cmdq_err_lock, flags);
 		return IRQ_NONE; /* No errors pending */
+	}
 
 	dev_warn(smmu->dev,
 		 "unexpected global error reported (0x%08x), this could be serious\n",
@@ -2382,6 +2387,7 @@ static irqreturn_t arm_smmu_gerror_handler(int irq, void *dev)
 	if (active & GERROR_SFM_ERR) {
 		/* SMMU is being disabled, so other errors don't matter */
 		writel(gerror, smmu->base + ARM_SMMU_GERRORN);
+		raw_spin_unlock_irqrestore(&smmu->cmdq.cmdq_err_lock, flags);
 		dev_err(smmu->dev, "device has entered Service Failure Mode!\n");
 		arm_smmu_device_disable(smmu);
 		return IRQ_HANDLED;
@@ -2409,6 +2415,7 @@ static irqreturn_t arm_smmu_gerror_handler(int irq, void *dev)
 		arm_smmu_cmdq_skip_err(smmu);
 
 	writel(gerror, smmu->base + ARM_SMMU_GERRORN);
+	raw_spin_unlock_irqrestore(&smmu->cmdq.cmdq_err_lock, flags);
 	return IRQ_HANDLED;
 }
 
@@ -4529,13 +4536,15 @@ int arm_smmu_init_one_queue(struct arm_smmu_device *smmu,
 	return 0;
 }
 
-int arm_smmu_cmdq_init(struct arm_smmu_device *smmu,
-		       struct arm_smmu_cmdq *cmdq)
+int arm_smmu_cmdq_init(struct arm_smmu_device *smmu, struct arm_smmu_cmdq *cmdq,
+		       arm_smmu_cmdq_err_fn cmdq_err_handler)
 {
 	unsigned int nents = 1 << cmdq->q.llq.max_n_shift;
 
 	atomic_set(&cmdq->owner_prod, 0);
 	atomic_set(&cmdq->lock, 0);
+	raw_spin_lock_init(&cmdq->cmdq_err_lock);
+	cmdq->cmdq_err_handler = cmdq_err_handler;
 
 	cmdq->valid_map = (atomic_long_t *)devm_bitmap_zalloc(smmu->dev, nents,
 							      GFP_KERNEL);
@@ -4575,7 +4584,7 @@ static int arm_smmu_init_queues(struct arm_smmu_device *smmu)
 	if (ret)
 		return ret;
 
-	ret = arm_smmu_cmdq_init(smmu, &smmu->cmdq);
+	ret = arm_smmu_cmdq_init(smmu, &smmu->cmdq, NULL);
 	if (ret)
 		return ret;
 

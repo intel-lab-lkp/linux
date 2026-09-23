@@ -698,6 +698,10 @@ struct arm_smmu_queue_poll {
 	bool				wfe;
 };
 
+struct arm_smmu_cmdq;
+typedef void (*arm_smmu_cmdq_err_fn)(struct arm_smmu_device *smmu,
+				     struct arm_smmu_cmdq *cmdq);
+
 struct arm_smmu_cmdq {
 	struct arm_smmu_queue		q;
 	atomic_long_t			*valid_map;
@@ -705,6 +709,10 @@ struct arm_smmu_cmdq {
 	atomic_t			lock;
 	unsigned long			*atc_sync_timeouts;
 	bool				(*supports_cmd)(struct arm_smmu_cmd *cmd);
+
+	/* Drain a pending CMDQ_ERR; will hold cmdq_err_lock with irqsave */
+	arm_smmu_cmdq_err_fn		cmdq_err_handler;
+	raw_spinlock_t			cmdq_err_lock;
 };
 
 static inline bool arm_smmu_cmdq_supports_cmd(struct arm_smmu_cmdq *cmdq,
@@ -1170,8 +1178,8 @@ int arm_smmu_init_one_queue(struct arm_smmu_device *smmu,
 			    struct arm_smmu_queue *q, void __iomem *page,
 			    unsigned long prod_off, unsigned long cons_off,
 			    size_t dwords, const char *name);
-int arm_smmu_cmdq_init(struct arm_smmu_device *smmu,
-		       struct arm_smmu_cmdq *cmdq);
+int arm_smmu_cmdq_init(struct arm_smmu_device *smmu, struct arm_smmu_cmdq *cmdq,
+		       arm_smmu_cmdq_err_fn cmdq_err_handler);
 
 static inline bool arm_smmu_master_canwbs(struct arm_smmu_master *master)
 {
