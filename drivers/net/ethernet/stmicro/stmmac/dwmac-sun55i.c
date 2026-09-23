@@ -19,6 +19,7 @@
 #include <linux/property.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
+#include <linux/reset.h>
 #include <linux/stmmac.h>
 
 #include "stmmac.h"
@@ -61,6 +62,41 @@ static int sun55i_gmac200_init_resources(struct platform_device *pdev,
 	if (IS_ERR(gmac->regmap))
 		return dev_err_probe(&pdev->dev, PTR_ERR(gmac->regmap),
 				     "Unable to map syscon\n");
+
+	return 0;
+}
+
+static const struct regmap_config sun60i_a733_regmap_cfg = {
+	.reg_bits = 32,
+	.val_bits = 32,
+	.reg_stride = 4,
+};
+
+static int sun60i_gmac210_init_resources(struct platform_device *pdev,
+					 struct sun55i_gmac *gmac)
+{
+	struct device *dev = &pdev->dev;
+	struct reset_control *ahb_reset;
+	void __iomem *base;
+
+	/*
+	 * Get the configuration region out of reset before changing it.
+	 * stmmac core holds the same shared reset but only deasserts it later.
+	 */
+	ahb_reset = devm_reset_control_get_shared_deasserted(dev, "ahb");
+	if (IS_ERR(ahb_reset))
+		return dev_err_probe(dev, PTR_ERR(ahb_reset),
+				     "Failed to get ahb reset\n");
+
+	base = devm_platform_ioremap_resource(pdev, 1);
+	if (IS_ERR(base))
+		return dev_err_probe(dev, PTR_ERR(base),
+				     "Unable to get config memory region\n");
+
+	gmac->regmap = devm_regmap_init_mmio(dev, base, &sun60i_a733_regmap_cfg);
+	if (IS_ERR(gmac->regmap))
+		return dev_err_probe(dev, PTR_ERR(gmac->regmap),
+				     "Unable to get regmap for config memory region\n");
 
 	return 0;
 }
@@ -132,9 +168,11 @@ static int sun55i_gmac200_setup(struct device *dev,
 				     phy_modes(plat->phy_interface));
 	}
 
+	/* The dwmac will sample this when stmmaceth reset is deasserted */
 	ret = regmap_write(gmac->regmap, gmac->data->offset, reg);
 	if (ret < 0)
-		return dev_err_probe(dev, ret, "Failed to write to syscon\n");
+		return dev_err_probe(dev, ret,
+				     "Failed to write glue configuration\n");
 
 	return 0;
 }
@@ -202,9 +240,22 @@ static const struct sun55i_gmac_data sun55i_a523_gmac200_data = {
 	.rxdly_step_ps = 100,
 };
 
+static const struct sun55i_gmac_data sun60i_a733_gmac210_data = {
+	.init_resources = sun60i_gmac210_init_resources,
+	.flags = (STMMAC_FLAG_SPH_DISABLE |
+		  STMMAC_FLAG_MULTI_MSI_EN |
+		  STMMAC_FLAG_EN_TX_LPI_CLK_PHY_CAP),
+	.offset = 0x0,
+	.etxdc_ext_mask = GENMASK(17, 16),
+	.txdly_step_ps = 180,
+	.rxdly_step_ps = 180,
+};
+
 static const struct of_device_id sun55i_gmac200_match[] = {
 	{ .compatible = "allwinner,sun55i-a523-gmac200",
 	  .data = &sun55i_a523_gmac200_data },
+	{ .compatible = "allwinner,sun60i-a733-gmac210",
+	  .data = &sun60i_a733_gmac210_data },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, sun55i_gmac200_match);
