@@ -545,6 +545,39 @@ static int dw_spi_transfer_one(struct spi_controller *ctlr,
 	return 1;
 }
 
+static int dw_spi_prepare_hardware(struct spi_controller *ctlr)
+{
+	struct dw_spi *dws = spi_controller_get_devdata(ctlr);
+	int ret;
+
+	if (!ctlr->can_dma)
+		return 0;
+
+	ret = dws->dma_ops->dma_init(ctlr->dev.parent, dws);
+	if (ret) {
+		/*
+		 * DMA is optional: fall back to the PIO/IRQ path instead of
+		 * failing the message. Use dev_dbg() since this may happen
+		 * on every prepare.
+		 */
+		dev_dbg(&ctlr->dev, "DMA init failed (%d), using PIO\n", ret);
+
+		return 0;
+	}
+
+	return 0;
+}
+
+static int dw_spi_unprepare_hardware(struct spi_controller *ctlr)
+{
+	struct dw_spi *dws = spi_controller_get_devdata(ctlr);
+
+	if (dws->dma_ops && dws->dma_ops->dma_exit)
+		dws->dma_ops->dma_exit(dws);
+
+	return 0;
+}
+
 static inline void dw_spi_abort(struct spi_controller *ctlr)
 {
 	struct dw_spi *dws = spi_controller_get_devdata(ctlr);
@@ -1331,6 +1364,8 @@ int dw_spi_add_controller(struct device *dev, struct dw_spi *dws)
 	ctlr->setup = dw_spi_setup;
 	ctlr->cleanup = dw_spi_cleanup;
 	ctlr->transfer_one = dw_spi_transfer_one;
+	ctlr->prepare_transfer_hardware = dw_spi_prepare_hardware;
+	ctlr->unprepare_transfer_hardware = dw_spi_unprepare_hardware;
 	ctlr->handle_err = dw_spi_handle_err;
 	ctlr->auto_runtime_pm = true;
 
@@ -1355,13 +1390,14 @@ int dw_spi_add_controller(struct device *dev, struct dw_spi *dws)
 	device_property_read_u32(dev, "rx-sample-delay-ns",
 				 &dws->def_rx_sample_dly_ns);
 
-	if (dws->dma_ops && dws->dma_ops->dma_init) {
+	if (dws->dma_ops && dws->dma_ops->dma_init && dws->dma_ops->dma_exit) {
 		ret = dws->dma_ops->dma_init(dev, dws);
 		if (ret == -EPROBE_DEFER) {
 			goto err_free_irq;
 		} else if (ret) {
 			dev_warn(dev, "DMA init failed\n");
 		} else {
+			dws->dma_ops->dma_exit(dws);
 			ctlr->can_dma = dws->dma_ops->can_dma;
 			ctlr->flags |= SPI_CONTROLLER_MUST_TX;
 		}
@@ -1370,15 +1406,13 @@ int dw_spi_add_controller(struct device *dev, struct dw_spi *dws)
 	ret = spi_register_controller(ctlr);
 	if (ret) {
 		dev_err_probe(dev, ret, "problem registering spi controller\n");
-		goto err_dma_exit;
+		goto err_disable_ctlr;
 	}
 
 	dw_spi_debugfs_init(dws);
 	return 0;
 
-err_dma_exit:
-	if (dws->dma_ops && dws->dma_ops->dma_exit)
-		dws->dma_ops->dma_exit(dws);
+err_disable_ctlr:
 	dw_spi_enable_chip(dws, 0);
 err_free_irq:
 	free_irq(dws->irq, ctlr);
@@ -1393,9 +1427,6 @@ void dw_spi_remove_controller(struct dw_spi *dws)
 	dw_spi_debugfs_remove(dws);
 
 	spi_unregister_controller(dws->ctlr);
-
-	if (dws->dma_ops && dws->dma_ops->dma_exit)
-		dws->dma_ops->dma_exit(dws);
 
 	dw_spi_shutdown_chip(dws);
 

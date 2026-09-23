@@ -211,11 +211,15 @@ static void dw_spi_dma_exit(struct dw_spi *dws)
 	if (dws->txchan) {
 		dmaengine_terminate_sync(dws->txchan);
 		dma_release_channel(dws->txchan);
+		dws->txchan = NULL;
+		dws->ctlr->dma_tx = NULL;
 	}
 
 	if (dws->rxchan) {
 		dmaengine_terminate_sync(dws->rxchan);
 		dma_release_channel(dws->rxchan);
+		dws->rxchan = NULL;
+		dws->ctlr->dma_rx = NULL;
 	}
 }
 
@@ -248,6 +252,10 @@ static bool dw_spi_can_dma(struct spi_controller *ctlr,
 	struct dw_spi *dws = spi_controller_get_devdata(ctlr);
 	enum dma_slave_buswidth dma_bus_width;
 	u8 n_bytes = roundup_pow_of_two(BITS_TO_BYTES(xfer->bits_per_word));
+
+	/* Channels are acquired at runtime and may be unavailable */
+	if (!dws->txchan || !dws->rxchan)
+		return false;
 
 	if (xfer->len <= dws->fifo_len)
 		return false;
