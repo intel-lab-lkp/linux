@@ -949,6 +949,7 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 		.bdf_addr = 0x4D200000,
 		.hw_ops = &ipq5018_ops,
 		.internal_sleep_clock = false,
+		.regs = &qcn6122_regs,
 		.qmi_service_ins_id = ATH11K_QMI_WLFW_SERVICE_INS_ID_V01_QCN6122,
 		.host_ce_config = ath11k_host_ce_config_qcn9074,
 		.ce_count = CE_CNT_5018,
