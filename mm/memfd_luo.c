@@ -71,12 +71,19 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/bits.h>
+#include <linux/dcache.h>
 #include <linux/err.h>
 #include <linux/file.h>
+#include <linux/fs.h>
 #include <linux/io.h>
 #include <linux/kexec_handover.h>
 #include <linux/kho/abi/memfd.h>
+#include <linux/kho/abi/tmpfs.h>
+#include <linux/limits.h>
 #include <linux/liveupdate.h>
+#include <linux/magic.h>
+#include <linux/mount.h>
+#include <linux/quotaops.h>
 #include <linux/shmem_fs.h>
 #include <linux/vmalloc.h>
 #include <linux/memfd.h>
@@ -606,17 +613,242 @@ static struct liveupdate_file_handler memfd_luo_handler = {
 	.compatible = MEMFD_LUO_FH_COMPATIBLE,
 };
 
+/**
+ * DOC: tmpfs Preservation via LUO
+ *
+ * Overview
+ * ========
+ *
+ * tmpfs mounts can be preserved via LUO. This allows userspace to preserve an
+ * in-memory filesystem across kexec.
+ *
+ * Preservation is not transparent. Only the properties listed below survive;
+ * everything else comes back at its default.
+ *
+ * Preserving
+ * ==========
+ *
+ * A mount is preserved through a file descriptor for its root. An ``O_PATH``
+ * descriptor is rejected, so one obtained from fsmount(2) has to be reopened
+ * first with ``openat(fsmount_fd, ".", O_RDONLY | O_DIRECTORY)``.
+ *
+ * Mounts with memory policies, id mappings, quotas, and casefolding are not
+ * supported.
+ *
+ * Attaching a memory policy after preserve will fail the freeze.
+ *
+ * Restoring
+ * =========
+ *
+ * The mount comes back as a detached mount file descriptor with the same
+ * semantics as fsmount(2). Userspace attaches it with::
+ *
+ *	move_mount(fd, "", AT_FDCWD, "/some/path", MOVE_MOUNT_F_EMPTY_PATH);
+ *
+ * Closing the mount descriptor without ever attaching it tears the mount down,
+ * and everything in it goes too.
+ *
+ * Like fsmount(2)'s, the restored mount descriptor is an ``O_PATH`` one, so
+ * preserving the same mount again for a second live update means reopening its
+ * root.
+ *
+ * Preserved Properties
+ * ====================
+ *
+ * ``nr_blocks=``:
+ *   The block limit. Restoring file contents is charged against it.
+ *
+ * Root directory mode
+ *   Including the sticky and setgid bits.
+ *
+ * Not Preserved
+ * =============
+ *
+ * All properties which are not preserved must be assumed to be reset to
+ * default. This section describes some of those properties which may be more of
+ * note.
+ *
+ * Ownership
+ *   Everything comes back owned by whoever retrieves it. If different ownership
+ *   is needed, userspace must do that after retrieving the mount.
+ *
+ * Timestamps, inode numbers, extended attributes and ACLs
+ *   A restored mount root is a new inode with fresh timestamps and a new
+ *   number. utimensat(2) can set the timestamps again once the mount is
+ *   attached.
+ */
+
+static unsigned long tmpfs_luo_mnt_id(struct super_block *sb)
+{
+	return (unsigned long)sb;
+}
+
+static bool tmpfs_luo_mnt_can_preserve(struct liveupdate_file_handler *fh,
+				       struct file *file)
+{
+	struct vfsmount *mnt = file->f_path.mnt;
+	struct super_block *sb = mnt->mnt_sb;
+
+	if (sb->s_magic != TMPFS_MAGIC)
+		return false;
+
+	/* The root of a whole filesystem, not a bind mount of a subdirectory. */
+	if (file->f_path.dentry != mnt->mnt_root || mnt->mnt_root != sb->s_root)
+		return false;
+
+	/* These features are not supported. */
+	if (SHMEM_SB(sb)->mpol || sb_has_quota_active(sb, USRQUOTA) ||
+	    sb_has_encoding(sb) || is_idmapped_mnt(mnt))
+		return false;
+
+	return true;
+}
+
+static unsigned long tmpfs_luo_mnt_get_id(struct file *file)
+{
+	return tmpfs_luo_mnt_id(file->f_path.mnt->mnt_sb);
+}
+
+static int tmpfs_luo_mnt_preserve(struct liveupdate_file_op_args *args)
+{
+	struct tmpfs_luo_mnt_ser *ser;
+
+	ser = kho_alloc_preserve(sizeof(*ser));
+	if (IS_ERR(ser))
+		return PTR_ERR(ser);
+
+	/*
+	 * ser only saves mode and max_blocks. Since they can change by a
+	 * remount, save them on freeze(). So nothing to save for now.
+	 */
+	args->serialized_data = virt_to_phys(ser);
+
+	return 0;
+}
+
+static int tmpfs_luo_mnt_freeze(struct liveupdate_file_op_args *args)
+{
+	struct super_block *sb = args->file->f_path.mnt->mnt_sb;
+	struct shmem_sb_info *sbinfo = SHMEM_SB(sb);
+	struct tmpfs_luo_mnt_ser *ser;
+
+	/*
+	 * A remount can install a memory policy after can_preserve() accepted
+	 * the mount.
+	 */
+	if (sbinfo->mpol)
+		return -EOPNOTSUPP;
+
+	ser = phys_to_virt(args->serialized_data);
+	ser->max_blocks = sbinfo->max_blocks;
+	ser->mode = sbinfo->mode & 07777;
+
+	return 0;
+}
+
+static void tmpfs_luo_mnt_unpreserve(struct liveupdate_file_op_args *args)
+{
+	kho_unpreserve_free(phys_to_virt(args->serialized_data));
+}
+
+static int tmpfs_luo_mnt_retrieve(struct liveupdate_file_op_args *args)
+{
+	struct tmpfs_luo_mnt_ser *ser;
+	struct vfsmount *mnt;
+	struct file *file;
+	int err;
+
+	if (!args->serialized_data)
+		return -EINVAL;
+
+	ser = phys_to_virt(args->serialized_data);
+
+	if ((ser->mode & ~07777) || ser->flags) {
+		err = -EINVAL;
+		goto free_ser;
+	}
+
+	mnt = tmpfs_create_mount(ser->max_blocks, ser->mode);
+	if (IS_ERR(mnt)) {
+		pr_err("failed to create tmpfs mount: %pe\n", mnt);
+		err = PTR_ERR(mnt);
+		goto free_ser;
+	}
+
+	file = vfs_open_detached_mount(mnt);
+	if (IS_ERR(file)) {
+		pr_err("failed to open detached tmpfs mount: %pe\n", file);
+		err = PTR_ERR(file);
+		goto free_ser;
+	}
+
+	args->file = file;
+	kho_restore_free(ser);
+
+	return 0;
+
+free_ser:
+	kho_restore_free(ser);
+	return err;
+}
+
+static void tmpfs_luo_mnt_finish(struct liveupdate_file_op_args *args)
+{
+	/*
+	 * A successful retrieve() already freed the serialized state, and a
+	 * failed one cleaned up everything it could. Only an un-retrieved
+	 * mount is left to clean up here.
+	 */
+	if (args->retrieve_status || !args->serialized_data)
+		return;
+
+	kho_restore_free(phys_to_virt(args->serialized_data));
+}
+
+static const struct liveupdate_file_ops tmpfs_luo_mnt_ops = {
+	.freeze = tmpfs_luo_mnt_freeze,
+	.finish = tmpfs_luo_mnt_finish,
+	.retrieve = tmpfs_luo_mnt_retrieve,
+	.preserve = tmpfs_luo_mnt_preserve,
+	.unpreserve = tmpfs_luo_mnt_unpreserve,
+	.can_preserve = tmpfs_luo_mnt_can_preserve,
+	.get_id = tmpfs_luo_mnt_get_id,
+	.owner = THIS_MODULE,
+};
+
+static struct liveupdate_file_handler tmpfs_luo_mnt_handler = {
+	.ops = &tmpfs_luo_mnt_ops,
+	.compatible = TMPFS_LUO_MNT_FH_COMPATIBLE,
+};
+
 static int __init memfd_luo_init(void)
 {
-	int err = liveupdate_register_file_handler(&memfd_luo_handler);
+	int err;
 
-	if (err && err != -EOPNOTSUPP) {
-		pr_err("Could not register luo filesystem handler: %pe\n",
+	err = liveupdate_register_file_handler(&memfd_luo_handler);
+	if (err) {
+		if (err == -EOPNOTSUPP)
+			return 0;
+
+		pr_err("Could not register luo memfd handler: %pe\n",
 		       ERR_PTR(err));
 
 		return err;
 	}
 
+	err = liveupdate_register_file_handler(&tmpfs_luo_mnt_handler);
+	if (err) {
+		pr_err("Could not register luo tmpfs mount handler: %pe\n",
+		       ERR_PTR(err));
+
+		goto err_unregister_memfd;
+	}
+
 	return 0;
+
+err_unregister_memfd:
+	liveupdate_unregister_file_handler(&memfd_luo_handler);
+
+	return err;
 }
 late_initcall(memfd_luo_init);

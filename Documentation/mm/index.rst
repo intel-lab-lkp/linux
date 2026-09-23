@@ -72,6 +72,7 @@ documentation, or deleted if it has served its purpose.
    page_table_check
    remap_file_pages
    split_page_table_lock
+   tmpfs_preservation
    transhuge
    unevictable-lru
    vmalloced-kernel-stacks

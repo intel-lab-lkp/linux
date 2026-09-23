@@ -162,11 +162,6 @@ static int shmem_swapin_folio(struct inode *inode, pgoff_t index,
 			struct folio **foliop, enum sgp_type sgp, gfp_t gfp,
 			struct vm_fault *vmf, vm_fault_t *fault_type);
 
-static inline struct shmem_sb_info *SHMEM_SB(struct super_block *sb)
-{
-	return sb->s_fs_info;
-}
-
 /*
  * shmem_file_setup pre-accounts the whole fixed size of a VM object,
  * for shared memory and for shared anonymous (/dev/zero) mappings
