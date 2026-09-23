@@ -992,3 +992,16 @@ struct execmem_info __init *execmem_arch_setup(void)
 	return &execmem_info;
 }
 #endif /* CONFIG_EXECMEM */
+
+bool ptep_test_and_clear_young(struct vm_area_struct *vma,
+			       unsigned long addr, pte_t *ptep)
+{
+	pte_t pte;
+
+	pte = ptep_get(ptep);
+	if (!pte_young(pte))
+		return false;
+
+	set_pte_at(vma->vm_mm, addr, ptep, pte_mkold(pte));
+	return true;
+}
