@@ -276,6 +276,9 @@ impl<T: ?Sized> Arc<T> {
     ///
     /// `ptr` must have been returned by a previous call to [`Arc::into_raw`]. Additionally, it
     /// must not be called more than once for each previous call to [`Arc::into_raw`].
+    ///
+    /// If [`Arc::into_raw`] was executed on a different thread than the one executing
+    /// [`Arc::from_raw`], `T` must implement [`Send`].
     pub unsafe fn from_raw(ptr: *const T) -> Self {
         // SAFETY: The caller promises that this pointer originates from a call to `into_raw` on an
         // `Arc` that is still valid.
