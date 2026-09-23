@@ -29690,6 +29690,7 @@ W:	https://rust-for-linux.com
 B:	https://github.com/Rust-for-Linux/linux/issues
 C:	https://rust-for-linux.zulipchat.com
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/da.gomez/linux.git rxarray-next
+F:	lib/xarray_benchmark_rust.rs
 F:	rust/kernel/bench.rs
 F:	rust/kernel/rxarray.rs
 

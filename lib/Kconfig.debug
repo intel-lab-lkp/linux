@@ -2667,6 +2667,16 @@ config FIND_BIT_BENCHMARK_RUST
 
 	  If unsure, say N.
 
+config XARRAY_BENCHMARK_RUST
+	tristate "Benchmark the XArray Rust APIs"
+	depends on RUST
+	help
+	  This builds the "xarray_benchmark_rust" module. It runs the same
+	  workloads through the Rust abstraction of the C XArray (kernel::xarray),
+	  and through the Rust XArray implementation (kernel::rxarray).
+
+	  If unsure, say N.
+
 config TEST_FIRMWARE
 	tristate "Test firmware loading via userspace interface"
 	depends on FW_LOADER
