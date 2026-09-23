@@ -19,12 +19,14 @@
 #include <linux/kallsyms.h>
 #include <linux/types.h>
 #include <linux/mutex.h>
+#include <linux/percpu.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/list.h>
 #include <linux/sysctl.h>
 #include <linux/ctype.h>
 #include <linux/string.h>
+
 #include <linux/parser.h>
 #include <linux/string_helpers.h>
 #include <linux/uaccess.h>
@@ -71,6 +73,21 @@ struct flag_settings {
 	unsigned int mask;
 };
 
+static DEFINE_PER_CPU(unsigned long, ddebug_call_count);
+void ddebug_increment_call_count(void)
+{
+	this_cpu_inc(ddebug_call_count);
+}
+EXPORT_SYMBOL(ddebug_increment_call_count);
+
+static void reset_ddebug_call_count(void)
+{
+	int cpu;
+
+	for_each_possible_cpu(cpu)
+		per_cpu(ddebug_call_count, cpu) = 0;
+}
+
 static bool ddebug_class_map_in_range(const int class_id,
 				      const struct ddebug_class_map *map);
 static bool ddebug_class_user_in_range(const int class_id,
@@ -101,6 +118,7 @@ static const struct { unsigned flag:8; char opt_char; } opt_array[] = {
 	{ _DPRINTK_FLAGS_INCL_LINENO, 'l' },
 	{ _DPRINTK_FLAGS_INCL_TID, 't' },
 	{ _DPRINTK_FLAGS_INCL_STACK, 'd' },
+	{ _DPRINTK_FLAGS_COUNT, 'c' },
 	{ _DPRINTK_FLAGS_NONE, '_' },
 };
 
@@ -365,10 +383,10 @@ static int ddebug_change(const struct ddebug_query *query, struct flag_settings 
 			if (newflags == dp->flags)
 				continue;
 #ifdef CONFIG_JUMP_LABEL
-			if (dp->flags & _DPRINTK_FLAGS_PRINT) {
-				if (!(newflags & _DPRINTK_FLAGS_PRINT))
+			if (dp->flags & _DPRINTK_FLAGS_BRANCH) {
+				if (!(newflags & _DPRINTK_FLAGS_BRANCH))
 					static_branch_disable(&dp->key.dd_key_true);
-			} else if (newflags & _DPRINTK_FLAGS_PRINT) {
+			} else if (newflags & _DPRINTK_FLAGS_BRANCH) {
 				static_branch_enable(&dp->key.dd_key_true);
 			}
 #endif
@@ -726,6 +744,11 @@ static int ddebug_exec_queries(char *query, const char *modname)
 
 		if (!query || !*query || *query == '#')
 			continue;
+
+		if (!strcmp(strstrip(query), "reset_stats")) {
+			reset_ddebug_call_count();
+			continue;
+		}
 
 		if (modname)
 			v2pr_info("query %d: module %s \"%s\"\n", i, modname, query);
@@ -1109,6 +1132,7 @@ static __init int dyndbg_setup(char *str)
 
 __setup("dyndbg=", dyndbg_setup);
 
+
 /*
  * File_ops->write method for <debugfs>/dynamic_debug/control.  Gathers the
  * command text from userspace, parses and executes it.
@@ -1266,6 +1290,16 @@ static const char *ddebug_class_name(struct _ddebug_info *di, struct _ddebug *dp
 	return NULL;
 }
 
+static unsigned long get_ddebug_call_count(void)
+{
+	unsigned long total = 0;
+	int cpu;
+
+	for_each_possible_cpu(cpu)
+		total += per_cpu(ddebug_call_count, cpu);
+	return total;
+}
+
 /*
  * Seq_ops show method.  Called several times within a read()
  * call from userspace, with ddebug_lock held.  Formats the
@@ -1285,7 +1319,10 @@ static int ddebug_proc_show(struct seq_file *m, void *p)
 		return 0;
 	}
 	if (p == EPILOGUE_TOKEN) {
-		/* use this soon */
+		unsigned long count = get_ddebug_call_count();
+
+		if (count)
+			seq_printf(m, "#: counted_calls: %lu\n", count);
 		return 0;
 	}
 
