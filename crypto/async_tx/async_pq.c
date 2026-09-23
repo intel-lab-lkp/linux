@@ -51,7 +51,7 @@ do_async_gen_syndrome(struct dma_chan *chan,
 
 	while (src_cnt > 0) {
 		submit->flags = flags_orig;
-		pq_src_cnt = min(src_cnt, dma_maxpq(dma, dma_flags));
+		pq_src_cnt = min(src_cnt, dmaengine_maxpq(chan, dma_flags));
 		/* if we are submitting additional pqs, leave the chain open,
 		 * clear the callback parameters, and leave the destination
 		 * buffers mapped
@@ -192,8 +192,8 @@ async_gen_syndrome(struct page **blocks, unsigned int *offsets, int disks,
 
 	/* XORing P/Q is only implemented in software */
 	if (unmap && !(submit->flags & ASYNC_TX_PQ_XOR_DST) &&
-	    (src_cnt <= dma_maxpq(device, 0) ||
-	     dma_maxpq(device, DMA_PREP_CONTINUE) > 0) &&
+	    (src_cnt <= dmaengine_maxpq(chan, 0) ||
+	     dmaengine_maxpq(chan, DMA_PREP_CONTINUE) > 0) &&
 	    is_dma_pq_aligned_offs(device, offsets, disks, len)) {
 		struct dma_async_tx_descriptor *tx;
 		struct device *dma_dev = dmaengine_get_dma_device(chan);
@@ -313,7 +313,7 @@ async_syndrome_val(struct page **blocks, unsigned int *offsets, int disks,
 	if (chan)
 		unmap = dmaengine_get_unmap_data(chan, disks, GFP_NOWAIT);
 
-	if (unmap && disks <= dma_maxpq(device, 0) &&
+	if (unmap && disks <= dmaengine_maxpq(chan, 0) &&
 	    is_dma_pq_aligned_offs(device, offsets, disks, len)) {
 		struct device *dev = dmaengine_get_dma_device(chan);
 		dma_addr_t pq[2];

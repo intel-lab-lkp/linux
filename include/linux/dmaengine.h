@@ -1706,7 +1706,7 @@ static inline unsigned short dma_dev_to_maxpq(struct dma_device *dma)
 	return dma->max_pq & ~DMA_HAS_PQ_CONTINUE;
 }
 
-/* dma_maxpq - reduce maxpq in the face of continued operations
+/* dmaengine_maxpq - reduce maxpq in the face of continued operations
  * @dma - dma device with PQ capability
  * @flags - to check if DMA_PREP_CONTINUE and DMA_PREP_PQ_DISABLE_P are set
  *
@@ -1719,8 +1719,10 @@ static inline unsigned short dma_dev_to_maxpq(struct dma_device *dma)
  * In the case where P is disabled we only need 1 extra source:
  * 1/ {01} * Q : use Q to continue Q' calculation
  */
-static inline int dma_maxpq(struct dma_device *dma, enum dma_ctrl_flags flags)
+static inline int dmaengine_maxpq(struct dma_chan *chan, enum dma_ctrl_flags flags)
 {
+	struct dma_device *dma = chan->device;
+
 	if (dma_dev_has_pq_continue(dma) || !dmaf_continue(flags))
 		return dma_dev_to_maxpq(dma);
 	if (dmaf_p_disabled_continue(flags))

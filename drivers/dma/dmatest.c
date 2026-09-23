@@ -636,7 +636,7 @@ static int dmatest_func(void *data)
 						params->alignment;
 	} else if (thread->type == DMA_PQ) {
 		/* force odd to ensure dst = src */
-		src->cnt = min_odd(params->pq_sources | 1, dma_maxpq(dev, 0));
+		src->cnt = min_odd(params->pq_sources | 1, dmaengine_maxpq(chan, 0));
 		dst->cnt = 2;
 		align = params->alignment < 0 ? dev->pq_align :
 						params->alignment;
