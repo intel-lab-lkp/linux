@@ -4529,8 +4529,9 @@ static int tcpm_pd_select_pdo(struct tcpm_port *port, int *sink_pdo,
 				continue;
 			}
 
-			if (max_src_mv <= max_snk_mv &&
-				min_src_mv >= min_snk_mv) {
+			if (pdo_type(port->source_caps[i]) == pdo_type(pdo) &&
+			    max_src_mv <= max_snk_mv &&
+			    min_src_mv >= min_snk_mv) {
 				/* Prefer higher voltages if available */
 				if ((src_mw == max_mw && min_src_mv > max_mv) ||
 							src_mw > max_mw) {
