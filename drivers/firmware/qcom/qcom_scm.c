@@ -1084,6 +1084,49 @@ static bool qcom_scm_is_pas_available(void)
 	return true;
 }
 
+/**
+ * qcom_scm_pas_set_wifi_power_mode() - Power on/off internal wifi
+ * @peripheral:	peripheral id
+ * @enable:	true to power up, false to power down
+ *
+ * Return 0 on success.
+ */
+int qcom_scm_pas_set_wifi_power_mode(u32 peripheral, bool enable)
+{
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_PIL,
+		.cmd = enable ? QCOM_SCM_PIL_PAS_WIFI_PWR_EN :
+		       QCOM_SCM_PIL_PAS_WIFI_PWR_DIS,
+		.arginfo = QCOM_SCM_ARGS(1),
+		.args[0] = peripheral,
+		.owner = ARM_SMCCC_OWNER_SIP,
+	};
+	struct qcom_scm_res res;
+	int ret;
+
+	if (!__qcom_scm_is_call_available(__scm->dev, QCOM_SCM_SVC_PIL,
+					  enable ? QCOM_SCM_PIL_PAS_WIFI_PWR_EN :
+					  QCOM_SCM_PIL_PAS_WIFI_PWR_DIS))
+		return -EOPNOTSUPP;
+
+	ret = qcom_scm_clk_enable();
+	if (ret)
+		return ret;
+
+	ret = qcom_scm_bw_enable();
+	if (ret)
+		goto disable_clk;
+
+	ret = qcom_scm_call(__scm->dev, &desc, &res);
+	qcom_scm_bw_disable();
+
+disable_clk:
+	qcom_scm_clk_disable();
+
+	return ret ? : res.result[0];
+}
+EXPORT_SYMBOL_GPL(qcom_scm_pas_set_wifi_power_mode);
+
 static int __qcom_scm_pas_mss_reset(struct device *dev, bool reset)
 {
 	struct qcom_scm_desc desc = {
