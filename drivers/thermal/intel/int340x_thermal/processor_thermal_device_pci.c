@@ -405,7 +405,10 @@ static int proc_thermal_pci_probe(struct pci_dev *pdev, const struct pci_device_
 err_free_vectors:
 	if (msi_irq)
 		proc_thermal_free_msi(pdev, pci_info);
+	else
+		devm_free_irq(&pdev->dev, pdev->irq, pci_info);
 err_ret_tzone:
+	cancel_delayed_work_sync(&pci_info->work);
 	thermal_zone_device_unregister(pci_info->tzone);
 err_del_legacy:
 	if (!pci_info->no_legacy)
@@ -420,13 +423,16 @@ static void proc_thermal_pci_remove(struct pci_dev *pdev)
 	struct proc_thermal_device *proc_priv = pci_get_drvdata(pdev);
 	struct proc_thermal_pci *pci_info = proc_priv->priv_data;
 
-	cancel_delayed_work_sync(&pci_info->work);
-
 	proc_thermal_mmio_write(pci_info, PROC_THERMAL_MMIO_THRES_0, 0);
 	proc_thermal_mmio_write(pci_info, PROC_THERMAL_MMIO_INT_ENABLE_0, 0);
 
 	if (msi_irq)
 		proc_thermal_free_msi(pdev, pci_info);
+	else
+		devm_free_irq(&pdev->dev, pdev->irq, pci_info);
+
+	/* Cancel after the IRQs are freed, or the handler may reschedule it. */
+	cancel_delayed_work_sync(&pci_info->work);
 
 	thermal_zone_device_unregister(pci_info->tzone);
 	proc_thermal_mmio_remove(pdev, pci_info->proc_priv);
