@@ -45,4 +45,6 @@ bool cxl_cache_id_supported(struct cxl_cachedev *cxlcd);
 int cxl_allocate_cache_id(struct cxl_cachedev *cxlcd);
 void cxl_free_cache_id(struct cxl_cachedev *cxlcd);
 int cxl_cachedev_validate_cache_id(struct cxl_cachedev *cxlcd);
+int cxl_cachedev_program_cache_id(struct cxl_cachedev *cxlcd);
+void cxl_cachedev_deprogram_cache_id(struct cxl_cachedev *cxlcd);
 #endif

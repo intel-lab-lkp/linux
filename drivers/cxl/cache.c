@@ -124,6 +124,7 @@ static void deprogram_cache_id(void *_cxlcd)
 		return;
 
 	guard(device)(&hb->dev);
+	cxl_cachedev_deprogram_cache_id(cxlcd);
 	cxl_free_cache_id(cxlcd);
 }
 
@@ -152,20 +153,26 @@ static int program_cache_id(struct cxl_cachedev *cxlcd)
 		return num_cachedevs > 1 ? -ENXIO : 0;
 
 	rc = cxl_cachedev_validate_cache_id(cxlcd);
-	if (rc && num_cachedevs > 1) {
+	if (!rc)
+		return cxl_allocate_cache_id(cxlcd);
+
+	if (cxlcd->cxlds->hdmd) {
 		dev_err(dev,
-			"Cache id not programmed with other CXL.cache devices present: %d\n",
-			rc);
-		return rc;
-	} else if (rc) {
-		cxlcd->cache_id = 0;
+			"Cache id programming not supported for HDM-D devices\n");
+		return -ENXIO;
 	}
 
 	rc = cxl_allocate_cache_id(cxlcd);
 	if (rc)
 		return rc;
 
-	return 0;
+	rc = cxl_cachedev_program_cache_id(cxlcd);
+	if (rc) {
+		dev_err(dev, "Failed to program cache id: %d\n", rc);
+		cxl_free_cache_id(cxlcd);
+	}
+
+	return rc;
 }
 
 /**
