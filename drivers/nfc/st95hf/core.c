@@ -283,7 +283,8 @@ static int st95hf_send_recv_cmd(struct st95hf_context *st95context,
 		unsigned char st95hf_response_arr[2];
 
 		ret = st95hf_spi_recv_response(&st95context->spicontext,
-					       st95hf_response_arr);
+					       st95hf_response_arr,
+					       sizeof(st95hf_response_arr));
 		if (ret < 0) {
 			dev_err(dev, "spi error from st95hf_spi_recv_response(), err = 0x%x\n",
 				ret);
@@ -800,7 +801,8 @@ static irqreturn_t st95hf_irq_thread_handler(int irq, void  *st95hfcontext)
 
 	mutex_lock(&stcontext->rm_lock);
 	res_len = st95hf_spi_recv_response(&stcontext->spicontext,
-					   skb_resp->data);
+					   skb_resp->data,
+					   skb_tailroom(skb_resp));
 	if (res_len < 0) {
 		dev_err(spidevice, "TISR spi response err = 0x%x\n", res_len);
 		result = res_len;
