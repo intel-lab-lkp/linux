@@ -158,6 +158,7 @@ struct cxl_dpa_partition {
  *
  * @dev: The device associated with this CXL state
  * @cxlmd: The device representing the CXL.mem capabilities of @dev
+ * @cxlcd: The device representing the CXL.cache capabilities of @dev
  * @reg_map: component and ras register mapping parameters
  * @regs: Parsed register blocks
  * @cxl_dvsec: Offset to the PCIe device DVSEC
@@ -175,6 +176,7 @@ struct cxl_dev_state {
 	/* public for Type2 drivers */
 	struct device *dev;
 	struct cxl_memdev *cxlmd;
+	struct cxl_cachedev *cxlcd;
 
 	/* private for Type2 drivers */
 	struct cxl_register_map reg_map;
