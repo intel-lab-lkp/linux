@@ -124,6 +124,49 @@ struct syscall_arg {
 
 unsigned long syscall_arg__val(struct syscall_arg *arg, u8 idx);
 
+/**
+ * syscall_arg__augmented_args_valid: can the next augmented arg be read?
+ *
+ * Augmented arguments are a series of length prefixed payloads that the BPF
+ * augmenter appends to a sample, with arg->augmented.args pointing at the next
+ * unconsumed one and arg->augmented.size saying how many bytes are left.
+ *
+ * Both the remaining byte count and the length prefix come from the sample, so
+ * neither can be trusted: a sample that carries no augmented arguments at all
+ * can still have a few bytes of ring buffer padding after the tracepoint
+ * payload, and those bytes then look like a struct augmented_arg holding an
+ * arbitrary length.
+ *
+ * Check that a whole header is present and that the payload it advertises fits
+ * in what is left, so that a beautifier reading augmented_arg->value stays
+ * inside the sample.
+ *
+ * @need: how many bytes of payload the caller goes on to read, zero when it is
+ * driven by the length prefix itself rather than by a fixed sized type.
+ */
+static inline bool syscall_arg__augmented_args_valid(struct syscall_arg *arg, size_t need)
+{
+	const struct augmented_arg *augmented_arg;
+
+	if (arg == NULL || arg->augmented.args == NULL)
+		return false;
+
+	/* The header has to be there before its size field can be read. */
+	if (arg->augmented.size < (int)sizeof(*augmented_arg))
+		return false;
+
+	augmented_arg = arg->augmented.args;
+
+	/* A negative length would make the bounds below meaningless. */
+	if (augmented_arg->size < 0)
+		return false;
+
+	if (augmented_arg->size > arg->augmented.size - (int)sizeof(*augmented_arg))
+		return false;
+
+	return (size_t)augmented_arg->size >= need;
+}
+
 size_t syscall_arg__scnprintf_strarray_flags(char *bf, size_t size, struct syscall_arg *arg);
 #define SCA_STRARRAY_FLAGS syscall_arg__scnprintf_strarray_flags
 
