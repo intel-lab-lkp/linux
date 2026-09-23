@@ -66,7 +66,7 @@ EXPORT_SYMBOL_GPL(st95hf_spi_send);
 
 /* Function to Receive command Response */
 int st95hf_spi_recv_response(struct st95hf_spi_context *spicontext,
-			     unsigned char *receivebuff)
+			     unsigned char *receivebuff, int buff_len)
 {
 	int len = 0;
 	struct spi_transfer tx_takedata;
@@ -106,9 +106,16 @@ int st95hf_spi_recv_response(struct st95hf_spi_context *spicontext,
 	else
 		len += receivebuff[1];
 
-	/* Now make a transfer to read only relevant bytes */
+	/*
+	 * Now make a transfer to read only relevant bytes, clamped to
+	 * the caller's buffer.  The transfer must run even when the
+	 * device overreports the length: the header transfer above kept
+	 * chip select asserted via cs_change, and only completing this
+	 * message lets the SPI core deassert it.  The device discards
+	 * the unread bytes at the chip select rising edge.
+	 */
 	tx_takedata.rx_buf = &receivebuff[2];
-	tx_takedata.len = len - 2;
+	tx_takedata.len = min(len, buff_len) - 2;
 
 	spi_message_init(&m);
 	spi_message_add_tail(&tx_takedata, &m);
@@ -121,6 +128,9 @@ int st95hf_spi_recv_response(struct st95hf_spi_context *spicontext,
 			ret);
 		return ret;
 	}
+
+	if (len > buff_len)
+		return -E2BIG;
 
 	return len;
 }
