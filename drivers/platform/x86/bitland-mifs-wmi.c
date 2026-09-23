@@ -14,6 +14,7 @@
 #include <linux/dev_printk.h>
 #include <linux/device.h>
 #include <linux/device/devres.h>
+#include <linux/dmi.h>
 #include <linux/err.h>
 #include <linux/hwmon.h>
 #include <linux/init.h>
@@ -161,6 +162,19 @@ struct bitland_mifs_wmi_data {
 	struct device *hwmon_dev;
 	struct device *pp_dev;
 	enum platform_profile_option saved_profile;
+	bool is_wujie15_hpt;
+};
+
+/* Profile mapping and capabilities for the WUJIE15 PRO HPT board. */
+static const struct dmi_system_id bitland_wujie15_hpt[] = {
+	{
+		.matches = {
+			DMI_EXACT_MATCH(DMI_SYS_VENDOR, "MECHREVO"),
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "WUJIE15 PRO"),
+			DMI_EXACT_MATCH(DMI_BOARD_NAME, "WUJIE15 Series-HPT"),
+		},
+	},
+	{ }
 };
 
 static int bitland_mifs_wmi_call(struct bitland_mifs_wmi_data *data,
@@ -195,6 +209,12 @@ static int bitland_mifs_wmi_call(struct bitland_mifs_wmi_data *data,
 	if (output)
 		memcpy(output, result, sizeof(*output));
 
+	if (data->is_wujie15_hpt)
+		dev_dbg(&data->wdev->dev,
+			"HPT op=%#x fn=%#x arg=%u value=%u status=%#x\n",
+			input->operation, input->function, input->payload[0],
+			result->data[0], le16_to_cpu(result->return_code));
+
 	return 0;
 }
 
@@ -212,6 +232,22 @@ static int laptop_profile_get(struct device *dev,
 	ret = bitland_mifs_wmi_call(data, &input, &result);
 	if (ret)
 		return ret;
+
+	if (data->is_wujie15_hpt) {
+		switch (result.data[0]) {
+		case 0:
+			*profile = PLATFORM_PROFILE_PERFORMANCE;
+			return 0;
+		case 1:
+			*profile = PLATFORM_PROFILE_BALANCED;
+			return 0;
+		case 2:
+			*profile = PLATFORM_PROFILE_LOW_POWER;
+			return 0;
+		default:
+			return -EINVAL;
+		}
+	}
 
 	switch (result.data[0]) {
 	case WMI_PP_BALANCED:
@@ -232,6 +268,26 @@ static int laptop_profile_get(struct device *dev,
 	return 0;
 }
 
+static int bitland_wujie15_is_supplied(void)
+{
+	struct acpi_device *adapter;
+	unsigned long long online;
+	acpi_status status;
+
+	/* USB-C ONLINE can still contain the pre-suspend connector state. */
+	adapter = acpi_dev_get_first_match_dev("ACPI0003", NULL, -1);
+	if (!adapter)
+		return -ENODEV;
+
+	/* This machine's adapter _PSR reads the current EC power-present bit. */
+	status = acpi_evaluate_integer(adapter->handle, "_PSR", NULL, &online);
+	acpi_dev_put(adapter);
+	if (ACPI_FAILURE(status) || online > 1)
+		return -EIO;
+
+	return online;
+}
+
 static int bitland_check_performance_capability(struct bitland_mifs_wmi_data *data)
 {
 	struct bitland_mifs_input input = {
@@ -241,7 +297,15 @@ static int bitland_check_performance_capability(struct bitland_mifs_wmi_data *da
 	struct bitland_mifs_output output;
 	int ret;
 
-	/* Full-speed/performance mode requires DC power (not USB-C) */
+	/* WUJIE15 PRO is powered through USB-C only. */
+	if (data->is_wujie15_hpt) {
+		ret = bitland_wujie15_is_supplied();
+		if (ret < 0)
+			return ret;
+		return ret ? 0 : -EOPNOTSUPP;
+	}
+
+	/* Other models require the firmware's circular-hole adapter type. */
 	if (!power_supply_is_system_supplied())
 		return -EOPNOTSUPP;
 
@@ -269,6 +333,27 @@ static int laptop_profile_set(struct device *dev,
 	};
 	int ret;
 	u8 val;
+
+	if (data->is_wujie15_hpt) {
+		switch (profile) {
+		case PLATFORM_PROFILE_LOW_POWER:
+			val = 2;
+			break;
+		case PLATFORM_PROFILE_BALANCED:
+			val = 1;
+			break;
+		case PLATFORM_PROFILE_PERFORMANCE:
+			ret = bitland_check_performance_capability(data);
+			if (ret)
+				return ret;
+			val = 0;
+			break;
+		default:
+			return -EOPNOTSUPP;
+		}
+		input.payload[0] = val;
+		return bitland_mifs_wmi_call(data, &input, NULL);
+	}
 
 	switch (profile) {
 	case PLATFORM_PROFILE_LOW_POWER:
@@ -300,9 +385,12 @@ static int laptop_profile_set(struct device *dev,
 
 static int platform_profile_probe(void *drvdata, unsigned long *choices)
 {
+	struct bitland_mifs_wmi_data *data = drvdata;
+
 	set_bit(PLATFORM_PROFILE_LOW_POWER, choices);
 	set_bit(PLATFORM_PROFILE_BALANCED, choices);
-	set_bit(PLATFORM_PROFILE_BALANCED_PERFORMANCE, choices);
+	if (!data->is_wujie15_hpt)
+		set_bit(PLATFORM_PROFILE_BALANCED_PERFORMANCE, choices);
 	set_bit(PLATFORM_PROFILE_PERFORMANCE, choices);
 
 	return 0;
@@ -328,13 +416,25 @@ static int bitland_mifs_wmi_suspend(struct device *dev)
 static int bitland_mifs_wmi_resume(struct device *dev)
 {
 	struct bitland_mifs_wmi_data *data = dev_get_drvdata(dev);
+	enum platform_profile_option profile = data->saved_profile;
+	int supplied;
 
 	/* Skip event device */
 	if (!data->pp_dev)
 		return 0;
 
-	dev_dbg(dev, "Resuming, restoring profile %d\n", data->saved_profile);
-	return laptop_profile_set(dev, data->saved_profile);
+	/* Match the firmware's performance-to-balanced transition on AC loss. */
+	if (data->is_wujie15_hpt &&
+	    profile == PLATFORM_PROFILE_PERFORMANCE) {
+		supplied = bitland_wujie15_is_supplied();
+		if (supplied < 0)
+			return supplied;
+		if (!supplied)
+			profile = PLATFORM_PROFILE_BALANCED;
+	}
+
+	dev_dbg(dev, "Resuming, restoring profile %d\n", profile);
+	return laptop_profile_set(dev, profile);
 }
 
 static DEFINE_SIMPLE_DEV_PM_OPS(bitland_mifs_wmi_pm_ops,
@@ -398,7 +498,16 @@ static int laptop_hwmon_read_string(struct device *dev,
 				    enum hwmon_sensor_types type, u32 attr,
 				    int channel, const char **str)
 {
+	struct bitland_mifs_wmi_data *data = dev_get_drvdata(dev);
+	static const char *const hpt_fan_labels[] = { "Fan 2", "Fan 1" };
+
 	if (type == hwmon_fan && attr == hwmon_fan_label) {
+		if (data->is_wujie15_hpt) {
+			if (channel < 0 || channel >= ARRAY_SIZE(hpt_fan_labels))
+				return -EINVAL;
+			*str = hpt_fan_labels[channel];
+			return 0;
+		}
 		if (channel >= 0 && channel < ARRAY_SIZE(fan_labels)) {
 			*str = fan_labels[channel];
 			return 0;
@@ -424,6 +533,18 @@ static const struct hwmon_ops laptop_hwmon_ops = {
 static const struct hwmon_chip_info laptop_chip_info = {
 	.ops = &laptop_hwmon_ops,
 	.info = laptop_hwmon_info,
+};
+
+/* HPT fills only the F2/F1 tachometers; the temperature GET is a no-op. */
+static const struct hwmon_channel_info *hpt_hwmon_info[] = {
+	HWMON_CHANNEL_INFO(fan, HWMON_F_INPUT | HWMON_F_LABEL,
+			   HWMON_F_INPUT | HWMON_F_LABEL),
+	NULL
+};
+
+static const struct hwmon_chip_info hpt_chip_info = {
+	.ops = &laptop_hwmon_ops,
+	.info = hpt_hwmon_info,
 };
 
 static int laptop_kbd_led_set(struct led_classdev *led_cdev,
@@ -604,7 +725,28 @@ static const struct attribute *const laptop_attrs[] = {
 	&dev_attr_fan_boost.attr,
 	NULL,
 };
-ATTRIBUTE_GROUPS(laptop);
+
+static umode_t laptop_attr_is_visible(struct kobject *kobj,
+				      const struct attribute *attr, int index)
+{
+	struct bitland_mifs_wmi_data *data = dev_get_drvdata(kobj_to_dev(kobj));
+
+	/* All three custom attributes require methods absent on HPT. */
+	if (data && data->is_wujie15_hpt)
+		return 0;
+
+	return attr->mode;
+}
+
+static const struct attribute_group laptop_group = {
+	.attrs_const = laptop_attrs,
+	.is_visible_const = laptop_attr_is_visible,
+};
+
+static const struct attribute_group *laptop_groups[] = {
+	&laptop_group,
+	NULL
+};
 
 static const struct key_entry bitland_mifs_wmi_keymap[] = {
 	{ KE_KEY, WMI_EVENT_OPEN_APP, { KEY_PROG1 } },
@@ -659,6 +801,7 @@ static int bitland_notifier_callback(struct notifier_block *nb,
 static int bitland_mifs_wmi_probe(struct wmi_device *wdev, const void *context)
 {
 	struct bitland_mifs_wmi_data *drv_data;
+	const struct hwmon_chip_info *chip_info;
 	enum bitland_wmi_device_type dev_type =
 		(enum bitland_wmi_device_type)(unsigned long)context;
 	struct led_init_data init_data = {
@@ -673,6 +816,7 @@ static int bitland_mifs_wmi_probe(struct wmi_device *wdev, const void *context)
 		return -ENOMEM;
 
 	drv_data->wdev = wdev;
+	drv_data->is_wujie15_hpt = dmi_check_system(bitland_wujie15_hpt);
 
 	ret = devm_mutex_init(&wdev->dev, &drv_data->lock);
 	if (ret)
@@ -706,10 +850,11 @@ static int bitland_mifs_wmi_probe(struct wmi_device *wdev, const void *context)
 		return PTR_ERR(drv_data->pp_dev);
 
 	/* Register hwmon */
+	chip_info = drv_data->is_wujie15_hpt ? &hpt_chip_info : &laptop_chip_info;
 	drv_data->hwmon_dev = devm_hwmon_device_register_with_info(&wdev->dev,
 								   "bitland_mifs",
 								   drv_data,
-								   &laptop_chip_info,
+								   chip_info,
 								   NULL);
 	if (IS_ERR(drv_data->hwmon_dev))
 		return PTR_ERR(drv_data->hwmon_dev);
