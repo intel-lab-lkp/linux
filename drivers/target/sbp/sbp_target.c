@@ -721,10 +721,9 @@ static int tgt_agent_rw_orb_pointer(struct fw_card *card, int tcode, void *data,
 			return RCODE_CONFLICT_ERROR;
 		}
 		agent->state = AGENT_STATE_ACTIVE;
-		spin_unlock_bh(&agent->lock);
-
 		agent->orb_pointer = sbp2_pointer_to_addr(ptr);
 		agent->doorbell = false;
+		spin_unlock_bh(&agent->lock);
 
 		pr_debug("tgt_agent ORB_POINTER write: 0x%llx\n",
 				agent->orb_pointer);
@@ -757,9 +756,8 @@ static int tgt_agent_rw_doorbell(struct fw_card *card, int tcode, void *data,
 			return RCODE_CONFLICT_ERROR;
 		}
 		agent->state = AGENT_STATE_ACTIVE;
-		spin_unlock_bh(&agent->lock);
-
 		agent->doorbell = true;
+		spin_unlock_bh(&agent->lock);
 
 		pr_debug("tgt_agent DOORBELL\n");
 
@@ -933,8 +931,13 @@ static void tgt_agent_fetch_work(struct work_struct *work)
 	struct sbp_session *sess = agent->login->sess;
 	struct sbp_target_request *req;
 	int ret;
-	bool doorbell = agent->doorbell;
-	u64 next_orb = agent->orb_pointer;
+	bool doorbell;
+	u64 next_orb;
+
+	spin_lock_bh(&agent->lock);
+	doorbell = agent->doorbell;
+	next_orb = agent->orb_pointer;
+	spin_unlock_bh(&agent->lock);
 
 	while (next_orb && tgt_agent_check_active(agent)) {
 		req = sbp_mgt_get_req(sess, sess->card, next_orb);
