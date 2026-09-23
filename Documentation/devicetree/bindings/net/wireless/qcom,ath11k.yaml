@@ -20,6 +20,7 @@ properties:
       - qcom,ipq5018-wifi
       - qcom,ipq6018-wifi
       - qcom,ipq8074-wifi
+      - qcom,qcn6122-wifi
       - qcom,wcn6750-wifi
 
   reg:
@@ -30,11 +31,11 @@ properties:
     maxItems: 52
 
   interrupts-extended:
-    minItems: 56
+    minItems: 17
     maxItems: 56
 
   interrupt-names:
-    minItems: 32
+    minItems: 17
     maxItems: 56
 
   qcom,rproc:
@@ -464,6 +465,93 @@ allOf:
         compatible:
           contains:
             enum:
+              - qcom,qcn6122-wifi
+    then:
+      properties:
+        interrupts-extended:
+          items:
+            - description: interrupt event for ring CE1
+            - description: interrupt event for ring CE2
+            - description: interrupt event for ring CE3
+            - description: interrupt event for ring CE4
+            - description: interrupt event for ring CE5
+            - description: interrupt event for ring DP1
+            - description: interrupt event for ring DP2
+            - description: interrupt event for ring DP3
+            - description: interrupt event for ring DP4
+            - description: interrupt event for ring DP5
+            - description: interrupt event for ring DP6
+            - description: interrupt event for ring DP7
+            - description: interrupt event for ring DP8
+            - description: Q6 firmware user PD fatal interrupt event
+            - description: Q6 firmware user PD ready interrupt event
+            - description: Q6 firmware user PD spawn interrupt event
+            - description: Q6 firmware user PD stop ack interrupt event
+        interrupt-names:
+          minItems: 17
+          items:
+            - const: ce1
+            - const: ce2
+            - const: ce3
+            - const: ce4
+            - const: ce5
+            - const: dp1
+            - const: dp2
+            - const: dp3
+            - const: dp4
+            - const: dp5
+            - const: dp6
+            - const: dp7
+            - const: dp8
+            - const: fatal
+            - const: ready
+            - const: spawn
+            - const: stop-ack
+        memory-region:
+          minItems: 1
+          items:
+            - description: memory region for Q6 firmware
+            - description: memory region for M3 firmware
+            - description: memory region for M3 dump
+        memory-region-names:
+          minItems: 1
+          items:
+            - const: q6-region
+            - const: m3-region
+            - const: m3-dump
+        qcom,smem-states:
+          items:
+            - description: Signal bit used to shutdown Q6 user PD
+              items:
+                - description: Phandle to the Shared Memory Point 2 Point device
+                - description: Single bit index to toggle in the value sent to the remote processor
+                  maximum: 32
+            - description: Signal bit used to stop Q6 user PD
+              items:
+                - description: Phandle to the Shared Memory Point 2 Point device
+                - description: Single bit index to toggle in the value sent to the remote processor
+                  maximum: 32
+            - description: Signal bit used to spawn Q6 user PD
+              items:
+                - description: Phandle to the Shared Memory Point 2 Point device
+                - description: Single bit index to toggle in the value sent to the remote processor
+                  maximum: 32
+        qcom,smem-state-names:
+          items:
+            - const: shutdown
+            - const: stop
+            - const: spawn
+      required:
+        - interrupts-extended
+        - interrupt-names
+        - qcom,smem-states
+        - qcom,smem-state-names
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
               - qcom,wcn6750-wifi
     then:
       properties:
@@ -860,4 +948,56 @@ examples:
         memory-region-names = "q6-region", "m3-region", "m3-dump";
 
         qcom,rproc = <&q6v5_wcss>;
+    };
+
+    wifi1: wifi@b00a040 {
+        reg = <0x0b00a040 0x0>;
+        compatible = "qcom,qcn6122-wifi";
+
+        interrupts-extended = <&intc GIC_SPI 416 IRQ_TYPE_EDGE_RISING>,
+                              <&intc GIC_SPI 417 IRQ_TYPE_EDGE_RISING>,
+                              <&intc GIC_SPI 418 IRQ_TYPE_EDGE_RISING>,
+                              <&intc GIC_SPI 419 IRQ_TYPE_EDGE_RISING>,
+                              <&intc GIC_SPI 420 IRQ_TYPE_EDGE_RISING>,
+                              <&intc GIC_SPI 421 IRQ_TYPE_EDGE_RISING>,
+                              <&intc GIC_SPI 422 IRQ_TYPE_EDGE_RISING>,
+                              <&intc GIC_SPI 423 IRQ_TYPE_EDGE_RISING>,
+                              <&intc GIC_SPI 424 IRQ_TYPE_EDGE_RISING>,
+                              <&intc GIC_SPI 425 IRQ_TYPE_EDGE_RISING>,
+                              <&intc GIC_SPI 426 IRQ_TYPE_EDGE_RISING>,
+                              <&intc GIC_SPI 427 IRQ_TYPE_EDGE_RISING>,
+                              <&intc GIC_SPI 428 IRQ_TYPE_EDGE_RISING>,
+                              <&wcss_smp2p_in 16 IRQ_TYPE_NONE>,
+                              <&wcss_smp2p_in 17 IRQ_TYPE_NONE>,
+                              <&wcss_smp2p_in 20 IRQ_TYPE_NONE>,
+                              <&wcss_smp2p_in 19 IRQ_TYPE_NONE>;
+        interrupt-names = "ce1",
+                          "ce2",
+                          "ce3",
+                          "ce4",
+                          "ce5",
+                          "dp1",
+                          "dp2",
+                          "dp3",
+                          "dp4",
+                          "dp5",
+                          "dp6",
+                          "dp7",
+                          "dp8",
+                          "fatal",
+                          "ready",
+                          "spawn",
+                          "stop-ack";
+
+        qcom,smem-states = <&wcss_smp2p_out 16>,
+                           <&wcss_smp2p_out 17>,
+                           <&wcss_smp2p_out 18>;
+        qcom,smem-state-names = "shutdown",
+                                "stop",
+                                "spawn";
+
+        memory-region = <&q6_region_qcn6122_1>, <&q6_region_ipq5018>, <&m3_dump_qcn6122_1>;
+        memory-region-names = "q6-region", "m3-region", "m3-dump";
+
+        status = "disabled";
     };
