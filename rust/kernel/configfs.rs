@@ -295,7 +295,8 @@ unsafe impl<Data> HasGroup<Data> for Group<Data> {
 
 /// # Safety
 ///
-/// `this` must be a valid pointer.
+/// `this` must be a valid pointer to a group linked into a registered configfs
+/// subsystem. Its `cg_subsys` must be non-null and valid.
 ///
 /// If `this` does not represent the root group of a configfs subsystem,
 /// `this` must be a pointer to a `bindings::config_group` embedded in a
@@ -304,9 +305,15 @@ unsafe impl<Data> HasGroup<Data> for Group<Data> {
 /// Otherwise, `this` must be a pointer to a `bindings::config_group` that
 /// is embedded in a `bindings::configfs_subsystem` that is embedded in a
 /// `Subsystem<Parent>`.
+///
+/// The containing `Group<Parent>` or `Subsystem<Parent>` and its initialized
+/// `data` must remain valid for shared access for `'a`.
 unsafe fn get_group_data<'a, Parent>(this: *mut bindings::config_group) -> &'a Parent {
-    // SAFETY: `this` is a valid pointer.
-    let is_root = unsafe { (*this).cg_subsys.is_null() };
+    // SAFETY: `this` and its `cg_subsys` are valid by the function's safety requirements.
+    let is_root = unsafe {
+        let subsys = (*this).cg_subsys;
+        core::ptr::eq(this, &raw const (*subsys).su_group)
+    };
 
     if !is_root {
         // SAFETY: By C API contact,`this` was returned from a call to
