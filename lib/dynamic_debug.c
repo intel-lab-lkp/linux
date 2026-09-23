@@ -622,6 +622,30 @@ static int ddebug_exec_query(char *query_string, const char *modname)
 	return nfound;
 }
 
+/*
+ * Split multi-query string on delimiters (@, ;, \n), ignoring delimiters
+ * that appear inside single or double quoted strings.
+ */
+static char *ddebug_find_delimiter(char *str, const char *delims)
+{
+	bool in_quote = false;
+	char quote_char = 0;
+
+	for (; *str; str++) {
+		if (*str == '"' || *str == '\'') {
+			if (!in_quote) {
+				in_quote = true;
+				quote_char = *str;
+			} else if (*str == quote_char) {
+				in_quote = false;
+			}
+		} else if (!in_quote && strchr(delims, *str)) {
+			return str;
+		}
+	}
+	return NULL;
+}
+
 /* handle multiple queries in query string, continue on error, return
    last error or number of matching callsites.  Module name is either
    in the modname arg (for boot args) or perhaps in query string.
@@ -632,7 +656,7 @@ static int ddebug_exec_queries(char *query, const char *modname)
 	int i, errs = 0, exitcode = 0, rc, nfound = 0;
 
 	for (i = 0; query; query = split) {
-		split = strpbrk(query, ";\n");
+		split = ddebug_find_delimiter(query, "@;\n");
 		if (split)
 			*split++ = '\0';
 
