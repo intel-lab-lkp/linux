@@ -1429,11 +1429,14 @@ prepare0: archprepare
 	$(Q)$(MAKE) $(build)=. prepare
 	$(Q)$(MAKE) $(build)=scripts/mod
 
+ifdef CONFIG_RUST
+export KBUILD_RUST_DIRS := drivers lib mm samples
+endif
+
 # All the preparing..
 prepare: prepare0
 ifdef CONFIG_RUST
 	+$(Q)$(CONFIG_SHELL) $(srctree)/scripts/rust_is_available.sh
-	$(Q)$(MAKE) $(build)=rust
 endif
 
 PHONY += remove-stale-files
@@ -1760,6 +1763,14 @@ modules: modules_prepare
 # Target to prepare building external modules
 modules_prepare: prepare
 	$(Q)$(MAKE) $(build)=scripts scripts/module.lds
+ifdef CONFIG_RUST
+# Avoid two instances of rust/ being built at any one time.
+ifneq ($(filter modules_prepare,$(MAKECMDGOALS)),)
+ifeq ($(filter all vmlinux modules %Image% dtbs rustdoc rusttest,$(MAKECMDGOALS)),)
+	$(Q)$(MAKE) $(build)=rust
+endif
+endif
+endif
 
 endif # CONFIG_MODULES
 
@@ -2025,13 +2036,17 @@ rustavailable:
 # Documentation target
 #
 # Using the singular to avoid running afoul of `no-dot-config-targets`.
+#
+# rust/ is built alongside the rest of the tree, so must be built first here.
 PHONY += rustdoc
 rustdoc: prepare
+	$(Q)$(MAKE) $(build)=rust
 	$(Q)$(MAKE) $(build)=rust $@
 
 # Testing target
 PHONY += rusttest
 rusttest: prepare
+	$(Q)$(MAKE) $(build)=rust
 	$(Q)$(MAKE) $(build)=rust $@
 
 # Formatting targets
