@@ -1353,6 +1353,9 @@ static int dvb_ca_en50221_io_do_ioctl(struct file *file,
 
 	dprintk("%s\n", __func__);
 
+	if (ca->exit)
+		return -ENODEV;
+
 	if (mutex_lock_interruptible(&ca->ioctl_mutex))
 		return -ERESTARTSYS;
 
@@ -1459,6 +1462,9 @@ static ssize_t dvb_ca_en50221_io_write(struct file *file,
 	int written;
 
 	dprintk("%s\n", __func__);
+
+	if (ca->exit)
+		return -ENODEV;
 
 	/*
 	 * Incoming packet has a 2 byte header.
@@ -1618,6 +1624,9 @@ static ssize_t dvb_ca_en50221_io_read(struct file *file, char __user *buf,
 
 	dprintk("%s\n", __func__);
 
+	if (ca->exit)
+		return -ENODEV;
+
 	/*
 	 * Outgoing packet has a 2 byte header.
 	 * hdr[0] = slot_id, hdr[1] = connection_id
@@ -1635,8 +1644,11 @@ static ssize_t dvb_ca_en50221_io_read(struct file *file, char __user *buf,
 		/* wait for some data */
 		status = wait_event_interruptible(ca->wait_queue,
 						  dvb_ca_en50221_io_read_condition
-						  (ca, &result, &slot));
+						  (ca, &result, &slot) ||
+						  ca->exit);
 	}
+	if (ca->exit)
+		return -ENODEV;
 	if ((status < 0) || (result < 0)) {
 		if (result)
 			return result;
@@ -1819,6 +1831,9 @@ static __poll_t dvb_ca_en50221_io_poll(struct file *file, poll_table *wait)
 
 	poll_wait(file, &ca->wait_queue, wait);
 
+	if (ca->exit)
+		return EPOLLERR;
+
 	if (dvb_ca_en50221_io_read_condition(ca, &result, &slot) == 1)
 		mask |= EPOLLIN;
 
@@ -1964,6 +1979,13 @@ void dvb_ca_en50221_release(struct dvb_ca_en50221 *pubca)
 	mutex_lock(&ca->remove_mutex);
 	ca->exit = 1;
 	mutex_unlock(&ca->remove_mutex);
+
+	/*
+	 * Wake up everyone blocked in read() or poll() on the CA device, so
+	 * that they see the error and close it. The wait below cannot finish
+	 * before the last user has closed the device.
+	 */
+	wake_up_interruptible_all(&ca->wait_queue);
 
 	if (ca->dvbdev->users < 1)
 		wait_event(ca->dvbdev->wait_queue,
