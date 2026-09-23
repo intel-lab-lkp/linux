@@ -1373,7 +1373,7 @@ int _intel_psr_min_set_context_latency(const struct intel_crtc_state *crtc_state
 		return 0;
 
 	/* Wa_14015401596 */
-	if (intel_vrr_possible(crtc_state) && IS_DISPLAY_VER(display, 13, 14))
+	if (intel_vrr_can_use_vrr_tg(crtc_state) && IS_DISPLAY_VER(display, 13, 14))
 		return 1;
 
 	/* Rest is for SRD_STATUS needed on LunarLake and onwards */

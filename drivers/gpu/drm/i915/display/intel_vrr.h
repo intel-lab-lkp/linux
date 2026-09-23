@@ -48,6 +48,7 @@ void intel_vrr_set_fixed_rr_timings(const struct intel_crtc_state *crtc_state,
 void intel_vrr_dcb_reset(const struct intel_crtc_state *old_crtc_state,
 			 struct intel_crtc *crtc);
 bool intel_vrr_always_use_vrr_tg(struct intel_display *display);
+bool intel_vrr_can_use_vrr_tg(const struct intel_crtc_state *crtc_state);
 int intel_vrr_safe_window_start(const struct intel_crtc_state *crtc_state);
 int intel_vrr_vmin_safe_window_end(const struct intel_crtc_state *crtc_state);
 
