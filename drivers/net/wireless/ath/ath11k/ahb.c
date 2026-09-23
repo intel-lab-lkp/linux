@@ -491,9 +491,32 @@ static int ath11k_ahb_power_up(struct ath11k_base *ab)
 	return 0;
 }
 
+static void ath11k_ahb_stop_user_pd(struct ath11k_base *ab)
+{
+	struct ath11k_ahb *ab_ahb = ath11k_ahb_priv(ab);
+	unsigned long time_left;
+
+	qcom_smem_state_update_bits(ab_ahb->stop_state, BIT(ab_ahb->stop_bit),
+				    BIT(ab_ahb->stop_bit));
+
+	time_left = wait_for_completion_timeout(&ab_ahb->userpd_stopped,
+						ATH11K_USERPD_STOP_TIMEOUT);
+	if (!time_left)
+		ath11k_warn(ab, "UserPD stop wait timed out\n");
+
+	qcom_smem_state_update_bits(ab_ahb->stop_state, BIT(ab_ahb->stop_bit), 0);
+
+	if (ab->hw_rev == ATH11K_HW_IPQ5018_HW10)
+		qcom_scm_pas_set_wifi_power_mode(MPD_WCNSS_PAS_ID, false);
+}
+
 static void ath11k_ahb_power_down(struct ath11k_base *ab, bool is_suspend)
 {
-	return;
+	struct ath11k_ahb *ab_ahb = ath11k_ahb_priv(ab);
+
+	if (ab_ahb->userpd_id > 0 &&
+	    ab_ahb->userpd_id < ATH11K_AHB_USERPD_ID_MAX)
+		ath11k_ahb_stop_user_pd(ab);
 }
 
 static void ath11k_ahb_init_qmi_ce_config(struct ath11k_base *ab)
