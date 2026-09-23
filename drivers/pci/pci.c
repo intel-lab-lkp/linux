@@ -5029,12 +5029,20 @@ static int cxl_reset_bus_function(struct pci_dev *dev, bool probe)
 	if (!dvsec)
 		return -ENOTTY;
 
-	if (probe)
-		return 0;
-
 	rc = pci_read_config_word(bridge, dvsec + PCI_DVSEC_CXL_PORT_CTL, &reg);
 	if (rc)
 		return -ENOTTY;
+
+	/*
+	 * Do not probe via pci_reset_bus_function(), which would reject a
+	 * masked SBR that the do-reset path below unmasks before resetting.
+	 */
+	if (probe) {
+		rc = pci_dev_reset_slot_function(dev, PCI_RESET_PROBE);
+		if (rc != -ENOTTY)
+			return rc;
+		return pci_parent_bus_reset(dev, PCI_RESET_PROBE);
+	}
 
 	rc = pci_dev_reset_iommu_prepare(dev);
 	if (rc) {
@@ -5050,7 +5058,7 @@ static int cxl_reset_bus_function(struct pci_dev *dev, bool probe)
 				      val);
 	}
 
-	rc = pci_reset_bus_function(dev, probe);
+	rc = pci_reset_bus_function(dev, PCI_RESET_DO_RESET);
 
 	if (reg != val)
 		pci_write_config_word(bridge, dvsec + PCI_DVSEC_CXL_PORT_CTL,
