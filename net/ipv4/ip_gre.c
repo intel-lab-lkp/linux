@@ -1183,15 +1183,41 @@ static int erspan_validate(struct nlattr *tb[], struct nlattr *data[],
 	return 0;
 }
 
+struct ip_gre_parm {
+	__u32	fwmark;
+	u32	index;
+	u16	hwid;
+	u8	erspan_ver;
+	u8	dir;
+	bool	ignore_df;
+};
+
+static void ipgre_commit_parms(struct ip_tunnel *t,
+			       const struct ip_gre_parm *gparms)
+{
+	t->ignore_df = gparms->ignore_df;
+	t->erspan_ver = gparms->erspan_ver;
+	t->index = gparms->index;
+	t->hwid = gparms->hwid;
+	t->dir = gparms->dir;
+}
+
 static int ipgre_netlink_parms(struct net_device *dev,
 				struct nlattr *data[],
 				struct nlattr *tb[],
 				struct ip_tunnel_parm_kern *parms,
-				__u32 *fwmark)
+				struct ip_gre_parm *gparms,
+				bool newlink)
 {
 	struct ip_tunnel *t = netdev_priv(dev);
 
 	memset(parms, 0, sizeof(*parms));
+	gparms->fwmark = newlink ? 0 : t->fwmark;
+	gparms->ignore_df = t->ignore_df;
+	gparms->erspan_ver = t->erspan_ver;
+	gparms->index = t->index;
+	gparms->hwid = t->hwid;
+	gparms->dir = t->dir;
 
 	parms->iph.protocol = IPPROTO_GRE;
 
@@ -1234,20 +1260,24 @@ static int ipgre_netlink_parms(struct net_device *dev,
 	}
 
 	if (data[IFLA_GRE_COLLECT_METADATA]) {
-		t->collect_md = true;
-		if (dev->type == ARPHRD_IPGRE)
-			dev->type = ARPHRD_NONE;
+		if (!t->collect_md) {
+			if (!newlink)
+				return -EINVAL;
+			t->collect_md = true;
+			if (dev->type == ARPHRD_IPGRE)
+				dev->type = ARPHRD_NONE;
+		}
 	}
 
 	if (data[IFLA_GRE_IGNORE_DF]) {
 		if (nla_get_u8(data[IFLA_GRE_IGNORE_DF])
 		  && (parms->iph.frag_off & htons(IP_DF)))
 			return -EINVAL;
-		t->ignore_df = !!nla_get_u8(data[IFLA_GRE_IGNORE_DF]);
+		gparms->ignore_df = !!nla_get_u8(data[IFLA_GRE_IGNORE_DF]);
 	}
 
 	if (data[IFLA_GRE_FWMARK])
-		*fwmark = nla_get_u32(data[IFLA_GRE_FWMARK]);
+		gparms->fwmark = nla_get_u32(data[IFLA_GRE_FWMARK]);
 
 	return 0;
 }
@@ -1256,39 +1286,39 @@ static int erspan_netlink_parms(struct net_device *dev,
 				struct nlattr *data[],
 				struct nlattr *tb[],
 				struct ip_tunnel_parm_kern *parms,
-				__u32 *fwmark)
+				struct ip_gre_parm *gparms,
+				bool newlink)
 {
-	struct ip_tunnel *t = netdev_priv(dev);
 	int err;
 
-	err = ipgre_netlink_parms(dev, data, tb, parms, fwmark);
+	err = ipgre_netlink_parms(dev, data, tb, parms, gparms, newlink);
 	if (err)
 		return err;
 	if (!data)
 		return 0;
 
 	if (data[IFLA_GRE_ERSPAN_VER]) {
-		t->erspan_ver = nla_get_u8(data[IFLA_GRE_ERSPAN_VER]);
+		gparms->erspan_ver = nla_get_u8(data[IFLA_GRE_ERSPAN_VER]);
 
-		if (t->erspan_ver > 2)
+		if (gparms->erspan_ver > 2)
 			return -EINVAL;
 	}
 
-	if (t->erspan_ver == 1) {
+	if (gparms->erspan_ver == 1) {
 		if (data[IFLA_GRE_ERSPAN_INDEX]) {
-			t->index = nla_get_u32(data[IFLA_GRE_ERSPAN_INDEX]);
-			if (t->index & ~INDEX_MASK)
+			gparms->index = nla_get_u32(data[IFLA_GRE_ERSPAN_INDEX]);
+			if (gparms->index & ~INDEX_MASK)
 				return -EINVAL;
 		}
-	} else if (t->erspan_ver == 2) {
+	} else if (gparms->erspan_ver == 2) {
 		if (data[IFLA_GRE_ERSPAN_DIR]) {
-			t->dir = nla_get_u8(data[IFLA_GRE_ERSPAN_DIR]);
-			if (t->dir & ~(DIR_MASK >> DIR_OFFSET))
+			gparms->dir = nla_get_u8(data[IFLA_GRE_ERSPAN_DIR]);
+			if (gparms->dir & ~(DIR_MASK >> DIR_OFFSET))
 				return -EINVAL;
 		}
 		if (data[IFLA_GRE_ERSPAN_HWID]) {
-			t->hwid = nla_get_u16(data[IFLA_GRE_ERSPAN_HWID]);
-			if (t->hwid & ~(HWID_MASK >> HWID_OFFSET))
+			gparms->hwid = nla_get_u16(data[IFLA_GRE_ERSPAN_HWID]);
+			if (gparms->hwid & ~(HWID_MASK >> HWID_OFFSET))
 				return -EINVAL;
 		}
 	}
@@ -1401,7 +1431,12 @@ ipgre_newlink_encap_setup(struct net_device *dev, struct nlattr *data[])
 
 	if (ipgre_netlink_encap_parms(data, &ipencap)) {
 		struct ip_tunnel *t = netdev_priv(dev);
-		int err = ip_tunnel_encap_setup(t, &ipencap);
+		int err;
+
+		if (t->collect_md && ipencap.type != TUNNEL_ENCAP_NONE)
+			return -EINVAL;
+
+		err = ip_tunnel_encap_setup(t, &ipencap);
 
 		if (err < 0)
 			return err;
@@ -1417,18 +1452,19 @@ static int ipgre_newlink(struct net_device *dev,
 	struct nlattr **data = params->data;
 	struct nlattr **tb = params->tb;
 	struct ip_tunnel_parm_kern p;
-	__u32 fwmark = 0;
+	struct ip_gre_parm gparms;
 	int err;
 
 	err = ipgre_newlink_encap_setup(dev, data);
 	if (err)
 		return err;
 
-	err = ipgre_netlink_parms(dev, data, tb, &p, &fwmark);
+	err = ipgre_netlink_parms(dev, data, tb, &p, &gparms, true);
 	if (err < 0)
 		return err;
+	ipgre_commit_parms(netdev_priv(dev), &gparms);
 	return ip_tunnel_newlink(params->link_net ? : dev_net(dev), dev, tb, &p,
-				 fwmark);
+				 gparms.fwmark);
 }
 
 static int erspan_newlink(struct net_device *dev,
@@ -1438,18 +1474,19 @@ static int erspan_newlink(struct net_device *dev,
 	struct nlattr **data = params->data;
 	struct nlattr **tb = params->tb;
 	struct ip_tunnel_parm_kern p;
-	__u32 fwmark = 0;
+	struct ip_gre_parm gparms;
 	int err;
 
 	err = ipgre_newlink_encap_setup(dev, data);
 	if (err)
 		return err;
 
-	err = erspan_netlink_parms(dev, data, tb, &p, &fwmark);
+	err = erspan_netlink_parms(dev, data, tb, &p, &gparms, true);
 	if (err)
 		return err;
+	ipgre_commit_parms(netdev_priv(dev), &gparms);
 	return ip_tunnel_newlink(params->link_net ? : dev_net(dev), dev, tb, &p,
-				 fwmark);
+				 gparms.fwmark);
 }
 
 static int ipgre_changelink(struct net_device *dev, struct nlattr *tb[],
@@ -1458,24 +1495,25 @@ static int ipgre_changelink(struct net_device *dev, struct nlattr *tb[],
 {
 	struct ip_tunnel *t = netdev_priv(dev);
 	struct ip_tunnel_parm_kern p;
-	__u32 fwmark = t->fwmark;
+	struct ip_gre_parm gparms;
 	int err;
 
 	if (!rtnl_dev_link_net_capable(dev, t->net))
 		return -EPERM;
 
+	err = ipgre_netlink_parms(dev, data, tb, &p, &gparms, false);
+	if (err < 0)
+		return err;
+
 	err = ipgre_newlink_encap_setup(dev, data);
 	if (err)
 		return err;
 
-	err = ipgre_netlink_parms(dev, data, tb, &p, &fwmark);
+	err = ip_tunnel_changelink(dev, tb, &p, gparms.fwmark);
 	if (err < 0)
 		return err;
 
-	err = ip_tunnel_changelink(dev, tb, &p, fwmark);
-	if (err < 0)
-		return err;
-
+	ipgre_commit_parms(t, &gparms);
 	ip_tunnel_flags_copy(t->parms.i_flags, p.i_flags);
 	ip_tunnel_flags_copy(t->parms.o_flags, p.o_flags);
 
@@ -1490,24 +1528,25 @@ static int erspan_changelink(struct net_device *dev, struct nlattr *tb[],
 {
 	struct ip_tunnel *t = netdev_priv(dev);
 	struct ip_tunnel_parm_kern p;
-	__u32 fwmark = t->fwmark;
+	struct ip_gre_parm gparms;
 	int err;
 
 	if (!rtnl_dev_link_net_capable(dev, t->net))
 		return -EPERM;
 
+	err = erspan_netlink_parms(dev, data, tb, &p, &gparms, false);
+	if (err < 0)
+		return err;
+
 	err = ipgre_newlink_encap_setup(dev, data);
 	if (err)
 		return err;
 
-	err = erspan_netlink_parms(dev, data, tb, &p, &fwmark);
+	err = ip_tunnel_changelink(dev, tb, &p, gparms.fwmark);
 	if (err < 0)
 		return err;
 
-	err = ip_tunnel_changelink(dev, tb, &p, fwmark);
-	if (err < 0)
-		return err;
-
+	ipgre_commit_parms(t, &gparms);
 	ip_tunnel_flags_copy(t->parms.i_flags, p.i_flags);
 	ip_tunnel_flags_copy(t->parms.o_flags, p.o_flags);
 
