@@ -156,6 +156,13 @@ enum kernfs_root_flag {
 	 * Renames must not change the parent node.
 	 */
 	KERNFS_ROOT_INVARIANT_PARENT		= 0x0010,
+
+	/*
+	 * Track the holders of this root's rwsems (see
+	 * CONFIG_TRACK_LOCK_HOLDERS).  Use it for roots whose locks are
+	 * shared so widely that a stalled holder stalls unrelated work.
+	 */
+	KERNFS_ROOT_TRACK_LOCK_HOLDERS		= 0x0020,
 };
 
 /* type-specific structures for kernfs_node union members */
