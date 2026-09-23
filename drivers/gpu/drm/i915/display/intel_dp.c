@@ -3113,7 +3113,7 @@ static bool intel_dp_needs_as_sdp(struct intel_dp *intel_dp,
 	    !intel_psr_pr_async_video_timing_supported(intel_dp))
 		return true;
 
-	return intel_vrr_possible(crtc_state);
+	return crtc_state->vrr.in_range;
 }
 
 static void intel_dp_compute_as_sdp(struct intel_dp *intel_dp,
