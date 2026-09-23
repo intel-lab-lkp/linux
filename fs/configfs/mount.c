@@ -13,6 +13,7 @@
 #include <linux/module.h>
 #include <linux/mount.h>
 #include <linux/fs_context.h>
+#include <linux/namei.h>
 #include <linux/pagemap.h>
 #include <linux/init.h>
 #include <linux/slab.h>
@@ -117,6 +118,73 @@ static struct file_system_type configfs_fs_type = {
 	.kill_sb	= kill_anon_super,
 };
 MODULE_ALIAS_FS("configfs");
+
+/**
+ * configfs_open_root - open a path relative to an already-resolved root
+ * @root: resolved root, which must not be on configfs
+ * @name: path to open relative to @root, or "" to open @root itself
+ * @flags: open flags as per the open(2) second argument
+ * @mode: mode argument passed to file_open_root()
+ *
+ * Open @name relative to @root, refusing a @root on configfs.
+ *
+ * Configfs store callbacks are called with the fragment semaphore of the
+ * item they belong to held for reading.  Opening a configfs path from
+ * such a callback can re-enter __configfs_open_file() and take that same
+ * semaphore again, which is not recursive and deadlocks.  Callers that
+ * open a user-configured path from a configfs store callback must
+ * therefore use this helper instead of filp_open() or a bare
+ * file_open_root().
+ *
+ * Resolving @name relative to @root also lets a caller pin and validate a
+ * root once and keep opening files below it, rather than re-resolving a
+ * pathname that can be retargeted in the meantime.  The normal open-time
+ * permission and security checks still apply to the file being opened.
+ *
+ * Return: the opened file, or an ERR_PTR() value.  -EINVAL is returned if
+ * @root is on configfs.
+ */
+struct file *configfs_open_root(const struct path *root, const char *name,
+				int flags, umode_t mode)
+{
+	if (root->dentry->d_sb->s_type == &configfs_fs_type)
+		return ERR_PTR(-EINVAL);
+
+	return file_open_root(root, name, flags, mode);
+}
+EXPORT_SYMBOL_GPL(configfs_open_root);
+
+/**
+ * configfs_file_open - open a pathname that must not resolve to configfs
+ * @filename: existing pathname to resolve and open
+ * @flags: open flags as per the open(2) second argument
+ * @mode: mode argument passed to file_open_root()
+ *
+ * Resolve @filename and open the resulting file, refusing to open it if it
+ * resolves to configfs.  @filename must already exist; this helper cannot
+ * create a missing path.  Use this from configfs store callbacks that open
+ * a path configured by the user, in place of filp_open().  See
+ * configfs_open_root() for why opening configfs again from such a callback
+ * deadlocks.
+ *
+ * Return: the opened file, or an ERR_PTR() value.  -EINVAL is returned if
+ * @filename resolves to configfs.
+ */
+struct file *configfs_file_open(const char *filename, int flags, umode_t mode)
+{
+	struct file *file;
+	struct path path;
+	int ret;
+
+	ret = kern_path(filename, LOOKUP_FOLLOW, &path);
+	if (ret)
+		return ERR_PTR(ret);
+
+	file = configfs_open_root(&path, "", flags, mode);
+	path_put(&path);
+	return file;
+}
+EXPORT_SYMBOL_GPL(configfs_file_open);
 
 struct dentry *configfs_pin_fs(void)
 {
