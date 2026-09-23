@@ -29,6 +29,7 @@
 #include <drm/display/drm_dp_helper.h>
 #include <drm/drm_print.h>
 
+#include "intel_alpm.h"
 #include "intel_display.h"
 #include "intel_display_core.h"
 #include "intel_display_jiffies.h"
@@ -1124,7 +1125,17 @@ static bool
 intel_dp_pr_with_as_sdp_enabled(struct intel_dp *intel_dp,
 				const struct intel_crtc_state *crtc_state)
 {
+	/*
+	 * DP_FIXED_VTOTAL_AS_SDP_EN_IN_PR_ACTIVE tells the sink that the AS SDP
+	 * keeps coming during PR Active. With disable_as_sdp_when_pr_active,
+	 * intel_alpm_configure_pr_as_sdp() sets PR_ALPM_CTL[AS SDP Transmission
+	 * in Active Disable] and the source stops sending it for as long as PR
+	 * is active, unless AS SDP skip frames is used. The sink then keeps
+	 * the refresh rate using the coasting vtotal of the last AS SDP.
+	 */
 	return intel_psr_needs_alpm_aux_less(intel_dp, crtc_state) &&
+		(!crtc_state->disable_as_sdp_when_pr_active ||
+		 intel_alpm_pr_as_sdp_skip_frames_enabled(intel_dp, crtc_state)) &&
 		(crtc_state->infoframes.enable &
 		 intel_hdmi_infoframe_enable(DP_SDP_ADAPTIVE_SYNC));
 }

@@ -3156,11 +3156,12 @@ static void intel_dp_compute_as_sdp(struct intel_dp *intel_dp,
 
 	/*
 	 * For Panel Replay with Async Video Timing support, the source can
-	 * disable sending the AS SDP during PR Active state. In that case,
-	 * the sink needs the coasting vtotal value to maintain the refresh
-	 * rate. The HW only samples this on PR_ALPM_CTL[AS SDP Transmission
-	 * in Active Disable], which we never program, so providing the value
-	 * unconditionally when the sink advertises the capability is safe.
+	 * stop sending the AS SDP during PR Active (PR_ALPM_CTL[AS SDP
+	 * Transmission in Active Disable], see intel_alpm_configure_pr_as_sdp())
+	 * and the sink then keeps the refresh rate using the coasting vtotal of
+	 * the last AS SDP it received. The coasting vtotal bytes are fully
+	 * under driver control, so fill them in whenever the sink advertises
+	 * the capability.
 	 *
 	 * #TODO:
 	 * If we ever advertise support for coasting at other refresh targets,
