@@ -754,7 +754,7 @@ static int tun_attach(struct tun_struct *tun, struct file *file,
 		lock_sock(tfile->socket.sk);
 		err = sk_attach_filter(&tun->fprog, tfile->socket.sk);
 		release_sock(tfile->socket.sk);
-		if (!err)
+		if (err)
 			goto out;
 	}
 
