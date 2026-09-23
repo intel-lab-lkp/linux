@@ -48,6 +48,7 @@ pub mod alloc;
 #[cfg(CONFIG_AUXILIARY_BUS)]
 pub mod auxiliary;
 pub mod bitfield;
+pub mod bench;
 pub mod bitmap;
 pub mod bits;
 #[cfg(CONFIG_BLOCK)]
