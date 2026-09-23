@@ -22,6 +22,9 @@
 #define LINUX_LOGO_CLUT224	3	/* 224 colors */
 #define LINUX_LOGO_GRAY256	4	/* 256 levels grayscale */
 
+/* Compatible of the /chosen child describing a device tree supplied logo */
+#define LOGO_DT_COMPATIBLE	"boot-logo-clut224"
+
 
 struct linux_logo {
 	int type;			/* one of LINUX_LOGO_* */
