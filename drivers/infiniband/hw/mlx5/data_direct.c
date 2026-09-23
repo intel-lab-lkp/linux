@@ -109,6 +109,7 @@ void mlx5_data_direct_ib_unreg(struct mlx5_ib_dev *ibdev)
 	mutex_lock(&mlx5_data_direct_mutex);
 	list_for_each_entry(reg, &mlx5_data_direct_reg_list, list) {
 		if (reg->ibdev == ibdev) {
+			mlx5_ib_data_direct_unbind(reg->ibdev);
 			list_del(&reg->list);
 			kfree(reg);
 			goto end;
