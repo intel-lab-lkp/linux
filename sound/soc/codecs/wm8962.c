@@ -3115,7 +3115,7 @@ static void wm8962_mic_work(struct work_struct *work)
 
 	wm8962->mic_status = status;
 
-	snd_soc_jack_report(wm8962->jack, status,
+	snd_soc_jack_report(READ_ONCE(wm8962->jack), status,
 			    SND_JACK_MICROPHONE | SND_JACK_BTN_0);
 
 	snd_soc_component_update_bits(component, WM8962_MICINT_SOURCE_POL,
@@ -3203,9 +3203,14 @@ static irqreturn_t wm8962_irq(int irq, void *data)
 
 		pm_wakeup_event(dev, 300);
 
-		queue_delayed_work(system_power_efficient_wq,
-				   &wm8962->mic_work,
-				   msecs_to_jiffies(250));
+		/*
+		 * mic_work reports this jack.  Removal clears it before
+		 * synchronize_irq(), so do not queue once it is gone.
+		 */
+		if (READ_ONCE(wm8962->jack))
+			queue_delayed_work(system_power_efficient_wq,
+					   &wm8962->mic_work,
+					   msecs_to_jiffies(250));
 	}
 
 	pm_runtime_put(dev);
@@ -3232,7 +3237,7 @@ int wm8962_mic_detect(struct snd_soc_component *component, struct snd_soc_jack *
 	struct snd_soc_dapm_context *dapm = snd_soc_component_to_dapm(component);
 	int irq_mask, enable;
 
-	wm8962->jack = jack;
+	WRITE_ONCE(wm8962->jack, jack);
 	if (jack) {
 		irq_mask = 0;
 		enable = WM8962_MICDET_ENA;
@@ -3247,7 +3252,7 @@ int wm8962_mic_detect(struct snd_soc_component *component, struct snd_soc_jack *
 			    WM8962_MICDET_ENA, enable);
 
 	/* Send an initial empty report */
-	snd_soc_jack_report(wm8962->jack, 0,
+	snd_soc_jack_report(jack, 0,
 			    SND_JACK_MICROPHONE | SND_JACK_BTN_0);
 
 	snd_soc_dapm_mutex_lock(dapm);
@@ -3594,6 +3599,15 @@ static void wm8962_remove(struct snd_soc_component *component)
 {
 	struct wm8962_priv *wm8962 = snd_soc_component_get_drvdata(component);
 
+	/*
+	 * The IRQ stays registered for the I2C device, including across
+	 * card unbind.  It is the only producer of mic_work.  Clear the
+	 * jack first so a new handler does not queue, wait out a handler
+	 * that already loaded the old pointer, then drain the work.
+	 */
+	WRITE_ONCE(wm8962->jack, NULL);
+	if (wm8962->irq)
+		synchronize_irq(wm8962->irq);
 	cancel_delayed_work_sync(&wm8962->mic_work);
 
 	wm8962_free_gpio(component);
