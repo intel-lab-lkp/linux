@@ -41,6 +41,14 @@ struct hwtstamp_provider {
 	struct hwtstamp_provider_desc desc;
 };
 
+struct net_device;
+struct phy_device;
+
+void dev_attach_hwtstamp_phylib(struct net_device *dev,
+				struct phy_device *phydev);
+void dev_clear_hwtstamp_phylib(struct net_device *dev,
+			       struct phy_device *phydev);
+
 /**
  * struct kernel_hwtstamp_config - Kernel copy of struct hwtstamp_config
  *

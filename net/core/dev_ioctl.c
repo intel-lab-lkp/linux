@@ -5,6 +5,8 @@
 #include <linux/etherdevice.h>
 #include <linux/rtnetlink.h>
 #include <linux/net_tstamp.h>
+#include <linux/ethtool.h>
+#include <linux/phy.h>
 #include <linux/phylib_stubs.h>
 #include <linux/ptp_clock_kernel.h>
 #include <linux/wireless.h>
@@ -387,6 +389,75 @@ int dev_set_hwtstamp_phylib(struct net_device *dev,
 
 	return 0;
 }
+
+/**
+ * dev_attach_hwtstamp_phylib() - Install the default hwtstamp provider of a
+ *	netdev for a newly attached PHY, if the PHY qualifies.
+ * @dev: Network device
+ * @phydev: PHY device being attached
+ *
+ * Only sets metadata (source, phydev pointer, PHC descriptor); it never
+ * calls into any driver callback. A freshly attached PHY is by definition
+ * in its zero-config state so no zeroing is needed. Installation is skipped
+ * when the PHY is not the default hwtstamp provider, has no ts_info, or when
+ * a provider was already set (by ethtool). The locking convention is the
+ * same as for dev_set_hwtstamp_phylib(), but also accepts unregistered netdevs.
+ */
+void dev_attach_hwtstamp_phylib(struct net_device *dev,
+				struct phy_device *phydev)
+{
+	struct kernel_ethtool_ts_info ts_info = {};
+	struct hwtstamp_provider *hwprov;
+
+	/* Don't override an explicitly selected provider */
+	hwprov = netdev_ops_lock_dereference_or_invisible(dev->hwprov, dev);
+	if (hwprov)
+		return;
+
+	if (!phy_is_default_hwtstamp(phydev) || !phy_has_tsinfo(phydev))
+		return;
+
+	if (phy_ts_info(phydev, &ts_info) || ts_info.phc_index < 0)
+		/* No usable PTP hardware clock description */
+		return;
+
+	hwprov = kzalloc_obj(*hwprov);
+	if (!hwprov)
+		/* Degrade to the NULL fallback */
+		return;
+
+	hwprov->source = HWTSTAMP_SOURCE_PHYLIB;
+	hwprov->phydev = phydev;
+	hwprov->desc.index = ts_info.phc_index;
+	hwprov->desc.qualifier = ts_info.phc_qualifier;
+
+	rcu_assign_pointer(dev->hwprov, hwprov);
+}
+EXPORT_SYMBOL(dev_attach_hwtstamp_phylib);
+
+/**
+ * dev_clear_hwtstamp_phylib() - Remove the hwtstamp provider if it matches
+ *	a PHY that is being detached.
+ * @dev: Network device
+ * @phydev: PHY device being detached
+ *
+ * Clears dev->hwprov when it points at @phydev, whether the provider was
+ * installed by dev_attach_hwtstamp_phylib() or by dev_set_hwtstamp_phylib()
+ * (via ethtool). Called from phy_detach() for symmetry with attach.
+ */
+void dev_clear_hwtstamp_phylib(struct net_device *dev,
+			       struct phy_device *phydev)
+{
+	struct hwtstamp_provider *hwprov;
+
+	hwprov = netdev_ops_lock_dereference_or_invisible(dev->hwprov, dev);
+	/* Disable timestamping if the provider is the detached PHY */
+	if (hwprov && hwprov->phydev == phydev) {
+		rcu_assign_pointer(dev->hwprov, NULL);
+		kfree_rcu(hwprov, rcu_head);
+	}
+}
+EXPORT_SYMBOL(dev_clear_hwtstamp_phylib);
 
 static int dev_set_hwtstamp(struct net_device *dev, struct ifreq *ifr)
 {

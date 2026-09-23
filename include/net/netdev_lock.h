@@ -149,6 +149,24 @@ static inline int netdev_lock_cmp_fn(const struct lockdep_map *a,
 #define netdev_ops_lock_dereference(p, dev)				\
 	rcu_dereference_protected(p, netdev_is_locked_ops_compat(dev))
 
+/* Same as netdev_is_locked_ops_compat(), but a netdev which is not
+ * registered cannot be reached from user space, so its state cannot
+ * be accessed concurrently and no lock is needed.
+ */
+static inline int
+netdev_is_locked_ops_compat_or_invisible(const struct net_device *dev)
+{
+	if (dev->reg_state != NETREG_REGISTERED &&
+	    dev->reg_state != NETREG_UNREGISTERING)
+		return 1;
+
+	return netdev_is_locked_ops_compat(dev);
+}
+
+#define netdev_ops_lock_dereference_or_invisible(p, dev)		\
+	rcu_dereference_protected(p,					\
+		netdev_is_locked_ops_compat_or_invisible(dev))
+
 int netdev_debug_event(struct notifier_block *nb, unsigned long event,
 		       void *ptr);
 

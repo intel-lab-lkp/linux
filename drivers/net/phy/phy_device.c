@@ -17,6 +17,7 @@
 #include <linux/ethtool.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
+#include <linux/net_tstamp.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
@@ -1878,6 +1879,12 @@ int phy_attach_direct(struct net_device *dev, struct phy_device *phydev,
 
 	phy_resume(phydev);
 
+	/* Track the default hwtstamp provider of the netdev, if the
+	 * attached PHY is the one. Cleared symmetrically by phy_detach().
+	 */
+	if (dev)
+		dev_attach_hwtstamp_phylib(dev, phydev);
+
 	/**
 	 * If the external phy used by current mac interface is managed by
 	 * another mac interface, so we should create a device link between
@@ -1936,17 +1943,7 @@ void phy_detach(struct phy_device *phydev)
 
 	phy_suspend(phydev);
 	if (dev) {
-		struct hwtstamp_provider *hwprov;
-
-		/* hwprov may technically be protected by ops lock but
-		 * not for devices with a phydev, see phy_link_topo_add_phy()
-		 */
-		hwprov = rtnl_dereference(dev->hwprov);
-		/* Disable timestamp if it is the one selected */
-		if (hwprov && hwprov->phydev == phydev) {
-			rcu_assign_pointer(dev->hwprov, NULL);
-			kfree_rcu(hwprov, rcu_head);
-		}
+		dev_clear_hwtstamp_phylib(dev, phydev);
 
 		phydev->attached_dev->phydev = NULL;
 		phydev->attached_dev = NULL;
