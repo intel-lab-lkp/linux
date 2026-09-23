@@ -25,6 +25,11 @@
 #include <asm/page.h>
 #include <asm/uv.h>
 
+static inline pte_t ptep_get(const pte_t *ptep);
+static inline pud_t pudp_get(const pud_t *pudp);
+static inline p4d_t p4dp_get(const p4d_t *p4dp);
+static inline pgd_t pgdp_get(const pgd_t *pgdp);
+
 extern pgd_t swapper_pg_dir[];
 extern pgd_t invalid_pg_dir[];
 extern void paging_init(void);
@@ -983,36 +988,6 @@ static inline void set_pte(pte_t *ptep, pte_t pte)
 	if (pte_present(pte))
 		pte = clear_pte_bit(pte, __pgprot(_PAGE_UNUSED));
 	WRITE_ONCE(*ptep, pte);
-}
-
-#define ptep_get ptep_get
-static inline pte_t ptep_get(pte_t *ptep)
-{
-	return READ_ONCE(*ptep);
-}
-
-#define pmdp_get pmdp_get
-static inline pmd_t pmdp_get(pmd_t *pmdp)
-{
-	return READ_ONCE(*pmdp);
-}
-
-#define pudp_get pudp_get
-static inline pud_t pudp_get(pud_t *pudp)
-{
-	return READ_ONCE(*pudp);
-}
-
-#define p4dp_get p4dp_get
-static inline p4d_t p4dp_get(p4d_t *p4dp)
-{
-	return READ_ONCE(*p4dp);
-}
-
-#define pgdp_get pgdp_get
-static inline pgd_t pgdp_get(pgd_t *pgdp)
-{
-	return READ_ONCE(*pgdp);
 }
 
 static inline void pte_clear(struct mm_struct *mm, unsigned long addr, pte_t *ptep)
