@@ -66,7 +66,6 @@ async_tx_channel_switch(struct dma_async_tx_descriptor *depend_tx,
 			struct dma_async_tx_descriptor *tx)
 {
 	struct dma_chan *chan = depend_tx->chan;
-	struct dma_device *device = chan->device;
 	struct dma_async_tx_descriptor *intr_tx = (void *) ~0;
 
 	/* first check to see if we can still append to depend_tx */
@@ -86,10 +85,7 @@ async_tx_channel_switch(struct dma_async_tx_descriptor *depend_tx,
 	/* see if we can schedule an interrupt
 	 * otherwise poll for completion
 	 */
-	if (dma_has_cap(DMA_INTERRUPT, device->cap_mask))
-		intr_tx = device->device_prep_dma_interrupt(chan, 0);
-	else
-		intr_tx = NULL;
+	intr_tx = dmaengine_prep_dma_interrupt(chan, 0);
 
 	if (intr_tx) {
 		intr_tx->callback = NULL;
@@ -221,21 +217,16 @@ struct dma_async_tx_descriptor *
 async_trigger_callback(struct async_submit_ctl *submit)
 {
 	struct dma_chan *chan;
-	struct dma_device *device;
 	struct dma_async_tx_descriptor *tx;
 	struct dma_async_tx_descriptor *depend_tx = submit->depend_tx;
 
 	if (depend_tx) {
 		chan = depend_tx->chan;
-		device = chan->device;
 
 		/* see if we can schedule an interrupt
 		 * otherwise poll for completion
 		 */
-		if (device && !dma_has_cap(DMA_INTERRUPT, device->cap_mask))
-			device = NULL;
-
-		tx = device ? device->device_prep_dma_interrupt(chan, 0) : NULL;
+		tx = dmaengine_prep_dma_interrupt(chan, 0);
 	} else
 		tx = NULL;
 

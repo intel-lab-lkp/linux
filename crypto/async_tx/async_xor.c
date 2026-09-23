@@ -62,9 +62,8 @@ do_async_xor(struct dma_chan *chan, struct dmaengine_unmap_data *unmap,
 		tmp = src_list[0];
 		if (src_list > unmap->addr)
 			src_list[0] = dma_dest;
-		tx = dma->device_prep_dma_xor(chan, dma_dest, src_list,
-					      xor_src_cnt, unmap->len,
-					      dma_flags);
+		tx = dmaengine_prep_dma_xor(chan, dma_dest, src_list,
+					    xor_src_cnt, unmap->len, dma_flags);
 
 		if (unlikely(!tx))
 			async_tx_quiesce(&submit->depend_tx);
@@ -72,10 +71,9 @@ do_async_xor(struct dma_chan *chan, struct dmaengine_unmap_data *unmap,
 		/* spin wait for the preceding transactions to complete */
 		while (unlikely(!tx)) {
 			dma_async_issue_pending(chan);
-			tx = dma->device_prep_dma_xor(chan, dma_dest,
-						      src_list,
-						      xor_src_cnt, unmap->len,
-						      dma_flags);
+			tx = dmaengine_prep_dma_xor(chan, dma_dest, src_list,
+						    xor_src_cnt, unmap->len,
+						    dma_flags);
 		}
 		src_list[0] = tmp;
 
@@ -335,15 +333,14 @@ async_xor_val_offs(struct page *dest, unsigned int offset,
 		}
 		unmap->len = len;
 
-		tx = device->device_prep_dma_xor_val(chan, unmap->addr, src_cnt,
-						     len, result,
-						     dma_prep_flags);
+		tx = dmaengine_prep_dma_xor_val(chan, unmap->addr, src_cnt,
+						len, result, dma_prep_flags);
 		if (unlikely(!tx)) {
 			async_tx_quiesce(&submit->depend_tx);
 
 			while (!tx) {
 				dma_async_issue_pending(chan);
-				tx = device->device_prep_dma_xor_val(chan,
+				tx = dmaengine_prep_dma_xor_val(chan,
 					unmap->addr, src_cnt, len, result,
 					dma_prep_flags);
 			}
