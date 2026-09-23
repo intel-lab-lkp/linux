@@ -789,23 +789,36 @@ free_skb:
 	return NETDEV_TX_OK;
 }
 
-static void ipgre_link_update(struct net_device *dev, bool set_mtu)
+/* tunnel->hlen depends on tunnel->parms.o_flags and on tunnel->encap_hlen,
+ * both of which ipgre_changelink() can change. Recompute it the way
+ * __gre_tunnel_init() does, then let ip_tunnel_bind_dev() derive the device
+ * lengths from it.
+ *
+ * @old_hlen is only used to tell whether the MTU became stale, never as a
+ * difference to apply, so it can not make the lengths drift. It must be
+ * sampled before ip_tunnel_encap_setup(), which already publishes the new
+ * tunnel->hlen for us.
+ */
+static void ipgre_link_update(struct net_device *dev, bool set_mtu,
+			      int old_hlen)
 {
 	struct ip_tunnel *tunnel = netdev_priv(dev);
-	int len;
 
-	len = tunnel->tun_hlen;
 	tunnel->tun_hlen = gre_calc_hlen(tunnel->parms.o_flags);
-	len = tunnel->tun_hlen - len;
-	tunnel->hlen = tunnel->hlen + len;
+	tunnel->hlen = tunnel->tun_hlen + tunnel->encap_hlen;
 
-	if (dev->header_ops)
-		dev->hard_header_len += len;
-	else
-		dev->needed_headroom += len;
+	/* For the ARPHRD_IPGRE devices installing ipgre_header_ops,
+	 * dev->hard_header_len is the outer IP + GRE header, as set by
+	 * ipgre_tunnel_init(). ip_tunnel_bind_dev() does not maintain it:
+	 * it only subtracts it from the MTU, and only for ARPHRD_ETHER.
+	 */
+	if (dev->header_ops == &ipgre_header_ops)
+		dev->hard_header_len = tunnel->hlen + sizeof(struct iphdr);
 
-	if (set_mtu)
-		WRITE_ONCE(dev->mtu, max_t(int, dev->mtu - len, 68));
+	/* Only reset a MTU that the header length just invalidated, so that
+	 * a MTU configured by the user survives an unrelated change.
+	 */
+	ip_tunnel_refresh_lengths(dev, set_mtu && tunnel->hlen != old_hlen);
 
 	if (test_bit(IP_TUNNEL_SEQ_BIT, tunnel->parms.o_flags) ||
 	    (test_bit(IP_TUNNEL_CSUM_BIT, tunnel->parms.o_flags) &&
@@ -853,7 +866,7 @@ static int ipgre_tunnel_ctl(struct net_device *dev,
 		ip_tunnel_flags_copy(t->parms.o_flags, p->o_flags);
 
 		if (strcmp(dev->rtnl_link_ops->kind, "erspan"))
-			ipgre_link_update(dev, true);
+			ipgre_link_update(dev, true, t->hlen);
 	}
 
 	i_flags = gre_tnl_flags_to_gre_flags(p->i_flags);
@@ -1496,6 +1509,8 @@ static int ipgre_changelink(struct net_device *dev, struct nlattr *tb[],
 	struct ip_tunnel *t = netdev_priv(dev);
 	struct ip_tunnel_parm_kern p;
 	struct ip_gre_parm gparms;
+	int old_hlen = t->hlen;
+	bool link_changed;
 	int err;
 
 	if (!rtnl_dev_link_net_capable(dev, t->net))
@@ -1509,17 +1524,35 @@ static int ipgre_changelink(struct net_device *dev, struct nlattr *tb[],
 	if (err)
 		return err;
 
+	link_changed = t->parms.link != p.link || t->fwmark != gparms.fwmark;
+
 	err = ip_tunnel_changelink(dev, tb, &p, gparms.fwmark);
 	if (err < 0)
-		return err;
+		goto link_update;
+
+	/* When the link or fwmark changed, ip_tunnel_update() has just
+	 * recomputed dev->mtu from the intermediate t->hlen published by
+	 * ip_tunnel_encap_setup(). Record that as the length dev->mtu now
+	 * reflects so ipgre_link_update() refreshes it if tun_hlen moves.
+	 */
+	if (link_changed)
+		old_hlen = t->hlen;
 
 	ipgre_commit_parms(t, &gparms);
 	ip_tunnel_flags_copy(t->parms.i_flags, p.i_flags);
 	ip_tunnel_flags_copy(t->parms.o_flags, p.o_flags);
 
-	ipgre_link_update(dev, !tb[IFLA_MTU]);
+link_update:
+	/* ipgre_newlink_encap_setup() has published a new encapsulation even
+	 * if ip_tunnel_changelink() failed, so the lengths must be refreshed
+	 * on that error path as well.
+	 *
+	 * IFLA_MTU only defers the MTU to do_setlink(), which rtnl_changelink()
+	 * does not reach if we return an error, so it must not hold it back.
+	 */
+	ipgre_link_update(dev, err || !tb[IFLA_MTU], old_hlen);
 
-	return 0;
+	return err;
 }
 
 static int erspan_changelink(struct net_device *dev, struct nlattr *tb[],
