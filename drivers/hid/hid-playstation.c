@@ -421,6 +421,7 @@ struct dualshock4 {
 	enum dualshock4_dongle_state dongle_state;
 	/* Used during calibration. */
 	struct work_struct dongle_hotplug_worker;
+	bool dongle_hotplug_worker_initialized;
 
 	/* Timestamp for sensor data */
 	bool sensor_timestamp_initialized;
@@ -2618,10 +2619,12 @@ static int dualshock4_dongle_parse_report(struct ps_device *ps_dev, struct hid_r
 
 			dualshock4_set_default_lightbar_colors(ds4);
 
-			scoped_guard(spinlock_irqsave, &ps_dev->lock)
+			scoped_guard(spinlock_irqsave, &ps_dev->lock) {
 				ds4->dongle_state = DONGLE_CALIBRATING;
 
-			schedule_work(&ds4->dongle_hotplug_worker);
+				if (ds4->dongle_hotplug_worker_initialized)
+					schedule_work(&ds4->dongle_hotplug_worker);
+			}
 
 			/* Don't process the report since we don't have
 			 * calibration data, but let hidraw have it anyway.
@@ -2677,8 +2680,12 @@ static void dualshock4_remove(struct ps_device *ps_dev)
 
 	cancel_work_sync(&ds4->output_worker);
 
-	if (ps_dev->hdev->product == USB_DEVICE_ID_SONY_PS4_CONTROLLER_DONGLE)
+	if (ps_dev->hdev->product == USB_DEVICE_ID_SONY_PS4_CONTROLLER_DONGLE) {
+		scoped_guard(spinlock_irqsave, &ds4->base.lock)
+			ds4->dongle_hotplug_worker_initialized = false;
+
 		cancel_work_sync(&ds4->dongle_hotplug_worker);
+	}
 }
 
 static inline void dualshock4_schedule_work(struct dualshock4 *ds4)
@@ -2770,12 +2777,15 @@ static struct ps_device *dualshock4_create(struct hid_device *hdev)
 
 	max_output_report_size = sizeof(struct dualshock4_output_report_bt);
 	ds4->output_report_dmabuf = devm_kzalloc(&hdev->dev, max_output_report_size, GFP_KERNEL);
-	if (!ds4->output_report_dmabuf)
-		return ERR_PTR(-ENOMEM);
+	if (!ds4->output_report_dmabuf) {
+		ret = -ENOMEM;
+		goto err_cancel;
+	}
 
 	if (hdev->product == USB_DEVICE_ID_SONY_PS4_CONTROLLER_DONGLE) {
 		ds4->dongle_state = DONGLE_DISCONNECTED;
 		INIT_WORK(&ds4->dongle_hotplug_worker, dualshock4_dongle_calibration_work);
+		ds4->dongle_hotplug_worker_initialized = true;
 
 		/* Override parse report for dongle specific hotplug handling. */
 		ps_dev->parse_report = dualshock4_dongle_parse_report;
@@ -2784,7 +2794,7 @@ static struct ps_device *dualshock4_create(struct hid_device *hdev)
 	ret = dualshock4_get_mac_address(ds4);
 	if (ret) {
 		hid_err(hdev, "Failed to get MAC address from DualShock4\n");
-		return ERR_PTR(ret);
+		goto err_cancel;
 	}
 	snprintf(hdev->uniq, sizeof(hdev->uniq), "%pMR", ds4->base.mac_address);
 
@@ -2796,7 +2806,7 @@ static struct ps_device *dualshock4_create(struct hid_device *hdev)
 
 	ret = ps_devices_list_add(ps_dev);
 	if (ret)
-		return ERR_PTR(ret);
+		goto err_cancel;
 
 	ret = dualshock4_get_calibration_data(ds4);
 	if (ret) {
@@ -2858,6 +2868,18 @@ static struct ps_device *dualshock4_create(struct hid_device *hdev)
 
 err:
 	ps_devices_list_remove(ps_dev);
+err_cancel:
+	scoped_guard(spinlock_irqsave, &ps_dev->lock)
+		ds4->output_worker_initialized = false;
+
+	cancel_work_sync(&ds4->output_worker);
+
+	if (ds4->dongle_hotplug_worker_initialized) {
+		scoped_guard(spinlock_irqsave, &ps_dev->lock)
+			ds4->dongle_hotplug_worker_initialized = false;
+
+		cancel_work_sync(&ds4->dongle_hotplug_worker);
+	}
 	return ERR_PTR(ret);
 }
 
