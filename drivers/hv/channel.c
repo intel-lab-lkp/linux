@@ -548,8 +548,8 @@ static int __vmbus_establish_gpadl(struct vmbus_channel *channel,
 
 	/* At this point, we received the gpadl created msg */
 	gpadl->gpadl_handle = gpadlmsg->gpadl;
-	gpadl->buffer = kbuffer;
 	gpadl->size = size;
+	gpadl->buffer = kbuffer;
 
 
 cleanup:

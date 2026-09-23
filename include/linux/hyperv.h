@@ -780,7 +780,7 @@ struct vmbus_device {
 struct vmbus_gpadl {
 	u32 gpadl_handle;
 	u32 size;
-	void *buffer;
+	void *buffer __counted_by_ptr(size);
 	bool decrypted;
 };
 
