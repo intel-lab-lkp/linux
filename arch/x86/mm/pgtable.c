@@ -712,39 +712,30 @@ int pmd_clear_huge(pmd_t *pmd)
  *
  * Context: The PUD range has been unmapped and TLB purged.
  * Return: 1 if clearing the entry succeeded. 0 otherwise.
- *
- * NOTE: Callers must allow a single page allocation.
  */
 int pud_free_pmd_page(pud_t *pud, unsigned long addr)
 {
-	pmd_t *pmd, *pmd_sv;
+	pmd_t *pmd;
 	struct ptdesc *pt;
 	int i;
 
 	pmd = pud_pgtable(*pud);
-	pmd_sv = (pmd_t *)__get_free_page(GFP_KERNEL);
-	if (!pmd_sv)
-		return 0;
-
-	for (i = 0; i < PTRS_PER_PMD; i++) {
-		pmd_sv[i] = pmd[i];
-		if (!pmd_none(pmd[i]))
-			pmd_clear(&pmd[i]);
-	}
 
 	pud_clear(pud);
 
 	/* INVLPG to clear all paging-structure caches */
 	flush_tlb_kernel_range(addr, addr + PAGE_SIZE-1);
 
+	/*
+	 * The PMD table can no longer be walked, but it is still allocated:
+	 * free the PTE tables straight from it, then the table itself.
+	 */
 	for (i = 0; i < PTRS_PER_PMD; i++) {
-		if (!pmd_none(pmd_sv[i])) {
-			pt = page_ptdesc(pmd_page(pmd_sv[i]));
+		if (!pmd_none(pmd[i])) {
+			pt = page_ptdesc(pmd_page(pmd[i]));
 			pagetable_dtor_free(pt);
 		}
 	}
-
-	free_page((unsigned long)pmd_sv);
 
 	pmd_free(&init_mm, pmd);
 
