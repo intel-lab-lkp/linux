@@ -79,7 +79,7 @@ async_tx_channel_switch(struct dma_async_tx_descriptor *depend_tx,
 
 	/* attached dependency, flush the parent channel */
 	if (!intr_tx) {
-		device->device_issue_pending(chan);
+		dma_async_issue_pending(chan);
 		return;
 	}
 
@@ -113,7 +113,7 @@ async_tx_channel_switch(struct dma_async_tx_descriptor *depend_tx,
 			intr_tx->tx_submit(intr_tx);
 			async_tx_ack(intr_tx);
 		}
-		device->device_issue_pending(chan);
+		dma_async_issue_pending(chan);
 	} else {
 		if (dma_wait_for_async_tx(depend_tx) != DMA_COMPLETE)
 			panic("%s: DMA error waiting for depend_tx\n",
