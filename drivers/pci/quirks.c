@@ -4263,7 +4263,7 @@ static int __pci_dev_specific_reset(struct pci_dev *dev, bool probe,
 
 	ret = i->reset(dev, probe);
 	if (!probe)
-		pci_dev_reset_iommu_done(dev);
+		pci_dev_reset_iommu_done(dev, ret);
 	return ret;
 }
 

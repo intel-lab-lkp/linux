@@ -76,6 +76,7 @@ struct iommu_group {
 enum blocked_reason {
 	BLOCKED_NONE = 0, /* Not blocked */
 	BLOCKED_RESETTING, /* PCI reset in flight */
+	BLOCKED_RESET_FAILED, /* PCI reset failed */
 };
 
 struct group_device {
@@ -589,7 +590,8 @@ static void iommu_deinit_device(struct device *dev, bool blocked)
 			release_domain = ops->identity_domain;
 
 		release_domain->ops->attach_dev(release_domain, dev,
-						group->domain);
+						blocked ? group->blocking_domain :
+							  group->domain);
 	}
 
 	if (ops->release_device)
@@ -764,6 +766,9 @@ static void __iommu_group_remove_device(struct device *dev)
 		if (device->dev != dev)
 			continue;
 
+		/* Must drop the recovery_cnt when removing a blocked device */
+		if (blocked && !WARN_ON(group->recovery_cnt == 0))
+			group->recovery_cnt--;
 		list_del(&device->list);
 		__iommu_group_free_device(group, device);
 		if (dev_has_iommu(dev))
@@ -4027,7 +4032,12 @@ EXPORT_SYMBOL_NS_GPL(iommu_replace_group_handle, "IOMMUFD_INTERNAL");
  * reset is finished, pci_dev_reset_iommu_done() can restore everything.
  *
  * Caller must use pci_dev_reset_iommu_prepare() with pci_dev_reset_iommu_done()
- * before/after the core-level reset routine, to decrement the recovery_cnt.
+ * before/after the core-level reset routine. On a successful reset, done() will
+ * decrement group->recovery_cnt and restore domains. On a failure, recovery_cnt
+ * is left intact and the device stays blocked.
+ *
+ * Callers must skip pci_dev_reset_iommu_prepare/done() entirely when no reset
+ * is attempted (e.g. probe mode).
  *
  * Return: 0 on success or negative error code if the preparation failed.
  *
@@ -4055,6 +4065,10 @@ int pci_dev_reset_iommu_prepare(struct pci_dev *pdev)
 		return -ENODEV;
 
 	if (gdev->reset_depth++)
+		return 0;
+
+	/* Device might be already blocked for a quarantine */
+	if (gdev->blocked)
 		return 0;
 
 	ret = __iommu_group_alloc_blocking_domain(group);
@@ -4138,20 +4152,28 @@ static bool group_device_dma_alias_is_blocked(struct iommu_group *group,
 /**
  * pci_dev_reset_iommu_done() - Restore IOMMU after a PCI device reset is done
  * @pdev: PCI device that has finished a reset routine
+ * @reset_result: Return code from the reset routine
  *
  * After a PCIe device finishes a reset routine, it wants to restore its IOMMU
  * activity, including new translation and cache invalidation, by re-attaching
  * all RID/PASID of the device back to the domains retained in the core-level
  * structure.
  *
- * Caller must pair it with a successful pci_dev_reset_iommu_prepare().
+ * This is a pairing function for pci_dev_reset_iommu_prepare(). Caller passes
+ * the reset return value to @reset_result. On a failed reset, the device will
+ * remain blocked as a quarantine measure, with group->recovery_cnt intact, to
+ * protect system memory until a subsequent successful reset.
+ *
+ * Callers must skip pci_dev_reset_iommu_prepare/done() entirely when no reset
+ * is attempted (e.g. probe mode).
  *
  * Note that, although unlikely, there is a risk that re-attaching domains might
  * fail due to some unexpected happening like OOM.
  */
-void pci_dev_reset_iommu_done(struct pci_dev *pdev)
+void pci_dev_reset_iommu_done(struct pci_dev *pdev, int reset_result)
 {
 	struct iommu_group *group = pdev->dev.iommu_group;
+	enum blocked_reason old_blocked;
 	struct group_device *gdev;
 	unsigned long pasid;
 	void *entry;
@@ -4172,6 +4194,37 @@ void pci_dev_reset_iommu_done(struct pci_dev *pdev)
 		return;
 
 	if (WARN_ON(!group->blocking_domain))
+		return;
+
+	/*
+	 * A reset failure implies that the device might be unreliable. E.g. its
+	 * device cache might retain stale entries, which might result in memory
+	 * corruption. Thus, do not unblock the device until a successful reset.
+	 */
+	if (reset_result) {
+		/*
+		 * FIXME: the int-return values from the PCI reset functions are
+		 * not consistent: some reset functions use -ENOTTY to indicate
+		 * "no reset was attempted" (in which case IOMMU should revert a
+		 * prepare), while others use -ENOTTY to indicate "reset failed;
+		 * try the next reset method" (in which case IOMMU should keep
+		 * the device blocked). Without fixing the PCI return result, we
+		 * cannot tell the difference between the two cases. Warn it.
+		 */
+		if (reset_result == -ENOTTY)
+			dev_warn_ratelimited(
+				&pdev->dev,
+				"Reset may have been skipped. Keep it blocked conservatively\n");
+		else
+			dev_err_ratelimited(
+				&pdev->dev,
+				"Reset failed. Keep it blocked to protect memory\n");
+		if (gdev->blocked == BLOCKED_RESETTING)
+			gdev->blocked = BLOCKED_RESET_FAILED;
+		return;
+	}
+
+	if (WARN_ON(!gdev->blocked))
 		return;
 
 	if (group_device_dma_alias_is_blocked(group, gdev)) {
@@ -4204,6 +4257,7 @@ void pci_dev_reset_iommu_done(struct pci_dev *pdev)
 	 * the correct domain in iommu_driver_get_domain_for_dev() that might be
 	 * called in a set_dev_pasid callback function.
 	 */
+	old_blocked = gdev->blocked;
 	gdev->blocked = BLOCKED_NONE;
 
 	/*
@@ -4225,6 +4279,9 @@ void pci_dev_reset_iommu_done(struct pci_dev *pdev)
 
 	if (!WARN_ON(group->recovery_cnt == 0))
 		group->recovery_cnt--;
+
+	if (old_blocked > BLOCKED_RESETTING)
+		pci_info(pdev, "Device is unblocked after successful reset\n");
 }
 EXPORT_SYMBOL_GPL(pci_dev_reset_iommu_done);
 
