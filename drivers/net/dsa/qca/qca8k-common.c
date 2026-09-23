@@ -463,7 +463,8 @@ exit:
 	return ret;
 }
 
-void qca8k_port_set_status(struct qca8k_priv *priv, int port, int enable)
+static void qca8k_port_set_status_locked(struct qca8k_priv *priv, int port,
+					 int enable)
 {
 	u32 mask = QCA8K_PORT_STATUS_TXMAC | QCA8K_PORT_STATUS_RXMAC;
 
@@ -475,6 +476,13 @@ void qca8k_port_set_status(struct qca8k_priv *priv, int port, int enable)
 		regmap_set_bits(priv->regmap, QCA8K_REG_PORT_STATUS(port), mask);
 	else
 		regmap_clear_bits(priv->regmap, QCA8K_REG_PORT_STATUS(port), mask);
+}
+
+void qca8k_port_set_status(struct qca8k_priv *priv, int port, int enable)
+{
+	mutex_lock(&priv->reg_mutex);
+	qca8k_port_set_status_locked(priv, port, enable);
+	mutex_unlock(&priv->reg_mutex);
 }
 
 void qca8k_get_strings(struct dsa_switch *ds, int port, u32 stringset,
@@ -751,8 +759,10 @@ int qca8k_port_enable(struct dsa_switch *ds, int port,
 {
 	struct qca8k_priv *priv = ds->priv;
 
-	qca8k_port_set_status(priv, port, 1);
+	mutex_lock(&priv->reg_mutex);
+	qca8k_port_set_status_locked(priv, port, 1);
 	priv->port_enabled_map |= BIT(port);
+	mutex_unlock(&priv->reg_mutex);
 
 	if (dsa_is_user_port(ds, port))
 		phy_support_asym_pause(phy);
@@ -764,14 +774,20 @@ void qca8k_port_disable(struct dsa_switch *ds, int port)
 {
 	struct qca8k_priv *priv = ds->priv;
 
-	qca8k_port_set_status(priv, port, 0);
+	mutex_lock(&priv->reg_mutex);
+	qca8k_port_set_status_locked(priv, port, 0);
 	priv->port_enabled_map &= ~BIT(port);
+	mutex_unlock(&priv->reg_mutex);
 }
 
 int qca8k_port_change_mtu(struct dsa_switch *ds, int port, int new_mtu)
 {
+	u32 mask = QCA8K_PORT_STATUS_TXMAC | QCA8K_PORT_STATUS_RXMAC;
 	struct qca8k_priv *priv = ds->priv;
-	int ret;
+	u32 status[QCA8K_NUM_PORTS] = { 0 };
+	int ret, restore_ret, i;
+	u32 stopped = 0;
+	u32 ports;
 
 	/* We have only have a general MTU setting.
 	 * DSA always set the CPU port's MTU to the largest MTU of the user
@@ -784,25 +800,58 @@ int qca8k_port_change_mtu(struct dsa_switch *ds, int port, int new_mtu)
 
 	/* To change the MAX_FRAME_SIZE the cpu ports must be off or
 	 * the switch panics.
-	 * Turn off both cpu ports before applying the new value to prevent
-	 * this.
+	 * Include internal PHY CPU ports as well as the two MAC-only ports.
+	 * Toggle only MAC enables, preserving the phylink link-control mode.
 	 */
-	if (priv->port_enabled_map & BIT(0))
-		qca8k_port_set_status(priv, 0, 0);
+	ports = BIT(0) | BIT(6);
+	for (i = 1; i < 6; i++)
+		if (dsa_is_cpu_port(ds, i))
+			ports |= BIT(i);
 
-	if (priv->port_enabled_map & BIT(6))
-		qca8k_port_set_status(priv, 6, 0);
+	mutex_lock(&priv->reg_mutex);
+	ports &= priv->port_enabled_map;
+
+	for (i = 0; i < QCA8K_NUM_PORTS; i++) {
+		if (!(ports & BIT(i)))
+			continue;
+
+		ret = regmap_read(priv->regmap, QCA8K_REG_PORT_STATUS(i),
+				  &status[i]);
+		if (ret)
+			goto unlock;
+	}
+
+	for (i = 0; i < QCA8K_NUM_PORTS; i++) {
+		if (!(ports & BIT(i)) || !(status[i] & mask))
+			continue;
+
+		stopped |= BIT(i);
+		ret = regmap_clear_bits(priv->regmap, QCA8K_REG_PORT_STATUS(i),
+					mask);
+		if (ret)
+			goto restore;
+	}
 
 	/* Include L2 header / FCS length */
 	ret = qca8k_write(priv, QCA8K_MAX_FRAME_SIZE, new_mtu +
 			  ETH_HLEN + ETH_FCS_LEN);
 
-	if (priv->port_enabled_map & BIT(0))
-		qca8k_port_set_status(priv, 0, 1);
+restore:
+	for (i = 0; i < QCA8K_NUM_PORTS; i++)
+		if (stopped & BIT(i)) {
+			restore_ret = regmap_update_bits(priv->regmap,
+							 QCA8K_REG_PORT_STATUS(i),
+							 mask, status[i] & mask);
+			if (restore_ret) {
+				dev_err(priv->dev, "failed to restore MAC state on port %d: %d\n",
+					i, restore_ret);
+				if (!ret)
+					ret = restore_ret;
+			}
+		}
 
-	if (priv->port_enabled_map & BIT(6))
-		qca8k_port_set_status(priv, 6, 1);
-
+unlock:
+	mutex_unlock(&priv->reg_mutex);
 	return ret;
 }
 
