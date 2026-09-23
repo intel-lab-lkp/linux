@@ -42,6 +42,7 @@ struct sun55i_gmac_data {
 	int (*init_resources)(struct platform_device *pdev,
 			      struct sun55i_gmac *gmac);
 	unsigned int flags;
+	u32 etxdc_ext_mask;
 	u32 txdly_step_ps;
 	u32 rxdly_step_ps;
 	u32 offset;
@@ -86,17 +87,21 @@ static int sun55i_gmac200_setup(struct device *dev,
 				const struct sun55i_gmac *gmac)
 {
 	struct device_node *node = dev->of_node;
-	u32 val, step, max, reg = 0;
+	u32 val, step, max, low_bits, reg = 0;
 	int ret;
 
 	if (!of_property_read_u32(node, "tx-internal-delay-ps", &val)) {
+		low_bits = hweight32(SYSCON_ETXDC_MASK);
 		step = gmac->data->txdly_step_ps;
-		max = FIELD_MAX(SYSCON_ETXDC_MASK);
+		max = (1U << (low_bits + hweight32(gmac->data->etxdc_ext_mask))) - 1;
 		ret = sun55i_gmac200_validate_delay(dev, "tx", &val, step, max);
 		if (ret)
 			return ret;
 
 		reg |= FIELD_PREP(SYSCON_ETXDC_MASK, val);
+		if (gmac->data->etxdc_ext_mask)
+			reg |= field_prep(gmac->data->etxdc_ext_mask,
+					  val >> low_bits);
 	}
 
 	if (!of_property_read_u32(node, "rx-internal-delay-ps", &val)) {
