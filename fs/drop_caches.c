@@ -7,6 +7,7 @@
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <linux/fs.h>
+#include <linux/backing-dev.h>
 #include <linux/writeback.h>
 #include <linux/sysctl.h>
 #include <linux/gfp.h>
@@ -19,6 +20,9 @@ static int sysctl_drop_caches;
 static void drop_pagecache_sb(struct super_block *sb, void *unused)
 {
 	struct inode *inode, *toput_inode = NULL;
+
+	if (sb->s_bdi == &noop_backing_dev_info)
+		return;
 
 	spin_lock(&sb->s_inode_list_lock);
 	list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
