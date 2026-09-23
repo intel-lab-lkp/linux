@@ -2380,8 +2380,11 @@ static irqreturn_t arm_smmu_gerror_handler(int irq, void *dev)
 		 active);
 
 	if (active & GERROR_SFM_ERR) {
+		/* SMMU is being disabled, so other errors don't matter */
+		writel(gerror, smmu->base + ARM_SMMU_GERRORN);
 		dev_err(smmu->dev, "device has entered Service Failure Mode!\n");
 		arm_smmu_device_disable(smmu);
+		return IRQ_HANDLED;
 	}
 
 	if (active & GERROR_MSI_GERROR_ABT_ERR)
