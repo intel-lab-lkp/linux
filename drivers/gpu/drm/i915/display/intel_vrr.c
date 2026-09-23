@@ -98,7 +98,7 @@ bool intel_vrr_is_in_range(struct intel_connector *connector, int vrefresh)
 		vrefresh <= info->monitor_range.max_vfreq;
 }
 
-bool intel_vrr_possible(const struct intel_crtc_state *crtc_state)
+static bool has_vrr_tg_timings(const struct intel_crtc_state *crtc_state)
 {
 	return crtc_state->vrr.flipline;
 }
@@ -383,7 +383,7 @@ void intel_vrr_set_fixed_rr_timings(const struct intel_crtc_state *crtc_state,
 {
 	struct intel_display *display = to_intel_display(crtc_state);
 
-	if (!intel_vrr_possible(crtc_state))
+	if (!has_vrr_tg_timings(crtc_state))
 		return;
 
 	intel_vrr_set_cmrr_timings(crtc_state, transcoder);
@@ -623,7 +623,7 @@ void intel_vrr_compute_guardband(struct intel_crtc_state *crtc_state)
 	struct drm_display_mode *pipe_mode = &crtc_state->hw.pipe_mode;
 	int guardband;
 
-	if (!intel_vrr_possible(crtc_state))
+	if (!has_vrr_tg_timings(crtc_state))
 		return;
 
 	if (intel_vrr_use_optimized_guardband(crtc_state))
@@ -695,7 +695,7 @@ void intel_vrr_set_transcoder_timings(const struct intel_crtc_state *crtc_state)
 		intel_de_rmw(display, CHICKEN_TRANS(display, cpu_transcoder),
 			     0, PIPE_VBLANK_WITH_DELAY);
 
-	if (!intel_vrr_possible(crtc_state)) {
+	if (!has_vrr_tg_timings(crtc_state)) {
 		intel_de_write(display,
 			       TRANS_VRR_CTL(display, cpu_transcoder), 0);
 		return;
@@ -1040,7 +1040,7 @@ void intel_vrr_transcoder_enable(const struct intel_crtc_state *crtc_state)
 
 	intel_vrr_set_transcoder_timings(crtc_state);
 
-	if (!intel_vrr_possible(crtc_state))
+	if (!has_vrr_tg_timings(crtc_state))
 		return;
 
 	if (intel_vrr_always_use_vrr_tg(display))
@@ -1051,7 +1051,7 @@ void intel_vrr_transcoder_disable(const struct intel_crtc_state *old_crtc_state)
 {
 	struct intel_display *display = to_intel_display(old_crtc_state);
 
-	if (!intel_vrr_possible(old_crtc_state))
+	if (!has_vrr_tg_timings(old_crtc_state))
 		return;
 
 	if (intel_vrr_always_use_vrr_tg(display))
