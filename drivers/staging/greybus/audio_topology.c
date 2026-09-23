@@ -1019,6 +1019,7 @@ static int gbaudio_tplg_create_widget(struct gbaudio_module_info *module,
 	struct gbaudio_control *control, *_control;
 	size_t size;
 	char temp_name[NAME_SIZE];
+	int name_len;
 
 	ret = gbaudio_validate_kcontrol_count(w);
 	if (ret) {
@@ -1087,7 +1088,8 @@ static int gbaudio_tplg_create_widget(struct gbaudio_module_info *module,
 
 	/* Prefix dev_id to widget control_name */
 	strscpy(temp_name, w->name, sizeof(temp_name));
-	snprintf(w->name, sizeof(w->name), "GB %d %s", module->dev_id, temp_name);
+	name_len = scnprintf(w->name, sizeof(w->name), "GB %d ", module->dev_id);
+	strscpy(w->name + name_len, temp_name, sizeof(w->name) - name_len);
 
 	switch (w->type) {
 	case snd_soc_dapm_spk:
@@ -1144,6 +1146,7 @@ static int gbaudio_tplg_process_kcontrols(struct gbaudio_module_info *module,
 	struct gbaudio_control *control, *_control;
 	size_t size;
 	char temp_name[NAME_SIZE];
+	int name_len;
 
 	size = sizeof(struct snd_kcontrol_new) * module->num_controls;
 	dapm_kctls = devm_kzalloc(module->dev, size, GFP_KERNEL);
@@ -1169,8 +1172,10 @@ static int gbaudio_tplg_process_kcontrols(struct gbaudio_module_info *module,
 		control->id = curr->id;
 		/* Prefix dev_id to widget_name */
 		strscpy(temp_name, curr->name, sizeof(temp_name));
-		snprintf(curr->name, sizeof(curr->name), "GB %d %s", module->dev_id,
-			 temp_name);
+		name_len = scnprintf(curr->name, sizeof(curr->name), "GB %d ",
+				     module->dev_id);
+		strscpy(curr->name + name_len, temp_name,
+			sizeof(curr->name) - name_len);
 		control->name = curr->name;
 		if (curr->info.type == GB_AUDIO_CTL_ELEM_TYPE_ENUMERATED) {
 			struct gb_audio_enumerated *gbenum =
