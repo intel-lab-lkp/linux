@@ -78,7 +78,7 @@ static int kobject_action_type(const char *buf, size_t count,
 		count_first = args_start - buf;
 		args_start = args_start + 1;
 	} else
-		count_first = count;
+		count_first = min_t(size_t, strnlen(buf, count), count);
 
 	for (action = 0; action < ARRAY_SIZE(kobject_actions); action++) {
 		if (strncmp(kobject_actions[action], buf, count_first) != 0)
