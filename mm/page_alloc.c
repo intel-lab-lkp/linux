@@ -5138,6 +5138,84 @@ static inline bool prepare_alloc_pages(gfp_t gfp_mask, unsigned int order,
 	return true;
 }
 
+static inline bool alloc_order_allowed(gfp_t gfp, unsigned int order,
+				       unsigned int alloc_flags)
+{
+	if (alloc_flags & ALLOC_NOLOCK)
+		return pcp_allowed_order(order);
+
+	/*
+	 * There are several places where we assume that the order value is sane
+	 * so bail out early if the request is out of bound.
+	 */
+	return !(WARN_ON_ONCE_GFP(order > MAX_PAGE_ORDER, gfp));
+}
+
+static inline bool alloc_nolock_allowed(void)
+{
+	if (!can_spin_trylock())
+		return false;
+
+	/* Bailout, since _deferred_grow_zone() needs to take a lock */
+	if (deferred_pages_enabled())
+		return false;
+
+	return true;
+}
+
+/*
+ * GFP flags to set for ALLOC_NOLOCK i.e. alloc_pages_nolock().
+ *
+ * Do not specify __GFP_DIRECT_RECLAIM, since direct claim is not allowed.
+ * Do not specify __GFP_KSWAPD_RECLAIM either, since wake up of kswapd
+ * is not safe in arbitrary context.
+ *
+ * These two are the conditions for gfpflags_allow_spinning() being true.
+ *
+ * Specify __GFP_NOWARN since failing alloc_pages_nolock() is not a reason
+ * to warn. Also warn would trigger printk() which is unsafe from
+ * various contexts. We cannot use printk_deferred_enter() to mitigate,
+ * since the running context is unknown.
+ *
+ * Specify __GFP_ZERO to make sure that call to kmsan_alloc_page() below
+ * is safe in any context. Also zeroing the page is mandatory for
+ * BPF use cases.
+ *
+ * Though __GFP_NOMEMALLOC is not checked in the code path below,
+ * specify it here to highlight that alloc_pages_nolock()
+ * doesn't want to deplete reserves.
+ */
+static const gfp_t gfp_nolock = __GFP_NOWARN | __GFP_ZERO | __GFP_NOMEMALLOC |
+				__GFP_COMP;
+
+static __always_inline bool prepare_alloc_flags(gfp_t *gfp, unsigned int order,
+		unsigned int alloc_flags, unsigned int *prepared_alloc_flags,
+		unsigned int *fastpath_alloc_flags)
+{
+	/* Other flags could be supported later if needed. */
+	if (WARN_ON(alloc_flags & ~(ALLOC_NOLOCK | ALLOC_NO_CODETAG)))
+		return false;
+
+	if (!alloc_order_allowed(*gfp, order, alloc_flags))
+		return false;
+
+	*prepared_alloc_flags = alloc_flags;
+	*fastpath_alloc_flags = alloc_flags;
+
+	if (alloc_flags & ALLOC_NOLOCK) {
+		/* Certain other flags could be supported later if needed. */
+		VM_WARN_ON_ONCE(*gfp & ~(__GFP_ACCOUNT | gfp_nolock));
+		if (!alloc_nolock_allowed())
+			return false;
+		*gfp |= gfp_nolock;
+		*fastpath_alloc_flags |= ALLOC_WMARK_MIN;
+	} else {
+		*fastpath_alloc_flags |= ALLOC_WMARK_LOW;
+	}
+
+	return true;
+}
+
 /*
  * __alloc_pages_bulk - Allocate a number of order-0 pages to an array
  * @gfp: GFP flags for the allocation
@@ -5169,7 +5247,7 @@ unsigned long alloc_pages_bulk_noprof(gfp_t gfp, int preferred_nid,
 	struct per_cpu_pages *pcp;
 	struct list_head *pcp_list;
 	struct alloc_context ac;
-	unsigned int fastpath_alloc_flags = ALLOC_WMARK_LOW;
+	unsigned int fastpath_alloc_flags;
 	int nr_populated = 0, nr_account = 0;
 
 	/*
@@ -5206,6 +5284,10 @@ unsigned long alloc_pages_bulk_noprof(gfp_t gfp, int preferred_nid,
 	if (static_branch_unlikely(&page_owner_inited))
 		goto failed;
 #endif
+
+	if (!prepare_alloc_flags(&gfp, 0, ALLOC_DEFAULT, &ac.alloc_flags,
+				 &fastpath_alloc_flags))
+		goto out;
 
 	/* May set ALLOC_NOFRAGMENT, fragmentation will return 1 page. */
 	gfp &= gfp_allowed_mask;
@@ -5335,56 +5417,6 @@ void free_pages_bulk(struct page **page_array, unsigned long nr_pages)
 	}
 }
 
-static inline bool alloc_order_allowed(gfp_t gfp, unsigned int order,
-				       unsigned int alloc_flags)
-{
-	if (alloc_flags & ALLOC_NOLOCK)
-		return pcp_allowed_order(order);
-
-	/*
-	 * There are several places where we assume that the order value is sane
-	 * so bail out early if the request is out of bound.
-	 */
-	return !(WARN_ON_ONCE_GFP(order > MAX_PAGE_ORDER, gfp));
-}
-
-static inline bool alloc_nolock_allowed(void)
-{
-	if (!can_spin_trylock())
-		return false;
-
-	/* Bailout, since _deferred_grow_zone() needs to take a lock */
-	if (deferred_pages_enabled())
-		return false;
-
-	return true;
-}
-
-/*
- * GFP flags to set for ALLOC_NOLOCK i.e. alloc_pages_nolock().
- *
- * Do not specify __GFP_DIRECT_RECLAIM, since direct claim is not allowed.
- * Do not specify __GFP_KSWAPD_RECLAIM either, since wake up of kswapd
- * is not safe in arbitrary context.
- *
- * These two are the conditions for gfpflags_allow_spinning() being true.
- *
- * Specify __GFP_NOWARN since failing alloc_pages_nolock() is not a reason
- * to warn. Also warn would trigger printk() which is unsafe from
- * various contexts. We cannot use printk_deferred_enter() to mitigate,
- * since the running context is unknown.
- *
- * Specify __GFP_ZERO to make sure that call to kmsan_alloc_page() below
- * is safe in any context. Also zeroing the page is mandatory for
- * BPF use cases.
- *
- * Though __GFP_NOMEMALLOC is not checked in the code path below,
- * specify it here to highlight that alloc_pages_nolock()
- * doesn't want to deplete reserves.
- */
-static const gfp_t gfp_nolock = __GFP_NOWARN | __GFP_ZERO | __GFP_NOMEMALLOC |
-				__GFP_COMP;
-
 /*
  * This is the 'heart' of the zoned buddy allocator.
  */
@@ -5393,28 +5425,12 @@ struct page *__alloc_frozen_pages_noprof(gfp_t gfp, unsigned int order,
 {
 	struct page *page;
 	gfp_t alloc_gfp; /* The gfp_t that was actually used for allocation */
-	struct alloc_context ac = {
-		.alloc_flags = alloc_flags,
-	};
-	unsigned int fastpath_alloc_flags = alloc_flags;
+	struct alloc_context ac;
+	unsigned int fastpath_alloc_flags;
 
-	/* Other flags could be supported later if needed. */
-	if (WARN_ON(alloc_flags & ~(ALLOC_NOLOCK | ALLOC_NO_CODETAG)))
+	if (!prepare_alloc_flags(&gfp, order, alloc_flags, &ac.alloc_flags,
+				 &fastpath_alloc_flags))
 		return NULL;
-
-	if (!alloc_order_allowed(gfp, order, alloc_flags))
-		return NULL;
-
-	if (alloc_flags & ALLOC_NOLOCK) {
-		/* Certain other flags could be supported later if needed. */
-		VM_WARN_ON_ONCE(gfp & ~(__GFP_ACCOUNT | gfp_nolock));
-		if (!alloc_nolock_allowed())
-			return NULL;
-		gfp |= gfp_nolock;
-		fastpath_alloc_flags |= ALLOC_WMARK_MIN;
-	} else {
-		fastpath_alloc_flags |= ALLOC_WMARK_LOW;
-	}
 
 	gfp &= gfp_allowed_mask;
 	/*
