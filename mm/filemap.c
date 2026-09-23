@@ -52,6 +52,8 @@
 
 #include <asm/tlbflush.h>
 #include "internal.h"
+#include "mempolicy.h"
+#include "page_alloc.h"
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/filemap.h>
@@ -995,30 +997,61 @@ int filemap_add_folio(struct address_space *mapping, struct folio *folio,
 EXPORT_SYMBOL_GPL(filemap_add_folio);
 
 #ifdef CONFIG_NUMA
-struct folio *filemap_alloc_folio_noprof(gfp_t gfp, unsigned int order,
-		struct mempolicy *policy)
+static inline struct folio *__filemap_alloc_folio_noprof(gfp_t gfp,
+		unsigned int order, struct mempolicy *policy,
+		unsigned int alloc_flags)
 {
 	int n;
 	struct folio *folio;
 
+	/* Task policy and cpuset spreading are not safe in all IRQ contexts. */
+	if (unlikely((alloc_flags & ALLOC_NOLOCK) && !in_task()))
+		return __folio_alloc_flags_noprof(gfp, order, numa_node_id(),
+						 NULL, alloc_flags);
+
 	if (policy)
-		return folio_alloc_mpol_noprof(gfp, order, policy,
-				NO_INTERLEAVE_INDEX, numa_node_id());
+		return __folio_alloc_mpol_noprof(gfp, order, policy,
+				NO_INTERLEAVE_INDEX, numa_node_id(), alloc_flags);
 
 	if (cpuset_do_page_mem_spread()) {
 		unsigned int cpuset_mems_cookie;
+
 		do {
 			cpuset_mems_cookie = read_mems_allowed_begin();
 			n = cpuset_mem_spread_node();
-			folio = __folio_alloc_node_noprof(gfp, order, n);
+			folio = __folio_alloc_flags_noprof(gfp, order, n, NULL,
+							   alloc_flags);
 		} while (!folio && read_mems_allowed_retry(cpuset_mems_cookie));
 
 		return folio;
 	}
-	return folio_alloc_noprof(gfp, order);
+
+	if (in_interrupt() || (gfp & __GFP_THISNODE))
+		return __folio_alloc_flags_noprof(gfp, order, numa_node_id(),
+						 NULL, alloc_flags);
+
+	return __folio_alloc_mpol_noprof(gfp, order, get_task_policy(current),
+			NO_INTERLEAVE_INDEX, numa_node_id(), alloc_flags);
+}
+
+struct folio *filemap_alloc_folio_noprof(gfp_t gfp, unsigned int order,
+		struct mempolicy *policy)
+{
+	return __filemap_alloc_folio_noprof(gfp, order, policy, ALLOC_DEFAULT);
 }
 EXPORT_SYMBOL(filemap_alloc_folio_noprof);
+#else
+static inline struct folio *__filemap_alloc_folio_noprof(gfp_t gfp,
+		unsigned int order, struct mempolicy *policy,
+		unsigned int alloc_flags)
+{
+	return __folio_alloc_flags_noprof(gfp, order, numa_node_id(), NULL,
+					 alloc_flags);
+}
 #endif
+
+#define __filemap_alloc_folio(...) \
+	alloc_hooks(__filemap_alloc_folio_noprof(__VA_ARGS__))
 
 /*
  * filemap_invalidate_lock_two - lock invalidate_lock for two mappings
