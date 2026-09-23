@@ -963,6 +963,7 @@ static void arm_smmu_cmdq_batch_init_cmd(struct arm_smmu_device *smmu,
 {
 	cmds->num = 0;
 	cmds->cmdq = arm_smmu_get_cmdq(smmu, cmd);
+	cmds->has_ats = false;
 }
 
 static int arm_smmu_cmdq_batch_issue(struct arm_smmu_device *smmu,
@@ -1011,6 +1012,8 @@ static void arm_smmu_cmdq_batch_add_cmd_p(struct arm_smmu_device *smmu,
 		arm_smmu_cmdq_batch_init_cmd(smmu, cmds, cmd);
 	}
 
+	if (FIELD_GET(CMDQ_0_OP, cmd->data[0]) == CMDQ_OP_ATC_INV)
+		cmds->has_ats = true;
 	cmds->cmds[cmds->num++] = *cmd;
 }
 
