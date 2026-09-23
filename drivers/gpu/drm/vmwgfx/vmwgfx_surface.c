@@ -1718,15 +1718,21 @@ vmw_gb_surface_reference_internal(struct drm_device *dev,
 
 	user_srf = container_of(base, struct vmw_user_surface, prime.base);
 	srf = &user_srf->srf;
+	metadata = &srf->metadata;
+
+	mutex_lock(&dev_priv->cmdbuf_mutex); /* Protect res->guest_memory_bo */
 	if (!srf->res.guest_memory_bo) {
+		mutex_unlock(&dev_priv->cmdbuf_mutex);
 		DRM_ERROR("Shared GB surface is missing a backup buffer.\n");
 		goto out_bad_resource;
 	}
-	metadata = &srf->metadata;
-
-	mutex_lock(&dev_priv->cmdbuf_mutex); /* Protect res->backup */
 	ret = drm_gem_handle_create(file_priv, &srf->res.guest_memory_bo->tbo.base,
 				    &backup_handle);
+	if (!ret) {
+		rep->crep.buffer_map_handle =
+			drm_vma_node_offset_addr(&srf->res.guest_memory_bo->tbo.base.vma_node);
+		rep->crep.buffer_size = srf->res.guest_memory_bo->tbo.base.size;
+	}
 	mutex_unlock(&dev_priv->cmdbuf_mutex);
 	if (ret != 0) {
 		drm_err(dev, "Wasn't able to create a backing handle for surface sid = %u.\n",
@@ -1746,10 +1752,7 @@ vmw_gb_surface_reference_internal(struct drm_device *dev,
 	rep->crep.handle = user_srf->prime.base.handle;
 	rep->crep.backup_size = srf->res.guest_memory_size;
 	rep->crep.buffer_handle = backup_handle;
-	rep->crep.buffer_map_handle =
-		drm_vma_node_offset_addr(&srf->res.guest_memory_bo->tbo.base.vma_node);
-	rep->crep.buffer_size = srf->res.guest_memory_bo->tbo.base.size;
-
+	/* buffer_map_handle and buffer_size set inside the mutex above */
 	rep->creq.version = drm_vmw_gb_surface_v1;
 	rep->creq.svga3d_flags_upper_32_bits =
 		SVGA3D_FLAGS_UPPER_32(metadata->flags);
