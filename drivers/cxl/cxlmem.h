@@ -147,12 +147,12 @@ struct cxl_dpa_info {
 int cxl_dpa_setup(struct cxl_dev_state *cxlds, const struct cxl_dpa_info *info);
 
 static inline struct cxl_ep *cxl_ep_load(struct cxl_port *port,
-					 struct cxl_memdev *cxlmd)
+					 struct device *ep_dev)
 {
 	if (!port)
 		return NULL;
 
-	return xa_load(&port->endpoints, (unsigned long)&cxlmd->dev);
+	return xa_load(&port->endpoints, (unsigned long)ep_dev);
 }
 
 /*
