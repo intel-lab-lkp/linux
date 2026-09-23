@@ -13,7 +13,6 @@
 #include <linux/errno.h>
 #include <linux/linkage.h>
 #include <linux/of.h>
-#include <linux/pm.h>
 #include <linux/printk.h>
 #include <linux/psci.h>
 #include <linux/reboot.h>
@@ -79,6 +78,8 @@ struct psci_0_1_function_ids get_psci_0_1_function_ids(void)
 static u32 psci_cpu_suspend_feature;
 static bool psci_system_reset2_supported;
 static bool psci_system_off2_hibernate_supported;
+static bool psci_system_off_supported __initdata;
+static bool is_dt __initdata;
 
 static inline bool psci_has_ext_power_state(void)
 {
@@ -329,9 +330,11 @@ static struct notifier_block psci_sys_reset_nb = {
 	.priority = 129,
 };
 
-static void psci_sys_poweroff(void)
+static int psci_sys_poweroff(struct sys_off_data *data)
 {
 	invoke_psci_fn(PSCI_0_2_FN_SYSTEM_OFF, 0, 0, 0);
+
+	return NOTIFY_DONE;
 }
 
 #ifdef CONFIG_HIBERNATION
@@ -665,6 +668,40 @@ static void __init psci_init_smccc(void)
 
 }
 
+static int __init psci_poweroff_init(void)
+{
+	int priority = is_dt ? SYS_OFF_PRIO_FIRMWARE : SYS_OFF_PRIO_DEFAULT;
+	struct sys_off_handler *handler;
+	struct device_node *np;
+
+	if (!psci_system_off_supported)
+		return 0;
+
+	if (is_dt) {
+		/*
+		 * If a system-power-controller is designated in DT, a dedicated
+		 * driver should handle power-off; in that case register PSCI at
+		 * SYS_OFF_PRIO_DEFAULT - 1 as a fallback. This covers both the
+		 * case where that driver fails to power-off the system and the
+		 * case where it fails to register its own handler.
+		 */
+		np = of_find_node_with_property(NULL, "system-power-controller");
+		if (np) {
+			priority = SYS_OFF_PRIO_DEFAULT - 1;
+			of_node_put(np);
+		}
+	}
+
+	handler = register_sys_off_handler(SYS_OFF_MODE_POWER_OFF, priority,
+					   psci_sys_poweroff, NULL);
+	if (IS_ERR(handler))
+		pr_err("Failed to register PSCI power-off handler: %ld\n",
+		       PTR_ERR(handler));
+
+	return PTR_ERR_OR_ZERO(handler);
+}
+subsys_initcall(psci_poweroff_init);
+
 static void __init psci_0_2_set_functions(void)
 {
 	pr_info("Using standard PSCI v0.2 function IDs\n");
@@ -681,7 +718,7 @@ static void __init psci_0_2_set_functions(void)
 
 	register_restart_handler(&psci_sys_reset_nb);
 
-	pm_power_off = psci_sys_poweroff;
+	psci_system_off_supported = true;
 }
 
 /*
@@ -822,6 +859,7 @@ int __init psci_dt_init(void)
 	init_fn = (psci_initcall_t)matched_np->data;
 	ret = init_fn(np);
 
+	is_dt = true;
 	of_node_put(np);
 	return ret;
 }
