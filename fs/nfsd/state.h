@@ -35,7 +35,6 @@
 #ifndef _NFSD4_STATE_H
 #define _NFSD4_STATE_H
 
-#include <crypto/md5.h>
 
 #include <linux/filelock.h>
 #include <linux/idr.h>
@@ -499,9 +498,6 @@ struct nfsd4_sessionid {
 	u32		sequence;
 	u32		reserved;
 };
-
-/* Length of MD5 digest as hex, plus terminating '\0' */
-#define HEXDIR_LEN	(2 * MD5_DIGEST_SIZE + 1)
 
 /*
  *       State                Meaning                  Where set
