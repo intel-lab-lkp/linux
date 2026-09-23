@@ -8,6 +8,17 @@
 bool fb_center_logo __read_mostly;
 int fb_logo_count __read_mostly = -1;
 
+/*
+ * The placement in effect, as asked for on the console command line.
+ */
+static const struct logo_placement *fb_logo_placement(void)
+{
+	static const struct logo_placement centred = { .x = -1, .y = -1 };
+	static const struct logo_placement top_left = { };
+
+	return fb_center_logo ? &centred : &top_left;
+}
+
 static inline unsigned int safe_shift(unsigned int d, int n)
 {
 	return n < 0 ? d >> -n : d << n;
@@ -281,7 +292,11 @@ static int fb_show_logo_line(struct fb_info *info, int rotate,
 {
 	u32 *palette = NULL, *saved_pseudo_palette = NULL;
 	unsigned char *logo_new = NULL, *logo_rotate = NULL;
+	const struct logo_placement *p;
+	unsigned int xres = info->var.xres;
+	unsigned int yres = info->var.yres;
 	struct fb_image image;
+	unsigned int block;
 
 	/* Return if the frame buffer is not mapped or suspended */
 	if (logo == NULL || info->state != FBINFO_STATE_RUNNING ||
@@ -322,26 +337,22 @@ static int fb_show_logo_line(struct fb_info *info, int rotate,
 		fb_set_logo(info, logo, logo_new, fb_logo.depth);
 	}
 
-	if (fb_center_logo) {
-		int xres = info->var.xres;
-		int yres = info->var.yres;
-
-		if (rotate == FB_ROTATE_CW || rotate == FB_ROTATE_CCW) {
-			xres = info->var.yres;
-			yres = info->var.xres;
-		}
-
-		while (n && (n * (logo->width + 8) - 8 > xres))
-			--n;
-		image.dx = (xres - (n * (logo->width + 8) - 8)) / 2;
-		image.dy = y ?: (yres - logo->height) / 2;
-	} else {
-		image.dx = 0;
-		image.dy = y;
-	}
-
 	image.width = logo->width;
 	image.height = logo->height;
+
+	if (rotate == FB_ROTATE_CW || rotate == FB_ROTATE_CCW)
+		swap(xres, yres);
+
+	while (n && (n * (logo->width + 8) - 8 > xres))
+		--n;
+
+	/* The copies are drawn in a row, so they are centred as one block */
+	block = n ? n * (logo->width + 8) - 8 : logo->width;
+
+	p = fb_logo_placement();
+	image.dx = logo_place_axis(p->x, xres, block);
+	/* A stacked logo goes where the caller put it */
+	image.dy = y ? y : logo_place_axis(p->y, yres, image.height);
 
 	if (rotate) {
 		logo_rotate = kmalloc_array(logo->width, logo->height,
@@ -418,6 +429,7 @@ static int fb_show_extra_logos(struct fb_info *info, int y, int rotate)
 int fb_prepare_logo(struct fb_info *info, int rotate)
 {
 	int depth = fb_get_color_depth(&info->var, &info->fix);
+	const struct logo_placement *p;
 	unsigned int yres;
 	int height;
 
@@ -480,9 +492,15 @@ int fb_prepare_logo(struct fb_info *info, int rotate)
 		}
 	}
 
-	height = fb_logo.logo->height;
-	if (fb_center_logo)
-		height += (yres - fb_logo.logo->height) / 2;
+	/*
+	 * fbcon only leaves the first @height rows of the screen alone, so a
+	 * logo placed further down would be drawn and then immediately
+	 * cleared. Ask the same placement fb_show_logo_line() will use, so
+	 * that the two cannot disagree.
+	 */
+	p = fb_logo_placement();
+	height = logo_place_axis(p->y, yres, fb_logo.logo->height) +
+		 fb_logo.logo->height;
 #ifdef CONFIG_FB_LOGO_EXTRA
 	height = fb_prepare_extra_logos(info, height, yres);
 #endif

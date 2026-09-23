@@ -13,6 +13,8 @@
  */
 
 #include <linux/init.h>
+#include <linux/minmax.h>
+#include <linux/types.h>
 
 
 #define LINUX_LOGO_MONO		1	/* monochrome black/white */
@@ -36,6 +38,33 @@ extern const struct linux_logo logo_linux_clut224;
 extern const struct linux_logo logo_spe_clut224;
 
 extern const struct linux_logo *fb_find_logo(int depth);
+
+/*
+ * Where a boot logo goes. A coordinate of -1 centres the logo on that axis.
+ * Whatever draws the logo describes its placement this way and computes it
+ * with logo_place_axis(), so that no two places can end up disagreeing about
+ * where the logo is.
+ */
+struct logo_placement {
+	s32 x, y;
+};
+
+/*
+ * Place a logo along one axis. @pos is the coordinate asked for, or -1 to
+ * centre on that axis. The result is clamped so that the logo always lies
+ * entirely within the screen: the drawing code does not clip, so asking for
+ * more than that would otherwise scribble past the end of the frame buffer.
+ */
+static inline int logo_place_axis(s32 pos, unsigned int span, unsigned int size)
+{
+	int last = (int)span - (int)size;
+
+	if (size > span)
+		return 0;
+
+	return pos == -1 ? last / 2 : clamp(pos, 0, last);
+}
+
 #ifdef CONFIG_FB_LOGO_EXTRA
 extern void fb_append_extra_logo(const struct linux_logo *logo,
 				 unsigned int n);
