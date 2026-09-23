@@ -430,6 +430,12 @@ The operations which can be scoped are:
     This limits the sending of signals to target processes which run within the
     same or a nested Landlock domain.
 
+    Holding a PTY master FD grants control over the processes running under that
+    terminal, including the ability to inject input and signals.  A process able
+    to write to the master should therefore be considered as privileged as those
+    processes, and this capability is not restricted by
+    ``LANDLOCK_SCOPE_SIGNAL``.
+
 ``LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET``
     This limits the set of abstract :manpage:`unix(7)` sockets to which we can
     :manpage:`connect(2)` to socket addresses which were created by a process in
