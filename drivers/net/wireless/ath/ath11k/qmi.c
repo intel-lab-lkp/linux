@@ -2037,6 +2037,45 @@ static int ath11k_qmi_alloc_target_mem_chunk(struct ath11k_base *ab)
 	return 0;
 }
 
+static const char *ath11k_qmi_get_mem_reg_name(int mem_type)
+{
+	switch (mem_type) {
+	case HOST_DDR_REGION_TYPE:
+	case BDF_MEM_REGION_TYPE:
+		return "q6-region";
+	case M3_DUMP_REGION_TYPE:
+		return "m3-dump";
+	default:
+		return NULL;
+	}
+}
+
+static int ath11k_qmi_reserved_memory_to_resource(struct ath11k_base *ab,
+						  int mem_type,
+						  struct resource *res)
+{
+	const char *rname;
+	int ret;
+
+	rname = ath11k_qmi_get_mem_reg_name(mem_type);
+	if (!rname) {
+		ath11k_dbg(ab, ATH11K_DBG_QMI,
+			   "invalid memory type %d\n", mem_type);
+		return -EINVAL;
+	}
+
+	ret = of_reserved_mem_region_to_resource_byname(ab->dev->of_node,
+							rname, res);
+	if (ret) {
+		ath11k_dbg(ab, ATH11K_DBG_QMI,
+			   "failed to get reserved memory region for %s\n",
+			   rname);
+		return ret;
+	}
+
+	return 0;
+}
+
 static int ath11k_qmi_assign_target_mem_chunk(struct ath11k_base *ab)
 {
 	struct device *dev = ab->dev;
@@ -2073,7 +2112,11 @@ static int ath11k_qmi_assign_target_mem_chunk(struct ath11k_base *ab)
 			idx++;
 			break;
 		case BDF_MEM_REGION_TYPE:
-			ab->qmi.target_mem[idx].paddr = ab->hw_params.bdf_addr;
+			ret = ath11k_qmi_reserved_memory_to_resource(ab, BDF_MEM_REGION_TYPE, &res);
+			if (!ret && !(ab->qmi.target_mem[i].size > resource_size(&res)))
+				ab->qmi.target_mem[idx].paddr = res.start;
+			else
+				ab->qmi.target_mem[idx].paddr = ab->hw_params.bdf_addr;
 			ab->qmi.target_mem[idx].iaddr = NULL;
 			ab->qmi.target_mem[idx].size = ab->qmi.target_mem[i].size;
 			ab->qmi.target_mem[idx].type = ab->qmi.target_mem[i].type;
@@ -2106,6 +2149,16 @@ static int ath11k_qmi_assign_target_mem_chunk(struct ath11k_base *ab)
 			ab->qmi.target_mem[idx].size = ab->qmi.target_mem[i].size;
 			ab->qmi.target_mem[idx].type = ab->qmi.target_mem[i].type;
 			idx++;
+			break;
+		case M3_DUMP_REGION_TYPE:
+			ret = ath11k_qmi_reserved_memory_to_resource(ab, M3_DUMP_REGION_TYPE, &res);
+			if (!ret && !(ab->qmi.target_mem[i].size > resource_size(&res))) {
+				ab->qmi.target_mem[idx].paddr = res.start;
+				ab->qmi.target_mem[idx].iaddr = NULL;
+				ab->qmi.target_mem[idx].size = ab->qmi.target_mem[i].size;
+				ab->qmi.target_mem[idx].type = ab->qmi.target_mem[i].type;
+				idx++;
+			}
 			break;
 		default:
 			ath11k_warn(ab, "qmi ignore invalid mem req type %d\n",
@@ -2300,6 +2353,7 @@ static int ath11k_qmi_load_file_target_mem(struct ath11k_base *ab,
 {
 	struct qmi_wlanfw_bdf_download_req_msg_v01 *req;
 	struct qmi_wlanfw_bdf_download_resp_msg_v01 resp;
+	struct resource res = {};
 	struct qmi_txn txn;
 	const u8 *temp = data;
 	void __iomem *bdf_addr = NULL;
@@ -2313,7 +2367,11 @@ static int ath11k_qmi_load_file_target_mem(struct ath11k_base *ab,
 	memset(&resp, 0, sizeof(resp));
 
 	if (ab->hw_params.fixed_bdf_addr) {
-		bdf_addr = ioremap(ab->hw_params.bdf_addr, ab->hw_params.fw.board_size);
+		ret = ath11k_qmi_reserved_memory_to_resource(ab, BDF_MEM_REGION_TYPE, &res);
+		if (!ret && !(ab->hw_params.fw.board_size > resource_size(&res)))
+			bdf_addr = ioremap(res.start, ab->hw_params.fw.board_size);
+		else
+			bdf_addr = ioremap(ab->hw_params.bdf_addr, ab->hw_params.fw.board_size);
 		if (!bdf_addr) {
 			ath11k_warn(ab, "qmi ioremap error for bdf_addr\n");
 			ret = -EIO;
