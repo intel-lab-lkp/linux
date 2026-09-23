@@ -12,6 +12,7 @@ compile_commands.json.
 import argparse
 import json
 import multiprocessing
+import os
 import subprocess
 import sys
 
@@ -31,7 +32,7 @@ def parse_arguments():
                         choices=["clang-tidy", "clang-analyzer"],
                         help=type_help)
     path_help = "Path to the compilation database to parse"
-    parser.add_argument("path", type=str, help=path_help)
+    parser.add_argument("path", type=os.path.abspath, help=path_help)
 
     checks_help = "Checks to pass to the analysis"
     parser.add_argument("-checks", type=str, default=None, help=checks_help)
