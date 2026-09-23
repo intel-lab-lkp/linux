@@ -12,6 +12,7 @@
  *  Copyright (C) 2003 Geert Uytterhoeven <geert@linux-m68k.org>
  */
 
+#include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/minmax.h>
 #include <linux/types.h>
@@ -43,29 +44,55 @@ extern const struct linux_logo logo_spe_clut224;
 extern const struct linux_logo *fb_find_logo(int depth);
 
 /*
- * Where a boot logo goes. A coordinate of -1 centres the logo on that axis.
- * Whatever draws the logo describes its placement this way and computes it
- * with logo_place_axis(), so that no two places can end up disagreeing about
- * where the logo is.
+ * Where a boot logo goes. A coordinate of -1 centres the logo on that axis,
+ * and the offset is added afterwards. Whatever draws the logo describes its
+ * placement this way and computes it with logo_place_axis(), so that no two
+ * places can end up disagreeing about where the logo is.
  */
 struct logo_placement {
 	s32 x, y;
+	s32 offset_x, offset_y;
 };
+
+/* Rotation a device tree supplied logo can ask for, same values as FB_ROTATE_* */
+#define LOGO_ROTATE_NONE	0
+#define LOGO_ROTATE_CW		1
+#define LOGO_ROTATE_UD		2
+#define LOGO_ROTATE_CCW		3
+
+#ifdef CONFIG_LOGO
+int logo_dt_placement(struct logo_placement *pos, int *rotation);
+#else
+static inline int logo_dt_placement(struct logo_placement *pos, int *rotation)
+{
+	return -ENODEV;
+}
+#endif
 
 /*
  * Place a logo along one axis. @pos is the coordinate asked for, or -1 to
- * centre on that axis. The result is clamped so that the logo always lies
- * entirely within the screen: the drawing code does not clip, so asking for
- * more than that would otherwise scribble past the end of the frame buffer.
+ * centre on that axis, and @off is applied afterwards. The result is clamped
+ * so that the logo always lies entirely within the screen: the drawing code
+ * does not clip, so a device tree asking for more than that would otherwise
+ * scribble past the end of the frame buffer.
  */
-static inline int logo_place_axis(s32 pos, unsigned int span, unsigned int size)
+static inline int logo_place_axis(s32 pos, s32 off, unsigned int span,
+				  unsigned int size)
 {
 	int last = (int)span - (int)size;
+	s64 coord;
 
 	if (size > span)
 		return 0;
 
-	return pos == -1 ? last / 2 : clamp(pos, 0, last);
+	coord = pos == -1 ? last / 2 : pos;
+
+	/*
+	 * Both come straight from the device tree, so the sum is done wide
+	 * enough that a silly pair of values lands the logo against an edge
+	 * instead of wrapping round to the other one.
+	 */
+	return clamp_t(s64, coord + off, 0, last);
 }
 
 #ifdef CONFIG_FB_LOGO_EXTRA

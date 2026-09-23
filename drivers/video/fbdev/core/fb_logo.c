@@ -9,12 +9,71 @@ bool fb_center_logo __read_mostly;
 int fb_logo_count __read_mostly = -1;
 
 /*
- * The placement in effect, as asked for on the console command line.
+ * Placement of a logo supplied by the device tree. Both the image and its
+ * placement are parsed by drivers/video/logo/logo.c, here we only keep a copy
+ * of where it goes.
+ */
+static struct {
+	struct logo_placement pos;
+	bool valid;
+	int rotation;		/* LOGO_ROTATE_* (== FB_ROTATE_*), or -1 */
+} fb_logo_dt;
+
+/*
+ * Read the placement out of the device tree. Called once, from
+ * fb_prepare_logo(): fb_show_logo() is only ever reached after that has run,
+ * so everything below can just look at fb_logo_dt.
+ */
+static void fb_logo_dt_read(void)
+{
+	static bool read_done;
+
+	/*
+	 * logo_dt_placement() checks the option too, but it lives in another
+	 * translation unit, so without the check here the compiler would have
+	 * to keep fb_logo_dt around for a call that can only fail.
+	 */
+	if (!IS_ENABLED(CONFIG_LOGO_DT_CLUT224) || read_done)
+		return;
+
+	fb_logo_dt.valid = !logo_dt_placement(&fb_logo_dt.pos,
+					      &fb_logo_dt.rotation);
+	/* Last, so that nothing can observe a half filled in placement */
+	read_done = true;
+}
+
+/*
+ * A rotation asked for by the device tree turns the logo, not the screen, so
+ * it is placed in screen pixels. A rotated console turns the screen, and the
+ * logo is placed in the console's own frame. Telling the two apart is what
+ * this is for.
+ */
+static bool fb_logo_dt_rotated(void)
+{
+	return IS_ENABLED(CONFIG_LOGO_DT_CLUT224) && fb_logo_dt.valid &&
+	       fb_logo_dt.rotation >= 0;
+}
+
+static int fb_logo_dt_rotation(int rotate)
+{
+	if (fb_logo_dt_rotated())
+		return fb_logo_dt.rotation;
+
+	return rotate;
+}
+
+/*
+ * The placement in effect: what the device tree asked for if it supplied a
+ * logo, otherwise what the console command line asked for. fb_prepare_logo()
+ * has already called fb_logo_dt_read() by the time anything gets here.
  */
 static const struct logo_placement *fb_logo_placement(void)
 {
 	static const struct logo_placement centred = { .x = -1, .y = -1 };
 	static const struct logo_placement top_left = { };
+
+	if (IS_ENABLED(CONFIG_LOGO_DT_CLUT224) && fb_logo_dt.valid)
+		return &fb_logo_dt.pos;
 
 	return fb_center_logo ? &centred : &top_left;
 }
@@ -218,33 +277,43 @@ static void fb_rotate_logo_ccw(const u8 *in, u8 *out, u32 width, u32 height)
 			out[height * (w - j) + i] = *in++;
 }
 
-static void fb_rotate_logo(struct fb_info *info, u8 *dst,
-			   struct fb_image *image, int rotate)
+/* Turn the image itself, leaving @image->dx and @image->dy alone */
+static void fb_rotate_logo_image(u8 *dst, struct fb_image *image, int rotate)
 {
-	u32 tmp;
-
 	if (rotate == FB_ROTATE_UD) {
 		fb_rotate_logo_ud(image->data, dst, image->width,
 				  image->height);
-		image->dx = info->var.xres - image->width - image->dx;
-		image->dy = info->var.yres - image->height - image->dy;
 	} else if (rotate == FB_ROTATE_CW) {
 		fb_rotate_logo_cw(image->data, dst, image->width,
 				  image->height);
 		swap(image->width, image->height);
-		tmp = image->dy;
-		image->dy = image->dx;
-		image->dx = info->var.xres - image->width - tmp;
 	} else if (rotate == FB_ROTATE_CCW) {
 		fb_rotate_logo_ccw(image->data, dst, image->width,
 				   image->height);
 		swap(image->width, image->height);
-		tmp = image->dx;
-		image->dx = image->dy;
-		image->dy = info->var.yres - image->height - tmp;
 	}
 
 	image->data = dst;
+}
+
+/* As above, and map the placement from the console's frame to the screen */
+static void fb_rotate_logo(struct fb_info *info, u8 *dst,
+			   struct fb_image *image, int rotate)
+{
+	u32 tmp = rotate == FB_ROTATE_CW ? image->dy : image->dx;
+
+	fb_rotate_logo_image(dst, image, rotate);
+
+	if (rotate == FB_ROTATE_UD) {
+		image->dx = info->var.xres - image->width - image->dx;
+		image->dy = info->var.yres - image->height - image->dy;
+	} else if (rotate == FB_ROTATE_CW) {
+		image->dy = image->dx;
+		image->dx = info->var.xres - image->width - tmp;
+	} else if (rotate == FB_ROTATE_CCW) {
+		image->dx = image->dy;
+		image->dy = info->var.yres - image->height - tmp;
+	}
 }
 
 static void fb_do_show_logo(struct fb_info *info, struct fb_image *image,
@@ -295,6 +364,8 @@ static int fb_show_logo_line(struct fb_info *info, int rotate,
 	const struct logo_placement *p;
 	unsigned int xres = info->var.xres;
 	unsigned int yres = info->var.yres;
+	bool dt_rotated = fb_logo_dt_rotated();
+	unsigned int fw, fh;
 	struct fb_image image;
 	unsigned int block;
 
@@ -340,28 +411,60 @@ static int fb_show_logo_line(struct fb_info *info, int rotate,
 	image.width = logo->width;
 	image.height = logo->height;
 
-	if (rotate == FB_ROTATE_CW || rotate == FB_ROTATE_CCW)
-		swap(xres, yres);
+	/* How much of the screen the logo covers once it has been turned */
+	fw = image.width;
+	fh = image.height;
+	if (rotate == FB_ROTATE_CW || rotate == FB_ROTATE_CCW) {
+		swap(fw, fh);
+		/* A turned console is looked at sideways, a turned logo is not */
+		if (!dt_rotated)
+			swap(xres, yres);
+	}
 
-	while (n && (n * (logo->width + 8) - 8 > xres))
-		--n;
+	if (IS_ENABLED(CONFIG_LOGO_DT_CLUT224) && fb_logo_dt.valid) {
+		/*
+		 * The device tree asks for the logo at one place, so draw it
+		 * once. Repeating it per CPU would either overlap the copies
+		 * or walk them out of the region reserved for the logo.
+		 */
+		n = 1;
+	} else {
+		while (n && (n * (logo->width + 8) - 8 > xres))
+			--n;
+	}
 
 	/* The copies are drawn in a row, so they are centred as one block */
 	block = n ? n * (logo->width + 8) - 8 : logo->width;
 
 	p = fb_logo_placement();
-	image.dx = logo_place_axis(p->x, xres, block);
-	/* A stacked logo goes where the caller put it */
-	image.dy = y ? y : logo_place_axis(p->y, yres, image.height);
+	if (dt_rotated) {
+		/*
+		 * The device tree names a place on the screen, so the logo is
+		 * placed by the room it takes up there and drawn as it lies.
+		 */
+		image.dx = logo_place_axis(p->x, p->offset_x, xres, fw);
+		image.dy = logo_place_axis(p->y, p->offset_y, yres, fh);
+	} else {
+		image.dx = logo_place_axis(p->x, p->offset_x, xres, block);
+		/* A stacked logo goes where the caller put it */
+		image.dy = y ? y : logo_place_axis(p->y, p->offset_y, yres,
+						   image.height);
+	}
 
 	if (rotate) {
 		logo_rotate = kmalloc_array(logo->width, logo->height,
 					    GFP_KERNEL);
-		if (logo_rotate)
-			fb_rotate_logo(info, logo_rotate, &image, rotate);
+		if (logo_rotate) {
+			if (dt_rotated)
+				fb_rotate_logo_image(logo_rotate, &image,
+						     rotate);
+			else
+				fb_rotate_logo(info, logo_rotate, &image,
+					       rotate);
+		}
 	}
 
-	fb_do_show_logo(info, &image, rotate, n);
+	fb_do_show_logo(info, &image, dt_rotated ? FB_ROTATE_UR : rotate, n);
 
 	kfree(palette);
 	if (saved_pseudo_palette != NULL)
@@ -414,9 +517,22 @@ static int fb_prepare_extra_logos(struct fb_info *info, unsigned int height,
 	return height;
 }
 
+/*
+ * A logo supplied by the device tree is placed where the device tree asks,
+ * and the extra logos stack up from wherever the previous one ended. Those
+ * two do not compose: the stack would start at an arbitrary point and walk
+ * off the screen. The device tree wins, and says so if anything is dropped.
+ */
 static int fb_show_extra_logos(struct fb_info *info, int y, int rotate)
 {
 	unsigned int i;
+
+	if (IS_ENABLED(CONFIG_LOGO_DT_CLUT224) && fb_logo_dt.valid) {
+		if (fb_logo_ex_num)
+			pr_info("fb: device tree logo in use, %u extra logo(s) not drawn\n",
+				fb_logo_ex_num);
+		return y;
+	}
 
 	for (i = 0; i < fb_logo_ex_num; i++)
 		y = fb_show_logo_line(info, rotate,
@@ -430,10 +546,13 @@ int fb_prepare_logo(struct fb_info *info, int rotate)
 {
 	int depth = fb_get_color_depth(&info->var, &info->fix);
 	const struct logo_placement *p;
-	unsigned int yres;
+	unsigned int yres, fh;
 	int height;
 
 	memset(&fb_logo, 0, sizeof(struct logo_data));
+
+	fb_logo_dt_read();
+	rotate = fb_logo_dt_rotation(rotate);
 
 	if (info->flags & FBINFO_MISC_TILEBLITTING ||
 	    info->fbops->owner || !fb_logo_count)
@@ -458,12 +577,23 @@ int fb_prepare_logo(struct fb_info *info, int rotate)
 	if (!fb_logo.logo)
 		return 0;
 
-	if (rotate == FB_ROTATE_UR || rotate == FB_ROTATE_UD)
+	/*
+	 * A turned console is looked at sideways, so the logo is measured
+	 * against the console's own frame. A logo turned by the device tree
+	 * leaves the screen alone, and only covers a different part of it.
+	 */
+	fh = fb_logo.logo->height;
+	if (fb_logo_dt_rotated()) {
 		yres = info->var.yres;
-	else
+		if (rotate == FB_ROTATE_CW || rotate == FB_ROTATE_CCW)
+			fh = fb_logo.logo->width;
+	} else if (rotate == FB_ROTATE_UR || rotate == FB_ROTATE_UD) {
+		yres = info->var.yres;
+	} else {
 		yres = info->var.xres;
+	}
 
-	if (fb_logo.logo->height > yres) {
+	if (fh > yres) {
 		fb_logo.logo = NULL;
 		return 0;
 	}
@@ -499,8 +629,7 @@ int fb_prepare_logo(struct fb_info *info, int rotate)
 	 * that the two cannot disagree.
 	 */
 	p = fb_logo_placement();
-	height = logo_place_axis(p->y, yres, fb_logo.logo->height) +
-		 fb_logo.logo->height;
+	height = logo_place_axis(p->y, p->offset_y, yres, fh) + fh;
 #ifdef CONFIG_FB_LOGO_EXTRA
 	height = fb_prepare_extra_logos(info, height, yres);
 #endif
@@ -515,6 +644,8 @@ int fb_show_logo(struct fb_info *info, int rotate)
 
 	if (!fb_logo_count)
 		return 0;
+
+	rotate = fb_logo_dt_rotation(rotate);
 
 	count = fb_logo_count < 0 ? num_online_cpus() : fb_logo_count;
 	y = fb_show_logo_line(info, rotate, fb_logo.logo, 0, count);

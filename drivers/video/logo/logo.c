@@ -158,6 +158,84 @@ static const struct linux_logo *logo_dt_find(void)
 	return logo_dt_data ? &logo_dt_clut224 : NULL;
 }
 
+static int logo_dt_parse_rotation(const char *rotation)
+{
+	if (!strcmp(rotation, "none"))
+		return LOGO_ROTATE_NONE;
+	if (!strcmp(rotation, "cw"))
+		return LOGO_ROTATE_CW;
+	if (!strcmp(rotation, "ud"))
+		return LOGO_ROTATE_UD;
+	if (!strcmp(rotation, "ccw"))
+		return LOGO_ROTATE_CCW;
+
+	return -EINVAL;
+}
+
+/**
+ * logo_dt_placement - where a logo supplied by the device tree asks to go
+ * @pos: filled in with the requested position and offset
+ * @rotation: filled in with one of LOGO_ROTATE_*, or -1 when the node does
+ *            not ask for any
+ *
+ * Only the placement is read here, the image itself is fb_find_logo()'s
+ * business. It lives next to the image parser rather than in any one user so
+ * that everything that draws the logo reads the same properties the same way.
+ *
+ * Return: 0 if the device tree supplies a logo node, -ENODEV otherwise, in
+ * which case @pos and @rotation are left untouched.
+ */
+int logo_dt_placement(struct logo_placement *pos, int *rotation)
+{
+	struct device_node *np;
+	const char *str;
+	u32 val[2];
+	int rot;
+
+	if (!IS_ENABLED(CONFIG_LOGO_DT_CLUT224))
+		return -ENODEV;
+
+	/*
+	 * Same node the image itself comes from, looked up the same way: a
+	 * child of /chosen, not just anything compatible anywhere in the tree.
+	 */
+	np = of_get_compatible_child(of_chosen, LOGO_DT_COMPATIBLE);
+	if (!np)
+		return -ENODEV;
+
+	if (!of_device_is_available(np)) {
+		of_node_put(np);
+		return -ENODEV;
+	}
+
+	*pos = (struct logo_placement){ };
+	*rotation = -1;
+
+	if (!of_property_read_u32_array(np, "logo-position", val, 2)) {
+		pos->x = (s32)val[0];
+		pos->y = (s32)val[1];
+	}
+
+	if (!of_property_read_u32_array(np, "logo-offset", val, 2)) {
+		pos->offset_x = (s32)val[0];
+		pos->offset_y = (s32)val[1];
+	}
+
+	if (!of_property_read_string(np, "logo-rotation", &str)) {
+		rot = logo_dt_parse_rotation(str);
+		if (rot < 0)
+			pr_warn("logo: %pOF: unknown logo-rotation \"%s\"\n",
+				np, str);
+		else
+			*rotation = rot;
+	}
+
+	of_node_put(np);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(logo_dt_placement);
+
 /*
  * Logos are located in the initdata, and will be freed in kernel_init.
  * Use late_init to mark the logos as freed to prevent any further use.
