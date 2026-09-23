@@ -1931,6 +1931,11 @@ static int null_validate_conf(struct nullb_device *dev)
 		return -EINVAL;
 	}
 
+	if (dev->shared_tags && dev->blocking && !g_blocking) {
+		pr_err("blocking/memory-backed devices cannot share non-blocking tag set\n");
+		return -EINVAL;
+	}
+
 	return 0;
 }
 
