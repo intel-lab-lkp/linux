@@ -2,6 +2,8 @@
 #ifndef __ASM_CPU_TYPE_H
 #define __ASM_CPU_TYPE_H
 
+#include <linux/types.h>
+
 /*
  * Sparc (general) CPU types
  */
@@ -17,6 +19,11 @@ enum sparc_cpu {
 
 #ifdef CONFIG_SPARC32
 extern enum sparc_cpu sparc_cpu_model;
+
+/* True where the cpu implements the v9 casa extension (LEON3 does, plain v8
+ * does not).  Probed once on the boot cpu.
+ */
+extern bool sparc32_has_casa;
 
 #define SUN4M_NCPUS            4              /* Architectural limit of sun4m. */
 

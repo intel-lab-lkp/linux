@@ -12,6 +12,11 @@ lib-$(CONFIG_SPARC32) += blockops.o
 lib-y                 += memscan_$(BITS).o memcmp.o strncmp_$(BITS).o
 lib-$(CONFIG_SPARC32) += divdi3.o udivdi3.o
 lib-$(CONFIG_SPARC32) += copy_user.o locks.o
+lib-$(CONFIG_SPARC32) += casa_32.o
+
+# casa is not in v8, which the rest of sparc32 is assembled as.  -Aleon rather
+# than -Av9: it adds the one instruction without letting anything else v9 in.
+AFLAGS_casa_32.o += -Wa,-Aleon
 lib-$(CONFIG_SPARC64) += atomic_64.o
 lib-$(CONFIG_SPARC32) += lshrdi3.o ashldi3.o
 lib-$(CONFIG_SPARC32) += muldi3.o bitext.o

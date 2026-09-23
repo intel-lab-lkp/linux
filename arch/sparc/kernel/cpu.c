@@ -21,6 +21,9 @@
 #include <asm/psr.h>
 #include <asm/mbus.h>
 #include <asm/cpudata.h>
+#ifdef CONFIG_SPARC32
+#include <asm/cas_32.h>
+#endif
 
 #include "kernel.h"
 #include "entry.h"
@@ -437,10 +440,31 @@ const struct seq_operations cpuinfo_op = {
 };
 
 #ifdef CONFIG_SPARC32
+bool sparc32_has_casa __ro_after_init;
+
+/* One compare-and-swap that must succeed: a cpu without casa traps and the
+ * exception table reports -EFAULT.
+ */
+static void __init casa_probe(void)
+{
+	static const u32 oldval = 0x600df00d;
+	static const u32 newval = 0x0badcafe;
+	u32 word = oldval;
+	u32 prev = 0;
+
+	if (!__sparc32_casa(&word, oldval, newval, &prev))
+		sparc32_has_casa = prev == oldval && word == newval;
+
+	pr_info("sparc32: compare-and-swap instruction %s\n",
+		sparc32_has_casa ? "present" : "not implemented");
+}
+
 static int __init cpu_type_probe(void)
 {
 	int psr_impl, psr_vers, fpu_vers;
 	int psr;
+
+	casa_probe();
 
 	psr_impl = ((get_psr() >> PSR_IMPL_SHIFT) & PSR_IMPL_SHIFTED_MASK);
 	psr_vers = ((get_psr() >> PSR_VERS_SHIFT) & PSR_VERS_SHIFTED_MASK);
