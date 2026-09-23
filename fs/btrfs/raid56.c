@@ -946,7 +946,7 @@ static void rbio_orig_end_io(struct btrfs_raid_bio *rbio, blk_status_t status)
 	struct bio *cur = bio_list_get(&rbio->bio_list);
 	struct bio *extra;
 
-	kfree(rbio->csum_buf);
+	kvfree(rbio->csum_buf);
 	bitmap_free(rbio->csum_bitmap);
 	rbio->csum_buf = NULL;
 	rbio->csum_bitmap = NULL;
@@ -2304,8 +2304,8 @@ static void fill_data_csums(struct btrfs_raid_bio *rbio)
 	    rbio->bioc->map_type & BTRFS_BLOCK_GROUP_METADATA)
 		return;
 
-	rbio->csum_buf = kzalloc(rbio->nr_data * rbio->stripe_nsectors *
-				 fs_info->csum_size, GFP_NOFS);
+	rbio->csum_buf = kvzalloc(rbio->nr_data * rbio->stripe_nsectors *
+				  fs_info->csum_size, GFP_NOFS);
 	rbio->csum_bitmap = bitmap_zalloc(rbio->nr_data * rbio->stripe_nsectors,
 					  GFP_NOFS);
 	if (!rbio->csum_buf || !rbio->csum_bitmap) {
@@ -2340,7 +2340,7 @@ error:
 "sub-stripe write for full stripe %llu is not safe, failed to get csum: %d",
 			rbio->bioc->full_stripe_logical, ret);
 no_csum:
-	kfree(rbio->csum_buf);
+	kvfree(rbio->csum_buf);
 	bitmap_free(rbio->csum_bitmap);
 	rbio->csum_buf = NULL;
 	rbio->csum_bitmap = NULL;
