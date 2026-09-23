@@ -13,6 +13,7 @@
 
 #include <linux/acpi.h>
 #include <linux/highmem.h>
+#include <linux/io-64-nonatomic-lo-hi.h>
 #include <linux/rculist.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
@@ -25,6 +26,15 @@
 
 #define ACPI_SIG_TPM2 "TPM2"
 #define TPM_CRB_MAX_RESOURCES 3
+
+/* TPM_CRB_INTF_ID_x vendor ID field, bits 47:32 of the 64-bit register */
+#define CRB_INTF_ID_VID(intf_id)	(((intf_id) >> 32) & 0xffff)
+
+/* Amazon NitroTPM */
+#define CRB_INTF_VID_AMZN		0x0ec2
+
+/* Longest unavailability seen from NitroTPM */
+#define CRB_AMZN_BUSY_TIMEOUT_MS	30000
 
 static const guid_t crb_acpi_start_guid =
 	GUID_INIT(0x6BBF6CAB, 0x5463, 0x4714,
@@ -783,6 +793,48 @@ static int crb_map_pluton(struct device *dev, struct crb_priv *priv,
 	return 0;
 }
 
+/*
+ * Read the vendor ID from the interface ID register. Returns -ENODEV when
+ * the head registers are not mapped for this start method.
+ */
+static int crb_vendor_id(struct crb_priv *priv)
+{
+	u64 intf_id;
+
+	if (!priv->regs_h)
+		return -ENODEV;
+
+	intf_id = lo_hi_readq(&priv->regs_h->intf_id);
+
+	return CRB_INTF_ID_VID(intf_id);
+}
+
+static void crb_amzn_quirk(struct tpm_chip *chip)
+{
+	/* NitroTPM requires larger timeouts */
+	chip->busy_timeout_ms = CRB_AMZN_BUSY_TIMEOUT_MS;
+}
+
+static const struct crb_vendor_quirk {
+	u16 vendor_id;
+	void (*apply)(struct tpm_chip *chip);
+} crb_vendor_quirks[] = {
+	{ CRB_INTF_VID_AMZN, crb_amzn_quirk },
+};
+
+static void crb_apply_vendor_quirks(struct crb_priv *priv, struct tpm_chip *chip)
+{
+	int vendor_id = crb_vendor_id(priv);
+	unsigned int i;
+
+	if (vendor_id < 0)
+		return;
+
+	for (i = 0; i < ARRAY_SIZE(crb_vendor_quirks); i++)
+		if (crb_vendor_quirks[i].vendor_id == vendor_id)
+			crb_vendor_quirks[i].apply(chip);
+}
+
 static int crb_acpi_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -886,6 +938,8 @@ static int crb_acpi_probe(struct platform_device *pdev)
 	dev_set_drvdata(&chip->dev, priv);
 	chip->acpi_dev_handle = device->handle;
 	chip->flags = TPM_CHIP_FLAG_TPM2;
+
+	crb_apply_vendor_quirks(priv, chip);
 
 	rc = tpm_chip_bootstrap(chip);
 	if (rc)
