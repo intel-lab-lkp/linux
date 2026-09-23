@@ -492,18 +492,18 @@ static vm_fault_t arena_vm_fault(struct vm_fault *vmf)
 	struct page *page;
 	long kbase, kaddr;
 	unsigned long flags;
+	vm_fault_t ret_fault;
 	int ret;
 
 	kbase = bpf_arena_get_kern_vm_start(arena);
 	kaddr = kbase + (u32)(vmf->address);
 
-	if (raw_res_spin_lock_irqsave(&arena->spinlock, flags))
-		/*
-		 * A failed lock means a possible deadlock was detected. Don't
-		 * return VM_FAULT_RETRY: this handler never took mmap_lock, but
-		 * the fault path would re-take it on retry and deadlock. Fail.
-		 */
+	ret = raw_res_spin_lock_irqsave(&arena->spinlock, flags);
+	/* If we are deadlocking somehow, no way to ensure forward progress. */
+	if (ret == -EDEADLK)
 		return VM_FAULT_SIGBUS;
+	if (ret)
+		goto retry;
 
 	page = vmalloc_to_page((void *)kaddr);
 	if (page) {
@@ -549,10 +549,31 @@ static vm_fault_t arena_vm_fault(struct vm_fault *vmf)
 	flush_vmap_cache(kaddr, PAGE_SIZE);
 	bpf_map_memcg_exit(old_memcg, new_memcg);
 out:
-	page_ref_add(page, 1);
+	/* Reserve the page while installing its user PTE without the arena lock. */
+	bpf_map_memcg_enter(&arena->map, &old_memcg, &new_memcg);
+	ret = range_tree_set_unavail(&arena->rt, vmf->pgoff, 1);
+	bpf_map_memcg_exit(old_memcg, new_memcg);
 	raw_res_spin_unlock_irqrestore(&arena->spinlock, flags);
-	vmf->page = page;
-	return 0;
+	if (ret) {
+		if (ret == -EAGAIN)
+			goto retry;
+		return VM_FAULT_OOM;
+	}
+
+	ret_fault = vmf_insert_page(vmf->vma, vmf->address, page);
+
+	while ((ret = raw_res_spin_lock_irqsave(&arena->spinlock, flags))) {
+		/* If we somehow deadlocked stop trying to take the lock. */
+		if (ret == -EDEADLK)
+			return VM_FAULT_SIGBUS;
+
+		cond_resched();
+	}
+
+	ret = range_tree_remove_unavail(&arena->rt, vmf->pgoff, 1);
+	raw_res_spin_unlock_irqrestore(&arena->spinlock, flags);
+	WARN_ON_ONCE(ret);
+	return ret_fault;
 out_sigsegv_memcg:
 	bpf_map_memcg_exit(old_memcg, new_memcg);
 out_sigsegv:
@@ -648,7 +669,7 @@ static int arena_map_mmap(struct bpf_map *map, struct vm_area_struct *vma)
 	 * of user_vm_start. Set VM_DONTCOPY to prevent arena VMA from
 	 * being copied into the child process on fork.
 	 */
-	vm_flags_set(vma, VM_DONTEXPAND | VM_DONTCOPY);
+	vm_flags_set(vma, VM_DONTEXPAND | VM_DONTCOPY | VM_MIXEDMAP);
 	vma->vm_ops = &arena_vm_ops;
 	return 0;
 }
