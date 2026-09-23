@@ -1347,12 +1347,12 @@ void sbc_dif_copy_prot(struct se_cmd *cmd, unsigned int sectors, bool read,
 			else
 				memcpy(addr, paddr + copied, len);
 
+			kunmap_atomic(addr - sg->offset - offset);
+
 			left -= len;
 			offset += len;
 			copied += len;
 			psg_len -= len;
-
-			kunmap_atomic(addr - sg->offset - offset);
 
 			if (offset >= sg->length) {
 				sg = sg_next(sg);
