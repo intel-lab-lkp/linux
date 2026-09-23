@@ -44,6 +44,7 @@ static int verbose;
 static int transfer_size;
 static int iterations;
 static int interval = 5; /* interval in seconds for showing transfer rate */
+static int random_input;
 static int input_choices;
 
 static uint8_t default_tx[] = {
@@ -319,6 +320,7 @@ static void parse_opts(int argc, char *argv[])
 			break;
 		case 'S':
 			transfer_size = atoi(optarg);
+			random_input = 1;
 			input_choices++;
 			break;
 		case 'I':
@@ -452,6 +454,9 @@ int main(int argc, char *argv[])
 
 	if (input_choices > 1)
 		pabort("only one of -S (--size), -p, -i (--input) may be selected");
+
+	if (random_input && !transfer_size)
+		pabort("a nonzero size argument is mandatory for -S (--size)");
 
 	fd = open(device, O_RDWR);
 	if (fd < 0)
