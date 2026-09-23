@@ -734,6 +734,7 @@ struct iommu_ops {
 	int (*viommu_init)(struct iommufd_viommu *viommu,
 			   struct iommu_domain *parent_domain,
 			   const struct iommu_user_data *user_data);
+	int (*enable_cxl_ats)(struct device *dev);
 
 	const struct iommu_domain_ops *default_domain_ops;
 	struct module *owner;
@@ -1222,6 +1223,8 @@ void iommu_detach_device_pasid(struct iommu_domain *domain,
 ioasid_t iommu_alloc_global_pasid(struct device *dev);
 void iommu_free_global_pasid(ioasid_t pasid);
 
+int iommu_enable_cxl_ats(struct device *dev);
+
 /* PCI device reset functions */
 int pci_dev_reset_iommu_prepare(struct pci_dev *pdev);
 void pci_dev_reset_iommu_done(struct pci_dev *pdev);
@@ -1548,6 +1551,11 @@ static inline ioasid_t iommu_alloc_global_pasid(struct device *dev)
 }
 
 static inline void iommu_free_global_pasid(ioasid_t pasid) {}
+
+static inline int iommu_enable_cxl_ats(struct device *dev)
+{
+	return -ENODEV;
+}
 
 static inline int pci_dev_reset_iommu_prepare(struct pci_dev *pdev)
 {

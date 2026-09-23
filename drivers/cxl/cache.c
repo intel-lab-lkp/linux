@@ -3,6 +3,7 @@
 
 #include <linux/pci.h>
 #include <cxl/cxl.h>
+#include <linux/iommu.h>
 
 #include "cxlcache.h"
 

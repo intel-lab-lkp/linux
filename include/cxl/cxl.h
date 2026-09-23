@@ -8,6 +8,7 @@
 #include <linux/node.h>
 #include <linux/ioport.h>
 #include <cxl/mailbox.h>
+#include <linux/pci.h>
 
 /**
  * enum cxl_devtype - delineate type-2 from a generic type-3 device
@@ -274,6 +275,23 @@ int cxl_set_capacity(struct cxl_dev_state *cxlds, u64 capacity);
 struct cxl_cachedev *devm_cxl_add_cachedev(struct cxl_dev_state *cxlds);
 int devm_cxl_cachedev_alloc_snoop_capacity(struct cxl_cachedev *cxlcd,
 					   u64 size);
+int cxl_cache_configure_iommu(struct cxl_dev_state *cxlds);
+
+static inline bool cxl_cache_supported(struct pci_dev *pdev)
+{
+	int offset;
+	u16 cap;
+
+	offset = pci_find_dvsec_capability(pdev, PCI_VENDOR_ID_CXL,
+					   PCI_DVSEC_CXL_DEVICE);
+	if (!offset)
+		return false;
+
+	if (pci_read_config_word(pdev, offset + PCI_DVSEC_CXL_CAP, &cap))
+		return false;
+
+	return cap & PCI_DVSEC_CXL_CACHE_CAPABLE;
+}
 #else
 static inline struct cxl_cachedev *
 devm_cxl_add_cachedev(struct cxl_dev_state *cxlds)
@@ -281,5 +299,9 @@ devm_cxl_add_cachedev(struct cxl_dev_state *cxlds)
 static inline int
 devm_cxl_cachedev_alloc_snoop_capacity(struct cxl_cachedev *cxlcd, u64 size)
 { return -ENXIO; }
+static inline int cxl_cache_configure_iommu(struct cxl_dev_state *cxlds)
+{ return -ENXIO; }
+static inline bool cxl_cache_supported(struct pci_dev *pdev)
+{ return false; }
 #endif /* CONFIG_CXL_CACHE */
 #endif /* __CXL_CXL_H__ */

@@ -4222,6 +4222,34 @@ void pci_dev_reset_iommu_done(struct pci_dev *pdev)
 }
 EXPORT_SYMBOL_GPL(pci_dev_reset_iommu_done);
 
+/*
+ * iommu_enable_cxl_ats() - Enable CXL source bit extension of ATS for the
+ * given device.
+ * @dev: CXL.cache-capable PCIe device to enable capability for
+ *
+ * Returns:
+ * + -ENODEV if no IOMMU present
+ * + -EOPNOTSUPP if IOMMU isn't CXL-aware or doesn't need extra set up
+ * + Result of enablement callback otherwise
+ *
+ * Required by devices looking to use CXL.cache with non-identity IOMMU domais:
+ * see CXL 4.0 specification, section 3.1.6 "Memory Type Indication on ATS"
+ */
+int iommu_enable_cxl_ats(struct device *dev)
+{
+	const struct iommu_ops *ops;
+
+	if (!dev_has_iommu(dev))
+		return -ENODEV;
+
+	ops = dev_iommu_ops(dev);
+	if (!ops->enable_cxl_ats)
+		return -EOPNOTSUPP;
+
+	return ops->enable_cxl_ats(dev);
+}
+EXPORT_SYMBOL_GPL(iommu_enable_cxl_ats);
+
 #if IS_ENABLED(CONFIG_IRQ_MSI_IOMMU)
 /**
  * iommu_dma_prepare_msi() - Map the MSI page in the IOMMU domain

@@ -2,6 +2,7 @@
 /* Copyright (C) Advanced Micro Device, Inc. */
 
 #include <linux/iopoll.h>
+#include <linux/iommu.h>
 #include <linux/pci.h>
 #include <cxlcache.h>
 
@@ -806,3 +807,45 @@ void cxl_destroy_snoop_filters(void)
 
 	xa_destroy(&snoop_filters);
 }
+
+/**
+ * cxl_cache_configure_iommu() - Configure a device's IOMMU for CXL.cache
+ * @cxlds: struct cxl_dev_state of a cxl_cachedev that has been through
+ *	   CXL.cache probe
+ *
+ * Fails if the underlying PCI device supports ATS and IOMMU can't be
+ * configured, or if the device doesn't support ATS and is not attached to an
+ * identity IOMMU domain.
+ */
+int cxl_cache_configure_iommu(struct cxl_dev_state *cxlds)
+{
+	struct device *dev = cxlds->dev;
+	struct iommu_domain *domain;
+	int rc;
+
+	lockdep_assert_held(&dev->mutex);
+
+	if (!dev->iommu || !dev->iommu->iommu_dev)
+		return 0;
+
+	if (!device_iommu_capable(dev, IOMMU_CAP_PCI_ATS_SUPPORTED)) {
+		domain = iommu_get_domain_for_dev(dev);
+		if (!domain || domain->type != IOMMU_DOMAIN_IDENTITY)
+			return -EINVAL;
+
+		return 0;
+	}
+
+	rc = iommu_enable_cxl_ats(cxlds->dev);
+	if (rc == -EOPNOTSUPP) {
+		dev_warn(cxlds->dev,
+			"IOMMU doesn't support enabling CXL ATS requests; CXL.cache may not function properly.");
+		rc = 0;
+	} else if (rc) {
+		dev_err(cxlds->dev, "Failed to enable CXL ATS requests: %d\n",
+			rc);
+	}
+
+	return rc;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_cache_configure_iommu, "CXL");

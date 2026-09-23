@@ -41,6 +41,7 @@
 #include <asm/dma.h>
 #include <uapi/linux/iommufd.h>
 #include <linux/generic_pt/iommu.h>
+#include <cxl/cxl.h>
 
 #include "amd_iommu.h"
 #include "iommufd.h"
@@ -2199,6 +2200,13 @@ static void set_dte_passthrough(struct iommu_dev_data *dev_data,
 
 }
 
+static void set_dte_cxl_mem_attr(struct iommu_dev_data *dev_data,
+				 struct dev_table_entry *new)
+{
+	new->data[0] &= ~DTE_CXLMEM_MASK;
+	new->data[0] |= FIELD_PREP(DTE_CXLMEM_MASK, dev_data->cxl_memattr);
+}
+
 static void set_dte_entry(struct amd_iommu *iommu,
 			  struct iommu_dev_data *dev_data,
 			  phys_addr_t top_paddr, unsigned int top_level)
@@ -2217,10 +2225,13 @@ static void set_dte_entry(struct amd_iommu *iommu,
 	else if (domain->domain.type == IOMMU_DOMAIN_IDENTITY)
 		set_dte_passthrough(dev_data, domain, &new);
 	else if ((domain->domain.type & __IOMMU_DOMAIN_PAGING) &&
-		 domain->pd_mode == PD_MODE_V1)
+		   domain->pd_mode == PD_MODE_V1)
 		set_dte_v1(dev_data, domain, domain->id, top_paddr, top_level, &new);
 	else
 		WARN_ON(true);
+
+	if (amd_iommu_iotlb_sup && check_feature2(FEATURE_CXLMEMATTR))
+		set_dte_cxl_mem_attr(dev_data, &new);
 
 	amd_iommu_update_dte(iommu, dev_data, &new);
 
@@ -3190,6 +3201,14 @@ static int amd_iommu_def_domain_type(struct device *dev)
 		return IOMMU_DOMAIN_IDENTITY;
 	}
 
+	/*
+	 * CXL.cache devices that have no ATS capability need a passthrough
+	 * domain to function correctly.
+	 */
+	if (dev_is_pci(dev) && !pci_ats_supported(to_pci_dev(dev)) &&
+	    cxl_cache_supported(to_pci_dev(dev)))
+		return IOMMU_DOMAIN_IDENTITY;
+
 	return 0;
 }
 
@@ -3197,6 +3216,40 @@ static bool amd_iommu_enforce_cache_coherency(struct iommu_domain *domain)
 {
 	/* IOMMU_PTE_FC is always set */
 	return true;
+}
+
+static int amd_iommu_enable_cxl_ats(struct device *dev)
+{
+	struct iommu_dev_data *dev_data = dev_iommu_priv_get(dev);
+	int ret = 0;
+
+	if (!dev_data || !amd_iommu_iotlb_sup)
+		return -EINVAL;
+
+	if (!check_feature2(FEATURE_CXLMEMATTR))
+		return -ENXIO;
+
+	mutex_lock(&dev_data->mutex);
+
+	/* Already set up */
+	if (dev_data->cxl_memattr != 0)
+		goto out;
+
+	if (!dev_data->ats_enabled) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	/*
+	 * Give device the choice of whether to use CXL.io or CXL.cache and
+	 * whether accesses are snooped
+	 */
+	dev_data->cxl_memattr = 1;
+	dev_update_dte(dev_data, true);
+
+out:
+	mutex_unlock(&dev_data->mutex);
+	return ret;
 }
 
 const struct iommu_ops amd_iommu_ops = {
@@ -3216,6 +3269,7 @@ const struct iommu_ops amd_iommu_ops = {
 	.page_response = amd_iommu_page_response,
 	.get_viommu_size = amd_iommufd_get_viommu_size,
 	.viommu_init = amd_iommufd_viommu_init,
+	.enable_cxl_ats = amd_iommu_enable_cxl_ats,
 };
 
 #ifdef CONFIG_IRQ_REMAP

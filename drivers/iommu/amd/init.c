@@ -1125,6 +1125,14 @@ static void iommu_enable_gt(struct amd_iommu *iommu)
 		iommu_feature_enable(iommu, CONTROL_GCR3TRPMODE);
 }
 
+static void iommu_enable_cxlmemattr(struct amd_iommu *iommu)
+{
+	if (!check_feature2(FEATURE_CXLMEMATTR) || !amd_iommu_iotlb_sup)
+		return;
+
+	iommu_feature_enable(iommu, CONTROL_CXLMEMATTR_EN);
+}
+
 /* sets a specific bit in the device table entry. */
 static void set_dte_bit(struct dev_table_entry *dte, u8 bit)
 {
@@ -2244,6 +2252,12 @@ static int __init iommu_init_pci(struct amd_iommu *iommu)
 		if (ret)
 			return ret;
 	}
+
+	/* 
+	 * Set the CXLMemAttr control bit and do the Device Table Entry parts
+	 * of set up when a CXL.cache device shows up.
+	 */
+	iommu_enable_cxlmemattr(iommu);
 
 	ret = iommu_device_register(&iommu->iommu, &amd_iommu_ops, NULL);
 	if (ret || amd_iommu_pgtable == PD_MODE_NONE) {
