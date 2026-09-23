@@ -335,6 +335,7 @@ found_bundle:
 /*
  * Allocate a new connection and add it into a bundle.
  */
+static void rxrpc_unbundle_conn(struct rxrpc_connection *conn);
 static bool rxrpc_add_conn_to_bundle(struct rxrpc_bundle *bundle,
 				     unsigned int slot)
 {
@@ -344,6 +345,7 @@ static bool rxrpc_add_conn_to_bundle(struct rxrpc_bundle *bundle,
 
 	old = bundle->conns[slot];
 	if (old) {
+		rxrpc_unbundle_conn(old);
 		bundle->conns[slot] = NULL;
 		bundle->conn_ids[slot] = 0;
 		trace_rxrpc_client(old, -1, rxrpc_client_replace);
