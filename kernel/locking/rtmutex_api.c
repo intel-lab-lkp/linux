@@ -2,6 +2,7 @@
 /*
  * rtmutex API
  */
+#include <linux/lockholder.h>
 #include <linux/spinlock.h>
 #include <linux/export.h>
 
@@ -544,8 +545,24 @@ void rt_mutex_debug_task_free(struct task_struct *task)
 /* Mutexes */
 static void __mutex_rt_init_generic(struct mutex *mutex)
 {
+	/* rt_mutex_base_init() also clears the holder tracking opt-in. */
 	rt_mutex_base_init(&mutex->rtmutex);
 	debug_check_no_locks_freed((void *)mutex, sizeof(*mutex));
+}
+
+/*
+ * mutex_track_holder() is in mutex.c, shared with !PREEMPT_RT. Here the
+ * opt-in is a flag in the padding inside the rtmutex, not a bit of
+ * ->owner: rt_mutex clears ->owner on unlock, so a bit there would not
+ * survive.
+ */
+static inline bool mutex_is_tracked(struct mutex *lock)
+{
+#ifdef CONFIG_TRACK_LOCK_HOLDERS
+	return lock->rtmutex.tracked;
+#else
+	return false;
+#endif
 }
 
 static __always_inline int __mutex_lock_common(struct mutex *lock,
@@ -560,10 +577,12 @@ static __always_inline int __mutex_lock_common(struct mutex *lock,
 	might_sleep();
 	mutex_acquire_nest(&lock->dep_map, subclass, 0, nest_lock, ip);
 	ret = __rt_mutex_lock(&lock->rtmutex, state);
-	if (ret)
+	if (ret) {
 		mutex_release(&lock->dep_map, ip);
-	else
+	} else {
 		lock_acquired(&lock->dep_map, ip);
+		lock_holder_acquired_if(mutex_is_tracked(lock));
+	}
 	return ret;
 }
 
@@ -623,8 +642,10 @@ int __sched _mutex_trylock_nest_lock(struct mutex *lock,
 		return 0;
 
 	ret = __rt_mutex_trylock(&lock->rtmutex);
-	if (ret)
+	if (ret) {
 		mutex_acquire_nest(&lock->dep_map, 0, 1, nest_lock, _RET_IP_);
+		lock_holder_acquired_if(mutex_is_tracked(lock));
+	}
 
 	return ret;
 }
@@ -666,10 +687,16 @@ EXPORT_SYMBOL(mutex_lock_io);
 
 int __sched mutex_trylock(struct mutex *lock)
 {
+	int ret;
+
 	if (IS_ENABLED(CONFIG_DEBUG_RT_MUTEXES) && WARN_ON_ONCE(!in_task()))
 		return 0;
 
-	return __rt_mutex_trylock(&lock->rtmutex);
+	ret = __rt_mutex_trylock(&lock->rtmutex);
+	if (ret)
+		lock_holder_acquired_if(mutex_is_tracked(lock));
+
+	return ret;
 }
 EXPORT_SYMBOL(mutex_trylock);
 #endif /* !CONFIG_DEBUG_LOCK_ALLOC */
@@ -677,6 +704,7 @@ EXPORT_SYMBOL(mutex_trylock);
 void __sched mutex_unlock(struct mutex *lock)
 	__releases(lock) __no_context_analysis
 {
+	lock_holder_released_if(mutex_is_tracked(lock));
 	mutex_release(&lock->dep_map, _RET_IP_);
 	__rt_mutex_unlock(&lock->rtmutex);
 }
