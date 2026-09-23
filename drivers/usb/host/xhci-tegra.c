@@ -1542,11 +1542,20 @@ static void tegra_xusb_deinit_usb_phy(struct tegra_xusb *tegra)
 {
 	unsigned int i;
 
-	cancel_work_sync(&tegra->id_work);
-
-	for (i = 0; i < tegra->num_usb_phys; i++)
-		if (tegra->usbphy[i])
+	/*
+	 * id_nb is registered on the PHY notifier chain by
+	 * devm_usb_get_phy_by_node(), so devres would only drop it after
+	 * tegra_xusb_remove() has returned.  Unregister it here, before the
+	 * work is cancelled, so that it cannot be queued again.
+	 */
+	for (i = 0; i < tegra->num_usb_phys; i++) {
+		if (tegra->usbphy[i]) {
+			usb_unregister_notifier(tegra->usbphy[i], &tegra->id_nb);
 			otg_set_host(tegra->usbphy[i]->otg, NULL);
+		}
+	}
+
+	cancel_work_sync(&tegra->id_work);
 }
 
 static int tegra_xusb_setup_wakeup(struct platform_device *pdev, struct tegra_xusb *tegra)
