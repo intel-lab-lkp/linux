@@ -301,7 +301,9 @@ TEST_F(ip_local_port_range, single_port_range)
 	}
 }
 
-TEST_F(ip_local_port_range, exhaust_8_port_range)
+static void exhaust_8_port_range(struct __test_metadata *_metadata,
+				 const FIXTURE_VARIANT(ip_local_port_range) *variant,
+				 bool reuseport)
 {
 	__u8 port_set = 0;
 	int i, fd, err;
@@ -312,6 +314,11 @@ TEST_F(ip_local_port_range, exhaust_8_port_range)
 	for (i = 0; i < ARRAY_SIZE(fds); i++) {
 		fd = socket(variant->so_domain, variant->so_type, variant->so_protocol);
 		ASSERT_GE(fd, 0) TH_LOG("socket failed");
+
+		if (reuseport) {
+			err = setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &(int){ 1 }, sizeof(int));
+			ASSERT_TRUE(!err) TH_LOG("setsockopt(SO_REUSEPORT) failed");
+		}
 
 		range = pack_port_range(40000, 40007);
 		err = setsockopt(fd, SOL_IP, IP_LOCAL_PORT_RANGE, &range, sizeof(range));
@@ -335,6 +342,11 @@ TEST_F(ip_local_port_range, exhaust_8_port_range)
 	fd = socket(variant->so_domain, variant->so_type, variant->so_protocol);
 	ASSERT_GE(fd, 0) TH_LOG("socket failed");
 
+	if (reuseport) {
+		err = setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &(int){ 1 }, sizeof(int));
+		ASSERT_TRUE(!err) TH_LOG("setsockopt(SO_REUSEPORT) failed");
+	}
+
 	range = pack_port_range(40000, 40007);
 	err = setsockopt(fd, SOL_IP, IP_LOCAL_PORT_RANGE, &range, sizeof(range));
 	ASSERT_TRUE(!err) TH_LOG("setsockopt(IP_LOCAL_PORT_RANGE) failed");
@@ -350,6 +362,19 @@ TEST_F(ip_local_port_range, exhaust_8_port_range)
 		err = close(fds[i]);
 		ASSERT_TRUE(!err) TH_LOG("close failed");
 	}
+}
+
+TEST_F(ip_local_port_range, exhaust_8_port_range)
+{
+	exhaust_8_port_range(_metadata, variant, false);
+}
+
+/* Auto-selected port must not land on a port already taken by a
+ * SO_REUSEPORT socket, so all 8 sockets must get distinct ports.
+ */
+TEST_F(ip_local_port_range, exhaust_8_port_range_reuseport)
+{
+	exhaust_8_port_range(_metadata, variant, true);
 }
 
 TEST_F(ip_local_port_range, late_bind)
