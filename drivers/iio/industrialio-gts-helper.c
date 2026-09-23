@@ -652,10 +652,10 @@ static int iio_init_iio_gts(int max_scale_int, int max_scale_nano,
 	if (ret)
 		return ret;
 
-	gts->hwgain_table = gain_tbl;
 	gts->num_hwgain = num_gain;
-	gts->itime_table = tim_tbl;
+	gts->hwgain_table = gain_tbl;
 	gts->num_itime = num_times;
+	gts->itime_table = tim_tbl;
 
 	return iio_gts_sanity_check(gts);
 }
