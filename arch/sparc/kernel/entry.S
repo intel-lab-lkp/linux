@@ -644,6 +644,23 @@ do_cp_exception:
 
 	RESTORE_ALL
 
+	/* This routine handles the compare-and-swap trap, type 0x91. */
+	.align	4
+	.globl	do_sparc32_cas
+do_sparc32_cas:
+	SAVE_ALL
+
+	wr	%l0, PSR_ET, %psr		! re-enable traps
+	WRITE_PAUSE
+
+	add	%sp, STACKFRAME_SZ, %o0
+	mov	%l1, %o1
+	mov	%l2, %o2
+	call	handle_sparc32_cas
+	 mov	%l0, %o3
+
+	RESTORE_ALL
+
 	/* This routine handles Hardware Divide By Zero Exceptions. */
 	.align	4
 	.globl	do_hw_divzero

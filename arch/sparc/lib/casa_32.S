@@ -22,6 +22,17 @@ ENTRY(__sparc32_casa)
 	 clr	%o0
 ENDPROC(__sparc32_casa)
 
+/* The same on a user address; ASI 0x0a is user data, as userspace uses. */
+ENTRY(__sparc32_casa_user)
+	/* nop + .balignl: LEON errata GRLIB-TN-0010 and TN-0011. */
+	nop
+	.balignl 16, 0x01000000
+4:	casa	[%o0] 0x0a, %o1, %o2
+	st	%o2, [%o3]
+	retl
+	 clr	%o0
+ENDPROC(__sparc32_casa_user)
+
 	.section .fixup,#alloc,#execinstr
 	.align	4
 2:	retl
@@ -31,4 +42,5 @@ ENDPROC(__sparc32_casa)
 	.section __ex_table,#alloc
 	.align	4
 	.word	1b, 2b
+	.word	4b, 2b
 	.previous

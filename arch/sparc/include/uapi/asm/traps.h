@@ -81,6 +81,7 @@
 #define SP_TRAP_SOLARIS 0x88         /* Solaris System Call */
 #define SP_TRAP_NETBSD  0x89         /* NetBSD System Call */
 #define SP_TRAP_LINUX   0x90         /* Linux System Call */
+#define SP_TRAP_CAS     0x91         /* Compare and swap, issued as "ta 0x11" */
 
 /* Names used for compatibility with SunOS */
 #define ST_SYSCALL              0x00
@@ -104,7 +105,7 @@
 	 (level > SP_TRAP_BADFL && level < SP_TRAP_CPEXP) || \
 	 (level > SP_TRAP_DMM && level < SP_TRAP_IMM) || \
 	 (level > SP_TRAP_IMM && level < SP_TRAP_SUNOS) || \
-	 (level > SP_TRAP_LINUX && level < SP_TRAP_KBPT1))
+	 (level > SP_TRAP_CAS && level < SP_TRAP_KBPT1))
 
 /* Is this a Hardware trap? */
 #define HW_TRAP_P(level) ((level > 0) && (level < SP_TRAP_SUNOS))

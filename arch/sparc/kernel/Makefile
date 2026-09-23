@@ -18,6 +18,7 @@ CFLAGS_REMOVE_pcr.o := -pg
 endif
 
 obj-y                   := head_$(BITS).o
+obj-$(CONFIG_SPARC32)   += cas_32.o
 obj-$(CONFIG_SPARC64)   += urtt_fill.o
 obj-$(CONFIG_SPARC32)   += entry.o wof.o wuf.o
 obj-$(CONFIG_SPARC32)   += etrap_32.o
