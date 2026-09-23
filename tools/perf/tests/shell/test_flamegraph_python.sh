@@ -49,11 +49,11 @@ test_file_mode() {
 	fi
 
 	# Run the script, dump as json to temp_json (testing both file mode and pipe '-' mode)
-	if ! "$PYTHON" "$script_path" -i "${temp_data}" -f json -o "${temp_json}" >/dev/null; then
+	if ! perf script flamegraph -i "${temp_data}" -f json -o "${temp_json}" >/dev/null; then
 		echo "File mode JSON test failed."
 		err=1
 	elif ! perf record -g -o - -- perf test -w noploop 2>/dev/null | \
-		"$PYTHON" "$script_path" -i - -f json -o "${temp_json}" >/dev/null; then
+		perf script flamegraph -i - -f json -o "${temp_json}" >/dev/null; then
 		echo "Pipe stdin JSON mode test failed."
 		err=1
 	else
@@ -72,7 +72,7 @@ assert d.get('v', 0) > 0 or len(d.get('c', [])) > 0" "${temp_json}" >/dev/null 2
 	fi
 
 	# Run the script, dump as html to temp_html using MINIMAL_HTML fallback
-	if ! "$PYTHON" "$script_path" -i "${temp_data}" -f html \
+	if ! perf script flamegraph -i "${temp_data}" -f html \
 		--template /nonexistent/template.html -o "${temp_html}" >/dev/null 2>&1; then
 		echo "File mode HTML test failed."
 		err=1
@@ -93,7 +93,7 @@ const opts = /** @options_json **/;
 const data = /** @flamegraph_json **/;
 </script></body></html>
 EOF
-	if ! "$PYTHON" "$script_path" -i "${temp_data}" -f html --template "${temp_tpl}" \
+	if ! perf script flamegraph -i "${temp_data}" -f html --template "${temp_tpl}" \
 		--colorscheme blue-green -o "${temp_html}" >/dev/null 2>&1; then
 		echo "Custom template HTML test failed."
 		err=1
