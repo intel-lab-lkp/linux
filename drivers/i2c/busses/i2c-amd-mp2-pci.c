@@ -209,7 +209,7 @@ static irqreturn_t amd_mp2_irq_isr(int irq, void *dev)
 	enum irqreturn ret = IRQ_NONE;
 
 	for (bus_id = 0; bus_id < 2; bus_id++) {
-		i2c_common = privdata->busses[bus_id];
+		i2c_common = READ_ONCE(privdata->busses[bus_id]);
 		if (!i2c_common)
 			continue;
 
@@ -268,7 +268,9 @@ int amd_mp2_unregister_cb(struct amd_i2c_common *i2c_common)
 {
 	struct amd_mp2_dev *privdata = i2c_common->mp2_dev;
 
-	privdata->busses[i2c_common->bus_id] = NULL;
+	WRITE_ONCE(privdata->busses[i2c_common->bus_id], NULL);
+
+	synchronize_irq(privdata->dev_irq);
 
 	return 0;
 }
