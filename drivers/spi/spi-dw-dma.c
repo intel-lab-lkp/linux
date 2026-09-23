@@ -294,19 +294,28 @@ static inline bool dw_spi_dma_tx_busy(struct dw_spi *dws)
 		(DW_SPI_SR_BUSY | DW_SPI_SR_TF_EMPT)) != DW_SPI_SR_TF_EMPT;
 }
 
-static int dw_spi_dma_wait_tx_done(struct dw_spi *dws,
-				   struct spi_transfer *xfer)
+static int dw_spi_dma_wait_tx_done(struct dw_spi *dws, u32 speed_hz)
 {
 	int retry = DW_SPI_WAIT_RETRIES;
 	struct spi_delay delay;
+	unsigned long ns, us;
 	u32 nents;
 
-	nents = dw_readl(dws, DW_SPI_TXFLR);
-	delay.unit = SPI_DELAY_UNIT_SCK;
-	delay.value = nents * dws->n_bytes * BITS_PER_BYTE;
+	/* Account for the word that may still be in the shift register */
+	nents = dw_readl(dws, DW_SPI_TXFLR) + 1;
+	ns = DIV_ROUND_UP(NSEC_PER_SEC, speed_hz) * nents *
+	     dws->n_bytes * BITS_PER_BYTE;
+	if (ns <= NSEC_PER_USEC) {
+		delay.unit = SPI_DELAY_UNIT_NSECS;
+		delay.value = ns;
+	} else {
+		us = DIV_ROUND_UP(ns, NSEC_PER_USEC);
+		delay.unit = SPI_DELAY_UNIT_USECS;
+		delay.value = clamp_val(us, 0, USHRT_MAX);
+	}
 
 	while (dw_spi_dma_tx_busy(dws) && retry--)
-		spi_delay_exec(&delay, xfer);
+		spi_delay_exec(&delay, NULL);
 
 	if (retry < 0) {
 		dev_err(&dws->ctlr->dev, "Tx hanged up\n");
@@ -667,7 +676,7 @@ static int dw_spi_dma_transfer(struct dw_spi *dws, struct spi_transfer *xfer)
 		return ret;
 
 	if (dws->ctlr->cur_msg->status == -EINPROGRESS) {
-		ret = dw_spi_dma_wait_tx_done(dws, xfer);
+		ret = dw_spi_dma_wait_tx_done(dws, xfer->effective_speed_hz);
 		if (ret)
 			return ret;
 	}
@@ -688,6 +697,258 @@ static void dw_spi_dma_stop(struct dw_spi *dws)
 		dmaengine_terminate_sync(dws->rxchan);
 		clear_bit(DW_SPI_RX_BUSY, &dws->dma_chan_busy);
 	}
+}
+
+static int dw_spi_enh_mem_dma_caps_init(struct dw_spi *dws)
+{
+	struct dma_slave_caps caps;
+	int ret;
+
+	if (dws->tx_dir) {
+		ret = dma_get_slave_caps(dws->txchan, &caps);
+		if (ret)
+			return ret;
+
+		if (!(caps.directions & BIT(DMA_MEM_TO_DEV)))
+			return -ENXIO;
+
+		dws->dma_sg_burst = caps.max_sg_burst;
+		dws->dma_addr_widths = caps.dst_addr_widths;
+	} else {
+		ret = dma_get_slave_caps(dws->rxchan, &caps);
+		if (ret)
+			return ret;
+
+		if (!(caps.directions & BIT(DMA_DEV_TO_MEM)))
+			return -ENXIO;
+
+		dws->dma_sg_burst = caps.max_sg_burst;
+		dws->dma_addr_widths = caps.src_addr_widths;
+	}
+
+	return 0;
+}
+
+static void dw_spi_enh_mem_dma_maxburst_init(struct dw_spi *dws)
+{
+	struct dma_slave_caps caps;
+	u32 max_burst, def_burst;
+	int ret;
+
+	def_burst = dws->fifo_len / 2;
+
+	if (dws->tx_dir) {
+		ret = dma_get_slave_caps(dws->txchan, &caps);
+		max_burst = (!ret && caps.max_burst) ? caps.max_burst
+						     : DW_SPI_TX_BURST_LEVEL;
+		dws->txburst = min(max_burst, def_burst);
+		dw_writel(dws, DW_SPI_DMATDLR, dws->txburst);
+	} else {
+		ret = dma_get_slave_caps(dws->rxchan, &caps);
+		max_burst = (!ret && caps.max_burst) ? caps.max_burst
+						     : DW_SPI_RX_BURST_LEVEL;
+		dws->rxburst = min(max_burst, def_burst);
+		dw_writel(dws, DW_SPI_DMARDLR, dws->rxburst - 1);
+	}
+}
+
+static int dw_spi_enh_mem_dma_init_generic(struct device *dev, struct dw_spi *dws)
+{
+	int ret;
+
+	if (dws->tx_dir) {
+		if (dws->txchan)
+			return -EBUSY;
+
+		dws->txchan = dma_request_chan(dev, "tx");
+		if (IS_ERR(dws->txchan)) {
+			ret = PTR_ERR(dws->txchan);
+			dws->txchan = NULL;
+			goto err_exit;
+		}
+	} else {
+		if (dws->rxchan)
+			return -EBUSY;
+
+		dws->rxchan = dma_request_chan(dev, "rx");
+		if (IS_ERR(dws->rxchan)) {
+			ret = PTR_ERR(dws->rxchan);
+			dws->rxchan = NULL;
+			goto err_exit;
+		}
+	}
+
+	init_completion(&dws->dma_completion);
+
+	ret = dw_spi_enh_mem_dma_caps_init(dws);
+	if (ret)
+		goto free_txrxchan;
+
+	dw_spi_enh_mem_dma_maxburst_init(dws);
+
+	if (dws->tx_dir)
+		dws->ctlr->dma_tx = dws->txchan;
+	else
+		dws->ctlr->dma_rx = dws->rxchan;
+
+	return 0;
+
+free_txrxchan:
+	if (dws->tx_dir) {
+		dma_release_channel(dws->txchan);
+		dws->txchan = NULL;
+	} else {
+		dma_release_channel(dws->rxchan);
+		dws->rxchan = NULL;
+	}
+err_exit:
+	return ret;
+}
+
+static void dw_spi_enh_mem_dma_exit(struct dw_spi *dws)
+{
+	if (dws->tx_dir) {
+		if (!dws->txchan)
+			return;
+
+		dmaengine_terminate_sync(dws->txchan);
+		dma_release_channel(dws->txchan);
+		dws->txchan = NULL;
+		dws->ctlr->dma_tx = NULL;
+	} else {
+		if (!dws->rxchan)
+			return;
+
+		dmaengine_terminate_sync(dws->rxchan);
+		dma_release_channel(dws->rxchan);
+		dws->rxchan = NULL;
+		dws->ctlr->dma_rx = NULL;
+	}
+}
+
+static int dw_spi_enh_mem_dma_setup(struct dw_spi *dws)
+{
+	u16 dma_ctrl, level;
+	int ret;
+
+	/* Setup DMA channels */
+	if (dws->tx_dir) {
+		ret = dw_spi_dma_config_tx(dws);
+		if (ret)
+			return ret;
+
+		dma_ctrl = DW_SPI_DMACR_TDMAE;
+	} else {
+		ret = dw_spi_dma_config_rx(dws);
+		if (ret)
+			return ret;
+
+		dma_ctrl = DW_SPI_DMACR_RDMAE;
+	}
+
+	dw_writel(dws, DW_SPI_DMACR, dma_ctrl);
+
+	reinit_completion(&dws->dma_completion);
+
+	level = min_t(unsigned int, dws->fifo_len / 2, dws->tx_len);
+	dw_writel(dws, DW_SPI_TXFTLR, level);
+
+	level = min_t(unsigned int, dws->fifo_len / 2, dws->rx_len);
+	dw_writel(dws, DW_SPI_RXFTLR, level ? level - 1 : 0);
+
+	return 0;
+}
+
+static bool dw_spi_enh_mem_can_dma(struct spi_controller *ctlr)
+{
+	struct dw_spi *dws = spi_controller_get_devdata(ctlr);
+	enum dma_slave_buswidth dma_bus_width;
+
+	if (dws->tx_dir) {
+		if (dws->tx_len <= dws->fifo_len)
+			return false;
+	} else {
+		if (dws->rx_len <= dws->fifo_len)
+			return false;
+	}
+
+	dma_bus_width = dw_spi_dma_convert_width(dws->n_bytes);
+
+	return dws->dma_addr_widths & BIT(dma_bus_width);
+}
+
+static void dw_spi_enh_mem_dma_stop(struct dw_spi *dws)
+{
+	if (dws->tx_dir) {
+		if (test_bit(DW_SPI_TX_BUSY, &dws->dma_chan_busy)) {
+			dmaengine_terminate_sync(dws->txchan);
+			clear_bit(DW_SPI_TX_BUSY, &dws->dma_chan_busy);
+		}
+	} else {
+		if (test_bit(DW_SPI_RX_BUSY, &dws->dma_chan_busy)) {
+			dmaengine_terminate_sync(dws->rxchan);
+			clear_bit(DW_SPI_RX_BUSY, &dws->dma_chan_busy);
+		}
+	}
+}
+
+static int dw_spi_enh_mem_dma_transfer(struct spi_mem *mem, const struct spi_mem_op *op)
+{
+	struct spi_controller *ctlr = mem->spi->controller;
+	struct dw_spi *dws = spi_controller_get_devdata(ctlr);
+	struct sg_table sgt;
+	int ret;
+
+	if (dws->tx_dir) {
+		ret = spi_controller_dma_map_mem_op_data(ctlr, op, &sgt);
+		if (ret)
+			goto err_clear_dmac;
+
+		ret = dw_spi_dma_submit_tx(dws, sgt.sgl, sgt.nents);
+		if (ret)
+			goto err_unmap;
+
+		dma_async_issue_pending(dws->txchan);
+
+		ret = dw_spi_dma_wait(dws, dws->tx_len, dws->current_freq);
+		if (ret)
+			goto err_terminate;
+
+		ret = dw_spi_dma_wait_tx_done(dws, dws->current_freq);
+		if (ret)
+			goto err_terminate;
+
+		goto err_unmap;
+	} else {
+		ret = spi_controller_dma_map_mem_op_data(ctlr, op, &sgt);
+		if (ret)
+			goto err_clear_dmac;
+
+		ret = dw_spi_dma_submit_rx(dws, sgt.sgl, sgt.nents);
+		if (ret)
+			goto err_unmap;
+
+		dma_async_issue_pending(dws->rxchan);
+
+		ret = dw_spi_dma_wait(dws, dws->rx_len, dws->current_freq);
+		if (ret)
+			goto err_terminate;
+
+		ret = dw_spi_dma_wait_rx_done(dws);
+		if (ret)
+			goto err_terminate;
+
+		goto err_unmap;
+	}
+
+err_terminate:
+	dw_spi_enh_mem_dma_stop(dws);
+err_unmap:
+	spi_controller_dma_unmap_mem_op_data(ctlr, op, &sgt);
+err_clear_dmac:
+	dw_writel(dws, DW_SPI_DMACR, 0);
+
+	return ret;
 }
 
 static const struct dw_spi_dma_ops dw_spi_dma_mfld_ops = {
@@ -712,6 +973,12 @@ static const struct dw_spi_dma_ops dw_spi_dma_generic_ops = {
 	.can_dma	= dw_spi_can_dma,
 	.dma_transfer	= dw_spi_dma_transfer,
 	.dma_stop	= dw_spi_dma_stop,
+
+	.dma_enh_mem_init	= dw_spi_enh_mem_dma_init_generic,
+	.dma_enh_mem_exit	= dw_spi_enh_mem_dma_exit,
+	.dma_enh_mem_setup	= dw_spi_enh_mem_dma_setup,
+	.can_dma_enh_mem	= dw_spi_enh_mem_can_dma,
+	.dma_enh_mem_transfer	= dw_spi_enh_mem_dma_transfer,
 };
 
 void dw_spi_dma_setup_generic(struct dw_spi *dws)

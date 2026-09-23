@@ -970,6 +970,15 @@ static void dw_spi_enh_write_cmd_addr(struct dw_spi *dws, const struct spi_mem_o
 
 		dw_spi_set_cs(mem->spi, false);
 	}
+
+	/*
+	 * FIXME: The exact reason for this delay is not fully understood,
+	 * but empirical testing shows it significantly improves the stability
+	 * of read/write operations. Without this delay, occasional transfer
+	 * errors or timeouts may occur under certain conditions.
+	 * Keeping it as a safeguard based on practical validation.
+	 */
+	udelay(5);
 }
 
 static int dw_spi_exec_enh_mem_op(struct spi_mem *mem, const struct spi_mem_op *op)
@@ -980,6 +989,8 @@ static int dw_spi_exec_enh_mem_op(struct spi_mem *mem, const struct spi_mem_op *
 	struct dw_spi_cfg cfg = {0};
 	unsigned long long ms;
 	int ret;
+
+	dws->dma_mapped = false;
 
 	switch (op->data.buswidth) {
 	case 0:
@@ -1004,10 +1015,13 @@ static int dw_spi_exec_enh_mem_op(struct spi_mem *mem, const struct spi_mem_op *
 	cfg.dfs = 8;
 	cfg.freq = clamp(op->max_freq, 0U, dws->max_mem_freq);
 	cfg.ndf = op->data.nbytes;
-	if (op->data.dir == SPI_MEM_DATA_IN)
+	if (op->data.dir == SPI_MEM_DATA_IN) {
 		cfg.tmode = DW_SPI_CTRLR0_TMOD_RO;
-	else
+		dws->tx_dir = false;
+	} else {
 		cfg.tmode = DW_SPI_CTRLR0_TMOD_TO;
+		dws->tx_dir = true;
+	}
 
 	if (op->data.buswidth == op->addr.buswidth &&
 	    op->data.buswidth == op->cmd.buswidth)
@@ -1043,47 +1057,68 @@ static int dw_spi_exec_enh_mem_op(struct spi_mem *mem, const struct spi_mem_op *
 		}
 	}
 
-	dw_spi_enh_write_cmd_addr(dws, op, mem);
-
-	/*
-	 * FIXME: The exact reason for this delay is not fully understood,
-	 * but empirical testing shows it significantly improves the stability
-	 * of read/write operations. Without this delay, occasional transfer
-	 * errors or timeouts may occur under certain conditions.
-	 * Keeping it as a safeguard based on practical validation.
-	 */
-	udelay(5);
-
-	dw_spi_enh_irq_setup(dws);
-
-	/* Use timeout calculation from spi_transfer_wait() */
-	ms = 8LL * MSEC_PER_SEC * (dws->rx_len ? dws->rx_len : dws->tx_len);
-	do_div(ms, dws->current_freq);
-
-	/*
-	 * Increase it twice and add 200 ms tolerance, use
-	 * predefined maximum in case of overflow.
-	 */
-	ms += ms + 200;
-	if (ms > UINT_MAX)
-		ms = UINT_MAX;
-
-	ms = wait_for_completion_timeout(&ctlr->xfer_completion,
-					 msecs_to_jiffies(ms));
-	if (ms == 0) {
-		dw_spi_mask_intr(dws, 0xff);
-		synchronize_irq(dws->irq);
-		dws->rx = NULL;
-		dws->tx = NULL;
-		dws->rx_len = 0;
-		dws->tx_len = 0;
-		dw_spi_stop_mem_op(dws, mem->spi);
-		return -EIO;
+	if (dws->dma_ops && dws->dma_ops->dma_enh_mem_init &&
+	    dws->dma_ops->can_dma_enh_mem && op->data.nbytes > dws->fifo_len) {
+		ret = dws->dma_ops->dma_enh_mem_init(ctlr->dev.parent, dws);
+		if (ret) {
+			dev_dbg(&ctlr->dev, "DMA enh mem init failed (%d)\n", ret);
+		} else if (!dws->dma_ops->can_dma_enh_mem(ctlr)) {
+			/* Not worth a DMA transfer: give the channel back. */
+			dws->dma_ops->dma_enh_mem_exit(dws);
+		} else {
+			ret = dws->dma_ops->dma_enh_mem_setup(dws);
+			if (ret) {
+				/* fall back to the PIO/IRQ path */
+				dws->dma_ops->dma_enh_mem_exit(dws);
+				dev_err(&ctlr->dev, "DMA enh mem setup failed (%d)\n", ret);
+			} else {
+				dws->dma_mapped = true;
+			}
+		}
 	}
 
-	ret = dw_spi_wait_mem_op_done(dws);
+	if (dws->dma_mapped) {
+		dw_spi_enh_write_cmd_addr(dws, op, mem);
 
-	dw_spi_stop_mem_op(dws, mem->spi);
+		ret = dws->dma_ops->dma_enh_mem_transfer(mem, op);
+
+		dws->dma_ops->dma_enh_mem_exit(dws);
+
+		dw_spi_stop_mem_op(dws, mem->spi);
+	} else {
+		dw_spi_enh_write_cmd_addr(dws, op, mem);
+
+		dw_spi_enh_irq_setup(dws);
+
+		/* Use timeout calculation from spi_transfer_wait() */
+		ms = 8LL * MSEC_PER_SEC * (dws->rx_len ? dws->rx_len : dws->tx_len);
+		do_div(ms, dws->current_freq);
+
+		/*
+		 * Increase it twice and add 200 ms tolerance, use
+		 * predefined maximum in case of overflow.
+		 */
+		ms += ms + 200;
+		if (ms > UINT_MAX)
+			ms = UINT_MAX;
+
+		ms = wait_for_completion_timeout(&ctlr->xfer_completion,
+						 msecs_to_jiffies(ms));
+		if (ms == 0) {
+			dw_spi_mask_intr(dws, 0xff);
+			synchronize_irq(dws->irq);
+			dws->rx = NULL;
+			dws->tx = NULL;
+			dws->rx_len = 0;
+			dws->tx_len = 0;
+			dw_spi_stop_mem_op(dws, mem->spi);
+			return -EIO;
+		}
+
+		ret = dw_spi_wait_mem_op_done(dws);
+
+		dw_spi_stop_mem_op(dws, mem->spi);
+	}
 
 	return ret;
 }
