@@ -301,6 +301,7 @@ abort:
 
 /* Find the zone which holds a particular offset
  * Update *sectorp to be an offset in that zone
+ * Returns NULL if the sector is off the end of the array.
  */
 static struct strip_zone *find_zone(struct r0conf *conf,
 				    sector_t *sectorp)
@@ -315,7 +316,16 @@ static struct strip_zone *find_zone(struct r0conf *conf,
 				*sectorp = sector - z[i-1].zone_end;
 			return z + i;
 		}
-	BUG();
+	return NULL;
+}
+
+static void raid0_out_of_bounds(struct mddev *mddev, struct bio *bio)
+{
+	pr_err_ratelimited("md/raid0:%s: sector %llu out of bounds, array size %llu\n",
+			   mdname(mddev),
+			   (unsigned long long)bio->bi_iter.bi_sector,
+			   (unsigned long long)mddev->array_sectors);
+	bio_io_error(bio);
 }
 
 /*
@@ -471,6 +481,10 @@ static void raid0_handle_discard(struct mddev *mddev, struct bio *bio)
 
 	orig_start = start;
 	zone = find_zone(conf, &start);
+	if (!zone) {
+		raid0_out_of_bounds(mddev, bio);
+		return;
+	}
 
 	if (bio_end_sector(bio) > zone->zone_end) {
 		bio = bio_submit_split_bioset(bio,
@@ -566,6 +580,11 @@ static void raid0_map_submit_bio(struct mddev *mddev, struct bio *bio)
 	md_account_bio(mddev, &bio);
 
 	zone = find_zone(mddev->private, &sector);
+	if (!zone) {
+		raid0_out_of_bounds(mddev, bio);
+		return;
+	}
+
 	switch (conf->layout) {
 	case RAID0_ORIG_LAYOUT:
 		tmp_dev = map_sector(mddev, zone, bio_sector, &sector);
