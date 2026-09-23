@@ -1271,6 +1271,11 @@ __devm_cxl_add_dport(struct cxl_port *port, struct device *dport_dev,
 	if (!dport->rch)
 		devm_cxl_dport_ras_setup(dport);
 
+	rc = cxl_dport_map_cache_id_dc(dport);
+	if (rc)
+		dev_dbg(dport->dport_dev,
+			"Failed to map cache id decoder capability: %d\n", rc);
+
 	/* keep the group, and mark the end of devm actions */
 	cxl_dport_close_dr_group(dport, no_free_ptr(dport_dr_group));
 

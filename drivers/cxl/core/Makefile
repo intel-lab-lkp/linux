@@ -15,6 +15,7 @@ cxl_core-y += pci.o
 cxl_core-y += hdm.o
 cxl_core-y += pmu.o
 cxl_core-y += cdat.o
+cxl_core-y += cache.o
 cxl_core-$(CONFIG_TRACING) += trace.o
 cxl_core-$(CONFIG_CXL_REGION) += region.o region_pmem.o region_dax.o
 cxl_core-$(CONFIG_CXL_MCE) += mce.o

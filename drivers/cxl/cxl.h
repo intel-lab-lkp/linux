@@ -41,6 +41,8 @@ extern const struct nvdimm_security_ops *cxl_security_ops;
 
 #define   CXL_CM_CAP_CAP_ID_RAS 0x2
 #define   CXL_CM_CAP_CAP_ID_HDM 0x5
+#define   CXL_CM_CAP_CAP_ID_CACHE_ID_RT 0xD
+#define   CXL_CM_CAP_CAP_ID_CACHE_ID_DC 0xE
 #define   CXL_CM_CAP_CAP_HDM_VERSION 1
 
 /* HDM decoders CXL 2.0 8.2.5.12 CXL HDM Decoder Capability Structure */
@@ -222,6 +224,15 @@ static inline int ways_to_eiw(unsigned int ways, u8 *eiw)
 #define   CXLDEV_MBOX_BG_CMD_COMMAND_RC_MASK GENMASK_ULL(47, 32)
 #define   CXLDEV_MBOX_BG_CMD_COMMAND_VENDOR_MASK GENMASK_ULL(63, 48)
 #define CXLDEV_MBOX_PAYLOAD_OFFSET 0x20
+
+
+/* CXL 4.0 8.2.4.28.1 CXL Cache ID Route Table Capability Structure */
+#define CXL_CACHE_ID_RT_CAP_OFFSET 0x0
+#define   CXL_CACHE_ID_RT_CAP_TARGET_CNT GENMASK(4, 0)
+#define CXL_CACHE_ID_RT_TARGETN_OFFSET(n) (0x10 + (2 * (n)))
+
+/* CXL 4.0 8.2.4.29.1 CXL Cache ID Decoder Capability Structure */
+#define CXL_CACHE_ID_DC_CAPABILITY_LENGTH 0xC
 
 void cxl_probe_component_regs(struct device *dev, void __iomem *base,
 			      struct cxl_component_reg_map *map);
@@ -930,4 +941,14 @@ struct cxl_dport *devm_cxl_add_dport_by_dev(struct cxl_port *port,
 
 u16 cxl_gpf_get_dvsec(struct device *dev);
 
+#if IS_ENABLED(CONFIG_CXL_CACHE)
+int cxl_port_map_cache_id_rt(struct cxl_port *port);
+int cxl_dport_map_cache_id_dc(struct cxl_dport *dport);
+#else
+static inline int cxl_port_map_cache_id_rt(struct cxl_port *port)
+{ return -ENXIO; }
+static inline int cxl_dport_map_cache_id_dc(struct cxl_dport *dport)
+{ return -ENXIO; }
+#endif
+ 
 #endif /* __CXL_H__ */

@@ -281,6 +281,12 @@ static struct cxl_dport *cxl_port_add_dport(struct cxl_port *port,
 		 * on failure, or the device does not implement RAS registers.
 		 */
 		devm_cxl_port_ras_setup(port);
+
+		rc = cxl_port_map_cache_id_rt(port);
+		if (rc)
+			dev_dbg(&port->dev,
+				"Failed to map cache id route table capability: %d\n",
+				rc);
 	}
 
 	dport = devm_cxl_add_dport_by_dev(port, dport_dev);

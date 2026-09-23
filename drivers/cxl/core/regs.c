@@ -93,6 +93,27 @@ void cxl_probe_component_regs(struct device *dev, void __iomem *base,
 			length = CXL_RAS_CAPABILITY_LENGTH;
 			rmap = &map->ras;
 			break;
+		case CXL_CM_CAP_CAP_ID_CACHE_ID_RT: {
+			int target_cnt;
+
+			dev_dbg(dev,
+				"found Cache ID Route Table capability (0x%x)\n",
+				offset);
+
+			target_cnt = FIELD_GET(CXL_CACHE_ID_RT_CAP_TARGET_CNT,
+					       hdr);
+			length = 0x10 + 2 * target_cnt;
+			rmap = &map->cidrt;
+			break;
+		}
+		case CXL_CM_CAP_CAP_ID_CACHE_ID_DC:
+			dev_dbg(dev,
+				"found Cache ID Decoder capability (0x%x)\n",
+				offset);
+
+			length = CXL_CACHE_ID_DC_CAPABILITY_LENGTH;
+			rmap = &map->ciddc;
+			break;
 		default:
 			dev_dbg(dev, "Unknown CM cap ID: %d (0x%x)\n", cap_id,
 				offset);
@@ -212,6 +233,8 @@ int cxl_map_component_regs(const struct cxl_register_map *map,
 	} mapinfo[] = {
 		{ &map->component_map.hdm_decoder, &regs->hdm_decoder },
 		{ &map->component_map.ras, &regs->ras },
+		{ &map->component_map.cidrt, &regs->cidrt },
+		{ &map->component_map.ciddc, &regs->ciddc },
 	};
 	int i;
 
