@@ -823,6 +823,15 @@ int __arm_smmu_cmdq_issue_cmdlist(struct arm_smmu_device *smmu,
 		ret = arm_smmu_cmdq_poll_until_sync(smmu, cmdq, &llq);
 
 		/*
+		 * When the poll above timed out, the GERROR ISR might have been
+		 * delayed past the poll deadline, so the atc_sync_timeouts test
+		 * below could miss our ATC_INV timeout. Thus, drain any pending
+		 * CMDQ_ERR synchronously first via the per-cmdq callback.
+		 */
+		if (ret && cmdq->cmdq_err_handler)
+			cmdq->cmdq_err_handler(smmu, cmdq);
+
+		/*
 		 * Ensure that the read in __arm_smmu_cmdq_poll_until_msi() or
 		 * __arm_smmu_cmdq_poll_until_consumed() are completed, before
 		 * testing the atc_sync_timeouts bitmap below.
@@ -2362,6 +2371,26 @@ static irqreturn_t arm_smmu_priq_thread(int irq, void *dev)
 }
 
 static int arm_smmu_device_disable(struct arm_smmu_device *smmu);
+
+/* Drain a pending CMDQ_ERR, used by arm_smmu_cmdq_issue_cmdlist() */
+static void arm_smmu_cmdq_err_handler(struct arm_smmu_device *smmu,
+				      struct arm_smmu_cmdq *cmdq)
+{
+	u32 gerror, gerrorn;
+
+	guard(raw_spinlock_irqsave)(&cmdq->cmdq_err_lock);
+
+	gerror = readl_relaxed(smmu->base + ARM_SMMU_GERROR);
+	gerrorn = readl_relaxed(smmu->base + ARM_SMMU_GERRORN);
+
+	if (!((gerror ^ gerrorn) & GERROR_CMDQ_ERR))
+		return;
+
+	__arm_smmu_cmdq_skip_err(smmu, cmdq);
+
+	/* Toggle only the CMDQ_ERR bit; other bits are left for the ISR. */
+	writel(gerrorn ^ GERROR_CMDQ_ERR, smmu->base + ARM_SMMU_GERRORN);
+}
 
 static irqreturn_t arm_smmu_gerror_handler(int irq, void *dev)
 {
@@ -4584,7 +4613,7 @@ static int arm_smmu_init_queues(struct arm_smmu_device *smmu)
 	if (ret)
 		return ret;
 
-	ret = arm_smmu_cmdq_init(smmu, &smmu->cmdq, NULL);
+	ret = arm_smmu_cmdq_init(smmu, &smmu->cmdq, arm_smmu_cmdq_err_handler);
 	if (ret)
 		return ret;
 
