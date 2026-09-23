@@ -220,6 +220,8 @@ struct dma_fence_ops {
 	/**
 	 * @wait:
 	 *
+	 * DEPRECATED!
+	 *
 	 * Custom wait implementation, defaults to dma_fence_default_wait() if
 	 * not set.
 	 *
@@ -236,12 +238,18 @@ struct dma_fence_ops {
 	 * Implementing this callback prevents the fence from detaching after
 	 * signaling and so it is necessary for the module providing the
 	 * dma_fence_ops to stay loaded as long as the dma_fence exists.
+	 *
+	 * Deprecated for the reason mentioned above. No new users must be
+	 * implemented. Consumers of a fence can instead notify themselves by
+	 * registering a callback on the fence.
 	 */
 	signed long (*wait)(struct dma_fence *fence,
 			    bool intr, signed long timeout);
 
 	/**
 	 * @release:
+	 *
+	 * DEPRECATED!
 	 *
 	 * Called on destruction of fence to release additional resources.
 	 * Can be called from irq context.  This callback is optional. If it is
@@ -254,6 +262,12 @@ struct dma_fence_ops {
 	 *
 	 * If the callback is implemented the memory backing the dma_fence
 	 * object must be freed RCU safe.
+	 *
+	 * Deprecated because it prevents the producer of a fence from
+	 * unloading. No new users must be implemented. Parties with a
+	 * hypothetical need for this callback can instead simply and directly
+	 * perform their custom release operations one RCU grace period after
+	 * they have signaled the fence.
 	 */
 	void (*release)(struct dma_fence *fence);
 
