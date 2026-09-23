@@ -322,6 +322,8 @@
 			resets = <&rst SDMMC_RESET>, <&rst COMBOPHY_RESET>,
 				 <&rst SDMMC_OCP_RESET>;
 			reset-names = "sdhc-reset", "combophy", "sdmmc-ocp";
+			cdns,ddr50-use-lpbk-dqs = <0>;
+			cdns,ddr50-read-dqs-delay = <96>;
 
 			status = "disabled";
 		};
