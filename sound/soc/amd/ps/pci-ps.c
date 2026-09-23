@@ -738,6 +738,12 @@ static void snd_acp63_remove(struct pci_dev *pci)
 	int ret;
 
 	adata = pci_get_drvdata(pci);
+	/* Mask the interrupt sources before freeing the shared IRQ. */
+	writel(ACP_EXT_INTR_STAT_CLEAR_MASK,
+	       adata->acp63_base + ACP_EXTERNAL_INTR_STAT);
+	writel(0, adata->acp63_base + ACP_EXTERNAL_INTR_CNTL);
+	writel(0, adata->acp63_base + ACP_EXTERNAL_INTR_ENB);
+	devm_free_irq(&pci->dev, pci->irq, adata);
 	if (adata->sdw) {
 		amd_sdw_exit(adata);
 		platform_device_unregister(adata->sdw_dma_dev);
