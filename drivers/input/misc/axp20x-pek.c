@@ -85,6 +85,16 @@ static const struct axp20x_info axp221_info = {
 	.shutdown_mask = AXP20X_PEK_SHUTDOWN_MASK,
 };
 
+static const struct axp20x_info axp313a_info = {
+	/*
+	 * The AXP313a has no PEK key/startup/shutdown registers: AXP20X_PEK_KEY
+	 * (0x36) lies beyond the end of its register map (max_register =
+	 * AXP313A_IRQ_STATE, 0x21).  Leaving startup_time/shutdown_time unset
+	 * keeps the matching sysfs attributes from being created, so they
+	 * cannot fail with -EIO.
+	 */
+};
+
 static ssize_t axp20x_show_attr(struct device *dev,
 				const struct axp20x_time *time,
 				unsigned int mask, char *buf)
@@ -188,12 +198,35 @@ static DEVICE_ATTR(startup, 0644, axp20x_show_attr_startup,
 static DEVICE_ATTR(shutdown, 0644, axp20x_show_attr_shutdown,
 		   axp20x_store_attr_shutdown);
 
+static umode_t axp20x_attr_is_visible(struct kobject *kobj,
+				      struct attribute *attr, int n)
+{
+	struct device *dev = kobj_to_dev(kobj);
+	struct axp20x_pek *axp20x_pek = dev_get_drvdata(dev);
+
+	if (attr == &dev_attr_startup.attr && !axp20x_pek->info->startup_time)
+		return 0;
+	if (attr == &dev_attr_shutdown.attr && !axp20x_pek->info->shutdown_time)
+		return 0;
+
+	return attr->mode;
+}
+
 static struct attribute *axp20x_attrs[] = {
 	&dev_attr_startup.attr,
 	&dev_attr_shutdown.attr,
 	NULL,
 };
-ATTRIBUTE_GROUPS(axp20x);
+
+static const struct attribute_group axp20x_group = {
+	.attrs = axp20x_attrs,
+	.is_visible = axp20x_attr_is_visible,
+};
+
+static const struct attribute_group *axp20x_groups[] = {
+	&axp20x_group,
+	NULL,
+};
 
 static irqreturn_t axp20x_pek_irq(int irq, void *pwr)
 {
@@ -392,6 +425,10 @@ static const struct platform_device_id axp_pek_id_match[] = {
 	{
 		.name = "axp221-pek",
 		.driver_data = (kernel_ulong_t)&axp221_info,
+	},
+	{
+		.name = "axp313a-pek",
+		.driver_data = (kernel_ulong_t)&axp313a_info,
 	},
 	{ /* sentinel */ }
 };
