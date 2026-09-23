@@ -28,8 +28,8 @@ async_sum_product(struct page *dest, unsigned int d_off,
 	u8 ax, bx;
 	u8 *a, *b, *c;
 
-	if (dma)
-		unmap = dmaengine_get_unmap_data(dma->dev, 3, GFP_NOWAIT);
+	if (chan)
+		unmap = dmaengine_get_unmap_data(chan, 3, GFP_NOWAIT);
 
 	if (unmap) {
 		struct device *dev = dmaengine_get_dma_device(chan);
@@ -96,8 +96,8 @@ async_mult(struct page *dest, unsigned int d_off, struct page *src,
 	const u8 *qmul; /* Q multiplier table */
 	u8 *d, *s;
 
-	if (dma)
-		unmap = dmaengine_get_unmap_data(dma->dev, 3, GFP_NOWAIT);
+	if (chan)
+		unmap = dmaengine_get_unmap_data(chan, 3, GFP_NOWAIT);
 
 	if (unmap) {
 		dma_addr_t dma_dest[2];

@@ -656,7 +656,7 @@ static inline void dma_set_unmap(struct dma_async_tx_descriptor *tx,
 }
 
 struct dmaengine_unmap_data *
-dmaengine_get_unmap_data(struct device *dev, int nr, gfp_t flags);
+dmaengine_get_unmap_data(struct dma_chan *chan, int nr, gfp_t flags);
 void dmaengine_unmap_put(struct dmaengine_unmap_data *unmap);
 #else
 static inline void dma_set_unmap(struct dma_async_tx_descriptor *tx,
@@ -664,7 +664,7 @@ static inline void dma_set_unmap(struct dma_async_tx_descriptor *tx,
 {
 }
 static inline struct dmaengine_unmap_data *
-dmaengine_get_unmap_data(struct device *dev, int nr, gfp_t flags)
+dmaengine_get_unmap_data(struct dma_chan *chan, int nr, gfp_t flags)
 {
 	return NULL;
 }

@@ -794,7 +794,7 @@ static int mv_chan_memcpy_self_test(struct mv_xor_chan *mv_chan)
 		goto out;
 	}
 
-	unmap = dmaengine_get_unmap_data(dma_chan->device->dev, 2, GFP_KERNEL);
+	unmap = dmaengine_get_unmap_data(dma_chan, 2, GFP_KERNEL);
 	if (!unmap) {
 		err = -ENOMEM;
 		goto free_resources;
@@ -927,7 +927,7 @@ mv_chan_xor_self_test(struct mv_xor_chan *mv_chan)
 		goto out;
 	}
 
-	unmap = dmaengine_get_unmap_data(dma_chan->device->dev, src_count + 1,
+	unmap = dmaengine_get_unmap_data(dma_chan, src_count + 1,
 					 GFP_KERNEL);
 	if (!unmap) {
 		err = -ENOMEM;

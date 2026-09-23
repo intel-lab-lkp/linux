@@ -748,7 +748,7 @@ static int dmatest_func(void *data)
 			filltime = ktime_add(filltime, diff);
 		}
 
-		um = dmaengine_get_unmap_data(dma_dev, src->cnt + dst->cnt,
+		um = dmaengine_get_unmap_data(chan, src->cnt + dst->cnt,
 					      GFP_KERNEL);
 		if (!um) {
 			failed_tests++;

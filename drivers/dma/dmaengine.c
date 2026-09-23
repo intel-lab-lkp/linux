@@ -1474,7 +1474,7 @@ static int __init dmaengine_init_unmap_pool(void)
 }
 
 struct dmaengine_unmap_data *
-dmaengine_get_unmap_data(struct device *dev, int nr, gfp_t flags)
+dmaengine_get_unmap_data(struct dma_chan *chan, int nr, gfp_t flags)
 {
 	struct dmaengine_unmap_data *unmap;
 
@@ -1484,7 +1484,7 @@ dmaengine_get_unmap_data(struct device *dev, int nr, gfp_t flags)
 
 	memset(unmap, 0, sizeof(*unmap));
 	kref_init(&unmap->kref);
-	unmap->dev = dev;
+	unmap->dev = dmaengine_get_dma_device(chan);
 	unmap->map_cnt = nr;
 
 	return unmap;
