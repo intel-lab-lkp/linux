@@ -166,11 +166,11 @@ def process_line(root_directory, command_prefix, file_path):
         ValueError: Could not find the extracted file based on file_path and
             root_directory or file_directory.
     """
-    # The .cmd files are intended to be included directly by Make, so they
-    # escape the pound sign '#' as '$(pound)'. The compile_commands.json file
-    # is not interepreted by Make, so this code replaces the escaped version
-    # with '#'.
-    prefix = command_prefix.replace('$(pound)', '#')
+    # Undo the escaping performed by make-cmd in scripts/Kbuild.include.
+    # Decode both escapes in one pass to preserve a literal '$(pound)'.
+    prefix = re.sub(r'\$\$|\$\(pound\)',
+                    lambda match: '$' if match.group() == '$$' else '#',
+                    command_prefix)
 
     # Return the canonical path, eliminating any symbolic links encountered in the path.
     abs_path = os.path.realpath(os.path.join(root_directory, file_path))
