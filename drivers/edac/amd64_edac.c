@@ -2796,13 +2796,14 @@ static inline void decode_bus_error(int node_id, struct mce *m)
  * the instance_id. For example, instance_id=0xYXXXXX where Y is the channel
  * number.
  *
- * For DRAM ECC errors, the Chip Select number is given in bits [2:0] of
- * the MCA_SYND[ErrorInformation] field.
+ * For DRAM ECC errors, the Chip Select number is given in the low bits of
+ * the MCA_SYND[ErrorInformation] field. Only as many bits as the UMC has
+ * implemented chip selects are valid there.
  */
-static void umc_get_err_info(struct mce *m, struct err_info *err)
+static void umc_get_err_info(struct amd64_pvt *pvt, struct mce *m, struct err_info *err)
 {
 	err->channel = (m->ipid & GENMASK(31, 0)) >> 20;
-	err->csrow = m->synd & 0x7;
+	err->csrow = m->synd & (pvt->csels[0].b_cnt - 1);
 }
 
 static void decode_umc_error(int node_id, struct mce *m)
@@ -2841,7 +2842,7 @@ static void decode_umc_error(int node_id, struct mce *m)
 			err.err_code = ERR_CHANNEL;
 	}
 
-	pvt->ops->get_err_info(m, &err);
+	pvt->ops->get_err_info(pvt, m, &err);
 
 	a_err.addr = m->addr;
 	a_err.ipid = m->ipid;
@@ -3514,7 +3515,7 @@ static int umc_hw_info_get(struct amd64_pvt *pvt)
  * UMC1 CH[3:0] = 0x0025[3:0]000
  * UMC1 CH[7:4] = 0x0035[3:0]000
  */
-static void gpu_get_err_info(struct mce *m, struct err_info *err)
+static void gpu_get_err_info(struct amd64_pvt *pvt, struct mce *m, struct err_info *err)
 {
 	u8 ch = (m->ipid & GENMASK(31, 0)) >> 20;
 	u8 phy = ((m->ipid >> 12) & 0xf);
