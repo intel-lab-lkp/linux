@@ -118,6 +118,10 @@ static const char * const event_class_str[] = {
 
 static int arm_smmu_alloc_cd_tables(struct arm_smmu_master *master);
 static bool arm_smmu_ats_supported(struct arm_smmu_master *master);
+static struct arm_smmu_ste *
+arm_smmu_get_step_for_sid(struct arm_smmu_device *smmu, u32 sid);
+static struct arm_smmu_domain *
+to_smmu_domain_devices(struct iommu_domain *domain);
 
 static void parse_driver_options(struct arm_smmu_device *smmu)
 {
@@ -966,12 +970,25 @@ static void arm_smmu_cmdq_batch_init_cmd(struct arm_smmu_device *smmu,
 	cmds->has_ats = false;
 }
 
+static void arm_smmu_cmdq_batch_retry(struct arm_smmu_device *smmu,
+				      struct arm_smmu_cmdq_batch *cmds);
+
 static int arm_smmu_cmdq_batch_issue(struct arm_smmu_device *smmu,
 				     struct arm_smmu_cmdq_batch *cmds,
 				     bool sync)
 {
-	return arm_smmu_cmdq_issue_cmdlist(smmu, cmds->cmdq, cmds->cmds,
-					   cmds->num, sync);
+	int ret = arm_smmu_cmdq_issue_cmdlist(smmu, cmds->cmdq, cmds->cmds,
+					      cmds->num, sync);
+
+	/*
+	 * The CMDQ HW reports an ATC invalidation timeout at the trailing
+	 * CMD_SYNC, not at the failing CMD_ATC_INV. Re-issue each unique ATS
+	 * SID in the batch to identify the unresponsive master and block its
+	 * ATS so subsequent invalidations make forward progress.
+	 */
+	if (ret == -EIO && cmds->has_ats)
+		arm_smmu_cmdq_batch_retry(smmu, cmds);
+	return ret;
 }
 
 static bool arm_smmu_cmdq_batch_force_sync(struct arm_smmu_device *smmu,
@@ -993,6 +1010,10 @@ static bool arm_smmu_cmdq_batch_force_sync(struct arm_smmu_device *smmu,
 	 */
 	if (cmds->num == CMDQ_BATCH_ENTRIES &&
 	    arm_smmu_erratum_cmd_needs_repeating(&cmds->cmds[0]))
+		return true;
+
+	/* ATC_INV timeout is reported to CMD_SYNC; catch at the call site */
+	if (cmds->num == CMDQ_BATCH_ENTRIES && cmds->has_ats)
 		return true;
 
 	return false;
@@ -1068,7 +1089,11 @@ static inline struct arm_smmu_inv *
 arm_smmu_invs_iter_next(struct arm_smmu_invs *invs, size_t next, size_t *idx)
 {
 	while (true) {
-		if (next >= invs->num_invs) {
+		/*
+		 * Lockless readers (arm_smmu_invs_set_ats_broken) pair with the
+		 * WRITE_ONCE() in arm_smmu_invs_unref(); num_invs only shrinks.
+		 */
+		if (next >= READ_ONCE(invs->num_invs)) {
 			*idx = next;
 			return NULL;
 		}
@@ -2556,6 +2581,177 @@ static int arm_smmu_atc_inv_master(struct arm_smmu_master *master,
 						      ssid));
 
 	return arm_smmu_cmdq_batch_submit(master->smmu, &cmds);
+}
+
+static void arm_smmu_invs_set_ats_broken(struct arm_smmu_invs *invs,
+					 struct arm_smmu_device *smmu, u32 sid)
+{
+	struct arm_smmu_inv *inv;
+	size_t i;
+
+	/* arm_smmu_atc_inv_master() submits batches with invs=NULL */
+	if (!invs)
+		return;
+
+	/*
+	 * invs->rwlock is deliberately not taken: the caller holds one domain's
+	 * read side for the timed-out batch, then taking another domain's write
+	 * side while a concurrent timeout does the reverse would ABBA-deadlock.
+	 *
+	 * This indicates some potential races, but they are harmless since EATS
+	 * was already cleared:
+	 *  - WRITE_ONCE() may hit a stale invs copy if an attach just installed
+	 *    a new invs, which might result in another ATC_INV timeout.
+	 *  - a concurrent invalidation may still issue an ATC_INV that may time
+	 *    out again.
+	 */
+	arm_smmu_invs_for_each_entry(invs, i, inv) {
+		u8 type = arm_smmu_inv_type(inv);
+
+		if (inv->smmu == smmu && inv->id == sid &&
+		    (type == INV_TYPE_ATS || type == INV_TYPE_ATS_FULL))
+			WRITE_ONCE(inv->type, INV_TYPE_ATS_BROKEN);
+	}
+}
+
+/* Find the master by SID and block its ATS at the SMMU */
+static void arm_smmu_quarantine_ats(struct arm_smmu_device *smmu, u32 stream_id)
+{
+	struct arm_smmu_cmd cmd = arm_smmu_make_cmd_op(CMDQ_OP_CFGI_STE);
+	struct arm_smmu_master_domain *md;
+	struct arm_smmu_cmdq_batch cmds;
+	struct arm_smmu_master *master;
+	struct arm_smmu_invs *invs;
+	unsigned long flags;
+	int i;
+
+	/*
+	 * The in-place STE.EATS clear relies on try_cmpxchg64(), which is UB
+	 * on Non-Cacheable memory. Leave a non-coherent SMMU unquarantined:
+	 * its invalidations keep issuing ATC_INV and reporting the timeouts.
+	 */
+	if (!(smmu->features & ARM_SMMU_FEAT_COHERENCY))
+		return;
+
+	guard(spinlock_irqsave)(&smmu->streams_lock);
+	master = arm_smmu_find_master(smmu, stream_id);
+	/*
+	 * A concurrent hot-unplug can release the master while a stale ATS
+	 * entry for it still lingers in the invs snapshot being walked here.
+	 */
+	if (!master)
+		return;
+
+	/* Clear STE.EATS for every SID and sync to the SMMU */
+	arm_smmu_cmdq_batch_init_cmd(smmu, &cmds, &cmd);
+
+	for (i = 0; i < master->num_streams; i++) {
+		u32 sid = master->streams[i].id;
+		struct arm_smmu_ste *ste = arm_smmu_get_step_for_sid(smmu, sid);
+		__le64 old, new;
+
+		/*
+		 * A concurrent arm_smmu_write_ste() of a domain attachment may
+		 * overwrite the data[1] and set EATS, which is recoverable by
+		 * another ATC_INV issued by its arm_smmu_attach_commit().
+		 */
+		old = READ_ONCE(ste->data[1]);
+		do {
+			new = old & ~cpu_to_le64(STRTAB_STE_1_EATS);
+		} while (!try_cmpxchg64(&ste->data[1], &old, new));
+
+		arm_smmu_cmdq_batch_add_cmd(
+			smmu, &cmds, arm_smmu_make_cmd_cfgi_ste(sid, true));
+	}
+
+	/*
+	 * Only proceed to mark the entries broken if the STE.EATS clear above
+	 * is confirmed; otherwise return so invalidations keep issuing ATC_INV
+	 * (and re-quarantine) until ATS is actually disabled.
+	 */
+	if (arm_smmu_cmdq_batch_submit(smmu, &cmds)) {
+		dev_err_ratelimited(smmu->dev,
+				    "failed to disable ATS for master\n");
+		return;
+	}
+
+	/*
+	 * Mark this master's ATS entries broken in every domain it is attached,
+	 * so later invalidations skip the ATC_INV that would time out again.
+	 */
+	rcu_read_lock();
+	spin_lock_irqsave(&master->master_domains_lock, flags);
+	list_for_each_entry(md, &master->master_domains, master_elm) {
+		struct arm_smmu_domain *smmu_domain =
+			to_smmu_domain_devices(md->domain);
+
+		if (!smmu_domain)
+			continue;
+		invs = rcu_dereference(smmu_domain->invs);
+		for (i = 0; i < master->num_streams; i++)
+			arm_smmu_invs_set_ats_broken(invs, smmu,
+						     master->streams[i].id);
+	}
+	spin_unlock_irqrestore(&master->master_domains_lock, flags);
+	rcu_read_unlock();
+}
+
+/* Re-issue every unique ATS SID in @cmds to identify and quarantine masters. */
+static void arm_smmu_cmdq_batch_retry(struct arm_smmu_device *smmu,
+				      struct arm_smmu_cmdq_batch *cmds)
+{
+	struct arm_smmu_cmd atc = {};
+	u32 last_sid = 0;
+	int nr_sids = 0;
+	int i;
+
+	/*
+	 * Count unique Stream IDs, taking advantage of the sorted commands. An
+	 * ATS-capable PCI device rarely has multiple SIDs, so a batch commonly
+	 * carries a single SID, where a re-issue probe would be pointless.
+	 */
+	for (i = 0; i < cmds->num; i++) {
+		u32 sid;
+
+		/* Only ATC_INV commands can time out */
+		if (FIELD_GET(CMDQ_0_OP, cmds->cmds[i].data[0]) !=
+		    CMDQ_OP_ATC_INV)
+			continue;
+
+		sid = FIELD_GET(CMDQ_ATC_0_SID, cmds->cmds[i].data[0]);
+		if (!nr_sids || sid != last_sid) {
+			nr_sids++;
+			last_sid = sid;
+		}
+	}
+
+	/* The timed-out CMD_SYNC already identifies the lone Stream ID */
+	if (nr_sids == 1) {
+		arm_smmu_quarantine_ats(smmu, last_sid);
+		return;
+	}
+
+	for (i = 0; i < cmds->num; i++) {
+		u32 sid;
+
+		if (FIELD_GET(CMDQ_0_OP, cmds->cmds[i].data[0]) !=
+		    CMDQ_OP_ATC_INV)
+			continue;
+
+		/*
+		 * One retry per Stream ID. So, only try the first command since
+		 * commands are sorted. And each dead master costs one CMD_SYNC,
+		 * bounded by its PCIe Completion Timeout (usually <= 250ms).
+		 */
+		sid = FIELD_GET(CMDQ_ATC_0_SID, cmds->cmds[i].data[0]);
+		if (atc.data[0] &&
+		    sid == FIELD_GET(CMDQ_ATC_0_SID, atc.data[0]))
+			continue;
+
+		atc = cmds->cmds[i];
+		if (arm_smmu_cmdq_issue_cmd_p(smmu, &atc, true) == -EIO)
+			arm_smmu_quarantine_ats(smmu, sid);
+	}
 }
 
 /* IO_PGTABLE API */
