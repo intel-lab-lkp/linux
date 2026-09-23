@@ -1057,7 +1057,7 @@ static void flow_offload_work_handler(struct work_struct *work)
 			WARN_ON_ONCE(1);
 	}
 
-	clear_bit(NF_FLOW_HW_PENDING, &offload->flow->flags);
+	clear_bit(NF_FLOW_PENDING, &offload->flow->flags);
 	if (offload->cmd == FLOW_CLS_DESTROY) {
 		/* Publish after the worker's last flow access. */
 		smp_mb__before_atomic();
@@ -1089,12 +1089,12 @@ nf_flow_offload_work_alloc(struct nf_flowtable *flowtable,
 {
 	struct flow_offload_work *offload;
 
-	if (test_and_set_bit(NF_FLOW_HW_PENDING, &flow->flags))
+	if (test_and_set_bit(NF_FLOW_PENDING, &flow->flags))
 		return NULL;
 
 	offload = kmalloc_obj(struct flow_offload_work, GFP_ATOMIC);
 	if (!offload) {
-		clear_bit(NF_FLOW_HW_PENDING, &flow->flags);
+		clear_bit(NF_FLOW_PENDING, &flow->flags);
 		return NULL;
 	}
 
