@@ -17,6 +17,7 @@ skipped=0
 
 TEST_NAMES=(
 	"luo_kexec_simple"
+	"luo_kexec_tmpfs"
 	"luo_multi_session"
 	"luo_stress_files"
 	"luo_stress_sessions"
