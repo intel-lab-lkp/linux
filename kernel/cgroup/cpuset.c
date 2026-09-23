@@ -1929,6 +1929,17 @@ static int update_parent_effective_cpumask(struct cpuset *cs, int cmd,
 			    /* Adding to parent means adding isolated CPUs */
 			    !isolated_cpus_can_update(tmp->addmask, tmp->delmask))
 				part_error = PERR_HKEEPING;
+			if (part_error == PERR_HKEEPING) {
+				/*
+				 * Fall back to returning all the granted
+				 * CPUs to the parent instead of applying
+				 * the pending change.
+				 */
+				deleting = false;
+				adding = cpumask_and(tmp->addmask,
+						     cs->effective_xcpus,
+						     parent->effective_xcpus);
+			}
 		}
 
 		/*
