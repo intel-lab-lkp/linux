@@ -273,7 +273,9 @@ static int yoga_c630_ucsi_probe(struct auxiliary_device *adev,
 	return 0;
 
 err_ucsi_unregister:
+	yoga_c630_ec_unregister_notify(uec->ec, &uec->nb);
 	ucsi_unregister(uec->ucsi);
+	goto err_destroy;
 
 err_unregister:
 	yoga_c630_ec_unregister_notify(uec->ec, &uec->nb);
@@ -288,8 +290,8 @@ static void yoga_c630_ucsi_remove(struct auxiliary_device *adev)
 {
 	struct yoga_c630_ucsi *uec = auxiliary_get_drvdata(adev);
 
-	ucsi_unregister(uec->ucsi);
 	yoga_c630_ec_unregister_notify(uec->ec, &uec->nb);
+	ucsi_unregister(uec->ucsi);
 	ucsi_destroy(uec->ucsi);
 }
 
