@@ -1699,6 +1699,8 @@ static void remote_cpus_update(struct cpuset *cs, struct cpumask *xcpus,
 		else if ((prs == PRS_ISOLATED) &&
 			 !isolated_cpus_can_update(tmp->addmask, tmp->delmask))
 			WRITE_ONCE(cs->prs_err, PERR_HKEEPING);
+		else if (prstate_housekeeping_conflict(prs, tmp->addmask))
+			WRITE_ONCE(cs->prs_err, PERR_HKEEPING);
 		if (cs->prs_err)
 			goto invalidate;
 	}
