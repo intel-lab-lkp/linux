@@ -48,6 +48,7 @@ struct drm_display_mode;
 struct drm_mode_create_dumb;
 struct drm_printer;
 struct sg_table;
+struct srcu_struct;
 
 /**
  * enum drm_driver_feature - feature flags
@@ -254,6 +255,28 @@ struct drm_driver {
 	 * managed resources functions.
 	 */
 	void (*release) (struct drm_device *);
+
+	/**
+	 * @release_srcu:
+	 *
+	 * Optional driver-owned SRCU domain used to synchronize completion of
+	 * the @release callback and drm managed release actions with
+	 * drm_dev_release_barrier().
+	 *
+	 * Left unset, @release and drm managed release actions for this
+	 * driver's devices aren't synchronized with drm_dev_release_barrier()
+	 * at all, and calling drm_dev_release_barrier() for this driver is a
+	 * no-op that triggers a warning.
+	 *
+	 * Drivers that want to use drm_dev_release_barrier(), for example to
+	 * help determine when it's safe to unload the driver module, should
+	 * define their own static SRCU domain (DEFINE_STATIC_SRCU()) and set
+	 * this field to point at it. Each driver should use its own domain,
+	 * so that drm_dev_release_barrier() only waits for that driver's own
+	 * release callbacks, rather than also for unrelated drivers sharing
+	 * the same domain.
+	 */
+	struct srcu_struct *release_srcu;
 
 	/**
 	 * @master_set:
@@ -485,6 +508,7 @@ void drm_dev_exit(int idx);
 void drm_dev_unplug(struct drm_device *dev);
 int drm_dev_wedged_event(struct drm_device *dev, unsigned long method,
 			 struct drm_wedge_task_info *info);
+void drm_dev_release_barrier(const struct drm_driver *driver);
 
 /**
  * drm_dev_is_unplugged - is a DRM device unplugged
