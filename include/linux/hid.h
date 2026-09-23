@@ -790,7 +790,7 @@ struct hid_parser {
 	struct hid_global     global_stack[HID_GLOBAL_STACK_SIZE];
 	unsigned int          global_stack_ptr;
 	struct hid_local      local;
-	unsigned int         *collection_stack;
+	unsigned int         *collection_stack __counted_by_ptr(collection_stack_size);
 	unsigned int          collection_stack_ptr;
 	unsigned int          collection_stack_size;
 	struct hid_device    *device;
