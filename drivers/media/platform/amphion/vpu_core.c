@@ -299,21 +299,23 @@ static void vpu_core_put_vpu(struct vpu_core *core)
 	core->vpu->put_vpu(core->vpu);
 }
 
+static void vpu_core_cancel_work(struct vpu_core *core);
+
 static int vpu_core_unregister(struct device *dev, struct vpu_core *core)
 {
 	list_del_init(&core->list);
 
 	vpu_core_put_vpu(core);
-	core->vpu = NULL;
-	kfree(core->msg_buffer);
-	core->msg_buffer = NULL;
 
 	if (core->workqueue) {
-		cancel_work_sync(&core->msg_work);
-		cancel_delayed_work_sync(&core->msg_delayed_work);
+		vpu_core_cancel_work(core);
 		destroy_workqueue(core->workqueue);
 		core->workqueue = NULL;
 	}
+
+	kfree(core->msg_buffer);
+	core->msg_buffer = NULL;
+	core->vpu = NULL;
 
 	return 0;
 }
@@ -700,10 +702,18 @@ static void vpu_core_remove(struct platform_device *pdev)
 	WARN_ON(ret < 0);
 
 	vpu_core_shutdown(core);
+	/*
+	 * Runtime suspend frees every mailbox channel, including TX,
+	 * and is skipped while another runtime-PM reference remains.
+	 * Stop RX first.  vpu_core_unregister() then drains the core
+	 * workers and the instance workers they queue, which may still
+	 * send on TX, before the fifo buffer and core->vpu are released.
+	 */
+	vpu_mbox_free_rx(core);
+	vpu_core_unregister(core->parent, core);
 	pm_runtime_put_sync(dev);
 	pm_runtime_disable(dev);
-
-	vpu_core_unregister(core->parent, core);
+	vpu_mbox_free(core);
 	memunmap(core->fw.virt);
 	memunmap(core->rpc.virt);
 	mutex_destroy(&core->lock);

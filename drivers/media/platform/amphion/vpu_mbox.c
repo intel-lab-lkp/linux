@@ -88,14 +88,19 @@ error:
 	return ret;
 }
 
+void vpu_mbox_free_rx(struct vpu_core *core)
+{
+	mbox_free_channel(core->rx.ch);
+	core->rx.ch = NULL;
+}
+
 void vpu_mbox_free(struct vpu_core *core)
 {
 	mbox_free_channel(core->tx_type.ch);
 	mbox_free_channel(core->tx_data.ch);
-	mbox_free_channel(core->rx.ch);
 	core->tx_type.ch = NULL;
 	core->tx_data.ch = NULL;
-	core->rx.ch = NULL;
+	vpu_mbox_free_rx(core);
 	dev_dbg(core->dev, "%s free mbox\n", vpu_core_type_desc(core->type));
 }
 
