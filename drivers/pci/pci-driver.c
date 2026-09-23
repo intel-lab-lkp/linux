@@ -915,7 +915,15 @@ static int pci_pm_suspend_noirq(struct device *dev)
 		return pci_legacy_suspend_late(dev);
 
 	if (!pm) {
-		pci_save_state(pci_dev);
+		/*
+		 * The bridge above a runtime-suspended device may be in a
+		 * low-power state with the link down, which makes the device's
+		 * config space inaccessible.  pci_pm_runtime_suspend() has
+		 * saved it already.
+		 */
+		if (!pm_runtime_status_suspended(dev))
+			pci_save_state(pci_dev);
+
 		goto set_unknown;
 	}
 
