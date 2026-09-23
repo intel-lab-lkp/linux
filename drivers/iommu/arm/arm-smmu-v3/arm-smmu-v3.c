@@ -1094,13 +1094,21 @@ arm_smmu_invs_iter_next(struct arm_smmu_invs *invs, size_t next, size_t *idx)
 static int arm_smmu_inv_cmp(const struct arm_smmu_inv *inv_l,
 			    const struct arm_smmu_inv *inv_r)
 {
+	/*
+	 * Treat all ATS types as one class, so an in-place flip to ATS_BROKEN
+	 * preserves the sort order and still matches the original ATS entry.
+	 */
+	bool are_ats = arm_smmu_inv_is_ats(inv_l) & arm_smmu_inv_is_ats(inv_r);
+	u8 type_l = arm_smmu_inv_type(inv_l);
+	u8 type_r = arm_smmu_inv_type(inv_r);
+
 	if (inv_l->smmu != inv_r->smmu)
 		return cmp_int((uintptr_t)inv_l->smmu, (uintptr_t)inv_r->smmu);
-	if (inv_l->type != inv_r->type)
-		return cmp_int(inv_l->type, inv_r->type);
+	if (!are_ats && type_l != type_r)
+		return cmp_int(type_l, type_r);
 	if (inv_l->id != inv_r->id)
 		return cmp_int(inv_l->id, inv_r->id);
-	if (arm_smmu_inv_is_ats(inv_l))
+	if (are_ats)
 		return cmp_int(inv_l->ssid, inv_r->ssid);
 	return 0;
 }
@@ -1186,11 +1194,12 @@ struct arm_smmu_invs *arm_smmu_invs_merge(struct arm_smmu_invs *invs,
 		return ERR_PTR(-ENOMEM);
 
 	new = new_invs->inv;
+	/* data_race(): a racing quarantine may flip ->type; the u8 is safe */
 	arm_smmu_invs_for_each_cmp(invs, i, to_merge, j, cmp) {
 		if (cmp < 0) {
-			*new = invs->inv[i];
+			*new = data_race(invs->inv[i]);
 		} else if (cmp == 0) {
-			*new = invs->inv[i];
+			*new = data_race(invs->inv[i]);
 			WRITE_ONCE(new->users, READ_ONCE(new->users) + 1);
 		} else {
 			*new = to_merge->inv[j];
@@ -1312,8 +1321,9 @@ struct arm_smmu_invs *arm_smmu_invs_purge(struct arm_smmu_invs *invs)
 	if (!new_invs)
 		return NULL;
 
+	/* data_race(): a racing quarantine may flip ->type; the u8 is safe */
 	arm_smmu_invs_for_each_entry(invs, i, inv) {
-		new_invs->inv[num_invs] = *inv;
+		new_invs->inv[num_invs] = data_race(*inv);
 		if (arm_smmu_inv_is_ats(inv))
 			new_invs->has_ats = true;
 		num_invs++;
@@ -2700,8 +2710,8 @@ static inline bool arm_smmu_invs_end_batch(struct arm_smmu_inv *cur,
 	if (cur->smmu != next->smmu)
 		return true;
 	/* The batch for S2 TLBI must be done before nested S1 ASIDs */
-	if (cur->type != INV_TYPE_S2_VMID_S1_CLEAR &&
-	    next->type == INV_TYPE_S2_VMID_S1_CLEAR)
+	if (arm_smmu_inv_type(cur) != INV_TYPE_S2_VMID_S1_CLEAR &&
+	    arm_smmu_inv_type(next) == INV_TYPE_S2_VMID_S1_CLEAR)
 		return true;
 	/* ATS must be after a sync of the S1/S2 invalidations */
 	if (!arm_smmu_inv_is_ats(cur) && arm_smmu_inv_is_ats(next))
@@ -2737,7 +2747,7 @@ static void __arm_smmu_domain_inv_range(struct arm_smmu_invs *invs,
 		if (!cmds.num)
 			arm_smmu_cmdq_batch_init_cmd(smmu, &cmds, &cmd);
 
-		switch (cur->type) {
+		switch (arm_smmu_inv_type(cur)) {
 		case INV_TYPE_S1_ASID:
 			cmd = arm_smmu_make_cmd_tlbi(cur->size_opcode,
 						     cur->id, 0);
@@ -2770,6 +2780,9 @@ static void __arm_smmu_domain_inv_range(struct arm_smmu_invs *invs,
 				smmu, &cmds,
 				arm_smmu_make_cmd_atc_inv_all(cur->id,
 							      IOMMU_NO_PASID));
+			break;
+		case INV_TYPE_ATS_BROKEN:
+			/* Master is quarantined; skip its ATC_INV */
 			break;
 		default:
 			WARN_ON_ONCE(1);
@@ -3325,6 +3338,8 @@ arm_smmu_master_build_inv(struct arm_smmu_master *master,
 	case INV_TYPE_ATS_FULL:
 		cur->size_opcode = cur->nsize_opcode = CMDQ_OP_ATC_INV;
 		cur->ssid = ssid;
+		break;
+	case INV_TYPE_ATS_BROKEN:
 		break;
 	}
 
