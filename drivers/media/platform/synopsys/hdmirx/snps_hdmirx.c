@@ -20,6 +20,7 @@
 #include <linux/math64.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/of_graph.h>
 #include <linux/of_platform.h>
 #include <linux/of_reserved_mem.h>
 #include <linux/pinctrl/consumer.h>
@@ -32,12 +33,14 @@
 
 #include <media/cec.h>
 #include <media/media-device.h>
+#include <media/v4l2-async.h>
 #include <media/v4l2-common.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-dv-timings.h>
 #include <media/v4l2-event.h>
 #include <media/v4l2-fh.h>
+#include <media/v4l2-fwnode.h>
 #include <media/v4l2-ioctl.h>
 #include <media/videobuf2-dma-contig.h>
 #include <media/videobuf2-v4l2.h>
@@ -126,6 +129,7 @@ struct snps_hdmirx_dev {
 	struct v4l2_device v4l2_dev;
 	struct media_device mdev;
 	struct media_pad pad;
+	struct v4l2_async_notifier notifier;
 	struct v4l2_ctrl_handler hdl;
 	struct v4l2_ctrl *detect_tx_5v_ctrl;
 	struct v4l2_ctrl *rgb_range;
@@ -2649,6 +2653,48 @@ static int hdmirx_register_cec(struct snps_hdmirx_dev *hdmirx_dev,
 	return 0;
 }
 
+static int hdmirx_fwnode_bound(struct v4l2_async_notifier *notifier,
+			       struct v4l2_subdev *subdev,
+			       struct v4l2_async_connection *asc)
+{
+	struct snps_hdmirx_dev *hdmirx_dev =
+		container_of(notifier, struct snps_hdmirx_dev, notifier);
+	int source_pad;
+	int ret;
+
+	source_pad = media_entity_get_fwnode_pad(&subdev->entity,
+						 asc->match.fwnode,
+						 MEDIA_PAD_FL_SOURCE);
+	if (source_pad < 0) {
+		dev_err(hdmirx_dev->dev, "%s has no source pad for %pfw: %d\n",
+			subdev->name, asc->match.fwnode, source_pad);
+		return source_pad;
+	}
+
+	ret = media_create_pad_link(&subdev->entity, source_pad,
+				    &hdmirx_dev->stream.vdev.entity, 0,
+				    MEDIA_LNK_FL_ENABLED | MEDIA_LNK_FL_IMMUTABLE);
+	if (ret) {
+		dev_err(hdmirx_dev->dev, "Failed to create media link: %d\n", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+static int hdmirx_fwnode_complete(struct v4l2_async_notifier *notifier)
+{
+	struct snps_hdmirx_dev *hdmirx_dev =
+		container_of(notifier, struct snps_hdmirx_dev, notifier);
+
+	return v4l2_device_register_subdev_nodes(&hdmirx_dev->v4l2_dev);
+}
+
+static const struct v4l2_async_notifier_operations hdmirx_async_ops = {
+	.bound = hdmirx_fwnode_bound,
+	.complete = hdmirx_fwnode_complete,
+};
+
 static int hdmirx_probe(struct platform_device *pdev)
 {
 	struct snps_hdmirx_dev *hdmirx_dev;
@@ -2656,6 +2702,8 @@ static int hdmirx_probe(struct platform_device *pdev)
 	struct v4l2_ctrl_handler *hdl;
 	struct hdmirx_stream *stream;
 	struct v4l2_device *v4l2_dev;
+	struct device_node *ep_node;
+	struct v4l2_async_connection *asc;
 	int ret;
 
 	hdmirx_dev = devm_kzalloc(dev, sizeof(*hdmirx_dev), GFP_KERNEL);
@@ -2772,9 +2820,38 @@ static int hdmirx_probe(struct platform_device *pdev)
 		goto err_unreg_video_dev;
 	}
 
+	ep_node = of_graph_get_endpoint_by_regs(dev->of_node, 0, -1);
+	if (ep_node) {
+		v4l2_async_nf_init(&hdmirx_dev->notifier, &hdmirx_dev->v4l2_dev);
+		hdmirx_dev->notifier.ops = &hdmirx_async_ops;
+
+		asc = v4l2_async_nf_add_fwnode_remote(&hdmirx_dev->notifier,
+						      of_fwnode_handle(ep_node),
+						      struct v4l2_async_connection);
+		of_node_put(ep_node);
+
+		if (IS_ERR(asc)) {
+			ret = PTR_ERR(asc);
+			dev_err_probe(dev, ret, "Failed to add remote fwnode\n");
+			goto err_unreg_media;
+		}
+
+		ret = v4l2_async_nf_register(&hdmirx_dev->notifier);
+		if (ret) {
+			dev_err_probe(dev, ret, "Failed to register async notifier\n");
+			goto err_cleanup_notifier;
+		}
+	} else {
+		ret = v4l2_device_register_subdev_nodes(&hdmirx_dev->v4l2_dev);
+		if (ret) {
+			dev_err_probe(dev, ret, "Failed to register subdev nodes\n");
+			goto err_unreg_media;
+		}
+	}
+
 	ret = hdmirx_register_cec(hdmirx_dev, pdev);
 	if (ret)
-		goto err_unreg_media;
+		goto err_unreg_notifier;
 
 	hdmirx_load_default_edid(hdmirx_dev);
 
@@ -2789,6 +2866,10 @@ static int hdmirx_probe(struct platform_device *pdev)
 
 	return 0;
 
+err_unreg_notifier:
+	v4l2_async_nf_unregister(&hdmirx_dev->notifier);
+err_cleanup_notifier:
+	v4l2_async_nf_cleanup(&hdmirx_dev->notifier);
 err_unreg_media:
 	media_device_unregister(&hdmirx_dev->mdev);
 err_unreg_video_dev:
@@ -2817,6 +2898,13 @@ static void hdmirx_remove(struct platform_device *pdev)
 	snps_hdmirx_cec_unregister(hdmirx_dev->cec);
 
 	hdmirx_disable_irq(dev);
+
+	/*
+	 * Both are no-ops when there was no endpoint to watch: the notifier is
+	 * zeroed and neither v4l2_dev nor waiting_list is set.
+	 */
+	v4l2_async_nf_unregister(&hdmirx_dev->notifier);
+	v4l2_async_nf_cleanup(&hdmirx_dev->notifier);
 
 	media_device_unregister(&hdmirx_dev->mdev);
 
