@@ -19,6 +19,11 @@
 #define ATH11K_ROOTPD_READY_TIMEOUT		(5 * HZ)
 #define ATH11K_RPROC_AFTER_POWERUP		QCOM_SSR_AFTER_POWERUP
 
+enum ath11k_ahb_userpd_id {
+	ATH11K_AHB_USERPD_ID_1 = 1,
+	ATH11K_AHB_USERPD_ID_MAX,
+};
+
 enum ath11k_ahb_smp2p_msg_id {
 	ATH11K_AHB_POWER_SAVE_ENTER = 1,
 	ATH11K_AHB_POWER_SAVE_EXIT,
@@ -34,8 +39,18 @@ struct ath11k_ahb_rproc_info {
 	void *root_pd_notifier;
 	bool root_pd_booted;
 
+	u8 num_userpd;
+	struct ath11k_ahb *userpd[ATH11K_AHB_USERPD_ID_MAX];
+
 	/* Bitmap of loaded M3 firmwares indexed by hardware revision */
 	u32 m3_loaded;
+};
+
+enum ath11k_ahb_userpd_irq {
+	ATH11K_USERPD_SPAWN_IRQ,
+	ATH11K_USERPD_READY_IRQ,
+	ATH11K_USERPD_STOP_ACK_IRQ,
+	ATH11K_USERPD_MAX_IRQ,
 };
 
 struct ath11k_ahb {
@@ -55,6 +70,16 @@ struct ath11k_ahb {
 		struct qcom_smem_state *smem_state;
 	} smp2p_info;
 	struct ath11k_ahb_rproc_info *rproc_info;
+
+	struct qcom_smem_state *spawn_state;
+	struct qcom_smem_state *stop_state;
+	struct completion userpd_spawned;
+	struct completion userpd_ready;
+	struct completion userpd_stopped;
+	u32 userpd_id;
+	u32 spawn_bit;
+	u32 stop_bit;
+	int userpd_irq_num[ATH11K_USERPD_MAX_IRQ];
 };
 
 static inline struct ath11k_ahb *ath11k_ahb_priv(struct ath11k_base *ab)
