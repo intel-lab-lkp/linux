@@ -1255,7 +1255,7 @@ static int pm_runtime_get_conditional(struct device *dev, bool ign_usage_count)
 
 /**
  * pm_runtime_get_if_active - Bump up runtime PM usage counter if the device is
- *			      in active state
+ * in active state.
  * @dev: Target device.
  *
  * Increment the runtime PM usage counter of @dev if its runtime PM status is
@@ -1635,10 +1635,10 @@ static void pm_runtime_disable_action(void *data)
 /**
  * devm_pm_runtime_enable - devres-enabled version of pm_runtime_enable.
  *
+ * @dev: Device to handle.
+ *
  * NOTE: this will also handle calling pm_runtime_dont_use_autosuspend() for
  * you at driver exit time if needed.
- *
- * @dev: Device to handle.
  */
 int devm_pm_runtime_enable(struct device *dev)
 {
