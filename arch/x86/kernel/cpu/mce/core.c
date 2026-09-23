@@ -2822,8 +2822,8 @@ static __init int mcheck_init_device(void)
 	MAYBE_BUILD_BUG_ON(__VIRTUAL_MASK_SHIFT >= 63);
 
 	if (!mce_available(&boot_cpu_data)) {
-		err = -EIO;
-		goto err_out;
+		pr_info("MCE is unavailable\n");
+		return -ENODEV;
 	}
 
 	if (!zalloc_cpumask_var(&mce_device_initialized, GFP_KERNEL)) {
