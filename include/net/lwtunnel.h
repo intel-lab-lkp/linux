@@ -6,6 +6,7 @@
 #include <linux/netdevice.h>
 #include <linux/skbuff.h>
 #include <linux/types.h>
+#include <net/netlink.h>
 #include <net/route.h>
 
 #define LWTUNNEL_HASH_BITS   7
@@ -37,6 +38,7 @@ struct lwtunnel_state {
 };
 
 struct lwtunnel_encap_ops {
+	/* encap may lack NLA_F_NESTED, parse it with lwtunnel_nla_parse() */
 	int (*build_state)(struct net *net, struct nlattr *encap,
 			   unsigned int family, const void *cfg,
 			   struct lwtunnel_state **ts,
@@ -52,6 +54,31 @@ struct lwtunnel_encap_ops {
 
 	struct module *owner;
 };
+
+/**
+ * lwtunnel_nla_parse - parse the attributes nested in an lwtunnel encap
+ * @tb: destination array with maxtype+1 elements
+ * @maxtype: maximum attribute type to be expected
+ * @nla: encap attribute passed to &lwtunnel_encap_ops.build_state, or an
+ *	attribute nested in it
+ * @policy: validation policy
+ * @extack: extended ACK report struct
+ *
+ * The encap attribute, and some of the attributes nested in it, have always
+ * been dumped without NLA_F_NESTED, and userspace such as "ip route restore"
+ * sends a dump back unchanged, so the flag cannot be required on @nla.
+ * The attributes nested in @nla are still validated strictly.
+ *
+ * Return: 0 on success or a negative error code.
+ */
+static inline int lwtunnel_nla_parse(struct nlattr *tb[], int maxtype,
+				     const struct nlattr *nla,
+				     const struct nla_policy *policy,
+				     struct netlink_ext_ack *extack)
+{
+	return nla_parse(tb, maxtype, nla_data(nla), nla_len(nla), policy,
+			 extack);
+}
 
 #ifdef CONFIG_LWTUNNEL
 

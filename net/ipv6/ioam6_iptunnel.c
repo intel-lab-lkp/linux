@@ -113,8 +113,8 @@ static int ioam6_build_state(struct net *net, struct nlattr *nla,
 	if (family != AF_INET6)
 		return -EINVAL;
 
-	err = nla_parse_nested(tb, IOAM6_IPTUNNEL_MAX, nla,
-			       ioam6_iptunnel_policy, extack);
+	err = lwtunnel_nla_parse(tb, IOAM6_IPTUNNEL_MAX, nla,
+				 ioam6_iptunnel_policy, extack);
 	if (err < 0)
 		return err;
 
