@@ -98,6 +98,9 @@
  */
 #define HWCAP_SPARC_CRYPTO	0x04000000 /* CRYPTO insns available */
 #define HWCAP_SPARC_ADI		0x08000000 /* ADI available */
+/* 0x10000000 is HWCAP_SPARC_CASTRAP on sparc32 and must stay clear here;
+ * a 32-bit process reads this word too and there is no such trap on sparc64.
+ */
 
 #define CORE_DUMP_USE_REGSET
 
