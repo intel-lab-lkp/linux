@@ -253,9 +253,9 @@ void liveupdate_flb_put_outgoing(struct liveupdate_flb *flb);
 int liveupdate_get_file_incoming(struct liveupdate_session *s, u64 token,
 				 struct file **filep);
 
-/* Get a token for an outgoing file, or -ENOENT if file is not preserved */
+/* Get a token for a preserved object, or -ENOENT if it is not preserved */
 int liveupdate_get_token_outgoing(struct liveupdate_session *s,
-				  struct file *file, u64 *tokenp);
+				  unsigned long id, u64 *tokenp);
 
 #else /* CONFIG_LIVEUPDATE */
 
@@ -316,7 +316,7 @@ static inline int liveupdate_get_file_incoming(struct liveupdate_session *s,
 }
 
 static inline int liveupdate_get_token_outgoing(struct liveupdate_session *s,
-						struct file *file, u64 *tokenp)
+						unsigned long id, u64 *tokenp)
 {
 	return -EOPNOTSUPP;
 }

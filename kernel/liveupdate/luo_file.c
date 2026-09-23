@@ -950,29 +950,32 @@ void liveupdate_unregister_file_handler(struct liveupdate_file_handler *fh)
 }
 
 /**
- * liveupdate_get_token_outgoing - Get the token for a preserved file.
+ * liveupdate_get_token_outgoing - Get the token for a preserved object.
  * @s:      The outgoing liveupdate session.
- * @file:   The file object to search for.
+ * @id:     The identifier of the preserved object to search for, as returned
+ *          by the owning handler's ->get_id().
  * @tokenp: Output parameter for the found token.
  *
- * Searches the list of preserved files in an outgoing session for a matching
- * file object. If found, the corresponding user-provided token is returned.
+ * Searches the list of preserved files in an outgoing session for an object
+ * with a matching identifier. If found, the corresponding user-provided token
+ * is returned.
  *
- * This function is intended for in-kernel callers that need to correlate a
- * file with its liveupdate token.
+ * For handlers that do not implement ->get_id() use the 'struct file' pointer
+ * as their identifier.
  *
  * Context: It must be called with session mutex acquired.
- * Return: 0 on success, -ENOENT if the file is not preserved in this session.
+ * Return: 0 on success, -ENOENT if no such object is preserved in this
+ *         session.
  */
 int liveupdate_get_token_outgoing(struct liveupdate_session *s,
-				  struct file *file, u64 *tokenp)
+				  unsigned long id, u64 *tokenp)
 {
 	struct luo_file_set *file_set = luo_file_set_from_session_locked(s);
 	struct luo_file *luo_file;
 	int err = -ENOENT;
 
 	list_for_each_entry(luo_file, &file_set->files_list, list) {
-		if (luo_file->file == file) {
+		if (luo_get_id(luo_file->fh, luo_file->file) == id) {
 			if (tokenp)
 				*tokenp = luo_file->token;
 			err = 0;
