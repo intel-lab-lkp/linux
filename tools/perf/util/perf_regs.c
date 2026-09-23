@@ -68,6 +68,10 @@ uint64_t perf_intr_reg_mask(uint16_t e_machine)
 	case EM_S390:
 		mask = __perf_reg_mask_s390(/*intr=*/true);
 		break;
+	case EM_SPARC:
+	case EM_SPARCV9:
+		mask = __perf_reg_mask_sparc(/*intr=*/true);
+		break;
 	case EM_386:
 	case EM_X86_64:
 		mask = __perf_reg_mask_x86(/*intr=*/true);
@@ -111,6 +115,10 @@ uint64_t perf_user_reg_mask(uint16_t e_machine)
 	case EM_S390:
 		mask = __perf_reg_mask_s390(/*intr=*/false);
 		break;
+	case EM_SPARC:
+	case EM_SPARCV9:
+		mask = __perf_reg_mask_sparc(/*intr=*/false);
+		break;
 	case EM_386:
 	case EM_X86_64:
 		mask = __perf_reg_mask_x86(/*intr=*/false);
@@ -153,6 +161,10 @@ const char *perf_reg_name(int id, uint16_t e_machine, uint32_t e_flags)
 		break;
 	case EM_S390:
 		reg_name = __perf_reg_name_s390(id);
+		break;
+	case EM_SPARC:
+	case EM_SPARCV9:
+		reg_name = __perf_reg_name_sparc(id);
 		break;
 	case EM_386:
 	case EM_X86_64:
@@ -215,6 +227,9 @@ uint64_t perf_arch_reg_ip(uint16_t e_machine)
 		return __perf_reg_ip_riscv();
 	case EM_S390:
 		return __perf_reg_ip_s390();
+	case EM_SPARC:
+	case EM_SPARCV9:
+		return __perf_reg_ip_sparc();
 	case EM_386:
 	case EM_X86_64:
 		return __perf_reg_ip_x86();
@@ -244,6 +259,9 @@ uint64_t perf_arch_reg_sp(uint16_t e_machine)
 		return __perf_reg_sp_riscv();
 	case EM_S390:
 		return __perf_reg_sp_s390();
+	case EM_SPARC:
+	case EM_SPARCV9:
+		return __perf_reg_sp_sparc();
 	case EM_386:
 	case EM_X86_64:
 		return __perf_reg_sp_x86();

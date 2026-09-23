@@ -217,6 +217,10 @@ int get_dwarf_regnum_for_perf_regnum(int perf_regnum, unsigned int machine,
 	case EM_S390:
 		reg = __get_dwarf_regnum_for_perf_regnum_s390(perf_regnum);
 		break;
+	case EM_SPARC:
+	case EM_SPARCV9:
+		reg = __get_dwarf_regnum_for_perf_regnum_sparc(perf_regnum);
+		break;
 	case EM_LOONGARCH:
 		reg = __get_dwarf_regnum_for_perf_regnum_loongarch(perf_regnum);
 		break;
