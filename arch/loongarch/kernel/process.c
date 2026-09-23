@@ -226,6 +226,9 @@ int copy_thread(struct task_struct *p, const struct kernel_clone_args *args)
 		childregs->regs[2] = tls;
 
 out:
+	p->thread.hbp_break_skip = 0;
+	p->thread.hbp_watch_skip = 0;
+
 	clear_tsk_thread_flag(p, TIF_USEDFPU);
 	clear_tsk_thread_flag(p, TIF_USEDSIMD);
 	clear_tsk_thread_flag(p, TIF_USEDLBT);

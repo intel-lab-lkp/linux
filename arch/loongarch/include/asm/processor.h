@@ -135,6 +135,9 @@ struct thread_struct {
 	struct perf_event *hbp_break[LOONGARCH_MAX_BRP];
 	struct perf_event *hbp_watch[LOONGARCH_MAX_WRP];
 
+	bool hbp_break_skip;
+	bool hbp_watch_skip;
+
 	/*
 	 * FPU & vector registers, must be at the last of inherited
 	 * context because they are conditionally copied at fork().
