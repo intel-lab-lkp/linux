@@ -223,7 +223,7 @@ void *qxl_bo_kmap_atomic_page(struct qxl_device *qdev,
 	return io_mapping_map_atomic_wc(map, offset + page_offset);
 fallback:
 	if (bo->kptr) {
-		rptr = bo->kptr + (page_offset * PAGE_SIZE);
+		rptr = bo->kptr + page_offset;
 		return rptr;
 	}
 
@@ -232,7 +232,7 @@ fallback:
 		return NULL;
 	rptr = bo_map.vaddr; /* TODO: Use mapping abstraction properly */
 
-	rptr += page_offset * PAGE_SIZE;
+	rptr += page_offset;
 	return rptr;
 }
 
