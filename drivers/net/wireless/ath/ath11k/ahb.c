@@ -969,6 +969,14 @@ static int ath11k_ahb_init_userpd(struct ath11k_base *ab, int userpd_id)
 
 		ab_ahb->userpd_id = userpd_id;
 		break;
+	case ATH11K_HW_QCN6122_HW10:
+		if (userpd_id != ATH11K_AHB_USERPD_ID_2 &&
+		    userpd_id != ATH11K_AHB_USERPD_ID_3)
+			return -EINVAL;
+
+		ab_ahb->userpd_id = userpd_id;
+		ab->qmi.service_ins_id += (ab_ahb->userpd_id - 1);
+		break;
 	default:
 		return -EINVAL;
 	}
