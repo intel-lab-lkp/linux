@@ -34,4 +34,7 @@ static inline struct cxl_cachedev *to_cxl_cachedev(struct device *dev)
 
 struct cxl_cachedev *__devm_cxl_add_cachedev(struct cxl_dev_state *cxlds,
 					     void *attach);
+int cxl_accel_read_cache_info(struct cxl_dev_state *cxlds);
+void cxl_clear_cache_enable(struct cxl_dev_state *cxlds);
+int devm_cxl_enable_cache(struct device *host, struct cxl_dev_state *cxlds);
 #endif

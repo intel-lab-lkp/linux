@@ -8,6 +8,7 @@
 #include <linux/pci-doe.h>
 #include <cxl/pci.h>
 #include <linux/aer.h>
+#include <cxlcache.h>
 #include <cxlpci.h>
 #include <cxlmem.h>
 #include <cxl.h>
@@ -180,7 +181,8 @@ int cxl_await_media_ready(struct cxl_dev_state *cxlds)
 }
 EXPORT_SYMBOL_NS_GPL(cxl_await_media_ready, "CXL");
 
-static int cxl_set_mem_enable(struct cxl_dev_state *cxlds, u16 val)
+static int cxl_set_protocol_enable(struct cxl_dev_state *cxlds, u16 val,
+				   u16 enable_bit)
 {
 	struct pci_dev *pdev = to_pci_dev(cxlds->dev);
 	int d = cxlds->cxl_dvsec;
@@ -191,9 +193,9 @@ static int cxl_set_mem_enable(struct cxl_dev_state *cxlds, u16 val)
 	if (rc)
 		return pcibios_err_to_errno(rc);
 
-	if ((ctrl & PCI_DVSEC_CXL_MEM_ENABLE) == val)
+	if ((ctrl & enable_bit) == val)
 		return 1;
-	ctrl &= ~PCI_DVSEC_CXL_MEM_ENABLE;
+	ctrl &= ~enable_bit;
 	ctrl |= val;
 
 	rc = pci_write_config_word(pdev, d + PCI_DVSEC_CXL_CTRL, ctrl);
@@ -205,20 +207,46 @@ static int cxl_set_mem_enable(struct cxl_dev_state *cxlds, u16 val)
 
 static void clear_mem_enable(void *cxlds)
 {
-	cxl_set_mem_enable(cxlds, 0);
+	cxl_set_protocol_enable(cxlds, 0, PCI_DVSEC_CXL_MEM_ENABLE);
 }
 
 static int devm_cxl_enable_mem(struct device *host, struct cxl_dev_state *cxlds)
 {
 	int rc;
 
-	rc = cxl_set_mem_enable(cxlds, PCI_DVSEC_CXL_MEM_ENABLE);
+	rc = cxl_set_protocol_enable(cxlds, PCI_DVSEC_CXL_MEM_ENABLE,
+				     PCI_DVSEC_CXL_MEM_ENABLE);
 	if (rc < 0)
 		return rc;
 	if (rc > 0)
 		return 0;
 	return devm_add_action_or_reset(host, clear_mem_enable, cxlds);
 }
+
+static void __clear_cache_enable(void *cxlds)
+{
+	cxl_set_protocol_enable(cxlds, 0, PCI_DVSEC_CXL_CACHE_ENABLE);
+}
+
+void cxl_clear_cache_enable(struct cxl_dev_state *cxlds)
+{
+	__clear_cache_enable(cxlds);
+}
+EXPORT_SYMBOL_FOR_MODULES(cxl_clear_cache_enable, "cxl_cache");
+
+int devm_cxl_enable_cache(struct device *host, struct cxl_dev_state *cxlds)
+{
+	int rc;
+
+	rc = cxl_set_protocol_enable(cxlds, PCI_DVSEC_CXL_CACHE_ENABLE,
+				     PCI_DVSEC_CXL_CACHE_ENABLE);
+	if (rc < 0)
+		return rc;
+	if (rc > 0)
+		return 0;
+	return devm_add_action_or_reset(host, __clear_cache_enable, cxlds);
+}
+EXPORT_SYMBOL_FOR_MODULES(devm_cxl_enable_cache, "cxl_cache");
 
 /* require dvsec ranges to be covered by a locked platform window */
 static int dvsec_range_allowed(struct device *dev, const void *arg)
@@ -927,3 +955,43 @@ int cxl_port_get_possible_dports(struct cxl_port *port)
 
 	return ctx.count;
 }
+
+int cxl_accel_read_cache_info(struct cxl_dev_state *cxlds)
+{
+	struct cxl_cache_state *cstate = &cxlds->cstate;
+	struct pci_dev *pdev = to_pci_dev(cxlds->dev);
+	int dvsec = cxlds->cxl_dvsec;
+	u16 cap, cap2;
+	u32 unit;
+	int rc;
+
+	if (!dev_is_pci(cxlds->dev))
+		return -EINVAL;
+
+	rc = pci_read_config_word(pdev, dvsec + PCI_DVSEC_CXL_CAP, &cap);
+	if (rc)
+		return pcibios_err_to_errno(rc);
+
+	if (!FIELD_GET(PCI_DVSEC_CXL_CACHE_CAPABLE, cap))
+		return -ENXIO;
+
+	rc = pci_read_config_word(pdev, dvsec + PCI_DVSEC_CXL_CAP2, &cap2);
+	if (rc)
+		return pcibios_err_to_errno(rc);
+
+	switch (FIELD_GET(PCI_DVSEC_CXL_CACHE_UNIT, cap2)) {
+	case 1:
+		unit = SZ_64K;
+		break;
+	case 2:
+		unit = SZ_1M;
+		break;
+	default:
+		return -ENXIO;
+	}
+
+	cstate->size = FIELD_GET(PCI_DVSEC_CXL_CACHE_SIZE, cap2) * unit;
+	cstate->unit = unit;
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_accel_read_cache_info, "CXL");

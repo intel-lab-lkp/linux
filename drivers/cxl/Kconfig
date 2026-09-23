@@ -243,4 +243,18 @@ config CXL_ATL
 	depends on CXL_REGION
 	depends on ACPI_PRMT && AMD_NB
 
+config CXL_CACHE
+	tristate "CXL: Cache Management Support"
+	depends on CXL_BUS
+	help
+	  Enables a driver that manages the CXL.cache capabilities of a CXL.cache
+	  capable device. This driver validates and provides support for
+	  programming the CXL cache device topology. This driver is required for
+	  using multiple CXL.cache devices (Type 1 or 2) below a given CXL 3.0+
+	  capable PCIe Root Port. This driver only provides CXL cache management and
+	  reporting capabilities, a vendor-specific device driver is expected to
+	  use the device's CXL cache and enable any other capabilities.
+
+	  If unsure, say 'm'.
+
 endif

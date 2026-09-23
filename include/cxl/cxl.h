@@ -150,6 +150,22 @@ struct cxl_dpa_partition {
 #define CXL_NR_PARTITIONS_MAX 2
 
 /**
+ * struct cxl_cache_state - CXL cache device state for use by external drivers
+ * @size: Size of device's cache
+ * @unit: Unit of device's cache in bytes
+ */
+struct cxl_cache_state {
+	/* Public for endpoint drivers */
+
+	/* 
+	 * Populated by cxl_cache driver, will be overwritten on 
+	 * cxl_cache::probe()
+	 */
+	u64 size;
+	u64 unit;
+};
+
+/**
  * struct cxl_dev_state - The driver device state
  *
  * cxl_dev_state represents the CXL driver/device state.  It provides an
@@ -159,6 +175,7 @@ struct cxl_dpa_partition {
  * @dev: The device associated with this CXL state
  * @cxlmd: The device representing the CXL.mem capabilities of @dev
  * @cxlcd: The device representing the CXL.cache capabilities of @dev
+ * @cstate: CXL.cache information for @dev
  * @reg_map: component and ras register mapping parameters
  * @regs: Parsed register blocks
  * @cxl_dvsec: Offset to the PCIe device DVSEC
@@ -177,6 +194,7 @@ struct cxl_dev_state {
 	struct device *dev;
 	struct cxl_memdev *cxlmd;
 	struct cxl_cachedev *cxlcd;
+ 	struct cxl_cache_state cstate;
 
 	/* private for Type2 drivers */
 	struct cxl_register_map reg_map;
@@ -228,6 +246,13 @@ struct cxl_dev_state *_devm_cxl_dev_state_create(struct device *dev,
 
 struct cxl_memdev *devm_cxl_probe_mem(struct cxl_dev_state *cxlds,
 				      struct range *range);
-
 int cxl_set_capacity(struct cxl_dev_state *cxlds, u64 capacity);
+
+#if IS_ENABLED(CONFIG_CXL_CACHE)
+struct cxl_cachedev *devm_cxl_add_cachedev(struct cxl_dev_state *cxlds);
+#else
+static inline struct cxl_cachedev *
+devm_cxl_add_cachedev(struct cxl_dev_state *cxlds)
+{ return ERR_PTR(-ENXIO); }
+#endif /* CONFIG_CXL_CACHE */
 #endif /* __CXL_CXL_H__ */

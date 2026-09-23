@@ -116,4 +116,4 @@ struct cxl_cachedev *__devm_cxl_add_cachedev(struct cxl_dev_state *cxlds,
 
 	return cxl_cachedev_autoremove(no_free_ptr(cxlcd));
 }
-EXPORT_SYMBOL_NS_GPL(__devm_cxl_add_cachedev, "CXL");
+EXPORT_SYMBOL_FOR_MODULES(__devm_cxl_add_cachedev, "cxl_cache");
