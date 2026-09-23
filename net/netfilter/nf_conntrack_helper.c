@@ -16,6 +16,7 @@
 #include <linux/random.h>
 #include <linux/err.h>
 #include <linux/kernel.h>
+#include <linux/ctype.h>
 #include <linux/netdevice.h>
 #include <linux/rculist.h>
 #include <linux/rtnetlink.h>
@@ -568,6 +569,73 @@ void nf_nat_helper_unregister(struct nf_conntrack_nat_helper *nat)
 	mutex_unlock(&nf_ct_nat_helpers_mutex);
 }
 EXPORT_SYMBOL_GPL(nf_nat_helper_unregister);
+
+/* Parse a decimal unsigned integer from a length-delimited buffer that is not
+ * necessarily NUL-terminated.  At most @len bytes are examined.  On success
+ * the parsed value is returned and, if @endp is non-NULL, *@endp points just
+ * past the last digit consumed.  If no digit is found or the value would
+ * exceed UINT_MAX, 0 is returned and *@endp is set to @cp.
+ */
+unsigned int nf_ct_helper_parse_uint(const char *cp, unsigned int len,
+				     char **endp)
+{
+	const unsigned int max = sizeof("4294967295");
+	unsigned int olen = len;
+	const char *s = cp;
+	u64 result = 0;
+
+	if (len > max)
+		len = max;
+
+	while (olen > 0 && isdigit(*s)) {
+		unsigned int value;
+
+		if (len == 0)
+			goto err;
+
+		value = *s - '0';
+		result = result * 10 + value;
+
+		if (result > UINT_MAX)
+			goto err;
+		s++;
+		len--;
+		olen--;
+	}
+
+	if (endp)
+		*endp = (char *)s;
+
+	return result;
+err:
+	if (endp)
+		*endp = (char *)cp;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(nf_ct_helper_parse_uint);
+
+/* Parse a TCP/UDP port (1-65535) from a length-delimited buffer using
+ * nf_ct_helper_parse_uint().  Returns 0 and stores the port in *@port (and the
+ * end pointer in *@endp) on success, or -1 if no digit is found or the value
+ * is out of range.
+ */
+int nf_ct_helper_parse_port(const char *cp, unsigned int len,
+			    u16 *port, char **endp)
+{
+	char *e = (char *)cp;
+	unsigned int val;
+
+	val = nf_ct_helper_parse_uint(cp, len, &e);
+	if (e == cp || val == 0 || val > 65535)
+		return -1;
+
+	*port = val;
+	if (endp)
+		*endp = e;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(nf_ct_helper_parse_port);
 
 int nf_conntrack_helper_init(void)
 {
