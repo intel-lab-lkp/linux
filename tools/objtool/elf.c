@@ -1071,7 +1071,8 @@ struct reloc *elf_init_reloc(struct elf *elf, struct section *rsec,
 	set_reloc_type(elf, reloc, type);
 	set_reloc_addend(elf, reloc, addend);
 
-	elf_hash_add(reloc, &reloc->hash, reloc_hash(reloc));
+	if (!is_dwarf_section(rsec->base))
+		elf_hash_add(reloc, &reloc->hash, reloc_hash(reloc));
 	set_sym_next_reloc(reloc, sym->relocs);
 	sym->relocs = reloc;
 
@@ -1125,15 +1126,13 @@ struct reloc *elf_init_reloc_data_sym(struct elf *elf, struct section *sec,
 
 static int read_relocs(struct elf *elf)
 {
-	unsigned long nr_reloc, max_reloc = 0;
+	unsigned long nr_reloc, max_reloc = 0, nr_hashed = 0;
 	struct section *rsec;
 	struct reloc *reloc;
 	unsigned int symndx;
 	struct symbol *sym;
+	bool hashed;
 	int i;
-
-	if (!elf_alloc_hash(reloc, elf->num_relocs))
-		return -1;
 
 	list_for_each_entry(rsec, &elf->sections, list) {
 		if (!is_reloc_sec(rsec))
@@ -1146,6 +1145,23 @@ static int read_relocs(struct elf *elf)
 		}
 
 		rsec->base->rsec = rsec;
+
+		/*
+		 * DWARF relocations are never looked up by destination, they
+		 * only need to be on their symbol's list.
+		 */
+		if (!is_dwarf_section(rsec->base))
+			nr_hashed += sec_num_entries(rsec);
+	}
+
+	if (!elf_alloc_hash(reloc, nr_hashed))
+		return -1;
+
+	list_for_each_entry(rsec, &elf->sections, list) {
+		if (!is_reloc_sec(rsec))
+			continue;
+
+		hashed = !is_dwarf_section(rsec->base);
 
 		/* nr_alloc_relocs=0: libelf owns d_buf */
 		rsec->nr_alloc_relocs = 0;
@@ -1168,7 +1184,8 @@ static int read_relocs(struct elf *elf)
 				return -1;
 			}
 
-			elf_hash_add(reloc, &reloc->hash, reloc_hash(reloc));
+			if (hashed)
+				elf_hash_add(reloc, &reloc->hash, reloc_hash(reloc));
 			set_sym_next_reloc(reloc, sym->relocs);
 			sym->relocs = reloc;
 
@@ -1180,6 +1197,7 @@ static int read_relocs(struct elf *elf)
 	if (opts.stats) {
 		printf("max_reloc: %lu\n", max_reloc);
 		printf("num_relocs: %lu\n", elf->num_relocs);
+		printf("num_relocs_hashed: %lu\n", nr_hashed);
 		printf("reloc_bits: %d\n", elf->reloc_bits);
 	}
 
@@ -1634,7 +1652,7 @@ static int elf_alloc_reloc(struct elf *elf, struct section *rsec)
 
 	memcpy(new_relocs, old_relocs, nr_relocs_old * sizeof(struct reloc));
 
-	for (int i = 0; i < nr_relocs_old; i++) {
+	for (int i = 0; i < nr_relocs_old && !is_dwarf_section(rsec->base); i++) {
 		struct reloc *old = &old_relocs[i];
 		struct reloc *new = &new_relocs[i];
 		u32 key = reloc_hash(old);
