@@ -349,7 +349,7 @@ struct s1g_tim_aid {
 struct s1g_tim_enc_block {
 	u8 enc_mode;
 	bool inverse;
-	const u8 *ptr;
+	const u8 *ptr __counted_by_ptr(len);
 	u8 len;
 
 	/*
