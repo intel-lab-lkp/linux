@@ -16,6 +16,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <pthread.h>
 #include <ctype.h>
 #include <linux/align.h>
 #include <linux/kernel.h>
@@ -475,6 +476,7 @@ unsorted:
 }
 
 static unsigned long num_relocs_sorted;
+static pthread_mutex_t reloc_cache_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static int init_reloc_cache(struct section *rsec)
 {
@@ -514,8 +516,17 @@ struct reloc *find_reloc_by_dest_range(const struct elf *elf, struct section *se
 	if (!rsec)
 		return NULL;
 
-	if (!rsec->sorted && init_reloc_cache(rsec))
-		exit(1);
+	/* Decoding looks up from several threads, rebuild an index once. */
+	if (!rsec->sorted) {
+		int ret = 0;
+
+		pthread_mutex_lock(&reloc_cache_lock);
+		if (!rsec->sorted)
+			ret = init_reloc_cache(rsec);
+		pthread_mutex_unlock(&reloc_cache_lock);
+		if (ret)
+			exit(1);
+	}
 
 	cache_idx = reloc_cache_index(offset);
 	if (cache_idx >= rsec->nr_cache_windows)
