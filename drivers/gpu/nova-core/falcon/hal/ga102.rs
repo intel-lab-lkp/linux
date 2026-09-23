@@ -18,6 +18,7 @@ use crate::{
     driver::Bar0,
     falcon::{
         hal::LoadMethod,
+        regs, //
         Falcon,
         FalconBromParams,
         FalconEngine,
@@ -25,7 +26,6 @@ use crate::{
         PFalcon2Registers,
         PeregrineCoreSelect, //
     },
-    regs,
 };
 
 use super::FalconHal;
