@@ -52,9 +52,38 @@ static int loongson_se_poll(struct loongson_se *se, u32 int_bit)
 						!(status & int_bit),
 						1, LOONGSON_ENGINE_CMD_TIMEOUT_US);
 
+	/*
+	 * Re-enable the interrupt that loongson_se_reinit_completion() masked.
+	 * The hardware guarantees that once the interrupt is re-enabled, only
+	 * interrupts for the command just issued can arrive, so a stale
+	 * interrupt from a previously interrupted command can never complete
+	 * this command's completion.
+	 */
+	writel(int_bit | readl(se->base + SE_S2LINT_EN), se->base + SE_S2LINT_EN);
+
 	spin_unlock_irq(&se->dev_lock);
 
 	return err;
+}
+
+/*
+ * Prepare a completion for a new command: mask the corresponding interrupt,
+ * clear any pending interrupt status, and reset the completion.  This runs
+ * under dev_lock so that the IRQ handler cannot race with it.  The interrupt
+ * is re-enabled in loongson_se_poll() after the command has been issued.
+ */
+static void loongson_se_reinit_completion(struct loongson_se *se,
+					  struct completion *completion, u32 int_bit)
+{
+	spin_lock_irq(&se->dev_lock);
+
+	writel(readl(se->base + SE_S2LINT_EN) & ~int_bit, se->base + SE_S2LINT_EN);
+
+	writel(int_bit, se->base + SE_S2LINT_CL);
+
+	reinit_completion(completion);
+
+	spin_unlock_irq(&se->dev_lock);
 }
 
 static int loongson_se_send_controller_cmd(struct loongson_se *se,
@@ -63,6 +92,8 @@ static int loongson_se_send_controller_cmd(struct loongson_se *se,
 	u32 *send_cmd = (u32 *)cmd;
 	int err, i;
 
+	loongson_se_reinit_completion(se, &se->cmd_completion, SE_INT_CONTROLLER);
+
 	for (i = 0; i < SE_SEND_CMD_REG_LEN; i++)
 		writel(send_cmd[i], se->base + SE_SEND_CMD_REG + i * 4);
 
@@ -70,17 +101,31 @@ static int loongson_se_send_controller_cmd(struct loongson_se *se,
 	if (err)
 		return err;
 
-	return wait_for_completion_interruptible(&se->cmd_completion);
+	/*
+	 * Wait for the controller to complete the command.  Use a bounded
+	 * non-interruptible wait: a pending signal must not leave the
+	 * controller running while its DMA buffers are being torn down.
+	 * One second is far more than any controller command should take,
+	 * while still bounding the wait if the hardware wedges.
+	 */
+	if (!wait_for_completion_timeout(&se->cmd_completion, HZ))
+		return -ETIMEDOUT;
+
+	return 0;
 }
 
 int loongson_se_send_engine_cmd(struct loongson_se_engine *engine)
 {
+	int err;
+
+	loongson_se_reinit_completion(engine->se, &engine->completion, BIT(engine->id));
+
 	/*
 	 * After engine initialization, the controller already knows
 	 * where to obtain engine commands from. Now all we need to
 	 * do is notify the controller that the engine needs to be started.
 	 */
-	int err = loongson_se_poll(engine->se, BIT(engine->id));
+	err = loongson_se_poll(engine->se, BIT(engine->id));
 
 	if (err)
 		return err;
@@ -92,12 +137,17 @@ EXPORT_SYMBOL_GPL(loongson_se_send_engine_cmd);
 struct loongson_se_engine *loongson_se_init_engine(struct device *dev, int id)
 {
 	struct loongson_se *se = dev_get_drvdata(dev);
-	struct loongson_se_engine *engine = &se->engines[id];
-	struct loongson_se_controller_cmd cmd;
+	struct loongson_se_engine *engine;
+	struct loongson_se_controller_cmd cmd = {0};
+
+	/* Engine 0 does not exist and its data buffer is reused for commands */
+	if (id <= 0 || id >= SE_ENGINE_MAX)
+		return NULL;
+
+	engine = &se->engines[id];
 
 	engine->se = se;
 	engine->id = id;
-	init_completion(&engine->completion);
 
 	/* Divide DMA memory equally among all engines */
 	engine->buffer_size = se->dmam_size / SE_ENGINE_MAX;
@@ -155,7 +205,8 @@ static irqreturn_t se_irq_handler(int irq, void *dev_id)
 	/* For engines */
 	while (int_status) {
 		id = __ffs(int_status);
-		complete(&se->engines[id].completion);
+		if (id < SE_ENGINE_MAX)
+			complete(&se->engines[id].completion);
 		int_status &= ~BIT(id);
 		writel(BIT(id), se->base + SE_S2LINT_CL);
 	}
@@ -167,7 +218,7 @@ static irqreturn_t se_irq_handler(int irq, void *dev_id)
 
 static int loongson_se_init(struct loongson_se *se, dma_addr_t addr, int size)
 {
-	struct loongson_se_controller_cmd cmd;
+	struct loongson_se_controller_cmd cmd = {0};
 	int err;
 
 	cmd.command_id = SE_CMD_START;
@@ -188,6 +239,17 @@ static const struct mfd_cell engines[] = {
 	{ .name = "tpm_loongson" },
 };
 
+static void loongson_se_stop(void *data)
+{
+	struct loongson_se *se = data;
+	struct loongson_se_controller_cmd cmd = {0};
+
+	cmd.command_id = SE_CMD_STOP;
+	loongson_se_send_controller_cmd(se, &cmd);
+
+	writel(0, se->base + SE_S2LINT_EN);
+}
+
 static int loongson_se_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -195,7 +257,7 @@ static int loongson_se_probe(struct platform_device *pdev)
 	int nr_irq, irq, err, i;
 	dma_addr_t paddr;
 
-	se = devm_kmalloc(dev, sizeof(*se), GFP_KERNEL);
+	se = devm_kzalloc(dev, sizeof(*se), GFP_KERNEL);
 	if (!se)
 		return -ENOMEM;
 
@@ -204,9 +266,23 @@ static int loongson_se_probe(struct platform_device *pdev)
 	spin_lock_init(&se->dev_lock);
 	mutex_init(&se->engine_init_lock);
 
+	for (i = 0; i < SE_ENGINE_MAX; i++)
+		init_completion(&se->engines[i].completion);
+
 	dma_set_mask_and_coherent(dev, DMA_BIT_MASK(64));
 	if (device_property_read_u32(dev, "dmam_size", &se->dmam_size))
 		return -ENODEV;
+
+	/*
+	 * Engine 0 does not exist and its data buffer is reused as the command
+	 * buffer for the other engines.  The command buffers of all engines
+	 * therefore must fit within engine 0's data region, i.e.
+	 * dmam_size / SE_ENGINE_MAX >= SE_ENGINE_MAX * 2 * SE_ENGINE_CMD_SIZE.
+	 * Enforce this to keep each engine's data and command buffers from
+	 * overlapping.
+	 */
+	if ((se->dmam_size / SE_ENGINE_MAX) < (SE_ENGINE_MAX * 2 * SE_ENGINE_CMD_SIZE))
+		return -EINVAL;
 
 	se->dmam_base = dmam_alloc_coherent(dev, se->dmam_size, &paddr, GFP_KERNEL);
 	if (!se->dmam_base)
@@ -217,19 +293,27 @@ static int loongson_se_probe(struct platform_device *pdev)
 		return PTR_ERR(se->base);
 
 	nr_irq = platform_irq_count(pdev);
-	if (nr_irq <= 0)
+	if (nr_irq == 0)
 		return -ENODEV;
+	if (nr_irq < 0)
+		return nr_irq;
 
 	writel(SE_INT_ALL, se->base + SE_S2LINT_CL);
 
 	for (i = 0; i < nr_irq; i++) {
 		irq = platform_get_irq(pdev, i);
 		err = devm_request_irq(dev, irq, se_irq_handler, IRQF_SHARED, "loongson-se", se);
-		if (err)
+		if (err) {
 			dev_err(dev, "failed to request IRQ: %d\n", irq);
+			return err;
+		}
 	}
 
 	writel(SE_INT_ALL, se->base + SE_S2LINT_EN);
+
+	err = devm_add_action_or_reset(dev, loongson_se_stop, se);
+	if (err)
+		return err;
 
 	err = loongson_se_init(se, paddr, se->dmam_size);
 	if (err)
