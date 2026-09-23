@@ -1595,10 +1595,10 @@ static int gs_usb_probe(struct usb_interface *intf,
 
 			/* on failure destroy previously created candevs */
 			icount = i;
+			usb_kill_anchored_urbs(&parent->rx_submitted);
 			for (i = 0; i < icount; i++)
 				gs_destroy_candev(parent->canch[i]);
 
-			usb_kill_anchored_urbs(&parent->rx_submitted);
 			kfree(parent);
 			return rc;
 		}
@@ -1635,6 +1635,8 @@ static void gs_usb_disconnect(struct usb_interface *intf)
 		dev_err(&intf->dev, "Disconnect (nodata)\n");
 		return;
 	}
+
+	usb_kill_anchored_urbs(&parent->rx_submitted);
 
 	for (i = 0; i < parent->channel_cnt; i++)
 		if (parent->canch[i])
