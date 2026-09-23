@@ -78,20 +78,27 @@ static const struct {
 
 /**
  * tpm2_calc_ordinal_duration() - Calculate the maximum command duration
+ * @chip:	TPM chip to use.
  * @ordinal: TPM command ordinal.
  *
  * Returns the maximum amount of time the chip is expected by kernel to
- * take in jiffies.
+ * take in jiffies. The duration is never lower than chip->busy_timeout_ms.
  */
-unsigned long tpm2_calc_ordinal_duration(u32 ordinal)
+unsigned long tpm2_calc_ordinal_duration(struct tpm_chip *chip, u32 ordinal)
 {
+	unsigned long duration = TPM2_DURATION_DEFAULT;
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(tpm2_ordinal_duration_map); i++)
-		if (ordinal == tpm2_ordinal_duration_map[i].ordinal)
-			return msecs_to_jiffies(tpm2_ordinal_duration_map[i].duration);
+		if (ordinal == tpm2_ordinal_duration_map[i].ordinal) {
+			duration = tpm2_ordinal_duration_map[i].duration;
+			break;
+		}
 
-	return msecs_to_jiffies(TPM2_DURATION_DEFAULT);
+	if (duration < chip->busy_timeout_ms)
+		duration = chip->busy_timeout_ms;
+
+	return msecs_to_jiffies(duration);
 }
 
 /**

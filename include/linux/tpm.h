@@ -140,6 +140,13 @@ struct tpm_chip {
 	unsigned long duration[TPM_NUM_DURATIONS]; /* jiffies */
 	bool duration_adjusted;
 
+	/*
+	 * Longest unavailability expected from the chip in ms. Raises the
+	 * TPM2_RC_RETRY retry budget and the per-command durations to at
+	 * least this value; 0 keeps the defaults.
+	 */
+	unsigned int busy_timeout_ms;
+
 	struct dentry *bios_dir;
 
 	const struct attribute_group *groups[3 + TPM_MAX_HASHES];

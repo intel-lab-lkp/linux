@@ -53,7 +53,7 @@ MODULE_PARM_DESC(suspend_pcr,
 unsigned long tpm_calc_ordinal_duration(struct tpm_chip *chip, u32 ordinal)
 {
 	if (chip->flags & TPM_CHIP_FLAG_TPM2)
-		return tpm2_calc_ordinal_duration(ordinal);
+		return tpm2_calc_ordinal_duration(chip, ordinal);
 	else
 		return tpm1_calc_ordinal_duration(chip, ordinal);
 }
@@ -213,7 +213,8 @@ out_sync:
  *
  * A wrapper around tpm_try_transmit() that handles TPM2_RC_RETRY returns from
  * the TPM and retransmits the command after a delay up to a maximum wait of
- * TPM2_DURATION_LONG.
+ * TPM2_DURATION_LONG, or chip->busy_timeout_ms when the driver declared a
+ * longer transient unavailability window.
  *
  * Note that TPM 1.x never returns TPM2_RC_RETRY so the retry logic is TPM 2.0
  * only.
@@ -228,6 +229,7 @@ ssize_t tpm_transmit(struct tpm_chip *chip, u8 *buf, size_t bufsiz)
 	/* space for header and handles */
 	u8 save[TPM_HEADER_SIZE + 3*sizeof(u32)];
 	unsigned int delay_msec = TPM2_DURATION_SHORT;
+	unsigned int max_delay_msec = TPM2_DURATION_LONG;
 	u32 rc = 0;
 	ssize_t ret;
 	const size_t save_size = min(sizeof(save), bufsiz);
@@ -240,6 +242,9 @@ ssize_t tpm_transmit(struct tpm_chip *chip, u8 *buf, size_t bufsiz)
 	 * restore the handles.
 	 */
 	memcpy(save, buf, save_size);
+
+	if (chip->busy_timeout_ms > max_delay_msec)
+		max_delay_msec = chip->busy_timeout_ms;
 
 	for (;;) {
 		ret = tpm_try_transmit(chip, buf, bufsiz);
@@ -255,7 +260,7 @@ ssize_t tpm_transmit(struct tpm_chip *chip, u8 *buf, size_t bufsiz)
 		if (rc == TPM2_RC_TESTING && cc == TPM2_CC_SELF_TEST)
 			break;
 
-		if (delay_msec > TPM2_DURATION_LONG) {
+		if (delay_msec > max_delay_msec) {
 			if (rc == TPM2_RC_RETRY)
 				dev_err(&chip->dev, "in retry loop\n");
 			else
