@@ -17,7 +17,7 @@ use kernel::{
     },
     prelude::*,
     sizes::SZ_1K,
-    time::Delta,
+    time::Delta, //
 };
 
 use crate::{
@@ -26,11 +26,11 @@ use crate::{
         NovaRegisters, //
     },
     falcon::{
+        regs,
         Falcon,
         FalconEngine, //
     },
-    num,
-    regs, //
+    num, //
 };
 
 /// FSP message timeout in milliseconds.
