@@ -210,6 +210,17 @@ struct e1000_adapter {
 	/* track device up/down/testing state */
 	unsigned long state;
 
+	/* Flow-control advertisement-latch auto-recovery.
+	 * These MUST persist across the reinit that remediation triggers
+	 * (the reinit generates its own carrier-up), so they are NOT reset
+	 * on link-up. The holdoff and per-episode attempt budget prevent a
+	 * reset/flap storm against a partner that is still booting or that
+	 * genuinely never advertises pause.
+	 */
+	unsigned long fclatch_last_fix;	/* jiffies of last remediation, 0=none */
+	u8 fclatch_attempts;		/* attempts in the current link episode */
+	bool fclatch_gave_up;		/* terminal for episode; re-armed on link-down */
+
 	/* Interrupt Throttle Rate */
 	u32 itr;
 	u32 itr_setting;
