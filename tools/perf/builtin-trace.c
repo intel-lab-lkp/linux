@@ -4898,6 +4898,59 @@ out:
 }
 
 /*
+ * Is the task still running?
+ *
+ * A pid with no /proc entry is gone, and one reported as Z (zombie) or X (dead)
+ * is in or past do_exit(), which is where sched_process_exit() runs. Either way
+ * the BPF programs will never hear about it again.
+ *
+ * Anything that is not one of those, including being unable to tell, is taken
+ * as alive. The two mistakes are not equal: a dead task left in the map holds
+ * an entry that nothing needs, while a live one taken out of it stops being
+ * traced for the rest of the session.
+ */
+static bool trace__task_is_alive(pid_t pid)
+{
+	char path[PATH_MAX];
+	const char *state;
+	char *stat = NULL;
+	bool alive = true;
+	size_t len;
+	int err;
+
+	scnprintf(path, sizeof(path), "%s/%d/stat", procfs__mountpoint(), pid);
+	err = filename__read_str(path, &stat, &len);
+	if (err) {
+		/*
+		 * ENOENT and ESRCH are the task being gone, which is what this
+		 * is looking for. Any other error is perf's own, running out
+		 * of file descriptors or of memory, and says nothing about the
+		 * task.
+		 */
+		return err != -ENOENT && err != -ESRCH;
+	}
+
+	/*
+	 * The state is the field after the command name. do_task_stat() writes
+	 * that name out as it is, so it can hold anything a task cares to call
+	 * itself, ')' and newlines included. Nothing after it has parentheses,
+	 * so the last ')' in the file is the one that closes it; the whole file
+	 * is read rather than a line of it because a line stops at the first of
+	 * those newlines, short of the ')' that is being looked for.
+	 *
+	 * A read that returns something the state cannot be read out of, such
+	 * as the empty result of the task exiting midway through it, leaves the
+	 * task alive by the rule above.
+	 */
+	state = strrchr(stat, ')');
+	if (state != NULL && state[1] == ' ')
+		alive = state[2] != 'Z' && state[2] != 'X';
+
+	free(stat);
+	return alive;
+}
+
+/*
  * Trace the tasks that appeared while perf trace was starting up.
  *
  * evlist__create_maps() enumerated the target from /proc, and
@@ -4919,19 +4972,26 @@ out:
 static int trace__set_startup_pids(struct trace *trace)
 {
 	struct pid_list pids = {};
-	int err;
+	int err = 0;
 
 	/*
-	 * Nothing to do without a target: 'perf trace -a' does not filter on
-	 * pid at all, and evlist__prepare_workload() keeps a workload blocked
-	 * on a pipe until evlist__start_workload(), well after the attach.
+	 * Only a target is enumerated: 'perf trace -a' does not filter on pid
+	 * at all, and evlist__prepare_workload() keeps a workload blocked on a
+	 * pipe until evlist__start_workload(), well after the attach.
 	 */
-	if (!target__has_task(&trace->opts.target))
-		return 0;
+	if (target__has_task(&trace->opts.target)) {
+		err = trace__collect_target_pids(trace, &pids);
+		if (!err)
+			err = augmented_syscalls__set_target_pids(pids.nr, pids.entries);
+	}
 
-	err = trace__collect_target_pids(trace, &pids);
+	/*
+	 * Every session gets the sweep, target or not: --filter-pids names
+	 * tasks to leave out with no target of its own, and those are written
+	 * to a map of their own, before the attach and with the same race.
+	 */
 	if (!err)
-		err = augmented_syscalls__set_target_pids(pids.nr, pids.entries);
+		err = augmented_syscalls__prune_dead_pids(trace__task_is_alive);
 
 	pid_list__exit(&pids);
 	return err;

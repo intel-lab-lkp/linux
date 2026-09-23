@@ -256,6 +256,85 @@ int augmented_syscalls__set_target_pids(unsigned int nr, pid_t *pids)
 }
 
 /*
+ * Remove from a pid keyed map every task that is no longer alive.
+ *
+ * Deleting the key the walk is standing on leaves bpf_map__get_next_key() to
+ * resume from a key that is no longer there, which htab_map_get_next_key()
+ * answers with the first key of the whole map, starting the walk over. The
+ * cursor is therefore only ever moved onto a key that has been found alive,
+ * which is a key this function has just decided to keep, so nothing it does
+ * can send itself back to the beginning.
+ *
+ * sched_process_exit() deletes keys while this runs and can take out the
+ * cursor, which there is no way to prevent or to notice. The walk is bounded
+ * at max_entries steps so that it ends however often that happens: the map
+ * holds no more than that many keys, so a walk that has taken as many steps
+ * has either seen them all or been restarted, and the bound is what stops a
+ * repeatedly restarted walk from going round for ever. Stopping there can
+ * leave a dead task behind, which costs one entry of a great many until the
+ * session ends, where not stopping would cost the session itself.
+ */
+static int prune_dead_map_pids(struct bpf_map *map, bool (*is_alive)(pid_t pid))
+{
+	size_t max_entries = bpf_map__max_entries(map);
+	pid_t cursor, key;
+	bool have_cursor = false;
+
+	for (size_t step = 0; step < max_entries; step++) {
+		int err;
+
+		/* Anything other than success means there is no next key. */
+		if (bpf_map__get_next_key(map, have_cursor ? &cursor : NULL,
+					  &key, sizeof(key)) != 0)
+			break;
+
+		if (is_alive(key)) {
+			cursor = key;
+			have_cursor = true;
+			continue;
+		}
+
+		err = bpf_map__delete_elem(map, &key, sizeof(key), /*flags=*/0);
+		/*
+		 * ENOENT means the key went away while this was running, which
+		 * is sched_process_exit() doing the same job.
+		 */
+		if (err && err != -ENOENT)
+			return err;
+
+		/*
+		 * The cursor stays where it was, which is either a key that is
+		 * still in the map or unset. Unset asks the next step for the
+		 * first key of the map, and the one just deleted is no longer
+		 * it, so the walk moves on either way.
+		 */
+	}
+
+	return 0;
+}
+
+/*
+ * Remove the tasks that are no longer alive from both pid maps.
+ *
+ * has_pids_to_trace and has_pids_filtered are left alone. They say that the
+ * maps are in use rather than that they have anything in them, and clearing
+ * the first would turn a targeted session into a system wide one.
+ */
+int augmented_syscalls__prune_dead_pids(bool (*is_alive)(pid_t pid))
+{
+	int err;
+
+	if (skel == NULL)
+		return 0;
+
+	err = prune_dead_map_pids(skel->maps.pids_to_trace, is_alive);
+	if (!err)
+		err = prune_dead_map_pids(skel->maps.pids_filtered, is_alive);
+
+	return err;
+}
+
+/*
  * Populate syscalls in the BPF syscalls_to_trace map:
  * - not_syscalls: true if '!' prefix was specified (blacklist mode: trace
  *   all syscalls EXCEPT these).
