@@ -38,12 +38,22 @@ struct disas_context *objtool_disas_ctx;
 
 size_t sym_name_max_len;
 
+static struct hlist_head *insn_hash_head(struct objtool_file *file,
+					 struct section *sec, unsigned long offset)
+{
+	/* Determine instruction hash based on section index and offset. */
+	const u32 sec_hash = sec_offset_hash(sec, offset);
+	const u32 hash = hash_min(sec_hash, file->insn_hash_bits);
+
+	return &file->insn_hash[hash];
+}
+
 struct instruction *find_insn(struct objtool_file *file,
 			      struct section *sec, unsigned long offset)
 {
 	struct instruction *insn;
 
-	hash_for_each_possible(file->insn_hash, insn, hash, sec_offset_hash(sec, offset)) {
+	hlist_for_each_entry(insn, insn_hash_head(file, sec, offset), hash) {
 		if (insn->sec == sec && insn->offset == offset)
 			return insn;
 	}
@@ -404,6 +414,44 @@ static unsigned long nr_insns;
 static unsigned long nr_insns_visited;
 
 /*
+ * sec_offset_hash() keys on OFFSET_STRIDE windows, so the instructions of a
+ * window share a chain and buckets beyond one per window would sit empty.
+ */
+#define INSN_HASH_BYTES_PER_BUCKET	OFFSET_STRIDE
+#define INSN_HASH_MIN_BITS		10
+
+static unsigned long total_text_size(struct objtool_file *file)
+{
+	unsigned long size = 0;
+	struct section *sec;
+
+	for_each_sec(file->elf, sec)
+		if (is_text_sec(sec))
+			size += sec_size(sec);
+
+	return size;
+}
+
+static int alloc_insn_hash(struct objtool_file *file, unsigned long text_size)
+{
+	const unsigned long nr_buckets = text_size / INSN_HASH_BYTES_PER_BUCKET;
+	const int bits = ilog2(nr_buckets);
+
+	file->insn_hash_bits = max(INSN_HASH_MIN_BITS, bits);
+	file->insn_hash = calloc(1UL << file->insn_hash_bits,
+				 sizeof(*file->insn_hash));
+	if (!file->insn_hash) {
+		ERROR_GLIBC("calloc");
+		return -1;
+	}
+
+	if (opts.stats)
+		printf("insn_hash_bits: %d\n", file->insn_hash_bits);
+
+	return 0;
+}
+
+/*
  * Call the arch-specific instruction decoder for all the instructions and add
  * them to the global instruction list.
  */
@@ -413,6 +461,9 @@ static int decode_instructions(struct objtool_file *file)
 	struct symbol *func;
 	unsigned long offset;
 	struct instruction *insn;
+
+	if (alloc_insn_hash(file, total_text_size(file)))
+		return -1;
 
 	for_each_sec(file->elf, sec) {
 		struct instruction *insns = NULL;
@@ -474,7 +525,7 @@ static int decode_instructions(struct objtool_file *file)
 			if (insn->type == INSN_BUG)
 				insn->dead_end = true;
 
-			hash_add(file->insn_hash, &insn->hash, sec_offset_hash(sec, insn->offset));
+			hlist_add_head(&insn->hash, insn_hash_head(file, sec, insn->offset));
 			nr_insns++;
 		}
 
@@ -4802,6 +4853,9 @@ void free_insns(struct objtool_file *file)
 
 	for (chunk = chunks; chunk; chunk = chunk->next)
 		free(chunk->addr);
+
+	free(file->insn_hash);
+	file->insn_hash = NULL;
 }
 
 const char *objtool_disas_insn(struct instruction *insn)
