@@ -5219,6 +5219,7 @@ static __always_inline bool prepare_alloc_flags(gfp_t *gfp, unsigned int order,
 /*
  * __alloc_pages_bulk - Allocate a number of order-0 pages to an array
  * @gfp: GFP flags for the allocation
+ * @alloc_flags: Allocation behavior flags
  * @preferred_nid: The preferred NUMA node ID to allocate from
  * @nodemask: Set of nodes to allocate from, may be NULL
  * @nr_pages: The number of pages desired in the array
@@ -5237,15 +5238,16 @@ static __always_inline bool prepare_alloc_flags(gfp_t *gfp, unsigned int order,
  * @page_array were set to %NULL on entry, the slots from 0 to the return value
  * - 1 will be filled.
  */
-unsigned long alloc_pages_bulk_noprof(gfp_t gfp, int preferred_nid,
-			nodemask_t *nodemask, int nr_pages,
-			struct page **page_array)
+unsigned long __alloc_pages_bulk_noprof(gfp_t gfp, unsigned int alloc_flags,
+		int preferred_nid, nodemask_t *nodemask, int nr_pages,
+		struct page **page_array)
 {
 	struct page *page;
 	struct zone *zone;
 	struct zoneref *z;
 	struct per_cpu_pages *pcp;
 	struct list_head *pcp_list;
+	gfp_t orig_gfp = gfp;
 	struct alloc_context ac;
 	unsigned int fastpath_alloc_flags;
 	int nr_populated = 0, nr_account = 0;
@@ -5285,7 +5287,7 @@ unsigned long alloc_pages_bulk_noprof(gfp_t gfp, int preferred_nid,
 		goto failed;
 #endif
 
-	if (!prepare_alloc_flags(&gfp, 0, ALLOC_DEFAULT, &ac.alloc_flags,
+	if (!prepare_alloc_flags(&gfp, 0, alloc_flags, &ac.alloc_flags,
 				 &fastpath_alloc_flags))
 		goto out;
 
@@ -5296,7 +5298,7 @@ unsigned long alloc_pages_bulk_noprof(gfp_t gfp, int preferred_nid,
 				 &fastpath_alloc_flags))
 		goto out;
 
-	/* Find an allowed local zone that meets the low watermark. */
+	/* Find an allowed local zone that meets the required watermark. */
 	z = ac.preferred_zoneref;
 	for_next_zone_zonelist_nodemask(zone, z, ac.highest_zoneidx, ac.nodemask) {
 		unsigned long mark;
@@ -5332,8 +5334,8 @@ retry_this_zone:
 	}
 
 	/*
-	 * If there are no allowed local zones that meets the watermarks then
-	 * try to allocate a single page and reclaim if necessary.
+	 * If there are no allowed local zones that meet the watermarks, try the
+	 * single-page allocator.
 	 */
 	if (unlikely(!zone))
 		goto failed;
@@ -5366,7 +5368,7 @@ retry_this_zone:
 		}
 		nr_account++;
 
-		prep_new_page(page, 0, gfp, ALLOC_DEFAULT);
+		prep_new_page(page, 0, gfp, fastpath_alloc_flags);
 		trace_mm_page_alloc(page, 0, gfp, ac.migratetype);
 		kmsan_alloc_page(page, 0, gfp & ~__GFP_RECLAIM);
 		set_page_refcounted(page);
@@ -5382,10 +5384,18 @@ out:
 	return nr_populated;
 
 failed:
-	page = __alloc_pages_noprof(gfp, 0, preferred_nid, nodemask, ALLOC_DEFAULT);
+	page = __alloc_pages_noprof(orig_gfp, 0, preferred_nid, nodemask,
+				    alloc_flags);
 	if (page)
 		page_array[nr_populated++] = page;
 	goto out;
+}
+
+unsigned long alloc_pages_bulk_noprof(gfp_t gfp, int preferred_nid,
+		nodemask_t *nodemask, int nr_pages, struct page **page_array)
+{
+	return __alloc_pages_bulk_noprof(gfp, ALLOC_DEFAULT, preferred_nid,
+					 nodemask, nr_pages, page_array);
 }
 EXPORT_SYMBOL_GPL(alloc_pages_bulk_noprof);
 

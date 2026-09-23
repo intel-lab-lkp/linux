@@ -264,6 +264,10 @@ struct folio *__folio_alloc_flags_noprof(gfp_t gfp, unsigned int order,
 #define __folio_alloc_flags(...) \
 	alloc_hooks(__folio_alloc_flags_noprof(__VA_ARGS__))
 
+unsigned long __alloc_pages_bulk_noprof(gfp_t gfp, unsigned int alloc_flags,
+		int preferred_nid, nodemask_t *nodemask, int nr_pages,
+		struct page **page_array);
+
 extern void zone_pcp_reset(struct zone *zone);
 extern void zone_pcp_disable(struct zone *zone);
 extern void zone_pcp_enable(struct zone *zone);
