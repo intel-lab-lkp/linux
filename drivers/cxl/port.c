@@ -5,6 +5,7 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 
+#include "cxlcache.h"
 #include "cxlmem.h"
 #include "cxlpci.h"
 
@@ -26,9 +27,13 @@
  * PCIe topology.
  */
 
-static void schedule_detach(void *cxlmd)
+static void schedule_detach(void *ep_dev)
 {
-	schedule_cxl_memdev_detach(cxlmd);
+	if (is_cxl_memdev(ep_dev))
+		schedule_cxl_memdev_detach(ep_dev);
+
+	if (is_cxl_cachedev(ep_dev))
+		schedule_cxl_cachedev_detach(ep_dev);
 }
 
 static int discover_region(struct device *dev, void *unused)
@@ -118,24 +123,9 @@ static int cxl_ras_unmask(struct cxl_port *port)
 	return 0;
 }
 
-static int cxl_endpoint_port_probe(struct cxl_port *port)
+static void cxl_endpoint_setup_dport_ras(struct cxl_port *port)
 {
-	struct cxl_memdev *cxlmd = to_cxl_memdev(port->uport_dev);
 	struct cxl_dport *dport = port->parent_dport;
-	int rc;
-
-	/* Cache the data early to ensure is_visible() works */
-	read_cdat_data(port);
-	cxl_endpoint_parse_cdat(port);
-
-	get_device(&cxlmd->dev);
-	rc = devm_add_action_or_reset(&port->dev, schedule_detach, cxlmd);
-	if (rc)
-		return rc;
-
-	rc = devm_cxl_endpoint_decoders_setup(port);
-	if (rc)
-		return rc;
 
 	/*
 	 * With VH (CXL Virtual Host) topology the cxl_port::add_dport() method
@@ -151,6 +141,27 @@ static int cxl_endpoint_port_probe(struct cxl_port *port)
 	devm_cxl_port_ras_setup(port);
 	if (cxl_ras_unmask(port))
 		dev_dbg(&port->dev, "failed to unmask RAS interrupts\n");
+}
+
+static int cxl_mem_endpoint_port_probe(struct cxl_port *port)
+{
+	struct cxl_memdev *cxlmd = to_cxl_memdev(port->uport_dev);
+	int rc;
+
+	/* Cache the data early to ensure is_visible() works */
+	read_cdat_data(port);
+	cxl_endpoint_parse_cdat(port);
+
+	get_device(&cxlmd->dev);
+	rc = devm_add_action_or_reset(&port->dev, schedule_detach, &cxlmd->dev);
+	if (rc)
+		return rc;
+
+	rc = devm_cxl_endpoint_decoders_setup(port);
+	if (rc)
+		return rc;
+
+	cxl_endpoint_setup_dport_ras(port);
 
 	/*
 	 * Now that all endpoint decoders are successfully enumerated, try to
@@ -161,12 +172,30 @@ static int cxl_endpoint_port_probe(struct cxl_port *port)
 	return 0;
 }
 
+static int cxl_cache_endpoint_port_probe(struct cxl_port *port)
+{
+	struct cxl_cachedev *cxlcd = to_cxl_cachedev(port->uport_dev);
+	int rc;
+
+	get_device(&cxlcd->dev);
+	rc = devm_add_action_or_reset(&port->dev, schedule_detach,
+				      &cxlcd->dev);
+	if (rc)
+		return rc;
+
+	cxl_endpoint_setup_dport_ras(port);
+
+	return rc;
+}
+
 static int cxl_port_probe(struct device *dev)
 {
 	struct cxl_port *port = to_cxl_port(dev);
 
-	if (is_cxl_endpoint(port))
-		return cxl_endpoint_port_probe(port);
+	if (is_cxl_memdev(port->uport_dev))
+		return cxl_mem_endpoint_port_probe(port);
+	else if (is_cxl_cachedev(port->uport_dev))
+		return cxl_cache_endpoint_port_probe(port);
 	return cxl_switch_port_probe(port);
 }
 

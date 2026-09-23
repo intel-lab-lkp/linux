@@ -9,6 +9,7 @@
  * a CXL device
  * @dev: driver core device object
  * @cxlds: device state backing this device
+ * @detach_work: active cachedev lost a port in its ancestry
  * @endpoint: connection to the CXL port topology for this device
  * @id: id number of this cachedev instance
  * @depth: endpoint port depth in hierarchy
@@ -16,6 +17,7 @@
 struct cxl_cachedev {
 	struct device dev;
 	struct cxl_dev_state *cxlds;
+	struct work_struct detach_work;
 	struct cxl_port *endpoint;
 	int id;
 	int depth;

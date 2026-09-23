@@ -752,6 +752,7 @@ struct cxl_port *cxl_pci_find_port(struct pci_dev *pdev,
 struct cxl_port *cxl_mem_find_port(struct cxl_memdev *cxlmd,
 				   struct cxl_dport **dport);
 bool schedule_cxl_memdev_detach(struct cxl_memdev *cxlmd);
+bool schedule_cxl_cachedev_detach(struct cxl_cachedev *cxlcd);
 
 struct cxl_dport *devm_cxl_add_dport(struct cxl_port *port,
 				     struct device *dport, int port_id,

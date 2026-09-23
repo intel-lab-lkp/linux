@@ -33,6 +33,10 @@ static int cxl_cache_probe(struct device *dev)
 	/* Disable CXL.cache until we can validate the device configuration */
 	cxl_clear_cache_enable(cxlds);
 
+	/* See comment in cxl_mem_probe() */
+	if (work_pending(&cxlcd->detach_work))
+		return -EBUSY;
+
 	rc = cxl_accel_read_cache_info(cxlds);
 	if (rc)
 		return rc;

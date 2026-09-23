@@ -43,6 +43,16 @@ bool is_cxl_cachedev(const struct device *dev)
 }
 EXPORT_SYMBOL_NS_GPL(is_cxl_cachedev, "CXL");
 
+static void detach_cachedev(struct work_struct *work)
+{
+	struct cxl_cachedev *cxlcd;
+
+	cxlcd = container_of(work, typeof(*cxlcd), detach_work);
+
+	device_release_driver(&cxlcd->dev);
+	put_device(&cxlcd->dev);
+}
+
 static struct lock_class_key cxl_cachedev_key;
 
 static struct cxl_cachedev *cxl_cachedev_alloc(struct cxl_dev_state *cxlds)
@@ -70,6 +80,7 @@ static struct cxl_cachedev *cxl_cachedev_alloc(struct cxl_dev_state *cxlds)
 	dev->bus = &cxl_bus_type;
 	dev->type = &cxl_cachedev_type;
 	device_set_pm_not_required(dev);
+	INIT_WORK(&cxlcd->detach_work, detach_cachedev);
 
 	return_ptr(cxlcd);
 }

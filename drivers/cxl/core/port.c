@@ -2356,6 +2356,12 @@ bool schedule_cxl_memdev_detach(struct cxl_memdev *cxlmd)
 }
 EXPORT_SYMBOL_NS_GPL(schedule_cxl_memdev_detach, "CXL");
 
+bool schedule_cxl_cachedev_detach(struct cxl_cachedev *cxlcd)
+{
+	return queue_work(cxl_bus_wq, &cxlcd->detach_work);
+}
+EXPORT_SYMBOL_NS_GPL(schedule_cxl_cachedev_detach, "CXL");
+
 static void add_latency(struct access_coordinate *c, long latency)
 {
 	for (int i = 0; i < ACCESS_COORDINATE_MAX; i++) {
