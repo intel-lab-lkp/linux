@@ -980,7 +980,7 @@ int ethtool_net_get_ts_info_by_phc(struct net_device *dev,
 	if (err)
 		return err;
 
-	if (info->phc_index == hwprov_desc->index &&
+	if (info->phc_index >= 0 && info->phc_index == hwprov_desc->index &&
 	    net_support_hwtstamp_qualifier(dev, hwprov_desc->qualifier))
 		return 0;
 
