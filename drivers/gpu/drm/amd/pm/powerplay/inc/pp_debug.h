@@ -54,6 +54,18 @@
 		pr_debug(fmt, ##__VA_ARGS__); \
 	} while (0)
 
+/* Reports and returns true when index does not fit into the lookup table. */
+#define PP_VOLTAGE_INDEX_OOB(lookup_table, index, fmt, ...)		\
+({									\
+	typeof(lookup_table) __lookup = (lookup_table);			\
+	typeof(index) __idx = (index);					\
+	bool __oob = __idx >= __lookup->count;				\
+									\
+	if (__oob)							\
+		pr_err(fmt " index %u out of bounds (%u)\n",		\
+		       ##__VA_ARGS__, __idx, __lookup->count);		\
+	__oob;								\
+})
 
 #define GET_FLEXIBLE_ARRAY_MEMBER_ADDR(type, member, ptr, n)	\
 	(type *)((char *)&(ptr)->member + (sizeof(type) * (n)))

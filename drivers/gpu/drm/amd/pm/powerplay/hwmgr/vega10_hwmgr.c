@@ -691,12 +691,9 @@ static int vega10_patch_voltage_dependency_tables_with_lookup_table(
 
 		for (entry_id = 0; entry_id < vdt->count; entry_id++) {
 			voltage_id = vdt->entries[entry_id].vddInd;
-			if (voltage_id >= table_info->vddc_lookup_table->count) {
-				pr_err("amdgpu: clk_dep[%u][%u] vddc index %u out of bounds (%u)\n",
-				       i, entry_id, voltage_id,
-				       table_info->vddc_lookup_table->count);
+			if (PP_VOLTAGE_INDEX_OOB(table_info->vddc_lookup_table, voltage_id,
+						 "clk_dep[%u][%u] vddc", i, entry_id))
 				return -EINVAL;
-			}
 			vdt->entries[entry_id].vddc =
 					table_info->vddc_lookup_table->entries[voltage_id].us_vdd;
 		}
@@ -704,44 +701,32 @@ static int vega10_patch_voltage_dependency_tables_with_lookup_table(
 
 	for (entry_id = 0; entry_id < mm_table->count; ++entry_id) {
 		voltage_id = mm_table->entries[entry_id].vddcInd;
-		if (voltage_id >= table_info->vddc_lookup_table->count) {
-			pr_err("amdgpu: mm[%u] vddc index %u out of bounds (%u)\n",
-			       entry_id, voltage_id,
-			       table_info->vddc_lookup_table->count);
+		if (PP_VOLTAGE_INDEX_OOB(table_info->vddc_lookup_table, voltage_id,
+					 "mm[%u] vddc", entry_id))
 			return -EINVAL;
-		}
 		mm_table->entries[entry_id].vddc =
 			table_info->vddc_lookup_table->entries[voltage_id].us_vdd;
 	}
 
 	for (entry_id = 0; entry_id < mclk_table->count; ++entry_id) {
 		voltage_id = mclk_table->entries[entry_id].vddInd;
-		if (voltage_id >= table_info->vddc_lookup_table->count) {
-			pr_err("amdgpu: mclk[%u] vddc index %u out of bounds (%u)\n",
-			       entry_id, voltage_id,
-			       table_info->vddc_lookup_table->count);
+		if (PP_VOLTAGE_INDEX_OOB(table_info->vddc_lookup_table, voltage_id,
+					 "mclk[%u] vddc", entry_id))
 			return -EINVAL;
-		}
 		mclk_table->entries[entry_id].vddc =
 				table_info->vddc_lookup_table->entries[voltage_id].us_vdd;
 
 		voltage_id = mclk_table->entries[entry_id].vddciInd;
-		if (voltage_id >= table_info->vddci_lookup_table->count) {
-			pr_err("amdgpu: mclk[%u] vddci index %u out of bounds (%u)\n",
-			       entry_id, voltage_id,
-			       table_info->vddci_lookup_table->count);
+		if (PP_VOLTAGE_INDEX_OOB(table_info->vddci_lookup_table, voltage_id,
+					 "mclk[%u] vddci", entry_id))
 			return -EINVAL;
-		}
 		mclk_table->entries[entry_id].vddci =
 				table_info->vddci_lookup_table->entries[voltage_id].us_vdd;
 
 		voltage_id = mclk_table->entries[entry_id].mvddInd;
-		if (voltage_id >= table_info->vddmem_lookup_table->count) {
-			pr_err("amdgpu: mclk[%u] vddmem index %u out of bounds (%u)\n",
-			       entry_id, voltage_id,
-			       table_info->vddmem_lookup_table->count);
+		if (PP_VOLTAGE_INDEX_OOB(table_info->vddmem_lookup_table, voltage_id,
+					 "mclk[%u] vddmem", entry_id))
 			return -EINVAL;
-		}
 		mclk_table->entries[entry_id].mvdd =
 				table_info->vddmem_lookup_table->entries[voltage_id].us_vdd;
 	}
