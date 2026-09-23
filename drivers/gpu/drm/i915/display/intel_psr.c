@@ -1587,12 +1587,59 @@ static bool intel_psr2_config_valid(struct intel_dp *intel_dp,
 	return true;
 }
 
+/*
+ * Joiner needs a per-pipe PSR/Panel Replay register block, only
+ * supported on pipe A/B.
+ */
+static bool psr_joiner_config_valid(struct intel_dp *intel_dp,
+				    const struct intel_crtc_state *crtc_state,
+				    const char *what)
+{
+	struct intel_display *display = to_intel_display(intel_dp);
+
+	if (!crtc_state->joiner_pipes)
+		return true;
+
+	if (crtc_state->joiner_pipes & ~(BIT(PIPE_A) | BIT(PIPE_B))) {
+		drm_dbg_kms(display->drm,
+			    "%s not enabled, joiner only supported on pipe A/B\n", what);
+		return false;
+	}
+
+	return true;
+}
+
+/*
+ * PSR2 selective fetch and Panel Replay Selective Update share the same
+ * joiner limits, plus no uncompressed joiner configuration in YUV 4:2:0.
+ */
+static bool psr2_joiner_config_valid(struct intel_dp *intel_dp,
+				     const struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(intel_dp);
+
+	if (!psr_joiner_config_valid(intel_dp, crtc_state, "Selective update"))
+		return false;
+
+	if (crtc_state->joiner_pipes && !crtc_state->dsc.compression_enable &&
+	    crtc_state->output_format == INTEL_OUTPUT_FORMAT_YCBCR420) {
+		drm_dbg_kms(display->drm,
+			    "Selective update not enabled, uncompressed joiner does not support YUV 4:2:0\n");
+		return false;
+	}
+
+	return true;
+}
+
 static bool intel_sel_update_config_valid(struct intel_crtc_state *crtc_state,
 					  struct drm_connector_state *conn_state)
 {
 	struct intel_connector *connector = to_intel_connector(conn_state->connector);
 	struct intel_dp *intel_dp = intel_attached_dp(connector);
 	struct intel_display *display = to_intel_display(intel_dp);
+
+	if (!psr2_joiner_config_valid(intel_dp, crtc_state))
+		goto unsupported;
 
 	if (HAS_PSR2_SEL_FETCH(display) &&
 	    !intel_psr2_sel_fetch_config_valid(intel_dp, crtc_state) &&
@@ -1732,6 +1779,9 @@ static bool _panel_replay_compute_config(struct intel_crtc_state *crtc_state,
 			    "Panel Replay not enabled because it's not supported with DSC\n");
 		return false;
 	}
+
+	if (!psr_joiner_config_valid(intel_dp, crtc_state, "Panel Replay"))
+		return false;
 
 	crtc_state->link_off_after_as_sdp_when_pr_active = compute_link_off_after_as_sdp_when_pr_active(connector);
 	crtc_state->disable_as_sdp_when_pr_active = compute_disable_as_sdp_when_pr_active(connector);
@@ -1874,17 +1924,6 @@ void intel_psr_compute_config(struct intel_dp *intel_dp,
 		return;
 	}
 
-	/*
-	 * FIXME figure out what is wrong with PSR+joiner and
-	 * fix it. Presumably something related to the fact that
-	 * PSR is a transcoder level feature.
-	 */
-	if (crtc_state->joiner_pipes) {
-		drm_dbg_kms(display->drm,
-			    "PSR disabled due to joiner\n");
-		return;
-	}
-
 	/* Only used for state verification. */
 	crtc_state->panel_replay_dsc_support = connector->dp.panel_replay_caps.dsc_support;
 	crtc_state->has_panel_replay = _panel_replay_compute_config(crtc_state, conn_state);
@@ -1896,6 +1935,14 @@ void intel_psr_compute_config(struct intel_dp *intel_dp,
 		return;
 
 	crtc_state->has_sel_update = intel_sel_update_config_valid(crtc_state, conn_state);
+
+	/* Plain PSR1 is not supported with joiner. */
+	if (crtc_state->joiner_pipes && !crtc_state->has_panel_replay &&
+	    !crtc_state->has_sel_update) {
+		drm_dbg_kms(display->drm,
+			    "PSR disabled, PSR1 not supported with joiner\n");
+		crtc_state->has_psr = false;
+	}
 }
 
 void intel_psr_get_config(struct intel_encoder *encoder,
@@ -4614,6 +4661,10 @@ void intel_psr_compute_config_late(struct intel_dp *intel_dp,
 		crtc_state->has_sel_update = false;
 		crtc_state->enable_psr2_su_region_et = false;
 		crtc_state->enable_psr2_sel_fetch = false;
+
+		/* Plain PSR1 is not supported with joiner. */
+		if (crtc_state->joiner_pipes)
+			crtc_state->has_psr = false;
 	}
 
 	/* Wa_18037818876 */
