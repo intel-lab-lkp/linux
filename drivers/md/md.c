@@ -97,6 +97,7 @@ static struct workqueue_struct *md_misc_wq;
 static int remove_and_add_spares(struct mddev *mddev,
 				 struct md_rdev *this);
 static void mddev_detach(struct mddev *mddev);
+static void __md_stop(struct mddev *mddev);
 static void export_rdev(struct md_rdev *rdev);
 static void md_wakeup_thread_directly(struct md_thread __rcu **thread);
 
@@ -4229,7 +4230,33 @@ level_store(struct mddev *mddev, const char *buf, size_t len)
 		mddev->in_sync = 1;
 		timer_delete_sync(&mddev->safemode_timer);
 	}
-	pers->run(mddev);
+	rv = pers->run(mddev);
+	if (rv) {
+		/*
+		 * ->run() has released the private data of the new personality,
+		 * while the old one has already been released as well. There is
+		 * nothing to fall back to, so stop the array to avoid leaving
+		 * 'mddev->pers' pointing to a personality which has no private
+		 * data, and reminds user to try to active the mddev again.
+		 */
+		pr_warn("md: %s: failed to run %s after takeover, please try to active\n",
+			mdname(mddev), pers->head.name);
+		if (mddev->pers->sync_request && mddev->to_remove == NULL)
+			mddev->to_remove = &md_redundancy_group;
+		if (md_bitmap_enabled(mddev, true))
+			mddev->bitmap_ops->flush(mddev);
+		clear_bit(MD_SERIALIZE_POLICY, &mddev->flags);
+		mddev_destroy_serial_pool(mddev, NULL);
+		__md_stop(mddev);
+		rdev_for_each(rdev, mddev)
+			if (rdev->raid_disk >= 0)
+				sysfs_unlink_rdev(mddev, rdev);
+		set_capacity_and_notify(mddev->gendisk, 0);
+		mddev->changed = 1;
+		md_new_event();
+		sysfs_notify_dirent_safe(mddev->sysfs_state);
+		goto out_unlock;
+	}
 	set_bit(MD_SB_CHANGE_DEVS, &mddev->sb_flags);
 	if (!mddev->thread)
 		md_update_sb(mddev, 1);
