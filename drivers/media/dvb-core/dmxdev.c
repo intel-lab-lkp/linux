@@ -63,7 +63,9 @@ static ssize_t dvb_dmxdev_buffer_read(struct dvb_ringbuffer *src,
 
 	if (src->error) {
 		ret = src->error;
-		dvb_ringbuffer_flush(src);
+		/* -ENODEV: the demux is gone for good, keep it for all readers */
+		if (ret != -ENODEV)
+			dvb_ringbuffer_flush(src);
 		return ret;
 	}
 
@@ -81,7 +83,8 @@ static ssize_t dvb_dmxdev_buffer_read(struct dvb_ringbuffer *src,
 
 		if (src->error) {
 			ret = src->error;
-			dvb_ringbuffer_flush(src);
+			if (ret != -ENODEV)
+				dvb_ringbuffer_flush(src);
 			break;
 		}
 
@@ -1035,6 +1038,9 @@ dvb_demux_read(struct file *file, char __user *buf, size_t count,
 	struct dmxdev_filter *dmxdevfilter = file->private_data;
 	int ret;
 
+	if (dmxdevfilter->dev->exit)
+		return -ENODEV;
+
 	if (mutex_lock_interruptible(&dmxdevfilter->mutex))
 		return -ERESTARTSYS;
 
@@ -1457,8 +1463,29 @@ EXPORT_SYMBOL(dvb_dmxdev_init);
 
 void dvb_dmxdev_release(struct dmxdev *dmxdev)
 {
+	int i;
+
 	mutex_lock(&dmxdev->mutex);
 	dmxdev->exit = 1;
+
+	/*
+	 * Wake up everyone blocked in read() or poll() on the demux and dvr
+	 * devices, so that they see the error, close their file handles and
+	 * let the waits below finish.
+	 */
+	spin_lock_irq(&dmxdev->lock);
+	dmxdev->dvr_buffer.error = -ENODEV;
+	for (i = 0; i < dmxdev->filternum; i++) {
+		if (dmxdev->filter[i].state >= DMXDEV_STATE_ALLOCATED)
+			dmxdev->filter[i].buffer.error = -ENODEV;
+	}
+	spin_unlock_irq(&dmxdev->lock);
+
+	wake_up_all(&dmxdev->dvr_buffer.queue);
+	for (i = 0; i < dmxdev->filternum; i++) {
+		if (dmxdev->filter[i].state >= DMXDEV_STATE_ALLOCATED)
+			wake_up_all(&dmxdev->filter[i].buffer.queue);
+	}
 	mutex_unlock(&dmxdev->mutex);
 
 	if (dmxdev->dvbdev->users > 1) {
