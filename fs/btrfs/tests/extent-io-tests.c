@@ -507,7 +507,7 @@ static int __test_eb_bitmaps(unsigned long *bitmap, struct extent_buffer *eb)
 static int test_eb_bitmaps(u32 sectorsize, u32 nodesize)
 {
 	struct btrfs_fs_info *fs_info;
-	unsigned long AUTO_KFREE(bitmap);
+	unsigned long AUTO_KVFREE(bitmap);
 	struct extent_buffer *eb = NULL;
 	int ret;
 
@@ -519,7 +519,7 @@ static int test_eb_bitmaps(u32 sectorsize, u32 nodesize)
 		return -ENOMEM;
 	}
 
-	bitmap = kmalloc(nodesize, GFP_KERNEL);
+	bitmap = kvmalloc(nodesize, GFP_KERNEL);
 	if (!bitmap) {
 		test_err("couldn't allocate test bitmap");
 		ret = -ENOMEM;
