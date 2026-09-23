@@ -46,6 +46,9 @@ static const struct of_device_id ath11k_ahb_of_match[] = {
 	{ .compatible = "qcom,ipq5018-wifi",
 	  .data = (void *)ATH11K_HW_IPQ5018_HW10,
 	},
+	{ .compatible = "qcom,qcn6122-wifi",
+	  .data = (void *)ATH11K_HW_QCN6122_HW10,
+	},
 	{ }
 };
 
@@ -1395,6 +1398,10 @@ static int ath11k_ahb_setup_msi_resources(struct ath11k_base *ab)
 	ab->pci.msi.addr_hi = upper_32_bits(msi_addr_iova);
 
 	ret = of_property_read_u32_index(ab->dev->of_node, "interrupts", 1, &int_prop);
+	if (ret == -EINVAL)
+		ret = of_property_read_u32_index(ab->dev->of_node,
+						 "interrupts-extended", 2,
+						 &int_prop);
 	if (ret)
 		return ret;
 
