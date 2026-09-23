@@ -550,7 +550,7 @@ err_free:
 	return ret;
 }
 
-static void iommu_deinit_device(struct device *dev)
+static void iommu_deinit_device(struct device *dev, bool blocked)
 {
 	struct iommu_group *group = dev->iommu_group;
 	const struct iommu_ops *ops = dev_iommu_ops(dev);
@@ -703,7 +703,7 @@ err_remove_gdev:
 	list_del(&gdev->list);
 	__iommu_group_free_device(group, gdev);
 err_put_group:
-	iommu_deinit_device(dev);
+	iommu_deinit_device(dev, false);
 	mutex_unlock(&group->mutex);
 	iommu_group_put(group);
 
@@ -759,13 +759,15 @@ static void __iommu_group_remove_device(struct device *dev)
 
 	mutex_lock(&group->mutex);
 	for_each_group_device(group, device) {
+		bool blocked = device->blocked;
+
 		if (device->dev != dev)
 			continue;
 
 		list_del(&device->list);
 		__iommu_group_free_device(group, device);
 		if (dev_has_iommu(dev))
-			iommu_deinit_device(dev);
+			iommu_deinit_device(dev, blocked);
 		else
 			dev->iommu_group = NULL;
 		break;
