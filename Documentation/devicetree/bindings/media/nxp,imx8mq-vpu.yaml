@@ -15,8 +15,6 @@ description:
 properties:
   compatible:
     oneOf:
-      - const: nxp,imx8mq-vpu
-        deprecated: true
       - const: nxp,imx8mq-vpu-g1
       - const: nxp,imx8mq-vpu-g2
       - const: nxp,imx8mm-vpu-g1
