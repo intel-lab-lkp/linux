@@ -11,6 +11,7 @@
 #include <linux/of.h>
 #include <linux/of_reserved_mem.h>
 #include <linux/dma-mapping.h>
+#include <linux/firmware/qcom/qcom_scm.h>
 #include <linux/iommu.h>
 #include "ahb.h"
 #include "debug.h"
@@ -430,8 +431,63 @@ static void ath11k_ahb_stop(struct ath11k_base *ab)
 	ath11k_ce_cleanup_pipes(ab);
 }
 
+static int ath11k_ahb_boot_user_pd(struct ath11k_base *ab)
+{
+	struct ath11k_ahb *ab_ahb = ath11k_ahb_priv(ab);
+	unsigned long time_left;
+	int ret;
+
+	if (ab->hw_rev == ATH11K_HW_IPQ5018_HW10) {
+		ret = qcom_scm_pas_set_wifi_power_mode(MPD_WCNSS_PAS_ID, true);
+		if (ret) {
+			ath11k_err(ab, "failed to power up wifi: %d\n", ret);
+			return ret;
+		}
+	}
+
+	ret = qcom_smem_state_update_bits(ab_ahb->spawn_state, BIT(ab_ahb->spawn_bit),
+					  BIT(ab_ahb->spawn_bit));
+	if (ret) {
+		ath11k_err(ab, "Failed to update spawn state %d\n", ret);
+		return ret;
+	}
+
+	time_left = wait_for_completion_timeout(&ab_ahb->userpd_spawned,
+						ATH11K_USERPD_SPAWN_TIMEOUT);
+	if (!time_left) {
+		ath11k_err(ab, "UserPD spawn wait timed out\n");
+		return -ETIMEDOUT;
+	}
+
+	time_left = wait_for_completion_timeout(&ab_ahb->userpd_ready,
+						ATH11K_USERPD_READY_TIMEOUT);
+	if (!time_left) {
+		ath11k_err(ab, "UserPD ready wait timed out\n");
+		return -ETIMEDOUT;
+	}
+
+	qcom_smem_state_update_bits(ab_ahb->spawn_state, BIT(ab_ahb->spawn_bit), 0);
+
+	ath11k_dbg(ab, ATH11K_DBG_AHB, "UserPD%d is now UP\n", ab_ahb->userpd_id);
+
+	return 0;
+}
+
 static int ath11k_ahb_power_up(struct ath11k_base *ab)
 {
+	struct ath11k_ahb *ab_ahb = ath11k_ahb_priv(ab);
+	int ret;
+
+	if (ab_ahb->userpd_id > 0 &&
+	    ab_ahb->userpd_id < ATH11K_AHB_USERPD_ID_MAX) {
+		ret = ath11k_ahb_boot_user_pd(ab);
+		if (ret) {
+			ath11k_err(ab, "failed to boot userPD%d: %d\n",
+				   ab_ahb->userpd_id, ret);
+			return ret;
+		}
+	}
+
 	return 0;
 }
 
