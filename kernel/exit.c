@@ -35,6 +35,7 @@
 #include <linux/mount.h>
 #include <linux/proc_fs.h>
 #include <linux/kthread.h>
+#include <linux/lockholder.h>
 #include <linux/mempolicy.h>
 #include <linux/taskstats_kern.h>
 #include <linux/delayacct.h>
@@ -1025,6 +1026,9 @@ void __noreturn do_exit(long code)
 	 * Make sure we are holding no locks:
 	 */
 	debug_check_no_locks_held();
+	WARN_ONCE(task_holds_tracked_lock(tsk),
+		  "%s/%d exiting while holding %u tracked lock(s)\n",
+		  tsk->comm, task_pid_nr(tsk), task_nr_tracked_locks(tsk));
 
 	if (tsk->io_context)
 		exit_io_context(tsk);

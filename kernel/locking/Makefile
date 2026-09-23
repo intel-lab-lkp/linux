@@ -9,6 +9,7 @@ CONTEXT_ANALYSIS_ww_rt_mutex.o := y
 CONTEXT_ANALYSIS_rwsem.o := y
 
 obj-y += mutex.o semaphore.o rwsem.o percpu-rwsem.o
+obj-$(CONFIG_TRACK_LOCK_HOLDERS) += lockholder.o
 
 # Avoid recursion lockdep -> sanitizer -> ... -> lockdep & improve performance.
 KASAN_SANITIZE_lockdep.o := n

@@ -1306,6 +1306,14 @@ struct task_struct {
 	struct held_lock		held_locks[MAX_LOCK_DEPTH];
 #endif
 
+#ifdef CONFIG_TRACK_LOCK_HOLDERS
+	/*
+	 * Number of opted-in sleeping locks held. Only the task itself
+	 * changes it, so it needs no atomics. See linux/lockholder.h.
+	 */
+	unsigned int			nr_tracked_locks;
+#endif
+
 #if defined(CONFIG_UBSAN) && !defined(CONFIG_UBSAN_TRAP)
 	unsigned int			in_ubsan;
 #endif

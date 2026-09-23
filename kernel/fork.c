@@ -94,6 +94,7 @@
 #include <linux/sysctl.h>
 #include <linux/kcov.h>
 #include <linux/livepatch.h>
+#include <linux/lockholder.h>
 #include <linux/thread_info.h>
 #include <linux/kstack_erase.h>
 #include <linux/kasan.h>
@@ -2264,6 +2265,8 @@ __latent_entropy struct task_struct *copy_process(
 	p->pagefault_disabled = 0;
 
 	lockdep_init_task(p);
+
+	lock_holder_task_init(p);
 
 	p->blocked_on = NULL; /* not blocked yet */
 	p->blocked_donor = NULL; /* nobody is boosting p yet */
