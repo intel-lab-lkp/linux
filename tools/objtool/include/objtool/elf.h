@@ -59,6 +59,8 @@ struct section {
 	const char *name;
 	int idx;
 	bool _changed, text, rodata, noinstr, init, truncate;
+	bool sorted;
+	unsigned int *reloc_cache, *reloc_order, nr_cache_windows, nr_indexed;
 	struct reloc *relocs;
 	unsigned long nr_alloc_relocs;
 	struct section *twin;
@@ -106,7 +108,6 @@ struct symbol {
 };
 
 struct reloc {
-	struct elf_hash_node hash;
 	struct section *sec;
 	struct symbol *sym;
 	unsigned long _sym_next_reloc;
@@ -127,13 +128,11 @@ struct elf {
 	int symbol_name_bits;
 	int section_bits;
 	int section_name_bits;
-	int reloc_bits;
 
 	struct elf_hash_node **symbol_hash;
 	struct elf_hash_node **symbol_name_hash;
 	struct elf_hash_node **section_hash;
 	struct elf_hash_node **section_name_hash;
-	struct elf_hash_node **reloc_hash;
 
 	struct section *section_data;
 	struct symbol *symbol_data;
@@ -573,11 +572,6 @@ static inline u32 sec_offset_hash(struct section *sec, unsigned long offset)
 	__jhash_mix(ol, oh, idx);
 
 	return ol;
-}
-
-static inline u32 reloc_hash(struct reloc *reloc)
-{
-	return sec_offset_hash(reloc->sec, reloc_offset(reloc));
 }
 
 #endif /* _OBJTOOL_ELF_H */
