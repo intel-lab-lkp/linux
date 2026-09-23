@@ -179,6 +179,54 @@ function slice_and_hash_ddctrl {
 }
 
 # ==============================================================================
+
+function verify_modprobe_param_logging {
+    # $1 - parameter name (e.g. do_prints)
+    # $2 - parameter value (e.g. 1)
+    local param="$1"
+    local val="$2"
+
+    # Make sure both modules are completely unloaded to trigger a fresh load
+    ifrmmod test_dynamic_debug_submod
+    ifrmmod test_dynamic_debug
+
+    # Capture and verify the load-time (modprobe) dmesg logs
+    log_start
+    my_modprobe test_dynamic_debug "${param}=${val}"
+    my_modprobe test_dynamic_debug_submod
+
+    # If it is a state-controlling parameter, trigger the
+    # print-workload 'do_prints=1' inside the same syslog dmesg
+    # capture bookends to verify their actual pr_debug logging!
+
+    if [ "$param" = "p_disjoint_bits" ] || [ "$param" = "p_level_num" ]; then
+        set_param 1 /sys/module/test_dynamic_debug/parameters/do_classes
+    fi
+
+    log_stop
+
+    # Verify param write by direct readback
+    if [ "$param" = "p_disjoint_bits" ] || [ "$param" = "p_level_num" ]; then
+        local readback=$(cat "/sys/module/test_dynamic_debug/parameters/${param}")
+        if (( readback != val )); then
+            echo -e "${RED}: param readback failed: ${param} ${val} != ${readback}${NC}"
+            exit $ksft_fail
+        else
+            [ "$V" -ge 1 ] && \
+		echo -e "${GREEN}✔ Parameter Readback Verified: ${param}=${readback}${NC}"
+        fi
+    fi
+
+    # verify runtime unsetting
+    if [ "$param" = "p_disjoint_bits" ] || [ "$param" = "p_level_num" ]; then
+
+        set_param 0 "/sys/module/test_dynamic_debug/parameters/${param}"
+	verify_control_slice '\[test_dynamic_debug\]'
+
+    fi
+}
+
+# ==============================================================================
 # FEATURE TESTS (FT_*)
 #
 # test legal queries which should execute and return 0 (success)
@@ -292,33 +340,38 @@ function FT_basic_queries {
     ddcmd "file $f =_" "$f"
 }
 
-function FT_classmap_inheritance {
-    v_echo "${GREEN}# TEST_MOD_SUBMOD ${NC}"
+# testing classmap-based query enablers and class configurations
+function FT_test_classes {
+    v_echo "${GREEN}# TEST_CLASSES - classmap-based query enablers and class configs ${NC}"
 
     ifrmmod test_dynamic_debug_submod
     ifrmmod test_dynamic_debug
+    ddcmd =_
 
-    # modprobe with plain-old +p & 3 class enablements
+    # 1. Verify initial multi-query enablement state via file slice
     my_modprobe test_dynamic_debug \
-	"dyndbg=+p;class D2_CORE +pf;class D2_KMS +pt;class D2_ATOMIC +pm"
+        dyndbg="class D2_CORE,+pf;class D2_KMS,+ps;class D2_ATOMIC +pm"
     verify_control_slice '\[test_dynamic_debug\]'
 
-    set_param 5 /sys/module/test_dynamic_debug/parameters/p_level_num
-    verify_control_slice '\[test_dynamic_debug\]'
+    # 2. Verify state transition and live-printing end-to-end via ddcmd_load!
+    ddcmd_load "class D2_CORE +pmf;class D2_KMS +pls;class D2_ATOMIC +pml" \
+        '\[test_dynamic_debug\]' \
+        "/sys/module/test_dynamic_debug/parameters/do_classes" "1"
 
-    my_modprobe test_dynamic_debug_submod
-    verify_control_slice 'test_dynamic_debug_submod'
+    ifrmmod test_dynamic_debug
+}
+function FT_classmap_inheritance {
+    v_echo "${GREEN}# TEST_MOD_SUBMOD - Classmap state inheritance between supermod and submod ${NC}"
 
-    # fresh start, to clear all above flags (test-fn limits)
     ifrmmod test_dynamic_debug_submod
     ifrmmod test_dynamic_debug
 
-    # load submod, which loads supermod
+    # 1. Load submod directly (which auto-loads supermod with default parameters)
     my_modprobe test_dynamic_debug_submod \
 	"dyndbg=+p;class D2_CORE +pfs;class D2_KMS +pts;class D2_ATOMIC +pmf"
     verify_control_slice 'test_dynamic_debug'
 
-    # runtime changes to both
+    # 2. Runtime parameter changes to supermod propagate to submod descriptors
     set_param 0x57 /sys/module/test_dynamic_debug/parameters/p_disjoint_bits
     set_param 4 /sys/module/test_dynamic_debug/parameters/p_level_num
     verify_control_slice 'test_dynamic_debug'
@@ -326,19 +379,17 @@ function FT_classmap_inheritance {
     ifrmmod test_dynamic_debug_submod
     ifrmmod test_dynamic_debug
 
-    # set super-mod params at load-time
+    # 3. Pre-initialize supermod parameter state at load-time
     my_modprobe test_dynamic_debug p_disjoint_bits=0x16 p_level_num=5
     verify_control_slice '\[test_dynamic_debug\]'
 
-    # see them picked up by submod
+    # 4. Verify submod inherits pre-initialized supermod classmap parameter state upon load
     my_modprobe test_dynamic_debug_submod
     verify_control_slice 'test_dynamic_debug'
 
-    # Real-time mathematical proof that load-time (modprobe) parameter parsing
-    # and runtime (sysfs write) parameter configurations are perfectly equivalent!
+    # 5. Prove load-time (modprobe) and runtime (sysfs write) parameter equivalence
     local hash_modprobe=$(slice_and_hash_ddctrl '\[test_dynamic_debug\]')
 
-    # Fresh load with default parameters, then configure them dynamically at runtime
     ifrmmod test_dynamic_debug_submod
     ifrmmod test_dynamic_debug
     my_modprobe test_dynamic_debug
@@ -354,14 +405,41 @@ function FT_classmap_inheritance {
         v_echo "${GREEN}: Proven: parameter load-time (modprobe) " \
             "and runtime (sysfs write) are equivalent!${NC}"
     fi
-    # --- Live Content Fingerprinting Phase ---
+    # 6. End-to-end syslog content logging verification
     log_start
-    echo 1 > /sys/module/test_dynamic_debug/parameters/do_prints
-    echo 1 > /sys/module/test_dynamic_debug_submod/parameters/do_prints
+    echo 1 > /sys/module/test_dynamic_debug/parameters/do_classes
+    echo 1 > /sys/module/test_dynamic_debug_submod/parameters/do_classes
     log_stop
 
     ifrmmod test_dynamic_debug_submod
     ifrmmod test_dynamic_debug
+}
+
+function FT_modprobe_w_param {
+    v_echo "${GREEN}# TEST_MODPROBES ${NC}"
+    local verbose
+
+    ifrmmod test_dynamic_debug_submod
+    ifrmmod test_dynamic_debug
+
+    for verbose in 1 2; do # 3 4 0; do
+	echo $verbose > /sys/module/dynamic_debug/parameters/verbose
+
+	# Verify each parameter load sequence with 100% DRY modularity
+	verify_modprobe_param_logging "do_classes" "1"
+	verify_modprobe_param_logging "do_bulk" "1"
+
+	# Sequence composite bitmasks to verify disjoint bit transitions
+	for mask in "0x05" "0x12" "0x1f" "0x00"; do
+            verify_modprobe_param_logging "p_disjoint_bits" "$mask"
+	done
+
+	# Sequence levels to verify both growing and shrinking verbose transitions
+	for lvl in "3" "5" "4" "0"; do
+            verify_modprobe_param_logging "p_level_num" "$lvl"
+	done
+    done
+    ddcmd =_
 }
 
 # Built-in Feature Tests (Can run on any CONFIG_DYNAMIC_DEBUG kernel, modular or monolithic)
@@ -373,7 +451,9 @@ builtin_tests=(
 
 # Modular Feature Tests (Require CONFIG_MODULES=y and test_dynamic_debug*.ko available)
 modular_tests=(
+    FT_test_classes
     FT_classmap_inheritance
+    FT_modprobe_w_param
 )
 
 # ==============================================================================
@@ -457,14 +537,50 @@ function GOLDEN_RECORDS {
 #K= 02e4fd94602e108cb89bfc70d47a5dad FT_basic_queries.5
 #K= f03a7ca7316e8db4c0e16523dc41e75d FT_basic_queries.6
 #K= c518a50ba30ba8099d0dc874a27ecf16 FT_basic_queries.7
-#K= fb294f02a4207b28b2a874524ef07afd FT_classmap_inheritance.1
-#K= 7a0b87016fdc237077dfe96bbbb3661b FT_classmap_inheritance.2
-#K= 2784d60f5056fc5cc03b3ceb854293f5 FT_classmap_inheritance.3
-#K= bf66aaf8ff612272c0cda29778ed2131 FT_classmap_inheritance.4
-#K= 49fdd29d91a4c1d16f8b59bb431e741b FT_classmap_inheritance.5
-#K= a8aa244285d048b5ebe33061fa99c424 FT_classmap_inheritance.6
-#K= 3060b86a0f553dd5a826bb7023284925 FT_classmap_inheritance.7
-#K= f43e0aff8a4b38435b73d90ed8100d1b FT_classmap_inheritance.8
+#K= 2b4b152bdb82e6e4a5be18ca26025895 FT_test_classes.1
+#K= 5516e3d13cba7ea4197a7fb6c033887a FT_test_classes.2
+#K= 37dc0919cb1c0ee8ba00ad2ad77ba7c3 FT_test_classes.3
+#K= 81b16613f8d444485e2bc5aa4d38d024 FT_classmap_inheritance.1
+#K= c14c8aa758e24046b3237d20e2189bf7 FT_classmap_inheritance.2
+#K= 5d0f3701517aa3a461c8887c332bdb42 FT_classmap_inheritance.3
+#K= f444ae312fcce32444c54da757d87c41 FT_classmap_inheritance.4
+#K= 7e92245008439ee79fe2460aeaa16a9b FT_classmap_inheritance.5
+#K= d2e8b8c5a5b4e7b9bbe1a29460a3c07d FT_modprobe_w_param.1
+#K= d2e8b8c5a5b4e7b9bbe1a29460a3c07d FT_modprobe_w_param.2
+#K= 11032ef17569bd151c3806527a2428be FT_modprobe_w_param.3
+#K= 0239d8c0808eef396782362613f675b0 FT_modprobe_w_param.4
+#K= 942e62ca24809cad666c5725aeb14376 FT_modprobe_w_param.5
+#K= 0239d8c0808eef396782362613f675b0 FT_modprobe_w_param.6
+#K= fe1aadca4b2b4165d8d5c98e973f9e4b FT_modprobe_w_param.7
+#K= 0239d8c0808eef396782362613f675b0 FT_modprobe_w_param.8
+#K= 535ab526b24a7214de41d92e94bbd52c FT_modprobe_w_param.9
+#K= 0239d8c0808eef396782362613f675b0 FT_modprobe_w_param.10
+#K= a71670fec42b1b0646f0317180bafcc7 FT_modprobe_w_param.11
+#K= 0239d8c0808eef396782362613f675b0 FT_modprobe_w_param.12
+#K= aacdbab171b374f221f0196e6e415d09 FT_modprobe_w_param.13
+#K= 0239d8c0808eef396782362613f675b0 FT_modprobe_w_param.14
+#K= c7eb8e25c780f58c78ed73dc1c187a02 FT_modprobe_w_param.15
+#K= 0239d8c0808eef396782362613f675b0 FT_modprobe_w_param.16
+#K= d682c98ced7d31f1555ab474a9ebe253 FT_modprobe_w_param.17
+#K= 0239d8c0808eef396782362613f675b0 FT_modprobe_w_param.18
+#K= 362ab2e7e5f5e3ede8b69645c64fb987 FT_modprobe_w_param.19
+#K= 362ab2e7e5f5e3ede8b69645c64fb987 FT_modprobe_w_param.20
+#K= 4f539816f9cc9fb9dd4a032138e3abde FT_modprobe_w_param.21
+#K= 0239d8c0808eef396782362613f675b0 FT_modprobe_w_param.22
+#K= 20659d16ffb5b18475e83602223216d1 FT_modprobe_w_param.23
+#K= 0239d8c0808eef396782362613f675b0 FT_modprobe_w_param.24
+#K= 0b24971fb1018c38353141f8fcb9cbdc FT_modprobe_w_param.25
+#K= 0239d8c0808eef396782362613f675b0 FT_modprobe_w_param.26
+#K= 66eb387a95512f679eb5cad4168b0992 FT_modprobe_w_param.27
+#K= 0239d8c0808eef396782362613f675b0 FT_modprobe_w_param.28
+#K= 2583cb4637bcc2ce1e93eea4222ec76c FT_modprobe_w_param.29
+#K= 0239d8c0808eef396782362613f675b0 FT_modprobe_w_param.30
+#K= d592c5bf23312e705b39064c21ca68e4 FT_modprobe_w_param.31
+#K= 0239d8c0808eef396782362613f675b0 FT_modprobe_w_param.32
+#K= b44d105d151123c93cfe953bacdb573f FT_modprobe_w_param.33
+#K= 0239d8c0808eef396782362613f675b0 FT_modprobe_w_param.34
+#K= 4819f715ba485c493afb455542f7ab8c FT_modprobe_w_param.35
+#K= 0239d8c0808eef396782362613f675b0 FT_modprobe_w_param.36
 EOF
         # Read the K-recs and skip those for tests that can't run
         while read -r line; do
