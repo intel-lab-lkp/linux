@@ -672,9 +672,15 @@ static void rxe_sock_put(struct sock *sk,
 	if (refcount_read(&sk->sk_refcnt) > SK_REF_FOR_TUNNEL) {
 		__sock_put(sk);
 	} else {
+		/*
+		 * Clear the per-net pointer before the last reference is
+		 * dropped.  rxe_ns_pernet_sk4/6() returns the pointer to readers
+		 * that dereference it outside the RCU read-side critical section,
+		 * so it must not stay visible once the socket has entered the
+		 * teardown path.
+		 */
+		set_sk(net, NULL);
 		rxe_release_udp_tunnel(sk);
-		sk = NULL;
-		set_sk(net, sk);
 	}
 }
 
