@@ -573,6 +573,8 @@ struct fsnotify_mark_connector {
 		/* Used listing heads to free after srcu period expires */
 		struct fsnotify_mark_connector *destroy_next;
 	};
+	/* sb whose watched_objects account for this connector [lock] */
+	struct super_block *sb;
 	struct hlist_head list;	/* List of marks */
 };
 
