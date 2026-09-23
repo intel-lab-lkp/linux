@@ -4055,6 +4055,8 @@ static int __clk_core_init(struct clk_core *core)
 	 */
 	if (core->ops->init) {
 		ret = core->ops->init(core->hw);
+		if (ret > 0)
+			ret = -EINVAL;
 		if (ret)
 			goto out;
 	}
