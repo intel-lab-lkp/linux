@@ -127,6 +127,7 @@ enum wq_internal_consts {
 	 */
 	RESCUER_NICE_LEVEL	= MIN_NICE,
 	HIGHPRI_NICE_LEVEL	= MIN_NICE,
+	RTPRI_NICE_LEVEL	= MIN_NICE - 1,
 
 	WQ_NAME_LEN		= 32,
 	WORKER_ID_LEN		= 10 + WQ_NAME_LEN, /* "kworker/R-" + WQ_NAME_LEN */
@@ -3018,7 +3019,11 @@ static struct worker *create_worker(struct worker_pool *pool)
 			goto fail;
 		}
 
-		set_user_nice(worker->task, pool->attrs->nice);
+		if (pool->attrs->nice == RTPRI_NICE_LEVEL)
+			sched_set_fifo_low(worker->task);
+		else
+			set_user_nice(worker->task, pool->attrs->nice);
+
 		kthread_bind_mask(worker->task, pool_allowed_cpus(pool));
 	}
 
@@ -5928,8 +5933,17 @@ static struct workqueue_attrs *alloc_wq_std_attrs(struct workqueue_struct *wq)
 	if (!attrs)
 		return NULL;
 
-	if (wq->flags & WQ_HIGHPRI)
+	if (wq->flags & WQ_RTPRI) {
+		attrs->nice = RTPRI_NICE_LEVEL;
+		/*
+		 * RT workqueues have strict CPU affinity for low
+		 * latency execution.
+		 */
+		attrs->affn_scope = WQ_AFFN_CPU;
+		attrs->affn_strict = true;
+	} else if (wq->flags & WQ_HIGHPRI) {
 		attrs->nice = HIGHPRI_NICE_LEVEL;
+	}
 
 	if (wq->flags & __WQ_ORDERED)
 		attrs->ordered = true;
@@ -6112,6 +6126,12 @@ static struct workqueue_struct *__alloc_workqueue(const char *fmt,
 		if (WARN_ON_ONCE(flags & ~__WQ_BH_ALLOWS))
 			return NULL;
 		if (WARN_ON_ONCE(max_active))
+			return NULL;
+	}
+
+	if (flags & WQ_RTPRI) {
+		if (WARN_ON_ONCE((flags & (WQ_HIGHPRI | WQ_UNBOUND)) !=
+			         WQ_UNBOUND))
 			return NULL;
 	}
 
@@ -7606,7 +7626,10 @@ static ssize_t nice_show(struct device *dev, struct device_attribute *attr,
 	int written;
 
 	mutex_lock(&wq->mutex);
-	written = scnprintf(buf, PAGE_SIZE, "%d\n", wq->attrs->nice);
+	if (wq->attrs->nice == RTPRI_NICE_LEVEL)
+		written = scnprintf(buf, PAGE_SIZE, "rt\n");
+	else
+		written = scnprintf(buf, PAGE_SIZE, "%d\n", wq->attrs->nice);
 	mutex_unlock(&wq->mutex);
 
 	return written;
@@ -7785,6 +7808,10 @@ static umode_t wq_sysfs_unbound_group_visible(struct kobject *kobj,
 
 	if (!(wq->flags & WQ_UNBOUND))
 		return SYSFS_GROUP_INVISIBLE;
+
+	/* Do not allow priority changes for RT workers. */
+	if ((wq->flags & WQ_RTPRI) && !strcmp(attr->name, "nice"))
+		return 0444;
 
 	return attr->mode;
 }
