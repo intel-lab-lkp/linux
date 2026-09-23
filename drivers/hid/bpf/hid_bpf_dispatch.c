@@ -255,8 +255,8 @@ static int __hid_bpf_allocate_data(struct hid_device *hdev, u8 **data, u32 *size
 	if (!alloc_data)
 		return -ENOMEM;
 
-	*data = alloc_data;
 	*size = alloc_size;
+	*data = alloc_data;
 
 	return 0;
 }
