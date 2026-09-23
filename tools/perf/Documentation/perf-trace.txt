@@ -260,6 +260,11 @@ the thread executes on the designated CPUs. Default is to monitor all CPUs.
 	Maximum number of lines in the summary mode.  Note that this applies to
 	each entry (thread or cgroup).
 
+--syscall-augment::
+	Augment syscalls with BPF. Enabled by default when BPF support is available.
+	Use --no-syscall-augment to disable BPF augmentation and fall back to the
+	unaugmented tracepoint approach.
+
 
 PAGEFAULTS
 ----------
