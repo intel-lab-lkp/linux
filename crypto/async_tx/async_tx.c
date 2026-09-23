@@ -47,7 +47,7 @@ __async_tx_find_channel(struct async_submit_ctl *submit,
 
 	/* see if we can keep the chain on one channel */
 	if (depend_tx &&
-	    dma_has_cap(tx_type, depend_tx->chan->device->cap_mask))
+	    dmaengine_has_cap(depend_tx->chan, tx_type))
 		return depend_tx->chan;
 	return async_dma_find_channel(tx_type);
 }
