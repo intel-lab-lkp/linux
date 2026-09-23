@@ -179,6 +179,20 @@ struct cxl_cachedev *devm_cxl_add_cachedev(struct cxl_dev_state *cxlds)
 }
 EXPORT_SYMBOL_NS_GPL(devm_cxl_add_cachedev, "CXL");
 
+static int cxl_cachedev_find_snoop_gid(struct cxl_cachedev *cxlcd)
+{
+	struct cxl_dport *iter;
+
+	for (iter = cxlcd->endpoint->parent_dport;
+	     iter && !is_cxl_root(iter->port);
+	     iter = iter->port->parent_dport) {
+		if (iter->snoop != CXL_SNOOP_FILTER_NO_GROUP_ID)
+			return iter->snoop;
+	}
+
+	return -ENXIO;
+}
+
 static int cxl_cache_probe(struct device *dev)
 {
 	struct cxl_cachedev *cxlcd = to_cxl_cachedev(dev);
@@ -236,7 +250,17 @@ static int cxl_cache_probe(struct device *dev)
 	if (rc)
 		return rc;
 
-	return devm_add_action_or_reset(dev, deprogram_cache_id, cxlcd);
+	rc = devm_add_action_or_reset(dev, deprogram_cache_id, cxlcd);
+ 	if (rc)
+ 		return rc;
+
+	rc = cxl_cachedev_find_snoop_gid(cxlcd);
+	if (rc < 0)
+		return rc;
+
+	cxlcd->cxlds->cstate.gid = rc;
+
+ 	return 0;
 }
 
 static struct cxl_driver cxl_cache_driver = {

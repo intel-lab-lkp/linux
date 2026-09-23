@@ -751,6 +751,7 @@ struct cxl_dev_state *_devm_cxl_dev_state_create(struct device *dev,
 	cxlds->cxl_dvsec = dvsec;
 	cxlds->reg_map.host = dev;
 	cxlds->reg_map.resource = CXL_RESOURCE_NONE;
+	cxlds->cstate.gid = CXL_SNOOP_FILTER_NO_GROUP_ID;
 
 	if (has_mbox)
 		cxlds->cxl_mbox.host = dev;

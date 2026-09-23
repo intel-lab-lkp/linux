@@ -165,6 +165,8 @@ struct cxl_dpa_partition {
  * struct cxl_cache_state - CXL cache device state for use by external drivers
  * @size: Size of device's cache
  * @unit: Unit of device's cache in bytes
+ * @strict_snoop: Whether a full snoop filter should fail allocations
+ * @gid: Group ID of the snoop filter this device belongs to
  */
 struct cxl_cache_state {
 	/* Public for endpoint drivers */
@@ -175,6 +177,12 @@ struct cxl_cache_state {
 	 */
 	u64 size;
 	u64 unit;
+
+	/* Should be set by endpoint drivers */
+	bool strict_snoop;
+
+	/* Private for endpoint drivers */
+	int gid;
 };
 
 /**
@@ -264,9 +272,14 @@ int cxl_set_capacity(struct cxl_dev_state *cxlds, u64 capacity);
 
 #if IS_ENABLED(CONFIG_CXL_CACHE)
 struct cxl_cachedev *devm_cxl_add_cachedev(struct cxl_dev_state *cxlds);
+int devm_cxl_cachedev_alloc_snoop_capacity(struct cxl_cachedev *cxlcd,
+					   u64 size);
 #else
 static inline struct cxl_cachedev *
 devm_cxl_add_cachedev(struct cxl_dev_state *cxlds)
 { return ERR_PTR(-ENXIO); }
+static inline int
+devm_cxl_cachedev_alloc_snoop_capacity(struct cxl_cachedev *cxlcd, u64 size)
+{ return -ENXIO; }
 #endif /* CONFIG_CXL_CACHE */
 #endif /* __CXL_CXL_H__ */

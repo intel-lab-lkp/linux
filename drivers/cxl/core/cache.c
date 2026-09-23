@@ -571,17 +571,28 @@ void cxl_cachedev_deprogram_cache_id(struct cxl_cachedev *cxlcd)
 }
 EXPORT_SYMBOL_FOR_MODULES(cxl_cachedev_deprogram_cache_id, "cxl_cache");
 
+struct snoop_allocation {
+	struct cxl_cachedev *cxlcd;
+	bool strict;
+	u64 size;
+	int id;
+};
+
 /**
  * struct cxl_snoop_filter - CXL snoop filter instance for tracking CXL.cache
  * devices below a dport
  *
+ * @allocations: Allocations on this filter
  * @lock: Used for allocations
+ * @strict: Number of allocations from devices that disallow oversubscription
  * @avail: Available capacity left in the filter
  * @size: Size of the filter
  * @id: Group ID of the filter
  */
 struct cxl_snoop_filter {
+	struct xarray allocations;
 	struct mutex lock;
+	u32 strict;
 	u64 avail;
 	u64 size;
 	int id;
@@ -597,15 +608,37 @@ static struct cxl_snoop_filter *create_snoop_filter(u64 size, int id)
 
 	sf->id = id;
 	sf->size = sf->avail = size;
+	xa_init(&sf->allocations);
 	mutex_init(&sf->lock);
 
 	return sf;
 }
 
+static void free_snoop_capacity(void *);
+
+static void __free_snoop_capacity(struct snoop_allocation *alloc)
+{
+	struct cxl_snoop_filter *sf;
+
+	sf = xa_load(&snoop_filters, alloc->id);
+	if (sf) {
+		scoped_guard(mutex, &sf->lock) {
+			sf->avail += alloc->size;
+
+			if (alloc->strict)
+				sf->strict--;
+
+			xa_erase(&sf->allocations, (unsigned long)alloc);
+		}
+	}
+
+	put_device(&alloc->cxlcd->dev);
+	kfree(alloc);
+}
+
 static void destroy_snoop_filter(struct cxl_snoop_filter *sf)
 {
-	lockdep_assert_held_write(&snoop_rwsem);
-
+	xa_destroy(&sf->allocations);
 	mutex_destroy(&sf->lock);
 	kfree(sf);
 }
@@ -637,6 +670,94 @@ static struct cxl_snoop_filter *find_or_add_snoop_filter(u64 size, int id)
 
 	return sf;
 }
+
+static struct snoop_allocation *
+snoop_alloc_capacity(struct cxl_snoop_filter *sf, struct cxl_cachedev *cxlcd,
+		     u64 size)
+{
+	struct cxl_cache_state *cstate = &cxlcd->cxlds->cstate;
+	struct snoop_allocation *alloc;
+	int rc;
+
+	guard(mutex)(&sf->lock);
+	if (sf->avail < size) {
+		/*
+		 * Either this device or a device already using the filter
+		 * can't use an oversubscribed filter
+		 */
+		if (cstate->strict_snoop || sf->strict > 0)
+			return ERR_PTR(-ENOSPC);
+
+		size = sf->avail;
+	}
+
+	alloc = kmalloc_obj(*alloc);
+	if (!alloc)
+		return ERR_PTR(-ENOMEM);
+
+	*alloc = (struct snoop_allocation) {
+		.cxlcd = cxlcd,
+		.size = size,
+		.strict = cstate->strict_snoop,
+		.id = sf->id,
+	};
+
+	rc = xa_insert(&sf->allocations, (unsigned long)alloc, alloc,
+		       GFP_KERNEL);
+	if (rc) {
+		kfree(alloc);
+		return ERR_PTR(rc);
+	}
+
+	if (cstate->strict_snoop)
+		sf->strict++;
+
+	sf->avail -= size;
+	return alloc;
+}
+
+static void free_snoop_capacity(void *alloc)
+{
+	guard(rwsem_read)(&snoop_rwsem);
+	__free_snoop_capacity(alloc);
+}
+
+/**
+ * devm_cxl_cachedev_alloc_snoop_capacity - Allocate space in the system's snoop
+ * filter for a given CXL.cache device
+ * @cxlcd: Cache device to allocate capacity for
+ * @size: Size of allocation
+ *
+ * NOTE: CXL accelerator drivers are expected to call this function before
+ * using CXL.cache to access host memory. Failure to do so may result in
+ * unpredictable or undesirable behavior depending on the host's snoop filter
+ * implementation.
+ */
+int devm_cxl_cachedev_alloc_snoop_capacity(struct cxl_cachedev *cxlcd, u64 size)
+{
+	struct cxl_cache_state *cstate = &cxlcd->cxlds->cstate;
+	struct snoop_allocation *alloc;
+	struct cxl_snoop_filter *sf;
+
+	if (cstate->gid < 0)
+		return -EINVAL;
+
+	scoped_guard(rwsem_read, &snoop_rwsem) {
+		sf = xa_load(&snoop_filters, cstate->gid);
+		if (!sf)
+			return -ENODEV;
+
+		alloc = snoop_alloc_capacity(sf, cxlcd, size);
+		if (IS_ERR_OR_NULL(alloc))
+			return !alloc ? -ENOMEM : PTR_ERR(alloc);
+
+		get_device(&cxlcd->dev);
+	}
+
+	return devm_add_action_or_reset(&cxlcd->dev, free_snoop_capacity,
+					alloc);
+}
+EXPORT_SYMBOL_NS_GPL(devm_cxl_cachedev_alloc_snoop_capacity, "CXL");
 
 int cxl_dport_probe_snoop_filter(struct cxl_dport *dport)
 {
