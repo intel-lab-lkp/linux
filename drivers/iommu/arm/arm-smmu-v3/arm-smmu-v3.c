@@ -2126,7 +2126,8 @@ arm_smmu_find_master(struct arm_smmu_device *smmu, u32 sid)
 {
 	struct rb_node *node;
 
-	lockdep_assert_held(&smmu->streams_mutex);
+	lockdep_assert(lockdep_is_held(&smmu->streams_mutex) ||
+		       lockdep_is_held(&smmu->streams_lock));
 
 	node = rb_find(&sid, &smmu->streams, arm_smmu_streams_cmp_key);
 	if (!node)
@@ -4191,6 +4192,51 @@ static int arm_smmu_stream_id_cmp(const void *_l, const void *_r)
 	return cmp_int(*l, *r);
 }
 
+/* Caller must hold the streams_mutex. Publishes all the nodes, or none */
+static int arm_smmu_insert_streams(struct arm_smmu_device *smmu,
+				   struct arm_smmu_master *master)
+{
+	struct arm_smmu_master *existing_master = NULL;
+	u32 existing_sid = 0;
+	unsigned long flags;
+	int ret = 0;
+	int i;
+
+	spin_lock_irqsave(&smmu->streams_lock, flags);
+	for (i = 0; i < master->num_streams; i++) {
+		struct rb_node *existing;
+
+		existing = rb_find_add(&master->streams[i].node,
+				       &smmu->streams,
+				       arm_smmu_streams_cmp_node);
+		if (!existing)
+			continue;
+
+		existing_master = rb_entry(existing, struct arm_smmu_stream,
+					   node)->master;
+
+		/* Bridged PCI devices may end up with duplicated IDs */
+		if (existing_master == master)
+			continue;
+
+		existing_sid = master->streams[i].id;
+		ret = -ENODEV;
+		break;
+	}
+	if (ret)
+		for (i--; i >= 0; i--)
+			if (!RB_EMPTY_NODE(&master->streams[i].node))
+				rb_erase(&master->streams[i].node,
+					 &smmu->streams);
+	spin_unlock_irqrestore(&smmu->streams_lock, flags);
+
+	if (ret)
+		dev_warn(master->dev,
+			 "Aliasing StreamID 0x%x (from %s) unsupported, expect DMA to be broken\n",
+			 existing_sid, dev_name(existing_master->dev));
+	return ret;
+}
+
 static int arm_smmu_insert_master(struct arm_smmu_device *smmu,
 				  struct arm_smmu_master *master)
 {
@@ -4237,40 +4283,22 @@ static int arm_smmu_insert_master(struct arm_smmu_device *smmu,
 		RB_CLEAR_NODE(&master->streams[i].node);
 
 	mutex_lock(&smmu->streams_mutex);
-	for (i = 0; i < fwspec->num_ids; i++) {
-		struct arm_smmu_stream *new_stream = &master->streams[i];
-		struct rb_node *existing;
-		u32 sid = new_stream->id;
 
-		ret = arm_smmu_init_sid_strtab(smmu, sid);
+	/*
+	 * Initialize the L2 strtabs before publishing any stream node, and
+	 * insert all the nodes in one critical section, so an atomic reader
+	 * never sees a partially initialized master.
+	 */
+	for (i = 0; i < fwspec->num_ids; i++) {
+		ret = arm_smmu_init_sid_strtab(smmu, master->streams[i].id);
 		if (ret)
 			break;
-
-		/* Insert into SID tree */
-		existing = rb_find_add(&new_stream->node, &smmu->streams,
-				       arm_smmu_streams_cmp_node);
-		if (existing) {
-			struct arm_smmu_master *existing_master =
-				rb_entry(existing, struct arm_smmu_stream, node)
-					->master;
-
-			/* Bridged PCI devices may end up with duplicated IDs */
-			if (existing_master == master)
-				continue;
-
-			dev_warn(master->dev,
-				 "Aliasing StreamID 0x%x (from %s) unsupported, expect DMA to be broken\n",
-				 sid, dev_name(existing_master->dev));
-			ret = -ENODEV;
-			break;
-		}
 	}
 
+	if (!ret)
+		ret = arm_smmu_insert_streams(smmu, master);
+
 	if (ret) {
-		for (i--; i >= 0; i--)
-			if (!RB_EMPTY_NODE(&master->streams[i].node))
-				rb_erase(&master->streams[i].node,
-					 &smmu->streams);
 		kfree(master->streams);
 		kfree(master->build_invs);
 	}
@@ -4289,9 +4317,11 @@ static void arm_smmu_remove_master(struct arm_smmu_master *master)
 		return;
 
 	mutex_lock(&smmu->streams_mutex);
-	for (i = 0; i < fwspec->num_ids; i++)
-		if (!RB_EMPTY_NODE(&master->streams[i].node))
-			rb_erase(&master->streams[i].node, &smmu->streams);
+	scoped_guard(spinlock_irqsave, &smmu->streams_lock)
+		for (i = 0; i < fwspec->num_ids; i++)
+			if (!RB_EMPTY_NODE(&master->streams[i].node))
+				rb_erase(&master->streams[i].node,
+					 &smmu->streams);
 	mutex_unlock(&smmu->streams_mutex);
 
 	kfree(master->streams);
@@ -4726,6 +4756,7 @@ static int arm_smmu_init_structures(struct arm_smmu_device *smmu)
 	int ret;
 
 	mutex_init(&smmu->streams_mutex);
+	spin_lock_init(&smmu->streams_lock);
 	smmu->streams = RB_ROOT;
 
 	ret = arm_smmu_init_queues(smmu);

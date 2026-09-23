@@ -972,6 +972,8 @@ struct arm_smmu_device {
 
 	struct rb_root			streams;
 	struct mutex			streams_mutex;
+	/* Held during rb_root updates; allows atomic-context lookups */
+	spinlock_t			streams_lock;
 };
 
 struct arm_smmu_stream {
