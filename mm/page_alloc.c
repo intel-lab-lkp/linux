@@ -5510,12 +5510,20 @@ struct page *alloc_pages_node_noprof(int nid, gfp_t gfp_mask, unsigned int order
 }
 EXPORT_SYMBOL(alloc_pages_node_noprof);
 
-struct folio *__folio_alloc_noprof(gfp_t gfp, unsigned int order, int preferred_nid,
-		nodemask_t *nodemask)
+struct folio *__folio_alloc_flags_noprof(gfp_t gfp, unsigned int order,
+		int preferred_nid, nodemask_t *nodemask,
+		unsigned int alloc_flags)
 {
 	struct page *page = __alloc_pages_noprof(gfp | __GFP_COMP, order,
-					preferred_nid, nodemask, ALLOC_DEFAULT);
+					preferred_nid, nodemask, alloc_flags);
 	return page_rmappable_folio(page);
+}
+
+struct folio *__folio_alloc_noprof(gfp_t gfp, unsigned int order,
+		int preferred_nid, nodemask_t *nodemask)
+{
+	return __folio_alloc_flags_noprof(gfp, order, preferred_nid, nodemask,
+					 ALLOC_DEFAULT);
 }
 EXPORT_SYMBOL(__folio_alloc_noprof);
 
