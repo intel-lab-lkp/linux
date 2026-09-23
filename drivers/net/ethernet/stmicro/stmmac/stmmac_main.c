@@ -5638,7 +5638,8 @@ read_again:
 		len += buf1_len;
 
 		/* ACS is disabled; strip manually. */
-		if (likely(!(status & rx_not_ls))) {
+		if (likely(!(status & rx_not_ls)) &&
+		    likely(buf1_len >= ETH_FCS_LEN)) {
 			buf1_len -= ETH_FCS_LEN;
 			len -= ETH_FCS_LEN;
 		}
@@ -5810,10 +5811,10 @@ read_again:
 
 		/* ACS is disabled; strip manually. */
 		if (likely(!(status & rx_not_ls))) {
-			if (buf2_len) {
+			if (buf2_len >= ETH_FCS_LEN) {
 				buf2_len -= ETH_FCS_LEN;
 				len -= ETH_FCS_LEN;
-			} else if (buf1_len) {
+			} else if (buf1_len >= ETH_FCS_LEN) {
 				buf1_len -= ETH_FCS_LEN;
 				len -= ETH_FCS_LEN;
 			}
