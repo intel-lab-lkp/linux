@@ -196,6 +196,7 @@ async_gen_syndrome(struct page **blocks, unsigned int *offsets, int disks,
 	     dma_maxpq(device, DMA_PREP_CONTINUE) > 0) &&
 	    is_dma_pq_aligned_offs(device, offsets, disks, len)) {
 		struct dma_async_tx_descriptor *tx;
+		struct device *dma_dev = dmaengine_get_dma_device(chan);
 		enum dma_ctrl_flags dma_flags = 0;
 		unsigned char coefs[MAX_DISKS];
 		int i, j;
@@ -211,7 +212,7 @@ async_gen_syndrome(struct page **blocks, unsigned int *offsets, int disks,
 		for (i = 0, j = 0; i < src_cnt; i++) {
 			if (blocks[i] == NULL)
 				continue;
-			unmap->addr[j] = dma_map_page(device->dev, blocks[i],
+			unmap->addr[j] = dma_map_page(dma_dev, blocks[i],
 						offsets[i], len, DMA_TO_DEVICE);
 			coefs[j] = raid6_gfexp[i];
 			unmap->to_cnt++;
@@ -224,7 +225,7 @@ async_gen_syndrome(struct page **blocks, unsigned int *offsets, int disks,
 		 */
 		unmap->bidi_cnt++;
 		if (P(blocks, disks))
-			unmap->addr[j++] = dma_map_page(device->dev, P(blocks, disks),
+			unmap->addr[j++] = dma_map_page(dma_dev, P(blocks, disks),
 							P(offsets, disks),
 							len, DMA_BIDIRECTIONAL);
 		else {
@@ -234,7 +235,7 @@ async_gen_syndrome(struct page **blocks, unsigned int *offsets, int disks,
 
 		unmap->bidi_cnt++;
 		if (Q(blocks, disks))
-			unmap->addr[j++] = dma_map_page(device->dev, Q(blocks, disks),
+			unmap->addr[j++] = dma_map_page(dma_dev, Q(blocks, disks),
 							Q(offsets, disks),
 							len, DMA_BIDIRECTIONAL);
 		else {
@@ -314,7 +315,7 @@ async_syndrome_val(struct page **blocks, unsigned int *offsets, int disks,
 
 	if (unmap && disks <= dma_maxpq(device, 0) &&
 	    is_dma_pq_aligned_offs(device, offsets, disks, len)) {
-		struct device *dev = device->dev;
+		struct device *dev = dmaengine_get_dma_device(chan);
 		dma_addr_t pq[2];
 		int i, j = 0, src_cnt = 0;
 

@@ -44,6 +44,7 @@ async_memcpy(struct page *dest, struct page *src, unsigned int dest_offset,
 
 	if (unmap && is_dma_copy_aligned(device, src_offset, dest_offset, len)) {
 		unsigned long dma_prep_flags = 0;
+		struct device *dma_dev =  dmaengine_get_dma_device(chan);
 
 		if (submit->cb_fn)
 			dma_prep_flags |= DMA_PREP_INTERRUPT;
@@ -51,10 +52,10 @@ async_memcpy(struct page *dest, struct page *src, unsigned int dest_offset,
 			dma_prep_flags |= DMA_PREP_FENCE;
 
 		unmap->to_cnt = 1;
-		unmap->addr[0] = dma_map_page(device->dev, src, src_offset, len,
+		unmap->addr[0] = dma_map_page(dma_dev, src, src_offset, len,
 					      DMA_TO_DEVICE);
 		unmap->from_cnt = 1;
-		unmap->addr[1] = dma_map_page(device->dev, dest, dest_offset, len,
+		unmap->addr[1] = dma_map_page(dma_dev, dest, dest_offset, len,
 					      DMA_FROM_DEVICE);
 		unmap->len = len;
 

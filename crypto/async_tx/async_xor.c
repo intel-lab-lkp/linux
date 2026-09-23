@@ -183,6 +183,7 @@ async_xor_offs(struct page *dest, unsigned int offset,
 
 	if (unmap && dma_xor_aligned_offsets(device, offset,
 				src_offs, src_cnt, len)) {
+		struct device *dma_dev = dmaengine_get_dma_device(chan);
 		struct dma_async_tx_descriptor *tx;
 		int i, j;
 
@@ -194,13 +195,13 @@ async_xor_offs(struct page *dest, unsigned int offset,
 			if (!src_list[i])
 				continue;
 			unmap->to_cnt++;
-			unmap->addr[j++] = dma_map_page(device->dev, src_list[i],
+			unmap->addr[j++] = dma_map_page(dma_dev, src_list[i],
 					src_offs ? src_offs[i] : offset,
 					len, DMA_TO_DEVICE);
 		}
 
 		/* map it bidirectional as it may be re-used as a source */
-		unmap->addr[j] = dma_map_page(device->dev, dest, offset, len,
+		unmap->addr[j] = dma_map_page(dma_dev, dest, offset, len,
 					      DMA_BIDIRECTIONAL);
 		unmap->bidi_cnt = 1;
 
@@ -316,6 +317,7 @@ async_xor_val_offs(struct page *dest, unsigned int offset,
 	if (unmap && src_cnt <= device->max_xor &&
 	    dma_xor_aligned_offsets(device, offset, src_offs, src_cnt, len)) {
 		unsigned long dma_prep_flags = 0;
+		struct device *dma_dev = dmaengine_get_dma_device(chan);
 		int i;
 
 		pr_debug("%s: (async) len: %zu\n", __func__, len);
@@ -326,7 +328,7 @@ async_xor_val_offs(struct page *dest, unsigned int offset,
 			dma_prep_flags |= DMA_PREP_FENCE;
 
 		for (i = 0; i < src_cnt; i++) {
-			unmap->addr[i] = dma_map_page(device->dev, src_list[i],
+			unmap->addr[i] = dma_map_page(dma_dev, src_list[i],
 					src_offs ? src_offs[i] : offset,
 					len, DMA_TO_DEVICE);
 			unmap->to_cnt++;

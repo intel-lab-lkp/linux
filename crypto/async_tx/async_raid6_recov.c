@@ -32,7 +32,7 @@ async_sum_product(struct page *dest, unsigned int d_off,
 		unmap = dmaengine_get_unmap_data(dma->dev, 3, GFP_NOWAIT);
 
 	if (unmap) {
-		struct device *dev = dma->dev;
+		struct device *dev = dmaengine_get_dma_device(chan);
 		dma_addr_t pq[2];
 		struct dma_async_tx_descriptor *tx;
 		enum dma_ctrl_flags dma_flags = DMA_PREP_PQ_DISABLE_P;
@@ -101,7 +101,7 @@ async_mult(struct page *dest, unsigned int d_off, struct page *src,
 
 	if (unmap) {
 		dma_addr_t dma_dest[2];
-		struct device *dev = dma->dev;
+		struct device *dev = dmaengine_get_dma_device(chan);
 		struct dma_async_tx_descriptor *tx;
 		enum dma_ctrl_flags dma_flags = DMA_PREP_PQ_DISABLE_P;
 
