@@ -738,6 +738,15 @@ class KernelDoc:
                     for arg in content.split(';'):
                         arg = arg.strip()
                         #
+                        # Remove array portions. Array members whose
+                        # dimensions are expressed as macro calls
+                        # (e.g. DECLARE_BITMAP expansions) contain
+                        # parentheses inside [...] that would otherwise
+                        # cause a false match as a pointer-to-function
+                        # declaration.
+                        #
+                        arg = KernRe(r'\[.*\]').sub('', arg)
+                        #
                         # Look for (type)(*name)(args) - pointer to function
                         #
                         r = KernRe(r'^([^\(]+\(\*?\s*)([\w.]*)(\s*\).*)')
@@ -754,10 +763,9 @@ class KernelDoc:
                         #
                         else:
                             #
-                            # Remove bitmap and array portions and spaces around commas
+                            # Remove bitfield portions and spaces around commas
                             #
                             arg = KernRe(r':\s*\d+\s*').sub('', arg)
-                            arg = KernRe(r'\[.*\]').sub('', arg)
                             arg = KernRe(r'\s*,\s*').sub(',', arg)
                             #
                             # Look for a normal decl - "type name[,name...]"
