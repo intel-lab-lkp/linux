@@ -63,6 +63,7 @@
 	disable-wp;
 	max-frequency = <200000000>;
 	no-mmc;
+	sd-uhs-ddr50;
 	sd-uhs-sdr104;
 	vmmc-supply = <&vmmc_reg>;
 	vqmmc-supply = <&vqmmc_io_reg>;
