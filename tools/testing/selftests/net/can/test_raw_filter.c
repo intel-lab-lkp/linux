@@ -16,10 +16,18 @@
 #include <net/if.h>
 #include <linux/if.h>
 
+#include <errno.h>
+#include <stddef.h>
+
 #include <linux/can.h>
 #include <linux/can/raw.h>
+#include <linux/types.h>
 
 #include "kselftest_harness.h"
+
+#ifndef ARRAY_SIZE
+#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
+#endif
 
 #define ID 0x123
 
@@ -388,6 +396,394 @@ TEST_F(can_filters, test_filter)
 				TH_LOG("received unexpected flags");
 		}
 	}
+}
+
+/* --- CAN XL --- */
+
+#define XLF 0x80
+
+/* CAN XL requires an interface whose MTU is large enough; a classic CAN or
+ * CAN FD only interface cannot carry CAN XL frames.
+ */
+static bool can_iface_supports_xl(void)
+{
+	struct ifreq ifr;
+	int s, ret;
+
+	s = socket(PF_CAN, SOCK_RAW, CAN_RAW);
+	if (s < 0)
+		return false;
+
+	strncpy(ifr.ifr_name, CANIF, sizeof(ifr.ifr_name));
+	ret = ioctl(s, SIOCGIFMTU, &ifr);
+	close(s);
+
+	if (ret < 0)
+		return false;
+
+	return ifr.ifr_mtu >= CANXL_MIN_MTU;
+}
+
+static int open_xl_socket(int send_xl, const struct can_raw_vcid_options *vcid)
+{
+	struct sockaddr_can addr = { };
+	struct ifreq ifr;
+	int one = 1;
+	int s, ret;
+
+	s = socket(PF_CAN, SOCK_RAW, CAN_RAW);
+	if (s < 0)
+		return -1;
+
+	strncpy(ifr.ifr_name, CANIF, sizeof(ifr.ifr_name));
+	ret = ioctl(s, SIOCGIFINDEX, &ifr);
+	if (ret < 0)
+		goto close_sock;
+
+	addr.can_family = AF_CAN;
+	addr.can_ifindex = ifr.ifr_ifindex;
+
+	ret = bind(s, (struct sockaddr *)&addr, sizeof(addr));
+	if (ret < 0)
+		goto close_sock;
+
+	ret = setsockopt(s, SOL_CAN_RAW, CAN_RAW_RECV_OWN_MSGS, &one, sizeof(one));
+	if (ret < 0)
+		goto close_sock;
+
+	if (vcid) {
+		ret = setsockopt(s, SOL_CAN_RAW, CAN_RAW_XL_VCID_OPTS, vcid,
+				 sizeof(*vcid));
+		if (ret < 0)
+			goto close_sock;
+	}
+
+	ret = setsockopt(s, SOL_CAN_RAW, CAN_RAW_XL_FRAMES, &send_xl,
+			 sizeof(send_xl));
+	if (ret < 0)
+		goto close_sock;
+
+	return s;
+
+close_sock:
+	close(s);
+	return -1;
+}
+
+static void fill_canxl(struct canxl_frame *cxl, unsigned int len, __u8 sdt)
+{
+	int i;
+
+	memset(cxl, 0, sizeof(*cxl));
+	cxl->prio = ID;
+	cxl->flags = XLF;
+	cxl->sdt = sdt;
+	cxl->len = len;
+	cxl->af = 0xdeadbeef;
+
+	for (i = 0; i < len; i++)
+		cxl->data[i] = i & 0xff;
+}
+
+/* Wait up to 200ms for a frame. Returns the frame size, or -1 if nothing
+ * arrived. A blocking read() cannot be used to assert that a frame was
+ * filtered out, as it would simply wait forever.
+ */
+static int recv_timeout(int sock, void *buf, size_t len)
+{
+	struct timeval tv = {
+		.tv_sec = 0,
+		.tv_usec = 200000,
+	};
+	fd_set rdfs;
+	int ret;
+
+	FD_ZERO(&rdfs);
+	FD_SET(sock, &rdfs);
+
+	ret = select(sock + 1, &rdfs, NULL, NULL, &tv);
+	if (ret <= 0)
+		return -1;
+
+	return read(sock, buf, len);
+}
+
+FIXTURE(canxl) {
+	int sock;
+};
+
+FIXTURE_SETUP(canxl)
+{
+	self->sock = open_xl_socket(1, NULL);
+}
+
+FIXTURE_TEARDOWN(canxl)
+{
+	if (self->sock >= 0)
+		close(self->sock);
+}
+
+/* Round-trip payload lengths, including the maximum CAN XL payload */
+TEST_F(canxl, payload_roundtrip)
+{
+	const unsigned int lens[] = { 1, 8, 64, 2048 };
+	struct canxl_frame tx;
+
+	if (!can_iface_supports_xl())
+		SKIP(return, "%s does not support CAN XL", CANIF);
+
+	ASSERT_GE(self->sock, 0)
+		TH_LOG("failed to open CAN XL socket on %s", CANIF);
+
+	for (unsigned int i = 0; i < ARRAY_SIZE(lens); i++) {
+		unsigned int len = lens[i];
+		struct canxl_frame rx;
+		int ret;
+
+		fill_canxl(&tx, len, 0x11);
+
+		ret = write(self->sock, &tx, CANXL_HDR_SIZE + len);
+		ASSERT_EQ(ret, CANXL_HDR_SIZE + len)
+			TH_LOG("failed to send CAN XL frame of len %u", len);
+
+		ret = read(self->sock, &rx, sizeof(rx));
+		ASSERT_EQ(ret, CANXL_HDR_SIZE + len)
+			TH_LOG("failed to receive CAN XL frame of len %u", len);
+
+		ASSERT_EQ(rx.len, len)
+			TH_LOG("wrong payload length in received frame");
+		ASSERT_EQ(rx.sdt, tx.sdt)
+			TH_LOG("wrong SDU type in received frame");
+		ASSERT_EQ(rx.af, tx.af)
+			TH_LOG("wrong acceptance field in received frame");
+		ASSERT_EQ(rx.prio, tx.prio)
+			TH_LOG("wrong priority in received frame");
+		ASSERT_EQ(memcmp(rx.data, tx.data, len), 0)
+			TH_LOG("payload corrupted");
+	}
+}
+
+/* A CAN XL frame must not be accepted when CAN_RAW_XL_FRAMES is off */
+TEST(canxl_send_requires_xl_frames)
+{
+	struct canxl_frame tx;
+	int s, ret;
+
+	/* a plain socket that did not enable CAN XL */
+	s = open_xl_socket(0, NULL);
+	ASSERT_GE(s, 0)
+		TH_LOG("failed to open CAN socket on %s", CANIF);
+
+	fill_canxl(&tx, 8, 0x11);
+
+	ret = write(s, &tx, CANXL_HDR_SIZE + tx.len);
+	ASSERT_LT(ret, 0)
+		TH_LOG("CAN XL frame accepted without CAN_RAW_XL_FRAMES");
+	ASSERT_EQ(errno, EINVAL);
+
+	close(s);
+}
+
+/* A frame without the mandatory CANXL_XLF flag must be rejected */
+TEST(canxl_requires_xlf_flag)
+{
+	struct canxl_frame tx;
+	int s, ret;
+
+	s = open_xl_socket(1, NULL);
+	if (!can_iface_supports_xl())
+		SKIP(return, "%s does not support CAN XL", CANIF);
+
+	ASSERT_GE(s, 0)
+		TH_LOG("failed to open CAN XL socket on %s", CANIF);
+
+	fill_canxl(&tx, 8, 0x11);
+	tx.flags = 0;
+
+	ret = write(s, &tx, CANXL_HDR_SIZE + tx.len);
+	ASSERT_LT(ret, 0)
+		TH_LOG("frame without CANXL_XLF accepted");
+	ASSERT_EQ(errno, EINVAL);
+
+	close(s);
+}
+
+/* The declared length must match the payload actually written */
+TEST(canxl_declared_len_must_match_payload)
+{
+	struct canxl_frame tx;
+	int s, ret;
+
+	s = open_xl_socket(1, NULL);
+	if (!can_iface_supports_xl())
+		SKIP(return, "%s does not support CAN XL", CANIF);
+
+	ASSERT_GE(s, 0)
+		TH_LOG("failed to open CAN XL socket on %s", CANIF);
+
+	fill_canxl(&tx, 8, 0x11);
+	tx.len = 100;
+
+	ret = write(s, &tx, CANXL_HDR_SIZE + 8);
+	ASSERT_LT(ret, 0)
+		TH_LOG("frame with mismatching length accepted");
+	ASSERT_EQ(errno, EINVAL);
+
+	close(s);
+}
+
+/* Enabling CAN XL must implicitly enable CAN FD, and it must not be turnable
+ * off again while CAN XL stays enabled
+ */
+TEST(canxl_enables_fd_and_cannot_be_disabled)
+{
+	struct canfd_frame tx;
+	struct canxl_frame rx;
+	int s, ret;
+	int zero = 0;
+
+	s = open_xl_socket(1, NULL);
+	if (!can_iface_supports_xl())
+		SKIP(return, "%s does not support CAN XL", CANIF);
+
+	ASSERT_GE(s, 0)
+		TH_LOG("failed to open CAN XL socket on %s", CANIF);
+
+	ret = setsockopt(s, SOL_CAN_RAW, CAN_RAW_FD_FRAMES, &zero, sizeof(zero));
+	ASSERT_LT(ret, 0)
+		TH_LOG("CAN FD could be disabled while CAN XL was enabled");
+	ASSERT_EQ(errno, EINVAL);
+
+	memset(&tx, 0, sizeof(tx));
+	tx.can_id = ID;
+	tx.len = 8;
+
+	ret = write(s, &tx, CANFD_MTU);
+	ASSERT_EQ(ret, CANFD_MTU)
+		TH_LOG("CAN FD not implicitly enabled by CAN XL");
+
+	ret = read(s, &rx, sizeof(rx));
+	ASSERT_EQ(ret, CANFD_MTU)
+		TH_LOG("CAN FD frame not delivered to a CAN XL socket");
+
+	close(s);
+}
+
+/* Without VCID options the VCID is stripped on TX and a VCID-tagged frame is
+ * not forwarded on RX
+ */
+TEST(canxl_vcid_stripped_by_default)
+{
+	struct can_raw_vcid_options pass = {
+		.flags = CAN_RAW_XL_VCID_TX_PASS,
+	};
+	struct canxl_frame tx, rx;
+	int tx_sock, rx_sock, ret;
+
+	if (!can_iface_supports_xl())
+		SKIP(return, "%s does not support CAN XL", CANIF);
+
+	tx_sock = open_xl_socket(1, &pass);
+	ASSERT_GE(tx_sock, 0)
+		TH_LOG("CAN XL not supported on %s", CANIF);
+
+	rx_sock = open_xl_socket(1, NULL);
+	ASSERT_GE(rx_sock, 0);
+
+	fill_canxl(&tx, 8, 0x11);
+	tx.prio |= 0x42 << CANXL_VCID_OFFSET;
+
+	ret = write(tx_sock, &tx, CANXL_HDR_SIZE + tx.len);
+	ASSERT_EQ(ret, CANXL_HDR_SIZE + tx.len);
+
+	/* the RX socket has no VCID filter, so it drops VCID tagged frames */
+	ret = recv_timeout(rx_sock, &rx, sizeof(rx));
+	ASSERT_LT(ret, 0)
+		TH_LOG("VCID tagged frame forwarded without CAN_RAW_XL_VCID_RX_FILTER");
+
+	close(tx_sock);
+	close(rx_sock);
+}
+
+/* CAN_RAW_XL_VCID_TX_SET overwrites the VCID, and the RX side can select it */
+TEST(canxl_vcid_set_and_filter)
+{
+	struct can_raw_vcid_options opts = {
+		.flags = CAN_RAW_XL_VCID_TX_SET,
+		.tx_vcid = 0x77,
+	};
+	struct can_raw_vcid_options filter = {
+		.flags = CAN_RAW_XL_VCID_RX_FILTER,
+		.rx_vcid = 0x77,
+		.rx_vcid_mask = 0xff,
+	};
+	struct canxl_frame tx, rx;
+	int tx_sock, rx_sock, ret;
+
+	tx_sock = open_xl_socket(1, &opts);
+	if (!can_iface_supports_xl())
+		SKIP(return, "%s does not support CAN XL", CANIF);
+
+	ASSERT_GE(tx_sock, 0)
+		TH_LOG("failed to open CAN XL VCID socket on %s", CANIF);
+
+	rx_sock = open_xl_socket(1, &filter);
+	ASSERT_GE(rx_sock, 0);
+
+	fill_canxl(&tx, 8, 0x11);
+	tx.prio |= 0x42 << CANXL_VCID_OFFSET;
+
+	ret = write(tx_sock, &tx, CANXL_HDR_SIZE + tx.len);
+	ASSERT_EQ(ret, CANXL_HDR_SIZE + tx.len);
+
+	ret = read(rx_sock, &rx, sizeof(rx));
+	ASSERT_EQ(ret, CANXL_HDR_SIZE + 8);
+
+	ASSERT_EQ((rx.prio & CANXL_VCID_MASK) >> CANXL_VCID_OFFSET, 0x77)
+		TH_LOG("CAN_RAW_XL_VCID_TX_SET did not overwrite the VCID");
+	ASSERT_EQ(rx.prio & CANXL_PRIO_MASK, ID)
+		TH_LOG("priority clobbered by the VCID option");
+
+	close(tx_sock);
+	close(rx_sock);
+}
+
+/* A non-matching VCID filter must not forward the frame */
+TEST(canxl_vcid_filter_mismatch)
+{
+	struct can_raw_vcid_options pass = {
+		.flags = CAN_RAW_XL_VCID_TX_PASS,
+	};
+	struct can_raw_vcid_options filter = {
+		.flags = CAN_RAW_XL_VCID_RX_FILTER,
+		.rx_vcid = 0x99,
+		.rx_vcid_mask = 0xff,
+	};
+	struct canxl_frame tx, rx;
+	int tx_sock, rx_sock, ret;
+
+	tx_sock = open_xl_socket(1, &pass);
+	if (!can_iface_supports_xl())
+		SKIP(return, "%s does not support CAN XL", CANIF);
+
+	ASSERT_GE(tx_sock, 0)
+		TH_LOG("failed to open CAN XL VCID socket on %s", CANIF);
+
+	rx_sock = open_xl_socket(1, &filter);
+	ASSERT_GE(rx_sock, 0);
+
+	fill_canxl(&tx, 8, 0x11);
+	tx.prio |= 0x42 << CANXL_VCID_OFFSET;
+
+	ret = write(tx_sock, &tx, CANXL_HDR_SIZE + tx.len);
+	ASSERT_EQ(ret, CANXL_HDR_SIZE + tx.len);
+
+	ret = recv_timeout(rx_sock, &rx, sizeof(rx));
+	ASSERT_LT(ret, 0)
+		TH_LOG("frame with non-matching VCID was forwarded");
+
+	close(tx_sock);
+	close(rx_sock);
 }
 
 int main(int argc, char **argv)
