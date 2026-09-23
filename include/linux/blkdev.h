@@ -1580,6 +1580,16 @@ struct block_device_operations {
 			unsigned int flags);
 	int (*open)(struct gendisk *disk, blk_mode_t mode);
 	void (*release)(struct gendisk *disk);
+	/*
+	 * This operation is for performing synchronous cleanup after
+	 * release() was called. Since this operation is called without
+	 * disk->open_mutex held, users of this operation must implement
+	 * appropriate serialization. For example, even if thread-A called
+	 * release() operation before thread-B calls release() operation,
+	 * it is possible that thread-B calls post_release() operation
+	 * before thread-A calls post_release() operation.
+	 */
+	void (*post_release)(struct gendisk *disk);
 	int (*ioctl)(struct block_device *bdev, blk_mode_t mode,
 			unsigned cmd, unsigned long arg);
 	int (*compat_ioctl)(struct block_device *bdev, blk_mode_t mode,
