@@ -9,6 +9,7 @@ Locking
 
     locktypes
     lockdep-design
+    lock-holder-tracking
     lockstat
     locktorture
     mutex-design
