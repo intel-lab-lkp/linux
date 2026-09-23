@@ -80,7 +80,8 @@ static int xfrmi_build_state(struct net *net, struct nlattr *nla,
 	struct xfrm_md_info *info;
 	int ret;
 
-	ret = nla_parse_nested(tb, LWT_XFRM_MAX, nla, xfrm_lwt_policy, extack);
+	ret = lwtunnel_nla_parse(tb, LWT_XFRM_MAX, nla, xfrm_lwt_policy,
+				 extack);
 	if (ret < 0)
 		return ret;
 
