@@ -489,6 +489,7 @@ static vm_fault_t arena_vm_fault(struct vm_fault *vmf)
 	struct bpf_map *map = vmf->vma->vm_file->private_data;
 	struct bpf_arena *arena = container_of(map, struct bpf_arena, map);
 	struct mem_cgroup *new_memcg, *old_memcg;
+	struct range_node *unavail_node;
 	struct page *page;
 	long kbase, kaddr;
 	unsigned long flags;
@@ -551,10 +552,11 @@ static vm_fault_t arena_vm_fault(struct vm_fault *vmf)
 out:
 	/* Reserve the page while installing its user PTE without the arena lock. */
 	bpf_map_memcg_enter(&arena->map, &old_memcg, &new_memcg);
-	ret = range_tree_set_unavail(&arena->rt, vmf->pgoff, 1);
+	unavail_node = range_tree_set_unavail(&arena->rt, vmf->pgoff, 1);
 	bpf_map_memcg_exit(old_memcg, new_memcg);
 	raw_res_spin_unlock_irqrestore(&arena->spinlock, flags);
-	if (ret) {
+	if (IS_ERR(unavail_node)) {
+		ret = PTR_ERR(unavail_node);
 		if (ret == -EAGAIN)
 			goto retry;
 		return VM_FAULT_OOM;
@@ -895,6 +897,7 @@ static void zap_pages(struct bpf_arena *arena, long uaddr, long page_cnt)
 static void arena_free_pages(struct bpf_arena *arena, long uaddr, long page_cnt, bool sleepable)
 {
 	struct mem_cgroup *new_memcg, *old_memcg;
+	struct range_node *unavail_node = NULL;
 	u64 full_uaddr, uaddr_end;
 	long kaddr, pgoff;
 	struct page *page;
@@ -930,8 +933,9 @@ static void arena_free_pages(struct bpf_arena *arena, long uaddr, long page_cnt,
 	if (ret)
 		goto defer;
 
-	ret = range_tree_set_unavail(&arena->rt, pgoff, page_cnt);
-	if (ret) {
+	unavail_node = range_tree_set_unavail(&arena->rt, pgoff, page_cnt);
+	if (IS_ERR(unavail_node)) {
+		ret = PTR_ERR(unavail_node);
 		raw_res_spin_unlock_irqrestore(&arena->spinlock, flags);
 		/*
 		 * For -EAGAIN: An overlapping fault reserves
@@ -989,13 +993,29 @@ static void arena_free_pages(struct bpf_arena *arena, long uaddr, long page_cnt,
 defer:
 	s = kmalloc_nolock(sizeof(struct arena_free_span), __GFP_ACCOUNT, -1);
 	bpf_map_memcg_exit(old_memcg, new_memcg);
-	if (!s)
+	if (!s) {
 		/*
-		 * If allocation fails in non-sleepable context, pages are intentionally left
-		 * inaccessible (leaked) until the arena is destroyed. Cleanup or retries are not
-		 * possible here, so we intentionally omit them for safety.
+		 * Directly mark the region available. Unavailable regions must
+		 * always be transient, and a permanent one breaks the assumptions
+		 * made in the allocation/faulting code. The operation is safe because
+		 * unavailable nodes are not modified by the range tree code without a reference
+		 * to the node. The modification from unavailable to available also does
+		 * not require touching anything in the tree apart from the node itself,
+		 * so it can be done locklessly. The downside is fragmentation in the tree,
+		 * since we cannot merge with neighbors, but this is a) safe and b) better
+		 * than leaking the range.
 		 */
+		if (release_only)
+			range_node_mark_available(unavail_node);
+
+		/*
+		 * If we haven't even zapped the pages, intentionally leave them
+		 * inaccessible (leaked) until the arena is destroyed. Cleanup or
+		 * retries are not possible here, so we intentionally omit them for safety.
+		 */
+
 		return;
+	}
 
 	s->page_cnt = page_cnt;
 	s->uaddr = uaddr;
@@ -1048,6 +1068,7 @@ static void arena_free_worker(struct work_struct *work)
 	struct mem_cgroup *new_memcg, *old_memcg;
 	struct llist_node *list, *pos, *t;
 	struct arena_free_span *s;
+	struct range_node *unavail_node;
 	u64 arena_vm_start, user_vm_start;
 	struct llist_head free_pages;
 	struct clear_range_data cdata;
@@ -1081,8 +1102,9 @@ static void arena_free_worker(struct work_struct *work)
 		pgoff = compute_pgoff(arena, s->uaddr);
 		kaddr = arena_vm_start + s->uaddr;
 
-		ret = range_tree_set_unavail(&arena->rt, pgoff, page_cnt);
-		if (ret) {
+		unavail_node = range_tree_set_unavail(&arena->rt, pgoff, page_cnt);
+		if (IS_ERR(unavail_node)) {
+			ret = PTR_ERR(unavail_node);
 			/* Kick off another attempt at the end of this call. */
 			if (ret == -EAGAIN)
 				continue;
