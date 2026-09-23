@@ -32,7 +32,7 @@ connmark_tg_shift(struct sk_buff *skb, const struct xt_connmark_tginfo2 *info)
 	u_int32_t newmark;
 	u_int32_t oldmark;
 
-	ct = nf_ct_get(skb, &ctinfo);
+	ct = nf_ct_get_real(skb, &ctinfo);
 	if (ct == NULL)
 		return XT_CONTINUE;
 
@@ -134,7 +134,7 @@ connmark_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	enum ip_conntrack_info ctinfo;
 	const struct nf_conn *ct;
 
-	ct = nf_ct_get(skb, &ctinfo);
+	ct = nf_ct_get_real(skb, &ctinfo);
 	if (ct == NULL)
 		return false;
 

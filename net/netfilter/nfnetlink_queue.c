@@ -786,7 +786,7 @@ nfqnl_build_packet_message(struct net *net, struct nfqnl_instance *queue,
 #if IS_ENABLED(CONFIG_NF_CONNTRACK)
 	if (queue->flags & NFQA_CFG_F_CONNTRACK) {
 		if (nfnl_ct != NULL) {
-			ct = nf_ct_get(entskb, &ctinfo);
+			ct = nf_ct_get_real(entskb, &ctinfo);
 			if (ct != NULL)
 				size += nfnl_ct->build_size(ct);
 		}
@@ -1730,7 +1730,7 @@ static struct nf_conn *nfqnl_ct_parse(const struct nfnl_ct_hook *nfnl_ct,
 #if IS_ENABLED(CONFIG_NF_CONNTRACK)
 	struct nf_conn *ct;
 
-	ct = nf_ct_get(entry->skb, ctinfo);
+	ct = nf_ct_get_real(entry->skb, ctinfo);
 	if (ct == NULL)
 		return NULL;
 

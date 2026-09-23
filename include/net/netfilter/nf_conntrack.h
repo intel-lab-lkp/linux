@@ -260,6 +260,18 @@ static inline int nf_ct_is_template(const struct nf_conn *ct)
 	return test_bit(IPS_TEMPLATE_BIT, &ct->status);
 }
 
+/* Like nf_ct_get(), but returns NULL for template conntracks. */
+static inline struct nf_conn *
+nf_ct_get_real(const struct sk_buff *skb, enum ip_conntrack_info *ctinfo)
+{
+	struct nf_conn *ct = nf_ct_get(skb, ctinfo);
+
+	if (ct && nf_ct_is_template(ct))
+		return NULL;
+
+	return ct;
+}
+
 /* It's confirmed if it is, or has been in the hash table. */
 static inline int nf_ct_is_confirmed(const struct nf_conn *ct)
 {

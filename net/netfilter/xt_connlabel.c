@@ -25,7 +25,7 @@ connlabel_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	struct nf_conn *ct;
 	bool invert = info->options & XT_CONNLABEL_OP_INVERT;
 
-	ct = nf_ct_get(skb, &ctinfo);
+	ct = nf_ct_get_real(skb, &ctinfo);
 	if (ct == NULL)
 		return invert;
 

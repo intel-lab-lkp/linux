@@ -35,7 +35,7 @@ static void secmark_save(const struct sk_buff *skb)
 		struct nf_conn *ct;
 		enum ip_conntrack_info ctinfo;
 
-		ct = nf_ct_get(skb, &ctinfo);
+		ct = nf_ct_get_real(skb, &ctinfo);
 		if (ct && !ct->secmark) {
 			ct->secmark = skb->secmark;
 			nf_conntrack_event_cache(IPCT_SECMARK, ct);
@@ -53,7 +53,7 @@ static void secmark_restore(struct sk_buff *skb)
 		const struct nf_conn *ct;
 		enum ip_conntrack_info ctinfo;
 
-		ct = nf_ct_get(skb, &ctinfo);
+		ct = nf_ct_get_real(skb, &ctinfo);
 		if (ct && ct->secmark)
 			skb->secmark = ct->secmark;
 	}
