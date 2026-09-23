@@ -35,14 +35,13 @@ async_memcpy(struct page *dest, struct page *src, unsigned int dest_offset,
 {
 	struct dma_chan *chan = async_tx_find_channel(submit, DMA_MEMCPY,
 						      &dest, 1, &src, 1, len);
-	struct dma_device *device = chan ? chan->device : NULL;
 	struct dma_async_tx_descriptor *tx = NULL;
 	struct dmaengine_unmap_data *unmap = NULL;
 
 	if (chan)
 		unmap = dmaengine_get_unmap_data(chan, 2, GFP_NOWAIT);
 
-	if (unmap && is_dma_copy_aligned(device, src_offset, dest_offset, len)) {
+	if (unmap && dmaengine_is_copy_aligned(chan, src_offset, dest_offset, len)) {
 		unsigned long dma_prep_flags = 0;
 		struct device *dma_dev =  dmaengine_get_dma_device(chan);
 

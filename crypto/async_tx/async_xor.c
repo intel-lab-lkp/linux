@@ -23,7 +23,6 @@ static __async_inline struct dma_async_tx_descriptor *
 do_async_xor(struct dma_chan *chan, struct dmaengine_unmap_data *unmap,
 	     struct async_submit_ctl *submit)
 {
-	struct dma_device *dma = chan->device;
 	struct dma_async_tx_descriptor *tx = NULL;
 	dma_async_tx_callback cb_fn_orig = submit->cb_fn;
 	void *cb_param_orig = submit->cb_param;
@@ -38,7 +37,7 @@ do_async_xor(struct dma_chan *chan, struct dmaengine_unmap_data *unmap,
 		dma_addr_t tmp;
 
 		submit->flags = flags_orig;
-		xor_src_cnt = min(src_cnt, (int)dma->max_xor);
+		xor_src_cnt = min_t(int, src_cnt, dmaengine_get_max_xor(chan));
 		/* if we are submitting additional xors, leave the chain open
 		 * and clear the callback parameters
 		 */
@@ -124,19 +123,19 @@ do_sync_xor_offs(struct page *dest, unsigned int offset,
 }
 
 static inline bool
-dma_xor_aligned_offsets(struct dma_device *device, unsigned int offset,
-		unsigned int *src_offs, int src_cnt, int len)
+dma_xor_aligned_offsets(struct dma_chan *chan, unsigned int offset,
+			unsigned int *src_offs, int src_cnt, int len)
 {
 	int i;
 
-	if (!is_dma_xor_aligned(device, offset, 0, len))
+	if (!dmaengine_is_xor_aligned(chan, offset, 0, len))
 		return false;
 
 	if (!src_offs)
 		return true;
 
 	for (i = 0; i < src_cnt; i++) {
-		if (!is_dma_xor_aligned(device, src_offs[i], 0, len))
+		if (!dmaengine_is_xor_aligned(chan, src_offs[i], 0, len))
 			return false;
 	}
 	return true;
@@ -171,7 +170,6 @@ async_xor_offs(struct page *dest, unsigned int offset,
 	struct dma_chan *chan = async_tx_find_channel(submit, DMA_XOR,
 						      &dest, 1, src_list,
 						      src_cnt, len);
-	struct dma_device *device = chan ? chan->device : NULL;
 	struct dmaengine_unmap_data *unmap = NULL;
 
 	BUG_ON(src_cnt <= 1);
@@ -179,8 +177,8 @@ async_xor_offs(struct page *dest, unsigned int offset,
 	if (chan)
 		unmap = dmaengine_get_unmap_data(chan, src_cnt + 1, GFP_NOWAIT);
 
-	if (unmap && dma_xor_aligned_offsets(device, offset,
-				src_offs, src_cnt, len)) {
+	if (unmap && dma_xor_aligned_offsets(chan, offset, src_offs,
+					     src_cnt, len)) {
 		struct device *dma_dev = dmaengine_get_dma_device(chan);
 		struct dma_async_tx_descriptor *tx;
 		int i, j;
@@ -303,7 +301,6 @@ async_xor_val_offs(struct page *dest, unsigned int offset,
 		struct async_submit_ctl *submit)
 {
 	struct dma_chan *chan = xor_val_chan(submit, dest, src_list, src_cnt, len);
-	struct dma_device *device = chan ? chan->device : NULL;
 	struct dma_async_tx_descriptor *tx = NULL;
 	struct dmaengine_unmap_data *unmap = NULL;
 
@@ -312,8 +309,8 @@ async_xor_val_offs(struct page *dest, unsigned int offset,
 	if (chan)
 		unmap = dmaengine_get_unmap_data(chan, src_cnt, GFP_NOWAIT);
 
-	if (unmap && src_cnt <= device->max_xor &&
-	    dma_xor_aligned_offsets(device, offset, src_offs, src_cnt, len)) {
+	if (unmap && src_cnt <= dmaengine_get_max_xor(chan) &&
+	    dma_xor_aligned_offsets(chan, offset, src_offs, src_cnt, len)) {
 		unsigned long dma_prep_flags = 0;
 		struct device *dma_dev = dmaengine_get_dma_device(chan);
 		int i;
@@ -351,7 +348,7 @@ async_xor_val_offs(struct page *dest, unsigned int offset,
 		enum async_tx_flags flags_orig = submit->flags;
 
 		pr_debug("%s: (sync) len: %zu\n", __func__, len);
-		WARN_ONCE(device && src_cnt <= device->max_xor,
+		WARN_ONCE(chan && src_cnt <= dmaengine_get_max_xor(chan),
 			  "%s: no space for dma address conversion\n",
 			  __func__);
 

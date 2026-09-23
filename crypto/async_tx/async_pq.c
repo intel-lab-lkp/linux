@@ -140,13 +140,13 @@ do_sync_gen_syndrome(struct page **blocks, unsigned int *offsets, int disks,
 }
 
 static inline bool
-is_dma_pq_aligned_offs(struct dma_device *dev, unsigned int *offs,
-				     int src_cnt, size_t len)
+is_dma_pq_aligned_offs(struct dma_chan *chan, unsigned int *offs,
+		       int src_cnt, size_t len)
 {
 	int i;
 
 	for (i = 0; i < src_cnt; i++) {
-		if (!is_dma_pq_aligned(dev, offs[i], 0, len))
+		if (!dmaengine_is_pq_aligned(chan, offs[i], 0, len))
 			return false;
 	}
 	return true;
@@ -181,7 +181,6 @@ async_gen_syndrome(struct page **blocks, unsigned int *offsets, int disks,
 	struct dma_chan *chan = async_tx_find_channel(submit, DMA_PQ,
 						      &P(blocks, disks), 2,
 						      blocks, src_cnt, len);
-	struct dma_device *device = chan ? chan->device : NULL;
 	struct dmaengine_unmap_data *unmap = NULL;
 
 	BUG_ON(disks > MAX_DISKS || !(P(blocks, disks) || Q(blocks, disks)));
@@ -193,7 +192,7 @@ async_gen_syndrome(struct page **blocks, unsigned int *offsets, int disks,
 	if (unmap && !(submit->flags & ASYNC_TX_PQ_XOR_DST) &&
 	    (src_cnt <= dmaengine_maxpq(chan, 0) ||
 	     dmaengine_maxpq(chan, DMA_PREP_CONTINUE) > 0) &&
-	    is_dma_pq_aligned_offs(device, offsets, disks, len)) {
+	    is_dma_pq_aligned_offs(chan, offsets, disks, len)) {
 		struct dma_async_tx_descriptor *tx;
 		struct device *dma_dev = dmaengine_get_dma_device(chan);
 		enum dma_ctrl_flags dma_flags = 0;
@@ -301,7 +300,6 @@ async_syndrome_val(struct page **blocks, unsigned int *offsets, int disks,
 		   unsigned int s_off, struct async_submit_ctl *submit)
 {
 	struct dma_chan *chan = pq_val_chan(submit, blocks, disks, len);
-	struct dma_device *device = chan ? chan->device : NULL;
 	struct dma_async_tx_descriptor *tx;
 	unsigned char coefs[MAX_DISKS];
 	enum dma_ctrl_flags dma_flags = submit->cb_fn ? DMA_PREP_INTERRUPT : 0;
@@ -313,7 +311,7 @@ async_syndrome_val(struct page **blocks, unsigned int *offsets, int disks,
 		unmap = dmaengine_get_unmap_data(chan, disks, GFP_NOWAIT);
 
 	if (unmap && disks <= dmaengine_maxpq(chan, 0) &&
-	    is_dma_pq_aligned_offs(device, offsets, disks, len)) {
+	    is_dma_pq_aligned_offs(chan, offsets, disks, len)) {
 		struct device *dev = dmaengine_get_dma_device(chan);
 		dma_addr_t pq[2];
 		int i, j = 0, src_cnt = 0;
