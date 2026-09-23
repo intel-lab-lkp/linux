@@ -619,8 +619,8 @@ static struct liveupdate_file_handler memfd_luo_handler = {
  * Overview
  * ========
  *
- * tmpfs mounts can be preserved via LUO. This allows userspace to preserve an
- * in-memory filesystem across kexec.
+ * tmpfs mounts and the files contained can be preserved via LUO. This allows
+ * userspace to preserve in-memory files with a filesystem path across kexec.
  *
  * Preservation is not transparent. Only the properties listed below survive;
  * everything else comes back at its default.
@@ -632,10 +632,16 @@ static struct liveupdate_file_handler memfd_luo_handler = {
  * descriptor is rejected, so one obtained from fsmount(2) has to be reopened
  * first with ``openat(fsmount_fd, ".", O_RDONLY | O_DIRECTORY)``.
  *
- * Mounts with memory policies, id mappings, quotas, and casefolding are not
- * supported.
+ * Each file is then preserved through its own FD. A file depends on its mount,
+ * so the mount must already be preserved in the same session; otherwise
+ * preserving the file fails with ``-ENOENT``.
  *
- * Attaching a memory policy after preserve will fail the freeze.
+ * Only regular files linked at the root are supported. Files in subdirectories
+ * are not supported. Mounts with memory policies, id mappings, quotas, and
+ * casefolding are also not supported.
+ *
+ * Unlinking a file or attaching a memory policy after preserve will fail the
+ * freeze.
  *
  * Restoring
  * =========
@@ -645,8 +651,12 @@ static struct liveupdate_file_handler memfd_luo_handler = {
  *
  *	move_mount(fd, "", AT_FDCWD, "/some/path", MOVE_MOUNT_F_EMPTY_PATH);
  *
- * Closing the mount descriptor without ever attaching it tears the mount down,
- * and everything in it goes too.
+ * Until then the restored files are reachable only through the descriptors LUO
+ * hands back. Closing the mount descriptor without ever attaching it tears the
+ * mount down, and everything in it goes too.
+ *
+ * Unlike preservation, files may be retrieved before their mount. If the mount
+ * cannot be retrieved, every file in it fails with the same error.
  *
  * Like fsmount(2)'s, the restored mount descriptor is an ``O_PATH`` one, so
  * preserving the same mount again for a second live update means reopening its
@@ -655,11 +665,29 @@ static struct liveupdate_file_handler memfd_luo_handler = {
  * Preserved Properties
  * ====================
  *
+ * Of the mount:
+ *
  * ``nr_blocks=``:
  *   The block limit. Restoring file contents is charged against it.
  *
  * Root directory mode
  *   Including the sticky and setgid bits.
+ *
+ * Of each file:
+ *
+ * Contents and size
+ *   Holes are filled by allocating pages for them during preservation, as with
+ *   memfd.
+ *
+ * Name
+ *   A single component in the root of the mount.
+ *
+ * Permission bits
+ *   Not including the setuid and setgid bits; see below.
+ *
+ * File position
+ *   So that the returned descriptor can be read from or written to where the
+ *   old one left off.
  *
  * Not Preserved
  * =============
@@ -670,12 +698,11 @@ static struct liveupdate_file_handler memfd_luo_handler = {
  *
  * Ownership
  *   Everything comes back owned by whoever retrieves it. If different ownership
- *   is needed, userspace must do that after retrieving the mount.
+ *   is needed, userspace must do that after retrieving the files.
  *
  * Timestamps, inode numbers, extended attributes and ACLs
- *   A restored mount root is a new inode with fresh timestamps and a new
- *   number. utimensat(2) can set the timestamps again once the mount is
- *   attached.
+ *   A restored file is a new inode with fresh timestamps and a new number.
+ *   utimensat(2) can set the timestamps again once the mount is attached.
  */
 
 static unsigned long tmpfs_luo_mnt_id(struct super_block *sb)
@@ -821,6 +848,289 @@ static struct liveupdate_file_handler tmpfs_luo_mnt_handler = {
 	.compatible = TMPFS_LUO_MNT_FH_COMPATIBLE,
 };
 
+static bool tmpfs_luo_file_can_preserve(struct liveupdate_file_handler *fh,
+					struct file *file)
+{
+	struct inode *inode = file_inode(file);
+	struct dentry *dentry = file->f_path.dentry;
+	struct super_block *sb = inode->i_sb;
+
+	if (!shmem_file(file) || (sb->s_flags & SB_NOUSER))
+		return false;
+
+	/* Only linked regular files allowed. */
+	if (!S_ISREG(inode->i_mode) || d_unlinked(dentry))
+		return false;
+
+	/* Only files in the root of the mount are supported for now. */
+	if (dentry->d_parent != sb->s_root)
+		return false;
+
+	return true;
+}
+
+static unsigned long tmpfs_luo_file_get_id(struct file *file)
+{
+	return (unsigned long)file_inode(file);
+}
+
+static int tmpfs_luo_file_preserve(struct liveupdate_file_op_args *args)
+{
+	struct inode *inode = file_inode(args->file);
+	struct memfd_luo_folio_ser *folios_ser;
+	u64 nr_folios, inode_size, mnt_token;
+	struct tmpfs_luo_file_ser *ser;
+	int err;
+
+	/* Find the token of the mount. It is identified by its superblock. */
+	err = liveupdate_get_token_outgoing(args->session, tmpfs_luo_mnt_id(inode->i_sb),
+					    &mnt_token);
+	if (err)
+		return err;
+
+	ser = kho_alloc_preserve(sizeof(*ser));
+	if (IS_ERR(ser))
+		return PTR_ERR(ser);
+
+	inode_lock(inode);
+	shmem_freeze(inode, true);
+
+	inode_size = i_size_read(inode);
+
+	/*
+	 * memfd_pin_folios() caps at UINT_MAX folios; refuse larger files to
+	 * avoid silently preserving only a prefix.
+	 */
+	if (DIV_ROUND_UP_ULL(inode_size, PAGE_SIZE) > UINT_MAX) {
+		err = -EFBIG;
+		goto err_free_ser;
+	}
+
+	ser->mnt_token = mnt_token;
+
+	/*
+	 * Preserve only folios now. Name, mode, etc. can change later and are
+	 * cheap to preserve. They will be preserved on freeze().
+	 */
+	err = memfd_luo_preserve_folios(args->file, &ser->folios, &folios_ser,
+					&nr_folios);
+	if (err)
+		goto err_free_ser;
+
+	ser->nr_folios = nr_folios;
+	inode_unlock(inode);
+
+	args->private_data = folios_ser;
+	args->serialized_data = virt_to_phys(ser);
+
+	return 0;
+
+err_free_ser:
+	kho_unpreserve_free(ser);
+	shmem_freeze(inode, false);
+	inode_unlock(inode);
+	return err;
+}
+
+static int tmpfs_luo_file_freeze(struct liveupdate_file_op_args *args)
+{
+	struct dentry *dentry = args->file->f_path.dentry;
+	struct inode *inode = file_inode(args->file);
+	struct dentry *root = inode->i_sb->s_root;
+	struct tmpfs_luo_file_ser *ser;
+	int err;
+
+	/*
+	 * Lock the mount root to block renames and unlinks, then the inode
+	 * itself to stabilize its mode and size.
+	 */
+	inode_lock_shared_nested(d_inode(root), I_MUTEX_PARENT);
+	inode_lock_shared(inode);
+
+	/* Renamed into a subdirectory. */
+	if (dentry->d_parent != root) {
+		err = -EOPNOTSUPP;
+		goto unlock;
+	}
+
+	/* Unlinked after preserve. */
+	if (d_unlinked(dentry)) {
+		err = -ENOENT;
+		goto unlock;
+	}
+
+	ser = phys_to_virt(args->serialized_data);
+
+	/*
+	 * Zero-pads the tail, which the ABI requires. Cannot fail, the dentry
+	 * name is bounded by NAME_MAX, but check anyway.
+	 */
+	if (strscpy_pad(ser->name, dentry->d_name.name) < 0) {
+		err = -ENAMETOOLONG;
+		goto unlock;
+	}
+
+	ser->mode = inode->i_mode & 0777;
+	ser->size = i_size_read(inode);
+	ser->pos = args->file->f_pos;
+
+	err = 0;
+
+unlock:
+	inode_unlock_shared(inode);
+	inode_unlock_shared(d_inode(root));
+	return err;
+}
+
+static void tmpfs_luo_file_unpreserve(struct liveupdate_file_op_args *args)
+{
+	struct inode *inode = file_inode(args->file);
+	struct tmpfs_luo_file_ser *ser;
+
+	inode_lock(inode);
+	shmem_freeze(inode, false);
+
+	ser = phys_to_virt(args->serialized_data);
+	memfd_luo_unpreserve_folios(&ser->folios, args->private_data,
+				    ser->nr_folios);
+
+	kho_unpreserve_free(ser);
+	inode_unlock(inode);
+}
+
+/*
+ * A name from the previous kernel is untrusted input. There is no separate
+ * length, so the NUL terminator is the only bound.
+ */
+static bool tmpfs_luo_name_valid(const char *name, size_t size)
+{
+	size_t len = strnlen(name, size);
+
+	/* Non-empty, NUL terminated, and a single component. */
+	if (!len || len == size || memchr(name, '/', len))
+		return false;
+
+	return strcmp(name, ".") && strcmp(name, "..");
+}
+
+static int tmpfs_luo_file_retrieve(struct liveupdate_file_op_args *args)
+{
+	struct memfd_luo_folio_ser *folios_ser;
+	struct file *mnt_file, *file;
+	struct tmpfs_luo_file_ser *ser;
+	struct inode *inode;
+	int err;
+
+	if (!args->serialized_data)
+		return -EINVAL;
+
+	ser = phys_to_virt(args->serialized_data);
+
+	if ((ser->mode & ~0777) || ser->flags ||
+	    !tmpfs_luo_name_valid(ser->name, sizeof(ser->name))) {
+		err = -EINVAL;
+		goto free_ser;
+	}
+
+	err = liveupdate_get_file_incoming(args->session, ser->mnt_token,
+					   &mnt_file);
+	if (err) {
+		pr_err("failed to retrieve tmpfs mount: %pe\n", ERR_PTR(err));
+		goto free_ser;
+	}
+
+	/*
+	 * TODO: This is racy. This will link the file in the mount so after
+	 * this call userspace can already open the file and write to it.
+	 * Ideally we should first create the inode and set it up, and only
+	 * then link it to the root.
+	 */
+	file = file_open_root(&mnt_file->f_path, ser->name,
+			      O_RDWR | O_CREAT | O_EXCL | O_LARGEFILE,
+			      ser->mode);
+	fput(mnt_file);
+	if (IS_ERR(file)) {
+		pr_err("failed to create '%s': %pe\n", ser->name, file);
+		err = PTR_ERR(file);
+		goto free_ser;
+	}
+
+	inode = file_inode(file);
+
+	inode_lock(inode);
+	i_size_write(inode, ser->size);
+	inode_unlock(inode);
+
+	vfs_setpos(file, ser->pos, MAX_LFS_FILESIZE);
+
+	if (ser->nr_folios) {
+		folios_ser = kho_restore_vmalloc(&ser->folios);
+		if (!folios_ser) {
+			err = -EINVAL;
+			goto put_file;
+		}
+
+		err = memfd_luo_retrieve_folios(file, folios_ser,
+						ser->nr_folios);
+		vfree(folios_ser);
+		if (err)
+			goto put_file;
+	}
+
+	args->file = file;
+	kho_restore_free(ser);
+
+	return 0;
+
+put_file:
+	fput(file);
+free_ser:
+	kho_restore_free(ser);
+	return err;
+}
+
+static void tmpfs_luo_file_finish(struct liveupdate_file_op_args *args)
+{
+	struct memfd_luo_folio_ser *folios_ser;
+	struct tmpfs_luo_file_ser *ser;
+
+	/*
+	 * A successful retrieve() already consumed the preserved memory, and a
+	 * failed one cleaned up what it could. Only a file that was never
+	 * retrieved is left to discard here.
+	 */
+	if (args->retrieve_status || !args->serialized_data)
+		return;
+
+	ser = phys_to_virt(args->serialized_data);
+
+	if (ser->nr_folios) {
+		folios_ser = kho_restore_vmalloc(&ser->folios);
+		if (folios_ser) {
+			memfd_luo_discard_folios(folios_ser, ser->nr_folios);
+			vfree(folios_ser);
+		}
+	}
+
+	kho_restore_free(ser);
+}
+
+static const struct liveupdate_file_ops tmpfs_luo_file_ops = {
+	.freeze = tmpfs_luo_file_freeze,
+	.finish = tmpfs_luo_file_finish,
+	.retrieve = tmpfs_luo_file_retrieve,
+	.preserve = tmpfs_luo_file_preserve,
+	.unpreserve = tmpfs_luo_file_unpreserve,
+	.can_preserve = tmpfs_luo_file_can_preserve,
+	.get_id = tmpfs_luo_file_get_id,
+	.owner = THIS_MODULE,
+};
+
+static struct liveupdate_file_handler tmpfs_luo_file_handler = {
+	.ops = &tmpfs_luo_file_ops,
+	.compatible = TMPFS_LUO_FILE_FH_COMPATIBLE,
+};
+
 static int __init memfd_luo_init(void)
 {
 	int err;
@@ -844,8 +1154,18 @@ static int __init memfd_luo_init(void)
 		goto err_unregister_memfd;
 	}
 
+	err = liveupdate_register_file_handler(&tmpfs_luo_file_handler);
+	if (err) {
+		pr_err("Could not register luo tmpfs file handler: %pe\n",
+		       ERR_PTR(err));
+
+		goto err_unregister_tmpfs_mnt;
+	}
+
 	return 0;
 
+err_unregister_tmpfs_mnt:
+	liveupdate_unregister_file_handler(&tmpfs_luo_mnt_handler);
 err_unregister_memfd:
 	liveupdate_unregister_file_handler(&memfd_luo_handler);
 
