@@ -33,6 +33,9 @@ struct ath11k_ahb_rproc_info {
 	struct notifier_block root_pd_nb;
 	void *root_pd_notifier;
 	bool root_pd_booted;
+
+	/* Bitmap of loaded M3 firmwares indexed by hardware revision */
+	u32 m3_loaded;
 };
 
 struct ath11k_ahb {

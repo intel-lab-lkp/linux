@@ -18,6 +18,7 @@
 #include "qmi.h"
 #include <linux/remoteproc.h>
 #include "pcic.h"
+#include <linux/soc/qcom/mdt_loader.h>
 #include <linux/soc/qcom/smem.h>
 #include <linux/soc/qcom/smem_state.h>
 
@@ -890,6 +891,7 @@ static struct ath11k_ahb_rproc_info *ath11k_ahb_rproc_info_alloc(struct ath11k_b
 		return NULL;
 
 	rproc_info->root_pd_booted = false;
+	rproc_info->m3_loaded = 0;
 	init_completion(&rproc_info->rootpd_ready);
 	ab_ahb->rproc_info = rproc_info;
 
@@ -962,6 +964,58 @@ static int ath11k_ahb_boot_root_pd(struct ath11k_base *ab)
 	return 0;
 }
 
+static int ath11k_ahb_load_m3_firmware(struct ath11k_base *ab)
+{
+	char m3_fw_name[ATH11K_FW_NAME_LEN];
+	const struct firmware *m3_fw = NULL;
+	struct device_node *node;
+	struct resource res = {};
+	phys_addr_t mem_phys;
+	void *mem_region;
+	size_t mem_size;
+	int ret;
+
+	ret = of_reserved_mem_region_to_resource_byname(ab->dev->of_node,
+							"m3-region", &res);
+	/* If m3 region isn't found, fall back to the mem region of the rproc */
+	if (ret && ret == -EINVAL) {
+		node = g_rproc_info->tgt_rproc->dev.parent->of_node;
+		ret = of_reserved_mem_region_to_resource(node, 0, &res);
+	}
+	if (ret) {
+		ath11k_err(ab, "Failed to get m3 memory resource: %d\n", ret);
+		return ret;
+	}
+
+	mem_phys = res.start;
+	mem_size = resource_size(&res);
+	mem_region = devm_memremap(ab->dev, mem_phys, mem_size, MEMREMAP_WC);
+
+	snprintf(m3_fw_name, sizeof(m3_fw_name), "%s/%s/%s",
+		 ATH11K_FW_DIR, ab->hw_params.fw.dir, ATH11K_M3_MBN_FILE);
+
+	ret = request_firmware(&m3_fw, m3_fw_name, ab->dev);
+	if (ret < 0) {
+		ath11k_err(ab, "Failed to request firmware: %d\n", ret);
+		return ret;
+	}
+
+	if (!m3_fw->size || m3_fw->size > mem_size) {
+		ath11k_err(ab, "Invalid firmware size\n");
+		release_firmware(m3_fw);
+		return -EINVAL;
+	}
+
+	ret = qcom_mdt_load_no_init(ab->dev, m3_fw, m3_fw_name, mem_region,
+				    mem_phys, mem_size, &mem_phys);
+	if (ret)
+		ath11k_err(ab, "Failed to load MDT segments: %d\n", ret);
+
+	release_firmware(m3_fw);
+
+	return ret;
+}
+
 static int ath11k_ahb_configure_rproc(struct ath11k_base *ab)
 {
 	int ret;
@@ -979,6 +1033,17 @@ static int ath11k_ahb_configure_rproc(struct ath11k_base *ab)
 		ret = dev_err_probe(&ab->pdev->dev, ret,
 				    "failed to register rproc notifier\n");
 		goto err_put_rproc;
+	}
+
+	if (ab->hw_params.m3_fw_support &&
+	    ab->hw_params.fw.m3_loader == ath11k_m3_fw_loader_ahb &&
+	    !(g_rproc_info->m3_loaded & BIT(ab->hw_params.hw_rev))) {
+		ret = ath11k_ahb_load_m3_firmware(ab);
+		if (ret) {
+			ath11k_err(ab, "failed to load m3 firmware: %d\n", ret);
+			goto err_unreg_notifier;
+		}
+		g_rproc_info->m3_loaded |= BIT(ab->hw_params.hw_rev);
 	}
 
 	if (g_rproc_info->tgt_rproc->state != RPROC_RUNNING) {

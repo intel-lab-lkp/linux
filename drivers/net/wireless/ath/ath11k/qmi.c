@@ -1724,7 +1724,8 @@ int ath11k_qmi_host_cap_send(struct ath11k_base *ab)
 	req.bdf_support_valid = 1;
 	req.bdf_support = 1;
 
-	if (ab->hw_params.m3_fw_support) {
+	if (ab->hw_params.m3_fw_support &&
+	    ab->hw_params.fw.m3_loader == ath11k_m3_fw_loader_qmi) {
 		req.m3_support_valid = 1;
 		req.m3_support = 1;
 		req.m3_cache_support_valid = 1;
@@ -2589,7 +2590,8 @@ int ath11k_qmi_wlanfw_m3_info_send(struct ath11k_base *ab)
 	memset(&req, 0, sizeof(req));
 	memset(&resp, 0, sizeof(resp));
 
-	if (ab->hw_params.m3_fw_support) {
+	if (ab->hw_params.m3_fw_support &&
+	    ab->hw_params.fw.m3_loader == ath11k_m3_fw_loader_qmi) {
 		ret = ath11k_qmi_m3_load(ab);
 		if (ret) {
 			ath11k_err(ab, "failed to load m3 firmware: %d", ret);

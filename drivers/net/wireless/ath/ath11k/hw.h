@@ -72,6 +72,7 @@
 #define ATH11k_HW_RATECODE_CCK_SHORT_PREAM_MASK  0x4
 
 #define ATH11K_FW_DIR			"ath11k"
+#define ATH11K_FW_NAME_LEN		35
 
 #define ATH11K_BOARD_MAGIC		"QCA-ATH11K-BOARD"
 #define ATH11K_BOARD_API2_FILE		"board-2.bin"
@@ -79,6 +80,7 @@
 #define ATH11K_DEFAULT_CAL_FILE		"caldata.bin"
 #define ATH11K_AMSS_FILE		"amss.bin"
 #define ATH11K_M3_FILE			"m3.bin"
+#define ATH11K_M3_MBN_FILE		"m3_fw.mbn"
 #define ATH11K_REGDB_FILE_NAME		"regdb.bin"
 
 #define ATH11K_CE_OFFSET(ab)	(ab->mem_ce - ab->mem)
@@ -137,6 +139,11 @@ struct ath11k_hw_hal_params {
 	size_t num_tx_rings;
 };
 
+enum ath11k_m3_fw_loaders {
+	ath11k_m3_fw_loader_ahb,
+	ath11k_m3_fw_loader_qmi,
+};
+
 struct ath11k_hw_params {
 	const char *name;
 	u16 hw_rev;
@@ -147,6 +154,7 @@ struct ath11k_hw_params {
 		const char *dir;
 		size_t board_size;
 		size_t cal_offset;
+		enum ath11k_m3_fw_loaders m3_loader;
 	} fw;
 
 	const struct ath11k_hw_ops *hw_ops;
