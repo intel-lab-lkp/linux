@@ -3022,6 +3022,7 @@ static void *syscall__augmented_args(struct trace *trace, struct syscall *sc,
 	 * traffic to just what is needed for each syscall.
 	 */
 	int args_size = raw_augmented_args_size ?: sc->args_size;
+	static uintptr_t argbuf[1024]; /* assuming single-threaded */
 
 	/*
 	 * Augmented arguments are a perf trace specific payload, they are only
@@ -3042,24 +3043,40 @@ static void *syscall__augmented_args(struct trace *trace, struct syscall *sc,
 		return NULL;
 
 	*augmented_args_size = sample->raw_size - args_size;
-	if (*augmented_args_size > 0) {
-		static uintptr_t argbuf[1024]; /* assuming single-threaded */
 
-		if ((size_t)(*augmented_args_size) > sizeof(argbuf))
-			return NULL;
-
-		/*
-		 * The perf ring-buffer is 8-byte aligned but sample->raw_data
-		 * is not because it's preceded by u32 size.  Later, beautifier
-		 * will use the augmented args with stricter alignments like in
-		 * some struct.  To make sure it's aligned, let's copy the args
-		 * into a static buffer as it's single-threaded for now.
-		 */
-		memcpy(argbuf, sample->raw_data + args_size, *augmented_args_size);
-
-		return argbuf;
+	/*
+	 * perf_sample_save_raw_data() rounds the raw payload up to a multiple
+	 * of 8 bytes less the u32 that holds its size, and the kernel skips
+	 * over that padding rather than zeroing it, so those bytes are stale
+	 * ring buffer contents.
+	 *
+	 * A record that carries no augmented arguments at all therefore still
+	 * arrives with up to 7 trailing bytes, e.g. the 64 byte struct
+	 * syscall_enter_args that an unaugmented syscall emits comes back with
+	 * raw_size of 68. Anything shorter than a struct augmented_arg cannot
+	 * be one, so drop it instead of letting a beautifier read a length out
+	 * of uninitialised memory.
+	 */
+	if (*augmented_args_size < (int)sizeof(struct augmented_arg)) {
+		*augmented_args_size = 0;
+		return NULL;
 	}
-	return NULL;
+
+	if ((size_t)(*augmented_args_size) > sizeof(argbuf)) {
+		*augmented_args_size = 0;
+		return NULL;
+	}
+
+	/*
+	 * The perf ring-buffer is 8-byte aligned but sample->raw_data
+	 * is not because it's preceded by u32 size.  Later, beautifier
+	 * will use the augmented args with stricter alignments like in
+	 * some struct.  To make sure it's aligned, let's copy the args
+	 * into a static buffer as it's single-threaded for now.
+	 */
+	memcpy(argbuf, sample->raw_data + args_size, *augmented_args_size);
+
+	return argbuf;
 }
 
 static int trace__sys_enter(struct trace *trace,
