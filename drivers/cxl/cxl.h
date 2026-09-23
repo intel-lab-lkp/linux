@@ -41,6 +41,7 @@ extern const struct nvdimm_security_ops *cxl_security_ops;
 
 #define   CXL_CM_CAP_CAP_ID_RAS 0x2
 #define   CXL_CM_CAP_CAP_ID_HDM 0x5
+#define   CXL_CM_CAP_CAP_ID_SNOOP 0x8
 #define   CXL_CM_CAP_CAP_ID_CACHE_ID_RT 0xD
 #define   CXL_CM_CAP_CAP_ID_CACHE_ID_DC 0xE
 #define   CXL_CM_CAP_CAP_HDM_VERSION 1
@@ -225,6 +226,11 @@ static inline int ways_to_eiw(unsigned int ways, u8 *eiw)
 #define   CXLDEV_MBOX_BG_CMD_COMMAND_VENDOR_MASK GENMASK_ULL(63, 48)
 #define CXLDEV_MBOX_PAYLOAD_OFFSET 0x20
 
+/* CXL 4.0 8.2.4.23 CXL Snoop Filter Capability Structure */
+#define CXL_SNOOP_FILTER_GROUP_ID_OFFSET 0x0
+#define   CXL_SNOOP_FILTER_GROUP_ID_MASK GENMASK(15, 0)
+#define CXL_SNOOP_FILTER_SIZE_OFFSET 0x4
+#define CXL_SNOOP_FILTER_CAPABILITY_LENGTH 0x8
 
 /* CXL 4.0 8.2.4.28.1 CXL Cache ID Route Table Capability Structure */
 #define CXL_CACHE_ID_RT_CAP_OFFSET 0x0
@@ -683,6 +689,7 @@ struct cxl_rcrb_info {
  * @coord: access coordinates (bandwidth and latency performance attributes)
  * @link_latency: calculated PCIe downstream latency
  * @gpf_dvsec: Cached GPF port DVSEC
+ * @snoop: Group id of snoop filter this dport belongs to
  */
 struct cxl_dport {
 	struct device *dport_dev;
@@ -695,6 +702,7 @@ struct cxl_dport {
 	struct access_coordinate coord[ACCESS_COORDINATE_MAX];
 	long link_latency;
 	int gpf_dvsec;
+	int snoop;
 };
 
 /**
@@ -973,11 +981,17 @@ u16 cxl_gpf_get_dvsec(struct device *dev);
 #if IS_ENABLED(CONFIG_CXL_CACHE)
 int cxl_port_map_cache_id_rt(struct cxl_port *port);
 int cxl_dport_map_cache_id_dc(struct cxl_dport *dport);
+int cxl_dport_probe_snoop_filter(struct cxl_dport *dport);
 #else
 static inline int cxl_port_map_cache_id_rt(struct cxl_port *port)
 { return -ENXIO; }
 static inline int cxl_dport_map_cache_id_dc(struct cxl_dport *dport)
 { return -ENXIO; }
+static inline int cxl_dport_probe_snoop_filter(struct cxl_dport *dport)
+{
+	dport->snoop = CXL_SNOOP_FILTER_NO_GROUP_ID;
+	return 0;
+}
 #endif
- 
+
 #endif /* __CXL_H__ */

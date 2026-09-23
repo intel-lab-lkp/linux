@@ -301,6 +301,16 @@ static struct cxl_dport *cxl_port_add_dport(struct cxl_port *port,
 	/* New dport added, update the decoder targets */
 	cxl_port_update_decoder_targets(port, dport);
 
+	/* 
+	 * cxl_cachedevs won't probe if this fails, but it's not an error for
+	 * cxl_memdevs
+	 */
+	rc = cxl_dport_probe_snoop_filter(dport);
+	if (rc)
+		dev_info(dport->dport_dev,
+			 "Failed to find or create a CXL snoop filter: %d\n",
+			 rc);
+
 	dev_dbg(&port->dev, "dport%d:%s added\n", dport->port_id,
 		dev_name(dport_dev));
 

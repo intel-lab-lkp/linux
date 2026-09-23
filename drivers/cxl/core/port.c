@@ -1272,6 +1272,8 @@ __devm_cxl_add_dport(struct cxl_port *port, struct device *dport_dev,
 	if (!dport->rch)
 		devm_cxl_dport_ras_setup(dport);
 
+	dport->snoop = CXL_SNOOP_FILTER_NO_GROUP_ID;
+
 	rc = cxl_dport_map_cache_id_dc(dport);
 	if (rc)
 		dev_dbg(dport->dport_dev,
@@ -2629,6 +2631,7 @@ static void cxl_core_exit(void)
 	bus_unregister(&cxl_bus_type);
 	destroy_workqueue(cxl_bus_wq);
 	cxl_memdev_exit();
+	cxl_destroy_snoop_filters();
 	debugfs_remove_recursive(cxl_debugfs);
 }
 

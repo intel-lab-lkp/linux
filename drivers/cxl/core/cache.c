@@ -6,9 +6,13 @@
 #include <cxlcache.h>
 
 #include "cxlpci.h"
+#include "core.h"
 
 #define CXL_CACHE_ID_COMMIT_MAXTMO_US (5 * USEC_PER_SEC)
 #define CACHE_DECODER_MAX_CACHE_ID (15)
+
+static DEFINE_XARRAY(snoop_filters);
+static DECLARE_RWSEM(snoop_rwsem);
 
 int cxl_port_map_cache_id_rt(struct cxl_port *port)
 {
@@ -566,3 +570,118 @@ void cxl_cachedev_deprogram_cache_id(struct cxl_cachedev *cxlcd)
 	__deprogram_cache_id(cxlcd, &root->port);
 }
 EXPORT_SYMBOL_FOR_MODULES(cxl_cachedev_deprogram_cache_id, "cxl_cache");
+
+/**
+ * struct cxl_snoop_filter - CXL snoop filter instance for tracking CXL.cache
+ * devices below a dport
+ *
+ * @lock: Used for allocations
+ * @avail: Available capacity left in the filter
+ * @size: Size of the filter
+ * @id: Group ID of the filter
+ */
+struct cxl_snoop_filter {
+	struct mutex lock;
+	u64 avail;
+	u64 size;
+	int id;
+};
+
+static struct cxl_snoop_filter *create_snoop_filter(u64 size, int id)
+{
+	struct cxl_snoop_filter *sf;
+
+	sf = kzalloc_obj(*sf, GFP_KERNEL);
+	if (!sf)
+		return ERR_PTR(-ENOMEM);
+
+	sf->id = id;
+	sf->size = sf->avail = size;
+	mutex_init(&sf->lock);
+
+	return sf;
+}
+
+static void destroy_snoop_filter(struct cxl_snoop_filter *sf)
+{
+	lockdep_assert_held_write(&snoop_rwsem);
+
+	mutex_destroy(&sf->lock);
+	kfree(sf);
+}
+
+static struct cxl_snoop_filter *find_or_add_snoop_filter(u64 size, int id)
+{
+	struct cxl_snoop_filter *sf;
+	int rc;
+
+	guard(rwsem_write)(&snoop_rwsem);
+	sf = xa_load(&snoop_filters, id);
+	if (sf) {
+		if (sf->size != size)
+			pr_warn("Mismatched snoop filter (gid: %d) size: found %llu, expected %llu",
+				id, sf->size, size);
+
+		return sf;
+	}
+
+	sf = create_snoop_filter(size, id);
+	if (IS_ERR_OR_NULL(sf))
+		return sf;
+
+	rc = xa_insert(&snoop_filters, id, sf, GFP_KERNEL);
+	if (rc) {
+		destroy_snoop_filter(sf);
+		return ERR_PTR(rc);
+	}
+
+	return sf;
+}
+
+int cxl_dport_probe_snoop_filter(struct cxl_dport *dport)
+{
+	struct cxl_snoop_filter *sf;
+	u32 group, size;
+	int id, rc;
+
+	if (!dport->reg_map.component_map.snoop.valid) {
+		dev_dbg(dport->dport_dev, "missing snoop filter capability\n");
+		return 0;
+	}
+
+	rc = cxl_map_component_regs(&dport->reg_map, &dport->regs.component,
+				    BIT(CXL_CM_CAP_CAP_ID_SNOOP));
+	if (rc)
+		return rc;
+
+	group = readl(dport->regs.snoop + CXL_SNOOP_FILTER_GROUP_ID_OFFSET);
+	id = FIELD_GET(CXL_SNOOP_FILTER_GROUP_ID_MASK, group);
+
+	size = readl(dport->regs.snoop + CXL_SNOOP_FILTER_SIZE_OFFSET);
+	if (!size) {
+		dev_dbg(dport->dport_dev, "CXL snoop filter has no capacity\n");
+		return 0;
+	}
+
+	sf = find_or_add_snoop_filter(size, id);
+	if (IS_ERR_OR_NULL(sf)) {
+		return PTR_ERR(sf);
+	}
+
+	dev_dbg(dport->dport_dev, "assigned snoop filter gid %d\n", sf->id);
+	dport->snoop = id;
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_dport_probe_snoop_filter, "CXL");
+
+void cxl_destroy_snoop_filters(void)
+{
+	struct cxl_snoop_filter *sf;
+	unsigned long id;
+
+	guard(rwsem_write)(&snoop_rwsem);
+	xa_for_each(&snoop_filters, id, sf)
+		destroy_snoop_filter(sf);
+
+	xa_destroy(&snoop_filters);
+}

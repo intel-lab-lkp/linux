@@ -34,12 +34,14 @@ struct cxl_regs {
 	 * Common set of CXL Component register block base pointers
 	 * @hdm_decoder: CXL 2.0 8.2.5.12 CXL HDM Decoder Capability Structure
 	 * @ras: CXL 2.0 8.2.5.9 CXL RAS Capability Structure
+	 * @snoop: CXL 4.0 8.2.4.23 CXL Snoop Filter Capability Structure
 	 * @cidrt: CXL 4.0 8.2.4.28 CXL Cache ID Route Table Capability Structure
 	 * @ciddc: CXL 4.0 8.2.4.29 CXL Cache ID Decoder Capability Structure
 	 */
 	struct_group_tagged(cxl_component_regs, component,
 		void __iomem *hdm_decoder;
 		void __iomem *ras;
+		void __iomem *snoop;
 		void __iomem *cidrt;
 		void __iomem *ciddc;
 	);
@@ -84,6 +86,7 @@ struct cxl_reg_map {
 struct cxl_component_reg_map {
 	struct cxl_reg_map hdm_decoder;
 	struct cxl_reg_map ras;
+	struct cxl_reg_map snoop;
 	struct cxl_reg_map cidrt;
 	struct cxl_reg_map ciddc;
 };
@@ -156,7 +159,8 @@ struct cxl_dpa_partition {
 #define CXL_NR_PARTITIONS_MAX 2
 
 #define CXL_CACHE_ID_NO_ID (-1)
- 
+#define CXL_SNOOP_FILTER_NO_GROUP_ID (-1)
+
 /**
  * struct cxl_cache_state - CXL cache device state for use by external drivers
  * @size: Size of device's cache

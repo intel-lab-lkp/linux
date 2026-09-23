@@ -229,4 +229,11 @@ int cxl_set_feature(struct cxl_mailbox *cxl_mbox, const uuid_t *feat_uuid,
 
 resource_size_t cxl_rcd_component_reg_phys(struct device *dev,
 					   struct cxl_dport *dport);
+
+#if IS_ENABLED(CONFIG_CXL_CACHE)
+void cxl_destroy_snoop_filters(void);
+#else
+static inline void cxl_destroy_snoop_filters(void) {}
+#endif
+
 #endif /* __CXL_CORE_H__ */
