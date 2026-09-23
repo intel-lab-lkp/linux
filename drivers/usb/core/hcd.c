@@ -727,8 +727,13 @@ void usb_hcd_poll_rh_status(struct usb_hcd *hcd)
 
 	if (unlikely(!hcd->rh_pollable))
 		return;
-	if (!hcd->uses_new_polling && !hcd->status_urb)
+
+	spin_lock_irqsave(&hcd_root_hub_lock, flags);
+	if (!hcd->uses_new_polling && !hcd->status_urb) {
+		spin_unlock_irqrestore(&hcd_root_hub_lock, flags);
 		return;
+	}
+	spin_unlock_irqrestore(&hcd_root_hub_lock, flags);
 
 	length = hcd->driver->hub_status_data(hcd, buffer);
 	if (length > 0) {
