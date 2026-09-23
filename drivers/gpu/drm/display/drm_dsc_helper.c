@@ -1301,6 +1301,59 @@ int drm_dsc_setup_rc_params(struct drm_dsc_config *vdsc_cfg, enum drm_dsc_params
 EXPORT_SYMBOL(drm_dsc_setup_rc_params);
 
 /**
+ * __drm_dsc_compute_buffer_offset - Compute the rate buffer offset at a given
+ * group position within a slice, following the method of the DSC 1.2 C model.
+ *
+ * @vdsc_cfg: DSC Configuration data partially filled by driver
+ * @groups_per_line: number of groups used to code each line of a slice
+ * @grpcnt: group position to compute the offset for
+ *
+ * Return: the offset value for the group @grpcnt.
+ */
+static long
+__drm_dsc_compute_buffer_offset(const struct drm_dsc_config *vdsc_cfg,
+				unsigned long groups_per_line,
+				unsigned long grpcnt)
+{
+	unsigned long grpcnt_id = DIV_ROUND_UP(vdsc_cfg->initial_xmit_delay,
+					       DSC_RC_PIXELS_PER_GROUP);
+	long offset;
+
+	if (grpcnt <= grpcnt_id)
+		offset = DIV_ROUND_UP(grpcnt * DSC_RC_PIXELS_PER_GROUP *
+				      vdsc_cfg->bits_per_pixel, 16);
+	else
+		offset = DIV_ROUND_UP(grpcnt_id * DSC_RC_PIXELS_PER_GROUP *
+				      vdsc_cfg->bits_per_pixel, 16) -
+			 (((grpcnt - grpcnt_id) *
+			   vdsc_cfg->slice_bpg_offset) >> 11);
+
+	if (grpcnt <= groups_per_line)
+		offset += grpcnt * vdsc_cfg->first_line_bpg_offset;
+	else
+		offset += groups_per_line * vdsc_cfg->first_line_bpg_offset -
+			 (((grpcnt - groups_per_line) *
+			   vdsc_cfg->nfl_bpg_offset) >> 11);
+
+	if (vdsc_cfg->native_420) {
+		if (grpcnt <= groups_per_line)
+			offset -= (grpcnt * vdsc_cfg->nsl_bpg_offset) >> 11;
+		else if (grpcnt <= 2 * groups_per_line)
+			offset += (grpcnt - groups_per_line) *
+				   vdsc_cfg->second_line_bpg_offset -
+				 ((groups_per_line *
+				   vdsc_cfg->nsl_bpg_offset) >> 11);
+		else
+			offset += (grpcnt - groups_per_line) *
+				   vdsc_cfg->second_line_bpg_offset -
+				 (((grpcnt - groups_per_line) *
+				   vdsc_cfg->nsl_bpg_offset) >> 11);
+	}
+
+	return offset;
+}
+
+/**
  * drm_dsc_compute_rc_parameters() - Write rate control
  * parameters to the dsc configuration defined in
  * &struct drm_dsc_config in accordance with the DSC 1.2
@@ -1391,6 +1444,36 @@ int drm_dsc_compute_rc_parameters(struct drm_dsc_config *vdsc_cfg)
 	else
 		vdsc_cfg->nfl_bpg_offset = 0;
 
+	/*
+	 * According to DSC 1.2 spec in Section 4.1 if native_420 is set:
+	 * -second_line_bpg_offset is 12 in general and equal to 2*(slice_height-1) if slice
+	 * height < 8.
+	 * -second_line_offset_adj is 512 as shown by emperical values to yield best chroma
+	 * preservation in second line.
+	 * -nsl_bpg_offset is calculated as second_line_offset/slice_height -1 then rounded
+	 * up to 16 fractional bits, we left shift second line offset by 11 to preserve 11
+	 * fractional bits.
+	 */
+	if (vdsc_cfg->native_420) {
+		if (vdsc_cfg->slice_height >= 8)
+			vdsc_cfg->second_line_bpg_offset = 12;
+		else
+			vdsc_cfg->second_line_bpg_offset =
+				2 * (vdsc_cfg->slice_height - 1);
+
+		vdsc_cfg->second_line_offset_adj = 512;
+	} else {
+		vdsc_cfg->second_line_bpg_offset = 0;
+		vdsc_cfg->second_line_offset_adj = 0;
+	}
+
+	if (vdsc_cfg->native_420 && vdsc_cfg->slice_height > 2)
+		vdsc_cfg->nsl_bpg_offset =
+			DIV_ROUND_UP(vdsc_cfg->second_line_bpg_offset << 11,
+				     (vdsc_cfg->slice_height - 1));
+	else
+		vdsc_cfg->nsl_bpg_offset = 0;
+
 	/* Number of groups used to code the entire slice */
 	groups_total = groups_per_line * vdsc_cfg->slice_height;
 
@@ -1410,7 +1493,9 @@ int drm_dsc_compute_rc_parameters(struct drm_dsc_config *vdsc_cfg)
 		vdsc_cfg->scale_increment_interval =
 				(vdsc_cfg->final_offset * (1 << 11)) /
 				((vdsc_cfg->nfl_bpg_offset +
-				vdsc_cfg->slice_bpg_offset) *
+				vdsc_cfg->slice_bpg_offset +
+				(vdsc_cfg->native_420 ?
+				 vdsc_cfg->nsl_bpg_offset : 0)) *
 				(final_scale - 9));
 	} else {
 		/*
@@ -1425,10 +1510,29 @@ int drm_dsc_compute_rc_parameters(struct drm_dsc_config *vdsc_cfg)
 	 * bits/pixel (bpp) rate that is used by the encoder,
 	 * in steps of 1/16 of a bit per pixel
 	 */
-	rbs_min = vdsc_cfg->rc_model_size - vdsc_cfg->initial_offset +
-		DIV_ROUND_UP(vdsc_cfg->initial_xmit_delay *
-			     vdsc_cfg->bits_per_pixel, 16) +
-		groups_per_line * vdsc_cfg->first_line_bpg_offset;
+	if (vdsc_cfg->dsc_version_minor == 2 &&
+	    (vdsc_cfg->native_420 || vdsc_cfg->native_422)) {
+		/* Optimized computation of rbsMin for DSC 1.2 */
+		unsigned long grpcnt_id =
+			DIV_ROUND_UP(vdsc_cfg->initial_xmit_delay,
+				     DSC_RC_PIXELS_PER_GROUP);
+		long max_offset;
+
+		max_offset = __drm_dsc_compute_buffer_offset(vdsc_cfg, groups_per_line, grpcnt_id);
+		max_offset = max(max_offset,
+				 __drm_dsc_compute_buffer_offset(vdsc_cfg, groups_per_line,
+								 groups_per_line));
+		max_offset = max(max_offset,
+				 __drm_dsc_compute_buffer_offset(vdsc_cfg, groups_per_line,
+								 2 * groups_per_line));
+
+		rbs_min = vdsc_cfg->rc_model_size - vdsc_cfg->initial_offset + max_offset;
+	} else {
+		rbs_min = vdsc_cfg->rc_model_size - vdsc_cfg->initial_offset +
+			DIV_ROUND_UP(vdsc_cfg->initial_xmit_delay *
+				     vdsc_cfg->bits_per_pixel, 16) +
+			groups_per_line * vdsc_cfg->first_line_bpg_offset;
+	}
 
 	hrd_delay = DIV_ROUND_UP((rbs_min * 16), vdsc_cfg->bits_per_pixel);
 	vdsc_cfg->rc_bits = (hrd_delay * vdsc_cfg->bits_per_pixel) / 16;
