@@ -1354,6 +1354,13 @@ int md_check_no_bitmap(struct mddev *mddev)
 }
 EXPORT_SYMBOL(md_check_no_bitmap);
 
+static int md_check_disks_fit_metadata(int major, int raid_disks)
+{
+	if (major == 0 && raid_disks > MD_SB_DISKS)
+		return -EINVAL;
+	return 0;
+}
+
 /*
  * load_super for 0.90.0
  */
@@ -4448,8 +4455,15 @@ raid_disks_store(struct mddev *mddev, const char *buf, size_t len)
 		mddev->delta_disks = n - olddisks;
 		mddev->raid_disks = n;
 		mddev->reshape_backwards = (mddev->delta_disks < 0);
-	} else
+	} else {
+		err = md_check_disks_fit_metadata(mddev->major_version, n);
+		if (err) {
+			pr_warn("md: raid disks (%d) exceeds max disks (%d) for metadata version 0.90",
+					n, MD_SB_DISKS);
+			goto out_unlock;
+		}
 		mddev->raid_disks = n;
+	}
 out_unlock:
 	memalloc_noio_restore(noio_flags);
 	mddev_unlock_and_resume(mddev);
@@ -5041,6 +5055,13 @@ metadata_store(struct mddev *mddev, const char *buf, size_t len)
 	err = -ENOENT;
 	if (major >= ARRAY_SIZE(super_types) || super_types[major].name == NULL)
 		goto out_unlock;
+
+	err = md_check_disks_fit_metadata(major, mddev->raid_disks);
+	if (err) {
+		pr_warn("md: metadata version 0.90 doesn't support raid disks count higher than %d",
+				MD_SB_DISKS);
+		goto out_unlock;
+	}
 	mddev->major_version = major;
 	mddev->minor_version = minor;
 	mddev->persistent = 1;
