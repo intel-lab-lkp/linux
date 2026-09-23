@@ -335,6 +335,9 @@ static int dwc3_pci_probe(struct pci_dev *pci, const struct pci_device_id *id)
 	int			ret;
 	struct device		*dev = &pci->dev;
 
+	if (!id->driver_data)
+		return -ENODEV;
+
 	ret = pcim_enable_device(pci);
 	if (ret) {
 		dev_err(dev, "failed to enable pci device\n");
