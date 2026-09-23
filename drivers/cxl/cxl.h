@@ -734,7 +734,7 @@ struct cxl_port *devm_cxl_add_port(struct device *host,
 				   resource_size_t component_reg_phys,
 				   struct cxl_dport *parent_dport);
 struct cxl_root *devm_cxl_add_root(struct device *host);
-int devm_cxl_add_endpoint(struct device *host, struct cxl_memdev *cxlmd,
+int devm_cxl_add_endpoint(struct device *host, struct device *ep_dev,
 			  struct cxl_dport *parent_dport);
 struct cxl_root *find_cxl_root(struct cxl_port *port);
 
@@ -751,6 +751,8 @@ struct cxl_port *cxl_pci_find_port(struct pci_dev *pdev,
 				   struct cxl_dport **dport);
 struct cxl_port *cxl_mem_find_port(struct cxl_memdev *cxlmd,
 				   struct cxl_dport **dport);
+struct cxl_port *cxl_cache_find_port(struct cxl_cachedev *cxlcd,
+				     struct cxl_dport **dport);
 bool schedule_cxl_memdev_detach(struct cxl_memdev *cxlmd);
 bool schedule_cxl_cachedev_detach(struct cxl_cachedev *cxlcd);
 
@@ -788,7 +790,7 @@ static inline int cxl_root_decoder_autoremove(struct device *host,
 {
 	return cxl_decoder_autoremove(host, &cxlrd->cxlsd.cxld);
 }
-int cxl_endpoint_autoremove(struct cxl_memdev *cxlmd, struct cxl_port *endpoint);
+int cxl_endpoint_autoremove(struct device *ep_dev, struct cxl_port *endpoint);
 
 /**
  * struct cxl_endpoint_dvsec_info - Cached DVSEC info

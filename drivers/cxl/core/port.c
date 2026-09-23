@@ -1453,10 +1453,9 @@ static struct device *grandparent(struct device *dev)
 	return NULL;
 }
 
-static void delete_endpoint(void *data)
+static void __delete_endpoint(struct cxl_port **ep_port)
 {
-	struct cxl_memdev *cxlmd = data;
-	struct cxl_port *endpoint = cxlmd->endpoint;
+	struct cxl_port *endpoint = *ep_port;
 	struct device *host = port_to_host(endpoint);
 
 	scoped_guard(device, host) {
@@ -1465,21 +1464,35 @@ static void delete_endpoint(void *data)
 			devm_release_action(host, cxl_unlink_uport, endpoint);
 			devm_release_action(host, unregister_port, endpoint);
 		}
-		cxlmd->endpoint = NULL;
+		*ep_port = NULL;
 	}
 	put_device(&endpoint->dev);
 	put_device(host);
 }
 
-int cxl_endpoint_autoremove(struct cxl_memdev *cxlmd, struct cxl_port *endpoint)
+static void delete_endpoint(void *data)
+{
+	struct device *ep_dev = data;
+
+	if (is_cxl_memdev(ep_dev))
+		__delete_endpoint(&to_cxl_memdev(ep_dev)->endpoint);
+	else
+		__delete_endpoint(&to_cxl_cachedev(ep_dev)->endpoint);
+}
+
+int cxl_endpoint_autoremove(struct device *ep_dev, struct cxl_port *endpoint)
 {
 	struct device *host = port_to_host(endpoint);
-	struct device *dev = &cxlmd->dev;
 
 	get_device(host);
 	get_device(&endpoint->dev);
-	cxlmd->depth = endpoint->depth;
-	return devm_add_action_or_reset(dev, delete_endpoint, cxlmd);
+
+	if (is_cxl_memdev(ep_dev))
+		to_cxl_memdev(ep_dev)->depth = endpoint->depth;
+	else
+		to_cxl_cachedev(ep_dev)->depth = endpoint->depth;
+
+	return devm_add_action_or_reset(ep_dev, delete_endpoint, ep_dev);
 }
 EXPORT_SYMBOL_NS_GPL(cxl_endpoint_autoremove, "CXL");
 
@@ -1951,6 +1964,13 @@ struct cxl_port *cxl_mem_find_port(struct cxl_memdev *cxlmd,
 	return find_cxl_port_by_dport(grandparent(&cxlmd->dev), dport);
 }
 EXPORT_SYMBOL_NS_GPL(cxl_mem_find_port, "CXL");
+
+struct cxl_port *cxl_cache_find_port(struct cxl_cachedev *cxlcd,
+				     struct cxl_dport **dport)
+{
+	return find_cxl_port_by_dport(grandparent(&cxlcd->dev), dport);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_cache_find_port, "CXL");
 
 static int decoder_populate_targets(struct cxl_switch_decoder *cxlsd,
 				    struct cxl_port *port)

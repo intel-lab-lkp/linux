@@ -28,6 +28,8 @@ static int cxl_cache_probe(struct device *dev)
 {
 	struct cxl_cachedev *cxlcd = to_cxl_cachedev(dev);
 	struct cxl_dev_state *cxlds = cxlcd->cxlds;
+	struct device *endpoint_parent;
+	struct cxl_dport *dport;
 	int rc;
 
 	/* Disable CXL.cache until we can validate the device configuration */
@@ -40,6 +42,34 @@ static int cxl_cache_probe(struct device *dev)
 	rc = cxl_accel_read_cache_info(cxlds);
 	if (rc)
 		return rc;
+
+	rc = devm_cxl_enumerate_ports(&cxlcd->dev);
+	if (rc)
+		return rc;
+
+	struct cxl_port *parent_port __free(put_cxl_port) =
+		cxl_cache_find_port(cxlcd, &dport);
+	if (!parent_port) {
+		dev_err(dev, "CXL port topology not found\n");
+		return -ENXIO;
+	}
+
+	if (dport->rch)
+		endpoint_parent = parent_port->uport_dev;
+	else
+		endpoint_parent = &parent_port->dev;
+
+	scoped_guard(device, endpoint_parent) {
+		if (!endpoint_parent->driver) {
+			dev_err(dev, "CXL port topology %s not enabled\n",
+				dev_name(endpoint_parent));
+			return -ENXIO;
+		}
+
+		rc = devm_cxl_add_endpoint(endpoint_parent, &cxlcd->dev, dport);
+		if (rc)
+			return rc;
+	}
 
 	return 0;
 }
