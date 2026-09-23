@@ -16,7 +16,8 @@
 #include <media/v4l2-fwnode.h>
 
 #define OV02C10_LINK_FREQ_400MHZ	400000000ULL
-#define OV02C10_MCLK			19200000
+#define OV02C10_MCLK_19_2MHZ		19200000
+#define OV02C10_MCLK_26MHZ		26000000
 #define OV02C10_RGB_DEPTH		10
 
 #define OV02C10_NATIVE_WIDTH		1928
@@ -337,6 +338,23 @@ static const struct reg_sequence sensor_1928x1092_30fps_2lane_setting[] = {
 	{0x3016, 0x32},
 };
 
+/*
+ * The mode tables target a 19.2 MHz input clock, programming the OP PLL
+ * multiplier (0x0304/0x0305, 16-bit) to 0x0190 = 400 for a 400 MHz link at
+ * ~30 fps.  A 26 MHz input clock instead runs every internal clock, and
+ * therefore the MIPI link, 26/19.2 = 1.3542x faster (~541.7 MHz, ~40 fps).
+ * Scaling both PLL multipliers by 19.2/26 -- 400 * 19.2 / 26 = 295 = 0x0127
+ * -- puts the link back at 295 * 26 / 19.2 = 399.5 MHz, within 0.13% of the
+ * nominal 400 MHz, so the frame rate and the advertised link frequency both
+ * stay correct without a second link-frequency entry.
+ */
+static const struct reg_sequence sensor_pll_26mhz_setting[] = {
+	{0x0304, 0x01},
+	{0x0305, 0x27},
+	{0x0315, 0x01},
+	{0x0316, 0x27},
+};
+
 static const char * const ov02c10_test_pattern_menu[] = {
 	"Disabled",
 	"Color Bar",
@@ -396,6 +414,9 @@ struct ov02c10 {
 	/* MIPI lane info */
 	u32 link_freq_index;
 	u8 mipi_lanes;
+
+	/* External (sensor) clock rate, Hz */
+	u32 xvclk_freq;
 };
 
 static inline struct ov02c10 *to_ov02c10(struct v4l2_subdev *subdev)
@@ -617,6 +638,17 @@ static int ov02c10_enable_streams(struct v4l2_subdev *sd,
 	if (ret) {
 		dev_err(ov02c10->dev, "failed to write lane settings\n");
 		goto out;
+	}
+
+	if (ov02c10->xvclk_freq == OV02C10_MCLK_26MHZ) {
+		reg_sequence = sensor_pll_26mhz_setting;
+		sequence_length = ARRAY_SIZE(sensor_pll_26mhz_setting);
+		ret = regmap_multi_reg_write(ov02c10->regmap,
+					     reg_sequence, sequence_length);
+		if (ret) {
+			dev_err(ov02c10->dev, "failed to write PLL settings\n");
+			goto out;
+		}
 	}
 
 	ret = __v4l2_ctrl_handler_setup(ov02c10->sd.ctrl_handler);
@@ -876,6 +908,10 @@ static int ov02c10_check_hwcfg(struct ov02c10 *ov02c10)
 	/* v4l2_link_freq_to_bitmap() guarantees at least 1 bit is set */
 	ov02c10->link_freq_index = ffs(link_freq_bitmap) - 1;
 
+	dev_dbg(dev, "%u Hz external clock, link freq %lld Hz\n",
+		ov02c10->xvclk_freq,
+		link_freq_menu_items[ov02c10->link_freq_index]);
+
 	if (bus_cfg.bus.mipi_csi2.num_data_lanes != 1 &&
 	    bus_cfg.bus.mipi_csi2.num_data_lanes != 2) {
 		ret = dev_err_probe(dev, -EINVAL,
@@ -925,10 +961,11 @@ static int ov02c10_probe(struct i2c_client *client)
 				     "failed to get imaging clock\n");
 
 	freq = clk_get_rate(ov02c10->img_clk);
-	if (freq != OV02C10_MCLK)
+	if (freq != OV02C10_MCLK_19_2MHZ && freq != OV02C10_MCLK_26MHZ)
 		return dev_err_probe(ov02c10->dev, -EINVAL,
-				     "external clock %lu is not supported",
+				     "external clock %lu is not supported\n",
 				     freq);
+	ov02c10->xvclk_freq = freq;
 
 	v4l2_i2c_subdev_init(&ov02c10->sd, client, &ov02c10_subdev_ops);
 
