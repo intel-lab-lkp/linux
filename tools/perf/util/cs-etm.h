@@ -174,6 +174,7 @@ struct cs_etm_packet {
 	enum cs_etm_sample_type sample_type;
 	enum cs_etm_isa isa;
 	u64 start_addr;
+	/* For exceptions: preferred return address, or CS_ETM_INVAL_ADDR. */
 	u64 end_addr;
 	u32 instr_count;
 	u32 last_instr_type;
