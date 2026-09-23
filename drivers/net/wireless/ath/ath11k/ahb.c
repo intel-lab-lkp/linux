@@ -44,6 +44,13 @@ MODULE_DEVICE_TABLE(of, ath11k_ahb_of_match);
 
 #define ATH11K_IRQ_CE0_OFFSET 4
 
+/*
+ * Global Driver-level Locking:
+ *  - ath11k_rproc_info_lock: Protects rproc_info allocation/free
+ */
+static struct ath11k_ahb_rproc_info *g_rproc_info;
+static DEFINE_MUTEX(ath11k_rproc_info_lock);
+
 static const char *irq_name[ATH11K_IRQ_NUM_MAX] = {
 	"misc-pulse1",
 	"misc-latch",
@@ -408,21 +415,12 @@ static void ath11k_ahb_stop(struct ath11k_base *ab)
 
 static int ath11k_ahb_power_up(struct ath11k_base *ab)
 {
-	struct ath11k_ahb *ab_ahb = ath11k_ahb_priv(ab);
-	int ret;
-
-	ret = rproc_boot(ab_ahb->tgt_rproc);
-	if (ret)
-		ath11k_err(ab, "failed to boot the remote processor Q6\n");
-
-	return ret;
+	return 0;
 }
 
 static void ath11k_ahb_power_down(struct ath11k_base *ab, bool is_suspend)
 {
-	struct ath11k_ahb *ab_ahb = ath11k_ahb_priv(ab);
-
-	rproc_shutdown(ab_ahb->tgt_rproc);
+	return;
 }
 
 static void ath11k_ahb_init_qmi_ce_config(struct ath11k_base *ab)
@@ -832,24 +830,200 @@ static const struct ath11k_hif_ops ath11k_ahb_hif_ops_wcn6750 = {
 	.ce_irq_disable = ath11k_pci_disable_ce_irqs_except_wake_irq,
 };
 
+static int ath11k_ahb_root_pd_state_notifier(struct notifier_block *nb,
+					     const unsigned long event, void *data)
+{
+	struct ath11k_ahb_rproc_info *rproc_info =
+		container_of(nb, struct ath11k_ahb_rproc_info, root_pd_nb);
+
+	if (event == ATH11K_RPROC_AFTER_POWERUP) {
+		ath11k_dbg(NULL, ATH11K_DBG_AHB, "Root PD is UP\n");
+		complete(&rproc_info->rootpd_ready);
+	}
+
+	return 0;
+}
+
+static int ath11k_ahb_register_rproc_notifier(void)
+{
+	int ret;
+
+	lockdep_assert_held(&ath11k_rproc_info_lock);
+
+	if (g_rproc_info->root_pd_notifier)
+		return 0;
+
+	g_rproc_info->root_pd_nb.notifier_call = ath11k_ahb_root_pd_state_notifier;
+
+	g_rproc_info->root_pd_notifier = qcom_register_ssr_notifier(g_rproc_info->tgt_rproc->name,
+								    &g_rproc_info->root_pd_nb);
+	if (IS_ERR(g_rproc_info->root_pd_notifier)) {
+		ret = PTR_ERR(g_rproc_info->root_pd_notifier);
+		g_rproc_info->root_pd_notifier = NULL;
+		return ret;
+	}
+
+	return 0;
+}
+
+static void ath11k_ahb_unregister_rproc_notifier(void)
+{
+	lockdep_assert_held(&ath11k_rproc_info_lock);
+
+	if (!g_rproc_info->root_pd_notifier)
+		return;
+
+	qcom_unregister_ssr_notifier(g_rproc_info->root_pd_notifier,
+				     &g_rproc_info->root_pd_nb);
+	g_rproc_info->root_pd_notifier = NULL;
+}
+
+static struct ath11k_ahb_rproc_info *ath11k_ahb_rproc_info_alloc(struct ath11k_base *ab)
+{
+	struct ath11k_ahb *ab_ahb = ath11k_ahb_priv(ab);
+	struct ath11k_ahb_rproc_info *rproc_info;
+
+	lockdep_assert_held(&ath11k_rproc_info_lock);
+
+	rproc_info = kzalloc_obj(*rproc_info);
+	if (!rproc_info)
+		return NULL;
+
+	rproc_info->root_pd_booted = false;
+	init_completion(&rproc_info->rootpd_ready);
+	ab_ahb->rproc_info = rproc_info;
+
+	return rproc_info;
+}
+
 static int ath11k_core_get_rproc(struct ath11k_base *ab)
 {
 	struct ath11k_ahb *ab_ahb = ath11k_ahb_priv(ab);
 	struct device *dev = ab->dev;
 	struct rproc *prproc;
 	phandle rproc_phandle;
+	int ret;
+
+	lockdep_assert_held(&ath11k_rproc_info_lock);
+
+	if (g_rproc_info) {
+		ab_ahb->rproc_info = g_rproc_info;
+		return 0;
+	}
+
+	g_rproc_info = ath11k_ahb_rproc_info_alloc(ab);
+	if (!g_rproc_info)
+		return -ENOMEM;
 
 	if (of_property_read_u32(dev->of_node, "qcom,rproc", &rproc_phandle)) {
 		ath11k_err(ab, "failed to get q6_rproc handle\n");
-		return -ENOENT;
+		ret = -ENOENT;
+		goto err_free_rproc_info;
 	}
 
 	prproc = rproc_get_by_phandle(rproc_phandle);
-	if (!prproc)
-		return dev_err_probe(&ab->pdev->dev, -EPROBE_DEFER, "failed to get rproc\n");
-	ab_ahb->tgt_rproc = prproc;
+	if (!prproc) {
+		ret = dev_err_probe(dev, -EPROBE_DEFER,
+				    "failed to get rproc\n");
+		goto err_free_rproc_info;
+	}
+	g_rproc_info->tgt_rproc = prproc;
 
 	return 0;
+
+err_free_rproc_info:
+	ab_ahb->rproc_info = NULL;
+	kfree(g_rproc_info);
+	g_rproc_info = NULL;
+	return ret;
+}
+
+static int ath11k_ahb_boot_root_pd(struct ath11k_base *ab)
+{
+	unsigned long time_left;
+	int ret;
+
+	lockdep_assert_held(&ath11k_rproc_info_lock);
+	reinit_completion(&g_rproc_info->rootpd_ready);
+
+	ret = rproc_boot(g_rproc_info->tgt_rproc);
+	if (ret < 0) {
+		ath11k_err(ab, "RootPD boot failed\n");
+		return ret;
+	}
+
+	time_left = wait_for_completion_timeout(&g_rproc_info->rootpd_ready,
+						ATH11K_ROOTPD_READY_TIMEOUT);
+	if (!time_left) {
+		ath11k_err(ab, "RootPD ready wait timed out\n");
+		return -ETIMEDOUT;
+	}
+
+	return 0;
+}
+
+static int ath11k_ahb_configure_rproc(struct ath11k_base *ab)
+{
+	int ret;
+
+	mutex_lock(&ath11k_rproc_info_lock);
+
+	ret = ath11k_core_get_rproc(ab);
+	if (ret < 0) {
+		mutex_unlock(&ath11k_rproc_info_lock);
+		return ret;
+	}
+
+	ret = ath11k_ahb_register_rproc_notifier();
+	if (ret < 0) {
+		ret = dev_err_probe(&ab->pdev->dev, ret,
+				    "failed to register rproc notifier\n");
+		goto err_put_rproc;
+	}
+
+	if (g_rproc_info->tgt_rproc->state != RPROC_RUNNING) {
+		ret = ath11k_ahb_boot_root_pd(ab);
+		if (ret) {
+			ath11k_err(ab, "failed to boot the remote processor Q6\n");
+			goto err_unreg_notifier;
+		}
+	}
+	g_rproc_info->root_pd_booted = true;
+
+	mutex_unlock(&ath11k_rproc_info_lock);
+
+	return 0;
+
+err_unreg_notifier:
+	ath11k_ahb_unregister_rproc_notifier();
+
+err_put_rproc:
+	rproc_put(g_rproc_info->tgt_rproc);
+	mutex_unlock(&ath11k_rproc_info_lock);
+	return ret;
+}
+
+static void ath11k_ahb_deconfigure_rproc(struct ath11k_base *ab)
+{
+	struct ath11k_ahb *ab_ahb = ath11k_ahb_priv(ab);
+	struct ath11k_ahb_rproc_info *rproc_info = ab_ahb->rproc_info;
+
+	if (!rproc_info || !g_rproc_info)
+		return;
+
+	mutex_lock(&ath11k_rproc_info_lock);
+
+	ath11k_ahb_unregister_rproc_notifier();
+
+	if (g_rproc_info->root_pd_booted &&
+	    g_rproc_info->tgt_rproc->state == RPROC_RUNNING)
+		rproc_shutdown(g_rproc_info->tgt_rproc);
+
+	rproc_put(g_rproc_info->tgt_rproc);
+	kfree(g_rproc_info);
+	g_rproc_info = NULL;
+
+	mutex_unlock(&ath11k_rproc_info_lock);
 }
 
 static int ath11k_ahb_setup_msi_resources(struct ath11k_base *ab)
@@ -1148,6 +1322,7 @@ static int ath11k_ahb_probe(struct platform_device *pdev)
 	struct ath11k_base *ab;
 	const struct ath11k_hif_ops *hif_ops;
 	const struct ath11k_pci_ops *pci_ops;
+	struct ath11k_ahb *ab_ahb;
 	enum ath11k_hw_rev hw_rev;
 	int ret;
 
@@ -1187,6 +1362,8 @@ static int ath11k_ahb_probe(struct platform_device *pdev)
 	ab->hw_rev = hw_rev;
 	ab->fw_mode = ATH11K_FIRMWARE_MODE_NORMAL;
 	platform_set_drvdata(pdev, ab);
+	ab_ahb = ath11k_ahb_priv(ab);
+	ab_ahb->ab = ab;
 
 	ret = ath11k_pcic_register_pci_ops(ab, pci_ops);
 	if (ret) {
@@ -1226,25 +1403,28 @@ static int ath11k_ahb_probe(struct platform_device *pdev)
 
 	ath11k_ahb_init_qmi_ce_config(ab);
 
-	ret = ath11k_core_get_rproc(ab);
+	ret = ath11k_ahb_configure_rproc(ab);
 	if (ret)
 		goto err_ce_free;
 
 	ret = ath11k_core_init(ab);
 	if (ret) {
 		ath11k_err(ab, "failed to init core: %d\n", ret);
-		goto err_ce_free;
+		goto err_rproc_deconfigure;
 	}
 
 	ret = ath11k_ahb_config_irq(ab);
 	if (ret) {
 		ath11k_err(ab, "failed to configure irq: %d\n", ret);
-		goto err_ce_free;
+		goto err_rproc_deconfigure;
 	}
 
 	ath11k_qmi_fwreset_from_cold_boot(ab);
 
 	return 0;
+
+err_rproc_deconfigure:
+	ath11k_ahb_deconfigure_rproc(ab);
 
 err_ce_free:
 	ath11k_ce_free_pipes(ab);
@@ -1294,7 +1474,7 @@ static void ath11k_ahb_free_resources(struct ath11k_base *ab)
 	ath11k_ahb_fw_resource_deinit(ab);
 	ath11k_ce_free_pipes(ab);
 	ath11k_ahb_ce_unmap(ab);
-
+	ath11k_ahb_deconfigure_rproc(ab);
 	ath11k_core_free(ab);
 	platform_set_drvdata(pdev, NULL);
 }
