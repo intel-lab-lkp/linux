@@ -2098,8 +2098,11 @@ int dmar_set_interrupt(struct intel_iommu *iommu)
 	}
 
 	ret = request_irq(irq, dmar_fault, IRQF_NO_THREAD, iommu->name, iommu);
-	if (ret)
+	if (ret) {
 		pr_err("Can't request irq\n");
+		dmar_free_hwirq(iommu->irq);
+		iommu->irq = 0;
+	}
 	return ret;
 }
 
