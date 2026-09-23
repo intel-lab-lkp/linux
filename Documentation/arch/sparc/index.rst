@@ -7,6 +7,7 @@ Sparc Architecture
 
    console
    adi
+   cas-trap
 
    oradax/oracle-dax
 
