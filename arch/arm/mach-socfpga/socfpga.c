@@ -34,12 +34,15 @@ static void __init socfpga_sysmgr_init(void)
 	sync_cache_w(&socfpga_cpu1start_addr);
 
 	sys_manager_base_addr = of_iomap(np, 0);
+	of_node_put(np);
 
 	np = of_find_compatible_node(NULL, NULL, "altr,rst-mgr");
 	rst_manager_base_addr = of_iomap(np, 0);
+	of_node_put(np);
 
 	np = of_find_compatible_node(NULL, NULL, "altr,sdr-ctl");
 	sdr_ctl_base_addr = of_iomap(np, 0);
+	of_node_put(np);
 }
 
 static void __init socfpga_init_irq(void)
