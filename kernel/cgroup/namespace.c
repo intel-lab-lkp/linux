@@ -37,6 +37,8 @@ void free_cgroup_ns(struct cgroup_namespace *ns)
 {
 	ns_tree_remove(ns);
 	put_css_set(ns->root_cset);
+	if (ns->initial_root_cset != ns->root_cset)
+		put_css_set(ns->initial_root_cset);
 	dec_cgroup_namespaces(ns->ucounts);
 	put_user_ns(ns->user_ns);
 	ns_common_free(ns);
@@ -82,6 +84,7 @@ struct cgroup_namespace *copy_cgroup_ns(u64 flags,
 	new_ns->user_ns = get_user_ns(user_ns);
 	new_ns->ucounts = ucounts;
 	new_ns->root_cset = cset;
+	new_ns->initial_root_cset = cset;
 
 	ns_tree_add(new_ns);
 	return new_ns;

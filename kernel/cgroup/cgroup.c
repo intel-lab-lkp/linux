@@ -247,6 +247,7 @@ struct cgroup_namespace init_cgroup_ns = {
 	.ns		= NS_COMMON_INIT(init_cgroup_ns),
 	.user_ns	= &init_user_ns,
 	.root_cset	= &init_css_set,
+	.initial_root_cset = &init_css_set,
 };
 
 static struct file_system_type cgroup2_fs_type;
@@ -7149,9 +7150,11 @@ void cgroup_post_fork(struct task_struct *child,
 	if (kargs->flags & CLONE_NEWCGROUP) {
 		struct css_set *rcset = child->nsproxy->cgroup_ns->root_cset;
 
-		get_css_set(cset);
-		child->nsproxy->cgroup_ns->root_cset = cset;
-		put_css_set(rcset);
+		/* Both possible roots must remain pinned for namespace readers. */
+		if (rcset != cset) {
+			get_css_set(cset);
+			WRITE_ONCE(child->nsproxy->cgroup_ns->root_cset, cset);
+		}
 	}
 
 	/* Cgroup has to be killed so take down child immediately. */

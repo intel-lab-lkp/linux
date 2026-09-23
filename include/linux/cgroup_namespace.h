@@ -9,6 +9,8 @@ struct cgroup_namespace {
 	struct user_namespace	*user_ns;
 	struct ucounts		*ucounts;
 	struct css_set          *root_cset;
+	/* Preserve the root observed before cgroup_post_fork() updates it. */
+	struct css_set		*initial_root_cset;
 };
 
 extern struct cgroup_namespace init_cgroup_ns;
