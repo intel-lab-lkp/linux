@@ -6385,6 +6385,8 @@ struct mddev *md_alloc(dev_t dev, char *name)
 
 	disk->events |= DISK_EVENT_MEDIA_CHANGE;
 	mddev->gendisk = disk;
+	/* add_disk() exposes the device before its md kobject is registered. */
+	set_bit(MD_CLOSING, &mddev->flags);
 	error = add_disk(disk);
 	if (error)
 		goto out_put_disk;
@@ -6406,6 +6408,9 @@ struct mddev *md_alloc(dev_t dev, char *name)
 	kobject_uevent(&mddev->kobj, KOBJ_ADD);
 	mddev->sysfs_state = sysfs_get_dirent_safe(mddev->kobj.sd, "array_state");
 	mddev->sysfs_level = sysfs_get_dirent_safe(mddev->kobj.sd, "level");
+	mutex_lock(&mddev->open_mutex);
+	clear_bit(MD_CLOSING, &mddev->flags);
+	mutex_unlock(&mddev->open_mutex);
 	mutex_unlock(&disks_mutex);
 	return mddev;
 
