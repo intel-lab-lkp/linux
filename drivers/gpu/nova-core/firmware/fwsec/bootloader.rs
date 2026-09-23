@@ -12,10 +12,6 @@ use kernel::{
         Device, //
     },
     dma::Coherent,
-    io::{
-        register::Array,
-        Io, //
-    },
     prelude::*,
     ptr::{
         Alignable,
@@ -48,7 +44,6 @@ use crate::{
     },
     gpu::Chipset,
     num::FromSafeCast, //
-    regs,
 };
 
 /// Structure used by the boot-loader to load the rest of the code.
@@ -247,14 +242,11 @@ impl<'a> FwsecFirmwareWithBl<'a> {
             .inspect_err(|e| dev_err!(dev, "Failed to load FWSEC firmware: {:?}\n", e))?;
 
         // Configure DMA index for the bootloader to fetch the FWSEC firmware from system memory.
-        falcon.pfalcon.update(
-            regs::NV_PFALCON_FBIF_TRANSCFG::try_at(usize::from_safe_cast(self.dmem_desc.ctx_dma))
-                .ok_or(EINVAL)?,
-            |v| {
-                v.with_target(FalconFbifTarget::CoherentSysmem)
-                    .with_mem_type(FalconFbifMemType::Physical)
-            },
-        );
+        falcon.set_fbif_transcfg(
+            usize::from_safe_cast(self.dmem_desc.ctx_dma),
+            FalconFbifTarget::CoherentSysmem,
+            FalconFbifMemType::Physical,
+        )?;
 
         let (mbox0, _) = falcon
             .boot(Some(0), None)

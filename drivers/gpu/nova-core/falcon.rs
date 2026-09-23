@@ -44,8 +44,8 @@ pub(crate) mod sec2;
 pub(crate) const MEM_BLOCK_ALIGNMENT: usize = 256;
 
 bounded_enum! {
-    /// Revision number of a falcon core, used in the [`crate::regs::NV_PFALCON_FALCON_HWCFG1`]
-    /// register.
+    /// Revision number of a falcon core, used in the
+    /// [`crate::falcon::regs::NV_PFALCON_FALCON_HWCFG1`] register.
     #[derive(Debug, Copy, Clone)]
     pub(crate) enum FalconCoreRev with TryFrom<Bounded<u32, 4>> {
         Rev1 = 1,
@@ -60,7 +60,7 @@ bounded_enum! {
 
 bounded_enum! {
     /// Revision subversion number of a falcon core, used in the
-    /// [`crate::regs::NV_PFALCON_FALCON_HWCFG1`] register.
+    /// [`crate::falcon::regs::NV_PFALCON_FALCON_HWCFG1`] register.
     #[derive(Debug, Copy, Clone)]
     pub(crate) enum FalconCoreRevSubversion with From<Bounded<u32, 2>> {
         Subversion0 = 0,
@@ -106,8 +106,8 @@ bounded_enum! {
 }
 
 bounded_enum! {
-    /// Valid values for the `size` field of the [`crate::regs::NV_PFALCON_FALCON_DMATRFCMD`]
-    /// register.
+    /// Valid values for the `size` field of the
+    /// [`crate::falcon::regs::NV_PFALCON_FALCON_DMATRFCMD`] register.
     #[derive(Debug, Copy, Clone)]
     pub(crate) enum DmaTrfCmdSize with TryFrom<Bounded<u32, 3>> {
         /// 256 bytes transfer.
@@ -364,8 +364,7 @@ pub(crate) struct Falcon<'a, E: FalconEngine> {
     hal: KBox<dyn FalconHal<E>>,
     dev: &'a device::Device<device::Bound>,
     bar: Bar0<'a>,
-    // TODO: make private
-    pub(crate) pfalcon: Mmio<'a, PFalconRegisters>,
+    pfalcon: Mmio<'a, PFalconRegisters>,
     pfalcon2: Mmio<'a, PFalcon2Registers>,
 }
 

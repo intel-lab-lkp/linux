@@ -5,6 +5,7 @@ use kernel::{
         io_project,
         poll::read_poll_timeout,
         register,
+        register::Array,
         Io,
         Mmio, //
     },
@@ -18,10 +19,12 @@ use crate::{
         NovaRegisters, //
     },
     falcon::{
+        regs,
         Falcon,
-        FalconEngine, //
+        FalconEngine,
+        FalconFbifMemType,
+        FalconFbifTarget, //
     },
-    regs,
 };
 
 /// Type specifying the `Gsp` falcon engine. Cannot be instantiated.
@@ -57,7 +60,7 @@ impl<'a> Falcon<'a, Gsp> {
     /// Checks if GSP reload/resume has completed during the boot process.
     pub(crate) fn check_reload_completed(&self, timeout: Delta) -> Result<bool> {
         read_poll_timeout(
-            || Ok(self.bar.read(regs::NV_PGC6_BSI_SECURE_SCRATCH_14)),
+            || Ok(self.bar.read(crate::regs::NV_PGC6_BSI_SECURE_SCRATCH_14)),
             |val| val.boot_stage_3_handoff(),
             Delta::ZERO,
             timeout,
@@ -82,5 +85,19 @@ impl<'a> Falcon<'a, Gsp> {
         let hwcfg2 = self.pfalcon.read(regs::NV_PFALCON_FALCON_HWCFG2).into_raw();
 
         hwcfg2 != 0 && (hwcfg2 & LOCKED_MASK) != LOCKED_PATTERN
+    }
+
+    /// Configures the FBIF translation registers for the given DMA context.
+    pub(crate) fn set_fbif_transcfg(
+        &self,
+        ctx_dma: usize,
+        target: FalconFbifTarget,
+        mem_type: FalconFbifMemType,
+    ) -> Result {
+        self.pfalcon.update(
+            regs::NV_PFALCON_FBIF_TRANSCFG::try_at(ctx_dma).ok_or(EINVAL)?,
+            |v| v.with_target(target).with_mem_type(mem_type),
+        );
+        Ok(())
     }
 }
