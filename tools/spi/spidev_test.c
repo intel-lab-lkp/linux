@@ -461,6 +461,9 @@ int main(int argc, char *argv[])
 	if (random_input && !transfer_size)
 		pabort("a nonzero size argument is mandatory for -S (--size)");
 
+	if (iterations && !transfer_size)
+		pabort("-I (--iter) is only implemented for -S (--size)");
+
 	fd = open(device, O_RDWR);
 	if (fd < 0)
 		pabort("can't open device");
