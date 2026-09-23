@@ -66,6 +66,14 @@ properties:
     description: GPIO specifier for HPD.
     maxItems: 1
 
+  port:
+    $ref: /schemas/graph.yaml#/properties/port
+    description:
+      Connection to the HDMI source. Present when an HDMI bridge sits in
+      front of this receiver instead of the connector being wired straight
+      to it. The bridge is bound as a v4l2 subdevice and appears in the
+      media graph.
+
   rockchip,grf:
     $ref: /schemas/types.yaml#/definitions/phandle
     description:
