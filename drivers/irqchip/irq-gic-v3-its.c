@@ -5579,8 +5579,10 @@ static int __init its_of_probe(struct device_node *node)
 			continue;
 
 		err = its_reset_one(&res);
-		if (err)
+		if (err) {
+			of_node_put(np);
 			return err;
+		}
 	}
 
 	for (np = of_find_matching_node(node, its_device_id); np;
@@ -5602,12 +5604,15 @@ static int __init its_of_probe(struct device_node *node)
 
 
 		its = its_node_init(&res, &np->fwnode, of_node_to_nid(np));
-		if (!its)
+		if (!its) {
+			of_node_put(np);
 			return -ENOMEM;
+		}
 
 		err = its_probe_one(its);
 		if (err)  {
 			its_node_destroy(its);
+			of_node_put(np);
 			return err;
 		}
 	}
