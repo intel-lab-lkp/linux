@@ -1035,6 +1035,9 @@ struct arm_smmu_master {
 	struct arm_smmu_vmaster		*vmaster; /* use smmu->streams_mutex */
 	/* Locked by the iommu core using the group mutex */
 	struct arm_smmu_ctx_desc_cfg	cd_table;
+	struct list_head		master_domains;
+	/* Protects master_domains */
+	spinlock_t			master_domains_lock;
 	unsigned int			num_streams;
 	bool				ats_enabled : 1;
 	bool				ste_ats_enabled : 1;
@@ -1129,6 +1132,7 @@ struct arm_smmu_invs *arm_smmu_invs_purge(struct arm_smmu_invs *invs);
 
 struct arm_smmu_master_domain {
 	struct list_head devices_elm;
+	struct list_head master_elm;
 	struct arm_smmu_master *master;
 	/*
 	 * For nested domains the master_domain is threaded onto the S2 parent,

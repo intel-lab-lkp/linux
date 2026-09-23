@@ -3431,6 +3431,9 @@ static void arm_smmu_remove_master_domain(struct arm_smmu_master *master,
 						    ssid, nested_ats_flush);
 	if (master_domain) {
 		list_del(&master_domain->devices_elm);
+		spin_lock(&master->master_domains_lock);
+		list_del(&master_domain->master_elm);
+		spin_unlock(&master->master_domains_lock);
 		if (master->ats_enabled)
 			atomic_dec(&smmu_domain->nr_ats_masters);
 	}
@@ -3681,6 +3684,9 @@ int arm_smmu_attach_prepare(struct arm_smmu_attach_state *state,
 		if (state->ats_enabled)
 			atomic_inc(&smmu_domain->nr_ats_masters);
 		list_add(&master_domain->devices_elm, &smmu_domain->devices);
+		spin_lock(&master->master_domains_lock);
+		list_add(&master_domain->master_elm, &master->master_domains);
+		spin_unlock(&master->master_domains_lock);
 		spin_unlock_irqrestore(&smmu_domain->devices_lock, flags);
 
 		arm_smmu_install_new_domain_invs(state);
@@ -4405,6 +4411,8 @@ static struct iommu_device *arm_smmu_probe_device(struct device *dev)
 	master->dev = dev;
 	master->smmu = smmu;
 	dev_iommu_priv_set(dev, master);
+	INIT_LIST_HEAD(&master->master_domains);
+	spin_lock_init(&master->master_domains_lock);
 
 	ret = arm_smmu_insert_master(smmu, master);
 	if (ret)
