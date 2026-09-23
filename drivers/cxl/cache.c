@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (C) 2026 Advanced Micro Devices, Inc. */
 
+#include <linux/pci.h>
 #include <cxl/cxl.h>
 
 #include "cxlcache.h"
@@ -13,6 +14,75 @@
  * of CXL.cache enabled devices. This driver does not discover devices; a
  * device-specific driver is required for discovery and portions of set up.
  */
+
+static bool cxl_flexbus_cache_enabled(struct device *host)
+{
+
+	u16 dvsec, cap, status;
+	struct pci_dev *pdev;
+	int rc;
+
+	if (!dev_is_pci(host))
+		return false;
+	pdev = to_pci_dev(host);
+
+	dvsec = pci_find_dvsec_capability(pdev, PCI_VENDOR_ID_CXL,
+					  PCI_DVSEC_CXL_FLEXBUS_PORT);
+	if (!dvsec)
+		return false;
+
+	rc = pci_read_config_word(pdev,
+				  dvsec + PCI_DVSEC_CXL_FLEXBUS_PORT_CAPABILITY,
+				  &cap);
+	if (rc)
+		return false;
+
+	if (!FIELD_GET(PCI_DVSEC_CXL_FLEXBUS_PORT_CAP_CACHE, cap))
+		return false;
+
+	rc = pci_read_config_word(pdev,
+				  dvsec + PCI_DVSEC_CXL_FLEXBUS_PORT_STATUS,
+				  &status);
+	if (rc)
+		return false;
+
+	return FIELD_GET(PCI_DVSEC_CXL_FLEXBUS_PORT_STATUS_CACHE, status);
+}
+
+static int cxl_endpoint_cache_enabled(struct cxl_port *endpoint)
+{
+	struct cxl_dport *dport_iter = endpoint->parent_dport;
+	struct cxl_port *port_iter = dport_iter->port;
+
+	while (!is_cxl_root(port_iter)) {
+		/* 
+		 * CXL host bridge isn't a PCI device, but we still need to
+		 * check the PCIe root port
+		 */
+		if (dev_is_pci(port_iter->uport_dev) &&
+		    !cxl_flexbus_cache_enabled(port_iter->uport_dev)) {
+			dev_dbg(port_iter->uport_dev,
+				"CXL.cache not supported or enabled\n");
+			return -ENXIO;
+		}
+
+		/*
+		 * Cache can be enabled for dports, but it requires a link
+		 * reset. Could be done here, but should probably be done
+		 * by the endpoint's driver.
+		 */
+		if (!cxl_flexbus_cache_enabled(dport_iter->dport_dev)) {
+			dev_dbg(dport_iter->dport_dev,
+				"CXL.cache not supported or enabled\n");
+			return -ENXIO;
+		}
+
+		dport_iter = port_iter->parent_dport;
+		port_iter = dport_iter->port;
+	}
+
+	return 0;
+}
 
 /**
  * devm_cxl_add_cachedev - Add a CXL cache device
@@ -71,7 +141,11 @@ static int cxl_cache_probe(struct device *dev)
 			return rc;
 	}
 
-	return 0;
+	rc = cxl_endpoint_cache_enabled(cxlcd->endpoint);
+	if (rc)
+		dev_err(dev, "CXL.cache not enabled on parent port(s)");
+
+	return rc;
 }
 
 static struct cxl_driver cxl_cache_driver = {
