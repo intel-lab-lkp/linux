@@ -119,6 +119,10 @@ struct hdmirx_stream {
 	u32 sequence;
 	u32 line_flag_int_cnt;
 	u32 irq_stat;
+	u32 fifo_overflow_cnt;
+	u32 fifo_underflow_cnt;
+	u32 axi_error_cnt;
+	u32 last_frame_unfinish_cnt;
 };
 
 struct snps_hdmirx_dev {
@@ -1576,6 +1580,15 @@ static void hdmirx_stop_streaming(struct vb2_queue *queue)
 	hdmirx_update_bits(hdmirx_dev, DMA_CONFIG6, HDMIRX_DMA_EN, 0);
 	return_all_buffers(stream, VB2_BUF_STATE_ERROR);
 	mutex_unlock(&hdmirx_dev->stream_lock);
+
+	if (stream->fifo_overflow_cnt || stream->fifo_underflow_cnt ||
+	    stream->axi_error_cnt || stream->last_frame_unfinish_cnt)
+		v4l2_warn(v4l2_dev,
+			  "dma errors over %u frames: fifo_overflow:%u fifo_underflow:%u axi_error:%u last_frame_unfinish:%u\n",
+			  stream->sequence, stream->fifo_overflow_cnt,
+			  stream->fifo_underflow_cnt, stream->axi_error_cnt,
+			  stream->last_frame_unfinish_cnt);
+
 	v4l2_dbg(1, debug, v4l2_dev, "stream stopping finished\n");
 }
 
@@ -1592,6 +1605,10 @@ static int hdmirx_start_streaming(struct vb2_queue *queue, unsigned int count)
 	mutex_lock(&hdmirx_dev->stream_lock);
 	stream->sequence = 0;
 	stream->line_flag_int_cnt = 0;
+	stream->fifo_overflow_cnt = 0;
+	stream->fifo_underflow_cnt = 0;
+	stream->axi_error_cnt = 0;
+	stream->last_frame_unfinish_cnt = 0;
 	stream->curr_buf = NULL;
 	stream->next_buf = NULL;
 	stream->irq_stat = 0;
@@ -2089,6 +2106,31 @@ LINE_FLAG_OUT:
 	*handled = true;
 }
 
+static void dma_error_int_handler(struct snps_hdmirx_dev *hdmirx_dev,
+				  u32 dma_stat1, bool *handled)
+{
+	struct hdmirx_stream *stream = &hdmirx_dev->stream;
+	struct v4l2_device *v4l2_dev = &hdmirx_dev->v4l2_dev;
+
+	if ((dma_stat1 & FIFO_OVERFLOW_INT_EN) && !stream->fifo_overflow_cnt++)
+		v4l2_warn(v4l2_dev,
+			  "dma fifo overflow, captured lines are being dropped\n");
+
+	if ((dma_stat1 & FIFO_UNDERFLOW_INT_EN) &&
+	    !stream->fifo_underflow_cnt++)
+		v4l2_warn(v4l2_dev, "dma fifo underflow\n");
+
+	if ((dma_stat1 & HDMIRX_AXI_ERROR_INT_EN) && !stream->axi_error_cnt++)
+		v4l2_err(v4l2_dev, "dma axi error\n");
+
+	if ((dma_stat1 & LAST_FRAME_AXI_UNFINISH_INT_EN) &&
+	    !stream->last_frame_unfinish_cnt++)
+		v4l2_warn(v4l2_dev,
+			  "dma did not finish writing the last frame\n");
+
+	*handled = true;
+}
+
 static irqreturn_t hdmirx_dma_irq_handler(int irq, void *dev_id)
 {
 	struct snps_hdmirx_dev *hdmirx_dev = dev_id;
@@ -2123,6 +2165,11 @@ static irqreturn_t hdmirx_dma_irq_handler(int irq, void *dev_id)
 
 	if (dma_stat1 & LINE_FLAG_INT_EN)
 		line_flag_int_handler(hdmirx_dev, &handled);
+
+	if (dma_stat1 & (FIFO_OVERFLOW_INT_EN | FIFO_UNDERFLOW_INT_EN |
+			 HDMIRX_AXI_ERROR_INT_EN |
+			 LAST_FRAME_AXI_UNFINISH_INT_EN))
+		dma_error_int_handler(hdmirx_dev, dma_stat1, &handled);
 
 	if (!handled)
 		v4l2_dbg(3, debug, v4l2_dev,
