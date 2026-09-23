@@ -4435,6 +4435,65 @@ static unsigned int attr_flags_to_mnt_flags(u64 attr_flags)
 	return mnt_flags;
 }
 
+/**
+ * vfs_open_detached_mount - Publish a new mount as a detached mount file.
+ * @mnt: The mount to publish. Must not be attached to a mount namespace. The
+ *       caller's reference is consumed on success.
+ *
+ * Places @mnt into a new anonymous mount namespace and opens an O_PATH file on
+ * its root, marked FMODE_NEED_UNMOUNT. This is what fsmount(2) hands back, and
+ * the resulting file behaves the same way: it can be attached to the
+ * filesystem hierarchy with
+ *
+ *	move_mount(fd, "", dfd, path, MOVE_MOUNT_F_EMPTY_PATH)
+ *
+ * and the mount is torn down on the final fput() if it never was.
+ *
+ * A mount that is not the root of an anonymous mount namespace cannot be
+ * attached by userspace at all, so a mount freshly made by fc_mount() and
+ * friends has to go through here before it can be given away.
+ *
+ * Return: the new file, or an ERR_PTR. On failure the caller's reference to
+ *         @mnt is dropped, as the mount cannot be published.
+ */
+struct file *vfs_open_detached_mount(struct vfsmount *mnt)
+{
+	struct path path __free(path_put) = {};
+	struct mnt_namespace *ns;
+	struct file *file;
+
+	if (WARN_ON_ONCE(real_mount(mnt)->mnt_ns))
+		return ERR_PTR(-EINVAL);
+
+	ns = alloc_mnt_ns(current->nsproxy->mnt_ns->user_ns, true);
+	if (IS_ERR(ns)) {
+		mntput(mnt);
+		return ERR_CAST(ns);
+	}
+
+	/* The caller's reference becomes the namespace's reference. */
+	ns->root = real_mount(mnt);
+	ns->nr_mounts = 1;
+	mnt_add_to_ns(ns, real_mount(mnt));
+
+	path.mnt = mntget(mnt);
+	path.dentry = dget(mnt->mnt_root);
+
+	file = dentry_open(&path, O_PATH, current_cred());
+	if (IS_ERR(file)) {
+		dissolve_on_fput(mnt);
+		return file;
+	}
+
+	/*
+	 * An apparent O_PATH fd, with a note that the mount needs to be
+	 * unmounted on the final fput() rather than simply put.
+	 */
+	file->f_mode |= FMODE_NEED_UNMOUNT;
+
+	return file;
+}
+
 /*
  * Create a kernel mount representation for a new, prepared superblock
  * (specified by fs_fd) and attach to an open_tree-like file descriptor.
