@@ -2898,8 +2898,8 @@ int intel_psr2_sel_fetch_update(struct intel_atomic_state *state,
 	struct drm_rect display_area = {
 		.x1 = 0,
 		.y1 = 0,
-		.x2 = crtc_state->hw.adjusted_mode.crtc_hdisplay,
-		.y2 = crtc_state->hw.adjusted_mode.crtc_vdisplay,
+		.x2 = drm_rect_width(&crtc_state->pipe_src),
+		.y2 = drm_rect_height(&crtc_state->pipe_src),
 	};
 	bool full_update = false, su_area_changed;
 	int i, ret;
