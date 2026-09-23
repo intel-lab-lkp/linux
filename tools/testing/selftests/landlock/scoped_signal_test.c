@@ -9,9 +9,12 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/landlock.h>
+#include <poll.h>
 #include <pthread.h>
 #include <sched.h>
 #include <signal.h>
+#include <stdio.h>
+#include <sys/ioctl.h>
 #include <sys/mount.h>
 #include <sys/prctl.h>
 #include <sys/types.h>
@@ -765,6 +768,178 @@ TEST(sigio_to_pgid_self)
 
 	EXPECT_EQ(0, close(trigger[0]));
 	EXPECT_EQ(0, close(trigger[1]));
+}
+
+struct tiocsig_result {
+	int kill_ret;
+	int kill_errno;
+	int ioctl_ret;
+	int ioctl_errno;
+};
+
+static int tty_effect_fd = -1;
+
+static void handle_tty_signal(int sig)
+{
+	const char effect = sig;
+
+	if (tty_effect_fd >= 0)
+		(void)write(tty_effect_fd, &effect, sizeof(effect));
+}
+
+static int setup_tty_signal_handler(int sig)
+{
+	struct sigaction action = {
+		.sa_handler = handle_tty_signal,
+		.sa_flags = SA_RESTART,
+	};
+
+	if (sigemptyset(&action.sa_mask))
+		return -1;
+	return sigaction(sig, &action, NULL);
+}
+
+static int create_pty_master(char *const slave_path,
+			     const size_t slave_path_size)
+{
+	int master_fd, pty_number, unlock = 0;
+
+	master_fd = open("/dev/ptmx", O_RDWR | O_NOCTTY | O_CLOEXEC);
+	if (master_fd < 0)
+		return -1;
+	if (ioctl(master_fd, TIOCSPTLCK, &unlock) < 0 ||
+	    ioctl(master_fd, TIOCGPTN, &pty_number) < 0) {
+		const int saved_errno = errno;
+
+		close(master_fd);
+		errno = saved_errno;
+		return -1;
+	}
+	if (snprintf(slave_path, slave_path_size, "/dev/pts/%d", pty_number) >=
+	    (int)slave_path_size) {
+		close(master_fd);
+		errno = ENAMETOOLONG;
+		return -1;
+	}
+	return master_fd;
+}
+
+/*
+ * A PTY master grants control over its attached terminal, including signal
+ * delivery to the foreground process group.  LANDLOCK_SCOPE_SIGNAL blocks
+ * arbitrary signal targets, but it does not restrict this terminal capability.
+ */
+TEST(tiocsig_to_foreground_pgrp)
+{
+	struct tiocsig_result result = {};
+	struct pollfd poll_fd = {
+		.events = POLLIN,
+	};
+	char slave_path[64], byte, effect_signal = 0;
+	int ready[2], release[2], effect[2], report[2];
+	int master_fd, poll_ret, status;
+	ssize_t report_size;
+	pid_t attacker, target;
+
+	drop_caps(_metadata);
+	master_fd = create_pty_master(slave_path, sizeof(slave_path));
+	if (master_fd < 0 && errno == ENOENT)
+		SKIP(return, "Unix98 PTY not available");
+	ASSERT_LE(0, master_fd);
+	ASSERT_EQ(0, pipe2(ready, O_CLOEXEC));
+	ASSERT_EQ(0, pipe2(release, O_CLOEXEC));
+	ASSERT_EQ(0, pipe2(effect, O_CLOEXEC));
+	ASSERT_EQ(0, pipe2(report, O_CLOEXEC));
+
+	target = fork();
+	ASSERT_LE(0, target);
+	if (target == 0) {
+		int slave_fd;
+
+		EXPECT_EQ(0, close(master_fd));
+		EXPECT_EQ(0, close(ready[0]));
+		EXPECT_EQ(0, close(release[1]));
+		EXPECT_EQ(0, close(effect[0]));
+		EXPECT_EQ(0, close(report[0]));
+		EXPECT_EQ(0, close(report[1]));
+		ASSERT_LE(0, setsid());
+		slave_fd = open(slave_path, O_RDWR | O_CLOEXEC);
+		ASSERT_LE(0, slave_fd);
+		ASSERT_NE(SIG_ERR, signal(SIGTTOU, SIG_IGN));
+		tty_effect_fd = effect[1];
+		ASSERT_EQ(0, setup_tty_signal_handler(SIGUSR1));
+		ASSERT_EQ(0, setup_tty_signal_handler(SIGTSTP));
+		ASSERT_EQ(0, tcsetpgrp(slave_fd, getpgrp()));
+		ASSERT_EQ(1, write(ready[1], ".", 1));
+		ASSERT_EQ(1, read(release[0], &byte, 1));
+		EXPECT_EQ(0, close(slave_fd));
+		EXPECT_EQ(0, close(effect[1]));
+		_exit(_metadata->exit_code);
+		return;
+	}
+	EXPECT_EQ(0, close(ready[1]));
+	EXPECT_EQ(0, close(release[0]));
+	EXPECT_EQ(0, close(effect[1]));
+	ASSERT_EQ(1, read(ready[0], &byte, 1));
+
+	attacker = fork();
+	ASSERT_LE(0, attacker);
+	if (attacker == 0) {
+		EXPECT_EQ(0, close(ready[0]));
+		EXPECT_EQ(0, close(release[1]));
+		EXPECT_EQ(0, close(effect[0]));
+		EXPECT_EQ(0, close(report[0]));
+		create_scoped_domain(_metadata, LANDLOCK_SCOPE_SIGNAL);
+
+		errno = 0;
+		result.kill_ret = kill(target, SIGUSR1);
+		result.kill_errno = errno;
+		errno = 0;
+		result.ioctl_ret = ioctl(master_fd, TIOCSIG, SIGTSTP);
+		result.ioctl_errno = errno;
+		ASSERT_EQ((ssize_t)sizeof(result),
+			  write(report[1], &result, sizeof(result)));
+		EXPECT_EQ(0, close(report[1]));
+		EXPECT_EQ(0, close(master_fd));
+		_exit(_metadata->exit_code);
+		return;
+	}
+	EXPECT_EQ(0, close(report[1]));
+	report_size = read(report[0], &result, sizeof(result));
+	EXPECT_EQ((ssize_t)sizeof(result), report_size);
+	EXPECT_EQ(0, close(report[0]));
+	EXPECT_EQ(attacker, waitpid(attacker, &status, 0));
+	EXPECT_TRUE(WIFEXITED(status));
+	if (WIFEXITED(status))
+		EXPECT_EQ(0, WEXITSTATUS(status));
+
+	EXPECT_EQ(-1, result.kill_ret);
+	EXPECT_EQ(EPERM, result.kill_errno);
+	EXPECT_EQ(0, result.ioctl_ret);
+	EXPECT_EQ(0, result.ioctl_errno);
+
+	poll_fd.fd = effect[0];
+	poll_ret = poll(&poll_fd, 1, 1000);
+	EXPECT_EQ(1, poll_ret);
+	if (poll_ret == 1 && (poll_fd.revents & POLLIN)) {
+		EXPECT_EQ((ssize_t)sizeof(effect_signal),
+			  read(effect[0], &effect_signal,
+			       sizeof(effect_signal)));
+		EXPECT_EQ(SIGTSTP, effect_signal);
+	} else {
+		EXPECT_TRUE(poll_ret == 1 && (poll_fd.revents & POLLIN));
+	}
+
+	ASSERT_EQ(1, write(release[1], ".", 1));
+	EXPECT_EQ(target, waitpid(target, &status, 0));
+	EXPECT_TRUE(WIFEXITED(status));
+	if (WIFEXITED(status))
+		EXPECT_EQ(0, WEXITSTATUS(status));
+
+	EXPECT_EQ(0, close(ready[0]));
+	EXPECT_EQ(0, close(release[1]));
+	EXPECT_EQ(0, close(effect[0]));
+	EXPECT_EQ(0, close(master_fd));
 }
 
 /* Trace tests */
