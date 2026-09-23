@@ -204,7 +204,7 @@ static int cxl_cid_commit_decoder(struct cxl_dport *dport)
 }
 
 static int cxl_cid_program_decoder(struct cxl_dport *dport, int cid,
-				   bool endpoint)
+				   bool endpoint, bool hdmd)
 {
 	void __iomem *ciddc = dport->regs.ciddc;
 	u32 ctrl;
@@ -225,7 +225,14 @@ static int cxl_cid_program_decoder(struct cxl_dport *dport, int cid,
 		ctrl |= CXL_CACHE_ID_DC_CTRL_FWD_ID;
 	}
 
-	FIELD_MODIFY(CXL_CACHE_ID_DC_CTRL_LOCAL_ID, &ctrl, cid);
+	if (hdmd) {
+		ctrl |= CXL_CACHE_ID_DC_CTRL_HDMD_PRESENT;
+		FIELD_MODIFY(CXL_CACHE_ID_DC_CTRL_HDMD_ID, &ctrl, cid);
+	} else {
+		ctrl &= ~CXL_CACHE_ID_DC_CTRL_HDMD_PRESENT;
+		FIELD_MODIFY(CXL_CACHE_ID_DC_CTRL_LOCAL_ID, &ctrl, cid);
+	}
+
 	writel(ctrl, ciddc + CXL_CACHE_ID_DC_CTRL_OFFSET);
 
 	return cxl_cid_commit_decoder(dport);
@@ -269,10 +276,10 @@ static int cxl_cid_commit_table(struct cxl_port *port)
 }
 
 static int cxl_cid_program_table_entry(struct cxl_port *port, int cid,
-				       unsigned int dport_id)
+				       unsigned int dport_id, bool hdmd)
 {
 	void __iomem *cidrt = port->regs.cidrt;
-	u8 target_cnt, portn;
+	u8 target_cnt, hdmd_max, portn;
 	u16 target_n;
 	u32 cap;
 
@@ -288,6 +295,16 @@ static int cxl_cid_program_table_entry(struct cxl_port *port, int cid,
 			"Tried to allocate cache ID (%d) larger than table size (%d)\n",
 			cid, target_cnt);
 		return -EINVAL;
+	}
+
+	if (is_cxl_root(parent_port_of(port)) && hdmd) {
+		hdmd_max = FIELD_GET(CXL_CACHE_ID_RT_CAP_HDMD_MAX, cap);
+
+		if (port->num_hdmd > hdmd_max) {
+			dev_err(&port->dev,
+				"Maximum number of devices using HDM-D reached\n");
+			return -EINVAL;
+		}
 	}
 
 	target_n = readw(cidrt + CXL_CACHE_ID_RT_TARGETN_OFFSET(cid));
@@ -385,6 +402,22 @@ static struct ida *find_cache_id_ida(struct cxl_port *port)
 	return NULL;
 }
 
+static void cxl_port_add_hdmd(struct cxl_port *endpoint, int val)
+{
+	struct cxl_port *parent = parent_port_of(endpoint);
+	struct cxl_port *port = endpoint;
+
+	if (!parent || !is_cxl_cachedev(endpoint->uport_dev))
+		return;
+
+	while (parent && !is_cxl_root(parent)) {
+		port = parent;
+		parent = parent_port_of(port);
+	}
+
+	port->num_hdmd += val;
+}
+
 int cxl_allocate_cache_id(struct cxl_cachedev *cxlcd)
 {
 	struct ida *ida = find_cache_id_ida(cxlcd->endpoint);
@@ -407,6 +440,9 @@ int cxl_allocate_cache_id(struct cxl_cachedev *cxlcd)
 	if (id < 0)
 		return id;
 
+	if (cxlcd->cxlds->hdmd)
+		cxl_port_add_hdmd(cxlcd->endpoint, 1);
+
 	cxlcd->cache_id = id;
 	return 0;
 }
@@ -418,6 +454,9 @@ void cxl_free_cache_id(struct cxl_cachedev *cxlcd)
 
 	if (ida)
 		ida_free(ida, cxlcd->cache_id);
+
+	if (cxlcd->cxlds->hdmd)
+		cxl_port_add_hdmd(cxlcd->endpoint, -1);
 }
 EXPORT_SYMBOL_FOR_MODULES(cxl_free_cache_id, "cxl_cache");
 
@@ -489,17 +528,18 @@ int cxl_cachedev_program_cache_id(struct cxl_cachedev *cxlcd)
 {
 	struct cxl_dport *dport = cxlcd->endpoint->parent_dport;
 	struct cxl_port *port = dport->port;
+	bool hdmd = cxlcd->cxlds->hdmd;
 	bool endpoint = true;
 	int rc;
 
 	while (!is_cxl_root(port)) {
 		rc = cxl_cid_program_decoder(dport, cxlcd->cache_id,
-					     endpoint);
+					     endpoint, hdmd);
 		if (rc)
 			goto err;
 
 		rc = cxl_cid_program_table_entry(port, cxlcd->cache_id,
-						 dport->port_id);
+						 dport->port_id, hdmd);
 		if (rc)
 			goto err;
 

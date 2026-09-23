@@ -156,12 +156,6 @@ static int program_cache_id(struct cxl_cachedev *cxlcd)
 	if (!rc)
 		return cxl_allocate_cache_id(cxlcd);
 
-	if (cxlcd->cxlds->hdmd) {
-		dev_err(dev,
-			"Cache id programming not supported for HDM-D devices\n");
-		return -ENXIO;
-	}
-
 	rc = cxl_allocate_cache_id(cxlcd);
 	if (rc)
 		return rc;

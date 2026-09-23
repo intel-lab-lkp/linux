@@ -229,6 +229,7 @@ static inline int ways_to_eiw(unsigned int ways, u8 *eiw)
 /* CXL 4.0 8.2.4.28.1 CXL Cache ID Route Table Capability Structure */
 #define CXL_CACHE_ID_RT_CAP_OFFSET 0x0
 #define   CXL_CACHE_ID_RT_CAP_TARGET_CNT GENMASK(4, 0)
+#define   CXL_CACHE_ID_RT_CAP_HDMD_MAX GENMASK(11, 8)
 #define   CXL_CACHE_ID_RT_CAP_COMMIT_REQ BIT(16)
 #define CXL_CACHE_ID_RT_CTRL_OFFSET 0x4
 #define   CXL_CACHE_ID_RT_CTRL_COMMIT BIT(0)
@@ -603,6 +604,7 @@ struct cxl_dax_region {
  * @pci_latency: Upstream latency in picoseconds
  * @component_reg_phys: Physical address of component register
  * @cache_ida: ida used for cache id allocations on host bridges
+ * @num_hdmd: Number of devices using HDM-D flows below this port
  */
 struct cxl_port {
 	struct device dev;
@@ -629,6 +631,7 @@ struct cxl_port {
 	long pci_latency;
 	resource_size_t component_reg_phys;
 	struct ida cache_ida;
+	u32 num_hdmd;
 };
 
 struct cxl_root;
