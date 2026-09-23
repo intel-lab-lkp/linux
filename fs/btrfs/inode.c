@@ -9482,7 +9482,7 @@ static ssize_t btrfs_encoded_read_inline(
 		ptr += iocb->ki_pos - extent_start;
 	}
 
-	tmp = kmalloc(count, GFP_NOFS);
+	tmp = kvmalloc(count, GFP_NOFS);
 	if (!tmp)
 		return -ENOMEM;
 
@@ -9495,7 +9495,7 @@ static ssize_t btrfs_encoded_read_inline(
 	ret = copy_to_iter(tmp, count, iter);
 	if (ret != count)
 		ret = -EFAULT;
-	kfree(tmp);
+	kvfree(tmp);
 
 	return ret;
 }
