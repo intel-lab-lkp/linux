@@ -72,6 +72,7 @@ static struct cxl_cachedev *cxl_cachedev_alloc(struct cxl_dev_state *cxlds)
 	cxlcd->id = rc;
 	cxlcd->depth = -1;
 	cxlcd->endpoint = ERR_PTR(-ENODEV);
+	cxlcd->cache_id = CXL_CACHE_ID_NO_ID;
 
 	dev = &cxlcd->dev;
 	device_initialize(dev);

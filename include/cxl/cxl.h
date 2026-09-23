@@ -155,6 +155,8 @@ struct cxl_dpa_partition {
 
 #define CXL_NR_PARTITIONS_MAX 2
 
+#define CXL_CACHE_ID_NO_ID (-1)
+ 
 /**
  * struct cxl_cache_state - CXL cache device state for use by external drivers
  * @size: Size of device's cache
@@ -182,6 +184,7 @@ struct cxl_cache_state {
  * @cxlmd: The device representing the CXL.mem capabilities of @dev
  * @cxlcd: The device representing the CXL.cache capabilities of @dev
  * @cstate: CXL.cache information for @dev
+ * @hdmd: Whether the device is using HDM-D flows for CXL.cache
  * @reg_map: component and ras register mapping parameters
  * @regs: Parsed register blocks
  * @cxl_dvsec: Offset to the PCIe device DVSEC
@@ -201,6 +204,7 @@ struct cxl_dev_state {
 	struct cxl_memdev *cxlmd;
 	struct cxl_cachedev *cxlcd;
  	struct cxl_cache_state cstate;
+	bool hdmd;
 
 	/* private for Type2 drivers */
 	struct cxl_register_map reg_map;

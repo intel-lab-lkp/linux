@@ -84,6 +84,90 @@ static int cxl_endpoint_cache_enabled(struct cxl_port *endpoint)
 	return 0;
 }
 
+static struct cxl_port *find_host_bridge(struct cxl_port *endpoint)
+{
+	struct cxl_port *parent = endpoint->parent_dport->port;
+	struct cxl_port *hb = endpoint;
+
+	if (is_cxl_root(parent))
+		return NULL;
+
+	while (!is_cxl_root(parent)) {
+		hb = parent;
+		parent = hb->parent_dport->port;
+	}
+
+	return hb;
+}
+
+static int get_num_cachedevs_present(struct cxl_port *host_bridge, u32 *num)
+{
+	u32 num_cachedevs = 0;
+	unsigned long index;
+	struct cxl_ep *ep;
+
+	xa_for_each(&host_bridge->endpoints, index, ep) {
+		if (is_cxl_cachedev(ep->ep))
+			num_cachedevs++;
+	}
+
+	*num = num_cachedevs;
+	return 0;
+}
+
+static void deprogram_cache_id(void *_cxlcd)
+{
+	struct cxl_cachedev *cxlcd = _cxlcd;
+	struct cxl_port *hb = find_host_bridge(cxlcd->endpoint);
+
+	if (cxlcd->cache_id == CXL_CACHE_ID_NO_ID)
+		return;
+
+	guard(device)(&hb->dev);
+	cxl_free_cache_id(cxlcd);
+}
+
+static int program_cache_id(struct cxl_cachedev *cxlcd)
+{
+	struct cxl_port *endpoint = cxlcd->endpoint;
+	struct cxl_port *hb = find_host_bridge(endpoint);
+	struct device *dev = &cxlcd->dev;
+	u32 num_cachedevs;
+	int rc;
+
+	if (!hb)
+		return -ENODEV;
+
+	/*
+	 * Cache ids are unique to the host bridge, so synchronize programming
+	 * around the bridge's device lock
+	 */
+
+	guard(device)(&hb->dev);
+	rc = get_num_cachedevs_present(hb, &num_cachedevs);
+	if (rc)
+		return rc;
+
+	if (!cxl_cache_id_supported(cxlcd))
+		return num_cachedevs > 1 ? -ENXIO : 0;
+
+	rc = cxl_cachedev_validate_cache_id(cxlcd);
+	if (rc && num_cachedevs > 1) {
+		dev_err(dev,
+			"Cache id not programmed with other CXL.cache devices present: %d\n",
+			rc);
+		return rc;
+	} else if (rc) {
+		cxlcd->cache_id = 0;
+	}
+
+	rc = cxl_allocate_cache_id(cxlcd);
+	if (rc)
+		return rc;
+
+	return 0;
+}
+
 /**
  * devm_cxl_add_cachedev - Add a CXL cache device
  * @cxlds: CXL device state to associate with the cachedev
@@ -142,10 +226,16 @@ static int cxl_cache_probe(struct device *dev)
 	}
 
 	rc = cxl_endpoint_cache_enabled(cxlcd->endpoint);
-	if (rc)
+	if (rc) {
 		dev_err(dev, "CXL.cache not enabled on parent port(s)");
+		return rc;
+	}
 
-	return rc;
+	rc = program_cache_id(cxlcd);
+	if (rc)
+		return rc;
+
+	return devm_add_action_or_reset(dev, deprogram_cache_id, cxlcd);
 }
 
 static struct cxl_driver cxl_cache_driver = {

@@ -229,9 +229,23 @@ static inline int ways_to_eiw(unsigned int ways, u8 *eiw)
 /* CXL 4.0 8.2.4.28.1 CXL Cache ID Route Table Capability Structure */
 #define CXL_CACHE_ID_RT_CAP_OFFSET 0x0
 #define   CXL_CACHE_ID_RT_CAP_TARGET_CNT GENMASK(4, 0)
+#define   CXL_CACHE_ID_RT_CAP_COMMIT_REQ BIT(16)
+#define CXL_CACHE_ID_RT_STATUS_OFFSET 0x8
+#define   CXL_CACHE_ID_RT_STATUS_COMMITTED BIT(0)
 #define CXL_CACHE_ID_RT_TARGETN_OFFSET(n) (0x10 + (2 * (n)))
+#define   CXL_CACHE_ID_RT_TARGETN_VALID BIT(0)
 
 /* CXL 4.0 8.2.4.29.1 CXL Cache ID Decoder Capability Structure */
+#define CXL_CACHE_ID_DC_CAP_OFFSET 0x0
+#define   CXL_CACHE_ID_DC_CAP_COMMIT_REQ BIT(0)
+#define CXL_CACHE_ID_DC_CTRL_OFFSET 0x4
+#define   CXL_CACHE_ID_DC_CTRL_FWD_ID BIT(0)
+#define   CXL_CACHE_ID_DC_CTRL_ASGN_ID BIT(1)
+#define   CXL_CACHE_ID_DC_CTRL_HDMD_PRESENT BIT(2)
+#define   CXL_CACHE_ID_DC_CTRL_HDMD_ID GENMASK(11, 8)
+#define   CXL_CACHE_ID_DC_CTRL_LOCAL_ID GENMASK(19, 16)
+#define CXL_CACHE_ID_DC_STATUS_OFFSET 0x8
+#define   CXL_CACHE_ID_DC_STATUS_COMMITTED BIT(0)
 #define CXL_CACHE_ID_DC_CAPABILITY_LENGTH 0xC
 
 void cxl_probe_component_regs(struct device *dev, void __iomem *base,
@@ -578,6 +592,7 @@ struct cxl_dax_region {
  * @cdat_available: Should a CDAT attribute be available in sysfs
  * @pci_latency: Upstream latency in picoseconds
  * @component_reg_phys: Physical address of component register
+ * @cache_ida: ida used for cache id allocations on host bridges
  */
 struct cxl_port {
 	struct device dev;
@@ -603,6 +618,7 @@ struct cxl_port {
 	bool cdat_available;
 	long pci_latency;
 	resource_size_t component_reg_phys;
+	struct ida cache_ida;
 };
 
 struct cxl_root;
