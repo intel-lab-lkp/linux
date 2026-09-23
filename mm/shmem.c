@@ -5313,6 +5313,44 @@ static struct file_system_type shmem_fs_type = {
 	.fs_flags	= FS_USERNS_MOUNT | FS_ALLOW_IDMAP | FS_MGTIME,
 };
 
+/**
+ * tmpfs_create_mount - Create a new tmpfs instance from explicit parameters.
+ * @max_blocks: Block limit of the filesystem, in PAGE_SIZE units, as held by
+ *              shmem_sb_info::max_blocks.
+ * @mode:       Mode of the root directory.
+ *
+ * Creates a new tmpfs superblock and returns a mount for it. Everything not
+ * named above is left at its default.
+ *
+ * The returned mount belongs to no mount namespace and is owned by the caller,
+ * who must either mntput() it or hand it to something that takes it over.
+ *
+ * Return: the new mount, or an ERR_PTR.
+ */
+struct vfsmount *tmpfs_create_mount(unsigned long max_blocks, umode_t mode)
+{
+	struct shmem_options *ctx;
+	struct fs_context *fc;
+	struct vfsmount *mnt;
+
+	if (!IS_ENABLED(CONFIG_TMPFS))
+		return ERR_PTR(-EOPNOTSUPP);
+
+	fc = fs_context_for_mount(&shmem_fs_type, 0);
+	if (IS_ERR(fc))
+		return ERR_CAST(fc);
+
+	ctx = fc->fs_private;
+	ctx->blocks = max_blocks;
+	ctx->seen |= SHMEM_SEEN_BLOCKS;
+	ctx->mode = mode;
+
+	mnt = fc_mount(fc);
+	put_fs_context(fc);
+
+	return mnt;
+}
+
 #if defined(CONFIG_SYSFS) && defined(CONFIG_TMPFS)
 
 #define __INIT_KOBJ_ATTR(_name, _mode, _show, _store)			\
