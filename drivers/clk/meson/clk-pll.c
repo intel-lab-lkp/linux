@@ -14,7 +14,7 @@
  *        +--------------------------------+
  *        |                                |
  *        |             +--+               |
- *  in >>-----[ /N ]--->|  |      +-----+  |
+ *  in >>----------->|  |      +-----+  |
  *        |             |  |------| DCO |---->> out
  *        |  +--------->|  |      +--v--+  |
  *        |  |          +--+         |     |
@@ -23,7 +23,7 @@
  *        |                                |
  *        +--------------------------------+
  *
- * out = in * (m + frac / frac_max) / n
+ * out = in * (m + frac / frac_max)
  */
 
 #include <linux/clk-provider.h>
@@ -52,8 +52,7 @@ static int __pll_round_closest_mult(struct meson_clk_pll_data *pll)
 }
 
 static unsigned long __pll_params_to_rate(unsigned long parent_rate,
-					  unsigned int m, unsigned int n,
-					  unsigned int frac,
+					  unsigned int m, unsigned int frac,
 					  struct meson_clk_pll_data *pll)
 {
 	u64 rate = (u64)parent_rate * m;
@@ -66,7 +65,7 @@ static unsigned long __pll_params_to_rate(unsigned long parent_rate,
 		rate += DIV_ROUND_UP_ULL(frac_rate, frac_max);
 	}
 
-	return DIV_ROUND_UP_ULL(rate, n);
+	return rate;
 }
 
 static unsigned long meson_clk_pll_recalc_rate(struct clk_hw *hw,
@@ -74,17 +73,7 @@ static unsigned long meson_clk_pll_recalc_rate(struct clk_hw *hw,
 {
 	struct clk_regmap *clk = to_clk_regmap(hw);
 	struct meson_clk_pll_data *pll = meson_clk_pll_data(clk);
-	unsigned int m, n, frac;
-
-	n = meson_parm_read(clk->map, &pll->n);
-
-	/*
-	 * On some HW, N is set to zero on init. This value is invalid as
-	 * it would result in a division by zero. The rate can't be
-	 * calculated in this case
-	 */
-	if (n == 0)
-		return 0;
+	unsigned int m, frac;
 
 	m = meson_parm_read(clk->map, &pll->m);
 
@@ -92,21 +81,20 @@ static unsigned long meson_clk_pll_recalc_rate(struct clk_hw *hw,
 		meson_parm_read(clk->map, &pll->frac) :
 		0;
 
-	return __pll_params_to_rate(parent_rate, m, n, frac, pll);
+	return __pll_params_to_rate(parent_rate, m, frac, pll);
 }
 
 static unsigned int __pll_params_with_frac(unsigned long rate,
 					   unsigned long parent_rate,
 					   unsigned int m,
-					   unsigned int n,
 					   struct meson_clk_pll_data *pll)
 {
 	unsigned int frac_max = pll->frac_max ? pll->frac_max :
 						(1 << pll->frac.width);
-	u64 val = (u64)rate * n;
+	u64 val = (u64)rate;
 
 	/* Bail out if we are already over the requested rate */
-	if (rate < parent_rate * m / n)
+	if (rate < parent_rate * m)
 		return 0;
 
 	if (pll->flags & CLK_MESON_PLL_ROUND_CLOSEST)
@@ -119,128 +107,32 @@ static unsigned int __pll_params_with_frac(unsigned long rate,
 	return min((unsigned int)val, (frac_max - 1));
 }
 
-static bool meson_clk_pll_is_better(unsigned long rate,
-				    unsigned long best,
-				    unsigned long now,
-				    struct meson_clk_pll_data *pll)
+static int meson_clk_get_pll_multiplier(unsigned long rate,
+					unsigned long parent_rate,
+					unsigned int *m,
+					struct meson_clk_pll_data *pll)
 {
-	if (__pll_round_closest_mult(pll)) {
-		/* Round Closest */
-		if (abs(now - rate) < abs(best - rate))
-			return true;
-	} else {
-		/* Round down */
-		if (now <= rate && best < now)
-			return true;
-	}
-
-	return false;
-}
-
-static int meson_clk_get_pll_table_index(unsigned int index,
-					 unsigned int *m,
-					 unsigned int *n,
-					 struct meson_clk_pll_data *pll)
-{
-	if (!pll->table[index].n)
+	if (!pll->range)
 		return -EINVAL;
 
-	*m = pll->table[index].m;
-	*n = pll->table[index].n;
-
-	return 0;
-}
-
-static unsigned int meson_clk_get_pll_range_m(unsigned long rate,
-					      unsigned long parent_rate,
-					      unsigned int n,
-					      struct meson_clk_pll_data *pll)
-{
-	u64 val = (u64)rate * n;
+	if (rate <= pll->range->min * parent_rate) {
+		*m = pll->range->min;
+		return -ENODATA;
+	} else if (rate >= pll->range->max * parent_rate) {
+		*m = pll->range->max;
+		return -ENODATA;
+	}
 
 	if (__pll_round_closest_mult(pll))
-		return DIV_ROUND_CLOSEST_ULL(val, parent_rate);
+		*m = DIV_ROUND_CLOSEST_ULL(rate, parent_rate);
+	else
+		*m = div_u64(rate, parent_rate);
 
-	return div_u64(val,  parent_rate);
-}
-
-static int meson_clk_get_pll_range_index(unsigned long rate,
-					 unsigned long parent_rate,
-					 unsigned int index,
-					 unsigned int *m,
-					 unsigned int *n,
-					 struct meson_clk_pll_data *pll)
-{
-	*n = index + 1;
-
-	/* Check the predivider range */
-	if (*n >= (1 << pll->n.width))
-		return -EINVAL;
-
-	if (*n == 1) {
-		/* Get the boundaries out the way */
-		if (rate <= pll->range->min * parent_rate) {
-			*m = pll->range->min;
-			return -ENODATA;
-		} else if (rate >= pll->range->max * parent_rate) {
-			*m = pll->range->max;
-			return -ENODATA;
-		}
-	}
-
-	*m = meson_clk_get_pll_range_m(rate, parent_rate, *n, pll);
-
-	/* the pre-divider gives a multiplier too big - stop */
+	/* Multiplier exceeds hardware range */
 	if (*m >= (1 << pll->m.width))
 		return -EINVAL;
 
 	return 0;
-}
-
-static int meson_clk_get_pll_get_index(unsigned long rate,
-				       unsigned long parent_rate,
-				       unsigned int index,
-				       unsigned int *m,
-				       unsigned int *n,
-				       struct meson_clk_pll_data *pll)
-{
-	if (pll->range)
-		return meson_clk_get_pll_range_index(rate, parent_rate,
-						     index, m, n, pll);
-	else if (pll->table)
-		return meson_clk_get_pll_table_index(index, m, n, pll);
-
-	return -EINVAL;
-}
-
-static int meson_clk_get_pll_settings(unsigned long rate,
-				      unsigned long parent_rate,
-				      unsigned int *best_m,
-				      unsigned int *best_n,
-				      struct meson_clk_pll_data *pll)
-{
-	unsigned long best = 0, now = 0;
-	unsigned int i, m, n;
-	int ret;
-
-	for (i = 0, ret = 0; !ret; i++) {
-		ret = meson_clk_get_pll_get_index(rate, parent_rate,
-						  i, &m, &n, pll);
-		if (ret == -EINVAL)
-			break;
-
-		now = __pll_params_to_rate(parent_rate, m, n, 0, pll);
-		if (meson_clk_pll_is_better(rate, best, now, pll)) {
-			best = now;
-			*best_m = m;
-			*best_n = n;
-
-			if (now == rate)
-				break;
-		}
-	}
-
-	return best ? 0 : -EINVAL;
 }
 
 static int meson_clk_pll_determine_rate(struct clk_hw *hw,
@@ -248,16 +140,15 @@ static int meson_clk_pll_determine_rate(struct clk_hw *hw,
 {
 	struct clk_regmap *clk = to_clk_regmap(hw);
 	struct meson_clk_pll_data *pll = meson_clk_pll_data(clk);
-	unsigned int m, n, frac;
+	unsigned int m, frac;
 	unsigned long round;
 	int ret;
 
-	ret = meson_clk_get_pll_settings(req->rate, req->best_parent_rate,
-					 &m, &n, pll);
-	if (ret)
+	ret = meson_clk_get_pll_multiplier(req->rate, req->best_parent_rate, &m, pll);
+	if (ret && ret != -ENODATA)
 		return ret;
 
-	round = __pll_params_to_rate(req->best_parent_rate, m, n, 0, pll);
+	round = __pll_params_to_rate(req->best_parent_rate, m, 0, pll);
 
 	if (!MESON_PARM_APPLICABLE(&pll->frac) || req->rate == round) {
 		req->rate = round;
@@ -268,8 +159,8 @@ static int meson_clk_pll_determine_rate(struct clk_hw *hw,
 	 * The rate provided by the setting is not an exact match, let's
 	 * try to improve the result using the fractional parameter
 	 */
-	frac = __pll_params_with_frac(req->rate, req->best_parent_rate, m, n, pll);
-	req->rate = __pll_params_to_rate(req->best_parent_rate, m, n, frac, pll);
+	frac = __pll_params_with_frac(req->rate, req->best_parent_rate, m, pll);
+	req->rate = __pll_params_to_rate(req->best_parent_rate, m, frac, pll);
 
 	return 0;
 }
@@ -420,7 +311,7 @@ static int meson_clk_pll_set_rate(struct clk_hw *hw, unsigned long rate,
 {
 	struct clk_regmap *clk = to_clk_regmap(hw);
 	struct meson_clk_pll_data *pll = meson_clk_pll_data(clk);
-	unsigned int enabled, m, n, frac = 0;
+	unsigned int enabled, m, frac = 0;
 	unsigned long old_rate;
 	int ret;
 
@@ -429,19 +320,18 @@ static int meson_clk_pll_set_rate(struct clk_hw *hw, unsigned long rate,
 
 	old_rate = clk_hw_get_rate(hw);
 
-	ret = meson_clk_get_pll_settings(rate, parent_rate, &m, &n, pll);
-	if (ret)
+	ret = meson_clk_get_pll_multiplier(rate, parent_rate, &m, pll);
+	if (ret && ret != -ENODATA)
 		return ret;
 
 	enabled = meson_parm_read(clk->map, &pll->en);
 	if (enabled)
 		meson_clk_pll_disable(hw);
 
-	meson_parm_write(clk->map, &pll->n, n);
 	meson_parm_write(clk->map, &pll->m, m);
 
 	if (MESON_PARM_APPLICABLE(&pll->frac)) {
-		frac = __pll_params_with_frac(rate, parent_rate, m, n, pll);
+		frac = __pll_params_with_frac(rate, parent_rate, m, pll);
 		meson_parm_write(clk->map, &pll->frac, frac);
 	}
 
