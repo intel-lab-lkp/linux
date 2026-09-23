@@ -154,12 +154,6 @@ static int hw_breakpoint_slot_setup(struct perf_event **slots, int max_slots,
 	return -ENOSPC;
 }
 
-void ptrace_hw_copy_thread(struct task_struct *tsk)
-{
-	memset(tsk->thread.hbp_break, 0, sizeof(tsk->thread.hbp_break));
-	memset(tsk->thread.hbp_watch, 0, sizeof(tsk->thread.hbp_watch));
-}
-
 /*
  * Unregister breakpoints from this task and reset the pointers in the thread_struct.
  */

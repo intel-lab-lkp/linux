@@ -128,7 +128,12 @@ struct thread_struct {
 	unsigned long trap_nr;
 	unsigned long error_code;
 	unsigned long single_step; /* Used by PTRACE_SINGLESTEP */
+
 	struct loongarch_vdso_info *vdso;
+
+	/* Hardware breakpoints pinned to this task. */
+	struct perf_event *hbp_break[LOONGARCH_MAX_BRP];
+	struct perf_event *hbp_watch[LOONGARCH_MAX_WRP];
 
 	/*
 	 * FPU & vector registers, must be at the last of inherited
@@ -136,10 +141,6 @@ struct thread_struct {
 	 */
 	struct loongarch_fpu fpu FPU_ALIGN;
 	struct loongarch_lbt lbt; /* Also conditionally copied */
-
-	/* Hardware breakpoints pinned to this task. */
-	struct perf_event *hbp_break[LOONGARCH_MAX_BRP];
-	struct perf_event *hbp_watch[LOONGARCH_MAX_WRP];
 };
 
 #define thread_saved_ra(tsk)	(tsk->thread.sched_ra)
@@ -173,6 +174,8 @@ struct thread_struct {
 	 */							\
 	.trap_nr		= 0,				\
 	.error_code		= 0,				\
+	.hbp_break		= {0},				\
+	.hbp_watch		= {0},				\
 	/*							\
 	 * FPU & vector registers				\
 	 */							\
@@ -182,8 +185,6 @@ struct thread_struct {
 		.ftop		= 0,				\
 		.fpr		= {{{0,},},},			\
 	},							\
-	.hbp_break		= {0},				\
-	.hbp_watch		= {0},				\
 }
 
 struct task_struct;
