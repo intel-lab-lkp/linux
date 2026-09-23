@@ -328,6 +328,29 @@ test_int_plain()
 	assert_int_range "$t" "$baseline" || RET=$KSFT_FAIL
 }
 
+# The jiffies converters report the sign separately from the magnitude, so a
+# negative value must survive the round trip through the converter.  Each
+# value below is chosen to convert exactly at every CONFIG_HZ.
+test_int_jiffies_negative()
+{
+	local t="${SYSCTL}/int_jiffies"
+	local m="${SYSCTL}/int_ms_jiffies"
+	local u="${SYSCTL}/int_userhz_jiffies"
+
+	[[ -f "$t" && -f "$m" && -f "$u" ]] || { RET=$KSFT_SKIP; return; }
+
+	printf '%s' "-1" > "$t"
+	assert_content "$t" "-1" || RET=$KSFT_FAIL
+	printf '%s' "-1000" > "$m"
+	assert_content "$m" "-1000" || RET=$KSFT_FAIL
+	printf '%s' "-100" > "$u"
+	assert_content "$u" "-100" || RET=$KSFT_FAIL
+
+	# The positive path was never broken; keep it covered.
+	printf '%s' "1" > "$t"
+	assert_content "$t" "1" || RET=$KSFT_FAIL
+}
+
 test_uint_plain()
 {
 	local t="${SYSCTL}/uint_0001"
