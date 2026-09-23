@@ -323,7 +323,8 @@ static void tegra241_vintf0_handle_error(struct tegra241_vintf *vintf)
 			unsigned long map_bit = __ffs64(map);
 			unsigned long lidx = 64 * i + map_bit;
 			struct tegra241_vcmdq *vcmdq;
-			u32 gerror;
+			unsigned long flags;
+			u32 gerror, gerrorn;
 
 			map &= ~BIT_ULL(map_bit);
 
@@ -335,9 +336,16 @@ static void tegra241_vintf0_handle_error(struct tegra241_vintf *vintf)
 			if (!vcmdq)
 				continue;
 
+			raw_spin_lock_irqsave(&vcmdq->cmdq.cmdq_err_lock, flags);
 			gerror = readl_relaxed(REG_VCMDQ_PAGE0(vcmdq, GERROR));
-			__arm_smmu_cmdq_skip_err(&cmdqv->smmu, &vcmdq->cmdq);
+			gerrorn = readl_relaxed(REG_VCMDQ_PAGE0(vcmdq, GERRORN));
+
+			if ((gerror ^ gerrorn) & GERROR_CMDQ_ERR)
+				__arm_smmu_cmdq_skip_err(&cmdqv->smmu,
+							 &vcmdq->cmdq);
 			writel(gerror, REG_VCMDQ_PAGE0(vcmdq, GERRORN));
+			raw_spin_unlock_irqrestore(&vcmdq->cmdq.cmdq_err_lock,
+						   flags);
 		}
 	}
 }
@@ -477,6 +485,7 @@ static void tegra241_vcmdq_hw_deinit(struct tegra241_vcmdq *vcmdq)
 {
 	char header[64], *h = lvcmdq_error_header(vcmdq, header, 64);
 	u32 gerrorn, gerror;
+	unsigned long flags;
 
 	if (vcmdq_write_config(vcmdq, 0)) {
 		dev_err(vcmdq->cmdqv->dev,
@@ -492,6 +501,7 @@ static void tegra241_vcmdq_hw_deinit(struct tegra241_vcmdq *vcmdq)
 	writeq_relaxed(0, REG_VCMDQ_PAGE1(vcmdq, BASE));
 	writeq_relaxed(0, REG_VCMDQ_PAGE1(vcmdq, CONS_INDX_BASE));
 
+	raw_spin_lock_irqsave(&vcmdq->cmdq.cmdq_err_lock, flags);
 	gerrorn = readl_relaxed(REG_VCMDQ_PAGE0(vcmdq, GERRORN));
 	gerror = readl_relaxed(REG_VCMDQ_PAGE0(vcmdq, GERROR));
 	if (gerror != gerrorn) {
@@ -499,6 +509,7 @@ static void tegra241_vcmdq_hw_deinit(struct tegra241_vcmdq *vcmdq)
 			 "%suncleared error detected, resetting\n", h);
 		writel(gerror, REG_VCMDQ_PAGE0(vcmdq, GERRORN));
 	}
+	raw_spin_unlock_irqrestore(&vcmdq->cmdq.cmdq_err_lock, flags);
 
 	dev_dbg(vcmdq->cmdqv->dev, "%sdeinited\n", h);
 }
@@ -1205,6 +1216,8 @@ static int tegra241_vintf_alloc_lvcmdq_user(struct iommufd_hw_queue *hw_queue,
 
 	vcmdq->cmdq.q.q_base = base_addr_pa & VCMDQ_ADDR;
 	vcmdq->cmdq.q.q_base |= log2size;
+
+	raw_spin_lock_init(&vcmdq->cmdq.cmdq_err_lock);
 
 	ret = tegra241_vcmdq_hw_init_user(vcmdq);
 	if (ret)
