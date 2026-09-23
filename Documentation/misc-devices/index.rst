@@ -24,6 +24,7 @@ fit into other categories.
    mrvl_cn10k_dpi
    oxsemi-tornado
    pci-endpoint-test
+   socfpga-fcs
    spear-pcie-gadget
    tps6594-pfsm
    uacce
