@@ -965,6 +965,14 @@ static void arm_smmu_cmdq_batch_init_cmd(struct arm_smmu_device *smmu,
 	cmds->cmdq = arm_smmu_get_cmdq(smmu, cmd);
 }
 
+static int arm_smmu_cmdq_batch_issue(struct arm_smmu_device *smmu,
+				     struct arm_smmu_cmdq_batch *cmds,
+				     bool sync)
+{
+	return arm_smmu_cmdq_issue_cmdlist(smmu, cmds->cmdq, cmds->cmds,
+					   cmds->num, sync);
+}
+
 static bool arm_smmu_cmdq_batch_force_sync(struct arm_smmu_device *smmu,
 					   struct arm_smmu_cmdq_batch *cmds,
 					   struct arm_smmu_cmd *cmd)
@@ -994,14 +1002,12 @@ static void arm_smmu_cmdq_batch_add_cmd_p(struct arm_smmu_device *smmu,
 					  struct arm_smmu_cmd *cmd)
 {
 	if (arm_smmu_cmdq_batch_force_sync(smmu, cmds, cmd)) {
-		arm_smmu_cmdq_issue_cmdlist(smmu, cmds->cmdq, cmds->cmds,
-					    cmds->num, true);
+		arm_smmu_cmdq_batch_issue(smmu, cmds, true);
 		arm_smmu_cmdq_batch_init_cmd(smmu, cmds, cmd);
 	}
 
 	if (cmds->num == CMDQ_BATCH_ENTRIES) {
-		arm_smmu_cmdq_issue_cmdlist(smmu, cmds->cmdq, cmds->cmds,
-					    cmds->num, false);
+		arm_smmu_cmdq_batch_issue(smmu, cmds, false);
 		arm_smmu_cmdq_batch_init_cmd(smmu, cmds, cmd);
 	}
 
@@ -1017,8 +1023,7 @@ static void arm_smmu_cmdq_batch_add_cmd_p(struct arm_smmu_device *smmu,
 static int arm_smmu_cmdq_batch_submit(struct arm_smmu_device *smmu,
 				      struct arm_smmu_cmdq_batch *cmds)
 {
-	return arm_smmu_cmdq_issue_cmdlist(smmu, cmds->cmdq, cmds->cmds,
-					   cmds->num, true);
+	return arm_smmu_cmdq_batch_issue(smmu, cmds, true);
 }
 
 static void arm_smmu_page_response(struct device *dev, struct iopf_fault *unused,
