@@ -406,7 +406,7 @@ compare_and_write_do_cmp(struct scatterlist *read_sgl, unsigned int read_nents,
 	ret = TCM_NO_SENSE;
 	for_each_sg(read_sgl, sg, read_nents, sg_cnt) {
 		unsigned int len = min(sg->length, cmp_len);
-		unsigned char *addr = kmap_atomic(sg_page(sg));
+		unsigned char *addr = kmap_local_page(sg_page(sg));
 
 		if (memcmp(addr, buf + offset, len)) {
 			unsigned int i;
@@ -418,7 +418,7 @@ compare_and_write_do_cmp(struct scatterlist *read_sgl, unsigned int read_nents,
 				*miscmp_off);
 			ret = TCM_MISCOMPARE_VERIFY;
 		}
-		kunmap_atomic(addr);
+		kunmap_local(addr);
 		if (ret != TCM_NO_SENSE)
 			goto out;
 
@@ -1222,8 +1222,8 @@ sbc_dif_generate(struct se_cmd *cmd)
 	unsigned int block_size = dev->dev_attrib.block_size;
 
 	for_each_sg(cmd->t_prot_sg, psg, cmd->t_prot_nents, i) {
-		paddr = kmap_atomic(sg_page(psg)) + psg->offset;
-		daddr = kmap_atomic(sg_page(dsg)) + dsg->offset;
+		paddr = kmap_local_page(sg_page(psg)) + psg->offset;
+		daddr = kmap_local_page(sg_page(dsg)) + dsg->offset;
 
 		for (j = 0; j < psg->length;
 				j += sizeof(*sdt)) {
@@ -1232,26 +1232,26 @@ sbc_dif_generate(struct se_cmd *cmd)
 
 			if (offset >= dsg->length) {
 				offset -= dsg->length;
-				kunmap_atomic(daddr - dsg->offset);
+				kunmap_local(daddr - dsg->offset);
 				dsg = sg_next(dsg);
 				if (!dsg) {
-					kunmap_atomic(paddr - psg->offset);
+					kunmap_local(paddr - psg->offset);
 					return;
 				}
-				daddr = kmap_atomic(sg_page(dsg)) + dsg->offset;
+				daddr = kmap_local_page(sg_page(dsg)) + dsg->offset;
 			}
 
 			sdt = paddr + j;
 			avail = min(block_size, dsg->length - offset);
 			crc = crc_t10dif(daddr + offset, avail);
 			if (avail < block_size) {
-				kunmap_atomic(daddr - dsg->offset);
+				kunmap_local(daddr - dsg->offset);
 				dsg = sg_next(dsg);
 				if (!dsg) {
-					kunmap_atomic(paddr - psg->offset);
+					kunmap_local(paddr - psg->offset);
 					return;
 				}
-				daddr = kmap_atomic(sg_page(dsg)) + dsg->offset;
+				daddr = kmap_local_page(sg_page(dsg)) + dsg->offset;
 				offset = block_size - avail;
 				crc = crc_t10dif_update(crc, daddr, offset);
 			} else {
@@ -1273,8 +1273,8 @@ sbc_dif_generate(struct se_cmd *cmd)
 			sector++;
 		}
 
-		kunmap_atomic(daddr - dsg->offset);
-		kunmap_atomic(paddr - psg->offset);
+		kunmap_local(daddr - dsg->offset);
+		kunmap_local(paddr - psg->offset);
 	}
 }
 
@@ -1336,18 +1336,18 @@ void sbc_dif_copy_prot(struct se_cmd *cmd, unsigned int sectors, bool read,
 	for_each_sg(cmd->t_prot_sg, psg, cmd->t_prot_nents, i) {
 		unsigned int psg_len, copied = 0;
 
-		paddr = kmap_atomic(sg_page(psg)) + psg->offset;
+		paddr = kmap_local_page(sg_page(psg)) + psg->offset;
 		psg_len = min(left, psg->length);
 		while (psg_len) {
 			len = min(psg_len, sg->length - offset);
-			addr = kmap_atomic(sg_page(sg)) + sg->offset + offset;
+			addr = kmap_local_page(sg_page(sg)) + sg->offset + offset;
 
 			if (read)
 				memcpy(paddr + copied, addr, len);
 			else
 				memcpy(addr, paddr + copied, len);
 
-			kunmap_atomic(addr - sg->offset - offset);
+			kunmap_local(addr - sg->offset - offset);
 
 			left -= len;
 			offset += len;
@@ -1359,7 +1359,7 @@ void sbc_dif_copy_prot(struct se_cmd *cmd, unsigned int sectors, bool read,
 				offset = 0;
 			}
 		}
-		kunmap_atomic(paddr - psg->offset);
+		kunmap_local(paddr - psg->offset);
 	}
 }
 EXPORT_SYMBOL(sbc_dif_copy_prot);
@@ -1379,8 +1379,8 @@ sbc_dif_verify(struct se_cmd *cmd, sector_t start, unsigned int sectors,
 	unsigned int block_size = dev->dev_attrib.block_size;
 
 	for (; psg && sector < start + sectors; psg = sg_next(psg)) {
-		paddr = kmap_atomic(sg_page(psg)) + psg->offset;
-		daddr = kmap_atomic(sg_page(dsg)) + dsg->offset;
+		paddr = kmap_local_page(sg_page(psg)) + psg->offset;
+		daddr = kmap_local_page(sg_page(dsg)) + dsg->offset;
 
 		for (i = psg_off; i < psg->length &&
 				sector < start + sectors;
@@ -1390,13 +1390,13 @@ sbc_dif_verify(struct se_cmd *cmd, sector_t start, unsigned int sectors,
 
 			if (dsg_off >= dsg->length) {
 				dsg_off -= dsg->length;
-				kunmap_atomic(daddr - dsg->offset);
+				kunmap_local(daddr - dsg->offset);
 				dsg = sg_next(dsg);
 				if (!dsg) {
-					kunmap_atomic(paddr - psg->offset);
+					kunmap_local(paddr - psg->offset);
 					return 0;
 				}
-				daddr = kmap_atomic(sg_page(dsg)) + dsg->offset;
+				daddr = kmap_local_page(sg_page(dsg)) + dsg->offset;
 			}
 
 			sdt = paddr + i;
@@ -1414,13 +1414,13 @@ sbc_dif_verify(struct se_cmd *cmd, sector_t start, unsigned int sectors,
 			avail = min(block_size, dsg->length - dsg_off);
 			crc = crc_t10dif(daddr + dsg_off, avail);
 			if (avail < block_size) {
-				kunmap_atomic(daddr - dsg->offset);
+				kunmap_local(daddr - dsg->offset);
 				dsg = sg_next(dsg);
 				if (!dsg) {
-					kunmap_atomic(paddr - psg->offset);
+					kunmap_local(paddr - psg->offset);
 					return 0;
 				}
-				daddr = kmap_atomic(sg_page(dsg)) + dsg->offset;
+				daddr = kmap_local_page(sg_page(dsg)) + dsg->offset;
 				dsg_off = block_size - avail;
 				crc = crc_t10dif_update(crc, daddr, dsg_off);
 			} else {
@@ -1429,8 +1429,8 @@ sbc_dif_verify(struct se_cmd *cmd, sector_t start, unsigned int sectors,
 
 			rc = sbc_dif_v1_verify(cmd, sdt, crc, sector, ei_lba);
 			if (rc) {
-				kunmap_atomic(daddr - dsg->offset);
-				kunmap_atomic(paddr - psg->offset);
+				kunmap_local(daddr - dsg->offset);
+				kunmap_local(paddr - psg->offset);
 				cmd->sense_info = sector;
 				return rc;
 			}
@@ -1440,8 +1440,8 @@ next:
 		}
 
 		psg_off = 0;
-		kunmap_atomic(daddr - dsg->offset);
-		kunmap_atomic(paddr - psg->offset);
+		kunmap_local(daddr - dsg->offset);
+		kunmap_local(paddr - psg->offset);
 	}
 
 	return 0;
