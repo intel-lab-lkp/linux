@@ -306,10 +306,11 @@ static int mchp_spdiftx_trigger(struct snd_pcm_substream *substream, int cmd,
 {
 	struct mchp_spdiftx_dev *dev = snd_soc_dai_get_drvdata(dai);
 	struct mchp_spdiftx_mixer_control *ctrl = &dev->control;
+	unsigned long flags;
 	int ret;
 
 	/* do not start/stop while channel status or user data is updated */
-	spin_lock(&ctrl->lock);
+	spin_lock_irqsave(&ctrl->lock, flags);
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_RESUME:
 	case SNDRV_PCM_TRIGGER_START:
@@ -335,7 +336,7 @@ static int mchp_spdiftx_trigger(struct snd_pcm_substream *substream, int cmd,
 	default:
 		ret = -EINVAL;
 	}
-	spin_unlock(&ctrl->lock);
+	spin_unlock_irqrestore(&ctrl->lock, flags);
 	if (ret)
 		dev_err(dev->dev, "unable to start/stop TX: %d\n", ret);
 
