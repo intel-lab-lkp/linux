@@ -681,6 +681,8 @@ const struct address_space_operations jfs_metapage_aops = {
 	.migrate_folio	= metapage_migrate_folio,
 };
 
+static void release_metapage_locked(struct metapage *mp);
+
 struct metapage *__get_metapage(struct inode *inode, unsigned long lblock,
 				unsigned int size, int absolute,
 				unsigned long new)
@@ -751,8 +753,9 @@ struct metapage *__get_metapage(struct inode *inode, unsigned long lblock,
 			if (!new) {
 				jfs_error(inode->i_sb,
 					  "using a discarded metapage\n");
-				discard_metapage(mp);
-				goto unlock;
+				clear_bit(META_dirty, &mp->flag);
+				release_metapage_locked(mp);
+				return NULL;
 			}
 			clear_bit(META_discard, &mp->flag);
 		}
@@ -863,12 +866,11 @@ void put_metapage(struct metapage *mp)
 	release_metapage(mp);
 }
 
-void release_metapage(struct metapage * mp)
+/* Caller holds the folio lock; it is dropped along with the folio ref. */
+static void release_metapage_locked(struct metapage *mp)
 {
 	struct folio *folio = mp->folio;
-	jfs_info("release_metapage: mp = 0x%p, flag = 0x%lx", mp, mp->flag);
 
-	folio_lock(folio);
 	unlock_metapage(mp);
 
 	assert(mp->count);
@@ -894,6 +896,14 @@ void release_metapage(struct metapage * mp)
 
 	folio_unlock(folio);
 	folio_put(folio);
+}
+
+void release_metapage(struct metapage *mp)
+{
+	jfs_info("release_metapage: mp = 0x%p, flag = 0x%lx", mp, mp->flag);
+
+	folio_lock(mp->folio);
+	release_metapage_locked(mp);
 }
 
 void __invalidate_metapages(struct inode *ip, s64 addr, int len)
