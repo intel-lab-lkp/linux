@@ -22337,6 +22337,7 @@ L:	netdev@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/net/dsa/qca8k.yaml
 F:	drivers/net/dsa/qca/qca8k*
+F:	include/linux/qca83xx.h
 F:	net/dsa/tag_qca.c
 
 QUALCOMM ATHEROS QCA7K ETHERNET DRIVER
