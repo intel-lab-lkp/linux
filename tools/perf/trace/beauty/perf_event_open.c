@@ -81,33 +81,39 @@ static size_t perf_event_attr___scnprintf(struct perf_event_attr *attr, char *bf
 
 static size_t syscall_arg__scnprintf_augmented_perf_event_attr(struct syscall_arg *arg, char *bf, size_t size)
 {
-	struct perf_event_attr *attr = (void *)arg->augmented.args->value;
+	const struct augmented_arg *augmented_arg = arg->augmented.args;
 	struct perf_event_attr local_attr;
+	size_t copied = (size_t)augmented_arg->size;
 
 	/*
-	 * augmented_raw_syscalls.bpf.c (shipped with perf) copies
-	 * PERF_ATTR_SIZE_VER0 bytes when the tracee passes size=0,
-	 * but leaves the size field as 0.  The payload size is
-	 * guaranteed by perf's own BPF program, not externally
-	 * controllable.  Copy to a local so we can fix up size
-	 * without writing to the potentially read-only augmented
-	 * args buffer.
+	 * The tracee picks attr.size, so the payload that
+	 * augmented_raw_syscalls.bpf.c copied can be anything from
+	 * PERF_ATTR_SIZE_VER0 up to the size this build of perf knows about,
+	 * while perf_event_attr__fprintf() below always reads a whole struct
+	 * perf_event_attr. Work on a zero padded local copy so that a payload
+	 * from an older attr is not read past its end, which also lets the size
+	 * be fixed up without writing to the augmented args buffer.
 	 */
-	if (!attr->size) {
-		memcpy(&local_attr, attr, PERF_ATTR_SIZE_VER0);
-		memset((void *)&local_attr + PERF_ATTR_SIZE_VER0, 0,
-		       sizeof(local_attr) - PERF_ATTR_SIZE_VER0);
-		local_attr.size = PERF_ATTR_SIZE_VER0;
-		attr = &local_attr;
-	}
+	if (copied > sizeof(local_attr))
+		copied = sizeof(local_attr);
 
-	return perf_event_attr___scnprintf(attr, bf, size,
+	memcpy(&local_attr, augmented_arg->value, copied);
+	memset((void *)&local_attr + copied, 0, sizeof(local_attr) - copied);
+
+	/*
+	 * The BPF program copies PERF_ATTR_SIZE_VER0 bytes when the tracee
+	 * passes size=0, but leaves the size field as it found it.
+	 */
+	if (!local_attr.size)
+		local_attr.size = PERF_ATTR_SIZE_VER0;
+
+	return perf_event_attr___scnprintf(&local_attr, bf, size,
 					   trace__show_zeros(arg->trace));
 }
 
 size_t syscall_arg__scnprintf_perf_event_attr(char *bf, size_t size, struct syscall_arg *arg)
 {
-	if (arg->augmented.args)
+	if (syscall_arg__augmented_args_valid(arg, PERF_ATTR_SIZE_VER0))
 		return syscall_arg__scnprintf_augmented_perf_event_attr(arg, bf, size);
 
 	return scnprintf(bf, size, "%#lx", arg->val);
