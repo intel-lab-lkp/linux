@@ -1556,6 +1556,7 @@ out:
  * Inode operations for directories.
  */
 const struct inode_operations ntfs_dir_inode_ops = {
+	.fileattr_get	= ntfs_fileattr_get,
 	.lookup		= ntfs_lookup,	/* VFS: Lookup directory. */
 	.create		= ntfs_create,
 	.unlink		= ntfs_unlink,
