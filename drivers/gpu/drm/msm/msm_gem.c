@@ -1307,7 +1307,8 @@ struct drm_gem_object *msm_gem_import(struct drm_device *dev,
 	struct msm_gem_object *msm_obj;
 	struct drm_gem_object *obj;
 	struct dma_buf *dmabuf = attach->dmabuf;
-	size_t size, npages;
+	struct sg_page_iter piter;
+	size_t size, npages, filled = 0;
 	int ret;
 
 	size = PAGE_ALIGN(dmabuf->size);
@@ -1333,8 +1334,32 @@ struct drm_gem_object *msm_gem_import(struct drm_device *dev,
 		goto fail;
 	}
 
-	ret = drm_prime_sg_to_page_array(sgt, msm_obj->pages, npages);
-	if (ret) {
+	/*
+	 * Fill the page array ourselves instead of using the deprecated
+	 * drm_prime_sg_to_page_array(), so that we can detect sg_tables
+	 * that carry no struct page at all.  Those must be rejected:
+	 * msm maps imported buffers into the GPU's own pagetables with
+	 * iommu_map_sgtable(), which needs the physical pages, so an
+	 * import without page information could never be mapped.  The
+	 * most prominent case is the page-stripping sg_table wrapper that
+	 * dma_buf_map_attachment() hands out when CONFIG_DMABUF_DEBUG=y.
+	 *
+	 * drm_prime_sg_to_page_array() would "succeed" with zero entries
+	 * filled in that case and leave msm_obj->pages uninitialized,
+	 * which later blows up as arm-smmu translation faults from UCHE.
+	 */
+	for_each_sgtable_page(sgt, &piter, 0) {
+		if (WARN_ON(filled >= npages)) {
+			ret = -EINVAL;
+			goto fail;
+		}
+		msm_obj->pages[filled++] = sg_page_iter_page(&piter);
+	}
+	if (filled != npages) {
+		DRM_DEV_ERROR(dev->dev,
+			      "import of dmabuf from '%s' rejected: sg_table has no/misaligned struct page info\n",
+			      dmabuf->exp_name ?: "?");
+		ret = -EINVAL;
 		goto fail;
 	}
 
