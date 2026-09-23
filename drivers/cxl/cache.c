@@ -261,7 +261,7 @@ static int cxl_cache_probe(struct device *dev)
 
 	cxlcd->cxlds->cstate.gid = rc;
 
- 	return 0;
+	return devm_cxl_enable_cache(&cxlcd->dev, cxlcd->cxlds);
 }
 
 static struct cxl_driver cxl_cache_driver = {
