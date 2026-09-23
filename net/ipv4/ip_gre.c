@@ -255,13 +255,13 @@ static void gre_err(struct sk_buff *skb, u32 info)
 	ipgre_err(skb, info, &tpi);
 }
 
-static bool is_erspan_type1(int gre_hdr_len)
+static bool is_erspan_type1(int gre_hdr_len, __be16 proto)
 {
 	/* Both ERSPAN type I (version 0) and type II (version 1) use
 	 * protocol 0x88BE, but the type I has only 4-byte GRE header,
 	 * while type II has 8-byte.
 	 */
-	return gre_hdr_len == 4;
+	return proto == htons(ETH_P_ERSPAN) && gre_hdr_len == 4;
 }
 
 static int erspan_rcv(struct sk_buff *skb, struct tnl_ptk_info *tpi,
@@ -274,7 +274,6 @@ static int erspan_rcv(struct sk_buff *skb, struct tnl_ptk_info *tpi,
 	struct ip_tunnel_net *itn;
 	struct ip_tunnel *tunnel;
 	const struct iphdr *iph;
-	struct erspan_md2 *md2;
 	int ver;
 	int len;
 
@@ -282,7 +281,7 @@ static int erspan_rcv(struct sk_buff *skb, struct tnl_ptk_info *tpi,
 
 	itn = net_generic(net, erspan_net_id);
 	iph = ip_hdr(skb);
-	if (is_erspan_type1(gre_hdr_len)) {
+	if (is_erspan_type1(gre_hdr_len, tpi->proto)) {
 		ver = 0;
 		__set_bit(IP_TUNNEL_NO_KEY_BIT, flags);
 		tunnel = ip_tunnel_lookup(itn, skb->dev->ifindex, flags,
@@ -294,6 +293,9 @@ static int erspan_rcv(struct sk_buff *skb, struct tnl_ptk_info *tpi,
 
 		ershdr = (struct erspan_base_hdr *)(skb->data + gre_hdr_len);
 		ver = ershdr->ver;
+		if (unlikely(ver != 1 && ver != 2))
+			return PACKET_REJECT;
+
 		iph = ip_hdr(skb);
 		__set_bit(IP_TUNNEL_KEY_BIT, flags);
 		tunnel = ip_tunnel_lookup(itn, skb->dev->ifindex, flags,
@@ -301,7 +303,7 @@ static int erspan_rcv(struct sk_buff *skb, struct tnl_ptk_info *tpi,
 	}
 
 	if (tunnel) {
-		if (is_erspan_type1(gre_hdr_len))
+		if (is_erspan_type1(gre_hdr_len, tpi->proto))
 			len = gre_hdr_len;
 		else
 			len = gre_hdr_len + erspan_hdr_len(ver);
@@ -318,6 +320,7 @@ static int erspan_rcv(struct sk_buff *skb, struct tnl_ptk_info *tpi,
 		if (tunnel->collect_md) {
 			struct erspan_metadata *pkt_md, *md;
 			struct ip_tunnel_info *info;
+			struct erspan_md2 *md2;
 			unsigned char *gh;
 			__be64 tun_id;
 
@@ -334,19 +337,27 @@ static int erspan_rcv(struct sk_buff *skb, struct tnl_ptk_info *tpi,
 			info = &tun_dst->u.tun_info;
 			info->options_len = sizeof(*md);
 
-			/* skb can be uncloned in __iptunnel_pull_header, so
-			 * old pkt_md is no longer valid and we need to reset
-			 * it
-			 */
-			gh = skb_network_header(skb) +
-			     skb_network_header_len(skb);
-			pkt_md = (struct erspan_metadata *)(gh + gre_hdr_len +
-							    sizeof(*ershdr));
 			md = ip_tunnel_info_opts(&tun_dst->u.tun_info);
 			md->version = ver;
-			md2 = &md->u.md2;
-			memcpy(md2, pkt_md, ver == 1 ? ERSPAN_V1_MDSIZE :
-						       ERSPAN_V2_MDSIZE);
+
+			/* Type I has no ERSPAN header, thus no metadata to
+			 * extract: pkt_md would point into the inner Ethernet
+			 * frame just pulled by __iptunnel_pull_header().
+			 * ip_tun_rx_dst() zeroed @md for us.
+			 */
+			if (!is_erspan_type1(gre_hdr_len, tpi->proto)) {
+				/* skb can be uncloned in __iptunnel_pull_header, so
+				 * old pkt_md is no longer valid and we need to reset
+				 * it
+				 */
+				gh = skb_network_header(skb) +
+				     skb_network_header_len(skb);
+				pkt_md = (struct erspan_metadata *)(gh + gre_hdr_len +
+								    sizeof(*ershdr));
+				md2 = &md->u.md2;
+				memcpy(md2, pkt_md, ver == 1 ? ERSPAN_V1_MDSIZE :
+							       ERSPAN_V2_MDSIZE);
+			}
 
 			__set_bit(IP_TUNNEL_ERSPAN_OPT_BIT,
 				  info->key.tun_flags);

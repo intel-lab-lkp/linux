@@ -503,6 +503,8 @@ static int ip6erspan_rcv(struct sk_buff *skb,
 	ipv6h = ipv6_hdr(skb);
 	ershdr = (struct erspan_base_hdr *)skb->data;
 	ver = ershdr->ver;
+	if (unlikely(ver != 1 && ver != 2))
+		return PACKET_REJECT;
 
 	tunnel = ip6gre_tunnel_lookup(skb->dev,
 				      &ipv6h->saddr, &ipv6h->daddr, tpi->key,
