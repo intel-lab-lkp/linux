@@ -22,6 +22,17 @@ extern int max_lock_depth;
 
 struct rt_mutex_base {
 	raw_spinlock_t		wait_lock;
+#if defined(CONFIG_TRACK_LOCK_HOLDERS) && defined(CONFIG_PREEMPT_RT)
+	/*
+	 * Opt-in to holder tracking, set before first use. On PREEMPT_RT
+	 * the sleeping locks that can be tracked are built on this one.
+	 * On 64-bit the flag fits in the padding after wait_lock, so none
+	 * of them grows. Where that padding does not exist, as on 32-bit,
+	 * everything built on rt_mutex_base grows by a word, spinlock_t
+	 * included.
+	 */
+	bool			tracked;
+#endif
 	struct rb_root_cached   waiters __guarded_by(&wait_lock);
 	struct task_struct	*owner  __guarded_by(&wait_lock);
 };

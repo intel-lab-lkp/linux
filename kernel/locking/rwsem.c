@@ -25,6 +25,7 @@
 #include <linux/sched/signal.h>
 #include <linux/sched/clock.h>
 #include <linux/export.h>
+#include <linux/lockholder.h>
 #include <linux/rwsem.h>
 #include <linux/atomic.h>
 #include <linux/hung_task.h>
@@ -85,7 +86,8 @@
  * Bit  0    - writer locked bit
  * Bit  1    - waiters present bit
  * Bit  2    - lock handoff bit
- * Bits 3-7  - reserved
+ * Bit  3    - holder tracking opt-in (CONFIG_TRACK_LOCK_HOLDERS, sticky)
+ * Bits 4-7  - reserved
  * Bits 8-62 - 55-bit reader count
  * Bit  63   - read fail bit
  *
@@ -94,7 +96,8 @@
  * Bit  0    - writer locked bit
  * Bit  1    - waiters present bit
  * Bit  2    - lock handoff bit
- * Bits 3-7  - reserved
+ * Bit  3    - holder tracking opt-in (CONFIG_TRACK_LOCK_HOLDERS, sticky)
+ * Bits 4-7  - reserved
  * Bits 8-30 - 23-bit reader count
  * Bit  31   - read fail bit
  *
@@ -261,11 +264,39 @@ static inline bool rwsem_read_trylock(struct rw_semaphore *sem, long *cntp)
 	return false;
 }
 
+/*
+ * The opt-in flag as it sits in count, for the one path that folds it
+ * into a cmpxchg. The flag is only set once the static branch is on, so
+ * an off branch means no rwsem carries it and the read can be skipped.
+ */
+static inline long rwsem_tracked_flag(const struct rw_semaphore *sem)
+{
+#ifdef CONFIG_TRACK_LOCK_HOLDERS
+	if (!static_branch_unlikely(&lock_holder_tracking_key))
+		return 0;
+
+	return atomic_long_read(&sem->count) & RWSEM_FLAG_TRACKED;
+#else
+	return 0;
+#endif
+}
+
 static inline bool rwsem_write_trylock(struct rw_semaphore *sem)
 {
-	long tmp = RWSEM_UNLOCKED_VALUE;
+	/*
+	 * A free tracked rwsem reads RWSEM_FLAG_TRACKED, not 0, and the
+	 * flag has to survive the acquire, so both the expected and the
+	 * new value carry it. Reading it first costs one load but keeps
+	 * this to a single cmpxchg; the flag is sticky, so the read cannot
+	 * race. This is the only place the write side needs it: everywhere
+	 * else count is only added to, or written back from a value that
+	 * was read, so the flag survives.
+	 */
+	long flag = rwsem_tracked_flag(sem);
+	long tmp = flag;
 
-	if (atomic_long_try_cmpxchg_acquire(&sem->count, &tmp, RWSEM_WRITER_LOCKED)) {
+	if (atomic_long_try_cmpxchg_acquire(&sem->count, &tmp,
+					    flag | RWSEM_WRITER_LOCKED)) {
 		rwsem_set_owner(sem);
 		return true;
 	}
@@ -319,6 +350,7 @@ void __init_rwsem(struct rw_semaphore *sem, const char *name,
 #ifdef CONFIG_DEBUG_RWSEMS
 	sem->magic = sem;
 #endif
+	/* Clearing count also clears RWSEM_FLAG_TRACKED. */
 	atomic_long_set(&sem->count, RWSEM_UNLOCKED_VALUE);
 	atomic_long_set(&sem->owner, 0L);
 	scoped_guard (raw_spinlock_init, &sem->wait_lock) {
@@ -1488,6 +1520,7 @@ static inline void __downgrade_write(struct rw_semaphore *sem)
 void __init_rwsem(struct rw_semaphore *sem, const char *name,
 		  struct lock_class_key *key)
 {
+	/* init_rwbase_rt() also clears the holder tracking opt-in. */
 	init_rwbase_rt(&(sem)->rwbase);
 
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
@@ -1564,6 +1597,35 @@ static inline bool is_rwsem_reader_owned(struct rw_semaphore *sem)
 
 #endif /* CONFIG_PREEMPT_RT */
 
+#ifdef CONFIG_TRACK_LOCK_HOLDERS
+void rwsem_track_holder(struct rw_semaphore *sem)
+{
+	/*
+	 * A task holding @sem now was not counted, so its up_*() would make
+	 * its count wrong.
+	 */
+	if (WARN_ONCE(rwsem_is_locked(sem),
+		      "%s: rwsem is held; opt in before it is published\n",
+		      __func__))
+		return;
+
+	/*
+	 * Turn the hooks on before the flag, so that a lock carrying the
+	 * flag always has them on.
+	 */
+	lock_holder_tracking_enable();
+	__rwsem_set_tracked(sem);
+}
+EXPORT_SYMBOL_GPL(rwsem_track_holder);
+#endif
+
+/*
+ * Holder tracking: the count goes up once down_*() has the lock and down
+ * before up_*() releases it. Waiting is not counted, as the task does not
+ * hold the lock yet. downgrade_write() keeps the lock held, so it needs no
+ * hook.
+ */
+
 /*
  * lock for reading
  */
@@ -1574,6 +1636,7 @@ void __sched down_read(struct rw_semaphore *sem)
 	rwsem_acquire_read(&sem->dep_map, 0, 0, _RET_IP_);
 
 	LOCK_CONTENDED(sem, __down_read_trylock, __down_read);
+	lock_holder_acquired_if(rwsem_is_tracked(sem));
 }
 EXPORT_SYMBOL(down_read);
 
@@ -1588,6 +1651,7 @@ int __sched down_read_interruptible(struct rw_semaphore *sem)
 		return -EINTR;
 	}
 
+	lock_holder_acquired_if(rwsem_is_tracked(sem));
 	return 0;
 }
 EXPORT_SYMBOL(down_read_interruptible);
@@ -1603,6 +1667,7 @@ int __sched down_read_killable(struct rw_semaphore *sem)
 		return -EINTR;
 	}
 
+	lock_holder_acquired_if(rwsem_is_tracked(sem));
 	return 0;
 }
 EXPORT_SYMBOL(down_read_killable);
@@ -1615,8 +1680,10 @@ int down_read_trylock(struct rw_semaphore *sem)
 {
 	int ret = __down_read_trylock(sem);
 
-	if (ret == 1)
+	if (ret == 1) {
 		rwsem_acquire_read(&sem->dep_map, 0, 1, _RET_IP_);
+		lock_holder_acquired_if(rwsem_is_tracked(sem));
+	}
 	return ret;
 }
 EXPORT_SYMBOL(down_read_trylock);
@@ -1630,6 +1697,7 @@ void __sched down_write(struct rw_semaphore *sem)
 	might_sleep();
 	rwsem_acquire(&sem->dep_map, 0, 0, _RET_IP_);
 	LOCK_CONTENDED(sem, __down_write_trylock, __down_write);
+	lock_holder_acquired_if(rwsem_is_tracked(sem));
 }
 EXPORT_SYMBOL(down_write);
 
@@ -1648,6 +1716,7 @@ int __sched down_write_killable(struct rw_semaphore *sem)
 		return -EINTR;
 	}
 
+	lock_holder_acquired_if(rwsem_is_tracked(sem));
 	return 0;
 }
 EXPORT_SYMBOL(down_write_killable);
@@ -1660,8 +1729,10 @@ int down_write_trylock(struct rw_semaphore *sem)
 {
 	int ret = __down_write_trylock(sem);
 
-	if (ret == 1)
+	if (ret == 1) {
 		rwsem_acquire(&sem->dep_map, 0, 1, _RET_IP_);
+		lock_holder_acquired_if(rwsem_is_tracked(sem));
+	}
 
 	return ret;
 }
@@ -1673,6 +1744,7 @@ EXPORT_SYMBOL(down_write_trylock);
 void up_read(struct rw_semaphore *sem)
 	__no_context_analysis
 {
+	lock_holder_released_if(rwsem_is_tracked(sem));
 	rwsem_release(&sem->dep_map, _RET_IP_);
 	__up_read(sem);
 }
@@ -1684,6 +1756,7 @@ EXPORT_SYMBOL(up_read);
 void up_write(struct rw_semaphore *sem)
 	__no_context_analysis
 {
+	lock_holder_released_if(rwsem_is_tracked(sem));
 	rwsem_release(&sem->dep_map, _RET_IP_);
 	__up_write(sem);
 }
@@ -1708,6 +1781,7 @@ void down_read_nested(struct rw_semaphore *sem, int subclass)
 	might_sleep();
 	rwsem_acquire_read(&sem->dep_map, subclass, 0, _RET_IP_);
 	LOCK_CONTENDED(sem, __down_read_trylock, __down_read);
+	lock_holder_acquired_if(rwsem_is_tracked(sem));
 }
 EXPORT_SYMBOL(down_read_nested);
 
@@ -1722,6 +1796,7 @@ int down_read_killable_nested(struct rw_semaphore *sem, int subclass)
 		return -EINTR;
 	}
 
+	lock_holder_acquired_if(rwsem_is_tracked(sem));
 	return 0;
 }
 EXPORT_SYMBOL(down_read_killable_nested);
@@ -1732,13 +1807,19 @@ void _down_write_nest_lock(struct rw_semaphore *sem, struct lockdep_map *nest)
 	might_sleep();
 	rwsem_acquire_nest(&sem->dep_map, 0, 0, nest, _RET_IP_);
 	LOCK_CONTENDED(sem, __down_write_trylock, __down_write);
+	lock_holder_acquired_if(rwsem_is_tracked(sem));
 }
 EXPORT_SYMBOL(_down_write_nest_lock);
 
+/*
+ * The non_owner calls can run in different tasks, which a per-task count
+ * cannot follow, so tracked rwsems must not use them.
+ */
 void down_read_non_owner(struct rw_semaphore *sem)
 	__no_context_analysis
 {
 	might_sleep();
+	WARN_ON_ONCE(rwsem_is_tracked(sem));
 	__down_read(sem);
 	/*
 	 * The owner value for a reader-owned lock is mostly for debugging
@@ -1756,6 +1837,7 @@ void down_write_nested(struct rw_semaphore *sem, int subclass)
 	might_sleep();
 	rwsem_acquire(&sem->dep_map, subclass, 0, _RET_IP_);
 	LOCK_CONTENDED(sem, __down_write_trylock, __down_write);
+	lock_holder_acquired_if(rwsem_is_tracked(sem));
 }
 EXPORT_SYMBOL(down_write_nested);
 
@@ -1771,6 +1853,7 @@ int __sched down_write_killable_nested(struct rw_semaphore *sem, int subclass)
 		return -EINTR;
 	}
 
+	lock_holder_acquired_if(rwsem_is_tracked(sem));
 	return 0;
 }
 EXPORT_SYMBOL(down_write_killable_nested);
@@ -1779,6 +1862,7 @@ void up_read_non_owner(struct rw_semaphore *sem)
 	__no_context_analysis
 {
 	DEBUG_RWSEMS_WARN_ON(!is_rwsem_reader_owned(sem), sem);
+	WARN_ON_ONCE(rwsem_is_tracked(sem));
 	__up_read(sem);
 }
 EXPORT_SYMBOL(up_read_non_owner);
