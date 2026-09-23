@@ -258,6 +258,7 @@ static int tipc_enable_bearer(struct net *net, const char *name,
 	int bearer_id = 0;
 	int res = -EINVAL;
 	char *errstr = "";
+	char *if_name;
 	u32 i;
 
 	if (!bearer_name_validate(name, &b_names)) {
@@ -293,6 +294,15 @@ static int tipc_enable_bearer(struct net *net, const char *name,
 		if (!strcmp(name, b->name)) {
 			errstr = "already enabled";
 			NL_SET_ERR_MSG(extack, "Already enabled");
+			goto rejected;
+		}
+
+		if_name = strchr((const char *)b->name, ':') + 1;
+		if (!strcmp(if_name, b_names.if_name) &&
+		    strcmp(b->media->name, b_names.media_name)) {
+			errstr = "same device for different media";
+			NL_SET_ERR_MSG(extack,
+				       "Same device for different media");
 			goto rejected;
 		}
 
