@@ -142,6 +142,7 @@ struct snps_hdmirx_dev {
 	struct mutex phy_rw_lock; /* to protect phy r/w configuration */
 	struct mutex stream_lock; /* to lock video stream capture */
 	struct mutex work_lock; /* to lock the critical section of hotplug event */
+	bool hotplug_on; /* under work_lock: the hardware is up, workers may run */
 	struct reset_control_bulk_data resets[HDMIRX_NUM_RST];
 	struct clk_bulk_data *clks;
 	struct regmap *grf;
@@ -160,6 +161,7 @@ struct snps_hdmirx_dev {
 	bool hpd_trigger_level_high;
 	bool tmds_clk_ratio;
 	bool plugged;
+	bool source_5v; /* 5V as last reported by the subdev in front of us */
 	int num_clks;
 	u32 edid_blocks_written;
 	u32 cur_fmt_fourcc;
@@ -236,6 +238,15 @@ static bool tx_5v_power_present(struct snps_hdmirx_dev *hdmirx_dev)
 	const unsigned int detection_threshold = 7;
 	int val, i, cnt = 0;
 	bool ret;
+
+	/*
+	 * Without a GPIO of our own the connector belongs to the subdev in
+	 * front of us and there is no line here to sample, so sampling is
+	 * reading back what that subdev last told us. Nothing to debounce:
+	 * it did that on its side of the connector.
+	 */
+	if (!hdmirx_dev->detect_5v_gpio)
+		return READ_ONCE(hdmirx_dev->source_5v);
 
 	for (i = 0; i < 10; i++) {
 		usleep_range(1000, 1100);
@@ -2227,6 +2238,11 @@ static void hdmirx_delayed_work_hotplug(struct work_struct *work)
 				  delayed_work_hotplug.work);
 
 	mutex_lock(&hdmirx_dev->work_lock);
+	if (!hdmirx_dev->hotplug_on) {
+		mutex_unlock(&hdmirx_dev->work_lock);
+		return;
+	}
+
 	plugin = tx_5v_power_present(hdmirx_dev);
 	v4l2_ctrl_s_ctrl(hdmirx_dev->detect_tx_5v_ctrl, plugin);
 	v4l2_dbg(1, debug, &hdmirx_dev->v4l2_dev, "%s: plugin:%d\n",
@@ -2249,6 +2265,11 @@ static void hdmirx_delayed_work_res_change(struct work_struct *work)
 				  delayed_work_res_change.work);
 
 	mutex_lock(&hdmirx_dev->work_lock);
+	if (!hdmirx_dev->hotplug_on) {
+		mutex_unlock(&hdmirx_dev->work_lock);
+		return;
+	}
+
 	plugin = tx_5v_power_present(hdmirx_dev);
 	v4l2_dbg(1, debug, &hdmirx_dev->v4l2_dev, "%s: plugin:%d\n",
 		 __func__, plugin);
@@ -2272,15 +2293,37 @@ static void hdmirx_delayed_work_res_change(struct work_struct *work)
 	mutex_unlock(&hdmirx_dev->work_lock);
 }
 
+/*
+ * A 5V edge. Neither source of one says more than "look again": the
+ * hotplug worker samples tx_5v_power_present() and acts on what it finds.
+ */
+static void hdmirx_5v_edge(struct snps_hdmirx_dev *hdmirx_dev)
+{
+	queue_delayed_work(system_dfl_wq,
+			   &hdmirx_dev->delayed_work_hotplug,
+			   msecs_to_jiffies(10));
+}
+
 static irqreturn_t hdmirx_5v_det_irq_handler(int irq, void *dev_id)
 {
 	struct snps_hdmirx_dev *hdmirx_dev = dev_id;
 
-	queue_delayed_work(system_dfl_wq,
-			   &hdmirx_dev->delayed_work_hotplug,
-			   msecs_to_jiffies(10));
+	hdmirx_5v_edge(hdmirx_dev);
 
 	return IRQ_HANDLED;
+}
+
+/*
+ * The same edge from a subdev in front of us, on a board where the
+ * connector is its and not ours. It has no line here to leave asserted for
+ * the worker to sample, so remember what it saw on its side.
+ */
+static void hdmirx_5v_source_edge(struct snps_hdmirx_dev *hdmirx_dev,
+				  bool present)
+{
+	WRITE_ONCE(hdmirx_dev->source_5v, present);
+
+	hdmirx_5v_edge(hdmirx_dev);
 }
 
 static const struct hdmirx_cec_ops hdmirx_cec_ops = {
@@ -2525,6 +2568,17 @@ static void hdmirx_disable_irq(struct device *dev)
 {
 	struct snps_hdmirx_dev *hdmirx_dev = dev_get_drvdata(dev);
 
+	/*
+	 * Disabling det_irq is what stops the work being armed again, but
+	 * there is no det_irq when the 5V state comes from a subdev: it can
+	 * notify us into hdmirx_5v_source_edge() right after the cancel
+	 * below. Have the workers bail out instead. They take work_lock
+	 * first thing, so anything queued from here on sees this.
+	 */
+	mutex_lock(&hdmirx_dev->work_lock);
+	hdmirx_dev->hotplug_on = false;
+	mutex_unlock(&hdmirx_dev->work_lock);
+
 	if (hdmirx_dev->det_irq > 0)
 		disable_irq(hdmirx_dev->det_irq);
 	disable_irq(hdmirx_dev->dma_irq);
@@ -2537,6 +2591,15 @@ static void hdmirx_disable_irq(struct device *dev)
 static void hdmirx_enable_irq(struct device *dev)
 {
 	struct snps_hdmirx_dev *hdmirx_dev = dev_get_drvdata(dev);
+
+	/*
+	 * Also the first time the workers are let in: hdmirx_fwnode_bound()
+	 * can arm the hotplug work from within hdmirx_probe(), well before
+	 * the EDID is written and HDCP is registered.
+	 */
+	mutex_lock(&hdmirx_dev->work_lock);
+	hdmirx_dev->hotplug_on = true;
+	mutex_unlock(&hdmirx_dev->work_lock);
 
 	enable_irq(hdmirx_dev->hdmi_irq);
 	enable_irq(hdmirx_dev->dma_irq);
@@ -2673,6 +2736,18 @@ static int hdmirx_register_cec(struct snps_hdmirx_dev *hdmirx_dev,
 	return 0;
 }
 
+static void hdmirx_notify(struct v4l2_subdev *sd, unsigned int notification,
+			  void *arg)
+{
+	struct snps_hdmirx_dev *hdmirx_dev =
+		container_of(sd->v4l2_dev, struct snps_hdmirx_dev, v4l2_dev);
+
+	if (notification != V4L2_DEVICE_NOTIFY_RX_POWER_PRESENT || !arg)
+		return;
+
+	hdmirx_5v_source_edge(hdmirx_dev, !!*(unsigned int *)arg);
+}
+
 static int hdmirx_fwnode_bound(struct v4l2_async_notifier *notifier,
 			       struct v4l2_subdev *subdev,
 			       struct v4l2_async_connection *asc)
@@ -2680,6 +2755,7 @@ static int hdmirx_fwnode_bound(struct v4l2_async_notifier *notifier,
 	struct snps_hdmirx_dev *hdmirx_dev =
 		container_of(notifier, struct snps_hdmirx_dev, notifier);
 	int source_pad;
+	u32 status;
 	int ret;
 
 	source_pad = media_entity_get_fwnode_pad(&subdev->entity,
@@ -2699,6 +2775,23 @@ static int hdmirx_fwnode_bound(struct v4l2_async_notifier *notifier,
 		return ret;
 	}
 
+	if (hdmirx_dev->detect_5v_gpio)
+		return 0;
+
+	/*
+	 * Changes arrive through hdmirx_notify(). Ask once for the state a
+	 * source connected before we bound is already in.
+	 */
+	ret = v4l2_subdev_call(subdev, video, g_input_status, &status);
+	if (ret) {
+		dev_err(hdmirx_dev->dev,
+			"%s did not report the input status and there is no hpd-gpios, no source will be detected: %d\n",
+			subdev->name, ret);
+		return 0;
+	}
+
+	hdmirx_5v_source_edge(hdmirx_dev, !(status & V4L2_IN_ST_NO_POWER));
+
 	return 0;
 }
 
@@ -2710,8 +2803,24 @@ static int hdmirx_fwnode_complete(struct v4l2_async_notifier *notifier)
 	return v4l2_device_register_subdev_nodes(&hdmirx_dev->v4l2_dev);
 }
 
+static void hdmirx_fwnode_unbind(struct v4l2_async_notifier *notifier,
+				 struct v4l2_subdev *subdev,
+				 struct v4l2_async_connection *asc)
+{
+	struct snps_hdmirx_dev *hdmirx_dev =
+		container_of(notifier, struct snps_hdmirx_dev, notifier);
+
+	/* With a GPIO of our own the connector is ours and stays put. */
+	if (hdmirx_dev->detect_5v_gpio)
+		return;
+
+	/* The source went with it. */
+	hdmirx_5v_source_edge(hdmirx_dev, false);
+}
+
 static const struct v4l2_async_notifier_operations hdmirx_async_ops = {
 	.bound = hdmirx_fwnode_bound,
+	.unbind = hdmirx_fwnode_unbind,
 	.complete = hdmirx_fwnode_complete,
 };
 
@@ -2806,6 +2915,7 @@ static int hdmirx_probe(struct platform_device *pdev)
 		goto err_pm;
 	}
 	hdmirx_dev->v4l2_dev.ctrl_handler = hdl;
+	hdmirx_dev->v4l2_dev.notify = hdmirx_notify;
 
 	ret = v4l2_device_register(dev, &hdmirx_dev->v4l2_dev);
 	if (ret < 0) {
@@ -2890,6 +3000,8 @@ err_unreg_notifier:
 	v4l2_async_nf_unregister(&hdmirx_dev->notifier);
 err_cleanup_notifier:
 	v4l2_async_nf_cleanup(&hdmirx_dev->notifier);
+	/* Binding and unbinding both arm the hotplug work. */
+	cancel_delayed_work_sync(&hdmirx_dev->delayed_work_hotplug);
 err_unreg_media:
 	media_device_unregister(&hdmirx_dev->mdev);
 err_unreg_video_dev:
@@ -2925,6 +3037,9 @@ static void hdmirx_remove(struct platform_device *pdev)
 	 */
 	v4l2_async_nf_unregister(&hdmirx_dev->notifier);
 	v4l2_async_nf_cleanup(&hdmirx_dev->notifier);
+
+	/* The unbind above arms the hotplug work again. */
+	cancel_delayed_work_sync(&hdmirx_dev->delayed_work_hotplug);
 
 	media_device_unregister(&hdmirx_dev->mdev);
 
