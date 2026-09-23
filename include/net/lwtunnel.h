@@ -80,6 +80,28 @@ static inline int lwtunnel_nla_parse(struct nlattr *tb[], int maxtype,
 			 extack);
 }
 
+/**
+ * lwtunnel_nla_validate - validate the attributes nested in an lwtunnel encap
+ * @nla: encap attribute passed to &lwtunnel_encap_ops.build_state, or an
+ *	attribute nested in it
+ * @maxtype: maximum attribute type to be expected
+ * @policy: validation policy
+ * @extack: extended ACK report struct
+ *
+ * Like nla_validate(), except that NLA_F_NESTED is not required on the
+ * attributes nested in @nla, for the reason given for lwtunnel_nla_parse().
+ *
+ * Return: 0 on success or a negative error code.
+ */
+static inline int lwtunnel_nla_validate(const struct nlattr *nla, int maxtype,
+					const struct nla_policy *policy,
+					struct netlink_ext_ack *extack)
+{
+	return __nla_validate(nla_data(nla), nla_len(nla), maxtype, policy,
+			      NL_VALIDATE_STRICT & ~NL_VALIDATE_NESTED,
+			      extack);
+}
+
 #ifdef CONFIG_LWTUNNEL
 
 DECLARE_STATIC_KEY_FALSE(nf_hooks_lwtunnel_enabled);

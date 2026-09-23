@@ -466,7 +466,9 @@ int skb_tunnel_check_pmtu(struct sk_buff *skb, struct dst_entry *encap_dst,
 EXPORT_SYMBOL(skb_tunnel_check_pmtu);
 
 static const struct nla_policy ip_tun_policy[LWTUNNEL_IP_MAX + 1] = {
-	[LWTUNNEL_IP_UNSPEC]	= { .strict_start_type = LWTUNNEL_IP_OPTS },
+	[LWTUNNEL_IP_UNSPEC]	= {
+		.strict_start_type = LWTUNNEL_IP_OPTS + 1
+	},
 	[LWTUNNEL_IP_ID]	= { .type = NLA_U64 },
 	[LWTUNNEL_IP_DST]	= { .type = NLA_U32 },
 	[LWTUNNEL_IP_SRC]	= { .type = NLA_U32 },
@@ -509,8 +511,8 @@ static int ip_tun_parse_opts_geneve(struct nlattr *attr,
 	struct nlattr *tb[LWTUNNEL_IP_OPT_GENEVE_MAX + 1];
 	int data_len, err;
 
-	err = nla_parse_nested(tb, LWTUNNEL_IP_OPT_GENEVE_MAX, attr,
-			       geneve_opt_policy, extack);
+	err = lwtunnel_nla_parse(tb, LWTUNNEL_IP_OPT_GENEVE_MAX, attr,
+				 geneve_opt_policy, extack);
 	if (err)
 		return err;
 
@@ -546,8 +548,8 @@ static int ip_tun_parse_opts_vxlan(struct nlattr *attr,
 	struct nlattr *tb[LWTUNNEL_IP_OPT_VXLAN_MAX + 1];
 	int err;
 
-	err = nla_parse_nested(tb, LWTUNNEL_IP_OPT_VXLAN_MAX, attr,
-			       vxlan_opt_policy, extack);
+	err = lwtunnel_nla_parse(tb, LWTUNNEL_IP_OPT_VXLAN_MAX, attr,
+				 vxlan_opt_policy, extack);
 	if (err)
 		return err;
 
@@ -575,8 +577,8 @@ static int ip_tun_parse_opts_erspan(struct nlattr *attr,
 	int err;
 	u8 ver;
 
-	err = nla_parse_nested(tb, LWTUNNEL_IP_OPT_ERSPAN_MAX, attr,
-			       erspan_opt_policy, extack);
+	err = lwtunnel_nla_parse(tb, LWTUNNEL_IP_OPT_ERSPAN_MAX, attr,
+				 erspan_opt_policy, extack);
 	if (err)
 		return err;
 
@@ -626,8 +628,8 @@ static int ip_tun_parse_opts(struct nlattr *attr, struct ip_tunnel_info *info,
 	if (!attr)
 		return 0;
 
-	err = nla_validate(nla_data(attr), nla_len(attr), LWTUNNEL_IP_OPTS_MAX,
-			   ip_opts_policy, extack);
+	err = lwtunnel_nla_validate(attr, LWTUNNEL_IP_OPTS_MAX,
+				    ip_opts_policy, extack);
 	if (err)
 		return err;
 
@@ -975,7 +977,9 @@ static const struct lwtunnel_encap_ops ip_tun_lwt_ops = {
 };
 
 static const struct nla_policy ip6_tun_policy[LWTUNNEL_IP6_MAX + 1] = {
-	[LWTUNNEL_IP6_UNSPEC]	= { .strict_start_type = LWTUNNEL_IP6_OPTS },
+	[LWTUNNEL_IP6_UNSPEC]	= {
+		.strict_start_type = LWTUNNEL_IP6_OPTS + 1
+	},
 	[LWTUNNEL_IP6_ID]		= { .type = NLA_U64 },
 	[LWTUNNEL_IP6_DST]		= { .len = sizeof(struct in6_addr) },
 	[LWTUNNEL_IP6_SRC]		= { .len = sizeof(struct in6_addr) },
