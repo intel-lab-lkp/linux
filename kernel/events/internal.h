@@ -236,7 +236,7 @@ static inline bool arch_perf_have_user_stack_dump(void)
 	return true;
 }
 
-#define perf_user_stack_pointer(regs) user_stack_pointer(regs)
+#define perf_user_stack_pointer(regs) perf_arch_user_stack_pointer(regs)
 #else
 static inline bool arch_perf_have_user_stack_dump(void)
 {
