@@ -2064,77 +2064,81 @@ static void sisusb_get_ramconfig(struct sisusb_usb_data *sisusb)
 			ram_datarate[ramtype], ram_dynamictype[ramtype], bw);
 }
 
+/* Probe BAR size, then map it at @base */
+static int sisusb_init_bar(struct sisusb_usb_data *sisusb, int regnum, u32 base)
+{
+	u32 tmp32;
+	int ret;
+
+	ret = sisusb_read_pci_config(sisusb, regnum, &tmp32);
+	if (ret)
+		return ret;
+	ret = sisusb_write_pci_config(sisusb, regnum, 0xfffffff0);
+	if (ret)
+		return ret;
+	ret = sisusb_read_pci_config(sisusb, regnum, &tmp32);
+	if (ret)
+		return ret;
+	return sisusb_write_pci_config(sisusb, regnum, (tmp32 & 0x0f) | base);
+}
+
+/* Bail out on the first failure: each access to a dead device takes 5s */
 static int sisusb_do_init_gfxdevice(struct sisusb_usb_data *sisusb)
 {
+	static const struct { u32 address, data; } magic[] = {
+		{ 0x00000324, 0x00000004 },
+		{ 0x00000364, 0x00000004 },
+		{ 0x00000384, 0x00000004 },
+		{ 0x00000100, 0x00000700 },
+	};
+	static const struct { int regnum; u32 base; } bars[] = {
+		{ 0x10, SISUSB_PCI_MEMBASE },
+		{ 0x14, SISUSB_PCI_MMIOBASE },
+		{ 0x18, SISUSB_PCI_IOPORTBASE },
+	};
 	struct sisusb_packet packet;
-	int ret;
+	int ret, i;
 	u32 tmp32;
 
 	/* Do some magic */
-	packet.header  = 0x001f;
-	packet.address = 0x00000324;
-	packet.data    = 0x00000004;
-	ret = sisusb_send_bridge_packet(sisusb, 10, &packet, 0);
-
-	packet.header  = 0x001f;
-	packet.address = 0x00000364;
-	packet.data    = 0x00000004;
-	ret |= sisusb_send_bridge_packet(sisusb, 10, &packet, 0);
-
-	packet.header  = 0x001f;
-	packet.address = 0x00000384;
-	packet.data    = 0x00000004;
-	ret |= sisusb_send_bridge_packet(sisusb, 10, &packet, 0);
-
-	packet.header  = 0x001f;
-	packet.address = 0x00000100;
-	packet.data    = 0x00000700;
-	ret |= sisusb_send_bridge_packet(sisusb, 10, &packet, 0);
+	for (i = 0; i < ARRAY_SIZE(magic); i++) {
+		packet.header  = 0x001f;
+		packet.address = magic[i].address;
+		packet.data    = magic[i].data;
+		ret = sisusb_send_bridge_packet(sisusb, 10, &packet, 0);
+		if (ret)
+			return ret;
+	}
 
 	packet.header  = 0x000f;
 	packet.address = 0x00000004;
-	ret |= sisusb_send_bridge_packet(sisusb, 6, &packet, 0);
+	ret = sisusb_send_bridge_packet(sisusb, 6, &packet, 0);
+	if (ret)
+		return ret;
 	packet.data |= 0x17;
-	ret |= sisusb_send_bridge_packet(sisusb, 10, &packet, 0);
+	ret = sisusb_send_bridge_packet(sisusb, 10, &packet, 0);
+	if (ret)
+		return ret;
 
-	/* Init BAR 0 (VRAM) */
-	ret |= sisusb_read_pci_config(sisusb, 0x10, &tmp32);
-	ret |= sisusb_write_pci_config(sisusb, 0x10, 0xfffffff0);
-	ret |= sisusb_read_pci_config(sisusb, 0x10, &tmp32);
-	tmp32 &= 0x0f;
-	tmp32 |= SISUSB_PCI_MEMBASE;
-	ret |= sisusb_write_pci_config(sisusb, 0x10, tmp32);
-
-	/* Init BAR 1 (MMIO) */
-	ret |= sisusb_read_pci_config(sisusb, 0x14, &tmp32);
-	ret |= sisusb_write_pci_config(sisusb, 0x14, 0xfffffff0);
-	ret |= sisusb_read_pci_config(sisusb, 0x14, &tmp32);
-	tmp32 &= 0x0f;
-	tmp32 |= SISUSB_PCI_MMIOBASE;
-	ret |= sisusb_write_pci_config(sisusb, 0x14, tmp32);
-
-	/* Init BAR 2 (i/o ports) */
-	ret |= sisusb_read_pci_config(sisusb, 0x18, &tmp32);
-	ret |= sisusb_write_pci_config(sisusb, 0x18, 0xfffffff0);
-	ret |= sisusb_read_pci_config(sisusb, 0x18, &tmp32);
-	tmp32 &= 0x0f;
-	tmp32 |= SISUSB_PCI_IOPORTBASE;
-	ret |= sisusb_write_pci_config(sisusb, 0x18, tmp32);
-
-	/* Enable memory and i/o access */
-	ret |= sisusb_read_pci_config(sisusb, 0x04, &tmp32);
-	tmp32 |= 0x3;
-	ret |= sisusb_write_pci_config(sisusb, 0x04, tmp32);
-
-	if (ret == 0) {
-		/* Some further magic */
-		packet.header  = 0x001f;
-		packet.address = 0x00000050;
-		packet.data    = 0x000000ff;
-		ret |= sisusb_send_bridge_packet(sisusb, 10, &packet, 0);
+	for (i = 0; i < ARRAY_SIZE(bars); i++) {
+		ret = sisusb_init_bar(sisusb, bars[i].regnum, bars[i].base);
+		if (ret)
+			return ret;
 	}
 
-	return ret;
+	/* Enable memory and i/o access */
+	ret = sisusb_read_pci_config(sisusb, 0x04, &tmp32);
+	if (ret)
+		return ret;
+	ret = sisusb_write_pci_config(sisusb, 0x04, tmp32 | 0x3);
+	if (ret)
+		return ret;
+
+	/* Some further magic */
+	packet.header  = 0x001f;
+	packet.address = 0x00000050;
+	packet.data    = 0x000000ff;
+	return sisusb_send_bridge_packet(sisusb, 10, &packet, 0);
 }
 
 /* Initialize the graphics device (return 0 on success)
