@@ -34,6 +34,24 @@
 		/* We expect the bootloader to fill in the reg */
 		reg = <0x0 0x80000000 0x0 0x0>;
 	};
+
+	vqmmc_io_reg: regulator-1p8v {
+		compatible = "regulator-gpio";
+		regulator-name = "sd-bus-io-power";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <3300000>;
+		gpios = <&expander1 1 GPIO_ACTIVE_HIGH>;
+		states = <1800000 0x1>,
+			 <3300000 0x0>;
+	};
+
+	vmmc_reg: regulator-fixed-3p3v {
+		compatible = "regulator-fixed";
+		regulator-name = "card-power";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-always-on;
+	};
 };
 
 &gpio0 {
@@ -59,6 +77,32 @@
 			reg = <0>;
 		};
 	};
+};
+
+&i2c3 {
+	status = "okay";
+
+	expander1: gpio@27 {
+		compatible = "nxp,pca9535";
+		reg = <0x27>;			/* SoM expander address */
+		gpio-controller;
+		#gpio-cells = <2>;
+	};
+};
+
+&sdmmc {
+	bus-width = <4>;
+	cap-sd-highspeed;
+	disable-wp;
+	max-frequency = <200000000>;
+	no-mmc;
+	sd-uhs-ddr50;
+	sd-uhs-sdr104;
+	vmmc-supply = <&vmmc_reg>;
+	vqmmc-supply = <&vqmmc_io_reg>;
+	cdns,ddr50-phony-dqs-timing = <0>;
+
+	status = "okay";
 };
 
 &osc1 {
