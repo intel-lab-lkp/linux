@@ -129,6 +129,9 @@ static void transfer(int fd, uint8_t const *tx, uint8_t const *rx, size_t len)
 		.bits_per_word = bits,
 	};
 
+	if (!len)
+		pabort("can't transfer an empty buffer");
+
 	if (mode & SPI_TX_OCTAL)
 		tr.tx_nbits = 8;
 	else if (mode & SPI_TX_QUAD)
