@@ -733,7 +733,6 @@ static netdev_tx_t erspan_xmit(struct sk_buff *skb,
 	/* Push ERSPAN header */
 	if (tunnel->erspan_ver == 0) {
 		proto = htons(ETH_P_ERSPAN);
-		__clear_bit(IP_TUNNEL_SEQ_BIT, flags);
 	} else if (tunnel->erspan_ver == 1) {
 		erspan_build_header(skb, ntohl(tunnel->parms.o_key),
 				    tunnel->index,
@@ -748,6 +747,7 @@ static netdev_tx_t erspan_xmit(struct sk_buff *skb,
 		goto free_skb;
 	}
 
+	__assign_bit(IP_TUNNEL_SEQ_BIT, flags, tunnel->erspan_ver != 0);
 	__clear_bit(IP_TUNNEL_KEY_BIT, flags);
 	__gre_xmit(skb, dev, &tunnel->parms.iph, proto, flags);
 	return NETDEV_TX_OK;
@@ -1169,17 +1169,18 @@ static int erspan_validate(struct nlattr *tb[], struct nlattr *data[],
 	if (ret)
 		return ret;
 
-	if (data[IFLA_GRE_ERSPAN_VER] &&
-	    nla_get_u8(data[IFLA_GRE_ERSPAN_VER]) == 0)
-		return 0;
-
-	/* ERSPAN type II/III should only have GRE sequence and key flag */
 	if (data[IFLA_GRE_OFLAGS])
 		flags |= nla_get_be16(data[IFLA_GRE_OFLAGS]);
 	if (data[IFLA_GRE_IFLAGS])
 		flags |= nla_get_be16(data[IFLA_GRE_IFLAGS]);
-	if (!data[IFLA_GRE_COLLECT_METADATA] &&
-	    flags != (GRE_SEQ | GRE_KEY))
+
+	if ((data[IFLA_GRE_ERSPAN_VER] &&
+	     nla_get_u8(data[IFLA_GRE_ERSPAN_VER]) == 0) ||
+	    data[IFLA_GRE_COLLECT_METADATA])
+		return flags ? -EINVAL : 0;
+
+	/* ERSPAN type II/III should only have GRE sequence and key flag */
+	if (flags != (GRE_SEQ | GRE_KEY))
 		return -EINVAL;
 
 	/* ERSPAN Session ID only has 10-bit. Since we reuse
@@ -1317,7 +1318,11 @@ static int erspan_netlink_parms(struct net_device *dev,
 			return -EINVAL;
 	}
 
-	if (gparms->erspan_ver == 1) {
+	if (gparms->erspan_ver == 0) {
+		if (!ip_tunnel_flags_empty(parms->i_flags) ||
+		    !ip_tunnel_flags_empty(parms->o_flags))
+			return -EINVAL;
+	} else if (gparms->erspan_ver == 1) {
 		if (data[IFLA_GRE_ERSPAN_INDEX]) {
 			gparms->index = nla_get_u32(data[IFLA_GRE_ERSPAN_INDEX]);
 			if (gparms->index & ~INDEX_MASK)
@@ -1394,18 +1399,43 @@ static const struct net_device_ops gre_tap_netdev_ops = {
 	.ndo_fill_metadata_dst	= gre_fill_metadata_dst,
 };
 
+static void erspan_set_hlen(struct ip_tunnel *tunnel)
+{
+	/* Version 0 uses a 4-byte GRE header, other versions use 8 bytes. */
+	tunnel->tun_hlen = tunnel->erspan_ver == 0 ? 4 : 8;
+
+	tunnel->hlen = tunnel->tun_hlen + tunnel->encap_hlen +
+		       erspan_hdr_len(tunnel->erspan_ver);
+}
+
+/* Both tunnel->erspan_ver and tunnel->encap_hlen can be changed from
+ * erspan_changelink(), and both feed tunnel->hlen. Recompute it, then let
+ * ip_tunnel_bind_dev() derive the device lengths from it.
+ *
+ * As in ipgre_link_update(), @old_hlen only tells whether the MTU became
+ * stale and must be sampled before ip_tunnel_encap_setup(), which
+ * recomputes tunnel->hlen without the ERSPAN part.
+ */
+static void erspan_link_update(struct net_device *dev, bool set_mtu,
+			       int old_hlen)
+{
+	struct ip_tunnel *tunnel = netdev_priv(dev);
+
+	erspan_set_hlen(tunnel);
+
+	/* Only reset a MTU that the header length just invalidated, so that
+	 * a MTU configured by the user survives an unrelated change.
+	 */
+	ip_tunnel_refresh_lengths(dev, set_mtu && tunnel->hlen != old_hlen);
+}
+
 static int erspan_tunnel_init(struct net_device *dev)
 {
 	struct ip_tunnel *tunnel = netdev_priv(dev);
 
-	if (tunnel->erspan_ver == 0)
-		tunnel->tun_hlen = 4; /* 4-byte GRE hdr. */
-	else
-		tunnel->tun_hlen = 8; /* 8-byte GRE hdr. */
+	erspan_set_hlen(tunnel);
 
 	tunnel->parms.iph.protocol = IPPROTO_GRE;
-	tunnel->hlen = tunnel->tun_hlen + tunnel->encap_hlen +
-		       erspan_hdr_len(tunnel->erspan_ver);
 
 	dev->features		|= GRE_FEATURES;
 	dev->hw_features	|= GRE_FEATURES;
@@ -1562,6 +1592,8 @@ static int erspan_changelink(struct net_device *dev, struct nlattr *tb[],
 	struct ip_tunnel *t = netdev_priv(dev);
 	struct ip_tunnel_parm_kern p;
 	struct ip_gre_parm gparms;
+	int old_hlen = t->hlen;
+	bool link_changed;
 	int err;
 
 	if (!rtnl_dev_link_net_capable(dev, t->net))
@@ -1575,15 +1607,30 @@ static int erspan_changelink(struct net_device *dev, struct nlattr *tb[],
 	if (err)
 		return err;
 
+	link_changed = t->parms.link != p.link || t->fwmark != gparms.fwmark;
+
 	err = ip_tunnel_changelink(dev, tb, &p, gparms.fwmark);
 	if (err < 0)
-		return err;
+		goto link_update;
+
+	if (link_changed)
+		old_hlen = t->hlen;
 
 	ipgre_commit_parms(t, &gparms);
 	ip_tunnel_flags_copy(t->parms.i_flags, p.i_flags);
 	ip_tunnel_flags_copy(t->parms.o_flags, p.o_flags);
 
-	return 0;
+link_update:
+	/* ipgre_newlink_encap_setup() has published a new encapsulation
+	 * without the ERSPAN header length even if ip_tunnel_changelink()
+	 * failed, so the lengths must be refreshed on that error path too.
+	 *
+	 * As in ipgre_changelink(), IFLA_MTU must not hold the MTU back if we
+	 * return an error, because do_setlink() will not apply it then.
+	 */
+	erspan_link_update(dev, err || !tb[IFLA_MTU], old_hlen);
+
+	return err;
 }
 
 static size_t ipgre_get_size(const struct net_device *dev)
