@@ -25,6 +25,11 @@ do {							\
 	(regs)->u_regs[UREG_I6] = _fp;			\
 	(regs)->u_regs[UREG_I7] = _i7;			\
 } while (0)
+
+void perf_arch_prepare_ustack(void);
+#define perf_arch_prepare_ustack	perf_arch_prepare_ustack
+unsigned long perf_arch_user_stack_pointer(struct pt_regs *regs);
+#define perf_arch_user_stack_pointer	perf_arch_user_stack_pointer
 #endif
 
 #endif
