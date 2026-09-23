@@ -10,14 +10,12 @@ struct evlist;
 
 #ifdef HAVE_BPF_SKEL
 
-int augmented_syscalls__prepare(void);
+int augmented_syscalls__prepare(bool inherit);
+int augmented_syscalls__attach(void);
 int augmented_syscalls__create_bpf_output(struct evlist *evlist);
 void augmented_syscalls__setup_bpf_output(void);
 int augmented_syscalls__set_filter_pids(unsigned int nr, pid_t *pids);
 int augmented_syscalls__set_target_pids(unsigned int nr, pid_t *pids);
-int augmented_syscalls__add_target_pid(pid_t pid);
-int augmented_syscalls__del_target_pid(pid_t pid);
-bool augmented_syscalls__has_target_pid(pid_t pid);
 int augmented_syscalls__set_target_syscalls(unsigned int nr, int *syscall_ids, bool not_syscalls);
 int augmented_syscalls__get_map_fds(int *enter_fd, int *exit_fd, int *beauty_fd);
 struct bpf_program *augmented_syscalls__find_by_title(const char *name);
@@ -26,9 +24,14 @@ void augmented_syscalls__cleanup(void);
 
 #else /* !HAVE_BPF_SKEL */
 
-static inline int augmented_syscalls__prepare(void)
+static inline int augmented_syscalls__prepare(bool inherit __maybe_unused)
 {
 	return -1;
+}
+
+static inline int augmented_syscalls__attach(void)
+{
+	return 0;
 }
 
 static inline int augmented_syscalls__create_bpf_output(struct evlist *evlist __maybe_unused)
@@ -50,21 +53,6 @@ static inline int augmented_syscalls__set_target_pids(unsigned int nr __maybe_un
 						      pid_t *pids __maybe_unused)
 {
 	return 0;
-}
-
-static inline int augmented_syscalls__add_target_pid(pid_t pid __maybe_unused)
-{
-	return 0;
-}
-
-static inline int augmented_syscalls__del_target_pid(pid_t pid __maybe_unused)
-{
-	return 0;
-}
-
-static inline bool augmented_syscalls__has_target_pid(pid_t pid __maybe_unused)
-{
-	return false;
 }
 
 static inline int augmented_syscalls__set_target_syscalls(unsigned int nr __maybe_unused,

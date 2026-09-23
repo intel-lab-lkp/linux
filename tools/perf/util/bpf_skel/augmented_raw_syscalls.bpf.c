@@ -9,6 +9,7 @@
 #include "vmlinux.h"
 
 #include <bpf/bpf_helpers.h>
+#include <bpf/bpf_tracing.h>
 #include <linux/limits.h>
 
 #define PERF_ALIGN(x, a)        __PERF_ALIGN_MASK(x, (typeof(x))(a)-1)
@@ -107,12 +108,28 @@ struct augmented_arg {
 	};
 };
 
+/*
+ * Hash map of PIDs/TGIDs whose events must be discarded, e.g. perf trace's own
+ * pid, so that tracing doesn't feed back on itself.
+ *
+ * has_pids_filtered: set to true only when the map is populated. Checking a
+ *                    boolean is much cheaper than a map lookup, and sys_enter
+ *                    runs for every syscall on the system, so the common
+ *                    "no pids filtered" case must stay on a fast path.
+ *
+ * max_entries matches pids_to_trace: userspace only ever names a handful of
+ * pids here, but sched_process_fork() below adds every descendant of those,
+ * so a --filter-pids target that forks or is heavily threaded needs the same
+ * headroom as a traced one.
+ */
 struct pids_filtered {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__type(key, pid_t);
 	__type(value, bool);
-	__uint(max_entries, 64);
+	__uint(max_entries, 16384);
 } pids_filtered SEC(".maps");
+
+bool has_pids_filtered;
 
 /*
  * Optional hash map containing specific PIDs/TGIDs to trace (e.g., when
@@ -120,12 +137,19 @@ struct pids_filtered {
  *
  * has_pids_to_trace: Set to true if target PID filtering is active.
  *                    When false, all processes are eligible for tracing.
+ *
+ * max_entries bounds how many tasks can be tracked at once. sched_process_exit
+ * below evicts a task as it dies, whatever it died of, so the map holds live
+ * tasks rather than growing without bound. It is sized well
+ * above the thread count of realistic traced workloads; should a workload
+ * still exceed it, bpf_map_update_elem() fails with -E2BIG and the extra
+ * tasks are simply not traced rather than anything being corrupted.
  */
 struct pids_to_trace {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__type(key, pid_t);
 	__type(value, bool);
-	__uint(max_entries, 1024);
+	__uint(max_entries, 16384);
 } pids_to_trace SEC(".maps");
 
 bool has_pids_to_trace;
@@ -148,6 +172,9 @@ struct syscalls_to_trace {
 
 bool has_syscalls_to_trace;
 bool not_syscalls_to_trace;
+
+/* Inherit tracing for child tasks (set to false if --no-inherit is specified) */
+const volatile bool inherit = true;
 
 struct augmented_args_payload {
 	struct syscall_enter_args args;
@@ -501,24 +528,35 @@ static pid_t getpid(void)
 }
 
 /*
- * Returns true if a PID is explicitly excluded/filtered out (e.g., via --filter-pids).
+ * Checks if a PID is explicitly excluded/filtered out (e.g., via --filter-pids).
+ *
+ * Children of a filtered task are added to the map by sched_process_fork()
+ * below, so a plain lookup is all that is needed here.
  */
 static bool pid_filter__has(struct pids_filtered *pids, pid_t pid)
 {
+	/*
+	 * Fast path: this runs for every syscall on the system, so when no pid
+	 * is filtered do no work at all rather than failing a lookup.
+	 */
+	if (!has_pids_filtered)
+		return false;
+
 	return bpf_map_lookup_elem(pids, &pid) != NULL;
 }
 
 /*
- * Checks if the current task (thread PID or process TGID) is targeted for tracing.
- * Checks both PID (thread ID) and TGID (process ID) so that all threads of a
- * target process match.
+ * Checks if the current task is targeted for tracing.
+ *
+ * Every thread that existed when tracing started was named by the target and
+ * inserted from userspace, and every task created since was inserted by
+ * sched_process_fork() below, before it was able to run. So there is nothing
+ * to derive here, and in particular no need to consult the tgid or walk to the
+ * parent: a task is traced if and only if it is in the map.
  */
 static inline bool pid_to_trace__has(pid_t pid)
 {
-	pid_t tgid = bpf_get_current_pid_tgid() >> 32;
-
-	return bpf_map_lookup_elem(&pids_to_trace, &pid) != NULL ||
-	       bpf_map_lookup_elem(&pids_to_trace, &tgid) != NULL;
+	return bpf_map_lookup_elem(&pids_to_trace, &pid) != NULL;
 }
 
 /*
@@ -744,10 +782,23 @@ int sys_exit(struct syscall_exit_args *args)
 	if (has_pids_to_trace && !pid_to_trace__has(getpid()))
 		return 1;
 
+	/*
+	 * Returning 1 leaves the record in place rather than vetoing the
+	 * tracepoint for every other listener. The pids named by
+	 * --filter-pids are also excluded by the raw_syscalls:sys_exit
+	 * evsel's own tracepoint filter, so they are dropped there.
+	 * Descendants added to pids_filtered by sched_process_fork() below
+	 * are not in that static filter, so their sys_exit is still
+	 * delivered and printed without a matching enter. A tracepoint
+	 * program can only suppress an event by vetoing it, which is what
+	 * this series removes; routing sys_exit through
+	 * __augmented_syscalls__ the way sys_enter now is would close this.
+	 */
 	if (pid_filter__has(&pids_filtered, getpid()))
 		return 1;
 
 	bpf_probe_read_kernel(&exit_args, sizeof(exit_args), args);
+
 	/*
 	 * Jump to syscall specific return augmenter, even if the default one,
 	 * "!raw_syscalls:unaugmented" that will just return 1 to return the
@@ -761,6 +812,173 @@ int sys_exit(struct syscall_exit_args *args)
 	 * syscalls.
 	 */
 	return 1;
+}
+
+/*
+ * Propagate tracing to a newly created task.
+ *
+ * tp_btf/sched_process_fork is raised by copy_process(), in the parent's
+ * context and before the child is woken, so the child is in the maps before it
+ * can issue its first syscall. That removes the need to inspect real_parent
+ * when a syscall is seen from an unknown task, which could neither tell a
+ * genuine descendant from a task merely reparented to a traced init, nor keep
+ * following a descendant whose parent had already exited.
+ *
+ * Using tp_btf rather than tp/sched/sched_process_fork avoids depending on the
+ * tracepoint ring-buffer record layout (TP_STRUCT__entry), which changed in
+ * Linux 6.16 when parent_comm and child_comm were converted from fixed 16-byte
+ * arrays to 4-byte __data_loc strings (shrinking the tracepoint context from
+ * 48 to 24 bytes and causing BPF_PROG_TYPE_TRACEPOINT attachment to fail with
+ * -EACCES when accessing higher offsets). Instead, tp_btf receives the stable
+ * TP_PROTO arguments (struct task_struct *parent, struct task_struct *child)
+ * directly.
+ *
+ * child->pid is task_struct.pid, i.e. the pid in the initial namespace, which
+ * is what the maps are keyed by. A clone() return value, in contrast, is the
+ * pid in the caller's namespace and would alias an unrelated host task when a
+ * containerised workload is traced.
+ *
+ * CLONE_THREAD needs no special handling: a new thread arrives here like any
+ * other task and is inserted under its own pid.
+ */
+SEC("tp_btf/sched_process_fork")
+int BPF_PROG(sched_process_fork, struct task_struct *parent, struct task_struct *child)
+{
+	pid_t parent_pid, child_pid;
+	bool val = true;
+
+	if (!inherit)
+		return 0;
+
+	/*
+	 * Inherit from the thread that called clone() and from nothing else.
+	 * The maps name individual tasks: pid_to_trace__has() and
+	 * pid_filter__has() look up a task's own pid and nothing more, and
+	 * every thread of a -p target is enumerated from /proc/<pid>/task and
+	 * inserted in its own right, so a traced thread is always here under
+	 * its own key. Consulting the parent's tgid as well would let a child
+	 * inherit from a thread that is not itself traced, which is precisely
+	 * what 'perf trace -t <tid>' asked to leave out, and would re-admit
+	 * descendants of a thread that sched_process_fork() skipped or that
+	 * was missed while the programs were being attached, while still not
+	 * tracing that thread itself.
+	 */
+	parent_pid = parent->pid;
+	child_pid = child->pid;
+
+	if (has_pids_to_trace &&
+	    bpf_map_lookup_elem(&pids_to_trace, &parent_pid) != NULL)
+		bpf_map_update_elem(&pids_to_trace, &child_pid, &val, BPF_ANY);
+
+	if (has_pids_filtered &&
+	    bpf_map_lookup_elem(&pids_filtered, &parent_pid) != NULL)
+		bpf_map_update_elem(&pids_filtered, &child_pid, &val, BPF_ANY);
+
+	return 0;
+}
+
+/*
+ * Drop a dying task from the maps.
+ *
+ * tp_btf/sched_process_exit is raised by do_exit() for every task, in its own
+ * context, so unlike hooking the exit and exit_group syscalls this also covers
+ * tasks killed by a signal and threads torn down implicitly by exit_group.
+ *
+ * Doing it here rather than from the userspace PERF_RECORD_EXIT handler also
+ * means there is no window between the task dying and the map being updated,
+ * during which the kernel could recycle the pid and the late eviction silently
+ * stop tracing whichever new task received it.
+ *
+ * Each thread is reported separately, including the group leader, whose pid is
+ * the thread group's tgid, so one delete per map covers both uses of the key.
+ */
+SEC("tp_btf/sched_process_exit")
+int BPF_PROG(sched_process_exit, struct task_struct *p)
+{
+	pid_t pid = p->pid;
+
+	bpf_map_delete_elem(&pids_to_trace, &pid);
+	bpf_map_delete_elem(&pids_filtered, &pid);
+
+	return 0;
+}
+
+/*
+ * Follow a task whose pid changed under it.
+ *
+ * When a thread that is not the thread group leader execs, de_thread() kills
+ * the rest of the group and then hands the leader's pid, which is the tgid, to
+ * the exec'ing thread. The leader dies first, so sched_process_exit() above
+ * has already dropped that pid from the maps, and the survivor is now keyed by
+ * a pid nothing knows about while its original entry is left behind for good.
+ *
+ * Move the entry across so the task stays tracked and nothing is leaked.
+ * old_pid is sampled in bprm_execve() before de_thread() runs, so for the
+ * common case of the group leader exec'ing it simply equals p->pid and there
+ * is nothing to do.
+ */
+SEC("tp_btf/sched_process_exec")
+int BPF_PROG(sched_process_exec, struct task_struct *p, pid_t old_pid)
+{
+	pid_t pid = p->pid;
+	bool val = true;
+
+	if (pid == old_pid)
+		return 0;
+
+	/*
+	 * Drop the old key before adding the new one. The maps are bounded and
+	 * the move is only ever a rename, but inserting first needs a spare
+	 * slot for as long as both keys are present: on a full map that insert
+	 * fails with -E2BIG while the delete still succeeds, which would lose
+	 * the task rather than move it. Deleting first frees the slot the
+	 * insert goes on to use. The task is mid exec and issues no syscalls in
+	 * between, so the gap is not observable.
+	 *
+	 * There is no atomic rename for a hash map, so on a map that is exactly
+	 * full this narrows the window rather than closing it: a fork on
+	 * another CPU can still take the freed slot before the insert below
+	 * runs, and the task is then dropped just as any other task is once the
+	 * map is full.
+	 *
+	 * Nothing else takes old_pid out of the maps. sched_process_exit() ran
+	 * for the group leader under the leader's own pid, before de_thread()
+	 * swapped the two, so skipping the delete would leave old_pid behind
+	 * as an entry for a task that no longer holds it.
+	 *
+	 * old_pid may already belong to somebody else by the time this runs. A
+	 * non leader thread getting here has been through de_thread(), which
+	 * hands it the leader's pid with exchange_tids() and then
+	 * release_task()s the leader, freeing the pid the thread started with.
+	 * That is inside the binfmt loader, whereas the tracepoint only fires
+	 * once the whole of exec_binprm() is done, so the pid is up for reuse
+	 * for the length of an exec. Should a task created in that window be
+	 * given it, and be one that is traced or filtered itself, it is
+	 * inserted under this same key and the move below carries its entry
+	 * across rather than this task's: it stops being reported and this task
+	 * takes its place.
+	 *
+	 * That is left as it is. An entry records only that some task with that
+	 * pid was of interest, and the tracepoint offers no other handle on the
+	 * task old_pid was taken from, so the two cannot be told apart here.
+	 * Reuse needs the cyclic pid allocator to come the whole way round to
+	 * old_pid inside that window, and a task cannot simply ask for the pid
+	 * it wants: clone3()'s set_tid is gated on CAP_CHECKPOINT_RESTORE.
+	 * Whichever task wins, both are ones the session was already following,
+	 * so what is at stake is which of them gets reported rather than
+	 * whether tracing reaches beyond what was asked for.
+	 */
+	if (bpf_map_lookup_elem(&pids_to_trace, &old_pid) != NULL) {
+		bpf_map_delete_elem(&pids_to_trace, &old_pid);
+		bpf_map_update_elem(&pids_to_trace, &pid, &val, BPF_ANY);
+	}
+
+	if (bpf_map_lookup_elem(&pids_filtered, &old_pid) != NULL) {
+		bpf_map_delete_elem(&pids_filtered, &old_pid);
+		bpf_map_update_elem(&pids_filtered, &pid, &val, BPF_ANY);
+	}
+
+	return 0;
 }
 
 char _license[] SEC("license") = "GPL";
