@@ -1506,6 +1506,51 @@ static bool intel_fbc_is_ok(const struct intel_plane_state *plane_state)
 		intel_fbc_is_cfb_ok(plane_state);
 }
 
+static bool intel_fbc_can_flip_nuke(struct intel_atomic_state *state,
+				    struct intel_crtc *crtc,
+				    struct intel_plane *plane)
+{
+	const struct intel_crtc_state *new_crtc_state =
+		intel_atomic_get_new_crtc_state(state, crtc);
+	const struct intel_plane_state *old_plane_state =
+		intel_atomic_get_old_plane_state(state, plane);
+	const struct intel_plane_state *new_plane_state =
+		intel_atomic_get_new_plane_state(state, plane);
+	const struct drm_framebuffer *old_fb = old_plane_state->hw.fb;
+	const struct drm_framebuffer *new_fb = new_plane_state->hw.fb;
+
+	if (intel_crtc_needs_modeset(new_crtc_state))
+		return false;
+
+	if (!intel_fbc_is_ok(old_plane_state) ||
+	    !intel_fbc_is_ok(new_plane_state))
+		return false;
+
+	if (old_fb->format->format != new_fb->format->format)
+		return false;
+
+	if (old_fb->modifier != new_fb->modifier)
+		return false;
+
+	if (intel_fbc_plane_stride(old_plane_state) !=
+	    intel_fbc_plane_stride(new_plane_state))
+		return false;
+
+	if (intel_fbc_cfb_stride(old_plane_state) !=
+	    intel_fbc_cfb_stride(new_plane_state))
+		return false;
+
+	if (intel_fbc_cfb_size(old_plane_state) !=
+	    intel_fbc_cfb_size(new_plane_state))
+		return false;
+
+	if (intel_fbc_override_cfb_stride(old_plane_state) !=
+	    intel_fbc_override_cfb_stride(new_plane_state))
+		return false;
+
+	return true;
+}
+
 static void
 __intel_fbc_prepare_dirty_rect(const struct intel_plane_state *plane_state,
 			       const struct intel_crtc_state *crtc_state)
@@ -1753,51 +1798,6 @@ int intel_fbc_min_cdclk(const struct intel_crtc_state *crtc_state)
 		return 0;
 
 	return min_cdclk;
-}
-
-static bool intel_fbc_can_flip_nuke(struct intel_atomic_state *state,
-				    struct intel_crtc *crtc,
-				    struct intel_plane *plane)
-{
-	const struct intel_crtc_state *new_crtc_state =
-		intel_atomic_get_new_crtc_state(state, crtc);
-	const struct intel_plane_state *old_plane_state =
-		intel_atomic_get_old_plane_state(state, plane);
-	const struct intel_plane_state *new_plane_state =
-		intel_atomic_get_new_plane_state(state, plane);
-	const struct drm_framebuffer *old_fb = old_plane_state->hw.fb;
-	const struct drm_framebuffer *new_fb = new_plane_state->hw.fb;
-
-	if (intel_crtc_needs_modeset(new_crtc_state))
-		return false;
-
-	if (!intel_fbc_is_ok(old_plane_state) ||
-	    !intel_fbc_is_ok(new_plane_state))
-		return false;
-
-	if (old_fb->format->format != new_fb->format->format)
-		return false;
-
-	if (old_fb->modifier != new_fb->modifier)
-		return false;
-
-	if (intel_fbc_plane_stride(old_plane_state) !=
-	    intel_fbc_plane_stride(new_plane_state))
-		return false;
-
-	if (intel_fbc_cfb_stride(old_plane_state) !=
-	    intel_fbc_cfb_stride(new_plane_state))
-		return false;
-
-	if (intel_fbc_cfb_size(old_plane_state) !=
-	    intel_fbc_cfb_size(new_plane_state))
-		return false;
-
-	if (intel_fbc_override_cfb_stride(old_plane_state) !=
-	    intel_fbc_override_cfb_stride(new_plane_state))
-		return false;
-
-	return true;
 }
 
 static bool __intel_fbc_pre_update(struct intel_atomic_state *state,
