@@ -2911,6 +2911,7 @@ static const struct kvm_vm_s2_ops *arm64_vm_s2_ops[] = {
 	KVM_VM_S2_OPS(VM_NVHE, &kvm_default_vm_s2_ops),
 	KVM_VM_S2_OPS(VM_PKVM, &pkvm_vm_s2_ops),
 	KVM_VM_S2_OPS(VM_PROTECTED_PKVM, &protected_pkvm_vm_s2_ops),
+	KVM_VM_S2_OPS(VM_REALM, &realm_vm_s2_ops),
 };
 
 static int kvm_vm_init_vm_s2_ops(struct kvm *kvm)
