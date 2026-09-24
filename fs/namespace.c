@@ -363,6 +363,15 @@ bool __mnt_is_readonly(const struct vfsmount *mnt)
 }
 EXPORT_SYMBOL_GPL(__mnt_is_readonly);
 
+bool mnt_is_anon(struct vfsmount *mnt)
+{
+	struct mount *m = real_mount(mnt);
+	struct mnt_namespace *ns = READ_ONCE(m->mnt_ns);
+
+	return !IS_ERR_OR_NULL(ns) && is_anon_ns(ns);
+}
+EXPORT_SYMBOL_GPL(mnt_is_anon);
+
 static inline void mnt_inc_writers(struct mount *mnt)
 {
 #ifdef CONFIG_SMP

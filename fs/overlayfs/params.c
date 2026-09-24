@@ -477,7 +477,19 @@ static int ovl_parse_layer(struct fs_context *fc, struct fs_parameter *param,
 		layer_path = param->file->f_path;
 		path_get(&layer_path);
 
-		layer_name = d_path(&layer_path, buf, PATH_MAX);
+		/*
+		 * For detached mounts (open_tree(OPEN_TREE_CLONE)), d_path()
+		 * resolves against the anonymous namespace root and returns a
+		 * short fs-relative path rather than a full system path.  Use
+		 * dentry_path_raw() instead, which gives the path relative to
+		 * the filesystem root regardless of mount namespace.  The name
+		 * is display-only; layer_path itself is always correct.
+		 */
+		if (mnt_is_anon(layer_path.mnt))
+			layer_name = dentry_path_raw(layer_path.dentry,
+						     buf, PATH_MAX);
+		else
+			layer_name = d_path(&layer_path, buf, PATH_MAX);
 		if (IS_ERR(layer_name))
 			return PTR_ERR(layer_name);
 

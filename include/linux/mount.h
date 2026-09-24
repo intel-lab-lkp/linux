@@ -78,6 +78,7 @@ extern void mnt_make_shortterm(struct vfsmount *mnt);
 extern struct vfsmount *mnt_clone_internal(const struct path *path);
 extern bool __mnt_is_readonly(const struct vfsmount *mnt);
 extern bool mnt_may_suid(struct vfsmount *mnt);
+extern bool mnt_is_anon(struct vfsmount *mnt);
 
 extern struct vfsmount *clone_private_mount(const struct path *path);
 int mnt_get_write_access(struct vfsmount *mnt);
