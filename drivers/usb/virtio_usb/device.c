@@ -11,6 +11,7 @@
 #include "device.h"
 
 #define GADGET_NAME "virtio_usb_dc"
+#define VIRTIO_USB_EP0_IDLE_TIMEOUT_MS 5000
 
 /**
  * struct virtio_usb_dc_priv - Device controller data priv
@@ -23,6 +24,8 @@ struct virtio_usb_dc_priv {
 	struct usb_request req;
 	struct virtio_usb_ep *vep;
 	struct virtio_usb_data *vreq;
+	struct work_struct cancel_work;
+	bool completed_early;
 };
 
 /**
@@ -72,6 +75,34 @@ static struct virtio_usb_data *usb_req_to_virtio_data(struct usb_request *req)
 	return priv->vreq;
 }
 
+static bool virtio_usb_dc_req_queue_empty(struct virtio_usb_ep *vep)
+{
+	struct virtio_usb_dc *vudc = vep->vudc;
+	unsigned long flags;
+	bool empty;
+
+	spin_lock_irqsave(&vudc->lock, flags);
+	empty = list_empty(&vep->req_queue);
+	spin_unlock_irqrestore(&vudc->lock, flags);
+
+	return empty;
+}
+
+static int virtio_usb_dc_wait_ep0_idle(struct virtio_usb_dc *vudc)
+{
+	struct virtio_usb_ep *vep = usb_ep_to_virtio_ep(vudc->gadget.ep0);
+	long ret;
+
+	if (virtio_usb_dc_req_queue_empty(vep))
+		return 0;
+
+	ret = wait_event_timeout(
+		vudc->ep0_idle, virtio_usb_dc_req_queue_empty(vep),
+		msecs_to_jiffies(VIRTIO_USB_EP0_IDLE_TIMEOUT_MS));
+
+	return ret ? 0 : -ETIMEDOUT;
+}
+
 /**
  * virtio_usb_dc_complete_req() - Completes a usb request
  * @vreq: virtio usb data message.
@@ -89,6 +120,8 @@ static void virtio_usb_dc_complete_req(struct virtio_usb_data *vreq)
 	struct virtio_usb_data *vreq_iter;
 	unsigned int found = 0;
 	unsigned long flags;
+	bool wake_ep0 = false;
+	bool early;
 
 	spin_lock_irqsave(&vudc->lock, flags);
 
@@ -98,10 +131,15 @@ static void virtio_usb_dc_complete_req(struct virtio_usb_data *vreq)
 			break;
 		}
 	}
+	early = priv->completed_early;
 	if (!found) {
 		spin_unlock_irqrestore(&vudc->lock, flags);
+		/* Arrived after ep_disable() already gave back */
+		if (early)
+			virtio_usb_data_unref(vreq);
 		return;
 	}
+	/* Common case - request still belongs to in-flight queue */
 	if (req->status != -ECONNRESET && req->status != -ESHUTDOWN) {
 		req->status = virtio_error_to_usb(status);
 		if (!req->status)
@@ -109,9 +147,17 @@ static void virtio_usb_dc_complete_req(struct virtio_usb_data *vreq)
 	}
 
 	list_del_init(&vreq->list);
+	wake_ep0 = !vep->ep_id && list_empty(&vep->req_queue);
 	spin_unlock_irqrestore(&vudc->lock, flags);
+	if (wake_ep0)
+		wake_up(&vudc->ep0_idle);
+
+	/* Normal completion: giveback now */
+	if (!early)
+		usb_gadget_giveback_request(&vep->ep, req);
+
+	/* Drop final reference */
 	virtio_usb_data_unref(vreq);
-	usb_gadget_giveback_request(&vep->ep, req);
 }
 
 /**
@@ -128,22 +174,24 @@ void virtio_usb_dc_data_work(struct work_struct *work)
 	struct virtio_usb_queue *dataq =
 		&vusb->vqueues[vusb->dev_vq_base + VIRTIO_USB_VQ_DATA_IDX];
 	struct virtio_usb_data *vreq;
+	unsigned long flags;
 	unsigned int length;
 
-	spin_lock_irq(&dataq->lock);
+	spin_lock_irqsave(&dataq->lock, flags);
 	do {
 		virtqueue_disable_cb(dataq->vqueue);
 		while ((vreq = virtqueue_get_buf(dataq->vqueue, &length))) {
-			spin_unlock_irq(&dataq->lock);
+			spin_unlock_irqrestore(&dataq->lock, flags);
 			virtio_usb_dc_complete_req(vreq);
-			spin_lock_irq(&dataq->lock);
+			spin_lock_irqsave(&dataq->lock, flags);
 		}
 		if (unlikely(virtqueue_is_broken(dataq->vqueue)))
 			break;
 	} while (!virtqueue_enable_cb(dataq->vqueue));
-	spin_unlock_irq(&dataq->lock);
+	spin_unlock_irqrestore(&dataq->lock, flags);
 }
 
+static void virtio_usb_dc_cancel_work(struct work_struct *work);
 /**
  * virtio_usb_dc_data_alloc() - Allocate and initialize a device controller
  * data message.
@@ -174,6 +222,8 @@ static struct virtio_usb_data *virtio_usb_dc_data_alloc(struct usb_ep *ep,
 	priv = virtio_usb_data_priv(vreq);
 	priv->vep = vep;
 	priv->vreq = vreq;
+	priv->completed_early = false;
+	INIT_WORK(&priv->cancel_work, virtio_usb_dc_cancel_work);
 	vreq->msg.queue =
 		&vep->vudc->vusb->vqueues[vep->vudc->vusb->dev_vq_base +
 					  VIRTIO_USB_VQ_DATA_IDX];
@@ -242,6 +292,264 @@ virtio_usb_dc_cmd_alloc(struct virtio_usb_dc *vudc, unsigned int command,
 
 /* Endpoint callbacks */
 
+static int do_real_queue(struct virtio_usb_ep *vep, struct usb_request *req)
+{
+	struct virtio_usb_dc *vudc = vep->vudc;
+	struct virtio_usb_data *vreq = usb_req_to_virtio_data(req);
+	struct virtio_usb_dc_priv *priv = virtio_usb_data_priv(vreq);
+	struct virtio_usb_request *request;
+	struct virtio_usb_response *response;
+	struct scatterlist *out_sgs = NULL, *in_sgs = NULL, *psg_data = NULL;
+	struct scatterlist sg;
+	unsigned long flags;
+	u16 endpoint;
+	u16 transfer_flags = 0;
+	u16 transfer_type = VIRTIO_USB_EP_CONTROL;
+	int rc;
+
+	virtio_usb_data_ref(vreq);
+
+	request = virtio_usb_data_request(vreq);
+	response = virtio_usb_data_response(vreq);
+	response->actual_length = cpu_to_le32(0);
+	response->status = cpu_to_le32(VIRTIO_USB_S_ERR_INTERNAL);
+
+	if (req->short_not_ok)
+		transfer_flags |= VIRTIO_USB_FLAG_SHORT_NOT_OK;
+	else if (req->zero)
+		transfer_flags |= VIRTIO_USB_FLAG_ZERO_PACKET;
+	request->transfer_flags = cpu_to_le16(transfer_flags);
+
+	endpoint = vep->ep_id |
+		   (usb_ep_dir_in(&vep->ep) ? VIRTIO_USB_EP_DIR_IN :
+					      VIRTIO_USB_EP_DIR_OUT);
+	request->endpoint = cpu_to_le16(endpoint);
+	request->port = cpu_to_le16(vudc->port);
+	if (vep->ep_id && vep->ep.desc) {
+		switch (usb_endpoint_type(vep->ep.desc)) {
+		case USB_ENDPOINT_XFER_ISOC:
+			transfer_type = VIRTIO_USB_EP_ISOCHRONOUS;
+			break;
+		case USB_ENDPOINT_XFER_BULK:
+			transfer_type = VIRTIO_USB_EP_BULK;
+			break;
+		case USB_ENDPOINT_XFER_INT:
+			transfer_type = VIRTIO_USB_EP_INTERRUPT;
+			break;
+		default:
+			transfer_type = VIRTIO_USB_EP_CONTROL;
+			break;
+		}
+	}
+	request->transfer_type = cpu_to_le16(transfer_type);
+
+	if (req->length && req->buf) {
+		psg_data = &sg;
+		sg_init_one(psg_data, req->buf, req->length);
+	} else if (req->length && req->num_sgs > 0) {
+		psg_data = req->sg;
+	} else if (req->length && req->sg) {
+		psg_data = &sg;
+		sg_init_one(psg_data, sg_virt(req->sg), req->length);
+	} else {
+		psg_data = NULL;
+	}
+
+	if (usb_ep_dir_in(&vep->ep))
+		out_sgs = psg_data;
+	else
+		in_sgs = psg_data;
+
+	spin_lock_irqsave(&vudc->lock, flags);
+	priv->completed_early = false;
+	req->actual = 0;
+	req->status = -EINPROGRESS;
+	list_add_tail(&vreq->list, &vep->req_queue);
+	spin_unlock_irqrestore(&vudc->lock, flags);
+
+	rc = virtio_usb_data_send(vudc->vusb, vreq, out_sgs, in_sgs);
+	if (rc) {
+		spin_lock_irqsave(&vudc->lock, flags);
+		list_del_init(&vreq->list);
+		spin_unlock_irqrestore(&vudc->lock, flags);
+
+		virtio_usb_data_unref(vreq);
+		return rc;
+	}
+
+	return 0;
+}
+
+static bool virtio_usb_dc_ep_enabling_locked(struct virtio_usb_dc *vudc)
+{
+	u32 i;
+
+	for (i = 1; i < vudc->neps; i++) {
+		if (vudc->veps[i].state == EP_ENABLING)
+			return true;
+	}
+
+	return false;
+}
+
+static void virtio_usb_dc_flush_ep0_pend(struct virtio_usb_dc *vudc)
+{
+	struct virtio_usb_ep *vep = &vudc->veps[0];
+	struct virtio_usb_data *vreq;
+	unsigned long flags;
+
+	spin_lock_irqsave(&vudc->lock, flags);
+	if (virtio_usb_dc_ep_enabling_locked(vudc)) {
+		spin_unlock_irqrestore(&vudc->lock, flags);
+		return;
+	}
+
+	while (!list_empty(&vep->pend_queue)) {
+		struct virtio_usb_dc_priv *priv;
+		int qrc;
+
+		vreq = list_first_entry(&vep->pend_queue,
+					struct virtio_usb_data, list);
+		priv = virtio_usb_data_priv(vreq);
+		list_del_init(&vreq->list);
+		spin_unlock_irqrestore(&vudc->lock, flags);
+
+		qrc = do_real_queue(vep, &priv->req);
+		virtio_usb_data_unref(vreq);
+		if (qrc) {
+			priv->req.status = qrc;
+			usb_gadget_giveback_request(&vep->ep, &priv->req);
+		}
+
+		spin_lock_irqsave(&vudc->lock, flags);
+	}
+	spin_unlock_irqrestore(&vudc->lock, flags);
+}
+
+static bool
+virtio_usb_ep_comp_valid(const struct usb_ss_ep_comp_descriptor *comp)
+{
+	return comp && comp->bLength == USB_DT_SS_EP_COMP_SIZE &&
+	       comp->bDescriptorType == USB_DT_SS_ENDPOINT_COMP;
+}
+
+static void vep_enable_work(struct work_struct *work)
+{
+	struct virtio_usb_ep *vep =
+		container_of(work, struct virtio_usb_ep, enable_work);
+	struct virtio_usb_dc *vudc = vep->vudc;
+	const struct usb_endpoint_descriptor *desc = vep->ep.desc;
+	struct scatterlist sg;
+	struct scatterlist *psg_data = &sg;
+	struct virtio_usb_dev_cmd_hdr *hdr;
+	struct virtio_usb_cmd *cmd;
+	unsigned long flags;
+	u16 endpoint;
+	int rc;
+
+	if (!desc)
+		return;
+
+	endpoint = vep->ep_id |
+		   (usb_ep_dir_in(&vep->ep) ? VIRTIO_USB_EP_DIR_IN :
+					      VIRTIO_USB_EP_DIR_OUT);
+
+	cmd = virtio_usb_dc_cmd_alloc(vudc, VIRTIO_USB_CMD_DEV_EP_ENABLE,
+				      GFP_KERNEL);
+	if (!cmd) {
+		rc = -ENOMEM;
+		goto done;
+	}
+
+	sg_init_one(psg_data, desc, sizeof(*desc));
+	hdr = virtio_usb_cmd_request(cmd);
+	hdr->endpoint = cpu_to_le16(endpoint);
+
+	rc = virtio_usb_cmd_send_sync(vudc->vusb, psg_data, NULL, cmd);
+
+done:
+	spin_lock_irqsave(&vudc->lock, flags);
+	if (!rc) {
+		vep->state = EP_ENABLED;
+		vep->last_err = 0;
+		/* Flush pend_queue */
+		while (!list_empty(&vep->pend_queue)) {
+			struct virtio_usb_data *vreq = list_first_entry(
+				&vep->pend_queue, struct virtio_usb_data, list);
+			struct virtio_usb_dc_priv *priv =
+				virtio_usb_data_priv(vreq);
+			int qrc;
+
+			list_del_init(&vreq->list);
+			spin_unlock_irqrestore(&vudc->lock, flags);
+			qrc = do_real_queue(vep, &priv->req);
+			/*
+			 * do_real_queue() takes its own ref for the
+			 * in-flight/vring lifetime; drop the ref that kept
+			 * vreq alive while it was parked in pend_queue.
+			 */
+			virtio_usb_data_unref(vreq);
+			if (qrc) {
+				/*
+				 * Request was accepted while EP was ENABLING.
+				 * If forwarding now fails, complete it with
+				 * error instead of silently dropping it.
+				 */
+				priv->req.status = qrc;
+				usb_gadget_giveback_request(&vep->ep,
+							    &priv->req);
+			}
+			spin_lock_irqsave(&vudc->lock, flags);
+		}
+	} else {
+		vep->state = EP_HALTED;
+		vep->last_err = rc;
+
+		while (!list_empty(&vep->pend_queue)) {
+			struct virtio_usb_data *vreq = list_first_entry(
+				&vep->pend_queue, struct virtio_usb_data, list);
+			struct virtio_usb_dc_priv *priv =
+				virtio_usb_data_priv(vreq);
+
+			list_del_init(&vreq->list);
+			priv->req.status = rc;
+			spin_unlock_irqrestore(&vudc->lock, flags);
+			virtio_usb_data_unref(vreq);
+			usb_gadget_giveback_request(&vep->ep, &priv->req);
+			spin_lock_irqsave(&vudc->lock, flags);
+		}
+	}
+	spin_unlock_irqrestore(&vudc->lock, flags);
+	virtio_usb_dc_flush_ep0_pend(vudc);
+}
+
+static void vep_disable_work(struct work_struct *work)
+{
+	struct virtio_usb_ep *vep =
+		container_of(work, struct virtio_usb_ep, disable_work);
+	struct virtio_usb_dc *vudc = vep->vudc;
+	struct virtio_usb_cmd *cmd;
+	struct virtio_usb_dev_cmd_hdr *hdr;
+	u16 endpoint;
+
+	if (!READ_ONCE(vudc->driver) || !vudc->registered)
+		return;
+
+	endpoint = vep->ep_id |
+		   (usb_ep_dir_in(&vep->ep) ? VIRTIO_USB_EP_DIR_IN :
+					      VIRTIO_USB_EP_DIR_OUT);
+
+	cmd = virtio_usb_dc_cmd_alloc(vudc, VIRTIO_USB_CMD_DEV_EP_DISABLE,
+				      GFP_KERNEL);
+	if (!cmd)
+		return;
+
+	hdr = virtio_usb_cmd_request(cmd);
+	hdr->endpoint = cpu_to_le16(endpoint);
+
+	(void)virtio_usb_cmd_send_sync(vudc->vusb, NULL, NULL, cmd);
+}
+
 /**
  * virtio_ep_enable() - Enable endpoint
  * This callback is called to configure endpoint and make it usable.
@@ -256,44 +564,30 @@ static int virtio_ep_enable(struct usb_ep *ep,
 {
 	struct virtio_usb_ep *vep = usb_ep_to_virtio_ep(ep);
 	struct virtio_usb_dc *vudc = vep->vudc;
-	struct scatterlist sg;
-	struct scatterlist *psg_data = &sg;
-	struct virtio_usb_dev_cmd_hdr *hdr;
-	struct virtio_usb_cmd *cmd;
 	unsigned long flags;
-	u16 endpoint;
-	int rc;
-
-	if (!vudc->driver)
-		return -ESHUTDOWN;
 
 	spin_lock_irqsave(&vudc->lock, flags);
 
-	if (!ep || !desc || ep->caps.type_control ||
+	if (!vudc->driver || !ep || !desc || ep->caps.type_control ||
 	    desc->bDescriptorType != USB_DT_ENDPOINT) {
 		spin_unlock_irqrestore(&vudc->lock, flags);
 		return -EINVAL;
 	}
 
+	if (vep->state != EP_DISABLED) {
+		spin_unlock_irqrestore(&vudc->lock, flags);
+		return -EBUSY;
+	}
+
 	ep->desc = desc;
 	ep->maxpacket = usb_endpoint_maxp(desc);
-	endpoint = vep->ep_id | (usb_ep_dir_in(ep) ? VIRTIO_USB_EP_DIR_IN :
-						     VIRTIO_USB_EP_DIR_OUT);
+	vep->state = EP_ENABLING;
+
+	queue_work(vudc->ep_cmd_wq, &vep->enable_work);
 
 	spin_unlock_irqrestore(&vudc->lock, flags);
 
-	cmd = virtio_usb_dc_cmd_alloc(vudc, VIRTIO_USB_CMD_DEV_EP_ENABLE,
-				      GFP_ATOMIC);
-	if (!cmd)
-		return -ENOMEM;
-
-	sg_init_one(psg_data, desc, sizeof(*desc));
-	hdr = virtio_usb_cmd_request(cmd);
-	hdr->endpoint = cpu_to_le16(endpoint);
-
-	rc = virtio_usb_cmd_send_sync(vudc->vusb, psg_data, NULL, cmd);
-
-	return rc;
+	return 0;
 }
 
 /**
@@ -311,42 +605,82 @@ static int virtio_ep_disable(struct usb_ep *ep)
 	struct virtio_usb_data *vreq = NULL, *vreq_tmp;
 	struct virtio_usb_dc *vudc = vep->vudc;
 	struct virtio_usb_dc_priv *priv = NULL;
-	struct virtio_usb_dev_cmd_hdr *hdr;
-	struct virtio_usb_cmd *cmd;
+	LIST_HEAD(giveback_inflight);
+	LIST_HEAD(giveback_pended);
 	unsigned long flags;
-	u16 endpoint;
-	int rc;
 
-	if (!ep || ep->caps.type_control)
+	if (!ep || ep->caps.type_control) // EP0 not called disable
 		return -EINVAL;
 
 	spin_lock_irqsave(&vudc->lock, flags);
 
+	if (vep->state == EP_ENABLING) {
+		/*
+		 * cancel_work_sync() can sleep and must not be called while
+		 * holding vudc->lock: vep_enable_work() only re-acquires
+		 * this same lock after its (possibly blocking) virtio
+		 * command completes, so holding the lock here across
+		 * cancel_work_sync() would deadlock against it.
+		 */
+		spin_unlock_irqrestore(&vudc->lock, flags);
+		cancel_work_sync(&vep->enable_work);
+		spin_lock_irqsave(&vudc->lock, flags);
+	}
+
+	if (vep->state == EP_DISABLED) {
+		spin_unlock_irqrestore(&vudc->lock, flags);
+		return 0;
+	}
+
+	vep->state = EP_DISABLED;
+
+	/*
+	 * All pending (waiting for the ENABLING) - put to local list for
+	 * giveback(-ESHUTDOWN). These requests are not in the virtqueue,
+	 * can be unref now.
+	 */
+	list_for_each_entry_safe(vreq, vreq_tmp, &vep->pend_queue, list) {
+		list_del_init(&vreq->list);
+		list_add_tail(&vreq->list, &giveback_pended);
+	}
+
+	/*
+	 * in-flight requests - make early giveback, remove from req_queue,
+	 * mark completed_early, but do not unref: unref will be in complete
+	 * handler.
+	 */
 	list_for_each_entry_safe(vreq, vreq_tmp, &vep->req_queue, list) {
 		priv = virtio_usb_data_priv(vreq);
-		/**
-		 * When endpoint is disabled, completion handler for all pending
-		 * requests will be called. Make the request status to -ESHUTDOWN
-		 * to prevent requests completes even before the endpoint disable
-		 * is send to the controller.
-		 */
 		priv->req.status = -ESHUTDOWN;
+		priv->completed_early = true;
+		list_del_init(&vreq->list);
+		list_add_tail(&vreq->list, &giveback_inflight);
 	}
-	endpoint = vep->ep_id | (usb_ep_dir_in(ep) ? VIRTIO_USB_EP_DIR_IN :
-						     VIRTIO_USB_EP_DIR_OUT);
+
 	spin_unlock_irqrestore(&vudc->lock, flags);
 
-	cmd = virtio_usb_dc_cmd_alloc(vudc, VIRTIO_USB_CMD_DEV_EP_DISABLE,
-				      GFP_ATOMIC);
-	if (!cmd)
-		return -ENOMEM;
+	/* pending: just giveback and unref */
+	list_for_each_entry_safe(vreq, vreq_tmp, &giveback_pended, list) {
+		struct virtio_usb_dc_priv *p = virtio_usb_data_priv(vreq);
 
-	hdr = virtio_usb_cmd_request(cmd);
-	hdr->endpoint = cpu_to_le16(endpoint);
+		list_del_init(&vreq->list);
+		p->req.status = -ESHUTDOWN;
+		usb_gadget_giveback_request(&vep->ep, &p->req);
+		virtio_usb_data_unref(
+			vreq); /* drop the pend_queue ref taken in virtio_ep_queue() */
+	}
 
-	rc = virtio_usb_cmd_send_sync(vudc->vusb, NULL, NULL, cmd);
+	/* in-flight: giveback now, unref will be in complete_req */
+	list_for_each_entry_safe(vreq, vreq_tmp, &giveback_inflight, list) {
+		struct virtio_usb_dc_priv *p = virtio_usb_data_priv(vreq);
 
-	return rc;
+		list_del_init(&vreq->list);
+		usb_gadget_giveback_request(&vep->ep, &p->req);
+	}
+
+	queue_work(vudc->ep_cmd_wq, &vep->disable_work);
+
+	return 0;
 }
 
 /**
@@ -395,75 +729,52 @@ static void virtio_ep_free_request(struct usb_ep *ep, struct usb_request *req)
 static int virtio_ep_queue(struct usb_ep *ep, struct usb_request *req,
 			   gfp_t mem_flags)
 {
-	struct scatterlist *out_sgs = NULL, *in_sgs = NULL, *psg_data;
 	struct virtio_usb_data *vreq = usb_req_to_virtio_data(req);
 	struct virtio_usb_ep *vep = usb_ep_to_virtio_ep(ep);
 	struct virtio_usb_dc *vudc = vep->vudc;
-	struct virtio_usb_response *response;
-	struct virtio_usb_request *request;
-	u16 transfer_flags = 0;
-	struct scatterlist sg;
 	unsigned long flags;
-	u16 endpoint;
-	int rc;
-
-	virtio_usb_data_ref(vreq);
+	int rc = 0;
 
 	spin_lock_irqsave(&vudc->lock, flags);
-	req->actual = 0;
-	req->status = -EINPROGRESS;
 
-	list_add_tail(&vreq->list, &vep->req_queue);
-	endpoint = vep->ep_id | (usb_ep_dir_in(ep) ? VIRTIO_USB_EP_DIR_IN :
-						     VIRTIO_USB_EP_DIR_OUT);
-	spin_unlock_irqrestore(&vudc->lock, flags);
+	switch (vep->state) {
+	case EP_ENABLED:
+		if (!vep->ep_id && virtio_usb_dc_ep_enabling_locked(vudc)) {
+			virtio_usb_data_ref(vreq);
+			req->actual = 0;
+			req->status = -EINPROGRESS;
+			list_add_tail(&vreq->list, &vep->pend_queue);
+			spin_unlock_irqrestore(&vudc->lock, flags);
+			return 0;
+		}
+		spin_unlock_irqrestore(&vudc->lock, flags);
+		rc = do_real_queue(vep, req);
+		/* if rc==0 - unref will be in completion, on failure
+		 * do_real_queue() has already dropped its own ref
+		 */
+		return rc;
 
-	request = virtio_usb_data_request(vreq);
-	response = virtio_usb_data_response(vreq);
+	case EP_ENABLING:
+		/* Waiting for ENABLED state */
+		virtio_usb_data_ref(vreq);
+		req->actual = 0;
+		req->status = -EINPROGRESS;
+		list_add_tail(&vreq->list, &vep->pend_queue);
+		spin_unlock_irqrestore(&vudc->lock, flags);
+		// Additional ref waited for the enable_work()
+		return 0;
 
-	response->actual_length = cpu_to_le32(0);
-	response->status = cpu_to_le32(VIRTIO_USB_S_ERR_INTERNAL);
+	case EP_HALTED:
+		spin_unlock_irqrestore(&vudc->lock, flags);
+		req->status = vep->last_err ? vep->last_err : -EPIPE;
+		usb_gadget_giveback_request(&vep->ep, req);
+		return req->status;
 
-	if (req->short_not_ok)
-		transfer_flags |= VIRTIO_USB_FLAG_SHORT_NOT_OK;
-	else if (req->zero)
-		transfer_flags |= VIRTIO_USB_FLAG_ZERO_PACKET;
-
-	request->transfer_flags = cpu_to_le16(transfer_flags);
-	request->endpoint = cpu_to_le16(endpoint);
-	request->port = cpu_to_le16(vudc->port);
-
-	if (req->length && req->buf) {
-		psg_data = &sg;
-		sg_init_one(psg_data, req->buf, req->length);
-	} else if (req->length && req->num_sgs > 0) {
-		psg_data = req->sg;
-	} else if (req->sg) {
-		psg_data = &sg;
-		sg_init_one(psg_data, sg_virt(req->sg), req->length);
-	} else {
-		psg_data = NULL;
+	case EP_DISABLED:
+	default:
+		spin_unlock_irqrestore(&vudc->lock, flags);
+		return -ESHUTDOWN;
 	}
-
-	if (usb_ep_dir_in(ep))
-		out_sgs = psg_data;
-	else
-		in_sgs = psg_data;
-
-	rc = virtio_usb_data_send(vudc->vusb, vreq, out_sgs, in_sgs);
-	if (rc)
-		goto on_error_vq;
-
-	return rc;
-
-on_error_vq:
-	spin_lock_irqsave(&vudc->lock, flags);
-	list_del_init(&vreq->list);
-	spin_unlock_irqrestore(&vudc->lock, flags);
-
-	virtio_usb_data_unref(vreq);
-
-	return rc;
 }
 
 /**
@@ -477,20 +788,32 @@ on_error_vq:
 static int virtio_ep_dequeue(struct usb_ep *ep, struct usb_request *req)
 {
 	struct virtio_usb_ep *vep = usb_ep_to_virtio_ep(ep);
-	struct virtio_usb_dev_cmd_cancel *cancel;
 	struct virtio_usb_dc *vudc = vep->vudc;
 	struct virtio_usb_dc_priv *priv;
 	struct virtio_usb_data *vreq;
-	struct virtio_usb_cmd *cmd;
 	unsigned long flags;
 	int rc = -EINVAL;
-	u16 endpoint;
 
 	if (!vudc->driver)
 		return -ESHUTDOWN;
 
 	spin_lock_irqsave(&vudc->lock, flags);
 
+	/* If request is still pending (ENABLING) */
+	list_for_each_entry(vreq, &vep->pend_queue, list) {
+		priv = virtio_usb_data_priv(vreq);
+		if (&priv->req == req) {
+			list_del_init(&vreq->list);
+			req->status = -ECONNRESET;
+			spin_unlock_irqrestore(&vudc->lock, flags);
+
+			virtio_usb_data_unref(vreq);
+			usb_gadget_giveback_request(ep, req);
+			return 0;
+		}
+	}
+
+	/* in-flight - schedule async cancel */
 	list_for_each_entry(vreq, &vep->req_queue, list) {
 		priv = virtio_usb_data_priv(vreq);
 		if (req == &priv->req) {
@@ -502,28 +825,14 @@ static int virtio_ep_dequeue(struct usb_ep *ep, struct usb_request *req)
 			break;
 		}
 	}
-	endpoint = vep->ep_id | (usb_ep_dir_in(ep) ? VIRTIO_USB_EP_DIR_IN :
-						     VIRTIO_USB_EP_DIR_OUT);
 	spin_unlock_irqrestore(&vudc->lock, flags);
 
-	if (rc)
+	if (rc) // request not found in req_queue
 		return rc;
 
-	vreq = priv->vreq;
+	schedule_work(&priv->cancel_work);
 
-	cmd = virtio_usb_dc_cmd_alloc(vudc, VIRTIO_USB_CMD_DEV_CANCEL,
-				      GFP_KERNEL);
-	if (!cmd)
-		return -ENOMEM;
-
-	cancel = virtio_usb_cmd_request(cmd);
-	cancel->hdr.endpoint = cpu_to_le16(endpoint);
-	cancel->hdr.port = cpu_to_le16(vudc->port);
-	cancel->tag = cpu_to_le64((uintptr_t)vreq);
-
-	rc = virtio_usb_cmd_send_sync(vudc->vusb, NULL, NULL, cmd);
-
-	return rc;
+	return 0;
 }
 
 /**
@@ -633,6 +942,109 @@ static const struct usb_ep_ops virtio_usb_ep_ops = {
 /*-------------------------------------------------------------------------*/
 /* UDC callbacks */
 
+static void virtio_usb_dc_cancel_work(struct work_struct *work)
+{
+	struct virtio_usb_dc_priv *priv =
+		container_of(work, struct virtio_usb_dc_priv, cancel_work);
+	struct virtio_usb_ep *vep = priv->vep;
+	struct virtio_usb_dc *vudc = vep->vudc;
+	struct virtio_usb_cmd *cmd;
+	struct virtio_usb_dev_cmd_cancel *cancel;
+	struct virtio_usb_data *vreq = priv->vreq;
+	unsigned long flags;
+	u16 endpoint;
+	struct virtio_usb_data *iter;
+	bool found = false;
+
+	spin_lock_irqsave(&vudc->lock, flags);
+
+	list_for_each_entry(iter, &vep->req_queue, list) {
+		if (iter == vreq) {
+			found = true;
+			break;
+		}
+	}
+	if (!found) {
+		spin_unlock_irqrestore(&vudc->lock, flags);
+		return;
+	}
+	endpoint = vep->ep_id |
+		   (usb_ep_dir_in(&vep->ep) ? VIRTIO_USB_EP_DIR_IN :
+					      VIRTIO_USB_EP_DIR_OUT);
+	spin_unlock_irqrestore(&vudc->lock, flags);
+
+	cmd = virtio_usb_dc_cmd_alloc(vudc, VIRTIO_USB_CMD_DEV_CANCEL,
+				      GFP_KERNEL);
+	if (!cmd)
+		return;
+
+	cancel = virtio_usb_cmd_request(cmd);
+	cancel->hdr.endpoint = cpu_to_le16(endpoint);
+	cancel->hdr.port = cpu_to_le16(vudc->port);
+	cancel->tag = cpu_to_le64((uintptr_t)vreq);
+
+	(void)virtio_usb_cmd_send_sync(vudc->vusb, NULL, NULL, cmd);
+}
+
+static int virtio_usb_dc_send_cmd(struct virtio_usb_dc *vudc,
+				  unsigned int cmd_code, unsigned int val)
+{
+	struct virtio_usb_dev_cmd_set_value *req;
+	struct virtio_usb_cmd *cmd;
+
+	cmd = virtio_usb_dc_cmd_alloc(vudc, cmd_code, GFP_ATOMIC);
+	if (!cmd)
+		return -ENOMEM;
+
+	req = virtio_usb_cmd_request(cmd);
+	req->value = cpu_to_le32(val);
+
+	return virtio_usb_cmd_send_sync(vudc->vusb, NULL, NULL, cmd);
+}
+
+static void virtio_usb_dc_work(struct work_struct *work)
+{
+	struct virtio_usb_dc *vudc =
+		container_of(work, struct virtio_usb_dc, dc_cmd_work);
+	int sp, ma;
+
+	mutex_lock(&vudc->dc_cmd_work_lock);
+
+	sp = atomic_xchg(&vudc->pending_self_pwr, -1);
+	ma = atomic_xchg(&vudc->pending_vbus_ma, -1);
+
+	if (sp >= 0) {
+		bool new_sp = (sp != 0);
+
+		if (new_sp != vudc->cur_self_pwr) {
+			(void)virtio_usb_dc_send_cmd(
+				vudc, VIRTIO_USB_CMD_DEV_SET_SELF_POWERED,
+				new_sp);
+			vudc->cur_self_pwr = new_sp;
+		}
+	}
+
+	if (ma >= 0) {
+		unsigned int new_ma = (unsigned int)ma;
+
+		if (vudc->cur_self_pwr)
+			new_ma = 0;
+
+		if (new_ma != vudc->cur_vbus_ma) {
+			(void)virtio_usb_dc_send_cmd(
+				vudc, VIRTIO_USB_CMD_DEV_VBUS_DRAW, new_ma);
+			vudc->cur_vbus_ma = new_ma;
+		}
+	}
+
+	mutex_unlock(&vudc->dc_cmd_work_lock);
+
+	if (atomic_read(&vudc->pending_self_pwr) >= 0 ||
+	    atomic_read(&vudc->pending_vbus_ma) >= 0) {
+		queue_work(vudc->dc_cmd_wq, &vudc->dc_cmd_work);
+	}
+}
+
 /**
  * virtio_usb_dc_set_selfpowered() - Sets the device selfpowered feature.
  * @gadget: The device being declared as self-powered
@@ -645,18 +1057,11 @@ static int virtio_usb_dc_set_selfpowered(struct usb_gadget *gadget,
 {
 	struct virtio_usb_dc *vudc =
 		container_of(gadget, struct virtio_usb_dc, gadget);
-	unsigned int code = VIRTIO_USB_CMD_DEV_SET_SELF_POWERED;
-	struct virtio_usb_dev_cmd_set_value *req;
-	struct virtio_usb_cmd *cmd;
 
-	cmd = virtio_usb_dc_cmd_alloc(vudc, code, GFP_ATOMIC);
-	if (!cmd)
-		return -ENOMEM;
+	atomic_set(&vudc->pending_self_pwr, is_selfpowered ? 1 : 0);
+	queue_work(vudc->dc_cmd_wq, &vudc->dc_cmd_work);
 
-	req = virtio_usb_cmd_request(cmd);
-	req->value = cpu_to_le32(!!is_selfpowered);
-
-	return virtio_usb_cmd_send_sync(vudc->vusb, NULL, NULL, cmd);
+	return 0;
 }
 
 /**
@@ -774,29 +1179,18 @@ static int virtio_usb_dc_stop(struct usb_gadget *gadget)
 /**
  * virtio_usb_dc_vbus_draw() - Constrain controller's VBUS power usage
  * @gadget: The device whose VBUS usage is being described
- * @mA: How much current to draw, in milliAmperes.
+ * @ma: How much current to draw, in milliAmperes.
  *
  * Return: 0 on success, -errno on failure.
  */
-static int virtio_usb_dc_vbus_draw(struct usb_gadget *gadget, unsigned int mA)
+static int virtio_usb_dc_vbus_draw(struct usb_gadget *gadget, unsigned int ma)
 {
 	struct virtio_usb_dc *vudc =
 		container_of(gadget, struct virtio_usb_dc, gadget);
-	unsigned int code = VIRTIO_USB_CMD_DEV_VBUS_DRAW;
-	struct virtio_usb_dev_cmd_set_value *req;
-	struct virtio_usb_cmd *cmd;
-	int rc;
 
-	cmd = virtio_usb_dc_cmd_alloc(vudc, code, GFP_ATOMIC);
-	if (!cmd)
-		return -ENOMEM;
-
-	req = virtio_usb_cmd_request(cmd);
-	req->value = cpu_to_le32(mA);
-
-	rc = virtio_usb_cmd_send_sync(vudc->vusb, NULL, NULL, cmd);
-
-	return rc;
+	atomic_set(&vudc->pending_vbus_ma, ma);
+	queue_work(vudc->dc_cmd_wq, &vudc->dc_cmd_work);
+	return 0;
 }
 
 /**
@@ -930,6 +1324,11 @@ static int virtio_usb_dc_get_endpoint_info(struct virtio_usb_dc *vudc)
 		vep->ep.name = vep->name;
 		vep->ep.ops = &virtio_usb_ep_ops;
 		INIT_LIST_HEAD(&vep->req_queue);
+		INIT_LIST_HEAD(&vep->pend_queue);
+		vep->state = i ? EP_DISABLED : EP_ENABLED; // EP0 always enabled
+		INIT_WORK(&vep->enable_work, vep_enable_work);
+		INIT_WORK(&vep->disable_work, vep_disable_work);
+		vep->last_err = 0;
 		list_add_tail(&vep->ep.ep_list, &vudc->gadget.ep_list);
 		usb_ep_set_maxpacket_limit(&vep->ep, maxpacket_limit);
 		vep->ep.max_streams = le16_to_cpu(epinfo[i].max_streams);
@@ -1038,7 +1437,6 @@ static void virtio_usb_dc_event_process(struct virtio_usb_event *event)
 		}
 		vudc->gadget.ops = &virtio_gadget_ops;
 		vudc->gadget.max_speed = USB_SPEED_HIGH;
-		vudc->gadget.nonatomic = 1;
 
 		//vudc->gadget.dev.init_name = gadget_name;
 		vudc->gadget.dev.parent = &vudc->pdev->dev;
@@ -1071,6 +1469,14 @@ static void virtio_usb_dc_event_process(struct virtio_usb_event *event)
 
 		vep = usb_ep_to_virtio_ep(vudc->gadget.ep0);
 		setup_evt = virtio_usb_event_buf(event);
+		rc = virtio_usb_dc_wait_ep0_idle(vudc);
+		if (rc) {
+			dev_warn(
+				&vusb->vdev->dev,
+				"SETUP while ep0 request is still pending, timing out\n");
+			virtio_ep_set_halt(vudc->gadget.ep0, 1);
+			break;
+		}
 
 		memcpy(&vep->setup, setup_evt->setup,
 		       sizeof(struct usb_ctrlrequest));
@@ -1102,6 +1508,9 @@ static void virtio_usb_dc_event_process(struct virtio_usb_event *event)
 	case VIRTIO_USB_EVT_DEV_UNBIND: {
 		unsigned int registered;
 
+		pr_info("%s port_id %d VIRTIO_USB_EVT_DEV_UNBIND\n", __func__,
+			port_id);
+
 		spin_lock_irqsave(&vudc->lock, flags);
 		registered = vudc->registered;
 		vudc->registered = 0;
@@ -1113,8 +1522,14 @@ static void virtio_usb_dc_event_process(struct virtio_usb_event *event)
 			vudc->gadget.name = NULL;
 		}
 
-		kfree(vudc->veps);
-		vudc->veps = NULL;
+		if (vudc->veps) {
+			unsigned int i;
+
+			for (i = 0; i < vudc->neps; i++)
+				cancel_work_sync(&vudc->veps[i].enable_work);
+			kfree(vudc->veps);
+			vudc->veps = NULL;
+		}
 
 		if (vudc->pdev) {
 			platform_device_unregister(vudc->pdev);
@@ -1141,7 +1556,6 @@ void virtio_usb_dc_event_work(struct work_struct *work)
 		container_of(work, struct virtio_usb, vq_dev_event_work);
 	struct virtio_usb_queue *evtq =
 		&vusb->vqueues[vusb->dev_vq_base + VIRTIO_USB_VQ_EVENT_IDX];
-
 	virtio_usb_evt_work(evtq, virtio_usb_dc_event_process);
 }
 
@@ -1186,13 +1600,39 @@ int virtio_usb_dc_init(struct virtio_usb *vusb, int port_id)
 	if (!vudc)
 		return -ENOMEM;
 
-	vusb->vports[port_id].vudc = vudc;
 	vudc->vusb = vusb;
 	vudc->port = port_id;
 	for (i = 0; i < VIRTIO_USB_VQ_DEV_MAX; i++)
 		vudc->dcqs[i] = &vusb->vqueues[vusb->dev_vq_base + i];
 
+	vudc->ep_cmd_wq = alloc_ordered_workqueue(
+		"vudc_ep_work_%d", WQ_MEM_RECLAIM | WQ_UNBOUND, port_id);
+	vudc->dc_cmd_wq = alloc_ordered_workqueue(
+		"vudc_dc_work_%d", WQ_MEM_RECLAIM | WQ_UNBOUND, port_id);
+	if (!vudc->ep_cmd_wq || !vudc->dc_cmd_wq) {
+		if (vudc->ep_cmd_wq)
+			destroy_workqueue(vudc->ep_cmd_wq);
+		if (vudc->dc_cmd_wq)
+			destroy_workqueue(vudc->dc_cmd_wq);
+		devm_kfree(&vusb->vdev->dev, vudc);
+		return -ENOMEM;
+	}
+
+	/* Publish only once fully initialized - vports[port_id].vudc must
+	 * never point at a partially-constructed (or already-freed, on the
+	 * failure path above) struct virtio_usb_dc.
+	 */
+	vusb->vports[port_id].vudc = vudc;
+
+	INIT_WORK(&vudc->dc_cmd_work, virtio_usb_dc_work);
+	mutex_init(&vudc->dc_cmd_work_lock);
+	atomic_set(&vudc->pending_self_pwr, -1);
+	atomic_set(&vudc->pending_vbus_ma, -1);
+	vudc->cur_vbus_ma = 0;
+	vudc->cur_self_pwr = false;
+
 	spin_lock_init(&vudc->lock);
+	init_waitqueue_head(&vudc->ep0_idle);
 
 	vudc->registered = 0;
 
@@ -1228,6 +1668,22 @@ int virtio_usb_dc_deinit(struct virtio_usb *vusb)
 		if (registered)
 			usb_del_gadget_udc(&vudc->gadget);
 
+		if (vudc->dc_cmd_wq) {
+			cancel_work_sync(&vudc->dc_cmd_work);
+			destroy_workqueue(vudc->dc_cmd_wq);
+		}
+
+		if (vudc->ep_cmd_wq) {
+			flush_workqueue(vudc->ep_cmd_wq);
+			if (vudc->veps) {
+				unsigned int i;
+
+				for (i = 0; i < vudc->neps; i++)
+					cancel_work_sync(
+						&vudc->veps[i].enable_work);
+			}
+			destroy_workqueue(vudc->ep_cmd_wq);
+		}
 		kfree(vudc->veps);
 		vudc->veps = NULL;
 
