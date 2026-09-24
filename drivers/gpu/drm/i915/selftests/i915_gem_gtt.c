@@ -32,8 +32,10 @@
 #include "gem/selftests/mock_context.h"
 #include "gt/intel_context.h"
 #include "gt/intel_gpu_commands.h"
+#include "gt/intel_gt_print.h"
 #include "gt/intel_gtt.h"
 
+#include "i915_drv.h"
 #include "i915_random.h"
 #include "i915_selftest.h"
 #include "i915_vma_resource.h"
@@ -268,8 +270,10 @@ static int lowlevel_hole(struct i915_address_space *vm,
 			hole_size = KMALLOC_MAX_SIZE / sizeof(u32);
 		count = hole_size >> 1;
 		if (!count) {
-			pr_debug("%s: hole is too small [%llx - %llx] >> %d: %lld\n",
-				 __func__, hole_start, hole_end, size, hole_size);
+			gt_dbg(vm->gt,
+			       "%s: hole is too small [%llx - %llx] >> %d: %lld\n",
+			       __func__, hole_start, hole_end, size,
+			       hole_size);
 			break;
 		}
 
@@ -472,15 +476,21 @@ static int fill_hole(struct i915_address_space *vm,
 
 					err = i915_vma_pin(vma, 0, 0, offset | flags);
 					if (err) {
-						pr_err("%s(%s) pin (forward) failed with err=%d on size=%lu pages (prime=%lu), offset=%llx\n",
-						       __func__, p->name, err, npages, prime, offset);
+						gt_err(vm->gt,
+						       "%s(%s) pin (forward) failed with err=%d on size=%lu pages (prime=%lu), offset=%llx\n",
+						       __func__, p->name, err,
+						       npages, prime, offset);
 						goto err;
 					}
 
 					if (!drm_mm_node_allocated(&vma->node) ||
 					    i915_vma_misplaced(vma, 0, 0, offset | flags)) {
-						pr_err("%s(%s) (forward) insert failed: vma.node=%llx + %llx [allocated? %d], expected offset %llx\n",
-						       __func__, p->name, vma->node.start, vma->node.size, drm_mm_node_allocated(&vma->node),
+						gt_err(vm->gt,
+						       "%s(%s) (forward) insert failed: vma.node=%llx + %llx [allocated? %d], expected offset %llx\n",
+						       __func__, p->name,
+						       vma->node.start,
+						       vma->node.size,
+						       drm_mm_node_allocated(&vma->node),
 						       offset);
 						err = -EINVAL;
 						goto err;
@@ -512,18 +522,22 @@ static int fill_hole(struct i915_address_space *vm,
 
 					if (!drm_mm_node_allocated(&vma->node) ||
 					    i915_vma_misplaced(vma, 0, 0, offset | flags)) {
-						pr_err("%s(%s) (forward) moved vma.node=%llx + %llx, expected offset %llx\n",
-						       __func__, p->name, vma->node.start, vma->node.size,
-						       offset);
+						gt_err(vm->gt,
+						       "%s(%s) (forward) moved vma.node=%llx + %llx, expected offset %llx\n",
+						       __func__, p->name,
+						       vma->node.start,
+						       vma->node.size, offset);
 						err = -EINVAL;
 						goto err;
 					}
 
 					err = i915_vma_unbind_unlocked(vma);
 					if (err) {
-						pr_err("%s(%s) (forward) unbind of vma.node=%llx + %llx failed with err=%d\n",
-						       __func__, p->name, vma->node.start, vma->node.size,
-						       err);
+						gt_err(vm->gt,
+						       "%s(%s) (forward) unbind of vma.node=%llx + %llx failed with err=%d\n",
+						       __func__, p->name,
+						       vma->node.start,
+						       vma->node.size, err);
 						goto err;
 					}
 
@@ -551,15 +565,21 @@ static int fill_hole(struct i915_address_space *vm,
 
 					err = i915_vma_pin(vma, 0, 0, offset | flags);
 					if (err) {
-						pr_err("%s(%s) pin (backward) failed with err=%d on size=%lu pages (prime=%lu), offset=%llx\n",
-						       __func__, p->name, err, npages, prime, offset);
+						gt_err(vm->gt,
+						       "%s(%s) pin (backward) failed with err=%d on size=%lu pages (prime=%lu), offset=%llx\n",
+						       __func__, p->name, err,
+						       npages, prime, offset);
 						goto err;
 					}
 
 					if (!drm_mm_node_allocated(&vma->node) ||
 					    i915_vma_misplaced(vma, 0, 0, offset | flags)) {
-						pr_err("%s(%s) (backward) insert failed: vma.node=%llx + %llx [allocated? %d], expected offset %llx\n",
-						       __func__, p->name, vma->node.start, vma->node.size, drm_mm_node_allocated(&vma->node),
+						gt_err(vm->gt,
+						       "%s(%s) (backward) insert failed: vma.node=%llx + %llx [allocated? %d], expected offset %llx\n",
+						       __func__, p->name,
+						       vma->node.start,
+						       vma->node.size,
+						       drm_mm_node_allocated(&vma->node),
 						       offset);
 						err = -EINVAL;
 						goto err;
@@ -591,8 +611,12 @@ static int fill_hole(struct i915_address_space *vm,
 
 					if (!drm_mm_node_allocated(&vma->node) ||
 					    i915_vma_misplaced(vma, 0, 0, offset | flags)) {
-						pr_err("%s(%s) (backward) moved vma.node=%llx + %llx [allocated? %d], expected offset %llx\n",
-						       __func__, p->name, vma->node.start, vma->node.size, drm_mm_node_allocated(&vma->node),
+						gt_err(vm->gt,
+						       "%s(%s) (backward) moved vma.node=%llx + %llx [allocated? %d], expected offset %llx\n",
+						       __func__, p->name,
+						       vma->node.start,
+						       vma->node.size,
+						       drm_mm_node_allocated(&vma->node),
 						       offset);
 						err = -EINVAL;
 						goto err;
@@ -600,9 +624,11 @@ static int fill_hole(struct i915_address_space *vm,
 
 					err = i915_vma_unbind_unlocked(vma);
 					if (err) {
-						pr_err("%s(%s) (backward) unbind of vma.node=%llx + %llx failed with err=%d\n",
-						       __func__, p->name, vma->node.start, vma->node.size,
-						       err);
+						gt_err(vm->gt,
+						       "%s(%s) (backward) unbind of vma.node=%llx + %llx failed with err=%d\n",
+						       __func__, p->name,
+						       vma->node.start,
+						       vma->node.size, err);
 						goto err;
 					}
 
@@ -672,16 +698,18 @@ static int walk_hole(struct i915_address_space *vm,
 		     addr += round_up(obj->base.size, min_alignment)) {
 			err = i915_vma_pin(vma, 0, 0, addr | flags);
 			if (err) {
-				pr_err("%s bind failed at %llx + %llx [hole %llx- %llx] with err=%d\n",
-				       __func__, addr, vma->size,
-				       hole_start, hole_end, err);
+				gt_err(vm->gt,
+				       "%s bind failed at %llx + %llx [hole %llx- %llx] with err=%d\n",
+				       __func__, addr, vma->size, hole_start,
+				       hole_end, err);
 				goto err_put;
 			}
 			i915_vma_unpin(vma);
 
 			if (!drm_mm_node_allocated(&vma->node) ||
 			    i915_vma_misplaced(vma, 0, 0, addr | flags)) {
-				pr_err("%s incorrect at %llx + %llx\n",
+				gt_err(vm->gt,
+				       "%s incorrect at %llx + %llx\n",
 				       __func__, addr, vma->size);
 				err = -EINVAL;
 				goto err_put;
@@ -689,7 +717,8 @@ static int walk_hole(struct i915_address_space *vm,
 
 			err = i915_vma_unbind_unlocked(vma);
 			if (err) {
-				pr_err("%s unbind failed at %llx + %llx  with err=%d\n",
+				gt_err(vm->gt,
+				       "%s unbind failed at %llx + %llx  with err=%d\n",
 				       __func__, addr, vma->size, err);
 				goto err_put;
 			}
@@ -754,7 +783,8 @@ static int pot_hole(struct i915_address_space *vm,
 		     addr += step) {
 			err = i915_vma_pin(vma, 0, 0, addr | flags);
 			if (err) {
-				pr_err("%s failed to pin object at %llx in hole [%llx - %llx], with err=%d\n",
+				gt_err(vm->gt,
+				       "%s failed to pin object at %llx in hole [%llx - %llx], with err=%d\n",
 				       __func__,
 				       addr,
 				       hole_start, hole_end,
@@ -764,7 +794,8 @@ static int pot_hole(struct i915_address_space *vm,
 
 			if (!drm_mm_node_allocated(&vma->node) ||
 			    i915_vma_misplaced(vma, 0, 0, addr | flags)) {
-				pr_err("%s incorrect at %llx + %llx\n",
+				gt_err(vm->gt,
+				       "%s incorrect at %llx + %llx\n",
 				       __func__, addr, vma->size);
 				i915_vma_unpin(vma);
 				err = i915_vma_unbind_unlocked(vma);
@@ -819,8 +850,10 @@ static int drunk_hole(struct i915_address_space *vm,
 			hole_size = KMALLOC_MAX_SIZE / sizeof(u32);
 		count = hole_size >> 1;
 		if (!count) {
-			pr_debug("%s: hole is too small [%llx - %llx] >> %d: %lld\n",
-				 __func__, hole_start, hole_end, size, hole_size);
+			gt_dbg(vm->gt,
+			       "%s: hole is too small [%llx - %llx] >> %d: %lld\n",
+			       __func__, hole_start, hole_end, size,
+			       hole_size);
 			break;
 		}
 
@@ -859,7 +892,8 @@ static int drunk_hole(struct i915_address_space *vm,
 
 			err = i915_vma_pin(vma, 0, 0, addr | flags);
 			if (err) {
-				pr_err("%s failed to pin object at %llx + %llx in hole [%llx - %llx], with err=%d\n",
+				gt_err(vm->gt,
+				       "%s failed to pin object at %llx + %llx in hole [%llx - %llx], with err=%d\n",
 				       __func__,
 				       addr, BIT_ULL(size),
 				       hole_start, hole_end,
@@ -869,7 +903,8 @@ static int drunk_hole(struct i915_address_space *vm,
 
 			if (!drm_mm_node_allocated(&vma->node) ||
 			    i915_vma_misplaced(vma, 0, 0, addr | flags)) {
-				pr_err("%s incorrect at %llx + %llx\n",
+				gt_err(vm->gt,
+				       "%s incorrect at %llx + %llx\n",
 				       __func__, addr, BIT_ULL(size));
 				i915_vma_unpin(vma);
 				err = i915_vma_unbind_unlocked(vma);
@@ -939,14 +974,16 @@ static int __shrink_hole(struct i915_address_space *vm,
 
 		err = i915_vma_pin(vma, 0, 0, addr | flags);
 		if (err) {
-			pr_err("%s failed to pin object at %llx + %llx in hole [%llx - %llx], with err=%d\n",
-			       __func__, addr, size, hole_start, hole_end, err);
+			gt_err(vm->gt,
+			       "%s failed to pin object at %llx + %llx in hole [%llx - %llx], with err=%d\n",
+			       __func__, addr, size, hole_start, hole_end,
+			       err);
 			break;
 		}
 
 		if (!drm_mm_node_allocated(&vma->node) ||
 		    i915_vma_misplaced(vma, 0, 0, addr | flags)) {
-			pr_err("%s incorrect at %llx + %llx\n",
+			gt_err(vm->gt, "%s incorrect at %llx + %llx\n",
 			       __func__, addr, size);
 			i915_vma_unpin(vma);
 			err = i915_vma_unbind_unlocked(vma);
@@ -1419,7 +1456,8 @@ static int igt_ggtt_page(void *arg)
 		io_mapping_unmap_atomic(vaddr);
 
 		if (val != n) {
-			pr_err("insert page failed: found %d, expected %d\n",
+			gt_err(ggtt->vm.gt,
+			       "insert page failed: found %d, expected %d\n",
 			       val, n);
 			err = -EINVAL;
 			break;
@@ -1578,7 +1616,8 @@ static int igt_gtt_reserve(void *arg)
 
 		err = reserve_gtt_with_resource(vma, total);
 		if (err) {
-			pr_err("i915_gem_gtt_reserve (pass 1) failed at %llu/%llu with err=%d\n",
+			gt_err(ggtt->vm.gt,
+			       "i915_gem_gtt_reserve (pass 1) failed at %llu/%llu with err=%d\n",
 			       total, ggtt->vm.total, err);
 			goto out;
 		}
@@ -1587,9 +1626,10 @@ static int igt_gtt_reserve(void *arg)
 		GEM_BUG_ON(!drm_mm_node_allocated(&vma->node));
 		if (vma->node.start != total ||
 		    vma->node.size != 2*I915_GTT_PAGE_SIZE) {
-			pr_err("i915_gem_gtt_reserve (pass 1) placement failed, found (%llx + %llx), expected (%llx + %llx)\n",
-			       vma->node.start, vma->node.size,
-			       total, 2*I915_GTT_PAGE_SIZE);
+			gt_err(ggtt->vm.gt,
+			       "i915_gem_gtt_reserve (pass 1) placement failed, found (%llx + %llx), expected (%llx + %llx)\n",
+			       vma->node.start, vma->node.size, total,
+			       2 * I915_GTT_PAGE_SIZE);
 			err = -EINVAL;
 			goto out;
 		}
@@ -1624,7 +1664,8 @@ static int igt_gtt_reserve(void *arg)
 
 		err = reserve_gtt_with_resource(vma, total);
 		if (err) {
-			pr_err("i915_gem_gtt_reserve (pass 2) failed at %llu/%llu with err=%d\n",
+			gt_err(ggtt->vm.gt,
+			       "i915_gem_gtt_reserve (pass 2) failed at %llu/%llu with err=%d\n",
 			       total, ggtt->vm.total, err);
 			goto out;
 		}
@@ -1633,9 +1674,10 @@ static int igt_gtt_reserve(void *arg)
 		GEM_BUG_ON(!drm_mm_node_allocated(&vma->node));
 		if (vma->node.start != total ||
 		    vma->node.size != 2*I915_GTT_PAGE_SIZE) {
-			pr_err("i915_gem_gtt_reserve (pass 2) placement failed, found (%llx + %llx), expected (%llx + %llx)\n",
-			       vma->node.start, vma->node.size,
-			       total, 2*I915_GTT_PAGE_SIZE);
+			gt_err(ggtt->vm.gt,
+			       "i915_gem_gtt_reserve (pass 2) placement failed, found (%llx + %llx), expected (%llx + %llx)\n",
+			       vma->node.start, vma->node.size, total,
+			       2 * I915_GTT_PAGE_SIZE);
 			err = -EINVAL;
 			goto out;
 		}
@@ -1654,7 +1696,8 @@ static int igt_gtt_reserve(void *arg)
 
 		err = i915_vma_unbind_unlocked(vma);
 		if (err) {
-			pr_err("i915_vma_unbind failed with err=%d!\n", err);
+			gt_err(ggtt->vm.gt,
+			       "i915_vma_unbind failed with err=%d!\n", err);
 			goto out;
 		}
 
@@ -1665,7 +1708,8 @@ static int igt_gtt_reserve(void *arg)
 
 		err = reserve_gtt_with_resource(vma, offset);
 		if (err) {
-			pr_err("i915_gem_gtt_reserve (pass 3) failed at %llu/%llu with err=%d\n",
+			gt_err(ggtt->vm.gt,
+			       "i915_gem_gtt_reserve (pass 3) failed at %llu/%llu with err=%d\n",
 			       total, ggtt->vm.total, err);
 			goto out;
 		}
@@ -1674,9 +1718,10 @@ static int igt_gtt_reserve(void *arg)
 		GEM_BUG_ON(!drm_mm_node_allocated(&vma->node));
 		if (vma->node.start != offset ||
 		    vma->node.size != 2*I915_GTT_PAGE_SIZE) {
-			pr_err("i915_gem_gtt_reserve (pass 3) placement failed, found (%llx + %llx), expected (%llx + %llx)\n",
-			       vma->node.start, vma->node.size,
-			       offset, 2*I915_GTT_PAGE_SIZE);
+			gt_err(ggtt->vm.gt,
+			       "i915_gem_gtt_reserve (pass 3) placement failed, found (%llx + %llx), expected (%llx + %llx)\n",
+			       vma->node.start, vma->node.size, offset,
+			       2 * I915_GTT_PAGE_SIZE);
 			err = -EINVAL;
 			goto out;
 		}
@@ -1766,7 +1811,8 @@ static int igt_gtt_insert(void *arg)
 					  0);
 		mutex_unlock(&ggtt->vm.mutex);
 		if (err != -ENOSPC) {
-			pr_err("Invalid i915_gem_gtt_insert(.size=%llx, .alignment=%llx, .start=%llx, .end=%llx) succeeded (err=%d)\n",
+			gt_err(ggtt->vm.gt,
+			       "Invalid i915_gem_gtt_insert(.size=%llx, .alignment=%llx, .start=%llx, .end=%llx) succeeded (err=%d)\n",
 			       ii->size, ii->alignment, ii->start, ii->end,
 			       err);
 			return -EINVAL;
@@ -1807,7 +1853,8 @@ static int igt_gtt_insert(void *arg)
 			break;
 		}
 		if (err) {
-			pr_err("i915_gem_gtt_insert (pass 1) failed at %llu/%llu with err=%d\n",
+			gt_err(ggtt->vm.gt,
+			       "i915_gem_gtt_insert (pass 1) failed at %llu/%llu with err=%d\n",
 			       total, ggtt->vm.total, err);
 			goto out;
 		}
@@ -1827,7 +1874,8 @@ static int igt_gtt_insert(void *arg)
 		}
 
 		if (!drm_mm_node_allocated(&vma->node)) {
-			pr_err("VMA was unexpectedly evicted!\n");
+			gt_err(ggtt->vm.gt,
+			       "VMA was unexpectedly evicted!\n");
 			err = -EINVAL;
 			goto out;
 		}
@@ -1851,13 +1899,15 @@ static int igt_gtt_insert(void *arg)
 
 		err = i915_vma_unbind_unlocked(vma);
 		if (err) {
-			pr_err("i915_vma_unbind failed with err=%d!\n", err);
+			gt_err(ggtt->vm.gt,
+			       "i915_vma_unbind failed with err=%d!\n", err);
 			goto out;
 		}
 
 		err = insert_gtt_with_resource(vma);
 		if (err) {
-			pr_err("i915_gem_gtt_insert (pass 2) failed at %llu/%llu with err=%d\n",
+			gt_err(ggtt->vm.gt,
+			       "i915_gem_gtt_insert (pass 2) failed at %llu/%llu with err=%d\n",
 			       total, ggtt->vm.total, err);
 			goto out;
 		}
@@ -1865,7 +1915,8 @@ static int igt_gtt_insert(void *arg)
 
 		GEM_BUG_ON(!drm_mm_node_allocated(&vma->node));
 		if (vma->node.start != offset) {
-			pr_err("i915_gem_gtt_insert did not return node to its previous location (the only hole), expected address %llx, found %llx\n",
+			gt_err(ggtt->vm.gt,
+			       "i915_gem_gtt_insert did not return node to its previous location (the only hole), expected address %llx, found %llx\n",
 			       offset, vma->node.start);
 			err = -EINVAL;
 			goto out;
@@ -1901,7 +1952,8 @@ static int igt_gtt_insert(void *arg)
 
 		err = insert_gtt_with_resource(vma);
 		if (err) {
-			pr_err("i915_gem_gtt_insert (pass 3) failed at %llu/%llu with err=%d\n",
+			gt_err(ggtt->vm.gt,
+			       "i915_gem_gtt_insert (pass 3) failed at %llu/%llu with err=%d\n",
 			       total, ggtt->vm.total, err);
 			goto out;
 		}

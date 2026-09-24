@@ -25,6 +25,7 @@
 #include "../i915_selftest.h"
 
 #include "gt/intel_gt.h"
+#include "gt/intel_gt_print.h"
 
 static int intel_fw_table_check(const struct intel_forcewake_range *ranges,
 				unsigned int num_ranges,
@@ -161,6 +162,7 @@ static int live_forcewake_ops(void *arg)
 	const struct reg *r;
 	struct intel_gt *gt = arg;
 	struct intel_uncore_forcewake_domain *domain;
+	struct drm_i915_private *i915 = gt->i915;
 	struct intel_uncore *uncore = gt->uncore;
 	struct intel_engine_cs *engine;
 	enum intel_engine_id id;
@@ -171,8 +173,8 @@ static int live_forcewake_ops(void *arg)
 	GEM_BUG_ON(gt->awake);
 
 	/* vlv/chv with their pcu behave differently wrt reads */
-	if (IS_VALLEYVIEW(gt->i915) || IS_CHERRYVIEW(gt->i915)) {
-		pr_debug("PCU fakes forcewake badly; skipping\n");
+	if (IS_VALLEYVIEW(i915) || IS_CHERRYVIEW(i915)) {
+		gt_dbg(gt, "PCU fakes forcewake badly; skipping\n");
 		return 0;
 	}
 
@@ -189,11 +191,12 @@ static int live_forcewake_ops(void *arg)
 
 	/* We have to pick carefully to get the exact behaviour we need */
 	for (r = registers; r->name; r++)
-		if (IS_GRAPHICS_VER(gt->i915, r->min_graphics_ver, r->max_graphics_ver))
+		if (IS_GRAPHICS_VER(i915, r->min_graphics_ver, r->max_graphics_ver))
 			break;
 	if (!r->name) {
-		pr_debug("Forcewaked register not known for %s; skipping\n",
-			 intel_platform_name(INTEL_INFO(gt->i915)->platform));
+		gt_dbg(gt,
+		       "Forcewaked register not known for %s; skipping\n",
+		       intel_platform_name(INTEL_INFO(i915)->platform));
 		return 0;
 	}
 
@@ -225,7 +228,8 @@ static int live_forcewake_ops(void *arg)
 			if (!domain->wake_count)
 				continue;
 
-			pr_err("fw_domain %s still active, aborting test!\n",
+			gt_err(gt,
+			       "fw_domain %s still active, aborting test!\n",
 			       intel_uncore_forcewake_domain_to_str(domain->id));
 			err = -EINVAL;
 			goto out_rpm;
@@ -245,14 +249,15 @@ static int live_forcewake_ops(void *arg)
 			err = wait_ack_clear(domain, FORCEWAKE_KERNEL);
 			preempt_enable();
 			if (err) {
-				pr_err("Failed to clear fw_domain %s\n",
+				gt_err(gt,
+				       "Failed to clear fw_domain %s\n",
 				       intel_uncore_forcewake_domain_to_str(domain->id));
 				goto out_rpm;
 			}
 		}
 
 		if (!val) {
-			pr_err("%s:%s was zero while fw was held!\n",
+			gt_err(gt, "%s:%s was zero while fw was held!\n",
 			       engine->name, r->name);
 			err = -EINVAL;
 			goto out_rpm;
@@ -260,7 +265,8 @@ static int live_forcewake_ops(void *arg)
 
 		/* We then expect the read to return 0 outside of the fw */
 		if (wait_for(readl(reg) == 0, 100)) {
-			pr_err("%s:%s=%0x, fw_domains 0x%x still up after 100ms!\n",
+			gt_err(gt,
+			       "%s:%s=%0x, fw_domains 0x%x still up after 100ms!\n",
 			       engine->name, r->name, readl(reg), fw_domains);
 			err = -ETIMEDOUT;
 			goto out_rpm;
