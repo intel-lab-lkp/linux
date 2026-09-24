@@ -67,102 +67,87 @@ strnlen_zbb:
 	 *   a1 - Max length of string
 	 *
 	 * Clobbers
-	 *   t0, t1, t2, t3, t4
+	 *   t0, t1, t2, t3, t4, t5, t6
 	 */
 
 	/* If maxlen is 0, return 0. */
-	beqz	a1, 3f
+	beqz	a1, .Lmaxlen
 
-	/* Number of irrelevant bytes in the first word. */
-	andi	t2, a0, SZREG-1
+	/* Save original pointer: final length = (current - orig) + offset. */
+	mv	t2, a0
+
+	/* Bytes preceding the string in the first word. */
+	andi	t6, a0, SZREG-1
 
 	/* Align pointer. */
 	andi	t0, a0, -SZREG
 
-	li	t3, SZREG
-	sub	t3, t3, t2
-	slli	t2, t2, 3
+	li	t5, SZREG
+	sub	t5, t5, t6
+	slli	t6, t6, 3
 
-	/*
-	 * Aligned boundary.  Use the address of the last valid byte
-	 * (s + count - 1) to avoid loading a word past the count
-	 * boundary in the loop below.  count == 0 is handled above.
-	 */
-	add	t4, a0, a1
-	addi	t4, t4, -1
-	andi	t4, t4, -SZREG
-
-	/* Get the first word.  */
+	/* Load and mask the first word. */
 	REG_L	t1, 0(t0)
-
-	/*
-	 * Shift away the partial data we loaded to remove the irrelevant bytes
-	 * preceding the string with the effect of adding NUL bytes at the
-	 * end of the string's first word.
-	 */
-	SHIFT	t1, t1, t2
-
-	/* Convert non-NUL into 0xff and NUL into 0x00. */
+	SHIFT	t1, t1, t6
 	orc.b	t1, t1
-
-	/* Convert non-NUL into 0x00 and NUL into 0xff. */
 	not	t1, t1
-
-	/*
-	 * Search for the first set bit (corresponding to a NUL byte in the
-	 * original chunk).
-	 */
 	CZ	t1, t1
 
-	/*
-	 * The first chunk is special: compare against the number
-	 * of valid bytes in this chunk.
-	 */
+	/* NUL offset inside the first (shifted) word. */
 	srli	a0, t1, 3
-
-	/* Limit the result by maxlen. */
 	minu	a0, a0, a1
 
-	bgtu	t3, a0, 2f
+	/* If the NUL lies inside the valid bytes of this first chunk, done. */
+	bgtu	t5, a0, .Ldone
 
-	/* All remaining bytes are in the first word, no loop needed. */
-	bgeu	t0, t4, 2f
+	/*
+	 * Remaining bytes = a1 - t5 (never underflows here).
+	 * Word count = ceil(remaining / SZREG) without addi-wrap hazard.
+	 */
+	sub	t4, a1, t5
+	beqz	t4, .Lmaxlen
 
-	/* Prepare for the word comparison loop. */
-	addi	t2, t0, SZREG
+#if defined(CONFIG_64BIT)
+	srli	t1, t4, 3
+	andi	t4, t4, 7
+#else
+	srli	t1, t4, 2
+	andi	t4, t4, 3
+#endif
+	beqz	t4, 1f
+	addi	t1, t1, 1
+1:
+	mv	t4, t1
+
 	li	t3, -1
 
 	/*
-	 * Our critical loop is 4 instructions and processes data in
-	 * 4 byte or 8 byte chunks.
+	 * Critical loop: exactly one backward branch.
+	 * addi t4 is hoisted before orc.b to hide in the load-use latency.
 	 */
 	.p2align 3
-1:
+2:
 	REG_L	t1, SZREG(t0)
 	addi	t0, t0, SZREG
+	addi	t4, t4, -1
 	orc.b	t1, t1
-	bgeu	t0, t4, 4f
-	beq	t1, t3, 1b
-4:
+	bne	t1, t3, .Lfound
+	bnez	t4, 2b
+
+.Lmaxlen:
+	mv	a0, a1
+.Ldone:
+	ret
+
+.Lfound:
 	not	t1, t1
 	CZ	t1, t1
 	srli	t1, t1, 3
 
-	/* Get number of processed bytes. */
-	sub	t2, t0, t2
-
-	/* Add number of characters in the first word.  */
-	add	a0, a0, t2
-
-	/* Add number of characters in the last word.  */
+	/* Length = bytes already passed + offset in final word. */
+	sub	a0, t0, t2
 	add	a0, a0, t1
-
-	/* Ensure the final result does not exceed maxlen. */
 	minu	a0, a0, a1
-2:
-	ret
-3:
-	mv	a0, a1
 	ret
 
 .option pop
