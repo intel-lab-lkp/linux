@@ -44,6 +44,21 @@ static const uint32_t virtio_gpu_cursor_formats[] = {
 	DRM_FORMAT_HOST_ARGB8888,
 };
 
+static const uint32_t virtio_gpu_overlay_formats[] = {
+	DRM_FORMAT_XRGB8888,
+	DRM_FORMAT_ARGB8888,
+	DRM_FORMAT_BGRX8888,
+	DRM_FORMAT_BGRA8888,
+	DRM_FORMAT_RGBX8888,
+	DRM_FORMAT_RGBA8888,
+	DRM_FORMAT_XBGR8888,
+	DRM_FORMAT_ABGR8888,
+	DRM_FORMAT_XRGB2101010,
+	DRM_FORMAT_BGRX1010102,
+	DRM_FORMAT_NV12,
+	DRM_FORMAT_P010,
+};
+
 uint32_t virtio_gpu_translate_format(uint32_t drm_fourcc)
 {
 	uint32_t format;
@@ -586,6 +601,13 @@ static const struct drm_plane_helper_funcs virtio_gpu_cursor_helper_funcs = {
 	.atomic_update		= virtio_gpu_cursor_plane_update,
 };
 
+static const struct drm_plane_helper_funcs virtio_gpu_overlay_helper_funcs = {
+	.prepare_fb		= virtio_gpu_plane_prepare_fb,
+	.cleanup_fb		= virtio_gpu_plane_cleanup_fb,
+	.atomic_check		= virtio_gpu_plane_atomic_check,
+	.atomic_update		= virtio_gpu_primary_plane_update,
+};
+
 struct drm_plane *virtio_gpu_plane_init(struct virtio_gpu_device *vgdev,
 					enum drm_plane_type type,
 					int index)
@@ -600,6 +622,10 @@ struct drm_plane *virtio_gpu_plane_init(struct virtio_gpu_device *vgdev,
 		formats = virtio_gpu_cursor_formats;
 		nformats = ARRAY_SIZE(virtio_gpu_cursor_formats);
 		funcs = &virtio_gpu_cursor_helper_funcs;
+	} else if (type == DRM_PLANE_TYPE_OVERLAY) {
+		formats = virtio_gpu_overlay_formats;
+		nformats = ARRAY_SIZE(virtio_gpu_overlay_formats);
+		funcs = &virtio_gpu_overlay_helper_funcs;
 	} else {
 		formats = virtio_gpu_formats;
 		nformats = ARRAY_SIZE(virtio_gpu_formats);
