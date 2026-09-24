@@ -28,6 +28,7 @@
 #include <linux/spinlock.h>
 #include <linux/interrupt.h>
 #include <linux/debug_locks.h>
+#include <linux/lockholder.h>
 #include <linux/osq_lock.h>
 #include <linux/hung_task.h>
 
@@ -45,6 +46,7 @@
 
 static void __mutex_init_generic(struct mutex *lock)
 {
+	/* Clearing owner also clears MUTEX_FLAG_TRACKED. */
 	atomic_long_set(&lock->owner, 0);
 	scoped_guard (raw_spinlock_init, &lock->wait_lock) {
 		lock->first_waiter = NULL;
@@ -81,6 +83,9 @@ unsigned long mutex_get_owner(struct mutex *lock)
 
 /*
  * Returns: __mutex_owner(lock) on failure or NULL on success.
+ *
+ * Only this and __mutex_trylock_fast() take the lock for current, so the
+ * holder count goes up in these two.
  */
 static inline struct task_struct *__mutex_trylock_common(struct mutex *lock, bool handoff)
 {
@@ -109,8 +114,10 @@ static inline struct task_struct *__mutex_trylock_common(struct mutex *lock, boo
 		}
 
 		if (atomic_long_try_cmpxchg_acquire(&lock->owner, &owner, task | flags)) {
-			if (task == curr)
+			if (task == curr) {
+				lock_holder_acquired_if(flags & MUTEX_FLAG_TRACKED);
 				return NULL;
+			}
 			break;
 		}
 	}
@@ -154,12 +161,28 @@ static __always_inline bool __mutex_trylock_fast(struct mutex *lock)
 	__cond_acquires(true, lock)
 {
 	unsigned long curr = (unsigned long)current;
-	unsigned long zero = 0UL;
+	/*
+	 * A free tracked mutex reads MUTEX_FLAG_TRACKED, not 0, and the
+	 * flag has to survive the acquire, so both the expected and the
+	 * new value carry it. Reading it first keeps this to a single
+	 * cmpxchg, and the read cannot race because the flag is sticky.
+	 */
+	unsigned long flag = mutex_tracked_flag(lock);
+	unsigned long expected = flag;
 
 	MUTEX_WARN_ON(lock->magic != lock);
 
-	if (atomic_long_try_cmpxchg_acquire(&lock->owner, &zero, curr))
+	if (atomic_long_try_cmpxchg_acquire(&lock->owner, &expected, curr | flag)) {
+#ifdef CONFIG_TRACK_LOCK_HOLDERS
+		/*
+		 * The flag is only set once the static branch is on, so a
+		 * set flag means tracking is enabled.
+		 */
+		if (flag)
+			__lock_holder_acquired();
+#endif
 		return true;
+	}
 
 	return false;
 }
@@ -168,8 +191,23 @@ static __always_inline bool __mutex_unlock_fast(struct mutex *lock)
 	__cond_releases(true, lock)
 {
 	unsigned long curr = (unsigned long)current;
+	/*
+	 * A tracked mutex unlocks to MUTEX_FLAG_TRACKED, not to 0. Read the
+	 * flag while the mutex is still held, so this needs only a single
+	 * cmpxchg and never looks at @lock after giving it away.
+	 */
+	unsigned long flag = mutex_tracked_flag(lock);
+	unsigned long owner = curr | flag;
 
-	return atomic_long_try_cmpxchg_release(&lock->owner, &curr, 0UL);
+	if (atomic_long_try_cmpxchg_release(&lock->owner, &owner, flag)) {
+#ifdef CONFIG_TRACK_LOCK_HOLDERS
+		if (flag)
+			__lock_holder_released();
+#endif
+		return true;
+	}
+
+	return false;
 }
 
 #else /* !CONFIG_DEBUG_LOCK_ALLOC */
@@ -242,7 +280,7 @@ __mutex_remove_waiter(struct mutex *lock, struct mutex_waiter *waiter)
 	__must_hold(&lock->wait_lock)
 {
 	if (list_empty(&waiter->list)) {
-		__mutex_clear_flag(lock, MUTEX_FLAGS);
+		__mutex_clear_flag(lock, MUTEX_STATE_FLAGS);
 		lock->first_waiter = NULL;
 	} else {
 		if (lock->first_waiter == waiter)
@@ -257,7 +295,7 @@ __mutex_remove_waiter(struct mutex *lock, struct mutex_waiter *waiter)
 /*
  * Give up ownership to a specific task, when @task = NULL, this is equivalent
  * to a regular unlock. Sets PICKUP on a handoff, clears HANDOFF, preserves
- * WAITERS. Provides RELEASE semantics like a regular unlock, the
+ * WAITERS and TRACKED. Provides RELEASE semantics like a regular unlock, the
  * __mutex_trylock() provides a matching ACQUIRE semantics for the handoff.
  */
 static void __mutex_handoff(struct mutex *lock, struct task_struct *task)
@@ -270,7 +308,7 @@ static void __mutex_handoff(struct mutex *lock, struct task_struct *task)
 		MUTEX_WARN_ON(__owner_task(owner) != current);
 		MUTEX_WARN_ON(owner & MUTEX_FLAG_PICKUP);
 
-		new = (owner & MUTEX_FLAG_WAITERS);
+		new = (owner & (MUTEX_FLAG_WAITERS | MUTEX_FLAG_TRACKED));
 		new |= (unsigned long)task;
 		if (task)
 			new |= MUTEX_FLAG_PICKUP;
@@ -986,6 +1024,7 @@ static noinline void __sched __mutex_unlock_slowpath(struct mutex *lock, unsigne
 	unsigned long owner;
 	unsigned long flags;
 
+	lock_holder_released_if(mutex_is_tracked(lock));
 	mutex_release(&lock->dep_map, ip);
 	__release(lock);
 
@@ -1275,6 +1314,32 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(contended_release);
 __weak int arch_contended_release_trace_reg(void) { return 0; }
 
 __weak void arch_contended_release_trace_unreg(void) { }
+
+#ifdef CONFIG_TRACK_LOCK_HOLDERS
+void mutex_track_holder(struct mutex *lock)
+{
+	/*
+	 * A task holding @lock now was not counted, so its mutex_unlock()
+	 * would make its count wrong.
+	 */
+	if (WARN_ONCE(mutex_is_locked(lock),
+		      "%s: mutex is held; opt in before it is published\n",
+		      __func__))
+		return;
+
+	/*
+	 * Turn the hooks on before the flag, so that a lock carrying the
+	 * flag always has them on.
+	 */
+	lock_holder_tracking_enable();
+#ifdef CONFIG_PREEMPT_RT
+	lock->rtmutex.tracked = true;
+#else
+	atomic_long_or(MUTEX_FLAG_TRACKED, &lock->owner);
+#endif
+}
+EXPORT_SYMBOL_GPL(mutex_track_holder);
+#endif
 
 /**
  * atomic_dec_and_mutex_lock - return holding mutex if we dec to 0

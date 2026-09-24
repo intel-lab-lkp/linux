@@ -75,6 +75,20 @@ do {									\
  */
 #define mutex_init_with_key(mutex, key) __mutex_init((mutex), #mutex, (key))
 
+#ifdef CONFIG_TRACK_LOCK_HOLDERS
+/**
+ * mutex_track_holder - track the holder of a mutex
+ * @lock: initialized mutex that no one holds yet
+ *
+ * Count @lock in task_nr_tracked_locks() of the task holding it. Use it
+ * for locks whose holders can stall unrelated work. Call it before anyone
+ * can take @lock, e.g. right after mutex_init().
+ */
+void mutex_track_holder(struct mutex *lock);
+#else
+static inline void mutex_track_holder(struct mutex *lock) { }
+#endif
+
 #ifndef CONFIG_PREEMPT_RT
 #define __MUTEX_INITIALIZER(lockname) \
 		{ .owner = ATOMIC_LONG_INIT(0) \
