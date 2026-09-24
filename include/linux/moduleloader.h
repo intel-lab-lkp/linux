@@ -108,6 +108,12 @@ int module_finalize(const Elf_Ehdr *hdr,
 		    const Elf_Shdr *sechdrs,
 		    struct module *mod);
 
+#ifdef CONFIG_UNWINDER_ORC
+/* Sort the module's ORC tables and make them available to the unwinder. */
+void unwind_module_init(struct module *mod, void *orc_ip, size_t orc_ip_size,
+			void *orc, size_t orc_size);
+#endif
+
 #ifdef CONFIG_MODULES
 void flush_module_init_free_work(void);
 #else

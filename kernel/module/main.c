@@ -3015,8 +3015,24 @@ int __weak module_finalize(const Elf_Ehdr *hdr,
 	return 0;
 }
 
+static void module_unwind_init(struct module *mod, const struct load_info *info)
+{
+#ifdef CONFIG_UNWINDER_ORC
+	unsigned int orc = find_sec(info, ".orc_unwind");
+	unsigned int orc_ip = find_sec(info, ".orc_unwind_ip");
+
+	if (orc && orc_ip)
+		unwind_module_init(mod, (void *)info->sechdrs[orc_ip].sh_addr,
+				   info->sechdrs[orc_ip].sh_size,
+				   (void *)info->sechdrs[orc].sh_addr,
+				   info->sechdrs[orc].sh_size);
+#endif
+}
+
 static int post_relocation(struct module *mod, const struct load_info *info)
 {
+	int err;
+
 	/* Sort exception table now relocations are done. */
 	sort_extable(mod->extable, mod->extable + mod->num_exentries);
 
@@ -3028,7 +3044,12 @@ static int post_relocation(struct module *mod, const struct load_info *info)
 	add_kallsyms(mod, info);
 
 	/* Arch-specific module finalizing. */
-	return module_finalize(info->hdr, info->sechdrs, mod);
+	err = module_finalize(info->hdr, info->sechdrs, mod);
+	if (err)
+		return err;
+
+	module_unwind_init(mod, info);
+	return 0;
 }
 
 /* Call module constructors. */

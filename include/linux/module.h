@@ -42,6 +42,7 @@ struct modversion_info {
 
 struct module;
 struct exception_table_entry;
+struct orc_entry;
 
 struct module_kobject {
 	struct kobject kobj;
@@ -463,6 +464,12 @@ struct module {
 	unsigned num_bugs;
 	struct list_head bug_list;
 	struct bug_entry *bug_table;
+#endif
+
+#ifdef CONFIG_UNWINDER_ORC
+	unsigned int num_orcs;
+	int *orc_unwind_ip;
+	struct orc_entry *orc_unwind;
 #endif
 
 #ifdef CONFIG_KALLSYMS

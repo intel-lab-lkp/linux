@@ -20,7 +20,6 @@
 #include <linux/kernel.h>
 #include <asm/alternative.h>
 #include <asm/inst.h>
-#include <asm/unwind.h>
 
 /*
  * reloc_rela_handler() - Apply a particular relocation to a module
@@ -607,24 +606,17 @@ int module_finalize(const Elf_Ehdr *hdr,
 		    const Elf_Shdr *sechdrs, struct module *mod)
 {
 	const char *secstrs = (void *)hdr + sechdrs[hdr->e_shstrndx].sh_offset;
-	const Elf_Shdr *s, *alt = NULL, *orc = NULL, *orc_ip = NULL, *ftrace = NULL;
+	const Elf_Shdr *s, *alt = NULL, *ftrace = NULL;
 
 	for (s = sechdrs; s < sechdrs + hdr->e_shnum; s++) {
 		if (!strcmp(".altinstructions", secstrs + s->sh_name))
 			alt = s;
-		if (!strcmp(".orc_unwind", secstrs + s->sh_name))
-			orc = s;
-		if (!strcmp(".orc_unwind_ip", secstrs + s->sh_name))
-			orc_ip = s;
 		if (!strcmp(".ftrace_trampoline", secstrs + s->sh_name))
 			ftrace = s;
 	}
 
 	if (alt)
 		apply_alternatives((void *)alt->sh_addr, (void *)alt->sh_addr + alt->sh_size);
-
-	if (orc && orc_ip)
-		unwind_module_init(mod, (void *)orc_ip->sh_addr, orc_ip->sh_size, (void *)orc->sh_addr, orc->sh_size);
 
 	if (ftrace)
 		module_init_ftrace_plt(hdr, ftrace, mod);

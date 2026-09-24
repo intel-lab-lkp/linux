@@ -29638,6 +29638,8 @@ F:	arch/x86/include/asm/unwind*.h
 F:	arch/x86/kernel/dumpstack.c
 F:	arch/x86/kernel/stacktrace.c
 F:	arch/x86/kernel/unwind_*.c
+F:	include/linux/orc.h
+F:	lib/orc.c
 
 X86 TRUST DOMAIN EXTENSIONS (TDX)
 M:	Kiryl Shutsemau <kas@kernel.org>
