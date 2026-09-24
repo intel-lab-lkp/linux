@@ -4404,9 +4404,14 @@ EXPORT_SYMBOL(dev_loopback_xmit);
 static struct netdev_queue *
 netdev_tx_queue_mapping(struct net_device *dev, struct sk_buff *skb)
 {
-	int qm = skb_get_queue_mapping(skb);
+	int queue = skb_get_queue_mapping(skb);
+	int capped;
 
-	return netdev_get_tx_queue(dev, netdev_cap_txqueue(dev, qm));
+	capped = netdev_cap_txqueue(dev, queue);
+	if (unlikely(capped != queue))
+		skb_set_queue_mapping(skb, capped);
+
+	return netdev_get_tx_queue(dev, capped);
 }
 
 #ifndef CONFIG_PREEMPT_RT
@@ -4824,6 +4829,9 @@ int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
 	int cpu, rc = -ENOMEM;
 	bool again = false;
 	struct Qdisc *q;
+#ifdef CONFIG_NET_EGRESS
+	bool skip_txq;
+#endif
 
 	skb_reset_mac_header(skb);
 	skb_assert_len(skb);
@@ -4847,14 +4855,20 @@ int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
 
 	tcx_set_ingress(skb, false);
 #ifdef CONFIG_NET_EGRESS
+	/* The flag is per-CPU and a nested xmit can set it from its own
+	 * clsact hook or transmit qdisc. Own it for the whole frame: this
+	 * frame cannot consume a nested xmit's flag and a nested xmit
+	 * cannot inherit this frame's.
+	 */
+	skip_txq = netdev_xmit_txqueue_skipped();
+	netdev_xmit_skip_txqueue(false);
+
 	if (static_branch_unlikely(&egress_needed_key)) {
 		if (nf_hook_egress_active()) {
 			skb = nf_hook_egress(skb, &rc, dev);
 			if (!skb)
 				goto out;
 		}
-
-		netdev_xmit_skip_txqueue(false);
 
 		nf_skip_egress(skb, true);
 		skb = sch_handle_egress(skb, &rc, dev);
@@ -4952,12 +4966,18 @@ recursion_alert:
 
 	reason = SKB_DROP_REASON_RECURSION_LIMIT;
 drop:
+#ifdef CONFIG_NET_EGRESS
+	netdev_xmit_skip_txqueue(skip_txq);
+#endif
 	rcu_read_unlock_bh();
 
 	dev_core_stats_tx_dropped_inc(dev);
 	kfree_skb_list_reason(skb, reason);
 	return rc;
 out:
+#ifdef CONFIG_NET_EGRESS
+	netdev_xmit_skip_txqueue(skip_txq);
+#endif
 	rcu_read_unlock_bh();
 	return rc;
 }
