@@ -24569,8 +24569,8 @@ M:	"Martin K. Petersen" <mkp@kernel.org>
 L:	linux-scsi@vger.kernel.org
 S:	Maintained
 Q:	https://patchwork.kernel.org/project/linux-scsi/list/
-T:	git git://git.kernel.org/pub/scm/linux/kernel/git/jejb/scsi.git
-T:	git git://git.kernel.org/pub/scm/linux/kernel/git/mkp/scsi.git
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/jejb/scsi.git for-next
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/mkp/scsi.git for-next
 F:	Documentation/devicetree/bindings/scsi/
 F:	drivers/scsi/
 F:	drivers/ufs/
@@ -24600,7 +24600,7 @@ L:	linux-scsi@vger.kernel.org
 L:	target-devel@vger.kernel.org
 S:	Supported
 Q:	https://patchwork.kernel.org/project/target-devel/list/
-T:	git git://git.kernel.org/pub/scm/linux/kernel/git/mkp/scsi.git
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/mkp/scsi.git for-next
 F:	Documentation/target/
 F:	drivers/target/
 F:	include/target/
