@@ -3510,6 +3510,7 @@ EXPORT_SYMBOL_GPL(pci_rescan_bus);
  * routines should always be executed under this mutex.
  */
 DEFINE_MUTEX(pci_rescan_remove_lock);
+EXPORT_SYMBOL_GPL(pci_rescan_remove_lock);
 static const struct task_struct *pci_rescan_remove_owner;
 static size_t pci_rescan_remove_depth;
 
