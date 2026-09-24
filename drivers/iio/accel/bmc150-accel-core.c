@@ -1561,8 +1561,12 @@ static int bmc150_accel_chip_init(struct bmc150_accel_data *data)
 	 * Reset chip to get it in a known good state. A delay of 1.8ms after
 	 * reset is required according to the data sheets of supported chips.
 	 */
-	regmap_write(data->regmap, BMC150_ACCEL_REG_RESET,
-		     BMC150_ACCEL_RESET_VAL);
+	ret = regmap_write(data->regmap, BMC150_ACCEL_REG_RESET,
+			   BMC150_ACCEL_RESET_VAL);
+	if (ret < 0) {
+		dev_err(dev, "Error writing reset register\n");
+		return ret;
+	}
 	usleep_range(1800, 2500);
 
 	ret = regmap_read(data->regmap, BMC150_ACCEL_REG_CHIP_ID, &val);
