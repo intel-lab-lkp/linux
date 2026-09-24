@@ -45,6 +45,10 @@ endif
 ifeq ($(ARCH),loongarch)
 SRCARCH := loongarch
 endif
+# UML runs host code, and only supports x86 as the host arch
+ifeq ($(ARCH),um)
+SRCARCH := x86
+endif
 HOSTCFLAGS_sorttable.o += -I$(srctree)/tools/arch/$(SRCARCH)/include
 HOSTCFLAGS_sorttable.o += -DUNWINDER_ORC_ENABLED
 endif

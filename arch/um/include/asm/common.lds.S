@@ -20,6 +20,8 @@
 
   BUG_TABLE
 
+  ORC_UNWIND_TABLE
+
   .uml.setup.init : {
 	__uml_setup_start = .;
 	*(.uml.setup.init)

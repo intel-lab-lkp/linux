@@ -239,6 +239,7 @@ extern int set_umid(char *name);
 extern char *get_umid(void);
 
 /* signal.c */
+extern unsigned long os_sigreturn_ip;
 extern void timer_set_signal_handler(void);
 extern void set_sigstack(void *sig_stack, int size);
 extern void set_handler(int sig);

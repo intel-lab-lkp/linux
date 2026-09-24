@@ -12,7 +12,27 @@
 #include <linux/module.h>
 #include <linux/uaccess.h>
 #include <asm/stacktrace.h>
+#include <asm/unwind.h>
 
+#ifdef CONFIG_UNWINDER_ORC
+void dump_trace(struct task_struct *tsk,
+		const struct stacktrace_ops *ops,
+		void *data)
+{
+	struct pt_regs *segv_regs = tsk == current ? tsk->thread.segv_regs : NULL;
+	struct unwind_state state;
+	unsigned long addr;
+
+	for (unwind_start(&state, tsk, segv_regs, NULL);
+	     !unwind_done(&state); unwind_next_frame(&state)) {
+		addr = unwind_get_return_address(&state);
+		/* e.g. a signal interrupted libc, keep going with the fallback */
+		if (!addr)
+			continue;
+		ops->address(data, addr, !unwind_error(&state));
+	}
+}
+#else
 void dump_trace(struct task_struct *tsk,
 		const struct stacktrace_ops *ops,
 		void *data)
@@ -40,6 +60,7 @@ void dump_trace(struct task_struct *tsk,
 		sp++;
 	}
 }
+#endif
 
 static void save_addr(void *data, unsigned long address, int reliable)
 {

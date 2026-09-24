@@ -26,6 +26,7 @@
 #include <asm/sections.h>
 #include <asm/setup.h>
 #include <asm/text-patching.h>
+#include <asm/unwind.h>
 #include <as-layout.h>
 #include <arch.h>
 #include <init.h>
@@ -422,6 +423,8 @@ void __init setup_arch(char **cmdline_p)
 		add_bootloader_randomness(rng_seed, sizeof(rng_seed));
 		memzero_explicit(rng_seed, sizeof(rng_seed));
 	}
+
+	unwind_init();
 }
 
 void __init arch_cpu_finalize_init(void)

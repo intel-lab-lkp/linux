@@ -46,5 +46,7 @@ CFLAGS_stub_exe.o += $(call cc-option, -ftrivial-auto-var-init=uninitialized)
 
 UNPROFILE_OBJS := stub.o stub_exe.o
 KCOV_INSTRUMENT := n
+# not really linked as code and shouldn't have ORC data created
+OBJECT_FILES_NON_STANDARD_stub.o := y
 
 include $(srctree)/arch/um/scripts/Makefile.rules

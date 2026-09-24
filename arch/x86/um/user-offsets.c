@@ -66,6 +66,10 @@ void foo(void)
 
 	DEFINE_LONGS(HOST_IP, RIP);
 	DEFINE_LONGS(HOST_SP, RSP);
+
+	DEFINE(HOST_UC_IP, offsetof(ucontext_t, uc_mcontext.gregs[REG_RIP]));
+	DEFINE(HOST_UC_SP, offsetof(ucontext_t, uc_mcontext.gregs[REG_RSP]));
+	DEFINE(HOST_UC_BP, offsetof(ucontext_t, uc_mcontext.gregs[REG_RBP]));
 #endif
 
 	DEFINE(UM_FRAME_SIZE, sizeof(struct user_regs_struct));

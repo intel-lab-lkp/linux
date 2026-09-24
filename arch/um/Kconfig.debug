@@ -36,3 +36,18 @@ config EARLY_PRINTK
 
 	  This is useful for kernel debugging when your machine crashes very
 	  early before the console code is initialized.
+
+config UNWINDER_ORC
+	bool "ORC unwinder"
+	depends on X86_64
+	select OBJTOOL
+	select BUILDTIME_TABLE_SORT
+	help
+	  This option enables the ORC (Oops Rewind Capability) unwinder for
+	  kernel stack traces, instead of scanning the stack for anything
+	  that looks like a kernel text address.  It uses unwind tables that
+	  objtool generates at compile time, so traces are exact and don't
+	  depend on frame pointers.  This increases the kernel image size by
+	  roughly 1-4 MB, depending on the configuration.
+
+	  If you're unsure, say N.

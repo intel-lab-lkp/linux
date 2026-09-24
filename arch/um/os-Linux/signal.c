@@ -212,6 +212,8 @@ static void hard_handler(int sig, siginfo_t *si, void *p)
 	errno = save_errno;
 }
 
+unsigned long os_sigreturn_ip;
+
 void set_handler(int sig)
 {
 	struct sigaction action;
@@ -238,6 +240,10 @@ void set_handler(int sig)
 	action.sa_restorer = NULL;
 	if (sigaction(sig, &action, NULL) < 0)
 		panic("sigaction failed - errno = %d\n", errno);
+
+	/* libc installs its own restorer, find it for the unwinder */
+	if (!os_sigreturn_ip && !sigaction(sig, NULL, &action))
+		os_sigreturn_ip = (unsigned long)action.sa_restorer;
 
 	sigemptyset(&sig_mask);
 	sigaddset(&sig_mask, sig);

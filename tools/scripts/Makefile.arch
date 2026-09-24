@@ -38,6 +38,11 @@ ifeq ($(ARCH),loongarch64)
        SRCARCH := loongarch
 endif
 
+# UML runs host code, and only supports x86 as the host arch
+ifeq ($(ARCH),um)
+       SRCARCH := x86
+endif
+
 # Probe for __LP64__ only when the compiler is installed: this runs at
 # parse time for every target, including ones that never compile, e.g.
 # install-build-deps, and would otherwise spew "gcc: not found" when the
