@@ -259,22 +259,30 @@ static int samsung_dt_node_to_map(struct pinctrl_dev *pctldev,
 	*map = NULL;
 	*num_maps = 0;
 
-	if (!of_get_child_count(np_config))
-		return samsung_dt_subnode_to_map(drvdata, pctldev->dev,
-							np_config, map,
-							&reserved_maps,
-							num_maps);
+	if (!of_get_child_count(np_config)) {
+		ret = samsung_dt_subnode_to_map(drvdata, pctldev->dev,
+						np_config, map, &reserved_maps,
+						num_maps);
+		if (ret < 0)
+			goto err_free_map;
+
+		return 0;
+	}
 
 	for_each_child_of_node_scoped(np_config, np) {
 		ret = samsung_dt_subnode_to_map(drvdata, pctldev->dev, np, map,
 						&reserved_maps, num_maps);
-		if (ret < 0) {
-			samsung_dt_free_map(pctldev, *map, *num_maps);
-			return ret;
-		}
+		if (ret < 0)
+			goto err_free_map;
 	}
 
 	return 0;
+
+err_free_map:
+	samsung_dt_free_map(pctldev, *map, *num_maps);
+	*map = NULL;
+	*num_maps = 0;
+	return ret;
 }
 
 #ifdef CONFIG_DEBUG_FS
