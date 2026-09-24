@@ -843,7 +843,11 @@ static bool coresight_get_ref(struct coresight_device *csdev)
 		goto err_module;
 
 	/* Make sure the device is powered on */
-	pm_runtime_get_sync(parent);
+	if (pm_runtime_resume_and_get(parent) < 0) {
+		module_put(drv->owner);
+		goto err_module;
+	}
+
 	return true;
 
 err_module:
