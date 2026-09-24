@@ -43,6 +43,42 @@
 #define DW_IC_SDA_HOLD_MIN_VERS			0x3131312A /* "111*" == v1.11* */
 #define DW_IC_COMP_TYPE_VALUE			0x44570140 /* "DW" + 0x0140 */
 
+/*
+ * Bit positions within the CON register that could differ between IP
+ * variants.
+ */
+struct dw_i2c_con_bits {
+	u32 master;
+	u32 speed_std;
+	u32 speed_fast;
+	u32 speed_high;
+	u32 speed_mask;
+	u32 bit10_slave;
+	u32 bit10_master;
+	u32 restart_en;
+	u32 slave_disable;
+	u32 stop_det_ifaddressed;
+	u32 tx_empty_ctrl;
+	u32 rx_fifo_full_hld_ctrl;
+	u32 bus_clear_ctrl;
+};
+
+/* Logical interrupt IDs for i2c_dw_ack_intr() */
+enum dw_i2c_intr_idx {
+	DW_INTR_IDX_INTR,
+	DW_INTR_IDX_RX_UNDER,
+	DW_INTR_IDX_RX_OVER,
+	DW_INTR_IDX_TX_OVER,
+	DW_INTR_IDX_RD_REQ,
+	DW_INTR_IDX_TX_ABRT,
+	DW_INTR_IDX_RX_DONE,
+	DW_INTR_IDX_ACTIVITY,
+	DW_INTR_IDX_STOP_DET,
+	DW_INTR_IDX_START_DET,
+	DW_INTR_IDX_GEN_CALL,
+	DW_INTR_IDX_MAX,
+};
+
 #define DW_IC_INTR_DEFAULT_MASK			(DW_IC_INTR_RX_FULL | \
 						 DW_IC_INTR_TX_ABRT | \
 						 DW_IC_INTR_STOP_DET)
@@ -126,6 +162,9 @@ struct reset_control;
  * struct dw_i2c_dev - private i2c-designware data
  * @dev: driver model device node
  * @map: IO registers map
+ * @regs: logical-to-physical register offset table for the active IP variant
+ * @con_bits: CON register bit-layout for the active IP variant
+ * @intr_clr: logical intr number to reg table for the active IP variant
  * @sysmap: System controller registers map
  * @base: IO registers pointer
  * @ext: Extended IO registers pointer
@@ -189,6 +228,9 @@ struct reset_control;
 struct dw_i2c_dev {
 	struct device		*dev;
 	struct regmap		*map;
+	const u32		*regs;
+	const struct dw_i2c_con_bits *con_bits;
+	const u32		*intr_clr;
 	struct regmap		*sysmap;
 	void __iomem		*base;
 	void __iomem		*ext;
@@ -255,7 +297,6 @@ struct dw_i2c_dev {
  * Enable UCSI interrupt by writing 0xd at register
  * offset 0x474 specified in hardware specification.
  */
-#define AMD_UCSI_INTR_REG			0x474
 #define AMD_UCSI_INTR_EN			0xd
 
 #define TXGBE_TX_FIFO_DEPTH			4
@@ -265,6 +306,7 @@ struct i2c_dw_semaphore_callbacks {
 	int	(*probe)(struct dw_i2c_dev *dev);
 };
 
+void i2c_dw_select_variant(struct dw_i2c_dev *dev);
 u32 i2c_dw_scl_hcnt(struct dw_i2c_dev *dev, unsigned int reg, u32 ic_clk,
 		    u32 tSYMBOL, u32 tf, int offset);
 u32 i2c_dw_scl_lcnt(struct dw_i2c_dev *dev, unsigned int reg, u32 ic_clk,
@@ -308,6 +350,14 @@ static inline void __i2c_dw_read_intr_mask(struct dw_i2c_dev *dev,
 		regmap_read(dev->map, DW_IC_INTR_MASK, intr_mask);
 	else
 		*intr_mask = dev->sw_mask;
+}
+
+/* Acknowledge a logical interrupt via dev->intr_clr[]: reg ID */
+static inline void i2c_dw_ack_intr(struct dw_i2c_dev *dev, enum dw_i2c_intr_idx intr)
+{
+	unsigned int dummy;
+
+	regmap_read(dev->map, dev->intr_clr[intr], &dummy);
 }
 
 void __i2c_dw_disable(struct dw_i2c_dev *dev);
