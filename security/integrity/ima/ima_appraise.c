@@ -759,11 +759,12 @@ static int validate_hash_algo(struct dentry *dentry,
 	return -EACCES;
 }
 
-static int ima_inode_setxattr(struct mnt_idmap *idmap, struct dentry *dentry,
+static int ima_inode_setxattr(const struct path *path,
 			      const char *xattr_name, const void *xattr_value,
 			      size_t xattr_value_len, int flags)
 {
 	const struct evm_ima_xattr_data *xvalue = xattr_value;
+	struct dentry *dentry = path->dentry;
 	int digsig = 0;
 	int result;
 	int err;
@@ -801,16 +802,16 @@ static int ima_inode_set_acl(struct mnt_idmap *idmap, struct dentry *dentry,
 	return 0;
 }
 
-static int ima_inode_removexattr(struct mnt_idmap *idmap, struct dentry *dentry,
+static int ima_inode_removexattr(const struct path *path,
 				 const char *xattr_name)
 {
 	int result, digsig = -1;
 
-	result = ima_protect_xattr(dentry, xattr_name, NULL, 0);
+	result = ima_protect_xattr(path->dentry, xattr_name, NULL, 0);
 	if (result == 1 || evm_revalidate_status(xattr_name)) {
 		if (!strcmp(xattr_name, XATTR_NAME_IMA))
 			digsig = 0;
-		ima_reset_appraise_flags(d_backing_inode(dentry), digsig);
+		ima_reset_appraise_flags(d_backing_inode(path->dentry), digsig);
 		if (result == 1)
 			result = 0;
 	}

@@ -1942,15 +1942,14 @@ int security_inode_getattr(const struct path *path)
 
 /**
  * security_inode_setxattr() - Check if setting file xattrs is allowed
- * @idmap: idmap of the mount
- * @dentry: file
+ * @path: file
  * @name: xattr name
  * @value: xattr value
  * @size: size of xattr value
  * @flags: flags
  *
  * This hook performs the desired permission checks before setting the extended
- * attributes (xattrs) on @dentry.  It is important to note that we have some
+ * attributes (xattrs) on @path.  It is important to note that we have some
  * additional logic before the main LSM implementation calls to detect if we
  * need to perform an additional capability check at the LSM layer.
  *
@@ -1966,23 +1965,23 @@ int security_inode_getattr(const struct path *path)
  *
  * Return: Returns 0 if permission is granted.
  */
-int security_inode_setxattr(struct mnt_idmap *idmap,
-			    struct dentry *dentry, const char *name,
-			    const void *value, size_t size, int flags)
+int security_inode_setxattr(const struct path *path,
+			    const char *name, const void *value,
+			    size_t size, int flags)
 {
 	int rc;
 
-	if (unlikely(IS_PRIVATE(d_backing_inode(dentry))))
+	if (unlikely(IS_PRIVATE(d_backing_inode(path->dentry))))
 		return 0;
 
 	/* enforce the capability checks at the lsm layer, if needed */
 	if (!call_int_hook(inode_xattr_skipcap, name)) {
-		rc = cap_inode_setxattr(dentry, name, value, size, flags);
+		rc = cap_inode_setxattr(path, name, value, size, flags);
 		if (rc)
 			return rc;
 	}
 
-	return call_int_hook(inode_setxattr, idmap, dentry, name, value, size,
+	return call_int_hook(inode_setxattr, path, name, value, size,
 			     flags);
 }
 
@@ -2099,45 +2098,44 @@ void security_inode_post_setxattr(struct dentry *dentry, const char *name,
 
 /**
  * security_inode_getxattr() - Check if xattr access is allowed
- * @dentry: file
+ * @path: file
  * @name: xattr name
  *
  * Check permission before obtaining the extended attributes identified by
- * @name for @dentry.
+ * @name for @path.
  *
  * Return: Returns 0 if permission is granted.
  */
-int security_inode_getxattr(struct dentry *dentry, const char *name)
+int security_inode_getxattr(const struct path *path, const char *name)
 {
-	if (unlikely(IS_PRIVATE(d_backing_inode(dentry))))
+	if (unlikely(IS_PRIVATE(d_backing_inode(path->dentry))))
 		return 0;
-	return call_int_hook(inode_getxattr, dentry, name);
+	return call_int_hook(inode_getxattr, path, name);
 }
 
 /**
  * security_inode_listxattr() - Check if listing xattrs is allowed
- * @dentry: file
+ * @path: file
  *
  * Check permission before obtaining the list of extended attribute names for
- * @dentry.
+ * @path.
  *
  * Return: Returns 0 if permission is granted.
  */
-int security_inode_listxattr(struct dentry *dentry)
+int security_inode_listxattr(const struct path *path)
 {
-	if (unlikely(IS_PRIVATE(d_backing_inode(dentry))))
+	if (unlikely(IS_PRIVATE(d_backing_inode(path->dentry))))
 		return 0;
-	return call_int_hook(inode_listxattr, dentry);
+	return call_int_hook(inode_listxattr, path);
 }
 
 /**
  * security_inode_removexattr() - Check if removing an xattr is allowed
- * @idmap: idmap of the mount
- * @dentry: file
+ * @path: file
  * @name: xattr name
  *
  * This hook performs the desired permission checks before setting the extended
- * attributes (xattrs) on @dentry.  It is important to note that we have some
+ * attributes (xattrs) on @path.  It is important to note that we have some
  * additional logic before the main LSM implementation calls to detect if we
  * need to perform an additional capability check at the LSM layer.
  *
@@ -2153,22 +2151,21 @@ int security_inode_listxattr(struct dentry *dentry)
  *
  * Return: Returns 0 if permission is granted.
  */
-int security_inode_removexattr(struct mnt_idmap *idmap,
-			       struct dentry *dentry, const char *name)
+int security_inode_removexattr(const struct path *path, const char *name)
 {
 	int rc;
 
-	if (unlikely(IS_PRIVATE(d_backing_inode(dentry))))
+	if (unlikely(IS_PRIVATE(d_backing_inode(path->dentry))))
 		return 0;
 
 	/* enforce the capability checks at the lsm layer, if needed */
 	if (!call_int_hook(inode_xattr_skipcap, name)) {
-		rc = cap_inode_removexattr(idmap, dentry, name);
+		rc = cap_inode_removexattr(path, name);
 		if (rc)
 			return rc;
 	}
 
-	return call_int_hook(inode_removexattr, idmap, dentry, name);
+	return call_int_hook(inode_removexattr, path, name);
 }
 
 /**

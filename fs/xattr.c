@@ -307,7 +307,7 @@ __vfs_setxattr_locked(const struct path *path, const char *name,
 	if (error)
 		return error;
 
-	error = security_inode_setxattr(idmap, dentry, name, value, size,
+	error = security_inode_setxattr(path, name, value, size,
 					flags);
 	if (error)
 		goto out;
@@ -463,7 +463,7 @@ vfs_getxattr(const struct path *path, const char *name, void *value,
 	if (error)
 		return error;
 
-	error = security_inode_getxattr(dentry, name);
+	error = security_inode_getxattr(path, name);
 	if (error)
 		return error;
 
@@ -514,7 +514,7 @@ vfs_listxattr(const struct path *path, char *list, size_t size)
 	struct inode *inode = d_inode(dentry);
 	ssize_t error;
 
-	error = security_inode_listxattr(dentry);
+	error = security_inode_listxattr(path);
 	if (error)
 		return error;
 
@@ -574,7 +574,7 @@ __vfs_removexattr_locked(const struct path *path, const char *name,
 	if (error)
 		return error;
 
-	error = security_inode_removexattr(idmap, dentry, name);
+	error = security_inode_removexattr(path, name);
 	if (error)
 		goto out;
 

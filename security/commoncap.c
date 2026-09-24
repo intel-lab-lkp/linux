@@ -14,6 +14,7 @@
 #include <linux/netlink.h>
 #include <linux/ptrace.h>
 #include <linux/xattr.h>
+#include <linux/path.h>
 #include <linux/mount.h>
 #include <linux/sched.h>
 #include <linux/prctl.h>
@@ -1007,7 +1008,7 @@ int cap_bprm_creds_from_file(struct linux_binprm *bprm, const struct file *file)
 
 /**
  * cap_inode_setxattr - Determine whether an xattr may be altered
- * @dentry: The inode/dentry being altered
+ * @path: The inode/path being altered
  * @name: The name of the xattr to be changed
  * @value: The value that the xattr will be changed to
  * @size: The size of value
@@ -1019,9 +1020,10 @@ int cap_bprm_creds_from_file(struct linux_binprm *bprm, const struct file *file)
  * This is used to make sure security xattrs don't get updated or set by those
  * who aren't privileged to do so.
  */
-int cap_inode_setxattr(struct dentry *dentry, const char *name,
+int cap_inode_setxattr(const struct path *path, const char *name,
 		       const void *value, size_t size, int flags)
 {
+	struct dentry *dentry = path->dentry;
 	struct user_namespace *user_ns = dentry->d_sb->s_user_ns;
 
 	/* Ignore non-security xattrs */
@@ -1044,25 +1046,18 @@ int cap_inode_setxattr(struct dentry *dentry, const char *name,
 /**
  * cap_inode_removexattr - Determine whether an xattr may be removed
  *
- * @idmap:	idmap of the mount the inode was found from
- * @dentry:	The inode/dentry being altered
+ * @path:	The inode/path being altered
  * @name:	The name of the xattr to be changed
  *
  * Determine whether an xattr may be removed from an inode, returning 0 if
  * permission is granted, -ve if denied.
  *
- * If the inode has been found through an idmapped mount the idmap of
- * the vfsmount must be passed through @idmap. This function will then
- * take care to map the inode according to @idmap before checking
- * permissions. On non-idmapped mounts or if permission checking is to be
- * performed on the raw inode simply pass @nop_mnt_idmap.
- *
  * This is used to make sure security xattrs don't get removed by those who
  * aren't privileged to remove them.
  */
-int cap_inode_removexattr(struct mnt_idmap *idmap,
-			  struct dentry *dentry, const char *name)
+int cap_inode_removexattr(const struct path *path, const char *name)
 {
+	struct dentry *dentry = path->dentry;
 	struct user_namespace *user_ns = dentry->d_sb->s_user_ns;
 
 	/* Ignore non-security xattrs */
@@ -1075,7 +1070,8 @@ int cap_inode_removexattr(struct mnt_idmap *idmap,
 		struct inode *inode = d_backing_inode(dentry);
 		if (!inode)
 			return -EINVAL;
-		if (!capable_wrt_inode_uidgid(idmap, inode, CAP_SETFCAP))
+		if (!capable_wrt_inode_uidgid(mnt_idmap(path->mnt), inode,
+					      CAP_SETFCAP))
 			return -EPERM;
 		return 0;
 	}

@@ -1351,11 +1351,12 @@ static int smack_inode_xattr_skipcap(const char *name)
  *
  * Returns 0 if access is permitted, an error code otherwise
  */
-static int smack_inode_setxattr(struct mnt_idmap *idmap,
-				struct dentry *dentry, const char *name,
-				const void *value, size_t size, int flags)
+static int smack_inode_setxattr(const struct path *path,
+				const char *name, const void *value,
+				size_t size, int flags)
 {
 	struct smk_audit_info ad;
+	struct dentry *dentry = path->dentry;
 	struct smack_known *skp;
 	int check_priv = 0;
 	int check_import = 0;
@@ -1462,9 +1463,10 @@ static void smack_inode_post_setxattr(struct dentry *dentry, const char *name,
  *
  * Returns 0 if access is permitted, an error code otherwise
  */
-static int smack_inode_getxattr(struct dentry *dentry, const char *name)
+static int smack_inode_getxattr(const struct path *path, const char *name)
 {
 	struct smk_audit_info ad;
+	struct dentry *dentry = path->dentry;
 	int rc;
 
 	smk_ad_init(&ad, __func__, LSM_AUDIT_DATA_DENTRY);
@@ -1477,19 +1479,19 @@ static int smack_inode_getxattr(struct dentry *dentry, const char *name)
 
 /**
  * smack_inode_removexattr - Smack check on removexattr
- * @idmap: idmap of the mount
- * @dentry: the object
+ * @path: the object
  * @name: name of the attribute
  *
  * Removing the Smack attribute requires CAP_MAC_ADMIN
  *
  * Returns 0 if access is permitted, an error code otherwise
  */
-static int smack_inode_removexattr(struct mnt_idmap *idmap,
-				   struct dentry *dentry, const char *name)
+static int smack_inode_removexattr(const struct path *path,
+				   const char *name)
 {
 	struct inode_smack *isp;
 	struct smk_audit_info ad;
+	struct dentry *dentry = path->dentry;
 	int rc = 0;
 
 	if (strcmp(name, XATTR_NAME_SMACK) == 0 ||
