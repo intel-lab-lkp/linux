@@ -366,11 +366,43 @@ static void vma_prepare(struct vma_prepare *vp)
 
 	if (vp->file) {
 		flush_dcache_mmap_lock(vp->mapping);
-		mapping_rmap_tree_remove(vp->vma, vp->mapping);
+		/* vp->vma is re-keyed by vma_complete(), if it needs to be. */
 		if (vp->adj_next)
 			mapping_rmap_tree_remove(vp->adj_next, vp->mapping);
 	}
+}
 
+/*
+ * vma_split_keeps_rmap_key() - Check if vp->vma keeps its file rmap tree key
+ * @vp: The vma_prepare struct
+ *
+ * True only for a new_below=0 __split_vma(): the new VMA takes the upper half,
+ * so its vma_start_pgoff() is strictly greater, while vp->vma's (its key in the
+ * file rmap interval tree) is unchanged and its tree position still correct, so
+ * only shared.rb_subtree_last has to be recomputed.
+ *
+ * Relies on vp->insert being assigned by __split_vma() only; the check below
+ * catches a second assignment site whose VMA does not abut vp->vma.
+ */
+static bool vma_split_keeps_rmap_key(const struct vma_prepare *vp)
+{
+	if (!vp->insert ||
+	    vma_start_pgoff(vp->insert) <= vma_start_pgoff(vp->vma))
+		return false;
+
+	/*
+	 * Today only a new_below=0 __split_vma() reaches here, where the new
+	 * VMA abuts vp->vma at the split point once the caller has updated
+	 * vp->vma->vm_end.  If a future vp->insert user ever violates that,
+	 * fall back to the safe remove + re-insert instead of trusting the
+	 * fast path.
+	 */
+	if (vp->insert->vm_start != vp->vma->vm_end) {
+		VM_WARN_ON_ONCE(1);
+		return false;
+	}
+
+	return true;
 }
 
 /*
@@ -385,9 +417,27 @@ static void vma_complete(struct vma_prepare *vp, struct vma_iterator *vmi,
 			 struct mm_struct *mm)
 {
 	if (vp->file) {
+		if (vma_split_keeps_rmap_key(vp)) {
+			/*
+			 * Split paths go through init_vma_prep(), which
+			 * passes a NULL vmg, so vp->adj_next is never set.
+			 */
+			VM_WARN_ON_ONCE(vp->adj_next);
+			mapping_rmap_tree_propagate(vp->vma);
+		} else {
+			/*
+			 * Re-key vp->vma *before* the insert of vp->adj_next
+			 * below, so that the latter descends a valid
+			 * search tree: vp->vma is the only node left in
+			 * the tree that may carry a stale sort key
+			 * (vp->adj_next itself was removed in
+			 * vma_prepare()).
+			 */
+			mapping_rmap_tree_remove(vp->vma, vp->mapping);
+			mapping_rmap_tree_insert(vp->vma, vp->mapping);
+		}
 		if (vp->adj_next)
 			mapping_rmap_tree_insert(vp->adj_next, vp->mapping);
-		mapping_rmap_tree_insert(vp->vma, vp->mapping);
 		flush_dcache_mmap_unlock(vp->mapping);
 	}
 

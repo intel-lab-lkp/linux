@@ -23,6 +23,7 @@ struct vma_prepare {
 	struct file *file;
 	struct address_space *mapping;
 	struct anon_vma *anon_vma;
+	/* Set by __split_vma() only; see vma_split_keeps_rmap_key(). */
 	struct vm_area_struct *insert;
 	struct vm_area_struct *remove;
 	struct vm_area_struct *remove2;

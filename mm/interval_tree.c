@@ -64,6 +64,19 @@ void mapping_rmap_tree_remove(struct vm_area_struct *vma,
 	__mapping_rmap_tree_remove(vma, &mapping->i_mmap);
 }
 
+/*
+ * Recompute shared.rb_subtree_last for vma and its ancestors, for a vma whose
+ * interval changed but whose vma_start_pgoff() (the tree's sort key) did not.
+ * The NULL stop node makes the walk run up to the root, though it ends early
+ * once the recomputed value stops changing.
+ *
+ * Wrapper because INTERVAL_TREE_DEFINE() above declares the callbacks static.
+ */
+void mapping_rmap_tree_propagate(struct vm_area_struct *vma)
+{
+	__mapping_rmap_tree_augment.propagate(&vma->shared.rb, NULL);
+}
+
 struct vm_area_struct *
 mapping_rmap_tree_iter_first(struct address_space *mapping,
 			     pgoff_t pgoff_start, pgoff_t pgoff_last)
