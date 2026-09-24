@@ -62,7 +62,7 @@ properties:
 
   clock-names:
     minItems: 1
-    maxItems: 2
+    maxItems: 3
 
   power-domains:
     maxItems: 1
@@ -135,17 +135,38 @@ allOf:
       properties:
         compatible:
           contains:
-            enum:
-              - amlogic,meson-s4-pwm
+            const: amlogic,t7-pwm
     then:
       properties:
         clocks:
           items:
             - description: input clock of PWM channel A
             - description: input clock of PWM channel B
-        clock-names: false
+            - description: gate clock for the PWM controller
+        clock-names:
+          items:
+            - const: clk_a
+            - const: clk_b
+            - const: core
       required:
         - clocks
+        - clock-names
+    else:
+      if:
+        properties:
+          compatible:
+            contains:
+              enum:
+                - amlogic,meson-s4-pwm
+      then:
+        properties:
+          clocks:
+            items:
+              - description: input clock of PWM channel A
+              - description: input clock of PWM channel B
+          clock-names: false
+        required:
+          - clocks
 
   - if:
       properties:
@@ -180,5 +201,13 @@ examples:
       compatible = "amlogic,meson-s4-pwm";
       reg = <0x1000 0x10>;
       clocks = <&pwm_src_a>, <&pwm_src_b>;
+      #pwm-cells = <3>;
+    };
+  - |
+    pwm@60000 {
+      compatible = "amlogic,t7-pwm", "amlogic,meson-s4-pwm";
+      reg = <0x60000 0x24>;
+      clocks = <&clk_a>, <&clk_b>, <&core>;
+      clock-names = "clk_a", "clk_b", "core";
       #pwm-cells = <3>;
     };
