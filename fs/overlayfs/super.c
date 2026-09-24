@@ -1557,8 +1557,12 @@ int ovl_fill_super(struct super_block *sb, struct fs_context *fc)
 			goto out_err;
 	}
 
-	with_ovl_creds(sb)
-		err = ovl_fill_super_creds(fc, sb);
+	/*
+	 * Mount setup must run under the caller's credentials, not
+	 * creator_cred: clone_private_mount() requires CAP_SYS_ADMIN,
+	 * which override_creds may have dropped.
+	 */
+	err = ovl_fill_super_creds(fc, sb);
 
 out_err:
 	if (err) {
