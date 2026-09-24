@@ -402,6 +402,18 @@ void ntfs_report_metadata_error(struct ntfs_volume *vol, int error)
 		fserror_report_metadata(vol->sb, error, GFP_ATOMIC);
 }
 
+void ntfs_report_file_metadata_error(struct inode *inode, int error)
+{
+	struct ntfs_inode *ni = NTFS_I(inode);
+
+	/* Attribute inodes share the file handle of their base inode. */
+	if (NInoAttr(ni))
+		inode = VFS_I(ni->ext.base_ntfs_ino);
+	NVolSetErrors(NTFS_SB(inode->i_sb));
+	if (inode->i_sb->s_flags & SB_ACTIVE)
+		fserror_report_file_metadata(inode, error, GFP_ATOMIC);
+}
+
 void ntfs_handle_error(struct super_block *sb)
 {
 	struct ntfs_volume *vol = NTFS_SB(sb);

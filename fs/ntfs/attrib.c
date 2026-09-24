@@ -838,6 +838,7 @@ static int ntfs_attr_find(const __le32 type, const __le16 *name,
 		const u8 *val, const u32 val_len, struct ntfs_attr_search_ctx *ctx)
 {
 	struct attr_record *a;
+	struct ntfs_inode *base_ni;
 	struct ntfs_volume *vol = ctx->ntfs_ino->vol;
 	__le16 *upcase = vol->upcase;
 	u32 upcase_len = vol->upcase_len;
@@ -964,7 +965,11 @@ static int ntfs_attr_find(const __le32 type, const __le16 *name,
 	}
 	ntfs_error(vol->sb, "mft %#llx, type %#x is corrupt. Run chkdsk.",
 		   (long long)ctx->ntfs_ino->mft_no, le32_to_cpu(type));
-	NVolSetErrors(vol);
+	if (ctx->ntfs_ino->nr_extents >= 0)
+		base_ni = ctx->ntfs_ino;
+	else
+		base_ni = ctx->ntfs_ino->ext.base_ntfs_ino;
+	ntfs_report_file_metadata_error(VFS_I(base_ni), -EIO);
 	return -EIO;
 }
 
@@ -1501,8 +1506,12 @@ corrupt:
 		err = -EIO;
 	}
 
-	if (err != -ENOMEM)
-		NVolSetErrors(vol);
+	if (err != -ENOMEM) {
+		if (err != -EINTR && err != -ERESTARTSYS)
+			ntfs_report_file_metadata_error(VFS_I(base_ni), err);
+		else
+			NVolSetErrors(vol);
+	}
 	return err;
 not_found:
 	/*
@@ -2233,10 +2242,11 @@ undo_err_out:
 rl_err_out:
 	up_write(&ni->runlist.lock);
 	if (rl) {
-		if (ntfs_cluster_free_from_rl(vol, rl) < 0) {
+		err2 = ntfs_cluster_free_from_rl(vol, rl);
+		if (err2 < 0) {
 			ntfs_error(vol->sb,
 				"Failed to release allocated cluster(s) in error code path.  Run chkdsk to recover the lost cluster(s).");
-			NVolSetErrors(vol);
+			ntfs_report_file_metadata_error(vi, err2);
 		}
 		kvfree(rl);
 folio_err_out:
@@ -3728,6 +3738,7 @@ static int __ntfs_attr_update_mapping_pairs(struct ntfs_inode *ni,
 	struct attr_record *a;
 	s64 stop_vcn;
 	int err = 0, mp_size, cur_max_mp_size, exp_max_mp_size;
+	int rollback_err;
 	bool finished_build;
 	bool first_updated = false;
 	struct super_block *sb;
@@ -4016,10 +4027,14 @@ retry:
 		m = map_mft_record(ext_ni);
 		if (IS_ERR(m)) {
 			ntfs_error(sb, "Could not map new MFT record");
-			if (ntfs_mft_record_free(ni->vol, ext_ni))
+			rollback_err = ntfs_mft_record_free(ni->vol, ext_ni);
+			if (rollback_err) {
 				ntfs_error(sb, "Could not free MFT record");
+				ntfs_report_file_metadata_error(VFS_I(base_ni),
+								rollback_err);
+			}
 			ntfs_inode_close(ext_ni);
-			err = -ENOMEM;
+			err = PTR_ERR(m);
 			ext_ni = NULL;
 			goto put_err_out;
 		}
@@ -4053,8 +4068,12 @@ retry:
 		if (err < 0) {
 			ntfs_error(sb, "Could not add attribute extent");
 			unmap_mft_record(ext_ni);
-			if (ntfs_mft_record_free(ni->vol, ext_ni))
+			rollback_err = ntfs_mft_record_free(ni->vol, ext_ni);
+			if (rollback_err) {
 				ntfs_error(sb, "Could not free MFT record");
+				ntfs_report_file_metadata_error(VFS_I(base_ni),
+								rollback_err);
+			}
 			ntfs_inode_close(ext_ni);
 			goto put_err_out;
 		}
@@ -4067,8 +4086,12 @@ retry:
 		if (err < 0 && err != -ENOSPC) {
 			ntfs_error(sb, "Failed to build MP");
 			unmap_mft_record(ext_ni);
-			if (ntfs_mft_record_free(ni->vol, ext_ni))
+			rollback_err = ntfs_mft_record_free(ni->vol, ext_ni);
+			if (rollback_err) {
 				ntfs_error(sb, "Couldn't free MFT record");
+				ntfs_report_file_metadata_error(VFS_I(base_ni),
+								rollback_err);
+			}
 			goto put_err_out;
 		}
 		a->data.non_resident.highest_vcn = cpu_to_le64(stop_vcn - 1);
@@ -4449,6 +4472,7 @@ static int ntfs_non_resident_attr_expand(struct ntfs_inode *ni, const s64 newsiz
 	struct ntfs_attr_search_ctx *ctx = NULL;
 	struct runlist_element *rl, *rln;
 	s64 org_alloc_size, org_compressed_size;
+	s64 freed;
 	int err, err2;
 	struct ntfs_inode *base_ni;
 	struct super_block *sb = ni->vol->sb;
@@ -4678,10 +4702,12 @@ static int ntfs_non_resident_attr_expand(struct ntfs_inode *ni, const s64 newsiz
 	return 0;
 rollback:
 	/* Free allocated clusters. */
-	err2 = ntfs_cluster_free(ni, ntfs_bytes_to_cluster(vol, org_alloc_size),
-				-1, ctx);
-	if (err2)
+	freed = ntfs_cluster_free(ni, ntfs_bytes_to_cluster(vol, org_alloc_size),
+				  -1, ctx);
+	if (freed < 0) {
 		ntfs_debug("Leaking clusters");
+		ntfs_report_file_metadata_error(VFS_I(base_ni), freed);
+	}
 
 	/* Now, truncate the runlist itself. */
 	if (ni != locked_ni)
@@ -4698,14 +4724,18 @@ rollback:
 		kvfree(ni->runlist.rl);
 		ni->runlist.rl = NULL;
 		ntfs_error(sb, "Couldn't truncate runlist. Rollback failed");
+		ntfs_report_file_metadata_error(VFS_I(base_ni), err2);
 	} else {
 		/* Prepare to mapping pairs update. */
 		ni->allocated_size = org_alloc_size;
 		/* Restore mapping pairs. */
 		if (ni != locked_ni)
 			down_read(&ni->runlist.lock);
-		if (__ntfs_attr_update_mapping_pairs(ni, 0, locked_ni, true))
+		err2 = __ntfs_attr_update_mapping_pairs(ni, 0, locked_ni, true);
+		if (err2) {
 			ntfs_error(sb, "Failed to restore old mapping pairs");
+			ntfs_report_file_metadata_error(VFS_I(base_ni), err2);
+		}
 		if (ni != locked_ni)
 			up_read(&ni->runlist.lock);
 
@@ -5139,8 +5169,9 @@ int ntfs_attr_map_cluster(struct ntfs_inode *ni, s64 vcn_start, s64 *lcn_start,
 	struct runlist_element *rl, *rlc;
 	struct runlist_element *old_rl = NULL;
 	s64 vcn = vcn_start, lcn, clu_count;
+	s64 freed;
 	s64 lcn_seek_from = -1;
-	int err = 0;
+	int err = 0, err2;
 	size_t new_rl_count, old_rl_count;
 
 	err = ntfs_attr_map_whole_runlist(ni);
@@ -5239,10 +5270,11 @@ int ntfs_attr_map_cluster(struct ntfs_inode *ni, s64 vcn_start, s64 *lcn_start,
 			 old_rl_count * sizeof(*old_rl), GFP_NOFS);
 	if (!old_rl) {
 		err = -ENOMEM;
-		if (ntfs_cluster_free_from_rl(vol, rlc)) {
+		err2 = ntfs_cluster_free_from_rl(vol, rlc);
+		if (err2) {
 			ntfs_error(vol->sb,
 				   "Failed to free cluster allocation after runlist backup failure.");
-			NVolSetErrors(vol);
+			ntfs_report_file_metadata_error(VFS_I(ni), err2);
 		}
 		kvfree(rlc);
 		goto out;
@@ -5252,8 +5284,11 @@ int ntfs_attr_map_cluster(struct ntfs_inode *ni, s64 vcn_start, s64 *lcn_start,
 	if (IS_ERR(rl)) {
 		ntfs_error(vol->sb, "Failed to merge runlists");
 		err = PTR_ERR(rl);
-		if (ntfs_cluster_free_from_rl(vol, rlc))
+		err2 = ntfs_cluster_free_from_rl(vol, rlc);
+		if (err2) {
 			ntfs_error(vol->sb, "Failed to free hot clusters.");
+			ntfs_report_file_metadata_error(VFS_I(ni), err2);
+		}
 		kvfree(rlc);
 		goto out;
 	}
@@ -5272,13 +5307,12 @@ int ntfs_attr_map_cluster(struct ntfs_inode *ni, s64 vcn_start, s64 *lcn_start,
 		ntfs_attr_reinit_search_ctx(ctx);
 		err = ntfs_attr_update_mapping_pairs_locked(ni, 0, ni);
 		if (err) {
-			int err2;
-
-			err2 = ntfs_cluster_free(ni, vcn, clu_count, ctx);
-			if (err2 < 0 || err2 != clu_count) {
+			freed = ntfs_cluster_free(ni, vcn, clu_count, ctx);
+			if (freed < 0 || freed != clu_count) {
 				ntfs_error(vol->sb,
 					   "Failed to free cluster allocation. Leaving inconsistent metadata.\n");
-				NVolSetErrors(vol);
+				err2 = freed < 0 ? freed : -EIO;
+				ntfs_report_file_metadata_error(VFS_I(ni), err2);
 				goto out;
 			}
 
@@ -5290,11 +5324,11 @@ int ntfs_attr_map_cluster(struct ntfs_inode *ni, s64 vcn_start, s64 *lcn_start,
 			ni->runlist.rl = old_rl;
 			ni->runlist.count = old_rl_count;
 			old_rl = NULL;
-			if (ntfs_attr_update_mapping_pairs_locked(
-					ni, 0, ni)) {
+			err2 = ntfs_attr_update_mapping_pairs_locked(ni, 0, ni);
+			if (err2) {
 				ntfs_error(vol->sb,
 					   "Failed to restore mapping pairs after allocation rollback.\n");
-				NVolSetErrors(vol);
+				ntfs_report_file_metadata_error(VFS_I(ni), err2);
 			}
 		}
 	} else {

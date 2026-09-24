@@ -78,7 +78,7 @@ static int ntfs_attrlist_repack(struct inode *attr_vi,
 	s64 old_alloc_size;
 	size_t old_rl_count, new_rl_count;
 	unsigned long flags;
-	int err, restore_err;
+	int err, free_err, restore_err;
 	if (attr_ni->mft_no != FILE_MFT || !NInoNonResident(attr_ni) ||
 		min_alloc_size < 0)
 		return -EINVAL;
@@ -129,7 +129,9 @@ static int ntfs_attrlist_repack(struct inode *attr_vi,
 		new_rl_count = 2;
 
 	if (new_rl_count != 2) {
-		ntfs_cluster_free_from_rl(vol, new_rl);
+		free_err = ntfs_cluster_free_from_rl(vol, new_rl);
+		if (free_err)
+			ntfs_report_file_metadata_error(attr_vi, free_err);
 		kvfree(new_rl);
 		err = -ENOSPC;
 		goto out_free_data;
@@ -159,11 +161,12 @@ static int ntfs_attrlist_repack(struct inode *attr_vi,
 		goto restore_old_runlist;
 
 	/* The new mapping is now authoritative; release the old data runs. */
-	if (ntfs_cluster_free_from_rl(vol, old_rl)) {
+	free_err = ntfs_cluster_free_from_rl(vol, old_rl);
+	if (free_err) {
 		ntfs_error(vol->sb,
 			   "Failed to free old ATTRIBUTE_LIST extent: inode %#llx",
 			   (long long)attr_ni->mft_no);
-		NVolSetErrors(vol);
+		ntfs_report_file_metadata_error(attr_vi, free_err);
 	}
 	kvfree(old_rl);
 	kvfree(data);
@@ -184,10 +187,12 @@ restore_old_runlist:
 	if (restore_err) {
 		ntfs_error(vol->sb, "Failed to restore ATTRIBUTE_LIST mapping pairs (%d)",
 			   restore_err);
-		NVolSetErrors(vol);
+		ntfs_report_file_metadata_error(attr_vi, restore_err);
 	}
 
-	ntfs_cluster_free_from_rl(vol, new_rl);
+	free_err = ntfs_cluster_free_from_rl(vol, new_rl);
+	if (free_err)
+		ntfs_report_file_metadata_error(attr_vi, free_err);
 	kvfree(new_rl);
 	err = err ? err : restore_err;
 

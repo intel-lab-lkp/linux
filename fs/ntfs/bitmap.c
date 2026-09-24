@@ -287,7 +287,7 @@ rollback:
 		ntfs_error(vi->i_sb,
 			"Failed to map subsequent page (error %i) and rollback failed (error %i). Aborting and leaving inconsistent metadata. Unmount and run chkdsk.",
 			err, pos);
-		NVolSetErrors(NTFS_SB(vi->i_sb));
+		ntfs_report_file_metadata_error(vi, pos);
 	}
 	return err;
 }
