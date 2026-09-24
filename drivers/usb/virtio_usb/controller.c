@@ -12,6 +12,7 @@
 #include "controller.h"
 #include "host.h"
 #include "device.h"
+#include "otg.h"
 #include "vq_common.h"
 
 u32 virtio_usb_cmd_timeout_ms = MSEC_PER_SEC;
@@ -130,12 +131,12 @@ static int virtio_usb_probe(struct virtio_device *vdev)
 
 	/* Only allocate/negotiate the virtqueue triplets this instance
 	 * actually needs: HOST_* only exists when host_role is negotiated,
-	 * DEV_* only when device_role is negotiated. A pure single-role
-	 * instance therefore has exactly VIRTIO_USB_VQ_HOST_MAX (3) or
-	 * VIRTIO_USB_VQ_DEV_MAX (3) virtqueues, not a fixed layout - queues
-	 * that don't exist on the wire must not be created, since a peer
-	 * with no host-role VP has no host command/event/data queues to
-	 * negotiate at all.
+	 * DEV_* only when device_role is negotiated, OTG_* only when both
+	 * roles are negotiated. A pure single-role instance therefore has
+	 * exactly VIRTIO_USB_VQ_HOST_MAX (3) or VIRTIO_USB_VQ_DEV_MAX (3)
+	 * virtqueues, not a fixed layout - queues that don't exist on the
+	 * wire must not be created, since a peer with no host-role VP has
+	 * no host command/event/data queues to negotiate at all.
 	 */
 	vusb->host_vq_base = -1;
 	vusb->dev_vq_base = -1;
@@ -148,17 +149,15 @@ static int virtio_usb_probe(struct virtio_device *vdev)
 		vusb->dev_vq_base = nvqs;
 		nvqs += VIRTIO_USB_VQ_DEV_MAX;
 	}
-
-	/* Resolve every port's role. With only one role negotiated, every
-	 * port unambiguously has that role. With both negotiated, a port's
-	 * own role is ambiguous until a later commit adds an OTG-based
-	 * per-port query - default to DEVICE for now as a placeholder.
-	 */
-	for (i = 0; i < vusb->nports; i++) {
-		if (vusb->host_role && !vusb->device_role)
-			vusb->vports[i].role = VIRTIO_USB_ROLE_HOST;
-		else if (vusb->device_role)
-			vusb->vports[i].role = VIRTIO_USB_ROLE_DEVICE;
+	if (vusb->host_role && vusb->device_role) {
+		/* The OTG command/event queue pair is needed whenever both
+		 * roles are negotiated - it is how the driver asks each
+		 * port for its actual role via otg_get_role() below, since
+		 * a port's own role is otherwise ambiguous (host|device)
+		 * until then.
+		 */
+		vusb->otg_vq_base = nvqs;
+		nvqs += VIRTIO_USB_VQ_OTG_MAX;
 	}
 
 	vusb->vqueues = devm_kcalloc(&vdev->dev, nvqs, sizeof(*vusb->vqueues),
@@ -192,11 +191,63 @@ static int virtio_usb_probe(struct virtio_device *vdev)
 				dev_vqueues[i].stop;
 		}
 
+	if (vusb->host_role && vusb->device_role)
+		for (i = 0; i < VIRTIO_USB_VQ_OTG_MAX; i++) {
+			vusb->vqueues[vusb->otg_vq_base + i].name =
+				otg_vqueues[i].name;
+			vusb->vqueues[vusb->otg_vq_base + i].callback =
+				otg_vqueues[i].callback;
+			vusb->vqueues[vusb->otg_vq_base + i].process =
+				otg_vqueues[i].process;
+			vusb->vqueues[vusb->otg_vq_base + i].stop =
+				otg_vqueues[i].stop;
+		}
+
 	rc = virtio_usb_find_vqs(vusb);
 	if (rc) {
 		dev_err(&vdev->dev, "%s virtio_usb_find_vqs() error(%d)\n",
 			__func__, rc);
 		goto on_error;
+	}
+
+	if (vusb->host_role && vusb->device_role) {
+		rc = otg_init(vusb);
+		if (rc) {
+			dev_err(&vdev->dev, "%s otg_init() error(%d)\n",
+				__func__, rc);
+			goto on_error;
+		}
+	}
+
+	/* Resolve every port's role. With only one role negotiated, every
+	 * port unambiguously has that role. With both negotiated, query
+	 * each port's actual role individually via otg_get_role(), since
+	 * it is otherwise ambiguous (host|device).
+	 */
+	for (i = 0; i < vusb->nports; i++) {
+		if (vusb->host_role && !vusb->device_role) {
+			vusb->vports[i].role = VIRTIO_USB_ROLE_HOST;
+		} else if (vusb->device_role && !vusb->host_role) {
+			vusb->vports[i].role = VIRTIO_USB_ROLE_DEVICE;
+		} else {
+			u32 status, role;
+
+			status = otg_get_role(vusb, i, &role);
+			if (status != VIRTIO_USB_S_OK) {
+				dev_err(&vdev->dev, "%s status(%d)\n", __func__,
+					status);
+				rc = -EIO;
+				goto on_error;
+			}
+			if (role != VIRTIO_USB_ROLE_HOST &&
+			    role != VIRTIO_USB_ROLE_DEVICE) {
+				dev_err(&vdev->dev, "%s port%d wrong role %d\n",
+					__func__, i, role);
+				rc = -EIO;
+				goto on_error;
+			}
+			vusb->vports[i].role = role;
+		}
 	}
 
 	if (vusb->host_role) {
@@ -286,6 +337,8 @@ static void virtio_usb_remove(struct virtio_device *vdev)
 	virtio_reset_device(vdev);
 
 	vdev->config->del_vqs(vdev);
+
+	otg_deinit(vusb);
 }
 
 static const unsigned int virtio_usb_features[] = {
