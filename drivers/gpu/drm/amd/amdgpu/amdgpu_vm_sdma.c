@@ -100,11 +100,9 @@ static int amdgpu_vm_sdma_prepare(struct amdgpu_vm_update_params *p,
  * @p: see amdgpu_vm_update_params definition
  * @fence: resulting fence
  *
- * Returns:
- * Negativ errno, 0 for success.
  */
-static int amdgpu_vm_sdma_commit(struct amdgpu_vm_update_params *p,
-				 struct dma_fence **fence)
+static void amdgpu_vm_sdma_commit(struct amdgpu_vm_update_params *p,
+				  struct dma_fence **fence)
 {
 	struct amdgpu_ib *ib = p->job->ibs;
 	struct amdgpu_ring *ring;
@@ -142,7 +140,6 @@ static int amdgpu_vm_sdma_commit(struct amdgpu_vm_update_params *p,
 		swap(*fence, f);
 	}
 	dma_fence_put(f);
-	return 0;
 }
 
 /**
@@ -246,9 +243,7 @@ static int amdgpu_vm_sdma_update(struct amdgpu_vm_update_params *p,
 		ndw -= p->job->ibs->length_dw;
 
 		if (ndw < 32) {
-			r = amdgpu_vm_sdma_commit(p, NULL);
-			if (r)
-				return r;
+			amdgpu_vm_sdma_commit(p, NULL);
 
 			r = amdgpu_vm_sdma_alloc_job(p, count,
 						     AMDGPU_KERNEL_JOB_ID_VM_UPDATE);

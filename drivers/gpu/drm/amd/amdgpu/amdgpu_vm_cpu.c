@@ -116,8 +116,8 @@ static int amdgpu_vm_cpu_update(struct amdgpu_vm_update_params *p,
  *
  * Make sure that the hardware sees the page table updates.
  */
-static int amdgpu_vm_cpu_commit(struct amdgpu_vm_update_params *p,
-				struct dma_fence **fence)
+static void amdgpu_vm_cpu_commit(struct amdgpu_vm_update_params *p,
+				 struct dma_fence **fence)
 {
 	struct amdgpu_device *adev = p->adev;
 
@@ -127,12 +127,10 @@ static int amdgpu_vm_cpu_commit(struct amdgpu_vm_update_params *p,
 	mb();
 	/* A reset flushed the HDP anyway, so that here can be skipped when a reset is ongoing */
 	if (!down_read_trylock(&adev->reset_domain->sem))
-		return 0;
+		return;
 
 	amdgpu_device_flush_hdp(adev, NULL);
 	up_read(&adev->reset_domain->sem);
-
-	return 0;
 }
 
 const struct amdgpu_vm_update_funcs amdgpu_vm_cpu_funcs = {
