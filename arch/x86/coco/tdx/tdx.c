@@ -978,6 +978,9 @@ static bool tdx_enc_status_changed(unsigned long vaddr, int numpages, bool enc)
 static int tdx_enc_status_change_prepare(unsigned long vaddr, int numpages,
 					 bool enc)
 {
+	if (!enc)
+		memset((void *)vaddr, 0, (size_t)numpages << PAGE_SHIFT);
+
 	/*
 	 * Only handle shared->private conversion here.
 	 * See the comment in tdx_early_init().

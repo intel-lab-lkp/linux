@@ -505,8 +505,6 @@ int hv_common_cpu_init(unsigned int cpu)
 				/* It may be unsafe to free 'mem' */
 				return ret;
 			}
-
-			memset(mem, 0x00, pgcount * HV_HYP_PAGE_SIZE);
 		}
 
 		/*

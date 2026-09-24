@@ -13,6 +13,7 @@
 #include <linux/dma-direct.h>
 #include <linux/swiotlb.h>
 #include <linux/mem_encrypt.h>
+#include <linux/string.h>
 #include <linux/device.h>
 #include <linux/kernel.h>
 #include <linux/bitops.h>
@@ -285,6 +286,9 @@ static void enc_dec_hypercall(unsigned long vaddr, unsigned long size, bool enc)
 
 static int amd_enc_status_change_prepare(unsigned long vaddr, int npages, bool enc)
 {
+	if (!enc)
+		memset((void *)vaddr, 0, (size_t)npages << PAGE_SHIFT);
+
 	/*
 	 * To maintain the security guarantees of SEV-SNP guests, make sure
 	 * to invalidate the memory before encryption attribute is cleared.

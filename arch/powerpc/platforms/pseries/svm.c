@@ -9,6 +9,7 @@
 #include <linux/mm.h>
 #include <linux/memblock.h>
 #include <linux/mem_encrypt.h>
+#include <linux/string.h>
 #include <linux/cc_platform.h>
 #include <asm/machdep.h>
 #include <asm/svm.h>
@@ -59,6 +60,7 @@ int set_memory_decrypted(unsigned long addr, int numpages)
 	if (!PAGE_ALIGNED(addr))
 		return -EINVAL;
 
+	memset((void *)addr, 0, (size_t)numpages << PAGE_SHIFT);
 	uv_share_page(PHYS_PFN(__pa(addr)), numpages);
 
 	return 0;

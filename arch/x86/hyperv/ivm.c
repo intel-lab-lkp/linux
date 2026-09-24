@@ -755,6 +755,10 @@ static int hv_mark_gpa_visibility(u16 count, const u64 pfn[],
  */
 static int hv_vtom_clear_present(unsigned long kbuffer, int pagecount, bool enc)
 {
+	if (!enc)
+		memset((void *)kbuffer, 0,
+		       (size_t)pagecount << PAGE_SHIFT);
+
 	return set_memory_np(kbuffer, pagecount);
 }
 

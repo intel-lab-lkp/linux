@@ -104,7 +104,6 @@ static int __alloc_cc_shared_pages_node(int nid, gfp_t gfp,
 	struct cc_shared_layout layout;
 	struct page *page;
 	unsigned int order;
-	bool zero = gfp & __GFP_ZERO;
 	int ret;
 
 	ret = cc_shared_calc_layout(requested, &layout);
@@ -117,7 +116,8 @@ static int __alloc_cc_shared_pages_node(int nid, gfp_t gfp,
 
 	/*
 	 * State transitions require a linear-map address and may modify memory.
-	 * Allocate from low memory and defer requested zeroing until afterwards.
+	 * Allocate from low memory and let the architecture place zeroing at the
+	 * appropriate point in the transition.
 	 */
 	gfp &= ~(__GFP_HIGHMEM | __GFP_ZERO);
 	if (nid == NUMA_NO_NODE)
@@ -136,9 +136,6 @@ static int __alloc_cc_shared_pages_node(int nid, gfp_t gfp,
 					    layout.shared_size);
 		return ret;
 	}
-
-	if (zero)
-		memset(page_address(page), 0, layout.shared_size);
 
 	mem->page = page;
 	mem->shared_size = layout.shared_size;
