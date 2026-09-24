@@ -42,6 +42,7 @@ unsigned int ipu7_isys_mbus_code_to_mipi(u32 code)
 	case MEDIA_BUS_FMT_SGRBG10_1X10:
 	case MEDIA_BUS_FMT_SRGGB10_1X10:
 		return MIPI_CSI2_DT_RAW10;
+	case MEDIA_BUS_FMT_Y8_1X8:
 	case MEDIA_BUS_FMT_SBGGR8_1X8:
 	case MEDIA_BUS_FMT_SGBRG8_1X8:
 	case MEDIA_BUS_FMT_SGRBG8_1X8:
@@ -87,6 +88,10 @@ u32 ipu7_isys_convert_bayer_order(u32 code, int x, int y)
 		MEDIA_BUS_FMT_SBGGR12_1X12,
 	};
 	unsigned int i;
+
+	/* Monochrome raw formats have no Bayer order to convert */
+	if (code == MEDIA_BUS_FMT_Y8_1X8 || code == MEDIA_BUS_FMT_Y10_1X10)
+		return code;
 
 	for (i = 0; i < ARRAY_SIZE(code_map); i++)
 		if (code_map[i] == code)

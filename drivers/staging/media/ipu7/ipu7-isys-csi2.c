@@ -27,6 +27,7 @@
 #include "ipu7-isys-csi-phy.h"
 
 static const u32 csi2_supported_codes[] = {
+	MEDIA_BUS_FMT_Y8_1X8,
 	MEDIA_BUS_FMT_Y10_1X10,
 	MEDIA_BUS_FMT_RGB565_1X16,
 	MEDIA_BUS_FMT_RGB888_1X24,
