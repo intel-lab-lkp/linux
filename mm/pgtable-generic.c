@@ -459,6 +459,17 @@ static void kernel_pgtable_work_func(struct work_struct *work)
 
 void pagetable_free_kernel(struct ptdesc *pt)
 {
+	/*
+	 * While the system is still booting only the boot CPU runs and no
+	 * IOMMU has been set up, so nothing can be caching this table and
+	 * there is nothing to flush.  The workqueue this defers to may not
+	 * exist yet either.
+	 */
+	if (system_state == SYSTEM_BOOTING) {
+		__pagetable_free(pt);
+		return;
+	}
+
 	spin_lock(&kernel_pgtable_work.lock);
 	list_add(&pt->pt_list, &kernel_pgtable_work.list);
 	spin_unlock(&kernel_pgtable_work.lock);
