@@ -65,10 +65,7 @@ static inline void mtk_hdmi_v2_hwirq_disable(struct mtk_hdmi *hdmi)
 
 static inline void mtk_hdmi_v2_enable_hpd_pord_irq(struct mtk_hdmi *hdmi, bool enable)
 {
-	if (enable)
-		regmap_set_bits(hdmi->regs, TOP_INT_ENABLE00, HPD_PORD_HWIRQS);
-	else
-		regmap_clear_bits(hdmi->regs, TOP_INT_ENABLE00, HPD_PORD_HWIRQS);
+	regmap_assign_bits(hdmi->regs, TOP_INT_ENABLE00, HPD_PORD_HWIRQS, enable);
 }
 
 static inline void mtk_hdmi_v2_set_sw_hpd(struct mtk_hdmi *hdmi, bool enable)
@@ -88,10 +85,7 @@ static inline void mtk_hdmi_v2_enable_scrambling(struct mtk_hdmi *hdmi, bool ena
 {
 	struct drm_scdc *scdc = &hdmi->curr_conn->display_info.hdmi.scdc;
 
-	if (enable)
-		regmap_set_bits(hdmi->regs, TOP_CFG00, SCR_ON | HDMI2_ON);
-	else
-		regmap_clear_bits(hdmi->regs, TOP_CFG00, SCR_ON | HDMI2_ON);
+	regmap_assign_bits(hdmi->regs, TOP_CFG00, SCR_ON | HDMI2_ON, enable);
 
 	if (scdc->supported) {
 		if (scdc->scrambling.supported)
@@ -103,10 +97,7 @@ static inline void mtk_hdmi_v2_enable_scrambling(struct mtk_hdmi *hdmi, bool ena
 static void mtk_hdmi_v2_hw_vid_mute(struct mtk_hdmi *hdmi, bool enable)
 {
 	/* If enabled, sends a black image */
-	if (enable)
-		regmap_set_bits(hdmi->regs, TOP_VMUTE_CFG1, REG_VMUTE_EN);
-	else
-		regmap_clear_bits(hdmi->regs, TOP_VMUTE_CFG1, REG_VMUTE_EN);
+	regmap_assign_bits(hdmi->regs, TOP_VMUTE_CFG1, REG_VMUTE_EN, enable);
 }
 
 static void mtk_hdmi_v2_hw_aud_mute(struct mtk_hdmi *hdmi, bool enable)
@@ -302,10 +293,7 @@ static inline void mtk_hdmi_v2_hw_gcp_avmute(struct mtk_hdmi *hdmi, bool mute)
 
 static void mtk_hdmi_v2_hw_ncts_enable(struct mtk_hdmi *hdmi, bool enable)
 {
-	if (enable)
-		regmap_set_bits(hdmi->regs, AIP_CTRL, CTS_SW_SEL);
-	else
-		regmap_clear_bits(hdmi->regs, AIP_CTRL, CTS_SW_SEL);
+	regmap_assign_bits(hdmi->regs, AIP_CTRL, CTS_SW_SEL, enable);
 }
 
 static void mtk_hdmi_v2_hw_aud_set_channel_status(struct mtk_hdmi *hdmi)
@@ -423,10 +411,7 @@ static void mtk_hdmi_v2_hw_i2s_ch_mapping(struct mtk_hdmi *hdmi, u8 chnum, u8 ma
 	 * Layout 0 is for two channels
 	 * Layout 1 is for up to eight channels
 	 */
-	if (chnum == 2)
-		regmap_set_bits(hdmi->regs, AIP_TXCTRL, AUD_LAYOUT_1);
-	else
-		regmap_clear_bits(hdmi->regs, AIP_TXCTRL, AUD_LAYOUT_1);
+	regmap_assign_bits(hdmi->regs, AIP_TXCTRL, AUD_LAYOUT_1, chnum == 2);
 }
 
 static void mtk_hdmi_i2s_data_fmt(struct mtk_hdmi *hdmi, unsigned char fmt)
@@ -456,10 +441,7 @@ static void mtk_hdmi_i2s_data_fmt(struct mtk_hdmi *hdmi, unsigned char fmt)
 
 static inline void mtk_hdmi_i2s_sck_edge_rise(struct mtk_hdmi *hdmi, bool rise)
 {
-	if (rise)
-		regmap_set_bits(hdmi->regs, AIP_I2S_CTRL, SCK_EDGE_RISE);
-	else
-		regmap_clear_bits(hdmi->regs, AIP_I2S_CTRL, SCK_EDGE_RISE);
+	regmap_assign_bits(hdmi->regs, AIP_I2S_CTRL, SCK_EDGE_RISE, rise);
 }
 
 static inline void mtk_hdmi_i2s_cbit_order(struct mtk_hdmi *hdmi, unsigned int cbit)
@@ -645,10 +627,7 @@ static void mtk_hdmi_v2_aud_set_input(struct mtk_hdmi *hdmi)
 
 static inline void mtk_hdmi_v2_hw_audio_input_enable(struct mtk_hdmi *hdmi, bool ena)
 {
-	if (ena)
-		regmap_set_bits(hdmi->regs, AIP_CTRL, AUD_IN_EN);
-	else
-		regmap_clear_bits(hdmi->regs, AIP_CTRL, AUD_IN_EN);
+	regmap_assign_bits(hdmi->regs, AIP_CTRL, AUD_IN_EN, ena);
 }
 
 static void mtk_hdmi_v2_aip_ctrl_init(struct mtk_hdmi *hdmi)
@@ -662,10 +641,7 @@ static void mtk_hdmi_v2_audio_reset(struct mtk_hdmi *hdmi, bool reset)
 {
 	const u32 arst_bits = RST4AUDIO | RST4AUDIO_FIFO | RST4AUDIO_ACR;
 
-	if (reset)
-		regmap_set_bits(hdmi->regs, AIP_TXCTRL, arst_bits);
-	else
-		regmap_clear_bits(hdmi->regs, AIP_TXCTRL, arst_bits);
+	regmap_assign_bits(hdmi->regs, AIP_TXCTRL, arst_bits, reset);
 }
 
 static void mtk_hdmi_v2_aud_output_config(struct mtk_hdmi *hdmi,
@@ -728,10 +704,8 @@ static void mtk_hdmi_v2_change_video_resolution(struct mtk_hdmi *hdmi,
 	/* Disable adding deepcolor information to the general packet */
 	regmap_clear_bits(hdmi->regs, TOP_MISC_CTLR, DEEP_COLOR_ADD);
 
-	if (hdmi->curr_conn->display_info.is_hdmi)
-		regmap_set_bits(hdmi->regs, TOP_CFG00, HDMI_MODE_HDMI);
-	else
-		regmap_clear_bits(hdmi->regs, TOP_CFG00, HDMI_MODE_HDMI);
+	regmap_assign_bits(hdmi->regs, TOP_CFG00, HDMI_MODE_HDMI,
+			   hdmi->curr_conn->display_info.is_hdmi);
 
 	udelay(5);
 	mtk_hdmi_v2_hw_vid_mute(hdmi, true);
