@@ -199,7 +199,7 @@ u64 kvm_pmu_host_counter_mask(void)
 {
 	struct kvm_vcpu *vcpu = kvm_get_running_vcpu();
 
-	if (vcpu && kvm_pmu_is_partitioned(vcpu->kvm)) {
+	if (vcpu && vcpu->arch.pmu.loaded_on_cpu) {
 		u8 nr_counters = *host_data_ptr(nr_event_counters);
 		unsigned int guest_counters = vcpu->kvm->arch.nr_pmu_counters;
 
@@ -212,7 +212,7 @@ u64 kvm_pmu_host_counter_mask(void)
 	return ARMV8_PMU_CNT_MASK_ALL;
 }
 
-static u64 kvm_vcpu_pmu_guest_counter_mask(struct kvm_vcpu *vcpu)
+u64 kvm_vcpu_pmu_guest_counter_mask(struct kvm_vcpu *vcpu)
 {
 	if (vcpu && kvm_pmu_is_partitioned(vcpu->kvm)) {
 		u64 mask = ARMV8_PMU_CNT_MASK_C;
@@ -226,6 +226,7 @@ static u64 kvm_vcpu_pmu_guest_counter_mask(struct kvm_vcpu *vcpu)
 
 	return 0;
 }
+
 /**
  * kvm_pmu_guest_counter_mask() - Compute bitmask of guest-reserved counters
  *
@@ -237,7 +238,12 @@ static u64 kvm_vcpu_pmu_guest_counter_mask(struct kvm_vcpu *vcpu)
  */
 u64 kvm_pmu_guest_counter_mask(void)
 {
-	return kvm_vcpu_pmu_guest_counter_mask(kvm_get_running_vcpu());
+	struct kvm_vcpu *vcpu = kvm_get_running_vcpu();
+
+	if (vcpu && vcpu->arch.pmu.loaded_on_cpu)
+		return kvm_vcpu_pmu_guest_counter_mask(vcpu);
+
+	return 0;
 }
 
 /**
@@ -336,7 +342,9 @@ void kvm_pmu_load(struct kvm_vcpu *vcpu)
 	 * If we aren't guest-owned then we know the guest isn't using
 	 * the PMU anyway, so no need to bother with the swap.
 	 */
-	if (!kvm_pmu_is_partitioned(vcpu->kvm))
+	if (!kvm_pmu_is_partitioned(vcpu->kvm) ||
+	    kvm_pmu_get_access(vcpu) != VCPU_PMU_ACCESS_GUEST_OWNED ||
+	    vcpu->arch.pmu.loaded_on_cpu)
 		return;
 
 	preempt_disable();
@@ -344,6 +352,11 @@ void kvm_pmu_load(struct kvm_vcpu *vcpu)
 	pmu = vcpu->kvm->arch.arm_pmu;
 	guest_counters = kvm_vcpu_pmu_guest_counter_mask(vcpu);
 	kvm_pmu_set_guest_counters(pmu, guest_counters);
+
+	vcpu->arch.pmu.loaded_on_cpu = true;
+	kvm_arm_setup_mdcr_el2(vcpu);
+	isb();
+
 	kvm_pmu_apply_event_filter(vcpu);
 
 	for_each_set_bit(i, &guest_counters, ARMPMU_MAX_HWEVENTS) {
@@ -411,11 +424,12 @@ void kvm_pmu_put(struct kvm_vcpu *vcpu)
 	u64 val;
 
 	/*
-	 * If we aren't guest-owned then we know the guest is not
+	 * If we aren't loaded on the CPU then we know the guest is not
 	 * accessing the PMU anyway, so no need to bother with the
 	 * swap.
 	 */
-	if (!kvm_pmu_is_partitioned(vcpu->kvm))
+	if (!kvm_pmu_is_partitioned(vcpu->kvm) ||
+	    !vcpu->arch.pmu.loaded_on_cpu)
 		return;
 
 	preempt_disable();
@@ -471,6 +485,30 @@ void kvm_pmu_put(struct kvm_vcpu *vcpu)
 	write_sysreg(val & mask, pmovsclr_el0);
 	local_irq_restore(flags);
 
+	vcpu->arch.pmu.loaded_on_cpu = false;
+	kvm_arm_setup_mdcr_el2(vcpu);
+	isb();
+
 	kvm_pmu_set_guest_counters(pmu, 0);
 	preempt_enable();
+}
+
+/**
+ * kvm_pmu_set_guest_owned() - Give PMU ownership to guest
+ * @vcpu: Pointer to vcpu struct
+ *
+ * Reconfigure the guest for physical access of PMU hardware if
+ * allowed. This means reconfiguring mdcr_el2 and loading guest PMU
+ * registers when running on the current physical CPU.
+ */
+void kvm_pmu_set_guest_owned(struct kvm_vcpu *vcpu)
+{
+	guard(preempt)();
+
+	if (kvm_pmu_is_partitioned(vcpu->kvm) &&
+	    kvm_pmu_get_access(vcpu) == VCPU_PMU_ACCESS_FREE &&
+	    vcpu == kvm_get_running_vcpu()) {
+		vcpu->arch.pmu.access = VCPU_PMU_ACCESS_GUEST_OWNED;
+		kvm_pmu_load(vcpu);
+	}
 }

@@ -630,7 +630,8 @@ void kvm_vcpu_reload_pmu(struct kvm_vcpu *vcpu)
 	__vcpu_rmw_sys_reg(vcpu, PMINTENSET_EL1, &=, mask);
 	__vcpu_rmw_sys_reg(vcpu, PMCNTENSET_EL0, &=, mask);
 
-	kvm_pmu_reprogram_counter_mask(vcpu, mask);
+	if (!kvm_pmu_is_partitioned(vcpu->kvm))
+		kvm_pmu_reprogram_counter_mask(vcpu, mask);
 }
 
 void kvm_pmu_nested_transition(struct kvm_vcpu *vcpu)
@@ -638,6 +639,9 @@ void kvm_pmu_nested_transition(struct kvm_vcpu *vcpu)
 	bool reprogrammed = false;
 	unsigned long mask;
 	int i;
+
+	if (kvm_pmu_is_partitioned(vcpu->kvm))
+		return;
 
 	mask = __vcpu_sys_reg(vcpu, PMCNTENSET_EL0);
 	for_each_set_bit(i, &mask, 32) {

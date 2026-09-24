@@ -1109,13 +1109,34 @@ static void pmu_reg_write(struct kvm_vcpu *vcpu, enum vcpu_sysreg reg, u64 val, 
 
 	switch (reg) {
 	case PMCR_EL0:
-		if (kvm_pmu_is_partitioned(vcpu->kvm))
-			kvm_pmu_direct_pmcr_write(vcpu, val);
-		else
+		if (kvm_pmu_is_partitioned(vcpu->kvm)) {
+			__vcpu_rmw_sys_reg(vcpu, PMCR_EL0, &=, ~ARMV8_PMU_PMCR_MASK);
+			__vcpu_rmw_sys_reg(vcpu, PMCR_EL0, |=, val & ARMV8_PMU_PMCR_MASK);
+			if (val & ARMV8_PMU_PMCR_C)
+				__vcpu_assign_sys_reg(vcpu, PMCCNTR_EL0, 0);
+			if (val & ARMV8_PMU_PMCR_P) {
+				int i;
+
+				mask = kvm_pmu_implemented_counter_mask(vcpu) &
+				       ~BIT(ARMV8_PMU_CYCLE_IDX);
+				if (!vcpu_is_el2(vcpu))
+					mask &= ~kvm_pmu_hyp_counter_mask(vcpu);
+				for_each_set_bit(i, (unsigned long *)&mask,
+						 ARMV8_PMU_MAX_GENERAL_COUNTERS)
+					__vcpu_assign_sys_reg(vcpu, PMEVCNTR0_EL0 + i, 0);
+			}
+
+			if (val & ARMV8_PMU_PMCR_E)
+				kvm_pmu_set_guest_owned(vcpu);
+
+			if (vcpu->arch.pmu.loaded_on_cpu)
+				kvm_pmu_direct_pmcr_write(vcpu, val);
+		} else {
 			kvm_pmu_handle_pmcr(vcpu, val);
+		}
 		break;
 	case PMSELR_EL0:
-		if (kvm_pmu_is_partitioned(vcpu->kvm))
+		if (vcpu->arch.pmu.loaded_on_cpu)
 			write_sysreg(val, pmselr_el0);
 		__vcpu_assign_sys_reg(vcpu, reg, val);
 		break;
@@ -1123,10 +1144,13 @@ static void pmu_reg_write(struct kvm_vcpu *vcpu, enum vcpu_sysreg reg, u64 val, 
 		idx = reg - PMEVCNTR0_EL0;
 
 		if (kvm_pmu_is_partitioned(vcpu->kvm)) {
-			if (idx == ARMV8_PMU_CYCLE_IDX)
-				write_sysreg(val, pmccntr_el0);
-			else
-				write_pmevcntrn(idx, val);
+			__vcpu_assign_sys_reg(vcpu, reg, val);
+			if (vcpu->arch.pmu.loaded_on_cpu) {
+				if (idx == ARMV8_PMU_CYCLE_IDX)
+					write_sysreg(val, pmccntr_el0);
+				else
+					write_pmevcntrn(idx, val);
+			}
 		} else {
 			kvm_pmu_set_counter_value(vcpu, idx, val);
 		}
@@ -1137,7 +1161,8 @@ static void pmu_reg_write(struct kvm_vcpu *vcpu, enum vcpu_sysreg reg, u64 val, 
 		if (kvm_pmu_is_partitioned(vcpu->kvm)) {
 			mask = kvm_pmu_evtyper_mask(vcpu->kvm);
 			__vcpu_assign_sys_reg(vcpu, reg, val & mask);
-			kvm_pmu_apply_single_event_filter(vcpu, idx);
+			if (vcpu->arch.pmu.loaded_on_cpu)
+				kvm_pmu_apply_single_event_filter(vcpu, idx);
 		} else {
 			kvm_pmu_set_counter_event_type(vcpu, val, idx);
 			kvm_vcpu_pmu_restore_guest(vcpu);
@@ -1145,16 +1170,24 @@ static void pmu_reg_write(struct kvm_vcpu *vcpu, enum vcpu_sysreg reg, u64 val, 
 		break;
 	case PMCNTENSET_EL0:
 		if (kvm_pmu_is_partitioned(vcpu->kvm)) {
-			if (set)
-				write_sysreg(val, pmcntenset_el0);
-			else
-				write_sysreg(val, pmcntenclr_el0);
+			mask = kvm_vcpu_pmu_guest_counter_mask(vcpu);
+			if (set) {
+				__vcpu_rmw_sys_reg(vcpu, PMCNTENSET_EL0, |=, val & mask);
+				if (val & mask)
+					kvm_pmu_set_guest_owned(vcpu);
+				if (vcpu->arch.pmu.loaded_on_cpu)
+					write_sysreg(val & mask, pmcntenset_el0);
+			} else {
+				__vcpu_rmw_sys_reg(vcpu, PMCNTENSET_EL0, &=, ~(val & mask));
+				if (vcpu->arch.pmu.loaded_on_cpu)
+					write_sysreg(val & mask, pmcntenclr_el0);
+			}
 		} else {
 			if (set)
 				/* accessing PMCNTENSET_EL0 */
 				__vcpu_rmw_sys_reg(vcpu, PMCNTENSET_EL0, |=, val);
 			else
-				/* accessing PMINTENCLR_EL1 */
+				/* accessing PMCNTENCLR_EL0 */
 				__vcpu_rmw_sys_reg(vcpu, PMCNTENSET_EL0, &=, ~val);
 
 			kvm_pmu_reprogram_counter_mask(vcpu, val);
@@ -1162,10 +1195,18 @@ static void pmu_reg_write(struct kvm_vcpu *vcpu, enum vcpu_sysreg reg, u64 val, 
 		break;
 	case PMINTENSET_EL1:
 		if (kvm_pmu_is_partitioned(vcpu->kvm)) {
-			if (set)
-				write_sysreg(val, pmintenset_el1);
-			else
-				write_sysreg(val, pmintenclr_el1);
+			mask = kvm_vcpu_pmu_guest_counter_mask(vcpu);
+			if (set) {
+				__vcpu_rmw_sys_reg(vcpu, PMINTENSET_EL1, |=, val & mask);
+				if (val & mask)
+					kvm_pmu_set_guest_owned(vcpu);
+				if (vcpu->arch.pmu.loaded_on_cpu)
+					write_sysreg(val & mask, pmintenset_el1);
+			} else {
+				__vcpu_rmw_sys_reg(vcpu, PMINTENSET_EL1, &=, ~(val & mask));
+				if (vcpu->arch.pmu.loaded_on_cpu)
+					write_sysreg(val & mask, pmintenclr_el1);
+			}
 		} else {
 			if (set)
 				/* accessing PMINTENSET_EL1 */
@@ -1183,14 +1224,14 @@ static void pmu_reg_write(struct kvm_vcpu *vcpu, enum vcpu_sysreg reg, u64 val, 
 		} else {
 			/* accessing PMOVSCLR_EL0 */
 			__vcpu_rmw_sys_reg(vcpu, PMOVSSET_EL0, &=, ~val);
-			if (kvm_pmu_is_partitioned(vcpu->kvm))
-				write_sysreg(val & kvm_pmu_guest_counter_mask(),
+			if (vcpu->arch.pmu.loaded_on_cpu)
+				write_sysreg(val & kvm_vcpu_pmu_guest_counter_mask(vcpu),
 					     pmovsclr_el0);
 		}
 		local_irq_restore(flags);
 		break;
 	case PMUSERENR_EL0:
-		if (kvm_pmu_is_partitioned(vcpu->kvm) &&
+		if (vcpu->arch.pmu.loaded_on_cpu &&
 		    !(vcpu->arch.mdcr_el2 & MDCR_EL2_TPM))
 			write_sysreg(val, pmuserenr_el0);
 		__vcpu_assign_sys_reg(vcpu, reg, val);
@@ -1199,7 +1240,6 @@ static void pmu_reg_write(struct kvm_vcpu *vcpu, enum vcpu_sysreg reg, u64 val, 
 		WARN_ON(1);
 		break;
 	}
-
 }
 
 /**
@@ -1219,13 +1259,13 @@ static u64 pmu_reg_read(struct kvm_vcpu *vcpu, enum vcpu_sysreg reg)
 
 	switch (reg) {
 	case PMCR_EL0:
-		if (kvm_pmu_is_partitioned(vcpu->kvm))
+		if (vcpu->arch.pmu.loaded_on_cpu)
 			val = kvm_pmu_direct_pmcr_read(vcpu);
 		else
 			val = kvm_vcpu_read_pmcr(vcpu);
 		break;
 	case PMSELR_EL0:
-		if (kvm_pmu_is_partitioned(vcpu->kvm))
+		if (vcpu->arch.pmu.loaded_on_cpu)
 			val = read_sysreg(pmselr_el0);
 		else
 			val = __vcpu_sys_reg(vcpu, reg);
@@ -1234,10 +1274,14 @@ static u64 pmu_reg_read(struct kvm_vcpu *vcpu, enum vcpu_sysreg reg)
 		idx = reg - PMEVCNTR0_EL0;
 
 		if (kvm_pmu_is_partitioned(vcpu->kvm)) {
-			if (idx == ARMV8_PMU_CYCLE_IDX)
-				val = read_sysreg(pmccntr_el0);
-			else
-				val = read_pmevcntrn(idx);
+			if (vcpu->arch.pmu.loaded_on_cpu) {
+				if (idx == ARMV8_PMU_CYCLE_IDX)
+					val = read_sysreg(pmccntr_el0);
+				else
+					val = read_pmevcntrn(idx);
+			} else {
+				val = __vcpu_sys_reg(vcpu, reg);
+			}
 		} else {
 			val = kvm_pmu_get_counter_value(vcpu, idx);
 		}
@@ -1246,26 +1290,26 @@ static u64 pmu_reg_read(struct kvm_vcpu *vcpu, enum vcpu_sysreg reg)
 		val = __vcpu_sys_reg(vcpu, reg);
 		break;
 	case PMCNTENSET_EL0:
-		if (kvm_pmu_is_partitioned(vcpu->kvm)) {
+		if (vcpu->arch.pmu.loaded_on_cpu) {
 			val = read_sysreg(pmcntenset_el0);
-			val &= kvm_pmu_guest_counter_mask();
+			val &= kvm_vcpu_pmu_guest_counter_mask(vcpu);
 		} else {
 			val = __vcpu_sys_reg(vcpu, reg);
 		}
 		break;
 	case PMINTENSET_EL1:
-		if (kvm_pmu_is_partitioned(vcpu->kvm)) {
+		if (vcpu->arch.pmu.loaded_on_cpu) {
 			val = read_sysreg(pmintenset_el1);
-			val &= kvm_pmu_guest_counter_mask();
+			val &= kvm_vcpu_pmu_guest_counter_mask(vcpu);
 		} else {
 			val = __vcpu_sys_reg(vcpu, reg);
 		}
 		break;
 	case PMOVSSET_EL0:
 		local_irq_save(flags);
-		if (kvm_pmu_is_partitioned(vcpu->kvm)) {
+		if (vcpu->arch.pmu.loaded_on_cpu) {
 			u64 hw_ovf = read_sysreg(pmovsset_el0) &
-				     kvm_pmu_guest_counter_mask();
+				     kvm_vcpu_pmu_guest_counter_mask(vcpu);
 
 			if (hw_ovf) {
 				__vcpu_rmw_sys_reg(vcpu, PMOVSSET_EL0, |=, hw_ovf);
@@ -1276,7 +1320,7 @@ static u64 pmu_reg_read(struct kvm_vcpu *vcpu, enum vcpu_sysreg reg)
 		local_irq_restore(flags);
 		break;
 	case PMUSERENR_EL0:
-		if (kvm_pmu_is_partitioned(vcpu->kvm) &&
+		if (vcpu->arch.pmu.loaded_on_cpu &&
 		    !(vcpu->arch.mdcr_el2 & MDCR_EL2_TPM))
 			val = read_sysreg(pmuserenr_el0);
 		else
