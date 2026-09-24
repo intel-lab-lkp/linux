@@ -1369,6 +1369,58 @@ int test_pipe(void)
 	return !!memcmp(buf, msg, len);
 }
 
+int test_fd_set(void)
+{
+	fd_set fds;
+	int fd, i;
+
+	for (fd = 0; fd < FD_SETSIZE; fd++) {
+		/* FD_SET() must set this fd and no other */
+		FD_ZERO(&fds);
+		FD_SET(fd, &fds);
+		for (i = 0; i < FD_SETSIZE; i++)
+			if (!!FD_ISSET(i, &fds) != (i == fd))
+				return 1;
+
+		/* FD_CLR() must clear this fd and no other */
+		for (i = 0; i < FD_SETSIZE; i++)
+			FD_SET(i, &fds);
+		FD_CLR(fd, &fds);
+		for (i = 0; i < FD_SETSIZE; i++)
+			if (!!FD_ISSET(i, &fds) != (i != fd))
+				return 1;
+	}
+
+	return 0;
+}
+
+int test_select_high_fd(void)
+{
+	struct timeval tv = { 0 };
+	int pipefd[2], fd, ret = 1;
+	fd_set fds;
+
+	if (pipe(pipefd) == -1)
+		return 1;
+
+	/* fd 40 is in the upper half of a 64-bit fd_set word */
+	fd = dup2(pipefd[0], 40);
+	if (fd == -1)
+		goto out;
+
+	write(pipefd[1], "x", 1);
+	FD_ZERO(&fds);
+	FD_SET(fd, &fds);
+	if (select(fd + 1, &fds, NULL, NULL, &tv) == 1 && FD_ISSET(fd, &fds))
+		ret = 0;
+
+	close(fd);
+out:
+	close(pipefd[0]);
+	close(pipefd[1]);
+	return ret;
+}
+
 int test_rlimit(void)
 {
 	struct rlimit rlim = {
@@ -1711,6 +1763,7 @@ int run_syscall(int min, int max)
 		CASE_TEST(execve_root);       EXPECT_SYSER(1, execve("/", (char*[]){ [0] = (char []){"/"}, [1] = NULL }, NULL), -1, EACCES); break;
 		CASE_TEST(fchdir_stdin);      EXPECT_SYSER(1, fchdir(STDIN_FILENO), -1, ENOTDIR); break;
 		CASE_TEST(fchdir_badfd);      EXPECT_SYSER(1, fchdir(-1), -1, EBADF); break;
+		CASE_TEST(fd_set);            EXPECT_ZR(1, test_fd_set()); break;
 		CASE_TEST(fdopendir_notdir);  EXPECT_SYSER(1, (uintptr_t)fdopendir(STDIN_FILENO), (uintptr_t)NULL, ENOTDIR); break;
 		CASE_TEST(file_stream);       EXPECT_SYSZR(1, test_file_stream()); break;
 		CASE_TEST(file_stream_wsr);   EXPECT_SYSZR(1, test_file_stream_wsr()); break;
@@ -1753,6 +1806,7 @@ int run_syscall(int min, int max)
 		CASE_TEST(select_null);       EXPECT_SYSZR(1, ({ struct timeval tv = { 0 }; select(0, NULL, NULL, NULL, &tv); })); break;
 		CASE_TEST(select_stdout);     EXPECT_SYSNE(1, ({ fd_set fds; FD_ZERO(&fds); FD_SET(1, &fds); select(2, NULL, &fds, NULL, NULL); }), -1); break;
 		CASE_TEST(select_fault);      EXPECT_SYSER(1, select(1, (void *)1, NULL, NULL, 0), -1, EFAULT); break;
+		CASE_TEST(select_high_fd);    EXPECT_SYSZR(1, test_select_high_fd()); break;
 		CASE_TEST(sendfile);          EXPECT_SYSZR(1, test_sendfile()); break;
 		CASE_TEST(stat_blah);         EXPECT_SYSER(1, stat("/proc/self/blah", &stat_buf), -1, ENOENT); break;
 		CASE_TEST(stat_fault);        EXPECT_SYSER(1, stat(NULL, &stat_buf), -1, EFAULT); break;
