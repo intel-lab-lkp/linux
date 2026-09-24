@@ -158,6 +158,9 @@ static void qxl_update_offset_props(struct qxl_device *qdev)
 	list_for_each_entry(connector, &dev->mode_config.connector_list, head) {
 		output = drm_connector_to_qxl_output(connector);
 
+		if (output->index >= qdev->client_monitors_config->count)
+			continue;
+
 		head = &qdev->client_monitors_config->heads[output->index];
 
 		drm_object_property_set_value(&connector->base,
@@ -1056,7 +1059,8 @@ static int qxl_conn_get_modes(struct drm_connector *connector)
 	unsigned int pheight = 768;
 	int ret = 0;
 
-	if (qdev->client_monitors_config) {
+	if (qdev->client_monitors_config &&
+	    output->index < qdev->client_monitors_config->count) {
 		struct qxl_head *head;
 		head = &qdev->client_monitors_config->heads[output->index];
 		if (head->width)
