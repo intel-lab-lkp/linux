@@ -14,6 +14,7 @@
 #include <net/icmp.h>
 #include <net/ip6_route.h>
 #include <net/inet_ecn.h>
+#include <net/page_pool/helpers.h>
 #include <net/xfrm.h>
 
 #include <crypto/aead.h>
@@ -449,6 +450,20 @@ static bool iptfs_skb_can_add_frags(const struct sk_buff *skb,
 	return true;
 }
 
+static void iptfs_frag_ref(skb_frag_t *frag, bool recycle)
+{
+	struct page *head;
+
+	if (recycle && !skb_frag_is_net_iov(frag)) {
+		head = compound_head(skb_frag_page(frag));
+		if (page_pool_page_is_pp(head)) {
+			page_pool_ref_page(head);
+			return;
+		}
+	}
+	__skb_frag_ref(frag);
+}
+
 /**
  * iptfs_skb_add_frags() - add a range of fragment references into an skb
  * @skb: skb to add references into
@@ -486,7 +501,7 @@ static int iptfs_skb_add_frags(struct sk_buff *skb,
 			tofrag->len -= offset;
 			offset = 0;
 		}
-		__skb_frag_ref(tofrag);
+		iptfs_frag_ref(tofrag, skb->pp_recycle);
 		shinfo->nr_frags++;
 		shinfo->flags |= SKBFL_SHARED_FRAG;
 
@@ -2171,7 +2186,8 @@ static void iptfs_consume_frags(struct sk_buff *to, struct sk_buff *from)
 		new_truesize = SKB_TRUESIZE(skb_end_offset(from));
 	} else {
 		iptfs_skb_head_to_frag(from, &toi->frags[toi->nr_frags]);
-		skb_frag_ref(to, toi->nr_frags++);
+		iptfs_frag_ref(&toi->frags[toi->nr_frags], to->pp_recycle);
+		toi->nr_frags++;
 		new_truesize = SKB_DATA_ALIGN(sizeof(struct sk_buff));
 	}
 
