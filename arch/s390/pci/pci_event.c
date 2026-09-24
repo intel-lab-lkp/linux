@@ -382,6 +382,7 @@ static void __zpci_event_error(struct zpci_ccdf_err *ccdf)
 	pci_dev_put(pdev);
 no_pdev:
 	mutex_unlock(&zdev->state_lock);
+	guard(pci_rescan_remove)();
 	zpci_zdev_put(zdev);
 }
 
@@ -428,6 +429,7 @@ static bool zpci_event_avail_any_device(struct zpci_ccdf_avail *ccdf)
 	if (ccdf->pec != 0x0306)
 		return false;
 	/* 0x308 or 0x302 for multiple devices */
+	guard(pci_rescan_remove)();
 	zpci_remove_reserved_devices();
 	zpci_scan_devices();
 	return true;
@@ -436,26 +438,29 @@ static bool zpci_event_avail_any_device(struct zpci_ccdf_avail *ccdf)
 static void zpci_event_avail_new_device(struct zpci_ccdf_avail *ccdf)
 {
 	struct zpci_dev *zdev;
+	bool freed = false;
 
 	switch (ccdf->pec) {
 	case 0x0301: /* Reserved|Standby -> Configured */
 		zdev = zpci_create_device(ccdf->fid, ccdf->fh, ZPCI_FN_STATE_CONFIGURED);
 		if (IS_ERR(zdev))
 			break;
-		if (zpci_add_device(zdev)) {
-			kfree(zdev);
-			break;
-		}
-		zpci_scan_configured_device(zdev, ccdf->fh);
+		scoped_guard(pci_rescan_remove)
+			if (zpci_add_device(zdev)) {
+				kfree(zdev);
+				/* break; is incompatible w/ scoped_guard() */
+				freed = true;
+			}
+		if (!freed)
+			zpci_scan_configured_device(zdev, ccdf->fh);
 		break;
 	case 0x0302: /* Reserved -> Standby */
 		zdev = zpci_create_device(ccdf->fid, ccdf->fh, ZPCI_FN_STATE_STANDBY);
 		if (IS_ERR(zdev))
 			break;
-		if (zpci_add_device(zdev)) {
-			kfree(zdev);
-			break;
-		}
+		scoped_guard(pci_rescan_remove)
+			if (zpci_add_device(zdev))
+				kfree(zdev);
 		break;
 	}
 }
@@ -497,11 +502,13 @@ static void zpci_event_avail_existing_device(struct zpci_dev *zdev, struct zpci_
 		/* The 0x0304 event may immediately reserve the device */
 		if (!clp_get_state(zdev->fid, &state) &&
 		    state == ZPCI_FN_STATE_RESERVED) {
+			guard(pci_rescan_remove)();
 			zpci_device_reserved(zdev);
 		}
 		break;
 	case 0x0308: /* Standby -> Reserved */
-		zpci_device_reserved(zdev);
+		scoped_guard(pci_rescan_remove)
+			zpci_device_reserved(zdev);
 		break;
 	}
 }
@@ -523,5 +530,6 @@ void zpci_event_availability(void *data)
 	mutex_lock(&zdev->state_lock);
 	zpci_event_avail_existing_device(zdev, ccdf);
 	mutex_unlock(&zdev->state_lock);
+	guard(pci_rescan_remove)();
 	zpci_zdev_put(zdev);
 }

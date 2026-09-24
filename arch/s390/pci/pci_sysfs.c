@@ -76,10 +76,15 @@ static int _do_recover(struct pci_dev *pdev, struct zpci_dev *zdev)
 	return ret;
 }
 
+/* So we don't have to mix cleanup.h helpers and gotos in recover_store() */
+DEFINE_CLASS(sysfs_break_active_protection, struct kernfs_node *,
+	     if (_T) sysfs_unbreak_active_protection(_T),
+	     sysfs_break_active_protection(kobj, attr),
+	     struct kobject *kobj, const struct attribute *attr);
+
 static ssize_t recover_store(struct device *dev, struct device_attribute *attr,
 			     const char *buf, size_t count)
 {
-	struct kernfs_node *kn;
 	struct pci_dev *pdev = to_pci_dev(dev);
 	struct zpci_dev *zdev = to_zpci(pdev);
 	int ret = 0;
@@ -94,13 +99,13 @@ static ssize_t recover_store(struct device *dev, struct device_attribute *attr,
 	 * This is analogous to sdev_store_delete() in
 	 * drivers/scsi/scsi_sysfs.c
 	 */
-	kn = sysfs_break_active_protection(&dev->kobj, &attr->attr);
+	CLASS(sysfs_break_active_protection, kn)(&dev->kobj, &attr->attr);
 	WARN_ON_ONCE(!kn);
 
 	/* Device needs to be configured and state must not change */
-	mutex_lock(&zdev->state_lock);
+	guard(mutex)(&zdev->state_lock);
 	if (zdev->state != ZPCI_FN_STATE_CONFIGURED)
-		goto out;
+		return count;
 
 	/* device_remove_file() serializes concurrent calls ignoring all but
 	 * the first
@@ -109,20 +114,14 @@ static ssize_t recover_store(struct device *dev, struct device_attribute *attr,
 
 	/* A concurrent call to recover_store() may slip between
 	 * sysfs_break_active_protection() and the sysfs file removal.
-	 * Once it unblocks from pci_lock_rescan_remove() the original pdev
+	 * Once it unblocks from guard(pci_rescan_remove)() the original pdev
 	 * will already be removed.
 	 */
-	pci_lock_rescan_remove();
-	if (pci_dev_is_added(pdev)) {
+	guard(pci_rescan_remove)();
+	if (pci_dev_is_added(pdev))
 		ret = _do_recover(pdev, zdev);
-	}
 	pci_rescan_bus(zdev->zbus->bus);
-	pci_unlock_rescan_remove();
 
-out:
-	mutex_unlock(&zdev->state_lock);
-	if (kn)
-		sysfs_unbreak_active_protection(kn);
 	return ret ? ret : count;
 }
 static DEVICE_ATTR_WO(recover);
