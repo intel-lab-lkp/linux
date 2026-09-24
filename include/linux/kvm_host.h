@@ -1687,6 +1687,8 @@ void kvm_arch_disable_virtualization(void);
  */
 int kvm_arch_enable_virtualization_cpu(void);
 void kvm_arch_disable_virtualization_cpu(void);
+/* Called after tasks have migrated away from an offlining CPU. */
+void kvm_arch_prepare_cpu_offline(unsigned int cpu);
 #endif
 bool kvm_vcpu_has_events(struct kvm_vcpu *vcpu);
 int kvm_arch_vcpu_runnable(struct kvm_vcpu *vcpu);

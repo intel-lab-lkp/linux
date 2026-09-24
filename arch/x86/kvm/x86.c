@@ -9820,6 +9820,11 @@ void kvm_arch_disable_virtualization_cpu(void)
 		__module_get(THIS_MODULE);
 }
 
+void kvm_arch_prepare_cpu_offline(unsigned int cpu)
+{
+	kvm_x86_call(prepare_cpu_offline)(cpu);
+}
+
 bool kvm_vcpu_is_reset_bsp(struct kvm_vcpu *vcpu)
 {
 	return vcpu->kvm->arch.bsp_vcpu_id == vcpu->vcpu_id;

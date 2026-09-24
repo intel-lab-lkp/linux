@@ -5620,6 +5620,10 @@ __weak void kvm_arch_disable_virtualization(void)
 
 }
 
+__weak void kvm_arch_prepare_cpu_offline(unsigned int cpu)
+{
+}
+
 static int kvm_enable_virtualization_cpu(void)
 {
 	if (__this_cpu_read(virtualization_enabled))
@@ -5657,6 +5661,7 @@ static void kvm_disable_virtualization_cpu(void *ign)
 
 static int kvm_offline_cpu(unsigned int cpu)
 {
+	kvm_arch_prepare_cpu_offline(cpu);
 	kvm_disable_virtualization_cpu(NULL);
 	return 0;
 }

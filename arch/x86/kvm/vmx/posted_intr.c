@@ -266,6 +266,29 @@ void pi_wakeup_handler(void)
 	raw_spin_unlock(spinlock);
 }
 
+void pi_wakeup_cpu_offline(unsigned int cpu)
+{
+	struct list_head *wakeup_list = &per_cpu(wakeup_vcpus_on_cpu, cpu);
+	raw_spinlock_t *spinlock = &per_cpu(wakeup_vcpus_on_cpu_lock, cpu);
+	struct vcpu_vt *vt;
+	unsigned long flags;
+
+	/*
+	 * CPUHP_AP_SCHED_WAIT_EMPTY has already migrated tasks away from the
+	 * dying CPU.  Force blocked vCPUs to leave the block loop so that their
+	 * PI wakeup state is rebuilt on an online CPU before the old notification
+	 * destination becomes unreachable.
+	 */
+	raw_spin_lock_irqsave(spinlock, flags);
+	list_for_each_entry(vt, wakeup_list, pi_wakeup_list) {
+		struct kvm_vcpu *vcpu = vt_to_vcpu(vt);
+
+		kvm_make_request(KVM_REQ_UNBLOCK, vcpu);
+		kvm_vcpu_wake_up(vcpu);
+	}
+	raw_spin_unlock_irqrestore(spinlock, flags);
+}
+
 void __init pi_init_cpu(int cpu)
 {
 	INIT_LIST_HEAD(&per_cpu(wakeup_vcpus_on_cpu, cpu));
