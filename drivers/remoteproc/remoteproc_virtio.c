@@ -469,6 +469,8 @@ static int rproc_remove_virtio_dev(struct device *dev, void *data)
 {
 	struct virtio_device *vdev = dev_to_virtio(dev);
 
+	virtio_reset_device(vdev);
+
 	unregister_virtio_device(vdev);
 	return 0;
 }
