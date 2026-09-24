@@ -660,8 +660,8 @@ int setxattr_copy(const char __user *name, struct kernel_xattr_ctx *ctx)
 static int do_setxattr(const struct path *path, struct kernel_xattr_ctx *ctx)
 {
 	if (is_posix_acl_xattr(ctx->kname->name))
-		return do_set_acl(mnt_idmap(path->mnt), path->dentry,
-				  ctx->kname->name, ctx->kvalue, ctx->size);
+		return do_set_acl(path, ctx->kname->name,
+				  ctx->kvalue, ctx->size);
 
 	return vfs_setxattr(path, ctx->kname->name,
 			ctx->kvalue, ctx->size, ctx->flags);
@@ -806,8 +806,7 @@ do_getxattr(const struct path *path, struct kernel_xattr_ctx *ctx)
 	}
 
 	if (is_posix_acl_xattr(kname))
-		error = do_get_acl(mnt_idmap(path->mnt), path->dentry,
-				   kname, kvalue, ctx->size);
+		error = do_get_acl(path, kname, kvalue, ctx->size);
 	else
 		error = vfs_getxattr(path, kname, kvalue, ctx->size);
 	if (error > 0) {
@@ -1036,8 +1035,7 @@ static long
 removexattr(const struct path *path, const char *name)
 {
 	if (is_posix_acl_xattr(name))
-		return vfs_remove_acl(mnt_idmap(path->mnt), path->dentry,
-				      name);
+		return vfs_remove_acl(path, name);
 	return vfs_removexattr(path, name);
 }
 

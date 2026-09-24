@@ -1081,8 +1081,7 @@ static int vfs_set_acl_idmapped_mnt(struct mnt_idmap *idmap,
 
 /**
  * vfs_set_acl - set posix acls
- * @idmap: idmap of the mount
- * @dentry: the dentry based on which to set the posix acls
+ * @path: the path based on which to set the posix acls
  * @acl_name: the name of the posix acl
  * @kacl: the posix acls in the appropriate VFS format
  *
@@ -1091,9 +1090,11 @@ static int vfs_set_acl_idmapped_mnt(struct mnt_idmap *idmap,
  *
  * Return: On success 0, on error negative errno.
  */
-int vfs_set_acl(struct mnt_idmap *idmap, struct dentry *dentry,
-		const char *acl_name, struct posix_acl *kacl)
+int vfs_set_acl(const struct path *path, const char *acl_name,
+		struct posix_acl *kacl)
 {
+	struct mnt_idmap *idmap = mnt_idmap(path->mnt);
+	struct dentry *dentry = path->dentry;
 	int acl_type;
 	int error;
 	struct inode *inode = d_inode(dentry);
@@ -1159,8 +1160,7 @@ EXPORT_SYMBOL_GPL(vfs_set_acl);
 
 /**
  * vfs_get_acl - get posix acls
- * @idmap: idmap of the mount
- * @dentry: the dentry based on which to retrieve the posix acls
+ * @path: the path based on which to retrieve the posix acls
  * @acl_name: the name of the posix acl
  *
  * This function retrieves @kacl from the filesystem. The caller must all
@@ -1168,9 +1168,10 @@ EXPORT_SYMBOL_GPL(vfs_set_acl);
  *
  * Return: On success POSIX ACLs in VFS format, on error negative errno.
  */
-struct posix_acl *vfs_get_acl(struct mnt_idmap *idmap,
-			      struct dentry *dentry, const char *acl_name)
+struct posix_acl *vfs_get_acl(const struct path *path, const char *acl_name)
 {
+	struct mnt_idmap *idmap = mnt_idmap(path->mnt);
+	struct dentry *dentry = path->dentry;
 	struct inode *inode = d_inode(dentry);
 	struct posix_acl *acl;
 	int acl_type, error;
@@ -1204,17 +1205,17 @@ EXPORT_SYMBOL_GPL(vfs_get_acl);
 
 /**
  * vfs_remove_acl - remove posix acls
- * @idmap: idmap of the mount
- * @dentry: the dentry based on which to retrieve the posix acls
+ * @path: the path based on which to retrieve the posix acls
  * @acl_name: the name of the posix acl
  *
  * This function removes posix acls.
  *
  * Return: On success 0, on error negative errno.
  */
-int vfs_remove_acl(struct mnt_idmap *idmap, struct dentry *dentry,
-		   const char *acl_name)
+int vfs_remove_acl(const struct path *path, const char *acl_name)
 {
+	struct mnt_idmap *idmap = mnt_idmap(path->mnt);
+	struct dentry *dentry = path->dentry;
 	int acl_type;
 	int error;
 	struct inode *inode = d_inode(dentry);
@@ -1265,8 +1266,8 @@ out_inode_unlock:
 }
 EXPORT_SYMBOL_GPL(vfs_remove_acl);
 
-int do_set_acl(struct mnt_idmap *idmap, struct dentry *dentry,
-	       const char *acl_name, const void *kvalue, size_t size)
+int do_set_acl(const struct path *path, const char *acl_name,
+	       const void *kvalue, size_t size)
 {
 	int error;
 	struct posix_acl *acl = NULL;
@@ -1281,22 +1282,23 @@ int do_set_acl(struct mnt_idmap *idmap, struct dentry *dentry,
 			return PTR_ERR(acl);
 	}
 
-	error = vfs_set_acl(idmap, dentry, acl_name, acl);
+	error = vfs_set_acl(path, acl_name, acl);
 	posix_acl_release(acl);
 	return error;
 }
 
-ssize_t do_get_acl(struct mnt_idmap *idmap, struct dentry *dentry,
-		   const char *acl_name, void *kvalue, size_t size)
+ssize_t do_get_acl(const struct path *path, const char *acl_name,
+		   void *kvalue, size_t size)
 {
 	ssize_t error;
 	struct posix_acl *acl;
 
-	acl = vfs_get_acl(idmap, dentry, acl_name);
+	acl = vfs_get_acl(path, acl_name);
 	if (IS_ERR(acl))
 		return PTR_ERR(acl);
 
-	error = vfs_posix_acl_to_xattr(idmap, d_inode(dentry),
+	error = vfs_posix_acl_to_xattr(mnt_idmap(path->mnt),
+				       d_inode(path->dentry),
 				       acl, kvalue, size);
 	posix_acl_release(acl);
 	return error;

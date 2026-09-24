@@ -1093,8 +1093,9 @@ static int ecryptfs_fileattr_set(struct mnt_idmap *idmap,
 static struct posix_acl *ecryptfs_get_acl(struct mnt_idmap *idmap,
 					  struct dentry *dentry, int type)
 {
-	return vfs_get_acl(idmap, ecryptfs_dentry_to_lower(dentry),
-			   posix_acl_xattr_name(type));
+	struct path lower_path = ecryptfs_lower_path(dentry);
+
+	return vfs_get_acl(&lower_path, posix_acl_xattr_name(type));
 }
 
 static int ecryptfs_set_acl(struct mnt_idmap *idmap,
@@ -1102,11 +1103,10 @@ static int ecryptfs_set_acl(struct mnt_idmap *idmap,
 			    int type)
 {
 	int rc;
-	struct dentry *lower_dentry = ecryptfs_dentry_to_lower(dentry);
-	struct inode *lower_inode = d_inode(lower_dentry);
+	struct path lower_path = ecryptfs_lower_path(dentry);
+	struct inode *lower_inode = d_inode(lower_path.dentry);
 
-	rc = vfs_set_acl(&nop_mnt_idmap, lower_dentry,
-			 posix_acl_xattr_name(type), acl);
+	rc = vfs_set_acl(&lower_path, posix_acl_xattr_name(type), acl);
 	if (!rc)
 		fsstack_copy_attr_all(d_inode(dentry), lower_inode);
 	return rc;
