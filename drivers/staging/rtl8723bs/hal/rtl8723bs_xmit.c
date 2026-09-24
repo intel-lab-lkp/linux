@@ -231,29 +231,30 @@ static s32 xmit_xmitframes(struct adapter *padapter, struct xmit_priv *pxmitpriv
 
 				/*  check xmit_buf size enough or not */
 				txlen = txdesc_size + rtw_wlan_pkt_size(pxmitframe);
-				if (!pxmitbuf ||
-					((_RND(pxmitbuf->len, 8) + txlen) > max_xmit_len) ||
-					(k >= (rtw_hal_sdio_max_txoqt_free_space(padapter) - 1))
+				if (pxmitbuf &&
+				    (((_RND(pxmitbuf->len, 8) + txlen) > max_xmit_len) ||
+				     (k >= (rtw_hal_sdio_max_txoqt_free_space(padapter) - 1)))
 				) {
-					if (pxmitbuf) {
-						/* pxmitbuf->priv_data will be NULL, and will crash here */
-						if (pxmitbuf->len > 0 &&
-						    pxmitbuf->priv_data) {
-							struct xmit_frame *pframe;
+					if (pxmitbuf->len > 0 &&
+					    pxmitbuf->priv_data) {
+						struct xmit_frame *pframe;
 
-							pframe = (struct xmit_frame *)pxmitbuf->priv_data;
-							pframe->agg_num = k;
-							pxmitbuf->agg_num = k;
-							rtl8723b_update_txdesc(pframe, pframe->buf_addr);
-							rtw_free_xmitframe(pxmitpriv, pframe);
-							pxmitbuf->priv_data = NULL;
-							enqueue_pending_xmitbuf(pxmitpriv, pxmitbuf);
-							/* can not yield under lock */
-							/* yield(); */
-						} else
-							rtw_free_xmitbuf(pxmitpriv, pxmitbuf);
-					}
+						pframe = (struct xmit_frame *)pxmitbuf->priv_data;
+						pframe->agg_num = k;
+						pxmitbuf->agg_num = k;
+						rtl8723b_update_txdesc(pframe, pframe->buf_addr);
+						rtw_free_xmitframe(pxmitpriv, pframe);
+						pxmitbuf->priv_data = NULL;
+						enqueue_pending_xmitbuf(pxmitpriv, pxmitbuf);
+						/* can not yield under lock */
+						/* yield(); */
+					} else
+						rtw_free_xmitbuf(pxmitpriv, pxmitbuf);
 
+					pxmitbuf = NULL;
+				}
+
+				if (!pxmitbuf) {
 					pxmitbuf = rtw_alloc_xmitbuf(pxmitpriv);
 					if (!pxmitbuf) {
 						err = -2;
