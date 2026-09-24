@@ -54,10 +54,11 @@ static inline struct super_block *fsnotify_object_sb(void *obj,
 	}
 }
 
+/* The sb the connector is accounted on; NULL once it has been detached */
 static inline struct super_block *fsnotify_connector_sb(
 				struct fsnotify_mark_connector *conn)
 {
-	return fsnotify_object_sb(conn->obj, conn->type);
+	return conn->sb;
 }
 
 static inline fsnotify_connp_t *fsnotify_sb_marks(struct super_block *sb)

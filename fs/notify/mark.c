@@ -425,6 +425,7 @@ static void *fsnotify_detach_connector_from_object(
 	conn->type = FSNOTIFY_OBJ_TYPE_DETACHED;
 	if (sb)
 		fsnotify_update_sb_watchers(sb, conn);
+	conn->sb = NULL;
 
 	return inode;
 }
@@ -791,6 +792,8 @@ static void fsnotify_init_connector(struct fsnotify_mark_connector *conn,
 	conn->prio = 0;
 	conn->type = obj_type;
 	conn->obj = obj;
+	/* the object may move to another sb, the accounting doesn't */
+	conn->sb = fsnotify_object_sb(obj, obj_type);
 }
 
 static struct fsnotify_mark_connector *
@@ -953,8 +956,8 @@ restart:
 	/* mark should be the last entry.  last is the current last entry */
 	hlist_add_behind_rcu(&mark->obj_list, &last->obj_list);
 added:
-	if (sb)
-		fsnotify_update_sb_watchers(sb, conn);
+	if (conn->sb)
+		fsnotify_update_sb_watchers(conn->sb, conn);
 	/*
 	 * Since connector is attached to object using cmpxchg() we are
 	 * guaranteed that connector initialization is fully visible by anyone
