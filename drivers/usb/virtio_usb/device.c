@@ -1369,11 +1369,26 @@ on_error:
 	return rc;
 }
 
-static int virtio_usb_dc_parent_create(struct virtio_usb_dc *vudc)
+static int virtio_usb_dc_parent_create(struct virtio_usb_dc *vudc,
+				       const unsigned char *udc_prefix)
 {
+	size_t prefix_len;
+	char *parent_name;
 	int rc;
 
-	vudc->pdev = platform_device_alloc(GADGET_NAME, vudc->port);
+	prefix_len = strnlen((const char *)udc_prefix,
+			     VIRTIO_USB_UDC_NAME_PREFIX_MAX);
+	if (prefix_len) {
+		parent_name = kasprintf(GFP_KERNEL, "%.*s", (int)prefix_len,
+					(const char *)udc_prefix);
+	} else {
+		parent_name = kstrdup(GADGET_NAME, GFP_KERNEL);
+	}
+	if (!parent_name)
+		return -ENOMEM;
+
+	vudc->pdev = platform_device_alloc(parent_name, vudc->port);
+	kfree(parent_name);
 	if (!vudc->pdev)
 		return -ENOMEM;
 
@@ -1421,6 +1436,7 @@ static void virtio_usb_dc_event_process(struct virtio_usb_event *event)
 	switch (le32_to_cpu(evt->code)) {
 	case VIRTIO_USB_EVT_DEV_BIND: {
 		u8 max_speed;
+		size_t udc_prefix_len;
 
 		if (vudc->registered) {
 			dev_err(&vusb->vdev->dev,
@@ -1447,7 +1463,8 @@ static void virtio_usb_dc_event_process(struct virtio_usb_event *event)
 			break;
 		}
 		if (!vudc->pdev) {
-			rc = virtio_usb_dc_parent_create(vudc);
+			rc = virtio_usb_dc_parent_create(
+				vudc, bind_evt->udc_name_prefix);
 			if (rc) {
 				dev_err(&vusb->vdev->dev,
 					"Failed to create UDC parent device\n");
@@ -1456,8 +1473,18 @@ static void virtio_usb_dc_event_process(struct virtio_usb_event *event)
 				break;
 			}
 		}
-		vudc->gadget.name =
-			kasprintf(GFP_KERNEL, "%s_%d", GADGET_NAME, port_id);
+		udc_prefix_len =
+			strnlen((const char *)bind_evt->udc_name_prefix,
+				VIRTIO_USB_UDC_NAME_PREFIX_MAX);
+		if (udc_prefix_len) {
+			vudc->gadget.name = kasprintf(
+				GFP_KERNEL, "%.*s_p%d", (int)udc_prefix_len,
+				(const char *)bind_evt->udc_name_prefix,
+				port_id);
+		} else {
+			vudc->gadget.name = kasprintf(GFP_KERNEL, "%s_%d",
+						      GADGET_NAME, port_id);
+		}
 		if (!vudc->gadget.name) {
 			rc = -ENOMEM;
 			kfree(vudc->veps);
@@ -1480,7 +1507,6 @@ static void virtio_usb_dc_event_process(struct virtio_usb_event *event)
 			break;
 		}
 
-		//vudc->gadget.dev.init_name = gadget_name;
 		vudc->gadget.dev.parent = &vudc->pdev->dev;
 		rc = usb_add_gadget_udc(&vudc->pdev->dev, &vudc->gadget);
 		if (rc) {
@@ -1612,11 +1638,16 @@ int virtio_usb_dc_event_populate(struct virtio_usb *vusb)
 {
 	struct virtio_usb_queue *evt_queue =
 		&vusb->vqueues[vusb->dev_vq_base + VIRTIO_USB_VQ_EVENT_IDX];
+	size_t evt_size;
 	struct virtio_usb_event *events;
 	int rc;
 
-	events = virtio_usb_events_alloc(vusb, evt_queue,
-					 sizeof(struct virtio_usb_dev_event));
+	evt_size = max_t(size_t, sizeof(struct virtio_usb_dev_event),
+			 sizeof(struct virtio_usb_dev_setup_event));
+	evt_size = max_t(size_t, evt_size,
+			 sizeof(struct virtio_usb_dev_bind_event));
+
+	events = virtio_usb_events_alloc(vusb, evt_queue, evt_size);
 
 	if (!events)
 		return -ENOMEM;

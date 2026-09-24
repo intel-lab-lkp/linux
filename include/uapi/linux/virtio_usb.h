@@ -216,6 +216,8 @@ enum {
 	VIRTIO_USB_EVT_DEV_UNBIND,
 };
 
+#define VIRTIO_USB_UDC_NAME_PREFIX_MAX 64
+
 struct virtio_usb_dev_event {
 	__le32 code; /* VIRTIO_USB_EVT_DEV_XXX */
 	__le16 port; /* Device ID */
@@ -227,7 +229,7 @@ struct virtio_usb_dev_bind_event {
 	__le32 code; /* VIRTIO_USB_EVT_DEV_BIND */
 	__le16 port; /* Device ID */
 	__u8 max_speed; /* enum usb_device_speed */
-	__u8 padding[9];
+	__u8 udc_name_prefix[VIRTIO_USB_UDC_NAME_PREFIX_MAX];
 };
 
 /* VIRTIO_USB_EVT_DEV_SETUP */
