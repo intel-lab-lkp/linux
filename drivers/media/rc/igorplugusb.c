@@ -241,9 +241,9 @@ static void igorplugusb_disconnect(struct usb_interface *intf)
 {
 	struct igorplugusb *ir = usb_get_intfdata(intf);
 
-	rc_unregister_device(ir->rc);
 	usb_poison_urb(ir->urb);
 	timer_delete_sync(&ir->timer);
+	rc_unregister_device(ir->rc);
 	usb_set_intfdata(intf, NULL);
 	usb_unpoison_urb(ir->urb);
 	usb_free_urb(ir->urb);
