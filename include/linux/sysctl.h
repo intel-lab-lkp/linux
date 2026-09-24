@@ -22,6 +22,8 @@
 #ifndef _LINUX_SYSCTL_H
 #define _LINUX_SYSCTL_H
 
+#include <linux/bits.h>
+#include <linux/build_bug.h>
 #include <linux/list.h>
 #include <linux/rcupdate.h>
 #include <linux/wait.h>
@@ -224,11 +226,49 @@ struct ctl_table {
 	void *data;
 	int maxlen;
 	umode_t mode;
+	u8 flags;			/* CTL_TABLE_F_* */
 	proc_handler *proc_handler;	/* Callback for text formatting */
 	struct ctl_table_poll *poll;
 	void *extra1;
 	void *extra2;
 } __randomize_layout;
+
+/*
+ * ctl_table::flags.  Resolve the corresponding member against the
+ * registration context instead of using it as it stands.
+ */
+#define CTL_TABLE_F_CTX_DATA	BIT(0)
+#define CTL_TABLE_F_CTX		CTL_TABLE_F_CTX_DATA
+
+/**
+ * struct sysctl_context - ctl_table specific context
+ * @inst: entry location
+ * @tmpl: struct template (used to calculate offset into @inst)
+ *
+ * @inst/@tmpl pair is used to overlay the ctl_table entry before calling
+ * proc_handler. This is relevant when struct members (like ->data) are
+ * somewhere different than the const static ctl_table array (think
+ * namespaces).  Build it with SYSCTL_CTX() so the compiler checks that
+ * both point at the same type.
+ */
+struct sysctl_context {
+	void *inst;
+	const void *tmpl;
+};
+
+/**
+ * SYSCTL_CTX - build a struct sysctl_context
+ * @_inst: the instance this registration describes
+ * @_tmpl: the instance the table's data members name
+ *
+ * Fails to build unless @_inst and @_tmpl point at the same type.
+ */
+#define SYSCTL_CTX(_inst, _tmpl)					\
+	((struct sysctl_context){					\
+		.inst = (_inst) +					\
+			BUILD_BUG_ON_ZERO(!__same_type(*(_inst), *(_tmpl))), \
+		.tmpl = (_tmpl),					\
+	})
 
 struct ctl_node {
 	struct rb_node node;
@@ -244,6 +284,7 @@ struct ctl_node {
  *         something is removed from inodes
  * @nreg: When nreg drops to 0 the ctl_table_header will be unregistered.
  * @rcu: Delays the freeing of the inode. Introduced with "unfuck proc_sysctl ->d_compare()"
+ * @ctx: instances given to __register_sysctl_table_ctx(), see struct sysctl_context
  *
  * @type: Enumeration to differentiate between ctl target types:
  * type.SYSCTL_TABLE_TYPE_DEFAULT: ctl target with no special considerations
@@ -268,6 +309,7 @@ struct ctl_table_header {
 	struct ctl_dir *parent;
 	struct ctl_node *node;
 	struct hlist_head inodes; /* head for proc_inode->sysctl_inodes */
+	struct sysctl_context ctx;
 	enum {
 		SYSCTL_TABLE_TYPE_DEFAULT,
 		SYSCTL_TABLE_TYPE_PERMANENTLY_EMPTY,
@@ -305,9 +347,18 @@ extern void setup_sysctl_set(struct ctl_table_set *p,
 	int (*is_seen)(struct ctl_table_set *));
 extern void retire_sysctl_set(struct ctl_table_set *set);
 
-struct ctl_table_header *__register_sysctl_table(
+struct ctl_table_header *__register_sysctl_table_ctx(
 	struct ctl_table_set *set,
-	const char *path, const struct ctl_table *table, size_t table_size);
+	const char *path, const struct ctl_table *table, size_t table_size,
+	const struct sysctl_context *ctx);
+
+static inline struct ctl_table_header *__register_sysctl_table(
+	struct ctl_table_set *set,
+	const char *path, const struct ctl_table *table, size_t table_size)
+{
+	return __register_sysctl_table_ctx(set, path, table, table_size, NULL);
+}
+
 struct ctl_table_header *register_sysctl_sz(const char *path, const struct ctl_table *table,
 					    size_t table_size);
 void unregister_sysctl_table(struct ctl_table_header * table);

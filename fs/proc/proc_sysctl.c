@@ -1143,10 +1143,18 @@ static int sysctl_check_table_array(const char *path, const struct ctl_table *ta
 static int sysctl_check_table(const char *path, struct ctl_table_header *header)
 {
 	const struct ctl_table *entry;
+	u8 flagged = 0;
 	int err = 0;
 	list_for_each_table_entry(entry, header) {
 		if (!entry->procname)
 			err |= sysctl_err(path, entry, "procname is null");
+		if (entry->flags & CTL_TABLE_F_CTX_DATA) {
+			if (!entry->data)
+				err |= sysctl_err(path, entry, "No data to resolve");
+			if (!header->ctx.inst || !header->ctx.tmpl)
+				err |= sysctl_err(path, entry, "No context to resolve against");
+		}
+		flagged |= entry->flags & CTL_TABLE_F_CTX;
 		if ((entry->proc_handler == proc_dostring) ||
 		    (entry->proc_handler == proc_dobool) ||
 		    (entry->proc_handler == proc_dointvec) ||
@@ -1172,6 +1180,12 @@ static int sysctl_check_table(const char *path, struct ctl_table_header *header)
 		if ((entry->mode & (S_IRUGO|S_IWUGO)) != entry->mode)
 			err |= sysctl_err(path, entry, "bogus .mode 0%o",
 				entry->mode);
+	}
+	/* A context nobody resolves against is a forgotten flag. */
+	if (!flagged && (header->ctx.inst || header->ctx.tmpl)) {
+		pr_err("sysctl table check failed: %s context given but no entry is flagged\n",
+		       path);
+		err = -EINVAL;
 	}
 	return err;
 }
@@ -1324,7 +1338,7 @@ static struct ctl_dir *sysctl_mkdir_p(struct ctl_dir *dir, const char *path)
 }
 
 /**
- * __register_sysctl_table - register a leaf sysctl table
+ * __register_sysctl_table_ctx - register a leaf sysctl table
  * @set: Sysctl tree to register on
  * @path: The path to the directory the sysctl table is in.
  *
@@ -1333,6 +1347,9 @@ static struct ctl_dir *sysctl_mkdir_p(struct ctl_dir *dir, const char *path)
  *         be a global or dynamically allocated by the caller and free'd later
  *         after sysctl unregistration.
  * @table_size : The number of elements in table
+ * @ctx: instances that entries flagged CTL_TABLE_F_CTX_* resolve against, see
+ *       struct sysctl_context.  Copied, so it may be on stack.  %NULL when no
+ *       entry is flagged.
  *
  * Register a sysctl table hierarchy. @table should be a filled in ctl_table
  * array.
@@ -1343,6 +1360,7 @@ static struct ctl_dir *sysctl_mkdir_p(struct ctl_dir *dir, const char *path)
  * data     - a pointer to data for use by proc_handler
  * maxlen   - the maximum size in bytes of the data
  * mode     - the file permissions for the /proc/sys file
+ * flags    - CTL_TABLE_F_* bits naming members to resolve against @ctx
  * type     - Defines the target type (described in struct definition)
  * proc_handler - the text handler routine (described below)
  *
@@ -1366,9 +1384,10 @@ static struct ctl_dir *sysctl_mkdir_p(struct ctl_dir *dir, const char *path)
  * This routine returns %NULL on a failure to register, and a pointer
  * to the table header on success.
  */
-struct ctl_table_header *__register_sysctl_table(
+struct ctl_table_header *__register_sysctl_table_ctx(
 	struct ctl_table_set *set,
-	const char *path, const struct ctl_table *table, size_t table_size)
+	const char *path, const struct ctl_table *table, size_t table_size,
+	const struct sysctl_context *ctx)
 {
 	struct ctl_table_root *root = set->dir.header.root;
 	struct ctl_table_header *header;
@@ -1382,6 +1401,8 @@ struct ctl_table_header *__register_sysctl_table(
 
 	node = (struct ctl_node *)(header + 1);
 	init_header(header, root, set, node, table, table_size);
+	if (ctx)
+		header->ctx = *ctx;
 	if (sysctl_check_table(path, header))
 		goto fail;
 
@@ -1427,7 +1448,7 @@ fail:
  * Register a sysctl table. @table should be a filled in ctl_table
  * array. A completely 0 filled entry terminates the table.
  *
- * See __register_sysctl_table for more details.
+ * See __register_sysctl_table_ctx for more details.
  */
 struct ctl_table_header *register_sysctl_sz(const char *path, const struct ctl_table *table,
 					    size_t table_size)
