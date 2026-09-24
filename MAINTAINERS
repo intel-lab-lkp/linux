@@ -15428,6 +15428,7 @@ F:	Documentation/locking/
 F:	arch/*/include/asm/spinlock*.h
 F:	include/linux/local_lock*.h
 F:	include/linux/lockdep*.h
+F:	include/linux/lockholder.h
 F:	include/linux/mutex*.h
 F:	include/linux/rwlock*.h
 F:	include/linux/rwsem*.h

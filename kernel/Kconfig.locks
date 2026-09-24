@@ -279,3 +279,19 @@ config ARCH_HAS_MMIOWB
 config MMIOWB
 	def_bool y if ARCH_HAS_MMIOWB
 	depends on SMP
+
+config TRACK_LOCK_HOLDERS
+	bool "Track holders of selected sleeping locks"
+	help
+	  Keep a per-task count of held sleeping locks that have opted in
+	  to tracking. This lets code check whether a task holds a lock
+	  that others may be waiting for, e.g. to avoid stalling it in
+	  memcg limit enforcement or under global memory pressure.
+
+	  No lock is tracked until one opts in. Until then, the lock hooks
+	  are a static branch that is off. The opt-in is a spare bit in a
+	  word the lock already has, or existing padding, so on 64-bit no
+	  lock grows. Where there is no padding to use, as on 32-bit, some
+	  locks grow by a word.
+
+	  If unsure, say N.
