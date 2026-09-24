@@ -7,6 +7,7 @@
 
 #include "intel_gpu_commands.h"
 #include "intel_gt_pm.h"
+#include "intel_gt_print.h"
 #include "intel_rps.h"
 
 #include "i915_selftest.h"
@@ -207,7 +208,7 @@ out:
 		if (err)
 			break;
 
-		pr_info("%s: MI_BB_START cycles: %u\n",
+		gt_info(gt, "%s: MI_BB_START cycles: %u\n",
 			engine->name, trifilter(cycles));
 	}
 	if (perf_end(gt, wakeref))
@@ -365,7 +366,7 @@ out:
 		if (err)
 			break;
 
-		pr_info("%s: 16K MI_NOOP cycles: %u\n",
+		gt_info(gt, "%s: 16K MI_NOOP cycles: %u\n",
 			engine->name, trifilter(cycles));
 	}
 	if (perf_end(gt, wakeref))

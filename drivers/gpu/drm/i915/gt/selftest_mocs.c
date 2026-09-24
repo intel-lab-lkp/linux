@@ -5,6 +5,7 @@
 
 #include "gt/intel_engine_pm.h"
 #include "gt/intel_gpu_commands.h"
+#include "gt/intel_gt_print.h"
 #include "i915_selftest.h"
 
 #include "gem/selftests/igt_gem_utils.h"
@@ -169,7 +170,8 @@ static int check_mocs_table(struct intel_engine_cs *engine,
 
 	for_each_mocs(expect, table, i) {
 		if (**vaddr != expect) {
-			pr_err("%s: Invalid MOCS[%d] entry, found %08x, expected %08x\n",
+			gt_err(engine->gt,
+			       "%s: Invalid MOCS[%d] entry, found %08x, expected %08x\n",
 			       engine->name, i, **vaddr, expect);
 			return -EINVAL;
 		}
@@ -203,7 +205,8 @@ static int check_l3cc_table(struct intel_engine_cs *engine,
 
 	for_each_l3cc(expect, table, i) {
 		if (!mcr_range(engine->i915, reg) && **vaddr != expect) {
-			pr_err("%s: Invalid L3CC[%d] entry, found %08x, expected %08x\n",
+			gt_err(engine->gt,
+			       "%s: Invalid L3CC[%d] entry, found %08x, expected %08x\n",
 			       engine->name, i, **vaddr, expect);
 			return -EINVAL;
 		}

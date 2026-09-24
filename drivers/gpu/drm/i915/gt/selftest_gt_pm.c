@@ -7,6 +7,7 @@
 
 #include "intel_engine_regs.h"
 #include "intel_gt_clock_utils.h"
+#include "intel_gt_print.h"
 
 #include "selftest_llc.h"
 #include "selftest_rc6.h"
@@ -85,7 +86,7 @@ static int live_gt_clocks(void *arg)
 	int err = 0;
 
 	if (!gt->clock_frequency) { /* unknown */
-		pr_info("CS_TIMESTAMP frequency unknown\n");
+		gt_info(gt, "CS_TIMESTAMP frequency unknown\n");
 		return 0;
 	}
 
@@ -109,19 +110,22 @@ static int live_gt_clocks(void *arg)
 		time = intel_gt_clock_interval_to_ns(engine->gt, cycles);
 		expected = intel_gt_ns_to_clock_interval(engine->gt, dt);
 
-		pr_info("%s: TIMESTAMP %d cycles [%lldns] in %lldns [%d cycles], using CS clock frequency of %uKHz\n",
+		gt_info(gt,
+			"%s: TIMESTAMP %d cycles [%lldns] in %lldns [%d cycles], using CS clock frequency of %uKHz\n",
 			engine->name, cycles, time, dt, expected,
 			engine->gt->clock_frequency / 1000);
 
 		if (9 * time < 8 * dt || 8 * time > 9 * dt) {
-			pr_err("%s: CS ticks did not match walltime!\n",
+			gt_err(gt,
+			       "%s: CS ticks did not match walltime!\n",
 			       engine->name);
 			err = -EINVAL;
 			break;
 		}
 
 		if (9 * expected < 8 * cycles || 8 * expected > 9 * cycles) {
-			pr_err("%s: walltime did not match CS ticks!\n",
+			gt_err(gt,
+			       "%s: walltime did not match CS ticks!\n",
 			       engine->name);
 			err = -EINVAL;
 			break;
@@ -146,7 +150,8 @@ static int live_gt_resume(void *arg)
 		intel_gt_suspend_late(gt);
 
 		if (gt->rc6.enabled) {
-			pr_err("rc6 still enabled after suspend!\n");
+			gt_err(gt,
+			       "rc6 still enabled after suspend!\n");
 			intel_gt_set_wedged_on_init(gt);
 			err = -EINVAL;
 			break;
@@ -157,7 +162,8 @@ static int live_gt_resume(void *arg)
 			break;
 
 		if (gt->rc6.supported && !gt->rc6.enabled) {
-			pr_err("rc6 not enabled upon resume!\n");
+			gt_err(gt,
+			       "rc6 not enabled upon resume!\n");
 			intel_gt_set_wedged_on_init(gt);
 			err = -EINVAL;
 			break;
@@ -165,7 +171,8 @@ static int live_gt_resume(void *arg)
 
 		err = st_llc_verify(&gt->llc);
 		if (err) {
-			pr_err("llc state not restored upon resume!\n");
+			gt_err(gt,
+			       "llc state not restored upon resume!\n");
 			intel_gt_set_wedged_on_init(gt);
 			break;
 		}

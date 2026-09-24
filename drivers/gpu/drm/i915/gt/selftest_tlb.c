@@ -15,6 +15,7 @@
 #include "intel_engine_regs.h"
 #include "intel_gpu_commands.h"
 #include "intel_gt.h"
+#include "intel_gt_print.h"
 #include "intel_ring.h"
 
 #include "selftests/igt_flush_test.h"
@@ -40,6 +41,7 @@ pte_tlbinv(struct intel_context *ce,
 	const unsigned int pat_index =
 		i915_gem_get_pat_index(ce->vm->i915, I915_CACHE_NONE);
 	struct drm_i915_gem_object *batch;
+	struct intel_gt *gt = ce->engine->gt;
 	struct drm_mm_node vb_node;
 	struct i915_request *rq;
 	struct i915_vma *vma;
@@ -68,7 +70,8 @@ pte_tlbinv(struct intel_context *ce,
 				 va->size, align);
 	err = i915_vma_pin(va,  0, 0, addr | PIN_OFFSET_FIXED | PIN_USER);
 	if (err) {
-		pr_err("Cannot pin at %llx+%llx\n", addr, va->size);
+		gt_err(gt, "Cannot pin at %llx+%llx\n",
+		       addr, va->size);
 		goto out;
 	}
 	GEM_BUG_ON(i915_vma_offset(va) != addr);
@@ -91,7 +94,8 @@ pte_tlbinv(struct intel_context *ce,
 	addr = igt_random_offset(prng, addr, addr + align, 8, 8);
 
 	if (va != vb)
-		pr_info("%s(%s): Sampling %llx, with alignment %llx, using PTE size %x (phys %x, sg %x), invalidate:%llx+%llx\n",
+		gt_info(gt,
+			"%s(%s): Sampling %llx, with alignment %llx, using PTE size %x (phys %x, sg %x), invalidate:%llx+%llx\n",
 			ce->engine->name, va->obj->mm.region->name ?: "smem",
 			addr, align, va->resource->page_sizes_gtt,
 			va->page_sizes.phys, va->page_sizes.sg,
@@ -147,9 +151,11 @@ pte_tlbinv(struct intel_context *ce,
 
 	if (va == vb) {
 		if (!i915_request_completed(rq)) {
-			pr_err("%s(%s): Semaphore sanitycheck failed %llx, with alignment %llx, using PTE size %x (phys %x, sg %x)\n",
-			       ce->engine->name, va->obj->mm.region->name ?: "smem",
-			       addr, align, va->resource->page_sizes_gtt,
+			gt_err(gt,
+			       "%s(%s): Semaphore sanitycheck failed %llx, with alignment %llx, using PTE size %x (phys %x, sg %x)\n",
+			       ce->engine->name,
+			       va->obj->mm.region->name ?: "smem", addr, align,
+			       va->resource->page_sizes_gtt,
 			       va->page_sizes.phys, va->page_sizes.sg);
 			err = -EIO;
 		}
@@ -171,12 +177,13 @@ pte_tlbinv(struct intel_context *ce,
 		tlbinv(ce->vm, addr & -length, length);
 
 		if (wait_for(i915_request_completed(rq), HZ / 2)) {
-			pr_err("%s: Request did not complete; the COND_BBE did not read the updated PTE\n",
+			gt_err(gt,
+			       "%s: Request did not complete; the COND_BBE did not read the updated PTE\n",
 			       ce->engine->name);
 			err = -EINVAL;
 		}
 	} else {
-		pr_err("Spinner ended unexpectedly\n");
+		gt_err(gt, "Spinner ended unexpectedly\n");
 		err = -EIO;
 	}
 	i915_request_put(rq);
@@ -271,7 +278,8 @@ mem_tlbinv(struct intel_gt *gt,
 
 	GEM_BUG_ON(A->base.size != B->base.size);
 	if ((A->mm.page_sizes.phys | B->mm.page_sizes.phys) & (A->base.size - 1))
-		pr_warn("Failed to allocate contiguous pages for size %zx\n",
+		gt_warn(gt,
+			"Failed to allocate contiguous pages for size %zx\n",
 			A->base.size);
 
 	ppgtt = i915_ppgtt_create(gt, 0);
