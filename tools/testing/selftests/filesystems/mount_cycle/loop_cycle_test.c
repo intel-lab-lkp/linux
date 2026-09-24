@@ -205,6 +205,34 @@ static int loop_mount(const char *img, const char *mp)
 }
 
 /*
+ * Two tmpfs mounts, each carrying the image of the loop mount below the
+ * other: the loop mount below /mnt_dir/vol has its image on /mnt_dir/vol2
+ * and the other way round.
+ */
+static int crossed_child(int to_parent, int from_parent)
+{
+	int n[2];
+	char c;
+
+	if (unshare(CLONE_NEWNS) || mount("", "/", NULL, MS_REC | MS_PRIVATE, NULL))
+		return CHILD_NS;
+	if (mkdir("/mnt_dir/vol", 0755) || mount("tmpfs", "/mnt_dir/vol", "tmpfs", 0, NULL) ||
+	    mkdir("/mnt_dir/vol2", 0755) || mount("tmpfs", "/mnt_dir/vol2", "tmpfs", 0, NULL))
+		return CHILD_NS;
+	n[0] = loop_mount("/mnt_dir/vol2/img", "/mnt_dir/vol/mnt");
+	if (n[0] < 0)
+		return -n[0];
+	n[1] = loop_mount("/mnt_dir/vol/img", "/mnt_dir/vol2/mnt");
+	if (n[1] < 0)
+		return -n[1];
+	if (write(to_parent, n, sizeof(n)) != sizeof(n))
+		return CHILD_PIPE;
+	if (read(from_parent, &c, 1) != 1)
+		return CHILD_PIPE;
+	return CHILD_OK;
+}
+
+/*
  * In its own mount namespace the child mounts a tmpfs on /mnt_dir/vol,
  * puts a filesystem image on it, binds a loop device to the image and
  * mounts that loop device below. The loop device's backing file is a
@@ -372,6 +400,66 @@ TEST_F(loop_cycle, dissolved_tree_loop_mount_released)
 	ASSERT_FALSE(mounted_anywhere(self->dev));
 
 	assert_loop_released(_metadata, self);
+}
+
+/*
+ * The cycle in two steps: rmdir of /mnt_dir/vol leaves the loop mount
+ * below it connected while its image's mount, /mnt_dir/vol2, is alive;
+ * then rmdir of /mnt_dir/vol2 takes that one with the loop mount whose
+ * image is on the dead /mnt_dir/vol. Each dead mount now owns a loop
+ * mount whose filesystem pins the other.
+ */
+TEST_F(loop_cycle, crossed_images_released)
+{
+	int to_parent[2], to_child[2];
+	char sysfs[2][64], dev[2][32];
+	int status, n[2] = { -1, -1 };
+	pid_t pid;
+
+	ASSERT_EQ(pipe(to_parent), 0);
+	ASSERT_EQ(pipe(to_child), 0);
+
+	pid = fork();
+	ASSERT_GE(pid, 0);
+	if (pid == 0) {
+		close(to_parent[0]);
+		close(to_child[1]);
+		_exit(crossed_child(to_parent[1], to_child[0]));
+	}
+	close(to_parent[1]);
+	close(to_child[0]);
+
+	if (read(to_parent[0], n, sizeof(n)) != sizeof(n)) {
+		waitpid(pid, &status, 0);
+		if (WIFEXITED(status) && WEXITSTATUS(status) == CHILD_MOUNT)
+			SKIP(return, "test requires a FAT filesystem");
+		ASSERT_EQ(status, 0);
+	}
+	for (int i = 0; i < 2; i++) {
+		snprintf(dev[i], sizeof(dev[i]), "/dev/loop%d", n[i]);
+		snprintf(sysfs[i], sizeof(sysfs[i]), "/sys/block/loop%d/loop/backing_file", n[i]);
+	}
+
+	/* step one: the mount with the first loop mount below it goes */
+	ASSERT_EQ(rmdir("/mnt_dir/vol"), 0);
+
+	/* step two: the other one, with the loop mount whose image is on the first */
+	ASSERT_EQ(rmdir("/mnt_dir/vol2"), 0);
+
+	/* the child leaves: its namespace and every reference it held are gone */
+	ASSERT_EQ(write(to_child[1], "", 1), 1);
+	ASSERT_EQ(waitpid(pid, &status, 0), pid);
+	ASSERT_EQ(status, 0);
+	close(to_parent[0]);
+	close(to_child[1]);
+
+	/* nothing can reach the four mounts any more */
+	for (int i = 0; i < 2; i++) {
+		ASSERT_FALSE(mounted_anywhere(dev[i]));
+		strcpy(self->dev, dev[i]);
+		strcpy(self->sysfs, sysfs[i]);
+		assert_loop_released(_metadata, self);
+	}
 }
 
 TEST_HARNESS_MAIN
