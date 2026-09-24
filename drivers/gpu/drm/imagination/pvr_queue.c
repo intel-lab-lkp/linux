@@ -820,6 +820,19 @@ static struct dma_fence *pvr_queue_run_job(struct drm_sched_job *sched_job)
 	if (WARN_ON(err))
 		goto err_release;
 
+	err = pvr_job_get_pm_ref(job);
+
+	if (WARN_ON(err))
+		goto err_release;
+
+	if (job->paired_job) {
+		err = pvr_job_get_pm_ref(job->paired_job);
+		if (WARN_ON(err)) {
+			pvr_job_release_pm_ref(job);
+			goto err_release;
+		}
+	}
+
 	return dma_fence_get(job->done_fence);
 
 err_release:
