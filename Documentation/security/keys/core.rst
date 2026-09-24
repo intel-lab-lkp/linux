@@ -165,8 +165,10 @@ The key service provides a number of features besides keys:
      When a process changes its real UID, if it used to have no session key, it
      will be subscribed to the default session key for the new UID.
 
-     If a process attempts to access its session key when it doesn't have one,
-     it will be subscribed to the default for its current UID.
+     If a process attempts to access its session keyring when it doesn't have
+     one, the default user session keyring for its current UID is returned
+     without being installed into its credentials.  If creation is requested,
+     an anonymous session keyring is installed.
 
   *  Each user has two quotas against which the keys they own are tracked. One
      limits the total number of keys and keyrings, the other limits the total

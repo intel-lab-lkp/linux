@@ -347,31 +347,6 @@ int install_session_keyring_to_cred(struct cred *cred, struct key *keyring)
 }
 
 /*
- * Install the given keyring as the session keyring of the current task,
- * replacing the existing one if any.  If the given keyring is NULL, then
- * install a new anonymous session keyring.
- *
- * Return: 0 on success; -errno on failure.
- */
-static int install_session_keyring(struct key *keyring)
-{
-	struct cred *new;
-	int ret;
-
-	new = prepare_creds();
-	if (!new)
-		return -ENOMEM;
-
-	ret = install_session_keyring_to_cred(new, keyring);
-	if (ret < 0) {
-		abort_creds(new);
-		return ret;
-	}
-
-	return commit_creds(new);
-}
-
-/*
  * Handle the fsuid changing.
  */
 void key_fsuid_changed(struct cred *new_cred)
@@ -665,20 +640,21 @@ try_again:
 
 	case KEY_SPEC_SESSION_KEYRING:
 		if (!ctx.cred->session_keyring) {
-			/* always install a session keyring upon access if one
-			 * doesn't exist yet */
 			ret = look_up_user_keyrings(NULL, &user_session);
 			if (ret < 0)
 				goto error;
-			if (lflags & KEY_LOOKUP_CREATE)
-				ret = join_session_keyring(NULL);
-			else
-				ret = install_session_keyring(user_session);
 
-			key_put(user_session);
-			if (ret < 0)
-				goto error;
-			goto reget_creds;
+			if (lflags & KEY_LOOKUP_CREATE) {
+				key_put(user_session);
+				ret = join_session_keyring(NULL);
+				if (ret < 0)
+					goto error;
+				goto reget_creds;
+			}
+
+			key = user_session;
+			key_ref = make_key_ref(key, 1);
+			break;
 		} else if (test_bit(KEY_FLAG_UID_KEYRING,
 				    &ctx.cred->session_keyring->flags) &&
 			   lflags & KEY_LOOKUP_CREATE) {
