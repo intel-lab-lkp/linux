@@ -7,6 +7,7 @@
 
 #include "i915_drv.h"
 
+#include "intel_gt_print.h"
 #include "intel_gt_requests.h"
 #include "i915_selftest.h"
 #include "selftest_engine_heartbeat.h"
@@ -202,7 +203,7 @@ static int __live_heartbeat_off(struct intel_engine_cs *engine)
 	engine->serial++;
 	flush_delayed_work(&engine->heartbeat.work);
 	if (!delayed_work_pending(&engine->heartbeat.work)) {
-		pr_err("%s: heartbeat not running\n",
+		gt_err(engine->gt, "%s: heartbeat not running\n",
 		       engine->name);
 		err = -EINVAL;
 		goto err_pm;
@@ -215,14 +216,14 @@ static int __live_heartbeat_off(struct intel_engine_cs *engine)
 	engine->serial++;
 	flush_delayed_work(&engine->heartbeat.work);
 	if (delayed_work_pending(&engine->heartbeat.work)) {
-		pr_err("%s: heartbeat still running\n",
+		gt_err(engine->gt, "%s: heartbeat still running\n",
 		       engine->name);
 		err = -EINVAL;
 		goto err_beat;
 	}
 
 	if (READ_ONCE(engine->heartbeat.systole)) {
-		pr_err("%s: heartbeat still allocated\n",
+		gt_err(engine->gt, "%s: heartbeat still allocated\n",
 		       engine->name);
 		err = -EINVAL;
 		goto err_beat;
