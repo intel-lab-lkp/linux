@@ -6647,7 +6647,7 @@ M:	Johannes Weiner <hannes@cmpxchg.org>
 M:	Michal Koutný <mkoutny@suse.com>
 L:	cgroups@vger.kernel.org
 S:	Maintained
-T:	git git://git.kernel.org/pub/scm/linux/kernel/git/tj/cgroup.git
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/tj/cgroup.git for-next
 F:	Documentation/admin-guide/cgroup-v1/
 F:	Documentation/admin-guide/cgroup-v2.rst
 F:	include/linux/cgroup*
@@ -6674,7 +6674,7 @@ M:	Waiman Long <longman@redhat.com>
 R:	Ridong Chen <ridong.chen@linux.dev>
 L:	cgroups@vger.kernel.org
 S:	Maintained
-T:	git git://git.kernel.org/pub/scm/linux/kernel/git/tj/cgroup.git
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/tj/cgroup.git for-next
 F:	Documentation/admin-guide/cgroup-v1/cpusets.rst
 F:	include/linux/cpuset.h
 F:	kernel/cgroup/cpuset-internal.h
