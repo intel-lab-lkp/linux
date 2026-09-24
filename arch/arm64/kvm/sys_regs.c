@@ -1137,6 +1137,7 @@ static void pmu_reg_write(struct kvm_vcpu *vcpu, enum vcpu_sysreg reg, u64 val, 
 		if (kvm_pmu_is_partitioned(vcpu->kvm)) {
 			mask = kvm_pmu_evtyper_mask(vcpu->kvm);
 			__vcpu_assign_sys_reg(vcpu, reg, val & mask);
+			kvm_pmu_apply_single_event_filter(vcpu, idx);
 		} else {
 			kvm_pmu_set_counter_event_type(vcpu, val, idx);
 			kvm_vcpu_pmu_restore_guest(vcpu);

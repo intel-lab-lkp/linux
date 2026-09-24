@@ -104,6 +104,7 @@ u64 kvm_pmu_host_counter_mask(void);
 u64 kvm_pmu_guest_counter_mask(void);
 void kvm_pmu_load(struct kvm_vcpu *vcpu);
 void kvm_pmu_put(struct kvm_vcpu *vcpu);
+void kvm_pmu_apply_single_event_filter(struct kvm_vcpu *vcpu, u8 idx);
 
 /*
  * Updates the vcpu's view of the pmu events for this cpu.
@@ -262,6 +263,8 @@ static inline u64 kvm_pmu_guest_counter_mask(void)
 {
 	return 0;
 }
+
+static inline void kvm_pmu_apply_single_event_filter(struct kvm_vcpu *vcpu, u8 idx) {}
 
 static inline bool has_kvm_pmu_partition_support(void)
 {
