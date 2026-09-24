@@ -413,7 +413,8 @@ static void dsi_pll_disable_pll_bias(struct dsi_pll_7nm *pll)
 	} /* else: == 0 */
 
 	data = readl(pll->phy->base + REG_DSI_7nm_PHY_CMN_CTRL_0);
-	data &= ~DSI_7nm_PHY_CMN_CTRL_0_PLL_SHUTDOWNB;
+	data &= ~(DSI_7nm_PHY_CMN_CTRL_0_DIGTOP_PWRDN_B |
+		  DSI_7nm_PHY_CMN_CTRL_0_PLL_SHUTDOWNB);
 	writel(0, pll->phy->pll_base + REG_DSI_7nm_PHY_PLL_SYSTEM_MUXES);
 	writel(data, pll->phy->base + REG_DSI_7nm_PHY_CMN_CTRL_0);
 	spin_unlock_irqrestore(&pll->pll_enable_lock, flags);
@@ -433,7 +434,8 @@ static void dsi_pll_enable_pll_bias(struct dsi_pll_7nm *pll)
 	}
 
 	data = readl(pll->phy->base + REG_DSI_7nm_PHY_CMN_CTRL_0);
-	data |= DSI_7nm_PHY_CMN_CTRL_0_PLL_SHUTDOWNB;
+	data |= DSI_7nm_PHY_CMN_CTRL_0_DIGTOP_PWRDN_B |
+		DSI_7nm_PHY_CMN_CTRL_0_PLL_SHUTDOWNB;
 	writel(data, pll->phy->base + REG_DSI_7nm_PHY_CMN_CTRL_0);
 
 	writel(0xc0, pll->phy->pll_base + REG_DSI_7nm_PHY_PLL_SYSTEM_MUXES);
