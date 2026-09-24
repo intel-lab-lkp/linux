@@ -6,6 +6,7 @@
 
 #include <linux/dma-mapping.h>
 #include <linux/firmware/xlnx-zynqmp.h>
+#include <linux/jiffies.h>
 #include <linux/kernel.h>
 #include <linux/mailbox_client.h>
 #include <linux/mailbox/zynqmp-ipi-message.h>
@@ -15,6 +16,7 @@
 #include <linux/of_reserved_mem.h>
 #include <linux/platform_device.h>
 #include <linux/remoteproc.h>
+#include <linux/wait.h>
 
 #include "remoteproc_internal.h"
 
@@ -32,6 +34,8 @@
 
 #define RSC_TBL_XLNX_MAGIC	((uint32_t)'x' << 24 | (uint32_t)'a' << 16 | \
 				 (uint32_t)'m' << 8 | (uint32_t)'p')
+
+#define RPROC_ATTACH_TIMEOUT_US (1000 * 1000)
 
 /*
  * settings for RPU cluster mode which
@@ -167,6 +171,9 @@ struct xlnx_rproc_crash_report {
  * @rsc_tbl_size: resource table size retrieved from remote
  * @pm_domain_id: RPU CPU power domain id
  * @ipi: pointer to mailbox information
+ * @attach_wq: wait queue for attach-time vdev reset acknowledgment
+ * @waiting_for_attach_ack: whether attach is waiting for remote interrupt
+ * @attach_ack: remote interrupt observed while attach wait is active
  */
 struct zynqmp_r5_core {
 	struct xlnx_rproc_crash_report *crash_report;
@@ -181,6 +188,9 @@ struct zynqmp_r5_core {
 	u32 rsc_tbl_size;
 	u32 pm_domain_id;
 	struct mbox_info *ipi;
+	wait_queue_head_t attach_wq;
+	bool waiting_for_attach_ack;
+	bool attach_ack;
 };
 
 /**
@@ -270,10 +280,17 @@ static void handle_event_notified(struct work_struct *work)
 static void zynqmp_r5_mb_rx_cb(struct mbox_client *cl, void *msg)
 {
 	struct zynqmp_ipi_message *ipi_msg, *buf_msg;
+	struct zynqmp_r5_core *r5_core;
 	struct mbox_info *ipi;
 	size_t len;
 
 	ipi = container_of(cl, struct mbox_info, mbox_cl);
+	r5_core = ipi->r5_core;
+
+	if (r5_core && READ_ONCE(r5_core->waiting_for_attach_ack)) {
+		WRITE_ONCE(r5_core->attach_ack, true);
+		wake_up(&r5_core->attach_wq);
+	}
 
 	/* copy data from ipi buffer to r5_core if IPI is buffered. */
 	ipi_msg = (struct zynqmp_ipi_message *)msg;
@@ -820,6 +837,62 @@ static int zynqmp_r5_get_rsc_table_va(struct zynqmp_r5_core *r5_core)
 
 static int zynqmp_r5_attach(struct rproc *rproc)
 {
+	struct zynqmp_r5_core *r5_core = rproc->priv;
+	struct device *dev = &rproc->dev;
+	bool wait_for_remote = false;
+	struct fw_rsc_vdev *rsc;
+	struct fw_rsc_hdr *hdr;
+	int i, offset, avail;
+	long time_left;
+
+	if (!rproc->table_ptr)
+		goto attach_success;
+
+	for (i = 0; i < rproc->table_ptr->num; i++) {
+		offset = rproc->table_ptr->offset[i];
+		hdr = (void *)rproc->table_ptr + offset;
+		avail = rproc->table_sz - offset - sizeof(*hdr);
+		rsc = (void *)hdr + sizeof(*hdr);
+
+		/* make sure table isn't truncated */
+		if (avail < 0) {
+			dev_err(dev, "rsc table is truncated\n");
+			return -EINVAL;
+		}
+
+		if (hdr->type != RSC_VDEV)
+			continue;
+
+		/*
+		 * reset vdev status, in case previous run didn't leave it in
+		 * a clean state.
+		 */
+		if (rsc->status) {
+			rsc->status = 0;
+			wait_for_remote = true;
+			break;
+		}
+	}
+
+	if (wait_for_remote) {
+		WRITE_ONCE(r5_core->attach_ack, false);
+		WRITE_ONCE(r5_core->waiting_for_attach_ack, true);
+	}
+
+	/* kick remote to notify about attach */
+	rproc->ops->kick(rproc, 0);
+
+	if (wait_for_remote) {
+		time_left = wait_event_timeout(r5_core->attach_wq,
+					       READ_ONCE(r5_core->attach_ack),
+					       usecs_to_jiffies(RPROC_ATTACH_TIMEOUT_US));
+		WRITE_ONCE(r5_core->waiting_for_attach_ack, false);
+
+		if (!time_left)
+			dev_warn(dev, "timeout waiting for remote vdev reset ack\n");
+	}
+
+attach_success:
 	dev_dbg(&rproc->dev, "rproc %d attached\n", rproc->index);
 
 	return 0;
@@ -920,6 +993,7 @@ static struct zynqmp_r5_core *zynqmp_r5_alloc_rproc_core(struct device *cdev)
 	r5_core = r5_rproc->priv;
 	r5_core->dev = cdev;
 	r5_core->np = dev_of_node(cdev);
+	init_waitqueue_head(&r5_core->attach_wq);
 	if (!r5_core->np) {
 		dev_err(cdev, "can't get device node for r5 core\n");
 		ret = -EINVAL;
