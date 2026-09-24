@@ -168,6 +168,8 @@ static int hibmc_kms_init(struct hibmc_drm_private *priv)
 	if (ret)
 		return ret;
 
+	spin_lock_init(&priv->gpio_lock);
+
 	dev->mode_config.min_width = 0;
 	dev->mode_config.min_height = 0;
 	dev->mode_config.max_width = 1920;
@@ -424,6 +426,30 @@ err:
 	return ret;
 }
 
+static inline void hibmc_set_enable_flag(struct hibmc_drm_private *priv)
+{
+	unsigned long flags;
+	u32 value;
+
+	spin_lock_irqsave(&priv->gpio_lock, flags);
+	value = readl(priv->mmio + HIBMC_ENABLE_FLAG);
+	value |= HIBMC_ENABLE_STATE;
+	writel(value, priv->mmio + HIBMC_ENABLE_FLAG);
+	spin_unlock_irqrestore(&priv->gpio_lock, flags);
+}
+
+static inline void hibmc_set_disable_flag(struct hibmc_drm_private *priv)
+{
+	unsigned long flags;
+	u32 value;
+
+	spin_lock_irqsave(&priv->gpio_lock, flags);
+	value = readl(priv->mmio + HIBMC_ENABLE_FLAG);
+	value &= ~HIBMC_ENABLE_STATE;
+	writel(value, priv->mmio + HIBMC_ENABLE_FLAG);
+	spin_unlock_irqrestore(&priv->gpio_lock, flags);
+}
+
 static int hibmc_pci_probe(struct pci_dev *pdev,
 			   const struct pci_device_id *ent)
 {
@@ -459,6 +485,8 @@ static int hibmc_pci_probe(struct pci_dev *pdev,
 		goto err_return;
 	}
 
+	hibmc_set_enable_flag(priv);
+
 	ret = drm_dev_register(dev, 0);
 	if (ret) {
 		drm_err(dev, "failed to register drv for userspace access: %d\n",
@@ -471,6 +499,7 @@ static int hibmc_pci_probe(struct pci_dev *pdev,
 	return 0;
 
 err_unload:
+	hibmc_set_disable_flag(to_hibmc_drm_private(dev));
 	hibmc_unload(dev);
 err_return:
 	return ret;
@@ -481,6 +510,7 @@ static void hibmc_pci_remove(struct pci_dev *pdev)
 	struct drm_device *dev = pci_get_drvdata(pdev);
 
 	drm_dev_unregister(dev);
+	hibmc_set_disable_flag(to_hibmc_drm_private(dev));
 	hibmc_unload(dev);
 }
 

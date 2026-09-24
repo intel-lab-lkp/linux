@@ -27,7 +27,11 @@ static void hibmc_set_i2c_signal(void *data, u32 mask, int value)
 {
 	struct hibmc_vdac *vdac = data;
 	struct hibmc_drm_private *priv = to_hibmc_drm_private(vdac->connector.dev);
-	u32 tmp_dir = readl(priv->mmio + GPIO_DATA_DIRECTION);
+	unsigned long flags;
+	u32 tmp_dir;
+
+	spin_lock_irqsave(&priv->gpio_lock, flags);
+	tmp_dir = readl(priv->mmio + GPIO_DATA_DIRECTION);
 
 	if (value) {
 		tmp_dir &= ~mask;
@@ -41,20 +45,29 @@ static void hibmc_set_i2c_signal(void *data, u32 mask, int value)
 		tmp_dir |= mask;
 		writel(tmp_dir, priv->mmio + GPIO_DATA_DIRECTION);
 	}
+	spin_unlock_irqrestore(&priv->gpio_lock, flags);
 }
 
 static int hibmc_get_i2c_signal(void *data, u32 mask)
 {
 	struct hibmc_vdac *vdac = data;
 	struct hibmc_drm_private *priv = to_hibmc_drm_private(vdac->connector.dev);
-	u32 tmp_dir = readl(priv->mmio + GPIO_DATA_DIRECTION);
+	unsigned long flags;
+	u32 tmp_dir;
+	int ret;
+
+	spin_lock_irqsave(&priv->gpio_lock, flags);
+	tmp_dir = readl(priv->mmio + GPIO_DATA_DIRECTION);
 
 	if ((tmp_dir & mask) != mask) {
 		tmp_dir &= ~mask;
 		writel(tmp_dir, priv->mmio + GPIO_DATA_DIRECTION);
 	}
 
-	return (readl(priv->mmio + GPIO_DATA) & mask) ? 1 : 0;
+	ret = (readl(priv->mmio + GPIO_DATA) & mask) ? 1 : 0;
+	spin_unlock_irqrestore(&priv->gpio_lock, flags);
+
+	return ret;
 }
 
 static void hibmc_ddc_setsda(void *data, int state)
