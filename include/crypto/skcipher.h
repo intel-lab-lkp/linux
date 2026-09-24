@@ -31,6 +31,17 @@ struct scatterlist;
 /**
  *	struct skcipher_request - Symmetric key cipher request
  *	@cryptlen: Number of bytes to encrypt or decrypt
+ *	@unit_size: Size in bytes of each data unit, or 0 for a
+ *		single-unit request (the default).  When non-zero, must be a
+ *		multiple of the cipher block size and @cryptlen must be a
+ *		positive multiple of it.  The data-unit number is a 64-bit
+ *		little-endian counter in the low 8 bytes of @iv, incremented
+ *		once per unit and wrapping at 2^64; the remaining IV bytes are
+ *		left unchanged (any other on-disk IV layout is produced by a
+ *		template wrapping the algorithm).  @iv itself is not modified
+ *		by the request.  An algorithm that advertises
+ *		CRYPTO_ALG_REQ_SEG handles the whole request natively and must
+ *		follow this same counter and @iv-preservation convention.
  *	@iv: Initialisation Vector
  *	@src: Source SG list
  *	@dst: Destination SG list
@@ -39,6 +50,7 @@ struct scatterlist;
  */
 struct skcipher_request {
 	unsigned int cryptlen;
+	unsigned int unit_size;
 
 	u8 *iv;
 
@@ -225,6 +237,7 @@ struct lskcipher_alg {
 	struct skcipher_request *name = \
 		(((struct skcipher_request *)__##name##_desc)->base.tfm = \
 			crypto_sync_skcipher_tfm((_tfm)), \
+		 ((struct skcipher_request *)__##name##_desc)->unit_size = 0, \
 		 (void *)__##name##_desc)
 
 /**
@@ -819,6 +832,8 @@ static inline void skcipher_request_set_tfm(struct skcipher_request *req,
 					    struct crypto_skcipher *tfm)
 {
 	req->base.tfm = crypto_skcipher_tfm(tfm);
+	/* New tfm, new request: default to single-unit. */
+	req->unit_size = 0;
 }
 
 static inline void skcipher_request_set_sync_tfm(struct skcipher_request *req,
@@ -908,6 +923,10 @@ static inline void skcipher_request_set_callback(struct skcipher_request *req,
 	req->base.complete = compl;
 	req->base.data = data;
 	req->base.flags = flags;
+	/* Reset the per-op multi-unit control; a reused request defaults to
+	 * single-unit until skcipher_request_set_unit_size() opts back in.
+	 */
+	req->unit_size = 0;
 }
 
 /**
@@ -935,6 +954,33 @@ static inline void skcipher_request_set_crypt(
 	req->dst = dst;
 	req->cryptlen = cryptlen;
 	req->iv = iv;
+}
+
+/**
+ * skcipher_request_set_unit_size() - submit as multiple data units
+ * @req: request handle
+ * @unit_size: unit size in bytes (a multiple of the cipher block size),
+ *	       or 0 to disable
+ *
+ * Process @req as @cryptlen / @unit_size data units sharing one starting
+ * @iv, with per-unit IVs derived by treating @iv as a wide counter (the
+ * data-unit-number convention).  @cryptlen must be a positive multiple of
+ * @unit_size.  If the algorithm does not handle multiple units natively,
+ * the API transparently splits the request into one call per unit; that
+ * split additionally requires an ivsize that is a non-zero multiple of 8
+ * and at most 32 bytes, and rejects a violating request with -EINVAL.  An
+ * algorithm advertising CRYPTO_ALG_REQ_SEG receives the whole request and
+ * enforces its own constraints.
+ *
+ * This function must be called after skcipher_request_set_tfm() and
+ * skcipher_request_set_callback(), both of which reset @req->unit_size
+ * to 0.
+ */
+static inline void
+skcipher_request_set_unit_size(struct skcipher_request *req,
+			       unsigned int unit_size)
+{
+	req->unit_size = unit_size;
 }
 
 #endif	/* _CRYPTO_SKCIPHER_H */
