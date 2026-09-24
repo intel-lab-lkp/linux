@@ -1164,7 +1164,6 @@ struct intel_crtc_state {
 	 * required. This is set in the 2nd loop of calling encoder's
 	 * ->compute_config if the first pick doesn't work out.
 	 */
-	bool bw_constrained;
 
 	/* Settings for the intel dpll used on pretty much everything but
 	 * haswell. */
