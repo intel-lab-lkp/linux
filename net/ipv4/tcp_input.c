@@ -641,9 +641,11 @@ static void tcp_sndbuf_expand(struct sock *sk)
 	sndmem = ca_ops->sndbuf_expand ? ca_ops->sndbuf_expand(sk) : 2;
 	sndmem *= nr_segs * per_mss;
 
-	if (sk->sk_sndbuf < sndmem)
+	if (sk->sk_sndbuf < sndmem) {
 		WRITE_ONCE(sk->sk_sndbuf,
 			   min(sndmem, READ_ONCE(sock_net(sk)->ipv4.sysctl_tcp_wmem[2])));
+		sk_memcg_budget_sync(sk, gfp_memcg_charge());
+	}
 }
 
 /* 2. Tuning advertised window (window_clamp, rcv_ssthresh)
@@ -803,6 +805,7 @@ static void tcp_clamp_window(struct sock *sk)
 	    sk_memory_allocated(sk) < sk_prot_mem_limits(sk, 0)) {
 		WRITE_ONCE(sk->sk_rcvbuf,
 			   min(atomic_read(&sk->sk_rmem_alloc), rmem2));
+		sk_memcg_budget_sync(sk, gfp_memcg_charge());
 	}
 	if (atomic_read(&sk->sk_rmem_alloc) > sk->sk_rcvbuf)
 		tp->rcv_ssthresh = min(tp->window_clamp, 2U * tp->advmss);
@@ -960,6 +963,7 @@ void tcp_rcvbuf_grow(struct sock *sk, u32 newval)
 	rcvbuf = min_t(u32, tcp_space_from_win(sk, rcvwin), cap);
 	if (rcvbuf > sk->sk_rcvbuf) {
 		WRITE_ONCE(sk->sk_rcvbuf, rcvbuf);
+		sk_memcg_budget_sync(sk, gfp_memcg_charge());
 		/* Make the window clamp follow along.  */
 		WRITE_ONCE(tp->window_clamp,
 			   tcp_win_from_space(sk, rcvbuf));
@@ -6067,8 +6071,10 @@ static bool tcp_should_expand_sndbuf(struct sock *sk)
 		 * it never goes below SOCK_MIN_SNDBUF.
 		 * See sk_stream_moderate_sndbuf() for more details.
 		 */
-		if (unused_mem > SOCK_MIN_SNDBUF)
+		if (unused_mem > SOCK_MIN_SNDBUF) {
 			WRITE_ONCE(sk->sk_sndbuf, unused_mem);
+			sk_memcg_budget_sync(sk, gfp_memcg_charge());
+		}
 
 		return false;
 	}
