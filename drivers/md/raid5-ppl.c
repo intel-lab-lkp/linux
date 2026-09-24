@@ -535,6 +535,9 @@ void ppl_write_stripe_run(struct r5conf *conf)
 	struct ppl_log *log;
 	int i;
 
+	if (!ppl_conf)
+		return;
+
 	for (i = 0; i < ppl_conf->count; i++) {
 		log = &ppl_conf->child_logs[i];
 
