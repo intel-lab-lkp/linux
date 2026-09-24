@@ -424,9 +424,8 @@ static void f2fs_cache_write_end_io(struct bio *bio)
 		entry->next_entry = NULL;
 
 		if (f2fs_is_node_cache(entry)) {
-			f2fs_sanity_check_node_footer(sbi, entry,
-				entry->index, NODE_TYPE_REGULAR, true);
-			f2fs_bug_on(sbi, entry->index != nid_of_node(sbi, entry));
+			f2fs_bug_on(sbi, f2fs_sanity_check_node_footer(sbi,
+				entry, entry->index, NODE_TYPE_REGULAR, true));
 		}
 		if (f2fs_in_warm_node_list(sbi, entry))
 			f2fs_del_fsync_node_entry(sbi, entry);
