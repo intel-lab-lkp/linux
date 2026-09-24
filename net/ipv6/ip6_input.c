@@ -348,6 +348,7 @@ int ipv6_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt
 	skb = ip6_rcv_core(skb, dev, net);
 	if (skb == NULL)
 		return NET_RX_DROP;
+	ipvs_reset(skb);
 	return NF_HOOK(NFPROTO_IPV6, NF_INET_PRE_ROUTING,
 		       net, NULL, skb, dev, NULL,
 		       ip6_rcv_finish);
