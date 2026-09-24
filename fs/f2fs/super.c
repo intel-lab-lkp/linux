@@ -3935,6 +3935,9 @@ static int __f2fs_commit_super(struct f2fs_sb_info *sbi, struct folio *folio,
 	blk_opf_t opf = REQ_OP_WRITE | REQ_SYNC | REQ_PREFLUSH | REQ_FUA;
 	int ret;
 
+	if (unlikely(sbi->log_blocksize < 9))
+		return -EFSCORRUPTED;
+
 	folio_lock(folio);
 	folio_wait_writeback(folio);
 	if (update)
