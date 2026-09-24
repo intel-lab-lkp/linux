@@ -21,10 +21,6 @@
 
 #include <trace/events/f2fs.h>
 
-#ifdef CONFIG_F2FS_FS_COMPRESSION
-extern const struct address_space_operations f2fs_compress_aops;
-#endif
-
 #define NUM_PREALLOC_EVICT_INODE_WORK 8
 
 static struct kmem_cache *evict_inode_work_cache;

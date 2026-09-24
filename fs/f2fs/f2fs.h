@@ -2821,25 +2821,6 @@ PAGE_PRIVATE_CLEAR_FUNC(reference, REF_RESOURCE);
 PAGE_PRIVATE_CLEAR_FUNC(gcing, ONGOING_MIGRATION);
 PAGE_PRIVATE_CLEAR_FUNC(atomic, ATOMIC_WRITE);
 
-static inline unsigned long folio_get_f2fs_data(struct folio *folio)
-{
-	unsigned long data = (unsigned long)folio->private;
-
-	if (!test_bit(PAGE_PRIVATE_NOT_POINTER, &data))
-		return 0;
-	return data >> PAGE_PRIVATE_MAX;
-}
-
-static inline void folio_set_f2fs_data(struct folio *folio, unsigned long data)
-{
-	data = (1UL << PAGE_PRIVATE_NOT_POINTER) | (data << PAGE_PRIVATE_MAX);
-
-	if (!folio_test_private(folio))
-		folio_attach_private(folio, (void *)data);
-	else
-		folio->private = (void *)((unsigned long)folio->private | data);
-}
-
 static inline void dec_valid_block_count(struct f2fs_sb_info *sbi,
 						struct inode *inode,
 						block_t count)
