@@ -3,6 +3,7 @@
 ENTRY(__efistub_efi_zboot_header);
 
 PROVIDE(zboot_code_size = ABSOLUTE(0));
+PROVIDE(efi_zboot_image_info_offset = ABSOLUTE(0));
 
 SECTIONS
 {
@@ -24,6 +25,8 @@ SECTIONS
 		. = ALIGN(4);
 		__efistub_code_size = .;
 		LONG(zboot_code_size);
+		__efistub_efi_image_info_offset = .;
+		LONG(efi_zboot_image_info_offset);
 
 		_etext = ALIGN(4096);
 		. = _etext;
