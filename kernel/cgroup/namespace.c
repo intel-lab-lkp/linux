@@ -30,12 +30,14 @@ static struct cgroup_namespace *alloc_cgroup_ns(void)
 	ret = ns_common_init(new_ns);
 	if (ret)
 		return ERR_PTR(ret);
+	ns_tree_gen_id(new_ns);
 	return no_free_ptr(new_ns);
 }
 
 void free_cgroup_ns(struct cgroup_namespace *ns)
 {
-	ns_tree_remove(ns);
+	if (ns_tree_active(ns))
+		ns_tree_remove(ns);
 	put_css_set(ns->root_cset);
 	dec_cgroup_namespaces(ns->ucounts);
 	put_user_ns(ns->user_ns);
@@ -83,7 +85,6 @@ struct cgroup_namespace *copy_cgroup_ns(u64 flags,
 	new_ns->ucounts = ucounts;
 	new_ns->root_cset = cset;
 
-	ns_tree_add(new_ns);
 	return new_ns;
 }
 

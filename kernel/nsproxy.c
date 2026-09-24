@@ -238,6 +238,11 @@ int unshare_nsproxy_namespaces(unsigned long unshare_flags,
 		goto out;
 	}
 
+#ifdef CONFIG_CGROUPS
+	if (flags & CLONE_NEWCGROUP)
+		ns_tree_add_raw((*new_nsp)->cgroup_ns);
+#endif
+
 out:
 	return err;
 }

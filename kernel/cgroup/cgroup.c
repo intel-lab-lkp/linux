@@ -7027,6 +7027,19 @@ int cgroup_can_fork(struct task_struct *child, struct kernel_clone_args *kargs)
 			goto out_revert;
 	} while_each_subsys_mask();
 
+	/* Publish a new cgroup namespace only after its root is final. */
+	if (kargs->flags & CLONE_NEWCGROUP) {
+		struct cgroup_namespace *ns = child->nsproxy->cgroup_ns;
+		struct css_set *rcset = ns->root_cset;
+
+		if (rcset != kargs->cset) {
+			get_css_set(kargs->cset);
+			ns->root_cset = kargs->cset;
+			put_css_set(rcset);
+		}
+		ns_tree_add_raw(ns);
+	}
+
 	return 0;
 
 out_revert:
@@ -7144,15 +7157,6 @@ void cgroup_post_fork(struct task_struct *child,
 	do_each_subsys_mask(ss, i, have_fork_callback) {
 		ss->fork(child);
 	} while_each_subsys_mask();
-
-	/* Make the new cset the root_cset of the new cgroup namespace. */
-	if (kargs->flags & CLONE_NEWCGROUP) {
-		struct css_set *rcset = child->nsproxy->cgroup_ns->root_cset;
-
-		get_css_set(cset);
-		child->nsproxy->cgroup_ns->root_cset = cset;
-		put_css_set(rcset);
-	}
 
 	/* Cgroup has to be killed so take down child immediately. */
 	if (unlikely(kill))
