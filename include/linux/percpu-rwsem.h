@@ -8,6 +8,7 @@
 #include <linux/wait.h>
 #include <linux/rcu_sync.h>
 #include <linux/lockdep.h>
+#include <linux/lockholder.h>
 #include <linux/cleanup.h>
 
 struct percpu_rw_semaphore {
@@ -16,6 +17,13 @@ struct percpu_rw_semaphore {
 	struct rcuwait		writer;
 	wait_queue_head_t	waiters;
 	atomic_t		block;
+#ifdef CONFIG_TRACK_LOCK_HOLDERS
+	/*
+	 * Set by percpu_rwsem_track_holder() before first use. Fits in the
+	 * padding after block, so the struct does not grow on 64-bit.
+	 */
+	bool			tracked;
+#endif
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
 	struct lockdep_map	dep_map;
 #endif
@@ -66,6 +74,11 @@ static inline void percpu_down_read_internal(struct percpu_rw_semaphore *sem,
 	else
 		__percpu_down_read(sem, false, freezable); /* Unconditional memory barrier */
 	/*
+	 * Count the lock before preemption comes back, so the task is
+	 * never preemptible holding @sem but not counted for it.
+	 */
+	lock_holder_acquired(sem);
+	/*
 	 * The preempt_enable() prevents the compiler from
 	 * bleeding the critical section out.
 	 */
@@ -95,6 +108,12 @@ static inline bool percpu_down_read_trylock(struct percpu_rw_semaphore *sem)
 		this_cpu_inc(*sem->read_count);
 	else
 		ret = __percpu_down_read(sem, true, false); /* Unconditional memory barrier */
+	/*
+	 * Count the lock before preemption comes back, as in
+	 * percpu_down_read_internal().
+	 */
+	if (ret)
+		lock_holder_acquired(sem);
 	preempt_enable();
 	/*
 	 * The barrier() from preempt_enable() prevents the compiler from
@@ -111,6 +130,7 @@ extern void __percpu_up_read(struct percpu_rw_semaphore *sem);
 
 static inline void percpu_up_read(struct percpu_rw_semaphore *sem)
 {
+	lock_holder_released(sem);
 	rwsem_release(&sem->dep_map, _RET_IP_);
 
 	preempt_disable();
@@ -128,6 +148,20 @@ static inline void percpu_up_read(struct percpu_rw_semaphore *sem)
 extern bool percpu_is_read_locked(struct percpu_rw_semaphore *);
 extern void percpu_down_write(struct percpu_rw_semaphore *);
 extern void percpu_up_write(struct percpu_rw_semaphore *);
+
+#ifdef CONFIG_TRACK_LOCK_HOLDERS
+/**
+ * percpu_rwsem_track_holder - track the holders of a percpu_rw_semaphore
+ * @sem: initialized percpu_rw_semaphore that no one holds yet
+ *
+ * Count @sem in task_nr_tracked_locks() of the tasks holding it. Use it
+ * for locks whose holders can stall unrelated work. Call it before anyone
+ * can take @sem, e.g. right after percpu_init_rwsem().
+ */
+void percpu_rwsem_track_holder(struct percpu_rw_semaphore *sem);
+#else
+static inline void percpu_rwsem_track_holder(struct percpu_rw_semaphore *sem) { }
+#endif
 
 DEFINE_GUARD(percpu_read, struct percpu_rw_semaphore *,
 	     percpu_down_read(_T), percpu_up_read(_T))
@@ -156,9 +190,16 @@ extern void percpu_free_rwsem(struct percpu_rw_semaphore *);
 #define percpu_rwsem_is_held(sem)	lockdep_is_held(sem)
 #define percpu_rwsem_assert_held(sem)	lockdep_assert_held(sem)
 
+/*
+ * These pass a held lock to another task. For example, filesystem freeze
+ * returns to user space holding the lock, and thaw, maybe in another
+ * task, releases it. The holder count moves with the lock, as lockdep's
+ * view of it does.
+ */
 static inline void percpu_rwsem_release(struct percpu_rw_semaphore *sem,
 					unsigned long ip)
 {
+	lock_holder_released(sem);
 	lock_release(&sem->dep_map, ip);
 }
 
@@ -166,6 +207,7 @@ static inline void percpu_rwsem_acquire(struct percpu_rw_semaphore *sem,
 					bool read, unsigned long ip)
 {
 	lock_acquire(&sem->dep_map, 0, 1, read, 1, NULL, ip);
+	lock_holder_acquired(sem);
 }
 
 #endif

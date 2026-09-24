@@ -22,6 +22,9 @@ int __percpu_init_rwsem(struct percpu_rw_semaphore *sem,
 	rcuwait_init(&sem->writer);
 	init_waitqueue_head(&sem->waiters);
 	atomic_set(&sem->block, 0);
+#ifdef CONFIG_TRACK_LOCK_HOLDERS
+	sem->tracked = false;
+#endif
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
 	debug_check_no_locks_freed((void *)sem, sizeof(*sem));
 	lockdep_init_map(&sem->dep_map, name, key, 0);
@@ -201,6 +204,28 @@ bool percpu_is_read_locked(struct percpu_rw_semaphore *sem)
 }
 EXPORT_SYMBOL_GPL(percpu_is_read_locked);
 
+#ifdef CONFIG_TRACK_LOCK_HOLDERS
+void percpu_rwsem_track_holder(struct percpu_rw_semaphore *sem)
+{
+	/*
+	 * A task holding @sem now was not counted, so its percpu_up_*()
+	 * would make its count wrong.
+	 */
+	if (WARN_ONCE(percpu_is_read_locked(sem) || percpu_is_write_locked(sem),
+		      "%s: rwsem is held; opt in before it is published\n",
+		      __func__))
+		return;
+
+	/*
+	 * Turn the hooks on before the flag, so that a lock carrying the
+	 * flag always has them on.
+	 */
+	lock_holder_tracking_enable();
+	sem->tracked = true;
+}
+EXPORT_SYMBOL_GPL(percpu_rwsem_track_holder);
+#endif
+
 /*
  * Return true if the modular sum of the sem->read_count per-CPU variable is
  * zero.  If this sum is zero, then it is stable due to the fact that if any
@@ -256,11 +281,14 @@ void __sched percpu_down_write(struct percpu_rw_semaphore *sem)
 	rcuwait_wait_event(&sem->writer, readers_active_check(sem), TASK_UNINTERRUPTIBLE);
 	if (contended)
 		trace_contention_end(sem, 0);
+
+	lock_holder_acquired(sem);
 }
 EXPORT_SYMBOL_GPL(percpu_down_write);
 
 void percpu_up_write(struct percpu_rw_semaphore *sem)
 {
+	lock_holder_released(sem);
 	rwsem_release(&sem->dep_map, _RET_IP_);
 
 	if (trace_contended_release_enabled() && wq_has_sleeper(&sem->waiters))
