@@ -65,6 +65,57 @@ bool kvm_pmu_is_partitioned(struct kvm *kvm)
 }
 
 /**
+ * kvm_pmu_direct_pmcr_write() - Handle guest writes to PMCR_EL0
+ * @vcpu: Pointer to vcpu struct
+ * @val: Value written to PMCR_EL0
+ *
+ * Write control bits to physical pmcr_el0 and reset guest-owned general
+ * event counters when PMCR_EL0.P is set.
+ */
+void kvm_pmu_direct_pmcr_write(struct kvm_vcpu *vcpu, u64 val)
+{
+	bool reset_p = val & ARMV8_PMU_PMCR_P;
+	unsigned long mask;
+	int i;
+
+	val &= ~ARMV8_PMU_PMCR_P;
+
+	write_sysreg(val, pmcr_el0);
+
+	if (reset_p) {
+		mask = kvm_pmu_implemented_counter_mask(vcpu) & ~BIT(ARMV8_PMU_CYCLE_IDX);
+
+		if (!vcpu_is_el2(vcpu))
+			mask &= ~kvm_pmu_hyp_counter_mask(vcpu);
+
+		for_each_set_bit(i, &mask, ARMV8_PMU_MAX_GENERAL_COUNTERS)
+			write_pmevcntrn(i, 0);
+	}
+}
+
+/**
+ * kvm_pmu_direct_pmcr_read() - Handle guest reads from PMCR_EL0
+ * @vcpu: Pointer to vcpu struct
+ *
+ * Read physical pmcr_el0 and replace PMCR_EL0.N with the number of
+ * event counters partitioned to the guest.
+ *
+ * Return: Filtered PMCR_EL0 value
+ */
+u64 kvm_pmu_direct_pmcr_read(struct kvm_vcpu *vcpu)
+{
+	u64 n = vcpu->kvm->arch.nr_pmu_counters;
+
+	if (vcpu_has_nv(vcpu) && !vcpu_is_el2(vcpu))
+		n = FIELD_GET(MDCR_EL2_HPMN, __vcpu_sys_reg(vcpu, MDCR_EL2));
+
+	return u64_replace_bits(
+		read_sysreg(pmcr_el0),
+		n,
+		ARMV8_PMU_PMCR_N);
+}
+
+/**
  * kvm_pmu_host_counter_mask() - Compute bitmask of host-reserved counters
  *
  * Compute the bitmask that selects the host-reserved counters in the
