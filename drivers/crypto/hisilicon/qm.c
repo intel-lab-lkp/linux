@@ -3158,6 +3158,7 @@ err_free_qp_finish_id:
 static void hisi_qm_pre_init(struct hisi_qm *qm)
 {
 	struct pci_dev *pdev = qm->pdev;
+	struct acpi_device *adev;
 
 	if (qm->ver == QM_HW_V1)
 		qm->ops = &qm_hw_ops_v1;
@@ -3173,9 +3174,16 @@ static void hisi_qm_pre_init(struct hisi_qm *qm)
 	mutex_init(&qm->ifc_lock);
 	init_rwsem(&qm->qps_lock);
 	qm->qp_in_used = 0;
+	/*
+	 * If the device is not power manageable, clear the flag to
+	 * avoid entering the suspend and resume process later.
+	 */
 	if (test_bit(QM_SUPPORT_RPM, &qm->caps)) {
-		if (!acpi_device_power_manageable(ACPI_COMPANION(&pdev->dev)))
-			dev_info(&pdev->dev, "_PS0 and _PR0 are not defined");
+		adev = ACPI_COMPANION(&pdev->dev);
+		if (!adev || !acpi_device_power_manageable(adev)) {
+			dev_warn(&pdev->dev, "device does not support runtime power gating\n");
+			clear_bit(QM_SUPPORT_RPM, &qm->caps);
+		}
 	}
 }
 
