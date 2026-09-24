@@ -368,6 +368,8 @@ static void intel_cmtg_enable_ddi(const struct intel_crtc_state *crtc_state)
 	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
 	u32 interrupt_mask = 0;
 
+	intel_de_rmw(display, GEN8_CHICKEN_DCPR_1, DC3CO_CMTG_VBLANK_SELECT,
+		     cpu_transcoder == TRANSCODER_B ? DC3CO_CMTG_VBLANK_SELECT : 0);
 	intel_de_rmw(display, TRANS_DDI_FUNC_CTL2(display, cpu_transcoder), 0, CMTG_SECONDARY_MODE);
 	intel_de_rmw(display, CMTG_SCANLINE_GB1(cpu_transcoder), 0, CMTG_HW_GB_ENABLE);
 	crtc->cmtg.enabled = true;
