@@ -28,6 +28,7 @@
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
 #include <sys/un.h>
+#include <sys/xattr.h>
 #include <sys/vfs.h>
 #include <unistd.h>
 
@@ -578,11 +579,13 @@ TEST_F_FORK(layout1, inval)
 	LANDLOCK_ACCESS_FS_EXECUTE | \
 	LANDLOCK_ACCESS_FS_WRITE_FILE | \
 	LANDLOCK_ACCESS_FS_READ_FILE | \
+	LANDLOCK_ACCESS_FS_READ_METADATA | \
+	LANDLOCK_ACCESS_FS_WRITE_METADATA | \
 	LANDLOCK_ACCESS_FS_TRUNCATE | \
 	LANDLOCK_ACCESS_FS_IOCTL_DEV | \
 	LANDLOCK_ACCESS_FS_RESOLVE_UNIX)
 
-#define ACCESS_LAST LANDLOCK_ACCESS_FS_RESOLVE_UNIX
+#define ACCESS_LAST LANDLOCK_ACCESS_FS_WRITE_METADATA
 
 #define ACCESS_ALL ( \
 	ACCESS_FILE | \
@@ -10921,6 +10924,310 @@ TEST_F(trace_layout1, check_rule_fs_empty_grant)
 	}
 
 	free(buf);
+}
+
+/* Invokes chmod(2) and returns its errno or 0. */
+static int test_chmod(const char *const path, mode_t mode)
+{
+	if (chmod(path, mode) < 0)
+		return errno;
+	return 0;
+}
+
+/* Invokes fchmod(2) and returns its errno or 0. */
+static int test_fchmod(int fd, mode_t mode)
+{
+	if (fchmod(fd, mode) < 0)
+		return errno;
+	return 0;
+}
+
+/* Invokes chown(2) and returns its errno or 0. */
+static int test_chown(const char *const path, uid_t uid, gid_t gid)
+{
+	if (chown(path, uid, gid) < 0)
+		return errno;
+	return 0;
+}
+
+/* Invokes fchown(2) and returns its errno or 0. */
+static int test_fchown(int fd, uid_t uid, gid_t gid)
+{
+	if (fchown(fd, uid, gid) < 0)
+		return errno;
+	return 0;
+}
+
+/* Invokes lchown(2) and returns its errno or 0. */
+static int test_lchown(const char *const path, uid_t uid, gid_t gid)
+{
+	if (lchown(path, uid, gid) < 0)
+		return errno;
+	return 0;
+}
+
+/* Invokes utimensat(2) with explicit times and returns its errno or 0. */
+static int test_utimensat(const char *const path)
+{
+	const struct timespec times[] = {
+		{
+			.tv_sec = 0,
+			.tv_nsec = UTIME_OMIT,
+		},
+		{
+			.tv_sec = 1,
+			.tv_nsec = 0,
+		},
+	};
+
+	if (utimensat(AT_FDCWD, path, times, 0) < 0)
+		return errno;
+	return 0;
+}
+
+/* Invokes utimensat(2) with UTIME_NOW and returns its errno or 0. */
+static int test_utimensat_now(const char *const path)
+{
+	if (utimensat(AT_FDCWD, path, NULL, 0) < 0)
+		return errno;
+	return 0;
+}
+
+/* Invokes setxattr(2) and returns its errno or 0. */
+static int test_setxattr(const char *const path, const char *const name,
+			 const void *const value, const size_t size)
+{
+	if (setxattr(path, name, value, size, 0) < 0)
+		return errno;
+	return 0;
+}
+
+/* Invokes getxattr(2) and returns its errno or 0. */
+static int test_getxattr(const char *const path, const char *const name,
+			 void *const value, const size_t size)
+{
+	if (getxattr(path, name, value, size) < 0)
+		return errno;
+	return 0;
+}
+
+/* Invokes listxattr(2) and returns its errno or 0. */
+static int test_listxattr(const char *const path, void *const list,
+			  const size_t size)
+{
+	if (listxattr(path, list, size) < 0)
+		return errno;
+	return 0;
+}
+
+/* Invokes removexattr(2) and returns its errno or 0. */
+static int test_removexattr(const char *const path, const char *const name)
+{
+	if (removexattr(path, name) < 0)
+		return errno;
+	return 0;
+}
+
+/* Invokes stat(2) and returns its errno or 0. */
+static int test_stat(const char *const path, struct stat *statbuf)
+{
+	if (stat(path, statbuf) < 0)
+		return errno;
+	return 0;
+}
+
+/* Invokes fstat(2) and returns its errno or 0. */
+static int test_fstat(int fd, struct stat *statbuf)
+{
+	if (fstat(fd, statbuf) < 0)
+		return errno;
+	return 0;
+}
+
+TEST_F_FORK(layout1, unhandled_metadata)
+{
+	int file_fd;
+	int ruleset_fd;
+	const char *const file1 = file1_s1d1;
+	const char *const file2 = file2_s1d1;
+	const char *const dir1 = dir_s1d1;
+	struct stat statbuf;
+	const struct rule rules[] = {
+		{
+			.path = file1,
+			.access = LANDLOCK_ACCESS_FS_WRITE_FILE,
+		},
+		{
+			.path = file2,
+			.access = LANDLOCK_ACCESS_FS_READ_FILE |
+				  LANDLOCK_ACCESS_FS_WRITE_FILE,
+		},
+		{
+			.path = dir1,
+			.access = ACCESS_RW,
+		},
+		{},
+	};
+
+	/*
+	 * READ_METADATA and WRITE_METADATA are not handled, so metadata
+	 * access should be allowed.
+	 */
+	ruleset_fd = create_ruleset(_metadata, ACCESS_RW, rules);
+	ASSERT_LE(0, ruleset_fd);
+	file_fd = open(file1, O_WRONLY | O_CLOEXEC);
+	ASSERT_LE(0, file_fd);
+
+	enforce_ruleset(_metadata, ruleset_fd);
+	ASSERT_EQ(0, close(ruleset_fd));
+
+	EXPECT_EQ(0, test_chmod(file1, 0644));
+	EXPECT_EQ(0, test_fchmod(file_fd, 0644));
+	EXPECT_EQ(0, test_chmod(file2, 0400));
+	EXPECT_EQ(0, test_chmod(dir1, 0700));
+
+	EXPECT_EQ(0, test_chown(file1, -1, 0));
+	EXPECT_EQ(0, test_fchown(file_fd, -1, 0));
+	EXPECT_EQ(0, test_lchown(file1, -1, 0));
+
+	EXPECT_EQ(0, test_utimensat(file1));
+	EXPECT_EQ(0, test_utimensat_now(file1));
+
+	EXPECT_EQ(0, test_setxattr(file1, "user.test", "a", 1));
+	EXPECT_EQ(0, test_getxattr(file1, "user.test", NULL, 0));
+	EXPECT_EQ(0, test_listxattr(file1, NULL, 0));
+	EXPECT_EQ(0, test_removexattr(file1, "user.test"));
+
+	EXPECT_EQ(0, test_stat(file1, &statbuf));
+	EXPECT_EQ(0, test_fstat(file_fd, &statbuf));
+	EXPECT_EQ(0, test_stat(dir1, &statbuf));
+
+	ASSERT_EQ(0, close(file_fd));
+}
+
+TEST_F_FORK(layout1, write_metadata)
+{
+	int file_fd, file2_fd;
+	int ruleset_fd;
+	const char *const file1 = file1_s1d1;
+	const char *const file2 = file2_s1d1;
+	const char *const dir1 = dir_s1d1;
+	const struct rule rules[] = {
+		{
+			.path = file1,
+			.access = LANDLOCK_ACCESS_FS_WRITE_FILE |
+				  LANDLOCK_ACCESS_FS_WRITE_METADATA,
+		},
+		{
+			.path = file2,
+			.access = LANDLOCK_ACCESS_FS_READ_FILE |
+				  LANDLOCK_ACCESS_FS_WRITE_FILE,
+		},
+		{
+			.path = dir1,
+			.access = ACCESS_RW,
+		},
+		{},
+	};
+
+	ruleset_fd = create_ruleset(_metadata, ACCESS_RW |
+				    LANDLOCK_ACCESS_FS_WRITE_METADATA, rules);
+	ASSERT_LE(0, ruleset_fd);
+	file_fd = open(file1, O_WRONLY | O_CLOEXEC);
+	ASSERT_LE(0, file_fd);
+	file2_fd = open(file2, O_WRONLY | O_CLOEXEC);
+	ASSERT_LE(0, file2_fd);
+
+	enforce_ruleset(_metadata, ruleset_fd);
+	ASSERT_EQ(0, close(ruleset_fd));
+
+	/* file1 has WRITE_METADATA: allowed */
+	EXPECT_EQ(0, test_chmod(file1, 0644));
+	EXPECT_EQ(0, test_fchmod(file_fd, 0644));
+	EXPECT_EQ(0, test_chown(file1, -1, 0));
+	EXPECT_EQ(0, test_fchown(file_fd, -1, 0));
+	EXPECT_EQ(0, test_lchown(file1, -1, 0));
+	EXPECT_EQ(0, test_utimensat(file1));
+	EXPECT_EQ(0, test_utimensat_now(file1));
+	EXPECT_EQ(0, test_setxattr(file1, "user.test", "a", 1));
+	EXPECT_EQ(0, test_removexattr(file1, "user.test"));
+
+	/*
+	 * Writing is not an explicit metadata change: implicit timestamp
+	 * updates are allowed without WRITE_METADATA.
+	 */
+	EXPECT_EQ(1, write(file2_fd, "a", 1));
+
+	/* file2 does not have WRITE_METADATA: denied */
+	EXPECT_EQ(EACCES, test_chmod(file2, 0400));
+	EXPECT_EQ(EACCES, test_chown(file2, -1, 0));
+	EXPECT_EQ(EACCES, test_lchown(file2, -1, 0));
+	EXPECT_EQ(EACCES, test_utimensat(file2));
+	EXPECT_EQ(EACCES, test_utimensat_now(file2));
+	EXPECT_EQ(EACCES, test_setxattr(file2, "user.test", "a", 1));
+	EXPECT_EQ(EACCES, test_removexattr(file2, "user.test"));
+
+	/* dir1 does not have WRITE_METADATA: denied */
+	EXPECT_EQ(EACCES, test_chmod(dir1, 0700));
+	EXPECT_EQ(EACCES, test_chown(dir1, -1, 0));
+
+	ASSERT_EQ(0, close(file_fd));
+	ASSERT_EQ(0, close(file2_fd));
+}
+
+TEST_F_FORK(layout1, read_metadata)
+{
+	int file_fd;
+	int ruleset_fd;
+	const char *const file1 = file1_s1d1;
+	const char *const file2 = file2_s1d1;
+	const char *const dir1 = dir_s1d1;
+	struct stat statbuf;
+	const struct rule rules[] = {
+		{
+			.path = file1,
+			.access = LANDLOCK_ACCESS_FS_READ_FILE |
+				  LANDLOCK_ACCESS_FS_READ_METADATA,
+		},
+		{
+			.path = file2,
+			.access = LANDLOCK_ACCESS_FS_READ_FILE |
+				  LANDLOCK_ACCESS_FS_WRITE_FILE,
+		},
+		{
+			.path = dir1,
+			.access = ACCESS_RW,
+		},
+		{},
+	};
+
+	ruleset_fd = create_ruleset(_metadata, ACCESS_RW |
+				    LANDLOCK_ACCESS_FS_READ_METADATA, rules);
+	ASSERT_LE(0, ruleset_fd);
+
+	ASSERT_EQ(0, setxattr(file1, "user.test", "a", 1, 0));
+	ASSERT_EQ(0, setxattr(file2, "user.test", "a", 1, 0));
+
+	file_fd = open(file1, O_RDONLY | O_CLOEXEC);
+	ASSERT_LE(0, file_fd);
+
+	enforce_ruleset(_metadata, ruleset_fd);
+	ASSERT_EQ(0, close(ruleset_fd));
+
+	/* file1 has READ_METADATA: allowed */
+	EXPECT_EQ(0, test_stat(file1, &statbuf));
+	EXPECT_EQ(0, test_fstat(file_fd, &statbuf));
+	EXPECT_EQ(0, test_getxattr(file1, "user.test", NULL, 0));
+	EXPECT_EQ(0, test_listxattr(file1, NULL, 0));
+
+	/* file2 does not have READ_METADATA: denied */
+	EXPECT_EQ(EACCES, test_stat(file2, &statbuf));
+	EXPECT_EQ(EACCES, test_getxattr(file2, "user.test", NULL, 0));
+	EXPECT_EQ(EACCES, test_listxattr(file2, NULL, 0));
+	/* dir1 does not have READ_METADATA: denied */
+	EXPECT_EQ(EACCES, test_stat(dir1, &statbuf));
+
+	ASSERT_EQ(0, close(file_fd));
 }
 
 TEST_HARNESS_MAIN
