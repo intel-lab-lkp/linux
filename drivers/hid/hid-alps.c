@@ -322,7 +322,7 @@ static int t4_raw_event(struct alps_dev *hdata, u8 *data, int size)
 	int i;
 	struct t4_input_report *p_report = (struct t4_input_report *)data;
 
-	if (!data)
+	if (size < sizeof(*p_report))
 		return 0;
 	for (i = 0; i < hdata->max_fingers; i++) {
 		x = p_report->contact[i].x_hi << 8 | p_report->contact[i].x_lo;
@@ -370,6 +370,9 @@ static int u1_raw_event(struct alps_dev *hdata, u8 *data, int size)
 		break;
 	case U1_ABSOLUTE_REPORT_ID:
 	case U1_ABSOLUTE_REPORT_ID_SECD:
+		if (size < 3 + hdata->max_fingers * 5)
+			return 0;
+
 		for (i = 0; i < hdata->max_fingers; i++) {
 			u8 *contact = &data[i * 5];
 
@@ -407,6 +410,9 @@ static int u1_raw_event(struct alps_dev *hdata, u8 *data, int size)
 		return 1;
 
 	case U1_SP_ABSOLUTE_REPORT_ID:
+		if (size < 6)
+			return 0;
+
 		sp_x = get_unaligned_le16(data+2);
 		sp_y = get_unaligned_le16(data+4);
 
