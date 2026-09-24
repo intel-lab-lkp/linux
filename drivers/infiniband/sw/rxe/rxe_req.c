@@ -723,6 +723,15 @@ int rxe_requester(struct rxe_qp *qp)
 		goto err;
 	}
 
+	if (unlikely((wqe->wr.send_flags & IB_SEND_INLINE) &&
+		     (wqe->dma.sge_offset > qp->sq.max_inline ||
+		      wqe->dma.resid >
+		      qp->sq.max_inline - wqe->dma.sge_offset))) {
+		rxe_dbg_qp(qp, "invalid inline data range in send wqe\n");
+		wqe->status = IB_WC_LOC_QP_OP_ERR;
+		goto err;
+	}
+
 	if (rxe_wqe_is_fenced(qp, wqe)) {
 		qp->req.wait_fence = 1;
 		goto exit;
