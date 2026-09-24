@@ -79,6 +79,18 @@ enum dw_i2c_intr_idx {
 	DW_INTR_IDX_MAX,
 };
 
+#define DWC_ADV_IC_INTR_CLR_INTR		BIT(0)
+#define DWC_ADV_IC_INTR_CLR_RX_UNDER		BIT(1)
+#define DWC_ADV_IC_INTR_CLR_RX_OVER		BIT(2)
+#define DWC_ADV_IC_INTR_CLR_TX_OVER		BIT(3)
+#define DWC_ADV_IC_INTR_CLR_RD_REQ		BIT(4)
+#define DWC_ADV_IC_INTR_CLR_TX_ABRT		BIT(5)
+#define DWC_ADV_IC_INTR_CLR_RX_DONE		BIT(6)
+#define DWC_ADV_IC_INTR_CLR_ACTIVITY		BIT(7)
+#define DWC_ADV_IC_INTR_CLR_STOP_DET		BIT(8)
+#define DWC_ADV_IC_INTR_CLR_START_DET		BIT(9)
+#define DWC_ADV_IC_INTR_CLR_GEN_CALL		BIT(10)
+
 #define DW_IC_INTR_DEFAULT_MASK			(DW_IC_INTR_RX_FULL | \
 						 DW_IC_INTR_TX_ABRT | \
 						 DW_IC_INTR_STOP_DET)
@@ -291,7 +303,8 @@ struct dw_i2c_dev {
 
 #define MODEL_AMD_NAVI_GPU			BIT(10)
 #define MODEL_WANGXUN_SP			BIT(11)
-#define MODEL_MASK				GENMASK(11, 8)
+#define MODEL_TI_TDA54				BIT(12)
+#define MODEL_MASK				GENMASK(12, 8)
 
 /*
  * Enable UCSI interrupt by writing 0xd at register
@@ -352,12 +365,15 @@ static inline void __i2c_dw_read_intr_mask(struct dw_i2c_dev *dev,
 		*intr_mask = dev->sw_mask;
 }
 
-/* Acknowledge a logical interrupt via dev->intr_clr[]: reg ID */
+/* Acknowledge a logical interrupt via dev->intr_clr[]: reg ID or bit value */
 static inline void i2c_dw_ack_intr(struct dw_i2c_dev *dev, enum dw_i2c_intr_idx intr)
 {
 	unsigned int dummy;
 
-	regmap_read(dev->map, dev->intr_clr[intr], &dummy);
+	if (dev->flags & MODEL_TI_TDA54)
+		regmap_write(dev->map, DW_IC_CLR_INTR, dev->intr_clr[intr]);
+	else
+		regmap_read(dev->map, dev->intr_clr[intr], &dummy);
 }
 
 void __i2c_dw_disable(struct dw_i2c_dev *dev);

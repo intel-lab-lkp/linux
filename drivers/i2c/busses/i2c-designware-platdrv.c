@@ -257,6 +257,7 @@ static const struct of_device_id dw_i2c_of_match[] = {
 	{ .compatible = "mobileye,eyeq6lplus-i2c" },
 	{ .compatible = "mscc,ocelot-i2c" },
 	{ .compatible = "snps,designware-i2c" },
+	{ .compatible = "ti,tda54-i2c", .data = (void *)MODEL_TI_TDA54 },
 	{}
 };
 MODULE_DEVICE_TABLE(of, dw_i2c_of_match);
