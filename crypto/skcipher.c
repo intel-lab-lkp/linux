@@ -432,6 +432,112 @@ out:
 }
 EXPORT_SYMBOL_GPL(crypto_skcipher_setkey);
 
+/* Bounds the on-stack per-unit IV buffers: 16 covers xts, 32 Adiantum. */
+#define SKCIPHER_MAX_UNIT_IVSIZE	32
+
+/*
+ * Advance the per-unit IV to the next data unit.  The data-unit number is a
+ * 64-bit little-endian counter held in the low 8 bytes of @iv (matching
+ * dm-crypt's plain64/essiv sector generators, which the caller feeds in as a
+ * little-endian sector number).  It wraps at 2^64 and never carries into the
+ * higher IV bytes, so batched output stays bit-identical to the per-unit path
+ * across the counter rollover; any other on-disk IV format is produced by a
+ * template wrapping the algorithm, not here.
+ */
+static void skcipher_unit_iv_next(u8 *iv)
+{
+	__le64 lo;
+
+	memcpy(&lo, iv, sizeof(lo));
+	lo = cpu_to_le64(le64_to_cpu(lo) + 1);
+	memcpy(iv, &lo, sizeof(lo));
+}
+
+/*
+ * Transparently split a multi-unit request for an algorithm with no native
+ * multi-unit support: one call per unit, walking the IV as a wide counter.
+ * The caller's request is reused for each unit (same tfm, so the request
+ * context is already correctly sized) and fully restored before returning.
+ * @req->iv is never modified; each unit gets a private copy the algorithm
+ * may write back in place (e.g. xts).
+ */
+static int skcipher_crypt_unit(struct skcipher_request *req, bool enc)
+{
+	struct crypto_skcipher *tfm = crypto_skcipher_reqtfm(req);
+	struct skcipher_alg *alg = crypto_skcipher_alg(tfm);
+	const unsigned int unit = req->unit_size;
+	const unsigned int total = req->cryptlen;
+	const unsigned int ivsize = crypto_skcipher_ivsize(tfm);
+	bool inplace = req->src == req->dst;
+	struct scatterlist *o_src = req->src, *o_dst = req->dst;
+	struct scatter_walk src_walk, dst_walk;
+	struct scatterlist src_sg[2], dst_sg[2];
+	u8 iv_ctr[SKCIPHER_MAX_UNIT_IVSIZE];
+	/* Becomes req->iv: keep the alignment the caller's IV would have had. */
+	u8 iv_unit[SKCIPHER_MAX_UNIT_IVSIZE] __aligned(MAX_ALGAPI_ALIGNMASK + 1);
+	u8 *o_iv = req->iv;
+	unsigned int off;
+	int err = 0;
+
+	if (!total || !IS_ALIGNED(unit, crypto_skcipher_blocksize(tfm)) ||
+	    (total % unit) || !ivsize ||
+	    !IS_ALIGNED(ivsize, sizeof(__le64)) ||
+	    ivsize > SKCIPHER_MAX_UNIT_IVSIZE)
+		return -EINVAL;
+
+	/* The split is synchronous; only a native (REQ_SEG) alg may be async. */
+	if (alg->co.base.cra_flags & CRYPTO_ALG_ASYNC)
+		return -EOPNOTSUPP;
+
+	/* iv_ctr is the counter; iv_unit is the per-unit copy. */
+	memcpy(iv_ctr, req->iv, ivsize);
+
+	sg_init_table(src_sg, 2);
+	scatterwalk_start(&src_walk, req->src);
+	if (!inplace) {
+		sg_init_table(dst_sg, 2);
+		scatterwalk_start(&dst_walk, req->dst);
+	}
+
+	req->unit_size = 0;
+	req->cryptlen = unit;
+
+	for (off = 0; off < total; off += unit) {
+		scatterwalk_get_sglist(&src_walk, src_sg);
+		scatterwalk_skip(&src_walk, unit);
+		req->src = src_sg;
+		if (inplace) {
+			req->dst = src_sg;
+		} else {
+			scatterwalk_get_sglist(&dst_walk, dst_sg);
+			scatterwalk_skip(&dst_walk, unit);
+			req->dst = dst_sg;
+		}
+
+		memcpy(iv_unit, iv_ctr, ivsize);
+		req->iv = iv_unit;
+		err = enc ? crypto_skcipher_encrypt(req) :
+			    crypto_skcipher_decrypt(req);
+		if (err)
+			break;
+
+		skcipher_unit_iv_next(iv_ctr);
+		/*
+		 * Match dm-crypt's per-sector reschedule, but only when the
+		 * caller allows sleeping (the split can run in atomic context).
+		 */
+		if (req->base.flags & CRYPTO_TFM_REQ_MAY_SLEEP)
+			cond_resched();
+	}
+
+	req->src = o_src;
+	req->dst = o_dst;
+	req->iv = o_iv;
+	req->cryptlen = total;
+	req->unit_size = unit;
+	return err;
+}
+
 int crypto_skcipher_encrypt(struct skcipher_request *req)
 {
 	struct crypto_skcipher *tfm = crypto_skcipher_reqtfm(req);
@@ -439,6 +545,9 @@ int crypto_skcipher_encrypt(struct skcipher_request *req)
 
 	if (crypto_skcipher_get_flags(tfm) & CRYPTO_TFM_NEED_KEY)
 		return -ENOKEY;
+	/* Must precede the lskcipher redirect, which ignores unit_size. */
+	if (unlikely(req->unit_size) && !crypto_skcipher_req_seg(tfm))
+		return skcipher_crypt_unit(req, true);
 	if (alg->co.base.cra_type != &crypto_skcipher_type)
 		return crypto_lskcipher_encrypt_sg(req);
 	return alg->encrypt(req);
@@ -452,6 +561,9 @@ int crypto_skcipher_decrypt(struct skcipher_request *req)
 
 	if (crypto_skcipher_get_flags(tfm) & CRYPTO_TFM_NEED_KEY)
 		return -ENOKEY;
+	/* Must precede the lskcipher redirect, which ignores unit_size. */
+	if (unlikely(req->unit_size) && !crypto_skcipher_req_seg(tfm))
+		return skcipher_crypt_unit(req, false);
 	if (alg->co.base.cra_type != &crypto_skcipher_type)
 		return crypto_lskcipher_decrypt_sg(req);
 	return alg->decrypt(req);
