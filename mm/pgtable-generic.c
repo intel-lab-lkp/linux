@@ -463,6 +463,12 @@ void pagetable_free_kernel(struct ptdesc *pt)
 	list_add(&pt->pt_list, &kernel_pgtable_work.list);
 	spin_unlock(&kernel_pgtable_work.lock);
 
-	schedule_work(&kernel_pgtable_work.work);
+	/*
+	 * The workqueue may not exist yet while the system is booting.
+	 * The next kernel page table freed after boot schedules the work,
+	 * which then frees this one as well.
+	 */
+	if (system_state != SYSTEM_BOOTING)
+		schedule_work(&kernel_pgtable_work.work);
 }
 #endif
