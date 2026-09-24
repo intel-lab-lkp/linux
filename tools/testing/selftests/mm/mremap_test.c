@@ -373,7 +373,10 @@ static bool is_multiple_vma_range_ok(unsigned int pattern_seed,
 	for (i = 0; i <= 10; i += 2) {
 		int j;
 		char *buf = &ptr[i * page_size];
-		size_t size = i == 4 ? 2 * page_size : page_size;
+		size_t size = i == 4 ? 3 * page_size : page_size;
+
+		if (i == 6)
+			continue;
 
 		for (j = 0; j < size; j++) {
 			char chr = rand();
