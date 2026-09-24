@@ -318,6 +318,8 @@ retry:
 	LANDLOCK_ACCESS_FS_EXECUTE | \
 	LANDLOCK_ACCESS_FS_WRITE_FILE | \
 	LANDLOCK_ACCESS_FS_READ_FILE | \
+	LANDLOCK_ACCESS_FS_READ_METADATA | \
+	LANDLOCK_ACCESS_FS_WRITE_METADATA | \
 	LANDLOCK_ACCESS_FS_TRUNCATE | \
 	LANDLOCK_ACCESS_FS_IOCTL_DEV | \
 	LANDLOCK_ACCESS_FS_RESOLVE_UNIX)
@@ -1676,6 +1678,81 @@ static int hook_path_truncate(const struct path *const path)
 	return current_check_access_path(path, LANDLOCK_ACCESS_FS_TRUNCATE);
 }
 
+static int hook_inode_getattr(const struct path *const path)
+{
+	return current_check_access_path(path,
+					LANDLOCK_ACCESS_FS_READ_METADATA);
+}
+
+static int hook_inode_setattr(const struct path *const path,
+			      struct iattr *const attr)
+{
+	/*
+	 * Explicit metadata changes (i.e. mode, ownership, and timestamps
+	 * set with utimes() and friends) require
+	 * LANDLOCK_ACCESS_FS_WRITE_METADATA.  Implicit timestamp updates
+	 * (e.g. ATTR_CTIME set for a write) and size changes (handled by
+	 * the truncate hooks) are not restricted.
+	 */
+	if (!(attr->ia_valid & (ATTR_MODE | ATTR_UID | ATTR_GID |
+				ATTR_TIMES_SET | ATTR_TOUCH)))
+		return 0;
+
+	return current_check_access_path(path,
+					LANDLOCK_ACCESS_FS_WRITE_METADATA);
+}
+
+static int hook_inode_setxattr(const struct path *const path,
+			       const char *const name,
+			       const void *const value, const size_t size,
+			       const int flags)
+{
+	return current_check_access_path(path,
+					LANDLOCK_ACCESS_FS_WRITE_METADATA);
+}
+
+static int hook_inode_getxattr(const struct path *const path,
+			       const char *const name)
+{
+	return current_check_access_path(path,
+					LANDLOCK_ACCESS_FS_READ_METADATA);
+}
+
+static int hook_inode_listxattr(const struct path *const path)
+{
+	return current_check_access_path(path,
+					LANDLOCK_ACCESS_FS_READ_METADATA);
+}
+
+static int hook_inode_removexattr(const struct path *const path,
+				  const char *const name)
+{
+	return current_check_access_path(path,
+					LANDLOCK_ACCESS_FS_WRITE_METADATA);
+}
+
+static int hook_inode_set_acl(const struct path *const path,
+			      const char *const acl_name,
+			      struct posix_acl *const kacl)
+{
+	return current_check_access_path(path,
+					LANDLOCK_ACCESS_FS_WRITE_METADATA);
+}
+
+static int hook_inode_get_acl(const struct path *const path,
+			      const char *const acl_name)
+{
+	return current_check_access_path(path,
+					LANDLOCK_ACCESS_FS_READ_METADATA);
+}
+
+static int hook_inode_remove_acl(const struct path *const path,
+				 const char *const acl_name)
+{
+	return current_check_access_path(path,
+					LANDLOCK_ACCESS_FS_WRITE_METADATA);
+}
+
 /**
  * unmask_scoped_access - Remove access right bits in @masks in all layers
  *                        where @client and @server have the same domain
@@ -2100,6 +2177,15 @@ static struct security_hook_list landlock_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(path_unlink, hook_path_unlink),
 	LSM_HOOK_INIT(path_rmdir, hook_path_rmdir),
 	LSM_HOOK_INIT(path_truncate, hook_path_truncate),
+	LSM_HOOK_INIT(inode_getattr, hook_inode_getattr),
+	LSM_HOOK_INIT(inode_setattr, hook_inode_setattr),
+	LSM_HOOK_INIT(inode_setxattr, hook_inode_setxattr),
+	LSM_HOOK_INIT(inode_getxattr, hook_inode_getxattr),
+	LSM_HOOK_INIT(inode_listxattr, hook_inode_listxattr),
+	LSM_HOOK_INIT(inode_removexattr, hook_inode_removexattr),
+	LSM_HOOK_INIT(inode_set_acl, hook_inode_set_acl),
+	LSM_HOOK_INIT(inode_get_acl, hook_inode_get_acl),
+	LSM_HOOK_INIT(inode_remove_acl, hook_inode_remove_acl),
 	LSM_HOOK_INIT(unix_find, hook_unix_find),
 
 	LSM_HOOK_INIT(file_alloc_security, hook_file_alloc_security),
