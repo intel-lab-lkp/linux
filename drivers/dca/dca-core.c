@@ -360,16 +360,15 @@ int register_dca_provider(struct dca_provider *dca, struct device *dev)
 
 		if (dca_providers_blocked) {
 			raw_spin_unlock_irqrestore(&dca_lock, flags);
-			dca_sysfs_remove_provider(dca);
 			unregister_dca_providers();
-			return -ENODEV;
+			goto err_remove_provider;
 		}
 
 		raw_spin_unlock_irqrestore(&dca_lock, flags);
 		rc = dca_pci_rc_from_dev(dev);
 		newdomain = dca_allocate_domain(rc);
 		if (!newdomain)
-			return -ENODEV;
+			goto err_remove_provider;
 		raw_spin_lock_irqsave(&dca_lock, flags);
 		/* Recheck, we might have raced after dropping the lock */
 		domain = dca_get_domain(dev);
@@ -386,6 +385,10 @@ int register_dca_provider(struct dca_provider *dca, struct device *dev)
 				     DCA_PROVIDER_ADD, NULL);
 	kfree(newdomain);
 	return 0;
+
+err_remove_provider:
+	dca_sysfs_remove_provider(dca);
+	return -ENODEV;
 }
 EXPORT_SYMBOL_GPL(register_dca_provider);
 
