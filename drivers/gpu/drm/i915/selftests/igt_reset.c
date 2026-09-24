@@ -8,6 +8,7 @@
 
 #include "gt/intel_engine.h"
 #include "gt/intel_gt.h"
+#include "gt/intel_gt_print.h"
 
 #include "../i915_drv.h"
 
@@ -16,7 +17,8 @@ void igt_global_reset_lock(struct intel_gt *gt)
 	struct intel_engine_cs *engine;
 	enum intel_engine_id id;
 
-	pr_debug("%s: current gpu_error=%08lx\n", __func__, gt->reset.flags);
+	gt_dbg(gt, "%s: current gpu_error=%08lx\n", __func__,
+	       gt->reset.flags);
 
 	while (test_and_set_bit(I915_RESET_BACKOFF, &gt->reset.flags))
 		wait_event(gt->reset.queue,

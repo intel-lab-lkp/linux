@@ -7,6 +7,7 @@
 
 //#include "gt/intel_engine_user.h"
 #include "gt/intel_gt.h"
+#include "gt/intel_gt_print.h"
 #include "i915_drv.h"
 #include "i915_selftest.h"
 
@@ -24,7 +25,7 @@ struct intel_engine_cs *intel_selftest_find_any_engine(struct intel_gt *gt)
 	for_each_engine(engine, gt, id)
 		return engine;
 
-	pr_err("No valid engine found!\n");
+	gt_err(gt, "No valid engine found!\n");
 	return NULL;
 }
 
@@ -60,7 +61,9 @@ int intel_selftest_modify_policy(struct intel_engine_cs *engine,
 		break;
 
 	default:
-		pr_err("Invalid scheduler policy modification type: %d!\n", modify_type);
+		gt_err(engine->gt,
+		       "Invalid scheduler policy modification type: %d!\n",
+		       modify_type);
 		return -EINVAL;
 	}
 

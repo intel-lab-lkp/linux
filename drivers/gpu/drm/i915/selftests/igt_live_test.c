@@ -8,6 +8,7 @@
 #include "gt/intel_gt.h"
 #include "gt/intel_gt_print.h"
 
+#include "i915_printk.h"
 #include "../i915_selftest.h"
 #include "igt_flush_test.h"
 #include "igt_live_test.h"
@@ -59,9 +60,9 @@ int igt_live_test_end(struct igt_live_test *t)
 		return -EIO;
 
 	if (t->reset_global != i915_reset_count(&i915->gpu_error)) {
-		pr_err("%s(%s): GPU was reset %d times!\n",
-		       t->func, t->name,
-		       i915_reset_count(&i915->gpu_error) - t->reset_global);
+		i915_err(i915, "%s(%s): GPU was reset %d times!\n",
+			 t->func, t->name,
+			 i915_reset_count(&i915->gpu_error) - t->reset_global);
 		return -EIO;
 	}
 

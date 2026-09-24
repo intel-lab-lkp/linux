@@ -12,6 +12,7 @@
 #include "gem/i915_gem_pm.h"
 #include "gt/intel_gt.h"
 
+#include "i915_printk.h"
 #include "i915_selftest.h"
 
 #include "igt_flush_test.h"
@@ -115,7 +116,7 @@ __live_active_setup(struct drm_i915_private *i915)
 			err = i915_active_add_request(&active->base, rq);
 		i915_request_add(rq);
 		if (err) {
-			pr_err("Failed to track active ref!\n");
+			i915_err(i915, "Failed to track active ref!\n");
 			break;
 		}
 
@@ -124,12 +125,13 @@ __live_active_setup(struct drm_i915_private *i915)
 
 	i915_active_release(&active->base);
 	if (READ_ONCE(active->retired) && count) {
-		pr_err("i915_active retired before submission!\n");
+		i915_err(i915, "i915_active retired before submission!\n");
 		err = -EINVAL;
 	}
 	if (atomic_read(&active->base.count) != count) {
-		pr_err("i915_active not tracking all requests, found %d, expected %d\n",
-		       atomic_read(&active->base.count), count);
+		i915_err(i915,
+			 "i915_active not tracking all requests, found %d, expected %d\n",
+			 atomic_read(&active->base.count), count);
 		err = -EINVAL;
 	}
 
@@ -236,7 +238,8 @@ static int live_active_barrier(void *arg)
 
 	__i915_active_wait(&active->base, TASK_UNINTERRUPTIBLE);
 	if (!READ_ONCE(active->retired)) {
-		pr_err("i915_active not retired after flushing barriers!\n");
+		i915_err(i915,
+			 "i915_active not retired after flushing barriers!\n");
 		err = -EINVAL;
 	}
 
