@@ -347,6 +347,14 @@ int install_session_keyring_to_cred(struct cred *cred, struct key *keyring)
 }
 
 /*
+ * Determine whether the current task is running with overridden credentials.
+ */
+static bool cred_overridden(void)
+{
+	return current_cred() != current_real_cred();
+}
+
+/*
  * Handle the fsuid changing.
  */
 void key_fsuid_changed(struct cred *new_cred)
@@ -578,7 +586,8 @@ bool lookup_user_key_possessed(const struct key *key,
  * to a key or the best found key was a negative key; -EKEYREVOKED or
  * -EKEYEXPIRED if the best found key was revoked or expired; -EACCES if the
  * found key doesn't grant the requested permit or the LSM denied access to it;
- * or -ENOMEM if a special keyring couldn't be created.
+ * -ENOMEM if a special keyring couldn't be created; or -EPERM if creating one
+ * while credentials are overridden.
  *
  * In the case of a successful return, the possession attribute is set on the
  * returned key reference.
@@ -607,6 +616,11 @@ try_again:
 			if (!(lflags & KEY_LOOKUP_CREATE))
 				goto error;
 
+			if (cred_overridden()) {
+				key_ref = ERR_PTR(-EPERM);
+				goto error;
+			}
+
 			ret = install_thread_keyring();
 			if (ret < 0) {
 				key_ref = ERR_PTR(ret);
@@ -624,6 +638,11 @@ try_again:
 		if (!ctx.cred->process_keyring) {
 			if (!(lflags & KEY_LOOKUP_CREATE))
 				goto error;
+
+			if (cred_overridden()) {
+				key_ref = ERR_PTR(-EPERM);
+				goto error;
+			}
 
 			ret = install_process_keyring();
 			if (ret < 0) {
@@ -646,6 +665,11 @@ try_again:
 
 			if (lflags & KEY_LOOKUP_CREATE) {
 				key_put(user_session);
+				if (cred_overridden()) {
+					key_ref = ERR_PTR(-EPERM);
+					goto error;
+				}
+
 				ret = join_session_keyring(NULL);
 				if (ret < 0)
 					goto error;
@@ -658,6 +682,11 @@ try_again:
 		} else if (test_bit(KEY_FLAG_UID_KEYRING,
 				    &ctx.cred->session_keyring->flags) &&
 			   lflags & KEY_LOOKUP_CREATE) {
+			if (cred_overridden()) {
+				key_ref = ERR_PTR(-EPERM);
+				goto error;
+			}
+
 			ret = join_session_keyring(NULL);
 			if (ret < 0)
 				goto error;

@@ -168,7 +168,8 @@ The key service provides a number of features besides keys:
      If a process attempts to access its session keyring when it doesn't have
      one, the default user session keyring for its current UID is returned
      without being installed into its credentials.  If creation is requested,
-     an anonymous session keyring is installed.
+     an anonymous session keyring is installed, failing with -EPERM if
+     credentials are overridden.
 
   *  Each user has two quotas against which the keys they own are tracked. One
      limits the total number of keys and keyrings, the other limits the total
