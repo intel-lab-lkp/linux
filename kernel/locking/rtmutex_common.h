@@ -180,6 +180,9 @@ enum rtmutex_chainwalk {
 
 static inline void __rt_mutex_base_init(struct rt_mutex_base *lock)
 {
+#if defined(CONFIG_TRACK_LOCK_HOLDERS) && defined(CONFIG_PREEMPT_RT)
+	lock->tracked = false;
+#endif
 	scoped_guard (raw_spinlock_init, &lock->wait_lock) {
 		lock->waiters = RB_ROOT_CACHED;
 		lock->owner = NULL;

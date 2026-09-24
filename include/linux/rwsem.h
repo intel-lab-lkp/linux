@@ -68,17 +68,30 @@ context_lock_struct(rw_semaphore) {
 
 #define RWSEM_UNLOCKED_VALUE		0UL
 #define RWSEM_WRITER_LOCKED		(1UL << 0)
+#ifdef CONFIG_TRACK_LOCK_HOLDERS
+/*
+ * Sticky: set by rwsem_track_holder(), cleared only by init. count bits
+ * 3-7 are reserved, and the lock and unlock paths only add to count or
+ * write back a value they read, so the bit survives. See
+ * kernel/locking/rwsem.c.
+ */
+#define RWSEM_FLAG_TRACKED		(1UL << 3)
+#else
+#define RWSEM_FLAG_TRACKED		0UL
+#endif
 #define __RWSEM_COUNT_INIT(name)	.count = ATOMIC_LONG_INIT(RWSEM_UNLOCKED_VALUE)
 
 static inline int rwsem_is_locked(struct rw_semaphore *sem)
 {
-	return atomic_long_read(&sem->count) != RWSEM_UNLOCKED_VALUE;
+	return (atomic_long_read(&sem->count) & ~RWSEM_FLAG_TRACKED) !=
+		RWSEM_UNLOCKED_VALUE;
 }
 
 static inline void rwsem_assert_held_nolockdep(const struct rw_semaphore *sem)
 	__assumes_ctx_lock(sem)
 {
-	WARN_ON(atomic_long_read(&sem->count) == RWSEM_UNLOCKED_VALUE);
+	WARN_ON((atomic_long_read(&sem->count) & ~RWSEM_FLAG_TRACKED) ==
+		RWSEM_UNLOCKED_VALUE);
 }
 
 static inline void rwsem_assert_held_write_nolockdep(const struct rw_semaphore *sem)
@@ -86,6 +99,21 @@ static inline void rwsem_assert_held_write_nolockdep(const struct rw_semaphore *
 {
 	WARN_ON(!(atomic_long_read(&sem->count) & RWSEM_WRITER_LOCKED));
 }
+
+static inline bool rwsem_is_tracked(const struct rw_semaphore *sem)
+{
+	if (!IS_ENABLED(CONFIG_TRACK_LOCK_HOLDERS))
+		return false;
+
+	return atomic_long_read(&sem->count) & RWSEM_FLAG_TRACKED;
+}
+
+#ifdef CONFIG_TRACK_LOCK_HOLDERS
+static inline void __rwsem_set_tracked(struct rw_semaphore *sem)
+{
+	atomic_long_or(RWSEM_FLAG_TRACKED, &sem->count);
+}
+#endif
 
 /* Common initializer macros and functions */
 
@@ -157,6 +185,23 @@ context_lock_struct(rw_semaphore) {
 #endif
 };
 
+/* The opt-in lives in the padding inside the rtmutex. */
+static inline bool rwsem_is_tracked(const struct rw_semaphore *sem)
+{
+#ifdef CONFIG_TRACK_LOCK_HOLDERS
+	return sem->rwbase.rtmutex.tracked;
+#else
+	return false;
+#endif
+}
+
+#ifdef CONFIG_TRACK_LOCK_HOLDERS
+static inline void __rwsem_set_tracked(struct rw_semaphore *sem)
+{
+	sem->rwbase.rtmutex.tracked = true;
+}
+#endif
+
 #define __RWSEM_INITIALIZER(name)				\
 	{							\
 		.rwbase = __RWBASE_INITIALIZER(name),		\
@@ -222,6 +267,22 @@ static inline void rwsem_assert_held_write(const struct rw_semaphore *sem)
 	else
 		rwsem_assert_held_write_nolockdep(sem);
 }
+
+#ifdef CONFIG_TRACK_LOCK_HOLDERS
+/**
+ * rwsem_track_holder - track the holders of an rw_semaphore
+ * @sem: initialized rw_semaphore that no one holds yet
+ *
+ * Count @sem in task_nr_tracked_locks() of the tasks holding it. Use it
+ * for locks whose holders can stall unrelated work. Call it before anyone
+ * can take @sem, e.g. right after init_rwsem(). Do not use
+ * down_read_non_owner() or up_read_non_owner() on a tracked rwsem: they
+ * can run in different tasks, which a per-task count cannot follow.
+ */
+void rwsem_track_holder(struct rw_semaphore *sem);
+#else
+static inline void rwsem_track_holder(struct rw_semaphore *sem) { }
+#endif
 
 /*
  * lock for reading
