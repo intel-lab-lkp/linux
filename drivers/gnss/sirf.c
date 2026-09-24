@@ -103,10 +103,9 @@ static int sirf_open(struct gnss_device *gdev)
 		return ret;
 	}
 
-	ret = pm_runtime_get_sync(&serdev->dev);
+	ret = pm_runtime_resume_and_get(&serdev->dev);
 	if (ret < 0) {
 		dev_err(&gdev->dev, "failed to runtime resume: %d\n", ret);
-		pm_runtime_put_noidle(&serdev->dev);
 		goto err_close;
 	}
 
