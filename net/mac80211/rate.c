@@ -403,7 +403,14 @@ static void __rate_control_send_low(struct ieee80211_hw *hw,
 		info->control.rates[0].idx = i;
 		break;
 	}
-	WARN_ONCE(i == sband->n_bitrates,
+	/*
+	 * An empty rate_mask is a valid configuration: nl80211 allows
+	 * configuring only HT/VHT/HE/EHT MCS rates.  Frames without a
+	 * station (multicast, beacons, management) are sent at legacy
+	 * rates regardless, and the fallback to rate index 0 done here
+	 * is all that can be done for them, so don't warn.
+	 */
+	WARN_ONCE(i == sband->n_bitrates && rate_mask,
 		  "no supported rates for sta %pM (0x%x, band %d) in rate_mask 0x%x with flags 0x%x\n",
 		  sta ? sta->addr : NULL,
 		  sta ? sta->deflink.supp_rates[sband->band] : -1,
