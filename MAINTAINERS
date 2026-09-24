@@ -27211,6 +27211,7 @@ T:	git git://git.kernel.org/pub/scm/linux/kernel/git/westeri/thunderbolt.git
 F:	Documentation/admin-guide/thunderbolt.rst
 F:	drivers/thunderbolt/
 F:	include/linux/thunderbolt.h
+F:	include/linux/thunderbolt_stream.h
 
 THUNDERBOLT NETWORK DRIVER
 M:	Mika Westerberg <westeri@kernel.org>

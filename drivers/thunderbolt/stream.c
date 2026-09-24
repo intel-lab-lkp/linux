@@ -21,6 +21,7 @@
 #include <linux/poll.h>
 #include <linux/sizes.h>
 #include <linux/thunderbolt.h>
+#include <linux/thunderbolt_stream.h>
 #include <linux/uaccess.h>
 #include <linux/uio.h>
 #include <linux/uuid.h>
@@ -1023,6 +1024,21 @@ tbstream_dev_from_group(struct config_group *group)
 {
 	return container_of(group, struct tbstream_dev, group);
 }
+
+/**
+ * tbstream_dev_from_file() - Return USB4STREAM device behind a file
+ * @file: File to check
+ *
+ * Return: Pointer to &struct tbstream_dev, %NULL if file is not
+ * USB4STREAM device.
+ */
+struct tbstream_dev *tbstream_dev_from_file(struct file *file)
+{
+	if (file->f_op != &tbstream_dev_fops)
+		return NULL;
+	return to_tbstream_dev(file->private_data);
+}
+EXPORT_SYMBOL_GPL(tbstream_dev_from_file);
 
 static ssize_t tbstream_dev_busy_poll_show(struct config_item *item, char *buf)
 {
