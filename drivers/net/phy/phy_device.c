@@ -1757,6 +1757,11 @@ int phy_attach_direct(struct net_device *dev, struct phy_device *phydev,
 	struct module *ndev_owner = NULL;
 	int err;
 
+	if (phydev->attached_dev) {
+		phydev_err(phydev, "PHY already attached\n");
+		return -EBUSY;
+	}
+
 	/* For Ethernet device drivers that register their own MDIO bus, we
 	 * will have bus->owner match ndev_mod, so we do not want to increment
 	 * our own module->refcnt here, otherwise we would not be able to
@@ -1796,12 +1801,6 @@ int phy_attach_direct(struct net_device *dev, struct phy_device *phydev,
 
 		if (err)
 			goto error_module_put;
-	}
-
-	if (phydev->attached_dev) {
-		dev_err(&dev->dev, "PHY already attached\n");
-		err = -EBUSY;
-		goto error;
 	}
 
 	phydev->phy_link_change = phy_link_change;
