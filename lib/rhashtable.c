@@ -548,7 +548,7 @@ static void *rhashtable_lookup_one(struct rhashtable *ht,
 		if (!key ||
 		    (ht->p.obj_cmpfn ?
 		     ht->p.obj_cmpfn(&arg, rht_obj(ht, head)) :
-		     rhashtable_compare(&arg, rht_obj(ht, head)))) {
+		     rhashtable_compare(&arg, rht_obj(ht, head), ht->p))) {
 			pprev = &head->next;
 			continue;
 		}
@@ -710,7 +710,8 @@ static struct rhash_head *__rhashtable_next_in_table(
 		rht_for_each_rcu(he, tbl, b) {
 			bool match = params.obj_cmpfn
 				     ? !params.obj_cmpfn(&arg, rht_obj(ht, he))
-				     : !rhashtable_compare(&arg, rht_obj(ht, he));
+				     : !rhashtable_compare(&arg, rht_obj(ht, he),
+						   params);
 			if (found) {
 				if (match)
 					continue;
