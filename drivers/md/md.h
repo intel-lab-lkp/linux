@@ -549,8 +549,6 @@ struct mddev {
 	struct kernfs_node		*sysfs_degraded;	/*handle for 'degraded' */
 	struct kernfs_node		*sysfs_level;		/*handle for 'level' */
 
-	/* used for delayed sysfs removal */
-	struct work_struct del_work;
 	/* used for register new sync thread */
 	struct work_struct sync_work;
 
