@@ -64,12 +64,11 @@ enum {
 	VIRTIO_USB_S_ERR_STALL,
 	VIRTIO_USB_S_ERR_SHORT_PKT,
 	VIRTIO_USB_S_ERR_CANCELLED,
-	VIRTIO_USB_S_ERR_HOST,
 };
 
 struct virtio_usb_cmd_status {
 	__le32 code; /* VIRTIO_USB_S_XXX */
-};
+} __packed;
 
 /*****************************************************************************
  * HOST COMMAND MESSAGES
@@ -145,6 +144,8 @@ enum {
 	VIRTIO_USB_CMD_DEV_EP_SET_HALT,
 	VIRTIO_USB_CMD_DEV_EP_SET_WEDGE,
 	VIRTIO_USB_CMD_DEV_CANCEL,
+	VIRTIO_USB_CMD_DEV_GET_FRAME_NUMBER,
+	VIRTIO_USB_CMD_DEV_SET_SELF_POWERED,
 };
 
 struct virtio_usb_dev_cmd_hdr {
@@ -153,10 +154,28 @@ struct virtio_usb_dev_cmd_hdr {
 	__le16 endpoint; /* Endpoint ID */
 };
 
+/* VIRTIO_USB_CMD_DEV_CANCEL */
+struct virtio_usb_dev_cmd_cancel {
+	struct virtio_usb_dev_cmd_hdr hdr;
+	__le64 tag;
+};
+
 /* VIRTIO_USB_CMD_DEV_GET_ENDPOINT_COUNT */
-struct virtio_usb_dev_cmd_ep_count {
+struct virtio_usb_dev_ep_count {
 	struct virtio_usb_cmd_status status;
 	__le32 count; /* # of supported endpoints */
+};
+
+struct virtio_usb_dev_cmd_set_value {
+	struct virtio_usb_dev_cmd_hdr hdr;
+	__le32 value;
+	__le32 padding;
+};
+
+/* VIRTIO_USB_CMD_DEV_GET_FRAME_NUMBER */
+struct virtio_usb_dev_frame_number {
+	struct virtio_usb_cmd_status status;
+	__le32 frame_number;
 };
 
 enum {
@@ -176,35 +195,39 @@ enum {
  *     struct virtio_usb_cmd_status
  *     struct virtio_usb_dev_cmd_ep_info [count]
  */
-struct virtio_usb_dev_cmd_ep_info {
+struct virtio_usb_dev_ep_info {
 	__le16 types; /* supported type bit map (1 << VIRTIO_USB_EP_XXX) */
 	__le16 directions /* supported direction bit map (1 << VIRTIO_USB_DIR_XXX) */;
 	__le16 maxpacket_limit;
 	__le16 max_streams;
+	__u8 name[16];
 };
 
 /*******************************************************************************
  * DEVICE EVENT MESSAGES
  */
 enum {
-	VIRTIO_USB_EVT_DEV_CONNECTED = 0,
+	VIRTIO_USB_EVT_DEV_BIND = 0,
 	VIRTIO_USB_EVT_DEV_DISCONNECTED,
 	VIRTIO_USB_EVT_DEV_SETUP,
 	VIRTIO_USB_EVT_DEV_RESET,
 	VIRTIO_USB_EVT_DEV_SUSPEND,
 	VIRTIO_USB_EVT_DEV_RESUME,
+	VIRTIO_USB_EVT_DEV_UNBIND,
 };
 
 struct virtio_usb_dev_event {
 	__le32 code; /* VIRTIO_USB_EVT_DEV_XXX */
-	__u8 padding[12];
+	__le16 port; /* Device ID */
+	__u8 padding[10];
 };
 
 /* VIRTIO_USB_EVT_DEV_SETUP */
 struct virtio_usb_dev_setup_event {
 	__le32 code; /* VIRTIO_USB_EVT_DEV_SETUP */
+	__le16 port; /* Device ID */
 	__u8 setup[8]; /* setup packet contents */
-	__u8 padding[4];
+	__u8 padding[2];
 };
 
 /*******************************************************************************
