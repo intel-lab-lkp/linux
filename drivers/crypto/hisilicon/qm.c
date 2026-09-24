@@ -5770,9 +5770,19 @@ static int qm_get_hw_caps(struct hisi_qm *qm)
 	if (val)
 		set_bit(QM_SUPPORT_DB_ISOLATION, &qm->caps);
 
-	if (qm->ver >= QM_HW_V3) {
-		val = readl(qm->io_base + QM_FUNC_CAPS_REG);
-		qm->cap_ver = val & QM_CAPBILITY_VERSION;
+	/*
+	 * Read capability version from hardware register unconditionally.
+	 * For V1/V2 hardware, this register is not implemented and returns 0
+	 * in normal condition, but returns 0xffffffff when the device is
+	 * abnormal, same as V3+ abnormal devices.
+	 * When cap_ver equals QM_CAPBILITY_VERSION (0xff), the device is
+	 * abnormal and probe should fail early.
+	 */
+	val = readl(qm->io_base + QM_FUNC_CAPS_REG);
+	qm->cap_ver = val & QM_CAPBILITY_VERSION;
+	if (qm->cap_ver == QM_CAPBILITY_VERSION) {
+		dev_err(&qm->pdev->dev, "abnormal device detected\n");
+		return -EIO;
 	}
 
 	/* Get PF/VF common capbility */
