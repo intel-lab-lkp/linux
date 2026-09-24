@@ -1035,6 +1035,11 @@ struct kernfs_root *kernfs_create_root(struct kernfs_syscall_ops *scops,
 	init_rwsem(&root->kernfs_rwsem);
 	init_rwsem(&root->kernfs_iattr_rwsem);
 	init_rwsem(&root->kernfs_supers_rwsem);
+	if (flags & KERNFS_ROOT_TRACK_LOCK_HOLDERS) {
+		rwsem_track_holder(&root->kernfs_rwsem);
+		rwsem_track_holder(&root->kernfs_iattr_rwsem);
+		rwsem_track_holder(&root->kernfs_supers_rwsem);
+	}
 	INIT_LIST_HEAD(&root->supers);
 	rwlock_init(&root->kernfs_rename_lock);
 

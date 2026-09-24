@@ -2191,11 +2191,18 @@ int cgroup_setup_root(struct cgroup_root *root, u32 ss_mask)
 	kf_sops = root == &cgrp_dfl_root ?
 		&cgroup_kf_syscall_ops : &cgroup1_kf_syscall_ops;
 
+	/*
+	 * Track the holders of the cgroupfs kernfs locks.  They are held
+	 * across work that can charge memory, so a holder stuck in reclaim
+	 * can stall many other cgroupfs operations.  Other kernfs users have
+	 * their own roots and are not affected.
+	 */
 	root->kf_root = kernfs_create_root(kf_sops,
 					   KERNFS_ROOT_CREATE_DEACTIVATED |
 					   KERNFS_ROOT_SUPPORT_EXPORTOP |
 					   KERNFS_ROOT_SUPPORT_USER_XATTR |
-					   KERNFS_ROOT_INVARIANT_PARENT,
+					   KERNFS_ROOT_INVARIANT_PARENT |
+					   KERNFS_ROOT_TRACK_LOCK_HOLDERS,
 					   root_cgrp);
 	if (IS_ERR(root->kf_root)) {
 		ret = PTR_ERR(root->kf_root);
@@ -6551,6 +6558,24 @@ int __init cgroup_init(void)
 
 	get_user_ns(init_cgroup_ns.user_ns);
 	cgroup_rt_init();
+
+	/*
+	 * cgroup_mutex is taken by every cgroup create, destroy and migrate
+	 * and is held across work that can allocate, so a holder stuck in
+	 * reclaim stalls the whole cgroupfs control plane.
+	 *
+	 * cgroup_threadgroup_rwsem is taken for read by fork and exit, and
+	 * usually for write by migration, so a stalled holder can stall
+	 * process creation on the whole machine.
+	 *
+	 * Neither can be held yet, as rest_init() has not run.
+	 *
+	 * signal->cgroup_threadgroup_rwsem is not tracked.  Its readers hold
+	 * cgroup_threadgroup_rwsem too, so they are counted already, and its
+	 * writer only blocks the process being migrated.
+	 */
+	mutex_track_holder(&cgroup_mutex);
+	percpu_rwsem_track_holder(&cgroup_threadgroup_rwsem);
 
 	cgroup_lock();
 
