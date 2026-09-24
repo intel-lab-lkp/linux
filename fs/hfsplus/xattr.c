@@ -649,15 +649,28 @@ ssize_t __hfsplus_getxattr(struct inode *inode, const char *name,
 		goto out;
 	}
 
+	if (fd.entrylength < sizeof(xattr_record_type)) {
+		pr_err("invalid xattr record size\n");
+		res = -EIO;
+		goto out;
+	}
 	hfs_bnode_read(fd.bnode, &xattr_record_type,
 			fd.entryoffset, sizeof(xattr_record_type));
 	record_type = be32_to_cpu(xattr_record_type);
 	if (record_type == HFSPLUS_ATTR_INLINE_DATA) {
+		if (fd.entrylength < offsetof(struct hfsplus_attr_inline_data,
+					      raw_bytes)) {
+			pr_err("invalid xattr record size\n");
+			res = -EIO;
+			goto out;
+		}
 		record_length = hfs_bnode_read_u16(fd.bnode,
 				fd.entryoffset +
 				offsetof(struct hfsplus_attr_inline_data,
 				length));
-		if (record_length > HFSPLUS_MAX_INLINE_DATA_SIZE) {
+		if (record_length > HFSPLUS_MAX_INLINE_DATA_SIZE ||
+		    offsetof(struct hfsplus_attr_inline_data, raw_bytes) +
+		    record_length > fd.entrylength) {
 			pr_err("invalid xattr record size\n");
 			res = -EIO;
 			goto out;
