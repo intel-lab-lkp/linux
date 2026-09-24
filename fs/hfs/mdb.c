@@ -214,6 +214,14 @@ int hfs_mdb_get(struct super_block *sb)
 
 	/* These parameters are read from and written to the MDB */
 	HFS_SB(sb)->free_ablocks = be16_to_cpu(mdb->drFreeBks);
+	if (!HFS_SB(sb)->fs_ablocks ||
+	    HFS_SB(sb)->free_ablocks > HFS_SB(sb)->fs_ablocks ||
+	    (sector_t)be16_to_cpu(mdb->drAlBlSt) +
+	    (sector_t)HFS_SB(sb)->fs_ablocks *
+	    (HFS_SB(sb)->alloc_blksz >> HFS_SECTOR_SIZE_BITS) > part_size) {
+		pr_err("inconsistent allocation block parameters in MDB\n");
+		goto out_err;
+	}
 	atomic64_set(&HFS_SB(sb)->next_id, be32_to_cpu(mdb->drNxtCNID));
 	HFS_SB(sb)->root_files = be16_to_cpu(mdb->drNmFls);
 	HFS_SB(sb)->root_dirs = be16_to_cpu(mdb->drNmRtDirs);
@@ -305,6 +313,10 @@ int hfs_mdb_get(struct super_block *sb)
 	}
 
 	return 0;
+
+out_err:
+	hfs_mdb_put(sb);
+	return -EINVAL;
 }
 
 /*
