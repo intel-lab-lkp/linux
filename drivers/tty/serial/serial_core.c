@@ -3295,9 +3295,19 @@ static int serial_core_port_device_add(struct serial_ctrl_device *ctrl_dev,
 int serial_core_register_port(struct uart_driver *drv, struct uart_port *port)
 {
 	struct serial_ctrl_device *ctrl_dev, *new_ctrl_dev = NULL;
-	int ret;
+	int i, ret;
 
 	guard(mutex)(&port_mutex);
+
+	/*
+	 * Reject registration of a port that is already registered. Bail
+	 * out before taking any steps (UPF_DEAD, serial core devices) so
+	 * that a duplicate attempt cannot disturb the live registration.
+	 */
+	for (i = 0; i < drv->nr; i++) {
+		if (drv->state[i].uart_port == port)
+			return -EINVAL;
+	}
 
 	/*
 	 * Prevent serial_port_runtime_resume() from trying to use the port
@@ -3335,6 +3345,14 @@ int serial_core_register_port(struct uart_driver *drv, struct uart_port *port)
 
 err_unregister_port_dev:
 	serial_base_port_device_remove(port->port_dev);
+	/*
+	 * serial_base_port_device_remove() dropped the last reference to
+	 * the port device, so leave no dangling ->port_dev behind. No
+	 * state slot restore is needed: serial_core_add_one_port() has no
+	 * failure exit after linking state->uart_port, so a failed
+	 * registration never links the state slot.
+	 */
+	port->port_dev = NULL;
 
 err_unregister_ctrl_dev:
 	serial_base_ctrl_device_remove(new_ctrl_dev);
@@ -3349,11 +3367,24 @@ err_unregister_ctrl_dev:
 void serial_core_unregister_port(struct uart_driver *drv, struct uart_port *port)
 {
 	struct device *phys_dev = port->dev;
-	struct serial_port_device *port_dev = port->port_dev;
-	struct serial_ctrl_device *ctrl_dev = serial_core_get_ctrl_dev(port_dev);
+	struct serial_port_device *port_dev;
+	struct serial_ctrl_device *ctrl_dev;
 	int ctrl_id = port->ctrl_id;
 
 	guard(mutex)(&port_mutex);
+
+	/*
+	 * A port may be unregistered even though it was never successfully
+	 * registered (e.g. an allocation failure aborted serial_core_register_port()
+	 * part-way). Drivers like serial8250 remove ports matching on ->dev, so
+	 * those half-registered ports still reach us with port_dev == NULL. Read
+	 * ->port_dev under port_mutex like all of its writers.
+	 */
+	port_dev = port->port_dev;
+	if (!port_dev)
+		return;
+
+	ctrl_dev = serial_core_get_ctrl_dev(port_dev);
 
 	port->flags |= UPF_DEAD;
 
