@@ -6,6 +6,7 @@
 #include "intel_context.h"
 #include "intel_engine_pm.h"
 #include "intel_gpu_commands.h"
+#include "intel_gt_print.h"
 #include "intel_gt_requests.h"
 #include "intel_ring.h"
 #include "intel_rps.h"
@@ -80,7 +81,8 @@ int live_rc6_manual(void *arg)
 	res[1] = rc6_residency(rc6);
 	rc0_freq = intel_rps_read_actual_frequency_fw(rps);
 	if ((res[1] - res[0]) >> 10) {
-		pr_err("RC6 residency increased by %lldus while disabled for 1000ms!\n",
+		gt_err(gt,
+		       "RC6 residency increased by %lldus while disabled for 1000ms!\n",
 		       (res[1] - res[0]) >> 10);
 		err = -EINVAL;
 		goto out_unlock;
@@ -92,10 +94,12 @@ int live_rc6_manual(void *arg)
 
 		if (!rc0_power) {
 			if (rc0_freq)
-				pr_err("No power measured while in RC0! GPU Freq: %uMHz in RC0\n",
+				gt_err(gt,
+				       "No power measured while in RC0! GPU Freq: %uMHz in RC0\n",
 				       rc0_freq);
 			else
-				pr_err("No power and freq measured while in RC0\n");
+				gt_err(gt,
+				       "No power and freq measured while in RC0\n");
 			err = -EINVAL;
 			goto out_unlock;
 		}
@@ -114,7 +118,8 @@ int live_rc6_manual(void *arg)
 	dt = ktime_sub(ktime_get(), dt);
 	res[1] = rc6_residency(rc6);
 	if (res[1] == res[0]) {
-		pr_err("Did not enter RC6! RC6_STATE=%08x, RC6_CONTROL=%08x, residency=%lld\n",
+		gt_err(gt,
+		       "Did not enter RC6! RC6_STATE=%08x, RC6_CONTROL=%08x, residency=%lld\n",
 		       intel_uncore_read_fw(gt->uncore, GEN6_RC_STATE),
 		       intel_uncore_read_fw(gt->uncore, GEN6_RC_CONTROL),
 		       res[0]);
@@ -124,21 +129,25 @@ int live_rc6_manual(void *arg)
 	if (has_power) {
 		rc6_power = div64_u64(NSEC_PER_SEC * rc6_sample_energy[1],
 				      ktime_to_ns(dt));
-		pr_info("GPU consumed %lluuW in RC0 and %lluuW in RC6\n",
+		gt_info(gt,
+			"GPU consumed %lluuW in RC0 and %lluuW in RC6\n",
 			rc0_power, rc6_power);
 
 		if (2 * rc6_power > rc0_power) {
-			pr_err("GPU leaked energy while in RC6!\n"
+			gt_err(gt,
+			       "GPU leaked energy while in RC6!\n"
 			       "GPU Freq: %uMHz in RC6 and %uMHz in RC0\n"
 			       "RC0 energy before & after sleep respectively: %lluuJ %lluuJ\n"
 			       "RC6 energy before & after sleep respectively: %lluuJ %lluuJ\n",
-			       rc6_freq, rc0_freq, rc0_sample_energy[0], rc0_sample_energy[1],
+			       rc6_freq, rc0_freq,
+			       rc0_sample_energy[0], rc0_sample_energy[1],
 			       rc6_sample_energy[0], rc6_sample_energy[1]);
 
 			diff = res[1] - res[0];
 			threshold = (9 * NSEC_PER_MSEC * sleep_time) / 10;
 			if (diff < threshold)
-				pr_err("Did not enter RC6 properly, RC6 start residency=%lluns, RC6 end residency=%lluns\n",
+				gt_err(gt,
+				       "Did not enter RC6 properly, RC6 start residency=%lluns, RC6 end residency=%lluns\n",
 				       res[0], res[1]);
 			err = -EINVAL;
 			goto out_unlock;
@@ -265,12 +274,13 @@ int live_rc6_ctx_wa(void *arg)
 			}
 
 			intel_gt_pm_wait_for_idle(gt);
-			pr_debug("%s: CTX_INFO=%0x\n",
-				 engine->name, READ_ONCE(*res));
+			gt_dbg(gt, "%s: CTX_INFO=%0x\n",
+			       engine->name, READ_ONCE(*res));
 
 			if (resets !=
 			    i915_reset_engine_count(error, engine)) {
-				pr_err("%s: GPU reset required\n",
+				gt_err(gt,
+				       "%s: GPU reset required\n",
 				       engine->name);
 				add_taint_for_CI(gt->i915, TAINT_WARN);
 				err = -EIO;
