@@ -210,6 +210,19 @@ void io_req_normal_work_add(struct io_kiocb *req)
 	struct io_uring_task *tctx = req->tctx;
 	struct io_ring_ctx *ctx = req->ctx;
 
+	/* SQPOLL may consume and retire the request immediately after push. */
+	if (ctx->flags & IORING_SETUP_SQPOLL) {
+		struct task_struct *task = tctx->task;
+		bool first;
+
+		get_task_struct(task);
+		first = mpscq_push(&tctx->task_list, &req->io_task_work.node);
+		if (first)
+			__set_notify_signal(task);
+		put_task_struct(task);
+		return;
+	}
+
 	/* tw run already pending, nothing else to do */
 	if (!mpscq_push(&tctx->task_list, &req->io_task_work.node))
 		return;
@@ -220,12 +233,6 @@ void io_req_normal_work_add(struct io_kiocb *req)
 	 */
 	if (ctx->flags & IORING_SETUP_TASKRUN_FLAG)
 		atomic_or(IORING_SQ_TASKRUN, &ctx->rings->sq_flags);
-
-	/* SQPOLL doesn't need the task_work added, it'll run it itself */
-	if (ctx->flags & IORING_SETUP_SQPOLL) {
-		__set_notify_signal(tctx->task);
-		return;
-	}
 
 	if (likely(!task_work_add(tctx->task, &tctx->task_work, ctx->notify_method)))
 		return;
