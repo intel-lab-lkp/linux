@@ -115,6 +115,15 @@ struct crypt_iv_operations {
 			 struct dm_crypt_request *dmreq);
 	void (*post)(struct crypt_config *cc, u8 *iv,
 		     struct dm_crypt_request *dmreq);
+
+	/*
+	 * Set for IV modes whose per-sector IV is a little-endian
+	 * data-unit-number counter (IV(s+i) == IV(s)+i) placed in the low
+	 * 64-bit limb, enabling multi-unit batching via the skcipher API-layer
+	 * split.  Clear for non-counter modes (lmk, tcw, ...) and for counter
+	 * modes whose on-disk IV is not that layout (e.g. plain64be).
+	 */
+	bool unit_counter;
 };
 
 struct iv_benbi_private {
@@ -151,6 +160,7 @@ enum cipher_flags {
 	CRYPT_IV_LARGE_SECTORS,		/* Calculate IV from sector_size, not 512B sectors */
 	CRYPT_ENCRYPT_PREPROCESS,	/* Must preprocess data for encryption (elephant) */
 	CRYPT_KEY_MAC_SIZE_SET,		/* The integrity_key_size option was used */
+	CRYPT_MULTI_DATA_UNIT,		/* Batch a bio segment's sectors per crypto request */
 };
 
 /*
@@ -1018,15 +1028,23 @@ static const struct crypt_iv_operations crypt_iv_plain_ops = {
 };
 
 static const struct crypt_iv_operations crypt_iv_plain64_ops = {
-	.generator = crypt_iv_plain64_gen
+	.generator = crypt_iv_plain64_gen,
+	.unit_counter = true,
 };
 
 static const struct crypt_iv_operations crypt_iv_plain64be_ops = {
-	.generator = crypt_iv_plain64be_gen
+	.generator = crypt_iv_plain64be_gen,
+	/*
+	 * No unit_counter: the big-endian, high-limb on-disk layout is not the
+	 * little-endian low-limb counter the API-layer split walks.  Batching
+	 * it needs a template producing this layout; unbatched for now.
+	 */
 };
 
 static const struct crypt_iv_operations crypt_iv_essiv_ops = {
-	.generator = crypt_iv_essiv_gen
+	.generator = crypt_iv_essiv_gen,
+	/* IV input is le64(sector); the salt-encrypt lives in essiv(). */
+	.unit_counter = true,
 };
 
 static const struct crypt_iv_operations crypt_iv_benbi_ops = {
@@ -1349,21 +1367,51 @@ static int crypt_convert_block_aead(struct crypt_config *cc,
 	return r;
 }
 
+/*
+ * Bytes to process in one skcipher request: a whole contiguous segment when
+ * batching (multi-data-unit), else one sector.  0 means an unusable
+ * (sub-sector / misaligned) segment.
+ */
+static unsigned int crypt_skcipher_len(struct crypt_config *cc,
+				       const struct bio_vec *bv_in,
+				       const struct bio_vec *bv_out)
+{
+	const unsigned int sector_size = cc->sector_size;
+
+	if (test_bit(CRYPT_MULTI_DATA_UNIT, &cc->cipher_flags))
+		return round_down(min(bv_in->bv_len, bv_out->bv_len),
+				  sector_size);
+
+	/* Reject unexpected unaligned bio. */
+	if (unlikely(bv_in->bv_len & (sector_size - 1)))
+		return 0;
+	return sector_size;
+}
+
+/*
+ * Encrypt/decrypt one bio segment (one sector, or a whole segment when
+ * batching) and report the bytes done in *out_processed.  The integrity /
+ * preprocess / post handling is inert when batching (crypt_can_batch_units()
+ * excludes those configs).
+ */
 static int crypt_convert_block_skcipher(struct crypt_config *cc,
 					struct convert_context *ctx,
 					struct skcipher_request *req,
-					unsigned int tag_offset)
+					unsigned int tag_offset,
+					unsigned int *out_processed)
 {
 	struct bio_vec bv_in = bio_iter_iovec(ctx->bio_in, ctx->iter_in);
 	struct bio_vec bv_out = bio_iter_iovec(ctx->bio_out, ctx->iter_out);
+	const unsigned int sector_size = cc->sector_size;
 	struct scatterlist *sg_in, *sg_out;
 	struct dm_crypt_request *dmreq;
 	u8 *iv, *org_iv, *tag_iv;
 	__le64 *sector;
+	unsigned int len;
 	int r = 0;
 
-	/* Reject unexpected unaligned bio. */
-	if (unlikely(bv_in.bv_len & (cc->sector_size - 1)))
+	len = crypt_skcipher_len(cc, &bv_in, &bv_out);
+	if (unlikely(!len))
 		return -EIO;
 
 	dmreq = dmreq_of_req(cc, req);
@@ -1386,10 +1434,10 @@ static int crypt_convert_block_skcipher(struct crypt_config *cc,
 	sg_out = &dmreq->sg_out[0];
 
 	sg_init_table(sg_in, 1);
-	sg_set_page(sg_in, bv_in.bv_page, cc->sector_size, bv_in.bv_offset);
+	sg_set_page(sg_in, bv_in.bv_page, len, bv_in.bv_offset);
 
 	sg_init_table(sg_out, 1);
-	sg_set_page(sg_out, bv_out.bv_page, cc->sector_size, bv_out.bv_offset);
+	sg_set_page(sg_out, bv_out.bv_page, len, bv_out.bv_offset);
 
 	if (cc->iv_gen_ops) {
 		/* For READs use IV stored in integrity metadata */
@@ -1410,7 +1458,9 @@ static int crypt_convert_block_skcipher(struct crypt_config *cc,
 		memcpy(iv, org_iv, cc->iv_size);
 	}
 
-	skcipher_request_set_crypt(req, sg_in, sg_out, cc->sector_size, iv);
+	skcipher_request_set_crypt(req, sg_in, sg_out, len, iv);
+	if (test_bit(CRYPT_MULTI_DATA_UNIT, &cc->cipher_flags))
+		skcipher_request_set_unit_size(req, sector_size);
 
 	if (bio_data_dir(ctx->bio_in) == WRITE)
 		r = crypto_skcipher_encrypt(req);
@@ -1420,9 +1470,10 @@ static int crypt_convert_block_skcipher(struct crypt_config *cc,
 	if (!r && cc->iv_gen_ops && cc->iv_gen_ops->post)
 		cc->iv_gen_ops->post(cc, org_iv, dmreq);
 
-	bio_advance_iter(ctx->bio_in, &ctx->iter_in, cc->sector_size);
-	bio_advance_iter(ctx->bio_out, &ctx->iter_out, cc->sector_size);
+	bio_advance_iter(ctx->bio_in, &ctx->iter_in, len);
+	bio_advance_iter(ctx->bio_out, &ctx->iter_out, len);
 
+	*out_processed = len;
 	return r;
 }
 
@@ -1510,12 +1561,24 @@ static void crypt_free_req(struct crypt_config *cc, void *req, struct bio *base_
 }
 
 /*
+ * Advance the IV-sector and integrity-tag cursors by @processed bytes; the
+ * bio iterators are advanced by the per-block helpers themselves.
+ */
+static void crypt_convert_advance(struct crypt_config *cc,
+				  struct convert_context *ctx,
+				  unsigned int processed)
+{
+	ctx->cc_sector += processed >> SECTOR_SHIFT;
+	ctx->tag_offset += processed / cc->sector_size;
+}
+
+/*
  * Encrypt / decrypt data from one bio to another one (can be the same one)
  */
 static blk_status_t crypt_convert(struct crypt_config *cc,
 			 struct convert_context *ctx, bool atomic, bool reset_pending)
 {
-	unsigned int sector_step = cc->sector_size >> SECTOR_SHIFT;
+	unsigned int processed;
 	int r;
 
 	/*
@@ -1536,10 +1599,12 @@ static blk_status_t crypt_convert(struct crypt_config *cc,
 
 		atomic_inc(&ctx->cc_pending);
 
+		processed = cc->sector_size;
 		if (crypt_integrity_aead(cc))
 			r = crypt_convert_block_aead(cc, ctx, ctx->r.req_aead, ctx->tag_offset);
 		else
-			r = crypt_convert_block_skcipher(cc, ctx, ctx->r.req, ctx->tag_offset);
+			r = crypt_convert_block_skcipher(cc, ctx, ctx->r.req,
+							 ctx->tag_offset, &processed);
 
 		switch (r) {
 		/*
@@ -1559,8 +1624,7 @@ static blk_status_t crypt_convert(struct crypt_config *cc,
 					 * exit and continue processing in a workqueue
 					 */
 					ctx->r.req = NULL;
-					ctx->tag_offset++;
-					ctx->cc_sector += sector_step;
+					crypt_convert_advance(cc, ctx, processed);
 					return BLK_STS_DEV_RESOURCE;
 				}
 			} else {
@@ -1574,16 +1638,14 @@ static blk_status_t crypt_convert(struct crypt_config *cc,
 		 */
 		case -EINPROGRESS:
 			ctx->r.req = NULL;
-			ctx->tag_offset++;
-			ctx->cc_sector += sector_step;
+			crypt_convert_advance(cc, ctx, processed);
 			continue;
 		/*
 		 * The request was already processed (synchronously).
 		 */
 		case 0:
 			atomic_dec(&ctx->cc_pending);
-			ctx->cc_sector += sector_step;
-			ctx->tag_offset++;
+			crypt_convert_advance(cc, ctx, processed);
 			if (!atomic)
 				cond_resched();
 			continue;
@@ -2345,12 +2407,28 @@ static int crypt_alloc_tfms_aead(struct crypt_config *cc, char *ciphermode)
 	return 0;
 }
 
+/*
+ * Whether multi-unit batching applies: a counter IV mode (unit_counter set),
+ * single-tfm, non-aead, and a per-unit IV step of exactly one (512B sectors
+ * or iv_large_sectors).  The IV must also satisfy the API split's counter
+ * constraints (non-zero multiple of 8, <= 32 bytes).  Integrity is excluded
+ * in crypt_ctr_cipher(), which runs after integrity is configured.
+ */
+static bool crypt_can_batch_units(struct crypt_config *cc)
+{
+	return !crypt_integrity_aead(cc) && cc->tfms_count == 1 &&
+		cc->iv_gen_ops && cc->iv_gen_ops->unit_counter &&
+		cc->iv_size && IS_ALIGNED(cc->iv_size, sizeof(__le64)) &&
+		cc->iv_size <= 32 &&
+		(cc->sector_size == (1 << SECTOR_SHIFT) ||
+		 test_bit(CRYPT_IV_LARGE_SECTORS, &cc->cipher_flags));
+}
+
 static int crypt_alloc_tfms(struct crypt_config *cc, char *ciphermode)
 {
 	if (crypt_integrity_aead(cc))
 		return crypt_alloc_tfms_aead(cc, ciphermode);
-	else
-		return crypt_alloc_tfms_skcipher(cc, ciphermode);
+	return crypt_alloc_tfms_skcipher(cc, ciphermode);
 }
 
 static unsigned int crypt_subkey_size(struct crypt_config *cc)
@@ -2999,7 +3077,6 @@ static int crypt_ctr_cipher_old(struct dm_target *ti, char *cipher_in, char *key
 		goto bad_mem;
 	}
 
-	/* Allocate cipher */
 	ret = crypt_alloc_tfms(cc, cipher_api);
 	if (ret < 0) {
 		ti->error = "Error allocating crypto tfm";
@@ -3061,6 +3138,21 @@ static int crypt_ctr_cipher(struct dm_target *ti, char *cipher_in, char *key)
 			ti->error = "Error initialising IV";
 			return ret;
 		}
+	}
+
+	/*
+	 * Enable multi-unit batching for an eligible config with no integrity
+	 * (integrity is set up after cipher alloc, hence the re-check here).
+	 * The API layer's transparent split is synchronous, so an async cipher
+	 * batches only if it handles multi-unit requests natively.
+	 */
+	if (crypt_can_batch_units(cc) && !cc->integrity_tag_size &&
+	    !cc->integrity_iv_size &&
+	    (crypto_skcipher_alg(any_tfm(cc))->co.base.cra_flags &
+	     (CRYPTO_ALG_ASYNC | CRYPTO_ALG_REQ_SEG)) != CRYPTO_ALG_ASYNC) {
+		set_bit(CRYPT_MULTI_DATA_UNIT, &cc->cipher_flags);
+		DMINFO("Using multi-data-unit crypto offload (du=%u)",
+		       cc->sector_size);
 	}
 
 	/* wipe the kernel key payload copy */
