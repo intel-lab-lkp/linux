@@ -29,6 +29,14 @@
 
 #define	V4L2_DEVICE_NOTIFY_EVENT		_IOW('v', 2, struct v4l2_event)
 
+/*
+ * The source power state a receiver publishes as
+ * V4L2_CID_DV_RX_POWER_PRESENT has changed. The argument points at an
+ * unsigned int holding the same per-input mask as that control, so zero
+ * means no input sees a source.
+ */
+#define	V4L2_DEVICE_NOTIFY_RX_POWER_PRESENT	_IOW('v', 3, unsigned int)
+
 struct v4l2_device;
 struct v4l2_ctrl_handler;
 struct v4l2_event;
