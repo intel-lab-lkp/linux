@@ -550,12 +550,31 @@ out:
 	return err;
 }
 
+/* Returns @entry itself when it is not flagged, else a resolved copy in @buf. */
+static const struct ctl_table *sysctl_apply_ctx(struct ctl_table_header *head,
+						const struct ctl_table *entry,
+						struct ctl_table *buf)
+{
+	ptrdiff_t off;
+
+	if (!(entry->flags & CTL_TABLE_F_CTX_DATA))
+		return entry;
+
+	off = (const char *)entry->data - (const char *)head->ctx.tmpl;
+
+	*buf = *entry;
+	buf->data = (char *)head->ctx.inst + off;
+
+	return buf;
+}
+
 static ssize_t proc_sys_call_handler(struct kiocb *iocb, struct iov_iter *iter,
 		int write)
 {
 	struct inode *inode = file_inode(iocb->ki_filp);
 	struct ctl_table_header *head = grab_header(inode);
 	const struct ctl_table *table = PROC_I(inode)->sysctl_entry;
+	struct ctl_table ctx_entry;
 	size_t count = iov_iter_count(iter);
 	char *kbuf;
 	ssize_t error;
@@ -567,6 +586,8 @@ static ssize_t proc_sys_call_handler(struct kiocb *iocb, struct iov_iter *iter,
 	 * At this point we know that the sysctl was not unregistered
 	 * and won't be until we finish.
 	 */
+	table = sysctl_apply_ctx(head, table, &ctx_entry);
+
 	error = -EPERM;
 	if (sysctl_perm(head, table, write ? MAY_WRITE : MAY_READ))
 		goto out;
@@ -797,6 +818,7 @@ static int proc_sys_permission(struct mnt_idmap *idmap,
 	 */
 	struct ctl_table_header *head;
 	const struct ctl_table *table;
+	struct ctl_table ctx_entry;
 	int error;
 
 	/* Executable files are not allowed under /proc/sys/ */
@@ -810,8 +832,11 @@ static int proc_sys_permission(struct mnt_idmap *idmap,
 	table = PROC_I(inode)->sysctl_entry;
 	if (!table) /* global root - r-xr-xr-x */
 		error = mask & MAY_WRITE ? -EACCES : 0;
-	else /* Use the permissions on the sysctl table entry */
+	else {
+		/* ->permissions may inspect the entry, so resolve it first. */
+		table = sysctl_apply_ctx(head, table, &ctx_entry);
 		error = sysctl_perm(head, table, mask & ~MAY_NOT_BLOCK);
+	}
 
 	sysctl_head_finish(head);
 	return error;
