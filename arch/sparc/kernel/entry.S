@@ -22,6 +22,7 @@
 #include <asm/psr.h>
 #include <asm/vaddrs.h>
 #include <asm/page.h>
+#include <asm/pgtsrmmu.h>
 #include <asm/winmacro.h>
 #include <asm/signal.h>
 #include <asm/obio.h>
@@ -203,6 +204,33 @@ bad_trap_handler:
 	add	%sp, STACKFRAME_SZ, %o0	! pt_regs
 	call	do_hw_interrupt
 	 mov	%l7, %o1		! trap number
+
+	RESTORE_ALL
+
+	.align	4
+	.globl	data_store_error
+data_store_error:
+	/* SAVE_ALL preserves the trap window's output registers. */
+	mov	SRMMU_FAULT_ADDR, %l5
+	LEON_PI(lda	[%l5] ASI_LEON_MMUREGS, %o1)	! read MFAR first
+	SUN_PI_(lda	[%l5] ASI_M_MMUREGS, %o1)	! read MFAR first
+
+	mov	SRMMU_FAULT_STATUS, %l5
+	LEON_PI(lda	[%l5] ASI_LEON_MMUREGS, %o2)	! read MFSR last
+	SUN_PI_(lda	[%l5] ASI_M_MMUREGS, %o2)	! read MFSR last
+
+	SAVE_ALL
+
+	wr	%l0, PSR_ET, %psr
+	WRITE_PAUSE
+
+	add	%sp, STACKFRAME_SZ, %o0	! pt_regs
+	call	do_data_store_error
+	 nop
+
+	add	%sp, STACKFRAME_SZ, %o0	! pt_regs
+	call	do_hw_interrupt
+	 mov	0x2b, %o1
 
 	RESTORE_ALL
 	

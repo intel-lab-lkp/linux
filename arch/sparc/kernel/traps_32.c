@@ -25,6 +25,9 @@
 #include <asm/ptrace.h>
 #include <asm/oplib.h>
 #include <asm/page.h>
+#include <asm/mbus.h>
+#include <asm/mxcc.h>
+#include <asm/viking.h>
 #include <asm/unistd.h>
 #include <asm/traps.h>
 
@@ -103,6 +106,64 @@ void do_hw_interrupt(struct pt_regs *regs, unsigned long type)
 
 	force_sig_fault_trapno(SIGILL, ILL_ILLTRP,
 			       (void __user *)regs->pc, type - 0x80);
+}
+
+static bool cpu_is_viking(unsigned long psr, unsigned long mcr)
+{
+	unsigned int psr_impl = (psr >> 28) & 0xf;
+	unsigned int psr_vers = (psr >> 24) & 0xf;
+	unsigned int mcr_impl = (mcr >> 28) & 0xf;
+	unsigned int mcr_vers = (mcr >> 24) & 0xf;
+
+	return psr_impl == MBUS_VIKING &&
+	       (psr_vers == 0 ||
+		(psr_vers == 1 && mcr_impl == 0 && mcr_vers == 0));
+}
+
+void do_data_store_error(struct pt_regs *regs, unsigned long mfar,
+			 unsigned long mfsr)
+{
+	unsigned long tag_high[VIKING_STOREBUF_ENTRIES];
+	unsigned long tag_low[VIKING_STOREBUF_ENTRIES];
+	unsigned long data_high[VIKING_STOREBUF_ENTRIES];
+	unsigned long data_low[VIKING_STOREBUF_ENTRIES];
+	unsigned long mxcc_status_high = 0, mxcc_status_low = 0;
+	unsigned long mxcc_error_high = 0, mxcc_error_low = 0;
+	unsigned long mxcc_port = 0, storebuf_control;
+	unsigned long mcr = srmmu_get_mmureg();
+	unsigned long psr = regs->psr;
+	bool has_mxcc;
+	int i;
+
+	if (!cpu_is_viking(psr, mcr)) {
+		pr_emerg("Data Store Error: CPU%d PSR=%08lx MCR=%08lx MFAR=%08lx MFSR=%08lx\n",
+			 raw_smp_processor_id(), psr, mcr, mfar, mfsr);
+		return;
+	}
+
+	storebuf_control = viking_get_storebuf_control();
+	for (i = 0; i < VIKING_STOREBUF_ENTRIES; i++)
+		viking_get_storebuf_entry(i, &tag_high[i], &tag_low[i],
+					  &data_high[i], &data_low[i]);
+
+	has_mxcc = !(mcr & VIKING_MMODE);
+	if (has_mxcc) {
+		mxcc_get_sreg(&mxcc_status_high, &mxcc_status_low);
+		mxcc_get_ereg(&mxcc_error_high, &mxcc_error_low);
+		mxcc_port = mxcc_get_preg();
+	}
+
+	pr_emerg("Viking Data Store Error: CPU%d PSR=%08lx MCR=%08lx MFAR=%08lx MFSR=%08lx SBCTRL=%08lx\n",
+		 raw_smp_processor_id(), psr, mcr, mfar, mfsr,
+		 storebuf_control);
+	if (has_mxcc)
+		pr_emerg("MXCC: CCSR=%08lx:%08lx CCER=%08lx:%08lx PREG=%08lx\n",
+			 mxcc_status_high, mxcc_status_low,
+			 mxcc_error_high, mxcc_error_low, mxcc_port);
+
+	for (i = 0; i < VIKING_STOREBUF_ENTRIES; i++)
+		pr_emerg("Viking SB%d: TAG=%08lx:%08lx DATA=%08lx:%08lx\n",
+			 i, tag_high[i], tag_low[i], data_high[i], data_low[i]);
 }
 
 void do_illegal_instruction(struct pt_regs *regs, unsigned long pc, unsigned long npc,

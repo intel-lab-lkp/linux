@@ -126,6 +126,42 @@ static inline unsigned long mxcc_get_creg(void)
 	return mxcc_control;
 }
 
+static inline void mxcc_get_64bit_reg(unsigned long reg,
+				      unsigned long *high,
+				      unsigned long *low)
+{
+	unsigned long reg_high, reg_low;
+
+	__asm__ __volatile__("ldda [%2] %3, %%g2\n\t"
+			     "or %%g0, %%g2, %0\n\t"
+			     "or %%g0, %%g3, %1\n\t"
+			     : "=&r" (reg_high), "=&r" (reg_low)
+			     : "r" (reg), "i" (ASI_M_MXCC)
+			     : "g2", "g3");
+	*high = reg_high;
+	*low = reg_low;
+}
+
+static inline void mxcc_get_sreg(unsigned long *high, unsigned long *low)
+{
+	mxcc_get_64bit_reg(MXCC_SREG, high, low);
+}
+
+static inline void mxcc_get_ereg(unsigned long *high, unsigned long *low)
+{
+	mxcc_get_64bit_reg(MXCC_EREG, high, low);
+}
+
+static inline unsigned long mxcc_get_preg(void)
+{
+	unsigned long mxcc_port;
+
+	__asm__ __volatile__("lda [%1] %2, %0\n\t"
+			     : "=r" (mxcc_port)
+			     : "r" (MXCC_PREG), "i" (ASI_M_MXCC));
+	return mxcc_port;
+}
+
 static inline void mxcc_set_creg(unsigned long mxcc_control)
 {
 	__asm__ __volatile__("sta %0, [%1] %2\n\t" : :

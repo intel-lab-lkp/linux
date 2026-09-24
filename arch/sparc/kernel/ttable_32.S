@@ -56,7 +56,7 @@ t_bad26:BAD_TRAP(0x26) BAD_TRAP(0x27)
 t_cpexc:TRAP_ENTRY(0x28, do_cp_exception)   /* Co-Processor Exception        */
 t_dacce:SRMMU_DFAULT                        /* Data Access Error             */
 t_hwdz:	TRAP_ENTRY(0x2a, do_hw_divzero)     /* Division by zero, you lose... */
-t_dserr:BAD_TRAP(0x2b)                      /* Data Store Error              */
+t_dserr:TRAP_ENTRY(0x2b, data_store_error)  /* Data Store Error              */
 t_daccm:BAD_TRAP(0x2c)                      /* Data Access MMU-Miss          */
 t_bad2d:BAD_TRAP(0x2d) BAD_TRAP(0x2e) BAD_TRAP(0x2f) BAD_TRAP(0x30) BAD_TRAP(0x31)
 t_bad32:BAD_TRAP(0x32) BAD_TRAP(0x33) BAD_TRAP(0x34) BAD_TRAP(0x35) BAD_TRAP(0x36)
@@ -158,7 +158,7 @@ trapbase_cpu1:
 	TRAP_ENTRY(0x28, do_cp_exception)
 	SRMMU_DFAULT
 	TRAP_ENTRY(0x2a, do_hw_divzero)
-	BAD_TRAP(0x2b)
+	TRAP_ENTRY(0x2b, data_store_error)
 	BAD_TRAP(0x2c)
 	BAD_TRAP(0x2d) BAD_TRAP(0x2e) BAD_TRAP(0x2f) BAD_TRAP(0x30) BAD_TRAP(0x31)
 	BAD_TRAP(0x32) BAD_TRAP(0x33) BAD_TRAP(0x34) BAD_TRAP(0x35) BAD_TRAP(0x36)
@@ -257,7 +257,7 @@ trapbase_cpu2:
 	TRAP_ENTRY(0x28, do_cp_exception)
 	SRMMU_DFAULT
 	TRAP_ENTRY(0x2a, do_hw_divzero)
-	BAD_TRAP(0x2b)
+	TRAP_ENTRY(0x2b, data_store_error)
 	BAD_TRAP(0x2c)
 	BAD_TRAP(0x2d) BAD_TRAP(0x2e) BAD_TRAP(0x2f) BAD_TRAP(0x30) BAD_TRAP(0x31)
 	BAD_TRAP(0x32) BAD_TRAP(0x33) BAD_TRAP(0x34) BAD_TRAP(0x35) BAD_TRAP(0x36)
@@ -357,7 +357,7 @@ trapbase_cpu3:
 	TRAP_ENTRY(0x28, do_cp_exception)
 	SRMMU_DFAULT
 	TRAP_ENTRY(0x2a, do_hw_divzero)
-	BAD_TRAP(0x2b) BAD_TRAP(0x2c)
+	TRAP_ENTRY(0x2b, data_store_error) BAD_TRAP(0x2c)
 	BAD_TRAP(0x2d) BAD_TRAP(0x2e) BAD_TRAP(0x2f) BAD_TRAP(0x30) BAD_TRAP(0x31)
 	BAD_TRAP(0x32) BAD_TRAP(0x33) BAD_TRAP(0x34) BAD_TRAP(0x35) BAD_TRAP(0x36)
 	BAD_TRAP(0x37) BAD_TRAP(0x38) BAD_TRAP(0x39) BAD_TRAP(0x3a) BAD_TRAP(0x3b)

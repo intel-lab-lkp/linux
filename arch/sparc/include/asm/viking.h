@@ -98,6 +98,11 @@
 #define VIKING_TCENABLE     0x00010000   /* Enable table-walks to be cached */
 #define VIKING_DPENABLE     0x00040000   /* Enable the data prefetcher */
 
+#define ASI_M_VIKING_STOREBUF_TAG	0x30
+#define ASI_M_VIKING_STOREBUF_DATA	0x31
+#define ASI_M_VIKING_STOREBUF_CTRL	0x32
+#define VIKING_STOREBUF_ENTRIES		8
+
 /*
  * GNU/Viking Breakpoint Action Register fields.
  */
@@ -160,6 +165,42 @@ static inline unsigned long viking_get_bpreg(void)
 			     : "=r" (regval)
 			     : "i" (ASI_M_ACTION));
 	return regval;
+}
+
+static inline unsigned long viking_get_storebuf_control(void)
+{
+	unsigned long control;
+
+	__asm__ __volatile__("lda [%%g0] %1, %0\n\t"
+			     : "=r" (control)
+			     : "i" (ASI_M_VIKING_STOREBUF_CTRL));
+	return control;
+}
+
+static inline void
+viking_get_storebuf_entry(unsigned int entry, unsigned long *tag_high,
+			  unsigned long *tag_low, unsigned long *data_high,
+			  unsigned long *data_low)
+{
+	unsigned long address = (entry & 7) << 3;
+	unsigned long th, tl, dh, dl;
+
+	__asm__ __volatile__("ldda [%4] %5, %%g2\n\t"
+			     "or %%g0, %%g2, %0\n\t"
+			     "or %%g0, %%g3, %1\n\t"
+			     "ldda [%4] %6, %%g2\n\t"
+			     "or %%g0, %%g2, %2\n\t"
+			     "or %%g0, %%g3, %3\n\t"
+			     : "=&r" (th), "=&r" (tl), "=&r" (dh),
+			       "=&r" (dl)
+			     : "r" (address),
+			       "i" (ASI_M_VIKING_STOREBUF_TAG),
+			       "i" (ASI_M_VIKING_STOREBUF_DATA)
+			     : "g2", "g3");
+	*tag_high = th;
+	*tag_low = tl;
+	*data_high = dh;
+	*data_low = dl;
 }
 
 static inline void viking_get_dcache_ptag(int set, int block,

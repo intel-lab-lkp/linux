@@ -12,6 +12,8 @@ void handler_irq(int irq, struct pt_regs *regs);
 #ifdef CONFIG_SPARC32
 /* traps */
 void do_hw_interrupt(struct pt_regs *regs, unsigned long type);
+void do_data_store_error(struct pt_regs *regs, unsigned long mfar,
+			 unsigned long mfsr);
 void do_illegal_instruction(struct pt_regs *regs, unsigned long pc,
                             unsigned long npc, unsigned long psr);
 
