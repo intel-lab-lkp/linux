@@ -6,6 +6,7 @@
 #include <linux/fs_pin.h>
 
 extern struct file_system_type nullfs_fs_type;
+extern struct vfsmount *knullfs;
 extern struct list_head notify_list;
 
 struct mnt_namespace {
@@ -50,8 +51,14 @@ struct mount {
 	struct vfsmount mnt;
 	union {
 		struct rb_node mnt_node; /* node in the ns->mounts rbtree */
-		struct rcu_head mnt_rcu;
-		struct llist_node mnt_llist;
+		struct {		 /* once it has left its namespace */
+			union {
+				struct rcu_head mnt_rcu;
+				struct llist_node mnt_llist;
+			};
+			/* what a vacant mount stands in for, NULL once released */
+			struct dentry *mnt_old_root;
+		};
 	};
 #ifdef CONFIG_SMP
 	struct mnt_pcp __percpu *mnt_pcp;
@@ -84,7 +91,7 @@ struct mount {
 	struct mountpoint *mnt_mp;	/* where is it mounted */
 	union {
 		struct hlist_node mnt_mp_list;	/* list mounts with the same mountpoint */
-		struct hlist_node mnt_umount;
+		struct hlist_node mnt_umount;	/* in the parent's mnt_stuck_children */
 	};
 #ifdef CONFIG_FSNOTIFY
 	struct fsnotify_mark_connector __rcu *mnt_fsnotify_marks;

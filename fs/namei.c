@@ -816,6 +816,10 @@ static bool path_connected(struct vfsmount *mnt, struct dentry *dentry)
 {
 	struct super_block *sb = mnt->mnt_sb;
 
+	/* @mnt was vacated after an RCU walk found @dentry on it */
+	if (unlikely(dentry->d_sb != sb))
+		return false;
+
 	/* Bind mounts can have disconnected paths */
 	if (mnt->mnt_root == sb->s_root)
 		return true;
