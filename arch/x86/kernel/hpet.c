@@ -155,22 +155,22 @@ static void _hpet_print_config(const char *function, int line)
 	pr_info("CFG: 0x%x, STATUS: 0x%x\n", cfg, status);
 
 	l = hpet_readl(HPET_COUNTER);
-	h = hpet_readl(HPET_COUNTER+4);
+	h = hpet_readl(HPET_COUNTER + 4);
 	pr_info("COUNTER_l: 0x%x, COUNTER_h: 0x%x\n", l, h);
 
 	channels = ((id & HPET_ID_NUMBER) >> HPET_ID_NUMBER_SHIFT) + 1;
 
 	for (i = 0; i < channels; i++) {
 		l = hpet_readl(HPET_Tn_CFG(i));
-		h = hpet_readl(HPET_Tn_CFG(i)+4);
+		h = hpet_readl(HPET_Tn_CFG(i) + 4);
 		pr_info("T%d: CFG_l: 0x%x, CFG_h: 0x%x\n", i, l, h);
 
 		l = hpet_readl(HPET_Tn_CMP(i));
-		h = hpet_readl(HPET_Tn_CMP(i)+4);
+		h = hpet_readl(HPET_Tn_CMP(i) + 4);
 		pr_info("T%d: CMP_l: 0x%x, CMP_h: 0x%x\n", i, l, h);
 
 		l = hpet_readl(HPET_Tn_ROUTE(i));
-		h = hpet_readl(HPET_Tn_ROUTE(i)+4);
+		h = hpet_readl(HPET_Tn_ROUTE(i) + 4);
 		pr_info("T%d ROUTE_l: 0x%x, ROUTE_h: 0x%x\n", i, l, h);
 	}
 }
@@ -300,10 +300,10 @@ static int hpet_clkevt_set_state_periodic(struct clock_event_device *evt)
 {
 	unsigned int channel = clockevent_to_channel(evt)->num;
 	unsigned int cfg, cmp, now;
-	uint64_t delta;
+	u64 delta;
 
 	hpet_stop_counter();
-	delta = ((uint64_t)(NSEC_PER_SEC / HZ)) * evt->mult;
+	delta = ((u64)(NSEC_PER_SEC / HZ)) * evt->mult;
 	delta >>= evt->shift;
 	now = hpet_readl(HPET_COUNTER);
 	cmp = now + (unsigned int)delta;
@@ -367,7 +367,7 @@ hpet_clkevt_set_next_event(unsigned long delta, struct clock_event_device *evt)
 	s32 res;
 
 	cnt = hpet_readl(HPET_COUNTER);
-	cnt += (u32) delta;
+	cnt += (u32)delta;
 	hpet_writel(cnt, HPET_Tn_CMP(channel));
 
 	/*
@@ -541,7 +541,7 @@ static struct irq_domain *hpet_create_irq_domain(int hpet_id)
 	struct fwnode_handle *fn;
 	struct irq_fwspec fwspec;
 
-	if (x86_vector_domain == NULL)
+	if (!x86_vector_domain)
 		return NULL;
 
 	domain_info = kzalloc_obj(*domain_info);
@@ -1271,9 +1271,9 @@ int hpet_rtc_timer_init(void)
 
 	if (!hpet_default_delta) {
 		struct clock_event_device *evt = &hpet_base.channels[0].evt;
-		uint64_t clc;
+		u64 clc;
 
-		clc = (uint64_t) evt->mult * NSEC_PER_SEC;
+		clc = (u64)evt->mult * NSEC_PER_SEC;
 		clc >>= evt->shift + DEFAULT_RTC_SHIFT;
 		hpet_default_delta = clc;
 	}
@@ -1360,7 +1360,7 @@ EXPORT_SYMBOL_GPL(hpet_set_alarm_time);
 
 int hpet_set_periodic_freq(unsigned long freq)
 {
-	uint64_t clc;
+	u64 clc;
 
 	if (!is_hpet_enabled())
 		return 0;
@@ -1370,7 +1370,7 @@ int hpet_set_periodic_freq(unsigned long freq)
 	} else {
 		struct clock_event_device *evt = &hpet_base.channels[0].evt;
 
-		clc = (uint64_t) evt->mult * NSEC_PER_SEC;
+		clc = (u64)evt->mult * NSEC_PER_SEC;
 		do_div(clc, freq);
 		clc >>= evt->shift;
 		hpet_pie_delta = clc;
@@ -1407,8 +1407,7 @@ static void hpet_rtc_timer_reinit(void)
 	if (lost_ints) {
 		if (hpet_rtc_flags & RTC_PIE)
 			hpet_pie_count += lost_ints;
-		if (printk_ratelimit())
-			pr_warn("Lost %d RTC interrupts\n", lost_ints);
+		pr_warn_ratelimited("Lost %d RTC interrupts\n", lost_ints);
 	}
 }
 
@@ -1440,9 +1439,9 @@ irqreturn_t hpet_rtc_interrupt(int irq, void *dev_id)
 	}
 
 	if (hpet_rtc_flags & RTC_AIE &&
-	    (curr_time.tm_sec == hpet_alarm_time.tm_sec) &&
-	    (curr_time.tm_min == hpet_alarm_time.tm_min) &&
-	    (curr_time.tm_hour == hpet_alarm_time.tm_hour))
+	    curr_time.tm_sec == hpet_alarm_time.tm_sec &&
+	    curr_time.tm_min == hpet_alarm_time.tm_min &&
+	    curr_time.tm_hour == hpet_alarm_time.tm_hour)
 		rtc_int_flag |= RTC_AF;
 
 	if (rtc_int_flag) {
