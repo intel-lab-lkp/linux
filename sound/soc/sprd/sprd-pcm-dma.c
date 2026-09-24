@@ -177,7 +177,7 @@ static int sprd_pcm_request_dma_channel(struct snd_soc_component *component,
 			dev_err(dev, "failed to request dma channel:%s\n",
 				dma_params->chan_name[i]);
 			sprd_pcm_release_dma_channel(substream);
-			return PTR_ERR(chan);
+			return -ENODEV;
 		}
 		data->chan = chan;
 	}

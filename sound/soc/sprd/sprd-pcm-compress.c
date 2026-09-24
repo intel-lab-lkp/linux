@@ -157,7 +157,7 @@ static int sprd_platform_compr_dma_config(struct snd_soc_component *component,
 	chan = dma_request_chan(dev, dma_params->chan_name[channel]);
 	if (IS_ERR(chan)) {
 		dev_err(dev, "failed to request dma channel\n");
-		return PTR_ERR(chan);
+		return -ENODEV;
 	}
 	dma->chan = chan;
 
