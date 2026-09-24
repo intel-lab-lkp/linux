@@ -160,10 +160,9 @@ struct fc_rport_priv *fc_rport_create(struct fc_lport *lport, u32 port_id)
 	rdata->maxframe_size = FC_MIN_MAX_PAYLOAD;
 	INIT_DELAYED_WORK(&rdata->retry_work, fc_rport_timeout);
 	INIT_WORK(&rdata->event_work, fc_rport_work);
-	if (port_id != FC_FID_DIR_SERV) {
+	if (port_id != FC_FID_DIR_SERV)
 		rdata->lld_event_callback = lport->tt.rport_event_callback;
-		list_add_rcu(&rdata->peers, &lport->disc.rports);
-	}
+	list_add_rcu(&rdata->peers, &lport->disc.rports);
 	return rdata;
 }
 EXPORT_SYMBOL(fc_rport_create);
@@ -363,11 +362,8 @@ static void fc_rport_work(struct work_struct *work)
 
 		mutex_lock(&rdata->rp_mutex);
 		if (rdata->rp_state == RPORT_ST_DELETE) {
-			if (port_id == FC_FID_DIR_SERV) {
-				rdata->event = RPORT_EV_NONE;
-				mutex_unlock(&rdata->rp_mutex);
-				kref_put(&rdata->kref, fc_rport_destroy);
-			} else if ((rdata->flags & FC_RP_STARTED) &&
+			if (port_id != FC_FID_DIR_SERV &&
+			    (rdata->flags & FC_RP_STARTED) &&
 				   rdata->major_retries <
 				   lport->max_rport_retry_count) {
 				rdata->major_retries++;
