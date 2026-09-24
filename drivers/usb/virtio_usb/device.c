@@ -439,12 +439,14 @@ static void vep_enable_work(struct work_struct *work)
 		container_of(work, struct virtio_usb_ep, enable_work);
 	struct virtio_usb_dc *vudc = vep->vudc;
 	const struct usb_endpoint_descriptor *desc = vep->ep.desc;
-	struct scatterlist sg;
-	struct scatterlist *psg_data = &sg;
+	const struct usb_ss_ep_comp_descriptor *comp = vep->ep.comp_desc;
+	struct scatterlist sgs[2];
+	struct scatterlist *psg_data = sgs;
 	struct virtio_usb_dev_cmd_hdr *hdr;
 	struct virtio_usb_cmd *cmd;
 	unsigned long flags;
 	u16 endpoint;
+	u8 n_sgs = 1;
 	int rc;
 
 	if (!desc)
@@ -461,7 +463,13 @@ static void vep_enable_work(struct work_struct *work)
 		goto done;
 	}
 
-	sg_init_one(psg_data, desc, sizeof(*desc));
+	if (virtio_usb_ep_comp_valid(comp))
+		n_sgs = 2;
+
+	sg_init_table(psg_data, n_sgs);
+	sg_set_buf(&psg_data[0], desc, sizeof(*desc));
+	if (n_sgs == 2)
+		sg_set_buf(&psg_data[1], comp, sizeof(*comp));
 	hdr = virtio_usb_cmd_request(cmd);
 	hdr->endpoint = cpu_to_le16(endpoint);
 
@@ -564,6 +572,7 @@ static int virtio_ep_enable(struct usb_ep *ep,
 {
 	struct virtio_usb_ep *vep = usb_ep_to_virtio_ep(ep);
 	struct virtio_usb_dc *vudc = vep->vudc;
+	const struct usb_ss_ep_comp_descriptor *comp = ep->comp_desc;
 	unsigned long flags;
 
 	spin_lock_irqsave(&vudc->lock, flags);
@@ -577,6 +586,16 @@ static int virtio_ep_enable(struct usb_ep *ep,
 	if (vep->state != EP_DISABLED) {
 		spin_unlock_irqrestore(&vudc->lock, flags);
 		return -EBUSY;
+	}
+
+	if (comp) {
+		if (!virtio_usb_ep_comp_valid(comp) || comp->bMaxBurst > 15) {
+			spin_unlock_irqrestore(&vudc->lock, flags);
+			return -EINVAL;
+		}
+	} else if (vudc->gadget.speed >= USB_SPEED_SUPER) {
+		spin_unlock_irqrestore(&vudc->lock, flags);
+		return -EINVAL;
 	}
 
 	ep->desc = desc;
@@ -1119,9 +1138,13 @@ static void virtio_usb_dc_set_speed(struct usb_gadget *gadget,
 	struct virtio_usb_dc *vudc =
 		container_of(gadget, struct virtio_usb_dc, gadget);
 
-	vudc->gadget.speed = min_t(u8, USB_SPEED_HIGH, speed);
+	vudc->gadget.speed = min_t(u8, vudc->gadget.max_speed, speed);
 
-	switch (speed) {
+	switch (vudc->gadget.speed) {
+	case USB_SPEED_SUPER_PLUS:
+	case USB_SPEED_SUPER:
+		vudc->veps[0].ep.maxpacket = 512;
+		break;
 	case USB_SPEED_HIGH:
 	case USB_SPEED_FULL:
 		vudc->veps[0].ep.maxpacket = 64;
@@ -1375,6 +1398,8 @@ static int virtio_usb_dc_parent_create(struct virtio_usb_dc *vudc)
 static void virtio_usb_dc_event_process(struct virtio_usb_event *event)
 {
 	struct virtio_usb_dev_event *evt = virtio_usb_event_buf(event);
+	struct virtio_usb_dev_bind_event *bind_evt =
+		(struct virtio_usb_dev_bind_event *)evt;
 	struct virtio_usb_dev_setup_event *setup_evt;
 	struct virtio_usb *vusb = event->vusb;
 	struct virtio_usb_dc *vudc;
@@ -1395,6 +1420,8 @@ static void virtio_usb_dc_event_process(struct virtio_usb_event *event)
 
 	switch (le32_to_cpu(evt->code)) {
 	case VIRTIO_USB_EVT_DEV_BIND: {
+		u8 max_speed;
+
 		if (vudc->registered) {
 			dev_err(&vusb->vdev->dev,
 				"port %d: BIND while still registered, ignoring\n",
@@ -1405,6 +1432,8 @@ static void virtio_usb_dc_event_process(struct virtio_usb_event *event)
 
 		memzero_explicit(&vudc->gadget, sizeof(struct usb_gadget));
 		vudc->gadget.sg_supported = 1;
+		max_speed = bind_evt->max_speed;
+
 		rc = virtio_usb_dc_get_endpoint_count(vudc);
 		if (rc) {
 			dev_err(&vusb->vdev->dev,
@@ -1436,7 +1465,20 @@ static void virtio_usb_dc_event_process(struct virtio_usb_event *event)
 			break;
 		}
 		vudc->gadget.ops = &virtio_gadget_ops;
-		vudc->gadget.max_speed = USB_SPEED_HIGH;
+		switch (max_speed) {
+		case USB_SPEED_LOW:
+		case USB_SPEED_FULL:
+		case USB_SPEED_HIGH:
+		case USB_SPEED_SUPER:
+		case USB_SPEED_SUPER_PLUS:
+			vudc->gadget.max_speed = max_speed;
+			break;
+		default:
+			pr_info("virtio-usb: unrecognized max_speed %u from host, defaulting to HIGH\n",
+				max_speed);
+			vudc->gadget.max_speed = USB_SPEED_HIGH;
+			break;
+		}
 
 		//vudc->gadget.dev.init_name = gadget_name;
 		vudc->gadget.dev.parent = &vudc->pdev->dev;

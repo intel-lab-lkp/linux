@@ -222,6 +222,14 @@ struct virtio_usb_dev_event {
 	__u8 padding[10];
 };
 
+/* VIRTIO_USB_EVT_DEV_BIND */
+struct virtio_usb_dev_bind_event {
+	__le32 code; /* VIRTIO_USB_EVT_DEV_BIND */
+	__le16 port; /* Device ID */
+	__u8 max_speed; /* enum usb_device_speed */
+	__u8 padding[9];
+};
+
 /* VIRTIO_USB_EVT_DEV_SETUP */
 struct virtio_usb_dev_setup_event {
 	__le32 code; /* VIRTIO_USB_EVT_DEV_SETUP */
