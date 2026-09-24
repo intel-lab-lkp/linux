@@ -1891,8 +1891,7 @@ int security_inode_permission(struct mnt_idmap *idmap, struct inode *inode,
 
 /**
  * security_inode_setattr() - Check if setting file attributes is allowed
- * @idmap: idmap of the mount
- * @dentry: file
+ * @path: file
  * @attr: new attributes
  *
  * Check permission before setting file attributes.  Note that the kernel call
@@ -1902,12 +1901,11 @@ int security_inode_permission(struct mnt_idmap *idmap, struct inode *inode,
  *
  * Return: Returns 0 if permission is granted.
  */
-int security_inode_setattr(struct mnt_idmap *idmap,
-			   struct dentry *dentry, struct iattr *attr)
+int security_inode_setattr(const struct path *path, struct iattr *attr)
 {
-	if (unlikely(IS_PRIVATE(d_backing_inode(dentry))))
+	if (unlikely(IS_PRIVATE(d_backing_inode(path->dentry))))
 		return 0;
-	return call_int_hook(inode_setattr, idmap, dentry, attr);
+	return call_int_hook(inode_setattr, path, attr);
 }
 EXPORT_SYMBOL_GPL(security_inode_setattr);
 

@@ -537,7 +537,7 @@ int notify_change(const struct path *path, struct iattr *attr,
 	    !vfsgid_valid(i_gid_into_vfsgid(idmap, inode)))
 		return -EOVERFLOW;
 
-	error = security_inode_setattr(idmap, dentry, attr);
+	error = security_inode_setattr(path, attr);
 	if (error)
 		return error;
 

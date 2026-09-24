@@ -3339,10 +3339,11 @@ static int selinux_inode_permission(struct mnt_idmap *idmap,
 	return rc;
 }
 
-static int selinux_inode_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
+static int selinux_inode_setattr(const struct path *path,
 				 struct iattr *iattr)
 {
 	const struct cred *cred = current_cred();
+	struct dentry *dentry = path->dentry;
 	struct inode *inode = d_backing_inode(dentry);
 	unsigned int ia_valid = iattr->ia_valid;
 	u32 av = FILE__WRITE;
