@@ -313,8 +313,8 @@ TEST_F(epoll_busy_poll, test_invalid_ioctl)
 	EXPECT_EQ(-1, ret)
 		TH_LOG("invalid ioctl should return error");
 
-	EXPECT_EQ(EINVAL, errno)
-		TH_LOG("invalid ioctl should set errno to EINVAL");
+	EXPECT_EQ(ENOTTY, errno)
+		TH_LOG("invalid ioctl should set errno to ENOTTY");
 }
 
 TEST_HARNESS_MAIN
