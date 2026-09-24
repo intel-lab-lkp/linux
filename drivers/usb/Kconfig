@@ -139,6 +139,8 @@ source "drivers/usb/chipidea/Kconfig"
 
 source "drivers/usb/isp1760/Kconfig"
 
+source "drivers/usb/virtio_usb/Kconfig"
+
 comment "USB port drivers"
 
 if USB

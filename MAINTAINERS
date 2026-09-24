@@ -28447,6 +28447,16 @@ F:	drivers/media/usb/uvc/
 F:	include/linux/usb/uvc.h
 F:	include/uapi/linux/uvcvideo.h
 
+USB VIRTIO DRIVER
+M:	Igor Skalkin <igor.skalkin@oss.qualcomm.com>
+R:	Aiswarya Cyriac <aiswarya.cyriac@oss.qualcomm.com>
+R:	Vasilii Ianikeev <vasilii.ianikeev@oss.qualcomm.com>
+L:	linux-usb@vger.kernel.org
+L:	virtualization@lists.linux.dev
+S:	Maintained
+F:	drivers/usb/virtio_usb/
+F:	include/uapi/linux/virtio_usb.h
+
 USB WEBCAM GADGET
 L:	linux-usb@vger.kernel.org
 S:	Orphan

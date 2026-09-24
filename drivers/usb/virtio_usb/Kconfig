@@ -1,0 +1,21 @@
+config USB_VIRTIO
+	tristate "Virtio USB device support"
+	depends on USB_SUPPORT && VIRTIO
+	depends on USB || USB_GADGET
+	depends on USB if !USB_GADGET
+	depends on USB_GADGET if !USB
+	select USB_ROLE_SWITCH
+	help
+	  Say Y here if you want to support a virtio-usb device: a virtio
+	  transport for USB that can present itself to the guest as a USB
+	  host controller, a USB device controller (UDC), or both, with
+	  each port independently configurable and, on ports where the
+	  virtio-usb device advertises support for it, capable of
+	  switching between the host and device role at runtime (USB
+	  OTG-style role switching), backed by the standard USB Role
+	  Switch class.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called virtio-usb.
+
+	  If unsure, say N.
