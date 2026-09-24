@@ -427,18 +427,14 @@ void intel_display_power_dc3co_update(struct intel_display *display, u32 trigger
 static bool intel_dc3co_port_pipe_compatible(struct intel_dp *intel_dp,
 					     const struct intel_crtc_state *crtc_state)
 {
+	struct intel_display *display = to_intel_display(intel_dp);
 	struct intel_digital_port *dig_port = dp_to_dig_port(intel_dp);
 	enum pipe pipe = to_intel_crtc(crtc_state->uapi.crtc)->pipe;
 	enum port port = dig_port->base.port;
 	int num_pipes = intel_crtc_num_joined_pipes(crtc_state);
 
-	/* Need to follow 1:1 mapping because of CMTG restriction */
-	if (DISPLAY_VER(to_intel_display(crtc_state)) == 35)
-		return num_pipes == 1 &&
-		       ((pipe == PIPE_A && port == PORT_A) ||
-			(pipe == PIPE_B && port == PORT_B));
-	else
-		return num_pipes == 1 && pipe <= PIPE_B && port <= PORT_B;
+	return DISPLAY_VER(display) == 35 && num_pipes == 1 && pipe <= PIPE_B &&
+		port <= PORT_B;
 }
 
 void intel_display_power_dc3co_compute(struct intel_atomic_state *state)
