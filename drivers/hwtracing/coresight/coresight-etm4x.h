@@ -1070,7 +1070,7 @@ struct etmv4_save_state {
  *		at runtime, due to the additional setting of TRFCR_CX when
  *		in EL2. Otherwise, 0.
  * @curr_config:	structure holding current applied configuration.
- * @config:	structure holding sysfs mode configuration.
+ * @sysfs_config:	structure holding sysfs mode configuration.
  * @save_state:	State to be preserved across power loss
  * @paused:	Indicates if the trace unit is paused.
  * @ss_status:	The status of the corresponding single-shot comparator.
@@ -1092,7 +1092,7 @@ struct etmv4_drvdata {
 	bool				paused : 1;
 	u64				trfcr;
 	struct etmv4_config		curr_config;
-	struct etmv4_config		config;
+	struct etmv4_config		sysfs_config;
 	struct etmv4_save_state		*save_state;
 	u32				ss_status[ETM_MAX_SS_CMP];
 	DECLARE_BITMAP(arch_features, ETM4_IMPDEF_FEATURE_MAX);
