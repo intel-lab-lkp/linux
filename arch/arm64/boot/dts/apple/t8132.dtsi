@@ -216,7 +216,8 @@
 		#size-cells = <2>;
 
 		pmgr: power-management@380700000 {
-			compatible = "apple,t8132-pmgr", "apple,t8103-pmgr", "syscon", "simple-mfd";
+			compatible = "apple,t8132-pmgr", "apple,t8103-pmgr",
+			             "syscon", "simple-mfd";
 			reg = <0x3 0x80700000 0 0x14000>;
 			#address-cells = <1>;
 			#size-cells = <1>;
@@ -234,7 +235,8 @@
 
 			affinities {
 				e-core-pmu-affinity {
-					cpus = <&cpu_e0 &cpu_e1 &cpu_e2 &cpu_e3 &cpu_e4 &cpu_e5>;
+					cpus = <&cpu_e0 &cpu_e1 &cpu_e2
+					       &cpu_e3 &cpu_e4 &cpu_e5>;
 					apple,fiq-index = <AIC_CPU_PMU_E>;
 				};
 
@@ -269,7 +271,8 @@
 		};
 
 		pmgr_mini: power-management@388280000 {
-			compatible = "apple,t8132-pmgr", "apple,t8103-pmgr", "syscon", "simple-mfd";
+			compatible = "apple,t8132-pmgr", "apple,t8103-pmgr",
+			             "syscon", "simple-mfd";
 			reg = <0x3 0x88280000 0 0x4000>;
 			#address-cells = <1>;
 			#size-cells = <1>;
