@@ -140,6 +140,9 @@ struct thread_struct {
 	/* Hardware breakpoints pinned to this task. */
 	struct perf_event *hbp_break[LOONGARCH_MAX_BRP];
 	struct perf_event *hbp_watch[LOONGARCH_MAX_WRP];
+
+	bool hbp_break_skip;
+	bool hbp_watch_skip;
 };
 
 #define thread_saved_ra(tsk)	(tsk->thread.sched_ra)
