@@ -8,6 +8,7 @@
 #include <linux/errno.h>
 #include <linux/export.h>
 #include <linux/gfp.h>
+#include <linux/kernel.h>
 #include <linux/log2.h>
 #include <linux/mm.h>
 #include <linux/mem_encrypt.h>
@@ -105,6 +106,8 @@ static int __alloc_cc_shared_pages_node(int nid, gfp_t gfp,
 	struct page *page;
 	unsigned int order;
 	int ret;
+
+	might_sleep();
 
 	ret = cc_shared_calc_layout(requested, &layout);
 	if (ret)
