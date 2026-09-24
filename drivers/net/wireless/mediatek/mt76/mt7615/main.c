@@ -219,7 +219,7 @@ static int mt7615_add_interface(struct ieee80211_hw *hw,
 
 	ret = mt7615_mcu_set_dbdc(dev);
 	if (ret)
-		goto out;
+		goto err_mask;
 
 	idx = MT7615_WTBL_RESERVED - mvif->mt76.idx;
 
@@ -237,7 +237,24 @@ static int mt7615_add_interface(struct ieee80211_hw *hw,
 	}
 
 	ret = mt7615_mcu_add_dev_info(phy, vif, true);
+	if (ret)
+		goto err_wcid;
+
+	mt7615_mutex_release(dev);
+
+	return 0;
+
+err_wcid:
+	rcu_assign_pointer(dev->mt76.wcid[idx], NULL);
+	mt76_wcid_cleanup(&dev->mt76, &mvif->sta.wcid);
+err_mask:
+	dev->mt76.vif_mask &= ~BIT_ULL(mvif->mt76.idx);
+	dev->omac_mask &= ~BIT_ULL(mvif->mt76.omac_idx);
+	phy->omac_mask &= ~BIT_ULL(mvif->mt76.omac_idx);
 out:
+	if (phy->monitor_vif == vif)
+		phy->monitor_vif = NULL;
+
 	mt7615_mutex_release(dev);
 
 	return ret;
