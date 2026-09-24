@@ -913,6 +913,22 @@ void cxl_event_trace_record(struct cxl_memdev *cxlmd,
 		return;
 	}
 
+	/*
+	 * EDAC memory repair looks these records up from the current boot, so
+	 * store them whether or not tracing is enabled. Hold the memdev lock
+	 * across the store to keep cxlmd->err_rec_array alive against a
+	 * concurrent cxl_mem unbind.
+	 */
+	guard(device)(&cxlmd->dev);
+
+	if (event_type == CXL_CPER_EVENT_GEN_MEDIA) {
+		if (cxl_store_rec_gen_media(cxlmd, evt))
+			dev_dbg(&cxlmd->dev, "CXL store rec_gen_media failed\n");
+	} else if (event_type == CXL_CPER_EVENT_DRAM) {
+		if (cxl_store_rec_dram(cxlmd, evt))
+			dev_dbg(&cxlmd->dev, "CXL store rec_dram failed\n");
+	}
+
 	if (trace_cxl_general_media_enabled() || trace_cxl_dram_enabled()) {
 		u64 dpa, hpa = ULLONG_MAX, hpa_alias = ULLONG_MAX;
 		struct cxl_region *cxlr;
@@ -922,7 +938,6 @@ void cxl_event_trace_record(struct cxl_memdev *cxlmd,
 		 * translations. Take topology mutation locks and lookup
 		 * { HPA, REGION } from { DPA, MEMDEV } in the event record.
 		 */
-		guard(device)(&cxlmd->dev);
 		guard(rwsem_read)(&cxl_rwsem.region);
 		guard(rwsem_read)(&cxl_rwsem.dpa);
 
@@ -937,9 +952,6 @@ void cxl_event_trace_record(struct cxl_memdev *cxlmd,
 		}
 
 		if (event_type == CXL_CPER_EVENT_GEN_MEDIA) {
-			if (cxl_store_rec_gen_media((struct cxl_memdev *)cxlmd, evt))
-				dev_dbg(&cxlmd->dev, "CXL store rec_gen_media failed\n");
-
 			if (evt->gen_media.media_hdr.descriptor &
 			    CXL_GMER_EVT_DESC_THRESHOLD_EVENT)
 				WARN_ON_ONCE((evt->gen_media.media_hdr.type &
@@ -952,9 +964,6 @@ void cxl_event_trace_record(struct cxl_memdev *cxlmd,
 			trace_cxl_general_media(cxlmd, type, cxlr, hpa,
 						hpa_alias, &evt->gen_media);
 		} else if (event_type == CXL_CPER_EVENT_DRAM) {
-			if (cxl_store_rec_dram((struct cxl_memdev *)cxlmd, evt))
-				dev_dbg(&cxlmd->dev, "CXL store rec_dram failed\n");
-
 			if (evt->dram.media_hdr.descriptor &
 			    CXL_GMER_EVT_DESC_THRESHOLD_EVENT)
 				WARN_ON_ONCE((evt->dram.media_hdr.type &
