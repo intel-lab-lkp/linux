@@ -37,7 +37,8 @@ export LANG=C
 
 status=
 # Attempt to build a source that is expected to fail with a specific warning.
-if "$@" -Werror -c "$IN" -o "$OUT".o 2> "$TMP" ; then
+# Disable colors so that the grep below can match the warning.
+if "$@" -Werror -fdiagnostics-color=never -c "$IN" -o "$OUT".o 2> "$TMP" ; then
 	# If the build succeeds, either the test has failed or the
 	# warning may only happen at link time (Clang). In that case,
 	# make sure the expected symbol is unresolved in the symbol list.
