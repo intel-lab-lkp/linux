@@ -439,8 +439,10 @@ static int mt7925_mac_link_bss_add(struct mt792x_dev *dev,
 
 	ret = mt76_connac_mcu_uni_add_dev(&dev->mphy, link_conf, &mconf->mt76,
 					  &mlink->wcid, true);
-	if (ret)
+	if (ret) {
+		mt792x_mac_link_bss_remove(dev, mconf, mlink);
 		goto out;
+	}
 
 	if (vif->txq) {
 		mtxq = (struct mt76_txq *)vif->txq->drv_priv;
