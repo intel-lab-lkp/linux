@@ -1513,6 +1513,18 @@ static int pci_scan_bridge_extend(struct pci_bus *bus, struct pci_dev *dev,
 		fixed_buses = pci_ea_fixed_busnrs(dev, &fixed_sec, &fixed_sub);
 		if (fixed_buses)
 			next_busnr = fixed_sec;
+		else if (dev->subordinate)
+			/*
+			 * This bridge already has a child bus, so we are
+			 * rescanning an already-configured bridge (e.g. after a
+			 * sibling bridge was removed and the bus was rescanned).
+			 * Keep its existing bus number instead of renumbering
+			 * it: a re-added sibling is appended to the tail of the
+			 * device list, so handing out max + 1 here would let that
+			 * later sibling steal this bridge's number and swap the
+			 * two subtrees.
+			 */
+			next_busnr = dev->subordinate->busn_res.start;
 		else
 			next_busnr = max + 1;
 
