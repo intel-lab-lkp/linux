@@ -1777,7 +1777,9 @@ int pci_save_state(struct pci_dev *dev)
 	pci_save_aer_state(dev);
 	pci_save_ptm_state(dev);
 	pci_save_tph_state(dev);
-	return pci_save_vc_state(dev);
+	pci_save_vc_state(dev);
+
+	return 0;
 }
 EXPORT_SYMBOL(pci_save_state);
 
@@ -3589,7 +3591,7 @@ void pci_allocate_cap_save_buffers(struct pci_dev *dev)
 			pci_err(dev, "unable to reserve LTR save state\n");
 	}
 
-	pci_allocate_vc_save_buffers(dev);
+	pci_vc_reserve_saved_caps(dev);
 }
 
 void pci_free_cap_save_buffers(struct pci_dev *dev)
