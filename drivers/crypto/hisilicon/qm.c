@@ -77,6 +77,7 @@
 #define QM_CQ_OVERFLOW			0
 #define QM_EQ_OVERFLOW			1
 #define QM_CQE_ERROR			2
+#define QM_XQC_MIN_DEPTH		1024
 
 #define QM_XQ_DEPTH_SHIFT		16
 #define QM_XQ_DEPTH_MASK		GENMASK(15, 0)
@@ -963,14 +964,24 @@ u32 hisi_qm_get_cap_value(struct hisi_qm *qm,
 }
 EXPORT_SYMBOL_GPL(hisi_qm_get_cap_value);
 
-static void qm_get_xqc_depth(struct hisi_qm *qm, u16 *low_bits,
-			     u16 *high_bits, enum qm_basic_type type)
+static int qm_get_xqc_depth(struct hisi_qm *qm, u16 *low_bits,
+			    u16 *high_bits, enum qm_basic_type type)
 {
 	u32 depth;
 
 	depth = hisi_qm_get_hw_info(qm, qm_basic_info, type, qm->cap_ver);
 	*low_bits = depth & QM_XQ_DEPTH_MASK;
 	*high_bits = (depth >> QM_XQ_DEPTH_SHIFT) & QM_XQ_DEPTH_MASK;
+
+	if (qm->ver >= QM_HW_V3 &&
+	    (*low_bits < QM_XQC_MIN_DEPTH || *high_bits < QM_XQC_MIN_DEPTH)) {
+		dev_err(&qm->pdev->dev,
+			"invalid depth type %d, low %u, high %u, min %u\n",
+			type, *low_bits, *high_bits, QM_XQC_MIN_DEPTH);
+		return -EIO;
+	}
+
+	return 0;
 }
 
 int hisi_qm_set_algs(struct hisi_qm *qm, u64 alg_msk, const struct qm_dev_alg *dev_algs,
@@ -2940,6 +2951,7 @@ static int qm_alloc_uacce(struct hisi_qm *qm)
 	unsigned long mmio_page_nr;
 	unsigned long dus_page_nr;
 	u16 sq_depth, cq_depth;
+	int ret;
 	struct uacce_interface interface = {
 		.flags = UACCE_DEV_SVA,
 		.ops = &uacce_qm_ops,
@@ -2974,7 +2986,12 @@ static int qm_alloc_uacce(struct hisi_qm *qm)
 	else
 		mmio_page_nr = qm->db_interval / PAGE_SIZE;
 
-	qm_get_xqc_depth(qm, &sq_depth, &cq_depth, QM_QP_DEPTH_CAP);
+	ret = qm_get_xqc_depth(qm, &sq_depth, &cq_depth, QM_QP_DEPTH_CAP);
+	if (ret) {
+		uacce_remove(uacce);
+		qm->use_sva = false;
+		return ret;
+	}
 
 	/* Add one more page for device or qp status */
 	dus_page_nr = (PAGE_SIZE - 1 + qm->sqe_size * sq_depth +
@@ -6002,7 +6019,12 @@ static int hisi_qp_alloc_memory(struct hisi_qm *qm)
 		return -ENOMEM;
 	}
 
-	qm_get_xqc_depth(qm, &sq_depth, &cq_depth, QM_QP_DEPTH_CAP);
+	ret = qm_get_xqc_depth(qm, &sq_depth, &cq_depth, QM_QP_DEPTH_CAP);
+	if (ret) {
+		kfree(qm->poll_data);
+		kfree(qm->qp_array);
+		return ret;
+	}
 
 	/* one more page for device or qp statuses */
 	qp_dma_size = qm->sqe_size * sq_depth + sizeof(struct qm_cqe) * cq_depth;
@@ -6076,7 +6098,9 @@ static int hisi_qm_memory_init(struct hisi_qm *qm)
 } while (0)
 
 	idr_init(&qm->qp_idr);
-	qm_get_xqc_depth(qm, &qm->eq_depth, &qm->aeq_depth, QM_XEQ_DEPTH_CAP);
+	ret = qm_get_xqc_depth(qm, &qm->eq_depth, &qm->aeq_depth, QM_XEQ_DEPTH_CAP);
+	if (ret)
+		goto err_destroy_idr;
 	qm->qdma.size = QMC_ALIGN(sizeof(struct qm_eqe) * qm->eq_depth) +
 			QMC_ALIGN(sizeof(struct qm_aeqe) * qm->aeq_depth) +
 			QMC_ALIGN(sizeof(struct qm_sqc) * qm->qp_num) +
