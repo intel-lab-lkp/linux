@@ -43,7 +43,6 @@ struct hibmc_dp_dev {
 	u8 downstream_ports[DP_MAX_DOWNSTREAM_PORTS];
 	struct drm_dp_desc desc;
 	bool is_branch;
-	int hpd_status;
 	void __iomem *serdes_base;
 };
 
