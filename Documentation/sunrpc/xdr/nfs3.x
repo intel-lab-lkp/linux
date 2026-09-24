@@ -627,6 +627,16 @@ struct dirlist3 {
 	bool		eof;
 };
 
+/*
+ * The entry list encodes as the value-follows form of "entry3
+ * *entries" -- each entry prefixed by TRUE, the sequence closed by
+ * FALSE -- and the encode hooks stream it straight from the directory
+ * during reply encoding rather than from a materialized array.  The
+ * struct definitions above are the verbatim RFC 1813 types; only this
+ * pragma selects the hook-driven codec.
+ */
+pragma aggregate dirlist3 entries;
+
 struct READDIR3resok {
 	post_op_attr	dir_attributes;
 	cookieverf3	cookieverf;
