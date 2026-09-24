@@ -3213,8 +3213,15 @@ static void serial_core_remove_one_port(struct uart_driver *drv,
 	/*
 	 * If the port is used as a console, unregister it
 	 */
-	if (uart_console(uport))
+	if (uart_console(uport)) {
 		unregister_console(uport->cons);
+		port->console = false;
+	}
+
+	guard(mutex)(&port->mutex);
+
+	if (tty_port_initialized(port))
+		uart_shutdown(NULL, state);
 
 	/*
 	 * Free the port IO and memory resources, if any.
@@ -3230,7 +3237,6 @@ static void serial_core_remove_one_port(struct uart_driver *drv,
 	uport->type = PORT_UNKNOWN;
 	uport->port_dev = NULL;
 
-	guard(mutex)(&port->mutex);
 	WARN_ON(atomic_dec_return(&state->refcount) < 0);
 	wait_event(state->remove_wait, !atomic_read(&state->refcount));
 	state->uart_port = NULL;
