@@ -768,7 +768,7 @@ io_err:
 rl_err:
 	ntfs_error(sb, "Runlist is corrupt.  Unmount and run chkdsk.");
 dirty_err:
-	NVolSetErrors(vol);
+	ntfs_report_file_metadata_error(log_vi, -EIO);
 	err = -EIO;
 err:
 	kvfree(empty_buf);
