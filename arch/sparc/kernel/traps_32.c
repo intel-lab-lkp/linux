@@ -20,6 +20,7 @@
 #include <linux/kdebug.h>
 #include <linux/export.h>
 #include <linux/pgtable.h>
+#include <linux/uaccess.h>
 
 #include <asm/delay.h>
 #include <asm/ptrace.h>
@@ -105,15 +106,256 @@ void do_hw_interrupt(struct pt_regs *regs, unsigned long type)
 			       (void __user *)regs->pc, type - 0x80);
 }
 
+/* Some SPARC V8 implementations raise illegal_instruction instead of
+ * completing UDIV/SDIV for every operand.  Finish the divide in software and
+ * step over it rather than killing the process for an instruction the
+ * architecture defines.
+ */
+#define DIV_OP3_UDIV	0x0e
+#define DIV_OP3_SDIV	0x0f
+#define DIV_OP3_UDIVCC	0x1e
+#define DIV_OP3_SDIVCC	0x1f
+
+/* %l and %i live in the register file until the windows spill, so force them
+ * out before reading them off the stack.  Without this we read stale memory and
+ * compute a confidently wrong quotient.
+ */
+static inline void div_maybe_flush_windows(unsigned int rs1, unsigned int rs2,
+					   unsigned int rd)
+{
+	if (rs2 >= 16 || rs1 >= 16 || rd >= 16) {
+		__asm__ __volatile__("save %sp, -0x40, %sp\n\t"
+				     "save %sp, -0x40, %sp\n\t"
+				     "save %sp, -0x40, %sp\n\t"
+				     "save %sp, -0x40, %sp\n\t"
+				     "save %sp, -0x40, %sp\n\t"
+				     "save %sp, -0x40, %sp\n\t"
+				     "save %sp, -0x40, %sp\n\t"
+				     "restore; restore; restore; restore;\n\t"
+				     "restore; restore; restore;\n\t");
+	}
+}
+
+/* The window is only reachable if %fp is a properly aligned user address. */
+static struct reg_window32 __user *div_user_window(struct pt_regs *regs)
+{
+	unsigned long fp = regs->u_regs[UREG_FP];
+
+	if (fp & (sizeof(unsigned long) * 2 - 1))
+		return NULL;
+	return (struct reg_window32 __user *) fp;
+}
+
+/* Where a windowed register was spilled, or NULL if unreachable.  %fp may be
+ * mapped while the slot itself lands on the next page, so callers report this
+ * address rather than %fp on failure.
+ */
+static unsigned long __user *div_reg_slot(unsigned int reg,
+					 struct pt_regs *regs)
+{
+	struct reg_window32 __user *win = div_user_window(regs);
+
+	if (!win)
+		return NULL;
+	if (reg < 24)
+		return &win->locals[reg - 16];
+	return &win->ins[reg - 24];
+}
+
+static int div_fetch_reg(unsigned int reg, struct pt_regs *regs,
+			 unsigned long *val, void __user **fault_at)
+{
+	unsigned long __user *slot;
+
+	if (reg < 16) {
+		*val = reg ? regs->u_regs[reg] : 0;
+		return 0;
+	}
+
+	/* %l and %i live in the register window on the user stack. */
+	slot = div_reg_slot(reg, regs);
+	if (!slot) {
+		*fault_at = (void __user *)regs->u_regs[UREG_FP];
+		return -EFAULT;
+	}
+	if (get_user(*val, slot)) {
+		*fault_at = (void __user *)slot;
+		return -EFAULT;
+	}
+	return 0;
+}
+
+static int div_store_reg(unsigned int reg, struct pt_regs *regs,
+			 unsigned long val, void __user **fault_at)
+{
+	unsigned long __user *slot;
+
+	if (reg == 0)			/* %g0 is hardwired to zero */
+		return 0;
+	if (reg < 16) {
+		regs->u_regs[reg] = val;
+		return 0;
+	}
+
+	slot = div_reg_slot(reg, regs);
+	if (!slot) {
+		*fault_at = (void __user *)regs->u_regs[UREG_FP];
+		return -EFAULT;
+	}
+	if (put_user(val, slot)) {
+		*fault_at = (void __user *)slot;
+		return -EFAULT;
+	}
+	return 0;
+}
+
+/* DIV_NOT_MINE: not one of ours, the caller must still raise SIGILL.
+ * DIV_DONE:     emulated (or turned into SIGFPE); swallow the trap.
+ * DIV_FAULT:    it was a divide, but its register window was unreachable.
+ */
+#define DIV_NOT_MINE	0
+#define DIV_DONE	1
+#define DIV_FAULT	(-1)
+
+static int emulate_divide(struct pt_regs *regs, unsigned long pc,
+			  void __user **fault_at)
+{
+	unsigned int insn, op3, rd, rs1, rs2;
+	unsigned long v1, divisor;
+	int is_signed, sets_cc;
+	unsigned long result;
+	u64 dividend;
+	int overflow = 0;
+
+	if (get_user(insn, (unsigned int __user *) pc))
+		return DIV_NOT_MINE;
+
+	if ((insn >> 30) != 2)			/* not format 3 */
+		return DIV_NOT_MINE;
+
+	op3 = (insn >> 19) & 0x3f;
+	switch (op3) {
+	case DIV_OP3_UDIV:
+		is_signed = 0;
+		sets_cc = 0;
+		break;
+	case DIV_OP3_SDIV:
+		is_signed = 1;
+		sets_cc = 0;
+		break;
+	case DIV_OP3_UDIVCC:
+		is_signed = 0;
+		sets_cc = 1;
+		break;
+	case DIV_OP3_SDIVCC:
+		is_signed = 1;
+		sets_cc = 1;
+		break;
+	default:
+		return DIV_NOT_MINE;
+	}
+
+	/* Definitely a divide now, so unreachable operands are a fault. */
+	rd  = (insn >> 25) & 0x1f;
+	rs1 = (insn >> 14) & 0x1f;
+	rs2 = (insn & 0x2000) ? 0 : (insn & 0x1f);
+
+	div_maybe_flush_windows(rs1, rs2, rd);
+
+	if (div_fetch_reg(rs1, regs, &v1, fault_at))
+		return DIV_FAULT;
+
+	if (insn & 0x2000) {			/* i=1, simm13 */
+		divisor = (unsigned long)(long)((int)(insn << 19) >> 19);
+	} else {
+		if (div_fetch_reg(rs2, regs, &divisor, fault_at))
+			return DIV_FAULT;
+	}
+
+	if (divisor == 0) {
+		/* Hardware raises division_by_zero here; keep that contract. */
+		send_sig_fault(SIGFPE, FPE_INTDIV, (void __user *)pc, current);
+		return DIV_DONE;
+	}
+
+	dividend = ((u64)regs->y << 32) | (u32)v1;
+
+	if (!is_signed) {
+		u64 q = dividend / (u32)divisor;
+
+		if (q > 0xffffffffULL) {
+			q = 0xffffffffULL;	/* V8: clamp on overflow */
+			overflow = 1;
+		}
+		result = (unsigned long)q;
+	} else {
+		s64 sdividend = (s64)dividend;
+		s32 sdivisor = (s32)divisor;
+		s64 q;
+
+		/* S64_MIN / -1 wants 2^63, which is not representable, and in
+		 * C the expression is undefined rather than merely out of
+		 * range.  Saturate directly instead of dividing.
+		 */
+		if (sdividend == S64_MIN && sdivisor == -1) {
+			q = (s64)0x7fffffff;
+			overflow = 1;
+		} else {
+			q = sdividend / sdivisor;
+		}
+
+		if (q > (s64)0x7fffffff) {
+			q = 0x7fffffff;
+			overflow = 1;
+		} else if (q < -(s64)0x80000000LL) {
+			q = -(s64)0x80000000LL;
+			overflow = 1;
+		}
+		result = (unsigned long)(s32)q;
+	}
+
+	if (div_store_reg(rd, regs, result, fault_at))
+		return DIV_FAULT;
+
+	if (sets_cc) {
+		unsigned long psr = regs->psr;
+
+		psr &= ~(PSR_N | PSR_Z | PSR_V | PSR_C);
+		if ((s32)result < 0)
+			psr |= PSR_N;
+		if (result == 0)
+			psr |= PSR_Z;
+		if (overflow)
+			psr |= PSR_V;
+		regs->psr = psr;
+	}
+
+	/* Step over the instruction we just performed. */
+	regs->pc = regs->npc;
+	regs->npc = regs->npc + 4;
+	return DIV_DONE;
+}
+
 void do_illegal_instruction(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 			    unsigned long psr)
 {
+	void __user *fault_at = (void __user *)pc;
+
 	if(psr & PSR_PS)
 		die_if_kernel("Kernel illegal instruction", regs);
 #ifdef TRAP_DEBUG
 	printk("Ill instr. at pc=%08lx instruction is %08lx\n",
 	       regs->pc, *(unsigned long *)regs->pc);
 #endif
+
+	switch (emulate_divide(regs, pc, &fault_at)) {
+	case DIV_DONE:
+		return;
+	case DIV_FAULT:
+		/* The instruction was legal; the stack it spilled to was not. */
+		send_sig_fault(SIGSEGV, SEGV_MAPERR, fault_at, current);
+		return;
+	}
 
 	send_sig_fault(SIGILL, ILL_ILLOPC, (void __user *)pc, current);
 }
