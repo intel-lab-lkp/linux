@@ -698,7 +698,12 @@ static unsigned int io_cqring_queued(struct io_ring_ctx *ctx)
  */
 static bool io_fill_nop_cqe(struct io_ring_ctx *ctx, unsigned int off)
 {
-	if (io_cqring_queued(ctx) < ctx->cq_entries) {
+	/*
+	 * Creating a skip CQE and posting a 32b CQE requires 3 free CQ slots
+	 * in total (1 for the skip CQE at the end of the ring and 2 for the
+	 * 32b CQE at the start of the ring).
+	 */
+	if (io_cqring_queued(ctx) + 3 <= ctx->cq_entries) {
 		struct io_uring_cqe *cqe = &ctx->rings->cqes[off];
 
 		cqe->user_data = 0;
