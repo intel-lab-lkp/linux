@@ -38,13 +38,13 @@ SECTIONS
 
 	.data : ALIGN(4096) {
 		_data = .;
-		*(.data* .init.data*)
+		*(.data* .init.data* .init.efidata*)
 		_edata = ALIGN(512);
 		. = _edata;
 	}
 
 	.bss : {
-		*(.bss* .init.bss*)
+		*(.bss* .init.bss* .init.efibss*)
 		_end = ALIGN(512);
 		. = _end;
 	}
