@@ -958,8 +958,9 @@ static int __maybe_unused stmmac_pltfr_noirq_suspend(struct device *dev)
 		return 0;
 
 	if (!priv->wolopts) {
-		/* Disable clock in case of PWM is off */
-		clk_disable_unprepare(priv->plat->clk_ptp_ref);
+		/* A detached datapath may already have released its PTP clock. */
+		if (priv->datapath != STMMAC_DATAPATH_DOWN)
+			clk_disable_unprepare(priv->plat->clk_ptp_ref);
 
 		ret = pm_runtime_force_suspend(dev);
 		if (ret)
@@ -984,12 +985,14 @@ static int __maybe_unused stmmac_pltfr_noirq_resume(struct device *dev)
 		if (ret)
 			return ret;
 
-		ret = clk_prepare_enable(priv->plat->clk_ptp_ref);
-		if (ret < 0) {
-			netdev_warn(priv->dev,
-				    "failed to enable PTP reference clock: %pe\n",
-				    ERR_PTR(ret));
-			return ret;
+		if (priv->datapath != STMMAC_DATAPATH_DOWN) {
+			ret = clk_prepare_enable(priv->plat->clk_ptp_ref);
+			if (ret < 0) {
+				netdev_warn(priv->dev,
+					    "failed to enable PTP reference clock: %pe\n",
+					    ERR_PTR(ret));
+				return ret;
+			}
 		}
 	}
 
