@@ -2525,7 +2525,8 @@ static void hdmirx_disable_irq(struct device *dev)
 {
 	struct snps_hdmirx_dev *hdmirx_dev = dev_get_drvdata(dev);
 
-	disable_irq(hdmirx_dev->det_irq);
+	if (hdmirx_dev->det_irq > 0)
+		disable_irq(hdmirx_dev->det_irq);
 	disable_irq(hdmirx_dev->dma_irq);
 	disable_irq(hdmirx_dev->hdmi_irq);
 
@@ -2539,7 +2540,8 @@ static void hdmirx_enable_irq(struct device *dev)
 
 	enable_irq(hdmirx_dev->hdmi_irq);
 	enable_irq(hdmirx_dev->dma_irq);
-	enable_irq(hdmirx_dev->det_irq);
+	if (hdmirx_dev->det_irq > 0)
+		enable_irq(hdmirx_dev->det_irq);
 
 	queue_delayed_work(system_dfl_wq,
 			   &hdmirx_dev->delayed_work_hotplug,
@@ -2623,21 +2625,23 @@ static int hdmirx_setup_irq(struct snps_hdmirx_dev *hdmirx_dev,
 		return ret;
 	}
 
-	irq = gpiod_to_irq(hdmirx_dev->detect_5v_gpio);
-	if (irq < 0) {
-		dev_err_probe(dev, irq, "failed to get hdmirx-5v irq\n");
-		return irq;
-	}
+	if (hdmirx_dev->detect_5v_gpio) {
+		irq = gpiod_to_irq(hdmirx_dev->detect_5v_gpio);
+		if (irq < 0) {
+			dev_err_probe(dev, irq, "failed to get hdmirx-5v irq\n");
+			return irq;
+		}
 
-	irq_set_status_flags(irq, IRQ_NOAUTOEN);
+		irq_set_status_flags(irq, IRQ_NOAUTOEN);
 
-	hdmirx_dev->det_irq = irq;
-	ret = devm_request_irq(dev, irq, hdmirx_5v_det_irq_handler,
-			       IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING,
-			       "rk_hdmirx-5v", hdmirx_dev);
-	if (ret) {
-		dev_err_probe(dev, ret, "failed to request hdmirx-5v irq\n");
-		return ret;
+		hdmirx_dev->det_irq = irq;
+		ret = devm_request_irq(dev, irq, hdmirx_5v_det_irq_handler,
+				       IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING,
+				       "rk_hdmirx-5v", hdmirx_dev);
+		if (ret) {
+			dev_err_probe(dev, ret, "failed to request hdmirx-5v irq\n");
+			return ret;
+		}
 	}
 
 	return 0;
