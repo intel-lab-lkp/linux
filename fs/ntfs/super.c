@@ -14,6 +14,7 @@
 #include <linux/sched/mm.h>
 #include <linux/fs_context.h>
 #include <linux/fs_parser.h>
+#include <linux/fserror.h>
 
 #include "sysctl.h"
 #include "logfile.h"
@@ -393,6 +394,13 @@ const struct option_t on_errors_arr[] = {
 	{ ON_ERRORS_CONTINUE,	"continue", },
 	{ 0,			NULL }
 };
+
+void ntfs_report_metadata_error(struct ntfs_volume *vol, int error)
+{
+	NVolSetErrors(vol);
+	if (vol->sb->s_flags & SB_ACTIVE)
+		fserror_report_metadata(vol->sb, error, GFP_ATOMIC);
+}
 
 void ntfs_handle_error(struct super_block *sb)
 {
