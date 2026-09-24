@@ -235,6 +235,8 @@ static bool ima_get_verity_digest(struct ima_iint_cache *iint,
  *
  * Calculate the file hash, if it doesn't already exist,
  * storing the measurement and i_version in the iint.
+ * If modsig is provided, bind it to the file data or discard it on failure
+ * so ordinary measurement and xattr appraisal can proceed.
  *
  * Must be called with iint->mutex held.
  *
@@ -242,7 +244,7 @@ static bool ima_get_verity_digest(struct ima_iint_cache *iint,
  */
 int ima_collect_measurement(struct ima_iint_cache *iint, struct file *file,
 			    void *buf, loff_t size, enum hash_algo algo,
-			    struct modsig *modsig)
+			    struct modsig **modsig)
 {
 	const char *audit_cause = "failed";
 	struct inode *inode = file_inode(file);
@@ -252,7 +254,7 @@ int ima_collect_measurement(struct ima_iint_cache *iint, struct file *file,
 						struct ima_digest_data, hdr);
 	struct name_snapshot filename;
 	struct kstat stat;
-	int result = 0;
+	int result = 0, modsig_result = 0;
 	int length;
 	void *tmpbuf;
 	u64 i_version = 0;
@@ -262,8 +264,13 @@ int ima_collect_measurement(struct ima_iint_cache *iint, struct file *file,
 	 * the file digest without collecting the modsig in a previous
 	 * measurement rule.
 	 */
-	if (modsig)
-		ima_collect_modsig(modsig, buf, size);
+	if (modsig && *modsig) {
+		modsig_result = ima_collect_modsig(*modsig, buf, size);
+		if (modsig_result) {
+			ima_free_modsig(*modsig);
+			*modsig = NULL;
+		}
+	}
 
 	if (iint->flags & IMA_COLLECTED)
 		goto out;
@@ -322,15 +329,20 @@ int ima_collect_measurement(struct ima_iint_cache *iint, struct file *file,
 	if (!result)
 		iint->flags |= IMA_COLLECTED;
 out:
-	if (result) {
+	if (result || modsig_result) {
 		if (file->f_flags & O_DIRECT)
 			audit_cause = "failed(directio)";
 
 		take_dentry_name_snapshot(&filename, file->f_path.dentry);
 
-		integrity_audit_msg(AUDIT_INTEGRITY_DATA, inode,
-				    filename.name.name, "collect_data",
-				    audit_cause, result, 0);
+		if (modsig_result)
+			integrity_audit_msg(AUDIT_INTEGRITY_DATA, inode,
+					    filename.name.name, "collect_data",
+					    "failed-modsig", modsig_result, 0);
+		if (result)
+			integrity_audit_msg(AUDIT_INTEGRITY_DATA, inode,
+					    filename.name.name, "collect_data",
+					    audit_cause, result, 0);
 
 		release_dentry_name_snapshot(&filename);
 	}

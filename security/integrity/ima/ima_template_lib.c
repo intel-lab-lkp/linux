@@ -478,8 +478,8 @@ int ima_eventdigest_modsig_init(struct ima_event_data *event_data,
 		if (rc)
 			return rc;
 		else if (hash_algo == HASH_ALGO__LAST || cur_digestsize == 0)
-			/* There was some error collecting the digest. */
-			return -EINVAL;
+			/* Keep the ordinary measurement without an exported digest. */
+			return 0;
 	}
 
 	return ima_eventdigest_init_common(cur_digest, cur_digestsize,
