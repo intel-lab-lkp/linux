@@ -84,6 +84,13 @@ struct hfs_find_data {
 	int entryoffset, entrylength;
 };
 
+static inline bool hfs_bnode_is_valid_range(struct hfs_bnode *node,
+					    int off, int len)
+{
+	return off >= 0 && len > 0 &&
+	       (u64)off + len <= node->tree->node_size;
+}
+
 
 /* btree.c */
 extern struct hfs_btree *hfs_btree_open(struct super_block *sb, u32 id,
