@@ -6,9 +6,16 @@
  */
 
 #include <linux/module.h>
+#include <linux/moduleparam.h>
 #include <uapi/linux/virtio_ids.h>
 
 #include "controller.h"
+#include "host.h"
+#include "vq_common.h"
+
+u32 virtio_usb_cmd_timeout_ms = MSEC_PER_SEC;
+module_param_named(cmd_timeout_ms, virtio_usb_cmd_timeout_ms, uint, 0644);
+MODULE_PARM_DESC(cmd_timeout_ms, "Command completion timeout in milliseconds");
 
 /**
  * virtio_usb_find_vqs() - Enumerate and initialize all virtqueues.
@@ -70,8 +77,21 @@ static int virtio_usb_validate(struct virtio_device *vdev)
 		return -EINVAL;
 	}
 
+	if (!virtio_has_feature(vdev, VIRTIO_USB_F_HOST)) {
+		dev_err(&vdev->dev,
+			"device should support at least one usb role\n");
+		return -EINVAL;
+	}
+
+	if (!virtio_usb_cmd_timeout_ms) {
+		dev_err(&vdev->dev, "msg_timeout_ms value cannot be zero\n");
+		return -EINVAL;
+	}
+
 	return 0;
 }
+
+static void virtio_usb_remove(struct virtio_device *vdev);
 
 /**
  * virtio_usb_probe() - Probe VirtIO usb controller.
@@ -84,7 +104,7 @@ static int virtio_usb_probe(struct virtio_device *vdev)
 {
 	struct virtio_usb *vusb;
 	unsigned int nvqs = 0;
-	int rc = 0;
+	int rc = 0, i = 0;
 
 	vusb = devm_kzalloc(&vdev->dev, sizeof(*vusb), GFP_KERNEL);
 	if (!vusb)
@@ -100,6 +120,22 @@ static int virtio_usb_probe(struct virtio_device *vdev)
 	if (!vusb->vports)
 		return -ENOMEM;
 
+	if (virtio_has_feature(vdev, VIRTIO_USB_F_HOST))
+		vusb->host_role = 1;
+
+	/* Only host_role exists so far, so every port is unambiguously a
+	 * host-role port. Later commits (device role, OTG) will replace
+	 * this with real per-port role resolution.
+	 */
+	vusb->host_vq_base = -1;
+	if (vusb->host_role) {
+		vusb->host_vq_base = nvqs;
+		nvqs += VIRTIO_USB_VQ_HOST_MAX;
+
+		for (i = 0; i < vusb->nports; i++)
+			vusb->vports[i].role = VIRTIO_USB_ROLE_HOST;
+	}
+
 	vusb->vqueues = devm_kcalloc(&vdev->dev, nvqs, sizeof(*vusb->vqueues),
 				     GFP_KERNEL);
 	if (!vusb->vqueues)
@@ -107,13 +143,60 @@ static int virtio_usb_probe(struct virtio_device *vdev)
 
 	vusb->nvqs = nvqs;
 
+	if (vusb->host_vq_base >= 0)
+		for (i = 0; i < VIRTIO_USB_VQ_HOST_MAX; i++) {
+			vusb->vqueues[vusb->host_vq_base + i].name =
+				host_vqueues[i].name;
+			vusb->vqueues[vusb->host_vq_base + i].callback =
+				host_vqueues[i].callback;
+			vusb->vqueues[vusb->host_vq_base + i].process =
+				host_vqueues[i].process;
+			vusb->vqueues[vusb->host_vq_base + i].stop =
+				host_vqueues[i].stop;
+		}
+
 	rc = virtio_usb_find_vqs(vusb);
-	if (rc)
-		goto on_exit;
+	if (rc) {
+		dev_err(&vdev->dev, "%s virtio_usb_find_vqs() error(%d)\n",
+			__func__, rc);
+		goto on_error;
+	}
+
+	if (vusb->host_role) {
+		INIT_WORK(&vusb->vq_host_data_rx_work, virtio_usb_hc_rx_work);
+		INIT_WORK(&vusb->vq_host_evt_work, virtio_usb_hc_evt_work);
+
+		/* Initialize one HCD pair per host-role VP. */
+		for (i = 0; i < vusb->nports; i++) {
+			if (vusb->vports[i].role != VIRTIO_USB_ROLE_HOST)
+				continue;
+			rc = virtio_usb_hc_vp_init(vusb, i);
+			if (rc) {
+				dev_err(&vdev->dev,
+					"%s virtio_usb_hc_vp_init() port=%d error(%d)\n",
+					__func__, i, rc);
+				goto on_error;
+			}
+		}
+		/* Populate the shared host event queue once, after every
+		 * VP is initialized.
+		 */
+		rc = virtio_usb_hc_event_populate(vusb);
+		if (rc) {
+			dev_err(&vdev->dev,
+				"%s virtio_usb_hc_event_populate() error(%d)\n",
+				__func__, rc);
+			goto on_error;
+		}
+	}
 
 	virtio_device_ready(vdev);
 
-on_exit:
+	return rc;
+
+on_error:
+	dev_err(&vdev->dev, "%s failed(%d)\n", __func__, rc);
+	virtio_usb_remove(vdev);
 	return rc;
 }
 
@@ -128,12 +211,22 @@ static void virtio_usb_remove(struct virtio_device *vdev)
 	struct virtio_usb *vusb = vdev->priv;
 	int i;
 
-	virtio_reset_device(vdev);
 	for (i = 0; i < vusb->nvqs; i++)
 		vusb->vqueues[i].stop(vusb, &vusb->vqueues[i]);
 
+	if (vusb->host_role && vusb->vports) {
+		for (i = 0; i < (int)vusb->nports; i++)
+			virtio_usb_hc_vp_deinit(vusb, i);
+	}
+
+	virtio_reset_device(vdev);
+
 	vdev->config->del_vqs(vdev);
 }
+
+static const unsigned int virtio_usb_features[] = {
+	VIRTIO_USB_F_HOST,
+};
 
 static const struct virtio_device_id id_table[] = {
 	{ VIRTIO_ID_USB, VIRTIO_DEV_ANY_ID },
@@ -142,6 +235,8 @@ static const struct virtio_device_id id_table[] = {
 
 static struct virtio_driver virtio_usb_driver = {
 	.driver.name = KBUILD_MODNAME,
+	.feature_table = virtio_usb_features,
+	.feature_table_size = ARRAY_SIZE(virtio_usb_features),
 	.id_table = id_table,
 	.validate = virtio_usb_validate,
 	.probe = virtio_usb_probe,

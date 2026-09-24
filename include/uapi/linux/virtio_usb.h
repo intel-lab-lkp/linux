@@ -106,6 +106,14 @@ enum {
 	VIRTIO_USB_EVT_HOST_PORT_DISCONNECTED,
 };
 
+/* Maximum number of leaf-device slots per virtual port (physical socket).
+ * Each VP's root hub advertises exactly this many ports to the guest hub
+ * driver. Leaf devices (direct or behind a physical hub) are flattened
+ * into slots 0..VIRTIO_USB_VP_MAX_PORTS-1 of their VP's root hub.
+ * Must be <= USB_MAXCHILDREN (31) and <= USB_SS_MAXPORTS (15).
+ */
+#define VIRTIO_USB_VP_MAX_PORTS 8
+
 /* VIRTIO_USB_EVT_HOST_PORT_CONNECTED/DISCONNECTED */
 enum {
 	VIRTIO_USB_SPEED_UNKNOWN = 0,
@@ -119,9 +127,9 @@ enum {
 
 struct virtio_usb_host_port_event {
 	__le32 code; /* VIRTIO_USB_EVT_HOST_PORT_XXX */
-	__le32 port_id;
+	__le32 vp_idx; /* virtual port (physical socket) index, 0..nports-1 */
+	__le32 port_id; /* leaf slot within VP, 0..VIRTIO_USB_VP_MAX_PORTS-1 */
 	__le32 speed; /* VIRTIO_USB_SPEED_XXX */
-	__le32 padding;
 };
 
 /*****************************************************************************
@@ -210,10 +218,12 @@ enum {
 
 struct virtio_usb_request {
 	__le64 tag;
-	__le16 port; /* Port ID */
+	__le16 vp_idx; /* virtual port (physical socket) index, host role only */
+	__le16 port; /* Port ID (leaf slot within vp_idx for host role) */
 	__le16 endpoint; /* Endpoint ID */
 	__le16 transfer_type; /* VIRTIO_USB_EP_XXX */
 	__le16 transfer_flags; /* VIRTIO_USB_FLAG_XXX */
+	__le16 padding;
 	union {
 		/* transfer_type = VIRTIO_USB_EP_CONTROL */
 		struct {
