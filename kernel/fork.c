@@ -3312,13 +3312,16 @@ int ksys_unshare(unsigned long unshare_flags)
 			shm_init_task(current);
 		}
 
+		if (new_fs) {
+			new_fs = switch_fs_struct(new_fs);
+			if (new_fs)
+				free_fs_struct(no_free_ptr(new_fs));
+		}
+
 		if (new_nsproxy) {
 			switch_task_namespaces(current, new_nsproxy);
 			new_nsproxy = NULL;
 		}
-
-		if (new_fs)
-			new_fs = switch_fs_struct(new_fs);
 
 		if (new_fd) {
 			guard(task_lock)(current);
