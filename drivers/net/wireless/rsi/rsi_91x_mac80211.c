@@ -518,6 +518,8 @@ static int rsi_mac80211_add_interface(struct ieee80211_hw *hw,
 	if (rsi_set_vap_capabilities(common, intf_mode, vif->addr,
 				     vif_info->vap_id, vap_status)) {
 		rsi_dbg(ERR_ZONE, "Failed to set VAP capabilities\n");
+		adapter->vifs[vap_idx] = NULL;
+		adapter->sc_nvifs--;
 		mutex_unlock(&common->mutex);
 		return -EINVAL;
 	}
