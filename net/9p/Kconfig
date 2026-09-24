@@ -49,6 +49,13 @@ config NET_9P_USBG
 	  This builds support for a transport for 9pfs over
 	  usb gadget.
 
+config NET_9P_USB4
+	tristate "9P Thunderbolt/USB4 Transport"
+	depends on USB4_STREAM
+	help
+	  This builds support for a transport for 9pfs over
+	  Thunderbolt/USB4 cable.
+
 config NET_9P_RDMA
 	depends on INET && INFINIBAND && INFINIBAND_ADDR_TRANS
 	tristate "9P RDMA Transport (Experimental)"
