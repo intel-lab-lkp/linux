@@ -291,8 +291,7 @@ static inline ssize_t ovl_do_getxattr(const struct path *path, const char *name,
 
 	WARN_ON(path->dentry->d_sb != path->mnt->mnt_sb);
 
-	err = vfs_getxattr(mnt_idmap(path->mnt), path->dentry,
-			       name, value, size);
+	err = vfs_getxattr(path, name, value, size);
 	len = (value && err > 0) ? err : 0;
 
 	pr_debug("getxattr(%pd2, \"%s\", \"%*pE\", %zu, 0) = %i\n",
@@ -325,9 +324,13 @@ static inline int ovl_do_setxattr(struct ovl_fs *ofs, struct dentry *dentry,
 				  const char *name, const void *value,
 				  size_t size, int flags)
 {
+	struct path path = {
+		.mnt = ovl_upper_mnt(ofs),
+		.dentry = dentry,
+	};
+
 	/* Use vfs_setxattr(), not __vfs_setxattr(): it idmaps the security.capability rootid. */
-	int err = vfs_setxattr(ovl_upper_mnt_idmap(ofs), dentry, name,
-			       value, size, flags);
+	int err = vfs_setxattr(&path, name, value, size, flags);
 
 	pr_debug("setxattr(%pd2, \"%s\", \"%*pE\", %zu, %d) = %i\n",
 		 dentry, name, min((int)size, 48), value, size, flags, err);
@@ -344,7 +347,12 @@ static inline int ovl_setxattr(struct ovl_fs *ofs, struct dentry *dentry,
 static inline int ovl_do_removexattr(struct ovl_fs *ofs, struct dentry *dentry,
 				     const char *name)
 {
-	int err = vfs_removexattr(ovl_upper_mnt_idmap(ofs), dentry, name);
+	struct path path = {
+		.mnt = ovl_upper_mnt(ofs),
+		.dentry = dentry,
+	};
+
+	int err = vfs_removexattr(&path, name);
 	pr_debug("removexattr(%pd2, \"%s\") = %i\n", dentry, name, err);
 	return err;
 }

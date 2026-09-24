@@ -538,8 +538,7 @@ static void __ksmbd_inode_close(struct ksmbd_file *fp)
 			const struct cred *saved_cred;
 
 			saved_cred = override_creds(filp->f_cred);
-			err = ksmbd_vfs_remove_xattr(file_mnt_idmap(filp),
-						     &filp->f_path,
+			err = ksmbd_vfs_remove_xattr(&filp->f_path,
 						     fp->stream.name,
 						     true);
 			revert_creds(saved_cred);

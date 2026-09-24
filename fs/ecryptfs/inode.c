@@ -991,17 +991,17 @@ ecryptfs_setxattr(struct dentry *dentry, struct inode *inode,
 		  size_t size, int flags)
 {
 	int rc;
-	struct dentry *lower_dentry;
+	struct path lower_path;
 	struct inode *lower_inode;
 
-	lower_dentry = ecryptfs_dentry_to_lower(dentry);
-	lower_inode = d_inode(lower_dentry);
+	lower_path = ecryptfs_lower_path(dentry);
+	lower_inode = d_inode(lower_path.dentry);
 	if (!(lower_inode->i_opflags & IOP_XATTR)) {
 		rc = -EOPNOTSUPP;
 		goto out;
 	}
 	inode_lock(lower_inode);
-	rc = __vfs_setxattr_locked(&nop_mnt_idmap, lower_dentry, name, value, size, flags, NULL);
+	rc = __vfs_setxattr_locked(&lower_path, name, value, size, flags, NULL);
 	inode_unlock(lower_inode);
 	if (!rc && inode)
 		fsstack_copy_attr_all(inode, lower_inode);

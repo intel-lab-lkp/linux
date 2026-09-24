@@ -3297,7 +3297,6 @@ static bool smb2_is_private_ea(const char *name, size_t name_len)
 static int smb2_set_ea(struct smb2_ea_info *eabuf, unsigned int buf_len,
 		       const struct path *path, bool get_write)
 {
-	struct mnt_idmap *idmap = mnt_idmap(path->mnt);
 	char *attr_name = NULL, *value;
 	int rc = 0;
 	unsigned int next = 0;
@@ -3337,16 +3336,14 @@ static int smb2_set_ea(struct smb2_ea_info *eabuf, unsigned int buf_len,
 		value = (char *)&eabuf->name + eabuf->EaNameLength + 1;
 
 		if (!eabuf->EaValueLength) {
-			rc = ksmbd_vfs_casexattr_len(idmap,
-						     path->dentry,
+			rc = ksmbd_vfs_casexattr_len(path,
 						     attr_name,
 						     XATTR_USER_PREFIX_LEN +
 						     eabuf->EaNameLength);
 
 			/* delete the EA only when it exits */
 			if (rc > 0) {
-				rc = ksmbd_vfs_remove_xattr(idmap,
-							    path,
+				rc = ksmbd_vfs_remove_xattr(path,
 							    attr_name,
 							    get_write);
 
@@ -3361,7 +3358,7 @@ static int smb2_set_ea(struct smb2_ea_info *eabuf, unsigned int buf_len,
 			/* if the EA doesn't exist, just do nothing. */
 			rc = 0;
 		} else {
-			rc = ksmbd_vfs_setxattr(idmap, path, attr_name, value,
+			rc = ksmbd_vfs_setxattr(path, attr_name, value,
 						le16_to_cpu(eabuf->EaValueLength),
 						0, get_write);
 			if (rc < 0) {
@@ -3398,7 +3395,6 @@ static noinline int smb2_set_stream_name_xattr(const struct path *path,
 					       struct ksmbd_file *fp,
 					       char *stream_name, int s_type)
 {
-	struct mnt_idmap *idmap = mnt_idmap(path->mnt);
 	size_t xattr_stream_size;
 	char *xattr_stream_name;
 	int rc;
@@ -3414,8 +3410,7 @@ static noinline int smb2_set_stream_name_xattr(const struct path *path,
 	fp->stream.size = xattr_stream_size;
 
 	/* Check if there is stream prefix in xattr space */
-	rc = ksmbd_vfs_casexattr_len(idmap,
-				     path->dentry,
+	rc = ksmbd_vfs_casexattr_len(path,
 				     xattr_stream_name,
 				     xattr_stream_size);
 	if (rc >= 0)
@@ -3442,7 +3437,7 @@ static noinline int smb2_set_stream_name_xattr(const struct path *path,
 				0x00, 0x00, 0x01, 0x00,	/* version */
 				[15] = 0x80,		/* backup time */
 			};
-			rc = ksmbd_vfs_setxattr(idmap, path, xattr_stream_name,
+			rc = ksmbd_vfs_setxattr(path, xattr_stream_name,
 						(void *)afpinfo_empty,
 						sizeof(afpinfo_empty), 0, false);
 			return rc < 0 ? rc : 0;
@@ -3451,7 +3446,7 @@ static noinline int smb2_set_stream_name_xattr(const struct path *path,
 		return -EBADF;
 	}
 
-	rc = ksmbd_vfs_setxattr(idmap, path, xattr_stream_name, NULL, 0, 0, false);
+	rc = ksmbd_vfs_setxattr(path, xattr_stream_name, NULL, 0, 0, false);
 	if (rc < 0)
 		pr_err("Failed to store XATTR stream name :%d\n", rc);
 	return 0;
@@ -3466,8 +3461,7 @@ static noinline int smb2_set_stream_name_xattr(const struct path *path,
  */
 static loff_t ksmbd_stream_eof(struct ksmbd_file *fp)
 {
-	ssize_t slen = ksmbd_vfs_casexattr_len(file_mnt_idmap(fp->filp),
-					       fp->filp->f_path.dentry,
+	ssize_t slen = ksmbd_vfs_casexattr_len(&fp->filp->f_path,
 					       fp->stream.name,
 					       fp->stream.size);
 	return slen < 0 ? 0 : (loff_t)slen;
@@ -3475,12 +3469,11 @@ static loff_t ksmbd_stream_eof(struct ksmbd_file *fp)
 
 static int smb2_remove_smb_xattrs(const struct path *path)
 {
-	struct mnt_idmap *idmap = mnt_idmap(path->mnt);
 	char *name, *xattr_list = NULL;
 	ssize_t xattr_list_len;
 	int err = 0;
 
-	xattr_list_len = ksmbd_vfs_listxattr(path->dentry, &xattr_list);
+	xattr_list_len = ksmbd_vfs_listxattr(path, &xattr_list);
 	if (xattr_list_len < 0) {
 		goto out;
 	} else if (!xattr_list_len) {
@@ -3495,8 +3488,7 @@ static int smb2_remove_smb_xattrs(const struct path *path)
 		if (!strncmp(name, XATTR_USER_PREFIX, XATTR_USER_PREFIX_LEN) &&
 		    !strncmp(&name[XATTR_USER_PREFIX_LEN], STREAM_PREFIX,
 			     STREAM_PREFIX_LEN)) {
-			err = ksmbd_vfs_remove_xattr(idmap, path,
-						     name, true);
+			err = ksmbd_vfs_remove_xattr(path, name, true);
 			if (err)
 				ksmbd_debug(SMB, "remove xattr failed : %s\n",
 					    name);
@@ -3542,7 +3534,7 @@ static void smb2_new_xattrs(struct ksmbd_tree_connect *tcon, const struct path *
 	da.flags = XATTR_DOSINFO_ATTRIB | XATTR_DOSINFO_CREATE_TIME |
 		XATTR_DOSINFO_ITIME;
 
-	rc = ksmbd_vfs_set_dos_attrib_xattr(mnt_idmap(path->mnt), path, &da, true);
+	rc = ksmbd_vfs_set_dos_attrib_xattr(path, &da, true);
 	if (rc)
 		ksmbd_debug(SMB, "failed to store file attribute into xattr\n");
 }
@@ -3551,6 +3543,7 @@ static bool smb2_parent_compressed(struct ksmbd_tree_connect *tcon,
 				   const struct path *path)
 {
 	struct dentry *parent = dget_parent(path->dentry);
+	struct path parent_path = { .mnt = path->mnt, .dentry = parent };
 	struct file_kattr fa = { .flags_valid = true };
 	struct xattr_dos_attrib da;
 	bool compressed = false;
@@ -3562,7 +3555,7 @@ static bool smb2_parent_compressed(struct ksmbd_tree_connect *tcon,
 		goto out;
 	}
 
-	rc = ksmbd_vfs_get_dos_attrib_xattr(mnt_idmap(path->mnt), parent, &da);
+	rc = ksmbd_vfs_get_dos_attrib_xattr(&parent_path, &da);
 	if (rc > 0 && da.attr & FILE_ATTRIBUTE_COMPRESSED)
 		compressed = true;
 
@@ -3582,8 +3575,7 @@ static void smb2_update_xattrs(struct ksmbd_tree_connect *tcon,
 	fp->f_ci->m_fattr &= ~(FILE_ATTRIBUTE_HIDDEN_LE | FILE_ATTRIBUTE_SYSTEM_LE);
 
 	/* get FileAttributes from XATTR_NAME_DOS_ATTRIBUTE */
-	rc = ksmbd_vfs_get_dos_attrib_xattr(mnt_idmap(path->mnt),
-					    path->dentry, &da);
+	rc = ksmbd_vfs_get_dos_attrib_xattr(path, &da);
 	if (rc > 0) {
 		if (store_dos_attrs) {
 			fp->f_ci->m_fattr = cpu_to_le32(da.attr);
@@ -4528,8 +4520,7 @@ int smb2_open(struct ksmbd_work *work)
 
 			if (test_share_config_flag(tcon->share_conf,
 						   KSMBD_SHARE_FLAG_STORE_DOS_ATTRS) &&
-			    ksmbd_vfs_get_dos_attrib_xattr(mnt_idmap(path.mnt),
-							 path.dentry, &da) > 0 &&
+			    ksmbd_vfs_get_dos_attrib_xattr(&path, &da) > 0 &&
 			    da.attr & FILE_ATTRIBUTE_READONLY) {
 				rsp->hdr.Status = STATUS_CANNOT_DELETE;
 				rc = -EACCES;
@@ -4867,7 +4858,6 @@ int smb2_open(struct ksmbd_work *work)
 					}
 
 					rc = ksmbd_vfs_set_sd_xattr(conn,
-								    idmap,
 								    &path,
 								    pntsd,
 								    pntsd_size,
@@ -5890,7 +5880,6 @@ static int process_query_dir_entries(struct smb2_query_dir_private *priv)
 		ksmbd_kstat.kstat = &kstat;
 		if (priv->info_level != FILE_NAMES_INFORMATION) {
 			rc = ksmbd_vfs_fill_dentry_attrs(priv->work,
-							 idmap,
 							 dent,
 							 &ksmbd_kstat);
 			if (rc) {
@@ -6432,7 +6421,6 @@ static int smb2_get_ea(struct ksmbd_work *work, struct ksmbd_file *fp,
 	ssize_t buf_free_len, alignment_bytes, next_offset, rsp_data_cnt = 0;
 	struct smb2_ea_info_req *ea_req = NULL;
 	const struct path *path;
-	struct mnt_idmap *idmap = file_mnt_idmap(fp->filp);
 
 	if (!(fp->daccess & FILE_READ_EA_LE)) {
 		pr_err("Not permitted to read ext attr : 0x%x\n",
@@ -6469,7 +6457,7 @@ static int smb2_get_ea(struct ksmbd_work *work, struct ksmbd_file *fp,
 	if (buf_free_len < 0)
 		return -EINVAL;
 
-	rc = ksmbd_vfs_listxattr(path->dentry, &xattr_list);
+	rc = ksmbd_vfs_listxattr(path, &xattr_list);
 	if (rc < 0) {
 		rsp->hdr.Status = STATUS_INVALID_HANDLE;
 		goto out;
@@ -6515,8 +6503,7 @@ static int smb2_get_ea(struct ksmbd_work *work, struct ksmbd_file *fp,
 		buf_free_len -= (offsetof(struct smb2_ea_info, name) +
 				name_len + 1);
 		/* bailout if xattr can't fit in buf_free_len */
-		value_len = ksmbd_vfs_getxattr(idmap, path->dentry,
-					       name, &buf);
+		value_len = ksmbd_vfs_getxattr(path, name, &buf);
 		if (value_len <= 0) {
 			rc = -ENOENT;
 			rsp->hdr.Status = STATUS_INVALID_HANDLE;
@@ -6806,7 +6793,7 @@ static char *smb2_get_normalized_stream_name(struct ksmbd_file *fp)
 	if (!ksmbd_stream_fd(fp))
 		return NULL;
 
-	xattr_list_len = ksmbd_vfs_listxattr(fp->filp->f_path.dentry,
+	xattr_list_len = ksmbd_vfs_listxattr(&fp->filp->f_path,
 					     &xattr_list);
 	if (xattr_list_len <= 0)
 		goto out;
@@ -6909,7 +6896,7 @@ static int get_file_stream_info(struct ksmbd_work *work,
 	if (buf_free_len < 0)
 		goto out;
 
-	xattr_list_len = ksmbd_vfs_listxattr(path->dentry, &xattr_list);
+	xattr_list_len = ksmbd_vfs_listxattr(path, &xattr_list);
 	if (xattr_list_len < 0) {
 		goto out;
 	} else if (!xattr_list_len) {
@@ -6954,8 +6941,7 @@ static int get_file_stream_info(struct ksmbd_work *work,
 		streamlen *= 2;
 		kfree(stream_buf);
 		file_info->StreamNameLength = cpu_to_le32(streamlen);
-		slen = ksmbd_vfs_xattr_len(file_mnt_idmap(fp->filp),
-					   path->dentry, stream_name);
+		slen = ksmbd_vfs_xattr_len(path, stream_name);
 		ssize = slen < 0 ? 0 : (loff_t)slen;
 		file_info->StreamSize = cpu_to_le64(ssize);
 		file_info->StreamAllocationSize = cpu_to_le64(ssize);
@@ -7693,8 +7679,8 @@ static int smb2_get_info_sec(struct ksmbd_work *work,
 
 	if (test_share_config_flag(work->tcon->share_conf,
 				   KSMBD_SHARE_FLAG_ACL_XATTR))
-		ppntsd_size = ksmbd_vfs_get_sd_xattr(work->conn, idmap,
-						     fp->filp->f_path.dentry,
+		ppntsd_size = ksmbd_vfs_get_sd_xattr(work->conn,
+						     &fp->filp->f_path,
 						     &ppntsd);
 
 	/* Check if sd buffer size exceeds response buffer size */
@@ -8055,8 +8041,7 @@ static int smb2_rename(struct ksmbd_work *work,
 				goto out;
 			}
 
-			stream_buf_len = ksmbd_vfs_getcasexattr(file_mnt_idmap(fp->filp),
-								fp->filp->f_path.dentry,
+			stream_buf_len = ksmbd_vfs_getcasexattr(&fp->filp->f_path,
 								fp->stream.name,
 								fp->stream.size,
 								&stream_buf);
@@ -8067,8 +8052,7 @@ static int smb2_rename(struct ksmbd_work *work,
 			}
 		}
 
-		rc = ksmbd_vfs_setxattr(file_mnt_idmap(fp->filp),
-					&fp->filp->f_path,
+		rc = ksmbd_vfs_setxattr(&fp->filp->f_path,
 					xattr_stream_name,
 					stream_buf, stream_buf_len, 0, true);
 		kfree(stream_buf);
@@ -8175,7 +8159,6 @@ static int set_file_basic_info(struct ksmbd_file *fp,
 	struct iattr attrs;
 	struct file *filp;
 	struct inode *inode;
-	struct mnt_idmap *idmap;
 	__le32 attrs_mask = FILE_ATTRIBUTE_DIRECTORY_LE |
 		FILE_ATTRIBUTE_COMPRESSED_LE;
 	int rc = 0;
@@ -8186,7 +8169,6 @@ static int set_file_basic_info(struct ksmbd_file *fp,
 	attrs.ia_valid = 0;
 	filp = fp->filp;
 	inode = file_inode(filp);
-	idmap = file_mnt_idmap(filp);
 
 	if (file_info->CreationTime)
 		fp->create_time = le64_to_cpu(file_info->CreationTime);
@@ -8231,7 +8213,7 @@ static int set_file_basic_info(struct ksmbd_file *fp,
 		da.flags = XATTR_DOSINFO_ATTRIB | XATTR_DOSINFO_CREATE_TIME |
 			XATTR_DOSINFO_ITIME;
 
-		rc = ksmbd_vfs_set_dos_attrib_xattr(idmap, &filp->f_path, &da,
+		rc = ksmbd_vfs_set_dos_attrib_xattr(&filp->f_path, &da,
 				true);
 		if (rc)
 			ksmbd_debug(SMB,
@@ -10784,7 +10766,6 @@ static inline int fsctl_set_sparse(struct ksmbd_work *work, u64 id,
 				   struct file_sparse *sparse)
 {
 	struct ksmbd_file *fp;
-	struct mnt_idmap *idmap;
 	int ret = 0;
 	__le32 old_fattr;
 
@@ -10808,8 +10789,6 @@ static inline int fsctl_set_sparse(struct ksmbd_work *work, u64 id,
 		goto out;
 	}
 
-	idmap = file_mnt_idmap(fp->filp);
-
 	old_fattr = fp->f_ci->m_fattr;
 	if (!sparse->SetSparse &&
 	    (old_fattr & FILE_ATTRIBUTE_SPARSE_FILE_LE)) {
@@ -10827,8 +10806,7 @@ static inline int fsctl_set_sparse(struct ksmbd_work *work, u64 id,
 		const struct cred *saved_cred;
 		struct xattr_dos_attrib da = {0};
 
-		ret = ksmbd_vfs_get_dos_attrib_xattr(idmap,
-						     fp->filp->f_path.dentry, &da);
+		ret = ksmbd_vfs_get_dos_attrib_xattr(&fp->filp->f_path, &da);
 		if (ret <= 0) {
 			da.version = 4;
 			da.itime = fp->itime;
@@ -10840,8 +10818,7 @@ static inline int fsctl_set_sparse(struct ksmbd_work *work, u64 id,
 		da.attr = le32_to_cpu(fp->f_ci->m_fattr);
 		da.flags |= XATTR_DOSINFO_ATTRIB;
 		saved_cred = override_creds(fp->filp->f_cred);
-		ret = ksmbd_vfs_set_dos_attrib_xattr(idmap,
-						     &fp->filp->f_path,
+		ret = ksmbd_vfs_set_dos_attrib_xattr(&fp->filp->f_path,
 						     &da, true);
 		revert_creds(saved_cred);
 		if (ret)

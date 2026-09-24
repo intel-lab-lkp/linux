@@ -38,7 +38,7 @@ int nfsd4_create_laundry_wq(void);
 void nfsd4_destroy_laundry_wq(void);
 bool nfsd_wait_for_delegreturn(struct svc_rqst *rqstp, struct inode *inode);
 
-extern int nfsd4_is_junction(struct dentry *dentry);
+extern int nfsd4_is_junction(const struct path *path);
 extern int register_cld_notifier(void);
 extern void unregister_cld_notifier(void);
 #ifdef CONFIG_NFSD_V4_2_INTER_SSC
@@ -68,7 +68,7 @@ static inline bool nfsd_wait_for_delegreturn(struct svc_rqst *rqstp,
 	return false;
 }
 
-static inline int nfsd4_is_junction(struct dentry *dentry)
+static inline int nfsd4_is_junction(const struct path *path)
 {
 	return 0;
 }

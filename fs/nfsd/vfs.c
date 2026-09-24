@@ -233,11 +233,13 @@ static int nfsd_lookup_parent(struct svc_rqst *rqstp, struct dentry *dparent, st
  */
 int nfsd_mountpoint(struct dentry *dentry, struct svc_export *exp)
 {
+	struct path path = { .mnt = exp->ex_path.mnt, .dentry = dentry };
+
 	if (!d_inode(dentry))
 		return 0;
 	if (exp->ex_flags & NFSEXP_V4ROOT)
 		return 1;
-	if (nfsd4_is_junction(dentry))
+	if (nfsd4_is_junction(&path))
 		return 1;
 	if (d_managed(dentry))
 		/*
@@ -684,14 +686,14 @@ out:
 /**
  * nfsd4_is_junction - Test if an object could be an NFS junction
  *
- * @dentry: object to test
+ * @path: object to test
  *
- * Returns 1 if "dentry" appears to contain NFS junction information.
+ * Returns 1 if "path" appears to contain NFS junction information.
  * Otherwise 0 is returned.
  */
-int nfsd4_is_junction(struct dentry *dentry)
+int nfsd4_is_junction(const struct path *path)
 {
-	struct inode *inode = d_inode(dentry);
+	struct inode *inode = d_inode(path->dentry);
 
 	if (inode == NULL)
 		return 0;
@@ -699,8 +701,7 @@ int nfsd4_is_junction(struct dentry *dentry)
 		return 0;
 	if (!(inode->i_mode & S_ISVTX))
 		return 0;
-	if (vfs_getxattr(&nop_mnt_idmap, dentry, NFSD_JUNCTION_XATTR_NAME,
-			 NULL, 0) <= 0)
+	if (vfs_getxattr(path, NFSD_JUNCTION_XATTR_NAME, NULL, 0) <= 0)
 		return 0;
 	return 1;
 }
@@ -2619,19 +2620,20 @@ nfsd_getxattr(struct svc_rqst *rqstp, struct svc_fh *fhp, char *name,
 	__be32 err;
 	char *buf;
 	struct inode *inode;
-	struct dentry *dentry;
+	struct path path;
 
 	err = fh_verify(rqstp, fhp, 0, NFSD_MAY_READ);
 	if (err)
 		return err;
 
 	err = nfs_ok;
-	dentry = fhp->fh_dentry;
-	inode = d_inode(dentry);
+	path.mnt = fhp->fh_export->ex_path.mnt;
+	path.dentry = fhp->fh_dentry;
+	inode = d_inode(path.dentry);
 
 	inode_lock_shared(inode);
 
-	len = vfs_getxattr(&nop_mnt_idmap, dentry, name, NULL, 0);
+	len = vfs_getxattr(&path, name, NULL, 0);
 
 	/*
 	 * Zero-length attribute, just return.
@@ -2658,7 +2660,7 @@ nfsd_getxattr(struct svc_rqst *rqstp, struct svc_fh *fhp, char *name,
 		goto out;
 	}
 
-	len = vfs_getxattr(&nop_mnt_idmap, dentry, name, buf, len);
+	len = vfs_getxattr(&path, name, buf, len);
 	if (len <= 0) {
 		kvfree(buf);
 		buf = NULL;
@@ -2692,19 +2694,20 @@ nfsd_listxattr(struct svc_rqst *rqstp, struct svc_fh *fhp, char **bufp,
 	__be32 err;
 	char *buf;
 	struct inode *inode;
-	struct dentry *dentry;
+	struct path path;
 
 	err = fh_verify(rqstp, fhp, 0, NFSD_MAY_READ);
 	if (err)
 		return err;
 
-	dentry = fhp->fh_dentry;
-	inode = d_inode(dentry);
+	path.mnt = fhp->fh_export->ex_path.mnt;
+	path.dentry = fhp->fh_dentry;
+	inode = d_inode(path.dentry);
 	*lenp = 0;
 
 	inode_lock_shared(inode);
 
-	len = vfs_listxattr(dentry, NULL, 0);
+	len = vfs_listxattr(&path, NULL, 0);
 	if (len <= 0) {
 		err = nfsd_xattr_errno(len);
 		goto out;
@@ -2721,7 +2724,7 @@ nfsd_listxattr(struct svc_rqst *rqstp, struct svc_fh *fhp, char **bufp,
 		goto out;
 	}
 
-	len = vfs_listxattr(dentry, buf, len);
+	len = vfs_listxattr(&path, buf, len);
 	if (len <= 0) {
 		kvfree(buf);
 		err = nfsd_xattr_errno(len);
@@ -2754,6 +2757,7 @@ nfsd_removexattr(struct svc_rqst *rqstp, struct svc_fh *fhp, char *name)
 {
 	__be32 err;
 	int ret;
+	struct path path;
 
 	err = fh_verify(rqstp, fhp, 0, NFSD_MAY_WRITE);
 	if (err)
@@ -2763,16 +2767,17 @@ nfsd_removexattr(struct svc_rqst *rqstp, struct svc_fh *fhp, char *name)
 	if (ret)
 		return nfserrno(ret);
 
-	inode_lock(fhp->fh_dentry->d_inode);
+	path.mnt = fhp->fh_export->ex_path.mnt;
+	path.dentry = fhp->fh_dentry;
+	inode_lock(d_inode(path.dentry));
 	err = fh_fill_pre_attrs(fhp);
 	if (err != nfs_ok)
 		goto out_unlock;
-	ret = __vfs_removexattr_locked(&nop_mnt_idmap, fhp->fh_dentry,
-				       name, NULL);
+	ret = __vfs_removexattr_locked(&path, name, NULL);
 	err = nfsd_xattr_errno(ret);
 	fh_fill_post_attrs(fhp);
 out_unlock:
-	inode_unlock(fhp->fh_dentry->d_inode);
+	inode_unlock(d_inode(path.dentry));
 	fh_drop_write(fhp);
 
 	return err;
@@ -2784,6 +2789,7 @@ nfsd_setxattr(struct svc_rqst *rqstp, struct svc_fh *fhp, char *name,
 {
 	__be32 err;
 	int ret;
+	struct path path;
 
 	err = fh_verify(rqstp, fhp, 0, NFSD_MAY_WRITE);
 	if (err)
@@ -2792,16 +2798,17 @@ nfsd_setxattr(struct svc_rqst *rqstp, struct svc_fh *fhp, char *name,
 	ret = fh_want_write(fhp);
 	if (ret)
 		return nfserrno(ret);
-	inode_lock(fhp->fh_dentry->d_inode);
+	path.mnt = fhp->fh_export->ex_path.mnt;
+	path.dentry = fhp->fh_dentry;
+	inode_lock(d_inode(path.dentry));
 	err = fh_fill_pre_attrs(fhp);
 	if (err != nfs_ok)
 		goto out_unlock;
-	ret = __vfs_setxattr_locked(&nop_mnt_idmap, fhp->fh_dentry,
-				    name, buf, len, flags, NULL);
+	ret = __vfs_setxattr_locked(&path, name, buf, len, flags, NULL);
 	fh_fill_post_attrs(fhp);
 	err = nfsd_xattr_errno(ret);
 out_unlock:
-	inode_unlock(fhp->fh_dentry->d_inode);
+	inode_unlock(d_inode(path.dentry));
 	fh_drop_write(fhp);
 	return err;
 }

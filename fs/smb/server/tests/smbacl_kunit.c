@@ -221,8 +221,7 @@ static void ksmbd_smb_check_perm_dacl_boundary_test(struct kunit *test)
 				mk_vma_flags(VMA_NORESERVE_BIT));
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, file);
 
-	rc = ksmbd_vfs_set_sd_xattr(NULL, mnt_idmap(file->f_path.mnt),
-				    &file->f_path, pntsd, ntsd_size,
+	rc = ksmbd_vfs_set_sd_xattr(NULL, &file->f_path, pntsd, ntsd_size,
 				    false);
 	KUNIT_EXPECT_EQ(test, 0, rc);
 	if (rc)
@@ -263,8 +262,7 @@ ksmbd_smb_check_perm_dacl_maximal_boundary_test(struct kunit *test)
 				mk_vma_flags(VMA_NORESERVE_BIT));
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, file);
 
-	rc = ksmbd_vfs_set_sd_xattr(NULL, mnt_idmap(file->f_path.mnt),
-				    &file->f_path, pntsd, ntsd_size,
+	rc = ksmbd_vfs_set_sd_xattr(NULL, &file->f_path, pntsd, ntsd_size,
 				    false);
 	KUNIT_EXPECT_EQ(test, 0, rc);
 	if (rc)
