@@ -628,12 +628,33 @@ static irqreturn_t pciehp_isr(int irq, void *dev_id)
 	u16 status, events = 0;
 
 	/*
-	 * Interrupts only occur in D3hot or shallower and only if enabled
-	 * in the Slot Control register (PCIe r4.0, sec 6.7.3.4).
+	 * Interrupts only occur in D3hot or shallower (PCIe r4.0, sec 6.7.3.4).
 	 */
-	if (pdev->current_state == PCI_D3cold ||
-	    (!(ctrl->slot_ctrl & PCI_EXP_SLTCTL_HPIE) && !pciehp_poll_mode))
+	if (pdev->current_state == PCI_D3cold)
 		return IRQ_NONE;
+
+	/*
+	 * Interrupts are only sent if enabled in the Slot Control register
+	 * (PCIe r4.0, sec 6.7.3.4).  ctrl->slot_ctrl caches that register, but
+	 * the cached Hot-Plug Interrupt Enable bit can fall transiently out of
+	 * sync with the hardware if platform firmware clears it behind the
+	 * driver's back (e.g. concurrently with a Slot Control read-modify-
+	 * write).  While the port is in D0 it is accessible, so re-read the
+	 * register from hardware before dismissing the interrupt as not ours.
+	 * In a low-power state the port may be inaccessible and the cached
+	 * value is authoritative.
+	 */
+	if (!pciehp_poll_mode && !(ctrl->slot_ctrl & PCI_EXP_SLTCTL_HPIE)) {
+		u16 slot_ctrl;
+
+		if (pdev->current_state != PCI_D0)
+			return IRQ_NONE;
+
+		pcie_capability_read_word(pdev, PCI_EXP_SLTCTL, &slot_ctrl);
+		if (PCI_POSSIBLE_ERROR(slot_ctrl) ||
+		    !(slot_ctrl & PCI_EXP_SLTCTL_HPIE))
+			return IRQ_NONE;
+	}
 
 	/*
 	 * Keep the port accessible by holding a runtime PM ref on its parent.
