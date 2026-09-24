@@ -41,6 +41,10 @@ properties:
           - const: mediatek,spi-ipm
       - items:
           - enum:
+              - mediatek,mtxxxx-spi
+          - const: mediatek,spi-ipm-v59
+      - items:
+          - enum:
               - mediatek,mt8196-spi
           - const: mediatek,mt6991-spi
       - items:
@@ -55,7 +59,6 @@ properties:
               - mediatek,mt8135-spi
               - mediatek,mt8173-spi
               - mediatek,mt8183-spi
-
   reg:
     maxItems: 1
 
