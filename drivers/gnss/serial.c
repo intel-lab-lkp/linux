@@ -32,11 +32,9 @@ static int gnss_serial_open(struct gnss_device *gdev)
 	serdev_device_set_baudrate(serdev, gserial->speed);
 	serdev_device_set_flow_control(serdev, false);
 
-	ret = pm_runtime_get_sync(&serdev->dev);
-	if (ret < 0) {
-		pm_runtime_put_noidle(&serdev->dev);
+	ret = pm_runtime_resume_and_get(&serdev->dev);
+	if (ret < 0)
 		goto err_close;
-	}
 
 	return 0;
 
