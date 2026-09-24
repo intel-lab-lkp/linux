@@ -1054,11 +1054,11 @@ static void iommu_poll_events(struct amd_iommu *iommu)
 }
 
 #ifdef CONFIG_IRQ_REMAP
-static int (*iommu_ga_log_notifier)(u32);
+static int (__rcu *iommu_ga_log_notifier)(u32 ga_tag);
 
 int amd_iommu_register_ga_log_notifier(int (*notifier)(u32))
 {
-	iommu_ga_log_notifier = notifier;
+	rcu_assign_pointer(iommu_ga_log_notifier, notifier);
 
 	/*
 	 * Ensure all in-flight IRQ handlers run to completion before returning
@@ -1094,17 +1094,25 @@ static void iommu_poll_ga_log(struct amd_iommu *iommu)
 
 		/* Handle GA entry */
 		switch (GA_REQ_TYPE(log_entry)) {
-		case GA_GUEST_NR:
-			if (!iommu_ga_log_notifier)
-				break;
+		case GA_GUEST_NR: {
+			int (*notifier)(u32 ga_tag);
+			int ret = 0;
 
-			pr_debug("%s: devid=%#x, ga_tag=%#x\n",
-				 __func__, GA_DEVID(log_entry),
-				 GA_TAG(log_entry));
+			scoped_guard(rcu) {
+				notifier = rcu_dereference(iommu_ga_log_notifier);
+				if (notifier)
+					ret = notifier(GA_TAG(log_entry));
+			}
 
-			if (iommu_ga_log_notifier(GA_TAG(log_entry)) != 0)
-				pr_err("GA log notifier failed.\n");
+			if (notifier) {
+				pr_debug("%s: devid=%#x, ga_tag=%#x\n",
+					 __func__, GA_DEVID(log_entry),
+					 GA_TAG(log_entry));
+				if (ret)
+					pr_err("GA log notifier failed.\n");
+			}
 			break;
+		}
 		default:
 			break;
 		}
