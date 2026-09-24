@@ -78,7 +78,9 @@ to be explicit about the denied-by-default access rights.
             LANDLOCK_ACCESS_FS_REFER |
             LANDLOCK_ACCESS_FS_TRUNCATE |
             LANDLOCK_ACCESS_FS_IOCTL_DEV |
-            LANDLOCK_ACCESS_FS_RESOLVE_UNIX,
+            LANDLOCK_ACCESS_FS_RESOLVE_UNIX |
+            LANDLOCK_ACCESS_FS_READ_METADATA |
+            LANDLOCK_ACCESS_FS_WRITE_METADATA,
         .handled_access_net =
             LANDLOCK_ACCESS_NET_BIND_TCP |
             LANDLOCK_ACCESS_NET_CONNECT_TCP |
@@ -140,6 +142,13 @@ version, and only use the available subset of access rights:
         ruleset_attr.handled_access_net &=
             ~(LANDLOCK_ACCESS_NET_BIND_UDP |
               LANDLOCK_ACCESS_NET_CONNECT_SEND_UDP);
+        __attribute__((fallthrough));
+    case 10:
+    case 11:
+        /* Removes metadata rights for ABI < 12 */
+        ruleset_attr.handled_access_fs &=
+            ~(LANDLOCK_ACCESS_FS_READ_METADATA |
+              LANDLOCK_ACCESS_FS_WRITE_METADATA);
     }
 
 This enables the creation of an inclusive ruleset that will contain our rules.
