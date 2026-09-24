@@ -2169,7 +2169,7 @@ exit:
 static int mm81x_mac_ops_add_interface(struct ieee80211_hw *hw,
 				       struct ieee80211_vif *vif)
 {
-	int ret = 0;
+	int cleanup_ret, ret = 0;
 	struct mm81x *mors = hw->priv;
 	struct mm81x_vif *mors_vif = (struct mm81x_vif *)vif->drv_priv;
 
@@ -2221,6 +2221,13 @@ static int mm81x_mac_ops_add_interface(struct ieee80211_hw *hw,
 		dev_err(mors->dev,
 			"mm81x_cmd_get_capabilities failed for vif %d",
 			mors_vif->id);
+		if (vif->type == NL80211_IFTYPE_AP)
+			mm81x_mac_beacon_finish(mors_vif);
+		RCU_INIT_POINTER(mors->vifs[mors_vif->id], NULL);
+		cleanup_ret = mm81x_cmd_rm_if(mors, mors_vif->id);
+		if (cleanup_ret)
+			dev_err(mors->dev, "mm81x_cmd_rm_if failed %d",
+				cleanup_ret);
 		return ret;
 	}
 
