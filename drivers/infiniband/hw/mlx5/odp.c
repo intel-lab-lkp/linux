@@ -595,6 +595,7 @@ static int alloc_implicit_mr_null_mkey(struct mlx5_ib_dev *dev,
 		goto free_in;
 
 	imr->null_mmkey.type = MLX5_MKEY_NULL;
+	init_waitqueue_head(&imr->null_mmkey.wait);
 
 free_in:
 	kfree(in);
@@ -682,6 +683,8 @@ void mlx5_ib_free_odp_mr(struct mlx5_ib_mr *mr)
 	if (mr->null_mmkey.key) {
 		xa_erase(&mr_to_mdev(mr)->odp_mkeys,
 			 mlx5_base_mkey(mr->null_mmkey.key));
+
+		mlx5r_deref_wait_odp_mkey(&mr->null_mmkey);
 
 		mlx5_core_destroy_mkey(mr_to_mdev(mr)->mdev,
 				       mr->null_mmkey.key);
