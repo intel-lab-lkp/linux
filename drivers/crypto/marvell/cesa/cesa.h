@@ -10,6 +10,9 @@
 
 #define CESA_ENGINE_OFF(i)			(((i) * 0x2000))
 
+/* Max time in microseconds to wait for the engine to stop */
+#define CESA_ENGINE_STOP_TIMEOUT_US		1000
+
 #define CESA_TDMA_BYTE_CNT			0x800
 #define CESA_TDMA_SRC_ADDR			0x810
 #define CESA_TDMA_DST_ADDR			0x820
@@ -450,6 +453,7 @@ struct mv_cesa_engine {
 	struct mv_cesa_tdma_chain chain_sw;
 	struct list_head complete_queue;
 	int irq;
+	bool aborted;
 };
 
 /**

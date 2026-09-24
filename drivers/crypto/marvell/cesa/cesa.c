@@ -52,6 +52,14 @@ static void mv_cesa_rearm_engine(struct mv_cesa_engine *engine)
 
 	spin_lock_bh(&engine->lock);
 	if (!engine->req) {
+		if (engine->aborted) {
+			/*
+			 * The device is being removed: do not restart the
+			 * engine nor fetch any new request.
+			 */
+			spin_unlock_bh(&engine->lock);
+			return;
+		}
 		req = mv_cesa_dequeue_req_locked(engine, &backlog);
 		engine->req = req;
 	}
@@ -542,9 +550,81 @@ static int mv_cesa_probe(struct platform_device *pdev)
 static void mv_cesa_remove(struct platform_device *pdev)
 {
 	struct mv_cesa_dev *cesa = platform_get_drvdata(pdev);
+	struct mv_cesa_engine *engine;
+	struct crypto_async_request *req;
+	unsigned int i;
+	unsigned int timeout;
 
 	mv_cesa_remove_algs(cesa);
 
+	for (i = 0; i < cesa->caps->nengines; i++) {
+		engine = &cesa->engines[i];
+
+		/*
+		 * Stop the engine so it no longer issues DMA to the SRAM
+		 * region or to request scatterlists that are about to be
+		 * unmapped.
+		 */
+		writel(0, engine->regs + CESA_SA_INT_MSK);
+		writel(0, engine->regs + CESA_SA_CMD);
+		writel(0, engine->regs + CESA_TDMA_CONTROL);
+
+		/*
+		 * Flush the posted writes above and wait for the engine to
+		 * report that it is stopped before any buffer is released.
+		 */
+		timeout = CESA_ENGINE_STOP_TIMEOUT_US;
+		while ((readl(engine->regs + CESA_SA_CMD) &
+			CESA_SA_CMD_EN_CESA_SA_ACCL0) && --timeout)
+			udelay(1);
+
+		/*
+		 * Synchronize with the threaded IRQ handler so that it cannot
+		 * run while the queues below are drained.
+		 */
+		disable_irq(engine->irq);
+		synchronize_irq(engine->irq);
+
+		spin_lock_bh(&engine->lock);
+		engine->aborted = true;
+
+		/*
+		 * Complete the request currently in flight and drain the
+		 * pending and already-processed queues with an error so that
+		 * waiters do not block indefinitely when the device is unbound
+		 * while requests are still outstanding.
+		 */
+		if (engine->req) {
+			req = engine->req;
+			engine->req = NULL;
+			spin_unlock_bh(&engine->lock);
+			mv_cesa_complete_req(crypto_tfm_ctx(req->tfm), req,
+					     -ENOENT);
+			spin_lock_bh(&engine->lock);
+		}
+
+		while ((req = crypto_dequeue_request(&engine->queue)) != NULL) {
+			spin_unlock_bh(&engine->lock);
+			mv_cesa_complete_req(crypto_tfm_ctx(req->tfm), req,
+					     -ENOENT);
+			spin_lock_bh(&engine->lock);
+		}
+
+		while ((req = mv_cesa_engine_dequeue_complete_request(engine))
+		       != NULL) {
+			spin_unlock_bh(&engine->lock);
+			mv_cesa_complete_req(crypto_tfm_ctx(req->tfm), req,
+					     -ENOENT);
+			spin_lock_bh(&engine->lock);
+		}
+		spin_unlock_bh(&engine->lock);
+	}
+
+	/*
+	 * The completion callbacks above (and any concurrent submitter) rely
+	 * on the global cesa_dev pointer: only clear it once the engines are
+	 * fully drained.
+	 */
 	cesa_dev = NULL;
 }
 
