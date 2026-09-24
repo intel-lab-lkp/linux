@@ -558,6 +558,7 @@ struct intel_connector {
 	u8 polled;
 
 	int force_joined_pipes;
+	bool force_bit_banging;
 
 	struct {
 		struct drm_dp_aux *dsc_decompression_aux;

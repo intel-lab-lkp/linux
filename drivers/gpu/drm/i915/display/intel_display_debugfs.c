@@ -40,6 +40,7 @@
 #include "intel_fb.h"
 #include "intel_fbc.h"
 #include "intel_fbdev.h"
+#include "intel_gmbus.h"
 #include "intel_hdcp.h"
 #include "intel_hdmi.h"
 #include "intel_hotplug.h"
@@ -1326,6 +1327,8 @@ void intel_connector_debugfs_add(struct intel_connector *connector)
 	/* The connector must have been registered beforehands. */
 	if (!root)
 		return;
+
+	intel_gmbus_connector_debugfs_add(connector);
 
 	intel_drrs_connector_debugfs_add(connector);
 	intel_hdcp_connector_debugfs_add(connector);
