@@ -793,11 +793,11 @@ static int ima_inode_setxattr(const struct path *path,
 	return result;
 }
 
-static int ima_inode_set_acl(struct mnt_idmap *idmap, struct dentry *dentry,
+static int ima_inode_set_acl(const struct path *path,
 			     const char *acl_name, struct posix_acl *kacl)
 {
 	if (evm_revalidate_status(acl_name))
-		ima_reset_appraise_flags(d_backing_inode(dentry), -1);
+		ima_reset_appraise_flags(d_backing_inode(path->dentry), -1);
 
 	return 0;
 }
@@ -818,10 +818,10 @@ static int ima_inode_removexattr(const struct path *path,
 	return result;
 }
 
-static int ima_inode_remove_acl(struct mnt_idmap *idmap, struct dentry *dentry,
+static int ima_inode_remove_acl(const struct path *path,
 				const char *acl_name)
 {
-	return ima_inode_set_acl(idmap, dentry, acl_name, NULL);
+	return ima_inode_set_acl(path, acl_name, NULL);
 }
 
 static struct security_hook_list ima_appraise_hooks[] __ro_after_init = {

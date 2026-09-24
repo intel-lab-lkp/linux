@@ -1128,7 +1128,7 @@ retry_deleg:
 	if (error)
 		goto out_inode_unlock;
 
-	error = security_inode_set_acl(idmap, dentry, acl_name, kacl);
+	error = security_inode_set_acl(path, acl_name, kacl);
 	if (error)
 		goto out_inode_unlock;
 
@@ -1184,7 +1184,7 @@ struct posix_acl *vfs_get_acl(const struct path *path, const char *acl_name)
 	 * The VFS has no restrictions on reading POSIX ACLs so calling
 	 * something like xattr_permission() isn't needed. Only LSMs get a say.
 	 */
-	error = security_inode_get_acl(idmap, dentry, acl_name);
+	error = security_inode_get_acl(path, acl_name);
 	if (error)
 		return ERR_PTR(error);
 
@@ -1236,7 +1236,7 @@ retry_deleg:
 	if (error)
 		goto out_inode_unlock;
 
-	error = security_inode_remove_acl(idmap, dentry, acl_name);
+	error = security_inode_remove_acl(path, acl_name);
 	if (error)
 		goto out_inode_unlock;
 

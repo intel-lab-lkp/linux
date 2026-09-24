@@ -685,8 +685,7 @@ static inline int evm_inode_set_acl_change(struct mnt_idmap *idmap,
 
 /**
  * evm_inode_set_acl - protect the EVM extended attribute from posix acls
- * @idmap: idmap of the idmapped mount
- * @dentry: pointer to the affected dentry
+ * @path: pointer to the affected object
  * @acl_name: name of the posix acl
  * @kacl: pointer to the posix acls
  *
@@ -696,10 +695,12 @@ static inline int evm_inode_set_acl_change(struct mnt_idmap *idmap,
  *
  * Return: zero on success, -EPERM on failure.
  */
-static int evm_inode_set_acl(struct mnt_idmap *idmap, struct dentry *dentry,
+static int evm_inode_set_acl(const struct path *path,
 			     const char *acl_name, struct posix_acl *kacl)
 {
 	enum integrity_status evm_status;
+	struct dentry *dentry = path->dentry;
+	struct mnt_idmap *idmap = mnt_idmap(path->mnt);
 
 	/* Policy permits modification of the protected xattrs even though
 	 * there's no HMAC key loaded
@@ -738,8 +739,7 @@ static int evm_inode_set_acl(struct mnt_idmap *idmap, struct dentry *dentry,
 
 /**
  * evm_inode_remove_acl - Protect the EVM extended attribute from posix acls
- * @idmap: idmap of the mount
- * @dentry: pointer to the affected dentry
+ * @path: pointer to the affected object
  * @acl_name: name of the posix acl
  *
  * Prevent removing posix acls causing the EVM HMAC to be re-calculated
@@ -748,10 +748,10 @@ static int evm_inode_set_acl(struct mnt_idmap *idmap, struct dentry *dentry,
  *
  * Return: zero on success, -EPERM on failure.
  */
-static int evm_inode_remove_acl(struct mnt_idmap *idmap, struct dentry *dentry,
+static int evm_inode_remove_acl(const struct path *path,
 				const char *acl_name)
 {
-	return evm_inode_set_acl(idmap, dentry, acl_name, NULL);
+	return evm_inode_set_acl(path, acl_name, NULL);
 }
 
 static void evm_reset_status(struct inode *inode)

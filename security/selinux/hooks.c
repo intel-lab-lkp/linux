@@ -3498,23 +3498,22 @@ static int selinux_inode_setxattr(const struct path *path,
 			    &ad);
 }
 
-static int selinux_inode_set_acl(struct mnt_idmap *idmap,
-				 struct dentry *dentry, const char *acl_name,
-				 struct posix_acl *kacl)
+static int selinux_inode_set_acl(const struct path *path,
+				 const char *acl_name, struct posix_acl *kacl)
 {
-	return dentry_has_perm(current_cred(), dentry, FILE__SETATTR);
+	return dentry_has_perm(current_cred(), path->dentry, FILE__SETATTR);
 }
 
-static int selinux_inode_get_acl(struct mnt_idmap *idmap,
-				 struct dentry *dentry, const char *acl_name)
+static int selinux_inode_get_acl(const struct path *path,
+				 const char *acl_name)
 {
-	return dentry_has_perm(current_cred(), dentry, FILE__GETATTR);
+	return dentry_has_perm(current_cred(), path->dentry, FILE__GETATTR);
 }
 
-static int selinux_inode_remove_acl(struct mnt_idmap *idmap,
-				    struct dentry *dentry, const char *acl_name)
+static int selinux_inode_remove_acl(const struct path *path,
+				    const char *acl_name)
 {
-	return dentry_has_perm(current_cred(), dentry, FILE__SETATTR);
+	return dentry_has_perm(current_cred(), path->dentry, FILE__SETATTR);
 }
 
 static void selinux_inode_post_setxattr(struct dentry *dentry, const char *name,
