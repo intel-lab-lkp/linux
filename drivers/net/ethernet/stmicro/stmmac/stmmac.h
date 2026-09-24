@@ -289,7 +289,7 @@ struct stmmac_priv {
 	int (*hwif_quirks)(struct stmmac_priv *priv);
 	struct mutex lock;
 
-	struct stmmac_dma_conf dma_conf;
+	struct stmmac_dma_conf *dma_conf;
 	/* IRQ/DMA ownership and NAPI state, serialized by RTNL. */
 	enum stmmac_datapath_state datapath;
 	/* Core sleep sequence completed, independently of datapath ownership. */
