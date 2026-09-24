@@ -836,6 +836,8 @@ buttress_exit:
 static void ipu6_pci_remove(struct pci_dev *pdev)
 {
 	struct ipu6_device *isp = pci_get_drvdata(pdev);
+	struct ipu6_mmu *isys_mmu = isp->isys->mmu;
+	struct ipu6_mmu *psys_mmu = isp->psys->mmu;
 	unsigned long dir;
 
 	devm_free_irq(&pdev->dev, pdev->irq, isp);
@@ -844,11 +846,9 @@ static void ipu6_pci_remove(struct pci_dev *pdev)
 	ipu6_cpd_free_pkg_dir(isp->psys);
 	ipu6_unmap_fw_region(isp->psys, dir);
 
-	if (isp->isys) {
-		ipu6_cpd_free_pkg_dir(isp->isys);
-		if (isp->isys->fw_sgt.nents)
-			ipu6_unmap_fw_region(isp->isys, dir);
-	}
+	ipu6_cpd_free_pkg_dir(isp->isys);
+	if (isp->isys->fw_sgt.nents)
+		ipu6_unmap_fw_region(isp->isys, dir);
 
 	vfree(isp->fw_code_region);
 	isp->fw_code_region = NULL;
@@ -862,10 +862,8 @@ static void ipu6_pci_remove(struct pci_dev *pdev)
 
 	release_firmware(isp->cpd_fw);
 
-	if (isp->psys)
-		ipu6_mmu_cleanup(isp->psys->mmu);
-	if (isp->isys)
-		ipu6_mmu_cleanup(isp->isys->mmu);
+	ipu6_mmu_cleanup(psys_mmu);
+	ipu6_mmu_cleanup(isys_mmu);
 }
 
 static void ipu6_pci_reset_prepare(struct pci_dev *pdev)
