@@ -469,9 +469,14 @@ static bool __init swiotlb_kmalloc_needs_bounce(void)
 static void __init
 swiotlb_adjust_pool_size(enum swiotlb_pool_policy policy)
 {
+	unsigned long size;
+
 	switch (policy) {
 	case SWIOTLB_POOL_MINIMAL:
-		return;
+		/* Use 1MB per 1GB of RAM for kmalloc() bouncing. */
+		size = DIV_ROUND_UP(memblock_phys_mem_size(), 1024);
+		size = min(swiotlb_default_pool_size(), size);
+		break;
 	case SWIOTLB_POOL_CC_GUEST:
 		return;
 	case SWIOTLB_POOL_NONE:
@@ -481,6 +486,8 @@ swiotlb_adjust_pool_size(enum swiotlb_pool_policy policy)
 	default:
 		return;
 	}
+
+	swiotlb_adjust_size(size);
 }
 
 static enum swiotlb_pool_policy __init
