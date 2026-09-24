@@ -244,7 +244,7 @@ struct etm_config {
  * @os_unlock:	true if access to management registers is allowed.
  * @traceid:	value of the current ID for this component.
  * @curr_config:	structure holding current running configuration.
- * @config:	structure holding sysfs mode configuration.
+ * @sysfs_config:	structure holding sysfs mode configuration.
  */
 struct etm_drvdata {
 	struct csdev_access		csa;
@@ -260,7 +260,7 @@ struct etm_drvdata {
 	bool				os_unlock;
 	u32				traceid;
 	struct etm_config		curr_config;
-	struct etm_config		config;
+	struct etm_config		sysfs_config;
 };
 
 static inline void etm_writel(struct etm_drvdata *drvdata,
