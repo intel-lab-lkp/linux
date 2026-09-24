@@ -1037,6 +1037,9 @@ void adi_restore_tags(struct mm_struct *mm, struct vm_area_struct *vma,
 int adi_save_tags(struct mm_struct *mm, struct vm_area_struct *vma,
 		  unsigned long addr, pte_t oldpte);
 
+int adi_save_tags_range(struct mm_struct *mm, struct vm_area_struct *vma,
+			unsigned long addr, pte_t oldpte, unsigned long nr);
+
 #define __HAVE_ARCH_DO_SWAP_PAGE
 static inline void arch_do_swap_page(struct mm_struct *mm,
 				     struct vm_area_struct *vma,
@@ -1057,10 +1060,11 @@ static inline void arch_do_swap_page(struct mm_struct *mm,
 #define __HAVE_ARCH_UNMAP_ONE
 static inline int arch_unmap_one(struct mm_struct *mm,
 				 struct vm_area_struct *vma,
-				 unsigned long addr, pte_t oldpte)
+				 unsigned long addr, pte_t oldpte,
+				 unsigned long nr)
 {
-	if (adi_state.enabled && (pte_val(oldpte) & _PAGE_MCD_4V))
-		return adi_save_tags(mm, vma, addr, oldpte);
+	if (adi_state.enabled)
+		return adi_save_tags_range(mm, vma, addr, oldpte, nr);
 	return 0;
 }
 

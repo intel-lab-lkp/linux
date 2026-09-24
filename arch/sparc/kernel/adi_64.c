@@ -9,6 +9,7 @@
 #include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/mm_types.h>
+#include <linux/pgtable.h>
 #include <asm/mdesc.h>
 #include <asm/adi_64.h>
 #include <asm/mmu_64.h>
@@ -390,6 +391,26 @@ int adi_save_tags(struct mm_struct *mm, struct vm_area_struct *vma,
 				: "r" (tmp), "i" (ASI_MCD_REAL));
 		*tag = (version1 << 4) | version2;
 		tag++;
+	}
+
+	return 0;
+}
+
+int adi_save_tags_range(struct mm_struct *mm, struct vm_area_struct *vma,
+			unsigned long addr, pte_t oldpte, unsigned long nr)
+{
+	unsigned long i;
+
+	for (i = 0; i < nr; i++, addr += PAGE_SIZE,
+	     oldpte = pte_next_pfn(oldpte)) {
+		int ret;
+
+		if (!(pte_val(oldpte) & _PAGE_MCD_4V))
+			continue;
+
+		ret = adi_save_tags(mm, vma, addr, oldpte);
+		if (ret)
+			return ret;
 	}
 
 	return 0;

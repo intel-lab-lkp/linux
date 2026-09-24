@@ -1959,6 +1959,7 @@ static inline unsigned int folio_unmap_pte_batch(struct folio *folio,
 
 	if (flags & TTU_HWPOISON)
 		return 1;
+
 	if (!folio_test_large(folio))
 		return 1;
 
@@ -1968,11 +1969,6 @@ static inline unsigned int folio_unmap_pte_batch(struct folio *folio,
 
 	if (pte_unused(pte))
 		return 1;
-
-#ifdef __HAVE_ARCH_UNMAP_ONE
-	if (folio_test_anon(folio) && folio_test_swapbacked(folio))
-		return 1;
-#endif
 
 	/*
 	 * If unmap fails, we need to restore the ptes. To avoid accidentally
@@ -2168,8 +2164,7 @@ static bool __ttu_anon_swapbacked_folio(struct vm_area_struct *vma,
 	 * architectures where we could have PFN swap PTEs,
 	 * so we'll not check/care.
 	 */
-	if (arch_unmap_one(mm, vma, address, pteval) < 0) {
-		VM_WARN_ON(nr_pages != 1);
+	if (arch_unmap_one(mm, vma, address, pteval, nr_pages) < 0) {
 		folio_put_swap_pages(folio, page, nr_pages);
 		return false;
 	}
@@ -2746,7 +2741,7 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 			 * architectures where we could have PFN swap PTEs,
 			 * so we'll not check/care.
 			 */
-			if (arch_unmap_one(mm, vma, address, pteval) < 0) {
+			if (arch_unmap_one(mm, vma, address, pteval, 1) < 0) {
 				if (folio_test_hugetlb(folio))
 					set_huge_pte_at(mm, address, pvmw.pte,
 							pteval, hsz);

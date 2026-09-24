@@ -1431,12 +1431,12 @@ static inline void arch_do_swap_page_nr(struct mm_struct *mm,
  * restored when the page is swapped back in. SPARC M7 and newer
  * processors support an ADI (Application Data Integrity) tag for the
  * page as metadata for the page. arch_unmap_one() can save this
- * metadata on a swap-out of a page.
+ * metadata on swap-out of one or more pages.
  */
 static inline int arch_unmap_one(struct mm_struct *mm,
 				  struct vm_area_struct *vma,
-				  unsigned long addr,
-				  pte_t orig_pte)
+				  unsigned long addr, pte_t orig_pte,
+				  unsigned long nr)
 {
 	return 0;
 }
