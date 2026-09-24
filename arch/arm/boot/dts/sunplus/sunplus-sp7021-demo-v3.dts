@@ -23,8 +23,4 @@
 		stdout-path = "serial0:115200n8";
 	};
 
-	memory@0 {
-		device_type = "memory";
-		reg = <0x00000000 0x20000000>;
-	};
 };
