@@ -16,7 +16,6 @@ use kernel::{
     },
     prelude::*,
     time::Delta,
-    transmute::AsBytes,
     uapi, //
 };
 
@@ -133,17 +132,6 @@ impl DerefMut for GpuInfo {
         &mut self.0
     }
 }
-
-// SAFETY: `GpuInfo`'s invariant guarantees that it is the same type that is
-// already exposed to userspace by the C driver. This implies that it fulfills
-// the requirements for `AsBytes`.
-//
-// This means:
-//
-// - No implicit padding,
-// - No kernel pointers,
-// - No interior mutability.
-unsafe impl AsBytes for GpuInfo {}
 
 struct GpuModels {
     name: &'static str,
