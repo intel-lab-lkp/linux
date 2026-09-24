@@ -300,16 +300,31 @@ static umode_t hsmp_is_sock_attr_visible(struct kobject *kobj,
 	 * so that userspace which expects the file to exist gets a clear
 	 * -EOPNOTSUPP from the read handler instead of -ENOENT, and is
 	 * pointed at HSMP_IOCTL_GET_TELEMETRY_DATA as the supported path.
+	 * The client set has its own telemetry table, read only through
+	 * HSMP_IOCTL_GET_TELEMETRY_DATA; never show this file there.
 	 */
-	if (hsmp_pdev->proto_ver >= HSMP_PROTO_VER6)
+	if (!is_client_platform() && hsmp_pdev->proto_ver >= HSMP_PROTO_VER6)
 		return battr->attr.mode;
 
 	return 0;
 }
 
+/* Defined below by HSMP_DEV_ATTR(); same message ID in both message tables */
+static struct hsmp_sys_attr hattr_smu_fw_version;
+static struct hsmp_sys_attr hattr_protocol_version;
+
 static umode_t hsmp_is_sock_dev_attr_visible(struct kobject *kobj,
 					     struct attribute *attr, int id)
 {
+	/*
+	 * smu_fw_version and protocol_version map to the same data in both
+	 * message tables. Every other attribute here uses server-only
+	 * message IDs that resolve to unrelated client commands.
+	 */
+	if (is_client_platform() && attr != &hattr_smu_fw_version.dattr.attr &&
+	    attr != &hattr_protocol_version.dattr.attr)
+		return 0;
+
 	return attr->mode;
 }
 
@@ -564,9 +579,15 @@ static int init_acpi(struct device *dev)
 			dev_info(dev, "Failed to init metric table\n");
 	}
 
-	ret = hsmp_create_sensor(dev, sock_ind);
-	if (ret)
-		dev_info(dev, "Failed to register HSMP sensors with hwmon\n");
+	/*
+	 * hwmon attributes use server-only message IDs, which resolve to
+	 * unrelated client commands on client platforms.
+	 */
+	if (!is_client_platform()) {
+		ret = hsmp_create_sensor(dev, sock_ind);
+		if (ret)
+			dev_info(dev, "Failed to register HSMP sensors with hwmon\n");
+	}
 
 	dev_set_drvdata(dev, &hsmp_pdev->sock[sock_ind]);
 
