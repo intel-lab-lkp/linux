@@ -10,6 +10,7 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/module.h>
+#include <linux/if_vlan.h>
 #include <net/netfilter/nf_flow_table.h>
 #include <linux/bpf.h>
 #include <linux/btf.h>
@@ -60,6 +61,8 @@ bpf_xdp_flow_lookup(struct xdp_md *ctx, struct bpf_fib_lookup *fib_tuple,
 		    struct bpf_flowtable_opts *opts, u32 opts_len)
 {
 	struct xdp_buff *xdp = (struct xdp_buff *)ctx;
+	const struct ethhdr *eth = xdp->data;
+	const struct vlan_hdr *vh;
 	struct flow_offload_tuple tuple = {
 		.iifidx = fib_tuple->ifindex,
 		.l3proto = fib_tuple->family,
@@ -89,6 +92,18 @@ bpf_xdp_flow_lookup(struct xdp_md *ctx, struct bpf_fib_lookup *fib_tuple,
 	default:
 		opts->error = -EAFNOSUPPORT;
 		return NULL;
+	}
+
+	/* encap[] is part of the lookup key, fill it from the 802.1Q tag. */
+	if (eth + 1 <= (const struct ethhdr *)xdp->data_end &&
+	    eth->h_proto == htons(ETH_P_8021Q)) {
+		vh = (const struct vlan_hdr *)(eth + 1);
+		if (unlikely(vh + 1 > (const struct vlan_hdr *)xdp->data_end)) {
+			opts->error = -EINVAL;
+			return NULL;
+		}
+		tuple.encap[0].id = ntohs(vh->h_vlan_TCI);
+		tuple.encap[0].proto = htons(ETH_P_8021Q);
 	}
 
 	tuplehash = bpf_xdp_flow_tuple_lookup(xdp->rxq->dev, &tuple, proto);
