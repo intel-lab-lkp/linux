@@ -197,6 +197,7 @@ static void enqueue_task_in_user_space(struct task_struct *p, u64 enq_flags)
 		scx_bpf_dsq_insert(p, SCX_DSQ_GLOBAL, SCX_SLICE_DFL, enq_flags);
 	} else {
 		__sync_fetch_and_add(&nr_user_enqueues, 1);
+		__sync_fetch_and_add(&nr_queued, 1);
 		set_usersched_needed();
 	}
 }
