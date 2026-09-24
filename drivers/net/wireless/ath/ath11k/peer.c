@@ -341,8 +341,21 @@ static int __ath11k_peer_delete(struct ath11k *ar, u32 vdev_id, const u8 *addr)
 	}
 
 	ret = ath11k_wait_for_peer_delete_done(ar, vdev_id, addr);
-	if (ret)
-		return ret;
+	if (ret) {
+		/*
+		 * The delete timed out. The peer is normally already freed by
+		 * the unmap event; drop it here only if it is still on the
+		 * list. Either way return success so that ath11k_peer_delete()
+		 * releases the num_peers slot instead of leaking it.
+		 */
+		spin_lock_bh(&ab->base_lock);
+		peer = ath11k_peer_find(ab, vdev_id, addr);
+		if (peer) {
+			list_del(&peer->list);
+			kfree(peer);
+		}
+		spin_unlock_bh(&ab->base_lock);
+	}
 
 	return 0;
 }
