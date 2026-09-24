@@ -8247,7 +8247,7 @@ static int set_file_basic_info(struct ksmbd_file *fp,
 			return -EACCES;
 
 		inode_lock(inode);
-		rc = notify_change(idmap, dentry, &attrs, NULL);
+		rc = notify_change(&filp->f_path, &attrs, NULL);
 		inode_unlock(inode);
 	}
 	return rc;

@@ -4287,7 +4287,7 @@ static int may_open(struct mnt_idmap *idmap, const struct path *path,
 	return 0;
 }
 
-static int handle_truncate(struct mnt_idmap *idmap, struct file *filp)
+static int handle_truncate(struct file *filp)
 {
 	const struct path *path = &filp->f_path;
 	struct inode *inode = path->dentry->d_inode;
@@ -4297,8 +4297,7 @@ static int handle_truncate(struct mnt_idmap *idmap, struct file *filp)
 
 	error = security_file_truncate(filp);
 	if (!error) {
-		error = do_truncate(idmap, path->dentry, 0,
-				    ATTR_MTIME|ATTR_CTIME|ATTR_OPEN,
+		error = do_truncate(path, 0, ATTR_MTIME|ATTR_CTIME|ATTR_OPEN,
 				    filp);
 	}
 	put_write_access(inode);
@@ -4845,7 +4844,7 @@ static int do_open(struct nameidata *nd,
 	if (!error)
 		error = security_file_post_open(file, op->acc_mode);
 	if (!error && do_truncate)
-		error = handle_truncate(idmap, file);
+		error = handle_truncate(file);
 	if (unlikely(error > 0)) {
 		WARN_ON(1);
 		error = -EINVAL;

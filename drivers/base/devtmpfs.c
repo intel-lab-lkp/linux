@@ -284,13 +284,14 @@ static int handle_create(const char *nodename, umode_t mode, kuid_t uid,
 			dev->devt, NULL);
 	if (!err) {
 		struct iattr newattrs;
+		struct path attr_path = { .mnt = path.mnt, .dentry = dentry };
 
 		newattrs.ia_mode = mode;
 		newattrs.ia_uid = uid;
 		newattrs.ia_gid = gid;
 		newattrs.ia_valid = ATTR_MODE|ATTR_UID|ATTR_GID;
 		inode_lock(d_inode(dentry));
-		notify_change(&nop_mnt_idmap, dentry, &newattrs, NULL);
+		notify_change(&attr_path, &newattrs, NULL);
 		inode_unlock(d_inode(dentry));
 
 		/* mark as kernel-created inode */
@@ -380,6 +381,7 @@ static int handle_remove(const char *nodename, struct device *dev)
 	inode = d_inode(dentry);
 	if (dev_mynode(dev, inode)) {
 		struct iattr newattrs;
+		struct path attr_path = { .mnt = parent.mnt, .dentry = dentry };
 		/*
 		 * before unlinking this node, reset permissions
 		 * of possible references like hardlinks
@@ -390,7 +392,7 @@ static int handle_remove(const char *nodename, struct device *dev)
 		newattrs.ia_valid =
 			ATTR_UID|ATTR_GID|ATTR_MODE;
 		inode_lock(d_inode(dentry));
-		notify_change(&nop_mnt_idmap, dentry, &newattrs, NULL);
+		notify_change(&attr_path, &newattrs, NULL);
 		inode_unlock(d_inode(dentry));
 		err = vfs_unlink(&nop_mnt_idmap, d_inode(parent.dentry),
 				 dentry, NULL);

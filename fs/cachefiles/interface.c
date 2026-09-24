@@ -138,8 +138,7 @@ static int cachefiles_adjust_size(struct cachefiles_object *object)
 		newattrs.ia_size = oi_size & PAGE_MASK;
 		ret = cachefiles_inject_remove_error();
 		if (ret == 0)
-			ret = notify_change(&nop_mnt_idmap, file->f_path.dentry,
-					    &newattrs, NULL);
+			ret = notify_change(&file->f_path, &newattrs, NULL);
 		if (ret < 0)
 			goto truncate_failed;
 	}
@@ -148,8 +147,7 @@ static int cachefiles_adjust_size(struct cachefiles_object *object)
 	newattrs.ia_size = ni_size;
 	ret = cachefiles_inject_write_error();
 	if (ret == 0)
-		ret = notify_change(&nop_mnt_idmap, file->f_path.dentry,
-				    &newattrs, NULL);
+		ret = notify_change(&file->f_path, &newattrs, NULL);
 
 truncate_failed:
 	inode_unlock(file_inode(file));

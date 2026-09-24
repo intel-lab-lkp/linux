@@ -455,7 +455,7 @@ nfsd_get_write_access(struct svc_fh *fhp)
 	return nfserrno(get_write_access(d_inode(fhp->fh_dentry)));
 }
 
-static int __nfsd_setattr(struct dentry *dentry, struct iattr *iap)
+static int __nfsd_setattr(const struct path *path, struct iattr *iap)
 {
 	int host_err;
 
@@ -475,7 +475,7 @@ static int __nfsd_setattr(struct dentry *dentry, struct iattr *iap)
 		if (iap->ia_size < 0)
 			return -EFBIG;
 
-		host_err = notify_change(&nop_mnt_idmap, dentry, &size_attr, NULL);
+		host_err = notify_change(path, &size_attr, NULL);
 		if (host_err)
 			return host_err;
 		iap->ia_valid &= ~ATTR_SIZE;
@@ -501,7 +501,7 @@ static int __nfsd_setattr(struct dentry *dentry, struct iattr *iap)
 	if (!(iap->ia_valid & ATTR_DELEG))
 		iap->ia_valid |= ATTR_CTIME;
 
-	return notify_change(&nop_mnt_idmap, dentry, iap, NULL);
+	return notify_change(path, iap, NULL);
 }
 
 /**
@@ -524,6 +524,7 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp,
 {
 	struct dentry	*dentry;
 	struct inode	*inode;
+	struct path	path;
 	struct iattr	*iap = attr->na_iattr;
 	int		accmode = NFSD_MAY_SATTR;
 	umode_t		ftype = 0;
@@ -569,6 +570,11 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	dentry = fhp->fh_dentry;
 	inode = d_inode(dentry);
 
+	path = (struct path){
+		.mnt	= fhp->fh_export->ex_path.mnt,
+		.dentry	= dentry,
+	};
+
 	nfsd_sanitize_attrs(inode, iap);
 
 	/*
@@ -612,7 +618,7 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		 * copy for every loop iteration.
 		 */
 		attrs = *iap;
-		host_err = __nfsd_setattr(dentry, &attrs);
+		host_err = __nfsd_setattr(&path, &attrs);
 		if (host_err != -EAGAIN || !retries--)
 			break;
 		if (!nfsd_wait_for_delegreturn(rqstp, inode))
