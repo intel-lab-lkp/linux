@@ -610,6 +610,9 @@ void kvm_riscv_aia_enable(void)
 	lc = (gc) ? this_cpu_ptr(gc->local) : NULL;
 	hgctrl = this_cpu_ptr(&aia_hgei);
 
+	if (hgctrl->free_bitmap_initialized)
+		goto skip_hgctrl_init;
+
 	/* Figure-out number of bits in HGEIE */
 	csr_write(CSR_HGEIE, -1UL);
 	hgctrl->nr_hgei = fls_long(csr_read(CSR_HGEIE));
@@ -634,12 +637,11 @@ void kvm_riscv_aia_enable(void)
 	} while (!atomic_try_cmpxchg(&kvm_riscv_aia_nr_hgei, &aia_nr_hgei, hgctrl->nr_hgei));
 
 	raw_spin_lock_irqsave(&hgctrl->lock, flags);
-	if (!hgctrl->free_bitmap_initialized) {
-		hgctrl->free_bitmap = (hgctrl->nr_hgei) ? GENMASK_ULL(hgctrl->nr_hgei, 1) : 0;
-		hgctrl->free_bitmap_initialized = true;
-	}
+	hgctrl->free_bitmap = (hgctrl->nr_hgei) ? GENMASK_ULL(hgctrl->nr_hgei, 1) : 0;
+	hgctrl->free_bitmap_initialized = true;
 	raw_spin_unlock_irqrestore(&hgctrl->lock, flags);
 
+skip_hgctrl_init:
 	csr_write(CSR_HVICTL, aia_hvictl_value(false));
 	csr_write(CSR_HVIPRIO1, 0x0);
 	csr_write(CSR_HVIPRIO2, 0x0);
