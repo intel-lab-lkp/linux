@@ -540,7 +540,7 @@ static int ath10k_sdio_mbox_rx_alloc(struct ath10k *ar,
 {
 	struct ath10k_sdio *ar_sdio = ath10k_sdio_priv(ar);
 	struct ath10k_htc_hdr *htc_hdr;
-	size_t full_len, act_len;
+	size_t full_len, act_len, bndl_cnt;
 	bool last_in_bundle;
 	int ret, i;
 	int pkt_cnt = 0;
@@ -579,14 +579,23 @@ static int ath10k_sdio_mbox_rx_alloc(struct ath10k *ar,
 			goto err;
 		}
 
-		if (ath10k_htc_get_bundle_count(
-			ar->htc.max_msgs_per_htc_bundle, htc_hdr->flags)) {
+		bndl_cnt = ath10k_htc_get_bundle_count(
+			ar->htc.max_msgs_per_htc_bundle, htc_hdr->flags);
+
+		/* One rx_pkts[] slot per lookahead plus one per bundled packet */
+		if (bndl_cnt + 1 > ATH10K_SDIO_MAX_RX_MSGS - pkt_cnt) {
+			ath10k_warn(ar,
+				    "rx bundle count %zu exceeds remaining pkt slots\n",
+				    bndl_cnt);
+			ret = -ENOMEM;
+			goto err;
+		}
+
+		if (bndl_cnt) {
 			/* HTC header indicates that every packet to follow
 			 * has the same padded length so that it can be
 			 * optimally fetched as a full bundle.
 			 */
-			size_t bndl_cnt;
-
 			ret = ath10k_sdio_mbox_alloc_bundle(ar,
 							    &ar_sdio->rx_pkts[pkt_cnt],
 							    htc_hdr,
