@@ -249,6 +249,11 @@ static inline bool crypto_skcipher_tested(struct crypto_skcipher *tfm)
 	return tfm_base->__crt_alg->cra_flags & CRYPTO_ALG_TESTED;
 }
 
+static inline bool crypto_skcipher_req_seg(struct crypto_skcipher *tfm)
+{
+	return crypto_tfm_req_seg(&tfm->base);
+}
+
 static inline void *skcipher_request_ctx(struct skcipher_request *req)
 {
 	return req->__ctx;
