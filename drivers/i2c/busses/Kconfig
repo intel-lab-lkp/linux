@@ -885,6 +885,15 @@ config I2C_MESON
 	  If you say yes to this option, support will be included for the
 	  I2C interface on the Amlogic Meson family of SoCs.
 
+config I2C_AMLOGIC_A9
+	tristate "Amlogic new I2C controller"
+	depends on ARCH_MESON || COMPILE_TEST
+	depends on COMMON_CLK
+	help
+	  If you say yes to this option, support will be included for the
+	  I2C interface on the new Amlogic family of SoCs.
+
+
 config I2C_MICROCHIP_CORE
 	tristate "Microchip FPGA I2C controller"
 	depends on ARCH_MICROCHIP_POLARFIRE || COMPILE_TEST
