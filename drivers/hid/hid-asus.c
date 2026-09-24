@@ -51,6 +51,8 @@ MODULE_DESCRIPTION("Asus HID Keyboard and TouchPad");
 #define FEATURE_KBD_LED_REPORT_ID1 0x5d
 #define FEATURE_KBD_LED_REPORT_ID2 0x5e
 
+#define ASUS_AIRPLANE_KEY_CODE 0x88
+
 #define ROG_ALLY_REPORT_SIZE 64
 #define ROG_ALLY_X_MIN_MCU 313
 #define ROG_ALLY_MIN_MCU 319
@@ -549,6 +551,16 @@ static int asus_raw_event(struct hid_device *hdev,
 		 */
 		if (data[0] == 0x02 && data[1] == 0x30)
 			return -1;
+
+		/*
+		 * Some ROG laptops (e.g. ROG Flow X13 GV302X) send the airplane
+		 * mode keycode 0x88 in the Wireless Radio Controls report instead
+		 * of setting its Wireless Radio Button bit, so the key press is
+		 * lost. Report the button press instead.
+		 */
+		if (report->application == HID_GD_WIRELESS_RADIO_CTLS &&
+		    data[1] == ASUS_AIRPLANE_KEY_CODE)
+			data[1] = 0x01;
 	}
 
 	if (drvdata->quirks & QUIRK_ROG_CLAYMORE_II_KEYBOARD) {
