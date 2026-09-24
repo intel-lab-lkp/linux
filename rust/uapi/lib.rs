@@ -36,5 +36,9 @@ type __kernel_ssize_t = isize;
 type __kernel_ptrdiff_t = isize;
 
 use pin_init::MaybeZeroable;
+use zerocopy_derive::{
+    Immutable,
+    IntoBytes, //
+};
 
 include!(concat!(env!("OBJTREE"), "/rust/uapi/uapi_generated.rs"));
