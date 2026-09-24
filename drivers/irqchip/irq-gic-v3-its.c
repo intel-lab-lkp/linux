@@ -195,6 +195,7 @@ static DEFINE_PER_CPU(struct cpu_lpi_count, cpu_lpi_count);
 static LIST_HEAD(its_nodes);
 static DEFINE_RAW_SPINLOCK(its_lock);
 static struct rdists *gic_rdists;
+static unsigned int vpe_l1_prealloc_order = UINT_MAX;
 static struct irq_domain *its_parent;
 
 static unsigned long its_list_map;
@@ -2884,12 +2885,35 @@ static bool allocate_vpe_l2_table(int cpu, u32 id)
 	return true;
 }
 
-static int allocate_vpe_l1_table(void)
+static unsigned int vpe_l1_table_order(u64 val)
+{
+	unsigned int psz;
+	u64 npg;
+
+	switch (FIELD_GET(GICR_VPROPBASER_4_1_PAGE_SIZE, val)) {
+	default:
+	case GIC_PAGE_SIZE_4K:
+		psz = SZ_4K;
+		break;
+	case GIC_PAGE_SIZE_16K:
+		psz = SZ_16K;
+		break;
+	case GIC_PAGE_SIZE_64K:
+		psz = SZ_64K;
+		break;
+	}
+
+	npg = FIELD_GET(GICR_VPROPBASER_4_1_SIZE, val) + 1;
+	return get_order(npg * psz);
+}
+
+static int allocate_vpe_l1_table(bool use_prealloc)
 {
 	void __iomem *vlpi_base = gic_data_rdist_vlpi_base();
 	u64 val, gpsz, npg, pa;
 	unsigned int psz = SZ_64K;
 	unsigned int np, epp, esz;
+	unsigned int order;
 	struct page *page;
 
 	if (!gic_rdists->has_rvpeid)
@@ -2982,7 +3006,16 @@ static int allocate_vpe_l1_table(void)
 
 	pr_debug("np = %d, npg = %lld, psz = %d, epp = %d, esz = %d\n",
 		 np, npg, psz, epp, esz);
-	page = its_alloc_pages(GFP_ATOMIC | __GFP_ZERO, get_order(np * PAGE_SIZE));
+	order = get_order(np * PAGE_SIZE);
+	if (use_prealloc) {
+		if (WARN_ON_ONCE(order != vpe_l1_prealloc_order))
+			return -EINVAL;
+
+		page = gic_data_rdist()->vpe_l1_prealloc;
+		gic_data_rdist()->vpe_l1_prealloc = NULL;
+	} else {
+		page = its_alloc_pages(GFP_KERNEL | __GFP_ZERO, order);
+	}
 	if (!page)
 		return -ENOMEM;
 
@@ -2999,6 +3032,9 @@ static int allocate_vpe_l1_table(void)
 	val |= GICR_VPROPBASER_4_1_VALID;
 
 out:
+	if (!use_prealloc)
+		vpe_l1_prealloc_order = vpe_l1_table_order(val);
+
 	gicr_write_vpropbaser(val, vlpi_base + GICR_VPROPBASER);
 	cpumask_set_cpu(smp_processor_id(), gic_data_rdist()->vpe_table_mask);
 
@@ -3138,7 +3174,7 @@ static u64 its_clear_vpend_valid(void __iomem *vlpi_base, u64 clr, u64 set)
 	return val;
 }
 
-static void its_cpu_init_lpis(void)
+static void its_cpu_init_lpis(bool use_prealloc)
 {
 	void __iomem *rbase = gic_data_rdist_rd_base();
 	struct page *pend_page;
@@ -3251,7 +3287,7 @@ out:
 		val = its_clear_vpend_valid(vlpi_base, 0, 0);
 	}
 
-	if (allocate_vpe_l1_table()) {
+	if (allocate_vpe_l1_table(use_prealloc)) {
 		/*
 		 * If the allocation has failed, we're in massive trouble.
 		 * Disable direct injection, and pray that no VM was
@@ -5422,7 +5458,7 @@ static int redist_disable_lpis(void)
 	return 0;
 }
 
-int its_cpu_init(void)
+int its_cpu_init(bool use_prealloc)
 {
 	if (!list_empty(&its_nodes)) {
 		int ret;
@@ -5431,8 +5467,61 @@ int its_cpu_init(void)
 		if (ret)
 			return ret;
 
-		its_cpu_init_lpis();
+		its_cpu_init_lpis(use_prealloc);
 		its_cpu_init_collections();
+	}
+
+	return 0;
+}
+
+static int its_vpe_l1_prepare(unsigned int cpu)
+{
+	struct page **prealloc;
+
+	if (!gic_rdists->has_rvpeid ||
+	    vpe_l1_prealloc_order == UINT_MAX ||
+	    (gic_data_rdist_cpu(cpu)->flags & RD_LOCAL_LPI_ENABLED))
+		return 0;
+
+	prealloc = &gic_data_rdist_cpu(cpu)->vpe_l1_prealloc;
+	if (*prealloc)
+		return 0;
+
+	*prealloc = its_alloc_pages_node(cpu_to_node(cpu),
+					 GFP_KERNEL | __GFP_ZERO,
+					 vpe_l1_prealloc_order);
+	return *prealloc ? 0 : -ENOMEM;
+}
+
+static int its_vpe_l1_cleanup(unsigned int cpu)
+{
+	struct page *page;
+
+	page = xchg(&gic_data_rdist_cpu(cpu)->vpe_l1_prealloc, NULL);
+	if (page)
+		its_free_pages(page_address(page), vpe_l1_prealloc_order);
+
+	return 0;
+}
+
+static int __init its_vpe_l1_cpuhp_init(void)
+{
+	int prepare_state, state;
+
+	state = cpuhp_setup_state_nocalls(CPUHP_BP_PREPARE_DYN,
+					  "irqchip/arm/gicv3-vpe:prepare",
+					  its_vpe_l1_prepare,
+					  its_vpe_l1_cleanup);
+	if (state < 0)
+		return state;
+	prepare_state = state;
+
+	state = cpuhp_setup_state_nocalls(CPUHP_AP_ONLINE_DYN,
+					  "irqchip/arm/gicv3-vpe:online",
+					  its_vpe_l1_cleanup, NULL);
+	if (state < 0) {
+		cpuhp_remove_state_nocalls(prepare_state);
+		return state;
 	}
 
 	return 0;
@@ -5861,6 +5950,15 @@ int __init its_init(struct fwnode_handle *handle, struct rdists *rdists,
 	/* Don't bother with inconsistent systems */
 	if (WARN_ON(!has_v4_1 && rdists->has_rvpeid))
 		rdists->has_rvpeid = false;
+
+	if (rdists->has_rvpeid) {
+		err = its_vpe_l1_cpuhp_init();
+		if (err) {
+			rdists->has_rvpeid = false;
+			rdists->has_vlpis = false;
+			pr_err("ITS: Failed to prepare VPE tables, disabling GICv4 support\n");
+		}
+	}
 
 	if (has_v4 & rdists->has_vlpis) {
 		const struct irq_domain_ops *sgi_ops;

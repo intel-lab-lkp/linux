@@ -1320,7 +1320,7 @@ static int gic_starting_cpu(unsigned int cpu)
 	gic_cpu_init();
 
 	if (gic_dist_supports_lpis())
-		its_cpu_init();
+		its_cpu_init(true);
 
 	return 0;
 }
@@ -2053,7 +2053,7 @@ static int __init gic_init_bases(phys_addr_t dist_phys_base,
 
 	if (gic_dist_supports_lpis()) {
 		its_init(handle, &gic_data.rdists, gic_data.domain, dist_prio_irq);
-		its_cpu_init();
+		its_cpu_init(false);
 		its_lpi_memreserve_init();
 	} else {
 		if (IS_ENABLED(CONFIG_ARM_GIC_V2M))
