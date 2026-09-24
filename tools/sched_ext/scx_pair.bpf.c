@@ -633,6 +633,34 @@ void BPF_STRUCT_OPS(pair_cgroup_exit, struct cgroup *cgrp)
 
 	q_idx = bpf_map_lookup_elem(&cgrp_q_idx_hash, &cgid);
 	if (q_idx) {
+		struct cgrp_q *cgq;
+		s32 pid;
+		u64 *cgq_len;
+
+		/*
+		 * All tasks have left the cgroup by the time it exits, so
+		 * the pids left behind are stale; drain the queue and take
+		 * the length counter down with them -- the next cgroup
+		 * inheriting this slot must see its first enqueue go
+		 * 0 -> 1 or it never reaches top_q.  Each pop claims a
+		 * counter slot as try_dispatch() does, so that the drain
+		 * can't steal an entry from an in-flight dispatcher and
+		 * trip its scx_bpf_error().
+		 */
+		cgq = bpf_map_lookup_elem(&cgrp_q_arr, q_idx);
+		cgq_len = MEMBER_VPTR(cgrp_q_len, [*q_idx]);
+		if (cgq && cgq_len)
+			bpf_repeat(BPF_MAX_LOOPS) {
+				u64 len = *(volatile u64 *)cgq_len;
+
+				if (!len)
+					break;
+				if (__sync_val_compare_and_swap(cgq_len, len, len - 1) != len)
+					continue;
+				if (bpf_map_pop_elem(cgq, &pid))
+					break;
+			}
+
 		u64 *busy = MEMBER_VPTR(cgrp_q_idx_busy, [*q_idx]);
 		if (busy)
 			*busy = 0;
