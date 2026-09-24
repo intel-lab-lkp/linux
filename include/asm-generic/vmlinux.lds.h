@@ -57,6 +57,21 @@
 #endif
 
 /*
+ * There aren't any ELF relocations we can use to endian-swap values known only
+ * at link time (e.g. the subtraction of two symbol addresses), so we must get
+ * the linker to endian-swap certain values before emitting them.
+ */
+#ifdef CONFIG_CPU_BIG_ENDIAN
+#define DATA_LE32(data)				\
+	((((data) & 0x000000ff) << 24) |	\
+	 (((data) & 0x0000ff00) << 8)  |	\
+	 (((data) & 0x00ff0000) >> 8)  |	\
+	 (((data) & 0xff000000) >> 24))
+#else
+#define DATA_LE32(data) ((data) & 0xffffffff)
+#endif
+
+/*
  * Only some architectures want to have the .notes segment visible in
  * a separate PT_NOTE ELF Program Header. When this happens, it needs
  * to be visible in both the kernel text's PT_LOAD and the PT_NOTE
