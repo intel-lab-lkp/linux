@@ -143,7 +143,7 @@ void *malloc(size_t len)
 }
 
 static __attribute__((unused))
-void *calloc(size_t size, size_t nmemb)
+void *calloc(size_t nmemb, size_t size)
 {
 	size_t x;
 
