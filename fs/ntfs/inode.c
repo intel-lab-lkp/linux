@@ -621,6 +621,67 @@ err_corrupt_attr:
 	return 0;	/* NO, it is not an extended system file. */
 }
 
+/*
+ * ntfs_count_vfs_links - count VFS-visible hard links
+ * @ctx: initialized attribute search context
+ *
+ * The MFT link count counts all $FILE_NAME attributes.  A separate DOS 8.3
+ * name therefore contributes to the on-disk count even though it is an alias
+ * for its Win32 name and does not represent another VFS hard link.
+ *
+ * Return the number of VFS-visible links or -errno on error.
+ */
+static int ntfs_count_vfs_links(struct ntfs_attr_search_ctx *ctx)
+{
+	unsigned int expected, names = 0, links = 0;
+	int err;
+
+	expected = le16_to_cpu(ctx->mrec->link_count);
+	ntfs_attr_reinit_search_ctx(ctx);
+
+	while (!(err = ntfs_attr_lookup(AT_FILE_NAME, NULL, 0, 0, 0, NULL, 0,
+					ctx))) {
+		struct attr_record *attr = ctx->attr;
+		struct file_name_attr *fn;
+		u32 attr_len, value_len;
+		u16 value_off;
+
+		if (unlikely(attr->non_resident))
+			goto corrupt;
+
+		attr_len = le32_to_cpu(attr->length);
+		value_len = le32_to_cpu(attr->data.resident.value_length);
+		value_off = le16_to_cpu(attr->data.resident.value_offset);
+
+		if (unlikely(value_off > attr_len ||
+			     value_len > attr_len - value_off ||
+			     value_len < offsetof(struct file_name_attr, file_name)))
+			goto corrupt;
+
+		fn = (struct file_name_attr *)((u8 *)attr + value_off);
+		names++;
+		if (fn->file_name_type != FILE_NAME_DOS)
+			links++;
+	}
+
+	if (unlikely(err != -ENOENT))
+		return err;
+
+	if (unlikely(names != expected || !links)) {
+		ntfs_error(ctx->ntfs_ino->vol->sb,
+			   "Inode link count doesn't match file name attributes. You should run chkdsk.");
+		return -EIO;
+	}
+
+	ntfs_attr_reinit_search_ctx(ctx);
+	return links;
+
+corrupt:
+	ntfs_error(ctx->ntfs_ino->vol->sb,
+		   "Corrupt file name attribute. You should run chkdsk.");
+	return -EIO;
+}
+
 static struct lock_class_key ntfs_dir_inval_lock_key;
 
 void ntfs_set_vfs_operations(struct inode *inode, mode_t mode, dev_t dev)
@@ -872,6 +933,22 @@ static int ntfs_read_locked_inode(struct inode *vi)
 		}
 	}
 skip_attr_list_load:
+	/*
+	 * The MFT link count includes separate DOS 8.3 aliases.  Once the
+	 * attribute list is available, derive the VFS link count from the
+	 * $FILE_NAME namespaces instead.
+	 */
+	if (!(m->flags & MFT_RECORD_IS_DIRECTORY) && vi->i_ino != FILE_MFT) {
+		int nr_links;
+
+		nr_links = ntfs_count_vfs_links(ctx);
+		if (unlikely(nr_links < 0)) {
+			err = nr_links;
+			goto unm_err_out;
+		}
+		set_nlink(vi, nr_links);
+	}
+
 	err = ntfs_attr_lookup(AT_EA_INFORMATION, NULL, 0, 0, 0, NULL, 0, ctx);
 	if (!err) {
 		NInoSetHasEA(ni);

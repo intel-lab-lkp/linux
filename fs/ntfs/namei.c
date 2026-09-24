@@ -829,6 +829,7 @@ static int ntfs_delete(struct ntfs_inode *ni, struct ntfs_inode *dir_ni,
 	struct file_name_attr *fn = NULL;
 	bool looking_for_dos_name = false, looking_for_win32_name = false;
 	bool case_sensitive_match = true;
+	bool is_dos_name;
 	int err = 0;
 	struct mft_record *ni_mrec;
 	struct super_block *sb;
@@ -932,6 +933,8 @@ search:
 	if (err)
 		goto err_out;
 
+	is_dos_name = fn->file_name_type == FILE_NAME_DOS;
+
 	err = ntfs_index_remove(dir_ni, fn, le32_to_cpu(actx->attr->data.resident.value_length));
 	if (err)
 		goto err_out;
@@ -942,7 +945,7 @@ search:
 
 	ni_mrec = actx->base_mrec ? actx->base_mrec : actx->mrec;
 	ni_mrec->link_count = cpu_to_le16(le16_to_cpu(ni_mrec->link_count) - 1);
-	if (!S_ISDIR(VFS_I(ni)->i_mode))
+	if (!S_ISDIR(VFS_I(ni)->i_mode) && !is_dos_name)
 		drop_nlink(VFS_I(ni));
 
 	mark_mft_record_dirty(ni);
