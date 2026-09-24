@@ -20,6 +20,7 @@ struct virtio_usb_hc_vp;
 struct virtio_usb_dc;
 /* Forward declaration - full definition in otg.h */
 struct virtio_usb_otg;
+struct virtio_usb_port_otg;
 
 #define VIRTIO_USB_VQ_COMMAND_IDX 0
 #define VIRTIO_USB_VQ_EVENT_IDX 1
@@ -31,14 +32,27 @@ struct virtio_usb_otg;
 
 /**
  * struct virtio_usb_port - Per-virtual-port state.
+ * @vusb: VirtIO usb device this port belongs to.
+ * @is_otg: True if this port supports dynamic role switching.
  * @role: Role of this port (VIRTIO_USB_ROLE_HOST or _DEVICE).
  * @vhc: Host controller - non-NULL when role is HOST.
  * @vudc: Device controller - non-NULL when role is DEVICE.
+ * @otg: Per-port OTG role-switching state - non-NULL when is_otg.
  */
 struct virtio_usb_port {
+	struct virtio_usb *vusb;
+	bool is_otg;
 	unsigned int role;
+	/*! Protects vhc against concurrent OTG-triggered init/deinit while
+	 * the host event-processing worker is reading it. Only needs to
+	 * guard the pointer itself: virtio_usb_hc_vp_init()/_deinit()'s
+	 * sleeping work (devm_kzalloc(), usb_add_hcd(), usb_remove_hcd())
+	 * happens outside this lock.
+	 */
+	spinlock_t vhc_lock;
 	struct virtio_usb_hc_vp *vhc;
 	struct virtio_usb_dc *vudc;
+	struct virtio_usb_port_otg *otg;
 };
 
 /**
@@ -63,6 +77,9 @@ struct virtio_usb_port {
  *               otg_get_role() below, since with both host_role and
  *               device_role negotiated a port's own role is otherwise
  *               ambiguous.
+ * @switch_role: flag indicating support for dynamically switching roles
+ * @started: True once probe() has finished bringing up every VP - guards
+ *           notify callbacks against running before setup is complete.
  * @vq_host_data_rx_work: Kernel work draining the host data queue, shared
  *                        across every host-role VP.
  * @vq_host_evt_work: Kernel work draining the host event queue, shared
@@ -76,13 +93,15 @@ struct virtio_usb {
 	struct virtio_device *vdev;
 	struct virtio_usb_queue *vqueues;
 	struct virtio_usb_port *vports;
-	unsigned int nports;
+	u32 nports;
 	u32 nvqs;
 	bool host_role;
 	bool device_role;
 	int host_vq_base;
 	int dev_vq_base;
 	int otg_vq_base;
+	bool switch_role;
+	bool started;
 	struct work_struct vq_host_data_rx_work;
 	struct work_struct vq_host_evt_work;
 	struct work_struct vq_dev_data_rx_work;

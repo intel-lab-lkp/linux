@@ -1013,12 +1013,16 @@ int virtio_usb_hc_vp_init(struct virtio_usb *vusb, unsigned int vp_idx)
 		vhcd_vp->hcqs[i] = &vusb->vqueues[vusb->host_vq_base + i];
 
 	/* Install into the port before add_hcd so vhcd_vp->vusb is set */
+	spin_lock(&vusb->vports[vp_idx].vhc_lock);
 	vusb->vports[vp_idx].vhc = vhcd_vp;
+	spin_unlock(&vusb->vports[vp_idx].vhc_lock);
 
 	/* Add HCDs first so hs/ss are valid before any PORT_CONNECTED event */
 	rc = virtio_usb_add_hcd(vusb, vhcd_vp);
 	if (rc) {
+		spin_lock(&vusb->vports[vp_idx].vhc_lock);
 		vusb->vports[vp_idx].vhc = NULL;
+		spin_unlock(&vusb->vports[vp_idx].vhc_lock);
 		return rc;
 	}
 
@@ -1032,7 +1036,11 @@ int virtio_usb_hc_vp_init(struct virtio_usb *vusb, unsigned int vp_idx)
  */
 int virtio_usb_hc_vp_deinit(struct virtio_usb *vusb, unsigned int vp_idx)
 {
-	struct virtio_usb_hc_vp *vhcd_vp = vusb->vports[vp_idx].vhc;
+	struct virtio_usb_hc_vp *vhcd_vp;
+
+	spin_lock(&vusb->vports[vp_idx].vhc_lock);
+	vhcd_vp = vusb->vports[vp_idx].vhc;
+	spin_unlock(&vusb->vports[vp_idx].vhc_lock);
 
 	if (!vhcd_vp)
 		return 0;
@@ -1045,7 +1053,9 @@ int virtio_usb_hc_vp_deinit(struct virtio_usb *vusb, unsigned int vp_idx)
 	vhcd_vp->ss = NULL;
 	vhcd_vp->hs = NULL;
 
+	spin_lock(&vusb->vports[vp_idx].vhc_lock);
 	vusb->vports[vp_idx].vhc = NULL;
+	spin_unlock(&vusb->vports[vp_idx].vhc_lock);
 	return 0;
 }
 
@@ -1085,7 +1095,18 @@ static void virtio_usb_hc_evt_process_one(struct virtio_usb_event *uevent)
 		return;
 	}
 
+	/* vhc can be concurrently init/deinit'd by an OTG role switch
+	 * (virtio_usb_otg_event_process() runs on its own workqueue) -
+	 * vhc_lock protects only the pointer read itself; the vhcd_vp it
+	 * points to remains valid for as long as we hold a reference to
+	 * it here, since virtio_usb_hc_vp_deinit() only clears the
+	 * vports[vp_idx].vhc pointer under the same lock, it does not
+	 * free vhcd_vp itself (devm-managed, freed at device teardown).
+	 */
+	spin_lock(&vusb->vports[vp_idx].vhc_lock);
 	vhcd_vp = vusb->vports[vp_idx].vhc;
+	spin_unlock(&vusb->vports[vp_idx].vhc_lock);
+
 	if (!vhcd_vp) {
 		dev_err_ratelimited(
 			&vusb->vdev->dev,
@@ -1174,10 +1195,12 @@ static void virtio_usb_hc_evt_process_one(struct virtio_usb_event *uevent)
  * @work: kernel work item embedded in struct virtio_usb.
  *
  * The host event queue is shared across all host-role VPs and its VP
- * may not even exist yet at probe time (e.g. a dual-role instance
- * where every port currently reports device role), so events are
- * drained and processed here, in process context, rather than
- * directly inside the interrupt-context notify callback.
+ * may not even exist yet (or may be concurrently torn down by an OTG
+ * role switch), so events are drained and processed here, in process
+ * context, instead of directly inside the interrupt-context notify
+ * callback - this lets virtio_usb_hc_evt_process_one() safely take
+ * vhc_lock without needing an atomic-context-safe primitive on the
+ * writer side (virtio_usb_hc_vp_init()/_deinit() sleep).
  *
  * Context: Process context.
  */
@@ -1215,7 +1238,11 @@ static void virtio_usb_hc_dataq_stop_cb(struct virtio_usb *vusb,
 	cancel_work_sync(&vusb->vq_host_data_rx_work);
 
 	for (vp_idx = 0; vp_idx < vusb->nports; vp_idx++) {
-		struct virtio_usb_hc_vp *vhcd_vp = vusb->vports[vp_idx].vhc;
+		struct virtio_usb_hc_vp *vhcd_vp;
+
+		spin_lock(&vusb->vports[vp_idx].vhc_lock);
+		vhcd_vp = vusb->vports[vp_idx].vhc;
+		spin_unlock(&vusb->vports[vp_idx].vhc_lock);
 
 		if (!vhcd_vp)
 			continue;
@@ -1284,6 +1311,9 @@ static void virtio_usb_hc_evt_notify_cb(struct virtqueue *vqueue)
 {
 	struct virtio_usb *vusb = vqueue->vdev->priv;
 
+	if (!READ_ONCE(vusb->started))
+		return;
+
 	schedule_work(&vusb->vq_host_evt_work);
 }
 
@@ -1309,6 +1339,9 @@ static void virtio_usb_hc_evtq_stop_cb(struct virtio_usb *vusb,
 static void virtio_usb_host_data_notify_cb(struct virtqueue *vqueue)
 {
 	struct virtio_usb *vusb = vqueue->vdev->priv;
+
+	if (!READ_ONCE(vusb->started))
+		return;
 
 	schedule_work(&vusb->vq_host_data_rx_work);
 }

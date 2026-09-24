@@ -1056,6 +1056,8 @@ static void virtio_usb_dc_event_process(struct virtio_usb_event *event)
 		break;
 	}
 	case VIRTIO_USB_EVT_DEV_DISCONNECTED: {
+		pr_info("%s port_id %d VIRTIO_USB_EVT_DEV_DISCONNECTED\n",
+			__func__, port_id);
 		if (vudc->driver && vudc->driver->disconnect)
 			vudc->driver->disconnect(&vudc->gadget);
 		if (vudc->registered)
@@ -1080,16 +1082,19 @@ static void virtio_usb_dc_event_process(struct virtio_usb_event *event)
 		break;
 	}
 	case VIRTIO_USB_EVT_DEV_RESET: {
+		pr_info("%s VIRTIO_USB_EVT_DEV_RESET\n", __func__);
 		if (driver)
 			usb_gadget_udc_reset(&vudc->gadget, driver);
 		break;
 	}
 	case VIRTIO_USB_EVT_DEV_SUSPEND: {
+		pr_info("%s VIRTIO_USB_EVT_DEV_SUSPEND\n", __func__);
 		if (driver && driver->suspend)
 			driver->suspend(&vudc->gadget);
 		break;
 	}
 	case VIRTIO_USB_EVT_DEV_RESUME: {
+		pr_info("%s VIRTIO_USB_EVT_DEV_RESUME\n", __func__);
 		if (driver && driver->resume)
 			driver->resume(&vudc->gadget);
 		break;
@@ -1307,6 +1312,9 @@ static void virtio_usb_dc_data_notify_cb(struct virtqueue *vqueue)
 static void virtio_usb_dc_evt_notify_cb(struct virtqueue *vqueue)
 {
 	struct virtio_usb *vusb = vqueue->vdev->priv;
+
+	if (!READ_ONCE(vusb->started))
+		return;
 
 	schedule_work(&vusb->vq_dev_event_work);
 }

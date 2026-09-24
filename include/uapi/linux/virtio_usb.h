@@ -318,6 +318,7 @@ enum {
 struct virtio_usb_otg_cmd_role {
 	struct virtio_usb_cmd_status status;
 	__le32 role; /* VIRTIO_USB_ROLE_XXX */
+	__le32 supported_role; /* VIRTIO_USB_F_[HOST|DEVICE|SWITCH_ROLE] */
 };
 
 /*****************************************************************************

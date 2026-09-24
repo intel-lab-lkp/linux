@@ -10,8 +10,8 @@
 #include <uapi/linux/virtio_ids.h>
 
 #include "controller.h"
-#include "host.h"
 #include "device.h"
+#include "host.h"
 #include "otg.h"
 #include "vq_common.h"
 
@@ -86,6 +86,14 @@ static int virtio_usb_validate(struct virtio_device *vdev)
 		return -EINVAL;
 	}
 
+	if ((!(virtio_has_feature(vdev, VIRTIO_USB_F_HOST)) ||
+	     !(virtio_has_feature(vdev, VIRTIO_USB_F_DEVICE))) &&
+	    virtio_has_feature(vdev, VIRTIO_USB_F_SWITCH_ROLE)) {
+		dev_err(&vdev->dev,
+			"OTG requires both (host and device) roles support\n");
+		return -EINVAL;
+	}
+
 	if (!virtio_usb_cmd_timeout_ms) {
 		dev_err(&vdev->dev, "msg_timeout_ms value cannot be zero\n");
 		return -EINVAL;
@@ -128,6 +136,12 @@ static int virtio_usb_probe(struct virtio_device *vdev)
 
 	if (virtio_has_feature(vdev, VIRTIO_USB_F_DEVICE))
 		vusb->device_role = 1;
+
+	if (virtio_has_feature(vdev, VIRTIO_USB_F_SWITCH_ROLE))
+		vusb->switch_role = 1;
+
+	dev_info(&vdev->dev, "%s nports %d (h_role %d dev_role %d)\n", __func__,
+		 vusb->nports, vusb->host_role, vusb->device_role);
 
 	/* Only allocate/negotiate the virtqueue triplets this instance
 	 * actually needs: HOST_* only exists when host_role is negotiated,
@@ -219,20 +233,44 @@ static int virtio_usb_probe(struct virtio_device *vdev)
 		}
 	}
 
+	if (vusb->device_role) {
+		INIT_WORK(&vusb->vq_dev_event_work, virtio_usb_dc_event_work);
+		INIT_WORK(&vusb->vq_dev_data_rx_work, virtio_usb_dc_data_work);
+
+		/* Populate the shared device event queue before telling the
+		 * backend we are ready, so a DEV_CONNECTED event can never
+		 * race ahead of the driver having posted receive buffers.
+		 */
+		rc = virtio_usb_dc_event_populate(vusb);
+		if (rc) {
+			dev_err(&vdev->dev,
+				"%s virtio_usb_dc_event_populate() error(%d)\n",
+				__func__, rc);
+			goto on_error;
+		}
+	}
+
+	virtio_device_ready(vdev);
+
 	/* Resolve every port's role. With only one role negotiated, every
 	 * port unambiguously has that role. With both negotiated, query
-	 * each port's actual role individually via otg_get_role(), since
-	 * it is otherwise ambiguous (host|device).
+	 * each port's actual role - and, if switch_role is negotiated,
+	 * whether the port supports switching - individually via
+	 * otg_get_role(), since a port's own role is otherwise ambiguous
+	 * (host|device).
 	 */
 	for (i = 0; i < vusb->nports; i++) {
+		vusb->vports[i].vusb = vusb;
+		spin_lock_init(&vusb->vports[i].vhc_lock);
+
 		if (vusb->host_role && !vusb->device_role) {
 			vusb->vports[i].role = VIRTIO_USB_ROLE_HOST;
 		} else if (vusb->device_role && !vusb->host_role) {
 			vusb->vports[i].role = VIRTIO_USB_ROLE_DEVICE;
 		} else {
-			u32 status, role;
+			u32 status, role, supported_role;
 
-			status = otg_get_role(vusb, i, &role);
+			status = otg_get_role(vusb, i, &role, &supported_role);
 			if (status != VIRTIO_USB_S_OK) {
 				dev_err(&vdev->dev, "%s status(%d)\n", __func__,
 					status);
@@ -247,8 +285,24 @@ static int virtio_usb_probe(struct virtio_device *vdev)
 				goto on_error;
 			}
 			vusb->vports[i].role = role;
+			vusb->vports[i].is_otg =
+				supported_role &
+				(1UL << VIRTIO_USB_F_SWITCH_ROLE);
+
+			if (vusb->vports[i].is_otg && !vusb->switch_role) {
+				dev_err(&vdev->dev,
+					"%s port%d switch_role not supported\n",
+					__func__, i);
+				rc = -EIO;
+				goto on_error;
+			}
 		}
 	}
+
+	for (i = 0; i < vusb->nports; i++)
+		dev_info(&vdev->dev, "%s port[%d] VIRTIO_USB_F_%s is_otg %s\n",
+			 __func__, i, vusb->vports[i].role ? "DEVICE" : "HOST",
+			 vusb->vports[i].is_otg ? "TRUE" : "FALSE");
 
 	if (vusb->host_role) {
 		INIT_WORK(&vusb->vq_host_data_rx_work, virtio_usb_hc_rx_work);
@@ -278,13 +332,9 @@ static int virtio_usb_probe(struct virtio_device *vdev)
 		}
 	}
 
-	if (vusb->device_role) {
-		INIT_WORK(&vusb->vq_dev_data_rx_work, virtio_usb_dc_data_work);
-		INIT_WORK(&vusb->vq_dev_event_work, virtio_usb_dc_event_work);
-
-		for (i = 0; i < vusb->nports; i++) {
-			if (vusb->vports[i].role != VIRTIO_USB_ROLE_DEVICE)
-				continue;
+	for (i = 0; i < vusb->nports; i++) {
+		if (vusb->vports[i].is_otg ||
+		    vusb->vports[i].role == VIRTIO_USB_ROLE_DEVICE) {
 			rc = virtio_usb_dc_init(vusb, i);
 			if (rc) {
 				dev_err(&vdev->dev,
@@ -293,17 +343,17 @@ static int virtio_usb_probe(struct virtio_device *vdev)
 				goto on_error;
 			}
 		}
-		rc = virtio_usb_dc_event_populate(vusb);
-		if (rc) {
-			dev_err(&vdev->dev,
-				"%s virtio_usb_dc_event_populate() error(%d)\n",
-				__func__, rc);
-			goto on_error;
-		}
 	}
 
-	virtio_device_ready(vdev);
+	if (vusb->host_role && vusb->device_role)
+		if (otg_sysfs_init(vusb))
+			goto on_error;
 
+	WRITE_ONCE(vusb->started, true);
+	if (vusb->device_role)
+		schedule_work(&vusb->vq_dev_event_work);
+
+	dev_info(&vdev->dev, "%s returns %d\n", __func__, rc);
 	return rc;
 
 on_error:
@@ -322,6 +372,9 @@ static void virtio_usb_remove(struct virtio_device *vdev)
 {
 	struct virtio_usb *vusb = vdev->priv;
 	int i;
+
+	/* Stop queue-driven workers from scheduling new activity. */
+	WRITE_ONCE(vusb->started, false);
 
 	for (i = 0; i < vusb->nvqs; i++)
 		vusb->vqueues[i].stop(vusb, &vusb->vqueues[i]);
@@ -344,6 +397,7 @@ static void virtio_usb_remove(struct virtio_device *vdev)
 static const unsigned int virtio_usb_features[] = {
 	VIRTIO_USB_F_HOST,
 	VIRTIO_USB_F_DEVICE,
+	VIRTIO_USB_F_SWITCH_ROLE,
 };
 
 static const struct virtio_device_id id_table[] = {
