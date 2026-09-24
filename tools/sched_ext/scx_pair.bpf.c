@@ -519,6 +519,25 @@ static int try_dispatch(s32 cpu)
 
 	p = bpf_task_from_pid(pid);
 	if (p) {
+		struct cgroup *task_cgrp;
+		u64 task_cgid;
+
+		/*
+		 * Without a .dequeue callback, a task that migrated to
+		 * another cgroup after being enqueued leaves a stale pid
+		 * behind. Dispatching it here would run it under the wrong
+		 * cgroup. Drop it and retry.
+		 */
+		task_cgrp = scx_bpf_task_cgroup(p);
+		task_cgid = task_cgrp->kn->id;
+		bpf_cgroup_release(task_cgrp);
+
+		if (task_cgid != cgid) {
+			bpf_task_release(p);
+			__sync_fetch_and_add(&nr_missing, 1);
+			return -EAGAIN;
+		}
+
 		__sync_fetch_and_add(&nr_dispatched, 1);
 		scx_bpf_dsq_insert(p, SCX_DSQ_GLOBAL, SCX_SLICE_DFL, 0);
 		bpf_task_release(p);
