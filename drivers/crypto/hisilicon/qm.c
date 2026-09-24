@@ -2968,7 +2968,7 @@ static int qm_alloc_uacce(struct hisi_qm *qm)
 		qm->use_sva = true;
 	} else {
 		/* only consider sva case */
-		qm_remove_uacce(qm);
+		uacce_remove(uacce);
 		return -EINVAL;
 	}
 
