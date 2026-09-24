@@ -31,6 +31,7 @@
 #include <linux/workqueue.h>
 
 #include <media/cec.h>
+#include <media/media-device.h>
 #include <media/v4l2-common.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
@@ -123,6 +124,7 @@ struct snps_hdmirx_dev {
 	struct device *dev;
 	struct hdmirx_stream stream;
 	struct v4l2_device v4l2_dev;
+	struct media_device mdev;
 	struct v4l2_ctrl_handler hdl;
 	struct v4l2_ctrl *detect_tx_5v_ctrl;
 	struct v4l2_ctrl *rgb_range;
@@ -2742,6 +2744,11 @@ static int hdmirx_probe(struct platform_device *pdev)
 		goto err_hdl;
 	}
 
+	hdmirx_dev->mdev.dev = dev;
+	strscpy(hdmirx_dev->mdev.model, "snps-hdmirx", sizeof(hdmirx_dev->mdev.model));
+	media_device_init(&hdmirx_dev->mdev);
+	hdmirx_dev->v4l2_dev.mdev = &hdmirx_dev->mdev;
+
 	stream = &hdmirx_dev->stream;
 	stream->hdmirx_dev = hdmirx_dev;
 	ret = hdmirx_register_stream_vdev(stream);
@@ -2771,6 +2778,7 @@ err_unreg_video_dev:
 	vb2_video_unregister_device(&hdmirx_dev->stream.vdev);
 err_unreg_v4l2_dev:
 	v4l2_device_unregister(&hdmirx_dev->v4l2_dev);
+	media_device_cleanup(&hdmirx_dev->mdev);
 err_hdl:
 	v4l2_ctrl_handler_free(&hdmirx_dev->hdl);
 err_pm:
@@ -2794,6 +2802,7 @@ static void hdmirx_remove(struct platform_device *pdev)
 	vb2_video_unregister_device(&hdmirx_dev->stream.vdev);
 	v4l2_ctrl_handler_free(&hdmirx_dev->hdl);
 	v4l2_device_unregister(&hdmirx_dev->v4l2_dev);
+	media_device_cleanup(&hdmirx_dev->mdev);
 
 	/* touched by hdmirx_disable()->hdmirx_plugout() */
 	hdmirx_dev->rgb_range = NULL;
