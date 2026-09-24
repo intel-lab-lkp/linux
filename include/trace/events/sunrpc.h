@@ -1370,6 +1370,36 @@ TRACE_EVENT(xs_stream_read_request,
 			__entry->copied, __entry->reclen, __entry->offset)
 );
 
+TRACE_EVENT(xs_stream_bogus_marker,
+	TP_PROTO(const struct sock_xprt *xs),
+
+	TP_ARGS(xs),
+
+	TP_STRUCT__entry(
+		__string(addr, xs->xprt.address_strings[RPC_DISPLAY_ADDR])
+		__string(port, xs->xprt.address_strings[RPC_DISPLAY_PORT])
+		__field(u32, fraghdr)
+		__field(u32, xid)
+		__field(unsigned int, reclen)
+		__field(unsigned int, offset)
+		__field(long, copied)
+	),
+
+	TP_fast_assign(
+		__assign_str(addr);
+		__assign_str(port);
+		__entry->fraghdr = be32_to_cpu(xs->recv.fraghdr);
+		__entry->xid = be32_to_cpu(xs->recv.xid);
+		__entry->reclen = xs->recv.len;
+		__entry->offset = xs->recv.offset;
+		__entry->copied = (long)xs->recv.copied;
+	),
+
+	TP_printk("peer=[%s]:%s fraghdr=0x%08x reclen=%u xid=0x%08x offset=%u copied=%ld",
+		__get_str(addr), __get_str(port), __entry->fraghdr,
+		__entry->reclen, __entry->xid, __entry->offset, __entry->copied)
+);
+
 TRACE_EVENT(rpcb_getport,
 	TP_PROTO(
 		const struct rpc_clnt *clnt,

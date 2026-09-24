@@ -81,6 +81,15 @@ static unsigned int xprt_max_resvport = RPC_DEF_MAX_RESVPORT;
 static unsigned int xs_tcp_fin_timeout __read_mostly = XS_TCP_LINGER_TO;
 
 /*
+ * Largest RPC record marker length we are prepared to trust.
+ * NFS over TCP negotiates message sizes of at most 1 MiB (rsize/wsize),
+ * so this leaves a generous margin. A larger value means the stream
+ * parser has lost framing sync; the only recovery is to reset the
+ * connection, since record marking has no resynchronization mechanism.
+ */
+#define XS_MAX_RECORD_LEN	(16U << 20)
+
+/*
  * We can register our own files under /proc/sys/sunrpc by
  * calling register_sysctl() again.  The files in that
  * directory become the union of all files registered there.
@@ -713,6 +722,11 @@ xs_read_stream(struct sock_xprt *transport, int flags)
 			return transport->recv.offset;
 		transport->recv.len = be32_to_cpu(transport->recv.fraghdr) &
 			RPC_FRAGMENT_SIZE_MASK;
+		if (unlikely(transport->recv.len > XS_MAX_RECORD_LEN)) {
+			trace_xs_stream_bogus_marker(transport);
+			ret = -ESHUTDOWN;
+			goto out_err;
+		}
 		transport->recv.offset -= sizeof(transport->recv.fraghdr);
 		read = ret;
 	}
