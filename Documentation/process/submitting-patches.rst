@@ -37,8 +37,9 @@ which can be grabbed with::
 Note, however, that you may not want to develop against the mainline tree
 directly.  Most subsystem maintainers run their own trees and want to see
 patches prepared against those trees.  See the **T:** entry for the subsystem
-in the MAINTAINERS file to find that tree, or simply ask the maintainer if
-the tree is not listed there.
+in the MAINTAINERS file to find that tree, and the branch to work against if
+the entry names one, or simply ask the maintainer if the tree is not listed
+there.
 
 .. _describe_changes:
 
