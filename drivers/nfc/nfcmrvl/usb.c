@@ -224,12 +224,16 @@ static int nfcmrvl_usb_nci_send(struct nfcmrvl_private *priv,
 	unsigned int pipe;
 	int err;
 
-	if (!drv_data->bulk_tx_ep)
+	if (!drv_data->bulk_tx_ep) {
+		kfree_skb(skb);
 		return -ENODEV;
+	}
 
 	urb = usb_alloc_urb(0, GFP_ATOMIC);
-	if (!urb)
+	if (!urb) {
+		kfree_skb(skb);
 		return -ENOMEM;
+	}
 
 	pipe = usb_sndbulkpipe(drv_data->udev,
 				drv_data->bulk_tx_ep->bEndpointAddress);
@@ -254,6 +258,7 @@ static int nfcmrvl_usb_nci_send(struct nfcmrvl_private *priv,
 				"urb %p submission failed (%d)\n", urb, -err);
 		kfree(urb->setup_packet);
 		usb_unanchor_urb(urb);
+		kfree_skb(skb);
 	} else {
 		usb_mark_last_busy(drv_data->udev);
 	}
