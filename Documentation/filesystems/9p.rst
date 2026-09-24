@@ -50,6 +50,24 @@ mount points. Each 9P export is seen by the client as a virtio device with an
 associated "mount_tag" property. Available mount tags can be
 seen by reading /sys/bus/virtio/drivers/9pnet_virtio/virtio<n>/mount_tag files.
 
+Thunderbolt/USB4 Usage
+======================
+
+Establish USB4STREAM between two machines (see Documentation/admin-guide/thunderbolt.rst).
+Export filesystem on server machine (e.g., using diod). Example::
+
+	diod -f -n -S -e /srv/shared -r 3 -w 4 3</dev/tbstream0 4>/dev/tbstream0
+
+Mount remote filesystem on client machine using::
+
+	mount -t 9p -o trans=thunderbolt,aname=<exported_remote_dir > /dev/<USB4STREAM_device> /mnt/9
+
+where USB4STREAM device is 'tbstreamX'.
+
+Example::
+
+	mount -t 9p -o trans=thunderbolt,aname=/srv/shared /dev/tbstream0 /mnt
+
 USBG Usage
 ==========
 
@@ -112,16 +130,17 @@ Options
   trans=name	select an alternative transport.  Valid options are
   		currently:
 
-			========  ============================================
-			unix 	  specifying a named pipe mount point
-			tcp	  specifying a normal TCP/IP connection
-			fd   	  used passed file descriptors for connection
-                                  (see rfdno and wfdno)
-			virtio	  connect to the next virtio channel available
-				  (from QEMU with trans_virtio module)
-			rdma	  connect to a specified RDMA channel
-			usbg	  connect to a specified usb gadget channel
-			========  ============================================
+			===========  =========================================
+			unix	     specifying a named pipe mount point
+			tcp	     specifying a normal TCP/IP connection
+			fd	     used passed file descriptors for connection
+				     (see rfdno and wfdno)
+			virtio	     connect to the next virtio channel available
+				     (from QEMU with trans_virtio module)
+			rdma	     connect to a specified RDMA channel
+			usbg	     connect to a specified usb gadget channel
+			thunderbolt  connect using USB4STREAM
+			===========  =========================================
 
   uname=name	user name to attempt mount as on the remote server.  The
   		server may override or ignore this value.  Certain user
