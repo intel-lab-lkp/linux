@@ -1349,6 +1349,7 @@ int btrfs_defrag_file(struct btrfs_inode *inode, struct file_ra_state *ra,
 	struct btrfs_fs_info *fs_info = inode->root->fs_info;
 	unsigned long sectors_defragged = 0;
 	u64 isize = i_size_read(&inode->vfs_inode);
+	const u64 start = round_down(range->start, fs_info->sectorsize);
 	u64 cur;
 	u64 last_byte;
 	bool do_compress = (range->flags & BTRFS_DEFRAG_RANGE_COMPRESS);
@@ -1400,7 +1401,7 @@ int btrfs_defrag_file(struct btrfs_inode *inode, struct file_ra_state *ra,
 	}
 
 	/* Align the range */
-	cur = round_down(range->start, fs_info->sectorsize);
+	cur = start;
 	last_byte = round_up(last_byte, fs_info->sectorsize) - 1;
 
 	/*
@@ -1471,10 +1472,28 @@ int btrfs_defrag_file(struct btrfs_inode *inode, struct file_ra_state *ra,
 		 * need to be written back immediately.
 		 */
 		if (range->flags & BTRFS_DEFRAG_RANGE_START_IO) {
-			filemap_flush(inode->vfs_inode.i_mapping);
-			if (test_bit(BTRFS_INODE_HAS_ASYNC_EXTENT,
-				     &inode->runtime_flags))
+			/*
+			 * For experimental delayed writeback, we must wait
+			 * for the range to be fully written back before
+			 * clearing inode->defrag_compress.
+			 *
+			 * Regular filemap_flush() will only start writeback,
+			 * which will only create delayed OEs. But the real
+			 * compression is happening later.
+			 * This means if we just flush but not wait for writeback,
+			 * the inode->defrag_compress clearing can race with
+			 * compression, so the requested compression algorithm
+			 * is not applied.
+			 */
+			if (IS_ENABLED(CONFIG_BTRFS_EXPERIMENTAL) && !btrfs_is_zoned(fs_info)) {
+				filemap_write_and_wait_range(inode->vfs_inode.i_mapping,
+							     start, last_byte);
+			} else {
 				filemap_flush(inode->vfs_inode.i_mapping);
+				if (test_bit(BTRFS_INODE_HAS_ASYNC_EXTENT,
+					     &inode->runtime_flags))
+					filemap_flush(inode->vfs_inode.i_mapping);
+			}
 		}
 		if (range->compress_type == BTRFS_COMPRESS_LZO)
 			btrfs_set_fs_incompat(fs_info, COMPRESS_LZO);
