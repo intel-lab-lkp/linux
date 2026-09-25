@@ -240,6 +240,9 @@ static int altera_ps_probe(struct spi_device *spi)
 		return -ENOMEM;
 
 	conf->data = spi_get_device_match_data(spi);
+	if (!conf->data)
+		return -ENODATA;
+
 	conf->spi = spi;
 	conf->config = devm_gpiod_get(&spi->dev, "nconfig", GPIOD_OUT_LOW);
 	if (IS_ERR(conf->config)) {
