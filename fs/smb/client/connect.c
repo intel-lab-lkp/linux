@@ -127,13 +127,21 @@ void smb2_query_server_interfaces(struct work_struct *work)
 			   (SMB_INTERFACE_POLL_INTERVAL * HZ));
 }
 
-#define set_need_reco(server) \
-do { \
-	spin_lock(&server->srv_lock); \
-	if (server->tcpStatus != CifsExiting) \
-		server->tcpStatus = CifsNeedReconnect; \
-	spin_unlock(&server->srv_lock); \
-} while (0)
+static inline void set_need_reco(struct TCP_Server_Info *server)
+{
+	bool shutdown = false;
+
+	spin_lock(&server->srv_lock);
+	if (server->tcpStatus != CifsExiting) {
+		shutdown = (server->tcpStatus != CifsNeedReconnect && server->ssocket);
+		server->tcpStatus = CifsNeedReconnect;
+	}
+	spin_unlock(&server->srv_lock);
+
+	/* Don't release it yet! */
+	if (shutdown)
+		kernel_sock_shutdown(server->ssocket, SHUT_RDWR);
+}
 
 /*
  * Update the tcpStatus for the server.
@@ -353,6 +361,8 @@ cifs_abort_connection(struct TCP_Server_Info *server)
 
 static bool cifs_tcp_ses_needs_reconnect(struct TCP_Server_Info *server, int num_targets)
 {
+	bool shutdown;
+
 	spin_lock(&server->srv_lock);
 	server->nr_targets = num_targets;
 	if (server->tcpStatus == CifsExiting) {
@@ -365,9 +375,14 @@ static bool cifs_tcp_ses_needs_reconnect(struct TCP_Server_Info *server, int num
 	cifs_dbg(FYI, "Mark tcp session as need reconnect\n");
 	trace_smb3_reconnect(server->current_mid, server->conn_id,
 			     server->hostname);
+	shutdown = (server->tcpStatus != CifsNeedReconnect && server->ssocket);
 	server->tcpStatus = CifsNeedReconnect;
-
 	spin_unlock(&server->srv_lock);
+
+	/* Don't release it yet! */
+	if (shutdown)
+		kernel_sock_shutdown(server->ssocket, SHUT_RDWR);
+
 	return true;
 }
 
