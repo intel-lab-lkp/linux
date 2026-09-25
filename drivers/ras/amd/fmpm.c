@@ -673,7 +673,7 @@ static int get_saved_records(void)
 
 	ret = erst_get_record_id_begin(&pos);
 	if (ret < 0)
-		goto out_end;
+		goto out;
 
 	while (!erst_get_record_id_next(&pos, &record_id)) {
 		if (record_id == APEI_ERST_INVALID_RECORD_ID)
@@ -714,8 +714,8 @@ static int get_saved_records(void)
 
 out_end:
 	erst_get_record_id_end();
-	kfree(old);
 out:
+	kfree(old);
 	return ret;
 }
 
