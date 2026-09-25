@@ -339,6 +339,73 @@ TRACE_EVENT(flush_foreign,
 		__entry->frn_memcg_id
 	)
 );
+
+TRACE_EVENT(track_foreign_bdev_dirty,
+
+	TP_PROTO(struct folio *folio, struct bdi_writeback *wb, dev_t dev),
+
+	TP_ARGS(folio, wb, dev),
+
+	TP_STRUCT__entry(
+		__array(char,		name, 32)
+		__field(u64,		bdi_id)
+		__field(u64,		ino)
+		__field(u64,		cgroup_ino)
+		__field(u64,		page_cgroup_ino)
+		__field(unsigned int,	memcg_id)
+		__field(dev_t,		dev)
+	),
+
+	TP_fast_assign(
+		struct inode *inode = folio_mapping(folio)->host;
+
+		strscpy_pad(__entry->name, bdi_dev_name(wb->bdi), 32);
+		__entry->bdi_id		= wb->bdi->id;
+		__entry->ino		= inode->i_ino;
+		__entry->memcg_id	= wb->memcg_css->id;
+		__entry->cgroup_ino	= __trace_wb_assign_cgroup(wb);
+		__entry->dev		= dev;
+
+		rcu_read_lock();
+		__entry->page_cgroup_ino = cgroup_ino(folio_memcg(folio)->css.cgroup);
+		rcu_read_unlock();
+	),
+
+	TP_printk("bdi %s[%llu]: ino=%llu memcg_id=%u cgroup_ino=%llu page_cgroup_ino=%llu dev=%u:%u",
+		__entry->name,
+		__entry->bdi_id,
+		__entry->ino,
+		__entry->memcg_id,
+		__entry->cgroup_ino,
+		__entry->page_cgroup_ino,
+		MAJOR(__entry->dev), MINOR(__entry->dev)
+	)
+);
+
+TRACE_EVENT(flush_foreign_bdev,
+
+	TP_PROTO(struct bdi_writeback *wb, dev_t dev),
+
+	TP_ARGS(wb, dev),
+
+	TP_STRUCT__entry(
+		__array(char,		name, 32)
+		__field(u64,		cgroup_ino)
+		__field(dev_t,		dev)
+	),
+
+	TP_fast_assign(
+		strscpy_pad(__entry->name, bdi_dev_name(wb->bdi), 32);
+		__entry->cgroup_ino	= __trace_wb_assign_cgroup(wb);
+		__entry->dev		= dev;
+	),
+
+	TP_printk("bdi %s: cgroup_ino=%llu dev=%u:%u",
+		__entry->name,
+		__entry->cgroup_ino,
+		MAJOR(__entry->dev), MINOR(__entry->dev)
+	)
+);
 #endif
 
 DECLARE_EVENT_CLASS(writeback_write_inode_template,
