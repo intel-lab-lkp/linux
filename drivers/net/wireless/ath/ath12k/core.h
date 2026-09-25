@@ -529,6 +529,8 @@ struct ath12k_sta {
 	enum ieee80211_sta_state state;
 
 	bool enable_4addr;
+
+	bool is_authorized;
 };
 
 #define ATH12K_HALF_20MHZ_BW	10
