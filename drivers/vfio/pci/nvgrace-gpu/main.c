@@ -207,9 +207,12 @@ static int nvgrace_gpu_open_device(struct vfio_device *core_vdev)
 			goto error_exit;
 	}
 
-	ret = nvgrace_gpu_vfio_pci_register_pfn_range(core_vdev, &nvdev->usemem);
-	if (ret && ret != -EOPNOTSUPP)
-		goto register_mem_failed;
+	if (nvdev->usemem.memlength) {
+		ret = nvgrace_gpu_vfio_pci_register_pfn_range(core_vdev,
+							      &nvdev->usemem);
+		if (ret && ret != -EOPNOTSUPP)
+			goto register_mem_failed;
+	}
 
 	vfio_pci_core_finish_enable(vdev);
 	nvdev->bar0_base = io;
@@ -235,7 +238,8 @@ static void nvgrace_gpu_close_device(struct vfio_device *core_vdev)
 	if (nvdev->resmem.memlength)
 		unregister_pfn_address_space(&nvdev->resmem.pfn_address_space);
 
-	unregister_pfn_address_space(&nvdev->usemem.pfn_address_space);
+	if (nvdev->usemem.memlength)
+		unregister_pfn_address_space(&nvdev->usemem.pfn_address_space);
 
 	/* Unmap the mapping to the device memory cached region */
 	if (nvdev->usemem.memaddr) {
