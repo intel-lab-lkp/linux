@@ -541,6 +541,9 @@ static int wacom_intuos_pad(struct wacom_wac *wacom)
 	      data[0] == WACOM_REPORT_CINTIQPAD))
 		return 0;
 
+	if (!input)
+		return 0;
+
 	if (features->type >= INTUOS4S && features->type <= INTUOS4L) {
 		buttons = (data[3] << 1) | (data[2] & 0x01);
 		ring1 = data[1];
@@ -1047,9 +1050,10 @@ static int wacom_intuos_irq(struct wacom_wac *wacom)
 	}
 
 	/* process pad events */
-	result = wacom_intuos_pad(wacom);
-	if (result)
-		return result;
+	if (data[0] == WACOM_REPORT_INTUOSPAD ||
+	    data[0] == WACOM_REPORT_INTUOS5PAD ||
+	    data[0] == WACOM_REPORT_CINTIQPAD)
+		return wacom_intuos_pad(wacom);
 
 	/* process in/out prox events */
 	result = wacom_intuos_inout(wacom);
@@ -1485,12 +1489,17 @@ static void wacom_intuos_pro2_bt_pad(struct wacom_wac *wacom)
 	struct input_dev *pad_input = wacom->pad_input;
 	unsigned char *data = wacom->data;
 	int nbuttons = wacom->features.numbered_buttons;
+	int expresskeys, center, ring;
+	bool ringstatus, prox;
 
-	int expresskeys = data[282];
-	int center = (data[281] & 0x40) >> 6;
-	int ring = data[285] & 0x7F;
-	bool ringstatus = data[285] & 0x80;
-	bool prox = expresskeys || center || ringstatus;
+	if (!pad_input)
+		return;
+
+	expresskeys = data[282];
+	center = (data[281] & 0x40) >> 6;
+	ring = data[285] & 0x7F;
+	ringstatus = data[285] & 0x80;
+	prox = expresskeys || center || ringstatus;
 
 	/* Fix touchring data: userspace expects 0 at left and increasing clockwise */
 	ring = 71 - ring;
@@ -1525,8 +1534,12 @@ static void wacom_intuos_gen3_bt_pad(struct wacom_wac *wacom)
 {
 	struct input_dev *pad_input = wacom->pad_input;
 	unsigned char *data = wacom->data;
+	int buttons;
 
-	int buttons = data[44];
+	if (!pad_input)
+		return;
+
+	buttons = data[44];
 
 	wacom_report_numbered_buttons(pad_input, 4, buttons);
 
@@ -4226,8 +4239,13 @@ static void wacom_update_led(struct wacom *wacom, int button_count, int mask,
 static void wacom_report_numbered_buttons(struct input_dev *input_dev,
 				int button_count, int mask)
 {
-	struct wacom *wacom = input_get_drvdata(input_dev);
+	struct wacom *wacom;
 	int i;
+
+	if (!input_dev)
+		return;
+
+	wacom = input_get_drvdata(input_dev);
 
 	for (i = 0; i < wacom->led.count; i++)
 		wacom_update_led(wacom,  button_count, mask, i);
