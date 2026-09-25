@@ -169,7 +169,6 @@ EXPORT_SYMBOL(sdw_bus_master_add);
 static int sdw_delete_slave(struct device *dev, void *data)
 {
 	struct sdw_slave *slave = dev_to_sdw_dev(dev);
-	struct sdw_bus *bus = slave->bus;
 
 	pm_runtime_disable(dev);
 
@@ -177,18 +176,37 @@ static int sdw_delete_slave(struct device *dev, void *data)
 
 	device_del(dev);
 
-	mutex_lock(&bus->bus_lock);
-	if (slave->dev_num) { /* clear dev_num if assigned */
-		clear_bit(slave->dev_num, bus->assigned);
-		if (bus->ops && bus->ops->put_device_num)
-			bus->ops->put_device_num(bus, slave);
-	}
-	list_del_init(&slave->node);
-	mutex_unlock(&bus->bus_lock);
-
-	put_device(dev);
-
 	return 0;
+}
+
+/**
+ * sdw_bus_slaves_delete() - delete all peripherals on a bus
+ * @bus: bus with peripherals to be deleted
+ *
+ * Delete the child devices.
+ */
+void sdw_bus_slaves_delete(struct sdw_bus *bus)
+{
+	device_for_each_child(bus->dev, NULL, sdw_delete_slave);
+}
+EXPORT_SYMBOL(sdw_bus_slaves_delete);
+
+static void sdw_bus_slaves_put(struct sdw_bus *bus)
+{
+	struct sdw_slave *slave, *tmp;
+
+	list_for_each_entry_safe(slave, tmp, &bus->slaves, node) {
+		mutex_lock(&bus->bus_lock);
+		if (slave->dev_num) { /* clear dev_num if assigned */
+			clear_bit(slave->dev_num, bus->assigned);
+			if (bus->ops && bus->ops->put_device_num)
+				bus->ops->put_device_num(bus, slave);
+		}
+		list_del_init(&slave->node);
+		mutex_unlock(&bus->bus_lock);
+
+		put_device(&slave->dev);
+	}
 }
 
 /**
@@ -199,7 +217,8 @@ static int sdw_delete_slave(struct device *dev, void *data)
  */
 void sdw_bus_master_delete(struct sdw_bus *bus)
 {
-	device_for_each_child(bus->dev, NULL, sdw_delete_slave);
+	sdw_bus_slaves_delete(bus);
+	sdw_bus_slaves_put(bus);
 
 	sdw_irq_delete(bus);
 
