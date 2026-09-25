@@ -2154,6 +2154,8 @@ static int arm_smmu_device_probe(struct platform_device *pdev)
 		return PTR_ERR(smmu);
 
 	num_irqs = platform_irq_count(pdev);
+	if (num_irqs < 0)
+		return dev_err_probe(dev, num_irqs, "IRQ count failed\n");
 
 	smmu->num_context_irqs = num_irqs - global_irqs - pmu_irqs;
 	if (smmu->num_context_irqs <= 0)
@@ -2171,7 +2173,7 @@ static int arm_smmu_device_probe(struct platform_device *pdev)
 		int irq = platform_get_irq(pdev, global_irqs + pmu_irqs + i);
 
 		if (irq < 0)
-			return irq;
+			return dev_err_probe(dev, irq, "failed to get context IRQ\n");
 		smmu->irqs[i] = irq;
 	}
 
@@ -2211,7 +2213,7 @@ static int arm_smmu_device_probe(struct platform_device *pdev)
 		int irq = platform_get_irq(pdev, i);
 
 		if (irq < 0)
-			return irq;
+			return dev_err_probe(dev, irq, "failed to get global IRQ\n");
 
 		err = devm_request_irq(dev, irq, global_fault, IRQF_SHARED,
 				       "arm-smmu global fault", smmu);
