@@ -40,6 +40,14 @@ patches prepared against those trees.  See the **T:** entry for the subsystem
 in the MAINTAINERS file to find that tree, or simply ask the maintainer if
 the tree is not listed there.
 
+What to base a patch on also depends on what it is.  A fix that should reach
+mainline during the current release cycle, such as a regression fix, is
+usually based on the latest mainline or on the subsystem's fixes branch.  New
+development is usually based on the branch where the subsystem queues work for
+the next merge window, which linux-next merges and which the **T:** entry may
+name.  When in doubt, check the subsystem's **P:** profile, if there is one,
+or ask the maintainer.
+
 .. _describe_changes:
 
 Describe your changes
