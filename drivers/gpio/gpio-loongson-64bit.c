@@ -141,24 +141,6 @@ static int loongson_gpio_set(struct gpio_chip *chip, unsigned int pin, int value
 	return 0;
 }
 
-static int loongson_gpio_to_irq(struct gpio_chip *chip, unsigned int offset)
-{
-	unsigned int u;
-	struct platform_device *pdev = to_platform_device(chip->parent);
-	struct loongson_gpio_chip *lgpio = to_loongson_gpio_chip(chip);
-
-	if (lgpio->chip_data->mode == BIT_CTRL_MODE) {
-		/* Get the register index from offset then multiply by bytes per register */
-		u = readl(lgpio->reg_base + lgpio->chip_data->inten_offset + (offset / 32) * 4);
-		u |= BIT(offset % 32);
-		writel(u, lgpio->reg_base + lgpio->chip_data->inten_offset + (offset / 32) * 4);
-	} else {
-		writeb(1, lgpio->reg_base + lgpio->chip_data->inten_offset + offset);
-	}
-
-	return platform_get_irq(pdev, offset);
-}
-
 static void loongson_gpio_irq_ack(struct irq_data *data)
 {
 	struct gpio_chip *chip = irq_data_get_irq_chip_data(data);
@@ -945,8 +927,6 @@ static int loongson_gpio_init(struct platform_device *pdev, struct loongson_gpio
 			dev_warn(&pdev->dev, "no parent IRQs ha been found, GPIO IRQs will not be available\n");
 			gpio_irq_chip_set_chip(&lgpio->chip.gc.irq, NULL);
 		}
-	} else if (lgpio->chip_data->inten_offset) {
-		lgpio->chip.gc.to_irq = loongson_gpio_to_irq;
 	}
 
 	return devm_gpiochip_add_data(&pdev->dev, &lgpio->chip.gc, lgpio);
