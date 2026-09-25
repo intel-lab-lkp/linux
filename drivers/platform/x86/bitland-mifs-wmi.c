@@ -14,6 +14,7 @@
 #include <linux/dev_printk.h>
 #include <linux/device.h>
 #include <linux/device/devres.h>
+#include <linux/dmi.h>
 #include <linux/err.h>
 #include <linux/hwmon.h>
 #include <linux/init.h>
@@ -37,6 +38,17 @@
 #define DRV_NAME		"bitland-mifs-wmi"
 #define BITLAND_MIFS_GUID	"B60BFB48-3E5B-49E4-A0E9-8CFFE1B3434B"
 #define BITLAND_EVENT_GUID	"46C93E13-EE9B-4262-8488-563BCA757FEF"
+
+static const struct dmi_system_id bitland_tm2107_table[] = {
+	{
+		.matches = {
+			DMI_EXACT_MATCH(DMI_SYS_VENDOR, "TIMI"),
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Redmi Book Pro 14 2022"),
+			DMI_EXACT_MATCH(DMI_BOARD_NAME, "TM2107"),
+		},
+	},
+	{}
+};
 
 enum bitland_mifs_operation {
 	WMI_METHOD_GET	= 250,
@@ -195,13 +207,18 @@ static int laptop_profile_get(struct device *dev,
 		.function = WMI_FN_SYSTEM_PER_MODE,
 	};
 	struct bitland_mifs_output result;
+	u8 mode;
 	int ret;
 
 	ret = bitland_mifs_wmi_call(data, &input, &result);
 	if (ret)
 		return ret;
 
-	switch (result.data[0]) {
+	/* TM2107 returns the profile in byte 2 instead of byte 4. */
+	mode = dmi_check_system(bitland_tm2107_table) ?
+		result.reserved2 : result.data[0];
+
+	switch (mode) {
 	case WMI_PP_BALANCED:
 		*profile = PLATFORM_PROFILE_BALANCED;
 		break;
@@ -228,6 +245,10 @@ static int bitland_check_performance_capability(struct bitland_mifs_wmi_data *da
 	};
 	struct bitland_mifs_output output;
 	int ret;
+
+	/* TM2107 only requires external power, including USB-C. */
+	if (dmi_check_system(bitland_tm2107_table))
+		return power_supply_is_system_supplied() > 0 ? 0 : -EOPNOTSUPP;
 
 	/* Full-speed/performance mode requires DC power (not USB-C) */
 	if (!power_supply_is_system_supplied())
