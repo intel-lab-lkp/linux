@@ -177,6 +177,17 @@ struct memcg_cgwb_frn {
 };
 
 /*
+ * No extra memcg reference is taken: this work is embedded in the memcg,
+ * and mem_cgroup_css_free() waits for it to finish before freeing the memcg.
+ */
+struct memcg_bdev_frn {
+	struct work_struct work;
+	dev_t dev;			/* dev_t of the foreign bdev inode */
+	u64 at;				/* last recorded dirtying time in jiffies */
+	atomic_t inflight;		/* slot replacement or queued/running flush */
+};
+
+/*
  * Bucket for arbitrarily byte-sized objects charged to a memory
  * cgroup. The bucket can be reparented in one piece when the cgroup
  * is destroyed, without having to round up the individual references
@@ -279,6 +290,7 @@ struct mem_cgroup {
 #ifdef CONFIG_CGROUP_WRITEBACK
 	struct wb_domain cgwb_domain;
 	struct memcg_cgwb_frn cgwb_frn[MEMCG_CGWB_FRN_CNT];
+	struct memcg_bdev_frn bdev_frn[MEMCG_CGWB_FRN_CNT];
 #endif
 
 #ifdef CONFIG_LRU_GEN_WALKS_MMU
