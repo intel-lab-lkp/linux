@@ -131,6 +131,9 @@ static void intel_pipe_fault_irq_handler(struct intel_display *display,
 	struct intel_crtc *crtc = intel_crtc_for_pipe(display, pipe);
 	const struct pipe_fault_handler *handler;
 
+	if (!crtc)
+		return;
+
 	for (handler = handlers; handler && handler->fault; handler++) {
 		if ((fault_errors & handler->fault) == 0)
 			continue;
@@ -148,7 +151,8 @@ intel_handle_vblank(struct intel_display *display, enum pipe pipe)
 {
 	struct intel_crtc *crtc = intel_crtc_for_pipe(display, pipe);
 
-	drm_crtc_handle_vblank(&crtc->base);
+	if (crtc)
+		drm_crtc_handle_vblank(&crtc->base);
 }
 
 /**
@@ -425,8 +429,13 @@ static void display_pipe_crc_irq_handler(struct intel_display *display,
 					 u32 crc4)
 {
 	struct intel_crtc *crtc = intel_crtc_for_pipe(display, pipe);
-	struct intel_pipe_crc *pipe_crc = &crtc->pipe_crc;
+	struct intel_pipe_crc *pipe_crc;
 	u32 crcs[5] = { crc0, crc1, crc2, crc3, crc4 };
+
+	if (!crtc)
+		return;
+
+	pipe_crc = &crtc->pipe_crc;
 
 	trace_intel_pipe_crc(crtc, crcs);
 
@@ -464,6 +473,9 @@ static void flip_done_handler(struct intel_display *display,
 			      enum pipe pipe)
 {
 	struct intel_crtc *crtc = intel_crtc_for_pipe(display, pipe);
+
+	if (!crtc)
+		return;
 
 	spin_lock(&display->drm->event_lock);
 
