@@ -69,6 +69,7 @@ struct can327 {
 	struct can_priv can;
 
 	struct can_rx_offload offload;
+	struct can_rx_offload_irq offload_irq;
 
 	/* TTY buffers */
 	u8 txbuf[CAN327_SIZE_TXBUF];
@@ -272,11 +273,11 @@ static void can327_feed_frame_to_netdev(struct can327 *elm, struct sk_buff *skb)
 	/* Queue for NAPI pickup.
 	 * rx-offload will update stats and LEDs for us.
 	 */
-	if (can_rx_offload_queue_tail(&elm->offload, skb))
+	if (can_rx_offload_queue_tail(&elm->offload_irq, skb))
 		elm->dev->stats.rx_fifo_errors++;
 
 	/* Wake NAPI */
-	can_rx_offload_irq_finish(&elm->offload);
+	can_rx_offload_irq_finish(&elm->offload_irq);
 }
 
 /* Called when we're out of ideas and just want it all to end. */
@@ -772,7 +773,8 @@ static int can327_netdev_open(struct net_device *dev)
 	can327_init_device(elm);
 	spin_unlock_bh(&elm->lock);
 
-	err = can_rx_offload_add_manual(dev, &elm->offload, CAN327_NAPI_WEIGHT);
+	err = can_rx_offload_add_manual(dev, &elm->offload,
+					&elm->offload_irq, CAN327_NAPI_WEIGHT);
 	if (err) {
 		close_candev(dev);
 		return err;

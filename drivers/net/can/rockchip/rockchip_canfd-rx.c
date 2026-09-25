@@ -269,7 +269,7 @@ static int rkcanfd_handle_rx_int_one(struct rkcanfd_priv *priv)
 	memcpy(skb_cfd, cfd, len);
 	rkcanfd_skb_set_timestamp(priv, skb, header->ts);
 
-	err = can_rx_offload_queue_timestamp(&priv->offload, skb, header->ts);
+	err = can_rx_offload_queue_timestamp(&priv->offload_irq, skb, header->ts);
 	if (err)
 		stats->rx_fifo_errors++;
 

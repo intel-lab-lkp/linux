@@ -88,6 +88,7 @@ struct flexcan_stop_mode {
 struct flexcan_priv {
 	struct can_priv can;
 	struct can_rx_offload offload;
+	struct can_rx_offload_irq offload_irq;
 	struct device *dev;
 
 	struct flexcan_regs __iomem *regs;

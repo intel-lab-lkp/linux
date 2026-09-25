@@ -151,6 +151,7 @@ struct at91_devtype_data {
 struct at91_priv {
 	struct can_priv can;		/* must be the first member! */
 	struct can_rx_offload offload;
+	struct can_rx_offload_irq offload_irq;
 	struct phy *transceiver;
 
 	void __iomem *reg_base;
@@ -568,7 +569,7 @@ static void at91_rx_overflow_err(struct net_device *dev)
 	cf->can_id |= CAN_ERR_CRTL;
 	cf->data[1] = CAN_ERR_CRTL_RX_OVERFLOW;
 
-	err = can_rx_offload_queue_timestamp(&priv->offload, skb, timestamp);
+	err = can_rx_offload_queue_timestamp(&priv->offload_irq, skb, timestamp);
 	if (err)
 		stats->rx_fifo_errors++;
 }
@@ -745,7 +746,7 @@ static void at91_irq_err_line(struct net_device *dev, const u32 reg_sr)
 		cf->data[7] = bec.rxerr;
 	}
 
-	err = can_rx_offload_queue_timestamp(&priv->offload, skb, timestamp);
+	err = can_rx_offload_queue_timestamp(&priv->offload_irq, skb, timestamp);
 	if (err)
 		stats->rx_fifo_errors++;
 }
@@ -810,7 +811,7 @@ static void at91_irq_err_frame(struct net_device *dev, const u32 reg_sr)
 	if (!cf)
 		return;
 
-	err = can_rx_offload_queue_timestamp(&priv->offload, skb, timestamp);
+	err = can_rx_offload_queue_timestamp(&priv->offload_irq, skb, timestamp);
 	if (err)
 		stats->rx_fifo_errors++;
 }
@@ -836,7 +837,7 @@ static irqreturn_t at91_irq(int irq, void *dev_id)
 	 * Some bits of AT91_SR are cleared on read, keep them in reg_sr.
 	 */
 	while ((reg_sr_rx = at91_get_reg_sr_rx(priv, &reg_sr))) {
-		ret = can_rx_offload_irq_offload_timestamp(&priv->offload,
+		ret = can_rx_offload_irq_offload_timestamp(&priv->offload_irq,
 							   reg_sr_rx);
 		handled = IRQ_HANDLED;
 
@@ -864,7 +865,7 @@ static irqreturn_t at91_irq(int irq, void *dev_id)
 	}
 
 	if (handled)
-		can_rx_offload_irq_finish(&priv->offload);
+		can_rx_offload_irq_finish(&priv->offload_irq);
 
 	return handled;
 }
@@ -1120,10 +1121,11 @@ static int at91_can_probe(struct platform_device *pdev)
 	priv->pdata = dev_get_platdata(&pdev->dev);
 	priv->mb0_id = 0x7ff;
 	priv->offload.mailbox_read = at91_mailbox_read;
-	priv->offload.mb_first = devtype_data->rx_first;
-	priv->offload.mb_last = devtype_data->rx_last;
+	priv->offload_irq.mb_first = devtype_data->rx_first;
+	priv->offload_irq.mb_last = devtype_data->rx_last;
 
-	err = can_rx_offload_add_timestamp(dev, &priv->offload);
+	err = can_rx_offload_add_timestamp(dev, &priv->offload,
+					   &priv->offload_irq);
 	if (err) {
 		dev_err(&pdev->dev, "can_rx_offload_add_timestamp() failed\n");
 		goto exit_free;

@@ -165,6 +165,7 @@ struct bxcan_regs {
 struct bxcan_priv {
 	struct can_priv can;
 	struct can_rx_offload offload;
+	struct can_rx_offload_irq offload_irq;
 	struct device *dev;
 	struct net_device *ndev;
 
@@ -420,8 +421,8 @@ static irqreturn_t bxcan_rx_isr(int irq, void *dev_id)
 	if (!(rf0r & BXCAN_RF0R_FMP0_MASK))
 		return IRQ_NONE;
 
-	can_rx_offload_irq_offload_fifo(&priv->offload);
-	can_rx_offload_irq_finish(&priv->offload);
+	can_rx_offload_irq_offload_fifo(&priv->offload_irq);
+	can_rx_offload_irq_finish(&priv->offload_irq);
 
 	return IRQ_HANDLED;
 }
@@ -507,7 +508,7 @@ static void bxcan_handle_state_change(struct net_device *ndev, u32 esr)
 	if (skb) {
 		int err;
 
-		err = can_rx_offload_queue_timestamp(&priv->offload, skb,
+		err = can_rx_offload_queue_timestamp(&priv->offload_irq, skb,
 						     priv->timestamp);
 		if (err)
 			ndev->stats.rx_fifo_errors++;
@@ -592,7 +593,7 @@ static void bxcan_handle_bus_err(struct net_device *ndev, u32 esr)
 	if (skb) {
 		int err;
 
-		err = can_rx_offload_queue_timestamp(&priv->offload, skb,
+		err = can_rx_offload_queue_timestamp(&priv->offload_irq, skb,
 						     priv->timestamp);
 		if (err)
 			ndev->stats.rx_fifo_errors++;
@@ -618,7 +619,7 @@ static irqreturn_t bxcan_state_change_isr(int irq, void *dev_id)
 
 	msr |= BXCAN_MSR_ERRI;
 	writel(msr, &regs->msr);
-	can_rx_offload_irq_finish(&priv->offload);
+	can_rx_offload_irq_finish(&priv->offload_irq);
 
 	return IRQ_HANDLED;
 }
@@ -1008,7 +1009,8 @@ static int bxcan_probe(struct platform_device *pdev)
 		CAN_CTRLMODE_LISTENONLY	| CAN_CTRLMODE_BERR_REPORTING;
 
 	priv->offload.mailbox_read = bxcan_mailbox_read;
-	err = can_rx_offload_add_fifo(ndev, &priv->offload, BXCAN_NAPI_WEIGHT);
+	err = can_rx_offload_add_fifo(ndev, &priv->offload,
+				      &priv->offload_irq, BXCAN_NAPI_WEIGHT);
 	if (err) {
 		dev_err(dev, "failed to add FIFO rx_offload\n");
 		goto out_free_candev;

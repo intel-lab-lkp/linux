@@ -177,6 +177,7 @@ static const struct can_bittiming_const ti_hecc_bittiming_const = {
 struct ti_hecc_priv {
 	struct can_priv can;	/* MUST be first member/field */
 	struct can_rx_offload offload;
+	struct can_rx_offload_irq offload_irq;
 	struct net_device *ndev;
 	struct clk *clk;
 	void __iomem *base;
@@ -623,7 +624,7 @@ static int ti_hecc_error(struct net_device *ndev, int int_status,
 			cf->data[3] = CAN_ERR_PROT_LOC_ACK;
 
 		timestamp = hecc_read(priv, HECC_CANLNT);
-		err = can_rx_offload_queue_timestamp(&priv->offload, skb,
+		err = can_rx_offload_queue_timestamp(&priv->offload_irq, skb,
 						     timestamp);
 		if (err)
 			ndev->stats.rx_fifo_errors++;
@@ -659,7 +660,7 @@ static void ti_hecc_change_state(struct net_device *ndev,
 	}
 
 	timestamp = hecc_read(priv, HECC_CANLNT);
-	err = can_rx_offload_queue_timestamp(&priv->offload, skb, timestamp);
+	err = can_rx_offload_queue_timestamp(&priv->offload_irq, skb, timestamp);
 	if (err)
 		ndev->stats.rx_fifo_errors++;
 }
@@ -747,7 +748,7 @@ static irqreturn_t ti_hecc_interrupt(int irq, void *dev_id)
 			spin_unlock_irqrestore(&priv->mbx_lock, flags);
 			stamp = hecc_read_stamp(priv, mbxno);
 			stats->tx_bytes +=
-				can_rx_offload_get_echo_skb_queue_timestamp(&priv->offload,
+				can_rx_offload_get_echo_skb_queue_timestamp(&priv->offload_irq,
 									    mbxno, stamp, NULL);
 			stats->tx_packets++;
 			--priv->tx_tail;
@@ -762,7 +763,7 @@ static irqreturn_t ti_hecc_interrupt(int irq, void *dev_id)
 
 		/* offload RX mailboxes and let NAPI deliver them */
 		while ((rx_pending = hecc_read(priv, HECC_CANRMP))) {
-			can_rx_offload_irq_offload_timestamp(&priv->offload,
+			can_rx_offload_irq_offload_timestamp(&priv->offload_irq,
 							     rx_pending);
 		}
 	}
@@ -776,7 +777,7 @@ static irqreturn_t ti_hecc_interrupt(int irq, void *dev_id)
 		int_status = hecc_read(priv, HECC_CANGIF0);
 	}
 
-	can_rx_offload_irq_finish(&priv->offload);
+	can_rx_offload_irq_finish(&priv->offload_irq);
 
 	return IRQ_HANDLED;
 }
@@ -930,9 +931,10 @@ static int ti_hecc_probe(struct platform_device *pdev)
 	}
 
 	priv->offload.mailbox_read = ti_hecc_mailbox_read;
-	priv->offload.mb_first = HECC_RX_FIRST_MBOX;
-	priv->offload.mb_last = HECC_RX_LAST_MBOX;
-	err = can_rx_offload_add_timestamp(ndev, &priv->offload);
+	priv->offload_irq.mb_first = HECC_RX_FIRST_MBOX;
+	priv->offload_irq.mb_last = HECC_RX_LAST_MBOX;
+	err = can_rx_offload_add_timestamp(ndev, &priv->offload,
+					   &priv->offload_irq);
 	if (err) {
 		dev_err(&pdev->dev, "can_rx_offload_add_timestamp() failed\n");
 		goto probe_exit_disable_clk;

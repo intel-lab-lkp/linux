@@ -305,6 +305,7 @@ struct gs_can {
 	struct can_priv can; /* must be the first member */
 
 	struct can_rx_offload offload;
+	struct can_rx_offload_irq offload_irq;
 	struct gs_usb *parent;
 
 	struct net_device *netdev;
@@ -539,15 +540,15 @@ static u32 gs_usb_set_timestamp(struct gs_can *dev, struct sk_buff *skb,
 static void gs_usb_rx_offload(struct gs_can *dev, struct sk_buff *skb,
 			      const struct gs_host_frame *hf)
 {
-	struct can_rx_offload *offload = &dev->offload;
+	struct can_rx_offload_irq *offload_irq = &dev->offload_irq;
 	int rc;
 
 	if (dev->feature & GS_CAN_FEATURE_HW_TIMESTAMP) {
 		const u32 ts = gs_usb_set_timestamp(dev, skb, hf);
 
-		rc = can_rx_offload_queue_timestamp(offload, skb, ts);
+		rc = can_rx_offload_queue_timestamp(offload_irq, skb, ts);
 	} else {
-		rc = can_rx_offload_queue_tail(offload, skb);
+		rc = can_rx_offload_queue_tail(offload_irq, skb);
 	}
 
 	if (rc)
@@ -558,18 +559,19 @@ static unsigned int
 gs_usb_get_echo_skb(struct gs_can *dev, struct sk_buff *skb,
 		    const struct gs_host_frame *hf)
 {
-	struct can_rx_offload *offload = &dev->offload;
+	struct can_rx_offload_irq *offload_irq = &dev->offload_irq;
 	const u32 echo_id = hf->echo_id;
 	unsigned int len;
 
 	if (dev->feature & GS_CAN_FEATURE_HW_TIMESTAMP) {
 		const u32 ts = gs_usb_set_timestamp(dev, skb, hf);
 
-		len = can_rx_offload_get_echo_skb_queue_timestamp(offload, echo_id,
-								  ts, NULL);
+		len = can_rx_offload_get_echo_skb_queue_timestamp(offload_irq,
+								  echo_id, ts,
+								  NULL);
 	} else {
-		len = can_rx_offload_get_echo_skb_queue_tail(offload, echo_id,
-							     NULL);
+		len = can_rx_offload_get_echo_skb_queue_tail(offload_irq,
+							     echo_id, NULL);
 	}
 
 	return len;
@@ -743,7 +745,7 @@ static void gs_usb_receive_bulk_callback(struct urb *urb)
 		gs_usb_rx_offload(dev, skb, hf);
 	}
 
-	can_rx_offload_irq_finish(&dev->offload);
+	can_rx_offload_irq_finish(&dev->offload_irq);
 
 resubmit_urb:
 	usb_fill_bulk_urb(urb, parent->udev,
@@ -1487,7 +1489,8 @@ static struct gs_can *gs_make_candev(unsigned int channel,
 		dev->can.fd.data_bittiming_const = &dev->data_bt_const;
 	}
 
-	can_rx_offload_add_manual(netdev, &dev->offload, GS_NAPI_WEIGHT);
+	can_rx_offload_add_manual(netdev, &dev->offload,
+				  &dev->offload_irq, GS_NAPI_WEIGHT);
 	SET_NETDEV_DEV(netdev, &intf->dev);
 
 	rc = register_candev(dev->netdev);

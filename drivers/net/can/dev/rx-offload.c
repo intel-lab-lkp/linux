@@ -21,19 +21,19 @@ can_rx_offload_get_cb(struct sk_buff *skb)
 }
 
 static inline bool
-can_rx_offload_le(struct can_rx_offload *offload,
+can_rx_offload_le(struct can_rx_offload_irq *offload_irq,
 		  unsigned int a, unsigned int b)
 {
-	if (offload->inc)
+	if (offload_irq->inc)
 		return a <= b;
 	else
 		return a >= b;
 }
 
 static inline unsigned int
-can_rx_offload_inc(struct can_rx_offload *offload, unsigned int *val)
+can_rx_offload_inc(struct can_rx_offload_irq *offload_irq, unsigned int *val)
 {
-	if (offload->inc)
+	if (offload_irq->inc)
 		return (*val)++;
 	else
 		return (*val)--;
@@ -118,7 +118,7 @@ static int can_rx_offload_compare(struct sk_buff *a, struct sk_buff *b)
 
 /**
  * can_rx_offload_offload_one() - Read one CAN frame from HW
- * @offload: pointer to rx_offload context
+ * @offload_irq: pointer to rx_offload per-IRQ context
  * @n: number of mailbox to read
  *
  * The task of this function is to read a CAN frame from mailbox @n
@@ -126,9 +126,9 @@ static int can_rx_offload_compare(struct sk_buff *a, struct sk_buff *b)
  * sk_buff.
  *
  * If the struct can_rx_offload::skb_queue exceeds the maximal queue
- * length (struct can_rx_offload::skb_queue_len_max) or no skb can be
- * allocated, the mailbox contents is discarded by reading it into an
- * overflow buffer. This way the mailbox is marked as free by the
+ * length (struct can_rx_offload_irq::skb_queue_len_max) or no skb can
+ * be allocated, the mailbox contents is discarded by reading it into
+ * an overflow buffer. This way the mailbox is marked as free by the
  * driver.
  *
  * Return: A pointer to skb containing the CAN frame on success.
@@ -138,8 +138,10 @@ static int can_rx_offload_compare(struct sk_buff *a, struct sk_buff *b)
  *         ERR_PTR() in case of an error
  */
 static struct sk_buff *
-can_rx_offload_offload_one(struct can_rx_offload *offload, unsigned int n)
+can_rx_offload_offload_one(struct can_rx_offload_irq *offload_irq,
+			   unsigned int n)
 {
+	struct can_rx_offload *offload = offload_irq->offload;
 	struct sk_buff *skb;
 	struct can_rx_offload_cb *cb;
 	bool drop = false;
@@ -147,7 +149,7 @@ can_rx_offload_offload_one(struct can_rx_offload *offload, unsigned int n)
 
 	/* If queue is full drop frame */
 	if (unlikely(skb_queue_len(&offload->skb_queue) >
-		     offload->skb_queue_len_max))
+		     offload_irq->skb_queue_len_max))
 		drop = true;
 
 	skb = offload->mailbox_read(offload, n, &timestamp, drop);
@@ -172,25 +174,25 @@ can_rx_offload_offload_one(struct can_rx_offload *offload, unsigned int n)
 	return skb;
 }
 
-int can_rx_offload_irq_offload_timestamp(struct can_rx_offload *offload,
+int can_rx_offload_irq_offload_timestamp(struct can_rx_offload_irq *offload_irq,
 					 u64 pending)
 {
 	unsigned int i;
 	int received = 0;
 
-	for (i = offload->mb_first;
-	     can_rx_offload_le(offload, i, offload->mb_last);
-	     can_rx_offload_inc(offload, &i)) {
+	for (i = offload_irq->mb_first;
+	     can_rx_offload_le(offload_irq, i, offload_irq->mb_last);
+	     can_rx_offload_inc(offload_irq, &i)) {
 		struct sk_buff *skb;
 
 		if (!(pending & BIT_ULL(i)))
 			continue;
 
-		skb = can_rx_offload_offload_one(offload, i);
+		skb = can_rx_offload_offload_one(offload_irq, i);
 		if (IS_ERR_OR_NULL(skb))
 			continue;
 
-		__skb_queue_add_sort(&offload->skb_irq_queue, skb,
+		__skb_queue_add_sort(&offload_irq->skb_irq_queue, skb,
 				     can_rx_offload_compare);
 		received++;
 	}
@@ -199,19 +201,19 @@ int can_rx_offload_irq_offload_timestamp(struct can_rx_offload *offload,
 }
 EXPORT_SYMBOL_GPL(can_rx_offload_irq_offload_timestamp);
 
-int can_rx_offload_irq_offload_fifo(struct can_rx_offload *offload)
+int can_rx_offload_irq_offload_fifo(struct can_rx_offload_irq *offload_irq)
 {
 	struct sk_buff *skb;
 	int received = 0;
 
 	while (1) {
-		skb = can_rx_offload_offload_one(offload, 0);
+		skb = can_rx_offload_offload_one(offload_irq, 0);
 		if (IS_ERR(skb))
 			continue;
 		if (!skb)
 			break;
 
-		__skb_queue_tail(&offload->skb_irq_queue, skb);
+		__skb_queue_tail(&offload_irq->skb_irq_queue, skb);
 		received++;
 	}
 
@@ -219,13 +221,14 @@ int can_rx_offload_irq_offload_fifo(struct can_rx_offload *offload)
 }
 EXPORT_SYMBOL_GPL(can_rx_offload_irq_offload_fifo);
 
-int can_rx_offload_queue_timestamp(struct can_rx_offload *offload,
+int can_rx_offload_queue_timestamp(struct can_rx_offload_irq *offload_irq,
 				   struct sk_buff *skb, u32 timestamp)
 {
+	struct can_rx_offload *offload = offload_irq->offload;
 	struct can_rx_offload_cb *cb;
 
 	if (skb_queue_len(&offload->skb_queue) >
-	    offload->skb_queue_len_max) {
+	    offload_irq->skb_queue_len_max) {
 		dev_kfree_skb_any(skb);
 		return -ENOBUFS;
 	}
@@ -233,7 +236,7 @@ int can_rx_offload_queue_timestamp(struct can_rx_offload *offload,
 	cb = can_rx_offload_get_cb(skb);
 	cb->timestamp = timestamp;
 
-	__skb_queue_add_sort(&offload->skb_irq_queue, skb,
+	__skb_queue_add_sort(&offload_irq->skb_irq_queue, skb,
 			     can_rx_offload_compare);
 
 	return 0;
@@ -241,11 +244,11 @@ int can_rx_offload_queue_timestamp(struct can_rx_offload *offload,
 EXPORT_SYMBOL_GPL(can_rx_offload_queue_timestamp);
 
 unsigned int
-can_rx_offload_get_echo_skb_queue_timestamp(struct can_rx_offload *offload,
+can_rx_offload_get_echo_skb_queue_timestamp(struct can_rx_offload_irq *offload_irq,
 					    unsigned int idx, u32 timestamp,
 					    unsigned int *frame_len_ptr)
 {
-	struct net_device *dev = offload->dev;
+	struct net_device *dev = offload_irq->offload->dev;
 	struct net_device_stats *stats = &dev->stats;
 	struct sk_buff *skb;
 	unsigned int len;
@@ -255,7 +258,7 @@ can_rx_offload_get_echo_skb_queue_timestamp(struct can_rx_offload *offload,
 	if (!skb)
 		return 0;
 
-	err = can_rx_offload_queue_timestamp(offload, skb, timestamp);
+	err = can_rx_offload_queue_timestamp(offload_irq, skb, timestamp);
 	if (err) {
 		stats->rx_errors++;
 		stats->tx_fifo_errors++;
@@ -265,27 +268,29 @@ can_rx_offload_get_echo_skb_queue_timestamp(struct can_rx_offload *offload,
 }
 EXPORT_SYMBOL_GPL(can_rx_offload_get_echo_skb_queue_timestamp);
 
-int can_rx_offload_queue_tail(struct can_rx_offload *offload,
+int can_rx_offload_queue_tail(struct can_rx_offload_irq *offload_irq,
 			      struct sk_buff *skb)
 {
+	struct can_rx_offload *offload = offload_irq->offload;
+
 	if (skb_queue_len(&offload->skb_queue) >
-	    offload->skb_queue_len_max) {
+	    offload_irq->skb_queue_len_max) {
 		dev_kfree_skb_any(skb);
 		return -ENOBUFS;
 	}
 
-	__skb_queue_tail(&offload->skb_irq_queue, skb);
+	__skb_queue_tail(&offload_irq->skb_irq_queue, skb);
 
 	return 0;
 }
 EXPORT_SYMBOL_GPL(can_rx_offload_queue_tail);
 
 unsigned int
-can_rx_offload_get_echo_skb_queue_tail(struct can_rx_offload *offload,
+can_rx_offload_get_echo_skb_queue_tail(struct can_rx_offload_irq *offload_irq,
 				       unsigned int idx,
 				       unsigned int *frame_len_ptr)
 {
-	struct net_device *dev = offload->dev;
+	struct net_device *dev = offload_irq->offload->dev;
 	struct net_device_stats *stats = &dev->stats;
 	struct sk_buff *skb;
 	unsigned int len;
@@ -295,7 +300,7 @@ can_rx_offload_get_echo_skb_queue_tail(struct can_rx_offload *offload,
 	if (!skb)
 		return 0;
 
-	err = can_rx_offload_queue_tail(offload, skb);
+	err = can_rx_offload_queue_tail(offload_irq, skb);
 	if (err) {
 		stats->rx_errors++;
 		stats->tx_fifo_errors++;
@@ -305,20 +310,44 @@ can_rx_offload_get_echo_skb_queue_tail(struct can_rx_offload *offload,
 }
 EXPORT_SYMBOL_GPL(can_rx_offload_get_echo_skb_queue_tail);
 
-void can_rx_offload_irq_finish(struct can_rx_offload *offload)
+static void
+can_rx_offload_move_to_skb_queue(struct can_rx_offload_irq *offload_irq)
 {
+	struct can_rx_offload *offload = offload_irq->offload;
 	unsigned long flags;
-	int queue_len;
-
-	if (skb_queue_empty_lockless(&offload->skb_irq_queue))
-		return;
 
 	spin_lock_irqsave(&offload->skb_queue.lock, flags);
-	skb_queue_splice_tail_init(&offload->skb_irq_queue, &offload->skb_queue);
+
+	if (offload->irq_cnt > 1 && offload->sort) {
+		/* Merge this IRQ's sorted queue into skb_queue to keep the
+		 * overall timestamp order.
+		 */
+		struct sk_buff *skb;
+
+		while ((skb = __skb_dequeue(&offload_irq->skb_irq_queue)))
+			__skb_queue_add_sort(&offload->skb_queue, skb,
+					     can_rx_offload_compare);
+	} else {
+		/* Single producer, or no timestamp to sort by. */
+		skb_queue_splice_tail_init(&offload_irq->skb_irq_queue,
+					   &offload->skb_queue);
+	}
+
 	spin_unlock_irqrestore(&offload->skb_queue.lock, flags);
+}
+
+void can_rx_offload_irq_finish(struct can_rx_offload_irq *offload_irq)
+{
+	struct can_rx_offload *offload = offload_irq->offload;
+	int queue_len;
+
+	if (skb_queue_empty_lockless(&offload_irq->skb_irq_queue))
+		return;
+
+	can_rx_offload_move_to_skb_queue(offload_irq);
 
 	queue_len = skb_queue_len(&offload->skb_queue);
-	if (queue_len > offload->skb_queue_len_max / 8)
+	if (queue_len > offload_irq->skb_queue_len_max / 8)
 		netdev_dbg(offload->dev, "%s: queue_len=%d\n",
 			   __func__, queue_len);
 
@@ -326,20 +355,18 @@ void can_rx_offload_irq_finish(struct can_rx_offload *offload)
 }
 EXPORT_SYMBOL_GPL(can_rx_offload_irq_finish);
 
-void can_rx_offload_threaded_irq_finish(struct can_rx_offload *offload)
+void can_rx_offload_threaded_irq_finish(struct can_rx_offload_irq *offload_irq)
 {
-	unsigned long flags;
+	struct can_rx_offload *offload = offload_irq->offload;
 	int queue_len;
 
-	if (skb_queue_empty_lockless(&offload->skb_irq_queue))
+	if (skb_queue_empty_lockless(&offload_irq->skb_irq_queue))
 		return;
 
-	spin_lock_irqsave(&offload->skb_queue.lock, flags);
-	skb_queue_splice_tail_init(&offload->skb_irq_queue, &offload->skb_queue);
-	spin_unlock_irqrestore(&offload->skb_queue.lock, flags);
+	can_rx_offload_move_to_skb_queue(offload_irq);
 
 	queue_len = skb_queue_len(&offload->skb_queue);
-	if (queue_len > offload->skb_queue_len_max / 8)
+	if (queue_len > offload_irq->skb_queue_len_max / 8)
 		netdev_dbg(offload->dev, "%s: queue_len=%d\n",
 			   __func__, queue_len);
 
@@ -351,64 +378,88 @@ EXPORT_SYMBOL_GPL(can_rx_offload_threaded_irq_finish);
 
 static int can_rx_offload_init_queue(struct net_device *dev,
 				     struct can_rx_offload *offload,
+				     struct can_rx_offload_irq *offload_irq,
 				     unsigned int weight)
 {
-	offload->dev = dev;
+	struct can_rx_offload_irq *pos;
+	u32 skb_queue_len_max;
 
-	/* Limit queue len to 4x the weight (rounded to next power of two) */
-	offload->skb_queue_len_max = 2 << fls(weight);
-	offload->skb_queue_len_max *= 4;
-	skb_queue_head_init(&offload->skb_queue);
-	__skb_queue_head_init(&offload->skb_irq_queue);
+	offload_irq->offload = offload;
+	__skb_queue_head_init(&offload_irq->skb_irq_queue);
 
-	netif_napi_add_weight(dev, &offload->napi, can_rx_offload_napi_poll,
-			      weight);
+	/* The first registered IRQ initializes the shared state. */
+	if (!offload->irq_cnt) {
+		offload->dev = dev;
+		skb_queue_head_init(&offload->skb_queue);
+		INIT_LIST_HEAD(&offload->irqs);
+		netif_napi_add_weight(dev, &offload->napi,
+				      can_rx_offload_napi_poll, weight);
+	} else if (weight > offload->napi.weight) {
+		/* All contexts feed the same NAPI, keep the largest weight. */
+		offload->napi.weight = weight;
+	}
+	list_add_tail(&offload_irq->node, &offload->irqs);
+	offload->irq_cnt++;
+
+	/* Limit queue len to 4x the weight (rounded to next power of two).
+	 * All contexts feed the same skb_queue, so they share its limit.
+	 */
+	skb_queue_len_max = 2 << fls(offload->napi.weight);
+	skb_queue_len_max *= 4;
+	list_for_each_entry(pos, &offload->irqs, node)
+		pos->skb_queue_len_max = skb_queue_len_max;
 
 	dev_dbg(dev->dev.parent, "%s: skb_queue_len_max=%d\n",
-		__func__, offload->skb_queue_len_max);
+		__func__, skb_queue_len_max);
 
 	return 0;
 }
 
 int can_rx_offload_add_timestamp(struct net_device *dev,
-				 struct can_rx_offload *offload)
+				 struct can_rx_offload *offload,
+				 struct can_rx_offload_irq *offload_irq)
 {
 	unsigned int weight;
 
-	if (offload->mb_first > BITS_PER_LONG_LONG ||
-	    offload->mb_last > BITS_PER_LONG_LONG || !offload->mailbox_read)
+	if (offload_irq->mb_first > BITS_PER_LONG_LONG ||
+	    offload_irq->mb_last > BITS_PER_LONG_LONG || !offload->mailbox_read)
 		return -EINVAL;
 
-	if (offload->mb_first < offload->mb_last) {
-		offload->inc = true;
-		weight = offload->mb_last - offload->mb_first;
+	if (offload_irq->mb_first < offload_irq->mb_last) {
+		offload_irq->inc = true;
+		weight = offload_irq->mb_last - offload_irq->mb_first;
 	} else {
-		offload->inc = false;
-		weight = offload->mb_first - offload->mb_last;
+		offload_irq->inc = false;
+		weight = offload_irq->mb_first - offload_irq->mb_last;
 	}
 
-	return can_rx_offload_init_queue(dev, offload, weight);
+	offload->sort = true;
+
+	return can_rx_offload_init_queue(dev, offload, offload_irq, weight);
 }
 EXPORT_SYMBOL_GPL(can_rx_offload_add_timestamp);
 
 int can_rx_offload_add_fifo(struct net_device *dev,
-			    struct can_rx_offload *offload, unsigned int weight)
+			    struct can_rx_offload *offload,
+			    struct can_rx_offload_irq *offload_irq,
+			    unsigned int weight)
 {
 	if (!offload->mailbox_read)
 		return -EINVAL;
 
-	return can_rx_offload_init_queue(dev, offload, weight);
+	return can_rx_offload_init_queue(dev, offload, offload_irq, weight);
 }
 EXPORT_SYMBOL_GPL(can_rx_offload_add_fifo);
 
 int can_rx_offload_add_manual(struct net_device *dev,
 			      struct can_rx_offload *offload,
+			      struct can_rx_offload_irq *offload_irq,
 			      unsigned int weight)
 {
 	if (offload->mailbox_read)
 		return -EINVAL;
 
-	return can_rx_offload_init_queue(dev, offload, weight);
+	return can_rx_offload_init_queue(dev, offload, offload_irq, weight);
 }
 EXPORT_SYMBOL_GPL(can_rx_offload_add_manual);
 
@@ -420,8 +471,19 @@ EXPORT_SYMBOL_GPL(can_rx_offload_enable);
 
 void can_rx_offload_del(struct can_rx_offload *offload)
 {
+	struct can_rx_offload_irq *offload_irq, *tmp;
+
 	netif_napi_del(&offload->napi);
 	skb_queue_purge(&offload->skb_queue);
-	__skb_queue_purge(&offload->skb_irq_queue);
+
+	/* Drop the contexts, so that re-adding them (e.g. on the next
+	 * ndo_open()) initializes the shared state again.
+	 */
+	list_for_each_entry_safe(offload_irq, tmp, &offload->irqs, node) {
+		__skb_queue_purge(&offload_irq->skb_irq_queue);
+		list_del_init(&offload_irq->node);
+	}
+	offload->irq_cnt = 0;
+	offload->sort = false;
 }
 EXPORT_SYMBOL_GPL(can_rx_offload_del);

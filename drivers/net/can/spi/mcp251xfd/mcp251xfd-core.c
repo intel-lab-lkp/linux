@@ -972,7 +972,7 @@ static int mcp251xfd_handle_rxovif(struct mcp251xfd_priv *priv)
 	cf->can_id |= CAN_ERR_CRTL;
 	cf->data[1] = CAN_ERR_CRTL_RX_OVERFLOW;
 
-	err = can_rx_offload_queue_timestamp(&priv->offload, skb, ts_raw);
+	err = can_rx_offload_queue_timestamp(&priv->offload_irq, skb, ts_raw);
 	if (err)
 		stats->rx_fifo_errors++;
 
@@ -1077,7 +1077,7 @@ static int mcp251xfd_handle_ivmif(struct mcp251xfd_priv *priv)
 		return 0;
 
 	mcp251xfd_skb_set_timestamp_raw(priv, skb, ts_raw);
-	err = can_rx_offload_queue_timestamp(&priv->offload, skb, ts_raw);
+	err = can_rx_offload_queue_timestamp(&priv->offload_irq, skb, ts_raw);
 	if (err)
 		stats->rx_fifo_errors++;
 
@@ -1151,7 +1151,7 @@ static int mcp251xfd_handle_cerrif(struct mcp251xfd_priv *priv)
 		cf->data[7] = bec.rxerr;
 	}
 
-	err = can_rx_offload_queue_timestamp(&priv->offload, skb, ts_raw);
+	err = can_rx_offload_queue_timestamp(&priv->offload_irq, skb, ts_raw);
 	if (err)
 		stats->rx_fifo_errors++;
 
@@ -1515,7 +1515,7 @@ static irqreturn_t mcp251xfd_irq(int irq, void *dev_id)
 				  priv->regs_status.intf);
 
 		if (!(intf_pending)) {
-			can_rx_offload_threaded_irq_finish(&priv->offload);
+			can_rx_offload_threaded_irq_finish(&priv->offload_irq);
 			return handled;
 		}
 
@@ -1610,7 +1610,7 @@ static irqreturn_t mcp251xfd_irq(int irq, void *dev_id)
 			 * directly.
 			 */
 			if (priv->can.state == CAN_STATE_BUS_OFF) {
-				can_rx_offload_threaded_irq_finish(&priv->offload);
+				can_rx_offload_threaded_irq_finish(&priv->offload_irq);
 				return IRQ_HANDLED;
 			}
 		}
@@ -1619,7 +1619,7 @@ static irqreturn_t mcp251xfd_irq(int irq, void *dev_id)
 	} while (1);
 
 out_fail:
-	can_rx_offload_threaded_irq_finish(&priv->offload);
+	can_rx_offload_threaded_irq_finish(&priv->offload_irq);
 
 	netdev_err(priv->ndev, "IRQ handler returned %d (intf=0x%08x).\n",
 		   err, priv->regs_status.intf);
@@ -2358,6 +2358,7 @@ static int mcp251xfd_probe(struct spi_device *spi)
 		goto out_free_candev;
 
 	err = can_rx_offload_add_manual(ndev, &priv->offload,
+					&priv->offload_irq,
 					MCP251XFD_NAPI_WEIGHT);
 	if (err)
 		goto out_free_candev;

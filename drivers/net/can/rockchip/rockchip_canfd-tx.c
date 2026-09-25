@@ -160,7 +160,7 @@ void rkcanfd_handle_tx_done_one(struct rkcanfd_priv *priv, const u32 ts,
 	if (skb)
 		rkcanfd_skb_set_timestamp(priv, skb, ts);
 	stats->tx_bytes +=
-		can_rx_offload_get_echo_skb_queue_timestamp(&priv->offload,
+		can_rx_offload_get_echo_skb_queue_timestamp(&priv->offload_irq,
 							    tx_tail, ts,
 							    frame_len_p);
 	stats->tx_packets++;

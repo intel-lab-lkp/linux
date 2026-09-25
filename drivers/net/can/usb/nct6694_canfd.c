@@ -133,6 +133,7 @@ struct __packed nct6694_canfd_frame {
 struct nct6694_canfd_priv {
 	struct can_priv can;	/* must be the first member */
 	struct can_rx_offload offload;
+	struct can_rx_offload_irq offload_irq;
 	struct net_device *ndev;
 	struct nct6694 *nct6694;
 	struct workqueue_struct *wq;
@@ -172,13 +173,13 @@ static const struct can_bittiming_const nct6694_canfd_bittiming_data_const = {
 	.brp_inc = 1,
 };
 
-static void nct6694_canfd_rx_offload(struct can_rx_offload *offload,
+static void nct6694_canfd_rx_offload(struct can_rx_offload_irq *offload_irq,
 				     struct sk_buff *skb)
 {
-	struct nct6694_canfd_priv *priv = rx_offload_to_priv(offload);
+	struct nct6694_canfd_priv *priv = rx_offload_to_priv(offload_irq->offload);
 	int ret;
 
-	ret = can_rx_offload_queue_tail(offload, skb);
+	ret = can_rx_offload_queue_tail(offload_irq, skb);
 	if (ret)
 		priv->ndev->stats.rx_fifo_errors++;
 }
@@ -202,7 +203,7 @@ static void nct6694_canfd_handle_lost_msg(struct net_device *ndev)
 	cf->can_id |= CAN_ERR_CRTL;
 	cf->data[1] = CAN_ERR_CRTL_RX_OVERFLOW;
 
-	nct6694_canfd_rx_offload(&priv->offload, skb);
+	nct6694_canfd_rx_offload(&priv->offload_irq, skb);
 }
 
 static void nct6694_canfd_handle_rx(struct net_device *ndev, u8 rx_evt)
@@ -262,7 +263,7 @@ static void nct6694_canfd_handle_rx(struct net_device *ndev, u8 rx_evt)
 			memcpy(cf->data, frame->data, cf->len);
 	}
 
-	nct6694_canfd_rx_offload(&priv->offload, skb);
+	nct6694_canfd_rx_offload(&priv->offload_irq, skb);
 }
 
 static int nct6694_canfd_get_berr_counter(const struct net_device *ndev,
@@ -305,7 +306,7 @@ static void nct6694_canfd_handle_state_change(struct net_device *ndev, u8 status
 	}
 
 	if (skb)
-		nct6694_canfd_rx_offload(&priv->offload, skb);
+		nct6694_canfd_rx_offload(&priv->offload_irq, skb);
 }
 
 static void nct6694_canfd_handle_bus_err(struct net_device *ndev, u8 bus_err)
@@ -363,7 +364,7 @@ static void nct6694_canfd_handle_bus_err(struct net_device *ndev, u8 bus_err)
 	}
 
 	if (skb)
-		nct6694_canfd_rx_offload(&priv->offload, skb);
+		nct6694_canfd_rx_offload(&priv->offload_irq, skb);
 }
 
 static void nct6694_canfd_handle_tx(struct net_device *ndev)
@@ -371,7 +372,7 @@ static void nct6694_canfd_handle_tx(struct net_device *ndev)
 	struct nct6694_canfd_priv *priv = netdev_priv(ndev);
 	struct net_device_stats *stats = &ndev->stats;
 
-	stats->tx_bytes += can_rx_offload_get_echo_skb_queue_tail(&priv->offload,
+	stats->tx_bytes += can_rx_offload_get_echo_skb_queue_tail(&priv->offload_irq,
 								  0, NULL);
 	stats->tx_packets++;
 	netif_wake_queue(ndev);
@@ -422,7 +423,7 @@ static irqreturn_t nct6694_canfd_irq(int irq, void *data)
 	}
 
 	if (handled)
-		can_rx_offload_threaded_irq_finish(&priv->offload);
+		can_rx_offload_threaded_irq_finish(&priv->offload_irq);
 
 	priv->bec.rxerr = event->rec;
 	priv->bec.txerr = event->tec;
@@ -775,6 +776,7 @@ static int nct6694_canfd_probe(struct platform_device *pdev)
 		goto free_candev;
 
 	ret = can_rx_offload_add_manual(ndev, &priv->offload,
+					&priv->offload_irq,
 					NCT6694_NAPI_WEIGHT);
 	if (ret) {
 		dev_err_probe(&pdev->dev, ret, "Failed to add rx_offload\n");

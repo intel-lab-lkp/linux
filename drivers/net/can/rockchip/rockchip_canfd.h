@@ -472,6 +472,7 @@ struct rkcanfd_stats {
 struct rkcanfd_priv {
 	struct can_priv can;
 	struct can_rx_offload offload;
+	struct can_rx_offload_irq offload_irq;
 	struct net_device *ndev;
 
 	void __iomem *regs;

@@ -563,7 +563,7 @@ static int rkcanfd_handle_error_int(struct rkcanfd_priv *priv)
 	if (!cf)
 		return 0;
 
-	err = can_rx_offload_queue_timestamp(&priv->offload, skb, timestamp);
+	err = can_rx_offload_queue_timestamp(&priv->offload_irq, skb, timestamp);
 	if (err)
 		stats->rx_fifo_errors++;
 
@@ -608,7 +608,7 @@ static int rkcanfd_handle_state_error_int(struct rkcanfd_priv *priv)
 		cf->data[7] = bec.rxerr;
 	}
 
-	err = can_rx_offload_queue_timestamp(&priv->offload, skb, timestamp);
+	err = can_rx_offload_queue_timestamp(&priv->offload_irq, skb, timestamp);
 	if (err)
 		stats->rx_fifo_errors++;
 
@@ -641,7 +641,7 @@ rkcanfd_handle_rx_fifo_overflow_int(struct rkcanfd_priv *priv)
 	cf->data[6] = bec.txerr;
 	cf->data[7] = bec.rxerr;
 
-	err = can_rx_offload_queue_timestamp(&priv->offload, skb, timestamp);
+	err = can_rx_offload_queue_timestamp(&priv->offload_irq, skb, timestamp);
 	if (err)
 		stats->rx_fifo_errors++;
 
@@ -715,7 +715,7 @@ static irqreturn_t rkcanfd_irq(int irq, void *dev_id)
 	if (reg_int & RKCANFD_REG_INT_OVERLOAD_INT)
 		netdev_info(priv->ndev, "%s: OVERLOAD_INT\n", __func__);
 
-	can_rx_offload_irq_finish(&priv->offload);
+	can_rx_offload_irq_finish(&priv->offload_irq);
 
 	return IRQ_HANDLED;
 }
@@ -930,6 +930,7 @@ static int rkcanfd_probe(struct platform_device *pdev)
 	}
 
 	err = can_rx_offload_add_manual(ndev, &priv->offload,
+					&priv->offload_irq,
 					RKCANFD_NAPI_WEIGHT);
 	if (err)
 		goto out_free_candev;

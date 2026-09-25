@@ -28,8 +28,8 @@ flexcan_get_ringparam(struct net_device *ndev, struct ethtool_ringparam *ring,
 	ring->tx_max_pending = priv->mb_count;
 
 	if (priv->devtype_data.quirks & FLEXCAN_QUIRK_USE_RX_MAILBOX)
-		ring->rx_pending = priv->offload.mb_last -
-			priv->offload.mb_first + 1;
+		ring->rx_pending = priv->offload_irq.mb_last -
+			priv->offload_irq.mb_first + 1;
 	else
 		ring->rx_pending = 6;	/* RX-FIFO depth is fixed */
 

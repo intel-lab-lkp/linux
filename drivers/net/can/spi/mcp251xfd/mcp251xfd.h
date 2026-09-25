@@ -624,6 +624,7 @@ enum mcp251xfd_flags {
 struct mcp251xfd_priv {
 	struct can_priv can;
 	struct can_rx_offload offload;
+	struct can_rx_offload_irq offload_irq;
 	struct net_device *ndev;
 
 	struct regmap *map_reg;			/* register access */

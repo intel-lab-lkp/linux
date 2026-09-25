@@ -543,7 +543,7 @@ static void m_can_receive_skb(struct m_can_classdev *cdev,
 		struct net_device_stats *stats = &cdev->net->stats;
 		int err;
 
-		err = can_rx_offload_queue_timestamp(&cdev->offload, skb,
+		err = can_rx_offload_queue_timestamp(&cdev->offload_irq, skb,
 						     timestamp);
 		if (err)
 			stats->rx_fifo_errors++;
@@ -1100,7 +1100,7 @@ static unsigned int m_can_tx_update_stats(struct m_can_classdev *cdev,
 
 	if (cdev->is_peripheral)
 		stats->tx_bytes +=
-			can_rx_offload_get_echo_skb_queue_timestamp(&cdev->offload,
+			can_rx_offload_get_echo_skb_queue_timestamp(&cdev->offload_irq,
 								    msg_mark,
 								    timestamp,
 								    &frame_len);
@@ -1303,7 +1303,7 @@ static int m_can_interrupt_handler(struct m_can_classdev *cdev)
 	}
 
 	if (cdev->is_peripheral)
-		can_rx_offload_threaded_irq_finish(&cdev->offload);
+		can_rx_offload_threaded_irq_finish(&cdev->offload_irq);
 
 	return IRQ_HANDLED;
 }
@@ -2535,6 +2535,7 @@ int m_can_class_register(struct m_can_classdev *cdev)
 
 	if (cdev->is_peripheral) {
 		ret = can_rx_offload_add_manual(cdev->net, &cdev->offload,
+						&cdev->offload_irq,
 						NAPI_POLL_WEIGHT);
 		if (ret)
 			goto out_reset_control_assert;

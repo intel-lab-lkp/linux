@@ -885,7 +885,7 @@ static void flexcan_irq_bus_err(struct net_device *dev, u32 reg_esr)
 	if (tx_errors)
 		dev->stats.tx_errors++;
 
-	err = can_rx_offload_queue_timestamp(&priv->offload, skb, timestamp);
+	err = can_rx_offload_queue_timestamp(&priv->offload_irq, skb, timestamp);
 	if (err)
 		dev->stats.rx_fifo_errors++;
 }
@@ -932,7 +932,7 @@ static void flexcan_irq_state(struct net_device *dev, u32 reg_esr)
 	if (unlikely(new_state == CAN_STATE_BUS_OFF))
 		can_bus_off(dev);
 
-	err = can_rx_offload_queue_timestamp(&priv->offload, skb, timestamp);
+	err = can_rx_offload_queue_timestamp(&priv->offload_irq, skb, timestamp);
 	if (err)
 		dev->stats.rx_fifo_errors++;
 }
@@ -1088,7 +1088,7 @@ static irqreturn_t flexcan_irq(int irq, void *dev_id)
 
 		while ((reg_iflag_rx = flexcan_read_reg_iflag_rx(priv))) {
 			handled = IRQ_HANDLED;
-			ret = can_rx_offload_irq_offload_timestamp(&priv->offload,
+			ret = can_rx_offload_irq_offload_timestamp(&priv->offload_irq,
 								   reg_iflag_rx);
 			if (!ret)
 				break;
@@ -1099,7 +1099,7 @@ static irqreturn_t flexcan_irq(int irq, void *dev_id)
 		reg_iflag1 = priv->read(&regs->iflag1);
 		if (reg_iflag1 & FLEXCAN_IFLAG_RX_FIFO_AVAILABLE) {
 			handled = IRQ_HANDLED;
-			can_rx_offload_irq_offload_fifo(&priv->offload);
+			can_rx_offload_irq_offload_fifo(&priv->offload_irq);
 		}
 
 		/* FIFO overflow interrupt */
@@ -1120,7 +1120,7 @@ static irqreturn_t flexcan_irq(int irq, void *dev_id)
 
 		handled = IRQ_HANDLED;
 		stats->tx_bytes +=
-			can_rx_offload_get_echo_skb_queue_timestamp(&priv->offload, 0,
+			can_rx_offload_get_echo_skb_queue_timestamp(&priv->offload_irq, 0,
 								    reg_ctrl << 16, NULL);
 		stats->tx_packets++;
 
@@ -1189,7 +1189,7 @@ static irqreturn_t flexcan_irq(int irq, void *dev_id)
 	}
 
 	if (handled)
-		can_rx_offload_irq_finish(&priv->offload);
+		can_rx_offload_irq_finish(&priv->offload_irq);
 
 	return handled;
 }
@@ -1410,16 +1410,18 @@ static int flexcan_rx_offload_setup(struct net_device *dev)
 	priv->offload.mailbox_read = flexcan_mailbox_read;
 
 	if (priv->devtype_data.quirks & FLEXCAN_QUIRK_USE_RX_MAILBOX) {
-		priv->offload.mb_first = FLEXCAN_RX_MB_RX_MAILBOX_FIRST;
-		priv->offload.mb_last = priv->mb_count - 2;
+		priv->offload_irq.mb_first = FLEXCAN_RX_MB_RX_MAILBOX_FIRST;
+		priv->offload_irq.mb_last = priv->mb_count - 2;
 
-		priv->rx_mask = GENMASK_ULL(priv->offload.mb_last,
-					    priv->offload.mb_first);
-		err = can_rx_offload_add_timestamp(dev, &priv->offload);
+		priv->rx_mask = GENMASK_ULL(priv->offload_irq.mb_last,
+					    priv->offload_irq.mb_first);
+		err = can_rx_offload_add_timestamp(dev, &priv->offload,
+						   &priv->offload_irq);
 	} else {
 		priv->rx_mask = FLEXCAN_IFLAG_RX_FIFO_OVERFLOW |
 			FLEXCAN_IFLAG_RX_FIFO_AVAILABLE;
 		err = can_rx_offload_add_fifo(dev, &priv->offload,
+					      &priv->offload_irq,
 					      FLEXCAN_NAPI_WEIGHT);
 	}
 
@@ -1600,7 +1602,7 @@ static int flexcan_chip_start(struct net_device *dev)
 	}
 
 	if (priv->devtype_data.quirks & FLEXCAN_QUIRK_USE_RX_MAILBOX) {
-		for (i = priv->offload.mb_first; i <= priv->offload.mb_last; i++) {
+		for (i = priv->offload_irq.mb_first; i <= priv->offload_irq.mb_last; i++) {
 			mb = flexcan_get_mb(priv, i);
 			priv->write(FLEXCAN_MB_CODE_RX_EMPTY,
 				    &mb->can_ctrl);
