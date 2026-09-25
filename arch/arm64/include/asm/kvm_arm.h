@@ -30,6 +30,7 @@
 #define HCR_AMVOFFEN	__HCR(AMVOFFEN)
 #define HCR_TICAB	__HCR(TICAB)
 #define HCR_TID4	__HCR(TID4)
+#define HCR_GPF		__HCR(GPF)
 #define HCR_FIEN	__HCR(FIEN)
 #define HCR_FWB		__HCR(FWB)
 #define HCR_NV2		__HCR(NV2)

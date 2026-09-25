@@ -13,6 +13,19 @@
 #include <nvhe/spinlock.h>
 
 /*
+ * HCR_EL2 bits EL2 owns for a non-protected VM, whatever the host sets: those
+ * that restrict the guest, configure EL2 or what it switches (E2H, RW), or
+ * enable state EL2 doesn't switch or support. RES0 is included, so a bit comes
+ * from the host only once arch/arm64/tools/sysreg describes it.
+ */
+#define PKVM_HCR_EL2_OWNED	((HCR_GUEST_FLAGS & ~(HCR_TWI | HCR_TWE)) | HCR_BSU |	\
+				 HCR_E2H | HCR_TGE | HCR_TEA | HCR_GPF | HCR_TERR |	\
+				 HCR_FWB | HCR_DC | HCR_ID | HCR_CD | HCR_NV |		\
+				 HCR_NV1 | HCR_NV2 | HCR_API | HCR_APK | HCR_ATA |	\
+				 HCR_DCT | HCR_FIEN | HCR_AMVOFFEN | HCR_ENSCXT |	\
+				 HCR_EL2_RES0)
+
+/*
  * Holds the relevant data for maintaining the vcpu state completely at hyp.
  */
 struct pkvm_hyp_vcpu {
