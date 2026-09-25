@@ -9,3 +9,7 @@ ccflags-y += -I $(src)/freestanding
 obj-$(CONFIG_LZ4_COMPRESS)	+= lz4_compress.o
 obj-$(CONFIG_LZ4HC_COMPRESS)	+= lz4hc_compress.o
 obj-$(CONFIG_LZ4_DECOMPRESS)	+= lz4_decompress.o
+
+# lz4hc.c pulls in lz4.c's common definitions, which include two decoder
+# tables nothing here uses when LZ4_FAST_DEC_LOOP is off.
+CFLAGS_lz4hc_compress.o += $(call cc-disable-warning, unused-const-variable)
