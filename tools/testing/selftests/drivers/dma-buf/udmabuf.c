@@ -25,6 +25,21 @@
 
 static unsigned int page_size;
 
+static bool hugepages_available(void)
+{
+	unsigned long nr = 0;
+	FILE *f;
+
+	f = fopen("/proc/sys/vm/nr_hugepages", "r");
+	if (!f)
+		return false;
+	if (fscanf(f, "%lu", &nr) != 1)
+		nr = 0;
+	fclose(f);
+
+	return nr > 0;
+}
+
 static int create_memfd_with_seals(off64_t size, bool hpage)
 {
 	int memfd, ret;
@@ -234,6 +249,11 @@ int main(int argc, char *argv[])
 	close(memfd);
 
 	/* should work (migration of 2MB size huge pages)*/
+	if (!hugepages_available()) {
+		ksft_test_result_skip("%s: [SKIP,test-6] no huge pages\n", TEST_PREFIX);
+		close(devfd);
+		ksft_finished();
+	}
 	page_size = getpagesize() * 512; /* 2 MB */
 	size = MEMFD_SIZE * page_size;
 	memfd = create_memfd_with_seals(size, true);
