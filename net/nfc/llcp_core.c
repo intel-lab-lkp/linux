@@ -1326,7 +1326,7 @@ static void nfc_llcp_recv_dm(struct nfc_llcp_local *local,
 	 * corrupt the connecting_sockets list / desync the socket refcount.
 	 * This mirrors nfc_llcp_recv_cc().
 	 */
-	if (connecting)
+	if (connecting && sk->sk_state == LLCP_CONNECTING)
 		nfc_llcp_sock_unlink(&local->connecting_sockets, sk);
 
 	sk->sk_err = ENXIO;
