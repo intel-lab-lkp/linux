@@ -317,6 +317,8 @@ struct apic {
 
 	void	(*update_vector)(unsigned int cpu, unsigned int vector, bool set);
 
+	u32	eilvt_regs_count;
+
 	char	*name;
 };
 
