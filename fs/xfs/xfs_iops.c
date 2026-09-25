@@ -620,6 +620,12 @@ xfs_get_atomic_write_min(
 	return 0;
 }
 
+static inline enum xfs_group_type
+xfs_inode_group_type(struct xfs_inode *ip)
+{
+	return XFS_IS_REALTIME_INODE(ip) ? XG_TYPE_RTG : XG_TYPE_AG;
+}
+
 unsigned int
 xfs_get_atomic_write_max(
 	struct xfs_inode	*ip)
@@ -642,19 +648,20 @@ xfs_get_atomic_write_max(
 	 * then advertise a maximum size of whatever we can complete through
 	 * that means.  Hardware support is reported via max_opt, not here.
 	 */
-	if (XFS_IS_REALTIME_INODE(ip))
-		return XFS_FSB_TO_B(mp, mp->m_groups[XG_TYPE_RTG].awu_max);
-	return XFS_FSB_TO_B(mp, mp->m_groups[XG_TYPE_AG].awu_max);
+	return XFS_FSB_TO_B(mp, mp->m_groups[xfs_inode_group_type(ip)].awu_max);
 }
 
 unsigned int
 xfs_get_atomic_write_max_opt(
 	struct xfs_inode	*ip)
 {
+	struct xfs_mount	*mp = ip->i_mount;
 	unsigned int		awu_max = xfs_get_atomic_write_max(ip);
+	xfs_extlen_t		align_max_fsb;
+	unsigned int		opt;
 
 	/* if the max is 1x block, then just keep behaviour that opt is 0 */
-	if (awu_max <= ip->i_mount->m_sb.sb_blocksize)
+	if (awu_max <= mp->m_sb.sb_blocksize)
 		return 0;
 
 	/*
@@ -663,7 +670,17 @@ xfs_get_atomic_write_max_opt(
 	 * less than our out of place write limit, but we don't want to exceed
 	 * the awu_max.
 	 */
-	return min(awu_max, xfs_inode_buftarg(ip)->bt_awu_max);
+	opt = min(awu_max, xfs_inode_buftarg(ip)->bt_awu_max);
+
+	/*
+	 * REQ_ATOMIC writes also have to be naturally aligned on disk, so we
+	 * cannot promise more than the largest extent that the allocator is
+	 * able to align within a group.
+	 */
+	align_max_fsb = xfs_calc_group_awu_align_max(mp,
+						xfs_inode_group_type(ip));
+
+	return min_t(xfs_fsize_t, opt, XFS_FSB_TO_B(mp, align_max_fsb));
 }
 
 static void
