@@ -2,6 +2,6 @@
 # Makefile for mount selftests.
 CFLAGS = -g $(KHDR_INCLUDES) -Wall -O2
 
-TEST_GEN_FILES += move_mount_set_group_test
+TEST_GEN_PROGS += move_mount_set_group_test
 
 include ../lib.mk
