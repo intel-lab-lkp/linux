@@ -188,9 +188,9 @@ static void pci_clip_resource_to_region(struct pci_bus *bus,
 }
 
 static int pci_bus_alloc_from_region(struct pci_bus *bus, struct resource *res,
-		resource_size_t size, resource_size_t align,
-		resource_size_t min, unsigned long type_mask,
-		resource_alignf alignf,
+		unsigned long flags, resource_size_t size,
+		resource_size_t align, resource_size_t min,
+		unsigned long type_mask, resource_alignf alignf,
 		void *alignf_data,
 		struct pci_bus_region *region)
 {
@@ -210,13 +210,13 @@ static int pci_bus_alloc_from_region(struct pci_bus *bus, struct resource *res,
 			continue;
 
 		/* type_mask must match */
-		if ((res->flags ^ r->flags) & type_mask)
+		if ((flags ^ r->flags) & type_mask)
 			continue;
 
 		/* We cannot allocate a non-prefetching resource
 		   from a pre-fetching area */
 		if ((r->flags & IORESOURCE_PREFETCH) &&
-		    !(res->flags & IORESOURCE_PREFETCH))
+		    !(flags & IORESOURCE_PREFETCH))
 			continue;
 
 		avail = *r;
@@ -247,6 +247,50 @@ static int pci_bus_alloc_from_region(struct pci_bus *bus, struct resource *res,
 }
 
 /**
+ * __pci_bus_alloc_resource - allocate a resource from a parent bus
+ * @bus: PCI bus
+ * @res: resource to allocate
+ * @flags: resource flags to match against the bus resources
+ * @size: size of resource to allocate
+ * @align: alignment of resource to allocate
+ * @min: minimum /proc/iomem address to allocate
+ * @type_mask: IORESOURCE_* type flags
+ * @alignf: resource alignment function
+ * @alignf_data: data argument for resource alignment function
+ *
+ * Like pci_bus_alloc_resource(), but match the bus resources against @flags
+ * rather than @res->flags. This permits allocating a non-prefetchable
+ * resource from a prefetchable bus resource by passing @flags with
+ * IORESOURCE_PREFETCH set, which the caller must have established to be safe.
+ */
+int __pci_bus_alloc_resource(struct pci_bus *bus, struct resource *res,
+			     unsigned long flags, resource_size_t size,
+			     resource_size_t align, resource_size_t min,
+			     unsigned long type_mask, resource_alignf alignf,
+			     void *alignf_data)
+{
+#ifdef CONFIG_ARCH_DMA_ADDR_T_64BIT
+	int rc;
+
+	if (flags & IORESOURCE_MEM_64) {
+		rc = pci_bus_alloc_from_region(bus, res, flags, size, align,
+					       min, type_mask, alignf,
+					       alignf_data, &pci_high);
+		if (rc == 0)
+			return 0;
+
+		return pci_bus_alloc_from_region(bus, res, flags, size, align,
+						 min, type_mask, alignf,
+						 alignf_data, &pci_64_bit);
+	}
+#endif
+
+	return pci_bus_alloc_from_region(bus, res, flags, size, align, min,
+					 type_mask, alignf, alignf_data,
+					 &pci_32_bit);
+}
+
+/**
  * pci_bus_alloc_resource - allocate a resource from a parent bus
  * @bus: PCI bus
  * @res: resource to allocate
@@ -262,30 +306,12 @@ static int pci_bus_alloc_from_region(struct pci_bus *bus, struct resource *res,
  * for a specific device resource.
  */
 int pci_bus_alloc_resource(struct pci_bus *bus, struct resource *res,
-		resource_size_t size, resource_size_t align,
-		resource_size_t min, unsigned long type_mask,
-		resource_alignf alignf,
-		void *alignf_data)
+			   resource_size_t size, resource_size_t align,
+			   resource_size_t min, unsigned long type_mask,
+			   resource_alignf alignf, void *alignf_data)
 {
-#ifdef CONFIG_ARCH_DMA_ADDR_T_64BIT
-	int rc;
-
-	if (res->flags & IORESOURCE_MEM_64) {
-		rc = pci_bus_alloc_from_region(bus, res, size, align, min,
-					       type_mask, alignf, alignf_data,
-					       &pci_high);
-		if (rc == 0)
-			return 0;
-
-		return pci_bus_alloc_from_region(bus, res, size, align, min,
-						 type_mask, alignf, alignf_data,
-						 &pci_64_bit);
-	}
-#endif
-
-	return pci_bus_alloc_from_region(bus, res, size, align, min,
-					 type_mask, alignf, alignf_data,
-					 &pci_32_bit);
+	return __pci_bus_alloc_resource(bus, res, res->flags, size, align, min,
+					type_mask, alignf, alignf_data);
 }
 EXPORT_SYMBOL(pci_bus_alloc_resource);
 
