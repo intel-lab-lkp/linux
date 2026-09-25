@@ -11,6 +11,8 @@
 #include <linux/slab.h>
 #include <linux/string.h>
 
+#include "kstrtox.h"
+
 /*
  * max size needed by different bases to express U64
  * HEX: "0xFFFFFFFFFFFFFFFF" --> 18
@@ -137,22 +139,35 @@ EXPORT_SYMBOL(match_token);
  */
 static int match_number(substring_t *s, int *result, int base)
 {
-	char *endp;
 	char buf[NUMBER_BUF_LEN];
-	int ret;
-	long val;
+	unsigned long long val;
+	unsigned int radix = base;
+	const char *cp = buf;
+	bool negative;
+	unsigned int rv;
 
 	if (match_strlcpy(buf, s, NUMBER_BUF_LEN) >= NUMBER_BUF_LEN)
 		return -ERANGE;
-	ret = 0;
-	val = simple_strtol(buf, &endp, base);
-	if (endp == buf)
-		ret = -EINVAL;
-	else if (val < (long)INT_MIN || val > (long)INT_MAX)
-		ret = -ERANGE;
-	else
-		*result = (int) val;
-	return ret;
+
+	/*
+	 * Parse like simple_strtol() does, but keep the magnitude and the
+	 * overflow indication instead of truncating to a long, so that
+	 * values outside the range of an int can be rejected.
+	 */
+	negative = *cp == '-';
+	if (negative)
+		cp++;
+	cp = _parse_integer_fixup_radix(cp, &radix);
+	rv = _parse_integer(cp, radix, &val);
+	if (cp + (rv & ~KSTRTOX_OVERFLOW) == buf)
+		return -EINVAL;
+
+	if (rv & KSTRTOX_OVERFLOW ||
+	    val > (negative ? (unsigned long long)INT_MAX + 1 : INT_MAX))
+		return -ERANGE;
+
+	*result = negative ? -(long long)val : (long long)val;
+	return 0;
 }
 
 /**
