@@ -3463,7 +3463,9 @@ move_data:
 
 	case SetNewAttributeSizes:
 		new_sz = data;
-		if (!check_if_attr(rec, lrh) || !attr->non_res)
+		if (!check_if_attr(rec, lrh) || !attr->non_res ||
+		    dlen < offsetof(struct NEW_ATTRIBUTE_SIZES, data_size) +
+				   sizeof(new_sz->data_size))
 			goto dirty_vol;
 
 		attr->nres.alloc_size = new_sz->alloc_size;
