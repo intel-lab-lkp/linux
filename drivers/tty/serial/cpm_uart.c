@@ -1517,6 +1517,7 @@ static int cpm_uart_probe(struct platform_device *ofdev)
 {
 	int index = probe_index++;
 	struct uart_cpm_port *pinfo = &cpm_uart_ports[index];
+	int irq;
 	int ret;
 
 	pinfo->port.line = index;
@@ -1524,14 +1525,15 @@ static int cpm_uart_probe(struct platform_device *ofdev)
 	if (index >= UART_NR)
 		return -ENODEV;
 
+	irq = platform_get_irq(ofdev, 0);
+	if (irq < 0)
+		return irq;
+
 	platform_set_drvdata(ofdev, pinfo);
 
 	/* initialize the device pointer for the port */
 	pinfo->port.dev = &ofdev->dev;
-
-	pinfo->port.irq = platform_get_irq(ofdev, 0);
-	if (pinfo->port.irq < 0)
-		return pinfo->port.irq;
+	pinfo->port.irq = irq;
 
 	ret = cpm_uart_init_port(ofdev->dev.of_node, pinfo);
 	if (!ret)
