@@ -286,4 +286,20 @@ TEST_F(pcie_ep_doorbell, DOORBELL_TEST)
 		SKIP(return, "Doorbell test is not supported");
 	EXPECT_FALSE(ret) TH_LOG("Test failed for Doorbell\n");
 }
-TEST_HARNESS_MAIN
+
+static bool test_device_available(void)
+{
+	return access(test_device, F_OK) == 0;
+}
+
+int main(int argc, char **argv)
+{
+	/*
+	 * Only the plain invocation, which is the one kselftest uses, turns
+	 * into a skip, so that -l and -h keep working without the hardware.
+	 */
+	if (argc == 1 && !test_device_available())
+		ksft_exit_skip("no PCI endpoint test device %s\n", test_device);
+
+	return test_harness_run(argc, argv);
+}
