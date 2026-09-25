@@ -96,6 +96,13 @@ struct btrfs_bio {
 	bool can_use_append:1;
 
 	/*
+	 * If the bio is delayed.
+	 *
+	 * A delayed bbio will not be directly submitted.
+	 */
+	bool is_delayed:1;
+
+	/*
 	 * This member must come last, bio_alloc_bioset will allocate enough
 	 * bytes for entire btrfs_bio but relies on bio being last.
 	 */
