@@ -336,8 +336,11 @@ error:
 static int __init gtdt_import_sbsa_gwdt(struct acpi_gtdt_watchdog *wd,
 					int index)
 {
+	struct property_entry props[4] = {};
 	struct platform_device *pdev;
-	int irq;
+	u32 gsi[1], triggering[1], polarity[1];
+	struct fwnode_handle *fwnode;
+	int ret, nr_res = 2;
 
 	/*
 	 * According to SBSA specification the size of refresh and control
@@ -346,9 +349,7 @@ static int __init gtdt_import_sbsa_gwdt(struct acpi_gtdt_watchdog *wd,
 	struct resource res[] = {
 		DEFINE_RES_MEM(wd->control_frame_address, SZ_4K),
 		DEFINE_RES_MEM(wd->refresh_frame_address, SZ_4K),
-		{},
 	};
-	int nr_res = ARRAY_SIZE(res);
 
 	pr_debug("found a Watchdog (0x%llx/0x%llx gsi:%u flags:0x%x).\n",
 		 wd->refresh_frame_address, wd->control_frame_address,
@@ -359,26 +360,58 @@ static int __init gtdt_import_sbsa_gwdt(struct acpi_gtdt_watchdog *wd,
 		return -EINVAL;
 	}
 
-	irq = map_gt_gsi(wd->timer_interrupt, wd->timer_flags);
-	res[2] = DEFINE_RES_IRQ(irq);
-	if (irq <= 0) {
-		pr_warn("failed to map the Watchdog interrupt.\n");
-		nr_res--;
-	}
-
 	/*
 	 * Add a platform device named "sbsa-gwdt" to match the platform driver.
 	 * "sbsa-gwdt": SBSA(Server Base System Architecture) Generic Watchdog
 	 * The platform driver can get device info below by matching this name.
 	 */
-	pdev = platform_device_register_simple("sbsa-gwdt", index, res, nr_res);
-	if (IS_ERR(pdev)) {
-		if (irq > 0)
-			acpi_unregister_gsi(wd->timer_interrupt);
-		return PTR_ERR(pdev);
+	pdev = platform_device_alloc("sbsa-gwdt", index);
+	if (!pdev)
+		return -ENOMEM;
+
+	ret = platform_device_add_resources(pdev, res, nr_res);
+	if (ret)
+		goto dev_put;
+
+	fwnode = acpi_alloc_fwnode_static();
+	if (!fwnode) {
+		ret = -ENOMEM;
+		goto dev_put;
 	}
 
+	platform_device_set_fwnode(pdev, fwnode);
+
+	if (wd->timer_interrupt) {
+		gsi[0] = wd->timer_interrupt;
+		triggering[0] = (wd->timer_flags & ACPI_GTDT_INTERRUPT_MODE) ?
+			ACPI_EDGE_SENSITIVE : ACPI_LEVEL_SENSITIVE;
+		polarity[0] = (wd->timer_flags & ACPI_GTDT_INTERRUPT_POLARITY) ?
+			ACPI_ACTIVE_LOW : ACPI_ACTIVE_HIGH;
+
+		props[0] = PROPERTY_ENTRY_U32_ARRAY(ACPI_IRQ_PROP_GSI, gsi);
+		props[1] = PROPERTY_ENTRY_U32_ARRAY(ACPI_IRQ_PROP_GSI_TRIGGER,
+						    triggering);
+		props[2] = PROPERTY_ENTRY_U32_ARRAY(ACPI_IRQ_PROP_GSI_POLARITY,
+						    polarity);
+
+		ret = device_create_managed_software_node(&pdev->dev, props, NULL);
+		if (ret)
+			goto fwnode_free;
+	}
+
+	ret = platform_device_add(pdev);
+	if (ret)
+		goto fwnode_free;
+
 	return 0;
+
+fwnode_free:
+	device_remove_software_node(&pdev->dev);
+	platform_device_set_fwnode(pdev, NULL);
+	acpi_free_fwnode_static(fwnode);
+dev_put:
+	platform_device_put(pdev);
+	return ret;
 }
 
 static int __init gtdt_platform_timer_init(void)
