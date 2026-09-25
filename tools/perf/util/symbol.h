@@ -227,6 +227,12 @@ void symbol__elf_init(void);
 int symbol__annotation_init(void);
 
 struct symbol *symbol__new(u64 start, u64 len, u8 binding, u8 type, const char *name);
+struct symbol *symbol__new_bounded(u64 start, u64 len, u8 binding, u8 type,
+				  const char *name, bool *budget_exceeded);
+size_t symbol__bytes_used(void);
+void symbol__account_bytes(size_t bytes);
+bool symbol__try_account_bytes(size_t bytes);
+void symbol__unaccount_bytes(size_t bytes);
 size_t __symbol__fprintf_symname_offs(const struct symbol *sym,
 				      const struct addr_location *al,
 				      bool unknown_as_addr,

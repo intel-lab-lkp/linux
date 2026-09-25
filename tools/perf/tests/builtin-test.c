@@ -154,6 +154,7 @@ static struct test_suite *generic_tests[] = {
 	&suite__event_groups,
 	&suite__hybrid_merge,
 	&suite__symbols,
+	&suite__symbol_bytes,
 	&suite__util,
 	&suite__subcmd_help,
 	&suite__kallsyms_split,
