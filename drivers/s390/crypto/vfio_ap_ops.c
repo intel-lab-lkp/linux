@@ -841,14 +841,14 @@ static bool _queue_passable(struct vfio_ap_queue *q)
 	if (!q)
 		return false;
 
-	switch (q->reset_status.response_code) {
-	case AP_RESPONSE_NORMAL:
-	case AP_RESPONSE_DECONFIGURED:
-	case AP_RESPONSE_CHECKSTOPPED:
-		return true;
-	default:
-		return false;
-	}
+	/*
+	 * A queue is only passable if zeroization was confirmed by
+	 * apq_reset_check() via TAPQ status bit verification. This is
+	 * indicated by reset_status.response_code == AP_RESPONSE_NORMAL (0).
+	 * This is to protect against leaking the internal state of the queue
+	 * to the guest.
+	 */
+	return q->reset_status.response_code == AP_RESPONSE_NORMAL;
 }
 
 /*
@@ -2809,8 +2809,9 @@ int vfio_ap_mdev_probe_queue(struct ap_device *apdev)
 
 	q->apqn = apqn;
 	q->saved_isc = VFIO_AP_ISC_INVALID;
-	memset(&q->reset_status, 0, sizeof(q->reset_status));
 	INIT_WORK(&q->reset_work, apq_reset_check);
+	vfio_ap_mdev_reset_queue(q);
+	flush_work(&q->reset_work);
 
 	if (matrix_mdev) {
 		vfio_ap_mdev_link_queue(matrix_mdev, q);
@@ -2902,8 +2903,8 @@ done:
 		vfio_ap_unlink_queue_fr_mdev(q);
 
 	dev_set_drvdata(&apdev->device, NULL);
-	kfree(q);
 	release_update_locks_for_mdev(matrix_mdev);
+	kfree(q);
 }
 
 /**
@@ -3308,4 +3309,47 @@ do_unlock:
 	}
 
 	mutex_unlock(&matrix_dev->guests_lock);
+}
+
+/**
+ * vfio_ap_on_qstate_transition:
+ *
+ * AP bus callback notifying the vfio_ap device driver that the state of a
+ * queue has transitioned.
+ *
+ * @qstate_trans: the object containing a reference to the queue device and the
+ *		  state to which it transitioned.
+ */
+void vfio_ap_on_qstate_transition(struct ap_qstate_transition *qstate_trans)
+{
+	struct vfio_ap_queue *q = vfio_ap_find_queue(qstate_trans->queue->qid);
+	DECLARE_BITMAP(apm_filtered, AP_DEVICES);
+
+	/*
+	 * If the queue is not bound to the vfio_ap device driver, then it won't
+	 * be passed through to a guest; so, no need to continue.
+	 */
+	if (!q)
+		return;
+
+	get_update_locks_for_mdev(q->matrix_mdev);
+
+	switch (qstate_trans->new_state) {
+	case AP_QUEUE_CONFIG_ON:
+	case AP_QUEUE_CHKSTOP_OFF:
+		vfio_ap_mdev_reset_queue(q);
+		flush_work(&q->reset_work);
+
+		if (q->matrix_mdev) {
+			if (vfio_ap_mdev_filter_matrix(q->matrix_mdev, apm_filtered)) {
+				vfio_ap_mdev_update_guest_apcb(q->matrix_mdev);
+				reset_queues_for_apids(q->matrix_mdev, apm_filtered);
+			}
+		}
+		break;
+	default:
+		break;
+	}
+
+	release_update_locks_for_mdev(q->matrix_mdev);
 }

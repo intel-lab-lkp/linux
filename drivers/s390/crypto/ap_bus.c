@@ -1979,6 +1979,28 @@ static inline void notify_scan_complete(void)
 			 __drv_notify_scan_complete);
 }
 
+/* Helper function for notify_config_changed */
+static int __drv_notify_qstate_transitioned(struct device_driver *drv, void *data)
+{
+	struct ap_driver *ap_drv = to_ap_drv(drv);
+	struct ap_qstate_transition *qstate_trans = data;
+
+	if (try_module_get(drv->owner)) {
+		if (ap_drv->on_qstate_transition)
+			ap_drv->on_qstate_transition(qstate_trans);
+		module_put(drv->owner);
+	}
+
+	return 0;
+}
+
+/* Notify all drivers about a queue state transition */
+static inline void notify_qstate_transitioned(struct ap_qstate_transition *qstate_trans)
+{
+	bus_for_each_drv(&ap_bus_type, NULL, qstate_trans,
+			 __drv_notify_qstate_transitioned);
+}
+
 /*
  * Helper function for ap_scan_bus().
  * Remove card device and associated queue devices.
@@ -1998,6 +2020,7 @@ static inline void ap_scan_rm_card_dev_and_queue_devs(struct ap_card *ac)
  */
 static inline void ap_scan_domains(struct ap_card *ac)
 {
+	struct ap_qstate_transition qstate_trans;
 	struct ap_tapq_hwinfo hwinfo;
 	bool decfg, chkstop;
 	struct ap_queue *aq;
@@ -2093,6 +2116,13 @@ static inline void ap_scan_domains(struct ap_card *ac)
 			spin_unlock_bh(&aq->lock);
 			pr_debug("(%d,%d) queue dev checkstop on\n",
 				 ac->id, dom);
+			/*
+			 * Notify drivers that the queue state has transitioned
+			 * to checkstopped.
+			 */
+			qstate_trans.queue = aq;
+			qstate_trans.new_state = AP_QUEUE_CHKSTOP_ON;
+			notify_qstate_transitioned(&qstate_trans);
 			/* 'receive' pending messages with -EAGAIN */
 			ap_flush_queue(aq);
 			goto put_dev_and_continue;
@@ -2104,6 +2134,13 @@ static inline void ap_scan_domains(struct ap_card *ac)
 			spin_unlock_bh(&aq->lock);
 			pr_debug("(%d,%d) queue dev checkstop off\n",
 				 ac->id, dom);
+			/*
+			 * Notify drivers that the queue state has transitioned
+			 * to not checkstopped.
+			 */
+			qstate_trans.queue = aq;
+			qstate_trans.new_state = AP_QUEUE_CHKSTOP_OFF;
+			notify_qstate_transitioned(&qstate_trans);
 			goto put_dev_and_continue;
 		}
 		/* config state change */
@@ -2117,6 +2154,13 @@ static inline void ap_scan_domains(struct ap_card *ac)
 			spin_unlock_bh(&aq->lock);
 			pr_debug("(%d,%d) queue dev config off\n",
 				 ac->id, dom);
+			/*
+			 * Notify drivers that the queue state has transitioned
+			 * to deconfigured.
+			 */
+			qstate_trans.queue = aq;
+			qstate_trans.new_state = AP_QUEUE_CONFIG_OFF;
+			notify_qstate_transitioned(&qstate_trans);
 			ap_send_config_uevent(&aq->ap_dev, aq->config);
 			/* 'receive' pending messages with -EAGAIN */
 			ap_flush_queue(aq);
@@ -2129,6 +2173,13 @@ static inline void ap_scan_domains(struct ap_card *ac)
 			spin_unlock_bh(&aq->lock);
 			pr_debug("(%d,%d) queue dev config on\n",
 				 ac->id, dom);
+			/*
+			 * Notify drivers that the queue state has transitioned
+			 * to configured.
+			 */
+			qstate_trans.queue = aq;
+			qstate_trans.new_state = AP_QUEUE_CONFIG_ON;
+			notify_qstate_transitioned(&qstate_trans);
 			ap_send_config_uevent(&aq->ap_dev, aq->config);
 			goto put_dev_and_continue;
 		}

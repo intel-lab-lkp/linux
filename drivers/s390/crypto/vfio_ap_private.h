@@ -165,4 +165,6 @@ void vfio_ap_on_cfg_changed(struct ap_config_info *new_config_info,
 void vfio_ap_on_scan_complete(struct ap_config_info *new_config_info,
 			      struct ap_config_info *old_config_info);
 
+void vfio_ap_on_qstate_transition(struct ap_qstate_transition *qstate_trans);
+
 #endif /* _VFIO_AP_PRIVATE_H_ */
