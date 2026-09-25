@@ -32,6 +32,7 @@ properties:
               - fujitsu,mb85rs256
               - fujitsu,mb85rs64
               - microchip,25aa010a
+              - microchip,25aa128
               - microchip,at25160bn
               - microchip,25lc040
               - st,m95m02
