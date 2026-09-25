@@ -72,11 +72,55 @@ static const char *const abort_sources[] = {
 		"incorrect slave-transmitter mode configuration",
 };
 
+static const struct dw_i2c_con_bits dw_i2c_con_bits = {
+	.master			= DW_IC_CON_MASTER,
+	.speed_std		= DW_IC_CON_SPEED_STD,
+	.speed_fast		= DW_IC_CON_SPEED_FAST,
+	.speed_high		= DW_IC_CON_SPEED_HIGH,
+	.speed_mask		= DW_IC_CON_SPEED_MASK,
+	.bit10_slave		= DW_IC_CON_10BITADDR_SLAVE,
+	.bit10_master		= DW_IC_CON_10BITADDR_MASTER,
+	.restart_en		= DW_IC_CON_RESTART_EN,
+	.slave_disable		= DW_IC_CON_SLAVE_DISABLE,
+	.stop_det_ifaddressed	= DW_IC_CON_STOP_DET_IFADDRESSED,
+	.tx_empty_ctrl		= DW_IC_CON_TX_EMPTY_CTRL,
+	.rx_fifo_full_hld_ctrl	= DW_IC_CON_RX_FIFO_FULL_HLD_CTRL,
+	.bus_clear_ctrl		= DW_IC_CON_BUS_CLEAR_CTRL,
+};
+
+/* "snps,designware-i2c": dedicated read-to-clear register ID per logical interrupt */
+static const u32 dw_i2c_intr_clr[DW_INTR_IDX_MAX] = {
+	[DW_INTR_IDX_INTR]      = DW_IC_CLR_INTR,
+	[DW_INTR_IDX_RX_UNDER]  = DW_IC_CLR_RX_UNDER,
+	[DW_INTR_IDX_RX_OVER]   = DW_IC_CLR_RX_OVER,
+	[DW_INTR_IDX_TX_OVER]   = DW_IC_CLR_TX_OVER,
+	[DW_INTR_IDX_RD_REQ]    = DW_IC_CLR_RD_REQ,
+	[DW_INTR_IDX_TX_ABRT]   = DW_IC_CLR_TX_ABRT,
+	[DW_INTR_IDX_RX_DONE]   = DW_IC_CLR_RX_DONE,
+	[DW_INTR_IDX_ACTIVITY]  = DW_IC_CLR_ACTIVITY,
+	[DW_INTR_IDX_STOP_DET]  = DW_IC_CLR_STOP_DET,
+	[DW_INTR_IDX_START_DET] = DW_IC_CLR_START_DET,
+	[DW_INTR_IDX_GEN_CALL]  = DW_IC_CLR_GEN_CALL,
+};
+
+/**
+ * i2c_dw_select_variant() - Pick the register offset table, CON-register bit
+ * layout and interrupt-ack mapping matching this device's IP variant
+ * @dev: device private data
+ */
+void i2c_dw_select_variant(struct dw_i2c_dev *dev)
+{
+	dev->regs = dw_i2c_reg_offsets;
+	dev->con_bits = &dw_i2c_con_bits;
+	dev->intr_clr = dw_i2c_intr_clr;
+}
+EXPORT_SYMBOL_GPL(i2c_dw_select_variant);
+
 static int dw_reg_read(void *context, unsigned int reg, unsigned int *val)
 {
 	struct dw_i2c_dev *dev = context;
 
-	*val = readl(dev->base + reg);
+	*val = readl(dev->base + dev->regs[reg]);
 
 	return 0;
 }
@@ -85,7 +129,7 @@ static int dw_reg_write(void *context, unsigned int reg, unsigned int val)
 {
 	struct dw_i2c_dev *dev = context;
 
-	writel(val, dev->base + reg);
+	writel(val, dev->base + dev->regs[reg]);
 
 	return 0;
 }
@@ -94,7 +138,7 @@ static int dw_reg_read_swab(void *context, unsigned int reg, unsigned int *val)
 {
 	struct dw_i2c_dev *dev = context;
 
-	*val = swab32(readl(dev->base + reg));
+	*val = swab32(readl(dev->base + dev->regs[reg]));
 
 	return 0;
 }
@@ -103,7 +147,7 @@ static int dw_reg_write_swab(void *context, unsigned int reg, unsigned int val)
 {
 	struct dw_i2c_dev *dev = context;
 
-	writel(swab32(val), dev->base + reg);
+	writel(swab32(val), dev->base + dev->regs[reg]);
 
 	return 0;
 }
@@ -111,9 +155,10 @@ static int dw_reg_write_swab(void *context, unsigned int reg, unsigned int val)
 static int dw_reg_read_word(void *context, unsigned int reg, unsigned int *val)
 {
 	struct dw_i2c_dev *dev = context;
+	unsigned int offset = dev->regs[reg];
 
-	*val = readw(dev->base + reg) |
-		(readw(dev->base + reg + DW_IC_REG_STEP_BYTES) << DW_IC_REG_WORD_SHIFT);
+	*val = readw(dev->base + offset) |
+		(readw(dev->base + offset + DW_IC_REG_STEP_BYTES) << DW_IC_REG_WORD_SHIFT);
 
 	return 0;
 }
@@ -121,9 +166,10 @@ static int dw_reg_read_word(void *context, unsigned int reg, unsigned int *val)
 static int dw_reg_write_word(void *context, unsigned int reg, unsigned int val)
 {
 	struct dw_i2c_dev *dev = context;
+	unsigned int offset = dev->regs[reg];
 
-	writew(val, dev->base + reg);
-	writew(val >> DW_IC_REG_WORD_SHIFT, dev->base + reg + DW_IC_REG_STEP_BYTES);
+	writew(val, dev->base + offset);
+	writew(val >> DW_IC_REG_WORD_SHIFT, dev->base + offset + DW_IC_REG_STEP_BYTES);
 
 	return 0;
 }
@@ -143,7 +189,7 @@ static int i2c_dw_init_regmap(struct dw_i2c_dev *dev)
 	struct regmap_config map_cfg = {
 		.reg_bits = 32,
 		.val_bits = 32,
-		.reg_stride = 4,
+		.reg_stride = 1,
 		.disable_locking = true,
 		.reg_read = dw_reg_read,
 		.reg_write = dw_reg_write,
@@ -163,7 +209,7 @@ static int i2c_dw_init_regmap(struct dw_i2c_dev *dev)
 	if (ret)
 		return ret;
 
-	reg = readl(dev->base + DW_IC_COMP_TYPE);
+	reg = readl(dev->base + dev->regs[DW_IC_COMP_TYPE]);
 	i2c_dw_release_lock(dev);
 
 	if ((dev->flags & MODEL_MASK) == MODEL_AMD_NAVI_GPU)
@@ -845,7 +891,6 @@ u32 i2c_dw_func(struct i2c_adapter *adap)
 
 void i2c_dw_disable(struct dw_i2c_dev *dev)
 {
-	unsigned int dummy;
 	int ret;
 
 	ret = i2c_dw_acquire_lock(dev);
@@ -857,7 +902,7 @@ void i2c_dw_disable(struct dw_i2c_dev *dev)
 
 	/* Disable all interrupts */
 	__i2c_dw_write_intr_mask(dev, 0);
-	regmap_read(dev->map, DW_IC_CLR_INTR, &dummy);
+	i2c_dw_ack_intr(dev, DW_INTR_IDX_INTR);
 
 	i2c_dw_release_lock(dev);
 }
@@ -1055,7 +1100,7 @@ void i2c_dw_shutdown(struct dw_i2c_dev *dev)
 	 * disable bit while the controller is still enabled.
 	 */
 	regmap_read(dev->map, DW_IC_CON, &con);
-	con |= DW_IC_CON_SLAVE_DISABLE;
+	con |= dev->con_bits->slave_disable;
 	regmap_write(dev->map, DW_IC_CON, con);
 
 	i2c_dw_disable(dev);

@@ -156,6 +156,8 @@ static int dw_i2c_plat_probe(struct platform_device *pdev)
 	dev->flags = flags;
 	platform_set_drvdata(pdev, dev);
 
+	i2c_dw_select_variant(dev);
+
 	ret = dw_i2c_plat_request_regs(dev);
 	if (ret)
 		return ret;

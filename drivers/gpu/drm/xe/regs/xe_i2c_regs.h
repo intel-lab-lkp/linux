@@ -2,6 +2,7 @@
 #ifndef _XE_I2C_REGS_H_
 #define _XE_I2C_REGS_H_
 
+#include <linux/designware_i2c.h>
 #include <linux/pci_regs.h>
 
 #include "xe_reg_defs.h"
@@ -20,6 +21,6 @@
 #define I2C_CONFIG_CMD			XE_REG(I2C_CONFIG_SPACE_OFFSET + PCI_COMMAND)
 #define I2C_CONFIG_PMCSR		XE_REG(I2C_CONFIG_SPACE_OFFSET + 0x84)
 
-#define I2C_REG(reg)			XE_REG((reg) + I2C_MEM_SPACE_OFFSET)
+#define I2C_REG(reg)			XE_REG(dw_i2c_reg_offsets[reg] + I2C_MEM_SPACE_OFFSET)
 
 #endif /* _XE_I2C_REGS_H_ */

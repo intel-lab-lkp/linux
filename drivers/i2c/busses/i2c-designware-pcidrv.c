@@ -246,6 +246,8 @@ static int i2c_dw_pci_probe(struct pci_dev *pdev,
 
 	pci_set_drvdata(pdev, dev);
 
+	i2c_dw_select_variant(dev);
+
 	if (controller->setup) {
 		r = controller->setup(pdev, controller);
 		if (r)

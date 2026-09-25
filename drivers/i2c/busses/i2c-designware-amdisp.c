@@ -46,6 +46,7 @@ static int amd_isp_dw_i2c_plat_probe(struct platform_device *pdev)
 	isp_i2c_dev->flags |= ACCESS_POLLING;
 	platform_set_drvdata(pdev, isp_i2c_dev);
 
+	i2c_dw_select_variant(isp_i2c_dev);
 	isp_i2c_dev->base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(isp_i2c_dev->base))
 		return dev_err_probe(&pdev->dev, PTR_ERR(isp_i2c_dev->base),
