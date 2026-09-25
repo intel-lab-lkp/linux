@@ -6031,6 +6031,32 @@ static int init_rescuer(struct workqueue_struct *wq)
 	return 0;
 }
 
+static void wq_init_max_active(struct workqueue_struct *wq, int max_active)
+{
+	int effective_max_active;
+
+	if (wq->flags & WQ_BH) {
+		/*
+		 * BH workqueues always share a single execution context per CPU
+		 * and don't impose any max_active limit.
+		 */
+		effective_max_active = INT_MAX;
+	} else {
+		effective_max_active = max_active ?: WQ_DFL_ACTIVE;
+		effective_max_active = wq_clamp_max_active(effective_max_active,
+							   wq->flags, wq->name);
+	}
+
+	if (wq->flags & WQ_UNBOUND) {
+		wq->max_active = effective_max_active;
+		wq->min_active = min(effective_max_active, WQ_DFL_MIN_ACTIVE);
+		wq->saved_min_active = wq->min_active;
+	} else {
+		wq->percpu_max_active = effective_max_active;
+	}
+	wq->saved_max_active = effective_max_active;
+}
+
 /**
  * wq_adjust_max_active - update a wq's max_active to the current setting
  * @wq: target workqueue
@@ -6156,27 +6182,9 @@ static struct workqueue_struct *__alloc_workqueue(const char *fmt,
 		flags &= ~WQ_PERCPU;
 	}
 
-	if (flags & WQ_BH) {
-		/*
-		 * BH workqueues always share a single execution context per CPU
-		 * and don't impose any max_active limit.
-		 */
-		max_active = INT_MAX;
-	} else {
-		max_active = max_active ?: WQ_DFL_ACTIVE;
-		max_active = wq_clamp_max_active(max_active, flags, wq->name);
-	}
-
 	/* init wq */
 	wq->flags = flags;
-	if (flags & WQ_UNBOUND) {
-		wq->max_active = max_active;
-		wq->min_active = min(max_active, WQ_DFL_MIN_ACTIVE);
-		wq->saved_min_active = wq->min_active;
-	} else {
-		wq->percpu_max_active = max_active;
-	}
-	wq->saved_max_active = max_active;
+	wq_init_max_active(wq, max_active);
 	mutex_init(&wq->mutex);
 	atomic_set(&wq->nr_pwqs_to_flush, 0);
 	INIT_LIST_HEAD(&wq->pwqs);
