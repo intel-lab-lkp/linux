@@ -2472,6 +2472,25 @@ TEST_F(iommufd_dirty_tracking, get_dirty_bitmap_overrun)
 	test_ioctl_destroy(hwpt_id);
 }
 
+TEST_F(iommufd_dirty_tracking, get_dirty_bitmap_zero_length)
+{
+	uint32_t ioas_id = self->ioas_id;
+	uint32_t hwpt_id;
+
+	test_cmd_hwpt_alloc_iommupt(self->idev_id, ioas_id,
+				    IOMMU_HWPT_ALLOC_DIRTY_TRACKING,
+				    MOCK_IOMMUPT_DEFAULT, &hwpt_id);
+	test_cmd_set_dirty_tracking(hwpt_id, true);
+
+	/* Only iova 0 wraps the zero length into an accepted range. */
+	EXPECT_ERRNO(EINVAL,
+		     _test_cmd_get_dirty_bitmap(self->fd, hwpt_id, 0, 0,
+						self->page_size, self->bitmap,
+						0));
+
+	test_ioctl_destroy(hwpt_id);
+}
+
 /* VFIO compatibility IOCTLs */
 
 TEST_F(iommufd, simple_ioctls)
