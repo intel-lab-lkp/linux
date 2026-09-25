@@ -680,6 +680,7 @@ int nfsd_create_serv(struct net *net, bool no_rpcbind)
 		return -ENOMEM;
 	}
 	serv->sv_reply_sent = nfsd_cache_reply_sent;
+	serv->sv_tls = true;
 
 	/* svc_bind() reads this, so set it first. */
 	serv->sv_no_rpcbind = no_rpcbind;
