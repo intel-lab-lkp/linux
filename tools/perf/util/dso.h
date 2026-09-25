@@ -264,6 +264,7 @@ struct dso_data {
 #ifdef REFCNT_CHECKING
 	struct dso	 *dso;
 #endif
+	char		 *path;
 	int		 fd;
 	int		 status;
 	u32		 status_seen;
@@ -910,6 +911,7 @@ bool dso__data_get_fd(struct dso *dso, struct machine *machine, int *fd)
 	EXCLUSIVE_TRYLOCK_FUNCTION(true, _dso__data_open_lock);
 void dso__data_put_fd(struct dso *dso) UNLOCK_FUNCTION(_dso__data_open_lock);
 void dso__data_close(struct dso *dso) LOCKS_EXCLUDED(_dso__data_open_lock);
+int dso__data_set_path(struct dso *dso, const char *path);
 
 int dso__data_file_size(struct dso *dso, struct machine *machine);
 off_t dso__data_size(struct dso *dso, struct machine *machine);
