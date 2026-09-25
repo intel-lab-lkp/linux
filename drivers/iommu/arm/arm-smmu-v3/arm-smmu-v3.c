@@ -1641,6 +1641,68 @@ void arm_smmu_write_cd_entry(struct arm_smmu_master *master, int ssid,
 	arm_smmu_write_entry(&cd_writer.writer, cdptr->data, target->data);
 }
 
+/* Invalidate every stage-1 TLB entry tagged with @asid. */
+static void arm_smmu_tlb_inv_asid(struct arm_smmu_device *smmu, u16 asid)
+{
+	enum arm_smmu_cmdq_opcode op = (smmu->features & ARM_SMMU_FEAT_E2H) ?
+					       CMDQ_OP_TLBI_EL2_ASID :
+					       CMDQ_OP_TLBI_NH_ASID;
+
+	arm_smmu_cmdq_issue_cmd_with_sync(smmu,
+					  arm_smmu_make_cmd_tlbi(op, asid, 0));
+}
+
+static void arm_smmu_cd_set_asid(struct arm_smmu_cd *cd, u16 asid)
+{
+	cd->data[0] &= ~cpu_to_le64(CTXDESC_CD_0_ASID);
+	cd->data[0] |= cpu_to_le64(FIELD_PREP(CTXDESC_CD_0_ASID, asid));
+}
+
+static void arm_smmu_replace_cd_entry(struct arm_smmu_master *master, int ssid,
+				      struct arm_smmu_cd *cdptr,
+				      const struct arm_smmu_cd *target)
+{
+	struct arm_smmu_device *smmu = master->smmu;
+	struct arm_smmu_cd stage;
+	u32 tmp_asid;
+
+	lockdep_assert_held(&arm_smmu_asid_lock);
+
+	/*
+	 * Nothing is translating through an invalid CD, and an update that
+	 * invalidates one cannot be made hitless anyway.
+	 */
+	if (!(cdptr->data[0] & cpu_to_le64(CTXDESC_CD_0_V)) ||
+	    !(target->data[0] & cpu_to_le64(CTXDESC_CD_0_V)))
+		goto write_directly;
+
+	if (xa_alloc(&arm_smmu_asid_xa, &tmp_asid, XA_ZERO_ENTRY,
+		     XA_LIMIT(1, (1 << smmu->asid_bits) - 1), GFP_KERNEL))
+		goto write_directly;
+
+	/* Copy the existing cd entry and update only the ASID. */
+	stage = *cdptr;
+	arm_smmu_cd_set_asid(&stage, tmp_asid);
+	arm_smmu_write_cd_entry(master, ssid, cdptr, &stage);
+
+	/* Copy the target cd entry and update ASID to the temporary ASID. */
+	stage = *target;
+	arm_smmu_cd_set_asid(&stage, tmp_asid);
+	arm_smmu_write_cd_entry(master, ssid, cdptr, &stage);
+
+	arm_smmu_tlb_inv_asid(smmu, tmp_asid);
+
+	/* Update to the target cd entry as it should be hitless now. */
+	arm_smmu_write_cd_entry(master, ssid, cdptr, target);
+
+	arm_smmu_tlb_inv_asid(smmu, tmp_asid);
+	xa_erase(&arm_smmu_asid_xa, tmp_asid);
+	return;
+
+write_directly:
+	arm_smmu_write_cd_entry(master, ssid, cdptr, target);
+}
+
 void arm_smmu_make_s1_cd(struct arm_smmu_cd *target,
 			 struct arm_smmu_master *master,
 			 struct arm_smmu_domain *smmu_domain)
@@ -3664,8 +3726,8 @@ static int arm_smmu_attach_dev(struct iommu_domain *domain, struct device *dev,
 		struct arm_smmu_cd target_cd;
 
 		arm_smmu_make_s1_cd(&target_cd, master, smmu_domain);
-		arm_smmu_write_cd_entry(master, IOMMU_NO_PASID, cdptr,
-					&target_cd);
+		arm_smmu_replace_cd_entry(master, IOMMU_NO_PASID, cdptr,
+					  &target_cd);
 		arm_smmu_make_cdtable_ste(&target, master, state.ats_enabled,
 					  STRTAB_STE_1_S1DSS_SSID0);
 		arm_smmu_install_ste_for_dev(master, &target);
