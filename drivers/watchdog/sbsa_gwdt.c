@@ -352,6 +352,8 @@ static int sbsa_gwdt_probe(struct platform_device *pdev)
 
 	if (action) {
 		irq = platform_get_irq(pdev, 0);
+		if (irq == -EPROBE_DEFER)
+			return dev_err_probe(dev, irq, "failed to get ws0 interrupt\n");
 		if (irq < 0) {
 			action = 0;
 			dev_warn(dev, "unable to get ws0 interrupt.\n");
