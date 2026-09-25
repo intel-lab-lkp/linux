@@ -1238,6 +1238,7 @@ static int ucc_uart_probe(struct platform_device *ofdev)
 	struct uart_qe_port *qe_port = NULL;
 	struct resource res;
 	u32 val;
+	int irq;
 	int ret;
 
 	/*
@@ -1246,6 +1247,10 @@ static int ucc_uart_probe(struct platform_device *ofdev)
 	ret = soft_uart_init(ofdev);
 	if (ret)
 		return ret;
+
+	irq = platform_get_irq(ofdev, 0);
+	if (irq < 0)
+		return irq;
 
 	qe_port = kzalloc_obj(struct uart_qe_port);
 	if (!qe_port) {
@@ -1338,13 +1343,7 @@ static int ucc_uart_probe(struct platform_device *ofdev)
 		goto out_free;
 	}
 
-	qe_port->port.irq = irq_of_parse_and_map(np, 0);
-	if (qe_port->port.irq == 0) {
-		dev_err(&ofdev->dev, "could not map IRQ for UCC%u\n",
-		       qe_port->ucc_num + 1);
-		ret = -EINVAL;
-		goto out_free;
-	}
+	qe_port->port.irq = irq;
 
 	/*
 	 * Newer device trees have an "fsl,qe" compatible property for the QE
