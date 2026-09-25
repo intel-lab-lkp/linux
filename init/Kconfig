@@ -173,6 +173,13 @@ config CC_HAS_ALLOC_TOKEN
 config CC_HAS_MULTIDIMENSIONAL_NONSTRING
 	def_bool $(success,echo 'char tag[][4] __attribute__((__nonstring__)) = { };' | $(CC) $(CLANG_FLAGS) -x c - -c -o /dev/null -Werror)
 
+config CC_HAS_OPT_INLINE_MEMSET
+	def_bool $(cc-option,-finline-stringops=memset)
+
+config CC_OPT_INLINE_MEMSET
+	string
+	default "-finline-stringops=memset" if CC_HAS_OPT_INLINE_MEMSET
+
 config LD_CAN_USE_KEEP_IN_OVERLAY
 	# ld.lld prior to 21.0.0 did not support KEEP within an overlay description
 	# https://github.com/llvm/llvm-project/pull/130661

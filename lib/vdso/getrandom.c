@@ -3,7 +3,6 @@
  * Copyright (C) 2022-2024 Jason A. Donenfeld <Jason@zx2c4.com>. All Rights Reserved.
  */
 
-#include <linux/array_size.h>
 #include <linux/minmax.h>
 #include <vdso/datapage.h>
 #include <vdso/getrandom.h>
@@ -28,6 +27,18 @@
 		len -= sizeof(type);						\
 	}									\
 } while (0)
+
+#if __has_builtin(__builtin_memset_inline)
+#define memset_inline(dst, value, size) __builtin_memset_inline(dst, value, size)
+#elif IS_ENABLED(CONFIG_CC_HAS_OPT_INLINE_MEMSET)
+#define memset_inline(dst, value, size) __builtin_memset(dst, value, size)
+#else
+static inline void memset_inline(void *dst, int value, size_t size)
+{
+	for (char *d = dst; size--;)
+		*d++ = value;
+}
+#endif
 
 static void memcpy_and_zero_src(void *dst, void *src, size_t len)
 {
@@ -83,8 +94,7 @@ __cvdso_getrandom_data(const struct vdso_rng_data *rng_info, void *buffer, size_
 		params->size_of_opaque_state = sizeof(*state);
 		params->mmap_prot = PROT_READ | PROT_WRITE;
 		params->mmap_flags = MAP_DROPPABLE | MAP_ANONYMOUS;
-		for (size_t i = 0; i < ARRAY_SIZE(params->reserved); ++i)
-			params->reserved[i] = 0;
+		memset_inline(params->reserved, 0, sizeof(params->reserved));
 		return 0;
 	}
 
