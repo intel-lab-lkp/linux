@@ -3603,6 +3603,8 @@ static ssize_t srpt_tpg_attrib_srp_sq_size_store(struct config_item *item,
 {
 	struct se_portal_group *se_tpg = attrib_to_tpg(item);
 	struct srpt_port *sport = srpt_tpg_to_sport(se_tpg);
+	const struct ib_device_attr *attrs = &sport->sdev->device->attrs;
+	u32 rq_size = min(attrs->max_qp_wr, MAX_SRPT_RQ_SIZE);
 	unsigned long val;
 	int ret;
 
@@ -3619,6 +3621,11 @@ static ssize_t srpt_tpg_attrib_srp_sq_size_store(struct config_item *item,
 	if (val < MIN_SRPT_SRQ_SIZE) {
 		pr_err("val: %lu smaller than MIN_SRPT_SRQ_SIZE: %d\n", val,
 			MIN_SRPT_SRQ_SIZE);
+		return -EINVAL;
+	}
+	if (val + rq_size > attrs->max_cqe) {
+		pr_err("val: %lu exceeds max_cqe: %u minus rq_size: %u\n",
+		       val, attrs->max_cqe, rq_size);
 		return -EINVAL;
 	}
 	sport->port_attrib.srp_sq_size = val;
