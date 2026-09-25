@@ -68,6 +68,10 @@ static inline void futex_init_task(struct task_struct *tsk)
 	INIT_LIST_HEAD(&tsk->futex.pi_state_list);
 	tsk->futex.state = FUTEX_STATE_OK;
 	mutex_init(&tsk->futex.exit_mutex);
+	tsk->futex.robust_list = NULL;
+#ifdef CONFIG_COMPAT
+	tsk->futex.robust_list32 = NULL;
+#endif
 }
 
 void futex_exit_recursive(struct task_struct *tsk);

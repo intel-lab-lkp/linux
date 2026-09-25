@@ -23,7 +23,7 @@ struct robust_list_head;
 struct futex_sched_data {
 	struct robust_list_head __user		*robust_list;
 #ifdef CONFIG_COMPAT
-	struct compat_robust_list_head __user	*compat_robust_list;
+	struct robust_list_head32 __user *robust_list32;
 #endif
 	struct list_head			pi_state_list;
 	struct futex_pi_state			*pi_state_cache;

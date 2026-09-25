@@ -1235,9 +1235,10 @@ static void __user *futex_uaddr(struct robust_list __user *entry,
 /*
  * Fetch a robust-list pointer. Bit 0 signals PI futexes:
  */
-static inline int
-compat_fetch_robust_entry(compat_uptr_t *uentry, struct robust_list __user **entry,
-		   compat_uptr_t __user *head, unsigned int *pflags)
+static inline int fetch_robust_entry32(compat_uptr_t *uentry,
+				       struct robust_list __user **entry,
+				       compat_uptr_t __user *head,
+				       unsigned int *pflags)
 {
 	if (get_user(*uentry, head))
 		return -EFAULT;
@@ -1254,9 +1255,9 @@ compat_fetch_robust_entry(compat_uptr_t *uentry, struct robust_list __user **ent
  *
  * We silently return on any sign of list-walking problem.
  */
-static void compat_exit_robust_list(struct task_struct *curr)
+static void exit_robust_list32(struct task_struct *curr)
 {
-	struct compat_robust_list_head __user *head = current->futex.compat_robust_list;
+	struct robust_list_head32 __user *head = curr->futex.robust_list32;
 	unsigned int limit = ROBUST_LIST_LIMIT, cur_mod, next_mod, pend_mod;
 	struct robust_list __user *entry, *next_entry, *pending;
 	compat_uptr_t uentry, next_uentry, upending;
@@ -1267,7 +1268,7 @@ static void compat_exit_robust_list(struct task_struct *curr)
 	 * Fetch the list head (which was registered earlier, via
 	 * sys_set_robust_list()):
 	 */
-	if (compat_fetch_robust_entry(&uentry, &entry, &head->list.next, &cur_mod))
+	if (fetch_robust_entry32(&uentry, &entry, &head->list.next, &cur_mod))
 		return;
 	/*
 	 * Fetch the relative futex offset:
@@ -1278,7 +1279,7 @@ static void compat_exit_robust_list(struct task_struct *curr)
 	 * Fetch any possibly pending lock-add first, and handle it
 	 * if it exists:
 	 */
-	if (compat_fetch_robust_entry(&upending, &pending, &head->list_op_pending, &pend_mod))
+	if (fetch_robust_entry32(&upending, &pending, &head->list_op_pending, &pend_mod))
 		return;
 
 	next_entry = NULL;	/* avoid warning with gcc */
@@ -1287,7 +1288,7 @@ static void compat_exit_robust_list(struct task_struct *curr)
 		 * Fetch the next entry in the list before calling
 		 * handle_futex_death:
 		 */
-		rc = compat_fetch_robust_entry(&next_uentry, &next_entry,
+		rc = fetch_robust_entry32(&next_uentry, &next_entry,
 			(compat_uptr_t __user *)&entry->next, &next_mod);
 		/*
 		 * A pending lock might already be on the list, so
@@ -1319,20 +1320,20 @@ static void compat_exit_robust_list(struct task_struct *curr)
 	}
 }
 
-static bool compat_robust_list_clear_pending(u32 __user *pop)
+static bool robust_list_clear_pending32(u32 __user *pop)
 {
-	struct compat_robust_list_head __user *head = current->futex.compat_robust_list;
+	struct robust_list_head32 __user *head = current->futex.robust_list32;
 
 	if (!put_user(0U, pop))
 		return true;
 
 	/* See comment in robust_list_clear_pending(). */
 	if (pop == &head->list_op_pending)
-		current->futex.compat_robust_list = NULL;
+		current->futex.robust_list32 = NULL;
 	return false;
 }
 #else
-static bool compat_robust_list_clear_pending(u32 __user *pop_addr) { return false; }
+static bool robust_list_clear_pending32(u32 __user *pop_addr) { return false; }
 #endif
 
 #ifdef CONFIG_FUTEX_PI
@@ -1435,7 +1436,7 @@ bool futex_robust_list_clear_pending(void __user *pop, unsigned int flags)
 		return false;
 
 	if (IS_ENABLED(CONFIG_64BIT) && size32bit)
-		return compat_robust_list_clear_pending(pop);
+		return robust_list_clear_pending32(pop);
 
 	return robust_list_clear_pending(pop);
 }
@@ -1464,12 +1465,11 @@ static void futex_cleanup(struct task_struct *tsk)
 	}
 
 #ifdef CONFIG_COMPAT
-	if (unlikely(tsk->futex.compat_robust_list)) {
-		compat_exit_robust_list(tsk);
-		tsk->futex.compat_robust_list = NULL;
+	if (unlikely(tsk->futex.robust_list32)) {
+		exit_robust_list32(tsk);
+		tsk->futex.robust_list32 = NULL;
 	}
 #endif
-
 	if (unlikely(!list_empty(&tsk->futex.pi_state_list)))
 		exit_pi_state_list(tsk);
 }

@@ -1360,9 +1360,7 @@ struct task_struct {
 	u32				closid;
 	u32				rmid;
 #endif
-
 	struct futex_sched_data		futex;
-
 #ifdef CONFIG_PERF_EVENTS
 	u8				perf_recursion[PERF_NR_CONTEXTS];
 	struct perf_event_context	*perf_event_ctxp;
