@@ -150,6 +150,8 @@ static int mc13xxx_spi_probe(struct spi_device *spi)
 	}
 
 	mc13xxx->variant = spi_get_device_match_data(spi);
+	if (!mc13xxx->variant)
+		return -ENODATA;
 
 	return mc13xxx_common_init(&spi->dev);
 }
