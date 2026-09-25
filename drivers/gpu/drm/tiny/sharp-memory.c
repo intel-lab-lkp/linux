@@ -557,6 +557,8 @@ static int sharp_memory_probe(struct spi_device *spi)
 
 	drm->mode_config.funcs = &sharp_memory_mode_config_funcs;
 	smd->mode = spi_get_device_match_data(spi);
+	if (!smd->mode)
+		return -ENODATA;
 
 	smd->pitch = (SHARP_ADDR_PERIOD + smd->mode->hdisplay + SHARP_DUMMY_PERIOD) / 8;
 	smd->tx_buffer_size = (SHARP_MODE_PERIOD +
