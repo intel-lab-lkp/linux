@@ -1774,6 +1774,8 @@ static void btrfs_stop_all_workers(struct btrfs_fs_info *fs_info)
 	if (fs_info->fixup_workers)
 		destroy_workqueue(fs_info->fixup_workers);
 	btrfs_destroy_workqueue(fs_info->delalloc_workers);
+	if (fs_info->delayed_write_workers)
+		destroy_workqueue(fs_info->delayed_write_workers);
 	btrfs_destroy_workqueue(fs_info->workers);
 	if (fs_info->endio_workers)
 		destroy_workqueue(fs_info->endio_workers);
@@ -1972,7 +1974,8 @@ static int btrfs_init_workqueues(struct btrfs_fs_info *fs_info)
 	fs_info->delalloc_workers =
 		btrfs_alloc_workqueue(fs_info, "delalloc",
 				      flags, max_active, 2);
-
+	fs_info->delayed_write_workers =
+		alloc_workqueue("btrfs-delayed-write", flags, max_active);
 	fs_info->flush_workers =
 		btrfs_alloc_workqueue(fs_info, "flush_delalloc",
 				      flags, max_active, 0);
@@ -2003,7 +2006,7 @@ static int btrfs_init_workqueues(struct btrfs_fs_info *fs_info)
 	fs_info->discard_ctl.discard_workers =
 		alloc_ordered_workqueue("btrfs-discard", WQ_FREEZABLE);
 
-	if (!(fs_info->workers &&
+	if (!(fs_info->workers && fs_info->delayed_write_workers &&
 	      fs_info->delalloc_workers && fs_info->flush_workers &&
 	      fs_info->endio_workers && fs_info->endio_meta_workers &&
 	      fs_info->endio_write_workers &&
@@ -4434,6 +4437,7 @@ void __cold close_ctree(struct btrfs_fs_info *fs_info)
 	 * when we call kthread_stop().
 	 */
 	btrfs_flush_workqueue(fs_info->delalloc_workers);
+	flush_workqueue(fs_info->delayed_write_workers);
 
 	/*
 	 * We can have ordered extents getting their last reference dropped from
