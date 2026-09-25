@@ -902,7 +902,7 @@ static int device_early_init(struct hl_device *hdev)
 
 	for (i = 0 ; i < hdev->asic_prop.completion_queues_count ; i++) {
 		snprintf(workq_name, 32, "hl%u-free-jobs-%u", hdev->cdev_idx, (u32) i);
-		hdev->cq_wq[i] = create_singlethread_workqueue(workq_name);
+		hdev->cq_wq[i] = alloc_ordered_workqueue("%s", WQ_MEM_RECLAIM, workq_name);
 		if (hdev->cq_wq[i] == NULL) {
 			dev_err(hdev->dev, "Failed to allocate CQ workqueue\n");
 			rc = -ENOMEM;
@@ -911,7 +911,7 @@ static int device_early_init(struct hl_device *hdev)
 	}
 
 	snprintf(workq_name, 32, "hl%u-events", hdev->cdev_idx);
-	hdev->eq_wq = create_singlethread_workqueue(workq_name);
+	hdev->eq_wq = alloc_ordered_workqueue("%s", WQ_MEM_RECLAIM, workq_name);
 	if (hdev->eq_wq == NULL) {
 		dev_err(hdev->dev, "Failed to allocate EQ workqueue\n");
 		rc = -ENOMEM;
@@ -957,7 +957,7 @@ static int device_early_init(struct hl_device *hdev)
 	hl_mem_mgr_init(hdev->dev, &hdev->kernel_mem_mgr);
 
 	snprintf(workq_name, 32, "hl%u_device_reset", hdev->cdev_idx);
-	hdev->reset_wq = create_singlethread_workqueue(workq_name);
+	hdev->reset_wq = alloc_ordered_workqueue("%s", WQ_MEM_RECLAIM, workq_name);
 	if (!hdev->reset_wq) {
 		rc = -ENOMEM;
 		dev_err(hdev->dev, "Failed to create device reset WQ\n");
