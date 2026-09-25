@@ -36,6 +36,28 @@
 		fd = -EBADF;        \
 	}
 
+static bool binderfs_supported(void)
+{
+	char line[128];
+	bool ret = false;
+	FILE *f;
+
+	f = fopen("/proc/filesystems", "r");
+	if (!f)
+		return true;	/* Cannot tell, let the test run and report. */
+
+	while (fgets(line, sizeof(line), f)) {
+		/* binderfs has no backing device, hence the "nodev" prefix. */
+		if (!strcmp(line, "nodev\tbinder\n")) {
+			ret = true;
+			break;
+		}
+	}
+
+	fclose(f);
+	return ret;
+}
+
 static void change_mountns(struct __test_metadata *_metadata)
 {
 	int ret;
@@ -387,6 +409,9 @@ TEST(binderfs_stress)
 	struct binderfs_device device = { 0 };
 	char binderfs_mntpt[] = P_tmpdir "/binderfs_XXXXXX",
 		device_path[sizeof(P_tmpdir "/binderfs_XXXXXX/") + BINDERFS_MAX_NAME];
+
+	if (!binderfs_supported())
+		SKIP(return, "The Android binderfs filesystem is not available");
 
 	ret = socketpair(PF_LOCAL, SOCK_STREAM | SOCK_CLOEXEC, 0, syncfds);
 	ASSERT_EQ(ret, 0) {
