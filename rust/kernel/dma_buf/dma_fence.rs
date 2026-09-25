@@ -32,6 +32,10 @@ use core::{
 };
 
 use kernel::{
+    device::{
+        Device,
+        Normal, //
+    },
     str::CString,
     sync::{
         aref::{
@@ -59,7 +63,7 @@ pub trait FenceContextOps {
 /// with each other, providing each with raising sequence numbers and a common
 /// identifier.
 #[pin_data(PinnedDrop)]
-pub struct FenceContext<T: FenceContextOps + Send + Sync> {
+pub struct FenceContext<'a, T: FenceContextOps + Send + Sync> {
     /// The fence context number.
     nr: u64,
     /// The sequence number for the next fence created.
@@ -81,12 +85,14 @@ pub struct FenceContext<T: FenceContextOps + Send + Sync> {
     // the lifetime which intends to enforce that all fences disappear before
     // their context.
     nr_of_unsignaled_fences: Atomic<usize>,
+    /// The device this fence context is associated with.
+    dev: &'a Device<Normal>,
     /// The user's data.
     #[pin]
     data: T,
 }
 
-impl<'a, T: Send + Sync + FenceContextOps> FenceContext<T> {
+impl<'a, T: Send + Sync + FenceContextOps + 'a> FenceContext<'a, T> {
     // This can later be extended as a vtable in case other parties need support
     // for the more "exotic" callbacks.
     const OPS: bindings::dma_fence_ops = bindings::dma_fence_ops {
@@ -106,6 +112,7 @@ impl<'a, T: Send + Sync + FenceContextOps> FenceContext<T> {
         initial_seqno: u64,
         driver_name: &CStr,
         timeline_name: &CStr,
+        dev: &'a Device<Normal>,
         data: impl PinInit<T, E>,
     ) -> impl PinInit<Self, Error>
     where
@@ -122,6 +129,7 @@ impl<'a, T: Send + Sync + FenceContextOps> FenceContext<T> {
             driver_name: driver_name?,
             timeline_name: timeline_name?,
             nr_of_unsignaled_fences: Atomic::new(0),
+            dev,
             data <- data,
         })
     }
@@ -211,7 +219,7 @@ impl<'a, T: Send + Sync + FenceContextOps> FenceContext<T> {
 }
 
 #[pinned_drop]
-impl<T: FenceContextOps + Send + Sync> PinnedDrop for FenceContext<T> {
+impl<T: FenceContextOps + Send + Sync> PinnedDrop for FenceContext<'_, T> {
     fn drop(self: Pin<&mut Self>) {
         // Fence ops callbacks can be called on unsignaled fences. Since these
         // callbacks can access the fence context and its data, it needs to be
@@ -596,7 +604,7 @@ struct DriverFenceData<'a, T: Send + Sync + FenceContextOps> {
     /// Callback head for dropping this in a deferred manner through RCU.
     rcu_head: bindings::callback_head,
     /// Reference to access the FenceContext.
-    fctx: &'a FenceContext<T>,
+    fctx: &'a FenceContext<'a, T>,
     /// The API user's data. It is essential that the data only performs
     /// operations legal in atomic context in its [`Drop`] implementation.
     #[pin]
@@ -641,6 +649,7 @@ struct DriverFenceData<'a, T: Send + Sync + FenceContextOps> {
 ///
 /// ```
 /// use kernel::{
+///     device::Normal,
 ///     dma_buf::{
 ///         DriverFence,
 ///         FenceContext,
@@ -648,6 +657,7 @@ struct DriverFenceData<'a, T: Send + Sync + FenceContextOps> {
 ///         FenceCallback,
 ///         FenceCallbackRegistration,
 ///     },
+///     faux,
 ///     str::CString,
 ///     sync::aref::ARef, //
 /// };
@@ -676,9 +686,10 @@ struct DriverFenceData<'a, T: Send + Sync + FenceContextOps> {
 ///
 /// let fctx_data = FenceContextData::new();
 ///
+/// let reg = faux::Registration::new(c"DmaFence-KUnit-Test", None)?;
 ///
 /// let mut fctx = KBox::pin_init(
-///     FenceContext::new(0, c"dummy_driver", c"dummy_timeline", fctx_data),
+///     FenceContext::new(0, c"dummy_driver", c"dummy_timeline", reg.as_ref().as_ref(), fctx_data),
 ///     GFP_KERNEL
 /// )?;
 ///
@@ -934,7 +945,9 @@ impl<'a, T: Send + Sync + FenceContextOps> Drop for DriverFence<'a, T> {
         // SAFETY: `guard` is valid until the `call_rcu()` below.
         let signaled: bool = unsafe { bindings::dma_fence_test_signaled_flag(guard.as_raw()) };
         if !signaled {
-            pr_err!("DriverFence drops unsignaled. Danger of memory corruption!\n");
+            // SAFETY: `data` is valid because `self` is valid.
+            let dev = unsafe { self.data.as_ref().fctx.dev };
+            dev_warn!(dev, "DriverFence drops unsignaled.\n");
             // SAFETY: `guard` is valid until the `call_rcu()` below. The fence
             // must not have been signaled yet, which we check directly above.
             unsafe { bindings::dma_fence_set_error(guard.as_raw(), ECANCELED.to_errno()) };
