@@ -419,6 +419,8 @@ FIXTURE_SETUP(NCI)
 	ASSERT_NE(self->fid, -1);
 
 	self->virtual_nci_fd = open("/dev/virtual_nci", O_RDWR);
+	if (self->virtual_nci_fd < 0 && errno == ENOENT)
+		SKIP(return, "virtual NCI device is not available");
 	ASSERT_GT(self->virtual_nci_fd, -1);
 
 	rc = setsockopt(self->sd, SOL_NETLINK, NETLINK_ADD_MEMBERSHIP, &event_group,
