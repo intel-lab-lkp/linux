@@ -191,6 +191,34 @@ static irqreturn_t arch_timer_mmio_handler(int irq, void *dev_id)
 	return IRQ_NONE;
 }
 
+static void arch_timer_mmio_unmap_irq(int *irq)
+{
+	if (irq && *irq) {
+		irq_dispose_mapping(*irq);
+		*irq = 0;
+	}
+}
+
+static void arch_timer_mmio_unmap_frame_irqs(struct arch_timer_mem_frame *frame)
+{
+	arch_timer_mmio_unmap_irq(&frame->phys_irq);
+	arch_timer_mmio_unmap_irq(&frame->virt_irq);
+}
+
+static void arch_timer_mmio_unmap_irqs(struct arch_timer_mem *gt_block)
+{
+	int i;
+
+	for (i = 0; i < ARCH_TIMER_MEM_MAX_FRAMES; i++) {
+		struct arch_timer_mem_frame *frame = &gt_block->frame[i];
+
+		if (!frame->valid)
+			continue;
+
+		arch_timer_mmio_unmap_frame_irqs(frame);
+	}
+}
+
 static struct arch_timer_mem_frame *find_best_frame(struct platform_device *pdev)
 {
 	struct arch_timer_mem_frame *frame, *best_frame = NULL;
@@ -398,6 +426,7 @@ static int arch_timer_mmio_probe(struct platform_device *pdev)
 
 	frame = find_best_frame(pdev);
 	if (!frame) {
+		arch_timer_mmio_unmap_irqs(at->gt_block);
 		dev_err(&pdev->dev,
 			"Unable to find a suitable frame in timer @ %pa\n",
 			&at->gt_block->cntctlbase);
