@@ -17,6 +17,7 @@
 #include <linux/init.h>
 #include <linux/platform_device.h>
 #include <linux/backlight.h>
+#include <linux/bitops.h>
 #include <linux/err.h>
 #include <linux/dmi.h>
 #include <linux/io.h>
@@ -2036,7 +2037,7 @@ static int kbd_led_level_set(struct led_classdev *led_cdev,
 	enum led_brightness new_value = value;
 	struct kbd_state state;
 	struct kbd_state new_state;
-	u16 num;
+	unsigned int bit;
 	int ret;
 
 	mutex_lock(&kbd_led_mutex);
@@ -2051,12 +2052,8 @@ static int kbd_led_level_set(struct led_classdev *led_cdev,
 			goto out;
 		ret = kbd_set_state_safe(&new_state, &state);
 	} else if (kbd_get_valid_token_counts()) {
-		for (num = kbd_token_bits; num != 0 && value > 0; --value)
-			num &= num - 1; /* clear the first bit set */
-		if (num == 0)
-			ret = 0;
-		else
-			ret = kbd_set_token_bit(ffs(num) - 1);
+		bit = fns(kbd_token_bits, value);
+		ret = bit == BITS_PER_LONG ? 0 : kbd_set_token_bit(bit);
 	} else {
 		pr_warn("Keyboard brightness level control not supported\n");
 		ret = -ENXIO;
