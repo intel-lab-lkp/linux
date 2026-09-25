@@ -736,6 +736,111 @@ static bool pci_dev_config_accessible(struct pci_dev *dev, char *msg)
 	return true;
 }
 
+/*
+ * Return true if there is a bridge between @bus and the root bus that is not a
+ * PCIe Root Port or PCIe Switch Port, such as a conventional PCI or CardBus
+ * bridge, or a PCIe to PCI/PCI-X bridge in either direction.
+ */
+static bool pci_bus_behind_non_pcie_port(struct pci_bus *bus)
+{
+	for (; !pci_is_root_bus(bus); bus = bus->parent) {
+		struct pci_dev *bridge = bus->self;
+
+		/* Virtual buses for SR-IOV VFs have no bridge of their own */
+		if (!bridge)
+			continue;
+
+		if (!pci_is_pcie(bridge))
+			return true;
+
+		switch (pci_pcie_type(bridge)) {
+		case PCI_EXP_TYPE_ROOT_PORT:
+		case PCI_EXP_TYPE_UPSTREAM:
+		case PCI_EXP_TYPE_DOWNSTREAM:
+			break;
+		default:
+			/* PCIe to PCI/PCI-X bridges, in either direction */
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/*
+ * Return true if the host bridge above @bus has a prefetchable memory window.
+ */
+static bool pci_host_bridge_has_pref_window(struct pci_bus *bus)
+{
+	struct resource *r;
+
+	while (!pci_is_root_bus(bus))
+		bus = bus->parent;
+
+	pci_bus_for_each_resource(bus, r) {
+		if (r && resource_type(r) == IORESOURCE_MEM &&
+		    (r->flags & IORESOURCE_PREFETCH))
+			return true;
+	}
+
+	return false;
+}
+
+/**
+ * pci_resource_placement_flags - Get the flags to use for placing a resource
+ * @dev: PCI device
+ * @res: Resource of @dev
+ * @flags: Resource flags of @res (which may have been cleared in @res itself)
+ *
+ * Non-prefetchable memory BARs are normally only placed in non-prefetchable
+ * bridge windows. However, the PCIe spec notes that setting the Prefetchable
+ * bit of a BAR permits correct operation even if the range has read side
+ * effects or cannot tolerate write merging, as long as the entire path from
+ * the host to the device is PCIe: PCIe Memory Reads always carry an explicit
+ * length, and PCIe Switches never prefetch or merge writes (PCIe r7.0, sec
+ * 7.5.1.2.1, Implementation Note "Additional Guidance on the Prefetchable Bit
+ * in Memory Space BARs").
+ *
+ * So treat non-prefetchable memory BARs of @dev as prefetchable when choosing,
+ * sizing and allocating bridge windows, unless there is a bridge between @dev
+ * and the root bus that is not a PCIe Root Port or PCIe Switch Port, such as a
+ * conventional PCI bridge, which may prefetch from its prefetchable window.
+ * This permits 64-bit non-prefetchable BARs to be placed in a 64-bit
+ * prefetchable window, which may be above 4GB, rather than competing for space
+ * in the non-prefetchable window of a PCI-to-PCI bridge, which is always below
+ * 4GB. This only affects where a BAR is placed, not how it is mapped.
+ *
+ * How a host bridge treats the windows that firmware describes as prefetchable
+ * is platform specific, however, and some prefetch from them, or relax the
+ * ordering of accesses to them. So only do this if the host bridge has no
+ * prefetchable windows at all, in which case all prefetchable bridge windows
+ * are carved out of its non-prefetchable windows. As a consequence, the
+ * non-prefetchable BARs of devices on a root bus are never placed in a
+ * prefetchable window. Bridge windows are never treated as prefetchable.
+ *
+ * Return: @flags, with IORESOURCE_PREFETCH set if @res may be placed in a
+ * prefetchable bridge window.
+ */
+unsigned long pci_resource_placement_flags(const struct pci_dev *dev,
+					   const struct resource *res,
+					   unsigned long flags)
+{
+	if ((flags & (IORESOURCE_TYPE_BITS | IORESOURCE_PREFETCH)) !=
+	    IORESOURCE_MEM)
+		return flags;
+
+	if (pci_resource_is_bridge_win(pci_resource_num(dev, res)))
+		return flags;
+
+	if (pci_bus_behind_non_pcie_port(dev->bus))
+		return flags;
+
+	if (pci_host_bridge_has_pref_window(dev->bus))
+		return flags;
+
+	return flags | IORESOURCE_PREFETCH;
+}
+
 /**
  * pci_find_parent_resource - return resource region of parent bus of given
  *			      region
@@ -749,7 +854,12 @@ struct resource *pci_find_parent_resource(const struct pci_dev *dev,
 					  struct resource *res)
 {
 	const struct pci_bus *bus = dev->bus;
+	unsigned long flags = res->flags;
 	struct resource *r;
+
+	/* @res is not necessarily one of @dev's resources */
+	if (res >= &dev->resource[0] && res < &dev->resource[PCI_NUM_RESOURCES])
+		flags = pci_resource_placement_flags(dev, res, flags);
 
 	pci_bus_for_each_resource(bus, r) {
 		if (!r)
@@ -758,10 +868,11 @@ struct resource *pci_find_parent_resource(const struct pci_dev *dev,
 
 			/*
 			 * If the window is prefetchable but the BAR is
-			 * not, the allocator made a mistake.
+			 * not (and may not be treated as such), the
+			 * allocator made a mistake.
 			 */
 			if (r->flags & IORESOURCE_PREFETCH &&
-			    !(res->flags & IORESOURCE_PREFETCH))
+			    !(flags & IORESOURCE_PREFETCH))
 				return NULL;
 
 			/*

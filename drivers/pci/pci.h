@@ -567,6 +567,9 @@ static inline int pci_resource_num(const struct pci_dev *dev,
 	return resno;
 }
 
+unsigned long pci_resource_placement_flags(const struct pci_dev *dev,
+					   const struct resource *res,
+					   unsigned long flags);
 int __pci_bus_alloc_resource(struct pci_bus *bus, struct resource *res,
 			     unsigned long flags, resource_size_t size,
 			     resource_size_t align, resource_size_t min,
@@ -574,7 +577,7 @@ int __pci_bus_alloc_resource(struct pci_bus *bus, struct resource *res,
 			     void *alignf_data);
 
 void pbus_validate_busn(struct pci_bus *bus);
-struct resource *pbus_select_window(struct pci_bus *bus,
+struct resource *pbus_select_window(const struct pci_dev *dev,
 				    const struct resource *res);
 void pci_reassigndev_resource_alignment(struct pci_dev *dev);
 void pci_disable_bridge_window(struct pci_dev *dev);

@@ -253,15 +253,17 @@ static struct resource *pbus_select_window_for_type(struct pci_bus *bus,
 
 /**
  * pbus_select_window - Select bridge window for a resource
- * @bus: PCI bus
+ * @dev: PCI device owning @res
  * @res: Resource
  *
- * Select the bridge window for @res. If the resource is already assigned,
- * return the current bridge window.
+ * Select the bridge window on the bus of @dev for @res. If the resource is
+ * already assigned, return the current bridge window.
  *
  * For memory resources, the selection is done as follows:
  *
- * Any non-prefetchable resource is put into the non-prefetchable window.
+ * Any non-prefetchable resource is put into the non-prefetchable window,
+ * unless it may be treated as prefetchable according to
+ * pci_resource_placement_flags().
  *
  * If there is no prefetchable MMIO window, put all memory resources into the
  * non-prefetchable window.
@@ -274,13 +276,16 @@ static struct resource *pbus_select_window_for_type(struct pci_bus *bus,
  *
  * Return: the bridge window resource or NULL if no bridge window is found.
  */
-struct resource *pbus_select_window(struct pci_bus *bus,
+struct resource *pbus_select_window(const struct pci_dev *dev,
 				    const struct resource *res)
 {
+	unsigned long flags;
+
 	if (resource_assigned(res))
 		return res->parent;
 
-	return pbus_select_window_for_type(bus, res->flags);
+	flags = pci_resource_placement_flags(dev, res, res->flags);
+	return pbus_select_window_for_type(dev->bus, flags);
 }
 
 static bool pdev_resources_assignable(struct pci_dev *dev)
@@ -514,6 +519,13 @@ static void assign_requested_resources_sorted(struct list_head *head,
 	}
 }
 
+/* Get the placement flags of a tracked resource */
+static unsigned long pci_dev_res_placement_flags(struct pci_dev_resource *dev_res)
+{
+	return pci_resource_placement_flags(dev_res->dev, dev_res->res,
+					    dev_res->flags);
+}
+
 static unsigned long pci_fail_res_type_mask(struct list_head *fail_head)
 {
 	struct pci_dev_resource *fail_res;
@@ -521,7 +533,7 @@ static unsigned long pci_fail_res_type_mask(struct list_head *fail_head)
 
 	/* Check failed type */
 	list_for_each_entry(fail_res, fail_head, list)
-		mask |= fail_res->flags;
+		mask |= pci_dev_res_placement_flags(fail_res);
 
 	/*
 	 * One pref failed resource will set IORESOURCE_MEM, as we can
@@ -564,8 +576,9 @@ static bool pci_required_resource_failed(struct list_head *fail_head,
 
 	list_for_each_entry(fail_res, fail_head, list) {
 		int idx = pci_resource_num(fail_res->dev, fail_res->res);
+		unsigned long flags = pci_dev_res_placement_flags(fail_res);
 
-		if (type && (fail_res->flags & PCI_RES_TYPE_MASK) != type)
+		if (type && (flags & PCI_RES_TYPE_MASK) != type)
 			continue;
 
 		if (!pci_resource_is_optional(fail_res->dev, idx))
@@ -1307,7 +1320,7 @@ static void pbus_size_mem(struct pci_bus *bus, struct resource *b_res,
 			if (!pdev_resources_assignable(dev) ||
 			    !pdev_resource_should_fit(dev, r))
 				continue;
-			if (b_res != pbus_select_window(bus, r))
+			if (b_res != pbus_select_window(dev, r))
 				continue;
 
 			align = pci_resource_alignment(dev, r);
@@ -1942,7 +1955,7 @@ static void remove_dev_resources(struct pci_dev *dev,
 	int idx;
 
 	pci_dev_for_each_resource(dev, res) {
-		b_win = pbus_select_window(dev->bus, res);
+		b_win = pbus_select_window(dev, res);
 		if (!b_win)
 			continue;
 
@@ -2158,10 +2171,11 @@ static void pci_prepare_next_assign_round(struct list_head *fail_head,
 	 * enough to contain child device resources.
 	 */
 	list_for_each_entry(fail_res, fail_head, list) {
+		unsigned long flags = pci_dev_res_placement_flags(fail_res);
 		struct pci_bus *bus = fail_res->dev->bus;
 		struct resource *b_win;
 
-		b_win = pbus_select_window_for_type(bus, fail_res->flags);
+		b_win = pbus_select_window_for_type(bus, flags);
 		if (!b_win)
 			continue;
 		pci_bus_release_bridge_resources(bus, b_win, rel_type);
@@ -2301,16 +2315,18 @@ void pci_assign_unassigned_bridge_resources(struct pci_dev *bridge)
 EXPORT_SYMBOL_GPL(pci_assign_unassigned_bridge_resources);
 
 /*
- * Walk to the root bus, find the bridge window relevant for @res and
- * release it when possible. If the bridge window contains assigned
+ * Walk to the root bus, find the bridge window relevant for @res of @pdev
+ * and release it when possible. If the bridge window contains assigned
  * resources, it cannot be released.
  */
-static int pbus_reassign_bridge_resources(struct pci_bus *bus, struct resource *res,
+static int pbus_reassign_bridge_resources(struct pci_dev *pdev,
+					  struct resource *res,
 					  struct list_head *saved)
 {
-	unsigned long type = res->flags;
+	unsigned long type = pci_resource_placement_flags(pdev, res, res->flags);
+	struct pci_dev *bridge = NULL, *owner = pdev;
+	struct pci_bus *bus = pdev->bus;
 	struct pci_dev_resource *dev_res;
-	struct pci_dev *bridge = NULL;
 	LIST_HEAD(add_list);
 	LIST_HEAD(failed);
 	unsigned int i;
@@ -2318,7 +2334,7 @@ static int pbus_reassign_bridge_resources(struct pci_bus *bus, struct resource *
 
 	while (!pci_is_root_bus(bus)) {
 		bridge = bus->self;
-		res = pbus_select_window(bus, res);
+		res = pbus_select_window(owner, res);
 		if (!res)
 			break;
 
@@ -2339,6 +2355,8 @@ static int pbus_reassign_bridge_resources(struct pci_bus *bus, struct resource *
 				 res_name, res);
 		}
 
+		/* @res is now a window of @bridge */
+		owner = bridge;
 		bus = bus->parent;
 	}
 
@@ -2386,7 +2404,7 @@ int pci_do_resource_release_and_resize(struct pci_dev *pdev, int resno, int size
 	unsigned int i;
 	int old, ret;
 
-	b_win = pbus_select_window(bus, res);
+	b_win = pbus_select_window(pdev, res);
 	if (!b_win)
 		return -EINVAL;
 
@@ -2407,7 +2425,7 @@ int pci_do_resource_release_and_resize(struct pci_dev *pdev, int resno, int size
 		if (exclude_bars & BIT(i))
 			continue;
 
-		if (b_win != pbus_select_window(bus, r))
+		if (b_win != pbus_select_window(pdev, r))
 			continue;
 
 		ret = pci_dev_res_add_to_list(&saved, pdev, r, 0, 0);
@@ -2419,7 +2437,7 @@ int pci_do_resource_release_and_resize(struct pci_dev *pdev, int resno, int size
 	pci_resize_resource_set_size(pdev, resno, size);
 
 	if (bridge) {
-		ret = pbus_reassign_bridge_resources(bus, res, &saved);
+		ret = pbus_reassign_bridge_resources(pdev, res, &saved);
 		if (ret)
 			goto restore;
 	} else {
