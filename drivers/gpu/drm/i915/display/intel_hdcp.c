@@ -312,6 +312,39 @@ static void intel_hdcp_get_remote_capability(struct intel_connector *connector,
 		*hdcp2_capable = false;
 }
 
+/* Determine whether atomic check should reject Type1 for this MST sink. */
+static bool
+intel_hdcp_mst_type1_is_unsupported(struct intel_connector *connector,
+				    const struct intel_hdcp_shim *shim)
+{
+	struct intel_hdcp *hdcp = &connector->hdcp;
+	bool hdcp_capable = false, hdcp2_capable = false;
+	int ret;
+
+	if (!shim->get_remote_hdcp_capability)
+		return false;
+
+	ret = shim->get_remote_hdcp_capability(connector, &hdcp_capable,
+						   &hdcp2_capable);
+	if (ret)
+		return false;
+
+	return hdcp_capable && (!hdcp->hdcp2_supported || !hdcp2_capable);
+}
+
+static void
+intel_hdcp_mst_update_type1_capability(struct intel_connector *connector,
+					       const struct intel_hdcp_shim *shim)
+{
+	connector->mst.type1_unsupported = false;
+
+	if (!shim || !shim->get_remote_hdcp_capability)
+		return;
+
+	connector->mst.type1_unsupported =
+		intel_hdcp_mst_type1_is_unsupported(connector, shim);
+}
+
 static bool intel_hdcp_in_use(struct intel_display *display,
 			      enum transcoder cpu_transcoder, enum port port)
 {
@@ -2421,6 +2454,9 @@ int intel_hdcp_init(struct intel_connector *connector,
 	if (is_hdcp2_supported(display))
 		intel_hdcp2_init(connector, dig_port, shim);
 
+	/* Cache the capability for the currently attached MST sink only. */
+	intel_hdcp_mst_update_type1_capability(connector, shim);
+
 	ret = drm_connector_attach_content_protection_property(&connector->base,
 							       hdcp->hdcp2_supported);
 	if (ret) {
@@ -2652,6 +2688,8 @@ void intel_hdcp_cleanup(struct intel_connector *connector)
 {
 	struct intel_hdcp *hdcp = &connector->hdcp;
 
+	connector->mst.type1_unsupported = false;
+
 	if (!hdcp->shim)
 		return;
 
@@ -2684,10 +2722,11 @@ void intel_hdcp_cleanup(struct intel_connector *connector)
 	mutex_unlock(&hdcp->mutex);
 }
 
-void intel_hdcp_atomic_check(struct drm_connector *connector,
-			     struct drm_connector_state *old_state,
-			     struct drm_connector_state *new_state)
+int intel_hdcp_atomic_check(struct drm_connector *connector,
+			    struct drm_connector_state *old_state,
+			    struct drm_connector_state *new_state)
 {
+	struct intel_connector *intel_connector = to_intel_connector(connector);
 	u64 old_cp = old_state->content_protection;
 	u64 new_cp = new_state->content_protection;
 	struct drm_crtc_state *crtc_state;
@@ -2700,7 +2739,20 @@ void intel_hdcp_atomic_check(struct drm_connector *connector,
 		if (old_cp == DRM_MODE_CONTENT_PROTECTION_ENABLED)
 			new_state->content_protection =
 				DRM_MODE_CONTENT_PROTECTION_DESIRED;
-		return;
+		return 0;
+	}
+
+	/*
+	 * Fail fast if userspace asks for Type1 but neither the platform nor
+	 * the downstream sink can do HDCP 2.x, instead of only discovering
+	 * this once intel_hdcp_enable() is reached.
+	 */
+	if (new_cp == DRM_MODE_CONTENT_PROTECTION_DESIRED &&
+	    new_state->hdcp_content_type == DRM_MODE_HDCP_CONTENT_TYPE1 &&
+	    intel_connector->mst.type1_unsupported) {
+		drm_dbg_kms(connector->dev,
+			    "HDCP Type1 requested without HDCP 2.x support\n");
+		return -EOPNOTSUPP;
 	}
 
 	crtc_state = drm_atomic_get_new_crtc_state(new_state->state,
@@ -2725,10 +2777,12 @@ void intel_hdcp_atomic_check(struct drm_connector *connector,
 	     new_cp == DRM_MODE_CONTENT_PROTECTION_ENABLED)) {
 		if (old_state->hdcp_content_type ==
 				new_state->hdcp_content_type)
-			return;
+			return 0;
 	}
 
 	crtc_state->mode_changed = true;
+
+	return 0;
 }
 
 /* Handles the CP_IRQ raised from the DP HDCP sink */

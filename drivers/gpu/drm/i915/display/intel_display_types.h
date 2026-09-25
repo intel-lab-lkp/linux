@@ -605,6 +605,8 @@ struct intel_connector {
 	struct {
 		struct drm_dp_mst_port *port;
 		struct intel_dp *dp;
+		/* Used to reject unsupported HDCP Type1 requests during atomic check. */
+		bool type1_unsupported;
 	} mst;
 
 	struct {

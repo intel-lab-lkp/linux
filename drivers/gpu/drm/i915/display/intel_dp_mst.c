@@ -1838,6 +1838,7 @@ mst_topology_add_connector(struct drm_dp_mst_topology_mgr *mgr,
 	connector->sync_state = intel_dp_connector_sync_state;
 	connector->mst.dp = intel_dp;
 	connector->mst.port = port;
+	connector->mst.type1_unsupported = false;
 	drm_dp_mst_get_port_malloc(port);
 
 	ret = drm_connector_dynamic_init(display->drm, &connector->base, &mst_connector_funcs,

@@ -123,8 +123,12 @@ int intel_digital_connector_atomic_check(struct drm_connector *conn,
 	struct intel_digital_connector_state *old_conn_state =
 		to_intel_digital_connector_state(old_state);
 	struct drm_crtc_state *crtc_state;
+	/* Propagate HDCP capability failures during atomic validation. */
+	int ret;
 
-	intel_hdcp_atomic_check(conn, old_state, new_state);
+	ret = intel_hdcp_atomic_check(conn, old_state, new_state);
+	if (ret)
+		return ret;
 
 	if (!new_state->crtc)
 		return 0;
