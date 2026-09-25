@@ -378,6 +378,10 @@ int acpi_register_gsi (struct device *dev, u32 gsi, int triggering, int polarity
 int acpi_gsi_to_irq (u32 gsi, unsigned int *irq);
 int acpi_isa_irq_to_gsi (unsigned isa_irq, u32 *gsi);
 
+#define ACPI_IRQ_PROP_GSI		"linux,acpi-gsi"
+#define ACPI_IRQ_PROP_GSI_TRIGGER	"linux,acpi-gsi-trigger"
+#define ACPI_IRQ_PROP_GSI_POLARITY	"linux,acpi-gsi-polarity"
+
 typedef struct fwnode_handle *(*acpi_gsi_domain_disp_fn)(u32);
 typedef acpi_handle (*acpi_gsi_handle_disp_fn)(u32);
 

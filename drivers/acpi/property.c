@@ -1766,7 +1766,74 @@ static int acpi_fwnode_irq_get(const struct fwnode_handle *fwnode,
 
 DECLARE_ACPI_FWNODE_OPS(acpi_device_fwnode_ops);
 DECLARE_ACPI_FWNODE_OPS(acpi_data_fwnode_ops);
-const struct fwnode_operations acpi_static_fwnode_ops;
+
+static int acpi_static_fwnode_read_u32_prop_index(const struct fwnode_handle *fwnode,
+						  const char *propname,
+						  unsigned int index, u32 *value)
+{
+	u32 *values;
+	int ret, count;
+
+	count = fwnode_property_count_u32(fwnode, propname);
+	if (count < 0)
+		return count;
+
+	if (index >= count)
+		return -ENOENT;
+
+	values = kcalloc(count, sizeof(*values), GFP_KERNEL);
+	if (!values)
+		return -ENOMEM;
+
+	ret = fwnode_property_read_u32_array(fwnode, propname, values, count);
+	if (!ret)
+		*value = values[index];
+
+	kfree(values);
+	return ret;
+}
+
+static int acpi_static_fwnode_read_string_array(const struct fwnode_handle *fwnode,
+						const char *propname,
+						const char **val, size_t nval)
+{
+	/* Route string handling to secondary software nodes */
+	return -EINVAL;
+}
+
+static int acpi_static_fwnode_irq_get(const struct fwnode_handle *fwnode,
+				      unsigned int index)
+{
+	u32 gsi, trigger, polarity;
+	int ret;
+
+	if (!fwnode->secondary)
+		return -ENODEV;
+
+	fwnode = fwnode->secondary;
+
+	ret = acpi_static_fwnode_read_u32_prop_index(fwnode, ACPI_IRQ_PROP_GSI,
+						index, &gsi);
+	if (ret)
+		return ret == -ENOENT ? -ENXIO : ret;
+
+	ret = acpi_static_fwnode_read_u32_prop_index(fwnode, ACPI_IRQ_PROP_GSI_TRIGGER,
+						index, &trigger);
+	if (ret)
+		return ret == -ENOENT ? -ENXIO : ret;
+
+	ret = acpi_static_fwnode_read_u32_prop_index(fwnode, ACPI_IRQ_PROP_GSI_POLARITY,
+						index, &polarity);
+	if (ret)
+		return ret == -ENOENT ? -ENXIO : ret;
+
+	return acpi_register_gsi(NULL, gsi, trigger, polarity);
+}
+
+const struct fwnode_operations acpi_static_fwnode_ops = {
+	.property_read_string_array = acpi_static_fwnode_read_string_array,
+	.irq_get = acpi_static_fwnode_irq_get,
+};
 
 bool is_acpi_device_node(const struct fwnode_handle *fwnode)
 {
