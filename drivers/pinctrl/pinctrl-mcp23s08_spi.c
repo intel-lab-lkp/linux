@@ -146,6 +146,8 @@ static int mcp23s08_probe(struct spi_device *spi)
 	u8 v;
 
 	info = spi_get_device_match_data(spi);
+	if (!info)
+		return -ENODATA;
 
 	ret = device_property_read_u8(dev, "microchip,spi-present-mask", &v);
 	if (ret) {
