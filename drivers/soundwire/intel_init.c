@@ -28,6 +28,15 @@ static void intel_link_dev_release(struct device *dev)
 	kfree(ldev);
 }
 
+static void intel_link_list_del(void *data)
+{
+	struct sdw_intel_link_res *link = data;
+
+	mutex_lock(link->link_lock);
+	list_del(&link->list);
+	mutex_unlock(link->link_lock);
+}
+
 /* alloc, init and add link devices */
 static struct sdw_intel_link_dev *intel_link_dev_register(struct sdw_intel_res *res,
 							  struct sdw_intel_ctx *ctx,
@@ -79,6 +88,7 @@ static struct sdw_intel_link_dev *intel_link_dev_register(struct sdw_intel_res *
 		link->shim_lock = res->eml_lock;
 		link->mic_privacy = res->mic_privacy;
 	}
+	link->link_lock = &ctx->link_lock;
 
 	link->ops = res->ops;
 	link->dev = res->dev;
@@ -145,8 +155,10 @@ irqreturn_t sdw_intel_thread(int irq, void *dev_id)
 	struct sdw_intel_ctx *ctx = dev_id;
 	struct sdw_intel_link_res *link;
 
+	mutex_lock(&ctx->link_lock);
 	list_for_each_entry(link, &ctx->link_list, list)
 		sdw_cdns_irq(irq, link->cdns);
+	mutex_unlock(&ctx->link_lock);
 
 	return IRQ_HANDLED;
 }
@@ -165,6 +177,7 @@ static struct sdw_intel_ctx
 	u32 link_mask;
 	int num_slaves = 0;
 	int count;
+	int ret;
 	int i;
 
 	if (!res)
@@ -210,6 +223,7 @@ static struct sdw_intel_ctx
 	ctx->link_mask = res->link_mask;
 	ctx->handle = res->handle;
 	mutex_init(&ctx->shim_lock);
+	mutex_init(&ctx->link_lock);
 
 	link_mask = ctx->link_mask;
 
@@ -246,7 +260,14 @@ static struct sdw_intel_ctx
 			i++;
 			goto err;
 		}
+
+		mutex_lock(&ctx->link_lock);
 		list_add_tail(&link->list, &ctx->link_list);
+		mutex_unlock(&ctx->link_lock);
+		ret = devm_add_action_or_reset(&ldev->auxdev.dev, intel_link_list_del, link);
+		if (ret)
+			goto err;
+
 		bus = &link->cdns->bus;
 		/* Calculate number of slaves */
 		list_for_each(node, &bus->slaves)
