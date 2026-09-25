@@ -110,10 +110,10 @@ int adis_update_scan_mode(struct iio_dev *indio_dev,
 		spi_message_add_tail(&adis->xfer[j], &adis->msg);
 	}
 
-	chan = indio_dev->channels;
-	for (i = 0; i < indio_dev->num_channels; i++, chan++) {
-		if (!test_bit(chan->scan_index, scan_mask))
-			continue;
+	for_each_set_bit(i, scan_mask, iio_get_masklength(indio_dev)) {
+		chan = iio_find_channel_from_si(indio_dev, i);
+		if (!chan)
+			return -EINVAL;
 		if (chan->scan_type.storagebits == 32)
 			*tx++ = cpu_to_be16((chan->address + 2) << 8);
 		*tx++ = cpu_to_be16(chan->address << 8);
