@@ -59,6 +59,8 @@ static int xlnx_rtc_set_time(struct device *dev, struct rtc_time *tm)
 	struct xlnx_rtc_dev *xrtcdev = dev_get_drvdata(dev);
 	unsigned long new_time;
 
+	u32 rtc_ctrl;
+
 	/*
 	 * The value written will be updated after 1 sec into the
 	 * seconds read register, so we need to program time +1 sec
@@ -78,6 +80,14 @@ static int xlnx_rtc_set_time(struct device *dev, struct rtc_time *tm)
 	 */
 	writel(RTC_INT_SEC, xrtcdev->reg_base + RTC_INT_STS);
 
+	/*
+	 * Now that the time is valid, start the crystal oscillator so the
+	 * RTC free-runs.
+	 */
+	rtc_ctrl = readl(xrtcdev->reg_base + RTC_CTRL);
+	rtc_ctrl |= RTC_OSC_EN;
+	writel(rtc_ctrl, xrtcdev->reg_base + RTC_CTRL);
+
 	return 0;
 }
 
@@ -86,6 +96,9 @@ static int xlnx_rtc_read_time(struct device *dev, struct rtc_time *tm)
 	u32 status;
 	unsigned long read_time;
 	struct xlnx_rtc_dev *xrtcdev = dev_get_drvdata(dev);
+
+	if (!(readl(xrtcdev->reg_base + RTC_CTRL) & RTC_OSC_EN))
+		return -EINVAL;
 
 	status = readl(xrtcdev->reg_base + RTC_INT_STS);
 
