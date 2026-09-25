@@ -62,14 +62,36 @@ static void braille_write(u16 *buf)
 {
 	static u16 lastwrite[WIDTH];
 	unsigned char data[1 + 1 + 2*WIDTH + 2 + 1], csum = 0, *c;
+	struct nbcon_write_context wctxt = { };
+	unsigned long flags;
+	bool locked;
+
 	u16 out;
 	int i;
 
 	if (!braille_co)
 		return;
 
+	if (braille_co->flags & CON_NBCON) {
+		/*
+		 * Braille console might be called from unknown context via
+		 * vt_console_print() from console_unlock() from printk().
+		 * Use the atomic callback and synchronize it just using
+		 * the console context. Disable interrupts to prevent a nested
+		 * call into the driver code which might cause a deadlock when
+		 * trying to acquire the console ownership, see
+		 * __nbcon_atomic_flush_pending_con().
+		 */
+		local_irq_save(flags);
+		do {
+			locked = nbcon_braille_try_acquire(braille_co, &wctxt);
+			if (!locked)
+				cpu_relax();
+		} while (!locked && !oops_in_progress);
+	}
+
 	if (!memcmp(lastwrite, buf, WIDTH * sizeof(*buf)))
-		return;
+		goto release_nbcon;
 	memcpy(lastwrite, buf, WIDTH * sizeof(*buf));
 
 #define SOH 1
@@ -102,7 +124,24 @@ static void braille_write(u16 *buf)
 	*c++ = csum;
 	*c++ = ETX;
 
-	braille_co->write(braille_co, data, c - data);
+	if (braille_co->flags & CON_NBCON) {
+		if (braille_co->write_atomic &&
+		    !(braille_co->flags & CON_NBCON_ATOMIC_UNSAFE)) {
+			nbcon_write_context_set_buf(&wctxt, (char *)data, c - data);
+			braille_co->write_atomic(braille_co, &wctxt);
+		} else {
+			pr_warn_once("Braille requires a safe braille_co->write_atomic callback\n");
+		}
+	} else {
+		braille_co->write(braille_co, data, c - data);
+	}
+
+release_nbcon:
+	if (braille_co->flags & CON_NBCON) {
+		if (locked)
+			nbcon_braille_release(&wctxt);
+		local_irq_restore(flags);
+	}
 }
 
 /* Follow the VC cursor*/
