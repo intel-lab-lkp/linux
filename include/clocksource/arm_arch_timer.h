@@ -76,6 +76,10 @@ struct arch_timer_mem_frame {
 	size_t size;
 	int phys_irq;
 	int virt_irq;
+	u32 phys_gsi;
+	u32 phys_flags;
+	u32 virt_gsi;
+	u32 virt_flags;
 };
 
 struct arch_timer_mem {

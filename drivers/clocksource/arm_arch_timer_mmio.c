@@ -10,6 +10,7 @@
 
 #define pr_fmt(fmt) 	"arch_timer_mmio: " fmt
 
+#include <linux/acpi.h>
 #include <linux/clockchips.h>
 #include <linux/interrupt.h>
 #include <linux/io-64-nonatomic-lo-hi.h>
@@ -204,6 +205,96 @@ static void arch_timer_mmio_unmap_frame_irqs(struct arch_timer_mem_frame *frame)
 	arch_timer_mmio_unmap_irq(&frame->phys_irq);
 	arch_timer_mmio_unmap_irq(&frame->virt_irq);
 }
+
+#ifdef CONFIG_ACPI
+static int arch_timer_mmio_map_gsi(struct platform_device *pdev, u32 gsi,
+				   u32 flags, int *irq)
+{
+	int trigger, polarity, ret;
+
+	if (!gsi || *irq)
+		return 0;
+
+	trigger = (flags & ACPI_GTDT_INTERRUPT_MODE) ? ACPI_EDGE_SENSITIVE
+						     : ACPI_LEVEL_SENSITIVE;
+	polarity = (flags & ACPI_GTDT_INTERRUPT_POLARITY) ? ACPI_ACTIVE_LOW
+							  : ACPI_ACTIVE_HIGH;
+
+	ret = acpi_register_gsi(&pdev->dev, gsi, trigger, polarity);
+	if (ret < 0)
+		return ret;
+
+	*irq = ret;
+
+	return 0;
+}
+
+static int arch_timer_mmio_map_frame_gsis(struct platform_device *pdev,
+					  struct arch_timer_mem_frame *frame)
+{
+	int ret;
+
+	ret = arch_timer_mmio_map_gsi(pdev, frame->phys_gsi, frame->phys_flags, &frame->phys_irq);
+	if (ret < 0) {
+		if (ret == -EPROBE_DEFER)
+			return ret;
+
+		dev_err(&pdev->dev,
+			"Failed to map physical timer GSI %u for frame @ %pa: %d\n",
+			frame->phys_gsi, &frame->cntbase, ret);
+		return ret;
+	}
+
+	ret = arch_timer_mmio_map_gsi(pdev, frame->virt_gsi, frame->virt_flags, &frame->virt_irq);
+	if (ret < 0) {
+		if (ret != -EPROBE_DEFER)
+			dev_err(&pdev->dev,
+				"Failed to map virtual timer GSI %u for frame @ %pa: %d\n",
+				frame->virt_gsi, &frame->cntbase, ret);
+		arch_timer_mmio_unmap_irq(&frame->phys_irq);
+		return ret;
+	}
+
+	return 0;
+}
+
+static int arch_timer_mmio_map_gsis(struct platform_device *pdev,
+				    struct arch_timer_mem *gt_block)
+{
+	int i, ret;
+
+	for (i = 0; i < ARCH_TIMER_MEM_MAX_FRAMES; i++) {
+		struct arch_timer_mem_frame *frame = &gt_block->frame[i];
+
+		if (!frame->valid)
+			continue;
+
+		ret = arch_timer_mmio_map_frame_gsis(pdev, frame);
+		if (ret < 0)
+			goto unmap_err;
+	}
+
+	return 0;
+
+unmap_err:
+	for (i--; i >= 0; i--) {
+		struct arch_timer_mem_frame *frame = &gt_block->frame[i];
+
+		if (!frame->valid)
+			continue;
+
+		arch_timer_mmio_unmap_frame_irqs(frame);
+	}
+
+	return ret;
+}
+#else
+static inline int arch_timer_mmio_map_gsis(struct platform_device *pdev,
+					   struct arch_timer_mem *gt_block)
+{
+	return -ENODEV;
+}
+#endif
 
 static void arch_timer_mmio_unmap_irqs(struct arch_timer_mem *gt_block)
 {
@@ -420,6 +511,9 @@ static int arch_timer_mmio_probe(struct platform_device *pdev)
 			return ret;
 	} else {
 		at->gt_block = dev_get_platdata(&pdev->dev);
+		ret = arch_timer_mmio_map_gsis(pdev, at->gt_block);
+		if (ret)
+			return ret;
 	}
 
 	platform_set_drvdata(pdev, at);
