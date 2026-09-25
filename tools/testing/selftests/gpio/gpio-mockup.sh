@@ -51,6 +51,9 @@ prerequisite()
 	DEBUGFS=$(grep -w debugfs /proc/mounts | cut -f2 -d' ')
 	[ -d "$DEBUGFS" ] || skip "debugfs is not mounted"
 
+	modinfo $module >/dev/null 2>&1 || [ -d /sys/module/$module ] ||
+		skip "$module module is not available"
+
 	GPIO_DEBUGFS=$DEBUGFS/$module
 }
 
