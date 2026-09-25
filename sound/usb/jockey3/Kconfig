@@ -1,0 +1,60 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config SND_USB_JOCKEY3
+	tristate "Reloop Jockey 3 support"
+	select SND_PCM
+	select SND_RAWMIDI
+	help
+	  Say Y here to include support for the Reloop Jockey 3 DJ controllers.
+	  These devices utilize a non-standard, proprietary Ploytec USB
+	  protocol.
+
+	  Supported devices:
+
+	    * Reloop Jockey 3 Master Edition
+	    * Reloop Jockey 3 Remix
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called snd-reloop-jockey3.
+
+config SND_USB_JOCKEY3_REFERENCE_CODEC
+	bool "Use portable reference codec implementation"
+	depends on SND_USB_JOCKEY3
+	depends on EXPERT
+	help
+	  The Jockey 3 driver normally uses an architecture-optimized
+	  bit-packing codec (separate 32-bit and 64-bit variants) to convert
+	  between ALSA's S24_3LE sample format and the Ploytec wire format.
+	  This is the default on all architectures.
+
+	  Say Y to build the driver with the portable reference
+	  implementation instead. It is much slower, and is intended as a
+	  readable definition of the wire format and as a fallback on
+	  architectures where the optimized codec has not been exercised.
+
+	  If unsure, say N.
+
+config SND_USB_JOCKEY3_CODEC_KUNIT_TEST
+	bool "KUnit tests for the Ploytec codec" if !KUNIT_ALL_TESTS
+	depends on SND_USB_JOCKEY3
+	depends on KUNIT
+	depends on KUNIT=y || SND_USB_JOCKEY3=m
+	default KUNIT_ALL_TESTS
+	help
+	  Enable KUnit tests for the Ploytec bit-plane encoder and decoder.
+	  The tests validate whichever codec variant the build selected
+	  against a declarative description of the wire format, and prove
+	  the mapping is a complete bit permutation.
+
+	  Because the codec functions are internal to the driver, the tests
+	  are linked into the snd-reloop-jockey3 module itself rather than
+	  built separately.
+
+	  KUnit tests run during boot and output the results to the debug
+	  log in TAP format (https://testanything.org/). Only useful for
+	  kernel devs running KUnit test harness and are not for inclusion
+	  into a production build.
+
+	  For more information on KUnit and unit tests in general, refer
+	  to the KUnit documentation in Documentation/dev-tools/kunit/.
+
+	  If unsure, say N.
