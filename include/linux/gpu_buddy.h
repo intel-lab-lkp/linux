@@ -172,7 +172,7 @@ struct gpu_buddy {
 	 * a power of two, with each root being the largest power-of-two
 	 * that fits in the remaining space.
 	 */
-	struct gpu_buddy_block **roots;
+	struct gpu_buddy_block **roots __counted_by_ptr(n_roots);
 	/*
 	 * Per-order free block scoreboard: free_scoreboard[order] holds the
 	 * number of blocks of that order currently in the free state.
