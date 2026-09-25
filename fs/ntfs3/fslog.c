@@ -694,6 +694,7 @@ static bool check_log_rec(const struct LOG_REC_HDR *lr, u32 bytes, u32 tr,
 			  u32 bytes_per_attr_entry)
 {
 	u16 t16;
+	u32 off, len;
 
 	if (bytes < sizeof(struct LOG_REC_HDR))
 		return false;
@@ -729,6 +730,17 @@ check_lcns:
 
 check_length:
 	if (bytes < lrh_length(lr))
+		return false;
+
+	off = le16_to_cpu(lr->redo_off);
+	len = le16_to_cpu(lr->redo_len);
+	if (off > bytes || len > bytes - off)
+		return false;
+
+	off = le16_to_cpu(lr->undo_off);
+	len = le16_to_cpu(lr->undo_len);
+	if (lr->undo_op != cpu_to_le16(CompensationLogRecord) &&
+	    (off > bytes || len > bytes - off))
 		return false;
 
 	return true;
@@ -4736,6 +4748,25 @@ copy_lcns:
 	}
 
 	case OpenNonresidentAttribute:
+		t32 = !rst->major_ver ? SIZEOF_OPENATTRIBUTEENTRY0 :
+					 bytes_per_attr_entry;
+		off = le16_to_cpu(lrh->redo_off);
+		if (off > rec_len || t32 > rec_len - off) {
+			err = -EINVAL;
+			goto out;
+		}
+
+		/*
+		 * The attribute name is copied from the undo range, which
+		 * check_log_rec() does not bound for compensation log records.
+		 */
+		off = le16_to_cpu(lrh->undo_off);
+		t32 = le16_to_cpu(lrh->undo_len);
+		if (t32 && (off > rec_len || t32 > rec_len - off)) {
+			err = -EINVAL;
+			goto out;
+		}
+
 		t16 = le16_to_cpu(lrh->target_attr);
 		if (t16 >= bytes_per_rt(oatbl)) {
 			/*
