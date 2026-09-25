@@ -348,8 +348,10 @@ static void qxl_crtc_update_monitors_config(struct drm_crtc *crtc,
 		head.y = crtc->y;
 		if (qdev->monitors_config->count < i + 1)
 			qdev->monitors_config->count = i + 1;
-		if (qdev->primary_bo == qdev->dumb_shadow_bo)
-			head.x += qdev->dumb_heads[i].x;
+		if (qdev->primary_bo == qdev->dumb_shadow_bo) {
+			head.x = qdev->dumb_heads[i].x;
+			head.y = qdev->dumb_heads[i].y;
+		}
 	} else if (i > 0) {
 		head.width = 0;
 		head.height = 0;
@@ -458,8 +460,47 @@ static int qxl_framebuffer_surface_dirty(struct drm_framebuffer *fb,
 		inc = 2; /* skip source rects */
 	}
 
-	qxl_draw_dirty_fb(qdev, fb, qobj, flags, color,
-			  clips, num_clips, inc, 0);
+	if (qobj->shadow) {
+		struct drm_crtc *crtc;
+		unsigned int n;
+
+		drm_for_each_crtc(crtc, &qdev->ddev) {
+			struct drm_plane_state *st;
+			u32 sx, sy, sw, sh;
+
+			st = crtc->primary->state;
+			if (st->fb != fb ||
+			    !qdev->dumb_heads[crtc->index].width)
+				continue;
+			sx = st->src_x >> 16;
+			sy = st->src_y >> 16;
+			sw = st->src_w >> 16;
+			sh = st->src_h >> 16;
+			for (n = 0; n < num_clips; n++) {
+				struct drm_clip_rect *in = clips + n * inc;
+				struct drm_clip_rect c;
+				u32 x1 = max_t(u32, in->x1, sx);
+				u32 y1 = max_t(u32, in->y1, sy);
+				u32 x2 = min_t(u32, in->x2, sx + sw);
+				u32 y2 = min_t(u32, in->y2, sy + sh);
+
+				if (x1 >= x2 || y1 >= y2)
+					continue;
+				c.x1 = x1;
+				c.y1 = y1;
+				c.x2 = x2;
+				c.y2 = y2;
+				qxl_draw_dirty_fb(qdev, fb, qobj, flags, color,
+						  &c, 1, 1,
+						  qdev->dumb_heads[crtc->index].x - sx,
+						  (int)qdev->dumb_heads[crtc->index].y -
+						  (int)sy);
+			}
+		}
+	} else {
+		qxl_draw_dirty_fb(qdev, fb, qobj, flags, color,
+				  clips, num_clips, inc, 0, 0);
+	}
 
 out_lock_end:
 	DRM_MODESET_LOCK_ALL_END(fb->dev, ctx, ret);
@@ -662,6 +703,37 @@ static void qxl_free_cursor(struct qxl_bo *cursor_bo)
 	qxl_bo_unref(&cursor_bo);
 }
 
+static void qxl_redraw_other_dumb_heads(struct qxl_device *qdev, int skip)
+{
+	struct drm_crtc *crtc;
+
+	drm_for_each_crtc(crtc, &qdev->ddev) {
+		struct drm_plane_state *st;
+		struct qxl_bo *other;
+		struct drm_clip_rect clip;
+		u32 sx, sy;
+
+		if (crtc->index == skip ||
+		    !qdev->dumb_heads[crtc->index].width)
+			continue;
+		st = crtc->primary->state;
+		if (!st->fb)
+			continue;
+		other = gem_to_qxl_bo(st->fb->obj[0]);
+		if (!other->is_dumb)
+			continue;
+		sx = st->src_x >> 16;
+		sy = st->src_y >> 16;
+		clip.x1 = sx;
+		clip.y1 = sy;
+		clip.x2 = sx + (st->src_w >> 16);
+		clip.y2 = sy + (st->src_h >> 16);
+		qxl_draw_dirty_fb(qdev, st->fb, other, 0, 0, &clip, 1, 1,
+				  qdev->dumb_heads[crtc->index].x - sx,
+				  (int)qdev->dumb_heads[crtc->index].y - (int)sy);
+	}
+}
+
 static void qxl_primary_atomic_update(struct drm_plane *plane,
 				      struct drm_atomic_commit *state)
 {
@@ -670,13 +742,18 @@ static void qxl_primary_atomic_update(struct drm_plane *plane,
 	struct qxl_device *qdev = to_qxl(plane->dev);
 	struct qxl_bo *bo = gem_to_qxl_bo(new_state->fb->obj[0]);
 	struct qxl_bo *primary;
-	struct drm_clip_rect norect = {
-	    .x1 = 0,
-	    .y1 = 0,
-	    .x2 = new_state->fb->width,
-	    .y2 = new_state->fb->height
-	};
+	struct drm_clip_rect norect;
 	uint32_t dumb_shadow_offset = 0;
+	int y_off = 0;
+	u32 src_x = new_state->src_x >> 16;
+	u32 src_y = new_state->src_y >> 16;
+	u32 src_w = new_state->src_w >> 16;
+	u32 src_h = new_state->src_h >> 16;
+
+	norect.x1 = src_x;
+	norect.y1 = src_y;
+	norect.x2 = src_x + src_w;
+	norect.y2 = src_y + src_h;
 
 	primary = bo->shadow ? bo->shadow : bo;
 
@@ -687,12 +764,19 @@ static void qxl_primary_atomic_update(struct drm_plane *plane,
 		qxl_primary_apply_cursor(qdev, plane->state);
 	}
 
-	if (bo->is_dumb)
+	if (bo->is_dumb) {
 		dumb_shadow_offset =
-			qdev->dumb_heads[new_state->crtc->index].x;
+			qdev->dumb_heads[new_state->crtc->index].x - src_x;
+		y_off = (int)qdev->dumb_heads[new_state->crtc->index].y -
+			(int)src_y;
+	}
 
 	qxl_draw_dirty_fb(qdev, new_state->fb, bo, 0, 0, &norect, 1, 1,
-			  dumb_shadow_offset);
+			  dumb_shadow_offset, y_off);
+	if (qdev->dumb_shadow_needs_redraw) {
+		qdev->dumb_shadow_needs_redraw = false;
+		qxl_redraw_other_dumb_heads(qdev, new_state->crtc->index);
+	}
 }
 
 static void qxl_primary_atomic_disable(struct drm_plane *plane,
@@ -764,18 +848,14 @@ static void qxl_cursor_atomic_disable(struct drm_plane *plane,
 	qcrtc->cursor_bo = NULL;
 }
 
-static void qxl_update_dumb_head(struct qxl_device *qdev,
-				 int index, struct qxl_bo *bo)
+static void qxl_update_dumb_head(struct qxl_device *qdev, int index,
+				 struct qxl_bo *bo, uint32_t width,
+				 uint32_t height)
 {
-	uint32_t width, height;
-
 	if (index >= qdev->monitors_config->max_allowed)
 		return;
 
-	if (bo && bo->is_dumb) {
-		width = bo->surf.width;
-		height = bo->surf.height;
-	} else {
+	if (!bo || !bo->is_dumb) {
 		width = 0;
 		height = 0;
 	}
@@ -820,12 +900,11 @@ static void qxl_calc_dumb_shadow(struct qxl_device *qdev,
 }
 
 static void qxl_prepare_shadow(struct qxl_device *qdev, struct qxl_bo *user_bo,
-			       int crtc_index)
+			       int crtc_index, uint32_t width, uint32_t height)
 {
 	struct qxl_surface surf;
 
-	qxl_update_dumb_head(qdev, crtc_index,
-			     user_bo);
+	qxl_update_dumb_head(qdev, crtc_index, user_bo, width, height);
 	qxl_calc_dumb_shadow(qdev, &surf);
 	if (!qdev->dumb_shadow_bo ||
 	    qdev->dumb_shadow_bo->surf.width  != surf.width ||
@@ -839,6 +918,7 @@ static void qxl_prepare_shadow(struct qxl_device *qdev, struct qxl_bo *user_bo,
 		qxl_bo_create(qdev, surf.height * surf.stride,
 			      true, true, QXL_GEM_DOMAIN_SURFACE, 0,
 			      &surf, &qdev->dumb_shadow_bo);
+		qdev->dumb_shadow_needs_redraw = true;
 	}
 	if (user_bo->shadow != qdev->dumb_shadow_bo) {
 		if (user_bo->shadow) {
@@ -869,7 +949,9 @@ static int qxl_plane_prepare_fb(struct drm_plane *plane,
 
 	if (plane->type == DRM_PLANE_TYPE_PRIMARY &&
 	    user_bo->is_dumb) {
-		qxl_prepare_shadow(qdev, user_bo, new_state->crtc->index);
+		qxl_prepare_shadow(qdev, user_bo, new_state->crtc->index,
+				   new_state->src_w >> 16,
+				   new_state->src_h >> 16);
 	}
 
 	if (plane->type == DRM_PLANE_TYPE_CURSOR &&

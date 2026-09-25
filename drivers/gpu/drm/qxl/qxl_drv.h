@@ -202,6 +202,7 @@ struct qxl_device {
 
 	struct qxl_bo *primary_bo;
 	struct qxl_bo *dumb_shadow_bo;
+	bool dumb_shadow_needs_redraw;
 	struct qxl_head *dumb_heads;
 
 	struct qxl_memslot main_slot;
@@ -394,7 +395,7 @@ void qxl_draw_dirty_fb(struct qxl_device *qdev,
 		       unsigned int flags, unsigned int color,
 		       struct drm_clip_rect *clips,
 		       unsigned int num_clips, int inc,
-		       uint32_t dumb_shadow_offset);
+		       u32 dumb_shadow_offset, int y_off);
 
 void qxl_release_free(struct qxl_device *qdev,
 		      struct qxl_release *release);
