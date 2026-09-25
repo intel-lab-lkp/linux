@@ -560,6 +560,12 @@ qla2x00_sysfs_read_vpd(struct file *filp, struct kobject *kobj,
 
 	faddr = ha->flt_region_vpd << 2;
 
+	mutex_lock(&ha->optrom_mutex);
+	if (qla2x00_chip_is_down(vha)) {
+		mutex_unlock(&ha->optrom_mutex);
+		return -EAGAIN;
+	}
+
 	if (IS_QLA28XX(ha)) {
 		qla28xx_get_aux_images(vha, &active_regions);
 		if (active_regions.aux.vpd_nvram == QLA27XX_SECONDARY_IMAGE)
@@ -569,12 +575,6 @@ qla2x00_sysfs_read_vpd(struct file *filp, struct kobject *kobj,
 		    "Loading %s nvram image.\n",
 		    active_regions.aux.vpd_nvram == QLA27XX_PRIMARY_IMAGE ?
 		    "primary" : "secondary");
-	}
-
-	mutex_lock(&ha->optrom_mutex);
-	if (qla2x00_chip_is_down(vha)) {
-		mutex_unlock(&ha->optrom_mutex);
-		return -EAGAIN;
 	}
 
 	ha->isp_ops->read_optrom(vha, ha->vpd, faddr, ha->vpd_size);
