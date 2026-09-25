@@ -141,6 +141,13 @@ bpf_jit_find_kfunc_model(const struct bpf_prog *prog,
 	struct bpf_kfunc_desc_tab *tab;
 
 	tab = prog->aux->kfunc_tab;
+	if (bpf_jit_supports_far_kfunc_call()) {
+		if (insn->off < 0 || insn->off >= tab->nr_descs)
+			return NULL;
+		res = &tab->descs[insn->off];
+		return res->func_id == insn->imm ? &res->func_model : NULL;
+	}
+
 	res = bsearch(&desc, tab->descs, tab->nr_descs,
 		      sizeof(tab->descs[0]), kfunc_desc_cmp_by_imm_off);
 
@@ -2700,11 +2707,14 @@ next_insn:
 		}
 	}
 
-	ret = sort_kfunc_descs_by_imm_off(env);
-	if (ret)
-		return ret;
+	/*
+	 * Do not change kfunc desc position into the table for far JIT.
+	 * because we use the indices in the instructions.
+	 */
+	if (bpf_jit_supports_far_kfunc_call())
+		return 0;
 
-	return 0;
+	return sort_kfunc_descs_by_imm_off(env);
 }
 
 static struct bpf_prog *inline_bpf_loop(struct bpf_verifier_env *env,

@@ -2583,12 +2583,16 @@ find_kfunc_desc(const struct bpf_prog *prog, u32 func_id, u16 offset)
 }
 
 int bpf_get_kfunc_addr(const struct bpf_prog *prog, u32 func_id,
-		       u16 btf_fd_idx, u8 **func_addr)
+		       u16 desc_idx, u8 **func_addr)
 {
+	struct bpf_kfunc_desc_tab *tab;
 	const struct bpf_kfunc_desc *desc;
 
-	desc = find_kfunc_desc(prog, func_id, btf_fd_idx);
-	if (!desc)
+	tab = prog->aux->kfunc_tab;
+	if (desc_idx >= tab->nr_descs)
+		return -EFAULT;
+	desc = &tab->descs[desc_idx];
+	if (desc->func_id != func_id)
 		return -EFAULT;
 
 	*func_addr = (u8 *)desc->addr;
@@ -22028,7 +22032,8 @@ static int specialize_kfunc(struct bpf_verifier_env *env, struct bpf_kfunc_desc 
 }
 
 static int add_kfunc_desc_target(struct bpf_verifier_env *env,
-				 const struct bpf_kfunc_desc *target_desc)
+				 const struct bpf_kfunc_desc *target_desc,
+				 u16 *desc_idx)
 {
 	struct bpf_kfunc_desc desc = *target_desc;
 	struct bpf_kfunc_desc_tab *new_tab;
@@ -22041,8 +22046,10 @@ static int add_kfunc_desc_target(struct bpf_verifier_env *env,
 	for (i = 0; i < tab->nr_descs; i++) {
 		if (tab->descs[i].func_id == desc.func_id &&
 		    tab->descs[i].offset == desc.offset &&
-		    tab->descs[i].addr == desc.addr)
+		    tab->descs[i].addr == desc.addr) {
+			*desc_idx = i;
 			return 0;
+		}
 	}
 
 	if (tab->nr_descs == MAX_KFUNC_CALL_DESCS) {
@@ -22057,6 +22064,7 @@ static int add_kfunc_desc_target(struct bpf_verifier_env *env,
 	tab = new_tab;
 	prog_aux->kfunc_tab = tab;
 
+	*desc_idx = tab->nr_descs;
 	tab->descs[tab->nr_descs++] = desc;
 	return 0;
 }
@@ -22084,6 +22092,7 @@ int bpf_fixup_kfunc_call(struct bpf_verifier_env *env, struct bpf_insn *insn,
 	struct bpf_kfunc_desc desc_copy;
 	struct bpf_kfunc_desc *desc;
 	unsigned long call_imm;
+	u16 desc_idx;
 	bool near_call;
 	int err;
 
@@ -22106,10 +22115,8 @@ int bpf_fixup_kfunc_call(struct bpf_verifier_env *env, struct bpf_insn *insn,
 	}
 
 	near_call = !bpf_jit_supports_far_kfunc_call();
-	if (near_call) {
-		desc_copy = *desc;
-		desc = &desc_copy;
-	}
+	desc_copy = *desc;
+	desc = &desc_copy;
 
 	err = specialize_kfunc(env, desc, insn_idx);
 	if (err)
@@ -22123,11 +22130,13 @@ int bpf_fixup_kfunc_call(struct bpf_verifier_env *env, struct bpf_insn *insn,
 			return -EINVAL;
 		}
 		insn->imm = call_imm;
-
-		err = add_kfunc_desc_target(env, desc);
-		if (err)
-			return err;
 	}
+
+	err = add_kfunc_desc_target(env, desc, &desc_idx);
+	if (err)
+		return err;
+	if (!near_call)
+		insn->off = desc_idx;
 
 	if (is_bpf_obj_new_kfunc(desc->func_id) || is_bpf_percpu_obj_new_kfunc(desc->func_id)) {
 		struct btf_struct_meta *kptr_struct_meta = env->insn_aux_data[insn_idx].kptr_struct_meta;

@@ -1797,6 +1797,8 @@ struct bpf_kfunc_desc_tab {
 	 * descriptors used for verifier lookups. Call specialization may append
 	 * immutable descriptors for additional targets. Near-call JITs look up
 	 * descriptors by imm and offset after do_misc_fixups() sorts the table.
+	 * Far-call JITs use the descriptor index stored in the finalized call's
+	 * off field, so their table remains in verification order.
 	 *
 	 * Grown one entry at a time by bpf_add_kfunc_call() and during
 	 * call specialization.
