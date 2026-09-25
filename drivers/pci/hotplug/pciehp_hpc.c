@@ -89,6 +89,10 @@ static int pcie_poll_cmd(struct controller *ctrl, int timeout)
 	u16 slot_status;
 
 	do {
+		/* The IRQ handler may have consumed the completion event. */
+		if (!ctrl->cmd_busy)
+			return 1;
+
 		pcie_capability_read_word(pdev, PCI_EXP_SLTSTA, &slot_status);
 		if (PCI_POSSIBLE_ERROR(slot_status)) {
 			ctrl_info(ctrl, "%s: no response from device\n",
@@ -106,7 +110,7 @@ static int pcie_poll_cmd(struct controller *ctrl, int timeout)
 		msleep(10);
 		timeout -= 10;
 	} while (timeout >= 0);
-	return 0;	/* timeout */
+	return !ctrl->cmd_busy;
 }
 
 static void pcie_wait_cmd(struct controller *ctrl)
@@ -137,7 +141,8 @@ static void pcie_wait_cmd(struct controller *ctrl)
 	else
 		timeout = cmd_timeout - now;
 
-	if (ctrl->slot_ctrl & PCI_EXP_SLTCTL_HPIE &&
+	if (READ_ONCE(ctrl->hpie_enabled) &&
+	    ctrl->slot_ctrl & PCI_EXP_SLTCTL_HPIE &&
 	    ctrl->slot_ctrl & PCI_EXP_SLTCTL_CCIE)
 		rc = wait_event_timeout(ctrl->queue, !ctrl->cmd_busy, timeout);
 	else
@@ -179,6 +184,9 @@ static void pcie_do_write_cmd(struct controller *ctrl, u16 cmd,
 	ctrl->cmd_busy = 1;
 	smp_mb();
 	ctrl->slot_ctrl = slot_ctrl;
+	/* Do not let unrelated read-modify-writes change the IRQ setting. */
+	if (mask & PCI_EXP_SLTCTL_HPIE)
+		WRITE_ONCE(ctrl->hpie_enabled, !!(cmd & PCI_EXP_SLTCTL_HPIE));
 	pcie_capability_write_word(pdev, PCI_EXP_SLTCTL, slot_ctrl);
 	ctrl->cmd_started = jiffies;
 
@@ -629,10 +637,12 @@ static irqreturn_t pciehp_isr(int irq, void *dev_id)
 
 	/*
 	 * Interrupts only occur in D3hot or shallower and only if enabled
-	 * in the Slot Control register (PCIe r4.0, sec 6.7.3.4).
+	 * in the Slot Control register (PCIe r4.0, sec 6.7.3.4).  Use the
+	 * driver's HPIE setting, not a cached hardware value which may be
+	 * affected by firmware changes to Slot Control.
 	 */
 	if (pdev->current_state == PCI_D3cold ||
-	    (!(ctrl->slot_ctrl & PCI_EXP_SLTCTL_HPIE) && !pciehp_poll_mode))
+	    (!READ_ONCE(ctrl->hpie_enabled) && !pciehp_poll_mode))
 		return IRQ_NONE;
 
 	/*

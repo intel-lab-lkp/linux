@@ -54,6 +54,8 @@ extern int pciehp_poll_time;
  *	controller and disabled per spec recommendation (PCIe r5.0, appendix I
  *	implementation note)
  * @slot_ctrl: cached copy of the Slot Control register
+ * @hpie_enabled: driver's Hot-Plug Interrupt Enable setting, updated only
+ *	by commands that explicitly change HPIE, not by hardware readback
  * @ctrl_lock: serializes writes to the Slot Control register
  * @cmd_started: jiffies when the Slot Control register was last written;
  *	the next write is allowed 1 second later, absent a Command Completed
@@ -96,6 +98,7 @@ struct controller {
 	unsigned int inband_presence_disabled:1;
 
 	u16 slot_ctrl;				/* control register access */
+	bool hpie_enabled;
 	struct mutex ctrl_lock;
 	unsigned long cmd_started;
 	unsigned int cmd_busy:1;
