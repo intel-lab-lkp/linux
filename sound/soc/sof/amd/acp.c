@@ -1059,6 +1059,7 @@ int amd_sof_acp_resume(struct snd_sof_dev *sdev)
 }
 EXPORT_SYMBOL_NS(amd_sof_acp_resume, "SND_SOC_SOF_AMD_COMMON");
 
+#ifdef CONFIG_ACPI
 static void acp_sof_scan_pdm_devices(struct snd_sof_dev *sdev,
 				     struct acpi_device *pdm_dev)
 {
@@ -1083,6 +1084,7 @@ static void acp_sof_scan_pdm_devices(struct snd_sof_dev *sdev,
 	}
 	fwnode_handle_put(child);
 }
+#endif
 
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_AMD_SOUNDWIRE)
 static int acp_sof_scan_sdw_devices(struct snd_sof_dev *sdev, u64 addr)
@@ -1299,9 +1301,7 @@ int amd_sof_acp7x_probe(struct snd_sof_dev *sdev)
 	struct pci_dev *pci = to_pci_dev(sdev->dev);
 	struct acp_dev_data *adata;
 	const struct sof_amd_acp_desc *chip;
-	const union acpi_object *obj;
 	struct acpi_device *adev;
-	struct acpi_device *pdm_dev;
 	unsigned int addr;
 	unsigned int irqflags;
 	int ret;
@@ -1369,7 +1369,11 @@ int amd_sof_acp7x_probe(struct snd_sof_dev *sdev)
 		adata->is_sdw_dev = true;
 
 skip_soundwire:
+#ifdef CONFIG_ACPI
 	if (adev) {
+		struct acpi_device *pdm_dev;
+		const union acpi_object *obj;
+
 		/* DMIC ACPI child address is 2 on ACP7x platforms */
 		pdm_dev = acpi_find_child_device(adev, ACP7X_DMIC_ADDR, 0);
 		if (pdm_dev)
@@ -1379,6 +1383,7 @@ skip_soundwire:
 					   ACPI_TYPE_INTEGER, &obj))
 			adata->acp_sof_signed_firmware_image = obj->integer.value;
 	}
+#endif
 
 	sdev->dsp_box.offset = 0;
 	sdev->dsp_box.size = BOX_SIZE_512;
