@@ -954,6 +954,13 @@ u32 arch_acpi_add_auto_dep(acpi_handle handle);
 
 #else	/* CONFIG_ACPI */
 
+static inline struct acpi_device *
+acpi_find_child_device(struct acpi_device *parent, u64 address,
+		       bool check_children)
+{
+	return NULL;
+}
+
 static inline bool acpi_has_method(acpi_handle handle, char *name)
 {
 	return false;
