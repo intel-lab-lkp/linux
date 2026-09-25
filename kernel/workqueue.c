@@ -393,6 +393,7 @@ struct workqueue_struct {
 	int			min_active;	/* WO: min active works */
 	int			saved_max_active; /* WQ: saved max_active */
 	int			saved_min_active; /* WQ: saved min_active */
+	int			saved_percpu_max_active; /* WQ: percpu limit */
 
 	struct workqueue_attrs	*attrs;	/* PW: workqueue attributes */
 	struct pool_workqueue __rcu *dfl_pwq;   /* PW: only for unbound wqs */
@@ -420,6 +421,13 @@ struct workqueue_struct {
 	struct pool_workqueue __rcu * __percpu *cpu_pwq; /* I: per-cpu pwqs */
 	struct wq_node_nr_active *node_nr_active[]; /* I: per-node nr_active */
 };
+
+static int wq_user_max_active(struct workqueue_struct *wq)
+{
+	if (wq->flags & WQ_UNBOUND)
+		return READ_ONCE(wq->saved_max_active);
+	return READ_ONCE(wq->saved_percpu_max_active);
+}
 
 /*
  * Each pod type describes how CPUs should be grouped for unbound workqueues.
@@ -4549,7 +4557,7 @@ static bool start_flush_work(struct work_struct *work, struct wq_barrier *barr,
 	 * workqueues the deadlock happens when the rescuer stalls, blocking
 	 * forward progress.
 	 */
-	if (!from_cancel && (wq->saved_max_active == 1 || wq->rescuer))
+	if (!from_cancel && (wq_user_max_active(wq) == 1 || wq->rescuer))
 		touch_wq_lockdep_map(wq);
 
 	rcu_read_unlock();
@@ -6031,9 +6039,25 @@ static int init_rescuer(struct workqueue_struct *wq)
 	return 0;
 }
 
+static int wq_nr_online_cpus(const struct cpumask *mask)
+{
+	return max(cpumask_weight_and(mask, cpu_online_mask), 1);
+}
+
+static int wq_scale_to_unbound(int percpu_max, int nr_cpus)
+{
+	return min_t(s64, (s64)percpu_max * nr_cpus, WQ_MAX_ACTIVE);
+}
+
+static int wq_scale_to_percpu(int max_active, int min_active, int nr_cpus)
+{
+	return max(DIV_ROUND_UP(max_active, nr_cpus), min_active);
+}
+
 static void wq_init_max_active(struct workqueue_struct *wq, int max_active)
 {
 	int effective_max_active;
+	int nr_cpus = wq_nr_online_cpus(wq_unbound_cpumask);
 
 	if (wq->flags & WQ_BH) {
 		/*
@@ -6050,55 +6074,69 @@ static void wq_init_max_active(struct workqueue_struct *wq, int max_active)
 	if (wq->flags & WQ_UNBOUND) {
 		wq->max_active = effective_max_active;
 		wq->min_active = min(effective_max_active, WQ_DFL_MIN_ACTIVE);
-		wq->saved_min_active = wq->min_active;
+		wq->percpu_max_active = wq_scale_to_percpu(effective_max_active,
+							   wq->min_active,
+							   nr_cpus);
+	} else if (wq->flags & WQ_BH) {	/* BH implies !WQ_UNBOUND */
+		wq->max_active = effective_max_active;
+		wq->min_active = effective_max_active;
+		wq->percpu_max_active = effective_max_active;
 	} else {
 		wq->percpu_max_active = effective_max_active;
+		wq->max_active = wq_scale_to_unbound(effective_max_active,
+						     nr_cpus);
+		wq->min_active = min(effective_max_active, wq->max_active);
 	}
-	wq->saved_max_active = effective_max_active;
+
+	wq->saved_max_active = wq->max_active;
+	wq->saved_min_active = wq->min_active;
+	wq->saved_percpu_max_active = wq->percpu_max_active;
 }
 
 /**
  * wq_adjust_max_active - update a wq's max_active to the current setting
  * @wq: target workqueue
  *
- * If @wq isn't freezing, set the limit that applies to @wq's backing to the
- * saved_max_active and activate inactive work items accordingly. If @wq is
- * freezing, clear it to zero.
+ * If @wq isn't freezing, publish the saved limits of both domains and activate
+ * inactive work items accordingly. If @wq is freezing, clear them to zero.
  */
 static void wq_adjust_max_active(struct workqueue_struct *wq)
 {
+	int new_max, new_min, new_percpu_max;
 	bool activated;
-	int new_max, new_min;
 
 	lockdep_assert_held(&wq->mutex);
 
 	if ((wq->flags & WQ_FREEZABLE) && workqueue_freezing) {
 		new_max = 0;
 		new_min = 0;
+		new_percpu_max = 0;
 	} else {
 		new_max = wq->saved_max_active;
 		new_min = wq->saved_min_active;
+		new_percpu_max = wq->saved_percpu_max_active;
 	}
 
 	/*
-	 * Update the limit and then kick inactive work items if more active
+	 * Update both domains and then kick inactive work items if more active
 	 * work items are allowed. This doesn't break work item ordering
 	 * because new work items are always queued behind existing inactive
 	 * work items if there are any.
+	 *
+	 * Which domain a pwq honours follows its pool, see
+	 * pwq_tryinc_nr_active(). Keeping both current means a pwq is never
+	 * metered against a limit nobody set.
 	 */
-	if (wq->flags & WQ_UNBOUND) {
-		if (wq->max_active == new_max && wq->min_active == new_min)
-			return;
+	if (wq->max_active == new_max && wq->min_active == new_min &&
+	    wq->percpu_max_active == new_percpu_max)
+		return;
 
-		WRITE_ONCE(wq->max_active, new_max);
-		WRITE_ONCE(wq->min_active, new_min);
+	WRITE_ONCE(wq->max_active, new_max);
+	WRITE_ONCE(wq->min_active, new_min);
+	WRITE_ONCE(wq->percpu_max_active, new_percpu_max);
+
+	if (wq->flags & WQ_UNBOUND)
 		wq_update_node_max_active(wq, -1);
-	} else {
-		if (wq->percpu_max_active == new_max)
-			return;
-
-		WRITE_ONCE(wq->percpu_max_active, new_max);
-	}
 
 	if (new_max == 0)
 		return;
@@ -6448,6 +6486,8 @@ EXPORT_SYMBOL_GPL(destroy_workqueue);
  */
 void workqueue_set_max_active(struct workqueue_struct *wq, int max_active)
 {
+	int nr_cpus;
+
 	/* max_active doesn't mean anything for BH workqueues */
 	if (WARN_ON(wq->flags & WQ_BH))
 		return;
@@ -6456,12 +6496,22 @@ void workqueue_set_max_active(struct workqueue_struct *wq, int max_active)
 		return;
 
 	max_active = wq_clamp_max_active(max_active, wq->flags, wq->name);
+	nr_cpus = wq_nr_online_cpus(wq_unbound_cpumask);
 
 	mutex_lock(&wq->mutex);
 
-	wq->saved_max_active = max_active;
-	if (wq->flags & WQ_UNBOUND)
+	if (wq->flags & WQ_UNBOUND) {
+		wq->saved_max_active = max_active;
 		wq->saved_min_active = min(wq->saved_min_active, max_active);
+		wq->saved_percpu_max_active =
+			wq_scale_to_percpu(max_active, wq->saved_min_active,
+					   nr_cpus);
+	} else {
+		wq->saved_percpu_max_active = max_active;
+		wq->saved_max_active = wq_scale_to_unbound(max_active,
+							   nr_cpus);
+		wq->saved_min_active = min(max_active, wq->saved_max_active);
+	}
 
 	wq_adjust_max_active(wq);
 
@@ -6492,6 +6542,9 @@ void workqueue_set_min_active(struct workqueue_struct *wq, int min_active)
 
 	mutex_lock(&wq->mutex);
 	wq->saved_min_active = clamp(min_active, 0, wq->saved_max_active);
+	wq->saved_percpu_max_active =
+		wq_scale_to_percpu(wq->saved_max_active, wq->saved_min_active,
+				   wq_nr_online_cpus(wq_unbound_cpumask));
 	wq_adjust_max_active(wq);
 	mutex_unlock(&wq->mutex);
 }
@@ -7563,7 +7616,7 @@ static ssize_t max_active_show(struct device *dev,
 {
 	struct workqueue_struct *wq = dev_to_wq(dev);
 
-	return scnprintf(buf, PAGE_SIZE, "%d\n", wq->saved_max_active);
+	return scnprintf(buf, PAGE_SIZE, "%d\n", wq_user_max_active(wq));
 }
 
 static ssize_t max_active_store(struct device *dev,
