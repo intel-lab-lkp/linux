@@ -48,10 +48,16 @@
  *	CONSTANTS
  **************************************************************************/
 #define LZ4_MAX_INPUT_SIZE	0x7E000000 /* 2 113 929 216 bytes */
+
+/* lib/decompress_unlz4.c sees this header and, under PREBOOT, upstream's
+ * lz4.h too; both define this identically.
+ */
+#ifndef LZ4_COMPRESSBOUND
 #define LZ4_COMPRESSBOUND(isize)	(\
 	(unsigned int)(isize) > (unsigned int)LZ4_MAX_INPUT_SIZE \
 	? 0 \
 	: (isize) + ((isize)/255) + 16)
+#endif
 
 #define LZ4_ACCELERATION_DEFAULT 1
 
@@ -66,12 +72,8 @@
 #define LZ4HC_CLAMP_CLEVEL			10
 
 /*-************************************************************************
- *	STREAMING CONSTANTS AND STRUCTURES
+ *	STREAMING STRUCTURES
  **************************************************************************/
-#define LZ4_STREAMDECODESIZE_U64	4
-#define LZ4_STREAMDECODESIZE		 (LZ4_STREAMDECODESIZE_U64 * \
-	sizeof(unsigned long long))
-
 /*
  * LZ4_stream_t - an LZ4 stream.  Incomplete: lib/lz4 owns the layout.
  * Allocate LZ4_MEM_COMPRESS bytes and cast, do not sizeof().
@@ -85,21 +87,11 @@ typedef union LZ4_stream_u LZ4_stream_t;
 typedef union LZ4_streamHC_u LZ4_streamHC_t;
 
 /*
- * LZ4_streamDecode_t - information structure to track an
- *	LZ4 stream during decompression.
- *
- * init this structure using LZ4_setStreamDecode (or memset()) before first use
+ * LZ4_streamDecode_t - an LZ4 stream during decompression.  Incomplete:
+ * lib/lz4 owns the layout.  Allocate LZ4_MEM_DECOMPRESS bytes and cast, do
+ * not sizeof().  Init with LZ4_setStreamDecode() (or zero it) before use.
  */
-typedef struct {
-	const uint8_t *externalDict;
-	size_t extDictSize;
-	const uint8_t *prefixEnd;
-	size_t prefixSize;
-} LZ4_streamDecode_t_internal;
-typedef union {
-	unsigned long long table[LZ4_STREAMDECODESIZE_U64];
-	LZ4_streamDecode_t_internal internal_donotuse;
-} LZ4_streamDecode_t;
+typedef union LZ4_streamDecode_u LZ4_streamDecode_t;
 
 /*-************************************************************************
  *	SIZE OF STATE
@@ -111,22 +103,11 @@ typedef union {
  */
 #define LZ4_MEM_COMPRESS	16416
 #define LZ4HC_MEM_COMPRESS	262200
+#define LZ4_MEM_DECOMPRESS	32
 
 /*-************************************************************************
  *	Compression Functions
  **************************************************************************/
-
-/**
- * LZ4_compressBound() - Max. output size in worst case szenarios
- * @isize: Size of the input data
- *
- * Return: Max. size LZ4 may output in a "worst case" szenario
- * (data not compressible)
- */
-static inline int LZ4_compressBound(size_t isize)
-{
-	return LZ4_COMPRESSBOUND(isize);
-}
 
 /**
  * LZ4_compress_default() - Compress data from source to dest
@@ -141,7 +122,7 @@ static inline int LZ4_compressBound(size_t isize)
  * Compresses 'sourceSize' bytes from buffer 'source'
  * into already allocated 'dest' buffer of size 'maxOutputSize'.
  * Compression is guaranteed to succeed if
- * 'maxOutputSize' >= LZ4_compressBound(inputSize).
+ * 'maxOutputSize' >= LZ4_COMPRESSBOUND(inputSize).
  * It also runs faster, so it's a recommended setting.
  * If the function cannot compress 'source' into a more limited 'dest' budget,
  * compression stops *immediately*, and the function result is zero.
@@ -295,7 +276,7 @@ int LZ4_decompress_safe_partial(const char *source, char *dest,
  *
  * Compress data from 'src' into 'dst', using the more powerful
  * but slower "HC" algorithm. Compression is guaranteed to succeed if
- * `dstCapacity >= LZ4_compressBound(srcSize)
+ * `dstCapacity >= LZ4_COMPRESSBOUND(srcSize)
  *
  * Return : the number of bytes written into 'dst' or 0 if compression fails.
  */
@@ -359,7 +340,7 @@ int	LZ4_loadDictHC(LZ4_streamHC_t *streamHCPtr, const char *dictionary,
  * (including initial dictionary when present) must remain accessible
  * and unmodified during compression.
  * 'dst' buffer should be sized to handle worst case scenarios, using
- *  LZ4_compressBound(), to ensure operation success.
+ *  LZ4_COMPRESSBOUND(), to ensure operation success.
  *  If, for any reason, previous data blocks can't be preserved unmodified
  *  in memory during next compression block,
  *  you must save it to a safer memory space, using LZ4_saveDictHC().
@@ -455,7 +436,7 @@ int LZ4_saveDict(LZ4_stream_t *streamPtr, char *safeBuffer, int dictSize);
  * as dictionary to improve compression ratio.
  * Important : Previous data blocks are assumed to still
  * be present and unmodified !
- * If maxDstSize >= LZ4_compressBound(srcSize),
+ * If maxDstSize >= LZ4_COMPRESSBOUND(srcSize),
  * compression is guaranteed to succeed, and runs faster.
  *
  * Return: Number of bytes written into buffer 'dst'  or 0 if compression fails
