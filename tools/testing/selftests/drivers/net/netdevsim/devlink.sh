@@ -849,6 +849,13 @@ rate_test()
 {
 	RET=0
 
+	local tc_bw_supported=false
+	if devlink port function rate help 2>&1 | grep -q tc-bw; then
+		tc_bw_supported=true
+	else
+		log_test_skip "rate tc-bw" "Current iproute doesn't support rate option 'tc-bw'."
+	fi
+
 	echo $VF_COUNT > /sys/bus/netdevsim/devices/$DEV_NAME/sriov_numvfs
 	devlink dev eswitch set $DL_HANDLE mode switchdev
 	local leafs=`rate_leafs_get $DL_HANDLE`
@@ -872,12 +879,14 @@ rate_test()
 		rate=$(($rate+100))
 	done
 
-	local tc_bw="0:0 1:40 2:0 3:0 4:0 5:0 6:60 7:0"
-	for r_obj in $leafs
-	do
-		rate_attr_tc_bw_check "$r_obj" "$tc_bw" \
-			"$DEBUGFS_DIR"/ports/"${r_obj##*/}"
-	done
+	if $tc_bw_supported; then
+		local tc_bw="0:0 1:40 2:0 3:0 4:0 5:0 6:60 7:0"
+		for r_obj in $leafs
+		do
+			rate_attr_tc_bw_check "$r_obj" "$tc_bw" \
+				"$DEBUGFS_DIR"/ports/"${r_obj##*/}"
+		done
+	fi
 
 	local node1_name='group1'
 	local node1="$DL_HANDLE/$node1_name"
@@ -897,9 +906,11 @@ rate_test()
 		$DEBUGFS_DIR/rate_nodes/${node1##*/}/tx_max
 
 
-	local tc_bw="0:20 1:0 2:0 3:0 4:0 5:20 6:60 7:0"
-	rate_attr_tc_bw_check $node1 "$tc_bw" \
-		"$DEBUGFS_DIR"/rate_nodes/"${node1##*/}"
+	if $tc_bw_supported; then
+		local tc_bw="0:20 1:0 2:0 3:0 4:0 5:20 6:60 7:0"
+		rate_attr_tc_bw_check $node1 "$tc_bw" \
+			"$DEBUGFS_DIR"/rate_nodes/"${node1##*/}"
+	fi
 
 
 	rate_node_del "$node1"
