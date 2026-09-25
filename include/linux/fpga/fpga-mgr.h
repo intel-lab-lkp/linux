@@ -103,7 +103,7 @@ struct fpga_image_info {
 	u32 config_complete_timeout_us;
 	char *firmware_name;
 	struct sg_table *sgt;
-	const char *buf;
+	const char *buf __counted_by_ptr(count);
 	size_t count;
 	size_t header_size;
 	size_t data_size;
