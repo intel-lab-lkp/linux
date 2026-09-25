@@ -1840,7 +1840,9 @@ static int synaptics_setup_intertouch(struct psmouse *psmouse,
 		}
 
 		/* Disable intertouch on known-broken board revisions */
-		if (info->board_id == 2722) {
+		if (psmouse_matches_pnp_id(psmouse,
+				(const char * const []){"LEN0036", NULL}) &&
+		    info->board_id == 2722) {
 			psmouse_info(psmouse,
 				     "Disabling intertouch for board id %u\n",
 				     info->board_id);
