@@ -55,6 +55,8 @@ operate_files() { # tested value, files, operation
 
 # Parameters
 TEST_STRING_PATTERN="Testing pstore: uuid="
+# Kselftest framework requirement - SKIP code is 4.
+ksft_skip=4
 UUID=`cat /proc/sys/kernel/random/uuid`
 TOP_DIR=`absdir $0`
 LOG_DIR=$TOP_DIR/logs/`date +%Y%m%d-%H%M%S`_${UUID}/
@@ -74,10 +76,15 @@ prlog "=== Pstore unit tests (`basename $0`) ==="
 prlog "UUID="$UUID
 
 prlog -n "Checking pstore backend is registered ... "
-backend=`cat /sys/module/pstore/parameters/backend`
-show_result $?
+# No file at all where pstore is not loaded, "(null)" where none registered
+backend=`cat /sys/module/pstore/parameters/backend 2>/dev/null`
+if [ -z "$backend" ] || [ "$backend" = "(null)" ]; then
+    prlog "SKIP"
+    prlog -e "\tbackend=${backend:-<none>}"
+    prlog -e "\tcmdline=`cat /proc/cmdline`"
+    prlog "pstore backend is not registered, skipping"
+    exit $ksft_skip
+fi
+prlog "ok"
 prlog -e "\tbackend=${backend}"
 prlog -e "\tcmdline=`cat /proc/cmdline`"
-if [ $rc -ne 0 ]; then
-    exit 1
-fi

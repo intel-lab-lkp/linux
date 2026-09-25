@@ -7,9 +7,6 @@
 #  Written by Hiraku Toyooka <hiraku.toyooka.gu@hitachi.com>
 #
 
-# Kselftest framework requirement - SKIP code is 4.
-ksft_skip=4
-
 . ./common_tests
 
 if [ -e $REBOOT_FLAG  ]; then
