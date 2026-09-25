@@ -1222,12 +1222,12 @@ static bool robust_list_clear_pending(unsigned long __user *pop)
 	return false;
 }
 
-#ifdef CONFIG_COMPAT
+#ifdef CONFIG_64BIT
 static void __user *futex_uaddr(struct robust_list __user *entry,
 				compat_long_t futex_offset)
 {
-	compat_uptr_t base = ptr_to_compat(entry);
-	void __user *uaddr = compat_ptr(base + futex_offset);
+	u32 base = (u32)(unsigned long)(entry);
+	void __user *uaddr = (void __user *)(unsigned long)(base + futex_offset);
 
 	return uaddr;
 }
@@ -1260,8 +1260,8 @@ static void exit_robust_list32(struct task_struct *curr)
 	struct robust_list_head32 __user *head = curr->futex.robust_list32;
 	unsigned int limit = ROBUST_LIST_LIMIT, cur_mod, next_mod, pend_mod;
 	struct robust_list __user *entry, *next_entry, *pending;
-	compat_uptr_t uentry, next_uentry, upending;
-	compat_long_t futex_offset;
+	u32 uentry, next_uentry, upending;
+	s32 futex_offset;
 	int rc;
 
 	/*
@@ -1464,7 +1464,7 @@ static void futex_cleanup(struct task_struct *tsk)
 		tsk->futex.robust_list = NULL;
 	}
 
-#ifdef CONFIG_COMPAT
+#ifdef CONFIG_64BIT
 	if (unlikely(tsk->futex.robust_list32)) {
 		exit_robust_list32(tsk);
 		tsk->futex.robust_list32 = NULL;
