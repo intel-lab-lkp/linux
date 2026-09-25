@@ -30,7 +30,6 @@
 #include <linux/tty_flip.h>
 #include <linux/serial_core.h>
 #include <linux/io.h>
-#include <linux/of_irq.h>
 #include <linux/of_address.h>
 
 /*************************************
@@ -571,11 +570,16 @@ static int arc_serial_probe(struct platform_device *pdev)
 	struct arc_uart_port *uart;
 	struct uart_port *port;
 	int dev_id;
+	int irq;
 	u32 val;
 
 	/* no device tree device */
 	if (!np)
 		return -ENODEV;
+
+	irq = platform_get_irq(pdev, 0);
+	if (irq < 0)
+		return irq;
 
 	dev_id = of_alias_get_id(np, "serial");
 	if (dev_id < 0)
@@ -607,7 +611,7 @@ static int arc_serial_probe(struct platform_device *pdev)
 		return PTR_ERR(port->membase);
 	}
 
-	port->irq = irq_of_parse_and_map(np, 0);
+	port->irq = irq;
 
 	port->dev = &pdev->dev;
 	port->iotype = UPIO_MEM;
