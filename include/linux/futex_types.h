@@ -19,6 +19,7 @@ struct robust_list_head;
  * @pi_state_cache:	Pointer to cache one PI state object per task
  * @exit_mutex:		Mutex for serializing exit
  * @state:		Futex handling state to handle exit races correctly
+ * @robust_lists:	List of robust lists heads
  */
 struct futex_sched_data {
 	struct robust_list_head __user		*robust_list;
@@ -29,6 +30,7 @@ struct futex_sched_data {
 	struct futex_pi_state			*pi_state_cache;
 	struct mutex				exit_mutex;
 	unsigned int				state;
+	uintptr_t				*robust_lists;
 };
 
 #ifdef CONFIG_FUTEX_PRIVATE_HASH

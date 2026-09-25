@@ -5,6 +5,7 @@
 #include <linux/sched.h>
 #include <linux/ktime.h>
 #include <linux/mm_types.h>
+#include <linux/compat.h>
 
 #include <uapi/linux/futex.h>
 
@@ -62,6 +63,28 @@ enum {
 	FUTEX_STATE_DEAD,
 };
 
+#define FUTEX_ROBUST_LIST_NATIVE_IDX	0
+#define FUTEX_ROBUST_LIST_COMPAT_IDX	1
+#define FUTEX_ROBUST_LIST2_IDX		2
+#define FUTEX_ROBUST_LISTS_PER_USER	8
+#define FUTEX_ROBUST_LIST2_MAX_IDX	(FUTEX_ROBUST_LIST2_IDX + FUTEX_ROBUST_LISTS_PER_USER)
+
+/*
+ * List entries without _32BIT flag are using the native machine size
+ */
+#define FUTEX_ROBUST_LIST_ENTRY_INUSE	0x1UL
+#define FUTEX_ROBUST_LIST_ENTRY_32BIT	0x2UL
+#define FUTEX_ROBUST_LIST_ENTRY_MASK	(~0x3UL)
+
+static inline bool futex_in_32bit_syscall(void)
+{
+#ifdef CONFIG_X86
+	return !IS_ENABLED(CONFIG_64BIT) || in_32bit_syscall();
+#else
+	return !IS_ENABLED(CONFIG_64BIT);
+#endif
+}
+
 static inline void futex_init_task(struct task_struct *tsk)
 {
 	memset(&tsk->futex, 0, sizeof(tsk->futex));
@@ -72,6 +95,7 @@ static inline void futex_init_task(struct task_struct *tsk)
 #ifdef CONFIG_COMPAT
 	tsk->futex.robust_list32 = NULL;
 #endif
+	tsk->futex.robust_lists = NULL;
 }
 
 void futex_exit_recursive(struct task_struct *tsk);
