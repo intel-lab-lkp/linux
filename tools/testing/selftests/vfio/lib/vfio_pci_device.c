@@ -23,10 +23,53 @@
 #include <linux/types.h>
 #include <linux/vfio.h>
 
-#include <uuid/uuid.h>
-
 #include "kselftest.h"
 #include <libvfio.h>
+
+/*
+ * Minimal replacement for libuuid's uuid_parse(). libuuid is part of
+ * util-linux and is routinely absent from cross-compilation sysroots, which
+ * makes the vfio selftests unbuildable for non-native architectures. The only
+ * thing needed from it is parsing a VF token, so open-code that instead.
+ */
+#define VFIO_UUID_LEN		16
+#define VFIO_UUID_STR_LEN	36
+
+static int vfio_uuid_hexval(char c)
+{
+	if (c >= '0' && c <= '9')
+		return c - '0';
+	if (c >= 'a' && c <= 'f')
+		return c - 'a' + 10;
+	if (c >= 'A' && c <= 'F')
+		return c - 'A' + 10;
+	return -1;
+}
+
+static int vfio_uuid_parse(const char *in, unsigned char uu[VFIO_UUID_LEN])
+{
+	const char *p = in;
+	int i, hi, lo;
+
+	if (strlen(in) != VFIO_UUID_STR_LEN)
+		return -1;
+
+	for (i = 0; i < VFIO_UUID_LEN; i++) {
+		if (i == 4 || i == 6 || i == 8 || i == 10) {
+			if (*p++ != '-')
+				return -1;
+		}
+
+		hi = vfio_uuid_hexval(*p++);
+		lo = vfio_uuid_hexval(*p++);
+		if (hi < 0 || lo < 0)
+			return -1;
+
+		uu[i] = (hi << 4) | lo;
+	}
+
+	return 0;
+}
 
 static void vfio_pci_irq_set(struct vfio_pci_device *device,
 			     u32 index, u32 vector, u32 count, int *fds)
@@ -167,13 +210,13 @@ static void vfio_device_feature_set(int fd, u16 feature, void *data, size_t data
 
 void vfio_device_set_vf_token(int fd, const char *vf_token)
 {
-	uuid_t token_uuid = {0};
+	unsigned char token_uuid[VFIO_UUID_LEN] = {0};
 
 	VFIO_ASSERT_NOT_NULL(vf_token, "vf_token is NULL");
-	VFIO_ASSERT_EQ(uuid_parse(vf_token, token_uuid), 0);
+	VFIO_ASSERT_EQ(vfio_uuid_parse(vf_token, token_uuid), 0);
 
 	vfio_device_feature_set(fd, VFIO_DEVICE_FEATURE_PCI_VF_TOKEN,
-				token_uuid, sizeof(uuid_t));
+				token_uuid, sizeof(token_uuid));
 }
 
 static void vfio_pci_region_get(struct vfio_pci_device *device, int index,
@@ -415,10 +458,10 @@ int __vfio_device_bind_iommufd(int device_fd, int iommufd, const char *vf_token)
 		.argsz = sizeof(args),
 		.iommufd = iommufd,
 	};
-	uuid_t token_uuid;
+	unsigned char token_uuid[VFIO_UUID_LEN];
 
 	if (vf_token) {
-		VFIO_ASSERT_EQ(uuid_parse(vf_token, token_uuid), 0);
+		VFIO_ASSERT_EQ(vfio_uuid_parse(vf_token, token_uuid), 0);
 		args.flags |= VFIO_DEVICE_BIND_FLAG_TOKEN;
 		args.token_uuid_ptr = (u64)token_uuid;
 	}
