@@ -913,20 +913,64 @@ struct drm_device *drm_dev_alloc(const struct drm_driver *driver,
 }
 EXPORT_SYMBOL(drm_dev_alloc);
 
+/*
+ * Single, global SRCU domain used to synchronize completion of every
+ * driver's @release callback and drm managed release actions with
+ * drm_dev_release_barrier(). Sharing one domain across all drivers means a
+ * driver's call to drm_dev_release_barrier() may occasionally have to wait
+ * for unrelated drivers' release callbacks to finish, but that's a
+ * reasonable trade-off given that release callbacks are expected to run
+ * quickly, and it avoids the bookkeeping of a per-driver SRCU domain.
+ */
+DEFINE_STATIC_SRCU(drm_release_srcu);
+
 static void drm_dev_release(struct kref *ref)
 {
 	struct drm_device *dev = container_of(ref, struct drm_device, ref);
+	int idx;
 
 	/* Just in case register/unregister was never called */
 	drm_debugfs_dev_fini(dev);
+
+	idx = srcu_read_lock(&drm_release_srcu);
 
 	if (dev->driver->release)
 		dev->driver->release(dev);
 
 	drm_managed_release(dev);
 
+	srcu_read_unlock(&drm_release_srcu, idx);
+
 	kfree(dev->managed.final_kfree);
 }
+
+/**
+ * drm_dev_release_barrier() - Ensure drm device release callbacks are finished
+ *
+ * If a device release method or any of the drm managed release callbacks
+ * have been called for any drm_device, wait until all of them have finished
+ * executing. This function can be used to help determine whether it's safe
+ * to unload a driver module.
+ *
+ * Assume for example a driver maintains a device count which is decremented
+ * using a drmm callback or a device release callback. From a drm device
+ * lifetime POV, it's then safe to unload the driver when that device-count
+ * has reached zero and drm_dev_release_barrier() has been called.
+ *
+ * Since a single, global SRCU domain is used for all drivers, this function
+ * may also end up waiting for unrelated drivers' release callbacks to
+ * complete.
+ *
+ * This function only waits for the &drm_driver.release callback and drm
+ * managed release actions to finish. It does not, by itself, guarantee that
+ * whoever called drm_dev_put() to drop the reference triggering that release
+ * has itself finished running. See drm_dev_put() for that invariant.
+ */
+void drm_dev_release_barrier(void)
+{
+	synchronize_srcu(&drm_release_srcu);
+}
+EXPORT_SYMBOL(drm_dev_release_barrier);
 
 /**
  * drm_dev_get - Take reference of a DRM device
@@ -953,6 +997,23 @@ EXPORT_SYMBOL(drm_dev_get);
  *
  * This decreases the ref-count of @dev by one. The device is destroyed if the
  * ref-count drops to zero.
+ *
+ * If this call may drop the last reference, the calling code itself is
+ * responsible for ensuring it isn't unloaded (for example as part of a
+ * module) before this call has returned. This matters in particular for
+ * drivers relying on drm_dev_release_barrier() to determine when it's safe to
+ * unload, since that function only waits for the &drm_driver.release
+ * callback and drm managed release actions to finish, not for whoever calls
+ * drm_dev_put() to finish calling it.
+ *
+ * A common case is dropping the last reference from a deferred context, such
+ * as a workqueue item. In that case it's the responsibility of whoever
+ * queued that work item to guarantee it has run to completion before the
+ * module can unload, for example by draining a module-lifetime workqueue at
+ * module exit time. Holding a module reference only until the work item
+ * starts running is insufficient: that reference would already be dropped
+ * before this call runs, even though this call is what may still need the
+ * module's code to remain resident.
  */
 void drm_dev_put(struct drm_device *dev)
 {
