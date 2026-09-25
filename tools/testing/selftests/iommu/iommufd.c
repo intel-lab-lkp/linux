@@ -2423,6 +2423,55 @@ TEST_F(iommufd_dirty_tracking, get_dirty_bitmap_no_clear)
 	test_ioctl_destroy(hwpt_id);
 }
 
+TEST_F(iommufd_dirty_tracking, get_dirty_bitmap_overrun)
+{
+	uint32_t ioas_id = self->ioas_id;
+	uint32_t hwpt_id;
+	size_t nbits = 64;
+	size_t query_len = nbits * self->page_size;
+	__u64 *bitmap = self->bitmap;
+	size_t bitmap_words =
+		DIV_ROUND_UP(nbits, BITS_PER_BYTE * sizeof(*bitmap));
+	__u64 set = 1;
+	__u64 nr_dirty;
+	size_t i;
+
+	if (!variant->hugepages)
+		SKIP(return, "test requires a huge IOPTE");
+
+	/* The canary sits in the same pinned page, right after the bitmap. */
+	memset(bitmap, 0, (bitmap_words + 8) * sizeof(*bitmap));
+	for (i = 0; i < 8; i++)
+		bitmap[bitmap_words + i] = 0xaaaaaaaaaaaaaaaaULL;
+
+	test_ioctl_ioas_map_fixed_id(ioas_id, self->buffer,
+				     variant->buffer_size, MOCK_APERTURE_START);
+	test_cmd_hwpt_alloc_iommupt(self->idev_id, ioas_id,
+				    IOMMU_HWPT_ALLOC_DIRTY_TRACKING,
+				    MOCK_IOMMUPT_HUGE, &hwpt_id);
+	test_cmd_set_dirty_tracking(hwpt_id, true);
+
+	/* Dirty the whole first huge IOPTE */
+	test_cmd_mock_domain_set_dirty(self->fd, hwpt_id, MOCK_HUGE_PAGE_SIZE,
+				       MOCK_APERTURE_START, MOCK_HUGE_PAGE_SIZE,
+				       &set, &nr_dirty);
+	ASSERT_EQ(1, nr_dirty);
+
+	/* Query only part of it */
+	test_cmd_get_dirty_bitmap(self->fd, hwpt_id, query_len,
+				  MOCK_APERTURE_START, self->page_size, bitmap,
+				  0);
+
+	/* The queried window is dirty */
+	ASSERT_EQ(~0ULL, bitmap[0]);
+
+	/* Bits past the queried bitmap must not be set */
+	for (i = 0; i < 8; i++)
+		ASSERT_EQ(0xaaaaaaaaaaaaaaaaULL, bitmap[bitmap_words + i]);
+
+	test_ioctl_destroy(hwpt_id);
+}
+
 /* VFIO compatibility IOCTLs */
 
 TEST_F(iommufd, simple_ioctls)
