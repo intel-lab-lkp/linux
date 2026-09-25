@@ -127,11 +127,15 @@ static const struct input_id goodix_berlin_spi_input_id = {
 
 static int goodix_berlin_spi_probe(struct spi_device *spi)
 {
-	const struct goodix_berlin_ic_data *ic_data = spi_get_device_match_data(spi);
+	const struct goodix_berlin_ic_data *ic_data;
 	struct regmap_config regmap_config;
 	struct regmap *regmap;
 	size_t max_size;
 	int error = 0;
+
+	ic_data = spi_get_device_match_data(spi);
+	if (!ic_data)
+		return -ENODATA;
 
 	spi->mode = SPI_MODE_0;
 	spi->bits_per_word = 8;
