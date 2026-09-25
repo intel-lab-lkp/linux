@@ -292,6 +292,11 @@ struct ccu_div {
 		},							\
 	}
 
+#define SUNXI_CCU_P_DATA(_struct, _name, _parents, _reg,		\
+			 _pshift, _pwidth, _flags)			\
+	SUNXI_CCU_P_DATA_WITH_MUX_GATE(_struct, _name, _parents, _reg,	\
+				       _pshift, _pwidth, 0, 0, 0, _flags)
+
 static inline struct ccu_div *hw_to_ccu_div(struct clk_hw *hw)
 {
 	struct ccu_common *common = hw_to_ccu_common(hw);
