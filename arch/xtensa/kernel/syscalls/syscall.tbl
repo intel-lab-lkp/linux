@@ -444,3 +444,4 @@
 471	common	rseq_slice_yield		sys_rseq_slice_yield
 472	common	fchroot				sys_fchroot
 473	common	set_robust_list2		sys_set_robust_list2
+474	common	get_robust_list2		sys_get_robust_list2
