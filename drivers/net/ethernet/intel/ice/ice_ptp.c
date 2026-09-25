@@ -2278,9 +2278,6 @@ static int ice_capture_crosststamp(ktime_t *device,
 	/* Snapshot system time for historic interpolation */
 	ktime_get_snapshot_id(ctx->snapshot_clock_id, &ctx->snapshot);
 
-	/* Program cmd to master timer */
-	ice_ptp_src_cmd(hw, ICE_PTP_READ_TIME);
-
 	/* Start the ART and device clock sync sequence */
 	ctl = rd32(hw, cfg->ctl_reg);
 	ctl |= cfg->ctl_active;
@@ -2307,9 +2304,6 @@ static int ice_capture_crosststamp(ktime_t *device,
 	*device = ns_to_ktime(ts);
 
 err_timeout:
-	/* Clear the master timer */
-	ice_ptp_src_cmd(hw, ICE_PTP_NOP);
-
 	/* Release HW lock */
 	lock = rd32(hw, cfg->lock_reg);
 	lock &= ~cfg->lock_busy;
