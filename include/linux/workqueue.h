@@ -205,6 +205,15 @@ struct workqueue_attrs {
 	enum wq_affn_scope affn_scope;
 
 	/**
+	 * @percpu_concurrency_managed: use per-cpu concurrency accounting
+	 *
+	 * Workqueues with this set meter active work per CPU against
+	 * percpu_max_active. Workqueues with this clear either use unbound
+	 * max_active accounting or do not impose a max_active limit.
+	 */
+	bool percpu_concurrency_managed;
+
+	/**
 	 * @ordered: work items must be executed one by one in queueing order
 	 */
 	bool ordered;

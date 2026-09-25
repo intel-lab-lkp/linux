@@ -424,9 +424,9 @@ struct workqueue_struct {
 
 static int wq_user_max_active(struct workqueue_struct *wq)
 {
-	if (wq->flags & WQ_UNBOUND)
-		return READ_ONCE(wq->saved_max_active);
-	return READ_ONCE(wq->saved_percpu_max_active);
+	if (READ_ONCE(wq->attrs->percpu_concurrency_managed))
+		return READ_ONCE(wq->saved_percpu_max_active);
+	return READ_ONCE(wq->saved_max_active);
 }
 
 /*
@@ -1861,11 +1861,13 @@ static bool pwq_tryinc_nr_active(struct pool_workqueue *pwq, bool fill)
 
 	lockdep_assert_held(&pool->lock);
 
-	/*
-	 * A concurrency-managed per-cpu pool accounts nr_active per pwq, so
-	 * pwq->nr_active against wq->percpu_max_active is sufficient.
-	 */
-	if (is_percpu_pool(pool)) {
+	/* BH workqueues use per-cpu pools but do not throttle max_active. */
+	if (pool->flags & POOL_BH) {
+		obtained = true;
+		goto out;
+	}
+
+	if (READ_ONCE(wq->attrs->percpu_concurrency_managed)) {
 		obtained = pwq->nr_active < READ_ONCE(wq->percpu_max_active);
 		goto out;
 	}
@@ -2091,6 +2093,7 @@ out_unlock:
  */
 static void pwq_dec_nr_active(struct pool_workqueue *pwq)
 {
+	struct workqueue_struct *wq = pwq->wq;
 	struct worker_pool *pool = pwq->pool;
 	struct wq_node_nr_active *nna;
 
@@ -2102,16 +2105,15 @@ static void pwq_dec_nr_active(struct pool_workqueue *pwq)
 	 */
 	pwq->nr_active--;
 
-	/*
-	 * A concurrency-managed per-cpu pool only needs to kick the first
-	 * inactive work item on @pwq itself.
-	 */
-	if (is_percpu_pool(pool)) {
+	if (pool->flags & POOL_BH)
+		return;
+
+	if (READ_ONCE(wq->attrs->percpu_concurrency_managed)) {
 		pwq_activate_first_inactive(pwq, false);
 		return;
 	}
 
-	nna = wq_node_nr_active(pwq->wq, pool->node);
+	nna = wq_node_nr_active(wq, pool->node);
 
 	/*
 	 * If @pwq is for an unbound workqueue, it's more complicated because
@@ -5034,6 +5036,7 @@ static void copy_workqueue_attrs(struct workqueue_attrs *to,
 	 * get_unbound_pool() explicitly clears the fields.
 	 */
 	to->affn_scope = from->affn_scope;
+	to->percpu_concurrency_managed = from->percpu_concurrency_managed;
 	to->ordered = from->ordered;
 }
 
@@ -5044,6 +5047,7 @@ static void copy_workqueue_attrs(struct workqueue_attrs *to,
 static void wqattrs_clear_for_pool(struct workqueue_attrs *attrs)
 {
 	attrs->affn_scope = WQ_AFFN_NR_TYPES;
+	attrs->percpu_concurrency_managed = false;
 	attrs->ordered = false;
 	if (attrs->affn_strict)
 		cpumask_copy(attrs->cpumask, cpu_possible_mask);
@@ -5851,6 +5855,10 @@ int apply_workqueue_attrs(struct workqueue_struct *wq,
 	if (WARN_ON(!(wq->flags & WQ_UNBOUND)))
 		return -EINVAL;
 
+	/* Attrs cannot switch a workqueue to per-cpu pools yet. */
+	if (WARN_ON(attrs->percpu_concurrency_managed))
+		return -EINVAL;
+
 	mutex_lock(&wq_pool_mutex);
 	ret = apply_workqueue_attrs_locked(wq, attrs);
 	mutex_unlock(&wq_pool_mutex);
@@ -5941,6 +5949,10 @@ static struct workqueue_attrs *alloc_wq_std_attrs(struct workqueue_struct *wq)
 
 	if (wq->flags & __WQ_ORDERED)
 		attrs->ordered = true;
+
+	/* BH uses per-cpu pools but not max_active concurrency management. */
+	if ((wq->flags & WQ_PERCPU) && !(wq->flags & WQ_BH))
+		attrs->percpu_concurrency_managed = true;
 
 	return attrs;
 }
