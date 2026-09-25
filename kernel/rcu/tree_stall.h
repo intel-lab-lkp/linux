@@ -12,6 +12,7 @@
 #include <linux/rcu_notifier.h>
 #include <linux/smp.h>
 #include <linux/rtmutex.h>
+#include "../locking/rtmutex_common.h"
 
 //////////////////////////////////////////////////////////////////////////////
 //
