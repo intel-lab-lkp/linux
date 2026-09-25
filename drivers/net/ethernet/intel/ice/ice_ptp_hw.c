@@ -2045,7 +2045,7 @@ static int ice_read_phy_and_phc_time_eth56g(struct ice_hw *hw, u8 port,
 }
 
 /**
- * ice_sync_phy_timer_eth56g - Synchronize the PHY timer with PHC timer
+ * ice_sync_phy_timer_eth56g_unlocked - Synchronize the PHY timer with PHC timer
  * @hw: pointer to the HW struct
  * @port: the PHY port to synchronize
  *
@@ -2058,22 +2058,18 @@ static int ice_read_phy_and_phc_time_eth56g(struct ice_hw *hw, u8 port,
  *
  * Return:
  * * %0     - success
- * * %-EBUSY- failed to acquire PTP semaphore
  * * %other - PHY read/write failed
+ *
+ * The caller must acquire PTP semaphore lock
  */
-static int ice_sync_phy_timer_eth56g(struct ice_hw *hw, u8 port)
+static int ice_sync_phy_timer_eth56g_unlocked(struct ice_hw *hw, u8 port)
 {
 	u64 phc_time, phy_time, difference;
 	int err;
 
-	if (!ice_ptp_lock(hw)) {
-		ice_debug(hw, ICE_DBG_PTP, "Failed to acquire PTP semaphore\n");
-		return -EBUSY;
-	}
-
 	err = ice_read_phy_and_phc_time_eth56g(hw, port, &phy_time, &phc_time);
 	if (err)
-		goto err_unlock;
+		return err;
 
 	/* Calculate the amount required to add to the port time in order for
 	 * it to match the PHC time.
@@ -2089,11 +2085,11 @@ static int ice_sync_phy_timer_eth56g(struct ice_hw *hw, u8 port)
 
 	err = ice_ptp_prep_port_adj_eth56g(hw, port, (s64)difference);
 	if (err)
-		goto err_unlock;
+		return err;
 
 	err = ice_ptp_one_port_cmd(hw, port, ICE_PTP_ADJ_TIME);
 	if (err)
-		goto err_unlock;
+		return err;
 
 	/* Issue the sync to activate the time adjustment */
 	ice_ptp_exec_tmr_cmd(hw);
@@ -2103,15 +2099,13 @@ static int ice_sync_phy_timer_eth56g(struct ice_hw *hw, u8 port)
 	 */
 	err = ice_read_phy_and_phc_time_eth56g(hw, port, &phy_time, &phc_time);
 	if (err)
-		goto err_unlock;
+		return err;
 
 	dev_info(ice_hw_to_dev(hw),
 		 "Port %u PHY time synced to PHC: 0x%016llX, 0x%016llX\n",
 		 port, phy_time, phc_time);
 
-err_unlock:
-	ice_ptp_unlock(hw);
-	return err;
+	return 0;
 }
 
 /**
@@ -2174,19 +2168,24 @@ int ice_start_phy_timer_eth56g(struct ice_hw *hw, u8 port)
 	if (err)
 		return err;
 
+	if (!ice_ptp_lock(hw)) {
+		dev_err(ice_hw_to_dev(hw), "Failed to acquire PTP semaphore\n");
+		return -EBUSY;
+	}
+
 	ice_ptp_src_cmd(hw, ICE_PTP_NOP);
 
 	err = ice_phy_cfg_parpcs_eth56g(hw, port);
 	if (err)
-		return err;
+		goto err_ptp_unlock;
 
 	err = ice_phy_cfg_ptp_1step_eth56g(hw, port);
 	if (err)
-		return err;
+		goto err_ptp_unlock;
 
 	err = ice_phy_cfg_mac_eth56g(hw, port);
 	if (err)
-		return err;
+		goto err_ptp_unlock;
 
 	if (ice_is_primary(hw)) {
 		lo = rd32(hw, GLTSYN_INCVAL_L(tmr_idx));
@@ -2203,11 +2202,6 @@ int ice_start_phy_timer_eth56g(struct ice_hw *hw, u8 port)
 	}
 	incval = (u64)hi << 32 | lo;
 
-	if (!ice_ptp_lock(hw)) {
-		dev_err(ice_hw_to_dev(hw), "Failed to acquire PTP semaphore\n");
-		return -EBUSY;
-	}
-
 	err = ice_write_40b_ptp_reg_eth56g(hw, port, PHY_REG_TIMETUS_L, incval);
 	if (err)
 		goto err_ptp_unlock;
@@ -2218,11 +2212,11 @@ int ice_start_phy_timer_eth56g(struct ice_hw *hw, u8 port)
 
 	ice_ptp_exec_tmr_cmd(hw);
 
-	ice_ptp_unlock(hw);
-
-	err = ice_sync_phy_timer_eth56g(hw, port);
+	err = ice_sync_phy_timer_eth56g_unlocked(hw, port);
 	if (err)
-		return err;
+		goto err_ptp_unlock;
+
+	ice_ptp_unlock(hw);
 
 	err = ice_write_ptp_reg_eth56g(hw, port, PHY_REG_TX_OFFSET_READY, 1);
 	if (err)
