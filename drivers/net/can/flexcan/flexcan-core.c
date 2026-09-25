@@ -828,7 +828,9 @@ static netdev_tx_t flexcan_start_xmit(struct sk_buff *skb, struct net_device *de
 	return NETDEV_TX_OK;
 }
 
-static void flexcan_irq_bus_err(struct net_device *dev, u32 reg_esr)
+static void flexcan_irq_bus_err(struct net_device *dev,
+				struct can_rx_offload_irq *offload_irq,
+				u32 reg_esr)
 {
 	struct flexcan_priv *priv = netdev_priv(dev);
 	struct flexcan_regs __iomem *regs = priv->regs;
@@ -885,12 +887,14 @@ static void flexcan_irq_bus_err(struct net_device *dev, u32 reg_esr)
 	if (tx_errors)
 		dev->stats.tx_errors++;
 
-	err = can_rx_offload_queue_timestamp(&priv->offload_irq, skb, timestamp);
+	err = can_rx_offload_queue_timestamp(offload_irq, skb, timestamp);
 	if (err)
 		dev->stats.rx_fifo_errors++;
 }
 
-static void flexcan_irq_state(struct net_device *dev, u32 reg_esr)
+static void flexcan_irq_state(struct net_device *dev,
+			      struct can_rx_offload_irq *offload_irq,
+			      u32 reg_esr)
 {
 	struct flexcan_priv *priv = netdev_priv(dev);
 	struct flexcan_regs __iomem *regs = priv->regs;
@@ -932,7 +936,7 @@ static void flexcan_irq_state(struct net_device *dev, u32 reg_esr)
 	if (unlikely(new_state == CAN_STATE_BUS_OFF))
 		can_bus_off(dev);
 
-	err = can_rx_offload_queue_timestamp(&priv->offload_irq, skb, timestamp);
+	err = can_rx_offload_queue_timestamp(offload_irq, skb, timestamp);
 	if (err)
 		dev->stats.rx_fifo_errors++;
 }
@@ -1070,11 +1074,35 @@ static struct sk_buff *flexcan_mailbox_read(struct can_rx_offload *offload,
 	return skb;
 }
 
+/* The same handler is requested on every IRQ line, so the line it was
+ * called for selects the rx-offload context to queue into.
+ */
+static struct can_rx_offload_irq *
+flexcan_get_offload_irq(struct flexcan_priv *priv, int irq)
+{
+	const u32 quirks = priv->devtype_data.quirks;
+
+	if (quirks & FLEXCAN_QUIRK_SECONDARY_MB_IRQ &&
+	    irq == priv->irq_secondary_mb)
+		return &priv->offload_irq_secondary_mb;
+
+	if (quirks & FLEXCAN_QUIRK_NR_IRQ_3) {
+		if (irq == priv->irq_boff)
+			return &priv->offload_irq_boff;
+		if (irq == priv->irq_err)
+			return &priv->offload_irq_err;
+	}
+
+	return &priv->offload_irq;
+}
+
 static irqreturn_t flexcan_irq(int irq, void *dev_id)
 {
 	struct net_device *dev = dev_id;
 	struct net_device_stats *stats = &dev->stats;
 	struct flexcan_priv *priv = netdev_priv(dev);
+	struct can_rx_offload_irq *offload_irq =
+		flexcan_get_offload_irq(priv, irq);
 	struct flexcan_regs __iomem *regs = priv->regs;
 	irqreturn_t handled = IRQ_NONE;
 	u64 reg_iflag_tx;
@@ -1088,7 +1116,7 @@ static irqreturn_t flexcan_irq(int irq, void *dev_id)
 
 		while ((reg_iflag_rx = flexcan_read_reg_iflag_rx(priv))) {
 			handled = IRQ_HANDLED;
-			ret = can_rx_offload_irq_offload_timestamp(&priv->offload_irq,
+			ret = can_rx_offload_irq_offload_timestamp(offload_irq,
 								   reg_iflag_rx);
 			if (!ret)
 				break;
@@ -1099,7 +1127,7 @@ static irqreturn_t flexcan_irq(int irq, void *dev_id)
 		reg_iflag1 = priv->read(&regs->iflag1);
 		if (reg_iflag1 & FLEXCAN_IFLAG_RX_FIFO_AVAILABLE) {
 			handled = IRQ_HANDLED;
-			can_rx_offload_irq_offload_fifo(&priv->offload_irq);
+			can_rx_offload_irq_offload_fifo(offload_irq);
 		}
 
 		/* FIFO overflow interrupt */
@@ -1120,7 +1148,7 @@ static irqreturn_t flexcan_irq(int irq, void *dev_id)
 
 		handled = IRQ_HANDLED;
 		stats->tx_bytes +=
-			can_rx_offload_get_echo_skb_queue_timestamp(&priv->offload_irq, 0,
+			can_rx_offload_get_echo_skb_queue_timestamp(offload_irq, 0,
 								    reg_ctrl << 16, NULL);
 		stats->tx_packets++;
 
@@ -1143,12 +1171,12 @@ static irqreturn_t flexcan_irq(int irq, void *dev_id)
 	if ((reg_esr & FLEXCAN_ESR_ERR_STATE) ||
 	    (priv->devtype_data.quirks & (FLEXCAN_QUIRK_BROKEN_WERR_STATE |
 					   FLEXCAN_QUIRK_BROKEN_PERR_STATE)))
-		flexcan_irq_state(dev, reg_esr);
+		flexcan_irq_state(dev, offload_irq, reg_esr);
 
 	/* bus error IRQ - handle if bus error reporting is activated */
 	if ((reg_esr & FLEXCAN_ESR_ERR_BUS) &&
 	    (priv->can.ctrlmode & CAN_CTRLMODE_BERR_REPORTING))
-		flexcan_irq_bus_err(dev, reg_esr);
+		flexcan_irq_bus_err(dev, offload_irq, reg_esr);
 
 	/* availability of error interrupt among state transitions in case
 	 * bus error reporting is de-activated and
@@ -1189,7 +1217,7 @@ static irqreturn_t flexcan_irq(int irq, void *dev_id)
 	}
 
 	if (handled)
-		can_rx_offload_irq_finish(&priv->offload_irq);
+		can_rx_offload_irq_finish(offload_irq);
 
 	return handled;
 }
@@ -1381,6 +1409,23 @@ static void flexcan_ram_init(struct net_device *dev)
 	priv->write(reg_ctrl2, &regs->ctrl2);
 }
 
+static int flexcan_rx_offload_add(struct net_device *dev,
+				  struct can_rx_offload_irq *offload_irq)
+{
+	struct flexcan_priv *priv = netdev_priv(dev);
+
+	if (priv->devtype_data.quirks & FLEXCAN_QUIRK_USE_RX_MAILBOX) {
+		offload_irq->mb_first = FLEXCAN_RX_MB_RX_MAILBOX_FIRST;
+		offload_irq->mb_last = priv->mb_count - 2;
+
+		return can_rx_offload_add_timestamp(dev, &priv->offload,
+						    offload_irq);
+	}
+
+	return can_rx_offload_add_fifo(dev, &priv->offload, offload_irq,
+				       FLEXCAN_NAPI_WEIGHT);
+}
+
 static int flexcan_rx_offload_setup(struct net_device *dev)
 {
 	struct flexcan_priv *priv = netdev_priv(dev);
@@ -1409,21 +1454,41 @@ static int flexcan_rx_offload_setup(struct net_device *dev)
 
 	priv->offload.mailbox_read = flexcan_mailbox_read;
 
-	if (priv->devtype_data.quirks & FLEXCAN_QUIRK_USE_RX_MAILBOX) {
-		priv->offload_irq.mb_first = FLEXCAN_RX_MB_RX_MAILBOX_FIRST;
-		priv->offload_irq.mb_last = priv->mb_count - 2;
-
-		priv->rx_mask = GENMASK_ULL(priv->offload_irq.mb_last,
-					    priv->offload_irq.mb_first);
-		err = can_rx_offload_add_timestamp(dev, &priv->offload,
-						   &priv->offload_irq);
-	} else {
+	if (priv->devtype_data.quirks & FLEXCAN_QUIRK_USE_RX_MAILBOX)
+		priv->rx_mask = GENMASK_ULL(priv->mb_count - 2,
+					    FLEXCAN_RX_MB_RX_MAILBOX_FIRST);
+	else
 		priv->rx_mask = FLEXCAN_IFLAG_RX_FIFO_OVERFLOW |
 			FLEXCAN_IFLAG_RX_FIFO_AVAILABLE;
-		err = can_rx_offload_add_fifo(dev, &priv->offload,
-					      &priv->offload_irq,
-					      FLEXCAN_NAPI_WEIGHT);
+
+	err = flexcan_rx_offload_add(dev, &priv->offload_irq);
+	if (err)
+		return err;
+
+	/* Every IRQ line queues into its own context, the shared skb_queue is
+	 * only touched by can_rx_offload_irq_finish().
+	 */
+	if (priv->devtype_data.quirks & FLEXCAN_QUIRK_SECONDARY_MB_IRQ) {
+		err = flexcan_rx_offload_add(dev,
+					     &priv->offload_irq_secondary_mb);
+		if (err)
+			goto out_can_rx_offload_del;
 	}
+
+	if (priv->devtype_data.quirks & FLEXCAN_QUIRK_NR_IRQ_3) {
+		err = flexcan_rx_offload_add(dev, &priv->offload_irq_boff);
+		if (err)
+			goto out_can_rx_offload_del;
+
+		err = flexcan_rx_offload_add(dev, &priv->offload_irq_err);
+		if (err)
+			goto out_can_rx_offload_del;
+	}
+
+	return 0;
+
+out_can_rx_offload_del:
+	can_rx_offload_del(&priv->offload);
 
 	return err;
 }

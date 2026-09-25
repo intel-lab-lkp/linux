@@ -89,6 +89,9 @@ struct flexcan_priv {
 	struct can_priv can;
 	struct can_rx_offload offload;
 	struct can_rx_offload_irq offload_irq;
+	struct can_rx_offload_irq offload_irq_secondary_mb;
+	struct can_rx_offload_irq offload_irq_boff;
+	struct can_rx_offload_irq offload_irq_err;
 	struct device *dev;
 
 	struct flexcan_regs __iomem *regs;
