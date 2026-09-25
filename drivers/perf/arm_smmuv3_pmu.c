@@ -893,6 +893,9 @@ static int smmu_pmu_probe(struct platform_device *pdev)
 	}
 
 	irq = platform_get_irq_optional(pdev, 0);
+	if (irq == -EPROBE_DEFER)
+		return dev_err_probe(dev, irq, "failed to get PMCG IRQ\n");
+
 	if (irq > 0)
 		smmu_pmu->irq = irq;
 
