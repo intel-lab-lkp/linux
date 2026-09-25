@@ -5004,7 +5004,7 @@ ath12k_wmi_save_mac_phy_info(struct ath12k_base *ab,
 					__le32_to_cpu(mac_phy_cap->high_5ghz_chan_freq);
 }
 
-static void
+static int
 ath12k_wmi_save_all_mac_phy_info(struct ath12k_base *ab,
 				 struct ath12k_wmi_svc_rdy_ext_parse *svc_rdy_ext)
 {
@@ -5014,6 +5014,20 @@ ath12k_wmi_save_all_mac_phy_info(struct ath12k_base *ab,
 	struct ath12k_svc_ext_mac_phy_info *mac_phy_info;
 	u32 hw_mode_id, phy_bit_map;
 	u8 hw_idx;
+
+	if (svc_rdy_ext->tot_phy_id > ARRAY_SIZE(svc_ext_info->mac_phy_info)) {
+		ath12k_warn(ab, "too many PHY entries %u (max %zu)\n",
+			    svc_rdy_ext->tot_phy_id,
+			    ARRAY_SIZE(svc_ext_info->mac_phy_info));
+		return -EINVAL;
+	}
+
+	if (svc_rdy_ext->n_mac_phy_caps != svc_rdy_ext->tot_phy_id) {
+		ath12k_warn(ab, "invalid number of MAC/PHY caps %u, expected %u\n",
+			    svc_rdy_ext->n_mac_phy_caps,
+			    svc_rdy_ext->tot_phy_id);
+		return -EINVAL;
+	}
 
 	mac_phy_info = &svc_ext_info->mac_phy_info[0];
 	mac_phy_cap = svc_rdy_ext->mac_phy_caps;
@@ -5044,6 +5058,8 @@ ath12k_wmi_save_all_mac_phy_info(struct ath12k_base *ab,
 			phy_bit_map >>= 1;
 		}
 	}
+
+	return 0;
 }
 
 static int ath12k_wmi_svc_rdy_ext_parse(struct ath12k_base *ab,
@@ -5094,7 +5110,9 @@ static int ath12k_wmi_svc_rdy_ext_parse(struct ath12k_base *ab,
 				return ret;
 			}
 
-			ath12k_wmi_save_all_mac_phy_info(ab, svc_rdy_ext);
+			ret = ath12k_wmi_save_all_mac_phy_info(ab, svc_rdy_ext);
+			if (ret)
+				return ret;
 
 			svc_rdy_ext->mac_phy_done = true;
 		} else if (!svc_rdy_ext->ext_hal_reg_done) {
