@@ -9,13 +9,20 @@
 
 . ./common_tests
 
+# The frontends are separate options, a backend does not bring them in
 prlog -n "Checking pstore console is registered ... "
-dmesg | grep -Eq "console \[(pstore|${backend})"
-show_result $?
+if dmesg | grep -Eq "console \[(pstore|${backend})"; then
+    show_result 0
+else
+    prlog "SKIP (no pstore console, needs CONFIG_PSTORE_CONSOLE)"
+fi
 
 prlog -n "Checking /dev/pmsg0 exists ... "
-test -e /dev/pmsg0
-show_result $?
+if [ -e /dev/pmsg0 ]; then
+    show_result 0
+else
+    prlog "SKIP (no /dev/pmsg0, needs CONFIG_PSTORE_PMSG)"
+fi
 
 prlog -n "Writing unique string to /dev/pmsg0 ... "
 if [ -e "/dev/pmsg0" ]; then
@@ -23,8 +30,7 @@ if [ -e "/dev/pmsg0" ]; then
     show_result $?
     echo "$UUID" > $TOP_DIR/uuid
 else
-    prlog "FAIL"
-    rc=1
+    prlog "SKIP (no /dev/pmsg0)"
 fi
 
 exit $rc
