@@ -209,6 +209,10 @@ void io_req_normal_work_add(struct io_kiocb *req)
 {
 	struct io_uring_task *tctx = req->tctx;
 	struct io_ring_ctx *ctx = req->ctx;
+	struct task_struct *task = tctx->task;
+
+	/* pairs with synchronize_rcu() in io_ring_exit_work() */
+	guard(rcu)();
 
 	/* tw run already pending, nothing else to do */
 	if (!mpscq_push(&tctx->task_list, &req->io_task_work.node))
@@ -223,7 +227,8 @@ void io_req_normal_work_add(struct io_kiocb *req)
 
 	/* SQPOLL doesn't need the task_work added, it'll run it itself */
 	if (ctx->flags & IORING_SETUP_SQPOLL) {
-		__set_notify_signal(tctx->task);
+		/* SQPOLL cancellation may have freed tctx after the push. */
+		__set_notify_signal(task);
 		return;
 	}
 
