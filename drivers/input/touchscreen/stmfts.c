@@ -64,6 +64,8 @@
 #define STMFTS_MASK_KEY_MENU			0x01
 #define STMFTS_MASK_KEY_BACK			0x02
 
+#define STMFTS_RESET_TIMEOUT_MS	300
+
 #define STMFTS_EVENT_SIZE	8
 #define STMFTS_STACK_DEPTH	32
 #define STMFTS_DATA_MAX_SIZE	(STMFTS_EVENT_SIZE * STMFTS_STACK_DEPTH)
@@ -543,15 +545,6 @@ static int stmfts_read_system_info(struct stmfts_data *sdata)
 	return 0;
 }
 
-static void stmfts_reset(struct stmfts_data *sdata)
-{
-	gpiod_set_value_cansleep(sdata->reset_gpio, 1);
-	msleep(20);
-
-	gpiod_set_value_cansleep(sdata->reset_gpio, 0);
-	msleep(50);
-}
-
 static int stmfts_configure(struct stmfts_data *sdata)
 {
 	int err;
@@ -587,27 +580,50 @@ static int stmfts_power_on(struct stmfts_data *sdata)
 {
 	int err;
 
+	if (sdata->reset_gpio) {
+		gpiod_set_value_cansleep(sdata->reset_gpio, 1);
+		/* a short delay before powering up */
+		usleep_range(1000, 1500);
+	}
+
 	err = regulator_bulk_enable(ARRAY_SIZE(stmfts_supplies),
 				    sdata->supplies);
 	if (err)
 		return err;
 
-	/*
-	 * The datasheet does not specify the power on time, but considering
-	 * that the reset time is < 10ms, I sleep 20ms to be sure
-	 */
-	msleep(20);
+	if (sdata->reset_gpio) {
+		reinit_completion(&sdata->cmd_done);
 
-	if (sdata->reset_gpio)
-		stmfts_reset(sdata);
+		/*
+		 * The datasheet does not specify the power on time, but
+		 * considering that the reset time is < 10ms, sleep for 20ms
+		 * to be sure before releasing reset line.
+		 */
+		msleep(20);
+		gpiod_set_value_cansleep(sdata->reset_gpio, 0);
+
+		enable_irq(sdata->client->irq);
+
+		if (!wait_for_completion_timeout(&sdata->cmd_done,
+						 msecs_to_jiffies(STMFTS_RESET_TIMEOUT_MS))) {
+			dev_err(&sdata->client->dev, "controller not ready after reset");
+			err = -ETIMEDOUT;
+			goto err_disable_irq;
+		}
+	} else {
+		/*
+		 * We do not know the real controller state (was it powered
+		 * off or reset). Let's hope that this is enough time to
+		 * initialize.
+		 */
+		msleep(70);
+
+		enable_irq(sdata->client->irq);
+	}
 
 	err = stmfts_read_system_info(sdata);
 	if (err)
-		goto err_disable_regulators;
-
-	enable_irq(sdata->client->irq);
-
-	msleep(50);
+		goto err_disable_irq;
 
 	err = stmfts_configure(sdata);
 	if (err)
@@ -623,7 +639,7 @@ static int stmfts_power_on(struct stmfts_data *sdata)
 
 err_disable_irq:
 	disable_irq(sdata->client->irq);
-err_disable_regulators:
+
 	regulator_bulk_disable(ARRAY_SIZE(stmfts_supplies), sdata->supplies);
 	return err;
 }
