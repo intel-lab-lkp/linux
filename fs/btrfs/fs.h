@@ -707,6 +707,11 @@ struct btrfs_fs_info {
 	 */
 	struct btrfs_workqueue *workers;
 	struct btrfs_workqueue *delalloc_workers;
+	/*
+	 * This is for delayed writes, for now only compressed writes
+	 * on non-zoned experimental builds utilize this.
+	 */
+	struct workqueue_struct *delayed_write_workers;
 	struct btrfs_workqueue *flush_workers;
 	struct workqueue_struct *endio_workers;
 	struct workqueue_struct *endio_meta_workers;
