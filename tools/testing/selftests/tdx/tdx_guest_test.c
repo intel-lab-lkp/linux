@@ -135,6 +135,8 @@ TEST(verify_report)
 	int devfd, i;
 
 	devfd = open(TDX_GUEST_DEVNAME, O_RDWR | O_SYNC);
+	if (devfd < 0 && errno == ENOENT)
+		SKIP(return, "TDX guest device is not available");
 	ASSERT_LT(0, devfd);
 
 	/* Generate sample report data */
