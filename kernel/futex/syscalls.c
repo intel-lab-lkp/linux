@@ -27,21 +27,19 @@
  */
 SYSCALL_DEFINE2(set_robust_list, struct robust_list_head __user *, head, size_t, len)
 {
-	/* The kernel knows only one size for now. */
+	int ret;
+
+	/*
+	 * The kernel knows only one size for now:
+	 */
 	if (unlikely(len != sizeof(*head)))
 		return -EINVAL;
 
-	current->futex.robust_list = head;
-	return 0;
-}
-
-static inline void __user *futex_task_robust_list(struct task_struct *p, bool compat)
-{
-#ifdef CONFIG_COMPAT
-	if (compat)
-		return p->futex.robust_list32;
-#endif
-	return p->futex.robust_list;
+	ret = futex_robust_list_create((uintptr_t) head,
+				       FUTEX_ROBUST_LIST_SET_NATIVE);
+	if (ret >= 0)
+		return 0;
+	return ret;
 }
 
 static void __user *futex_get_robust_list_common(int pid, bool compat, int index)
@@ -49,6 +47,9 @@ static void __user *futex_get_robust_list_common(int pid, bool compat, int index
 	struct task_struct *p = current;
 	void __user *head;
 	int ret;
+
+	if (index >= FUTEX_ROBUST_LIST2_MAX_IDX)
+		return (void __user *)ERR_PTR(-EINVAL);
 
 	scoped_guard(rcu) {
 		if (pid) {
@@ -74,11 +75,8 @@ static void __user *futex_get_robust_list_common(int pid, bool compat, int index
 	if (index >= 0) {
 		scoped_guard(mutex, &p->futex.exit_mutex) {
 			uintptr_t *rl = p->futex.robust_lists;
-
 			head = rl ? (void __user *) rl[index] : NULL;
 		}
-	} else {
-		head = futex_task_robust_list(p, compat);
 	}
 
 	up_read(&p->signal->exec_update_lock);
@@ -103,7 +101,11 @@ SYSCALL_DEFINE3(get_robust_list, int, pid,
 		struct robust_list_head __user * __user *, head_ptr,
 		size_t __user *, len_ptr)
 {
-	struct robust_list_head __user *head = futex_get_robust_list_common(pid, false, -1);
+	struct robust_list_head __user *head =
+		futex_get_robust_list_common(pid, false, FUTEX_ROBUST_LIST_NATIVE_IDX);
+
+	head = (struct robust_list_head __user *)
+		((uintptr_t) head & FUTEX_ROBUST_LIST_ENTRY_MASK);
 
 	if (IS_ERR(head))
 		return PTR_ERR(head);
@@ -162,8 +164,7 @@ SYSCALL_DEFINE4(set_robust_list2, struct robust_list_head *, head, unsigned int,
 	return -EINVAL;
 }
 
-SYSCALL_DEFINE4(get_robust_list2, int, pid,
-		void __user * __user *, head_ptr,
+SYSCALL_DEFINE4(get_robust_list2, int, pid, void __user * __user *, head_ptr,
 		unsigned int, index, unsigned int, flags)
 {
 	void __user *entry_ptr;
@@ -586,22 +587,23 @@ COMPAT_SYSCALL_DEFINE2(set_robust_list, struct robust_list_head32 __user *, head
 	if (unlikely(len != sizeof(*head)))
 		return -EINVAL;
 
-	current->futex.robust_list32 = head;
-
-	return 0;
+	return futex_robust_list_create((uintptr_t) head,
+					FUTEX_ROBUST_LIST_SET_COMPAT);
 }
 
 COMPAT_SYSCALL_DEFINE3(get_robust_list, int, pid,
 			compat_uptr_t __user *, head_ptr,
 			compat_size_t __user *, len_ptr)
 {
-	struct robust_list_head32 __user *head = futex_get_robust_list_common(pid, true, -1);
+	struct robust_list_head32 __user *head =
+		futex_get_robust_list_common(pid, true, FUTEX_ROBUST_LIST_COMPAT_IDX);
 
-	if (IS_ERR(head))
-		return PTR_ERR(head);
+	head = (struct robust_list_head32 __user *)
+		((uintptr_t) head & FUTEX_ROBUST_LIST_ENTRY_MASK);
 
 	if (put_user(sizeof(*head), len_ptr))
 		return -EFAULT;
+
 	return put_user(ptr_to_compat(head), head_ptr);
 }
 #endif /* CONFIG_COMPAT */

@@ -96,6 +96,13 @@ int futex_robust_list_create(uintptr_t head, enum robust_list2_cmd cmd)
 	}
 
 	switch (cmd) {
+	case FUTEX_ROBUST_LIST_SET_COMPAT:
+		entry |= FUTEX_ROBUST_LIST_ENTRY_32BIT;
+		index = FUTEX_ROBUST_LIST_COMPAT_IDX;
+		fallthrough;
+	case FUTEX_ROBUST_LIST_SET_NATIVE:
+		index = FUTEX_ROBUST_LIST_NATIVE_IDX;
+		goto exit;
 	case FUTEX_ROBUST_LIST_CMD_CREATE_32:
 		entry |= FUTEX_ROBUST_LIST_ENTRY_32BIT;
 		fallthrough;
@@ -1284,7 +1291,8 @@ static void exit_robust_list(struct task_struct *curr, struct robust_list_head _
 
 static bool robust_list_clear_pending(unsigned long __user *pop)
 {
-	struct robust_list_head __user *head = current->futex.robust_list;
+	struct robust_list_head __user *head = (struct robust_list_head __user *)
+		current->futex.robust_lists[FUTEX_ROBUST_LIST_NATIVE_IDX];
 
 	if (!put_user(0UL, pop))
 		return true;
@@ -1299,7 +1307,8 @@ static bool robust_list_clear_pending(unsigned long __user *pop)
 	 * that's mostly an academic exercise.
 	 */
 	if (pop == (unsigned long __user *)&head->list_op_pending)
-		current->futex.robust_list = NULL;
+		current->futex.robust_lists[FUTEX_ROBUST_LIST_NATIVE_IDX] = 0;
+
 	return false;
 }
 
@@ -1402,14 +1411,16 @@ static void exit_robust_list32(struct task_struct *curr, struct robust_list_head
 
 static bool robust_list_clear_pending32(u32 __user *pop)
 {
-	struct robust_list_head32 __user *head = current->futex.robust_list32;
+	struct robust_list_head32 __user *head =
+		(struct robust_list_head32 __user *)
+		current->futex.robust_lists[FUTEX_ROBUST_LIST_COMPAT_IDX];
 
 	if (!put_user(0U, pop))
 		return true;
 
 	/* See comment in robust_list_clear_pending(). */
 	if (pop == &head->list_op_pending)
-		current->futex.robust_list32 = NULL;
+		current->futex.robust_lists[FUTEX_ROBUST_LIST_COMPAT_IDX] = 0;
 	return false;
 }
 #else
@@ -1517,6 +1528,9 @@ bool futex_robust_list_clear_pending(void __user *pop, unsigned int flags)
 {
 	bool size32bit = !!(flags & FLAGS_ROBUST_LIST32);
 
+	if (!current->futex.robust_lists)
+		return false;
+
 	if (!IS_ENABLED(CONFIG_64BIT) && !size32bit)
 		return false;
 
@@ -1581,18 +1595,6 @@ static void exit_robust_lists(struct task_struct *tsk)
 
 static void futex_cleanup(struct task_struct *tsk)
 {
-	if (unlikely(tsk->futex.robust_list)) {
-		exit_robust_list(tsk, tsk->futex.robust_list);
-		tsk->futex.robust_list = NULL;
-	}
-
-#ifdef CONFIG_64BIT
-	if (unlikely(tsk->futex.robust_list32)) {
-		exit_robust_list32(tsk, tsk->futex.robust_list32);
-		tsk->futex.robust_list32 = NULL;
-	}
-#endif
-
 	if (unlikely(tsk->futex.robust_lists))
 		exit_robust_lists(tsk);
 

@@ -13,8 +13,6 @@ struct robust_list_head;
 
 /**
  * struct futex_sched_data - Futex related per task data
- * @robust_list:	User space registered robust list pointer
- * @compat_robust_list:	User space registered robust list pointer for compat tasks
  * @pi_state_list:	List head for Priority Inheritance (PI) state management
  * @pi_state_cache:	Pointer to cache one PI state object per task
  * @exit_mutex:		Mutex for serializing exit
@@ -22,10 +20,6 @@ struct robust_list_head;
  * @robust_lists:	List of robust lists heads
  */
 struct futex_sched_data {
-	struct robust_list_head __user		*robust_list;
-#ifdef CONFIG_COMPAT
-	struct robust_list_head32 __user *robust_list32;
-#endif
 	struct list_head			pi_state_list;
 	struct futex_pi_state			*pi_state_cache;
 	struct mutex				exit_mutex;
