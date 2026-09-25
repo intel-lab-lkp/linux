@@ -513,6 +513,7 @@ static ssize_t driver_override_store(struct device *dev,
 {
 	int ret;
 
+	add_taint_module(drv->owner, TAINT_DRIVER_OVERRIDE, LOCKDEP_STILL_OK);
 	ret = __device_set_driver_override(dev, buf, count);
 	if (ret)
 		return ret;
