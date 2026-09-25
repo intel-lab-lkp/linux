@@ -5562,18 +5562,26 @@ static int arm_smmu_device_probe(struct platform_device *pdev)
 	/* Interrupt lines */
 
 	irq = platform_get_irq_byname_optional(pdev, "combined");
+	if (irq == -EPROBE_DEFER)
+		return dev_err_probe(dev, irq, "failed to get combined IRQ\n");
 	if (irq > 0)
 		smmu->combined_irq = irq;
 	else {
 		irq = platform_get_irq_byname_optional(pdev, "eventq");
+		if (irq == -EPROBE_DEFER)
+			return dev_err_probe(dev, irq, "failed to get eventq IRQ\n");
 		if (irq > 0)
 			smmu->evtq.q.irq = irq;
 
 		irq = platform_get_irq_byname_optional(pdev, "priq");
+		if (irq == -EPROBE_DEFER)
+			return dev_err_probe(dev, irq, "failed to get priq IRQ\n");
 		if (irq > 0)
 			smmu->priq.q.irq = irq;
 
 		irq = platform_get_irq_byname_optional(pdev, "gerror");
+		if (irq == -EPROBE_DEFER)
+			return dev_err_probe(dev, irq, "failed to get gerror IRQ\n");
 		if (irq > 0)
 			smmu->gerr_irq = irq;
 	}
