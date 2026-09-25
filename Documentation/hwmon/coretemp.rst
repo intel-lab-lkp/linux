@@ -50,6 +50,10 @@ All sysfs entries are named with their core_id (represented here by 'X').
 
 ================= ========================================================
 tempX_input	  Core temperature (in millidegrees Celsius).
+tempX_fault	  Set when the CPU reports the reading in tempX_input as
+		  invalid. Some CPUs do this while the temperature is too
+		  low to be measured. tempX_input still reports a value in
+		  this state; it is low or zero.
 tempX_max	  Maximum recommended operating temperature (Tcontrol).
 		  All cooling devices should be turned on.
 tempX_crit	  Maximum junction temperature (in millidegrees Celsius).

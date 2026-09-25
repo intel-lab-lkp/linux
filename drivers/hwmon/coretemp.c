@@ -45,6 +45,7 @@ enum coretemp_attr_index {
 	ATTR_LABEL,
 	ATTR_CRIT_ALARM,
 	ATTR_TEMP,
+	ATTR_TEMP_FAULT,
 	ATTR_TJMAX,
 	ATTR_TTARGET,
 	MAX_CORE_ATTRS = ATTR_TJMAX + 1,	/* Maximum no of basic attrs */
@@ -60,6 +61,9 @@ enum coretemp_attr_index {
 
 /*
  * Per-Core Temperature Data
+ * @temp_fault: The temperature in @temp is not to be trusted. Mirrors the
+ *		meaning of the tempX_fault attribute, and is therefore the
+ *		inverse of the valid bit the CPU reports in @status_reg.
  * @tjmax: The static tjmax value when tjmax cannot be retrieved from
  *		IA32_TEMPERATURE_TARGET MSR.
  * @last_updated: The time when the current temperature value was updated
@@ -72,6 +76,7 @@ enum coretemp_attr_index {
  */
 struct temp_data {
 	int temp;
+	bool temp_fault;
 	int tjmax;
 	unsigned long last_updated;
 	unsigned int cpu;
@@ -393,41 +398,62 @@ static ssize_t show_ttarget(struct device *dev,
 	return sprintf(buf, "%d\n", ttarget);
 }
 
+/* Requires tdata->update_lock to be held. */
+static void update_temp(struct temp_data *tdata, struct device *dev)
+{
+	struct msr val;
+	int tjmax;
+
+	/* Check whether the time interval has elapsed */
+	if (!time_after(jiffies, tdata->last_updated + HZ))
+		return;
+
+	tjmax = get_tjmax(tdata, dev);
+
+	rdmsrq_on_cpu(tdata->cpu, tdata->status_reg, &val.q);
+
+	/*
+	 * Cache the temperature even when the CPU reports it as invalid. In
+	 * all observed cases the register value is either low or zero if the
+	 * valid bit is 0, which is of more use than reporting an error.
+	 * tempX_fault tells userspace when the temperature is unreliable.
+	 */
+	tdata->temp_fault = !((val.l >> 31) & 1);
+	tdata->temp = tjmax - ((val.l >> 16) & 0xff) * 1000;
+	tdata->last_updated = jiffies;
+}
+
 static ssize_t show_temp(struct device *dev,
 			 struct device_attribute *devattr, char *buf)
 {
-	struct msr val;
 	struct temp_data *tdata = container_of(devattr, struct temp_data, sd_attrs[ATTR_TEMP]);
-	int tjmax;
 
-	mutex_lock(&tdata->update_lock);
+	guard(mutex)(&tdata->update_lock);
+	update_temp(tdata, dev);
 
-	/* Check whether the time interval has elapsed */
-	if (time_after(jiffies, tdata->last_updated + HZ)) {
-		tjmax = get_tjmax(tdata, dev);
-		rdmsrq_on_cpu(tdata->cpu, tdata->status_reg, &val.q);
-		/*
-		 * Ignore the valid bit. In all observed cases the register
-		 * value is either low or zero if the valid bit is 0.
-		 * Return it instead of reporting an error which doesn't
-		 * really help at all.
-		 */
-		tdata->temp = tjmax - ((val.l >> 16) & 0xff) * 1000;
-		tdata->last_updated = jiffies;
-	}
-
-	mutex_unlock(&tdata->update_lock);
 	return sprintf(buf, "%d\n", tdata->temp);
+}
+
+static ssize_t show_temp_fault(struct device *dev,
+			       struct device_attribute *devattr, char *buf)
+{
+	struct temp_data *tdata = container_of(devattr, struct temp_data,
+					       sd_attrs[ATTR_TEMP_FAULT]);
+
+	guard(mutex)(&tdata->update_lock);
+	update_temp(tdata, dev);
+
+	return sprintf(buf, "%d\n", tdata->temp_fault);
 }
 
 static int create_core_attrs(struct temp_data *tdata, struct device *dev)
 {
 	static ssize_t (*const rd_ptr[TOTAL_ATTRS]) (struct device *dev,
 			struct device_attribute *devattr, char *buf) = {
-			show_label, show_crit_alarm, show_temp, show_tjmax,
-			show_ttarget };
+			show_label, show_crit_alarm, show_temp, show_temp_fault,
+			show_tjmax, show_ttarget };
 	static const char *const suffixes[TOTAL_ATTRS] = {
-		"label", "crit_alarm", "input", "crit", "max"
+		"label", "crit_alarm", "input", "fault", "crit", "max"
 	};
 	int i;
 
