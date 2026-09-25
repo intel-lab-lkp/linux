@@ -7714,23 +7714,184 @@ struct extent_map *btrfs_create_delayed_em(struct btrfs_inode *inode,
 	return em;
 }
 
+static void end_bbio_delayed_compressed(struct btrfs_bio *bbio)
+{
+	struct delayed_bio_private *dbp = bbio->private;
+	struct btrfs_bio *parent = dbp->delayed_bbio;
+	struct folio_iter fi;
+
+	bio_for_each_folio_all(fi, &bbio->bio)
+		btrfs_free_compr_folio(fi.folio);
+	btrfs_bio_end_io(parent, bbio->bio.bi_status);
+	bio_put(&bbio->bio);
+}
+
+/*
+ * If we failed to allocate a child OE for a range, that range will be cleaned
+ * up by the caller, and the parent OE should not clean it up again.
+ * So here we need to clear the bits in the parent OE.
+ */
+static void clear_cleanup_bitmap(struct btrfs_ordered_extent *parent,
+				 u64 file_offset, u32 len)
+{
+	const u32 sectorbits = parent->inode->root->fs_info->sectorsize_bits;
+
+	/*
+	 * There can be multiple child ranges for the parent delayed OE.
+	 *
+	 * Re-use inode->ordered_tree_lock to prevent race.
+	 */
+	spin_lock(&parent->inode->ordered_tree_lock);
+	bitmap_clear(parent->child_cleanup_bitmap,
+		     (file_offset - parent->file_offset) >> sectorbits,
+		     len >> sectorbits);
+	spin_unlock(&parent->inode->ordered_tree_lock);
+}
+
+/*
+ * Return 0 if a compressed write is submitted.
+ * Return >0 if a compressed write is not submitted and we need to fall back to
+ * uncompressed write.
+ * Return <0 if we hit a critical error, and the reserved space is already cleaned
+ * up.
+ */
+static int try_submit_compressed(struct btrfs_bio *parent)
+{
+	struct delayed_bio_private *dbp = parent->private;
+	struct btrfs_inode *inode = parent->inode;
+	struct btrfs_fs_info *fs_info = inode->root->fs_info;
+	struct btrfs_key ins;
+	struct compressed_bio *cb;
+	struct extent_state *cached = NULL;
+	struct extent_map *em;
+	struct btrfs_ordered_extent *ordered;
+	struct btrfs_file_extent file_extent;
+	u64 alloc_hint;
+	const u32 len = bio_get_size(&parent->bio);
+	const u64 fileoff = parent->file_offset;
+	const u64 end = fileoff + len - 1;
+	u32 compressed_size;
+	int compress_type = fs_info->compress_type;
+	int compress_level = fs_info->compress_level;
+	int ret;
+
+	if (!btrfs_inode_can_compress(inode) ||
+	    !inode_need_compress(inode, fileoff, end, false))
+		return 1;
+
+	if (inode->defrag_compress > 0 &&
+	    inode->defrag_compress < BTRFS_NR_COMPRESS_TYPES) {
+		compress_type = inode->defrag_compress;
+		compress_level = inode->defrag_compress_level;
+	} else if (inode->prop_compress) {
+		compress_type = inode->prop_compress;
+	}
+	cb = btrfs_compress_bio(inode, fileoff, len, compress_type,
+				compress_level, 0);
+	if (IS_ERR(cb))
+		return 1;
+
+	round_up_last_block(cb, fs_info->sectorsize);
+	compressed_size = cb->bbio.bio.bi_iter.bi_size;
+	/* If no space is saved, abort and mark the inode NOCOMPRESS. */
+	if (compressed_size >= len) {
+		if (!btrfs_test_opt(fs_info, FORCE_COMPRESS) &&
+		    !inode->prop_compress)
+			inode->flags |= BTRFS_INODE_NOCOMPRESS;
+		cleanup_compressed_bio(cb);
+		return 1;
+	}
+
+	alloc_hint = btrfs_get_extent_allocation_hint(inode, fileoff, len);
+	ret = btrfs_reserve_extent(inode->root, len,
+				   compressed_size, compressed_size,
+				   0, alloc_hint, &ins, true, true);
+	if (ret < 0) {
+		cleanup_compressed_bio(cb);
+		return 1;
+	}
+	btrfs_lock_extent(&inode->io_tree, fileoff, end, &cached);
+	file_extent.disk_bytenr = ins.objectid;
+	file_extent.disk_num_bytes = ins.offset;
+	file_extent.ram_bytes = len;
+	file_extent.num_bytes = len;
+	file_extent.offset = 0;
+	file_extent.compression = cb->compress_type;
+
+	cb->bbio.bio.bi_iter.bi_sector = ins.objectid >> SECTOR_SHIFT;
+	em = btrfs_create_io_em(inode, fileoff, &file_extent, BTRFS_ORDERED_COMPRESSED);
+	if (IS_ERR(em)) {
+		ret = PTR_ERR(em);
+		goto out_free_reserve;
+	}
+	btrfs_free_extent_map(em);
+
+	ordered = btrfs_alloc_ordered_extent(inode, fileoff, &file_extent,
+					     1U << BTRFS_ORDERED_COMPRESSED);
+	if (IS_ERR(ordered)) {
+		ret = PTR_ERR(ordered);
+		goto out_free_reserve;
+	}
+	cb->bbio.ordered = ordered;
+	btrfs_dec_block_group_reservations(fs_info, ins.objectid);
+	btrfs_unlock_extent(&inode->io_tree, fileoff, end, &cached);
+
+	cb->bbio.end_io = end_bbio_delayed_compressed;
+	cb->bbio.private = dbp;
+	atomic_inc(&parent->pending_ios);
+	btrfs_submit_bbio(&cb->bbio, 0);
+	return 0;
+
+out_free_reserve:
+	/*
+	 * We may have not created the real EM yet, but the range will
+	 * not be cleaned up by the delayed parent OE.
+	 * So we still need to drop the parent delayed em for the failed range.
+	 */
+	btrfs_drop_extent_map_range(inode, fileoff, end, false);
+	btrfs_dec_block_group_reservations(fs_info, ins.objectid);
+	btrfs_free_reserved_extent(fs_info, ins.objectid, ins.offset, true);
+	/*
+	 * The range has EXTENT_DELALLOC cleared already, so
+	 * EXTENT_DO_ACCOUNTING is not working, and bytes_reserved
+	 * already decreased by the above btrfs_free_reserved_extent().
+	 *
+	 * Here we only need to release metadata and qgroup reserved space.
+	 */
+	btrfs_delalloc_release_metadata(inode, len, true);
+	btrfs_qgroup_free_data(inode, NULL, fileoff, len, NULL);
+	btrfs_clear_extent_bit(&inode->io_tree, fileoff, end,
+			       EXTENT_LOCKED | EXTENT_DELALLOC_NEW | EXTENT_DEFRAG,
+			       &cached);
+	cleanup_compressed_bio(cb);
+	clear_cleanup_bitmap(parent->ordered, parent->file_offset, len);
+	ASSERT(ret < 0);
+	return ret;
+}
+
 static void run_delayed_bbio(struct work_struct *work)
 {
 	struct delayed_bio_private *dbp = container_of(work, struct delayed_bio_private, work);
 	struct btrfs_bio *parent = dbp->delayed_bbio;
+	int ret;
 
 	/* Parent OE must be set. */
 	ASSERT(parent->ordered && test_bit(BTRFS_ORDERED_DELAYED, &parent->ordered->flags));
 
-	/* Compressed and uncompressed fallback is not yet implemented. */
+	ret = try_submit_compressed(parent);
+	if (ret <= 0)
+		goto finish;
+
+	/* Uncompressed fallback is not yet implemented. */
 	ASSERT(0);
 
+finish:
 	/*
 	 * Any real compressed/uncompressed bios have increased
 	 * parent->pending_ios, the last caller of btrfs_bio_end_io()
 	 * will execute the real endio function.
 	 */
-	btrfs_bio_end_io(parent, BLK_STS_OK);
+	btrfs_bio_end_io(parent, errno_to_blk_status(ret));
 }
 
 static void end_bbio_delayed(struct btrfs_bio *bbio)
