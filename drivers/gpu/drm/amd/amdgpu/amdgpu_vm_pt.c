@@ -551,13 +551,11 @@ static void amdgpu_vm_pt_free(struct amdgpu_vm_bo_base *entry)
 /**
  * amdgpu_vm_pt_free_list - free PD/PT levels
  *
- * @adev: amdgpu device structure
  * @params: see amdgpu_vm_update_params definition
  *
  * Free the page directory objects saved in the flush list
  */
-void amdgpu_vm_pt_free_list(struct amdgpu_device *adev,
-			    struct amdgpu_vm_update_params *params)
+void amdgpu_vm_pt_free_list(struct amdgpu_vm_update_params *params)
 {
 	struct amdgpu_vm_bo_base *entry, *next;
 	bool unlocked = params->unlocked;

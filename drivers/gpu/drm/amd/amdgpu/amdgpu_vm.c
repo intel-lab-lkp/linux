@@ -1252,7 +1252,7 @@ int amdgpu_vm_update_range(struct amdgpu_device *adev, struct amdgpu_vm *vm,
 		tlb_cb = NULL;
 	}
 
-	amdgpu_vm_pt_free_list(adev, &params);
+	amdgpu_vm_pt_free_list(&params);
 
 error_free:
 	kfree(tlb_cb);
