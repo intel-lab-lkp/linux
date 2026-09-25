@@ -8,6 +8,7 @@
 
 #define IGC_RX_MIN_FRAG_SIZE		60
 #define SMD_FRAME_SIZE			60
+#define IGC_EMPTY_FRAME_SIZE		60
 
 enum igc_txd_popts_type {
 	SMD_V = 0x01,
