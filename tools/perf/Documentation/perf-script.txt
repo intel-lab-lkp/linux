@@ -412,6 +412,21 @@ include::itrace.txt[]
 
         Default: 127
 
+--lazy-load-symbols::
+	Resolve symbols lazily instead of eagerly loading the full
+	symbol table of every DSO that appears in a sample. A compact
+	sorted index is built per DSO and only the addresses that appear
+	in samples are materialized into symbols, with names read from the
+	file's string table through the DSO data cache at lookup time. This
+	sharply reduces memory (and usually time) for profiles of large
+	binaries where only a small fraction of the symbol table is
+	referenced. This applies only to userspace ELF DSOs; kernel DSOs and
+	modules always load eagerly. Operations that look up a symbol by name
+	materialize the remainder of that DSO's index first to preserve
+	name-lookup behavior.
+	Output may differ from the default loader for some targets
+	(e.g. PPC64 .opd or .gnu_debugdata). Default: off.
+
 --max-symbol-bytes::
 	Limit the bytes held in struct symbol allocations for DSOs on the
 	libelf symbol-loader path: userspace DSOs, vmlinux-as-ELF, and kernel
@@ -420,6 +435,7 @@ include::itrace.txt[]
 	size with a B/K/M/G suffix (e.g. 128M). When the budget is exceeded,
 	the ELF loader stops adding symbols; addresses not covered by symbols
 	already loaded are then printed as [unknown]. A warning is printed.
+	With --lazy-load-symbols, the lazy symbol index is also counted.
 	Default: 0 (unlimited).
 
 --ns::

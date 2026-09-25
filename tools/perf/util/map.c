@@ -382,10 +382,27 @@ int map__load(struct map *map)
 
 struct symbol *map__find_symbol(struct map *map, u64 addr)
 {
+	struct dso *dso;
+	struct symbol *sym;
+
 	if (map__load(map) < 0)
 		return NULL;
 
-	return dso__find_symbol(map__dso(map), addr);
+	dso = map__dso(map);
+	if (!symbol_conf.lazy_load_symbols)
+		return dso__find_symbol(dso, addr);
+
+	/*
+	 * A lazily loaded DSO inserts symbols into its rb-tree on lookup and
+	 * drops its index once fully materialized. Look up and materialize
+	 * under the DSO lock so readers never race with either change.
+	 */
+	mutex_lock(dso__lock(dso));
+	sym = dso__find_symbol(dso, addr);
+	if (!sym)
+		sym = dso__find_symbol_ondemand(dso, addr);
+	mutex_unlock(dso__lock(dso));
+	return sym;
 }
 
 struct symbol *map__find_symbol_by_name_idx(struct map *map, const char *name, size_t *idx)

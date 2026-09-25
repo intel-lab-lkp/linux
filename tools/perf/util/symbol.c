@@ -773,6 +773,7 @@ void dso__sort_by_name(struct dso *dso)
 	if (!dso__sorted_by_name(dso)) {
 		size_t len = 0;
 
+		dso__materialize_symbols_ondemand(dso);
 		dso__set_symbol_names(dso, symbols__sort_by_name(dso__symbols(dso), &len));
 		if (dso__symbol_names(dso)) {
 			dso__set_symbol_names_len(dso, len);
@@ -2019,11 +2020,19 @@ int dso__load(struct dso *dso, struct map *map)
 		}
 
 #ifdef HAVE_LIBBFD_SUPPORT
+#ifdef HAVE_LIBELF_SUPPORT
+		if (is_reg && !symbol_conf.lazy_load_symbols)
+#else
 		if (is_reg)
+#endif
 			bfdrc = dso__load_bfd_symbols(dso, name);
 #endif
 		if (is_reg && bfdrc < 0)
 			sirc = symsrc__init(ss, dso, name, symtab_type);
+#if defined(HAVE_LIBBFD_SUPPORT) && defined(HAVE_LIBELF_SUPPORT)
+		if (is_reg && symbol_conf.lazy_load_symbols && sirc < 0)
+			bfdrc = dso__load_bfd_symbols(dso, name);
+#endif
 
 		if (nsexit)
 			nsinfo__mountns_enter(dso__nsinfo(dso), &nsc);
