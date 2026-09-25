@@ -1137,8 +1137,6 @@ static void igc_init_tx_empty_descriptor(struct igc_ring *ring,
 		ring->next_to_use = 0;
 }
 
-#define IGC_EMPTY_FRAME_SIZE 60
-
 static void igc_tx_ctxtdesc(struct igc_ring *tx_ring,
 			    __le32 launch_time, bool first_flag,
 			    u32 vlan_macip_lens, u32 type_tucmd,
