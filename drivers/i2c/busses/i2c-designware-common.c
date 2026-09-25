@@ -72,6 +72,40 @@ static const char *const abort_sources[] = {
 		"incorrect slave-transmitter mode configuration",
 };
 
+/* "ti,tda54-i2c" block-based register layout */
+#define DWC_ADV_OPERATION_BLK_OFFSET		0x00
+#define DWC_ADV_I2C_BLK_OFFSET			0x28
+#define DWC_ADV_FIFO_INTR_BLK_OFFSET		0xbc
+#define DWC_ADV_DEBUG_BLK_OFFSET		0xf8
+
+static const u32 tda54_i2c_reg_offsets[DW_IC_REG_MAX] = {
+	[DW_IC_ENABLE]			= DWC_ADV_OPERATION_BLK_OFFSET + 0x04,
+	[DW_IC_CON]			= DWC_ADV_I2C_BLK_OFFSET + 0x04,
+	[DW_IC_TAR]			= DWC_ADV_I2C_BLK_OFFSET + 0x08,
+	[DW_IC_SAR]			= DWC_ADV_I2C_BLK_OFFSET + 0x0c,
+	[DW_IC_DATA_CMD]		= DWC_ADV_I2C_BLK_OFFSET + 0x58,
+	[DW_IC_SS_SCL_HCNT]		= DWC_ADV_I2C_BLK_OFFSET + 0x24, /* shared SS/FS pair */
+	[DW_IC_SS_SCL_LCNT]		= DWC_ADV_I2C_BLK_OFFSET + 0x28,
+	[DW_IC_FS_SCL_HCNT]		= DWC_ADV_I2C_BLK_OFFSET + 0x24,
+	[DW_IC_FS_SCL_LCNT]		= DWC_ADV_I2C_BLK_OFFSET + 0x28,
+	[DW_IC_HS_SCL_HCNT]		= DWC_ADV_I2C_BLK_OFFSET + 0x2c,
+	[DW_IC_HS_SCL_LCNT]		= DWC_ADV_I2C_BLK_OFFSET + 0x30,
+	[DW_IC_SDA_HOLD]		= DWC_ADV_I2C_BLK_OFFSET + 0x34,
+	[DW_IC_RX_TL]			= DWC_ADV_I2C_BLK_OFFSET + 0x5c,
+	[DW_IC_TX_TL]			= DWC_ADV_I2C_BLK_OFFSET + 0x60,
+	[DW_IC_INTR_STAT]		= DWC_ADV_FIFO_INTR_BLK_OFFSET + 0x04,
+	[DW_IC_INTR_MASK]		= DWC_ADV_FIFO_INTR_BLK_OFFSET + 0x08,
+	[DW_IC_RAW_INTR_STAT]		= DWC_ADV_FIFO_INTR_BLK_OFFSET + 0x0c,
+	[DW_IC_CLR_INTR]		= DWC_ADV_FIFO_INTR_BLK_OFFSET + 0x10,
+	[DW_IC_STATUS]			= DWC_ADV_FIFO_INTR_BLK_OFFSET + 0x1c,
+	[DW_IC_TXFLR]			= DWC_ADV_FIFO_INTR_BLK_OFFSET + 0x20,
+	[DW_IC_RXFLR]			= DWC_ADV_FIFO_INTR_BLK_OFFSET + 0x24,
+	[DW_IC_TX_ABRT_SOURCE]		= DWC_ADV_FIFO_INTR_BLK_OFFSET + 0x18,
+	[DW_IC_ENABLE_STATUS]		= DWC_ADV_FIFO_INTR_BLK_OFFSET + 0x14,
+	[DW_IC_COMP_VERSION]		= DWC_ADV_DEBUG_BLK_OFFSET + 0x08,
+	[DW_IC_COMP_TYPE]		= DWC_ADV_DEBUG_BLK_OFFSET + 0x0c,
+};
+
 static const struct dw_i2c_con_bits dw_i2c_con_bits = {
 	.master			= DW_IC_CON_MASTER,
 	.speed_std		= DW_IC_CON_SPEED_STD,
@@ -86,6 +120,26 @@ static const struct dw_i2c_con_bits dw_i2c_con_bits = {
 	.tx_empty_ctrl		= DW_IC_CON_TX_EMPTY_CTRL,
 	.rx_fifo_full_hld_ctrl	= DW_IC_CON_RX_FIFO_FULL_HLD_CTRL,
 	.bus_clear_ctrl		= DW_IC_CON_BUS_CLEAR_CTRL,
+};
+
+/*
+ * DWC_IC_CTRL bit layout for "ti,tda54-i2c".
+ * There is no defined bit for RESTART_EN or SLAVE_DISABLE on this IP.
+ */
+static const struct dw_i2c_con_bits dwc_adv_i2c_con_bits = {
+	.master			= BIT(0),
+	.speed_std		= (1 << 4),
+	.speed_fast		= (2 << 4),
+	.speed_high		= (3 << 4),
+	.speed_mask		= GENMASK(5, 4),
+	.bit10_slave		= BIT(8),
+	.bit10_master		= BIT(9),
+	.restart_en		= 0,
+	.slave_disable		= 0,
+	.stop_det_ifaddressed	= BIT(10),
+	.tx_empty_ctrl		= BIT(11),
+	.rx_fifo_full_hld_ctrl	= BIT(12),
+	.bus_clear_ctrl		= 0,
 };
 
 /* "snps,designware-i2c": dedicated read-to-clear register ID per logical interrupt */
@@ -103,6 +157,21 @@ static const u32 dw_i2c_intr_clr[DW_INTR_IDX_MAX] = {
 	[DW_INTR_IDX_GEN_CALL]  = DW_IC_CLR_GEN_CALL,
 };
 
+/* "ti,tda54-i2c" CLR_INTR bit to write per logical interrupt */
+static const u32 dwc_adv_i2c_intr_clr[DW_INTR_IDX_MAX] = {
+	[DW_INTR_IDX_INTR]      = DWC_ADV_IC_INTR_CLR_INTR,
+	[DW_INTR_IDX_RX_UNDER]  = DWC_ADV_IC_INTR_CLR_RX_UNDER,
+	[DW_INTR_IDX_RX_OVER]   = DWC_ADV_IC_INTR_CLR_RX_OVER,
+	[DW_INTR_IDX_TX_OVER]   = DWC_ADV_IC_INTR_CLR_TX_OVER,
+	[DW_INTR_IDX_RD_REQ]    = DWC_ADV_IC_INTR_CLR_RD_REQ,
+	[DW_INTR_IDX_TX_ABRT]   = DWC_ADV_IC_INTR_CLR_TX_ABRT,
+	[DW_INTR_IDX_RX_DONE]   = DWC_ADV_IC_INTR_CLR_RX_DONE,
+	[DW_INTR_IDX_ACTIVITY]  = DWC_ADV_IC_INTR_CLR_ACTIVITY,
+	[DW_INTR_IDX_STOP_DET]  = DWC_ADV_IC_INTR_CLR_STOP_DET,
+	[DW_INTR_IDX_START_DET] = DWC_ADV_IC_INTR_CLR_START_DET,
+	[DW_INTR_IDX_GEN_CALL]  = DWC_ADV_IC_INTR_CLR_GEN_CALL,
+};
+
 /**
  * i2c_dw_select_variant() - Pick the register offset table, CON-register bit
  * layout and interrupt-ack mapping matching this device's IP variant
@@ -110,9 +179,15 @@ static const u32 dw_i2c_intr_clr[DW_INTR_IDX_MAX] = {
  */
 void i2c_dw_select_variant(struct dw_i2c_dev *dev)
 {
-	dev->regs = dw_i2c_reg_offsets;
-	dev->con_bits = &dw_i2c_con_bits;
-	dev->intr_clr = dw_i2c_intr_clr;
+	if (dev->flags & MODEL_TI_TDA54) {
+		dev->regs = tda54_i2c_reg_offsets;
+		dev->con_bits = &dwc_adv_i2c_con_bits;
+		dev->intr_clr = dwc_adv_i2c_intr_clr;
+	} else {
+		dev->regs = dw_i2c_reg_offsets;
+		dev->con_bits = &dw_i2c_con_bits;
+		dev->intr_clr = dw_i2c_intr_clr;
+	}
 }
 EXPORT_SYMBOL_GPL(i2c_dw_select_variant);
 
@@ -432,13 +507,27 @@ static void i2c_dw_configure_mode(struct dw_i2c_dev *dev, int mode)
 
 static void i2c_dw_write_timings(struct dw_i2c_dev *dev)
 {
-	/* Write standard speed timing parameters */
-	regmap_write(dev->map, DW_IC_SS_SCL_HCNT, dev->ss_hcnt);
-	regmap_write(dev->map, DW_IC_SS_SCL_LCNT, dev->ss_lcnt);
+	if (dev->flags & MODEL_TI_TDA54) {
+		/*
+		 * Only one HCNT/LCNT register pair backs both speeds on
+		 * this IP -- write whichever value set matches master_cfg.
+		 */
+		if ((dev->master_cfg & dev->con_bits->speed_mask) == dev->con_bits->speed_std) {
+			regmap_write(dev->map, DW_IC_SS_SCL_HCNT, dev->ss_hcnt);
+			regmap_write(dev->map, DW_IC_SS_SCL_LCNT, dev->ss_lcnt);
+		} else {
+			regmap_write(dev->map, DW_IC_FS_SCL_HCNT, dev->fs_hcnt);
+			regmap_write(dev->map, DW_IC_FS_SCL_LCNT, dev->fs_lcnt);
+		}
+	} else {
+		/* Write standard speed timing parameters */
+		regmap_write(dev->map, DW_IC_SS_SCL_HCNT, dev->ss_hcnt);
+		regmap_write(dev->map, DW_IC_SS_SCL_LCNT, dev->ss_lcnt);
 
-	/* Write fast mode/fast mode plus timing parameters */
-	regmap_write(dev->map, DW_IC_FS_SCL_HCNT, dev->fs_hcnt);
-	regmap_write(dev->map, DW_IC_FS_SCL_LCNT, dev->fs_lcnt);
+		/* Write fast mode/fast mode plus timing parameters */
+		regmap_write(dev->map, DW_IC_FS_SCL_HCNT, dev->fs_hcnt);
+		regmap_write(dev->map, DW_IC_FS_SCL_LCNT, dev->fs_lcnt);
+	}
 
 	/* Write high speed timing parameters */
 	regmap_write(dev->map, DW_IC_HS_SCL_HCNT, dev->hs_hcnt);
@@ -493,8 +582,10 @@ int i2c_dw_init(struct dw_i2c_dev *dev)
 	 * Mask SMBus interrupts to block storms from broken
 	 * firmware that leaves IC_SMBUS=1; the handler never
 	 * services them.
+	 * TDA54 SoC has no SMBus block, so skip it.
 	 */
-	regmap_write(dev->map, DW_IC_SMBUS_INTR_MASK, 0);
+	if (!(dev->flags & MODEL_TI_TDA54))
+		regmap_write(dev->map, DW_IC_SMBUS_INTR_MASK, 0);
 
 	i2c_dw_write_timings(dev);
 
@@ -537,6 +628,14 @@ int i2c_dw_fw_parse_and_configure(struct dw_i2c_dev *dev)
 
 	if (device_property_read_u32(device, "snps,bus-capacitance-pf", &dev->bus_capacitance_pF))
 		dev->bus_capacitance_pF = DW_IC_DEFAULT_BUS_CAPACITANCE_pF;
+
+	if (dev->flags & MODEL_TI_TDA54) {
+		device_property_read_u32(device, "snps,tx-fifo-depth", &dev->tx_fifo_depth);
+		device_property_read_u32(device, "snps,rx-fifo-depth", &dev->rx_fifo_depth);
+
+		if (!dev->tx_fifo_depth || !dev->rx_fifo_depth)
+			return -EINVAL;
+	}
 
 	dev->clk_freq_optimized = device_property_read_bool(device, "snps,clk-freq-optimized");
 
@@ -853,6 +952,13 @@ static int i2c_dw_set_fifo_size(struct dw_i2c_dev *dev)
 
 		return 0;
 	}
+
+	/*
+	 * DW_IC_COMP_PARAM_1 not implemented on this IP;
+	 * fifo depth set in i2c_dw_fw_parse_and_configure().
+	 */
+	if (dev->flags & MODEL_TI_TDA54)
+		return 0;
 
 	/*
 	 * Try to detect the FIFO depth if not set by interface driver,
