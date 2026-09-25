@@ -954,6 +954,8 @@ u32 arch_acpi_add_auto_dep(acpi_handle handle);
 
 #else	/* CONFIG_ACPI */
 
+#define acpi_find_child_device(...)	(NULL)
+
 static inline bool acpi_has_method(acpi_handle handle, char *name)
 {
 	return false;
