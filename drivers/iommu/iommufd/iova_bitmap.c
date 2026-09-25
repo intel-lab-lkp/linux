@@ -388,6 +388,30 @@ int iova_bitmap_for_each(struct iova_bitmap *bitmap, void *opaque,
 }
 EXPORT_SYMBOL_NS_GPL(iova_bitmap_for_each, "IOMMUFD");
 
+/*
+ * Trim [@iova..@iova+@length-1] to the IOVA range covered by @bitmap.
+ * Dirty trackers may report more than was asked for, for instance a whole
+ * huge IOPTE of which only a part was queried.
+ */
+static bool iova_bitmap_clip(struct iova_bitmap *bitmap, unsigned long *iova,
+			     size_t *length)
+{
+	unsigned long first = max(*iova, bitmap->iova);
+	unsigned long last = bitmap->iova + bitmap->length - 1;
+	unsigned long end;
+
+	if (!*length)
+		return false;
+	if (!check_add_overflow(*iova, *length - 1, &end))
+		last = min(last, end);
+	if (first > last)
+		return false;
+
+	*iova = first;
+	*length = last - first + 1;
+	return true;
+}
+
 /**
  * iova_bitmap_set() - Records an IOVA range in bitmap
  * @bitmap: IOVA bitmap
@@ -403,6 +427,9 @@ void iova_bitmap_set(struct iova_bitmap *bitmap,
 {
 	struct iova_bitmap_map *mapped = &bitmap->mapped;
 	unsigned long cur_bit, last_bit, last_page_idx;
+
+	if (!iova_bitmap_clip(bitmap, &iova, &length))
+		return;
 
 update_indexes:
 	if (unlikely(!iova_bitmap_mapped_range(mapped, iova, length))) {
