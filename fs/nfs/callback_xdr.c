@@ -951,7 +951,13 @@ static __be32 nfs4_callback_compound(struct svc_rqst *rqstp)
 	if (status == htonl(NFS4ERR_RESOURCE))
 		return rpc_garbage_args;
 
-	if (hdr_arg.minorversion == 0) {
+	if (hdr_arg.minorversion == 0 && svc_is_backchannel(rqstp)) {
+		/* RFC 8881 Section 19.2.3: a backchannel carries only the
+		 * minor version that created its session.
+		 */
+		pr_warn_ratelimited("NFS: NFSv4 backchannel callback with minor version 0\n");
+		status = htonl(NFS4ERR_MINOR_VERS_MISMATCH);
+	} else if (hdr_arg.minorversion == 0) {
 		cps.clp = nfs4_find_client_ident(SVC_NET(rqstp), hdr_arg.cb_ident);
 		if (!cps.clp) {
 			trace_nfs_cb_no_clp(rqstp->rq_xid, hdr_arg.cb_ident);
