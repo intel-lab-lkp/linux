@@ -1001,7 +1001,10 @@ magic_found:
 	uspi->s_fsize = fs32_to_cpu(sb, usb1->fs_fsize);
 	uspi->s_sbsize = fs32_to_cpu(sb, usb1->fs_sbsize);
 	uspi->s_fmask = fs32_to_cpu(sb, usb1->fs_fmask);
+	uspi->s_bshift = fs32_to_cpu(sb, usb1->fs_bshift);
 	uspi->s_fshift = fs32_to_cpu(sb, usb1->fs_fshift);
+	UFSD("uspi->s_bshift = %d,uspi->s_fshift = %d", uspi->s_bshift,
+		uspi->s_fshift);
 
 	if (!is_power_of_2(uspi->s_fsize)) {
 		pr_err("%s(): fragment size %u is not a power of 2\n",
@@ -1018,6 +1021,11 @@ magic_found:
 		       __func__, uspi->s_fsize);
 		goto failed;
 	}
+	if (uspi->s_fshift != ilog2(uspi->s_fsize)) {
+		pr_err("%s(): fragment size shift %u does not match fragment size %u\n",
+		       __func__, uspi->s_fshift, uspi->s_fsize);
+		goto failed;
+	}
 	if (!is_power_of_2(uspi->s_bsize)) {
 		pr_err("%s(): block size %u is not a power of 2\n",
 		       __func__, uspi->s_bsize);
@@ -1026,6 +1034,11 @@ magic_found:
 	if (uspi->s_bsize < 4096) {
 		pr_err("%s(): block size %u is too small\n",
 		       __func__, uspi->s_bsize);
+		goto failed;
+	}
+	if (uspi->s_bshift != ilog2(uspi->s_bsize)) {
+		pr_err("%s(): block size shift %u does not match block size %u\n",
+		       __func__, uspi->s_bshift, uspi->s_bsize);
 		goto failed;
 	}
 	if (uspi->s_bsize / uspi->s_fsize > 8) {
@@ -1117,10 +1130,6 @@ magic_found:
 	uspi->s_minfree = fs32_to_cpu(sb, usb1->fs_minfree);
 	uspi->s_bmask = fs32_to_cpu(sb, usb1->fs_bmask);
 	uspi->s_fmask = fs32_to_cpu(sb, usb1->fs_fmask);
-	uspi->s_bshift = fs32_to_cpu(sb, usb1->fs_bshift);
-	uspi->s_fshift = fs32_to_cpu(sb, usb1->fs_fshift);
-	UFSD("uspi->s_bshift = %d,uspi->s_fshift = %d", uspi->s_bshift,
-		uspi->s_fshift);
 	uspi->s_fpbshift = fs32_to_cpu(sb, usb1->fs_fragshift);
 	uspi->s_fsbtodb = fs32_to_cpu(sb, usb1->fs_fsbtodb);
 	/* s_sbsize already set */
