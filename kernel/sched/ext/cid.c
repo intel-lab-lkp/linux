@@ -641,6 +641,29 @@ __bpf_kfunc s32 scx_bpf_cid_to_cpu(s32 cid, const struct bpf_prog_aux *aux)
 }
 
 /**
+ * scx_bpf_cid_node - Return the NUMA node the given @cid belongs to
+ * @cid: cid to look up
+ * @aux: implicit BPF argument to access bpf_prog_aux hidden from BPF progs
+ *
+ * Return NUMA_NO_NODE if @cid is invalid or there is no scheduler. Unlike
+ * scx_bpf_cpu_node(), this kfunc is available only with CID support, so BPF
+ * schedulers can use its presence to detect NUMA-aware CID lookups.
+ */
+__bpf_kfunc s32 scx_bpf_cid_node(s32 cid, const struct bpf_prog_aux *aux)
+{
+	struct scx_sched *sch;
+	s32 cpu;
+
+	guard(rcu)();
+
+	sch = scx_prog_sched(aux);
+	if (unlikely(!sch))
+		return NUMA_NO_NODE;
+	cpu = scx_cid_to_cpu(sch, cid);
+	return cpu < 0 ? NUMA_NO_NODE : cpu_to_node(cpu);
+}
+
+/**
  * scx_bpf_cpu_to_cid - Return the cid for @cpu
  * @cpu: cpu to look up
  * @aux: implicit BPF argument to access bpf_prog_aux hidden from BPF progs
@@ -952,6 +975,7 @@ static const struct btf_kfunc_id_set scx_kfunc_set_init_cids = {
 
 BTF_KFUNCS_START(scx_kfunc_ids_cid)
 BTF_ID_FLAGS(func, scx_bpf_cid_to_cpu, KF_IMPLICIT_ARGS)
+BTF_ID_FLAGS(func, scx_bpf_cid_node, KF_IMPLICIT_ARGS)
 BTF_ID_FLAGS(func, scx_bpf_cpu_to_cid, KF_IMPLICIT_ARGS)
 BTF_ID_FLAGS(func, scx_bpf_cid_topo, KF_IMPLICIT_ARGS)
 BTF_KFUNCS_END(scx_kfunc_ids_cid)
