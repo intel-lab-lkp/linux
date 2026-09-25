@@ -533,7 +533,6 @@ static void bnx2fc_recv_frame(struct sk_buff *skb)
 
 	/* Pull the header */
 	hp = (struct fcoe_hdr *) skb_network_header(skb);
-	fh = (struct fc_frame_header *) skb_transport_header(skb);
 	skb_pull(skb, sizeof(struct fcoe_hdr));
 	fr_len = skb->len - sizeof(struct fcoe_crc_eof);
 
