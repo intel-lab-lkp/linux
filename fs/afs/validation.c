@@ -372,11 +372,15 @@ static void afs_zap_data(struct afs_vnode *vnode)
 
 	/* nuke all the non-dirty pages that aren't locked, mapped or being
 	 * written back in a regular file and completely discard the pages in a
-	 * directory or symlink */
-	if (S_ISREG(vnode->netfs.inode.i_mode))
-		filemap_invalidate_inode(&vnode->netfs.inode, true, 0, LLONG_MAX);
-	else
-		filemap_invalidate_inode(&vnode->netfs.inode, false, 0, LLONG_MAX);
+	 * directory or symlink.
+	 *
+	 * Don't flush here: we hold validate_lock for write, and writeback
+	 * would take validate_lock for read again in afs_writepages(),
+	 * deadlocking against ourselves.  The queued writes are also based
+	 * on a stale data version at this point and cannot be stored
+	 * coherently anyway.
+	 */
+	filemap_invalidate_inode(&vnode->netfs.inode, false, 0, LLONG_MAX);
 }
 
 /*
