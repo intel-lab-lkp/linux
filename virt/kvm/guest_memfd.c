@@ -3,6 +3,7 @@
 #include <linux/backing-dev.h>
 #include <linux/falloc.h>
 #include <linux/fs.h>
+#include <linux/guest_memfd.h>
 #include <linux/kvm_host.h>
 #include <linux/maple_tree.h>
 #include <linux/mempolicy.h>
@@ -35,6 +36,9 @@ struct gmem_inode {
 	struct inode vfs_inode;
 	struct list_head gmem_file_list;
 
+	void *provider;
+	const struct guest_memfd_provider_operations *provider_ops;
+
 	u64 flags;
 	/*
 	 * Every index in this inode, whether memory is populated or
@@ -48,6 +52,16 @@ struct gmem_inode {
 static __always_inline struct gmem_inode *GMEM_I(struct inode *inode)
 {
 	return container_of(inode, struct gmem_inode, vfs_inode);
+}
+
+static inline struct folio *gmem_provider_alloc_folio(struct gmem_inode *gi,
+						      pgoff_t index,
+						      struct mempolicy *mpol)
+{
+	if (!gi->provider_ops || !gi->provider_ops->alloc_folio)
+		return ERR_PTR(-EOPNOTSUPP);
+
+	return gi->provider_ops->alloc_folio(gi->provider, index, mpol);
 }
 
 #define kvm_gmem_for_each_file(f, inode) \
@@ -128,6 +142,7 @@ static bool kvm_gmem_range_has_attributes(struct inode *inode,
  */
 static struct folio *kvm_gmem_get_folio(struct inode *inode, pgoff_t index)
 {
+	struct gmem_inode *gi = GMEM_I(inode);
 	/* TODO: Support huge pages. */
 	struct mempolicy *policy;
 	struct folio *folio;
@@ -140,10 +155,29 @@ static struct folio *kvm_gmem_get_folio(struct inode *inode, pgoff_t index)
 	if (!IS_ERR(folio))
 		return folio;
 
-	policy = mpol_shared_policy_lookup(&GMEM_I(inode)->policy, index);
-	folio = __filemap_get_folio_mpol(inode->i_mapping, index,
-					 FGP_LOCK | FGP_CREAT,
-					 mapping_gfp_mask(inode->i_mapping), policy);
+	policy = mpol_shared_policy_lookup(&gi->policy, index);
+	/*
+	 * TODO: Refactor the internal PAGE_SIZE gmem could be an internal
+	 * provider with internal provider_ops.
+	 */
+	if (gi->provider_ops) {
+		folio = gmem_provider_alloc_folio(gi, index, policy);
+		if (!IS_ERR(folio)) {
+			int r = filemap_add_folio(inode->i_mapping, folio,
+						  index, GFP_KERNEL);
+			if (r) {
+				folio_put(folio);
+				folio = ERR_PTR(r);
+			} else {
+				folio_mark_accessed(folio);
+			}
+		}
+	} else {
+		folio = __filemap_get_folio_mpol(inode->i_mapping, index,
+						 FGP_LOCK | FGP_CREAT,
+						 mapping_gfp_mask(inode->i_mapping),
+						 policy);
+	}
 	mpol_cond_put(policy);
 
 	/*
@@ -1334,6 +1368,8 @@ static struct inode *kvm_gmem_alloc_inode(struct super_block *sb)
 	mt_init_flags(&gi->attributes, MT_FLAGS_LOCK_EXTERN | MT_FLAGS_USE_RCU);
 
 	gi->flags = 0;
+	gi->provider = NULL;
+	gi->provider_ops = NULL;
 	INIT_LIST_HEAD(&gi->gmem_file_list);
 	return &gi->vfs_inode;
 }
