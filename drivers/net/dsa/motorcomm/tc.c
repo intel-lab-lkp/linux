@@ -1070,6 +1070,9 @@ yt921x_acl_rule_ext_parse_flow(struct yt921x_acl_rule_ext *ruleext, int port,
 	yt921x_acl_rule_set_ports(&ruleext->r, prio, BIT(port));
 	ruleext->r.tag = cls->cookie;
 	ruleext->r.type = TC_SETUP_CLSFLOWER;
+	/* Align with sja1105 */
+	ruleext->r.stat_pkt_mode = true;
+	ruleext->r.laststat = 0;
 	return 0;
 }
 
@@ -1136,6 +1139,45 @@ yt921x_acl_reserve(struct yt921x_priv *priv, unsigned int entscnt,
 	NL_SET_ERR_MSG_MOD(extack,
 			   "ACL entry allocation failed, simplify your rules or remove existing rules");
 	return UINT_MAX;
+}
+
+static int
+yt921x_acl_stat(struct yt921x_priv *priv, enum tc_setup_type type,
+		unsigned long tag, struct flow_stats *stats)
+{
+	struct yt921x_acl_rule *aclrule;
+	const struct yt921x_acl_blk *aclblk;
+	unsigned int statid;
+	unsigned int binid;
+	unsigned int blkid;
+	unsigned int entid;
+	u64 diff;
+	u64 stat;
+	int res;
+
+	entid = yt921x_acl_find(priv, type, tag);
+	if (entid == UINT_MAX)
+		return -ENOENT;
+
+	blkid = entid / YT921X_ACL_ENT_PER_BLK;
+	binid = entid % YT921X_ACL_ENT_PER_BLK;
+	aclblk = priv->acl_blks[blkid];
+	aclrule = aclblk->rules[binid];
+
+	if (!(aclrule->action[0] & YT921X_ACL_ACTa_FLOWSTAT_EN))
+		return -EOPNOTSUPP;
+
+	statid = FIELD_GET(YT921X_ACL_ACTa_FLOWSTAT_ID_M, aclrule->action[0]);
+	res = yt921x_counter_read(priv, YT921X_FLOWSTATn_STAT(statid), &stat);
+	if (res)
+		return res;
+
+	diff = stat - aclrule->laststat;
+	aclrule->laststat = stat;
+	flow_stats_update(stats, aclrule->stat_pkt_mode ? 0 : diff,
+			  !aclrule->stat_pkt_mode ? 0 : diff, 0,
+			  jiffies, FLOW_ACTION_HW_STATS_IMMEDIATE);
+	return 0;
 }
 
 static int
@@ -1270,9 +1312,13 @@ yt921x_acl_del(struct yt921x_priv *priv, enum tc_setup_type type,
 	}
 
 	if (aclrule->action[0] & YT921X_ACL_ACTa_METER_EN)
-		clear_bit(FIELD_GET(YT921X_ACL_ACTa_METER_ID_M,
-				    aclrule->action[0]),
-			  priv->meters_map);
+		__clear_bit(FIELD_GET(YT921X_ACL_ACTa_METER_ID_M,
+				      aclrule->action[0]),
+			    priv->meters_map);
+	if (aclrule->action[0] & YT921X_ACL_ACTa_FLOWSTAT_EN)
+		__clear_bit(FIELD_GET(YT921X_ACL_ACTa_FLOWSTAT_ID_M,
+				      aclrule->action[0]),
+			    priv->flowstats_map);
 	priv->acl_masks[blkid] &= ~aclrule->mask;
 	kvfree(aclrule);
 	if (!priv->acl_masks[blkid]) {
@@ -1290,13 +1336,14 @@ yt921x_acl_add(struct yt921x_priv *priv,
 	unsigned int entscnt = hweight8(ruleext->r.mask);
 	struct yt921x_acl_rule *aclrule;
 	struct yt921x_acl_blk *aclblk;
-	bool use_trap = false;
 	unsigned int meterid;
+	unsigned int statid;
 	unsigned int binid;
 	unsigned int blkid;
 	unsigned int entid;
 	unsigned long m;
 	unsigned int o;
+	bool use_trap;
 	u32 ctrl;
 	int res;
 
@@ -1304,6 +1351,10 @@ yt921x_acl_add(struct yt921x_priv *priv,
 	entid = yt921x_acl_reserve(priv, entscnt, extack);
 	if (entid == UINT_MAX)
 		return -EOPNOTSUPP;
+
+	use_trap = (ruleext->r.action[2] & YT921X_ACL_ACTc_FWD_EN) &&
+		   (FIELD_GET(YT921X_ACL_ACTc_FWD_M,
+			      ruleext->r.action[2]) == YT921X_ACL_ACTc_FWD_TRAP);
 
 	if (!(ruleext->r.action[0] & YT921X_ACL_ACTa_METER_EN)) {
 		meterid = YT921X_METER_NUM;
@@ -1334,6 +1385,35 @@ yt921x_acl_add(struct yt921x_priv *priv,
 		res = yt921x_reg_write(priv, YT921X_ACL_PORT, ctrl);
 		if (res)
 			return res;
+	}
+
+	if (ruleext->r.sw_assisted && use_trap) {
+		statid = YT921X_FLOWSTAT_NUM;
+	} else {
+		statid = find_first_zero_bit(priv->flowstats_map,
+					     YT921X_FLOWSTAT_NUM);
+		if (statid >= YT921X_FLOWSTAT_NUM) {
+			NL_SET_ERR_MSG_MOD(extack,
+					   "No more flowstats, HW stats disabled");
+		} else {
+			u32 zeros[2] = {};
+
+			ctrl = YT921X_FLOWSTAT_CTRL_TYPE_FLOW |
+			       YT921X_FLOWSTAT_CTRL_EN;
+			if (ruleext->r.stat_pkt_mode)
+				ctrl |= YT921X_FLOWSTAT_CTRL_PKT_MODE;
+			res = yt921x_reg_write(priv,
+					       YT921X_FLOWSTATn_CTRL(statid),
+					       ctrl);
+			if (res)
+				return res;
+
+			res = yt921x_reg64_write(priv,
+						 YT921X_FLOWSTATn_STAT(statid),
+						 zeros);
+			if (res)
+				return res;
+		}
 	}
 
 	/* Prepare acl block ctrlblk */
@@ -1376,6 +1456,9 @@ yt921x_acl_add(struct yt921x_priv *priv,
 		aclrule->action[0] |= YT921X_ACL_ACTa_METER_ID(meterid);
 	else
 		aclrule->action[0] &= ~YT921X_ACL_ACTa_METER_EN;
+	if (statid < YT921X_FLOWSTAT_NUM)
+		aclrule->action[0] |= YT921X_ACL_ACTa_FLOWSTAT_EN |
+				      YT921X_ACL_ACTa_FLOWSTAT_ID(statid);
 
 	/* Write rules */
 	aclblk->rules[binid] = aclrule;
@@ -1391,7 +1474,9 @@ yt921x_acl_add(struct yt921x_priv *priv,
 		priv->ports[o].acl_cnt++;
 
 	if (meterid < YT921X_METER_NUM)
-		set_bit(meterid, priv->meters_map);
+		__set_bit(meterid, priv->meters_map);
+	if (statid < YT921X_FLOWSTAT_NUM)
+		__set_bit(statid, priv->flowstats_map);
 	priv->acl_masks[blkid] |= aclrule->mask;
 	return 0;
 
@@ -1400,6 +1485,21 @@ err:
 		kvfree(aclblk);
 		priv->acl_blks[blkid] = NULL;
 	}
+	return res;
+}
+
+int
+yt921x_dsa_cls_flower_stats(struct dsa_switch *ds, int port,
+			    struct flow_cls_offload *cls, bool ingress)
+{
+	struct yt921x_priv *priv = to_yt921x_priv(ds);
+	int res;
+
+	mutex_lock(&priv->reg_lock);
+	res = yt921x_acl_stat(priv, TC_SETUP_CLSFLOWER, cls->cookie,
+			      &cls->stats);
+	mutex_unlock(&priv->reg_lock);
+
 	return res;
 }
 
