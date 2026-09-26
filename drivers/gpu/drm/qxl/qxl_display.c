@@ -437,9 +437,16 @@ static int qxl_framebuffer_surface_dirty(struct drm_framebuffer *fb,
 	struct qxl_bo *qobj;
 	struct drm_modeset_acquire_ctx ctx;
 	bool is_primary;
+	struct drm_crtc *crtc;
 	int inc = 1, ret;
 
 	DRM_MODESET_LOCK_ALL_BEGIN(fb->dev, ctx, DRM_MODESET_ACQUIRE_INTERRUPTIBLE, ret);
+
+	drm_for_each_crtc(crtc, &qdev->ddev) {
+		ret = drm_crtc_commit_wait(crtc->state->commit);
+		if (ret)
+			goto out_lock_end;
+	}
 
 	qobj = gem_to_qxl_bo(fb->obj[0]);
 	/* if we aren't primary surface ignore this */
@@ -464,7 +471,7 @@ static int qxl_framebuffer_surface_dirty(struct drm_framebuffer *fb,
 out_lock_end:
 	DRM_MODESET_LOCK_ALL_END(fb->dev, ctx, ret);
 
-	return 0;
+	return ret;
 }
 
 static const struct drm_framebuffer_funcs qxl_fb_funcs = {
