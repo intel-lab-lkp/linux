@@ -1111,7 +1111,7 @@ out:
 	/*
 	 * Compounding is never used during session establish.
 	 */
-	if (num_processed == num_rqst) {
+	if (num_processed == num_rqst && resp_iov) {
 		spin_lock(&ses->ses_lock);
 		if ((ses->ses_status == SES_NEW) || (optype & CIFS_NEG_OP) || (optype & CIFS_SESS_OP)) {
 			struct kvec iov = {
