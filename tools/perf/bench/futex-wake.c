@@ -75,10 +75,9 @@ static void *workerfn(void *arg __maybe_unused)
 	cond_wait(&thread_worker, &thread_lock);
 	mutex_unlock(&thread_lock);
 
-	while (1) {
-		if (futex_wait(&futex1, 0, NULL, futex_flag) != EINTR)
-			break;
-	}
+	/* Retry if the wait was interrupted by a signal. */
+	while (futex_wait(&futex1, 0, NULL, futex_flag) == -1 && errno == EINTR)
+		;
 
 	pthread_exit(NULL);
 	return NULL;
