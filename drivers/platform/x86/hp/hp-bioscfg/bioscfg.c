@@ -12,6 +12,7 @@
 #include <linux/kernel.h>
 #include <linux/printk.h>
 #include <linux/string.h>
+#include <linux/string_helpers.h>
 #include <linux/wmi.h>
 #include "bioscfg.h"
 #include "../../firmware_attributes_class.h"
@@ -55,72 +56,55 @@ int hp_get_string_from_buffer(u8 **buffer, u32 *buffer_size, char *dst, u32 dst_
 {
 	u16 *src = (u16 *)*buffer;
 	u16 src_size;
-
-	u16 size;
-	int i;
+	u16 orig_size;
+	char utf8_buf[MAX_BUFF_SIZE];
+	int utf8_len;
 	int conv_dst_size;
+	int escaped_len;
 
 	if (*buffer_size < sizeof(u16))
 		return -EINVAL;
 
-	src_size = *(src++);
-	/* size value in u16 chars */
-	size = src_size / sizeof(u16);
+	src_size = *src;
 
 	/* Ensure there is enough space remaining to read and convert
 	 * the string
 	 */
-	if (*buffer_size < src_size)
+	if (*buffer_size < sizeof(u16) + src_size)
 		return -EINVAL;
 
-	for (i = 0; i < size; i++)
-		if (src[i] == '\\' ||
-		    src[i] == '\r' ||
-		    src[i] == '\n' ||
-		    src[i] == '\t')
-			size++;
+	src++;
+	/* size value in u16 chars */
+	orig_size = src_size / sizeof(u16);
 
 	/*
-	 * Conversion is limited to destination string max number of
-	 * bytes.
+	 * Convert from UTF-16 to UTF-8 into a scratch buffer first, then
+	 * escape the result into dst. utf16s_to_utf8s() is capped at
+	 * sizeof(utf8_buf) regardless of orig_size: orig_size comes
+	 * straight from the WMI buffer, and dst_size is MAX_BUFF_SIZE at
+	 * every caller in this file.
 	 */
-	conv_dst_size = size;
-	if (size >= dst_size)
-		conv_dst_size = dst_size - 1;
+	utf8_len = utf16s_to_utf8s(src, orig_size, UTF16_HOST_ENDIAN,
+				   utf8_buf, sizeof(utf8_buf));
+
+	conv_dst_size = dst_size - 1;
+	escaped_len = string_escape_mem(utf8_buf, utf8_len, dst, conv_dst_size,
+					ESCAPE_SPACE | ESCAPE_BACKSLASH, NULL);
+	if (escaped_len > conv_dst_size)
+		escaped_len = conv_dst_size;
+	dst[escaped_len] = 0;
 
 	/*
-	 * convert from UTF-16 unicode to ASCII
+	 * string_escape_mem() has no equivalent of the original quote
+	 * substitution; keep turning '"' into a plain single quote instead
+	 * of escaping it, to match existing behaviour.
 	 */
-	utf16s_to_utf8s(src, src_size, UTF16_HOST_ENDIAN, dst, conv_dst_size);
-	dst[conv_dst_size] = 0;
+	strreplace(dst, '"', '\'');
 
-	for (i = 0; i < conv_dst_size; i++) {
-		if (*src == '\\' ||
-		    *src == '\r' ||
-		    *src == '\n' ||
-		    *src == '\t') {
-			dst[i++] = '\\';
-			if (i == conv_dst_size)
-				break;
-		}
+	*buffer += sizeof(u16) + src_size;
+	*buffer_size -= sizeof(u16) + src_size;
 
-		if (*src == '\r')
-			dst[i] = 'r';
-		else if (*src == '\n')
-			dst[i] = 'n';
-		else if (*src == '\t')
-			dst[i] = 't';
-		else if (*src == '"')
-			dst[i] = '\'';
-		else
-			dst[i] = *src;
-		src++;
-	}
-
-	*buffer = (u8 *)src;
-	*buffer_size -= size * sizeof(u16);
-
-	return size;
+	return escaped_len;
 }
 
 int hp_get_common_data_from_buffer(u8 **buffer_ptr, u32 *buffer_size,
