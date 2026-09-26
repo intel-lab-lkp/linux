@@ -1915,6 +1915,14 @@ int test_malloc(void)
 	return 0;
 }
 
+/* Hide a size from the compiler, which warns about huge constant allocations */
+static size_t hide_size(size_t size)
+{
+	__asm__ ("" : "+r" (size));
+
+	return size;
+}
+
 int run_stdlib(int min, int max)
 {
 	int test;
@@ -2050,6 +2058,9 @@ int run_stdlib(int min, int max)
 		CASE_TEST(major_big);               EXPECT_EQ(1, major(0x1122355667734488), 0x11223344); break;
 		CASE_TEST(minor_big);               EXPECT_EQ(1, minor(0x1122355667734488), 0x55667788); break;
 		CASE_TEST(malloc);                  EXPECT_ZR(1, test_malloc()); break;
+		CASE_TEST(malloc_max);              EXPECT_PTRER(1, malloc(hide_size(SIZE_MAX)), NULL, ENOMEM); break;
+		CASE_TEST(malloc_max_page);         EXPECT_PTRER(1, malloc(hide_size(SIZE_MAX - 4096)), NULL, ENOMEM); break;
+		CASE_TEST(calloc_max);              EXPECT_PTRER(1, calloc(hide_size(SIZE_MAX), 1), NULL, ENOMEM); break;
 		CASE_TEST(bswap_16);                EXPECT_EQ(1, bswap_16(0x0123), 0x2301); break;
 		CASE_TEST(bswap_32);                EXPECT_EQ(1, bswap_32(0x01234567), 0x67452301); break;
 		CASE_TEST(bswap_64);                EXPECT_EQ(1, bswap_64(0x0123456789abcdef), 0xefcdab8967452301); break;
