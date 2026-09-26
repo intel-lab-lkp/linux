@@ -130,9 +130,15 @@ void *malloc(size_t len)
 {
 	struct nolibc_heap *heap;
 
-	/* Always allocate memory with size multiple of 4096. */
-	len  = sizeof(*heap) + len;
-	len  = (len + 4095UL) & -4096UL;
+	/*
+	 * Always allocate memory with size multiple of 4096, and reject sizes
+	 * which would wrap around once the header is added and rounded up.
+	 */
+	if (__builtin_expect(__builtin_add_overflow(len, sizeof(*heap) + 4095UL, &len), 0)) {
+		SET_ERRNO(ENOMEM);
+		return NULL;
+	}
+	len &= -4096UL;
 	heap = mmap(NULL, len, PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE,
 		    -1, 0);
 	if (__builtin_expect(heap == MAP_FAILED, 0))
