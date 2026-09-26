@@ -13,6 +13,7 @@
 #include <linux/module.h>
 #include <linux/mount.h>
 #include <linux/fs_context.h>
+#include <linux/namei.h>
 #include <linux/pagemap.h>
 #include <linux/init.h>
 #include <linux/slab.h>
@@ -117,6 +118,58 @@ static struct file_system_type configfs_fs_type = {
 	.kill_sb	= kill_anon_super,
 };
 MODULE_ALIAS_FS("configfs");
+
+/**
+ * configfs_open_root - open a path below a non-configfs root
+ * @root: resolved root path
+ * @name: path relative to @root
+ * @flags: open flags
+ * @mode: mode for a newly created file
+ *
+ * Use this from configfs store callbacks with a resolved non-configfs root
+ * to avoid re-entering configfs while the callback holds its fragment
+ * semaphore.
+ *
+ * Return: opened file, or an ERR_PTR() value.  Returns -EINVAL if @root
+ * is on configfs.
+ */
+struct file *configfs_open_root(const struct path *root, const char *name,
+				int flags, umode_t mode)
+{
+	if (root->dentry->d_sb->s_type == &configfs_fs_type)
+		return ERR_PTR(-EINVAL);
+
+	return file_open_root(root, name, flags, mode);
+}
+EXPORT_SYMBOL_GPL(configfs_open_root);
+
+/**
+ * configfs_file_open - open an existing non-configfs pathname
+ * @filename: pathname to open; it must already exist
+ * @flags: open flags for the existing pathname
+ * @mode: unused; creation is not supported
+ *
+ * Resolve @filename and reject configfs paths.  Use this from configfs
+ * store callbacks for existing configured paths.
+ *
+ * Return: opened file, or an ERR_PTR() value.  Returns -EINVAL if the
+ * resolved path is on configfs.
+ */
+struct file *configfs_file_open(const char *filename, int flags, umode_t mode)
+{
+	struct file *file;
+	struct path path;
+	int ret;
+
+	ret = kern_path(filename, LOOKUP_FOLLOW, &path);
+	if (ret)
+		return ERR_PTR(ret);
+
+	file = configfs_open_root(&path, "", flags, mode);
+	path_put(&path);
+	return file;
+}
+EXPORT_SYMBOL_GPL(configfs_file_open);
 
 struct dentry *configfs_pin_fs(void)
 {
