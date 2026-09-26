@@ -207,9 +207,14 @@ int bench_futex_wake(int argc, const char **argv)
 
 		/* Ok, all threads are patiently blocked, start waking folks up */
 		gettimeofday(&start, NULL);
-		while (nwoken != params.nthreads)
-			nwoken += futex_wake(&futex1,
-					     params.nwakes, futex_flag);
+		while (nwoken != params.nthreads) {
+			int r = futex_wake(&futex1, params.nwakes, futex_flag);
+
+			if (r < 0)
+				err(EXIT_FAILURE, "couldn't wakeup from %p", &futex1);
+
+			nwoken += r;
+		}
 		gettimeofday(&end, NULL);
 		timersub(&end, &start, &runtime);
 		runtime_us = (u64)runtime.tv_sec * USEC_PER_SEC + runtime.tv_usec;
