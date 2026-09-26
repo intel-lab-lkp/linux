@@ -340,7 +340,7 @@ struct rproc_vring {
 	u32 align;
 	int notifyid;
 	struct rproc_vdev *rvdev;
-	struct virtqueue *vq;
+	struct virtqueue __rcu *vq;
 };
 
 /**

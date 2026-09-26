@@ -16,6 +16,7 @@
 #include <linux/of_reserved_mem.h>
 #include <linux/platform_device.h>
 #include <linux/remoteproc.h>
+#include <linux/srcu.h>
 #include <linux/virtio.h>
 #include <linux/virtio_config.h>
 #include <linux/virtio_ids.h>
@@ -25,6 +26,14 @@
 #include <linux/slab.h>
 
 #include "remoteproc_internal.h"
+
+/*
+ * Protects rproc_vring->vq: rproc_vq_interrupt() uses the virtqueue inside a
+ * read-side section, and __rproc_virtio_del_vqs() waits for those sections to
+ * finish before freeing it. Sleepable RCU is used because vring callbacks may
+ * sleep when rproc_vq_interrupt() is called from process context.
+ */
+DEFINE_STATIC_SRCU(rproc_vq_srcu);
 
 static int copy_dma_range_map(struct device *to, struct device *from)
 {
@@ -88,15 +97,24 @@ static bool rproc_virtio_notify(struct virtqueue *vq)
  */
 irqreturn_t rproc_vq_interrupt(struct rproc *rproc, int notifyid)
 {
+	irqreturn_t ret = IRQ_NONE;
 	struct rproc_vring *rvring;
+	struct virtqueue *vq;
+	int idx;
 
 	dev_dbg(&rproc->dev, "vq index %d is interrupted\n", notifyid);
 
 	rvring = idr_find(&rproc->notifyids, notifyid);
-	if (!rvring || !rvring->vq)
+	if (!rvring)
 		return IRQ_NONE;
 
-	return vring_interrupt(0, rvring->vq);
+	idx = srcu_read_lock(&rproc_vq_srcu);
+	vq = srcu_dereference(rvring->vq, &rproc_vq_srcu);
+	if (vq)
+		ret = vring_interrupt(0, vq);
+	srcu_read_unlock(&rproc_vq_srcu, idx);
+
+	return ret;
 }
 EXPORT_SYMBOL(rproc_vq_interrupt);
 
@@ -153,8 +171,8 @@ static struct virtqueue *rp_find_vq(struct virtio_device *vdev,
 
 	vq->num_max = num;
 
-	rvring->vq = vq;
 	vq->priv = rvring;
+	rcu_assign_pointer(rvring->vq, vq);
 
 	/* Update vring in resource table */
 	rsc = (void *)rproc->table_ptr + rvdev->rsc_offset;
@@ -168,11 +186,16 @@ static void __rproc_virtio_del_vqs(struct virtio_device *vdev)
 	struct virtqueue *vq, *n;
 	struct rproc_vring *rvring;
 
-	list_for_each_entry_safe(vq, n, &vdev->vqs, list) {
+	list_for_each_entry(vq, &vdev->vqs, list) {
 		rvring = vq->priv;
-		rvring->vq = NULL;
-		vring_del_virtqueue(vq);
+		RCU_INIT_POINTER(rvring->vq, NULL);
 	}
+
+	/* Wait for rproc_vq_interrupt() callers still using the virtqueues */
+	synchronize_srcu(&rproc_vq_srcu);
+
+	list_for_each_entry_safe(vq, n, &vdev->vqs, list)
+		vring_del_virtqueue(vq);
 }
 
 static void rproc_virtio_del_vqs(struct virtio_device *vdev)
