@@ -6,9 +6,11 @@
 #ifndef _AMDXDNA_CTX_H_
 #define _AMDXDNA_CTX_H_
 
+#include <drm/gpu_scheduler.h>
 #include <linux/bitfield.h>
 
 #include "amdxdna_gem.h"
+#include "drm/amdxdna_accel.h"
 
 struct amdxdna_hwctx_priv;
 
