@@ -109,7 +109,6 @@ struct dma_buf *msm_gem_prime_export(struct drm_gem_object *obj, int flags)
 
 int msm_gem_prime_pin(struct drm_gem_object *obj)
 {
-	struct page **pages;
 	int ret = 0;
 
 	if (drm_gem_is_imported(obj))
@@ -118,9 +117,7 @@ int msm_gem_prime_pin(struct drm_gem_object *obj)
 	if (to_msm_bo(obj)->flags & MSM_BO_NO_SHARE)
 		return -EINVAL;
 
-	pages = msm_gem_pin_pages_locked(obj);
-	if (IS_ERR(pages))
-		ret = PTR_ERR(pages);
+	return msm_gem_pin_pages_locked(obj);
 
 	return ret;
 }
