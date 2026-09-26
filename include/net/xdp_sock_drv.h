@@ -95,6 +95,20 @@ static inline void xsk_pool_dma_unmap(struct xsk_buff_pool *pool,
 	xp_dma_unmap(pool, attrs);
 }
 
+/* RTNL must be held. Keep DMA mappings and pinned pages independently of
+ * the socket/pool lifetime, for rings whose DMA shutdown can fail.
+ * This does not keep pool metadata alive or postpone the detach callback.
+ */
+static inline struct xsk_dma_map *xsk_pool_dma_get(struct xsk_buff_pool *pool)
+{
+	return xp_dma_get(pool);
+}
+
+static inline void xsk_pool_dma_put(struct xsk_dma_map *dma_map)
+{
+	xp_dma_put(dma_map);
+}
+
 static inline int xsk_pool_dma_map(struct xsk_buff_pool *pool,
 				   struct device *dev, unsigned long attrs)
 {
@@ -429,6 +443,15 @@ static inline void xsk_pool_fill_cb(struct xsk_buff_pool *pool,
 
 static inline void xsk_pool_dma_unmap(struct xsk_buff_pool *pool,
 				      unsigned long attrs)
+{
+}
+
+static inline struct xsk_dma_map *xsk_pool_dma_get(struct xsk_buff_pool *pool)
+{
+	return NULL;
+}
+
+static inline void xsk_pool_dma_put(struct xsk_dma_map *dma_map)
 {
 }
 

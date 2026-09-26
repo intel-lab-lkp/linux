@@ -360,7 +360,8 @@ static struct xsk_dma_map *xp_find_dma_map(struct xsk_buff_pool *pool)
 }
 
 static struct xsk_dma_map *xp_create_dma_map(struct device *dev, struct net_device *netdev,
-					     u32 nr_pages, struct xdp_umem *umem)
+					     u32 nr_pages, struct xdp_umem *umem,
+					     unsigned long attrs)
 {
 	struct xsk_dma_map *dma_map;
 
@@ -376,6 +377,8 @@ static struct xsk_dma_map *xp_create_dma_map(struct device *dev, struct net_devi
 
 	dma_map->netdev = netdev;
 	dma_map->dev = dev;
+	dma_map->umem = umem;
+	dma_map->attrs = attrs;
 	dma_map->dma_pages_cnt = nr_pages;
 	refcount_set(&dma_map->users, 1);
 	list_add(&dma_map->list, &umem->xsk_dma_list);
@@ -429,6 +432,47 @@ void xp_dma_unmap(struct xsk_buff_pool *pool, unsigned long attrs)
 	pool->dev = NULL;
 }
 EXPORT_SYMBOL(xp_dma_unmap);
+
+struct xsk_dma_map *xp_dma_get(struct xsk_buff_pool *pool)
+{
+	struct xsk_dma_map *dma_map;
+
+	ASSERT_RTNL();
+	if (!pool->dma_pages)
+		return NULL;
+	dma_map = xp_find_dma_map(pool);
+	if (WARN_ON_ONCE(!dma_map))
+		return NULL;
+
+	refcount_inc(&dma_map->users);
+	xdp_get_umem(dma_map->umem);
+	get_device(dma_map->dev);
+	/* Keep the mapping's lookup key alive without preventing unregister. */
+	get_device(&dma_map->netdev->dev);
+	return dma_map;
+}
+EXPORT_SYMBOL_GPL(xp_dma_get);
+
+void xp_dma_put(struct xsk_dma_map *dma_map)
+{
+	struct net_device *netdev;
+	struct xdp_umem *umem;
+	struct device *dev;
+
+	ASSERT_RTNL();
+	if (!dma_map)
+		return;
+	dev = dma_map->dev;
+	netdev = dma_map->netdev;
+	umem = dma_map->umem;
+	if (refcount_dec_and_test(&dma_map->users))
+		__xp_dma_unmap(dma_map, dma_map->attrs);
+	/* Unmap before the final reference can unpin the UMEM pages. */
+	xdp_put_umem(umem, false);
+	put_device(&netdev->dev);
+	put_device(dev);
+}
+EXPORT_SYMBOL_GPL(xp_dma_put);
 
 static void xp_check_dma_contiguity(struct xsk_dma_map *dma_map)
 {
@@ -487,7 +531,7 @@ int xp_dma_map(struct xsk_buff_pool *pool, struct device *dev,
 		return 0;
 	}
 
-	dma_map = xp_create_dma_map(dev, pool->netdev, nr_pages, pool->umem);
+	dma_map = xp_create_dma_map(dev, pool->netdev, nr_pages, pool->umem, attrs);
 	if (!dma_map)
 		return -ENOMEM;
 
