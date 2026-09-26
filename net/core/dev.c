@@ -7229,7 +7229,8 @@ static void napi_stop_kthread(struct napi_struct *napi)
 		 * STATE_THREADED can be unset here.
 		 */
 		if ((val & NAPIF_STATE_SCHED_THREADED) ||
-		    !(val & NAPIF_STATE_SCHED)) {
+		    !(val & NAPIF_STATE_SCHED) ||
+		    (val & NAPIF_STATE_DISABLE)) {
 			new = val & (~(NAPIF_STATE_THREADED |
 				       NAPIF_STATE_THREADED_BUSY_POLL));
 		} else {
@@ -7646,6 +7647,7 @@ void netif_napi_add_weight_locked(struct net_device *dev,
 	napi->list_owner = -1;
 	set_bit(NAPI_STATE_SCHED, &napi->state);
 	set_bit(NAPI_STATE_NPSVC, &napi->state);
+	set_bit(NAPI_STATE_DISABLE, &napi->state);
 	netif_napi_dev_list_add(dev, napi);
 
 	/* default settings from sysfs are applied to all NAPIs. any per-NAPI
@@ -7694,8 +7696,6 @@ void napi_disable_locked(struct napi_struct *n)
 		napi_save_config(n);
 	else
 		napi_hash_del(n);
-
-	clear_bit(NAPI_STATE_DISABLE, &n->state);
 }
 EXPORT_SYMBOL(napi_disable_locked);
 
@@ -7727,7 +7727,8 @@ void napi_enable_locked(struct napi_struct *n)
 	do {
 		BUG_ON(!test_bit(NAPI_STATE_SCHED, &val));
 
-		new = val & ~(NAPIF_STATE_SCHED | NAPIF_STATE_NPSVC);
+		new = val & ~(NAPIF_STATE_SCHED | NAPIF_STATE_NPSVC |
+			      NAPIF_STATE_DISABLE);
 		if (n->dev->threaded && n->thread)
 			new |= NAPIF_STATE_THREADED;
 	} while (!try_cmpxchg(&n->state, &val, new));

@@ -423,7 +423,7 @@ struct napi_struct {
 enum {
 	NAPI_STATE_SCHED,		/* Poll is scheduled */
 	NAPI_STATE_MISSED,		/* reschedule a napi */
-	NAPI_STATE_DISABLE,		/* Disable pending */
+	NAPI_STATE_DISABLE,		/* Disable pending or already disabled */
 	NAPI_STATE_NPSVC,		/* Netpoll - don't dequeue from poll_list */
 	NAPI_STATE_LISTED,		/* NAPI added to system lists */
 	NAPI_STATE_NO_BUSY_POLL,	/* Do not add in napi_hash, no busy polling */
