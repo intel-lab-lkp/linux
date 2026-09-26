@@ -30,7 +30,43 @@ struct aie_device {
 
 	struct amdxdna_drm_query_aie_version version;
 	struct amdxdna_drm_query_aie_metadata metadata;
+
+	u32 clk_gating;
+	u32 npuclk_freq;
+	u32 hclk_freq;
+	u32 max_tops;
+	u32 curr_tops;
 };
+
+struct aie_hw_ops {
+	int (*set_dpm)(struct aie_device *aie, u32 dpm_level);
+	int (*update_counters)(struct aie_device *aie);
+};
+
+#define aie_update_counters(ndev)					\
+({									\
+	typeof(ndev) _ndev = ndev;					\
+	if ((_ndev)->priv->hw_ops && (_ndev)->priv->hw_ops->update_counters) \
+		(_ndev)->priv->hw_ops->update_counters(&(_ndev)->aie);	\
+})
+
+struct dpm_clk_freq {
+	u32	npuclk;
+	u32	hclk;
+};
+
+#include <linux/amd-pmf-io.h>
+
+#if IS_ENABLED(CONFIG_AMD_PMF)
+#define AIE_GET_PMF_NPU_METRICS(metrics) amd_pmf_get_npu_data(metrics)
+#else
+#define AIE_GET_PMF_NPU_METRICS(metrics)				\
+({									\
+	typeof(metrics) _m = metrics;					\
+	memset(_m, 0xff, sizeof(*_m));					\
+	(-EOPNOTSUPP);							\
+})
+#endif
 
 #define DECLARE_AIE_MSG(name, op) \
 	DECLARE_XDNA_MSG_COMMON(name, op, -1)
