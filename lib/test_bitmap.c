@@ -528,6 +528,9 @@ static const struct test_bitmap_parselist parselist_tests[] __initconst = {
 	{-EINVAL, "a-31:10/1", NULL, 8, 0},
 	{-EINVAL, "0-31:a/1", NULL, 8, 0},
 	{-EINVAL, "0-\n", NULL, 8, 0},
+	{-EINVAL, "0-7:1/2N", NULL, 8, 0},
+	{-EINVAL, "0-7:1/2all", NULL, 8, 0},
+	{-EINVAL, "all:1/2N", NULL, 8, 0},
 
 };
 
