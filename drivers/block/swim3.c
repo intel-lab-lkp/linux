@@ -898,7 +898,7 @@ static int floppy_locked_ioctl(struct block_device *bdev, blk_mode_t mode,
 
 	switch (cmd) {
 	case FDEJECT:
-		if (fs->ref_count != 1)
+		if (fs->ref_count != -1 && fs->ref_count != 1)
 			return -EBUSY;
 		err = fd_eject(fs);
 		return err;
