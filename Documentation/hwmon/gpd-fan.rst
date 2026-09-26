@@ -28,6 +28,7 @@ Currently the driver supports the following handhelds:
  - GPD Win Max 2 2025 (HX370)
  - GPD Win 4 (6800U)
  - GPD Win 4 (7840U)
+ - GPD Win 5
  - GPD Micro PC 2
 
 Module parameters
@@ -59,23 +60,26 @@ Sysfs entries
 
 The following attributes are supported:
 
-fan1_input
+fan[1-2]_input
   Read Only. Reads current fan RPM.
 
-pwm1_enable
+pwm[1-2]_enable
   Read/Write. Enable manual fan control. Write "0" to disable control and run
   at full speed. Write "1" to set to manual, write "2" to let the EC control
   decide fan speed. Read this attribute to see current status.
 
   NB: In consideration of the safety of the device, when setting to manual mode,
   the pwm speed will be set to the maximum value (255) by default. You can set
-  a different value by writing pwm1 later.
+  a different value by writing pwm[1-2] later.
 
-pwm1
+pwm[1-2]
   Read/Write. Read this attribute to see current duty cycle in the range
-  [0-255]. When pwm1_enable is set to "1" (manual) write any value in the
+  [0-255]. When pwm[1-2]_enable is set to "1" (manual) write any value in the
   range [0-255] to set fan speed.
 
   NB: Many boards (except listed under wm2 above) don't support reading the
   current pwm value in auto mode. That will just return EOPNOTSUPP. In manual
   mode it will always return the real value.
+
+fan2_input, pwm2_enable and pwm2 only exist on devices with two fans
+(GPD Win 5).
