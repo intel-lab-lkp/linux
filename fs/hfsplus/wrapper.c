@@ -137,6 +137,7 @@ int hfsplus_read_wrapper(struct super_block *sb)
 	struct hfsplus_wd wd;
 	sector_t part_start, part_size;
 	u32 blocksize;
+	bool part_hop_done = false, wrapper_hop_done = false;
 	int error = 0;
 
 	error = -EINVAL;
@@ -172,21 +173,35 @@ reread:
 	case cpu_to_be16(HFSPLUS_VOLHEAD_SIG):
 		break;
 	case cpu_to_be16(HFSP_WRAP_MAGIC):
+		/*
+		 * The embedded volume must be HFS Plus (TN1150), so a
+		 * second wrapper is corrupt; a descriptor pointing at
+		 * itself would otherwise loop forever.
+		 */
+		if (wrapper_hop_done)
+			goto out_free_backup_vhdr;
 		if (!hfsplus_read_mdb(sbi->s_vhdr, &wd))
 			goto out_free_backup_vhdr;
 		wd.ablk_size >>= HFSPLUS_SECTOR_SHIFT;
 		part_start += (sector_t)wd.ablk_start +
 			       (sector_t)wd.embed_start * wd.ablk_size;
 		part_size = (sector_t)wd.embed_count * wd.ablk_size;
+		wrapper_hop_done = true;
 		goto reread;
 	default:
 		/*
 		 * Check for a partition block.
 		 *
 		 * (should do this only for cdrom/loop though)
+		 *
+		 * The partition map is at the start of the device: follow
+		 * it at most once, and not from inside a wrapper.
 		 */
+		if (part_hop_done || wrapper_hop_done)
+			goto out_free_backup_vhdr;
 		if (hfs_part_find(sb, &part_start, &part_size))
 			goto out_free_backup_vhdr;
+		part_hop_done = true;
 		goto reread;
 	}
 
