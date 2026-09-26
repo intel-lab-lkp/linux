@@ -563,6 +563,7 @@ struct cgroup_subsys_state *cgroup_e_css(struct cgroup *cgrp,
 
 	return init_css_set.subsys[ss->id];
 }
+EXPORT_SYMBOL_GPL(cgroup_e_css);
 
 /**
  * cgroup_get_e_css - get a cgroup's effective css for the specified subsystem
