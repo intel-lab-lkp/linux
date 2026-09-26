@@ -9173,17 +9173,10 @@ static void ath12k_mgmt_over_wmi_tx_drop(struct ath12k *ar, struct sk_buff *skb)
 		wake_up(&ar->txmgmt_empty_waitq);
 }
 
-static void ath12k_mac_tx_mgmt_free(struct ath12k *ar, int buf_id)
+static void ath12k_mac_tx_mgmt_free_skb(struct ath12k *ar,
+					struct sk_buff *msdu)
 {
-	struct sk_buff *msdu;
 	struct ieee80211_tx_info *info;
-
-	spin_lock_bh(&ar->txmgmt_idr_lock);
-	msdu = idr_remove(&ar->txmgmt_idr, buf_id);
-	spin_unlock_bh(&ar->txmgmt_idr_lock);
-
-	if (!msdu)
-		return;
 
 	dma_unmap_single(ar->ab->dev, ATH12K_SKB_CB(msdu)->paddr, msdu->len,
 			 DMA_TO_DEVICE);
@@ -9194,11 +9187,23 @@ static void ath12k_mac_tx_mgmt_free(struct ath12k *ar, int buf_id)
 	ath12k_mgmt_over_wmi_tx_drop(ar, msdu);
 }
 
+static void ath12k_mac_tx_mgmt_free(struct ath12k *ar, int buf_id)
+{
+	struct sk_buff *msdu;
+
+	spin_lock_bh(&ar->txmgmt_idr_lock);
+	msdu = idr_remove(&ar->txmgmt_idr, buf_id);
+	spin_unlock_bh(&ar->txmgmt_idr_lock);
+
+	if (msdu)
+		ath12k_mac_tx_mgmt_free_skb(ar, msdu);
+}
+
 int ath12k_mac_tx_mgmt_pending_free(int buf_id, void *skb, void *ctx)
 {
 	struct ath12k *ar = ctx;
 
-	ath12k_mac_tx_mgmt_free(ar, buf_id);
+	ath12k_mac_tx_mgmt_free_skb(ar, skb);
 
 	return 0;
 }
