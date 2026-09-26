@@ -662,6 +662,16 @@ struct bpf_insn_aux_data {
 	};
 	struct btf_struct_meta *kptr_struct_meta;
 	struct bpf_typed_arena *typed_arena; /* named by a cast or a typed arena kfunc call */
+	/*
+	 * Lazy sanitization of a typed arena pointer used as an address here:
+	 * the register and its typed arena, whether a path brought the pointer
+	 * unsanitized, and the registers some path brought in a form the
+	 * sanitizing sequence would corrupt.
+	 */
+	struct bpf_typed_arena *sanitize_arena;
+	u16 sanitize_plain;
+	u8 sanitize_reg;
+	bool sanitize_needed;
 	u64 map_key_state; /* constant (32 bit) key tracking for maps */
 	int ctx_field_size; /* the ctx field size for load insn, maybe 0 */
 	u32 seen; /* this insn was processed by the verifier at env->pass_cnt */

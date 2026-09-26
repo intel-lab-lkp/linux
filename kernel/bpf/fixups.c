@@ -877,27 +877,41 @@ apply_patch_buffer:
  *     struct bpf_sock_ops -> struct sock
  */
 /*
- * Replace every typed_arena_cast with the sanitizing sequence of the typed
- * arena the verifier registered for it. The type is part of the instruction,
- * so a cast has exactly one typed arena by the time it gets here.
+ * Lower the instructions the verifier tied to a typed arena. A typed_arena_cast
+ * becomes the sanitizing sequence of the typed arena the verifier registered
+ * for it; the type is part of the instruction, so a cast has exactly one. An
+ * instruction that uses a typed pointer loaded from a typed pointer field as
+ * an address gets the same sequence prepended, in place on that register: the
+ * verifier checked that every path brings that register here as an
+ * unsanitized pointer of that typed arena, or as a canonical one at offset
+ * zero, on which the sequence is a no-op.
  */
 int bpf_lower_typed_arena_insns(struct bpf_verifier_env *env)
 {
 	struct bpf_insn *insn = env->prog->insnsi;
 	int i, cnt, delta = 0, insn_cnt = env->prog->len;
-	const struct bpf_typed_arena *ta;
-	struct bpf_insn insn_buf[8];
+	struct bpf_insn insn_buf[16];
+	struct bpf_insn_aux_data *aux;
 	struct bpf_prog *new_prog;
 
 	for (i = 0; i < insn_cnt; i++, insn++) {
-		if (!insn_is_typed_arena_cast(insn))
-			continue;
-		ta = env->insn_aux_data[i + delta].typed_arena;
-		if (!ta) {
-			verifier_bug(env, "typed_arena_cast at insn %d has no typed arena", i);
-			return -EFAULT;
+		aux = &env->insn_aux_data[i + delta];
+		cnt = 0;
+		if (aux->sanitize_needed)
+			cnt = bpf_typed_arena_cast_insns(aux->sanitize_arena, aux->sanitize_reg,
+							 aux->sanitize_reg, insn_buf);
+		if (insn_is_typed_arena_cast(insn)) {
+			if (!aux->typed_arena) {
+				verifier_bug(env, "typed_arena_cast at insn %d has no typed arena", i);
+				return -EFAULT;
+			}
+			cnt += bpf_typed_arena_cast_insns(aux->typed_arena, insn->dst_reg,
+							  insn->src_reg, insn_buf + cnt);
+		} else if (cnt) {
+			insn_buf[cnt++] = *insn;
 		}
-		cnt = bpf_typed_arena_cast_insns(ta, insn->dst_reg, insn->src_reg, insn_buf);
+		if (!cnt)
+			continue;
 		new_prog = bpf_patch_insn_data(env, i + delta, insn_buf, cnt);
 		if (!new_prog)
 			return -ENOMEM;

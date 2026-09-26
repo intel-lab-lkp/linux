@@ -383,20 +383,75 @@ static bool reg_not_null(struct bpf_verifier_env *env, const struct bpf_reg_stat
 }
 
 /*
- * @regno is about to serve as an address, or go to a call. A typed arena
- * pointer loaded from a typed pointer field is not canonical yet: its slice
- * and slot are what the field's discipline promises, not what the lowering has
- * masked, and until the lowering learns to sanitize it in place such a use is
- * refused.
+ * @regno is about to serve as an address, be moved by arithmetic, or go to a
+ * call. A typed arena pointer loaded from a typed pointer field is not
+ * canonical: it is an object of its type or 0, as the field's discipline
+ * promises, but nothing masked it into its slot. Sanitize it here, in place:
+ * the lowering prepends the typed arena's cast sequence to this instruction,
+ * and on this path the register is canonical from here on. The sequence maps
+ * 0 to object 0 of the slice, as the cast maps any value, so a NULL the
+ * program did not test costs no more than a stray cast would.
+ *
+ * The sequence is lowered once per instruction and runs on every path through
+ * it, so it must be harmless on every path. It is a no-op on a canonical
+ * pointer of the same typed arena at offset zero, and wrong on anything else:
+ * a path that brings another typed arena, a pointer with an offset into its
+ * object, or a value of another kind to this register here is rejected, and
+ * so is a second register in need of the sequence at the same instruction.
+ * Where nothing brings an unsanitized pointer, nothing is lowered.
  */
 static int typed_arena_use(struct bpf_verifier_env *env, int regno)
 {
+	struct bpf_insn_aux_data *aux = &env->insn_aux_data[env->insn_idx];
 	struct bpf_reg_state *reg = &cur_regs(env)[regno];
+	struct bpf_typed_arena *ta;
+	bool canonical;
 
-	if (!type_is_unsanitized_arena_obj(reg->type))
+	canonical = !(type_flag(reg->type) & PTR_UNSANITIZED);
+	if (!type_is_typed_arena_obj(reg->type) ||
+	    (canonical && (!tnum_is_const(reg->var_off) || reg->var_off.value))) {
+		if (aux->sanitize_needed && aux->sanitize_reg == regno) {
+			verbose(env, "insn %d sanitizes a typed arena pointer only on some paths\n",
+				env->insn_idx);
+			return -EINVAL;
+		}
+		aux->sanitize_plain |= BIT(regno);
 		return 0;
-	verbose(env, "R%d unsanitized typed arena pointer cannot be dereferenced\n", regno);
-	return -EACCES;
+	}
+
+	ta = bpf_prog_typed_arena(env->prog->aux, reg->btf_id);
+	if (verifier_bug_if(!ta, env, "R%d typed arena pointer has no typed arena", regno))
+		return -EFAULT;
+	if (aux->sanitize_arena && aux->sanitize_reg == regno && aux->sanitize_arena != ta) {
+		verbose(env, "insn %d sanitizes typed arena pointers of different types on different paths\n",
+			env->insn_idx);
+		return -EINVAL;
+	}
+	if (aux->sanitize_arena && aux->sanitize_reg != regno) {
+		if (canonical)
+			return 0;
+		if (aux->sanitize_needed) {
+			verbose(env, "insn %d needs more than one typed arena pointer sanitized\n",
+				env->insn_idx);
+			return -EINVAL;
+		}
+		/* A canonical pointer only booked the register; the one in need takes it. */
+		aux->sanitize_arena = NULL;
+	}
+	if (!aux->sanitize_arena) {
+		aux->sanitize_arena = ta;
+		aux->sanitize_reg = regno;
+	}
+	if (canonical)
+		return 0;
+	if (aux->sanitize_plain & BIT(regno)) {
+		verbose(env, "insn %d sanitizes a typed arena pointer only on some paths\n",
+			env->insn_idx);
+		return -EINVAL;
+	}
+	aux->sanitize_needed = true;
+	reg->type &= ~PTR_UNSANITIZED;
+	return 0;
 }
 
 static struct btf_record *reg_btf_record(const struct bpf_reg_state *reg)
