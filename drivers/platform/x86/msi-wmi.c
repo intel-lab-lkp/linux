@@ -46,6 +46,12 @@ enum msi_scancodes {
 	WIND_KEY_WLAN		= 0x5f,	/* Fn+F11 Wi-Fi toggle */
 	WIND_KEY_TURBO,			/* Fn+F10 turbo mode toggle */
 	WIND_KEY_ECO		= 0x69,	/* Fn+F10 ECO mode toggle */
+	/* MSI Notebook keys that use Wind GUID */
+	WIND_KEY_FN_NB		= 0x0b,
+	WIND_KEY_MICMUTE_NB	= 0x19,
+	WIND_KEY_SETTINGS_NB	= 0x1d,
+	WIND_KEY_MUTE_NB	= 0x23,
+	WIND_KEY_BLUETOOTH_NB	= 0x78,
 	/* MSI Claw keys */
 	CLAW_KEY_VOLUMEDOWN	= 0x21,
 	CLAW_KEY_CENTER		= 0x29,	/* MSI M-Center main menu */
@@ -65,6 +71,13 @@ static struct key_entry msi_wmi_keymap[] = {
 	{ KE_IGNORE, WIND_KEY_BLUETOOTH,	{KEY_BLUETOOTH} },
 	{ KE_IGNORE, WIND_KEY_CAMERA,		{KEY_CAMERA} },
 	{ KE_IGNORE, WIND_KEY_WLAN,		{KEY_WLAN} },
+
+	/* These MSI Notebook keys work without WMI. Ignore them to avoid double keycodes */
+	{ KE_IGNORE, WIND_KEY_FN_NB },
+	{ KE_IGNORE, WIND_KEY_MICMUTE_NB },
+	{ KE_IGNORE, WIND_KEY_SETTINGS_NB },
+	{ KE_IGNORE, WIND_KEY_MUTE_NB },
+	{ KE_IGNORE, WIND_KEY_BLUETOOTH_NB },
 
 	/* These are unknown WMI events found on MSI Wind */
 	{ KE_IGNORE, 0x00 },
