@@ -72,8 +72,9 @@ static inline int string_unescape_any_inplace(char *buf)
 #define ESCAPE_NA		BIT(6)
 #define ESCAPE_NAP		BIT(7)
 #define ESCAPE_APPEND		BIT(8)
+#define ESCAPE_BACKSLASH	BIT(9)
 
-#define ESCAPE_ALL_MASK		GENMASK(8, 0)
+#define ESCAPE_ALL_MASK		GENMASK(9, 0)
 
 int string_escape_mem(const char *src, size_t isz, char *dst, size_t osz,
 		unsigned int flags, const char *only);

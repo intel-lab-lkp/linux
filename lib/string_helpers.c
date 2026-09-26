@@ -438,6 +438,24 @@ static bool escape_special(unsigned char c, char **dst, char *end)
 	return true;
 }
 
+static bool escape_backslash(unsigned char c, char **dst, char *end)
+{
+	char *out = *dst;
+
+	if (c != '\\')
+		return false;
+
+	if (out < end)
+		*out = '\\';
+	++out;
+	if (out < end)
+		*out = '\\';
+	++out;
+
+	*dst = out;
+	return true;
+}
+
 static bool escape_null(unsigned char c, char **dst, char *end)
 {
 	char *out = *dst;
@@ -558,6 +576,8 @@ static bool escape_hex(unsigned char c, char **dst, char *end)
  *		escape only non-printable or non-ascii characters
  *	%ESCAPE_APPEND:
  *		append characters from @only to be escaped by the given classes
+ *	%ESCAPE_BACKSLASH:
+ *		'\\' - backslash, without the rest of %ESCAPE_SPECIAL
  *
  * %ESCAPE_APPEND would help to pass additional characters to the escaped, when
  * one of %ESCAPE_NP, %ESCAPE_NA, or %ESCAPE_NAP is provided.
@@ -626,6 +646,9 @@ int string_escape_mem(const char *src, size_t isz, char *dst, size_t osz,
 			continue;
 
 		if (flags & ESCAPE_SPECIAL && escape_special(c, &p, end))
+			continue;
+
+		if (flags & ESCAPE_BACKSLASH && escape_backslash(c, &p, end))
 			continue;
 
 		if (flags & ESCAPE_NULL && escape_null(c, &p, end))
