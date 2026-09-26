@@ -120,6 +120,7 @@ struct stmmac_rx_queue {
 	u32 queue_index;
 	struct xdp_rxq_info xdp_rxq;
 	struct xsk_buff_pool *xsk_pool;
+	struct xsk_dma_map *xsk_dma;
 	struct page_pool *page_pool;
 	struct stmmac_rx_buffer *buf_pool;
 	struct stmmac_priv *priv_data;
@@ -223,6 +224,10 @@ struct stmmac_rfs_entry {
 };
 
 struct stmmac_dma_conf {
+	/* RTNL: all configurations exposed to DMA survive until stop/reset. */
+	struct list_head list;
+	bool dma_owned;
+	bool retired;
 	unsigned int dma_buf_sz;
 
 	/* RX Queue */
@@ -266,11 +271,11 @@ struct stmmac_msi {
 };
 
 enum stmmac_datapath_state {
-	/* No IRQs or DMA allocations owned by a successful open. */
+	/* No IRQs or enabled NAPI; failed DMA shutdown may retain memory. */
 	STMMAC_DATAPATH_DOWN,
 	/* Resources allocated, NAPI enabled. */
 	STMMAC_DATAPATH_RUNNING,
-	/* Resources retained, NAPI and DMA stopped; also after failed resume. */
+	/* Resources retained, NAPI disabled, DMA stop requested. */
 	STMMAC_DATAPATH_SUSPENDED,
 };
 
@@ -297,6 +302,8 @@ struct stmmac_priv {
 	struct mutex lock;
 
 	struct stmmac_dma_conf *dma_conf;
+	struct list_head dma_confs;
+	bool dma_reset_needed;
 	/* IRQ/DMA ownership and NAPI state, serialized by RTNL. */
 	enum stmmac_datapath_state datapath;
 	/* Core sleep sequence completed, independently of datapath ownership. */

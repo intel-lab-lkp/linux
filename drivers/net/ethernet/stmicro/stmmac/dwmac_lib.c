@@ -27,6 +27,26 @@ int dwmac_dma_reset(void __iomem *ioaddr)
 				 10000, 200000);
 }
 
+int dwmac_dma_wait_idle(struct stmmac_priv *priv, void __iomem *ioaddr)
+{
+	u32 channels = max(priv->plat->rx_queues_to_use,
+			   priv->plat->tx_queues_to_use);
+	u32 value, chan;
+	int ret;
+
+	/* CSR5 process states, not the latched process-stopped interrupts.
+	 * Stopped is reached after the outstanding descriptor writeback.
+	 */
+	for (chan = 0; chan < channels; chan++) {
+		ret = readl_poll_timeout(ioaddr + DMA_CHAN_STATUS(chan), value,
+					 !(value & (DMA_STATUS_TS_MASK | DMA_STATUS_RS_MASK)),
+					 100, 100000);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
+
 /* CSR1 enables the transmit DMA to check for new descriptor */
 void dwmac_enable_dma_transmission(void __iomem *ioaddr, u32 chan)
 {

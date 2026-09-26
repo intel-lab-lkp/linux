@@ -568,6 +568,7 @@ static int dwmac4_enable_tbs(struct stmmac_priv *priv, void __iomem *ioaddr,
 
 const struct stmmac_dma_ops dwmac4_dma_ops = {
 	.reset = dwmac4_dma_reset,
+	.wait_idle = dwmac4_dma_wait_idle,
 	.init = dwmac4_dma_init,
 	.init_chan = dwmac4_dma_init_channel,
 	.deinit_chan = dwmac4_dma_deinit_channel,
@@ -598,6 +599,7 @@ const struct stmmac_dma_ops dwmac4_dma_ops = {
 
 const struct stmmac_dma_ops dwmac410_dma_ops = {
 	.reset = dwmac4_dma_reset,
+	.wait_idle = dwmac4_dma_wait_idle,
 	.init = dwmac4_dma_init,
 	.init_chan = dwmac410_dma_init_channel,
 	.deinit_chan = dwmac410_dma_deinit_channel,

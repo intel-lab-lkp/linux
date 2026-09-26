@@ -988,6 +988,24 @@ static void stmmac_block_ptp(struct stmmac_priv *priv, bool block)
 	write_unlock_irqrestore(&priv->ptp_lock, flags);
 }
 
+static int stmmac_restore_timestamping(struct stmmac_priv *priv)
+{
+	int ret;
+
+	if (priv->plat->ptp_clk_freq_config)
+		priv->plat->ptp_clk_freq_config(priv);
+	if (!(priv->dma_cap.time_stamp || priv->dma_cap.atime_stamp) ||
+	    !priv->plat->clk_ptp_rate)
+		return 0;
+
+	ret = stmmac_init_tstamp_counter(priv, priv->systime_flags);
+	if (ret)
+		return ret;
+	if (priv->plat->flags & STMMAC_FLAG_HWTSTAMP_CORRECT_LATENCY)
+		stmmac_hwtstamp_correct_latency(priv, priv);
+	return stmmac_ptp_restore(priv);
+}
+
 static void stmmac_legacy_serdes_power_down(struct stmmac_priv *priv)
 {
 	if (priv->plat->serdes_powerdown && priv->legacy_serdes_is_powered)
@@ -1665,24 +1683,10 @@ static void stmmac_clear_descriptors(struct stmmac_priv *priv,
 		stmmac_clear_tx_descriptors(priv, dma_conf, queue);
 }
 
-/**
- * stmmac_init_rx_buffers - init the RX descriptor buffer.
- * @priv: driver private structure
- * @dma_conf: structure to take the dma data
- * @p: descriptor pointer
- * @i: descriptor index
- * @flags: gfp flag
- * @queue: RX queue index
- * Description: this function is called to allocate a receive buffer, perform
- * the DMA mapping and init the descriptor.
- */
-static int stmmac_init_rx_buffers(struct stmmac_priv *priv,
-				  struct stmmac_dma_conf *dma_conf,
-				  struct dma_desc *p,
-				  int i, gfp_t flags, u32 queue)
+static int stmmac_alloc_rx_buffer(struct stmmac_priv *priv,
+				  struct stmmac_rx_queue *rx_q,
+				  struct stmmac_rx_buffer *buf)
 {
-	struct stmmac_rx_queue *rx_q = &dma_conf->rx_queue[queue];
-	struct stmmac_rx_buffer *buf = &rx_q->buf_pool[i];
 	gfp_t gfp = (GFP_ATOMIC | __GFP_NOWARN);
 
 	if (priv->dma_cap.host_dma_width <= 32)
@@ -1699,19 +1703,49 @@ static int stmmac_init_rx_buffers(struct stmmac_priv *priv,
 		buf->sec_page = page_pool_alloc_pages(rx_q->page_pool, gfp);
 		if (!buf->sec_page)
 			return -ENOMEM;
-
 		buf->sec_addr = page_pool_get_dma_addr(buf->sec_page);
-		stmmac_set_desc_sec_addr(priv, p, buf->sec_addr, true);
-	} else {
-		buf->sec_page = NULL;
-		stmmac_set_desc_sec_addr(priv, p, buf->sec_addr, false);
 	}
 
+	return 0;
+}
+
+static void stmmac_init_rx_buffer_desc(struct stmmac_priv *priv,
+				       struct stmmac_dma_conf *dma_conf,
+				       struct dma_desc *p,
+				       struct stmmac_rx_buffer *buf)
+{
+	if (buf->sec_page)
+		buf->sec_addr = page_pool_get_dma_addr(buf->sec_page);
+	stmmac_set_desc_sec_addr(priv, p, buf->sec_addr, !!buf->sec_page);
 	buf->addr = page_pool_get_dma_addr(buf->page) + buf->page_offset;
 
 	stmmac_set_desc_addr(priv, p, buf->addr);
 	if (dma_conf->dma_buf_sz == BUF_SIZE_16KiB)
 		stmmac_init_desc3(priv, p);
+}
+
+/**
+ * stmmac_init_rx_buffers - allocate a receive buffer and init its descriptor
+ * @priv: driver private structure
+ * @dma_conf: structure to take the dma data
+ * @p: descriptor pointer
+ * @i: descriptor index
+ * @flags: gfp flag
+ * @queue: RX queue index
+ */
+static int stmmac_init_rx_buffers(struct stmmac_priv *priv,
+				  struct stmmac_dma_conf *dma_conf,
+				  struct dma_desc *p,
+				  int i, gfp_t flags, u32 queue)
+{
+	struct stmmac_rx_queue *rx_q = &dma_conf->rx_queue[queue];
+	struct stmmac_rx_buffer *buf = &rx_q->buf_pool[i];
+	int ret;
+
+	ret = stmmac_alloc_rx_buffer(priv, rx_q, buf);
+	if (ret)
+		return ret;
+	stmmac_init_rx_buffer_desc(priv, dma_conf, p, buf);
 
 	return 0;
 }
@@ -1923,6 +1957,9 @@ static int __init_dma_rx_desc_rings(struct stmmac_priv *priv,
 	rx_q->xsk_pool = stmmac_get_xsk_pool(priv, queue);
 
 	if (rx_q->xsk_pool) {
+		rx_q->xsk_dma = xsk_pool_dma_get(rx_q->xsk_pool);
+		if (!rx_q->xsk_dma)
+			return -EINVAL;
 		ret = xdp_rxq_info_reg_mem_model(&rx_q->xdp_rxq,
 						 MEM_TYPE_XSK_BUFF_POOL, NULL);
 		if (ret)
@@ -2168,6 +2205,41 @@ static void stmmac_free_tx_skbufs(struct stmmac_priv *priv)
 		dma_free_tx_skbufs(priv, priv->dma_conf, queue);
 }
 
+/* Only after a successful DMA reset, and with all RX buffers prepared. */
+static void stmmac_reinit_dma_desc(struct stmmac_priv *priv)
+{
+	struct stmmac_dma_conf *dma_conf = priv->dma_conf;
+	u32 queue, i;
+
+	stmmac_free_tx_skbufs(priv);
+	stmmac_reset_queues_param(priv);
+	init_dma_tx_desc_rings(priv->dev, dma_conf);
+
+	for (queue = 0; queue < priv->plat->rx_queues_to_use; queue++) {
+		struct stmmac_rx_queue *rx_q = &dma_conf->rx_queue[queue];
+
+		if (rx_q->state_saved)
+			dev_kfree_skb_any(rx_q->state.skb);
+		rx_q->state.skb = NULL;
+		rx_q->state_saved = 0;
+		rx_q->rx_count_frames = 0;
+		rx_q->buf_alloc_num = dma_conf->dma_rx_size;
+
+		for (i = 0; i < dma_conf->dma_rx_size; i++)
+			stmmac_init_rx_buffer_desc(priv, dma_conf,
+						   stmmac_get_rx_desc(priv, rx_q, i),
+						   &rx_q->buf_pool[i]);
+
+		if (priv->descriptor_mode == STMMAC_CHAIN_MODE)
+			stmmac_mode_init(priv, stmmac_get_rx_desc(priv, rx_q, 0),
+					 rx_q->dma_rx_phy, dma_conf->dma_rx_size,
+					 priv->extend_desc);
+	}
+
+	/* Address programming can overwrite OWN in GMAC4/XGMAC descriptors. */
+	stmmac_clear_descriptors(priv, dma_conf);
+}
+
 /**
  * __free_dma_rx_desc_resources - free RX dma desc resources (per queue)
  * @priv: private structure
@@ -2214,6 +2286,9 @@ static void __free_dma_rx_desc_resources(struct stmmac_priv *priv,
 	kfree(rx_q->buf_pool);
 	if (rx_q->page_pool)
 		page_pool_destroy(rx_q->page_pool);
+	if (rx_q->xsk_dma)
+		xsk_pool_dma_put(rx_q->xsk_dma);
+	rx_q->xsk_dma = NULL;
 	rx_q->buf_pool = NULL;
 	rx_q->page_pool = NULL;
 	rx_q->dma_erx = NULL;
@@ -2223,11 +2298,10 @@ static void __free_dma_rx_desc_resources(struct stmmac_priv *priv,
 static void free_dma_rx_desc_resources(struct stmmac_priv *priv,
 				       struct stmmac_dma_conf *dma_conf)
 {
-	u8 rx_count = priv->plat->rx_queues_to_use;
 	u8 queue;
 
 	/* Free RX queue resources */
-	for (queue = 0; queue < rx_count; queue++)
+	for (queue = 0; queue < MTL_MAX_RX_QUEUES; queue++)
 		__free_dma_rx_desc_resources(priv, dma_conf, queue);
 }
 
@@ -2274,11 +2348,10 @@ static void __free_dma_tx_desc_resources(struct stmmac_priv *priv,
 static void free_dma_tx_desc_resources(struct stmmac_priv *priv,
 				       struct stmmac_dma_conf *dma_conf)
 {
-	u8 tx_count = priv->plat->tx_queues_to_use;
 	u8 queue;
 
 	/* Free TX queue resources */
-	for (queue = 0; queue < tx_count; queue++)
+	for (queue = 0; queue < MTL_MAX_TX_QUEUES; queue++)
 		__free_dma_tx_desc_resources(priv, dma_conf, queue);
 }
 
@@ -2481,14 +2554,36 @@ static int alloc_dma_desc_resources(struct stmmac_priv *priv,
 	return ret;
 }
 
-/**
- * free_dma_desc_resources - free dma desc resources
- * @priv: private structure
- * @dma_conf: structure to take the dma data
- */
+static void stmmac_detach_xsk_buffers(struct stmmac_priv *priv,
+				      struct stmmac_dma_conf *dma_conf)
+{
+	u32 queue;
+
+	/* Socket teardown cannot retain the pool itself. Drop software-only
+	 * references, but keep each xsk_dma reference: hardware can still reach
+	 * the mapped UMEM pages even after the pool and its heads are freed.
+	 */
+	for (queue = 0; queue < MTL_MAX_RX_QUEUES; queue++) {
+		struct stmmac_rx_queue *rx_q = &dma_conf->rx_queue[queue];
+
+		if (!rx_q->xsk_pool)
+			continue;
+		dma_free_rx_xskbufs(priv, dma_conf, queue);
+		xsk_pool_set_rxq_info(rx_q->xsk_pool, NULL);
+		rx_q->xsk_pool = NULL;
+	}
+	for (queue = 0; queue < MTL_MAX_TX_QUEUES; queue++)
+		dma_conf->tx_queue[queue].xsk_pool = NULL;
+}
+
 static void free_dma_desc_resources(struct stmmac_priv *priv,
 				    struct stmmac_dma_conf *dma_conf)
 {
+	if (dma_conf->dma_owned) {
+		stmmac_detach_xsk_buffers(priv, dma_conf);
+		return;
+	}
+
 	/* Release the DMA TX socket buffers */
 	free_dma_tx_desc_resources(priv, dma_conf);
 
@@ -2496,6 +2591,42 @@ static void free_dma_desc_resources(struct stmmac_priv *priv,
 	 * to ensure all pending XDP_TX buffers are returned.
 	 */
 	free_dma_rx_desc_resources(priv, dma_conf);
+}
+
+static void stmmac_put_dma_conf(struct stmmac_priv *priv,
+				struct stmmac_dma_conf *dma_conf)
+{
+	free_dma_desc_resources(priv, dma_conf);
+	if (dma_conf->dma_owned) {
+		dma_conf->retired = true;
+		return;
+	}
+	list_del(&dma_conf->list);
+	kfree(dma_conf);
+}
+
+/* A successful global reset is also the retirement fence for configurations
+ * retained by a previous failed close, open, or MTU rollback.
+ */
+static void stmmac_dma_reset_complete(struct stmmac_priv *priv)
+{
+	struct stmmac_dma_conf *dma_conf, *next;
+
+	list_for_each_entry_safe(dma_conf, next, &priv->dma_confs, list) {
+		dma_conf->dma_owned = false;
+		if (dma_conf->retired)
+			stmmac_put_dma_conf(priv, dma_conf);
+	}
+}
+
+static bool stmmac_dma_busy(struct stmmac_priv *priv)
+{
+	struct stmmac_dma_conf *dma_conf;
+
+	list_for_each_entry(dma_conf, &priv->dma_confs, list)
+		if (dma_conf->dma_owned)
+			return true;
+	return false;
 }
 
 /**
@@ -2524,6 +2655,7 @@ static void stmmac_mac_enable_rx_queues(struct stmmac_priv *priv)
  */
 static void stmmac_start_rx_dma(struct stmmac_priv *priv, u32 chan)
 {
+	priv->dma_conf->dma_owned = true;
 	netdev_dbg(priv->dev, "DMA RX processes started in channel %d\n", chan);
 	stmmac_start_rx(priv, priv->ioaddr, chan);
 }
@@ -2537,6 +2669,7 @@ static void stmmac_start_rx_dma(struct stmmac_priv *priv, u32 chan)
  */
 static void stmmac_start_tx_dma(struct stmmac_priv *priv, u32 chan)
 {
+	priv->dma_conf->dma_owned = true;
 	netdev_dbg(priv->dev, "DMA TX processes started in channel %d\n", chan);
 	stmmac_start_tx(priv, priv->ioaddr, chan);
 }
@@ -3072,25 +3205,17 @@ static int stmmac_tx_clean(struct stmmac_priv *priv, int budget, u32 queue,
  * stmmac_tx_err - to manage the tx error
  * @priv: driver private structure
  * @chan: channel index
- * Description: it cleans the descriptors and restarts the transmission
- * in case of transmission errors.
+ * Description: stop submissions and request process-context DMA recovery.
  */
 static void stmmac_tx_err(struct stmmac_priv *priv, u32 chan)
 {
-	struct stmmac_tx_queue *tx_q = &priv->dma_conf->tx_queue[chan];
-
 	netif_tx_stop_queue(netdev_get_tx_queue(priv->dev, chan));
-
 	stmmac_stop_tx_dma(priv, chan);
-	dma_free_tx_skbufs(priv, priv->dma_conf, chan);
-	stmmac_clear_tx_descriptors(priv, priv->dma_conf, chan);
-	stmmac_reset_tx_queue(priv, chan);
-	stmmac_init_tx_chan(priv, priv->ioaddr, priv->plat->dma_cfg,
-			    tx_q->dma_tx_phy, chan);
-	stmmac_start_tx_dma(priv, chan);
-
 	priv->xstats.tx_errors++;
-	netif_tx_wake_queue(netdev_get_tx_queue(priv->dev, chan));
+	/* Recovery must wait for DMA before freeing or rewriting descriptors.
+	 * Use the process-context reset path, not teardown in hard IRQ context.
+	 */
+	stmmac_global_err(priv);
 }
 
 /**
@@ -3326,12 +3451,13 @@ static int stmmac_prereset_configure(struct stmmac_priv *priv)
 /**
  * stmmac_init_dma_engine - DMA init.
  * @priv: driver private structure
+ * @reinit: rebuild the retained rings after a successful reset
  * Description:
  * It inits the DMA invoking the specific MAC/GMAC callback.
  * Some DMA parameters can be passed from the platform;
  * in case of these are not passed a default is kept for the MAC or GMAC.
  */
-static int stmmac_init_dma_engine(struct stmmac_priv *priv)
+static int stmmac_init_dma_engine(struct stmmac_priv *priv, bool reinit)
 {
 	u8 rx_channels_count = priv->plat->rx_queues_to_use;
 	u8 tx_channels_count = priv->plat->tx_queues_to_use;
@@ -3349,6 +3475,19 @@ static int stmmac_init_dma_engine(struct stmmac_priv *priv)
 	if (ret) {
 		netdev_err(priv->dev, "Failed to reset the dma\n");
 		return ret;
+	}
+	stmmac_dma_reset_complete(priv);
+	priv->dma_reset_needed = false;
+
+	if (reinit) {
+		stmmac_reinit_dma_desc(priv);
+	} else if (priv->datapath == STMMAC_DATAPATH_SUSPENDED) {
+		/* Suspend only requested a stop. Do not modify its descriptors
+		 * or release pending TX buffers until this reset has completed.
+		 */
+		stmmac_reset_queues_param(priv);
+		stmmac_free_tx_skbufs(priv);
+		stmmac_clear_descriptors(priv, priv->dma_conf);
 	}
 
 	/* DMA Configuration */
@@ -3700,6 +3839,8 @@ static bool stmmac_tso_channel_permitted(struct stmmac_priv *priv,
 /**
  * stmmac_hw_setup - setup mac in a usable state.
  *  @dev : pointer to the device structure.
+ *  @reinit: rebuild retained descriptor rings after the DMA reset
+ *  @keep_ptp: restore the registered PHC's configuration before starting DMA
  *  Description:
  *  this is the main function to setup the HW in a usable state because the
  *  dma engine is reset, the core registers are configured (e.g. AXI,
@@ -3709,7 +3850,7 @@ static bool stmmac_tso_channel_permitted(struct stmmac_priv *priv,
  *  0 on success and an appropriate (-)ve integer as defined in errno.h
  *  file on failure.
  */
-static int stmmac_hw_setup(struct net_device *dev)
+static int stmmac_hw_setup(struct net_device *dev, bool reinit, bool keep_ptp)
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
 	u8 rx_cnt = priv->plat->rx_queues_to_use;
@@ -3731,7 +3872,7 @@ static int stmmac_hw_setup(struct net_device *dev)
 	phylink_rx_clk_stop_block(priv->phylink);
 
 	/* DMA initialization and SW reset */
-	ret = stmmac_init_dma_engine(priv);
+	ret = stmmac_init_dma_engine(priv, reinit);
 	if (ret < 0) {
 		phylink_rx_clk_stop_unblock(priv->phylink);
 		netdev_err(priv->dev, "%s: DMA engine initialization failed\n",
@@ -3821,6 +3962,15 @@ static int stmmac_hw_setup(struct net_device *dev)
 		int enable = tx_q->tbs & STMMAC_TBS_AVAIL;
 
 		stmmac_enable_tbs(priv, priv->ioaddr, enable, chan);
+	}
+
+	if (keep_ptp) {
+		ret = stmmac_restore_timestamping(priv);
+		if (ret)
+			return ret;
+		ret = stmmac_tc_restore_est(priv);
+		if (ret)
+			return ret;
 	}
 
 	phylink_rx_clk_stop_block(priv->phylink);
@@ -4169,6 +4319,7 @@ stmmac_setup_dma_desc(struct stmmac_priv *priv, unsigned int mtu)
 			   __func__);
 		return ERR_PTR(-ENOMEM);
 	}
+	list_add_tail(&dma_conf->list, &priv->dma_confs);
 
 	len = mtu + ETH_HLEN + 2 * VLAN_HLEN + ETH_FCS_LEN;
 
@@ -4219,9 +4370,8 @@ stmmac_setup_dma_desc(struct stmmac_priv *priv, unsigned int mtu)
 	return dma_conf;
 
 init_error:
-	free_dma_desc_resources(priv, dma_conf);
 alloc_error:
-	kfree(dma_conf);
+	stmmac_put_dma_conf(priv, dma_conf);
 	return ERR_PTR(ret);
 }
 
@@ -4308,6 +4458,57 @@ static int stmmac_resume_hw(struct stmmac_priv *priv)
 	return 0;
 }
 
+/* NAPI, transmitters and IRQ handlers have already been drained. Clearing
+ * ST/SR only requests a stop: the current frame may still access memory.
+ * Keep the configuration DMA-owned unless hardware acknowledges idle/reset.
+ */
+static void stmmac_drain_dma(struct stmmac_priv *priv)
+{
+	struct stmmac_dma_conf *dma_conf;
+	int ret;
+
+	if (priv->hw_unavailable)
+		return;
+	stmmac_stop_all_dma(priv);
+	stmmac_mac_set(priv, priv->ioaddr, false);
+	if (!stmmac_dma_busy(priv))
+		return;
+
+	/* A failed replacement may have programmed a different topology. Only
+	 * a global reset can acknowledge all of those retired configurations.
+	 */
+	list_for_each_entry(dma_conf, &priv->dma_confs, list)
+		if (dma_conf != priv->dma_conf && dma_conf->dma_owned)
+			goto reset;
+
+	ret = stmmac_dma_wait_idle(priv, priv->ioaddr);
+	if (!ret) {
+		priv->dma_conf->dma_owned = false;
+		return;
+	}
+
+	/* Some integrations do not expose a usable idle indication. Reset is
+	 * also the fallback after a stop timeout. It needs the PHY RX clock,
+	 * even though phylink has already stopped link resolution.
+	 */
+reset:
+	phylink_prepare_resume(priv->phylink);
+	mutex_lock(&priv->ptp_mutex);
+	stmmac_block_ptp(priv, true);
+	priv->dma_reset_needed = true;
+	phylink_rx_clk_stop_block(priv->phylink);
+	ret = stmmac_prereset_configure(priv);
+	if (!ret)
+		ret = stmmac_reset(priv);
+	phylink_rx_clk_stop_unblock(priv->phylink);
+	if (!ret)
+		stmmac_dma_reset_complete(priv);
+	else
+		netdev_err(priv->dev, "DMA shutdown failed: %pe; retaining DMA memory\n",
+			   ERR_PTR(ret));
+	mutex_unlock(&priv->ptp_mutex);
+}
+
 /**
  *  __stmmac_open - open entry point of the driver
  *  @dev : pointer to the device structure.
@@ -4339,7 +4540,7 @@ static int __stmmac_open(struct net_device *dev,
 
 	stmmac_reset_queues_param(priv);
 
-	ret = stmmac_hw_setup(dev);
+	ret = stmmac_hw_setup(dev, false, false);
 	if (ret < 0) {
 		netdev_err(priv->dev, "%s: Hw setup failed\n", __func__);
 		goto init_error;
@@ -4391,8 +4592,9 @@ init_error:
 	 * phylink_start(). Keep the PHY attachment and outer PM ownership.
 	 */
 	phylink_stop(priv->phylink);
-	stmmac_stop_all_dma(priv);
-	stmmac_mac_set(priv, priv->ioaddr, false);
+	stmmac_drain_dma(priv);
+	/* Reset fallback may have powered the stopped PHY up for its clock. */
+	phylink_stop(priv->phylink);
 	return ret;
 }
 
@@ -4436,7 +4638,7 @@ static int stmmac_open(struct net_device *dev)
 	if (ret)
 		goto err_serdes;
 
-	kfree(old_conf);
+	stmmac_put_dma_conf(priv, old_conf);
 
 	/* We may have called phylink_speed_down before */
 	phylink_speed_up(priv->phylink);
@@ -4451,8 +4653,7 @@ err_runtime_pm:
 	pm_runtime_put(priv->device);
 err_dma_resources:
 	priv->dma_conf = old_conf;
-	free_dma_desc_resources(priv, dma_conf);
-	kfree(dma_conf);
+	stmmac_put_dma_conf(priv, dma_conf);
 	return ret;
 }
 
@@ -4499,23 +4700,19 @@ static void __stmmac_release(struct net_device *dev)
 	/* Free the IRQ lines */
 	stmmac_free_irq(dev, REQ_IRQ_ERR_ALL, 0);
 
-	/* TX error IRQs can restart a queue after the first quiescence. */
+	/* Drain any final IRQ-triggered network activity before DMA shutdown. */
 	stmmac_stop_tx_queues(priv);
+	if (!priv->hw_unavailable && stmmac_fpe_supported(priv))
+		ethtool_mmsv_stop(&priv->fpe_cfg.mmsv);
 
-	/* Stop TX/RX DMA after draining IRQ handlers which can restart it. */
-	if (!priv->hw_unavailable) {
-		stmmac_stop_all_dma(priv);
-		/* Link resolution need not have reached mac_link_up() yet. */
-		stmmac_mac_set(priv, priv->ioaddr, false);
-	}
+	/* Only confirmed hardware shutdown permits releasing DMA memory. */
+	stmmac_drain_dma(priv);
+	phylink_stop(priv->phylink);
 
 	/* Release and free the Rx/Tx resources */
 	free_dma_desc_resources(priv, priv->dma_conf);
 
 	stmmac_release_ptp(priv);
-
-	if (!priv->hw_unavailable && stmmac_fpe_supported(priv))
-		ethtool_mmsv_stop(&priv->fpe_cfg.mmsv);
 }
 
 /**
@@ -6447,8 +6644,7 @@ static int stmmac_change_mtu(struct net_device *dev, int new_mtu)
 		ret = __stmmac_open(dev, dma_conf);
 		if (ret) {
 			priv->dma_conf = old_conf;
-			free_dma_desc_resources(priv, dma_conf);
-			kfree(dma_conf);
+			stmmac_put_dma_conf(priv, dma_conf);
 			/*
 			 * Keep the administrative state and PHY/PM ownership until
 			 * ndo_stop(), but prevent use of the released data path.
@@ -6458,7 +6654,7 @@ static int stmmac_change_mtu(struct net_device *dev, int new_mtu)
 			return ret;
 		}
 
-		kfree(old_conf);
+		stmmac_put_dma_conf(priv, old_conf);
 
 		stmmac_set_rx_mode(dev);
 		netif_device_attach(dev);
@@ -7383,23 +7579,18 @@ void stmmac_xdp_release(struct net_device *dev)
 	/* Free the IRQ lines */
 	stmmac_free_irq(dev, REQ_IRQ_ERR_ALL, 0);
 	stmmac_stop_tx_queues(priv);
+	if (stmmac_fpe_supported(priv))
+		ethtool_mmsv_stop(&priv->fpe_cfg.mmsv);
 
-	/* Stop TX/RX DMA channels */
-	stmmac_stop_all_dma(priv);
+	stmmac_drain_dma(priv);
 
 	/* Release and free the Rx/Tx resources */
 	free_dma_desc_resources(priv, priv->dma_conf);
-
-	/* Disable the MAC Rx/Tx */
-	stmmac_mac_set(priv, priv->ioaddr, false);
 
 	/* set trans_start so we don't get spurious
 	 * watchdogs during reset
 	 */
 	netif_trans_update(dev);
-
-	if (stmmac_fpe_supported(priv))
-		ethtool_mmsv_stop(&priv->fpe_cfg.mmsv);
 
 	/* Keep PTP across the immediately following stmmac_xdp_open(). That
 	 * function releases it if reopening fails, before returning DOWN.
@@ -7418,6 +7609,14 @@ int stmmac_xdp_open(struct net_device *dev)
 	u8 chan;
 	int ret;
 
+	/* The old rings cannot be overwritten after a failed shutdown. Pool
+	 * removal still completes, with their mappings held independently.
+	 */
+	if (stmmac_dma_busy(priv)) {
+		ret = -EBUSY;
+		goto dma_desc_error;
+	}
+
 	ret = alloc_dma_desc_resources(priv, priv->dma_conf);
 	if (ret < 0) {
 		netdev_err(dev, "%s: DMA descriptors allocation failed\n",
@@ -7433,6 +7632,21 @@ int stmmac_xdp_open(struct net_device *dev)
 	}
 
 	stmmac_reset_queues_param(priv);
+	if (priv->dma_reset_needed) {
+		phylink_prepare_resume(priv->phylink);
+		mutex_lock(&priv->ptp_mutex);
+		ret = stmmac_hw_setup(dev, false, true);
+		if (!ret)
+			stmmac_block_ptp(priv, false);
+		mutex_unlock(&priv->ptp_mutex);
+		if (ret) {
+			stmmac_drain_dma(priv);
+			goto init_error;
+		}
+		stmmac_set_rx_mode(dev);
+		stmmac_vlan_restore(priv);
+		goto setup_timers;
+	}
 
 	/* DMA CSR Channel configuration */
 	for (chan = 0; chan < dma_csr_ch; chan++) {
@@ -7469,15 +7683,17 @@ int stmmac_xdp_open(struct net_device *dev)
 
 		if (tx_q->tbs & STMMAC_TBS_AVAIL)
 			stmmac_enable_tbs(priv, priv->ioaddr, 1, chan);
-
-		hrtimer_setup(&tx_q->txtimer, stmmac_tx_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	}
 
 	/* Enable the MAC Rx/Tx */
 	stmmac_mac_set(priv, priv->ioaddr, true);
 
-	/* Start Rx & Tx DMA Channels */
+setup_timers:
+	/* The reset path has also restored filters, PTP and the EST schedule. */
 	stmmac_start_all_dma(priv);
+	for (chan = 0; chan < tx_cnt; chan++)
+		hrtimer_setup(&priv->dma_conf->tx_queue[chan].txtimer,
+			      stmmac_tx_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 
 	ret = stmmac_request_irq(dev);
 	if (ret)
@@ -7494,8 +7710,7 @@ int stmmac_xdp_open(struct net_device *dev)
 
 irq_error:
 	stmmac_stop_tx_queues(priv);
-	stmmac_stop_all_dma(priv);
-	stmmac_mac_set(priv, priv->ioaddr, false);
+	stmmac_drain_dma(priv);
 
 init_error:
 	free_dma_desc_resources(priv, priv->dma_conf);
@@ -7626,7 +7841,7 @@ static void stmmac_reset_subtask(struct stmmac_priv *priv)
 	netdev_err(priv->dev, "Reset adapter.\n");
 
 	rtnl_lock();
-	if (!netif_device_present(priv->dev))
+	if (!netif_device_present(priv->dev) || !netif_running(priv->dev))
 		goto out_unlock;
 
 	netif_trans_update(priv->dev);
@@ -7900,12 +8115,11 @@ static int stmmac_reopen(struct net_device *dev)
 	ret = __stmmac_open(dev, dma_conf);
 	if (ret) {
 		priv->dma_conf = old_conf;
-		free_dma_desc_resources(priv, dma_conf);
-		kfree(dma_conf);
+		stmmac_put_dma_conf(priv, dma_conf);
 		return ret;
 	}
 
-	kfree(old_conf);
+	stmmac_put_dma_conf(priv, old_conf);
 	netif_device_attach(dev);
 	return 0;
 }
@@ -7940,6 +8154,8 @@ int stmmac_reinit_queues(struct net_device *dev, u8 rx_cnt, u8 tx_cnt)
 		netif_device_detach(dev);
 		__stmmac_release(dev);
 	}
+	if (stmmac_dma_busy(priv))
+		return -EBUSY;
 
 	stmmac_set_queues(dev, rx_cnt, tx_cnt);
 
@@ -7967,6 +8183,8 @@ int stmmac_reinit_ringparam(struct net_device *dev, u32 rx_size, u32 tx_size)
 		netif_device_detach(dev);
 		__stmmac_release(dev);
 	}
+	if (stmmac_dma_busy(priv))
+		return -EBUSY;
 
 	priv->dma_conf->dma_rx_size = rx_size;
 	priv->dma_conf->dma_tx_size = tx_size;
@@ -8153,8 +8371,20 @@ EXPORT_SYMBOL_GPL(stmmac_plat_dat_alloc);
 static void stmmac_free_dma_conf(void *data)
 {
 	struct stmmac_priv *priv = data;
+	struct stmmac_dma_conf *dma_conf, *next;
 
-	kfree(priv->dma_conf);
+	list_for_each_entry_safe(dma_conf, next, &priv->dma_confs, list) {
+		list_del(&dma_conf->list);
+		/* A permanently unresponsive device must not DMA into recycled
+		 * memory, even on unbind. There is no generic isolation mechanism
+		 * for all stmmac integrations. Deliberately retain these allocations.
+		 */
+		if (dma_conf->dma_owned) {
+			dev_err(priv->device, "DMA still active on removal; DMA memory quarantined\n");
+			continue;
+		}
+		kfree(dma_conf);
+	}
 }
 
 static int __stmmac_dvr_probe(struct device *device,
@@ -8181,10 +8411,12 @@ static int __stmmac_dvr_probe(struct device *device,
 	priv = netdev_priv(ndev);
 	priv->device = device;
 	priv->dev = ndev;
+	INIT_LIST_HEAD(&priv->dma_confs);
 	/* Keep ring sizes and per-queue settings even while the device is down. */
 	priv->dma_conf = kzalloc_obj(*priv->dma_conf);
 	if (!priv->dma_conf)
 		return -ENOMEM;
+	list_add_tail(&priv->dma_conf->list, &priv->dma_confs);
 	ret = devm_add_action_or_reset(device, stmmac_free_dma_conf, priv);
 	if (ret)
 		return ret;
@@ -8508,12 +8740,28 @@ void stmmac_dvr_remove(struct device *dev)
 {
 	struct net_device *ndev = dev_get_drvdata(dev);
 	struct stmmac_priv *priv = netdev_priv(ndev);
+	struct stmmac_dma_conf *dma_conf;
+	u32 queue;
 
 	netdev_info(priv->dev, "%s: removing driver", __func__);
 
 	pm_runtime_get_sync(dev);
 
 	unregister_netdev(ndev);
+	rtnl_lock();
+	/* A failed ndo_open has no matching ndo_stop. Its retained resources
+	 * still need retirement, or software-only disconnection on timeout.
+	 */
+	list_for_each_entry(dma_conf, &priv->dma_confs, list) {
+		free_dma_desc_resources(priv, dma_conf);
+		for (queue = 0; queue < MTL_MAX_RX_QUEUES; queue++) {
+			struct xdp_rxq_info *rxq = &dma_conf->rx_queue[queue].xdp_rxq;
+
+			if (xdp_rxq_info_is_reg(rxq))
+				xdp_rxq_info_unreg(rxq);
+		}
+	}
+	rtnl_unlock();
 
 #ifdef CONFIG_DEBUG_FS
 	stmmac_exit_fs(ndev);
@@ -8721,12 +8969,7 @@ int stmmac_resume(struct device *dev)
 
 	mutex_lock(&priv->lock);
 
-	stmmac_reset_queues_param(priv);
-
-	stmmac_free_tx_skbufs(priv);
-	stmmac_clear_descriptors(priv, priv->dma_conf);
-
-	ret = stmmac_hw_setup(ndev);
+	ret = stmmac_hw_setup(ndev, false, false);
 	if (ret < 0) {
 		netdev_err(priv->dev, "%s: Hw setup failed\n", __func__);
 		goto error_stop_dma;

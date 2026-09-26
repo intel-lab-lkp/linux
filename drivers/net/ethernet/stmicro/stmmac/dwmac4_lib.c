@@ -26,6 +26,24 @@ int dwmac4_dma_reset(void __iomem *ioaddr)
 				 10000, 1000000);
 }
 
+int dwmac4_dma_wait_idle(struct stmmac_priv *priv, void __iomem *ioaddr)
+{
+	u32 channels = max(priv->plat->rx_queues_to_use,
+			   priv->plat->tx_queues_to_use);
+	u32 mask = DMA_DEBUG_BUS_BUSY;
+	u32 value, chan;
+
+	/* DSR0 describes channels 0..2 and outstanding AXI transactions.
+	 * Other debug-register layouts require a successful reset instead.
+	 */
+	if (channels > 3)
+		return -EOPNOTSUPP;
+	for (chan = 0; chan < channels; chan++)
+		mask |= DMA_DEBUG_CH_STATE(chan);
+	return readl_poll_timeout(ioaddr + DMA_DEBUG_STATUS0, value,
+				 !(value & mask), 100, 100000);
+}
+
 void dwmac4_set_rx_tail_ptr(struct stmmac_priv *priv, void __iomem *ioaddr,
 			    u32 tail_ptr, u32 chan)
 {

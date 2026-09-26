@@ -252,6 +252,7 @@ static void dwmac1000_rx_watchdog(struct stmmac_priv *priv,
 
 const struct stmmac_dma_ops dwmac1000_dma_ops = {
 	.reset = dwmac_dma_reset,
+	.wait_idle = dwmac_dma_wait_idle,
 	.init_chan = dwmac1000_dma_init_channel,
 	.init_rx_chan = dwmac1000_dma_init_rx,
 	.init_tx_chan = dwmac1000_dma_init_tx,

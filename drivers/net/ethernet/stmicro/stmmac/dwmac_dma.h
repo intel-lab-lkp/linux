@@ -11,6 +11,8 @@
 #ifndef __DWMAC_DMA_H__
 #define __DWMAC_DMA_H__
 
+int dwmac_dma_wait_idle(struct stmmac_priv *priv, void __iomem *ioaddr);
+
 /* DMA CRS Control and Status Register Mapping */
 #define DMA_BUS_MODE		0x00001000	/* Bus Mode */
 
