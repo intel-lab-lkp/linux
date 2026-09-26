@@ -7782,7 +7782,7 @@ int btf_struct_access(struct bpf_verifier_log *log,
 	u32 id = reg->btf_id;
 	int err;
 
-	while (type_is_alloc(reg->type)) {
+	while (type_is_local_obj(reg->type)) {
 		struct btf_struct_meta *meta;
 		struct btf_record *rec;
 		int i;
@@ -7807,14 +7807,15 @@ int btf_struct_access(struct bpf_verifier_log *log,
 	t = btf_type_by_id(btf, id);
 	do {
 		err = btf_struct_walk(log, btf, t, off, size, &id, &tmp_flag,
-				      field_name, !type_is_alloc(reg->type));
+				      field_name, !type_is_local_obj(reg->type));
 
 		switch (err) {
 		case WALK_PTR:
-			/* For local types, the destination register cannot
+			/*
+			 * For local types, the destination register cannot
 			 * become a pointer again.
 			 */
-			if (type_is_alloc(reg->type))
+			if (type_is_local_obj(reg->type))
 				return SCALAR_VALUE;
 			/* If we found the pointer or scalar on t+off,
 			 * we're done.
