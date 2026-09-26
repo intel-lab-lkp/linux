@@ -69,6 +69,10 @@ int main(int argc, char **argv)
 	}
 
 	rc = waitpid(-1, &status, 0);
+	if (rc == -1) {
+		puts("waitpid failed\n");
+		exit(-1);
+	}
 
 	if (WIFEXITED(status) && WEXITSTATUS(status) == -1) {
 		puts("child exited abnormally\n");
