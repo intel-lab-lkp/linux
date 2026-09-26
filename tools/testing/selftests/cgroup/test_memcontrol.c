@@ -11,6 +11,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <sys/inotify.h>
+#include <poll.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <arpa/inet.h>
@@ -1655,10 +1656,20 @@ cleanup:
 	return ret;
 }
 
+#define INOTIFY_TIMEOUT_MS 5000
+
 static int read_event(int inotify_fd, int expected_event, int expected_wd)
 {
+	struct pollfd pfd = { .fd = inotify_fd, .events = POLLIN };
 	struct inotify_event event;
 	ssize_t len = 0;
+	int ret;
+
+	ret = poll(&pfd, 1, INOTIFY_TIMEOUT_MS);
+	if (ret == 0)
+		return -ETIMEDOUT;
+	if (ret < 0)
+		return -1;
 
 	len = read(inotify_fd, &event, sizeof(event));
 	if (len < (ssize_t)sizeof(event))
@@ -1678,7 +1689,7 @@ static int test_memcg_inotify_delete_file(const char *root)
 {
 	int ret = KSFT_FAIL;
 	char *memcg = NULL;
-	int fd, wd;
+	int fd, wd, err;
 
 	memcg = cg_name(root, "memcg_test_0");
 
@@ -1701,7 +1712,11 @@ static int test_memcg_inotify_delete_file(const char *root)
 	free(memcg);
 	memcg = NULL;
 
-	if (read_event(fd, IN_DELETE_SELF, wd))
+	err = read_event(fd, IN_DELETE_SELF, wd);
+	if (err == -ETIMEDOUT)
+		fprintf(stderr, "no IN_DELETE_SELF event within %d ms\n",
+			INOTIFY_TIMEOUT_MS);
+	if (err)
 		goto cleanup;
 
 	if (read_event(fd, IN_IGNORED, wd))
@@ -1723,7 +1738,7 @@ static int test_memcg_inotify_delete_dir(const char *root)
 {
 	int ret = KSFT_FAIL;
 	char *memcg = NULL;
-	int fd, wd;
+	int fd, wd, err;
 
 	memcg = cg_name(root, "memcg_test_0");
 
@@ -1746,7 +1761,11 @@ static int test_memcg_inotify_delete_dir(const char *root)
 	free(memcg);
 	memcg = NULL;
 
-	if (read_event(fd, IN_DELETE_SELF, wd))
+	err = read_event(fd, IN_DELETE_SELF, wd);
+	if (err == -ETIMEDOUT)
+		fprintf(stderr, "no IN_DELETE_SELF event within %d ms\n",
+			INOTIFY_TIMEOUT_MS);
+	if (err)
 		goto cleanup;
 
 	if (read_event(fd, IN_IGNORED, wd))
