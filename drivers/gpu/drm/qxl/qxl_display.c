@@ -887,7 +887,10 @@ static int qxl_plane_prepare_fb(struct drm_plane *plane,
 	if (ret)
 		return ret;
 
-	return drm_gem_plane_helper_prepare_fb(plane, new_state);
+	ret = drm_gem_plane_helper_prepare_fb(plane, new_state);
+	if (ret)
+		qxl_bo_unpin(user_bo);
+	return ret;
 }
 
 static void qxl_plane_cleanup_fb(struct drm_plane *plane,
