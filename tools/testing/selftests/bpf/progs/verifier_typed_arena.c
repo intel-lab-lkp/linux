@@ -1157,6 +1157,148 @@ int ptr_field_sanitize_on_one_path(void *ctx)
 	return 0;
 }
 
+#define TYPE_ID(T) bpf_core_type_id_local(T)
+
+SEC("syscall")
+__description("allocated pages hold real objects, reachable through any value that lands in them")
+__success __retval(0)
+__xlated("r2 = 0x{{[0-9a-f]+[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]}}")
+__xlated("call kernel-function")
+int pages_alloc(void *ctx)
+{
+	struct typed_obj *obj, *again, *next;
+	void *opaque;
+	__u32 cnt = 1;
+
+	obj = bpf_typed_arena_alloc_pages(&arena, TYPE_ID(struct typed_obj), NULL, &cnt,
+					  NUMA_NO_NODE);
+	if (!obj)
+		return 1;
+	if (cnt != 1)
+		return 2;
+	obj->value = 5;
+	/* The object through an opaque value, and its neighbor by arithmetic on that value */
+	opaque = obj;
+	again = opaque;
+	if (again != obj || again->value != 5)
+		return 3;
+	next = opaque + sizeof(*obj);
+	next->value = 6;
+	if (next == obj || next->value != 6 || obj->value != 5)
+		return 4;
+	return 0;
+}
+
+SEC("syscall")
+__description("a fixed request takes its chunk once")
+__success __retval(0)
+int pages_alloc_fixed(void *ctx)
+{
+	struct typed_obj *obj, *hint;
+	__u32 cnt;
+
+	/* The chunk user space names, the first one here */
+	hint = ptr;
+	cnt = 2;
+	obj = bpf_typed_arena_alloc_pages(&arena, TYPE_ID(struct typed_obj), hint, &cnt,
+					  NUMA_NO_NODE);
+	if (!obj)
+		return 1;
+	if (obj != hint || cnt != 2)
+		return 2;
+	cnt = 1;
+	if (bpf_typed_arena_alloc_pages(&arena, TYPE_ID(struct typed_obj), hint, &cnt,
+					NUMA_NO_NODE))
+		return 3;
+	/* The page after it, part of the first request */
+	hint = (void *)hint + __PAGE_SIZE;
+	cnt = 1;
+	if (bpf_typed_arena_alloc_pages(&arena, TYPE_ID(struct typed_obj), hint, &cnt,
+					NUMA_NO_NODE))
+		return 4;
+	return 0;
+}
+
+SEC("syscall")
+__description("a request is rounded up to whole chunks and the granted count written back")
+__success __retval(0)
+int pages_alloc_granted_count(void *ctx)
+{
+	__u32 cnt = 1, chunk_pages = 16384 > __PAGE_SIZE ? 16384 / __PAGE_SIZE : 1;
+	struct big_obj *obj;
+
+	obj = bpf_typed_arena_alloc_pages(&arena, TYPE_ID(struct big_obj), NULL, &cnt,
+					  NUMA_NO_NODE);
+	if (!obj)
+		return 1;
+	if (cnt != chunk_pages)
+		return 2;
+	obj->pad[8191] = 1;
+	return obj->pad[8191] - 1;
+}
+
+SEC("syscall")
+__description("a released chunk keeps its objects and stays taken until the grace period has passed")
+__success __retval(0)
+int pages_free(void *ctx)
+{
+	struct typed_obj *obj;
+	__u32 cnt = 1;
+
+	obj = bpf_typed_arena_alloc_pages(&arena, TYPE_ID(struct typed_obj), NULL, &cnt,
+					  NUMA_NO_NODE);
+	if (!obj)
+		return 1;
+	obj->value = 7;
+	bpf_typed_arena_free_pages(&arena, TYPE_ID(struct typed_obj), obj, 1);
+	if (obj->value != 7)
+		return 2;
+	cnt = 1;
+	if (bpf_typed_arena_alloc_pages(&arena, TYPE_ID(struct typed_obj), obj, &cnt, NUMA_NO_NODE))
+		return 3;
+	return 0;
+}
+
+SEC("syscall")
+__description("an allocation must be checked for NULL")
+__failure __msg("invalid mem access 'typed_arena_ptr_or_null_'")
+int pages_alloc_null_check(void *ctx)
+{
+	struct typed_obj *obj;
+	__u32 cnt = 1;
+
+	obj = bpf_typed_arena_alloc_pages(&arena, TYPE_ID(struct typed_obj), NULL, &cnt,
+					  NUMA_NO_NODE);
+	obj->value = 1;
+	return 0;
+}
+
+SEC("syscall")
+__description("the page kfuncs register the type like a cast: a struct without special fields belongs in the raw arena")
+__failure __msg("struct plain_obj has no special fields and needs no typed arena")
+int pages_alloc_plain_struct(void *ctx)
+{
+	struct plain_obj *obj;
+	__u32 cnt = 1;
+
+	obj = bpf_typed_arena_alloc_pages(&arena, TYPE_ID(struct plain_obj), NULL, &cnt,
+					  NUMA_NO_NODE);
+	return obj == NULL;
+}
+
+SEC("syscall")
+__description("the page kfuncs need the program's arena")
+__failure __msg("can only be used in a program that has an associated arena")
+int pages_alloc_needs_arena(void *ctx)
+{
+	struct typed_obj *obj;
+	__u32 cnt = 1;
+
+	obj = bpf_typed_arena_alloc_pages(&not_an_arena, TYPE_ID(struct typed_obj), NULL, &cnt,
+					  NUMA_NO_NODE);
+	return obj == NULL;
+}
+
 #endif /* __BPF_FEATURE_TYPED_ARENA_CAST */
 
 char _license[] SEC("license") = "GPL";

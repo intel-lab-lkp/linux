@@ -15,6 +15,18 @@
  */
 #define __typed_arena_size(sz) __attribute__((btf_decl_tag("typed_arena_size:" #sz)))
 
+/*
+ * Back the chunks covering *page_cnt pages of the typed arena of the struct
+ * whose local BTF type ID is type_id with zeroed objects, at addr, a typed
+ * pointer naming the first chunk, or anywhere for NULL; round the count up
+ * to whole chunks and write it back; return a pointer to the first object,
+ * or NULL. Release such a range after a grace period, after which its
+ * objects read as the dummy object. Both are safe under a spin lock.
+ */
+extern void *bpf_typed_arena_alloc_pages(void *map, __u64 type_id, void *addr, __u32 *page_cnt,
+					 int node_id) __ksym;
+extern void bpf_typed_arena_free_pages(void *map, __u64 type_id, void *ptr, __u32 page_cnt) __ksym;
+
 /* Convenience macro to wrap over bpf_obj_new */
 #define bpf_obj_new(type) ((type *)bpf_obj_new(bpf_core_type_id_local(type)))
 
