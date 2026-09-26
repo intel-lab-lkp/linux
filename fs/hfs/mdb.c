@@ -134,6 +134,7 @@ int hfs_mdb_get(struct super_block *sb)
 	sector_t part_start, part_size;
 	loff_t off;
 	__be16 attrib;
+	bool part_hop_done = false;
 
 	/* set the device driver to 512-byte blocks */
 	size = sb_min_blocksize(sb, HFS_SECTOR_SIZE);
@@ -152,11 +153,18 @@ int hfs_mdb_get(struct super_block *sb)
 			break;
 		brelse(bh);
 
-		/* check for a partition block
+		/*
+		 * check for a partition block
 		 * (should do this only for cdrom/loop though)
+		 *
+		 * The partition map is at the start of the device: follow
+		 * it once, or an entry pointing at itself loops forever.
 		 */
+		if (part_hop_done)
+			return -EIO;
 		if (hfs_part_find(sb, &part_start, &part_size))
 			return -EIO;
+		part_hop_done = true;
 	}
 
 	HFS_SB(sb)->alloc_blksz = size = be32_to_cpu(mdb->drAlBlkSiz);
