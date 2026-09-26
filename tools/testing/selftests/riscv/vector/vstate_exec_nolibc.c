@@ -74,7 +74,7 @@ int main(int argc, char **argv)
 		exit(-1);
 	}
 
-	if (WIFEXITED(status) && WEXITSTATUS(status) == -1) {
+	if (WIFEXITED(status) && WEXITSTATUS(status) == 255) {
 		puts("child exited abnormally\n");
 		exit(-1);
 	}

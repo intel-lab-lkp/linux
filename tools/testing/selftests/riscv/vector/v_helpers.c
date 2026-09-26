@@ -81,7 +81,7 @@ int launch_test(char *next_program, int test_inherit, int xtheadvector)
 		return -3;
 	}
 
-	if ((WIFEXITED(status) && WEXITSTATUS(status) == -1) ||
+	if ((WIFEXITED(status) && WEXITSTATUS(status) == 255) ||
 	    WIFSIGNALED(status)) {
 		printf("child exited abnormally\n");
 		return -4;
