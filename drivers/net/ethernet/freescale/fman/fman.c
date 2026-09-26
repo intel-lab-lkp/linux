@@ -2103,6 +2103,18 @@ int fman_set_port_params(struct fman *fman,
 	unsigned long flags;
 	u8 port_id = port_params->port_id, mac_id;
 
+	/*
+	 * port_id comes from the device tree: reject ids outside the LIODN
+	 * table and ids that do not map to a MAC.
+	 */
+	mac_id = hw_port_id_to_sw_port_id(fman->state->rev_info.major, port_id);
+	if (port_id == 0 || port_id >= FMAN_LIODN_TBL ||
+	    mac_id >= MAX_NUM_OF_MACS) {
+		dev_err(fman->dev, "%s: invalid port id %u\n", __func__,
+			port_id);
+		return -EINVAL;
+	}
+
 	spin_lock_irqsave(&fman->spinlock, flags);
 
 	err = set_num_of_tasks(fman, port_params->port_id,
@@ -2169,8 +2181,6 @@ int fman_set_port_params(struct fman *fman,
 
 	if (fman->state->rev_info.major < 6)
 		set_port_order_restoration(fman->fpm_regs, port_id);
-
-	mac_id = hw_port_id_to_sw_port_id(fman->state->rev_info.major, port_id);
 
 	if (port_params->max_frame_length >= fman->state->mac_mfl[mac_id]) {
 		fman->state->port_mfl[mac_id] = port_params->max_frame_length;
