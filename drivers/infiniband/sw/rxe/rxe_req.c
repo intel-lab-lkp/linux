@@ -503,6 +503,7 @@ static int finish_packet(struct rxe_qp *qp, struct rxe_av *av,
 			 struct sk_buff *skb, u32 payload)
 {
 	int err;
+	u32 sge_offset;
 
 	err = rxe_prepare(av, pkt, skb);
 	if (err)
@@ -510,12 +511,19 @@ static int finish_packet(struct rxe_qp *qp, struct rxe_av *av,
 
 	if (pkt->mask & RXE_WRITE_OR_SEND_MASK) {
 		if (wqe->wr.send_flags & IB_SEND_INLINE) {
-			u8 *tmp = &wqe->dma.inline_data[wqe->dma.sge_offset];
+			sge_offset = wqe->dma.sge_offset;
+			if (unlikely(sge_offset > qp->sq.max_inline ||
+				     payload >
+				     qp->sq.max_inline - sge_offset)) {
+				rxe_dbg_qp(qp, "invalid inline data range in send wqe\n");
+				return -EINVAL;
+			}
 
-			memcpy(payload_addr(pkt), tmp, payload);
+			memcpy(payload_addr(pkt),
+			       &wqe->dma.inline_data[sge_offset], payload);
 
 			wqe->dma.resid -= payload;
-			wqe->dma.sge_offset += payload;
+			wqe->dma.sge_offset = sge_offset + payload;
 		} else {
 			err = copy_data(qp->pd, 0, &wqe->dma,
 					payload_addr(pkt), payload,
