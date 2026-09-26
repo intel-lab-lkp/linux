@@ -1220,6 +1220,7 @@ static void nfc_llcp_recv_disc(struct nfc_llcp_local *local,
 
 	if (sk->sk_state == LLCP_CONNECTED) {
 		nfc_put_device(local->dev);
+		llcp_sock->dev = NULL;
 		sk->sk_state = LLCP_CLOSED;
 		sk->sk_state_change(sk);
 	}
