@@ -780,6 +780,9 @@ static int port100_send_frame_async(struct port100 *dev,
 	print_hex_dump_debug("PORT100 TX: ", DUMP_PREFIX_NONE, 16, 1,
 			     out->data, out->len, false);
 
+	/* The device may answer without consuming the previous frame. */
+	usb_kill_urb(dev->out_urb);
+
 	rc = usb_submit_urb(dev->out_urb, GFP_KERNEL);
 	if (rc)
 		goto exit;
