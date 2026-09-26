@@ -85,7 +85,6 @@ struct qxl_bo {
 	/* Constant after initialization */
 	unsigned int is_primary:1; /* is this now a primary surface */
 	unsigned int is_dumb:1;
-	struct qxl_bo *shadow;
 	unsigned int hw_surf_alloc:1;
 	struct qxl_surface surf;
 	uint32_t surface_id;
@@ -201,8 +200,6 @@ struct qxl_device {
 	struct qxl_ram_header *ram_header;
 
 	struct qxl_bo *primary_bo;
-	struct qxl_bo *dumb_shadow_bo;
-	struct qxl_head *dumb_heads;
 
 	struct qxl_memslot main_slot;
 	struct qxl_memslot surfaces_slot;
