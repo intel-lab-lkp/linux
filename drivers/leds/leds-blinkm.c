@@ -672,7 +672,6 @@ failblue:
 failgreen:
 	led_classdev_unregister(&leds[RED]->cdev.led_cdev);
 failred:
-	sysfs_remove_group(&client->dev.kobj, &blinkm_group);
 
 	return err;
 }
@@ -715,9 +714,8 @@ static int register_multicolor(struct i2c_client *client, struct blinkm_data *da
 	if (err < 0) {
 		dev_err(&client->dev, "couldn't register LED %s\n",
 				mc_led->cdev.led_cdev.name);
-		sysfs_remove_group(&client->dev.kobj, &blinkm_group);
 	}
-	return 0;
+	return err;
 }
 
 static int blinkm_probe(struct i2c_client *client)
@@ -749,14 +747,13 @@ static int blinkm_probe(struct i2c_client *client)
 		return err;
 	}
 
-	if (!IS_ENABLED(CONFIG_LEDS_BLINKM_MULTICOLOR)) {
+	if (!IS_ENABLED(CONFIG_LEDS_BLINKM_MULTICOLOR))
 		err = register_separate_colors(client, data);
-		if (err < 0)
-			return err;
-	} else {
+	else
 		err = register_multicolor(client, data);
-		if (err < 0)
-			return err;
+	if (err < 0) {
+		sysfs_remove_group(&client->dev.kobj, &blinkm_group);
+		return err;
 	}
 
 	blinkm_init_hw(client);
