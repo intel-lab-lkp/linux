@@ -661,6 +661,7 @@ struct bpf_insn_aux_data {
 		u64 insert_off;
 	};
 	struct btf_struct_meta *kptr_struct_meta;
+	struct bpf_typed_arena *typed_arena; /* named by a cast or a typed arena kfunc call */
 	u64 map_key_state; /* constant (32 bit) key tracking for maps */
 	int ctx_field_size; /* the ctx field size for load insn, maybe 0 */
 	u32 seen; /* this insn was processed by the verifier at env->pass_cnt */
@@ -1462,6 +1463,23 @@ static inline bool type_is_ptr_alloc_obj(u32 type)
 	       !(type_flag(type) & PTR_UNTRUSTED);
 }
 
+/* A pointer to an object in a typed arena: trusted, never NULL once checked, offset within the object. */
+static inline bool type_is_typed_arena_obj(u32 type)
+{
+	return base_type(type) == PTR_TO_BTF_ID && type_flag(type) & MEM_ARENA;
+}
+
+/* An object of a program-BTF struct: allocated by the program, or in a typed arena. */
+static inline bool type_is_local_obj(u32 type)
+{
+	return type & (MEM_ALLOC | MEM_ARENA);
+}
+
+static inline bool insn_is_typed_arena_cast(const struct bpf_insn *insn)
+{
+	return insn->code == (BPF_ALU64 | BPF_MOV | BPF_X) && insn->off == BPF_TYPED_ARENA_CAST;
+}
+
 static inline bool type_is_non_owning_ref(u32 type)
 {
 	return type_is_ptr_alloc_obj(type) && type_flag(type) & NON_OWN_REF;
@@ -1824,6 +1842,7 @@ int bpf_optimize_bpf_loop(struct bpf_verifier_env *env);
 void bpf_opt_hard_wire_dead_code_branches(struct bpf_verifier_env *env);
 int bpf_opt_remove_dead_code(struct bpf_verifier_env *env);
 int bpf_opt_remove_nops(struct bpf_verifier_env *env);
+int bpf_lower_typed_arena_insns(struct bpf_verifier_env *env);
 int bpf_opt_subreg_zext_lo32_rnd_hi32(struct bpf_verifier_env *env, const union bpf_attr *attr);
 int bpf_convert_ctx_accesses(struct bpf_verifier_env *env);
 int bpf_jit_subprogs(struct bpf_verifier_env *env);

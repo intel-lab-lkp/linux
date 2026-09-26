@@ -175,6 +175,12 @@ static bool is_addr_space_cast(const struct bpf_insn *insn)
 		insn->off == BPF_ADDR_SPACE_CAST;
 }
 
+static bool is_typed_arena_cast(const struct bpf_insn *insn)
+{
+	return insn->code == (BPF_ALU64 | BPF_MOV | BPF_X) &&
+		insn->off == BPF_TYPED_ARENA_CAST;
+}
+
 /* Special (internal-only) form of mov, used to resolve per-CPU addrs:
  * dst_reg = src_reg + <percpu_base_off>
  * BPF_ADDR_PERCPU is used as a special insn->off value.
@@ -208,6 +214,9 @@ void print_bpf_insn(const struct bpf_insn_cbs *cbs,
 			verbose(cbs->private_data, "(%02x) r%d = addr_space_cast(r%d, %u, %u)",
 				insn->code, insn->dst_reg,
 				insn->src_reg, ((u32)insn->imm) >> 16, (u16)insn->imm);
+		} else if (is_typed_arena_cast(insn)) {
+			verbose(cbs->private_data, "(%02x) r%d = typed_arena_cast(r%d, %d)",
+				insn->code, insn->dst_reg, insn->src_reg, insn->imm);
 		} else if (is_mov_percpu_addr(insn)) {
 			verbose(cbs->private_data, "(%02x) r%d = &(void __percpu *)(r%d)",
 				insn->code, insn->dst_reg, insn->src_reg);

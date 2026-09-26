@@ -876,6 +876,39 @@ apply_patch_buffer:
  *     struct __sk_buff    -> struct sk_buff
  *     struct bpf_sock_ops -> struct sock
  */
+/*
+ * Replace every typed_arena_cast with the sanitizing sequence of the typed
+ * arena the verifier registered for it. The type is part of the instruction,
+ * so a cast has exactly one typed arena by the time it gets here.
+ */
+int bpf_lower_typed_arena_insns(struct bpf_verifier_env *env)
+{
+	struct bpf_insn *insn = env->prog->insnsi;
+	int i, cnt, delta = 0, insn_cnt = env->prog->len;
+	const struct bpf_typed_arena *ta;
+	struct bpf_insn insn_buf[8];
+	struct bpf_prog *new_prog;
+
+	for (i = 0; i < insn_cnt; i++, insn++) {
+		if (!insn_is_typed_arena_cast(insn))
+			continue;
+		ta = env->insn_aux_data[i + delta].typed_arena;
+		if (!ta) {
+			verifier_bug(env, "typed_arena_cast at insn %d has no typed arena", i);
+			return -EFAULT;
+		}
+		cnt = bpf_typed_arena_cast_insns(ta, insn->dst_reg, insn->src_reg, insn_buf);
+		new_prog = bpf_patch_insn_data(env, i + delta, insn_buf, cnt);
+		if (!new_prog)
+			return -ENOMEM;
+		delta += cnt - 1;
+		env->prog = new_prog;
+		insn = new_prog->insnsi + i + delta;
+	}
+
+	return 0;
+}
+
 int bpf_convert_ctx_accesses(struct bpf_verifier_env *env)
 {
 	struct bpf_subprog_info *subprogs = env->subprog_info;

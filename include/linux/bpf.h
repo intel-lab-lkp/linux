@@ -945,6 +945,9 @@ enum bpf_type_flag {
 	/* DYNPTR points to file */
 	DYNPTR_TYPE_FILE	= BIT(20 + BPF_BASE_TYPE_BITS),
 
+	/* MEM is an object in a typed arena, reached through a native pointer. */
+	MEM_ARENA		= BIT(21 + BPF_BASE_TYPE_BITS),
+
 	__BPF_TYPE_FLAG_MAX,
 	__BPF_TYPE_LAST_FLAG	= __BPF_TYPE_FLAG_MAX - 1,
 };
@@ -1916,6 +1919,9 @@ struct bpf_prog_aux {
 	u64 prog_array_member_cnt; /* counts how many times as member of prog_array */
 	struct mutex ext_mutex; /* mutex for freplace_link_cnt and prog_array_member_cnt */
 	struct bpf_arena *arena;
+	/* typed arenas this program casts to or allocates from; referenced until the load fails */
+	struct bpf_typed_arena **typed_arenas;
+	u32 typed_arena_cnt;
 	void (*recursion_detected)(struct bpf_prog *prog); /* callback if recursion is detected */
 	/* BTF_KIND_FUNC_PROTO for valid attach_btf_id */
 	const struct btf_type *attach_func_proto;
@@ -1990,6 +1996,17 @@ struct bpf_prog_aux {
 };
 
 #define BPF_NR_CONTEXTS        4       /* normal, softirq, hardirq, NMI */
+
+/* The typed arena of a program-BTF struct this program registered, or NULL. */
+static inline struct bpf_typed_arena *bpf_prog_typed_arena(const struct bpf_prog_aux *aux, u32 btf_id)
+{
+	u32 i;
+
+	for (i = 0; i < aux->typed_arena_cnt; i++)
+		if (aux->typed_arenas[i]->btf_id == btf_id)
+			return aux->typed_arenas[i];
+	return NULL;
+}
 
 struct bpf_prog {
 	u16			pages;		/* Number of allocated pages */

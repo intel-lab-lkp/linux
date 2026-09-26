@@ -319,7 +319,7 @@ static int backtrack_insn(struct bpf_verifier_env *env, int idx, int subseq_idx,
 			 */
 			return 0;
 		} else if (opcode == BPF_MOV) {
-			if (BPF_SRC(insn->code) == BPF_X) {
+			if (BPF_SRC(insn->code) == BPF_X && insn->off != BPF_TYPED_ARENA_CAST) {
 				/* dreg = sreg or dreg = (s8, s16, s32)sreg
 				 * dreg needs precision after this insn
 				 * sreg needs precision before this insn
@@ -328,11 +328,13 @@ static int backtrack_insn(struct bpf_verifier_env *env, int idx, int subseq_idx,
 				if (sreg != BPF_REG_FP)
 					bt_set_reg(bt, sreg);
 			} else {
-				/* dreg = K
+				/* dreg = K, or dreg = typed_arena_cast(sreg, imm)
 				 * dreg needs precision after this insn.
 				 * Corresponding register is already marked
 				 * as precise=true in this verifier state.
-				 * No further markings in parent are necessary
+				 * No further markings in parent are necessary;
+				 * a cast yields a pointer that is safe for any
+				 * value of sreg, which needs no precision.
 				 */
 				bt_clear_reg(bt, dreg);
 			}

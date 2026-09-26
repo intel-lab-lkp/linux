@@ -1423,6 +1423,12 @@ enum {
 
 enum bpf_addr_space_cast {
 	BPF_ADDR_SPACE_CAST = 1,
+	/*
+	 * dst = typed_arena_cast(src, imm): src holds any 64-bit value, dst
+	 * becomes a pointer to the object it names in the typed arena of the
+	 * struct whose program-BTF type ID is imm. dst may be src.
+	 */
+	BPF_TYPED_ARENA_CAST = 2,
 };
 
 /* flags for BPF_MAP_UPDATE_ELEM command */
