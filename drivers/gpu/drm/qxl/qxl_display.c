@@ -350,16 +350,13 @@ static void qxl_crtc_update_monitors_config(struct drm_crtc *crtc,
 			qdev->monitors_config->count = i + 1;
 		if (qdev->primary_bo == qdev->dumb_shadow_bo)
 			head.x += qdev->dumb_heads[i].x;
-	} else if (i > 0) {
+	} else {
 		head.width = 0;
 		head.height = 0;
 		head.x = 0;
 		head.y = 0;
 		if (qdev->monitors_config->count == i + 1)
 			qdev->monitors_config->count = i;
-	} else {
-		DRM_DEBUG_KMS("inactive head 0, skip (%s)\n", reason);
-		return;
 	}
 
 	if (head.width  == qdev->monitors_config->heads[i].width  &&
