@@ -40,20 +40,6 @@
 #define USB_STATUS_NHCIMFCLR      (1 << 10)
 #define USB_STATUS_USBPWRSENSE    (1 << 11)
 
-#if 0
-static void dump_hci_status(struct usb_hcd *hcd, const char *label)
-{
-	unsigned long status = readl_relaxed(hcd->regs + USB_STATUS);
-
-	printk(KERN_DEBUG "%s USB_STATUS = { %s%s%s%s%s}\n", label,
-	     ((status & USB_STATUS_IRQHCIRMTWKUP) ? "IRQHCIRMTWKUP " : ""),
-	     ((status & USB_STATUS_IRQHCIBUFFACC) ? "IRQHCIBUFFACC " : ""),
-	     ((status & USB_STATUS_NIRQHCIM) ? "" : "IRQHCIM "),
-	     ((status & USB_STATUS_NHCIMFCLR) ? "" : "HCIMFCLR "),
-	     ((status & USB_STATUS_USBPWRSENSE) ? "USBPWRSENSE " : ""));
-}
-#endif
-
 static int ohci_sa1111_reset(struct usb_hcd *hcd)
 {
 	struct ohci_hcd *ohci = hcd_to_ohci(hcd);
