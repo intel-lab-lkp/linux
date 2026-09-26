@@ -218,6 +218,7 @@ enum btf_field_type {
 	BPF_RES_SPIN_LOCK = (1 << 12),
 	BPF_TASK_WORK  = (1 << 13),
 	BPF_RCU_HEAD   = (1 << 14),
+	BPF_TYPED_PTR  = (1 << 15),
 };
 
 enum bpf_cgroup_storage_type {
@@ -451,6 +452,8 @@ static inline const char *btf_field_type_name(enum btf_field_type type)
 		return "bpf_task_work";
 	case BPF_RCU_HEAD:
 		return "bpf_rcu_head";
+	case BPF_TYPED_PTR:
+		return "typed_ptr";
 	default:
 		WARN_ON_ONCE(1);
 		return "unknown";
@@ -478,6 +481,7 @@ static inline u32 btf_field_type_size(enum btf_field_type type)
 	case BPF_KPTR_REF:
 	case BPF_KPTR_PERCPU:
 	case BPF_UPTR:
+	case BPF_TYPED_PTR:
 		return sizeof(u64);
 	case BPF_LIST_HEAD:
 		return sizeof(struct bpf_list_head);
@@ -514,6 +518,7 @@ static inline u32 btf_field_type_align(enum btf_field_type type)
 	case BPF_KPTR_REF:
 	case BPF_KPTR_PERCPU:
 	case BPF_UPTR:
+	case BPF_TYPED_PTR:
 		return __alignof__(u64);
 	case BPF_LIST_HEAD:
 		return __alignof__(struct bpf_list_head);
@@ -562,6 +567,7 @@ static inline void bpf_obj_init_field(const struct btf_field *field, void *addr)
 	case BPF_UPTR:
 	case BPF_TASK_WORK:
 	case BPF_RCU_HEAD:
+	case BPF_TYPED_PTR:
 		break;
 	default:
 		WARN_ON_ONCE(1);
@@ -947,6 +953,12 @@ enum bpf_type_flag {
 
 	/* MEM is an object in a typed arena, reached through a native pointer. */
 	MEM_ARENA		= BIT(21 + BPF_BASE_TYPE_BITS),
+
+	/*
+	 * MEM_ARENA pointer as loaded from a typed pointer field: an object of
+	 * the type or 0, not yet masked into its slot.
+	 */
+	PTR_UNSANITIZED		= BIT(22 + BPF_BASE_TYPE_BITS),
 
 	__BPF_TYPE_FLAG_MAX,
 	__BPF_TYPE_LAST_FLAG	= __BPF_TYPE_FLAG_MAX - 1,

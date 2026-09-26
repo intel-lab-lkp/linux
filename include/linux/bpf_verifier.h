@@ -1475,6 +1475,12 @@ static inline bool type_is_local_obj(u32 type)
 	return type & (MEM_ALLOC | MEM_ARENA);
 }
 
+/* A typed arena pointer as a typed pointer field holds it, not yet rounded into its slot. */
+static inline bool type_is_unsanitized_arena_obj(u32 type)
+{
+	return type_is_typed_arena_obj(type) && type_flag(type) & PTR_UNSANITIZED;
+}
+
 static inline bool insn_is_typed_arena_cast(const struct bpf_insn *insn)
 {
 	return insn->code == (BPF_ALU64 | BPF_MOV | BPF_X) && insn->off == BPF_TYPED_ARENA_CAST;

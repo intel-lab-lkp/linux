@@ -688,6 +688,7 @@ void btf_record_free(struct btf_record *rec)
 		case BPF_WORKQUEUE:
 		case BPF_TASK_WORK:
 		case BPF_RCU_HEAD:
+		case BPF_TYPED_PTR:
 			/* Nothing to release */
 			break;
 		default:
@@ -743,6 +744,7 @@ struct btf_record *btf_record_dup(const struct btf_record *rec)
 		case BPF_WORKQUEUE:
 		case BPF_TASK_WORK:
 		case BPF_RCU_HEAD:
+		case BPF_TYPED_PTR:
 			/* Nothing to acquire */
 			break;
 		default:
@@ -877,6 +879,7 @@ void bpf_obj_free_fields(const struct btf_record *rec, void *obj)
 		case BPF_RB_NODE:
 		case BPF_REFCOUNT:
 		case BPF_RCU_HEAD:
+		case BPF_TYPED_PTR:
 			break;
 		default:
 			WARN_ON_ONCE(1);

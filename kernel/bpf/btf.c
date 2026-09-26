@@ -272,6 +272,8 @@ struct btf {
 	struct btf_struct_metas *struct_meta_tab;
 	struct btf_struct_ops_tab *struct_ops_tab;
 	struct btf_layout *layout;
+	/* structs with special fields, closed over plain pointers to them; see btf_find_kptr() */
+	unsigned long *typed_structs;
 
 	/* split BTF support */
 	struct btf *base_btf;
@@ -1890,6 +1892,7 @@ static void btf_free_struct_ops_tab(struct btf *btf)
 static void btf_free(struct btf *btf)
 {
 	btf_free_struct_meta_tab(btf);
+	bitmap_free(btf->typed_structs);
 	btf_free_dtor_kfunc_tab(btf);
 	btf_free_kfunc_set_tab(btf);
 	btf_free_struct_ops_tab(btf);
@@ -3578,6 +3581,11 @@ bool btf_type_is_arena_ptr(const struct btf *btf, const struct btf_type *t)
 	return false;
 }
 
+static bool btf_struct_is_typed(const struct btf *btf, u32 id)
+{
+	return btf->typed_structs && id < btf_nr_types(btf) && test_bit(id, btf->typed_structs);
+}
+
 static int btf_find_kptr(const struct btf *btf, const struct btf_type *t,
 			 u32 off, int sz, struct btf_field_info *info, u32 field_mask)
 {
@@ -3589,6 +3597,7 @@ static int btf_find_kptr(const struct btf *btf, const struct btf_type *t,
 	};
 	struct btf_type_tag_walk_ctx ctx;
 	enum btf_field_type type = 0;
+	const struct btf_type *ptr;
 	int err;
 	u32 res_id;
 
@@ -3598,6 +3607,7 @@ static int btf_find_kptr(const struct btf *btf, const struct btf_type *t,
 	/* For PTR, sz is always == 8 */
 	if (!btf_type_is_ptr(t))
 		return BTF_FIELD_IGNORE;
+	ptr = t;
 
 	ctx.t = t;
 	err = btf_type_tag_walk(btf, &ctx, kptr_type_tags,
@@ -3608,6 +3618,15 @@ static int btf_find_kptr(const struct btf *btf, const struct btf_type *t,
 	t = ctx.t;
 	res_id = ctx.id;
 	type = ctx.res;
+
+	/*
+	 * A plain pointer to a struct that has a typed arena is a typed pointer
+	 * field: an object of that struct, or NULL, whatever the program wrote.
+	 * Arena pointers are user addresses and stay plain scalars.
+	 */
+	if (!type && field_mask & BPF_TYPED_PTR && __btf_type_is_struct(t) &&
+	    !btf_type_is_arena_ptr(btf, ptr) && btf_struct_is_typed(btf, res_id))
+		type = BPF_TYPED_PTR;
 
 	if (!(type & field_mask))
 		return BTF_FIELD_IGNORE;
@@ -3748,7 +3767,7 @@ static int btf_get_field_type(const struct btf *btf, const struct btf_type *var_
 	}
 
 	/* Only return BPF_KPTR when all other types with matchable names fail */
-	if (field_mask & (BPF_KPTR | BPF_UPTR) && !__btf_type_is_struct(var_type)) {
+	if (field_mask & (BPF_KPTR | BPF_UPTR | BPF_TYPED_PTR) && !__btf_type_is_struct(var_type)) {
 		type = BPF_KPTR_REF;
 		goto end;
 	}
@@ -3780,6 +3799,7 @@ static int btf_repeat_fields(struct btf_field_info *info, int info_cnt,
 		case BPF_KPTR_REF:
 		case BPF_KPTR_PERCPU:
 		case BPF_UPTR:
+		case BPF_TYPED_PTR:
 		case BPF_LIST_HEAD:
 		case BPF_RB_ROOT:
 			break;
@@ -3915,6 +3935,7 @@ static int btf_find_field_one(const struct btf *btf,
 	case BPF_KPTR_REF:
 	case BPF_KPTR_PERCPU:
 	case BPF_UPTR:
+	case BPF_TYPED_PTR:
 		ret = btf_find_kptr(btf, var_type, off, sz,
 				    info_cnt ? &info[0] : &tmp, field_mask);
 		if (ret < 0)
@@ -4261,6 +4282,11 @@ struct btf_record *btf_parse_fields(const struct btf *btf, const struct btf_type
 			ret = btf_parse_kptr(btf, &rec->fields[i], &info_arr[i]);
 			if (ret < 0)
 				goto end;
+			break;
+		case BPF_TYPED_PTR:
+			/* The pointee is in this BTF, which outlives the record. */
+			rec->fields[i].kptr.btf = (struct btf *)btf;
+			rec->fields[i].kptr.btf_id = info_arr[i].kptr.type_id;
 			break;
 		case BPF_LIST_HEAD:
 			ret = btf_parse_list_head(btf, &rec->fields[i], &info_arr[i]);
@@ -6162,12 +6188,29 @@ static const char * const alloc_obj_fields[] = {
 	"bpf_refcount",
 };
 
+/*
+ * Whether a struct holds a typed pointer field, given the typed structs known
+ * so far. Every struct of the BTF is scanned, kernel structs pulled in from
+ * vmlinux.h included, and the scan can fail on members a typed arena object
+ * could not have, such as pointers with kernel type tags: a failure does not
+ * make a struct typed. A struct that a program registers is parsed again then,
+ * and that parse reports what is wrong with it.
+ */
+static bool btf_struct_has_typed_ptr(const struct btf *btf, const struct btf_type *t)
+{
+	struct btf_field_info info[BTF_FIELDS_MAX];
+
+	return btf_find_field(btf, t, BPF_TYPED_PTR, info, ARRAY_SIZE(info)) > 0;
+}
+
 static struct btf_struct_metas *
 btf_parse_struct_metas(struct bpf_verifier_log *log, struct btf *btf)
 {
 	struct btf_struct_metas *tab = NULL;
+	unsigned long *typed = NULL;
 	struct btf_id_set *aof;
 	int i, n, id, ret;
+	bool changed;
 
 	BUILD_BUG_ON(offsetof(struct btf_id_set, cnt) != 0);
 	BUILD_BUG_ON(sizeof(struct btf_id_set) != sizeof(u32));
@@ -6231,26 +6274,65 @@ btf_parse_struct_metas(struct bpf_verifier_log *log, struct btf *btf)
 	}
 	sort(&aof->ids, aof->cnt, sizeof(aof->ids[0]), btf_id_cmp_func, NULL);
 
+	/*
+	 * The structs with special fields, and their closure over plain
+	 * pointers: a pointer member to a struct with special fields is a typed
+	 * pointer field, itself a special field, so the struct holding it joins
+	 * the set, and so on until nothing changes. A struct whose only pointers
+	 * are to itself, with no special field of its own, never joins. The set
+	 * is published in the btf before the records are parsed, since parsing
+	 * consults it for every pointer member.
+	 */
+	typed = bitmap_zalloc(n, GFP_KERNEL | __GFP_NOWARN);
+	if (!typed) {
+		ret = -ENOMEM;
+		goto free_aof;
+	}
 	for (i = 1; i < n; i++) {
-		struct btf_struct_metas *new_tab;
 		const struct btf_member *member;
-		struct btf_struct_meta *type;
-		struct btf_record *record;
 		const struct btf_type *t;
-		int j, tab_cnt;
+		int j;
 
 		t = btf_type_by_id(btf, i);
 		if (!__btf_type_is_struct(t))
 			continue;
+		for_each_member(j, t, member) {
+			if (btf_id_set_contains(aof, member->type)) {
+				set_bit(i, typed);
+				break;
+			}
+		}
+	}
+	btf->typed_structs = typed;
+	do {
+		changed = false;
+		for (i = 1; i < n; i++) {
+			const struct btf_type *t;
+
+			t = btf_type_by_id(btf, i);
+			if (!__btf_type_is_struct(t) || test_bit(i, typed))
+				continue;
+			cond_resched();
+			if (btf_struct_has_typed_ptr(btf, t)) {
+				set_bit(i, typed);
+				changed = true;
+			}
+		}
+	} while (changed);
+
+	for (i = 1; i < n; i++) {
+		struct btf_struct_metas *new_tab;
+		struct btf_struct_meta *type;
+		struct btf_record *record;
+		const struct btf_type *t;
+		int tab_cnt;
+
+		if (!test_bit(i, typed))
+			continue;
+		t = btf_type_by_id(btf, i);
 
 		cond_resched();
 
-		for_each_member(j, t, member) {
-			if (btf_id_set_contains(aof, member->type))
-				goto parse;
-		}
-		continue;
-	parse:
 		tab_cnt = tab ? tab->cnt : 0;
 		new_tab = krealloc(tab, struct_size(new_tab, types, tab_cnt + 1),
 				   GFP_KERNEL | __GFP_NOWARN);
@@ -6266,10 +6348,12 @@ btf_parse_struct_metas(struct bpf_verifier_log *log, struct btf *btf)
 		type->btf_id = i;
 		record = btf_parse_fields(btf, t, BPF_SPIN_LOCK | BPF_RES_SPIN_LOCK | BPF_LIST_HEAD | BPF_LIST_NODE |
 						  BPF_RB_ROOT | BPF_RB_NODE | BPF_REFCOUNT |
-						  BPF_KPTR, t->size);
+						  BPF_KPTR | BPF_TYPED_PTR, t->size);
 		/* The record cannot be unset, treat it as an error if so */
 		if (IS_ERR_OR_NULL(record)) {
 			ret = PTR_ERR_OR_ZERO(record) ?: -EFAULT;
+			bpf_log(log, "struct %s has an invalid layout of special fields: %d\n",
+				__btf_name_by_offset(btf, t->name_off), ret);
 			goto free;
 		}
 		type->record = record;
@@ -6279,6 +6363,8 @@ btf_parse_struct_metas(struct bpf_verifier_log *log, struct btf *btf)
 	return tab;
 free:
 	btf_struct_metas_free(tab);
+	bitmap_free(typed);
+	btf->typed_structs = NULL;
 free_aof:
 	kfree(aof);
 	return ERR_PTR(ret);
@@ -7782,6 +7868,7 @@ int btf_struct_access(struct bpf_verifier_log *log,
 	u32 id = reg->btf_id;
 	int err;
 
+	t = btf_type_by_id(btf, id);
 	while (type_is_local_obj(reg->type)) {
 		struct btf_struct_meta *meta;
 		struct btf_record *rec;
@@ -7795,6 +7882,25 @@ int btf_struct_access(struct bpf_verifier_log *log,
 			struct btf_field *field = &rec->fields[i];
 			u32 offset = field->offset;
 			if (off < offset + field->size && offset < off + size) {
+				if (field->type == BPF_TYPED_PTR) {
+					/*
+					 * A typed pointer field is only special in a
+					 * typed arena object, where it is read and
+					 * written whole. In an allocated object it is
+					 * the plain pointer member it always was.
+					 */
+					if (!type_is_typed_arena_obj(reg->type))
+						continue;
+					if (off != offset || size != field->size) {
+						bpf_log(log,
+							"typed pointer field of struct %s must be accessed with a 64-bit load or store\n",
+							__btf_name_by_offset(btf, t->name_off));
+						return -EACCES;
+					}
+					*next_btf_id = field->kptr.btf_id;
+					*flag = MEM_ARENA | PTR_UNSANITIZED;
+					return PTR_TO_BTF_ID;
+				}
 				bpf_log(log,
 					"direct access to %s is disallowed\n",
 					btf_field_type_name(field->type));
@@ -7804,7 +7910,6 @@ int btf_struct_access(struct bpf_verifier_log *log,
 		break;
 	}
 
-	t = btf_type_by_id(btf, id);
 	do {
 		err = btf_struct_walk(log, btf, t, off, size, &id, &tmp_flag,
 				      field_name, !type_is_local_obj(reg->type));

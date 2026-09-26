@@ -358,6 +358,9 @@ static bool reg_not_null(struct bpf_verifier_env *env, const struct bpf_reg_stat
 	type = reg->type;
 	if (type_may_be_null(type))
 		return false;
+	/* A typed pointer field holds an object or 0, and its load is neither checked nor masked. */
+	if (type_flag(type) & PTR_UNSANITIZED)
+		return false;
 
 	/*
 	 * The types below guarantee a non-NULL base, an unbounded offset can
@@ -377,6 +380,23 @@ static bool reg_not_null(struct bpf_verifier_env *env, const struct bpf_reg_stat
 		(type == PTR_TO_BTF_ID && is_trusted_reg(env, reg)) ||
 		(type == PTR_TO_MEM && !(reg->type & PTR_UNTRUSTED)) ||
 		type == CONST_PTR_TO_MAP;
+}
+
+/*
+ * @regno is about to serve as an address, or go to a call. A typed arena
+ * pointer loaded from a typed pointer field is not canonical yet: its slice
+ * and slot are what the field's discipline promises, not what the lowering has
+ * masked, and until the lowering learns to sanitize it in place such a use is
+ * refused.
+ */
+static int typed_arena_use(struct bpf_verifier_env *env, int regno)
+{
+	struct bpf_reg_state *reg = &cur_regs(env)[regno];
+
+	if (!type_is_unsanitized_arena_obj(reg->type))
+		return 0;
+	verbose(env, "R%d unsanitized typed arena pointer cannot be dereferenced\n", regno);
+	return -EACCES;
 }
 
 static struct btf_record *reg_btf_record(const struct bpf_reg_state *reg)
@@ -6328,6 +6348,61 @@ static bool type_is_trusted_or_null(struct bpf_verifier_env *env,
 					  "__safe_trusted_or_null");
 }
 
+/*
+ * A typed pointer field of a typed arena object holds a pointer to an object
+ * of the pointee struct, or 0, and nothing else. Only a 64-bit store of a
+ * typed arena pointer to that struct at offset 0, sanitized or not, or of the
+ * constant 0, may write it, and only a plain 64-bit load may read it. The load
+ * yields the value as stored: an unsanitized typed arena pointer, which the
+ * write discipline makes trustworthy without a check.
+ */
+static int check_typed_ptr_field_access(struct bpf_verifier_env *env, struct bpf_reg_state *regs,
+					struct bpf_reg_state *reg, const char *tname, u32 btf_id,
+					enum bpf_access_type atype, int value_regno)
+{
+	struct bpf_insn *insn = &env->prog->insnsi[env->insn_idx];
+	u8 class = BPF_CLASS(insn->code);
+	struct bpf_reg_state *val;
+	struct bpf_typed_arena *ta;
+
+	if (BPF_MODE(insn->code) != BPF_MEM || BPF_SIZE(insn->code) != BPF_DW ||
+	    (class != BPF_LDX && class != BPF_STX && class != BPF_ST)) {
+		verbose(env, "typed pointer field of struct %s must be accessed with a 64-bit load or store\n",
+			tname);
+		return -EACCES;
+	}
+	if (atype == BPF_READ) {
+		/*
+		 * The pointer leads into the pointee's typed arena, which the
+		 * program may never cast to or allocate from: register it here,
+		 * as a cast would, so that the sanitization has a slice to mask
+		 * into and the slice exists for the map's lifetime.
+		 */
+		ta = typed_arena_register(env, btf_id);
+		if (IS_ERR(ta))
+			return PTR_ERR(ta);
+		return mark_btf_ld_reg(env, regs, value_regno, PTR_TO_BTF_ID, reg->btf, btf_id,
+				       MEM_ARENA | PTR_UNSANITIZED);
+	}
+
+	if (class == BPF_ST) {
+		if (!insn->imm)
+			return 0;
+	} else {
+		val = &regs[value_regno];
+		if (val->type == SCALAR_VALUE && tnum_is_const(val->var_off) && !val->var_off.value)
+			return 0;
+		if (type_is_typed_arena_obj(val->type) &&
+		    !(type_flag(val->type) & ~(MEM_ARENA | PTR_UNSANITIZED)) &&
+		    val->btf == reg->btf && val->btf_id == btf_id &&
+		    tnum_is_const(val->var_off) && !val->var_off.value)
+			return 0;
+	}
+	verbose(env, "store into typed pointer field of struct %s expects a typed arena pointer to struct %s or NULL\n",
+		tname, btf_name_by_offset(reg->btf, btf_type_by_id(reg->btf, btf_id)->name_off));
+	return -EACCES;
+}
+
 static int check_ptr_to_btf_access(struct bpf_verifier_env *env,
 				   struct bpf_reg_state *regs, struct bpf_reg_state *reg,
 				   argno_t argno, int off, int size,
@@ -6432,6 +6507,9 @@ static int check_ptr_to_btf_access(struct bpf_verifier_env *env,
 
 	if (ret < 0)
 		return ret;
+
+	if (ret == PTR_TO_BTF_ID && flag & MEM_ARENA)
+		return check_typed_ptr_field_access(env, regs, reg, tname, btf_id, atype, value_regno);
 
 	if (ret != PTR_TO_BTF_ID) {
 		/* just mark; */
@@ -7170,6 +7248,10 @@ static int check_load_mem(struct bpf_verifier_env *env, struct bpf_insn *insn,
 	if (err)
 		return err;
 
+	err = typed_arena_use(env, insn->src_reg);
+	if (err)
+		return err;
+
 	/* check dst operand */
 	err = check_reg_arg(env, insn->dst_reg, DST_OP_NO_MARK);
 	if (err)
@@ -7218,6 +7300,10 @@ static int check_store_reg(struct bpf_verifier_env *env, struct bpf_insn *insn,
 
 	/* check src2 operand */
 	err = check_reg_arg(env, insn->dst_reg, SRC_OP);
+	if (err)
+		return err;
+
+	err = typed_arena_use(env, insn->dst_reg);
 	if (err)
 		return err;
 
@@ -7272,6 +7358,10 @@ static int check_atomic_rmw(struct bpf_verifier_env *env,
 		verbose(env, "R%d leaks addr into mem\n", insn->src_reg);
 		return -EACCES;
 	}
+
+	err = typed_arena_use(env, insn->dst_reg);
+	if (err)
+		return err;
 
 	if (!atomic_ptr_type_ok(env, insn->dst_reg, insn)) {
 		verbose(env, "BPF_ATOMIC stores into R%d %s is not allowed\n",
@@ -9384,6 +9474,13 @@ static int check_func_arg(struct bpf_verifier_env *env, u32 arg, u32 slot, u32 p
 	if (arg_type == ARG_PTR_TO_PROG_AUX) {
 		cur_aux(env)->arg_prog = regno;
 		return 0;
+	}
+
+	/* Every register argument reaches the callee, an ignored one included. */
+	if (regno >= 0) {
+		err = typed_arena_use(env, regno);
+		if (err)
+			return err;
 	}
 
 	if (arg_type == ARG_IGNORE)
@@ -16811,6 +16908,15 @@ static int adjust_reg_min_max_vals(struct bpf_verifier_env *env,
 		aux->prevent_zext = true;
 	}
 
+	/* Arithmetic moves a typed arena pointer within its object, which needs the object. */
+	if (BPF_CLASS(insn->code) == BPF_ALU64) {
+		err = typed_arena_use(env, insn->dst_reg);
+		if (!err && src_reg)
+			err = typed_arena_use(env, insn->src_reg);
+		if (err)
+			return err;
+	}
+
 	if (dst_reg->type != SCALAR_VALUE)
 		ptr_reg = dst_reg;
 
@@ -16948,8 +17054,8 @@ clear_id:
 #define BPF_TYPED_ARENA_FIELDS \
 	(BPF_SPIN_LOCK | BPF_RES_SPIN_LOCK | BPF_TIMER | BPF_KPTR | BPF_LIST_HEAD | \
 	 BPF_LIST_NODE | BPF_RB_ROOT | BPF_RB_NODE | BPF_REFCOUNT | BPF_WORKQUEUE | \
-	 BPF_UPTR | BPF_TASK_WORK | BPF_RCU_HEAD)
-#define BPF_TYPED_ARENA_SUPPORTED_FIELDS BPF_KPTR
+	 BPF_UPTR | BPF_TASK_WORK | BPF_RCU_HEAD | BPF_TYPED_PTR)
+#define BPF_TYPED_ARENA_SUPPORTED_FIELDS (BPF_KPTR | BPF_TYPED_PTR)
 
 /*
  * The size of a struct's typed arena is a declared resource, read from the
@@ -17031,11 +17137,15 @@ static struct bpf_typed_arena *typed_arena_register(struct bpf_verifier_env *env
 		return ERR_PTR(-EOPNOTSUPP);
 	}
 	btf_record_free(record);
-	/* BTF keeps a record for every struct with these fields. */
+	/*
+	 * BTF keeps a record for every struct with these fields as direct
+	 * members; one that only inherits them from a nested struct has none.
+	 */
 	meta = btf_find_struct_meta(btf, btf_id);
 	if (!meta) {
-		verifier_bug(env, "struct %s has special fields but no metadata", tname);
-		return ERR_PTR(-EFAULT);
+		verbose(env, "struct %s has special fields only in a nested struct, which a typed arena does not support\n",
+			tname);
+		return ERR_PTR(-EOPNOTSUPP);
 	}
 
 	err = typed_arena_size(env, btf, t, tname, &size, &value);
@@ -19566,6 +19676,10 @@ static int do_check_insn(struct bpf_verifier_env *env, bool *do_print_state)
 		enum bpf_reg_type dst_reg_type;
 
 		err = check_reg_arg(env, insn->dst_reg, SRC_OP);
+		if (err)
+			return err;
+
+		err = typed_arena_use(env, insn->dst_reg);
 		if (err)
 			return err;
 
