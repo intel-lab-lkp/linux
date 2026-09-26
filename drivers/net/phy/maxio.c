@@ -43,17 +43,19 @@ static int maxio_mae0621a_probe(struct phy_device *phydev)
 
 	ret = device_property_read_u32(dev, "maxio,clk-out-frequency-hz",
 				       &frequency);
-	if (ret == -EINVAL)
-		return 0;
-	if (ret)
-		return ret;
+	if (ret) {
+		/* the property is optional, so ignore -EINVAL */
+		if (ret != -EINVAL)
+			return ret;
+	} else {
+		if (frequency != 125000000) {
+			phydev_err(phydev, "invalid CLKOUT frequency %u\n",
+				   frequency);
+			return -EINVAL;
+		}
 
-	if (frequency != 125000000) {
-		phydev_err(phydev, "invalid CLKOUT frequency %u\n", frequency);
-		return -EINVAL;
+		priv->clk_out_125m = true;
 	}
-
-	priv->clk_out_125m = true;
 
 	return 0;
 }
