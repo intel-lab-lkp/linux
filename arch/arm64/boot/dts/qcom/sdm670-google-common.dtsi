@@ -26,7 +26,9 @@
 /delete-node/ &gpu_mem;
 
 / {
-	aliases { };
+	aliases {
+		serial0 = &uart12;
+	};
 
 	battery: battery {
 		compatible = "simple-battery";
@@ -691,6 +693,10 @@
 			output-low;
 		};
 	};
+};
+
+&uart12 {
+	status = "okay";
 };
 
 &usb_1_hsphy {
