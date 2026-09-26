@@ -582,6 +582,8 @@ struct yt921x_port {
 	u64 rx_frames;
 	u64 tx_frames;
 
+	unsigned short acl_cnt;
+
 #if IS_ENABLED(CONFIG_NET_DSA_YT921X_LEDS)
 	unsigned char led_duty;
 	unsigned short led_cycle;
