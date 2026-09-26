@@ -175,6 +175,8 @@ int bench_futex_wake(int argc, const char **argv)
 	if (!params.fshared)
 		futex_flag = FUTEX_PRIVATE_FLAG;
 
+	futex_set_nbuckets_param(&params);
+
 	printf("Run summary [PID %d]: blocking on %d threads (at [%s] futex %p), "
 	       "waking up %d at a time.\n\n",
 	       getpid(), params.nthreads, params.fshared ? "shared":"private",
