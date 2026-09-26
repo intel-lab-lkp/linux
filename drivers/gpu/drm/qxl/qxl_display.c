@@ -369,8 +369,10 @@ static void qxl_crtc_update_monitors_config(struct drm_crtc *crtc,
 		head.y = crtc->y;
 		if (qdev->monitors_config->count < i + 1)
 			qdev->monitors_config->count = i + 1;
-		if (to_qxl_plane_state(crtc->primary->state)->shadow)
-			head.x += to_qxl_plane_state(crtc->primary->state)->x;
+		if (to_qxl_plane_state(crtc->primary->state)->shadow) {
+			head.x = to_qxl_plane_state(crtc->primary->state)->x;
+			head.y = 0;
+		}
 	} else {
 		head.width = 0;
 		head.height = 0;
@@ -484,23 +486,40 @@ static int qxl_framebuffer_surface_dirty(struct drm_framebuffer *fb,
 
 		drm_for_each_crtc(crtc, &qdev->ddev) {
 			struct drm_plane_state *st;
+			u32 sx, sy, sw, sh;
 
 			st = crtc->primary->state;
 			if (st->fb != fb || !crtc->state->active ||
 			    !to_qxl_plane_state(st)->shadow ||
 			    !to_qxl_plane_state(st)->shadow->is_primary)
 				continue;
+			sx = st->src_x >> 16;
+			sy = st->src_y >> 16;
+			sw = st->src_w >> 16;
+			sh = st->src_h >> 16;
 			for (n = 0; n < num_clips; n++) {
-				struct drm_clip_rect c = clips[n * inc];
+				struct drm_clip_rect *in = clips + n * inc;
+				struct drm_clip_rect c;
+				u32 x1 = max_t(u32, in->x1, sx);
+				u32 y1 = max_t(u32, in->y1, sy);
+				u32 x2 = min_t(u32, in->x2, sx + sw);
+				u32 y2 = min_t(u32, in->y2, sy + sh);
 
+				if (x1 >= x2 || y1 >= y2)
+					continue;
+				c.x1 = x1;
+				c.y1 = y1;
+				c.x2 = x2;
+				c.y2 = y2;
 				qxl_draw_dirty_fb(qdev, fb, qobj, flags, color,
 						  &c, 1, 1,
-						  to_qxl_plane_state(st)->x);
+						  to_qxl_plane_state(st)->x - sx,
+						  -(int)sy);
 			}
 		}
 	} else {
 		qxl_draw_dirty_fb(qdev, fb, qobj, flags, color,
-				  clips, num_clips, inc, 0);
+				  clips, num_clips, inc, 0, 0);
 	}
 
 out_lock_end:
@@ -741,12 +760,17 @@ static void qxl_primary_atomic_update(struct drm_plane *plane,
 	struct qxl_bo *bo = gem_to_qxl_bo(new_state->fb->obj[0]);
 	struct qxl_bo *primary;
 	struct drm_clip_rect norect = {
-	    .x1 = 0,
-	    .y1 = 0,
-	    .x2 = new_state->fb->width,
-	    .y2 = new_state->fb->height
+		.x1 = 0,
+		.y1 = 0,
+		.x2 = new_state->fb->width,
+		.y2 = new_state->fb->height,
 	};
 	uint32_t dumb_shadow_offset = 0;
+	int y_off = 0;
+	u32 src_x = new_state->src_x >> 16;
+	u32 src_y = new_state->src_y >> 16;
+	u32 src_w = new_state->src_w >> 16;
+	u32 src_h = new_state->src_h >> 16;
 
 	if (!qxl_primary_active(state, new_state)) {
 		qxl_primary_atomic_disable(plane, state);
@@ -762,11 +786,18 @@ static void qxl_primary_atomic_update(struct drm_plane *plane,
 		qxl_primary_apply_cursor(qdev, plane->state);
 	}
 
-	if (bo->is_dumb)
-		dumb_shadow_offset = to_qxl_plane_state(new_state)->x;
+	if (bo->is_dumb) {
+		norect.x1 = src_x;
+		norect.y1 = src_y;
+		norect.x2 = src_x + src_w;
+		norect.y2 = src_y + src_h;
+		dumb_shadow_offset =
+			to_qxl_plane_state(new_state)->x - src_x;
+		y_off = -(int)src_y;
+	}
 
 	qxl_draw_dirty_fb(qdev, new_state->fb, bo, 0, 0, &norect, 1, 1,
-			  dumb_shadow_offset);
+			  dumb_shadow_offset, y_off);
 }
 
 static void qxl_cursor_atomic_update(struct drm_plane *plane,
@@ -838,7 +869,6 @@ static int qxl_prepare_shadow(struct drm_plane *plane,
 	drm_for_each_crtc(crtc, plane->dev) {
 		struct drm_plane_state *ps;
 		struct qxl_plane_state *other;
-		struct qxl_bo *bo;
 
 		ps = drm_atomic_get_new_plane_state(state, crtc->primary);
 		if (!qxl_primary_active(state, ps) ||
@@ -847,9 +877,8 @@ static int qxl_prepare_shadow(struct drm_plane *plane,
 		other = to_qxl_plane_state(ps);
 		if (ps == new_state)
 			qps->x = surf.width;
-		bo = gem_to_qxl_bo(ps->fb->obj[0]);
-		surf.width += bo->surf.width;
-		surf.height = max_t(u32, surf.height, bo->surf.height);
+		surf.width += ps->src_w >> 16;
+		surf.height = max_t(u32, surf.height, ps->src_h >> 16);
 		if (other->shadow)
 			shadow = other->shadow;
 	}
