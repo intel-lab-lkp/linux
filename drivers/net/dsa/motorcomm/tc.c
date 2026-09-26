@@ -535,14 +535,14 @@ yt921x_acl_entries_find(struct yt921x_acl_entry *entries, unsigned int *sizep,
 }
 
 static void
-yt921x_acl_rule_set_ports(struct yt921x_acl_rule *aclrule, u16 ord,
+yt921x_acl_rule_set_ports(struct yt921x_acl_rule *aclrule, u16 prio,
 			  u16 ports_mask)
 {
 	struct yt921x_acl_entry *entries = aclrule->entries;
 
 	for (unsigned int i = 0; i < hweight8(aclrule->mask); i++) {
 		entries[i].key[1] |= YT921X_ACL_KEYb_SPORTS(ports_mask) |
-				     YT921X_ACL_KEYb_ORD(ord);
+				     YT921X_ACL_KEYb_PRIO(prio);
 	}
 }
 
@@ -1032,7 +1032,9 @@ yt921x_acl_rule_ext_parse_flow(struct yt921x_acl_rule_ext *ruleext, int port,
 			       const struct flow_cls_offload *cls, bool ingress,
 			       struct yt921x_priv *priv)
 {
+	const unsigned int scale = (U16_MAX + 1) / YT921X_ACL_PRIO_NUM;
 	struct netlink_ext_ack *extack = cls->common.extack;
+	u32 prio = cls->common.prio;
 	int res;
 
 	if (!ingress) {
@@ -1045,6 +1047,15 @@ yt921x_acl_rule_ext_parse_flow(struct yt921x_acl_rule_ext *ruleext, int port,
 		return -EOPNOTSUPP;
 	}
 
+	if (prio == U16_MAX) {
+		prio++;
+	} else if (prio % scale) {
+		NL_SET_ERR_MSG_FMT_MOD(extack,
+				       "Invalid priority %u, must be a multiple of %u",
+				       prio, scale);
+		return -EOPNOTSUPP;
+	}
+
 	res = yt921x_acl_rule_ext_parse_flow_action(ruleext, cls, priv, port);
 	if (res)
 		return res;
@@ -1052,7 +1063,11 @@ yt921x_acl_rule_ext_parse_flow(struct yt921x_acl_rule_ext *ruleext, int port,
 	if (res)
 		return res;
 
-	yt921x_acl_rule_set_ports(&ruleext->r, 0, BIT(port));
+	/* TC prio can't be 0 & TC lowest first -> HW highest first
+	 * map 1...ACL_PRIO_NUM to (ACL_PRIO_NUM - 1)...0
+	 */
+	prio = YT921X_ACL_PRIO_NUM - prio / scale;
+	yt921x_acl_rule_set_ports(&ruleext->r, prio, BIT(port));
 	ruleext->r.tag = cls->cookie;
 	ruleext->r.type = TC_SETUP_CLSFLOWER;
 	return 0;

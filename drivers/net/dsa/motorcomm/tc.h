@@ -88,8 +88,8 @@
 #define   YT921X_ACL_ENTRY_GRPIDm(bin, x)		((x) << (4 * (bin) + 1))
 #define  YT921X_ACL_ENTRY_ENm(bin)		BIT(4 * (bin))
 #define YT921X_ACLn_KEYm(blk, bin)	(0x204000 + 0x200 * (bin) + 8 * (blk))
-#define  YT921X_ACL_KEYb_ORD_M			GENMASK(29, 21)
-#define   YT921X_ACL_KEYb_ORD(x)			FIELD_PREP(YT921X_ACL_KEYb_ORD_M, (x))
+#define  YT921X_ACL_KEYb_PRIO_M			GENMASK(29, 21)	/* highest first */
+#define   YT921X_ACL_KEYb_PRIO(x)			FIELD_PREP(YT921X_ACL_KEYb_PRIO_M, (x))
 #define  YT921X_ACL_KEYb_SPORTS_M		GENMASK(20, 10)
 #define   YT921X_ACL_KEYb_SPORTS(x)			FIELD_PREP(YT921X_ACL_KEYb_SPORTS_M, (x))
 #define  YT921X_ACL_KEYb_SPORTn(port)		BIT((port) + 10)
@@ -330,6 +330,7 @@ enum yt921x_l4_type {
 #define YT921X_SHAPE_CIR_MAX	((1 << 18) - 1)
 #define YT921X_SHAPE_CBS_MAX	((1 << 14) - 1)
 
+#define YT921X_ACL_PRIO_NUM	512
 #define YT921X_UDF_NUM		8
 
 struct yt921x_acl_entry {
