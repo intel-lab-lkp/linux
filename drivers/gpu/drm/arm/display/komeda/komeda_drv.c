@@ -73,6 +73,8 @@ static int komeda_platform_probe(struct platform_device *pdev)
 		goto free_mdrv;
 	}
 
+	dev_set_drvdata(dev, mdrv);
+
 	pm_runtime_enable(dev);
 	if (!pm_runtime_enabled(dev)) {
 		err = komeda_dev_resume(mdrv->mdev);
@@ -86,7 +88,6 @@ static int komeda_platform_probe(struct platform_device *pdev)
 		goto destroy_mdev;
 	}
 
-	dev_set_drvdata(dev, mdrv);
 	drm_client_setup(&mdrv->kms->base, NULL);
 
 	return 0;
