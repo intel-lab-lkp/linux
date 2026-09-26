@@ -12294,6 +12294,22 @@ int smb3_decrypt_req(struct ksmbd_work *work)
 	if (rc)
 		return rc;
 
+	/*
+	 * The decryption key is selected by the transform header SessionId,
+	 * while the request is authorized under the session named in the
+	 * decrypted inner header. Per MS-SMB2 the two must match; verify
+	 * that here and drop the connection on mismatch. A compression
+	 * transform payload carries the session id only after
+	 * decompression, so it is not covered by this check.
+	 */
+	if (((struct smb2_hdr *)iov[1].iov_base)->ProtocolId ==
+	    SMB2_PROTO_NUMBER &&
+	    le64_to_cpu(tr_hdr->SessionId) !=
+	    le64_to_cpu(((struct smb2_hdr *)iov[1].iov_base)->SessionId)) {
+		pr_err_ratelimited("SessionId mismatch between transform and inner header\n");
+		return -ECONNABORTED;
+	}
+
 	/* Drop the AEAD authentication tag from the inner RFC1002 frame. */
 	memmove(buf + 4, iov[1].iov_base, original_msg_size);
 	*(__be32 *)buf = cpu_to_be32(original_msg_size);
