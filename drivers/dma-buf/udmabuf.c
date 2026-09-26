@@ -139,9 +139,13 @@ static struct sg_table *get_sg_table(struct device *dev, struct dma_buf *buf,
 	if (!sg)
 		return ERR_PTR(-ENOMEM);
 
-	ret = sg_alloc_table_from_pages(sg, ubuf->pages, ubuf->pagecount, 0,
-					ubuf->pagecount << PAGE_SHIFT,
-					GFP_KERNEL);
+	/* The SG allocator requires a segment limit of at least PAGE_SIZE. */
+	ret = sg_alloc_table_from_pages_segment(sg, ubuf->pages, ubuf->pagecount,
+						0, ubuf->pagecount << PAGE_SHIFT,
+						max_t(unsigned int,
+						      dma_get_max_seg_size(dev),
+						      PAGE_SIZE),
+						GFP_KERNEL);
 	if (ret < 0)
 		goto err_alloc;
 
