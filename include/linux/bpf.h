@@ -45,6 +45,7 @@ struct bpf_prog;
 struct bpf_prog_aux;
 struct bpf_map;
 struct bpf_arena;
+struct bpf_typed_arena;
 struct sock;
 struct seq_file;
 struct btf;
@@ -274,6 +275,67 @@ struct btf_record {
 	int rcu_head_off;
 	struct btf_field fields[];
 };
+
+/*
+ * Typed arenas: kernel-only object storage next to an arena map. A program-BTF
+ * struct with special fields that a program casts to, or allocates, gets a
+ * typed arena: a power-of-two slice of the map's typed region, naturally
+ * aligned, holding one object per power-of-two slot. Objects are reached
+ * through native kernel pointers that the verifier constructs; a cast masks
+ * any 64-bit value into a slot of the slice, so every value names an object
+ * of the type. The chunk, max(slot, page), is the unit of backing: a chunk no
+ * program allocated reads as the zeroed scratch chunk, one dummy object per
+ * slot, once an access faults it in. The chunks bitmap marks every chunk that
+ * holds a mapping, real or scratch; pending marks the chunks whose release is
+ * queued, which stay mapped and marked until it has run. record is the
+ * struct's own special-field record, from the BTF that is retained here.
+ */
+#define BPF_TYPED_ARENA_SIZE_TAG "typed_arena_size:"
+#define BPF_TYPED_ARENA_DEFAULT_SIZE SZ_128M
+
+struct bpf_typed_arena {
+	struct list_head node;
+	struct bpf_map *map;
+	refcount_t refcnt;
+	struct btf *btf;
+	u32 btf_id;
+	u8 slot_shift;
+	u8 chunk_shift;
+	u8 size_shift;
+	void *base;
+	void *scratch;
+	struct page **scratch_pages;
+	unsigned long *chunks;
+	unsigned long *pending;
+	const struct btf_record *record;
+};
+
+static inline u64 bpf_typed_arena_size(const struct bpf_typed_arena *ta)
+{
+	return 1ull << ta->size_shift;
+}
+
+static inline u32 bpf_typed_arena_slot(const struct bpf_typed_arena *ta)
+{
+	return 1u << ta->slot_shift;
+}
+
+static inline u32 bpf_typed_arena_chunk(const struct bpf_typed_arena *ta)
+{
+	return 1u << ta->chunk_shift;
+}
+
+/* The cast mask keeps the slot index and drops the offset within the slot and the bits above the slice. */
+static inline u64 bpf_typed_arena_mask(const struct bpf_typed_arena *ta)
+{
+	return bpf_typed_arena_size(ta) - bpf_typed_arena_slot(ta);
+}
+
+struct bpf_typed_arena *bpf_typed_arena_get(struct bpf_map *map, struct btf *btf, u32 btf_id,
+					    const struct btf_record *record, u64 size);
+void bpf_typed_arena_put(struct bpf_map *map, struct bpf_typed_arena *ta);
+int bpf_typed_arena_cast_insns(const struct bpf_typed_arena *ta, u8 dst, u8 src,
+			       struct bpf_insn *buf);
 
 /* Non-opaque version of bpf_rb_node in uapi/linux/bpf.h */
 struct bpf_rb_node_kern {

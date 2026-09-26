@@ -40,11 +40,33 @@
  * bpf program can allocate a page via bpf_arena_alloc_pages() kfunc
  * which will insert it into kernel vm_area.
  * The later fault-in from user space will populate that page into user vma.
+ *
+ * Ahead of the lower guard, the same vm_area holds the typed arena region, a
+ * kernel-only space user space never maps:
+ *
+ *   [ typed region 4 GiB ][ GUARD_SZ/2 ][ raw window 4 GiB ][ GUARD_SZ/2 ]
+ *   ^ kern_vm->addr                     ^ kern_vm_start
+ *
+ * A program-BTF struct with special fields that a program casts to gets a
+ * typed arena there: a power-of-two slice holding one object per power-of-two
+ * slot, reached through native kernel pointers. The region is aligned to its
+ * size and a slice sits at a multiple of its own size, so the slice is aligned
+ * to itself and a cast is a mask and an add: any 64-bit value masked with the
+ * slice's size less its slot, plus the base, is an object of the slice. Raw
+ * arena pointers and typed pointers never mix: a typed access is bounded by
+ * its slice, so the guard between the region and the window keeps it off the
+ * window, and the window's 32-bit offsets cannot reach the region.
  */
 
 /* number of bytes addressable by LDX/STX insn with 16-bit 'off' field */
 #define GUARD_SZ round_up(1ull << sizeof_field(struct bpf_insn, off) * 8, PAGE_SIZE << 1)
-#define KERN_VM_SZ (SZ_4G + GUARD_SZ)
+/*
+ * A slice is at most half the region: the cast masks with the slice's size
+ * less its slot, which must be a positive 32-bit immediate.
+ */
+#define TYPED_ARENA_REGION_SZ SZ_4G
+#define TYPED_ARENA_MAX_SZ SZ_2G
+#define KERN_VM_SZ (TYPED_ARENA_REGION_SZ + SZ_4G + GUARD_SZ)
 
 static void arena_free_pages(struct bpf_arena *arena, long uaddr, long page_cnt, bool sleepable);
 
@@ -60,7 +82,11 @@ struct bpf_arena {
 	/* number of pages currently populated in the arena */
 	u64 nr_pages;
 	struct list_head vma_list;
-	/* protects vma_list */
+	/* typed arenas in address order; mutated under lock, walked under RCU */
+	struct list_head typed_arenas;
+	/* memory of the typed arenas fixed at registration, for accounting */
+	u64 typed_arena_mem;
+	/* protects vma_list and typed_arenas */
 	struct mutex lock;
 	u64 zap_gen;
 	struct mutex zap_mutex;
@@ -78,9 +104,14 @@ struct arena_free_span {
 	u32 page_cnt;
 };
 
+static unsigned long typed_arena_region(struct bpf_arena *arena)
+{
+	return (unsigned long)arena->kern_vm->addr;
+}
+
 u64 bpf_arena_get_kern_vm_start(struct bpf_arena *arena)
 {
-	return arena ? (u64) (long) arena->kern_vm->addr + GUARD_SZ / 2 : 0;
+	return arena ? typed_arena_region(arena) + TYPED_ARENA_REGION_SZ + GUARD_SZ / 2 : 0;
 }
 
 u64 bpf_arena_get_user_vm_start(struct bpf_arena *arena)
@@ -263,6 +294,236 @@ static int populate_pgtable_except_pte(struct bpf_arena *arena)
 				   SZ_4G + GUARD_SZ / 2, apply_range_set_cb, NULL);
 }
 
+static unsigned long typed_arena_nr_chunks(const struct bpf_typed_arena *ta)
+{
+	return bpf_typed_arena_size(ta) >> ta->chunk_shift;
+}
+
+/* A chunk is one allocation of this order: a multi-page object is contiguous in the direct map. */
+static unsigned int typed_arena_chunk_order(const struct bpf_typed_arena *ta)
+{
+	return ta->chunk_shift - PAGE_SHIFT;
+}
+
+/*
+ * The memory a typed arena takes for the map's lifetime: a page table entry
+ * per page of the slice and the two chunk bitmaps.
+ */
+static u64 typed_arena_static_mem(const struct bpf_typed_arena *ta)
+{
+	return (bpf_typed_arena_size(ta) >> PAGE_SHIFT) * sizeof(pte_t) +
+	       2 * BITS_TO_LONGS(typed_arena_nr_chunks(ta)) * sizeof(long);
+}
+
+/*
+ * First-fit search for a slice of the region aligned to its own size. The
+ * registry is sorted by address, so its gaps are visited in order.
+ */
+static s64 typed_arena_find_slice(struct bpf_arena *arena, u64 size)
+{
+	unsigned long region = typed_arena_region(arena);
+	struct bpf_typed_arena *ta;
+	u64 off = 0, start;
+
+	list_for_each_entry(ta, &arena->typed_arenas, node) {
+		start = ALIGN(off, size);
+		if (start + size <= (unsigned long)ta->base - region)
+			return start;
+		off = (unsigned long)ta->base - region + bpf_typed_arena_size(ta);
+	}
+	start = ALIGN(off, size);
+	return start + size <= TYPED_ARENA_REGION_SZ ? start : -ENOSPC;
+}
+
+static void typed_arena_insert(struct bpf_arena *arena, struct bpf_typed_arena *ta)
+{
+	struct bpf_typed_arena *pos;
+
+	list_for_each_entry(pos, &arena->typed_arenas, node) {
+		if (pos->base > ta->base) {
+			list_add_tail_rcu(&ta->node, &pos->node);
+			return;
+		}
+	}
+	list_add_tail_rcu(&ta->node, &arena->typed_arenas);
+}
+
+/* Drop the special fields of every object of the chunk mapped at @chunk. */
+static void typed_arena_free_objects(const struct bpf_typed_arena *ta, void *chunk)
+{
+	u32 off;
+
+	for (off = 0; off < bpf_typed_arena_chunk(ta); off += bpf_typed_arena_slot(ta))
+		bpf_obj_free_fields(ta->record, chunk + off);
+}
+
+/*
+ * Free the real chunks of a typed arena at map teardown. A chunk is backed as
+ * a whole by one allocation of its order, so its first entry decides: the
+ * fields of its objects are dropped through the arena mapping, still in
+ * place, and the allocation is returned. The entries are not cleared;
+ * free_vm_area() does that for the whole area.
+ */
+static int typed_arena_teardown_cb(pte_t *ptep, unsigned long addr, void *data)
+{
+	struct bpf_typed_arena *ta = data;
+	pte_t pte = ptep_get(ptep);
+
+	if ((addr - (unsigned long)ta->base) & (bpf_typed_arena_chunk(ta) - 1))
+		return 0;
+	if (!pte_present(pte))
+		return 0;
+	typed_arena_free_objects(ta, (void *)addr);
+	__free_pages(pte_page(pte), typed_arena_chunk_order(ta));
+	return 0;
+}
+
+static void typed_arena_free(struct bpf_arena *arena, struct bpf_typed_arena *ta)
+{
+	WRITE_ONCE(arena->typed_arena_mem, arena->typed_arena_mem - typed_arena_static_mem(ta));
+	apply_to_existing_page_range(&init_mm, (unsigned long)ta->base, bpf_typed_arena_size(ta),
+				     typed_arena_teardown_cb, ta);
+	bitmap_free(ta->chunks);
+	bitmap_free(ta->pending);
+	btf_put(ta->btf);
+	kfree(ta);
+}
+
+/*
+ * Find or create the typed arena of a program-BTF struct. A typed arena is
+ * keyed by the BTF object and the type ID: two programs with different BTF
+ * objects get distinct slices even for structurally equal structs, and one
+ * BTF declares one size for a struct. The caller validated the record and
+ * parsed the size, a power of two between a page and TYPED_ARENA_MAX_SZ. The
+ * slot is the power of two covering the object, the chunk the larger of the
+ * slot and a page, so that a chunk holds whole objects and an object is never
+ * split between a real page and a scratch one. The page tables of the slice
+ * are populated here, in a sleepable context, because a fault on an unbacked
+ * typed page is recovered in atomic context, which cannot allocate them; they
+ * are charged to the map's memory, together with the bitmaps, for the map's
+ * lifetime. The reference returned is dropped with bpf_typed_arena_put().
+ */
+struct bpf_typed_arena *bpf_typed_arena_get(struct bpf_map *map, struct btf *btf, u32 btf_id,
+					    const struct btf_record *record, u64 size)
+{
+	struct bpf_arena *arena = container_of(map, struct bpf_arena, map);
+	const struct btf_type *t = btf_type_by_id(btf, btf_id);
+	struct bpf_typed_arena *ta;
+	u64 slot, chunk;
+	s64 off;
+	int err;
+
+	if (!t || !t->size || !record)
+		return ERR_PTR(-EINVAL);
+	if (!is_power_of_2(size) || size < PAGE_SIZE || size > TYPED_ARENA_MAX_SZ)
+		return ERR_PTR(-EINVAL);
+	slot = roundup_pow_of_two(t->size);
+	chunk = max_t(u64, slot, PAGE_SIZE);
+	if (slot > size || chunk > PAGE_SIZE << MAX_PAGE_ORDER)
+		return ERR_PTR(-E2BIG);
+
+	guard(mutex)(&arena->lock);
+
+	list_for_each_entry(ta, &arena->typed_arenas, node) {
+		if (ta->btf != btf || ta->btf_id != btf_id)
+			continue;
+		refcount_inc(&ta->refcnt);
+		return ta;
+	}
+
+	off = typed_arena_find_slice(arena, size);
+	if (off < 0)
+		return ERR_PTR(off);
+
+	ta = kzalloc(sizeof(*ta), GFP_KERNEL_ACCOUNT);
+	if (!ta)
+		return ERR_PTR(-ENOMEM);
+	ta->base = (void *)(typed_arena_region(arena) + off);
+	ta->size_shift = ilog2(size);
+	ta->slot_shift = ilog2(slot);
+	ta->chunk_shift = ilog2(chunk);
+	ta->chunks = bitmap_zalloc(typed_arena_nr_chunks(ta), GFP_KERNEL_ACCOUNT);
+	ta->pending = bitmap_zalloc(typed_arena_nr_chunks(ta), GFP_KERNEL_ACCOUNT);
+	if (!ta->chunks || !ta->pending) {
+		err = -ENOMEM;
+		goto free;
+	}
+	err = apply_to_page_range(&init_mm, (unsigned long)ta->base, size, apply_range_set_cb, NULL);
+	if (err)
+		goto free;
+	refcount_set(&ta->refcnt, 1);
+	ta->map = map;
+	btf_get(btf);
+	ta->btf = btf;
+	ta->btf_id = btf_id;
+	ta->record = record;
+	typed_arena_insert(arena, ta);
+	WRITE_ONCE(arena->typed_arena_mem, arena->typed_arena_mem + typed_arena_static_mem(ta));
+	return ta;
+
+free:
+	bitmap_free(ta->chunks);
+	bitmap_free(ta->pending);
+	kfree(ta);
+	return ERR_PTR(err);
+}
+
+/*
+ * Drop a reference taken by bpf_typed_arena_get(). Only a program whose load
+ * was rejected drops its references; a program that loaded keeps the typed
+ * arena alive for the map's lifetime, so that its objects survive program
+ * reloads. The last reference retracts the slice. Its page tables stay
+ * populated until the map is freed and serve the next slice placed there.
+ */
+void bpf_typed_arena_put(struct bpf_map *map, struct bpf_typed_arena *ta)
+{
+	struct bpf_arena *arena = container_of(map, struct bpf_arena, map);
+
+	guard(mutex)(&arena->lock);
+	if (!refcount_dec_and_test(&ta->refcnt))
+		return;
+	/*
+	 * No loaded program holds a pointer into a typed arena it did not
+	 * register, so nothing can fault in this slice; walkers of the registry
+	 * can still be stepping past this node.
+	 */
+	list_del_rcu(&ta->node);
+	synchronize_rcu();
+	typed_arena_free(arena, ta);
+}
+
+/*
+ * Lower a typed_arena_cast to plain BPF: dst = (src & mask) + base. The mask
+ * is the slice's size less its slot: it rounds any value down to a slot and,
+ * as a positive 64-bit AND, clears everything above the slice, so every input
+ * lands on an object of the type. The base is aligned to the slice's size, so
+ * nothing needs subtracting first. Return the number of instructions written.
+ */
+int bpf_typed_arena_cast_insns(const struct bpf_typed_arena *ta, u8 dst, u8 src,
+			       struct bpf_insn *buf)
+{
+	struct bpf_insn base[2] = { BPF_LD_IMM64(BPF_REG_AX, (unsigned long)ta->base) };
+	int cnt = 0;
+
+	if (dst != src)
+		buf[cnt++] = BPF_MOV64_REG(dst, src);
+	buf[cnt++] = BPF_ALU64_IMM(BPF_AND, dst, bpf_typed_arena_mask(ta));
+	buf[cnt++] = base[0];
+	buf[cnt++] = base[1];
+	buf[cnt++] = BPF_ALU64_REG(BPF_ADD, dst, BPF_REG_AX);
+	return cnt;
+}
+
+static void typed_arenas_free(struct bpf_arena *arena)
+{
+	struct bpf_typed_arena *ta, *tmp;
+
+	list_for_each_entry_safe(ta, tmp, &arena->typed_arenas, node) {
+		list_del(&ta->node);
+		typed_arena_free(arena, ta);
+	}
+}
+
 static struct bpf_map *arena_map_alloc(union bpf_attr *attr)
 {
 	struct vm_struct *kern_vm;
@@ -293,7 +554,7 @@ static struct bpf_map *arena_map_alloc(union bpf_attr *attr)
 		/* user vma must not cross 32-bit boundary */
 		return ERR_PTR(-ERANGE);
 
-	kern_vm = get_vm_area(KERN_VM_SZ, VM_SPARSE | VM_USERMAP);
+	kern_vm = get_vm_area_align(KERN_VM_SZ, TYPED_ARENA_REGION_SZ, VM_SPARSE | VM_USERMAP);
 	if (!kern_vm)
 		return ERR_PTR(-ENOMEM);
 
@@ -307,6 +568,7 @@ static struct bpf_map *arena_map_alloc(union bpf_attr *attr)
 		arena->user_vm_end = arena->user_vm_start + vm_range;
 
 	INIT_LIST_HEAD(&arena->vma_list);
+	INIT_LIST_HEAD(&arena->typed_arenas);
 	init_llist_head(&arena->free_spans);
 	init_irq_work(&arena->free_irq, arena_free_irq);
 	INIT_WORK(&arena->free_work, arena_free_worker);
@@ -392,6 +654,7 @@ static void arena_map_free(struct bpf_map *map)
 	 */
 	apply_to_existing_page_range(&init_mm, bpf_arena_get_kern_vm_start(arena),
 				     SZ_4G + GUARD_SZ / 2, existing_page_cb, arena);
+	typed_arenas_free(arena);
 	free_vm_area(arena->kern_vm);
 	range_tree_destroy(&arena->rt);
 	__free_page(arena->scratch_page);
@@ -419,7 +682,8 @@ static u64 arena_map_mem_usage(const struct bpf_map *map)
 {
 	struct bpf_arena *arena = container_of(map, struct bpf_arena, map);
 
-	return (u64)READ_ONCE(arena->nr_pages) << PAGE_SHIFT;
+	return ((u64)READ_ONCE(arena->nr_pages) << PAGE_SHIFT) +
+	       READ_ONCE(arena->typed_arena_mem);
 }
 
 struct vma_list {
