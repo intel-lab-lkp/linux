@@ -43,9 +43,9 @@ void futex_print_nbuckets(struct bench_futex_parameters *params)
 				printf("Can't query number of buckets: %m\n");
 				err(EXIT_FAILURE, "prctl(PR_FUTEX_HASH)");
 			}
-			printf("Requested number of hash buckets does not currently used.\n");
-			printf("Requested: %d in usage: %d\n", params->nbuckets, ret);
-			err(EXIT_FAILURE, "prctl(PR_FUTEX_HASH)");
+			printf("Requested number of buckets differs from the number in use.\n");
+			printf("Requested: %d, in use: %d\n", params->nbuckets, ret);
+			errx(EXIT_FAILURE, "prctl(PR_FUTEX_HASH)");
 		}
 		if (params->nbuckets == 0)
 			ret = asprintf(&futex_hash_mode, "Futex hashing: global hash");

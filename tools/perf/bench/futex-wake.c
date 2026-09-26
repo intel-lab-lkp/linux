@@ -89,7 +89,7 @@ static void print_summary(void)
 	double waketime_stddev = stddev_stats(&waketime_stats);
 	unsigned int wakeup_avg = avg_stats(&wakeup_stats);
 
-	printf("Wokeup %d of %d threads in %.4f ms (+-%.2f%%)\n",
+	printf("Woke up %d of %d threads in %.4f ms (+-%.2f%%)\n",
 	       wakeup_avg,
 	       params.nthreads,
 	       waketime_avg / USEC_PER_MSEC,
@@ -223,7 +223,7 @@ int bench_futex_wake(int argc, const char **argv)
 		update_stats(&waketime_stats, runtime_us);
 
 		if (!params.silent) {
-			printf("[Run %d]: Wokeup %d of %d threads in %.4f ms\n",
+			printf("[Run %d]: Woke up %d of %d threads in %.4f ms\n",
 			       j + 1, nwoken, params.nthreads,
 			       runtime_us / (double)USEC_PER_MSEC);
 		}
