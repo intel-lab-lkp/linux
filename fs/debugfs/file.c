@@ -1018,7 +1018,7 @@ ssize_t debugfs_read_file_str(struct file *file, char __user *user_buf,
 			      size_t count, loff_t *ppos)
 {
 	struct dentry *dentry = F_DENTRY(file);
-	char *str, *copy = NULL;
+	char *str, *copy;
 	int copy_len, len;
 	ssize_t ret;
 
@@ -1026,26 +1026,37 @@ ssize_t debugfs_read_file_str(struct file *file, char __user *user_buf,
 	if (unlikely(ret))
 		return ret;
 
-	str = *(char **)file->private_data;
-	len = strlen(str) + 1;
-	copy = kmalloc(len, GFP_KERNEL);
-	if (!copy) {
-		debugfs_file_put(dentry);
-		return -ENOMEM;
+	len = 0;
+	for (;;) {
+		rcu_read_lock();
+		str = rcu_dereference(*(char __rcu **)file->private_data);
+		len = max_t(int, strlen(str) + 1, len);
+		rcu_read_unlock();
+
+		copy = kmalloc(len, GFP_KERNEL);
+		if (!copy) {
+			debugfs_file_put(dentry);
+			return -ENOMEM;
+		}
+
+		rcu_read_lock();
+		str = rcu_dereference(*(char __rcu **)file->private_data);
+		copy_len = strscpy(copy, str, len);
+		rcu_read_unlock();
+
+		if (copy_len >= 0)
+			break;
+
+		kfree(copy);
+		len = PAGE_SIZE;
 	}
 
-	copy_len = strscpy(copy, str, len);
 	debugfs_file_put(dentry);
-	if (copy_len < 0) {
-		kfree(copy);
-		return copy_len;
-	}
 
 	copy[copy_len] = '\n';
-
+	len = copy_len + 1;
 	ret = simple_read_from_buffer(user_buf, count, ppos, copy, len);
 	kfree(copy);
-
 	return ret;
 }
 
