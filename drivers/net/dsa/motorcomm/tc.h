@@ -263,12 +263,26 @@ enum yt921x_l4_type {
 
 #define YT921X_PORTn_RATE(port)		(0x220000 + 4 * (port))
 #define  YT921X_PORT_RATE_GAP_VALUE		GENMASK(4, 0)	/* default 20 */
+#define YT921X_STORM_SLOT		0x220100
+#define  YT921X_STORM_SLOT_SLOT_M		GENMASK(11, 0)
 #define YT921X_METER_SLOT		0x220104
 #define  YT921X_METER_SLOT_SLOT_M		GENMASK(11, 0)
 #define YT921X_PORTn_METER(port)	(0x220108 + 4 * (port))
 #define  YT921X_PORT_METER_EN			BIT(4)
 #define  YT921X_PORT_METER_ID_M			GENMASK(3, 0)
 #define   YT921X_PORT_METER_ID(x)			FIELD_PREP(YT921X_PORT_METER_ID_M, (x))
+#define YT921X_STORM_UNK_MCAST		0x220140
+#define  YT921X_STORM_UNK_MCAST_PORTS_M		GENMASK(10, 0)
+#define  YT921X_STORM_UNK_MCAST_PORT(x)		BIT(x)
+#define YT921X_STORM_CTRLnm(type, port)	(0x220200 + 4 * (11 * (type) + (port)))
+#define  YT921X_STORM_CTRL_CIR_M		GENMASK(31, 13)
+#define   YT921X_STORM_CTRL_CIR(x)			FIELD_PREP(YT921X_STORM_CTRL_CIR_M, (x))
+#define  YT921X_STORM_CTRL_CBS_M		GENMASK(12, 3)
+#define   YT921X_STORM_CTRL_CBS(x)			FIELD_PREP(YT921X_STORM_CTRL_CBS_M, (x))
+#define  YT921X_STORM_CTRL_BYTE_MODE_INCLUDE_GAP	BIT(2)	/* +GAP_VALUE bytes each packet */
+#define  YT921X_STORM_CTRL_PKT_MODE		BIT(1)	/* 0: byte rate mode */
+#define  YT921X_STORM_CTRL_EN			BIT(0)
+#define YT921X_STORM_STATnm(type, port)	(0x220400 + 4 * (11 * (type) + (port)))
 #define YT921X_METERn_CTRL(x)		(0x220800 + 0x10 * (x))
 #define  YT921X_METER_CTRLc_METER_EN		BIT(14)
 #define  YT921X_METER_CTRLc_TOKEN_OVERFLOW_EN	BIT(13)	/* RFC4115: yellow use unused green bw */
@@ -339,6 +353,9 @@ enum yt921x_l4_type {
 #define YT921X_SHAPE_UNIT_MAX	((1 << 3) - 1)
 #define YT921X_SHAPE_CIR_MAX	((1 << 18) - 1)
 #define YT921X_SHAPE_CBS_MAX	((1 << 14) - 1)
+#define YT921X_STORM_SLOT_DEF	100
+#define YT921X_STORM_CIR_MAX	((1 << 19) - 1)
+#define YT921X_STORM_CBS_MAX	((1 << 10) - 1)
 
 #define YT921X_ACL_PRIO_NUM	512
 #define YT921X_UDF_NUM		8

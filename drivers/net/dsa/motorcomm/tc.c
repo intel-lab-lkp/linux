@@ -183,6 +183,41 @@ yt921x_marker_tfm_shape(struct yt921x_marker *marker, u64 rate, u64 burst,
 }
 
 static int
+yt921x_marker_tfm_storm(struct yt921x_marker *marker,
+			const struct flow_action_police *police,
+			struct yt921x_priv *priv, int port)
+{
+	unsigned int slot_ns = priv->storm_slot_ns;
+	bool pkt_mode = !!police->rate_pkt_ps;
+	u64 burst;
+	u64 rate;
+	u32 cbs;
+	u32 cir;
+
+	rate = pkt_mode ? police->rate_pkt_ps : police->rate_bytes_ps;
+	burst = pkt_mode ? police->burst_pkt : police->burst;
+	if (pkt_mode) {
+		rate *= 1024;
+		burst *= 1024;
+	}
+
+	/* 1 token = 1 rate */
+	cir = div_u64(slot_ns * rate, NSEC_PER_SEC);
+	if (cir > YT921X_STORM_CIR_MAX)
+		return -ERANGE;
+	cbs = div_u64(slot_ns * burst, NSEC_PER_SEC);
+	if (cbs > YT921X_STORM_CBS_MAX)
+		return -ERANGE;
+
+	*marker = (typeof(*marker)){
+		.cir = cir,
+		.cbs = cbs,
+		.pkt_mode = pkt_mode,
+	};
+	return 0;
+}
+
+static int
 yt921x_police_validate(const struct flow_action_police *police,
 		       const struct flow_action *action,
 		       const struct flow_action_entry *act,
@@ -550,6 +585,12 @@ struct yt921x_acl_rule_ext {
 	struct yt921x_acl_rule r;
 
 	struct yt921x_marker marker;
+	struct yt921x_marker marker_storm;
+
+	bool non_storm:1;
+	bool marker_storm_set:1;
+	bool storm_type_set:1;
+	unsigned char storm_type;
 };
 
 static int
@@ -597,6 +638,8 @@ yt921x_acl_rule_ext_parse_flow_entries(struct yt921x_acl_rule_ext *ruleext,
 
 			entry->key[0] |= ntohl(match.key->dst);
 			entry->mask[0] |= ntohl(match.mask->dst);
+
+			ruleext->non_storm = true;
 		}
 
 		if (match.mask->src) {
@@ -607,6 +650,8 @@ yt921x_acl_rule_ext_parse_flow_entries(struct yt921x_acl_rule_ext *ruleext,
 
 			entry->key[0] |= ntohl(match.key->src);
 			entry->mask[0] |= ntohl(match.mask->src);
+
+			ruleext->non_storm = true;
 		}
 	}
 
@@ -626,6 +671,8 @@ yt921x_acl_rule_ext_parse_flow_entries(struct yt921x_acl_rule_ext *ruleext,
 
 			entry->key[0] |= ntohl(match.key->dst.s6_addr32[i]);
 			entry->mask[0] |= ntohl(match.mask->dst.s6_addr32[i]);
+
+			ruleext->non_storm = true;
 		}
 
 		for (unsigned int i = 0; i < 4; i++) {
@@ -639,6 +686,8 @@ yt921x_acl_rule_ext_parse_flow_entries(struct yt921x_acl_rule_ext *ruleext,
 
 			entry->key[0] |= ntohl(match.key->src.s6_addr32[i]);
 			entry->mask[0] |= ntohl(match.mask->src.s6_addr32[i]);
+
+			ruleext->non_storm = true;
 		}
 	}
 
@@ -661,6 +710,8 @@ yt921x_acl_rule_ext_parse_flow_entries(struct yt921x_acl_rule_ext *ruleext,
 				 ntohs(match.key->src);
 		entry->mask[0] |= (ntohs(match.mask->dst) << 16) |
 				  ntohs(match.mask->src);
+
+		ruleext->non_storm = true;
 	}
 
 	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_PORTS_RANGE)) {
@@ -684,20 +735,39 @@ yt921x_acl_rule_ext_parse_flow_entries(struct yt921x_acl_rule_ext *ruleext,
 			entry->key[0] |= ntohs(match.key->tp_min.dst) << 16;
 			entry->key[1] |= YT921X_ACL_KEYb_L4_DPORT_RANGE_EN;
 			entry->mask[0] |= ntohs(match.key->tp_max.dst) << 16;
+
+			ruleext->non_storm = true;
 		}
 
 		if (match.mask->tp.src) {
 			entry->key[0] |= ntohs(match.key->tp_min.src);
 			entry->key[1] |= YT921X_ACL_KEYb_L4_SPORT_RANGE_EN;
 			entry->mask[0] |= ntohs(match.key->tp_max.src);
+
+			ruleext->non_storm = true;
 		}
 	}
 
 	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_ETH_ADDRS)) {
+		static const u8 mcast_addr[ETH_ALEN] = {0x01};
 		struct flow_match_eth_addrs match;
 		u32 mask;
 
 		flow_rule_match_eth_addrs(rule, &match);
+
+		if (!ruleext->non_storm) {
+			if (is_broadcast_ether_addr(match.mask->dst) &&
+			    is_broadcast_ether_addr(match.key->dst)) {
+				ruleext->storm_type = YT921X_STORM_BCAST;
+				ruleext->storm_type_set = true;
+			} else if (ether_addr_equal(match.mask->dst, mcast_addr) &&
+				   is_multicast_ether_addr(match.key->dst)) {
+				ruleext->storm_type = YT921X_STORM_MCAST;
+				ruleext->storm_type_set = true;
+			} else {
+				ruleext->non_storm = true;
+			}
+		}
 
 		mask = ethaddr_hi4_to_u32(match.mask->dst);
 		if (mask) {
@@ -781,6 +851,8 @@ yt921x_acl_rule_ext_parse_flow_entries(struct yt921x_acl_rule_ext *ruleext,
 				entry->key[0] |= ntohs(match.key->n_proto);
 				entry->mask[0] |= ntohs(match.mask->n_proto);
 			}
+
+			ruleext->non_storm = true;
 		}
 
 		if (match.mask->ip_proto) {
@@ -820,6 +892,8 @@ yt921x_acl_rule_ext_parse_flow_entries(struct yt921x_acl_rule_ext *ruleext,
 				entry->key[0] |= YT921X_ACL_BINa_MISC_IP_PROTO(match.key->ip_proto);
 				entry->mask[0] |= YT921X_ACL_BINa_MISC_IP_PROTO(match.mask->ip_proto);
 			}
+
+			ruleext->non_storm = true;
 		}
 	}
 
@@ -839,6 +913,8 @@ yt921x_acl_rule_ext_parse_flow_entries(struct yt921x_acl_rule_ext *ruleext,
 								  set);
 			if (!size)
 				goto err;
+
+			ruleext->non_storm = true;
 		}
 		if (match.mask->flags & FLOW_DIS_FIRST_FRAG) {
 			bool set = match.key->flags & FLOW_DIS_FIRST_FRAG;
@@ -847,6 +923,8 @@ yt921x_acl_rule_ext_parse_flow_entries(struct yt921x_acl_rule_ext *ruleext,
 								 set);
 			if (!size)
 				goto err;
+
+			ruleext->non_storm = true;
 		}
 	}
 
@@ -869,6 +947,8 @@ yt921x_acl_rule_ext_parse_flow_entries(struct yt921x_acl_rule_ext *ruleext,
 
 			entry->key[0] |= YT921X_ACL_BINa_MISC_TOS(match.key->tos);
 			entry->mask[0] |= YT921X_ACL_BINa_MISC_TOS(match.mask->tos);
+
+			ruleext->non_storm = true;
 		}
 	}
 
@@ -889,6 +969,8 @@ yt921x_acl_rule_ext_parse_flow_entries(struct yt921x_acl_rule_ext *ruleext,
 
 			entry->key[0] |= YT921X_ACL_BINa_MISC_TCP_FLAGS(ntohs(match.key->flags));
 			entry->mask[0] |= YT921X_ACL_BINa_MISC_TCP_FLAGS(ntohs(match.mask->flags));
+
+			ruleext->non_storm = true;
 		}
 	}
 
@@ -923,7 +1005,10 @@ yt921x_acl_rule_ext_parse_flow_action(struct yt921x_acl_rule_ext *ruleext,
 	int res;
 
 	memset(action, 0, 3 * sizeof(*action));
-	flow_action_for_each(i, act, flow_action)
+	flow_action_for_each(i, act, flow_action) {
+		if (act->id != FLOW_ACTION_POLICE)
+			ruleext->non_storm = true;
+
 		switch (act->id) {
 		case FLOW_ACTION_ACCEPT:
 		case FLOW_ACTION_DROP:
@@ -996,6 +1081,16 @@ yt921x_acl_rule_ext_parse_flow_action(struct yt921x_acl_rule_ext *ruleext,
 			if (res)
 				return res;
 
+			if (!ruleext->non_storm) {
+				res = yt921x_marker_tfm_storm(&ruleext->marker_storm,
+							      police, priv,
+							      port);
+				if (!res)
+					ruleext->marker_storm_set = true;
+				else
+					ruleext->non_storm = true;
+			}
+
 			res = yt921x_marker_tfm_police(&ruleext->marker, police,
 						       0, priv, port, extack);
 			if (res)
@@ -1022,6 +1117,7 @@ fallback:
 				     YT921X_ACL_ACTc_FWD_TRAP;
 			break;
 		}
+	}
 
 	ruleext->r.sw_assisted = !cls->common.skip_sw;
 	return 0;
@@ -1056,6 +1152,9 @@ yt921x_acl_rule_ext_parse_flow(struct yt921x_acl_rule_ext *ruleext, int port,
 		return -EOPNOTSUPP;
 	}
 
+	ruleext->non_storm = false;
+	ruleext->marker_storm_set = false;
+	ruleext->storm_type_set = false;
 	res = yt921x_acl_rule_ext_parse_flow_action(ruleext, cls, priv, port);
 	if (res)
 		return res;
@@ -1488,6 +1587,76 @@ err:
 	return res;
 }
 
+static int
+yt921x_storm_del(struct yt921x_priv *priv, int port, unsigned int type)
+{
+	struct yt921x_port *pp = &priv->ports[port];
+	int res;
+
+	res = yt921x_reg_write(priv, YT921X_STORM_CTRLnm(type, port), 0);
+	/* the kernel never rolls back on failure */
+
+	pp->storm_tags[type] = 0;
+
+	return res;
+}
+
+static int
+yt921x_storm_add(struct yt921x_priv *priv, int port, unsigned long cookie,
+		 unsigned int type, const struct yt921x_marker *marker,
+		 struct netlink_ext_ack *extack)
+{
+	struct yt921x_port *pp = &priv->ports[port];
+	u32 ctrl;
+	int res;
+
+	if (pp->storm_tags[type])
+		return -ENOSPC;
+
+	ctrl = YT921X_STORM_CTRL_EN | YT921X_STORM_CTRL_CBS(marker->cbs) |
+	       YT921X_STORM_CTRL_CIR(marker->cir);
+	if (marker->pkt_mode)
+		ctrl |= YT921X_STORM_CTRL_PKT_MODE;
+	res = yt921x_reg_write(priv, YT921X_STORM_CTRLnm(type, port), ctrl);
+	if (res)
+		return res;
+
+	pp->storm_tags[type] = cookie;
+	return 0;
+}
+
+static int
+yt921x_flower_del(struct yt921x_priv *priv, int port, unsigned long cookie)
+{
+	struct yt921x_port *pp = &priv->ports[port];
+
+	for (unsigned int type = YT921X_STORM_BCAST; type < YT921X_STORM_NUM;
+	     type++)
+		if (pp->storm_tags[type] == cookie)
+			return yt921x_storm_del(priv, port, type);
+
+	return yt921x_acl_del(priv, TC_SETUP_CLSFLOWER, cookie);
+}
+
+static int
+yt921x_flower_add(struct yt921x_priv *priv, int port,
+		  const struct yt921x_acl_rule_ext *ruleext,
+		  struct netlink_ext_ack *extack)
+{
+	int res;
+
+	if (!ruleext->non_storm && ruleext->marker_storm_set &&
+	    ruleext->storm_type_set) {
+		res = yt921x_storm_add(priv, port, ruleext->r.tag,
+				       ruleext->storm_type,
+				       &ruleext->marker_storm, extack);
+		if (res != -ENOSPC)
+			return res;
+	}
+
+	return yt921x_acl_add(priv, ruleext, extack);
+}
+
 int
 yt921x_dsa_cls_flower_stats(struct dsa_switch *ds, int port,
 			    struct flow_cls_offload *cls, bool ingress)
@@ -1511,7 +1680,7 @@ yt921x_dsa_cls_flower_del(struct dsa_switch *ds, int port,
 	int res;
 
 	mutex_lock(&priv->reg_lock);
-	res = yt921x_acl_del(priv, TC_SETUP_CLSFLOWER, cls->cookie);
+	res = yt921x_flower_del(priv, port, cls->cookie);
 	mutex_unlock(&priv->reg_lock);
 
 	return res;
@@ -1532,7 +1701,7 @@ yt921x_dsa_cls_flower_add(struct dsa_switch *ds, int port,
 		return res;
 
 	mutex_lock(&priv->reg_lock);
-	res = yt921x_acl_add(priv, &ruleext, extack);
+	res = yt921x_flower_add(priv, port, &ruleext, extack);
 	mutex_unlock(&priv->reg_lock);
 
 	return res;

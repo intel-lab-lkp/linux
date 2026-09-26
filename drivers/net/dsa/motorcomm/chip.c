@@ -2676,6 +2676,12 @@ static int yt921x_chip_setup_tc(struct yt921x_priv *priv)
 		return res;
 	priv->port_shape_slot_ns = ctrl * op_ns;
 
+	ctrl = YT921X_STORM_SLOT_DEF;
+	res = yt921x_reg_write(priv, YT921X_STORM_SLOT, ctrl);
+	if (res)
+		return res;
+	priv->storm_slot_ns = ctrl * 10 * NSEC_PER_USEC;
+
 	return 0;
 }
 
@@ -2778,6 +2784,11 @@ static int yt921x_chip_setup(struct yt921x_priv *priv)
 
 	res = yt921x_reg_clear_bits(priv, YT921X_SERDES_CTRL,
 				    YT921X_SERDES_CTRL_TEST);
+	if (res)
+		return res;
+
+	res = yt921x_reg_write(priv, YT921X_STORM_UNK_MCAST,
+			       YT921X_STORM_UNK_MCAST_PORTS_M);
 	if (res)
 		return res;
 

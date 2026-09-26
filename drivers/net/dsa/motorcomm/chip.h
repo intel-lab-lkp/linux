@@ -567,6 +567,12 @@ struct yt921x_mib {
 	u64 tx_oam;
 };
 
+enum yt921x_storm_type {
+	YT921X_STORM_BCAST,
+	YT921X_STORM_MCAST,
+	YT921X_STORM_NUM
+};
+
 struct yt921x_port {
 	unsigned char index;
 
@@ -585,6 +591,8 @@ struct yt921x_port {
 	u64 tx_frames;
 
 	unsigned short acl_cnt;
+
+	unsigned long storm_tags[YT921X_STORM_NUM];
 
 #if IS_ENABLED(CONFIG_NET_DSA_YT921X_LEDS)
 	unsigned char led_duty;
@@ -625,6 +633,7 @@ struct yt921x_priv {
 	const struct yt921x_info *info;
 	unsigned int meter_slot_ns;
 	unsigned int port_shape_slot_ns;
+	unsigned int storm_slot_ns;
 	/* cache of dsa_cpu_ports(ds) */
 	u16 cpu_ports_mask;
 	unsigned char cycle_ns;
