@@ -3302,6 +3302,25 @@ struct vm_struct *get_vm_area_caller(unsigned long size, unsigned long flags,
 }
 
 /**
+ * get_vm_area_align - reserve a contiguous kernel virtual area at an aligned start
+ * @size:	 size of the area
+ * @align:	 alignment of the start of the area, a power of two
+ * @flags:	 %VM_IOREMAP for I/O mappings or VM_ALLOC
+ *
+ * Like get_vm_area(), with the start of the area aligned to @align.
+ *
+ * Return: the area descriptor on success or %NULL on failure.
+ */
+struct vm_struct *get_vm_area_align(unsigned long size, unsigned long align,
+				    unsigned long flags)
+{
+	return __get_vm_area_node(size, align, PAGE_SHIFT, flags,
+				  VMALLOC_START, VMALLOC_END,
+				  NUMA_NO_NODE, GFP_KERNEL,
+				  __builtin_return_address(0));
+}
+
+/**
  * find_vm_area - find a continuous kernel virtual area
  * @addr:	  base address
  *
