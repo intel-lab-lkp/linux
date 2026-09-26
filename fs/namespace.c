@@ -2312,9 +2312,11 @@ void drop_collected_paths(const struct path *paths, const struct path *prealloc)
 
 static struct mnt_namespace *alloc_mnt_ns(struct user_namespace *, bool);
 
+/* Consumes the caller's reference to @mnt. */
 void dissolve_on_fput(struct vfsmount *mnt)
 {
-	struct mount *m = real_mount(mnt);
+	struct vfsmount *p __free(mntput) = mnt;
+	struct mount *m = real_mount(p);
 
 	/*
 	 * m used to be the root of anon namespace; if it still is one,
@@ -2339,6 +2341,7 @@ void dissolve_on_fput(struct vfsmount *mnt)
 		lock_mount_hash();
 		umount_tree(m, UMOUNT_CONNECTED);
 		unlock_mount_hash();
+		mntput(no_free_ptr(p));
 	}
 }
 
@@ -3109,7 +3112,7 @@ static struct file *open_detached_copy(struct path *path, unsigned int flags)
 	path->mnt = mntget(&ns->root->mnt);
 	file = dentry_open(path, O_PATH, current_cred());
 	if (IS_ERR(file))
-		dissolve_on_fput(path->mnt);
+		dissolve_on_fput(no_free_ptr(path->mnt));
 	else
 		file->f_mode |= FMODE_NEED_UNMOUNT;
 	return file;
@@ -4566,7 +4569,7 @@ SYSCALL_DEFINE3(fsmount, int, fs_fd, unsigned int, flags,
 	FD_PREPARE(fdf, (flags & FSMOUNT_CLOEXEC) ? O_CLOEXEC : 0,
 		   dentry_open(&new_path, O_PATH, fc->cred));
 	if (fdf.err) {
-		dissolve_on_fput(new_path.mnt);
+		dissolve_on_fput(no_free_ptr(new_path.mnt));
 		return fdf.err;
 	}
 
