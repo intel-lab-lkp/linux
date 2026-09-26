@@ -897,17 +897,34 @@ int bpf_lower_typed_arena_insns(struct bpf_verifier_env *env)
 	for (i = 0; i < insn_cnt; i++, insn++) {
 		aux = &env->insn_aux_data[i + delta];
 		cnt = 0;
-		if (aux->sanitize_needed)
+		if (insn_is_typed_arena_cast(insn)) {
+			/*
+			 * A cast that sanitized on some path lowers to the
+			 * sequence, a no-op on the paths that brought a sanitized
+			 * pointer of the same typed arena. One that only copied
+			 * verified pointers is a move, or nothing at all.
+			 */
+			if (aux->sanitize_needed) {
+				if (!aux->typed_arena) {
+					verifier_bug(env, "typed_arena_cast at insn %d has no typed arena", i);
+					return -EFAULT;
+				}
+				cnt = bpf_typed_arena_cast_insns(aux->typed_arena, insn->dst_reg,
+								 insn->src_reg, insn_buf);
+			} else if (insn->dst_reg != insn->src_reg) {
+				insn_buf[cnt++] = BPF_MOV64_REG(insn->dst_reg, insn->src_reg);
+			} else {
+				int err = verifier_remove_insns(env, i + delta, 1);
+
+				if (err)
+					return err;
+				delta--;
+				insn = env->prog->insnsi + i + delta;
+				continue;
+			}
+		} else if (aux->sanitize_needed) {
 			cnt = bpf_typed_arena_cast_insns(aux->sanitize_arena, aux->sanitize_reg,
 							 aux->sanitize_reg, insn_buf);
-		if (insn_is_typed_arena_cast(insn)) {
-			if (!aux->typed_arena) {
-				verifier_bug(env, "typed_arena_cast at insn %d has no typed arena", i);
-				return -EFAULT;
-			}
-			cnt += bpf_typed_arena_cast_insns(aux->typed_arena, insn->dst_reg,
-							  insn->src_reg, insn_buf + cnt);
-		} else if (cnt) {
 			insn_buf[cnt++] = *insn;
 		}
 		if (!cnt)

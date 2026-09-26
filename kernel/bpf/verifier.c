@@ -17299,12 +17299,50 @@ static struct bpf_typed_arena *typed_arena_register(struct bpf_verifier_env *env
  * of the instruction, so an instruction casts to one type on every path, and
  * the lowering can be chosen once.
  */
+/*
+ * dst = typed_arena_cast(src, imm) makes a trusted pointer to an object of the
+ * struct imm names out of the value in src. What that takes depends on the
+ * value, and the compiler that inserts the cast at every use of a pointer to
+ * the struct cannot tell, since the same struct lives in typed arenas, in
+ * allocated objects, in map values and on the stack. So the verifier decides
+ * per path. A scalar, a raw arena pointer, or a typed arena pointer that is
+ * unsanitized, of another struct, or moved inside its object is sanitized:
+ * dst becomes a pointer to the start of an object of the struct's typed
+ * arena, and the lowering masks and rebases the value. A sanitized pointer of
+ * that typed arena at offset zero is already what the cast makes, so dst is a
+ * copy of src; the sequence is a no-op on it, which lets such a path share
+ * the instruction with sanitizing ones. Any other verified pointer, to an
+ * allocated object, a map value, the stack, or anything else, is copied as it
+ * is, with its state, offset and references: the cast has nothing to add to
+ * what the verifier already knows, and needs no arena and no registration. A
+ * typed arena pointer that may be NULL, an allocation's result, is one of
+ * these: sanitizing it would turn a failed allocation into object 0, so it is
+ * copied and keeps its check.
+ *
+ * The lowering is per instruction and runs on every path through it, so a
+ * path that copies a verified pointer of another kind cannot share the
+ * instruction with a path that sanitizes: the sequence would mask a pointer
+ * that is not in the slice. Such a program is rejected.
+ */
 static int check_typed_arena_cast(struct bpf_verifier_env *env, struct bpf_insn *insn)
 {
 	struct bpf_insn_aux_data *aux = &env->insn_aux_data[env->insn_idx];
 	struct bpf_reg_state *regs = cur_regs(env);
+	struct bpf_reg_state *src = &regs[insn->src_reg];
 	struct bpf_reg_state *dst = &regs[insn->dst_reg];
 	struct bpf_typed_arena *ta;
+
+	if (src->type != SCALAR_VALUE && base_type(src->type) != PTR_TO_ARENA &&
+	    (!type_is_typed_arena_obj(src->type) || type_flag(src->type) & PTR_MAYBE_NULL)) {
+		if (aux->sanitize_needed) {
+			verbose(env, "insn %d casts values that need different treatment on different paths\n",
+				env->insn_idx);
+			return -EINVAL;
+		}
+		aux->sanitize_plain |= BIT(insn->src_reg);
+		*dst = *src;
+		return 0;
+	}
 
 	/* The arena itself needs CAP_PERFMON, so the leak rules already permit a kernel pointer. */
 	if (!env->prog->aux->arena) {
@@ -17319,6 +17357,18 @@ static int check_typed_arena_cast(struct bpf_verifier_env *env, struct bpf_insn 
 	if (IS_ERR(ta))
 		return PTR_ERR(ta);
 	aux->typed_arena = ta;
+
+	if (src->type == (PTR_TO_BTF_ID | MEM_ARENA) && src->btf_id == ta->btf_id &&
+	    tnum_is_const(src->var_off) && !src->var_off.value) {
+		*dst = *src;
+		return 0;
+	}
+	if (aux->sanitize_plain) {
+		verbose(env, "insn %d casts values that need different treatment on different paths\n",
+			env->insn_idx);
+		return -EINVAL;
+	}
+	aux->sanitize_needed = true;
 
 	mark_reg_known_zero(env, regs, insn->dst_reg);
 	dst->type = PTR_TO_BTF_ID | MEM_ARENA;
