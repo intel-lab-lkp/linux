@@ -327,9 +327,16 @@ static int gadget_bind(struct usb_gadget *gadget,
 
 static void gadget_unbind(struct usb_gadget *gadget)
 {
+	unsigned long flags;
 	struct raw_dev *dev = get_gadget_data(gadget);
 
 	set_gadget_data(gadget, NULL);
+
+	/*Avoid dangling pointer in case it remaining references*/
+	spin_lock_irqsave(&dev->lock, flags);
+	dev->gadget = NULL;
+	spin_unlock_irqrestore(&dev->lock, flags);
+
 	/* Matches kref_get() in gadget_bind(). */
 	kref_put(&dev->count, dev_free);
 }
