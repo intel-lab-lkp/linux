@@ -11,6 +11,7 @@
 #include <linux/vmalloc.h>
 #include <linux/pagemap.h>
 #include <asm/tlbflush.h>
+#include <linux/rcupdate_wait.h>
 #include "range_tree.h"
 
 /*
@@ -103,6 +104,9 @@ struct bpf_arena {
 	struct irq_work     free_irq;
 	struct work_struct  free_work;
 	struct llist_head   free_spans;
+	struct irq_work     typed_free_irq;
+	struct work_struct  typed_free_work;
+	struct llist_head   typed_free_spans;
 };
 
 static void arena_free_worker(struct work_struct *work);
@@ -112,6 +116,17 @@ struct arena_free_span {
 	struct llist_node node;
 	unsigned long uaddr;
 	u32 page_cnt;
+};
+
+static void typed_arena_free_worker(struct work_struct *work);
+static void typed_arena_free_irq(struct irq_work *iw);
+
+/* A chunk range of a typed arena whose release is queued. */
+struct typed_arena_free_span {
+	struct llist_node node;
+	struct bpf_typed_arena *ta;
+	u32 coff;
+	u32 chunk_cnt;
 };
 
 static unsigned long typed_arena_region(struct bpf_arena *arena)
@@ -565,6 +580,347 @@ static void typed_arenas_free(struct bpf_arena *arena)
 	}
 }
 
+static bool typed_arena_chunks_free(const struct bpf_typed_arena *ta, unsigned long coff,
+				    unsigned long cnt)
+{
+	return find_next_bit(ta->chunks, coff + cnt, coff) >= coff + cnt;
+}
+
+static bool typed_arena_chunks_taken(const struct bpf_typed_arena *ta, unsigned long coff,
+				     unsigned long cnt)
+{
+	return find_next_zero_bit(ta->chunks, coff + cnt, coff) >= coff + cnt;
+}
+
+static bool typed_arena_chunks_pending(const struct bpf_typed_arena *ta, unsigned long coff,
+				       unsigned long cnt)
+{
+	return find_next_bit(ta->pending, coff + cnt, coff) < coff + cnt;
+}
+
+/*
+ * The bits are set one at a time: the fault path marks a chunk it faults to
+ * scratch with an atomic set from any context, and a word-wide update here
+ * could undo that mark.
+ */
+static void typed_arena_chunks_mark(struct bpf_typed_arena *ta, unsigned long coff,
+				    unsigned long cnt, bool taken)
+{
+	unsigned long i;
+
+	for (i = coff; i < coff + cnt; i++) {
+		if (taken)
+			set_bit(i, ta->chunks);
+		else
+			clear_bit(i, ta->chunks);
+	}
+}
+
+struct typed_install_data {
+	struct bpf_arena *arena;
+	struct page *head;
+	unsigned long start;
+	int i;
+};
+
+/*
+ * The typed arena installer maps the pages of one chunk's allocation and only
+ * fills empty entries: a scratch page is never replaced, see
+ * typed_arena_handle_page_fault(). Pairs with the atomic scratch installer.
+ */
+static int apply_range_set_typed_cb(pte_t *pte, unsigned long addr, void *data)
+{
+	struct typed_install_data *d = data;
+	struct page *page = d->head + ((addr - d->start) >> PAGE_SHIFT);
+
+	if (!ptep_try_set(pte, mk_pte(page, PAGE_KERNEL)))
+		return -EBUSY;
+	d->i++;
+	WRITE_ONCE(d->arena->nr_pages, d->arena->nr_pages + 1);
+	return 0;
+}
+
+struct typed_clear_data {
+	struct bpf_arena *arena;
+	const struct bpf_typed_arena *ta;
+	struct page *head;
+};
+
+/*
+ * Clear the entries of one chunk. A real chunk is one allocation, so the page
+ * at the chunk's first entry is its head, which is reported for freeing once
+ * the mapping is gone; scratch pages are left to the scratch chunk.
+ */
+static int apply_range_clear_typed_cb(pte_t *pte, unsigned long addr, void *data)
+{
+	struct typed_clear_data *d = data;
+	pte_t old_pte;
+	struct page *page;
+
+	old_pte = ptep_get_and_clear(&init_mm, addr, pte);
+	if (pte_none(old_pte) || !pte_present(old_pte))
+		return 0;
+	page = pte_page(old_pte);
+	if (page == typed_arena_scratch_page(d->ta, addr))
+		return 0;
+	if (!((addr - (unsigned long)d->ta->base) & (bpf_typed_arena_chunk(d->ta) - 1)))
+		d->head = page;
+	WRITE_ONCE(d->arena->nr_pages, d->arena->nr_pages - 1);
+	return 0;
+}
+
+/*
+ * Back a chunk range of a typed arena with zeroed objects and return the
+ * address of its first object, or 0. @addr names the chunk of the first
+ * object, or is 0 for any range; *@page_cnt is the request in pages, rounded
+ * up to whole chunks, and receives the count granted. The range is claimed in
+ * the chunk bitmap under the arena's spinlock before anything is installed, so
+ * a chunk the fault path faulted to scratch is skipped by a search, or fails a
+ * fixed request. The fault path marks its chunk without the lock, so it can
+ * still win the race between the claim and the install; the chunks installed
+ * so far are then backed out, the chunk it took stays taken, and a search is
+ * retried a few times while a fixed request fails. Each chunk is one
+ * allocation of its order from the lock-free allocator, which the kfunc needs
+ * because it may run under a spin lock; there is no array of pages to size.
+ */
+static unsigned long typed_arena_alloc_pages(struct bpf_typed_arena *ta, unsigned long addr,
+					     u32 *page_cnt, int node_id)
+{
+	unsigned long base = (unsigned long)ta->base, nr_chunks = typed_arena_nr_chunks(ta);
+	struct bpf_arena *arena = container_of(ta->map, struct bpf_arena, map);
+	unsigned int order = typed_arena_chunk_order(ta);
+	unsigned long chunk = bpf_typed_arena_chunk(ta);
+	struct mem_cgroup *new_memcg, *old_memcg;
+	unsigned long chunk_cnt, coff = 0, start, done, i;
+	struct typed_install_data data;
+	struct typed_clear_data cdata;
+	struct llist_node *pos, *t;
+	struct llist_head freed;
+	unsigned long flags;
+	struct page *head;
+	int ret, attempt = 0;
+
+	if (node_id != NUMA_NO_NODE &&
+	    ((unsigned int)node_id >= nr_node_ids || !node_online(node_id)))
+		return 0;
+	if (!*page_cnt)
+		return 0;
+	chunk_cnt = DIV_ROUND_UP((unsigned long)*page_cnt, typed_arena_chunk_pages(ta));
+	if (chunk_cnt > nr_chunks)
+		return 0;
+	if (addr) {
+		if (addr - base >= bpf_typed_arena_size(ta))
+			return 0;
+		coff = (addr - base) >> ta->chunk_shift;
+		if (chunk_cnt > nr_chunks - coff)
+			return 0;
+	}
+
+	bpf_map_memcg_enter(&arena->map, &old_memcg, &new_memcg);
+retry:
+	if (raw_res_spin_lock_irqsave(&arena->spinlock, flags))
+		goto out;
+
+	if (addr) {
+		if (!typed_arena_chunks_free(ta, coff, chunk_cnt))
+			goto out_unlock;
+	} else {
+		coff = bitmap_find_next_zero_area(ta->chunks, nr_chunks, 0, chunk_cnt, 0);
+		if (coff >= nr_chunks)
+			goto out_unlock;
+	}
+	typed_arena_chunks_mark(ta, coff, chunk_cnt, true);
+	start = base + (coff << ta->chunk_shift);
+
+	data.arena = arena;
+	for (done = 0; done < chunk_cnt; done++) {
+		head = alloc_pages_nolock(__GFP_ACCOUNT, node_id, order);
+		if (!head) {
+			ret = -ENOMEM;
+			goto back_out;
+		}
+		data.head = head;
+		data.start = start + (done << ta->chunk_shift);
+		data.i = 0;
+		ret = apply_to_page_range(&init_mm, data.start, chunk, apply_range_set_typed_cb,
+					  &data);
+		if (ret) {
+			/* The fault path took this chunk: give back the allocation whole. */
+			cdata.arena = arena;
+			cdata.ta = ta;
+			if (data.i)
+				apply_to_existing_page_range(&init_mm, data.start,
+							     (unsigned long)data.i << PAGE_SHIFT,
+							     apply_range_clear_typed_cb, &cdata);
+			free_pages_nolock(head, order);
+			goto back_out;
+		}
+	}
+	flush_vmap_cache(start, chunk_cnt << ta->chunk_shift);
+	raw_res_spin_unlock_irqrestore(&arena->spinlock, flags);
+	bpf_map_memcg_exit(old_memcg, new_memcg);
+	*page_cnt = chunk_cnt * typed_arena_chunk_pages(ta);
+	return start;
+
+back_out:
+	/*
+	 * Back out the chunks installed before the one that failed. On -EBUSY
+	 * that chunk is the one the fault path took, and it keeps its mark.
+	 */
+	init_llist_head(&freed);
+	cdata.arena = arena;
+	cdata.ta = ta;
+	for (i = 0; i < chunk_cnt; i++)
+		if (ret != -EBUSY || i != done)
+			clear_bit(coff + i, ta->chunks);
+	for (i = 0; i < done; i++) {
+		cdata.head = NULL;
+		apply_to_existing_page_range(&init_mm, start + (i << ta->chunk_shift), chunk,
+					     apply_range_clear_typed_cb, &cdata);
+		if (cdata.head)
+			__llist_add(&cdata.head->pcp_llist, &freed);
+	}
+	raw_res_spin_unlock_irqrestore(&arena->spinlock, flags);
+	flush_tlb_kernel_range(start, start + (chunk_cnt << ta->chunk_shift));
+	llist_for_each_safe(pos, t, __llist_del_all(&freed))
+		free_pages_nolock(llist_entry(pos, struct page, pcp_llist), order);
+	if (ret == -EBUSY && !addr && ++attempt < 3)
+		goto retry;
+	goto out;
+
+out_unlock:
+	raw_res_spin_unlock_irqrestore(&arena->spinlock, flags);
+out:
+	bpf_map_memcg_exit(old_memcg, new_memcg);
+	return 0;
+}
+
+/*
+ * Queue the release of the chunks covering a page range of a typed arena. The
+ * chunks stay mapped and marked until the worker has waited for the grace
+ * periods, so that every invocation that started before this call keeps its
+ * objects. Every chunk of the range must be taken, by real pages or by the
+ * fault path, and none of them may have a release queued already: a second
+ * release of a chunk would run after the first has let it be claimed again,
+ * and take it away from its new owner. Releasing a chunk the fault path took
+ * clears its entries, after which it can be claimed or faulted again.
+ */
+static void typed_arena_free_pages(struct bpf_typed_arena *ta, unsigned long addr, u32 page_cnt)
+{
+	unsigned long base = (unsigned long)ta->base, size = bpf_typed_arena_size(ta);
+	struct bpf_arena *arena = container_of(ta->map, struct bpf_arena, map);
+	unsigned long off, first, last, flags;
+	struct typed_arena_free_span *s;
+
+	if (!page_cnt || addr - base >= size)
+		return;
+	off = addr - base;
+	if (page_cnt > (size - off) >> PAGE_SHIFT)
+		return;
+	first = off >> ta->chunk_shift;
+	last = (off + ((unsigned long)page_cnt << PAGE_SHIFT) - 1) >> ta->chunk_shift;
+
+	s = kmalloc_nolock(sizeof(*s), __GFP_ACCOUNT, NUMA_NO_NODE);
+	if (!s)
+		/*
+		 * The chunks stay allocated until the map is freed; nothing can
+		 * be retried from here.
+		 */
+		return;
+	if (raw_res_spin_lock_irqsave(&arena->spinlock, flags))
+		goto free_span;
+	if (!typed_arena_chunks_taken(ta, first, last - first + 1) ||
+	    typed_arena_chunks_pending(ta, first, last - first + 1)) {
+		raw_res_spin_unlock_irqrestore(&arena->spinlock, flags);
+		goto free_span;
+	}
+	/* Only this path and the worker touch the pending bits, both under the lock. */
+	bitmap_set(ta->pending, first, last - first + 1);
+	raw_res_spin_unlock_irqrestore(&arena->spinlock, flags);
+
+	s->ta = ta;
+	s->coff = first;
+	s->chunk_cnt = last - first + 1;
+	llist_add(&s->node, &arena->typed_free_spans);
+	irq_work_queue(&arena->typed_free_irq);
+	return;
+
+free_span:
+	kfree_nolock(s);
+}
+
+/*
+ * Release the queued chunk ranges once every invocation that started before
+ * a release was requested is done with its objects: after an RCU and an RCU
+ * tasks trace grace period, since sleepable programs run under the latter.
+ * The entries are cleared and the marks dropped under the spinlock, chunk by
+ * chunk, then the TLB is flushed and each real chunk's allocation, one
+ * contiguous block, has the special fields of its objects dropped and is
+ * freed. An invocation that casts into the range after the release was
+ * requested races with it: it stays memory safe, and sees the real objects
+ * before the clear and the dummy object after.
+ */
+static void typed_arena_free_worker(struct work_struct *work)
+{
+	struct bpf_arena *arena = container_of(work, struct bpf_arena, typed_free_work);
+	struct mem_cgroup *new_memcg, *old_memcg;
+	struct llist_node *list, *pos, *t, *p, *pn;
+	struct typed_arena_free_span *s;
+	struct typed_clear_data cdata;
+	struct bpf_typed_arena *ta;
+	struct llist_head heads;
+	unsigned long flags, start, i;
+	struct page *head;
+
+	list = llist_del_all(&arena->typed_free_spans);
+	if (!list)
+		return;
+
+	synchronize_rcu_mult(call_rcu, call_rcu_tasks_trace);
+
+	bpf_map_memcg_enter(&arena->map, &old_memcg, &new_memcg);
+	llist_for_each_safe(pos, t, list) {
+		s = llist_entry(pos, struct typed_arena_free_span, node);
+		ta = s->ta;
+		start = (unsigned long)ta->base + ((unsigned long)s->coff << ta->chunk_shift);
+
+		init_llist_head(&heads);
+		cdata.arena = arena;
+		cdata.ta = ta;
+
+		while (raw_res_spin_lock_irqsave(&arena->spinlock, flags))
+			cpu_relax();
+		for (i = 0; i < s->chunk_cnt; i++) {
+			cdata.head = NULL;
+			apply_to_existing_page_range(&init_mm, start + (i << ta->chunk_shift),
+						     bpf_typed_arena_chunk(ta),
+						     apply_range_clear_typed_cb, &cdata);
+			if (cdata.head)
+				__llist_add(&cdata.head->pcp_llist, &heads);
+		}
+		typed_arena_chunks_mark(ta, s->coff, s->chunk_cnt, false);
+		bitmap_clear(ta->pending, s->coff, s->chunk_cnt);
+		raw_res_spin_unlock_irqrestore(&arena->spinlock, flags);
+
+		flush_tlb_kernel_range(start,
+				       start + ((unsigned long)s->chunk_cnt << ta->chunk_shift));
+		llist_for_each_safe(p, pn, __llist_del_all(&heads)) {
+			head = llist_entry(p, struct page, pcp_llist);
+			typed_arena_free_objects(ta, page_address(head));
+			__free_pages(head, typed_arena_chunk_order(ta));
+		}
+		kfree_nolock(s);
+	}
+	bpf_map_memcg_exit(old_memcg, new_memcg);
+}
+
+static void typed_arena_free_irq(struct irq_work *iw)
+{
+	struct bpf_arena *arena = container_of(iw, struct bpf_arena, typed_free_irq);
+
+	schedule_work(&arena->typed_free_work);
+}
+
 static struct bpf_map *arena_map_alloc(union bpf_attr *attr)
 {
 	struct vm_struct *kern_vm;
@@ -613,6 +969,9 @@ static struct bpf_map *arena_map_alloc(union bpf_attr *attr)
 	init_llist_head(&arena->free_spans);
 	init_irq_work(&arena->free_irq, arena_free_irq);
 	INIT_WORK(&arena->free_work, arena_free_worker);
+	init_llist_head(&arena->typed_free_spans);
+	init_irq_work(&arena->typed_free_irq, typed_arena_free_irq);
+	INIT_WORK(&arena->typed_free_work, typed_arena_free_worker);
 	bpf_map_init_from_attr(&arena->map, attr);
 
 	err = bpf_map_alloc_pages(&arena->map, NUMA_NO_NODE, 1, &arena->scratch_page);
@@ -686,6 +1045,8 @@ static void arena_map_free(struct bpf_map *map)
 	/* Ensure no pending deferred frees */
 	irq_work_sync(&arena->free_irq);
 	flush_work(&arena->free_work);
+	irq_work_sync(&arena->typed_free_irq);
+	flush_work(&arena->typed_free_work);
 
 	/*
 	 * free_vm_area() calls remove_vm_area() that calls free_unmap_vmap_area().
@@ -1463,12 +1824,42 @@ __bpf_kfunc int bpf_arena_reserve_pages(void *p__map, void *ptr__ign, u32 page_c
 
 	return arena_reserve_pages(arena, (long)ptr__ign, page_cnt);
 }
+
+/*
+ * The verifier registers the typed arena of local_type_id__k at load, checks
+ * that the map is the program's arena, and replaces the type ID register with
+ * the registered typed arena before the call. addr__ign is a typed pointer
+ * into that arena naming the chunk of the first object, or NULL for any
+ * range; *page_cnt is the request in pages and receives the count granted,
+ * rounded up to whole objects.
+ */
+__bpf_kfunc void *bpf_typed_arena_alloc_pages(void *p__map, u64 local_type_id__k, void *addr__ign,
+					      u32 *page_cnt, int node_id)
+{
+	struct bpf_typed_arena *ta = (struct bpf_typed_arena *)local_type_id__k;
+
+	if (ta->map != p__map)
+		return NULL;
+	return (void *)typed_arena_alloc_pages(ta, (unsigned long)addr__ign, page_cnt, node_id);
+}
+
+__bpf_kfunc void bpf_typed_arena_free_pages(void *p__map, u64 local_type_id__k, void *ptr__ign,
+					    u32 page_cnt)
+{
+	struct bpf_typed_arena *ta = (struct bpf_typed_arena *)local_type_id__k;
+
+	if (ta->map != p__map)
+		return;
+	typed_arena_free_pages(ta, (unsigned long)ptr__ign, page_cnt);
+}
 __bpf_kfunc_end_defs();
 
 BTF_KFUNCS_START(arena_kfuncs)
 BTF_ID_FLAGS(func, bpf_arena_alloc_pages, KF_ARENA_RET | KF_ARENA_ARG2 | KF_SPINLOCK_SAFE)
 BTF_ID_FLAGS(func, bpf_arena_free_pages, KF_ARENA_ARG2 | KF_SPINLOCK_SAFE)
 BTF_ID_FLAGS(func, bpf_arena_reserve_pages, KF_ARENA_ARG2 | KF_SPINLOCK_SAFE)
+BTF_ID_FLAGS(func, bpf_typed_arena_alloc_pages, KF_RET_NULL | KF_SPINLOCK_SAFE)
+BTF_ID_FLAGS(func, bpf_typed_arena_free_pages, KF_SPINLOCK_SAFE)
 BTF_KFUNCS_END(arena_kfuncs)
 
 static const struct btf_kfunc_id_set common_kfunc_set = {

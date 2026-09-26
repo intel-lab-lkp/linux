@@ -216,6 +216,7 @@ static bool is_tracing_prog_type(enum bpf_prog_type type);
 static int ref_set_non_owning(struct bpf_verifier_env *env,
 			      struct bpf_reg_state *reg);
 static bool is_trusted_reg(struct bpf_verifier_env *env, const struct bpf_reg_state *reg);
+static struct bpf_typed_arena *typed_arena_register(struct bpf_verifier_env *env, u32 btf_id);
 static inline bool in_sleepable_context(struct bpf_verifier_env *env);
 static const char *non_sleepable_context_description(struct bpf_verifier_env *env);
 static void scalar32_min_max_add(struct bpf_reg_state *dst_reg, struct bpf_reg_state *src_reg);
@@ -13334,6 +13335,8 @@ enum special_kfunc_type {
 	KF_bpf_arena_alloc_pages,
 	KF_bpf_arena_free_pages,
 	KF_bpf_arena_reserve_pages,
+	KF_bpf_typed_arena_alloc_pages,
+	KF_bpf_typed_arena_free_pages,
 	KF_bpf_session_is_return,
 	KF_bpf_stream_vprintk,
 	KF_bpf_stream_print_stack,
@@ -13429,6 +13432,8 @@ BTF_ID(func, bpf_call_rcu_tasks_trace)
 BTF_ID(func, bpf_arena_alloc_pages)
 BTF_ID(func, bpf_arena_free_pages)
 BTF_ID(func, bpf_arena_reserve_pages)
+BTF_ID(func, bpf_typed_arena_alloc_pages)
+BTF_ID(func, bpf_typed_arena_free_pages)
 #ifdef CONFIG_BPF_EVENTS
 BTF_ID(func, bpf_session_is_return)
 #else
@@ -13456,6 +13461,12 @@ static bool is_bpf_obj_new_kfunc(u32 func_id)
 {
 	return func_id == special_kfunc_list[KF_bpf_obj_new] ||
 	       func_id == special_kfunc_list[KF_bpf_obj_new_impl];
+}
+
+static bool is_typed_arena_pages_kfunc(u32 func_id)
+{
+	return func_id == special_kfunc_list[KF_bpf_typed_arena_alloc_pages] ||
+	       func_id == special_kfunc_list[KF_bpf_typed_arena_free_pages];
 }
 
 static bool is_bpf_percpu_obj_new_kfunc(u32 func_id)
@@ -14800,6 +14811,11 @@ static int check_special_kfunc(struct bpf_verifier_env *env, struct bpf_call_arg
 
 		insn_aux->obj_new_size = ret_t->size;
 		insn_aux->kptr_struct_meta = struct_meta;
+	} else if (is_kfunc_call(meta, special_kfunc_list[KF_bpf_typed_arena_alloc_pages])) {
+		mark_reg_known_zero(env, regs, BPF_REG_0);
+		regs[BPF_REG_0].type = PTR_TO_BTF_ID | MEM_ARENA;
+		regs[BPF_REG_0].btf = env->prog->aux->btf;
+		regs[BPF_REG_0].btf_id = insn_aux->typed_arena->btf_id;
 	} else if (is_bpf_refcount_acquire_kfunc(meta->func_id)) {
 		mark_reg_known_zero(env, regs, BPF_REG_0);
 		regs[BPF_REG_0].type = PTR_TO_BTF_ID | MEM_ALLOC;
@@ -15128,6 +15144,38 @@ static int check_kfunc_call(struct bpf_verifier_env *env, struct bpf_insn *insn,
 		insn_aux->insert_off = regs[BPF_REG_2].var_off.value;
 		insn_aux->kptr_struct_meta = btf_find_struct_meta(meta.arg_btf, meta.arg_btf_id);
 		ref_convert_owning_non_owning(env, id);
+	}
+
+	if (meta.btf == btf_vmlinux && is_typed_arena_pages_kfunc(meta.func_id)) {
+		struct bpf_typed_arena *ta;
+
+		if (!env->prog->aux->arena) {
+			verbose(env, "kfunc %s can only be used in a program that has an associated arena\n",
+				func_name);
+			return -EINVAL;
+		}
+		if (!env->prog->aux->btf) {
+			verbose(env, "kfunc %s requires program BTF\n", func_name);
+			return -EINVAL;
+		}
+		if (((u64)(u32)meta.arg_constant.value) != meta.arg_constant.value) {
+			verbose(env, "local type ID argument must be in range [0, U32_MAX]\n");
+			return -EINVAL;
+		}
+		ta = typed_arena_register(env, meta.arg_constant.value);
+		if (IS_ERR(ta))
+			return PTR_ERR(ta);
+		/*
+		 * The type ID is a register value, so it may differ between
+		 * paths; the fixup replaces it with the typed arena once per
+		 * call site, and the allocator's return value is typed by it.
+		 */
+		if (insn_aux->typed_arena && insn_aux->typed_arena != ta) {
+			verbose(env, "kfunc %s at insn %d is called with different types on different paths\n",
+				func_name, insn_idx);
+			return -EINVAL;
+		}
+		insn_aux->typed_arena = ta;
 	}
 
 	if (meta.func_id == special_kfunc_list[KF_bpf_throw]) {
@@ -22493,6 +22541,18 @@ int bpf_fixup_kfunc_call(struct bpf_verifier_env *env, struct bpf_insn *insn,
 		insn_buf[2] = addr[1];
 		insn_buf[3] = *insn;
 		*cnt = 4;
+	} else if (is_typed_arena_pages_kfunc(desc->func_id)) {
+		struct bpf_typed_arena *ta = env->insn_aux_data[insn_idx].typed_arena;
+		struct bpf_insn addr[2] = { BPF_LD_IMM64(BPF_REG_2, (long)ta) };
+
+		if (!ta) {
+			verifier_bug(env, "typed arena kfunc at insn %d has no typed arena", insn_idx);
+			return -EFAULT;
+		}
+		insn_buf[0] = addr[0];
+		insn_buf[1] = addr[1];
+		insn_buf[2] = *insn;
+		*cnt = 3;
 	} else if (is_bpf_obj_drop_kfunc(desc->func_id) ||
 		   is_bpf_percpu_obj_drop_kfunc(desc->func_id) ||
 		   is_bpf_refcount_acquire_kfunc(desc->func_id)) {
