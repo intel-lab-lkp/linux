@@ -143,6 +143,7 @@ LIST_HEAD(tty_drivers);			/* linked list of tty drivers */
 
 /* Mutex to protect creating and releasing a tty */
 DEFINE_MUTEX(tty_mutex);
+static DEFINE_MUTEX(tty_termios_mutex);
 
 static ssize_t tty_read(struct kiocb *, struct iov_iter *);
 static ssize_t tty_write(struct kiocb *, struct iov_iter *);
@@ -1219,6 +1220,8 @@ void tty_init_termios(struct tty_struct *tty)
 	if (tty->driver->flags & TTY_DRIVER_RESET_TERMIOS)
 		tty->termios = tty->driver->init_termios;
 	else {
+		guard(mutex)(&tty_termios_mutex);
+
 		/* Check for lazy saved data */
 		tp = tty->driver->termios[idx];
 		if (tp != NULL) {
@@ -1440,6 +1443,8 @@ void tty_save_termios(struct tty_struct *tty)
 	/* If the port is going to reset then it has no termios to save */
 	if (tty->driver->flags & TTY_DRIVER_RESET_TERMIOS)
 		return;
+
+	guard(mutex)(&tty_termios_mutex);
 
 	/* Stash the termios data */
 	tp = tty->driver->termios[idx];
@@ -3242,10 +3247,12 @@ struct device *tty_register_device_attr(struct tty_driver *driver,
 		 * Free any saved termios data so that the termios state is
 		 * reset when reusing a minor number.
 		 */
-		tp = driver->termios[index];
-		if (tp) {
-			driver->termios[index] = NULL;
-			kfree(tp);
+		scoped_guard(mutex, &tty_termios_mutex) {
+			tp = driver->termios[index];
+			if (tp) {
+				driver->termios[index] = NULL;
+				kfree(tp);
+			}
 		}
 
 		retval = tty_cdev_add(driver, devt, index, 1);
