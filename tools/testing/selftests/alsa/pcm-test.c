@@ -613,6 +613,8 @@ int main(void)
 	conf_load();
 
 	find_pcms();
+	if (!card_list && !conf_cards)
+		ksft_exit_skip("No sound cards detected\n");
 
 	for (conf = conf_cards; conf; conf = conf->next)
 		if (conf->card < 0)

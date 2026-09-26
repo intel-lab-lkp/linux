@@ -1378,6 +1378,8 @@ int main(void)
 	ksft_print_header();
 
 	find_controls();
+	if (!card_list)
+		ksft_exit_skip("No sound cards detected\n");
 
 	ksft_set_plan(num_controls * TESTS_PER_CONTROL);
 
