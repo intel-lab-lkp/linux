@@ -155,7 +155,9 @@ static int fq_pie_qdisc_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 	memory_limited = q->memory_usage > q->memory_limit + skb->truesize;
 
 	/* Checks if the qdisc is full */
-	if (unlikely(qdisc_qlen(sch) >= sch->limit)) {
+	if (unlikely(qdisc_qlen(sch) >= sch->limit) ||
+	    unlikely((u64)sch->qstats.backlog + qdisc_pkt_len(skb) >
+		     QDISC_MAX_BACKLOG)) {
 		q->stats.overlimit++;
 		goto out;
 	} else if (unlikely(memory_limited)) {

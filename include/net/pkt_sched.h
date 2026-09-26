@@ -13,6 +13,11 @@
 #define DEFAULT_TX_QUEUE_LEN	1000
 #define STAB_SIZE_LOG_MAX	30
 #define QDISC_PKT_LEN_MAX	(1 << 20)	/* 1 MiB */
+/*
+ * Largest accounted backlog for which enqueuing one more maximum-size
+ * packet cannot wrap the 32-bit sch->qstats.backlog.
+ */
+#define QDISC_MAX_BACKLOG	(U32_MAX - QDISC_PKT_LEN_MAX)
 
 struct qdisc_walker {
 	int	stop;

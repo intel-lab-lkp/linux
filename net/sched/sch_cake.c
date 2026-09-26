@@ -1776,6 +1776,14 @@ static s32 cake_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 	idx--;
 	flow = &b->flows[idx];
 
+	if (unlikely((u64)sch->qstats.backlog + len > QDISC_MAX_BACKLOG)) {
+		WRITE_ONCE(flow->dropped, flow->dropped + 1);
+		WRITE_ONCE(b->tin_dropped, b->tin_dropped + 1);
+		qdisc_qstats_overlimit(sch);
+		return qdisc_drop_reason(skb, sch, to_free,
+					 QDISC_DROP_OVERLIMIT);
+	}
+
 	/* ensure shaper state isn't stale */
 	if (!b->tin_backlog) {
 		if (ktime_before(b->time_next_packet, now))
@@ -1801,13 +1809,30 @@ static s32 cake_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 		WRITE_ONCE(b->max_skblen, len);
 
 	if (qdisc_pkt_segs(skb) > 1 && q->config->rate_flags & CAKE_FLAG_SPLIT_GSO) {
-		struct sk_buff *segs, *nskb;
+		struct sk_buff *segs, *nskb, *seg;
 		netdev_features_t features = netif_skb_features(skb);
 		unsigned int slen = 0, numsegs = 0;
 
 		segs = skb_gso_segment(skb, features & ~NETIF_F_GSO_MASK);
 		if (IS_ERR_OR_NULL(segs))
 			return qdisc_drop(skb, sch, to_free);
+
+		/* The segment list is accounted by the sum of its lengths,
+		 * which can exceed the original packet's accounted length, so
+		 * sum it before linking any segment and drop the whole list if
+		 * the post-split total would cross the ceiling.
+		 */
+		skb_list_walk_safe(segs, seg, nskb)
+			slen += seg->len;
+
+		if (unlikely((u64)sch->qstats.backlog + slen > QDISC_MAX_BACKLOG)) {
+			kfree_skb_list_reason(segs, SKB_DROP_REASON_QDISC_DROP);
+			WRITE_ONCE(flow->dropped, flow->dropped + 1);
+			WRITE_ONCE(b->tin_dropped, b->tin_dropped + 1);
+			qdisc_qstats_overlimit(sch);
+			return qdisc_drop_reason(skb, sch, to_free,
+						 QDISC_DROP_OVERLIMIT);
+		}
 
 		skb_list_walk_safe(segs, segs, nskb) {
 			skb_mark_not_on_list(segs);
@@ -1820,7 +1845,6 @@ static s32 cake_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 
 			qdisc_qlen_inc(sch);
 			numsegs++;
-			slen += segs->len;
 			q->buffer_used += segs->truesize;
 			WRITE_ONCE(b->packets, b->packets + 1);
 		}
