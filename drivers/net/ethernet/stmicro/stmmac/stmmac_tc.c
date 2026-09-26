@@ -14,12 +14,17 @@
 static int tc_config_preemption(struct stmmac_priv *priv,
 				struct netlink_ext_ack *extack, u32 preemptible_tcs)
 {
-	/* Qdisc teardown must not access unpowered registers. */
-	if (priv->hw_unavailable)
-		return 0;
+	int ret = 0;
 
-	return stmmac_fpe_map_preemption_class(priv, priv->dev, extack,
-					      preemptible_tcs);
+	/* Qdisc teardown still clears the saved mapping after failed resume. */
+	if (!priv->hw_unavailable)
+		ret = stmmac_fpe_map_preemption_class(priv, priv->dev, extack,
+						      preemptible_tcs);
+	if (!ret) {
+		priv->fpe_cfg.preemptible_tcs = preemptible_tcs;
+		priv->fpe_cfg.mapping_configured = true;
+	}
+	return ret;
 }
 
 static void tc_fill_all_pass_entry(struct stmmac_tc_entry *entry)
@@ -519,31 +524,15 @@ static int tc_add_ip4_flow(struct stmmac_priv *priv,
 {
 	struct flow_rule *rule = flow_cls_offload_flow_rule(cls);
 	struct flow_dissector *dissector = rule->match.dissector;
-	bool inv = entry->action & STMMAC_FLOW_ACTION_DROP;
 	struct flow_match_ipv4_addrs match;
-	u32 hw_match;
-	int ret;
 
 	/* Nothing to do here */
 	if (!dissector_uses_key(dissector, FLOW_DISSECTOR_KEY_IPV4_ADDRS))
 		return -EINVAL;
 
 	flow_rule_match_ipv4_addrs(rule, &match);
-	hw_match = ntohl(match.key->src) & ntohl(match.mask->src);
-	if (hw_match) {
-		ret = stmmac_config_l3_filter(priv, priv->hw, entry->idx, true,
-					      false, true, inv, hw_match);
-		if (ret)
-			return ret;
-	}
-
-	hw_match = ntohl(match.key->dst) & ntohl(match.mask->dst);
-	if (hw_match) {
-		ret = stmmac_config_l3_filter(priv, priv->hw, entry->idx, true,
-					      false, false, inv, hw_match);
-		if (ret)
-			return ret;
-	}
+	entry->ip4_src = ntohl(match.key->src) & ntohl(match.mask->src);
+	entry->ip4_dst = ntohl(match.key->dst) & ntohl(match.mask->dst);
 
 	return 0;
 }
@@ -554,11 +543,7 @@ static int tc_add_ports_flow(struct stmmac_priv *priv,
 {
 	struct flow_rule *rule = flow_cls_offload_flow_rule(cls);
 	struct flow_dissector *dissector = rule->match.dissector;
-	bool inv = entry->action & STMMAC_FLOW_ACTION_DROP;
 	struct flow_match_ports match;
-	u32 hw_match;
-	bool is_udp;
-	int ret;
 
 	/* Nothing to do here */
 	if (!dissector_uses_key(dissector, FLOW_DISSECTOR_KEY_PORTS))
@@ -566,10 +551,7 @@ static int tc_add_ports_flow(struct stmmac_priv *priv,
 
 	switch (entry->ip_proto) {
 	case IPPROTO_TCP:
-		is_udp = false;
-		break;
 	case IPPROTO_UDP:
-		is_udp = true;
 		break;
 	default:
 		return -EINVAL;
@@ -577,23 +559,46 @@ static int tc_add_ports_flow(struct stmmac_priv *priv,
 
 	flow_rule_match_ports(rule, &match);
 
-	hw_match = ntohs(match.key->src) & ntohs(match.mask->src);
-	if (hw_match) {
-		ret = stmmac_config_l4_filter(priv, priv->hw, entry->idx, true,
-					      is_udp, true, inv, hw_match);
-		if (ret)
-			return ret;
-	}
-
-	hw_match = ntohs(match.key->dst) & ntohs(match.mask->dst);
-	if (hw_match) {
-		ret = stmmac_config_l4_filter(priv, priv->hw, entry->idx, true,
-					      is_udp, false, inv, hw_match);
-		if (ret)
-			return ret;
-	}
+	entry->port_src = ntohs(match.key->src) & ntohs(match.mask->src);
+	entry->port_dst = ntohs(match.key->dst) & ntohs(match.mask->dst);
 
 	entry->is_l4 = true;
+	return 0;
+}
+
+static int tc_config_flow(struct stmmac_priv *priv,
+			  const struct stmmac_flow_entry *entry)
+{
+	bool inv = entry->action & STMMAC_FLOW_ACTION_DROP;
+	bool udp = entry->ip_proto == IPPROTO_UDP;
+	int ret;
+
+	/* Clear the whole slot, including matches removed by a replacement. */
+	ret = stmmac_config_l3_filter(priv, priv->hw, entry->idx, false,
+				      false, false, false, 0);
+	if (ret || !entry->in_use)
+		return ret;
+	if (entry->ip4_src) {
+		ret = stmmac_config_l3_filter(priv, priv->hw, entry->idx, true,
+					      false, true, inv, entry->ip4_src);
+		if (ret)
+			return ret;
+	}
+	if (entry->ip4_dst) {
+		ret = stmmac_config_l3_filter(priv, priv->hw, entry->idx, true,
+					      false, false, inv, entry->ip4_dst);
+		if (ret)
+			return ret;
+	}
+	if (entry->port_src) {
+		ret = stmmac_config_l4_filter(priv, priv->hw, entry->idx, true,
+					    udp, true, inv, entry->port_src);
+		if (ret)
+			return ret;
+	}
+	if (entry->port_dst)
+		return stmmac_config_l4_filter(priv, priv->hw, entry->idx, true,
+					      udp, false, inv, entry->port_dst);
 	return 0;
 }
 
@@ -629,6 +634,7 @@ static int tc_add_flow(struct stmmac_priv *priv,
 {
 	struct stmmac_flow_entry *entry = tc_find_flow(priv, cls, false);
 	struct flow_rule *rule = flow_cls_offload_flow_rule(cls);
+	struct stmmac_flow_entry new = {};
 	int i, ret;
 
 	if (!entry) {
@@ -637,23 +643,33 @@ static int tc_add_flow(struct stmmac_priv *priv,
 			return -ENOENT;
 	}
 
-	ret = tc_parse_flow_actions(priv, &rule->action, entry,
+	new.idx = entry->idx;
+	ret = tc_parse_flow_actions(priv, &rule->action, &new,
 				    cls->common.extack);
 	if (ret)
 		return ret;
 
 	for (i = 0; i < ARRAY_SIZE(tc_flow_parsers); i++) {
-		ret = tc_flow_parsers[i].fn(priv, cls, entry);
+		ret = tc_flow_parsers[i].fn(priv, cls, &new);
 		if (!ret)
-			entry->in_use = true;
+			new.in_use = true;
 		else if (ret == -EOPNOTSUPP)
 			return ret;
 	}
 
-	if (!entry->in_use)
+	if (!new.in_use)
 		return -EINVAL;
 
-	entry->cookie = cls->cookie;
+	ret = tc_config_flow(priv, &new);
+	if (ret) {
+		/* Do not publish a rule that was only partially programmed. */
+		if (tc_config_flow(priv, entry))
+			netdev_err(priv->dev, "failed to restore flower filter %d\n",
+				   entry->idx);
+		return ret;
+	}
+	new.cookie = cls->cookie;
+	*entry = new;
 	return 0;
 }
 
@@ -739,6 +755,8 @@ static int tc_add_vlan_flow(struct stmmac_priv *priv,
 
 		prio = BIT(match.key->vlan_priority);
 		stmmac_rx_queue_prio(priv, priv->hw, prio, tc);
+		priv->plat->rx_queues_cfg[tc].prio = prio;
+		priv->plat->rx_queues_cfg[tc].use_prio = true;
 
 		entry->in_use = true;
 		entry->cookie = cls->cookie;
@@ -760,6 +778,8 @@ static int tc_del_vlan_flow(struct stmmac_priv *priv,
 
 	if (stmmac_tc_active(priv))
 		stmmac_rx_queue_prio(priv, priv->hw, 0, entry->tc);
+	priv->plat->rx_queues_cfg[entry->tc].prio = 0;
+	priv->plat->rx_queues_cfg[entry->tc].use_prio = true;
 
 	entry->in_use = false;
 	entry->cookie = 0;
@@ -934,6 +954,45 @@ static int tc_setup_cls(struct stmmac_priv *priv,
 	return ret;
 }
 
+int stmmac_tc_restore_filters(struct stmmac_priv *priv)
+{
+	int i, ret;
+
+	for (i = 0; i < priv->flow_entries_max; i++) {
+		struct stmmac_flow_entry *entry = &priv->flow_entries[i];
+
+		if (!entry->in_use)
+			continue;
+		ret = tc_config_flow(priv, entry);
+		if (ret)
+			return ret;
+	}
+	for (i = 0; i < priv->rfs_entries_total; i++) {
+		struct stmmac_rfs_entry *entry = &priv->rfs_entries[i];
+
+		if (!entry->in_use)
+			continue;
+		switch (entry->type) {
+		/* VLAN priorities are replayed by stmmac_mtl_configuration(). */
+		case STMMAC_RFS_T_VLAN:
+			break;
+		case STMMAC_RFS_T_LLDP:
+			stmmac_rx_queue_routing(priv, priv->hw, PACKET_DCBCPQ,
+						entry->tc);
+			break;
+		case STMMAC_RFS_T_1588:
+			stmmac_rx_queue_routing(priv, priv->hw, PACKET_PTPQ,
+						entry->tc);
+			break;
+		}
+	}
+	/* The XGMAC callback also restores the runtime TC-to-queue mapping. */
+	if (priv->fpe_cfg.mapping_configured)
+		return tc_config_preemption(priv, NULL,
+					    priv->fpe_cfg.preemptible_tcs);
+	return 0;
+}
+
 struct timespec64 stmmac_calc_tas_basetime(ktime_t old_base_time,
 					   ktime_t current_time,
 					   u64 cycle_time)
@@ -957,7 +1016,37 @@ struct timespec64 stmmac_calc_tas_basetime(ktime_t old_base_time,
 	return time;
 }
 
-static void tc_taprio_map_maxsdu_txq(struct stmmac_priv *priv,
+/* Called after timestamp setup and before DMA starts, with ptp_mutex held.
+ * The PHC can still be blocked while reset state is being restored.
+ */
+int stmmac_tc_restore_est(struct stmmac_priv *priv)
+{
+	struct stmmac_est *est = priv->est;
+	struct timespec64 base;
+	unsigned long flags;
+	u64 now, cycle;
+	int ret;
+
+	if (!est || !est->enable)
+		return 0;
+	mutex_lock(&priv->est_lock);
+	read_lock_irqsave(&priv->ptp_lock, flags);
+	ret = stmmac_get_systime(priv, priv->ptpaddr, &now);
+	read_unlock_irqrestore(&priv->ptp_lock, flags);
+	if (ret)
+		goto out;
+	cycle = (u64)est->ctr[1] * NSEC_PER_SEC + est->ctr[0];
+	base = stmmac_calc_tas_basetime(ktime_set(est->btr_reserve[1],
+						  est->btr_reserve[0]), now, cycle);
+	est->btr[0] = base.tv_nsec;
+	est->btr[1] = base.tv_sec;
+	ret = stmmac_est_configure(priv, priv, est, priv->plat->clk_ptp_rate);
+out:
+	mutex_unlock(&priv->est_lock);
+	return ret;
+}
+
+static void tc_taprio_map_maxsdu_txq(struct stmmac_est *est,
 				     struct tc_taprio_qopt_offload *qopt)
 {
 	u32 num_tc = qopt->mqprio.qopt.num_tc;
@@ -974,7 +1063,7 @@ static void tc_taprio_map_maxsdu_txq(struct stmmac_priv *priv,
 		count = qopt->mqprio.qopt.count[i];
 
 		for (j = offset; j < offset + count; j++)
-			priv->est->max_sdu[j] = qopt->max_sdu[i] + ETH_HLEN - ETH_TLEN;
+			est->max_sdu[j] = qopt->max_sdu[i] + ETH_HLEN - ETH_TLEN;
 	}
 }
 
@@ -984,8 +1073,9 @@ static int tc_taprio_configure(struct stmmac_priv *priv,
 	u32 size, wid = priv->dma_cap.estwid, dep = priv->dma_cap.estdep;
 	struct netlink_ext_ack *extack = qopt->mqprio.extack;
 	struct timespec64 time, current_time, qopt_time;
+	struct stmmac_est *est;
 	ktime_t current_time_ns;
-	int err, i, ret = 0;
+	int i, ret;
 	u64 ctr;
 
 	if (qopt->base_time < 0)
@@ -1040,34 +1130,27 @@ static int tc_taprio_configure(struct stmmac_priv *priv,
 	if (qopt->cycle_time_extension >= BIT(wid + 7))
 		return -ERANGE;
 
-	if (!priv->est) {
-		priv->est = devm_kzalloc(priv->device, sizeof(*priv->est),
-					 GFP_KERNEL);
-		if (!priv->est)
-			return -ENOMEM;
-
-		mutex_init(&priv->est_lock);
-	} else {
-		mutex_lock(&priv->est_lock);
-		memset(priv->est, 0, sizeof(*priv->est));
-		mutex_unlock(&priv->est_lock);
-	}
+	/* Build the replacement without changing the installed schedule. An
+	 * entry rejected below must not leave an enabled, zero-cycle cache for
+	 * PHC adjustment or reset replay to consume.
+	 */
+	est = kzalloc_obj(*est);
+	if (!est)
+		return -ENOMEM;
 
 	size = qopt->num_entries;
-
-	mutex_lock(&priv->est_lock);
-	priv->est->gcl_size = size;
-	priv->est->enable = qopt->cmd == TAPRIO_CMD_REPLACE;
-	mutex_unlock(&priv->est_lock);
+	est->gcl_size = size;
+	est->enable = true;
 
 	for (i = 0; i < size; i++) {
 		s64 delta_ns = qopt->entries[i].interval;
 		u32 gates = qopt->entries[i].gate_mask;
 
-		if (delta_ns > GENMASK(wid - 1, 0))
-			return -ERANGE;
-		if (gates > GENMASK(31 - wid, 0))
-			return -ERANGE;
+		if (delta_ns > GENMASK(wid - 1, 0) ||
+		    gates > GENMASK(31 - wid, 0)) {
+			ret = -ERANGE;
+			goto free_est;
+		}
 
 		switch (qopt->entries[i].command) {
 		case TC_TAPRIO_CMD_SET_GATES:
@@ -1079,47 +1162,69 @@ static int tc_taprio_configure(struct stmmac_priv *priv,
 			gates &= ~BIT(0);
 			break;
 		default:
-			return -EOPNOTSUPP;
+			ret = -EOPNOTSUPP;
+			goto free_est;
 		}
 
-		priv->est->gcl[i] = delta_ns | (gates << wid);
+		est->gcl[i] = delta_ns | (gates << wid);
 	}
 
-	mutex_lock(&priv->est_lock);
 	/* Adjust for real system time */
-	priv->ptp_clock_ops.gettime64(&priv->ptp_clock_ops, &current_time);
+	ret = priv->ptp_clock_ops.gettime64(&priv->ptp_clock_ops, &current_time);
+	if (ret)
+		goto free_est;
 	current_time_ns = timespec64_to_ktime(current_time);
 	time = stmmac_calc_tas_basetime(qopt->base_time, current_time_ns,
 					qopt->cycle_time);
 
-	priv->est->btr[0] = (u32)time.tv_nsec;
-	priv->est->btr[1] = (u32)time.tv_sec;
+	est->btr[0] = (u32)time.tv_nsec;
+	est->btr[1] = (u32)time.tv_sec;
 
 	qopt_time = ktime_to_timespec64(qopt->base_time);
-	priv->est->btr_reserve[0] = (u32)qopt_time.tv_nsec;
-	priv->est->btr_reserve[1] = (u32)qopt_time.tv_sec;
+	est->btr_reserve[0] = (u32)qopt_time.tv_nsec;
+	est->btr_reserve[1] = (u32)qopt_time.tv_sec;
 
 	ctr = qopt->cycle_time;
-	priv->est->ctr[0] = do_div(ctr, NSEC_PER_SEC);
-	priv->est->ctr[1] = (u32)ctr;
+	est->ctr[0] = do_div(ctr, NSEC_PER_SEC);
+	est->ctr[1] = (u32)ctr;
 
-	priv->est->ter = qopt->cycle_time_extension;
+	est->ter = qopt->cycle_time_extension;
 
-	tc_taprio_map_maxsdu_txq(priv, qopt);
+	tc_taprio_map_maxsdu_txq(est, qopt);
 
-	ret = stmmac_est_configure(priv, priv, priv->est,
-				   priv->plat->clk_ptp_rate);
-	mutex_unlock(&priv->est_lock);
+	if (!priv->est) {
+		priv->est = devm_kzalloc(priv->device, sizeof(*priv->est),
+					 GFP_KERNEL);
+		if (!priv->est) {
+			ret = -ENOMEM;
+			goto free_est;
+		}
+		mutex_init(&priv->est_lock);
+	}
+
+	mutex_lock(&priv->est_lock);
+	ret = stmmac_est_configure(priv, priv, est, priv->plat->clk_ptp_rate);
 	if (ret) {
 		netdev_err(priv->dev, "failed to configure EST\n");
-		goto disable;
+		goto restore;
 	}
 
 	ret = tc_config_preemption(priv, extack, qopt->mqprio.preemptible_tcs);
 	if (ret)
-		goto disable;
+		goto restore;
 
-	return 0;
+	*priv->est = *est;
+	mutex_unlock(&priv->est_lock);
+free_est:
+	kfree(est);
+	return ret;
+
+restore:
+	/* A failed hardware update must not publish the rejected schedule. */
+	if (stmmac_est_configure(priv, priv, priv->est, priv->plat->clk_ptp_rate))
+		netdev_err(priv->dev, "failed to restore EST\n");
+	mutex_unlock(&priv->est_lock);
+	goto free_est;
 
 disable:
 	if (priv->est) {
@@ -1137,9 +1242,7 @@ disable:
 		mutex_unlock(&priv->est_lock);
 	}
 
-	err = tc_config_preemption(priv, extack, 0);
-
-	return qopt->cmd == TAPRIO_CMD_DESTROY ? err : ret;
+	return tc_config_preemption(priv, extack, 0);
 }
 
 static void tc_taprio_stats(struct stmmac_priv *priv,
@@ -1180,7 +1283,10 @@ static int tc_setup_taprio(struct stmmac_priv *priv,
 	switch (qopt->cmd) {
 	case TAPRIO_CMD_REPLACE:
 	case TAPRIO_CMD_DESTROY:
+		/* Serialize cache publication with PHC adjustment and reset replay. */
+		mutex_lock(&priv->ptp_mutex);
 		err = tc_taprio_configure(priv, qopt);
+		mutex_unlock(&priv->ptp_mutex);
 		break;
 	case TAPRIO_CMD_STATS:
 		tc_taprio_stats(priv, qopt);

@@ -151,6 +151,9 @@ struct stmmac_fpe_cfg {
 	struct ethtool_mmsv mmsv;
 	const struct stmmac_fpe_reg *reg;
 	u32 fpe_csr;	/* MAC_FPE_CTRL_STS reg cache */
+	u32 preemptible_tcs;
+	u32 add_frag_size;
+	bool mapping_configured;
 };
 
 struct stmmac_tc_entry {
@@ -194,6 +197,10 @@ struct stmmac_flow_entry {
 	unsigned long cookie;
 	unsigned long action;
 	u8 ip_proto;
+	u32 ip4_src;
+	u32 ip4_dst;
+	u16 port_src;
+	u16 port_dst;
 	int in_use;
 	int idx;
 	int is_l4;
@@ -433,6 +440,8 @@ void stmmac_set_ethtool_ops(struct net_device *netdev);
 void stmmac_ptp_register(struct stmmac_priv *priv);
 void stmmac_ptp_unregister(struct stmmac_priv *priv);
 int stmmac_ptp_restore(struct stmmac_priv *priv);
+int stmmac_tc_restore_filters(struct stmmac_priv *priv);
+int stmmac_tc_restore_est(struct stmmac_priv *priv);
 int stmmac_xdp_open(struct net_device *dev);
 void stmmac_xdp_release(struct net_device *dev);
 int stmmac_get_phy_intf_sel(phy_interface_t interface);
