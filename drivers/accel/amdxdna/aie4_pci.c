@@ -295,6 +295,27 @@ static int aie4_query(struct amdxdna_dev_hdl *ndev)
 	return 0;
 }
 
+/*
+ * Firmware always boots in POWER_MODE_DEFAULT after a (re)load, so re-send the
+ * cached user override whenever the hardware starts. This keeps the driver
+ * cache (ndev->pw_mode) and the firmware power state consistent across
+ * suspend/resume and runtime PM cycles. On a fresh probe pw_mode is
+ * POWER_MODE_DEFAULT and this is a no-op.
+ *
+ * Power override is a per-VF property in firmware: each supervisor (VF) stores
+ * its own requested mode and the hypervisor arbitrates globally by taking the
+ * highest mode across all supervisors. A full firmware reload on suspend clears
+ * every supervisor override back to default, so each device type (PF, VF and
+ * classic) must re-send its own cached override on resume.
+ */
+int aie4_restore_power_mode(struct amdxdna_dev_hdl *ndev)
+{
+	if (ndev->pw_mode == POWER_MODE_DEFAULT)
+		return 0;
+
+	return aie4_msg_set_power_mode(ndev, ndev->pw_mode);
+}
+
 static int aie4_pf_hw_start(struct amdxdna_dev_hdl *ndev)
 {
 	int ret;
@@ -308,6 +329,10 @@ static int aie4_pf_hw_start(struct amdxdna_dev_hdl *ndev)
 		goto stop_fw;
 
 	ret = aie4_attach_work_buffer(ndev);
+	if (ret)
+		goto mbox_fini;
+
+	ret = aie4_restore_power_mode(ndev);
 	if (ret)
 		goto mbox_fini;
 
@@ -345,6 +370,10 @@ static int aie4_vf_hw_start(struct amdxdna_dev_hdl *ndev)
 		goto mailbox_fini;
 
 	ret = aie4_partition_init(ndev);
+	if (ret)
+		goto mailbox_fini;
+
+	ret = aie4_restore_power_mode(ndev);
 	if (ret)
 		goto mailbox_fini;
 
@@ -389,8 +418,14 @@ static int aie4_classic_hw_start(struct amdxdna_dev_hdl *ndev)
 	if (ret)
 		goto mailbox_fini;
 
+	ret = aie4_restore_power_mode(ndev);
+	if (ret)
+		goto partition_fini;
+
 	return 0;
 
+partition_fini:
+	aie4_partition_fini(ndev);
 mailbox_fini:
 	aie4_mailbox_fini(ndev);
 stop_fw:

@@ -166,7 +166,10 @@ int aie4_msg_set_power_mode(struct amdxdna_dev_hdl *ndev, u8 power_mode)
 
 	ret = aie_send_mgmt_msg_wait(&ndev->aie, &msg);
 	if (ret)
-		return ret;
+		XDNA_WARN(ndev->aie.xdna,
+			  "Failed to set power mode %u, ret %d", (u32)power_mode, ret);
+	else
+		XDNA_DBG(ndev->aie.xdna, "Power mode set to %u", (u32)power_mode);
 
-	return 0;
+	return ret;
 }
