@@ -386,14 +386,20 @@ int stmmac_mdio_reset(struct mii_bus *bus)
 
 #ifdef CONFIG_OF
 	if (priv->device->of_node) {
-		struct gpio_desc *reset_gpio;
+		struct gpio_desc *reset_gpio = priv->mdio_reset_gpio;
 		u32 delays[3] = { 0, 0, 0 };
 
-		reset_gpio = devm_gpiod_get_optional(priv->device,
-						     "snps,reset",
-						     GPIOD_OUT_LOW);
-		if (IS_ERR(reset_gpio))
-			return PTR_ERR(reset_gpio);
+		/* The bus reset also runs on resume. Devres retains the GPIO
+		 * until unbind, so do not request an already owned line again.
+		 */
+		if (!reset_gpio) {
+			reset_gpio = devm_gpiod_get_optional(priv->device,
+							     "snps,reset",
+							     GPIOD_OUT_LOW);
+			if (IS_ERR(reset_gpio))
+				return PTR_ERR(reset_gpio);
+			priv->mdio_reset_gpio = reset_gpio;
+		}
 
 		device_property_read_u32_array(priv->device,
 					       "snps,reset-delays-us",
