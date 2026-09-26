@@ -1305,7 +1305,7 @@ static void gcm_process_assoc(const struct aes_gcm_key *key, u8 ghash_acc[16],
 			pos = 0;
 		}
 		len = len_this_step;
-		if (unlikely(assoclen)) /* Not the last segment yet? */
+		if (unlikely(len < assoclen)) /* Not the last segment yet? */
 			len = round_down(len, 16);
 		aes_gcm_aad_update(key, ghash_acc, src, len, flags);
 		src += len;
