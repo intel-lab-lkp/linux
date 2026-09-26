@@ -7,7 +7,8 @@
 #include <linux/phy.h>
 #include <linux/property.h>
 
-#define MAXIO_MAE0621A_PHY_ID		0x7b744412
+#define MAXIO_MAE0621A_Q2C_PHY_ID	0x7b744411
+#define MAXIO_MAE0621A_Q3C_PHY_ID	0x7b744412
 
 #define MAXIO_PAGE_SELECT		0x1f
 #define MAXIO_MAE0621A_PHYCR2_PAGE	0xa43
@@ -89,8 +90,18 @@ static int maxio_mae0621a_config_init(struct phy_device *phydev)
 
 static struct phy_driver maxio_drivers[] = {
 	{
-		PHY_ID_MATCH_EXACT(MAXIO_MAE0621A_PHY_ID),
-		.name		= "Maxio MAE0621A",
+		PHY_ID_MATCH_EXACT(MAXIO_MAE0621A_Q2C_PHY_ID),
+		.name		= "Maxio MAE0621A-Q2C",
+		.probe		= maxio_mae0621a_probe,
+		.config_init	= maxio_mae0621a_config_init,
+		.suspend	= genphy_suspend,
+		.resume		= genphy_resume,
+		.read_page	= maxio_read_page,
+		.write_page	= maxio_write_page,
+	},
+	{
+		PHY_ID_MATCH_EXACT(MAXIO_MAE0621A_Q3C_PHY_ID),
+		.name		= "Maxio MAE0621A-Q3C",
 		.probe		= maxio_mae0621a_probe,
 		.config_init	= maxio_mae0621a_config_init,
 		.suspend	= genphy_suspend,
@@ -102,7 +113,8 @@ static struct phy_driver maxio_drivers[] = {
 module_phy_driver(maxio_drivers);
 
 static const struct mdio_device_id __maybe_unused maxio_tbl[] = {
-	{ PHY_ID_MATCH_EXACT(MAXIO_MAE0621A_PHY_ID) },
+	{ PHY_ID_MATCH_EXACT(MAXIO_MAE0621A_Q2C_PHY_ID) },
+	{ PHY_ID_MATCH_EXACT(MAXIO_MAE0621A_Q3C_PHY_ID) },
 	{ }
 };
 MODULE_DEVICE_TABLE(mdio, maxio_tbl);
