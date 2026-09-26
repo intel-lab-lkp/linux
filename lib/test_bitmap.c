@@ -643,6 +643,10 @@ static const struct test_bitmap_parselist parse_tests[] __initconst = {
 	{-EOVERFLOW, "badf00d,deadbeef,1,0",	NULL, 90, 0},
 	{-EOVERFLOW, "fbadf00d,deadbeef,1,0",	NULL, 95, 0},
 	{-EOVERFLOW, "badf00d,deadbeef,1,0",	NULL, 100, 0},
+
+	{-EINVAL,    "x12345678",		NULL, 32, 0},
+	{-EINVAL,    "1g12345678",		NULL, 64, 0},
+	{-EINVAL,    "0x0000000f",		NULL, 64, 0},
 #undef step
 };
 
