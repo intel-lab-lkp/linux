@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 
 #include <errno.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -18,6 +19,7 @@
 struct options {
 	bool count_packets;
 	bool gso_enabled;
+	bool hold;
 	int verbose;
 	unsigned int queue_num;
 	unsigned int timeout;
@@ -31,6 +33,7 @@ static struct options opts;
 static void help(const char *p)
 {
 	printf("Usage: %s [-c|-v [-vv] ] [-t timeout] [-q queue_num] [-Qdst_queue ] [ -d ms_delay ] [-G]\n", p);
+	printf("          [-H] (hold verdicts until SIGUSR1 is received)\n");
 }
 
 static int parse_attr_cb(const struct nlattr *attr, void *data)
@@ -273,6 +276,7 @@ static int mainloop(void)
 	struct mnl_socket *nl;
 	struct nlmsghdr *nlh;
 	unsigned int portid;
+	sigset_t hold_set;
 	char *buf;
 	int ret;
 
@@ -281,6 +285,12 @@ static int mainloop(void)
 		perror("malloc");
 		exit(EXIT_FAILURE);
 	}
+
+	/* -H: keep SIGUSR1 pending until the first packet is read */
+	sigemptyset(&hold_set);
+	sigaddset(&hold_set, SIGUSR1);
+	if (opts.hold)
+		sigprocmask(SIG_BLOCK, &hold_set, NULL);
 
 	nl = open_queue();
 	portid = mnl_socket_get_portid(nl);
@@ -310,6 +320,13 @@ static int mainloop(void)
 		}
 
 		id = ret - MNL_CB_OK;
+		if (opts.hold) {
+			int sig;
+
+			sigwait(&hold_set, &sig);
+			opts.hold = false;
+		}
+
 		if (opts.delay_ms)
 			sleep_ms(opts.delay_ms);
 
@@ -329,7 +346,7 @@ static void parse_opts(int argc, char **argv)
 {
 	int c;
 
-	while ((c = getopt(argc, argv, "chvt:q:Q:d:G")) != -1) {
+	while ((c = getopt(argc, argv, "chvt:q:Q:d:GH")) != -1) {
 		switch (c) {
 		case 'c':
 			opts.count_packets = true;
@@ -337,6 +354,9 @@ static void parse_opts(int argc, char **argv)
 		case 'h':
 			help(argv[0]);
 			exit(0);
+			break;
+		case 'H':
+			opts.hold = true;
 			break;
 		case 'q':
 			opts.queue_num = atoi(optarg);
