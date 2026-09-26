@@ -82,7 +82,7 @@ affs_grow_extcache(struct inode *inode, u32 lc_idx)
 		/* first shrink old cache to make more space */
 		off = 1 << (lc_shift - AFFS_I(inode)->i_lc_shift);
 		for (i = 1, j = off; j < AFFS_LC_SIZE; i++, j += off)
-			AFFS_I(inode)->i_ac[i] = AFFS_I(inode)->i_ac[j];
+			AFFS_I(inode)->i_lc[i] = AFFS_I(inode)->i_lc[j];
 
 		AFFS_I(inode)->i_lc_shift = lc_shift;
 		AFFS_I(inode)->i_lc_mask = lc_mask;
