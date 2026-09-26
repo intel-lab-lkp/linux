@@ -523,6 +523,640 @@ int narrow_store_is_invalid_spill(void *ctx)
 	return 0;
 }
 
+SEC("syscall")
+__description("a scalar field is written and read natively, on a chunk faulted to scratch")
+__success __retval(7)
+__stderr("ERROR: Typed arena WRITE access to unallocated struct typed_obj at 0x{{[0-9a-f]+}}")
+int access_scalar_field(void *ctx)
+{
+	struct typed_obj *obj;
+
+	arena_bind();
+	obj = ptr;
+	obj->value = 7;
+	return obj->value;
+}
+
+SEC("syscall")
+__description("atomics run natively on a scalar field")
+__success __retval(3)
+int access_atomic(void *ctx)
+{
+	struct typed_obj *obj;
+
+	arena_bind();
+	obj = ptr;
+	obj->value = 1;
+	__sync_fetch_and_add(&obj->value, 2);
+	return obj->value;
+}
+
+SEC("syscall")
+__description("pointer arithmetic stays inside the object")
+__success __retval(9)
+int access_after_arithmetic(void *ctx)
+{
+	struct typed_obj *obj;
+	void *p;
+
+	arena_bind();
+	obj = ptr;
+	p = obj;
+	asm volatile("%[p] += 8" : [p] "+r"(p));
+	*(__u64 *)p = 9;
+	return obj->value;
+}
+
+SEC("syscall")
+__description("an access beyond the object is rejected")
+__failure __msg("access beyond struct typed_obj")
+int access_beyond_object(void *ctx)
+{
+	struct typed_obj *obj;
+
+	arena_bind();
+	obj = ptr;
+	((__u64 *)obj)[2] = 1;
+	return 0;
+}
+
+SEC("syscall")
+__description("a negative offset is rejected")
+__failure __msg("invalid negative access")
+int access_negative_offset(void *ctx)
+{
+	struct typed_obj *obj;
+	void *p;
+
+	arena_bind();
+	obj = ptr;
+	p = (void *)obj - 8;
+	return *(__u64 *)p;
+}
+
+SEC("syscall")
+__description("a variable offset is rejected")
+__failure __msg("{{variable (offset|typed_arena_ptr_ access)}}")
+int access_variable_offset(void *ctx)
+{
+	struct typed_obj *obj;
+	void *p;
+
+	arena_bind();
+	obj = ptr;
+	p = (void *)obj + (bpf_get_prandom_u32() & 8);
+	return *(__u64 *)p;
+}
+
+struct mixed_obj {
+	struct task_struct __kptr *task;
+	struct {
+		__u32 a;
+		__u32 b;
+	} inner;
+	struct task_struct *ptr;
+};
+
+SEC("syscall")
+__description("nested structs are walked and pointers to kernel structs load as scalars")
+__success __retval(3)
+int access_nested_and_kernel_pointer_fields(void *ctx)
+{
+	struct mixed_obj *obj;
+
+	arena_bind();
+	obj = ptr;
+	obj->inner.b = 3;
+	if (obj->ptr)
+		return 1;
+	return obj->inner.b;
+}
+
+SEC("syscall")
+__description("helpers do not take typed arena pointers as memory")
+__failure __msg("R1 type=typed_arena_ptr_ expected=")
+int helper_rejects_typed_pointer(void *ctx)
+{
+	struct typed_obj *obj;
+	__u64 src = 0;
+
+	arena_bind();
+	obj = ptr;
+	bpf_probe_read_kernel(&obj->value, sizeof(obj->value), &src);
+	return 0;
+}
+
+struct arena_node {
+	__u64 v;
+};
+
+struct kptr_obj {
+	struct task_struct __kptr *task;
+	struct arena_node __kptr *node;
+	__u64 value;
+};
+
+SEC("syscall")
+__description("a kernel kptr is exchanged into and out of an object")
+__success __retval(0)
+int kptr_xchg_task(void *ctx)
+{
+	struct task_struct *task, *old;
+	struct kptr_obj *obj;
+
+	arena_bind();
+	obj = ptr;
+	task = bpf_task_acquire(bpf_get_current_task_btf());
+	if (!task)
+		return 2;
+	old = bpf_kptr_xchg(&obj->task, task);
+	if (old)
+		bpf_task_release(old);
+	old = bpf_kptr_xchg(&obj->task, NULL);
+	if (!old)
+		return 3;
+	bpf_task_release(old);
+	return 0;
+}
+
+SEC("syscall")
+__description("a local kptr left in a dummy object is dropped with the map")
+__success __retval(0)
+int kptr_xchg_local(void *ctx)
+{
+	struct arena_node *n, *old;
+	struct kptr_obj *obj;
+
+	arena_bind();
+	obj = ptr;
+	n = bpf_obj_new(struct arena_node);
+	if (!n)
+		return 2;
+	n->v = 42;
+	old = bpf_kptr_xchg(&obj->node, n);
+	if (old)
+		bpf_obj_drop(old);
+	return 0;
+}
+
+SEC("syscall")
+__description("a kptr field is not read directly")
+__failure __msg("direct access to kptr is disallowed")
+int kptr_read_directly(void *ctx)
+{
+	struct kptr_obj *obj;
+
+	arena_bind();
+	obj = ptr;
+	return obj->task != NULL;
+}
+
+SEC("syscall")
+__description("a kptr field is not written directly")
+__failure __msg("direct access to kptr is disallowed")
+int kptr_write_directly(void *ctx)
+{
+	struct kptr_obj *obj;
+
+	arena_bind();
+	obj = ptr;
+	obj->task = NULL;
+	return 0;
+}
+
+SEC("syscall")
+__description("an exchange needs a kptr field")
+__failure __msg("off=16 doesn't point to kptr")
+int kptr_xchg_scalar_field(void *ctx)
+{
+	struct kptr_obj *obj;
+
+	arena_bind();
+	obj = ptr;
+	bpf_kptr_xchg(&obj->value, NULL);
+	return 0;
+}
+
+SEC("syscall")
+__description("an exchange checks the value against the field's type")
+__failure __msg("invalid kptr access, R2 type=ptr_arena_node expected=ptr_task_struct")
+int kptr_xchg_wrong_type(void *ctx)
+{
+	struct kptr_obj *obj;
+	struct arena_node *n;
+
+	arena_bind();
+	obj = ptr;
+	n = bpf_obj_new(struct arena_node);
+	if (!n)
+		return 2;
+	n = bpf_kptr_xchg(&obj->task, n);
+	if (n)
+		bpf_obj_drop(n);
+	return 0;
+}
+
+/* 32-byte slot, linked through a typed pointer field: the sanitize mask is 134217696 */
+struct node_obj {
+	struct task_struct __kptr *task;
+	struct node_obj *next;
+	__u64 value;
+};
+
+/* The same layout as node_obj, a different typed arena */
+struct pair_obj {
+	struct task_struct __kptr *task;
+	struct pair_obj *next;
+	__u64 value;
+};
+
+/* 8-byte slot, typed only by its pointer to a typed struct: the cast mask is 134217720 */
+struct head_obj {
+	struct node_obj *first;
+};
+
+SEC("syscall")
+__description("a typed pointer field loads unsanitized, and a dereference sanitizes it in place")
+__success __retval(0) __log_level(2)
+__msg("R{{[0-9]}}=unsanitized_typed_arena_ptr_node_obj(")
+__xlated("r{{[0-9]}} &= 134217720")
+__xlated("r12 = 0x{{[0-9a-f]+}}")
+__xlated("r{{[0-9]}} += r12")
+__xlated("...")
+__xlated("r{{[0-9]}} = *(u64 *)(r{{[0-9]}} +0)")
+__xlated("r{{[0-9]}} &= 134217696")
+__xlated("r12 = 0x{{[0-9a-f]+}}")
+__xlated("r{{[0-9]}} += r12")
+__xlated("r{{[0-9]}} = *(u64 *)(r{{[0-9]}} +16)")
+int ptr_field_deref_sanitizes(void *ctx)
+{
+	struct head_obj *h;
+	struct node_obj *n;
+
+	arena_bind();
+	h = ptr;
+	n = h->first;
+	return n->value;
+}
+
+SEC("syscall")
+__description("a compare and a store of a loaded typed pointer use the raw value")
+__success __retval(0) __log_level(2)
+__msg("R{{[0-9]}}=unsanitized_typed_arena_ptr_node_obj(")
+__msg("if r{{[0-9]}} == 0x0 goto")
+__msg("R{{[0-9]}}=unsanitized_typed_arena_ptr_node_obj(")
+__msg("*(u64 *)(r1 +8) = r2")
+int ptr_field_compare_and_store_stay_raw(void *ctx)
+{
+	struct node_obj *n, *m;
+
+	arena_bind();
+	n = ptr;
+	m = n->next;
+	/* Opaque to the compiler, so that the compare is emitted. */
+	barrier_var(m);
+	if (!m)
+		return 0;
+	/* The store is written by hand: the compiler would cast the value first. */
+	asm volatile("r1 = %[n];"
+		     "r2 = %[m];"
+		     "*(u64 *)(r1 + 8) = r2;"
+		     :: [n] "r"(n), [m] "r"(m)
+		     : "r1", "r2", "memory");
+	return 0;
+}
+
+SEC("syscall")
+__description("a register sanitized by one dereference is not sanitized again by the next")
+__success __retval(5)
+__xlated("r1 = *(u64 *)(r1 +8)")
+__xlated("r2 = 5")
+__xlated("r1 &= 134217696")
+__xlated("r12 = 0x{{[0-9a-f]+}}")
+__xlated("r1 += r12")
+__xlated("*(u64 *)(r1 +16) = r2")
+__xlated("r0 = *(u64 *)(r1 +16)")
+int ptr_field_second_deref_not_sanitized_again(void *ctx)
+{
+	struct node_obj *n;
+	__u64 ret;
+
+	arena_bind();
+	n = ptr;
+	/* Written by hand: the compiler would cast copies rather than reuse the register. */
+	asm volatile("r1 = %[n];"
+		     "r1 = *(u64 *)(r1 + 8);"
+		     "r2 = 5;"
+		     "*(u64 *)(r1 + 16) = r2;"
+		     "r0 = *(u64 *)(r1 + 16);"
+		     "%[ret] = r0;"
+		     : [ret] "=r"(ret) : [n] "r"(n)
+		     : "r0", "r1", "r2", "memory");
+	return ret;
+}
+
+SEC("syscall")
+__description("pointer arithmetic on a loaded typed pointer sanitizes it first")
+__success __retval(0)
+__xlated("r{{[0-9]}} = *(u64 *)(r{{[0-9]}} +8)")
+__xlated("...")
+__xlated("r1 &= 134217696")
+__xlated("r12 = 0x{{[0-9a-f]+}}")
+__xlated("r1 += r12")
+__xlated("r1 += 16")
+__xlated("*(u64 *)(r1 +0) = r2")
+int ptr_field_arithmetic_sanitizes(void *ctx)
+{
+	struct node_obj *n, *m;
+
+	arena_bind();
+	n = ptr;
+	m = n->next;
+	asm volatile("r1 = %[m];"
+		     "r2 = 0;"
+		     "r1 += 16;"
+		     "*(u64 *)(r1 + 0) = r2;"
+		     :: [m] "r"(m)
+		     : "r1", "r2", "memory");
+	return 0;
+}
+
+SEC("syscall")
+__description("a NULL typed pointer dereferences object 0 of the slice, held directly or loaded from a field")
+__success __retval(42)
+int ptr_field_null_lands_on_object_zero(void *ctx)
+{
+	struct node_obj *zero = NULL, *n, *m;
+
+	arena_bind();
+	/*
+	 * The compiler treats a NULL dereference as undefined and would drop
+	 * the store, fold the stored NULL into the load and the load into
+	 * nothing; the barriers keep each value opaque so that the accesses
+	 * are emitted.
+	 */
+	barrier_var(zero);
+	zero->value = 42;
+	n = ptr;
+	n->next = NULL;
+	barrier_var(n);
+	m = n->next;
+	barrier_var(m);
+	return m->value;
+}
+
+SEC("syscall")
+__description("a typed pointer field takes a typed pointer, a loaded one, or NULL")
+__success __retval(0)
+int ptr_field_store_accepted(void *ctx)
+{
+	struct node_obj *n, *m, *p;
+
+	arena_bind();
+	n = ptr;
+	m = ptr2;
+	n->next = m;
+	p = m->next;
+	n->next = p;
+	n->next = NULL;
+	return 0;
+}
+
+SEC("syscall")
+__description("a typed pointer field does not take a scalar")
+__failure __msg("store into typed pointer field of struct node_obj expects a typed arena pointer to struct node_obj or NULL")
+int ptr_field_store_scalar_rejected(void *ctx)
+{
+	struct node_obj *n;
+
+	arena_bind();
+	n = ptr;
+	/* Written by hand: the compiler would cast the value before the store. */
+	asm volatile("r6 = %[n];"
+		     "call %[bpf_get_prandom_u32];"
+		     "r1 = r6;"
+		     "*(u64 *)(r1 + 8) = r0;"
+		     :: [n] "r"(n), __imm(bpf_get_prandom_u32)
+		     : "r0", "r1", "r2", "r3", "r4", "r5", "r6", "memory");
+	return 0;
+}
+
+SEC("syscall")
+__description("a scalar assigned to a typed pointer field is cast by the compiler first")
+__success __retval(0)
+__xlated("call unknown")
+__xlated("...")
+__xlated("r{{[0-9]}} &= 134217696")
+__xlated("r12 = 0x{{[0-9a-f]+}}")
+__xlated("r{{[0-9]}} += r12")
+__xlated("*(u64 *)(r{{[0-9]}} +8) = r{{[0-9]}}")
+int ptr_field_store_scalar_cast_by_compiler(void *ctx)
+{
+	struct node_obj *n;
+
+	arena_bind();
+	n = ptr;
+	n->next = (void *)(long)bpf_get_prandom_u32();
+	return 0;
+}
+
+SEC("syscall")
+__description("a typed pointer field does not take a pointer to another typed struct")
+__failure __msg("store into typed pointer field of struct node_obj expects a typed arena pointer to struct node_obj or NULL")
+int ptr_field_store_other_type_rejected(void *ctx)
+{
+	struct typed_obj *other;
+	struct node_obj *n;
+
+	arena_bind();
+	n = ptr;
+	other = ptr;
+	/* Written by hand: the compiler would re-cast the value to node_obj first. */
+	asm volatile("r1 = %[n];"
+		     "r2 = %[o];"
+		     "*(u64 *)(r1 + 8) = r2;"
+		     :: [n] "r"(n), [o] "r"(other)
+		     : "r1", "r2", "memory");
+	return 0;
+}
+
+SEC("syscall")
+__description("a pointer to another typed struct assigned to a typed pointer field is re-cast by the compiler")
+__success __retval(0)
+int ptr_field_store_other_type_recast(void *ctx)
+{
+	struct typed_obj *other;
+	struct node_obj *n;
+
+	arena_bind();
+	n = ptr;
+	other = ptr;
+	n->next = (struct node_obj *)other;
+	return n->next == NULL;
+}
+
+SEC("syscall")
+__description("a typed pointer field is loaded whole")
+__failure __msg("typed pointer field of struct node_obj must be accessed with a 64-bit load or store")
+int ptr_field_narrow_load_rejected(void *ctx)
+{
+	struct node_obj *n;
+
+	arena_bind();
+	n = ptr;
+	asm volatile("r1 = %[n];"
+		     "w2 = *(u32 *)(r1 + 8);"
+		     :: [n] "r"(n)
+		     : "r1", "r2");
+	return 0;
+}
+
+SEC("syscall")
+__description("a typed pointer field is stored whole")
+__failure __msg("typed pointer field of struct node_obj must be accessed with a 64-bit load or store")
+int ptr_field_narrow_store_rejected(void *ctx)
+{
+	struct node_obj *n;
+
+	arena_bind();
+	n = ptr;
+	asm volatile("r1 = %[n];"
+		     "w2 = 0;"
+		     "*(u32 *)(r1 + 8) = w2;"
+		     :: [n] "r"(n)
+		     : "r1", "r2", "memory");
+	return 0;
+}
+
+SEC("syscall")
+__description("a typed pointer field takes no atomic operation")
+__failure __msg("typed pointer field of struct node_obj")
+int ptr_field_atomic_rejected(void *ctx)
+{
+	struct node_obj *n, *m;
+
+	arena_bind();
+	n = ptr;
+	m = ptr2;
+	__sync_val_compare_and_swap((__u64 *)&n->next, 0, (__u64)m);
+	return 0;
+}
+
+/* The same member outside a typed object is data */
+struct raw_holder {
+	struct node_obj *n;
+	__u64 v;
+};
+
+SEC("syscall")
+__description("a pointer stored in raw arena memory loads as a scalar and casts back to its object")
+__success __retval(0)
+int ptr_field_in_raw_memory_is_scalar(void *ctx)
+{
+	struct raw_holder __arena *h;
+	struct node_obj *n, *again;
+
+	h = bpf_arena_alloc_pages(&arena, NULL, 1, NUMA_NO_NODE, 0);
+	if (!h)
+		return 1;
+	n = ptr;
+	n->value = 7;
+	h->n = n;
+	again = h->n;
+	return again != n || again->value != 7;
+}
+
+SEC("syscall")
+__description("a struct typed only by a pointer to a typed struct gets a typed arena of its own")
+__success __retval(0) __log_level(2)
+__msg("typed arena for struct head_obj: slot 8 bytes")
+int ptr_field_makes_struct_typed(void *ctx)
+{
+	struct head_obj *h;
+	struct node_obj *n;
+
+	arena_bind();
+	h = ptr;
+	n = ptr2;
+	h->first = n;
+	return h->first != n;
+}
+
+/*
+ * The cast the compiler inserts is one instruction on every path through it:
+ * a loaded typed pointer needs the sanitizing sequence there, an allocated
+ * object needs the identity, and the two cannot share a lowering.
+ */
+SEC("syscall")
+__description("one cast cannot both sanitize an arena pointer and pass an allocated object")
+__failure __msg("casts values that need different treatment on different paths")
+int cast_conflicts_between_arena_and_allocated(void *ctx)
+{
+	struct node_obj *n, *a;
+	struct head_obj *h;
+
+	arena_bind();
+	a = bpf_obj_new(struct node_obj);
+	if (!a)
+		return 1;
+	h = ptr;
+	if (bpf_get_prandom_u32() & 1)
+		n = h->first;
+	else
+		n = a;
+	n->value = 1;
+	bpf_obj_drop(a);
+	return 0;
+}
+
+SEC("syscall")
+__description("one instruction sanitizes one typed arena: two types on two paths are rejected")
+__failure __msg("sanitizes typed arena pointers of different types on different paths")
+int ptr_field_sanitize_two_types_at_one_insn(void *ctx)
+{
+	struct node_obj *n;
+	struct pair_obj *p;
+
+	arena_bind();
+	n = ptr;
+	p = ptr;
+	asm volatile("call %[bpf_get_prandom_u32];"
+		     "if r0 == 0 goto 1f;"
+		     "r1 = %[n];"
+		     "r1 = *(u64 *)(r1 + 8);"
+		     "goto 2f;"
+		     "1: r1 = %[p];"
+		     "r1 = *(u64 *)(r1 + 8);"
+		     "2: r2 = *(u64 *)(r1 + 16);"
+		     :: [n] "r"(n), [p] "r"(p), __imm(bpf_get_prandom_u32)
+		     : "r0", "r1", "r2", "r3", "r4", "r5", "memory");
+	return 0;
+}
+
+SEC("syscall")
+__description("one instruction sanitizes one typed arena: a typed pointer on one path only is rejected")
+__failure __msg("sanitizes a typed arena pointer only on some paths")
+int ptr_field_sanitize_on_one_path(void *ctx)
+{
+	struct node_obj *n;
+
+	arena_bind();
+	n = ptr;
+	asm volatile("r2 = 0;"
+		     "*(u64 *)(r10 - 16) = r2;"
+		     "call %[bpf_get_prandom_u32];"
+		     "if r0 == 0 goto 1f;"
+		     "r1 = %[n];"
+		     "r1 = *(u64 *)(r1 + 8);"
+		     "goto 2f;"
+		     "1: r1 = r10;"
+		     "r1 += -32;"
+		     "2: r2 = *(u64 *)(r1 + 16);"
+		     :: [n] "r"(n), __imm(bpf_get_prandom_u32)
+		     : "r0", "r1", "r2", "r3", "r4", "r5", "memory");
+	return 0;
+}
+
 #endif /* __BPF_FEATURE_TYPED_ARENA_CAST */
 
 char _license[] SEC("license") = "GPL";
