@@ -1754,6 +1754,44 @@ bail:
 	return rc;
 }
 
+/*
+ * Validate the slot fields used as indices into arrays sized by
+ * osb->max_slots.  The filecheck path uses this validator instead of
+ * ocfs2_validate_inode_block(), so it must enforce the same bounds.
+ */
+static int ocfs2_filecheck_validate_slots(struct super_block *sb,
+					  struct ocfs2_dinode *di,
+					  unsigned long long blkno)
+{
+	struct ocfs2_super *osb = OCFS2_SB(sb);
+
+	if (le16_to_cpu(di->i_suballoc_slot) != (u16)OCFS2_INVALID_SLOT &&
+	    (u32)le16_to_cpu(di->i_suballoc_slot) > osb->max_slots - 1) {
+		mlog(ML_ERROR,
+		     "Filecheck: invalid dinode #%llu: suballoc slot %u\n",
+		     blkno, le16_to_cpu(di->i_suballoc_slot));
+		return -OCFS2_FILECHECK_ERR_INVALIDINO;
+	}
+
+	if ((le32_to_cpu(di->i_flags) & OCFS2_ORPHANED_FL) &&
+	    le16_to_cpu(di->i_orphaned_slot) >= osb->max_slots) {
+		mlog(ML_ERROR,
+		     "Filecheck: invalid dinode #%llu: orphaned slot %u\n",
+		     blkno, le16_to_cpu(di->i_orphaned_slot));
+		return -OCFS2_FILECHECK_ERR_INVALIDINO;
+	}
+
+	if ((le32_to_cpu(di->i_flags) & OCFS2_DIO_ORPHANED_FL) &&
+	    le16_to_cpu(di->i_dio_orphaned_slot) >= osb->max_slots) {
+		mlog(ML_ERROR,
+		     "Filecheck: invalid dinode #%llu: DIO orphaned slot %u\n",
+		     blkno, le16_to_cpu(di->i_dio_orphaned_slot));
+		return -OCFS2_FILECHECK_ERR_INVALIDINO;
+	}
+
+	return 0;
+}
+
 static int ocfs2_filecheck_validate_inode_block(struct super_block *sb,
 						struct buffer_head *bh)
 {
@@ -1835,6 +1873,10 @@ static int ocfs2_filecheck_validate_inode_block(struct super_block *sb,
 		goto bail;
 	}
 
+	rc = ocfs2_filecheck_validate_slots(sb, di, bh->b_blocknr);
+	if (rc)
+		goto bail;
+
 	if (ocfs2_dinode_has_size_without_clusters(sb, di)) {
 		if (S_ISDIR(le16_to_cpu(di->i_mode)))
 			mlog(ML_ERROR,
@@ -1892,6 +1934,9 @@ static int ocfs2_filecheck_repair_inode_block(struct super_block *sb,
 		 */
 		return -OCFS2_FILECHECK_ERR_VALIDFLAG;
 	}
+
+	if (ocfs2_filecheck_validate_slots(sb, di, bh->b_blocknr))
+		return -OCFS2_FILECHECK_ERR_INVALIDINO;
 
 	if (le64_to_cpu(di->i_blkno) != bh->b_blocknr) {
 		di->i_blkno = cpu_to_le64(bh->b_blocknr);
