@@ -4,6 +4,8 @@
  * Copyright(c) 2007 - 2012 Realtek Corporation. All rights reserved.
  *
  ******************************************************************************/
+#include <linux/errno.h>
+
 #include <drv_types.h>
 #include <hal_data.h>
 
@@ -27,9 +29,9 @@ static void rtw_hal_init_opmode(struct adapter *padapter)
 	rtw_setopmode_cmd(padapter, networkType, false);
 }
 
-uint rtw_hal_init(struct adapter *padapter)
+int rtw_hal_init(struct adapter *padapter)
 {
-	uint status;
+	int status;
 	struct dvobj_priv *dvobj = adapter_to_dvobj(padapter);
 
 	status = rtl8723bs_hal_init(padapter);
@@ -51,12 +53,12 @@ uint rtw_hal_init(struct adapter *padapter)
 		dvobj->padapters->hw_init_completed = false;
 	}
 
-	return status;
+	return status == _SUCCESS ? 0 : -EIO;
 }
 
-uint rtw_hal_deinit(struct adapter *padapter)
+int rtw_hal_deinit(struct adapter *padapter)
 {
-	uint status = _SUCCESS;
+	int status;
 	struct dvobj_priv *dvobj = adapter_to_dvobj(padapter);
 
 	status = rtl8723bs_hal_deinit(padapter);
@@ -66,7 +68,7 @@ uint rtw_hal_deinit(struct adapter *padapter)
 		padapter->hw_init_completed = false;
 	}
 
-	return status;
+	return status == _SUCCESS ? 0 : -EIO;
 }
 
 void rtw_hal_set_hwreg(struct adapter *padapter, u8 variable, u8 *val)

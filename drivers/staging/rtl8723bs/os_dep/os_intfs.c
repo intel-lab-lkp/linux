@@ -786,7 +786,7 @@ int rtw_drv_register_netdev(struct adapter *if1)
 
 static int _netdev_open(struct net_device *pnetdev)
 {
-	unsigned int status;
+	int ret;
 	struct adapter *padapter = rtw_netdev_priv(pnetdev);
 	struct pwrctrl_priv *pwrctrlpriv = adapter_to_pwrctl(padapter);
 
@@ -802,13 +802,14 @@ static int _netdev_open(struct net_device *pnetdev)
 		padapter->bSurpriseRemoved = false;
 		padapter->bCardDisableWOHSM = false;
 
-		status = rtw_hal_init(padapter);
-		if (status == _FAIL)
+		ret = rtw_hal_init(padapter);
+		if (ret)
 			goto netdev_open_error;
 
-		status = rtw_start_drv_threads(padapter);
-		if (status == _FAIL)
+		if (rtw_start_drv_threads(padapter) == _FAIL) {
+			ret = -1;
 			goto netdev_open_error;
+		}
 
 		if (padapter->intf_start)
 			padapter->intf_start(padapter);
@@ -838,7 +839,7 @@ netdev_open_error:
 	netif_carrier_off(pnetdev);
 	rtw_netif_stop_queue(pnetdev);
 
-	return (-1);
+	return ret;
 }
 
 int netdev_open(struct net_device *pnetdev)
@@ -861,7 +862,6 @@ int netdev_open(struct net_device *pnetdev)
 
 static int  ips_netdrv_open(struct adapter *padapter)
 {
-	int status = _SUCCESS;
 	/* struct pwrctrl_priv *pwrpriv = adapter_to_pwrctl(padapter); */
 
 	padapter->net_closed = false;
@@ -870,8 +870,7 @@ static int  ips_netdrv_open(struct adapter *padapter)
 	padapter->bCardDisableWOHSM = false;
 	/* padapter->bup = true; */
 
-	status = rtw_hal_init(padapter);
-	if (status == _FAIL)
+	if (rtw_hal_init(padapter))
 		goto netdev_open_error;
 
 	if (padapter->intf_start)
