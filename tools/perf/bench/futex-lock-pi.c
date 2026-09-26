@@ -29,7 +29,7 @@ struct worker {
 	int tid;
 	u_int32_t *futex;
 	pthread_t thread;
-	unsigned long ops;
+	u64 ops;
 };
 
 static u_int32_t global_futex = 0;
@@ -86,7 +86,7 @@ static void toggle_done(int sig __maybe_unused,
 static void *workerfn(void *arg)
 {
 	struct worker *w = (struct worker *) arg;
-	unsigned long ops = w->ops;
+	u64 ops = w->ops;
 
 	mutex_lock(&thread_lock);
 	threads_starting--;
@@ -239,7 +239,7 @@ int bench_futex_lock_pi(int argc, const char **argv)
 
 	for (i = 0; i < params.nthreads; i++) {
 		unsigned long t = runtime_us ?
-			(u64)worker[i].ops * USEC_PER_SEC / runtime_us : 0;
+			worker[i].ops * USEC_PER_SEC / runtime_us : 0;
 
 		update_stats(&throughput_stats, t);
 		if (!params.silent)

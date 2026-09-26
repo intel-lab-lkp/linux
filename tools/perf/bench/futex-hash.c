@@ -46,7 +46,7 @@ struct worker {
 	int tid;
 	u_int32_t *futex;
 	pthread_t thread;
-	unsigned long ops;
+	u64 ops;
 };
 
 static struct bench_futex_parameters params = {
@@ -76,7 +76,7 @@ static void *workerfn(void *arg)
 	int ret;
 	struct worker *w = (struct worker *) arg;
 	unsigned int i;
-	unsigned long ops = w->ops; /* avoid cacheline bouncing */
+	u64 ops = w->ops; /* avoid cacheline bouncing */
 
 	mutex_lock(&thread_lock);
 	threads_starting--;
@@ -238,7 +238,7 @@ int bench_futex_hash(int argc, const char **argv)
 
 	for (i = 0; i < params.nthreads; i++) {
 		unsigned long t = runtime_us ?
-			(u64)worker[i].ops * USEC_PER_SEC / runtime_us : 0;
+			worker[i].ops * USEC_PER_SEC / runtime_us : 0;
 		update_stats(&throughput_stats, t);
 		if (!params.silent) {
 			if (params.nfutexes == 1)
