@@ -421,34 +421,92 @@ static inline bool valid_queue_index(u64 read, u64 write, u32 capacity)
 
 static u64 get_read_index(struct amdxdna_hwctx *hwctx)
 {
-	u64 wi = READ_ONCE(*hwctx->priv->umq_write_index);
-	u64 ri = READ_ONCE(*hwctx->priv->umq_read_index);
+	struct amdxdna_hwctx_priv *priv = hwctx->priv;
 	struct amdxdna_dev *xdna = hwctx->client->xdna;
+	u64 ri, wi;
+
+	/*
+	 * Sample read_index (written by CERT) before write_index. CERT can
+	 * never complete more than has been published, so a write_index sampled
+	 * after read_index always satisfies wi >= ri; sampling write_index
+	 * first races the submit path / CERT and yields a bogus ri > wi.
+	 *
+	 * In kernel-mode submission write_index is the driver's host-owned copy
+	 * in coherent kernel memory (always >= the value mirrored into the UMQ,
+	 * and the device never writes it).
+	 *
+	 * Security: read_index lives in the umq_bo, which the owning process can
+	 * map. Under PASID/SVA the device reaches the queue through that process's
+	 * own page tables, preventing access to other contexts' unshared memory.
+	 * A forged read_index only completes the process's own command early and
+	 * corrupts or hangs itself; however, if BOs are exported via dma-buf,
+	 * premature fence signaling can cause an importing process or device to
+	 * observe DMA completion before CERT has finished processing.
+	 */
+	ri = READ_ONCE(*priv->umq_read_index);
+	/* Order the read_index sample before the write_index sample. */
+	smp_rmb();
+	wi = READ_ONCE(priv->write_index);
 
 	/*
 	 * CERT cannot update read index as uint64 atomically. Driver may read
-	 * half-updated read index when it has bits in high 32bit. In case read
-	 * index is not valid, wait for some time and retry once. It should
-	 * allow CERT to complete the read index update.
+	 * a half-updated read index when it has bits in the high 32 bits. If it
+	 * looks invalid, re-sample once -- WITHOUT sleeping, since this can run as
+	 * a wait_event() condition. If still invalid, report not-advanced; the
+	 * waiter re-checks on the next completion wake or timeout.
 	 */
 	if (!valid_queue_index(ri, wi, CTX_MAX_CMDS)) {
-		XDNA_WARN(xdna, "Invalid index, ri %llu, wi %llu", ri, wi);
-		usleep_range(100, 200);
-		ri = READ_ONCE(*hwctx->priv->umq_read_index);
+		ri = READ_ONCE(*priv->umq_read_index);
+		/* Order the read_index sample before the write_index sample. */
+		smp_rmb();
+		wi = READ_ONCE(priv->write_index);
 		if (!valid_queue_index(ri, wi, CTX_MAX_CMDS)) {
-			XDNA_ERR(xdna, "Invalid index after retry, ri %llu, wi %llu", ri, wi);
-			ri = 0;
+			/*
+			 * Still invalid (torn 64-bit read, or a transient
+			 * accounting skew). Return the last valid read_index
+			 * instead of 0: read_index only advances, so the cached
+			 * value is a safe lower bound -- it never reports a
+			 * command complete that isn't, and never regresses the
+			 * worker into falsely timing out a finished job.
+			 */
+			XDNA_DBG(xdna, "Invalid index, ri %llu, wi %llu", ri, wi);
+			return READ_ONCE(priv->last_read_index);
 		}
 	}
 
+	WRITE_ONCE(priv->last_read_index, ri);
 	return ri;
 }
 
-static inline bool check_cmd_done(struct amdxdna_hwctx *hwctx, u64 seq)
+/*
+ * The ctx is "connected" as long as @comp is still the cert_comp linked to it.
+ * A disconnect (teardown/reset) unlinks (and may re-link a fresh) cert_comp, so
+ * a changed pointer means the caller must retry (-EAGAIN). This runs as a
+ * wait_event() condition on the completion hot path (cert_comp->waitq is shared
+ * per MSI-X), so keep it lockless: the caller pins @comp with a kref, making
+ * this a pure pointer-identity compare - never a dereference, ABA-safe - and
+ * READ_ONCE pairs with the WRITE_ONCE in aie4_hwctx_create()/
+ * aie4_hwctx_destroy().
+ */
+static bool check_cert_comp_linked(struct amdxdna_hwctx *hwctx, struct cert_comp *comp)
 {
-	u64 read_idx = get_read_index(hwctx);
+	/* READ_ONCE pairs with the link/unlink WRITE_ONCE. */
+	return comp == READ_ONCE(hwctx->priv->cert_comp);
+}
 
-	return read_idx > seq;
+static inline bool check_cmd_done(struct amdxdna_hwctx *hwctx, u64 seq, struct cert_comp *comp)
+{
+	/*
+	 * Runs as a wait_event() condition, so it must not sleep.
+	 * check_cert_comp_linked() is lockless (a READ_ONCE pointer compare); a
+	 * disconnect (teardown/reset) unlinks @comp and breaks the wait, and the
+	 * caller then confirms real completion by re-reading read_index, so a
+	 * disconnect wake is not mistaken for success.
+	 */
+	if (!check_cert_comp_linked(hwctx, comp))
+		return true;
+
+	return get_read_index(hwctx) > seq;
 }
 
 int aie4_cmd_wait(struct amdxdna_hwctx *hwctx, u64 seq, u32 timeout)
@@ -464,11 +522,14 @@ int aie4_cmd_wait(struct amdxdna_hwctx *hwctx, u64 seq, u32 timeout)
 		wait_jifs = msecs_to_jiffies(timeout);
 
 	ret = wait_event_interruptible_timeout(cert_comp->waitq,
-					       (check_cmd_done(hwctx, seq)),
+					       check_cmd_done(hwctx, seq, cert_comp),
 					       wait_jifs);
 
 	if (!ret)
 		ret = -ETIME;
+	else if (ret > 0 && get_read_index(hwctx) <= seq)
+		/* Woke on disconnect/reset, not on real completion. */
+		ret = -EAGAIN;
 
 	aie4_put_cert_comp(cert_comp);
 
