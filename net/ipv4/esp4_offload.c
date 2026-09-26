@@ -169,9 +169,13 @@ static struct sk_buff *xfrm4_beet_gso_segment(struct xfrm_state *x,
 		}
 	} else {
 		__be16 frag;
+		int offset;
 
-		skb->transport_header +=
-			ipv6_skip_exthdr(skb, 0, &proto, &frag);
+		offset = ipv6_skip_exthdr(skb, 0, &proto, &frag);
+		if (offset < 0)
+			return ERR_PTR(-EINVAL);
+
+		skb->transport_header += offset;
 		if (proto == IPPROTO_TCP)
 			skb_shinfo(skb)->gso_type |= SKB_GSO_TCPV4;
 	}

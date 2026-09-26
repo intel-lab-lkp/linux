@@ -48,15 +48,12 @@ EXPORT_SYMBOL(ipv6_ext_hdr);
  * "nexthdrp" initially points to some place,
  * where type of the first header can be found.
  *
- * It skips all well-known exthdrs, and returns pointer to the start
- * of unparsable area i.e. the first header with unknown type.
+ * It skips all well-known exthdrs, and returns the offset of the start
+ * of the first header with an unknown type.
  * If it is not NULL *nexthdr is updated by type/protocol of this header.
  *
- * NOTES: - if packet terminated with NEXTHDR_NONE it returns NULL.
- *        - it may return pointer pointing beyond end of packet,
- *	    if the last recognized header is truncated in the middle.
- *        - if packet is truncated, so that all parsed headers are skipped,
- *	    it returns NULL.
+ * NOTES: - if packet terminates with NEXTHDR_NONE or is truncated while
+ *          skipping extension headers, it returns -1.
  *	  - First fragment header is skipped, not-first ones
  *	    are considered as unparsable.
  *	  - Reports the offset field of the final fragment header so it is
@@ -106,6 +103,9 @@ int ipv6_skip_exthdr(const struct sk_buff *skb, int start, u8 *nexthdrp,
 			hdrlen = ipv6_authlen(hp);
 		else
 			hdrlen = ipv6_optlen(hp);
+
+		if (skb->len - start < hdrlen)
+			return -1;
 
 		nexthdr = hp->nexthdr;
 		start += hdrlen;

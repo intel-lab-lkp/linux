@@ -125,7 +125,9 @@ ipv6frag_thdr_truncated(struct sk_buff *skb, int start, u8 *nexthdrp)
 	int offset;
 
 	offset = ipv6_skip_exthdr(skb, start, &nexthdr, &frag_off);
-	if (offset < 0 || (frag_off & htons(IP6_OFFSET)))
+	if (offset < 0)
+		return true;
+	if (frag_off & htons(IP6_OFFSET))
 		return false;
 	switch (nexthdr) {
 	case NEXTHDR_TCP:
