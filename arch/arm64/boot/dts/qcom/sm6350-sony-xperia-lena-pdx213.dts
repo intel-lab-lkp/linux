@@ -73,6 +73,12 @@
 	};
 };
 
+&adsp {
+	firmware-name = "qcom/sm6350/sony/pdx213/adsp.mbn";
+
+	status = "okay";
+};
+
 &apps_rsc {
 	regulators-0 {
 		compatible = "qcom,pm6350-rpmh-regulators";
@@ -296,6 +302,12 @@
 	};
 };
 
+&cdsp {
+	firmware-name = "qcom/sm6350/sony/pdx213/cdsp.mbn";
+
+	status = "okay";
+};
+
 &gpi_dma0 {
 	status = "okay";
 };
@@ -319,6 +331,12 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&ts_int_default &ts_active>;
 	};
+};
+
+&mpss {
+	firmware-name = "qcom/sm6350/sony/pdx213/modem.mbn";
+
+	status = "okay";
 };
 
 &pm6150l_flash {
