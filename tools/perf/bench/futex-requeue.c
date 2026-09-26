@@ -223,6 +223,7 @@ int bench_futex_requeue(int argc, const char **argv)
 	for (j = 0; j < bench_repeat && !done; j++) {
 		unsigned int nrequeued = 0, wakeups = 0;
 		struct timeval start, end, runtime;
+		u64 runtime_us;
 
 		/* create, launch & block all threads */
 		block_threads(worker, cpu);
@@ -267,23 +268,24 @@ int bench_futex_requeue(int argc, const char **argv)
 
 		gettimeofday(&end, NULL);
 		timersub(&end, &start, &runtime);
+		runtime_us = (u64)runtime.tv_sec * USEC_PER_SEC + runtime.tv_usec;
 
 		update_stats(&requeued_stats, nrequeued);
-		update_stats(&requeuetime_stats, runtime.tv_usec);
+		update_stats(&requeuetime_stats, runtime_us);
 
 		if (!params.silent) {
 			if (!params.pi)
 				printf("[Run %d]: Requeued %d of %d threads in "
 				       "%.4f ms\n", j + 1, nrequeued,
 				       params.nthreads,
-				       runtime.tv_usec / (double)USEC_PER_MSEC);
+				       runtime_us / (double)USEC_PER_MSEC);
 			else {
 				nrequeued -= wakeups;
 				printf("[Run %d]: Awoke and Requeued (%d+%d) of "
 				       "%d threads in %.4f ms\n",
 				       j + 1, wakeups, nrequeued,
 				       params.nthreads,
-				       runtime.tv_usec / (double)USEC_PER_MSEC);
+				       runtime_us / (double)USEC_PER_MSEC);
 			}
 
 		}

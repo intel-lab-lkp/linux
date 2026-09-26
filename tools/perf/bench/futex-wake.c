@@ -191,6 +191,7 @@ int bench_futex_wake(int argc, const char **argv)
 	for (j = 0; j < bench_repeat && !done; j++) {
 		unsigned int nwoken = 0;
 		struct timeval start, end, runtime;
+		u64 runtime_us;
 
 		/* create, launch & block all threads */
 		block_threads(worker, cpu);
@@ -211,14 +212,15 @@ int bench_futex_wake(int argc, const char **argv)
 					     params.nwakes, futex_flag);
 		gettimeofday(&end, NULL);
 		timersub(&end, &start, &runtime);
+		runtime_us = (u64)runtime.tv_sec * USEC_PER_SEC + runtime.tv_usec;
 
 		update_stats(&wakeup_stats, nwoken);
-		update_stats(&waketime_stats, runtime.tv_usec);
+		update_stats(&waketime_stats, runtime_us);
 
 		if (!params.silent) {
 			printf("[Run %d]: Wokeup %d of %d threads in %.4f ms\n",
 			       j + 1, nwoken, params.nthreads,
-			       runtime.tv_usec / (double)USEC_PER_MSEC);
+			       runtime_us / (double)USEC_PER_MSEC);
 		}
 
 		for (i = 0; i < params.nthreads; i++) {

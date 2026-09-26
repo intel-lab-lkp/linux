@@ -13,6 +13,7 @@
 #include <subcmd/parse-options.h>
 #include <linux/compiler.h>
 #include <linux/kernel.h>
+#include <linux/time64.h>
 #include <linux/zalloc.h>
 #include <errno.h>
 #include <perf/cpumap.h>
@@ -66,9 +67,9 @@ static void print_summary(void)
 	unsigned long avg = avg_stats(&throughput_stats);
 	double stddev = stddev_stats(&throughput_stats);
 
-	printf("%sAveraged %ld operations/sec (+- %.2f%%), total secs = %d\n",
+	printf("%sAveraged %ld operations/sec (+- %.2f%%), total secs = %.2f\n",
 	       !params.silent ? "\n" : "", avg, rel_stddev_stats(stddev, avg),
-	       (int)bench__runtime.tv_sec);
+	       bench__runtime.tv_sec + bench__runtime.tv_usec / (double)USEC_PER_SEC);
 	futex_print_nbuckets(&params);
 }
 
@@ -168,6 +169,7 @@ int bench_futex_lock_pi(int argc, const char **argv)
 {
 	int ret = 0;
 	unsigned int i;
+	u64 runtime_us;
 	struct sigaction act;
 	struct perf_cpu_map *cpu;
 
@@ -233,9 +235,11 @@ int bench_futex_lock_pi(int argc, const char **argv)
 	cond_destroy(&thread_worker);
 	mutex_destroy(&thread_lock);
 
+	runtime_us = (u64)bench__runtime.tv_sec * USEC_PER_SEC + bench__runtime.tv_usec;
+
 	for (i = 0; i < params.nthreads; i++) {
-		unsigned long t = bench__runtime.tv_sec > 0 ?
-			worker[i].ops / bench__runtime.tv_sec : 0;
+		unsigned long t = runtime_us ?
+			(u64)worker[i].ops * USEC_PER_SEC / runtime_us : 0;
 
 		update_stats(&throughput_stats, t);
 		if (!params.silent)

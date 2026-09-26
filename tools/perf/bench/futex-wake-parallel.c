@@ -192,7 +192,9 @@ static void print_run(struct thread_data *waking_worker, unsigned int run_num)
 	init_stats(&__waketime_stats);
 
 	for (i = 0; i < params.nwakes; i++) {
-		update_stats(&__waketime_stats, waking_worker[i].runtime.tv_usec);
+		update_stats(&__waketime_stats,
+			     (u64)waking_worker[i].runtime.tv_sec * USEC_PER_SEC +
+			     waking_worker[i].runtime.tv_usec);
 		update_stats(&__wakeup_stats, waking_worker[i].nwoken);
 	}
 
@@ -229,7 +231,9 @@ static void do_run_stats(struct thread_data *waking_worker)
 	unsigned int i;
 
 	for (i = 0; i < params.nwakes; i++) {
-		update_stats(&waketime_stats, waking_worker[i].runtime.tv_usec);
+		update_stats(&waketime_stats,
+			     (u64)waking_worker[i].runtime.tv_sec * USEC_PER_SEC +
+			     waking_worker[i].runtime.tv_usec);
 		update_stats(&wakeup_stats, waking_worker[i].nwoken);
 	}
 
