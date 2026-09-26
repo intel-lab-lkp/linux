@@ -139,10 +139,8 @@ s32 rtl8723bs_xmit_buf_handler(struct adapter *padapter)
 	if (!queue_pending)
 		return _SUCCESS;
 
-	ret = rtw_register_tx_alive(padapter);
-	if (ret != _SUCCESS) {
+	if (!rtw_register_tx_alive(padapter))
 		return _SUCCESS;
-	}
 
 	do {
 		queue_empty = rtl8723_dequeue_writeport(padapter);
