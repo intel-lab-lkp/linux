@@ -2911,6 +2911,9 @@ static void i40e_atr(struct i40e_ring *tx_ring, struct sk_buff *skb,
 
 	if (l4_proto != IPPROTO_TCP)
 		return;
+	if (unlikely(skb_tail_pointer(skb) < hdr.network + hlen +
+			     sizeof(struct tcphdr)))
+		return;
 
 	th = (struct tcphdr *)(hdr.network + hlen);
 
