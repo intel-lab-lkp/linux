@@ -105,8 +105,9 @@ static int __maybe_unused tegra_mgbe_resume(struct device *dev)
 	}
 
 	err = stmmac_resume(dev);
-	if (err < 0)
-		clk_bulk_disable_unprepare(ARRAY_SIZE(mgbe_clks), mgbe->clks);
+	/* Core resume failure retains the suspended datapath for retry or
+	 * close. Keep its register interface powered until that cleanup.
+	 */
 
 	return err;
 }

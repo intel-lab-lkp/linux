@@ -258,6 +258,15 @@ struct stmmac_msi {
 	char int_name_tx_irq[MTL_MAX_TX_QUEUES][IFNAMSIZ + 18];
 };
 
+enum stmmac_datapath_state {
+	/* No IRQs or DMA allocations owned by a successful open. */
+	STMMAC_DATAPATH_DOWN,
+	/* Resources allocated, NAPI enabled. */
+	STMMAC_DATAPATH_RUNNING,
+	/* Resources retained, NAPI and DMA stopped; also after failed resume. */
+	STMMAC_DATAPATH_SUSPENDED,
+};
+
 struct stmmac_priv {
 	/* Frequently used values are kept adjacent for cache effect */
 	u32 tx_coal_frames[MTL_MAX_TX_QUEUES];
@@ -281,6 +290,18 @@ struct stmmac_priv {
 	struct mutex lock;
 
 	struct stmmac_dma_conf *dma_conf;
+	/* IRQ/DMA ownership and NAPI state, serialized by RTNL. */
+	enum stmmac_datapath_state datapath;
+	/* Core sleep sequence completed, independently of datapath ownership. */
+	bool hw_suspended;
+	/* System PM blocks MMIO until power restoration has completed. */
+	bool hw_unavailable;
+	bool bsp_suspended;
+	bool bus_clks_suspended;
+	bool ptp_clock_enabled;
+	bool ptp_clock_suspended;
+	/* Clock ownership can also change in noirq PM, without RTNL. */
+	struct mutex pm_mutex;
 
 	/* Generic channel for NAPI */
 	struct stmmac_channel channel[STMMAC_CH_MAX];
@@ -402,6 +423,7 @@ extern const struct dev_pm_ops stmmac_simple_pm_ops;
 int stmmac_mdio_unregister(struct net_device *ndev);
 int stmmac_mdio_register(struct net_device *ndev);
 int stmmac_mdio_reset(struct mii_bus *mii);
+int stmmac_resume_clocks(struct stmmac_priv *priv);
 void stmmac_mdio_lock(struct stmmac_priv *priv);
 void stmmac_mdio_unlock(struct stmmac_priv *priv);
 int stmmac_pcs_setup(struct net_device *ndev);
@@ -430,6 +452,13 @@ struct plat_stmmacenet_data *stmmac_plat_dat_alloc(struct device *dev);
 static inline bool stmmac_xdp_is_enabled(struct stmmac_priv *priv)
 {
 	return !!priv->xdp_prog;
+}
+
+/* RTNL serializes TC callbacks with datapath and power transitions. */
+static inline bool stmmac_tc_active(struct stmmac_priv *priv)
+{
+	return priv->datapath == STMMAC_DATAPATH_RUNNING &&
+	       netif_device_present(priv->dev) && !priv->hw_unavailable;
 }
 
 void stmmac_disable_rx_queue(struct stmmac_priv *priv, u32 queue);
