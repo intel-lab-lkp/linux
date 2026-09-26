@@ -29,10 +29,12 @@ static void l2_guest_code(void)
 	if (inhibit_apicv)
 		wrmsr(MSR_IA32_APICBASE, rdmsr(MSR_IA32_APICBASE) & GENMASK_ULL(11, 0));
 
-	x2apic_write_reg(APIC_TASKPRI, 0xf0);
-	GUEST_ASSERT_EQ(x2apic_read_reg(APIC_TASKPRI), 0xf0);
+	for (;;) {
+		x2apic_write_reg(APIC_TASKPRI, 0xf0);
+		GUEST_ASSERT_EQ(x2apic_read_reg(APIC_TASKPRI), 0xf0);
 
-	asm volatile("cpuid" ::: "eax", "ebx", "ecx", "edx");
+		asm volatile("cpuid" ::: "eax", "ebx", "ecx", "edx");
+	}
 }
 
 static void l1_svm_code(struct svm_test_data *svm)
@@ -58,22 +60,52 @@ static void l1_vmx_code(struct vmx_pages *vmx)
 	prepare_vmcs(vmx, NULL);
 	GUEST_ASSERT_EQ(vmwrite(GUEST_RIP, (unsigned long)l2_guest_code), 0);
 
+	control = vmreadz(PIN_BASED_VM_EXEC_CONTROL);
+	control |= PIN_BASED_EXT_INTR_MASK;
+	vmwrite(PIN_BASED_VM_EXEC_CONTROL, control);
+
 	control = vmreadz(CPU_BASED_VM_EXEC_CONTROL);
-	control |= CPU_BASED_USE_MSR_BITMAPS;
+	control |= CPU_BASED_USE_MSR_BITMAPS | CPU_BASED_TPR_SHADOW;
 	GUEST_ASSERT_EQ(vmwrite(CPU_BASED_VM_EXEC_CONTROL, control), 0);
+
+	if (control & CPU_BASED_ACTIVATE_SECONDARY_CONTROLS) {
+		control = vmreadz(SECONDARY_VM_EXEC_CONTROL);
+		control |= SECONDARY_EXEC_VIRTUALIZE_X2APIC_MODE |
+			   SECONDARY_EXEC_APIC_REGISTER_VIRT |
+			   SECONDARY_EXEC_VIRTUAL_INTR_DELIVERY;
+		control &= (rdmsr(MSR_IA32_VMX_PROCBASED_CTLS2) >> 32);
+		GUEST_ASSERT_EQ(vmwrite(SECONDARY_VM_EXEC_CONTROL, control), 0);
+	}
 
 	GUEST_ASSERT(!vmlaunch());
 	GUEST_ASSERT_EQ(vmreadz(VM_EXIT_REASON), EXIT_REASON_CPUID);
+	GUEST_ASSERT_EQ(vmwrite(GUEST_RIP,
+			vmreadz(GUEST_RIP) + vmreadz(VM_EXIT_INSTRUCTION_LEN)), 0);
 }
 
-static void l1_guest_code(void *test_data)
+static void l1_vmx_code_part2(void)
 {
-	x2apic_enable();
+	u64 control;
 
-	if (this_cpu_has(X86_FEATURE_SVM))
-		l1_svm_code(test_data);
-	else
-		l1_vmx_code(test_data);
+	control = vmreadz(CPU_BASED_VM_EXEC_CONTROL);
+	control &= ~CPU_BASED_TPR_SHADOW;
+	GUEST_ASSERT_EQ(vmwrite(CPU_BASED_VM_EXEC_CONTROL, control), 0);
+
+	control = vmread(SECONDARY_VM_EXEC_CONTROL, &control);
+	control &= ~(SECONDARY_EXEC_VIRTUALIZE_X2APIC_MODE |
+			SECONDARY_EXEC_APIC_REGISTER_VIRT |
+			SECONDARY_EXEC_VIRTUAL_INTR_DELIVERY);
+	GUEST_ASSERT_EQ(vmwrite(SECONDARY_VM_EXEC_CONTROL, control), 0);
+
+	GUEST_ASSERT(!vmresume());
+	GUEST_ASSERT_EQ(vmreadz(VM_EXIT_REASON), EXIT_REASON_CPUID);
+	GUEST_ASSERT_EQ(vmwrite(GUEST_RIP,
+			vmreadz(GUEST_RIP) + vmreadz(VM_EXIT_INSTRUCTION_LEN)), 0);
+}
+
+static void l1_test_x2apic_intercepts(void)
+{
+	GUEST_ASSERT_EQ(nr_irqs, 0);
 
 	sti_nop();
 
@@ -92,6 +124,28 @@ static void l1_guest_code(void *test_data)
 
 	x2apic_write_reg(APIC_ICR, APIC_DEST_SELF | APIC_INT_ASSERT | POSTED_INTR_NESTED_VECTOR);
 	GUEST_ASSERT_EQ(nr_irqs, 3);
+
+	nr_irqs = 0;
+}
+
+static void l1_guest_code(void *test_data)
+{
+	x2apic_enable();
+
+	if (this_cpu_has(X86_FEATURE_SVM))
+		l1_svm_code(test_data);
+	else
+		l1_vmx_code(test_data);
+
+	GUEST_ASSERT_EQ(x2apic_read_reg(APIC_TASKPRI), 0);
+	x2apic_write_reg(APIC_TASKPRI, 0xf0);
+
+	l1_test_x2apic_intercepts();
+
+	if (this_cpu_has(X86_FEATURE_VMX))
+		l1_vmx_code_part2();
+
+	l1_test_x2apic_intercepts();
 
 	GUEST_DONE();
 }
