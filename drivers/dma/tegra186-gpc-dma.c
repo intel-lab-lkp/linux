@@ -553,6 +553,21 @@ static void tegra_dma_start(struct tegra_dma_channel *tdc)
 		  sg_req->csr | TEGRA_GPCDMA_CSR_ENB);
 }
 
+static void tegra_dma_start_next(struct tegra_dma_channel *tdc)
+{
+	tegra_dma_start(tdc);
+
+	/*
+	 * For cyclic DMA transfers, program the second
+	 * transfer parameters as soon as the first DMA
+	 * transfer is started inorder for the DMA
+	 * controller to trigger the second transfer
+	 * with the correct parameters.
+	 */
+	if (tdc->dma_desc && tdc->dma_desc->cyclic)
+		tegra_dma_configure_next_sg(tdc);
+}
+
 static void tegra_dma_xfer_complete(struct tegra_dma_channel *tdc)
 {
 	vchan_cookie_complete(&tdc->dma_desc->vd);
@@ -560,6 +575,8 @@ static void tegra_dma_xfer_complete(struct tegra_dma_channel *tdc)
 	tegra_dma_sid_free(tdc);
 	tdc->dma_desc = NULL;
 	tdc->status = DMA_COMPLETE;
+
+	tegra_dma_start_next(tdc);
 }
 
 static void tegra_dma_chan_decode_error(struct tegra_dma_channel *tdc,
@@ -653,22 +670,9 @@ static void tegra_dma_issue_pending(struct dma_chan *dc)
 	struct tegra_dma_channel *tdc = to_tegra_dma_chan(dc);
 	unsigned long flags;
 
-	if (tdc->dma_desc)
-		return;
-
 	spin_lock_irqsave(&tdc->vc.lock, flags);
-	if (vchan_issue_pending(&tdc->vc))
-		tegra_dma_start(tdc);
-
-	/*
-	 * For cyclic DMA transfers, program the second
-	 * transfer parameters as soon as the first DMA
-	 * transfer is started inorder for the DMA
-	 * controller to trigger the second transfer
-	 * with the correct parameters.
-	 */
-	if (tdc->dma_desc && tdc->dma_desc->cyclic)
-		tegra_dma_configure_next_sg(tdc);
+	if (vchan_issue_pending(&tdc->vc) && !tdc->dma_desc)
+		tegra_dma_start_next(tdc);
 
 	spin_unlock_irqrestore(&tdc->vc.lock, flags);
 }
