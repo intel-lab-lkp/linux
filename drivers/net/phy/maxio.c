@@ -2,6 +2,7 @@
 /* Driver for Maxio Ethernet PHYs. */
 
 #include <linux/bitops.h>
+#include <linux/clk.h>
 #include <linux/module.h>
 #include <linux/phy.h>
 #include <linux/property.h>
@@ -15,6 +16,7 @@
 #define MAXIO_MAE0621A_CLKOUT_ENABLE	BIT(0)
 
 struct maxio_priv {
+	struct clk *clk;
 	bool clk_out_125m;
 };
 
@@ -56,6 +58,11 @@ static int maxio_mae0621a_probe(struct phy_device *phydev)
 
 		priv->clk_out_125m = true;
 	}
+
+	/* PHY clock from the generic PHY binding */
+	priv->clk = devm_clk_get_optional_enabled(&phydev->mdio.dev, NULL);
+	if (IS_ERR(priv->clk))
+		return PTR_ERR(priv->clk);
 
 	return 0;
 }
