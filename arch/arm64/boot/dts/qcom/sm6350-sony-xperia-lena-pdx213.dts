@@ -333,6 +333,12 @@
 	};
 };
 
+&ipa {
+	firmware-name = "qcom/sm6350/sony/pdx213/ipa_fws.mbn";
+
+	status = "okay";
+};
+
 &mpss {
 	firmware-name = "qcom/sm6350/sony/pdx213/modem.mbn";
 
