@@ -10,8 +10,10 @@
 #include <linux/types.h>
 
 enum aie4_msg_opcode {
+	AIE4_MSG_OP_IDENTIFY                         = 0x10002,
 	AIE4_MSG_OP_SUSPEND                          = 0x10003,
 	AIE4_MSG_OP_ATTACH_WORK_BUFFER               = 0x1000D,
+	AIE4_MSG_OP_QUERY_CERT_FIRMWARE_VERSION      = 0x1000F,
 
 	AIE4_MSG_OP_CREATE_VFS                       = 0x20001,
 	AIE4_MSG_OP_DESTROY_VFS                      = 0x20002,
@@ -29,6 +31,18 @@ enum aie4_msg_status {
 	AIE4_MSG_STATUS_NOTSUPP = 0x2,
 	MAX_AIE4_MSG_STATUS_CODE = 0x4,
 };
+
+struct aie4_msg_identify_req {
+	__u32 rsvd;
+} __packed;
+
+struct aie4_msg_identify_resp {
+	enum aie4_msg_status status;
+	__u32 fw_major;
+	__u32 fw_minor;
+	__u32 fw_patch;
+	__u32 fw_build;
+} __packed;
 
 struct aie4_msg_suspend_req {
 	__u32 rsvd;
@@ -130,6 +144,22 @@ struct aie4_msg_aie4_tile_info_req {
 struct aie4_msg_aie4_tile_info_resp {
 	enum aie4_msg_status status;
 	struct aie4_tile_info info;
+} __packed;
+
+struct aie4_msg_query_cert_firmware_version_req {
+	__u32 resvd;
+} __packed;
+
+struct aie4_msg_query_cert_firmware_version_resp {
+	enum aie4_msg_status status;
+	__u8 major_version;
+	__u8 minor_version;
+	__u8 git_hash[41];
+	__u8 date[11];
+	__u8 hotfix;
+	__u8 build;
+	__u16 host_queue_major;
+	__u16 host_queue_minor;
 } __packed;
 
 #define AIE4_WORK_BUFFER_MIN_SIZE      SZ_4M
