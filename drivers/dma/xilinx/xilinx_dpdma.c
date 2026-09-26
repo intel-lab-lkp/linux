@@ -410,7 +410,7 @@ static ssize_t xilinx_dpdma_debugfs_write(struct file *f,
 	if (dpdma_debugfs.testcase != DPDMA_TC_NONE)
 		return -EBUSY;
 
-	kern_buff = kzalloc(size, GFP_KERNEL);
+	kern_buff = kzalloc(size + 1, GFP_KERNEL);
 	if (!kern_buff)
 		return -ENOMEM;
 	kern_buff_start = kern_buff;
