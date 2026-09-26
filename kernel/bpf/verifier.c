@@ -386,7 +386,7 @@ static struct btf_record *reg_btf_record(const struct bpf_reg_state *reg)
 
 	if (reg->type == PTR_TO_MAP_VALUE) {
 		rec = reg->map_ptr->record;
-	} else if (type_is_ptr_alloc_obj(reg->type)) {
+	} else if (type_is_ptr_alloc_obj(reg->type) || type_is_typed_arena_obj(reg->type)) {
 		meta = btf_find_struct_meta(reg->btf, reg->btf_id);
 		if (meta)
 			rec = meta->record;
@@ -8063,7 +8063,7 @@ static int process_kptr_func(struct bpf_verifier_env *env, int regno,
 	struct btf_record *rec;
 	u32 kptr_off;
 
-	if (type_is_ptr_alloc_obj(reg->type)) {
+	if (type_is_ptr_alloc_obj(reg->type) || type_is_typed_arena_obj(reg->type)) {
 		rec = reg_btf_record(reg);
 	} else { /* PTR_TO_MAP_VALUE */
 		map_ptr = reg->map_ptr;
@@ -8834,6 +8834,7 @@ static const struct bpf_reg_types kptr_xchg_dest_types = {
 		PTR_TO_BTF_ID | MEM_ALLOC,
 		PTR_TO_BTF_ID | MEM_ALLOC | NON_OWN_REF,
 		PTR_TO_BTF_ID | MEM_ALLOC | NON_OWN_REF | MEM_RCU,
+		PTR_TO_BTF_ID | MEM_ARENA,
 	}
 };
 static const struct bpf_reg_types dynptr_types = {
@@ -9154,6 +9155,7 @@ static int check_func_arg_reg_off(struct bpf_verifier_env *env,
 	case PTR_TO_BTF_ID | MEM_RCU:
 	case PTR_TO_BTF_ID | MEM_ALLOC | NON_OWN_REF:
 	case PTR_TO_BTF_ID | MEM_ALLOC | NON_OWN_REF | MEM_RCU:
+	case PTR_TO_BTF_ID | MEM_ARENA:
 		/* When referenced PTR_TO_BTF_ID is passed to release function,
 		 * its fixed offset must be 0. bpf_refcount_acquire() returns the
 		 * pointer it was given while incrementing the refcount at the
