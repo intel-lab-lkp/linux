@@ -59,11 +59,19 @@ enum scx_consts {
 };
 
 /*
- * Per-cid topology info. For each topology level (core, LLC, node) and shard,
- * records the first cid in the unit and its global index. Global indices are
- * consecutive integers assigned in cid-walk order, so e.g. core_idx ranges over
- * [0, nr_cores_at_init) with no gaps. No-topo cids have core/LLC/node fields
- * set to -1 but always have valid shard assignments.
+ * Per-cid topology info. For each topology level (core, cluster, LLC, node) and
+ * shard, records the first cid in the unit and its global index. Global indices
+ * are consecutive integers assigned in cid-walk order, so e.g. core_idx ranges
+ * over [0, nr_cores_at_init) with no gaps. No-topo cids have core/cluster/LLC/
+ * node fields set to -1 but always have valid shard assignments.
+ *
+ * A cluster is the cache-sharing level below an LLC used by SD_CLUSTER and
+ * identified by per_cpu(sd_share_id). Where this level is absent, including on
+ * individual CPUs of hybrid machines, cluster_cid is the LLC's first cid and
+ * cluster_idx is -1. Comparing cluster_cid then matches cpus_share_resources().
+ * Entries with the same nonnegative cluster_idx form a contiguous cid range.
+ * Fallback entries may be interleaved with clusters and may share cluster_cid
+ * with a real cluster, so cluster_cid alone does not delimit a cluster range.
  *
  * Shards are contiguous CID ranges used as scalable locking/work domains for
  * sub-scheduler operations. By default each LLC becomes one shard, split into
@@ -78,6 +86,8 @@ enum scx_consts {
  * @node_idx: global index of that node, in [0, nr_nodes_at_init)
  * @shard_cid: first cid of this cid's shard
  * @shard_idx: global index of that shard, in [0, scx_nr_cid_shards)
+ * @cluster_cid: first cid of this cid's cluster, or LLC if no cluster level
+ * @cluster_idx: global index of that cluster, or -1 if no cluster level
  */
 struct scx_cid_topo {
 	s32 core_cid;
@@ -88,6 +98,8 @@ struct scx_cid_topo {
 	s32 node_idx;
 	s32 shard_cid;
 	s32 shard_idx;
+	s32 cluster_cid;
+	s32 cluster_idx;
 };
 
 enum scx_cid_consts {

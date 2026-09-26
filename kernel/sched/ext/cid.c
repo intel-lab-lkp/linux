@@ -31,6 +31,7 @@ static struct scx_cid_tables *scx_cid_tables;	/* used only during alloc/free */
 #define SCX_CID_TOPO_NEG	(struct scx_cid_topo) {				\
 	.core_cid = -1, .core_idx = -1, .llc_cid = -1, .llc_idx = -1,		\
 	.node_cid = -1, .node_idx = -1, .shard_cid = -1, .shard_idx = -1,	\
+	.cluster_cid = -1, .cluster_idx = -1,					\
 }
 
 /*
@@ -47,6 +48,28 @@ static const struct cpumask *cpu_llc_mask(int cpu, struct cpumask *fallbacks)
 		return cpumask_of_node(cpu_to_node(cpu));
 	}
 	return &ci->info_list[ci->num_leaves - 1].shared_cpu_map;
+}
+
+/*
+ * Return the mask of cpus @cpu shares cache resources with below its LLC, the
+ * cpus an SD_CLUSTER domain would span, or NULL when that is not a level of its
+ * own here.
+ *
+ * The level is dropped in the same cases the sched domain is: a cluster that is
+ * no wider than the core, or that covers the whole LLC, adds nothing.
+ */
+static const struct cpumask *cpu_cluster_mask(int cpu, const struct cpumask *llc_cpus)
+{
+	const struct cpumask *cluster = topology_cluster_cpumask(cpu);
+
+	if (!cluster || cpumask_empty(cluster))
+		return NULL;
+	if (cpumask_subset(cluster, topology_sibling_cpumask(cpu)))
+		return NULL;
+	if (cpumask_subset(llc_cpus, cluster))
+		return NULL;
+
+	return cluster;
 }
 
 /*
@@ -182,12 +205,14 @@ s32 scx_cid_init(struct scx_sched *sch)
 	cpumask_var_t to_walk __free(free_cpumask_var) = CPUMASK_VAR_NULL;
 	cpumask_var_t node_scratch __free(free_cpumask_var) = CPUMASK_VAR_NULL;
 	cpumask_var_t llc_scratch __free(free_cpumask_var) = CPUMASK_VAR_NULL;
+	cpumask_var_t cluster_scratch __free(free_cpumask_var) = CPUMASK_VAR_NULL;
 	cpumask_var_t core_scratch __free(free_cpumask_var) = CPUMASK_VAR_NULL;
 	cpumask_var_t llc_fallback __free(free_cpumask_var) = CPUMASK_VAR_NULL;
 	cpumask_var_t online_no_topo __free(free_cpumask_var) = CPUMASK_VAR_NULL;
 	struct scx_cid_tables *tbls;
 	u32 next_cid = 0;
 	s32 next_node_idx = 0, next_llc_idx = 0, next_core_idx = 0;
+	s32 next_cluster_idx = 0;
 	s32 next_shard_idx = 0;
 	u32 shard_size, max_cids;
 	u32 notopo_in_shard;
@@ -215,6 +240,7 @@ s32 scx_cid_init(struct scx_sched *sch)
 	if (!zalloc_cpumask_var(&to_walk, GFP_KERNEL) ||
 	    !zalloc_cpumask_var(&node_scratch, GFP_KERNEL) ||
 	    !zalloc_cpumask_var(&llc_scratch, GFP_KERNEL) ||
+	    !zalloc_cpumask_var(&cluster_scratch, GFP_KERNEL) ||
 	    !zalloc_cpumask_var(&core_scratch, GFP_KERNEL) ||
 	    !zalloc_cpumask_var(&llc_fallback, GFP_KERNEL) ||
 	    !zalloc_cpumask_var(&online_no_topo, GFP_KERNEL))
@@ -256,27 +282,55 @@ s32 scx_cid_init(struct scx_sched *sch)
 			u32 cores_per_shard, nr_large;
 			u32 shard_local = 0, cores_in_shard = 0, cids_in_shard = 0;
 			s32 shard_cid, shard_idx;
+			s32 cluster_cid = llc_cid, cluster_idx = -1;
 
 			/* llc_scratch = node_scratch & this llc */
 			cpumask_and(llc_scratch, node_scratch, llc_mask);
 			if (WARN_ON_ONCE(!cpumask_test_cpu(ncpu, llc_scratch)))
 				return -EINVAL;
 
+			cpumask_clear(cluster_scratch);
 			calc_shard_layout(llc_scratch, shard_size, &cores_per_shard, &nr_large);
 			shard_cid = next_cid;
 			shard_idx = next_shard_idx++;
 			tbls->shard_node[shard_idx] = nid;
 
 			while (!cpumask_empty(llc_scratch)) {
-				s32 lcpu = cpumask_first(llc_scratch);
-				const struct cpumask *sib = topology_sibling_cpumask(lcpu);
-				s32 core_cid = next_cid;
-				s32 core_idx = next_core_idx++;
-				s32 ccpu;
+				const struct cpumask *sib;
+				s32 core_cid, core_idx, lcpu, ccpu;
 				u32 max_cores, cids_in_core;
 
-				/* core_scratch = llc_scratch & this core */
-				cpumask_and(core_scratch, llc_scratch, sib);
+				/*
+				 * Take the cores of one cluster before moving
+				 * on, so that a cluster is a contiguous cid
+				 * range like the core, LLC and node levels.
+				 */
+				if (cpumask_empty(cluster_scratch)) {
+					s32 xcpu = cpumask_first(llc_scratch);
+					const struct cpumask *cluster =
+							cpu_cluster_mask(xcpu, llc_mask);
+
+					if (cluster) {
+						cpumask_and(cluster_scratch, llc_scratch, cluster);
+						cluster_cid = next_cid;
+						cluster_idx = next_cluster_idx++;
+					} else {
+						cpumask_and(cluster_scratch, llc_scratch,
+							    topology_sibling_cpumask(xcpu));
+						cluster_cid = llc_cid;
+						cluster_idx = -1;
+					}
+					if (WARN_ON_ONCE(!cpumask_test_cpu(xcpu, cluster_scratch)))
+						return -EINVAL;
+				}
+
+				lcpu = cpumask_first(cluster_scratch);
+				sib = topology_sibling_cpumask(lcpu);
+				core_cid = next_cid;
+				core_idx = next_core_idx++;
+
+				/* core_scratch = cluster_scratch & this core */
+				cpumask_and(core_scratch, cluster_scratch, sib);
 				if (WARN_ON_ONCE(!cpumask_test_cpu(lcpu, core_scratch)))
 					return -EINVAL;
 
@@ -316,8 +370,11 @@ s32 scx_cid_init(struct scx_sched *sch)
 						.node_idx = node_idx,
 						.shard_cid = shard_cid,
 						.shard_idx = shard_idx,
+						.cluster_cid = cluster_cid,
+						.cluster_idx = cluster_idx,
 					};
 
+					cpumask_clear_cpu(ccpu, cluster_scratch);
 					cpumask_clear_cpu(ccpu, llc_scratch);
 					cpumask_clear_cpu(ccpu, node_scratch);
 					cpumask_clear_cpu(ccpu, to_walk);
