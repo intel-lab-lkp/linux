@@ -340,6 +340,19 @@ enum libbpf_tristate {
 /* Helper macro to print out debug messages */
 #define bpf_printk(fmt, args...) ___bpf_pick_printk(args)(fmt, ##args)
 
+/*
+ * Turn any 64-bit value into a pointer to an object of the given struct type
+ * in its typed arena, with the typed_arena_cast instruction: the kernel masks
+ * the value into the struct's slice of the arena map's typed region, so the
+ * result names an object of that type whatever the value was, and the
+ * verifier trusts it. The struct's local BTF type ID is relocated into the
+ * instruction. Requires compiler support.
+ */
+#ifdef __BPF_FEATURE_TYPED_ARENA_CAST
+#define bpf_typed_arena_cast(v, type)					\
+	((typeof(type) *)__builtin_bpf_typed_arena_cast((v), *(typeof(type) *)0))
+#endif
+
 struct bpf_iter_num;
 
 extern int bpf_iter_num_new(struct bpf_iter_num *it, int start, int end) __weak __ksym;

@@ -1028,6 +1028,12 @@ static int insn_bytes_to_bpf_size(__u32 sz)
 	}
 }
 
+/* rX = typed_arena_cast(rY, <local type ID in imm>) */
+static bool is_typed_arena_cast_insn(struct bpf_insn *insn)
+{
+	return insn->code == (BPF_ALU64 | BPF_MOV | BPF_X) && insn->off == BPF_TYPED_ARENA_CAST;
+}
+
 /*
  * Patch relocatable BPF instruction.
  *
@@ -1043,7 +1049,8 @@ static int insn_bytes_to_bpf_size(__u32 sz)
  * 3. rX = <imm64> (load with 64-bit immediate value);
  * 4. rX = *(T *)(rY + <off>), where T is one of {u8, u16, u32, u64};
  * 5. *(T *)(rX + <off>) = rY, where T is one of {u8, u16, u32, u64};
- * 6. *(T *)(rX + <off>) = <imm>, where T is one of {u8, u16, u32, u64}.
+ * 6. *(T *)(rX + <off>) = <imm>, where T is one of {u8, u16, u32, u64};
+ * 7. rX = typed_arena_cast(rY, <imm>), for a local type ID relocation only.
  */
 int bpf_core_patch_insn(const char *prog_name, struct bpf_insn *insn,
 			int insn_idx, const struct bpf_core_relo *relo,
@@ -1060,8 +1067,16 @@ int bpf_core_patch_insn(const char *prog_name, struct bpf_insn *insn,
 	switch (class) {
 	case BPF_ALU:
 	case BPF_ALU64:
-		if (BPF_SRC(insn->code) != BPF_K)
+		/*
+		 * The typed arena cast is a register move whose imm names the
+		 * struct by its local type ID; the kernel takes the ID from there.
+		 */
+		if (is_typed_arena_cast_insn(insn)) {
+			if (relo->kind != BPF_CORE_TYPE_ID_LOCAL)
+				goto bad_insn;
+		} else if (BPF_SRC(insn->code) != BPF_K) {
 			goto bad_insn;
+		}
 		if (res->poison)
 			return bpf_core_poison_insn(prog_name, relo_idx, insn, insn_idx);
 		if (res->validate && insn->imm != orig_val) {
