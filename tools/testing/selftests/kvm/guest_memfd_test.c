@@ -457,6 +457,26 @@ static void test_resource_fd_unsupported_fs(struct kvm_vm *vm)
 	close(file_fd);
 }
 
+static void test_resource_fd_tmpfs_file(struct kvm_vm *vm)
+{
+	int fd, file_fd;
+
+	/*
+	 * Passing a regular file from tmpfs (e.g. via memfd) is rejected by
+	 * the provider attach callback with ENOTDIR because only directory
+	 * FDs representing the mount root are supported resource pools.
+	 */
+	file_fd = memfd_create("test_tmpfs_file", 0);
+	TEST_ASSERT(file_fd >= 0, "memfd_create failed");
+
+	fd = __vm_create_guest_memfd_resource(vm, page_size,
+					      GUEST_MEMFD_FLAG_USE_RESOURCE,
+					      file_fd);
+	TEST_ASSERT(fd < 0, "guest_memfd with tmpfs file fd should fail");
+	TEST_ASSERT_EQ(errno, ENOTDIR);
+	close(file_fd);
+}
+
 #define ____gmem_test(__test, __vm, __flags, __gmem_size, args...)	\
 do {									\
 	int fd = vm_create_guest_memfd(__vm, __gmem_size, __flags);	\
@@ -517,6 +537,7 @@ static void test_guest_memfd(unsigned long vm_type)
 
 	test_resource_fd_invalid(vm);
 	test_resource_fd_unsupported_fs(vm);
+	test_resource_fd_tmpfs_file(vm);
 
 	__test_guest_memfd(vm, 0);
 
