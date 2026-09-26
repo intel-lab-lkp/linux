@@ -37,6 +37,7 @@ struct workqueue_struct;
 struct writeback_control;
 struct xattr_handler;
 struct fserror_event;
+struct guest_memfd_provider_operations;
 
 extern struct super_block *blockdev_superblock;
 
@@ -130,6 +131,9 @@ struct super_operations {
 
 	/* Report a filesystem error */
 	void (*report_error)(const struct fserror_event *event);
+#ifdef CONFIG_KVM_GUEST_MEMFD
+	const struct guest_memfd_provider_operations *gmem_provider_ops;
+#endif
 };
 
 struct super_block {
