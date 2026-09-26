@@ -223,6 +223,8 @@ struct hib_bio_batch {
 	wait_queue_head_t	wait;
 	blk_status_t		error;
 	struct blk_plug		plug;
+	struct list_head	icache_pages;
+	spinlock_t		icache_lock;
 };
 
 static void hib_init_batch(struct hib_bio_batch *hb)
@@ -230,6 +232,8 @@ static void hib_init_batch(struct hib_bio_batch *hb)
 	atomic_set(&hb->count, 0);
 	init_waitqueue_head(&hb->wait);
 	hb->error = BLK_STS_OK;
+	INIT_LIST_HEAD(&hb->icache_pages);
+	spin_lock_init(&hb->icache_lock);
 	blk_start_plug(&hb->plug);
 }
 
@@ -249,11 +253,19 @@ static void hib_end_io(struct bio *bio)
 			 (unsigned long long)bio->bi_iter.bi_sector);
 	}
 
-	if (bio_data_dir(bio) == WRITE)
+	if (bio_data_dir(bio) == WRITE) {
 		put_page(page);
-	else if (clean_pages_on_read)
-		flush_icache_range((unsigned long)page_address(page),
-				   (unsigned long)page_address(page) + PAGE_SIZE);
+	} else if (clean_pages_on_read) {
+		/*
+		 * Stash the page on the batch list, load_image()
+		 * will flush it once hib_wait_io() has returned to task
+		 * context. The page is neither on an LRU nor in the page
+		 * cache, so its lru member is free to use as link node.
+		 */
+		spin_lock(&hb->icache_lock);
+		list_add(&page->lru, &hb->icache_pages);
+		spin_unlock(&hb->icache_lock);
+	}
 
 	if (bio->bi_status && !hb->error)
 		hb->error = bio->bi_status;
@@ -293,6 +305,23 @@ static int hib_wait_io(struct hib_bio_batch *hb)
 	 */
 	wait_event(hb->wait, atomic_read(&hb->count) == 0);
 	return blk_status_to_errno(hb->error);
+}
+
+/*
+ * Flush the icache for pages restored since the last hib_wait_io().
+ * Must be called from task context (after hib_wait_io() returned): all
+ * bios of the batch have completed, so the icache_pages list is no longer
+ * touched by hib_end_io() and can be walked without the lock.
+ */
+static void hib_flush_icache_pages(struct hib_bio_batch *hb)
+{
+	struct page *page, *tmp;
+
+	list_for_each_entry_safe(page, tmp, &hb->icache_pages, lru) {
+		list_del_init(&page->lru);
+		flush_icache_range((unsigned long)page_address(page),
+				   (unsigned long)page_address(page) + PAGE_SIZE);
+	}
 }
 
 /*
@@ -1116,8 +1145,12 @@ static int load_image(struct swap_map_handle *handle,
 		ret = swap_read_page(handle, data_of(*snapshot), &hb);
 		if (ret)
 			break;
-		if (snapshot->sync_read)
+		if (snapshot->sync_read) {
 			ret = hib_wait_io(&hb);
+			if (ret)
+				break;
+			hib_flush_icache_pages(&hb);
+		}
 		if (ret)
 			break;
 		if (!(nr_pages % m))
@@ -1131,10 +1164,17 @@ static int load_image(struct swap_map_handle *handle,
 	if (!ret)
 		ret = err2;
 	if (!ret) {
+		hib_flush_icache_pages(&hb);
 		pr_info("Image loading done\n");
 		ret = snapshot_write_finalize(snapshot);
 		if (!ret && !snapshot_image_loaded(snapshot))
 			ret = -ENODATA;
+	} else {
+		/*
+		 * Reinit the list instead of walking it to avoid
+		 * use-after-free.
+		 */
+		INIT_LIST_HEAD(&hb.icache_pages);
 	}
 	swsusp_show_speed(start, stop, nr_to_read, "Read");
 	return ret;
