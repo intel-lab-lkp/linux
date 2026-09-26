@@ -207,6 +207,10 @@ int bench_futex_requeue(int argc, const char **argv)
 	if (params.broadcast)
 		params.nrequeue = params.nthreads;
 
+	/* A regular requeue that moves no threads would never finish. */
+	if (!params.pi && !params.nrequeue)
+		errx(EXIT_FAILURE, "-q/--nrequeue must be at least 1");
+
 	futex_set_nbuckets_param(&params);
 
 	printf("Run summary [PID %d]: Requeuing %d threads (from [%s] %p to %s%p), "

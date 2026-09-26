@@ -161,6 +161,9 @@ int bench_futex_hash(int argc, const char **argv)
 	if (!params.nthreads) /* default to the number of CPUs */
 		params.nthreads = perf_cpu_map__nr(cpu);
 
+	if (!params.nfutexes)
+		errx(EXIT_FAILURE, "-f/--futexes must be at least 1");
+
 	worker = calloc(params.nthreads, sizeof(*worker));
 	if (!worker)
 		goto errmem;

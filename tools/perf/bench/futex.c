@@ -17,6 +17,9 @@ void futex_set_nbuckets_param(struct bench_futex_parameters *params)
 {
 	int ret;
 
+	if (params->nbuckets < -1)
+		errx(EXIT_FAILURE, "-b/--buckets must be -1 (auto), 0 or more");
+
 	if (params->nbuckets < 0)
 		return;
 
