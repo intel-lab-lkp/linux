@@ -10,6 +10,7 @@
 #include <linux/module.h>
 #include <linux/skbuff.h>
 #include <linux/route.h>
+#include <linux/user_namespace.h>
 #include <linux/netfilter/x_tables.h>
 #include <net/net_namespace.h>
 #include <net/netns/generic.h>
@@ -94,6 +95,9 @@ static int tee_tg_check(const struct xt_tgchk_param *par)
 	struct tee_net *tn = net_generic(par->net, tee_net_id);
 	struct xt_tee_tginfo *info = par->targinfo;
 	struct xt_tee_priv *priv;
+
+	if (par->net->user_ns != &init_user_ns)
+		return -EPERM;
 
 	/* 0.0.0.0 and :: not allowed */
 	if (memcmp(&info->gw, &tee_zero_address,
