@@ -301,7 +301,7 @@ static int prop_compression_validate(const struct btrfs_inode *inode,
 	if (!value)
 		return 0;
 
-	if (btrfs_compress_is_valid_type(value, len))
+	if (btrfs_compress_is_valid_type(value))
 		return 0;
 
 	if ((len == 2 && strncmp("no", value, 2) == 0) ||

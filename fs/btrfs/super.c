@@ -263,10 +263,9 @@ static const struct fs_parameter_spec btrfs_fs_parameters[] = {
 
 static bool btrfs_match_compress_type(const char *string, const char *type, bool may_have_level)
 {
-	const int len = strlen(type);
+	const size_t len = str_has_prefix(string, type);
 
-	return (strncmp(string, type, len) == 0) &&
-		((may_have_level && string[len] == ':') || string[len] == '\0');
+	return len && ((may_have_level && string[len] == ':') || string[len] == '\0');
 }
 
 static int btrfs_parse_compress(struct btrfs_fs_context *ctx,

@@ -70,19 +70,12 @@ static struct compressed_bio *alloc_compressed_bio(struct btrfs_inode *inode,
 	return to_compressed_bio(bbio);
 }
 
-bool btrfs_compress_is_valid_type(const char *str, size_t len)
+bool btrfs_compress_is_valid_type(const char *str)
 {
-	int i;
-
-	for (i = 1; i < ARRAY_SIZE(btrfs_compress_types); i++) {
-		size_t comp_len = strlen(btrfs_compress_types[i]);
-
-		if (len < comp_len)
-			continue;
-
-		if (!strncmp(btrfs_compress_types[i], str, comp_len))
+	for (int i = 1; i < ARRAY_SIZE(btrfs_compress_types); i++)
+		if (strstarts(str, btrfs_compress_types[i]))
 			return true;
-	}
+
 	return false;
 }
 

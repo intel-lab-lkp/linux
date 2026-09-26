@@ -239,8 +239,7 @@ int btrfs_setxattr_trans(struct inode *inode, const char *name,
 		 * block_rsv of the handle and trigger a warning for the start
 		 * case.
 		 */
-		ASSERT(strncmp(name, XATTR_SECURITY_PREFIX,
-			       XATTR_SECURITY_PREFIX_LEN) == 0);
+		ASSERT(strstarts(name, XATTR_SECURITY_PREFIX));
 		trans = current->journal_info;
 	}
 
