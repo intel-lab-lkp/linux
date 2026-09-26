@@ -9,6 +9,12 @@
 
 #define __contains(name, node) __attribute__((btf_decl_tag("contains:" #name ":" #node)))
 
+/*
+ * Size of a struct's typed arena in bytes: a power of two with an optional K,
+ * M or G suffix, 128M unless declared.
+ */
+#define __typed_arena_size(sz) __attribute__((btf_decl_tag("typed_arena_size:" #sz)))
+
 /* Convenience macro to wrap over bpf_obj_new */
 #define bpf_obj_new(type) ((type *)bpf_obj_new(bpf_core_type_id_local(type)))
 
