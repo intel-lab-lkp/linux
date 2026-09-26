@@ -1721,7 +1721,9 @@ void pneigh_enqueue(struct neigh_table *tbl, struct neigh_parms *p,
 {
 	unsigned long sched_next = neigh_proxy_delay(p);
 
+	spin_lock(&tbl->proxy_queue.lock);
 	if (p->qlen > NEIGH_VAR(p, PROXY_QLEN)) {
+		spin_unlock(&tbl->proxy_queue.lock);
 		kfree_skb(skb);
 		return;
 	}
@@ -1729,7 +1731,6 @@ void pneigh_enqueue(struct neigh_table *tbl, struct neigh_parms *p,
 	NEIGH_CB(skb)->sched_next = sched_next;
 	NEIGH_CB(skb)->flags |= LOCALLY_ENQUEUED;
 
-	spin_lock(&tbl->proxy_queue.lock);
 	if (timer_delete(&tbl->proxy_timer)) {
 		if (time_before(tbl->proxy_timer.expires, sched_next))
 			sched_next = tbl->proxy_timer.expires;
