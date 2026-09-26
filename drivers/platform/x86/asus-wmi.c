@@ -1046,7 +1046,58 @@ static ssize_t gpu_mux_mode_store(struct device *dev,
 static DEVICE_ATTR_RW(gpu_mux_mode);
 #endif /* IS_ENABLED(CONFIG_ASUS_WMI_DEPRECATED_ATTRS) */
 
+static int kbd_rgb_read_status(u8 data[16])
+{
+	int err;
+
+	err = asus_wmi_evaluate_method_buf(ASUS_WMI_METHODID_DSTS,
+					   ASUS_WMI_DEVID_TUF_RGB_READBACK,
+					   0, data, 16);
+
+	if (err)
+		return err < 0 ? err : -ENODEV;
+
+	/* DUBF[0] is a constant 1 set by the AML: anything else is not KBLS */
+	if (data[0] != 1)
+		return -ENODEV;
+
+	return 0;
+}
+
 /* TUF Laptop Keyboard RGB Modes **********************************************/
+static ssize_t kbd_rgb_mode_show(struct device *dev,
+				 struct device_attribute *attr,
+				 char *buf)
+{
+	u8 data[16] = {};
+	u32 speed;
+	int err;
+
+	err = kbd_rgb_read_status(data);
+	if (err)
+		return err;
+
+	/* Map hardware speed codes back to sysfs index:
+	 * 0xe1 -> 0 (slow), 0xeb -> 1 (normal), 0xf5 -> 2 (fast)
+	 */
+	switch (data[5]) {
+	case 0xe1:
+		speed = 0;
+		break;
+	case 0xeb:
+		speed = 1;
+		break;
+	case 0xf5:
+		speed = 2;
+		break;
+	default:
+		speed = 1;
+		break;
+	}
+
+	return sysfs_emit(buf, "1 %d %d %d %d %d\n",
+			  data[1], data[2], data[3], data[4], speed);
+}
 static ssize_t kbd_rgb_mode_store(struct device *dev,
 				 struct device_attribute *attr,
 				 const char *buf, size_t count)
@@ -1099,7 +1150,7 @@ static ssize_t kbd_rgb_mode_store(struct device *dev,
 
 	return count;
 }
-static DEVICE_ATTR_WO(kbd_rgb_mode);
+static DEVICE_ATTR_RW(kbd_rgb_mode);
 
 static DEVICE_STRING_ATTR_RO(kbd_rgb_mode_index, 0444,
 			     "cmd mode red green blue speed");
@@ -1115,6 +1166,30 @@ static const struct attribute_group kbd_rgb_mode_group = {
 };
 
 /* TUF Laptop Keyboard RGB State **********************************************/
+static ssize_t kbd_rgb_state_show(struct device *dev,
+				  struct device_attribute *attr,
+				  char *buf)
+{
+	u8 data[16] = {};
+	u8 flags;
+	int err;
+
+	err = kbd_rgb_read_status(data);
+	if (err)
+		return err;
+
+	/*
+	 * data[6] power-state bitmask:
+	 * BIT(1) boot, BIT(3) awake, BIT(5) sleep, BIT(7) shutdown
+	 */
+	flags = data[6];
+
+	return sysfs_emit(buf, "1 %d %d %d %d\n",
+			  !!(flags & BIT(1)),
+			  !!(flags & BIT(3)),
+			  !!(flags & BIT(5)),
+			  !!(flags & BIT(7)));
+}
 static ssize_t kbd_rgb_state_store(struct device *dev,
 				 struct device_attribute *attr,
 				 const char *buf, size_t count)
@@ -1146,7 +1221,7 @@ static ssize_t kbd_rgb_state_store(struct device *dev,
 
 	return count;
 }
-static DEVICE_ATTR_WO(kbd_rgb_state);
+static DEVICE_ATTR_RW(kbd_rgb_state);
 
 static DEVICE_STRING_ATTR_RO(kbd_rgb_state_index, 0444,
 			     "cmd boot awake sleep shutdown");
