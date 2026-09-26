@@ -197,6 +197,9 @@ struct stmmac_dma_ops {
 			       u32 chan, bool rx, bool tx);
 	void (*disable_dma_irq)(struct stmmac_priv *priv, void __iomem *ioaddr,
 				u32 chan, bool rx, bool tx);
+	/* Replace and flush the full interrupt enable mask; return the old mask. */
+	u32 (*set_irq_mask)(struct stmmac_priv *priv, void __iomem *ioaddr,
+			    u32 chan, u32 mask);
 	void (*start_tx)(struct stmmac_priv *priv, void __iomem *ioaddr,
 			 u32 chan);
 	void (*stop_tx)(struct stmmac_priv *priv, void __iomem *ioaddr,
@@ -263,6 +266,8 @@ struct stmmac_dma_ops {
 	stmmac_do_void_callback(__priv, dma, enable_dma_irq, __priv, __args)
 #define stmmac_disable_dma_irq(__priv, __args...) \
 	stmmac_do_void_callback(__priv, dma, disable_dma_irq, __priv, __args)
+#define stmmac_set_dma_irq_mask(__priv, __args...) \
+	stmmac_do_callback(__priv, dma, set_irq_mask, __priv, __args)
 #define stmmac_start_tx(__priv, __args...) \
 	stmmac_do_void_callback(__priv, dma, start_tx, __priv, __args)
 #define stmmac_stop_tx(__priv, __args...) \

@@ -256,6 +256,16 @@ static void dwxgmac2_disable_dma_irq(struct stmmac_priv *priv,
 	writel(value, ioaddr + XGMAC_DMA_CH_INT_EN(chan));
 }
 
+static u32 dwxgmac2_set_dma_irq_mask(struct stmmac_priv *priv,
+				     void __iomem *ioaddr, u32 chan, u32 mask)
+{
+	u32 old_mask = readl(ioaddr + XGMAC_DMA_CH_INT_EN(chan));
+
+	writel(mask, ioaddr + XGMAC_DMA_CH_INT_EN(chan));
+	readl(ioaddr + XGMAC_DMA_CH_INT_EN(chan));
+	return old_mask;
+}
+
 static void dwxgmac2_dma_start_tx(struct stmmac_priv *priv,
 				  void __iomem *ioaddr, u32 chan)
 {
@@ -604,6 +614,7 @@ const struct stmmac_dma_ops dwxgmac210_dma_ops = {
 	.dma_tx_mode = dwxgmac2_dma_tx_mode,
 	.enable_dma_irq = dwxgmac2_enable_dma_irq,
 	.disable_dma_irq = dwxgmac2_disable_dma_irq,
+	.set_irq_mask = dwxgmac2_set_dma_irq_mask,
 	.start_tx = dwxgmac2_dma_start_tx,
 	.stop_tx = dwxgmac2_dma_stop_tx,
 	.start_rx = dwxgmac2_dma_start_rx,

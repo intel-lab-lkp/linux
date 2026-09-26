@@ -3267,14 +3267,30 @@ static bool stmmac_safety_feat_interrupt(struct stmmac_priv *priv)
 
 static int stmmac_napi_check(struct stmmac_priv *priv, u32 chan, u32 dir)
 {
-	int status = stmmac_dma_interrupt_status(priv, priv->ioaddr,
-						 &priv->xstats, chan, dir);
-	struct stmmac_rx_queue *rx_q = &priv->dma_conf->rx_queue[chan];
-	struct stmmac_tx_queue *tx_q = &priv->dma_conf->tx_queue[chan];
 	struct stmmac_channel *ch = &priv->channel[chan];
+	struct stmmac_rx_queue *rx_q;
+	struct stmmac_tx_queue *tx_q;
 	struct napi_struct *rx_napi;
 	struct napi_struct *tx_napi;
 	unsigned long flags;
+	int status;
+
+	spin_lock_irqsave(&ch->lock, flags);
+	if (unlikely(ch->irq_quiesced)) {
+		/* A shared IRQ may still invoke us, and DMA initialization can
+		 * restore interrupt enables. Mask them again without acknowledging
+		 * pending events or accessing the configuration being replaced.
+		 */
+		stmmac_set_dma_irq_mask(priv, priv->ioaddr, chan, 0);
+		spin_unlock_irqrestore(&ch->lock, flags);
+		return 0;
+	}
+	spin_unlock_irqrestore(&ch->lock, flags);
+
+	status = stmmac_dma_interrupt_status(priv, priv->ioaddr,
+					     &priv->xstats, chan, dir);
+	rx_q = &priv->dma_conf->rx_queue[chan];
+	tx_q = &priv->dma_conf->tx_queue[chan];
 
 	rx_napi = rx_q->xsk_pool ? &ch->rxtx_napi : &ch->rx_napi;
 	tx_napi = tx_q->xsk_pool ? &ch->rxtx_napi : &ch->tx_napi;
@@ -3995,8 +4011,7 @@ static void stmmac_free_irq(struct net_device *dev,
 		for (j = irq_idx - 1; msi && j >= 0; j--) {
 			if (msi->tx_irq[j] > 0) {
 				irq_set_affinity_hint(msi->tx_irq[j], NULL);
-				free_irq(msi->tx_irq[j],
-					 &priv->channel[j]);
+				free_irq(msi->tx_irq[j], &priv->channel[j]);
 			}
 		}
 		irq_idx = priv->plat->rx_queues_to_use;
@@ -4005,8 +4020,7 @@ static void stmmac_free_irq(struct net_device *dev,
 		for (j = irq_idx - 1; msi && j >= 0; j--) {
 			if (msi->rx_irq[j] > 0) {
 				irq_set_affinity_hint(msi->rx_irq[j], NULL);
-				free_irq(msi->rx_irq[j],
-					 &priv->channel[j]);
+				free_irq(msi->rx_irq[j], &priv->channel[j]);
 			}
 		}
 

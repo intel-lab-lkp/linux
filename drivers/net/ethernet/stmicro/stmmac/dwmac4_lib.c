@@ -155,6 +155,17 @@ void dwmac4_disable_dma_irq(struct stmmac_priv *priv, void __iomem *ioaddr,
 	writel(value, ioaddr + DMA_CHAN_INTR_ENA(dwmac4_addrs, chan));
 }
 
+u32 dwmac4_set_dma_irq_mask(struct stmmac_priv *priv, void __iomem *ioaddr,
+			    u32 chan, u32 mask)
+{
+	const struct dwmac4_addrs *dwmac4_addrs = priv->plat->dwmac4_addrs;
+	u32 old_mask = readl(ioaddr + DMA_CHAN_INTR_ENA(dwmac4_addrs, chan));
+
+	writel(mask, ioaddr + DMA_CHAN_INTR_ENA(dwmac4_addrs, chan));
+	readl(ioaddr + DMA_CHAN_INTR_ENA(dwmac4_addrs, chan));
+	return old_mask;
+}
+
 int dwmac4_dma_interrupt(struct stmmac_priv *priv, void __iomem *ioaddr,
 			 struct stmmac_extra_stats *x, u32 chan, u32 dir)
 {
