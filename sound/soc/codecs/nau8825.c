@@ -348,7 +348,7 @@ static u32 nau8825_intlog10_dec3(u32 value)
  * @sig_org: original signal level
  * @sig_cros: cross talk signal level
  *
- * The original and cross talk signal vlues need to be characterized.
+ * The original and cross talk signal values need to be characterized.
  * Once these values have been characterized, this sidetone value
  * can be converted to decibel with the equation below.
  * sidetone = 20 * log (original signal level / crosstalk signal level)
@@ -725,7 +725,7 @@ static void nau8825_xtalk_measure(struct nau8825 *nau8825)
 		break;
 	case NAU8825_XTALK_IMM:
 		/* In impedance measure state, the original and cross talk
-		 * signal level vlues are ready. The side tone gain is deter-
+		 * signal level values are ready. The side tone gain is deter-
 		 * mined with these signal level. After all, restore codec
 		 * configuration.
 		 */
@@ -771,7 +771,7 @@ static void nau8825_xtalk_work(struct work_struct *work)
 
 static void nau8825_xtalk_cancel(struct nau8825 *nau8825)
 {
-	/* If the crosstalk is eanbled and the process is on going,
+	/* If the crosstalk is enabled and the process is on going,
 	 * the driver forces to cancel the crosstalk task and
 	 * restores the configuration to original status.
 	 */
@@ -1303,7 +1303,7 @@ static int nau8825_hw_params(struct snd_pcm_substream *substream,
 			NAU8825_CLK_ADC_SRC_MASK,
 			osr->clk_src << NAU8825_CLK_ADC_SRC_SFT);
 
-	/* make BCLK and LRC divde configuration if the codec as master. */
+	/* make BCLK and LRC divide configuration if the codec as master. */
 	regmap_read(nau8825->regmap, NAU8825_REG_I2S_PCM_CTRL2, &ctrl_val);
 	if (ctrl_val & NAU8825_I2S_MS_MASTER) {
 		/* get the bclk and fs ratio */
@@ -2897,7 +2897,7 @@ static int nau8825_i2c_probe(struct i2c_client *i2c)
 	nau8825->dev = dev;
 	nau8825->irq = i2c->irq;
 	/* Initiate parameters, semaphore and work queue which are needed in
-	 * cross talk suppression measurment function.
+	 * cross talk suppression measurement function.
 	 */
 	nau8825->xtalk_state = NAU8825_XTALK_DONE;
 	nau8825->xtalk_protect = false;
