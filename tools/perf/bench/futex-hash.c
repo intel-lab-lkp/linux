@@ -95,7 +95,7 @@ static void *workerfn(void *arg)
 			 */
 			ret = futex_wait(&w->futex[i], 1234, NULL, futex_flag);
 			if (!params.silent &&
-			    (!ret || errno != EAGAIN || errno != EWOULDBLOCK))
+			    (!ret || (errno != EAGAIN && errno != EWOULDBLOCK)))
 				warn("Non-expected futex return call");
 		}
 	}  while (!done);
@@ -256,7 +256,7 @@ int bench_futex_hash(int argc, const char **argv)
 	print_summary();
 
 	free(worker);
-	free(cpu);
+	perf_cpu_map__put(cpu);
 	return ret;
 errmem:
 	err(EXIT_FAILURE, "calloc");
