@@ -517,7 +517,7 @@ static int hw_breakpoint_handler(struct die_args *args)
 	bool bpx;
 
 	/* The DR6 value is pointed by args->err */
-	dr6_p = (unsigned long *)ERR_PTR(args->err);
+	dr6_p = (unsigned long *)args->err;
 	dr6 = *dr6_p;
 
 	/* Do an early return if no trap bits are set in DR6 */
