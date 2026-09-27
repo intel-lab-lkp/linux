@@ -346,7 +346,7 @@ static struct dma_async_tx_descriptor *fsl_re_prep_dma_genq(
 	}
 
 	desc = fsl_re_chan_alloc_desc(re_chan, flags);
-	if (desc <= 0)
+	if (!desc)
 		return NULL;
 
 	if (scf && (flags & DMA_PREP_CONTINUE)) {
@@ -470,7 +470,7 @@ static struct dma_async_tx_descriptor *fsl_re_prep_dma_pq(
 		src_cnt += 3;
 
 	desc = fsl_re_chan_alloc_desc(re_chan, flags);
-	if (desc <= 0)
+	if (!desc)
 		return NULL;
 
 	/* Filling GenQQ CDB */
@@ -554,7 +554,7 @@ static struct dma_async_tx_descriptor *fsl_re_prep_dma_memcpy(
 	}
 
 	desc = fsl_re_chan_alloc_desc(re_chan, flags);
-	if (desc <= 0)
+	if (!desc)
 		return NULL;
 
 	/* Filling move CDB */
