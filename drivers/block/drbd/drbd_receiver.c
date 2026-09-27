@@ -3621,10 +3621,10 @@ static struct crypto_shash *drbd_crypto_alloc_digest_safe(
 static int ignore_remaining_packet(struct drbd_connection *connection, struct packet_info *pi)
 {
 	void *buffer = connection->data.rbuf;
-	int size = pi->size;
+	unsigned int size = pi->size;
 
 	while (size) {
-		int s = min_t(int, size, DRBD_SOCKET_BUFFER_SIZE);
+		int s = min_t(unsigned int, size, DRBD_SOCKET_BUFFER_SIZE);
 		s = drbd_recv(connection, buffer, s);
 		if (s <= 0) {
 			if (s < 0)
