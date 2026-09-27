@@ -3269,6 +3269,14 @@ static const struct dmi_system_id uniwill_dmi_table[] __initconst = {
 		.driver_data = &tux_featureset_4_nvidia_descriptor,
 	},
 	{
+		.ident = "PCSpecialist Recoil 16 AMD",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "PCSpecialist"),
+			DMI_EXACT_MATCH(DMI_BOARD_NAME, "X6FR57TY"),
+		},
+		.driver_data = &tux_featureset_4_nvidia_descriptor,
+	},
+	{
 		.ident = "TUXEDO Stellaris 16 Gen7 Intel",
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "TUXEDO"),
