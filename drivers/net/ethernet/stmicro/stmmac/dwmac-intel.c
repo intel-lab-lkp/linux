@@ -1420,7 +1420,7 @@ static struct pci_driver intel_eth_pci_driver = {
 	.probe = intel_eth_pci_probe,
 	.remove = intel_eth_pci_remove,
 	.driver         = {
-		.pm     = &stmmac_simple_pm_ops,
+		.pm     = &stmmac_pci_pm_ops,
 	},
 };
 

@@ -376,7 +376,7 @@ static struct pci_driver dwmac_motorcomm_pci_driver = {
 	.probe = motorcomm_probe,
 	.remove = motorcomm_remove,
 	.driver = {
-		.pm = &stmmac_simple_pm_ops,
+		.pm = &stmmac_pci_pm_ops,
 	},
 };
 

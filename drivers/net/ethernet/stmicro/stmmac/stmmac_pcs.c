@@ -60,7 +60,8 @@ static void dwmac_integrated_pcs_disable(struct phylink_pcs *pcs)
 {
 	struct stmmac_pcs *spcs = phylink_pcs_to_stmmac_pcs(pcs);
 
-	stmmac_mac_irq_modify(spcs->priv, spcs->int_mask, 0);
+	if (!READ_ONCE(spcs->priv->hw_unavailable))
+		stmmac_mac_irq_modify(spcs->priv, spcs->int_mask, 0);
 }
 
 static void dwmac_integrated_pcs_get_state(struct phylink_pcs *pcs,

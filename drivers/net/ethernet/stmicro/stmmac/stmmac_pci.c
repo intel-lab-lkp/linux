@@ -215,7 +215,7 @@ static struct pci_driver stmmac_pci_driver = {
 	.probe = stmmac_pci_probe,
 	.remove = stmmac_pci_remove,
 	.driver         = {
-		.pm     = &stmmac_simple_pm_ops,
+		.pm     = &stmmac_pci_pm_ops,
 	},
 };
 

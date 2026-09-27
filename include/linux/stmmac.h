@@ -291,6 +291,13 @@ struct plat_stmmacenet_data {
 	void (*exit)(struct device *dev, void *priv);
 	int (*suspend)(struct device *dev, void *priv);
 	int (*resume)(struct device *dev, void *priv);
+	/* MAC WoL retains register/receive/timestamp clocks and power. These
+	 * hooks only prepare/undo additional wake resources, without gating
+	 * register access. Set both hooks together; a failed preparation must
+	 * unwind its own resources.
+	 */
+	int (*suspend_wol)(struct device *dev, void *priv);
+	void (*resume_wol)(struct device *dev, void *priv);
 	int (*mac_setup)(void *priv, struct mac_device_info *mac);
 	int (*clks_config)(void *priv, bool enabled);
 	int (*crosststamp)(ktime_t *device, struct system_counterval_t *system,

@@ -220,7 +220,8 @@ static void timestamp_interrupt(struct stmmac_priv *priv)
 	u64 ptp_time;
 	int i;
 
-	if (priv->plat->flags & STMMAC_FLAG_INT_SNAPSHOT_EN) {
+	if (!READ_ONCE(priv->ptp_blocked) &&
+	    (priv->plat->flags & STMMAC_FLAG_INT_SNAPSHOT_EN)) {
 		wake_up(&priv->tstamp_busy_wait);
 		return;
 	}
@@ -234,6 +235,13 @@ static void timestamp_interrupt(struct stmmac_priv *priv)
 	 * timestamp or start/end of PPS.
 	 */
 	ts_status = readl(priv->ioaddr + GMAC_TIMESTAMP_STATUS);
+
+	/* The powered register interface can still signal a level interrupt
+	 * while the PHC is unavailable. Acknowledge it, but do not report an
+	 * event from a clock which is being reset or shut down.
+	 */
+	if (READ_ONCE(priv->ptp_blocked))
+		return;
 
 	if (!(priv->plat->flags & STMMAC_FLAG_EXT_SNAPSHOT_EN))
 		return;

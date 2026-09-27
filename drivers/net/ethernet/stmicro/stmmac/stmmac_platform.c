@@ -968,15 +968,23 @@ static int __maybe_unused stmmac_pltfr_noirq_suspend(struct device *dev)
 	if (!netif_running(ndev))
 		return 0;
 
-	if (!priv->wolopts) {
-		/* Disable clock in case of PWM is off */
-		if (priv->ptp_enabled)
+	mutex_lock(&priv->pm_mutex);
+	if (!priv->irq_wake) {
+		/* A detached datapath may already have released its PTP clock. */
+		if (priv->ptp_clock_enabled) {
 			clk_disable_unprepare(priv->plat->clk_ptp_ref);
+			priv->ptp_clock_enabled = false;
+			priv->ptp_clock_suspended = true;
+		}
 
+		priv->bus_clks_suspended = true;
 		ret = pm_runtime_force_suspend(dev);
-		if (ret)
+		if (ret) {
+			mutex_unlock(&priv->pm_mutex);
 			return ret;
+		}
 	}
+	mutex_unlock(&priv->pm_mutex);
 
 	return 0;
 }
@@ -985,30 +993,8 @@ static int __maybe_unused stmmac_pltfr_noirq_resume(struct device *dev)
 {
 	struct net_device *ndev = dev_get_drvdata(dev);
 	struct stmmac_priv *priv = netdev_priv(ndev);
-	int ret;
 
-	if (!netif_running(ndev))
-		return 0;
-
-	if (!priv->wolopts) {
-		/* enable the clk previously disabled */
-		ret = pm_runtime_force_resume(dev);
-		if (ret)
-			return ret;
-
-		if (!priv->ptp_enabled)
-			return 0;
-
-		ret = clk_prepare_enable(priv->plat->clk_ptp_ref);
-		if (ret < 0) {
-			netdev_warn(priv->dev,
-				    "failed to enable PTP reference clock: %pe\n",
-				    ERR_PTR(ret));
-			return ret;
-		}
-	}
-
-	return 0;
+	return stmmac_resume_clocks(priv);
 }
 
 const struct dev_pm_ops stmmac_pltfr_pm_ops = {

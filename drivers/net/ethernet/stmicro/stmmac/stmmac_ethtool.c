@@ -1089,7 +1089,18 @@ static void stmmac_get_mm_stats(struct net_device *ndev,
 	s->MACMergeHoldCount = mmc->mmc_tx_hold_req_cntr;
 }
 
+static int stmmac_ethtool_begin(struct net_device *dev)
+{
+	struct stmmac_priv *priv = netdev_priv(dev);
+
+	/* Close reattaches the netdev so open can retry power restoration.
+	 * Presence alone does not make registers accessible after failed resume.
+	 */
+	return priv->hw_unavailable ? -EHOSTDOWN : 0;
+}
+
 static const struct ethtool_ops stmmac_ethtool_ops = {
+	.begin = stmmac_ethtool_begin,
 	.supported_coalesce_params = ETHTOOL_COALESCE_USECS |
 				     ETHTOOL_COALESCE_MAX_FRAMES,
 	.get_drvinfo = stmmac_ethtool_getdrvinfo,

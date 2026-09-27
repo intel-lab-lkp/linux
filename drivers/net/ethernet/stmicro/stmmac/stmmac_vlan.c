@@ -114,6 +114,8 @@ static int vlan_del_hw_rx_fltr(struct net_device *dev,
 			       struct mac_device_info *hw,
 			       __be16 proto, u16 vid)
 {
+	struct stmmac_priv *priv = netdev_priv(dev);
+	bool update_hw = netif_running(dev) && !priv->hw_unavailable;
 	int i, ret = 0;
 
 	/* Single Rx VLAN Filter */
@@ -121,7 +123,7 @@ static int vlan_del_hw_rx_fltr(struct net_device *dev,
 		if ((hw->vlan_filter[0] & VLAN_TAG_VID) == vid) {
 			hw->vlan_filter[0] = 0;
 
-			if (netif_running(dev))
+			if (update_hw)
 				vlan_write_single(dev, 0);
 		}
 		return 0;
@@ -132,7 +134,7 @@ static int vlan_del_hw_rx_fltr(struct net_device *dev,
 		if ((hw->vlan_filter[i] & VLAN_TAG_DATA_VEN) &&
 		    ((hw->vlan_filter[i] & VLAN_TAG_DATA_VID) == vid)) {
 
-			if (netif_running(dev)) {
+			if (update_hw) {
 				ret = vlan_write_filter(dev, hw, i, 0);
 				if (ret)
 					return ret;

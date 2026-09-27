@@ -522,6 +522,22 @@ static int stm32_dwmac_resume(struct device *dev, void *bsp_priv)
 	return stm32_dwmac_init(priv->plat);
 }
 
+static int stm32_dwmac_suspend_wol(struct device *dev, void *bsp_priv)
+{
+	struct stm32_dwmac *dwmac = bsp_priv;
+
+	/* Enable the stop-mode wake clock without dropping the live clocks. */
+	return dwmac->ops->suspend ? dwmac->ops->suspend(dwmac) : 0;
+}
+
+static void stm32_dwmac_resume_wol(struct device *dev, void *bsp_priv)
+{
+	struct stm32_dwmac *dwmac = bsp_priv;
+
+	if (dwmac->ops->resume)
+		dwmac->ops->resume(dwmac);
+}
+
 static int stm32_dwmac_probe(struct platform_device *pdev)
 {
 	struct plat_stmmacenet_data *plat_dat;
@@ -561,6 +577,8 @@ static int stm32_dwmac_probe(struct platform_device *pdev)
 	plat_dat->bsp_priv = dwmac;
 	plat_dat->suspend = stm32_dwmac_suspend;
 	plat_dat->resume = stm32_dwmac_resume;
+	plat_dat->suspend_wol = stm32_dwmac_suspend_wol;
+	plat_dat->resume_wol = stm32_dwmac_resume_wol;
 
 	ret = stm32_dwmac_init(plat_dat);
 	if (ret)

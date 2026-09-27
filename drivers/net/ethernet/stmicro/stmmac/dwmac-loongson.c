@@ -607,7 +607,7 @@ static struct pci_driver loongson_dwmac_driver = {
 	.probe = loongson_dwmac_probe,
 	.remove = loongson_dwmac_remove,
 	.driver = {
-		.pm = &stmmac_simple_pm_ops,
+		.pm = &stmmac_pci_pm_ops,
 	},
 };
 

@@ -531,6 +531,10 @@ void dwmac1000_timestamp_interrupt(struct stmmac_priv *priv)
 	/* Clears the timestamp interrupt */
 	ts_status = readl(priv->ptpaddr + GMAC3_X_TIMESTAMP_STATUS);
 
+	/* A blocked PHC still needs its powered interrupt source cleared. */
+	if (READ_ONCE(priv->ptp_blocked))
+		return;
+
 	if (!(priv->plat->flags & STMMAC_FLAG_EXT_SNAPSHOT_EN))
 		return;
 

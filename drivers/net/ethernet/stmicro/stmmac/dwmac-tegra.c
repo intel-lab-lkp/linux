@@ -16,6 +16,7 @@ struct tegra_mgbe {
 	struct device *dev;
 
 	struct clk_bulk_data *clks;
+	bool suspended;
 
 	struct reset_control *rst_mac;
 	struct reset_control *rst_pcs;
@@ -54,18 +55,29 @@ struct tegra_mgbe {
 #define MAC_SBD_INTR			BIT(2)
 #define MGBE_WRAP_AXI_ASID0_CTRL	0x8400
 
+static int __maybe_unused tegra_mgbe_resume(struct device *dev);
+
 static int __maybe_unused tegra_mgbe_suspend(struct device *dev)
 {
 	struct tegra_mgbe *mgbe = get_stmmac_bsp_priv(dev);
+	struct stmmac_priv *priv = netdev_priv(dev_get_drvdata(dev));
 	int err;
 
 	err = stmmac_suspend(dev);
 	if (err)
 		return err;
 
-	clk_bulk_disable_unprepare(ARRAY_SIZE(mgbe_clks), mgbe->clks);
+	/* MAC WoL needs the receiver and the register interface kept alive. */
+	if (priv->irq_wake || mgbe->suspended)
+		return 0;
 
-	return reset_control_assert(mgbe->rst_mac);
+	clk_bulk_disable_unprepare(ARRAY_SIZE(mgbe_clks), mgbe->clks);
+	mgbe->suspended = true;
+
+	err = reset_control_assert(mgbe->rst_mac);
+	if (err && tegra_mgbe_resume(dev))
+		dev_err(dev, "failed to restore device after suspend failure\n");
+	return err;
 }
 
 static int __maybe_unused tegra_mgbe_resume(struct device *dev)
@@ -74,13 +86,18 @@ static int __maybe_unused tegra_mgbe_resume(struct device *dev)
 	u32 value;
 	int err;
 
+	if (!mgbe->suspended)
+		return stmmac_resume(dev);
+
 	err = clk_bulk_prepare_enable(ARRAY_SIZE(mgbe_clks), mgbe->clks);
 	if (err < 0)
 		return err;
 
 	err = reset_control_deassert(mgbe->rst_mac);
-	if (err < 0)
+	if (err < 0) {
+		clk_bulk_disable_unprepare(ARRAY_SIZE(mgbe_clks), mgbe->clks);
 		return err;
+	}
 
 	/* Enable common interrupt at wrapper level */
 	writel(MAC_SBD_INTR, mgbe->regs + MGBE_WRAP_COMMON_INTR_ENABLE);
@@ -104,9 +121,11 @@ static int __maybe_unused tegra_mgbe_resume(struct device *dev)
 		return err;
 	}
 
+	mgbe->suspended = false;
 	err = stmmac_resume(dev);
-	if (err < 0)
-		clk_bulk_disable_unprepare(ARRAY_SIZE(mgbe_clks), mgbe->clks);
+	/* Core resume failure retains the suspended datapath for retry or
+	 * close. Keep its register interface powered until that cleanup.
+	 */
 
 	return err;
 }
