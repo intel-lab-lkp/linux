@@ -284,8 +284,8 @@ static void sched_info_arrive(struct rq *rq, struct task_struct *t)
 }
 
 /*
- * This function is only called from enqueue_task(), but also only updates
- * the timestamp if it is already not set.  It's assumed that
+ * This function is only called from enqueue_task() and sched_info_depart(),
+ * but only updates the timestamp if it is already not set. It's assumed that
  * sched_info_dequeue() will clear that stamp when appropriate.
  */
 static inline void sched_info_enqueue(struct rq *rq, struct task_struct *t)
