@@ -160,6 +160,9 @@ static void ops_pre_exit_list(const struct pernet_operations *ops,
 		list_for_each_entry(net, net_exit_list, exit_list)
 			ops->pre_exit(net);
 	}
+
+	if (ops->pre_exit_batch)
+		ops->pre_exit_batch(net_exit_list);
 }
 
 static void ops_exit_rtnl_list(const struct list_head *ops_list,

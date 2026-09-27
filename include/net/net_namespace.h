@@ -488,6 +488,7 @@ struct pernet_operations {
 	 */
 	int (*init)(struct net *net);
 	void (*pre_exit)(struct net *net);
+	void (*pre_exit_batch)(struct list_head *net_exit_list);
 	void (*exit)(struct net *net);
 	void (*exit_batch)(struct list_head *net_exit_list);
 	/* Following method is called with RTNL held. */
