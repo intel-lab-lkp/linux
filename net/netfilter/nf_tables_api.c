@@ -3780,7 +3780,7 @@ static int nf_tables_fill_rule_info(struct sk_buff *skb, struct net *net,
 				    const struct nft_table *table,
 				    const struct nft_chain *chain,
 				    const struct nft_rule *rule, u64 handle,
-				    bool reset)
+				    bool reset, bool commit_locked)
 {
 	struct nlmsghdr *nlh;
 	const struct nft_expr *expr, *next;
@@ -3806,8 +3806,15 @@ static int nf_tables_fill_rule_info(struct sk_buff *skb, struct net *net,
 			goto nla_put_failure;
 	}
 
-	if (chain->flags & NFT_CHAIN_HW_OFFLOAD)
-		nft_flow_rule_stats(chain, rule);
+	if (chain->flags & NFT_CHAIN_HW_OFFLOAD) {
+		struct nftables_pernet *nft_net = nft_pernet(net);
+
+		if (commit_locked || mutex_trylock(&nft_net->commit_mutex)) {
+			nft_flow_rule_stats(chain, rule);
+			if (!commit_locked)
+				mutex_unlock(&nft_net->commit_mutex);
+		}
+	}
 
 	list = nla_nest_start_noflag(skb, NFTA_RULE_EXPRESSIONS);
 	if (list == NULL)
@@ -3864,7 +3871,7 @@ static void nf_tables_rule_notify(const struct nft_ctx *ctx,
 
 	err = nf_tables_fill_rule_info(skb, ctx->net, ctx->portid, ctx->seq,
 				       event, flags, ctx->family, ctx->table,
-				       ctx->chain, rule, handle, false);
+				       ctx->chain, rule, handle, false, true);
 	if (err < 0) {
 		kfree_skb(skb);
 		goto err;
@@ -3924,7 +3931,8 @@ static int __nf_tables_dump_rules(struct sk_buff *skb,
 					NFT_MSG_NEWRULE,
 					NLM_F_MULTI | NLM_F_APPEND,
 					table->family,
-					table, chain, rule, handle, ctx->reset) < 0) {
+					table, chain, rule, handle,
+					ctx->reset, false) < 0) {
 			ret = 1;
 			break;
 		}
@@ -4072,7 +4080,7 @@ nf_tables_getrule_single(u32 portid, const struct nfnl_info *info,
 
 	err = nf_tables_fill_rule_info(skb2, net, portid,
 				       info->nlh->nlmsg_seq, NFT_MSG_NEWRULE, 0,
-				       family, table, chain, rule, 0, reset);
+				       family, table, chain, rule, 0, reset, false);
 	if (err < 0) {
 		kfree_skb(skb2);
 		return ERR_PTR(err);
