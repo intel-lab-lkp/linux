@@ -49,6 +49,38 @@ using the sftp protocol.
 The userspace library and utilities are available from the
 `FUSE homepage: <https://github.com/libfuse/>`_
 
+NFS export support
+==================
+
+FUSE filesystems can be exported via NFS if the filesystem daemon supports it.
+For reliable NFS export, the filesystem should provide a unique inode
+generation number for each inode. This generation number is used by the
+NFS server to distinguish between different file instances that may
+share the same inode number (e.g. after an inode number is reused).
+
+The inode generation number is provided by the filesystem daemon in the
+following messages:
+
+- `FUSE_LOOKUP`
+- `FUSE_GETATTR` (see below)
+- `FUSE_SETATTR` (see below)
+- `FUSE_READDIRPLUS`
+- `FUSE_CREATE` / `FUSE_TMPFILE` / `FUSE_MKNOD` / `FUSE_MKDIR` / `FUSE_SYMLINK` / `FUSE_LINK`
+
+A daemon that keeps the generation number in its `FUSE_GETATTR` and
+`FUSE_SETATTR` replies (the `generation` field of `fuse_attr_out`,
+protocol 7.46) must announce this by setting `FUSE_ATTR_GENERATION` in
+its `FUSE_INIT` reply flags. When the flag is negotiated, the kernel
+compares the generation in every getattr/setattr reply against the
+cached inode: a mismatch means the daemon has reused the node ID for a
+different file, and the cached inode is marked bad (subsequent
+operations on it fail with EIO). Without the flag, the field is ignored
+and the generation is only taken from lookup-type replies, preserving
+the behavior of existing filesystems.
+
+If the filesystem daemon does not provide a generation number, the kernel
+will use a default value of 0.
+
 Filesystem type
 ===============
 

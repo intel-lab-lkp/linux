@@ -514,6 +514,12 @@ struct fuse_conn {
 	 */
 	unsigned export_support:1;
 
+	/**
+	 * @attr_generation: Filesystem fills the generation field of
+	 * fuse_attr_out in GETATTR and SETATTR replies. Only set in INIT
+	 */
+	unsigned attr_generation:1;
+
 	/** @writeback_cache: write-back cache policy (default is write-through) */
 	unsigned writeback_cache:1;
 
@@ -988,12 +994,12 @@ void fuse_init_symlink(struct inode *inode);
  */
 void fuse_change_attributes(struct inode *inode, struct fuse_attr *attr,
 			    struct fuse_statx *sx,
-			    u64 attr_valid, u64 attr_version);
+			    u64 attr_valid, u64 attr_version, u64 generation);
 
 void fuse_change_attributes_common(struct inode *inode, struct fuse_attr *attr,
 				   struct fuse_statx *sx,
 				   u64 attr_valid, u32 cache_mask,
-				   u64 evict_ctr);
+				   u64 evict_ctr, u64 generation);
 
 u32 fuse_get_cache_mask(struct inode *inode);
 
