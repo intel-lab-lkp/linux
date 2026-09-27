@@ -664,6 +664,8 @@ static inline int sbi_err_map_linux_errno(int err)
 		return -EINVAL;
 	case SBI_ERR_BAD_RANGE:
 		return -ERANGE;
+	case SBI_ERR_ALREADY_AVAILABLE:
+		return -EALREADY;
 	case SBI_ERR_INVALID_ADDRESS:
 		return -EFAULT;
 	case SBI_ERR_NO_SHMEM:

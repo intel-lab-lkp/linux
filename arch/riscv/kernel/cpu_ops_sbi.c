@@ -26,12 +26,17 @@ static struct sbi_hart_boot_data boot_data[NR_CPUS];
 static int sbi_hsm_hart_start(unsigned long hartid, unsigned long saddr,
 			      unsigned long priv)
 {
+	int err;
 	struct sbiret ret;
 
 	ret = sbi_ecall(SBI_EXT_HSM, SBI_EXT_HSM_HART_START,
 			hartid, saddr, priv, 0, 0, 0);
 
-	return sbi_err_map_linux_errno(ret.error);
+	err = sbi_err_map_linux_errno(ret.error);
+	if (err == -EALREADY)
+		return 0;
+
+	return err;
 }
 
 #ifdef CONFIG_HOTPLUG_CPU
