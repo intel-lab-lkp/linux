@@ -1829,9 +1829,13 @@ int ksmbd_validate_name_reconnect(struct ksmbd_share_config *share,
 		return -EACCES;
 	}
 
-	if (name && strcmp(&ab_pathname[share->path_sz + 1], name)) {
-		ksmbd_debug(SMB, "invalid name reconnect %s\n", name);
-		ret = -EINVAL;
+	if (name) {
+		if (strlen(ab_pathname) <= share->path_sz ||
+		    ab_pathname[share->path_sz] != '/' ||
+		    strcmp(&ab_pathname[share->path_sz + 1], name)) {
+			ksmbd_debug(SMB, "invalid name reconnect %s\n", name);
+			ret = -EINVAL;
+		}
 	}
 
 	kfree(pathname);
