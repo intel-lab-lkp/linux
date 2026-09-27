@@ -131,6 +131,9 @@ void do_illegal_instruction(struct pt_regs *regs, unsigned long pc, unsigned lon
 	if (!get_user(insn, (unsigned int __user *)pc)) {
 		if (try_emulate_casa(regs, insn))
 			return;
+		/* SuperSPARC traps divides wider than 52 bits. */
+		if (try_emulate_div(regs, insn))
+			return;
 	}
 
 	send_sig_fault(SIGILL, ILL_ILLOPC, (void __user *)pc, current);

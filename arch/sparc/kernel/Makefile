@@ -41,6 +41,7 @@ obj-$(CONFIG_SPARC32)   += systbls_32.o
 obj-y                   += time_$(BITS).o
 obj-$(CONFIG_SPARC32)   += windows.o
 obj-$(CONFIG_SPARC32)   += cas_emu_32.o
+obj-$(CONFIG_SPARC32)   += div_emu_32.o
 obj-y                   += cpu.o
 obj-$(CONFIG_SPARC32)   += devices.o
 obj-y                   += ptrace_$(BITS).o
