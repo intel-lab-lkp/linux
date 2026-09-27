@@ -946,6 +946,9 @@ static inline void set_ptes(struct mm_struct *mm, unsigned long addr,
 	set_pte_at((mm), (addr), (ptep), __pte(0UL))
 
 #ifdef DCACHE_ALIASING_POSSIBLE
+/* Without pte_batch_hint(), move_ptes() calls this once per PTE, so
+ * only the page this PTE maps can have lines at the old colour.
+ */
 #define __HAVE_ARCH_MOVE_PTE
 #define move_pte(pte, old_addr, new_addr)				\
 ({									\
@@ -955,8 +958,8 @@ static inline void set_ptes(struct mm_struct *mm, unsigned long addr,
 									\
 		if (pfn_valid(this_pfn) &&				\
 		    (((old_addr) ^ (new_addr)) & (1 << 13)))		\
-			flush_dcache_folio_all(current->mm,		\
-				page_folio(pfn_to_page(this_pfn)));	\
+			flush_dcache_page_all(current->mm,		\
+					      pfn_to_page(this_pfn));	\
 	}								\
 	newpte;								\
 })
