@@ -5197,6 +5197,8 @@ static void nvme_free_ctrl(struct device *dev)
 
 	ctrl->ops->free_ctrl(ctrl);
 
+	kobject_put(ctrl->queues_kobj);
+
 	if (subsys)
 		nvme_put_subsystem(subsys);
 }

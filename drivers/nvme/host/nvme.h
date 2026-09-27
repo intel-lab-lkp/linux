@@ -339,6 +339,28 @@ enum nvme_ctrl_flags {
 	NVME_CTRL_FROZEN		= 6,
 };
 
+enum nvme_queue_info_flags {
+	NVME_QUEUE_INFO_REGISTERED	= 0,
+	NVME_QUEUE_INFO_IO_CPU_USER	= 1,
+};
+
+/*
+ * Common per-queue state, embedded in the transport's queue structure and
+ * backing the /sys/class/nvme/nvmeX/queues/<qid>/ directory.
+ */
+struct nvme_queue_info {
+	struct kobject		kobj;
+	unsigned int		qid;
+	unsigned long		flags;
+};
+
+struct nvme_ctrl;
+
+int nvme_register_queue_info(struct nvme_ctrl *ctrl,
+			     struct nvme_queue_info *qinfo, unsigned int qid,
+			     const struct kobj_type *ktype);
+void nvme_unregister_queue_info(struct nvme_queue_info *qinfo);
+
 struct nvme_ctrl {
 	bool comp_seen;
 	bool identified;
@@ -360,6 +382,7 @@ struct nvme_ctrl {
 	struct srcu_struct srcu;
 	struct device ctrl_device;
 	struct device *device;	/* char device */
+	struct kobject *queues_kobj;
 #ifdef CONFIG_NVME_HWMON
 	struct device *hwmon_device;
 #endif

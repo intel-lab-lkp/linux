@@ -1313,3 +1313,45 @@ const struct attribute_group *nvme_subsys_attrs_groups[] = {
 	&nvme_subsys_attrs_group,
 	NULL,
 };
+
+/*
+ * Per-queue sysfs directories under /sys/class/nvme/nvmeX/queues/. The
+ * transport backing the controller registers a directory for each of its
+ * queues and provides the attributes through the ktype. Registration is
+ * expected once per controller lifetime, so the directories persist while
+ * the transport's queues cycle across reconnects. The queues directory
+ * itself is released with the controller device.
+ */
+int nvme_register_queue_info(struct nvme_ctrl *ctrl,
+			     struct nvme_queue_info *qinfo, unsigned int qid,
+			     const struct kobj_type *ktype)
+{
+	int ret;
+
+	if (!ctrl->queues_kobj) {
+		ctrl->queues_kobj = kobject_create_and_add("queues",
+							   &ctrl->device->kobj);
+		if (!ctrl->queues_kobj)
+			return -ENOMEM;
+	}
+
+	qinfo->qid = qid;
+	ret = kobject_init_and_add(&qinfo->kobj, ktype, ctrl->queues_kobj,
+				   "%u", qid);
+	if (ret) {
+		kobject_put(&qinfo->kobj);
+		return ret;
+	}
+
+	set_bit(NVME_QUEUE_INFO_REGISTERED, &qinfo->flags);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(nvme_register_queue_info);
+
+void nvme_unregister_queue_info(struct nvme_queue_info *qinfo)
+{
+	if (!test_and_clear_bit(NVME_QUEUE_INFO_REGISTERED, &qinfo->flags))
+		return;
+	kobject_put(&qinfo->kobj);
+}
+EXPORT_SYMBOL_GPL(nvme_unregister_queue_info);
