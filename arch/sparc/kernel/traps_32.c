@@ -11,6 +11,7 @@
  */
 
 #include <linux/cpu.h>
+#include <linux/extable.h>
 #include <linux/sched/mm.h>
 #include <linux/sched/debug.h>
 #include <linux/mm_types.h>
@@ -108,8 +109,18 @@ void do_hw_interrupt(struct pt_regs *regs, unsigned long type)
 void do_illegal_instruction(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 			    unsigned long psr)
 {
-	if(psr & PSR_PS)
+	if (psr & PSR_PS) {
+		const struct exception_table_entry *entry;
+
+		/* The casa probe on a CPU without casa. */
+		entry = search_exception_tables(pc);
+		if (entry) {
+			regs->pc = entry->fixup;
+			regs->npc = regs->pc + 4;
+			return;
+		}
 		die_if_kernel("Kernel illegal instruction", regs);
+	}
 #ifdef TRAP_DEBUG
 	printk("Ill instr. at pc=%08lx instruction is %08lx\n",
 	       regs->pc, *(unsigned long *)regs->pc);
