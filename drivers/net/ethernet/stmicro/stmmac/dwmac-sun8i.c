@@ -163,6 +163,7 @@ static const struct emac_variant emac_variant_h6 = {
 #define EMAC_TX_CUR_DESC        0xB4
 #define EMAC_TX_CUR_BUF 0xB8
 #define EMAC_RX_DMA_STA 0xC0
+#define EMAC_DMA_STATE_MASK GENMASK(2, 0)
 #define EMAC_RX_CUR_DESC        0xC4
 #define EMAC_RX_CUR_BUF 0xC8
 
@@ -425,6 +426,21 @@ static void sun8i_dwmac_dma_stop_rx(struct stmmac_priv *priv,
 	writel(v, ioaddr + EMAC_RX_CTL1);
 }
 
+static int sun8i_dwmac_dma_wait_idle(struct stmmac_priv *priv,
+				     void __iomem *ioaddr)
+{
+	u32 value;
+	int ret;
+
+	/* STOP (0) follows the frame transfer and descriptor close states. */
+	ret = readl_poll_timeout(ioaddr + EMAC_TX_DMA_STA, value,
+				 !(value & EMAC_DMA_STATE_MASK), 100, 100000);
+	if (ret)
+		return ret;
+	return readl_poll_timeout(ioaddr + EMAC_RX_DMA_STA, value,
+				 !(value & EMAC_DMA_STATE_MASK), 100, 100000);
+}
+
 static int sun8i_dwmac_dma_interrupt(struct stmmac_priv *priv,
 				     void __iomem *ioaddr,
 				     struct stmmac_extra_stats *x, u32 chan,
@@ -553,6 +569,7 @@ static void sun8i_dwmac_dma_operation_mode_tx(struct stmmac_priv *priv,
 
 static const struct stmmac_dma_ops sun8i_dwmac_dma_ops = {
 	.reset = sun8i_dwmac_dma_reset,
+	.wait_idle = sun8i_dwmac_dma_wait_idle,
 	.init = sun8i_dwmac_dma_init,
 	.init_rx_chan = sun8i_dwmac_dma_init_rx,
 	.init_tx_chan = sun8i_dwmac_dma_init_tx,

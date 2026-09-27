@@ -10,6 +10,12 @@
 #ifndef __DWMAC4_DMA_H__
 #define __DWMAC4_DMA_H__
 
+int dwmac4_dma_wait_idle(struct stmmac_priv *priv, void __iomem *ioaddr);
+
+#define DMA_DEBUG_STATUS0	0x0000100c
+#define DMA_DEBUG_BUS_BUSY	GENMASK(1, 0)
+#define DMA_DEBUG_CH_STATE(ch)	(GENMASK(15, 8) << ((ch) * 8))
+
 /* Define the max channel number used for tx (also rx).
  * dwmac4 accepts up to 8 channels for TX (and also 8 channels for RX
  */

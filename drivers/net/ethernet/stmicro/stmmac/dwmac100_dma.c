@@ -108,6 +108,7 @@ static void dwmac100_dma_diagnostic_fr(struct stmmac_extra_stats *x,
 
 const struct stmmac_dma_ops dwmac100_dma_ops = {
 	.reset = dwmac_dma_reset,
+	.wait_idle = dwmac_dma_wait_idle,
 	.init = dwmac100_dma_init,
 	.init_rx_chan = dwmac100_dma_init_rx,
 	.init_tx_chan = dwmac100_dma_init_tx,
