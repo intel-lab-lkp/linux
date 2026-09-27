@@ -4254,7 +4254,7 @@ static int macsec_newlink(struct net_device *dev,
 	if (err < 0)
 		goto unregister;
 
-	if (rx_handler && sci_exists(real_dev, sci)) {
+	if (rx_handler && sci_exists(real_dev, macsec->secy.sci)) {
 		err = -EBUSY;
 		goto unlink;
 	}
