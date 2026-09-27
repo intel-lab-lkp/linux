@@ -659,18 +659,21 @@ impl CmdqInner<'_> {
             .gsp_mem
             .allocate_command(size_in_bytes, Self::ALLOCATE_TIMEOUT)?;
 
+        // Fill the header.
+        let msg_element_init = GspMsgElement::init(self.seq, size_in_bytes);
+        // SAFETY: `msg_header` is a valid reference, and not touched if the initializer fails.
+        unsafe {
+            pin_init::raw_try_init(core::ptr::from_mut(dst.header), msg_element_init)?;
+        }
+
         // Extract area for the command itself. The GSP message header and the command header
         // together are guaranteed to fit entirely into a single page, so it's ok to only look
         // at `dst.contents.0` here.
         let (cmd, payload_1) = M::Command::from_bytes_mut_prefix(dst.contents.0).ok_or(EIO)?;
-
-        // Fill the header and command in-place.
-        let msg_element_init = GspMsgElement::init(self.seq, size_in_bytes);
         let rpc_header_init = RpcMessageHeader::init(size_in_bytes, M::FUNCTION);
-        // SAFETY: `msg_header` and `cmd` are valid references, and not touched if the initializer
-        // fails.
+        // SAFETY: `rpc_header_mut()` and `cmd` are valid references, and not touched if the
+        // initializer fails.
         unsafe {
-            pin_init::raw_try_init(core::ptr::from_mut(dst.header), msg_element_init)?;
             pin_init::raw_try_init(
                 core::ptr::from_mut(dst.header.rpc_header_mut()),
                 rpc_header_init,
@@ -687,14 +690,6 @@ impl CmdqInner<'_> {
         }
         drop(sbuffer);
 
-        // Compute checksum now that the whole message is ready.
-        dst.header
-            .set_checksum(Cmdq::calculate_checksum(SBufferIter::new_reader([
-                dst.header.as_bytes(),
-                dst.contents.0,
-                dst.contents.1,
-            ])));
-
         dev_dbg!(
             &self.dev,
             "GSP RPC: send: seq# {}, function={:?}, length=0x{:x}\n",
@@ -702,6 +697,14 @@ impl CmdqInner<'_> {
             M::FUNCTION,
             size_in_bytes,
         );
+
+        // Compute checksum now that the whole message is ready.
+        dst.header
+            .set_checksum(Cmdq::calculate_checksum(SBufferIter::new_reader([
+                dst.header.as_bytes(),
+                dst.contents.0,
+                dst.contents.1,
+            ])));
 
         // All set - update the write pointer and inform the GSP of the new command.
         let elem_count = dst.header.element_count();
