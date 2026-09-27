@@ -486,11 +486,21 @@ mt7925_add_interface(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 		INIT_DELAYED_WORK(&mvif->nan.mac_rand_work,
 				  mt7925_nan_mac_rand_work);
 
+	if (vif->type == NL80211_IFTYPE_NAN_DATA) {
+		/* nan_tx_gtk_table[] slots are NULL from mac80211's kzalloc of
+		 * drv_priv; entries are allocated on demand by set_key when a
+		 * TX GTK is installed.
+		 */
+		spin_lock_init(&mvif->nan.nan_tx_gtk_lock);
+	}
 out:
 	mt792x_mutex_release(dev);
 
 	return ret;
 }
+
+static void mt7925_nan_gtk_table_cleanup(struct mt792x_dev *dev,
+					 struct mt792x_vif *mvif);
 
 static void
 mt7925_remove_interface(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
@@ -515,6 +525,9 @@ mt7925_remove_interface(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 
 	mconf = mt792x_link_conf_to_mconf(&vif->bss_conf);
 	mt792x_mac_link_bss_remove(dev, mconf, &mvif->sta.deflink);
+
+	if (vif->type == NL80211_IFTYPE_NAN_DATA)
+		mt7925_nan_gtk_table_cleanup(dev, mvif);
 
 	mt792x_mutex_release(dev);
 }
@@ -1329,6 +1342,29 @@ static void mt7925_nan_wcid_free(struct mt76_dev *mdev, struct mt76_wcid *wcid)
 	mt76_wcid_cleanup(mdev, wcid);
 	mt76_wcid_mask_clear(mdev->wcid_mask, idx);
 	wcid->idx = MT792x_WCID_IDX_UNSET;
+}
+
+/* Free all TX GTK WTBL entries for a NAN_DATA vif on interface teardown.
+ * Caller must hold dev->mt76.mutex.
+ */
+static void mt7925_nan_gtk_table_cleanup(struct mt792x_dev *dev,
+					 struct mt792x_vif *mvif)
+{
+	int i;
+
+	for (i = 0; i < MT792X_MAX_NAN_NDC; i++) {
+		struct mt792x_nan_gtk_entry *e;
+
+		e = rcu_dereference_protected(mvif->nan.nan_tx_gtk_table[i],
+					      lockdep_is_held(&dev->mt76.mutex));
+		if (!e)
+			continue;
+		rcu_assign_pointer(mvif->nan.nan_tx_gtk_table[i], NULL);
+		rcu_assign_pointer(dev->mt76.wcid[e->wcid.idx], NULL);
+		mt76_wcid_cleanup(&dev->mt76, &e->wcid);
+		mt76_wcid_mask_clear(dev->mt76.wcid_mask, e->wcid.idx);
+		kfree(e);
+	}
 }
 
 /* Release any lazily-allocated per-peer NAN group key WTBLs for a departing

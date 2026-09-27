@@ -187,11 +187,30 @@ void mt792x_tx(struct ieee80211_hw *hw, struct ieee80211_tx_control *control,
 		wcid = &mlink->wcid;
 	}
 
+	/* NAN_DATA multicast: route through the NDC-specific TX GTK WTBL.
+	 * Full WTBL layout is documented in mt792x.h.
+	 * NOTE: NDC selection is not yet implemented; always falls back to
+	 * the interface WTBL until set_key populates nan_tx_gtk_table[].
+	 */
 	if (vif && !control->sta) {
-		struct mt792x_vif *mvif;
+		struct mt792x_vif *mvif = (struct mt792x_vif *)vif->drv_priv;
 
-		mvif = (struct mt792x_vif *)vif->drv_priv;
-		wcid = &mvif->sta.deflink.wcid;
+		if (vif->type == NL80211_IFTYPE_NAN_DATA) {
+			struct mt792x_nan_gtk_entry *entry = NULL;
+			int i;
+
+			rcu_read_lock();
+			for (i = 0; i < MT792X_MAX_NAN_NDC; i++) {
+				entry = rcu_dereference(mvif->nan.nan_tx_gtk_table[i]);
+				if (entry)
+					break;
+			}
+			rcu_read_unlock();
+
+			wcid = entry ? &entry->wcid : &mvif->sta.deflink.wcid;
+		} else {
+			wcid = &mvif->sta.deflink.wcid;
+		}
 	}
 
 	if (vif && control->sta && ieee80211_vif_is_mld(vif) &&

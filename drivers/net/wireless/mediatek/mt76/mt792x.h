@@ -155,7 +155,7 @@ struct mt792x_sta {
 	struct mt792x_sta_nan_sched nan_sched;
 
 	/* NAN per-peer group key WTBLs (allocated lazily when keys are installed)
-	 * Note: TX GTK is interface-level, see mt792x_vif->nan_tx_gtk_table
+	 * Note: TX GTK is interface-level, see mvif->nan.nan_tx_gtk_table
 	 */
 	struct mt76_wcid nan_rx_gtk_wcid;    /* NAN_DATA peer: RX GTK WTBL (per-peer) */
 	struct mt76_wcid nan_rx_igtk_wcid;   /* NAN peer: RX IGTK/BIGTK WTBL (per-peer) */
@@ -183,6 +183,60 @@ struct mt792x_nan_conf {
 	bool enable_dw_notification;
 };
 
+/*
+ * NAN WTBL layout (mt7925)
+ *
+ * TX scope -- determined by who shares the encrypting key:
+ *
+ *   mvif->sta.deflink.wcid          [NAN vif, interface-level]
+ *     TX IGTK/BIGTK: multicast management TX.  Shared by all NMI peers;
+ *     installed via the normal hardware key path (set_key fallback).
+ *
+ *   mvif->sta.deflink.wcid          [NAN_DATA vif, interface-level]
+ *     TX GTK fallback when nan.nan_tx_gtk_table[] has no entry for the NDC.
+ *
+ *   mvif->nan.nan_tx_gtk_table[i]->wcid [NAN_DATA vif, NDC-level, on-demand]
+ *     TX GTK: multicast data TX.  All peers in the same NAN Data Cluster
+ *     share one TX GTK; different NDCs use independent keys.  Each slot
+ *     is NULL until set_key installs a key for that NDC (up to
+ *     MT792X_MAX_NAN_NDC concurrent NDCs).
+ *     NOTE: currently returns -EOPNOTSUPP -- mac80211 does not pass an
+ *     NDC ID at set_key time, so the correct table slot cannot be
+ *     selected.
+ *
+ * RX scope -- always per-peer because each sender has its own key:
+ *
+ *   msta->deflink.wcid              [NMI or NDI peer, peer-level]
+ *     NM-TK (NMI unicast) or ND-TK (NDI unicast).
+ *
+ *   msta->nan_rx_gtk_wcid           [NDI peer under NAN_DATA vif, peer-level]
+ *     RX GTK: multicast data RX.  Keyidx 1-2; allocated lazily in set_key.
+ *
+ *   msta->nan_rx_igtk_wcid          [NMI peer under NAN vif, peer-level]
+ *     RX IGTK/BIGTK: multicast management RX.  Keyidx 4-7; allocated
+ *     lazily in set_key.
+ *
+ * Example -- 2 peers in different NDCs, full security (design intent):
+ *   1  NAN vif WTBL                 TX IGTK/BIGTK
+ *   1  NAN_DATA vif WTBL            TX GTK fallback
+ *   2  NMI peer WTBLs               NM-TK (one per peer)
+ *   2  NDI peer WTBLs               ND-TK (one per peer)
+ *   2  TX GTK WTBLs                 nan.nan_tx_gtk_table[], one per NDC
+ *   2  RX GTK WTBLs                 nan_rx_gtk_wcid, one per NDI peer
+ *   2  RX IGTK/BIGTK WTBLs          nan_rx_igtk_wcid, one per NMI peer
+ *  = 12 WTBLs total
+ *
+ * Maximum concurrent NDCs is based on NAN_MAX_CONN_CFG (8 peers).
+ */
+#define MT792X_MAX_NAN_NDC	8
+
+/* TX GTK WTBL for one NAN Data Cluster; allocated only when the key is installed */
+struct mt792x_nan_gtk_entry {
+	u8 ndc_id[ETH_ALEN];
+	struct mt76_wcid wcid;
+	u8 key_idx;
+};
+
 struct mt792x_nan {
 	struct mt792x_nan_conf conf;
 
@@ -208,6 +262,14 @@ struct mt792x_nan {
 	 */
 	struct delayed_work mac_rand_work;
 	u32 mac_rand_period_sec;
+
+	/* NAN_DATA TX GTK table (mt7925 only): one entry per NAN Data Cluster,
+	 * allocated on demand when set_key installs a TX GTK for that NDC.
+	 * Protected by nan_tx_gtk_lock; slots are NULL until populated.
+	 */
+	struct mt792x_nan_gtk_entry __rcu *nan_tx_gtk_table[MT792X_MAX_NAN_NDC];
+	/* Protects nan_tx_gtk_table. */
+	spinlock_t nan_tx_gtk_lock;
 };
 
 struct mt792x_vif {
