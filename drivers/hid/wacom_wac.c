@@ -128,6 +128,9 @@ static int wacom_penpartner_irq(struct wacom_wac *wacom)
 	unsigned char *data = wacom->data;
 	struct input_dev *input = wacom->pen_input;
 
+	if (!input)
+		return 0;
+
 	switch (data[0]) {
 	case 1:
 		if (data[5] & 0x80) {
@@ -173,6 +176,9 @@ static int wacom_pl_irq(struct wacom_wac *wacom)
 	unsigned char *data = wacom->data;
 	struct input_dev *input = wacom->pen_input;
 	int prox, pressure;
+
+	if (!input)
+		return 0;
 
 	if (data[0] != WACOM_REPORT_PENABLED) {
 		dev_dbg(input->dev.parent,
@@ -233,6 +239,9 @@ static int wacom_ptu_irq(struct wacom_wac *wacom)
 	unsigned char *data = wacom->data;
 	struct input_dev *input = wacom->pen_input;
 
+	if (!input)
+		return 0;
+
 	if (data[0] != WACOM_REPORT_PENABLED) {
 		dev_dbg(input->dev.parent,
 			"%s: received unknown report #%d\n", __func__, data[0]);
@@ -262,6 +271,9 @@ static int wacom_dtu_irq(struct wacom_wac *wacom)
 	unsigned char *data = wacom->data;
 	struct input_dev *input = wacom->pen_input;
 	int prox = data[1] & 0x20;
+
+	if (!input)
+		return 0;
 
 	dev_dbg(input->dev.parent,
 		"%s: received report #%d", __func__, data[0]);
@@ -299,6 +311,8 @@ static int wacom_dtus_irq(struct wacom_wac *wacom)
 		return 0;
 	} else if (data[0] == WACOM_REPORT_DTUSPAD) {
 		input = wacom->pad_input;
+		if (!input)
+			return 0;
 		input_report_key(input, BTN_0, (data[1] & 0x01));
 		input_report_key(input, BTN_1, (data[1] & 0x02));
 		input_report_key(input, BTN_2, (data[1] & 0x04));
@@ -307,6 +321,9 @@ static int wacom_dtus_irq(struct wacom_wac *wacom)
 				 data[1] & 0x0f ? PAD_DEVICE_ID : 0);
 		return 1;
 	} else {
+		if (!input)
+			return 0;
+
 		prox = data[1] & 0x80;
 		if (prox) {
 			switch ((data[1] >> 3) & 3) {
@@ -363,7 +380,7 @@ static int wacom_graphire_irq(struct wacom_wac *wacom)
 	}
 
 	prox = data[1] & 0x80;
-	if (prox || wacom->id[0]) {
+	if (input && (prox || wacom->id[0])) {
 		if (prox) {
 			switch ((data[1] >> 5) & 3) {
 
@@ -438,7 +455,7 @@ static int wacom_graphire_irq(struct wacom_wac *wacom)
 	switch (features->type) {
 	case WACOM_G4:
 		prox = data[7] & 0xf8;
-		if (prox || wacom->id[1]) {
+		if (pad_input && (prox || wacom->id[1])) {
 			wacom->id[1] = PAD_DEVICE_ID;
 			input_report_key(pad_input, BTN_BACK, (data[7] & 0x40));
 			input_report_key(pad_input, BTN_FORWARD, (data[7] & 0x80));
@@ -453,7 +470,7 @@ static int wacom_graphire_irq(struct wacom_wac *wacom)
 
 	case WACOM_MO:
 		prox = (data[7] & 0xf8) || data[8];
-		if (prox || wacom->id[1]) {
+		if (pad_input && (prox || wacom->id[1])) {
 			wacom->id[1] = PAD_DEVICE_ID;
 			input_report_key(pad_input, BTN_BACK, (data[7] & 0x08));
 			input_report_key(pad_input, BTN_LEFT, (data[7] & 0x20));
@@ -468,7 +485,7 @@ static int wacom_graphire_irq(struct wacom_wac *wacom)
 		break;
 	case GRAPHIRE_BT:
 		prox = data[7] & 0x03;
-		if (prox || wacom->id[1]) {
+		if (pad_input && (prox || wacom->id[1])) {
 			wacom->id[1] = PAD_DEVICE_ID;
 			input_report_key(pad_input, BTN_0, (data[7] & 0x02));
 			input_report_key(pad_input, BTN_1, (data[7] & 0x01));
