@@ -388,6 +388,14 @@ config XLNX_R5_REMOTEPROC
 
 	  It's safe to say N if not interested in using RPU r5f cores.
 
+config SUNXI_REMOTEPROC
+	tristate "Allwinner XuanTie RISC-V remoteproc support"
+	depends on (ARCH_SUNXI || COMPILE_TEST) && MAILBOX
+	help
+	  Say y or m here to support the Allwinner XuanTie E906/E907 RISC-V
+	  co-processor on Allwinner A523, A527, and T527 SoCs via the
+	  remote processor framework.
+
 endif # REMOTEPROC
 
 endmenu
