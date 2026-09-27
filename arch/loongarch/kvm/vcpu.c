@@ -154,12 +154,13 @@ static void kvm_update_stolen_time(struct kvm_vcpu *vcpu)
 	u32 version;
 	u64 steal;
 	gpa_t gpa;
+	u64 last_steal;
 	struct kvm_memslots *slots;
 	struct kvm_steal_time __user *st;
 	struct gfn_to_hva_cache *ghc;
 
 	ghc = &vcpu->arch.st.cache;
-	gpa = vcpu->arch.st.guest_addr;
+	gpa = READ_ONCE(vcpu->arch.st.guest_addr);
 	if (!(gpa & KVM_STEAL_PHYS_VALID))
 		return;
 
@@ -187,8 +188,14 @@ static void kvm_update_stolen_time(struct kvm_vcpu *vcpu)
 	smp_wmb();
 
 	unsafe_get_user(steal, &st->steal, out);
-	steal += current->sched_info.run_delay - vcpu->arch.st.last_steal;
-	vcpu->arch.st.last_steal = current->sched_info.run_delay;
+	/* acquire pairs with the smp_wmb in the attr path */
+	smp_rmb();
+	last_steal = READ_ONCE(vcpu->arch.st.last_steal);
+	if (!last_steal)
+		/* first update in vcpu context: rebase the counter */
+		last_steal = current->sched_info.run_delay;
+	steal += current->sched_info.run_delay - last_steal;
+	WRITE_ONCE(vcpu->arch.st.last_steal, current->sched_info.run_delay);
 	unsafe_put_user(steal, &st->steal, out);
 
 	smp_wmb();
@@ -1122,7 +1129,7 @@ static int kvm_loongarch_pvtime_get_attr(struct kvm_vcpu *vcpu,
 			|| attr->attr != KVM_LOONGARCH_VCPU_PVTIME_GPA)
 		return -ENXIO;
 
-	gpa = vcpu->arch.st.guest_addr;
+	gpa = READ_ONCE(vcpu->arch.st.guest_addr);
 	if (put_user(gpa, user))
 		return -EFAULT;
 
@@ -1193,7 +1200,7 @@ static int kvm_loongarch_pvtime_set_attr(struct kvm_vcpu *vcpu,
 		return -EINVAL;
 
 	if (!(gpa & KVM_STEAL_PHYS_VALID)) {
-		vcpu->arch.st.guest_addr = gpa;
+		WRITE_ONCE(vcpu->arch.st.guest_addr, gpa);
 		return 0;
 	}
 
@@ -1204,8 +1211,10 @@ static int kvm_loongarch_pvtime_set_attr(struct kvm_vcpu *vcpu,
 	srcu_read_unlock(&kvm->srcu, idx);
 
 	if (!ret) {
-		vcpu->arch.st.guest_addr = gpa;
-		vcpu->arch.st.last_steal = current->sched_info.run_delay;
+		WRITE_ONCE(vcpu->arch.st.last_steal, 0);
+		/* publish the new address only after clearing the rebase sentinel */
+		smp_wmb();
+		WRITE_ONCE(vcpu->arch.st.guest_addr, gpa);
 		kvm_make_request(KVM_REQ_STEAL_UPDATE, vcpu);
 	}
 
@@ -1796,7 +1805,7 @@ static void kvm_vcpu_set_pv_preempted(struct kvm_vcpu *vcpu)
 	struct kvm_memslots *slots;
 	struct kvm_steal_time __user *st;
 
-	gpa = vcpu->arch.st.guest_addr;
+	gpa = READ_ONCE(vcpu->arch.st.guest_addr);
 	if (!(gpa & KVM_STEAL_PHYS_VALID))
 		return;
 
