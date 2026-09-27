@@ -240,6 +240,29 @@ static inline bool skb_gso_size_check(const struct sk_buff *skb,
 	return true;
 }
 
+/* TCP segment length reads doff, so validate its header offsets first. */
+static bool skb_gso_tcp_header_valid(const struct sk_buff *skb)
+{
+	unsigned int transport = skb->transport_header;
+	unsigned int tail = skb_tail_pointer(skb) - skb->head;
+
+	if (!skb_is_gso_tcp(skb))
+		return true;
+
+	if (!skb_transport_header_was_set(skb) ||
+	    transport <= skb->network_header || transport > tail)
+		return false;
+
+	if (skb->encapsulation) {
+		transport = skb->inner_transport_header;
+		if (transport <= skb->inner_network_header ||
+		    transport < skb->transport_header || transport > tail)
+			return false;
+	}
+
+	return sizeof(struct tcphdr) <= tail - transport;
+}
+
 /**
  * skb_gso_validate_network_len - Will a split GSO skb fit into a given MTU?
  *
@@ -252,6 +275,9 @@ static inline bool skb_gso_size_check(const struct sk_buff *skb,
  */
 bool skb_gso_validate_network_len(const struct sk_buff *skb, unsigned int mtu)
 {
+	if (unlikely(!skb_gso_tcp_header_valid(skb)))
+		return false;
+
 	return skb_gso_size_check(skb, skb_gso_network_seglen(skb), mtu);
 }
 EXPORT_SYMBOL_GPL(skb_gso_validate_network_len);
@@ -267,7 +293,12 @@ EXPORT_SYMBOL_GPL(skb_gso_validate_network_len);
  */
 bool skb_gso_validate_mac_len(const struct sk_buff *skb, unsigned int len)
 {
+	if (unlikely(!skb_gso_tcp_header_valid(skb) ||
+		     (skb_is_gso_tcp(skb) &&
+		      (!skb_mac_header_was_set(skb) ||
+		       skb->transport_header <= skb->mac_header))))
+		return false;
+
 	return skb_gso_size_check(skb, skb_gso_mac_seglen(skb), len);
 }
 EXPORT_SYMBOL_GPL(skb_gso_validate_mac_len);
-
