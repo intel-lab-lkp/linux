@@ -23986,6 +23986,14 @@ L:	rust-for-linux@vger.kernel.org
 S:	Maintained
 F:	rust/kernel/bitfield.rs
 
+RUST [DAMON]
+M:	Enze Li <lienze@kylinos.cn>
+L:	rust-for-linux@vger.kernel.org
+L:	damon@lists.linux.dev
+S:	Maintained
+F:	rust/kernel/damon.rs
+F:	samples/damon/rust_prcl.rs
+
 RUST [INTEROP]
 M:	Joel Fernandes <joelagnelf@nvidia.com>
 M:	Alexandre Courbot <acourbot@nvidia.com>
