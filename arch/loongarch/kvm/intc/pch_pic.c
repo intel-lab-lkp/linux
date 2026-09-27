@@ -282,7 +282,10 @@ static int kvm_pch_pic_init(struct kvm_device *dev, u64 addr)
 	struct kvm_io_device *device;
 	struct loongarch_pch_pic *s = dev->kvm->arch.pch_pic;
 
-	s->pch_pic_base = addr;
+	if (!addr)
+		return -EINVAL;
+	if (s->pch_pic_base)
+		return -EBUSY;
 	device = &s->device;
 	/* init device by pch pic writing and reading ops */
 	kvm_iodevice_init(device, &kvm_pch_pic_ops);
@@ -290,8 +293,11 @@ static int kvm_pch_pic_init(struct kvm_device *dev, u64 addr)
 	/* register pch pic device */
 	ret = kvm_io_bus_register_dev(kvm, KVM_MMIO_BUS, addr, PCH_PIC_SIZE, device);
 	mutex_unlock(&kvm->slots_lock);
+	if (ret < 0)
+		return ret;
 
-	return (ret < 0) ? -EFAULT : 0;
+	s->pch_pic_base = addr;
+	return 0;
 }
 
 /* used by user space to get or set pch pic registers */
