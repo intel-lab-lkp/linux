@@ -856,7 +856,8 @@ exit:
 		if (!conn_info)
 			return 0;
 
-		conn_info->max_pkt_payload_len = ntf.max_data_pkt_payload_size;
+		WRITE_ONCE(conn_info->max_pkt_payload_len,
+			   ntf.max_data_pkt_payload_size);
 		conn_info->initial_num_credits = ntf.initial_num_credits;
 
 		/* set the available credits to initial value */

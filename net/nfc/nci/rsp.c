@@ -345,7 +345,8 @@ static void nci_core_conn_create_rsp_packet(struct nci_dev *ndev,
 			ndev->hci_dev->conn_info = conn_info;
 
 		conn_info->conn_id = rsp->conn_id;
-		conn_info->max_pkt_payload_len = rsp->max_ctrl_pkt_payload_len;
+		WRITE_ONCE(conn_info->max_pkt_payload_len,
+			   rsp->max_ctrl_pkt_payload_len);
 		atomic_set(&conn_info->credits_cnt, rsp->credits_cnt);
 	}
 

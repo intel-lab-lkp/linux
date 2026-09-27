@@ -95,9 +95,9 @@ int nci_conn_max_data_pkt_payload_size(struct nci_dev *ndev, __u8 conn_id)
 EXPORT_SYMBOL(nci_conn_max_data_pkt_payload_size);
 
 static int nci_queue_tx_data_frags(struct nci_dev *ndev,
-				   __u8 conn_id,
-				   struct sk_buff *skb) {
-	const struct nci_conn_info *conn_info;
+				   __u8 conn_id, struct sk_buff *skb,
+				   u8 max_pkt_payload_len)
+{
 	int total_len = skb->len;
 	const unsigned char *data = skb->data;
 	unsigned long flags;
@@ -108,17 +108,10 @@ static int nci_queue_tx_data_frags(struct nci_dev *ndev,
 
 	pr_debug("conn_id 0x%x, total_len %d\n", conn_id, total_len);
 
-	conn_info = nci_get_conn_info_by_conn_id(ndev, conn_id);
-	if (!conn_info) {
-		rc = -EPROTO;
-		goto exit;
-	}
-
 	__skb_queue_head_init(&frags_q);
 
 	while (total_len) {
-		frag_len =
-			min_t(int, total_len, conn_info->max_pkt_payload_len);
+		frag_len = min_t(int, total_len, max_pkt_payload_len);
 
 		skb_frag = nci_skb_alloc(ndev,
 					 (NCI_DATA_HDR_SIZE + frag_len),
@@ -171,6 +164,7 @@ exit:
 int nci_send_data(struct nci_dev *ndev, __u8 conn_id, struct sk_buff *skb)
 {
 	const struct nci_conn_info *conn_info;
+	u8 max_pkt_payload_len;
 	int rc = 0;
 
 	pr_debug("conn_id 0x%x, plen %d\n", conn_id, skb->len);
@@ -181,17 +175,29 @@ int nci_send_data(struct nci_dev *ndev, __u8 conn_id, struct sk_buff *skb)
 		goto free_exit;
 	}
 
+	/* The rx workqueue updates the limit concurrently: snapshot it
+	 * once and drive both the fragmentation decision and the
+	 * fragmentation loop from the same value.
+	 */
+	max_pkt_payload_len = READ_ONCE(conn_info->max_pkt_payload_len);
+
+	if (!max_pkt_payload_len) {
+		rc = -EPROTO;
+		goto free_exit;
+	}
+
 	/* check if the packet need to be fragmented */
-	if (skb->len <= conn_info->max_pkt_payload_len) {
+	if (skb->len <= max_pkt_payload_len) {
 		/* no need to fragment packet */
 		nci_push_data_hdr(ndev, conn_id, skb, NCI_PBF_LAST);
 
 		skb_queue_tail(&ndev->tx_q, skb);
 	} else {
 		/* fragment packet and queue the fragments */
-		rc = nci_queue_tx_data_frags(ndev, conn_id, skb);
+		rc = nci_queue_tx_data_frags(ndev, conn_id, skb,
+					     max_pkt_payload_len);
 		if (rc) {
-			pr_err("failed to fragment tx data packet\n");
+			pr_err_ratelimited("failed to fragment tx data packet\n");
 			goto free_exit;
 		}
 	}
