@@ -545,7 +545,7 @@ static ssize_t rd_set_configfs_dev_params(struct se_device *dev,
 	struct rd_dev *rd_dev = RD_DEV(dev);
 	char *orig, *ptr, *opts;
 	substring_t args[MAX_OPT_ARGS];
-	int arg, token;
+	int ret = 0, arg, token;
 
 	opts = kstrdup(page, GFP_KERNEL);
 	if (!opts)
@@ -560,14 +560,18 @@ static ssize_t rd_set_configfs_dev_params(struct se_device *dev,
 		token = match_token(ptr, tokens, args);
 		switch (token) {
 		case Opt_rd_pages:
-			match_int(args, &arg);
+			ret = match_int(args, &arg);
+			if (ret)
+				goto out;
 			rd_dev->rd_page_count = arg;
 			pr_debug("RAMDISK: Referencing Page"
 				" Count: %u\n", rd_dev->rd_page_count);
 			rd_dev->rd_flags |= RDF_HAS_PAGE_COUNT;
 			break;
 		case Opt_rd_nullio:
-			match_int(args, &arg);
+			ret = match_int(args, &arg);
+			if (ret)
+				goto out;
 			if (arg != 1)
 				break;
 
@@ -575,7 +579,9 @@ static ssize_t rd_set_configfs_dev_params(struct se_device *dev,
 			rd_dev->rd_flags |= RDF_NULLIO;
 			break;
 		case Opt_rd_dummy:
-			match_int(args, &arg);
+			ret = match_int(args, &arg);
+			if (ret)
+				goto out;
 			if (arg != 1)
 				break;
 
@@ -587,8 +593,9 @@ static ssize_t rd_set_configfs_dev_params(struct se_device *dev,
 		}
 	}
 
+out:
 	kfree(orig);
-	return count;
+	return (!ret) ? count : ret;
 }
 
 static ssize_t rd_show_configfs_dev_params(struct se_device *dev, char *b)
