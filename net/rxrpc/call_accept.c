@@ -299,8 +299,9 @@ static struct rxrpc_call *rxrpc_alloc_incoming_call(struct rxrpc_sock *rx,
 		rxrpc_see_connection(conn, rxrpc_conn_see_new_service_conn);
 		rxrpc_new_incoming_connection(rx, conn, sec, skb);
 	} else {
+		if (!atomic_inc_unless_negative(&conn->active))
+			return NULL;
 		rxrpc_get_connection(conn, rxrpc_conn_get_service_conn);
-		atomic_inc(&conn->active);
 	}
 
 	/* And now we can allocate and set up a new call */
