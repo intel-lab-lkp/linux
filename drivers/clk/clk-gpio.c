@@ -138,6 +138,25 @@ static const struct clk_ops clk_gpio_mux_ops = {
 	.determine_rate = __clk_mux_determine_rate,
 };
 
+/* We can't prepare the clock, but the Common Clock Framework calls only
+ * prepare() not is_prepared(), therefore we fallback on the actuall GPIO value.
+ * The function clk_sleeping_gpio_gate_is_prepared() returns the raw boolean
+ * GPIO status (1 if locked, 0 if unlocked), but the prepare callback
+ * clk_core_prepare() expects 0 for success and non-zero integer for failure.
+ */
+static int clk_gpio_locked_prepare(struct clk_hw *hw)
+{
+	if (clk_sleeping_gpio_gate_is_prepared(hw))
+		return 0;
+
+	return -EBUSY;
+}
+
+static const struct clk_ops clk_gpio_locked_ops = {
+	.prepare =	clk_gpio_locked_prepare,
+	.is_prepared =	clk_sleeping_gpio_gate_is_prepared,
+};
+
 static struct clk_hw *clk_register_gpio(struct device *dev, u8 num_parents,
 					struct gpio_desc *gpiod,
 					const struct clk_ops *clk_gpio_ops)
@@ -146,6 +165,7 @@ static struct clk_hw *clk_register_gpio(struct device *dev, u8 num_parents,
 	struct clk_hw *hw;
 	struct clk_init_data init = {};
 	int err;
+	const char *clk_name;
 	const struct clk_parent_data gpio_parent_data[] = {
 		{ .index = 0 },
 		{ .index = 1 },
@@ -155,7 +175,11 @@ static struct clk_hw *clk_register_gpio(struct device *dev, u8 num_parents,
 	if (!clk_gpio)
 		return ERR_PTR(-ENOMEM);
 
-	init.name = dev->of_node->name;
+	err = device_property_read_string(dev, "clock-output-names", &clk_name);
+	if (err)
+		clk_name = fwnode_get_name(dev->fwnode);
+
+	init.name = clk_name;
 	init.ops = clk_gpio_ops;
 	init.parent_data = gpio_parent_data;
 	init.num_parents = num_parents;
@@ -192,6 +216,12 @@ static struct clk_hw *clk_hw_register_gpio_mux(struct device *dev,
 	return clk_register_gpio(dev, 2, gpiod, &clk_gpio_mux_ops);
 }
 
+static struct clk_hw *clk_hw_register_gpio_locked(struct device *dev,
+						  struct gpio_desc *gpiod)
+{
+	return clk_register_gpio(dev, 1, gpiod, &clk_gpio_locked_ops);
+}
+
 static int gpio_clk_driver_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -201,8 +231,11 @@ static int gpio_clk_driver_probe(struct platform_device *pdev)
 	struct gpio_desc *gpiod;
 	struct clk_hw *hw;
 	bool is_mux;
+	bool is_gpio_locked;
+	enum gpiod_flags gpio_flags;
 
 	is_mux = of_device_is_compatible(node, "gpio-mux-clock");
+	is_gpio_locked = of_device_is_compatible(node, "gpio-locked-clock");
 
 	num_parents = of_clk_get_parent_count(node);
 	if (is_mux && num_parents != 2) {
@@ -210,14 +243,24 @@ static int gpio_clk_driver_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	gpio_name = is_mux ? "select" : "enable";
-	gpiod = devm_gpiod_get(dev, gpio_name, GPIOD_OUT_LOW);
+	if (is_mux)
+		gpio_name = "select";
+	else if (is_gpio_locked)
+		gpio_name = "enabled";
+	else
+		gpio_name = "enable";
+
+	gpio_flags = is_gpio_locked ? GPIOD_IN : GPIOD_OUT_LOW;
+
+	gpiod = devm_gpiod_get(dev, gpio_name, gpio_flags);
 	if (IS_ERR(gpiod))
 		return dev_err_probe(dev, PTR_ERR(gpiod),
 				     "Can't get '%s' named GPIO property\n", gpio_name);
 
 	if (is_mux)
 		hw = clk_hw_register_gpio_mux(dev, gpiod);
+	else if (is_gpio_locked)
+		hw = clk_hw_register_gpio_locked(dev, gpiod);
 	else
 		hw = clk_hw_register_gpio_gate(dev, num_parents, gpiod);
 	if (IS_ERR(hw))
@@ -229,6 +272,7 @@ static int gpio_clk_driver_probe(struct platform_device *pdev)
 static const struct of_device_id gpio_clk_match_table[] = {
 	{ .compatible = "gpio-mux-clock" },
 	{ .compatible = "gpio-gate-clock" },
+	{ .compatible = "gpio-locked-clock" },
 	{ }
 };
 
