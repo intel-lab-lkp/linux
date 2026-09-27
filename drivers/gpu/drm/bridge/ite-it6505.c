@@ -407,6 +407,7 @@ struct it6505_audio_data {
 	u8 i2s_data_delay;
 	u8 i2s_ws_channel;
 	u8 i2s_data_sequence;
+	bool mute;
 };
 
 struct it6505_audio_sample_rate_map {
@@ -439,6 +440,7 @@ struct it6505 {
 	struct mutex extcon_lock;
 	struct mutex mode_lock; /* used to bridge_detect */
 	struct mutex aux_lock; /* used to aux data transfers */
+	struct mutex audio_lock; /* audio enable/disable vs. power on/off */
 	struct regmap *regmap;
 	struct drm_display_mode source_output_mode;
 	struct drm_display_mode video_info;
@@ -477,6 +479,7 @@ struct it6505 {
 	bool enable_enhanced_frame;
 	hdmi_codec_plugged_cb plugged_cb;
 	struct device *codec_dev;
+	struct platform_device *audio_pdev;
 	struct delayed_work delayed_audio;
 	struct it6505_audio_data audio;
 	struct dentry *debugfs;
@@ -1599,7 +1602,7 @@ static void it6505_enable_audio_infoframe(struct it6505 *it6505)
 			EN_AUD_CTRL_PKT);
 }
 
-static void it6505_disable_audio(struct it6505 *it6505)
+static void __it6505_disable_audio(struct it6505 *it6505)
 {
 	it6505_set_bits(it6505, REG_DATA_MUTE_CTRL, EN_AUD_MUTE, EN_AUD_MUTE);
 	it6505_set_bits(it6505, REG_AUDIO_SRC_CTRL, M_AUDIO_I2S_EN, 0x00);
@@ -1607,13 +1610,21 @@ static void it6505_disable_audio(struct it6505 *it6505)
 	it6505_set_bits(it6505, REG_RESET_CTRL, AUDIO_RESET, AUDIO_RESET);
 }
 
-static void it6505_enable_audio(struct it6505 *it6505)
+static void it6505_disable_audio(struct it6505 *it6505)
+{
+	mutex_lock(&it6505->audio_lock);
+	__it6505_disable_audio(it6505);
+	mutex_unlock(&it6505->audio_lock);
+}
+
+static void __it6505_enable_audio(struct it6505 *it6505)
 {
 	struct device *dev = it6505->dev;
 	int regbe;
 
 	DRM_DEV_DEBUG_DRIVER(dev, "start");
-	it6505_disable_audio(it6505);
+
+	__it6505_disable_audio(it6505);
 
 	it6505_setup_audio_channel_status(it6505);
 	it6505_setup_audio_format(it6505);
@@ -2331,18 +2342,11 @@ static void it6505_stop_link_train(struct it6505 *it6505)
 
 static void it6505_link_train_ok(struct it6505 *it6505)
 {
-	struct device *dev = it6505->dev;
-
 	it6505->link_state = LINK_OK;
 	/* disalbe mute enable avi info frame */
 	it6505_set_bits(it6505, REG_DATA_MUTE_CTRL, EN_VID_MUTE, 0x00);
 	it6505_set_bits(it6505, REG_INFOFRAME_CTRL,
 			EN_VID_CTRL_PKT, EN_VID_CTRL_PKT);
-
-	if (it6505_audio_input(it6505)) {
-		DRM_DEV_DEBUG_DRIVER(dev, "Enable audio!");
-		it6505_enable_audio(it6505);
-	}
 
 	if (it6505->hdcp_desired)
 		it6505_start_hdcp(it6505);
@@ -2635,8 +2639,10 @@ static void it6505_irq_audio_fifo_error(struct it6505 *it6505)
 
 	DRM_DEV_DEBUG_DRIVER(dev, "audio fifo error Interrupt");
 
-	if (it6505_audio_input(it6505))
-		it6505_enable_audio(it6505);
+	mutex_lock(&it6505->audio_lock);
+	if (!it6505->audio.mute && it6505_audio_input(it6505))
+		__it6505_enable_audio(it6505);
+	mutex_unlock(&it6505->audio_lock);
 }
 
 static void it6505_irq_link_train_fail(struct it6505 *it6505)
@@ -2794,11 +2800,13 @@ static int it6505_poweron(struct it6505 *it6505)
 		usleep_range(25000, 35000);
 	}
 
+	mutex_lock(&it6505->audio_lock);
 	it6505->powered = true;
 	it6505_reset_logic(it6505);
 	it6505_int_mask_enable(it6505);
 	it6505_init(it6505);
 	it6505_lane_off(it6505);
+	mutex_unlock(&it6505->audio_lock);
 
 	enable_irq(it6505->irq);
 
@@ -2823,6 +2831,8 @@ static int it6505_poweroff(struct it6505 *it6505)
 	cancel_work_sync(&it6505->hdcp_wait_ksv_list);
 	cancel_delayed_work_sync(&it6505->hdcp_work);
 
+	mutex_lock(&it6505->audio_lock);
+
 	if (pdata->gpiod_reset)
 		gpiod_set_value_cansleep(pdata->gpiod_reset, 1);
 
@@ -2842,6 +2852,7 @@ static int it6505_poweroff(struct it6505 *it6505)
 
 	it6505->powered = false;
 	it6505->sink_count = 0;
+	mutex_unlock(&it6505->audio_lock);
 
 	return 0;
 }
@@ -2988,25 +2999,28 @@ static void it6505_remove_notifier_module(struct it6505 *it6505)
 	flush_work(&it6505->extcon_wq);
 }
 
-static void __maybe_unused it6505_delayed_audio(struct work_struct *work)
+static void it6505_delayed_audio(struct work_struct *work)
 {
 	struct it6505 *it6505 = container_of(work, struct it6505,
 					     delayed_audio.work);
 
 	DRM_DEV_DEBUG_DRIVER(it6505->dev, "start");
 
-	if (!it6505->powered)
+	if (it6505->enable_drv_hold)
 		return;
 
-	if (!it6505->enable_drv_hold)
-		it6505_enable_audio(it6505);
+	mutex_lock(&it6505->audio_lock);
+	if (it6505->powered && !it6505->audio.mute)
+		__it6505_enable_audio(it6505);
+	mutex_unlock(&it6505->audio_lock);
 }
 
-static int __maybe_unused it6505_audio_setup_hw_params(struct it6505 *it6505,
-						       struct hdmi_codec_params
-						       *params)
+static int it6505_audio_setup_hw_params(struct it6505 *it6505,
+					struct hdmi_codec_params
+					*params)
 {
 	struct device *dev = it6505->dev;
+	u8 word_length;
 	int i = 0;
 
 	DRM_DEV_DEBUG_DRIVER(dev, "%s %d Hz, %d bit, %d channels\n", __func__,
@@ -3022,8 +3036,6 @@ static int __maybe_unused it6505_audio_setup_hw_params(struct it6505 *it6505,
 		return -EINVAL;
 	}
 
-	it6505->audio.channel_count = params->cea.channels;
-
 	while (i < ARRAY_SIZE(audio_sample_rate_map) &&
 	       params->sample_rate !=
 		       audio_sample_rate_map[i].sample_rate_value) {
@@ -3034,21 +3046,20 @@ static int __maybe_unused it6505_audio_setup_hw_params(struct it6505 *it6505,
 				     params->sample_rate);
 		return -EINVAL;
 	}
-	it6505->audio.sample_rate = audio_sample_rate_map[i].rate;
 
 	switch (params->sample_width) {
 	case 16:
-		it6505->audio.word_length = WORD_LENGTH_16BIT;
+		word_length = WORD_LENGTH_16BIT;
 		break;
 	case 18:
-		it6505->audio.word_length = WORD_LENGTH_18BIT;
+		word_length = WORD_LENGTH_18BIT;
 		break;
 	case 20:
-		it6505->audio.word_length = WORD_LENGTH_20BIT;
+		word_length = WORD_LENGTH_20BIT;
 		break;
 	case 24:
 	case 32:
-		it6505->audio.word_length = WORD_LENGTH_24BIT;
+		word_length = WORD_LENGTH_24BIT;
 		break;
 	default:
 		DRM_DEV_DEBUG_DRIVER(dev, "wordlength: %d bit not support",
@@ -3056,27 +3067,111 @@ static int __maybe_unused it6505_audio_setup_hw_params(struct it6505 *it6505,
 		return -EINVAL;
 	}
 
+	mutex_lock(&it6505->audio_lock);
+	it6505->audio.channel_count = params->cea.channels;
+	it6505->audio.sample_rate = audio_sample_rate_map[i].rate;
+	it6505->audio.word_length = word_length;
+	mutex_unlock(&it6505->audio_lock);
+
 	return 0;
 }
 
-static void __maybe_unused it6505_audio_shutdown(struct device *dev, void *data)
+static void it6505_audio_shutdown(struct device *dev, void *data)
 {
 	struct it6505 *it6505 = dev_get_drvdata(dev);
 
+	mutex_lock(&it6505->audio_lock);
+	it6505->audio.mute = true;
 	if (it6505->powered)
-		it6505_disable_audio(it6505);
+		__it6505_disable_audio(it6505);
+	mutex_unlock(&it6505->audio_lock);
+	cancel_delayed_work_sync(&it6505->delayed_audio);
 }
 
-static int __maybe_unused it6505_audio_hook_plugged_cb(struct device *dev,
-						       void *data,
-						       hdmi_codec_plugged_cb fn,
-						       struct device *codec_dev)
+static int it6505_audio_hw_params(struct device *dev, void *data,
+				  struct hdmi_codec_daifmt *daifmt,
+				  struct hdmi_codec_params *params)
+{
+	struct it6505 *it6505 = dev_get_drvdata(dev);
+
+	return it6505_audio_setup_hw_params(it6505, params);
+}
+
+static int it6505_audio_mute(struct device *dev, void *data,
+			     bool enable, int direction)
+{
+	struct it6505 *it6505 = dev_get_drvdata(dev);
+
+	DRM_DEV_DEBUG_DRIVER(dev, "mute: %d", enable);
+
+	/*
+	 * Delay enabling audio until the stream is unmuted; InfoFrames
+	 * without audio data upset some DP-to-HDMI dongles.
+	 */
+	if (enable) {
+		mutex_lock(&it6505->audio_lock);
+		it6505->audio.mute = true;
+		if (it6505->powered)
+			__it6505_disable_audio(it6505);
+		mutex_unlock(&it6505->audio_lock);
+		cancel_delayed_work_sync(&it6505->delayed_audio);
+	} else {
+		mutex_lock(&it6505->audio_lock);
+		it6505->audio.mute = false;
+		mutex_unlock(&it6505->audio_lock);
+		queue_delayed_work(system_wq, &it6505->delayed_audio,
+				   msecs_to_jiffies(180));
+	}
+
+	return 0;
+}
+
+static int it6505_audio_hook_plugged_cb(struct device *dev,
+					void *data,
+					hdmi_codec_plugged_cb fn,
+					struct device *codec_dev)
 {
 	struct it6505 *it6505 = data;
 
+	mutex_lock(&it6505->mode_lock);
 	it6505->plugged_cb = fn;
 	it6505->codec_dev = codec_dev;
 	it6505_plugged_status_to_codec(it6505);
+	mutex_unlock(&it6505->mode_lock);
+
+	return 0;
+}
+
+static const struct hdmi_codec_ops it6505_audio_codec_ops = {
+	.hw_params = it6505_audio_hw_params,
+	.mute_stream = it6505_audio_mute,
+	.audio_shutdown = it6505_audio_shutdown,
+	.hook_plugged_cb = it6505_audio_hook_plugged_cb,
+};
+
+static int it6505_register_audio_driver(struct device *dev)
+{
+	struct it6505 *it6505 = dev_get_drvdata(dev);
+	struct hdmi_codec_pdata codec_data = {
+		.ops = &it6505_audio_codec_ops,
+		.max_i2s_channels = 8,
+		.i2s = 1,
+		.no_capture_mute = 1,
+		.data = it6505,
+	};
+	struct platform_device *pdev;
+
+	it6505->audio.mute = true;
+	INIT_DELAYED_WORK(&it6505->delayed_audio, it6505_delayed_audio);
+
+	pdev = platform_device_register_data(dev, HDMI_CODEC_DRV_NAME,
+					     PLATFORM_DEVID_AUTO, &codec_data,
+					     sizeof(codec_data));
+	if (IS_ERR(pdev))
+		return PTR_ERR(pdev);
+
+	it6505->audio_pdev = pdev;
+	DRM_DEV_DEBUG_DRIVER(dev, "bound to %s", HDMI_CODEC_DRV_NAME);
 
 	return 0;
 }
@@ -3592,6 +3687,7 @@ static int it6505_i2c_probe(struct i2c_client *client)
 	mutex_init(&it6505->extcon_lock);
 	mutex_init(&it6505->mode_lock);
 	mutex_init(&it6505->aux_lock);
+	mutex_init(&it6505->audio_lock);
 
 	it6505->bridge.of_node = client->dev.of_node;
 	it6505->connector_status = connector_status_disconnected;
@@ -3640,6 +3736,12 @@ static int it6505_i2c_probe(struct i2c_client *client)
 	if (err)
 		return err;
 
+	err = it6505_register_audio_driver(dev);
+	if (err < 0) {
+		dev_err(dev, "Failed to register audio driver: %d\n", err);
+		return err;
+	}
+
 	INIT_WORK(&it6505->link_works, it6505_link_training_work);
 	INIT_WORK(&it6505->hdcp_wait_ksv_list, it6505_hdcp_wait_ksv_list);
 	INIT_DELAYED_WORK(&it6505->hdcp_work, it6505_hdcp_work);
@@ -3682,6 +3784,8 @@ static void it6505_i2c_remove(struct i2c_client *client)
 	cancel_work_sync(&it6505->hdcp_wait_ksv_list);
 	cancel_delayed_work_sync(&it6505->hdcp_work);
 	cancel_work_sync(&it6505->extcon_wq);
+	platform_device_unregister(it6505->audio_pdev);
+	cancel_delayed_work_sync(&it6505->delayed_audio);
 	if (it6505->extcon_state)
 		pm_runtime_put_sync(&client->dev);
 	pm_runtime_disable(&client->dev);
