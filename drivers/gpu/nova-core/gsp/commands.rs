@@ -23,8 +23,8 @@ use crate::{
     gpu::Chipset,
     gsp::{
         cmdq::{
+            rpc::CommandToGsp,
             Cmdq,
-            CommandToGsp,
             MessageFromGsp,
             NoReply, //
         },
