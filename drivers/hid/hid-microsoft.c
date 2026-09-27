@@ -335,7 +335,6 @@ static int ms_input_configured(struct hid_device *hdev, struct hid_input *hidinp
 		return 0;
 
 	ms->hdev = hdev;
-	INIT_WORK(&ms->ff_worker, ms_ff_worker);
 
 	ms->output_report_dmabuf = devm_kzalloc(&hdev->dev,
 						sizeof(struct xb1s_ff_report),
@@ -358,6 +357,7 @@ static int ms_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		return -ENOMEM;
 
 	ms->quirks = quirks;
+	INIT_WORK(&ms->ff_worker, ms_ff_worker);
 
 	hid_set_drvdata(hdev, ms);
 
@@ -384,7 +384,11 @@ static int ms_probe(struct hid_device *hdev, const struct hid_device_id *id)
 }
 static void ms_remove(struct hid_device *hdev)
 {
+	struct ms_data *ms = hid_get_drvdata(hdev);
+
 	hid_hw_stop(hdev);
+	/* Unregistering the input device stops rumble, which queues the work */
+	cancel_work_sync(&ms->ff_worker);
 }
 
 static const struct hid_device_id ms_devices[] = {
