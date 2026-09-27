@@ -638,65 +638,35 @@ impl CmdqInner<'_> {
     /// Timeout for waiting for space on the command queue.
     const ALLOCATE_TIMEOUT: Delta = Delta::from_secs(1);
 
-    /// Sends `command` to the GSP, without splitting it.
+    /// Allocates enough send slots to store a command of `sizes_in_bytes` length, initialize them
+    /// using `command_init`, and send the command to the GSP.
     ///
     /// # Errors
     ///
     /// - `EMSGSIZE` if the command exceeds the maximum queue element size.
     /// - `ETIMEDOUT` if space does not become available within the timeout.
-    /// - `EIO` if the variable payload requested by the command has not been entirely
-    ///   written to by its [`CommandToGsp::init_variable_payload`] method.
     ///
-    /// Error codes returned by the command initializers are propagated as-is.
-    fn send_single_command<M>(&mut self, command: M) -> Result
-    where
-        M: CommandToGsp,
-        // This allows all error types, including `Infallible`, to be used for `M::InitError`.
-        Error: From<M::InitError>,
-    {
-        let size_in_bytes = command.size();
-        let dst = self
+    /// Error codes returned by `command_init` are returned as-is.
+    fn send_command_element(
+        &mut self,
+        size_in_bytes: usize,
+        command_init: impl FnOnce(&mut GspCommand<'_>) -> Result,
+    ) -> Result {
+        let mut dst = self
             .gsp_mem
             .allocate_command(size_in_bytes, Self::ALLOCATE_TIMEOUT)?;
 
+        let seq = self.seq;
+
         // Fill the header.
-        let msg_element_init = GspMsgElement::init(self.seq, size_in_bytes);
+        let msg_element_init = GspMsgElement::init(seq, size_in_bytes);
         // SAFETY: `msg_header` is a valid reference, and not touched if the initializer fails.
         unsafe {
             pin_init::raw_try_init(core::ptr::from_mut(dst.header), msg_element_init)?;
         }
 
-        // Extract area for the command itself. The GSP message header and the command header
-        // together are guaranteed to fit entirely into a single page, so it's ok to only look
-        // at `dst.contents.0` here.
-        let (cmd, payload_1) = M::Command::from_bytes_mut_prefix(dst.contents.0).ok_or(EIO)?;
-        let rpc_header_init = RpcMessageHeader::init(size_in_bytes, M::FUNCTION);
-        // SAFETY: `rpc_header_mut()` and `cmd` are valid references, and not touched if the
-        // initializer fails.
-        unsafe {
-            pin_init::raw_try_init(
-                core::ptr::from_mut(dst.header.rpc_header_mut()),
-                rpc_header_init,
-            )?;
-            pin_init::raw_try_init(core::ptr::from_mut(cmd), command.init())?;
-        }
-
-        // Fill the variable-length payload, which may be empty.
-        let mut sbuffer = SBufferIter::new_writer([&mut payload_1[..], &mut dst.contents.1[..]]);
-        command.init_variable_payload(&mut sbuffer)?;
-
-        if !sbuffer.is_empty() {
-            return Err(EIO);
-        }
-        drop(sbuffer);
-
-        dev_dbg!(
-            &self.dev,
-            "GSP RPC: send: seq# {}, function={:?}, length=0x{:x}\n",
-            self.seq,
-            M::FUNCTION,
-            size_in_bytes,
-        );
+        // Initialize the message payload.
+        command_init(&mut dst)?;
 
         // Compute checksum now that the whole message is ready.
         dst.header
@@ -713,6 +683,66 @@ impl CmdqInner<'_> {
         Cmdq::notify_gsp(self.bar);
 
         Ok(())
+    }
+
+    /// Sends `command` to the GSP, without splitting it.
+    ///
+    /// # Errors
+    ///
+    /// - `EMSGSIZE` if the command exceeds the maximum queue element size.
+    /// - `ETIMEDOUT` if space does not become available within the timeout.
+    /// - `EIO` if the variable payload requested by the command has not been entirely
+    ///   written to by its [`CommandToGsp::init_variable_payload`] method.
+    ///
+    /// Error codes returned by the command initializers are propagated as-is.
+    fn send_single_command<M>(&mut self, command: M) -> Result
+    where
+        M: CommandToGsp,
+        // This allows all error types, including `Infallible`, to be used for `M::InitError`.
+        Error: From<M::InitError>,
+    {
+        let dev = self.dev;
+        let seq = self.seq;
+        let size_in_bytes = command.size();
+
+        let init = |dst: &mut GspCommand<'_>| {
+            // Extract area for the command itself. The GSP message header and the command header
+            // together are guaranteed to fit entirely into a single page, so it's ok to only look
+            // at `dst.contents.0` here.
+            let (cmd, payload_1) = M::Command::from_bytes_mut_prefix(dst.contents.0).ok_or(EIO)?;
+            let rpc_header_init = RpcMessageHeader::init(size_in_bytes, M::FUNCTION);
+
+            // SAFETY: `rpc_header_mut()` and `cmd` are valid references, and not touched if the
+            // initializer fails.
+            unsafe {
+                pin_init::raw_try_init(
+                    core::ptr::from_mut(dst.header.rpc_header_mut()),
+                    rpc_header_init,
+                )?;
+                pin_init::raw_try_init(core::ptr::from_mut(cmd), command.init())?;
+            }
+
+            // Fill the variable-length payload, which may be empty.
+            let mut sbuffer =
+                SBufferIter::new_writer([&mut payload_1[..], &mut dst.contents.1[..]]);
+            command.init_variable_payload(&mut sbuffer)?;
+
+            if !sbuffer.is_empty() {
+                return Err(EIO);
+            }
+
+            dev_dbg!(
+                dev,
+                "GSP RPC: send: seq# {}, function={:?}, length=0x{:x}\n",
+                seq,
+                M::FUNCTION,
+                size_in_bytes,
+            );
+
+            Ok(())
+        };
+
+        self.send_command_element(size_in_bytes, init)
     }
 
     /// Sends `command` to the GSP.
