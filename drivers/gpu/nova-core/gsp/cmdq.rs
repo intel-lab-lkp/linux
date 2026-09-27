@@ -584,7 +584,7 @@ impl CmdqInner<'_> {
     ///   message queue.
     ///
     /// Error codes returned by the message constructor are propagated as-is.
-    fn wait_for_msg(&self, timeout: Delta) -> Result<GspMessage<'_>> {
+    fn wait_for_element(&self, timeout: Delta) -> Result<GspMessage<'_>> {
         // Wait for a message to arrive from the GSP.
         let (slice_1, slice_2) = read_poll_timeout(
             || Ok(self.gsp_mem.driver_read_area()),
@@ -608,6 +608,18 @@ impl CmdqInner<'_> {
             return Err(EIO);
         }
 
+        Ok(GspMessage {
+            header,
+            contents: (slice_1, slice_2),
+        })
+    }
+
+    fn wait_for_msg(&self, timeout: Delta) -> Result<GspMessage<'_>> {
+        let GspMessage {
+            header,
+            contents: (slice_1, slice_2),
+        } = self.wait_for_element(timeout)?;
+
         let rpc_header = header.rpc_header();
         let payload_length = rpc_header.length();
 
@@ -618,6 +630,8 @@ impl CmdqInner<'_> {
             rpc_header.function(),
             payload_length,
         );
+
+        // Validate the RPC layer before returning the message.
 
         // Check that the driver read area is large enough for the message.
         if slice_1.len() + slice_2.len() < payload_length {
