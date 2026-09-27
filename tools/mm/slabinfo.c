@@ -27,25 +27,49 @@
 
 struct slabinfo {
 	char *name;
-	int alias;
 	int refs;
-	int aliases, align, cache_dma, cpu_slabs, destroy_by_rcu;
-	unsigned int hwcache_align, object_size, objs_per_slab;
-	unsigned int sanity_checks, slab_size, store_user, trace;
-	int order, poison, reclaim_account, red_zone;
-	unsigned long partial, objects, slabs, objects_partial, total_objects;
+	int numa_slabs[MAX_NODES];
+	int numa_partial[MAX_NODES];
+
+	unsigned int slab_size, object_size;
+	unsigned int objs_per_slab, order;
+	unsigned long objects_partial, partial;
+	int aliases;
+	unsigned int align;
+	int hwcache_align;
+	int reclaim_account;
+	int destroy_by_rcu;
+
+	/* CONFIG_SLUB_DEBUG */
+	unsigned long total_objects, objects, slabs;
+	int sanity_checks, trace, red_zone, poison, store_user;
+
+	/* CONFIG_ZONE_DMA */
+	int cache_dma;
+
+	/* CONFIG_SLUB_STATS */
 	unsigned long alloc_fastpath, alloc_slowpath;
 	unsigned long free_fastpath, free_slowpath;
-	unsigned long free_frozen, free_add_partial, free_remove_partial;
-	unsigned long alloc_from_partial, alloc_slab, free_slab, alloc_refill;
-	unsigned long cpuslab_flush, deactivate_full, deactivate_empty;
+	unsigned long free_add_partial, free_remove_partial;
+	unsigned long alloc_slab, alloc_node_mismatch, free_slab;
+	unsigned long order_fallback;
+	unsigned long cmpxchg_double_fail;
+
+	/*
+	 * Deprecated files:
+	 * No STAT_ATTR()/SLAB_ATTR() for these exists in mm/slub.c's
+	 * slab_attrs[] anymore. Although cpu_slabs remains as a file,
+	 * it is also outdated and always prints 0. Keep these for backward
+	 * compatibility, but they should be removed later.
+	 */
+	int cpu_slabs;
+	unsigned long free_frozen;
 	unsigned long deactivate_to_head, deactivate_to_tail;
-	unsigned long deactivate_remote_frees, order_fallback;
-	unsigned long cmpxchg_double_cpu_fail, cmpxchg_double_fail;
-	unsigned long alloc_node_mismatch, deactivate_bypass;
+	unsigned long alloc_from_partial, alloc_refill;
+	unsigned long cpuslab_flush, deactivate_full, deactivate_empty;
+	unsigned long deactivate_remote_frees, deactivate_bypass;
+	unsigned long cmpxchg_double_cpu_fail;
 	unsigned long cpu_partial_alloc, cpu_partial_free;
-	int numa[MAX_NODES];
-	int numa_partial[MAX_NODES];
 } slabinfo[MAX_SLABS];
 
 struct aliasinfo {
@@ -174,6 +198,30 @@ static unsigned long read_obj(const char *name)
 	return strlen(buffer);
 }
 
+static void decode_numa_list(int *numa, char *t)
+{
+	int node;
+	int nr;
+
+	memset(numa, 0, MAX_NODES * sizeof(int));
+
+	if (!t)
+		return;
+
+	while (*t == 'N') {
+		t++;
+		node = strtoul(t, &t, 10);
+		if (*t == '=') {
+			t++;
+			nr = strtoul(t, &t, 10);
+			numa[node] = nr;
+			if (node > highest_node)
+				highest_node = node;
+		}
+		while (*t == ' ')
+			t++;
+	}
+}
 
 /*
  * Get the contents of an attribute
@@ -186,12 +234,10 @@ static unsigned long get_obj(const char *name)
 	return atol(buffer);
 }
 
-static unsigned long get_obj_and_str(const char *name, char **x)
+static unsigned long get_obj_and_decode(int *numa, const char *name)
 {
 	unsigned long result = 0;
 	char *p;
-
-	*x = NULL;
 
 	if (!read_obj(name))
 		return 0;
@@ -199,8 +245,8 @@ static unsigned long get_obj_and_str(const char *name, char **x)
 	result = strtoul(buffer, &p, 10);
 	while (*p == ' ')
 		p++;
-	if (*p)
-		*x = strdup(p);
+
+	decode_numa_list(numa, p);
 	return result;
 }
 
@@ -291,31 +337,6 @@ static int store_size(char *buffer, unsigned long value)
 		n++;
 	}
 	return n;
-}
-
-static void decode_numa_list(int *numa, char *t)
-{
-	int node;
-	int nr;
-
-	memset(numa, 0, MAX_NODES * sizeof(int));
-
-	if (!t)
-		return;
-
-	while (*t == 'N') {
-		t++;
-		node = strtoul(t, &t, 10);
-		if (*t == '=') {
-			t++;
-			nr = strtoul(t, &t, 10);
-			numa[node] = nr;
-			if (node > highest_node)
-				highest_node = node;
-		}
-		while (*t == ' ')
-			t++;
-	}
 }
 
 static void slab_validate(struct slabinfo *s)
@@ -410,7 +431,7 @@ static void slab_numa(struct slabinfo *s, int mode)
 	for(node = 0; node <= highest_node; node++) {
 		char b[20];
 
-		store_size(b, s->numa[node]);
+		store_size(b, s->numa_slabs[node]);
 		printf(" %4s", b);
 	}
 	printf("\n");
@@ -1210,6 +1231,57 @@ static int slab_mismatch(char *slab)
 	return regexec(&pattern, slab, 0, NULL, 0);
 }
 
+static void fill_slabinfo(struct slabinfo *slab, const char *name)
+{
+	slab->name = strdup(name);
+	slab->refs = 0;
+	slab->aliases = get_obj("aliases");
+	slab->align = get_obj("align");
+	slab->cache_dma = get_obj("cache_dma");
+	slab->cpu_slabs = get_obj("cpu_slabs");
+	slab->destroy_by_rcu = get_obj("destroy_by_rcu");
+	slab->hwcache_align = get_obj("hwcache_align");
+	slab->object_size = get_obj("object_size");
+	slab->objects = get_obj("objects");
+	slab->objects_partial = get_obj("objects_partial");
+	slab->total_objects = get_obj("total_objects");
+	slab->objs_per_slab = get_obj("objs_per_slab");
+	slab->order = get_obj("order");
+	slab->partial = get_obj_and_decode(slab->numa_partial, "partial");
+	slab->poison = get_obj("poison");
+	slab->reclaim_account = get_obj("reclaim_account");
+	slab->red_zone = get_obj("red_zone");
+	slab->sanity_checks = get_obj("sanity_checks");
+	slab->slab_size = get_obj("slab_size");
+	slab->slabs = get_obj_and_decode(slab->numa_slabs, "slabs");
+	slab->store_user = get_obj("store_user");
+	slab->trace = get_obj("trace");
+	slab->alloc_fastpath = get_obj("alloc_fastpath");
+	slab->alloc_slowpath = get_obj("alloc_slowpath");
+	slab->free_fastpath = get_obj("free_fastpath");
+	slab->free_slowpath = get_obj("free_slowpath");
+	slab->free_frozen = get_obj("free_frozen");
+	slab->free_add_partial = get_obj("free_add_partial");
+	slab->free_remove_partial = get_obj("free_remove_partial");
+	slab->alloc_from_partial = get_obj("alloc_from_partial");
+	slab->alloc_slab = get_obj("alloc_slab");
+	slab->alloc_refill = get_obj("alloc_refill");
+	slab->free_slab = get_obj("free_slab");
+	slab->cpuslab_flush = get_obj("cpuslab_flush");
+	slab->deactivate_full = get_obj("deactivate_full");
+	slab->deactivate_empty = get_obj("deactivate_empty");
+	slab->deactivate_to_head = get_obj("deactivate_to_head");
+	slab->deactivate_to_tail = get_obj("deactivate_to_tail");
+	slab->deactivate_remote_frees = get_obj("deactivate_remote_frees");
+	slab->order_fallback = get_obj("order_fallback");
+	slab->cmpxchg_double_cpu_fail = get_obj("cmpxchg_double_cpu_fail");
+	slab->cmpxchg_double_fail = get_obj("cmpxchg_double_fail");
+	slab->cpu_partial_alloc = get_obj("cpu_partial_alloc");
+	slab->cpu_partial_free = get_obj("cpu_partial_free");
+	slab->alloc_node_mismatch = get_obj("alloc_node_mismatch");
+	slab->deactivate_bypass = get_obj("deactivate_bypass");
+}
+
 static void read_slab_dir(void)
 {
 	DIR *dir;
@@ -1217,7 +1289,6 @@ static void read_slab_dir(void)
 	struct slabinfo *slab = slabinfo;
 	struct aliasinfo *alias = aliasinfo;
 	char *p;
-	char *t;
 	int count;
 
 	if (chdir("/sys/kernel/slab") && chdir("/sys/slab"))
@@ -1226,14 +1297,14 @@ static void read_slab_dir(void)
 	dir = opendir(".");
 	while ((de = readdir(dir))) {
 		if (de->d_name[0] == '.' ||
-			(de->d_name[0] != ':' && slab_mismatch(de->d_name)))
-				continue;
+		    (de->d_name[0] != ':' && slab_mismatch(de->d_name)))
+			continue;
 		switch (de->d_type) {
-		   case DT_LNK:
+		case DT_LNK:
 			if (alias - aliasinfo == MAX_ALIASES)
 				fatal("Too many aliases\n");
 			alias->name = strdup(de->d_name);
-			count = readlink(de->d_name, buffer, sizeof(buffer)-1);
+			count = readlink(de->d_name, buffer, sizeof(buffer) - 1);
 
 			if (count < 0)
 				fatal("Cannot read symlink %s\n", de->d_name);
@@ -1245,71 +1316,21 @@ static void read_slab_dir(void)
 			alias->ref = strdup(p);
 			alias++;
 			break;
-		   case DT_DIR:
+		case DT_DIR:
 			if (slab - slabinfo == MAX_SLABS)
 				fatal("Too many slabs\n");
 			if (chdir(de->d_name))
 				fatal("Unable to access slab %s\n", slab->name);
-			slab->name = strdup(de->d_name);
-			slab->alias = 0;
-			slab->refs = 0;
-			slab->aliases = get_obj("aliases");
-			slab->align = get_obj("align");
-			slab->cache_dma = get_obj("cache_dma");
-			slab->cpu_slabs = get_obj("cpu_slabs");
-			slab->destroy_by_rcu = get_obj("destroy_by_rcu");
-			slab->hwcache_align = get_obj("hwcache_align");
-			slab->object_size = get_obj("object_size");
-			slab->objects = get_obj("objects");
-			slab->objects_partial = get_obj("objects_partial");
-			slab->total_objects = get_obj("total_objects");
-			slab->objs_per_slab = get_obj("objs_per_slab");
-			slab->order = get_obj("order");
-			slab->partial = get_obj_and_str("partial", &t);
-			decode_numa_list(slab->numa_partial, t);
-			free(t);
-			slab->poison = get_obj("poison");
-			slab->reclaim_account = get_obj("reclaim_account");
-			slab->red_zone = get_obj("red_zone");
-			slab->sanity_checks = get_obj("sanity_checks");
-			slab->slab_size = get_obj("slab_size");
-			slab->slabs = get_obj_and_str("slabs", &t);
-			decode_numa_list(slab->numa, t);
-			free(t);
-			slab->store_user = get_obj("store_user");
-			slab->trace = get_obj("trace");
-			slab->alloc_fastpath = get_obj("alloc_fastpath");
-			slab->alloc_slowpath = get_obj("alloc_slowpath");
-			slab->free_fastpath = get_obj("free_fastpath");
-			slab->free_slowpath = get_obj("free_slowpath");
-			slab->free_frozen= get_obj("free_frozen");
-			slab->free_add_partial = get_obj("free_add_partial");
-			slab->free_remove_partial = get_obj("free_remove_partial");
-			slab->alloc_from_partial = get_obj("alloc_from_partial");
-			slab->alloc_slab = get_obj("alloc_slab");
-			slab->alloc_refill = get_obj("alloc_refill");
-			slab->free_slab = get_obj("free_slab");
-			slab->cpuslab_flush = get_obj("cpuslab_flush");
-			slab->deactivate_full = get_obj("deactivate_full");
-			slab->deactivate_empty = get_obj("deactivate_empty");
-			slab->deactivate_to_head = get_obj("deactivate_to_head");
-			slab->deactivate_to_tail = get_obj("deactivate_to_tail");
-			slab->deactivate_remote_frees = get_obj("deactivate_remote_frees");
-			slab->order_fallback = get_obj("order_fallback");
-			slab->cmpxchg_double_cpu_fail = get_obj("cmpxchg_double_cpu_fail");
-			slab->cmpxchg_double_fail = get_obj("cmpxchg_double_fail");
-			slab->cpu_partial_alloc = get_obj("cpu_partial_alloc");
-			slab->cpu_partial_free = get_obj("cpu_partial_free");
-			slab->alloc_node_mismatch = get_obj("alloc_node_mismatch");
-			slab->deactivate_bypass = get_obj("deactivate_bypass");
+
+			fill_slabinfo(slab, de->d_name);
+
 			if (chdir(".."))
-				fatal("Unable to chdir from slab ../%s\n",
-				      slab->name);
+				fatal("Unable to chdir from slab ../%s\n", slab->name);
 			if (slab->name[0] == ':')
 				alias_targets++;
 			slab++;
 			break;
-		   default :
+		default:
 			fatal("Unknown file type %lx\n", de->d_type);
 		}
 	}
@@ -1324,12 +1345,7 @@ static void output_slabs(void)
 	struct slabinfo *slab;
 	int lines = output_lines;
 
-	for (slab = slabinfo; (slab < slabinfo + slabs) &&
-			lines != 0; slab++) {
-
-		if (slab->alias)
-			continue;
-
+	for (slab = slabinfo; (slab < slabinfo + slabs) && lines != 0; slab++) {
 		if (lines != -1)
 			lines--;
 
@@ -1528,9 +1544,10 @@ int main(int argc, char *argv[])
 
 	err = regcomp(&pattern, pattern_source, REG_ICASE|REG_NOSUB);
 	if (err)
-		fatal("%s: Invalid pattern '%s' code %d\n",
-			argv[0], pattern_source, err);
+		fatal("%s: Invalid pattern '%s' code %d\n", argv[0], pattern_source, err);
+
 	read_slab_dir();
+
 	if (show_alias) {
 		alias();
 	} else if (extended_totals) {
