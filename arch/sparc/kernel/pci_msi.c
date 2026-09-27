@@ -211,6 +211,7 @@ static void sparc64_teardown_msi_irq(unsigned int irq,
 
 	free_msi(pbm, msi_num);
 
+	irq_get_msi_desc(irq)->irq = 0;
 	irq_set_chip(irq, NULL);
 	irq_free(irq);
 }
