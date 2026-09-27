@@ -1685,6 +1685,11 @@ static void __net_exit fib_net_pre_exit(struct net *net)
 	nl_fib_lookup_exit(net);
 }
 
+static void __net_exit fib_net_pre_exit_batch(struct list_head *net_exit_list)
+{
+	rt_flush_dev(NULL);
+}
+
 static void __net_exit fib_net_exit_rtnl(struct net *net,
 					 struct list_head *dev_kill_list)
 {
@@ -1704,6 +1709,7 @@ static void __net_exit fib_net_exit(struct net *net)
 static struct pernet_operations fib_net_ops = {
 	.init = fib_net_init,
 	.pre_exit = fib_net_pre_exit,
+	.pre_exit_batch = fib_net_pre_exit_batch,
 	.exit_rtnl = fib_net_exit_rtnl,
 	.exit = fib_net_exit,
 };

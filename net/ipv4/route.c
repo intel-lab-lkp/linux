@@ -1554,14 +1554,29 @@ struct uncached_list {
 
 static DEFINE_PER_CPU_ALIGNED(struct uncached_list, rt_uncached_list);
 
+static void rt_replace_uncached_list(struct rtable *rt)
+{
+	struct net_device *dev = dst_dev(&rt->dst);
+
+	rcu_assign_pointer(rt->dst.dev_rcu, blackhole_netdev);
+	netdev_ref_replace(dev, blackhole_netdev,
+			   &rt->dst.dev_tracker, GFP_ATOMIC);
+}
+
 void rt_add_uncached_list(struct rtable *rt)
 {
 	struct uncached_list *ul = raw_cpu_ptr(&rt_uncached_list);
 
+	/* Set once and never cleared: non-NULL marks an uncached route. */
 	rt->dst.rt_uncached_list = ul;
 
 	spin_lock_bh(&ul->lock);
-	list_add_tail(&rt->dst.rt_uncached, &ul->head);
+
+	if (check_net(dst_dev_net_rcu(&rt->dst)))
+		list_add_tail(&rt->dst.rt_uncached, &ul->head);
+	else
+		rt_replace_uncached_list(rt);
+
 	spin_unlock_bh(&ul->lock);
 }
 
@@ -1587,6 +1602,9 @@ void rt_flush_dev(struct net_device *dev)
 	struct rtable *rt, *safe;
 	int cpu;
 
+	if (dev && net_pre_exit_done(dev_net(dev)))
+		return;
+
 	for_each_possible_cpu(cpu) {
 		struct uncached_list *ul = &per_cpu(rt_uncached_list, cpu);
 
@@ -1595,11 +1613,11 @@ void rt_flush_dev(struct net_device *dev)
 
 		spin_lock_bh(&ul->lock);
 		list_for_each_entry_safe(rt, safe, &ul->head, dst.rt_uncached) {
-			if (rt->dst.dev != dev)
+			if (rt->dst.dev != dev &&
+			    (dev || check_net(dev_net(rt->dst.dev))))
 				continue;
-			rcu_assign_pointer(rt->dst.dev_rcu, blackhole_netdev);
-			netdev_ref_replace(dev, blackhole_netdev,
-					   &rt->dst.dev_tracker, GFP_ATOMIC);
+
+			rt_replace_uncached_list(rt);
 			list_del_init(&rt->dst.rt_uncached);
 		}
 		spin_unlock_bh(&ul->lock);
