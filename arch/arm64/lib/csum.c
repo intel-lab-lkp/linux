@@ -5,7 +5,11 @@
 #include <linux/kasan-checks.h>
 #include <linux/kernel.h>
 
+#include <asm/simd.h>
+
 #include <net/checksum.h>
+
+#include "csum-copy.h"
 
 /* Looks dumb, but generates nice-ish code */
 static u64 accumulate(u64 sum, u64 data)
@@ -128,6 +132,56 @@ unsigned int __no_sanitize_address do_csum(const unsigned char *buff, int len)
 
 	return sum >> 16;
 }
+
+/*
+ * scoped_ksimd() puts the caller-provided FPSIMD state buffer (a 528-byte
+ * struct user_fpsimd_state) on the stack. Keep it out of line so that the
+ * common, short, scalar calls do not carry that frame, which matters for
+ * the deep softirq call chains csum_partial_copy_nocheck() is reached from.
+ */
+static noinline __wsum csum_partial_copy_neon(const void *src, void *dst,
+					      int len)
+{
+	__wsum sum;
+
+	scoped_ksimd()
+		sum = __csum_partial_copy_neon(src, dst, len);
+
+	return sum;
+}
+
+/**
+ * csum_partial_copy_nocheck - copy a buffer and compute its Internet checksum
+ * @src: source buffer
+ * @dst: destination buffer; must not overlap @src
+ * @len: number of bytes to copy; nothing is copied for len <= 0
+ *
+ * Copies @len bytes from @src to @dst in a single pass and returns the
+ * unfolded 32-bit ones' complement sum of the data, exactly as
+ * csum_partial(@src, @len, 0) would, so the result can be passed to
+ * csum_block_add() or csum_fold(). The returned sum is the checksum of the
+ * bytes written to @dst even if @src is concurrently modified.
+ *
+ * Callable from task and softirq context. For len >= CSUM_COPY_NEON_MIN_LEN
+ * the copy uses kernel-mode NEON when may_use_simd() allows it, so it must
+ * not be called from within another kernel_neon_begin()/kernel_neon_end()
+ * section in task context (kernel_neon_begin() only nests from softirq).
+ * From hardirq/NMI context, or when FPSIMD is not usable, the general
+ * purpose register implementation is used for any length.
+ *
+ * Return: the unfolded ones' complement sum of the copied data; 0 if len <= 0.
+ */
+__wsum csum_partial_copy_nocheck(const void *src, void *dst, int len)
+{
+	if (unlikely(len <= 0))
+		return 0;
+
+	if (len >= CSUM_COPY_NEON_MIN_LEN && likely(may_use_simd()))
+		return csum_partial_copy_neon(src, dst, len);
+
+	return __csum_partial_copy_scalar(src, dst, len);
+}
+EXPORT_SYMBOL(csum_partial_copy_nocheck);
 
 __sum16 csum_ipv6_magic(const struct in6_addr *saddr,
 			const struct in6_addr *daddr,
