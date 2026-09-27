@@ -553,6 +553,9 @@ static int wacom_intuos_pad(struct wacom_wac *wacom)
 	bool wrench = false, keyboard = false, mute_touch = false, menu = false,
 	     info = false;
 
+	if (!input)
+		return 0;
+
 	/* pad packets. Works as a second tool and is always in prox */
 	if (!(data[0] == WACOM_REPORT_INTUOSPAD || data[0] == WACOM_REPORT_INTUOS5PAD ||
 	      data[0] == WACOM_REPORT_CINTIQPAD))
