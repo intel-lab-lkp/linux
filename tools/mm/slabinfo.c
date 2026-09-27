@@ -33,6 +33,7 @@ struct slabinfo {
 
 	unsigned int slab_size, object_size;
 	unsigned int objs_per_slab, order;
+	unsigned int sheaf_capacity;
 	unsigned long objects_partial, partial;
 	int aliases;
 	unsigned int align;
@@ -49,11 +50,18 @@ struct slabinfo {
 
 	/* CONFIG_SLUB_STATS */
 	unsigned long alloc_fastpath, alloc_slowpath;
+	unsigned long free_rcu_sheaf, free_rcu_sheaf_fail;
 	unsigned long free_fastpath, free_slowpath;
 	unsigned long free_add_partial, free_remove_partial;
 	unsigned long alloc_slab, alloc_node_mismatch, free_slab;
 	unsigned long order_fallback;
 	unsigned long cmpxchg_double_fail;
+
+	unsigned long sheaf_flush, sheaf_refill, sheaf_alloc, sheaf_free;
+	unsigned long barn_get, barn_get_fail, barn_put, barn_put_fail;
+	unsigned long sheaf_prefill_fast, sheaf_prefill_slow,
+		sheaf_prefill_oversize;
+	unsigned long sheaf_return_fast, sheaf_return_slow;
 
 	/*
 	 * Deprecated files:
@@ -574,6 +582,39 @@ static void slab_stats(struct slabinfo *s)
 	}
 }
 
+static void sheaf_stats(struct slabinfo *s)
+{
+	if (!s->sheaf_capacity)
+		return;
+
+	printf("\nSheaf capacity       %8u objects\n", s->sheaf_capacity);
+
+	printf("\nSheaf Perf Counter    Success     Fail\n");
+	printf("--------------------------------------------------\n");
+	printf("Barn get             %8lu %8lu\n",
+		s->barn_get, s->barn_get_fail);
+	printf("Barn put             %8lu %8lu\n",
+		s->barn_put, s->barn_put_fail);
+	printf("RCU sheaf free       %8lu %8lu\n",
+		s->free_rcu_sheaf, s->free_rcu_sheaf_fail);
+
+	printf("\nSheaf API Counter        Fast     Slow\n");
+	printf("--------------------------------------------------\n");
+	printf("Prefill              %8lu %8lu\n",
+		s->sheaf_prefill_fast, s->sheaf_prefill_slow);
+	printf("Return               %8lu %8lu\n",
+		s->sheaf_return_fast, s->sheaf_return_slow);
+
+	printf("\nSheaf Objects/Allocations\n");
+	printf("--------------------------------------------------\n");
+	printf("Objects flushed to slabs      %8lu\n", s->sheaf_flush);
+	printf("Objects refilled into sheaves %8lu\n", s->sheaf_refill);
+	printf("Sheaves allocated             %8lu\n", s->sheaf_alloc);
+	printf("Sheaves freed                 %8lu\n", s->sheaf_free);
+	printf("Oversize sheaves for prefill  %8lu\n",
+		s->sheaf_prefill_oversize);
+}
+
 static void report(struct slabinfo *s)
 {
 	if (strcmp(s->name, "*") == 0)
@@ -613,6 +654,7 @@ static void report(struct slabinfo *s)
 	show_tracking(s);
 	slab_numa(s, 1);
 	slab_stats(s);
+	sheaf_stats(s);
 }
 
 static void slabcache(struct slabinfo *s)
@@ -1280,6 +1322,22 @@ static void fill_slabinfo(struct slabinfo *slab, const char *name)
 	slab->cpu_partial_free = get_obj("cpu_partial_free");
 	slab->alloc_node_mismatch = get_obj("alloc_node_mismatch");
 	slab->deactivate_bypass = get_obj("deactivate_bypass");
+	slab->sheaf_capacity = get_obj("sheaf_capacity");
+	slab->free_rcu_sheaf = get_obj("free_rcu_sheaf");
+	slab->free_rcu_sheaf_fail = get_obj("free_rcu_sheaf_fail");
+	slab->sheaf_flush = get_obj("sheaf_flush");
+	slab->sheaf_refill = get_obj("sheaf_refill");
+	slab->sheaf_alloc = get_obj("sheaf_alloc");
+	slab->sheaf_free = get_obj("sheaf_free");
+	slab->barn_get = get_obj("barn_get");
+	slab->barn_get_fail = get_obj("barn_get_fail");
+	slab->barn_put = get_obj("barn_put");
+	slab->barn_put_fail = get_obj("barn_put_fail");
+	slab->sheaf_prefill_fast = get_obj("sheaf_prefill_fast");
+	slab->sheaf_prefill_slow = get_obj("sheaf_prefill_slow");
+	slab->sheaf_prefill_oversize = get_obj("sheaf_prefill_oversize");
+	slab->sheaf_return_fast = get_obj("sheaf_return_fast");
+	slab->sheaf_return_slow = get_obj("sheaf_return_slow");
 }
 
 static void read_slab_dir(void)
