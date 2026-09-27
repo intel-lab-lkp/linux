@@ -1201,7 +1201,6 @@
 		ti,minimum-sys-voltage = <3700000>; /* uV */
 		ti,boost-voltage = <5000000>; /* uV */
 		ti,boost-max-current = <1500000>; /* uA */
-		monitored-battery = <&bat>;
 		power-supplies = <&typec_pd>;
 	};
 };
