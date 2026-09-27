@@ -591,7 +591,7 @@ static int
 kmmio_die_notifier(struct notifier_block *nb, unsigned long val, void *args)
 {
 	struct die_args *arg = args;
-	unsigned long* dr6_p = (unsigned long *)ERR_PTR(arg->err);
+	unsigned long *dr6_p = (unsigned long *)arg->err;
 
 	if (val == DIE_DEBUG && (*dr6_p & DR_STEP))
 		if (post_kmmio_handler(*dr6_p, arg->regs) == 1) {
