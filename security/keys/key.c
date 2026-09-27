@@ -454,8 +454,8 @@ static int __key_instantiate_and_link(struct key *key,
 			/* mark the key as being instantiated */
 			spin_lock(&key_user_lock);
 			atomic_inc(&key->user->nikeys);
-			spin_unlock(&key_user_lock);
 			mark_key_instantiated(key, 0);
+			spin_unlock(&key_user_lock);
 			notify_key(key, NOTIFY_KEY_INSTANTIATED, 0);
 
 			if (test_and_clear_bit(KEY_FLAG_USER_CONSTRUCT, &key->flags))
@@ -613,8 +613,8 @@ int key_reject_and_link(struct key *key,
 		/* mark the key as being negatively instantiated */
 		spin_lock(&key_user_lock);
 		atomic_inc(&key->user->nikeys);
-		spin_unlock(&key_user_lock);
 		mark_key_instantiated(key, -error);
+		spin_unlock(&key_user_lock);
 		notify_key(key, NOTIFY_KEY_INSTANTIATED, -error);
 		key_set_expiry(key, ktime_get_real_seconds() + timeout);
 
