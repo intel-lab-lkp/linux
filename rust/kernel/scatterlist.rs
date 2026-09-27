@@ -34,9 +34,7 @@ use crate::{
     bindings,
     device::{Bound, Device},
     devres::Devres,
-    dma, error,
-    io::ResourceSize,
-    page,
+    dma, error, page,
     prelude::*,
     sync::aref::ARef,
     types::Opaque,
@@ -90,10 +88,9 @@ impl SGEntry {
 
     /// Returns the length of this SG entry in bytes.
     #[inline]
-    pub fn dma_len(&self) -> ResourceSize {
-        #[allow(clippy::useless_conversion)]
+    pub fn dma_len(&self) -> u32 {
         // SAFETY: `self.as_raw()` is a valid pointer to a `struct scatterlist`.
-        unsafe { bindings::sg_dma_len(self.as_raw()) }.into()
+        unsafe { bindings::sg_dma_len(self.as_raw()) }
     }
 }
 
