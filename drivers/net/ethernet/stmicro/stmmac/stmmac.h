@@ -146,6 +146,8 @@ struct stmmac_channel {
 	struct stmmac_priv *priv_data;
 	spinlock_t lock;
 	u32 index;
+	/* Protected by lock; IRQ handlers must not access the DMA rings. */
+	bool irq_quiesced;
 };
 
 struct stmmac_fpe_cfg {

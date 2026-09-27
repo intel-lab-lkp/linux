@@ -374,6 +374,16 @@ static void sun8i_dwmac_disable_dma_irq(struct stmmac_priv *priv,
 	writel(value, ioaddr + EMAC_INT_EN);
 }
 
+static u32 sun8i_dwmac_set_dma_irq_mask(struct stmmac_priv *priv,
+					void __iomem *ioaddr, u32 chan, u32 mask)
+{
+	u32 old_mask = readl(ioaddr + EMAC_INT_EN);
+
+	writel(mask, ioaddr + EMAC_INT_EN);
+	readl(ioaddr + EMAC_INT_EN);
+	return old_mask;
+}
+
 static void sun8i_dwmac_dma_start_tx(struct stmmac_priv *priv,
 				     void __iomem *ioaddr, u32 chan)
 {
@@ -579,6 +589,7 @@ static const struct stmmac_dma_ops sun8i_dwmac_dma_ops = {
 	.enable_dma_transmission = sun8i_dwmac_enable_dma_transmission,
 	.enable_dma_irq = sun8i_dwmac_enable_dma_irq,
 	.disable_dma_irq = sun8i_dwmac_disable_dma_irq,
+	.set_irq_mask = sun8i_dwmac_set_dma_irq_mask,
 	.start_tx = sun8i_dwmac_dma_start_tx,
 	.stop_tx = sun8i_dwmac_dma_stop_tx,
 	.start_rx = sun8i_dwmac_dma_start_rx,

@@ -84,6 +84,16 @@ void dwmac_disable_dma_irq(struct stmmac_priv *priv, void __iomem *ioaddr,
 	writel(value, ioaddr + DMA_CHAN_INTR_ENA(chan));
 }
 
+u32 dwmac_set_dma_irq_mask(struct stmmac_priv *priv, void __iomem *ioaddr,
+			   u32 chan, u32 mask)
+{
+	u32 old_mask = readl(ioaddr + DMA_CHAN_INTR_ENA(chan));
+
+	writel(mask, ioaddr + DMA_CHAN_INTR_ENA(chan));
+	readl(ioaddr + DMA_CHAN_INTR_ENA(chan));
+	return old_mask;
+}
+
 void dwmac_dma_start_tx(struct stmmac_priv *priv, void __iomem *ioaddr,
 			u32 chan)
 {
