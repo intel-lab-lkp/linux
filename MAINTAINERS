@@ -15533,6 +15533,13 @@ W:	https://ez.analog.com/linux-software-drivers
 F:	Documentation/devicetree/bindings/leds/adi,ltc3220.yaml
 F:	drivers/leds/leds-ltc3220.c
 
+LTC4266 PSE CONTROLLER DRIVER
+M:	Kyle Swenson <kyle.swenson@est.tech>
+L:	netdev@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/net/pse-pd/lltc,ltc4266.yaml
+F:	drivers/net/pse-pd/ltc4266.c
+
 LTC4282 HARDWARE MONITOR DRIVER
 M:	Nuno Sa <nuno.sa@analog.com>
 L:	linux-hwmon@vger.kernel.org

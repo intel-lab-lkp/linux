@@ -3,6 +3,7 @@
 
 obj-$(CONFIG_PSE_CONTROLLER) += pse_core.o
 
+obj-$(CONFIG_PSE_LTC4266) += ltc4266.o
 obj-$(CONFIG_PSE_REALTEK_MCU) += realtek-pse-mcu-core.o
 obj-$(CONFIG_PSE_REALTEK_MCU_I2C) += realtek-pse-mcu-i2c.o
 obj-$(CONFIG_PSE_REALTEK_MCU_UART) += realtek-pse-mcu-uart.o
