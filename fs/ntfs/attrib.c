@@ -4453,6 +4453,7 @@ static int ntfs_non_resident_attr_expand(struct ntfs_inode *ni, const s64 newsiz
 	struct ntfs_inode *base_ni;
 	struct super_block *sb = ni->vol->sb;
 	size_t new_rl_count;
+	bool runlist_locked = locked_ni == ni;
 
 	ntfs_debug("Inode 0x%llx, attr 0x%x, new size %lld old size %lld\n",
 			(unsigned long long)ni->mft_no, ni->type,
@@ -4494,10 +4495,17 @@ static int ntfs_non_resident_attr_expand(struct ntfs_inode *ni, const s64 newsiz
 	 * clusters if there is a change.
 	 */
 	if (ntfs_bytes_to_cluster(vol, ni->allocated_size) < first_free_vcn) {
+		/*
+		 * The runlist array is replaced below.  Readers such as the
+		 * iomap read path hold only the runlist lock, not mrec_lock.
+		 */
+		if (!runlist_locked)
+			down_write(&ni->runlist.lock);
+
 		err = ntfs_attr_map_whole_runlist(ni);
 		if (err) {
 			ntfs_error(sb, "ntfs_attr_map_whole_runlist failed");
-			return err;
+			goto unlock_runlist;
 		}
 
 		/*
@@ -4522,7 +4530,7 @@ static int ntfs_non_resident_attr_expand(struct ntfs_inode *ni, const s64 newsiz
 						last + more_entries + 1);
 				if (IS_ERR(rl)) {
 					err = -ENOMEM;
-					goto put_err_out;
+					goto unlock_runlist;
 				}
 
 				alloc_size = ni->allocated_size;
@@ -4547,7 +4555,7 @@ static int ntfs_non_resident_attr_expand(struct ntfs_inode *ni, const s64 newsiz
 				rl = kmalloc(sizeof(struct runlist_element) * 2, GFP_NOFS);
 				if (!rl) {
 					err = -ENOMEM;
-					goto put_err_out;
+					goto unlock_runlist;
 				}
 
 				rl[0].vcn = ntfs_bytes_to_cluster(vol, ni->allocated_size);
@@ -4594,7 +4602,8 @@ static int ntfs_non_resident_attr_expand(struct ntfs_inode *ni, const s64 newsiz
 				ntfs_debug("Cluster allocation failed (%lld)",
 						(long long)first_free_vcn -
 						ntfs_bytes_to_cluster(vol, ni->allocated_size));
-				return PTR_ERR(rl);
+				err = PTR_ERR(rl);
+				goto unlock_runlist;
 			}
 			/*
 			 * A contiguous ATTRIBUTE_LIST allocation keeps its mapping
@@ -4618,8 +4627,10 @@ static int ntfs_non_resident_attr_expand(struct ntfs_inode *ni, const s64 newsiz
 								ni->allocated_size),
 						lcn_seek_from, DATA_ZONE, false,
 						false, false);
-				if (IS_ERR(rl))
-					return PTR_ERR(rl);
+				if (IS_ERR(rl)) {
+					err = PTR_ERR(rl);
+					goto unlock_runlist;
+				}
 			}
 		}
 
@@ -4631,7 +4642,8 @@ static int ntfs_non_resident_attr_expand(struct ntfs_inode *ni, const s64 newsiz
 				ntfs_error(sb, "Run list merge failed");
 				ntfs_cluster_free_from_rl(vol, rl);
 				kvfree(rl);
-				return -EIO;
+				err = -EIO;
+				goto unlock_runlist;
 			}
 			ni->runlist.rl = rln;
 			ni->runlist.count = new_rl_count;
@@ -4639,11 +4651,28 @@ static int ntfs_non_resident_attr_expand(struct ntfs_inode *ni, const s64 newsiz
 
 		/* Prepare to mapping pairs update. */
 		ni->allocated_size = ntfs_cluster_to_bytes(vol, first_free_vcn);
-		err = ntfs_attr_update_mapping_pairs_locked(
-				ni, 0, locked_ni);
-		if (err) {
-			ntfs_debug("Mapping pairs update failed");
-			goto rollback;
+		if (ni->type == AT_ATTRIBUTE_LIST && !runlist_locked) {
+			/*
+			 * Making room for the list's mapping pairs can resize
+			 * this attribute list again through
+			 * ntfs_attrlist_update_locked(), which takes its
+			 * runlist lock.
+			 */
+			up_write(&ni->runlist.lock);
+			err = ntfs_attr_update_mapping_pairs_locked(ni, 0,
+								    locked_ni);
+			if (err) {
+				ntfs_debug("Mapping pairs update failed");
+				goto rollback;
+			}
+		} else {
+			err = ntfs_attr_update_mapping_pairs_locked(ni, 0, ni);
+			if (err) {
+				ntfs_debug("Mapping pairs update failed");
+				goto rollback_locked;
+			}
+			if (!runlist_locked)
+				up_write(&ni->runlist.lock);
 		}
 	}
 
@@ -4677,6 +4706,9 @@ static int ntfs_non_resident_attr_expand(struct ntfs_inode *ni, const s64 newsiz
 	ntfs_attr_put_search_ctx(ctx);
 	return 0;
 rollback:
+	if (!runlist_locked)
+		down_write(&ni->runlist.lock);
+rollback_locked:
 	/* Free allocated clusters. */
 	err2 = ntfs_cluster_free(ni, ntfs_bytes_to_cluster(vol, org_alloc_size),
 				-1, ctx);
@@ -4684,12 +4716,8 @@ rollback:
 		ntfs_debug("Leaking clusters");
 
 	/* Now, truncate the runlist itself. */
-	if (ni != locked_ni)
-		down_write(&ni->runlist.lock);
 	err2 = ntfs_rl_truncate_nolock(vol, &ni->runlist,
 			ntfs_bytes_to_cluster(vol, org_alloc_size));
-	if (ni != locked_ni)
-		up_write(&ni->runlist.lock);
 	if (err2) {
 		/*
 		 * Failed to truncate the runlist, so just throw it away, it
@@ -4702,12 +4730,8 @@ rollback:
 		/* Prepare to mapping pairs update. */
 		ni->allocated_size = org_alloc_size;
 		/* Restore mapping pairs. */
-		if (ni != locked_ni)
-			down_read(&ni->runlist.lock);
-		if (__ntfs_attr_update_mapping_pairs(ni, 0, locked_ni, true))
+		if (__ntfs_attr_update_mapping_pairs(ni, 0, ni, true))
 			ntfs_error(sb, "Failed to restore old mapping pairs");
-		if (ni != locked_ni)
-			up_read(&ni->runlist.lock);
 
 		if (NInoSparse(ni) || NInoCompressed(ni)) {
 			ni->itype.compressed.size =  org_compressed_size;
@@ -4715,12 +4739,18 @@ rollback:
 		} else
 			VFS_I(base_ni)->i_blocks = ni->allocated_size >> 9;
 	}
+	if (!runlist_locked)
+		up_write(&ni->runlist.lock);
 	if (ctx)
 		ntfs_attr_put_search_ctx(ctx);
 	return err;
 put_err_out:
 	if (ctx)
 		ntfs_attr_put_search_ctx(ctx);
+	return err;
+unlock_runlist:
+	if (!runlist_locked)
+		up_write(&ni->runlist.lock);
 	return err;
 }
 
