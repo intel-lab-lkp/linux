@@ -161,11 +161,14 @@ static int kvm_dmsintc_create(struct kvm_device *dev, u32 type)
 
 static void kvm_dmsintc_destroy(struct kvm_device *dev)
 {
+	struct loongarch_dmsintc *s;
 
 	if (!dev || !dev->kvm || !dev->kvm->arch.dmsintc)
 		return;
 
-	kfree(dev->kvm->arch.dmsintc);
+	s = dev->kvm->arch.dmsintc;
+	dev->kvm->arch.dmsintc = NULL;
+	kfree(s);
 	kfree(dev);
 }
 
