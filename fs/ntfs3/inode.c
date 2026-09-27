@@ -1491,6 +1491,8 @@ int ntfs_create_inode(const struct mnt_idmap *idmap, struct inode *dir,
 
 	if (!(mode & 0222))
 		fa |= FILE_ATTRIBUTE_READONLY;
+	else
+		fa &= ~FILE_ATTRIBUTE_READONLY;
 
 	new_de = kzalloc(PATH_MAX, GFP_KERNEL);
 	if (!new_de) {
