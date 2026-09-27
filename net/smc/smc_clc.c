@@ -1169,14 +1169,21 @@ static int smc_clc_send_confirm_accept(struct smc_sock *smc,
 	clc->hdr.version = version;	/* SMC version */
 	if (first_contact)
 		clc->hdr.typev2 |= SMC_FIRST_CONTACT_MASK;
-	if (conn->lgr->is_smcd)
+	if (conn->lgr->is_smcd) {
 		smcd_clc_prep_confirm_accept(conn, clc, first_contact,
 					     version, eid, ini, &fce_len,
 					     &fce_v2x, &trl);
-	else
+	} else {
+		down_read(&conn->lgr->llc_conf_mutex);
+		if (!smc_link_usable(conn->lnk) || conn->lnk->clearing) {
+			up_read(&conn->lgr->llc_conf_mutex);
+			return -ENOLINK;
+		}
 		smcr_clc_prep_confirm_accept(conn, clc, first_contact,
 					     version, eid, ini, &fce_len,
 					     &fce_v2x, &gle, &trl);
+		up_read(&conn->lgr->llc_conf_mutex);
+	}
 	memset(&msg, 0, sizeof(msg));
 	i = 0;
 	vec[i].iov_base = clc;
@@ -1227,7 +1234,7 @@ int smc_clc_send_confirm(struct smc_sock *smc, bool clnt_first_contact,
 			reason_code = -ENETUNREACH;
 			smc->sk.sk_err = -reason_code;
 		} else {
-			smc->sk.sk_err = smc->clcsock->sk->sk_err;
+			smc->sk.sk_err = smc->clcsock->sk->sk_err ?: -len;
 			reason_code = -smc->sk.sk_err;
 		}
 	}
@@ -1246,7 +1253,8 @@ int smc_clc_send_accept(struct smc_sock *new_smc, bool srv_first_contact,
 	len = smc_clc_send_confirm_accept(new_smc, &aclc, srv_first_contact,
 					  version, negotiated_eid, ini);
 	if (len < ntohs(aclc.hdr.length))
-		len = len >= 0 ? -EPROTO : -new_smc->clcsock->sk->sk_err;
+		len = len >= 0 ? -EPROTO :
+			-(new_smc->clcsock->sk->sk_err ?: -len);
 
 	return len > 0 ? 0 : len;
 }
