@@ -1195,6 +1195,7 @@
 		pinctrl-0 = <&pinctrl_charger_in>;
 		interrupt-parent = <&gpio3>;
 		interrupts = <3 IRQ_TYPE_EDGE_FALLING>;
+		input-voltage-limit-microvolt = <3900000>;
 		ti,battery-regulation-voltage = <4208000>; /* uV */
 		ti,termination-current = <128000>;  /* uA */
 		ti,precharge-current = <128000>; /* uA */
