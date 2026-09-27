@@ -392,7 +392,11 @@ void cpuhp_ap_sync_alive(void)
 {
 	atomic_t *st = this_cpu_ptr(&cpuhp_state.ap_sync_state);
 
-	cpuhp_ap_update_sync_state(SYNC_STATE_ALIVE);
+	/*
+	 * Compare-exchange failure means that the state is either SYNC_STATE_ALIVE
+	 * or SYNC_STATE_SHOULD_ONLINE, both are acceptable.
+	 */
+	atomic_cmpxchg(st, SYNC_STATE_KICKED, SYNC_STATE_ALIVE);
 
 	/* Wait for the control CPU to release it. */
 	while (atomic_read(st) != SYNC_STATE_SHOULD_ONLINE)
@@ -414,7 +418,7 @@ again:
 		break;
 	case SYNC_STATE_ALIVE:
 		/* CPU is stuck cpuhp_ap_sync_alive(). */
-		break;
+		return true;
 	default:
 		/* CPU failed to report online or dead and is in limbo state. */
 		return false;
@@ -822,6 +826,15 @@ static int bringup_wait_for_ap_online(unsigned int cpu)
 #ifdef CONFIG_HOTPLUG_SPLIT_STARTUP
 static int cpuhp_kick_ap_alive(unsigned int cpu)
 {
+	struct cpuhp_cpu_state *st = per_cpu_ptr(&cpuhp_state, cpu);
+
+	/*
+	 * The AP is already alive and waiting in cpuhp_ap_sync_alive().
+	 * cpuhp_bp_sync_alive() will release it, so skip the kick.
+	 */
+	if (atomic_read(&st->ap_sync_state) == SYNC_STATE_ALIVE)
+		return 0;
+
 	if (!cpuhp_can_boot_ap(cpu))
 		return -EAGAIN;
 
