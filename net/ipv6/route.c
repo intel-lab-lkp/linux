@@ -135,6 +135,22 @@ struct uncached_list {
 
 static DEFINE_PER_CPU_ALIGNED(struct uncached_list, rt6_uncached_list);
 
+static void rt6_uncached_list_replace(struct rt6_info *rt)
+{
+	struct net_device *dev = dst_dev(&rt->dst);
+	struct inet6_dev *rt_idev = rt->rt6i_idev;
+
+	if (rt_idev) {
+		rt->rt6i_idev = in6_dev_get(blackhole_netdev);
+		in6_dev_put(rt_idev);
+	}
+
+	rcu_assign_pointer(rt->dst.dev_rcu, blackhole_netdev);
+	netdev_ref_replace(dev, blackhole_netdev,
+			   &rt->dst.dev_tracker,
+			   GFP_ATOMIC);
+}
+
 void rt6_uncached_list_add(struct rt6_info *rt)
 {
 	struct uncached_list *ul = raw_cpu_ptr(&rt6_uncached_list);
@@ -143,7 +159,12 @@ void rt6_uncached_list_add(struct rt6_info *rt)
 	rt->dst.rt_uncached_list = ul;
 
 	spin_lock_bh(&ul->lock);
-	list_add_tail(&rt->dst.rt_uncached, &ul->head);
+
+	if (check_net(dst_dev_net_rcu(&rt->dst)))
+		list_add_tail(&rt->dst.rt_uncached, &ul->head);
+	else
+		rt6_uncached_list_replace(rt);
+
 	spin_unlock_bh(&ul->lock);
 }
 
@@ -162,6 +183,9 @@ static void rt6_uncached_list_flush_dev(struct net_device *dev)
 {
 	int cpu;
 
+	if (dev && net_pre_exit_done(dev_net(dev)))
+		return;
+
 	for_each_possible_cpu(cpu) {
 		struct uncached_list *ul = per_cpu_ptr(&rt6_uncached_list, cpu);
 		struct rt6_info *rt, *safe;
@@ -173,23 +197,17 @@ static void rt6_uncached_list_flush_dev(struct net_device *dev)
 		list_for_each_entry_safe(rt, safe, &ul->head, dst.rt_uncached) {
 			struct inet6_dev *rt_idev = rt->rt6i_idev;
 			struct net_device *rt_dev = rt->dst.dev;
-			bool handled = false;
 
-			if (rt_idev && rt_idev->dev == dev) {
-				rt->rt6i_idev = in6_dev_get(blackhole_netdev);
-				in6_dev_put(rt_idev);
-				handled = true;
+			if (dev) {
+				if (rt_dev != dev &&
+				    (!rt_idev || rt_idev->dev != dev))
+					continue;
+			} else if (check_net(dev_net(rt_dev))) {
+				continue;
 			}
 
-			if (rt_dev == dev) {
-				rt->dst.dev = blackhole_netdev;
-				netdev_ref_replace(rt_dev, blackhole_netdev,
-						   &rt->dst.dev_tracker,
-						   GFP_ATOMIC);
-				handled = true;
-			}
-			if (handled)
-				list_del_init(&rt->dst.rt_uncached);
+			rt6_uncached_list_replace(rt);
+			list_del_init(&rt->dst.rt_uncached);
 		}
 		spin_unlock_bh(&ul->lock);
 	}
@@ -6801,6 +6819,11 @@ out_ip6_dst_ops:
 	goto out;
 }
 
+static void __net_exit ip6_route_net_pre_exit_batch(struct list_head *net_exit_list)
+{
+	rt6_uncached_list_flush_dev(NULL);
+}
+
 static void __net_exit ip6_route_net_exit(struct net *net)
 {
 	kfree(net->ipv6.fib6_null_entry);
@@ -6839,6 +6862,7 @@ static void __net_exit ip6_route_net_exit_late(struct net *net)
 
 static struct pernet_operations ip6_route_net_ops = {
 	.init = ip6_route_net_init,
+	.pre_exit_batch = ip6_route_net_pre_exit_batch,
 	.exit = ip6_route_net_exit,
 };
 
