@@ -88,6 +88,8 @@ struct bq25890_init_data {
 	u8 boosti;	/* boost current limit		*/
 	u8 boostf;	/* boost frequency		*/
 	u8 ilim_en;	/* enable ILIM pin		*/
+	bool force_vindpm; /* explicit absolute VINDPM request */
+	u8 vindpm;	/* absolute VINDPM threshold	*/
 	u8 treg;	/* thermal regulation threshold */
 	u8 rbatcomp;	/* IBAT sense resistor value    */
 	u8 vclamp;	/* IBAT compensation voltage limit */
@@ -284,6 +286,7 @@ enum bq25890_table_ids {
 	TBL_VBUSV,
 	TBL_VBATCOMP,
 	TBL_RBATCOMP,
+	TBL_VINDPM,
 
 	/* lookup tables */
 	TBL_TREG,
@@ -351,6 +354,7 @@ static const union {
 	[TBL_VBUSV] =	 { .rt = {2600000, 15300000, 100000} },	 /* uV */
 	[TBL_VBATCOMP] = { .rt = {0,         224000, 32000} },	 /* uV */
 	[TBL_RBATCOMP] = { .rt = {0,         140000, 20000} },	 /* uOhm */
+	[TBL_VINDPM] =   { .rt = {2600000, 15300000, 100000} },	 /* uV */
 
 	/* lookup tables */
 	[TBL_TREG] =	{ .lt = {bq25890_treg_tbl, BQ25890_TREG_TBL_SIZE} },
@@ -814,18 +818,67 @@ static int bq25890_get_chip_state(struct bq25890_device *bq,
 	return 0;
 }
 
+static int bq25890_set_vindpm(struct bq25890_device *bq)
+{
+	int ret;
+
+	if (!bq->init_data.force_vindpm)
+		return 0;
+
+	ret = bq25890_field_write(bq, F_FORCE_VINDPM, 1);
+	if (ret < 0)
+		return ret;
+
+	return bq25890_field_write(bq, F_VINDPM, bq->init_data.vindpm);
+}
+
+/* Return 1 if restored, 0 if unchanged, or a negative error. */
+static int bq25890_restore_vindpm(struct bq25890_device *bq)
+{
+	int force, vindpm, ret;
+
+	if (!bq->init_data.force_vindpm || bq->chip_version != BQ25896)
+		return 0;
+
+	force = bq25890_field_read(bq, F_FORCE_VINDPM);
+	if (force < 0)
+		return force;
+
+	vindpm = bq25890_field_read(bq, F_VINDPM);
+	if (vindpm < 0)
+		return vindpm;
+
+	if (force && vindpm == bq->init_data.vindpm)
+		return 0;
+
+	ret = bq25890_set_vindpm(bq);
+	if (ret < 0)
+		return ret;
+
+	return 1;
+}
+
 static irqreturn_t __bq25890_handle_irq(struct bq25890_device *bq)
 {
 	bool adc_conv_rate, new_adc_conv_rate;
 	struct bq25890_state new_state;
+	irqreturn_t irq_ret = IRQ_NONE;
 	int ret;
 
 	ret = bq25890_get_chip_state(bq, &new_state);
 	if (ret < 0)
 		return IRQ_NONE;
 
+	if (new_state.online) {
+		ret = bq25890_restore_vindpm(bq);
+		if (ret < 0)
+			goto error;
+		if (ret > 0)
+			irq_ret = IRQ_HANDLED;
+	}
+
 	if (!memcmp(&bq->state, &new_state, sizeof(new_state)))
-		return IRQ_NONE;
+		return irq_ret;
 
 	/*
 	 * Restore HiZ bit in case it was set by user. The chip does not retain
@@ -931,6 +984,9 @@ static int bq25890_rw_init_data(struct bq25890_device *bq)
 			return ret;
 		}
 	}
+
+	if (write)
+		return bq25890_set_vindpm(bq);
 
 	return 0;
 }
@@ -1386,6 +1442,18 @@ static int bq25890_fw_read_u32_props(struct bq25890_device *bq)
 						       props[i].tbl_id);
 	}
 
+	if (device_property_present(bq->dev,
+				    "input-voltage-limit-microvolt")) {
+		ret = device_property_read_u32(bq->dev,
+					       "input-voltage-limit-microvolt",
+					       &property);
+		if (ret < 0)
+			return ret;
+
+		init->vindpm = bq25890_find_idx(property, TBL_VINDPM);
+		init->force_vindpm = true;
+	}
+
 	return 0;
 }
 
@@ -1609,6 +1677,10 @@ static int bq25890_resume(struct device *dev)
 
 	/* Re-enable ADC only if charger is plugged in. */
 	if (bq->state.online) {
+		ret = bq25890_restore_vindpm(bq);
+		if (ret < 0)
+			goto unlock;
+
 		ret = bq25890_field_write(bq, F_CONV_RATE, 1);
 		if (ret < 0)
 			goto unlock;
