@@ -10,32 +10,6 @@
 #include <linux/kernel.h>
 #include <linux/string.h>
 
-u8 PHY_GetTxPowerByRateBase(struct adapter *Adapter, u8 RfPath,
-			    enum rate_section RateSection)
-{
-	struct hal_com_data	*pHalData = GET_HAL_DATA(Adapter);
-	u8	value = 0;
-
-	if (RfPath >= RF_PATH_MAX)
-		return 0;
-
-	switch (RateSection) {
-	case CCK:
-		value = pHalData->TxPwrByRateBase2_4G[RfPath][0];
-		break;
-	case OFDM:
-		value = pHalData->TxPwrByRateBase2_4G[RfPath][1];
-		break;
-	case HT_MCS0_MCS7:
-		value = pHalData->TxPwrByRateBase2_4G[RfPath][2];
-		break;
-	default:
-		break;
-	}
-
-	return value;
-}
-
 static void
 phy_SetTxPowerByRateBase(struct adapter *Adapter, u8 RfPath,
 			 enum rate_section RateSection, u8 Value)
@@ -755,14 +729,9 @@ void phy_tx_power_limit_to_index(struct adapter *adapter)
 					tmp_pwr_lmt = hal_data->TxPwrLimit_2_4G[reg][bw][rs][ch][RF_PATH_A];
 
 					for (path = RF_PATH_A; path < MAX_RF_PATH_NUM; ++path) {
-						if (hal_data->odmpriv.PhyRegPgValueType == PHY_REG_PG_EXACT_VALUE) {
-							if (rs == 2) /*  HT 1T */
-								pwr_base = PHY_GetTxPowerByRateBase(adapter, path, HT_MCS0_MCS7);
-							else if (rs == 1) /*  OFDM */
-								pwr_base = PHY_GetTxPowerByRateBase(adapter, path, OFDM);
-							else if (rs == 0) /*  CCK */
-								pwr_base = PHY_GetTxPowerByRateBase(adapter, path, CCK);
-						} else
+						if (hal_data->odmpriv.PhyRegPgValueType == PHY_REG_PG_EXACT_VALUE)
+							pwr_base = hal_data->TxPwrByRateBase2_4G[path][rs];
+						else
 							pwr_base = r->reg_power_base * 2;
 
 						if (tmp_pwr_lmt != MAX_POWER_INDEX) {
