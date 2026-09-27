@@ -1300,6 +1300,7 @@ ntfs_create_reparse_buffer(struct ntfs_sb_info *sbi, const char *symname,
 	int i, err;
 	struct REPARSE_DATA_BUFFER *rp;
 	__le16 *rp_name;
+	__le16 *sub_name;
 	typeof(rp->SymbolicLinkReparseBuffer) *rs;
 	bool is_absolute;
 
@@ -1327,12 +1328,6 @@ ntfs_create_reparse_buffer(struct ntfs_sb_info *sbi, const char *symname,
 		goto out;
 	}
 
-	/* Translate Linux '/' into Windows '\'. */
-	for (i = 0; i < err; i++) {
-		if (rp_name[i] == cpu_to_le16('/'))
-			rp_name[i] = cpu_to_le16('\\');
-	}
-
 	rp->ReparseTag = IO_REPARSE_TAG_SYMLINK;
 	rp->ReparseDataLength =
 		cpu_to_le16(*nsize - offsetof(struct REPARSE_DATA_BUFFER,
@@ -1351,8 +1346,15 @@ ntfs_create_reparse_buffer(struct ntfs_sb_info *sbi, const char *symname,
 	 */
 	rs->Flags = cpu_to_le32(is_absolute ? 0 : SYMLINK_FLAG_RELATIVE);
 
-	memmove(rp_name + err + (is_absolute ? 4 : 0), rp_name,
+	sub_name = rp_name + err + (is_absolute ? 4 : 0);
+	memmove(sub_name, rp_name,
 		sizeof(short) * err);
+
+	/* Translate Linux '/' into Windows '\'. */
+	for (i = 0; i < err; i++) {
+		if (sub_name[i] == cpu_to_le16('/'))
+			sub_name[i] = cpu_to_le16('\\');
+	}
 
 	if (is_absolute) {
 		/* Decorate SubstituteName. */
@@ -2245,12 +2247,6 @@ static noinline int ntfs_readlink_hlp(const struct dentry *link_de,
 
 	if (err < 0)
 		goto out;
-
-	/* Translate Windows '\' into Linux '/'. */
-	for (i = 0; i < err; i++) {
-		if (buffer[i] == '\\')
-			buffer[i] = '/';
-	}
 
 	/* Always set last zero. */
 	buffer[err] = 0;
