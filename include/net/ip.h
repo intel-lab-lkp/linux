@@ -543,7 +543,9 @@ static inline unsigned int ip_skb_dst_mtu(struct sock *sk,
 		return ip_dst_mtu_maybe_forward(dst, forwarding);
 	}
 
-	mtu = min(READ_ONCE(dst_dev(dst)->mtu), IP_MAX_MTU);
+	rcu_read_lock();
+	mtu = min(READ_ONCE(dst_dev_rcu(dst)->mtu), IP_MAX_MTU);
+	rcu_read_unlock();
 	return mtu - lwtunnel_headroom(dst->lwtstate, mtu);
 }
 
