@@ -7,7 +7,7 @@
 # This software may be used and distributed according to the terms
 # of the GNU General Public License, incorporated herein by reference.
 
-import sys, os, re, argparse
+import argparse, re, subprocess
 from signal import signal, SIGPIPE, SIG_DFL
 
 signal(SIGPIPE, SIG_DFL)
@@ -31,8 +31,11 @@ def getsizes(file, format):
     if args.prefix:
         nm = "{}nm".format(args.prefix)
 
-    with os.popen("{} --size-sort {}".format(nm, file)) as f:
-        for line in f:
+    with subprocess.Popen([nm, "--size-sort", file], stdout=subprocess.PIPE,
+                          text=True) as f:
+        if f.stdout is None:
+            return sym
+        for line in f.stdout:
             if line.startswith("\n") or ":" in line:
                 continue
             size, type, name = line.split()
@@ -49,6 +52,7 @@ def getsizes(file, format):
                 # statics and some other optimizations adds random .NUMBER
                 name = re_NUMBER.sub('', name)
                 sym[name] = sym.get(name, 0) + int(size, 16)
+        f.wait()
     return sym
 
 def calc(oldfile, newfile, format):
