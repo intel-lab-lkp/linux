@@ -117,6 +117,8 @@ static void iwl_mvm_wowlan_program_keys(struct ieee80211_hw *hw,
 	struct wowlan_key_reprogram_data *data = _data;
 	int ret;
 
+	lockdep_assert_held(&mvm->mutex);
+
 	switch (key->cipher) {
 	case WLAN_CIPHER_SUITE_WEP40:
 	case WLAN_CIPHER_SUITE_WEP104: { /* hack it for now */
@@ -150,7 +152,6 @@ static void iwl_mvm_wowlan_program_keys(struct ieee80211_hw *hw,
 			wep_key->key_offset = data->wep_key_idx;
 		}
 
-		mutex_lock(&mvm->mutex);
 		ret = iwl_mvm_send_cmd_pdu(mvm, WEP_KEY, 0,
 					   __struct_size(wkc), wkc);
 		data->error = ret != 0;
@@ -159,7 +160,6 @@ static void iwl_mvm_wowlan_program_keys(struct ieee80211_hw *hw,
 		mvm->ptk_icvlen = key->icv_len;
 		mvm->gtk_ivlen = key->iv_len;
 		mvm->gtk_icvlen = key->icv_len;
-		mutex_unlock(&mvm->mutex);
 
 		/* don't upload key again */
 		return;
@@ -186,7 +186,6 @@ static void iwl_mvm_wowlan_program_keys(struct ieee80211_hw *hw,
 		break;
 	}
 
-	mutex_lock(&mvm->mutex);
 	/*
 	 * The D3 firmware hardcodes the key offset 0 as the key it
 	 * uses to transmit packets to the AP, i.e. the PTK.
@@ -206,7 +205,6 @@ static void iwl_mvm_wowlan_program_keys(struct ieee80211_hw *hw,
 		mvm->gtk_icvlen = key->icv_len;
 		ret = iwl_mvm_set_sta_key(mvm, vif, sta, key, 1);
 	}
-	mutex_unlock(&mvm->mutex);
 	data->error = ret != 0;
 }
 
@@ -1012,8 +1010,8 @@ static int iwl_mvm_wowlan_config_key_params(struct iwl_mvm *mvm,
 		/*
 		 * Note that currently we don't use CMD_ASYNC in the iterator.
 		 * In case of key_data.configure_keys, all the configured
-		 * commands are SYNC, and iwl_mvm_wowlan_program_keys() will
-		 * take care of locking/unlocking mvm->mutex.
+		 * commands are SYNC and run under mvm->mutex, which the
+		 * caller holds.
 		 */
 		ieee80211_iter_keys(mvm->hw, vif, iwl_mvm_wowlan_program_keys,
 				    &key_data);
