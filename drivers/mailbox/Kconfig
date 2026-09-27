@@ -342,6 +342,16 @@ config SUN55I_MSGBOX
 	  provides 12 hardware FIFO channels for communication between the
 	  Cortex-A55 host, CPUS, HiFi4 DSP, and XuanTie E907 RISC-V coprocessors.
 
+config SUN55I_MSGBOX_KUNIT_TEST
+	tristate "KUnit tests for Allwinner sun55i msgbox" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  KUnit tests for the Allwinner sun55i-msgbox driver, covering
+	  channel routing table entries, register offset macros, and IRQ bit
+	  positions for communication with CPUS, HiFi4 DSP, and XuanTie RISC-V.
+	  Say Y here to run these tests during boot or via kunit.py.
+
 config SPRD_MBOX
 	tristate "Spreadtrum Mailbox"
 	depends on ARCH_SPRD || COMPILE_TEST
