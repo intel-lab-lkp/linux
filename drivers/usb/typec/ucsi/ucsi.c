@@ -898,7 +898,8 @@ static int ucsi_get_pdos(struct ucsi_connector *con, enum typec_role role,
 	if (ret < 0)
 		return ret;
 
-	num_pdos = ret / sizeof(u32); /* number of bytes to 32-bit PDOs */
+	/* The PPM may report more data than was requested */
+	num_pdos = min_t(u8, ret / sizeof(u32), UCSI_MAX_PDOS);
 	if (num_pdos < UCSI_MAX_PDOS)
 		return num_pdos;
 
@@ -908,7 +909,8 @@ static int ucsi_get_pdos(struct ucsi_connector *con, enum typec_role role,
 	if (ret < 0)
 		return ret;
 
-	return ret / sizeof(u32) + num_pdos;
+	return min_t(u8, ret / sizeof(u32),
+		     PDO_MAX_OBJECTS - UCSI_MAX_PDOS) + num_pdos;
 }
 
 static int ucsi_get_src_pdos(struct ucsi_connector *con)
