@@ -107,7 +107,7 @@ static int stmmac_adjust_time(struct ptp_clock_info *ptp, s64 delta)
 	 * error, but do not report success if only schedule replay failed.
 	 */
 	if (priv->est.enable) {
-		err = __stmmac_setup_est(priv);
+		err = __stmmac_setup_est(priv, &priv->est);
 		if (!ret)
 			ret = err;
 	}

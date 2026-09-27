@@ -80,29 +80,42 @@ static int est_configure(struct stmmac_priv *priv, struct stmmac_est *cfg,
 	return 0;
 }
 
-int __stmmac_setup_est(struct stmmac_priv *priv)
+/* Program either the installed schedule or an unpublished replacement. */
+int __stmmac_setup_est(struct stmmac_priv *priv, struct stmmac_est *est)
 {
 	struct timespec64 current_time, time;
 	ktime_t current_time_ns, basetime;
+	unsigned long flags;
+	u64 now;
 	u64 cycle_time;
 	int err;
 
 	lockdep_assert_held(&priv->est_lock);
+	lockdep_assert_held(&priv->ptp_mutex);
 
-	priv->ptp_clock_ops.gettime64(&priv->ptp_clock_ops, &current_time);
+	if (!priv->ptp_enabled)
+		return -EOPNOTSUPP;
+
+	/* Reset replay owns ptp_mutex while public PHC reads are blocked. */
+	read_lock_irqsave(&priv->ptp_lock, flags);
+	err = stmmac_get_systime(priv, priv->ptpaddr, &now);
+	read_unlock_irqrestore(&priv->ptp_lock, flags);
+	if (err)
+		return err;
+	current_time = ns_to_timespec64(now);
 	current_time_ns = timespec64_to_ktime(current_time);
 
-	time.tv_nsec = priv->est.btr_reserve[0];
-	time.tv_sec = priv->est.btr_reserve[1];
+	time.tv_nsec = est->btr_reserve[0];
+	time.tv_sec = est->btr_reserve[1];
 	basetime = timespec64_to_ktime(time);
 
-	cycle_time = (u64)priv->est.ctr[1] * NSEC_PER_SEC + priv->est.ctr[0];
+	cycle_time = (u64)est->ctr[1] * NSEC_PER_SEC + est->ctr[0];
 
 	time = stmmac_calc_tas_basetime(basetime, current_time_ns, cycle_time);
-	priv->est.btr[0] = (u32)time.tv_nsec;
-	priv->est.btr[1] = (u32)time.tv_sec;
+	est->btr[0] = (u32)time.tv_nsec;
+	est->btr[1] = (u32)time.tv_sec;
 
-	err = stmmac_est_configure(priv, priv, &priv->est,
+	err = stmmac_est_configure(priv, priv, est,
 				   priv->plat->clk_ptp_rate, true);
 	if (err)
 		netdev_err(priv->dev, "failed to re-configure EST\n");
