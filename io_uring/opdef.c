@@ -591,6 +591,13 @@ const struct io_issue_def io_issue_defs[] = {
 		.prep			= io_uring_cmd_prep,
 		.issue			= io_uring_cmd,
 	},
+	[IORING_OP_COPY_FILE_RANGE] = {
+		.needs_file		= 1,
+		.hash_reg_file		= 1,
+		.audit_skip		= 1,
+		.prep			= io_copy_file_range_prep,
+		.issue			= io_copy_file_range,
+	},
 };
 
 const struct io_cold_def io_cold_defs[] = {
@@ -848,6 +855,10 @@ const struct io_cold_def io_cold_defs[] = {
 		.name			= "URING_CMD128",
 		.sqe_copy		= io_uring_cmd_sqe_copy,
 		.cleanup		= io_uring_cmd_cleanup,
+	},
+	[IORING_OP_COPY_FILE_RANGE] = {
+		.name			= "COPY_FILE_RANGE",
+		.cleanup		= io_splice_cleanup,
 	},
 };
 

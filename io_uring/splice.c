@@ -147,3 +147,61 @@ done:
 	io_req_set_res(req, ret, 0);
 	return IOU_COMPLETE;
 }
+
+int io_copy_file_range_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
+{
+	struct io_splice *sp = io_kiocb_to_cmd(req, struct io_splice);
+
+	if (READ_ONCE(sqe->addr3) || READ_ONCE(sqe->buf_index))
+		return -EINVAL;
+
+	sp->off_in = READ_ONCE(sqe->splice_off_in);
+	sp->off_out = READ_ONCE(sqe->off);
+	sp->len = min_t(u32, READ_ONCE(sqe->len), MAX_RW_COUNT);
+	sp->flags = READ_ONCE(sqe->splice_flags);
+	if (unlikely(sp->flags & ~SPLICE_F_FD_IN_FIXED))
+		return -EINVAL;
+	sp->splice_fd_in = READ_ONCE(sqe->splice_fd_in);
+	sp->rsrc_node = NULL;
+	req->flags |= REQ_F_FORCE_ASYNC;
+	return 0;
+}
+
+int io_copy_file_range(struct io_kiocb *req, unsigned int issue_flags)
+{
+	struct io_splice *sp = io_kiocb_to_cmd(req, struct io_splice);
+	struct file *out = sp->file_out;
+	loff_t pos_in, pos_out;
+	struct file *in;
+	ssize_t ret;
+
+	WARN_ON_ONCE(issue_flags & IO_URING_F_NONBLOCK);
+
+	in = io_splice_get_file(req, issue_flags);
+	if (!in) {
+		ret = -EBADF;
+		goto done;
+	}
+
+	pos_in = (sp->off_in == -1) ? in->f_pos : sp->off_in;
+	pos_out = (sp->off_out == -1) ? out->f_pos : sp->off_out;
+
+	ret = vfs_copy_file_range(in, pos_in, out, pos_out, sp->len, 0);
+	if (ret == -ERESTARTSYS)
+		ret = -EINTR;
+
+	if (ret > 0) {
+		if (sp->off_in == -1)
+			in->f_pos = pos_in + ret;
+		if (sp->off_out == -1)
+			out->f_pos = pos_out + ret;
+	}
+
+	if (!(sp->flags & SPLICE_F_FD_IN_FIXED))
+		fput(in);
+done:
+	if (ret != sp->len)
+		req_set_fail(req);
+	io_req_set_res(req, ret, 0);
+	return IOU_COMPLETE;
+}
