@@ -31,6 +31,14 @@ properties:
   interrupts:
     maxItems: 1
 
+  input-voltage-limit-microvolt:
+    description: |
+      Absolute input voltage limit. When present, the charger uses the
+      absolute VINDPM threshold instead of relative VINDPM.
+    minimum: 3900000
+    maximum: 14000000
+    multipleOf: 100000
+
   ti,battery-regulation-voltage:
     $ref: /schemas/types.yaml#/definitions/uint32
     description: maximum charging voltage (in uV)
@@ -113,6 +121,7 @@ examples:
         interrupt-parent = <&gpio1>;
         interrupts = <16 IRQ_TYPE_EDGE_FALLING>;
 
+        input-voltage-limit-microvolt = <3900000>;
         ti,battery-regulation-voltage = <4200000>;
         ti,charge-current = <1000000>;
         ti,termination-current = <50000>;
