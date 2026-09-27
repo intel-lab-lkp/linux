@@ -713,35 +713,38 @@ s8 phy_get_tx_pwr_lmt(struct adapter *adapter, u32 reg_pwr_tbl_sel,
 	return pwr_lmt;
 }
 
+static void __phy_tx_power_limit_to_index(struct hal_com_data *hal_data, struct registry_priv *r,
+					  u8 reg, u8 bw, u8 ch, u8 rs)
+{
+	s8 tmp_pwr_lmt = hal_data->TxPwrLimit_2_4G[reg][bw][rs][ch][RF_PATH_A];
+	s8 tmp;
+	u8 path;
+	u8 pwr_base;
+
+	for (path = RF_PATH_A; path < MAX_RF_PATH_NUM; ++path) {
+		if (hal_data->odmpriv.PhyRegPgValueType == PHY_REG_PG_EXACT_VALUE)
+			pwr_base = hal_data->TxPwrByRateBase2_4G[path][rs];
+		else
+			pwr_base = r->reg_power_base * 2;
+
+		if (tmp_pwr_lmt != MAX_POWER_INDEX) {
+			tmp = tmp_pwr_lmt - pwr_base;
+			hal_data->TxPwrLimit_2_4G[reg][bw][rs][ch][path] = tmp;
+		}
+	}
+}
+
 void phy_tx_power_limit_to_index(struct adapter *adapter)
 {
 	struct hal_com_data *hal_data = GET_HAL_DATA(adapter);
 	struct registry_priv *r = &adapter->registrypriv;
-	u8 pwr_base = 0x2E;
 	u8 reg, bw, ch, rs;
-	s8 tmp = 0, tmp_pwr_lmt = 0;
-	u8 path = 0;
 
 	for (reg = 0; reg < MAX_REGULATION_NUM; ++reg) {
-		for (bw = 0; bw < MAX_2_4G_BANDWIDTH_NUM; ++bw) {
-			for (ch = 0; ch < CHANNEL_MAX_NUMBER_2G; ++ch) {
-				for (rs = 0; rs < MAX_RATE_SECTION_NUM; ++rs) {
-					tmp_pwr_lmt = hal_data->TxPwrLimit_2_4G[reg][bw][rs][ch][RF_PATH_A];
-
-					for (path = RF_PATH_A; path < MAX_RF_PATH_NUM; ++path) {
-						if (hal_data->odmpriv.PhyRegPgValueType == PHY_REG_PG_EXACT_VALUE)
-							pwr_base = hal_data->TxPwrByRateBase2_4G[path][rs];
-						else
-							pwr_base = r->reg_power_base * 2;
-
-						if (tmp_pwr_lmt != MAX_POWER_INDEX) {
-							tmp = tmp_pwr_lmt - pwr_base;
-							hal_data->TxPwrLimit_2_4G[reg][bw][rs][ch][path] = tmp;
-						}
-					}
-				}
-			}
-		}
+		for (bw = 0; bw < MAX_2_4G_BANDWIDTH_NUM; ++bw)
+			for (ch = 0; ch < CHANNEL_MAX_NUMBER_2G; ++ch)
+				for (rs = 0; rs < MAX_RATE_SECTION_NUM; ++rs)
+					__phy_tx_power_limit_to_index(hal_data, r, reg, bw, ch, rs);
 	}
 }
 
