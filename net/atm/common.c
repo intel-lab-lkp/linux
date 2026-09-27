@@ -327,6 +327,21 @@ static int check_ci(const struct atm_vcc *vcc, short vpi, int vci)
 	return 0;
 }
 
+/*
+ * ci_range.vpi_bits/vci_bits are documented as 1..8 / 1..16, with
+ * ATM_CI_MAX (-1) meaning "no restriction". Neither that sentinel nor
+ * the all-zero value the field holds before a driver's probe has set
+ * it (see the register-before-ci_range-is-set race in usbatm_atm_init())
+ * is a valid shift count, so compute the exclusive upper bound instead
+ * of shifting a VPI/VCI by a possibly negative or out-of-range amount.
+ */
+static int ci_range_bound(signed char bits, int max_bits)
+{
+	if (bits <= 0 || bits > max_bits)
+		return 1 << max_bits;
+	return 1 << bits;
+}
+
 static int find_ci(const struct atm_vcc *vcc, short *vpi, int *vci)
 {
 	static short p;        /* poor man's per-device cache */
@@ -342,12 +357,13 @@ static int find_ci(const struct atm_vcc *vcc, short *vpi, int *vci)
 	/* last scan may have left values out of bounds for current device */
 	if (*vpi != ATM_VPI_ANY)
 		p = *vpi;
-	else if (p >= 1 << vcc->dev->ci_range.vpi_bits)
+	else if (p >= ci_range_bound(vcc->dev->ci_range.vpi_bits, 8))
 		p = 0;
 	if (*vci != ATM_VCI_ANY)
 		c = *vci;
-	else if (c < ATM_NOT_RSV_VCI || c >= 1 << vcc->dev->ci_range.vci_bits)
-			c = ATM_NOT_RSV_VCI;
+	else if (c < ATM_NOT_RSV_VCI ||
+		 c >= ci_range_bound(vcc->dev->ci_range.vci_bits, 16))
+		c = ATM_NOT_RSV_VCI;
 	old_p = p;
 	old_c = c;
 	do {
@@ -358,13 +374,13 @@ static int find_ci(const struct atm_vcc *vcc, short *vpi, int *vci)
 		}
 		if (*vci == ATM_VCI_ANY) {
 			c++;
-			if (c >= 1 << vcc->dev->ci_range.vci_bits)
+			if (c >= ci_range_bound(vcc->dev->ci_range.vci_bits, 16))
 				c = ATM_NOT_RSV_VCI;
 		}
 		if ((c == ATM_NOT_RSV_VCI || *vci != ATM_VCI_ANY) &&
 		    *vpi == ATM_VPI_ANY) {
 			p++;
-			if (p >= 1 << vcc->dev->ci_range.vpi_bits)
+			if (p >= ci_range_bound(vcc->dev->ci_range.vpi_bits, 8))
 				p = 0;
 		}
 	} while (old_p != p || old_c != c);
@@ -378,8 +394,9 @@ static int __vcc_connect(struct atm_vcc *vcc, struct atm_dev *dev, short vpi,
 	int error;
 
 	if ((vpi != ATM_VPI_UNSPEC && vpi != ATM_VPI_ANY &&
-	    vpi >> dev->ci_range.vpi_bits) || (vci != ATM_VCI_UNSPEC &&
-	    vci != ATM_VCI_ANY && vci >> dev->ci_range.vci_bits))
+	    (vpi < 0 || vpi >= ci_range_bound(dev->ci_range.vpi_bits, 8))) ||
+	    (vci != ATM_VCI_UNSPEC && vci != ATM_VCI_ANY &&
+	    (vci < 0 || vci >= ci_range_bound(dev->ci_range.vci_bits, 16))))
 		return -EINVAL;
 	if (vci > 0 && vci < ATM_NOT_RSV_VCI && !capable(CAP_NET_BIND_SERVICE))
 		return -EPERM;
