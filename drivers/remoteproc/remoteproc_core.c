@@ -2842,3 +2842,7 @@ static void __exit remoteproc_exit(void)
 module_exit(remoteproc_exit);
 
 MODULE_DESCRIPTION("Generic Remote Processor Framework");
+
+#if IS_ENABLED(CONFIG_REMOTEPROC_KUNIT_TEST)
+#include "tests/remoteproc_core-kunit.h"
+#endif

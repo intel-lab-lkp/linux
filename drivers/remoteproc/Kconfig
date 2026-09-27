@@ -389,6 +389,16 @@ config XLNX_R5_REMOTEPROC
 
 	  It's safe to say N if not interested in using RPU r5f cores.
 
+config REMOTEPROC_KUNIT_TEST
+	bool "KUnit tests for remoteproc core" if !KUNIT_ALL_TESTS
+	depends on REMOTEPROC && KUNIT=y
+	default KUNIT_ALL_TESTS
+	help
+	  Enable KUnit tests for the remoteproc core, covering internal
+	  helpers such as carveout/address-translation logic.
+
+	  If unsure, say N.
+
 endif # REMOTEPROC
 
 endmenu
