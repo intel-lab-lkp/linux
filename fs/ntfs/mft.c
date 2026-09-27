@@ -1765,6 +1765,36 @@ err_out:
 }
 
 /*
+ * ntfs_mft_copy_tail - copy the runs of a runlist from a vcn onwards
+ * @rl:		runlist to copy from
+ * @vcn:	first vcn to copy
+ *
+ * Return a terminated copy of the runs of @rl covering @vcn and everything
+ * after it, NULL if there are none, or ERR_PTR(-ENOMEM).  The caller must
+ * hold the runlist lock and free the copy with kfree().
+ */
+static struct runlist_element *ntfs_mft_copy_tail(struct runlist_element *rl, s64 vcn)
+{
+	struct runlist_element *end, *copy;
+	s64 delta;
+
+	rl = ntfs_rl_find_vcn_nolock(rl, vcn);
+	if (!rl || !rl->length)
+		return NULL;
+	for (end = rl; end->length; end++)
+		;
+	copy = kmemdup(rl, (end - rl + 1) * sizeof(*rl), GFP_NOFS);
+	if (!copy)
+		return ERR_PTR(-ENOMEM);
+	delta = vcn - copy->vcn;
+	copy->vcn = vcn;
+	copy->length -= delta;
+	if (copy->lcn >= 0)
+		copy->lcn += delta;
+	return copy;
+}
+
+/*
  * ntfs_mft_data_extend_allocation_nolock - extend mft data attribute
  * @vol:	volume on which to extend the mft data attribute
  *
@@ -1791,7 +1821,7 @@ static int ntfs_mft_data_extend_allocation_nolock(struct ntfs_volume *vol)
 	s64 min_nr, nr, ll;
 	unsigned long flags;
 	struct ntfs_inode *mft_ni;
-	struct runlist_element *rl, *rl2;
+	struct runlist_element *rl, *rl2, *tail_rl;
 	struct ntfs_attr_search_ctx *ctx = NULL;
 	struct mft_record *mrec;
 	struct attr_record *a = NULL;
@@ -1904,7 +1934,6 @@ static int ntfs_mft_data_extend_allocation_nolock(struct ntfs_volume *vol)
 	if (IS_ERR(mrec)) {
 		ntfs_error(vol->sb, "Failed to map mft record.");
 		ret = PTR_ERR(mrec);
-		down_write(&mft_ni->runlist.lock);
 		goto undo_alloc;
 	}
 	ctx = ntfs_attr_get_search_ctx(mft_ni, mrec);
@@ -2015,7 +2044,6 @@ restore_undo_alloc:
 		write_unlock_irqrestore(&mft_ni->size_lock, flags);
 		ntfs_attr_put_search_ctx(ctx);
 		unmap_mft_record(mft_ni);
-		up_write(&mft_ni->runlist.lock);
 		/*
 		 * The only thing that is now wrong is ->allocated_size of the
 		 * base attribute extent which chkdsk should be able to fix.
@@ -2026,15 +2054,25 @@ restore_undo_alloc:
 	ctx->attr->data.non_resident.highest_vcn =
 			cpu_to_le64(old_last_vcn - 1);
 undo_alloc:
-	if (ntfs_cluster_free(mft_ni, old_last_vcn, -1, ctx) < 0) {
-		ntfs_error(vol->sb, "Failed to free clusters from mft data attribute.%s", es);
-		NVolSetErrors(vol);
-	}
-
+	/*
+	 * Entered without the runlist lock.  Take the new runs off the
+	 * runlist under it, and free their clusters from a copy once it is
+	 * dropped, as lcnbmp_lock nests outside it (see above).  If the copy
+	 * cannot be allocated, the clusters stay allocated until chkdsk.
+	 */
+	down_write(&mft_ni->runlist.lock);
+	tail_rl = ntfs_mft_copy_tail(mft_ni->runlist.rl, old_last_vcn);
 	if (ntfs_rl_truncate_nolock(vol, &mft_ni->runlist, old_last_vcn)) {
 		ntfs_error(vol->sb, "Failed to truncate mft data attribute runlist.%s", es);
 		NVolSetErrors(vol);
 	}
+	up_write(&mft_ni->runlist.lock);
+	if (IS_ERR(tail_rl) || ntfs_cluster_free_from_rl(vol, tail_rl)) {
+		ntfs_error(vol->sb, "Failed to free clusters from mft data attribute.%s", es);
+		NVolSetErrors(vol);
+	}
+	if (!IS_ERR(tail_rl))
+		kfree(tail_rl);
 	if (mp_extended && ntfs_attr_update_mapping_pairs(mft_ni, 0)) {
 		ntfs_error(vol->sb, "Failed to restore mapping pairs.%s",
 			   es);
