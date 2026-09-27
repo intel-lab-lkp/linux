@@ -25,6 +25,7 @@
 #include <linux/proc_fs.h>
 #include <linux/err.h>
 #include <linux/cpumask.h>
+#include <linux/pagemap.h>
 
 #include <linux/netfilter_ipv6/ip6_tables.h>
 #include <linux/netfilter/x_tables.h>
@@ -845,6 +846,7 @@ copy_entries_to_user(unsigned int total_size,
 
 	loc_cpu_entry = private->entries;
 
+	pagefault_disable();
 	/* FIXME: use iterator macros --RR */
 	/* ... then go back and fix counters and names */
 	for (off = 0, num = 0; off < total_size; off += e->next_offset, num++){
@@ -882,6 +884,7 @@ copy_entries_to_user(unsigned int total_size,
 	}
 
  free_counters:
+	pagefault_enable();
 	vfree(counters);
 	return ret;
 }
@@ -964,6 +967,7 @@ static int compat_table_info(const struct xt_table_info *info,
 
 static int get_info(struct net *net, void __user *user, const int *len)
 {
+	struct ip6t_getinfo info;
 	char name[XT_TABLE_MAXNAMELEN];
 	struct xt_table *t;
 	int ret;
@@ -981,7 +985,6 @@ static int get_info(struct net *net, void __user *user, const int *len)
 #endif
 	t = xt_request_find_table_lock(net, AF_INET6, name);
 	if (!IS_ERR(t)) {
-		struct ip6t_getinfo info;
 		const struct xt_table_info *private = t->private;
 #ifdef CONFIG_NETFILTER_XTABLES_COMPAT
 		struct xt_table_info tmp;
@@ -1002,10 +1005,7 @@ static int get_info(struct net *net, void __user *user, const int *len)
 		info.size = private->size;
 		strcpy(info.name, name);
 
-		if (copy_to_user(user, &info, *len) != 0)
-			ret = -EFAULT;
-		else
-			ret = 0;
+		ret = 0;
 
 		xt_table_unlock(t);
 		module_put(t->me);
@@ -1015,6 +1015,8 @@ static int get_info(struct net *net, void __user *user, const int *len)
 	if (in_compat_syscall())
 		xt_compat_unlock(AF_INET6);
 #endif
+	if (!ret && copy_to_user(user, &info, *len) != 0)
+		ret = -EFAULT;
 	return ret;
 }
 
@@ -1025,6 +1027,7 @@ get_entries(struct net *net, struct ip6t_get_entries __user *uptr,
 	int ret;
 	struct ip6t_get_entries get;
 	struct xt_table *t;
+	unsigned int retries = 0;
 
 	if (*len < sizeof(get))
 		return -EINVAL;
@@ -1035,19 +1038,49 @@ get_entries(struct net *net, struct ip6t_get_entries __user *uptr,
 
 	get.name[sizeof(get.name) - 1] = '\0';
 
+retry:
+	t = xt_find_table_lock(net, AF_INET6, get.name);
+	if (IS_ERR(t)) {
+		ret = PTR_ERR(t);
+		goto out;
+	}
+
+	if (get.size != t->private->size) {
+		ret = -EAGAIN;
+		module_put(t->me);
+		xt_table_unlock(t);
+		goto out;
+	}
+
+	module_put(t->me);
+	xt_table_unlock(t);
+
+	/* Fault in only after validating the table and requested size. */
+	if (fault_in_safe_writeable((char __user *)uptr->entrytable,
+				    get.size))
+		return -EFAULT;
+
 	t = xt_find_table_lock(net, AF_INET6, get.name);
 	if (!IS_ERR(t)) {
 		struct xt_table_info *private = t->private;
-		if (get.size == private->size)
+		if (get.size != private->size) {
+			ret = -EAGAIN;
+		} else {
 			ret = copy_entries_to_user(private->size,
 						   t, uptr->entrytable);
-		else
-			ret = -EAGAIN;
+		}
 
 		module_put(t->me);
 		xt_table_unlock(t);
 	} else
 		ret = PTR_ERR(t);
+
+out:
+	/* Allow three retries after the initial nofault copy. */
+	if (ret == -EFAULT && retries < 3) {
+		retries++;
+		goto retry;
+	}
 
 	return ret;
 }
@@ -1575,12 +1608,14 @@ compat_copy_entries_to_user(unsigned int total_size, struct xt_table *table,
 
 	pos = userptr;
 	size = total_size;
+	pagefault_disable();
 	xt_entry_foreach(iter, private->entries, total_size) {
 		ret = compat_copy_entry_to_user(iter, &pos,
 						&size, counters, i++);
 		if (ret != 0)
 			break;
 	}
+	pagefault_enable();
 
 	vfree(counters);
 	return ret;
@@ -1593,6 +1628,7 @@ compat_get_entries(struct net *net, struct compat_ip6t_get_entries __user *uptr,
 	int ret;
 	struct compat_ip6t_get_entries get;
 	struct xt_table *t;
+	unsigned int retries = 0;
 
 	if (*len < sizeof(get))
 		return -EINVAL;
@@ -1604,6 +1640,32 @@ compat_get_entries(struct net *net, struct compat_ip6t_get_entries __user *uptr,
 		return -EINVAL;
 
 	get.name[sizeof(get.name) - 1] = '\0';
+
+retry:
+	xt_compat_lock(AF_INET6);
+	t = xt_find_table_lock(net, AF_INET6, get.name);
+	if (!IS_ERR(t)) {
+		const struct xt_table_info *private = t->private;
+		struct xt_table_info info;
+
+		ret = compat_table_info(private, &info);
+		if (!ret && get.size != info.size)
+			ret = -EAGAIN;
+
+		xt_compat_flush_offsets(AF_INET6);
+		module_put(t->me);
+		xt_table_unlock(t);
+	} else {
+		ret = PTR_ERR(t);
+	}
+	xt_compat_unlock(AF_INET6);
+	if (ret)
+		goto out;
+
+	/* Fault in only after validating the table and requested size. */
+	if (fault_in_safe_writeable((char __user *)uptr->entrytable,
+				    get.size))
+		return -EFAULT;
 
 	xt_compat_lock(AF_INET6);
 	t = xt_find_table_lock(net, AF_INET6, get.name);
@@ -1620,10 +1682,17 @@ compat_get_entries(struct net *net, struct compat_ip6t_get_entries __user *uptr,
 		xt_compat_flush_offsets(AF_INET6);
 		module_put(t->me);
 		xt_table_unlock(t);
-	} else
+	} else {
 		ret = PTR_ERR(t);
+	}
 
 	xt_compat_unlock(AF_INET6);
+out:
+	/* Allow three retries after the initial nofault copy. */
+	if (ret == -EFAULT && retries < 3) {
+		retries++;
+		goto retry;
+	}
 	return ret;
 }
 #endif
