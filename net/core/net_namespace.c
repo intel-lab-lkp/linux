@@ -644,7 +644,7 @@ static void unhash_nsid(struct net *last)
 			int curr_id = id;
 
 			id++;
-			if (!peer->is_dying)
+			if (check_net(peer))
 				continue;
 
 			idr_remove(&tmp->netns_ids, curr_id);
@@ -681,7 +681,6 @@ static void cleanup_net(struct work_struct *work)
 	llist_for_each_entry(net, net_kill_list, cleanup_list) {
 		ns_tree_remove(net);
 		list_del_rcu(&net->list);
-		net->is_dying = true;
 	}
 	/* Cache last net. After we unlock rtnl, no one new net
 	 * added to net_namespace_list can assign nsid pointer
