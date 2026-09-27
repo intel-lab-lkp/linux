@@ -863,9 +863,8 @@ impl CmdqInner<'_> {
         };
 
         // Advance the read pointer past this message.
-        self.gsp_mem.advance_cpu_read_ptr(u32::try_from(
-            message.header.length().div_ceil(GSP_PAGE_SIZE),
-        )?);
+        self.gsp_mem
+            .advance_cpu_read_ptr(message.header.element_count());
 
         result
     }
