@@ -5822,7 +5822,8 @@ static int macb_probe(struct platform_device *pdev)
 		goto err_disable_clocks;
 	}
 
-	netdev = alloc_etherdev_mq(sizeof(*bp), num_queues);
+	netdev = devm_alloc_etherdev_mqs(&pdev->dev, sizeof(*bp),
+					 num_queues, num_queues);
 	if (!netdev) {
 		err = -ENOMEM;
 		goto err_disable_clocks;
@@ -5869,7 +5870,7 @@ static int macb_probe(struct platform_device *pdev)
 			IS_ENABLED(CONFIG_MACB_USE_HWSTAMP)) {
 		dev_err(&pdev->dev, "Timer adjust mode is not supported\n");
 		err = -EINVAL;
-		goto err_out_free_netdev;
+		goto err_disable_clocks;
 	}
 
 	/* By default we set to partial store and forward mode for zynqmp.
@@ -5903,7 +5904,7 @@ static int macb_probe(struct platform_device *pdev)
 		err = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(44));
 		if (err) {
 			dev_err(&pdev->dev, "failed to set DMA mask\n");
-			goto err_out_free_netdev;
+			goto err_disable_clocks;
 		}
 		bp->caps |= MACB_CAPS_DMA_64B;
 	}
@@ -5913,7 +5914,7 @@ static int macb_probe(struct platform_device *pdev)
 	netdev->irq = platform_get_irq(pdev, 0);
 	if (netdev->irq < 0) {
 		err = netdev->irq;
-		goto err_out_free_netdev;
+		goto err_disable_clocks;
 	}
 
 	/* MTU range: 68 - 1518 or 10240 */
@@ -5942,7 +5943,7 @@ static int macb_probe(struct platform_device *pdev)
 
 	err = of_get_ethdev_address(np, bp->netdev);
 	if (err == -EPROBE_DEFER)
-		goto err_out_free_netdev;
+		goto err_disable_clocks;
 	else if (err)
 		macb_get_hwaddr(bp);
 
@@ -5956,7 +5957,7 @@ static int macb_probe(struct platform_device *pdev)
 	/* IP specific init */
 	err = macb_init(pdev, macb_config);
 	if (err)
-		goto err_out_free_netdev;
+		goto err_disable_clocks;
 
 	err = macb_mii_init(bp);
 	if (err)
@@ -5998,9 +5999,6 @@ err_out_unregister_mdio:
 err_out_phy_exit:
 	phy_exit(bp->phy);
 
-err_out_free_netdev:
-	free_netdev(netdev);
-
 err_disable_clocks:
 	macb_clks_disable(pclk, hclk, tx_clk, rx_clk, tsu_clk);
 	pm_runtime_disable(&pdev->dev);
@@ -6034,7 +6032,6 @@ static void macb_remove(struct platform_device *pdev)
 		pm_runtime_dont_use_autosuspend(&pdev->dev);
 		pm_runtime_set_suspended(&pdev->dev);
 		phylink_destroy(bp->phylink);
-		free_netdev(netdev);
 	}
 }
 
