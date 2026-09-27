@@ -20,9 +20,14 @@ int mt7921_mcu_parse_response(struct mt76_dev *mdev, int cmd,
 	int ret = 0;
 
 	if (!skb) {
-		dev_err(mdev->dev, "Message %08x (seq %d) timeout\n",
-			cmd, seq);
-		mt792x_reset(mdev);
+		struct mt792x_dev *dev = container_of(mdev, struct mt792x_dev, mt76);
+
+		if (!test_bit(MT76_MCU_RESET, &dev->mphy.state) &&
+		    !test_bit(MT76_REMOVED, &dev->mphy.state)) {
+			dev_err(mdev->dev, "Message %08x (seq %d) timeout\n",
+				cmd, seq);
+			mt792x_reset(mdev);
+		}
 
 		return -ETIMEDOUT;
 	}

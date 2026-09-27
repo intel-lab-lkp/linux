@@ -1516,6 +1516,9 @@ void mt7925_mac_reset_work(struct work_struct *work)
 	struct mt76_connac_pm *pm = &dev->pm;
 	int i, ret;
 
+	if (test_bit(MT76_REMOVED, &dev->mphy.state))
+		return;
+
 	if (atomic_read(&dev->mt76.bus_hung))
 		return;
 

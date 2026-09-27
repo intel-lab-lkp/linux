@@ -664,6 +664,9 @@ void mt7921_mac_reset_work(struct work_struct *work)
 	struct mt76_connac_pm *pm = &dev->pm;
 	int i, ret;
 
+	if (test_bit(MT76_REMOVED, &dev->mphy.state))
+		return;
+
 	dev_dbg(dev->mt76.dev, "chip reset\n");
 	set_bit(MT76_RESET, &dev->mphy.state);
 	dev->hw_full_reset = true;
@@ -674,6 +677,9 @@ void mt7921_mac_reset_work(struct work_struct *work)
 	cancel_work_sync(&pm->wake_work);
 
 	for (i = 0; i < 10; i++) {
+		if (test_bit(MT76_REMOVED, &dev->mphy.state))
+			goto out;
+
 		if (atomic_read(&dev->mt76.bus_hung))
 			return;
 
@@ -700,9 +706,13 @@ void mt7921_mac_reset_work(struct work_struct *work)
 		ieee80211_scan_completed(dev->mphy.hw, &info);
 	}
 
+out:
 	dev->hw_full_reset = false;
-	clear_bit(MT76_RESET, &dev->mphy.state);
 	pm->suspended = false;
+	if (test_bit(MT76_REMOVED, &dev->mphy.state))
+		return;
+
+	clear_bit(MT76_RESET, &dev->mphy.state);
 	ieee80211_wake_queues(hw);
 	ieee80211_iterate_active_interfaces(hw,
 					    IEEE80211_IFACE_ITER_RESUME_ALL,

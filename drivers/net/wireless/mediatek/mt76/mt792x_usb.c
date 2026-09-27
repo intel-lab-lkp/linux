@@ -501,6 +501,7 @@ void mt792xu_disconnect(struct usb_interface *usb_intf)
 	if (!dev)
 		return;
 
+	set_bit(MT76_REMOVED, &dev->mphy.state);
 	set_bit(MT76_RESET, &dev->mphy.state);
 	set_bit(MT76_MCU_RESET, &dev->mphy.state);
 	clear_bit(MT76_STATE_RUNNING, &dev->mphy.state);
@@ -509,16 +510,15 @@ void mt792xu_disconnect(struct usb_interface *usb_intf)
 
 	cancel_work_sync(&dev->reset_work);
 	cancel_work_sync(&dev->init_work);
-	mt76_worker_disable(&dev->mt76.tx_worker);
+	cancel_delayed_work_sync(&dev->mphy.mac_work);
+	cancel_delayed_work_sync(&dev->pm.ps_work);
+	cancel_work_sync(&dev->pm.wake_work);
 	mt792xu_reset_work_cleanup(dev);
-	if (!test_bit(MT76_STATE_INITIALIZED, &dev->mphy.state)) {
-		set_bit(MT76_REMOVED, &dev->mphy.state);
+	if (!test_bit(MT76_STATE_INITIALIZED, &dev->mphy.state))
 		return;
-	}
 
 	mt76_unregister_device(&dev->mt76);
 	mt792xu_cleanup(dev);
-	set_bit(MT76_REMOVED, &dev->mphy.state);
 
 	usb_set_intfdata(usb_intf, NULL);
 

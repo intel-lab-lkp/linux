@@ -410,6 +410,11 @@ static int mt7921_abort_roc(struct mt792x_phy *phy, struct mt792x_vif *vif)
 	timer_delete_sync(&phy->roc_timer);
 	cancel_work_sync(&phy->roc_work);
 
+	if (test_bit(MT76_REMOVED, &phy->mt76->state)) {
+		clear_bit(MT76_STATE_ROC, &phy->mt76->state);
+		return 0;
+	}
+
 	mt792x_mutex_acquire(phy->dev);
 	if (test_and_clear_bit(MT76_STATE_ROC, &phy->mt76->state))
 		err = mt7921_mcu_abort_roc(phy, vif, phy->roc_token_id);
