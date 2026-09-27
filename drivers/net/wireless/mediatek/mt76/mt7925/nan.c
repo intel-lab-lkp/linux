@@ -697,6 +697,54 @@ void mt7925_nan_mcu_event(struct mt792x_dev *dev, struct sk_buff *skb)
 	}
 }
 
+int mt7925_nan_set_nmi_address(struct ieee80211_vif *vif,
+			       struct mt792x_dev *dev,
+			       const u8 *mac_address)
+{
+	struct mt76_dev *mdev = &dev->mt76;
+	struct {
+		u8 rsv[4];
+		struct mt7925_nan_nmi_addr_tlv nmi_addr_tlv;
+	} nmi_cmd = {
+		.nmi_addr_tlv = {
+			.tag = cpu_to_le16(NAN_UNI_CMD_CHANGE_NMI_ADDRESS),
+			.len = cpu_to_le16(sizeof(struct mt7925_nan_nmi_addr_tlv)),
+		},
+	};
+
+	if (!dev || !vif || !mac_address)
+		return -EINVAL;
+
+	if (is_zero_ether_addr(mac_address) ||
+	    is_multicast_ether_addr(mac_address))
+		return -EINVAL;
+
+	memcpy(nmi_cmd.nmi_addr_tlv.nmi_addr, mac_address, ETH_ALEN);
+
+	return mt76_mcu_send_msg(mdev, MCU_UNI_CMD(NAN), &nmi_cmd,
+				 sizeof(nmi_cmd), true);
+}
+
+int mt7925_nan_set_ndi_address(struct ieee80211_vif *vif,
+			       struct mt792x_dev *dev,
+			       const u8 *mac_address)
+{
+	if (!dev || !vif || !mac_address)
+		return -EINVAL;
+
+	if (is_zero_ether_addr(mac_address) ||
+	    is_multicast_ether_addr(mac_address))
+		return -EINVAL;
+
+	/*
+	 * The NDI address is not managed by firmware; it is the vif's own
+	 * hardware address, so updating it locally is sufficient.
+	 */
+	memcpy(vif->addr, mac_address, ETH_ALEN);
+
+	return 0;
+}
+
 static int mt7925_nan_avail_ctrl_tlv(struct sk_buff *skb,
 				     struct ieee80211_vif *vif)
 {
