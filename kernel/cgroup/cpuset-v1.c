@@ -61,6 +61,11 @@ struct cpuset_remove_tasks_struct {
 #define FM_MAXCNT 1000000	/* limit cnt to avoid overflow */
 #define FM_SCALE 1000		/* faux fixed point scale */
 
+static inline bool is_in_v2_mode(void)
+{
+	return cpuset_cgrp_subsys.root->flags & CGRP_ROOT_CPUSET_V2_MODE;
+}
+
 /* Initialize a frequency meter */
 static void fmeter_init(struct fmeter *fmp)
 {
@@ -357,10 +362,21 @@ int cpuset1_validate_change(struct cpuset *cur, struct cpuset *trial)
 		if (!is_cpuset_subset(c, trial))
 			goto out;
 
-	/* On legacy hierarchy, we must be a subset of our parent cpuset. */
+	/*
+	 * We can't shrink if we won't have enough room for SCHED_DEADLINE
+	 * tasks in a scheduling partition.
+	 */
+	if (is_cpu_exclusive(cur) && is_sched_load_balance(cur) &&
+	    !cpuset_cpumask_can_shrink(cur->cpus_allowed, trial->cpus_allowed))
+		goto out;
+
+	/*
+	 * On legacy hierarchy with v2 mode off, we must be a subset of our
+	 * parent cpuset.
+	 */
 	ret = -EACCES;
 	par = parent_cs(cur);
-	if (par && !is_cpuset_subset(trial, par))
+	if (par && !is_in_v2_mode() && !is_cpuset_subset(trial, par))
 		goto out;
 
 	/*
