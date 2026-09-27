@@ -774,7 +774,7 @@ static int hisi_femac_drv_probe(struct platform_device *pdev)
 	struct phy_device *phy;
 	int ret;
 
-	ndev = alloc_etherdev(sizeof(*priv));
+	ndev = devm_alloc_etherdev(dev, sizeof(*priv));
 	if (!ndev)
 		return -ENOMEM;
 
@@ -788,26 +788,26 @@ static int hisi_femac_drv_probe(struct platform_device *pdev)
 	priv->port_base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(priv->port_base)) {
 		ret = PTR_ERR(priv->port_base);
-		goto out_free_netdev;
+		goto out_return;
 	}
 
 	priv->glb_base = devm_platform_ioremap_resource(pdev, 1);
 	if (IS_ERR(priv->glb_base)) {
 		ret = PTR_ERR(priv->glb_base);
-		goto out_free_netdev;
+		goto out_return;
 	}
 
 	priv->clk = devm_clk_get(&pdev->dev, NULL);
 	if (IS_ERR(priv->clk)) {
 		dev_err(dev, "failed to get clk\n");
 		ret = -ENODEV;
-		goto out_free_netdev;
+		goto out_return;
 	}
 
 	ret = clk_prepare_enable(priv->clk);
 	if (ret) {
 		dev_err(dev, "failed to enable clk %d\n", ret);
-		goto out_free_netdev;
+		goto out_return;
 	}
 
 	priv->mac_rst = devm_reset_control_get(dev, "mac");
@@ -887,9 +887,7 @@ out_disconnect_phy:
 	phy_disconnect(phy);
 out_disable_clk:
 	clk_disable_unprepare(priv->clk);
-out_free_netdev:
-	free_netdev(ndev);
-
+out_return:
 	return ret;
 }
 
@@ -903,7 +901,6 @@ static void hisi_femac_drv_remove(struct platform_device *pdev)
 
 	phy_disconnect(ndev->phydev);
 	clk_disable_unprepare(priv->clk);
-	free_netdev(ndev);
 }
 
 #ifdef CONFIG_PM
