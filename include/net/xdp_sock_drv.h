@@ -95,6 +95,22 @@ static inline void xsk_pool_dma_unmap(struct xsk_buff_pool *pool,
 	xp_dma_unmap(pool, attrs);
 }
 
+/* RTNL must be held. Retain mappings, pages and buffer metadata without
+ * postponing the socket's detach callback. Do not return DMA-owned buffers
+ * with xsk_buff_free() until hardware has stopped, even after pool removal.
+ * Afterwards, free those buffers before putting the reference. This does not
+ * retain the FILL/COMPLETION rings or allow other pool operations after detach.
+ */
+static inline struct xsk_dma_ref *xsk_pool_dma_get(struct xsk_buff_pool *pool)
+{
+	return xp_dma_get(pool);
+}
+
+static inline void xsk_pool_dma_put(struct xsk_dma_ref *ref)
+{
+	xp_dma_put(ref);
+}
+
 static inline int xsk_pool_dma_map(struct xsk_buff_pool *pool,
 				   struct device *dev, unsigned long attrs)
 {
@@ -429,6 +445,15 @@ static inline void xsk_pool_fill_cb(struct xsk_buff_pool *pool,
 
 static inline void xsk_pool_dma_unmap(struct xsk_buff_pool *pool,
 				      unsigned long attrs)
+{
+}
+
+static inline struct xsk_dma_ref *xsk_pool_dma_get(struct xsk_buff_pool *pool)
+{
+	return NULL;
+}
+
+static inline void xsk_pool_dma_put(struct xsk_dma_ref *ref)
 {
 }
 
