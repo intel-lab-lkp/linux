@@ -905,7 +905,7 @@ static int hip04_mac_probe(struct platform_device *pdev)
 	int irq;
 	int ret;
 
-	ndev = alloc_etherdev(sizeof(struct hip04_priv));
+	ndev = devm_alloc_etherdev(d, sizeof(struct hip04_priv));
 	if (!ndev)
 		return -ENOMEM;
 
@@ -1021,7 +1021,6 @@ alloc_fail:
 	hip04_free_ring(ndev, d);
 init_fail:
 	of_node_put(priv->phy_node);
-	free_netdev(ndev);
 	return ret;
 }
 
@@ -1038,7 +1037,6 @@ static void hip04_remove(struct platform_device *pdev)
 	unregister_netdev(ndev);
 	of_node_put(priv->phy_node);
 	cancel_work_sync(&priv->tx_timeout_task);
-	free_netdev(ndev);
 }
 
 static const struct of_device_id hip04_mac_match[] = {
