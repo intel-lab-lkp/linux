@@ -480,6 +480,12 @@ mt7925_add_interface(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 
 	if (vif->type == NL80211_IFTYPE_NAN)
 		dev->nan_vif = vif;
+
+	if (vif->type == NL80211_IFTYPE_NAN ||
+	    vif->type == NL80211_IFTYPE_NAN_DATA)
+		INIT_DELAYED_WORK(&mvif->nan.mac_rand_work,
+				  mt7925_nan_mac_rand_work);
+
 out:
 	mt792x_mutex_release(dev);
 
@@ -492,6 +498,15 @@ mt7925_remove_interface(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 	struct mt792x_vif *mvif = (struct mt792x_vif *)vif->drv_priv;
 	struct mt792x_dev *dev = mt792x_hw_dev(hw);
 	struct mt792x_bss_conf *mconf;
+
+	/*
+	 * Stop before taking the dev mutex: mt7925_nan_mac_rand_work()
+	 * acquires it too, so cancel_delayed_work_sync() would deadlock
+	 * against a concurrently running instance if called while held.
+	 */
+	if (vif->type == NL80211_IFTYPE_NAN ||
+	    vif->type == NL80211_IFTYPE_NAN_DATA)
+		mt7925_nan_stop_mac_randomization(vif);
 
 	mt792x_mutex_acquire(dev);
 
