@@ -355,12 +355,52 @@ static void snd_ymfpci_pcm_capture_interrupt(struct snd_pcm_substream *substream
 	}
 }
 
+static void snd_ymfpci_pcm_control_work(struct work_struct *work)
+{
+	struct snd_ymfpci_pcm *ypcm = container_of(work, struct snd_ymfpci_pcm,
+							  control_work);
+	struct snd_ymfpci *chip = ypcm->chip;
+	struct snd_kcontrol *kctl;
+	unsigned int generation;
+	bool active;
+
+	kctl = chip->pcm_mixer[ypcm->substream->number].ctl;
+	if (!kctl)
+		return;
+
+	for (;;) {
+		scoped_guard(spinlock_irq, &chip->reg_lock) {
+			active = ypcm->control_active;
+			generation = ypcm->control_generation;
+		}
+		snd_ctl_activate_id(chip->card, &kctl->id, active);
+		scoped_guard(spinlock_irq, &chip->reg_lock) {
+			if (generation == ypcm->control_generation)
+				return;
+		}
+	}
+}
+
+static void snd_ymfpci_pcm_set_control_active(struct snd_ymfpci_pcm *ypcm,
+					      bool active)
+{
+	struct snd_ymfpci *chip = ypcm->chip;
+	struct snd_kcontrol *kctl;
+
+	scoped_guard(spinlock_irq, &chip->reg_lock) {
+		ypcm->control_active = active;
+		ypcm->control_generation++;
+	}
+	kctl = chip->pcm_mixer[ypcm->substream->number].ctl;
+	if (kctl)
+		snd_ctl_activate_id(chip->card, &kctl->id, active);
+}
+
 static int snd_ymfpci_playback_trigger(struct snd_pcm_substream *substream,
 				       int cmd)
 {
 	struct snd_ymfpci *chip = snd_pcm_substream_chip(substream);
 	struct snd_ymfpci_pcm *ypcm = substream->runtime->private_data;
-	struct snd_kcontrol *kctl = NULL;
 	int result = 0;
 
 	guard(spinlock)(&chip->reg_lock);
@@ -377,8 +417,9 @@ static int snd_ymfpci_playback_trigger(struct snd_pcm_substream *substream,
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
 		if (substream->pcm == chip->pcm && !ypcm->use_441_slot) {
-			kctl = chip->pcm_mixer[substream->number].ctl;
-			kctl->vd[0].access |= SNDRV_CTL_ELEM_ACCESS_INACTIVE;
+			ypcm->control_active = false;
+			ypcm->control_generation++;
+			schedule_work(&ypcm->control_work);
 		}
 		fallthrough;
 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
@@ -391,8 +432,6 @@ static int snd_ymfpci_playback_trigger(struct snd_pcm_substream *substream,
 	default:
 		return -EINVAL;
 	}
-	if (kctl)
-		snd_ctl_notify(chip->card, SNDRV_CTL_EVENT_MASK_INFO, &kctl->id);
 	return result;
 }
 static int snd_ymfpci_capture_trigger(struct snd_pcm_substream *substream,
@@ -636,7 +675,6 @@ static int snd_ymfpci_playback_prepare(struct snd_pcm_substream *substream)
 	struct snd_ymfpci *chip = snd_pcm_substream_chip(substream);
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct snd_ymfpci_pcm *ypcm = runtime->private_data;
-	struct snd_kcontrol *kctl;
 	unsigned int nvoice;
 
 	ypcm->period_size = runtime->period_size;
@@ -648,9 +686,7 @@ static int snd_ymfpci_playback_prepare(struct snd_pcm_substream *substream)
 					  substream->pcm == chip->pcm);
 
 	if (substream->pcm == chip->pcm && !ypcm->use_441_slot) {
-		kctl = chip->pcm_mixer[substream->number].ctl;
-		kctl->vd[0].access &= ~SNDRV_CTL_ELEM_ACCESS_INACTIVE;
-		snd_ctl_notify(chip->card, SNDRV_CTL_EVENT_MASK_INFO, &kctl->id);
+		snd_ymfpci_pcm_set_control_active(ypcm, true);
 	}
 	return 0;
 }
@@ -843,7 +879,10 @@ static const struct snd_pcm_hardware snd_ymfpci_capture =
 
 static void snd_ymfpci_pcm_free_substream(struct snd_pcm_runtime *runtime)
 {
-	kfree(runtime->private_data);
+	struct snd_ymfpci_pcm *ypcm = runtime->private_data;
+
+	cancel_work_sync(&ypcm->control_work);
+	kfree(ypcm);
 }
 
 static int snd_ymfpci_playback_open_1(struct snd_pcm_substream *substream)
@@ -870,6 +909,7 @@ static int snd_ymfpci_playback_open_1(struct snd_pcm_substream *substream)
 	ypcm->chip = chip;
 	ypcm->type = PLAYBACK_VOICE;
 	ypcm->substream = substream;
+	INIT_WORK(&ypcm->control_work, snd_ymfpci_pcm_control_work);
 	runtime->private_data = ypcm;
 	runtime->private_free = snd_ymfpci_pcm_free_substream;
 	return 0;
@@ -945,9 +985,7 @@ static int snd_ymfpci_playback_spdif_open(struct snd_pcm_substream *substream)
 		chip->spdif_opened++;
 	}
 
-	chip->spdif_pcm_ctl->vd[0].access &= ~SNDRV_CTL_ELEM_ACCESS_INACTIVE;
-	snd_ctl_notify(chip->card, SNDRV_CTL_EVENT_MASK_VALUE |
-		       SNDRV_CTL_EVENT_MASK_INFO, &chip->spdif_pcm_ctl->id);
+	snd_ctl_activate_id(chip->card, &chip->spdif_pcm_ctl->id, 1);
 	return 0;
 }
 
@@ -997,6 +1035,7 @@ static int snd_ymfpci_capture_open(struct snd_pcm_substream *substream,
 	ypcm->type = capture_bank_number + CAPTURE_REC;
 	ypcm->substream = substream;	
 	ypcm->capture_bank_number = capture_bank_number;
+	INIT_WORK(&ypcm->control_work, snd_ymfpci_pcm_control_work);
 	chip->capture_substream[capture_bank_number] = substream;
 	runtime->private_data = ypcm;
 	runtime->private_free = snd_ymfpci_pcm_free_substream;
@@ -1044,9 +1083,7 @@ static int snd_ymfpci_playback_spdif_close(struct snd_pcm_substream *substream)
 				  snd_ymfpci_readw(chip, YDSXGR_SPDIFOUTCTRL) & ~2);
 		snd_ymfpci_writew(chip, YDSXGR_SPDIFOUTSTATUS, chip->spdif_bits);
 	}
-	chip->spdif_pcm_ctl->vd[0].access |= SNDRV_CTL_ELEM_ACCESS_INACTIVE;
-	snd_ctl_notify(chip->card, SNDRV_CTL_EVENT_MASK_VALUE |
-		       SNDRV_CTL_EVENT_MASK_INFO, &chip->spdif_pcm_ctl->id);
+	snd_ctl_activate_id(chip->card, &chip->spdif_pcm_ctl->id, 0);
 	return snd_ymfpci_playback_close_1(substream);
 }
 

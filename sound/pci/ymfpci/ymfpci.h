@@ -12,6 +12,7 @@
 #include <sound/ac97_codec.h>
 #include <sound/timer.h>
 #include <linux/gameport.h>
+#include <linux/workqueue.h>
 
 /*
  *  Direct registers
@@ -260,6 +261,9 @@ struct snd_ymfpci_pcm {
 	             output_rear: 1,
 	             swap_rear: 1;
 	unsigned int update_pcm_vol;
+	struct work_struct control_work;
+	unsigned int control_generation;
+	bool control_active;
 	u32 period_size;		/* cached from runtime->period_size */
 	u32 buffer_size;		/* cached from runtime->buffer_size */
 	u32 period_pos;
