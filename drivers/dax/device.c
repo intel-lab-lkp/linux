@@ -409,7 +409,6 @@ static int dev_dax_probe(struct dev_dax *dev_dax)
 			return -ENOMEM;
 
 		pgmap->nr_range = dev_dax->nr_range;
-		dev_dax->pgmap = pgmap;
 
 		for (i = 0; i < dev_dax->nr_range; i++) {
 			struct range *range = &dev_dax->ranges[i].range;
@@ -450,7 +449,13 @@ static int dev_dax_probe(struct dev_dax *dev_dax)
 		return rc;
 
 	run_dax(dax_dev);
-	return devm_add_action_or_reset(dev, dev_dax_kill, dev_dax);
+	rc = devm_add_action_or_reset(dev, dev_dax_kill, dev_dax);
+	if (rc)
+		return rc;
+
+	/* Probe can no longer fail; expose the pgmap via dev_dax. */
+	dev_dax->pgmap = pgmap;
+	return 0;
 }
 
 static struct dax_device_driver device_dax_driver = {
