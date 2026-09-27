@@ -183,6 +183,13 @@ struct mt792x_nan {
 	unsigned long conn_bitmap;
 
 	/*
+	 * Set when firmware reports an active peer schedule via
+	 * NAN_UNI_EVENT_LOWPOWER_CTRL; cleared once the re-enable command
+	 * has been sent on resume.
+	 */
+	bool lowpower_mode;
+
+	/*
 	 * NMI/NDI MAC address randomization. Kept per-vif (rather than a
 	 * single pointer on mt792x_dev) because up to two NAN_DATA vifs can
 	 * coexist (see if_limits_nan_mcc/scc), each needing its own
