@@ -964,7 +964,4 @@ ctrl_fail:
 void usbtv_video_free(struct usbtv *usbtv)
 {
 	vb2_video_unregister_device(&usbtv->vdev);
-	v4l2_device_disconnect(&usbtv->v4l2_dev);
-
-	v4l2_device_put(&usbtv->v4l2_dev);
 }
