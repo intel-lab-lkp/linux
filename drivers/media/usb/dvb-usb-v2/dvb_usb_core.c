@@ -637,7 +637,6 @@ static int dvb_usbv2_adapter_frontend_init(struct dvb_usb_adapter *adap)
 	dev_dbg(&d->udev->dev, "%s: adap=%d\n", __func__, adap->id);
 
 	memset(adap->fe, 0, sizeof(adap->fe));
-	adap->active_fe = -1;
 
 	if (d->props->frontend_attach) {
 		ret = d->props->frontend_attach(adap);
@@ -794,6 +793,9 @@ static int dvb_usbv2_adapter_init(struct dvb_usb_device *d)
 			adap->pid_filtering  = 1;
 			adap->max_feed_count = adap->props->pid_filter_count;
 		}
+
+		/* demux is live before frontends attach: no feed until then */
+		adap->active_fe = -1;
 
 		ret = dvb_usbv2_adapter_stream_init(adap);
 		if (ret)
