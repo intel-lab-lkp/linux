@@ -531,6 +531,24 @@ err:
 	return 1;
 }
 
+/*
+ * Only corrected errors reported by the memory controller say something about
+ * the health of a DRAM page. Corrected cache hierarchy errors originate in the
+ * cache itself, their address only names the line that happened to be cached.
+ */
+static bool cec_is_dram_error(struct mce *m)
+{
+	switch (m->cpuvendor) {
+	case X86_VENDOR_INTEL:
+	case X86_VENDOR_ZHAOXIN:
+		/* Memory controller errors: MCACOD 000F 0000 1MMM CCCC */
+		return (m->status & 0xef80) == BIT(7);
+
+	default:
+		return mce_is_memory_error(m);
+	}
+}
+
 static int cec_notifier(struct notifier_block *nb, unsigned long val,
 			void *data)
 {
@@ -540,7 +558,7 @@ static int cec_notifier(struct notifier_block *nb, unsigned long val,
 		return NOTIFY_DONE;
 
 	/* We eat only correctable DRAM errors with usable addresses. */
-	if (mce_is_memory_error(m) &&
+	if (cec_is_dram_error(m) &&
 	    mce_is_correctable(m)  &&
 	    mce_usable_address(m)) {
 		if (!cec_add_elem(m->addr >> PAGE_SHIFT)) {
