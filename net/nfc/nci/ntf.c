@@ -30,21 +30,57 @@
 static int nci_core_reset_ntf_packet(struct nci_dev *ndev,
 				     const struct sk_buff *skb)
 {
-	/* Handle NCI 2.x core reset notification */
 	const struct nci_core_reset_ntf *ntf;
 
-	if (skb->len < sizeof(struct nci_core_reset_ntf))
-		return -EINVAL;
+	/*
+	 * Return 0 on short or unhandled packets so driver-specific
+	 * notification hooks (such as fdp firmware patching) can still run.
+	 */
+	if (skb->len < 2)
+		return 0;
 
-	ntf = (struct nci_core_reset_ntf *)skb->data;
+	ntf = (const struct nci_core_reset_ntf *)skb->data;
+
+	/*
+	 * If the controller reports an unrecoverable error while a reset is
+	 * pending, fail the in-flight reset request.
+	 */
+	if (ntf->reset_trigger == NCI_RESET_TRIGGER_ERROR) {
+		if (test_and_clear_bit(NCI_RESET_PENDING, &ndev->flags))
+			nci_req_complete(ndev, NCI_STATUS_FAILED);
+		return 0;
+	}
+
+	/*
+	 * Only CORE_RESET_CMD-triggered notifications (0x02) complete a
+	 * pending reset request in NCI 2.0. Power-on (0x01) and proprietary
+	 * triggers (>= 0xA0) must not update core protocol state.
+	 */
+	if (ntf->reset_trigger != NCI_RESET_TRIGGER_RESET_CMD)
+		return 0;
+
+	if (!test_and_clear_bit(NCI_RESET_PENDING, &ndev->flags)) {
+		pr_warn_ratelimited("unexpected CORE_RESET_NTF\n");
+		return 0;
+	}
+
+	if (skb->len < offsetofend(struct nci_core_reset_ntf,
+				   manufacturer_specific_len)) {
+		nci_req_complete(ndev, NCI_STATUS_FAILED);
+		return 0;
+	}
 
 	ndev->nci_ver = ntf->nci_ver;
 	pr_debug("nci_ver 0x%x, config_status 0x%x\n",
 		 ntf->nci_ver, ntf->config_status);
 
 	ndev->manufact_id = ntf->manufact_id;
-	ndev->manufact_specific_info =
-		__le32_to_cpu(ntf->manufact_specific_info);
+	if (ntf->manufacturer_specific_len >= sizeof(__le32) &&
+	    skb->len >= sizeof(struct nci_core_reset_ntf))
+		ndev->manufact_specific_info =
+			__le32_to_cpu(ntf->manufact_specific_info);
+	else
+		ndev->manufact_specific_info = 0;
 
 	nci_req_complete(ndev, NCI_STATUS_OK);
 

@@ -32,16 +32,32 @@ static void nci_core_reset_rsp_packet(struct nci_dev *ndev,
 
 	pr_debug("status 0x%x\n", rsp->status);
 
-	/* Handle NCI 1.x ver */
-	if (skb->len != 1) {
-		if (rsp->status == NCI_STATUS_OK) {
-			ndev->nci_ver = rsp->nci_ver;
-			pr_debug("nci_ver 0x%x, config_status 0x%x\n",
-				 rsp->nci_ver, rsp->config_status);
-		}
+	/*
+	 * If no reset request is pending, ignore unexpected responses to avoid
+	 * prematurely completing an unrelated request.
+	 */
+	if (!test_bit(NCI_RESET_PENDING, &ndev->flags))
+		return;
+
+	if (rsp->status != NCI_STATUS_OK) {
+		if (test_and_clear_bit(NCI_RESET_PENDING, &ndev->flags))
+			nci_req_complete(ndev, rsp->status);
+		return;
+	}
+
+	/* Handle NCI 1.x ver: completed by RSP */
+	if (skb->len >= sizeof(*rsp)) {
+		if (!test_and_clear_bit(NCI_RESET_PENDING, &ndev->flags))
+			return;
+
+		ndev->nci_ver = rsp->nci_ver;
+		pr_debug("nci_ver 0x%x, config_status 0x%x\n",
+			 rsp->nci_ver, rsp->config_status);
 
 		nci_req_complete(ndev, rsp->status);
 	}
+
+	/* NCI 2.x ver: status is OK, wait for CORE_RESET_NTF to complete */
 }
 
 static u8 nci_core_init_rsp_packet_v1(struct nci_dev *ndev,
