@@ -45,7 +45,9 @@ static void rxrpc_activate_bundle(struct rxrpc_bundle *bundle)
 static void rxrpc_put_client_connection_id(struct rxrpc_local *local,
 					   struct rxrpc_connection *conn)
 {
+	idr_lock(&local->conn_ids);
 	idr_remove(&local->conn_ids, conn->proto.cid >> RXRPC_CIDSHIFT);
+	idr_unlock(&local->conn_ids);
 }
 
 /*
@@ -162,8 +164,10 @@ rxrpc_alloc_client_connection(struct rxrpc_bundle *bundle)
 	if (!conn)
 		return ERR_PTR(-ENOMEM);
 
+	idr_lock(&local->conn_ids);
 	id = idr_alloc_cyclic(&local->conn_ids, conn, 1, 0x40000000,
 			      GFP_ATOMIC | __GFP_NOWARN);
+	idr_unlock(&local->conn_ids);
 	if (id < 0) {
 		kfree(conn);
 		return ERR_PTR(id);
