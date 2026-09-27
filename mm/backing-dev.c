@@ -808,6 +808,37 @@ struct bdi_writeback *wb_get_lookup(struct backing_dev_info *bdi,
 }
 
 /**
+ * wb_get_lookup_dying - get a killed wb for a given memcg
+ * @bdi: target bdi
+ * @memcg_css: cgroup_subsys_state of the target memcg (must have positive ref)
+ *
+ * wb_get_lookup() only finds wbs that are still in @bdi->cgwb_tree.  A
+ * killed wb leaves the tree but stays on @bdi->wb_list until it is
+ * released, and inodes attached to it can keep collecting dirty pages from
+ * other memcgs until they are written back and switched away, so foreign
+ * flushes still need to reach it.  Returns a wb of @memcg_css on @bdi which
+ * has dirty IO, with a reference held, or %NULL.  If there are several,
+ * the first one found is returned; this is best effort.
+ */
+struct bdi_writeback *wb_get_lookup_dying(struct backing_dev_info *bdi,
+					  struct cgroup_subsys_state *memcg_css)
+{
+	struct bdi_writeback *wb;
+
+	rcu_read_lock();
+	list_for_each_entry_rcu(wb, &bdi->wb_list, bdi_node) {
+		if (wb->memcg_css == memcg_css && wb_has_dirty_io(wb) &&
+		    wb_tryget(wb)) {
+			rcu_read_unlock();
+			return wb;
+		}
+	}
+	rcu_read_unlock();
+
+	return NULL;
+}
+
+/**
  * wb_get_create - get wb for a given memcg, create if necessary
  * @bdi: target bdi
  * @memcg_css: cgroup_subsys_state of the target memcg (must have positive ref)

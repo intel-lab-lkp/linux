@@ -1189,6 +1189,8 @@ int cgroup_writeback_by_id(u64 bdi_id, int memcg_id,
 	 * there's nothing to flush, don't create one.
 	 */
 	wb = wb_get_lookup(bdi, memcg_css);
+	if (!wb)
+		wb = wb_get_lookup_dying(bdi, memcg_css);
 	if (!wb) {
 		ret = -ENOENT;
 		goto out_css_put;
