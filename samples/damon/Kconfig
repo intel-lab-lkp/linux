@@ -40,4 +40,16 @@ config SAMPLE_DAMON_MTIER
 
 	  If unsure, say N.
 
+config SAMPLE_DAMON_RUST_PRCL
+	bool "Rust sample module for DAMON-based access-aware proactive reclamation"
+	depends on DAMON && DAMON_VADDR && RUST && DEBUG_FS
+	help
+	  This option builds the Rust implementation of DAMON-based prcl sample.
+
+	  The module exposes two debugfs interfaces under
+	  /sys/kernel/debug/rust_prcl/ for starting/stopping monitoring
+	  and setting the target PID.
+
+	  If unsure, say N.
+
 endmenu
