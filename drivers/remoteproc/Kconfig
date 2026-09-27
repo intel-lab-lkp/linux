@@ -396,6 +396,16 @@ config SUNXI_REMOTEPROC
 	  co-processor on Allwinner A523, A527, and T527 SoCs via the
 	  remote processor framework.
 
+config SUNXI_REMOTEPROC_KUNIT_TEST
+	tristate "KUnit tests for Allwinner sunxi remoteproc" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  KUnit tests for the Allwinner sunxi_rproc driver, covering
+	  da_to_va() address translation logic and boundary conditions
+	  across dedicated SRAM spaces, DRAM carveouts, and trace regions.
+	  Say Y here to run these tests during boot or via kunit.py.
+
 endif # REMOTEPROC
 
 endmenu
