@@ -84,6 +84,7 @@ ret=0
 # all tests in this script. Can be overridden with -t option
 TESTS="
 	vxlan_vnifilter_api
+	vxlan_vnifilter_dump_replay
 	vxlan_vnifilter_datapath
 	vxlan_vnifilter_datapath_pervni
 	vxlan_vnifilter_datapath_mgroup
@@ -163,8 +164,9 @@ check_vm_connectivity() {
 cleanup() {
 	ip link del veth-hv-1 2>/dev/null || true
 	ip link del vethhv-11 vethhv-12 vethhv-21 vethhv-22 2>/dev/null || true
+	ip link del veth-host 2>/dev/null || true
 
-	cleanup_ns $hv_1 $hv_2 $vm_11 $vm_21 $vm_12 $vm_22 $vm_31 $vm_32
+	cleanup_ns $hv_1 $hv_2 $vm_11 $vm_21 $vm_12 $vm_22 $vm_31 $vm_32 $testns
 }
 
 trap cleanup EXIT
@@ -371,6 +373,116 @@ vxlan_vnifilter_api()
 	# change vxlan vnifilter flag
 	run_cmd "ip -netns $testns link set dev vxlan-ext1 type vxlan external novnifilter"
 	log_test $? 2 "Cannot unset vnifilter flag on a device"
+
+	# A single request may add at most 4096 VNIs. bridge(8) puts one
+	# VXLAN_VNIFILTER_ENTRY per comma-separated item into a single message,
+	# so both the single-entry and the multi-entry paths are reachable here.
+
+	# The largest accepted add, and one VNI more rejected.
+	run_cmd "bridge -netns $testns vni add dev vxlan-ext1 vni 10000-14095"
+	log_test $? 0 "Add a request of the maximum VNI count"
+
+	# The rejected oversized add must install nothing. Assert the range is
+	# absent first: vxlan_vni_add() folds an already-present VNI into the
+	# update path and returns 0, so a later probe cannot tell "installed
+	# nothing" from "installed part" unless it started absent.
+	run_cmd "bridge -netns $testns vni show dev vxlan-ext1 | grep -qw 20000"
+	log_test $? 1 "VNI 20000 absent before the oversized add"
+	run_cmd "bridge -netns $testns vni add dev vxlan-ext1 vni 20000-24096"
+	log_test $? 255 "Cannot add a request over the maximum VNI count"
+	run_cmd "bridge -netns $testns vni show dev vxlan-ext1 | grep -qw 20000"
+	log_test $? 1 "The rejected oversized add installed nothing"
+
+	# Two entries each under the limit but summing over it: the per-message
+	# total is what is bounded, not the span of one entry. This is the shape
+	# a per-entry check would have let through.
+	run_cmd "bridge -netns $testns vni show dev vxlan-ext1 | grep -qw 30000"
+	log_test $? 1 "VNI 30000 absent before the oversized multi-entry add"
+	run_cmd "bridge -netns $testns vni add dev vxlan-ext1 vni 30000-32047,32048-34097"
+	log_test $? 255 "Cannot add a multi-entry request summing over the maximum"
+	run_cmd "bridge -netns $testns vni show dev vxlan-ext1 | grep -qw 30000"
+	log_test $? 1 "The rejected multi-entry add installed nothing"
+
+	# The cap is symmetric: a delete may touch at most the maximum too.
+	# Install a maximum-size range and the VNI past it, so the max+1 delete
+	# below has every VNI present and can only be refused by the cap, not by
+	# a missing VNI.
+	run_cmd "bridge -netns $testns vni add dev vxlan-ext1 vni 40000-44095"
+	log_test $? 0 "Populate a maximum-size range to delete"
+	run_cmd "bridge -netns $testns vni add dev vxlan-ext1 vni 44096"
+	log_test $? 0 "Add the VNI past the maximum range"
+	run_cmd "bridge -netns $testns vni del dev vxlan-ext1 vni 40000-44096"
+	log_test $? 255 "Cannot delete a request over the maximum VNI count"
+	run_cmd "bridge -netns $testns vni del dev vxlan-ext1 vni 40000-44095"
+	log_test $? 0 "Delete a request of the maximum VNI count"
+	run_cmd "bridge -netns $testns vni del dev vxlan-ext1 vni 44096"
+	log_test $? 0 "Delete the VNI past the maximum range"
+
+	# A within-cap delete of a never-installed range reaches the handler and
+	# fails there on the missing VNI, not on the cap.
+	run_cmd "bridge -netns $testns vni del dev vxlan-ext1 vni 50000-50010"
+	log_test $? 255 "Cannot delete a range that was never installed"
+
+	# A start above the end selects nothing and is accepted as a no-op.
+	# Use a VNI no earlier case installs, so the absence check is meaningful.
+	run_cmd "bridge -netns $testns vni show dev vxlan-ext1 | grep -qw 55000"
+	log_test $? 1 "VNI 55000 absent before the inverted range"
+	run_cmd "bridge -netns $testns vni add dev vxlan-ext1 vni 55000-50000"
+	log_test $? 0 "An inverted range is accepted as a no-op"
+	run_cmd "bridge -netns $testns vni show dev vxlan-ext1 | grep -qw 55000"
+	log_test $? 1 "The inverted range installed nothing"
+
+	# The VXLAN header carries 24 bits. The bound is on both endpoints, so a
+	# range whose END alone leaves the space is rejected too.
+	run_cmd "bridge -netns $testns vni add dev vxlan-ext1 vni 16777215"
+	log_test $? 0 "Add the highest VNI the header can carry"
+	run_cmd "bridge -netns $testns vni del dev vxlan-ext1 vni 16777215"
+	log_test $? 0 "Delete the highest VNI the header can carry"
+	run_cmd "bridge -netns $testns vni add dev vxlan-ext1 vni 16777215-16777216"
+	log_test $? 255 "Cannot add a range whose END leaves the 24-bit space"
+	run_cmd "bridge -netns $testns vni add dev vxlan-ext1 vni 100-4294967295"
+	log_test $? 255 "Cannot add a range whose END wraps past the 24-bit space"
+}
+
+# A device may hold a contiguous run longer than one request's limit, built
+# from several requests. The dump coalesces it, so the dump must break the run
+# into entries each no larger than the limit, or the configuration it reports
+# cannot be replayed. Install such a run, then feed every range the dump
+# reports back into a second device and require all to be accepted.
+vxlan_vnifilter_dump_replay()
+{
+	local opts="external vnifilter local 172.16.0.1 dev veth-testns"
+	local range rc=0 src_ranges dst_ranges
+
+	cleanup_vnifilter_api &>/dev/null
+	setup_vnifilter_api
+
+	# The destination is on a different dstport so re-adding the same VNIs
+	# does not collide with the source under vxlan_vni_in_use().
+	run_cmd "ip -netns $testns link add vxlan-src type vxlan $opts dstport 4789"
+	log_test $? 0 "dump/replay: create source device"
+	run_cmd "ip -netns $testns link add vxlan-dst type vxlan $opts dstport 4790"
+	log_test $? 0 "dump/replay: create destination device"
+
+	# 8192 contiguous VNIs sharing the default remote: one run, twice the
+	# limit, installed in two accepted requests.
+	run_cmd "bridge -netns $testns vni add dev vxlan-src vni 10000-14095"
+	run_cmd "bridge -netns $testns vni add dev vxlan-src vni 14096-18191"
+	log_test $? 0 "dump/replay: populate a run larger than the limit"
+
+	for range in $(bridge -netns $testns vni show dev vxlan-src | \
+		       grep -oE '[0-9]+-[0-9]+|[0-9]{2,}'); do
+		bridge -netns $testns vni add dev vxlan-dst vni "$range" \
+			2>/dev/null || rc=$?
+	done
+	log_test $rc 0 "dump/replay: every dumped entry is accepted on replay"
+
+	src_ranges=$(bridge -netns $testns vni show dev vxlan-src | \
+		     grep -oE '[0-9]+-[0-9]+|[0-9]{2,}' | sort)
+	dst_ranges=$(bridge -netns $testns vni show dev vxlan-dst | \
+		     grep -oE '[0-9]+-[0-9]+|[0-9]{2,}' | sort)
+	[ -n "$src_ranges" ] && [ "$src_ranges" = "$dst_ranges" ]
+	log_test $? 0 "dump/replay: source and destination dump the same ranges"
 }
 
 # Sanity test vnifilter datapath
