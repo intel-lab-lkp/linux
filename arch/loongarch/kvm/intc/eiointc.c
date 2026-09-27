@@ -112,8 +112,11 @@ static inline void eiointc_update_sw_coremap(struct loongarch_eiointc *s,
 void eiointc_set_irq(struct loongarch_eiointc *s, int irq, int level)
 {
 	unsigned long flags;
-	unsigned long *isr = (unsigned long *)s->isr;
+	unsigned long *isr;
 
+	if (!s)
+		return;
+	isr = (unsigned long *)s->isr;
 	spin_lock_irqsave(&s->lock, flags);
 	level ? __set_bit(irq, isr) : __clear_bit(irq, isr);
 	eiointc_update_irq(s, irq, level);

@@ -48,6 +48,9 @@ void pch_pic_set_irq(struct loongarch_pch_pic *s, int irq, int level)
 {
 	u64 mask = BIT(irq);
 
+	if (!s)
+		return;
+
 	spin_lock(&s->lock);
 	if (level)
 		s->irr |= mask; /* set irr */
