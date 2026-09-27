@@ -189,5 +189,33 @@
         "teardown": [
             "$TC qdisc del dev $DUMMY handle 1: root"
         ]
+    },
+    {
+        "id": "7f31",
+        "name": "Drop GSO packet with unset transport header",
+        "category": [
+            "qdisc",
+            "tbf"
+        ],
+        "plugins": {
+            "requires": "nsPlugin"
+        },
+        "setup": [
+            "$IP link set dev $IFB mtu 256",
+            "$TC qdisc add dev $IFB handle 1: root tbf limit 4096 burst 300 rate 1mbit"
+        ],
+        "cmdUnderTest": "python3 ./tdc_vnet.py $IP $TC $IFB",
+        "expExitCode": "0",
+        "verifyCmd": "$TC -s -j qdisc show dev $IFB root",
+        "matchJSON": [
+            {
+                "kind": "tbf",
+                "handle": "1:",
+                "drops": 2
+            }
+        ],
+        "teardown": [
+            "$TC qdisc del dev $IFB handle 1: root"
+        ]
     }
 ]

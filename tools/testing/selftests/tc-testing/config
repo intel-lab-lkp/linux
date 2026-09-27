@@ -5,6 +5,9 @@
 CONFIG_DUMMY=y
 CONFIG_VETH=y
 CONFIG_IFB=y
+CONFIG_TUN=y
+CONFIG_DEBUG_KERNEL=y
+CONFIG_DEBUG_NET=y
 
 #
 # Core Netfilter Configuration
