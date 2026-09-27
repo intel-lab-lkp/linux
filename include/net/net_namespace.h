@@ -57,6 +57,9 @@ struct uevent_sock;
 struct netns_ipvs;
 struct bpf_prog;
 
+enum {
+	NET_PRE_EXIT_DONE = 1,
+};
 
 #define NETDEV_HASHBITS    8
 #define NETDEV_HASHENTRIES (1 << NETDEV_HASHBITS)
@@ -125,6 +128,7 @@ struct net {
 	 * it is critical that it is on a read_mostly cache line.
 	 */
 	u32			hash_mix;
+	u8			undo_state;
 
 	struct net_device       *loopback_dev;          /* The loopback */
 
@@ -362,6 +366,11 @@ static inline void net_passive_inc(struct net *net)
 static inline bool net_initialized(const struct net *net)
 {
 	return READ_ONCE(net->list.next);
+}
+
+static inline bool net_pre_exit_done(const struct net *net)
+{
+	return READ_ONCE(net->undo_state) >= NET_PRE_EXIT_DONE;
 }
 
 static inline void __netns_tracker_alloc(struct net *net,

@@ -226,7 +226,9 @@ static void ops_undo_list(const struct list_head *ops_list,
 			  bool expedite_rcu)
 {
 	const struct pernet_operations *saved_ops;
+	bool dying = ops_list == &pernet_list;
 	bool hold_rtnl = false;
+	struct net *net;
 
 	if (!ops)
 		ops = list_entry(ops_list, typeof(*ops), list);
@@ -247,6 +249,11 @@ static void ops_undo_list(const struct list_head *ops_list,
 		synchronize_rcu_expedited();
 	else
 		synchronize_rcu();
+
+	if (dying) {
+		list_for_each_entry(net, net_exit_list, exit_list)
+			WRITE_ONCE(net->undo_state, NET_PRE_EXIT_DONE);
+	}
 
 	if (hold_rtnl)
 		ops_exit_rtnl_list(ops_list, saved_ops, net_exit_list);
