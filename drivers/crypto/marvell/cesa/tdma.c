@@ -76,7 +76,14 @@ void mv_cesa_dma_cleanup(struct mv_cesa_req *dreq)
 			dma_pool_free(cesa_dev->dma->op_pool, tdma->op,
 				      le32_to_cpu(tdma->src));
 
-		tdma = tdma->next;
+		/*
+		 * Stop at the end of our own chain. Requests queued back to
+		 * back are linked together in mv_cesa_tdma_chain() and the
+		 * link is only severed once the engine reaches the previous
+		 * request's END_OF_REQ descriptor, so a request that never
+		 * ran may still point at its successor.
+		 */
+		tdma = (old_tdma == dreq->chain.last) ? NULL : old_tdma->next;
 		dma_pool_free(cesa_dev->dma->tdma_desc_pool, old_tdma,
 			      old_tdma->cur_dma);
 	}
