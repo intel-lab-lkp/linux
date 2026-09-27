@@ -739,35 +739,35 @@ s8 phy_get_tx_pwr_lmt(struct adapter *adapter, u32 reg_pwr_tbl_sel,
 	return pwr_lmt;
 }
 
-void phy_tx_power_limit_to_index(struct adapter *Adapter)
+void phy_tx_power_limit_to_index(struct adapter *adapter)
 {
-	struct hal_com_data	*pHalData = GET_HAL_DATA(Adapter);
-	struct registry_priv *r = &Adapter->registrypriv;
-	u8 BW40PwrBasedBm2_4G = 0x2E;
-	u8 regulation, bw, channel, rateSection;
-	s8 tempValue = 0, tempPwrLmt = 0;
-	u8 rfPath = 0;
+	struct hal_com_data *hal_data = GET_HAL_DATA(adapter);
+	struct registry_priv *r = &adapter->registrypriv;
+	u8 pwr_base = 0x2E;
+	u8 reg, bw, ch, rs;
+	s8 tmp = 0, tmp_pwr_lmt = 0;
+	u8 path = 0;
 
-	for (regulation = 0; regulation < MAX_REGULATION_NUM; ++regulation) {
+	for (reg = 0; reg < MAX_REGULATION_NUM; ++reg) {
 		for (bw = 0; bw < MAX_2_4G_BANDWIDTH_NUM; ++bw) {
-			for (channel = 0; channel < CHANNEL_MAX_NUMBER_2G; ++channel) {
-				for (rateSection = 0; rateSection < MAX_RATE_SECTION_NUM; ++rateSection) {
-					tempPwrLmt = pHalData->TxPwrLimit_2_4G[regulation][bw][rateSection][channel][RF_PATH_A];
+			for (ch = 0; ch < CHANNEL_MAX_NUMBER_2G; ++ch) {
+				for (rs = 0; rs < MAX_RATE_SECTION_NUM; ++rs) {
+					tmp_pwr_lmt = hal_data->TxPwrLimit_2_4G[reg][bw][rs][ch][RF_PATH_A];
 
-					for (rfPath = RF_PATH_A; rfPath < MAX_RF_PATH_NUM; ++rfPath) {
-						if (pHalData->odmpriv.PhyRegPgValueType == PHY_REG_PG_EXACT_VALUE) {
-							if (rateSection == 2) /*  HT 1T */
-								BW40PwrBasedBm2_4G = PHY_GetTxPowerByRateBase(Adapter, rfPath, HT_MCS0_MCS7);
-							else if (rateSection == 1) /*  OFDM */
-								BW40PwrBasedBm2_4G = PHY_GetTxPowerByRateBase(Adapter, rfPath, OFDM);
-							else if (rateSection == 0) /*  CCK */
-								BW40PwrBasedBm2_4G = PHY_GetTxPowerByRateBase(Adapter, rfPath, CCK);
+					for (path = RF_PATH_A; path < MAX_RF_PATH_NUM; ++path) {
+						if (hal_data->odmpriv.PhyRegPgValueType == PHY_REG_PG_EXACT_VALUE) {
+							if (rs == 2) /*  HT 1T */
+								pwr_base = PHY_GetTxPowerByRateBase(adapter, path, HT_MCS0_MCS7);
+							else if (rs == 1) /*  OFDM */
+								pwr_base = PHY_GetTxPowerByRateBase(adapter, path, OFDM);
+							else if (rs == 0) /*  CCK */
+								pwr_base = PHY_GetTxPowerByRateBase(adapter, path, CCK);
 						} else
-							BW40PwrBasedBm2_4G = r->reg_power_base * 2;
+							pwr_base = r->reg_power_base * 2;
 
-						if (tempPwrLmt != MAX_POWER_INDEX) {
-							tempValue = tempPwrLmt - BW40PwrBasedBm2_4G;
-							pHalData->TxPwrLimit_2_4G[regulation][bw][rateSection][channel][rfPath] = tempValue;
+						if (tmp_pwr_lmt != MAX_POWER_INDEX) {
+							tmp = tmp_pwr_lmt - pwr_base;
+							hal_data->TxPwrLimit_2_4G[reg][bw][rs][ch][path] = tmp;
 						}
 					}
 				}
