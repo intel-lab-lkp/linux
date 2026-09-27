@@ -121,6 +121,13 @@ static const struct thermal_profile_params victus_s_thermal_params = {
 	.ec_tp_offset	= HP_EC_OFFSET_UNKNOWN,
 };
 
+static const struct thermal_profile_params victus_s_known_thermal_params = {
+	.performance	= HP_VICTUS_S_THERMAL_PROFILE_PERFORMANCE,
+	.balanced	= HP_VICTUS_S_THERMAL_PROFILE_DEFAULT,
+	.low_power	= HP_VICTUS_S_THERMAL_PROFILE_DEFAULT,
+	.ec_tp_offset	= HP_VICTUS_S_EC_THERMAL_PROFILE_OFFSET,
+};
+
 static const struct thermal_profile_params omen_v1_thermal_params = {
 	.performance	= HP_OMEN_V1_THERMAL_PROFILE_PERFORMANCE,
 	.balanced	= HP_OMEN_V1_THERMAL_PROFILE_DEFAULT,
@@ -161,6 +168,11 @@ static const struct hp_wmi_fan_profile_params victus_s_fan_profile_params = {
 
 static const struct hp_wmi_board_params victus_s_board_params = {
 	.thermal_profile	= &victus_s_thermal_params,
+	.fan_profile		= &victus_s_fan_profile_params,
+};
+
+static const struct hp_wmi_board_params victus_s_known_board_params = {
+	.thermal_profile	= &victus_s_known_thermal_params,
 	.fan_profile		= &victus_s_fan_profile_params,
 };
 
@@ -313,7 +325,7 @@ static const struct dmi_system_id hp_wmi_feature_boards[] __initconst = {
 	},
 	{
 		.matches = { DMI_MATCH(DMI_BOARD_NAME, "8C99") },
-		.driver_data = (void *)&victus_s_board_params,
+		.driver_data = (void *)&victus_s_known_board_params,
 	},
 	{
 		.matches = { DMI_MATCH(DMI_BOARD_NAME, "8C9C") },
@@ -2123,10 +2135,12 @@ static int platform_profile_victus_s_get_ec(enum platform_profile_option *profil
 	 * of these values.
 	 */
 	if (tp == victus_s_thermal_params.performance ||
-	    tp == omen_v1_thermal_params.performance) {
+	    tp == omen_v1_thermal_params.performance ||
+		tp == victus_s_known_thermal_params.performance) {
 		*profile = PLATFORM_PROFILE_PERFORMANCE;
 	} else if (tp == victus_s_thermal_params.balanced ||
-		   tp == omen_v1_thermal_params.balanced) {
+			tp == omen_v1_thermal_params.balanced ||
+			tp == victus_s_known_thermal_params.balanced) {
 		/*
 		 * Since both PLATFORM_PROFILE_LOW_POWER and
 		 * PLATFORM_PROFILE_BALANCED share the same thermal profile
