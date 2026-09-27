@@ -344,6 +344,23 @@ remap_rl:
 		rl++;
 	*lcn = ntfs_rl_vcn_to_lcn(rl, vcn);
 
+	/*
+	 * Nothing is mapped at or beyond the allocated size: the runlist ends
+	 * there with LCN_ENOENT, or with LCN_RL_NOT_MAPPED if only a later
+	 * extent has been mapped.  Return that end as it is.  Below the
+	 * allocated size, an unmapped vcn is worth a retry.
+	 */
+	if (*lcn <= LCN_RL_NOT_MAPPED && !is_retry) {
+		unsigned long flags;
+		s64 allocated_vcn;
+
+		read_lock_irqsave(&ni->size_lock, flags);
+		allocated_vcn = ntfs_bytes_to_cluster(ni->vol, ni->allocated_size);
+		read_unlock_irqrestore(&ni->size_lock, flags);
+		if (vcn >= allocated_vcn)
+			return rl;
+	}
+
 	if (*lcn <= LCN_RL_NOT_MAPPED && is_retry == false) {
 		is_retry = true;
 		err = ntfs_map_runlist_nolock(ni, vcn, NULL);
@@ -354,11 +371,14 @@ remap_rl:
 	}
 
 	/*
-	 * The runlist fragment containing @vcn could not be mapped, e.g.
-	 * because the extent mft record holding it is corrupt.  Do not hand
-	 * LCN_RL_NOT_MAPPED back to callers, which would treat it as a hole.
+	 * Neither the runlist nor the retry mapped @vcn, which lies below the
+	 * allocated size, e.g. because the extent mft record holding it is
+	 * corrupt or because the mapping pairs end too soon.
+	 * ntfs_map_runlist_nolock() reports the latter as -ENOENT, as @vcn
+	 * lies past the extent it found.  Callers would treat
+	 * LCN_RL_NOT_MAPPED or LCN_ENOENT here as a hole, so fail instead.
 	 */
-	if (*lcn == LCN_RL_NOT_MAPPED)
+	if (*lcn <= LCN_RL_NOT_MAPPED)
 		return ERR_PTR(err == -ENOMEM ? -ENOMEM : -EIO);
 
 	return rl;
@@ -4703,11 +4723,17 @@ rollback:
 	if (err2)
 		ntfs_debug("Leaking clusters");
 
-	/* Now, truncate the runlist itself. */
+	/*
+	 * Now, truncate the runlist itself.  Restore allocated_size before
+	 * dropping the lock: ntfs_attr_vcn_to_rl() fails a lookup below the
+	 * allocated size that falls past the end of the runlist.
+	 */
 	if (ni != locked_ni)
 		down_write(&ni->runlist.lock);
 	err2 = ntfs_rl_truncate_nolock(vol, &ni->runlist,
 			ntfs_bytes_to_cluster(vol, org_alloc_size));
+	if (!err2)
+		ni->allocated_size = org_alloc_size;
 	if (ni != locked_ni)
 		up_write(&ni->runlist.lock);
 	if (err2) {
@@ -4719,8 +4745,6 @@ rollback:
 		ni->runlist.rl = NULL;
 		ntfs_error(sb, "Couldn't truncate runlist. Rollback failed");
 	} else {
-		/* Prepare to mapping pairs update. */
-		ni->allocated_size = org_alloc_size;
 		/* Restore mapping pairs. */
 		if (ni != locked_ni)
 			down_read(&ni->runlist.lock);
