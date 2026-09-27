@@ -941,7 +941,8 @@ static long blkdev_fallocate(struct file *file, int mode, loff_t start,
 		goto fail;
 
 	error = blkdev_issue_zeroout(bdev, start >> SECTOR_SHIFT,
-				     len >> SECTOR_SHIFT, GFP_KERNEL, flags);
+				     len >> SECTOR_SHIFT, GFP_KERNEL,
+				     flags | BLKDEV_ZERO_KILLABLE);
  fail:
 	filemap_invalidate_unlock(inode->i_mapping);
 	inode_unlock(inode);
