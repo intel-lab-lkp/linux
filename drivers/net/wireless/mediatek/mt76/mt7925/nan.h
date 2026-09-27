@@ -143,6 +143,7 @@ enum mt7925_nan_key_type {
  */
 enum mt7925_nan_deferred_event {
 	MT7925_NAN_DEFERRED_STARTED_CLUSTER,
+	MT7925_NAN_DEFERRED_JOINED_CLUSTER,
 	MT7925_NAN_DEFERRED_SCHED_UPDATE_DONE,
 };
 /* NAN 4.0 Table 79. Device Capability attribute format, Supported Bands */
