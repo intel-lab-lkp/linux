@@ -745,6 +745,65 @@ int mt7925_nan_set_ndi_address(struct ieee80211_vif *vif,
 	return 0;
 }
 
+void mt7925_nan_mac_rand_work(struct work_struct *work)
+{
+	struct mt792x_vif *mvif = container_of(work, struct mt792x_vif,
+					       nan.mac_rand_work.work);
+	struct mt792x_dev *dev = mvif->phy->dev;
+	struct ieee80211_vif *vif =
+		container_of((void *)mvif, struct ieee80211_vif, drv_priv);
+	bool is_nmi = (vif->type == NL80211_IFTYPE_NAN);
+	u8 addr[ETH_ALEN];
+	int ret;
+
+	mt792x_mutex_acquire(dev);
+
+	if (!mvif->nan.mac_rand_period_sec)
+		goto out;
+
+	eth_random_addr(addr);
+
+	ret = is_nmi ? mt7925_nan_set_nmi_address(vif, dev, addr)
+		     : mt7925_nan_set_ndi_address(vif, dev, addr);
+
+	if (ret)
+		dev_err(dev->mt76.dev,
+			"NAN: failed to randomize %s address: %d\n",
+			is_nmi ? "NMI" : "NDI", ret);
+
+	ieee80211_queue_delayed_work(mt76_hw(dev), &mvif->nan.mac_rand_work,
+				     secs_to_jiffies(mvif->nan.mac_rand_period_sec));
+out:
+	mt792x_mutex_release(dev);
+}
+
+void mt7925_nan_start_mac_randomization(struct ieee80211_vif *vif,
+					u32 period_sec)
+{
+	struct mt792x_vif *mvif = (struct mt792x_vif *)vif->drv_priv;
+	struct mt792x_dev *dev = mvif->phy->dev;
+
+	if (!period_sec)
+		return;
+
+	mvif->nan.mac_rand_period_sec = period_sec;
+
+	ieee80211_queue_delayed_work(mt76_hw(dev), &mvif->nan.mac_rand_work, 0);
+}
+
+/*
+ * Must be called without holding the dev mutex: mt7925_nan_mac_rand_work()
+ * acquires it, so cancel_delayed_work_sync() here would deadlock against a
+ * concurrently running instance of that work otherwise.
+ */
+void mt7925_nan_stop_mac_randomization(struct ieee80211_vif *vif)
+{
+	struct mt792x_vif *mvif = (struct mt792x_vif *)vif->drv_priv;
+
+	mvif->nan.mac_rand_period_sec = 0;
+	cancel_delayed_work_sync(&mvif->nan.mac_rand_work);
+}
+
 static int mt7925_nan_avail_ctrl_tlv(struct sk_buff *skb,
 				     struct ieee80211_vif *vif)
 {

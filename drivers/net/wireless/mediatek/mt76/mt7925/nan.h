@@ -503,6 +503,13 @@ int mt7925_nan_set_ndi_address(struct ieee80211_vif *vif,
 			       struct mt792x_dev *dev,
 			       const u8 *mac_address);
 
+void mt7925_nan_mac_rand_work(struct work_struct *work);
+
+void mt7925_nan_start_mac_randomization(struct ieee80211_vif *vif,
+					u32 period_sec);
+
+void mt7925_nan_stop_mac_randomization(struct ieee80211_vif *vif);
+
 void mt7925_nan_local_sched_changed(struct mt792x_dev *dev,
 				    struct ieee80211_vif *vif);
 

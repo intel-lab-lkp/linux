@@ -181,6 +181,15 @@ struct mt792x_nan {
 
 	/* Connection index bitmap, up to NAN_MAX_CONN_CFG peers */
 	unsigned long conn_bitmap;
+
+	/*
+	 * NMI/NDI MAC address randomization. Kept per-vif (rather than a
+	 * single pointer on mt792x_dev) because up to two NAN_DATA vifs can
+	 * coexist (see if_limits_nan_mcc/scc), each needing its own
+	 * independent randomization period and pending work.
+	 */
+	struct delayed_work mac_rand_work;
+	u32 mac_rand_period_sec;
 };
 
 struct mt792x_vif {
