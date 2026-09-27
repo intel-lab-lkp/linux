@@ -360,6 +360,15 @@ void ucsi_altmode_update_active(struct ucsi_connector *con)
 	u8 cur;
 	int i;
 
+	/*
+	 * Alternate mode support is optional, and the PPM is not required to
+	 * support GET_CURRENT_CAM when it does not support alternate modes.
+	 * There is also nothing to update when the partner has not registered
+	 * any alternate modes, so don't send the command in that case.
+	 */
+	if (!con->partner_altmode[0])
+		return;
+
 	command = UCSI_GET_CURRENT_CAM | UCSI_CONNECTOR_NUMBER(con->num);
 	ret = ucsi_send_command(con->ucsi, command, &cur, sizeof(cur));
 	if (ret < 0) {
