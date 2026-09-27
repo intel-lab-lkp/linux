@@ -346,6 +346,7 @@ struct mt7925_nan_nmi_addr_tlv {
 	__le16 tag;
 	__le16 len;
 	u8 nmi_addr[ETH_ALEN];
+	u8 reserved[2];
 } __packed __aligned(4);
 
 struct mt7925_nan_avail_ctrl_tlv {
