@@ -941,6 +941,11 @@ extern const struct export_operations ovl_export_fid_operations;
 /* super.c */
 int ovl_fill_super(struct super_block *sb, struct fs_context *fc);
 
+int __init ovl_sysfs_init(void);
+void ovl_sysfs_exit(void);
+int ovl_sysfs_register(struct ovl_fs *ofs);
+void ovl_sysfs_unregister(struct ovl_fs *ofs);
+
 /* Will this overlay be forced to mount/remount ro? */
 static inline bool ovl_force_readonly(struct ovl_fs *ofs)
 {

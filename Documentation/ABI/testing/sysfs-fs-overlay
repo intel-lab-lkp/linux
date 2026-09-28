@@ -1,0 +1,6 @@
+What:		/sys/fs/overlay/<volume>/
+Date:		September 2026
+Contact:	linux-unionfs@vger.kernel.org
+Description:
+		A directory is created for every mounted overlayfs instance.
+		<volume> is set to the device major:minor.

@@ -20580,6 +20580,7 @@ M:	Amir Goldstein <amir73il@gmail.com>
 L:	linux-unionfs@vger.kernel.org
 S:	Supported
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/overlayfs/vfs.git
+F:	Documentation/ABI/testing/sysfs-fs-overlay
 F:	Documentation/filesystems/overlayfs.rst
 F:	fs/overlayfs/
 

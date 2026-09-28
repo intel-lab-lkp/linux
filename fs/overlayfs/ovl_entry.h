@@ -5,6 +5,9 @@
  * Copyright (C) 2016 Red Hat, Inc.
  */
 
+#include <linux/completion.h>
+#include <linux/kobject.h>
+
 struct ovl_config {
 	char *upperdir;
 	char *workdir;
@@ -56,6 +59,7 @@ struct ovl_entry {
 
 /* private information held for overlayfs's superblock */
 struct ovl_fs {
+	struct super_block *sb;
 	unsigned int numlayer;
 	/* Number of unique fs among layers including upper fs */
 	unsigned int numfs;
@@ -92,6 +96,9 @@ struct ovl_fs {
 	/* r/o snapshot of upperdir sb's only taken on volatile mounts */
 	errseq_t errseq;
 	bool casefold;
+	struct kobject kobj;
+	struct completion kobj_unregister;
+	bool kobj_registered;
 };
 
 /* Number of lower layers, not including data-only layers */

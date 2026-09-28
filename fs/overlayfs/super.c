@@ -226,8 +226,10 @@ static void ovl_put_super(struct super_block *sb)
 {
 	struct ovl_fs *ofs = OVL_FS(sb);
 
-	if (ofs)
+	if (ofs) {
+		ovl_sysfs_unregister(ofs);
 		ovl_free_fs(ofs);
+	}
 }
 
 /* Sync real dirty inodes in upper filesystem (if it exists) */
@@ -1548,6 +1550,7 @@ int ovl_fill_super(struct super_block *sb, struct fs_context *fc)
 	if (fc->user_ns != current_user_ns())
 		goto out_err;
 
+	ofs->sb = sb;
 	ovl_set_d_op(sb);
 
 	if (!ofs->creator_cred) {
@@ -1559,6 +1562,13 @@ int ovl_fill_super(struct super_block *sb, struct fs_context *fc)
 
 	with_ovl_creds(sb)
 		err = ovl_fill_super_creds(fc, sb);
+	if (err)
+		goto out_err;
+	/*
+	 * ->s_root is now set (by ovl_fill_super_creds), so if
+	 * ovl_sysfs_register fails it will be cleaned by ovl_put_super.
+	 */
+	return ovl_sysfs_register(ofs);
 
 out_err:
 	if (err) {
@@ -1598,10 +1608,19 @@ static int __init ovl_init(void)
 	if (ovl_inode_cachep == NULL)
 		return -ENOMEM;
 
-	err = register_filesystem(&ovl_fs_type);
-	if (!err)
-		return 0;
+	err = ovl_sysfs_init();
+	if (err)
+		goto out_destroy_cache;
 
+	err = register_filesystem(&ovl_fs_type);
+	if (err)
+		goto out_sysfs_exit;
+
+	return 0;
+
+out_sysfs_exit:
+	ovl_sysfs_exit();
+out_destroy_cache:
 	kmem_cache_destroy(ovl_inode_cachep);
 
 	return err;
@@ -1610,6 +1629,7 @@ static int __init ovl_init(void)
 static void __exit ovl_exit(void)
 {
 	unregister_filesystem(&ovl_fs_type);
+	ovl_sysfs_exit();
 
 	/*
 	 * Make sure all delayed rcu free inodes are flushed before we
