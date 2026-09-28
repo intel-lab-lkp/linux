@@ -2772,8 +2772,10 @@ char *dso__demangle_sym(struct dso *dso, int kmodule, const char *elf_name)
 				break;
 			demangled = tmp;
 			if (rust_demangle_display_demangle(&rust_demangle, demangled, buf_len,
-							   /*alternate=*/true) == OverflowOk)
-				return demangled;
+							   /*alternate=*/true) == OverflowOk) {
+				tmp = realloc(demangled, strlen(demangled) + 1);
+				return tmp ?: demangled;
+			}
 		}
 		/* Failure to grow output buffer or buffer exceeded sensible bounds. */
 		free(demangled);
