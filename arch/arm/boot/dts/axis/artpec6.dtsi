@@ -120,6 +120,7 @@
 		reg = <0xfaf00600 0x20>;
 		interrupts = <GIC_PPI 13 0xf04>;
 		clocks = <&clkctrl ARTPEC6_CLK_CPU_PERIPH>;
+
 		status = "disabled";
 	};
 
@@ -183,6 +184,7 @@
 				<0 0 0 3 &intc GIC_SPI 146 IRQ_TYPE_LEVEL_HIGH>,
 				<0 0 0 4 &intc GIC_SPI 147 IRQ_TYPE_LEVEL_HIGH>;
 		axis,syscon-pcie = <&syscon>;
+
 		status = "disabled";
 	};
 
@@ -197,6 +199,7 @@
 		num-ob-windows = <2>;
 		num-lanes = <2>;
 		axis,syscon-pcie = <&syscon>;
+
 		status = "disabled";
 	};
 
@@ -209,16 +212,19 @@
 			groups = "uart0grp2";
 			bias-pull-up;
 		};
+
 		pinctrl_uart1: uart1grp {
 			function = "uart1";
 			groups = "uart1grp0";
 			bias-pull-up;
 		};
+
 		pinctrl_uart2: uart2grp {
 			function = "uart2";
 			groups = "uart2grp1";
 			bias-pull-up;
 		};
+
 		pinctrl_uart3: uart3grp {
 			function = "uart3";
 			groups = "uart3grp0";
@@ -261,6 +267,7 @@
 			dma-channels = <8>;
 			dma-requests = <8>;
 		};
+
 		dma1: dma@f8019400 {
 			compatible = "renesas,nbpfaxi64dmac8b16";
 			reg = <0xf8019400 0x400>;
@@ -340,8 +347,10 @@
 			dmas = <&dma0 4 (NBPF_SLAVE_RQ_HIGH | NBPF_SLAVE_RQ_LEVEL)>,
 			       <&dma0 5 (NBPF_SLAVE_RQ_HIGH | NBPF_SLAVE_RQ_LEVEL)>;
 			dma-names = "rx", "tx";
+
 			status = "disabled";
 		};
+
 		uart1: serial@f8037000 {
 			compatible = "arm,pl011", "arm,primecell";
 			reg = <0xf8037000 0x1000>;
@@ -354,8 +363,10 @@
 			dmas = <&dma0 6 (NBPF_SLAVE_RQ_HIGH | NBPF_SLAVE_RQ_LEVEL)>,
 			       <&dma0 7 (NBPF_SLAVE_RQ_HIGH | NBPF_SLAVE_RQ_LEVEL)>;
 			dma-names = "rx", "tx";
+
 			status = "disabled";
 		};
+
 		uart2: serial@f8038000 {
 			compatible = "arm,pl011", "arm,primecell";
 			reg = <0xf8038000 0x1000>;
@@ -368,8 +379,10 @@
 			dmas = <&dma1 0 (NBPF_SLAVE_RQ_HIGH | NBPF_SLAVE_RQ_LEVEL)>,
 			       <&dma1 1 (NBPF_SLAVE_RQ_HIGH | NBPF_SLAVE_RQ_LEVEL)>;
 			dma-names = "rx", "tx";
+
 			status = "disabled";
 		};
+
 		uart3: serial@f8039000 {
 			compatible = "arm,pl011", "arm,primecell";
 			reg = <0xf8039000 0x1000>;
@@ -382,6 +395,7 @@
 			dmas = <&dma1 2 (NBPF_SLAVE_RQ_HIGH | NBPF_SLAVE_RQ_LEVEL)>,
 			       <&dma1 3 (NBPF_SLAVE_RQ_HIGH | NBPF_SLAVE_RQ_LEVEL)>;
 			dma-names = "rx", "tx";
+
 			status = "disabled";
 		};
 	};
