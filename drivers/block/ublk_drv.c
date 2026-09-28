@@ -3169,6 +3169,9 @@ ublk_fill_io_cmd(struct ublk_io *io, struct io_uring_cmd *cmd)
 {
 	struct request *req = io->req;
 
+	/* io->cmd shares its storage with io->req, switch them under io->lock */
+	lockdep_assert_held(&io->lock);
+
 	io->cmd = cmd;
 	io->flags |= UBLK_IO_FLAG_ACTIVE;
 	/* now this cmd slot is owned by ublk driver */
@@ -3338,8 +3341,11 @@ static int ublk_fetch(struct io_uring_cmd *cmd, struct ublk_device *ub,
 	 */
 	mutex_lock(&ub->mutex);
 	ret = ublk_validate_io_buf(ub, cmd, &auto_buf);
-	if (!ret)
+	if (!ret) {
+		ublk_io_lock(io);
 		ret = __ublk_fetch(cmd, ub, io, q_id);
+		ublk_io_unlock(io);
+	}
 	if (!ret) {
 		ublk_apply_io_buf(ub, io, cmd, buf_addr, &auto_buf, NULL);
 		ublk_mark_io_ready(ub, q_id);
@@ -3496,7 +3502,9 @@ static int ublk_ch_uring_cmd_local(struct io_uring_cmd *cmd,
 		if (ret)
 			goto out;
 		io->res = result;
+		ublk_io_lock(io);
 		req = ublk_fill_io_cmd(io, cmd);
+		ublk_io_unlock(io);
 		ublk_apply_io_buf(ub, io, cmd, addr, &auto_buf, &buf_idx);
 		if (buf_idx != UBLK_INVALID_BUF_IDX)
 			io_buffer_unregister(cmd, buf_idx, issue_flags);
@@ -3514,7 +3522,9 @@ static int ublk_ch_uring_cmd_local(struct io_uring_cmd *cmd,
 		 * uring_cmd active first and prepare for handling new requeued
 		 * request
 		 */
+		ublk_io_lock(io);
 		req = ublk_fill_io_cmd(io, cmd);
+		ublk_io_unlock(io);
 		io->buf.addr = addr;
 		if (likely(ublk_get_data(ubq, io, req))) {
 			__ublk_prep_compl_io_cmd(io, req);
