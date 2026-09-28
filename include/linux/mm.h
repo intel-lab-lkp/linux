@@ -345,6 +345,10 @@ enum {
 	DECLARE_VMA_BIT(UFFD_MINOR, 41),
 	DECLARE_VMA_BIT(SEALED, 42),
 	DECLARE_VMA_BIT(UFFD_RWP, 43),
+#if defined(CONFIG_CRASH_MEMACTION)
+	/* Describe this VMA's folios to the kdump kernel; carries no type. */
+	DECLARE_VMA_BIT(CRASH_MARK, 44),
+#endif
 	/* Flags that reuse flags above. */
 	DECLARE_VMA_BIT_ALIAS(PKEY_BIT0, HIGH_ARCH_0),
 	DECLARE_VMA_BIT_ALIAS(PKEY_BIT1, HIGH_ARCH_1),
@@ -525,6 +529,11 @@ enum {
 #else
 #define VM_ALLOW_ANY_UNCACHED	VM_NONE
 #define VM_SEALED		VM_NONE
+#endif
+#ifdef CONFIG_CRASH_MEMACTION
+#define VM_CRASH_MARK		INIT_VM_FLAG(CRASH_MARK)
+#else
+#define VM_CRASH_MARK		VM_NONE
 #endif
 #if defined(CONFIG_64BIT) || defined(CONFIG_PPC32)
 #define VM_DROPPABLE		INIT_VM_FLAG(DROPPABLE)

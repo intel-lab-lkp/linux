@@ -1162,6 +1162,9 @@ static void show_smap_vma_flags(struct seq_file *m, struct vm_area_struct *vma)
 #ifdef CONFIG_64BIT
 		[ilog2(VM_SEALED)] = "sl",
 #endif
+#ifdef CONFIG_CRASH_MEMACTION
+		[ilog2(VM_CRASH_MARK)] = "cm",
+#endif
 	};
 	size_t i;
 

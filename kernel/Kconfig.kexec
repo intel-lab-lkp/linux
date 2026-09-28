@@ -189,6 +189,8 @@ config CRASH_MEMACTION
 	depends on !SLUB_TINY
 	select SLAB_BUCKETS
 	depends on ARCH_SUPPORTS_CRASH_MEMACTION
+	# VM_CRASH_MARK needs a bit from the 64-bit-only half of vm_flags.
+	depends on 64BIT
 	help
 	  Track pages that may require special handling by the kdump kernel:
 	  pages holding secrets such as crypto keys, which it can wipe before
