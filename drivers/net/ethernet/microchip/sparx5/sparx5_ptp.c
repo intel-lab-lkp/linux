@@ -573,6 +573,42 @@ static int sparx5_ptp_adjtime(struct ptp_clock_info *ptp, s64 delta)
 	return 0;
 }
 
+static int sparx5_ptp_tod_start(struct sparx5 *sparx5, u8 phc_mask)
+{
+	u64 tod_adj = sparx5_ptp_get_nominal_value(sparx5);
+	int i;
+
+	if (phc_mask > GENMASK(SPARX5_PHC_COUNT - 1, 0))
+		return -EINVAL;
+
+	/* Disable master counters */
+	spx5_wr(PTP_PTP_DOM_CFG_PTP_ENA_SET(0), sparx5, PTP_PTP_DOM_CFG);
+
+	/* Configure the nominal TOD increment per clock cycle */
+	spx5_rmw(PTP_PTP_DOM_CFG_PTP_CLKCFG_DIS_SET(phc_mask),
+		 PTP_PTP_DOM_CFG_PTP_CLKCFG_DIS,
+		 sparx5, PTP_PTP_DOM_CFG);
+
+	for (i = 0; i < SPARX5_PHC_COUNT; ++i) {
+		if (!(phc_mask & BIT(i)))
+			continue;
+
+		spx5_wr((u32)tod_adj & 0xFFFFFFFF, sparx5,
+			PTP_CLK_PER_CFG(i, 0));
+		spx5_wr((u32)(tod_adj >> 32), sparx5,
+			PTP_CLK_PER_CFG(i, 1));
+	}
+
+	spx5_rmw(PTP_PTP_DOM_CFG_PTP_CLKCFG_DIS_SET(0),
+		 PTP_PTP_DOM_CFG_PTP_CLKCFG_DIS,
+		 sparx5, PTP_PTP_DOM_CFG);
+
+	/* Enable master counters */
+	spx5_wr(PTP_PTP_DOM_CFG_PTP_ENA_SET(phc_mask), sparx5, PTP_PTP_DOM_CFG);
+
+	return 0;
+}
+
 static struct ptp_clock_info sparx5_ptp_clock_info = {
 	.owner		= THIS_MODULE,
 	.name		= "sparx5 ptp",
@@ -605,7 +641,6 @@ static int sparx5_ptp_phc_init(struct sparx5 *sparx5,
 
 int sparx5_ptp_init(struct sparx5 *sparx5)
 {
-	u64 tod_adj = sparx5_ptp_get_nominal_value(sparx5);
 	const struct sparx5_ops *ops = sparx5->data->ops;
 	struct sparx5_port *port;
 	int err, i;
@@ -622,8 +657,17 @@ int sparx5_ptp_init(struct sparx5 *sparx5)
 		sparx5->ptp = 1;
 	}
 
-	if (!sparx5->ptp)
+	if (!sparx5->ptp) {
+		if (!is_sparx5(sparx5)) {
+			/* the base, non-ptp-capable lan969x variants need the first tod counter
+			 * running to forward frames.
+			 */
+			err = sparx5_ptp_tod_start(sparx5, BIT(0));
+			if (err)
+				return err;
+		}
 		return 0;
+	}
 
 	for (i = 0; i < SPARX5_PHC_COUNT; ++i) {
 		err = sparx5_ptp_phc_init(sparx5, i, &sparx5_ptp_clock_info);
@@ -635,27 +679,9 @@ int sparx5_ptp_init(struct sparx5 *sparx5)
 	spin_lock_init(&sparx5->ptp_ts_id_lock);
 	mutex_init(&sparx5->ptp_lock);
 
-	/* Disable master counters */
-	spx5_wr(PTP_PTP_DOM_CFG_PTP_ENA_SET(0), sparx5, PTP_PTP_DOM_CFG);
-
-	/* Configure the nominal TOD increment per clock cycle */
-	spx5_rmw(PTP_PTP_DOM_CFG_PTP_CLKCFG_DIS_SET(0x7),
-		 PTP_PTP_DOM_CFG_PTP_CLKCFG_DIS,
-		 sparx5, PTP_PTP_DOM_CFG);
-
-	for (i = 0; i < SPARX5_PHC_COUNT; ++i) {
-		spx5_wr((u32)tod_adj & 0xFFFFFFFF, sparx5,
-			PTP_CLK_PER_CFG(i, 0));
-		spx5_wr((u32)(tod_adj >> 32), sparx5,
-			PTP_CLK_PER_CFG(i, 1));
-	}
-
-	spx5_rmw(PTP_PTP_DOM_CFG_PTP_CLKCFG_DIS_SET(0),
-		 PTP_PTP_DOM_CFG_PTP_CLKCFG_DIS,
-		 sparx5, PTP_PTP_DOM_CFG);
-
-	/* Enable master counters */
-	spx5_wr(PTP_PTP_DOM_CFG_PTP_ENA_SET(0x7), sparx5, PTP_PTP_DOM_CFG);
+	err = sparx5_ptp_tod_start(sparx5, GENMASK(SPARX5_PHC_COUNT - 1, 0));
+	if (err)
+		return err;
 
 	for (i = 0; i < sparx5->data->consts->n_ports; i++) {
 		port = sparx5->ports[i];
