@@ -3055,13 +3055,20 @@ int cifs_fiemap(struct inode *inode, struct fiemap_extent_info *fei, u64 start,
 
 void cifs_setsize(struct inode *inode, loff_t offset)
 {
-	loff_t old_size;
+	loff_t old_size = i_size_read(inode);
 	u64 blocks = CIFS_INO_BLOCKS(offset);
 
-	spin_lock(&inode->i_lock);
-	old_size = i_size_read(inode);
-	i_size_write(inode, offset);
+	/*
+	 * When extending, zero the tail of the folio straddling the old EOF
+	 * (before updating i_size) so data dirtied past EOF through an mmap
+	 * isn't exposed.  truncate_pagecache() then drops any pagecache beyond
+	 * the new EOF, as in truncate_setsize().
+	 */
+	if (offset > old_size)
+		netfs_clear_stale_post_eof(inode, old_size, offset, false);
 
+	spin_lock(&inode->i_lock);
+	i_size_write(inode, offset);
 	/*
 	 * Extending EOF does not allocate the intervening range. Only clamp
 	 * i_blocks on shrink; allocation growth comes from writes or from the
@@ -3071,8 +3078,7 @@ void cifs_setsize(struct inode *inode, loff_t offset)
 		inode->i_blocks = blocks;
 	spin_unlock(&inode->i_lock);
 	inode_set_mtime_to_ts(inode, inode_set_ctime_current(inode));
-	if (offset > old_size)
-		pagecache_isize_extended(inode, old_size, offset);
+
 	truncate_pagecache(inode, offset);
 	netfs_wait_for_outstanding_io(inode);
 }
