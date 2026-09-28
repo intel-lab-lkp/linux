@@ -2201,6 +2201,100 @@ static void copy_user_test_oob(struct kunit *test)
 		unused = strncpy_from_user(kmem, usermem, size + 1));
 }
 
+#ifdef CONFIG_CC_HAS_COUNTED_BY
+struct counted_by_flex_struct {
+	size_t size;
+	int array[] __counted_by(size);
+};
+
+/*
+ * Allocate the struct out-of-line to prevent inherent attributes from
+ * affecting the '__builtin_dynamic_object_size' check.
+ */
+static noinline struct counted_by_flex_struct *
+alloc_counted_by_flex_struct(struct kunit *test, size_t size)
+{
+	struct counted_by_flex_struct *s;
+
+	s = kzalloc(sizeof(struct counted_by_flex_struct) +
+		    size * sizeof(s->array[0]), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, s);
+
+	s->size = size;
+	return s;
+}
+
+static void counted_by_flex_oob_access(struct kunit *test)
+{
+	size_t size = 128;
+	struct counted_by_flex_struct *s;
+
+	s = alloc_counted_by_flex_struct(test, size);
+
+	OPTIMIZER_HIDE_VAR(s);
+
+	/* __builtin_dynamic_object_size() should return the correct length. */
+	KUNIT_EXPECT_EQ(test, size * sizeof(s->array[0]),
+			__builtin_dynamic_object_size(s->array, 0));
+
+	/* Out-of-bounds assignment. */
+	KUNIT_EXPECT_KASAN_FAIL(test, s->array[size + 1] = 42);
+
+	/* Out-of-bounds read. */
+	KUNIT_EXPECT_KASAN_FAIL_READ(test, s->array[0] = s->array[size + 13]);
+
+	kfree(s);
+}
+
+#ifdef CONFIG_CC_HAS_COUNTED_BY_PTR
+struct counted_by_ptr_struct {
+	char *ptr __counted_by_ptr(size);
+	size_t size;
+};
+
+/*
+ * Allocate the struct out-of-line to prevent inherent attributes from
+ * affecting the '__builtin_dynamic_object_size' check.
+ */
+static noinline struct counted_by_ptr_struct *
+alloc_counted_by_ptr_struct(struct kunit *test, size_t size)
+{
+	struct counted_by_ptr_struct *s;
+
+	s = kmalloc_obj(struct counted_by_ptr_struct);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, s);
+
+	s->size = size;
+	s->ptr = kzalloc(size, GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, s->ptr);
+
+	return s;
+}
+
+static void counted_by_ptr_oob_access(struct kunit *test)
+{
+	size_t size = 128;
+	struct counted_by_ptr_struct *s;
+
+	s = alloc_counted_by_ptr_struct(test, size);
+
+	OPTIMIZER_HIDE_VAR(s);
+
+	/* __builtin_dynamic_object_size() should return the correct length. */
+	KUNIT_EXPECT_EQ(test, size, __builtin_dynamic_object_size(s->ptr, 0));
+
+	/* Out-of-bounds assignment. */
+	KUNIT_EXPECT_KASAN_FAIL(test, s->ptr[size + 1] = 42);
+
+	/* Out-of-bounds read. */
+	KUNIT_EXPECT_KASAN_FAIL_READ(test, s->ptr[0] = s->ptr[size + 13]);
+
+	kfree(s->ptr);
+	kfree(s);
+}
+#endif /* CONFIG_CC_HAS_COUNTED_BY_PTR */
+#endif /* CONFIG_CC_HAS_COUNTED_BY */
+
 static struct kunit_case kasan_kunit_test_cases[] = {
 	KUNIT_CASE(kmalloc_oob_right),
 	KUNIT_CASE(kmalloc_oob_left),
@@ -2280,6 +2374,12 @@ static struct kunit_case kasan_kunit_test_cases[] = {
 #endif
 	KUNIT_CASE(rust_uaf),
 	KUNIT_CASE(copy_user_test_oob),
+#ifdef CONFIG_CC_HAS_COUNTED_BY
+	KUNIT_CASE(counted_by_flex_oob_access),
+#ifdef CONFIG_CC_HAS_COUNTED_BY_PTR
+	KUNIT_CASE(counted_by_ptr_oob_access),
+#endif /* CONFIG_CC_HAS_COUNTED_BY_PTR */
+#endif /* CONFIG_CC_HAS_COUNTED_BY */
 	{}
 };
 
