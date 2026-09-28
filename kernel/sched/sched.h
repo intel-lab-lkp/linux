@@ -2256,7 +2256,11 @@ struct sched_group_capacity {
 	unsigned long		min_capacity;		/* Min per-CPU capacity in group */
 	unsigned long		max_capacity;		/* Max per-CPU capacity in group */
 	unsigned long		next_update;
-	int			imbalance;		/* XXX unrelated to capacity but shared group state */
+	/*
+	 * Set when a child domain cannot balance pinned tasks.
+	 * XXX unrelated to capacity, but it is shared group state.
+	 */
+	int			pinned_task;
 
 	int			id;
 

@@ -11567,7 +11567,7 @@ static inline bool check_misfit_status(struct rq *rq)
 }
 
 /*
- * Group imbalance indicates (and tries to solve) the problem where balancing
+ * sgc->pinned_task indicates (and tries to solve) the problem where balancing
  * groups is inadequate due to ->cpus_ptr constraints.
  *
  * Imagine a situation of two groups of 4 CPUs each and 4 tasks each with a
@@ -11595,9 +11595,9 @@ static inline bool check_misfit_status(struct rq *rq)
  * subtle and fragile situation.
  */
 
-static inline int sg_imbalanced(struct sched_group *group)
+static inline int sg_pinned_task(struct sched_group *group)
 {
-	return group->sgc->imbalance;
+	return group->sgc->pinned_task;
 }
 
 /*
@@ -11672,7 +11672,7 @@ group_type group_classify(unsigned int imbalance_pct,
 	if (sgs->group_llc_balance)
 		return group_llc_balance;
 
-	if (sg_imbalanced(group))
+	if (sg_pinned_task(group))
 		return group_pinned_task;
 
 	if (sgs->group_asym_packing)
@@ -13591,10 +13591,10 @@ more_balance:
 		 * We failed to reach balance because of affinity.
 		 */
 		if (sd_parent) {
-			int *group_imbalance = &sd_parent->groups->sgc->imbalance;
+			int *pinned_task = &sd_parent->groups->sgc->pinned_task;
 
 			if ((env.flags & LBF_SOME_PINNED) && env.imbalance > 0)
-				*group_imbalance = 1;
+				*pinned_task = 1;
 		}
 
 		/* All tasks on this runqueue were pinned by CPU affinity */
@@ -13694,21 +13694,21 @@ out_unbalanced:
 out_balanced:
 	/*
 	 * We reach balance although we may have faced some affinity
-	 * constraints. Clear the imbalance flag only if other tasks got
+	 * constraints. Clear the pinned flag only if other tasks got
 	 * a chance to move and fix the imbalance.
 	 */
 	if (sd_parent && !(env.flags & LBF_ALL_PINNED)) {
-		int *group_imbalance = &sd_parent->groups->sgc->imbalance;
+		int *pinned_task = &sd_parent->groups->sgc->pinned_task;
 
-		if (*group_imbalance)
-			*group_imbalance = 0;
+		if (*pinned_task)
+			*pinned_task = 0;
 	}
 
 out_all_pinned:
 	/*
 	 * We reach balance because all tasks are pinned at this level so
-	 * we can't migrate them. Let the imbalance flag set so parent level
-	 * can try to migrate them.
+	 * we can't migrate them. Let the pinned flag stay set so the parent
+	 * level can try to migrate them.
 	 */
 	schedstat_inc(sd->lb_balanced[idle]);
 
