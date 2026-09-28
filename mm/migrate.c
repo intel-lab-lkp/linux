@@ -1221,6 +1221,18 @@ static int migrate_folio_unmap(new_folio_t get_new_folio,
 	bool locked = false;
 	bool dst_locked = false;
 
+	if (unlikely(folio_contain_hwpoisoned_page(src))) {
+		/*
+		 * The copy would propagate the corrupted data into a
+		 * fresh folio with no poison marker.  Fail permanently
+		 * so the folio is put back on the LRU for reclaim or a
+		 * later memory_failure(); it was not unmapped yet, so
+		 * there is nothing to restore.
+		 */
+		migrate_folio_undo_src(src, 0, NULL, false, ret);
+		return -EHWPOISON;
+	}
+
 	dst = get_new_folio(src, private);
 	if (!dst)
 		return -ENOMEM;
@@ -1375,6 +1387,20 @@ static int migrate_folio_move(free_folio_t put_new_folio, unsigned long private,
 	prev = dst->lru.prev;
 	list_del(&dst->lru);
 
+	if (unlikely(folio_contain_hwpoisoned_page(src))) {
+		/*
+		 * Recheck before the copy: a poison can land while the
+		 * batch is still unmapping the rest of its chunk.  A
+		 * GUP-based path takes its reference before the unmap,
+		 * and memory_failure() sets PG_hwpoison before
+		 * releasing it, so a racing poison is visible by now;
+		 * a hardware MCE can still land in the final
+		 * instructions.
+		 */
+		rc = -EHWPOISON;
+		goto out;
+	}
+
 	if (unlikely(page_has_movable_ops(&src->page))) {
 		rc = migrate_movable_ops_page(&dst->page, &src->page, mode);
 		if (rc)
@@ -1520,6 +1546,12 @@ static int unmap_and_move_hugetlb_folio(new_folio_t get_new_folio,
 		goto out_unlock;
 	}
 
+	if (unlikely(folio_contain_hwpoisoned_page(src))) {
+		/* Same reasoning as in migrate_folio_unmap(). */
+		rc = -EHWPOISON;
+		goto out_unlock;
+	}
+
 	if (folio_test_anon(src))
 		anon_vma = folio_get_anon_vma(src);
 
@@ -1545,8 +1577,13 @@ static int unmap_and_move_hugetlb_folio(new_folio_t get_new_folio,
 		was_mapped = 1;
 	}
 
-	if (!folio_mapped(src))
-		rc = move_to_new_folio(dst, src, mode);
+	if (!folio_mapped(src)) {
+		/* Same reasoning as in migrate_folio_move(). */
+		if (unlikely(folio_contain_hwpoisoned_page(src)))
+			rc = -EHWPOISON;
+		else
+			rc = move_to_new_folio(dst, src, mode);
+	}
 
 	if (was_mapped)
 		remove_migration_ptes(src, !rc ? dst : src, ttu);
