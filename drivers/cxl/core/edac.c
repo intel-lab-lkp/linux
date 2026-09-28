@@ -639,6 +639,9 @@ static u16 cxl_get_ecs_threshold(u8 log_cap, u16 config)
 {
 	u8 index = FIELD_GET(CXL_ECS_THRESHOLD_COUNT_MASK, config);
 
+	if (index >= ARRAY_SIZE(ecs_supp_threshold))
+		return 0;
+
 	return ecs_supp_threshold[index];
 }
 
