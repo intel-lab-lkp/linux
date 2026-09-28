@@ -721,6 +721,53 @@ struct rxe_mr *lookup_mr(struct rxe_pd *pd, int access, u32 key,
 	return mr;
 }
 
+/*
+ * num_mw counts the MWs bound to an MR. The value -1 is reserved while
+ * the MR is changing state so that a new MW binding cannot race with
+ * invalidation, fast registration, or deregistration.
+ */
+int rxe_mr_get_mw(struct rxe_mr *mr)
+{
+	int old;
+
+	if (!rxe_get(mr))
+		return 0;
+
+	old = atomic_read(&mr->num_mw);
+	do {
+		if (old < 0)
+			goto err_put;
+	} while (!atomic_try_cmpxchg(&mr->num_mw, &old, old + 1));
+
+	if (mr->state != RXE_MR_STATE_VALID) {
+		atomic_dec_return(&mr->num_mw);
+		rxe_put(mr);
+		return 0;
+	}
+
+	return 1;
+
+err_put:
+	rxe_put(mr);
+	return 0;
+}
+
+void rxe_mr_put_mw(struct rxe_mr *mr)
+{
+	atomic_dec_return(&mr->num_mw);
+	rxe_put(mr);
+}
+
+bool rxe_mr_reserve_mw_state(struct rxe_mr *mr)
+{
+	return atomic_cmpxchg(&mr->num_mw, 0, -1) == 0;
+}
+
+void rxe_mr_release_mw_state(struct rxe_mr *mr)
+{
+	atomic_xchg(&mr->num_mw, 0);
+}
+
 int rxe_invalidate_mr(struct rxe_qp *qp, u32 key)
 {
 	struct rxe_dev *rxe = to_rdev(qp->ibqp.device);
@@ -743,7 +790,7 @@ int rxe_invalidate_mr(struct rxe_qp *qp, u32 key)
 		goto err_drop_ref;
 	}
 
-	if (atomic_read(&mr->num_mw) > 0) {
+	if (!rxe_mr_reserve_mw_state(mr)) {
 		rxe_dbg_mr(mr, "Attempt to invalidate an MR while bound to MWs\n");
 		ret = -EINVAL;
 		goto err_drop_ref;
@@ -752,11 +799,16 @@ int rxe_invalidate_mr(struct rxe_qp *qp, u32 key)
 	if (unlikely(mr->ibmr.type != IB_MR_TYPE_MEM_REG)) {
 		rxe_dbg_mr(mr, "Type (%d) is wrong\n", mr->ibmr.type);
 		ret = -EINVAL;
-		goto err_drop_ref;
+		goto err_release;
 	}
 
 	mr->state = RXE_MR_STATE_FREE;
+	rxe_mr_release_mw_state(mr);
 	ret = 0;
+	goto err_drop_ref;
+
+err_release:
+	rxe_mr_release_mw_state(mr);
 
 err_drop_ref:
 	rxe_put(mr);
@@ -777,23 +829,26 @@ int rxe_reg_fast_mr(struct rxe_qp *qp, struct rxe_send_wqe *wqe)
 	u32 key = wqe->wr.wr.reg.key;
 	u32 access = wqe->wr.wr.reg.access;
 
+	if (!rxe_mr_reserve_mw_state(mr))
+		return -EINVAL;
+
 	/* user can only register MR in free state */
 	if (unlikely(mr->state != RXE_MR_STATE_FREE)) {
 		rxe_dbg_mr(mr, "mr->lkey = 0x%x not free\n", mr->lkey);
-		return -EINVAL;
+		goto err_release;
 	}
 
 	/* user can only register mr with qp in same protection domain */
 	if (unlikely(qp->ibqp.pd != mr->ibmr.pd)) {
 		rxe_dbg_mr(mr, "qp->pd and mr->pd don't match\n");
-		return -EINVAL;
+		goto err_release;
 	}
 
 	/* user is only allowed to change key portion of l/rkey */
 	if (unlikely((mr->lkey & ~0xff) != (key & ~0xff))) {
 		rxe_dbg_mr(mr, "key = 0x%x has wrong index mr->lkey = 0x%x\n",
 			key, mr->lkey);
-		return -EINVAL;
+		goto err_release;
 	}
 
 	mr->access = access;
@@ -801,8 +856,13 @@ int rxe_reg_fast_mr(struct rxe_qp *qp, struct rxe_send_wqe *wqe)
 	mr->rkey = key;
 	mr->ibmr.iova = wqe->wr.wr.reg.mr->iova;
 	mr->state = RXE_MR_STATE_VALID;
+	rxe_mr_release_mw_state(mr);
 
 	return 0;
+
+err_release:
+	rxe_mr_release_mw_state(mr);
+	return -EINVAL;
 }
 
 void rxe_mr_cleanup(struct rxe_pool_elem *elem)

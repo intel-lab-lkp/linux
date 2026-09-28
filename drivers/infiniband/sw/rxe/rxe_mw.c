@@ -136,10 +136,27 @@ static int rxe_check_bind_mw(struct rxe_qp *qp, struct rxe_send_wqe *wqe,
 	return 0;
 }
 
-static void rxe_do_bind_mw(struct rxe_qp *qp, struct rxe_send_wqe *wqe,
-		      struct rxe_mw *mw, struct rxe_mr *mr, int access)
+static int rxe_do_bind_mw(struct rxe_qp *qp, struct rxe_send_wqe *wqe,
+			  struct rxe_mw *mw, struct rxe_mr *mr, int access)
 {
 	u32 key = wqe->wr.wr.mw.rkey & 0xff;
+
+	if (mw->ibmw.type == IB_MW_TYPE_2 && !rxe_get(qp))
+		return -EINVAL;
+
+	if (mr && !rxe_mr_get_mw(mr)) {
+		if (mw->ibmw.type == IB_MW_TYPE_2)
+			rxe_put(qp);
+		return -EINVAL;
+	}
+
+	if (mw->mr) {
+		rxe_mr_put_mw(mw->mr);
+		mw->mr = NULL;
+	}
+
+	if (mr)
+		mw->mr = mr;
 
 	mw->rkey = (mw->rkey & ~0xff) | key;
 	mw->access = access;
@@ -147,22 +164,11 @@ static void rxe_do_bind_mw(struct rxe_qp *qp, struct rxe_send_wqe *wqe,
 	mw->addr = wqe->wr.wr.mw.addr;
 	mw->length = wqe->wr.wr.mw.length;
 
-	if (mw->mr) {
-		rxe_put(mw->mr);
-		atomic_dec(&mw->mr->num_mw);
-		mw->mr = NULL;
-	}
-
-	if (mw->length) {
-		mw->mr = mr;
-		atomic_inc(&mr->num_mw);
-		rxe_get(mr);
-	}
-
 	if (mw->ibmw.type == IB_MW_TYPE_2) {
-		rxe_get(qp);
 		mw->qp = qp;
 	}
+
+	return 0;
 }
 
 int rxe_bind_mw(struct rxe_qp *qp, struct rxe_send_wqe *wqe)
@@ -213,7 +219,9 @@ int rxe_bind_mw(struct rxe_qp *qp, struct rxe_send_wqe *wqe)
 	if (ret)
 		goto err_unlock;
 
-	rxe_do_bind_mw(qp, wqe, mw, mr, access);
+	ret = rxe_do_bind_mw(qp, wqe, mw, mr, access);
+	if (ret)
+		goto err_unlock;
 err_unlock:
 	spin_unlock_bh(&mw->lock);
 err_drop_mr:
@@ -250,8 +258,7 @@ static void rxe_do_invalidate_mw(struct rxe_mw *mw)
 	/* valid type 2 MW will always have an MR pointer */
 	mr = mw->mr;
 	mw->mr = NULL;
-	atomic_dec(&mr->num_mw);
-	rxe_put(mr);
+	rxe_mr_put_mw(mr);
 
 	mw->access = 0;
 	mw->addr = 0;
@@ -336,8 +343,7 @@ void rxe_mw_cleanup(struct rxe_pool_elem *elem)
 		struct rxe_mr *mr = mw->mr;
 
 		mw->mr = NULL;
-		atomic_dec(&mr->num_mw);
-		rxe_put(mr);
+		rxe_mr_put_mw(mr);
 	}
 
 	if (mw->qp) {
