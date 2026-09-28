@@ -185,6 +185,25 @@ out_drop_cnt:
 	return NETDEV_TX_OK;
 }
 
+/* Do not advertise NETDEV_XDP_ACT_NDO_XMIT, no real datapath.
+ * This is a "stub" which allows netdevsim to be put under a bond with XDP.
+ */
+static int nsim_xdp_xmit(struct net_device *dev, int n,
+			 struct xdp_frame **frames, u32 flags)
+{
+	int i;
+
+	if (unlikely(flags & ~XDP_XMIT_FLAGS_MASK))
+		return -EINVAL;
+
+	for (i = 0; i < n; i++) {
+		dev_dstats_tx_dropped(dev);
+		xdp_return_frame(frames[i]);
+	}
+
+	return n;
+}
+
 static netdev_tx_t nsim_start_xmit_vf(struct sk_buff *skb,
 				      struct net_device *dev)
 {
@@ -651,6 +670,7 @@ static const struct net_device_ops nsim_netdev_ops = {
 	.ndo_set_features	= nsim_set_features,
 	.ndo_get_iflink		= nsim_get_iflink,
 	.ndo_bpf		= nsim_bpf,
+	.ndo_xdp_xmit		= nsim_xdp_xmit,
 	.ndo_open		= nsim_open,
 	.ndo_stop		= nsim_stop,
 	.ndo_vlan_rx_add_vid	= nsim_vlan_rx_add_vid,
