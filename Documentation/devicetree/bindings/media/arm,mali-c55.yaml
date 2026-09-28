@@ -36,6 +36,9 @@ properties:
       - const: aclk
       - const: hclk
 
+  power-domains:
+    maxItems: 1
+
   resets:
     items:
       - description: vclk domain reset
@@ -77,6 +80,7 @@ examples:
       reg = <0x400000 0x200000>;
       clocks = <&clk 0>, <&clk 1>, <&clk 2>;
       clock-names = "vclk", "aclk", "hclk";
+      power-domains = <&power>;
       resets = <&resets 0>, <&resets 1>, <&resets 2>;
       reset-names = "vresetn", "aresetn", "hresetn";
       /* Example interrupt numbers. */
