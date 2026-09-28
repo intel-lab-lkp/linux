@@ -335,6 +335,8 @@ static void release_xsl_irq(struct ocxl_link *link)
 
 	if (spa->virq) {
 		free_irq(spa->virq, link);
+		if (cancel_work_sync(&spa->xsl_fault.fault_work))
+			mmput(spa->xsl_fault.pe_data.mm);
 		irq_dispose_mapping(spa->virq);
 	}
 	kfree(spa->irq_name);
