@@ -5046,11 +5046,12 @@ static int intel_pmu_hw_config(struct perf_event *event)
 		leader = event->group_leader;
 		if (intel_set_branch_counter_constr(leader, &num))
 			return -EINVAL;
-		leader->hw.flags |= PERF_X86_EVENT_BRANCH_COUNTERS;
 
-		for_each_sibling_event(sibling, leader) {
-			if (intel_set_branch_counter_constr(sibling, &num))
-				return -EINVAL;
+		if (leader->nr_siblings) {
+			for_each_sibling_event(sibling, leader) {
+				if (intel_set_branch_counter_constr(sibling, &num))
+					return -EINVAL;
+			}
 		}
 
 		/* event isn't installed as a sibling yet. */
@@ -5069,7 +5070,7 @@ static int intel_pmu_hw_config(struct perf_event *event)
 		if (0 == (event->attr.branch_sample_type &
 			  ~(PERF_SAMPLE_BRANCH_PLM_ALL |
 			    PERF_SAMPLE_BRANCH_COUNTERS)))
-			event->hw.flags  &= ~PERF_X86_EVENT_NEEDS_BRANCH_STACK;
+			event->hw.flags &= ~PERF_X86_EVENT_NEEDS_BRANCH_STACK;
 
 		/*
 		 * Force the leader to be a LBR event. So LBRs can be reset
@@ -5077,6 +5078,8 @@ static int intel_pmu_hw_config(struct perf_event *event)
 		 */
 		if (!intel_pmu_needs_branch_stack(leader))
 			return -EINVAL;
+
+		leader->hw.flags |= PERF_X86_EVENT_BRANCH_COUNTERS;
 	}
 
 	if (intel_pmu_needs_branch_stack(event)) {
