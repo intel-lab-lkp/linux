@@ -27,7 +27,7 @@ dm-clone-y	+= dm-clone-target.o dm-clone-metadata.o
 dm-verity-y	+= dm-verity-target.o
 dm-zoned-y	+= dm-zoned-target.o dm-zoned-metadata.o dm-zoned-reclaim.o
 
-md-mod-y	+= md.o
+md-mod-y	+= md.o md-ctl.o
 md-mod-$(CONFIG_MD_BITMAP)	+= md-bitmap.o
 md-mod-$(CONFIG_MD_LLBITMAP)	+= md-llbitmap.o
 raid456-y	+= raid5.o raid5-cache.o raid5-ppl.o

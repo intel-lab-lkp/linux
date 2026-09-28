@@ -975,7 +975,12 @@ extern void mddev_destroy_serial_pool(struct mddev *mddev,
 				      struct md_rdev *rdev);
 struct md_rdev *md_find_rdev_nr_rcu(struct mddev *mddev, int nr);
 struct md_rdev *md_find_rdev_rcu(struct mddev *mddev, dev_t dev);
+int set_disk_faulty(struct mddev *mddev, dev_t dev);
 int update_array_info(struct mddev *mddev, mdu_array_info_t *info);
+int md_ctl_init(void);
+void md_ctl_exit(void);
+int md_do_ioctl(struct block_device *bdev, blk_mode_t mode, unsigned int cmd,
+		unsigned long arg);
 
 extern struct list_head all_mddevs;
 extern spinlock_t all_mddevs_lock;

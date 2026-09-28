@@ -8339,18 +8339,14 @@ static int __md_set_array_info(struct mddev *mddev, void __user *argp)
 	return err;
 }
 
-static int md_ioctl(struct block_device *bdev, blk_mode_t mode,
-			unsigned int cmd, unsigned long arg)
+int md_do_ioctl(struct block_device *bdev, blk_mode_t mode, unsigned int cmd,
+		unsigned long arg)
 {
 	int err = 0;
 	unsigned int noio_flags = 0;
 	void __user *argp = (void __user *)arg;
 	struct mddev *mddev = NULL;
 	bool suspend;
-
-	err = md_ioctl_valid(cmd);
-	if (err)
-		return err;
 
 	/*
 	 * Commands dealing with the RAID driver but not any
@@ -8541,6 +8537,21 @@ out:
 		clear_bit(MD_CLOSING, &mddev->flags);
 	return err;
 }
+
+static int md_ioctl(struct block_device *bdev, blk_mode_t mode,
+		    unsigned int cmd, unsigned long arg)
+{
+	int err;
+
+	err = md_ioctl_valid(cmd);
+	if (err)
+		return err;
+
+	pr_warn_once("md: ioctl is deprecated and will be removed in future, please upgrade to mdadm-4.6+\n");
+
+	return md_do_ioctl(bdev, mode, cmd, arg);
+}
+
 #ifdef CONFIG_COMPAT
 static int md_compat_ioctl(struct block_device *bdev, blk_mode_t mode,
 		    unsigned int cmd, unsigned long arg)
@@ -10774,12 +10785,20 @@ static int __init md_init(void)
 		goto err_mdp;
 	mdp_major = ret;
 
+	ret = md_ctl_init();
+	if (ret < 0)
+		goto err_ctl;
+
 	register_reboot_notifier(&md_notifier);
 	raid_table_header = register_sysctl("dev/raid", raid_table);
 
 	md_geninit();
+
 	return 0;
 
+err_ctl:
+	unregister_blkdev(mdp_major, "mdb");
+	mdp_major = 0;
 err_mdp:
 	unregister_blkdev(MD_MAJOR, "md");
 err_md:

@@ -71,6 +71,7 @@
 #define VHOST_VSOCK_MINOR	241
 #define EISA_EEPROM_MINOR	241
 #define RFKILL_MINOR		242
+#define MD_CTRL_MINOR		243
 
 /*
  * Misc char device minor code space division related to below macro:
