@@ -1299,8 +1299,10 @@ int __init cscfg_init(void)
 
 	/* initialise configfs subsystem */
 	err = cscfg_configfs_init(cscfg_mgr);
-	if (err)
-		goto exit_err;
+	if (err) {
+		device_unregister(cscfg_device());
+		return err;
+	}
 
 	/* preload built-in configurations */
 	err = cscfg_preload(THIS_MODULE);
