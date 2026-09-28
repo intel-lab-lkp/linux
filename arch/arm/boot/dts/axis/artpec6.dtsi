@@ -323,13 +323,19 @@
 
 			mtl_rx_setup: rx-queues-config {
 				snps,rx-queues-to-use = <1>;
-				queue0 {};
+
+				queue0 {
+				};
 			};
 
 			mtl_tx_setup: tx-queues-config {
 				snps,tx-queues-to-use = <2>;
-				queue0 {};
-				queue1 {};
+
+				queue0 {
+				};
+
+				queue1 {
+				};
 			};
 		};
 
