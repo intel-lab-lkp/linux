@@ -2,9 +2,10 @@
 # SPDX-License-Identifier: (LGPL-2.1 OR BSD-2-Clause)
 import argparse
 import os
-from typing import Optional
-from metric import (aggr_nr, d_ratio, Event, JsonEncodeMetric,
-                    JsonEncodeMetricGroupDescriptions, LoadEvents, Metric, MetricGroup)
+from typing import List, Optional, Union
+from metric import (aggr_nr, d_ratio, has_event, source_count, Event, Expression,
+                    JsonEncodeMetric, JsonEncodeMetricGroupDescriptions, LoadEvents, Metric,
+                    MetricGroup, Select)
 from common_metrics import Cycles
 
 # Global command line arguments.
@@ -67,7 +68,66 @@ def NvidiaT410Uncore() -> Optional[MetricGroup]:
                    rd_cum_outs - rd_cum_outs, "1ns"),
         ], description="NVIDIA Tegra410 DDR latency")
 
-    return MetricGroup("lpm_uncore", [DdrBw(), DdrLat()],
+    def PcieBw() -> MetricGroup:
+        # PCIE PMU, one per socket and PCIe Root Complex (RC):
+        # AVG_{RD,WR}_BANDWIDTH = {RD,WR}_BYTES / ELAPSED_TIME
+        loc_dst = "dst_loc_cmem=0x1,dst_loc_gmem=0x1,dst_loc_pcie_p2p=0x1,dst_loc_pcie_cxl=0x1"
+        rem_dst = "dst_rem=0x1"
+
+        def SocketSum(rc: str, event: str) -> Expression:
+            # Sum the event over both sockets. A PMU counts as 0 if it isn't
+            # present (has_event() is 0) or isn't counted in the aggregation,
+            # e.g. the other socket with --per-socket (source_count() is 0).
+            def Count(e: Event) -> Expression:
+                return Select(Select(e, source_count(e), 0), has_event(e), 0)
+
+            return (Count(Event(f"nvidia_pcie_pmu_0_{rc}/{event}/")) +
+                    Count(Event(f"nvidia_pcie_pmu_1_{rc}/{event}/")))
+
+        # nvidia_pcie_pmu_<socket-id>_rc matches the PMUs of all RCs in the socket.
+        rd = SocketSum("rc", "rd_bytes")
+        wr = SocketSum("rc", "wr_bytes")
+        metrics: List[Union[Metric, MetricGroup]] = [
+            Metric("lpm_pcie_bw", "Total PCIe bandwidth across all Root Complexes",
+                   d_ratio(rd + wr, interval_sec), mb_per_sec),
+            Metric("lpm_pcie_rd_bw", "Total PCIe read bandwidth across all Root Complexes",
+                   d_ratio(rd, interval_sec), mb_per_sec),
+            Metric("lpm_pcie_wr_bw", "Total PCIe write bandwidth across all Root Complexes",
+                   d_ratio(wr, interval_sec), mb_per_sec),
+        ]
+        for i in range(6):
+            rc = f"rc_{i}"
+            rc_rd = SocketSum(rc, "rd_bytes")
+            rc_wr = SocketSum(rc, "wr_bytes")
+            loc_rd = SocketSum(rc, f"rd_bytes,{loc_dst}")
+            loc_wr = SocketSum(rc, f"wr_bytes,{loc_dst}")
+            rem_rd = SocketSum(rc, f"rd_bytes,{rem_dst}")
+            rem_wr = SocketSum(rc, f"wr_bytes,{rem_dst}")
+            metrics.append(MetricGroup(f"lpm_pcie_rc{i}_bw", [
+                Metric(f"lpm_pcie_bw_{i}", f"PCIe total bandwidth on Root Complex {i}",
+                       d_ratio(rc_rd + rc_wr, interval_sec), mb_per_sec),
+                Metric(f"lpm_pcie_rd_bw_{i}", f"PCIe read bandwidth on Root Complex {i}",
+                       d_ratio(rc_rd, interval_sec), mb_per_sec),
+                Metric(f"lpm_pcie_wr_bw_{i}", f"PCIe write bandwidth on Root Complex {i}",
+                       d_ratio(rc_wr, interval_sec), mb_per_sec),
+                Metric(f"lpm_pcie_loc_rd_bw_{i}",
+                       f"PCIe local read bandwidth on Root Complex {i}",
+                       d_ratio(loc_rd, interval_sec), mb_per_sec),
+                Metric(f"lpm_pcie_loc_wr_bw_{i}",
+                       f"PCIe local write bandwidth on Root Complex {i}",
+                       d_ratio(loc_wr, interval_sec), mb_per_sec),
+                Metric(f"lpm_pcie_rem_rd_bw_{i}",
+                       f"PCIe remote read bandwidth on Root Complex {i}",
+                       d_ratio(rem_rd, interval_sec), mb_per_sec),
+                Metric(f"lpm_pcie_rem_wr_bw_{i}",
+                       f"PCIe remote write bandwidth on Root Complex {i}",
+                       d_ratio(rem_wr, interval_sec), mb_per_sec),
+            ], description=f"PCIe bandwidth on Root Complex {i}"))
+
+        return MetricGroup("lpm_pcie_bw", metrics,
+                           description="NVIDIA Tegra410 PCIe Root Complex bandwidth")
+
+    return MetricGroup("lpm_uncore", [DdrBw(), DdrLat(), PcieBw()],
                        description="NVIDIA Tegra410 uncore metrics")
 
 
