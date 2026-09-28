@@ -405,21 +405,65 @@ impl ops::MulAssign<i64> for Delta {
     }
 }
 
+#[inline]
+fn div_s64_or_panic(dividend: i64, divisor: i64) -> i64 {
+    if divisor == 0 {
+        panic!("attempt to divide by zero");
+    }
+
+    if dividend == i64::MIN && divisor == -1 {
+        panic!("attempt to divide with overflow");
+    }
+
+    #[cfg(CONFIG_64BIT)]
+    {
+        dividend / divisor
+    }
+
+    #[cfg(not(CONFIG_64BIT))]
+    {
+        // SAFETY: `divisor` is non-zero, and both operands are passed by value.
+        unsafe { bindings::div64_s64(dividend, divisor) }
+    }
+}
+
+#[inline]
+fn rem_s64_or_panic(dividend: i64, divisor: i32) -> i64 {
+    if divisor == 0 {
+        panic!("attempt to calculate the remainder with a divisor of zero");
+    }
+
+    if dividend == i64::MIN && divisor == -1 {
+        panic!("attempt to calculate the remainder with overflow");
+    }
+
+    #[cfg(CONFIG_64BIT)]
+    {
+        dividend % i64::from(divisor)
+    }
+
+    #[cfg(not(CONFIG_64BIT))]
+    {
+        let mut rem = 0;
+
+        // SAFETY: `rem` points to a local variable and `divisor` is non-zero.
+        unsafe { bindings::div_s64_rem(dividend, divisor, &mut rem) };
+
+        i64::from(rem)
+    }
+}
+
+/// # Panics
+///
+/// Panics if `rhs` is zero, or if the quotient overflows, i.e. if `self` is
+/// `Delta::from_nanos(i64::MIN)` and `rhs` is `Delta::from_nanos(-1)`. Both
+/// cases panic on 32-bit as well as on 64-bit; see `div_s64_or_panic()`.
 impl ops::Div for Delta {
     type Output = i64;
 
     #[inline]
     fn div(self, rhs: Self) -> Self::Output {
-        #[cfg(CONFIG_64BIT)]
-        {
-            self.value / rhs.value
-        }
-
-        #[cfg(not(CONFIG_64BIT))]
-        {
-            // SAFETY: This function is always safe to call regardless of the input values
-            unsafe { bindings::div64_s64(self.value, rhs.value) }
-        }
+        div_s64_or_panic(self.value, rhs.value)
     }
 }
 
@@ -554,29 +598,26 @@ impl Delta {
         }
     }
 
-    /// Return `self % dividend` where `dividend` is in nanoseconds.
+    /// Return `self % divisor`, where `divisor` is a number of nanoseconds.
     ///
-    /// The kernel doesn't have any emulation for `s64 % s64` on 32 bit platforms, so this is
-    /// limited to 32 bit dividends.
+    /// The result has the sign of `self`, and its magnitude is strictly smaller
+    /// than that of `divisor`.
+    ///
+    /// `divisor` is a 32-bit integer because the helper called on 32-bit
+    /// platforms, `div_s64_rem()`, takes an `s32` divisor. The dividend (`self`)
+    /// is a full `i64` on every architecture, so the width restriction applies
+    /// to all configurations, not only to 32-bit ones.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `divisor` is zero, or if the division overflows, i.e. if `self`
+    /// is `Delta::from_nanos(i64::MIN)` and `divisor` is `-1`. These are the same
+    /// inputs [`ops::Div`] panics on, and the same ones `i64`'s `%` operator
+    /// panics on. See `rem_s64_or_panic()`.
     #[inline]
-    pub fn rem_nanos(self, dividend: i32) -> Self {
-        #[cfg(CONFIG_64BIT)]
-        {
-            Self {
-                value: self.as_nanos() % i64::from(dividend),
-            }
-        }
-
-        #[cfg(not(CONFIG_64BIT))]
-        {
-            let mut rem = 0;
-
-            // SAFETY: `rem` is in the stack, so we can always provide a valid pointer to it.
-            unsafe { bindings::div_s64_rem(self.as_nanos(), dividend, &mut rem) };
-
-            Self {
-                value: i64::from(rem),
-            }
+    pub fn rem_nanos(self, divisor: i32) -> Self {
+        Self {
+            value: rem_s64_or_panic(self.as_nanos(), divisor),
         }
     }
 }
