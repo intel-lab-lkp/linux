@@ -118,7 +118,13 @@ managing and controlling ublk devices with help of several control commands:
   After the server prepares userspace resources (such as creating I/O handler
   threads & io_uring for handling ublk IO), this command is sent to the
   driver for allocating & exposing ``/dev/ublkb*``. Parameters set via
-  ``UBLK_CMD_SET_PARAMS`` are applied for creating the device.
+  ``UBLK_CMD_SET_PARAMS`` are applied for creating the device. The command
+  fails with ``-ENODEV`` if any fetched io command got canceled meantime,
+  by ``UBLK_CMD_STOP_DEV`` or because its io_uring is gone, and the device
+  has to be deleted then. With ``UBLK_F_BATCH_IO`` it fails the same way
+  after a ``UBLK_CMD_STOP_DEV`` sent while no process had ``/dev/ublkc*``
+  open, or after the current one opened it, even if no io command had
+  been fetched yet.
 
 - ``UBLK_CMD_STOP_DEV``
 
@@ -195,7 +201,12 @@ managing and controlling ublk devices with help of several control commands:
   command is accepted after ublk device is quiesced and a new process has
   opened ``/dev/ublkc*`` and get all ublk queues be ready. When this command
   returns, ublk device is unquiesced and new I/O requests are passed to the
-  new process.
+  new process. It fails with ``-ENODEV`` if any of the new io commands got
+  canceled already, and with ``UBLK_F_BATCH_IO`` also if the cancel of a
+  ``UBLK_CMD_QUIESCE_DEV`` reached one of its queues after the old process
+  released ``/dev/ublkc*`` and before that queue got ready. The device has
+  to be deleted then, or the recovery
+  started over after the new process has closed ``/dev/ublkc*``.
 
 - user recovery feature description
 

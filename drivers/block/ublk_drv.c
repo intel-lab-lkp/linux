@@ -2757,6 +2757,7 @@ static void ublk_abort_queue(struct ublk_device *ub, struct ublk_queue *ubq)
 static struct gendisk *ublk_start_cancel(struct ublk_device *ub)
 	__must_hold(&ub->cancel_mutex)
 {
+	/* sync with ublk_ctrl_start_dev() publishing the disk */
 	struct gendisk *disk = ublk_get_disk(ub);
 
 	if (ub->canceling)
@@ -2772,10 +2773,10 @@ static struct gendisk *ublk_start_cancel(struct ublk_device *ub)
 		blk_mq_unquiesce_queue(disk->queue);
 	} else {
 		/*
-		 * Disk not yet allocated by ublk_ctrl_start_dev(), so
-		 * there is no request queue and ublk_queue_rq() cannot
-		 * be running.  Just set the flag; if start_dev proceeds
-		 * later, new I/O will see canceling and be aborted.
+		 * Disk not published by ublk_ctrl_start_dev() or detached
+		 * already, so ublk_queue_rq() cannot be running.  Just set
+		 * the flag, START_DEV fails on canceled commands instead
+		 * of adding a disk on top of them.
 		 */
 		ublk_set_canceling(ub, true);
 	}
@@ -4653,10 +4654,34 @@ static bool ublk_validate_user_pid(struct ublk_device *ub, pid_t ublksrv_pid)
 }
 
 /*
+ * The commands canceled by ublk_claim_cmd() can't be fetched again
+ * before the queues are reinitialized, so a ready device must not go live
+ * while a queue is canceling or holds a command canceled after the fetch.
+ */
+static bool ublk_dev_cmds_canceled(struct ublk_device *ub)
+	__must_hold(&ub->cancel_mutex)
+{
+	u16 i;
+
+	for (i = 0; i < ub->dev_info.nr_hw_queues; i++) {
+		struct ublk_queue *ubq = ublk_get_queue(ub, i);
+		bool canceled;
+
+		spin_lock(&ubq->cancel_lock);
+		canceled = ubq->canceling || ublk_queue_has_canceled_io(ubq);
+		spin_unlock(&ubq->cancel_lock);
+		if (canceled)
+			return true;
+	}
+	return false;
+}
+
+/*
  * Wait until all queues have fetched their I/O commands, and return with
- * ub->mutex held and readiness guaranteed: then every queue's ->canceling
- * is cleared. Ready may regress between wakeup and mutex_lock() (F_BATCH
- * UNPREP, daemon death), so re-check it under the mutex and wait again.
+ * ub->mutex held and readiness guaranteed. Ready may regress between wakeup
+ * and mutex_lock() (F_BATCH UNPREP, daemon death), so re-check it under the
+ * mutex and wait again. The commands may still get canceled after being
+ * fetched, callers check ublk_dev_cmds_canceled().
  */
 static int ublk_wait_dev_ready_and_lock(struct ublk_device *ub)
 {
@@ -4691,6 +4716,7 @@ static int ublk_ctrl_start_dev(struct ublk_device *ub,
 	};
 	struct gendisk *disk;
 	int ret = -EINVAL;
+	bool canceled;
 
 	if (ublksrv_pid <= 0)
 		return -EINVAL;
@@ -4776,8 +4802,20 @@ static int ublk_ctrl_start_dev(struct ublk_device *ub,
 	disk->fops = &ub_fops;
 	disk->private_data = ub;
 
+	/*
+	 * Check and publish under cancel_mutex, so either the canceled
+	 * commands are seen here or ublk_start_cancel() sees the disk.
+	 */
+	mutex_lock(&ub->cancel_mutex);
+	canceled = ublk_dev_cmds_canceled(ub);
+	if (!canceled)
+		ub->ub_disk = disk;
+	mutex_unlock(&ub->cancel_mutex);
+	if (canceled) {
+		ret = -ENODEV;
+		goto out_put_disk;
+	}
 	ub->dev_info.ublksrv_pid = ub->ublksrv_tgid;
-	ub->ub_disk = disk;
 
 	ublk_apply_params(ub);
 
@@ -4824,6 +4862,7 @@ out_put_cdev:
 		ublk_detach_disk(ub);
 		ublk_put_device(ub);
 	}
+out_put_disk:
 	if (ret)
 		put_disk(disk);
 out_unlock:
@@ -5350,6 +5389,7 @@ static int ublk_ctrl_end_recovery(struct ublk_device *ub,
 {
 	int ublksrv_pid = (int)header->data[0];
 	int ret = -EINVAL;
+	bool canceled;
 
 	pr_devel("%s: Waiting for all FETCH_REQs, dev id %d...\n", __func__,
 		 header->dev_id);
@@ -5370,6 +5410,13 @@ static int ublk_ctrl_end_recovery(struct ublk_device *ub,
 
 	if (!ublk_dev_in_recoverable_state(ub)) {
 		ret = -EBUSY;
+		goto out_unlock;
+	}
+	mutex_lock(&ub->cancel_mutex);
+	canceled = ublk_dev_cmds_canceled(ub);
+	mutex_unlock(&ub->cancel_mutex);
+	if (canceled) {
+		ret = -ENODEV;
 		goto out_unlock;
 	}
 	ub->dev_info.ublksrv_pid = ub->ublksrv_tgid;
