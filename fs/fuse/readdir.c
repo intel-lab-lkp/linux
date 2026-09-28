@@ -229,7 +229,7 @@ retry:
 		forget_all_cached_acls(inode);
 		fuse_change_attributes(inode, &o->attr, NULL,
 				       ATTR_TIMEOUT(o),
-				       attr_version);
+				       attr_version, o->generation);
 		/*
 		 * The other branch comes via fuse_iget()
 		 * which bumps nlookup inside
