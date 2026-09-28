@@ -92,6 +92,54 @@ static int qca83xx_probe(struct phy_device *phydev)
 	return 0;
 }
 
+static int qca8337_read_status(struct phy_device *phydev)
+{
+	int ret, ss;
+
+	ret = genphy_read_status(phydev);
+	if (ret)
+		return ret;
+	if (phydev->autoneg == AUTONEG_DISABLE)
+		return 0;
+
+	phydev->speed = SPEED_UNKNOWN;
+	phydev->duplex = DUPLEX_UNKNOWN;
+	phydev->pause = false;
+	phydev->asym_pause = false;
+	if (!phydev->link)
+		return 0;
+
+	/* SmartSpeed can make the actual speed differ from the advertised modes. */
+	ss = phy_read(phydev, AT803X_SPECIFIC_STATUS);
+	if (ss < 0)
+		return ss;
+	if (!(ss & AT803X_SS_SPEED_DUPLEX_RESOLVED)) {
+		phydev->link = 0;
+		return 0;
+	}
+
+	switch ((ss & AT803X_SS_SPEED_MASK) >> 14) {
+	case AT803X_SS_SPEED_10:
+		phydev->speed = SPEED_10;
+		break;
+	case AT803X_SS_SPEED_100:
+		phydev->speed = SPEED_100;
+		break;
+	case AT803X_SS_SPEED_1000:
+		phydev->speed = SPEED_1000;
+		break;
+	default:
+		phydev->link = 0;
+		return 0;
+	}
+
+	phydev->duplex = ss & AT803X_SS_DUPLEX ? DUPLEX_FULL : DUPLEX_HALF;
+	if (phydev->autoneg == AUTONEG_ENABLE && phydev->autoneg_complete)
+		phy_resolve_aneg_pause(phydev);
+
+	return 0;
+}
+
 static int qca83xx_config_init(struct phy_device *phydev)
 {
 	u8 switch_revision;
@@ -220,6 +268,7 @@ static struct phy_driver qca83xx_driver[] = {
 	.flags			= PHY_IS_INTERNAL,
 	.config_init		= qca83xx_config_init,
 	.soft_reset		= genphy_soft_reset,
+	.read_status		= qca8337_read_status,
 	.get_sset_count		= qca83xx_get_sset_count,
 	.get_strings		= qca83xx_get_strings,
 	.get_stats		= qca83xx_get_stats,
