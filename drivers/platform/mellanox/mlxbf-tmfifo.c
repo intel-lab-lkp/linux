@@ -1143,7 +1143,7 @@ static void mlxbf_tmfifo_virtio_synchronize_cbs(struct virtio_device *vdev)
 	unsigned long flags;
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(fifo->spin_lock); i++) {
+	for (i = 0; i < 2; i++) {
 		spin_lock_irqsave(&fifo->spin_lock[i], flags);
 		spin_unlock_irqrestore(&fifo->spin_lock[i], flags);
 	}
