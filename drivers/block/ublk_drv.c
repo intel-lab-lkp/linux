@@ -192,6 +192,14 @@ struct ublk_batch_io_data {
 #define UBLK_IO_FLAG_CANCELED	0x80000000
 
 /*
+ * Set next to UBLK_IO_FLAG_CANCELED by a cancel which took a command
+ * before io_uring marked it cancelable, the issue path completes the
+ * command then, see ublk_take_canceled_cmd().  Set and cleared under
+ * io->lock.
+ */
+#define UBLK_IO_FLAG_CANCEL_DEFERRED	0x40000000
+
+/*
  * Initialize refcount to a large number to include any registered buffers.
  * UBLK_IO_COMMIT_AND_FETCH_REQ will release these references minus those for
  * any buffers registered on the io daemon task.
@@ -2807,6 +2815,17 @@ static void ublk_cancel_cmd(struct ublk_queue *ubq, u16 tag,
 		io->flags |= UBLK_IO_FLAG_CANCELED;
 		cmd = io->cmd;
 		io->cmd = NULL;
+		/*
+		 * The issue path stores the command before ublk_prep_cancel()
+		 * marks it cancelable, and completing it in between would
+		 * leave a completed request on io_uring's list of cancelable
+		 * commands.  Leave the completion to the issue path then, it
+		 * looks for this once the command is marked.
+		 */
+		if (!(READ_ONCE(cmd->flags) & IORING_URING_CMD_CANCELABLE)) {
+			io->flags |= UBLK_IO_FLAG_CANCEL_DEFERRED;
+			cmd = NULL;
+		}
 	}
 	spin_unlock(&ubq->cancel_lock);
 unlock:
@@ -3202,6 +3221,24 @@ static inline void ublk_prep_cancel(struct io_uring_cmd *cmd,
 	io_uring_cmd_mark_cancelable(cmd, issue_flags);
 }
 
+/*
+ * Called by the issue path after ublk_prep_cancel(): a cancel which found
+ * the command before it was marked took it off the io and left completing
+ * it here.  io->lock orders this against ublk_cancel_cmd(), which sees the
+ * marking if it runs after this, and completes the command itself then.
+ */
+static bool ublk_take_canceled_cmd(struct ublk_io *io)
+{
+	bool canceled;
+
+	ublk_io_lock(io);
+	canceled = io->flags & UBLK_IO_FLAG_CANCEL_DEFERRED;
+	io->flags &= ~UBLK_IO_FLAG_CANCEL_DEFERRED;
+	ublk_io_unlock(io);
+
+	return canceled;
+}
+
 static void ublk_io_release(void *priv)
 {
 	struct request *rq = priv;
@@ -3466,6 +3503,8 @@ static int ublk_ch_uring_cmd_local(struct io_uring_cmd *cmd,
 			goto out;
 
 		ublk_prep_cancel(cmd, issue_flags, ubq, tag);
+		if (ublk_take_canceled_cmd(io))
+			io_uring_cmd_done(cmd, UBLK_IO_RES_ABORT, issue_flags);
 		return -EIOCBQUEUED;
 	}
 
@@ -3542,6 +3581,8 @@ static int ublk_ch_uring_cmd_local(struct io_uring_cmd *cmd,
 		goto out;
 	}
 	ublk_prep_cancel(cmd, issue_flags, ubq, tag);
+	if (ublk_take_canceled_cmd(io))
+		io_uring_cmd_done(cmd, UBLK_IO_RES_ABORT, issue_flags);
 	return -EIOCBQUEUED;
 
  out:
