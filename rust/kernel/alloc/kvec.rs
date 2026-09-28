@@ -369,7 +369,24 @@ where
 
     /// Appends an element to the back of the [`Vec`] instance by initializing it in place.
     ///
-    /// Unlike [`Vec::push`], the initializer may be fallible. If the allocation fails, the
+    /// # Examples
+    ///
+    /// ```
+    /// use pin_init::init_zeroed;
+    ///
+    /// let mut v = KVec::<[u8; 200]>::new();
+    /// v.push_init(init_zeroed(), GFP_KERNEL)?;
+    /// assert_eq!(v[0], [0; 200]);
+    /// # Ok::<(), Error>(())
+    /// ```
+    pub fn push_init(&mut self, init: impl Init<T>, flags: Flags) -> Result<(), AllocError> {
+        self.try_push_init(init, flags)
+            .map_err(|PushInitError::AllocError(_)| AllocError)
+    }
+
+    /// Appends an element to the back of the [`Vec`] instance by initializing it in place.
+    ///
+    /// Unlike [`Vec::push_init`], the initializer may be fallible. If the allocation fails, the
     /// original initializer `init` is handed back in [`PushInitError::AllocError`]. If the
     /// initializer itself fails, its error is returned in [`PushInitError::InitError`].
     ///
