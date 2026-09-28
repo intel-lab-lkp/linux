@@ -1677,7 +1677,8 @@ int nfs_initiate_commit(struct rpc_clnt *clnt, struct nfs_commit_data *data,
 		return PTR_ERR(task);
 	if (how & FLUSH_SYNC)
 		rpc_wait_for_completion_task(task);
-	rpc_put_task(task);
+	/* The caller may be writeback: don't run rpc_release() here */
+	rpc_put_task_async(task);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(nfs_initiate_commit);
