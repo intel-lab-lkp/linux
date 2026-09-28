@@ -6,6 +6,9 @@
 #include <linux/types.h>
 
 extern struct atomic_notifier_head panic_notifier_list;
+extern struct atomic_notifier_head panic_pre_kdump_list;
+
+void panic_notify_pre_kdump(char *msg);
 
 extern bool crash_kexec_post_notifiers;
 

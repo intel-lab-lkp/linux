@@ -82,6 +82,10 @@ ATOMIC_NOTIFIER_HEAD(panic_notifier_list);
 
 EXPORT_SYMBOL(panic_notifier_list);
 
+struct atomic_notifier_head panic_pre_kdump_list =
+	ATOMIC_NOTIFIER_INIT(panic_pre_kdump_list);
+EXPORT_SYMBOL_GPL(panic_pre_kdump_list);
+
 static void panic_print_deprecated(void)
 {
 	pr_info_once("Kernel: The 'panic_print' parameter is now deprecated. Please use 'panic_sys_info' and 'panic_console_replay' instead.\n");
@@ -568,6 +572,27 @@ static void panic_other_cpus_shutdown(bool crash_kexec)
 }
 
 /**
+ * panic_notify_pre_kdump - invoke selected callbacks before kdump
+ * @msg: Panic message, or NULL for direct crash-kexec entry
+ *
+ * Dispatch at most once per boot, including recursive entry. Callbacks run
+ * with interrupts disabled, possibly in NMI context, before other CPUs have
+ * necessarily stopped. The kexec lock may be held. They must not sleep,
+ * allocate, wait for other CPUs, or call into kexec management operations.
+ * The message is read-only and may only be used during the callback.
+ */
+void panic_notify_pre_kdump(char *msg)
+{
+	static atomic_t started = ATOMIC_INIT(0);
+	unsigned long flags;
+
+	local_irq_save(flags);
+	if (!atomic_xchg(&started, 1))
+		atomic_notifier_call_chain(&panic_pre_kdump_list, 0, msg);
+	local_irq_restore(flags);
+}
+
+/**
  * vpanic - halt the system
  * @fmt: The text string to print
  * @args: Arguments for the format string
@@ -682,6 +707,7 @@ void vpanic(const char *fmt, va_list args)
 
 	sys_info(panic_print);
 
+	panic_notify_pre_kdump(buf);
 	kmsg_dump_desc(KMSG_DUMP_PANIC, buf);
 
 	/*
