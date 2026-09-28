@@ -209,8 +209,16 @@ static u16 bnge_get_total_rss_ctxs(struct bnge_dev *bd,
 
 static u16 bnge_get_total_vnics(struct bnge_dev *bd)
 {
-	if (bnge_is_arfs_cap(bd))
-		return 2;
+	if (bnge_is_arfs_cap(bd)) {
+		u16 vnics = 2;
+
+		if (bd->netdev) {
+			struct bnge_net *bn = netdev_priv(bd->netdev);
+
+			vnics += bn->num_rss_ctx;
+		}
+		return vnics;
+	}
 
 	return 1;
 }
