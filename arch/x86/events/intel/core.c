@@ -5300,30 +5300,53 @@ static int intel_pmu_hw_config(struct perf_event *event)
 
 		if (is_available_metric_event(event)) {
 			struct perf_event *leader = event->group_leader;
+			struct perf_event *slots = NULL;
+			struct perf_event *sibling;
 
 			/* The metric events don't support sampling. */
 			if (is_sampling_event(event))
 				return -EINVAL;
 
-			/* The metric events require a slots group leader. */
-			if (!is_slots_event(leader))
+			/*
+			 * intel_pmu_hw_config() cannot tell whether the current
+			 * event is the last one in the group. Require the slots
+			 * event to appear before all metric events.
+			 */
+			if (is_slots_event(leader)) {
+				slots = leader;
+			} else if (leader->nr_siblings) {
+				for_each_sibling_event(sibling, leader) {
+					if (is_slots_event(sibling)) {
+						slots = sibling;
+						break;
+					}
+				}
+			}
+
+			/* The metric events require a slots event. */
+			if (!slots)
 				return -EINVAL;
 
 			/*
-			 * The leader/SLOTS must not be a sampling event for
+			 * The slots event must not be a sampling event for
 			 * metric use; hardware requires it starts at 0 when used
 			 * in conjunction with MSR_PERF_METRICS.
 			 */
-			if (is_sampling_event(leader))
+			if (is_sampling_event(slots))
 				return -EINVAL;
 
-			event->event_caps |= PERF_EV_CAP_SIBLING;
+			if (slots == leader) {
+				event->event_caps |= PERF_EV_CAP_SIBLING;
+			} else {
+				slots->event_caps |= PERF_EV_CAP_RELIED_ON;
+				event->event_caps |= PERF_EV_CAP_RELIANT;
+			}
 			/*
 			 * Only once we have a METRICs sibling do we
 			 * need TopDown magic.
 			 */
-			leader->hw.flags |= PERF_X86_EVENT_TOPDOWN;
-			event->hw.flags  |= PERF_X86_EVENT_TOPDOWN;
+			slots->hw.flags |= PERF_X86_EVENT_TOPDOWN;
+			event->hw.flags |= PERF_X86_EVENT_TOPDOWN;
 		}
 	}
 
