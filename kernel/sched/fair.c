@@ -1066,9 +1066,20 @@ static inline bool min_vruntime_update(struct sched_entity *se, bool exit)
 	       se->max_slice == old_max_slice;
 }
 
+/*
+ * Fold @new's subtree data into @se, for each @se on @new's insertion path.
+ */
+static inline void
+min_vruntime_merge(struct sched_entity *se, struct sched_entity *new)
+{
+	__min_vruntime_update(se, &new->run_node);
+	__min_slice_update(se, &new->run_node);
+	__max_slice_update(se, &new->run_node);
+}
 
 RB_DECLARE_CALLBACKS_MULTI(static, min_vruntime_cb, struct sched_entity,
-		     run_node, min_vruntime_copy, min_vruntime_update);
+		     run_node, min_vruntime_copy, min_vruntime_update,
+		     min_vruntime_merge);
 
 /*
  * Enqueue an entity into the rb-tree:

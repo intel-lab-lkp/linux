@@ -28,6 +28,7 @@ struct rb_augment_callbacks {
 	void (*propagate)(struct rb_node *node, struct rb_node *stop);
 	void (*copy)(struct rb_node *old, struct rb_node *new);
 	void (*rotate)(struct rb_node *old, struct rb_node *new);
+	void (*merge)(struct rb_node *node, struct rb_node *new);
 };
 
 extern void __rb_insert_augmented(struct rb_node *node, struct rb_root *root,
@@ -60,6 +61,12 @@ rb_insert_augmented_cached(struct rb_node *node,
 	rb_insert_augmented(node, &root->rb_root, augment);
 }
 
+/*
+ * Insert @node into the leftmost cached augmented tree @tree.
+ *
+ * The augmented data of @node must already describe @node alone; it is
+ * merged into every ancestor on the way down through augment->merge().
+ */
 static __always_inline struct rb_node *
 rb_add_augmented_cached(struct rb_node *node, struct rb_root_cached *tree,
 			bool (*less)(struct rb_node *, const struct rb_node *),
@@ -71,6 +78,7 @@ rb_add_augmented_cached(struct rb_node *node, struct rb_root_cached *tree,
 
 	while (*link) {
 		parent = *link;
+		augment->merge(parent, node);
 		if (less(node, parent)) {
 			link = &parent->rb_left;
 		} else {
@@ -80,7 +88,6 @@ rb_add_augmented_cached(struct rb_node *node, struct rb_root_cached *tree,
 	}
 
 	rb_link_node(node, parent, link);
-	augment->propagate(parent, NULL); /* suboptimal */
 	rb_insert_augmented_cached(node, tree, leftmost, augment);
 
 	return leftmost ? node : NULL;
@@ -95,10 +102,13 @@ rb_add_augmented_cached(struct rb_node *node, struct rb_root_cached *tree,
  * RBFIELD:     name of struct rb_node field within RBSTRUCT
  * RBCOPY:	name of function that copies the RBAUGMENTED datas
  * RBCOMPUTE:   name of function that recomputes the RBAUGMENTED datas
+ * RBMERGE:     name of function that merges a new node's RBAUGMENTED datas
+ *              into an ancestor's, used on the insertion path
  */
 
 #define RB_DECLARE_CALLBACKS_MULTI(RBSTATIC, RBNAME,			\
-			     RBSTRUCT, RBFIELD, RBCOPY, RBCOMPUTE)	\
+			     RBSTRUCT, RBFIELD, RBCOPY, RBCOMPUTE,	\
+			     RBMERGE)					\
 static inline void							\
 RBNAME ## _propagate(struct rb_node *rb, struct rb_node *stop)		\
 {									\
@@ -124,10 +134,18 @@ RBNAME ## _rotate(struct rb_node *rb_old, struct rb_node *rb_new)	\
 	RBCOPY(new, old);						\
 	RBCOMPUTE(old, false);						\
 }									\
+static inline void							\
+RBNAME ## _merge(struct rb_node *rb, struct rb_node *rb_new)		\
+{									\
+	RBSTRUCT *node = rb_entry(rb, RBSTRUCT, RBFIELD);		\
+	RBSTRUCT *new = rb_entry(rb_new, RBSTRUCT, RBFIELD);		\
+	RBMERGE(node, new);						\
+}									\
 RBSTATIC const struct rb_augment_callbacks RBNAME = {			\
 	.propagate = RBNAME ## _propagate,				\
 	.copy = RBNAME ## _copy,					\
-	.rotate = RBNAME ## _rotate					\
+	.rotate = RBNAME ## _rotate,					\
+	.merge = RBNAME ## _merge					\
 };
 
 /*
@@ -139,17 +157,21 @@ RBSTATIC const struct rb_augment_callbacks RBNAME = {			\
  * RBFIELD:     name of struct rb_node field within RBSTRUCT
  * RBAUGMENTED: name of field within RBSTRUCT holding data for subtree
  * RBCOMPUTE:   name of function that recomputes the RBAUGMENTED data
+ * RBMERGE:     name of function that merges a new node's RBAUGMENTED data
+ *              into an ancestor's, used on the insertion path
  */
 
 #define RB_DECLARE_CALLBACKS(RBSTATIC, RBNAME,				\
-			     RBSTRUCT, RBFIELD, RBAUGMENTED, RBCOMPUTE)	\
+			     RBSTRUCT, RBFIELD, RBAUGMENTED, RBCOMPUTE,	\
+			     RBMERGE)					\
 static inline void							\
 RBNAME ## _copy_single(RBSTRUCT *new, RBSTRUCT *old)			\
 {									\
 	new->RBAUGMENTED = old->RBAUGMENTED;				\
 }									\
 RB_DECLARE_CALLBACKS_MULTI(RBSTATIC, RBNAME,				\
-		     RBSTRUCT, RBFIELD, RBNAME ## _copy_single, RBCOMPUTE)
+		     RBSTRUCT, RBFIELD, RBNAME ## _copy_single,		\
+		     RBCOMPUTE, RBMERGE)
 
 /*
  * Template for declaring augmented rbtree callbacks,
@@ -185,8 +207,14 @@ static inline bool RBNAME ## _compute_max(RBSTRUCT *node, bool exit)	      \
 	node->RBAUGMENTED = max;					      \
 	return false;							      \
 }									      \
+static inline void RBNAME ## _merge_max(RBSTRUCT *node, RBSTRUCT *new)	      \
+{									      \
+	if (node->RBAUGMENTED < new->RBAUGMENTED)			      \
+		node->RBAUGMENTED = new->RBAUGMENTED;			      \
+}									      \
 RB_DECLARE_CALLBACKS(RBSTATIC, RBNAME,					      \
-		     RBSTRUCT, RBFIELD, RBAUGMENTED, RBNAME ## _compute_max)
+		     RBSTRUCT, RBFIELD, RBAUGMENTED, RBNAME ## _compute_max,  \
+		     RBNAME ## _merge_max)
 
 
 #define	RB_RED		0
