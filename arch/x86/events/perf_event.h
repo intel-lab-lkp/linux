@@ -96,26 +96,28 @@ static inline bool is_topdown_count(struct perf_event *event)
 	return event->hw.flags & PERF_X86_EVENT_TOPDOWN;
 }
 
+int is_x86_event(struct perf_event *event);
+
 static inline bool is_metric_event(struct perf_event *event)
 {
 	u64 config = event->attr.config;
 
-	return ((config & ARCH_PERFMON_EVENTSEL_EVENT) == 0) &&
-		((config & INTEL_ARCH_EVENT_MASK) >= INTEL_TD_METRIC_RETIRING)  &&
-		((config & INTEL_ARCH_EVENT_MASK) <= INTEL_TD_METRIC_MAX);
+	return is_x86_event(event) &&
+	       ((config & ARCH_PERFMON_EVENTSEL_EVENT) == 0) &&
+	       ((config & INTEL_ARCH_EVENT_MASK) >= INTEL_TD_METRIC_RETIRING) &&
+	       ((config & INTEL_ARCH_EVENT_MASK) <= INTEL_TD_METRIC_MAX);
 }
 
 static inline bool is_slots_event(struct perf_event *event)
 {
-	return (event->attr.config & INTEL_ARCH_EVENT_MASK) == INTEL_TD_SLOTS;
+	return is_x86_event(event) &&
+	       (event->attr.config & INTEL_ARCH_EVENT_MASK) == INTEL_TD_SLOTS;
 }
 
 static inline bool is_topdown_event(struct perf_event *event)
 {
 	return is_metric_event(event) || is_slots_event(event);
 }
-
-int is_x86_event(struct perf_event *event);
 
 static inline bool check_leader_group(struct perf_event *leader, int flags)
 {

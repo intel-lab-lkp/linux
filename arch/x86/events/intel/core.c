@@ -4809,12 +4809,16 @@ static bool is_available_metric_event(struct perf_event *event)
 
 static inline bool is_mem_loads_event(struct perf_event *event)
 {
-	return (event->attr.config & INTEL_ARCH_EVENT_MASK) == X86_CONFIG(.event=0xcd, .umask=0x01);
+	return is_x86_event(event) &&
+	       ((event->attr.config & INTEL_ARCH_EVENT_MASK) ==
+		X86_CONFIG(.event = 0xcd, .umask = 0x01));
 }
 
 static inline bool is_mem_loads_aux_event(struct perf_event *event)
 {
-	return (event->attr.config & INTEL_ARCH_EVENT_MASK) == X86_CONFIG(.event=0x03, .umask=0x82);
+	return is_x86_event(event) &&
+	       ((event->attr.config & INTEL_ARCH_EVENT_MASK) ==
+		X86_CONFIG(.event = 0x03, .umask = 0x82));
 }
 
 static inline bool require_mem_loads_aux_event(struct perf_event *event)
