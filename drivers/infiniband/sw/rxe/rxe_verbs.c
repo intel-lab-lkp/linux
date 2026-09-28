@@ -650,6 +650,7 @@ static int rxe_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 static int rxe_destroy_qp(struct ib_qp *ibqp, struct ib_udata *udata)
 {
 	struct rxe_qp *qp = to_rqp(ibqp);
+	unsigned long flags;
 	int err;
 
 	err = rxe_qp_chk_destroy(qp);
@@ -657,6 +658,13 @@ static int rxe_destroy_qp(struct ib_qp *ibqp, struct ib_udata *udata)
 		rxe_dbg_qp(qp, "unable to destroy qp, err = %d\n", err);
 		goto err_out;
 	}
+
+	spin_lock_irqsave(&qp->state_lock, flags);
+	qp->valid = 0;
+	spin_unlock_irqrestore(&qp->state_lock, flags);
+
+	rxe_disable_task(&qp->send_task);
+	rxe_invalidate_mws(qp);
 
 	err = rxe_cleanup(qp);
 	if (err)

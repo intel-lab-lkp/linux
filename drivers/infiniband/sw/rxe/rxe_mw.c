@@ -166,6 +166,9 @@ static int rxe_do_bind_mw(struct rxe_qp *qp, struct rxe_send_wqe *wqe,
 
 	if (mw->ibmw.type == IB_MW_TYPE_2) {
 		mw->qp = qp;
+		spin_lock(&qp->mw_lock);
+		list_add(&mw->qp_list, &qp->mw_list);
+		spin_unlock(&qp->mw_lock);
 	}
 
 	return 0;
@@ -247,11 +250,13 @@ static int rxe_check_invalidate_mw(struct rxe_qp *qp, struct rxe_mw *mw)
 
 static void rxe_do_invalidate_mw(struct rxe_mw *mw)
 {
-	struct rxe_qp *qp;
 	struct rxe_mr *mr;
+	struct rxe_qp *qp = mw->qp;
 
-	/* valid type 2 MW will always have a QP pointer */
-	qp = mw->qp;
+	spin_lock(&qp->mw_lock);
+	list_del_init(&mw->qp_list);
+	spin_unlock(&qp->mw_lock);
+
 	mw->qp = NULL;
 	rxe_put(qp);
 
@@ -296,6 +301,35 @@ err_drop_ref:
 	rxe_put(mw);
 err:
 	return ret;
+}
+
+void rxe_invalidate_mws(struct rxe_qp *qp)
+{
+	struct rxe_mw *mw;
+
+	for (;;) {
+		spin_lock(&qp->mw_lock);
+		if (list_empty(&qp->mw_list)) {
+			spin_unlock(&qp->mw_lock);
+			return;
+		}
+
+		mw = list_first_entry(&qp->mw_list, struct rxe_mw, qp_list);
+		if (!rxe_get(mw)) {
+			list_del_init(&mw->qp_list);
+			spin_unlock(&qp->mw_lock);
+			continue;
+		}
+		spin_unlock(&qp->mw_lock);
+
+		spin_lock_bh(&mw->lock);
+		if (mw->qp == qp)
+			rxe_do_invalidate_mw(mw);
+		spin_unlock_bh(&mw->lock);
+
+		rxe_put(mw);
+		cond_resched();
+	}
 }
 
 struct rxe_mr *rxe_mw_get_mr(struct rxe_qp *qp, int access, u32 rkey,
@@ -348,6 +382,10 @@ void rxe_mw_cleanup(struct rxe_pool_elem *elem)
 
 	if (mw->qp) {
 		struct rxe_qp *qp = mw->qp;
+
+		spin_lock(&qp->mw_lock);
+		list_del_init(&mw->qp_list);
+		spin_unlock(&qp->mw_lock);
 
 		mw->qp = NULL;
 		rxe_put(qp);

@@ -288,6 +288,8 @@ struct rxe_qp {
 	struct timer_list rnr_nak_timer;
 
 	spinlock_t		state_lock; /* guard requester and completer */
+	spinlock_t		mw_lock;
+	struct list_head	mw_list;
 
 	struct execute_work	cleanup_work;
 };
@@ -387,6 +389,7 @@ struct rxe_mw {
 	int			access;
 	u64			addr;
 	u64			length;
+	struct list_head	qp_list;
 };
 
 struct rxe_mcg {
