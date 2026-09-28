@@ -591,9 +591,12 @@ static void swap_bdev_submit_write(struct swap_io_ctx *ctx)
 {
 	struct swap_iocb *sio = ctx->sio;
 	struct bio *bio = &sio->bio;
+	blk_opf_t opf = REQ_OP_WRITE | REQ_SWAP;
 
-	bio_init(bio, ctx->sis->bdev, sio->bvecs, ARRAY_SIZE(sio->bvecs),
-			REQ_OP_WRITE | REQ_SWAP);
+	if (ctx->throttled)
+		opf |= REQ_BACKGROUND;
+
+	bio_init(bio, ctx->sis->bdev, sio->bvecs, ARRAY_SIZE(sio->bvecs), opf);
 	bio->bi_iter.bi_size = sio->len;
 	bio->bi_iter.bi_sector = swap_folio_sector(bio_first_folio_all(bio));
 	bio_associate_blkg_from_page(bio, bio_first_folio_all(bio));

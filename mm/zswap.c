@@ -983,16 +983,21 @@ static bool zswap_decompress(struct zswap_entry *entry, struct folio *folio)
  * in the first place.  After the folio has been decompressed into
  * the swap cache, the compressed version stored by zswap can be
  * freed.
+ *
+ * @throttled lets the cgroup IO controllers throttle the write rather than
+ * issue it as root.
  */
 static int zswap_writeback_entry(struct zswap_entry *entry,
-				 swp_entry_t swpentry)
+				 swp_entry_t swpentry, bool throttled)
 {
 	struct xarray *tree;
 	pgoff_t offset = swp_offset(swpentry);
 	struct folio *folio;
 	struct mempolicy *mpol;
 	struct swap_info_struct *si;
-	struct swap_io_ctx ctx = {};
+	struct swap_io_ctx ctx = {
+		.throttled = throttled,
+	};
 	int ret = 0;
 
 	/* try to allocate swap cache folio */
@@ -1070,8 +1075,14 @@ out:
  *
  * ZSWAP_SHRINK_SWAPCACHE (out) is set when the walk stopped at an entry whose
  * folio is already in the swap cache.
+ *
+ * ZSWAP_SHRINK_THROTTLED (in) lets the cgroup IO controllers throttle the
+ * writeback rather than issue it as root. Only the memory pressure shrinker
+ * sets it. The pool limit path must not: once the pool is full zswap_store()
+ * rejects everything until this writeback drains it.
  */
 #define ZSWAP_SHRINK_SWAPCACHE	BIT(0)
+#define ZSWAP_SHRINK_THROTTLED	BIT(1)
 
 /*
  * The dynamic shrinker is modulated by the following factors:
@@ -1154,7 +1165,8 @@ static enum lru_status shrink_memcg_cb(struct list_head *item, struct list_lru_o
 	 */
 	spin_unlock(&l->lock);
 
-	writeback_result = zswap_writeback_entry(entry, swpentry);
+	writeback_result = zswap_writeback_entry(entry, swpentry, flags &&
+						 (*flags & ZSWAP_SHRINK_THROTTLED));
 
 	if (writeback_result) {
 		zswap_reject_reclaim_fail++;
@@ -1180,7 +1192,7 @@ static unsigned long zswap_shrinker_scan(struct shrinker *shrinker,
 		struct shrink_control *sc)
 {
 	unsigned long shrink_ret;
-	unsigned int flags = 0;
+	unsigned int flags = ZSWAP_SHRINK_THROTTLED;
 
 	if (!zswap_shrinker_enabled ||
 			!mem_cgroup_zswap_writeback_enabled(sc->memcg)) {
