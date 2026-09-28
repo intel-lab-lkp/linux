@@ -11,6 +11,7 @@
 #include "g4x_dp.h"
 #include "intel_de.h"
 #include "intel_display_jiffies.h"
+#include "intel_display_power.h"
 #include "intel_display_power_well.h"
 #include "intel_display_regs.h"
 #include "intel_display_types.h"
@@ -734,6 +735,18 @@ static  u32 ilk_get_pp_control(struct intel_dp *intel_dp)
 	return control;
 }
 
+static enum intel_display_power_domain
+intel_pps_vdd_power_domain(struct intel_dp *intel_dp)
+{
+	struct intel_display *display = to_intel_display(intel_dp);
+	struct intel_digital_port *dig_port = dp_to_dig_port(intel_dp);
+
+	if (DISPLAY_VER(display) >= 35 && !intel_encoder_is_tc(&dig_port->base))
+		return intel_display_power_aux_io_domain(display, dig_port->aux_ch);
+
+	return intel_aux_power_domain(dig_port);
+}
+
 /*
  * Must be paired with intel_pps_vdd_off_unlocked().
  * Must hold pps_mutex around the whole on/off sequence.
@@ -760,7 +773,7 @@ bool intel_pps_vdd_on_unlocked(struct intel_dp *intel_dp)
 
 	drm_WARN_ON(display->drm, intel_dp->pps.vdd_wakeref);
 	intel_dp->pps.vdd_wakeref = intel_display_power_get(display,
-							    intel_aux_power_domain(dig_port));
+							    intel_pps_vdd_power_domain(intel_dp));
 
 	pp_stat_reg = _pp_stat_reg(intel_dp);
 	pp_ctrl_reg = _pp_ctrl_reg(intel_dp);
@@ -862,7 +875,7 @@ static void intel_pps_vdd_off_sync_unlocked(struct intel_dp *intel_dp)
 	}
 
 	intel_display_power_put(display,
-				intel_aux_power_domain(dig_port),
+				intel_pps_vdd_power_domain(intel_dp),
 				fetch_and_zero(&intel_dp->pps.vdd_wakeref));
 }
 
@@ -1064,7 +1077,7 @@ void intel_pps_off_unlocked(struct intel_dp *intel_dp)
 
 	/* We got a reference when we enabled the VDD. */
 	intel_display_power_put(display,
-				intel_aux_power_domain(dig_port),
+				intel_pps_vdd_power_domain(intel_dp),
 				fetch_and_zero(&intel_dp->pps.vdd_wakeref));
 }
 
@@ -1336,7 +1349,7 @@ static void pps_vdd_init(struct intel_dp *intel_dp)
 		    pps_name(intel_dp));
 	drm_WARN_ON(display->drm, intel_dp->pps.vdd_wakeref);
 	intel_dp->pps.vdd_wakeref = intel_display_power_get(display,
-							    intel_aux_power_domain(dig_port));
+							    intel_pps_vdd_power_domain(intel_dp));
 }
 
 bool intel_pps_have_panel_power_or_vdd(struct intel_dp *intel_dp)
