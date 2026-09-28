@@ -1040,6 +1040,15 @@ Kernel parameters
 			Default is enabled if CONFIG_HOTPLUG_PARALLEL=y. Otherwise
 			the parameter has no effect.
 
+	crash_memaction={secret|cache}[,...]
+			[KNL,EARLY] When CONFIG_CRASH_MEMACTION is set, this
+			parameter instructs the kernel to hand an eventual
+			kdump kernel a bitmap of pages annotated with the
+			given types. Annotations are made with madvise(2).
+			Kernel crypto keys are annotated secret. What the
+			kdump kernel does with this is up to it. Default is
+			nothing is tracked and no bitmap is created.
+
 	crash_kexec_post_notifiers
 			Only jump to kdump kernel after running the panic
 			notifiers and dumping kmsg. This option increases

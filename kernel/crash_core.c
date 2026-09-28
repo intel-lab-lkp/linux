@@ -18,11 +18,23 @@
 #include <linux/memblock.h>
 #include <linux/kmemleak.h>
 #include <linux/crash_core.h>
+#include <linux/crash_memaction.h>
 #include <linux/reboot.h>
 #include <linux/btf.h>
 #include <linux/objtool.h>
 #include <linux/delay.h>
 #include <linux/panic.h>
+#include <linux/timekeeping.h>
+#include <linux/atomic.h>
+#include <linux/bitmap.h>
+#include <linux/bitops.h>
+#include <linux/jump_label.h>
+#include <linux/overflow.h>
+#include <linux/pfn.h>
+#include <linux/slab.h>
+#include <linux/string.h>
+#include <linux/sysfs.h>
+#include <linux/vmcore_info.h>
 
 #include <asm/page.h>
 #include <asm/sections.h>
@@ -32,6 +44,406 @@
 
 /* Per cpu memory for storing cpu states in case of system crash. */
 note_buf_t __percpu *crash_notes;
+
+#ifdef CONFIG_CRASH_MEMACTION
+
+#define CRASH_MEMACTION_NOTE_NAME_BYTES \
+	ALIGN(sizeof(CRASH_MEMACTION_NOTE_NAME), 4)
+
+/* Bitmap a hole may waste before it gets a region of its own. */
+#define CRASH_MEMACTION_MAX_HOLE_BYTES	SZ_128K
+
+DEFINE_STATIC_KEY_FALSE(crash_memaction_active);
+EXPORT_SYMBOL_GPL(crash_memaction_active);
+
+struct crash_memaction_region {
+	unsigned long start_pfn;
+	unsigned long nr_pages;
+	unsigned long *bits;
+};
+
+static struct crash_memaction_region *crash_memaction_regions __ro_after_init;
+static unsigned int crash_memaction_nr_regions __ro_after_init;
+static size_t crash_memaction_note_bytes __ro_after_init;
+
+static struct crash_memaction_note *crash_memaction_desc __ro_after_init;
+static size_t crash_memaction_desc_bytes __ro_after_init;
+
+static phys_addr_t crash_memaction_note_paddr;
+
+static int crash_memaction_type_mask __ro_after_init;
+
+int crash_memaction_types(void)
+{
+	return crash_memaction_type_mask;
+}
+
+static int __init crash_memaction_param(char *str)
+{
+	char *tok;
+
+	while ((tok = strsep(&str, ",")) != NULL) {
+		if (!strcmp(tok, "secret"))
+			crash_memaction_type_mask |= CRASH_MEMACTION_SECRET;
+		else if (!strcmp(tok, "cache"))
+			crash_memaction_type_mask |= CRASH_MEMACTION_CACHE;
+		else if (*tok)
+			pr_warn("memaction: ignoring unknown type \"%s\"\n",
+				tok);
+	}
+	return 0;
+}
+early_param("crash_memaction", crash_memaction_param);
+
+ssize_t crash_memaction_types_str(char *buf)
+{
+	int mask = crash_memaction_type_mask;
+	int len = 0;
+
+	if (mask & CRASH_MEMACTION_SECRET)
+		len += sysfs_emit_at(buf, len, "secret");
+	if (mask & CRASH_MEMACTION_CACHE)
+		len += sysfs_emit_at(buf, len, "%scache", len ? "," : "");
+
+	return len + sysfs_emit_at(buf, len, "\n");
+}
+
+void __init crash_memaction_init(void)
+{
+	struct crash_memaction_region *regions;
+	struct crash_memaction_note *desc;
+	unsigned long total_bytes = 0;
+	unsigned long start, end, prev_end;
+	unsigned int nr = 0, i;
+	size_t desc_bytes;
+	void *bits;
+	int idx;
+
+	if (!crash_memaction_type_mask)
+		return;
+
+	regions = memblock_alloc(memblock.memory.cnt * sizeof(*regions),
+				 SMP_CACHE_BYTES);
+	if (!regions)
+		goto nomem;
+
+	for_each_mem_pfn_range(idx, NUMA_NO_NODE, &start, &end, NULL) {
+		if (nr && bitmap_size(start - prev_end) <=
+				CRASH_MEMACTION_MAX_HOLE_BYTES) {
+			regions[nr - 1].nr_pages = max(
+					end - regions[nr - 1].start_pfn,
+					regions[nr - 1].nr_pages);
+		} else {
+			regions[nr].start_pfn = start;
+			regions[nr].nr_pages = end - start;
+			nr++;
+		}
+		prev_end = end;
+	}
+
+	for (i = 0; i < nr; i++)
+		total_bytes += bitmap_size(regions[i].nr_pages);
+
+	bits = memblock_alloc(total_bytes, PAGE_SIZE);
+	if (!bits)
+		goto nomem;
+
+	for (i = 0; i < nr; i++) {
+		regions[i].bits = bits;
+		bits += bitmap_size(regions[i].nr_pages);
+	}
+
+	desc_bytes = struct_size_t(struct crash_memaction_note, regions, nr);
+	desc = memblock_alloc(desc_bytes, sizeof(u64));
+	if (!desc)
+		goto nomem;
+
+	desc->types = crash_memaction_type_mask;
+	desc->page_shift = PAGE_SHIFT;
+	desc->nr_regions = nr;
+	for (i = 0; i < nr; i++) {
+		desc->regions[i].start_pfn = regions[i].start_pfn;
+		desc->regions[i].nr_pages = regions[i].nr_pages;
+		desc->regions[i].bitmap_paddr = __pa(regions[i].bits);
+	}
+
+	crash_memaction_regions = regions;
+	crash_memaction_nr_regions = nr;
+	crash_memaction_desc = desc;
+	crash_memaction_desc_bytes = desc_bytes;
+	crash_memaction_note_bytes =
+		PAGE_ALIGN(2 * sizeof(struct elf_note) +
+			   CRASH_MEMACTION_NOTE_NAME_BYTES +
+			   ALIGN(desc_bytes, 4));
+
+	static_branch_enable(&crash_memaction_active);
+
+	pr_info("crash_memaction: types 0x%x, %u memory region(s), %lu KiB of bitmap\n",
+		crash_memaction_type_mask, nr, total_bytes >> 10);
+	return;
+
+nomem:
+	crash_memaction_type_mask = 0;
+	pr_err("crash_memaction: cannot allocate page bitmaps, disabled\n");
+}
+
+/*
+ * The clear reads before it writes: it runs on every frame the page allocator
+ * hands out and almost never has anything to do, so this keeps an allocation
+ * from dirtying a cache line for frames it has nothing to do with.
+ */
+static __always_inline void crash_memaction_word(atomic_long_t *p, unsigned long mask, bool set)
+{
+	unsigned long val = atomic_long_read(p);
+
+	if (set) {
+		if ((val & mask) != mask)
+			atomic_long_or(mask, p);
+	} else if (val & mask) {
+		atomic_long_andnot(mask, p);
+	}
+}
+
+/*
+ * __bitmap_set() and __bitmap_clear() merged, with the store made atomic: the
+ * partial words at either end can be shared with an unrelated folio, and
+ * marking runs from rmap with no lock. Counts are unsigned long rather than
+ * the header's unsigned int, which a bit per page frame outgrows.
+ */
+static void __crash_memaction_bits(unsigned long *map, unsigned long start,
+		unsigned long nr, bool set)
+{
+	atomic_long_t *p = (atomic_long_t *)(map + BIT_WORD(start));
+	const unsigned long size = start + nr;
+	unsigned long bits = BITS_PER_LONG - (start % BITS_PER_LONG);
+	unsigned long mask = BITMAP_FIRST_WORD_MASK(start);
+
+	/* Unsigned, so this is __bitmap_set()'s "nr - bits >= 0". */
+	while (nr >= bits) {
+		crash_memaction_word(p, mask, set);
+		nr -= bits;
+		bits = BITS_PER_LONG;
+		mask = ~0UL;
+		p++;
+	}
+
+	if (nr) {
+		mask &= BITMAP_LAST_WORD_MASK(size);
+		crash_memaction_word(p, mask, set);
+	}
+}
+
+static __always_inline void crash_memaction_bits(unsigned long *map,
+		unsigned long start, unsigned long nr, bool set)
+{
+	if (nr == 1) {
+		if (set) {
+			if (!test_bit(start, map))
+				set_bit(start, map);
+		} else if (test_bit(start, map)) {
+			clear_bit(start, map);
+		}
+		return;
+	}
+
+	__crash_memaction_bits(map, start, nr, set);
+}
+
+static void crash_memaction_update(unsigned long start_pfn,
+		unsigned long nr_pages, bool set)
+{
+	unsigned long end_pfn = start_pfn + nr_pages;
+	unsigned int i;
+
+	for (i = 0; i < crash_memaction_nr_regions; i++) {
+		struct crash_memaction_region *reg = &crash_memaction_regions[i];
+		unsigned long from = max(start_pfn, reg->start_pfn);
+		unsigned long to = min(end_pfn, reg->start_pfn + reg->nr_pages);
+
+		if (reg->start_pfn >= end_pfn)
+			break;
+		if (from < to)
+			crash_memaction_bits(reg->bits, from - reg->start_pfn,
+					     to - from, set);
+	}
+}
+
+void __crash_memaction_mark_pfns(unsigned long pfn, unsigned long nr_pages)
+{
+	crash_memaction_update(pfn, nr_pages, true);
+}
+EXPORT_SYMBOL_GPL(__crash_memaction_mark_pfns);
+
+void __crash_memaction_unmark_pfns(unsigned long pfn, unsigned long nr_pages)
+{
+	crash_memaction_update(pfn, nr_pages, false);
+}
+EXPORT_SYMBOL_GPL(__crash_memaction_unmark_pfns);
+
+static void crash_memaction_va(void *addr, size_t size, bool set)
+{
+	unsigned long start = ALIGN_DOWN((unsigned long)addr, PAGE_SIZE);
+	unsigned long end = ALIGN((unsigned long)addr + size, PAGE_SIZE);
+	unsigned long va;
+
+	if (!addr || !size)
+		return;
+
+	if (virt_addr_valid(addr)) {
+		if (!virt_addr_valid((void *)(end - 1))) {
+			pr_warn("memaction: invalid range 0x%p+%zx\n",
+				addr, size);
+			return;
+		}
+
+		/* The linear map is physically contiguous. */
+		crash_memaction_update(PHYS_PFN(virt_to_phys((void *)start)),
+				       (end - start) >> PAGE_SHIFT, set);
+		return;
+	}
+
+	if (!is_vmalloc_addr(addr)) {
+		pr_warn("memaction: invalid range 0x%p+%zx: neither linear nor vmalloc\n",
+			addr, size);
+		return;
+	}
+
+	for (va = start; va < end; va += PAGE_SIZE) {
+		struct page *page = vmalloc_to_page((void *)va);
+
+		if (!page) {
+			pr_warn("memaction: unmapped page 0x%lx inside range 0x%p+%zx\n",
+				va, addr, size);
+			return;
+		}
+
+		crash_memaction_update(page_to_pfn(page), 1, set);
+	}
+}
+
+void crash_memaction_mark(void *addr, size_t size, int types)
+{
+	if (!static_branch_unlikely(&crash_memaction_active))
+		return;
+	if (!(types & crash_memaction_type_mask))
+		return;
+
+	crash_memaction_va(addr, size, true);
+}
+EXPORT_SYMBOL_GPL(crash_memaction_mark);
+
+void crash_memaction_unmark(void *addr, size_t size)
+{
+	if (!static_branch_unlikely(&crash_memaction_active))
+		return;
+
+	crash_memaction_va(addr, size, false);
+}
+EXPORT_SYMBOL_GPL(crash_memaction_unmark);
+
+int crash_load_memaction(struct kimage *image)
+{
+	unsigned long nr_pages, i;
+	struct page **pages;
+	int ret;
+	struct kexec_buf kbuf = {
+		.image = image,
+		.buffer = NULL,
+		.bufsz = 0,
+		.mem = KEXEC_BUF_MEM_UNKNOWN,
+		.memsz = crash_memaction_note_bytes,
+		.buf_align = PAGE_SIZE,
+		.buf_min = 0,
+		.buf_max = ULONG_MAX,
+		.top_down = true,
+		.random = true,
+	};
+
+	if (!crash_memaction_nr_regions)
+		return 0;
+
+	ret = kexec_add_buffer(&kbuf);
+	if (ret)
+		return ret;
+
+	nr_pages = crash_memaction_note_bytes / PAGE_SIZE;
+	pages = kmalloc_array(nr_pages, sizeof(*pages), GFP_KERNEL);
+	if (!pages)
+		return -ENOMEM;
+
+	for (i = 0; i < nr_pages; i++)
+		pages[i] = pfn_to_page((kbuf.mem >> PAGE_SHIFT) + i);
+
+	image->memaction_note_va = vmap(pages, nr_pages, VM_MAP, PAGE_KERNEL);
+	kfree(pages);
+	if (!image->memaction_note_va)
+		return -ENOMEM;
+
+	image->memaction_addr = kbuf.mem;
+	image->memaction_sz = kbuf.memsz;
+	image->memaction_index = image->nr_segments - 1;
+	crash_memaction_note_paddr = kbuf.mem;
+
+	return 0;
+}
+
+void crash_memaction_unload(struct kimage *image)
+{
+	if (!image->memaction_note_va)
+		return;
+
+	vunmap(image->memaction_note_va);
+	image->memaction_note_va = NULL;
+	image->memaction_addr = 0;
+	image->memaction_sz = 0;
+	image->memaction_index = -1;
+	crash_memaction_note_paddr = 0;
+}
+
+static void crash_memaction_save(struct kimage *image)
+{
+	if (!image || !image->memaction_note_va)
+		return;
+
+	final_note(append_elf_note(image->memaction_note_va,
+				   CRASH_MEMACTION_NOTE_NAME, 0,
+				   crash_memaction_desc,
+				   crash_memaction_desc_bytes));
+}
+
+static unsigned long crash_memaction_nr_phdr(void)
+{
+	return crash_memaction_note_paddr ? 1 : 0;
+}
+
+static Elf64_Phdr *crash_memaction_emit_phdr(Elf64_Ehdr *ehdr,
+		Elf64_Phdr *phdr)
+{
+	if (!crash_memaction_note_paddr)
+		return phdr;
+
+	phdr->p_type = PT_NOTE;
+	phdr->p_offset = phdr->p_paddr = crash_memaction_note_paddr;
+	phdr->p_filesz = phdr->p_memsz = crash_memaction_note_bytes;
+	(ehdr->e_phnum)++;
+
+	return phdr + 1;
+}
+
+#else
+static inline void crash_memaction_save(struct kimage *image) { }
+
+static inline unsigned long crash_memaction_nr_phdr(void)
+{
+	return 0;
+}
+
+static inline Elf64_Phdr *crash_memaction_emit_phdr(Elf64_Ehdr *ehdr,
+		Elf64_Phdr *phdr)
+{
+	return phdr;
+}
+#endif /* CONFIG_CRASH_MEMACTION */
 
 /* time to wait for possible DMA to finish before starting the kdump kernel
  * when a CMA reservation is used
@@ -142,6 +554,7 @@ void __noclone __crash_kexec(struct pt_regs *regs)
 			crash_save_vmcoreinfo();
 			machine_crash_shutdown(&fixed_regs);
 			crash_cma_clear_pending_dma();
+			crash_memaction_save(kexec_crash_image);
 			machine_kexec(kexec_crash_image);
 		}
 		kexec_unlock();
@@ -182,6 +595,7 @@ int crash_prepare_elf64_headers(struct crash_mem *mem, int need_kernel_map,
 	/* extra phdr for vmcoreinfo ELF note */
 	nr_phdr = nr_cpus + 1;
 	nr_phdr += mem->nr_ranges;
+	nr_phdr += crash_memaction_nr_phdr();
 
 	/*
 	 * kexec-tools creates an extra PT_LOAD phdr for kernel text mapping
@@ -230,6 +644,8 @@ int crash_prepare_elf64_headers(struct crash_mem *mem, int need_kernel_map,
 	phdr->p_filesz = phdr->p_memsz = VMCOREINFO_NOTE_SIZE;
 	(ehdr->e_phnum)++;
 	phdr++;
+
+	phdr = crash_memaction_emit_phdr(ehdr, phdr);
 
 	/* Prepare PT_LOAD type program header for kernel text region */
 	if (need_kernel_map) {

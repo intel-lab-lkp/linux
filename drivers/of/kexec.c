@@ -442,6 +442,13 @@ void *of_kexec_alloc_and_setup_fdt(const struct kimage *image,
 				goto out;
 		}
 
+		if (image->memaction_addr != 0) {
+			ret = fdt_add_mem_rsv(fdt, image->memaction_addr,
+					      image->memaction_sz);
+			if (ret)
+				goto out;
+		}
+
 #ifdef CONFIG_CRASH_DUMP
 		/* add linux,usable-memory-range */
 		ret = fdt_appendprop_addrrange(fdt, 0, chosen_node,

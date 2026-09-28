@@ -415,6 +415,12 @@ struct kimage {
 	/* dm crypt keys buffer */
 	unsigned long dm_crypt_keys_addr;
 	unsigned long dm_crypt_keys_sz;
+
+	/* crash memaction descriptor buffer */
+	void *memaction_note_va;
+	unsigned long memaction_addr;
+	unsigned long memaction_sz;
+	int memaction_index;
 };
 
 /* kexec interface functions */

@@ -179,4 +179,25 @@ config CRASH_MAX_MEMORY_RANGES
 	  the computation behind the value provided through the
 	  /sys/kernel/crash_elfcorehdr_size attribute.
 
+config ARCH_SUPPORTS_CRASH_MEMACTION
+	bool
+
+config CRASH_MEMACTION
+	bool "Register kdump actions for certain memory ranges"
+	depends on CRASH_DUMP
+	depends on KEXEC_FILE
+	depends on ARCH_SUPPORTS_CRASH_MEMACTION
+	help
+	  Track pages that may require special handling by the kdump kernel:
+	  pages holding secrets such as crypto keys, which it can wipe before
+	  anything reads the dump, and pages not worth dumping at all. This
+	  kernel only records which pages are which; what happens to them is
+	  the kdump kernel's decision.
+
+	  Nothing is tracked and no memory is spent unless the kernel is booted
+	  with the crash_memaction= parameter, which also says which types the
+	  bits stand for. The bitmap then costs about 32 KiB per GiB of memory.
+
+	  If unsure, say N.
+
 endmenu

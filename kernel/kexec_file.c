@@ -10,6 +10,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/capability.h>
+#include <linux/crash_memaction.h>
 #include <linux/mm.h>
 #include <linux/file.h>
 #include <linux/slab.h>
@@ -325,6 +326,10 @@ kimage_file_alloc_init(struct kimage **rimage, int kernel_fd,
 		/* Enable special crash kernel control page alloc policy. */
 		image->control_page = crashk_res.start;
 		image->type = KEXEC_TYPE_CRASH;
+
+		ret = crash_load_memaction(image);
+		if (ret)
+			goto out_free_image;
 	}
 #endif
 
@@ -360,6 +365,7 @@ out_free_control_pages:
 out_free_post_load_bufs:
 	kimage_file_post_load_cleanup(image);
 out_free_image:
+	crash_memaction_unload(image);
 	kfree(image);
 	return ret;
 }
@@ -876,6 +882,10 @@ static int kexec_calculate_store_digests(struct kimage *image)
 		if (i == image->elfcorehdr_index)
 			continue;
 #endif
+
+		/* Exclude the memaction buffer, written during the crash */
+		if (i == image->memaction_index)
+			continue;
 
 		ksegment = &image->segment[i];
 		/*

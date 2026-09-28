@@ -8,6 +8,7 @@
 
 #include <linux/btf.h>
 #include <linux/capability.h>
+#include <linux/crash_memaction.h>
 #include <linux/mm.h>
 #include <linux/file.h>
 #include <linux/slab.h>
@@ -263,6 +264,8 @@ struct kimage *do_kimage_alloc_init(void)
 	image->elfcorehdr_index = -1;
 	image->elfcorehdr_updated = false;
 #endif
+
+	image->memaction_index = -1;
 
 	return image;
 }
@@ -595,6 +598,7 @@ void kimage_free(struct kimage *image)
 		crash_update_vmcoreinfo_safecopy(NULL);
 		vunmap(image->vmcoreinfo_data_copy);
 	}
+	crash_memaction_unload(image);
 #endif
 
 	kimage_free_extra_pages(image);

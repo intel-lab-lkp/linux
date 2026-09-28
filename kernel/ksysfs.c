@@ -14,6 +14,7 @@
 #include <linux/export.h>
 #include <linux/init.h>
 #include <linux/vmcore_info.h>
+#include <linux/crash_memaction.h>
 #include <linux/profile.h>
 #include <linux/stat.h>
 #include <linux/sched.h>
@@ -133,6 +134,17 @@ KERNEL_ATTR_RO(vmcoreinfo);
 
 #endif /* CONFIG_VMCORE_INFO */
 
+#ifdef CONFIG_CRASH_MEMACTION
+
+static ssize_t crash_memaction_show(struct kobject *kobj,
+				    struct kobj_attribute *attr, char *buf)
+{
+	return crash_memaction_types_str(buf);
+}
+KERNEL_ATTR_RO(crash_memaction);
+
+#endif /* CONFIG_CRASH_MEMACTION */
+
 /* whether file capabilities are enabled */
 static ssize_t fscaps_show(struct kobject *kobj,
 				  struct kobj_attribute *attr, char *buf)
@@ -202,6 +214,9 @@ static struct attribute * kernel_attrs[] = {
 #endif
 #ifdef CONFIG_VMCORE_INFO
 	&vmcoreinfo_attr.attr,
+#endif
+#ifdef CONFIG_CRASH_MEMACTION
+	&crash_memaction_attr.attr,
 #endif
 #ifndef CONFIG_TINY_RCU
 	&rcu_expedited_attr.attr,
