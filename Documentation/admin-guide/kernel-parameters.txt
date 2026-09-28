@@ -4904,6 +4904,20 @@ Kernel parameters
 			This option should only be used for systems with the above
 			constraints as it might cause the panic operation to be less reliable.
 
+	panic_pre_kdump_postpone=
+			[KNL] Defer pre-kdump notifiers to the late panic path.
+			They run before kdump only when
+			crash_kexec_post_notifiers is also enabled. If panic
+			reaches the late path without entering kdump, they
+			can still run there.
+			Intended for debugging kexec/crash-dump failures.
+			Skipping these callbacks may prevent correct crash
+			handling by the hypervisor.
+			Format: <bool>
+			Default: 0
+			Writable at runtime via
+			/sys/module/kernel/parameters/panic_pre_kdump_postpone.
+
 	panic_print=	Bitmask for printing system info when panic happens.
 			User can chose combination of the following bits:
 
