@@ -345,6 +345,7 @@ struct readahead_control;
 #define IOCB_DONTCACHE		(__force int) RWF_DONTCACHE
 #define IOCB_NOSIGNAL		(__force int) RWF_NOSIGNAL
 #define IOCB_WRITETHROUGH	(__force int) RWF_WRITETHROUGH
+#define IOCB_NOSERIAL		(__force int) RWF_NOSERIAL
 
 /* non-RWF related bits - start at 16 */
 #define IOCB_EVENTFD		(1 << 16)
@@ -375,7 +376,8 @@ struct readahead_control;
 	{ IOCB_NOIO,		"NOIO" }, \
 	{ IOCB_ALLOC_CACHE,	"ALLOC_CACHE" }, \
 	{ IOCB_AIO_RW,		"AIO_RW" }, \
-	{ IOCB_HAS_METADATA,	"AIO_HAS_METADATA" }
+	{ IOCB_HAS_METADATA,	"AIO_HAS_METADATA" }, \
+	{ IOCB_NOSERIAL,	"IOCB_NOSERIAL" }
 
 struct kiocb {
 	struct file		*ki_filp;
@@ -3498,6 +3500,12 @@ static inline int kiocb_set_rw_flags(struct kiocb *ki, rwf_t flags,
 			return -EPERM;
 		ki->ki_flags &= ~IOCB_APPEND;
 	}
+
+	/*
+	 * Currently, only writethrough supports noserial IO.
+	 */
+	if ((flags & RWF_NOSERIAL) && !(flags & RWF_WRITETHROUGH))
+		return -EOPNOTSUPP;
 
 	ki->ki_flags |= kiocb_flags;
 	return 0;
