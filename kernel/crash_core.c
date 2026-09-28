@@ -28,9 +28,11 @@
 #include <linux/atomic.h>
 #include <linux/bitmap.h>
 #include <linux/bitops.h>
+#include <linux/debugfs.h>
 #include <linux/jump_label.h>
 #include <linux/overflow.h>
 #include <linux/pfn.h>
+#include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/sysfs.h>
@@ -65,6 +67,10 @@ struct crash_memaction_region {
 static struct crash_memaction_region *crash_memaction_regions __ro_after_init;
 static unsigned int crash_memaction_nr_regions __ro_after_init;
 static size_t crash_memaction_note_bytes __ro_after_init;
+
+/* The one allocation all of the bitmaps above were carved out of. */
+static void *crash_ma_bitmap_base __ro_after_init;
+static size_t crash_ma_bitmap_size __ro_after_init;
 
 static struct crash_memaction_note *crash_memaction_desc __ro_after_init;
 static size_t crash_memaction_desc_bytes __ro_after_init;
@@ -148,6 +154,8 @@ void __init crash_memaction_init(void)
 	if (!bits)
 		goto nomem;
 
+	crash_ma_bitmap_base = bits;
+	crash_ma_bitmap_size = total_bytes;
 	for (i = 0; i < nr; i++) {
 		regions[i].bits = bits;
 		bits += bitmap_size(regions[i].nr_pages);
@@ -340,6 +348,57 @@ void crash_memaction_unmark(void *addr, size_t size)
 	crash_memaction_va(addr, size, false);
 }
 EXPORT_SYMBOL_GPL(crash_memaction_unmark);
+
+#ifdef CONFIG_CRASH_MEMACTION_DEBUGFS
+
+static struct debugfs_blob_wrapper crash_ma_bitmap_blob;
+
+/* @paddr is what the note gives, so a vmcore can be matched to a live one. */
+static int crash_memaction_regions_show(struct seq_file *m, void *v)
+{
+	unsigned long offset = 0;
+	unsigned int i;
+
+	seq_printf(m, "# types 0x%x page_shift %u nr_regions %u\n",
+		   crash_memaction_type_mask, PAGE_SHIFT,
+		   crash_memaction_nr_regions);
+	seq_puts(m, "# start_pfn nr_pages offset bytes paddr\n");
+
+	for (i = 0; i < crash_memaction_nr_regions; i++) {
+		struct crash_memaction_region *reg = &crash_memaction_regions[i];
+		size_t bytes = bitmap_size(reg->nr_pages);
+		phys_addr_t paddr = __pa(reg->bits);
+
+		seq_printf(m, "0x%016lx 0x%016lx 0x%016lx 0x%016zx %pa\n",
+			   reg->start_pfn, reg->nr_pages, offset, bytes, &paddr);
+		offset += bytes;
+	}
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(crash_memaction_regions);
+
+static int __init crash_memaction_debugfs_init(void)
+{
+	struct dentry *dir;
+
+	if (!crash_memaction_nr_regions)
+		return 0;
+
+	dir = debugfs_create_dir("crash_memaction", NULL);
+
+	debugfs_create_file("regions", 0400, dir, NULL,
+			    &crash_memaction_regions_fops);
+
+	crash_ma_bitmap_blob.data = crash_ma_bitmap_base;
+	crash_ma_bitmap_blob.size = crash_ma_bitmap_size;
+	debugfs_create_blob("bitmap", 0400, dir, &crash_ma_bitmap_blob);
+
+	return 0;
+}
+fs_initcall(crash_memaction_debugfs_init);
+
+#endif /* CONFIG_CRASH_MEMACTION_DEBUGFS */
 
 int crash_load_memaction(struct kimage *image)
 {

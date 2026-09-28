@@ -57,3 +57,12 @@ Limitations
   trying to mark smaller objects, use lib/secret_pool or a similar mechanism.
 * Memory hotplug is not supported at this time. When memory is hotplugged, the
   newly hotplugged memory will not be included in the bitmap.
+
+Inspecting the bitmap
+=====================
+
+With ``CONFIG_CRASH_MEMACTION_DEBUGFS`` the bitmap can be read through debugfs::
+
+	# types 0x3000 page_shift 12 nr_regions 1
+	# start_pfn nr_pages offset bytes paddr
+	0x0000000000000001 0x0000000000800000 0x0 0x100000 0x0000000040000000

@@ -204,4 +204,18 @@ config CRASH_MEMACTION
 
 	  If unsure, say N.
 
+config CRASH_MEMACTION_DEBUGFS
+	bool "Expose the crash memaction bitmap in debugfs"
+	depends on CRASH_MEMACTION && DEBUG_FS
+	help
+	  Allow reading the live crash_memaction bitmap through
+      /sys/kernel/debug/crash_memaction/. The bitmap is used when
+      CRASH_MEMACTION is set and when a crash_memaction cmdline param is present
+      to tell an eventual kdump kernel about the use of certain memory pages.
+
+      Note that this is a debug interface only that gives no guarantees
+      whatsoever on memory consistency.
+
+	  If unsure, say N.
+
 endmenu
