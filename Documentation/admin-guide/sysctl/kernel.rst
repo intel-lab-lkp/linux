@@ -1690,6 +1690,26 @@ entry will default to 2 instead of 0.
 = =============================================================
 
 
+vmware_record_panic_msg
+======================
+
+Controls whether panic or fatal-oops kmsg data is written to the host's
+``vmware.log`` before kdump. This setting does not control the separate
+VMware guest-crash event. Writing zero disables recording; writing a
+nonzero integer enables it. Reads return 0 or 1.
+
+= ==============================================================
+0 Do not write kmsg data to ``vmware.log``. This is the default
+  for encrypted guests.
+1 Write kmsg data to ``vmware.log``. This is the default for
+  ordinary guests.
+= ==============================================================
+
+``crash_kexec_post_notifiers=0`` alone does not disable this logger.
+``panic_pre_kdump_postpone=1`` skips early logging but leaves late panic
+logging eligible; set this sysctl to 0 to disable both.
+
+
 warn_limit
 ==========
 
