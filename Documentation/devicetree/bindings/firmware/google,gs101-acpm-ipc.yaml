@@ -22,7 +22,9 @@ description: |
 
 properties:
   compatible:
-    const: google,gs101-acpm-ipc
+    enum:
+      - google,gs101-acpm-ipc
+      - samsung,exynos850-acpm-ipc
 
   "#clock-cells":
     const: 1
@@ -32,6 +34,20 @@ properties:
       within the range. The firmware also manages the voltage scaling
       appropriately with the clock scaling. The argument is the ID of the
       clock contained by the firmware messages.
+
+  clocks:
+    minItems: 1
+    maxItems: 9
+    description:
+      Phandles to the underlying clocks associated with each ACPM clock
+      domain. This property relates to ACPM firmware variants where not all
+      clock operations are implemented.
+
+  clock-names:
+    minItems: 1
+    maxItems: 9
+    description:
+      Names of the ACPM clock domains corresponding to entries in 'clocks'.
 
   mboxes:
     maxItems: 1
@@ -76,6 +92,42 @@ required:
   - "#clock-cells"
   - mboxes
   - shmem
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: google,gs101-acpm-ipc
+    then:
+      properties:
+        clocks: false
+        clock-names: false
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: samsung,exynos850-acpm-ipc
+    then:
+      properties:
+        clock-names:
+          items:
+            - const: mif
+            - const: int
+            - const: cpucl0
+            - const: cpucl1
+            - const: g3d
+            - const: aud
+            - const: cam
+            - const: disp
+            - const: cp
+        pmic: false
+        pmic-1: false
+        pmic-2: false
+      required:
+        - clocks
+        - clock-names
 
 additionalProperties: false
 
