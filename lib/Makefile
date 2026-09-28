@@ -60,6 +60,7 @@ obj-y += bcd.o sort.o parser.o debug_locks.o random32.o \
 	 once.o refcount.o rcuref.o usercopy.o errseq.o bucket_locks.o \
 	 generic-radix-tree.o bitmap-str.o
 obj-y += string_helpers.o
+obj-y += secret_pool.o
 obj-y += hexdump.o
 obj-$(CONFIG_TEST_HEXDUMP) += test_hexdump.o
 obj-y += kstrtox.o

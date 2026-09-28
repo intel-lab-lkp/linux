@@ -186,6 +186,8 @@ config CRASH_MEMACTION
 	bool "Register kdump actions for certain memory ranges"
 	depends on CRASH_DUMP
 	depends on KEXEC_FILE
+	depends on !SLUB_TINY
+	select SLAB_BUCKETS
 	depends on ARCH_SUPPORTS_CRASH_MEMACTION
 	help
 	  Track pages that may require special handling by the kdump kernel:
