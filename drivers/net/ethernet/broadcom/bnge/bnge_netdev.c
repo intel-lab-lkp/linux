@@ -2804,6 +2804,7 @@ static int bnge_open_core(struct bnge_net *bn)
 	bnge_get_port_module_status(bn);
 
 	bnge_hwrm_realloc_rss_ctx_vnic(bn);
+	bnge_cfg_usr_fltrs(bn);
 
 	return 0;
 
@@ -3166,6 +3167,9 @@ static int bnge_set_features(struct net_device *dev, netdev_features_t features)
 	if ((bn->priv_flags & BNGE_NET_EN_NTUPLE) &&
 	    !(flags & BNGE_NET_EN_NTUPLE) && bn->num_rss_ctx)
 		return -EBUSY;
+
+	if (!(flags & BNGE_NET_EN_NTUPLE))
+		bnge_clear_usr_fltrs(bn);
 
 	bn->priv_flags = flags;
 
