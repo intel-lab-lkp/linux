@@ -722,7 +722,7 @@ static inline void kvm_arch_vcpu_unblocking(struct kvm_vcpu *vcpu) {}
 void kvm_arch_free_vm(struct kvm *kvm);
 
 struct zpci_kvm_hook {
-	int (*kvm_register)(void *opaque, struct kvm *kvm);
+	int (*kvm_register)(void *opaque, struct file *kvm_file);
 	void (*kvm_unregister)(void *opaque);
 };
 
