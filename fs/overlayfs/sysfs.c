@@ -22,7 +22,22 @@ struct ovl_sysfs_attr {
 		.show	= ovl_##_name##_show,				\
 	}
 
+static ssize_t ovl_encoding_show(struct ovl_fs *ofs, char *buf)
+{
+	struct unicode_map *um = sb_encoding(ofs->sb);
+
+	if (!um)
+		return sysfs_emit(buf, "(none)\n");
+
+	return sysfs_emit(buf, "UTF-8 (%d.%d.%d)\n",
+			  unicode_major(um->version),
+			  unicode_minor(um->version),
+			  unicode_rev(um->version));
+}
+OVL_SYSFS_ATTR_RO(encoding);
+
 static struct attribute *ovl_sysfs_attrs[] = {
+	&ovl_sysfs_attr_encoding.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(ovl_sysfs);

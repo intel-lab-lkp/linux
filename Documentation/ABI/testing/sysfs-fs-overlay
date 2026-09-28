@@ -4,3 +4,10 @@ Contact:	linux-unionfs@vger.kernel.org
 Description:
 		A directory is created for every mounted overlayfs instance.
 		<volume> is set to the device major:minor.
+
+What:		/sys/fs/overlay/<volume>/encoding
+Date:		September 2026
+Contact:	linux-unionfs@vger.kernel.org
+Description:
+		Displays name and version of the encoding set for the
+		overlay.  If no encoding is set, displays (none)
