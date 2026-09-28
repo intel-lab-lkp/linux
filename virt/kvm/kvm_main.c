@@ -5515,12 +5515,6 @@ static struct file_operations kvm_vm_fops = {
 	KVM_COMPAT(kvm_vm_compat_ioctl),
 };
 
-bool file_is_kvm(struct file *file)
-{
-	return file && file->f_op == &kvm_vm_fops;
-}
-EXPORT_SYMBOL_FOR_KVM_INTERNAL(file_is_kvm);
-
 #ifdef kvm_file_to_kvm_arch
 struct kvm *kvm_file_to_kvm_fn(struct file *file)
 {
