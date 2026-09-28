@@ -361,27 +361,35 @@ int jbd2_cleanup_journal_tail(journal_t *journal)
  * Find all the written-back checkpoint buffers in the given list
  * and try to release them. If the whole transaction is released, set
  * the 'released' parameter. Return the number of released checkpointed
- * buffers.
+ * buffers. Store the number of buffers this function actually looked
+ * at, whether or not they were released, in '*nr_scanned' (a busy
+ * buffer skipped via JBD2_SHRINK_BUSY_SKIP still counts here, since
+ * walking it is real work, unlike the freed count).
  *
  * Called with j_list_lock held.
  */
 static unsigned long journal_shrink_one_cp_list(struct journal_head *jh,
 						enum jbd2_shrink_type type,
+						unsigned long *nr_scanned,
 						bool *released)
 {
 	struct journal_head *last_jh;
 	struct journal_head *next_jh = jh;
 	unsigned long nr_freed = 0;
+	unsigned long nr_examined = 0;
 	int ret;
 
 	*released = false;
-	if (!jh)
+	if (!jh) {
+		*nr_scanned = 0;
 		return 0;
+	}
 
 	last_jh = jh->b_cpprev;
 	do {
 		jh = next_jh;
 		next_jh = jh->b_cpnext;
+		nr_examined++;
 
 		if (type == JBD2_SHRINK_DESTROY) {
 			ret = __jbd2_journal_remove_checkpoint(jh);
@@ -404,6 +412,7 @@ static unsigned long journal_shrink_one_cp_list(struct journal_head *jh,
 			break;
 	} while (jh != last_jh);
 
+	*nr_scanned = nr_examined;
 	return nr_freed;
 }
 
@@ -424,7 +433,7 @@ unsigned long jbd2_journal_shrink_checkpoint_list(journal_t *journal,
 	tid_t first_tid = 0, last_tid = 0, next_tid = 0;
 	tid_t tid = 0;
 	unsigned long nr_freed = 0;
-	unsigned long freed;
+	unsigned long freed, scanned;
 	bool first_set = false;
 
 again:
@@ -458,9 +467,10 @@ again:
 		tid = transaction->t_tid;
 
 		freed = journal_shrink_one_cp_list(transaction->t_checkpoint_list,
-						   JBD2_SHRINK_BUSY_SKIP, &released);
+						   JBD2_SHRINK_BUSY_SKIP, &scanned,
+						   &released);
 		nr_freed += freed;
-		(*nr_to_scan) -= min(*nr_to_scan, freed);
+		(*nr_to_scan) -= min(*nr_to_scan, scanned);
 		if (*nr_to_scan == 0)
 			break;
 		if (need_resched() || spin_needbreak(&journal->j_list_lock))
@@ -502,6 +512,7 @@ void __jbd2_journal_clean_checkpoint_list(journal_t *journal,
 					  enum jbd2_shrink_type type)
 {
 	transaction_t *transaction, *last_transaction, *next_transaction;
+	unsigned long __always_unused scanned;
 	bool released;
 
 	WARN_ON_ONCE(type == JBD2_SHRINK_BUSY_SKIP);
@@ -516,7 +527,7 @@ void __jbd2_journal_clean_checkpoint_list(journal_t *journal,
 		transaction = next_transaction;
 		next_transaction = transaction->t_cpnext;
 		journal_shrink_one_cp_list(transaction->t_checkpoint_list,
-					   type, &released);
+					   type, &scanned, &released);
 		/*
 		 * This function only frees up some memory if possible so we
 		 * dont have an obligation to finish processing. Bail out if

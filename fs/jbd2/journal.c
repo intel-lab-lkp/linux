@@ -1262,9 +1262,26 @@ static unsigned long jbd2_journal_shrink_scan(struct shrinker *shrink,
 	trace_jbd2_shrink_scan_enter(journal, sc->nr_to_scan, count);
 
 	nr_shrunk = jbd2_journal_shrink_checkpoint_list(journal, &nr_to_scan);
+	sc->nr_scanned = sc->nr_to_scan - nr_to_scan;
 
 	count = percpu_counter_read_positive(&journal->j_checkpoint_jh_count);
 	trace_jbd2_shrink_scan_exit(journal, nr_to_scan, nr_shrunk, count);
+
+	/*
+	 * Give up on this reclaim pass if this call didn't manage to free
+	 * anything. This is deliberately based on nr_shrunk, not on
+	 * sc->nr_scanned: a checkpoint list can be full of buffers that are
+	 * still busy being written back, in which case a call can
+	 * legitimately scan (and correctly report through sc->nr_scanned)
+	 * a full batch of them without freeing a single one. Retrying
+	 * immediately within the same synchronous reclaim pass is not going
+	 * to let any of that in-flight writeback complete any sooner, so
+	 * there is nothing to gain from letting do_shrink_slab() keep
+	 * calling us against the same stale freeable count until its
+	 * one-shot scan budget for this priority level is exhausted.
+	 */
+	if (nr_shrunk == 0)
+		return SHRINK_STOP;
 
 	return nr_shrunk;
 }
