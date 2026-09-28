@@ -962,6 +962,11 @@ static void ntb_transport_link_cleanup(struct ntb_transport_ctx *nt)
 	u64 qp_bitmap_alloc;
 	unsigned int i, count;
 
+	if (!atomic_read(&nt->link_is_up))
+		cancel_delayed_work_sync(&nt->link_work);
+
+	guard(mutex)(&nt->link_event_lock);
+
 	qp_bitmap_alloc = nt->qp_bitmap & ~nt->qp_bitmap_free;
 
 	/* Pass along the info to any clients */
@@ -972,9 +977,6 @@ static void ntb_transport_link_cleanup(struct ntb_transport_ctx *nt)
 			cancel_work_sync(&qp->link_cleanup);
 			cancel_delayed_work_sync(&qp->link_work);
 		}
-
-	if (!atomic_read(&nt->link_is_up))
-		cancel_delayed_work_sync(&nt->link_work);
 
 	for (i = 0; i < nt->mw_count; i++)
 		ntb_free_mw(nt, i);
@@ -993,7 +995,6 @@ static void ntb_transport_link_cleanup_work(struct work_struct *work)
 	struct ntb_transport_ctx *nt =
 		container_of(work, struct ntb_transport_ctx, link_cleanup);
 
-	guard(mutex)(&nt->link_event_lock);
 	ntb_transport_link_cleanup(nt);
 }
 
