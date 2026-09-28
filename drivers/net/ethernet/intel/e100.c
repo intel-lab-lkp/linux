@@ -2988,6 +2988,7 @@ static void e100_remove(struct pci_dev *pdev)
 	if (netdev) {
 		struct nic *nic = netdev_priv(netdev);
 		unregister_netdev(netdev);
+		cancel_work_sync(&nic->tx_timeout_task);
 		e100_free(nic);
 		pci_iounmap(pdev, nic->csr);
 		dma_pool_destroy(nic->cbs_pool);
