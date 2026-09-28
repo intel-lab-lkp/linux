@@ -38,15 +38,7 @@
 #include "../kexec_internal.h"
 #include "kexec_handover_internal.h"
 
-/*
- * This is the minimal alignment required by deferred struct page init.
- * deferred_init_memmap_chunk frees memory to the buddy allocator, which looks
- * at the neighboring pages (up to MAX_PAGE_ORDER) to merge them.
- * If KHO scratch is not aligned to that value, buddy can access uninitialized
- * struct pages, which can cause a crash.
- */
 #define SCRATCH_ALIGNMENT_BYTES (PAGE_SIZE * MAX_ORDER_NR_PAGES)
-static_assert(SCRATCH_ALIGNMENT_BYTES >= CMA_MIN_ALIGNMENT_BYTES);
 
 /* The magic token for preserved pages */
 #define KHO_PAGE_MAGIC 0x4b484f50U /* ASCII for 'KHOP' */
@@ -685,6 +677,21 @@ static void __init kho_reserve_scratch(void)
 
 	if (!kho_enable)
 		return;
+
+	/*
+	 * This is the minimal alignment required by deferred struct page init.
+	 * deferred_init_memmap_chunk frees memory to the buddy allocator, which looks
+	 * at the neighboring pages (up to MAX_PAGE_ORDER) to merge them.
+	 * If KHO scratch is not aligned to that value, buddy can access uninitialized
+	 * struct pages, which can cause a crash.
+	 */
+	if (WARN_ON_ONCE(SCRATCH_ALIGNMENT_BYTES < CMA_MIN_ALIGNMENT_BYTES)) {
+		pr_err("scratch alignment %lu < CMA minimum %lu, disabling\n",
+		       (unsigned long)SCRATCH_ALIGNMENT_BYTES,
+		       (unsigned long)CMA_MIN_ALIGNMENT_BYTES);
+		kho_enable = false;
+		return;
+	}
 
 	scratch_size_update();
 
