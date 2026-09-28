@@ -2,6 +2,9 @@
 #
 # IP configuration
 #
+config IPV4
+	def_bool y
+
 config IP_MULTICAST
 	bool "IP: multicasting"
 	help
@@ -62,7 +65,7 @@ config IP_FIB_TRIE_STATS
 
 config IP_MULTIPLE_TABLES
 	bool "IP: policy routing"
-	depends on IP_ADVANCED_ROUTER
+	depends on IPV4 && IP_ADVANCED_ROUTER
 	select FIB_RULES
 	help
 	  Normally, a router decides what to do with a received packet based
@@ -105,6 +108,7 @@ config IP_ROUTE_CLASSID
 
 config IP_PNP
 	bool "IP: kernel level autoconfiguration"
+	depends on IPV4
 	help
 	  This enables automatic configuration of IP addresses of devices and
 	  of the routing table during kernel boot, based on either information
@@ -161,6 +165,7 @@ config IP_PNP_RARP
 
 config NET_IPIP
 	tristate "IP: tunneling"
+	depends on IPV4
 	select INET_TUNNEL
 	select NET_IP_TUNNEL
 	help
@@ -185,12 +190,14 @@ config NET_IPGRE_DEMUX
 
 config NET_IP_TUNNEL
 	tristate
+	depends on IPV4
 	select DST_CACHE
 	select GRO_CELLS
 	default n
 
 config NET_IPGRE
 	tristate "IP: GRE tunnels over IP"
+	depends on IPV4
 	depends on NET_IPGRE_DEMUX
 	select NET_IP_TUNNEL
 	help
@@ -219,7 +226,7 @@ config IP_MROUTE_COMMON
 
 config IP_MROUTE
 	bool "IP: multicast routing"
-	depends on IP_MULTICAST
+	depends on IP_MULTICAST && IPV4
 	select IP_MROUTE_COMMON
 	help
 	  This is used if you want your machine to act as a router for IP
@@ -267,6 +274,7 @@ config IP_PIMSM_V2
 
 config SYN_COOKIES
 	bool "IP: TCP syncookie support"
+	depends on IPV4
 	help
 	  Normal TCP/IP networking is open to an attack known as "SYN
 	  flooding". This denial-of-service attack prevents legitimate remote
@@ -303,6 +311,7 @@ config SYN_COOKIES
 
 config NET_IPVTI
 	tristate "Virtual (secure) IP: tunneling"
+	depends on IPV4
 	select INET_TUNNEL
 	select NET_IP_TUNNEL
 	select XFRM
@@ -315,11 +324,13 @@ config NET_IPVTI
 
 config NET_UDP_TUNNEL
 	tristate
+	depends on IPV4
 	select NET_IP_TUNNEL
 	default n
 
 config NET_FOU
 	tristate "IP: Foo (IP protocols) over UDP"
+	depends on IPV4
 	select NET_UDP_TUNNEL
 	help
 	  Foo over UDP allows any IP protocol to be directly encapsulated
@@ -338,6 +349,7 @@ config NET_FOU_IP_TUNNELS
 
 config INET_AH
 	tristate "IP: AH transformation"
+	depends on IPV4
 	select XFRM_AH
 	help
 	  Support for IPsec AH (Authentication Header).
@@ -353,6 +365,7 @@ config INET_AH
 
 config INET_ESP
 	tristate "IP: ESP transformation"
+	depends on IPV4
 	select XFRM_ESP
 	help
 	  Support for IPsec ESP (Encapsulating Security Payload).
@@ -393,6 +406,7 @@ config INET_ESPINTCP
 
 config INET_IPCOMP
 	tristate "IP: IPComp transformation"
+	depends on IPV4
 	select INET_XFRM_TUNNEL
 	select XFRM_IPCOMP
 	help
@@ -747,7 +761,7 @@ config TCP_AO
 	select CRYPTO_LIB_SHA1
 	select CRYPTO_LIB_SHA256
 	select CRYPTO_LIB_UTILS
-	depends on 64BIT # seq-number extension needs WRITE_ONCE(u64)
+	depends on IPV4 && 64BIT # seq-number extension needs WRITE_ONCE(u64)
 	help
 	  TCP-AO specifies the use of stronger Message Authentication Codes (MACs),
 	  protects against replays for long-lived TCP connections, and
@@ -758,6 +772,7 @@ config TCP_AO
 
 config TCP_MD5SIG
 	bool "TCP: MD5 Signature Option support (RFC2385)"
+	depends on IPV4
 	select CRYPTO_LIB_MD5
 	select CRYPTO_LIB_UTILS
 	help

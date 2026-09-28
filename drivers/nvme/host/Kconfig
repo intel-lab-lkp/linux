@@ -82,7 +82,7 @@ config NVME_FC
 
 config NVME_TCP
 	tristate "NVM Express over Fabrics TCP host driver"
-	depends on INET
+	depends on INET && IPV4
 	depends on BLOCK
 	select CRC32
 	select NET_CRC32C

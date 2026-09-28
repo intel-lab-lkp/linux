@@ -5,7 +5,7 @@
 
 menuconfig L2TP
 	tristate "Layer Two Tunneling Protocol (L2TP)"
-	depends on INET
+	depends on INET && IPV4
 	select NET_UDP_TUNNEL
 	help
 	  Layer Two Tunneling Protocol

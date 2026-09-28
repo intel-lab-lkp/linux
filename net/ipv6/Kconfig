@@ -47,6 +47,7 @@ config IPV6_OPTIMISTIC_DAD
 config INET6_AH
 	tristate "IPv6: AH transformation"
 	select XFRM_AH
+	depends on IPV4
 	help
 	  Support for IPsec AH (Authentication Header).
 
@@ -61,6 +62,7 @@ config INET6_AH
 
 config INET6_ESP
 	tristate "IPv6: ESP transformation"
+	depends on IPV4
 	select XFRM_ESP
 	help
 	  Support for IPsec ESP (Encapsulating Security Payload).
@@ -101,6 +103,7 @@ config INET6_ESPINTCP
 
 config INET6_IPCOMP
 	tristate "IPv6: IPComp transformation"
+	depends on IPV4
 	select INET6_XFRM_TUNNEL
 	select XFRM_IPCOMP
 	help
@@ -111,6 +114,7 @@ config INET6_IPCOMP
 
 config IPV6_MIP6
 	tristate "IPv6: Mobility"
+	depends on IPV4
 	select XFRM
 	help
 	  Support for IPv6 Mobility described in RFC 3775.
@@ -119,6 +123,7 @@ config IPV6_MIP6
 
 config IPV6_ILA
 	tristate "IPv6: Identifier Locator Addressing (ILA)"
+	depends on IPV4
 	depends on NETFILTER
 	select DST_CACHE
 	select LWTUNNEL
@@ -149,6 +154,7 @@ config INET6_TUNNEL
 
 config IPV6_VTI
 	tristate "Virtual (secure) IPv6: tunneling"
+	depends on IPV4
 	select IPV6_TUNNEL
 	select NET_IP_TUNNEL
 	select XFRM
@@ -161,6 +167,7 @@ config IPV6_VTI
 
 config IPV6_SIT
 	tristate "IPv6: IPv6-in-IPv4 tunnel (SIT driver)"
+	depends on IPV4
 	select INET_TUNNEL
 	select NET_IP_TUNNEL
 	select IPV6_NDISC_NODETYPE
@@ -198,6 +205,7 @@ config IPV6_NDISC_NODETYPE
 
 config IPV6_TUNNEL
 	tristate "IPv6: IP-in-IPv6 tunnel (RFC2473)"
+	depends on IPV4
 	select INET6_TUNNEL
 	select DST_CACHE
 	select GRO_CELLS
@@ -209,6 +217,7 @@ config IPV6_TUNNEL
 
 config IPV6_GRE
 	tristate "IPv6: GRE tunnel"
+	depends on IPV4
 	select IPV6_TUNNEL
 	select NET_IP_TUNNEL
 	depends on NET_IPGRE_DEMUX
@@ -256,7 +265,7 @@ config IPV6_SUBTREES
 
 config IPV6_MROUTE
 	bool "IPv6: multicast routing"
-	depends on IPV6
+	depends on IPV4 && IPV6
 	select IP_MROUTE_COMMON
 	help
 	  Support for IPv6 multicast forwarding.
@@ -285,7 +294,7 @@ config IPV6_PIMSM_V2
 
 config IPV6_SEG6_LWTUNNEL
 	bool "IPv6: Segment Routing Header encapsulation support"
-	depends on IPV6
+	depends on IPV4 && IPV6
 	select LWTUNNEL
 	select DST_CACHE
 	select IPV6_MULTIPLE_TABLES
@@ -316,7 +325,7 @@ config IPV6_SEG6_BPF
 
 config IPV6_RPL_LWTUNNEL
 	bool "IPv6: RPL Source Routing Header support"
-	depends on IPV6
+	depends on IPV4 && IPV6
 	select LWTUNNEL
 	select DST_CACHE
 	help
@@ -327,7 +336,7 @@ config IPV6_RPL_LWTUNNEL
 
 config IPV6_IOAM6_LWTUNNEL
 	bool "IPv6: IOAM Pre-allocated Trace insertion support"
-	depends on IPV6
+	depends on IPV4 && IPV6
 	select LWTUNNEL
 	select DST_CACHE
 	help
