@@ -153,7 +153,7 @@ int __ip6_datagram_connect(struct sock *sk, struct sockaddr_unsized *uaddr,
 	int			err;
 
 	if (usin->sin6_family == AF_INET) {
-		if (ipv6_only_sock(sk))
+		if (!IS_ENABLED(CONFIG_IPV4) || ipv6_only_sock(sk))
 			return -EAFNOSUPPORT;
 		err = __ip4_datagram_connect(sk, uaddr, addr_len);
 		goto ipv4_connected;
@@ -186,7 +186,7 @@ int __ip6_datagram_connect(struct sock *sk, struct sockaddr_unsized *uaddr,
 	if (addr_type & IPV6_ADDR_MAPPED) {
 		struct sockaddr_in sin;
 
-		if (ipv6_only_sock(sk)) {
+		if (!IS_ENABLED(CONFIG_IPV4) || ipv6_only_sock(sk)) {
 			err = -ENETUNREACH;
 			goto out;
 		}
