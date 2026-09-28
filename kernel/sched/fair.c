@@ -10349,7 +10349,7 @@ enum group_type {
 	 * The tasks' affinity constraints previously prevented the scheduler
 	 * from balancing the load across the system.
 	 */
-	group_imbalanced,
+	group_pinned_task,
 	/*
 	 * There are tasks running on non-preferred LLC, possible to move
 	 * them to their preferred LLC without creating too much imbalance.
@@ -11673,7 +11673,7 @@ group_type group_classify(unsigned int imbalance_pct,
 		return group_llc_balance;
 
 	if (sg_imbalanced(group))
-		return group_imbalanced;
+		return group_pinned_task;
 
 	if (sgs->group_asym_packing)
 		return group_asym_packing;
@@ -12136,10 +12136,10 @@ static bool update_sd_pick_busiest(struct lb_env *env,
 		/* Select the group with most tasks preferring dst LLC */
 		return update_llc_busiest(env, busiest, sgs);
 
-	case group_imbalanced:
+	case group_pinned_task:
 		/*
-		 * Select the 1st imbalanced group as we don't have any way to
-		 * choose one more than another.
+		 * Select the 1st group with pinned tasks as we don't
+		 * have any way to choose one more than another.
 		 */
 		return false;
 
@@ -12388,7 +12388,7 @@ static bool update_pick_idlest(struct sched_group *idlest,
 		break;
 
 	case group_llc_balance:
-	case group_imbalanced:
+	case group_pinned_task:
 	case group_asym_packing:
 	case group_smt_balance:
 		/* Those types are not used in the slow wakeup path */
@@ -12521,7 +12521,7 @@ sched_balance_find_dst_group(struct sched_domain *sd, struct task_struct *p, int
 		break;
 
 	case group_llc_balance:
-	case group_imbalanced:
+	case group_pinned_task:
 	case group_asym_packing:
 	case group_smt_balance:
 		/* Those type are not used in the slow wakeup path */
@@ -12784,11 +12784,11 @@ static inline void calculate_imbalance(struct lb_env *env, struct sd_lb_stats *s
 	}
 #endif
 
-	if (busiest->group_type == group_imbalanced) {
+	if (busiest->group_type == group_pinned_task) {
 		/*
-		 * In the group_imb case we cannot rely on group-wide averages
-		 * to ensure CPU-load equilibrium, try to move any task to fix
-		 * the imbalance. The next load balance will take care of
+		 * In the group_pinned_task case we cannot rely on group-wide
+		 * averages to ensure CPU-load equilibrium, try to move any task
+		 * to fix the imbalance. The next load balance will take care of
 		 * balancing back the system.
 		 */
 		env->migration_type = migrate_task;
@@ -12919,13 +12919,13 @@ static inline void calculate_imbalance(struct lb_env *env, struct sd_lb_stats *s
 /*
  * Decision matrix according to the local and busiest group type:
  *
- * busiest \ local has_spare fully_busy misfit smt asym imbalanced llc overloaded
+ * busiest \ local has_spare fully_busy misfit smt asym   pinned   llc overloaded
  * has_spare        nr_idle   balanced   N/A   N/A  N/A  balanced  N/A  balanced
  * fully_busy       nr_idle   nr_idle    N/A   N/A  N/A  balanced  N/A  balanced
  * misfit_task      force     N/A        N/A   N/A  N/A  N/A       N/A  N/A
  * smt_balance      nr_idle   nr_idle    N/A   N/A  N/A  balanced  N/A  balanced
  * asym_packing     force     force      N/A   N/A  N/A  force     N/A  force
- * imbalanced       force     force      N/A   N/A  N/A  force     N/A  force
+ * pinned_task      force     force      N/A   N/A  N/A  force     N/A  force
  * llc_balance      nr_idle   nr_idle    N/A   N/A  N/A  nr_idle   N/A  balanced
  * overloaded       force     force      N/A   N/A  N/A  force     N/A  avg_load
  *
@@ -12980,11 +12980,11 @@ static struct sched_group *sched_balance_find_src_group(struct lb_env *env)
 		goto force_balance;
 
 	/*
-	 * If the busiest group is imbalanced the below checks don't
+	 * If the busiest group has pinned tasks the below checks don't
 	 * work because they assume all things are equal, which typically
 	 * isn't true due to cpus_ptr constraints and the like.
 	 */
-	if (busiest->group_type == group_imbalanced)
+	if (busiest->group_type == group_pinned_task)
 		goto force_balance;
 
 	local = &sds.local_stat;
