@@ -95,8 +95,14 @@ static void nfc_llcp_socket_release(struct nfc_llcp_local *local, bool device,
 
 		nfc_llcp_socket_purge(llcp_sock);
 
-		if (sk->sk_state == LLCP_CONNECTED)
+		if (sk->sk_state == LLCP_CONNECTED) {
 			nfc_put_device(llcp_sock->dev);
+			llcp_sock->dev = NULL;
+		} else if (sk->sk_state == LLCP_BOUND ||
+			   sk->sk_state == LLCP_LISTEN) {
+			/* bind() already dropped its temporary device reference. */
+			llcp_sock->dev = NULL;
+		}
 
 		if (sk->sk_state == LLCP_LISTEN) {
 			struct nfc_llcp_sock *lsk, *n;
@@ -1328,6 +1334,10 @@ static void nfc_llcp_recv_dm(struct nfc_llcp_local *local,
 	 */
 	if (connecting)
 		nfc_llcp_sock_unlink(&local->connecting_sockets, sk);
+
+	/* Bound and listening sockets do not own a device reference. */
+	if (sk->sk_state == LLCP_BOUND || sk->sk_state == LLCP_LISTEN)
+		llcp_sock->dev = NULL;
 
 	sk->sk_err = ENXIO;
 	sk->sk_state = LLCP_CLOSED;
