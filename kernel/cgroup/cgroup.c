@@ -554,6 +554,7 @@ struct cgroup_subsys_state *cgroup_e_css(struct cgroup *cgrp,
 	return rcu_dereference_check(cgrp->e_css[ss->id],
 				     lockdep_is_held(&cgroup_mutex));
 }
+EXPORT_SYMBOL_GPL(cgroup_e_css);
 
 /**
  * cgroup_get_e_css - get a cgroup's effective css for the specified subsystem
