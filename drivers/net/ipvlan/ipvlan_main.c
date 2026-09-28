@@ -47,7 +47,7 @@ static int ipvlan_set_port_mode(struct ipvl_port *port, u16 nval,
 			/* Old mode was L3S */
 			ipvlan_l3s_unregister(port);
 		}
-		port->mode = nval;
+		WRITE_ONCE(port->mode, nval);
 
 		mutex_unlock(&port->pnodes_lock);
 	}
@@ -501,7 +501,7 @@ static int ipvlan_nl_changelink(struct net_device *dev,
 				struct netlink_ext_ack *extack)
 {
 	struct ipvl_dev *ipvlan = netdev_priv(dev);
-	struct ipvl_port *port = ipvlan_port_get_rtnl(ipvlan->phy_dev);
+	struct ipvl_port *port = ipvlan->port;
 	int err = 0;
 
 	if (!data)
@@ -516,17 +516,7 @@ static int ipvlan_nl_changelink(struct net_device *dev,
 	}
 
 	if (!err && data[IFLA_IPVLAN_FLAGS]) {
-		u16 flags = nla_get_u16(data[IFLA_IPVLAN_FLAGS]);
-
-		if (flags & IPVLAN_F_PRIVATE)
-			ipvlan_mark_private(port);
-		else
-			ipvlan_clear_private(port);
-
-		if (flags & IPVLAN_F_VEPA)
-			ipvlan_mark_vepa(port);
-		else
-			ipvlan_clear_vepa(port);
+		WRITE_ONCE(port->flags, nla_get_u16(data[IFLA_IPVLAN_FLAGS]));
 	}
 
 	return err;
@@ -570,23 +560,13 @@ static int ipvlan_nl_validate(struct nlattr *tb[], struct nlattr *data[],
 static int ipvlan_nl_fillinfo(struct sk_buff *skb,
 			      const struct net_device *dev)
 {
-	struct ipvl_dev *ipvlan = netdev_priv(dev);
-	struct ipvl_port *port = ipvlan_port_get_rtnl(ipvlan->phy_dev);
-	int ret = -EINVAL;
+	const struct ipvl_dev *ipvlan = netdev_priv(dev);
+	const struct ipvl_port *port = ipvlan->port;
 
-	if (!port)
-		goto err;
-
-	ret = -EMSGSIZE;
-	if (nla_put_u16(skb, IFLA_IPVLAN_MODE, port->mode))
-		goto err;
-	if (nla_put_u16(skb, IFLA_IPVLAN_FLAGS, port->flags))
-		goto err;
-
+	if (nla_put_u16(skb, IFLA_IPVLAN_MODE, READ_ONCE(port->mode)) ||
+	    nla_put_u16(skb, IFLA_IPVLAN_FLAGS, READ_ONCE(port->flags)))
+		return -EMSGSIZE;
 	return 0;
-
-err:
-	return ret;
 }
 
 int ipvlan_link_new(struct net_device *dev, struct rtnl_newlink_params *params,
@@ -682,7 +662,7 @@ int ipvlan_link_new(struct net_device *dev, struct rtnl_newlink_params *params,
 	 * to be consistent in setting it just like the mode attribute.
 	 */
 	if (data && data[IFLA_IPVLAN_FLAGS])
-		port->flags = nla_get_u16(data[IFLA_IPVLAN_FLAGS]);
+		WRITE_ONCE(port->flags, nla_get_u16(data[IFLA_IPVLAN_FLAGS]));
 
 	if (data && data[IFLA_IPVLAN_MODE])
 		mode = nla_get_u16(data[IFLA_IPVLAN_MODE]);

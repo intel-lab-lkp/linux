@@ -676,6 +676,7 @@ int ipvlan_queue_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct ipvl_dev *ipvlan = netdev_priv(dev);
 	struct ipvl_port *port = ipvlan_port_get_rcu_bh(ipvlan->phy_dev);
+	u16 mode;
 
 	if (!port)
 		goto out;
@@ -683,7 +684,8 @@ int ipvlan_queue_xmit(struct sk_buff *skb, struct net_device *dev)
 	if (unlikely(!pskb_may_pull(skb, sizeof(struct ethhdr))))
 		goto out;
 
-	switch(port->mode) {
+	mode = READ_ONCE(port->mode);
+	switch (mode) {
 	case IPVLAN_MODE_L2:
 		return ipvlan_xmit_mode_l2(skb, dev);
 	case IPVLAN_MODE_L3:
@@ -694,7 +696,7 @@ int ipvlan_queue_xmit(struct sk_buff *skb, struct net_device *dev)
 	}
 
 	/* Should not reach here */
-	WARN_ONCE(true, "%s called for mode = [%x]\n", __func__, port->mode);
+	WARN_ONCE(true, "%s called for mode = [%x]\n", __func__, mode);
 out:
 	kfree_skb(skb);
 	return NET_XMIT_DROP;
@@ -782,11 +784,13 @@ rx_handler_result_t ipvlan_handle_frame(struct sk_buff **pskb)
 {
 	struct sk_buff *skb = *pskb;
 	struct ipvl_port *port = ipvlan_port_get_rcu(skb->dev);
+	u16 mode;
 
 	if (!port)
 		return RX_HANDLER_PASS;
 
-	switch (port->mode) {
+	mode = READ_ONCE(port->mode);
+	switch (mode) {
 	case IPVLAN_MODE_L2:
 		return ipvlan_handle_mode_l2(pskb, port);
 	case IPVLAN_MODE_L3:
@@ -798,7 +802,7 @@ rx_handler_result_t ipvlan_handle_frame(struct sk_buff **pskb)
 	}
 
 	/* Should not reach here */
-	WARN_ONCE(true, "%s called for mode = [%x]\n", __func__, port->mode);
+	WARN_ONCE(true, "%s called for mode = [%x]\n", __func__, mode);
 	kfree_skb(skb);
 	return RX_HANDLER_CONSUMED;
 }

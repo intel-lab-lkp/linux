@@ -24,7 +24,7 @@ static struct ipvl_addr *ipvlan_skb_to_addr(struct sk_buff *skb,
 		goto out;
 
 	port = ipvlan_port_get_rcu(dev);
-	if (!port || port->mode != IPVLAN_MODE_L3S)
+	if (!port || READ_ONCE(port->mode) != IPVLAN_MODE_L3S)
 		goto out;
 
 	lyr3h = ipvlan_get_L3_hdr(port, skb, &addr_type);

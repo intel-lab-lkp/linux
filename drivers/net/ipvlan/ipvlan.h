@@ -125,32 +125,12 @@ static inline struct ipvl_port *ipvlan_port_get_rtnl(const struct net_device *d)
 
 static inline bool ipvlan_is_private(const struct ipvl_port *port)
 {
-	return !!(port->flags & IPVLAN_F_PRIVATE);
-}
-
-static inline void ipvlan_mark_private(struct ipvl_port *port)
-{
-	port->flags |= IPVLAN_F_PRIVATE;
-}
-
-static inline void ipvlan_clear_private(struct ipvl_port *port)
-{
-	port->flags &= ~IPVLAN_F_PRIVATE;
+	return !!(READ_ONCE(port->flags) & IPVLAN_F_PRIVATE);
 }
 
 static inline bool ipvlan_is_vepa(const struct ipvl_port *port)
 {
-	return !!(port->flags & IPVLAN_F_VEPA);
-}
-
-static inline void ipvlan_mark_vepa(struct ipvl_port *port)
-{
-	port->flags |= IPVLAN_F_VEPA;
-}
-
-static inline void ipvlan_clear_vepa(struct ipvl_port *port)
-{
-	port->flags &= ~IPVLAN_F_VEPA;
+	return !!(READ_ONCE(port->flags) & IPVLAN_F_VEPA);
 }
 
 void ipvlan_init_secret(void);
