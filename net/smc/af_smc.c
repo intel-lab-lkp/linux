@@ -157,7 +157,7 @@ static struct sock *smc_tcp_syn_recv_sock(const struct sock *sk,
 		rcu_assign_sk_user_data(child, NULL);
 
 		/* v4-mapped sockets don't inherit parent ops. Don't restore. */
-		if (inet_csk(child)->icsk_af_ops == inet_csk(sk)->icsk_af_ops)
+		if (inet_csk(child)->icsk_af_ops == &smc->af_ops)
 			inet_csk(child)->icsk_af_ops = smc->ori_af_ops;
 	}
 	sock_put(&smc->sk);
@@ -2671,6 +2671,8 @@ int smc_listen(struct socket *sock, int backlog)
 	if (!smc->use_fallback)
 		tcp_sk(smc->clcsock->sk)->syn_smc = 1;
 
+	sock_set_flag(sk, SOCK_RCU_FREE);
+
 	/* save original sk_data_ready function and establish
 	 * smc-specific sk_data_ready function
 	 */
@@ -2682,18 +2684,25 @@ int smc_listen(struct socket *sock, int backlog)
 	write_unlock_bh(&smc->clcsock->sk->sk_callback_lock);
 
 	/* save original ops */
+	lock_sock(smc->clcsock->sk);
 	smc->ori_af_ops = inet_csk(smc->clcsock->sk)->icsk_af_ops;
 
 	smc->af_ops = *smc->ori_af_ops;
 	smc->af_ops.syn_recv_sock = smc_tcp_syn_recv_sock;
 
-	inet_csk(smc->clcsock->sk)->icsk_af_ops = &smc->af_ops;
+	WRITE_ONCE(inet_csk(smc->clcsock->sk)->icsk_af_ops, &smc->af_ops);
+	release_sock(smc->clcsock->sk);
 
 	if (smc->limit_smc_hs)
 		tcp_sk(smc->clcsock->sk)->smc_hs_congested = smc_hs_congested;
 
 	rc = kernel_listen(smc->clcsock, backlog);
 	if (rc) {
+		lock_sock(smc->clcsock->sk);
+		if (inet_csk(smc->clcsock->sk)->icsk_af_ops == &smc->af_ops)
+			WRITE_ONCE(inet_csk(smc->clcsock->sk)->icsk_af_ops,
+				   smc->ori_af_ops);
+		release_sock(smc->clcsock->sk);
 		write_lock_bh(&smc->clcsock->sk->sk_callback_lock);
 		smc_clcsock_restore_cb(&smc->clcsock->sk->sk_data_ready,
 				       &smc->clcsk_data_ready);
@@ -2701,7 +2710,6 @@ int smc_listen(struct socket *sock, int backlog)
 		write_unlock_bh(&smc->clcsock->sk->sk_callback_lock);
 		goto out;
 	}
-	sock_set_flag(sk, SOCK_RCU_FREE);
 	sk->sk_max_ack_backlog = backlog;
 	sk->sk_ack_backlog = 0;
 	sk->sk_state = SMC_LISTEN;

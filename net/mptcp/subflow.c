@@ -1984,10 +1984,11 @@ static int subflow_ulp_init(struct sock *sk)
 	struct tcp_sock *tp = tcp_sk(sk);
 	int err = 0;
 
-	/* disallow attaching ULP to a socket unless it has been
-	 * created with sock_create_kern()
+	/* Only attach to a kernel-created socket that has not been
+	 * exposed through a file.
 	 */
-	if (!sk->sk_kern_sock) {
+	if (!sk->sk_kern_sock ||
+	    (sk->sk_socket && READ_ONCE(sk->sk_socket->file))) {
 		err = -EOPNOTSUPP;
 		goto out;
 	}

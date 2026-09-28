@@ -24,12 +24,18 @@
 void smc_clcsock_release(struct smc_sock *smc)
 {
 	struct socket *tcp;
+	struct sock *sk;
 
 	if (smc->listen_smc && current_work() != &smc->smc_listen_work)
 		cancel_work_sync(&smc->smc_listen_work);
 	mutex_lock(&smc->clcsock_release_lock);
 	if (smc->clcsock) {
 		tcp = smc->clcsock;
+		sk = tcp->sk;
+		lock_sock(sk);
+		if (inet_csk(sk)->icsk_af_ops == &smc->af_ops)
+			WRITE_ONCE(inet_csk(sk)->icsk_af_ops, smc->ori_af_ops);
+		release_sock(sk);
 		smc->clcsock = NULL;
 		sock_release(tcp);
 	}
