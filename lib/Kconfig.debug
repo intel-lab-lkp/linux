@@ -3392,6 +3392,19 @@ config TEST_OBJPOOL
 
 	  If unsure, say N.
 
+config OBJPOOL_KUNIT_TEST
+	tristate "KUnit test for nested objpool pushes" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  Stress test for an objpool push that is interrupted by another
+	  push to the same per-CPU slot, as happens when a kretprobe'd
+	  function returns in NMI context.  An hrtimer stands in for the
+	  NMI.  The test runs for about ten seconds.  The case that pops
+	  from another CPU is skipped when only one CPU is online.
+
+	  If unsure, say N.
+
 config TEST_KEXEC_HANDOVER
 	bool "Test for Kexec HandOver"
 	default n

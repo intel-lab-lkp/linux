@@ -19872,6 +19872,7 @@ S:	Supported
 F:	include/linux/objpool.h
 F:	lib/objpool.c
 F:	lib/test_objpool.c
+F:	lib/tests/objpool_kunit.c
 
 OBJTOOL
 M:	Josh Poimboeuf <jpoimboe@kernel.org>
