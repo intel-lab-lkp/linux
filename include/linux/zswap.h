@@ -4,6 +4,7 @@
 
 #include <linux/types.h>
 #include <linux/mm_types.h>
+#include <linux/workqueue_types.h>
 
 struct lruvec;
 
@@ -22,6 +23,9 @@ struct zswap_lruvec_state {
 	 * swapped them in.
 	 */
 	atomic_long_t nr_disk_swapins;
+
+	atomic_long_t nr_deferred_writeback;
+	struct work_struct deferred_writeback_work;
 };
 
 unsigned long zswap_total_pages(void);
