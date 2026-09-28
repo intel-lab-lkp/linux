@@ -3358,8 +3358,9 @@ static int intel_pmu_drain_arch_pebs(struct pt_regs *iregs,
 
 	rdmsrq(MSR_IA32_PEBS_INDEX, index.whole);
 
+	mask = hybrid(cpuc->pmu, arch_pebs_cap).counters & cpuc->pebs_enabled;
 	if (unlikely(!index.wr)) {
-		intel_pmu_pebs_event_update_no_drain(cpuc, X86_PMC_IDX_MAX);
+		intel_pmu_pebs_event_update_no_drain(cpuc, mask);
 		return 0;
 	}
 
@@ -3374,8 +3375,6 @@ static int intel_pmu_drain_arch_pebs(struct pt_regs *iregs,
 	else
 		index.thresh = ARCH_PEBS_THRESH_SINGLE;
 	wrmsrq(MSR_IA32_PEBS_INDEX, index.whole);
-
-	mask = hybrid(cpuc->pmu, arch_pebs_cap).counters & cpuc->pebs_enabled;
 
 	if (!iregs)
 		iregs = &dummy_iregs;
