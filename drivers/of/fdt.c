@@ -925,7 +925,7 @@ void __init early_init_dt_check_for_usable_mem_range(void)
 /**
  * early_init_dt_check_kho - Decode info required for kexec handover from DT
  */
-static void __init early_init_dt_check_kho(void)
+void __init early_init_dt_check_kho(void)
 {
 	unsigned long node = chosen_node_offset;
 	u64 fdt_start, fdt_size, scratch_start, scratch_size;

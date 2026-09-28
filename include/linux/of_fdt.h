@@ -83,6 +83,7 @@ extern int early_init_dt_scan_root(void);
 extern bool early_init_dt_scan(void *dt_virt, phys_addr_t dt_phys);
 extern bool early_init_dt_verify(void *dt_virt, phys_addr_t dt_phys);
 extern void early_init_dt_scan_nodes(void);
+extern void early_init_dt_check_kho(void);
 
 extern const char *of_flat_dt_get_machine_name(void);
 extern const void *of_flat_dt_match_machine(const void *default_match,
