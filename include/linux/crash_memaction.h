@@ -4,6 +4,7 @@
 
 #include <linux/init.h>
 #include <linux/jump_label.h>
+#include <linux/mm.h>
 #include <linux/types.h>
 
 struct kimage;
@@ -50,6 +51,18 @@ static inline void crash_memaction_unmark_pfns(unsigned long pfn,
 		__crash_memaction_unmark_pfns(pfn, nr_pages);
 }
 
+static inline void crash_mark_pages(struct page *page, int nr_pages,
+		struct vm_area_struct *vma)
+{
+	if (!static_branch_unlikely(&crash_memaction_active))
+		return;
+
+	if (likely(!(vma->vm_flags & VM_CRASH_MARK)))
+		return;
+
+	__crash_memaction_mark_pfns(page_to_pfn(page), nr_pages);
+}
+
 void crash_memaction_mark(void *addr, size_t size, int types);
 void crash_memaction_unmark(void *addr, size_t size);
 
@@ -62,6 +75,8 @@ void crash_memaction_unload(struct kimage *image);
 static inline void crash_memaction_init(void) { }
 static inline void crash_memaction_unmark_pfns(unsigned long pfn,
 		unsigned long nr_pages) { }
+static inline void crash_mark_pages(struct page *page, int nr_pages,
+		struct vm_area_struct *vma) { }
 static inline void crash_memaction_mark(void *addr, size_t size, int types) { }
 static inline void crash_memaction_unmark(void *addr, size_t size) { }
 static inline int crash_memaction_types(void) { return 0; }

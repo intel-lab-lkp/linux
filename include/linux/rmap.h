@@ -9,6 +9,7 @@
 #include <linux/slab.h>
 #include <linux/mm.h>
 #include <linux/rwsem.h>
+#include <linux/crash_memaction.h>
 #include <linux/memcontrol.h>
 #include <linux/highmem.h>
 #include <linux/pagemap.h>
@@ -472,13 +473,15 @@ static inline int hugetlb_try_share_anon_rmap(struct folio *folio)
 	return 0;
 }
 
-static inline void hugetlb_add_file_rmap(struct folio *folio)
+static inline void hugetlb_add_file_rmap(struct folio *folio,
+		struct vm_area_struct *vma)
 {
 	VM_WARN_ON_FOLIO(!folio_test_hugetlb(folio), folio);
 	VM_WARN_ON_FOLIO(folio_test_anon(folio), folio);
 
 	atomic_inc(&folio->_entire_mapcount);
 	atomic_inc(&folio->_large_mapcount);
+	crash_mark_pages(&folio->page, folio_nr_pages(folio), vma);
 }
 
 static inline void hugetlb_remove_rmap(struct folio *folio)

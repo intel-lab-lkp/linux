@@ -1582,6 +1582,8 @@ static __always_inline void __folio_add_anon_rmap(struct folio *folio,
 	 */
 	if (folio_nr_pages(folio) == nr_pages)
 		mlock_vma_folio(folio, vma);
+
+	crash_mark_pages(page, nr_pages, vma);
 }
 
 /**
@@ -1703,6 +1705,8 @@ void folio_add_new_anon_rmap(struct folio *folio, struct vm_area_struct *vma,
 
 	__folio_mod_stat(folio, nr, nr_pmdmapped);
 	mod_mthp_stat(folio_order(folio), MTHP_STAT_NR_ANON, 1);
+
+	crash_mark_pages(&folio->page, nr, vma);
 }
 
 static __always_inline void __folio_add_file_rmap(struct folio *folio,
@@ -1721,6 +1725,8 @@ static __always_inline void __folio_add_file_rmap(struct folio *folio,
 	 */
 	if (folio_nr_pages(folio) == nr_pages)
 		mlock_vma_folio(folio, vma);
+
+	crash_mark_pages(page, nr_pages, vma);
 }
 
 /**
@@ -3190,6 +3196,7 @@ void hugetlb_add_anon_rmap(struct folio *folio, struct vm_area_struct *vma,
 		SetPageAnonExclusive(&folio->page);
 	VM_WARN_ON_FOLIO(folio_entire_mapcount(folio) > 1 &&
 			 PageAnonExclusive(&folio->page), folio);
+	crash_mark_pages(&folio->page, folio_nr_pages(folio), vma);
 }
 
 void hugetlb_add_new_anon_rmap(struct folio *folio,
@@ -3204,5 +3211,6 @@ void hugetlb_add_new_anon_rmap(struct folio *folio,
 	folio_clear_hugetlb_restore_reserve(folio);
 	__folio_set_anon(folio, vma, address, true);
 	SetPageAnonExclusive(&folio->page);
+	crash_mark_pages(&folio->page, folio_nr_pages(folio), vma);
 }
 #endif /* CONFIG_HUGETLB_PAGE */

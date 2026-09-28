@@ -5063,7 +5063,7 @@ again:
 			 * sleep during the process.
 			 */
 			if (!folio_test_anon(pte_folio)) {
-				hugetlb_add_file_rmap(pte_folio);
+				hugetlb_add_file_rmap(pte_folio, dst_vma);
 			} else if (hugetlb_try_dup_anon_rmap(pte_folio, src_vma)) {
 				pte_t src_pte_old = entry;
 				struct folio *new_folio;
@@ -5982,7 +5982,7 @@ static vm_fault_t hugetlb_no_page(struct address_space *mapping,
 	if (new_anon_folio)
 		hugetlb_add_new_anon_rmap(folio, vma, vmf->address);
 	else
-		hugetlb_add_file_rmap(folio);
+		hugetlb_add_file_rmap(folio, vma);
 	new_pte = make_huge_pte(vma, folio, vma->vm_flags & VM_SHARED);
 	/*
 	 * If this pte was previously wr-protected, keep it wr-protected even
@@ -6502,7 +6502,7 @@ int hugetlb_mfill_atomic_pte(pte_t *dst_pte,
 		goto out_release_unlock;
 
 	if (folio_in_pagecache)
-		hugetlb_add_file_rmap(folio);
+		hugetlb_add_file_rmap(folio, dst_vma);
 	else
 		hugetlb_add_new_anon_rmap(folio, dst_vma, dst_addr);
 

@@ -1326,6 +1326,7 @@ static long move_present_ptes(struct mm_struct *mm,
 
 		folio_move_anon_rmap(src_folio, dst_vma);
 		src_folio->index = linear_anon_page_index(dst_vma, dst_addr);
+		crash_mark_pages(&src_folio->page, 1, dst_vma);
 
 		orig_dst_pte = folio_mk_pte(src_folio, dst_vma->vm_page_prot);
 		/* Set soft dirty bit so userspace can notice the pte was moved */
