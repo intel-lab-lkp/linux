@@ -54,6 +54,7 @@ documentation, or deleted if it has served its purpose.
    allocation-profiling
    arch_pgtable_helpers
    balance
+   crash_memaction
    damon/index
    free_page_reporting
    hmm
