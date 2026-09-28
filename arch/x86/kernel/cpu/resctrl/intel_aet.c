@@ -139,7 +139,7 @@ static struct event_group *known_event_groups[] = {
 	     _peg < &known_event_groups[ARRAY_SIZE(known_event_groups)];	\
 	     _peg++)
 
-bool intel_handle_aet_option(bool force_off, char *tok)
+bool rdt_handle_aet_option(bool force_off, char *tok)
 {
 	struct event_group **peg;
 	bool ret = false;
@@ -194,7 +194,7 @@ static bool group_has_usable_regions(struct event_group *e, struct pmt_feature_g
 		if (skip_telem_region(&p->regions[i], e)) {
 			/*
 			 * Clear the address field of regions that did not pass the checks in
-			 * skip_telem_region() so they will not be used by intel_aet_read_event().
+			 * skip_telem_region() so they will not be used by rdt_aet_read_event().
 			 * This is safe to do because intel_pmt_get_regions_by_feature() allocates
 			 * a new pmt_feature_group structure to return to each caller and only makes
 			 * use of the pmt_feature_group::kref field when intel_pmt_put_feature_group()
@@ -398,7 +398,7 @@ void intel_aet_invalidate(u8 package_id)
 }
 EXPORT_SYMBOL_NS_GPL(intel_aet_invalidate, "INTEL_PMT");
 
-bool intel_aet_pre_mount(void)
+bool rdt_aet_pre_mount(void)
 {
 	guard(mutex)(&aet_register_lock);
 
@@ -418,7 +418,7 @@ bool intel_aet_pre_mount(void)
 	return true;
 }
 
-void intel_aet_unmount(void)
+void rdt_aet_unmount(void)
 {
 	struct rdt_resource *r = &rdt_resources_all[RDT_RESOURCE_PERF_PKG].r_resctrl;
 	struct event_group **peg;
@@ -452,7 +452,7 @@ void intel_aet_unmount(void)
  * the MMIO read indicates that data is not valid.  Return success if at
  * least one aggregator has valid data.
  */
-int intel_aet_read_event(int domid, u32 rmid, void *arch_priv, u64 *val)
+int rdt_aet_read_event(int domid, u32 rmid, void *arch_priv, u64 *val)
 {
 	struct pmt_event *pevt = arch_priv;
 	struct event_group *e;
@@ -492,7 +492,7 @@ int intel_aet_read_event(int domid, u32 rmid, void *arch_priv, u64 *val)
 	return valid ? 0 : -EINVAL;
 }
 
-void intel_aet_mon_domain_setup(int cpu, int id, struct rdt_resource *r,
+void rdt_aet_mon_domain_setup(int cpu, int id, struct rdt_resource *r,
 				struct list_head *add_pos)
 {
 	struct rdt_perf_pkg_mon_domain *d;

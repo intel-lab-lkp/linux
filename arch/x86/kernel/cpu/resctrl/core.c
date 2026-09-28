@@ -616,7 +616,7 @@ static void domain_add_cpu_mon(int cpu, struct rdt_resource *r)
 		break;
 	case RDT_RESOURCE_PERF_PKG:
 		if (!hdr)
-			intel_aet_mon_domain_setup(cpu, id, r, add_pos);
+			rdt_aet_mon_domain_setup(cpu, id, r, add_pos);
 		break;
 	default:
 		pr_warn_once("Unknown resource rid=%d\n", r->rid);
@@ -795,7 +795,7 @@ void resctrl_arch_pre_mount(void)
 	struct rdt_resource *r = &rdt_resources_all[RDT_RESOURCE_PERF_PKG].r_resctrl;
 	int cpu;
 
-	if (!intel_aet_pre_mount())
+	if (!rdt_aet_pre_mount())
 		return;
 
 	/*
@@ -819,7 +819,7 @@ void resctrl_arch_unmount(void)
 	if (!r->mon_capable)
 		return;
 
-	intel_aet_unmount();
+	rdt_aet_unmount();
 
 	cpus_read_lock();
 	mutex_lock(&domain_list_lock);
@@ -885,7 +885,7 @@ static int __init set_rdt_options(char *str)
 		force_off = *tok == '!';
 		if (force_off)
 			tok++;
-		if (intel_handle_aet_option(force_off, tok))
+		if (rdt_handle_aet_option(force_off, tok))
 			continue;
 		for (o = rdt_options; o < &rdt_options[NUM_RDT_OPTIONS]; o++) {
 			if (strcmp(tok, o->name) == 0) {
