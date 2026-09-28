@@ -1133,6 +1133,8 @@ err:
 
 static int vdec_start_output(struct venus_inst *inst)
 {
+	struct vb2_queue *dst_vq;
+	bool cap_waiting;
 	int ret;
 
 	if (inst->codec_state == VENUS_DEC_STATE_SEEK) {
@@ -1145,10 +1147,26 @@ static int vdec_start_output(struct venus_inst *inst)
 		} else {
 			inst->codec_state = VENUS_DEC_STATE_DECODING;
 
-			if (inst->streamon_cap) {
+			/*
+			 * If CAPTURE was streamed on first, vdec_start_capture()
+			 * returned early because OUTPUT was not streaming, so
+			 * start the capture side from here.
+			 */
+			dst_vq = v4l2_m2m_get_dst_vq(inst->m2m_ctx);
+			cap_waiting = !inst->streamon_cap && vb2_is_streaming(dst_vq);
+
+			if (inst->streamon_cap || cap_waiting) {
 				ret = venus_helper_queue_dpb_bufs(inst);
 				if (ret)
 					return ret;
+			}
+
+			if (cap_waiting) {
+				ret = venus_helper_process_initial_cap_bufs(inst);
+				if (ret)
+					return ret;
+
+				inst->streamon_cap = 1;
 			}
 		}
 		goto done;
