@@ -330,6 +330,9 @@ static void run_test(void)
 		kvm_pthread_join(vcpu_threads[i], NULL);
 
 	report_stats(delta);
+
+	free(lpi_threads);
+	free(vcpu_threads);
 }
 
 static void setup_vm(void)
