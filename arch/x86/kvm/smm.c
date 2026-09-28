@@ -361,6 +361,17 @@ void enter_smm(struct kvm_vcpu *vcpu)
 	if (guest_cpu_cap_has(vcpu, X86_FEATURE_LM))
 		if (kvm_x86_call(set_efer)(vcpu, 0))
 			goto error;
+
+	/*
+	 * CR3 is unmodified on SMM entry, but with paging disabled and outside
+	 * of long mode, bits 63:32 are unreachable and RSM restores the full
+	 * value from SMRAM.  Clear them, as a CR3 above 4GiB with EFER.LMA=0
+	 * fails VMRUN consistency checks when KVM runs nested under Hyper-V.
+	 */
+	if (kvm_read_cr3(vcpu) >> 32) {
+		vcpu->arch.cr3 = (u32)vcpu->arch.cr3;
+		kvm_register_mark_dirty(vcpu, VCPU_EXREG_CR3);
+	}
 #endif
 
 	vcpu->arch.cpuid_dynamic_bits_dirty = true;
