@@ -62,6 +62,7 @@ macro_rules! nvkv_encode {
         }
     };
 }
+pub(crate) use nvkv_encode;
 
 /// A value with a specific index that encodes under the NVKV key `KEY_ID`.
 struct IndexedKey<T, const KEY_ID: KeyId> {

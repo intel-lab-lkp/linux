@@ -132,6 +132,7 @@ macro_rules! nvkv_decode {
         }
     };
 }
+pub(crate) use nvkv_decode;
 
 impl<T: Default, const KEY_ID: KeyId> Schema for Key<T, KEY_ID> {
     type Target = T;
