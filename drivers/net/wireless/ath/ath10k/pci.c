@@ -2069,10 +2069,20 @@ void ath10k_pci_flush(struct ath10k *ar)
 	ath10k_pci_buffer_cleanup(ar);
 }
 
+static bool ath10k_pci_needs_bt_cold_reset(struct ath10k_pci *ar_pci)
+{
+	struct pci_dev *pdev = ar_pci->pdev;
+
+	return pdev->device == QCA6174_2_1_DEVICE_ID &&
+	       pdev->subsystem_vendor == PCI_VENDOR_ID_ASUSTEK &&
+	       pdev->subsystem_device == 0x8751;
+}
+
 static void ath10k_pci_hif_stop(struct ath10k *ar)
 {
 	struct ath10k_pci *ar_pci = ath10k_pci_priv(ar);
 	unsigned long flags;
+	int ret;
 
 	ath10k_dbg(ar, ATH10K_DBG_BOOT, "boot hif stop\n");
 
@@ -2095,6 +2105,14 @@ static void ath10k_pci_hif_stop(struct ath10k *ar)
 	 * before proceeding with cleanup.
 	 */
 	ath10k_pci_safe_chip_reset(ar);
+
+	if (ath10k_pci_needs_bt_cold_reset(ar_pci)) {
+		ret = ath10k_pci_cold_reset(ar);
+		if (ret)
+			ath10k_warn(ar,
+				    "failed to cold reset after hif stop: %d\n",
+				    ret);
+	}
 
 	ath10k_pci_flush(ar);
 
