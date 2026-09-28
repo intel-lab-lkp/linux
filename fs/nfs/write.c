@@ -568,11 +568,16 @@ out_unlock:
 
 static void nfs_write_error(struct nfs_page *req, int error)
 {
+	struct nfs_open_context *ctx;
+
+	/* The caller may be writeback, which must not release the context */
+	ctx = get_nfs_open_context(nfs_req_openctx(req));
 	trace_nfs_write_error(nfs_page_to_inode(req), req, error);
 	nfs_mapping_set_error(nfs_page_to_folio(req), error);
 	nfs_inode_remove_request(req);
 	nfs_page_end_writeback(req);
 	nfs_release_request(req);
+	put_nfs_open_context_async(ctx);
 }
 
 /*
