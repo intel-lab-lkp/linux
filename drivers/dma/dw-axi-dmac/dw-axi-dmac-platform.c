@@ -352,33 +352,110 @@ static void vchan_desc_put(struct virt_dma_desc *vdesc)
 	axi_desc_put(vd_to_axi_desc(vdesc));
 }
 
+/*
+ * Read a 64-bit channel address register while the transfer may be
+ * running. The two 32-bit halves cannot be read atomically on all
+ * platforms, so sample the high half before and after the low half
+ * and retry if it moved (the low half wrapped in between).
+ */
+static u64 axi_chan_readq(struct axi_dma_chan *chan, u32 reg)
+{
+	u32 hi, lo, hi2;
+
+	do {
+		hi = readl(chan->chan_regs + reg + 4);
+		lo = readl(chan->chan_regs + reg);
+		hi2 = readl(chan->chan_regs + reg + 4);
+	} while (unlikely(hi != hi2));
+
+	return (u64)hi << 32 | lo;
+}
+
+/*
+ * Return the number of bytes already transferred by the descriptor
+ * currently on the hardware (running, paused or just completed), based
+ * on the current read or write position: CH_SAR for MEM_TO_DEV and
+ * MEM_TO_MEM, CH_DAR for DEV_TO_MEM. Must be called with vc.lock held.
+ */
+static u32 axi_chan_get_xferred(struct axi_dma_chan *chan,
+				struct axi_dma_desc *desc)
+{
+	struct axi_dma_hw_desc *hw_desc;
+	bool dst = chan->direction == DMA_DEV_TO_MEM;
+	u64 pos, start;
+	u32 xferred = 0;
+	int i;
+
+	pos = axi_chan_readq(chan, dst ? CH_DAR : CH_SAR);
+
+	for (i = 0; i < desc->nr_hw_descs; i++) {
+		hw_desc = &desc->hw_desc[i];
+		start = le64_to_cpu(dst ? hw_desc->lli->dar : hw_desc->lli->sar);
+
+		/* Current position is inside this block: partial progress */
+		if (pos >= start && pos <= start + hw_desc->len)
+			return xferred + (u32)(pos - start);
+
+		xferred += hw_desc->len;
+	}
+
+	/* Position doesn't match any block, be conservative */
+	return 0;
+}
+
 static enum dma_status
 dma_chan_tx_status(struct dma_chan *dchan, dma_cookie_t cookie,
 		   struct dma_tx_state *txstate)
 {
 	struct axi_dma_chan *chan = dchan_to_axi_dma_chan(dchan);
 	struct virt_dma_desc *vdesc;
+	struct axi_dma_desc *desc;
 	enum dma_status status;
 	u32 completed_length;
 	unsigned long flags;
-	u32 completed_blocks;
 	size_t bytes = 0;
 	u32 length;
-	u32 len;
 
 	status = dma_cookie_status(dchan, cookie, txstate);
-	if (status == DMA_COMPLETE || !txstate)
+	if (status == DMA_COMPLETE)
 		return status;
 
 	spin_lock_irqsave(&chan->vc.lock, flags);
 
+	if (chan->is_paused && status == DMA_IN_PROGRESS)
+		status = DMA_PAUSED;
+
+	if (!txstate) {
+		spin_unlock_irqrestore(&chan->vc.lock, flags);
+		return status;
+	}
+
 	vdesc = vchan_find_desc(&chan->vc, cookie);
 	if (vdesc) {
-		length = vd_to_axi_desc(vdesc)->length;
-		completed_blocks = vd_to_axi_desc(vdesc)->completed_blocks;
-		len = vd_to_axi_desc(vdesc)->hw_desc[0].len;
-		completed_length = completed_blocks * len;
-		bytes = length - completed_length;
+		desc = vd_to_axi_desc(vdesc);
+		length = desc->length;
+
+		if (chan->cyclic) {
+			completed_length = desc->completed_blocks *
+					   desc->hw_desc[0].len;
+		} else if (desc == chan->desc) {
+			/*
+			 * chan->desc is the descriptor last programmed into
+			 * the hardware, so the pointer registers belong to
+			 * it; never match a queued-but-never-started
+			 * descriptor against the stale pointer left by a
+			 * previous transfer. If the transfer has just
+			 * finished but the interrupt has not reaped the
+			 * descriptor yet, the pointer sits at the end and
+			 * the residue reads 0.
+			 */
+			completed_length = axi_chan_get_xferred(chan, desc);
+		} else {
+			/* Still queued, nothing transferred yet */
+			completed_length = 0;
+		}
+
+		bytes = length - min(completed_length, length);
 	}
 
 	spin_unlock_irqrestore(&chan->vc.lock, flags);
@@ -427,6 +504,7 @@ static void axi_chan_block_xfer_start(struct axi_dma_chan *chan,
 {
 	u32 priority = chan->chip->dw->hdata->priority[chan->id];
 	struct axi_dma_chan_config config = {};
+	struct axi_dma_lli *lli = first->hw_desc[0].lli;
 	u32 irq_mask;
 	u8 lms = 0; /* Select AXI0 master for LLI fetching */
 
@@ -467,6 +545,19 @@ static void axi_chan_block_xfer_start(struct axi_dma_chan *chan,
 		break;
 	}
 	axi_chan_config_write(chan, &config);
+
+	/*
+	 * Pre-load the pointer registers with the first block's addresses.
+	 * The hardware reloads them with the same values once it fetches
+	 * the first LLI; in between, a reader observes the start of the
+	 * first block instead of a stale pointer left by a previous
+	 * transfer (which may alias the new one if the buffer is reused).
+	 */
+	axi_chan_iowrite64(chan, CH_SAR, le64_to_cpu(lli->sar));
+	axi_chan_iowrite64(chan, CH_DAR, le64_to_cpu(lli->dar));
+
+	/* The hardware pointer registers now belong to this descriptor */
+	chan->desc = first;
 
 	write_chan_llp(chan, first->hw_desc[0].llp | lms);
 
@@ -1077,6 +1168,8 @@ static noinline void axi_chan_handle_err(struct axi_dma_chan *chan, u32 status)
 	}
 	/* Remove the completed descriptor from issued list */
 	list_del(&vd->node);
+	if (chan->desc == vd_to_axi_desc(vd))
+		chan->desc = NULL;
 
 	/* WARN about bad descriptor */
 	dev_err(chan2dev(chan),
@@ -1140,6 +1233,8 @@ static void axi_chan_block_xfer_complete(struct axi_dma_chan *chan)
 	} else {
 		/* Remove the completed descriptor from issued list before completing */
 		list_del(&vd->node);
+		if (chan->desc == vd_to_axi_desc(vd))
+			chan->desc = NULL;
 		vchan_cookie_complete(vd);
 	}
 
@@ -1205,7 +1300,9 @@ static int dma_chan_terminate_all(struct dma_chan *dchan)
 
 	vchan_get_all_descriptors(&chan->vc, &head);
 
+	chan->desc = NULL;
 	chan->cyclic = false;
+	chan->is_paused = false;
 	spin_unlock_irqrestore(&chan->vc.lock, flags);
 
 	vchan_dma_desc_free_list(&chan->vc, &head);
