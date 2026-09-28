@@ -631,6 +631,15 @@ static int nix_bp_disable(struct rvu *rvu,
 
 		if (type == NIX_INTF_TYPE_LBK) {
 			bpid = cfg & GENMASK(8, 0);
+			/* Ignore channels that were never armed with an LBK
+			 * free-pool bpid (e.g. never enabled, or belonging
+			 * to a CGX/SDP range) - bpid - free_pool_base would
+			 * underflow and corrupt an unrelated bitmap word.
+			 */
+			if (bpid < bp->free_pool_base ||
+			    bpid >= bp->free_pool_base + bp->bpids.max)
+				continue;
+
 			mutex_lock(&rvu->rsrc_lock);
 			rvu_free_rsrc(&bp->bpids, bpid - bp->free_pool_base);
 			for (bpid = 0; bpid < bp->bpids.max; bpid++) {
@@ -738,6 +747,35 @@ static int rvu_nix_get_bpid(struct rvu *rvu, struct nix_bp_cfg_req *req,
 	return bpid;
 }
 
+static void nix_bp_enable_unwind(struct rvu *rvu, struct nix_bp *bp,
+				 int blkaddr, u16 chan_base, int chan_cnt,
+				 int type, bool cpt_link)
+{
+	u16 chan, chan_v, bpid;
+	u64 cfg;
+
+	for (chan = chan_base; chan < chan_base + chan_cnt; chan++) {
+		chan_v = nix_get_channel(chan, cpt_link);
+		cfg = rvu_read64(rvu, blkaddr, NIX_AF_RX_CHANX_CFG(chan_v));
+		rvu_write64(rvu, blkaddr, NIX_AF_RX_CHANX_CFG(chan_v),
+			    cfg & ~BIT_ULL(16));
+
+		if (type != NIX_INTF_TYPE_LBK)
+			continue;
+
+		bpid = cfg & GENMASK_ULL(8, 0);
+		if (bpid < bp->free_pool_base ||
+		    bpid >= bp->free_pool_base + bp->bpids.max)
+			continue;
+
+		mutex_lock(&rvu->rsrc_lock);
+		rvu_free_rsrc(&bp->bpids, bpid - bp->free_pool_base);
+		bp->fn_map[bpid - bp->free_pool_base] = 0;
+		bp->ref_cnt[bpid - bp->free_pool_base] = 0;
+		mutex_unlock(&rvu->rsrc_lock);
+	}
+}
+
 static int nix_bp_enable(struct rvu *rvu,
 			 struct nix_bp_cfg_req *req,
 			 struct nix_bp_cfg_rsp *rsp,
@@ -747,9 +785,12 @@ static int nix_bp_enable(struct rvu *rvu,
 	u16 pcifunc = req->hdr.pcifunc;
 	struct rvu_pfvf *pfvf;
 	u16 chan_base, chan;
-	s16 bpid, bpid_base;
+	struct nix_hw *nix_hw;
+	struct nix_bp *bp;
 	u16 chan_v;
+	s16 bpid;
 	u64 cfg;
+	int err;
 
 	pf = rvu_get_pf(rvu->pdev, pcifunc);
 	type = is_lbk_vf(rvu, pcifunc) ? NIX_INTF_TYPE_LBK : NIX_INTF_TYPE_CGX;
@@ -764,16 +805,27 @@ static int nix_bp_enable(struct rvu *rvu,
 	if (cpt_link && !rvu->hw->cpt_links)
 		return 0;
 
-	pfvf = rvu_get_pfvf(rvu, pcifunc);
-	blkaddr = rvu_get_blkaddr(rvu, BLKTYPE_NIX, pcifunc);
+	if (!req->chan_cnt)
+		return NIX_AF_ERR_INVALID_BPID_REQ;
 
-	bpid_base = rvu_nix_get_bpid(rvu, req, type, chan_id);
+	pfvf = rvu_get_pfvf(rvu, pcifunc);
+	err = nix_get_struct_ptrs(rvu, pcifunc, &nix_hw, &blkaddr);
+	if (err)
+		return err;
+
+	bp = &nix_hw->bp;
 	chan_base = pfvf->rx_chan_base + req->chan_base;
-	bpid = bpid_base;
 
 	for (chan = chan_base; chan < (chan_base + req->chan_cnt); chan++) {
+		bpid = rvu_nix_get_bpid(rvu, req, type, chan_id);
 		if (bpid < 0) {
 			dev_warn(rvu->dev, "Fail to enable backpressure\n");
+			/* Undo the channels already enabled/allocated for
+			 * this request so their BPIDs and armed channels
+			 * don't leak until an FLR.
+			 */
+			nix_bp_enable_unwind(rvu, bp, blkaddr, chan_base,
+					     chan_id, type, cpt_link);
 			return -EINVAL;
 		}
 
@@ -783,16 +835,17 @@ static int nix_bp_enable(struct rvu *rvu,
 		cfg &= ~GENMASK_ULL(8, 0);
 		rvu_write64(rvu, blkaddr, NIX_AF_RX_CHANX_CFG(chan_v),
 			    cfg | (bpid & GENMASK_ULL(8, 0)) | BIT_ULL(16));
-		chan_id++;
-		bpid = rvu_nix_get_bpid(rvu, req, type, chan_id);
-	}
 
-	for (chan = 0; chan < req->chan_cnt; chan++) {
-		/* Map channel and bpid assign to it */
-		rsp->chan_bpid[chan] = ((req->chan_base + chan) & 0x7F) << 10 |
-					(bpid_base & 0x3FF);
-		if (req->bpid_per_chan)
-			bpid_base++;
+		/* Report the bpid actually programmed for this channel,
+		 * instead of reconstructing it arithmetically from the
+		 * first channel's bpid. For LBK, each call above can
+		 * return a non-contiguous bpid from the shared free pool,
+		 * so that reconstruction can diverge from what's actually
+		 * written into NIX_AF_RX_CHANX_CFG.
+		 */
+		rsp->chan_bpid[chan_id] = ((req->chan_base + chan_id) & 0x7F) << 10 |
+					  (bpid & 0x3FF);
+		chan_id++;
 	}
 	rsp->chan_cnt = req->chan_cnt;
 
