@@ -838,6 +838,14 @@ static void nbd_pending_cmd_work(struct work_struct *work)
 		/* don't bother timeout handler for partial sending */
 		if (READ_ONCE(jiffies) + msecs_to_jiffies(wait_ms) >= deadline) {
 			cmd->status = BLK_STS_IOERR;
+			/*
+			 * The header is on the wire but the rest of the payload
+			 * never will be, so the stream is out of sync with the
+			 * server.  Marking the socket dead also drops the stale
+			 * nsock->pending, which would otherwise make
+			 * nbd_handle_cmd() requeue every later request forever.
+			 */
+			nbd_mark_nsock_dead(nbd, nsock, 1);
 			blk_mq_complete_request(req);
 			break;
 		}
