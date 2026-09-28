@@ -684,29 +684,6 @@ int ip_rt_ioctl(struct net *net, unsigned int cmd, struct rtentry *rt)
 	return -EINVAL;
 }
 
-const struct nla_policy rtm_ipv4_policy[RTA_MAX + 1] = {
-	[RTA_UNSPEC]		= { .strict_start_type = RTA_DPORT + 1 },
-	[RTA_DST]		= { .type = NLA_U32 },
-	[RTA_SRC]		= { .type = NLA_U32 },
-	[RTA_IIF]		= { .type = NLA_U32 },
-	[RTA_OIF]		= { .type = NLA_U32 },
-	[RTA_GATEWAY]		= { .type = NLA_U32 },
-	[RTA_PRIORITY]		= { .type = NLA_U32 },
-	[RTA_PREFSRC]		= { .type = NLA_U32 },
-	[RTA_METRICS]		= { .type = NLA_NESTED },
-	[RTA_MULTIPATH]		= { .len = sizeof(struct rtnexthop) },
-	[RTA_FLOW]		= { .type = NLA_U32 },
-	[RTA_ENCAP_TYPE]	= { .type = NLA_U16 },
-	[RTA_ENCAP]		= { .type = NLA_NESTED },
-	[RTA_UID]		= { .type = NLA_U32 },
-	[RTA_MARK]		= { .type = NLA_U32 },
-	[RTA_TABLE]		= { .type = NLA_U32 },
-	[RTA_IP_PROTO]		= { .type = NLA_U8 },
-	[RTA_SPORT]		= { .type = NLA_U16 },
-	[RTA_DPORT]		= { .type = NLA_U16 },
-	[RTA_NH_ID]		= { .type = NLA_U32 },
-};
-
 int fib_gw_from_via(struct fib_config *cfg, struct nlattr *nla,
 		    struct netlink_ext_ack *extack)
 {
@@ -956,79 +933,6 @@ unlock:
 errout:
 	return err;
 }
-
-int ip_valid_fib_dump_req(struct net *net, const struct nlmsghdr *nlh,
-			  struct fib_dump_filter *filter,
-			  struct netlink_callback *cb)
-{
-	struct netlink_ext_ack *extack = cb->extack;
-	struct nlattr *tb[RTA_MAX + 1];
-	struct rtmsg *rtm;
-	int err, i;
-
-	rtm = nlmsg_payload(nlh, sizeof(*rtm));
-	if (!rtm) {
-		NL_SET_ERR_MSG(extack, "Invalid header for FIB dump request");
-		return -EINVAL;
-	}
-
-	if (rtm->rtm_dst_len || rtm->rtm_src_len  || rtm->rtm_tos   ||
-	    rtm->rtm_scope) {
-		NL_SET_ERR_MSG(extack, "Invalid values in header for FIB dump request");
-		return -EINVAL;
-	}
-
-	if (rtm->rtm_flags & ~(RTM_F_CLONED | RTM_F_PREFIX)) {
-		NL_SET_ERR_MSG(extack, "Invalid flags for FIB dump request");
-		return -EINVAL;
-	}
-	if (rtm->rtm_flags & RTM_F_CLONED)
-		filter->dump_routes = false;
-	else
-		filter->dump_exceptions = false;
-
-	filter->flags    = rtm->rtm_flags;
-	filter->protocol = rtm->rtm_protocol;
-	filter->rt_type  = rtm->rtm_type;
-	filter->table_id = rtm->rtm_table;
-
-	err = nlmsg_parse_deprecated_strict(nlh, sizeof(*rtm), tb, RTA_MAX,
-					    rtm_ipv4_policy, extack);
-	if (err < 0)
-		return err;
-
-	for (i = 0; i <= RTA_MAX; ++i) {
-		int ifindex;
-
-		if (!tb[i])
-			continue;
-
-		switch (i) {
-		case RTA_TABLE:
-			filter->table_id = nla_get_u32(tb[i]);
-			break;
-		case RTA_OIF:
-			ifindex = nla_get_u32(tb[i]);
-
-			filter->dev = dev_get_by_index_rcu(net, ifindex);
-			if (!filter->dev)
-				return -ENODEV;
-			break;
-		default:
-			NL_SET_ERR_MSG(extack, "Unsupported attribute in dump request");
-			return -EINVAL;
-		}
-	}
-
-	if (filter->flags || filter->protocol || filter->rt_type ||
-	    filter->table_id || filter->dev) {
-		filter->filter_set = 1;
-		cb->answer_flags = NLM_F_DUMP_FILTERED;
-	}
-
-	return 0;
-}
-EXPORT_SYMBOL_GPL(ip_valid_fib_dump_req);
 
 static int inet_dump_fib(struct sk_buff *skb, struct netlink_callback *cb)
 {
