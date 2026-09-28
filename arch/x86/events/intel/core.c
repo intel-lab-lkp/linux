@@ -6591,8 +6591,25 @@ static void free_excl_cntrs(struct cpu_hw_events *cpuc)
 	cpuc->constraint_list = NULL;
 }
 
+static void fini_fixed_cntrs_on_cpu(int cpu)
+{
+	struct cpu_hw_events *cpuc;
+
+	if (x86_pmu.version < 2)
+		return;
+
+	/*
+	 * Clear active_fixed_ctrl_val so MSR_CORE_PERF_FIXED_CTR_CTRL
+	 * can be reprogrammed after CPU online.
+	 */
+	cpuc = &per_cpu(cpu_hw_events, cpu);
+	cpuc->active_fixed_ctrl_val = 0;
+	wrmsrq_on_cpu(cpu, MSR_CORE_PERF_FIXED_CTR_CTRL, 0);
+}
+
 static void intel_pmu_cpu_dying(int cpu)
 {
+	fini_fixed_cntrs_on_cpu(cpu);
 	fini_debug_store_on_cpu(cpu);
 	fini_arch_pebs_on_cpu(cpu);
 }
