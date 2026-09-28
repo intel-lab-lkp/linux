@@ -272,14 +272,15 @@ static int rxrpc_process_event(struct rxrpc_connection *conn,
 	bool secured = false;
 	int ret;
 
-	if (conn->state == RXRPC_CONN_ABORTED)
-		return -ECONNABORTED;
 
 	_enter("{%d},{%u,%%%u},", conn->debug_id, sp->hdr.type, sp->hdr.serial);
 
 	switch (sp->hdr.type) {
 	case RXRPC_PACKET_TYPE_CHALLENGE:
-		ret = conn->security->respond_to_challenge(conn, skb);
+		if (conn->state != RXRPC_CONN_ABORTED)
+			ret = conn->security->respond_to_challenge(conn, skb);
+		else
+			ret = -ECONNABORTED;
 		sp->chall.conn = NULL;
 		rxrpc_put_connection(conn, rxrpc_conn_put_challenge_input);
 		return ret;
@@ -323,6 +324,8 @@ static int rxrpc_process_event(struct rxrpc_connection *conn,
 		return 0;
 
 	default:
+		if (conn->state == RXRPC_CONN_ABORTED)
+			return -ECONNABORTED;
 		WARN_ON_ONCE(1);
 		return -EPROTO;
 	}
