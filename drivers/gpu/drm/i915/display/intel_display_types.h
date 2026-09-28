@@ -558,7 +558,6 @@ struct intel_connector {
 	u8 polled;
 
 	int force_joined_pipes;
-
 	struct {
 		struct drm_dp_aux *dsc_decompression_aux;
 		u8 dsc_dpcd[DP_DSC_RECEIVER_CAP_SIZE];

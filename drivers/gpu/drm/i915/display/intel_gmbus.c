@@ -27,6 +27,7 @@
  *	Chris Wilson <chris@chris-wilson.co.uk>
  */
 
+#include <linux/debugfs.h>
 #include <linux/export.h>
 #include <linux/i2c-algo-bit.h>
 #include <linux/i2c.h>
@@ -47,6 +48,7 @@ struct intel_gmbus {
 	struct i2c_adapter adapter;
 #define GMBUS_FORCE_BIT_RETRY (1U << 31)
 	u32 force_bit;
+	bool debugfs_force_bit;
 	u32 reg0;
 	intel_reg_t gpio_reg;
 	struct i2c_algo_bit_data bit_algo;
@@ -870,6 +872,71 @@ static const struct i2c_algorithm gmbus_algorithm = {
 	.master_xfer	= gmbus_xfer,
 	.functionality	= gmbus_func
 };
+
+static bool intel_gmbus_is_adapter(struct intel_connector *connector)
+{
+	struct i2c_adapter *adapter = connector->base.ddc;
+
+	return adapter && adapter->algo == &gmbus_algorithm;
+}
+
+static int intel_force_bit_banging_show(struct seq_file *m, void *data)
+{
+	struct intel_connector *connector = m->private;
+	struct intel_gmbus *bus = container_of(connector->base.ddc,
+					       struct intel_gmbus, adapter);
+
+	seq_printf(m, "%u\n", bus->debugfs_force_bit);
+
+	return 0;
+}
+
+static ssize_t intel_force_bit_banging_write(struct file *file,
+						     const char __user *ubuf,
+						     size_t len, loff_t *offp)
+{
+	struct seq_file *m = file->private_data;
+	struct intel_connector *connector = m->private;
+	struct intel_gmbus *bus = container_of(connector->base.ddc,
+					       struct intel_gmbus, adapter);
+	bool force_bit_banging;
+	int ret;
+
+	ret = kstrtobool_from_user(ubuf, len, &force_bit_banging);
+	if (ret)
+		return ret;
+
+	if (force_bit_banging != bus->debugfs_force_bit) {
+		intel_gmbus_force_bit(connector->base.ddc, force_bit_banging);
+		bus->debugfs_force_bit = force_bit_banging;
+	}
+
+	*offp += len;
+
+	return len;
+}
+
+static int intel_force_bit_banging_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, intel_force_bit_banging_show, inode->i_private);
+}
+
+static const struct file_operations intel_force_bit_banging_fops = {
+	.owner = THIS_MODULE,
+	.open = intel_force_bit_banging_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+	.write = intel_force_bit_banging_write,
+};
+
+void intel_gmbus_connector_debugfs_add(struct intel_connector *connector)
+{
+	if (intel_gmbus_is_adapter(connector))
+		debugfs_create_file("intel_force_bit_banging", 0644,
+				    connector->base.debugfs_entry, connector,
+				    &intel_force_bit_banging_fops);
+}
 
 static void gmbus_lock_bus(struct i2c_adapter *adapter,
 			   unsigned int flags)
