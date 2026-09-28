@@ -3267,7 +3267,6 @@ __intel_pmu_handle_last_pebs_record(struct pt_regs *iregs,
 {
 	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);
 	struct perf_event *event;
-	bool handled = false;
 	int bit;
 
 	for_each_set_bit(bit, (unsigned long *)&mask,
@@ -3275,15 +3274,101 @@ __intel_pmu_handle_last_pebs_record(struct pt_regs *iregs,
 		if (!counts[bit])
 			continue;
 
-		handled = true;
 		event = cpuc->events[bit];
 		__intel_pmu_pebs_last_event(event, iregs, regs, data, last[bit],
 					    counts[bit], corrupted, setup_sample);
 	}
+}
 
-	/* All records are corrupted, reset sampling period. */
-	if (!handled)
+static inline u64 get_pebs_cntr_mask(struct cpu_hw_events *cpuc)
+{
+	return hybrid(cpuc->pmu, arch_pebs_cap).counters &
+	       cpuc->pebs_enabled;
+}
+
+static inline u64 get_pebs_cntr_status(void *at)
+{
+	struct arch_pebs_basic *basic;
+
+	basic = at + sizeof(struct arch_pebs_header);
+	return basic->applicable_counters;
+}
+
+static void *find_next_pebs_record(void *at, void *top)
+{
+	struct arch_pebs_header *header;
+
+	header = at;
+	if (WARN_ON_ONCE(!header->size))
+		return NULL;
+
+	/* 1st fragment or single record must have basic group */
+	if (WARN_ON_ONCE(!header->basic))
+		return NULL;
+
+	/* Skip non-last fragments */
+	while (arch_pebs_record_continued(header)) {
+		if (!header->size)
+			return NULL;
+		at += header->size;
+		if (WARN_ON_ONCE(at >= top))
+			return NULL;
+		header = at;
+	}
+
+	/* Skip last fragment or the single record */
+	at += header->size;
+	if (WARN_ON_ONCE(at > top))
+		return NULL;
+
+	return at;
+}
+
+static __always_inline int
+intel_pmu_handle_pebs_records(struct pt_regs *iregs,
+			      struct perf_sample_data *data,
+			      void *base, void *top,
+			      setup_fn setup_sample)
+{
+	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);
+	short counts[INTEL_PMC_IDX_FIXED + MAX_FIXED_PEBS_EVENTS] = {};
+	void *last[INTEL_PMC_IDX_FIXED + MAX_FIXED_PEBS_EVENTS];
+	struct x86_perf_regs *perf_regs = this_cpu_ptr(&x86_pebs_regs);
+	struct pt_regs *regs = &perf_regs->regs;
+	u64 mask = get_pebs_cntr_mask(cpuc);
+	u64 events_bitmap = 0;
+	bool corrupted = false;
+	void *at, *next;
+
+	if (!iregs)
+		iregs = &dummy_iregs;
+
+	/* Process all but the last event for each counter. */
+	for (at = base; at < top;) {
+		u64 pebs_status;
+
+		next = find_next_pebs_record(at, top);
+		if (!next) {
+			corrupted = true;
+			break;
+		}
+
+		pebs_status = mask & get_pebs_cntr_status(at);
+		events_bitmap |= pebs_status;
+		__intel_pmu_handle_pebs_record(iregs, regs, data, at,
+					       pebs_status, counts, last,
+					       setup_sample);
+		at = next;
+	}
+
+	__intel_pmu_handle_last_pebs_record(iregs, regs, data, mask,
+					    counts, last, corrupted,
+					    setup_sample);
+
+	if (!events_bitmap)
 		intel_pmu_pebs_event_update_no_drain(cpuc, mask);
+
+	return hweight64(events_bitmap);
 }
 
 static int intel_pmu_drain_pebs_icl(struct pt_regs *iregs, struct perf_sample_data *data)
@@ -3342,22 +3427,19 @@ static int intel_pmu_drain_pebs_icl(struct pt_regs *iregs, struct perf_sample_da
 	__intel_pmu_handle_last_pebs_record(iregs, regs, data, mask, counts, last,
 					    corrupted, setup_pebs_adaptive_sample_data);
 
+	if (!events_bitmap)
+		intel_pmu_pebs_event_update_no_drain(cpuc, mask);
+
 	return hweight64(events_bitmap);
 }
 
 static int intel_pmu_drain_arch_pebs(struct pt_regs *iregs,
 				     struct perf_sample_data *data)
 {
-	short counts[INTEL_PMC_IDX_FIXED + MAX_FIXED_PEBS_EVENTS] = {};
-	void *last[INTEL_PMC_IDX_FIXED + MAX_FIXED_PEBS_EVENTS];
 	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);
+	u64 mask = get_pebs_cntr_mask(cpuc);
 	union arch_pebs_index index;
-	struct x86_perf_regs *perf_regs = this_cpu_ptr(&x86_pebs_regs);
-	struct pt_regs *regs = &perf_regs->regs;
-	void *base, *at, *top;
-	u64 events_bitmap = 0;
-	bool corrupted = false;
-	u64 mask;
+	void *base, *top;
 
 	rdmsrq(MSR_IA32_PEBS_INDEX, index.whole);
 
@@ -3379,61 +3461,8 @@ static int intel_pmu_drain_arch_pebs(struct pt_regs *iregs,
 		index.thresh = ARCH_PEBS_THRESH_SINGLE;
 	wrmsrq(MSR_IA32_PEBS_INDEX, index.whole);
 
-	if (!iregs)
-		iregs = &dummy_iregs;
-
-	/* Process all but the last event for each counter. */
-	for (at = base; at < top;) {
-		struct arch_pebs_header *header;
-		struct arch_pebs_basic *basic;
-		u64 pebs_status;
-
-		header = at;
-
-		if (WARN_ON_ONCE(!header->size)) {
-			corrupted = true;
-			goto done;
-		}
-
-		/* 1st fragment or single record must have basic group */
-		if (!header->basic) {
-			at += header->size;
-			continue;
-		}
-
-		basic = at + sizeof(struct arch_pebs_header);
-		pebs_status = mask & basic->applicable_counters;
-		events_bitmap |= pebs_status;
-		__intel_pmu_handle_pebs_record(iregs, regs, data, at,
-					       pebs_status, counts, last,
-					       setup_arch_pebs_sample_data);
-
-		/* Skip non-last fragments */
-		while (arch_pebs_record_continued(header)) {
-			if (!header->size)
-				break;
-			at += header->size;
-			if (WARN_ON_ONCE(at >= top)) {
-				corrupted = true;
-				goto done;
-			}
-			header = at;
-		}
-
-		/* Skip last fragment or the single record */
-		at += header->size;
-		if (WARN_ON_ONCE(at > top)) {
-			corrupted = true;
-			goto done;
-		}
-	}
-
-done:
-	__intel_pmu_handle_last_pebs_record(iregs, regs, data, mask,
-					    counts, last, corrupted,
-					    setup_arch_pebs_sample_data);
-
-	return hweight64(events_bitmap);
+	return intel_pmu_handle_pebs_records(iregs, data, base, top,
+					     setup_arch_pebs_sample_data);
 }
 
 static void __init intel_arch_pebs_init(void)
