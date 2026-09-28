@@ -63,6 +63,7 @@ struct nbd_sock {
 	int fallback_index;
 	int cookie;
 	struct work_struct work;
+	struct request *partial_req;
 };
 
 struct recv_thread_args {
@@ -637,12 +638,24 @@ static void nbd_sched_pending_work(struct nbd_device *nbd,
 {
 	struct request *req = blk_mq_rq_from_pdu(cmd);
 
-	/* pending work should be scheduled only once */
-	WARN_ON_ONCE(test_bit(NBD_CMD_PARTIAL_SEND, &cmd->flags));
-
 	nsock->pending = req;
 	nsock->sent = sent;
-	set_bit(NBD_CMD_PARTIAL_SEND, &cmd->flags);
+
+	/*
+	 * Already armed: this is nbd_pending_cmd_work() re-entering because the
+	 * resumed send was interrupted again.  Its work is still running, so
+	 * just refresh the resume point above and let its loop pick it up
+	 * instead of taking another config reference and requeueing the work.
+	 */
+	if (test_and_set_bit(NBD_CMD_PARTIAL_SEND, &cmd->flags))
+		return;
+
+	/*
+	 * nbd_mark_nsock_dead() clears ->pending, so the work function cannot
+	 * rely on it to find the request it owns.  Keep a copy that only it
+	 * clears.
+	 */
+	nsock->partial_req = req;
 	refcount_inc(&nbd->config_refs);
 	schedule_work(&nsock->work);
 }
@@ -817,11 +830,12 @@ requeue:
 static void nbd_pending_cmd_work(struct work_struct *work)
 {
 	struct nbd_sock *nsock = container_of(work, struct nbd_sock, work);
-	struct request *req = nsock->pending;
+	struct request *req = nsock->partial_req;
 	struct nbd_cmd *cmd = blk_mq_rq_to_pdu(req);
 	struct nbd_device *nbd = cmd->nbd;
 	unsigned long deadline = READ_ONCE(req->deadline);
 	unsigned int wait_ms = 2;
+	bool complete = false;
 
 	mutex_lock(&cmd->lock);
 
@@ -830,6 +844,18 @@ static void nbd_pending_cmd_work(struct work_struct *work)
 		goto out;
 
 	mutex_lock(&nsock->tx_lock);
+	/*
+	 * nbd_mark_nsock_dead() can tear the socket down between schedule_work()
+	 * and here, and it clears ->pending and ->sent.  The header is already
+	 * on the wire so this request can never be answered; fail it rather than
+	 * resuming a send on a socket that is gone.
+	 */
+	if (!nsock->pending) {
+		cmd->status = BLK_STS_IOERR;
+		__clear_bit(NBD_CMD_INFLIGHT, &cmd->flags);
+		complete = true;
+		goto unlock;
+	}
 	while (true) {
 		nbd_send_cmd(nbd, cmd, cmd->index);
 		if (!nsock->pending)
@@ -846,16 +872,36 @@ static void nbd_pending_cmd_work(struct work_struct *work)
 			 * nbd_handle_cmd() requeue every later request forever.
 			 */
 			nbd_mark_nsock_dead(nbd, nsock, 1);
-			blk_mq_complete_request(req);
+			complete = true;
 			break;
 		}
 		msleep(wait_ms);
 		wait_ms *= 2;
 	}
+unlock:
+	/*
+	 * nbd_sched_pending_work() writes partial_req under tx_lock, and
+	 * cmd->lock is per-command, so this has to be under tx_lock too.
+	 */
+	nsock->partial_req = NULL;
 	mutex_unlock(&nsock->tx_lock);
 	clear_bit(NBD_CMD_PARTIAL_SEND, &cmd->flags);
 out:
 	mutex_unlock(&cmd->lock);
+
+	/*
+	 * Complete before nbd_config_put(): if this is the last config
+	 * reference, nbd_put() runs nbd_dev_remove() inline unless
+	 * NBD_DESTROY_ON_DISCONNECT is set, and del_gendisk() would then wait
+	 * in blk_mq_freeze_queue_wait() for the q_usage_counter that this
+	 * request holds until it is completed.  The config reference is what
+	 * keeps nbd itself alive across the completion, but cmd must not be
+	 * touched afterwards, since nbd_complete_rq() may run inline and ends
+	 * the request without taking cmd->lock.
+	 */
+	if (complete)
+		blk_mq_complete_request(req);
+
 	nbd_config_put(nbd);
 }
 
