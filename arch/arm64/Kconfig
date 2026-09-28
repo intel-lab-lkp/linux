@@ -1720,6 +1720,9 @@ config ARCH_SUPPORTS_KEXEC_HANDOVER
 config ARCH_SUPPORTS_CRASH_DUMP
 	def_bool y
 
+config ARCH_SUPPORTS_CRASH_MEMACTION
+	def_bool y
+
 config ARCH_DEFAULT_CRASH_DUMP
 	def_bool y
 
