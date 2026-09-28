@@ -140,7 +140,7 @@ F:	drivers/net/ethernet/realtek/r8169*
 M:	Greg Kroah-Hartman <gregkh@linuxfoundation.org>
 L:	linux-serial@vger.kernel.org
 S:	Maintained
-T:	git git://git.kernel.org/pub/scm/linux/kernel/git/gregkh/tty.git
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/gregkh/tty.git tty-next
 F:	drivers/tty/serial/8250*
 F:	include/linux/serial_8250.h
 
@@ -27813,7 +27813,7 @@ M:	Jiri Slaby <jirislaby@kernel.org>
 L:	linux-kernel@vger.kernel.org
 L:	linux-serial@vger.kernel.org
 S:	Supported
-T:	git git://git.kernel.org/pub/scm/linux/kernel/git/gregkh/tty.git
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/gregkh/tty.git tty-next
 F:	Documentation/devicetree/bindings/serial/
 F:	Documentation/driver-api/serial/
 F:	drivers/tty/
