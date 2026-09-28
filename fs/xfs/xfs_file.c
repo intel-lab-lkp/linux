@@ -507,6 +507,45 @@ restart:
 	return kiocb_modified(iocb);
 }
 
+STATIC ssize_t
+xfs_file_writethrough_checks(
+	struct kiocb		*iocb,
+	struct iov_iter		*from,
+	unsigned int		*iolock,
+	struct xfs_zone_alloc_ctx *ac)
+{
+	struct inode		*inode = iocb->ki_filp->f_mapping->host;
+	size_t			orig_count = iov_iter_count(from);
+	xfs_fsize_t		isize = i_size_read(inode);
+	ssize_t		error;
+
+restart:
+	error =  xfs_file_write_checks(iocb, from, iolock, ac);
+	if (error < 0)
+		return error;
+
+	if (*iolock == XFS_IOLOCK_EXCL)
+		return 0;
+
+	 /* Extending IO needs exclusive lock for i_size change */
+	if (iocb->ki_pos + iov_iter_count(from) > isize)
+		goto upgrade_excl;
+
+	return 0;
+
+upgrade_excl:
+	xfs_iunlock(XFS_I(inode), *iolock);
+	*iolock = XFS_IOLOCK_EXCL;
+	error = xfs_ilock_iocb(iocb, *iolock);
+	if (error) {
+		*iolock = 0;
+		return error;
+	}
+	iov_iter_reexpand(from, orig_count);
+	goto restart;
+
+}
+
 static ssize_t
 xfs_zoned_write_space_reserve(
 	struct xfs_mount		*mp,
@@ -1107,23 +1146,29 @@ xfs_file_buffered_write(
 	unsigned int		iolock;
 
 write_retry:
-	iolock = XFS_IOLOCK_EXCL;
+	if (iocb->ki_flags & IOCB_NOSERIAL)
+		iolock = XFS_IOLOCK_SHARED;
+	else
+		iolock = XFS_IOLOCK_EXCL;
 	ret = xfs_ilock_iocb(iocb, iolock);
 	if (ret)
 		return ret;
 
-	ret = xfs_file_write_checks(iocb, from, &iolock, NULL);
-	if (ret)
-		goto out;
-
 	trace_xfs_file_buffered_write(iocb, from);
 	if (iocb->ki_flags & IOCB_WRITETHROUGH) {
+		ret = xfs_file_writethrough_checks(iocb, from, &iolock, NULL);
+		if (ret)
+			goto out;
 		ret = iomap_file_writethrough_write(iocb, from,
 						    &xfs_writethrough_ops, NULL);
-	} else
+	} else {
+		ret = xfs_file_write_checks(iocb, from, &iolock, NULL);
+		if (ret)
+			goto out;
 		ret = iomap_file_buffered_write(iocb, from,
 						&xfs_buffered_write_iomap_ops,
 						&xfs_iomap_write_ops, NULL);
+	}
 
 	/*
 	 * If we hit a space limit, try to free up some lingering preallocated
