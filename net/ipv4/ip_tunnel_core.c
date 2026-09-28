@@ -58,6 +58,14 @@ void iptunnel_xmit(struct sock *sk, struct rtable *rt, struct sk_buff *skb,
 	struct iphdr *iph;
 	int err;
 
+	if (!IS_ENABLED(CONFIG_IPV4)) {
+		if (dev)
+			DEV_STATS_INC(dev, tx_errors);
+		ip_rt_put(rt);
+		kfree_skb(skb);
+		return;
+	}
+
 	if (unlikely(dev_recursion_level() > IP_TUNNEL_RECURSION_LIMIT)) {
 		if (dev) {
 			net_crit_ratelimited("Dead loop on virtual device %s (net %llu), fix it urgently!\n",
@@ -217,6 +225,9 @@ static int iptunnel_pmtud_build_icmp(struct sk_buff *skb, int mtu)
 	struct iphdr *niph;
 	struct ethhdr eh;
 	int len, err;
+
+	if (!IS_ENABLED(CONFIG_IPV4))
+		return -EOPNOTSUPP;
 
 	if (!pskb_may_pull(skb, ETH_HLEN + sizeof(struct iphdr)))
 		return -EINVAL;
