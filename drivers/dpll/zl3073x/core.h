@@ -167,6 +167,7 @@ int zl3073x_write_hwreg_seq(struct zl3073x_dev *zldev,
  *****************/
 
 int zl3073x_ref_phase_offsets_update(struct zl3073x_dev *zldev, int channel);
+int zl3073x_dev_gpo_set(struct zl3073x_dev *zldev, u8 gpo, bool value);
 
 /**
  * zl3073x_dev_is_ref_phase_comp_32bit - check ref phase comp register size

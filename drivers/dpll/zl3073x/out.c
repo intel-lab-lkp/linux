@@ -85,8 +85,22 @@ int zl3073x_out_state_fetch(struct zl3073x_dev *zldev, u8 index)
 	if (rc)
 		return rc;
 
-	return zl3073x_read_u32(zldev, ZL_REG_OUTPUT_PHASE_COMP,
-				&out->phase_comp);
+	rc = zl3073x_read_u32(zldev, ZL_REG_OUTPUT_PHASE_COMP,
+			      &out->phase_comp);
+	if (rc)
+		return rc;
+
+	rc = zl3073x_read_u8(zldev, ZL_REG_OUTPUT_GPO_EN, &out->gpo_en);
+	if (rc)
+		return rc;
+
+	rc = zl3073x_read_u8(zldev, ZL_REG_OUTPUT_GPO_CONFIG_OUT_P,
+			     &out->gpo_config_p);
+	if (rc)
+		return rc;
+
+	return zl3073x_read_u8(zldev, ZL_REG_OUTPUT_GPO_CONFIG_OUT_N,
+			       &out->gpo_config_n);
 }
 
 /**
@@ -108,11 +122,12 @@ const struct zl3073x_out *zl3073x_out_state_get(struct zl3073x_dev *zldev,
  * @index: output index to set state for
  * @out: desired output state
  *
- * Validates that invariant fields have not been modified, skips the HW
- * write if the mutable configuration is unchanged, and otherwise writes
- * only the changed cfg fields to hardware via the mailbox interface.
+ * Skips the HW write if the configuration is unchanged, writes ctrl
+ * directly to the output_ctrl_x register if it differs (it is not part
+ * of the output mailbox), and otherwise writes only the changed cfg
+ * fields to hardware via the mailbox interface.
  *
- * Return: 0 on success, -EINVAL if invariants changed, <0 on HW error
+ * Return: 0 on success, <0 on HW error
  */
 int zl3073x_out_state_set(struct zl3073x_dev *zldev, u8 index,
 			  const struct zl3073x_out *out)
@@ -120,11 +135,17 @@ int zl3073x_out_state_set(struct zl3073x_dev *zldev, u8 index,
 	struct zl3073x_out *dout = &zldev->out[index];
 	int rc;
 
-	/* Reject attempts to change invariant fields (set at fetch only) */
-	if (WARN_ON(memcmp(&dout->inv, &out->inv, sizeof(out->inv))))
-		return -EINVAL;
+	/* ctrl is a direct register, independent of the output mailbox */
+	if (dout->ctrl != out->ctrl) {
+		rc = zl3073x_write_u8(zldev, ZL_REG_OUTPUT_CTRL(index),
+				      out->ctrl);
+		if (rc)
+			return rc;
 
-	/* Skip HW write if configuration hasn't changed */
+		dout->ctrl = out->ctrl;
+	}
+
+	/* Skip the mailbox commit if nothing else has changed */
 	if (!memcmp(&dout->cfg, &out->cfg, sizeof(out->cfg)))
 		return 0;
 
@@ -152,6 +173,15 @@ int zl3073x_out_state_set(struct zl3073x_dev *zldev, u8 index,
 	if (!rc && dout->phase_comp != out->phase_comp)
 		rc = zl3073x_write_u32(zldev, ZL_REG_OUTPUT_PHASE_COMP,
 				       out->phase_comp);
+	if (!rc && dout->gpo_en != out->gpo_en)
+		rc = zl3073x_write_u8(zldev, ZL_REG_OUTPUT_GPO_EN,
+				      out->gpo_en);
+	if (!rc && dout->gpo_config_p != out->gpo_config_p)
+		rc = zl3073x_write_u8(zldev, ZL_REG_OUTPUT_GPO_CONFIG_OUT_P,
+				      out->gpo_config_p);
+	if (!rc && dout->gpo_config_n != out->gpo_config_n)
+		rc = zl3073x_write_u8(zldev, ZL_REG_OUTPUT_GPO_CONFIG_OUT_N,
+				      out->gpo_config_n);
 	if (rc)
 		return rc;
 

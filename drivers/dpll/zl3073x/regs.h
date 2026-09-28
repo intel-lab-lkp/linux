@@ -95,6 +95,13 @@
 #define ZL_REG_DIE_TEMP_STATUS			ZL_REG(0, 0x44, 2)
 
 /*************************
+ * Register Page 1, GPIOs
+ *************************/
+
+#define ZL_REG_GPO_OUT(_idx)						\
+	ZL_REG_IDX(_idx, 1, 0x70, 1, 3, 1)
+
+/*************************
  * Register Page 2, Status
  *************************/
 
@@ -254,6 +261,8 @@
 #define ZL_REG_OUTPUT_CTRL(_idx)					\
 	ZL_REG_IDX(_idx, 9, 0x28, 1, ZL3073X_NUM_OUTS, 1)
 #define ZL_OUTPUT_CTRL_EN			BIT(0)
+#define ZL_OUTPUT_CTRL_STOP			BIT(1)
+#define ZL_OUTPUT_CTRL_STOP_HZ			BIT(3)
 #define ZL_OUTPUT_CTRL_SYNTH_SEL		GENMASK(6, 4)
 
 #define ZL_REG_OUTPUT_STEP_TIME_MASK		ZL_REG(9, 0x36, 2)
@@ -367,6 +376,17 @@
 #define ZL_REG_OUTPUT_ESYNC_PERIOD		ZL_REG(14, 0x14, 4)
 #define ZL_REG_OUTPUT_ESYNC_WIDTH		ZL_REG(14, 0x18, 4)
 #define ZL_REG_OUTPUT_PHASE_COMP		ZL_REG(14, 0x20, 4)
+
+#define ZL_REG_OUTPUT_GPO_EN			ZL_REG(14, 0x24, 1)
+#define ZL_OUTPUT_GPO_EN_OUT_P			BIT(0)
+#define ZL_OUTPUT_GPO_EN_OUT_N			BIT(1)
+
+#define ZL_REG_OUTPUT_GPO_CONFIG_OUT_P		ZL_REG(14, 0x27, 1)
+#define ZL_REG_OUTPUT_GPO_CONFIG_OUT_N		ZL_REG(14, 0x2a, 1)
+#define ZL_OUTPUT_GPO_CONFIG_CTRL		GENMASK(2, 0)
+#define ZL_OUTPUT_GPO_CONFIG_CTRL_OUTPUT	1
+#define ZL_OUTPUT_GPO_CONFIG_CTRL_STATUS	3
+#define ZL_OUTPUT_GPO_CONFIG_CTRL_IRQ		4
 
 /*
  * Register Page 255 - HW registers access

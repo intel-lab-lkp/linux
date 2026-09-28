@@ -629,6 +629,45 @@ int zl3073x_ref_phase_offsets_update(struct zl3073x_dev *zldev, int channel)
 }
 
 /**
+ * zl3073x_dev_gpo_set - set the static value driven by a GPO channel
+ * @zldev: pointer to zl3073x_dev structure
+ * @gpo: GPO channel index (2 * output index for the P-pin, +1 for the
+ *	 N-pin)
+ * @value: value to drive when the channel is GPO-overridden
+ *
+ * The gpo_out_x registers are direct, multi-channel bitmask registers
+ * shared by all outputs, so the read-modify-write is serialized against
+ * concurrent updates to other channels via multiop_lock.
+ *
+ * Return: 0 on success, <0 on error
+ */
+int zl3073x_dev_gpo_set(struct zl3073x_dev *zldev, u8 gpo, bool value)
+{
+	unsigned int reg;
+	u8 bit, val;
+	int rc;
+
+	if (gpo >= ZL3073X_NUM_OUTPUT_PINS)
+		return -EINVAL;
+
+	reg = ZL_REG_GPO_OUT(gpo / 8);
+	bit = gpo % 8;
+
+	guard(mutex)(&zldev->multiop_lock);
+
+	rc = zl3073x_read_u8(zldev, reg, &val);
+	if (rc)
+		return rc;
+
+	if (value)
+		val |= BIT(bit);
+	else
+		val &= ~BIT(bit);
+
+	return zl3073x_write_u8(zldev, reg, val);
+}
+
+/**
  * zl3073x_ref_freq_meas_latch - latch reference frequency measurements
  * @zldev: pointer to zl3073x_dev structure
  * @type: measurement type (ZL_REF_FREQ_MEAS_CTRL_*)
