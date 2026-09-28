@@ -2778,8 +2778,11 @@ out:
 	ublk_put_disk(disk);
 }
 
-static void ublk_cancel_cmd(struct ublk_queue *ubq, u16 tag,
-		unsigned int issue_flags)
+/*
+ * Mark a fetched command as canceled and take it off the io, the caller
+ * completes it
+ */
+static struct io_uring_cmd *ublk_claim_cmd(struct ublk_queue *ubq, u16 tag)
 {
 	struct ublk_io *io = &ubq->ios[tag];
 	struct ublk_device *ub = ubq->dev;
@@ -2830,6 +2833,14 @@ static void ublk_cancel_cmd(struct ublk_queue *ubq, u16 tag,
 	spin_unlock(&ubq->cancel_lock);
 unlock:
 	ublk_io_unlock(io);
+
+	return cmd;
+}
+
+static void ublk_cancel_cmd(struct ublk_queue *ubq, u16 tag,
+			    unsigned int issue_flags)
+{
+	struct io_uring_cmd *cmd = ublk_claim_cmd(ubq, tag);
 
 	if (cmd)
 		io_uring_cmd_done(cmd, UBLK_IO_RES_ABORT, issue_flags);
@@ -3224,7 +3235,7 @@ static inline void ublk_prep_cancel(struct io_uring_cmd *cmd,
 /*
  * Called by the issue path after ublk_prep_cancel(): a cancel which found
  * the command before it was marked took it off the io and left completing
- * it here.  io->lock orders this against ublk_cancel_cmd(), which sees the
+ * it here.  io->lock orders this against ublk_claim_cmd(), which sees the
  * marking if it runs after this, and completes the command itself then.
  */
 static bool ublk_take_canceled_cmd(struct ublk_io *io)
