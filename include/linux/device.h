@@ -905,8 +905,15 @@ static inline int device_match_driver_override(struct device *dev,
 					       const struct device_driver *drv)
 {
 	guard(spinlock)(&dev->driver_override.lock);
-	if (dev->driver_override.name)
-		return !strcmp(dev->driver_override.name, drv->name);
+	if (dev->driver_override.name) {
+		int ret = !strcmp(dev->driver_override.name, drv->name);
+
+		if (ret > 0)
+			add_taint_module(drv->owner,
+					 TAINT_DRIVER_OVERRIDE, LOCKDEP_STILL_OK);
+
+		return ret;
+	}
 	return -1;
 }
 
