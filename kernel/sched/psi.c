@@ -305,8 +305,24 @@ static void get_recent_times(struct psi_group *group, int cpu,
 		 * (u32) and our reported pressure close to what's
 		 * actually happening.
 		 */
-		if (state_mask & (1 << s))
-			times[s] += now - state_start;
+		if (state_mask & (1 << s)) {
+			s64 elapsed = now - state_start;
+
+			/*
+			 * When sched_clock_stable(), cpu_clock(cpu) ignores
+			 * the cpu argument, so we can end up doing cross-CPU
+			 * comparisons. A negative clock skew can result in
+			 * underflow to a very large u32.
+			 *
+			 * While the u32 cyclic accumulators in groupc could
+			 * handle a very large u32 from underflow, folding it
+			 * into the u64 totals in collect_percpu_times()
+			 * would result in huge jumps. Clamp to avoid that.
+			 */
+			if (elapsed < 0)
+				elapsed = 0;
+			times[s] += elapsed;
+		}
 
 		delta = times[s] - groupc->times_prev[aggregator][s];
 		groupc->times_prev[aggregator][s] = times[s];
