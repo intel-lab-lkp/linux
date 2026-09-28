@@ -3282,19 +3282,53 @@ __intel_pmu_handle_last_pebs_record(struct pt_regs *iregs,
 
 static inline u64 get_pebs_cntr_mask(struct cpu_hw_events *cpuc)
 {
-	return hybrid(cpuc->pmu, arch_pebs_cap).counters &
-	       cpuc->pebs_enabled;
+	u64 mask;
+
+	if (x86_pmu.arch_pebs)
+		mask = hybrid(cpuc->pmu, arch_pebs_cap).counters;
+	else {
+		mask = hybrid(cpuc->pmu, pebs_events_mask) |
+		       hybrid(cpuc->pmu, fixed_cntr_mask64) << INTEL_PMC_IDX_FIXED;
+	}
+
+	return mask & cpuc->pebs_enabled;
 }
 
 static inline u64 get_pebs_cntr_status(void *at)
 {
-	struct arch_pebs_basic *basic;
+	u64 status;
 
-	basic = at + sizeof(struct arch_pebs_header);
-	return basic->applicable_counters;
+	if (x86_pmu.arch_pebs) {
+		struct arch_pebs_basic *basic;
+
+		basic = at + sizeof(struct arch_pebs_header);
+		status = basic->applicable_counters;
+	} else {
+		struct pebs_basic *basic = at;
+
+		status = basic->applicable_counters;
+	}
+
+	return status;
 }
 
-static void *find_next_pebs_record(void *at, void *top)
+static void *icl_pebs_find_next_pebs_record(void *at, void *top)
+{
+	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);
+	struct pebs_basic *basic = at;
+
+	if (WARN_ON_ONCE(!basic->format_size))
+		return NULL;
+
+	if (WARN_ON_ONCE(basic->format_size != cpuc->pebs_record_size))
+		return NULL;
+
+	at += basic->format_size;
+
+	return at;
+}
+
+static void *arch_pebs_find_next_pebs_record(void *at, void *top)
 {
 	struct arch_pebs_header *header;
 
@@ -3322,6 +3356,14 @@ static void *find_next_pebs_record(void *at, void *top)
 		return NULL;
 
 	return at;
+}
+
+static void *find_next_pebs_record(void *at, void *top)
+{
+	if (x86_pmu.arch_pebs)
+		return arch_pebs_find_next_pebs_record(at, top);
+	else
+		return icl_pebs_find_next_pebs_record(at, top);
 }
 
 static __always_inline int
@@ -3371,66 +3413,28 @@ intel_pmu_handle_pebs_records(struct pt_regs *iregs,
 	return hweight64(events_bitmap);
 }
 
-static int intel_pmu_drain_pebs_icl(struct pt_regs *iregs, struct perf_sample_data *data)
+static int intel_pmu_drain_pebs_icl(struct pt_regs *iregs,
+				    struct perf_sample_data *data)
 {
-	short counts[INTEL_PMC_IDX_FIXED + MAX_FIXED_PEBS_EVENTS] = {};
-	void *last[INTEL_PMC_IDX_FIXED + MAX_FIXED_PEBS_EVENTS];
 	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);
+	u64 mask = get_pebs_cntr_mask(cpuc);
 	struct debug_store *ds = cpuc->ds;
-	struct x86_perf_regs *perf_regs = this_cpu_ptr(&x86_pebs_regs);
-	struct pt_regs *regs = &perf_regs->regs;
-	struct pebs_basic *basic;
-	void *base, *at, *top;
-	u64 events_bitmap = 0;
-	bool corrupted = false;
-	u64 mask;
+	void *base, *top;
 
 	if (!x86_pmu.pebs_active)
 		return 0;
 
-	base = (struct pebs_basic *)(unsigned long)ds->pebs_buffer_base;
-	top = (struct pebs_basic *)(unsigned long)ds->pebs_index;
-
+	base = (void *)(unsigned long)ds->pebs_buffer_base;
+	top = (void *)(unsigned long)ds->pebs_index;
 	ds->pebs_index = ds->pebs_buffer_base;
-
-	mask = hybrid(cpuc->pmu, pebs_events_mask) |
-	       (hybrid(cpuc->pmu, fixed_cntr_mask64) << INTEL_PMC_IDX_FIXED);
-	mask &= cpuc->pebs_enabled;
 
 	if (unlikely(base >= top)) {
 		intel_pmu_pebs_event_update_no_drain(cpuc, mask);
 		return 0;
 	}
 
-	if (!iregs)
-		iregs = &dummy_iregs;
-
-	/* Process all but the last event for each counter. */
-	for (at = base; at < top; at += basic->format_size) {
-		u64 pebs_status;
-
-		basic = at;
-		if (WARN_ON_ONCE(!basic->format_size)) {
-			corrupted = true;
-			break;
-		}
-		if (basic->format_size != cpuc->pebs_record_size)
-			continue;
-
-		pebs_status = mask & basic->applicable_counters;
-		events_bitmap |= pebs_status;
-		__intel_pmu_handle_pebs_record(iregs, regs, data, at,
-					       pebs_status, counts, last,
-					       setup_pebs_adaptive_sample_data);
-	}
-
-	__intel_pmu_handle_last_pebs_record(iregs, regs, data, mask, counts, last,
-					    corrupted, setup_pebs_adaptive_sample_data);
-
-	if (!events_bitmap)
-		intel_pmu_pebs_event_update_no_drain(cpuc, mask);
-
-	return hweight64(events_bitmap);
+	return intel_pmu_handle_pebs_records(iregs, data, base, top,
+					     setup_pebs_adaptive_sample_data);
 }
 
 static int intel_pmu_drain_arch_pebs(struct pt_regs *iregs,
