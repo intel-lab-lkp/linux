@@ -18,6 +18,7 @@
 #include <linux/module.h>
 #include <linux/param.h>
 #include <linux/sched/signal.h>
+#include <linux/secret_pool.h>
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/completion.h>
@@ -413,7 +414,7 @@ struct crypto_tfm *__crypto_alloc_tfm(struct crypto_alg *alg, u32 type,
 	int err = -ENOMEM;
 
 	tfm_size = sizeof(*tfm) + crypto_ctxsize(alg, type, mask);
-	tfm = kzalloc(tfm_size, GFP_KERNEL);
+	tfm = secret_pool_zalloc(tfm_size, GFP_KERNEL);
 	if (tfm == NULL)
 		goto out_err;
 
@@ -428,7 +429,7 @@ cra_init_failed:
 	crypto_exit_ops(tfm);
 	if (err == -EAGAIN)
 		crypto_shoot_alg(alg);
-	kfree(tfm);
+	kfree_sensitive(tfm);
 out_err:
 	tfm = ERR_PTR(err);
 out:
@@ -502,7 +503,7 @@ void *crypto_create_tfm_node(struct crypto_alg *alg,
 	int err;
 
 	size = frontend->tfmsize + sizeof(*tfm) + frontend->extsize(alg);
-	mem = kzalloc_node(size, GFP_KERNEL, node);
+	mem = secret_pool_zalloc_node(size, GFP_KERNEL, node);
 	if (!mem)
 		return ERR_PTR(-ENOMEM);
 
@@ -525,7 +526,7 @@ cra_init_failed:
 out_free_tfm:
 	if (err == -EAGAIN)
 		crypto_shoot_alg(alg);
-	kfree(mem);
+	kfree_sensitive(mem);
 	mem = ERR_PTR(err);
 out:
 	return mem;
