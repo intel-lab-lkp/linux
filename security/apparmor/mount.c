@@ -698,9 +698,18 @@ out:
 	return error;
 
 fail:
-	/* TODO: add back in auditing of new_name and old_name,
-	 * needs lifting of name lookup out of profile cb
-	 */
+	if (!ad.name) {
+		struct aa_profile *p = labels_profile(label);
+
+		aa_path_name(new_path, path_flags(p, new_path), new_buffer,
+			     &ad.name, &ad.info, p->disconnected);
+	}
+	if (!ad.mnt.src_name) {
+		struct aa_profile *p = labels_profile(label);
+
+		aa_path_name(old_path, path_flags(p, old_path), old_buffer,
+			     &ad.mnt.src_name, &ad.info, p->disconnected);
+	}
 	ad.mnt.trans = target->hname;
 	error = aa_audit_perm_error(label, AA_MAY_PIVOTROOT, error, &ad,
 				    audit_cb);
