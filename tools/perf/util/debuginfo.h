@@ -18,8 +18,12 @@ struct debuginfo {
 	const unsigned char	*build_id;
 };
 
+struct dso;
+
 /* This also tries to open distro debuginfo */
-struct debuginfo *debuginfo__new(const char *path);
+struct debuginfo *debuginfo__from_path(const char *path);
+/* Create a debuginfo using information in DSO */
+struct debuginfo *debuginfo__new(struct dso *dso);
 void debuginfo__delete(struct debuginfo *dbg);
 
 int debuginfo__get_text_offset(struct debuginfo *dbg, Dwarf_Addr *offs,
@@ -31,7 +35,12 @@ int debuginfo__get_text_offset(struct debuginfo *dbg, Dwarf_Addr *offs,
 struct debuginfo {
 };
 
-static inline struct debuginfo *debuginfo__new(const char *path __maybe_unused)
+static inline struct debuginfo *debuginfo__from_path(const char *path __maybe_unused)
+{
+	return NULL;
+}
+
+static inline struct debuginfo *debuginfo__new(struct dso *dso __maybe_unused)
 {
 	return NULL;
 }
