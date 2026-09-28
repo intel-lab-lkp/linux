@@ -5224,6 +5224,14 @@ static __be32 nfsd4_encode_readv(struct nfsd4_compoundres *resp,
 	__be32 zero = xdr_zero;
 	__be32 nfserr;
 
+	/*
+	 * The payload accounting continues at
+	 * pages[page_len >> PAGE_SHIFT]; write the data there, not one
+	 * page ahead.
+	 */
+	resp->rqstp->rq_next_page = xdr->buf->pages +
+				    (xdr->buf->page_len >> PAGE_SHIFT);
+
 	nfserr = nfsd_iter_read(resp->rqstp, read->rd_fhp, read->rd_nf,
 				read->rd_offset, &maxcount, base,
 				&read->rd_eof);
