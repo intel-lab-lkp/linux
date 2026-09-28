@@ -67,6 +67,9 @@ struct loop_device {
 	struct list_head        rootcg_cmd_list;
 	struct list_head        idle_worker_list;
 	struct rb_root          worker_tree;
+	struct work_struct      clear_limits_work;
+	struct mutex		clear_limits_lock;
+	unsigned int		clear_limits_mode;
 	struct timer_list       timer;
 	bool			sysfs_inited;
 
@@ -222,9 +225,25 @@ static void loop_set_size(struct loop_device *lo, loff_t size)
 		kobject_uevent(&disk_to_dev(lo->lo_disk)->kobj, KOBJ_CHANGE);
 }
 
-static void loop_clear_limits(struct loop_device *lo, int mode)
+static void loop_clear_limits_workfn(struct work_struct *work)
 {
+	struct loop_device *lo =
+		container_of(work, struct loop_device, clear_limits_work);
 	struct queue_limits lim = queue_limits_start_update(lo->lo_queue);
+	unsigned int memflags;
+	int mode = 0;
+
+	/*
+	 * A rebind cannot race with this work item: loop_change_fd()
+	 * and __loop_clr_fd() cancel it, loop_configure() only runs on
+	 * an unbound device, on which no work item can be pending, and
+	 * loop_assign_backing_file() resets the accumulated modes.
+	 */
+	memflags = blk_mq_freeze_queue(lo->lo_queue);
+	mutex_lock(&lo->clear_limits_lock);
+	mode = lo->clear_limits_mode;
+	lo->clear_limits_mode = 0;
+	mutex_unlock(&lo->clear_limits_lock);
 
 	if (mode & FALLOC_FL_ZERO_RANGE)
 		lim.max_write_zeroes_sectors = 0;
@@ -233,15 +252,16 @@ static void loop_clear_limits(struct loop_device *lo, int mode)
 		lim.max_hw_discard_sectors = 0;
 		lim.discard_granularity = 0;
 	}
-
-	/*
-	 * XXX: this updates the queue limits without freezing the queue, which
-	 * is against the locking protocol and dangerous.  But we can't just
-	 * freeze the queue as we're inside the ->queue_rq method here.  So this
-	 * should move out into a workqueue unless we get the file operations to
-	 * advertise if they support specific fallocate operations.
-	 */
 	queue_limits_commit_update(lo->lo_queue, &lim);
+	blk_mq_unfreeze_queue(lo->lo_queue, memflags);
+}
+
+static void loop_clear_limits(struct loop_device *lo, int mode)
+{
+	mutex_lock(&lo->clear_limits_lock);
+	lo->clear_limits_mode |= mode;
+	mutex_unlock(&lo->clear_limits_lock);
+	schedule_work(&lo->clear_limits_work);
 }
 
 static int lo_fallocate(struct loop_device *lo, struct request *rq, loff_t pos,
@@ -518,6 +538,14 @@ static int loop_validate_file(struct file *file, struct block_device *bdev)
 static void loop_assign_backing_file(struct loop_device *lo, struct file *file)
 {
 	lo->lo_backing_file = file;
+	/*
+	 * Discard any modes recorded against the old backing file.  The
+	 * paths that can race with a pending work item cancel it before
+	 * they get here.
+	 */
+	mutex_lock(&lo->clear_limits_lock);
+	lo->clear_limits_mode = 0;
+	mutex_unlock(&lo->clear_limits_lock);
 	lo->old_gfp_mask = mapping_gfp_mask(file->f_mapping);
 	mapping_set_gfp_mask(file->f_mapping,
 			lo->old_gfp_mask & ~(__GFP_IO | __GFP_FS));
@@ -602,6 +630,12 @@ static int loop_change_fd(struct loop_device *lo, struct block_device *bdev,
 	/* and ... switch */
 	disk_force_media_change(lo->lo_disk);
 	memflags = blk_mq_freeze_queue(lo->lo_queue);
+	/*
+	 * The freeze drained the in-flight requests, so any clear they
+	 * scheduled is pending or running now; cancelling here leaves
+	 * no clear behind for the new backing file.
+	 */
+	cancel_work_sync(&lo->clear_limits_work);
 	mapping_set_gfp_mask(old_file->f_mapping, lo->old_gfp_mask);
 	loop_assign_backing_file(lo, file);
 	loop_update_dio(lo);
@@ -1147,6 +1181,16 @@ static void __loop_clr_fd(struct loop_device *lo)
 	filp = lo->lo_backing_file;
 	lo->lo_backing_file = NULL;
 	spin_unlock_irq(&lo->lo_lock);
+
+	/*
+	 * Invalidate any clear that was scheduled against the old backing
+	 * file.  Unbinding cannot race with in-flight I/O, so cancelling
+	 * here leaves no work item behind.
+	 */
+	cancel_work_sync(&lo->clear_limits_work);
+	mutex_lock(&lo->clear_limits_lock);
+	lo->clear_limits_mode = 0;
+	mutex_unlock(&lo->clear_limits_lock);
 
 	lo->lo_device = NULL;
 	lo->lo_offset = 0;
@@ -1783,7 +1827,9 @@ static void lo_free_disk(struct gendisk *disk)
 		destroy_workqueue(lo->workqueue);
 	loop_free_idle_workers(lo, true);
 	timer_shutdown_sync(&lo->timer);
+	cancel_work_sync(&lo->clear_limits_work);
 	mutex_destroy(&lo->lo_mutex);
+	mutex_destroy(&lo->clear_limits_lock);
 	kfree(lo);
 }
 
@@ -2102,6 +2148,8 @@ static int loop_add(int i)
 	spin_lock_init(&lo->lo_lock);
 	spin_lock_init(&lo->lo_work_lock);
 	INIT_WORK(&lo->rootcg_work, loop_rootcg_workfn);
+	INIT_WORK(&lo->clear_limits_work, loop_clear_limits_workfn);
+	mutex_init(&lo->clear_limits_lock);
 	INIT_LIST_HEAD(&lo->rootcg_cmd_list);
 	disk->major		= LOOP_MAJOR;
 	disk->first_minor	= i << part_shift;
@@ -2140,6 +2188,12 @@ out:
 
 static void loop_remove(struct loop_device *lo)
 {
+	/*
+	 * Cancel early: the queue may already be in RCU-delayed freeing
+	 * by the time lo_free_disk() cancels the work item.
+	 */
+	cancel_work_sync(&lo->clear_limits_work);
+
 	/* Make this loop device unreachable from pathname. */
 	del_gendisk(lo->lo_disk);
 	blk_mq_free_tag_set(&lo->tag_set);
