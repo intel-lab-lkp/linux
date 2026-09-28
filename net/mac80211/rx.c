@@ -1924,7 +1924,11 @@ ieee80211_rx_h_sta_process(struct ieee80211_rx_data *rx)
 			if (!ieee80211_has_pm(hdr->frame_control))
 				sta_ps_end(sta);
 		} else {
-			if (ieee80211_has_pm(hdr->frame_control))
+			if (ieee80211_has_pm(hdr->frame_control) &&
+			    (ieee80211_is_data(hdr->frame_control) ||
+			     ieee80211_is_action(hdr->frame_control) ||
+			     ieee80211_is_disassoc(hdr->frame_control) ||
+			     ieee80211_is_deauth(hdr->frame_control)))
 				sta_ps_start(sta);
 		}
 	}
