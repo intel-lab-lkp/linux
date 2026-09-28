@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: LGPL-2.1+
 
 #include <kunit/test.h>
+#include <linux/gcd.h>
+#include <linux/jiffies.h>
+#include <linux/math64.h>
 #include <linux/time.h>
 
 /*
@@ -87,8 +90,84 @@ static void time64_to_tm_test_date_range(struct kunit *test)
 	}
 }
 
+/*
+ * jiffies_to_clock_t() must be the inverse of clock_t_to_jiffies() for every
+ * clock_t value that is a whole number of jiffies, whatever HZ is.
+ */
+static void jiffies_to_clock_t_test(struct kunit *test)
+{
+	unsigned long step = USER_HZ / gcd(HZ, USER_HZ);
+	unsigned long x;
+
+	/* Bridge STP defaults, exposed in USER_HZ through sysfs and netlink */
+	KUNIT_EXPECT_EQ(test, 15 * USER_HZ, jiffies_to_clock_t(15 * HZ));
+	KUNIT_EXPECT_EQ(test, 2 * USER_HZ, jiffies_to_clock_t(2 * HZ));
+	KUNIT_EXPECT_EQ(test, 300 * USER_HZ, jiffies_to_clock_t(300 * HZ));
+	/* Large enough to catch a rounded NSEC_PER_SEC / USER_HZ (alpha) */
+	KUNIT_EXPECT_EQ(test, 10000 * USER_HZ, jiffies_to_clock_t(10000 * HZ));
+
+	for (x = 0; x <= 100 * USER_HZ; x += step) {
+		unsigned long j = clock_t_to_jiffies(x);
+		clock_t c = jiffies_to_clock_t(j);
+		u64 c64 = jiffies_64_to_clock_t(j);
+
+		KUNIT_ASSERT_EQ_MSG(test, x * HZ, (u64)j * USER_HZ,
+				    "clock_t %lu -> %lu jiffies", x, j);
+		if (c != (long)x || c64 != x) {
+			KUNIT_FAIL(test, "clock_t %lu -> %lu jiffies -> %ld / %llu",
+				   x, j, (long)c, c64);
+			break;
+		}
+	}
+}
+
+/*
+ * Every unsigned int number of microseconds fits in MAX_JIFFY_OFFSET jiffies
+ * for any supported HZ, so usecs_to_jiffies() must never saturate. It must
+ * round up; when HZ does not divide USEC_PER_SEC, the reciprocal
+ * multiplication may round up by one more jiffy for large values.
+ */
+static bool check_usecs_to_jiffies(struct kunit *test, unsigned int u,
+				   unsigned long got)
+{
+	unsigned long want = DIV_ROUND_UP_ULL((u64)u * HZ, USEC_PER_SEC);
+
+	if (got >= want && got <= want + !!(USEC_PER_SEC % HZ))
+		return true;
+	KUNIT_FAIL(test, "usecs_to_jiffies(%u) = %lu, want %lu%s", u, got,
+		   want, USEC_PER_SEC % HZ ? " or one more" : "");
+	return false;
+}
+
+static void usecs_to_jiffies_test(struct kunit *test)
+{
+	static const unsigned int vals[] = {
+		0, 1, 999, 1000, 1001, 1000000, 1431649098, 1431649099,
+		2000000000, 3000000000U, UINT_MAX - 20000, UINT_MAX - 1,
+		UINT_MAX,
+	};
+	u64 x;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(vals); i++)
+		check_usecs_to_jiffies(test, vals[i], usecs_to_jiffies(vals[i]));
+
+	for (x = 0; x <= UINT_MAX; x += 999983)
+		if (!check_usecs_to_jiffies(test, x, usecs_to_jiffies(x)))
+			break;
+	for (x = UINT_MAX - 30000; x <= UINT_MAX; x++)
+		if (!check_usecs_to_jiffies(test, x, usecs_to_jiffies(x)))
+			break;
+
+	/* Constant-folded variant */
+	check_usecs_to_jiffies(test, 3000000000U, usecs_to_jiffies(3000000000U));
+	check_usecs_to_jiffies(test, UINT_MAX, usecs_to_jiffies(UINT_MAX));
+}
+
 static struct kunit_case time_test_cases[] = {
 	KUNIT_CASE_SLOW(time64_to_tm_test_date_range),
+	KUNIT_CASE(jiffies_to_clock_t_test),
+	KUNIT_CASE(usecs_to_jiffies_test),
 	{}
 };
 
