@@ -279,7 +279,7 @@ static int walk_nested_s2_pgd(struct kvm_vcpu *vcpu, phys_addr_t ipa,
 		return -EFAULT;
 
 	ret = check_base_s2_limits(vcpu, wi, level, input_size, stride);
-	if (WARN_ON(ret)) {
+	if (ret) {
 		out->esr = compute_fsc(0, ESR_ELx_FSC_FAULT);
 		return ret;
 	}
