@@ -29,6 +29,9 @@ use crate::bounded_enum;
 mod encode;
 pub(crate) use encode::*;
 
+mod decode;
+pub(crate) use decode::*;
+
 /// The allocator backing [`EncodedStream`].
 type StreamAllocator = KVmalloc;
 
