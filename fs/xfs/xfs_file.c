@@ -449,7 +449,7 @@ xfs_file_write_checks(
 	struct xfs_zone_alloc_ctx *ac)
 {
 	struct inode		*inode = iocb->ki_filp->f_mapping->host;
-	size_t			count = iov_iter_count(from);
+	size_t			orig_count = iov_iter_count(from);
 	bool			drained_dio = false;
 	ssize_t			error;
 
@@ -481,6 +481,7 @@ restart:
 			*iolock = 0;
 			return error;
 		}
+		iov_iter_reexpand(from, orig_count);
 		goto restart;
 	}
 
@@ -495,7 +496,7 @@ restart:
 	 * the slow path when we are at or beyond the current EOF.
 	 */
 	if (iocb->ki_pos > i_size_read(inode)) {
-		error = xfs_file_write_zero_eof(iocb, from, iolock, count,
+		error = xfs_file_write_zero_eof(iocb, from, iolock, orig_count,
 				&drained_dio, ac);
 		if (error == 1)
 			goto restart;
