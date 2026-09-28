@@ -1888,9 +1888,9 @@ int pci_cfg_space_size(struct pci_dev *dev)
 static u32 pci_class(struct pci_dev *dev)
 {
 	u32 class;
+#ifdef CONFIG_PCI_IOV
 	u8 rev;
 
-#ifdef CONFIG_PCI_IOV
 	if (dev->is_virtfn) {
 		if (pci_read_config_byte(dev, PCI_REVISION_ID, &rev))
 			rev = 0;
