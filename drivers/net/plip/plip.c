@@ -308,6 +308,8 @@ plip_init_netdev(struct net_device *dev)
 	/* Initialize task queue structures */
 	INIT_WORK(&nl->immediate, plip_bh);
 	INIT_DELAYED_WORK(&nl->deferred, plip_kick_bh);
+	disable_work(&nl->immediate);
+	disable_delayed_work(&nl->deferred);
 
 	if (dev->irq == -1)
 		INIT_DELAYED_WORK(&nl->timer, plip_timer_bh);
@@ -1077,6 +1079,17 @@ plip_open(struct net_device *dev)
 
 	nl->should_relinquish = 0;
 
+	/* Initialize the state machine. */
+	nl->rcv_data.state = PLIP_PK_DONE;
+	nl->snd_data.state = PLIP_PK_DONE;
+	nl->rcv_data.skb = NULL;
+	nl->snd_data.skb = NULL;
+	nl->connection = PLIP_CN_NONE;
+	nl->is_deferred = 0;
+
+	enable_work(&nl->immediate);
+	enable_work(&nl->deferred.work);
+
 	/* Clear the data port. */
 	write_data (dev, 0x00);
 
@@ -1087,12 +1100,6 @@ plip_open(struct net_device *dev)
 		atomic_set (&nl->kill_timer, 0);
 		schedule_delayed_work(&nl->timer, 1);
 	}
-
-	/* Initialize the state machine. */
-	nl->rcv_data.state = nl->snd_data.state = PLIP_PK_DONE;
-	nl->rcv_data.skb = nl->snd_data.skb = NULL;
-	nl->connection = PLIP_CN_NONE;
-	nl->is_deferred = 0;
 
 	/* Fill in the MAC-level header.
 	   We used to abuse dev->broadcast to store the point-to-point
@@ -1140,6 +1147,9 @@ plip_close(struct net_device *dev)
 		atomic_set (&nl->kill_timer, 1);
 		wait_for_completion(&nl->killed_timer_cmp);
 	}
+
+	disable_work_sync(&nl->immediate);
+	disable_delayed_work_sync(&nl->deferred);
 
 #ifdef NOTDEF
 	outb(0x00, PAR_DATA(dev));
