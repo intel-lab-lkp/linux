@@ -1,7 +1,7 @@
 What:		/sys/class/leds/<led>/device/brightness
-Date:		July 2020
-KernelVersion:	5.9
-Contact:	Marek Behún <kabel@kernel.org>
+Date:		July 2020 (Turris Omnia), September 2026 (Turris 1.x)
+KernelVersion:	5.9 (Turris Omnia), 7.4 (Turris 1.x)
+Contact:	Marek Behún <kabel@kernel.org>, linux-leds@vger.kernel.org
 Description:	(RW) On the front panel of the Turris Omnia router there is also
 		a button which can be used to control the intensity of all the
 		LEDs at once, so that if they are too bright, user can dim them.
@@ -10,6 +10,13 @@ Description:	(RW) On the front panel of the Turris Omnia router there is also
 		brightness (from 100% to 0%), but this setting can have any
 		integer value between 0 and 100. It is therefore convenient to be
 		able to change this setting from software.
+
+		The button on the back of Turris 1.x routers selects one of 8
+		brightness levels, whose values (0-255) are in
+		brightness_levels/<N>. Reading this file returns the value of
+		the level in use; writing it selects the level whose value is
+		closest to the written one. If two levels are equally close, the
+		lower level index is selected.
 
 		Format: %i
 

@@ -1,0 +1,23 @@
+What:		/sys/class/leds/<led>/device/brightness_level
+Date:		September 2026
+Contact:	Josef Schlehofer <pepe.schlehofer@gmail.com>
+Description:	(RW) Index (0-7) of the global brightness level in use on the
+		Turris 1.x routers. The button on the back side of the router
+		steps through the levels. Writing to this file selects a level
+		directly. The CPLD keeps the selection across driver unbind and
+		reboot.
+
+		Format: %u
+
+What:		/sys/class/leds/<led>/device/brightness_levels/<N>
+Date:		September 2026
+Contact:	Josef Schlehofer <pepe.schlehofer@gmail.com>
+Description:	(RW) Value of the global brightness level N (0-7) on the
+		Turris 1.x routers, one file per level. These are the values
+		the CPLD firmware steps through when the brightness button is
+		pressed. Reading returns the value, writing accepts an integer
+		between 0 and 255. The CPLD keeps the values across driver
+		unbind and reboot, and restores the defaults (255 64 32 16 8 4
+		2 0) at power-on and when the reset button is pressed.
+
+		Format: %u

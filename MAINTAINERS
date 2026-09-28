@@ -7163,6 +7163,16 @@ L:	linux-input@vger.kernel.org
 S:	Maintained
 F:	drivers/input/touchscreen/cyttsp*
 
+CZ.NIC TURRIS 1.X LED DRIVER
+M:	Josef Schlehofer <pepe.schlehofer@gmail.com>
+L:	linux-leds@vger.kernel.org
+S:	Maintained
+W:	https://www.turris.cz/
+F:	Documentation/ABI/testing/sysfs-class-led-driver-turris-omnia
+F:	Documentation/ABI/testing/sysfs-class-led-driver-turris1x
+F:	Documentation/devicetree/bindings/leds/cznic,turris1x-leds.yaml
+F:	drivers/leds/leds-turris-1x.c
+
 D-LINK DIR-685 TOUCHKEYS DRIVER
 M:	Linus Walleij <linusw@kernel.org>
 L:	linux-input@vger.kernel.org
