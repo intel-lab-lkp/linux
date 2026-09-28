@@ -367,8 +367,11 @@ static int smc_pnet_add_eth(struct smc_pnettable *pnettable, struct net *net,
 	if (ndev) {
 		base_ndev = pnet_find_base_ndev(ndev);
 		if (!smc_pnetid_by_dev_port(base_ndev->dev.parent,
-					    base_ndev->dev_port, ndev_pnetid))
+					    base_ndev->dev_port, ndev_pnetid)) {
+			dev_put(base_ndev);
 			goto out_put;
+		}
+		dev_put(base_ndev);
 	}
 
 	/* add a new netdev entry to the pnet table if there isn't one */
@@ -949,6 +952,8 @@ static struct net_device *pnet_find_base_ndev(struct net_device *ndev)
 {
 	rtnl_lock();
 	ndev = __pnet_find_base_ndev(ndev);
+	/* keep ndev alive after dropping RTNL, callers must dev_put() */
+	dev_hold(ndev);
 	rtnl_unlock();
 	return ndev;
 }
@@ -1094,8 +1099,10 @@ static void smc_pnet_find_roce_by_pnetid(struct net_device *ndev,
 	    smc_pnet_find_ndev_pnetid_by_table(base_ndev, ndev_pnetid) &&
 	    smc_pnet_find_ndev_pnetid_by_table(ndev, ndev_pnetid)) {
 		smc_pnet_find_rdma_dev(base_ndev, ini);
+		dev_put(base_ndev);
 		return; /* pnetid could not be determined */
 	}
+	dev_put(base_ndev);
 	_smc_pnet_find_roce_by_pnetid(ndev_pnetid, ini, NULL, net);
 }
 
@@ -1108,8 +1115,10 @@ static void smc_pnet_find_ism_by_pnetid(struct net_device *ndev,
 	ndev = pnet_find_base_ndev(ndev);
 	if (smc_pnetid_by_dev_port(ndev->dev.parent, ndev->dev_port,
 				   ndev_pnetid) &&
-	    smc_pnet_find_ndev_pnetid_by_table(ndev, ndev_pnetid))
+	    smc_pnet_find_ndev_pnetid_by_table(ndev, ndev_pnetid)) {
+		dev_put(ndev);
 		return; /* pnetid could not be determined */
+	}
 
 	mutex_lock(&smcd_dev_list.mutex);
 	list_for_each_entry(ismdev, &smcd_dev_list.list, list) {
@@ -1123,6 +1132,7 @@ static void smc_pnet_find_ism_by_pnetid(struct net_device *ndev,
 		}
 	}
 	mutex_unlock(&smcd_dev_list.mutex);
+	dev_put(ndev);
 }
 
 /* PNET table analysis for a given sock:
