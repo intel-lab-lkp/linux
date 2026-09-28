@@ -73,12 +73,40 @@ static void test_at(bool expect_fault)
 	test_at_insn(S1E1W, expect_fault);
 }
 
+/* 4K granule with SL0 == 3 and no FEAT_TTST is a stage-2 level 0 Translation fault */
+static void test_at_s12_bad_sl0(void)
+{
+	u64 vtcr = FIELD_PREP(VTCR_EL2_SL0_MASK, 3) | FIELD_PREP(VTCR_EL2_T0SZ_MASK, 24);
+	u64 sctlr = read_sysreg_s(SYS_SCTLR_EL12);
+	u64 par;
+
+	/* Disable stage 1, so the stage-2 fault is on the output address, not a table walk */
+	write_sysreg_s(sctlr & ~SCTLR_ELx_M, SYS_SCTLR_EL12);
+	write_sysreg(vtcr, vtcr_el2);
+	sysreg_clear_set(hcr_el2, 0, HCR_EL2_VM);
+	isb();
+
+	__at(OP_AT_S12E1R, TEST_ADDR);
+	isb();
+	par = read_sysreg(par_el1);
+
+	sysreg_clear_set(hcr_el2, HCR_EL2_VM, 0);
+	write_sysreg(0, vtcr_el2);
+	write_sysreg_s(sctlr, SYS_SCTLR_EL12);
+	isb();
+
+	__GUEST_ASSERT((par & SYS_PAR_EL1_F) && (par & SYS_PAR_EL1_S) &&
+		       FIELD_GET(SYS_PAR_EL1_FST, par) == ESR_ELx_FSC_FAULT_L(0),
+		       "AT S12E1R: expected stage-2 level 0 translation fault (par: %lx)", par);
+}
+
 static void guest_code(void)
 {
 	sysreg_clear_set(tcr_el1, TCR_HA, 0);
 	isb();
 
 	test_at(true);
+	test_at_s12_bad_sl0();
 
 	if (!SYS_FIELD_GET(ID_AA64MMFR1_EL1, HAFDBS, read_sysreg(id_aa64mmfr1_el1)))
 		GUEST_DONE();
