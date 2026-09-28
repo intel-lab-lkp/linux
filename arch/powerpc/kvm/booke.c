@@ -1404,10 +1404,17 @@ out:
 		if (s <= 0)
 			r = (s << 2) | RESUME_HOST | (r & RESUME_FLAG_NV);
 		else {
-			/* interrupts now hard-disabled */
+			/*
+			 * kvmppc_fix_ee_before_entry() marks the software
+			 * IRQ state enabled while interrupts are still
+			 * hard-disabled. So disable preemption while loading
+			 * guest FP and Altivec.
+			 */
 			kvmppc_fix_ee_before_entry();
+			preempt_disable();
 			kvmppc_load_guest_fp(vcpu);
 			kvmppc_load_guest_altivec(vcpu);
+			preempt_enable_no_resched();
 		}
 	}
 
