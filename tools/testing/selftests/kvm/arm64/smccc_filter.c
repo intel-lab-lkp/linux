@@ -105,6 +105,8 @@ static void test_pad_must_be_zero(void)
 				  KVM_ARM_VM_SMCCC_FILTER, &filter);
 	TEST_ASSERT(r < 0 && errno == EINVAL,
 		    "Setting filter with nonzero padding should return EINVAL");
+
+	kvm_vm_free(vm);
 }
 
 /* Ensure that userspace cannot filter the Arm Architecture SMCCC range */

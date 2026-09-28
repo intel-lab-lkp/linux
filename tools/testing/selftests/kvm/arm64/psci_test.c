@@ -239,9 +239,10 @@ static void host_test_system_off2(void)
 	u64 psci_version = 0;
 	int nr_shutdowns = 0;
 	struct kvm_run *run;
+	struct kvm_vm *vm;
 	struct ucall uc;
 
-	setup_vm(guest_test_system_off2, &source, &target);
+	vm = setup_vm(guest_test_system_off2, &source, &target);
 
 	psci_version = vcpu_get_reg(target, KVM_REG_ARM_PSCI_VERSION);
 
@@ -276,6 +277,8 @@ static void host_test_system_off2(void)
 
 	TEST_ASSERT(get_ucall(source, &uc) == UCALL_DONE, "Guest did not exit cleanly");
 	TEST_ASSERT(nr_shutdowns == 2, "Two shutdown events were expected, but saw %d", nr_shutdowns);
+
+	kvm_vm_free(vm);
 }
 
 int main(void)
