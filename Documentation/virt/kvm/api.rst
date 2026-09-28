@@ -6337,7 +6337,7 @@ The Feature ID range is defined as the AArch64 System register space with
 op0==3, op1=={0, 1, 3}, CRn==0, CRm=={0-7}, op2=={0-7}.
 
 The mask returned array pointed to by ``addr`` is indexed by the macro
-``ARM64_FEATURE_ID_RANGE_IDX(op0, op1, crn, crm, op2)``, allowing userspace
+``KVM_ARM_FEATURE_ID_RANGE_IDX(op0, op1, crn, crm, op2)``, allowing userspace
 to know what fields can be changed for the system register described by
 ``op0, op1, crn, crm, op2``. KVM rejects ID register values that describe a
 superset of the features supported by the system.
