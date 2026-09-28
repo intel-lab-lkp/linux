@@ -275,13 +275,10 @@ static int walk_nested_s2_pgd(struct kvm_vcpu *vcpu, phys_addr_t ipa,
 
 	stride = wi->pgshift - 3;
 	input_size = get_ia_size(wi);
-	if (input_size > 48 || input_size < 25)
-		return -EFAULT;
-
-	ret = check_base_s2_limits(vcpu, wi, level, input_size, stride);
-	if (ret) {
+	if (input_size > 48 || input_size < 25 ||
+	    check_base_s2_limits(vcpu, wi, level, input_size, stride)) {
 		out->esr = compute_fsc(0, ESR_ELx_FSC_FAULT);
-		return ret;
+		return 1;
 	}
 
 	base_lower_bound = 3 + input_size - ((3 - level) * stride +
