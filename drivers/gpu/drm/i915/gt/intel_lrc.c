@@ -8,6 +8,7 @@
 #include "gem/i915_gem_lmem.h"
 
 #include "gen8_engine_cs.h"
+#include "i915_drm_client.h"
 #include "i915_drv.h"
 #include "i915_perf.h"
 #include "i915_reg.h"
@@ -1348,6 +1349,60 @@ gen12_invalidate_state_cache(u32 *cs)
 	return cs;
 }
 
+static bool ctx_needs_wa_22013059131(const struct intel_context *ce)
+{
+	struct i915_gem_context *gem_ctx;
+	bool needed = false;
+
+	/*
+	 * Kernel-internal contexts (gem_context == NULL) never run the
+	 * shader workloads that require this workaround.
+	 *
+	 * For userspace contexts the choice belongs to the client, so latch
+	 * the kernel as the owner unless the client has already opted out.
+	 * This batchbuffer is what programs the register, and it is built
+	 * only once per context (see lrc_pin()), so from here on the client
+	 * can no longer opt out and set_client_wa_22013059131() will reject
+	 * any attempt to.
+	 */
+	rcu_read_lock();
+	gem_ctx = rcu_dereference(ce->gem_context);
+	if (gem_ctx) {
+		int owner = I915_WA_22013059131_KERNEL;
+
+		if (gem_ctx->client)
+			owner = i915_drm_client_latch_wa_22013059131(gem_ctx->client, owner);
+
+		needed = owner != I915_WA_22013059131_USERSPACE;
+	}
+	rcu_read_unlock();
+
+	return needed;
+}
+
+static u32 *
+dg2_g11_emit_wa_22013059131(const struct intel_context *ce, u32 *cs)
+{
+	/*
+	 * While re-writing LSC_CHICKEN_BIT_0 for Wa_22013059131, the
+	 * other bits of the register will also get overwritten.  The
+	 * hardware default for all other bits is 0, but any workarounds
+	 * that adjust the other bits in the lower dword of the register
+	 * also need to be re-applied here.  At the moment that's just
+	 * Wa_22014226127, which is always set for DG2-G11 platforms.
+	 */
+	u32 val = DISABLE_D8_D16_COASLESCE;
+
+	if (ctx_needs_wa_22013059131(ce))
+		val |= FORCE_1_SUB_MESSAGE_PER_FRAGMENT;
+
+	*cs++ = MI_LOAD_REGISTER_IMM(1);
+	*cs++ = i915_mmio_reg_offset(LSC_CHICKEN_BIT_0);
+	*cs++ = val;
+
+	return cs;
+}
+
 static u32 *
 gen12_emit_indirect_ctx_rcs(const struct intel_context *ce, u32 *cs)
 {
@@ -1371,6 +1426,10 @@ gen12_emit_indirect_ctx_rcs(const struct intel_context *ce, u32 *cs)
 	    IS_DG2(ce->engine->i915))
 		cs = dg2_emit_draw_watermark_setting(cs);
 
+	/* Wa_22013059131:dg2 */
+	if (IS_DG2_G11(ce->engine->i915))
+		cs = dg2_g11_emit_wa_22013059131(ce, cs);
+
 	return cs;
 }
 
@@ -1387,7 +1446,14 @@ gen12_emit_indirect_ctx_xcs(const struct intel_context *ce, u32 *cs)
 						    PIPE_CONTROL_INSTRUCTION_CACHE_INVALIDATE,
 						    0);
 
-	return gen12_emit_aux_table_inv(ce->engine, cs);
+	cs = gen12_emit_aux_table_inv(ce->engine, cs);
+
+	/* Wa_22013059131:dg2 */
+	if (IS_DG2_G11(ce->engine->i915))
+		if (ce->engine->class == COMPUTE_CLASS)
+			cs = dg2_g11_emit_wa_22013059131(ce, cs);
+
+	return cs;
 }
 
 static u32 *xehp_emit_fastcolor_blt_wabb(const struct intel_context *ce, u32 *cs)
