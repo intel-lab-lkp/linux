@@ -1185,7 +1185,6 @@ static const struct net_proto_family inet_family_ops = {
 	.owner	= THIS_MODULE,
 };
 
-#if IS_ENABLED(CONFIG_IPV4)
 /* Upon startup we insert all the elements in inetsw_array[] into
  * the linked list inetsw.
  */
@@ -1226,7 +1225,6 @@ static struct inet_protosw inetsw_array[] =
 };
 
 #define INETSW_ARRAY_LEN ARRAY_SIZE(inetsw_array)
-#endif
 
 void inet_register_protosw(struct inet_protosw *p)
 {
@@ -1814,10 +1812,6 @@ static int __init init_ipv4_mibs(void)
 	return register_pernet_subsys(&ipv4_mib_ops);
 }
 
-#if IS_ENABLED(CONFIG_IPV4)
-static int ipv4_proc_init(void);
-#endif
-
 static __net_init int inet_init_net(struct net *net)
 {
 	/*
@@ -1868,6 +1862,8 @@ static int __init init_inet_pernet_ops(void)
 	return register_pernet_subsys(&af_inet_ops);
 }
 
+static int ipv4_proc_init(void);
+
 /*
  *	IP protocol layer initialiser
  */
@@ -1912,25 +1908,18 @@ static int __init ipv4_offload_init(void)
 
 fs_initcall(ipv4_offload_init);
 
-#if IS_ENABLED(CONFIG_IPV4)
 static struct packet_type ip_packet_type __read_mostly = {
 	.type = cpu_to_be16(ETH_P_IP),
 	.func = ip_rcv,
 	.list_func = ip_list_rcv,
 };
-#endif
 
-static int __init inet_init(void)
+static int __init inet4_init(void)
 {
-#if IS_ENABLED(CONFIG_IPV4)
 	struct inet_protosw *q;
 	struct list_head *r;
 	int rc;
-#endif
 
-	sock_skb_cb_check_size(sizeof(struct inet_skb_parm));
-
-#if IS_ENABLED(CONFIG_IPV4)
 	raw_hashinfo_init(&raw_v4_hashinfo);
 
 	rc = proto_register(&tcp_prot, 1);
@@ -2005,7 +1994,46 @@ static int __init inet_init(void)
 	 */
 
 	ip_init();
-#endif /* CONFIG_IPV4 */
+
+	return 0;
+out_unregister_raw_proto:
+	proto_unregister(&raw_prot);
+out_unregister_udp_proto:
+	proto_unregister(&udp_prot);
+out_unregister_tcp_proto:
+	proto_unregister(&tcp_prot);
+out:
+	return rc;
+}
+
+static void __init inet4_late_init(void)
+{
+	/*
+	 *	Initialise the multicast router
+	 */
+#if defined(CONFIG_IP_MROUTE)
+	if (ip_mr_init())
+		pr_crit("%s: Cannot init ipv4 mroute\n", __func__);
+#endif
+	ipv4_proc_init();
+
+	ipfrag_init();
+
+	dev_add_pack(&ip_packet_type);
+}
+
+static int __init inet_init(void)
+{
+	int rc;
+
+	sock_skb_cb_check_size(sizeof(struct inet_skb_parm));
+
+	if (IS_ENABLED(CONFIG_IPV4)) {
+		rc = inet4_init();
+		if (rc)
+			return rc;
+	}
+
 	/* Initialise per-cpu ipv4 mibs */
 	if (init_ipv4_mibs())
 		panic("%s: Cannot init ipv4 mibs\n", __func__);
@@ -2029,42 +2057,24 @@ static int __init inet_init(void)
 
 	if (init_inet_pernet_ops())
 		pr_crit("%s: Cannot init ipv4 inet pernet ops\n", __func__);
-#if IS_ENABLED(CONFIG_IPV4)
-	/*
-	 *	Initialise the multicast router
-	 */
-#if defined(CONFIG_IP_MROUTE)
-	if (ip_mr_init())
-		pr_crit("%s: Cannot init ipv4 mroute\n", __func__);
+
+#ifdef CONFIG_PROC_FS
+	if (ip_misc_proc_init())
+		pr_crit("%s: Cannot init ipv4 misc proc\n", __func__);
 #endif
-	ipv4_proc_init();
 
-	ipfrag_init();
-
-	dev_add_pack(&ip_packet_type);
-#endif /* CONFIG_IPV4 */
+	if (IS_ENABLED(CONFIG_IPV4))
+		inet4_late_init();
 
 	ip_tunnel_core_init();
 
 	return 0;
-#if IS_ENABLED(CONFIG_IPV4)
-out:
-	return rc;
-out_unregister_raw_proto:
-	proto_unregister(&raw_prot);
-out_unregister_udp_proto:
-	proto_unregister(&udp_prot);
-out_unregister_tcp_proto:
-	proto_unregister(&tcp_prot);
-	goto out;
-#endif
 }
 
 fs_initcall(inet_init);
 
 /* ------------------------------------------------------------------------ */
 
-#if IS_ENABLED(CONFIG_IPV4)
 #ifdef CONFIG_PROC_FS
 static int __init ipv4_proc_init(void)
 {
@@ -2078,12 +2088,8 @@ static int __init ipv4_proc_init(void)
 		goto out_udp;
 	if (ping_proc_init())
 		goto out_ping;
-	if (ip_misc_proc_init())
-		goto out_misc;
 out:
 	return rc;
-out_misc:
-	ping_proc_exit();
 out_ping:
 	udp4_proc_exit();
 out_udp:
@@ -2101,4 +2107,3 @@ static int __init ipv4_proc_init(void)
 	return 0;
 }
 #endif /* CONFIG_PROC_FS */
-#endif

@@ -29,6 +29,7 @@
  */
 #include <linux/types.h>
 #include <net/net_namespace.h>
+#include <net/aligned_data.h>
 #include <net/icmp.h>
 #include <net/protocol.h>
 #include <net/tcp.h>
@@ -50,25 +51,33 @@
  */
 static int sockstat_seq_show(struct seq_file *seq, void *v)
 {
+	int tcp_inuse = 0, udp_inuse = 0, raw_inuse = 0;
 	struct net *net = seq->private;
+	long tcp_mem, udp_mem;
 	int orphans, sockets;
 
 	orphans = tcp_orphan_count_sum();
-	sockets = proto_sockets_allocated_sum_positive(&tcp_prot);
+	sockets = percpu_counter_sum_positive(&tcp_sockets_allocated);
+	tcp_mem = max(0L, atomic_long_read(&net_aligned_data.tcp_memory_allocated));
+	udp_mem = max(0L, atomic_long_read(&net_aligned_data.udp_memory_allocated));
+
+	if (IS_ENABLED(CONFIG_IPV4)) {
+		tcp_inuse = sock_prot_inuse_get(net, &tcp_prot);
+		udp_inuse = sock_prot_inuse_get(net, &udp_prot);
+		raw_inuse = sock_prot_inuse_get(net, &raw_prot);
+	}
 
 	socket_seq_show(seq);
 	seq_printf(seq, "TCP: inuse %d orphan %d tw %d alloc %d mem %ld\n",
-		   sock_prot_inuse_get(net, &tcp_prot), orphans,
+		   tcp_inuse, orphans,
 		   refcount_read(&net->ipv4.tcp_death_row.tw_refcount) - 1,
-		   sockets, proto_memory_allocated(&tcp_prot));
-	seq_printf(seq, "UDP: inuse %d mem %ld\n",
-		   sock_prot_inuse_get(net, &udp_prot),
-		   proto_memory_allocated(&udp_prot));
-	seq_printf(seq, "RAW: inuse %d\n",
-		   sock_prot_inuse_get(net, &raw_prot));
-	seq_printf(seq,  "FRAG: inuse %u memory %lu\n",
-		   atomic_read(&net->ipv4.fqdir->rhashtable.nelems),
-		   frag_mem_limit(net->ipv4.fqdir));
+		   sockets, tcp_mem);
+	seq_printf(seq, "UDP: inuse %d mem %ld\n", udp_inuse, udp_mem);
+	seq_printf(seq, "RAW: inuse %d\n", raw_inuse);
+	if (IS_ENABLED(CONFIG_IPV4))
+		seq_printf(seq,  "FRAG: inuse %u memory %lu\n",
+			   atomic_read(&net->ipv4.fqdir->rhashtable.nelems),
+			   frag_mem_limit(net->ipv4.fqdir));
 	return 0;
 }
 
@@ -406,7 +415,7 @@ static int snmp_seq_show_ipstats(struct seq_file *seq, void *v)
 	return 0;
 }
 
-static int snmp_seq_show_tcp_udp(struct seq_file *seq, void *v)
+static int snmp_seq_show_tcp_udp(struct seq_file *seq, void *v, bool first)
 {
 	const int udp_cnt = ARRAY_SIZE(snmp4_udp_list);
 	const int tcp_cnt = ARRAY_SIZE(snmp4_tcp_list);
@@ -416,7 +425,7 @@ static int snmp_seq_show_tcp_udp(struct seq_file *seq, void *v)
 
 	memset(buff, 0, tcp_cnt * sizeof(unsigned long));
 
-	seq_puts(seq, "\nTcp:");
+	seq_puts(seq, first ? "Tcp:" : "\nTcp:");
 	for (i = 0; i < tcp_cnt; i++)
 		seq_printf(seq, " %s", snmp4_tcp_list[i].name);
 
@@ -450,12 +459,14 @@ static int snmp_seq_show_tcp_udp(struct seq_file *seq, void *v)
 
 static int snmp_seq_show(struct seq_file *seq, void *v)
 {
-	snmp_seq_show_ipstats(seq, v);
+	if (IS_ENABLED(CONFIG_IPV4)) {
+		snmp_seq_show_ipstats(seq, v);
 
-	icmp_put(seq);	/* RFC 2011 compatibility */
-	icmpmsg_put(seq);
+		icmp_put(seq);	/* RFC 2011 compatibility */
+		icmpmsg_put(seq);
+	}
 
-	snmp_seq_show_tcp_udp(seq, v);
+	snmp_seq_show_tcp_udp(seq, v, !IS_ENABLED(CONFIG_IPV4));
 
 	return 0;
 }

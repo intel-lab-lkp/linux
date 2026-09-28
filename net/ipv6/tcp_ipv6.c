@@ -220,7 +220,7 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr_unsized *uaddr,
 		u32 exthdrlen = icsk->icsk_ext_hdr_len;
 		struct sockaddr_in sin;
 
-		if (ipv6_only_sock(sk))
+		if (!IS_ENABLED(CONFIG_IPV4) || ipv6_only_sock(sk))
 			return -ENETUNREACH;
 
 		sin.sin_family = AF_INET;
@@ -1315,8 +1315,11 @@ u16 tcp_v6_get_syncookie(struct sock *sk, struct ipv6hdr *iph,
 
 static int tcp_v6_conn_request(struct sock *sk, struct sk_buff *skb)
 {
-	if (skb->protocol == htons(ETH_P_IP))
+	if (skb->protocol == htons(ETH_P_IP)) {
+		if (!IS_ENABLED(CONFIG_IPV4))
+			goto drop;
 		return tcp_v4_conn_request(sk, skb);
+	}
 
 	if (!ipv6_unicast_destination(skb))
 		goto drop;
@@ -1401,10 +1404,14 @@ static struct sock *tcp_v6_syn_recv_sock(const struct sock *sk, struct sk_buff *
 #endif
 	struct flowi6 fl6;
 
-	if (skb->protocol == htons(ETH_P_IP))
+	if (skb->protocol == htons(ETH_P_IP)) {
+		if (!IS_ENABLED(CONFIG_IPV4))
+			return NULL;
 		return tcp_v4_syn_recv_sock(sk, skb, req, dst,
 					    req_unhash, own_req,
 					    tcp_v6_mapped_child_init);
+	}
+
 	ireq = inet_rsk(req);
 
 	if (sk_acceptq_is_full(sk))
@@ -1579,8 +1586,12 @@ int tcp_v6_do_rcv(struct sock *sk, struct sk_buff *skb)
 	   tcp_v6_hnd_req and tcp_v6_send_reset().   --ANK
 	 */
 
-	if (skb->protocol == htons(ETH_P_IP))
-		return tcp_v4_do_rcv(sk, skb);
+	if (skb->protocol == htons(ETH_P_IP)) {
+		if (IS_ENABLED(CONFIG_IPV4))
+			return tcp_v4_do_rcv(sk, skb);
+		kfree_skb(skb);
+		return 0;
+	}
 
 	reason = psp_sk_rx_policy_check(sk, skb);
 	if (reason)
@@ -2284,7 +2295,7 @@ struct proto tcpv6_prot = {
 	.accept			= inet_csk_accept,
 	.ioctl			= tcp_ioctl,
 	.init			= tcp_v6_init_sock,
-	.destroy		= tcp_v4_destroy_sock,
+	.destroy		= tcp_destroy_sock,
 	.shutdown		= tcp_shutdown,
 	.setsockopt		= tcp_setsockopt,
 	.getsockopt		= tcp_getsockopt,
