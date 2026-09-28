@@ -1229,6 +1229,7 @@ static void reset_partition_data(struct cpuset *cs)
 
 	lockdep_assert_held(&callback_lock);
 
+	cs->remote_partition = false;
 	if (cpumask_empty(cs->exclusive_cpus))
 		cpumask_clear(cs->effective_xcpus);
 
@@ -1616,7 +1617,6 @@ static void remote_partition_disable(struct cpuset *cs, struct tmpmasks *tmp)
 		     !cpumask_empty(subpartitions_cpus));
 
 	spin_lock_irq(&callback_lock);
-	cs->remote_partition = false;
 	partition_xcpus_del(cs->partition_root_state, NULL, cs->effective_xcpus);
 	if (cs->prs_err)
 		cs->partition_root_state = -cs->partition_root_state;
@@ -2893,6 +2893,7 @@ static int update_prstate(struct cpuset *cs, int new_prs)
 	struct cpuset *parent = parent_cs(cs);
 	struct tmpmasks tmpmask;
 	bool isolcpus_updated = false;
+	bool disable_partition = false;
 
 	if (old_prs == new_prs)
 		return 0;
@@ -2947,27 +2948,32 @@ static int update_prstate(struct cpuset *cs, int new_prs)
 		 */
 		if (((new_prs == PRS_ISOLATED) &&
 		     !isolated_cpus_can_update(cs->effective_xcpus, NULL)) ||
-		    prstate_housekeeping_conflict(new_prs, cs->effective_xcpus))
+		    prstate_housekeeping_conflict(new_prs, cs->effective_xcpus)) {
 			err = PERR_HKEEPING;
-		else
+			disable_partition = true;
+		} else {
 			isolcpus_updated = true;
+		}
 	} else {
 		/*
 		 * Switching back to member is always allowed even if it
 		 * disables child partitions.
 		 */
+		disable_partition = true;
+	}
+out:
+	if (disable_partition) {
 		if (is_remote_partition(cs))
 			remote_partition_disable(cs, &tmpmask);
 		else
 			update_parent_effective_cpumask(cs, partcmd_disable,
 							NULL, &tmpmask);
-
 		/*
 		 * Invalidation of child partitions will be done in
-		 * update_cpumasks_hier().
+		 * update_cpumasks_hier() below.
 		 */
 	}
-out:
+
 	/*
 	 * Make partition invalid if an error happens.
 	 */
