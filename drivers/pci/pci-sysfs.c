@@ -1209,9 +1209,6 @@ static ssize_t pci_resource_io(struct file *filp, struct kobject *kobj,
 	if (port > pci_resource_end(pdev, bar))
 		return 0;
 
-	if (port + count - 1 > pci_resource_end(pdev, bar))
-		return -EINVAL;
-
 	switch (count) {
 	case 1:
 		if (write)
@@ -1220,12 +1217,16 @@ static ssize_t pci_resource_io(struct file *filp, struct kobject *kobj,
 			*(u8 *)buf = inb(port);
 		return 1;
 	case 2:
+		if (port & 1)
+			return -EINVAL;
 		if (write)
 			outw(*(u16 *)buf, port);
 		else
 			*(u16 *)buf = inw(port);
 		return 2;
 	case 4:
+		if (port & 3)
+			return -EINVAL;
 		if (write)
 			outl(*(u32 *)buf, port);
 		else
