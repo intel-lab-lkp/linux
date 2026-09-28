@@ -736,6 +736,44 @@ int tc_meta_read(struct __sk_buff *ctx)
 	return TC_ACT_UNSPEC;
 }
 
+/*
+ * Read skb_ext at TC, never drop -- for cross-hook tests where untagged
+ * packets (e.g. TCP handshake) must pass through the same hook.
+ */
+SEC("tc")
+int tc_meta_read_pass(struct __sk_buff *ctx)
+{
+	__u8 *meta_have;
+
+	meta_have = bpf_map_lookup_elem(&meta_map, &ctx);
+	if (!meta_have)
+		return TC_ACT_UNSPEC;
+	if (!check_metadata(meta_have))
+		return TC_ACT_UNSPEC;
+
+	test_pass = true;
+	return TC_ACT_UNSPEC;
+}
+
+bool drop_once_done;
+
+/* Drop the first packet carrying an skb_ext entry -- force TCP retransmit */
+SEC("tc")
+int tc_meta_drop_once(struct __sk_buff *ctx)
+{
+	__u8 *meta_have;
+
+	if (drop_once_done)
+		return TC_ACT_UNSPEC;
+
+	meta_have = bpf_map_lookup_elem(&meta_map, &ctx);
+	if (!meta_have)
+		return TC_ACT_UNSPEC;
+
+	drop_once_done = true;
+	return TC_ACT_SHOT;
+}
+
 int free_count;
 
 SEC("raw_tp/skb_free")
@@ -896,6 +934,40 @@ int cgrp_meta_write_once(struct __sk_buff *ctx)
 
 	write_meta(ctx, &meta_map);
 	write_once_done = true;
+
+	return 1;
+}
+
+/*
+ * Write skb_ext from cgroup/skb egress on both fast-clone twins: the
+ * transmitted packet is a fast clone of the write-queue original; tag
+ * both so the retransmit (a fresh clone of the tagged original) inherits
+ * the entry via the skb_copy tracepoint.
+ */
+SEC("cgroup_skb/egress")
+int cgrp_meta_write_twins(struct __sk_buff *ctx)
+{
+	struct sk_buff *twin;
+	__u8 *meta_have;
+
+	if (write_once_done || !is_test_packet_tc(ctx))
+		return 1;
+
+	write_meta(ctx, &meta_map);
+	write_once_done = true;
+
+	twin = bpf_skb_fclone_orig(bpf_cast_to_kern_ctx(ctx));
+	if (!twin)
+		return 1;
+
+	if (bpf_map_update_elem(&meta_map, &twin, &meta_want, BPF_NOEXIST))
+		return 1;
+	bpf_trace_skb(twin, 0);
+
+	meta_have = bpf_map_lookup_elem(&meta_map, &twin);
+	if (!meta_have)
+		return 1;
+	__builtin_memcpy(meta_have, meta_want, META_SIZE);
 
 	return 1;
 }

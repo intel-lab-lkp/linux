@@ -1269,6 +1269,218 @@ cleanup:
 }
 
 /*
+ * Test metadata passing across cgroup/skb egress -> TC egress with TCP
+ * traffic.  TCP fast-clones the write-queue skb at tcp_transmit_skb();
+ * both hooks run on the transmitted clone.
+ */
+static void test_skb_trace__tcp_egress(struct test_xdp_meta *skel)
+{
+	LIBBPF_OPTS(bpf_tc_hook, tc_hook,
+		    .ifindex = 1 /* IFINDEX_LO */,
+		    .attach_point = BPF_TC_EGRESS);
+	LIBBPF_OPTS(bpf_tc_opts, tc_opts, .handle = 1, .priority = 1);
+	struct bpf_link *put_link = NULL;
+	struct bpf_link *cg_link = NULL;
+	struct netns_obj *ns = NULL;
+	char buf[TEST_PAYLOAD_LEN];
+	int server_fd = -1;
+	int cgroup_fd = -1;
+	int client_fd = -1;
+	int conn_fd = -1;
+	int ret;
+	int i;
+
+	put_link = bpf_program__attach(skel->progs.skb_free);
+	if (!ASSERT_OK_PTR(put_link, "put_attach"))
+		return;
+
+	cgroup_fd = test__join_cgroup("/cgrp_to_tc");
+	if (!ASSERT_GE(cgroup_fd, 0, "join_cgroup"))
+		goto cleanup;
+
+	ns = netns_new("cgrp_to_tc", true);
+	if (!ASSERT_OK_PTR(ns, "netns_new"))
+		goto cleanup;
+
+	skel->bss->test_pass = false;
+	skel->bss->free_count = 0;
+
+	cg_link = bpf_program__attach_cgroup(skel->progs.cgrp_meta_write,
+					     cgroup_fd);
+	if (!ASSERT_OK_PTR(cg_link, "attach_cgroup"))
+		goto cleanup;
+
+	ret = bpf_tc_hook_create(&tc_hook);
+	if (!ASSERT_OK(ret, "bpf_tc_hook_create"))
+		goto cleanup;
+
+	tc_opts.prog_fd = bpf_program__fd(skel->progs.tc_meta_read_pass);
+	ret = bpf_tc_attach(&tc_hook, &tc_opts);
+	if (!ASSERT_OK(ret, "bpf_tc_attach"))
+		goto cleanup;
+
+	server_fd = start_server(AF_INET, SOCK_STREAM, "127.0.0.1", 0, 0);
+	if (!ASSERT_GE(server_fd, 0, "start_server"))
+		goto cleanup;
+
+	client_fd = connect_to_fd(server_fd, 0);
+	if (!ASSERT_GE(client_fd, 0, "connect"))
+		goto cleanup;
+
+	conn_fd = accept(server_fd, NULL, NULL);
+	if (!ASSERT_GE(conn_fd, 0, "accept"))
+		goto cleanup;
+
+	ret = send(client_fd, test_payload, TEST_PAYLOAD_LEN, 0);
+	if (!ASSERT_EQ(ret, TEST_PAYLOAD_LEN, "send"))
+		goto cleanup;
+
+	/* Receive -- synchronizes with packet delivery and free */
+	ret = recv(conn_fd, buf, sizeof(buf), 0);
+	ASSERT_EQ(ret, TEST_PAYLOAD_LEN, "recv");
+
+	/* Poll every 10 msec up to 1 sec */
+	for (i = 0; i < 100 && !skel->bss->test_pass; i++)
+		usleep(10000);
+	ASSERT_TRUE(skel->bss->test_pass, "test_pass");
+
+	/* Skb is freed after RX delivery; wait for free tp */
+	for (i = 0; i < 100 && !skel->bss->free_count; i++)
+		usleep(10000);
+	ASSERT_GE(skel->bss->free_count, 1, "free_count");
+
+	assert_meta_stash_empty(skel->maps.meta_map);
+cleanup:
+	if (conn_fd >= 0)
+		close(conn_fd);
+	if (client_fd >= 0)
+		close(client_fd);
+	if (server_fd >= 0)
+		close(server_fd);
+	bpf_link__destroy(cg_link);
+	bpf_link__destroy(put_link);
+	bpf_tc_hook_destroy(&tc_hook);
+	if (cgroup_fd >= 0)
+		close(cgroup_fd);
+	netns_free(ns);
+}
+
+/*
+ * Test metadata passing across TCP retransmission with fast-clone
+ * support: cgroup/skb egress -> TC egress.  The cgroup writer tags the
+ * transmitted fast clone and, via bpf_skb_fclone_orig, the write-queue
+ * original.  The TC drop program kills the first transmission; the
+ * retransmit is a fresh fast clone of the tagged original, so the copy
+ * tracepoint propagates the entry to it and the TC reader sees the
+ * metadata.
+ */
+static void test_skb_trace__tcp_retrans(struct test_xdp_meta *skel)
+{
+	LIBBPF_OPTS(bpf_tc_hook, tc_hook,
+		    .ifindex = 1 /* IFINDEX_LO */,
+		    .attach_point = BPF_TC_EGRESS);
+	LIBBPF_OPTS(bpf_tc_opts, drop_opts, .handle = 1, .priority = 1);
+	LIBBPF_OPTS(bpf_tc_opts, read_opts, .handle = 2, .priority = 2);
+	struct bpf_link *put_link = NULL;
+	struct bpf_link *copy_link = NULL;
+	struct bpf_link *cg_link = NULL;
+	struct netns_obj *ns = NULL;
+	char buf[TEST_PAYLOAD_LEN];
+	int server_fd = -1;
+	int cgroup_fd = -1;
+	int client_fd = -1;
+	int conn_fd = -1;
+	int ret;
+	int i;
+
+	put_link = bpf_program__attach(skel->progs.skb_free);
+	if (!ASSERT_OK_PTR(put_link, "put_attach"))
+		return;
+
+	copy_link = bpf_program__attach(skel->progs.skb_copy);
+	if (!ASSERT_OK_PTR(copy_link, "copy_attach"))
+		goto cleanup;
+
+	cgroup_fd = test__join_cgroup("/cgrp_to_tc_twins");
+	if (!ASSERT_GE(cgroup_fd, 0, "join_cgroup"))
+		goto cleanup;
+
+	ns = netns_new("cgrp_to_tc_twins", true);
+	if (!ASSERT_OK_PTR(ns, "netns_new"))
+		goto cleanup;
+
+	skel->bss->write_once_done = false;
+	skel->bss->drop_once_done = false;
+	skel->bss->test_pass = false;
+	skel->bss->free_count = 0;
+
+	cg_link = bpf_program__attach_cgroup(skel->progs.cgrp_meta_write_twins,
+					     cgroup_fd);
+	if (!ASSERT_OK_PTR(cg_link, "attach_cgroup"))
+		goto cleanup;
+
+	ret = bpf_tc_hook_create(&tc_hook);
+	if (!ASSERT_OK(ret, "bpf_tc_hook_create"))
+		goto cleanup;
+
+	drop_opts.prog_fd = bpf_program__fd(skel->progs.tc_meta_drop_once);
+	ret = bpf_tc_attach(&tc_hook, &drop_opts);
+	if (!ASSERT_OK(ret, "bpf_tc_attach drop"))
+		goto cleanup;
+
+	read_opts.prog_fd = bpf_program__fd(skel->progs.tc_meta_read_pass);
+	ret = bpf_tc_attach(&tc_hook, &read_opts);
+	if (!ASSERT_OK(ret, "bpf_tc_attach read"))
+		goto cleanup;
+
+	server_fd = start_server(AF_INET, SOCK_STREAM, "127.0.0.1", 0, 0);
+	if (!ASSERT_GE(server_fd, 0, "start_server"))
+		goto cleanup;
+
+	client_fd = connect_to_fd(server_fd, 0);
+	if (!ASSERT_GE(client_fd, 0, "connect"))
+		goto cleanup;
+
+	conn_fd = accept(server_fd, NULL, NULL);
+	if (!ASSERT_GE(conn_fd, 0, "accept"))
+		goto cleanup;
+
+	ret = send(client_fd, test_payload, TEST_PAYLOAD_LEN, 0);
+	if (!ASSERT_EQ(ret, TEST_PAYLOAD_LEN, "send"))
+		goto cleanup;
+
+	/* First transmission is dropped at TC; recv unblocks on retransmit */
+	ret = recv(conn_fd, buf, sizeof(buf), 0);
+	ASSERT_EQ(ret, TEST_PAYLOAD_LEN, "recv");
+
+	/* Poll every 10 msec up to 1 sec */
+	for (i = 0; i < 100 && !skel->bss->test_pass; i++)
+		usleep(10000);
+	ASSERT_TRUE(skel->bss->test_pass, "test_pass");
+
+	/* Skb is freed after RX delivery; wait for free tp */
+	for (i = 0; i < 100 && !skel->bss->free_count; i++)
+		usleep(10000);
+	ASSERT_GE(skel->bss->free_count, 1, "free_count");
+
+	assert_meta_stash_empty(skel->maps.meta_map);
+cleanup:
+	if (conn_fd >= 0)
+		close(conn_fd);
+	if (client_fd >= 0)
+		close(client_fd);
+	if (server_fd >= 0)
+		close(server_fd);
+	bpf_link__destroy(cg_link);
+	bpf_link__destroy(copy_link);
+	bpf_link__destroy(put_link);
+	bpf_tc_hook_destroy(&tc_hook);
+	if (cgroup_fd >= 0)
+		close(cgroup_fd);
+	netns_free(ns);
+}
+
+/*
  * Test skb_ext survival until skb free: cgroup/skb egress -> kfree_skb.
  * Send UDP to a closed port. The packet is dropped, triggering kfree_skb.
  */
@@ -1372,6 +1584,10 @@ void test_skb_trace_cross_hook(void)
 		test_skb_trace__tcp_ingress(skel, "tc_to_skops", READER_SKOPS);
 	if (test__start_subtest("cgrp_egress_to_kfree_skb"))
 		test_cgrp_egress_to_kfree_skb(skel);
+	if (test__start_subtest("cgrp_egress_to_tc_egress"))
+		test_skb_trace__tcp_egress(skel);
+	if (test__start_subtest("cgrp_egress_to_tc_egress_fclone"))
+		test_skb_trace__tcp_retrans(skel);
 
 	test_xdp_meta__destroy(skel);
 }
