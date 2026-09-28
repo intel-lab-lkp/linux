@@ -1094,6 +1094,14 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 			goto isolate_fail;
 
 		/*
+		 * Migrating would copy the corrupted data into a fresh
+		 * folio with no poison marker; skip, as memory hotplug
+		 * refuses to migrate such folios for the same reason.
+		 */
+		if (folio_contain_hwpoisoned_page(folio))
+			goto isolate_fail_put;
+
+		/*
 		 * Migration will fail if an anonymous page is pinned in memory,
 		 * so avoid taking lru_lock and isolating it unnecessarily in an
 		 * admittedly racy check.
