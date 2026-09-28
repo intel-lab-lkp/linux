@@ -373,7 +373,7 @@ static int raydium_i2c_query_ts_info(struct raydium_data *ts)
 		if (error)
 			continue;
 
-		if (ts->report_data && ts->pkg_size != data_info.pkg_size) {
+		if (!ts->report_data || ts->pkg_size != data_info.pkg_size) {
 			report_data = devm_krealloc(&client->dev, ts->report_data,
 						    data_info.pkg_size, GFP_KERNEL);
 			if (!report_data)
@@ -1134,11 +1134,6 @@ static int raydium_i2c_probe(struct i2c_client *client)
 		dev_err(&client->dev, "failed to initialize: %d\n", error);
 		return error;
 	}
-
-	ts->report_data = devm_kmalloc(&client->dev,
-				       ts->pkg_size, GFP_KERNEL);
-	if (!ts->report_data)
-		return -ENOMEM;
 
 	ts->input = devm_input_allocate_device(&client->dev);
 	if (!ts->input) {
