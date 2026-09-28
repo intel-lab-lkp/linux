@@ -364,8 +364,8 @@ EXPORT_SYMBOL_GPL(md_new_event);
  * Enables to iterate over all existing md arrays
  * all_mddevs_lock protects this list.
  */
-static LIST_HEAD(all_mddevs);
-static DEFINE_SPINLOCK(all_mddevs_lock);
+LIST_HEAD(all_mddevs);
+DEFINE_SPINLOCK(all_mddevs_lock);
 
 static bool is_md_suspended(struct mddev *mddev)
 {
@@ -623,7 +623,7 @@ bool md_flush_request(struct mddev *mddev, struct bio *bio)
 }
 EXPORT_SYMBOL(md_flush_request);
 
-static inline struct mddev *mddev_get(struct mddev *mddev)
+struct mddev *mddev_get(struct mddev *mddev)
 {
 	lockdep_assert_held(&all_mddevs_lock);
 
@@ -8101,7 +8101,7 @@ static void put_cluster_ops(struct mddev *mddev)
  * Any differences that cannot be handled will cause an error.
  * Normally, only one change can be managed at a time.
  */
-static int update_array_info(struct mddev *mddev, mdu_array_info_t *info)
+int update_array_info(struct mddev *mddev, mdu_array_info_t *info)
 {
 	int rv = 0;
 	int cnt = 0;
@@ -8227,7 +8227,7 @@ err:
 	return rv;
 }
 
-static int set_disk_faulty(struct mddev *mddev, dev_t dev)
+int set_disk_faulty(struct mddev *mddev, dev_t dev)
 {
 	struct md_rdev *rdev;
 	int err = 0;

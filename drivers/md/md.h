@@ -953,6 +953,7 @@ extern int mddev_init(struct mddev *mddev);
 extern void mddev_destroy(struct mddev *mddev);
 void md_init_stacking_limits(struct queue_limits *lim);
 struct mddev *md_alloc(dev_t dev, char *name);
+extern struct mddev *mddev_get(struct mddev *mddev);
 void mddev_put(struct mddev *mddev);
 extern int md_run(struct mddev *mddev);
 extern int md_start(struct mddev *mddev);
@@ -974,6 +975,10 @@ extern void mddev_destroy_serial_pool(struct mddev *mddev,
 				      struct md_rdev *rdev);
 struct md_rdev *md_find_rdev_nr_rcu(struct mddev *mddev, int nr);
 struct md_rdev *md_find_rdev_rcu(struct mddev *mddev, dev_t dev);
+int update_array_info(struct mddev *mddev, mdu_array_info_t *info);
+
+extern struct list_head all_mddevs;
+extern spinlock_t all_mddevs_lock;
 
 static inline bool is_rdev_broken(struct md_rdev *rdev)
 {
