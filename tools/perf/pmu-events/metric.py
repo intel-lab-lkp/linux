@@ -91,7 +91,7 @@ def CheckEveryEvent(*names: str) -> None:
       name = name[:name.find(':')]
     elif '/' in name:
       name = name[:name.find('/')]
-      if any([name.startswith(x) for x in ['amd', 'arm', 'cpu', 'msr', 'power', 'cha', 'uncore']]):
+      if any([name.startswith(x) for x in ['amd', 'arm', 'cpu', 'msr', 'power', 'cha', 'uncore', 'nvidia']]):
         continue
     if name not in all_events_all_models:
       raise ValueError(f"Is {name} a named json event?")
