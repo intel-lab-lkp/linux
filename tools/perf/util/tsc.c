@@ -113,6 +113,15 @@ u64 __weak rdtsc(void)
 	return 0;
 }
 
+/*
+ * An architecture that implements rdtsc() with a real counter should override
+ * this, so that users of the counter can tell a stub apart from support.
+ */
+bool __weak arch__rdtsc_supported(void)
+{
+	return false;
+}
+
 size_t perf_event__fprintf_time_conv(union perf_event *event, FILE *fp)
 {
 	struct perf_record_time_conv *tc = (struct perf_record_time_conv *)event;

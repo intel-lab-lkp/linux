@@ -17,3 +17,8 @@ u64 rdtsc(void)
 
 	return val;
 }
+
+bool arch__rdtsc_supported(void)
+{
+	return true;
+}

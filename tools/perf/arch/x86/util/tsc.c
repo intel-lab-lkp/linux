@@ -17,6 +17,11 @@ u64 rdtsc(void)
 	return low | ((u64)high) << 32;
 }
 
+bool arch__rdtsc_supported(void)
+{
+	return true;
+}
+
 /*
  * Derive the TSC frequency in Hz from the /proc/cpuinfo, for example:
  * ...
