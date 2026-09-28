@@ -55,14 +55,26 @@ struct dma_heap_attachment {
 #define HIGH_ORDER_GFP  (((GFP_HIGHUSER | __GFP_ZERO | __GFP_NOWARN \
 				| __GFP_NORETRY) & ~__GFP_RECLAIM) \
 				| __GFP_COMP)
-static gfp_t order_flags[] = {HIGH_ORDER_GFP, HIGH_ORDER_GFP, LOW_ORDER_GFP};
 /*
- * The selection of the orders used for allocation (1MB, 64K, 4K) is designed
- * to match with the sizes often found in IOMMUs. Using order 4 pages instead
- * of order 0 pages can significantly improve the performance of many IOMMUs
- * by reducing TLB pressure and time spent updating page tables.
+ * The selection of the orders used for allocation is designed to match with
+ * the sizes often found in IOMMUs. Using large order pages instead of order 0
+ * pages can significantly improve performance by reducing TLB pressure and
+ * time spent updating page tables.
+ *
+ * x86 uses 2MB, 1MB, 64K and 4K. VT-d and AMD-Vi v2 have no 1MB leaf and
+ * AMD-Vi v1 encodes one as 256 replicated 4K entries, so 2MB is the smallest
+ * chunk that installs a single entry. 1MB stays as a fallback for when 2MB
+ * blocks are gone but 1MB ones are not.
+ *
+ * Everywhere else uses 1MB, 64K and 4K, which is optimized for 4K-page Arm
+ * platforms. Here stable performance is preferred to keep the system heap
+ * driver independent, and be less susceptible to fragmentation.
  */
+#ifdef CONFIG_X86
+static const unsigned int orders[] = {9, 8, 4, 0};
+#else
 static const unsigned int orders[] = {8, 4, 0};
+#endif
 #define NUM_ORDERS ARRAY_SIZE(orders)
 
 static int system_heap_set_page_decrypted(struct page *page)
@@ -387,7 +399,7 @@ static struct page *alloc_largest_available(unsigned long size,
 			continue;
 		if (max_order < orders[i])
 			continue;
-		flags = order_flags[i];
+		flags = orders[i] ? HIGH_ORDER_GFP : LOW_ORDER_GFP;
 		if (mem_accounting)
 			flags |= __GFP_ACCOUNT;
 		page = alloc_pages(flags, orders[i]);

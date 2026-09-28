@@ -15,6 +15,10 @@ A heap represents a specific allocator. The Linux kernel currently supports the
 following heaps:
 
  - The ``system`` heap allocates virtually contiguous, cacheable, buffers.
+   They are assembled from the largest free page blocks the heap can get
+   without reclaiming or compacting memory, so the physical layout of a
+   buffer, and with it how efficiently an IOMMU can map it, depends on how
+   fragmented free memory is at allocation time.
 
  - The ``system_cc_shared`` heap allocates virtually contiguous, cacheable,
    buffers using shared (decrypted) memory. It is only present on
