@@ -6365,6 +6365,25 @@ static inline void __intel_update_large_pebs_flags(struct pmu *pmu)
 
 #define counter_mask(_gp, _fixed) ((_gp) | ((u64)(_fixed) << INTEL_PMC_IDX_FIXED))
 
+static bool intel_pmu_support_acr(void)
+{
+	unsigned int eax, ebx, ecx, edx;
+	union cpuid35_eax eax_0;
+	union cpuid35_ebx ebx_0;
+
+	if (!this_cpu_has(X86_FEATURE_ARCH_PERFMON_EXT))
+		return false;
+
+	cpuid(ARCH_PERFMON_EXT_LEAF, &eax_0.full, &ebx_0.full, &ecx, &edx);
+	if (eax_0.split.acr_subleaf) {
+		cpuid_count(ARCH_PERFMON_EXT_LEAF, ARCH_PERFMON_ACR_LEAF,
+			    &eax, &ebx, &ecx, &edx);
+		return !!counter_mask(eax, ebx);
+	}
+
+	return false;
+}
+
 static void update_pmu_cap_from_perfmonext(struct pmu *pmu)
 {
 	unsigned int eax, ebx, ecx, edx;
@@ -8112,7 +8131,6 @@ static __always_inline void intel_pmu_init_pnc(struct pmu *pmu)
 	hybrid(pmu, event_constraints) = intel_pnc_event_constraints;
 	hybrid(pmu, pebs_constraints) = intel_pnc_pebs_event_constraints;
 	hybrid(pmu, extra_regs) = intel_pnc_extra_regs;
-	static_call_update(intel_pmu_enable_acr_event, intel_pmu_enable_acr);
 }
 
 static __always_inline void intel_pmu_init_cyc(struct pmu *pmu)
@@ -8160,7 +8178,6 @@ static __always_inline void intel_pmu_init_arw(struct pmu *pmu)
 	hybrid(pmu, event_constraints) = intel_arw_event_constraints;
 	hybrid(pmu, pebs_constraints) = intel_dkt_pebs_event_constraints;
 	hybrid(pmu, extra_regs) = intel_arw_extra_regs;
-	static_call_update(intel_pmu_enable_acr_event, intel_pmu_enable_acr);
 }
 
 __init int intel_pmu_init(void)
@@ -9126,6 +9143,12 @@ __init int intel_pmu_init(void)
 	 */
 	if (!is_hybrid())
 		intel_update_pmu_caps(NULL);
+
+	if (x86_pmu.acr_cntr_mask64 || intel_pmu_support_acr()) {
+		static_call_update(intel_pmu_enable_acr_event,
+				   intel_pmu_enable_acr);
+		pr_cont("Auto counter reload, ");
+	}
 
 	if (x86_pmu.arch_pebs) {
 		static_call_update(intel_pmu_disable_event_ext,
