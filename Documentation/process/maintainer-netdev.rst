@@ -283,6 +283,37 @@ as a patch to the list with a commit message explaining the technical
 problems with the reverted commit. Reverts should be used as a last resort,
 when original change is completely wrong; incremental fixes are preferred.
 
+Bug fixes
+~~~~~~~~~
+
+All bug fixes must state how the issue was discovered and validated,
+and how the fix was tested. This should be done in plain English, not with
+special tags or annotations. That said, the information does not have to be
+provided if the existing trailers imply it (e.g. ``Reported-by: syzbot...``
+implies the discovery method and validation).
+
+Example statements describing discovery:
+
+ - discovered by a non-AI static analysis tool
+ - discovered by an AI code review agent
+ - discovered by manual code inspection
+ - triggered during code development
+ - triggered in CI testing
+ - observed on a machine in real use
+
+If the discovery does not imply the issue was triggered, the next sentence
+should describe the reproduction. The commit message must disclose if kernel
+modifications (e.g. inserting a delay to widen the race, a loadable module
+with the right sequence of calls) or error injection were necessary for
+reproduction. The reproduction steps should be included in the commit
+message if they are short (roughly 10 lines or fewer);
+longer reproducers can be posted online with a link included.
+
+The testing statement should explain whether the fix was tested against the
+reproducer and against kernel selftests. If the bug is in a hardware driver,
+the testing statement must include information about the HW on which the
+fix was tested.
+
 Stable tree
 ~~~~~~~~~~~
 
