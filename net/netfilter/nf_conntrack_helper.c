@@ -16,6 +16,8 @@
 #include <linux/random.h>
 #include <linux/err.h>
 #include <linux/kernel.h>
+#include <linux/ctype.h>
+#include <linux/limits.h>
 #include <linux/netdevice.h>
 #include <linux/rculist.h>
 #include <linux/rtnetlink.h>
@@ -568,6 +570,83 @@ void nf_nat_helper_unregister(struct nf_conntrack_nat_helper *nat)
 	mutex_unlock(&nf_ct_nat_helpers_mutex);
 }
 EXPORT_SYMBOL_GPL(nf_nat_helper_unregister);
+
+/**
+ * nf_ct_helper_parse_uint - parse a decimal number from a packet buffer
+ * @cp: first byte to parse; the buffer need not be NUL-terminated
+ * @len: number of bytes available at @cp
+ * @endp: if not NULL, set to the byte after the last digit, or to @cp on
+ *	error
+ *
+ * Return: the parsed value, or 0 if @cp does not start with a digit, the
+ * digit run is longer than 11 characters, or the value exceeds UINT_MAX.
+ */
+unsigned int nf_ct_helper_parse_uint(const char *cp, unsigned int len,
+				     char **endp)
+{
+	const unsigned int max = sizeof("4294967295");
+	unsigned int olen = len;
+	const char *s = cp;
+	u64 result = 0;
+
+	if (len > max)
+		len = max;
+
+	while (olen > 0 && isdigit(*s)) {
+		unsigned int value;
+
+		if (len == 0)
+			goto err;
+
+		value = *s - '0';
+		result = result * 10 + value;
+
+		if (result > UINT_MAX)
+			goto err;
+		s++;
+		len--;
+		olen--;
+	}
+
+	if (endp)
+		*endp = (char *)s;
+
+	return result;
+err:
+	if (endp)
+		*endp = (char *)cp;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(nf_ct_helper_parse_uint);
+
+/**
+ * nf_ct_helper_parse_port - parse a TCP/UDP port number from a packet buffer
+ * @cp: first byte to parse; the buffer need not be NUL-terminated
+ * @len: number of bytes available at @cp
+ * @port: set to the parsed port on success
+ * @endp: if not NULL, set to the byte after the last digit on success
+ *
+ * Return: 0 on success, or -EINVAL if @cp does not start with a digit, the
+ * digit run is longer than five characters, or the value is 0 or above
+ * 65535.
+ */
+int nf_ct_helper_parse_port(const char *cp, unsigned int len,
+			    u16 *port, char **endp)
+{
+	char *e = (char *)cp;
+	unsigned int val;
+
+	val = nf_ct_helper_parse_uint(cp, len, &e);
+	if (e == cp || e - cp > 5 || val == 0 || val > 65535)
+		return -EINVAL;
+
+	*port = val;
+	if (endp)
+		*endp = e;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(nf_ct_helper_parse_port);
 
 int nf_conntrack_helper_init(void)
 {
