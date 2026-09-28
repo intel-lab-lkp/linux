@@ -52,7 +52,6 @@
 		pinctrl-0 = <&usb3drd_boost_en>;
 		enable-active-high;
 	};
-
 };
 
 &fin_pll {
