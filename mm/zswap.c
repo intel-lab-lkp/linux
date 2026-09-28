@@ -1066,6 +1066,14 @@ out:
 * shrinker functions
 **********************************/
 /*
+ * shrink_memcg_cb() flags, passed by pointer as the list_lru walk's @arg.
+ *
+ * ZSWAP_SHRINK_SWAPCACHE (out) is set when the walk stopped at an entry whose
+ * folio is already in the swap cache.
+ */
+#define ZSWAP_SHRINK_SWAPCACHE	BIT(0)
+
+/*
  * The dynamic shrinker is modulated by the following factors:
  *
  * 1. Each zswap entry has a referenced bit, which the shrinker unsets (giving
@@ -1091,7 +1099,7 @@ static enum lru_status shrink_memcg_cb(struct list_head *item, struct list_lru_o
 				       void *arg)
 {
 	struct zswap_entry *entry = container_of(item, struct zswap_entry, lru);
-	bool *encountered_page_in_swapcache = (bool *)arg;
+	unsigned int *flags = arg;
 	swp_entry_t swpentry;
 	enum lru_status ret = LRU_REMOVED_RETRY;
 	int writeback_result;
@@ -1157,9 +1165,9 @@ static enum lru_status shrink_memcg_cb(struct list_head *item, struct list_lru_o
 		 * into the warmer region. We should terminate shrinking (if we're in the dynamic
 		 * shrinker context).
 		 */
-		if (writeback_result == -EEXIST && encountered_page_in_swapcache) {
+		if (writeback_result == -EEXIST && flags) {
 			ret = LRU_STOP;
-			*encountered_page_in_swapcache = true;
+			*flags |= ZSWAP_SHRINK_SWAPCACHE;
 		}
 	} else {
 		zswap_written_back_pages++;
@@ -1172,7 +1180,7 @@ static unsigned long zswap_shrinker_scan(struct shrinker *shrinker,
 		struct shrink_control *sc)
 {
 	unsigned long shrink_ret;
-	bool encountered_page_in_swapcache = false;
+	unsigned int flags = 0;
 
 	if (!zswap_shrinker_enabled ||
 			!mem_cgroup_zswap_writeback_enabled(sc->memcg)) {
@@ -1181,9 +1189,9 @@ static unsigned long zswap_shrinker_scan(struct shrinker *shrinker,
 	}
 
 	shrink_ret = list_lru_shrink_walk(&zswap_list_lru, sc, &shrink_memcg_cb,
-		&encountered_page_in_swapcache);
+		&flags);
 
-	if (encountered_page_in_swapcache)
+	if (flags & ZSWAP_SHRINK_SWAPCACHE)
 		return SHRINK_STOP;
 
 	return shrink_ret ? shrink_ret : SHRINK_STOP;
