@@ -2349,13 +2349,12 @@ static void perf_promote_sibling_to_leader(struct perf_event *sibling,
 					   int group_caps)
 {
 	/*
-	 * Events that have PERF_EV_CAP_SIBLING require being part of
-	 * a group and cannot exist on their own, schedule them out
-	 * and move them into the ERROR state. Also see
-	 * _perf_event_enable(), it will not be able to recover this
-	 * ERROR state.
+	 * Events with PERF_EV_CAP_SIBLING or PERF_EV_CAP_RELIANT
+	 * must stay in a group or depend on another event in the
+	 * group; otherwise schedule them out and move them to ERROR.
+	 * _perf_event_enable() cannot recover from this state.
 	 */
-	if (sibling->event_caps & PERF_EV_CAP_SIBLING)
+	if (sibling->event_caps & (PERF_EV_CAP_SIBLING | PERF_EV_CAP_RELIANT))
 		__event_disable(sibling, ctx, PERF_EVENT_STATE_ERROR);
 
 	sibling->group_leader = sibling;
@@ -2369,6 +2368,43 @@ static void perf_promote_sibling_to_leader(struct perf_event *sibling,
 	}
 
 	perf_event__header_size(sibling);
+}
+
+static void perf_group_disable_reliants(struct perf_event *event)
+{
+	struct perf_event *leader = event->group_leader;
+	struct perf_event *sibling, *tmp;
+	struct perf_event_context *ctx = event->ctx;
+	u32 mask = PERF_EV_CAP_RELIED_ON | PERF_EV_CAP_RELIANT;
+
+	if (!(event->event_caps & PERF_EV_CAP_RELIED_ON))
+		return;
+
+	/* Group leader should not carry PERF_EV_CAP_RELIED_ON. */
+	WARN_ON_ONCE(leader->event_caps & PERF_EV_CAP_RELIED_ON);
+	/* Group leader should not carry PERF_EV_CAP_RELIANT. */
+	WARN_ON_ONCE(leader->event_caps & PERF_EV_CAP_RELIANT);
+
+	/*
+	 * Disable all siblings that rely on this event. Without it,
+	 * they cannot function and would otherwise fall into ERROR state.
+	 */
+	list_for_each_entry_safe(sibling, tmp, &leader->sibling_list, sibling_list) {
+		if (!(sibling->event_caps & PERF_EV_CAP_RELIANT))
+			continue;
+
+		/*
+		 * An event must not set both PERF_EV_CAP_RELIED_ON and
+		 * PERF_EV_CAP_RELIANT simultaneously.
+		 */
+		if (WARN_ON_ONCE((sibling->event_caps & mask) == mask))
+			continue;
+
+		list_del_init(&sibling->sibling_list);
+		leader->nr_siblings--;
+		leader->group_generation++;
+		perf_promote_sibling_to_leader(sibling, ctx, leader->group_caps);
+	}
 }
 
 static void perf_group_detach(struct perf_event *event)
@@ -2393,6 +2429,7 @@ static void perf_group_detach(struct perf_event *event)
 	 * If this is a sibling, remove it from its group.
 	 */
 	if (leader != event) {
+		perf_group_disable_reliants(event);
 		list_del_init(&event->sibling_list);
 		leader->nr_siblings--;
 		leader->group_generation++;
@@ -3305,7 +3342,8 @@ out:
 		/*
 		 * Detached SIBLING events cannot leave ERROR state.
 		 */
-		if (event->event_caps & PERF_EV_CAP_SIBLING &&
+		if (event->event_caps &
+		    (PERF_EV_CAP_SIBLING | PERF_EV_CAP_RELIANT) &&
 		    event->group_leader == event)
 			goto out;
 

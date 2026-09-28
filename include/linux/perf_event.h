@@ -706,11 +706,19 @@ typedef void (*perf_overflow_handler_t)(struct perf_event *,
  * group it is scheduled out and moved into an unrecoverable ERROR state.
  * PERF_EV_CAP_READ_SCOPE: A CPU event that can be read from any CPU of the
  * PMU scope where it is active.
+ * PERF_EV_CAP_RELIED_ON: An event on which other group members depend.
+ * This flag must not be set on a group leader.
+ * PERF_EV_CAP_RELIANT: A member that depends on another group event carrying
+ * PERF_EV_CAP_RELIED_ON. It must not be combined with PERF_EV_CAP_RELIED_ON
+ * and must not be set on a group leader. If the dependency is on the group
+ * leader, use PERF_EV_CAP_SIBLING instead.
  */
 #define PERF_EV_CAP_SOFTWARE		BIT(0)
 #define PERF_EV_CAP_READ_ACTIVE_PKG	BIT(1)
 #define PERF_EV_CAP_SIBLING		BIT(2)
 #define PERF_EV_CAP_READ_SCOPE		BIT(3)
+#define PERF_EV_CAP_RELIED_ON		BIT(4)
+#define PERF_EV_CAP_RELIANT		BIT(5)
 
 #define SWEVENT_HLIST_BITS		8
 #define SWEVENT_HLIST_SIZE		(1 << SWEVENT_HLIST_BITS)
