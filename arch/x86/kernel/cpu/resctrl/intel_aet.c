@@ -308,6 +308,9 @@ static enum pmt_feature_id lookup_pfid(const char *pfname)
  */
 static DEFINE_MUTEX(aet_register_lock);
 
+/* Protects telemetry_region::addr. */
+static DEFINE_MUTEX(aet_mmio_lock);
+
 static struct module *pmt_module;
 static struct pmt_feature_group *(*get_feature)(enum pmt_feature_id id);
 static void (*put_feature)(struct pmt_feature_group *p);
@@ -370,6 +373,30 @@ void intel_aet_unregister_enumeration(void)
 	put_feature = NULL;
 }
 EXPORT_SYMBOL_NS_GPL(intel_aet_unregister_enumeration, "INTEL_PMT");
+
+/*
+ * pmt_telemetry driver calls this for unbind/remove operations that
+ * will invalidate the virtual addresses of MMIO registers provided
+ * by intel_pmt_get_regions_by_feature().
+ */
+void intel_aet_invalidate(u8 package_id)
+{
+	struct event_group **peg;
+
+	guard(mutex)(&aet_mmio_lock);
+
+	for_each_event_group(peg) {
+		struct event_group *e = *peg;
+
+		if (!e->pfg)
+			continue;
+		for (int i = 0; i < e->pfg->count; i++) {
+			if (e->pfg->regions[i].plat_info.package_id == package_id)
+				e->pfg->regions[i].addr = NULL;
+		}
+	}
+}
+EXPORT_SYMBOL_NS_GPL(intel_aet_invalidate, "INTEL_PMT");
 
 bool intel_aet_pre_mount(void)
 {
@@ -434,6 +461,8 @@ int intel_aet_read_event(int domid, u32 rmid, void *arch_priv, u64 *val)
 	u64 evtcount;
 	void *pevt0;
 	u32 idx;
+
+	guard(mutex)(&aet_mmio_lock);
 
 	pevt0 = pevt - pevt->idx;
 	e = container_of(pevt0, struct event_group, evts);
