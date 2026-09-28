@@ -31,4 +31,25 @@ struct zl3073x_pin_props *zl3073x_pin_props_get(struct zl3073x_dev *zldev,
 
 void zl3073x_pin_props_put(struct zl3073x_pin_props *props);
 
+/**
+ * zl3073x_props_is_freq_supported - check if pin supports given frequency
+ * @props: pin properties
+ * @freq: frequency to check in Hz
+ *
+ * Return: true if the frequency is within the pin supported frequency ranges.
+ */
+static inline bool
+zl3073x_props_is_freq_supported(const struct zl3073x_pin_props *props, u64 freq)
+{
+	const struct dpll_pin_frequency *freqs;
+	int i;
+
+	freqs = props->dpll_props.freq_supported;
+	for (i = 0; i < props->dpll_props.freq_supported_num; i++)
+		if (freq >= freqs[i].min && freq <= freqs[i].max)
+			return true;
+
+	return false;
+}
+
 #endif /* _ZL3073X_PROP_H */

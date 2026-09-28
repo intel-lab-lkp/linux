@@ -9,6 +9,8 @@
 
 #include "core.h"
 
+struct zl3073x_dpll_pin;
+
 /**
  * struct zl3073x_dpll - ZL3073x DPLL sub-device structure
  * @list: this DPLL list entry
@@ -25,6 +27,7 @@
  * @pins: list of pins
  * @ptp_info: PTP clock info
  * @ptp_clock: registered PTP clock (or NULL)
+ * @perout_map: bitmap of output pins eligible for periodic output
  */
 struct zl3073x_dpll {
 	struct list_head		list;
@@ -41,6 +44,7 @@ struct zl3073x_dpll {
 	struct list_head		pins;
 	struct ptp_clock_info		ptp_info;
 	struct ptp_clock		*ptp_clock;
+	DECLARE_BITMAP(perout_map, ZL3073X_NUM_OUTPUT_PINS);
 };
 
 struct zl3073x_dpll *zl3073x_dpll_alloc(struct zl3073x_dev *zldev, u8 ch);
