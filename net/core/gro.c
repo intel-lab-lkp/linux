@@ -683,6 +683,7 @@ static void napi_reuse_skb(struct napi_struct *napi, struct sk_buff *skb)
 		nf_reset_ct(skb);
 		skb->slow_gro = 0;
 	}
+	skb_maybe_trace_free(skb, SKB_CONSUMED);
 
 	napi->skb = skb;
 }

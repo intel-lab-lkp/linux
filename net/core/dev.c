@@ -5863,6 +5863,7 @@ static __latent_entropy void net_tx_action(void)
 			else
 				trace_kfree_skb(skb, net_tx_action,
 						get_kfree_skb_cb(skb)->reason, NULL);
+			skb_maybe_trace_free(skb, get_kfree_skb_cb(skb)->reason);
 
 			if (skb->fclone != SKB_FCLONE_UNAVAILABLE)
 				__kfree_skb(skb);

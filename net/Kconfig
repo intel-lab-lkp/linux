@@ -539,4 +539,13 @@ config NET_TEST
 
 	  If unsure, say N.
 
+config SKB_GATED_TRACEPOINTS
+	bool "gated skb life-cycle tracepoints"
+	depends on BPF_SYSCALL
+	help
+	  Enable the gated skb life-cycle tracepoints (skb_free, skb_copy).
+	  The tracepoints fire only for packets tagged with bpf_trace_skb(),
+	  which arms a flag on the skb, allowing BPF programs to pass
+	  per-packet state across the network stack.
+
 endif   # if NET

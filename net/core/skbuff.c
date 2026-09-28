@@ -1187,6 +1187,7 @@ void skb_release_head_state(struct sk_buff *skb)
 	}
 	nf_reset_ct(skb);
 	skb_ext_reset(skb);
+	skb_maybe_trace_free(skb, SKB_DROP_REASON_NOT_SPECIFIED);
 }
 
 /* Free everything but the sk_buff shell. */
@@ -1229,6 +1230,7 @@ bool __sk_skb_reason_drop(const struct sock *sk, struct sk_buff *skb,
 		trace_consume_skb(skb, __builtin_return_address(0));
 	else
 		trace_kfree_skb(skb, __builtin_return_address(0), reason, sk);
+	skb_maybe_trace_free(skb, reason);
 	return true;
 }
 
@@ -1445,6 +1447,7 @@ void consume_skb(struct sk_buff *skb)
 		return;
 
 	trace_consume_skb(skb, __builtin_return_address(0));
+	skb_maybe_trace_free(skb, SKB_CONSUMED);
 	__kfree_skb(skb);
 }
 EXPORT_SYMBOL(consume_skb);
@@ -1460,6 +1463,7 @@ EXPORT_SYMBOL(consume_skb);
 void __consume_stateless_skb(struct sk_buff *skb)
 {
 	trace_consume_skb(skb, __builtin_return_address(0));
+	skb_maybe_trace_free(skb, SKB_CONSUMED);
 	skb_release_data(skb, SKB_CONSUMED);
 	kfree_skbmem(skb);
 }
@@ -1504,6 +1508,7 @@ void napi_skb_free_stolen_head(struct sk_buff *skb)
 		skb_orphan(skb);
 		skb->slow_gro = 0;
 	}
+	skb_maybe_trace_free(skb, SKB_CONSUMED);
 	napi_skb_cache_put(skb);
 }
 
@@ -1539,6 +1544,7 @@ void napi_consume_skb(struct sk_buff *skb, int budget)
 
 	/* if reaching here SKB is ready to free */
 	trace_consume_skb(skb, __builtin_return_address(0));
+	skb_maybe_trace_free(skb, SKB_CONSUMED);
 
 	/* if SKB is a clone, don't handle this case */
 	if (skb->fclone != SKB_FCLONE_UNAVAILABLE) {
@@ -1601,6 +1607,7 @@ static void __copy_skb_header(struct sk_buff *new, const struct sk_buff *old)
 	CHECK_SKB_FIELD(tc_index);
 #endif
 
+	skb_maybe_trace_copy(new, old);
 }
 
 /*
@@ -7342,6 +7349,24 @@ free_now:
 	kmem_cache_free(skbuff_ext_cache, ext);
 }
 EXPORT_SYMBOL(__skb_ext_put);
+
+#ifdef CONFIG_SKB_GATED_TRACEPOINTS
+
+void __skb_trace_free(struct sk_buff *skb, enum skb_drop_reason reason,
+		      void *location)
+{
+	trace_skb_free(skb, reason, location);
+}
+EXPORT_SYMBOL(__skb_trace_free);
+
+void __skb_trace_copy(struct sk_buff *dst, const struct sk_buff *src)
+{
+	trace_skb_copy(dst, src);
+}
+EXPORT_SYMBOL(__skb_trace_copy);
+
+#endif
+
 #endif /* CONFIG_SKB_EXTENSIONS */
 
 static void kfree_skb_napi_cache(struct sk_buff *skb)

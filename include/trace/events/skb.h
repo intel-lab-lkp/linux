@@ -92,6 +92,63 @@ TRACE_EVENT(skb_copy_datagram_iovec,
 	TP_printk("skbaddr=%p len=%d", __entry->skbaddr, __entry->len)
 );
 
+#ifdef CONFIG_SKB_GATED_TRACEPOINTS
+
+#undef FN
+#undef FNe
+#define FN(reason)	{ SKB_DROP_REASON_##reason, #reason },
+#define FNe(reason)	{ SKB_DROP_REASON_##reason, #reason }
+
+TRACE_EVENT(skb_free,
+
+	    TP_PROTO(struct sk_buff *skb, enum skb_drop_reason reason,
+		     void *location),
+
+	    TP_ARGS(skb, reason, location),
+
+	    TP_STRUCT__entry(
+		    __field(	void *,		skbaddr)
+		    __field(	enum skb_drop_reason,	reason)
+		    __field(	void *,		location)
+		    ),
+
+	    TP_fast_assign(
+		    __entry->skbaddr = skb;
+		    __entry->reason = reason;
+		    __entry->location = location;
+		    ),
+
+	    TP_printk("skbaddr=%p reason=%s location=%pS",
+		      __entry->skbaddr,
+		      __print_symbolic(__entry->reason,
+				       DEFINE_DROP_REASON(FN, FNe)),
+		      __entry->location)
+	);
+
+#undef FN
+#undef FNe
+
+TRACE_EVENT(skb_copy,
+
+	    TP_PROTO(struct sk_buff *dst, const struct sk_buff *src),
+
+	    TP_ARGS(dst, src),
+
+	    TP_STRUCT__entry(
+		    __field(	void *,	dst)
+		    __field(	const void *,	src)
+		    ),
+
+	    TP_fast_assign(
+		    __entry->dst = dst;
+		    __entry->src = src;
+		    ),
+
+	    TP_printk("dst=%p src=%p", __entry->dst, __entry->src)
+	);
+
+#endif /* CONFIG_SKB_GATED_TRACEPOINTS */
+
 #endif /* _TRACE_SKB_H */
 
 /* This part must be outside protection */
