@@ -167,10 +167,8 @@
 		      <0xf8040000 0x1000>,
 		      <0xc0000000 0x2000>;
 		reg-names = "dbi", "phy", "config";
-			  /* downstream I/O */
-		ranges = <0x81000000 0 0 0xc0002000 0 0x00010000>,
-			  /* non-prefetchable memory */
-			 <0x82000000 0 0xc0012000 0xc0012000 0 0x1ffee000>;
+		ranges = <0x81000000 0 0 0xc0002000 0 0x00010000>,          /* downstream I/O */
+			 <0x82000000 0 0xc0012000 0xc0012000 0 0x1ffee000>; /* non-prefetchable */
 		#address-cells = <3>;
 		#size-cells = <2>;
 		num-lanes = <2>;
