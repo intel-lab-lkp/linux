@@ -12023,6 +12023,7 @@ HSR NETWORK PROTOCOL
 L:	netdev@vger.kernel.org
 S:	Orphan
 F:	net/hsr/
+F:	include/uapi/linux/hsr_ptp.h
 F:	tools/testing/selftests/net/hsr/
 
 HT16K33 LED CONTROLLER DRIVER
