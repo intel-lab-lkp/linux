@@ -179,10 +179,10 @@ static int reg_enable_multi(void *enable, int size, int bit, int flags,
 	}
 
 	reg.size = sizeof(reg);
-	reg.name_args = (__u64)full_args;
+	reg.name_args = (__u64)(uintptr_t)full_args;
 	reg.flags = USER_EVENT_REG_MULTI_FORMAT | flags;
 	reg.enable_bit = bit;
-	reg.enable_addr = (__u64)enable;
+	reg.enable_addr = (__u64)(uintptr_t)enable;
 	reg.enable_size = size;
 
 	ret = ioctl(fd, DIAG_IOCSREG, &reg);
@@ -202,10 +202,10 @@ static int reg_enable_flags(void *enable, int size, int bit, int flags)
 		return -1;
 
 	reg.size = sizeof(reg);
-	reg.name_args = (__u64)"__abi_event";
+	reg.name_args = (__u64)(uintptr_t)"__abi_event";
 	reg.flags = flags;
 	reg.enable_bit = bit;
-	reg.enable_addr = (__u64)enable;
+	reg.enable_addr = (__u64)(uintptr_t)enable;
 	reg.enable_size = size;
 
 	ret = ioctl(fd, DIAG_IOCSREG, &reg);
@@ -231,7 +231,7 @@ static int reg_disable(void *enable, int bit)
 
 	reg.size = sizeof(reg);
 	reg.disable_bit = bit;
-	reg.disable_addr = (__u64)enable;
+	reg.disable_addr = (__u64)(uintptr_t)enable;
 
 	ret = ioctl(fd, DIAG_IOCSUNREG, &reg);
 

@@ -89,7 +89,7 @@ static int clear(int *check)
 
 	unreg.size = sizeof(unreg);
 	unreg.disable_bit = 31;
-	unreg.disable_addr = (__u64)check;
+	unreg.disable_addr = (__u64)(uintptr_t)check;
 
 	int fd = open(data_file, O_RDWR);
 
@@ -160,9 +160,9 @@ TEST_F(user, perf_write) {
 	__u32 *val;
 
 	reg.size = sizeof(reg);
-	reg.name_args = (__u64)"__test_event u32 field1; u32 field2";
+	reg.name_args = (__u64)(uintptr_t)"__test_event u32 field1; u32 field2";
 	reg.enable_bit = 31;
-	reg.enable_addr = (__u64)&self->check;
+	reg.enable_addr = (__u64)(uintptr_t)&self->check;
 	reg.enable_size = sizeof(self->check);
 
 	/* Register should work */
@@ -224,9 +224,9 @@ TEST_F(user, perf_empty_events) {
 	__u32 *val;
 
 	reg.size = sizeof(reg);
-	reg.name_args = (__u64)"__test_event";
+	reg.name_args = (__u64)(uintptr_t)"__test_event";
 	reg.enable_bit = 31;
-	reg.enable_addr = (__u64)&self->check;
+	reg.enable_addr = (__u64)(uintptr_t)&self->check;
 	reg.enable_size = sizeof(self->check);
 
 	/* Register should work */

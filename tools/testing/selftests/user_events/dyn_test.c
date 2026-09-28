@@ -58,9 +58,9 @@ static int reg_event(int fd, int *check, int bit, const char *value)
 	struct user_reg reg = {0};
 
 	reg.size = sizeof(reg);
-	reg.name_args = (__u64)value;
+	reg.name_args = (__u64)(uintptr_t)value;
 	reg.enable_bit = bit;
-	reg.enable_addr = (__u64)check;
+	reg.enable_addr = (__u64)(uintptr_t)check;
 	reg.enable_size = sizeof(*check);
 
 	if (ioctl(fd, DIAG_IOCSREG, &reg) == -1)
@@ -75,7 +75,7 @@ static int unreg_event(int fd, int *check, int bit)
 
 	unreg.size = sizeof(unreg);
 	unreg.disable_bit = bit;
-	unreg.disable_addr = (__u64)check;
+	unreg.disable_addr = (__u64)(uintptr_t)check;
 
 	return ioctl(fd, DIAG_IOCSUNREG, &unreg);
 }

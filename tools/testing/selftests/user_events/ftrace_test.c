@@ -127,7 +127,7 @@ static int clear(int *check)
 
 	unreg.size = sizeof(unreg);
 	unreg.disable_bit = 31;
-	unreg.disable_addr = (__u64)check;
+	unreg.disable_addr = (__u64)(uintptr_t)check;
 
 	fd = open(data_file, O_RDWR);
 
@@ -174,9 +174,9 @@ static int check_print_fmt(const char *event, const char *expected, int *check)
 		return fd;
 
 	reg.size = sizeof(reg);
-	reg.name_args = (__u64)event;
+	reg.name_args = (__u64)(uintptr_t)event;
 	reg.enable_bit = 31;
-	reg.enable_addr = (__u64)check;
+	reg.enable_addr = (__u64)(uintptr_t)check;
 	reg.enable_size = sizeof(*check);
 
 	/* Register should work */
@@ -239,14 +239,14 @@ TEST_F(user, register_events) {
 	struct user_unreg unreg = {0};
 
 	reg.size = sizeof(reg);
-	reg.name_args = (__u64)"__test_event u32 field1; u32 field2";
+	reg.name_args = (__u64)(uintptr_t)"__test_event u32 field1; u32 field2";
 	reg.enable_bit = 31;
-	reg.enable_addr = (__u64)&self->check;
+	reg.enable_addr = (__u64)(uintptr_t)&self->check;
 	reg.enable_size = sizeof(self->check);
 
 	unreg.size = sizeof(unreg);
 	unreg.disable_bit = 31;
-	unreg.disable_addr = (__u64)&self->check;
+	unreg.disable_addr = (__u64)(uintptr_t)&self->check;
 
 	/* Register should work */
 	ASSERT_EQ(0, ioctl(self->data_fd, DIAG_IOCSREG, &reg));
@@ -263,13 +263,13 @@ TEST_F(user, register_events) {
 
 	/* Register without separator spacing should still match */
 	reg.enable_bit = 29;
-	reg.name_args = (__u64)"__test_event u32 field1;u32 field2";
+	reg.name_args = (__u64)(uintptr_t)"__test_event u32 field1;u32 field2";
 	ASSERT_EQ(0, ioctl(self->data_fd, DIAG_IOCSREG, &reg));
 	ASSERT_EQ(0, reg.write_index);
 
 	/* Multiple registers to same name but different args should fail */
 	reg.enable_bit = 29;
-	reg.name_args = (__u64)"__test_event u32 field1;";
+	reg.name_args = (__u64)(uintptr_t)"__test_event u32 field1;";
 	ASSERT_EQ(-1, ioctl(self->data_fd, DIAG_IOCSREG, &reg));
 	ASSERT_EQ(EADDRINUSE, errno);
 
@@ -310,9 +310,9 @@ TEST_F(user, write_events) {
 	int before = 0, after = 0;
 
 	reg.size = sizeof(reg);
-	reg.name_args = (__u64)"__test_event u32 field1; u32 field2";
+	reg.name_args = (__u64)(uintptr_t)"__test_event u32 field1; u32 field2";
 	reg.enable_bit = 31;
-	reg.enable_addr = (__u64)&self->check;
+	reg.enable_addr = (__u64)(uintptr_t)&self->check;
 	reg.enable_size = sizeof(self->check);
 
 	field1 = 1;
@@ -367,9 +367,9 @@ TEST_F(user, write_empty_events) {
 	int before = 0, after = 0;
 
 	reg.size = sizeof(reg);
-	reg.name_args = (__u64)"__test_event";
+	reg.name_args = (__u64)(uintptr_t)"__test_event";
 	reg.enable_bit = 31;
-	reg.enable_addr = (__u64)&self->check;
+	reg.enable_addr = (__u64)(uintptr_t)&self->check;
 	reg.enable_size = sizeof(self->check);
 
 	io[0].iov_base = &reg.write_index;
@@ -401,9 +401,9 @@ TEST_F(user, write_fault) {
 	void *anon;
 
 	reg.size = sizeof(reg);
-	reg.name_args = (__u64)"__test_event u64 anon";
+	reg.name_args = (__u64)(uintptr_t)"__test_event u64 anon";
 	reg.enable_bit = 31;
-	reg.enable_addr = (__u64)&self->check;
+	reg.enable_addr = (__u64)(uintptr_t)&self->check;
 	reg.enable_size = sizeof(self->check);
 
 	anon = mmap(NULL, l, PROT_READ, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -439,9 +439,9 @@ TEST_F(user, write_validator) {
 	int before = 0, after = 0;
 
 	reg.size = sizeof(reg);
-	reg.name_args = (__u64)"__test_event __rel_loc char[] data";
+	reg.name_args = (__u64)(uintptr_t)"__test_event __rel_loc char[] data";
 	reg.enable_bit = 31;
-	reg.enable_addr = (__u64)&self->check;
+	reg.enable_addr = (__u64)(uintptr_t)&self->check;
 	reg.enable_size = sizeof(self->check);
 
 	/* Register should work */
