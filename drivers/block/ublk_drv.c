@@ -2777,10 +2777,16 @@ static void ublk_cancel_cmd(struct ublk_queue *ubq, u16 tag,
 	struct ublk_device *ub = ubq->dev;
 	struct io_uring_cmd *cmd = NULL;
 	struct request *req;
-	bool done;
 
+	/*
+	 * ublk_fill_io_cmd() runs under io->lock, so either the io is not
+	 * active yet or its command is in io->cmd.  The request the command
+	 * was committed for is ended after that, check it in here as well, so
+	 * that one seen idle goes with the command fetched for the next one.
+	 */
+	ublk_io_lock(io);
 	if (!(io->flags & UBLK_IO_FLAG_ACTIVE))
-		return;
+		goto unlock;
 
 	/*
 	 * Don't try to cancel this command if the request is started for
@@ -2794,18 +2800,19 @@ static void ublk_cancel_cmd(struct ublk_queue *ubq, u16 tag,
 	 */
 	req = blk_mq_tag_to_rq(ub->tag_set.tags[ubq->q_id], tag);
 	if (req && blk_mq_request_started(req) && req->tag == tag)
-		return;
+		goto unlock;
 
 	spin_lock(&ubq->cancel_lock);
-	done = !!(io->flags & UBLK_IO_FLAG_CANCELED);
-	if (!done) {
+	if (!(io->flags & UBLK_IO_FLAG_CANCELED)) {
 		io->flags |= UBLK_IO_FLAG_CANCELED;
 		cmd = io->cmd;
 		io->cmd = NULL;
 	}
 	spin_unlock(&ubq->cancel_lock);
+unlock:
+	ublk_io_unlock(io);
 
-	if (!done && cmd)
+	if (cmd)
 		io_uring_cmd_done(cmd, UBLK_IO_RES_ABORT, issue_flags);
 }
 
