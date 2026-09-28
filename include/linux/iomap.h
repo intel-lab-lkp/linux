@@ -275,6 +275,7 @@ struct iomap_iter {
 
 int iomap_iter(struct iomap_iter *iter, const struct iomap_ops *ops);
 int iomap_iter_advance(struct iomap_iter *iter, u64 count);
+int iomap_iter_revert(struct iomap_iter *iter, u64 count);
 
 /**
  * iomap_length_trim - trimmed length of the current iomap iteration
