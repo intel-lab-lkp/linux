@@ -162,7 +162,7 @@ static void tdx_mr_deinit(const struct attribute_group *mr_grp)
  * DICE-based attestation uses layered evidence that requires
  * larger Quote size (~100K).
  */
-#define GET_QUOTE_BUF_SIZE		SZ_128K
+#define TDX_DEFAULT_QUOTE_SIZE		SZ_128K
 
 #define GET_QUOTE_CMD_VER		1
 
@@ -209,26 +209,42 @@ static long tdx_get_report0(struct tdx_report_req __user *req)
 			     USER_SOCKPTR(req->tdreport));
 }
 
+static size_t get_quote_buf_size(void)
+{
+	static size_t quote_buf_size;
+
+	if (quote_buf_size)
+		return quote_buf_size;
+
+	quote_buf_size = PAGE_ALIGN(TDX_DEFAULT_QUOTE_SIZE);
+
+	return quote_buf_size;
+}
+
 static void free_quote_buf(struct tdx_quote_buf *buf)
 {
-	size_t len = PAGE_ALIGN(GET_QUOTE_BUF_SIZE);
-	unsigned int count = len >> PAGE_SHIFT;
+	size_t buf_size = get_quote_buf_size();
+	unsigned int count;
+
+	count = buf_size >> PAGE_SHIFT;
 
 	if (set_memory_encrypted((unsigned long)buf, count)) {
 		pr_err("Failed to restore encryption mask for Quote buffer, leak it\n");
 		return;
 	}
 
-	free_pages_exact(buf, len);
+	free_pages_exact(buf, buf_size);
 }
 
 static struct tdx_quote_buf *alloc_quote_buf(void)
 {
-	size_t len = PAGE_ALIGN(GET_QUOTE_BUF_SIZE);
-	unsigned int count = len >> PAGE_SHIFT;
+	size_t buf_size = get_quote_buf_size();
 	struct tdx_quote_buf *buf;
+	unsigned int count;
 
-	buf = alloc_pages_exact(len, GFP_KERNEL | __GFP_ZERO);
+	count = buf_size >> PAGE_SHIFT;
+
+	buf = alloc_pages_exact(buf_size, GFP_KERNEL | __GFP_ZERO);
 	if (!buf)
 		return NULL;
 
@@ -269,6 +285,7 @@ static int tdx_report_new_locked(struct tsm_report *report, void *data)
 {
 	u8 *buf;
 	struct tsm_report_desc *desc = &report->desc;
+	size_t quote_buf_size = get_quote_buf_size();
 	u32 out_len;
 	int ret;
 	u64 err;
@@ -284,7 +301,7 @@ static int tdx_report_new_locked(struct tsm_report *report, void *data)
 	if (desc->inblob_len != TDX_REPORTDATA_LEN)
 		return -EINVAL;
 
-	memset(quote_buf, 0, GET_QUOTE_BUF_SIZE);
+	memset(quote_buf, 0, quote_buf_size);
 
 	/* Update Quote buffer header */
 	quote_buf->version = GET_QUOTE_CMD_VER;
@@ -295,7 +312,7 @@ static int tdx_report_new_locked(struct tsm_report *report, void *data)
 	if (ret)
 		return ret;
 
-	err = tdx_hcall_get_quote(quote_buf, GET_QUOTE_BUF_SIZE);
+	err = tdx_hcall_get_quote(quote_buf, quote_buf_size);
 	if (err) {
 		pr_err("GetQuote hypercall failed, status:%llx\n", err);
 		return -EIO;
@@ -314,7 +331,7 @@ static int tdx_report_new_locked(struct tsm_report *report, void *data)
 
 	out_len = READ_ONCE(quote_buf->out_len);
 
-	if (TDX_QUOTE_TOTAL_SIZE(out_len) > GET_QUOTE_BUF_SIZE)
+	if (TDX_QUOTE_TOTAL_SIZE(out_len) > quote_buf_size)
 		return -EFBIG;
 
 	buf = kvmemdup(quote_buf->data, out_len, GFP_KERNEL);
