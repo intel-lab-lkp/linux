@@ -1337,6 +1337,11 @@ static struct ib_mr *rxe_rereg_user_mr(struct ib_mr *ibmr, int flags,
 		return ERR_PTR(-EOPNOTSUPP);
 	}
 
+	if (!rxe_mr_reserve_mw_state(mr)) {
+		rxe_err_mr(mr, "mr has mws bound\n");
+		return ERR_PTR(-EINVAL);
+	}
+
 	if (flags & IB_MR_REREG_PD) {
 		rxe_put(old_pd);
 		rxe_get(pd);
@@ -1345,6 +1350,8 @@ static struct ib_mr *rxe_rereg_user_mr(struct ib_mr *ibmr, int flags,
 
 	if (flags & IB_MR_REREG_ACCESS)
 		mr->access = access;
+
+	rxe_mr_release_mw_state(mr);
 
 	return NULL;
 }
@@ -1401,12 +1408,14 @@ static int rxe_dereg_mr(struct ib_mr *ibmr, struct ib_udata *udata)
 	struct rxe_mr *mr = to_rmr(ibmr);
 	int err, cleanup_err;
 
-	/* See IBA 10.6.7.2.6 */
-	if (atomic_read(&mr->num_mw) > 0) {
+	/* See IBA 10.6.7.2.6. Leave num_mw set to -1 for destruction. */
+	if (!rxe_mr_reserve_mw_state(mr)) {
 		err = -EINVAL;
 		rxe_dbg_mr(mr, "mr has mw's bound\n");
 		goto err_out;
 	}
+
+	mr->state = RXE_MR_STATE_INVALID;
 
 	cleanup_err = rxe_cleanup(mr);
 	if (cleanup_err)

@@ -72,6 +72,10 @@ enum resp_states rxe_mr_do_atomic_op(struct rxe_mr *mr, u64 iova, int opcode,
 enum resp_states rxe_mr_do_atomic_write(struct rxe_mr *mr, u64 iova, u64 value);
 struct rxe_mr *lookup_mr(struct rxe_pd *pd, int access, u32 key,
 			 enum rxe_mr_lookup_type type);
+int rxe_mr_get_mw(struct rxe_mr *mr);
+void rxe_mr_put_mw(struct rxe_mr *mr);
+bool rxe_mr_reserve_mw_state(struct rxe_mr *mr);
+void rxe_mr_release_mw_state(struct rxe_mr *mr);
 int mr_check_range(struct rxe_mr *mr, u64 iova, size_t length);
 int advance_dma_data(struct rxe_dma_info *dma, unsigned int length);
 int rxe_invalidate_mr(struct rxe_qp *qp, u32 key);
