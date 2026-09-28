@@ -406,7 +406,7 @@ static void ngbe_disable_device(struct wx *wx)
 	/* disable all enabled rx queues */
 	for (i = 0; i < wx->num_rx_queues; i++)
 		/* this call also flushes the previous write */
-		wx_disable_rx_queue(wx, wx->rx_ring[i]);
+		wx_disable_rx_queue(wx, rtnl_dereference(wx->rx_ring[i]));
 	/* disable receives */
 	wx_disable_rx(wx);
 	wx_napi_disable_all(wx);
@@ -422,7 +422,7 @@ static void ngbe_disable_device(struct wx *wx)
 	wx_irq_disable(wx);
 	/* disable transmits in the hardware now that interrupts are off */
 	for (i = 0; i < wx->num_tx_queues; i++) {
-		u8 reg_idx = wx->tx_ring[i]->reg_idx;
+		u8 reg_idx = rtnl_dereference(wx->tx_ring[i])->reg_idx;
 
 		wr32(wx, WX_PX_TR_CFG(reg_idx), WX_PX_TR_CFG_SWFLSH);
 	}
@@ -578,8 +578,10 @@ static void ngbe_dev_shutdown(struct pci_dev *pdev, bool *enable_wake)
 	if (netif_running(netdev))
 		ngbe_close(netdev);
 	wx_clear_interrupt_scheme(wx);
-	rtnl_unlock();
 
+	/* wx_configure_rx() dereferences the ring array, so the WoL setup has
+	 * to stay inside the RTNL section.
+	 */
 	if (wufc) {
 		wx_set_rx_mode(netdev);
 		wx_configure_rx(wx);
@@ -587,6 +589,8 @@ static void ngbe_dev_shutdown(struct pci_dev *pdev, bool *enable_wake)
 	} else {
 		wr32(wx, WX_PSR_WKUP_CTL, 0);
 	}
+	rtnl_unlock();
+
 	pci_wake_from_d3(pdev, !!wufc);
 	*enable_wake = !!wufc;
 	wx_control_hw(wx, false);
@@ -866,7 +870,14 @@ static int ngbe_probe(struct pci_dev *pdev,
 
 	ngbe_init_service(wx);
 
+	/* wx_init_interrupt_scheme() reaches rtnl_dereference() through
+	 * wx_cache_ring_rss(), which asserts that RTNL is held.  The netdev is
+	 * not registered yet, so the lock does not serialize this against any
+	 * other caller; it is only there to satisfy that assertion.
+	 */
+	rtnl_lock();
 	err = wx_init_interrupt_scheme(wx);
+	rtnl_unlock();
 	if (err)
 		goto err_cancel_service;
 

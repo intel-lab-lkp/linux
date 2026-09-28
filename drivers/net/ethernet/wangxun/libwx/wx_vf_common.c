@@ -17,7 +17,14 @@ int wxvf_suspend(struct device *dev_d)
 	struct wx *wx = pci_get_drvdata(pdev);
 
 	netif_device_detach(wx->netdev);
+	/* wx_clear_interrupt_scheme() only clears the ring slots with
+	 * rcu_assign_pointer(), so RTNL is not needed for the ring arrays
+	 * here; it serializes this teardown against the VF reset subtask,
+	 * which rebuilds the same interrupt scheme under RTNL.
+	 */
+	rtnl_lock();
 	wx_clear_interrupt_scheme(wx);
+	rtnl_unlock();
 	pci_disable_device(pdev);
 
 	return 0;
@@ -36,8 +43,13 @@ int wxvf_resume(struct device *dev_d)
 	struct wx *wx = pci_get_drvdata(pdev);
 
 	pci_set_master(pdev);
+	/* wx_init_interrupt_scheme() reaches rtnl_dereference() through
+	 * wx_cache_ring_rss(), which requires RTNL.
+	 */
+	rtnl_lock();
 	wx_init_interrupt_scheme(wx);
 	netif_device_attach(wx->netdev);
+	rtnl_unlock();
 
 	return 0;
 }
@@ -205,7 +217,7 @@ static void wx_configure_rx_vf(struct wx *wx)
 	 * the Base and Length of the Rx Descriptor Ring
 	 */
 	for (i = 0; i < wx->num_rx_queues; i++) {
-		struct wx_ring *rx_ring = wx->rx_ring[i];
+		struct wx_ring *rx_ring = rtnl_dereference(wx->rx_ring[i]);
 #ifdef HAVE_SWIOTLB_SKIP_CPU_SYNC
 		wx_set_rx_buffer_len_vf(wx, rx_ring);
 #endif

@@ -267,7 +267,14 @@ static int txgbevf_probe(struct pci_dev *pdev,
 	ether_addr_copy(netdev->perm_addr, wx->mac.addr);
 
 	wxvf_init_service(wx);
+	/* wx_init_interrupt_scheme() reaches rtnl_dereference() through
+	 * wx_cache_ring_rss(), which asserts that RTNL is held.  The netdev is
+	 * not registered yet, so the lock does not serialize this against any
+	 * other caller; it is only there to satisfy that assertion.
+	 */
+	rtnl_lock();
 	err = wx_init_interrupt_scheme(wx);
+	rtnl_unlock();
 	if (err)
 		goto err_free_sw_init;
 
