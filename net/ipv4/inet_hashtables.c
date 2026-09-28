@@ -596,6 +596,9 @@ static int __inet_check_established(struct inet_timewait_death_row *death_row,
 	struct sock *sk2;
 	spinlock_t *lock;
 
+	if (!IS_ENABLED(CONFIG_IPV4))
+		return -EAFNOSUPPORT;
+
 	if (rcu_lookup) {
 		sk_nulls_for_each(sk2, node, &head->chain) {
 			if (sk2->sk_hash != hash ||
