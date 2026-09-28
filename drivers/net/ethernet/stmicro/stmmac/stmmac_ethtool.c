@@ -927,12 +927,18 @@ static u32 stmmac_get_rxfh_key_size(struct net_device *dev)
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
 
+	if (!stmmac_rss_is_supported(priv))
+		return 0;
+
 	return sizeof(priv->rss.key);
 }
 
 static u32 stmmac_get_rxfh_indir_size(struct net_device *dev)
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
+
+	if (!stmmac_rss_is_supported(priv))
+		return 0;
 
 	return ARRAY_SIZE(priv->rss.table);
 }
@@ -942,6 +948,9 @@ static int stmmac_get_rxfh(struct net_device *dev,
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
 	int i;
+
+	if (!stmmac_rss_is_supported(priv))
+		return -EOPNOTSUPP;
 
 	if (rxfh->indir) {
 		for (i = 0; i < ARRAY_SIZE(priv->rss.table); i++)
@@ -961,6 +970,9 @@ static int stmmac_set_rxfh(struct net_device *dev,
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
 	int i;
+
+	if (!stmmac_rss_is_supported(priv))
+		return -EOPNOTSUPP;
 
 	if (rxfh->hfunc != ETH_RSS_HASH_NO_CHANGE &&
 	    rxfh->hfunc != ETH_RSS_HASH_TOP)
