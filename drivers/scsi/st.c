@@ -2688,6 +2688,20 @@ static int do_load_unload(struct scsi_tape *STp, struct file *filp, int load_cod
 		else {
 			STp->rew_at_close = STp->autorew_dev;
 			retval = check_tape(STp, filp);
+			/*
+			 * LOAD leaves the medium at the beginning of partition
+			 * 0.  check_tape() records that only for a new session;
+			 * without a new-medium unit attention (the medium was
+			 * already loaded) the position and the EOF state would
+			 * be left as before the load.  Set them as MTREW does.
+			 */
+			if (retval == CHKRES_READY && STp->partition == 0) {
+				STps = &(STp->ps[0]);
+				STps->drv_file = STps->drv_block = 0;
+				STps->eof = ST_NOEOF;
+				STps->at_sm = 0;
+				STps->last_block_valid = 0;
+			}
 			if (retval > 0)
 				retval = 0;
 		}
