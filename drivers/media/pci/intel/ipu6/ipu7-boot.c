@@ -246,6 +246,7 @@ int ipu6_ipu7_init_boot_config(struct ipu6_bus_device *adev,
 					  GFP_KERNEL, 0);
 	if (!fwctx->queue_mem) {
 		dev_err(dev, "Failed to allocate queue memory.\n");
+		ipu7_release_boot_config(adev);
 		return -ENOMEM;
 	}
 	fwctx->queue_mem_size = total_queue_size_aligned;
