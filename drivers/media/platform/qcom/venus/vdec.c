@@ -4,9 +4,11 @@
  * Copyright (C) 2017 Linaro Ltd.
  */
 #include <linux/clk.h>
+#include <linux/dma-mapping.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/sizes.h>
 #include <linux/slab.h>
 #include <media/v4l2-ioctl.h>
 #include <media/v4l2-event.h>
@@ -20,6 +22,8 @@
 #include "helpers.h"
 #include "vdec.h"
 #include "pm_helpers.h"
+
+#define VDEC_EOS_BUF_SIZE	SZ_4K
 
 /*
  * Three resons to keep MPLANE formats (despite that the number of planes
@@ -574,10 +578,28 @@ vdec_decoder_cmd(struct file *file, void *fh, struct v4l2_decoder_cmd *cmd)
 		 * avoids misapplying this quirk and breaking VP9 decode on SC7280.
 		 */
 
-		if (IS_IRIS2(inst->core) && is_fw_rev_or_older(inst->core, 1, 0, 87))
+		if (IS_IRIS2(inst->core) && is_fw_rev_or_older(inst->core, 1, 0, 87)) {
 			fdata.device_addr = 0;
-		else
-			fdata.device_addr = 0xdeadb000;
+		} else {
+			/*
+			 * Firmware may validate the address of the EOS buffer,
+			 * so hand it a real one rather than a made-up address.
+			 */
+			if (!inst->eos_va) {
+				inst->eos_va = dma_alloc_attrs(inst->core->dev,
+							       VDEC_EOS_BUF_SIZE,
+							       &inst->eos_da,
+							       GFP_KERNEL,
+							       DMA_ATTR_NO_KERNEL_MAPPING);
+				if (!inst->eos_va) {
+					ret = -ENOMEM;
+					goto unlock;
+				}
+			}
+
+			fdata.device_addr = inst->eos_da;
+			fdata.alloc_len = VDEC_EOS_BUF_SIZE;
+		}
 
 		ret = hfi_session_process_buf(inst, &fdata);
 
@@ -1763,6 +1785,9 @@ static int vdec_close(struct file *file)
 	cancel_work_sync(&inst->delayed_process_work);
 	venus_close_common(inst, file);
 	ida_destroy(&inst->dpb_ids);
+	if (inst->eos_va)
+		dma_free_attrs(inst->core->dev, VDEC_EOS_BUF_SIZE, inst->eos_va,
+			       inst->eos_da, DMA_ATTR_NO_KERNEL_MAPPING);
 	vdec_pm_put(inst, false);
 
 	kfree(inst);

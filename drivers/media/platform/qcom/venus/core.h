@@ -457,6 +457,8 @@ enum venus_inst_modes {
  * @drain_active:	Drain sequence is in progress
  * @flags:	bitmask flags describing current instance mode
  * @dpb_ids:	DPB buffer ID's
+ * @eos_va:	kernel cookie of the buffer used to signal decoder EOS
+ * @eos_da:	device address of the buffer used to signal decoder EOS
  */
 struct venus_inst {
 	struct list_head list;
@@ -528,6 +530,8 @@ struct venus_inst {
 	bool drain_active;
 	enum venus_inst_modes flags;
 	struct ida dpb_ids;
+	void *eos_va;
+	dma_addr_t eos_da;
 };
 
 #define IS_V1(core)	((core)->res->hfi_version == HFI_VERSION_1XX)
