@@ -1077,44 +1077,81 @@ int cifs_inval_name_dfs_link_error(const unsigned int xid,
 
 int cifs_wait_for_server_reconnect(struct TCP_Server_Info *server, bool retry)
 {
-	int timeout = 10;
-	int rc;
+	int timeout, rc = 0;
+
+	/* Hard mounts keep waiting until process is killed or server comes back on-line. */
+	if (retry)
+		return wait_event_interruptible(server->response_q,
+						(server->tcpStatus != CifsNeedReconnect));
 
 	spin_lock(&server->srv_lock);
 	if (server->tcpStatus != CifsNeedReconnect) {
+		if (unlikely(server->tcpStatus == CifsExiting))
+			rc = -ESHUTDOWN;
 		spin_unlock(&server->srv_lock);
-		return 0;
+
+		return rc;
 	}
-	timeout *= server->nr_targets;
+
+	/*
+	 * Soft mounts, wait with timeout.
+	 * Compute timeout based on echo_interval, to match user expectations wrt. time to recover
+	 * from network interruptions.
+	 *
+	 * Minimum is 17 seconds (per reconnect target):
+	 *   7s for cifs socket timeout
+	 *   3s sleep after a failed attempt
+	 *   7s spare, to cover at least a full attempt
+	 *
+	 * Maximum is 60s; might not be enough in some rare cases, but >60s is too much.
+	 */
+	timeout = max(server->echo_interval / HZ, 17) * server->nr_targets;
+	timeout = min(timeout, 60);
 	spin_unlock(&server->srv_lock);
 
 	/*
-	 * Give demultiplex thread up to 10 seconds to each target available for
-	 * reconnect -- should be greater than cifs socket timeout which is 7
-	 * seconds.
+	 * First, wait for cifs_reconnect() to start.
+	 * This is needed because tcpStatus == CifsNeedReconnect doesn't imply cifs_reconnect()
+	 * is actually running.
 	 *
-	 * On "soft" mounts we wait once. Hard mounts keep retrying until
-	 * process is killed or server comes back on-line.
+	 * Wait 3*timeout (max 180s) here, which should be more than enough.
 	 */
-	do {
-		rc = wait_event_interruptible_timeout(server->response_q,
-						      (server->tcpStatus != CifsNeedReconnect),
-						      timeout * HZ);
-		if (rc < 0) {
-			cifs_dbg(FYI, "%s: aborting reconnect due to received signal\n",
-				 __func__);
-			return -ERESTARTSYS;
-		}
+	rc = wait_event_interruptible_timeout(server->response_q,
+					      (server->reconnecting ||
+					       server->tcpStatus != CifsNeedReconnect),
+					      min(3 * timeout, 180) * HZ);
 
-		/* are we still trying to reconnect? */
-		spin_lock(&server->srv_lock);
-		if (server->tcpStatus != CifsNeedReconnect) {
-			spin_unlock(&server->srv_lock);
-			return 0;
-		}
-		spin_unlock(&server->srv_lock);
-	} while (retry);
+	/* cifs_reconnect() never started, don't wait any longer */
+	spin_lock(&server->srv_lock);
+	if (!rc && !server->reconnecting && server->tcpStatus == CifsNeedReconnect)
+		rc = -EHOSTDOWN;
+	spin_unlock(&server->srv_lock);
 
-	cifs_dbg(FYI, "%s: gave up waiting on reconnect\n", __func__);
-	return -EHOSTDOWN;
+	if (rc < 0)
+		return rc;
+
+	/* cifs_reconnect() started (maybe already succeeded), wait for status change */
+	rc = wait_event_interruptible_timeout(server->response_q,
+					      (server->tcpStatus != CifsNeedReconnect),
+					      timeout * HZ);
+	if (rc < 0)
+		return rc;
+
+	spin_lock(&server->srv_lock);
+	if (server->tcpStatus != CifsNeedReconnect) {
+		rc = 0;
+		if (server->tcpStatus == CifsExiting)
+			rc = -ESHUTDOWN;
+	} else {
+		rc = -ECONNRESET;
+
+		/* Are we still even trying to reconnect? */
+		if (!server->reconnecting) {
+			cifs_dbg(FYI, "%s: gave up waiting on reconnect\n", __func__);
+			rc = -EHOSTDOWN;
+		}
+	}
+	spin_unlock(&server->srv_lock);
+
+	return rc;
 }

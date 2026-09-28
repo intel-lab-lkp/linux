@@ -803,6 +803,7 @@ struct TCP_Server_Info {
 	bool	posix_ext_supported;
 	struct delayed_work reconnect; /* reconnect workqueue job */
 	struct mutex reconnect_mutex; /* prevent simultaneous reconnects */
+	bool reconnecting; /* if cifs_reconnect() is indeed running */
 	unsigned long echo_interval;
 
 	/*

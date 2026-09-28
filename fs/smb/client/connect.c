@@ -398,6 +398,8 @@ static bool cifs_tcp_ses_needs_reconnect(struct TCP_Server_Info *server, int num
 	cifs_dbg(FYI, "Mark tcp session as need reconnect\n");
 	trace_smb3_reconnect(server->current_mid, server->conn_id,
 			     server->hostname);
+	server->reconnecting = true;
+	wake_up(&server->response_q);
 	spin_unlock(&server->srv_lock);
 
 	set_need_reco(server);
@@ -475,6 +477,7 @@ static int __cifs_reconnect(struct TCP_Server_Info *server,
 	spin_lock(&server->srv_lock);
 	if (server->tcpStatus == CifsNeedNegotiate)
 		mod_delayed_work(cifsiod_wq, &server->echo, 0);
+	server->reconnecting = false;
 	spin_unlock(&server->srv_lock);
 
 	wake_up(&server->response_q);
@@ -617,6 +620,7 @@ static int reconnect_dfs_server(struct TCP_Server_Info *server)
 	spin_lock(&server->srv_lock);
 	if (server->tcpStatus == CifsNeedNegotiate)
 		mod_delayed_work(cifsiod_wq, &server->echo, 0);
+	server->reconnecting = false;
 	spin_unlock(&server->srv_lock);
 
 	wake_up(&server->response_q);
