@@ -464,8 +464,9 @@ out:
 /* Test with nested bonding devices to catch issue with negative jump label count */
 static void test_xdp_bonding_nested(struct skeletons *skeletons)
 {
+	struct bpf_link *link2 = NULL;
 	struct bpf_link *link = NULL;
-	int bond, err;
+	int bond, nest2, err;
 
 	if (!ASSERT_OK(system("ip link add bond type bond"), "add bond"))
 		goto out;
@@ -488,10 +489,23 @@ static void test_xdp_bonding_nested(struct skeletons *skeletons)
 	if (!ASSERT_OK(err, "set bond_nest2 master"))
 		goto out;
 
+	nest2 = if_nametoindex("bond_nest2");
+	if (!ASSERT_GE(nest2, 0, "if_nametoindex bond_nest2"))
+		goto out;
+
 	link = bpf_program__attach_xdp(skeletons->xdp_dummy->progs.xdp_dummy_prog, bond);
-	ASSERT_OK_PTR(link, "attach program to master");
+	if (!ASSERT_OK_PTR(link, "attach program to master"))
+		goto out;
+
+	/* Attaching to a nested slave is not allowed either. Only the direct
+	 * upper is consulted, so this only holds if every device the program
+	 * was propagated to records it.
+	 */
+	link2 = bpf_program__attach_xdp(skeletons->xdp_dummy->progs.xdp_dummy_prog, nest2);
+	ASSERT_ERR_PTR(link2, "attach program to nested slave when master has program");
 
 out:
+	bpf_link__destroy(link2);
 	bpf_link__destroy(link);
 	system("ip link del bond");
 	system("ip link del bond_nest1");
