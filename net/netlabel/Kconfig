@@ -17,3 +17,7 @@ config NETLABEL
 	   * https://github.com/netlabel/netlabel_tools
 
 	  If you are unsure, say N.
+
+config CIPSO
+	def_bool y
+	depends on NETLABEL && IPV4

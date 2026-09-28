@@ -332,6 +332,9 @@ int netlbl_cfg_cipsov4_map_add(u32 doi,
 	struct netlbl_domaddr_map *addrmap = NULL;
 	struct netlbl_domaddr4_map *addrinfo = NULL;
 
+	if (!IS_ENABLED(CONFIG_CIPSO))
+		return -ENOSYS;
+
 	doi_def = cipso_v4_doi_getdef(doi);
 	if (doi_def == NULL)
 		return -ENOENT;
