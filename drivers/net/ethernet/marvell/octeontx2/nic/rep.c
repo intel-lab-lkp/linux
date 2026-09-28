@@ -297,11 +297,27 @@ static int rvu_rep_notify_pfvf(struct otx2_nic *priv, u16 event,
 static void rvu_rep_state_evt_handler(struct otx2_nic *priv,
 				      struct rep_event *info)
 {
+	struct rep_dev **reps;
 	struct rep_dev *rep;
 	int rep_id;
 
+	/* Capture a stable snapshot.  rvu_rep_destroy() sets priv->reps to
+	 * NULL and then calls flush_work() to wait for any in-flight handler
+	 * to finish before freeing the array, so using the local copy here
+	 * is safe for the lifetime of this function.
+	 */
+	reps = READ_ONCE(priv->reps);
+	if (!reps)
+		return;
+
 	rep_id = rvu_rep_get_repid(priv, info->pcifunc);
-	rep = priv->reps[rep_id];
+	if (rep_id < 0) {
+		dev_warn_ratelimited(priv->dev,
+				     "REP state event for unknown pcifunc 0x%x (err %d)\n",
+				     info->pcifunc, rep_id);
+		return;
+	}
+	rep = reps[rep_id];
 	if (info->evt_data.vf_state)
 		rep->flags |= RVU_REP_VF_INITIALIZED;
 	else
@@ -459,6 +475,9 @@ static int rvu_rep_open(struct net_device *dev)
 	netif_carrier_on(dev);
 	netif_tx_start_all_queues(dev);
 
+	if (rep->pcifunc & RVU_PFVF_FUNC_MASK)
+		return 0;
+
 	evt.event = RVU_EVENT_PORT_STATE;
 	evt.evt_data.port_state = 1;
 	evt.pcifunc = rep->pcifunc;
@@ -477,6 +496,13 @@ static int rvu_rep_stop(struct net_device *dev)
 
 	netif_carrier_off(dev);
 	netif_tx_disable(dev);
+
+	if (rep->pcifunc & RVU_PFVF_FUNC_MASK)
+		return 0;
+
+	/* Don't notify the AF during teardown */
+	if (priv->flags & OTX2_FLAG_INTF_DOWN)
+		return 0;
 
 	evt.event = RVU_EVENT_PORT_STATE;
 	evt.pcifunc = rep->pcifunc;
@@ -628,20 +654,27 @@ err_free_mem:
 
 void rvu_rep_destroy(struct otx2_nic *priv)
 {
+	struct rep_dev **reps = priv->reps;
 	struct rep_dev *rep;
 	int rep_id;
 
 	rvu_eswitch_config(priv, false);
 	priv->flags |= OTX2_FLAG_INTF_DOWN;
 	rvu_rep_free_cq_rsrc(priv);
+
+	priv->reps = NULL;
+	/* Wait for any in-flight rvu_rep_state_evt_handler() using the old
+	 * reps snapshot to finish before freeing the entries below.
+	 */
+	flush_work(&priv->mbox.mbox_up_wrk);
 	for (rep_id = 0; rep_id < priv->rep_cnt; rep_id++) {
-		rep = priv->reps[rep_id];
+		rep = reps[rep_id];
 		unregister_netdev(rep->netdev);
 		rvu_rep_devlink_port_unregister(rep);
 		free_netdev(rep->netdev);
 		kfree(rep->flow_cfg);
 	}
-	kfree(priv->reps);
+	kfree(reps);
 	rvu_rep_rsrc_free(priv);
 }
 

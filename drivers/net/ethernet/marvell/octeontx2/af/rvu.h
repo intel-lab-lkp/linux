@@ -571,7 +571,7 @@ struct npc_kpu_profile_adapter {
 #define RVU_SWITCH_LBK_CHAN	63
 
 struct rvu_switch {
-	struct mutex switch_lock; /* Serialize flow installation */
+	struct mutex switch_lock; /* Serialize flow installation and entry2pcifunc access */
 	u32 used_entries;
 	u16 *entry2pcifunc;
 	u16 mode;
@@ -675,6 +675,7 @@ struct rvu {
 	struct list_head	rep_evtq_head;
 	/* Representor event lock */
 	spinlock_t		rep_evtq_lock;
+	bool			rep_evt_teardown;
 
 	struct ng_rvu           *ng_rvu;
 };

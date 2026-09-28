@@ -12,11 +12,18 @@ void rvu_switch_enable_lbk_link(struct rvu *rvu, u16 pcifunc, bool enable)
 {
 	struct rvu_pfvf *pfvf = rvu_get_pfvf(rvu, pcifunc);
 	struct nix_hw *nix_hw;
+	int blkaddr;
 
-	nix_hw = get_nix_hw(rvu->hw, pfvf->nix_blkaddr);
+	mutex_lock(&rvu->rsrc_lock);
+	blkaddr = pfvf->nix_blkaddr;
+	nix_hw = get_nix_hw(rvu->hw, blkaddr);
 	/* Enable LBK links with channel 63 for TX MCAM rule */
-	rvu_nix_tx_tl2_cfg(rvu, pfvf->nix_blkaddr, pcifunc,
+	if (!nix_hw)
+		goto unlock;
+	rvu_nix_tx_tl2_cfg(rvu, blkaddr, pcifunc,
 			   &nix_hw->txsch[NIX_TXSCH_LVL_TL2], enable);
+unlock:
+	mutex_unlock(&rvu->rsrc_lock);
 }
 
 static int rvu_switch_install_rx_rule(struct rvu *rvu, u16 pcifunc,
@@ -188,7 +195,7 @@ void rvu_switch_enable(struct rvu *rvu)
 	if (!rswitch->entry2pcifunc)
 		goto free_entries;
 
-	rswitch->used_entries = alloc_rsp.count;
+	/* Publish used_entries only after entry2pcifunc[] is fully populated. */
 	rswitch->start_entry = alloc_rsp.entry;
 
 	if (rvu->rep_mode) {
@@ -200,13 +207,25 @@ void rvu_switch_enable(struct rvu *rvu)
 	if (ret)
 		goto uninstall_rules;
 
+	mutex_lock(&rswitch->switch_lock);
+	rswitch->used_entries = alloc_rsp.count;
+	mutex_unlock(&rswitch->switch_lock);
+
 	return;
 
 uninstall_rules:
+	if (rvu->rep_mode && rvu->rep_pcifunc)
+		rvu_switch_enable_lbk_link(rvu, rvu->rep_pcifunc, false);
+
 	uninstall_req.start = rswitch->start_entry;
-	uninstall_req.end =  rswitch->start_entry + rswitch->used_entries - 1;
+	uninstall_req.end =  rswitch->start_entry + alloc_rsp.count - 1;
 	rvu_mbox_handler_npc_delete_flow(rvu, &uninstall_req, &uninstall_rsp);
+	mutex_lock(&rswitch->switch_lock);
+	rswitch->used_entries = 0;
+	rswitch->start_entry = 0;
 	kfree(rswitch->entry2pcifunc);
+	rswitch->entry2pcifunc = NULL;
+	mutex_unlock(&rswitch->switch_lock);
 free_entries:
 	free_req.all = 1;
 	rvu_mbox_handler_npc_mcam_free_entry(rvu, &free_req, &rsp);
@@ -229,8 +248,23 @@ void rvu_switch_disable(struct rvu *rvu)
 	if (!rswitch->used_entries)
 		return;
 
-	if (rvu->rep_mode)
+	if (rvu->rep_mode) {
+		if (rvu->rep_pcifunc)
+			rvu_switch_enable_lbk_link(rvu, rvu->rep_pcifunc, false);
+
+		for (pf = 1; pf < hw->total_pfs; pf++) {
+			if (!is_pf_cgxmapped(rvu, pf))
+				continue;
+			pcifunc = rvu_make_pcifunc(rvu->pdev, pf, 0);
+			rvu_switch_enable_lbk_link(rvu, pcifunc, false);
+			rvu_get_pf_numvfs(rvu, pf, &numvfs, NULL);
+			for (vf = 0; vf < numvfs; vf++) {
+				pcifunc = rvu_make_pcifunc(rvu->pdev, pf, vf + 1);
+				rvu_switch_enable_lbk_link(rvu, pcifunc, false);
+			}
+		}
 		goto free_ents;
+	}
 
 	for (pf = 1; pf < hw->total_pfs; pf++) {
 		if (!is_pf_cgxmapped(rvu, pf))
@@ -260,35 +294,46 @@ void rvu_switch_disable(struct rvu *rvu)
 	}
 
 free_ents:
+	mutex_lock(&rswitch->switch_lock);
 	uninstall_req.start = rswitch->start_entry;
-	uninstall_req.end =  rswitch->start_entry + rswitch->used_entries - 1;
+	uninstall_req.end   = rswitch->start_entry + rswitch->used_entries - 1;
+	rswitch->used_entries = 0;
+	kfree(rswitch->entry2pcifunc);
+	rswitch->entry2pcifunc = NULL;
+	mutex_unlock(&rswitch->switch_lock);
+
 	free_req.all = 1;
 	rvu_mbox_handler_npc_delete_flow(rvu, &uninstall_req, &uninstall_rsp);
 	rvu_mbox_handler_npc_mcam_free_entry(rvu, &free_req, &rsp);
-	rswitch->used_entries = 0;
-	kfree(rswitch->entry2pcifunc);
 }
 
 void rvu_switch_update_rules(struct rvu *rvu, u16 pcifunc, bool ena)
 {
 	struct rvu_switch *rswitch = &rvu->rswitch;
-	u32 max = rswitch->used_entries;
+	u16 start_entry;
 	u16 entry;
+	u32 max;
 
 	if (rvu->rep_mode)
 		return rvu_rep_update_rules(rvu, pcifunc, ena);
 
-	if (!rswitch->used_entries)
+	mutex_lock(&rswitch->switch_lock);
+	max = rswitch->used_entries;
+	if (!max) {
+		mutex_unlock(&rswitch->switch_lock);
 		return;
+	}
 
 	for (entry = 0; entry < max; entry++) {
 		if (rswitch->entry2pcifunc[entry] == pcifunc)
 			break;
 	}
+	start_entry = rswitch->start_entry;
+	mutex_unlock(&rswitch->switch_lock);
 
 	if (entry >= max)
 		return;
 
-	rvu_switch_install_tx_rule(rvu, pcifunc, rswitch->start_entry + entry);
+	rvu_switch_install_tx_rule(rvu, pcifunc, start_entry + entry);
 	rvu_switch_install_rx_rule(rvu, pcifunc, 0x0);
 }
