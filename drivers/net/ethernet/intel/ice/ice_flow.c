@@ -2088,6 +2088,15 @@ ice_flow_set_rss_seg_info(struct ice_flow_seg_info *segs, u8 seg_cnt,
 
 	ICE_FLOW_SET_HDRS(seg, cfg->addl_hdrs);
 
+	/* A GTP segment without an L4 header bit would select the "no L4"
+	 * PTYPE sets, which hold no GTP PTYPE at all. VF requests that do
+	 * carry an L4 bit drop IPV_OTHER on purpose, so leave those alone.
+	 */
+	if ((seg->hdrs & (ICE_FLOW_SEG_HDR_GTPU | ICE_FLOW_SEG_HDR_GTPC |
+			  ICE_FLOW_SEG_HDR_GTPC_TEID)) &&
+	    !(seg->hdrs & ICE_FLOW_SEG_HDRS_L4_MASK_NO_OTHER))
+		seg->hdrs |= ICE_FLOW_SEG_HDR_IPV_OTHER;
+
 	/* set outer most header */
 	if (cfg->hdr_type == ICE_RSS_INNER_HEADERS_W_OUTER_IPV4)
 		segs[ICE_RSS_OUTER_HEADERS].hdrs |= ICE_FLOW_SEG_HDR_IPV4 |
@@ -3002,9 +3011,10 @@ u64 ice_get_rss_cfg(struct ice_hw *hw, u16 vsi_handle, u32 hdrs, bool *symm)
 		return ICE_HASH_INVALID;
 
 	mutex_lock(&hw->rss_locks);
+	/* IPV_OTHER is set on GTP segments internally, ethtool never asks for it */
 	list_for_each_entry(r, &hw->rss_list_head, l_entry)
 		if (test_bit(vsi_handle, r->vsis) &&
-		    r->hash.addl_hdrs == hdrs) {
+		    (r->hash.addl_hdrs & ~ICE_FLOW_SEG_HDR_IPV_OTHER) == hdrs) {
 			rss_hash = r->hash.hash_flds;
 			*symm = r->hash.symm;
 			break;
