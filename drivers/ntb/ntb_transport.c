@@ -47,6 +47,7 @@
  * Contact Information:
  * Jon Mason <jon.mason@intel.com>
  */
+#include <linux/atomic.h>
 #include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/dmaengine.h>
@@ -142,7 +143,7 @@ struct ntb_transport_qp {
 	struct dma_chan *tx_dma_chan;
 	struct dma_chan *rx_dma_chan;
 
-	bool client_ready;
+	atomic_t client_ready;
 	bool link_is_up;
 	bool active;
 
@@ -249,7 +250,7 @@ struct ntb_transport_ctx {
 	unsigned int msi_spad_offset;
 	u64 msi_db_mask;
 
-	bool link_is_up;
+	atomic_t link_is_up;
 	struct delayed_work link_work;
 	struct work_struct link_cleanup;
 
@@ -945,7 +946,7 @@ static void ntb_qp_link_cleanup_work(struct work_struct *work)
 
 	ntb_qp_link_cleanup(qp);
 
-	if (nt->link_is_up)
+	if (atomic_read(&nt->link_is_up))
 		schedule_delayed_work(&qp->link_work,
 				      msecs_to_jiffies(NTB_LINK_DOWN_TIMEOUT));
 }
@@ -972,7 +973,7 @@ static void ntb_transport_link_cleanup(struct ntb_transport_ctx *nt)
 			cancel_delayed_work_sync(&qp->link_work);
 		}
 
-	if (!nt->link_is_up)
+	if (!atomic_read(&nt->link_is_up))
 		cancel_delayed_work_sync(&nt->link_work);
 
 	for (i = 0; i < nt->mw_count; i++)
@@ -1084,7 +1085,7 @@ static void ntb_transport_link_work(struct work_struct *work)
 			goto out1;
 	}
 
-	nt->link_is_up = true;
+	atomic_set(&nt->link_is_up, true);
 
 	for (i = 0; i < nt->qp_count; i++) {
 		struct ntb_transport_qp *qp = &nt->qp_vec[i];
@@ -1092,7 +1093,7 @@ static void ntb_transport_link_work(struct work_struct *work)
 		ntb_transport_setup_qp_mw(nt, i);
 		ntb_transport_setup_qp_peer_msi(nt, i);
 
-		if (qp->client_ready)
+		if (atomic_read(&qp->client_ready))
 			schedule_delayed_work(&qp->link_work, 0);
 	}
 
@@ -1121,7 +1122,7 @@ static void ntb_qp_link_work(struct work_struct *work)
 	struct ntb_transport_ctx *nt = qp->transport;
 	int val;
 
-	WARN_ON(!nt->link_is_up);
+	WARN_ON(!atomic_read(&nt->link_is_up));
 
 	val = ntb_spad_read(nt->ndev, QP_LINKS);
 
@@ -1141,7 +1142,7 @@ static void ntb_qp_link_work(struct work_struct *work)
 
 		if (qp->active)
 			tasklet_schedule(&qp->rxc_db_work);
-	} else if (nt->link_is_up)
+	} else if (atomic_read(&nt->link_is_up))
 		schedule_delayed_work(&qp->link_work,
 				      msecs_to_jiffies(NTB_LINK_DOWN_TIMEOUT));
 }
@@ -1165,7 +1166,7 @@ static int ntb_transport_init_queue(struct ntb_transport_ctx *nt,
 	qp->qp_num = qp_num;
 	qp->transport = nt;
 	qp->ndev = nt->ndev;
-	qp->client_ready = false;
+	atomic_set(&qp->client_ready, false);
 	qp->event_handler = NULL;
 	ntb_qp_link_context_reset(qp);
 
@@ -1373,7 +1374,7 @@ static int ntb_transport_probe(struct ntb_client *self, struct ntb_dev *ndev)
 	if (rc)
 		goto err3;
 
-	nt->link_is_up = false;
+	atomic_set(&nt->link_is_up, false);
 	ntb_link_enable(ndev, NTB_SPEED_AUTO, NTB_WIDTH_AUTO);
 	ntb_link_event(ndev);
 
@@ -1457,7 +1458,7 @@ static void ntb_complete_rxc(struct ntb_transport_qp *qp)
 
 		spin_unlock_irqrestore(&qp->ntb_rx_q_lock, irqflags);
 
-		if (qp->rx_handler && qp->client_ready)
+		if (qp->rx_handler && atomic_read(&qp->client_ready))
 			qp->rx_handler(qp, qp->cb_data, cb_data, len);
 
 		spin_lock_irqsave(&qp->ntb_rx_q_lock, irqflags);
@@ -2268,7 +2269,7 @@ void *ntb_transport_rx_remove(struct ntb_transport_qp *qp, unsigned int *len)
 	struct ntb_queue_entry *entry;
 	void *buf;
 
-	if (!qp || qp->client_ready)
+	if (!qp || atomic_read(&qp->client_ready))
 		return NULL;
 
 	entry = ntb_list_rm(&qp->ntb_rx_q_lock, &qp->rx_pend_q);
@@ -2385,9 +2386,9 @@ void ntb_transport_link_up(struct ntb_transport_qp *qp)
 	if (!qp)
 		return;
 
-	qp->client_ready = true;
+	atomic_set(&qp->client_ready, true);
 
-	if (qp->transport->link_is_up)
+	if (atomic_read(&qp->transport->link_is_up))
 		schedule_delayed_work(&qp->link_work, 0);
 }
 EXPORT_SYMBOL_GPL(ntb_transport_link_up);
@@ -2407,7 +2408,7 @@ void ntb_transport_link_down(struct ntb_transport_qp *qp)
 	if (!qp)
 		return;
 
-	qp->client_ready = false;
+	atomic_set(&qp->client_ready, false);
 
 	val = ntb_spad_read(qp->ndev, QP_LINKS);
 
