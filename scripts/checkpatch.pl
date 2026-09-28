@@ -1292,6 +1292,16 @@ sub git_commit_info {
 	return ($id, $desc);
 }
 
+sub git_commit_in_release {
+	my ($commit) = @_;
+
+	return undef if ((which("git") eq "") || !(-e "$gitroot"));
+
+	`${git_command} describe --contains --match 'v*' --exclude '*-rc*' $commit 2>/dev/null`;
+
+	return $? == 0;
+}
+
 $chk_signoff = 0 if ($file);
 $chk_fixes_tag = 0 if ($file);
 
@@ -2687,6 +2697,8 @@ sub process {
 	my $fixes_tag = 0;
 	my $is_revert = 0;
 	my $needs_fixes_tag = "";
+	my $has_cc_stable = 0;
+	my @old_fixes_without_cc_stable = ();
 	my $author = '';
 	my $authorsignoff = 0;
 	my $author_sob = '';
@@ -3085,6 +3097,11 @@ sub process {
 			my $email = $4;
 			my $ucfirst_sign_off = ucfirst(lc($sign_off));
 
+			if ($sign_off =~ /^cc:$/i &&
+			    $email =~ /stable\@(?:vger\.)?kernel\.org/i) {
+				$has_cc_stable = 1;
+			}
+
 			if ($sign_off !~ /$signature_tags/) {
 				my $suggested_signature = find_standard_signature($sign_off);
 				if ($suggested_signature eq "") {
@@ -3307,6 +3324,15 @@ sub process {
 				     "Please use correct Fixes: style 'Fixes: <12+ chars of sha1> (\"<title line>\")' - ie: '$fixed'\n" . $herecurr) &&
 				    $fix) {
 					$fixed[$fixlinenr] = $fixed;
+				}
+			}
+
+			# Cc: stable@vger.kernel.org may appear later in the
+			# tags block, so defer the check until the whole
+			# commit log has been scanned.
+			if (defined($cid)) {
+				if (git_commit_in_release($cid)) {
+					push(@old_fixes_without_cc_stable, $herecurr);
 				}
 			}
 		}
@@ -7868,6 +7894,12 @@ sub process {
 		if ($needs_fixes_tag ne "" && !$is_revert && !$fixes_tag) {
 			WARN("MISSING_FIXES_TAG",
 				 "The commit message has '$needs_fixes_tag', perhaps it also needs a 'Fixes:' tag?\n");
+		}
+		if (!$has_cc_stable) {
+			foreach my $fixes_herecurr (@old_fixes_without_cc_stable) {
+				CHK("MISSING_FIXES_STABLE_TAG",
+					 "The commit fixed by the Fixes: tag is already present in a released kernel, should the commit have a Cc: stable tag?\n" . $fixes_herecurr);
+			}
 		}
 	}
 	if ($is_patch && $has_commit_log && $chk_signoff) {
