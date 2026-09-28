@@ -69,6 +69,18 @@ static int test__demangle_rust(struct test_suite *test __maybe_unused, int subte
 		free(buf);
 	}
 
+	/*
+	 * A symbol with more lifetimes bound than fit in the largest buffer
+	 * must fail to demangle rather than give a truncated name.
+	 */
+	buf = dso__demangle_sym(/*dso=*/NULL, /*kmodule=*/0, "_RINvC1a1fFGZZZZZZ_EuE");
+	if (buf) {
+		pr_debug("FAILED: symbol larger than the buffer limit demangled to %zu bytes\n",
+			 strlen(buf));
+		ret = TEST_FAIL;
+		free(buf);
+	}
+
 	return ret;
 }
 

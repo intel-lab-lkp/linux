@@ -2737,12 +2737,16 @@ char *cxx_demangle_sym(const char *str __maybe_unused, bool params __maybe_unuse
 }
 #endif /* !HAVE_CXA_DEMANGLE_SUPPORT */
 
+/* Buffer limit for a demangled Rust symbol name. */
+#define RUST_DEMANGLE_MAX_LEN (1024 * 1024)
+
 char *dso__demangle_sym(struct dso *dso, int kmodule, const char *elf_name)
 {
 	struct demangle rust_demangle = {
 		.style = DemangleStyleUnknown,
 	};
 	char *demangled = NULL;
+	size_t buf_len;
 
 	/*
 	 * We need to figure out if the object was created from C++ sources
@@ -2758,8 +2762,10 @@ char *dso__demangle_sym(struct dso *dso, int kmodule, const char *elf_name)
 		if (rust_demangle.mangled_len == 0)
 			return demangled;
 
-		for (size_t buf_len = roundup_pow_of_two(rust_demangle.mangled_len * 2);
-		     buf_len < 1024 * 1024; buf_len += 32) {
+		for (buf_len = min_t(size_t, roundup_pow_of_two(rust_demangle.mangled_len * 2),
+				     RUST_DEMANGLE_MAX_LEN);
+		     buf_len <= RUST_DEMANGLE_MAX_LEN;
+		     buf_len *= 2) {
 			char *tmp = realloc(demangled, buf_len);
 
 			if (!tmp)
