@@ -3239,7 +3239,8 @@ __intel_pmu_handle_pebs_record(struct pt_regs *iregs,
 	struct perf_event *event;
 	int bit;
 
-	for_each_set_bit(bit, (unsigned long *)&pebs_status, X86_PMC_IDX_MAX) {
+	for_each_set_bit(bit, (unsigned long *)&pebs_status,
+			 INTEL_PMC_IDX_FIXED + MAX_FIXED_PEBS_EVENTS) {
 		event = cpuc->events[bit];
 
 		if (WARN_ON_ONCE(!event) ||
@@ -3268,7 +3269,8 @@ __intel_pmu_handle_last_pebs_record(struct pt_regs *iregs,
 	bool handled = false;
 	int bit;
 
-	for_each_set_bit(bit, (unsigned long *)&mask, X86_PMC_IDX_MAX) {
+	for_each_set_bit(bit, (unsigned long *)&mask,
+			 INTEL_PMC_IDX_FIXED + MAX_FIXED_PEBS_EVENTS) {
 		if (!counts[bit])
 			continue;
 
