@@ -591,16 +591,20 @@ unsigned long __msecs_to_jiffies(const unsigned int m)
 }
 EXPORT_SYMBOL(__msecs_to_jiffies);
 
+/*
+ * UINT_MAX microseconds are far less than MAX_JIFFY_OFFSET jiffies for every
+ * supported HZ, so usecs_to_jiffies() never needs to saturate.
+ */
+static_assert((u64)UINT_MAX * HZ / USEC_PER_SEC < MAX_JIFFY_OFFSET);
+
 /**
  * __usecs_to_jiffies: - convert microseconds to jiffies
- * @u:	time in milliseconds
+ * @u:	time in microseconds
  *
  * Return: jiffies value
  */
 unsigned long __usecs_to_jiffies(const unsigned int u)
 {
-	if (u > jiffies_to_usecs(MAX_JIFFY_OFFSET))
-		return MAX_JIFFY_OFFSET;
 	return _usecs_to_jiffies(u);
 }
 EXPORT_SYMBOL(__usecs_to_jiffies);

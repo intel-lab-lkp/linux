@@ -575,7 +575,8 @@ extern unsigned long __usecs_to_jiffies(const unsigned int u);
 #if !(USEC_PER_SEC % HZ)
 static inline unsigned long _usecs_to_jiffies(const unsigned int u)
 {
-	return (u + (USEC_PER_SEC / HZ) - 1) / (USEC_PER_SEC / HZ);
+	/* Round up without overflowing for u close to UINT_MAX */
+	return u / (USEC_PER_SEC / HZ) + !!(u % (USEC_PER_SEC / HZ));
 }
 #else
 static inline unsigned long _usecs_to_jiffies(const unsigned int u)
@@ -589,14 +590,10 @@ static inline unsigned long _usecs_to_jiffies(const unsigned int u)
  * usecs_to_jiffies: - convert microseconds to jiffies
  * @u:	time in microseconds
  *
- * conversion is done as follows:
- *
- * - 'too large' values [that would result in larger than
- *   MAX_JIFFY_OFFSET values] mean 'infinite timeout' too.
- *
- * - all other values are converted to jiffies by either multiplying
- *   the input value by a factor or dividing it with a factor and
- *   handling any 32-bit overflows as for msecs_to_jiffies.
+ * conversion is done by either multiplying the input value by a factor
+ * or dividing it with a factor, rounding up. Any unsigned int number of
+ * microseconds is far below MAX_JIFFY_OFFSET jiffies for every supported
+ * HZ, so, unlike msecs_to_jiffies(), there is no 'infinite timeout' case.
  *
  * usecs_to_jiffies() checks for the passed in value being a constant
  * via __builtin_constant_p() allowing gcc to eliminate most of the
@@ -611,13 +608,10 @@ static inline unsigned long _usecs_to_jiffies(const unsigned int u)
  */
 static __always_inline unsigned long usecs_to_jiffies(const unsigned int u)
 {
-	if (__builtin_constant_p(u)) {
-		if (u > jiffies_to_usecs(MAX_JIFFY_OFFSET))
-			return MAX_JIFFY_OFFSET;
+	if (__builtin_constant_p(u))
 		return _usecs_to_jiffies(u);
-	} else {
+	else
 		return __usecs_to_jiffies(u);
-	}
 }
 
 extern unsigned long timespec64_to_jiffies(const struct timespec64 *value);
