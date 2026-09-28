@@ -298,13 +298,18 @@ static enum pmt_feature_id lookup_pfid(const char *pfname)
 /*
  * Protects pmt_module, get_feature, put_feature against races between module
  * load/unload of the pmt_telemetry module and mount/unmount of the resctrl
- * file system.
+ * file system. Also protects pmt_in_use.
  */
 static DEFINE_MUTEX(aet_register_lock);
 
 static struct module *pmt_module;
 static struct pmt_feature_group *(*get_feature)(enum pmt_feature_id id);
 static void (*put_feature)(struct pmt_feature_group *p);
+
+/*
+ * Track whether pmt_telemetry enumeration succeeded during mount for use during unmount.
+ */
+static bool pmt_in_use;
 
 /*
  * Request a copy of struct pmt_feature_group for each event group. If there is
@@ -375,19 +380,33 @@ bool intel_aet_pre_mount(void)
 		return false;
 	}
 
+	pmt_in_use = true;
+
 	return true;
 }
 
-void __exit intel_aet_exit(void)
+void intel_aet_unmount(void)
 {
+	struct rdt_resource *r = &rdt_resources_all[RDT_RESOURCE_PERF_PKG].r_resctrl;
 	struct event_group **peg;
 
+	guard(mutex)(&aet_register_lock);
+	if (!pmt_in_use)
+		return;
+
 	for_each_event_group(peg) {
-		if ((*peg)->pfg) {
-			put_feature((*peg)->pfg);
-			(*peg)->pfg = NULL;
+		struct event_group *e = *peg;
+
+		if (e->pfg) {
+			for (int i = 0; i < e->num_events; i++)
+				resctrl_disable_mon_event(e->evts[i].id);
+			put_feature(e->pfg);
+			e->pfg = NULL;
 		}
 	}
+	module_put(pmt_module);
+	pmt_in_use = false;
+	r->mon.num_rmid = 0;
 }
 
 #define DATA_VALID	BIT_ULL(63)
