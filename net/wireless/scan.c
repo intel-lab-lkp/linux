@@ -1436,7 +1436,8 @@ void cfg80211_bss_flush(struct wiphy *wiphy)
 EXPORT_SYMBOL(cfg80211_bss_flush);
 
 const struct element *
-cfg80211_find_elem_match(u8 eid, const u8 *ies, unsigned int len,
+cfg80211_find_elem_match(enum ieee80211_eid eid,
+			 const u8 *ies, unsigned int len,
 			 const u8 *match, unsigned int match_len,
 			 unsigned int match_offset)
 {
