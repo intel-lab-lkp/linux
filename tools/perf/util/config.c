@@ -12,6 +12,8 @@
 #include "config.h"
 
 #include <errno.h>
+#include <limits.h>
+#include <pthread.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -549,11 +551,26 @@ int perf_default_config(const char *var, const char *value,
 	return 0;
 }
 
+/*
+ * Serialize config file access: parsing and rewriting share the static
+ * parser state and can run on more than one thread, the debuginfod
+ * fetch writing core.debuginfod=false while perf top reads it.
+ */
+static pthread_mutex_t config_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+/*
+ * perf_config__set_variable() is a read-modify-write of a config file,
+ * and config_mutex serializes just each of its steps: take it for the
+ * whole update so callers can't write over each other's changes.
+ */
+static pthread_mutex_t config_update_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 static int perf_config_from_file(config_fn_t fn, const char *filename, void *data)
 {
 	int ret;
 	FILE *f = fopen(filename, "r");
 
+	pthread_mutex_lock(&config_mutex);
 	ret = -1;
 	if (f) {
 		config_file = f;
@@ -564,15 +581,34 @@ static int perf_config_from_file(config_fn_t fn, const char *filename, void *dat
 		fclose(f);
 		config_file_name = NULL;
 	}
+	pthread_mutex_unlock(&config_mutex);
 	return ret;
+}
+
+/*
+ * Computed once: system_path() allocates, a lazy init racing on two
+ * threads would leak all but one of the strings.
+ */
+static const char *etc_perfconfig;
+
+static void perf_etc_perfconfig__init(void)
+{
+	etc_perfconfig = system_path(ETC_PERFCONFIG);
+	/*
+	 * None of the callers check for NULL, so an allocation failure
+	 * here leaves all of them dereferencing it.  The unresolved path
+	 * is the same string when ETC_PERFCONFIG is absolute anyway.
+	 */
+	if (!etc_perfconfig)
+		etc_perfconfig = ETC_PERFCONFIG;
 }
 
 const char *perf_etc_perfconfig(void)
 {
-	static const char *system_wide;
-	if (!system_wide)
-		system_wide = system_path(ETC_PERFCONFIG);
-	return system_wide;
+	static pthread_once_t once = PTHREAD_ONCE_INIT;
+
+	pthread_once(&once, perf_etc_perfconfig__init);
+	return etc_perfconfig;
 }
 
 static int perf_env_bool(const char *k, int def)
@@ -783,8 +819,15 @@ out_free:
 int perf_config_set__collect(struct perf_config_set *set, const char *file_name,
 			     const char *var, const char *value)
 {
+	int ret;
+
+	pthread_mutex_lock(&config_mutex);
 	config_file_name = file_name;
-	return collect_config(var, value, set);
+	ret = collect_config(var, value, set);
+		/* Don't leave the static parser state pointing at the caller's buffer. */
+	config_file_name = NULL;
+	pthread_mutex_unlock(&config_mutex);
+	return ret;
 }
 
 static int perf_config_set__init(struct perf_config_set *set)
@@ -881,6 +924,84 @@ void perf_config__exit(void)
 {
 	perf_config_set__delete(config_set);
 	config_set = NULL;
+}
+
+int perf_config_set__write(struct perf_config_set *set,
+			   const char *file_name, bool system_config)
+{
+	struct perf_config_section *section = NULL;
+	struct perf_config_item *item = NULL;
+	FILE *fp;
+
+	pthread_mutex_lock(&config_mutex);
+	fp = fopen(file_name, "w");
+	if (!fp) {
+		pthread_mutex_unlock(&config_mutex);
+		return -1;
+	}
+
+	fprintf(fp, "# this file is auto-generated.\n");
+
+	/* overwrite configvariables */
+	perf_config_sections__for_each_entry(&set->sections, section) {
+		if (!system_config && section->from_system_config)
+			continue;
+		fprintf(fp, "[%s]\n", section->name);
+
+		perf_config_items__for_each_entry(&section->items, item) {
+			if (!system_config && item->from_system_config)
+				continue;
+			if (item->value)
+				fprintf(fp, "\t%s = %s\n",
+					item->name, item->value);
+		}
+	}
+	fclose(fp);
+	pthread_mutex_unlock(&config_mutex);
+
+	return 0;
+}
+
+/*
+ * Set @var=@value in the configuration file perf is using: ~/.perfconfig
+ * or the file named by PERF_CONFIG, which makes perf read only that
+ * file.  The rewrite is the same 'perf config' does, comments are not
+ * preserved.
+ */
+int perf_config__set_variable(const char *var, const char *value)
+{
+	char path[PATH_MAX];
+	char *user_config = mkpath(path, sizeof(path), "%s/.perfconfig", getenv("HOME"));
+	const char *config_filename = config_exclusive_filename ?: user_config;
+		/*
+	 * When rewriting the system wide file all entries are marked as coming
+	 * from it and must be kept, or it would be truncated down to its
+	 * header.
+	 */
+	bool system_config = strcmp(config_filename, perf_etc_perfconfig()) == 0;
+	struct perf_config_set *set;
+	int ret = -1;
+
+	pthread_mutex_lock(&config_update_mutex);
+	set = perf_config_set__new();
+	if (!set)
+		goto out_err;
+
+	if (perf_config_set__collect(set, config_filename, var, value) < 0) {
+		pr_err("Failed to add '%s=%s'\n", var, value);
+		goto out_err;
+	}
+
+	if (perf_config_set__write(set, config_filename, system_config) < 0) {
+		pr_err("Failed to set the configs on %s\n", config_filename);
+		goto out_err;
+	}
+
+	ret = 0;
+out_err:
+	perf_config_set__delete(set);
+	pthread_mutex_unlock(&config_update_mutex);
+	return ret;
 }
 
 static void perf_config_item__delete(struct perf_config_item *item)
