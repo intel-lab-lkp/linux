@@ -9,7 +9,7 @@
 //! function calls will map to some struct - for example, f(GPU_NAME_STRING_KEY, 0, b"some gpu")
 //! naturally maps to storing a &str with the GPU name.
 
-#![expect(unused_imports)]
+#![cfg_attr(not(CONFIG_KUNIT), expect(unused_imports))]
 #![cfg_attr(not(CONFIG_KUNIT), expect(unused_macros))]
 
 use core::{
@@ -23,7 +23,8 @@ use core::{
 use kernel::{
     alloc::{
         allocator::KVmalloc,
-        Allocator, //
+        Allocator,
+        ArrayVec, //
     },
     bitfield,
     num::Bounded,
@@ -146,6 +147,12 @@ impl<T: Default, const KEY_ID: KeyId, As> Default for Key<T, KEY_ID, As> {
     fn default() -> Self {
         Self(T::default(), PhantomData)
     }
+}
+
+/// A schema field for an array value under the NVKV key `KEY_ID`.
+#[repr(transparent)]
+pub(crate) struct Array<T: Default + Copy, const N: usize, const KEY_ID: KeyId> {
+    vec: ArrayVec<T, N>,
 }
 
 bitfield! {
