@@ -362,7 +362,7 @@
 		samsung,pin-function = <EXYNOS_PIN_FUNC_2>;
 		samsung,pin-pud = <EXYNOS_PIN_PULL_UP>;
 		samsung,pin-drv = <EXYNOS850_HSI_PIN_DRV_LV2>;
-	 };
+	};
 
 	sd2_bus1_pins: sd2-bus1-pins {
 		samsung,pins = "gpf2-2";
