@@ -5301,9 +5301,11 @@ static void e1000_watchdog_task(struct work_struct *work)
 					usleep_range(10000, 20000);
 					pcim_state = er32(STATUS);
 
-					/* Checking if MAC exited DMoff state */
-					if (!(pcim_state & E1000_STATUS_PCIM_STATE))
-						e1000_phy_hw_reset(&adapter->hw);
+					/* MAC exited DMoff; do a full reset. */
+					if (!(pcim_state & E1000_STATUS_PCIM_STATE)) {
+						adapter->flags |= FLAG_RESTART_NOW;
+						goto link_up;
+					}
 				}
 			}
 
