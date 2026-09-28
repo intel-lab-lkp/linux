@@ -37,6 +37,22 @@ accidentally.
           |4_bytes_of_attributes + efivar_data|
           +-----------------------------------+
 
+Mount options
+=============
+
+statfs / nostatfs
+      Control whether ``statfs(2)`` reports the variable-store used/available
+      capacity. Obtaining it requires the ``QueryVariableInfo()`` EFI runtime
+      service, which on some firmware takes tens of milliseconds and runs with
+      preemption disabled, stalling the calling CPU. With ``nostatfs`` the call
+      is skipped and ``statfs(2)`` reports zero. The default is to report,
+      except on ``CONFIG_PREEMPT_RT`` where it defaults to ``nostatfs``; pass
+      ``statfs`` there to force reporting back on (e.g. for tools such as fwupd
+      that need the free space for firmware updates). The option can also be
+      flipped on a live mount with ``mount -o remount,statfs`` /
+      ``mount -o remount,nostatfs``, so reporting can be enabled only for the
+      duration of a firmware update without unmounting efivarfs.
+
 *See also:*
 
 - Documentation/admin-guide/acpi/ssdt-overlays.rst
