@@ -200,26 +200,18 @@ lpfc_dev_loss_tmo_callbk(struct fc_rport *rport)
 		/* The scsi_transport is done with the rport so lpfc cannot
 		 * call to unregister.
 		 */
-		if (ndlp->fc4_xpt_flags & SCSI_XPT_REGD) {
+		if ((ndlp->fc4_xpt_flags & SCSI_XPT_REGD) &&
+		    !(ndlp->fc4_xpt_flags & SCSI_XPT_UNREG_WAIT)) {
+			/* Reference held since no unreg call made */
 			ndlp->fc4_xpt_flags &= ~SCSI_XPT_REGD;
+			spin_unlock_irqrestore(&ndlp->lock, iflags);
 
-			/* If NLP_XPT_REGD was cleared in lpfc_nlp_unreg_node,
-			 * unregister calls were made to the scsi and nvme
-			 * transports and refcnt was already decremented. Clear
-			 * the NLP_XPT_REGD flag only if the NVME nrport is
-			 * confirmed unregistered.
-			 */
-			if (ndlp->fc4_xpt_flags & NLP_XPT_REGD) {
-				if (!(ndlp->fc4_xpt_flags & NVME_XPT_REGD))
-					ndlp->fc4_xpt_flags &= ~NLP_XPT_REGD;
-				spin_unlock_irqrestore(&ndlp->lock, iflags);
-
-				/* Release scsi transport reference */
-				lpfc_nlp_put(ndlp);
-			} else {
-				spin_unlock_irqrestore(&ndlp->lock, iflags);
-			}
+			/* Release scsi transport reference */
+			lpfc_nlp_put(ndlp);
 		} else {
+			/* Clear scsi xpt flags */
+			ndlp->fc4_xpt_flags &= ~(SCSI_XPT_REGD |
+						 SCSI_XPT_UNREG_WAIT);
 			spin_unlock_irqrestore(&ndlp->lock, iflags);
 		}
 
@@ -270,7 +262,7 @@ lpfc_dev_loss_tmo_callbk(struct fc_rport *rport)
 	 * The backend does not expect any more calls associated with this
 	 * rport. Remove the association between rport and ndlp.
 	 */
-	ndlp->fc4_xpt_flags &= ~SCSI_XPT_REGD;
+	ndlp->fc4_xpt_flags &= ~(SCSI_XPT_REGD | SCSI_XPT_UNREG_WAIT);
 	((struct lpfc_rport_data *)rport->dd_data)->pnode = NULL;
 	ndlp->rport = NULL;
 	spin_unlock_irqrestore(&ndlp->lock, iflags);
@@ -606,7 +598,7 @@ lpfc_dev_loss_tmo_handler(struct lpfc_nodelist *ndlp)
 		return fcf_inuse;
 	}
 
-	if (!(ndlp->fc4_xpt_flags & NVME_XPT_REGD))
+	if (!(ndlp->fc4_xpt_flags & (SCSI_XPT_REGD | NVME_XPT_REGD)))
 		lpfc_disc_state_machine(vport, ndlp, NULL, NLP_EVT_DEVICE_RM);
 
 	return fcf_inuse;
@@ -4346,7 +4338,8 @@ out:
 		 */
 		if (!(ndlp->fc4_xpt_flags & (SCSI_XPT_REGD | NVME_XPT_REGD))) {
 			clear_bit(NLP_NPR_2B_DISC, &ndlp->nlp_flag);
-			lpfc_nlp_put(ndlp);
+			if (!test_and_set_bit(NLP_DROPPED, &ndlp->nlp_flag))
+				lpfc_nlp_put(ndlp);
 		}
 
 		if (phba->fc_topology == LPFC_TOPOLOGY_LOOP) {
@@ -4488,8 +4481,20 @@ lpfc_register_remote_port(struct lpfc_vport *vport, struct lpfc_nodelist *ndlp)
 	struct lpfc_hba  *phba = vport->phba;
 	unsigned long flags;
 
-	if (vport->cfg_enable_fc4_type == LPFC_ENABLE_NVME)
+	/* Don't add the remote port if unloading. */
+	if (test_bit(FC_UNLOADING, &vport->load_flag))
 		return;
+
+	spin_lock_irqsave(&ndlp->lock, flags);
+	if ((ndlp->fc4_xpt_flags & (SCSI_XPT_REGD | SCSI_XPT_UNREG_WAIT)) ==
+	    SCSI_XPT_REGD) {
+		/* Prevent racing registrations */
+		spin_unlock_irqrestore(&ndlp->lock, flags);
+		return;
+	}
+	ndlp->fc4_xpt_flags &= ~SCSI_XPT_UNREG_WAIT;
+	ndlp->fc4_xpt_flags |= SCSI_XPT_REGD;
+	spin_unlock_irqrestore(&ndlp->lock, flags);
 
 	/* Remote port has reappeared. Re-register w/ FC transport */
 	rport_ids.node_name = wwn_to_u64(ndlp->nlp_nodename.u.wwn);
@@ -4497,17 +4502,15 @@ lpfc_register_remote_port(struct lpfc_vport *vport, struct lpfc_nodelist *ndlp)
 	rport_ids.port_id = ndlp->nlp_DID;
 	rport_ids.roles = FC_RPORT_ROLE_UNKNOWN;
 
-
 	lpfc_debugfs_disc_trc(vport, LPFC_DISC_TRC_RPORT,
 			      "rport add:       did:x%x flg:x%lx type x%x",
 			      ndlp->nlp_DID, ndlp->nlp_flag, ndlp->nlp_type);
 
-	/* Don't add the remote port if unloading. */
-	if (test_bit(FC_UNLOADING, &vport->load_flag))
-		return;
-
 	ndlp->rport = rport = fc_remote_port_add(shost, 0, &rport_ids);
 	if (!rport) {
+		spin_lock_irqsave(&ndlp->lock, flags);
+		ndlp->fc4_xpt_flags &= ~SCSI_XPT_REGD;
+		spin_unlock_irqrestore(&ndlp->lock, flags);
 		dev_printk(KERN_WARNING, &phba->pcidev->dev,
 			   "Warning: fc_remote_port_add failed\n");
 		return;
@@ -4519,16 +4522,15 @@ lpfc_register_remote_port(struct lpfc_vport *vport, struct lpfc_nodelist *ndlp)
 	rdata = rport->dd_data;
 	rdata->pnode = lpfc_nlp_get(ndlp);
 	if (!rdata->pnode) {
+		spin_lock_irqsave(&ndlp->lock, flags);
+		ndlp->fc4_xpt_flags &= ~SCSI_XPT_REGD;
+		spin_unlock_irqrestore(&ndlp->lock, flags);
 		dev_warn(&phba->pcidev->dev,
 			 "Warning - node ref failed. Unreg rport\n");
 		fc_remote_port_delete(rport);
 		ndlp->rport = NULL;
 		return;
 	}
-
-	spin_lock_irqsave(&ndlp->lock, flags);
-	ndlp->fc4_xpt_flags |= SCSI_XPT_REGD;
-	spin_unlock_irqrestore(&ndlp->lock, flags);
 
 	if (ndlp->nlp_type & NLP_FCP_TARGET)
 		rport_ids.roles |= FC_PORT_ROLE_FCP_TARGET;
@@ -4562,6 +4564,7 @@ lpfc_unregister_remote_port(struct lpfc_nodelist *ndlp)
 {
 	struct fc_rport *rport = ndlp->rport;
 	struct lpfc_vport *vport = ndlp->vport;
+	unsigned long flags;
 
 	if (vport->cfg_enable_fc4_type == LPFC_ENABLE_NVME)
 		return;
@@ -4576,7 +4579,21 @@ lpfc_unregister_remote_port(struct lpfc_nodelist *ndlp)
 			 ndlp->nlp_DID, rport, ndlp->fc4_xpt_flags,
 			 kref_read(&ndlp->kref));
 
+	/* There are certain cases where the following call could result in an
+	 * almost immediate dev-loss callback. Set unreg pending flag before
+	 * making the call.
+	 */
+	spin_lock_irqsave(&ndlp->lock, flags);
+	if (ndlp->fc4_xpt_flags & SCSI_XPT_UNREG_WAIT) {
+		spin_unlock_irqrestore(&ndlp->lock, flags);
+		return;
+	}
+	ndlp->fc4_xpt_flags |= SCSI_XPT_UNREG_WAIT;
+	spin_unlock_irqrestore(&ndlp->lock, flags);
+
 	fc_remote_port_delete(rport);
+
+	/* Release reference */
 	lpfc_nlp_put(ndlp);
 }
 
@@ -4623,7 +4640,10 @@ lpfc_nlp_reg_node(struct lpfc_vport *vport, struct lpfc_nodelist *ndlp)
 	lpfc_check_nlp_post_devloss(vport, ndlp);
 
 	spin_lock_irqsave(&ndlp->lock, iflags);
-	if (ndlp->fc4_xpt_flags & NLP_XPT_REGD) {
+	if (((ndlp->fc4_xpt_flags & SCSI_XPT_REGD) &&
+	     !(ndlp->fc4_xpt_flags & SCSI_XPT_UNREG_WAIT)) ||
+	    ((ndlp->fc4_xpt_flags & NVME_XPT_REGD) &&
+	     !(ndlp->fc4_xpt_flags & NVME_XPT_UNREG_WAIT))) {
 		/* Already registered with backend, trigger rescan */
 		spin_unlock_irqrestore(&ndlp->lock, iflags);
 
@@ -4633,41 +4653,46 @@ lpfc_nlp_reg_node(struct lpfc_vport *vport, struct lpfc_nodelist *ndlp)
 		}
 		return;
 	}
-
-	ndlp->fc4_xpt_flags |= NLP_XPT_REGD;
 	spin_unlock_irqrestore(&ndlp->lock, iflags);
 
-	if (lpfc_valid_xpt_node(ndlp)) {
-		vport->phba->nport_event_cnt++;
-		/*
-		 * Tell the fc transport about the port, if we haven't
-		 * already. If we have, and it's a scsi entity, be
-		 */
-		lpfc_register_remote_port(vport, ndlp);
+	if (vport->cfg_enable_fc4_type & LPFC_ENABLE_FCP) {
+		if (lpfc_valid_xpt_node(ndlp)) {
+			vport->phba->nport_event_cnt++;
+			/* Tell the fc transport about the port */
+			lpfc_register_remote_port(vport, ndlp);
+		}
 	}
 
 	/* We are done if we do not have any NVME remote node */
 	if (!(ndlp->nlp_fc4_type & NLP_FC4_NVME))
 		return;
 
+	if (vport->phba->sli_rev < LPFC_SLI_REV4)
+		return;
+
 	/* Notify the NVME transport of this new rport. */
-	if (vport->phba->sli_rev >= LPFC_SLI_REV4 &&
-			ndlp->nlp_fc4_type & NLP_FC4_NVME) {
-		if (vport->phba->nvmet_support == 0) {
-			/* Register this rport with the transport.
-			 * Only NVME Target Rports are registered with
-			 * the transport.
-			 */
-			if (ndlp->nlp_type & NLP_NVME_TARGET) {
-				vport->phba->nport_event_cnt++;
-				lpfc_nvme_register_port(vport, ndlp);
-			}
-		} else {
-			/* Just take an NDLP ref count since the
-			 * target does not register rports.
-			 */
-			lpfc_nlp_get(ndlp);
+	if (vport->phba->nvmet_support == 0) {
+		/* Register this rport with the transport.
+		 * Only NVME Target Rports are registered with
+		 * the transport.
+		 */
+		if (ndlp->nlp_type & NLP_NVME_TARGET) {
+			vport->phba->nport_event_cnt++;
+			lpfc_nvme_register_port(vport, ndlp);
 		}
+	} else {
+		/* Just take an NDLP ref count since the
+		 * target does not register rports.
+		 */
+		spin_lock_irqsave(&ndlp->lock, iflags);
+		if (ndlp->fc4_xpt_flags & NVMET_XPT_TGT) {
+			spin_unlock_irqrestore(&ndlp->lock, iflags);
+			return;
+		}
+		ndlp->fc4_xpt_flags |= NVMET_XPT_TGT;
+		spin_unlock_irqrestore(&ndlp->lock, iflags);
+
+		lpfc_nlp_get(ndlp);
 	}
 }
 
@@ -4678,7 +4703,15 @@ lpfc_nlp_unreg_node(struct lpfc_vport *vport, struct lpfc_nodelist *ndlp)
 	unsigned long iflags;
 
 	spin_lock_irqsave(&ndlp->lock, iflags);
-	if (!(ndlp->fc4_xpt_flags & NLP_XPT_REGD)) {
+	if (vport->phba->nvmet_support != 0) {
+		if (ndlp->fc4_xpt_flags & NVMET_XPT_TGT) {
+			ndlp->fc4_xpt_flags &= ~NVMET_XPT_TGT;
+			spin_unlock_irqrestore(&ndlp->lock, iflags);
+			lpfc_nlp_put(ndlp);
+			return;
+		}
+	}
+	if (!(ndlp->fc4_xpt_flags & (SCSI_XPT_REGD | NVME_XPT_REGD))) {
 		spin_unlock_irqrestore(&ndlp->lock, iflags);
 		lpfc_printf_vlog(vport, KERN_INFO,
 				 LOG_ELS | LOG_NODE | LOG_DISCOVERY,
@@ -4688,12 +4721,11 @@ lpfc_nlp_unreg_node(struct lpfc_vport *vport, struct lpfc_nodelist *ndlp)
 				  ndlp->nlp_flag, ndlp->fc4_xpt_flags);
 		return;
 	}
-
-	ndlp->fc4_xpt_flags &= ~NLP_XPT_REGD;
 	spin_unlock_irqrestore(&ndlp->lock, iflags);
 
 	if (ndlp->rport &&
-	    ndlp->fc4_xpt_flags & SCSI_XPT_REGD) {
+	    ((ndlp->fc4_xpt_flags & (SCSI_XPT_REGD | SCSI_XPT_UNREG_WAIT)) ==
+	     SCSI_XPT_REGD)) {
 		vport->phba->nport_event_cnt++;
 		lpfc_unregister_remote_port(ndlp);
 	} else if (!ndlp->rport) {
@@ -4706,16 +4738,11 @@ lpfc_nlp_unreg_node(struct lpfc_vport *vport, struct lpfc_nodelist *ndlp)
 				 kref_read(&ndlp->kref));
 	}
 
-	if (ndlp->fc4_xpt_flags & NVME_XPT_REGD) {
+	if ((ndlp->fc4_xpt_flags & (NVME_XPT_REGD | NVME_XPT_UNREG_WAIT)) ==
+	    NVME_XPT_REGD) {
 		vport->phba->nport_event_cnt++;
-		if (vport->phba->nvmet_support == 0) {
-			lpfc_nvme_unregister_port(vport, ndlp);
-		} else {
-			/* NVMET has no upcall. */
-			lpfc_nlp_put(ndlp);
-		}
+		lpfc_nvme_unregister_port(vport, ndlp);
 	}
-
 }
 
 /*

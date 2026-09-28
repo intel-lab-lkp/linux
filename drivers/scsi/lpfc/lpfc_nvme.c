@@ -2601,6 +2601,15 @@ lpfc_nvme_unregister_port(struct lpfc_vport *vport, struct lpfc_nodelist *ndlp)
 		 * The transport will update it.
 		 */
 		spin_lock_irq(&ndlp->lock);
+		/* Prevent racing unregister requests. */
+		if (ndlp->fc4_xpt_flags & NVME_XPT_UNREG_WAIT) {
+			spin_unlock_irq(&ndlp->lock);
+			lpfc_vlog_msg(vport, KERN_NOTICE, LOG_NVME_DISC,
+				      "6034 NVME unregister in progress, "
+				      "remote port x%px, refcnt %d\n",
+				      remoteport, kref_read(&ndlp->kref));
+			return;
+		}
 		ndlp->fc4_xpt_flags |= NVME_XPT_UNREG_WAIT;
 		spin_unlock_irq(&ndlp->lock);
 
