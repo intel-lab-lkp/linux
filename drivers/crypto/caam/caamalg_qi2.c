@@ -19,6 +19,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/fsl/mc.h>
 #include <linux/kernel.h>
+#include <linux/of.h>
 #include <linux/string.h>
 #include <linux/string_choices.h>
 #include <soc/fsl/dpaa2-io.h>
@@ -34,6 +35,25 @@ MODULE_PARM_DESC(priority,
 		 "Crypto API priority of the algorithms (0: default, 2000)");
 
 static int cra_priority = CAAM_CRA_PRIORITY;
+
+static int dpaa2_caam_cra_priority(void)
+{
+	struct device_node *np;
+	u32 prio;
+	int err;
+
+	if (priority)
+		return priority;
+
+	np = of_find_compatible_node(NULL, NULL, "fsl,sec-v4.0");
+	if (!np)
+		return CAAM_CRA_PRIORITY;
+
+	err = of_property_read_u32(np, "fsl,qi2-crypto-priority", &prio);
+	of_node_put(np);
+
+	return err ? CAAM_CRA_PRIORITY : prio;
+}
 
 /* max key is sum of AES_MAX_KEY_SIZE, max split key size */
 #define CAAM_MAX_KEY_SIZE	(AES_MAX_KEY_SIZE + CTR_RFC3686_NONCE_SIZE + \
@@ -5215,8 +5235,7 @@ static int dpaa2_caam_probe(struct fsl_mc_device *dpseci_dev)
 
 	caam_imx = false;
 
-	if (priority)
-		cra_priority = priority;
+	cra_priority = dpaa2_caam_cra_priority();
 
 	dev = &dpseci_dev->dev;
 
