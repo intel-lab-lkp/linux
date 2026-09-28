@@ -28,6 +28,13 @@
 
 #define CAAM_CRA_PRIORITY	2000
 
+static unsigned int priority;
+module_param(priority, uint, 0444);
+MODULE_PARM_DESC(priority,
+		 "Crypto API priority of the algorithms (0: default, 2000)");
+
+static int cra_priority = CAAM_CRA_PRIORITY;
+
 /* max key is sum of AES_MAX_KEY_SIZE, max split key size */
 #define CAAM_MAX_KEY_SIZE	(AES_MAX_KEY_SIZE + CTR_RFC3686_NONCE_SIZE + \
 				 SHA512_DIGEST_SIZE * 2)
@@ -3014,7 +3021,7 @@ static void caam_skcipher_alg_init(struct caam_skcipher_alg *t_alg)
 	struct skcipher_alg *alg = &t_alg->skcipher;
 
 	alg->base.cra_module = THIS_MODULE;
-	alg->base.cra_priority = CAAM_CRA_PRIORITY;
+	alg->base.cra_priority = cra_priority;
 	alg->base.cra_ctxsize = sizeof(struct caam_ctx) + crypto_dma_padding();
 	alg->base.cra_flags |= (CRYPTO_ALG_ASYNC | CRYPTO_ALG_ALLOCATES_MEMORY |
 			      CRYPTO_ALG_KERN_DRIVER_ONLY);
@@ -3028,7 +3035,7 @@ static void caam_aead_alg_init(struct caam_aead_alg *t_alg)
 	struct aead_alg *alg = &t_alg->aead;
 
 	alg->base.cra_module = THIS_MODULE;
-	alg->base.cra_priority = CAAM_CRA_PRIORITY;
+	alg->base.cra_priority = cra_priority;
 	alg->base.cra_ctxsize = sizeof(struct caam_ctx) + crypto_dma_padding();
 	alg->base.cra_flags = CRYPTO_ALG_ASYNC | CRYPTO_ALG_ALLOCATES_MEMORY |
 			      CRYPTO_ALG_KERN_DRIVER_ONLY;
@@ -4659,7 +4666,7 @@ static struct caam_hash_alg *caam_hash_alloc(struct device *dev,
 	alg->cra_init = caam_hash_cra_init;
 	alg->cra_exit = caam_hash_cra_exit;
 	alg->cra_ctxsize = sizeof(struct caam_hash_ctx) + crypto_dma_padding();
-	alg->cra_priority = CAAM_CRA_PRIORITY;
+	alg->cra_priority = cra_priority;
 	alg->cra_blocksize = template->blocksize;
 	alg->cra_alignmask = 0;
 	alg->cra_flags = CRYPTO_ALG_ASYNC | CRYPTO_ALG_ALLOCATES_MEMORY;
@@ -5207,6 +5214,9 @@ static int dpaa2_caam_probe(struct fsl_mc_device *dpseci_dev)
 	caam_little_end = true;
 
 	caam_imx = false;
+
+	if (priority)
+		cra_priority = priority;
 
 	dev = &dpseci_dev->dev;
 
