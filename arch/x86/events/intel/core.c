@@ -6607,9 +6607,26 @@ static void fini_fixed_cntrs_on_cpu(int cpu)
 	wrmsrq_on_cpu(cpu, MSR_CORE_PERF_FIXED_CTR_CTRL, 0);
 }
 
+static void fini_adaptive_pebs_on_cpu(int cpu)
+{
+	struct cpu_hw_events *cpuc;
+
+	if (!x86_pmu.ds_pebs || !x86_pmu.intel_cap.pebs_baseline)
+		return;
+
+	/*
+	 * Clear active_pebs_data_cfg so MSR_PEBS_DATA_CFG can
+	 * be reprogrammed after CPU online.
+	 */
+	cpuc = &per_cpu(cpu_hw_events, cpu);
+	cpuc->active_pebs_data_cfg = 0;
+	wrmsrq_on_cpu(cpu, MSR_PEBS_DATA_CFG, 0);
+}
+
 static void intel_pmu_cpu_dying(int cpu)
 {
 	fini_fixed_cntrs_on_cpu(cpu);
+	fini_adaptive_pebs_on_cpu(cpu);
 	fini_debug_store_on_cpu(cpu);
 	fini_arch_pebs_on_cpu(cpu);
 }
