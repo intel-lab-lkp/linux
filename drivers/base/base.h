@@ -292,6 +292,7 @@ void device_links_unbind_consumers(struct device *dev);
 bool device_link_flag_is_sync_state_only(u32 flags);
 void fw_devlink_drivers_done(void);
 void fw_devlink_probing_done(void);
+void fw_devlink_release_shared_fwnode(struct device *dev);
 
 #define dev_for_each_link_to_supplier(__link, __dev)	\
 	list_for_each_entry_srcu(__link, &(__dev)->links.suppliers, c_node, \

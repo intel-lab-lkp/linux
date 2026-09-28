@@ -762,6 +762,15 @@ dev_sysfs_state_synced_failed:
 dev_groups_failed:
 	device_remove(dev);
 probe_failed:
+	/*
+	 * -ENODEV/-ENXIO mean the driver definitively rejected this device
+	 * (errors are returned as positive values at this label). If it owns a
+	 * fwnode shared with sibling devices (e.g. SCMI creates several devices
+	 * per protocol node), hand the fwnode off so its dangling child
+	 * consumers can be resolved by a sibling instead of deferring forever.
+	 */
+	if (ret == ENODEV || ret == ENXIO)
+		fw_devlink_release_shared_fwnode(dev);
 	driver_sysfs_remove(dev);
 sysfs_failed:
 	bus_notify(dev, BUS_NOTIFY_DRIVER_NOT_BOUND);

@@ -1377,6 +1377,20 @@ void device_links_driver_bound(struct device *dev)
 	LIST_HEAD(sync_list);
 
 	/*
+	 * Multiple devices may share the same fwnode (e.g. the SCMI bus
+	 * creates several devices per protocol node).  The first one
+	 * registered owns the fwnode; if that owner's driver is rejected
+	 * it relinquishes ownership (fwnode->dev == NULL, see
+	 * fw_devlink_release_shared_fwnode()).  If the owning device has
+	 * no driver at all (driver never compiled / loaded as module), it
+	 * will never bind, so it is safe to take over.  Re-acquire the
+	 * fwnode here so the purge/pickup still happens.
+	 */
+	if (dev->fwnode && (!dev->fwnode->dev ||
+	    (dev->fwnode->dev != dev && !dev->fwnode->dev->driver)))
+		dev->fwnode->dev = dev;
+
+	/*
 	 * If a device binds successfully, it's expected to have created all
 	 * the device links it needs to or make new device links as it needs
 	 * them. So, fw_devlink no longer needs to create device links to any
@@ -1390,6 +1404,7 @@ void device_links_driver_bound(struct device *dev)
 	 * consumers to defer probe indefinitely waiting for a device for the
 	 * child firmware node.
 	 */
+
 	if (dev->fwnode && dev->fwnode->dev == dev) {
 		fwnode_links_purge_suppliers(dev->fwnode);
 		fw_devlink_pickup_dangling_consumers(dev);
@@ -1472,6 +1487,54 @@ void device_links_driver_bound(struct device *dev)
 	device_links_write_unlock();
 
 	device_links_flush_sync_list(&sync_list, dev);
+}
+
+static int fwnode_shared_bound_match(struct device *dev, const void *data)
+{
+	const struct device *rejected = data;
+
+	return dev != rejected && dev->fwnode == rejected->fwnode &&
+	       device_is_bound(dev);
+}
+
+/**
+ * fw_devlink_release_shared_fwnode - Hand off a shared fwnode on probe reject.
+ * @dev: Device whose driver just definitively rejected it (-ENODEV/-ENXIO).
+ *
+ * Several devices can share one fwnode (e.g. the SCMI bus creates both a
+ * "pinctrl" and a "pinctrl-imx" device for one protocol node). Only the first
+ * one registered owns the fwnode (fwnode->dev). If that owner's driver rejects
+ * the device, driver_bound() never runs for it, so the dangling consumers of
+ * the fwnode's child nodes are never picked up and defer probe forever.
+ *
+ * When the rejected device is the fwnode owner, relinquish ownership so those
+ * consumers can be resolved by a sibling that does bind:
+ *
+ *  - If a sibling has already bound, transfer ownership to it and run the
+ *    purge/pickup the owner could not do.
+ *  - Otherwise clear ownership so the next sibling to bind re-acquires it in
+ *    device_links_driver_bound() and runs the purge/pickup there.
+ *
+ * fwnode->dev is not lock-serialized; this only ever writes it when @dev is
+ * the current owner (fwnode->dev == dev), the same ownership-gated rule
+ * device_del() uses when it clears fwnode->dev on the owner.
+ */
+void fw_devlink_release_shared_fwnode(struct device *dev)
+{
+	struct device *sibling;
+
+	if (!dev->fwnode || dev->fwnode->dev != dev)
+		return;
+
+	sibling = bus_find_device(dev->bus, NULL, dev, fwnode_shared_bound_match);
+	if (sibling) {
+		dev->fwnode->dev = sibling;
+		fwnode_links_purge_suppliers(dev->fwnode);
+		fw_devlink_pickup_dangling_consumers(sibling);
+		put_device(sibling);
+	} else {
+		dev->fwnode->dev = NULL;
+	}
 }
 
 /**
