@@ -242,10 +242,16 @@ void blkg_conf_close_bdev(struct blkg_conf_ctx *ctx)
  * the bio and attach the appropriate blkg to the bio.  Then we call this helper
  * and if it is true run with the root blkg for that queue and then do any
  * backcharging to the originating cgroup once the io is complete.
+ *
+ * A REQ_SWAP bio is issued as root because reclaim waits on it, unless it is
+ * also REQ_BACKGROUND, which marks it as not urgent.
  */
 static inline bool bio_issue_as_root_blkg(struct bio *bio)
 {
-	return (bio->bi_opf & (REQ_META | REQ_SWAP)) != 0;
+	blk_opf_t opf = bio->bi_opf;
+
+	return (opf & REQ_META) ||
+	       (opf & (REQ_SWAP | REQ_BACKGROUND)) == REQ_SWAP;
 }
 
 /**
