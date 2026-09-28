@@ -1205,6 +1205,10 @@ static void bnge_free_core(struct bnge_net *bn)
 	bnge_free_ring_stats(bn);
 	bnge_free_ring_grps(bn);
 	bnge_free_vnics(bn);
+
+	/* Free non-user filters only */
+	bnge_free_ntp_fltrs(bn, true);
+
 	kfree(bn->tx_ring_map);
 	bn->tx_ring_map = NULL;
 	kfree(bn->tx_ring);
@@ -1292,6 +1296,10 @@ static int bnge_alloc_core(struct bnge_net *bn)
 		goto err_free_core;
 
 	bnge_init_stats(bn);
+
+	rc = bnge_fltrs_mem(bn);
+	if (rc)
+		goto err_free_core;
 
 	rc = bnge_alloc_vnics(bn);
 	if (rc)
@@ -2052,7 +2060,7 @@ static int bnge_cfg_rx_mode(struct bnge_net *bn, struct netdev_hw_addr_list *uc,
 		struct bnge_l2_filter *fltr = vnic->l2_filters[i];
 
 		bnge_hwrm_l2_filter_free(bd, fltr);
-		bnge_del_l2_filter(bn, fltr);
+		bnge_del_l2_filter_rcu(bn, fltr);
 	}
 
 	vnic->uc_filter_count = 1;
@@ -2266,7 +2274,7 @@ static void bnge_hwrm_clear_vnic_filter(struct bnge_net *bn)
 		struct bnge_l2_filter *fltr = vnic->l2_filters[i];
 
 		bnge_hwrm_l2_filter_free(bn->bd, fltr);
-		bnge_del_l2_filter(bn, fltr);
+		bnge_del_l2_filter_rcu(bn, fltr);
 	}
 
 	vnic->uc_filter_count = 0;
@@ -3432,6 +3440,9 @@ int bnge_netdev_alloc(struct bnge_dev *bd, int max_irqs)
 		goto err_free_workq;
 	spin_lock_init(&bn->stats_lock);
 
+	spin_lock_init(&bn->ntp_fltr_lock);
+	INIT_LIST_HEAD(&bn->usr_fltr_list);
+
 	netdev->request_ops_lock = true;
 	rc = register_netdev(netdev);
 	if (rc) {
@@ -3458,6 +3469,9 @@ void bnge_netdev_free(struct bnge_dev *bd)
 	bn = netdev_priv(netdev);
 
 	unregister_netdev(netdev);
+
+	bnge_free_ntp_fltrs(bn, false);
+	bnge_free_l2_filters(bn);
 
 	timer_shutdown_sync(&bn->timer);
 	cancel_work_sync(&bn->sp_task);
