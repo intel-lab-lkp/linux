@@ -10147,6 +10147,7 @@ nfs4_proc_layoutcommit(struct nfs4_layoutcommit_data *data, bool sync)
 			return -EAGAIN;
 		}
 		task_setup_data.flags = RPC_TASK_ASYNC;
+		task_setup_data.workqueue = nfsiod_workqueue;
 	}
 	nfs4_init_sequence(NFS_SERVER(data->args.inode)->nfs_client,
 			   &data->args.seq_args, &data->res.seq_res, 1, 0);
@@ -10157,7 +10158,11 @@ nfs4_proc_layoutcommit(struct nfs4_layoutcommit_data *data, bool sync)
 		status = task->tk_status;
 	trace_nfs4_layoutcommit(data->args.inode, &data->args.stateid, status);
 	dprintk("%s: status %d\n", __func__, status);
-	rpc_put_task(task);
+	/* An asynchronous caller may be writeback: don't run rpc_release() here */
+	if (sync)
+		rpc_put_task(task);
+	else
+		rpc_put_task_async(task);
 	return status;
 }
 
