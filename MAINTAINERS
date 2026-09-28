@@ -20449,7 +20449,7 @@ Q:	http://patchwork.kernel.org/project/devicetree/list/
 W:	http://www.devicetree.org/
 C:	irc://irc.libera.chat/devicetree
 P:	Documentation/process/maintainer-devicetree.rst
-T:	git git://git.kernel.org/pub/scm/linux/kernel/git/robh/linux.git
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/robh/linux.git for-next
 F:	Documentation/ABI/testing/sysfs-firmware-ofw
 F:	drivers/of/
 F:	include/linux/of*.h
@@ -20471,7 +20471,7 @@ S:	Maintained
 Q:	http://patchwork.kernel.org/project/devicetree/list/
 C:	irc://irc.libera.chat/devicetree
 P:	Documentation/process/maintainer-devicetree.rst
-T:	git git://git.kernel.org/pub/scm/linux/kernel/git/robh/linux.git
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/robh/linux.git for-next
 F:	Documentation/devicetree/
 F:	Documentation/process/maintainer-devicetree.rst
 F:	arch/*/boot/dts/
