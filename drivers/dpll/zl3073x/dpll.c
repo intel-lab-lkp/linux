@@ -1032,6 +1032,74 @@ zl3073x_dpll_output_pin_frequency_get(const struct dpll_pin *dpll_pin,
 	return 0;
 }
 
+/**
+ * zl3073x_dpll_output_pin_freq_set - compute output config for pin frequency
+ * @pin: output pin to set the frequency for
+ * @out: output state to update, not committed to hardware
+ * @frequency: requested pin frequency in Hz
+ *
+ * Updates the divisor and N-division fields of @out so the given output
+ * pin runs at the requested frequency. For non N-divided formats the
+ * divisor is shared by both pins of the output pair. The caller is
+ * responsible for committing @out with zl3073x_out_state_set().
+ *
+ * Return: 0 on success, -EINVAL if the frequency cannot be represented
+ */
+static int
+zl3073x_dpll_output_pin_freq_set(struct zl3073x_dpll_pin *pin,
+				 struct zl3073x_out *out, u64 frequency)
+{
+	struct zl3073x_dev *zldev = pin->dpll->dev;
+	u32 new_div, synth_freq;
+	u8 synth;
+
+	synth = zl3073x_out_synth_get(out);
+	synth_freq = zl3073x_dev_synth_freq_get(zldev, synth);
+	new_div = synth_freq / (u32)frequency;
+
+	if (!zl3073x_out_is_ndiv(out)) {
+		/* For non N-divided signal formats the frequency is computed
+		 * as division of synth frequency and output divisor, which
+		 * is shared by both pins of the output pair.
+		 */
+		out->div = new_div;
+
+		/* For 50/50 duty cycle the divisor is equal to width */
+		out->width = new_div;
+
+		return 0;
+	}
+
+	if (zl3073x_dpll_is_p_pin(pin)) {
+		/* Changing the P-pin frequency, rescale the N-pin divisor to
+		 * keep the N-pin frequency unchanged. Fail if the requested
+		 * frequency is too low to represent the current N-pin one.
+		 */
+		out->esync_n_period = out->esync_n_period * out->div / new_div;
+		if (!out->esync_n_period)
+			return -EINVAL;
+
+		/* Update the output divisor */
+		out->div = new_div;
+
+		/* For 50/50 duty cycle the divisor is equal to width */
+		out->width = new_div;
+	} else {
+		/* Changing the N-pin frequency. Fail if the requested
+		 * frequency is higher than or does not divide the P-pin one.
+		 */
+		out->esync_n_period = div64_u64(synth_freq,
+						frequency * out->div);
+		if (!out->esync_n_period)
+			return -EINVAL;
+	}
+
+	/* For 50/50 duty cycle the divisor is equal to width */
+	out->esync_n_width = out->esync_n_period;
+
+	return 0;
+}
+
 static int
 zl3073x_dpll_output_pin_frequency_set(const struct dpll_pin *dpll_pin,
 				      void *pin_priv,
@@ -1043,8 +1111,6 @@ zl3073x_dpll_output_pin_frequency_set(const struct dpll_pin *dpll_pin,
 	struct zl3073x_dev *zldev = zldpll->dev;
 	struct zl3073x_dpll_pin *pin = pin_priv;
 	struct zl3073x_dpll_pin *sibling = NULL;
-	const struct zl3073x_synth *synth;
-	u32 new_div, synth_freq;
 	struct zl3073x_out out;
 	u8 out_id;
 	int rc;
@@ -1054,74 +1120,21 @@ zl3073x_dpll_output_pin_frequency_set(const struct dpll_pin *dpll_pin,
 	out_id = zl3073x_output_pin_out_get(pin->id);
 	out = *zl3073x_out_state_get(zldev, out_id);
 
-	/* Get attached synth frequency and compute new divisor */
-	synth = zl3073x_synth_state_get(zldev, zl3073x_out_synth_get(&out));
-	synth_freq = zl3073x_synth_freq_get(synth);
-	new_div = synth_freq / (u32)frequency;
-
-	/* Check signal format */
-	if (!zl3073x_out_is_ndiv(&out)) {
-		/* For non N-divided signal formats the frequency is computed
-		 * as division of synth frequency and output divisor, which
-		 * is shared by both pins of the output pair.
-		 */
-		out.div = new_div;
-
-		/* For 50/50 duty cycle the divisor is equal to width */
-		out.width = new_div;
-
-		/* Commit output configuration */
-		rc = zl3073x_out_state_set(zldev, out_id, &out);
-		if (rc)
-			goto unlock;
-
-		/* The other pin's frequency changed too - it has to be
-		 * notified about the change.
-		 */
-		sibling = zl3073x_dpll_output_pin_sibling_get(pin);
-
+	rc = zl3073x_dpll_output_pin_freq_set(pin, &out, frequency);
+	if (rc)
 		goto unlock;
-	}
-
-	if (zl3073x_dpll_is_p_pin(pin)) {
-		/* We are going to change output frequency for P-pin but
-		 * if the requested frequency is less than current N-pin
-		 * frequency then indicate a failure as we are not able
-		 * to compute N-pin divisor to keep its frequency unchanged.
-		 *
-		 * Update divisor for N-pin to keep N-pin frequency.
-		 */
-		out.esync_n_period = (out.esync_n_period * out.div) / new_div;
-		if (!out.esync_n_period) {
-			rc = -EINVAL;
-			goto unlock;
-		}
-
-		/* Update the output divisor */
-		out.div = new_div;
-
-		/* For 50/50 duty cycle the divisor is equal to width */
-		out.width = out.div;
-	} else {
-		/* We are going to change frequency of N-pin but if
-		 * the requested freq is greater or equal than freq of P-pin
-		 * in the output pair we cannot compute divisor for the N-pin.
-		 * In this case indicate a failure.
-		 *
-		 * Update divisor for N-pin
-		 */
-		out.esync_n_period = div64_u64(synth_freq, frequency * out.div);
-		if (!out.esync_n_period) {
-			rc = -EINVAL;
-			goto unlock;
-		}
-	}
-
-	/* For 50/50 duty cycle the divisor is equal to width */
-	out.esync_n_width = out.esync_n_period;
 
 	/* Commit output configuration */
 	rc = zl3073x_out_state_set(zldev, out_id, &out);
+	if (rc)
+		goto unlock;
+
+	/* For non N-divided formats the divisor is shared, so the other
+	 * pin's frequency changed too and has to be notified.
+	 */
+	if (!zl3073x_out_is_ndiv(&out))
+		sibling = zl3073x_dpll_output_pin_sibling_get(pin);
+
 unlock:
 	mutex_unlock(&zldpll->lock);
 
