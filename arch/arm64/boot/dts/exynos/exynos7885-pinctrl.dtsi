@@ -638,7 +638,7 @@
 		samsung,pin-pud = <EXYNOS_PIN_PULL_NONE>;
 	};
 
-	/* USI1 UART_HSI2C1*/
+	/* USI1 UART_HSI2C1 */
 	uart4_bus_dual: uart4-bus-dual-pins {
 		samsung,pins = "gpc2-5", "gpc2-4";
 		samsung,pin-function = <EXYNOS_PIN_FUNC_2>;
