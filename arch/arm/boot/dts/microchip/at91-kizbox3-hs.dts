@@ -57,16 +57,16 @@
 
 	gpio-keys {
 		compatible = "gpio-keys";
-		pinctrl-names = "default" , "default", "default",
-				"default", "default";
-		pinctrl-0 = <&pinctrl_key_gpio_default>;
-		pinctrl-1 = <&pinctrl_pio_rf &pinctrl_pio_wifi>;
-		pinctrl-2 = <&pinctrl_pio_io_boot
-			     &pinctrl_pio_io_reset
-			     &pinctrl_pio_io_test_radio>;
-		pinctrl-3 = <&pinctrl_pio_zbe_test_radio
-			     &pinctrl_pio_zbe_rst>;
-		pinctrl-4 = <&pinctrl_pio_input>;
+		pinctrl-0 = <&pinctrl_key_gpio_default
+			    &pinctrl_pio_rf
+			    &pinctrl_pio_wifi
+			    &pinctrl_pio_io_boot
+			    &pinctrl_pio_io_reset
+			    &pinctrl_pio_io_test_radio
+			    &pinctrl_pio_zbe_test_radio
+			    &pinctrl_pio_zbe_rst
+			    &pinctrl_pio_input>;
+		pinctrl-names = "default";
 
 		switch-1 {
 			label = "SW1";
