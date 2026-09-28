@@ -1046,12 +1046,10 @@ static int xgmac_stop(struct net_device *dev)
 {
 	struct xgmac_priv *priv = netdev_priv(dev);
 
-	if (readl(priv->base + XGMAC_DMA_INTR_ENA))
-		napi_disable(&priv->napi);
-
-	writel(0, priv->base + XGMAC_DMA_INTR_ENA);
-
 	netif_tx_disable(dev);
+	writel(0, priv->base + XGMAC_DMA_INTR_ENA);
+	cancel_work_sync(&priv->tx_timeout_work);
+	napi_disable(&priv->napi);
 
 	/* Disable the MAC core */
 	xgmac_mac_disable(priv->base);
