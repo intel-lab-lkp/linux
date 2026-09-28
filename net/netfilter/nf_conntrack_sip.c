@@ -183,8 +183,8 @@ static int sip_parse_addr(const struct nf_conn *ct, const char *cp,
 static bool sip_parse_port(const char *dptr, const char **endp,
 			   const char *limit, __be16 *port)
 {
-	unsigned int p = 0;
-	int len = 0;
+	char *end;
+	u16 p;
 
 	if (dptr >= limit)
 		return false;
@@ -199,29 +199,22 @@ static bool sip_parse_port(const char *dptr, const char **endp,
 
 	dptr++; /* skip ':' */
 
-	while (dptr < limit && isdigit(*dptr)) {
-		p = p * 10 + (*dptr - '0');
-		dptr++;
-		len++;
-		if (len > 5) /* max "65535" */
-			return false;
-	}
-
-	if (len == 0)
+	if (nf_ct_helper_parse_port(dptr, limit - dptr, &p, &end))
 		return false;
 
 	/* reached limit while parsing port */
-	if (dptr >= limit)
+	if (end >= limit)
 		return false;
 
-	if (p < 1024 || p > 65535)
+	/* SIP ports below 1024 are not accepted */
+	if (p < 1024)
 		return false;
 
 	if (port)
 		*port = htons(p);
 
 	if (endp)
-		*endp = dptr;
+		*endp = end;
 
 	return true;
 }
@@ -268,51 +261,6 @@ static int skp_epaddr_len(const struct nf_conn *ct, const char *dptr,
 	}
 
 	return epaddr_len(ct, dptr, limit, shift);
-}
-
-/* simple_strtoul stops after first non-number character.
- * But as we're not dealing with c-strings, we can't rely on
- * hitting \r,\n,\0 etc. before moving past end of buffer.
- *
- * This is a variant of simple_strtoul, but doesn't require
- * a c-string.
- *
- * If value exceeds UINT_MAX, 0 is returned.
- */
-static unsigned int sip_strtouint(const char *cp, unsigned int len, char **endp)
-{
-	const unsigned int max = sizeof("4294967295");
-	unsigned int olen = len;
-	const char *s = cp;
-	u64 result = 0;
-
-	if (len > max)
-		len = max;
-
-	while (olen > 0 && isdigit(*s)) {
-		unsigned int value;
-
-		if (len == 0)
-			goto err;
-
-		value = *s - '0';
-		result = result * 10 + value;
-
-		if (result > UINT_MAX)
-			goto err;
-		s++;
-		len--;
-		olen--;
-	}
-
-	if (endp)
-		*endp = (char *)s;
-
-	return result;
-err:
-	if (endp)
-		*endp = (char *)cp;
-	return 0;
 }
 
 /* Parse a SIP request line of the form:
@@ -682,7 +630,7 @@ int ct_sip_parse_numerical_param(const struct nf_conn *ct, const char *dptr,
 		return 0;
 
 	start += strlen(name);
-	*val = sip_strtouint(start, limit - start, (char **)&end);
+	*val = nf_ct_helper_parse_uint(start, limit - start, (char **)&end);
 	if (start == end)
 		return -1;
 	if (matchoff && matchlen) {
@@ -1166,7 +1114,9 @@ static int process_sdp(struct sk_buff *skb, unsigned int protoff,
 		mediaoff += t->len;
 		medialen -= t->len;
 
-		port = sip_strtouint(*dptr + mediaoff, *datalen - mediaoff, (char **)&end);
+		port = nf_ct_helper_parse_uint(*dptr + mediaoff,
+					       *datalen - mediaoff,
+					       (char **)&end);
 		if (port == 0 || *dptr + mediaoff == end)
 			continue;
 		if (port < 1024 || port > 65535) {
@@ -1357,7 +1307,8 @@ static int process_register_request(struct sk_buff *skb, unsigned int protoff,
 	 */
 	if (ct_sip_get_header(ct, *dptr, 0, *datalen, SIP_HDR_EXPIRES,
 			      &matchoff, &matchlen) > 0)
-		expires = sip_strtouint(*dptr + matchoff, *datalen - matchoff, NULL);
+		expires = nf_ct_helper_parse_uint(*dptr + matchoff,
+						  *datalen - matchoff, NULL);
 
 	ret = ct_sip_parse_header_uri(ct, *dptr, NULL, *datalen,
 				      SIP_HDR_CONTACT, NULL,
@@ -1467,7 +1418,8 @@ static int process_register_response(struct sk_buff *skb, unsigned int protoff,
 
 	if (ct_sip_get_header(ct, *dptr, 0, *datalen, SIP_HDR_EXPIRES,
 			      &matchoff, &matchlen) > 0)
-		expires = sip_strtouint(*dptr + matchoff, *datalen - matchoff, NULL);
+		expires = nf_ct_helper_parse_uint(*dptr + matchoff,
+						  *datalen - matchoff, NULL);
 
 	while (1) {
 		unsigned int c_expires = expires;
@@ -1531,8 +1483,8 @@ static int process_sip_response(struct sk_buff *skb, unsigned int protoff,
 
 	if (*datalen < strlen("SIP/2.0 200"))
 		return NF_ACCEPT;
-	code = sip_strtouint(*dptr + strlen("SIP/2.0 "),
-			     *datalen - strlen("SIP/2.0 "), NULL);
+	code = nf_ct_helper_parse_uint(*dptr + strlen("SIP/2.0 "),
+				       *datalen - strlen("SIP/2.0 "), NULL);
 	if (!code) {
 		nf_ct_helper_log(skb, ct, "cannot get code");
 		return NF_DROP;
@@ -1543,7 +1495,8 @@ static int process_sip_response(struct sk_buff *skb, unsigned int protoff,
 		nf_ct_helper_log(skb, ct, "cannot parse cseq");
 		return NF_DROP;
 	}
-	cseq = sip_strtouint(*dptr + matchoff, *datalen - matchoff, (char **)&end);
+	cseq = nf_ct_helper_parse_uint(*dptr + matchoff, *datalen - matchoff,
+				       (char **)&end);
 	if (*dptr + matchoff == end) {
 		nf_ct_helper_log(skb, ct, "cannot get cseq");
 		return NF_DROP;
@@ -1613,7 +1566,9 @@ static int process_sip_request(struct sk_buff *skb, unsigned int protoff,
 			nf_ct_helper_log(skb, ct, "cannot parse cseq");
 			return NF_DROP;
 		}
-		cseq = sip_strtouint(*dptr + matchoff, *datalen - matchoff, (char **)&end);
+		cseq = nf_ct_helper_parse_uint(*dptr + matchoff,
+					       *datalen - matchoff,
+					       (char **)&end);
 		if (*dptr + matchoff == end) {
 			nf_ct_helper_log(skb, ct, "cannot get cseq");
 			return NF_DROP;
@@ -1690,7 +1645,9 @@ static int sip_help_tcp(struct sk_buff *skb, unsigned int protoff,
 				      &matchoff, &matchlen) <= 0)
 			break;
 
-		clen = sip_strtouint(dptr + matchoff, datalen - matchoff, (char **)&end);
+		clen = nf_ct_helper_parse_uint(dptr + matchoff,
+					       datalen - matchoff,
+					       (char **)&end);
 		if (dptr + matchoff == end)
 			break;
 
