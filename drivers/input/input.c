@@ -1114,6 +1114,7 @@ static __poll_t input_proc_devices_poll(struct file *file, poll_table *wait)
 static void *input_devices_seq_start(struct seq_file *seq, loff_t *pos)
 {
 	struct input_seq_state *state = seq->private;
+	void *v;
 	int error;
 
 	error = mutex_lock_interruptible(&input_mutex);
@@ -1124,7 +1125,11 @@ static void *input_devices_seq_start(struct seq_file *seq, loff_t *pos)
 
 	state->mutex_acquired = true;
 
-	return seq_list_start(&input_dev_list, *pos);
+	v = seq_list_start(&input_dev_list, *pos);
+	if (v)
+		input_get_device(container_of(v, struct input_dev, node));
+
+	return v;
 }
 
 static void *input_devices_seq_next(struct seq_file *seq, void *v, loff_t *pos)
@@ -1135,6 +1140,17 @@ static void *input_devices_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 static void input_seq_stop(struct seq_file *seq, void *v)
 {
 	struct input_seq_state *state = seq->private;
+
+	if (state->mutex_acquired)
+		mutex_unlock(&input_mutex);
+}
+
+static void input_devices_seq_stop(struct seq_file *seq, void *v)
+{
+	struct input_seq_state *state = seq->private;
+
+	if (v)
+		input_put_device(container_of(v, struct input_dev, node));
 
 	if (state->mutex_acquired)
 		mutex_unlock(&input_mutex);
@@ -1214,7 +1230,7 @@ static int input_devices_seq_show(struct seq_file *seq, void *v)
 static const struct seq_operations input_devices_seq_ops = {
 	.start	= input_devices_seq_start,
 	.next	= input_devices_seq_next,
-	.stop	= input_seq_stop,
+	.stop	= input_devices_seq_stop,
 	.show	= input_devices_seq_show,
 };
 
