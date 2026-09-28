@@ -162,6 +162,7 @@ lpfc_dev_loss_tmo_callbk(struct fc_rport *rport)
 	struct lpfc_work_evt *evtp;
 	unsigned long iflags;
 	bool drop_initial_node_ref = false;
+	bool drop_scsi_node_ref = false;
 
 	ndlp = ((struct lpfc_rport_data *)rport->dd_data)->pnode;
 	if (!ndlp)
@@ -202,6 +203,7 @@ lpfc_dev_loss_tmo_callbk(struct fc_rport *rport)
 		 */
 		if (ndlp->fc4_xpt_flags & SCSI_XPT_REGD) {
 			ndlp->fc4_xpt_flags &= ~SCSI_XPT_REGD;
+			drop_scsi_node_ref = true;
 
 			/* If NLP_XPT_REGD was cleared in lpfc_nlp_unreg_node,
 			 * unregister calls were made to the scsi and nvme
@@ -213,9 +215,6 @@ lpfc_dev_loss_tmo_callbk(struct fc_rport *rport)
 				if (!(ndlp->fc4_xpt_flags & NVME_XPT_REGD))
 					ndlp->fc4_xpt_flags &= ~NLP_XPT_REGD;
 				spin_unlock_irqrestore(&ndlp->lock, iflags);
-
-				/* Release scsi transport reference */
-				lpfc_nlp_put(ndlp);
 			} else {
 				spin_unlock_irqrestore(&ndlp->lock, iflags);
 			}
@@ -223,6 +222,8 @@ lpfc_dev_loss_tmo_callbk(struct fc_rport *rport)
 			spin_unlock_irqrestore(&ndlp->lock, iflags);
 		}
 
+		if (drop_scsi_node_ref)
+			lpfc_nlp_put(ndlp);
 		if (drop_initial_node_ref)
 			lpfc_nlp_put(ndlp);
 		return;
@@ -271,6 +272,7 @@ lpfc_dev_loss_tmo_callbk(struct fc_rport *rport)
 	 * rport. Remove the association between rport and ndlp.
 	 */
 	ndlp->fc4_xpt_flags &= ~SCSI_XPT_REGD;
+	drop_scsi_node_ref = true;
 	((struct lpfc_rport_data *)rport->dd_data)->pnode = NULL;
 	ndlp->rport = NULL;
 	spin_unlock_irqrestore(&ndlp->lock, iflags);
@@ -287,6 +289,8 @@ lpfc_dev_loss_tmo_callbk(struct fc_rport *rport)
 			list_add_tail(&evtp->evt_listp, &phba->work_list);
 			spin_unlock_irqrestore(&phba->hbalock, iflags);
 			lpfc_worker_wake_up(phba);
+			if (drop_scsi_node_ref)
+				lpfc_nlp_put(ndlp);
 			return;
 		}
 		spin_unlock_irqrestore(&phba->hbalock, iflags);
@@ -304,6 +308,8 @@ lpfc_dev_loss_tmo_callbk(struct fc_rport *rport)
 						NLP_EVT_DEVICE_RM);
 		}
 	}
+	if (drop_scsi_node_ref)
+		lpfc_nlp_put(ndlp);
 }
 
 /**
@@ -4577,7 +4583,6 @@ lpfc_unregister_remote_port(struct lpfc_nodelist *ndlp)
 			 kref_read(&ndlp->kref));
 
 	fc_remote_port_delete(rport);
-	lpfc_nlp_put(ndlp);
 }
 
 static void
