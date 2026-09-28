@@ -147,6 +147,19 @@ int kvmppc_prepare_to_enter(struct kvm_vcpu *vcpu)
 			continue;
 		}
 
+#ifdef CONFIG_PPC64
+		/*
+		 * Interrupt arrived between the soft and hard
+		 * disable. Replay it and retry guest entry.
+		 */
+		if (unlikely(local_paca->irq_happened != PACA_IRQ_HARD_DIS)) {
+			local_irq_enable();
+			local_irq_disable();
+			hard_irq_disable();
+			continue;
+		}
+#endif
+
 		guest_enter_irqoff();
 		return 1;
 	}
