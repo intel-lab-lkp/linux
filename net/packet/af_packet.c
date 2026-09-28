@@ -1911,7 +1911,14 @@ static int packet_rcv_spkt(struct sk_buff *skb, struct net_device *dev,
 
 	spkt = &PACKET_SKB_CB(skb)->sa.pkt;
 
-	skb_push(skb, skb->data - skb_mac_header(skb));
+	/* Only a device with a visible ll header can have it restored, which is
+	 * the test packet_rcv() and tpacket_rcv() already make.  For the others
+	 * the header is invisible and the subtraction has no meaning: a producer
+	 * that left skb->mac_header at its 0xFFFF sentinel turns it into a huge
+	 * negative length that trips skb_under_panic() in softirq context.
+	 */
+	if (dev_has_header(dev))
+		skb_push(skb, skb->data - skb_mac_header(skb));
 
 	/*
 	 *	The SOCK_PACKET socket receives _all_ frames.
