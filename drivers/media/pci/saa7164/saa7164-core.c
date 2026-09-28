@@ -1462,6 +1462,20 @@ static void saa7164_finidev(struct pci_dev *pci_dev)
 		&dev->ports[SAA7164_PORT_VBI2].poll_interval);
 
 	saa7164_shutdown(dev);
+	free_irq(pci_dev->irq, dev);
+	cancel_work_sync(&dev->workcmd);
+
+	if (saa7164_boards[dev->board].portc == SAA7164_MPEG_ENCODER)
+		cancel_work_sync(&dev->ports[SAA7164_PORT_ENC1].workenc);
+
+	if (saa7164_boards[dev->board].portd == SAA7164_MPEG_ENCODER)
+		cancel_work_sync(&dev->ports[SAA7164_PORT_ENC2].workenc);
+
+	if (saa7164_boards[dev->board].porte == SAA7164_MPEG_VBI)
+		cancel_work_sync(&dev->ports[SAA7164_PORT_VBI1].workenc);
+
+	if (saa7164_boards[dev->board].portf == SAA7164_MPEG_VBI)
+		cancel_work_sync(&dev->ports[SAA7164_PORT_VBI2].workenc);
 
 	if (saa7164_boards[dev->board].porta == SAA7164_MPEG_DVB)
 		saa7164_dvb_unregister(&dev->ports[SAA7164_PORT_TS1]);
@@ -1484,9 +1498,6 @@ static void saa7164_finidev(struct pci_dev *pci_dev)
 	saa7164_i2c_unregister(&dev->i2c_bus[0]);
 	saa7164_i2c_unregister(&dev->i2c_bus[1]);
 	saa7164_i2c_unregister(&dev->i2c_bus[2]);
-
-	/* unregister stuff */
-	free_irq(pci_dev->irq, dev);
 
 	if (dev->msi) {
 		pci_disable_msi(pci_dev);
