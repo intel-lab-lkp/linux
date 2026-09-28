@@ -79,6 +79,10 @@
 
 #define MADV_COLLAPSE	25		/* Synchronous hugepage collapse */
 
+#define MADV_CRASH_SECRET 26		/* holds secrets, tell the kdump kernel */
+#define MADV_CRASH_CACHE 27		/* holds nothing worth dumping */
+#define MADV_CRASH_RESET 28		/* undo MADV_CRASH_SECRET and MADV_CRASH_CACHE */
+
 #define MADV_GUARD_INSTALL 102		/* fatal signal on access to range */
 #define MADV_GUARD_REMOVE 103		/* unguard range */
 

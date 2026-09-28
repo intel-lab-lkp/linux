@@ -13,6 +13,8 @@
 #include <linux/page-isolation.h>
 #include <linux/page_idle.h>
 #include <linux/userfaultfd_k.h>
+#include <linux/crash_memaction.h>
+#include <linux/rmap.h>
 #include <linux/hugetlb.h>
 #include <linux/falloc.h>
 #include <linux/fadvise.h>
@@ -1173,6 +1175,98 @@ static long madvise_populate(struct madvise_behavior *madv_behavior)
 	return 0;
 }
 
+#ifdef CONFIG_CRASH_MEMACTION
+static void madvise_crash_mark_pfns(struct mm_walk *walk, unsigned long pfn,
+		unsigned long nr_pages)
+{
+	bool mark = *(bool *)walk->private;
+
+	/* Acting on the zero page would reach every other mapping of it. */
+	if (is_zero_pfn(pfn) || is_huge_zero_pfn(pfn) || !pfn_valid(pfn))
+		return;
+
+	if (mark)
+		crash_mark_pages(pfn_to_page(pfn), nr_pages, walk->vma);
+	else
+		crash_memaction_unmark_pfns(pfn, nr_pages);
+}
+
+static int crash_mark_pmd_entry(pmd_t *pmd, unsigned long addr,
+		unsigned long end, struct mm_walk *walk)
+{
+	pte_t *start_pte, *pte;
+	spinlock_t *ptl;
+
+	if (fatal_signal_pending(current))
+		return -EINTR;
+
+	ptl = pmd_trans_huge_lock(pmd, walk->vma);
+	if (ptl) {
+		pmd_t pmdval = *pmd;
+
+		if (pmd_present(pmdval))
+			madvise_crash_mark_pfns(walk,
+				pmd_pfn(pmdval) + ((addr & ~PMD_MASK) >> PAGE_SHIFT),
+				(end - addr) >> PAGE_SHIFT);
+		spin_unlock(ptl);
+		return 0;
+	}
+
+	start_pte = pte = pte_offset_map_lock(walk->mm, pmd, addr, &ptl);
+	if (!start_pte)
+		return 0;
+
+	for (; addr < end; pte++, addr += PAGE_SIZE) {
+		pte_t ptent = ptep_get(pte);
+
+		if (pte_present(ptent))
+			madvise_crash_mark_pfns(walk, pte_pfn(ptent), 1);
+	}
+
+	pte_unmap_unlock(start_pte, ptl);
+	cond_resched();
+	return 0;
+}
+
+#ifdef CONFIG_HUGETLB_PAGE
+static int crash_mark_hugetlb_entry(pte_t *pte, unsigned long hmask,
+		unsigned long addr, unsigned long end, struct mm_walk *walk)
+{
+	struct hstate *h = hstate_vma(walk->vma);
+	spinlock_t *ptl;
+	pte_t entry;
+
+	ptl = huge_pte_lock(h, walk->mm, pte);
+	entry = huge_ptep_get(walk->mm, addr, pte);
+	if (pte_present(entry))
+		madvise_crash_mark_pfns(walk,
+			pte_pfn(entry) + ((addr & ~hmask) >> PAGE_SHIFT),
+			(end - addr) >> PAGE_SHIFT);
+	spin_unlock(ptl);
+
+	return 0;
+}
+#endif /* CONFIG_HUGETLB_PAGE */
+
+static const struct mm_walk_ops crash_mark_walk_ops = {
+	.pmd_entry	= crash_mark_pmd_entry,
+#ifdef CONFIG_HUGETLB_PAGE
+	.hugetlb_entry	= crash_mark_hugetlb_entry,
+#endif
+	.walk_lock	= PGWALK_WRLOCK,
+};
+
+static int madvise_crash_mark_existing(struct vm_area_struct *vma,
+		unsigned long start, unsigned long end, bool mark)
+{
+	if (!static_branch_unlikely(&crash_memaction_active))
+		return 0;
+
+	return walk_page_range_vma(vma, start, end, &crash_mark_walk_ops,
+				   &mark);
+}
+#endif /* CONFIG_CRASH_MEMACTION */
+
 /*
  * Application wants to free up the pages and associated backing store.
  * This is effectively punching a hole into the middle of a file.
@@ -1585,6 +1679,26 @@ static int madvise_vma_behavior(struct madvise_behavior *madv_behavior)
 	case MADV_DONTDUMP:
 		new_flags |= VM_DONTDUMP;
 		break;
+#ifdef CONFIG_CRASH_MEMACTION
+	case MADV_CRASH_SECRET:
+		if (!vma_is_anonymous(vma) && !vma_is_shmem(vma) &&
+		    !vma_is_hugetlb(vma))
+			return -EINVAL;
+		if (crash_memaction_types() & CRASH_MEMACTION_SECRET)
+			new_flags |= VM_CRASH_MARK;
+		break;
+	case MADV_CRASH_CACHE:
+		if (!vma_is_anonymous(vma) && !vma_is_shmem(vma) &&
+		    !vma_is_hugetlb(vma))
+			return -EINVAL;
+		if (crash_memaction_types() & CRASH_MEMACTION_CACHE)
+			new_flags |= VM_CRASH_MARK;
+		break;
+	case MADV_CRASH_RESET:
+		/* Unmarking stays allowed whatever the VMA has become since. */
+		new_flags &= ~VM_CRASH_MARK;
+		break;
+#endif
 	case MADV_DODUMP:
 		/* Non-persistent memory cannot be dumped. */
 		if (!vma_is_persistent(vma))
@@ -1613,6 +1727,19 @@ static int madvise_vma_behavior(struct madvise_behavior *madv_behavior)
 
 	/* This is a write operation.*/
 	VM_WARN_ON_ONCE(madv_behavior->lock_mode != MADVISE_MMAP_WRITE_LOCK);
+
+#ifdef CONFIG_CRASH_MEMACTION
+	/* The rmap hooks only see the flag as folios arrive, so walk the rest. */
+	if ((new_flags ^ vma->vm_flags) & VM_CRASH_MARK) {
+		error = madvise_update_vma(new_flags, madv_behavior);
+		if (!error)
+			error = madvise_crash_mark_existing(
+					madv_behavior->vma, range->start,
+					range->end,
+					!!(new_flags & VM_CRASH_MARK));
+		goto out;
+	}
+#endif
 
 	error = madvise_update_vma(new_flags, madv_behavior);
 out:
@@ -1732,6 +1859,11 @@ madvise_behavior_valid(int behavior)
 	case MADV_KEEPONFORK:
 	case MADV_GUARD_INSTALL:
 	case MADV_GUARD_REMOVE:
+#ifdef CONFIG_CRASH_MEMACTION
+	case MADV_CRASH_SECRET:
+	case MADV_CRASH_CACHE:
+	case MADV_CRASH_RESET:
+#endif
 #ifdef CONFIG_MEMORY_FAILURE
 	case MADV_SOFT_OFFLINE:
 	case MADV_HWPOISON:
