@@ -15828,6 +15828,9 @@ lpfc_sli4_queue_free(struct lpfc_queue *queue)
 	if (!queue)
 		return;
 
+	disable_delayed_work_sync(&queue->sched_irqwork);
+	disable_delayed_work_sync(&queue->sched_spwork);
+
 	if (!list_empty(&queue->wq_list))
 		list_del(&queue->wq_list);
 
@@ -15892,6 +15895,8 @@ lpfc_sli4_queue_alloc(struct lpfc_hba *phba, uint32_t page_size,
 	INIT_LIST_HEAD(&queue->page_list);
 	INIT_LIST_HEAD(&queue->child_list);
 	INIT_LIST_HEAD(&queue->cpu_list);
+	INIT_DELAYED_WORK(&queue->sched_irqwork, lpfc_sli4_dly_hba_process_cq);
+	INIT_DELAYED_WORK(&queue->sched_spwork, lpfc_sli4_dly_sp_process_cq);
 
 	/* Set queue parameters now.  If the system cannot provide memory
 	 * resources, the free routine needs to know what was allocated.
@@ -15922,8 +15927,6 @@ lpfc_sli4_queue_alloc(struct lpfc_hba *phba, uint32_t page_size,
 	}
 	INIT_WORK(&queue->irqwork, lpfc_sli4_hba_process_cq);
 	INIT_WORK(&queue->spwork, lpfc_sli4_sp_process_cq);
-	INIT_DELAYED_WORK(&queue->sched_irqwork, lpfc_sli4_dly_hba_process_cq);
-	INIT_DELAYED_WORK(&queue->sched_spwork, lpfc_sli4_dly_sp_process_cq);
 
 	/* notify_interval will be set during q creation */
 
