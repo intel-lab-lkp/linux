@@ -16,6 +16,8 @@ static int sk_udp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len,
 	if (sk->sk_family == AF_INET6)
 		return udpv6_prot_saved->recvmsg(sk, msg, len, flags);
 #endif
+	if (!IS_ENABLED(CONFIG_IPV4))
+		return -EAFNOSUPPORT;
 	return udp_prot.recvmsg(sk, msg, len, flags);
 }
 
@@ -155,7 +157,8 @@ static void udp_bpf_check_v6_needs_rebuild(struct proto *ops)
 
 static int __init udp_bpf_v4_build_proto(void)
 {
-	udp_bpf_rebuild_protos(&udp_bpf_prots[UDP_BPF_IPV4], &udp_prot);
+	if (IS_ENABLED(CONFIG_IPV4))
+		udp_bpf_rebuild_protos(&udp_bpf_prots[UDP_BPF_IPV4], &udp_prot);
 	return 0;
 }
 late_initcall(udp_bpf_v4_build_proto);
