@@ -306,7 +306,7 @@ static int venus_add_video_core(struct venus_core *core, const char *node_name,
 	if (!node_name)
 		return 0;
 
-	enp = of_find_node_by_name(dev->of_node, node_name);
+	enp = of_get_child_by_name(dev->of_node, node_name);
 	if (enp) {
 		of_node_put(enp);
 		return 0;
