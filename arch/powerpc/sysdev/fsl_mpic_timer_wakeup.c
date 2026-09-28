@@ -23,6 +23,7 @@ struct fsl_mpic_timer_wakeup {
 
 static struct fsl_mpic_timer_wakeup *fsl_wakeup;
 static DEFINE_MUTEX(sysfs_lock);
+static DEFINE_MUTEX(timer_store_lock);
 
 static void fsl_free_resource(struct work_struct *ws)
 {
@@ -76,32 +77,43 @@ static ssize_t fsl_timer_wakeup_store(struct device *dev,
 	if (kstrtoll(buf, 0, &interval))
 		return -EINVAL;
 
-	guard(mutex)(&sysfs_lock);
+	guard(mutex)(&timer_store_lock);
+
+	mutex_lock(&sysfs_lock);
 
 	if (fsl_wakeup->timer) {
 		disable_irq_wake(fsl_wakeup->timer->irq);
 		mpic_free_timer(fsl_wakeup->timer);
 		fsl_wakeup->timer = NULL;
 	}
+	mutex_unlock(&sysfs_lock);
+
+	cancel_work_sync(&fsl_wakeup->free_work);
 
 	if (!interval)
 		return count;
 
+	mutex_lock(&sysfs_lock);
 	fsl_wakeup->timer = mpic_request_timer(fsl_mpic_timer_irq,
 						fsl_wakeup, interval);
-	if (!fsl_wakeup->timer)
-		return -EINVAL;
+	if (!fsl_wakeup->timer) {
+		ret = -EINVAL;
+		goto unlock;
+	}
 
 	ret = enable_irq_wake(fsl_wakeup->timer->irq);
 	if (ret) {
 		mpic_free_timer(fsl_wakeup->timer);
 		fsl_wakeup->timer = NULL;
-		return ret;
+		goto unlock;
 	}
 
 	mpic_start_timer(fsl_wakeup->timer);
+	ret = count;
 
-	return count;
+unlock:
+	mutex_unlock(&sysfs_lock);
+	return ret;
 }
 
 static struct device_attribute mpic_attributes = __ATTR(timer_wakeup, 0644,
@@ -139,16 +151,18 @@ static void __exit fsl_wakeup_sys_exit(void)
 		put_device(dev_root);
 	}
 
+	guard(mutex)(&timer_store_lock);
 	mutex_lock(&sysfs_lock);
 
 	if (fsl_wakeup->timer) {
 		disable_irq_wake(fsl_wakeup->timer->irq);
 		mpic_free_timer(fsl_wakeup->timer);
+		fsl_wakeup->timer = NULL;
 	}
 
-	kfree(fsl_wakeup);
-
 	mutex_unlock(&sysfs_lock);
+	cancel_work_sync(&fsl_wakeup->free_work);
+	kfree(fsl_wakeup);
 }
 
 module_init(fsl_wakeup_sys_init);
