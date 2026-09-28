@@ -229,16 +229,6 @@ err_cleanup:
 	return ret;
 }
 
-static void ak7375_remove(struct i2c_client *client)
-{
-	struct v4l2_subdev *sd = i2c_get_clientdata(client);
-	struct ak7375_device *ak7375_dev = sd_to_ak7375_vcm(sd);
-
-	ak7375_subdev_cleanup(ak7375_dev);
-	pm_runtime_disable(&client->dev);
-	pm_runtime_set_suspended(&client->dev);
-}
-
 /*
  * This function sets the vcm position, so it consumes least current
  * The lens position is gradually moved in units of ctrl_steps,
@@ -326,6 +316,18 @@ static int __maybe_unused ak7375_vcm_resume(struct device *dev)
 	ak7375_dev->active = true;
 
 	return 0;
+}
+
+static void ak7375_remove(struct i2c_client *client)
+{
+	struct v4l2_subdev *sd = i2c_get_clientdata(client);
+	struct ak7375_device *ak7375_dev = sd_to_ak7375_vcm(sd);
+
+	ak7375_subdev_cleanup(ak7375_dev);
+	pm_runtime_disable(&client->dev);
+	if (!pm_runtime_status_suspended(&client->dev))
+		ak7375_vcm_suspend(&client->dev);
+	pm_runtime_set_suspended(&client->dev);
 }
 
 static const struct of_device_id ak7375_of_table[] = {
