@@ -14,6 +14,7 @@
 #include <linux/dev_printk.h>
 #include <linux/device.h>
 #include <linux/device/devres.h>
+#include <linux/dmi.h>
 #include <linux/err.h>
 #include <linux/hwmon.h>
 #include <linux/init.h>
@@ -131,6 +132,58 @@ struct bitland_mifs_output {
 	u8 data[28];
 } __packed;
 
+/* TM2107 places the return code after the function ID and payload. */
+struct bitland_mifs_output_tm2107 {
+	__le16 function;
+	u8 data[28];
+	__le16 return_code;
+} __packed;
+
+struct bitland_mifs_quirks {
+	const enum platform_profile_option *profiles;
+	size_t num_profiles;
+	bool return_code_at_end;
+	bool skip_ac_type_check;
+};
+
+static const enum platform_profile_option bitland_profiles[] = {
+	[WMI_PP_BALANCED] = PLATFORM_PROFILE_BALANCED,
+	[WMI_PP_PERFORMANCE] = PLATFORM_PROFILE_BALANCED_PERFORMANCE,
+	[WMI_PP_QUIET] = PLATFORM_PROFILE_LOW_POWER,
+	[WMI_PP_FULL_SPEED] = PLATFORM_PROFILE_PERFORMANCE,
+};
+
+/* Values observed after selecting each mode in GCommandCenter. */
+static const enum platform_profile_option tm2107_profiles[] = {
+	[0] = PLATFORM_PROFILE_PERFORMANCE,
+	[1] = PLATFORM_PROFILE_BALANCED,
+	[2] = PLATFORM_PROFILE_LOW_POWER,
+};
+
+static const struct bitland_mifs_quirks bitland_default_quirks = {
+	.profiles = bitland_profiles,
+	.num_profiles = ARRAY_SIZE(bitland_profiles),
+};
+
+static const struct bitland_mifs_quirks bitland_tm2107_quirks = {
+	.profiles = tm2107_profiles,
+	.num_profiles = ARRAY_SIZE(tm2107_profiles),
+	.return_code_at_end = true,
+	.skip_ac_type_check = true,
+};
+
+static const struct dmi_system_id bitland_mifs_dmi_table[] = {
+	{
+		.matches = {
+			DMI_EXACT_MATCH(DMI_SYS_VENDOR, "TIMI"),
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Redmi Book Pro 14 2022"),
+			DMI_EXACT_MATCH(DMI_BOARD_NAME, "TM2107"),
+		},
+		.driver_data = (void *)&bitland_tm2107_quirks,
+	},
+	{}
+};
+
 struct bitland_mifs_event {
 	u8 event_type;
 	u8 event_id;
@@ -154,6 +207,7 @@ struct bitland_fan_notify_data {
 
 struct bitland_mifs_wmi_data {
 	struct wmi_device *wdev;
+	const struct bitland_mifs_quirks *quirks;
 	struct mutex lock;		/* Protects WMI calls */
 	struct led_classdev kbd_led;
 	struct notifier_block notifier;
@@ -180,6 +234,17 @@ static int bitland_mifs_wmi_call(struct bitland_mifs_wmi_data *data,
 
 	struct bitland_mifs_output *result __free(kfree) = out_buf.data;
 
+	if (data->quirks->return_code_at_end) {
+		const struct bitland_mifs_output_tm2107 *raw = out_buf.data;
+		struct bitland_mifs_output normalized = {
+			.return_code = raw->return_code,
+			.function = raw->function,
+		};
+
+		memcpy(normalized.data, raw->data, sizeof(normalized.data));
+		*result = normalized;
+	}
+
 	switch (le16_to_cpu(result->return_code)) {
 	case WMI_RETURN_CODE_SUCCESS:
 		break;
@@ -202,6 +267,7 @@ static int laptop_profile_get(struct device *dev,
 			      enum platform_profile_option *profile)
 {
 	struct bitland_mifs_wmi_data *data = dev_get_drvdata(dev);
+	const struct bitland_mifs_quirks *quirks = data->quirks;
 	struct bitland_mifs_input input = {
 		.operation = cpu_to_le16(WMI_METHOD_GET),
 		.function = cpu_to_le16(WMI_FN_SYSTEM_PER_MODE),
@@ -213,22 +279,10 @@ static int laptop_profile_get(struct device *dev,
 	if (ret)
 		return ret;
 
-	switch (result.data[0]) {
-	case WMI_PP_BALANCED:
-		*profile = PLATFORM_PROFILE_BALANCED;
-		break;
-	case WMI_PP_PERFORMANCE:
-		*profile = PLATFORM_PROFILE_BALANCED_PERFORMANCE;
-		break;
-	case WMI_PP_QUIET:
-		*profile = PLATFORM_PROFILE_LOW_POWER;
-		break;
-	case WMI_PP_FULL_SPEED:
-		*profile = PLATFORM_PROFILE_PERFORMANCE;
-		break;
-	default:
+	if (result.data[0] >= quirks->num_profiles)
 		return -EINVAL;
-	}
+
+	*profile = quirks->profiles[result.data[0]];
 	return 0;
 }
 
@@ -240,6 +294,10 @@ static int bitland_check_performance_capability(struct bitland_mifs_wmi_data *da
 	};
 	struct bitland_mifs_output output;
 	int ret;
+
+	/* TM2107 accepts its USB-C charger, without an AC type query. */
+	if (data->quirks->skip_ac_type_check)
+		return power_supply_is_system_supplied() > 0 ? 0 : -EOPNOTSUPP;
 
 	/* Full-speed/performance mode requires DC power (not USB-C) */
 	if (!power_supply_is_system_supplied())
@@ -263,47 +321,40 @@ static int laptop_profile_set(struct device *dev,
 			      enum platform_profile_option profile)
 {
 	struct bitland_mifs_wmi_data *data = dev_get_drvdata(dev);
+	const struct bitland_mifs_quirks *quirks = data->quirks;
 	struct bitland_mifs_input input = {
 		.operation = cpu_to_le16(WMI_METHOD_SET),
 		.function = cpu_to_le16(WMI_FN_SYSTEM_PER_MODE),
 	};
+	size_t i;
 	int ret;
-	u8 val;
 
-	switch (profile) {
-	case PLATFORM_PROFILE_LOW_POWER:
-		val = WMI_PP_QUIET;
-		break;
-	case PLATFORM_PROFILE_BALANCED:
-		val = WMI_PP_BALANCED;
-		break;
-	case PLATFORM_PROFILE_BALANCED_PERFORMANCE:
-		ret = bitland_check_performance_capability(data);
-		if (ret)
-			return ret;
-		val = WMI_PP_PERFORMANCE;
-		break;
-	case PLATFORM_PROFILE_PERFORMANCE:
-		ret = bitland_check_performance_capability(data);
-		if (ret)
-			return ret;
-		val = WMI_PP_FULL_SPEED;
-		break;
-	default:
+	for (i = 0; i < quirks->num_profiles; i++) {
+		if (profile == quirks->profiles[i])
+			break;
+	}
+	if (i == quirks->num_profiles)
 		return -EOPNOTSUPP;
+
+	if (profile == PLATFORM_PROFILE_BALANCED_PERFORMANCE ||
+	    profile == PLATFORM_PROFILE_PERFORMANCE) {
+		ret = bitland_check_performance_capability(data);
+		if (ret)
+			return ret;
 	}
 
-	input.payload[0] = val;
+	input.payload[0] = i;
 
 	return bitland_mifs_wmi_call(data, &input, NULL);
 }
 
 static int platform_profile_probe(void *drvdata, unsigned long *choices)
 {
-	set_bit(PLATFORM_PROFILE_LOW_POWER, choices);
-	set_bit(PLATFORM_PROFILE_BALANCED, choices);
-	set_bit(PLATFORM_PROFILE_BALANCED_PERFORMANCE, choices);
-	set_bit(PLATFORM_PROFILE_PERFORMANCE, choices);
+	struct bitland_mifs_wmi_data *data = drvdata;
+	size_t i;
+
+	for (i = 0; i < data->quirks->num_profiles; i++)
+		set_bit(data->quirks->profiles[i], choices);
 
 	return 0;
 }
@@ -659,6 +710,7 @@ static int bitland_notifier_callback(struct notifier_block *nb,
 static int bitland_mifs_wmi_probe(struct wmi_device *wdev, const void *context)
 {
 	struct bitland_mifs_wmi_data *drv_data;
+	const struct dmi_system_id *dmi_id;
 	enum bitland_wmi_device_type dev_type =
 		(enum bitland_wmi_device_type)(unsigned long)context;
 	struct led_init_data init_data = {
@@ -673,6 +725,11 @@ static int bitland_mifs_wmi_probe(struct wmi_device *wdev, const void *context)
 		return -ENOMEM;
 
 	drv_data->wdev = wdev;
+
+	drv_data->quirks = &bitland_default_quirks;
+	dmi_id = dmi_first_match(bitland_mifs_dmi_table);
+	if (dmi_id)
+		drv_data->quirks = dmi_id->driver_data;
 
 	ret = devm_mutex_init(&wdev->dev, &drv_data->lock);
 	if (ret)
