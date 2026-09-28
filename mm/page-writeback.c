@@ -2986,11 +2986,18 @@ bool __folio_end_writeback(struct folio *folio)
 		__xa_clear_mark(&mapping->i_pages, folio->index,
 					PAGECACHE_TAG_WRITEBACK);
 
+		/*
+		 * With RWF_WRITETHROUGH, we might not have a writeback
+		 * associated with the inode
+		 */
 		wb = inode_to_wb(inode);
-		wb_stat_mod(wb, WB_WRITEBACK, -nr);
-		__wb_writeout_add(wb, nr);
+		if (wb) {
+			wb_stat_mod(wb, WB_WRITEBACK, -nr);
+			__wb_writeout_add(wb, nr);
+		}
 		if (!mapping_tagged(mapping, PAGECACHE_TAG_WRITEBACK)) {
-			wb_inode_writeback_end(wb);
+			if (wb)
+				wb_inode_writeback_end(wb);
 			if (mapping->host)
 				sb_clear_inode_writeback(mapping->host);
 		}
@@ -3030,10 +3037,17 @@ void __folio_start_writeback(struct folio *folio, bool keep_write)
 		on_wblist = mapping_tagged(mapping, PAGECACHE_TAG_WRITEBACK);
 
 		xas_set_mark(&xas, PAGECACHE_TAG_WRITEBACK);
+
+		/*
+		 * With RWF_WRITETHROUGH, we might not have a writeback
+		 * associated with the inode
+		 */
 		wb = inode_to_wb(inode);
-		wb_stat_mod(wb, WB_WRITEBACK, nr);
+		if (wb)
+			wb_stat_mod(wb, WB_WRITEBACK, nr);
 		if (!on_wblist) {
-			wb_inode_writeback_start(wb);
+			if (wb)
+				wb_inode_writeback_start(wb);
 			/*
 			 * We can come through here when swapping anonymous
 			 * folios, so we don't necessarily have an inode to
