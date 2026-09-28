@@ -940,6 +940,7 @@ static ssize_t map_write(struct file *file, const char __user *buf,
 	struct uid_gid_map new_map;
 	unsigned idx;
 	struct uid_gid_extent extent;
+	unsigned long long first, lower_first, cnt;
 	char *kbuf, *pos, *next_line;
 	ssize_t ret;
 
@@ -1001,17 +1002,17 @@ static ssize_t map_write(struct file *file, const char __user *buf,
 		}
 
 		pos = skip_spaces(pos);
-		extent.first = simple_strtoul(pos, &pos, 10);
+		first = simple_strtoull(pos, &pos, 10);
 		if (!isspace(*pos))
 			goto out;
 
 		pos = skip_spaces(pos);
-		extent.lower_first = simple_strtoul(pos, &pos, 10);
+		lower_first = simple_strtoull(pos, &pos, 10);
 		if (!isspace(*pos))
 			goto out;
 
 		pos = skip_spaces(pos);
-		extent.count = simple_strtoul(pos, &pos, 10);
+		cnt = simple_strtoull(pos, &pos, 10);
 		if (*pos && !isspace(*pos))
 			goto out;
 
@@ -1019,6 +1020,13 @@ static ssize_t map_write(struct file *file, const char __user *buf,
 		pos = skip_spaces(pos);
 		if (*pos != '\0')
 			goto out;
+
+		/* Verify the values fit in the u32 fields of the extent */
+		if (first > U32_MAX || lower_first > U32_MAX || cnt > U32_MAX)
+			goto out;
+		extent.first = first;
+		extent.lower_first = lower_first;
+		extent.count = cnt;
 
 		/* Verify we have been given valid starting values */
 		if ((extent.first == (u32) -1) ||
