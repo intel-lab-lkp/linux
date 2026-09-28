@@ -111,11 +111,11 @@
 	};
 
 	wlan_host_wake: wlan-host-wake-pins {
-		  samsung,pins = "gpa0-7";
-		  samsung,pin-function = <EXYNOS_PIN_FUNC_EINT>;
-		  samsung,pin-pud = <EXYNOS_PIN_PULL_DOWN>;
-		  samsung,pin-con-pdn = <EXYNOS_PIN_PDN_PREV>;
-		  samsung,pin-pud-pdn = <EXYNOS_PIN_PULL_DOWN>;
+		samsung,pins = "gpa0-7";
+		samsung,pin-function = <EXYNOS_PIN_FUNC_EINT>;
+		samsung,pin-pud = <EXYNOS_PIN_PULL_DOWN>;
+		samsung,pin-con-pdn = <EXYNOS_PIN_PDN_PREV>;
+		samsung,pin-pud-pdn = <EXYNOS_PIN_PULL_DOWN>;
 	};
 };
 
