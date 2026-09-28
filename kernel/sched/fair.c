@@ -12919,13 +12919,15 @@ static inline void calculate_imbalance(struct lb_env *env, struct sd_lb_stats *s
 /*
  * Decision matrix according to the local and busiest group type:
  *
- * busiest \ local has_spare fully_busy misfit asym imbalanced overloaded
- * has_spare        nr_idle   balanced   N/A    N/A  balanced   balanced
- * fully_busy       nr_idle   nr_idle    N/A    N/A  balanced   balanced
- * misfit_task      force     N/A        N/A    N/A  N/A        N/A
- * asym_packing     force     force      N/A    N/A  force      force
- * imbalanced       force     force      N/A    N/A  force      force
- * overloaded       force     force      N/A    N/A  force      avg_load
+ * busiest \ local has_spare fully_busy misfit smt asym imbalanced llc overloaded
+ * has_spare        nr_idle   balanced   N/A   N/A  N/A  balanced  N/A  balanced
+ * fully_busy       nr_idle   nr_idle    N/A   N/A  N/A  balanced  N/A  balanced
+ * misfit_task      force     N/A        N/A   N/A  N/A  N/A       N/A  N/A
+ * smt_balance      nr_idle   nr_idle    N/A   N/A  N/A  balanced  N/A  balanced
+ * asym_packing     force     force      N/A   N/A  N/A  force     N/A  force
+ * imbalanced       force     force      N/A   N/A  N/A  force     N/A  force
+ * llc_balance      nr_idle   nr_idle    N/A   N/A  N/A  nr_idle   N/A  balanced
+ * overloaded       force     force      N/A   N/A  N/A  force     N/A  avg_load
  *
  * N/A :      Not Applicable because already filtered while updating
  *            statistics.
