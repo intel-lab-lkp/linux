@@ -4974,6 +4974,53 @@ static inline int intel_set_branch_counter_constr(struct perf_event *event,
 	return 0;
 }
 
+static inline bool is_acr_sample_read_allowed(struct perf_event *event,
+					      bool group_has_sample_read)
+{
+	/*
+	 * ACR events cannot report an accurate count for non-PEBS events
+	 * or for PEBS events without counter snapshots: another ACR event
+	 * may overflow andauto-reload the counter before software can read
+	 * the precise value.
+	 *
+	 * We keep the check simple and do not validate the acr_mask precisely
+	 * to determine whether the SAMPLE_READ event is actually auto-reloaded
+	 * by another ACR event. If a SAMPLE_READ event is in the group, the
+	 * ACR event must be a PEBS event with counter snapshots; otherwise it
+	 * is rejected.
+	 */
+	if (group_has_sample_read && is_sampling_event(event) &&
+	    (!event->attr.precise_ip || !is_pebs_counter_event_group(event)))
+		return false;
+
+	return true;
+}
+
+static bool intel_pmu_allow_acr_sample_read(struct perf_event *event,
+					    bool group_has_sample_read)
+{
+	struct perf_event *leader = event->group_leader;
+	struct perf_event *sibling;
+
+	if (!is_acr_sample_read_allowed(leader, group_has_sample_read))
+		return false;
+
+	if (leader->nr_siblings) {
+		for_each_sibling_event(sibling, leader) {
+			if (!is_acr_sample_read_allowed(sibling,
+						group_has_sample_read))
+				return false;
+		}
+	}
+
+	/* event isn't installed as a sibling yet. */
+	if ((event != leader) &&
+	    !is_acr_sample_read_allowed(event, group_has_sample_read))
+		return false;
+
+	return true;
+}
+
 static int intel_pmu_hw_config(struct perf_event *event)
 {
 	int ret = x86_pmu_hw_config(event);
@@ -5117,6 +5164,7 @@ static int intel_pmu_hw_config(struct perf_event *event)
 		struct perf_event *sibling, *leader = event->group_leader;
 		struct pmu *pmu = event->pmu;
 		bool has_sw_event = false;
+		bool has_sample_read = false;
 		int num = 0, idx = 0;
 		u64 cause_mask = 0;
 
@@ -5162,8 +5210,14 @@ static int intel_pmu_hw_config(struct perf_event *event)
 		if (leader->attr.config2)
 			intel_pmu_set_acr_cntr_constr(leader, &cause_mask, &num);
 
+		if ((leader->attr.sample_type & PERF_SAMPLE_READ) ||
+		    (event->attr.sample_type & PERF_SAMPLE_READ))
+			has_sample_read = true;
+
 		if (leader->nr_siblings) {
 			for_each_sibling_event(sibling, leader) {
+				if (sibling->attr.sample_type & PERF_SAMPLE_READ)
+					has_sample_read = true;
 				if (!is_x86_event(sibling)) {
 					has_sw_event = true;
 					continue;
@@ -5175,6 +5229,7 @@ static int intel_pmu_hw_config(struct perf_event *event)
 				intel_pmu_set_acr_cntr_constr(sibling, &cause_mask, &num);
 			}
 		}
+
 		if (leader != event && event->attr.config2) {
 			if (has_sw_event)
 				return -EINVAL;
@@ -5184,6 +5239,10 @@ static int intel_pmu_hw_config(struct perf_event *event)
 		if (hweight64(cause_mask) > hweight64(hybrid(pmu, acr_cause_mask64)) ||
 		    num > hweight64(hybrid(event->pmu, acr_cntr_mask64)))
 			return -EINVAL;
+
+		if (!intel_pmu_allow_acr_sample_read(event, has_sample_read))
+			return -EINVAL;
+
 		/*
 		 * In the second round, apply the counter-constraints for
 		 * the events which can cause other events reload.
