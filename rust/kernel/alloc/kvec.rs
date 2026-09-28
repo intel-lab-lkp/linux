@@ -52,10 +52,18 @@ use core::{
     }, //
 };
 
-use pin_init::Zeroable;
+use pin_init::{
+    Init,
+    Zeroable, //
+};
 
 mod errors;
-pub use self::errors::{InsertError, PushError, RemoveError};
+pub use self::errors::{
+    InsertError,
+    PushError,
+    PushInitError,
+    RemoveError, //
+};
 
 /// Create a [`KVec`] containing the arguments.
 ///
@@ -356,6 +364,49 @@ where
         // SAFETY: The call to `reserve` was successful, so the capacity is at least one greater
         // than the length.
         unsafe { self.push_within_capacity_unchecked(v) };
+        Ok(())
+    }
+
+    /// Appends an element to the back of the [`Vec`] instance by initializing it in place.
+    ///
+    /// Unlike [`Vec::push`], the initializer may be fallible. If the allocation fails, the
+    /// original initializer `init` is handed back in [`PushInitError::AllocError`]. If the
+    /// initializer itself fails, its error is returned in [`PushInitError::InitError`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// struct Element {
+    ///     buf: KVec<u8>,
+    /// }
+    ///
+    /// impl Element {
+    ///     fn new() -> impl Init<Self, Error> {
+    ///         try_init!(Element {
+    ///             buf: KVec::with_capacity(16, GFP_KERNEL)?,
+    ///         }? Error)
+    ///     }
+    /// }
+    ///
+    /// let mut v: KVec<Element> = KVec::new();
+    /// v.try_push_init(Element::new(), GFP_KERNEL)?;
+    /// assert!(v[0].buf.is_empty());
+    /// # Ok::<(), Error>(())
+    /// ```
+    pub fn try_push_init<I, E>(&mut self, init: I, flags: Flags) -> Result<(), PushInitError<I, E>>
+    where
+        I: Init<T, E>,
+    {
+        if self.reserve(1, flags).is_err() {
+            return Err(PushInitError::AllocError(init));
+        }
+        // SAFETY: The call to `reserve` was successful, so there is at least one spare slot.
+        unsafe { init.__init(self.spare_capacity_mut().as_mut_ptr().cast::<T>()) }
+            .map_err(PushInitError::InitError)?;
+        // SAFETY: The call to `__init` returned `Ok`, so the first spare slot now holds an
+        // initialized `T`. The new length does not exceed the capacity because `reserve` ensured
+        // the capacity is greater than the length by at least one.
+        unsafe { self.inc_len(1) };
         Ok(())
     }
 
