@@ -29,6 +29,7 @@
 #include <linux/atomic.h>
 #include <linux/scatterlist.h>
 #include <linux/rbtree.h>
+#include <linux/secret_pool.h>
 #include <linux/ctype.h>
 #include <asm/page.h>
 #include <linux/unaligned.h>
@@ -486,7 +487,7 @@ static int crypt_iv_lmk_ctr(struct crypt_config *cc, struct dm_target *ti,
 		return 0;
 	}
 
-	lmk->seed = kzalloc(LMK_SEED_SIZE, GFP_KERNEL);
+	lmk->seed = secret_pool_zalloc(LMK_SEED_SIZE, GFP_KERNEL);
 	if (!lmk->seed) {
 		ti->error = "Error kmallocing seed storage in LMK";
 		return -ENOMEM;
@@ -603,8 +604,8 @@ static int crypt_iv_tcw_ctr(struct crypt_config *cc, struct dm_target *ti,
 		return -EINVAL;
 	}
 
-	tcw->iv_seed = kzalloc(cc->iv_size, GFP_KERNEL);
-	tcw->whitening = kzalloc(TCW_WHITENING_SIZE, GFP_KERNEL);
+	tcw->iv_seed = secret_pool_zalloc(cc->iv_size, GFP_KERNEL);
+	tcw->whitening = secret_pool_zalloc(TCW_WHITENING_SIZE, GFP_KERNEL);
 	if (!tcw->iv_seed || !tcw->whitening) {
 		crypt_iv_tcw_dtr(cc);
 		ti->error = "Error allocating seed storage in TCW";
@@ -771,7 +772,7 @@ static int crypt_iv_elephant_ctr(struct crypt_config *cc, struct dm_target *ti,
 	struct iv_elephant_private *elephant = &cc->iv_gen_private.elephant;
 	int r;
 
-	elephant->key = kmalloc_obj(*elephant->key);
+	elephant->key = secret_pool_alloc_obj(*elephant->key);
 	if (!elephant->key)
 		return -ENOMEM;
 
@@ -2484,6 +2485,7 @@ static int set_key_trusted(struct crypt_config *cc, struct key *key)
 static int crypt_set_keyring_key(struct crypt_config *cc, const char *key_string)
 {
 	char *new_key_string, *key_desc;
+	size_t key_string_size;
 	int ret;
 	struct key_type *type;
 	struct key *key;
@@ -2521,9 +2523,11 @@ static int crypt_set_keyring_key(struct crypt_config *cc, const char *key_string
 		return -EINVAL;
 	}
 
-	new_key_string = kstrdup(key_string, GFP_KERNEL);
+	key_string_size = strlen(key_string) + 1;
+	new_key_string = secret_pool_alloc(key_string_size, GFP_KERNEL);
 	if (!new_key_string)
 		return -ENOMEM;
+	memcpy(new_key_string, key_string, key_string_size);
 
 	key = request_key(type, key_desc + 1, NULL);
 	if (IS_ERR(key)) {
@@ -2851,7 +2855,8 @@ static int crypt_ctr_auth_cipher(struct crypt_config *cc, char *cipher_api)
 		cc->key_mac_size = crypto_ahash_digestsize(mac);
 	crypto_free_ahash(mac);
 
-	cc->authenc_key = kmalloc(crypt_authenckey_size(cc), GFP_KERNEL);
+	cc->authenc_key = secret_pool_alloc(crypt_authenckey_size(cc),
+					    GFP_KERNEL);
 	if (!cc->authenc_key)
 		return -ENOMEM;
 
@@ -3201,7 +3206,7 @@ static int crypt_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 		return -EINVAL;
 	}
 
-	cc = kzalloc_flex(*cc, key, key_size);
+	cc = secret_pool_zalloc_flex(*cc, key, key_size);
 	if (!cc) {
 		ti->error = "Cannot allocate encryption context";
 		return -ENOMEM;
