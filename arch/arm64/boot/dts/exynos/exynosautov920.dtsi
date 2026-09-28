@@ -901,7 +901,6 @@
 
 				status = "disabled";
 			};
-
 		};
 
 		pwm: pwm@109b0000 {
