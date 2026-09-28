@@ -307,6 +307,19 @@ config CRYPTO_DH_RFC7919_GROUPS
 config CRYPTO_ECC
 	tristate
 
+config CRYPTO_ECC_KUNIT_TEST
+	tristate "KUnit tests for ECC modular inversion" if !KUNIT_ALL_TESTS
+	depends on KUNIT && CRYPTO_ECC
+	default KUNIT_ALL_TESTS
+	help
+	  KUnit tests for vli_mod_inv() and vli_mod_inv_vartime(), the
+	  constant-time and variable-time modular inversions in crypto/ecc.c.
+	  Checks known answers, edge cases and pseudo-random inputs modulo the
+	  field primes and group orders of the NIST P-192/256/384/521 and
+	  EC-RDSA GOST curves, and that both functions agree.
+
+	  If unsure, say N.
+
 config CRYPTO_ECDH
 	tristate "ECDH (Elliptic Curve Diffie-Hellman)"
 	select CRYPTO_ECC

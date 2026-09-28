@@ -119,7 +119,7 @@ static int ecrdsa_verify(struct crypto_sig *tfm,
 		e[0] = 1;
 
 	/* Step 4: calculate v = e^{-1} \mod q */
-	vli_mod_inv(v, e, ctx->curve->n, ndigits);
+	vli_mod_inv_vartime(v, e, ctx->curve->n, ndigits);
 
 	/* Step 5: calculate z_1 = sv \mod q, z_2 = -rv \mod q */
 	vli_mod_mult_slow(z1, s, v, ctx->curve->n, ndigits);

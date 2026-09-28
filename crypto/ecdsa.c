@@ -41,7 +41,7 @@ static int _ecdsa_verify(struct ecc_ctx *ctx, const u64 *hash, const u64 *r, con
 		 hash[ndigits - 1], hash[ndigits - 2], hash[0]);
 
 	/* s1 = (s^-1) mod n */
-	vli_mod_inv(s1, s, curve->n, ndigits);
+	vli_mod_inv_vartime(s1, s, curve->n, ndigits);
 	/* u1 = (hash * s1) mod n */
 	vli_mod_mult_slow(u1, hash, s1, curve->n, ndigits);
 	/* u2 = (r * s1) mod n */

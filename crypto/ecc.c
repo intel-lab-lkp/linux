@@ -1057,9 +1057,12 @@ static void vli_mod_square_fast(u64 *result, const u64 *left,
 /* Computes result = (1 / p_input) % mod. All VLIs are the same size.
  * See "From Euclid's GCD to Montgomery Multiplication to the Great Divide"
  * https://labs.oracle.com/techrep/2001/smli_tr-2001-95.pdf
+ *
+ * Not constant-time: the branches and the iteration count depend on input.
+ * Only for public inputs, such as in signature verification.
  */
-void vli_mod_inv(u64 *result, const u64 *input, const u64 *mod,
-			unsigned int ndigits)
+void vli_mod_inv_vartime(u64 *result, const u64 *input, const u64 *mod,
+			 unsigned int ndigits)
 {
 	u64 a[ECC_MAX_DIGITS], b[ECC_MAX_DIGITS];
 	u64 u[ECC_MAX_DIGITS], v[ECC_MAX_DIGITS];
@@ -1130,6 +1133,238 @@ void vli_mod_inv(u64 *result, const u64 *input, const u64 *mod,
 	}
 
 	vli_set(result, u, ndigits);
+}
+EXPORT_SYMBOL(vli_mod_inv_vartime);
+
+/* f and g are signed and need one extra word beyond ndigits. */
+#define SAFEGCD_MAX_WORDS (ECC_MAX_DIGITS + 1)
+
+/*
+ * Carries and borrows are computed from the top bits with plain bitwise
+ * operations. Comparisons such as (sum < b), and the add_carry() and
+ * sub_borrow() helpers above, compile to conditional jumps on 32-bit
+ * targets, where a u64 is two registers, and would leak the carry: gcc
+ * lowers even __builtin_addcll() to addl; adcl; jc on i386.
+ *
+ * Every all-zeros/all-ones mask derived from secret data goes through
+ * OPTIMIZER_HIDE_VAR(): otherwise the compiler may notice that the mask
+ * has only two values and turn (x & mask) | (y & ~mask) back into a
+ * branch (gcc does this for i386).
+ */
+
+/* r = a + (b & mask), returns carry */
+static u64 safegcd_add_masked(u64 *r, const u64 *a, const u64 *b, u64 mask,
+			      unsigned int n)
+{
+	u64 carry = 0;
+	unsigned int i;
+
+	for (i = 0; i < n; i++) {
+		u64 x = a[i], y = b[i] & mask;
+		u64 sum = x + y + carry;
+
+		carry = ((x & y) | ((x | y) & ~sum)) >> 63;
+		r[i] = sum;
+	}
+
+	return carry;
+}
+
+/* r = a - b, returns borrow */
+static u64 safegcd_sub(u64 *r, const u64 *a, const u64 *b, unsigned int n)
+{
+	u64 borrow = 0;
+	unsigned int i;
+
+	for (i = 0; i < n; i++) {
+		u64 x = a[i], y = b[i];
+		u64 diff = x - y - borrow;
+
+		borrow = ((~x & y) | (~(x ^ y) & diff)) >> 63;
+		r[i] = diff;
+	}
+
+	return borrow;
+}
+
+/* Swap a and b if mask is all ones, do nothing if mask is 0. */
+static void safegcd_cswap(u64 *a, u64 *b, u64 mask, unsigned int n)
+{
+	unsigned int i;
+
+	for (i = 0; i < n; i++) {
+		u64 t = (a[i] ^ b[i]) & mask;
+
+		a[i] ^= t;
+		b[i] ^= t;
+	}
+}
+
+/* Two's complement negate a if mask is all ones. */
+static void safegcd_cneg(u64 *a, u64 mask, unsigned int n)
+{
+	u64 carry = mask & 1;
+	unsigned int i;
+
+	for (i = 0; i < n; i++) {
+		u64 x = a[i] ^ mask;
+		u64 t = x + carry;
+
+		carry = (x & ~t) >> 63;
+		a[i] = t;
+	}
+}
+
+/* Arithmetic (sign-preserving) shift right by one. */
+static void safegcd_sar1(u64 *a, unsigned int n)
+{
+	unsigned int i;
+
+	for (i = 0; i < n - 1; i++)
+		a[i] = (a[i] >> 1) | (a[i + 1] << 63);
+	a[n - 1] = (u64)((s64)a[n - 1] >> 1);
+}
+
+/* r = t modulo mod, for t + carry * 2^(64 * ndigits) in [0, 2 * mod). */
+static void safegcd_mod_reduce(u64 *r, const u64 *t, u64 carry,
+			       const u64 *mod, unsigned int ndigits)
+{
+	u64 s[ECC_MAX_DIGITS];
+	u64 borrow = safegcd_sub(s, t, mod, ndigits);
+	u64 mask = -(carry | (borrow ^ 1));
+	unsigned int i;
+
+	OPTIMIZER_HIDE_VAR(mask);
+	for (i = 0; i < ndigits; i++)
+		r[i] = (s[i] & mask) | (t[i] & ~mask);
+}
+
+/* a = (a + (b & mask)) modulo mod */
+static void safegcd_mod_add_masked(u64 *a, const u64 *b, u64 mask,
+				   const u64 *mod, unsigned int ndigits)
+{
+	u64 t[ECC_MAX_DIGITS];
+	u64 carry = safegcd_add_masked(t, a, b, mask, ndigits);
+
+	safegcd_mod_reduce(a, t, carry, mod, ndigits);
+}
+
+/* a = -a modulo mod if mask is all ones. */
+static void safegcd_mod_cneg(u64 *a, u64 mask, const u64 *mod,
+			     unsigned int ndigits)
+{
+	u64 t[ECC_MAX_DIGITS];
+	unsigned int i;
+
+	safegcd_sub(t, mod, a, ndigits);	/* in (0, mod] */
+	for (i = 0; i < ndigits; i++)
+		t[i] = (t[i] & mask) | (a[i] & ~mask);
+	/* maps mod to 0 when a == 0 */
+	safegcd_mod_reduce(a, t, 0, mod, ndigits);
+}
+
+/* a = a / 2 modulo mod */
+static void safegcd_mod_half(u64 *a, const u64 *mod, unsigned int ndigits)
+{
+	u64 odd = -(a[0] & 1);
+	u64 carry;
+	unsigned int i;
+
+	OPTIMIZER_HIDE_VAR(odd);
+	carry = safegcd_add_masked(a, a, mod, odd, ndigits);
+
+	for (i = 0; i < ndigits - 1; i++)
+		a[i] = (a[i] >> 1) | (a[i + 1] << 63);
+	a[ndigits - 1] = (a[ndigits - 1] >> 1) | (carry << 63);
+}
+
+/*
+ * Computes result = (1 / input) % mod in constant time, using Bernstein-Yang
+ * division steps (simple version: one divstep per iteration):
+ * https://gcd.cr.yp.to
+ *
+ * divstep(delta, f, g) =
+ *   (1 - delta, g, (g - f) / 2)          if delta > 0 and g odd;
+ *   (1 + delta, f, (g + (g mod 2)f) / 2) otherwise.
+ *
+ * Starting from (1, mod, input), Theorem 11.2 guarantees that after
+ * m = iterations(d) steps g = 0 and f = +-gcd(mod, input) = +-1.
+ *
+ * recip2 (Figure 11.1) tracks the transition matrix with denominators 2^(m-1)
+ * and divides by 2^(m-1) modulo mod at the end. Here the halving is instead
+ * done modulo mod at every step: vf, vg are kept in [0, mod) such that
+ * f == vf * input and g == vg * input (modulo mod). At the end f = +-1, so
+ * input^-1 = +-vf.
+ *
+ * Every iteration runs the same instructions: both divstep cases are merged
+ * into masked operations, and the iteration count depends only on ndigits.
+ * mod must be odd. Returns 0 if input is 0.
+ */
+void vli_mod_inv(u64 *result, const u64 *input, const u64 *mod,
+		 unsigned int ndigits)
+{
+	u64 f[SAFEGCD_MAX_WORDS], g[SAFEGCD_MAX_WORDS];
+	u64 vf[ECC_MAX_DIGITS], vg[ECC_MAX_DIGITS];
+	const unsigned int nw = ndigits + 1;
+	const unsigned int d = ndigits * 64;
+	const unsigned int m = (49 * d + 57) / 17; /* iterations(d), d >= 46 */
+	s64 delta = 1;
+	unsigned int i;
+	u64 neg;
+
+	/*
+	 * The divstep algorithm needs f = mod odd: g + (g mod 2) f must be
+	 * even, and the halvings modulo mod need 2 to be invertible. mod is a
+	 * public curve parameter (p or n), so branching on it leaks nothing.
+	 */
+	if (WARN_ON_ONCE(!(mod[0] & 1))) {
+		vli_clear(result, ndigits);
+		return;
+	}
+
+	vli_set(f, mod, ndigits);
+	f[ndigits] = 0;
+	vli_set(g, input, ndigits);
+	g[ndigits] = 0;
+	vli_clear(vf, ndigits);
+	vli_clear(vg, ndigits);
+	vg[0] = 1;
+
+	for (i = 0; i < m; i++) {
+		/* all ones iff delta > 0 and g is odd */
+		u64 swap = (u64)(-delta >> 63) & -(g[0] & 1);
+		u64 g0;
+
+		OPTIMIZER_HIDE_VAR(swap);
+
+		/*
+		 * First case: (delta, f, g) <- (-delta, g, -f), after which
+		 * both cases are the same step with g odd.
+		 */
+		delta = (delta ^ (s64)swap) - (s64)swap;
+		safegcd_cswap(f, g, swap, nw);
+		safegcd_cneg(g, swap, nw);
+		safegcd_cswap(vf, vg, swap, ndigits);
+		safegcd_mod_cneg(vg, swap, mod, ndigits);
+
+		/* (delta, g) <- (1 + delta, (g + (g mod 2) f) / 2) */
+		g0 = -(g[0] & 1);
+		OPTIMIZER_HIDE_VAR(g0);
+		safegcd_add_masked(g, g, f, g0, nw);
+		safegcd_sar1(g, nw);
+		safegcd_mod_add_masked(vg, vf, g0, mod, ndigits);
+		safegcd_mod_half(vg, mod, ndigits);
+		delta++;
+	}
+
+	/*
+	 * input == 0 is intentionally not special-cased: g starts at 0,
+	 * vf stays 0, and the fixed iteration count returns 0.
+	 */
+	neg = -(f[nw - 1] >> 63);
+	OPTIMIZER_HIDE_VAR(neg);
+	safegcd_mod_cneg(vf, neg, mod, ndigits);
+	vli_set(result, vf, ndigits);
 }
 EXPORT_SYMBOL(vli_mod_inv);
 
@@ -1426,7 +1661,7 @@ static void ecc_point_add(const struct ecc_point *result,
 	vli_set(px, p->x, ndigits);
 	vli_set(py, p->y, ndigits);
 	xycz_add(px, py, result->x, result->y, curve);
-	vli_mod_inv(z, z, curve->p, ndigits);
+	vli_mod_inv_vartime(z, z, curve->p, ndigits);
 	apply_z(result->x, result->y, z, curve);
 }
 
@@ -1485,7 +1720,7 @@ void ecc_point_mult_shamir(const struct ecc_point *result,
 			vli_mod_mult_fast(z, z, tz, curve);
 		}
 	}
-	vli_mod_inv(z, z, curve->p, ndigits);
+	vli_mod_inv_vartime(z, z, curve->p, ndigits);
 	apply_z(rx, ry, z, curve);
 }
 EXPORT_SYMBOL(ecc_point_mult_shamir);

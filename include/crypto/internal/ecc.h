@@ -230,15 +230,33 @@ void vli_from_be64(u64 *dest, const void *src, unsigned int ndigits);
 void vli_from_le64(u64 *dest, const void *src, unsigned int ndigits);
 
 /**
- * vli_mod_inv() - Modular inversion
+ * vli_mod_inv() - Constant-time modular inversion
  *
  * @result:		where to write vli number
  * @input:		vli value to operate on
  * @mod:		modulus
  * @ndigits:		length of all vlis
+ *
+ * @mod must be odd. Nonzero @input must be coprime to @mod, as is always
+ * true for nonzero inputs smaller than the prime moduli used here.
+ * A zero @input returns 0.
  */
 void vli_mod_inv(u64 *result, const u64 *input, const u64 *mod,
 		 unsigned int ndigits);
+
+/**
+ * vli_mod_inv_vartime() - Variable-time modular inversion
+ *
+ * @result:		where to write vli number
+ * @input:		vli value to operate on
+ * @mod:		modulus
+ * @ndigits:		length of all vlis
+ *
+ * Faster than vli_mod_inv(), but its running time depends on @input.
+ * Only use it when @input is public, e.g. in signature verification.
+ */
+void vli_mod_inv_vartime(u64 *result, const u64 *input, const u64 *mod,
+			 unsigned int ndigits);
 
 /**
  * vli_mod_mult_slow() - Modular multiplication
