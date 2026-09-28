@@ -684,7 +684,11 @@ clock_t jiffies_to_clock_t(unsigned long x)
 	return x / (HZ / USER_HZ);
 # endif
 #else
-	return div_u64((u64)x * TICK_NSEC, NSEC_PER_SEC / USER_HZ);
+	/*
+	 * Use the nominal HZ ratio like clock_t_to_jiffies(); TICK_NSEC is
+	 * rounded when HZ does not divide NSEC_PER_SEC.
+	 */
+	return div_u64((u64)x * USER_HZ, HZ);
 #endif
 }
 EXPORT_SYMBOL(jiffies_to_clock_t);
@@ -729,12 +733,8 @@ notrace u64 jiffies_64_to_clock_t(u64 x)
 	/* Nothing to do */
 # endif
 #else
-	/*
-	 * There are better ways that don't overflow early,
-	 * but even this doesn't overflow in hundreds of years
-	 * in 64 bits, so..
-	 */
-	x = div_u64(x * TICK_NSEC, (NSEC_PER_SEC / USER_HZ));
+	/* Nominal HZ ratio, see jiffies_to_clock_t() */
+	x = div_u64(x * USER_HZ, HZ);
 #endif
 	return x;
 }
