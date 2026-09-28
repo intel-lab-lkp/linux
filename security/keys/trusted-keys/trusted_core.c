@@ -22,6 +22,7 @@
 #include <linux/parser.h>
 #include <linux/random.h>
 #include <linux/rcupdate.h>
+#include <linux/secret_pool.h>
 #include <linux/slab.h>
 #include <linux/static_call.h>
 #include <linux/string.h>
@@ -140,7 +141,7 @@ static struct trusted_key_payload *trusted_payload_alloc(struct key *key)
 	ret = key_payload_reserve(key, sizeof(*p));
 	if (ret < 0)
 		goto err;
-	p = kzalloc_obj(*p);
+	p = secret_pool_zalloc_obj(*p);
 	if (!p)
 		goto err;
 

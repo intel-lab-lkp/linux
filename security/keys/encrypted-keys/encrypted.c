@@ -27,6 +27,7 @@
 #include <linux/random.h>
 #include <linux/rcupdate.h>
 #include <linux/scatterlist.h>
+#include <linux/secret_pool.h>
 #include <linux/ctype.h>
 #include <crypto/aes.h>
 #include <crypto/sha2.h>
@@ -648,8 +649,8 @@ static struct encrypted_key_payload *encrypted_key_alloc(struct key *key,
 	if (ret < 0)
 		return ERR_PTR(ret);
 
-	epayload = kzalloc_flex(*epayload, payload_data, payload_totallen,
-				GFP_KERNEL);
+	epayload = secret_pool_zalloc_flex(*epayload, payload_data,
+					   payload_totallen, GFP_KERNEL);
 	if (!epayload)
 		return ERR_PTR(-ENOMEM);
 

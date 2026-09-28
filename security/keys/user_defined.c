@@ -7,6 +7,7 @@
 
 #include <linux/export.h>
 #include <linux/init.h>
+#include <linux/secret_pool.h>
 #include <linux/slab.h>
 #include <linux/seq_file.h>
 #include <linux/err.h>
@@ -64,7 +65,7 @@ int user_preparse(struct key_preparsed_payload *prep)
 	if (datalen == 0 || datalen > 32767 || !prep->data)
 		return -EINVAL;
 
-	upayload = kmalloc_flex(*upayload, data, datalen);
+	upayload = secret_pool_alloc_flex(*upayload, data, datalen);
 	if (!upayload)
 		return -ENOMEM;
 
