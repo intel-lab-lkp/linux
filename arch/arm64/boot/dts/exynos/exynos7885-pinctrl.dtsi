@@ -809,7 +809,7 @@
 		samsung,pins = "gpp8-1", "gpp8-0", "gpp7-1", "gpp7-0";
 		samsung,pin-function = <EXYNOS_PIN_FUNC_2>;
 		samsung,pin-pud = <EXYNOS_PIN_PULL_NONE>;
-	  };
+	};
 
 	/* USI2 UART_HSI2C1 */
 	uart5_bus_dual: uart5-bus-dual-pins {
