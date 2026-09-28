@@ -692,8 +692,8 @@ _ieee802_11_parse_elems_full(struct ieee80211_elems_parse_params *params,
 						IEEE80211_PARSE_ERR_BAD_ELEM_SIZE;
 			}
 
-			subelem = cfg80211_find_ext_elem(WLAN_EID_TX_POWER_ENVELOPE,
-							 pos, elen);
+			subelem = cfg80211_find_elem(WLAN_EID_TX_POWER_ENVELOPE,
+						     pos, elen);
 			if (subelem)
 				ieee80211_parse_tpe(&elems->csa_tpe,
 						    subelem->data + 1,
