@@ -229,6 +229,19 @@ u32 bnge_get_rxfh_indir_size(struct bnge_dev *bd)
 	       BNGE_RSS_TABLE_ENTRIES;
 }
 
+static u16 bnge_get_max_rss_ring(struct bnge_dev *bd)
+{
+	u32 i, tbl_size, max_ring = 0;
+
+	if (!bd->rss_indir_tbl)
+		return 0;
+
+	tbl_size = bnge_get_rxfh_indir_size(bd);
+	for (i = 0; i < tbl_size; i++)
+		max_ring = max_t(u32, max_ring, bd->rss_indir_tbl[i]);
+	return max_ring;
+}
+
 static void bnge_copy_reserved_rings(struct bnge_dev *bd,
 				     struct bnge_hw_rings *hwr)
 {
@@ -344,9 +357,15 @@ int bnge_reserve_rings(struct bnge_dev *bd)
 	hwr.nq = sh ? max_t(u16, tx_cp, rx_rings) : tx_cp + rx_rings;
 	bd->tx_nr_rings = hwr.tx;
 
-	if (rx_rings != bd->rx_nr_rings)
+	if (rx_rings != bd->rx_nr_rings) {
 		dev_warn(bd->dev, "RX rings resv reduced to %d than earlier %d requested\n",
 			 rx_rings, bd->rx_nr_rings);
+		if (bd->netdev && netif_is_rxfh_configured(bd->netdev) &&
+		    (bnge_cal_nr_rss_ctxs(bd->rx_nr_rings) !=
+		     bnge_cal_nr_rss_ctxs(rx_rings) ||
+		     bnge_get_max_rss_ring(bd) >= rx_rings))
+			ethtool_rxfh_indir_lost(bd->netdev);
+	}
 
 	bd->rx_nr_rings = rx_rings;
 	bd->nq_nr_rings = hwr.nq;
@@ -354,8 +373,9 @@ int bnge_reserve_rings(struct bnge_dev *bd)
 	if (!bnge_rings_ok(&hwr))
 		return -ENOMEM;
 
-	if (old_rx_rings != bd->hw_resc.resv_rx_rings)
-		bnge_set_dflt_rss_indir_tbl(bd);
+	if (old_rx_rings != bd->hw_resc.resv_rx_rings &&
+	    (!bd->netdev || !netif_is_rxfh_configured(bd->netdev)))
+		bnge_set_dflt_rss_indir_tbl(bd, NULL);
 
 	if (!bnge_aux_registered(bd)) {
 		u16 resv_msix, resv_ctx, aux_ctxs;
