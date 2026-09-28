@@ -3933,6 +3933,63 @@ netdev_features_t netif_skb_features(struct sk_buff *skb)
 }
 EXPORT_SYMBOL(netif_skb_features);
 
+static unsigned int
+skb_gso_output_max_segs(struct sk_buff *skb, struct net_device *dev)
+{
+	unsigned int mss = skb_shinfo(skb)->gso_size;
+	unsigned int gso_max_size, hdr_len, max_segs;
+	netdev_features_t features;
+	struct tcphdr _tcph, *th;
+
+	/*
+	 * The TCP frag-list path segments through skb_segment_list(), which
+	 * does not carry max_segs, so bounded calls skip those skbs.
+	 */
+	if (!skb_is_gso(skb) || !skb_is_gso_tcp(skb) ||
+	    skb->encapsulation || skb_has_frag_list(skb) ||
+	    !skb_mac_header_was_set(skb) ||
+	    !skb_transport_header_was_set(skb))
+		return 0;
+
+	th = skb_header_pointer(skb, skb_transport_offset(skb), sizeof(_tcph),
+				&_tcph);
+	if (!th || th->doff < sizeof(*th) / 4)
+		return 0;
+
+	hdr_len = skb_transport_header(skb) - skb_mac_header(skb) +
+		  th->doff * 4;
+
+	/*
+	 * The output stays a GSO skb, so the device has to offload the GSO
+	 * type.  The caller's features cannot tell that: this skb is over
+	 * the device limits, so gso_features_check() has cleared their GSO
+	 * bits.  Compute the features again without the limit checks.
+	 */
+	features = __netif_skb_features(skb, false);
+	if (!net_gso_ok(features | NETIF_F_GSO_ROBUST,
+			skb_shinfo(skb)->gso_type))
+		return 0;
+
+	/*
+	 * The output is a plain GSO skb, so its whole length lands in the
+	 * 16-bit L3 length field: only a BIG TCP skb may exceed the legacy
+	 * GSO size, and this path does not emit one.
+	 */
+	gso_max_size = netif_get_gso_max_size(dev, vlan_get_protocol(skb));
+	gso_max_size = min(gso_max_size, GSO_LEGACY_MAX_SIZE);
+
+	/*
+	 * gso_within_dev_limits() accepts gso_segs == gso_max_segs but
+	 * rejects skb->len >= gso_max_size, so only the size bound needs - 1.
+	 * The min() keeps that subtraction from wrapping when the device
+	 * limit is smaller than the headers.
+	 */
+	max_segs = (gso_max_size - min(gso_max_size, hdr_len + 1)) / mss;
+	max_segs = min(max_segs, READ_ONCE(dev->gso_max_segs));
+
+	return max_segs;
+}
+
 static int xmit_one(struct sk_buff *skb, struct net_device *dev,
 		    struct netdev_queue *txq, bool more)
 {
@@ -4097,9 +4154,13 @@ static struct sk_buff *validate_xmit_skb(struct sk_buff *skb, struct net_device 
 		goto out_null;
 
 	if (netif_needs_gso(skb, features)) {
+		unsigned int max_segs = 0;
 		struct sk_buff *segs;
 
-		segs = skb_gso_segment(skb, features);
+		if (unlikely(!gso_within_dev_limits(skb, dev)))
+			max_segs = skb_gso_output_max_segs(skb, dev);
+
+		segs = __skb_gso_segment(skb, features, true, max_segs);
 		if (IS_ERR(segs)) {
 			goto out_kfree_skb;
 		} else if (segs) {
