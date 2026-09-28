@@ -193,19 +193,40 @@ __objpool_try_add_slot(void *obj, struct objpool_head *pool, int cpu)
 	struct objpool_slot *slot = pool->cpu_slots[cpu];
 	uint32_t head, tail;
 
-	/* loading tail and head as a local snapshot, tail first */
+	/*
+	 * Only the local CPU pushes to its slot, with irqs disabled, but a
+	 * push from NMI context (a kretprobe'd function returning in NMI)
+	 * can interrupt this one at any point.
+	 */
 	tail = READ_ONCE(slot->tail);
+	while (!try_cmpxchg_acquire(&slot->tail, &tail, tail + 1))
+		;
 
-	do {
-		head = READ_ONCE(slot->head);
-		/* fault caught: something must be wrong */
-		WARN_ON_ONCE(tail - head > pool->nr_objs);
-	} while (!try_cmpxchg_acquire(&slot->tail, &tail, tail + 1));
+	/*
+	 * fault caught: something must be wrong.  Read head only after the
+	 * reservation: a nested push and a pop on another CPU could have
+	 * moved head past an older snapshot of tail.
+	 */
+	head = READ_ONCE(slot->head);
+	WARN_ON_ONCE(tail - head > pool->nr_objs);
 
 	/* now the tail position is reserved for the given obj */
 	WRITE_ONCE(slot->entries[tail & slot->mask], obj);
-	/* update sequence to make this obj available for pop() */
-	smp_store_release(&slot->last, tail + 1);
+
+	/*
+	 * Update 'last' to make this obj available for pop(), in order:
+	 * 'last' must never move past an entry that is not written yet.
+	 * If this push interrupted another push to this slot, the entry of
+	 * the interrupted push comes first and is not written yet: leave
+	 * 'last' alone, the interrupted push publishes both when it resumes.
+	 * Pushes that interrupted this one have completed by now, so publish
+	 * their entries too.  A plain store is not enough: another nested
+	 * push can take over publishing as soon as 'last' reaches its entry.
+	 */
+	while (try_cmpxchg_release(&slot->last, &tail, tail + 1)) {
+		if (++tail == READ_ONCE(slot->tail))
+			break;
+	}
 
 	return 0;
 }
