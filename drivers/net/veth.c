@@ -756,6 +756,9 @@ static int veth_convert_skb_to_xdp_buff(struct veth_rq *rq,
 	struct sk_buff *skb = *pskb;
 	u32 frame_sz;
 
+	if (unlikely(xdp_skb_feature_check(skb)))
+		goto drop;
+
 	if (skb_shared(skb) || skb_head_is_locked(skb) ||
 	    skb_is_nonlinear(skb) ||
 	    skb_headroom(skb) < XDP_PACKET_HEADROOM) {

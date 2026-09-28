@@ -158,6 +158,7 @@
 #include <linux/once_lite.h>
 #include <net/netdev_lock.h>
 #include <net/netdev_rx_queue.h>
+#include <net/xdp.h>
 #include <net/page_pool/types.h>
 #include <net/page_pool/helpers.h>
 #include <net/page_pool/memory_provider.h>
@@ -5515,6 +5516,9 @@ u32 bpf_prog_run_generic_xdp(struct sk_buff *skb, struct xdp_buff *xdp,
 	struct ethhdr *eth;
 	u32 metalen, act;
 	int off;
+
+	if (unlikely(xdp_skb_feature_check(skb)))
+		return XDP_DROP;
 
 	/* The XDP program wants to see the packet starting at the MAC
 	 * header.

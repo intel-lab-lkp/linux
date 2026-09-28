@@ -291,6 +291,22 @@ static inline bool xdp_buff_add_frag(struct xdp_buff *xdp, netmem_ref netmem,
 	return true;
 }
 
+/**
+ * xdp_skb_feature_check() - can this skb be handed to an XDP program?
+ * @skb: skb about to be turned into an xdp_buff
+ *
+ * Return: true if the skb must not reach the program and has to be dropped.
+ */
+static inline bool xdp_skb_feature_check(const struct sk_buff *skb)
+{
+	if (likely(!skb_is_gso(skb)))
+		return false;
+
+	net_warn_ratelimited("%s: dropping coalesced packet before XDP, receive offloads are still on\n",
+			     skb->dev->name);
+	return true;
+}
+
 struct xdp_frame {
 	void *data;
 	u32 len;
