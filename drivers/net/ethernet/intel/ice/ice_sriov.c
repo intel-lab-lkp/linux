@@ -508,8 +508,13 @@ teardown:
 		if (it_cnt == 0)
 			break;
 
+		mutex_lock(&vf->cfg_lock);
+
+		ice_eswitch_detach_vf(pf, vf);
 		ice_dis_vf_mappings(vf);
 		ice_vf_vsi_release(vf);
+		mutex_unlock(&vf->cfg_lock);
+
 		it_cnt--;
 	}
 
