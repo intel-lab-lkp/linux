@@ -45,6 +45,9 @@ static DEFINE_MUTEX(domain_list_lock);
  */
 DEFINE_PER_CPU(struct resctrl_pqr_state, pqr_state);
 
+/* Number of unique RMID values that can be written to MSR_IA32_PQR_ASSOC.RMID */
+static u32 pqr_assoc_num_rmid;
+
 static void mba_wrmsr_intel(struct msr_param *m);
 static void cat_wrmsr(struct msr_param *m);
 static void mba_wrmsr_amd(struct msr_param *m);
@@ -122,6 +125,28 @@ u32 resctrl_arch_system_num_rmid_idx(void)
 
 	/* RMID are independent numbers for x86. num_rmid_idx == num_rmid */
 	return num_rmids == U32_MAX ? 0 : num_rmids;
+}
+
+/**
+ * resctrl_arch_system_max_rmid_idx - Largest possible RMID index
+ *
+ * Return: Largest possible RMID index used for boot time allocations.
+ */
+u32 resctrl_arch_system_max_rmid_idx(void)
+{
+	struct rdt_resource *r = &rdt_resources_all[RDT_RESOURCE_L3].r_resctrl;
+	u32 num_rmid = pqr_assoc_num_rmid;
+
+	/*
+	 * If the system is capable of L3 monitoring the maximum RMID value may
+	 * be lower than the system maximum. Either because the L3 monitoring
+	 * feature supports fewer RMIDs, or because SNC (Sub-NUMA Cluster)
+	 * is enabled and divides RMIDs per cluster.
+	 */
+	if (r->mon_capable)
+		num_rmid = r->mon.num_rmid;
+
+	return num_rmid;
 }
 
 struct rdt_resource *resctrl_arch_get_resource(enum resctrl_res_level l)
@@ -966,6 +991,8 @@ static __init bool get_rdt_mon_resources(void)
 	/* Any monitoring at all? */
 	if (!cpu_feature_enabled(X86_FEATURE_CQM))
 		return false;
+
+	pqr_assoc_num_rmid = cpuid_ebx(0xf) + 1;
 
 	/* Any of the L3 monitoring features? */
 	if (!cpu_feature_enabled(X86_FEATURE_CQM_LLC))

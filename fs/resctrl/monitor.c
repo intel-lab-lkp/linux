@@ -76,6 +76,11 @@ static unsigned int rmid_limbo_count;
 static struct rmid_entry	*rmid_ptrs;
 
 /*
+ * @num_rmid_ptrs - The number of elements in rmid_ptrs[].
+ */
+static u32 num_rmid_ptrs;
+
+/*
  * This is the threshold cache occupancy in bytes at which we will consider an
  * RMID available for re-allocation.
  */
@@ -961,45 +966,60 @@ void mbm_setup_overflow_handler(struct rdt_l3_mon_domain *dom, unsigned long del
 
 int setup_rmid_lru_list(void)
 {
-	struct rmid_entry *entry = NULL;
-	u32 idx_limit;
-	u32 idx;
+	struct rmid_entry *entry;
+	u32 cur_idx_limit;
+	u32 rsvd_idx;
 	int i;
 
 	if (!resctrl_mon_capable())
 		return 0;
 
 	/*
-	 * Called on every mount, but the number of RMIDs cannot change
-	 * after the first mount, so keep using the same set of rmid_ptrs[]
-	 * until resctrl_exit(). Note that the limbo handler continues to
-	 * access rmid_ptrs[] after resctrl is unmounted.
+	 * Allocate the largest number of RMIDs that this system will ever
+	 * need. These cannot be freed until resctrl_exit() because the limbo
+	 * handler continues to access rmid_ptrs[] after resctrl is unmounted.
 	 */
-	if (rmid_ptrs)
-		return 0;
+	if (!rmid_ptrs) {
+		num_rmid_ptrs = resctrl_arch_system_max_rmid_idx();
+		rmid_ptrs = kzalloc_objs(struct rmid_entry, num_rmid_ptrs);
+		if (!rmid_ptrs) {
+			num_rmid_ptrs = 0;
+			return -ENOMEM;
+		}
 
-	idx_limit = resctrl_arch_system_num_rmid_idx();
-	rmid_ptrs = kzalloc_objs(struct rmid_entry, idx_limit);
-	if (!rmid_ptrs)
-		return -ENOMEM;
+		for (i = 0; i < num_rmid_ptrs; i++) {
+			entry = &rmid_ptrs[i];
+			INIT_LIST_HEAD(&entry->list);
 
-	for (i = 0; i < idx_limit; i++) {
-		entry = &rmid_ptrs[i];
-		INIT_LIST_HEAD(&entry->list);
-
-		resctrl_arch_rmid_idx_decode(i, &entry->closid, &entry->rmid);
-		list_add_tail(&entry->list, &rmid_free_lru);
+			resctrl_arch_rmid_idx_decode(i, &entry->closid, &entry->rmid);
+		}
 	}
+
+	/* Find how many RMIDs are available for this mount */
+	cur_idx_limit = resctrl_arch_system_num_rmid_idx();
+	if (cur_idx_limit > num_rmid_ptrs) {
+		pr_warn_once("RMID count %u exceeds allocation. Limit to %u\n",
+			     cur_idx_limit, num_rmid_ptrs);
+		cur_idx_limit = num_rmid_ptrs;
+	}
+
+	INIT_LIST_HEAD(&rmid_free_lru);
 
 	/*
 	 * RESCTRL_RESERVED_CLOSID and RESCTRL_RESERVED_RMID are special and
 	 * are always allocated. These are used for the rdtgroup_default
 	 * control group, which was setup earlier in rdtgroup_setup_default().
 	 */
-	idx = resctrl_arch_rmid_idx_encode(RESCTRL_RESERVED_CLOSID,
-					   RESCTRL_RESERVED_RMID);
-	entry = __rmid_entry(idx);
-	list_del(&entry->list);
+	rsvd_idx = resctrl_arch_rmid_idx_encode(RESCTRL_RESERVED_CLOSID,
+						RESCTRL_RESERVED_RMID);
+
+	for (i = 0; i < cur_idx_limit; i++) {
+		entry = &rmid_ptrs[i];
+		/* Don't add reserved or busy entries to free list */
+		if (i == rsvd_idx || entry->busy)
+			continue;
+		list_add_tail(&entry->list, &rmid_free_lru);
+	}
 
 	return 0;
 }
