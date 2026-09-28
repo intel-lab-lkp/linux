@@ -711,11 +711,15 @@ void evsel__tpebs_close(struct evsel *evsel)
 	mutex_lock(tpebs_mtx_get());
 	t = tpebs_retire_lat__find(evsel);
 	if (t) {
+		/*
+		 * Stop while the entry is still visible so the reader thread can
+		 * drain samples flushed after STOP; otherwise it aborts the
+		 * session and closes the pipe, killing perf record with SIGPIPE.
+		 */
+		if (list_is_last(&t->nd, &tpebs_results))
+			tpebs_stop();
 		list_del_init(&t->nd);
 		tpebs_retire_lat__delete(t);
-
-		if (list_empty(&tpebs_results))
-			tpebs_stop();
 	}
 	mutex_unlock(tpebs_mtx_get());
 }
