@@ -301,8 +301,10 @@ struct stmmac_priv {
 	struct stmmac_est *est;
 
 	struct {
+		bool enabled;
 		u32 prio[MTL_MAX_TX_QUEUES];
 		bool prio_offload;
+		u32 num_tx_queues;
 		u8 algo;
 	} xmit_qdisc;
 
