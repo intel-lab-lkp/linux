@@ -1911,7 +1911,17 @@ static int packet_rcv_spkt(struct sk_buff *skb, struct net_device *dev,
 
 	spkt = &PACKET_SKB_CB(skb)->sa.pkt;
 
-	skb_push(skb, skb->data - skb_mac_header(skb));
+	/* The push restores the link layer header, which only exists for
+	 * devices that have one.  A device without a visible ll header
+	 * (ARPHRD_CAN and other L3 types) must not be pushed, and the
+	 * subtraction is meaningless when the producer never initialised
+	 * skb->mac_header -- it then holds the 0xFFFF sentinel and the
+	 * result is a huge negative length that trips skb_under_panic() in
+	 * softirq context.  packet_rcv() and tpacket_rcv() already guard
+	 * this with dev_has_header(); do the same here.
+	 */
+	if (dev_has_header(dev) && skb_mac_header_was_set(skb))
+		skb_push(skb, skb->data - skb_mac_header(skb));
 
 	/*
 	 *	The SOCK_PACKET socket receives _all_ frames.
