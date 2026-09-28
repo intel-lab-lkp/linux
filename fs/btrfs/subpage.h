@@ -174,6 +174,10 @@ DECLARE_BTRFS_SUBPAGE_OPS(uptodate);
 DECLARE_BTRFS_SUBPAGE_OPS(dirty);
 DECLARE_BTRFS_SUBPAGE_OPS(writeback);
 
+bool btrfs_folio_find_next_read_range(struct btrfs_fs_info *fs_info,
+				      struct folio *folio,
+				      u64 start, u32 *len_ret);
+
 /*
  * Fixup bit helpers.
  *
