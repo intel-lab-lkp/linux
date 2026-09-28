@@ -127,13 +127,42 @@ void smb2_query_server_interfaces(struct work_struct *work)
 			   (SMB_INTERFACE_POLL_INTERVAL * HZ));
 }
 
-#define set_need_reco(server) \
-do { \
-	spin_lock(&server->srv_lock); \
-	if (server->tcpStatus != CifsExiting) \
-		server->tcpStatus = CifsNeedReconnect; \
-	spin_unlock(&server->srv_lock); \
-} while (0)
+static inline bool __set_need_reco(struct TCP_Server_Info *server)
+{
+	bool need_reco = false;
+
+	spin_lock(&server->srv_lock);
+	if (server->tcpStatus != CifsExiting) {
+		need_reco = (server->tcpStatus != CifsNeedReconnect);
+		server->tcpStatus = CifsNeedReconnect;
+	}
+	spin_unlock(&server->srv_lock);
+
+	return need_reco;
+}
+
+static inline void kill_socket_queues(struct TCP_Server_Info *server)
+{
+	bool locked = false;
+
+	if (server->mutex_owner != current) {
+		cifs_server_lock(server);
+		locked = true;
+	}
+
+	if (server->ssocket)
+		/* Don't release it yet! */
+		kernel_sock_shutdown(server->ssocket, SHUT_RDWR);
+
+	if (locked)
+		cifs_server_unlock(server);
+}
+
+static inline void set_need_reco(struct TCP_Server_Info *server)
+{
+	if (__set_need_reco(server))
+		kill_socket_queues(server);
+}
 
 /*
  * Update the tcpStatus for the server.
@@ -151,6 +180,7 @@ cifs_signal_cifsd_for_reconnect(struct TCP_Server_Info *server,
 	struct TCP_Server_Info *nserver;
 	struct cifs_ses *ses;
 	LIST_HEAD(reco);
+	bool shutdown;
 	int i;
 
 	/* if we need to signal just this channel */
@@ -162,7 +192,7 @@ cifs_signal_cifsd_for_reconnect(struct TCP_Server_Info *server,
 	if (SERVER_IS_CHAN(server))
 		server = server->primary_server;
 	scoped_guard(spinlock, &cifs_tcp_ses_lock) {
-		set_need_reco(server);
+		shutdown = __set_need_reco(server);
 		list_for_each_entry(ses, &server->smb_ses_list, smb_ses_list) {
 			spin_lock(&ses->ses_lock);
 			if (ses->ses_status == SES_EXITING) {
@@ -183,6 +213,9 @@ cifs_signal_cifsd_for_reconnect(struct TCP_Server_Info *server,
 			spin_unlock(&ses->ses_lock);
 		}
 	}
+
+	if (shutdown)
+		kill_socket_queues(server);
 
 	spin_lock(&cifs_tcp_ses_lock);
 	list_for_each_entry_safe(server, nserver, &reco, rlist) {
@@ -365,9 +398,10 @@ static bool cifs_tcp_ses_needs_reconnect(struct TCP_Server_Info *server, int num
 	cifs_dbg(FYI, "Mark tcp session as need reconnect\n");
 	trace_smb3_reconnect(server->current_mid, server->conn_id,
 			     server->hostname);
-	server->tcpStatus = CifsNeedReconnect;
-
 	spin_unlock(&server->srv_lock);
+
+	set_need_reco(server);
+
 	return true;
 }
 

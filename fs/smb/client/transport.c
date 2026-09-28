@@ -180,6 +180,10 @@ smb_send_kvec(struct TCP_Server_Info *server, struct msghdr *smb_msg,
 		 */
 		rc = sock_sendmsg(ssocket, smb_msg);
 		if (rc == -EAGAIN || unlikely(rc == -EINTR && task_work_pending(current))) {
+			/* Don't retry if need to reconnect */
+			if (unlikely(server->tcpStatus == CifsNeedReconnect))
+				return -ECONNRESET;
+
 			retries++;
 			if (retries >= 14 ||
 			    (!server->noblocksnd && (retries > 2))) {
@@ -190,6 +194,10 @@ smb_send_kvec(struct TCP_Server_Info *server, struct msghdr *smb_msg,
 			msleep(1 << retries);
 			continue;
 		}
+
+		/* Blame the need to reconnect for any non-interrupt error */
+		if (unlikely(server->tcpStatus == CifsNeedReconnect && !is_interrupt_error(rc)))
+			rc = -ECONNRESET;
 
 		if (rc < 0)
 			return rc;

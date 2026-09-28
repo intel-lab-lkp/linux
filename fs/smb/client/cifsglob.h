@@ -711,6 +711,7 @@ struct TCP_Server_Info {
 	spinlock_t req_lock;  /* protect the two values above */
 	struct mutex _srv_mutex;
 	unsigned int nofs_flag;
+	struct task_struct *mutex_owner;
 	struct task_struct *tsk;
 	char server_GUID[16];
 	__u16 sec_mode;
@@ -847,12 +848,14 @@ static inline void cifs_server_lock(struct TCP_Server_Info *server)
 
 	mutex_lock(&server->_srv_mutex);
 	server->nofs_flag = nofs_flag;
+	server->mutex_owner = current;
 }
 
 static inline void cifs_server_unlock(struct TCP_Server_Info *server)
 {
 	unsigned int nofs_flag = server->nofs_flag;
 
+	server->mutex_owner = NULL;
 	mutex_unlock(&server->_srv_mutex);
 	memalloc_nofs_restore(nofs_flag);
 }
