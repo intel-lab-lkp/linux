@@ -25,6 +25,11 @@
 #include <crypto/utils.h>
 #include <linux/async_tx.h>
 #include <linux/dm-bufio.h>
+#include <linux/ctype.h>
+#include <linux/key.h>
+#include <keys/user-type.h>
+#include <keys/encrypted-type.h>
+#include <keys/trusted-type.h>
 
 #include "dm-audit.h"
 
@@ -4415,6 +4420,152 @@ static void free_alg(struct alg_spec *a)
 	memset(a, 0, sizeof(*a));
 }
 
+#ifdef CONFIG_KEYS
+
+static bool contains_whitespace(const char *str)
+{
+	while (*str)
+		if (isspace(*str++))
+			return true;
+	return false;
+}
+
+static int set_key_user(struct alg_spec *a, struct key *key)
+{
+	const struct user_key_payload *ukp;
+
+	ukp = user_key_payload_locked(key);
+	if (!ukp)
+		return -EKEYREVOKED;
+
+	if (a->key_size != ukp->datalen)
+		return -EINVAL;
+
+	memcpy(a->key, ukp->data, a->key_size);
+
+	return 0;
+}
+
+static int set_key_encrypted(struct alg_spec *a, struct key *key)
+{
+	const struct encrypted_key_payload *ekp;
+
+	ekp = key->payload.data[0];
+	if (!ekp)
+		return -EKEYREVOKED;
+
+	if (a->key_size != ekp->decrypted_datalen)
+		return -EINVAL;
+
+	memcpy(a->key, ekp->decrypted_data, a->key_size);
+
+	return 0;
+}
+
+static int set_key_trusted(struct alg_spec *a, struct key *key)
+{
+	const struct trusted_key_payload *tkp;
+
+	tkp = key->payload.data[0];
+	if (!tkp)
+		return -EKEYREVOKED;
+
+	if (a->key_size != tkp->key_len)
+		return -EINVAL;
+
+	memcpy(a->key, tkp->key, a->key_size);
+
+	return 0;
+}
+
+/*
+ * Load the key from the kernel keyring. a->key_string has the format
+ * ":<key_size>:<key_type>:<key_description>".
+ */
+static int get_alg_key_from_keyring(struct alg_spec *a)
+{
+	int (*set_key)(struct alg_spec *a, struct key *key);
+	const char *key_type_desc, *key_desc;
+	struct key_type *type;
+	unsigned int key_size;
+	struct key *key;
+	char dummy;
+	int r;
+
+	/*
+	 * Reject key_string with whitespace. dm core currently lacks code for
+	 * proper whitespace escaping in arguments on DM_TABLE_STATUS path.
+	 */
+	if (contains_whitespace(a->key_string))
+		return -EINVAL;
+
+	if (sscanf(a->key_string, ":%u%c", &key_size, &dummy) != 2 || dummy != ':')
+		return -EINVAL;
+	if (!key_size || key_size > KMALLOC_MAX_SIZE)
+		return -EINVAL;
+
+	/* skip ":<key_size>:", the sscanf() above guarantees the second ':' */
+	key_type_desc = strchr(a->key_string + 1, ':') + 1;
+
+	/* look for next ':' separating key_type from key_description */
+	key_desc = strchr(key_type_desc, ':');
+	if (!key_desc || key_desc == key_type_desc || !strlen(key_desc + 1))
+		return -EINVAL;
+
+	if (!strncmp(key_type_desc, "logon:", key_desc - key_type_desc + 1)) {
+		type = &key_type_logon;
+		set_key = set_key_user;
+	} else if (!strncmp(key_type_desc, "user:", key_desc - key_type_desc + 1)) {
+		type = &key_type_user;
+		set_key = set_key_user;
+	} else if (IS_ENABLED(CONFIG_ENCRYPTED_KEYS) &&
+		   !strncmp(key_type_desc, "encrypted:", key_desc - key_type_desc + 1)) {
+		type = &key_type_encrypted;
+		set_key = set_key_encrypted;
+	} else if (IS_ENABLED(CONFIG_TRUSTED_KEYS) &&
+		   !strncmp(key_type_desc, "trusted:", key_desc - key_type_desc + 1)) {
+		type = &key_type_trusted;
+		set_key = set_key_trusted;
+	} else {
+		return -EINVAL;
+	}
+
+	a->key = kmalloc(key_size, GFP_KERNEL);
+	if (!a->key)
+		return -ENOMEM;
+	a->key_size = key_size;
+
+	key = request_key(type, key_desc + 1, NULL);
+	if (IS_ERR(key)) {
+		r = PTR_ERR(key);
+		goto free_key;
+	}
+
+	down_read(&key->sem);
+	r = set_key(a, key);
+	up_read(&key->sem);
+	key_put(key);
+	if (r < 0)
+		goto free_key;
+
+	return 0;
+
+free_key:
+	kfree_sensitive(a->key);
+	a->key = NULL;
+	a->key_size = 0;
+	return r;
+}
+
+#else
+
+static int get_alg_key_from_keyring(struct alg_spec *a)
+{
+	return -EINVAL;
+}
+
+#endif /* CONFIG_KEYS */
+
 static int get_alg_and_key(const char *arg, struct alg_spec *a, char **error, char *error_inval)
 {
 	char *k;
@@ -4429,6 +4580,19 @@ static int get_alg_and_key(const char *arg, struct alg_spec *a, char **error, ch
 	if (k) {
 		*k = 0;
 		a->key_string = k + 1;
+
+		if (a->key_string[0] == ':') {
+			int r = get_alg_key_from_keyring(a);
+
+			if (r == -ENOMEM)
+				goto nomem;
+			if (r == -EINVAL)
+				goto inval;
+			if (r)
+				*error = "Cannot get key from the kernel keyring";
+			return r;
+		}
+
 		if (strlen(a->key_string) & 1)
 			goto inval;
 

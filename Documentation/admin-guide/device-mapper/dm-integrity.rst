@@ -146,6 +146,8 @@ internal_hash:algorithm(:key)	(the key is optional)
 	from an upper layer target, such as dm-crypt. The upper layer
 	target should check the validity of the integrity tags.
 
+	The format of the key is described below the list of arguments.
+
 recalculate
 	Recalculate the integrity tags automatically. It is only valid
 	when using internal hash.
@@ -162,6 +164,8 @@ journal_crypt:algorithm(:key)	(the key is optional)
 	the size of files that were written. To protect against this
 	situation, you can encrypt the journal.
 
+	The format of the key is described below the list of arguments.
+
 journal_mac:algorithm(:key)	(the key is optional)
 	Protect sector numbers in the journal from accidental or malicious
 	modification. To protect against accidental modification, use a
@@ -172,6 +176,8 @@ journal_mac:algorithm(:key)	(the key is optional)
 	mode, the integrity of journal entries is checked when replaying
 	the journal. Thus, modified sector number would be detected at
 	this stage.
+
+	The format of the key is described below the list of arguments.
 
 block_size:number (default 512)
 	The size of a data block in bytes. The larger the block size the
@@ -224,6 +230,25 @@ legacy_recalculate
 	default for security reasons - an attacker could modify the volume,
 	set recalc_sector to zero, and the kernel would not detect the
 	modification.
+
+The key of internal_hash, journal_crypt and journal_mac is encoded either as
+a hexadecimal number or it can be passed as <key_string> prefixed with single
+colon character (':') for keys residing in kernel keyring service.
+
+<key_string>
+	The kernel keyring key is identified by string in following format:
+	<key_size>:<key_type>:<key_description>.
+
+<key_size>
+	The key size in bytes. The kernel key payload size must match
+	the value passed in <key_size>.
+
+<key_type>
+	Either 'logon', 'user', 'encrypted' or 'trusted' kernel key type.
+
+<key_description>
+	The kernel keyring key description integrity target should look for
+	when loading key of <key_type>.
 
 The journal mode (D/J), buffer_sectors, journal_watermark, commit_time and
 allow_discards can be changed when reloading the target (load an inactive

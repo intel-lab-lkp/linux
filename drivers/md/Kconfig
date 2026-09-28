@@ -667,6 +667,8 @@ config DM_LOG_WRITES
 config DM_INTEGRITY
 	tristate "Integrity target support"
 	depends on BLK_DEV_DM
+	depends on (ENCRYPTED_KEYS || ENCRYPTED_KEYS=n)
+	depends on (TRUSTED_KEYS || TRUSTED_KEYS=n)
 	select BLK_DEV_INTEGRITY
 	select DM_BUFIO
 	select CRYPTO
