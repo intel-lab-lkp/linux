@@ -338,7 +338,7 @@ void free_rmid(u32 closid, u32 rmid)
 	 * allows architectures that ignore the closid parameter to avoid an
 	 * unnecessary check.
 	 */
-	if (!resctrl_arch_mon_capable() ||
+	if (!resctrl_mon_capable() ||
 	    idx == resctrl_arch_rmid_idx_encode(RESCTRL_RESERVED_CLOSID,
 						RESCTRL_RESERVED_RMID))
 		return;
@@ -888,7 +888,7 @@ void mbm_handle_overflow(struct work_struct *work)
 	 * If the filesystem has been unmounted this work no longer needs to
 	 * run.
 	 */
-	if (!resctrl_mounted || !resctrl_arch_mon_capable())
+	if (!resctrl_mounted || !resctrl_mon_capable())
 		goto out_unlock;
 
 	/*
@@ -950,7 +950,7 @@ void mbm_setup_overflow_handler(struct rdt_l3_mon_domain *dom, unsigned long del
 	 * When a domain comes online there is no guarantee the filesystem is
 	 * mounted. If not, there is no need to catch counter overflow.
 	 */
-	if (!resctrl_mounted || !resctrl_arch_mon_capable())
+	if (!resctrl_mounted || !resctrl_mon_capable())
 		return;
 	cpu = cpumask_any_housekeeping(&dom->hdr.cpu_mask, exclude_cpu);
 	dom->mbm_work_cpu = cpu;
@@ -966,7 +966,7 @@ int setup_rmid_lru_list(void)
 	u32 idx;
 	int i;
 
-	if (!resctrl_arch_mon_capable())
+	if (!resctrl_mon_capable())
 		return 0;
 
 	/*
@@ -1006,7 +1006,7 @@ int setup_rmid_lru_list(void)
 
 void free_rmid_lru_list(void)
 {
-	if (!resctrl_arch_mon_capable())
+	if (!resctrl_mon_capable())
 		return;
 
 	mutex_lock(&rdtgroup_mutex);
