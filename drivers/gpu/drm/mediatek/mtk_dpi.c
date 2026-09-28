@@ -27,6 +27,7 @@
 #include <drm/drm_edid.h>
 #include <drm/drm_encoder.h>
 #include <drm/drm_of.h>
+#include <drm/drm_panel.h>
 
 #include "mtk_ddp_comp.h"
 #include "mtk_disp_drv.h"

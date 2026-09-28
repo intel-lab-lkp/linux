@@ -10,6 +10,7 @@
 #include <drm/drm_bridge.h>
 #include <drm/drm_bridge_connector.h>
 #include <drm/drm_of.h>
+#include <drm/drm_panel.h>
 #include <drm/drm_simple_kms_helper.h>
 
 #include "tilcdc_drv.h"

@@ -8,6 +8,7 @@
 
 #include <drm/drm_bridge.h>
 #include <drm/drm_bridge_connector.h>
+#include <drm/drm_panel.h>
 #include <drm/drm_vblank.h>
 
 #include "msm_drv.h"
