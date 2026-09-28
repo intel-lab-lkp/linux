@@ -6268,10 +6268,19 @@ place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 			load += avg_vruntime_weight(cfs_rq, curr->h_load.weight);
 
 		weight = avg_vruntime_weight(cfs_rq, se->h_load.weight);
-		lag *= load + weight;
-		if (WARN_ON_ONCE(!load))
+		if (WARN_ON_ONCE(!load)) {
 			load = 1;
-		lag = div64_long(lag, load);
+			lag *= weight;
+		} else {
+			/*
+			 * Avoid overflowing lag * (load + weight) by distributing
+			 * the division:
+			 *
+			 *   lag * (load + weight) / load
+			 *     = lag + lag * weight / load
+			 */
+			lag += div64_long(lag * weight, load);
+		}
 
 		/*
 		 * A heavy entity (relative to the tree) will pull the
