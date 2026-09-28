@@ -39,7 +39,6 @@ void br_recalculate_neigh_suppress_enabled(struct net_bridge *br)
 	br_opt_toggle(br, BROPT_NEIGH_SUPPRESS_ENABLED, neigh_suppress);
 }
 
-#if IS_ENABLED(CONFIG_INET)
 static bool
 br_is_neigh_suppress_enabled_vid(const struct net_bridge_port *p, u16 vid)
 {
@@ -57,6 +56,7 @@ br_is_neigh_suppress_enabled_vid(const struct net_bridge_port *p, u16 vid)
 	return br_is_neigh_suppress_enabled(p, v);
 }
 
+#if IS_ENABLED(CONFIG_IPV4)
 static void br_arp_send(struct net_bridge *br, struct net_bridge_port *p,
 			struct net_device *dev, __be32 dest_ip, __be32 src_ip,
 			const unsigned char *dest_hw,
