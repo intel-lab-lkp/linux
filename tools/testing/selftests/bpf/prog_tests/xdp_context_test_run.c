@@ -2,6 +2,7 @@
 #include <test_progs.h>
 #include <network_helpers.h>
 #include <linux/ipv6.h>
+#include <linux/netfilter.h>
 #include <arpa/inet.h>
 #include "test_xdp_context_test_run.skel.h"
 #include "test_xdp_meta.skel.h"
@@ -1566,6 +1567,77 @@ cleanup:
 		close(cgroup_fd);
 }
 
+/* Test metadata passing across TC ingress -> netfilter hook */
+static void test_skb_trace__nf(struct test_xdp_meta *skel, const char *name)
+{
+	LIBBPF_OPTS(bpf_tc_hook, tc_hook,
+		    .ifindex = 1 /* IFINDEX_LO */,
+		    .attach_point = BPF_TC_INGRESS);
+	LIBBPF_OPTS(bpf_tc_opts, tc_opts, .handle = 1, .priority = 1);
+	LIBBPF_OPTS(bpf_netfilter_opts, nf_opts,
+		    .pf = NFPROTO_IPV4,
+		    .hooknum = NF_INET_LOCAL_IN,
+		    .priority = 1);
+	struct bpf_link *reader_link = NULL;
+	struct bpf_link *put_link = NULL;
+	struct netns_obj *ns = NULL;
+	int server_fd = -1;
+	int ret;
+	int i;
+
+	put_link = bpf_program__attach(skel->progs.skb_free);
+	if (!ASSERT_OK_PTR(put_link, "put_attach"))
+		return;
+
+	ns = netns_new(name, true);
+	if (!ASSERT_OK_PTR(ns, "netns_new"))
+		goto cleanup;
+
+	server_fd = start_server(AF_INET, SOCK_DGRAM, "127.0.0.1", 0, 0);
+	if (!ASSERT_GE(server_fd, 0, "start_server"))
+		goto cleanup;
+
+	skel->bss->test_pass = false;
+	skel->bss->free_count = 0;
+
+	ret = bpf_tc_hook_create(&tc_hook);
+	if (!ASSERT_OK(ret, "bpf_tc_hook_create"))
+		goto cleanup;
+
+	tc_opts.prog_fd = bpf_program__fd(skel->progs.tc_meta_write);
+	ret = bpf_tc_attach(&tc_hook, &tc_opts);
+	if (!ASSERT_OK(ret, "bpf_tc_attach"))
+		goto cleanup;
+
+	reader_link = bpf_program__attach_netfilter(skel->progs.nf_meta_read,
+						    &nf_opts);
+	if (!ASSERT_OK_PTR(reader_link, "attach_nf"))
+		goto cleanup;
+
+	if (send_loopback_udp(server_fd))
+		goto cleanup;
+
+	/* Poll every 10 msec up to 1 sec */
+	for (i = 0; i < 100 && !skel->bss->test_pass; i++)
+		usleep(10000);
+	ASSERT_TRUE(skel->bss->test_pass, "test_pass");
+
+	/* Skb is freed after RX delivery; wait for free tp */
+	for (i = 0; i < 100 && !skel->bss->free_count; i++)
+		usleep(10000);
+	ASSERT_GE(skel->bss->free_count, 1, "free_count");
+
+	assert_meta_stash_empty(skel->maps.meta_map);
+
+cleanup:
+	bpf_link__destroy(reader_link);
+	bpf_link__destroy(put_link);
+	bpf_tc_hook_destroy(&tc_hook);
+	if (server_fd >= 0)
+		close(server_fd);
+	netns_free(ns);
+}
+
 void test_skb_trace_cross_hook(void)
 {
 	struct test_xdp_meta *skel = NULL;
@@ -1588,6 +1660,8 @@ void test_skb_trace_cross_hook(void)
 		test_skb_trace__tcp_egress(skel);
 	if (test__start_subtest("cgrp_egress_to_tc_egress_fclone"))
 		test_skb_trace__tcp_retrans(skel);
+	if (test__start_subtest("tc_to_nf"))
+		test_skb_trace__nf(skel, "tc_to_nf");
 
 	test_xdp_meta__destroy(skel);
 }
