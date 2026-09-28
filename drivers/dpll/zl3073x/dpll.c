@@ -38,7 +38,7 @@
  * @dir: pin direction
  * @id: pin id
  * @prio: pin priority <0, 14>
- * @esync_control: embedded sync is controllable
+ * @caps: pin capabilities (ZL3073X_DPLL_PIN_CAP_*)
  * @phase_gran: phase adjustment granularity
  * @operstate: last saved operational state
  * @phase_offset: last saved pin phase offset
@@ -55,13 +55,24 @@ struct zl3073x_dpll_pin {
 	enum dpll_pin_direction	dir;
 	u8			id;
 	u8			prio;
-	bool			esync_control;
+	u8			caps;
 	s32			phase_gran;
 	enum dpll_pin_operstate	operstate;
 	s64			phase_offset;
 	s64			freq_offset;
 	u32			measured_freq;
 };
+
+/*
+ * DPLL pin capabilities
+ */
+enum zl3073x_dpll_pin_caps {
+	ZL3073X_DPLL_PIN_CAP_ESYNC_BIT,
+	ZL3073X_DPLL_PIN_CAPS_NBITS /* must be last */
+};
+
+#define __ZL3073X_DPLL_PIN_CAP(name)	BIT(ZL3073X_DPLL_PIN_CAP_##name##_BIT)
+#define ZL3073X_DPLL_PIN_CAP_ESYNC	__ZL3073X_DPLL_PIN_CAP(ESYNC)
 
 /*
  * Supported esync ranges for input and for output per output pair type
@@ -189,7 +200,8 @@ zl3073x_dpll_input_pin_esync_get(const struct dpll_pin *dpll_pin,
 	ref_id = zl3073x_input_pin_ref_get(pin->id);
 	ref = zl3073x_ref_state_get(zldev, ref_id);
 
-	if (!pin->esync_control || zl3073x_ref_freq_get(ref) <= 1)
+	if (!(pin->caps & ZL3073X_DPLL_PIN_CAP_ESYNC) ||
+	    zl3073x_ref_freq_get(ref) <= 1)
 		return -EOPNOTSUPP;
 
 	esync->range = esync_freq_ranges;
@@ -897,7 +909,7 @@ zl3073x_dpll_output_pin_esync_get(const struct dpll_pin *dpll_pin,
 	synth_freq = zl3073x_synth_freq_get(synth);
 	out_freq = synth_freq / out->div;
 
-	if (!pin->esync_control || out_freq <= 1)
+	if (!(pin->caps & ZL3073X_DPLL_PIN_CAP_ESYNC) || out_freq <= 1)
 		return -EOPNOTSUPP;
 
 	esync->range = esync_freq_ranges;
@@ -1837,13 +1849,16 @@ zl3073x_dpll_pin_register(struct zl3073x_dpll_pin *pin, u32 index)
 	if (IS_ERR(props))
 		return PTR_ERR(props);
 
-	/* Save package label, fwnode, esync capability and phase adjust
+	/* Save package label, fwnode, capabilities and phase adjust
 	 * granularity.
 	 */
 	strscpy(pin->label, props->package_label);
 	pin->fwnode = fwnode_handle_get(props->fwnode);
-	pin->esync_control = props->esync_control;
 	pin->phase_gran = props->dpll_props.phase_gran;
+
+	pin->caps = 0;
+	if (props->esync_control)
+		pin->caps |= ZL3073X_DPLL_PIN_CAP_ESYNC;
 
 	if (zl3073x_dpll_is_input_pin(pin)) {
 		const struct zl3073x_chan *chan;
