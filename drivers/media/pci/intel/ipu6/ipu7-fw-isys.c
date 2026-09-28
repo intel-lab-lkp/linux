@@ -148,7 +148,8 @@ static int ipu7_fw_isys_init(struct ipu6_isys *isys, unsigned int num_streams)
 
 static struct ipu7_insys_resp *ipu7_fw_isys_get_resp(struct ipu6_isys *isys)
 {
-	return ipu7_fw_com_get_token(isys->fwctx, IPU7_INSYS_OUTPUT_MSG_QUEUE);
+	return ipu7_fw_com_get_token(&isys->adev->auxdev.dev, isys->fwctx,
+				     IPU7_INSYS_OUTPUT_MSG_QUEUE);
 }
 
 static void ipu7_fw_isys_put_resp(struct ipu6_isys *isys)
@@ -220,7 +221,6 @@ ipu7_fw_isys_send_cmd(struct ipu6_isys *isys, const unsigned int stream_handle,
 		      size_t size, u16 send_type)
 {
 	struct ipu7_fw_com_context *ctx = isys->fwctx;
-	/*struct device *dev = &isys->adev->auxdev.dev;*/
 	struct ipu7_insys_send_queue_token *token;
 
 	if (send_type >= N_IPU7_INSYS_SEND_TYPE)
@@ -229,7 +229,8 @@ ipu7_fw_isys_send_cmd(struct ipu6_isys *isys, const unsigned int stream_handle,
 	if (cpu_mapped_buf)
 		clflush_cache_range(cpu_mapped_buf, size);
 
-	token = ipu7_fw_com_get_token(ctx, stream_handle +
+	token = ipu7_fw_com_get_token(&isys->adev->auxdev.dev, ctx,
+				      stream_handle +
 				      IPU7_INSYS_INPUT_MSG_QUEUE);
 	if (!token)
 		return -EBUSY;
