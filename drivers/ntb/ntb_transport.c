@@ -923,6 +923,16 @@ static void ntb_qp_link_down_reset(struct ntb_transport_qp *qp)
 		qp->remote_rx_info->entry = qp->rx_max_entry - 1;
 }
 
+static void ntb_transport_schedule_qp_link(struct ntb_transport_qp *qp,
+					   unsigned long delay)
+{
+	struct ntb_transport_ctx *nt = qp->transport;
+
+	/* Pair with the link publication in ntb_transport_link_work(). */
+	if (atomic_read_acquire(&nt->link_is_up))
+		schedule_delayed_work(&qp->link_work, delay);
+}
+
 static void ntb_qp_link_cleanup(struct ntb_transport_qp *qp)
 {
 	struct ntb_transport_ctx *nt = qp->transport;
@@ -942,13 +952,10 @@ static void ntb_qp_link_cleanup_work(struct work_struct *work)
 	struct ntb_transport_qp *qp = container_of(work,
 						   struct ntb_transport_qp,
 						   link_cleanup);
-	struct ntb_transport_ctx *nt = qp->transport;
 
 	ntb_qp_link_cleanup(qp);
-
-	if (atomic_read(&nt->link_is_up))
-		schedule_delayed_work(&qp->link_work,
-				      msecs_to_jiffies(NTB_LINK_DOWN_TIMEOUT));
+	ntb_transport_schedule_qp_link(qp,
+				       msecs_to_jiffies(NTB_LINK_DOWN_TIMEOUT));
 }
 
 static void ntb_qp_link_down(struct ntb_transport_qp *qp)
@@ -1086,16 +1093,19 @@ static void ntb_transport_link_work(struct work_struct *work)
 			goto out1;
 	}
 
-	atomic_set(&nt->link_is_up, true);
+	for (i = 0; i < nt->qp_count; i++) {
+		ntb_transport_setup_qp_mw(nt, i);
+		ntb_transport_setup_qp_peer_msi(nt, i);
+	}
+
+	/* Publish the link only after every QP has been set up. */
+	atomic_set_release(&nt->link_is_up, true);
 
 	for (i = 0; i < nt->qp_count; i++) {
 		struct ntb_transport_qp *qp = &nt->qp_vec[i];
 
-		ntb_transport_setup_qp_mw(nt, i);
-		ntb_transport_setup_qp_peer_msi(nt, i);
-
 		if (atomic_read(&qp->client_ready))
-			schedule_delayed_work(&qp->link_work, 0);
+			ntb_transport_schedule_qp_link(qp, 0);
 	}
 
 	return;
@@ -1143,9 +1153,10 @@ static void ntb_qp_link_work(struct work_struct *work)
 
 		if (qp->active)
 			tasklet_schedule(&qp->rxc_db_work);
-	} else if (atomic_read(&nt->link_is_up))
-		schedule_delayed_work(&qp->link_work,
-				      msecs_to_jiffies(NTB_LINK_DOWN_TIMEOUT));
+	} else {
+		ntb_transport_schedule_qp_link(qp,
+					       msecs_to_jiffies(NTB_LINK_DOWN_TIMEOUT));
+	}
 }
 
 static int ntb_transport_init_queue(struct ntb_transport_ctx *nt,
@@ -2389,8 +2400,7 @@ void ntb_transport_link_up(struct ntb_transport_qp *qp)
 
 	atomic_set(&qp->client_ready, true);
 
-	if (atomic_read(&qp->transport->link_is_up))
-		schedule_delayed_work(&qp->link_work, 0);
+	ntb_transport_schedule_qp_link(qp, 0);
 }
 EXPORT_SYMBOL_GPL(ntb_transport_link_up);
 
