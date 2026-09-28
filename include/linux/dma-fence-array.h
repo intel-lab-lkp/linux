@@ -39,7 +39,7 @@ struct dma_fence_array {
 
 	unsigned num_fences;
 	atomic_t num_pending;
-	struct dma_fence **fences;
+	struct dma_fence **fences __counted_by_ptr(num_fences);
 
 	struct irq_work work;
 
