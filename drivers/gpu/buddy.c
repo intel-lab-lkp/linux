@@ -1240,6 +1240,52 @@ static void __gpu_buddy_undo_splits(struct gpu_buddy *mm,
 	}
 }
 
+static void gpu_buddy_merge_one_level(struct gpu_buddy *mm,
+				      struct gpu_buddy_block *block)
+{
+	struct gpu_buddy_block *buddy = __get_buddy(block);
+	struct gpu_buddy_block *parent = block->parent;
+	enum gpu_block_state block_state;
+
+	if (!buddy || !gpu_buddy_block_is_free(block) ||
+	    !gpu_buddy_block_is_free(buddy))
+		return;
+
+	block_state = gpu_block_cached_state(block);
+	if (gpu_block_cached_state(buddy) != block_state)
+		block_state = GPU_BLOCK_MIXED;
+
+	rbtree_remove(mm, block);
+	rbtree_remove(mm, buddy);
+	mm->free_scoreboard[gpu_buddy_block_order(block)] -= 2;
+
+	gpu_block_free(mm, block);
+	gpu_block_free(mm, buddy);
+
+	__mark_free(mm, parent, block_state);
+}
+
+static void gpu_buddy_undo_splits(struct gpu_buddy *mm,
+				  struct gpu_buddy_block *block,
+				  struct list_head *splits)
+{
+	if (block)
+		gpu_buddy_merge_one_level(mm, block);
+
+	while (!list_empty(splits)) {
+		struct gpu_buddy_block *parent =
+			list_first_entry(splits, struct gpu_buddy_block,
+					 tmp_link);
+
+		list_del(&parent->tmp_link);
+
+		if (!gpu_buddy_block_is_split(parent))
+			continue;
+
+		gpu_buddy_merge_one_level(mm, parent->left);
+	}
+}
+
 static struct gpu_buddy_block *
 __alloc_range_bias(struct gpu_buddy *mm,
 		   u64 start, u64 end,
@@ -1249,6 +1295,7 @@ __alloc_range_bias(struct gpu_buddy *mm,
 	u64 req_size = mm->chunk_size << order;
 	struct gpu_buddy_block *block;
 	LIST_HEAD(dfs);
+	LIST_HEAD(splits);
 	int err;
 	int i;
 
@@ -1313,6 +1360,8 @@ __alloc_range_bias(struct gpu_buddy *mm,
 			err = split_block(mm, block);
 			if (unlikely(err))
 				goto err_undo;
+
+			list_add(&block->tmp_link, &splits);
 		}
 
 		/*
@@ -1349,7 +1398,7 @@ __alloc_range_bias(struct gpu_buddy *mm,
 		}
 	} while (1);
 
-	return ERR_PTR(-ENOSPC);
+	err = -ENOSPC;
 
 err_undo:
 	/*
@@ -1357,7 +1406,8 @@ err_undo:
 	 * bigger is better, so make sure we merge everything back before we
 	 * free the allocated blocks.
 	 */
-	__gpu_buddy_undo_splits(mm, block);
+	gpu_buddy_undo_splits(mm, block, &splits);
+
 	return ERR_PTR(err);
 }
 
@@ -1580,6 +1630,7 @@ static int __alloc_range(struct gpu_buddy *mm,
 	struct gpu_buddy_block *block;
 	u64 total_allocated = 0;
 	LIST_HEAD(allocated);
+	LIST_HEAD(splits);
 	u64 end;
 	int err;
 
@@ -1605,7 +1656,7 @@ static int __alloc_range(struct gpu_buddy *mm,
 
 		if (gpu_buddy_block_is_allocated(block)) {
 			err = -ENOSPC;
-			goto err_free;
+			goto err_undo;
 		}
 
 		if (contains(start, end, block_start, block_end)) {
@@ -1634,6 +1685,8 @@ static int __alloc_range(struct gpu_buddy *mm,
 			err = split_block(mm, block);
 			if (unlikely(err))
 				goto err_undo;
+
+			list_add(&block->tmp_link, &splits);
 		}
 
 		list_add(&block->right->tmp_link, dfs);
@@ -1642,7 +1695,7 @@ static int __alloc_range(struct gpu_buddy *mm,
 
 	if (total_allocated < size) {
 		err = -ENOSPC;
-		goto err_free;
+		goto err_undo;
 	}
 
 	list_splice_tail(&allocated, blocks);
@@ -1655,9 +1708,8 @@ err_undo:
 	 * bigger is better, so make sure we merge everything back before we
 	 * free the allocated blocks.
 	 */
-	__gpu_buddy_undo_splits(mm, block);
+	gpu_buddy_undo_splits(mm, block, &splits);
 
-err_free:
 	if (err == -ENOSPC && total_allocated_on_err) {
 		list_splice_tail(&allocated, blocks);
 		*total_allocated_on_err = total_allocated;
