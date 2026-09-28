@@ -657,9 +657,6 @@ struct amd_iommu {
 	/* Extended features 2 */
 	u64 features2;
 
-	/* Devices requesting PerfOpt; the shared PERF_OPT_EN bit is on while >0. Protected by @lock. */
-	int perfopt_refcount;
-
 	/* PCI device id of the IOMMU device */
 	u16 devid;
 

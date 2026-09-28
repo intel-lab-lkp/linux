@@ -3070,7 +3070,7 @@ static int restore_perfopt_all(void)
 	int err, ret = 0;
 
 	for_each_iommu(iommu) {
-		err = amd_iommu_perfopt_restore(iommu);
+		err = amd_iommu_perfopt_arm(iommu);
 		if (err)
 			ret = err;
 	}
@@ -3115,7 +3115,6 @@ static void amd_iommu_resume(void *data)
 	for_each_iommu(iommu)
 		early_enable_iommu(iommu);
 
-	/* early_enable_iommu() cleared PERF_OPT_EN; re-assert it from the refcount. */
 	if (restore_perfopt_all())
 		pr_err("Failed to restore PerfOpt after IOMMU resume\n");
 
