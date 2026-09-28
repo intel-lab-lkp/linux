@@ -579,7 +579,8 @@ static void xiic_smbus_block_read_setup(struct xiic_i2c *i2c)
 static void xiic_read_rx(struct xiic_i2c *i2c)
 {
 	u8 bytes_in_fifo, cr = 0, bytes_to_read = 0;
-	u32 bytes_rem = 0;
+	u32 bytes_rem;
+	u32 rx_space;
 	int i;
 
 	bytes_in_fifo = xiic_getreg8(i2c, XIIC_RFO_REG_OFFSET) + 1;
@@ -591,13 +592,32 @@ static void xiic_read_rx(struct xiic_i2c *i2c)
 			xiic_getreg8(i2c, XIIC_SR_REG_OFFSET),
 			xiic_getreg8(i2c, XIIC_CR_REG_OFFSET));
 
-	if (bytes_in_fifo > xiic_rx_space(i2c))
-		bytes_in_fifo = xiic_rx_space(i2c);
+	rx_space = xiic_rx_space(i2c);
+
+	/* Do not read more bytes than are still expected for this message */
+	if (bytes_in_fifo > rx_space)
+		bytes_in_fifo = rx_space;
 
 	bytes_to_read = bytes_in_fifo;
 
-	if (!i2c->dynamic) {
-		bytes_rem = xiic_rx_space(i2c) - bytes_in_fifo;
+	if (i2c->dynamic) {
+		/*
+		 * RFD is set by xiic_start_recv() and must not be changed during
+		 * a transfer, because reprogramming it may generate a spurious
+		 * SCL pulse and cause the STOP condition to be missed.
+		 */
+		bytes_rem = rx_space - bytes_in_fifo;
+
+		/*
+		 * If fewer bytes remain to arrive than are currently in the FIFO,
+		 * drain only that remaining count. The retained FIFO bytes together
+		 * with the bytes still arriving restore the FIFO occupancy to the
+		 * fixed threshold. Otherwise, drain the FIFO completely.
+		 */
+		if (bytes_rem && bytes_rem < bytes_in_fifo)
+			bytes_to_read = bytes_rem;
+	} else {
+		bytes_rem = rx_space - bytes_in_fifo;
 
 		/* Set msg length if smbus_block_read */
 		if (i2c->rx_msg->flags & I2C_M_RECV_LEN) {
@@ -636,15 +656,6 @@ static void xiic_read_rx(struct xiic_i2c *i2c)
 	for (i = 0; i < bytes_to_read; i++) {
 		i2c->rx_msg->buf[i2c->rx_pos++] =
 			xiic_getreg8(i2c, XIIC_DRR_REG_OFFSET);
-	}
-
-	if (i2c->dynamic) {
-		u8 bytes;
-
-		/* Receive remaining bytes if less than fifo depth */
-		bytes = min_t(u8, xiic_rx_space(i2c), IIC_RX_FIFO_DEPTH);
-		bytes--;
-		xiic_setreg8(i2c, XIIC_RFD_REG_OFFSET, bytes);
 	}
 }
 
