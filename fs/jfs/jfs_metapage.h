@@ -31,6 +31,7 @@ struct metapage {
 	/* Journal management */
 	int clsn;
 	int nohomeok;
+	unsigned int writeback_count; /* Synchronous writeback users */
 	struct jfs_log *log;
 };
 

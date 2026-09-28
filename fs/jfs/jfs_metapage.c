@@ -269,6 +269,7 @@ static inline struct metapage *alloc_metapage(gfp_t gfp_mask)
 		mp->data = NULL;
 		mp->clsn = 0;
 		mp->log = NULL;
+		mp->writeback_count = 0;
 		init_waitqueue_head(&mp->wait);
 		INIT_LIST_HEAD(&mp->synclist);
 	}
@@ -309,8 +310,8 @@ void metapage_exit(void)
 
 static inline void drop_metapage(struct folio *folio, struct metapage *mp)
 {
-	if (mp->count || mp->nohomeok || test_bit(META_dirty, &mp->flag) ||
-	    test_bit(META_io, &mp->flag))
+	if (mp->count || mp->nohomeok || mp->writeback_count ||
+	    test_bit(META_dirty, &mp->flag) || test_bit(META_io, &mp->flag))
 		return;
 	remove_metapage(folio, mp);
 	INCREMENT(mpStat.pagefree);
@@ -623,7 +624,7 @@ static bool metapage_release_folio(struct folio *folio, gfp_t gfp_mask)
 			continue;
 
 		jfs_info("metapage_release_folio: mp = 0x%p", mp);
-		if (mp->count || mp->nohomeok ||
+		if (mp->count || mp->nohomeok || mp->writeback_count ||
 		    test_bit(META_dirty, &mp->flag)) {
 			jfs_info("count = %ld, nohomeok = %d", mp->count,
 				 mp->nohomeok);
@@ -882,9 +883,11 @@ void release_metapage(struct metapage * mp)
 		folio_mark_dirty(folio);
 		if (test_bit(META_sync, &mp->flag)) {
 			clear_bit(META_sync, &mp->flag);
+			mp->writeback_count++;
 			if (metapage_write_one(folio))
 				jfs_error(mp->sb, "metapage_write_one() failed\n");
 			folio_lock(folio);
+			mp->writeback_count--;
 		}
 	} else if (mp->lsn)	/* discard_metapage doesn't remove it */
 		remove_from_logsync(mp);
