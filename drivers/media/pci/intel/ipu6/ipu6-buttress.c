@@ -530,16 +530,15 @@ static int __ipu7_power_on(struct device *dev,
 	ret = readl_poll_timeout(isp->base + isp->buttress.regs->pwr_status,
 				 val, (val & ctrl->pwr_sts_mask) == pwr_sts,
 				 100, BUTTRESS_POWER_TIMEOUT_US);
-	if (ret) {
+	if (ret)
 		dev_err(&isp->pdev->dev,
 			"Change power status timeout with 0x%x\n", val);
-		return ret;
-	}
 
+	/* Always drop the clock override, even if the poll above timed out. */
 	slp = readl(isp->base + IPU7_BUTTRESS_REG_SLEEP_LEVEL_CFG);
 	writel(slp & ~ovrd_clk, isp->base + IPU7_BUTTRESS_REG_SLEEP_LEVEL_CFG);
 
-	return 0;
+	return ret;
 }
 
 static int __ipu7_power_off(struct device *dev,
@@ -555,18 +554,25 @@ static int __ipu7_power_off(struct device *dev,
 	ret = readl_poll_timeout(isp->base + isp->buttress.regs->pwr_status,
 				 val, (val & ctrl->pwr_sts_mask) == pwr_sts,
 				 100, BUTTRESS_POWER_TIMEOUT_US);
-	if (ret) {
+	if (ret)
 		dev_err(&isp->pdev->dev,
 			"Change power status timeout with 0x%x\n", val);
-		return ret;
-	}
 
+	/* Always release D2D/NDE, even if the power status poll timed out. */
 	if (ctrl->subsys_id == IPU_ISYS) {
-		ipu7_isys_d2d_power(isp, false);
+		int d2d_ret;
+
+		d2d_ret = ipu7_isys_d2d_power(isp, false);
+		if (d2d_ret) {
+			dev_err(&isp->pdev->dev,
+				"D2D power down failed (%d)\n", d2d_ret);
+			if (!ret)
+				ret = d2d_ret;
+		}
 		ipu7_nde_control(isp, false);
 	}
 
-	return 0;
+	return ret;
 }
 
 static int __ipu6_power(struct device *dev,
