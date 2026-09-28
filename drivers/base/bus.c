@@ -606,6 +606,49 @@ out_put:
 	return error;
 }
 
+static int __read_mostly allow_driver_override;
+
+static int __init allow_driver_override_setup(char *str)
+{
+	allow_driver_override = 1;
+
+	return 1;
+}
+__setup("allow_driver_override", allow_driver_override_setup);
+
+/**
+ * device_match_driver_override() - Match a driver against the device's driver_override.
+ * @dev: device to check
+ * @drv: driver to match against
+ *
+ * Returns > 0 if a driver override is set and matches the given driver, 0 if a
+ * driver override is set but does not match, or < 0 if a driver override is not
+ * set at all.
+ */
+int device_match_driver_override(struct device *dev,
+				 const struct device_driver *drv)
+{
+	guard(spinlock)(&dev->driver_override.lock);
+	if (dev->driver_override.name) {
+		int ret = !strcmp(dev->driver_override.name, drv->name);
+
+		if (ret > 0) {
+			if (!allow_driver_override && !drv->support_driver_override) {
+				pr_info("Suppress driver override binding. Allow %ps to do overriding or boot with allow_driver_override on cmdline\n",
+					drv);
+				return -1;
+			}
+
+			add_taint_module(drv->owner,
+					 TAINT_DRIVER_OVERRIDE, LOCKDEP_STILL_OK);
+		}
+
+		return ret;
+	}
+	return -1;
+}
+EXPORT_SYMBOL_GPL(device_match_driver_override);
+
 /**
  * bus_probe_device - probe drivers for a new device
  * @dev: device to probe
