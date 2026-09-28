@@ -46,18 +46,18 @@
 };
 
 &ethernet {
-	status = "okay";
-
 	phy-handle = <&phy1>;
 	phy-mode = "gmii";
 
+	status = "okay";
+
 	mdio {
+		compatible = "snps,dwmac-mdio";
 		#address-cells = <0x1>;
 		#size-cells = <0x0>;
-		compatible = "snps,dwmac-mdio";
 		phy1: phy@0 {
-			compatible = "ethernet-phy-ieee802.3-c22";
 			device_type = "ethernet-phy";
+			compatible = "ethernet-phy-ieee802.3-c22";
 			reg = <0x0>;
 		};
 	};
