@@ -2740,13 +2740,44 @@ char *cxx_demangle_sym(const char *str __maybe_unused, bool params __maybe_unuse
 /* Buffer limit for a demangled Rust symbol name. */
 #define RUST_DEMANGLE_MAX_LEN (1024 * 1024)
 
-char *dso__demangle_sym(struct dso *dso, int kmodule, const char *elf_name)
+static char *rust_demangle_sym(const char *elf_name)
 {
 	struct demangle rust_demangle = {
 		.style = DemangleStyleUnknown,
 	};
 	char *demangled = NULL;
 	size_t buf_len;
+
+	rust_demangle_demangle(elf_name, &rust_demangle);
+	if (!rust_demangle_is_known(&rust_demangle))
+		return NULL;
+
+	if (rust_demangle.mangled_len == 0)
+		return NULL;
+
+	for (buf_len = min_t(size_t, roundup_pow_of_two(rust_demangle.mangled_len * 2),
+			     RUST_DEMANGLE_MAX_LEN);
+	     buf_len <= RUST_DEMANGLE_MAX_LEN;
+	     buf_len *= 2) {
+		char *tmp = realloc(demangled, buf_len);
+
+		if (!tmp)
+			break;
+		demangled = tmp;
+		if (rust_demangle_display_demangle(&rust_demangle, demangled, buf_len,
+						   /*alternate=*/true) == OverflowOk) {
+			tmp = realloc(demangled, strlen(demangled) + 1);
+			return tmp ?: demangled;
+		}
+	}
+	/* Failure to grow output buffer or buffer exceeded sensible bounds. */
+	free(demangled);
+	return NULL;
+}
+
+char *dso__demangle_sym(struct dso *dso, int kmodule, const char *elf_name)
+{
+	char *demangled = NULL;
 
 	/*
 	 * We need to figure out if the object was created from C++ sources
@@ -2756,31 +2787,9 @@ char *dso__demangle_sym(struct dso *dso, int kmodule, const char *elf_name)
 	if (!want_demangle((dso && dso__kernel(dso)) || kmodule))
 		return demangled;
 
-	rust_demangle_demangle(elf_name, &rust_demangle);
-	if (rust_demangle_is_known(&rust_demangle)) {
-		/* A rust mangled name. */
-		if (rust_demangle.mangled_len == 0)
-			return demangled;
-
-		for (buf_len = min_t(size_t, roundup_pow_of_two(rust_demangle.mangled_len * 2),
-				     RUST_DEMANGLE_MAX_LEN);
-		     buf_len <= RUST_DEMANGLE_MAX_LEN;
-		     buf_len *= 2) {
-			char *tmp = realloc(demangled, buf_len);
-
-			if (!tmp)
-				break;
-			demangled = tmp;
-			if (rust_demangle_display_demangle(&rust_demangle, demangled, buf_len,
-							   /*alternate=*/true) == OverflowOk) {
-				tmp = realloc(demangled, strlen(demangled) + 1);
-				return tmp ?: demangled;
-			}
-		}
-		/* Failure to grow output buffer or buffer exceeded sensible bounds. */
-		free(demangled);
-		return NULL;
-	}
+	demangled = rust_demangle_sym(elf_name);
+	if (demangled)
+		return demangled;
 
 	demangled = cxx_demangle_sym(elf_name, verbose > 0, verbose > 0);
 	if (demangled)
