@@ -158,7 +158,7 @@ static void retrieve_apple_device_properties(struct boot_params *boot_params)
 	efi_guid_t guid = APPLE_PROPERTIES_PROTOCOL_GUID;
 	struct setup_data *data, *new;
 	efi_status_t status;
-	u32 size = 0;
+	unsigned long size = 0;
 	apple_properties_protocol_t *p;
 
 	status = efi_bs_call(locate_protocol, &guid, NULL, (void **)&p);
