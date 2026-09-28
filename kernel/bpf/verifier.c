@@ -12891,6 +12891,23 @@ static int check_kfunc_args(struct bpf_verifier_env *env, struct bpf_call_arg_me
 			break;
 		case KF_ARG_PTR_TO_CTX:
 			if (reg->type != PTR_TO_CTX) {
+				/* Only accept trusted kernel-context pointers from
+				 * vmlinux BTF. reg->btf_id is scoped to reg->btf,
+				 * so a module-local ID could otherwise alias the
+				 * vmlinux context type ID.
+				 */
+				if (base_type(reg->type) == PTR_TO_BTF_ID &&
+				    reg->btf == btf_vmlinux &&
+				    is_trusted_reg(env, reg) &&
+				    !bpf_type_has_unsafe_modifiers(reg->type)) {
+					ret = get_kern_ctx_btf_id(&env->log,
+								  resolve_prog_type(env->prog));
+					if (ret < 0)
+						return -EINVAL;
+					if (reg->btf_id == ret)
+						break;
+				}
+
 				verbose(env, "%s expected pointer to ctx, but got %s\n",
 					reg_arg_name(env, argno), reg_type_str(env, reg->type));
 				bpf_diag_call_arg_fmt(env, insn_idx, argno, func_name,
