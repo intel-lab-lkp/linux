@@ -6623,9 +6623,47 @@ static void fini_adaptive_pebs_on_cpu(int cpu)
 	wrmsrq_on_cpu(cpu, MSR_PEBS_DATA_CFG, 0);
 }
 
+#define clear_pmu_ext_msrs_on_cpu(cpu, mask, gp_base, fixed_base)		\
+do {										\
+	int idx, msr;								\
+										\
+	for_each_set_bit(idx, (unsigned long *)&(mask), X86_PMC_IDX_MAX) {	\
+		if (idx < INTEL_PMC_IDX_FIXED) {				\
+			msr = (gp_base) + x86_pmu.addr_offset(idx, false);	\
+		} else {							\
+			msr = (fixed_base) +					\
+			       x86_pmu.addr_offset(idx - INTEL_PMC_IDX_FIXED, false); \
+		}								\
+		wrmsrq_on_cpu((cpu), msr, 0);					\
+	}									\
+} while (0)
+
+static void fini_pmu_ext_msrs_on_cpu(int cpu)
+{
+	struct cpu_hw_events *cpuc = &per_cpu(cpu_hw_events, cpu);
+	u64 cfg_b_mask = hybrid(cpuc->pmu, acr_cntr_mask64);
+	u64 cfg_c_mask = cfg_b_mask |
+			 hybrid(cpuc->pmu, arch_pebs_cap).counters;
+
+	if (x86_pmu.version < 6)
+		return;
+
+	/*
+	 * Clear cached acr_cfg_b[] and cfg_c_val[] so *_CFG_B and
+	 *_CFG_C MSRs can always be reprogrammed after CPU online.
+	 */
+	memset(cpuc->acr_cfg_b, 0, sizeof(cpuc->acr_cfg_b));
+	memset(cpuc->cfg_c_val, 0, sizeof(cpuc->cfg_c_val));
+	clear_pmu_ext_msrs_on_cpu(cpu, cfg_b_mask, MSR_IA32_PMC_V6_GP0_CFG_B,
+				  MSR_IA32_PMC_V6_FX0_CFG_B);
+	clear_pmu_ext_msrs_on_cpu(cpu, cfg_c_mask, MSR_IA32_PMC_V6_GP0_CFG_C,
+				  MSR_IA32_PMC_V6_FX0_CFG_C);
+}
+
 static void intel_pmu_cpu_dying(int cpu)
 {
 	fini_fixed_cntrs_on_cpu(cpu);
+	fini_pmu_ext_msrs_on_cpu(cpu);
 	fini_adaptive_pebs_on_cpu(cpu);
 	fini_debug_store_on_cpu(cpu);
 	fini_arch_pebs_on_cpu(cpu);
