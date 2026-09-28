@@ -282,12 +282,6 @@ __bad_area(struct pt_regs *regs, unsigned long error_code,
 }
 
 static noinline void
-bad_area(struct pt_regs *regs, unsigned long error_code, unsigned long address)
-{
-	__bad_area(regs, error_code, address, SEGV_MAPERR);
-}
-
-static noinline void
 bad_area_access_error(struct pt_regs *regs, unsigned long error_code,
 		      unsigned long address)
 {
@@ -297,11 +291,6 @@ bad_area_access_error(struct pt_regs *regs, unsigned long error_code,
 static void
 do_sigbus(struct pt_regs *regs, unsigned long error_code, unsigned long address)
 {
-	struct task_struct *tsk = current;
-	struct mm_struct *mm = tsk->mm;
-
-	mmap_read_unlock(mm);
-
 	/* Kernel mode? Handle exceptions or die: */
 	if (!user_mode(regs))
 		no_context(regs, error_code, address);
@@ -347,7 +336,7 @@ mm_fault_error(struct pt_regs *regs, unsigned long error_code,
 		if (fault & VM_FAULT_SIGBUS)
 			do_sigbus(regs, error_code, address);
 		else if (fault & VM_FAULT_SIGSEGV)
-			bad_area(regs, error_code, address);
+			bad_area_nosemaphore(regs, error_code, address);
 		else
 			BUG();
 	}
