@@ -974,6 +974,8 @@ static void ntb_transport_link_cleanup(struct ntb_transport_ctx *nt)
 
 	guard(mutex)(&nt->link_event_lock);
 
+	atomic_set(&nt->link_is_up, false);
+
 	qp_bitmap_alloc = nt->qp_bitmap & ~nt->qp_bitmap_free;
 
 	/* Pass along the info to any clients */
@@ -1139,7 +1141,9 @@ static void ntb_qp_link_work(struct work_struct *work)
 	struct ntb_transport_ctx *nt = qp->transport;
 	int val;
 
-	WARN_ON(!atomic_read(&nt->link_is_up));
+	/* Pair with the link publication in ntb_transport_link_work(). */
+	if (!atomic_read_acquire(&nt->link_is_up))
+		return;
 
 	val = ntb_spad_read(nt->ndev, QP_LINKS);
 
