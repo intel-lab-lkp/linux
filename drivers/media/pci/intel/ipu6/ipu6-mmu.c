@@ -566,10 +566,19 @@ phys_addr_t ipu6_mmu_iova_to_phys(struct ipu6_mmu_info *mmu_info,
 {
 	phys_addr_t phy_addr;
 	unsigned long flags;
+	u32 l1_idx = iova >> ISP_L1PT_SHIFT;
 	u32 *l2_pt;
 
 	spin_lock_irqsave(&mmu_info->lock, flags);
-	l2_pt = mmu_info->l2_pts[iova >> ISP_L1PT_SHIFT];
+	if (mmu_info->l1_pt[l1_idx] == mmu_info->dummy_l2_pteval) {
+		spin_unlock_irqrestore(&mmu_info->lock, flags);
+		dev_err(mmu_info->dev,
+			"iova_to_phys: no mapping for iova %pad\n",
+			&iova);
+		return 0;
+	}
+
+	l2_pt = mmu_info->l2_pts[l1_idx];
 	phy_addr = (phys_addr_t)l2_pt[(iova & ISP_L2PT_MASK) >> ISP_L2PT_SHIFT];
 	phy_addr <<= ISP_PAGE_SHIFT;
 	spin_unlock_irqrestore(&mmu_info->lock, flags);
