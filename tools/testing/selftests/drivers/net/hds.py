@@ -6,6 +6,7 @@ import os
 import random
 from typing import Union
 from lib.py import ksft_run, ksft_exit, ksft_eq, ksft_raises, KsftSkipEx
+from lib.py import ksft_disruptive
 from lib.py import CmdExitFailure, EthtoolFamily, NlError
 from lib.py import NetDrvEnv
 from lib.py import defer, ethtool, ip
@@ -26,6 +27,21 @@ def _xdp_onoff(cfg):
     ip("link set dev %s xdp obj %s sec xdp" %
        (cfg.ifname, prog))
     ip("link set dev %s xdp off" % cfg.ifname)
+
+
+def _xdp_attach(cfg, ifname):
+    """Attach a single-buffer XDP program, detach it when the test ends."""
+    prog = cfg.net_lib_dir / "xdp_dummy.bpf.o"
+    ip(f"link set dev {ifname} xdp obj {prog} sec xdp")
+    defer(ip, f"link set dev {ifname} xdp off")
+
+
+def _hds_enable_expect_fail(cfg, netnl):
+    """Enabling HDS must be refused while single-buffer XDP is attached."""
+    with ksft_raises(NlError) as e:
+        netnl.rings_set({'header': {'dev-index': cfg.ifindex},
+                         'tcp-data-split': 'enabled'})
+    ksft_eq(e.exception.nl_msg.error, -errno.EINVAL)
 
 
 def _ioctl_ringparam_modify(cfg, netnl) -> None:
@@ -240,6 +256,53 @@ def enabled_set_xdp(cfg, netnl) -> None:
         _xdp_onoff(cfg)
 
 
+def xdp_set_hds(cfg, netnl) -> None:
+    """
+    Enable single-buffer XDP on the device, then try to enable HDS.
+    The mirror of enabled_set_xdp(): HDS must be refused.
+    """
+    mode = _get_hds_mode(cfg, netnl)
+    _defer_reset_hds(cfg, netnl)
+    if mode == 'enabled':
+        netnl.rings_set({'header': {'dev-index': cfg.ifindex},
+                         'tcp-data-split': 'unknown'})
+
+    _xdp_attach(cfg, cfg.ifname)
+
+    _hds_enable_expect_fail(cfg, netnl)
+
+
+@ksft_disruptive
+def xdp_bond_set_hds(cfg, netnl) -> None:
+    """
+    Like xdp_set_hds(), but the program is installed on a bond and pushed
+    down to the device rather than attached to it directly. The device is
+    running it either way, so HDS must be refused all the same.
+    """
+    mode = _get_hds_mode(cfg, netnl)
+    _defer_reset_hds(cfg, netnl)
+    if mode == 'enabled':
+        netnl.rings_set({'header': {'dev-index': cfg.ifindex},
+                         'tcp-data-split': 'unknown'})
+
+    ip("link add hds-bond type bond mode active-backup")
+    defer(ip, "link del hds-bond")
+
+    # bonding refuses to enslave a device which is up
+    ip(f"link set dev {cfg.ifname} down")
+    defer(ip, f"link set dev {cfg.ifname} up")
+    ip(f"link set dev {cfg.ifname} master hds-bond")
+    defer(ip, f"link set dev {cfg.ifname} nomaster")
+    ip("link set dev hds-bond up")
+
+    try:
+        _xdp_attach(cfg, "hds-bond")
+    except CmdExitFailure:
+        raise KsftSkipEx("device can't be an XDP bond slave")
+
+    _hds_enable_expect_fail(cfg, netnl)
+
+
 def ioctl(cfg, netnl) -> None:
     mode1 = _get_hds_mode(cfg, netnl)
     _ioctl_ringparam_modify(cfg, netnl)
@@ -290,6 +353,8 @@ def main() -> None:
                   set_hds_thresh_gt,
                   set_xdp,
                   enabled_set_xdp,
+                  xdp_set_hds,
+                  xdp_bond_set_hds,
                   ioctl,
                   ioctl_set_xdp,
                   ioctl_enabled_set_xdp],
