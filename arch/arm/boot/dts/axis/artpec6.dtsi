@@ -151,7 +151,7 @@
 	pmu {
 		compatible = "arm,cortex-a9-pmu";
 		interrupts = <GIC_SPI 0 IRQ_TYPE_LEVEL_HIGH>,
-			<GIC_SPI 1 IRQ_TYPE_LEVEL_HIGH>;
+			     <GIC_SPI 1 IRQ_TYPE_LEVEL_HIGH>;
 		interrupt-affinity = <&cpu0>, <&cpu1>;
 	};
 
@@ -287,7 +287,7 @@
 		ethernet: ethernet@f8010000 {
 			clock-names = "stmmaceth", "ptp_ref";
 			clocks = <&clkctrl ARTPEC6_CLK_ETH_ACLK>,
-				<&clkctrl ARTPEC6_CLK_PTP_REF>;
+				 <&clkctrl ARTPEC6_CLK_PTP_REF>;
 			compatible = "snps,dwmac-4.10a", "snps,dwmac";
 			interrupts = <GIC_SPI 98 IRQ_TYPE_LEVEL_HIGH>,
 				     <GIC_SPI 99 IRQ_TYPE_LEVEL_HIGH>;
@@ -333,7 +333,7 @@
 			reg = <0xf8036000 0x1000>;
 			interrupts = <GIC_SPI 105 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&clkctrl ARTPEC6_CLK_UART_REFCLK>,
-				<&clkctrl ARTPEC6_CLK_UART_PCLK>;
+				 <&clkctrl ARTPEC6_CLK_UART_PCLK>;
 			clock-names = "uart_clk", "apb_pclk";
 			pinctrl-names = "default";
 			pinctrl-0 = <&pinctrl_uart0>;
@@ -347,7 +347,7 @@
 			reg = <0xf8037000 0x1000>;
 			interrupts = <GIC_SPI 113 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&clkctrl ARTPEC6_CLK_UART_REFCLK>,
-				<&clkctrl ARTPEC6_CLK_UART_PCLK>;
+				 <&clkctrl ARTPEC6_CLK_UART_PCLK>;
 			clock-names = "uart_clk", "apb_pclk";
 			pinctrl-names = "default";
 			pinctrl-0 = <&pinctrl_uart1>;
@@ -361,7 +361,7 @@
 			reg = <0xf8038000 0x1000>;
 			interrupts = <GIC_SPI 121 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&clkctrl ARTPEC6_CLK_UART_REFCLK>,
-				<&clkctrl ARTPEC6_CLK_UART_PCLK>;
+				 <&clkctrl ARTPEC6_CLK_UART_PCLK>;
 			clock-names = "uart_clk", "apb_pclk";
 			pinctrl-names = "default";
 			pinctrl-0 = <&pinctrl_uart2>;
@@ -375,7 +375,7 @@
 			reg = <0xf8039000 0x1000>;
 			interrupts = <GIC_SPI 129 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&clkctrl ARTPEC6_CLK_UART_REFCLK>,
-				<&clkctrl ARTPEC6_CLK_UART_PCLK>;
+				 <&clkctrl ARTPEC6_CLK_UART_PCLK>;
 			clock-names = "uart_clk", "apb_pclk";
 			pinctrl-names = "default";
 			pinctrl-0 = <&pinctrl_uart3>;
