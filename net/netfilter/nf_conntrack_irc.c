@@ -88,7 +88,9 @@ static int parse_dcc(char *data, const char *data_end, __be32 *ip,
 		data++;
 	}
 
-	*port = simple_strtoul(data, &data, 10);
+	if (nf_ct_helper_parse_port(data, data_end - data, port, &data))
+		return -1;
+
 	*ad_end_p = data;
 
 	return 0;
@@ -206,9 +208,8 @@ static int help(struct sk_buff *skb, unsigned int protoff,
 
 			/* dcc_ip can be the internal OR external (NAT'ed) IP */
 			tuple = &ct->tuplehash[dir].tuple;
-			if ((tuple->src.u3.ip != dcc_ip &&
-			     ct->tuplehash[!dir].tuple.dst.u3.ip != dcc_ip) ||
-			    dcc_port == 0) {
+			if (tuple->src.u3.ip != dcc_ip &&
+			    ct->tuplehash[!dir].tuple.dst.u3.ip != dcc_ip) {
 				net_warn_ratelimited("Forged DCC command from %pI4: %pI4:%u\n",
 						     &tuple->src.u3.ip,
 						     &dcc_ip, dcc_port);
