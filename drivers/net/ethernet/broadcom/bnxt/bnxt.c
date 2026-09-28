@@ -17229,6 +17229,42 @@ static void bnxt_clear_bars(struct pci_dev *pdev)
 		pci_write_config_dword(pdev, off, 0);
 }
 
+/* Clear any pending DMA transactions from crash kernel while loading driver in
+ * capture kernel.
+ */
+static void bnxt_kdump_reset(struct pci_dev *pdev)
+{
+	u16 cmd;
+	int rc;
+
+	pci_read_config_word(pdev, PCI_COMMAND, &cmd);
+	cmd &= ~(PCI_COMMAND_MASTER | PCI_COMMAND_MEMORY);
+	pci_write_config_word(pdev, PCI_COMMAND, cmd);
+
+	if (pci_save_state(pdev))
+		dev_warn(&pdev->dev, "Failed to save PCI state, PCI restore may be incomplete\n");
+
+	/* Since it is kdump kernel, try to continue in the best possible way
+	 * even if the device is unresponsive after FLR.  The device may
+	 * eventually respond to HWRM_VER_GET later in the init sequence.
+	 */
+	rc = pcie_flr(pdev);
+	if (rc)
+		dev_warn(&pdev->dev, "pcie_flr() failed (rc: %d), trying to continue\n",
+			 rc);
+
+	/* A complete or partial reset has been done.  Clear the BARs
+	 * if the device is responsive.
+	 */
+	pci_read_config_word(pdev, PCI_COMMAND, &cmd);
+	if (PCI_POSSIBLE_ERROR(cmd))
+		dev_warn(&pdev->dev, "PCI config space inaccessible after FLR, not clearing BARs\n");
+	else
+		bnxt_clear_bars(pdev);
+
+	pci_restore_state(pdev);
+}
+
 static int bnxt_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	struct bnxt_hw_resc *hw_resc;
@@ -17244,15 +17280,11 @@ static int bnxt_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 		return -ENODEV;
 	}
 
-	/* Clear any pending DMA transactions from crash kernel
-	 * while loading driver in capture kernel.
-	 */
-	if (is_kdump_kernel()) {
-		pci_clear_master(pdev);
-		pcie_flr(pdev);
-	}
-
 	max_irqs = bnxt_get_max_irq(pdev);
+
+	if (is_kdump_kernel())
+		bnxt_kdump_reset(pdev);
+
 	dev = alloc_etherdev_mqs(sizeof(*bp), max_irqs * BNXT_MAX_QUEUE,
 				 max_irqs);
 	if (!dev)
