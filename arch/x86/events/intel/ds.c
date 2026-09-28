@@ -2956,22 +2956,6 @@ __intel_pmu_pebs_last_event(struct perf_event *event,
 		setup_sample(event, iregs, at, data, regs);
 	}
 
-	if (iregs == &dummy_iregs) {
-		/*
-		 * The PEBS records may be drained in the non-overflow context,
-		 * e.g., large PEBS + context switch. Perf should treat the
-		 * last record the same as other PEBS records, and doesn't
-		 * invoke the generic overflow handler.
-		 */
-		perf_event_output(event, data, regs);
-	} else {
-		/*
-		 * All but the last records are processed.
-		 * The last one is left to be able to call the overflow handler.
-		 */
-		perf_event_overflow(event, data, regs);
-	}
-
 	if (hwc->flags & PERF_X86_EVENT_AUTO_RELOAD) {
 		if (is_pebs_counter_event_group(event)) {
 			if (corrupted) {
@@ -3011,6 +2995,23 @@ __intel_pmu_pebs_last_event(struct perf_event *event,
 		else
 			intel_pmu_save_and_restart(event);
 	}
+
+	if (iregs == &dummy_iregs) {
+		/*
+		 * The PEBS records may be drained in the non-overflow context,
+		 * e.g., large PEBS + context switch. Perf should treat the
+		 * last record the same as other PEBS records, and doesn't
+		 * invoke the generic overflow handler.
+		 */
+		perf_event_output(event, data, regs);
+	} else {
+		/*
+		 * All but the last records are processed.
+		 * The last one is left to be able to call the overflow handler.
+		 */
+		perf_event_overflow(event, data, regs);
+	}
+
 }
 
 static DEFINE_PER_CPU(struct x86_perf_regs, x86_pebs_regs);
