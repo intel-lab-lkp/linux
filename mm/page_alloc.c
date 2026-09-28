@@ -54,6 +54,7 @@
 #include <linux/khugepaged.h>
 #include <linux/delayacct.h>
 #include <linux/cacheinfo.h>
+#include <linux/crash_memaction.h>
 #include <linux/pgalloc_tag.h>
 #include <asm/div64.h>
 #include "internal.h"
@@ -1854,6 +1855,11 @@ inline void post_alloc_hook(struct page *page, unsigned int order,
 	set_page_owner(page, order, gfp_flags);
 	page_table_check_alloc(page, order);
 	pgalloc_tag_add(page, current, 1 << order, alloc_flags);
+
+	/*
+	 * Release leftover crash_memaction markings from a previous owner of this page.
+	 */
+	crash_memaction_unmark_pfns(page_to_pfn(page), 1UL << order);
 }
 
 static void prep_new_page(struct page *page, unsigned int order, gfp_t gfp_flags,

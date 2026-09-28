@@ -27,6 +27,7 @@
 #include <linux/stackdepot.h>
 #include <linux/swap.h>
 #include <linux/cma.h>
+#include <linux/crash_memaction.h>
 #include <linux/crash_dump.h>
 #include <linux/execmem.h>
 #include <linux/sizes.h>
@@ -2705,6 +2706,8 @@ void __init mm_core_init(void)
 	 * as close as possible to buddy initialization
 	 */
 	kho_memory_init();
+
+	crash_memaction_init();
 
 	memblock_free_all();
 	mem_init();
