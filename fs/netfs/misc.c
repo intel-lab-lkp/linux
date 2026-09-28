@@ -6,6 +6,7 @@
  */
 
 #include <linux/swap.h>
+#include <linux/rmap.h>
 #include "internal.h"
 
 /**
@@ -582,3 +583,73 @@ void netfs_wait_for_put_ra_refs(struct netfs_io_request *rreq)
 	trace_netfs_rreq(rreq, netfs_rreq_trace_waited_put_ra_refs);
 	finish_wait(&rreq->waitq, &myself);
 }
+
+/**
+ * netfs_clear_stale_post_eof - Clear stale pagecache in a to-be-created hole
+ * @inode: The inode to act upon.
+ * @from: The base of the hole to be made (the current EOF).
+ * @to: The top of the hole to be made.
+ * @nowait: True to return -EAGAIN rather than block.
+ *
+ * Before extending a file, zero any data left in the pagecache within the
+ * [@from, @to) hole by a write through an mmap so that it isn't exposed as file
+ * content once the file is extended.  Only the uptodate folio straddling @from
+ * can hold such data as pages wholly beyond the EOF can't be faulted in, so the
+ * zeroing is limited to that folio.  The folio is zeroed rather than dropped so
+ * that a concurrent extending write can't lose data, and the zeroed range is
+ * clamped to the current EOF so it can't clobber data written by such a write.
+ *
+ * pagecache_isize_extended() can't be reused here: it is keyed on a sub-page
+ * block size (a no-op when the block size is >= PAGE_SIZE, as on network
+ * filesystems), runs after i_size is updated, can't honour @nowait, and
+ * doesn't wait for writeback.  Keep the two in sync if either is changed.
+ *
+ * Return: 0 on success, or -EAGAIN if @nowait is set and the folio is mapped
+ * or under writeback and so can't be cleaned without blocking.
+ */
+int netfs_clear_stale_post_eof(struct inode *inode, uoff_t from,
+			       uoff_t to, bool nowait)
+{
+	struct address_space *mapping = inode->i_mapping;
+	fgf_t fgp = FGP_LOCK;
+	struct folio *folio;
+	int ret;
+
+	if (from >= to)
+		return 0;
+
+	if (nowait)
+		fgp |= FGP_NOWAIT;
+
+	folio = __filemap_get_folio(mapping, from >> PAGE_SHIFT, fgp, 0);
+	if (IS_ERR(folio))
+		return PTR_ERR(folio) == -EAGAIN ? -EAGAIN : 0;
+
+	ret = 0;
+	if (nowait && (folio_mapped(folio) || folio_test_writeback(folio))) {
+		ret = -EAGAIN;
+		goto out;
+	}
+
+	folio_wait_writeback(folio);
+
+	if (folio_mkclean(folio))
+		folio_mark_dirty(folio);
+
+	if (folio_test_uptodate(folio)) {
+		uoff_t fpos = folio_pos(folio);
+
+		from = umax(from, i_size_read(inode));
+		if (from < to && from < fpos + folio_size(folio)) {
+			size_t end = umin(to - fpos, folio_size(folio));
+			size_t offset = from - fpos;
+
+			folio_zero_segment(folio, offset, end);
+		}
+	}
+out:
+	folio_unlock(folio);
+	folio_put(folio);
+	return ret;
+}
+EXPORT_SYMBOL(netfs_clear_stale_post_eof);
