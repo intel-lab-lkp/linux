@@ -2786,7 +2786,8 @@ static void ov5670_remove(struct i2c_client *client)
 	mutex_destroy(&ov5670->mutex);
 
 	pm_runtime_disable(ov5670->dev);
-	ov5670_runtime_suspend(ov5670->dev);
+	if (!pm_runtime_status_suspended(ov5670->dev))
+		ov5670_runtime_suspend(ov5670->dev);
 
 	v4l2_fwnode_endpoint_free(&ov5670->endpoint);
 }
