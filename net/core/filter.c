@@ -12469,6 +12469,30 @@ __bpf_kfunc bool bpf_skb_is_traced(struct sk_buff *skb)
 	return skb->traced;
 }
 
+/**
+ * bpf_skb_fclone_orig() - Return the fast-clone original of an skb
+ * @skb_: socket buffer allocated from the fclone cache
+ *
+ * TCP write-queue skbs are allocated from the fclone cache, the packet
+ * transmitted on the wire is a fast clone. A prog can only associate
+ * metadata with an skb by keying on its address. On retransmission TCP
+ * reuses the write-queue original, a different address with no packet
+ * hook, so the retransmit carries no metadata. A prog can use this kfunc
+ * to retrieve the address of the write-queue original and populate the
+ * metadata stash for it, so the metadata shows up on skb retransmits.
+ *
+ * Return:
+ * * orig skb address  - skb is a fast clone
+ * * %NULL             - skb is not a fast clone
+ */
+__bpf_kfunc struct sk_buff *bpf_skb_fclone_orig(struct sk_buff *skb)
+{
+	if (skb->fclone == SKB_FCLONE_CLONE)
+		return &container_of(skb, struct sk_buff_fclones, skb2)->skb1;
+
+	return NULL;
+}
+
 #endif /* CONFIG_SKB_GATED_TRACEPOINTS */
 
 /**
@@ -12856,6 +12880,7 @@ BTF_KFUNCS_END(bpf_kfunc_check_set_skb_meta)
 BTF_KFUNCS_START(bpf_kfunc_check_set_skb_tracepoints)
 BTF_ID_FLAGS(func, bpf_trace_skb)
 BTF_ID_FLAGS(func, bpf_skb_is_traced)
+BTF_ID_FLAGS(func, bpf_skb_fclone_orig, KF_RET_NULL)
 BTF_KFUNCS_END(bpf_kfunc_check_set_skb_tracepoints)
 #endif
 
