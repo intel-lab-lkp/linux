@@ -1187,13 +1187,6 @@ static int uvc_parse_standard_control(struct uvc_device *dev,
 		unit->processing.bmControls = (u8 *)unit + sizeof(*unit);
 		memcpy(unit->processing.bmControls, &buffer[8], n);
 
-		/*
-		 * We are not using bmVideoStandards, so there is no need to
-		 * warn the user if it is missing.
-		 */
-		if (dev->uvc_version >= 0x0110 && buflen >= (n + 10))
-			unit->processing.bmVideoStandards = buffer[9+n];
-
 		uvc_entity_set_name(dev, unit, "Processing", buffer[8+n]);
 
 		list_add_tail(&unit->list, &dev->entities);
