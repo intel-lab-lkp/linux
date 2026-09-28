@@ -1202,6 +1202,10 @@ static void vc4_gem_destroy(struct drm_device *dev, void *unused)
 {
 	struct vc4_dev *vc4 = to_vc4_dev(dev);
 
+	timer_shutdown_sync(&vc4->hangcheck.timer);
+	cancel_work_sync(&vc4->hangcheck.reset_work);
+	cancel_work_sync(&vc4->job_done_work);
+
 	/* Waiting for exec to finish would need to be done before
 	 * unregistering V3D.
 	 */
