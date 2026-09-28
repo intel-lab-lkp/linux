@@ -17,6 +17,7 @@
 #include <linux/ptp_clock_kernel.h>
 #include <linux/slab.h>
 #include <linux/sprintf.h>
+#include <linux/time64.h>
 
 #include "core.h"
 #include "dpll.h"
@@ -1195,10 +1196,72 @@ zl3073x_dpll_output_pin_state_on_dpll_get(const struct dpll_pin *dpll_pin,
 					  enum dpll_pin_state *state,
 					  struct netlink_ext_ack *extack)
 {
-	/* If the output pin is registered then it is always connected */
-	*state = DPLL_PIN_STATE_CONNECTED;
+	struct zl3073x_dpll *zldpll = dpll_priv;
+	struct zl3073x_dev *zldev = zldpll->dev;
+	struct zl3073x_dpll_pin *pin = pin_priv;
+
+	guard(mutex)(&zldpll->lock);
+
+	if (zl3073x_dev_output_pin_state_get(zldev, pin->id))
+		*state = DPLL_PIN_STATE_CONNECTED;
+	else
+		*state = DPLL_PIN_STATE_DISCONNECTED;
 
 	return 0;
+}
+
+/**
+ * zl3073x_dpll_output_pin_state_on_dpll_set - enable or disable an output pin
+ * @dpll_pin: registered dpll_pin
+ * @pin_priv: pointer to zl3073x_dpll_pin structure
+ * @dpll: registered dpll_device
+ * @dpll_priv: pointer to zl3073x_dpll structure
+ * @state: requested pin state
+ * @extack: netlink extack pointer
+ *
+ * Differential output pins are enabled/disabled through the clean
+ * output_ctrl_x::stop condition, since they expose only a single
+ * logical pin.
+ *
+ * CMOS output pins are enabled/disabled by muting/unmuting the pin's
+ * driver via a GPO override rather than by changing the output's
+ * signal_format, since a signal_format change is not glitch-free on
+ * this hardware. The GPO toggle itself is not glitch-free either, so
+ * it is bracketed by a clean stop/restart of the whole output.
+ *
+ * Return: 0 on success, <0 on error
+ */
+static int
+zl3073x_dpll_output_pin_state_on_dpll_set(const struct dpll_pin *dpll_pin,
+					  void *pin_priv,
+					  const struct dpll_device *dpll,
+					  void *dpll_priv,
+					  enum dpll_pin_state state,
+					  struct netlink_ext_ack *extack)
+{
+	struct zl3073x_dpll *zldpll = dpll_priv;
+	struct zl3073x_dev *zldev = zldpll->dev;
+	struct zl3073x_dpll_pin *pin = pin_priv;
+	bool enable;
+	int rc = 0;
+
+	if (state != DPLL_PIN_STATE_CONNECTED &&
+	    state != DPLL_PIN_STATE_DISCONNECTED) {
+		NL_SET_ERR_MSG(extack, "Invalid pin state for output pin");
+		return -EINVAL;
+	}
+
+	guard(mutex)(&zldpll->lock);
+
+	enable = state == DPLL_PIN_STATE_CONNECTED;
+	if (zl3073x_dev_output_pin_state_get(zldev, pin->id) != enable) {
+		rc = zl3073x_dev_output_pin_state_set(zldev, pin->id, enable);
+		if (rc)
+			NL_SET_ERR_MSG(extack,
+				       "Failed to change output pin state");
+	}
+
+	return rc;
 }
 
 static int
@@ -1685,6 +1748,7 @@ static const struct dpll_pin_ops zl3073x_dpll_output_pin_ops = {
 	.phase_adjust_get = zl3073x_dpll_output_pin_phase_adjust_get,
 	.phase_adjust_set = zl3073x_dpll_output_pin_phase_adjust_set,
 	.state_on_dpll_get = zl3073x_dpll_output_pin_state_on_dpll_get,
+	.state_on_dpll_set = zl3073x_dpll_output_pin_state_on_dpll_set,
 };
 
 static const struct dpll_pin_ops zl3073x_dpll_nco_pin_ops = {

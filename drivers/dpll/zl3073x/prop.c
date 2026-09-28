@@ -214,6 +214,8 @@ struct zl3073x_pin_props *zl3073x_pin_props_get(struct zl3073x_dev *zldev,
 		u32 f;
 
 		props->dpll_props.type = DPLL_PIN_TYPE_GNSS;
+		props->dpll_props.capabilities =
+			DPLL_PIN_CAPABILITIES_STATE_CAN_CHANGE;
 
 		/* The output pin phase adjustment granularity equals half of
 		 * the synth frequency count.

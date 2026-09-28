@@ -168,6 +168,8 @@ int zl3073x_write_hwreg_seq(struct zl3073x_dev *zldev,
 
 int zl3073x_ref_phase_offsets_update(struct zl3073x_dev *zldev, int channel);
 int zl3073x_dev_gpo_set(struct zl3073x_dev *zldev, u8 gpo, bool value);
+int zl3073x_dev_output_pin_state_set(struct zl3073x_dev *zldev, u8 id,
+				     bool enable);
 
 /**
  * zl3073x_dev_is_ref_phase_comp_32bit - check ref phase comp register size
@@ -445,6 +447,33 @@ zl3073x_dev_output_pin_is_enabled(struct zl3073x_dev *zldev, u8 id)
 	}
 
 	return true;
+}
+
+/**
+ * zl3073x_dev_output_pin_state_get - get the given output pin connection state
+ * @zldev: pointer to zl3073x device
+ * @id: output pin id
+ *
+ * Differential outputs are connected when their clock is not stopped.
+ * CMOS ones are connected when they are not GPO-overridden - the pin would
+ * not have been registered at all if its P/N side was not enabled by the
+ * signal format in the first place.
+ *
+ * Return: true if the output pin is connected, false if disconnected
+ */
+static inline bool
+zl3073x_dev_output_pin_state_get(struct zl3073x_dev *zldev, u8 id)
+{
+	u8 out_id = zl3073x_output_pin_out_get(id);
+	const struct zl3073x_out *out;
+
+	out = zl3073x_out_state_get(zldev, out_id);
+
+	if (zl3073x_out_is_stopped(out))
+		return false;
+
+	return zl3073x_out_is_diff(out) ||
+	       zl3073x_out_pin_func_get(out, id) == ZL3073X_OUT_PIN_F_CLOCK;
 }
 
 #endif /* _ZL3073X_CORE_H */
