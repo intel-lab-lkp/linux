@@ -116,3 +116,24 @@ Contact:	"Theodore Ts'o" <tytso@mit.edu>
 Description:
 		This file is read-only and shows the pid of journal thread in
 		current pid-namespace or 0 if task is unreachable.
+
+What:		/sys/fs/ext4/<disk>/encoding
+Date:		September 2026
+Contact:	"Gabriel Krisman Bertazi" <krisman@suse.de>
+Description:
+		Displays name and version of the encoding set for the
+		filesystem.  If no encoding is set, displays (none)
+
+What:		/sys/fs/ext4/<disk>/encoding_flags
+Date:		September 2026
+Contact:	"Gabriel Krisman Bertazi" <krisman@suse.de>
+Description:
+		This is a read-only entry to show the value of
+		sb.s_encoding_flags, the value is hexadecimal.
+
+		============================     ==========
+		Flag_Name                        Flag_Value
+		============================     ==========
+		SB_ENC_STRICT_MODE_FL            0x00000001
+		SB_ENC_NO_COMPAT_FALLBACK_FL     0x00000002
+		============================     ==========

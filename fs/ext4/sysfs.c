@@ -32,6 +32,8 @@ typedef enum {
 	attr_clusters_in_group,
 	attr_mb_order,
 	attr_feature,
+	attr_encoding,
+	attr_encoding_flags,
 	attr_pointer_pi,
 	attr_pointer_ui,
 	attr_pointer_ul,
@@ -161,6 +163,25 @@ out:
 	return count;
 }
 
+static ssize_t encoding_show(struct ext4_sb_info *sbi, char *buf)
+{
+#if IS_ENABLED(CONFIG_UNICODE)
+	struct super_block *sb = sbi->s_sb;
+
+	if (ext4_has_feature_casefold(sb))
+		return sysfs_emit(buf, "UTF-8 (%d.%d.%d)\n",
+				  unicode_major(sb->s_encoding->version),
+				  unicode_minor(sb->s_encoding->version),
+				  unicode_rev(sb->s_encoding->version));
+#endif
+	return sysfs_emit(buf, "(none)\n");
+}
+
+static ssize_t encoding_flags_show(struct ext4_sb_info *sbi, char *buf)
+{
+	return sysfs_emit(buf, "%x\n", le16_to_cpu(sbi->s_es->s_encoding_flags));
+}
+
 static ssize_t journal_task_show(struct ext4_sb_info *sbi, char *buf)
 {
 	if (!sbi->s_journal)
@@ -283,6 +304,8 @@ EXT4_RO_ATTR_ES_STRING(last_error_func, s_last_error_func, 32);
 EXT4_ATTR(first_error_time, 0444, first_error_time);
 EXT4_ATTR(last_error_time, 0444, last_error_time);
 EXT4_ATTR(journal_task, 0444, journal_task);
+EXT4_ATTR_FUNC(encoding, 0444);
+EXT4_ATTR_FUNC(encoding_flags, 0444);
 EXT4_RW_ATTR_SBI_UI(mb_prefetch, s_mb_prefetch);
 EXT4_RW_ATTR_SBI_UI(mb_prefetch_limit, s_mb_prefetch_limit);
 EXT4_RW_ATTR_SBI_UL(last_trim_minblks, s_last_trim_minblks);
@@ -333,6 +356,8 @@ static struct attribute *ext4_attrs[] = {
 	ATTR_LIST(first_error_time),
 	ATTR_LIST(last_error_time),
 	ATTR_LIST(journal_task),
+	ATTR_LIST(encoding),
+	ATTR_LIST(encoding_flags),
 #ifdef CONFIG_EXT4_DEBUG
 	ATTR_LIST(simulate_fail),
 #endif
@@ -483,6 +508,10 @@ static ssize_t ext4_attr_show(struct kobject *kobj,
 		return print_tstamp(buf, sbi->s_es, s_last_error_time);
 	case attr_journal_task:
 		return journal_task_show(sbi, buf);
+	case attr_encoding:
+		return encoding_show(sbi, buf);
+	case attr_encoding_flags:
+		return encoding_flags_show(sbi, buf);
 	default:
 		return ext4_generic_attr_show(a, sbi, buf);
 	}
