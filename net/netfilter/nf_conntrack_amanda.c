@@ -88,7 +88,8 @@ static int amanda_help(struct sk_buff *skb,
 	struct nf_conntrack_expect *exp;
 	struct nf_conntrack_tuple *tuple;
 	unsigned int dataoff, start, stop, off, i;
-	char pbuf[sizeof("65535")], *tmp;
+	char pbuf[sizeof("65535") + 1], *tmp;
+	u16 parsed_port;
 	u16 len;
 	__be16 port;
 	int ret = NF_ACCEPT;
@@ -127,15 +128,19 @@ static int amanda_help(struct sk_buff *skb,
 			continue;
 		off += start + search[i].len;
 
+		/*
+		 * pbuf holds one byte more than the longest port so that
+		 * an over-long digit run is seen and rejected.
+		 */
 		len = min_t(unsigned int, sizeof(pbuf) - 1, stop - off);
 		if (skb_copy_bits(skb, off, pbuf, len))
 			break;
 		pbuf[len] = '\0';
 
-		port = htons(simple_strtoul(pbuf, &tmp, 10));
-		len = tmp - pbuf;
-		if (port == 0 || len > 5)
+		if (nf_ct_helper_parse_port(pbuf, len, &parsed_port, &tmp))
 			break;
+		port = htons(parsed_port);
+		len = tmp - pbuf;
 
 		exp = nf_ct_expect_alloc(ct);
 		if (exp == NULL) {
