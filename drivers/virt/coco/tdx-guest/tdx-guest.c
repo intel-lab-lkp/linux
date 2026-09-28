@@ -212,11 +212,22 @@ static long tdx_get_report0(struct tdx_report_req __user *req)
 static size_t get_quote_buf_size(void)
 {
 	static size_t quote_buf_size;
+	u64 max_quote_size;
 
 	if (quote_buf_size)
 		return quote_buf_size;
 
-	quote_buf_size = PAGE_ALIGN(TDX_DEFAULT_QUOTE_SIZE);
+	/* Start with the default buffer size */
+	quote_buf_size = TDX_DEFAULT_QUOTE_SIZE;
+
+	/*
+	 * Override the default when the TDX module reports a size. Add room
+	 * for the header metadata.
+	 */
+	if (!tdx_get_max_quote_size(&max_quote_size))
+		quote_buf_size = TDX_QUOTE_TOTAL_SIZE(max_quote_size);
+
+	quote_buf_size = PAGE_ALIGN(quote_buf_size);
 
 	return quote_buf_size;
 }
