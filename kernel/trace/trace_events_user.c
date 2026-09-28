@@ -8,6 +8,7 @@
 
 #include <linux/bitmap.h>
 #include <linux/cdev.h>
+#include <linux/compat.h>
 #include <linux/hashtable.h>
 #include <linux/list.h>
 #include <linux/io.h>
@@ -2737,6 +2738,36 @@ static long user_events_ioctl(struct file *file, unsigned int cmd,
 	return ret;
 }
 
+#ifdef CONFIG_COMPAT
+/*
+ * These IOCTLs encode the size of a pointer and thus change their numbers
+ * between 32 and 64 bits. The structs they point to have the same layout.
+ */
+#define DIAG_IOCSREG_COMPAT	_IOWR(DIAG_IOC_MAGIC, 0, compat_uptr_t)
+#define DIAG_IOCSDEL_COMPAT	_IOW(DIAG_IOC_MAGIC, 1, compat_uptr_t)
+#define DIAG_IOCSUNREG_COMPAT	_IOW(DIAG_IOC_MAGIC, 2, compat_uptr_t)
+
+static long user_events_compat_ioctl(struct file *file, unsigned int cmd,
+				     unsigned long uarg)
+{
+	switch (cmd) {
+	case DIAG_IOCSREG_COMPAT:
+		cmd = DIAG_IOCSREG;
+		break;
+	case DIAG_IOCSDEL_COMPAT:
+		cmd = DIAG_IOCSDEL;
+		break;
+	case DIAG_IOCSUNREG_COMPAT:
+		cmd = DIAG_IOCSUNREG;
+		break;
+	}
+
+	return user_events_ioctl(file, cmd, (unsigned long)compat_ptr(uarg));
+}
+#else
+#define user_events_compat_ioctl NULL
+#endif
+
 /*
  * Handles the final close of the file from user mode.
  */
@@ -2787,6 +2818,7 @@ static const struct file_operations user_data_fops = {
 	.write		= user_events_write,
 	.write_iter	= user_events_write_iter,
 	.unlocked_ioctl	= user_events_ioctl,
+	.compat_ioctl	= user_events_compat_ioctl,
 	.release	= user_events_release,
 };
 
