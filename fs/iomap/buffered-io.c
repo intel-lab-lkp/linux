@@ -802,6 +802,13 @@ struct folio *iomap_get_folio(struct iomap_iter *iter, loff_t pos, size_t len)
 {
 	fgf_t fgp = FGP_WRITEBEGIN;
 
+	/*
+	 * For writethrough, we open code the FGP_STABLE logic directly in
+	 * iomap_writhrethrough_iter() so disable it here.. See
+	 * iomap_writethrough_iter() for details.
+	 */
+	if (iter->flags & IOMAP_WRITETHROUGH)
+		fgp &= ~FGP_STABLE;
 	if (iter->flags & IOMAP_NOWAIT)
 		fgp |= FGP_NOWAIT;
 	if (iter->flags & IOMAP_DONTCACHE)
@@ -1284,12 +1291,16 @@ static void iomap_writethrough_bio_end_io(struct bio *bio)
 {
 	struct iomap_writethrough_ctx *wt_ctx = bio->bi_private;
 	struct folio_iter fi;
+	struct folio *prev_folio = NULL;
 
 	if (bio->bi_status)
 		cmpxchg(&wt_ctx->error, 0,
 			blk_status_to_errno(bio->bi_status));
-	bio_for_each_folio_all(fi, bio)
-		folio_end_writeback(fi.folio);
+	bio_for_each_folio_all(fi, bio) {
+		if (fi.folio != prev_folio)
+			folio_end_writeback(fi.folio);
+		prev_folio = fi.folio;
+	}
 
 	bio_put(bio);
 	if (atomic_dec_and_test(&wt_ctx->ref))
@@ -1384,15 +1395,12 @@ iomap_writethrough_try_submit(struct iomap_writethrough_ctx *wt_ctx,
  * need to clear the master dirty bit.
  */
 static void iomap_folio_prepare_writethrough(struct folio *folio, size_t off,
-					     size_t len)
+					     size_t len, bool already_prepared)
 {
 	bool needs_cleardirty = false, fully_written = false;
 	u64 zero = 0;
 	u64 tmp_off = off;
 	struct iomap_folio_state *ifs = folio->private;
-
-	if (folio_test_writeback(folio))
-		folio_wait_writeback(folio);
 
 	if (folio_mkclean(folio))
 		folio_mark_dirty(folio);
@@ -1427,7 +1435,8 @@ static void iomap_folio_prepare_writethrough(struct folio *folio, size_t off,
 	if (needs_cleardirty)
 		folio_clear_dirty_for_writethrough(folio);
 	task_io_account_write(len);
-	folio_start_writeback(folio);
+	if (!already_prepared)
+		folio_start_writeback(folio);
 }
 
 /**
@@ -1444,6 +1453,17 @@ static void iomap_folio_prepare_writethrough(struct folio *folio, size_t off,
  * Folio handling note: We might be writing through a partial folio so we need
  * to be careful to not clear the folio dirty bit unless there are no dirty blocks
  * in the folio after the writethrough.
+ *
+ * **A corner case to be careful about**
+ *
+ * For writethrough, we open code the stable write behavior to handle the case
+ * where we encounter a folio that we already started writeback on but have not
+ * yet submitted. In that case we must not wait for writeback again to avoid
+ * deadlocking. Repeating folios can occur if, example,
+ * copy_folio_from_iter_atomic() does a short copy due to userspace pages not
+ * faulted in. Also, repeating folios will always be encountered back to back so
+ * we can just use a simple cur != prev check to detect them.
+
  */
 static int iomap_writethrough_iter(struct iomap_writethrough_ctx *wt_ctx,
 				   struct iomap_iter *iter, struct iov_iter *i,
@@ -1457,6 +1477,7 @@ static int iomap_writethrough_iter(struct iomap_writethrough_ctx *wt_ctx,
 	size_t chunk = mapping_max_folio_size(mapping);
 	unsigned int bdp_flags = (iter->flags & IOMAP_NOWAIT) ? BDP_ASYNC : 0;
 	unsigned int bs = i_blocksize(iter->inode);
+	struct folio *prev_folio = NULL;
 
 	/* copied over based on how DIO handles these flags */
 	if (iter->iomap.type == IOMAP_UNWRITTEN)
@@ -1547,6 +1568,10 @@ retry:
 		if (mapping_writably_mapped(mapping))
 			flush_dcache_folio(folio);
 
+		 /* Open coding stable write behavior, see comment on top. */
+		if (prev_folio != folio)
+			folio_wait_writeback(folio);
+
 		copied = copy_folio_from_iter_atomic(folio, offset, bytes, i);
 		written = iomap_write_end(iter, bytes, copied, folio) ?
 			  copied : 0;
@@ -1584,7 +1609,10 @@ retry:
 		prev_len = len_aligned;
 
 		iomap_folio_prepare_writethrough(folio, off_aligned,
-						 len_aligned);
+						 len_aligned,
+						 prev_folio == folio);
+
+		prev_folio = folio;
 
 		if (!wt_ctx->nr_bvecs) {
 			wt_ctx->bio_pos = round_down(pos, bs);
@@ -1629,6 +1657,8 @@ put_folio:
 					&iter->iomap, wt_ops, &pending);
 			if (status)
 				goto submit_failed;
+
+			prev_folio = NULL;
 		}
 
 	} while (iov_iter_count(i) && iomap_length(iter));
