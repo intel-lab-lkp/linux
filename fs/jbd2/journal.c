@@ -1262,9 +1262,25 @@ static unsigned long jbd2_journal_shrink_scan(struct shrinker *shrink,
 	trace_jbd2_shrink_scan_enter(journal, sc->nr_to_scan, count);
 
 	nr_shrunk = jbd2_journal_shrink_checkpoint_list(journal, &nr_to_scan);
+	sc->nr_scanned = sc->nr_to_scan - nr_to_scan;
 
 	count = percpu_counter_read_positive(&journal->j_checkpoint_jh_count);
 	trace_jbd2_shrink_scan_exit(journal, nr_to_scan, nr_shrunk, count);
+
+	/*
+	 * j_checkpoint_jh_count is a percpu counter, so count_objects() can
+	 * report a stale/approximate value that is still positive even
+	 * though the checkpoint list is actually empty by the time we get
+	 * here. When that happens jbd2_journal_shrink_checkpoint_list()
+	 * returns immediately having examined nothing (sc->nr_scanned == 0).
+	 * Without SHRINK_STOP, do_shrink_slab() has no way to tell "nothing
+	 * was there" from "a full batch was scanned and none of it was
+	 * freeable" and will keep calling us with the same stale freeable
+	 * count until its scan budget for this priority level is exhausted
+	 * one batch at a time.
+	 */
+	if (sc->nr_scanned == 0)
+		return SHRINK_STOP;
 
 	return nr_shrunk;
 }
