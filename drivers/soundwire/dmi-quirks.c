@@ -111,6 +111,15 @@ static const struct adr_remap ghost_realtek[] = {
 	{}
 };
 
+static const struct adr_remap ghost_rt711[] = {
+	/* rt711 on link0 */
+	{
+		0x000030025d071101ull,
+		0x0000000000000000ull
+	},
+	{}
+};
+
 static const struct dmi_system_id adr_remap_quirk_table[] = {
 	/* TGL devices */
 	{
@@ -241,6 +250,13 @@ static const struct dmi_system_id adr_remap_quirk_table[] = {
 			DMI_MATCH(DMI_PRODUCT_NAME, "83SF"),
 		},
 		.driver_data = (void *)ghost_realtek,
+	},
+	{
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "83R0"),
+		},
+		.driver_data = (void *)ghost_rt711,
 	},
 	{}
 };
