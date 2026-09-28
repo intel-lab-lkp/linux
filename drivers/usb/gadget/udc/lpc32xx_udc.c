@@ -3183,9 +3183,15 @@ static void lpc32xx_udc_remove(struct platform_device *pdev)
 		return;
 	}
 
+	disable_irq(udc->udp_irq[IRQ_USB_LP]);
+	disable_irq(udc->udp_irq[IRQ_USB_HP]);
+	disable_irq(udc->udp_irq[IRQ_USB_DEVDMA]);
+	disable_irq(udc->udp_irq[IRQ_USB_ATX]);
+
 	udc_clk_set(udc, 1);
 	udc_disable(udc);
 	pullup(udc, 0);
+	cancel_work_sync(&udc->pullup_job);
 
 	device_init_wakeup(&pdev->dev, 0);
 	remove_debug_file(udc);
