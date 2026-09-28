@@ -14,27 +14,43 @@
 #include <linux/skbuff.h>
 #include <uapi/linux/netfilter_bridge/ebt_802_3.h>
 
-static struct ebt_802_3_hdr *ebt_802_3_hdr(const struct sk_buff *skb)
-{
-	return (struct ebt_802_3_hdr *)skb_mac_header(skb);
-}
-
 static bool
 ebt_802_3_mt(const struct sk_buff *skb, struct xt_action_param *par)
 {
 	const struct ebt_802_3_info *info = par->matchinfo;
-	const struct ebt_802_3_hdr *hdr = ebt_802_3_hdr(skb);
-	__be16 type = hdr->llc.ui.ctrl & IS_UI ? hdr->llc.ui.type : hdr->llc.ni.type;
+	struct ebt_802_3_hdr _frame;
+	const struct ebt_802_3_hdr *frame;
+	int mac_offset = skb_mac_offset(skb);
+	__be16 type;
+
+	/* skb->data sits past the Ethernet header when the match runs, so the
+	 * frame starts before skb->data. skb_header_pointer() takes an offset
+	 * relative to skb->data and cannot express that, so check the linear
+	 * area against the mac header ourselves and use skb_mac_header()
+	 * directly once the check has passed.
+	 */
+	if (mac_offset < 0)
+		mac_offset = -mac_offset;
+	if (mac_offset + sizeof(_frame) > skb_headlen(skb)) {
+		/* The frame is too short to hold an LLC header. */
+		par->hotdrop = true;
+		return false;
+	}
+
+	frame = (const struct ebt_802_3_hdr *)skb_mac_header(skb);
+	type = frame->llc.ui.ctrl & IS_UI ? frame->llc.ui.type :
+					    frame->llc.ni.type;
 
 	if (info->bitmask & EBT_802_3_SAP) {
-		if (NF_INVF(info, EBT_802_3_SAP, info->sap != hdr->llc.ui.ssap))
+		if (NF_INVF(info, EBT_802_3_SAP, info->sap != frame->llc.ui.ssap))
 			return false;
-		if (NF_INVF(info, EBT_802_3_SAP, info->sap != hdr->llc.ui.dsap))
+		if (NF_INVF(info, EBT_802_3_SAP, info->sap != frame->llc.ui.dsap))
 			return false;
 	}
 
 	if (info->bitmask & EBT_802_3_TYPE) {
-		if (!(hdr->llc.ui.dsap == CHECK_TYPE && hdr->llc.ui.ssap == CHECK_TYPE))
+		if (!(frame->llc.ui.dsap == CHECK_TYPE &&
+		      frame->llc.ui.ssap == CHECK_TYPE))
 			return false;
 		if (NF_INVF(info, EBT_802_3_TYPE, info->type != type))
 			return false;
