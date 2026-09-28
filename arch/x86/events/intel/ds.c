@@ -3413,6 +3413,113 @@ intel_pmu_handle_pebs_records(struct pt_regs *iregs,
 	return hweight64(events_bitmap);
 }
 
+static __always_inline int
+intel_pmu_handle_pebs_records_in_order(struct pt_regs *iregs,
+				       struct perf_sample_data *data,
+				       void *base, void *top,
+				       setup_fn setup_sample)
+{
+	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);
+	short counts[INTEL_PMC_IDX_FIXED + MAX_FIXED_PEBS_EVENTS] = {};
+	void *last[INTEL_PMC_IDX_FIXED + MAX_FIXED_PEBS_EVENTS] = {NULL};
+	struct x86_perf_regs *perf_regs = this_cpu_ptr(&x86_pebs_regs);
+	struct pt_regs *regs = &perf_regs->regs;
+	u64 mask = get_pebs_cntr_mask(cpuc);
+	u64 events_bitmap = 0;
+	bool corrupted = false;
+	void *at, *next;
+	int bit;
+
+	if (!iregs)
+		iregs = &dummy_iregs;
+
+	/* Find the last PEBS record for each PEBS event. */
+	for (at = base; at < top;) {
+		u64 pebs_status;
+
+		next = find_next_pebs_record(at, top);
+		if (!next) {
+			corrupted = true;
+			break;
+		}
+
+		pebs_status = mask & get_pebs_cntr_status(at);
+		for_each_set_bit(bit, (unsigned long *)&pebs_status,
+				 INTEL_PMC_IDX_FIXED + MAX_FIXED_PEBS_EVENTS) {
+			struct perf_event *event = cpuc->events[bit];
+
+			if (WARN_ON_ONCE(!event) ||
+			    WARN_ON_ONCE(!event->attr.precise_ip))
+				continue;
+
+			last[bit] = at;
+		}
+		at = next;
+	}
+
+	/* Process all PEBS records in sampling order. */
+	for (at = base; at < top;) {
+		u64 pebs_status;
+
+		next = find_next_pebs_record(at, top);
+		if (!next)
+			break;
+
+		pebs_status = mask & get_pebs_cntr_status(at);
+		events_bitmap |= pebs_status;
+
+		for_each_set_bit(bit, (unsigned long *)&pebs_status,
+				 INTEL_PMC_IDX_FIXED + MAX_FIXED_PEBS_EVENTS) {
+			struct perf_event *event = cpuc->events[bit];
+
+			if (WARN_ON_ONCE(!event) ||
+			    WARN_ON_ONCE(!event->attr.precise_ip))
+				continue;
+
+			if (last[bit] && (at != last[bit])) {
+				counts[bit]++;
+				__intel_pmu_pebs_event(event, iregs, regs, data,
+						       at, setup_sample);
+			} else {
+				__intel_pmu_pebs_last_event(event, iregs, regs, data,
+							    at, counts[bit] + 1,
+							    corrupted,
+							    setup_sample);
+			}
+		}
+		at = next;
+	}
+
+	if (!events_bitmap)
+		intel_pmu_pebs_event_update_no_drain(cpuc, mask);
+
+	return hweight64(events_bitmap);
+}
+
+static bool must_process_pebs_in_order(struct cpu_hw_events *cpuc)
+{
+	int count = 0;
+	int bit;
+
+	/*
+	 * When multiple PEBS events with counter-group are active, PEBS
+	 * records must be processed in sampling order; otherwise counter-group
+	 * updates can corrupt PEBS event counts.
+	 */
+	for_each_set_bit(bit, (unsigned long *)&cpuc->pebs_enabled, X86_PMC_IDX_MAX) {
+		struct perf_event *event = cpuc->events[bit];
+
+		if (!event || !event->attr.precise_ip)
+			continue;
+		if (is_pebs_counter_event_group(event))
+			count++;
+		if (count > 1)
+			return true;
+	}
+
+	return false;
+}
+
 static int intel_pmu_drain_pebs_icl(struct pt_regs *iregs,
 				    struct perf_sample_data *data)
 {
@@ -3420,6 +3527,7 @@ static int intel_pmu_drain_pebs_icl(struct pt_regs *iregs,
 	u64 mask = get_pebs_cntr_mask(cpuc);
 	struct debug_store *ds = cpuc->ds;
 	void *base, *top;
+	int handled;
 
 	if (!x86_pmu.pebs_active)
 		return 0;
@@ -3433,8 +3541,15 @@ static int intel_pmu_drain_pebs_icl(struct pt_regs *iregs,
 		return 0;
 	}
 
-	return intel_pmu_handle_pebs_records(iregs, data, base, top,
-					     setup_pebs_adaptive_sample_data);
+	if (must_process_pebs_in_order(cpuc)) {
+		handled = intel_pmu_handle_pebs_records_in_order(iregs, data,
+				base, top, setup_pebs_adaptive_sample_data);
+	} else {
+		handled = intel_pmu_handle_pebs_records(iregs, data,
+				base, top, setup_pebs_adaptive_sample_data);
+	}
+
+	return handled;
 }
 
 static int intel_pmu_drain_arch_pebs(struct pt_regs *iregs,
@@ -3444,6 +3559,7 @@ static int intel_pmu_drain_arch_pebs(struct pt_regs *iregs,
 	u64 mask = get_pebs_cntr_mask(cpuc);
 	union arch_pebs_index index;
 	void *base, *top;
+	int handled;
 
 	rdmsrq(MSR_IA32_PEBS_INDEX, index.whole);
 
@@ -3465,8 +3581,15 @@ static int intel_pmu_drain_arch_pebs(struct pt_regs *iregs,
 		index.thresh = ARCH_PEBS_THRESH_SINGLE;
 	wrmsrq(MSR_IA32_PEBS_INDEX, index.whole);
 
-	return intel_pmu_handle_pebs_records(iregs, data, base, top,
-					     setup_arch_pebs_sample_data);
+	if (must_process_pebs_in_order(cpuc)) {
+		handled = intel_pmu_handle_pebs_records_in_order(iregs, data,
+					base, top, setup_arch_pebs_sample_data);
+	} else {
+		handled = intel_pmu_handle_pebs_records(iregs, data,
+					base, top, setup_arch_pebs_sample_data);
+	}
+
+	return handled;
 }
 
 static void __init intel_arch_pebs_init(void)
