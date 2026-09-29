@@ -244,7 +244,7 @@
 		};
 		pins2 {
 			pinmux = <STM32_PINMUX('F', 8, AF10)>, /* ETH_RGMII_CLK125 */
-				 <STM32_PINMUX('F', 7, AF10)>; /* ETH_MDC */
+				 <STM32_PINMUX('F', 7, AF10)>; /* ETH_RGMII_GTX_CLK */
 			bias-disable;
 			drive-push-pull;
 			slew-rate = <3>;
