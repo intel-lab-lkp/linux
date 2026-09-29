@@ -423,6 +423,7 @@ static void return_buffers(struct ipu6_isys_queue *aq,
 	struct ipu6_isys_video *av = ipu6_isys_queue_to_video(aq);
 	struct ipu6_isys_buffer *ib;
 	bool need_reset = false;
+	bool first_buf = true;
 	unsigned long flags;
 
 	spin_lock_irqsave(&aq->lock, flags);
@@ -447,6 +448,12 @@ static void return_buffers(struct ipu6_isys_queue *aq,
 	 */
 	while (!list_empty(&aq->active)) {
 		struct vb2_buffer *vb;
+
+		if (first_buf) {
+			dev_warn(&av->isys->adev->auxdev.dev,
+				 "buffer list not empty, needs isys reset\n");
+			first_buf = false;
+		}
 
 		ib = list_first_entry(&aq->active, struct ipu6_isys_buffer,
 				      head);
