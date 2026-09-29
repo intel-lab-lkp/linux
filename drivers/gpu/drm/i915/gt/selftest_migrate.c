@@ -552,6 +552,7 @@ static int live_emit_pte_full_ring(void *arg)
 	struct intel_context *ce;
 	struct i915_request *rq, *prev;
 	struct spinner_timer st;
+	bool timer_set = false;
 	struct sgt_dma it;
 	int len, sz, err;
 	u32 *cs;
@@ -641,6 +642,7 @@ static int live_emit_pte_full_ring(void *arg)
 
 	timer_setup_on_stack(&st.timer, spinner_kill, 0);
 	mod_timer(&st.timer, jiffies + 2 * HZ);
+	timer_set = true;
 
 	/*
 	 * This should wait for the spinner to be killed, otherwise we should go
@@ -660,8 +662,10 @@ static int live_emit_pte_full_ring(void *arg)
 
 out_rq:
 	i915_request_add(rq); /* GEM_BUG_ON(rq->reserved_space > ring->space)? */
-	timer_delete_sync(&st.timer);
-	timer_destroy_on_stack(&st.timer);
+	if (timer_set) {
+		timer_delete_sync(&st.timer);
+		timer_destroy_on_stack(&st.timer);
+	}
 out_unpin:
 	intel_context_unpin(ce);
 out_put:
