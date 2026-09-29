@@ -1248,10 +1248,10 @@ static int pci_dev_wait(struct pci_dev *dev, char *reset_type, int timeout)
 	 * If the device is below a Root Port with Configuration RRS
 	 * Software Visibility enabled, reading the Vendor ID returns a
 	 * special data value if the device responded with RRS.  Read the
-	 * Vendor ID until we get non-RRS status.
+	 * Vendor ID until we get neither RRS nor an error response.
 	 *
-	 * If there's no Root Port or Configuration RRS Software Visibility
-	 * is not enabled, the device may still respond with RRS, but
+	 * For VFs, or if there's no Root Port or Configuration RRS Software
+	 * Visibility is not enabled, the device may still respond with RRS, but
 	 * hardware may retry the config request.  If no retries receive
 	 * Successful Completion, hardware generally synthesizes ~0
 	 * (PCI_ERROR_RESPONSE) data to complete the read.  Reading Vendor
@@ -1266,9 +1266,9 @@ static int pci_dev_wait(struct pci_dev *dev, char *reset_type, int timeout)
 			return -ENOTTY;
 		}
 
-		if (root && root->config_rrs_sv) {
+		if (root && root->config_rrs_sv && !dev->is_virtfn) {
 			pci_read_config_dword(dev, PCI_VENDOR_ID, &id);
-			if (!pci_bus_rrs_vendor_id(id))
+			if (!PCI_POSSIBLE_ERROR(id) && !pci_bus_rrs_vendor_id(id))
 				break;
 		} else {
 			pci_read_config_dword(dev, PCI_COMMAND, &id);
