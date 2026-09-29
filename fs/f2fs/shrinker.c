@@ -11,6 +11,7 @@
 
 #include "f2fs.h"
 #include "node.h"
+#include "node_cache_compress.h"
 
 static LIST_HEAD(f2fs_list);
 static DEFINE_SPINLOCK(f2fs_list_lock);
@@ -40,7 +41,7 @@ static unsigned long __count_extent_cache(struct f2fs_sb_info *sbi,
 static unsigned long __count_cache(struct f2fs_sb_info *sbi)
 {
 	return META_CACHE(sbi)->num_entries +
-		NODE_CACHE(sbi)->num_entries +
+		f2fs_nc_count_nodes(sbi) +
 		COMPRESS_CACHE(sbi)->num_entries;
 }
 

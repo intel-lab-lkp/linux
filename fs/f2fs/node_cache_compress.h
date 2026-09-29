@@ -34,6 +34,9 @@ struct list_head *f2fs_nc_queue_head(struct f2fs_cached_block_list *cache,
 unsigned int f2fs_nc_entry_queue(const struct f2fs_cached_block *entry);
 void f2fs_nc_entry_attached(struct f2fs_cached_block *entry);
 void f2fs_nc_entry_detached(struct f2fs_cached_block *entry);
+unsigned long f2fs_nc_count_nodes(struct f2fs_sb_info *sbi);
+unsigned long f2fs_nc_shrink_nodes(struct f2fs_sb_info *sbi,
+				   unsigned long nr_to_scan);
 void f2fs_nc_memory_usage(struct f2fs_sb_info *sbi,
 			  struct f2fs_nc_memory *memory);
 #else
@@ -65,6 +68,18 @@ f2fs_nc_entry_queue(const struct f2fs_cached_block *entry)
 
 static inline void f2fs_nc_entry_attached(struct f2fs_cached_block *entry) { }
 static inline void f2fs_nc_entry_detached(struct f2fs_cached_block *entry) { }
+
+static inline unsigned long f2fs_nc_count_nodes(struct f2fs_sb_info *sbi)
+{
+	return NODE_CACHE(sbi)->num_entries;
+}
+
+static inline unsigned long f2fs_nc_shrink_nodes(struct f2fs_sb_info *sbi,
+						 unsigned long nr_to_scan)
+{
+	return f2fs_shrink_cache_list(NODE_CACHE(sbi),
+			&NODE_CACHE(sbi)->lru_list, ULONG_MAX, nr_to_scan, NULL);
+}
 
 static inline void f2fs_nc_memory_usage(struct f2fs_sb_info *sbi,
 					struct f2fs_nc_memory *memory)

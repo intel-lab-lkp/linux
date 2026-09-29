@@ -95,8 +95,12 @@ struct f2fs_nc_ctx {
 	atomic_long_t attached[F2FS_NC_NR_QUEUES];
 	atomic64_t attached_payload[F2FS_NC_NR_QUEUES - 1];
 	atomic64_t attached_slot_bytes[F2FS_NC_NR_QUEUES - 1];
-	/* Cumulative detach statistics since mount. */
+	/* Cumulative reclaim and detach statistics since mount. */
+	atomic64_t shrink_scanned[F2FS_NC_NR_QUEUES];
+	atomic64_t shrink_freed[F2FS_NC_NR_QUEUES];
 	atomic64_t detached[F2FS_NC_NR_QUEUES];
+	/* Signed quota history carried between shrinker calls. */
+	s64 shrink_credit[F2FS_NC_NR_QUEUES];
 	/* Mount reference plus references held by compressed objects. */
 	refcount_t refs;
 };
@@ -274,6 +278,64 @@ void f2fs_nc_free_data(struct f2fs_cached_block *entry)
 	node->compressed_crc = 0;
 	f2fs_nc_store_free(ctx->store, object, alloc_size);
 	f2fs_nc_ctx_put(ctx);
+}
+
+static void f2fs_nc_population_snapshot(struct f2fs_nc_ctx *ctx,
+					unsigned long nr[F2FS_NC_NR_QUEUES])
+{
+	struct f2fs_cached_block_list *cache = NODE_CACHE(ctx->sbi);
+	unsigned int i;
+
+	spin_lock(&cache->list_lock);
+	for (i = 0; i < F2FS_NC_NR_QUEUES; i++)
+		nr[i] = atomic_long_read(&ctx->attached[i]);
+	spin_unlock(&cache->list_lock);
+}
+
+unsigned long f2fs_nc_count_nodes(struct f2fs_sb_info *sbi)
+{
+	struct f2fs_nc_ctx *ctx = sbi->node_compress;
+	unsigned long nr[F2FS_NC_NR_QUEUES];
+
+	if (!ctx)
+		return NODE_CACHE(sbi)->num_entries;
+	f2fs_nc_population_snapshot(ctx, nr);
+	return f2fs_nc_effective_count(nr, sbi->blocksize);
+}
+
+unsigned long f2fs_nc_shrink_nodes(struct f2fs_sb_info *sbi,
+				   unsigned long nr_to_scan)
+{
+	struct f2fs_cached_block_list *cache = NODE_CACHE(sbi);
+	struct f2fs_nc_ctx *ctx = sbi->node_compress;
+	unsigned long nr[F2FS_NC_NR_QUEUES];
+	unsigned long quota[F2FS_NC_NR_QUEUES];
+	unsigned long freed = 0;
+	unsigned int i;
+
+	if (!ctx)
+		return f2fs_shrink_cache_list(cache, &cache->lru_list,
+				ULONG_MAX, nr_to_scan, NULL);
+	f2fs_nc_population_snapshot(ctx, nr);
+	f2fs_nc_scan_quotas(nr, sbi->blocksize, nr_to_scan,
+			    ctx->shrink_credit, quota);
+	for (i = 0; i < F2FS_NC_NR_QUEUES; i++) {
+		struct list_head *head;
+		unsigned long scanned = 0;
+		unsigned long queue_freed;
+
+		if (!quota[i])
+			continue;
+		head = f2fs_nc_queue_head(cache, i);
+		if (!head)
+			continue;
+		queue_freed = f2fs_shrink_cache_list(cache, head, nr[i], quota[i],
+						     &scanned);
+		freed += queue_freed;
+		atomic64_add(scanned, &ctx->shrink_scanned[i]);
+		atomic64_add(queue_freed, &ctx->shrink_freed[i]);
+	}
+	return freed;
 }
 
 void f2fs_nc_memory_usage(struct f2fs_sb_info *sbi,

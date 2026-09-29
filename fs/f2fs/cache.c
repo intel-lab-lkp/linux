@@ -666,7 +666,7 @@ unsigned long f2fs_shrink_cache(struct f2fs_sb_info *sbi,
 	if (freed >= nr_to_scan)
 		return freed;
 
-	freed += f2fs_do_shrink_cache(NODE_CACHE(sbi), nr_to_scan - freed);
+	freed += f2fs_nc_shrink_nodes(sbi, nr_to_scan - freed);
 	if (freed >= nr_to_scan)
 		return freed;
 
