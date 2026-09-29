@@ -1702,7 +1702,10 @@ int snd_usb_apply_boot_quirk_once(struct usb_device *dev,
 	switch (id) {
 	case USB_ID(0x07fd, 0x0008): /* MOTU M Series, 1st hardware version */
 		return snd_usb_motu_m_series_boot_quirk(dev);
+	case USB_ID(0x1397, 0x1230): /* Behringer K-2 Mk II */
 	case USB_ID(0x1397, 0x1234): /* Behringer CM1A */
+	case USB_ID(0x1397, 0x1249): /* Behringer Kobol Expander */
+	case USB_ID(0x1397, 0x1256): /* Behringer 2-XM */
 		return snd_usb_cm1a_boot_quirk(dev);
 	}
 
