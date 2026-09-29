@@ -11,6 +11,7 @@
 #include <linux/iio/imu/adis.h>
 
 #include <linux/kernel.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/spi/spi.h>
 
@@ -292,12 +293,19 @@ static const struct of_device_id adis16203_of_match[] = {
 
 MODULE_DEVICE_TABLE(of, adis16203_of_match);
 
+static const struct spi_device_id adis16203_id[] = {
+	{ "adis16203", 0 },
+	{ }
+};
+MODULE_DEVICE_TABLE(spi, adis16203_id);
+
 static struct spi_driver adis16203_driver = {
 	.driver = {
 		.name = "adis16203",
 		.of_match_table = adis16203_of_match,
 	},
 	.probe = adis16203_probe,
+	.id_table = adis16203_id,
 };
 module_spi_driver(adis16203_driver);
 
