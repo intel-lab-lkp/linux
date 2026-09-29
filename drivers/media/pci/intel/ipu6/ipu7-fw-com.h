@@ -6,6 +6,8 @@
 
 #include <linux/types.h>
 
+struct device;
+
 struct ipu7_fw_com_queue_config {
 	void *token_array_mem;
 	u32 queue_size;
@@ -46,7 +48,8 @@ struct ipu7_fw_com_queue_indices {
 };
 
 void ipu7_fw_com_put_token(struct ipu7_fw_com_context *ctx, int q);
-void *ipu7_fw_com_get_token(struct ipu7_fw_com_context *ctx, int q);
+void *ipu7_fw_com_get_token(struct device *dev, struct ipu7_fw_com_context *ctx,
+			    int q);
 struct ipu7_fw_com_queue_params_config *
 ipu7_fw_com_get_queue_config(struct ipu7_fw_com_config *config);
 

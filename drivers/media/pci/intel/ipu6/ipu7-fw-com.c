@@ -3,6 +3,7 @@
  * Copyright (C) 2026 Intel Corporation
  */
 
+#include <linux/device.h>
 #include <linux/io.h>
 
 #include "ipu7-fw-com.h"
@@ -13,7 +14,8 @@ static void __iomem *ipu7_fw_com_get_indices(struct ipu7_fw_com_context *ctx,
 	return ctx->queue_indices + (q * sizeof(struct ipu7_fw_com_queue_indices));
 }
 
-void *ipu7_fw_com_get_token(struct ipu7_fw_com_context *ctx, int q)
+void *ipu7_fw_com_get_token(struct device *dev, struct ipu7_fw_com_context *ctx,
+			    int q)
 {
 	struct ipu7_fw_com_queue_config *queue_params = &ctx->queue_configs[q];
 	void __iomem *queue_indices = ipu7_fw_com_get_indices(ctx, q);
@@ -24,6 +26,16 @@ void *ipu7_fw_com_get_token(struct ipu7_fw_com_context *ctx, int q)
 			       offsetof(struct ipu7_fw_com_queue_indices,
 					read_index));
 	void *token = NULL;
+
+	/* Indices come from firmware-shared memory; don't trust them blindly. */
+	if (read_index >= queue_params->max_capacity ||
+	    write_index >= queue_params->max_capacity) {
+		dev_err_once(dev,
+			     "ipu7-fw-com: bad queue %d index (r=%u w=%u cap=%u)\n",
+			     q, read_index, write_index,
+			     queue_params->max_capacity);
+		return NULL;
+	}
 
 	if (q < ctx->num_output_queues) {
 		/* Output queue */
