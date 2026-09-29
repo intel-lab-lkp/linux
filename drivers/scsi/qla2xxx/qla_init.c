@@ -8652,7 +8652,7 @@ qla28xx_load_fw_template(scsi_qla_host_t *vha, uint32_t faddr)
 		ql_dbg(ql_dbg_init, vha, 0x01a5,
 		    "-> fwdt%u template allocate template %#x words...\n",
 		    j, risc_size);
-		fwdt->template = vmalloc(risc_size * sizeof(*dcode));
+		fwdt->template = vmalloc(array_size(risc_size, sizeof(*dcode)));
 		if (!fwdt->template) {
 			ql_log(ql_log_warn, vha, 0x01a6,
 			    "-> fwdt%u failed allocate template.\n", j);
