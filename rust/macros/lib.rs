@@ -962,3 +962,98 @@ pub fn derive_try_from(input: TokenStream) -> TokenStream {
         .unwrap_or_else(syn::Error::into_compile_error)
         .into()
 }
+
+/// Derives [`core::convert::From`] for a unit-only enum covering every input value.
+///
+/// Supported inputs and representation rules are the same as for [`macro@TryFrom`]:
+/// `bool`, primitive integers, and [`Bounded`]. `#[from(...)]` or `#[convert(...)]`
+/// selects the input types, overriding the default derived from `#[repr(...)]`
+/// (or `isize` when no representation is specified).
+///
+/// Every discriminant must fit each input type, and every input value must have
+/// a corresponding variant. Both conditions are checked at compile time, even
+/// when the conversion is never called. Duplicate discriminants are rejected by
+/// Rust itself. Empty enums and the layouts rejected by [`macro@TryFrom`] are
+/// not supported.
+///
+/// The generated conversion is infallible and contains no panic path. It also
+/// provides `TryFrom` with [`core::convert::Infallible`] through the standard
+/// blanket implementation. Do not additionally derive [`macro@TryFrom`] for
+/// the same input type; use it for inputs the enum does not fully cover.
+///
+/// [`Bounded`]: ../kernel/num/bounded/struct.Bounded.html
+///
+/// # Examples
+///
+/// ```
+/// use kernel::macros::From;
+///
+/// #[derive(Debug, PartialEq, From)]
+/// #[from(bool)]
+/// enum Switch {
+///     Off = 0,
+///     On = 1,
+/// }
+///
+/// assert_eq!(Switch::from(false), Switch::Off);
+/// assert_eq!(Switch::from(true), Switch::On);
+/// ```
+///
+/// Use `#[convert(...)]` with `Into` to derive both directions:
+///
+/// ```
+/// use kernel::{macros::{From, Into}, num::Bounded};
+///
+/// #[derive(Debug, PartialEq, From, Into)]
+/// #[convert(Bounded<u8, 2>)]
+/// enum Mode {
+///     A = 0,
+///     B = 1,
+///     C = 2,
+///     D = 3,
+/// }
+///
+/// for value in 0..=3 {
+///     let bounded = Bounded::<u8, 2>::try_new(value).unwrap();
+///     let mode = Mode::from(bounded);
+///     let round_trip: Bounded<u8, 2> = mode.into();
+///     assert_eq!(round_trip, bounded);
+/// }
+/// ```
+///
+/// Missing values are rejected at compile time:
+///
+/// ```compile_fail,E0080
+/// use kernel::macros::From;
+///
+/// #[derive(From)]
+/// #[from(Bounded<u8, 2>)]
+/// enum Incomplete {
+///     A = 0,
+///     B = 1,
+///     C = 2,
+///     // No variant represents 3.
+/// }
+/// ```
+///
+/// Having the right number of variants does not allow out-of-range values:
+///
+/// ```compile_fail,E0080
+/// use kernel::macros::From;
+///
+/// #[derive(From)]
+/// #[from(Bounded<u8, 2>)]
+/// enum OutOfRange {
+///     A = 0,
+///     B = 1,
+///     C = 2,
+///     D = 4,
+/// }
+/// ```
+#[proc_macro_derive(From, attributes(from, convert))]
+pub fn derive_from(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    convert::derive_from(input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}

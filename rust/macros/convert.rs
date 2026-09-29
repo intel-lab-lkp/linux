@@ -38,6 +38,10 @@ pub(crate) fn derive_try_from(input: DeriveInput) -> syn::Result<TokenStream> {
     derive(DeriveTarget::TryFrom, input)
 }
 
+pub(crate) fn derive_from(input: DeriveInput) -> syn::Result<TokenStream> {
+    derive(DeriveTarget::From, input)
+}
+
 fn derive(target: DeriveTarget, input: DeriveInput) -> syn::Result<TokenStream> {
     let data_enum = match input.data {
         Data::Enum(data) => data,
@@ -109,6 +113,13 @@ fn derive(target: DeriveTarget, input: DeriveInput) -> syn::Result<TokenStream> 
         return Err(errors);
     }
 
+    if matches!(target, DeriveTarget::From) && data_enum.variants.is_empty() {
+        return Err(syn::Error::new(
+            input.ident.span(),
+            "`#[derive(From)]` requires a nonempty enum",
+        ));
+    }
+
     let variants: Vec<_> = data_enum
         .variants
         .into_iter()
@@ -134,6 +145,7 @@ fn derive(target: DeriveTarget, input: DeriveInput) -> syn::Result<TokenStream> 
 enum DeriveTarget {
     Into,
     TryFrom,
+    From,
 }
 
 impl DeriveTarget {
@@ -141,6 +153,7 @@ impl DeriveTarget {
         match self {
             Self::Into => "Into",
             Self::TryFrom => "TryFrom",
+            Self::From => "From",
         }
     }
 
@@ -148,6 +161,7 @@ impl DeriveTarget {
         match self {
             Self::Into => "into",
             Self::TryFrom => "try_from",
+            Self::From => "from",
         }
     }
 
@@ -199,6 +213,7 @@ fn derive_for_enum(
     let impl_fn = match target {
         DeriveTarget::Into => impl_into,
         DeriveTarget::TryFrom => impl_try_from,
+        DeriveTarget::From => impl_from,
     };
 
     let qualified_repr_ty: syn::Path = parse_quote! { ::core::primitive::#repr_ty };
@@ -267,25 +282,8 @@ fn derive_for_enum(
         let param = Ident::new("value", Span::call_site());
 
         let overflow_assertion = emit_overflow_assert(enum_ident, variants, repr_ty, input_ty);
-        let emit_cast = |variant| {
-            let qualified_variant = ::quote::quote! { #enum_ident::#variant };
-            match input_ty {
-                ValidTy::Bounded(inner) => {
-                    let base_ty = inner.emit_qualified_base_ty();
-                    let expr = parse_quote! { #qualified_variant as #base_ty };
-                    inner.emit_new(&expr)
-                }
-                ValidTy::Primitive(ident) if ident == "bool" => {
-                    ::quote::quote! { ((#qualified_variant as #repr_ty) == 1) }
-                }
-                qualified @ ValidTy::Primitive(_) => {
-                    ::quote::quote! { #qualified_variant as #qualified }
-                }
-            }
-        };
-
         let clauses = variants.iter().map(|variant| {
-            let cast = emit_cast(variant);
+            let cast = emit_variant_cast(enum_ident, variant, repr_ty, input_ty);
             ::quote::quote! {
                 if #param == #cast {
                     ::core::result::Result::Ok(#enum_ident::#variant)
@@ -304,6 +302,77 @@ fn derive_for_enum(
                         ::core::result::Result::Err(::kernel::prelude::EINVAL)
                     }
                 }
+            }
+        }
+    }
+
+    fn impl_from(
+        enum_ident: &Ident,
+        variants: &[Ident],
+        repr_ty: &syn::Path,
+        input_ty: &ValidTy,
+    ) -> TokenStream {
+        let param = Ident::new("value", Span::call_site());
+        let (last, rest) = variants.split_last().expect("nonempty enum checked above");
+        let overflow_assertion = emit_overflow_assert(enum_ident, variants, repr_ty, input_ty);
+        let input_min = input_ty.emit_min();
+        let input_max = input_ty.emit_max();
+        let span = rest.len() as u128;
+        let msg = format!("enum `{enum_ident}` does not cover every value of `{input_ty}`");
+
+        let clauses = rest.iter().map(|variant| {
+            let cast = emit_variant_cast(enum_ident, variant, repr_ty, input_ty);
+            ::quote::quote! {
+                if #param == #cast {
+                    #enum_ident::#variant
+                } else
+            }
+        });
+
+        ::quote::quote! {
+            #[automatically_derived]
+            impl ::core::convert::From<#input_ty> for #enum_ident {
+                fn from(#param: #input_ty) -> Self {
+                    #overflow_assertion
+
+                    const _: () = {
+                        // Rust rejects duplicate discriminants, and the overflow assertion
+                        // places every discriminant in the input range. Equal cardinality
+                        // therefore proves that every possible input has a variant.
+                        let min = (#input_min) as ::core::primitive::u128;
+                        let max = (#input_max) as ::core::primitive::u128;
+                        // Wrapping subtraction also handles negative minima. Compare spans
+                        // rather than lengths to avoid overflowing for a full 128-bit range.
+                        ::core::assert!(max.wrapping_sub(min) == #span, #msg);
+                    };
+
+                    // Exhaustiveness guarantees the final variant when no other one matches.
+                    #(#clauses)* {
+                        #enum_ident::#last
+                    }
+                }
+            }
+        }
+    }
+
+    fn emit_variant_cast(
+        enum_ident: &Ident,
+        variant: &Ident,
+        repr_ty: &syn::Path,
+        input_ty: &ValidTy,
+    ) -> TokenStream {
+        let qualified_variant = ::quote::quote! { #enum_ident::#variant };
+        match input_ty {
+            ValidTy::Bounded(inner) => {
+                let base_ty = inner.emit_qualified_base_ty();
+                let expr = parse_quote! { #qualified_variant as #base_ty };
+                inner.emit_new(&expr)
+            }
+            ValidTy::Primitive(ident) if ident == "bool" => {
+                ::quote::quote! { ((#qualified_variant as #repr_ty) == 1) }
+            }
+            qualified @ ValidTy::Primitive(_) => {
+                ::quote::quote! { #qualified_variant as #qualified }
             }
         }
     }
