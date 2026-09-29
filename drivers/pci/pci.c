@@ -1279,7 +1279,7 @@ static int pci_dev_wait(struct pci_dev *dev, char *reset_type, int timeout)
 		if (delay > timeout) {
 			pci_err(dev, "not ready %dms after %s; giving up\n",
 				delay - 1, reset_type);
-			return -ENOTTY;
+			return -ETIMEDOUT;
 		}
 
 		if (delay > PCI_RESET_WAIT) {
