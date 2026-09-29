@@ -31,4 +31,11 @@ config PINCTRL_BERLIN_BG4CT
 	depends on OF
 	select PINCTRL_BERLIN
 
+config PINCTRL_SL261X
+	tristate "Synaptics SL261X pin controller driver"
+	depends on OF
+	select GENERIC_PINCONF
+	select PINCONF
+	select PINCTRL_BERLIN
+
 endif
