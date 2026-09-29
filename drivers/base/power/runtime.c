@@ -749,8 +749,10 @@ static int rpm_suspend(struct device *dev, int rpmflags)
 	dev->power.deferred_resume = false;
 	wake_up_all(&dev->power.wait_queue);
 
-	if (retval != -EAGAIN && retval != -EBUSY)
+	if (retval != -EAGAIN && retval != -EBUSY) {
 		dev->power.runtime_error = retval;
+		pm_runtime_cancel_pending(dev);
+	}
 
 	/*
 	 * On transient errors, if the callback routine failed an autosuspend,
@@ -761,8 +763,6 @@ static int rpm_suspend(struct device *dev, int rpmflags)
 	if (!dev->power.runtime_error && (rpmflags & RPM_AUTO) &&
 	    pm_runtime_autosuspend_expiration(dev) != 0)
 		goto repeat;
-
-	pm_runtime_cancel_pending(dev);
 
 	goto out;
 }
