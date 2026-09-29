@@ -72,6 +72,30 @@ static inline void intel_gt_pm_put_async(struct intel_gt *gt, intel_wakeref_t ha
 	intel_gt_pm_put_async_untracked(gt);
 }
 
+/**
+ * intel_gt_pm_put_delay - release the GT wakeref, deferred by a timer
+ *
+ * @gt: pointer to the gt
+ * @handle: the handle returned by the matching intel_gt_pm_get*()
+ * @delay: delay, in jiffies, before the release is processed
+ *
+ * As intel_gt_pm_put_async(), except that dropping the last reference arms a
+ * timer instead of queueing the release immediately.
+ *
+ * intel_gt_pm_put_async() ends up in mod_delayed_work() with a zero delay,
+ * which queues the work straight away and so wakes a workqueue worker through
+ * try_to_wake_up(). That deadlocks if the caller already holds a runqueue
+ * lock, since try_to_wake_up() then tries to take it again. Callers which can
+ * run from inside the scheduler must use this variant with a non-zero @delay,
+ * which takes the add_timer_on() path and never wakes a task.
+ */
+static inline void intel_gt_pm_put_delay(struct intel_gt *gt, intel_wakeref_t handle,
+					 unsigned long delay)
+{
+	intel_wakeref_untrack(&gt->wakeref, handle);
+	intel_wakeref_put_delay(&gt->wakeref, delay);
+}
+
 #define with_intel_gt_pm(gt, wf) \
 	for ((wf) = intel_gt_pm_get(gt); (wf); intel_gt_pm_put((gt), (wf)), (wf) = NULL)
 

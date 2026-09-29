@@ -1361,7 +1361,12 @@ static ktime_t guc_engine_busyness(struct intel_engine_cs *engine, ktime_t *now)
 		 */
 		guc_update_engine_gt_clks(engine);
 		guc_update_pm_timestamp(guc, now);
-		intel_gt_pm_put_async(gt, wakeref);
+		/*
+		 * We are reached from the perf callbacks, which perf may invoke
+		 * from the scheduler with the runqueue lock held. Defer the put
+		 * on a timer so that it can never wake a task from here.
+		 */
+		intel_gt_pm_put_delay(gt, wakeref, 1);
 		if (i915_reset_count(gpu_error) != reset_count) {
 			*stats = stats_saved;
 			guc->timestamp.gt_stamp = gt_stamp_saved;
