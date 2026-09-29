@@ -389,14 +389,18 @@
 	regulator-always-on;
 };
 
-&{sdmmc2_b4_pins_a/pins2} {
-	/delete-property/ bias-disable;
-	bias-pull-up;
+&sdmmc2_b4_pins_a {
+	pins2 {
+		/delete-property/ bias-disable;
+		bias-pull-up;
+	};
 };
 
-&{sdmmc2_b4_od_pins_a/pins2} {
-	/delete-property/ bias-disable;
-	bias-pull-up;
+&sdmmc2_b4_od_pins_a {
+	pins2 {
+		/delete-property/ bias-disable;
+		bias-pull-up;
+	};
 };
 
 &sdmmc2 {
