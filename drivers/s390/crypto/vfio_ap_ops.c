@@ -2164,6 +2164,12 @@ static int apq_status_check(int apqn, struct ap_queue_status *status)
 		return -EBUSY;
 
 	case AP_RESPONSE_BUSY:
+		/*
+		 * The queue is busy with something unrelated to a reset and our
+		 * ZAPQ was rejected outright. Re-issue the ZAPQ.
+		 */
+		return -EAGAIN;
+
 	case AP_RESPONSE_ASSOC_SECRET_NOT_UNIQUE:
 	case AP_RESPONSE_ASSOC_FAILED:
 		/*
@@ -2190,7 +2196,58 @@ static int apq_status_check(int apqn, struct ap_queue_status *status)
 	}
 }
 
+static void report_apq_reset_check_timeout(struct vfio_ap_queue *q)
+{
+	if (q->aqic_resources.isc != VFIO_AP_ISC_INVALID || q->aqic_resources.iova) {
+		if (q->matrix_mdev) {
+			dev_warn_ratelimited(mdev_dev(q->matrix_mdev->mdev),
+					     "Reset timed out for APQN %02x.%04x: leaking AQIC resources (NIB page & GISC) to prevent host crash\n",
+					     AP_QID_CARD(q->apqn),
+					     AP_QID_QUEUE(q->apqn));
+		} else {
+			pr_warn_ratelimited("Reset timed out for APQN %02x.%04x: leaking AQIC resources (NIB page & GISC) to prevent host crash\n",
+					    AP_QID_CARD(q->apqn),
+					    AP_QID_QUEUE(q->apqn));
+		}
+	} else {
+		if (q->matrix_mdev) {
+			dev_warn_ratelimited(mdev_dev(q->matrix_mdev->mdev),
+					     "Reset timed out for APQN %02x.%04x\n",
+					     AP_QID_CARD(q->apqn),
+					     AP_QID_QUEUE(q->apqn));
+		} else {
+			pr_warn_ratelimited("Reset timed out for APQN %02x.%04x\n",
+					    AP_QID_CARD(q->apqn),
+					    AP_QID_QUEUE(q->apqn));
+		}
+	}
+}
+
 #define WAIT_MSG "Waited %dms for reset of queue %02x.%04x (%u, %u, %u)"
+
+/**
+ * apq_reset_finalize - store final TAPQ status and free AQIC resources.
+ * @q:      the vfio_ap_queue
+ * @status: the final AP queue status returned by PQAP(TAPQ)
+ * @ret:    the return value from apq_status_check()
+ *
+ * Copies the full TAPQ status word to q->reset_status so that all status
+ * bits reflect the confirmed end state of the queue. If ret == 0,
+ * zeroization was confirmed and the response code is overridden with
+ * AP_RESPONSE_NORMAL so that _queue_passable() returns true. For
+ * ret == -ENODEV (DECONFIGURED or CHECKSTOPPED), the non-zero response
+ * code is left intact so _queue_passable() correctly returns false.
+ * AQIC resources are then freed.
+ */
+static void apq_reset_finalize(struct vfio_ap_queue *q,
+			       struct ap_queue_status *status, int ret)
+{
+	memcpy(&q->reset_status, status, sizeof(*status));
+	if (!ret)
+		q->reset_status.response_code = AP_RESPONSE_NORMAL;
+
+	vfio_ap_free_aqic_resources(q);
+}
 
 static void apq_reset_check(struct work_struct *reset_work)
 {
@@ -2223,30 +2280,73 @@ static void apq_reset_check(struct work_struct *reset_work)
 			 */
 			memcpy(&q->reset_status, &status, sizeof(status));
 			return;
-		}
-		if (ret == -EBUSY) {
+		} else if (elapsed >= AP_RESET_MAX_WAIT) {
+			/*Timed out without being able to verify zapq completed */
+			if (!ret || ret == -ENODEV) {
+				/*
+				 * Zeroization confirmed (ret == 0): the TAPQ status bits
+				 * indicate the async portion of the ZAPQ completed
+				 * successfully. Free AQIC resources and return.
+				 *
+				 * Queue non-operational (ret == -ENODEV): the queue is
+				 * deconfigured or checkstopped; interrupts are not
+				 * possible so AQIC resources can be safely freed.
+				 * Zeroization cannot be confirmed in this state, but the
+				 * queue cannot generate interrupts, so the NIB page is
+				 * no longer a DMA target and it is safe to free it.
+				 */
+				apq_reset_finalize(q, &status, ret);
+				return;
+			}
+
+			report_apq_reset_check_timeout(q);
+
+			/*
+			 * Zeroization could not be confirmed; set
+			 * reset_status to AP_RESPONSE_RESET_IN_PROGRESS.
+			 * This is used internally to signal that the reset
+			 * did not complete, and ensures that if the queue
+			 * is reset again, the re-issue logic in
+			 * apq_reset_check() will re-issue the ZAPQ.
+			 */
+			q->reset_status.response_code = AP_RESPONSE_RESET_IN_PROGRESS;
+
+			return;
+		} else if (ret == -EBUSY) {
 			pr_notice_ratelimited(WAIT_MSG, elapsed,
 					      AP_QID_CARD(q->apqn),
 					      AP_QID_QUEUE(q->apqn),
 					      status.response_code,
 					      status.queue_empty,
 					      status.irq_enabled);
+			continue;
 		} else {
-			if (q->reset_status.response_code == AP_RESPONSE_RESET_IN_PROGRESS ||
-			    q->reset_status.response_code == AP_RESPONSE_BUSY ||
-			    q->reset_status.response_code == AP_RESPONSE_STATE_CHANGE_IN_PROGRESS ||
-			    ret == -EAGAIN) {
+			if (ret == -EAGAIN ||
+			    q->reset_status.response_code == AP_RESPONSE_RESET_IN_PROGRESS ||
+			    q->reset_status.response_code == AP_RESPONSE_STATE_CHANGE_IN_PROGRESS) {
 				status = ap_zapq(q->apqn, 0);
 				memcpy(&q->reset_status, &status, sizeof(status));
 				continue;
 			}
+
 			/*
-			 * We end up here when the ZAPQ has completed. ZAPQ
-			 * disables interrupts, so the AQIC resources must be
-			 * freed; otherwise they will be leaked.
+			 * We are here for one of two reasons:
+			 *
+			 * Zeroization confirmed (ret == 0): the TAPQ status bits
+			 * indicate the async portion of the ZAPQ completed
+			 * successfully.
+			 *
+			 * Queue non-operational (ret == -ENODEV): the queue is
+			 * deconfigured or checkstopped; interrupts are not
+			 * possible. Zeroization cannot be confirmed in this state,
+			 * but the queue cannot generate interrupts, so the
+			 * NIB page is no longer a DMA.
+			 *
+			 * In either case, it is safe to free up the AQIC
+			 * resources.
 			 */
-			vfio_ap_free_aqic_resources(q);
-			break;
+			apq_reset_finalize(q, &status, ret);
+			return;
 		}
 	}
 }
