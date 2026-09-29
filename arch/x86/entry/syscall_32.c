@@ -77,6 +77,12 @@ static __always_inline void do_syscall_32_irqs_on(struct pt_regs *regs, unsigned
 	if (likely(nr < IA32_NR_syscalls)) {
 		nr = array_index_nospec(nr, IA32_NR_syscalls);
 		regs->ax = ia32_sys_call(regs, (unsigned int)nr);
+	} else if ((long)nr != -1) {
+		/*
+		 * ptrace or seccomp may have changed the return value. Only
+		 * -1 keeps it; any other invalid number fails with -ENOSYS.
+		 */
+		regs->ax = -ENOSYS;
 	}
 }
 

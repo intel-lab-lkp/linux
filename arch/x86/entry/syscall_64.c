@@ -64,7 +64,7 @@ static __always_inline bool do_syscall_x64(struct pt_regs *regs, unsigned long n
 	return false;
 }
 
-static __always_inline void do_syscall_x32(struct pt_regs *regs, unsigned long nr)
+static __always_inline bool do_syscall_x32(struct pt_regs *regs, unsigned long nr)
 {
 	/* Adjust the starting offset of the table */
 	nr -= __X32_SYSCALL_BIT;
@@ -72,7 +72,9 @@ static __always_inline void do_syscall_x32(struct pt_regs *regs, unsigned long n
 	if (IS_ENABLED(CONFIG_X86_X32_ABI) && likely(nr < X32_NR_syscalls)) {
 		nr = array_index_nospec(nr, X32_NR_syscalls);
 		regs->ax = x32_sys_call(regs, (unsigned int)nr);
+		return true;
 	}
+	return false;
 }
 
 /* Returns true to return using SYSRET, or false to use IRET */
@@ -81,8 +83,12 @@ __visible noinstr bool do_syscall_64(struct pt_regs *regs, long nr)
 	if (likely(syscall_enter_from_user_mode_randomize_stack(regs, &nr))) {
 		instrumentation_begin();
 
-		if (!do_syscall_x64(regs, nr))
-			do_syscall_x32(regs, nr);
+		/*
+		 * ptrace or seccomp may have changed the return value. Only
+		 * -1 keeps it; any other invalid number fails with -ENOSYS.
+		 */
+		if (!do_syscall_x64(regs, nr) && !do_syscall_x32(regs, nr) && nr != -1)
+			regs->ax = -ENOSYS;
 
 		instrumentation_end();
 	}
