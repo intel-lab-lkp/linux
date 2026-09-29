@@ -906,6 +906,23 @@ static inline unsigned int qdisc_pkt_len(const struct sk_buff *skb)
 	return qdisc_skb_cb(skb)->pkt_len;
 }
 
+#define QDISC_PKT_LEN_MAX	(1 << 20)	/* 1 MiB */
+
+/* Largest accounted backlog for which enqueuing one more maximum-size
+ * packet cannot wrap the 32-bit sch->qstats.backlog.
+ */
+#define QDISC_MAX_BACKLOG	(U32_MAX - QDISC_PKT_LEN_MAX)
+
+/* True when the accounted backlog is close enough to U32_MAX that one
+ * more maximum-size packet could wrap it. A qdisc whose limit is a
+ * packet count (or is otherwise not a byte bound) must drop at enqueue
+ * when this holds, so the 32-bit backlog an AQM reads cannot wrap.
+ */
+static inline bool qdisc_backlog_at_max(const struct Qdisc *sch)
+{
+	return sch->qstats.backlog > QDISC_MAX_BACKLOG;
+}
+
 static inline unsigned int qdisc_pkt_segs(const struct sk_buff *skb)
 {
 	u32 pkt_segs = qdisc_skb_cb(skb)->pkt_segs;
