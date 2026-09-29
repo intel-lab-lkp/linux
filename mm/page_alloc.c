@@ -3006,17 +3006,18 @@ void free_unref_folios(struct folio_batch *folios)
 	/* Prepare folios for freeing */
 	for (i = 0, j = 0; i < folios->nr; i++) {
 		struct folio *folio = folios->folios[i];
+		struct page *page = folio_page(folio, 0);
 		unsigned long pfn = folio_pfn(folio);
 		unsigned int order = folio_order(folio);
 
-		if (!__free_pages_prepare(&folio->page, order, FPI_NONE))
+		if (!__free_pages_prepare(page, order, FPI_NONE))
 			continue;
 		/*
 		 * Free orders not handled on the PCP directly to the
 		 * allocator.
 		 */
 		if (!pcp_allowed_order(order)) {
-			free_one_page(folio_zone(folio), &folio->page,
+			free_one_page(folio_zone(folio), page,
 				      pfn, order, FPI_NONE);
 			continue;
 		}
@@ -3029,13 +3030,14 @@ void free_unref_folios(struct folio_batch *folios)
 
 	for (i = 0; i < folios->nr; i++) {
 		struct folio *folio = folios->folios[i];
+		struct page *page = folio_page(folio, 0);
 		struct zone *zone = folio_zone(folio);
 		unsigned long pfn = folio_pfn(folio);
 		unsigned int order = (unsigned long)folio->private;
 		int migratetype;
 
 		folio->private = NULL;
-		migratetype = get_pfnblock_migratetype(&folio->page, pfn);
+		migratetype = get_pfnblock_migratetype(page, pfn);
 
 		/* Different zone requires a different pcp lock */
 		if (zone != locked_zone ||
@@ -3051,7 +3053,7 @@ void free_unref_folios(struct folio_batch *folios)
 			 * allocator, see comment in free_frozen_pages.
 			 */
 			if (is_migrate_isolate(migratetype)) {
-				free_one_page(zone, &folio->page, pfn,
+				free_one_page(zone, page, pfn,
 					      order, FPI_NONE);
 				continue;
 			}
@@ -3062,7 +3064,7 @@ void free_unref_folios(struct folio_batch *folios)
 			 */
 			pcp = pcp_spin_trylock(zone->per_cpu_pageset);
 			if (unlikely(!pcp)) {
-				free_one_page(zone, &folio->page, pfn,
+				free_one_page(zone, page, pfn,
 					      order, FPI_NONE);
 				continue;
 			}
@@ -3076,9 +3078,9 @@ void free_unref_folios(struct folio_batch *folios)
 		if (unlikely(migratetype >= MIGRATE_PCPTYPES))
 			migratetype = MIGRATE_MOVABLE;
 
-		trace_mm_page_free_batched(&folio->page);
-		if (!free_frozen_page_commit(zone, pcp, &folio->page,
-				migratetype, order, FPI_NONE)) {
+		trace_mm_page_free_batched(page);
+		if (!free_frozen_page_commit(zone, pcp, page,
+					     migratetype, order, FPI_NONE)) {
 			pcp = NULL;
 			locked_zone = NULL;
 		}
