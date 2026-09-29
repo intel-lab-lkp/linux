@@ -82,6 +82,7 @@ struct nvme_rdma_request {
 	struct nvme_rdma_sgl	data_sgl;
 	struct nvme_rdma_sgl	*metadata_sgl;
 	bool			use_sig_mr;
+	bool			rsp_seen;
 };
 
 enum nvme_rdma_queue_flags {
@@ -1568,6 +1569,7 @@ static int nvme_rdma_map_data(struct nvme_rdma_queue *queue,
 
 	req->num_sge = 1;
 	refcount_set(&req->ref, 2); /* send and recv completions */
+	req->rsp_seen = false;
 
 	c->common.flags |= NVME_CMD_SGL_METABUF;
 
@@ -1737,6 +1739,15 @@ static void nvme_rdma_process_nvme_rsp(struct nvme_rdma_queue *queue,
 		return;
 	}
 	req = blk_mq_rq_to_pdu(rq);
+
+	if (unlikely(req->rsp_seen)) {
+		dev_err(queue->ctrl->ctrl.device,
+			"Duplicate completion for command_id %#x on QP %#x\n",
+			cqe->command_id, queue->qp->qp_num);
+		nvme_rdma_error_recovery(queue->ctrl);
+		return;
+	}
+	req->rsp_seen = true;
 
 	req->status = cqe->status;
 	req->result = cqe->result;
