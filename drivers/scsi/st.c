@@ -368,6 +368,8 @@ static int st_chk_result(struct scsi_tape *STp, struct st_request * SRpnt)
 	if (ctr != STp->por_ctr) {
 		STp->por_ctr = ctr;
 		STp->pos_unknown = 1; /* ASC => power on / reset */
+		/* The reset allowed medium removal; relock at next access */
+		STp->door_locked = ST_UNLOCKED;
 		st_printk(KERN_WARNING, STp, "Power on/reset recognized.");
 	}
 
@@ -426,6 +428,7 @@ static int st_chk_result(struct scsi_tape *STp, struct st_request * SRpnt)
 	if (cmdstatp->have_sense && scode == UNIT_ATTENTION &&
 		cmdstatp->sense_hdr.asc == 0x29 && !STp->pos_unknown) {
 		STp->pos_unknown = 1; /* ASC => power on / reset */
+		STp->door_locked = ST_UNLOCKED;
 		st_printk(KERN_WARNING, STp, "Power on/reset recognized.");
 	}
 
