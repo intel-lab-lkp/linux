@@ -47,7 +47,8 @@ static phys_addr_t __init memblock_node_memory_size(int nid)
 void hugetlb_cma_free_frozen_folio(struct folio *folio)
 {
 	WARN_ON_ONCE(!cma_release_frozen(hugetlb_cma[folio_nid(folio)],
-					 &folio->page, folio_nr_pages(folio)));
+					 folio_page(folio, 0),
+					 folio_nr_pages(folio)));
 }
 
 struct folio *hugetlb_cma_alloc_frozen_folio(int order, gfp_t gfp_mask,
