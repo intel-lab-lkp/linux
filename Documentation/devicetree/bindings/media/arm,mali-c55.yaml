@@ -20,6 +20,8 @@ properties:
   interrupts:
     maxItems: 1
 
+  wakeup-source: true
+
   clocks:
     items:
       - description: ISP Video Clock
