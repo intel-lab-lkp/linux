@@ -370,6 +370,28 @@ int cper_dimm_err_location(struct cper_mem_err_compact *mem, char *msg)
 }
 EXPORT_SYMBOL_GPL(cper_dimm_err_location);
 
+static void cper_mem_err_old_pack(const struct cper_sec_mem_err_old *mem,
+				  struct cper_mem_err_compact *cmem)
+{
+	memset(cmem, 0, sizeof(*cmem));
+	cmem->validation_bits = mem->validation_bits;
+	cmem->node = mem->node;
+	cmem->card = mem->card;
+	cmem->module = mem->module;
+	cmem->bank = mem->bank;
+	cmem->device = mem->device;
+	cmem->row = mem->row;
+	cmem->column = mem->column;
+	cmem->bit_pos = mem->bit_pos;
+	cmem->requestor_id = mem->requestor_id;
+	cmem->responder_id = mem->responder_id;
+	cmem->target_id = mem->target_id;
+	cmem->error_status = mem->error_status;
+	cmem->physical_addr = mem->physical_addr;
+	cmem->physical_addr_mask = mem->physical_addr_mask;
+	cmem->error_type = mem->error_type;
+}
+
 void cper_mem_err_pack(const struct cper_sec_mem_err *mem,
 		       struct cper_mem_err_compact *cmem)
 {
@@ -398,6 +420,125 @@ void cper_mem_err_pack(const struct cper_sec_mem_err *mem,
 		cmem->chip_id = mem->extended >> CPER_MEM_CHIP_ID_SHIFT;
 }
 EXPORT_SYMBOL_GPL(cper_mem_err_pack);
+
+static void cper_mem_err2_pack(const struct cper_sec_mem_err2 *mem,
+			       struct cper_mem_err_compact *cmem)
+{
+	u64 valid = mem->validation_bits;
+
+	memset(cmem, 0, sizeof(*cmem));
+	/*
+	 * Memory Error Section 2 uses different validation bit assignments
+	 * from the legacy section starting at bit 10.  Translate them to the
+	 * assignments used by struct cper_mem_err_compact and its consumers.
+	 */
+	cmem->validation_bits = valid & GENMASK_ULL(9, 0);
+	if (valid & BIT_ULL(10))
+		cmem->validation_bits |= CPER_MEM_VALID_RANK_NUMBER;
+	if (valid & BIT_ULL(11))
+		cmem->validation_bits |= CPER_MEM_VALID_BIT_POSITION;
+	if (valid & BIT_ULL(12))
+		cmem->validation_bits |= CPER_MEM_VALID_CHIP_ID;
+	if (valid & BIT_ULL(13))
+		cmem->validation_bits |= CPER_MEM_VALID_ERROR_TYPE;
+	if (valid & BIT_ULL(14))
+		cmem->validation_bits |= CPER_MEM_VALID_STATUS;
+	if (valid & BIT_ULL(15))
+		cmem->validation_bits |= CPER_MEM_VALID_REQUESTOR_ID;
+	if (valid & BIT_ULL(16))
+		cmem->validation_bits |= CPER_MEM_VALID_RESPONDER_ID;
+	if (valid & BIT_ULL(17))
+		cmem->validation_bits |= CPER_MEM_VALID_TARGET_ID;
+	if (valid & BIT_ULL(18))
+		cmem->validation_bits |= CPER_MEM_VALID_CARD_HANDLE;
+	if (valid & BIT_ULL(19))
+		cmem->validation_bits |= CPER_MEM_VALID_MODULE_HANDLE;
+	if (valid & BIT_ULL(20))
+		cmem->validation_bits |= CPER_MEM_VALID_BANK_GROUP;
+	if (valid & BIT_ULL(21))
+		cmem->validation_bits |= CPER_MEM_VALID_BANK_ADDRESS;
+	cmem->node = mem->node;
+	cmem->card = mem->card;
+	cmem->module = mem->module;
+	cmem->bank = mem->bank;
+	cmem->device = mem->device;
+	cmem->row = mem->row;
+	cmem->column = mem->column;
+	cmem->bit_pos = mem->bit_pos;
+	cmem->requestor_id = mem->requestor_id;
+	cmem->responder_id = mem->responder_id;
+	cmem->target_id = mem->target_id;
+	cmem->rank = mem->rank;
+	cmem->mem_array_handle = mem->mem_array_handle;
+	cmem->mem_dev_handle = mem->mem_dev_handle;
+	cmem->error_status = mem->error_status;
+	cmem->physical_addr = mem->physical_addr;
+	cmem->physical_addr_mask = mem->physical_addr_mask;
+	cmem->chip_id = mem->chip_id;
+	cmem->status = mem->status;
+	cmem->error_type = mem->error_type;
+	cmem->is_section2 = 1;
+
+	if ((cmem->validation_bits & CPER_MEM_VALID_CARD_HANDLE) &&
+	    cmem->mem_array_handle > U16_MAX) {
+		pr_warn(FW_WARN "Memory Error Section 2 card handle 0x%x exceeds SMBIOS range\n",
+			cmem->mem_array_handle);
+		cmem->mem_array_handle = 0;
+		cmem->validation_bits &= ~CPER_MEM_VALID_CARD_HANDLE;
+	}
+
+	if ((cmem->validation_bits & CPER_MEM_VALID_MODULE_HANDLE) &&
+	    cmem->mem_dev_handle > U16_MAX) {
+		pr_warn(FW_WARN "Memory Error Section 2 module handle 0x%x exceeds SMBIOS range\n",
+			cmem->mem_dev_handle);
+		cmem->mem_dev_handle = 0;
+		cmem->validation_bits &= ~CPER_MEM_VALID_MODULE_HANDLE;
+	}
+}
+
+bool cper_sec_is_platform_mem(const guid_t *sec_type)
+{
+	return guid_equal(sec_type, &CPER_SEC_PLATFORM_MEM) ||
+	       guid_equal(sec_type, &CPER_SEC_PLATFORM_MEM2);
+}
+EXPORT_SYMBOL_GPL(cper_sec_is_platform_mem);
+
+int cper_mem_err_parse(const guid_t *sec_type, const void *mem, size_t len,
+		       struct cper_mem_err_compact *cmem)
+{
+	memset(cmem, 0, sizeof(*cmem));
+
+	if (guid_equal(sec_type, &CPER_SEC_PLATFORM_MEM2)) {
+		const struct cper_sec_mem_err2 *mem2 = mem;
+
+		if (len < sizeof(*mem2))
+			return -EINVAL;
+
+		cper_mem_err2_pack(mem2, cmem);
+		return 0;
+	}
+
+	if (guid_equal(sec_type, &CPER_SEC_PLATFORM_MEM)) {
+		const struct cper_sec_mem_err_old *old = mem;
+
+		if (len < sizeof(*old))
+			return -EINVAL;
+
+		if (len < sizeof(struct cper_sec_mem_err)) {
+			u64 old_valid_mask = CPER_MEM_VALID_RANK_NUMBER - 1;
+
+			cper_mem_err_old_pack(old, cmem);
+			cmem->validation_bits &= old_valid_mask;
+			return 0;
+		}
+
+		cper_mem_err_pack(mem, cmem);
+		return 0;
+	}
+
+	return -EINVAL;
+}
+EXPORT_SYMBOL_GPL(cper_mem_err_parse);
 
 const char *cper_mem_err_unpack(struct trace_seq *p,
 				struct cper_mem_err_compact *cmem)

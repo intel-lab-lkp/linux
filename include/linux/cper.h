@@ -265,6 +265,7 @@ enum {
 #define CPER_MEM_VALID_BANK_GROUP		0x80000
 #define CPER_MEM_VALID_BANK_ADDRESS		0x100000
 #define CPER_MEM_VALID_CHIP_ID			0x200000
+#define CPER_MEM_VALID_STATUS			0x400000
 
 #define CPER_MEM_EXT_ROW_MASK			0x3
 #define CPER_MEM_EXT_ROW_SHIFT			16
@@ -628,6 +629,9 @@ int cper_bits_to_str(char *buf, int buf_size, unsigned long bits,
 		     const char * const strs[], unsigned int strs_size);
 void cper_mem_err_pack(const struct cper_sec_mem_err *,
 		       struct cper_mem_err_compact *);
+bool cper_sec_is_platform_mem(const guid_t *sec_type);
+int cper_mem_err_parse(const guid_t *sec_type, const void *mem, size_t len,
+		       struct cper_mem_err_compact *cmem);
 const char *cper_mem_err_unpack(struct trace_seq *,
 				struct cper_mem_err_compact *);
 void cper_print_proc_arm(const char *pfx,
