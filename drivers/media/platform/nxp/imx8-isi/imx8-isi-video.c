@@ -1231,34 +1231,10 @@ static int mxc_isi_video_enum_fmt(struct file *file, void *priv,
 				  struct v4l2_fmtdesc *f)
 {
 	const struct mxc_isi_format_info *fmt;
-	unsigned int index = f->index;
-	unsigned int i;
 
-	if (f->mbus_code) {
-		/*
-		 * If a media bus code is specified, only enumerate formats
-		 * compatible with it.
-		 */
-		for (i = 0; i < ARRAY_SIZE(mxc_isi_formats); i++) {
-			fmt = &mxc_isi_formats[i];
-			if (fmt->mbus_code != f->mbus_code)
-				continue;
-
-			if (index == 0)
-				break;
-
-			index--;
-		}
-
-		if (i == ARRAY_SIZE(mxc_isi_formats))
-			return -EINVAL;
-	} else {
-		/* Otherwise, enumerate all formatS. */
-		if (f->index >= ARRAY_SIZE(mxc_isi_formats))
-			return -EINVAL;
-
-		fmt = &mxc_isi_formats[f->index];
-	}
+	fmt = mxc_isi_format_enum(f, MXC_ISI_VIDEO_CAP);
+	if (!fmt)
+		return -EINVAL;
 
 	f->pixelformat = fmt->fourcc;
 	f->flags |= V4L2_FMT_FLAG_CSC_COLORSPACE | V4L2_FMT_FLAG_CSC_YCBCR_ENC
