@@ -19,6 +19,7 @@
 #include <linux/kvm.h>
 #include <linux/kvm_irqfd.h>
 #include <linux/irqbypass.h>
+#include <linux/log2.h>
 #include <linux/sched/stat.h>
 #include <linux/psci.h>
 #include <trace/events/kvm.h>
@@ -203,6 +204,31 @@ int kvm_vm_ioctl_enable_cap(struct kvm *kvm,
 		r = 0;
 		set_bit(KVM_ARCH_FLAG_EXIT_SEA, &kvm->arch.flags);
 		break;
+	case KVM_CAP_ARM_HDBSS_BUFFER_SIZE: {
+		u64 size = cap->args[0];
+
+		if (!system_supports_hdbss())
+			break;
+		if (kvm->dirty_ring_size)
+			break;
+		if (size < KVM_ARM_HDBSS_DEFAULT_SIZE ||
+		    size > KVM_ARM_HDBSS_MAX_SIZE)
+			break;
+		if (!is_power_of_2(size))
+			break;
+
+		mutex_lock(&kvm->lock);
+		if (kvm->created_vcpus) {
+			r = -EINVAL;
+		} else if (kvm->arch.hdbss_buffer_size) {
+			r = -EBUSY;
+		} else {
+			kvm->arch.hdbss_buffer_size = size;
+			r = 0;
+		}
+		mutex_unlock(&kvm->lock);
+		break;
+	}
 	default:
 		break;
 	}
@@ -499,6 +525,14 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 			r = kvm->arch.mmu.split_page_chunk_size;
 		else
 			r = KVM_ARM_EAGER_SPLIT_CHUNK_SIZE_DEFAULT;
+		break;
+	case KVM_CAP_ARM_HDBSS_BUFFER_SIZE:
+		if (!system_supports_hdbss())
+			r = 0;
+		else if (kvm)
+			r = kvm->arch.hdbss_buffer_size ?: KVM_ARM_HDBSS_DEFAULT_SIZE;
+		else
+			r = KVM_ARM_HDBSS_MAX_SIZE;
 		break;
 	case KVM_CAP_ARM_SUPPORTED_BLOCK_SIZES:
 		r = kvm_supported_block_sizes();
