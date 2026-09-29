@@ -2951,7 +2951,8 @@ int intel_psr2_sel_fetch_update(struct intel_atomic_state *state,
 		    !old_plane_state->uapi.visible)
 			continue;
 
-		if (!psr2_sel_fetch_plane_state_supported(new_plane_state)) {
+		if (new_plane_state->uapi.visible &&
+		    !psr2_sel_fetch_plane_state_supported(new_plane_state)) {
 			full_update = true;
 			break;
 		}
