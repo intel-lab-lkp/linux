@@ -14,12 +14,12 @@ use super::{
     AllocError,
     Allocator,
     Box,
-    Flags,
-    NumaNode, //
+    Flags, //
 };
 
 use crate::{
     fmt,
+    numa::NumaNode,
     page::{
         AsPageIter,
         PAGE_SIZE, //
