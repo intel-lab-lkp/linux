@@ -19,6 +19,7 @@
 #include <asm/cpufeature.h>
 #include <asm/kprobes.h>
 #include <asm/kvm_asm.h>
+#include <asm/kvm_dirty_bit.h>
 #include <asm/kvm_emulate.h>
 #include <asm/kvm_hyp.h>
 #include <asm/kvm_mmu.h>
@@ -219,6 +220,17 @@ static void __vcpu_put_deactivate_traps(struct kvm_vcpu *vcpu)
 	local_irq_restore(flags);
 }
 
+static void __load_hdbss(struct kvm_vcpu *vcpu)
+{
+	if (!vcpu->arch.hdbss.hdbss_pg)
+		return;
+
+	write_sysreg_s(vcpu->arch.hdbss.hdbssbr_el2, SYS_HDBSSBR_EL2);
+	write_sysreg_s(vcpu->arch.hdbss.hdbssprod_el2, SYS_HDBSSPROD_EL2);
+
+	isb();
+}
+
 void kvm_vcpu_load_vhe(struct kvm_vcpu *vcpu)
 {
 	host_data_ptr(host_ctxt)->__hyp_running_vcpu = vcpu;
@@ -226,10 +238,15 @@ void kvm_vcpu_load_vhe(struct kvm_vcpu *vcpu)
 	__vcpu_load_switch_sysregs(vcpu);
 	__vcpu_load_activate_traps(vcpu);
 	__load_stage2(vcpu->arch.hw_mmu);
+	__load_hdbss(vcpu);
 }
 
 void kvm_vcpu_put_vhe(struct kvm_vcpu *vcpu)
 {
+	/* Saved under the same ownership condition as __load_hdbss(). */
+	if (vcpu->arch.hdbss.hdbss_pg)
+		vcpu->arch.hdbss.hdbssprod_el2 = read_sysreg_s(SYS_HDBSSPROD_EL2);
+
 	__vcpu_put_deactivate_traps(vcpu);
 	__vcpu_put_switch_sysregs(vcpu);
 

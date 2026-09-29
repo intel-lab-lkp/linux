@@ -425,6 +425,9 @@ struct kvm_arch {
 	 */
 	struct kvm_protected_vm pkvm;
 
+	/* HDBSS: per-VM buffer size in bytes (0 = not configured, use default) */
+	u32 hdbss_buffer_size;
+
 #ifdef CONFIG_PTDUMP_STAGE2_DEBUGFS
 	/* Nested virtualization info */
 	struct dentry *debugfs_nv_dentry;
@@ -844,6 +847,13 @@ struct vcpu_reset_state {
 	bool		reset;
 };
 
+struct vcpu_hdbss_state {
+	struct page *hdbss_pg;		/* HDBSS buffer */
+	u64 hdbssbr_el2;		/* programmed into the CPU on load */
+	u64 hdbssprod_el2;		/* producer index, saved on put */
+	unsigned int buddy_order;	/* allocation order for __free_pages() */
+};
+
 struct vncr_tlb;
 
 struct kvm_vcpu_arch {
@@ -951,6 +961,9 @@ struct kvm_vcpu_arch {
 
 	/* Hyp-readable copy of kvm_vcpu::pid */
 	pid_t pid;
+
+	/* HDBSS buffer state */
+	struct vcpu_hdbss_state hdbss;
 };
 
 /*

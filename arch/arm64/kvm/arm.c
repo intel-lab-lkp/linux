@@ -36,6 +36,7 @@
 #include <asm/virt.h>
 #include <asm/kvm_arm.h>
 #include <asm/kvm_asm.h>
+#include <asm/kvm_dirty_bit.h>
 #include <asm/kvm_emulate.h>
 #include <asm/kvm_hyp.h>
 #include <asm/kvm_mmu.h>
@@ -580,10 +581,19 @@ int kvm_arch_vcpu_create(struct kvm_vcpu *vcpu)
 	}
 
 	err = kvm_share_hyp(vcpu, vcpu + 1);
-	if (err)
+	if (err) {
 		kvm_vgic_vcpu_destroy(vcpu);
+		return err;
+	}
 
-	return err;
+	err = kvm_arm_vcpu_alloc_hdbss(vcpu);
+	if (err) {
+		kvm_unshare_hyp(vcpu, vcpu + 1);
+		kvm_vgic_vcpu_destroy(vcpu);
+		return err;
+	}
+
+	return 0;
 }
 
 void kvm_arch_vcpu_postcreate(struct kvm_vcpu *vcpu)
