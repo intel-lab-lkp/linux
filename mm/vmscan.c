@@ -1709,7 +1709,7 @@ unsigned int reclaim_clean_pages_from_list(struct zone *zone,
 
 	list_for_each_entry_safe(folio, next, folio_list, lru) {
 		/* TODO: these pages should not even appear in this list. */
-		if (page_has_movable_ops(&folio->page))
+		if (page_has_movable_ops(folio_page(folio, 0)))
 			continue;
 		if (!folio_test_hugetlb(folio) && folio_is_file_lru(folio) &&
 		    !folio_test_dirty(folio) && !folio_test_unevictable(folio)) {

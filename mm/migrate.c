@@ -266,8 +266,8 @@ void putback_movable_pages(struct list_head *l)
 			continue;
 		}
 		list_del(&folio->lru);
-		if (unlikely(page_has_movable_ops(&folio->page))) {
-			putback_movable_ops_page(&folio->page);
+		if (unlikely(page_has_movable_ops(folio_page(folio, 0)))) {
+			putback_movable_ops_page(folio_page(folio, 0));
 		} else {
 			node_stat_mod_folio(folio, NR_ISOLATED_ANON +
 					folio_is_file_lru(folio), -folio_nr_pages(folio));
@@ -282,8 +282,8 @@ bool isolate_folio_to_list(struct folio *folio, struct list_head *list)
 	if (folio_test_hugetlb(folio))
 		return folio_isolate_hugetlb(folio, list);
 
-	if (page_has_movable_ops(&folio->page)) {
-		if (!isolate_movable_ops_page(&folio->page,
+	if (page_has_movable_ops(folio_page(folio, 0))) {
+		if (!isolate_movable_ops_page(folio_page(folio, 0),
 					      ISOLATE_UNEVICTABLE))
 			return false;
 	} else {
@@ -1199,7 +1199,8 @@ static void migrate_folio_undo_dst(struct folio *dst, bool locked,
 static void migrate_folio_done(struct folio *src,
 			       enum migrate_reason reason)
 {
-	if (likely(!page_has_movable_ops(&src->page)) && reason != MR_DEMOTION)
+	if (likely(!page_has_movable_ops(folio_page(src, 0))) &&
+	    reason != MR_DEMOTION)
 		mod_node_page_state(folio_pgdat(src), NR_ISOLATED_ANON +
 				    folio_is_file_lru(src), -folio_nr_pages(src));
 
@@ -1308,7 +1309,7 @@ static int migrate_folio_unmap(new_folio_t get_new_folio,
 		goto out;
 	dst_locked = true;
 
-	if (unlikely(page_has_movable_ops(&src->page))) {
+	if (unlikely(page_has_movable_ops(folio_page(src, 0)))) {
 		__migrate_folio_record(dst, old_folio_state, anon_vma);
 		return 0;
 	}
@@ -1375,8 +1376,9 @@ static int migrate_folio_move(free_folio_t put_new_folio, unsigned long private,
 	prev = dst->lru.prev;
 	list_del(&dst->lru);
 
-	if (unlikely(page_has_movable_ops(&src->page))) {
-		rc = migrate_movable_ops_page(&dst->page, &src->page, mode);
+	if (unlikely(page_has_movable_ops(folio_page(src, 0)))) {
+		rc = migrate_movable_ops_page(folio_page(dst, 0),
+					      folio_page(src, 0), mode);
 		if (rc)
 			goto out;
 		goto out_unlock_both;
@@ -1903,7 +1905,7 @@ static int migrate_pages_batch(struct list_head *from,
 			 * If we are holding the last folio reference, the folio
 			 * was freed from under us, so just drop our reference.
 			 */
-			if (likely(!page_has_movable_ops(&folio->page)) &&
+			if (likely(!page_has_movable_ops(folio_page(folio, 0))) &&
 			    folio_ref_count(folio) == 1) {
 				folio_clear_active(folio);
 				folio_clear_unevictable(folio);
