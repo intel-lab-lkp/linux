@@ -652,7 +652,7 @@ static void ene_tx_sample(struct ene_device *dev)
 	dev->tx_reg = !dev->tx_reg;
 exit:
 	/* simulate TX done interrupt */
-	if (txsim)
+	if (dev->tx_sim_enabled)
 		mod_timer(&dev->tx_sim_timer, jiffies + HZ / 500);
 }
 
@@ -1032,6 +1032,7 @@ static int ene_probe(struct pnp_dev *pnp_dev, const struct pnp_device_id *id)
 
 	if (!dev->hw_learning_and_tx_capable && txsim) {
 		dev->hw_learning_and_tx_capable = true;
+		dev->tx_sim_enabled = true;
 		timer_setup(&dev->tx_sim_timer, ene_tx_irqsim, 0);
 		pr_warn("Simulation of TX activated\n");
 	}
@@ -1103,7 +1104,8 @@ static void ene_remove(struct pnp_dev *pnp_dev)
 	unsigned long flags;
 
 	rc_unregister_device(dev->rdev);
-	timer_delete_sync(&dev->tx_sim_timer);
+	if (dev->tx_sim_enabled)
+		timer_shutdown_sync(&dev->tx_sim_timer);
 	spin_lock_irqsave(&dev->hw_lock, flags);
 	ene_rx_disable(dev);
 	ene_rx_restore_hw_buffer(dev);

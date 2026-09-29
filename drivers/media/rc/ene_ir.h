@@ -218,6 +218,7 @@ struct ene_device {
 	int tx_done;				/* done transmitting */
 						/* one more sample pending*/
 	struct completion tx_complete;		/* TX completion */
+	bool tx_sim_enabled;			/* simulated TX is enabled */
 	struct timer_list tx_sim_timer;
 
 	/* TX settings */
