@@ -1812,6 +1812,35 @@ void rtw_fw_update_beacon_work(struct work_struct *work)
 	mutex_unlock(&rtwdev->mutex);
 }
 
+void rtw_fw_csa_beacon_work(struct work_struct *work)
+{
+	struct rtw_vif *rtwvif = container_of(work, struct rtw_vif,
+					      csa_beacon_work.work);
+	struct ieee80211_vif *vif = rtwvif_to_vif(rtwvif);
+	struct rtw_dev *rtwdev = rtwvif->rtwdev;
+	unsigned int delay;
+
+	mutex_lock(&rtwdev->mutex);
+
+	if (rtwvif->net_type != RTW_NET_AP_MODE || !vif->bss_conf.csa_active)
+		goto out;
+
+	delay = ieee80211_tu_to_usec(vif->bss_conf.beacon_int);
+
+	if (!ieee80211_beacon_cntdwn_is_complete(vif, 0)) {
+		rtw_fw_download_rsvd_page(rtwdev);
+		rtw_send_rsvd_page_h2c(rtwdev);
+
+		ieee80211_queue_delayed_work(rtwdev->hw, &rtwvif->csa_beacon_work,
+					     usecs_to_jiffies(delay));
+	} else {
+		ieee80211_csa_finish(vif, 0);
+	}
+
+out:
+	mutex_unlock(&rtwdev->mutex);
+}
+
 static void rtw_fw_read_fifo_page(struct rtw_dev *rtwdev, u32 offset, u32 size,
 				  u32 *buf, u32 residue, u16 start_pg)
 {

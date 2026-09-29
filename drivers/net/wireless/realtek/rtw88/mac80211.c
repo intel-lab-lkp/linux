@@ -164,6 +164,8 @@ static int rtw_ops_add_interface(struct ieee80211_hw *hw,
 	memset(&rtwvif->bfee, 0, sizeof(struct rtw_bfee));
 	rtw_txq_init(rtwdev, vif->txq);
 	INIT_LIST_HEAD(&rtwvif->rsvd_page_list);
+	rtwvif->rtwdev = rtwdev;
+	INIT_DELAYED_WORK(&rtwvif->csa_beacon_work, rtw_fw_csa_beacon_work);
 
 	mutex_lock(&rtwdev->mutex);
 
@@ -234,6 +236,8 @@ static void rtw_ops_remove_interface(struct ieee80211_hw *hw,
 
 	rtw_dbg(rtwdev, RTW_DBG_STATE, "stop vif %pM mac_id %d on port %d\n",
 		vif->addr, rtwvif->mac_id, rtwvif->port);
+
+	cancel_delayed_work_sync(&rtwvif->csa_beacon_work);
 
 	mutex_lock(&rtwdev->mutex);
 
@@ -552,6 +556,15 @@ static int rtw_ops_set_tim(struct ieee80211_hw *hw, struct ieee80211_sta *sta,
 	ieee80211_queue_work(hw, &rtwdev->update_beacon_work);
 
 	return 0;
+}
+
+static void rtw_ops_channel_switch_beacon(struct ieee80211_hw *hw,
+					  struct ieee80211_vif *vif,
+					  struct cfg80211_chan_def *chandef)
+{
+	struct rtw_vif *rtwvif = (struct rtw_vif *)vif->drv_priv;
+
+	ieee80211_queue_delayed_work(hw, &rtwvif->csa_beacon_work, 0);
 }
 
 static int rtw_ops_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
@@ -971,6 +984,7 @@ const struct ieee80211_ops rtw_ops = {
 	.sta_add		= rtw_ops_sta_add,
 	.sta_remove		= rtw_ops_sta_remove,
 	.set_tim		= rtw_ops_set_tim,
+	.channel_switch_beacon	= rtw_ops_channel_switch_beacon,
 	.set_key		= rtw_ops_set_key,
 	.ampdu_action		= rtw_ops_ampdu_action,
 	.can_aggregate_in_amsdu	= rtw_ops_can_aggregate_in_amsdu,

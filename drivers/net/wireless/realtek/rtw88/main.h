@@ -821,6 +821,7 @@ struct rtw_bf_info {
 };
 
 struct rtw_vif {
+	struct rtw_dev *rtwdev;
 	enum rtw_net_type net_type;
 	u16 aid;
 	u8 mac_id;
@@ -833,6 +834,7 @@ struct rtw_vif {
 	const struct rtw_vif_port *conf;
 	struct cfg80211_scan_request *scan_req;
 	struct ieee80211_scan_ies *scan_ies;
+	struct delayed_work csa_beacon_work;
 
 	struct rtw_traffic_stats stats;
 
