@@ -88,6 +88,7 @@ struct report {
 #endif
 	bool			use_stdio;
 	bool			progress;
+	bool			no_progress;
 	bool			show_full_info;
 	bool			show_threads;
 	bool			inverted_callchain;
@@ -1387,6 +1388,8 @@ int cmd_report(int argc, const char **argv)
 			"Show or hide weight columns in annotation. Default show if non-zero."),
 	OPT_BOOLEAN(0, "progress", &report.progress,
 		    "Show progress while processing the perf.data file"),
+	OPT_BOOLEAN(0, "no-progress", &report.no_progress,
+		    "Do not show progress while processing the perf.data file"),
 	OPT_BOOLEAN(0, "header", &report.header, "Show data header."),
 	OPT_BOOLEAN(0, "header-only", &report.header_only,
 		    "Show only data header."),
@@ -1798,7 +1801,9 @@ repeat:
 	 * processed so far for each processing phase.  --quiet asks for no
 	 * messages at all, so it leaves the phases uncounted.
 	 */
-	if (report.progress && !quiet && use_browser == 0)
+	if (report.no_progress)
+		ui_progress__noop_init();
+	else if (report.progress && !quiet && use_browser == 0)
 		stdio_progress__init();
 
 	if (report.data_type && use_browser == 1) {
