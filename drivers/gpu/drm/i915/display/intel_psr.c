@@ -2892,7 +2892,6 @@ intel_psr_apply_su_area_workarounds(struct intel_crtc_state *crtc_state)
 int intel_psr2_sel_fetch_update(struct intel_atomic_state *state,
 				struct intel_crtc *crtc)
 {
-	struct intel_display *display = to_intel_display(state);
 	const struct intel_crtc_state *old_crtc_state =
 		intel_atomic_get_old_crtc_state(state, crtc);
 	struct intel_crtc_state *crtc_state = intel_atomic_get_new_crtc_state(state, crtc);
@@ -3009,12 +3008,8 @@ int intel_psr2_sel_fetch_update(struct intel_atomic_state *state,
 	 * should identify cases where this happens and fix the area
 	 * calculation for those.
 	 */
-	if (crtc_state->psr2_su_area.y1 == -1) {
-		drm_info_once(display->drm,
-			      "Selective fetch area calculation failed in pipe %c\n",
-			      pipe_name(crtc->pipe));
+	if (crtc_state->psr2_su_area.y1 == -1)
 		full_update = true;
-	}
 
 	if (full_update)
 		goto skip_su_area_calc;
