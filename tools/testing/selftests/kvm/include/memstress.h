@@ -58,7 +58,8 @@ extern struct memstress_args memstress_args;
 struct kvm_vm *memstress_create_vm(enum vm_guest_mode mode, int nr_vcpus,
 				   u64 vcpu_memory_bytes, int slots,
 				   enum vm_mem_backing_src_type backing_src,
-				   bool partition_vcpu_memory_access);
+				   bool partition_vcpu_memory_access,
+				   u32 dirty_ring_size);
 void memstress_destroy_vm(struct kvm_vm *vm);
 
 void memstress_set_write_percent(struct kvm_vm *vm, u32 write_percent);

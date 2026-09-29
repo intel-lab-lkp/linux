@@ -101,7 +101,7 @@ static void run_test(enum vm_guest_mode mode, void *unused)
 	struct kvm_page_stats stats_repopulated;
 
 	vm = memstress_create_vm(mode, VCPUS, guest_percpu_mem_size,
-				 SLOTS, backing_src, false);
+				 SLOTS, backing_src, false, 0);
 
 	guest_num_pages = (VCPUS * guest_percpu_mem_size) >> vm->page_shift;
 	guest_num_pages = vm_adjust_num_guest_pages(mode, guest_num_pages);
