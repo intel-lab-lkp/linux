@@ -3801,14 +3801,6 @@ static int tegra_xudc_probe(struct platform_device *pdev)
 	if (xudc->irq < 0)
 		return xudc->irq;
 
-	err = devm_request_irq(&pdev->dev, xudc->irq, tegra_xudc_irq, 0,
-			       dev_name(&pdev->dev), xudc);
-	if (err < 0) {
-		dev_err(xudc->dev, "failed to claim IRQ#%u: %d\n", xudc->irq,
-			err);
-		return err;
-	}
-
 	xudc->clks = devm_kcalloc(&pdev->dev, xudc->soc->num_clks, sizeof(*xudc->clks),
 				  GFP_KERNEL);
 	if (!xudc->clks)
@@ -3886,9 +3878,18 @@ static int tegra_xudc_probe(struct platform_device *pdev)
 	xudc->gadget.name = "tegra-xudc";
 	xudc->gadget.max_speed = USB_SPEED_SUPER;
 
+	err = devm_request_irq(&pdev->dev, xudc->irq, tegra_xudc_irq, 0,
+			       dev_name(&pdev->dev), xudc);
+	if (err < 0) {
+		dev_err(xudc->dev, "failed to claim IRQ#%u: %d\n", xudc->irq,
+			err);
+		goto free_eps;
+	}
+
 	err = usb_add_gadget_udc(&pdev->dev, &xudc->gadget);
 	if (err) {
 		dev_err(&pdev->dev, "failed to add USB gadget: %d\n", err);
+		devm_free_irq(&pdev->dev, xudc->irq, xudc);
 		goto free_eps;
 	}
 
