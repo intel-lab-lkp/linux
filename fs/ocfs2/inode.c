@@ -249,6 +249,36 @@ static int ocfs2_dinode_has_extents(struct ocfs2_dinode *di)
 	return 1;
 }
 
+static int
+ocfs2_dinode_has_invalid_extent_count(struct super_block *sb,
+				      struct ocfs2_dinode *di)
+{
+	struct ocfs2_extent_list *el = &di->id2.i_list;
+	u16 count;
+
+	if (!ocfs2_dinode_has_extents(di))
+		return 0;
+
+	count = le16_to_cpu(el->l_count);
+	/*
+	 * The exact capacity depends on i_xattr_inline_size, another
+	 * unvalidated on-disk field. Inline xattrs only shrink the
+	 * list, so the no-xattr maximum is a safe upper bound that a
+	 * valid l_count never exceeds.
+	 */
+	return !count || count > ocfs2_extent_recs_per_inode(sb);
+}
+
+static int ocfs2_dinode_has_invalid_extent_index(struct ocfs2_dinode *di)
+{
+	struct ocfs2_extent_list *el = &di->id2.i_list;
+
+	if (!ocfs2_dinode_has_extents(di))
+		return 0;
+
+	return le16_to_cpu(el->l_next_free_rec) > le16_to_cpu(el->l_count);
+}
+
 /*
  * here's how inodes get read from disk:
  * iget5_locked -> find_actor -> OCFS2_FIND_ACTOR
@@ -1716,36 +1746,28 @@ int ocfs2_validate_inode_block(struct super_block *sb,
 		goto bail;
 	}
 
-	if (ocfs2_dinode_has_extents(di)) {
-		struct ocfs2_extent_list *el = &di->id2.i_list;
-		u16 count = le16_to_cpu(el->l_count);
-		u16 next_free = le16_to_cpu(el->l_next_free_rec);
+	if (ocfs2_dinode_has_invalid_extent_count(sb, di)) {
+		u16 count = le16_to_cpu(di->id2.i_list.l_count);
 
-		if (count == 0) {
+		if (!count)
 			rc = ocfs2_error(sb,
 					 "Invalid dinode %llu: extent list l_count is zero\n",
 					 (unsigned long long)bh->b_blocknr);
-			goto bail;
-		}
-		/*
-		 * The exact capacity depends on i_xattr_inline_size, another
-		 * unvalidated on-disk field. Inline xattrs only shrink the
-		 * list, so the no-xattr maximum is a safe upper bound that a
-		 * valid l_count never exceeds.
-		 */
-		if (count > ocfs2_extent_recs_per_inode(sb)) {
+		else
 			rc = ocfs2_error(sb,
 					 "Invalid dinode %llu: extent list l_count %u exceeds max %u\n",
 					 (unsigned long long)bh->b_blocknr, count,
 					 ocfs2_extent_recs_per_inode(sb));
-			goto bail;
-		}
-		if (next_free > count) {
-			rc = ocfs2_error(sb,
-					 "Invalid dinode %llu: extent list l_next_free_rec %u exceeds l_count %u\n",
-					 (unsigned long long)bh->b_blocknr, next_free, count);
-			goto bail;
-		}
+		goto bail;
+	}
+
+	if (ocfs2_dinode_has_invalid_extent_index(di)) {
+		rc = ocfs2_error(sb,
+				 "Invalid dinode %llu: extent list l_next_free_rec %u exceeds l_count %u\n",
+				 (unsigned long long)bh->b_blocknr,
+				 le16_to_cpu(di->id2.i_list.l_next_free_rec),
+				 le16_to_cpu(di->id2.i_list.l_count));
+		goto bail;
 	}
 
 	rc = 0;
@@ -1835,6 +1857,26 @@ static int ocfs2_filecheck_validate_inode_block(struct super_block *sb,
 		goto bail;
 	}
 
+	if (ocfs2_dinode_has_invalid_extent_count(sb, di)) {
+		mlog(ML_ERROR,
+		     "Filecheck: invalid dinode #%llu: extent list l_count %u is invalid (max %u)\n",
+		     (unsigned long long)bh->b_blocknr,
+		     le16_to_cpu(di->id2.i_list.l_count),
+		     ocfs2_extent_recs_per_inode(sb));
+		rc = -OCFS2_FILECHECK_ERR_INVALIDINO;
+		goto bail;
+	}
+
+	if (ocfs2_dinode_has_invalid_extent_index(di)) {
+		mlog(ML_ERROR,
+		     "Filecheck: invalid dinode #%llu: extent list l_next_free_rec %u exceeds l_count %u\n",
+		     (unsigned long long)bh->b_blocknr,
+		     le16_to_cpu(di->id2.i_list.l_next_free_rec),
+		     le16_to_cpu(di->id2.i_list.l_count));
+		rc = -OCFS2_FILECHECK_ERR_INVALIDINO;
+		goto bail;
+	}
+
 	if (ocfs2_dinode_has_size_without_clusters(sb, di)) {
 		if (S_ISDIR(le16_to_cpu(di->i_mode)))
 			mlog(ML_ERROR,
@@ -1893,6 +1935,9 @@ static int ocfs2_filecheck_repair_inode_block(struct super_block *sb,
 		return -OCFS2_FILECHECK_ERR_VALIDFLAG;
 	}
 
+	if (ocfs2_dinode_has_invalid_extent_count(sb, di))
+		return -OCFS2_FILECHECK_ERR_INVALIDINO;
+
 	if (le64_to_cpu(di->i_blkno) != bh->b_blocknr) {
 		di->i_blkno = cpu_to_le64(bh->b_blocknr);
 		changed = 1;
@@ -1912,8 +1957,7 @@ static int ocfs2_filecheck_repair_inode_block(struct super_block *sb,
 		     le32_to_cpu(di->i_fs_generation));
 	}
 
-	if (ocfs2_dinode_has_extents(di) &&
-	    le16_to_cpu(di->id2.i_list.l_next_free_rec) > le16_to_cpu(di->id2.i_list.l_count)) {
+	if (ocfs2_dinode_has_invalid_extent_index(di)) {
 		di->id2.i_list.l_next_free_rec = di->id2.i_list.l_count;
 		changed = 1;
 		mlog(ML_ERROR,
