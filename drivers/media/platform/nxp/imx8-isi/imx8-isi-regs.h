@@ -421,4 +421,17 @@
 /* Channel Input Buffer Extended Address Bits */
 #define CHNL_IN_BUF_XTND_ADDR					0x00b8
 
+/*
+ * The ISI shifts the 10-bit and 12-bit RAW formats left by 6 and 4 bits when
+ * using CHNL_IMG_CTRL_FORMAT_RAW10 or CHNL_IMG_CTRL_FORMAT_RAW12 respectively,
+ * to align the bits to the left and pad with zeros in the LSBs. The
+ * corresponding V4L2 formats are however right-aligned, so
+ * CHNL_IMG_CTRL_FORMAT_RAW16 must be used to avoid the left shift.
+ */
+static inline bool isi_out_raw_shifted(u32 format)
+{
+	return format == CHNL_IMG_CTRL_FORMAT_RAW10 ||
+	       format == CHNL_IMG_CTRL_FORMAT_RAW12;
+}
+
 #endif /* __IMX8_ISI_REGS_H__ */
