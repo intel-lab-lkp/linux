@@ -112,9 +112,10 @@ TODOList:
 有幾份未分類的文檔似乎不適合放在文檔的其他部分，或者可能需要進行一些調整和/或
 轉換爲reStructureText格式，也有可能太舊。
 
-TODOList:
+.. toctree::
+   :maxdepth: 2
 
-* staging/index
+   staging/index
 
 術語表
 ------

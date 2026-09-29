@@ -113,11 +113,6 @@ TODOList:
 
 這裡是一些大多數開發者會感興趣的其他社群指南：
 
-.. toctree::
-   :maxdepth: 1
-
-   magic-number
-
 TODOList:
 
 * kernel-docs
