@@ -5433,9 +5433,11 @@ int xhci_gen_setup(struct usb_hcd *hcd, xhci_get_quirks_t get_quirks)
 	 * quirks
 	 */
 	struct device		*dev = hcd->self.sysdev;
+	void __iomem		*base;
 	int			retval;
 	u32			hcs_params1;
 	u32			hc_capbase;
+	u32			tunnel_cap;
 
 	/* Accept arbitrarily long scatter-gather lists */
 	hcd->self.sg_tablesize = ~0;
@@ -5456,6 +5458,7 @@ int xhci_gen_setup(struct usb_hcd *hcd, xhci_get_quirks_t get_quirks)
 	mutex_init(&xhci->mutex);
 	xhci->main_hcd = hcd;
 	xhci->cap_regs = hcd->regs;
+	base = &xhci->cap_regs->hc_capbase;
 	hc_capbase = readl(&xhci->cap_regs->hc_capbase);
 	if (hc_capbase == U32_MAX) {
 		xhci_warn(xhci, "Host controller not accessible, removed?\n");
@@ -5473,6 +5476,11 @@ int xhci_gen_setup(struct usb_hcd *hcd, xhci_get_quirks_t get_quirks)
 	xhci->hcc_params = readl(&xhci->cap_regs->hcc_params);
 	if (xhci->hci_version > 0x100)
 		xhci->hcc_params2 = readl(&xhci->cap_regs->hcc_params2);
+	tunnel_cap = xhci_find_next_ext_cap(base, 0, XHCI_EXT_CAPS_USB3_TUNNELING);
+	if (tunnel_cap) {
+		xhci->portsc_tunnel_reporting =
+			!!(readl(base + tunnel_cap) & XHCI_USB3_TUNNELING_SUPPORTED);
+	}
 
 	xhci->dma_mask_bits = 64;
 	xhci->max_slots = min(FIELD_GET(HCS_SLOTS_MASK, hcs_params1), MAX_HC_SLOTS);
