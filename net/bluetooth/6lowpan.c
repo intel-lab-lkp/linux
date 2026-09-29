@@ -695,20 +695,17 @@ static int setup_netdev(struct l2cap_chan *chan, struct lowpan_btle_dev **dev)
 	(*dev)->hdev = chan->conn->hcon->hdev;
 	INIT_LIST_HEAD(&(*dev)->peers);
 
+	err = lowpan_register_netdev(netdev, LOWPAN_LLTYPE_BTLE);
+	if (err < 0) {
+		BT_INFO("register_netdev failed %d", err);
+		free_netdev(netdev);
+		goto out;
+	}
+
 	spin_lock(&devices_lock);
 	INIT_LIST_HEAD(&(*dev)->list);
 	list_add_rcu(&(*dev)->list, &bt_6lowpan_devices);
 	spin_unlock(&devices_lock);
-
-	err = lowpan_register_netdev(netdev, LOWPAN_LLTYPE_BTLE);
-	if (err < 0) {
-		BT_INFO("register_netdev failed %d", err);
-		spin_lock(&devices_lock);
-		list_del_rcu(&(*dev)->list);
-		spin_unlock(&devices_lock);
-		free_netdev(netdev);
-		goto out;
-	}
 
 	BT_DBG("ifindex %d peer bdaddr %pMR type %d my addr %pMR type %d",
 	       netdev->ifindex, &chan->dst, chan->dst_type,
