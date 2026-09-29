@@ -47,7 +47,7 @@ bool page_is_unmovable(struct zone *zone, struct page *page,
 		unsigned long nr_pages, pfn;
 		unsigned int order;
 
-		order = compound_order(&folio->page);
+		order = compound_order(folio_page(folio, 0));
 		if (order > MAX_FOLIO_ORDER)
 			return true;
 
