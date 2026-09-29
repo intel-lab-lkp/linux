@@ -229,7 +229,16 @@ static u64 get_rc6(struct intel_gt *gt)
 	wakeref = intel_gt_pm_get_if_awake(gt);
 	if (wakeref) {
 		val = __get_rc6(gt);
-		intel_gt_pm_put_async(gt, wakeref);
+		/*
+		 * Perf framework may invoke this from the scheduler with the
+		 * runqueue lock held. If we are the last to drop the reference
+		 * here, then we cannot use intel_gt_pm_put_async since that can
+		 * result in waking up a task from this context which would try
+		 * to re-acquire the runqueue lock. To avoid such a deadlock,
+		 * defer the put on a timer so that waking the task can happen
+		 * from a timer context.
+		 */
+		intel_gt_pm_put_delay(gt, wakeref, 1);
 	}
 
 	spin_lock_irqsave(&pmu->lock, flags);
