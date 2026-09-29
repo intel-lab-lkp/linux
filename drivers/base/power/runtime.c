@@ -1788,7 +1788,8 @@ EXPORT_SYMBOL_GPL(pm_runtime_irq_safe);
  * @old_use: The former use_autosuspend value.
  *
  * Prevent runtime suspend if the new delay is negative and use_autosuspend is
- * set; otherwise allow it.  Send an idle notification if suspends are allowed.
+ * set; otherwise allow it.  Attempt to suspend the device if suspends are
+ * allowed.
  *
  * This function must be called under dev->power.lock with interrupts disabled.
  */
@@ -1816,7 +1817,7 @@ static void update_autosuspend(struct device *dev, int old_delay, int old_use)
 			atomic_dec(&dev->power.usage_count);
 
 		/* Maybe we can autosuspend now. */
-		rpm_idle(dev, RPM_AUTO);
+		rpm_suspend(dev, RPM_AUTO);
 	}
 }
 
