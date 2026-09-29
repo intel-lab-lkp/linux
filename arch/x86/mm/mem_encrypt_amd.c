@@ -459,9 +459,15 @@ out:
 	return ret;
 }
 
-int __init early_set_memory_decrypted(unsigned long vaddr, unsigned long size)
+static int __init amd_early_decrypt_page(unsigned long addr, unsigned long alias)
 {
-	return early_set_memory_enc_dec(vaddr, size, false);
+	unsigned int level;
+	pte_t *pte = lookup_address(addr, &level);
+
+	__set_clr_pte_enc(pte, PG_LEVEL_4K, false);
+	early_set_page_decrypted(addr, alias);
+	early_set_mem_enc_dec_hypercall(addr, PAGE_SIZE, false);
+	return 0;
 }
 
 int __init early_set_memory_encrypted(unsigned long vaddr, unsigned long size)
@@ -478,6 +484,8 @@ void __init sme_early_init(void)
 {
 	if (!sme_me_mask)
 		return;
+
+	x86_init.paging.early_decrypt_page = amd_early_decrypt_page;
 
 	early_pmd_flags = __sme_set(early_pmd_flags);
 
