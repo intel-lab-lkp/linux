@@ -98,3 +98,32 @@ void kvm_flush_hdbss_buffer(struct kvm_vcpu *vcpu)
 	vcpu->arch.hdbss.hdbssprod_el2 = prod;
 	isb();
 }
+
+int kvm_handle_hdbss_fault(struct kvm_vcpu *vcpu)
+{
+	u64 prod;
+	u64 fsc;
+
+	if (WARN_ON_ONCE(!system_supports_hdbss()))
+		return -EFAULT;
+
+	if (WARN_ON_ONCE(!vcpu_hdbss_enabled(vcpu)))
+		return -EFAULT;
+
+	prod = read_sysreg_s(SYS_HDBSSPROD_EL2);
+	fsc = FIELD_GET(HDBSSPROD_EL2_FSC_MASK, prod);
+
+	if (fsc == HDBSSPROD_EL2_FSC_OK)
+		/* Buffer full: the exit path drained it before handle_exit. */
+		return 1;
+
+	if (fsc != HDBSSPROD_EL2_FSC_ExternalAbort &&
+	    fsc != HDBSSPROD_EL2_FSC_GPF)
+		WARN_ONCE(1,
+			  "Unexpected HDBSS fault type, FSC: 0x%llx (prod=0x%llx, vcpu=%d)\n",
+			  fsc, prod, vcpu->vcpu_id);
+
+	/* Clear FSC so hardware dirty state updates can resume. */
+	write_sysreg_s(prod & ~HDBSSPROD_EL2_FSC_MASK, SYS_HDBSSPROD_EL2);
+	return -EFAULT;
+}

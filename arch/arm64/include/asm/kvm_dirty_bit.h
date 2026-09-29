@@ -39,5 +39,6 @@ static inline bool vcpu_hdbss_enabled(struct kvm_vcpu *vcpu)
 int kvm_arm_vcpu_alloc_hdbss(struct kvm_vcpu *vcpu);
 void kvm_arm_vcpu_free_hdbss(struct kvm_vcpu *vcpu);
 void kvm_flush_hdbss_buffer(struct kvm_vcpu *vcpu);
+int kvm_handle_hdbss_fault(struct kvm_vcpu *vcpu);
 
 #endif /* __ARM64_KVM_DIRTY_BIT_H__ */
