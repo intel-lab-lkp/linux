@@ -1274,7 +1274,7 @@ static struct folio *dequeue_hugetlb_folio_node_exact(struct hstate *h,
 		if (folio_test_hwpoison(folio))
 			continue;
 
-		if (is_migrate_isolate_page(&folio->page))
+		if (is_migrate_isolate_page(folio_page(folio, 0)))
 			continue;
 
 		list_move(&folio->lru, &h->hugepage_activelist);
@@ -1511,7 +1511,7 @@ static void __update_and_free_hugetlb_folio(struct hstate *h,
 	if (folio_test_hugetlb_cma(folio))
 		hugetlb_cma_free_frozen_folio(folio);
 	else
-		free_frozen_pages(&folio->page, folio_order(folio));
+		free_frozen_pages(folio_page(folio, 0), folio_order(folio));
 }
 
 /*
@@ -1701,7 +1701,7 @@ void free_huge_folio(struct folio *folio)
 
 	hugetlb_set_folio_subpool(folio, NULL);
 	if (folio_test_anon(folio))
-		__ClearPageAnonExclusive(&folio->page);
+		__ClearPageAnonExclusive(folio_page(folio, 0));
 	folio->mapping = NULL;
 	restore_reserve = folio_test_hugetlb_restore_reserve(folio);
 	folio_clear_hugetlb_restore_reserve(folio);
@@ -3238,7 +3238,7 @@ static void __init hugetlb_folio_init_tail_vmemmap(struct folio *folio,
 	 */
 	for (pfn = head_pfn + start_page_number; pfn < end_pfn; page++, pfn++) {
 		__init_single_page(page, pfn, zone, nid);
-		prep_compound_tail(page, &folio->page, order);
+		prep_compound_tail(page, folio_page(folio, 0), order);
 		set_page_count(page, 0);
 	}
 }
@@ -3259,7 +3259,7 @@ static void __init hugetlb_folio_init_vmemmap(struct folio *folio,
 	ret = folio_ref_freeze(folio, 1);
 	VM_BUG_ON(!ret);
 	hugetlb_folio_init_tail_vmemmap(folio, h, 1, nr_pages);
-	prep_compound_head(&folio->page, huge_page_order(h));
+	prep_compound_head(folio_page(folio, 0), huge_page_order(h));
 }
 
 /*
@@ -4004,7 +4004,8 @@ static long demote_free_hugetlb_folios(struct hstate *src, struct hstate *dst,
 
 		list_del(&folio->lru);
 
-		split_page_owner(&folio->page, huge_page_order(src), huge_page_order(dst));
+		split_page_owner(folio_page(folio, 0), huge_page_order(src),
+				 huge_page_order(dst));
 		pgalloc_tag_split(folio, huge_page_order(src), huge_page_order(dst));
 
 		for (i = 0; i < pages_per_huge_page(src); i += pages_per_huge_page(dst)) {
@@ -5605,9 +5606,9 @@ retry_avoidcopy:
 	 * be leaks between processes, for example, with FOLL_GET users.
 	 */
 	if (folio_mapcount(old_folio) == 1 && folio_test_anon(old_folio)) {
-		if (!PageAnonExclusive(&old_folio->page)) {
+		if (!PageAnonExclusive(folio_page(old_folio, 0))) {
 			folio_move_anon_rmap(old_folio, vma);
-			SetPageAnonExclusive(&old_folio->page);
+			SetPageAnonExclusive(folio_page(old_folio, 0));
 		}
 		if (likely(!unshare))
 			set_huge_ptep_maybe_writable(vma, vmf->address,
@@ -5616,8 +5617,8 @@ retry_avoidcopy:
 		delayacct_wpcopy_end();
 		return 0;
 	}
-	VM_BUG_ON_PAGE(folio_test_anon(old_folio) &&
-		       PageAnonExclusive(&old_folio->page), &old_folio->page);
+	VM_BUG_ON_FOLIO(folio_test_anon(old_folio) &&
+			PageAnonExclusive(folio_page(old_folio, 0)), old_folio);
 
 	/*
 	 * If the process that created a MAP_PRIVATE mapping is about to perform
