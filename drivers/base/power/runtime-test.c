@@ -354,6 +354,32 @@ static void pm_runtime_autosuspend_rearm_test(struct kunit *test)
 	dev_set_drvdata(dev, NULL);
 }
 
+static void pm_runtime_pending_teardown_test(struct kunit *test)
+{
+	struct device *dev = kunit_device_register(test, DEVICE_NAME);
+
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, dev);
+
+	pm_runtime_enable(dev);
+	pm_runtime_use_autosuspend(dev);
+
+	KUNIT_EXPECT_TRUE(test, pm_runtime_suspended(dev));
+
+	KUNIT_EXPECT_EQ(test, 0, pm_runtime_get_sync(dev));
+	KUNIT_EXPECT_TRUE(test, pm_runtime_active(dev));
+
+	/* Queue a RPM_REQ_AUTOSUSPEND (immediately, as autosuspend_delay is 0) */
+	KUNIT_EXPECT_EQ(test, 0, pm_runtime_put_autosuspend(dev));
+
+	/*
+	 * This is expected to quiesce a pending auto-suspend. See especially
+	 * devm_pm_runtime_enable() -> pm_runtime_disable_action().
+	 */
+	pm_runtime_dont_use_autosuspend(dev);
+
+	KUNIT_EXPECT_TRUE(test, pm_runtime_suspended(dev));
+}
+
 static struct kunit_case pm_runtime_test_cases[] = {
 	KUNIT_CASE(pm_runtime_depth_test),
 	KUNIT_CASE(pm_runtime_already_suspended_test),
@@ -363,6 +389,7 @@ static struct kunit_case pm_runtime_test_cases[] = {
 	KUNIT_CASE(pm_runtime_probe_active_test),
 	KUNIT_CASE(pm_runtime_supplier_suspend_test),
 	KUNIT_CASE(pm_runtime_autosuspend_rearm_test),
+	KUNIT_CASE(pm_runtime_pending_teardown_test),
 	{}
 };
 
