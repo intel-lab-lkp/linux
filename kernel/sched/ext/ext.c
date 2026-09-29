@@ -10969,6 +10969,27 @@ out:
 	cgroup_get(cgrp);
 	return cgrp;
 }
+
+/**
+ * scx_bpf_cgroup_nr_cpus - Return the number of CPUs in a cgroup's cpuset
+ * @cgrp: cgroup of interest
+ *
+ * Return the number of CPUs in @cgrp's effective cpuset, which is inherited
+ * from the nearest ancestor with the cpuset controller enabled. This matches
+ * the count used by fair's group share calculation and lets hierarchical BPF
+ * schedulers bound a group's weight by the CPUs it can actually run on.
+ *
+ * On cgroup v1 without the cpuset_v2_mode mount option, or when cpuset is not
+ * configured, the number of online CPUs is returned. The result may be 0 for a
+ * partition root which has no effective CPUs left.
+ *
+ * The value is a snapshot and may change at any time through cpuset updates or
+ * CPU hotplug. Schedulers should re-read it when recomputing group state.
+ */
+__bpf_kfunc u32 scx_bpf_cgroup_nr_cpus(struct cgroup *cgrp)
+{
+	return cpuset_num_cpus(cgrp);
+}
 #endif	/* CONFIG_CGROUP_SCHED */
 
 __bpf_kfunc_end_defs();
@@ -11016,6 +11037,7 @@ BTF_ID_FLAGS(func, scx_bpf_now)
 BTF_ID_FLAGS(func, scx_bpf_events, KF_IMPLICIT_ARGS)
 #ifdef CONFIG_CGROUP_SCHED
 BTF_ID_FLAGS(func, scx_bpf_task_cgroup, KF_IMPLICIT_ARGS | KF_RCU | KF_ACQUIRE)
+BTF_ID_FLAGS(func, scx_bpf_cgroup_nr_cpus, KF_RCU)
 #endif
 BTF_ID_FLAGS(func, scx_bpf_sub_grant, KF_IMPLICIT_ARGS)
 BTF_ID_FLAGS(func, scx_bpf_sub_revoke, KF_IMPLICIT_ARGS)
