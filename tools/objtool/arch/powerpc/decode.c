@@ -66,6 +66,17 @@ int arch_decode_instruction(struct objtool_file *file, const struct section *sec
 	imm = 0;
 
 	switch (opcode) {
+	case 16: /* bc[l][a] : Branch Conditional */
+		if (ins & 1)
+			typ = INSN_OTHER;
+		else
+			typ = INSN_JUMP_CONDITIONAL;
+		imm = ins & 0xfffc;
+		if (imm & 0x8000)
+			imm -= 0x10000;
+		imm |= ins & 2;	/* AA flag */
+		break;
+
 	case 18: /* b[l][a] */
 		if (ins == 0x48000005)	/* bl .+4 */
 			typ = INSN_OTHER;

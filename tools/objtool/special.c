@@ -167,3 +167,32 @@ int special_get_alts(struct elf *elf, struct list_head *alts)
 
 	return 0;
 }
+
+int __weak process_alt_data(struct objtool_file *file)
+{
+	return 0;
+}
+
+int __weak process_fixup_entries(struct objtool_file *file)
+{
+	return 0;
+}
+
+void __weak check_and_flatten_fixup_entries(void)
+{
+}
+
+int __weak process_exception_entries(struct objtool_file *file)
+{
+	return 0;
+}
+
+int __weak process_bug_entries(struct objtool_file *file)
+{
+	return 0;
+}
+
+int __weak process_alt_relocations(struct objtool_file *file)
+{
+	return 0;
+}

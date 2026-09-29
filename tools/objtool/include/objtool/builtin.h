@@ -13,6 +13,7 @@ struct opts {
 	const char *disas;
 	bool dump_orc;
 	bool hack_jump_label;
+	bool ftr_fixup;
 	bool hack_noinstr;
 	bool hack_skylake;
 	bool ibt;
