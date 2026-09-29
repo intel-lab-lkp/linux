@@ -4302,8 +4302,12 @@ int cpuset_num_cpus(struct cgroup *cgrp)
 	int nr = num_online_cpus();
 	struct cpuset *cs;
 
+	/*
+	 * is_in_v2_mode() dereferences cpuset's hierarchy root, which can be a
+	 * v1 root freed via kfree_rcu() on unmount.
+	 */
+	guard(rcu)();
 	if (is_in_v2_mode()) {
-		guard(rcu)();
 		cs = css_cs(cgroup_e_css(cgrp, &cpuset_cgrp_subsys));
 		if (cs)
 			nr = cpumask_weight(cs->effective_cpus);
