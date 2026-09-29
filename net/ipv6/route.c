@@ -158,13 +158,19 @@ void rt6_uncached_list_del(struct rt6_info *rt)
 	}
 }
 
-static void rt6_uncached_list_flush_dev(struct net_device *dev)
+void rt6_uncached_list_flush_dev(struct net_device *dev)
 {
 	int cpu;
+
+	if (dev && dev->dismantle)
+		return;
 
 	for_each_possible_cpu(cpu) {
 		struct uncached_list *ul = per_cpu_ptr(&rt6_uncached_list, cpu);
 		struct rt6_info *rt, *safe;
+
+		if (unlikely(!ul->head.next))
+			return;
 
 		if (list_empty(&ul->head))
 			continue;
@@ -175,19 +181,23 @@ static void rt6_uncached_list_flush_dev(struct net_device *dev)
 			struct net_device *rt_dev = rt->dst.dev;
 			bool handled = false;
 
-			if (rt_idev && rt_idev->dev == dev) {
+			if (rt_idev &&
+			    (dev ? rt_idev->dev == dev :
+			     READ_ONCE(rt_idev->dev->reg_state) == NETREG_UNREGISTERED)) {
 				rt->rt6i_idev = in6_dev_get(blackhole_netdev);
 				in6_dev_put(rt_idev);
 				handled = true;
 			}
 
-			if (rt_dev == dev) {
-				rt->dst.dev = blackhole_netdev;
+			if (dev ? rt_dev == dev :
+			    READ_ONCE(rt_dev->reg_state) == NETREG_UNREGISTERED) {
+				rcu_assign_pointer(rt->dst.dev_rcu, blackhole_netdev);
 				netdev_ref_replace(rt_dev, blackhole_netdev,
 						   &rt->dst.dev_tracker,
 						   GFP_ATOMIC);
 				handled = true;
 			}
+
 			if (handled)
 				list_del_init(&rt->dst.rt_uncached);
 		}
