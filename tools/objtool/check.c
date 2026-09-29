@@ -1693,8 +1693,11 @@ static int add_call_destinations(struct objtool_file *file)
 				continue;
 
 			if (!insn_call_dest(insn)) {
-				ERROR_INSN(insn, "unannotated intra-function call");
-				return -1;
+				if (!opts.ftr_fixup) {
+					ERROR_INSN(insn, "unannotated intra-function call");
+					return -1;
+				}
+				continue;
 			}
 
 			if (func && !is_func_sym(insn_call_dest(insn))) {
@@ -2661,8 +2664,10 @@ int decode_file(struct objtool_file *file)
 			return -1;
 	}
 
-	if (add_jump_destinations(file))
-		return -1;
+	if (!opts.ftr_fixup) {
+		if (add_jump_destinations(file))
+			return -1;
+	}
 
 	/*
 	 * Must be before add_call_destination(); it changes INSN_CALL to
