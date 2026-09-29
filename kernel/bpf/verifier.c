@@ -19257,6 +19257,15 @@ static int process_bpf_unwind(struct bpf_verifier_env *env, int *insn_idx,
 	int pad = bpf_exc_pad_of_call(env, *insn_idx);
 	int err;
 
+	/*
+	 * A table was held to this before the CFG walk; an unwind with no
+	 * table reaches the same gate here, since the walk it needs exists on
+	 * only some architectures.
+	 */
+	err = bpf_exc_check_prog(env);
+	if (err)
+		return err;
+
 	if (pad < 0) {
 		if (!env->cur_state->curframe) {
 			err = check_resource_leak(env, false, true,
@@ -22867,6 +22876,9 @@ skip_full_check:
 	if (ret == 0)
 		/* program is valid, convert *(u32*)(ctx + off) accesses */
 		ret = bpf_convert_ctx_accesses(env);
+
+	if (ret == 0)
+		ret = bpf_exc_keep_exits(env);
 
 	if (ret == 0)
 		ret = bpf_do_misc_fixups(env);
