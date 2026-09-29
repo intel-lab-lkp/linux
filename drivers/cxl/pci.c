@@ -976,6 +976,12 @@ static void cxl_reset_done(struct pci_dev *pdev)
 	struct cxl_dev_state *cxlds = pci_get_drvdata(pdev);
 	struct cxl_memdev *cxlmd = cxlds->cxlmd;
 	struct device *dev = &pdev->dev;
+	u32 command;
+
+	/* PCI state restoration may have been skipped after a failed reset. */
+	if (pci_read_config_dword(pdev, PCI_COMMAND, &command) ||
+	    PCI_POSSIBLE_ERROR(command) || !(command & PCI_COMMAND_MEMORY))
+		return;
 
 	/*
 	 * FLR does not expect to touch the HDM decoders and related
