@@ -881,6 +881,29 @@ static int set_proto_ctx_sseu(struct drm_i915_file_private *fpriv,
 	return 0;
 }
 
+/*
+ * Wa_22013059131:dg2 - Latch who owns LSC_CHICKEN_BIT_0 bit 15 for every
+ * context of @fpriv.  The register is shared by the RCS and CCS engines, so
+ * the first context to express a preference decides for the whole client
+ * and any later context asking for the opposite is rejected, rather than
+ * letting the two race over the register at context-switch time.
+ *
+ * The owner is also latched, to the kernel, by the first context of the
+ * client to initialise its LRC, so opting out is only possible while none
+ * of the client's contexts has been used yet.
+ */
+static int set_client_wa_22013059131(struct drm_i915_file_private *fpriv,
+				     u64 value)
+{
+	int want = value ? I915_WA_22013059131_USERSPACE :
+			   I915_WA_22013059131_KERNEL;
+
+	if (i915_drm_client_latch_wa_22013059131(fpriv->client, want) != want)
+		return -EINVAL;
+
+	return 0;
+}
+
 static int set_proto_ctx_param(struct drm_i915_file_private *fpriv,
 			       struct i915_gem_proto_context *pc,
 			       struct drm_i915_gem_context_param *args)
@@ -916,6 +939,15 @@ static int set_proto_ctx_param(struct drm_i915_file_private *fpriv,
 			pc->user_flags |= BIT(UCONTEXT_LOW_LATENCY);
 		else
 			ret = -EINVAL;
+		break;
+
+	case I915_CONTEXT_PARAM_WA_22013059131:
+		if (args->size)
+			ret = -EINVAL;
+		else if (!IS_DG2_G11(i915))
+			ret = -ENODEV;
+		else
+			ret = set_client_wa_22013059131(fpriv, args->value);
 		break;
 
 	case I915_CONTEXT_PARAM_RECOVERABLE:
@@ -2250,6 +2282,15 @@ static int ctx_setparam(struct drm_i915_file_private *fpriv,
 		ret = set_context_image(ctx, args);
 		break;
 
+	case I915_CONTEXT_PARAM_WA_22013059131:
+		if (args->size)
+			ret = -EINVAL;
+		else if (!IS_DG2_G11(ctx->i915))
+			ret = -ENODEV;
+		else
+			ret = set_client_wa_22013059131(fpriv, args->value);
+		break;
+
 	case I915_CONTEXT_PARAM_PROTECTED_CONTENT:
 	case I915_CONTEXT_PARAM_NO_ZEROMAP:
 	case I915_CONTEXT_PARAM_BAN_PERIOD:
@@ -2588,6 +2629,16 @@ int i915_gem_context_getparam_ioctl(struct drm_device *dev, void *data,
 
 	case I915_CONTEXT_PARAM_PROTECTED_CONTENT:
 		ret = get_protected(ctx, args);
+		break;
+
+	case I915_CONTEXT_PARAM_WA_22013059131:
+		if (!IS_DG2_G11(ctx->i915)) {
+			ret = -ENODEV;
+		} else {
+			args->size = 0;
+			args->value = atomic_read(&file_priv->client->wa_22013059131_owner) ==
+				      I915_WA_22013059131_USERSPACE;
+		}
 		break;
 
 	case I915_CONTEXT_PARAM_NO_ZEROMAP:
