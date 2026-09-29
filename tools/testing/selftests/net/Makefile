@@ -118,6 +118,7 @@ TEST_PROGS := \
 	test_vxlan_vnifilter_notify.sh \
 	test_vxlan_vnifiltering.sh \
 	tfo_passive.sh \
+	tipc_connect.py \
 	traceroute.sh \
 	txtimestamp.sh \
 	udpgro.sh \

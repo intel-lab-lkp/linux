@@ -27561,6 +27561,7 @@ S:	Maintained
 W:	http://tipc.sourceforge.net/
 F:	include/uapi/linux/tipc*.h
 F:	net/tipc/
+F:	tools/testing/selftests/net/tipc_connect.py
 
 TLAN NETWORK DRIVER
 M:	Samuel Chessman <chessman@tux.org>
