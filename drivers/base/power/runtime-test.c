@@ -285,6 +285,75 @@ static void pm_runtime_supplier_suspend_test(struct kunit *test)
 	KUNIT_EXPECT_TRUE(test, pm_runtime_suspended(norpm_supplier));
 }
 
+struct pm_runtime_test_data {
+	int pm_counter;
+};
+
+static int pm_runtime_rearm_test_suspend(struct device *dev)
+{
+	struct pm_runtime_test_data *data = dev_get_drvdata(dev);
+
+	/* Say we're busy the first time. */
+	if (data->pm_counter) {
+		data->pm_counter--;
+		pm_runtime_mark_last_busy(dev);
+
+		/*
+		 * We could also purposely slow this down, to potentially lose
+		 * more races:
+		 *   msleep(1000);
+		 */
+
+		return -EBUSY;
+	}
+
+	return 0;
+}
+
+static int pm_runtime_rearm_test_resume(struct device *dev)
+{
+	struct pm_runtime_test_data *data = dev_get_drvdata(dev);
+
+	data->pm_counter++;
+	return 0;
+}
+
+static const struct dev_pm_ops pm_runtime_rearm_test_ops = {
+	RUNTIME_PM_OPS(pm_runtime_rearm_test_suspend, pm_runtime_rearm_test_resume, NULL)
+};
+
+static void pm_runtime_autosuspend_rearm_test(struct kunit *test)
+{
+	struct device *dev = kunit_device_register(test, DEVICE_NAME);
+	struct pm_runtime_test_data data = {
+		.pm_counter = 1,
+	};
+
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, dev);
+
+	dev_set_drvdata(dev, &data);
+	dev->driver->pm = &pm_runtime_rearm_test_ops;
+
+	pm_runtime_set_active(dev);
+	pm_runtime_use_autosuspend(dev);
+	pm_runtime_enable(dev);
+
+	KUNIT_EXPECT_TRUE(test, pm_runtime_active(dev));
+
+	/*
+	 * .runtime_suspend() should return -EBUSY once, but retry due to
+	 * pm_runtime_mark_last_busy().
+	 */
+	KUNIT_EXPECT_EQ(test, 0, pm_runtime_autosuspend(dev));
+
+	KUNIT_EXPECT_TRUE(test, pm_runtime_suspended(dev));
+	KUNIT_EXPECT_EQ(test, 0, data.pm_counter);
+
+	/* Don't let on-stack drvdata escape this context. */
+	dev->driver->pm = NULL;
+	dev_set_drvdata(dev, NULL);
+}
+
 static struct kunit_case pm_runtime_test_cases[] = {
 	KUNIT_CASE(pm_runtime_depth_test),
 	KUNIT_CASE(pm_runtime_already_suspended_test),
@@ -293,6 +362,7 @@ static struct kunit_case pm_runtime_test_cases[] = {
 	KUNIT_CASE(pm_runtime_error_test),
 	KUNIT_CASE(pm_runtime_probe_active_test),
 	KUNIT_CASE(pm_runtime_supplier_suspend_test),
+	KUNIT_CASE(pm_runtime_autosuspend_rearm_test),
 	{}
 };
 
