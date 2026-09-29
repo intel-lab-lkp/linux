@@ -168,6 +168,14 @@ config PHY_XGENE
 	help
 	  This option enables support for APM X-Gene SoC multi-purpose PHY.
 
+config PHY_INNO_HDMI
+	tristate
+	depends on GENERIC_PHY
+	select REGMAP
+	help
+	  Common helpers for the Innosilicon HDMI PHY, shared by the SoC
+	  drivers that instantiate it. Selected by those drivers.
+
 source "drivers/phy/allwinner/Kconfig"
 source "drivers/phy/amlogic/Kconfig"
 source "drivers/phy/apple/Kconfig"
