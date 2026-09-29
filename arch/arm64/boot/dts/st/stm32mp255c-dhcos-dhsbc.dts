@@ -145,10 +145,34 @@
 	regulator-settling-time-down-us = <100000>;
 };
 
+&sdmmc1_b4_pins_a {
+	pins1 {
+		slew-rate = <1>;
+	};
+
+	pins2 {
+		slew-rate = <2>;
+	};
+};
+
+&sdmmc1_b4_od_pins_a {
+	pins1 {
+		slew-rate = <1>;
+	};
+
+	pins2 {
+		slew-rate = <2>;
+	};
+
+	pins3 {
+		slew-rate = <1>;
+	};
+};
+
 &sdmmc1 {
 	pinctrl-names = "default", "opendrain", "sleep";
-	pinctrl-0 = <&sdmmc1_b4_pins_b>;
-	pinctrl-1 = <&sdmmc1_b4_od_pins_b>;
+	pinctrl-0 = <&sdmmc1_b4_pins_a>;
+	pinctrl-1 = <&sdmmc1_b4_od_pins_a>;
 	pinctrl-2 = <&sdmmc1_b4_sleep_pins_a>;
 	cd-gpios = <&ioexp 8 GPIO_ACTIVE_HIGH>;
 	disable-wp;
