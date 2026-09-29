@@ -88,10 +88,9 @@ struct tipc_service {
 	struct rcu_head rcu;
 };
 
-#define service_range_upper(sr) ((sr)->upper)
-RB_DECLARE_CALLBACKS_MAX(static, sr_callbacks,
-			 struct service_range, tree_node, u32, max,
-			 service_range_upper)
+RB_DECLARE_CALLBACKS(static, sr_callbacks,
+		     struct service_range, tree_node,
+		     RB_AUG(upper, max, max));
 
 #define service_range_entry(rbtree_node)				\
 	(container_of(rbtree_node, struct service_range, tree_node))
