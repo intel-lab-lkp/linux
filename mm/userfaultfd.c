@@ -565,7 +565,7 @@ static int __mfill_atomic_pte(struct mfill_state *state,
 				goto err_folio_put;
 		}
 	} else if (uffd_flags_mode_is(flags, MFILL_ATOMIC_ZEROPAGE)) {
-		clear_user_highpage(&folio->page, state->dst_addr);
+		clear_user_highpage(folio_page(folio, 0), state->dst_addr);
 	} else {
 		VM_WARN_ONCE(1, "Unknown UFFDIO operation, flags: %x", flags);
 	}
@@ -584,7 +584,7 @@ static int __mfill_atomic_pte(struct mfill_state *state,
 	}
 
 	ret = mfill_atomic_install_pte(state->pmd, state->vma, dst_addr,
-				       &folio->page, flags);
+				       folio_page(folio, 0), flags);
 	if (ret)
 		goto err_filemap_remove;
 
@@ -1268,7 +1268,8 @@ static struct folio *check_ptes_for_batched_move(struct vm_area_struct *src_vma,
 	folio = vm_normal_folio(src_vma, src_addr, orig_src_pte);
 	if (!folio || !folio_trylock(folio))
 		return NULL;
-	if (!PageAnonExclusive(&folio->page) || folio_test_large(folio)) {
+	if (!PageAnonExclusive(folio_page(folio, 0)) ||
+	    folio_test_large(folio)) {
 		folio_unlock(folio);
 		return NULL;
 	}
@@ -1306,7 +1307,7 @@ static long move_present_ptes(struct mm_struct *mm,
 	}
 	if (folio_test_large(src_folio) ||
 	    folio_maybe_dma_pinned(src_folio) ||
-	    !PageAnonExclusive(&src_folio->page)) {
+	    !PageAnonExclusive(folio_page(src_folio, 0))) {
 		err = -EBUSY;
 		goto out;
 	}
@@ -1590,7 +1591,8 @@ retry:
 			}
 
 			folio = vm_normal_folio(src_vma, src_addr, orig_src_pte);
-			if (!folio || !PageAnonExclusive(&folio->page)) {
+			if (!folio ||
+			    !PageAnonExclusive(folio_page(folio, 0))) {
 				spin_unlock(src_ptl);
 				ret = -EBUSY;
 				goto out;
@@ -2072,7 +2074,7 @@ static ssize_t move_pages(struct userfaultfd_ctx *ctx, unsigned long dst_start,
 					struct folio *folio = pmd_folio(*src_pmd);
 
 					if (!is_huge_zero_folio(folio) &&
-					    !PageAnonExclusive(&folio->page)) {
+					    !PageAnonExclusive(folio_page(folio, 0))) {
 						spin_unlock(ptl);
 						err = -EBUSY;
 						break;
