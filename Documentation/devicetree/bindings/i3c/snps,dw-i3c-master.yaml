@@ -17,7 +17,9 @@ properties:
     oneOf:
       - const: snps,dw-i3c-master-1.00a
       - items:
-          - const: altr,agilex5-dw-i3c-master
+          - enum:
+              - altr,agilex5-dw-i3c-master
+              - syna,sl261x-i3c
           - const: snps,dw-i3c-master-1.00a
 
   reg:
