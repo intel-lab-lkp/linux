@@ -909,16 +909,6 @@ static int vfat_sync_ipos(struct inode *dir, struct inode *inode)
 	return 0;
 }
 
-static int vfat_update_dotdot_de(struct inode *dir, struct inode *inode,
-				 struct buffer_head *dotdot_bh,
-				 struct msdos_dir_entry *dotdot_de)
-{
-	fat_set_start(dotdot_de, MSDOS_I(dir)->i_logstart);
-	mmb_mark_buffer_dirty(dotdot_bh, &MSDOS_I(inode)->i_metadata_bhs);
-	if (IS_DIRSYNC(dir))
-		return sync_dirty_buffer(dotdot_bh);
-	return 0;
-}
 
 static void vfat_update_dir_metadata(struct inode *dir, struct timespec64 *ts)
 {
@@ -981,8 +971,8 @@ static int vfat_rename(struct inode *old_dir, struct dentry *old_dentry,
 		goto error_inode;
 
 	if (dotdot_de) {
-		err = vfat_update_dotdot_de(new_dir, old_inode, dotdot_bh,
-					    dotdot_de);
+		err = fat_update_dotdot_de(new_dir, old_inode, dotdot_bh,
+					   dotdot_de);
 		if (err)
 			goto error_dotdot;
 		drop_nlink(old_dir);
@@ -1014,8 +1004,8 @@ error_dotdot:
 	corrupt = 1;
 
 	if (dotdot_de) {
-		corrupt |= vfat_update_dotdot_de(old_dir, old_inode, dotdot_bh,
-						 dotdot_de);
+		corrupt |= fat_update_dotdot_de(old_dir, old_inode, dotdot_bh,
+						dotdot_de);
 	}
 error_inode:
 	fat_detach(old_inode);
@@ -1103,14 +1093,14 @@ static int vfat_rename_exchange(struct inode *old_dir, struct dentry *old_dentry
 
 	/* update ".." directory entry info */
 	if (old_dotdot_de) {
-		err = vfat_update_dotdot_de(new_dir, old_inode, old_dotdot_bh,
-					    old_dotdot_de);
+		err = fat_update_dotdot_de(new_dir, old_inode, old_dotdot_bh,
+					   old_dotdot_de);
 		if (err)
 			goto error_old_dotdot;
 	}
 	if (new_dotdot_de) {
-		err = vfat_update_dotdot_de(old_dir, new_inode, new_dotdot_bh,
-					    new_dotdot_de);
+		err = fat_update_dotdot_de(old_dir, new_inode, new_dotdot_bh,
+					   new_dotdot_de);
 		if (err)
 			goto error_new_dotdot;
 	}
@@ -1137,14 +1127,14 @@ out:
 
 error_new_dotdot:
 	if (new_dotdot_de) {
-		corrupt |= vfat_update_dotdot_de(new_dir, new_inode,
-						 new_dotdot_bh, new_dotdot_de);
+		corrupt |= fat_update_dotdot_de(new_dir, new_inode,
+						new_dotdot_bh, new_dotdot_de);
 	}
 
 error_old_dotdot:
 	if (old_dotdot_de) {
-		corrupt |= vfat_update_dotdot_de(old_dir, old_inode,
-						 old_dotdot_bh, old_dotdot_de);
+		corrupt |= fat_update_dotdot_de(old_dir, old_inode,
+						old_dotdot_bh, old_dotdot_de);
 	}
 
 error_exchange:

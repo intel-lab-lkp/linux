@@ -941,6 +941,40 @@ int fat_get_dotdot_entry(struct inode *dir, struct buffer_head **bh,
 }
 EXPORT_SYMBOL_GPL(fat_get_dotdot_entry);
 
+static int __fat_update_dotdot_de(struct inode *dir, struct inode *inode,
+				  struct buffer_head *dotdot_bh,
+				  struct msdos_dir_entry *dotdot_de,
+				  bool force_sync)
+{
+	lock_buffer(dotdot_bh);
+	if (!buffer_uptodate(dotdot_bh)) {
+		unlock_buffer(dotdot_bh);
+		return -EIO;
+	}
+	fat_set_start(dotdot_de, MSDOS_I(dir)->i_logstart);
+	mmb_mark_buffer_dirty(dotdot_bh, &MSDOS_I(inode)->i_metadata_bhs);
+	unlock_buffer(dotdot_bh);
+	if (force_sync || IS_DIRSYNC(dir))
+		return sync_dirty_buffer(dotdot_bh);
+	return 0;
+}
+
+int fat_update_dotdot_de(struct inode *dir, struct inode *inode,
+			 struct buffer_head *dotdot_bh,
+			 struct msdos_dir_entry *dotdot_de)
+{
+	return __fat_update_dotdot_de(dir, inode, dotdot_bh, dotdot_de, false);
+}
+EXPORT_SYMBOL_GPL(fat_update_dotdot_de);
+
+int fat_sync_update_dotdot_de(struct inode *dir, struct inode *inode,
+			      struct buffer_head *dotdot_bh,
+			      struct msdos_dir_entry *dotdot_de)
+{
+	return __fat_update_dotdot_de(dir, inode, dotdot_bh, dotdot_de, true);
+}
+EXPORT_SYMBOL_GPL(fat_sync_update_dotdot_de);
+
 /* See if directory is empty */
 int fat_dir_empty(struct inode *dir)
 {

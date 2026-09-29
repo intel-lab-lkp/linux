@@ -339,6 +339,12 @@ extern int fat_scan_logstart(struct inode *dir, int i_logstart,
 			     struct fat_slot_info *sinfo);
 extern int fat_get_dotdot_entry(struct inode *dir, struct buffer_head **bh,
 				struct msdos_dir_entry **de);
+extern int fat_update_dotdot_de(struct inode *dir, struct inode *inode,
+				struct buffer_head *dotdot_bh,
+				struct msdos_dir_entry *dotdot_de);
+extern int fat_sync_update_dotdot_de(struct inode *dir, struct inode *inode,
+				     struct buffer_head *dotdot_bh,
+				     struct msdos_dir_entry *dotdot_de);
 extern int fat_alloc_new_dir(struct inode *dir, struct timespec64 *ts);
 extern int fat_add_entries(struct inode *dir, void *slots, int nr_slots,
 			   struct fat_slot_info *sinfo);
