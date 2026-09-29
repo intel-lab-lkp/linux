@@ -13,6 +13,7 @@
 #include <linux/kconfig.h>
 #include <linux/log2.h>
 #include <linux/mm.h>
+#include <linux/srcu.h>
 
 int kvm_arm_vcpu_alloc_hdbss(struct kvm_vcpu *vcpu)
 {
@@ -52,4 +53,48 @@ void kvm_arm_vcpu_free_hdbss(struct kvm_vcpu *vcpu)
 
 	vcpu->arch.hdbss.hdbss_pg = NULL;
 	vcpu->arch.hdbss.hdbssbr_el2 = 0;
+}
+
+void kvm_flush_hdbss_buffer(struct kvm_vcpu *vcpu)
+{
+	int idx, curr_idx;
+	u64 prod;
+	u32 entries;
+	u64 *hdbss_buf;
+	struct kvm *kvm = vcpu->kvm;
+	int srcu_idx;
+
+	if (!vcpu_hdbss_enabled(vcpu))
+		return;
+
+	prod = read_sysreg_s(SYS_HDBSSPROD_EL2);
+	curr_idx = HDBSSPROD_IDX(prod);
+
+	if (curr_idx == 0 || !vcpu->arch.hdbss.hdbss_pg)
+		return;
+
+	hdbss_buf = page_address(vcpu->arch.hdbss.hdbss_pg);
+	if (!hdbss_buf)
+		return;
+
+	entries = kvm_hdbss_buffer_size(kvm) / sizeof(u64);
+
+	/* kvm_vcpu_mark_page_dirty() resolves the memslot under SRCU. */
+	srcu_idx = srcu_read_lock(&kvm->srcu);
+	for (idx = 0; idx < min_t(u32, curr_idx, entries); idx++) {
+		u64 gpa;
+
+		gpa = hdbss_buf[idx];
+		if (!(gpa & HDBSS_ENTRY_VALID))
+			continue;
+
+		gpa &= HDBSS_ENTRY_IPA;
+		kvm_vcpu_mark_page_dirty(vcpu, gpa >> PAGE_SHIFT);
+	}
+	srcu_read_unlock(&kvm->srcu, srcu_idx);
+
+	prod &= ~HDBSSPROD_EL2_INDEX_MASK;
+	write_sysreg_s(prod, SYS_HDBSSPROD_EL2);
+	vcpu->arch.hdbss.hdbssprod_el2 = prod;
+	isb();
 }

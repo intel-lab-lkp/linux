@@ -1430,6 +1430,14 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu)
 
 		trace_kvm_exit(ret, kvm_vcpu_trap_get_class(vcpu), *vcpu_pc(vcpu));
 
+		/*
+		 * Drain the HDBSS buffer before the exit is handled, so
+		 * entries pushed to the dirty ring are accounted for by
+		 * dirty_ring_check_request() on the next iteration.
+		 */
+		if (vcpu_hdbss_enabled(vcpu))
+			kvm_flush_hdbss_buffer(vcpu);
+
 		/* Exit types that need handling before we can be preempted */
 		handle_exit_early(vcpu, ret);
 
@@ -2017,7 +2025,19 @@ long kvm_arch_vcpu_unlocked_ioctl(struct file *filp, unsigned int ioctl,
 
 void kvm_arch_sync_dirty_log(struct kvm *kvm, struct kvm_memory_slot *memslot)
 {
+	unsigned long i;
+	struct kvm_vcpu *vcpu;
 
+	if (!kvm_hdbss_enabled(kvm))
+		return;
+
+	/*
+	 * The buffer is drained on every VM exit, so kicking running
+	 * vCPUs is enough to flush them; the dirty-log GET/CLEAR
+	 * protocol tolerates bits set concurrently with the snapshot.
+	 */
+	kvm_for_each_vcpu(i, vcpu, kvm)
+		kvm_vcpu_kick(vcpu);
 }
 
 static int kvm_vm_ioctl_set_device_addr(struct kvm *kvm,
