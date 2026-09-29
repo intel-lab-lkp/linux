@@ -1540,7 +1540,7 @@ int ieee80211_mesh_finish_csa(struct ieee80211_sub_if_data *sdata, u64 *changed)
 
 	*changed |= BSS_CHANGED_BEACON;
 
-	mcsa_dbg(sdata, "complete switching to center freq %d MHz",
+	mcsa_dbg(sdata, "complete switching to center freq %d MHz\n",
 		 sdata->vif.bss_conf.chanreq.oper.chan->center_freq);
 	return 0;
 }
@@ -1643,14 +1643,14 @@ static void mesh_rx_csa_frame(struct ieee80211_sub_if_data *sdata,
 
 	if (!sdata->vif.bss_conf.csa_active &&
 	    !ieee80211_mesh_process_chnswitch(sdata, elems, false)) {
-		mcsa_dbg(sdata, "Failed to process CSA action frame");
+		mcsa_dbg(sdata, "Failed to process CSA action frame\n");
 		goto free;
 	}
 
 	/* forward or re-broadcast the CSA frame */
 	if (fwd_csa) {
 		if (mesh_fwd_csa_frame(sdata, mgmt, len, elems) < 0)
-			mcsa_dbg(sdata, "Failed to forward the CSA frame");
+			mcsa_dbg(sdata, "Failed to forward the CSA frame\n");
 	}
 free:
 	kfree(elems);
