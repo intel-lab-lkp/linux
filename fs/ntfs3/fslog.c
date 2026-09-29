@@ -3615,7 +3615,7 @@ move_data:
 
 		used = le32_to_cpu(hdr->used);
 
-		if (!check_index_buffer(ib, bytes) ||
+		if (!check_index_buffer(ib, bytes - roff) ||
 		    !check_if_alloc_index(hdr, aoff) ||
 		    Add2Ptr(e, esize) > Add2Ptr(lrh, rec_len) ||
 		    used + esize > le32_to_cpu(hdr->total)) {
@@ -3630,7 +3630,7 @@ move_data:
 
 		a_dirty = true;
 
-		ntfs_fix_pre_write(&ib->rhdr, bytes);
+		ntfs_fix_pre_write(&ib->rhdr, bytes - roff);
 		break;
 
 	case DeleteIndexEntryAllocation:
@@ -3644,7 +3644,7 @@ move_data:
 		if (!check_lsn(&ib->rhdr, rlsn))
 			goto out;
 
-		if (!check_index_buffer(ib, bytes) ||
+		if (!check_index_buffer(ib, bytes - roff) ||
 		    !check_if_alloc_index(hdr, aoff)) {
 			goto dirty_vol;
 		}
@@ -3673,7 +3673,7 @@ move_data:
 
 		a_dirty = true;
 
-		ntfs_fix_pre_write(&ib->rhdr, bytes);
+		ntfs_fix_pre_write(&ib->rhdr, bytes - roff);
 		break;
 
 	case WriteEndOfIndexBuffer:
@@ -3685,7 +3685,7 @@ move_data:
 			goto dirty_vol;
 		if (!check_lsn(&ib->rhdr, rlsn))
 			goto out;
-		if (!check_index_buffer(ib, bytes) ||
+		if (!check_index_buffer(ib, bytes - roff) ||
 		    !check_if_alloc_index(hdr, aoff) ||
 		    aoff + dlen > offsetof(struct INDEX_BUFFER, ihdr) +
 					  le32_to_cpu(hdr->total)) {
@@ -3696,7 +3696,7 @@ move_data:
 		memmove(e, data, dlen);
 
 		a_dirty = true;
-		ntfs_fix_pre_write(&ib->rhdr, bytes);
+		ntfs_fix_pre_write(&ib->rhdr, bytes - roff);
 		break;
 
 	case SetIndexEntryVcnAllocation:
@@ -3709,7 +3709,7 @@ move_data:
 
 		if (!check_lsn(&ib->rhdr, rlsn))
 			goto out;
-		if (!check_index_buffer(ib, bytes) ||
+		if (!check_index_buffer(ib, bytes - roff) ||
 		    !check_if_alloc_index(hdr, aoff)) {
 			goto dirty_vol;
 		}
@@ -3717,7 +3717,7 @@ move_data:
 		de_set_vbn_le(e, *(__le64 *)data);
 
 		a_dirty = true;
-		ntfs_fix_pre_write(&ib->rhdr, bytes);
+		ntfs_fix_pre_write(&ib->rhdr, bytes - roff);
 		break;
 
 	case UpdateFileNameAllocation:
@@ -3730,7 +3730,7 @@ move_data:
 
 		if (!check_lsn(&ib->rhdr, rlsn))
 			goto out;
-		if (!check_index_buffer(ib, bytes) ||
+		if (!check_index_buffer(ib, bytes - roff) ||
 		    !check_if_alloc_index(hdr, aoff)) {
 			goto dirty_vol;
 		}
@@ -3739,7 +3739,7 @@ move_data:
 		memmove(&fname->dup, data, sizeof(fname->dup));
 
 		a_dirty = true;
-		ntfs_fix_pre_write(&ib->rhdr, bytes);
+		ntfs_fix_pre_write(&ib->rhdr, bytes - roff);
 		break;
 
 	case SetBitsInNonresidentBitMap:
@@ -3778,7 +3778,7 @@ move_data:
 
 		if (!check_lsn(&ib->rhdr, rlsn))
 			goto out;
-		if (!check_index_buffer(ib, bytes) ||
+		if (!check_index_buffer(ib, bytes - roff) ||
 		    !check_if_alloc_index(hdr, aoff)) {
 			goto dirty_vol;
 		}
@@ -3791,7 +3791,7 @@ move_data:
 		memmove(Add2Ptr(e, le16_to_cpu(e->view.data_off)), data, dlen);
 
 		a_dirty = true;
-		ntfs_fix_pre_write(&ib->rhdr, bytes);
+		ntfs_fix_pre_write(&ib->rhdr, bytes - roff);
 		break;
 
 	default:
