@@ -27,6 +27,7 @@
 #define ICE_CGU_R11_SYNCE_S_BYP_CLK	GENMASK(6, 1)
 
 #define ICE_CGU_BYPASS_MUX_OFFSET_E825C	3
+#define ICE_DPLL_IN_ESYNC_ENABLED	ICE_AQC_GET_CGU_IN_CFG_FLG2_ESYNC_EN
 
 /**
  * enum ice_dpll_pin_sw - enumerate ice software pin indices:
@@ -151,9 +152,14 @@ struct ice_dpll {
  * @output_phase_adj_max: max phase adjust value for an output pins
  * @periodic_counter: counter of periodic work executions
  * @generic: true when generic DPLL ops are used
+ * @unmanaged: true when dpll lock state is derived only from firmware
+ *             health-status events, with no ref-priority/state AQ
+ *             configuration support (E830 unmanaged CGU mode)
  * @txclk_work: deferred TX reference clock switch worker
  * @txclk_switch_requested: a TX ref clock switch is queued in @txclk_work
  * @txclk_notify_rwsem: drains in-flight TXCLK notifications on teardown
+ * @health_notify_rwsem: drains in-flight unmanaged dpll health-status
+ *                       notifications on teardown
  *
  * Locking:
  *   Acquisition order (top to bottom):
@@ -163,6 +169,9 @@ struct ice_dpll {
  *         -> pf->dplls.lock
  *           -> ctrl_pf->dplls.lock
  *           -> adapter->cgu_synce_lock
+ *
+ *     health_notify_rwsem (read)
+ *       -> pf->dplls.lock
  *
  *   PTP hardware semaphore path:
  *
@@ -185,6 +194,12 @@ struct ice_dpll {
  *     dpll_*_change_ntf() calls. ice_dpll_deinit() takes the write side
  *     standalone (not nested under any other lock) to drain in-flight
  *     readers before pins and the TXC DPLL device are freed.
+ *   - @health_notify_rwsem is held for read across
+ *     ice_dpll_lock_state_set_unmanaged(), including the out-of-lock
+ *     dpll_device_change_ntf() call. ice_dpll_deinit() clears
+ *     ICE_FLAG_DPLL first, then takes the write side standalone (not
+ *     nested under any other lock) to drain in-flight readers before
+ *     pins and the pps DPLL device are freed.
  *   - adapter->cgu_synce_lock serializes changes of the CGU registers R10 and
  *     R11. All E825C PFs reach one CGU, so @lock, which is per PF, does not
  *     cover them.
@@ -216,17 +231,26 @@ struct ice_dplls {
 	s32 output_phase_adj_max;
 	u32 periodic_counter;
 	bool generic;
+	bool unmanaged;
 	struct work_struct txclk_work;
 	bool txclk_switch_requested;
 	struct rw_semaphore txclk_notify_rwsem;
+	struct rw_semaphore health_notify_rwsem;
 };
 
 #if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
+bool ice_dpll_is_unmanaged(struct ice_pf *pf);
 void ice_dpll_init(struct ice_pf *pf);
 void ice_dpll_deinit(struct ice_pf *pf);
+void ice_dpll_lock_state_set_unmanaged(struct ice_pf *pf,
+				       const struct ice_aqc_health_status_elem *buff);
 #else
+static inline bool ice_dpll_is_unmanaged(struct ice_pf *pf) { return false; }
 static inline void ice_dpll_init(struct ice_pf *pf) { }
 static inline void ice_dpll_deinit(struct ice_pf *pf) { }
+static inline void
+ice_dpll_lock_state_set_unmanaged(struct ice_pf *pf,
+				  const struct ice_aqc_health_status_elem *buff) { }
 #endif
 
 #endif
