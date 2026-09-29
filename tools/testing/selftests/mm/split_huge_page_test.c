@@ -26,7 +26,6 @@ uint64_t pagesize;
 unsigned int pageshift;
 uint64_t pmd_pagesize;
 unsigned int pmd_order;
-int *expected_orders;
 
 #define SPLIT_DEBUGFS "/sys/kernel/debug/split_huge_pages"
 #define SMAP_PATH "/proc/self/smaps"
@@ -36,38 +35,40 @@ int *expected_orders;
 #define PID_FMT_OFFSET "%d,0x%lx,0x%lx,%d,%d"
 #define PATH_FMT "%s,0x%lx,0x%lx,%d"
 
-const char *pagemap_proc = "/proc/self/pagemap";
-const char *kpageflags_proc = "/proc/kpageflags";
-int pagemap_fd;
-int kpageflags_fd;
-
-static int check_after_split_folio_orders(char *vaddr_start, size_t len,
-		int pagemap_fd, int kpageflags_fd, int orders[], int nr_orders)
+/*
+ * A non-uniform split halves the folio, then halves the half holding
+ * @offset, down to @order.  Every half left behind is one folio, and the
+ * last two halves are both of @order.  Check that each PMD-sized part of
+ * the range came out that way.
+ */
+static bool check_split_at_offset(char *addr, size_t len, int order, int offset)
 {
-	int *vaddr_orders;
-	int status;
-	int i;
+	char *part;
 
-	vaddr_orders = (int *)malloc(sizeof(int) * nr_orders);
+	for (part = addr; part < addr + len; part += pmd_pagesize) {
+		size_t off = (size_t)offset * pagesize;
+		char *lo = part;
+		int cur;
 
-	if (!vaddr_orders)
-		ksft_exit_fail_msg("Cannot allocate memory for vaddr_orders");
+		for (cur = pmd_order - 1; cur >= order; cur--) {
+			size_t half = pagesize << cur;
+			char *left;
 
-	memset(vaddr_orders, 0, sizeof(int) * nr_orders);
-	status = gather_folio_orders(vaddr_start, len, pagemap_fd,
-				     kpageflags_fd, vaddr_orders, nr_orders);
-	if (status)
-		ksft_exit_fail_msg("gather folio info failed\n");
-
-	for (i = 0; i < nr_orders; i++)
-		if (vaddr_orders[i] != orders[i]) {
-			ksft_print_msg("order %d: expected: %d got %d\n", i,
-				       orders[i], vaddr_orders[i]);
-			status = -1;
+			if (off < half) {
+				left = lo + half;
+			} else {
+				left = lo;
+				lo += half;
+				off -= half;
+			}
+			if (!check_huge_file(left, half, 1, half))
+				return false;
 		}
+		if (!check_huge_file(lo, pagesize << order, 1, pagesize << order))
+			return false;
+	}
 
-	free(vaddr_orders);
-	return status;
+	return true;
 }
 
 static void write_debugfs(const char *fmt, ...)
@@ -191,12 +192,8 @@ static void split_pmd_thp_to_order(int order)
 		if (one_page[i] != (char)i)
 			ksft_exit_fail_msg("%ld byte corrupted\n", i);
 
-	memset(expected_orders, 0, sizeof(int) * (pmd_order + 1));
-	expected_orders[order] = 4 << (pmd_order - order);
-
-	if (check_after_split_folio_orders(one_page, len, pagemap_fd,
-					   kpageflags_fd, expected_orders,
-					   (pmd_order + 1)))
+	if (!check_huge_anon(one_page, len, len / (pagesize << order),
+			     pagesize << order))
 		ksft_exit_fail_msg("Unexpected THP split\n");
 
 	if (!check_huge_anon(one_page, 4 * pmd_pagesize, 0, pmd_pagesize))
@@ -264,8 +261,7 @@ static void split_pte_mapped_thp(void)
 	 * check_huge_anon() cannot be used as it checks for PMD mappings.
 	 */
 	for (i = 0; i < nr_thps; i++) {
-		if (is_backed_by_folio(page_area + i * pagesize, pmd_order,
-				       pagemap_fd, kpageflags_fd))
+		if (is_backed_by_folio(page_area + i * pagesize, pmd_order))
 			continue;
 		ksft_test_result_fail("THP %zu missing after mremap\n", i);
 		goto out;
@@ -285,8 +281,7 @@ static void split_pte_mapped_thp(void)
 
 	/* Split failed? */
 	for (i = 0; i < nr_thps; i++) {
-		if (is_backed_by_folio(page_area + i * pagesize, 0,
-				       pagemap_fd, kpageflags_fd))
+		if (is_backed_by_folio(page_area + i * pagesize, 0))
 			continue;
 		ksft_test_result_fail("THP %zu not split\n", i);
 	}
@@ -518,6 +513,7 @@ static void split_thp_in_pagecache_to_order_at(size_t fd_size,
 	size_t i;
 	char testfile[INPUT_MAX];
 	int err = 0;
+	bool ok;
 
 	err = snprintf(testfile, INPUT_MAX, "%s/test", fs_loc);
 
@@ -530,7 +526,6 @@ static void split_thp_in_pagecache_to_order_at(size_t fd_size,
 
 	err = 0;
 
-	memset(expected_orders, 0, sizeof(int) * (pmd_order + 1));
 	/*
 	 * use [split_addr, split_addr + pagesize) range to split THPs, since
 	 * the debugfs function always split a range with pagesize step and
@@ -541,18 +536,10 @@ static void split_thp_in_pagecache_to_order_at(size_t fd_size,
 		for (split_addr = addr; split_addr < addr + fd_size; split_addr += pmd_pagesize)
 			write_debugfs(PID_FMT, getpid(), (uint64_t)split_addr,
 				      (uint64_t)split_addr + pagesize, order);
-
-		expected_orders[order] = fd_size / (pagesize << order);
 	} else {
-		int times = fd_size / pmd_pagesize;
-
 		for (split_addr = addr; split_addr < addr + fd_size; split_addr += pmd_pagesize)
 			write_debugfs(PID_FMT_OFFSET, getpid(), (uint64_t)split_addr,
 				      (uint64_t)split_addr + pagesize, order, offset);
-
-		for (i = order + 1; i < pmd_order; i++)
-			expected_orders[i] = times;
-		expected_orders[order] = 2 * times;
 	}
 
 	for (i = 0; i < fd_size; i++)
@@ -562,9 +549,12 @@ static void split_thp_in_pagecache_to_order_at(size_t fd_size,
 			goto out;
 		}
 
-	if (check_after_split_folio_orders(addr, fd_size, pagemap_fd,
-					   kpageflags_fd, expected_orders,
-					   (pmd_order + 1))) {
+	if (offset == -1)
+		ok = check_huge_file(addr, fd_size, fd_size / (pagesize << order),
+				     pagesize << order);
+	else
+		ok = check_split_at_offset(addr, fd_size, order, offset);
+	if (!ok) {
 		ksft_print_msg("Unexpected THP split\n");
 		err = 1;
 		goto out;
@@ -625,20 +615,8 @@ int main(int argc, char **argv)
 	nr_pages = pmd_pagesize / pagesize;
 	pmd_order = sz2ord(pmd_pagesize, pagesize);
 
-	expected_orders = (int *)malloc(sizeof(int) * (pmd_order + 1));
-	if (!expected_orders)
-		ksft_exit_fail_msg("Fail to allocate memory: %s\n", strerror(errno));
-
 	tests = 2 + (pmd_order - 1) + (2 * pmd_order) + (pmd_order - 1) * 4 + 2;
 	ksft_set_plan(tests);
-
-	pagemap_fd = open(pagemap_proc, O_RDONLY);
-	if (pagemap_fd == -1)
-		ksft_exit_fail_msg("read pagemap: %s\n", strerror(errno));
-
-	kpageflags_fd = open(kpageflags_proc, O_RDONLY);
-	if (kpageflags_fd == -1)
-		ksft_exit_fail_msg("read kpageflags: %s\n", strerror(errno));
 
 	fd_size = 2 * pmd_pagesize;
 
@@ -663,10 +641,6 @@ int main(int argc, char **argv)
 		     offset += MAX(nr_pages / 4, 1 << i))
 			split_thp_in_pagecache_to_order_at(fd_size, fs_loc, i, offset);
 	cleanup_thp_fs(fs_loc, created_tmp);
-
-	close(pagemap_fd);
-	close(kpageflags_fd);
-	free(expected_orders);
 
 	ksft_finished();
 }
