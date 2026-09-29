@@ -649,6 +649,7 @@ static int ublk_report_zones(struct gendisk *disk, sector_t sector,
 		unsigned int remaining_zones = nr_zones - done_zones;
 		unsigned int zones_in_request =
 			min_t(unsigned int, remaining_zones, max_zones_per_request);
+		unsigned int batch_start = done_zones;
 		struct request *req;
 		struct ublk_zoned_report_desc desc;
 		blk_status_t status;
@@ -687,7 +688,7 @@ free_req:
 			if (!zone->len)
 				break;
 
-			ret = disk_report_zone(disk, zone, i, args);
+			ret = disk_report_zone(disk, zone, batch_start + i, args);
 			if (ret)
 				goto out;
 
