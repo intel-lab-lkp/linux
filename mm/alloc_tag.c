@@ -534,7 +534,7 @@ void pgalloc_tag_split(struct folio *folio, int old_order, int new_order)
 	if (!mem_alloc_profiling_enabled())
 		return;
 
-	tag = __pgalloc_tag_get(&folio->page);
+	tag = __pgalloc_tag_get(folio_page(folio, 0));
 	if (!tag)
 		return;
 
@@ -560,16 +560,16 @@ void pgalloc_tag_swap(struct folio *new, struct folio *old)
 	if (!mem_alloc_profiling_enabled())
 		return;
 
-	tag_old = __pgalloc_tag_get(&old->page);
+	tag_old = __pgalloc_tag_get(folio_page(old, 0));
 	if (!tag_old)
 		return;
-	tag_new = __pgalloc_tag_get(&new->page);
+	tag_new = __pgalloc_tag_get(folio_page(new, 0));
 	if (!tag_new)
 		return;
 
-	if (!get_page_tag_ref(&old->page, &ref_old, &handle_old))
+	if (!get_page_tag_ref(folio_page(old, 0), &ref_old, &handle_old))
 		return;
-	if (!get_page_tag_ref(&new->page, &ref_new, &handle_new)) {
+	if (!get_page_tag_ref(folio_page(new, 0), &ref_new, &handle_new)) {
 		put_page_tag_ref(handle_old);
 		return;
 	}

@@ -365,7 +365,7 @@ noinline void __set_page_owner(struct page *page, unsigned short order,
 
 void __folio_set_owner_migrate_reason(struct folio *folio, enum migrate_reason reason)
 {
-	struct page_ext *page_ext = page_ext_get(&folio->page);
+	struct page_ext *page_ext = page_ext_get(folio_page(folio, 0));
 	struct page_owner *page_owner;
 
 	if (unlikely(!page_ext))
@@ -398,14 +398,14 @@ void __folio_copy_owner(struct folio *newfolio, struct folio *old)
 	struct page_owner *new_page_owner;
 	depot_stack_handle_t migrate_handle;
 
-	page_ext = page_ext_get(&old->page);
+	page_ext = page_ext_get(folio_page(old, 0));
 	if (unlikely(!page_ext))
 		return;
 
 	old_page_owner = get_page_owner(page_ext);
 	page_ext_put(page_ext);
 
-	page_ext = page_ext_get(&newfolio->page);
+	page_ext = page_ext_get(folio_page(newfolio, 0));
 	if (unlikely(!page_ext))
 		return;
 
@@ -413,7 +413,8 @@ void __folio_copy_owner(struct folio *newfolio, struct folio *old)
 	page_ext_put(page_ext);
 
 	migrate_handle = new_page_owner->handle;
-	__update_page_owner_handle(&newfolio->page, old_page_owner->handle,
+	__update_page_owner_handle(folio_page(newfolio, 0),
+				   old_page_owner->handle,
 				   old_page_owner->order, old_page_owner->gfp_mask,
 				   old_page_owner->last_migrate_reason,
 				   old_page_owner->ts_nsec, old_page_owner->pid,
@@ -423,7 +424,8 @@ void __folio_copy_owner(struct folio *newfolio, struct folio *old)
 	 * will be freed after migration. Keep them until then as they may be
 	 * useful.
 	 */
-	__update_page_owner_free_handle(&newfolio->page, 0, old_page_owner->order,
+	__update_page_owner_free_handle(folio_page(newfolio, 0), 0,
+					old_page_owner->order,
 					old_page_owner->free_pid,
 					old_page_owner->free_tgid,
 					old_page_owner->free_ts_nsec);
@@ -433,7 +435,8 @@ void __folio_copy_owner(struct folio *newfolio, struct folio *old)
 	 * when subtracting those pages from the stack.
 	 */
 	rcu_read_lock();
-	for_each_page_ext(&old->page, 1 << new_page_owner->order, page_ext, iter) {
+	for_each_page_ext(folio_page(old, 0), 1 << new_page_owner->order,
+			  page_ext, iter) {
 		old_page_owner = get_page_owner(page_ext);
 		old_page_owner->handle = migrate_handle;
 	}
