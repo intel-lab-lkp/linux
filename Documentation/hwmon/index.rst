@@ -279,6 +279,7 @@ Hardware Monitoring Kernel Drivers
    tmp513
    tps23861
    tps25990
+   tps38900x
    tps40422
    tps53679
    tps546d24

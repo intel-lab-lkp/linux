@@ -27082,6 +27082,14 @@ F:	Documentation/devicetree/bindings/hwmon/ti,tps23861.yaml
 F:	Documentation/hwmon/tps23861.rst
 F:	drivers/hwmon/tps23861.c
 
+TEXAS INSTRUMENTS TPS38900X VOLTAGE MONITOR DRIVER
+M:	Luna Hart <lhart.opensource@witekio.com>
+L:	linux-hwmon@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/hwmon/ti,tps38900x.yaml
+F:	Documentation/hwmon/tps38900x.rst
+F:	drivers/hwmon/tps38900x.c
+
 TEXAS INSTRUMENTS TPS6131X FLASH LED DRIVER
 M:	Matthias Fend <matthias.fend@emfend.at>
 L:	linux-leds@vger.kernel.org

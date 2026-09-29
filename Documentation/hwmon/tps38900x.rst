@@ -1,0 +1,55 @@
+.. SPDX-License-Identifier: GPL-2.0-or-later
+
+Kernel Driver tps38900x
+=======================
+
+Supported chips:
+
+  * Texas Instruments TPS389008, TPS389006, TPS389004
+
+    Prefix: 'tps38900x'
+
+    Addresses scanned: -
+
+    Datasheet: https://www.ti.com/lit/ds/symlink/tps389006.pdf
+
+Author:
+
+  - Luna Hart <lhart.opensource@witekio.com>
+
+Description
+-----------
+
+This driver implements support for the TI TPS38900x family of voltage monitor.
+Supported chips include the TPS389004, TPS389006, and TPS389008.
+
+The driver currently supports reading out current voltage levels from the ADCs.
+Features like interrupts and sequencing readings are not currently supported.
+
+All ADC measurements are 8 bit, and there are 2 supported measurement scales.
+
+  - 1x scaling: 200 to 1475 mV (5mV steps) (default)
+  - 4x scaling: 800 to 5900 mV (20mV steps)
+
+Voltage values are read from sysfs. By default, all ADCs are exposed. However,
+when channels are defined via child nodes in the device tree: only the channels
+that explicitly have a device tree node will be available.
+
+Known Issues
+------------
+
+Interrupts and sequenced readings functions of the tps38900x family are not
+implemented.
+
+sysfs-Interface
+---------------
+
+The complete list of sysfs attributes provided for each channel:
+
+=============================== ======= ========================================
+Name                            Perm    Description
+=============================== ======= ========================================
+in[01234567]_input              RO      Voltage channel input
+in[01234567]_label              RO      Voltage channel label
+in[01234567]_enable             RW      Voltage channel enable controls
+=============================== ======= ========================================
