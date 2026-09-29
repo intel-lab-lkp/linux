@@ -177,6 +177,15 @@ void ccp_del_device(struct ccp_device *ccp)
 	write_unlock_irqrestore(&ccp_unit_lock, flags);
 }
 
+/* Prevent promotion from waking an idle queue during teardown. */
+void ccp_halt_cmds(struct ccp_device *ccp)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&ccp->cmd_lock, flags);
+	ccp->halting = true;
+	spin_unlock_irqrestore(&ccp->cmd_lock, flags);
+}
 
 
 int ccp_register_rng(struct ccp_device *ccp)
@@ -342,41 +351,13 @@ int ccp_enqueue_cmd(struct ccp_cmd *cmd)
 }
 EXPORT_SYMBOL_GPL(ccp_enqueue_cmd);
 
-static void ccp_do_cmd_backlog(struct work_struct *work)
-{
-	struct ccp_cmd *cmd = container_of(work, struct ccp_cmd, work);
-	struct ccp_device *ccp = cmd->ccp;
-	unsigned long flags;
-	unsigned int i;
-
-	cmd->callback(cmd->data, -EINPROGRESS);
-
-	spin_lock_irqsave(&ccp->cmd_lock, flags);
-
-	ccp->cmd_count++;
-	list_add_tail(&cmd->entry, &ccp->cmd);
-
-	/* Find an idle queue */
-	for (i = 0; i < ccp->cmd_q_count; i++) {
-		if (ccp->cmd_q[i].active)
-			continue;
-
-		break;
-	}
-
-	spin_unlock_irqrestore(&ccp->cmd_lock, flags);
-
-	/* If we found an idle queue, wake it up */
-	if (i < ccp->cmd_q_count)
-		wake_up_process(ccp->cmd_q[i].kthread);
-}
-
 static struct ccp_cmd *ccp_dequeue_cmd(struct ccp_cmd_queue *cmd_q)
 {
 	struct ccp_device *ccp = cmd_q->ccp;
 	struct ccp_cmd *cmd = NULL;
 	struct ccp_cmd *backlog = NULL;
 	unsigned long flags;
+	unsigned int i = ccp->cmd_q_count;
 
 	spin_lock_irqsave(&ccp->cmd_lock, flags);
 
@@ -391,26 +372,61 @@ static struct ccp_cmd *ccp_dequeue_cmd(struct ccp_cmd_queue *cmd_q)
 		return NULL;
 	}
 
-	if (ccp->cmd_count) {
+	if (!list_empty(&ccp->cmd)) {
 		cmd_q->active = 1;
 
 		cmd = list_first_entry(&ccp->cmd, struct ccp_cmd, entry);
 		list_del(&cmd->entry);
 
-		ccp->cmd_count--;
-	}
-
-	if (!list_empty(&ccp->backlog)) {
+		if (!list_empty(&ccp->backlog)) {
+			/* Transfer the freed slot to the backlogged
+			 * command, so that concurrent submissions cannot
+			 * claim the space meant for it.
+			 */
+			backlog = list_first_entry(&ccp->backlog,
+						   struct ccp_cmd, entry);
+			list_del(&backlog->entry);
+		} else {
+			ccp->cmd_count--;
+		}
+	} else if (!list_empty(&ccp->backlog)) {
+		/* No command is available for execution, but a backlogged
+		 * command is stranded: reserve a slot for it.
+		 */
 		backlog = list_first_entry(&ccp->backlog, struct ccp_cmd,
 					   entry);
 		list_del(&backlog->entry);
+
+		ccp->cmd_count++;
 	}
 
 	spin_unlock_irqrestore(&ccp->cmd_lock, flags);
 
 	if (backlog) {
-		INIT_WORK(&backlog->work, ccp_do_cmd_backlog);
-		schedule_work(&backlog->work);
+		/* Notify the advancement out of the backlog before the
+		 * command is made available for execution; the queue
+		 * kthread provides process context, so no work struct
+		 * is needed.
+		 */
+		backlog->callback(backlog->data, -EINPROGRESS);
+
+		spin_lock_irqsave(&ccp->cmd_lock, flags);
+
+		list_add_tail(&backlog->entry, &ccp->cmd);
+
+		/* Find an idle queue */
+		for (i = 0; i < ccp->cmd_q_count; i++) {
+			if (ccp->cmd_q[i].active)
+				continue;
+
+			break;
+		}
+
+		/* Do not wake an idle queue after teardown has started. */
+		if (!ccp->halting && i < ccp->cmd_q_count)
+			wake_up_process(ccp->cmd_q[i].kthread);
+
+		spin_unlock_irqrestore(&ccp->cmd_lock, flags);
 	}
 
 	return cmd;

@@ -501,6 +501,8 @@ e_hwrng:
 	ccp_unregister_rng(ccp);
 
 e_kthread:
+	ccp_halt_cmds(ccp);
+
 	for (i = 0; i < ccp->cmd_q_count; i++)
 		if (ccp->cmd_q[i].kthread)
 			kthread_stop(ccp->cmd_q[i].kthread);
@@ -542,6 +544,7 @@ static void ccp_destroy(struct ccp_device *ccp)
 	iowrite32(ccp->qim, ccp->io_regs + IRQ_STATUS_REG);
 
 	/* Stop the queue kthreads */
+	ccp_halt_cmds(ccp);
 	for (i = 0; i < ccp->cmd_q_count; i++)
 		if (ccp->cmd_q[i].kthread)
 			kthread_stop(ccp->cmd_q[i].kthread);

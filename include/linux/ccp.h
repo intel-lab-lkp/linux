@@ -12,7 +12,6 @@
 #define __CCP_H__
 
 #include <linux/scatterlist.h>
-#include <linux/workqueue.h>
 #include <linux/list.h>
 #include <crypto/aes.h>
 #include <crypto/sha1.h>
@@ -637,7 +636,6 @@ enum ccp_engine {
 /**
  * struct ccp_cmd - CCP operation request
  * @entry: list element (ccp driver use only)
- * @work: work element used for callbacks (ccp driver use only)
  * @ccp: CCP device to be run on
  * @ret: operation return code (ccp driver use only)
  * @flags: cmd processing flags
@@ -653,11 +651,10 @@ enum ccp_engine {
  *     operation.
  */
 struct ccp_cmd {
-	/* The list_head, work_struct, ccp and ret variables are for use
+	/* The list_head, ccp and ret variables are for use
 	 * by the CCP driver only.
 	 */
 	struct list_head entry;
-	struct work_struct work;
 	struct ccp_device *ccp;
 	int ret;
 
