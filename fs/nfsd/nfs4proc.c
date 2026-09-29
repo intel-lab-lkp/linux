@@ -110,6 +110,15 @@ static const struct nfsd_access_maps nfsd4_access_maps = {
 	.other		= nfsd4_otheraccess,
 };
 
+static enum stable_how4 nfsd4_stable_how(int iocb_flags)
+{
+	if (iocb_flags & IOCB_SYNC)
+		return FILE_SYNC4;
+	if (iocb_flags & IOCB_DSYNC)
+		return DATA_SYNC4;
+	return UNSTABLE4;
+}
+
 static int nfsd4_iocb_flags(enum stable_how4 how)
 {
 	switch (how) {
@@ -1433,6 +1442,7 @@ nfsd4_write(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	struct nfsd_file *nf = NULL;
 	__be32 status = nfs_ok;
 	unsigned long cnt;
+	int iocb_flags;
 
 	if (write->wr_offset > (u64)OFFSET_MAX ||
 	    write->wr_offset + write->wr_buflen > (u64)OFFSET_MAX)
@@ -1451,11 +1461,12 @@ nfsd4_write(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		nfs4_put_stid(stid);
 	}
 
-	write->wr_how_written = write->wr_stable_how;
+	iocb_flags = nfsd4_iocb_flags(write->wr_stable_how);
 	status = nfsd_vfs_write(rqstp, &cstate->current_fh, nf,
 				write->wr_offset, &write->wr_payload,
-				&cnt, nfsd4_iocb_flags(write->wr_how_written),
+				&cnt, &iocb_flags,
 				(__be32 *)write->wr_verifier.data);
+	write->wr_how_written = nfsd4_stable_how(iocb_flags);
 	nfsd_file_put(nf);
 
 	write->wr_bytes_written = cnt;
