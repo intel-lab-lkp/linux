@@ -1,6 +1,6 @@
 .. highlight:: none
 
-.. include:: ../disclaimer-zh_TW.rst
+.. include:: ../../disclaimer-zh_TW.rst
 
 :Original: Documentation/process/debugging/gdb-kernel-debugging.rst
 

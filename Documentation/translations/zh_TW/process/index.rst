@@ -88,12 +88,12 @@ TODOList:
 .. toctree::
    :maxdepth: 1
 
+   debugging/index
    security-bugs
    embargoed-hardware-issues
 
 TODOList:
 
-* debugging/index
 * handling-regressions
 * threat-model
 * cve

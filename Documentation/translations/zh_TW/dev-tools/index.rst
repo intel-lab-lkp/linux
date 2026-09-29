@@ -26,7 +26,6 @@ Documentation/translations/zh_TW/dev-tools/testing-overview.rst
    sparse
    gcov
    kasan
-   gdb-kernel-debugging
 
 Todolist:
 
