@@ -189,4 +189,26 @@ __be32		nfsd_permission(struct svc_cred *cred, struct svc_export *exp,
 
 void		nfsd_filp_close(struct file *fp);
 
+/*
+ * How nfsd_write_dio_iters_init() disposed of an NFSD_IO_DIRECT WRITE.
+ * "DONTCACHE segment" degrades to a cached segment when the file system
+ * lacks FOP_DONTCACHE.
+ */
+/*
+ * Which exit nfsd_write_dio_iters_init() took.  Whether the buffered
+ * segments carry IOCB_DONTCACHE is reported separately, by
+ * nfsd_write_dio_split's @dontcache, because it is the same answer for
+ * every exit below.
+ */
+enum nfsd_write_dio_disposition {
+	NFSD_WRITE_DIO_DIRECT,		/* aligned middle uses direct I/O */
+	NFSD_WRITE_DIO_MEM_MISALIGNED,	/* payload memory misaligned: one segment */
+	NFSD_WRITE_DIO_NO_ALIGN,	/* fs advertises no alignment: one segment */
+	NFSD_WRITE_DIO_TOO_SMALL,	/* len < max(offset_align, mem_align): one segment */
+	NFSD_WRITE_DIO_NO_MIDDLE,	/* no or tiny aligned middle: one segment */
+
+	/* ORed in: the WRITE's buffered segments carry IOCB_DONTCACHE */
+	NFSD_WRITE_DIO_DONTCACHE = 0x80,
+};
+
 #endif /* LINUX_NFSD_VFS_H */
