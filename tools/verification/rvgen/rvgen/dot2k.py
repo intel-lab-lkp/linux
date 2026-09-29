@@ -495,8 +495,10 @@ f"""static bool ha_verify_constraint(struct ha_monitor *ha_mon,
 
     def _fill_timer_type(self) -> list:
         if self.has_invariant:
-            return [
+            if {"ns", "us", "ms", "s"}.intersection(self.env_types.values()):
+                return [
                     "/* XXX: If the monitor has several instances, consider HA_TIMER_WHEEL */",
                     "#define HA_TIMER_TYPE HA_TIMER_HRTIMER"
-                    ]
+                ]
+            return ["#define HA_TIMER_TYPE HA_TIMER_WHEEL"]
         return []
