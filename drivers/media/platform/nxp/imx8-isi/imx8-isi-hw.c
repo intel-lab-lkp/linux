@@ -303,6 +303,22 @@ static void mxc_isi_channel_set_panic_threshold(struct mxc_isi_pipe *pipe)
 	mxc_isi_write(pipe, CHNL_OUT_BUF_CTRL, val);
 }
 
+/*
+ * The ISI receives RAW data from the Pixel Link, whose alignment is
+ * determined by the SoC integration. It originally selected RAW samples
+ * from the low bits of the Pixel Link bus. Starting with i.MX93,
+ * CHNL_CTRL_RAW_IN_MSB_ALIGN was introduced to allow the ISI to select
+ * RAW samples from either the high or low bits, as both LSB and MSB
+ * alignment can be selected in the gasket.
+ *
+ * On i.MX95, the CSI formatter provides MSB-aligned RAW data, so the ISI
+ * must select RAW samples from the high bits of the Pixel Link bus.
+ */
+static bool isi_raw_in_msb(const struct mxc_isi_plat_data *pdata)
+{
+	return pdata->model == MXC_ISI_IMX95;
+}
+
 static void mxc_isi_channel_set_control(struct mxc_isi_pipe *pipe,
 					enum mxc_isi_input_id input,
 					unsigned int vc,
@@ -356,6 +372,10 @@ static void mxc_isi_channel_set_control(struct mxc_isi_pipe *pipe,
 		if (pipe->isi->pdata->num_vc > 4)
 			val |= CHNL_CTRL_VC_ID_1(vc >> 2);
 	}
+
+	/* Select MSB-aligned RAW data from the Pixel Link when needed. */
+	if (isi_raw_in_msb(pipe->isi->pdata))
+		val |= CHNL_CTRL_RAW_IN_MSB_ALIGN;
 
 	mxc_isi_write(pipe, CHNL_CTRL, val);
 
