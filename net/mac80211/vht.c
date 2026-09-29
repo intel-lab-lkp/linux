@@ -365,7 +365,7 @@ u32 __ieee80211_vht_handle_opmode(struct ieee80211_sub_if_data *sdata,
 			}
 		} else {
 			sdata_dbg(sdata,
-				  "Ignore NSS change to invalid %d in VHT opmode notif from %pM",
+				  "Ignore NSS change to invalid %d in VHT opmode notif from %pM\n",
 				  nss, link_sta->pub->addr);
 		}
 	}

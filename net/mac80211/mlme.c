@@ -6623,7 +6623,7 @@ ieee80211_determine_our_sta_mode(struct ieee80211_sub_if_data *sdata,
 			     IEEE80211_VHT_CAP_EXT_NSS_BW_MASK))) {
 		conn->bw_limit = IEEE80211_CONN_BW_LIMIT_80;
 		mlme_link_id_dbg(sdata, link_id,
-				 "no VHT 160 MHz capability on 5 GHz, limiting to 80 MHz");
+				 "no VHT 160 MHz capability on 5 GHz, limiting to 80 MHz\n");
 	}
 
 	if (req && req->flags & ASSOC_REQ_DISABLE_HE) {
@@ -8733,7 +8733,7 @@ ieee80211_parse_neg_ttlm(struct ieee80211_sub_if_data *sdata,
 			map = ieee80211_get_ttlm(map_size, pos);
 			if (!map) {
 				mlme_dbg(sdata,
-					 "No active links for TID %d", tid);
+					 "No active links for TID %d\n", tid);
 				return -EINVAL;
 			}
 			pos += map_size;
@@ -11011,7 +11011,7 @@ ieee80211_process_ml_reconf_resp(struct ieee80211_sub_if_data *sdata,
 
 	if (len < 1 || len < 1 + *pos) {
 		sdata_info(sdata,
-			   "mlo: reconf: invalid group key data length");
+			   "mlo: reconf: invalid group key data length\n");
 		goto disconnect;
 	}
 

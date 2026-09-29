@@ -279,7 +279,7 @@ int fils_decrypt_assoc_resp(struct ieee80211_sub_if_data *sdata,
 					 ies, frame + *frame_len - ies);
 	if (!session || session->datalen != 1 + 8) {
 		mlme_dbg(sdata,
-			 "No (valid) FILS Session element in (Re)Association Response frame from %pM",
+			 "No (valid) FILS Session element in (Re)Association Response frame from %pM\n",
 			 mgmt->sa);
 		return -EINVAL;
 	}
@@ -309,7 +309,7 @@ int fils_decrypt_assoc_resp(struct ieee80211_sub_if_data *sdata,
 	crypt_len = frame + *frame_len - encr;
 	if (crypt_len < AES_BLOCK_SIZE) {
 		mlme_dbg(sdata,
-			 "Not enough room for AES-SIV data after FILS Session element in (Re)Association Response frame from %pM",
+			 "Not enough room for AES-SIV data after FILS Session element in (Re)Association Response frame from %pM\n",
 			 mgmt->sa);
 		return -EINVAL;
 	}
@@ -317,7 +317,7 @@ int fils_decrypt_assoc_resp(struct ieee80211_sub_if_data *sdata,
 			      encr, crypt_len, 5, addr, len, encr);
 	if (res != 0) {
 		mlme_dbg(sdata,
-			 "AES-SIV decryption of (Re)Association Response frame from %pM failed",
+			 "AES-SIV decryption of (Re)Association Response frame from %pM failed\n",
 			 mgmt->sa);
 		return res;
 	}

@@ -681,7 +681,7 @@ void mesh_plink_timer(struct timer_list *t)
 	 */
 	if (time_before(jiffies, sta->mesh->plink_timer.expires)) {
 		mpl_dbg(sta->sdata,
-			"Ignoring timer for %pM in state %s (timer adjusted)",
+			"Ignoring timer for %pM in state %s (timer adjusted)\n",
 			sta->sta.addr, mplstates[sta->mesh->plink_state]);
 		spin_unlock_bh(&sta->mesh->plink_lock);
 		return;
@@ -691,7 +691,7 @@ void mesh_plink_timer(struct timer_list *t)
 	if (sta->mesh->plink_state == NL80211_PLINK_LISTEN ||
 	    sta->mesh->plink_state == NL80211_PLINK_ESTAB) {
 		mpl_dbg(sta->sdata,
-			"Ignoring timer for %pM in state %s (timer deleted)",
+			"Ignoring timer for %pM in state %s (timer deleted)\n",
 			sta->sta.addr, mplstates[sta->mesh->plink_state]);
 		spin_unlock_bh(&sta->mesh->plink_lock);
 		return;

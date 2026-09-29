@@ -318,7 +318,7 @@ void ieee80211_check_rate_mask(struct ieee80211_link_data *link)
 		return;
 
 	sdata_dbg(sdata,
-		  "no overlap between basic rates (0x%x) and user mask (0x%x on band %d) - clearing the latter",
+		  "no overlap between basic rates (0x%x) and user mask (0x%x on band %d) - clearing the latter\n",
 		  basic_rates, user_mask, band);
 	sdata->rc_rateidx_mask[band] = (1 << sband->n_bitrates) - 1;
 }
