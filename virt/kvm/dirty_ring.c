@@ -16,6 +16,10 @@ int __weak kvm_cpu_dirty_log_size(struct kvm *kvm)
 	return 0;
 }
 
+void __weak kvm_arch_dirty_ring_size_updated(struct kvm *kvm)
+{
+}
+
 u32 kvm_dirty_ring_get_rsvd_entries(struct kvm *kvm)
 {
 	return KVM_DIRTY_RING_RSVD_ENTRIES + kvm_cpu_dirty_log_size(kvm);

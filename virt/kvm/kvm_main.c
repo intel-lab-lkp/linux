@@ -5011,6 +5011,7 @@ static int kvm_vm_ioctl_enable_dirty_log_ring(struct kvm *kvm, u32 size)
 		r = -EINVAL;
 	} else {
 		kvm->dirty_ring_size = size;
+		kvm_arch_dirty_ring_size_updated(kvm);
 		r = 0;
 	}
 
