@@ -1,0 +1,92 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/clock/syna,sl261x-clk.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Synaptics SL261x clock controllers
+
+maintainers:
+  - Jisheng Zhang <jszhang@kernel.org>
+
+description: |
+  The SL261x clock hardware is divided into SoC, CPU, AIO, and system
+  manager register blocks. Each clock controller is a child of the node
+  containing its register range. The CPU clock node has a phandle to the
+  global chip control syscon.
+
+properties:
+  compatible:
+    oneOf:
+      - enum:
+          - syna,sl261x-soc-clk
+          - syna,sl261x-cpu-clk
+          - syna,sl261x-aio-clk
+          - syna,sl261x-system-clk
+      - items:
+          - const: simple-mfd
+          - const: syscon
+
+  reg:
+    maxItems: 1
+
+  syna,gbl-syscon:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: Phandle to the SL261x global chip control syscon.
+
+  '#clock-cells':
+    const: 1
+
+  clocks:
+    maxItems: 1
+    description: Reference clock used as the input to the PLLs.
+
+required:
+  - compatible
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: syna,sl261x-cpu-clk
+    then:
+      required:
+        - syna,gbl-syscon
+    else:
+      properties:
+        syna,gbl-syscon: false
+
+additionalProperties: false
+
+examples:
+  - |
+    osc: clock-osc {
+        compatible = "fixed-clock";
+        #clock-cells = <0>;
+        clock-frequency = <25000000>;
+    };
+
+    chip: syscon@f7e10000 {
+        compatible = "syscon", "simple-mfd";
+        reg = <0xf7e10000 0x10000>;
+
+        clk: clock {
+            compatible = "syna,sl261x-soc-clk";
+            #clock-cells = <1>;
+            clocks = <&osc>;
+        };
+    };
+
+    cpu_wrap: cpu-wrap@f7e30000 {
+        compatible = "syscon", "simple-mfd";
+        reg = <0xf7e30000 0x4000>;
+
+        cpuclk: clock {
+            compatible = "syna,sl261x-cpu-clk";
+            #clock-cells = <1>;
+            clocks = <&osc>;
+            syna,gbl-syscon = <&chip>;
+        };
+    };
+...
