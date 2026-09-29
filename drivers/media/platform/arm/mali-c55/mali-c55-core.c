@@ -17,6 +17,8 @@
 #include <linux/of_reserved_mem.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/pm_wakeup.h>
+#include <linux/property.h>
 #include <linux/reset.h>
 #include <linux/slab.h>
 #include <linux/string.h>
@@ -675,8 +677,7 @@ static int __maybe_unused mali_c55_runtime_suspend(struct device *dev)
 {
 	struct mali_c55 *mali_c55 = dev_get_drvdata(dev);
 
-	if (irq_has_action(mali_c55->irqnum))
-		free_irq(mali_c55->irqnum, dev);
+	disable_irq(mali_c55->irqnum);
 	__mali_c55_power_off(mali_c55);
 
 	return 0;
@@ -745,25 +746,41 @@ static int __maybe_unused mali_c55_runtime_resume(struct device *dev)
 	if (ret)
 		return ret;
 
-	/*
-	 * The driver needs to transfer large amounts of register settings to
-	 * the ISP each frame, using either a DMA transfer or memcpy. We use a
-	 * threaded IRQ to avoid disabling interrupts the entire time that's
-	 * happening.
-	 */
-	ret = request_threaded_irq(mali_c55->irqnum, NULL, mali_c55_isr,
-				   IRQF_ONESHOT, dev_driver_string(dev), dev);
-	if (ret) {
-		__mali_c55_power_off(mali_c55);
-		dev_err(dev, "failed to request irq\n");
+	enable_irq(mali_c55->irqnum);
+
+	return 0;
+}
+
+static int __maybe_unused mali_c55_suspend(struct device *dev)
+{
+	struct mali_c55 *mali_c55 = dev_get_drvdata(dev);
+	int ret;
+
+	if (device_may_wakeup(dev)) {
+		ret = enable_irq_wake(mali_c55->irqnum);
+		if (ret)
+			return ret;
 	}
+
+	ret = pm_runtime_force_suspend(dev);
+	if (ret && device_may_wakeup(dev))
+		disable_irq_wake(mali_c55->irqnum);
 
 	return ret;
 }
 
+static int __maybe_unused mali_c55_resume(struct device *dev)
+{
+	struct mali_c55 *mali_c55 = dev_get_drvdata(dev);
+
+	if (device_may_wakeup(dev))
+		disable_irq_wake(mali_c55->irqnum);
+
+	return pm_runtime_force_resume(dev);
+}
+
 static const struct dev_pm_ops mali_c55_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend,
-				pm_runtime_force_resume)
+	SET_SYSTEM_SLEEP_PM_OPS(mali_c55_suspend, mali_c55_resume)
 	SET_RUNTIME_PM_OPS(mali_c55_runtime_suspend, mali_c55_runtime_resume,
 			   NULL)
 };
@@ -825,13 +842,12 @@ static int mali_c55_probe(struct platform_device *pdev)
 	pm_runtime_set_autosuspend_delay(&pdev->dev, 2000);
 	pm_runtime_use_autosuspend(&pdev->dev);
 	pm_runtime_set_active(&pdev->dev);
+	pm_runtime_get_noresume(dev);
 	pm_runtime_enable(&pdev->dev);
 
 	ret = mali_c55_media_frameworks_init(mali_c55);
 	if (ret)
 		goto err_pm_runtime_disable;
-
-	pm_runtime_idle(&pdev->dev);
 
 	mali_c55->irqnum = platform_get_irq(pdev, 0);
 	if (mali_c55->irqnum < 0) {
@@ -839,13 +855,40 @@ static int mali_c55_probe(struct platform_device *pdev)
 		goto err_deinit_media_frameworks;
 	}
 
+	/*
+	 * The driver needs to transfer large amounts of register settings to
+	 * the ISP each frame, using either a DMA transfer or memcpy. We use a
+	 * threaded IRQ to avoid disabling interrupts the entire time that's
+	 * happening.
+	 */
+	ret = request_threaded_irq(mali_c55->irqnum, NULL, mali_c55_isr,
+				   IRQF_ONESHOT, dev_driver_string(dev), dev);
+	if (ret) {
+		dev_err(dev, "failed to request irq\n");
+		goto err_deinit_media_frameworks;
+	}
+
+	if (device_property_read_bool(dev, "wakeup-source")) {
+		ret = devm_device_init_wakeup(dev);
+		if (ret) {
+			ret = dev_err_probe(dev, ret,
+					    "failed to initialize wakeup\n");
+			goto err_free_irq;
+		}
+	}
+
+	pm_runtime_put_autosuspend(dev);
+
 	return 0;
 
+err_free_irq:
+	free_irq(mali_c55->irqnum, dev);
 err_deinit_media_frameworks:
 	mali_c55_media_frameworks_deinit(mali_c55);
 err_pm_runtime_disable:
-	pm_runtime_set_suspended(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
+	pm_runtime_put_noidle(dev);
+	pm_runtime_set_suspended(&pdev->dev);
 	kfree(mali_c55->context.registers);
 err_power_off:
 	__mali_c55_power_off(mali_c55);
@@ -859,12 +902,13 @@ static void mali_c55_remove(struct platform_device *pdev)
 {
 	struct mali_c55 *mali_c55 = platform_get_drvdata(pdev);
 
+	pm_runtime_disable(&pdev->dev);
+	free_irq(mali_c55->irqnum, &pdev->dev);
 	mali_c55_media_frameworks_deinit(mali_c55);
-	if (!pm_runtime_suspended(&pdev->dev)) {
+	if (!pm_runtime_status_suspended(&pdev->dev)) {
 		__mali_c55_power_off(mali_c55);
 		pm_runtime_set_suspended(&pdev->dev);
 	}
-	pm_runtime_disable(&pdev->dev);
 	kfree(mali_c55->context.registers);
 	of_reserved_mem_device_release(&pdev->dev);
 }
