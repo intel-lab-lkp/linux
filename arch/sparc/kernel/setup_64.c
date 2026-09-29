@@ -488,19 +488,27 @@ static unsigned long __init mdesc_cpu_hwcap_list(void)
 
 	while (len) {
 		int i, plen;
+		bool known = false;
 
 		for (i = 0; i < ARRAY_SIZE(hwcaps); i++) {
 			unsigned long bit = 1UL << i;
 
 			if (hwcaps[i] && !strcmp(prop, hwcaps[i])) {
 				caps |= bit;
+				known = true;
 				break;
 			}
 		}
 		for (i = 0; i < ARRAY_SIZE(crypto_hwcaps); i++) {
-			if (!strcmp(prop, crypto_hwcaps[i]))
+			if (!strcmp(prop, crypto_hwcaps[i])) {
 				caps |= HWCAP_SPARC_CRYPTO;
+				known = true;
+			}
 		}
+
+		if (!known)
+			pr_info("CPU CAPS: unknown hwcap-list entry '%s'\n",
+				prop);
 
 		plen = strlen(prop) + 1;
 		prop += plen;
