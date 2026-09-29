@@ -1,0 +1,135 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright (C) 2025 Synaptics Incorporated
+ *
+ * Author: Jisheng Zhang <jszhang@kernel.org>
+ */
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/linux-event-codes.h>
+
+/ {
+	aliases {
+		serial0 = &sm_uart0;
+		serial1 = &sm_uart1;
+		serial2 = &sm_uart2;
+		serial3 = &sm_uart3;
+		serial4 = &soc_uart0;
+		serial5 = &soc_uart1;
+		serial6 = &soc_uart2;
+		serial7 = &soc_uart3;
+		i2c0 = &sm_i2c0;
+		i2c1 = &sm_i2c1;
+		i2c2 = &soc_i2c0;
+		i2c3 = &soc_i2c1;
+		spi1 = &sm_spi1;
+		spi2 = &soc_spi0;
+		spi3 = &soc_spi1;
+		spi4 = &soc_spi2;
+		spi5 = &soc_spi3;
+	};
+
+	cpus {
+		cpu@0 {
+			cpu0-supply = <&vcore>;
+		};
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+		bootargs = "earlycon";
+	};
+
+	memory@0 {
+		device_type = "memory";
+		reg = <0x0 0x00000000 0x0 0x80000000>;
+	};
+};
+
+&osc {
+	clock-frequency = <25000000>;
+};
+
+&pinctrl {
+	soc_i2c0_pmux: soc_i2c0-pmux {
+		groups = "GPIO23", "GPIO24";
+		function = "tw2";
+		drive-strength = <7>;
+	};
+};
+
+&sm_pinctrl {
+	sm_i2c0_pmux: i2c0-pmux {
+		groups = "SM_GPIO12", "SM_GPIO13";
+		function = "tw0";
+		drive-strength = <7>;
+	};
+
+	sm_i2c1_pmux: i2c1-pmux {
+		groups = "SM_GPIO3", "SM_GPIO4";
+		function = "tw1";
+		drive-strength = <7>;
+	};
+
+	vcore_gpio_pmux: vcore-gpio-pmux {
+		groups = "SM_GPIO5";
+		function = "gpio";
+	};
+};
+
+&sm_uart0 {
+	status = "okay";
+};
+
+&sm_i2c0 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&sm_i2c0_pmux>;
+	clock-frequency = <100000>;
+
+	expander0: gpio@43 {
+		compatible = "fcs,fxl6408";
+		reg = <0x43>;
+		gpio-controller;
+		#gpio-cells = <2>;
+	};
+
+	expander1: gpio@44 {
+		compatible = "fcs,fxl6408";
+		reg = <0x44>;
+		gpio-controller;
+		#gpio-cells = <2>;
+	};
+};
+
+&sm_i2c1 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&sm_i2c1_pmux>;
+	clock-frequency = <100000>;
+
+	vcore: regulator@60 {
+		compatible = "silergy,sy8827n";
+		reg = <0x60>;
+		regulator-name = "vcore";
+		regulator-min-microvolt = <700000>;
+		regulator-max-microvolt = <987500>;
+		regulator-always-on;
+		regulator-boot-on;
+		regulator-active-discharge = <0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&vcore_gpio_pmux>;
+		enable-gpios = <&portc 5 GPIO_ACTIVE_LOW>;
+	};
+};
+
+&soc_i2c0 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&soc_i2c0_pmux>;
+	clock-frequency = <100000>;
+};
+
+&sm_uart1 {
+	status = "okay";
+};
