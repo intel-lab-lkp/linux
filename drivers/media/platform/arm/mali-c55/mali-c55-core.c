@@ -756,31 +756,43 @@ static int __maybe_unused mali_c55_suspend(struct device *dev)
 	struct mali_c55 *mali_c55 = dev_get_drvdata(dev);
 	int ret;
 
-	if (device_may_wakeup(dev)) {
-		ret = enable_irq_wake(mali_c55->irqnum);
-		if (ret)
-			return ret;
+	if (!device_may_wakeup(dev))
+		return pm_runtime_force_suspend(dev);
+
+	/* Keep the ISP clocked and out of reset while it can wake the system. */
+	ret = pm_runtime_resume_and_get(dev);
+	if (ret)
+		return ret;
+
+	ret = enable_irq_wake(mali_c55->irqnum);
+	if (ret) {
+		pm_runtime_put_autosuspend(dev);
+		return ret;
 	}
 
-	ret = pm_runtime_force_suspend(dev);
-	if (ret && device_may_wakeup(dev))
-		disable_irq_wake(mali_c55->irqnum);
-
-	return ret;
+	return 0;
 }
 
 static int __maybe_unused mali_c55_resume(struct device *dev)
 {
 	struct mali_c55 *mali_c55 = dev_get_drvdata(dev);
 
-	if (device_may_wakeup(dev))
-		disable_irq_wake(mali_c55->irqnum);
+	if (!device_may_wakeup(dev))
+		return pm_runtime_force_resume(dev);
 
-	return pm_runtime_force_resume(dev);
+	disable_irq_wake(mali_c55->irqnum);
+	pm_runtime_put_autosuspend(dev);
+
+	return 0;
 }
 
 static const struct dev_pm_ops mali_c55_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(mali_c55_suspend, mali_c55_resume)
+	.suspend = pm_sleep_ptr(mali_c55_suspend),
+	.resume = pm_sleep_ptr(mali_c55_resume),
+	.freeze = pm_sleep_ptr(pm_runtime_force_suspend),
+	.thaw = pm_sleep_ptr(pm_runtime_force_resume),
+	.poweroff = pm_sleep_ptr(pm_runtime_force_suspend),
+	.restore = pm_sleep_ptr(pm_runtime_force_resume),
 	SET_RUNTIME_PM_OPS(mali_c55_runtime_suspend, mali_c55_runtime_resume,
 			   NULL)
 };
