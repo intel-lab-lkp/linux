@@ -25,6 +25,26 @@ config PHY_STARFIVE_JH7110_DPHY_TX
 	  system. If M is selected, the module will be called
 	  phy-jh7110-dphy-tx.ko.
 
+config PHY_STARFIVE_JH7110_INNO_HDMI
+	tristate "Starfive JH7110 INNO HDMI PHY"
+	select PHY_INNO_HDMI
+	depends on COMMON_CLK
+	select GENERIC_PHY
+	help
+	  This option enables the driver for the analog HDMI PHY (Physical
+	  Layer) on the StarFive JH7110 SoC.
+
+	  This driver binds to a child node of the 'starfive,jh7110-hdmi-subsystem'
+	  parent driver and gets its register map from that parent.
+
+	  It is responsible for two main functions:
+	  1. PHY Provider: It provides standard PHY operations (.power_on,
+	     .power_off) for the HDMI controller (bridge) driver. This
+	     involves configuring the Post-PLL and analog TMDS blocks.
+	  2. Clock Provider: It registers as a clock provider to supply the
+	     variable pixel clock (hdmi_pclk) to the HDMI controller and
+	     the VOUT subsystem, which it generates using the Pre-PLL.
+
 config PHY_STARFIVE_JH7110_PCIE
 	tristate "Starfive JH7110 PCIE 2.0/USB 3.0 PHY support"
 	depends on HAS_IOMEM
