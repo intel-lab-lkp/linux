@@ -309,6 +309,10 @@ static void blk_validate_atomic_write_limits(struct queue_limits *lim)
 
 	boundary_sectors = lim->atomic_write_hw_boundary >> SECTOR_SHIFT;
 
+	if (WARN_ON_ONCE((lim->features & BLK_FEAT_ATOMIC_WRITE_MULTI) &&
+			 !boundary_sectors))
+		lim->features &= ~BLK_FEAT_ATOMIC_WRITE_MULTI;
+
 	if (boundary_sectors) {
 		if (WARN_ON_ONCE(lim->atomic_write_hw_max >
 				 lim->atomic_write_hw_boundary))
@@ -333,6 +337,7 @@ static void blk_validate_atomic_write_limits(struct queue_limits *lim)
 	return;
 
 unsupported:
+	lim->features &= ~BLK_FEAT_ATOMIC_WRITE_MULTI;
 	lim->atomic_write_max_sectors = 0;
 	lim->atomic_write_boundary_sectors = 0;
 	lim->atomic_write_unit_min = 0;

@@ -241,8 +241,12 @@ static inline unsigned int blk_queue_get_max_sectors(struct request *rq)
 	if (unlikely(op == REQ_OP_WRITE_ZEROES))
 		return q->limits.max_write_zeroes_sectors;
 
-	if (rq->cmd_flags & REQ_ATOMIC)
+	if (rq->cmd_flags & REQ_ATOMIC) {
+		if (q->limits.features & BLK_FEAT_ATOMIC_WRITE_MULTI)
+			return max(q->limits.max_sectors,
+				   q->limits.atomic_write_max_sectors);
 		return q->limits.atomic_write_max_sectors;
+	}
 
 	return q->limits.max_sectors;
 }

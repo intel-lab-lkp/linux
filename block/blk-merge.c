@@ -523,7 +523,14 @@ static inline unsigned int blk_rq_get_max_sectors(struct request *rq,
 	struct request_queue *q = rq->q;
 	struct queue_limits *lim = &q->limits;
 	unsigned int max_sectors, boundary_sectors;
-	bool is_atomic = rq->cmd_flags & REQ_ATOMIC;
+	/*
+	 * The merged command is itself one atomic write and must not cross the
+	 * atomic write boundary. But in the BLK_FEAT_ATOMIC_WRITE_MULTI case,
+	 * the device writes each boundary window atomically, so its merged
+	 * commands are not atomic as a whole and may cross the boundary.
+	 */
+	bool is_atomic = (rq->cmd_flags & REQ_ATOMIC) &&
+			 !(lim->features & BLK_FEAT_ATOMIC_WRITE_MULTI);
 
 	if (blk_rq_is_passthrough(rq))
 		return q->limits.max_hw_sectors;
