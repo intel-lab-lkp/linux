@@ -242,7 +242,12 @@ static inline bool pm_runtime_has_no_callbacks(struct device *dev)
  */
 static inline void pm_runtime_mark_last_busy(struct device *dev)
 {
-	WRITE_ONCE(dev->power.last_busy, ktime_get_mono_fast_ns());
+	u64 now = ktime_get_mono_fast_ns();
+
+	if (now == READ_ONCE(dev->power.last_busy))
+		now++;
+
+	WRITE_ONCE(dev->power.last_busy, now);
 }
 
 /**

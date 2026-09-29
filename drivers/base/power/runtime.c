@@ -162,6 +162,26 @@ static void pm_runtime_cancel_pending(struct device *dev)
 	dev->power.request = RPM_REQ_NONE;
 }
 
+/*
+ * Expiration time without considering whether it has already passed.
+ */
+static u64 __pm_runtime_autosuspend_expiration(struct device *dev)
+{
+	int autosuspend_delay;
+	u64 expires;
+
+	if (!dev->power.use_autosuspend)
+		return 0;
+
+	autosuspend_delay = READ_ONCE(dev->power.autosuspend_delay);
+	if (autosuspend_delay < 0)
+		return 0;
+
+	expires = READ_ONCE(dev->power.last_busy);
+	expires += (u64)autosuspend_delay * NSEC_PER_MSEC;
+	return expires;
+}
+
 /**
  * pm_runtime_autosuspend_expiration - Get a device's autosuspend-delay expiration time.
  * @dev: Device to handle.
@@ -176,18 +196,10 @@ static void pm_runtime_cancel_pending(struct device *dev)
  */
 u64 pm_runtime_autosuspend_expiration(struct device *dev)
 {
-	int autosuspend_delay;
-	u64 expires;
+	u64 expires = __pm_runtime_autosuspend_expiration(dev);
 
-	if (!dev->power.use_autosuspend)
+	if (!expires)
 		return 0;
-
-	autosuspend_delay = READ_ONCE(dev->power.autosuspend_delay);
-	if (autosuspend_delay < 0)
-		return 0;
-
-	expires  = READ_ONCE(dev->power.last_busy);
-	expires += (u64)autosuspend_delay * NSEC_PER_MSEC;
 	if (expires > ktime_get_mono_fast_ns())
 		return expires;	/* Expires in the future */
 
@@ -586,6 +598,7 @@ static int rpm_suspend(struct device *dev, int rpmflags)
 {
 	int (*callback)(struct device *);
 	struct device *parent = NULL;
+	u64 old_expires;
 	int retval;
 
 	trace_rpm_suspend(dev, rpmflags);
@@ -689,6 +702,7 @@ static int rpm_suspend(struct device *dev, int rpmflags)
 	}
 
 	__update_runtime_status(dev, RPM_SUSPENDING);
+	old_expires = __pm_runtime_autosuspend_expiration(dev);
 
 	callback = RPM_GET_CALLBACK(dev, runtime_suspend);
 
@@ -760,9 +774,12 @@ static int rpm_suspend(struct device *dev, int rpmflags)
 	 * autosuspend expiration time, automatically reschedule another
 	 * autosuspend.
 	 */
-	if (!dev->power.runtime_error && (rpmflags & RPM_AUTO) &&
-	    pm_runtime_autosuspend_expiration(dev) != 0)
-		goto repeat;
+	if (!dev->power.runtime_error && (rpmflags & RPM_AUTO)) {
+		u64 new_expires = __pm_runtime_autosuspend_expiration(dev);
+
+		if (new_expires && new_expires != old_expires)
+			goto repeat;
+	}
 
 	goto out;
 }
