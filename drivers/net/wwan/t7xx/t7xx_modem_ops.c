@@ -400,12 +400,17 @@ static void t7xx_prepare_host_rt_data_query(struct t7xx_sys_info *core)
 }
 
 static int t7xx_prepare_device_rt_data(struct t7xx_sys_info *core, struct device *dev,
-				       void *data)
+				       void *data, int data_length)
 {
 	struct feature_query *md_feature = data;
 	struct mtk_runtime_feature *rt_feature;
 	unsigned int i, rt_data_len = 0;
 	struct sk_buff *skb;
+
+	if (data_length < sizeof(*md_feature)) {
+		dev_err(dev, "Invalid runtime data length: %d\n", data_length);
+		return -EINVAL;
+	}
 
 	/* Parse MD runtime data query */
 	if (le32_to_cpu(md_feature->head_pattern) != MD_FEATURE_QUERY_ID ||
@@ -563,7 +568,8 @@ static void t7xx_core_hk_handler(struct t7xx_modem *md, struct t7xx_sys_info *co
 	if (ctl->exp_flg)
 		goto err_free_event;
 
-	ret = t7xx_prepare_device_rt_data(core_info, dev, event->data);
+	ret = t7xx_prepare_device_rt_data(core_info, dev, event->data,
+					  event->length);
 	if (ret) {
 		dev_err(dev, "Device failure parsing runtime data: %d", ret);
 		goto err_free_event;
