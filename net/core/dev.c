@@ -11838,6 +11838,9 @@ void netdev_run_todo(void)
 		linkwatch_sync_dev(dev);
 	}
 
+	if (!list_empty(&list))
+		rt_flush_dev(NULL);
+
 	cnt = 0;
 	while (!list_empty(&list)) {
 		dev = netdev_wait_allrefs_any(&list);
