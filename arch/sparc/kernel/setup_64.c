@@ -387,7 +387,7 @@ static const char *hwcaps[] = {
 	"mul32", "div32", "fsmuld", "v8plus", "popc", "vis", "vis2",
 	"ASIBlkInit", "fmaf", "vis3", "hpc", "random", "trans", "fjfmau",
 	"ima", "cspare", "pause", "cbcond", NULL /*reserved for crypto */,
-	"adp",
+	"adp", "vis3b", "pause-nsec", "mwait", "sparc5",
 };
 
 static const char *crypto_hwcaps[] = {

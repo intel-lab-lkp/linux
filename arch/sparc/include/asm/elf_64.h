@@ -99,6 +99,14 @@
 #define HWCAP_SPARC_CRYPTO	0x04000000 /* CRYPTO insns available */
 #define HWCAP_SPARC_ADI		0x08000000 /* ADI available */
 
+/* Linux has only AT_HWCAP, so these continue the single word.  They are
+ * ABI: a bit once assigned cannot be moved.
+ */
+#define HWCAP_SPARC_VIS3B	0x10000000 /* VIS3B insns available */
+#define HWCAP_SPARC_PAUSE_NSEC	0x20000000 /* PAUSE has nanosecond granularity */
+#define HWCAP_SPARC_MWAIT	0x40000000 /* MWAIT available */
+#define HWCAP_SPARC_SPARC5	0x80000000 /* SPARC5 insns available */
+
 #define CORE_DUMP_USE_REGSET
 
 /*
