@@ -1098,7 +1098,8 @@ copy_present_page(struct vm_area_struct *dst_vma, struct vm_area_struct *src_vma
 	 * over and copy the page & arm it.
 	 */
 
-	if (copy_mc_user_highpage(&new_folio->page, page, addr, src_vma))
+	if (copy_mc_user_highpage(folio_page(new_folio, 0), page, addr,
+				  src_vma))
 		return -EHWPOISON;
 
 	*prealloc = NULL;
@@ -4073,7 +4074,8 @@ static vm_fault_t wp_page_copy(struct vm_fault *vmf)
 	if (!pfn_is_zero) {
 		int err;
 
-		err = __wp_page_copy_user(&new_folio->page, vmf->page, vmf);
+		err = __wp_page_copy_user(folio_page(new_folio, 0), vmf->page,
+					  vmf);
 		if (err) {
 			/*
 			 * COW failed, if the fault was solved by other,
@@ -4089,7 +4091,7 @@ static vm_fault_t wp_page_copy(struct vm_fault *vmf)
 			delayacct_wpcopy_end();
 			return err == -EHWPOISON ? VM_FAULT_HWPOISON : 0;
 		}
-		kmsan_copy_page_meta(&new_folio->page, vmf->page);
+		kmsan_copy_page_meta(folio_page(new_folio, 0), vmf->page);
 	}
 
 	__folio_mark_uptodate(new_folio);
@@ -5143,7 +5145,7 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 		ptep = folio_ptep;
 		nr_pages = nr;
 		entry = folio->swap;
-		page = &folio->page;
+		page = folio_page(folio, 0);
 	}
 
 check_folio:
@@ -5697,7 +5699,7 @@ vm_fault_t do_set_pmd(struct vm_fault *vmf, struct folio *folio, struct page *pa
 
 	if (!is_pmd_order(folio_order(folio)))
 		return ret;
-	page = &folio->page;
+	page = folio_page(folio, 0);
 
 	/*
 	 * Just backoff if any subpage of a THP is corrupted otherwise
@@ -5908,7 +5910,7 @@ fallback:
 		} else {
 			/* Now we can set mappings for the whole large folio. */
 			addr = vmf->address - idx * PAGE_SIZE;
-			page = &folio->page;
+			page = folio_page(folio, 0);
 		}
 	}
 
@@ -6093,7 +6095,7 @@ static vm_fault_t do_cow_fault(struct vm_fault *vmf)
 	if (!folio)
 		return VM_FAULT_OOM;
 
-	vmf->cow_page = &folio->page;
+	vmf->cow_page = folio_page(folio, 0);
 
 	ret = __do_fault(vmf);
 	if (unlikely(ret & (VM_FAULT_ERROR | VM_FAULT_NOPAGE | VM_FAULT_RETRY)))
