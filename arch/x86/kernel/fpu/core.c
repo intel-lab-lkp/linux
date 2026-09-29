@@ -866,8 +866,17 @@ void fpu__clear_user_states(struct fpu *fpu)
 
 void fpu_flush_thread(void)
 {
-	fpstate_reset(x86_task_fpu(current));
+	struct fpu *fpu = x86_task_fpu(current);
+	struct fpstate *oldfpstate = fpu->fpstate;
+
+	fpstate_reset(fpu);
 	fpu_reset_fpstate_regs();
+
+	/*
+	 * Free the old state only after register state ownership has been
+	 * invalidated. Otherwise, a context switch could save into it.
+	 */
+	fpstate_free(oldfpstate);
 }
 /*
  * Load FPU context before returning to userspace.
