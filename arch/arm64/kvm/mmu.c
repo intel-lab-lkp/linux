@@ -2841,3 +2841,11 @@ void kvm_toggle_cache(struct kvm_vcpu *vcpu, bool was_enabled)
 
 	trace_kvm_toggle_cache(*vcpu_pc(vcpu), was_enabled, now_enabled);
 }
+
+int kvm_cpu_dirty_log_size(struct kvm *kvm)
+{
+	if (!system_supports_hdbss())
+		return 0;
+
+	return kvm_hdbss_buffer_size(kvm) / sizeof(u64);
+}
