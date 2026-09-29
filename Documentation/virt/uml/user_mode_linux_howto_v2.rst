@@ -123,7 +123,7 @@ jfs, etc will work too.
 
 Create a minimal OS installation on the mounted filesystem::
 
-   # debootstrap buster /mnt http://deb.debian.org/debian
+   # debootstrap buster /mnt https://archive.debian.org/debian-archive/debian
 
 debootstrap does not set up the root password, fstab, hostname or
 anything related to networking. It is up to the user to do that.
