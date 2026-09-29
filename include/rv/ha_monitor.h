@@ -129,9 +129,10 @@ static enum hrtimer_restart ha_monitor_timer_callback(struct hrtimer *hrtimer);
  * ktime_get_ns is expensive, since we usually don't require precise accounting
  * of changes within the same event, cache the current time at the beginning of
  * the constraint handler and use the cache for subsequent calls.
- * Monitors without ns clocks automatically skip this.
+ * Monitors without ns clocks automatically skip this, unless they use
+ * hrtimers, which require a ns base.
  */
-#ifdef HA_CLK_NS
+#if defined(HA_CLK_NS) || HA_TIMER_TYPE == HA_TIMER_HRTIMER
 #define ha_get_ns() ktime_get_ns()
 #else
 #define ha_get_ns() 0
@@ -341,9 +342,13 @@ static inline void ha_reset_clk_ns(struct ha_monitor *ha_mon, enum envs env, u64
 	WRITE_ONCE(ha_mon->env_store[env], time_ns);
 }
 static inline bool ha_check_invariant_ns(struct ha_monitor *ha_mon, enum envs env,
-					 u64 time_ns, u64 expire_ns)
+					 u64 time_ns)
 {
-	return READ_ONCE(ha_mon->env_store[env]) >= time_ns - expire_ns;
+	if (HA_TIMER_TYPE == HA_TIMER_WHEEL)
+		return time_ns - READ_ONCE(ha_mon->env_store[env]) <= ha_mon->expire;
+	if (HA_TIMER_TYPE == HA_TIMER_HRTIMER)
+		return time_ns <= ktime_to_ns(hrtimer_get_expires(&ha_mon->hrtimer));
+	return true;
 }
 /*
  * ha_invariant_passed_ns - prepare the invariant and return the time since reset
@@ -367,9 +372,14 @@ static inline void ha_reset_clk_jiffy(struct ha_monitor *ha_mon, enum envs env)
 	WRITE_ONCE(ha_mon->env_store[env], get_jiffies_64());
 }
 static inline bool ha_check_invariant_jiffy(struct ha_monitor *ha_mon, enum envs env,
-					    u64 time_ns, u64 expire_jiffy)
+					    u64 time_ns)
 {
-	return time_after64(READ_ONCE(ha_mon->env_store[env]), get_jiffies_64() - expire_jiffy);
+	if (HA_TIMER_TYPE == HA_TIMER_WHEEL)
+		return time_after64(READ_ONCE(ha_mon->env_store[env]) + ha_mon->expire,
+				    get_jiffies_64());
+	if (HA_TIMER_TYPE == HA_TIMER_HRTIMER)
+		return time_ns <= ktime_to_ns(hrtimer_get_expires(&ha_mon->hrtimer));
+	return true;
 }
 /*
  * ha_invariant_passed_jiffy - prepare the invariant and return the time since reset
@@ -379,23 +389,6 @@ static inline u64 ha_invariant_passed_jiffy(struct ha_monitor *ha_mon, enum envs
 	if (env < 0 || env >= ENV_MAX_STORED)
 		return 0;
 	return ha_get_env(ha_mon, env, time_ns);
-}
-
-/*
- * Retrieve the last reset time (guard representation) from the invariant
- * representation (expiration).
- * It the caller's responsibility to make sure the storage was actually in the
- * invariant representation (e.g. the current state has an invariant).
- * The provided value must be the same used when starting the invariant.
- *
- * This function's access to the storage is NOT atomic, due to the rarity when
- * this is used. If a monitor allows writes concurrent to this, likely
- * other things are broken and need rethinking the model or additional locking.
- */
-static inline void ha_inv_to_guard(struct ha_monitor *ha_mon, enum envs env,
-				   u64 value, u64 time_ns)
-{
-	WRITE_ONCE(ha_mon->env_store[env], READ_ONCE(ha_mon->env_store[env]) - value);
 }
 
 #if HA_TIMER_TYPE == HA_TIMER_WHEEL
@@ -420,22 +413,30 @@ static inline void ha_setup_timer(struct ha_monitor *ha_mon)
 
 	if (RV_MON_TYPE == RV_MON_PER_CPU)
 		mode |= TIMER_PINNED;
+	ha_mon->expire = ENV_INVALID_VALUE;
 	timer_setup(&ha_mon->timer, ha_monitor_timer_callback, mode);
+}
+static inline void _ha_start_timer(struct ha_monitor *ha_mon, u64 expire,
+				   u64 time_ns)
+{
+	mod_timer(&ha_mon->timer, get_jiffies_64() + expire);
 }
 static inline void ha_start_timer_jiffy(struct ha_monitor *ha_mon, enum envs env,
 					u64 expire, u64 time_ns)
 {
 	u64 passed = ha_invariant_passed_jiffy(ha_mon, env, time_ns);
 
-	mod_timer(&ha_mon->timer, get_jiffies_64() + expire - passed);
+	ha_mon->expire = expire;
+	_ha_start_timer(ha_mon, expire - passed, time_ns);
 }
 static inline void ha_start_timer_ns(struct ha_monitor *ha_mon, enum envs env,
 				     u64 expire, u64 time_ns)
 {
 	u64 passed = ha_invariant_passed_ns(ha_mon, env, time_ns);
 
-	ha_start_timer_jiffy(ha_mon, ENV_MAX_STORED,
-			     nsecs_to_jiffies(expire - passed + TICK_NSEC - 1), time_ns);
+	ha_mon->expire = expire;
+	_ha_start_timer(ha_mon, nsecs_to_jiffies(expire - passed + TICK_NSEC - 1),
+			      time_ns);
 }
 /*
  * ha_cancel_timer - Cancel the timer

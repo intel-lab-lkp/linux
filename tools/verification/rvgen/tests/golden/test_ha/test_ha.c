@@ -87,9 +87,9 @@ static inline bool ha_verify_invariants(struct ha_monitor *ha_mon,
 					enum states next_state, u64 time_ns)
 {
 	if (curr_state == S0_test_ha)
-		return ha_check_invariant_ns(ha_mon, clk_test_ha, time_ns, bar_ns(ha_mon));
+		return ha_check_invariant_ns(ha_mon, clk_test_ha, time_ns);
 	else if (curr_state == S2_test_ha)
-		return ha_check_invariant_ns(ha_mon, clk_test_ha, time_ns, BAR_NS(ha_mon));
+		return ha_check_invariant_ns(ha_mon, clk_test_ha, time_ns);
 	return true;
 }
 

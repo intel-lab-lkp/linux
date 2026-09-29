@@ -248,9 +248,7 @@ class ha2k(dot2k):
         if inv.unit == "j":
             clock_type = "jiffy"
 
-        value = self.__adjust_value(inv.val, inv.unit)
-
-        return f"return ha_check_invariant_{clock_type}(ha_mon, {inv.env}_{self.name}, time_ns, {value})"
+        return f"return ha_check_invariant_{clock_type}(ha_mon, {inv.env}_{self.name}, time_ns)"
 
     def __parse_invariant(self, inv):
         # by default assume the timer has ns expiration

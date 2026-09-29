@@ -57,9 +57,9 @@ static inline bool ha_verify_invariants(struct ha_monitor *ha_mon,
 					enum states next_state, u64 time_ns)
 {
 	if (curr_state == ready_nomiss)
-		return ha_check_invariant_ns(ha_mon, clk_nomiss, time_ns, DEADLINE_NS(ha_mon));
+		return ha_check_invariant_ns(ha_mon, clk_nomiss, time_ns);
 	else if (curr_state == running_nomiss)
-		return ha_check_invariant_ns(ha_mon, clk_nomiss, time_ns, DEADLINE_NS(ha_mon));
+		return ha_check_invariant_ns(ha_mon, clk_nomiss, time_ns);
 	return true;
 }
 

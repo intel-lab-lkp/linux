@@ -109,7 +109,10 @@ struct ha_monitor {
 	u64 env_store[MAX_HA_ENV_LEN];
 	union {
 		struct hrtimer hrtimer;
-		struct timer_list timer;
+		struct {
+			struct timer_list timer;
+			u64 expire;
+		};
 	};
 };
 
