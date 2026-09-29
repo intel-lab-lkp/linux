@@ -19,6 +19,7 @@
 #define RPMPD_SSCCX_VFL		7
 #define RPMPD_SSCMX		8
 #define RPMPD_SSCMX_VFL		9
+#define RPMPD_VDDMD		10
 
 /*
  * Platform-specific power domain bindings. Don't add new entries here, use
@@ -84,8 +85,6 @@
 #define QM215_VDDMX_AO		MSM8917_VDDMX_AO
 
 /* MSM8953 Power Domain Indexes */
-#define MSM8953_VDDMD		0
-#define MSM8953_VDDMD_AO	1
 #define MSM8953_VDDCX		2
 #define MSM8953_VDDCX_AO	3
 #define MSM8953_VDDCX_VFL	4
