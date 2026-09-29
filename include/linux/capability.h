@@ -114,6 +114,11 @@ static inline bool cap_issubset(const kernel_cap_t a, const kernel_cap_t set)
 	return !(a.val & ~set.val);
 }
 
+static inline kernel_cap_t mk_kernel_cap(u32 low, u32 high)
+{
+	return (kernel_cap_t) { (low | ((u64)high << 32)) & CAP_VALID_MASK };
+}
+
 /* Used to decide between falling back on the old suser() or fsuser(). */
 
 static inline kernel_cap_t cap_drop_fs_set(const kernel_cap_t a)
