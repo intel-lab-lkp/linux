@@ -78,8 +78,22 @@ static void dwc3_xhci_plat_start(struct usb_hcd *hcd)
 	dwc3_enable_susphy(dwc, true);
 }
 
+static int dwc3_xhci_update_device(struct usb_hcd *hcd, struct usb_device *udev)
+{
+	struct platform_device *pdev;
+	struct dwc3 *dwc;
+
+	pdev = to_platform_device(hcd->self.controller);
+	dwc = dev_get_drvdata(pdev->dev.parent);
+
+	udev->tunnel_mode = dwc3_link_tunnel_mode(dwc, udev->portnum - 1);
+
+	return 0;
+}
+
 static const struct xhci_plat_priv dwc3_xhci_plat_quirk = {
 	.plat_start = dwc3_xhci_plat_start,
+	.update_device = dwc3_xhci_update_device,
 };
 
 static void dwc3_host_fill_xhci_irq_res(struct dwc3 *dwc,
