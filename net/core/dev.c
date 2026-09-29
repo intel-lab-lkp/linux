@@ -11447,6 +11447,13 @@ int register_netdevice(struct net_device *dev)
 		goto err_uninit;
 	}
 
+	if (!dev->netdev_ops->ndo_hwtstamp_get !=
+	    !dev->netdev_ops->ndo_hwtstamp_set) {
+		netdev_WARN(dev, "driver implements only one hwtstamp NDO\n");
+		ret = -EINVAL;
+		goto err_uninit;
+	}
+
 	if (netdev_need_ops_lock(dev) &&
 	    dev->netdev_ops->ndo_set_rx_mode &&
 	    !dev->netdev_ops->ndo_set_rx_mode_async)
