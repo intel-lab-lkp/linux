@@ -2,6 +2,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/kvm_host.h>
+#include <asm/hypervisor.h>
 #include "x86.h"
 #include "kvm_cache_regs.h"
 #include "kvm_emulate.h"
@@ -361,6 +362,20 @@ void enter_smm(struct kvm_vcpu *vcpu)
 	if (guest_cpu_cap_has(vcpu, X86_FEATURE_LM))
 		if (kvm_x86_call(set_efer)(vcpu, 0))
 			goto error;
+
+	/*
+	 * Work around Hyper-V rejecting VMRUN for a nested hypervisor when
+	 * CR3[63:32] != 0 with EFER.LMA=0, which is exactly the state left
+	 * behind by entering SMM with page tables above 4GiB.  CR3 is
+	 * unmodified on SMM entry, but with paging disabled and outside of
+	 * long mode bits 63:32 are unreachable, and RSM restores the full
+	 * value from SMRAM, so clearing them is invisible to the guest.
+	 */
+	if (hypervisor_is_type(X86_HYPER_MS_HYPERV) &&
+	    kvm_read_cr3(vcpu) >> 32) {
+		vcpu->arch.cr3 = (u32)vcpu->arch.cr3;
+		kvm_register_mark_dirty(vcpu, VCPU_EXREG_CR3);
+	}
 #endif
 
 	vcpu->arch.cpuid_dynamic_bits_dirty = true;
