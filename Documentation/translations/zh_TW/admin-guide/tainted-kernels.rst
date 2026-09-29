@@ -4,11 +4,6 @@
 
 :Original: :doc:`../../../admin-guide/tainted-kernels`
 
-:譯者:
-
- 吳想成 Wu XiangCheng <bobwxc@email.cn>
- 胡皓文 Hu Haowen <2023002089@link.tyut.edu.cn>
-
 受污染的內核
 -------------
 

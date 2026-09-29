@@ -2,14 +2,6 @@
 
 :Original: Documentation/admin-guide/sysrq.rst
 
-:翻譯:
-
- 黃軍華 Junhua Huang <huang.junhua@zte.com.cn>
-
-:校譯:
-
- 司延騰 Yanteng Si <siyanteng@loongson.cn>
-
 .. _tw_admin-guide_sysrq:
 
 Linux 魔法系統請求鍵駭客

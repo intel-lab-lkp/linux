@@ -5,11 +5,6 @@
 
 :Original: Documentation/admin-guide/reporting-regressions.rst
 
-:譯者:
-
- 吳想成 Wu XiangCheng <bobwxc@email.cn>
-
-
 ============
 報告迴歸問題
 ============

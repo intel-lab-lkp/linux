@@ -3,8 +3,6 @@
 .. include:: ../disclaimer-zh_TW.rst
 
 :Original: :doc:`../../../admin-guide/index`
-:Translator: Alex Shi <alex.shi@linux.alibaba.com>
-             胡皓文 Hu Haowen <2023002089@link.tyut.edu.cn>
 
 Linux 內核用戶和管理員指南
 ==========================

@@ -4,8 +4,6 @@
 
 :Original: Documentation/admin-guide/bootconfig.rst
 
-:譯者: 吳想成 Wu XiangCheng <bobwxc@email.cn>
-
 ========
 引導配置
 ========
