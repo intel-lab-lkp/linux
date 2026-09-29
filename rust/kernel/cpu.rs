@@ -6,6 +6,13 @@
 
 use crate::{bindings, device::Device, error::Result, prelude::ENODEV};
 
+/// Returns the maximum number of CPUs that may be online on the system.
+#[inline]
+pub fn num_possible_cpus() -> u32 {
+    // SAFETY: FFI call with no additional requirements.
+    unsafe { bindings::num_possible_cpus() }
+}
+
 /// Returns the maximum number of possible CPUs in the current system configuration.
 #[inline]
 pub fn nr_cpu_ids() -> u32 {
