@@ -374,6 +374,8 @@ static bool cifs_tcp_ses_needs_reconnect(struct TCP_Server_Info *server, int num
 	shutdown = (server->tcpStatus != CifsNeedReconnect || server->need_sock_shutdown);
 	server->need_sock_shutdown = false;
 	server->tcpStatus = CifsNeedReconnect;
+	server->reconnecting = true;
+	wake_up(&server->response_q);
 	spin_unlock(&server->srv_lock);
 
 	if (shutdown) {
@@ -457,6 +459,7 @@ static int __cifs_reconnect(struct TCP_Server_Info *server,
 	spin_lock(&server->srv_lock);
 	if (server->tcpStatus == CifsNeedNegotiate)
 		mod_delayed_work(cifsiod_wq, &server->echo, 0);
+	server->reconnecting = false;
 	spin_unlock(&server->srv_lock);
 
 	wake_up(&server->response_q);
@@ -599,6 +602,7 @@ static int reconnect_dfs_server(struct TCP_Server_Info *server)
 	spin_lock(&server->srv_lock);
 	if (server->tcpStatus == CifsNeedNegotiate)
 		mod_delayed_work(cifsiod_wq, &server->echo, 0);
+	server->reconnecting = false;
 	spin_unlock(&server->srv_lock);
 
 	wake_up(&server->response_q);

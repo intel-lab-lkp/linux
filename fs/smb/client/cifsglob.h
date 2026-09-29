@@ -803,6 +803,7 @@ struct TCP_Server_Info {
 	struct delayed_work reconnect; /* reconnect workqueue job */
 	struct mutex reconnect_mutex; /* prevent simultaneous reconnects */
 	bool need_sock_shutdown; /* true when CifsNeedReconnect was first set by non-cifsd task */
+	bool reconnecting; /* if cifs_reconnect() is indeed running */
 	unsigned long echo_interval;
 
 	/*
