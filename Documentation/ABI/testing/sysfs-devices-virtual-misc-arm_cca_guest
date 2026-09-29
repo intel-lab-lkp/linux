@@ -1,0 +1,38 @@
+What:		/sys/devices/virtual/misc/arm_cca_guest/measurements/MRNAME[:HASH]
+Date:		July, 2025
+KernelVersion:	v6.16
+Contact:	linux-coco@lists.linux.dev
+Description:
+		Value of a Arm CCA Realm measurement register (MR). The optional
+		suffix :HASH is to represent the hash algorithms associated with
+		the MRs. See below for a complete list of Arm CCA Realm MRs exposed
+		via sysfs. Refer to the Arm Realm Management Monitor (RMM)
+		Specification for more information on the Realm Measurement registers.
+
+		The Arm Realm Management Monitor Specification can be found at:
+		https://developer.arm.com/documentation/den0137/latest/
+
+		See also:
+		https://docs.kernel.org/driver-api/coco/measurement-registers.html
+
+What:		/sys/devices/virtual/misc/arm_cca_guest/measurements/rim:[sha256|sha512]
+Date:		July, 2025
+KernelVersion:	v6.16
+Contact:	linux-coco@lists.linux.dev
+Description:
+		(RO) RIM - [32|64]-byte immutable storage typically used to represent
+		the Realm Initial Measurement (RIM) which is the measurement of
+		the configuration and contents of a Realm at the time of activation.
+
+What:		/sys/devices/virtual/misc/arm_cca_guest/measurements/rem[0123]:[sha256|sha512]
+Date:		July, 2025
+KernelVersion:	v6.16
+Contact:	linux-coco@lists.linux.dev
+Description:
+		(RW) REM[0123] - 4 Run-Time extendable Measurement Registers that
+		represent the Realm Extensible Measurement (REM) registers which
+		can be extended during the lifetime of a Realm.
+		Read from any of these returns the current value of the corresponding
+		REM. Write extends the written buffer to the REM. All writes must start
+		at offset 0 and be maximum 64 bytes in size. Attempting to write more
+		than 64 bytes will result in EINVAL returned by the write() syscall.
