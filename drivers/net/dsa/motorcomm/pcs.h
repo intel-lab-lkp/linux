@@ -9,5 +9,6 @@
 #include <linux/phylink.h>
 
 extern const struct phylink_pcs_ops yt921x_phylink_pcs_ops;
+extern const struct phylink_pcs_ops yt922x_phylink_pcs_ops;
 
 #endif
