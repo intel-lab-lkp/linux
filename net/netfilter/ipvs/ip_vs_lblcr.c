@@ -686,7 +686,8 @@ ip_vs_lblcr_schedule(struct ip_vs_service *svc, const struct sk_buff *skb,
 
 		/* Update our cache entry */
 		spin_lock_bh(&svc->sched_lock);
-		if (!tbl->dead)
+		if (!tbl->dead &&
+		    ip_vs_lblcr_get(svc->af, tbl, &iph->daddr) == en)
 			ip_vs_dest_set_insert(&en->set, dest, true);
 		spin_unlock_bh(&svc->sched_lock);
 		goto out;
