@@ -1364,6 +1364,8 @@ static const struct key_entry ideapad_keymap[] = {
 	{ KE_KEY,   0x2d | IDEAPAD_WMI_KEY, { KEY_SELECTIVE_SCREENSHOT } },
 	{ KE_KEY,   0x29 | IDEAPAD_WMI_KEY, { KEY_TOUCHPAD_TOGGLE } },
 	{ KE_KEY,   0x2a | IDEAPAD_WMI_KEY, { KEY_ROOT_MENU } },
+	/* PrintScreen (Fn+F11) on ThinkBook 14 G8+ IPH (21VG) */
+	{ KE_KEY,   0x48 | IDEAPAD_WMI_KEY, { KEY_SYSRQ } },
 
 	{ KE_END },
 };
