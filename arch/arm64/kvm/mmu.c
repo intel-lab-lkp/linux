@@ -897,6 +897,21 @@ static int get_user_mapping_size(struct kvm *kvm, u64 addr)
 	return BIT(ARM64_HW_PGTABLE_LEVEL_SHIFT(level));
 }
 
+static void kvm_s2_mark_page_dirty(u64 pa)
+{
+	unsigned long pfn = pa >> PAGE_SHIFT;
+	struct page *page;
+
+	if (!pfn_valid(pfn))
+		return;
+
+	page = pfn_to_page(pfn);
+	if (PageReserved(page))
+		return;
+
+	SetPageDirty(page);
+}
+
 static struct kvm_pgtable_mm_ops kvm_s2_mm_ops = {
 	.zalloc_page		= stage2_memcache_zalloc_page,
 	.zalloc_pages_exact	= kvm_s2_zalloc_pages_exact,
@@ -909,6 +924,7 @@ static struct kvm_pgtable_mm_ops kvm_s2_mm_ops = {
 	.virt_to_phys		= kvm_host_pa,
 	.dcache_clean_inval_poc	= clean_dcache_guest_page,
 	.icache_inval_pou	= invalidate_icache_guest_page,
+	.mark_page_dirty	= kvm_s2_mark_page_dirty,
 };
 
 static int kvm_init_ipa_range(struct kvm_s2_mmu *mmu, unsigned long type)

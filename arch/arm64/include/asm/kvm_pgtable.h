@@ -246,6 +246,8 @@ struct kvm_pgtable_mm_ops {
 	phys_addr_t	(*virt_to_phys)(void *addr);
 	void		(*dcache_clean_inval_poc)(void *addr, size_t size);
 	void		(*icache_inval_pou)(void *addr, size_t size);
+	/* NULL where folios are not tracked. */
+	void		(*mark_page_dirty)(u64 pa);
 };
 
 /**

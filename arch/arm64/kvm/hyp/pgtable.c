@@ -1182,8 +1182,13 @@ static int stage2_unmap_walker(const struct kvm_pgtable_visit_ctx *ctx,
 
 		if (mm_ops->page_count(childp) != 1)
 			return 0;
-	} else if (stage2_pte_cacheable(pgt, ctx->old)) {
-		need_flush = !cpus_have_final_cap(ARM64_HAS_STAGE2_FWB);
+	} else {
+		if (stage2_pte_cacheable(pgt, ctx->old))
+			need_flush = !cpus_have_final_cap(ARM64_HAS_STAGE2_FWB);
+
+		if ((ctx->old & KVM_PTE_LEAF_ATTR_LO_S2_S2AP_W) &&
+		    mm_ops->mark_page_dirty)
+			mm_ops->mark_page_dirty(kvm_pte_to_phys(ctx->old));
 	}
 
 	/*
@@ -1301,6 +1306,11 @@ static int stage2_wrprotect_walker(const struct kvm_pgtable_visit_ctx *ctx,
 	/* We remove DBM on blocks so they can fault and get split */
 	if (ctx->level < KVM_PGTABLE_LAST_LEVEL)
 		new &= ~KVM_PTE_LEAF_ATTR_HI_S2_DBM;
+
+	if (kvm_pte_valid(ctx->old) && ctx->old != new &&
+	    (ctx->old & KVM_PTE_LEAF_ATTR_LO_S2_S2AP_W) &&
+	    ctx->mm_ops->mark_page_dirty)
+		ctx->mm_ops->mark_page_dirty(kvm_pte_to_phys(ctx->old));
 
 	/*
 	 * We may race with the CPU trying to set the access flag here,
