@@ -32,6 +32,35 @@
 
 #define STDOUT_FILENO 1
 
+#ifdef __i386__
+#include <stdarg.h>
+
+/*
+ * On 32-bit x86, libc's syscall() wrapper invokes the vDSO entry point
+ * stored in TLS (%gs:0x10 in glibc) or a global variable (__libc_sysinfo
+ * in Bionic) initialized by CRT startup routines. Because this binary is
+ * built with -nostartfiles, those pointers remain uninitialized and
+ * calling libc's syscall() crashes with SIGSEGV. Use int $0x80 directly.
+ */
+long syscall(long num, ...)
+{
+	va_list ap;
+	long a1, a2, a3, ret;
+
+	va_start(ap, num);
+	a1 = va_arg(ap, long);
+	a2 = va_arg(ap, long);
+	a3 = va_arg(ap, long);
+	va_end(ap);
+
+	__asm__ volatile("int $0x80"
+		: "=a"(ret)
+		: "a"(num), "b"(a1), "c"(a2), "d"(a3)
+		: "memory", "cc");
+	return ret;
+}
+#endif
+
 static int print(const char *s)
 {
 	size_t len = 0;
