@@ -3,7 +3,6 @@
 .. include:: ../disclaimer-zh_TW.rst
 
 :Original: Documentation/dev-tools/kasan.rst
-:Translator: 萬家兵 Wan Jiabing <wanjiabing@vivo.com>
 
 內核地址消毒劑(KASAN)
 =====================
