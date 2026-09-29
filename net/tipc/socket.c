@@ -1511,6 +1511,16 @@ static int __tipc_sendmsg(struct socket *sock, struct msghdr *m, size_t dlen)
 		return -ENOMEM;
 	}
 
+	/* Subscribe before sending SYN so node loss also aborts pending connects. */
+	if (syn) {
+		rc = tipc_node_add_conn(net, skaddr.node, tsk->portid, skaddr.ref);
+		if (rc) {
+			__skb_queue_purge(&pkts);
+			__skb_queue_purge(&sk->sk_write_queue);
+			return rc;
+		}
+	}
+
 	/* Send message */
 	trace_tipc_sk_sendmsg(sk, skb_peek(&pkts), TIPC_DUMP_SK_SNDQ, " ");
 	rc = tipc_node_xmit(net, &pkts, skaddr.node, tsk->portid);
@@ -1518,6 +1528,11 @@ static int __tipc_sendmsg(struct socket *sock, struct msghdr *m, size_t dlen)
 		tipc_dest_push(clinks, skaddr.node, 0);
 		tsk->cong_link_cnt++;
 		rc = 0;
+	}
+
+	if (unlikely(syn && rc)) {
+		tipc_node_remove_conn(net, skaddr.node, tsk->portid);
+		__skb_queue_purge(&sk->sk_write_queue);
 	}
 
 	if (unlikely(syn && !rc)) {
@@ -1674,8 +1689,10 @@ static void tipc_sk_finish_conn(struct tipc_sock *tsk, u32 peer_port,
 	msg_set_hdr_sz(msg, SHORT_H_SIZE);
 
 	sk_reset_timer(sk, &sk->sk_timer, jiffies + CONN_PROBING_INTV);
+	/* Active opens already subscribed before sending SYN. */
+	if (sk->sk_state != TIPC_CONNECTING)
+		tipc_node_add_conn(net, peer_node, tsk->portid, peer_port);
 	tipc_set_sk_state(sk, TIPC_ESTABLISHED);
-	tipc_node_add_conn(net, peer_node, tsk->portid, peer_port);
 	tsk->max_pkt = tipc_node_get_mtu(net, peer_node, tsk->portid, true);
 	tsk->peer_caps = tipc_node_get_capabilities(net, peer_node);
 	tsk_set_nagle(tsk);
@@ -2199,12 +2216,14 @@ static bool tipc_sk_filter_connect(struct tipc_sock *tsk, struct sk_buff *skb,
 	struct net *net = sock_net(sk);
 	struct tipc_msg *hdr = buf_msg(skb);
 	bool con_msg = msg_connected(hdr);
+	bool reject_ack = false;
 	u32 pport = tsk_peer_port(tsk);
 	u32 pnode = tsk_peer_node(tsk);
 	u32 oport = msg_origport(hdr);
 	u32 onode = msg_orignode(hdr);
 	int err = msg_errcode(hdr);
 	unsigned long delay;
+	int rc;
 
 	if (unlikely(msg_mcast(hdr)))
 		return false;
@@ -2216,6 +2235,18 @@ static bool tipc_sk_filter_connect(struct tipc_sock *tsk, struct sk_buff *skb,
 		if (likely(con_msg)) {
 			if (err)
 				break;
+			rc = tipc_node_update_conn(net, pnode, tsk->portid, oport);
+			/* A named SYN may have been rerouted to another node. */
+			if (!rc && onode != pnode) {
+				tipc_node_remove_conn(net, pnode, tsk->portid);
+				rc = tipc_node_add_conn(net, onode, tsk->portid, oport);
+			}
+			if (rc) {
+				err = TIPC_ERR_NO_NODE;
+				/* Return a late ACK to its sender, including any data. */
+				reject_ack = true;
+				break;
+			}
 			tipc_sk_finish_conn(tsk, oport, onode);
 			msg_set_importance(&tsk->phdr, msg_importance(hdr));
 			/* ACK+ message with data is added to receive queue */
@@ -2285,9 +2316,10 @@ static bool tipc_sk_filter_connect(struct tipc_sock *tsk, struct sk_buff *skb,
 	}
 	/* Abort connection setup attempt */
 	tipc_set_sk_state(sk, TIPC_DISCONNECTING);
-	sk->sk_err = ECONNREFUSED;
+	tipc_node_remove_conn(net, pnode, tsk->portid);
+	sk->sk_err = err == TIPC_ERR_NO_NODE ? EHOSTUNREACH : ECONNREFUSED;
 	sk->sk_state_change(sk);
-	return true;
+	return !reject_ack;
 }
 
 /**

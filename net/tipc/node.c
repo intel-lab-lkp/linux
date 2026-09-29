@@ -713,9 +713,44 @@ int tipc_node_add_conn(struct net *net, u32 dnode, u32 port, u32 peer_port)
 	conn->peer_port = peer_port;
 
 	tipc_node_write_lock(node);
-	list_add_tail(&conn->list, &node->conn_sks);
+	if (node_is_up(node)) {
+		list_add_tail(&conn->list, &node->conn_sks);
+	} else {
+		err = -EHOSTUNREACH;
+		kfree(conn);
+	}
 	tipc_node_write_unlock(node);
 exit:
+	tipc_node_put(node);
+	return err;
+}
+
+/* Replace the listening port with the accepted port without losing the
+ * node loss subscription. A missing entry means node_lost_contact() has
+ * already aborted this connection attempt, even if the node is up again.
+ */
+int tipc_node_update_conn(struct net *net, u32 dnode, u32 port, u32 peer_port)
+{
+	struct tipc_sock_conn *conn;
+	struct tipc_node *node;
+	int err = -EHOSTUNREACH;
+
+	if (in_own_node(net, dnode))
+		return 0;
+
+	node = tipc_node_find(net, dnode);
+	if (!node)
+		return err;
+
+	tipc_node_write_lock(node);
+	list_for_each_entry(conn, &node->conn_sks, list) {
+		if (conn->port != port)
+			continue;
+		conn->peer_port = peer_port;
+		err = 0;
+		break;
+	}
+	tipc_node_write_unlock(node);
 	tipc_node_put(node);
 	return err;
 }
