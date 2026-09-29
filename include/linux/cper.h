@@ -542,17 +542,23 @@ struct cper_mem_err_compact {
 	u16	card;
 	u16	module;
 	u16	bank;
-	u16	device;
-	u16	row;
-	u16	column;
-	u16	bit_pos;
+	u32	device;
+	u32	row;
+	u32	column;
+	u32	bit_pos;
 	u64	requestor_id;
 	u64	responder_id;
 	u64	target_id;
-	u16	rank;
-	u16	mem_array_handle;
-	u16	mem_dev_handle;
-	u8      extended;
+	u32	rank;
+	u32	mem_array_handle;
+	u32	mem_dev_handle;
+	u64	error_status;
+	u64	physical_addr;
+	u64	physical_addr_mask;
+	u8	chip_id;
+	u8	status;
+	u8	error_type;
+	u8	is_section2;
 };
 
 static inline u32 cper_get_mem_extension(u64 mem_valid, u8 mem_extended)

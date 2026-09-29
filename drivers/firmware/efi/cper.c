@@ -325,12 +325,8 @@ int cper_mem_err_location(struct cper_mem_err_compact *mem, char *msg)
 			       mem->bank & CPER_MEM_BANK_ADDRESS_MASK);
 	if (mem->validation_bits & CPER_MEM_VALID_DEVICE)
 		n += scnprintf(msg + n, len - n, "device:%d ", mem->device);
-	if (mem->validation_bits & (CPER_MEM_VALID_ROW | CPER_MEM_VALID_ROW_EXT)) {
-		u32 row = mem->row;
-
-		row |= cper_get_mem_extension(mem->validation_bits, mem->extended);
-		n += scnprintf(msg + n, len - n, "row:%d ", row);
-	}
+	if (mem->validation_bits & (CPER_MEM_VALID_ROW | CPER_MEM_VALID_ROW_EXT))
+		n += scnprintf(msg + n, len - n, "row:%d ", mem->row);
 	if (mem->validation_bits & CPER_MEM_VALID_COLUMN)
 		n += scnprintf(msg + n, len - n, "column:%d ", mem->column);
 	if (mem->validation_bits & CPER_MEM_VALID_BIT_POSITION)
@@ -347,7 +343,7 @@ int cper_mem_err_location(struct cper_mem_err_compact *mem, char *msg)
 			       mem->target_id);
 	if (mem->validation_bits & CPER_MEM_VALID_CHIP_ID)
 		n += scnprintf(msg + n, len - n, "chip_id:%d ",
-			       mem->extended >> CPER_MEM_CHIP_ID_SHIFT);
+			       mem->chip_id);
 
 	return n;
 }
@@ -362,7 +358,7 @@ int cper_dimm_err_location(struct cper_mem_err_compact *mem, char *msg)
 		return 0;
 
 	len = CPER_REC_LEN;
-	dmi_memdev_name(mem->mem_dev_handle, &bank, &device);
+	dmi_memdev_name((u16)mem->mem_dev_handle, &bank, &device);
 	if (bank && device)
 		n = snprintf(msg, len, "DIMM location: %s %s ", bank, device);
 	else
@@ -377,6 +373,7 @@ EXPORT_SYMBOL_GPL(cper_dimm_err_location);
 void cper_mem_err_pack(const struct cper_sec_mem_err *mem,
 		       struct cper_mem_err_compact *cmem)
 {
+	memset(cmem, 0, sizeof(*cmem));
 	cmem->validation_bits = mem->validation_bits;
 	cmem->node = mem->node;
 	cmem->card = mem->card;
@@ -384,15 +381,21 @@ void cper_mem_err_pack(const struct cper_sec_mem_err *mem,
 	cmem->bank = mem->bank;
 	cmem->device = mem->device;
 	cmem->row = mem->row;
+	cmem->row |= cper_get_mem_extension(mem->validation_bits, mem->extended);
 	cmem->column = mem->column;
 	cmem->bit_pos = mem->bit_pos;
 	cmem->requestor_id = mem->requestor_id;
 	cmem->responder_id = mem->responder_id;
 	cmem->target_id = mem->target_id;
-	cmem->extended = mem->extended;
 	cmem->rank = mem->rank;
 	cmem->mem_array_handle = mem->mem_array_handle;
 	cmem->mem_dev_handle = mem->mem_dev_handle;
+	cmem->error_status = mem->error_status;
+	cmem->physical_addr = mem->physical_addr;
+	cmem->physical_addr_mask = mem->physical_addr_mask;
+	cmem->error_type = mem->error_type;
+	if (mem->validation_bits & CPER_MEM_VALID_CHIP_ID)
+		cmem->chip_id = mem->extended >> CPER_MEM_CHIP_ID_SHIFT;
 }
 EXPORT_SYMBOL_GPL(cper_mem_err_pack);
 
