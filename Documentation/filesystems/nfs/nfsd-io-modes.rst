@@ -130,6 +130,16 @@ Misaligned WRITE:
     segments because using normal buffered IO offers significant RMW
     performance benefit when handling streaming misaligned WRITEs.
 
+    The O_DIRECT middle segment also carries the DONTCACHE flag. It has
+    no effect while the IO really is O_DIRECT, but a filesystem may
+    decide on its own to service the segment with buffered IO instead
+    (XFS does so when it cannot invalidate page cache that overlaps the
+    segment, which can happen when another WRITE's buffered start or
+    end segment dirties the shared boundary page at the same time).
+    The flag makes that fallback DONTCACHE buffered IO rather than
+    normal buffered IO. Such fallbacks are visible through the
+    iomap_dio_invalidate_fail trace event; see Tracing below.
+
 Tracing:
     The nfsd_read_direct trace event shows how NFSD expands any
     misaligned READ to the next DIO-aligned block (on either end of the

@@ -1332,6 +1332,15 @@ nfsd_write_dio_iters_init(struct nfsd_file *nf, struct bio_vec *bvec,
 	if (iov_iter_bvec_offset(&segments[nsegs].iter) & (mem_align - 1))
 		goto no_dio;
 	segments[nsegs].flags |= IOCB_DIRECT;
+	/*
+	 * Also mark the direct middle DONTCACHE: the file system may fall
+	 * back to buffered I/O on its own (e.g. XFS on -ENOTBLK when it
+	 * cannot invalidate page cache that a concurrent buffered prefix or
+	 * suffix of an adjacent WRITE just dirtied), and it reuses this kiocb
+	 * to do so.  On the direct path itself the flag is inert.
+	 */
+	if (nf->nf_file->f_op->fop_flags & FOP_DONTCACHE)
+		segments[nsegs].flags |= IOCB_DONTCACHE;
 	nsegs++;
 
 	if (suffix)
