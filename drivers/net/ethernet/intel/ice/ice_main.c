@@ -4791,6 +4791,9 @@ int ice_init_dev(struct ice_pf *pf)
 		return -EIO;
 	}
 
+	mutex_init(&pf->dplls.lock);
+	init_rwsem(&pf->dplls.health_notify_rwsem);
+
 	ice_start_service_task(pf);
 
 	return 0;
@@ -4799,6 +4802,8 @@ int ice_init_dev(struct ice_pf *pf)
 void ice_deinit_dev(struct ice_pf *pf)
 {
 	ice_service_task_stop(pf);
+
+	mutex_destroy(&pf->dplls.lock);
 
 	/* Service task is already stopped, so call reset directly. */
 	ice_reset(&pf->hw, ICE_RESET_PFR);
@@ -4813,14 +4818,6 @@ static void ice_init_features(struct ice_pf *pf)
 	if (ice_is_safe_mode(pf))
 		return;
 
-	/* pf->dplls.lock guards TSPLL/CGU access shared between the DPLL
-	 * subsystem callbacks and the PTP periodic worker's TSPLL monitor.
-	 * Initialize it before ice_ptp_init() so the PTP kworker never sees
-	 * an uninitialized mutex, and destroy it in ice_deinit_features()
-	 * only after ice_ptp_release() has drained the kworker.
-	 */
-	mutex_init(&pf->dplls.lock);
-
 	/* initialize DDP driven features */
 	if (test_bit(ICE_FLAG_PTP_SUPPORTED, pf->flags))
 		ice_ptp_init(pf);
@@ -4828,8 +4825,11 @@ static void ice_init_features(struct ice_pf *pf)
 	if (ice_is_feature_supported(pf, ICE_F_GNSS))
 		ice_gnss_init(pf);
 
+	pf->dplls.unmanaged = ice_dpll_is_unmanaged(pf);
+
 	if (ice_is_feature_supported(pf, ICE_F_CGU) ||
-	    ice_is_feature_supported(pf, ICE_F_PHY_RCLK))
+	    ice_is_feature_supported(pf, ICE_F_PHY_RCLK) ||
+	    pf->dplls.unmanaged)
 		ice_dpll_init(pf);
 
 	/* Note: Flow director init failure is non-fatal to load */
@@ -4865,7 +4865,6 @@ static void ice_deinit_features(struct ice_pf *pf)
 		ice_ptp_release(pf);
 	if (test_bit(ICE_FLAG_DPLL, pf->flags))
 		ice_dpll_deinit(pf);
-	mutex_destroy(&pf->dplls.lock);
 	if (pf->eswitch_mode == DEVLINK_ESWITCH_MODE_SWITCHDEV)
 		xa_destroy(&pf->eswitch.reprs);
 	ice_hwmon_exit(pf);
