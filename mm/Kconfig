@@ -1511,6 +1511,17 @@ config LAZY_MMU_MODE_KUNIT_TEST
 
 	  If unsure, say N.
 
+config PTVAL_HEX_STR_KUNIT_TEST
+	bool "KUnit tests for pgtable entry string conversion" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  Enable this option to check that ptval_bytes_to_hex_str() is able
+	  convert given pgtable entry value in bytes into hex strings which
+	  could be printed.
+
+	  If unsure, say N.
+
 source "mm/damon/Kconfig"
 
 endmenu
