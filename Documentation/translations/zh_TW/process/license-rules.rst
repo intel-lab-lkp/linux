@@ -3,9 +3,6 @@
 .. include:: ../disclaimer-zh_TW.rst
 
 :Original: :ref:`Documentation/process/license-rules.rst <kernel_licensing>`
-:Translator: Alex Shi <alex.shi@linux.alibaba.com>
-             Hu Haowen <2023002089@link.tyut.edu.cn>
-             Chen-Yu Yeh <chenyou910331@gmail.com>
 
 .. _tw_kernel_licensing:
 

@@ -6,19 +6,6 @@
 
 :Original: :ref:`Documentation/process/howto.rst <process_howto>`
 
-譯者::
-
-    英文版維護者： Greg Kroah-Hartman <greg@kroah.com>
-    中文版維護者： 李陽  Li Yang <leoyang.li@nxp.com>
-    中文版翻譯者： 李陽  Li Yang <leoyang.li@nxp.com>
-                   時奎亮 Alex Shi <alex.shi@linux.alibaba.com>
-    中文版校譯者:
-                   鍾宇  TripleX Chung <xxx.phy@gmail.com>
-                   陳琦  Maggie Chen <chenqi@beyondsoft.com>
-                   王聰  Wang Cong <xiyou.wangcong@gmail.com>
-                   胡皓文 Hu Haowen <2023002089@link.tyut.edu.cn>
-                   葉宸佑 Chen-Yu Yeh <chenyou910331@gmail.com>
-
 如何參與Linux核心開發
 =====================
 
@@ -494,8 +481,3 @@ Kees Cook, Andrew Morton, Andi Kleen, Vadim Lobanov, Jesper Juhl, Adrian
 Bunk, Keri Harris, Frans Pop, David A. Wheeler, Junio Hamano, Michael
 Kerrisk和Alex Shepard的評審、建議和貢獻。沒有他們的幫助，這篇文件是不可
 能完成的。
-
-
-
-英文版維護者： Greg Kroah-Hartman <greg@kroah.com>
-

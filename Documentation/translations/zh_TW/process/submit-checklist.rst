@@ -3,10 +3,6 @@
 .. include:: ../disclaimer-zh_TW.rst
 
 :Original: Documentation/process/submit-checklist.rst
-:Translator:
- - Alex Shi <alexs@kernel.org>
- - Wu XiangCheng <bobwxc@email.cn>
- - Hu Haowen <2023002089@link.tyut.edu.cn>
 
 .. _tw_submitchecklist:
 
