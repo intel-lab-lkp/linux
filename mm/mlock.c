@@ -603,6 +603,47 @@ static int __mlock_posix_error_return(long retval)
 	return retval;
 }
 
+/**
+ * check_mlock_range - Validate and page-align the requested address range.
+ * @start: Pointer to the start address. Untagged and page-aligned on success.
+ * @len:   Pointer to the length. Page-aligned on success.
+ *
+ * Return: 0 if the range is valid, or -EINVAL on arithmetic overflow.
+ * If *len is 0, *len remains 0 and 0 is returned; callers should treat this
+ * as a no-op and return 0 immediately without acquiring mmap_lock.
+ */
+static int check_mlock_range(unsigned long *start, size_t *len)
+{
+	unsigned long end;
+
+	/* Untag user pointer (e.g. AArch64 TBI / x86 LAM) before arithmetic. */
+	*start = untagged_addr(*start);
+
+	/*
+	 * A zero-length request must not be rounded up by PAGE_ALIGN()
+	 * to a non-zero range when *start is unaligned. Return 0 so caller
+	 * can exit early without modifying VMAs or taking locks.
+	 */
+	if (!*len)
+		return 0;
+
+	/* Guard against addition overflow between length and start offset. */
+	if (check_add_overflow(*len, (size_t)offset_in_page(*start), len))
+		return -EINVAL;
+
+	*len = PAGE_ALIGN(*len);
+	/* Check whether PAGE_ALIGN() wrapped a non-zero length to zero. */
+	if (!*len)
+		return -EINVAL;
+
+	*start &= PAGE_MASK;
+	/* Reject address wrap-around (start + len < start) before taking locks. */
+	if (check_add_overflow(*start, (unsigned long)*len, &end))
+		return -EINVAL;
+
+	return 0;
+}
+
 static __must_check int do_mlock(unsigned long start, size_t len,
 				 vma_flags_t *flags)
 {
@@ -610,13 +651,12 @@ static __must_check int do_mlock(unsigned long start, size_t len,
 	unsigned long lock_limit;
 	int error = -ENOMEM;
 
-	start = untagged_addr(start);
-
 	if (!can_do_mlock())
 		return -EPERM;
 
-	len = PAGE_ALIGN(len + (offset_in_page(start)));
-	start &= PAGE_MASK;
+	error = check_mlock_range(&start, &len);
+	if (error || !len)
+		return error;
 
 	lock_limit = rlimit(RLIMIT_MEMLOCK);
 	lock_limit >>= PAGE_SHIFT;
@@ -676,10 +716,9 @@ SYSCALL_DEFINE2(munlock, unsigned long, start, size_t, len)
 	vma_flags_t flags = EMPTY_VMA_FLAGS;
 	int ret;
 
-	start = untagged_addr(start);
-
-	len = PAGE_ALIGN(len + (offset_in_page(start)));
-	start &= PAGE_MASK;
+	ret = check_mlock_range(&start, &len);
+	if (ret || !len)
+		return ret;
 
 	if (mmap_write_lock_killable(current->mm))
 		return -EINTR;
