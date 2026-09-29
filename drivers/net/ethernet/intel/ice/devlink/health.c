@@ -236,7 +236,19 @@ void ice_process_health_status_event(struct ice_pf *pf, struct ice_rq_event_info
 		status_code = le16_to_cpu(health_info->health_status_code);
 		health_code = ice_get_health_status(status_code);
 
-		if (health_code) {
+		if (status_code == ICE_AQC_HEALTH_STATUS_INFO_LOSS_OF_LOCK &&
+		    pf->dplls.unmanaged) {
+			/* Firmware reports every unmanaged dpll lock state
+			 * transition with this code, re-locking included. It
+			 * is informational and not a failure, so it gets its
+			 * own path and deliberately does not reach
+			 * devlink_health_report(), which would bump
+			 * error_count and latch the shared firmware reporter
+			 * into DEVLINK_HEALTH_REPORTER_STATE_ERROR on every
+			 * normal state change.
+			 */
+			ice_dpll_lock_state_set_unmanaged(pf, health_info);
+		} else if (health_code) {
 			switch (le16_to_cpu(health_info->event_source)) {
 			case ICE_AQC_HEALTH_STATUS_GLOBAL:
 				pf->health_reporters.fw_status = *health_info;
