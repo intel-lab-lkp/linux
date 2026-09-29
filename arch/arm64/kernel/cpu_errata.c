@@ -389,6 +389,12 @@ static const struct arm64_cpu_capabilities arm64_repeat_amu_constcnt_list[] = {
 		CAP_MIDR_RANGE(MIDR_CORTEX_A510, 0, 0, 1, 1)
 	},
 #endif
+#ifdef CONFIG_ARM64_ERRATUM_3821522
+	{
+		/* Cortex-A725 r0p0 - r0p2 */
+		CAP_MIDR_RANGE(MIDR_CORTEX_A725, 0, 0, 0, 2)
+	},
+#endif
 	{}
 };
 #endif /* CONFIG_ARM64_WORKAROUND_BROKEN_AMU_CONSTCNT */
