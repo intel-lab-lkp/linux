@@ -26,6 +26,10 @@
 #include <linux/part_stat.h>
 #include <linux/rw_hint.h>
 
+#ifdef CONFIG_F2FS_FS_NODE_CACHE_COMPRESSION
+struct f2fs_nc_ctx;
+#endif
+
 #include <linux/fscrypt.h>
 #include <linux/fsverity.h>
 
@@ -2106,6 +2110,9 @@ struct f2fs_sb_info {
 	struct f2fs_cached_block_list meta_blocks;
 	struct f2fs_cached_block_list node_blocks;
 	struct f2fs_cached_block_list compress_blocks;
+#ifdef CONFIG_F2FS_FS_NODE_CACHE_COMPRESSION
+	struct f2fs_nc_ctx *node_compress;
+#endif
 
 	/* internal cache flush thread */
 	struct f2fs_cache_kthread cache_thread;

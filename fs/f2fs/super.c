@@ -32,6 +32,7 @@
 #include <linux/fserror.h>
 
 #include "f2fs.h"
+#include "node_cache_compress.h"
 #include "node.h"
 #include "segment.h"
 #include "xattr.h"
@@ -2071,6 +2072,7 @@ static void f2fs_put_super(struct super_block *sb)
 
 	f2fs_destroy_cache(COMPRESS_CACHE(sbi));
 	f2fs_destroy_cache(NODE_CACHE(sbi));
+	f2fs_nc_destroy(sbi);
 	f2fs_destroy_cache(META_CACHE(sbi));
 
 	/* Should check the page counts after dropping all node/meta pages */
@@ -5263,6 +5265,7 @@ try_onemore:
 	f2fs_init_cache(sbi, META_CACHE(sbi), F2FS_META_CACHE);
 	f2fs_init_cache(sbi, NODE_CACHE(sbi), F2FS_NODE_CACHE);
 	f2fs_init_cache(sbi, COMPRESS_CACHE(sbi), F2FS_COMPRESS_CACHE);
+	f2fs_nc_init(sbi);
 
 	err = f2fs_get_valid_checkpoint(sbi);
 	if (err) {
@@ -5581,6 +5584,7 @@ free_devices:
 free_compress_cache:
 	f2fs_destroy_cache(COMPRESS_CACHE(sbi));
 	f2fs_destroy_cache(NODE_CACHE(sbi));
+	f2fs_nc_destroy(sbi);
 	f2fs_destroy_cache(META_CACHE(sbi));
 	f2fs_destroy_page_array_cache(sbi);
 free_percpu:

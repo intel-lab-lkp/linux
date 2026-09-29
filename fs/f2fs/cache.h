@@ -64,6 +64,9 @@ enum f2fs_cached_state {
 	F2FS_BLOCK_WRITEBACK,		/* cache data is writeback state */
 	F2FS_BLOCK_REFERENCED,		/* cache was accessed recently, shrinker will skip it for once */
 	F2FS_BLOCK_INLINE_DATA,		/* indicate inline data */
+#ifdef CONFIG_F2FS_FS_NODE_CACHE_COMPRESSION
+	F2FS_BLOCK_COMPRESSED,
+#endif
 };
 
 enum {
@@ -144,6 +147,11 @@ F2FS_CACHE_FLAG_CLEAR_FUNC(inline, INLINE_DATA);
 F2FS_CACHE_FLAG_TEST_FUNC(referenced, REFERENCED);
 F2FS_CACHE_FLAG_SET_FUNC(referenced, REFERENCED);
 F2FS_CACHE_FLAG_TEST_AND_CLEAR_FUNC(referenced, REFERENCED);
+#ifdef CONFIG_F2FS_FS_NODE_CACHE_COMPRESSION
+F2FS_CACHE_FLAG_TEST_FUNC(compressed, COMPRESSED);
+F2FS_CACHE_FLAG_SET_FUNC(compressed, COMPRESSED);
+F2FS_CACHE_FLAG_CLEAR_FUNC(compressed, COMPRESSED);
+#endif
 
 static inline void *cache_address(const struct f2fs_cached_block *entry)
 {

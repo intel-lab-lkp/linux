@@ -17,6 +17,7 @@
 #include "node.h"
 #include <trace/events/f2fs.h>
 #include "segment.h"
+#include "node_cache_compress.h"
 
 void f2fs_cache_wait_writeback_cond(struct f2fs_cached_block *entry,
 					enum page_type type)
@@ -127,7 +128,7 @@ static int f2fs_cache_refcount(struct f2fs_cached_block *entry)
 
 static void f2fs_do_free_cache(struct f2fs_cached_block *entry)
 {
-	kfree(entry->data);
+	f2fs_nc_free_data(entry);
 	kfree(entry);
 }
 
@@ -159,6 +160,7 @@ static struct f2fs_cached_block *f2fs_create_cache(
 {
 	struct f2fs_sb_info *sbi = cache->sbi;
 	struct f2fs_cached_block *entry;
+	size_t entry_size = f2fs_nc_entry_alloc_size(cache);
 	unsigned int flags = GFP_NOFS;
 
 	if (index == ULONG_MAX)
@@ -166,10 +168,10 @@ static struct f2fs_cached_block *f2fs_create_cache(
 
 	if (nofail) {
 		flags |= __GFP_NOFAIL;
-		entry = kzalloc_obj(*entry, flags);
+		entry = kzalloc(entry_size, flags);
 		entry->data = kmalloc(sbi->blocksize, flags);
 	} else {
-		entry = f2fs_kzalloc(sbi, sizeof(*entry), flags);
+		entry = f2fs_kzalloc(sbi, entry_size, flags);
 		if (!entry)
 			return ERR_PTR(-ENOMEM);
 
@@ -220,6 +222,7 @@ static struct f2fs_cached_block *f2fs_insert_cache(
 		f2fs_bug_on(cache->sbi, !list_empty(&e->list));
 		list_add_tail(&e->list, &cache->lru_list);
 		cache->num_entries++;
+		f2fs_nc_entry_attached(e);
 	}
 	f2fs_cache_get(e);
 	spin_unlock_irqrestore(&cache->tree_lock, flags);
@@ -429,8 +432,9 @@ drop_it:
 	if (!radix_tree_delete(&cache->root, entry->index))
 		f2fs_bug_on(cache->sbi, !entry->cache);
 
-	entry->cache = NULL;
 	cache->num_entries--;
+	f2fs_nc_entry_detached(entry);
+	entry->cache = NULL;
 
 	atomic_dec(&entry->refcount);
 	f2fs_bug_on(cache->sbi, !f2fs_cache_refcount(entry));
@@ -514,14 +518,24 @@ int f2fs_init_cache(struct f2fs_sb_info *sbi,
 
 void f2fs_destroy_cache(struct f2fs_cached_block_list *cache)
 {
-	struct list_head *head = &cache->lru_list;
+	struct list_head *head;
 	struct f2fs_cached_block *entry;
 	unsigned long flags;
+	unsigned int queue;
 
 	f2fs_cache_wait_on_all_writeback(cache);
 next:
 	spin_lock(&cache->list_lock);
-	if (list_empty(head)) {
+	head = NULL;
+	for (queue = 0; queue < F2FS_NC_NR_QUEUES; queue++) {
+		struct list_head *candidate = f2fs_nc_queue_head(cache, queue);
+
+		if (candidate && !list_empty(candidate)) {
+			head = candidate;
+			break;
+		}
+	}
+	if (!head) {
 		spin_unlock(&cache->list_lock);
 		return;
 	}
@@ -530,6 +544,7 @@ next:
 	spin_lock_irqsave(&cache->tree_lock, flags);
 	radix_tree_delete(&cache->root, entry->index);
 	cache->num_entries--;
+	f2fs_nc_entry_detached(entry);
 	list_del_init(&entry->list);
 	spin_unlock_irqrestore(&cache->tree_lock, flags);
 

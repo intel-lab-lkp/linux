@@ -19,6 +19,7 @@
 #include "node.h"
 #include "segment.h"
 #include "gc.h"
+#include "node_cache_compress.h"
 
 static LIST_HEAD(f2fs_stat_list);
 static DEFINE_SPINLOCK(f2fs_stat_lock);
@@ -297,6 +298,7 @@ static void update_general_status(struct f2fs_sb_info *sbi)
 static void update_mem_info(struct f2fs_sb_info *sbi)
 {
 	struct f2fs_stat_info *si = F2FS_STAT(sbi);
+	struct f2fs_nc_memory node_memory;
 	int i;
 
 	if (si->base_mem)
@@ -386,11 +388,9 @@ get_cache:
 	si->cache_data_mem[F2FS_META_CACHE] =
 		(unsigned long long)META_CACHE(sbi)->num_entries * sbi->blocksize;
 
-	si->cache_entry_mem[F2FS_NODE_CACHE] =
-		(unsigned long long)NODE_CACHE(sbi)->num_entries *
-		sizeof(struct f2fs_cached_block);
-	si->cache_data_mem[F2FS_NODE_CACHE] =
-		(unsigned long long)NODE_CACHE(sbi)->num_entries * sbi->blocksize;
+	f2fs_nc_memory_usage(sbi, &node_memory);
+	si->cache_entry_mem[F2FS_NODE_CACHE] = node_memory.entry_bytes;
+	si->cache_data_mem[F2FS_NODE_CACHE] = node_memory.data_bytes;
 
 	si->cache_mem += si->cache_entry_mem[F2FS_META_CACHE] +
 			 si->cache_entry_mem[F2FS_NODE_CACHE];
