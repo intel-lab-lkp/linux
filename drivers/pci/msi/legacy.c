@@ -45,6 +45,7 @@ void __weak arch_teardown_msi_irqs(struct pci_dev *dev)
 	msi_for_each_desc(desc, &dev->dev, MSI_DESC_ASSOCIATED) {
 		for (i = 0; i < desc->nvec_used; i++)
 			arch_teardown_msi_irq(desc->irq + i);
+		desc->irq = 0;
 	}
 }
 
