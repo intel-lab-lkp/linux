@@ -2706,8 +2706,9 @@ int cpuhp_smt_enable(void)
 	cpu_maps_update_begin();
 	cpu_smt_control = CPU_SMT_ENABLED;
 	for_each_present_cpu(cpu) {
-		/* Skip online CPUs and CPUs on offline nodes */
-		if (cpu_online(cpu) || !node_online(cpu_to_node(cpu)))
+		/* Skip online/disabled CPUs and CPUs on offline nodes */
+		if (cpu_online(cpu) || !cpu_enabled(cpu) ||
+		    !node_online(cpu_to_node(cpu)))
 			continue;
 		if (!cpu_smt_thread_allowed(cpu) || !topology_is_core_online(cpu))
 			continue;
