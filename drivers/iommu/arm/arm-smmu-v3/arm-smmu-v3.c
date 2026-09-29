@@ -121,7 +121,7 @@ static int arm_smmu_alloc_cd_tables(struct arm_smmu_master *master);
 static bool arm_smmu_ats_supported(struct arm_smmu_master *master);
 
 /* Runtime PM helpers */
-__maybe_unused static int arm_smmu_rpm_get(struct arm_smmu_device *smmu)
+int arm_smmu_rpm_get(struct arm_smmu_device *smmu)
 {
 	int ret;
 
@@ -137,7 +137,7 @@ __maybe_unused static int arm_smmu_rpm_get(struct arm_smmu_device *smmu)
 	return 0;
 }
 
-__maybe_unused static bool arm_smmu_rpm_get_if_active(struct arm_smmu_device *smmu)
+static bool arm_smmu_rpm_get_if_active(struct arm_smmu_device *smmu)
 {
 	if (!pm_runtime_enabled(smmu->dev))
 		return true;
@@ -145,7 +145,7 @@ __maybe_unused static bool arm_smmu_rpm_get_if_active(struct arm_smmu_device *sm
 	return pm_runtime_get_if_active(smmu->dev) > 0;
 }
 
-__maybe_unused static void arm_smmu_rpm_put(struct arm_smmu_device *smmu)
+void arm_smmu_rpm_put(struct arm_smmu_device *smmu)
 {
 	int ret;
 
@@ -1186,6 +1186,7 @@ static void arm_smmu_page_response(struct device *dev, struct iopf_fault *unused
 				   struct iommu_page_response *resp)
 {
 	struct arm_smmu_master *master = dev_iommu_priv_get(dev);
+	struct arm_smmu_device *smmu = master->smmu;
 	u8 resume_resp;
 
 	if (WARN_ON(!master->stall_enabled))
@@ -1204,6 +1205,23 @@ static void arm_smmu_page_response(struct device *dev, struct iopf_fault *unused
 		break;
 	}
 
+	/*
+	 * The SMMU is guaranteed to be active via device_link if any master is
+	 * active. Furthermore, on suspend we set GBPA to abort, flushing any
+	 * pending stalled transactions.
+	 *
+	 * Receiving a page fault while suspended or suspending implies a stale
+	 * event when the master has already powered down. A lockless pre-check
+	 * on STOP_FLAG avoids taking the PM lock if already suspended. If active,
+	 * arm_smmu_rpm_get_if_active() atomically acquires a PM reference under
+	 * power.lock, avoiding races against concurrent suspend and rejecting
+	 * responses during transient states like RPM_SUSPENDING.
+	 */
+	if (!arm_smmu_is_active(smmu) || !arm_smmu_rpm_get_if_active(smmu)) {
+		dev_err(smmu->dev, "Ignoring page fault while suspended / suspending\n");
+		return;
+	}
+
 	arm_smmu_cmdq_issue_cmd(master->smmu,
 				arm_smmu_make_cmd_resume(master->streams[0].id,
 							 resp->grpid,
@@ -1214,6 +1232,7 @@ static void arm_smmu_page_response(struct device *dev, struct iopf_fault *unused
 	 * terminated... at some point in the future. PRI_RESP is fire and
 	 * forget.
 	 */
+	arm_smmu_rpm_put(smmu);
 }
 
 /* Invalidation array manipulation functions */
@@ -1739,7 +1758,6 @@ static void arm_smmu_sync_cd(struct arm_smmu_master *master,
 			smmu, &cmds,
 			arm_smmu_make_cmd_cfgi_cd(master->streams[i].id, ssid,
 						  leaf));
-
 	arm_smmu_cmdq_batch_submit(smmu, &cmds);
 }
 
@@ -2050,9 +2068,9 @@ static void arm_smmu_ste_writer_sync_entry(struct arm_smmu_entry_writer *writer)
 {
 	struct arm_smmu_ste_writer *ste_writer =
 		container_of(writer, struct arm_smmu_ste_writer, writer);
+	struct arm_smmu_device *smmu = writer->master->smmu;
 
-	arm_smmu_cmdq_issue_cmd_with_sync(
-		writer->master->smmu,
+	arm_smmu_cmdq_issue_cmd_with_sync(smmu,
 		arm_smmu_make_cmd_cfgi_ste(ste_writer->sid, true));
 }
 
@@ -2460,6 +2478,40 @@ static irqreturn_t arm_smmu_evtq_thread(int irq, void *dev)
 	static DEFINE_RATELIMIT_STATE(rs, DEFAULT_RATELIMIT_INTERVAL,
 				      DEFAULT_RATELIMIT_BURST);
 
+	/*
+	 * Use a non-sleeping get to avoid a circular dependency deadlock
+	 * with arm_smmu_runtime_suspend().
+	 *
+	 * When using a combined_irq, the suspend thread waits for pending
+	 * threaded handlers to complete. If the IRQ thread blocks waiting
+	 * for the PM core, it creates a deadlock:
+	 *
+	 *  [Suspend Thread]                  | [IRQ Thread]
+	 *  pm_runtime_suspend()              |
+	 *    state = RPM_SUSPENDING;         |
+	 *                                    | IRQ fires
+	 *                                    | arm_smmu_rpm_get()
+	 *                                    |   sleeps (waiting for suspend)
+	 *  arm_smmu_runtime_suspend()        |
+	 *    ...                             |
+	 *    synchronize_irq()               |
+	 *      sleeps (waiting for IRQ)      |
+	 *
+	 *           <==== DEADLOCK ====>
+	 *
+	 * A non-sleeping get allows the thread to instantly drop the event
+	 * if the device is suspending, safely bypassing the synchronize_irq()
+	 * deadlock.
+	 *
+	 * Devlinks guarantee client devices cannot resume or issue DMA until
+	 * the SMMU has fully transitioned to RPM_ACTIVE, ensuring no valid
+	 * events can be generated during transient states like RPM_RESUMING.
+	 */
+	if (!arm_smmu_rpm_get_if_active(smmu)) {
+		dev_warn_ratelimited(smmu->dev, "client device is suspended, dropping event\n");
+		return IRQ_HANDLED;
+	}
+
 	do {
 		while (!queue_remove_raw(q, evt)) {
 			arm_smmu_decode_event(smmu, evt, &event);
@@ -2480,6 +2532,7 @@ static irqreturn_t arm_smmu_evtq_thread(int irq, void *dev)
 
 	/* Sync our overflow flag, as we believe we're up to speed */
 	queue_sync_cons_ovf(q);
+	arm_smmu_rpm_put(smmu);
 	return IRQ_HANDLED;
 }
 
@@ -2518,6 +2571,18 @@ static irqreturn_t arm_smmu_priq_thread(int irq, void *dev)
 	struct arm_smmu_ll_queue *llq = &q->llq;
 	u64 evt[PRIQ_ENT_DWORDS];
 
+	/*
+	 * Use non-sleeping get to avoid deadlock. Devlinks prevent page
+	 * requests from arriving during transient states like RPM_RESUMING.
+	 * (see the detailed comment in arm_smmu_evtq_thread)
+	 * Page requests require active client masters, which are held in
+	 * runtime suspend until the SMMU is fully RPM_ACTIVE.
+	 */
+	if (!arm_smmu_rpm_get_if_active(smmu)) {
+		dev_warn_ratelimited(smmu->dev, "client device is suspended, dropping page request\n");
+		return IRQ_HANDLED;
+	}
+
 	do {
 		while (!queue_remove_raw(q, evt))
 			arm_smmu_handle_ppr(smmu, evt);
@@ -2528,6 +2593,7 @@ static irqreturn_t arm_smmu_priq_thread(int irq, void *dev)
 
 	/* Sync our overflow flag, as we believe we're up to speed */
 	queue_sync_cons_ovf(q);
+	arm_smmu_rpm_put(smmu);
 	return IRQ_HANDLED;
 }
 
@@ -2582,8 +2648,40 @@ static irqreturn_t arm_smmu_handle_gerror(struct arm_smmu_device *smmu)
 static irqreturn_t arm_smmu_gerror_handler(int irq, void *dev)
 {
 	struct arm_smmu_device *smmu = dev;
+	irqreturn_t ret;
 
-	return arm_smmu_handle_gerror(smmu);
+	/*
+	 * Global Errors are only processed if the SMMU is active.
+	 *
+	 * When the STOP_FLAG is set, the SMMU is disabled (CR0.SMMUEN = 0)
+	 * Any errors captured during the quiesce/drain phase (suspend)
+	 * will be handled by the explicit arm_smmu_handle_gerror() call at
+	 * the end of the arm_smmu_runtime_suspend() callback before power
+	 * down.
+	 *
+	 * During resume (RPM_RESUMING), the only operations that could
+	 * trigger a gerror are the CMDQ invalidation commands which are
+	 * only issued after the STOP_FLAG has already been cleared.
+	 *
+	 * Thus, no legitimate gerrors can ever occur while STOP_FLAG is
+	 * set. Any interrupt received while !arm_smmu_is_active() is
+	 * strictly spurious. Hence, returning IRQ_NONE correctly signals
+	 * an unhandled IRQ without missing any valid hardware errors.
+	 *
+	 * A lockless check is favoured here over a dynamic PM core check
+	 * since the runtime_pm_get_if_active would return false during
+	 * transient states like RPM_RESUMING & ignore level-triggered
+	 * interrupts.
+	 */
+	if (!arm_smmu_is_active(smmu)) {
+		dev_err(smmu->dev,
+			"Ignoring gerror interrupt because the SMMU is suspended\n");
+		return IRQ_NONE;
+	}
+
+	ret = arm_smmu_handle_gerror(smmu);
+
+	return ret;
 }
 
 static irqreturn_t arm_smmu_combined_irq_thread(int irq, void *dev)
@@ -2665,6 +2763,10 @@ static int arm_smmu_atc_inv_master(struct arm_smmu_master *master,
 	int i;
 	struct arm_smmu_cmd cmd;
 	struct arm_smmu_cmdq_batch cmds;
+
+	/* Shouldn't hit the WARN if there's no devlink inconsistency */
+	if (WARN_ON_ONCE(!arm_smmu_is_active(master->smmu)))
+		return 0;
 
 	cmd = arm_smmu_make_cmd_atc_inv_all(0, IOMMU_NO_PASID);
 	arm_smmu_cmdq_batch_init_cmd(master->smmu, &cmds, &cmd);
@@ -2912,7 +3014,16 @@ static void __arm_smmu_domain_inv_range(struct arm_smmu_invs *invs,
 
 		if (cmds.num &&
 		    (next == end || arm_smmu_invs_end_batch(cur, next))) {
+
+			/*
+			 * Concurrent suspend races are benign: the cmdq allocation cmpxchg
+			 * loop acts as the serialization point to safely drop the batch
+			 * without MMIO accesses. Concurrent resume is caught by the HW
+			 * reset cache invalidation, ensuring state consistency.
+			 */
 			arm_smmu_cmdq_batch_submit(smmu, &cmds);
+
+			/* Drop this batch to ensure the next one's fresh */
 			cmds.num = 0;
 		}
 		cur = next;
@@ -5116,14 +5227,37 @@ static int arm_smmu_device_disable(struct arm_smmu_device *smmu)
 static void arm_smmu_disable_action(void *data)
 {
 	struct arm_smmu_device *smmu = data;
+	int ret;
 
 	/* If the SMMU is already suspended, nothing to do */
 	if (!pm_runtime_suspended(smmu->dev)) {
+		ret = arm_smmu_rpm_get(smmu);
+		if (ret < 0) {
+			dev_err(smmu->dev, "failed to resume device for disable: %d\n", ret);
+			goto disable_pm;
+		}
+
 		if (smmu->impl_ops && smmu->impl_ops->device_disable)
 			smmu->impl_ops->device_disable(smmu);
 		arm_smmu_device_disable(smmu);
+
+		/*
+		 * A PM ref was only acquired via arm_smmu_rpm_get() to
+		 * guarantee power for the MMIO register writes in
+		 * arm_smmu_device_disable().
+		 *
+		 * Drop the PM ref, we intentionally do NOT invoke a
+		 * synchronous put/suspend here since the HW was already
+		 * disabled above. Calling put_sync would invoke
+		 * arm_smmu_runtime_suspend(), redundantly attempting to
+		 * do the same. Any pending autosuspend timer is cleanly
+		 * cancelled by pm_runtime_disable() immediately below.
+		 * The core code ensures the power management here.
+		 */
+		arm_smmu_rpm_put(smmu);
 	}
 
+disable_pm:
 	if (pm_runtime_enabled(smmu->dev)) {
 		pm_runtime_dont_use_autosuspend(smmu->dev);
 		pm_runtime_disable(smmu->dev);
@@ -5965,12 +6099,27 @@ static void arm_smmu_device_remove(struct platform_device *pdev)
 static void arm_smmu_device_shutdown(struct platform_device *pdev)
 {
 	struct arm_smmu_device *smmu = platform_get_drvdata(pdev);
+	int ret;
 
 	/* If the SMMU is already suspended, nothing to do */
 	if (pm_runtime_suspended(&pdev->dev))
 		return;
 
+	ret = arm_smmu_rpm_get(smmu);
+	if (ret < 0) {
+		dev_err(&pdev->dev, "failed to resume device for shutdown: %d\n", ret);
+		return;
+	}
+
 	arm_smmu_device_disable(smmu);
+	/*
+	 * Drop the PM ref acquired for the MMIO disable write.
+	 * An asynchronous put is intentional here as the HW is already
+	 * disabled (CR0 disabled), and the system is in the middle of
+	 * reboot/poweroff. Initiating a synchronous runtime suspend here
+	 * would redundantly disable SMMU and delay system powerdown.
+	 */
+	arm_smmu_rpm_put(smmu);
 }
 
 static int __maybe_unused arm_smmu_runtime_suspend(struct device *dev)
