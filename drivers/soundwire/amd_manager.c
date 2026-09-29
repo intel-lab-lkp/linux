@@ -889,7 +889,7 @@ static int amd_sdw_port_enable(struct sdw_bus *bus,
 
 static int amd_sdw_calculate_bra_params(struct amd_sdw_manager *amd_manager,
 					struct amd_bra_params *params,
-					u8 peripheral_addr)
+					struct sdw_slave *slave)
 {
 	struct sdw_bus *bus = &amd_manager->bus;
 	u32 nr = bus->params.row;  /* current rows - NOT enlarged */
@@ -900,6 +900,7 @@ static int amd_sdw_calculate_bra_params(struct amd_sdw_manager *amd_manager,
 	u32 sample_interval;
 	u32 bits_per_frame;
 	u32 bpf;
+	u32 block_alignment = slave->prop.bra_block_alignment;
 
 	params->hstart      = hstart;
 	params->hstop       = hstop;
@@ -931,14 +932,33 @@ static int amd_sdw_calculate_bra_params(struct amd_sdw_manager *amd_manager,
 	if (bpf > 511)
 		bpf = 511;
 
+	/*
+	 * If the peripheral advertises the DisCo BRA block-alignment property
+	 * (mipi-sdw-bra-mode-block-alignment), the data payload carried in each
+	 * BRA frame must be an integer multiple of that value. Round
+	 * bytes_per_frame down to the nearest multiple; the ACP BRA engine then
+	 * packs an aligned payload per frame and simply uses more frames to
+	 * cover the same transfer_length. When the property is absent (0) the
+	 * value is left unchanged.
+	 */
+	if (block_alignment) {
+		if (bpf < block_alignment) {
+			dev_err(amd_manager->dev,
+				"BPT: bytes_per_frame %u smaller than block alignment %u\n",
+				bpf, block_alignment);
+			return -EINVAL;
+		}
+		bpf -= bpf % block_alignment;
+	}
+
 	params->sample_interval = sample_interval;
 	params->bytes_per_frame = bpf;
-	params->dev_addr        = peripheral_addr;
+	params->dev_addr        = (u8)slave->dev_num;
 
 	dev_dbg(amd_manager->dev,
 		"BPT calc_params: NR=%u NC=%u col_width=%u WL=%u SI=%u BPF=%u hstart=%u hstop=%u dev=%u\n",
 		nr, nc, col_width, params->word_length, sample_interval,
-		bpf, hstart, hstop, peripheral_addr);
+		bpf, hstart, hstop, slave->dev_num);
 	return 0;
 }
 
@@ -1343,7 +1363,7 @@ static int amd_sdw_bra_transfer(struct amd_sdw_manager *amd_manager,
 	int ret;
 
 	ret = amd_sdw_calculate_bra_params(amd_manager, &params,
-					   (u8)slave->dev_num);
+					   slave);
 	if (ret < 0)
 		return ret;
 
@@ -1759,7 +1779,7 @@ static int amd_sdw_bpt_wait(struct sdw_bus *bus,
 	 * to register read/write commands.
 	 */
 	ret = amd_sdw_calculate_bra_params(amd_manager, &prep_params,
-					   (u8)slave->dev_num);
+					   slave);
 	if (ret < 0) {
 		dev_err(amd_manager->dev,
 			"BPT: failed to calc params: %d\n", ret);
