@@ -212,8 +212,17 @@ static void __j1939_rx_release(struct kref *kref)
 {
 	struct j1939_priv *priv = container_of(kref, struct j1939_priv,
 					       rx_kref);
+	struct j1939_ecu *ecu, *tmp;
 
 	j1939_can_rx_unregister(priv);
+
+	/* Cancel all pending address claim timers before unmapping the ECUs.
+	 * This prevents an orphaned timer from re-mapping an ECU after the
+	 * rx path has been completely torn down.
+	 */
+	list_for_each_entry_safe(ecu, tmp, &priv->ecus, list)
+		j1939_ecu_timer_cancel(ecu);
+
 	j1939_ecu_unmap_all(priv);
 	j1939_priv_set(priv->ndev, NULL);
 	mutex_unlock(&j1939_netdev_lock);
