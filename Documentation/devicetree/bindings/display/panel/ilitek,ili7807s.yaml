@@ -34,6 +34,10 @@ properties:
     description: Negative LCD bias supply (AVEE), typically -5.5V
       (range -6.3V to -4.5V)
 
+  wled-supply:
+    description: Optional Supply for the WLED driver that provides the
+      panel backlight
+
 required:
   - compatible
   - reg
@@ -49,6 +53,13 @@ examples:
   - |
     #include <dt-bindings/gpio/gpio.h>
 
+    vreg_wled: regulator-wled {
+        compatible = "regulator-fixed";
+        regulator-name = "vreg_wled";
+        gpio = <&tlmm 91 GPIO_ACTIVE_HIGH>;
+        enable-active-high;
+    };
+
     dsi {
         #address-cells = <1>;
         #size-cells = <0>;
@@ -61,6 +72,7 @@ examples:
             vddi-supply = <&pm4125_l15>;
             avdd-supply = <&avdd>;
             avee-supply = <&avee>;
+            wled-supply = <&vreg_wled>;
 
             port {
                 panel_in: endpoint {
