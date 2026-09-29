@@ -364,6 +364,16 @@ struct cpufreq_driver {
 	int		(*target)(struct cpufreq_policy *policy,
 				  unsigned int target_freq,
 				  unsigned int relation);	/* Deprecated */
+	/*
+	 * Optional for table-less ->target() drivers. Resolve a clamped request
+	 * within the supplied limits using CPUFREQ_RELATION_{L,H,C}. Must not
+	 * sleep. See Documentation/cpu-freq/cpu-drivers.rst for the contract.
+	 */
+	unsigned int	(*resolve_freq)(struct cpufreq_policy *policy,
+					unsigned int target_freq,
+					unsigned int min_freq,
+					unsigned int max_freq,
+					unsigned int relation);
 	int		(*target_index)(struct cpufreq_policy *policy,
 					unsigned int index);
 	unsigned int	(*fast_switch)(struct cpufreq_policy *policy,

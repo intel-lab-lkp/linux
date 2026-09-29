@@ -144,6 +144,10 @@ that belong to the same policy (including both online and offline CPUs).  That
 mask is then used by the core to populate the policy pointers for all of the
 CPUs in it.
 
+A table-less driver whose discrete frequencies are derived at runtime can
+instead provide a ``->resolve_freq()`` callback to map arbitrary requests to
+deterministic, supported frequencies.
+
 The next major initialization step for a new policy object is to attach a
 scaling governor to it (to begin with, that is the default scaling governor
 determined by the kernel command line or configuration, but it may be changed

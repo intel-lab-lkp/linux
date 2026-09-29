@@ -86,6 +86,9 @@ And optionally
  .set_boost - A pointer to a per-policy function to enable/disable boost
  frequencies.
 
+ .resolve_freq - A pointer to a frequency-resolution function for table-less
+ drivers with discrete, runtime-derived frequencies.  See below.
+
 
 1.2 Per-CPU Initialization
 --------------------------
@@ -169,6 +172,22 @@ limits on their own. These shall use the ->setpolicy() callback.
 
 1.5. target/target_index
 ------------------------
+
+Table-less ``->target()`` drivers may provide ``->resolve_freq()`` to map a
+clamped target to a supported frequency within the supplied limits.
+``CPUFREQ_RELATION_L`` selects the lowest frequency at or above the target,
+H the highest at or below it, and C the closest, choosing higher on ties.
+If no supported frequency is at or above the target, L returns the highest
+supported frequency in the interval. If none is at or below the target,
+H returns the lowest supported frequency in the interval.
+``CPUFREQ_RELATION_E`` is stripped before the call.
+
+Equivalent requests must resolve to the same frequency, which the target
+callbacks must map to one canonical driver request even if performance levels
+share a kHz value. This lets callers cache resolved requests. ``->verify()``
+must leave a supported frequency in every accepted limit interval.
+The callback must not sleep: it may run in scheduler context.
+Policies providing both a frequency table and this callback are rejected.
 
 The target_index call has two arguments: ``struct cpufreq_policy *policy``,
 and ``unsigned int`` index (into the exposed frequency table).

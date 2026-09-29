@@ -480,8 +480,12 @@ static unsigned int __resolve_freq(struct cpufreq_policy *policy,
 
 	target_freq = clamp_val(target_freq, min, max);
 
-	if (!policy->freq_table)
+	if (!policy->freq_table) {
+		if (cpufreq_driver->resolve_freq)
+			return cpufreq_driver->resolve_freq(policy, target_freq, min, max,
+							    relation & ~CPUFREQ_RELATION_E);
 		return target_freq;
+	}
 
 	idx = cpufreq_frequency_table_target(policy, target_freq, min, max, relation);
 	policy->cached_resolved_idx = idx;
@@ -495,7 +499,10 @@ static unsigned int __resolve_freq(struct cpufreq_policy *policy,
  * @policy: associated policy to interrogate
  * @target_freq: target frequency to resolve.
  *
- * The target to driver frequency mapping is cached in the policy.
+ * The frequency-table resolution path caches the mapping in the policy.
+ *
+ * Keep the policy active and exclude driver teardown; a policy reference
+ * alone does not protect driver-private data.
  *
  * Return: Lowest driver-supported frequency greater than or equal to the
  * given target_freq, subject to policy (min/max) and driver limitations.
@@ -1445,6 +1452,11 @@ static int cpufreq_policy_online(struct cpufreq_policy *policy,
 		 * If there is a problem with its frequency table, take it
 		 * offline and drop it.
 		 */
+		if (policy->freq_table && cpufreq_driver->resolve_freq) {
+			ret = -EINVAL;
+			goto out_offline_policy;
+		}
+
 		ret = cpufreq_table_validate_and_sort(policy);
 		if (ret)
 			goto out_offline_policy;
@@ -2925,6 +2937,7 @@ int cpufreq_register_driver(struct cpufreq_driver *driver_data)
 
 	if (!driver_data || !driver_data->verify || !driver_data->init ||
 	     (driver_data->target_index && driver_data->target) ||
+	     (driver_data->resolve_freq && !driver_data->target) ||
 	     (!!driver_data->setpolicy == (driver_data->target_index || driver_data->target)) ||
 	     (!driver_data->get_intermediate != !driver_data->target_intermediate) ||
 	     (!driver_data->online != !driver_data->offline) ||
