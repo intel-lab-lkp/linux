@@ -993,6 +993,9 @@ static bool nvme_valid_atomic_write(struct request *req)
 	struct request_queue *q = req->q;
 	u32 boundary_bytes = queue_atomic_write_boundary_bytes(q);
 
+	if (q->limits.features & BLK_FEAT_ATOMIC_WRITE_MULTI)
+		return true;
+
 	if (blk_rq_bytes(req) > queue_atomic_write_unit_max_bytes(q))
 		return false;
 
@@ -2038,11 +2041,23 @@ static void nvme_configure_metadata(struct nvme_ctrl *ctrl,
 	}
 }
 
+static bool nvme_mam_compliant(struct nvme_id_ns *id)
+{
+	if (id->nabspf != id->nawupf)
+		return false;
+	if (id->nabsn && id->nabsn != id->nabspf)
+		return false;
+	if (id->nawun && id->nawun != id->nawupf)
+		return false;
+	return true;
+}
 
 static u32 nvme_configure_atomic_write(struct nvme_ns *ns,
 		struct nvme_id_ns *id, struct queue_limits *lim, u32 bs)
 {
 	u32 atomic_bs, boundary = 0;
+
+	lim->features &= ~BLK_FEAT_ATOMIC_WRITE_MULTI;
 
 	/*
 	 * We do not support an offset for the atomic boundaries.
@@ -2057,6 +2072,14 @@ static u32 nvme_configure_atomic_write(struct nvme_ns *ns,
 		atomic_bs = (1 + le16_to_cpu(id->nawupf)) * bs;
 		if (id->nabspf)
 			boundary = (le16_to_cpu(id->nabspf) + 1) * bs;
+
+		if (id->nsfeat & NVME_NS_FEAT_MAM) {
+			if (nvme_mam_compliant(id))
+				lim->features |= BLK_FEAT_ATOMIC_WRITE_MULTI;
+			else
+				dev_warn_once(ns->ctrl->device,
+					"Inconsistent MAM parameters, ignoring\n");
+		}
 	} else {
 		if (ns->ctrl->awupf)
 			dev_info_once(ns->ctrl->device,
