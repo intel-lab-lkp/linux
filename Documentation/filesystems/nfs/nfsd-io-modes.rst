@@ -41,6 +41,41 @@ corresponding IO operation's debugfs interface, e.g.::
 If you experiment with NFSD's IO modes on a recent kernel and have
 interesting results, please report them to linux-nfs@vger.kernel.org
 
+READ and WRITE IO mode interlock
+================================
+
+Although io_cache_read and io_cache_write are separate interfaces, NFSD
+keeps them from being configured such that one of READ or WRITE uses
+DIRECT IO while the other uses the page cache. Mixing DIRECT and
+buffered IO to the same file causes needless page cache invalidation and
+writeback (see the DIRECT IO discussion in the Linux open(2) manpage),
+so writing one interface may adjust the other:
+
+- Setting io_cache_read to NFSD_IO_DIRECT (2) elevates io_cache_write
+  to NFSD_IO_DIRECT (2) if it was BUFFERED or DONTCACHE. A WRITE mode
+  that is already DIRECT (2, 3 or 4) is left unchanged.
+- Setting io_cache_write to any DIRECT mode (2, 3 or 4) elevates
+  io_cache_read to NFSD_IO_DIRECT (2) if it was BUFFERED or DONTCACHE.
+- Setting io_cache_read to NFSD_IO_BUFFERED (0) or NFSD_IO_DONTCACHE (1)
+  while io_cache_write is a DIRECT mode demotes io_cache_write to that
+  same value (0 or 1). A WRITE mode that is already BUFFERED or
+  DONTCACHE is left unchanged.
+- Setting io_cache_write to NFSD_IO_BUFFERED (0) or NFSD_IO_DONTCACHE
+  (1) while io_cache_read is NFSD_IO_DIRECT demotes io_cache_read to
+  that same value (0 or 1).
+
+Setting either interface to a value other than NFSD_IO_BUFFERED also
+disables NFSD's use of splice for READ, because both DONTCACHE and
+DIRECT READ must copy into the RPC reply buffer. This is reflected in
+/sys/kernel/debug/nfsd/disable-splice-read reading as 1. Writing 0 to
+disable-splice-read re-enables splice, which requires buffered READ, so
+it forces io_cache_read back to NFSD_IO_BUFFERED (0) and, if
+io_cache_write was a DIRECT mode, demotes it to NFSD_IO_BUFFERED (0) as
+well.
+
+Always read both interfaces back after writing either of them to
+confirm the resulting configuration.
+
 NFSD DONTCACHE
 ==============
 
