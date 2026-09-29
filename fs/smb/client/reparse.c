@@ -1218,25 +1218,26 @@ static bool posix_reparse_to_fattr(struct cifs_sb_info *cifs_sb,
 	if (buf == NULL)
 		return true;
 
+	/*
+	 * parse_reparse_nfs() has already validated this buffer and
+	 * reported anything wrong with it, but reparse_info_to_fattr()
+	 * still builds attributes from the rejected buffer, so fail
+	 * quietly on server-controlled data instead of warning.
+	 */
 	if (le16_to_cpu(buf->ReparseDataLength) < sizeof(buf->InodeType)) {
-		WARN_ON_ONCE(1);
 		return false;
 	}
 
 	switch (le64_to_cpu(buf->InodeType)) {
 	case NFS_SPECFILE_CHR:
-		if (le16_to_cpu(buf->ReparseDataLength) != sizeof(buf->InodeType) + 8) {
-			WARN_ON_ONCE(1);
+		if (le16_to_cpu(buf->ReparseDataLength) != sizeof(buf->InodeType) + 8)
 			return false;
-		}
 		ftype = S_IFCHR;
 		fattr->cf_rdev = reparse_mkdev(buf->DataBuffer);
 		break;
 	case NFS_SPECFILE_BLK:
-		if (le16_to_cpu(buf->ReparseDataLength) != sizeof(buf->InodeType) + 8) {
-			WARN_ON_ONCE(1);
+		if (le16_to_cpu(buf->ReparseDataLength) != sizeof(buf->InodeType) + 8)
 			return false;
-		}
 		ftype = S_IFBLK;
 		fattr->cf_rdev = reparse_mkdev(buf->DataBuffer);
 		break;
@@ -1250,7 +1251,6 @@ static bool posix_reparse_to_fattr(struct cifs_sb_info *cifs_sb,
 		ftype = S_IFLNK;
 		break;
 	default:
-		WARN_ON_ONCE(1);
 		return false;
 	}
 	fattr->cf_mode = (fattr->cf_mode & ~S_IFMT) | ftype;
