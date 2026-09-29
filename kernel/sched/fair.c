@@ -7798,9 +7798,13 @@ static void hrtick_start_fair(struct rq *rq, struct task_struct *p)
 		return;
 
 	/*
-	 * Compute time until virtual deadline
+	 * Reconsider the pick when live slice protection expires, which can be
+	 * earlier than the virtual deadline when shorter requests compete.
+	 * Without live protection, use the virtual deadline instead.
 	 */
 	vdelta = se->deadline - se->vruntime;
+	if (protect_slice(se))
+		vdelta = min_vruntime(se->deadline, se->vprot) - se->vruntime;
 	if ((s64)vdelta < 0) {
 		if (task_current_donor(rq, p))
 			resched_curr(rq);
@@ -10023,8 +10027,18 @@ pick:
 	if (preempt_action == PREEMPT_WAKEUP_SHORT && entity_eligible(cfs_rq, pse))
 		goto preempt;
 update:
-	if (sched_feat(RUN_TO_PARITY))
+	if (sched_feat(RUN_TO_PARITY)) {
+		u64 old_vprot = se->vprot;
+
 		update_protect_slice(cfs_rq, se);
+		if (hrtick_enabled_fair(rq) && se->vprot != old_vprot) {
+			/* The enqueue may have armed the timer before this update. */
+			if (protect_slice(se))
+				hrtick_start_fair(rq, donor);
+			else
+				resched_curr_lazy(rq);
+		}
+	}
 
 	return;
 
