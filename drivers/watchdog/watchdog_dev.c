@@ -319,6 +319,8 @@ static int watchdog_stop(struct watchdog_device *wdd)
 		clear_bit(WDOG_ACTIVE, &wdd->status);
 		watchdog_update_worker(wdd);
 		watchdog_hrtimer_pretimeout_stop(wdd);
+	} else {
+		set_bit(WDOG_HW_RUNNING, &wdd->status);
 	}
 
 	return err;
