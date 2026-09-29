@@ -403,6 +403,33 @@ rproc_parse_vring(struct rproc_vdev *rvdev, struct fw_rsc_vdev *rsc, int i)
 	return 0;
 }
 
+/*
+ * rproc_free_vring() runs while a remote processor is being torn down
+ * (rproc_stop()/rproc_detach() paths) or while a boot or attach attempt
+ * is failing.  Whether the reset below can reach the remote processor
+ * depends on what rproc->table_ptr refers to at that point:
+ *
+ * - teardown paths: the call comes from the rvdev cleanup in
+ *   rproc_resource_cleanup(), by which time rproc_stop()/__rproc_detach()
+ *   have switched table_ptr to the table the core was booted with, or
+ *   to a copy of the installed table when the remote processor was
+ *   started by another entity (rproc_reset_rsc_table_on_{stop,detach}()),
+ *   so the write cannot reach the remote processor.
+ *
+ * - error paths of rproc_start()/rproc_attach(): the failure originates
+ *   in rp_find_vq() (virtio_find_vqs() failing in e.g. rpmsg_probe()),
+ *   which rproc_start_subdevices() calls only once ops->start() or
+ *   ops->attach() have completed.  table_ptr still points at the
+ *   resource table installed in remote processor memory and the remote
+ *   processor is already running.
+ *
+ * Especially in the last case the reset has to tell the remote
+ * processor that the vring entry is not usable: with da set to the
+ * invalid FW_RSC_ADDR_ANY a running remote processor sees the address
+ * as unallocated, and notifyid is invalidated along with it.
+ *
+ * Reset the virtio device section only if there is a table to work with.
+ */
 void rproc_free_vring(struct rproc_vring *rvring)
 {
 	struct rproc *rproc = rvring->rvdev->rproc;
@@ -411,20 +438,9 @@ void rproc_free_vring(struct rproc_vring *rvring)
 
 	idr_remove(&rproc->notifyids, rvring->notifyid);
 
-	/*
-	 * At this point rproc_stop() has been called and the installed resource
-	 * table in the remote processor memory may no longer be accessible. As
-	 * such and as per rproc_stop(), rproc->table_ptr points to the cached
-	 * resource table (rproc->cached_table).  The cached resource table is
-	 * only available when a remote processor has been booted by the
-	 * remoteproc core, otherwise it is NULL.
-	 *
-	 * Based on the above, reset the virtio device section in the cached
-	 * resource table only if there is one to work with.
-	 */
 	if (rproc->table_ptr) {
 		rsc = (void *)rproc->table_ptr + rvring->rvdev->rsc_offset;
-		rsc->vring[idx].da = 0;
+		rsc->vring[idx].da = FW_RSC_ADDR_ANY;
 		rsc->vring[idx].notifyid = -1;
 	}
 }
