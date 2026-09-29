@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: GPL-2.0
+
+config SL_COMMON_CLK
+	bool
+
+config SL_SYSMGR_CLK
+	bool
+
+config SL261X_PLL
+	tristate "Synaptics SL261X PLL Driver"
+	depends on ARCH_BERLIN || COMPILE_TEST
+	default n
+	help
+	  This driver provides support for PLLs on Synaptics SL261X SoC.
+
+config SL261X_CLK
+	tristate "Synaptics SL261X Clock Driver"
+	depends on ARCH_BERLIN || COMPILE_TEST
+	select SL_COMMON_CLK
+	select SL_SYSMGR_CLK
+	default n
+	help
+	  This driver provides support for clock controller on Synaptics SL261X
+	  SoC. The clock controller generates and supplies clocks to various
+	  peripherals within the SoC.
