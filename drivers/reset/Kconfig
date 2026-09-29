@@ -348,6 +348,12 @@ config RESET_SUNXI
 	help
 	  This enables the reset driver for Allwinner SoCs.
 
+config RESET_SL261X
+	tristate "Synaptics SL261X Reset Driver"
+	depends on ARCH_BERLIN || COMPILE_TEST
+	help
+	  This enables the reset controller driver for Synaptics SL261X SoCs.
+
 config RESET_TENSTORRENT_ATLANTIS
 	tristate "Tenstorrent atlantis reset driver"
 	depends on ARCH_TENSTORRENT || COMPILE_TEST
