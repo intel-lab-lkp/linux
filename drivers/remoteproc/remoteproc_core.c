@@ -1900,7 +1900,7 @@ static int rproc_boot_recovery(struct rproc *rproc)
 	ret = request_firmware(&firmware_p, rproc->firmware, dev);
 	if (ret < 0) {
 		dev_err(dev, "request_firmware failed: %d\n", ret);
-		return ret;
+		goto clean_up_resources;
 	}
 
 	/* boot the remote processor up again */
@@ -1908,6 +1908,24 @@ static int rproc_boot_recovery(struct rproc *rproc)
 
 	release_firmware(firmware_p);
 
+	if (ret < 0)
+		goto clean_up_resources;
+
+	return 0;
+
+clean_up_resources:
+	/*
+	 * rproc_stop() has already switched the remote processor off, but
+	 * unlike rproc_shutdown() nothing releases the resources of the
+	 * boot this recovery was trying to restore.
+	 */
+	rproc_resource_cleanup(rproc);
+	kfree(rproc->cached_table);
+	rproc->cached_table = NULL;
+	rproc->table_ptr = NULL;
+	/* release HW resources if needed */
+	rproc_unprepare_device(rproc);
+	rproc_disable_iommu(rproc);
 	return ret;
 }
 
@@ -1947,6 +1965,20 @@ int rproc_trigger_recovery(struct rproc *rproc)
 		ret = rproc_attach_recovery(rproc);
 	else
 		ret = rproc_boot_recovery(rproc);
+
+	/*
+	 * A failed recovery leaves the remote processor in a state from which
+	 * rproc_shutdown() refuses to release the outstanding power references
+	 * (RPROC_OFFLINE or RPROC_DETACHED), so every rproc_boot() would
+	 * free-ride on them and silently do nothing. The service those
+	 * references were tracking is gone: void them all.  Failures that
+	 * leave the processor crashed keep the references, as rproc_shutdown()
+	 * can still drain them in that state.
+	 */
+	if (ret && rproc->state != RPROC_CRASHED) {
+		dev_err(dev, "failed to recover %s: %d\n", rproc->name, ret);
+		atomic_set(&rproc->power, 0);
+	}
 
 unlock_mutex:
 	mutex_unlock(&rproc->lock);
