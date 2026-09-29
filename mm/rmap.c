@@ -1668,7 +1668,7 @@ void folio_add_new_anon_rmap(struct folio *folio, struct vm_area_struct *vma,
 		/* increment count (starts at -1) */
 		atomic_set(&folio->_mapcount, 0);
 		if (exclusive)
-			SetPageAnonExclusive(&folio->page);
+			SetPageAnonExclusive(folio_page(folio, 0));
 	} else if (!folio_test_pmd_mappable(folio)) {
 		int i;
 
@@ -1694,7 +1694,7 @@ void folio_add_new_anon_rmap(struct folio *folio, struct vm_area_struct *vma,
 		if (IS_ENABLED(CONFIG_PAGE_MAPCOUNT))
 			atomic_set(&folio->_nr_pages_mapped, ENTIRELY_MAPPED);
 		if (exclusive)
-			SetPageAnonExclusive(&folio->page);
+			SetPageAnonExclusive(folio_page(folio, 0));
 		nr_pmdmapped = nr;
 	}
 
@@ -3187,9 +3187,9 @@ void hugetlb_add_anon_rmap(struct folio *folio, struct vm_area_struct *vma,
 	atomic_inc(&folio->_entire_mapcount);
 	atomic_inc(&folio->_large_mapcount);
 	if (flags & RMAP_EXCLUSIVE)
-		SetPageAnonExclusive(&folio->page);
+		SetPageAnonExclusive(folio_page(folio, 0));
 	VM_WARN_ON_FOLIO(folio_entire_mapcount(folio) > 1 &&
-			 PageAnonExclusive(&folio->page), folio);
+			 PageAnonExclusive(folio_page(folio, 0)), folio);
 }
 
 void hugetlb_add_new_anon_rmap(struct folio *folio,
@@ -3203,6 +3203,6 @@ void hugetlb_add_new_anon_rmap(struct folio *folio,
 	atomic_set(&folio->_large_mapcount, 0);
 	folio_clear_hugetlb_restore_reserve(folio);
 	__folio_set_anon(folio, vma, address, true);
-	SetPageAnonExclusive(&folio->page);
+	SetPageAnonExclusive(folio_page(folio, 0));
 }
 #endif /* CONFIG_HUGETLB_PAGE */

@@ -59,10 +59,11 @@ static inline void sanity_check_pinned_pages(struct page **pages,
 		    !folio_test_anon(folio))
 			continue;
 		if (!folio_test_large(folio) || folio_test_hugetlb(folio))
-			VM_WARN_ON_ONCE_FOLIO(!PageAnonExclusive(&folio->page), folio);
+			VM_WARN_ON_ONCE_FOLIO(!PageAnonExclusive(folio_page(folio, 0)),
+					      folio);
 		else
 			/* Either a PTE-mapped or a PMD-mapped THP. */
-			VM_WARN_ON_ONCE_PAGE(!PageAnonExclusive(&folio->page) &&
+			VM_WARN_ON_ONCE_PAGE(!PageAnonExclusive(folio_page(folio, 0)) &&
 					     !PageAnonExclusive(page), page);
 	}
 }
@@ -2957,7 +2958,8 @@ static unsigned long gup_fast_pmd_leaf(pmd_t orig, pmd_t *pmdp,
 		gup_put_folio(folio, nr_pages, flags);
 		return 0;
 	}
-	if (!pmd_write(orig) && gup_must_unshare(NULL, flags, &folio->page)) {
+	if (!pmd_write(orig) &&
+	    gup_must_unshare(NULL, flags, folio_page(folio, 0))) {
 		gup_put_folio(folio, nr_pages, flags);
 		return 0;
 	}
@@ -2999,7 +3001,8 @@ static unsigned long gup_fast_pud_leaf(pud_t orig, pud_t *pudp,
 		return 0;
 	}
 
-	if (!pud_write(orig) && gup_must_unshare(NULL, flags, &folio->page)) {
+	if (!pud_write(orig) &&
+	    gup_must_unshare(NULL, flags, folio_page(folio, 0))) {
 		gup_put_folio(folio, nr_pages, flags);
 		return 0;
 	}
