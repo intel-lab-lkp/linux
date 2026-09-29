@@ -449,7 +449,7 @@ static bool gpio_shared_dev_is_reset_gpio(struct device *consumer,
 int gpio_shared_add_proxy_lookup(struct device *consumer, struct fwnode_handle *fwnode,
 				 const char *con_id, unsigned long lflags)
 {
-	const char *dev_id = dev_name(consumer);
+	const char *dev_id = consumer ? dev_name(consumer) : NULL;
 	struct gpio_shared_entry *entry;
 	struct gpio_shared_ref *ref;
 
@@ -457,7 +457,8 @@ int gpio_shared_add_proxy_lookup(struct device *consumer, struct fwnode_handle *
 		list_for_each_entry(ref, &entry->refs, list) {
 			guard(mutex)(&ref->lock);
 
-			if (!ref->fwnode && device_is_compatible(consumer, "reset-gpio")) {
+			if (!ref->fwnode && consumer &&
+			    device_is_compatible(consumer, "reset-gpio")) {
 				if (!gpio_shared_dev_is_reset_gpio(consumer, entry, ref))
 					continue;
 			} else if (fwnode != ref->fwnode) {
@@ -485,7 +486,7 @@ int gpio_shared_add_proxy_lookup(struct device *consumer, struct fwnode_handle *
 				return -ENOMEM;
 
 			pr_debug("Adding machine lookup entry for a shared GPIO for consumer %s, with key '%s' and con_id '%s'\n",
-				 dev_id, key, ref->con_id ?: "none");
+				 dev_id ?: "<no device>", key, ref->con_id ?: "none");
 
 			lookup->dev_id = kstrdup(dev_id, GFP_KERNEL);
 			if (!lookup->dev_id)
