@@ -141,7 +141,8 @@ int hv_call_initialize_partition(u64 partition_id)
 	input.partition_id = partition_id;
 
 	ret = hv_call_deposit_pages(NUMA_NO_NODE, partition_id,
-				    HV_INIT_PARTITION_DEPOSIT_PAGES);
+				    HV_INIT_PARTITION_DEPOSIT_PAGES,
+				    GFP_KERNEL);
 	if (ret)
 		return ret;
 
@@ -249,7 +250,8 @@ static int hv_do_map_gpa_hcall(u64 partition_id, u64 gfn, u64 page_struct_count,
 
 		if (hv_result_needs_memory(status)) {
 			ret = hv_call_deposit_pages(NUMA_NO_NODE, partition_id,
-						    HV_MAP_GPA_DEPOSIT_PAGES);
+						    HV_MAP_GPA_DEPOSIT_PAGES,
+						    GFP_KERNEL);
 			if (ret)
 				break;
 

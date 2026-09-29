@@ -15,8 +15,8 @@
  */
 #define HV_DEPOSIT_MAX (HV_HYP_PAGE_SIZE / sizeof(u64) - 1)
 
-/* Deposits exact number of pages. Must be called with interrupts enabled.  */
-int hv_call_deposit_pages(int node, u64 partition_id, u32 num_pages)
+int hv_call_deposit_pages(int node, u64 partition_id, u32 num_pages,
+			  gfp_t gfp_flags)
 {
 	struct page **pages, *page;
 	int *counts;
@@ -35,12 +35,12 @@ int hv_call_deposit_pages(int node, u64 partition_id, u32 num_pages)
 		return 0;
 
 	/* One buffer for page pointers and counts */
-	page = alloc_page(GFP_KERNEL);
+	page = alloc_page(gfp_flags);
 	if (!page)
 		return -ENOMEM;
 	pages = page_address(page);
 
-	counts = kzalloc_objs(int, HV_DEPOSIT_MAX);
+	counts = kzalloc_objs(int, HV_DEPOSIT_MAX, gfp_flags);
 	if (!counts) {
 		free_page((unsigned long)pages);
 		return -ENOMEM;
@@ -54,7 +54,7 @@ int hv_call_deposit_pages(int node, u64 partition_id, u32 num_pages)
 		order = 31 - __builtin_clz(num_pages);
 
 		while (1) {
-			pages[i] = alloc_pages_node(node, GFP_KERNEL, order);
+			pages[i] = alloc_pages_node(node, gfp_flags, order);
 			if (pages[i])
 				break;
 			if (!order) {
@@ -137,7 +137,7 @@ int hv_deposit_memory_node(int node, u64 partition_id,
 		hv_status_err(hv_status, "Unexpected!\n");
 		return -ENOMEM;
 	}
-	return hv_call_deposit_pages(node, partition_id, num_pages);
+	return hv_call_deposit_pages(node, partition_id, num_pages, GFP_KERNEL);
 }
 EXPORT_SYMBOL_GPL(hv_deposit_memory_node);
 
@@ -206,7 +206,7 @@ int hv_call_create_vp(int node, u64 partition_id, u32 vp_index, u32 flags)
 	/* Root VPs don't seem to need pages deposited */
 	if (partition_id != hv_current_partition_id) {
 		/* The value 90 is empirically determined. It may change. */
-		ret = hv_call_deposit_pages(node, partition_id, 90);
+		ret = hv_call_deposit_pages(node, partition_id, 90, GFP_KERNEL);
 		if (ret)
 			return ret;
 	}
