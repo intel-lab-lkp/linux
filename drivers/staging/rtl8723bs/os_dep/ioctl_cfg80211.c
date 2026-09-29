@@ -2158,7 +2158,7 @@ static int rtw_cfg80211_add_monitor_if(struct adapter *padapter, char *name, str
 		goto out;
 
 	*ndev = pwdev_priv->pmon_ndev = mon_ndev;
-	memcpy(pwdev_priv->ifname_mon, name, IFNAMSIZ + 1);
+	strscpy(pwdev_priv->ifname_mon, name);
 
 out:
 	if (ret && mon_wdev) {
