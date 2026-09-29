@@ -626,6 +626,150 @@
 			status = "disabled";
 		};
 
+		adc0: adc@11c00000 {
+			compatible = "renesas,r9a09g056-adc", "renesas,r9a09g057-adc";
+			reg = <0 0x11c00000 0 0x400>;
+			interrupts = <GIC_SPI 918 IRQ_TYPE_EDGE_RISING>,
+				     <GIC_SPI 919 IRQ_TYPE_EDGE_RISING>,
+				     <GIC_SPI 920 IRQ_TYPE_EDGE_RISING>,
+				     <GIC_SPI 246 IRQ_TYPE_LEVEL_HIGH>,
+				     <GIC_SPI 247 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "adi", "gbadi", "gcadi",
+					  "cmpai", "cmpbi";
+			clocks = <&cpg CPG_MOD 0x108>, <&cpg CPG_MOD 0x107>;
+			clock-names = "adclk", "pclk";
+			resets = <&cpg 0xf6>;
+			power-domains = <&cpg>;
+			dmas = <&dmac0 0x24c8>, <&dmac1 0x24c8>, <&dmac2 0x24c8>,
+			       <&dmac3 0x24c8>, <&dmac4 0x24c8>;
+			dma-names = "rx", "rx", "rx", "rx", "rx";
+			status = "disabled";
+
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			channel@0 {
+				reg = <0>;
+			};
+			channel@1 {
+				reg = <1>;
+			};
+			channel@2 {
+				reg = <2>;
+			};
+			channel@3 {
+				reg = <3>;
+			};
+			channel@4 {
+				reg = <4>;
+			};
+			channel@5 {
+				reg = <5>;
+			};
+			channel@6 {
+				reg = <6>;
+			};
+			channel@7 {
+				reg = <7>;
+			};
+		};
+
+		adc1: adc@11c02800 {
+			compatible = "renesas,r9a09g056-adc", "renesas,r9a09g057-adc";
+			reg = <0 0x11c02800 0 0x400>;
+			interrupts = <GIC_SPI 926 IRQ_TYPE_EDGE_RISING>,
+				     <GIC_SPI 927 IRQ_TYPE_EDGE_RISING>,
+				     <GIC_SPI 928 IRQ_TYPE_EDGE_RISING>,
+				     <GIC_SPI 929 IRQ_TYPE_LEVEL_HIGH>,
+				     <GIC_SPI 930 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "adi", "gbadi", "gcadi",
+					  "cmpai", "cmpbi";
+			clocks = <&cpg CPG_MOD 0x108>, <&cpg CPG_MOD 0x107>;
+			clock-names = "adclk", "pclk";
+			resets = <&cpg 0xf6>;
+			power-domains = <&cpg>;
+			dmas = <&dmac0 0x25b5>, <&dmac1 0x25b5>, <&dmac2 0x25b5>,
+			       <&dmac3 0x25b5>, <&dmac4 0x25b5>;
+			dma-names = "rx", "rx", "rx", "rx", "rx";
+			status = "disabled";
+
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			channel@0 {
+				reg = <0>;
+			};
+			channel@1 {
+				reg = <1>;
+			};
+			channel@2 {
+				reg = <2>;
+			};
+			channel@3 {
+				reg = <3>;
+			};
+			channel@4 {
+				reg = <4>;
+			};
+			channel@5 {
+				reg = <5>;
+			};
+			channel@6 {
+				reg = <6>;
+			};
+			channel@7 {
+				reg = <7>;
+			};
+		};
+
+		adc2: adc@11c02c00 {
+			compatible = "renesas,r9a09g056-adc", "renesas,r9a09g057-adc";
+			reg = <0 0x11c02c00 0 0x400>;
+			interrupts = <GIC_SPI 931 IRQ_TYPE_EDGE_RISING>,
+				     <GIC_SPI 932 IRQ_TYPE_EDGE_RISING>,
+				     <GIC_SPI 933 IRQ_TYPE_EDGE_RISING>,
+				     <GIC_SPI 934 IRQ_TYPE_LEVEL_HIGH>,
+				     <GIC_SPI 935 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "adi", "gbadi", "gcadi",
+					  "cmpai", "cmpbi";
+			clocks = <&cpg CPG_MOD 0x108>, <&cpg CPG_MOD 0x107>;
+			clock-names = "adclk", "pclk";
+			resets = <&cpg 0xf6>;
+			power-domains = <&cpg>;
+			dmas = <&dmac0 0x25ba>, <&dmac1 0x25ba>, <&dmac2 0x25ba>,
+			       <&dmac3 0x25ba>, <&dmac4 0x25ba>;
+			dma-names = "rx", "rx", "rx", "rx", "rx";
+			status = "disabled";
+
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			channel@0 {
+				reg = <0>;
+			};
+			channel@1 {
+				reg = <1>;
+			};
+			channel@2 {
+				reg = <2>;
+			};
+			channel@3 {
+				reg = <3>;
+			};
+			channel@4 {
+				reg = <4>;
+			};
+			channel@5 {
+				reg = <5>;
+			};
+			channel@6 {
+				reg = <6>;
+			};
+			channel@7 {
+				reg = <7>;
+			};
+		};
+
 		rtc: rtc@11c00800 {
 			compatible = "renesas,r9a09g056-rtca3", "renesas,rz-rtca3";
 			reg = <0 0x11c00800 0 0x400>;
