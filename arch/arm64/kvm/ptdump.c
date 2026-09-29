@@ -46,6 +46,12 @@ static const struct ptdump_prot_bits stage2_pte_bits[] = {
 		.clear	= " ",
 	},
 	{
+		.mask	= KVM_PTE_LEAF_ATTR_LO_S2_S2AP_W,
+		.val	= KVM_PTE_LEAF_ATTR_LO_S2_S2AP_W,
+		.set	= "D",
+		.clear	= "C",
+	},
+	{
 		.mask	= KVM_PTE_LEAF_ATTR_HI_S2_XN,
 		.val	= 0b00UL << __bf_shf(KVM_PTE_LEAF_ATTR_HI_S2_XN),
 		.set	= "px ux ",
