@@ -423,6 +423,18 @@ struct acpi_cedt_cxims *mock_cxims[1] = {
 	[0] = &mock_cedt.cxims0.cxims,
 };
 
+static struct acpi_cedt_cfmws *mock_auto_region_cfmws(void)
+{
+	for (int i = cfmws_start; i <= cfmws_end; i++) {
+		struct acpi_cedt_cfmws *window = mock_cfmws[i];
+
+		if (window->restrictions & ACPI_CEDT_CFMWS_RESTRICT_VOLATILE)
+			return window;
+	}
+
+	return NULL;
+}
+
 struct cxl_mock_res {
 	struct list_head list;
 	struct range range;
@@ -1114,6 +1126,10 @@ static enum cxld_init_type get_decoder_init_type(struct cxl_decoder *cxld,
 	    pdev->id > 4 || cxld->id > 0)
 		return MOCK_DECODER_INIT_DEFAULT;
 
+	/* XOR windows are all pmem, no window to host the RAM region */
+	if (!mock_auto_region_cfmws())
+		return MOCK_DECODER_INIT_DEFAULT;
+
 	return type2_test ? MOCK_DECODER_INIT_TYPE2_AUTO :
 			    MOCK_DECODER_INIT_TYPE3_AUTO;
 }
@@ -1137,7 +1153,7 @@ static bool mock_decoder_handle_saved(struct cxl_decoder *cxld, struct cxl_test_
 static void mock_init_hdm_type2_cxled(struct cxl_endpoint_decoder *cxled,
 				      struct cxl_port *port)
 {
-	struct acpi_cedt_cfmws *window = mock_cfmws[0];
+	struct acpi_cedt_cfmws *window = mock_auto_region_cfmws();
 	struct cxl_decoder *cxld = &cxled->cxld;
 	struct cxl_switch_decoder *cxlsd;
 	struct cxl_dport *dport;
@@ -1211,7 +1227,7 @@ static void mock_init_hdm_type3_cxled(struct cxl_endpoint_decoder *cxled,
 				      struct platform_device *pdev,
 				      bool hb0)
 {
-	struct acpi_cedt_cfmws *window = mock_cfmws[0];
+	struct acpi_cedt_cfmws *window = mock_auto_region_cfmws();
 	struct cxl_decoder *cxld = &cxled->cxld;
 	struct cxl_switch_decoder *cxlsd;
 	struct cxl_dport *dport;
