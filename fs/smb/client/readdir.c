@@ -456,16 +456,16 @@ initiate_cifs_search(const unsigned int xid, struct file *file,
 }
 
 /* return length of unicode string in bytes */
-static int cifs_unicode_bytelen(const char *str)
+static int cifs_unicode_bytelen(const char *str, size_t maxlen)
 {
 	int len;
 	const __le16 *ustr = (const __le16 *)str;
 
-	for (len = 0; len <= PATH_MAX; len++) {
+	for (len = 0; len <= PATH_MAX && (size_t)len < maxlen / 2; len++) {
 		if (ustr[len] == 0)
 			return len << 1;
 	}
-	cifs_dbg(FYI, "Unicode string longer than PATH_MAX found\n");
+	cifs_dbg(FYI, "Unicode string not terminated within %d bytes\n", len << 1);
 	return len << 1;
 }
 
@@ -532,13 +532,13 @@ static void cifs_fill_dirent_posix(struct cifs_dirent *de,
 }
 
 static void cifs_fill_dirent_unix(struct cifs_dirent *de,
-		const FILE_UNIX_INFO *info, bool is_unicode)
+		const FILE_UNIX_INFO *info, bool is_unicode, size_t maxlen)
 {
 	de->name = &info->FileName[0];
 	if (is_unicode)
-		de->namelen = cifs_unicode_bytelen(de->name);
+		de->namelen = cifs_unicode_bytelen(de->name, maxlen);
 	else
-		de->namelen = strnlen(de->name, PATH_MAX);
+		de->namelen = strnlen(de->name, min_t(size_t, maxlen, PATH_MAX));
 	de->resume_key = info->ResumeKey;
 	de->ino = le64_to_cpu(info->basic.UniqueId);
 }
@@ -589,6 +589,7 @@ static int cifs_fill_dirent(struct cifs_dirent *de, const void *info,
 		const char *end, u16 level, bool is_unicode)
 {
 	size_t len = end > (const char *)info ? end - (const char *)info : 0;
+	size_t nul_len = 0;
 
 	memset(de, 0, sizeof(*de));
 
@@ -601,7 +602,9 @@ static int cifs_fill_dirent(struct cifs_dirent *de, const void *info,
 	case SMB_FIND_FILE_UNIX:
 		if (len < offsetof(FILE_UNIX_INFO, FileName))
 			goto too_short;
-		cifs_fill_dirent_unix(de, info, is_unicode);
+		cifs_fill_dirent_unix(de, info, is_unicode,
+				      len - offsetof(FILE_UNIX_INFO, FileName));
+		nul_len = is_unicode ? 2 : 1;
 		break;
 	case SMB_FIND_FILE_DIRECTORY_INFO:
 		if (len < offsetof(FILE_DIRECTORY_INFO, FileName))
@@ -634,7 +637,7 @@ static int cifs_fill_dirent(struct cifs_dirent *de, const void *info,
 	}
 
 	if (de->name && (end < de->name ||
-			 (size_t)(end - de->name) < de->namelen)) {
+			 (size_t)(end - de->name) < de->namelen + nul_len)) {
 		cifs_dbg(VFS, "search entry name extends past end of SMB\n");
 		return -EINVAL;
 	}
