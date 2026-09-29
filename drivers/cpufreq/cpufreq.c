@@ -2059,6 +2059,21 @@ bool cpufreq_driver_test_flags(u16 flags)
 }
 
 /**
+ * cpufreq_driver_needs_limits_update - Check for a pending driver limit update.
+ * @policy: CPU frequency policy to check.
+ *
+ * Return: Whether changed resolved limits require a driver callback.
+ */
+bool cpufreq_driver_needs_limits_update(struct cpufreq_policy *policy)
+{
+	if (!cpufreq_driver_test_flags(CPUFREQ_NEED_UPDATE_LIMITS))
+		return false;
+
+	/* Pairs with cpufreq_set_update_limits(). */
+	return smp_load_acquire(&policy->update_limits);
+}
+
+/**
  * cpufreq_get_current_driver - Return the current driver's name.
  *
  * Return the name string of the currently registered cpufreq driver or NULL if
@@ -2183,6 +2198,30 @@ EXPORT_SYMBOL(cpufreq_unregister_notifier);
  *                              GOVERNORS                            *
  *********************************************************************/
 
+static bool cpufreq_test_and_clear_update_limits(struct cpufreq_policy *policy)
+{
+	if (!cpufreq_driver_needs_limits_update(policy))
+		return false;
+
+	return xchg(&policy->update_limits, false);
+}
+
+static void cpufreq_set_update_limits(struct cpufreq_policy *policy)
+{
+	/* Publish the new limits before making their update pending. */
+	smp_store_release(&policy->update_limits, true);
+}
+
+static void cpufreq_read_policy_limits(struct cpufreq_policy *policy,
+				       unsigned int *min, unsigned int *max)
+{
+	/* Lockless reads can mix limit updates; favor max if inverted. */
+	*min = READ_ONCE(policy->min);
+	*max = READ_ONCE(policy->max);
+	if (unlikely(*min > *max))
+		*min = *max;
+}
+
 /**
  * cpufreq_driver_fast_switch - Carry out a fast CPU frequency switch.
  * @policy: cpufreq policy to switch the frequency for.
@@ -2209,14 +2248,20 @@ EXPORT_SYMBOL(cpufreq_unregister_notifier);
 unsigned int cpufreq_driver_fast_switch(struct cpufreq_policy *policy,
 					unsigned int target_freq)
 {
-	unsigned int freq;
+	bool update_limits;
+	unsigned int min, max, freq;
 	int cpu;
 
-	target_freq = clamp_val(target_freq, policy->min, policy->max);
+	update_limits = cpufreq_test_and_clear_update_limits(policy);
+	cpufreq_read_policy_limits(policy, &min, &max);
+	target_freq = clamp_val(target_freq, min, max);
 	freq = cpufreq_driver->fast_switch(policy, target_freq);
 
-	if (!freq)
+	if (!freq) {
+		if (update_limits)
+			cpufreq_set_update_limits(policy);
 		return 0;
+	}
 
 	policy->cur = freq;
 	arch_set_freq_scale(policy->related_cpus, freq,
@@ -2367,12 +2412,16 @@ int __cpufreq_driver_target(struct cpufreq_policy *policy,
 			    unsigned int relation)
 {
 	unsigned int old_target_freq = target_freq;
+	unsigned int min, max;
+	bool update_limits;
+	int ret;
 
 	if (cpufreq_disabled())
 		return -ENODEV;
 
-	target_freq = __resolve_freq(policy, target_freq, policy->min,
-				     policy->max, relation);
+	update_limits = cpufreq_test_and_clear_update_limits(policy);
+	cpufreq_read_policy_limits(policy, &min, &max);
+	target_freq = __resolve_freq(policy, target_freq, min, max, relation);
 
 	pr_debug("CPU %u: cur %u kHz -> target %u kHz (req %u kHz, rel %u)\n",
 		policy->cpu, policy->cur, target_freq, old_target_freq, relation);
@@ -2384,11 +2433,8 @@ int __cpufreq_driver_target(struct cpufreq_policy *policy,
 	 * calls.
 	 */
 	if (target_freq == policy->cur) {
-		if (!(cpufreq_driver->flags & CPUFREQ_NEED_UPDATE_LIMITS) ||
-		    !policy->update_limits)
+		if (!update_limits)
 			return 0;
-
-		policy->update_limits = false;
 	}
 
 	if (cpufreq_driver->target) {
@@ -2399,13 +2445,19 @@ int __cpufreq_driver_target(struct cpufreq_policy *policy,
 		if (!policy->efficiencies_available)
 			relation &= ~CPUFREQ_RELATION_E;
 
-		return cpufreq_driver->target(policy, target_freq, relation);
+		ret = cpufreq_driver->target(policy, target_freq, relation);
+	} else if (cpufreq_driver->target_index) {
+		ret = __target_index(policy, policy->cached_resolved_idx);
+	} else {
+		if (update_limits)
+			cpufreq_set_update_limits(policy);
+		return -EINVAL;
 	}
 
-	if (!cpufreq_driver->target_index)
-		return -EINVAL;
+	if (ret && update_limits)
+		cpufreq_set_update_limits(policy);
 
-	return __target_index(policy, policy->cached_resolved_idx);
+	return ret;
 }
 EXPORT_SYMBOL_GPL(__cpufreq_driver_target);
 
@@ -2681,7 +2733,7 @@ static int cpufreq_set_policy(struct cpufreq_policy *policy,
 			      CPUFREQ_RELATION_H);
 	if (freq != policy->max) {
 		WRITE_ONCE(policy->max, freq);
-		policy->update_limits = true;
+		cpufreq_set_update_limits(policy);
 	}
 
 	freq = __resolve_freq(policy, new_data.min, new_data.min, new_data.max,
@@ -2689,7 +2741,7 @@ static int cpufreq_set_policy(struct cpufreq_policy *policy,
 	freq = min(freq, policy->max);
 	if (freq != policy->min) {
 		WRITE_ONCE(policy->min, freq);
-		policy->update_limits = true;
+		cpufreq_set_update_limits(policy);
 	}
 
 	trace_cpu_frequency_limits(policy);
