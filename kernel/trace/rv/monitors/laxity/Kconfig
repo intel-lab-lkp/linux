@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+config RV_MON_LAXITY
+	depends on RV
+	depends on RV_MON_DEADLINE
+	default y
+	select HA_MON_EVENTS_ID
+	bool "laxity monitor"
+	help
+	  Monitor to ensure deferrable servers go to a zero-laxity wait unless
+	  already running and run in starvation cases.
+
+	  For further information, see:
+	    Documentation/trace/rv/monitor_deadline.rst
