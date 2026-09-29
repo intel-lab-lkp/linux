@@ -29,6 +29,7 @@ struct eeprom_93xx46_platform_data {
 #define EE_SIZE1K	0x10		/* 1 kb of data, that is a 93xx46 */
 #define EE_SIZE2K	0x20		/* 2 kb of data, that is a 93xx56 */
 #define EE_SIZE4K	0x40		/* 4 kb of data, that is a 93xx66 */
+#define EE_SIZE16K	0x80		/* 16 kb of data, that is a 93xx86 */
 
 	unsigned int	quirks;
 /* Single word read transfers only; no sequential read. */
@@ -74,6 +75,11 @@ static const struct eeprom_93xx46_devtype_data atmel_at93c46d_data = {
 
 static const struct eeprom_93xx46_devtype_data microchip_93lc46b_data = {
 	.flags = EE_SIZE1K,
+	.quirks = EEPROM_93XX46_QUIRK_EXTRA_READ_CYCLE,
+};
+
+static const struct eeprom_93xx46_devtype_data microchip_93lc86c_data = {
+	.flags = EE_SIZE16K,
 	.quirks = EEPROM_93XX46_QUIRK_EXTRA_READ_CYCLE,
 };
 
@@ -389,6 +395,7 @@ static const struct of_device_id eeprom_93xx46_of_table[] = {
 	{ .compatible = "atmel,at93c56", .data = &at93c56_data, },
 	{ .compatible = "atmel,at93c66", .data = &at93c66_data, },
 	{ .compatible = "microchip,93lc46b", .data = &microchip_93lc46b_data, },
+	{ .compatible = "microchip,93lc86c", .data = &microchip_93lc86c_data, },
 	{}
 };
 MODULE_DEVICE_TABLE(of, eeprom_93xx46_of_table);
@@ -406,6 +413,8 @@ static const struct spi_device_id eeprom_93xx46_spi_ids[] = {
 	  .driver_data = (kernel_ulong_t)&at93c66_data, },
 	{ .name = "93lc46b",
 	  .driver_data = (kernel_ulong_t)&microchip_93lc46b_data, },
+	{ .name = "93lc86c",
+	  .driver_data = (kernel_ulong_t)&microchip_93lc86c_data, },
 	{}
 };
 MODULE_DEVICE_TABLE(spi, eeprom_93xx46_spi_ids);
@@ -482,6 +491,8 @@ static int eeprom_93xx46_probe(struct spi_device *spi)
 		edev->size = 256;
 	else if (pd->flags & EE_SIZE4K)
 		edev->size = 512;
+	else if (pd->flags & EE_SIZE16K)
+		edev->size = 2048;
 	else {
 		dev_err(&spi->dev, "unspecified size\n");
 		return -EINVAL;
