@@ -396,6 +396,14 @@ static const char *crypto_hwcaps[] = {
 	"xmpmul", "xmontmul", "xmontsqr",
 };
 
+/* crypto_hwcaps[] is indexed by CFR bit.  The machine description names
+ * the Montgomery operations with one string each where CFR splits them
+ * into a multiply and a square, so those names need a list of their own.
+ */
+static const char * const crypto_mdesc_hwcaps[] __initconst = {
+	"mont", "xmont",
+};
+
 void cpucap_info(struct seq_file *m)
 {
 	unsigned long caps = sparc64_elf_hwcap;
@@ -502,6 +510,12 @@ static unsigned long __init mdesc_cpu_hwcap_list(void)
 		}
 		for (i = 0; i < ARRAY_SIZE(crypto_hwcaps); i++) {
 			if (!strcmp(prop, crypto_hwcaps[i])) {
+				caps |= HWCAP_SPARC_CRYPTO;
+				known = true;
+			}
+		}
+		for (i = 0; i < ARRAY_SIZE(crypto_mdesc_hwcaps); i++) {
+			if (!strcmp(prop, crypto_mdesc_hwcaps[i])) {
 				caps |= HWCAP_SPARC_CRYPTO;
 				known = true;
 			}
