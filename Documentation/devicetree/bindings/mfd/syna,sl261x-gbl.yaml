@@ -1,0 +1,208 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mfd/syna,sl261x-gbl.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Synaptics SL261x global and control register blocks
+
+maintainers:
+  - Jisheng Zhang <jszhang@kernel.org>
+
+description: |
+  The SL261x global and control register blocks contain clock, reset, and
+  pin control registers. Each functional child uses its parent's register
+  range. The CPU clock controller also refers to the chip control syscon.
+
+properties:
+  compatible:
+    oneOf:
+      - items:
+          - const: syna,sl261x-avio-gbl
+          - const: syscon
+          - const: simple-mfd
+      - items:
+          - const: syna,sl261x-cpu-wrp
+          - const: syscon
+          - const: simple-mfd
+      - items:
+          - const: syna,sl261x-chip-control
+          - const: syscon
+          - const: simple-mfd
+      - items:
+          - const: syna,sl261x-mcu-gbl
+          - const: syscon
+          - const: simple-mfd
+
+  reg:
+    maxItems: 1
+
+  clock:
+    type: object
+    additionalProperties: true
+
+  pin-controller:
+    type: object
+    additionalProperties: true
+
+  reset:
+    type: object
+    additionalProperties: true
+
+required:
+  - compatible
+  - reg
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: syna,sl261x-avio-gbl
+    then:
+      required:
+        - clock
+      properties:
+        clock:
+          properties:
+            compatible:
+              const: syna,sl261x-aio-clk
+        pin-controller: false
+        reset: false
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: syna,sl261x-cpu-wrp
+    then:
+      required:
+        - clock
+      properties:
+        clock:
+          properties:
+            compatible:
+              const: syna,sl261x-cpu-clk
+        pin-controller: false
+        reset: false
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: syna,sl261x-chip-control
+    then:
+      required:
+        - clock
+        - pin-controller
+        - reset
+      properties:
+        clock:
+          properties:
+            compatible:
+              const: syna,sl261x-soc-clk
+        pin-controller:
+          properties:
+            compatible:
+              const: syna,sl261x-soc-pinctrl
+        reset:
+          properties:
+            compatible:
+              const: syna,sl261x-soc-reset
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: syna,sl261x-mcu-gbl
+    then:
+      required:
+        - clock
+        - pin-controller
+        - reset
+      properties:
+        clock:
+          properties:
+            compatible:
+              const: syna,sl261x-system-clk
+        pin-controller:
+          properties:
+            compatible:
+              const: syna,sl261x-system-pinctrl
+        reset:
+          properties:
+            compatible:
+              const: syna,sl261x-system-reset
+
+additionalProperties: false
+
+examples:
+  - |
+    osc: clock-osc {
+        compatible = "fixed-clock";
+        #clock-cells = <0>;
+        clock-frequency = <25000000>;
+    };
+
+    avio_gbl: avio-gbl@f7490000 {
+        compatible = "syna,sl261x-avio-gbl", "syscon", "simple-mfd";
+        reg = <0xf7490000 0x4000>;
+
+        aioclk: clock {
+            compatible = "syna,sl261x-aio-clk";
+            #clock-cells = <1>;
+            clocks = <&osc>;
+        };
+    };
+
+    chip: chip-control@f7e10000 {
+        compatible = "syna,sl261x-chip-control", "syscon", "simple-mfd";
+        reg = <0xf7e10000 0x10000>;
+
+        clk: clock {
+            compatible = "syna,sl261x-soc-clk";
+            #clock-cells = <1>;
+            clocks = <&osc>;
+        };
+
+        pinctrl: pin-controller {
+            compatible = "syna,sl261x-soc-pinctrl";
+        };
+
+        rst: reset {
+            compatible = "syna,sl261x-soc-reset";
+            #reset-cells = <1>;
+        };
+    };
+
+    cpu_wrp: cpu-wrp@f7e30000 {
+        compatible = "syna,sl261x-cpu-wrp", "syscon", "simple-mfd";
+        reg = <0xf7e30000 0x4000>;
+
+        cpuclk: clock {
+            compatible = "syna,sl261x-cpu-clk";
+            #clock-cells = <1>;
+            clocks = <&osc>;
+            syna,gbl-syscon = <&chip>;
+        };
+    };
+
+    mcu_gbl: mcu-gbl@e5025000 {
+        compatible = "syna,sl261x-mcu-gbl", "syscon", "simple-mfd";
+        reg = <0xe5025000 0x1000>;
+
+        sm_clk: clock {
+            compatible = "syna,sl261x-system-clk";
+            #clock-cells = <1>;
+        };
+
+        sm_pinctrl: pin-controller {
+            compatible = "syna,sl261x-system-pinctrl";
+        };
+
+        sm_rst: reset {
+            compatible = "syna,sl261x-system-reset";
+            #reset-cells = <1>;
+        };
+    };
+...
