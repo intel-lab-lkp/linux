@@ -6,6 +6,7 @@
 #include <linux/pci.h>
 #include <linux/cdev.h>
 #include <linux/uuid.h>
+#include <linux/array_size.h>
 #include <linux/node.h>
 #include <cxl/event.h>
 #include <cxl/mailbox.h>
@@ -205,14 +206,39 @@ static const
 struct cxl_mbox_cmd_rc cxl_mbox_cmd_rctable[] ={ CMD_CMD_RC_TABLE };
 #undef C
 
+/*
+ * The return code comes straight out of a device register: the low 16 bits of
+ * CXL_DEV_MAILBOX_STS.ERRNO for a foreground command, and the same width of
+ * CXL_DEV_BG_CMD_STS.RET_CODE for a background one.  Nothing validates it, so
+ * a device that reports an undefined code would index past the end of the
+ * table above with both of the accessors below.
+ */
+static inline const struct cxl_mbox_cmd_rc *
+cxl_mbox_cmd_rc_entry(struct cxl_mbox_cmd *mbox_cmd)
+{
+	if (mbox_cmd->return_code >= ARRAY_SIZE(cxl_mbox_cmd_rctable))
+		return NULL;
+
+	return &cxl_mbox_cmd_rctable[mbox_cmd->return_code];
+}
+
 static inline const char *cxl_mbox_cmd_rc2str(struct cxl_mbox_cmd *mbox_cmd)
 {
-	return cxl_mbox_cmd_rctable[mbox_cmd->return_code].desc;
+	const struct cxl_mbox_cmd_rc *rc = cxl_mbox_cmd_rc_entry(mbox_cmd);
+
+	return rc ? rc->desc : "undefined command return code";
 }
 
 static inline int cxl_mbox_cmd_rc2errno(struct cxl_mbox_cmd *mbox_cmd)
 {
-	return cxl_mbox_cmd_rctable[mbox_cmd->return_code].err;
+	const struct cxl_mbox_cmd_rc *rc = cxl_mbox_cmd_rc_entry(mbox_cmd);
+
+	/*
+	 * Unknown codes are still failures, and -ENXIO is what every
+	 * non-success entry in the table maps to, so the caller cannot tell
+	 * an undefined code from a defined error in a way that matters.
+	 */
+	return rc ? rc->err : -ENXIO;
 }
 
 /*
