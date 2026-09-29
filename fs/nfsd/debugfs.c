@@ -128,6 +128,17 @@ void nfsd_debugfs_exit(void)
 	nfsd_top_dir = NULL;
 }
 
+/*
+ * /sys/kernel/debug/nfsd/direct_misaligned_num_pages
+ *
+ * The smallest DIO-aligned middle segment, in pages, that is worth
+ * splitting a misaligned direct-mode WRITE into three segments for.  A
+ * WRITE whose middle is smaller than this, and which has a misaligned
+ * start or end, is issued as a single buffered segment instead.
+ *
+ * Default 2.  Not yet tuned by benchmarking.
+ */
+
 void nfsd_debugfs_init(void)
 {
 	nfsd_top_dir = debugfs_create_dir("nfsd", NULL);
@@ -140,6 +151,9 @@ void nfsd_debugfs_init(void)
 
 	debugfs_create_file("io_cache_write", 0644, nfsd_top_dir, NULL,
 			    &nfsd_io_cache_write_fops);
+
+	debugfs_create_u32("direct_misaligned_num_pages", 0644, nfsd_top_dir,
+			   &nfsd_direct_misaligned_num_pages);
 #ifdef CONFIG_NFSD_V4
 	debugfs_create_bool("delegated_timestamps", 0644, nfsd_top_dir,
 			    &nfsd_delegts_enabled);

@@ -126,9 +126,9 @@ Misaligned WRITE:
     middle and end as needed. The large middle segment is DIO-aligned
     and the start and/or end are misaligned. Buffered IO is used for the
     misaligned segments and O_DIRECT is used for the middle DIO-aligned
-    segment. DONTCACHE buffered IO is _not_ used for the misaligned
-    segments because using normal buffered IO offers significant RMW
-    performance benefit when handling streaming misaligned WRITEs.
+    segment. If the underlying filesystem supports FOP_DONTCACHE, the
+    misaligned segments use DONTCACHE buffered IO so that their pages
+    are dropped from the page cache once written back.
 
     The O_DIRECT middle segment also carries the DONTCACHE flag. It has
     no effect while the IO really is O_DIRECT, but a filesystem may
@@ -139,6 +139,17 @@ Misaligned WRITE:
     The flag makes that fallback DONTCACHE buffered IO rather than
     normal buffered IO. Such fallbacks are visible through the
     iomap_dio_invalidate_fail trace event; see Tracing below.
+
+    Whenever no part of a WRITE can use O_DIRECT, the whole WRITE is
+    issued as a single DONTCACHE buffered IO (normal buffered IO if the
+    filesystem lacks FOP_DONTCACHE). This covers: a filesystem that
+    advertises no DIO alignment requirements at all; a WRITE smaller
+    than the larger of the offset and memory alignments; a WRITE whose
+    DIO-aligned middle segment is smaller than
+    /sys/kernel/debug/nfsd/direct_misaligned_num_pages pages (default 2)
+    while also having a misaligned start or end; and a WRITE whose
+    payload memory is not aligned to the block device's dma_alignment,
+    which rules out O_DIRECT for the middle segment as well.
 
 Tracing:
     The nfsd_read_direct trace event shows how NFSD expands any
