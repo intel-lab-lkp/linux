@@ -15,6 +15,11 @@
 #define SYS_PWRRDY_N_DSI_MASK	BIT(1)
 #define SYS_PWRRDY_N_CSI_MASK	BIT(2)
 
+struct pwrseq_rz_info {
+	int (*probe)(struct auxiliary_device *adev,
+		     const struct auxiliary_device_id *id);
+};
+
 static int pwrseq_rzg3l_set_pwrrdy(struct pwrseq_device *pwrseq, u32 mask,
 				   bool val)
 {
@@ -122,8 +127,24 @@ static int pwrseq_rzg3l_pwrrdy_probe(struct auxiliary_device *adev,
 	return PTR_ERR_OR_ZERO(devm_pwrseq_device_register(&adev->dev, &config));
 }
 
+static int pwrseq_pwrrdy_probe_common(struct auxiliary_device *adev,
+				      const struct auxiliary_device_id *id)
+{
+	const struct pwrseq_rz_info *info =
+		(const struct pwrseq_rz_info *)id->driver_data;
+
+	return info->probe(adev, id);
+}
+
+static const struct pwrseq_rz_info pwrseq_rzg3l_info = {
+	.probe = pwrseq_rzg3l_pwrrdy_probe,
+};
+
 static const struct auxiliary_device_id pwrseq_rzg3l_pwrrdy_id_table[] = {
-	{ .name = "rz_sysc.pwrseq-pwrrdy" },
+	{
+		.name = "rz_sysc.pwrseq-pwrrdy",
+		.driver_data = (kernel_ulong_t)&pwrseq_rzg3l_info,
+	},
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(auxiliary, pwrseq_rzg3l_pwrrdy_id_table);
@@ -132,7 +153,7 @@ static struct auxiliary_driver pwrseq_rzg3l_pwrrdy_driver = {
 	.driver = {
 		.name = "pwrseq-rzg3l-pwrrdy",
 	},
-	.probe = pwrseq_rzg3l_pwrrdy_probe,
+	.probe = pwrseq_pwrrdy_probe_common,
 	.id_table = pwrseq_rzg3l_pwrrdy_id_table,
 };
 module_auxiliary_driver(pwrseq_rzg3l_pwrrdy_driver);
