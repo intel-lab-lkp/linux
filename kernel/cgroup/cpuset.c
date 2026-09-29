@@ -1561,6 +1561,43 @@ static inline bool is_local_partition(struct cpuset *cs)
 	return is_partition_valid(cs) && !is_remote_partition(cs);
 }
 
+/**
+ * validate_remote_partition - Validate a remote partition CPU change
+ * @prs: partition root state to validate
+ * @updating: true for an update, false for an enable
+ * @excpus: resulting effective exclusive CPU mask
+ * @addcpus: exclusive CPUs to be added
+ * @delcpus: exclusive CPUs to be deleted, can be NULL
+ *
+ * Return: PERR_NONE if valid, otherwise an appropriate error code
+ */
+static enum prs_errcode
+validate_remote_partition(int prs, bool updating,
+			  struct cpumask *excpus,
+			  struct cpumask *addcpus,
+			  struct cpumask *delcpus)
+{
+	if (!capable(CAP_SYS_ADMIN))
+		return PERR_ACCESS;
+
+	if (!updating &&
+	    (!cpumask_intersects(excpus, cpu_active_mask) ||
+	     cpumask_subset(top_cpuset.effective_cpus, addcpus)))
+		return PERR_INVCPUS;
+
+	if (cpumask_intersects(addcpus, subpartitions_cpus) ||
+	    (updating &&
+	     cpumask_subset(top_cpuset.effective_cpus, addcpus)))
+		return PERR_NOCPUS;
+
+	if ((prs == PRS_ISOLATED &&
+	     !isolated_cpus_can_update(addcpus, delcpus)) ||
+	    prstate_housekeeping_conflict(prs, excpus))
+		return PERR_HKEEPING;
+
+	return PERR_NONE;
+}
+
 /*
  * remote_partition_enable - Enable current cpuset as a remote partition root
  * @cs: the cpuset to update
@@ -1574,11 +1611,7 @@ static inline bool is_local_partition(struct cpuset *cs)
 static int remote_partition_enable(struct cpuset *cs, int new_prs,
 				   struct tmpmasks *tmp)
 {
-	/*
-	 * The user must have sysadmin privilege.
-	 */
-	if (!capable(CAP_SYS_ADMIN))
-		return PERR_ACCESS;
+	enum prs_errcode err;
 
 	/*
 	 * The requested exclusive_cpus must not be allocated to other
@@ -1591,15 +1624,10 @@ static int remote_partition_enable(struct cpuset *cs, int new_prs,
 	 * above it or remote partition root underneath it is not allowed.
 	 */
 	compute_excpus(cs, tmp->new_cpus);
-	if (!cpumask_intersects(tmp->new_cpus, cpu_active_mask) ||
-	    cpumask_subset(top_cpuset.effective_cpus, tmp->new_cpus))
-		return PERR_INVCPUS;
-	if (cpumask_intersects(tmp->new_cpus, subpartitions_cpus))
-		return PERR_NOCPUS;
-	if (((new_prs == PRS_ISOLATED) &&
-	     !isolated_cpus_can_update(tmp->new_cpus, NULL)) ||
-	    prstate_housekeeping_conflict(new_prs, tmp->new_cpus))
-		return PERR_HKEEPING;
+	err = validate_remote_partition(new_prs, false, tmp->new_cpus,
+					tmp->new_cpus, NULL);
+	if (err)
+		return err;
 
 	spin_lock_irq(&callback_lock);
 	partition_xcpus_add(new_prs, NULL, tmp->new_cpus);
@@ -1672,6 +1700,7 @@ static void remote_partition_disable(struct cpuset *cs, struct tmpmasks *tmp)
 static void remote_cpus_update(struct cpuset *cs, struct cpumask *xcpus,
 			       struct cpumask *excpus, struct tmpmasks *tmp)
 {
+	enum prs_errcode err;
 	bool adding, deleting;
 	int prs = cs->partition_root_state;
 
@@ -1695,14 +1724,10 @@ static void remote_cpus_update(struct cpuset *cs, struct cpumask *xcpus,
 	 */
 	if (adding) {
 		WARN_ON_ONCE(cpumask_intersects(tmp->addmask, subpartitions_cpus));
-		if (!capable(CAP_SYS_ADMIN))
-			WRITE_ONCE(cs->prs_err, PERR_ACCESS);
-		else if (cpumask_intersects(tmp->addmask, subpartitions_cpus) ||
-			 cpumask_subset(top_cpuset.effective_cpus, tmp->addmask))
-			WRITE_ONCE(cs->prs_err, PERR_NOCPUS);
-		else if ((prs == PRS_ISOLATED) &&
-			 !isolated_cpus_can_update(tmp->addmask, tmp->delmask))
-			WRITE_ONCE(cs->prs_err, PERR_HKEEPING);
+		err = validate_remote_partition(prs, true, excpus, tmp->addmask,
+						tmp->delmask);
+		if (err)
+			WRITE_ONCE(cs->prs_err, err);
 		if (cs->prs_err)
 			goto invalidate;
 	}
