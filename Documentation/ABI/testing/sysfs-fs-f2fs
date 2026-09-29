@@ -1027,3 +1027,25 @@ Contact:	"Chao Yu" <chao@kernel.org>
 Description:	This is a writable entry to control writeback interval of
 		f2fs_writeback-x:y, the range is [100, 30000], by default the value
 		is 5000, unit is ms.
+
+What:		/sys/fs/f2fs/<disk>/node_compress_interval
+Date:		September 2026
+Contact:	"Wenjie Qi" <qiwenjie@xiaomi.com>
+Description:	This is a writable entry to control how often the background
+		node-cache compression worker runs. The range is [100, 30000],
+		default value is 1000, and the unit is ms. Updating the value
+		reschedules the next worker deadline but does not synchronously
+		cancel a cycle that is already running. This entry is present only
+		when CONFIG_F2FS_FS_NODE_CACHE_COMPRESSION is enabled.
+
+What:		/sys/fs/f2fs/<disk>/node_compress_threshold
+Date:		September 2026
+Contact:	"Wenjie Qi" <qiwenjie@xiaomi.com>
+Description:	This is a writable entry to set the maximum compressed payload
+		length as a percentage of the filesystem block size. The range is
+		[0, 100], default value is 0, which disables background node-cache
+		compression. The effective payload limit is also capped at 1024 bytes.
+		Updating the value affects subsequent worker scheduling and cycles;
+		it does not synchronously cancel a cycle that is already running.
+		This entry is present only when
+		CONFIG_F2FS_FS_NODE_CACHE_COMPRESSION is enabled.

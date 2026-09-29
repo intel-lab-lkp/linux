@@ -686,6 +686,19 @@ unsigned long f2fs_shrink_cache(struct f2fs_sb_info *sbi,
 	return freed;
 }
 
+static void f2fs_try_write_caches(struct f2fs_sb_info *sbi)
+{
+	if (f2fs_readonly(sbi->sb) || f2fs_cp_error(sbi) ||
+	    unlikely(freezing(current)))
+		return;
+	if (!sb_start_write_trylock(sbi->sb))
+		return;
+
+	f2fs_write_meta_caches(sbi);
+	f2fs_write_node_caches(sbi);
+	sb_end_write(sbi->sb);
+}
+
 static int f2fs_cache_writeback_kthread(void *data)
 {
 	struct f2fs_sb_info *sbi = data;
@@ -694,6 +707,32 @@ static int f2fs_cache_writeback_kthread(void *data)
 
 	set_freezable();
 
+#ifdef CONFIG_F2FS_FS_NODE_CACHE_COMPRESSION
+	if (sbi->node_compress) {
+		while (!kthread_should_stop()) {
+			u64 now = ktime_to_ms(ktime_get());
+			u64 due = min(cache_thread->next_wb_ms,
+					f2fs_nc_next_deadline(sbi));
+
+			wait_event_freezable_timeout(*wq,
+						     kthread_should_stop(),
+				msecs_to_jiffies(due > now ? due - now : 0));
+			if (kthread_should_stop())
+				break;
+			now = ktime_to_ms(ktime_get());
+			if (now >= cache_thread->next_wb_ms) {
+				f2fs_try_write_caches(sbi);
+				WRITE_ONCE(cache_thread->next_wb_ms,
+					   ktime_to_ms(ktime_get()) +
+					   cache_thread->cache_wb_interval);
+			}
+			if (!freezing(current) &&
+			    ktime_to_ms(ktime_get()) >= f2fs_nc_next_deadline(sbi))
+				f2fs_nc_run(sbi);
+		}
+		return 0;
+	}
+#endif
 	while (!kthread_should_stop()) {
 		unsigned int interval = cache_thread->cache_wb_interval;
 
@@ -704,22 +743,7 @@ static int f2fs_cache_writeback_kthread(void *data)
 		if (kthread_should_stop())
 			break;
 
-		if (f2fs_readonly(sbi->sb))
-			continue;
-
-		if (f2fs_cp_error(sbi))
-			continue;
-
-		if (unlikely(freezing(current)))
-			continue;
-
-		if (!sb_start_write_trylock(sbi->sb))
-			continue;
-
-		f2fs_write_meta_caches(sbi);
-		f2fs_write_node_caches(sbi);
-
-		sb_end_write(sbi->sb);
+		f2fs_try_write_caches(sbi);
 	}
 	return 0;
 }
@@ -736,6 +760,11 @@ int f2fs_start_cache_wb_thread(struct f2fs_sb_info *sbi)
 
 	init_waitqueue_head(&cache_thread->cache_wb_wq);
 	cache_thread->cache_wb_interval = DEF_DIRTY_CACHE_TIMEOUT;
+#ifdef CONFIG_F2FS_FS_NODE_CACHE_COMPRESSION
+	cache_thread->next_wb_ms = ktime_to_ms(ktime_get()) +
+					cache_thread->cache_wb_interval;
+	f2fs_nc_schedule_start(sbi, ktime_to_ms(ktime_get()));
+#endif
 	snprintf(name, sizeof(name), "f2fs_writeback-%u:%u",
 			MAJOR(dev), MINOR(dev));
 

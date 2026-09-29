@@ -67,6 +67,7 @@ enum f2fs_cached_state {
 #ifdef CONFIG_F2FS_FS_NODE_CACHE_COMPRESSION
 	F2FS_BLOCK_COMPRESSED,
 	F2FS_BLOCK_RESTORED,
+	F2FS_BLOCK_INCOMPRESSIBLE,
 #endif
 };
 
@@ -155,6 +156,9 @@ F2FS_CACHE_FLAG_CLEAR_FUNC(compressed, COMPRESSED);
 F2FS_CACHE_FLAG_TEST_FUNC(restored, RESTORED);
 F2FS_CACHE_FLAG_SET_FUNC(restored, RESTORED);
 F2FS_CACHE_FLAG_CLEAR_FUNC(restored, RESTORED);
+F2FS_CACHE_FLAG_TEST_FUNC(incompressible, INCOMPRESSIBLE);
+F2FS_CACHE_FLAG_SET_FUNC(incompressible, INCOMPRESSIBLE);
+F2FS_CACHE_FLAG_CLEAR_FUNC(incompressible, INCOMPRESSIBLE);
 #else
 static inline bool f2fs_cache_test_compressed(const struct f2fs_cached_block *entry)
 {
@@ -171,6 +175,14 @@ static inline bool f2fs_cache_test_restored(const struct f2fs_cached_block *entr
 
 static inline void f2fs_cache_set_restored(struct f2fs_cached_block *entry) { }
 static inline void f2fs_cache_clear_restored(struct f2fs_cached_block *entry) { }
+static inline bool
+f2fs_cache_test_incompressible(const struct f2fs_cached_block *entry)
+{
+	return false;
+}
+
+static inline void f2fs_cache_set_incompressible(struct f2fs_cached_block *entry) { }
+static inline void f2fs_cache_clear_incompressible(struct f2fs_cached_block *entry) { }
 #endif
 
 static inline void *cache_address(const struct f2fs_cached_block *entry)
@@ -264,6 +276,9 @@ struct f2fs_cache_kthread {
 	struct task_struct *cache_wb_task;
 	wait_queue_head_t cache_wb_wq;
 	unsigned int cache_wb_interval;
+#ifdef CONFIG_F2FS_FS_NODE_CACHE_COMPRESSION
+	u64 next_wb_ms;
+#endif
 };
 
 int f2fs_start_cache_wb_thread(struct f2fs_sb_info *sbi);

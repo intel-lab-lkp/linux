@@ -18,6 +18,7 @@
 #include "segment.h"
 #include "gc.h"
 #include "iostat.h"
+#include "node_cache_compress.h"
 #include <trace/events/f2fs.h>
 
 static struct proc_dir_entry *f2fs_proc_root;
@@ -311,6 +312,52 @@ static ssize_t mounted_time_sec_show(struct f2fs_attr *a,
 {
 	return sysfs_emit(buf, "%llu\n", SIT_I(sbi)->mounted_time);
 }
+
+#ifdef CONFIG_F2FS_FS_NODE_CACHE_COMPRESSION
+static ssize_t node_compress_interval_show(struct f2fs_attr *a,
+					   struct f2fs_sb_info *sbi, char *buf)
+{
+	return sysfs_emit(buf, "%llu\n",
+			f2fs_nc_config_value(sbi, F2FS_NC_PARAM_INTERVAL));
+}
+
+static ssize_t node_compress_threshold_show(struct f2fs_attr *a,
+					    struct f2fs_sb_info *sbi, char *buf)
+{
+	return sysfs_emit(buf, "%llu\n",
+			f2fs_nc_config_value(sbi, F2FS_NC_PARAM_THRESHOLD));
+}
+
+static ssize_t f2fs_nc_config_store(struct f2fs_sb_info *sbi,
+				    enum f2fs_nc_param id, const char *buf,
+				    size_t count)
+{
+	u64 value;
+	int ret;
+
+	if (kstrtou64(skip_spaces(buf), 0, &value))
+		return -EINVAL;
+	if (!down_read_trylock(&sbi->sb->s_umount))
+		return -EAGAIN;
+	ret = f2fs_nc_config_update(sbi, id, value);
+	up_read(&sbi->sb->s_umount);
+	return ret ? ret : count;
+}
+
+static ssize_t node_compress_interval_store(struct f2fs_attr *a,
+					    struct f2fs_sb_info *sbi,
+					    const char *buf, size_t count)
+{
+	return f2fs_nc_config_store(sbi, F2FS_NC_PARAM_INTERVAL, buf, count);
+}
+
+static ssize_t node_compress_threshold_store(struct f2fs_attr *a,
+					     struct f2fs_sb_info *sbi,
+					     const char *buf, size_t count)
+{
+	return f2fs_nc_config_store(sbi, F2FS_NC_PARAM_THRESHOLD, buf, count);
+}
+#endif
 
 #ifdef CONFIG_F2FS_STAT_FS
 static ssize_t moved_blocks_foreground_show(struct f2fs_attr *a,
@@ -1363,6 +1410,14 @@ ATGC_INFO_RW_ATTR(atgc_age_threshold, age_threshold);
 
 /* WB_THREAD ATTR */
 WB_THREAD_RW_ATTR(cache_wb_interval, cache_wb_interval);
+#ifdef CONFIG_F2FS_FS_NODE_CACHE_COMPRESSION
+static struct f2fs_attr f2fs_attr_node_compress_interval =
+	__ATTR(node_compress_interval, 0644, node_compress_interval_show,
+	       node_compress_interval_store);
+static struct f2fs_attr f2fs_attr_node_compress_threshold =
+	__ATTR(node_compress_threshold, 0644, node_compress_threshold_show,
+	       node_compress_threshold_store);
+#endif
 
 F2FS_GENERAL_RO_ATTR(dirty_segments);
 F2FS_GENERAL_RO_ATTR(free_segments);
@@ -1551,6 +1606,10 @@ static struct attribute *f2fs_attrs[] = {
 	ATTR_LIST(adjust_lock_priority),
 	ATTR_LIST(critical_task_priority),
 	ATTR_LIST(cache_wb_interval),
+#ifdef CONFIG_F2FS_FS_NODE_CACHE_COMPRESSION
+	ATTR_LIST(node_compress_interval),
+	ATTR_LIST(node_compress_threshold),
+#endif
 	NULL,
 };
 ATTRIBUTE_GROUPS(f2fs);

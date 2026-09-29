@@ -9,6 +9,54 @@
 #define F2FS_NC_RECLAIM_SCALE_PCT	25U
 #define F2FS_NC_SCORE_HEADROOM		4U
 
+void f2fs_nc_config_defaults(struct f2fs_nc_config *cfg)
+{
+	*cfg = (struct f2fs_nc_config) {
+		.compression_threshold_pct = F2FS_NC_DEFAULT_THRESHOLD_PCT,
+		.compression_interval_ms = F2FS_NC_DEFAULT_INTERVAL_MS,
+	};
+}
+
+int f2fs_nc_config_set(struct f2fs_nc_config *out,
+		       const struct f2fs_nc_config *old, enum f2fs_nc_param id, u64 value)
+{
+	struct f2fs_nc_config new;
+
+	if (!out || !old)
+		return -EINVAL;
+	new = *old;
+	switch (id) {
+	case F2FS_NC_PARAM_THRESHOLD:
+		if (value > F2FS_NC_PERCENT_MAX)
+			return -ERANGE;
+		new.compression_threshold_pct = value;
+		break;
+	case F2FS_NC_PARAM_INTERVAL:
+		if (value < F2FS_NC_MIN_INTERVAL_MS ||
+		    value > F2FS_NC_MAX_INTERVAL_MS)
+			return -ERANGE;
+		new.compression_interval_ms = value;
+		break;
+	default:
+		return -EINVAL;
+	}
+	*out = new;
+	return 0;
+}
+
+u64 f2fs_nc_config_get(const struct f2fs_nc_config *cfg,
+		       enum f2fs_nc_param id)
+{
+	switch (id) {
+	case F2FS_NC_PARAM_THRESHOLD:
+		return cfg->compression_threshold_pct;
+	case F2FS_NC_PARAM_INTERVAL:
+		return cfg->compression_interval_ms;
+	default:
+		return 0;
+	}
+}
+
 static void f2fs_nc_queue_weights(u32 blocksize,
 				  u64 weight[F2FS_NC_NR_QUEUES])
 {

@@ -713,6 +713,43 @@ static int stat_show(struct seq_file *s, void *v)
 		seq_printf(s, "  - compress: %4d, hit:%8d\n", si->compress_pages, si->compress_page_hit);
 		seq_printf(s, "  - nodes: %4d in %4d\n",
 			   si->ndirty_node, si->node_caches);
+#ifdef CONFIG_F2FS_FS_NODE_CACHE_COMPRESSION
+		{
+			struct f2fs_nc_stats nc;
+
+			f2fs_nc_get_stats(sbi, &nc);
+			seq_printf(s,
+				   "NodeCacheCompress: initialized=%u threshold=%u interval=%u\n",
+				nc.initialized, nc.threshold_pct, nc.interval_ms);
+			seq_printf(s,
+				   "NCQueues: raw=%llu 256=%llu 512=%llu 1024=%llu payload=%llu/%llu/%llu slots=%llu/%llu/%llu\n",
+				nc.attached[F2FS_NC_RAW], nc.attached[F2FS_NC_256],
+				nc.attached[F2FS_NC_512], nc.attached[F2FS_NC_1024],
+				nc.payload[0], nc.payload[1], nc.payload[2],
+				nc.slots[0], nc.slots[1], nc.slots[2]);
+			seq_printf(s,
+				   "NCWorker: cycles=%llu visited=%llu candidates=%llu attempts=%llu converted=%llu candidate_refs=%llu transient=%llu alloc_fail=%llu\n",
+				nc.cycles, nc.visited, nc.candidates, nc.attempts,
+				nc.converted, nc.candidate_refs,
+				nc.transient_extra_bytes, nc.allocation_failures);
+			seq_printf(s,
+				   "NCRestore: compressed_to_raw=%llu restored_hits=%llu restore_failures=%llu\n",
+				nc.compressed_to_raw, nc.restored_hits,
+				nc.restore_failures);
+			seq_printf(s,
+				   "NCReclaim: scanned=%llu/%llu/%llu/%llu freed=%llu/%llu/%llu/%llu detached=%llu/%llu/%llu/%llu\n",
+				nc.shrink_scanned[F2FS_NC_RAW],
+				nc.shrink_scanned[F2FS_NC_256],
+				nc.shrink_scanned[F2FS_NC_512],
+				nc.shrink_scanned[F2FS_NC_1024],
+				nc.shrink_freed[F2FS_NC_RAW],
+				nc.shrink_freed[F2FS_NC_256],
+				nc.shrink_freed[F2FS_NC_512],
+				nc.shrink_freed[F2FS_NC_1024],
+				nc.detached[F2FS_NC_RAW], nc.detached[F2FS_NC_256],
+				nc.detached[F2FS_NC_512], nc.detached[F2FS_NC_1024]);
+		}
+#endif
 		seq_printf(s, "  - dents: %4d in dirs:%4d (%4d)\n",
 			   si->ndirty_dent, si->ndirty_dirs, si->ndirty_all);
 		seq_printf(s, "  - data: %4d in files:%4d\n",
