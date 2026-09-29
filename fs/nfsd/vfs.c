@@ -54,6 +54,7 @@ bool nfsd_disable_splice_read __read_mostly;
 u64 nfsd_io_cache_read __read_mostly = NFSD_IO_BUFFERED;
 u64 nfsd_io_cache_write __read_mostly = NFSD_IO_BUFFERED;
 u32 nfsd_direct_misaligned_num_pages __read_mostly = 2;
+bool nfsd_direct_misaligned_dontcache __read_mostly = true;
 
 /**
  * nfserrno - Map Linux errnos to NFS errnos
@@ -1364,16 +1365,21 @@ nfsd_write_dio_iters_init(struct nfsd_file *nf, struct bio_vec *bvec,
 	size_t prefix, middle, suffix;
 	loff_t offset = iocb->ki_pos;
 	unsigned int dontcache_flags = 0;
+	unsigned int buffered_flags;
 	unsigned int nsegs = 0;
 
 	if (nf->nf_file->f_op->fop_flags & FOP_DONTCACHE)
 		dontcache_flags = IOCB_DONTCACHE;
+	/* Buffered segments follow the knob; the direct middle does not. */
+	buffered_flags = READ_ONCE(nfsd_direct_misaligned_dontcache) ?
+			 dontcache_flags : 0;
 
 	/*
 	 * Whenever direct I/O cannot be used for the WRITE, fall back to a
-	 * single DONTCACHE buffered I/O when the file system supports it, so
-	 * the WRITE's pages are dropped from the page cache once written
-	 * back, and to a single cached buffered I/O otherwise.
+	 * single DONTCACHE buffered I/O when the file system supports it (and
+	 * nfsd_direct_misaligned_dontcache is set), so the WRITE's pages are
+	 * dropped from the page cache once written back, and to a single
+	 * cached buffered I/O otherwise.
 	 *
 	 * If the file system doesn't advertise any alignment requirements,
 	 * don't try to issue direct I/O at all.
@@ -1412,13 +1418,15 @@ nfsd_write_dio_iters_init(struct nfsd_file *nf, struct bio_vec *bvec,
 	 * its page with the neighbouring WRITE; see
 	 * nfsd_write_dio_boundary_claim(), which nfsd_direct_write() calls right
 	 * before issuing each of them, for how the page is held for the
-	 * partner and dropped once both have written it.
+	 * partner and dropped once both have written it.  With
+	 * nfsd_direct_misaligned_dontcache=N both are plain cached writes and
+	 * nothing is held or dropped: the pages stay until reclaim.
 	 */
 	if (prefix) {
 		nfsd_write_dio_seg_init(&segments[nsegs], bvec,
 					nvecs, total, 0, prefix, iocb);
-		segments[nsegs].flags |= dontcache_flags;
-		segments[nsegs++].boundary = !!dontcache_flags;
+		segments[nsegs].flags |= buffered_flags;
+		segments[nsegs++].boundary = !!buffered_flags;
 	}
 
 	nfsd_write_dio_seg_init(&segments[nsegs], bvec, nvecs,
@@ -1449,8 +1457,8 @@ nfsd_write_dio_iters_init(struct nfsd_file *nf, struct bio_vec *bvec,
 	if (suffix) {
 		nfsd_write_dio_seg_init(&segments[nsegs], bvec, nvecs, total,
 					prefix + middle, suffix, iocb);
-		segments[nsegs].flags |= dontcache_flags;
-		segments[nsegs++].boundary = !!dontcache_flags;
+		segments[nsegs].flags |= buffered_flags;
+		segments[nsegs++].boundary = !!buffered_flags;
 	}
 
 	return nsegs;
@@ -1464,8 +1472,8 @@ no_dio:
 	 */
 	nfsd_write_dio_seg_init(&segments[0], bvec, nvecs, total, 0,
 				total, iocb);
-	segments[0].flags |= dontcache_flags;
-	segments[0].edges = !!dontcache_flags;
+	segments[0].flags |= buffered_flags;
+	segments[0].edges = !!buffered_flags;
 	return 1;
 }
 
