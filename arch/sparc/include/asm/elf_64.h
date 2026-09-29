@@ -106,6 +106,7 @@
 #define HWCAP_SPARC_PAUSE_NSEC	0x20000000 /* PAUSE has nanosecond granularity */
 #define HWCAP_SPARC_MWAIT	0x40000000 /* MWAIT available */
 #define HWCAP_SPARC_SPARC5	0x80000000 /* SPARC5 insns available */
+#define HWCAP_SPARC_VAMASK	0x100000000UL /* VA masking available */
 
 #define CORE_DUMP_USE_REGSET
 

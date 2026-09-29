@@ -387,7 +387,7 @@ static const char *hwcaps[] = {
 	"mul32", "div32", "fsmuld", "v8plus", "popc", "vis", "vis2",
 	"ASIBlkInit", "fmaf", "vis3", "hpc", "random", "trans", "fjfmau",
 	"ima", "cspare", "pause", "cbcond", NULL /*reserved for crypto */,
-	"adp", "vis3b", "pause-nsec", "mwait", "sparc5",
+	"adp", "vis3b", "pause-nsec", "mwait", "sparc5", "vamask",
 };
 
 static const char *crypto_hwcaps[] = {
@@ -521,6 +521,33 @@ out:
 	return caps;
 }
 
+/* VA masking is not named in the hwcap-list.  The cpu node describes it
+ * with va-mask-nz-mask instead, which is non-zero when the chip has it.
+ */
+static bool __init mdesc_cpu_has_vamask(void)
+{
+	struct mdesc_handle *hp;
+	const u64 *mask;
+	bool ret = false;
+	u64 pn;
+
+	hp = mdesc_grab();
+	if (!hp)
+		return false;
+
+	pn = mdesc_node_by_name(hp, MDESC_NODE_NULL, "cpu");
+	if (pn == MDESC_NODE_NULL)
+		goto out;
+
+	mask = mdesc_get_property(hp, pn, "va-mask-nz-mask", NULL);
+	if (mask && *mask)
+		ret = true;
+
+out:
+	mdesc_release(hp);
+	return ret;
+}
+
 /* This yields a mask that user programs can use to figure out what
  * instruction set this cpu supports.
  */
@@ -598,6 +625,9 @@ static void __init init_sparc64_elf_hwcap(void)
 					AV_SPARC_FMAF);
 		}
 	}
+	if (mdesc_cpu_has_vamask())
+		cap |= HWCAP_SPARC_VAMASK;
+
 	sparc64_elf_hwcap = cap | mdesc_caps;
 
 	report_hwcaps(sparc64_elf_hwcap);
