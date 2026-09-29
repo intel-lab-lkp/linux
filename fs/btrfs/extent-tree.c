@@ -3777,12 +3777,11 @@ btrfs_lock_block_group(struct btrfs_block_group *cache, bool delalloc)
 		down_read(&cache->data_rwsem);
 }
 
-static inline void btrfs_grab_block_group(struct btrfs_block_group *cache,
-					  bool delalloc)
+static inline void
+btrfs_unlock_block_group(struct btrfs_block_group *cache, bool delalloc)
 {
-	btrfs_get_block_group(cache);
 	if (delalloc)
-		down_read(&cache->data_rwsem);
+		up_read(&cache->data_rwsem);
 }
 
 static struct btrfs_block_group *btrfs_lock_cluster(
@@ -4226,7 +4225,7 @@ static void release_block_group(struct btrfs_block_group *block_group,
 
 	BUG_ON(btrfs_bg_flags_to_raid_index(block_group->flags) !=
 	       ffe_ctl->index);
-	btrfs_release_block_group(block_group, delalloc);
+	btrfs_unlock_block_group(block_group, delalloc);
 }
 
 static void found_extent_clustered(struct find_free_extent_ctl *ffe_ctl,
@@ -4659,6 +4658,7 @@ static noinline int find_free_extent(struct btrfs_root *root,
 			} else {
 				ffe_ctl->index = btrfs_bg_flags_to_raid_index(
 							block_group->flags);
+				btrfs_put_block_group(block_group);
 				btrfs_lock_block_group(block_group,
 						       ffe_ctl->delalloc);
 				ffe_ctl->hinted = true;
@@ -4690,7 +4690,7 @@ search:
 			continue;
 		}
 
-		btrfs_grab_block_group(block_group, ffe_ctl->delalloc);
+		btrfs_lock_block_group(block_group, ffe_ctl->delalloc);
 		ffe_ctl->search_start = block_group->start;
 
 		/*
@@ -4717,7 +4717,7 @@ search:
 			 * It's possible that we have MIXED_GROUP flag but no
 			 * block group is mixed.  Just skip such block group.
 			 */
-			btrfs_release_block_group(block_group, ffe_ctl->delalloc);
+			btrfs_unlock_block_group(block_group, ffe_ctl->delalloc);
 			continue;
 		}
 
@@ -4761,7 +4761,12 @@ have_block_group:
 			goto loop;
 
 		if (bg_ret && bg_ret != block_group) {
-			btrfs_release_block_group(block_group, ffe_ctl->delalloc);
+			btrfs_unlock_block_group(block_group, ffe_ctl->delalloc);
+			/*
+			 * bg_ret is still on the list: btrfs_remove_block_group()
+			 * detaches it from the cluster before list_del_init().
+			 */
+			btrfs_put_block_group(bg_ret);
 			block_group = bg_ret;
 		}
 
@@ -4800,7 +4805,7 @@ have_block_group:
 		ins->offset = ffe_ctl->num_bytes;
 
 		trace_btrfs_reserve_extent(block_group, ffe_ctl);
-		btrfs_release_block_group(block_group, ffe_ctl->delalloc);
+		btrfs_unlock_block_group(block_group, ffe_ctl->delalloc);
 		break;
 loop:
 		if (!ffe_ctl->cached && ffe_ctl->loop > LOOP_CACHING_NOWAIT &&
