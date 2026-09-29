@@ -1845,7 +1845,6 @@ static void isolate_freepages(struct compact_control *cc)
 static struct folio *compaction_alloc_noprof(struct folio *src, unsigned long data)
 {
 	struct compact_control *cc = (struct compact_control *)data;
-	struct folio *dst;
 	int order = folio_order(src);
 	bool has_isolated_pages = false;
 	int start_order;
@@ -1878,15 +1877,13 @@ again:
 
 		list_add(&freepage[size].lru, &cc->freepages[start_order]);
 	}
-	dst = (struct folio *)freepage;
-
-	post_alloc_hook(&dst->page, order, __GFP_MOVABLE, ALLOC_DEFAULT);
-	set_page_refcounted(&dst->page);
+	post_alloc_hook(freepage, order, __GFP_MOVABLE, ALLOC_DEFAULT);
+	set_page_refcounted(freepage);
 	if (order)
-		prep_compound_page(&dst->page, order);
+		prep_compound_page(freepage, order);
 	cc->nr_freepages -= 1 << order;
 	cc->nr_migratepages -= 1 << order;
-	return page_rmappable_folio(&dst->page);
+	return page_rmappable_folio(freepage);
 }
 
 static struct folio *compaction_alloc(struct folio *src, unsigned long data)
@@ -1903,10 +1900,10 @@ static void compaction_free(struct folio *dst, unsigned long data)
 {
 	struct compact_control *cc = (struct compact_control *)data;
 	int order = folio_order(dst);
-	struct page *page = &dst->page;
+	struct page *page = folio_page(dst, 0);
 
 	if (folio_put_testzero(dst) && free_pages_prepare(page, order)) {
-		list_add(&dst->lru, &cc->freepages[order]);
+		list_add(&page->lru, &cc->freepages[order]);
 		cc->nr_freepages += 1 << order;
 	}
 	cc->nr_migratepages += 1 << order;
