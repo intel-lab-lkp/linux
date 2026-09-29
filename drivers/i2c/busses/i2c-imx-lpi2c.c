@@ -846,7 +846,6 @@ desc_prepare_err_exit:
 submit_err_exit:
 	dma_unmap_single(txchan->device->dev, dma->dma_tx_addr,
 			 dma->rx_cmd_buf_len, DMA_TO_DEVICE);
-	dmaengine_desc_free(rx_cmd_desc);
 	return -EINVAL;
 }
 
@@ -905,7 +904,6 @@ desc_prepare_err_exit:
 
 submit_err_exit:
 	lpi2c_dma_unmap(dma);
-	dmaengine_desc_free(desc);
 	return -EINVAL;
 }
 
