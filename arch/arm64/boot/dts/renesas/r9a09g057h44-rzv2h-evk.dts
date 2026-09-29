@@ -130,6 +130,10 @@
 	};
 };
 
+&adc {
+	status = "okay";
+};
+
 &audio_extal_clk {
 	clock-frequency = <22579200>;
 };
