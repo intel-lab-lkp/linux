@@ -393,6 +393,7 @@ static const char *hwcaps[] = {
 static const char *crypto_hwcaps[] = {
 	"aes", "des", "kasumi", "camellia", "md5", "sha1", "sha256",
 	"sha512", "mpmul", "montmul", "montsqr", "crc32c",
+	"xmpmul", "xmontmul", "xmontsqr",
 };
 
 void cpucap_info(struct seq_file *m)
