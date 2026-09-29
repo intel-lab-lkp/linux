@@ -138,6 +138,21 @@ static int io_uring_cmd_timestamp(struct socket *sock,
 		if (!skb)
 			break;
 		ret = io_process_timestamp_skb(cmd, sk, skb, issue_flags);
+		if (ret && ret != -ENOBUFS) {
+			/*
+			 * The walk selected this skb, but skb_get_tx_timestamp()
+			 * cannot extract a timestamp from it: the two use
+			 * different checks.  Splicing it back would put it at
+			 * the head of sk_error_queue, where every later run
+			 * selects it first and fails on it again, so nothing
+			 * behind it is ever delivered.  recvmsg(MSG_ERRQUEUE)
+			 * frees such a skb without reporting a timestamp; drop
+			 * it here as well.
+			 */
+			__skb_dequeue(&list);
+			kfree_skb(skb);
+			continue;
+		}
 		if (ret)
 			break;
 		__skb_dequeue(&list);
