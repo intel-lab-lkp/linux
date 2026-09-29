@@ -4948,39 +4948,26 @@ static int resp_write_tape(struct scsi_cmnd *scp, struct sdebug_dev_info *devip)
 	return 0;
 }
 
-static int corrupt_lbas(struct sdebug_dev_info *devip, u64 lba, u32 num,
-		u32 nr_bit_errors, s32 reftag_adjust)
+static int __corrupt_lbas(struct sdeb_store_info *sip, u64 lba, u32 num,
+			  u32 nr_bit_errors, s32 reftag_adjust)
 {
-	struct sdeb_store_info *sip = devip2sip(devip, false);
-	bool meta_data_locked = false;
 	u32 block, num_mapped, b, i;
-	int error = 0;
-
-	if (sdebug_dev_is_zoned(devip) ||
-	    sdebug_dix ||
-	    scsi_debug_lbp())  {
-		sdeb_meta_write_lock(sip);
-		meta_data_locked = true;
-	}
 
 	if (!sip) {
 		pr_err("can't corrupt with fake_rw\n");
-		error = -EINVAL;
-		goto out_unlock;
+		return -EINVAL;
 	}
 
 	if (num > sdebug_capacity || lba > sdebug_capacity - num) {
 		pr_err("logical blocks out of bounds: %llu:%u", lba, num);
-		error = -EINVAL;
-		goto out_unlock;
+		return -EINVAL;
 	}
 
 	if (scsi_debug_lbp() &&
 	    (!map_state(sip, lba, &num_mapped) || num > num_mapped)) {
 		pr_err("can't modify unmapped logical blocks: %llu:%u",
 			lba, num);
-		error = -EINVAL;
-		goto out_unlock;
+		return -EINVAL;
 	}
 
 	/*
@@ -5018,9 +5005,24 @@ static int corrupt_lbas(struct sdebug_dev_info *devip, u64 lba, u32 num,
 	}
 	sdeb_data_unlock(sip, false);
 
-out_unlock:
-	if (meta_data_locked)
+	return 0;
+}
+
+static int corrupt_lbas(struct sdebug_dev_info *devip, u64 lba, u32 num,
+			u32 nr_bit_errors, s32 reftag_adjust)
+{
+	struct sdeb_store_info *sip = devip2sip(devip, false);
+	int error;
+
+	if (sdebug_dev_is_zoned(devip) || sdebug_dix || scsi_debug_lbp()) {
+		sdeb_meta_write_lock(sip);
+		error = __corrupt_lbas(sip, lba, num, nr_bit_errors,
+				       reftag_adjust);
 		sdeb_meta_write_unlock(sip);
+	} else {
+		error = __corrupt_lbas(sip, lba, num, nr_bit_errors,
+				       reftag_adjust);
+	}
 	return error;
 }
 
