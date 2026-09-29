@@ -5127,7 +5127,9 @@ static void pci_dev_restore(struct pci_dev *dev)
 	const struct pci_error_handlers *err_handler =
 			dev->driver ? dev->driver->err_handler : NULL;
 
-	pci_restore_state(dev);
+	/* MSI-X restoration may access device MMIO. */
+	if (pci_dev_config_accessible(dev, "restore state"))
+		pci_restore_state(dev);
 
 	/*
 	 * dev->driver->err_handler->reset_done() is protected against
