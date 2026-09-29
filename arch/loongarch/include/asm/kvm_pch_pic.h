@@ -53,6 +53,7 @@ struct loongarch_pch_pic {
 	spinlock_t lock;
 	struct kvm *kvm;
 	struct kvm_io_device device;
+	bool has_init;
 	union pch_pic_id id;
 	uint64_t mask; /* 1:disable irq, 0:enable irq */
 	uint64_t htmsi_en; /* 1:msi */
