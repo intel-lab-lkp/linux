@@ -10568,6 +10568,9 @@ void perf_event_text_poke(const void *addr, const void *old_bytes,
 
 void perf_event_itrace_started(struct perf_event *event)
 {
+	if (event->parent)
+		event = event->parent;
+
 	WRITE_ONCE(event->attach_state, event->attach_state | PERF_ATTACH_ITRACE);
 }
 
