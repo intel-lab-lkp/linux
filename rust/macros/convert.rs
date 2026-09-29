@@ -295,7 +295,7 @@ fn derive_for_enum(
             #[automatically_derived]
             impl ::core::convert::TryFrom<#input_ty> for #enum_ident {
                 type Error = ::kernel::prelude::Error;
-                fn try_from(#param: #input_ty) -> Result<#enum_ident, Self::Error> {
+                fn try_from(#param: #input_ty) -> ::core::result::Result<#enum_ident, Self::Error> {
                     #overflow_assertion
 
                     #(#clauses)* {
@@ -492,7 +492,8 @@ impl Bounded {
     const QUALIFIED_NAME: &'static str = "::kernel::num::Bounded";
 
     fn emit_new(&self, expr: &Expr) -> TokenStream {
-        let Self { base_ty, bits, .. } = self;
+        let base_ty = self.emit_qualified_base_ty();
+        let bits = &self.bits;
         let qualified_name: syn::Path = parse_str(Self::QUALIFIED_NAME).expect("valid path");
         ::quote::quote! {
             #qualified_name::<#base_ty, #bits>::new::<{ #expr }>()
@@ -556,6 +557,8 @@ fn validate_type(ty: &Type) -> syn::Result<ValidTy> {
     let segment = &path.segments[0];
     if segment.ident == Bounded::NAME {
         return validate_bounded(segment);
+    } else if !matches!(segment.arguments, PathArguments::None) {
+        return Err(make_err(ty));
     } else {
         return validate_primitive(&segment.ident);
     }
@@ -2042,4 +2045,49 @@ mod derive_from_tests {
     /// enum Incomplete { A, B }
     /// ```
     mod incomplete_wide_input_9 {}
+}
+
+mod helper_type_tests {
+    /// ```compile_fail
+    /// use kernel::macros::Into;
+    /// #[derive(Into)]
+    /// #[into(bool<Undefined>)]
+    /// enum Invalid { A, B }
+    /// ```
+    ///
+    /// ```compile_fail
+    /// use kernel::macros::TryFrom;
+    /// #[derive(TryFrom)]
+    /// #[try_from(bool<Undefined>)]
+    /// enum Invalid { A, B }
+    /// ```
+    ///
+    /// ```compile_fail
+    /// use kernel::macros::From;
+    /// #[derive(From)]
+    /// #[from(bool<Undefined>)]
+    /// enum Invalid { A, B }
+    /// ```
+    mod primitive_arguments_are_not_ignored {}
+
+    /// ```
+    /// #![allow(non_camel_case_types, dead_code)]
+    /// use kernel::{macros::{From, Into, TryFrom}, num::Bounded};
+    ///
+    /// type Result = ();
+    /// type u8 = i8;
+    ///
+    /// #[derive(Debug, PartialEq, From, Into, TryFrom)]
+    /// #[from(Bounded<u8, 1>)]
+    /// #[into(Bounded<u8, 1>)]
+    /// #[try_from(u8, Bounded<u8, 2>)]
+    /// enum Switch { Off, On }
+    ///
+    /// let value = Bounded::<core::primitive::u8, 1>::new::<1>();
+    /// assert_eq!(Switch::from(value), Switch::On);
+    /// assert_eq!(Bounded::<core::primitive::u8, 1>::from(Switch::On), value);
+    /// assert_eq!(Switch::try_from(0_u8), Ok(Switch::Off));
+    /// assert_eq!(Switch::try_from(value.extend::<2>()), Ok(Switch::On));
+    /// ```
+    mod names_in_scope_do_not_change_generated_types {}
 }
