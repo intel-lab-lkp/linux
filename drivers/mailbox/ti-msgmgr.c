@@ -425,10 +425,18 @@ static int ti_msgmgr_send_data(struct mbox_chan *chan, void *data)
 
 	trail_bytes = message->len % sizeof(u32);
 	if (trail_bytes) {
-		u32 data_trail = *word_data;
+		/*
+		 * Read the trailing bytes one at a time instead of as a full
+		 * u32, as the message buffer may end right after them and a
+		 * u32 read would go past the end of it. This also leaves all
+		 * unused data as 0.
+		 */
+		u8 *byte_data = (u8 *)word_data;
+		u32 data_trail = 0;
+		int i;
 
-		/* Ensure all unused data is 0 */
-		data_trail &= 0xFFFFFFFF >> (8 * (sizeof(u32) - trail_bytes));
+		for (i = 0; i < trail_bytes; i++)
+			data_trail |= byte_data[i] << (8 * i);
 		writel(data_trail, data_reg);
 		data_reg += sizeof(u32);
 	}
