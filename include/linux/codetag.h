@@ -87,6 +87,8 @@ void codetag_to_text(struct seq_buf *out, struct codetag *ct);
 struct codetag_type *
 codetag_register_type(const struct codetag_type_desc *desc);
 
+void codetag_unregister_type(struct codetag_type *cttype);
+
 #if defined(CONFIG_CODE_TAGGING) && defined(CONFIG_MODULES)
 
 bool codetag_needs_module_section(struct module *mod, const char *name,

@@ -439,7 +439,7 @@ void __show_mem(unsigned int filter, const nodemask_t *nodemask,
 		struct codetag_bytes tags[10];
 		size_t i, nr;
 
-		nr = alloc_tag_top_users(tags, ARRAY_SIZE(tags), false);
+		nr = alloc_tag_top_users(tags, ARRAY_SIZE(tags));
 		if (nr) {
 			pr_notice("Memory allocations (profiling is currently turned %s):\n",
 				mem_alloc_profiling_enabled() ? "on" : "off");

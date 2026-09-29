@@ -81,7 +81,7 @@ struct codetag_bytes {
 	s64 bytes;
 };
 
-size_t alloc_tag_top_users(struct codetag_bytes *tags, size_t count, bool can_sleep);
+size_t alloc_tag_top_users(struct codetag_bytes *tags, size_t count);
 
 static inline struct alloc_tag *ct_to_alloc_tag(struct codetag *ct)
 {

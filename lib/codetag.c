@@ -429,3 +429,29 @@ codetag_register_type(const struct codetag_type_desc *desc)
 
 	return cttype;
 }
+
+/**
+ * codetag_unregister_type - unregister a codetag type
+ * @cttype: the codetag type to unregister
+ *
+ * Undo codetag_register_type() and free @cttype. The caller must make
+ * sure no lockless reader still uses @cttype, e.g. clear the pointer
+ * to it and wait for an RCU grace period first.
+ */
+void __init codetag_unregister_type(struct codetag_type *cttype)
+{
+	struct codetag_module *cmod;
+	unsigned long id, tmp;
+
+	mutex_lock(&codetag_lock);
+	list_del(&cttype->link);
+	mutex_unlock(&codetag_lock);
+
+	down_write(&cttype->mod_lock);
+	idr_for_each_entry_ul(&cttype->mod_idr, cmod, tmp, id)
+		kfree(cmod);
+	idr_destroy(&cttype->mod_idr);
+	up_write(&cttype->mod_lock);
+
+	kfree(cttype);
+}
