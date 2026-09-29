@@ -3217,6 +3217,7 @@ int intel_hdmi_dsc_get_slice_height(int vactive)
  * and dsc decoder capabilities
  *
  * @mode: drm_display_mode for which num of slices are needed
+ * @pixel_clock: pixel clock in kHz used for DSC throughput calculation
  * @output_format : pipe output format
  * @src_max_slices: maximum slices supported by the DSC encoder
  * @src_max_slice_width: maximum slice width supported by DSC encoder
@@ -3228,6 +3229,7 @@ int intel_hdmi_dsc_get_slice_height(int vactive)
  */
 int
 intel_hdmi_dsc_get_num_slices(const struct drm_display_mode *mode,
+			      int pixel_clock,
 			      enum intel_output_format output_format,
 			      int src_max_slices, int src_max_slice_width,
 			      int hdmi_max_slices, int hdmi_throughput)
@@ -3250,7 +3252,6 @@ intel_hdmi_dsc_get_num_slices(const struct drm_display_mode *mode,
 	int max_throughput; /* max clock freq. in khz per slice */
 	int max_slice_width;
 	int slice_width;
-	int pixel_clock = mode->crtc_clock;
 
 	if (!hdmi_throughput)
 		return 0;
