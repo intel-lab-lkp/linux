@@ -1030,6 +1030,11 @@ static inline bool acpi_driver_match_device(struct device *dev,
 	return false;
 }
 
+static inline bool acpi_has_method(acpi_handle handle, char *name)
+{
+	return false;
+}
+
 static inline bool acpi_check_dsm(acpi_handle handle, const guid_t *guid,
 				  u64 rev, u64 funcs)
 {
