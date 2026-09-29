@@ -1664,7 +1664,8 @@ static vm_fault_t insert_pmd(struct vm_area_struct *vma, unsigned long addr,
 			entry = pmd_mkspecial(entry);
 		} else {
 			folio_get(fop.folio);
-			folio_add_file_rmap_pmd(fop.folio, &fop.folio->page, vma);
+			folio_add_file_rmap_pmd(fop.folio,
+						folio_page(fop.folio, 0), vma);
 			add_mm_counter(mm, mm_counter_file(fop.folio), HPAGE_PMD_NR);
 		}
 	} else {
@@ -1786,7 +1787,8 @@ static vm_fault_t insert_pud(struct vm_area_struct *vma, unsigned long addr,
 		entry = folio_mk_pud(fop.folio, vma->vm_page_prot);
 
 		folio_get(fop.folio);
-		folio_add_file_rmap_pud(fop.folio, &fop.folio->page, vma);
+		folio_add_file_rmap_pud(fop.folio,
+					folio_page(fop.folio, 0), vma);
 		add_mm_counter(mm, mm_counter_file(fop.folio), HPAGE_PUD_NR);
 	} else {
 		entry = pud_mkhuge(pfn_pud(fop.pfn, prot));
@@ -1935,7 +1937,7 @@ static void copy_huge_non_present_pmd(
 		 * folio_try_dup_anon_rmap_pmd does not fail for
 		 * device private entries.
 		 */
-		folio_try_dup_anon_rmap_pmd(src_folio, &src_folio->page,
+		folio_try_dup_anon_rmap_pmd(src_folio, folio_page(src_folio, 0),
 					    dst_vma, src_vma);
 	}
 
@@ -2487,7 +2489,7 @@ static void zap_huge_pmd_folio(struct mm_struct *mm, struct vm_area_struct *vma,
 
 	/* Present and device private folios are rmappable. */
 	if (is_present || is_device_private)
-		folio_remove_rmap_pmd(folio, &folio->page, vma);
+		folio_remove_rmap_pmd(folio, folio_page(folio, 0), vma);
 
 	if (folio_test_anon(folio)) {
 		add_mm_counter(mm, MM_ANONPAGES, -HPAGE_PMD_NR);
@@ -2572,7 +2574,7 @@ bool zap_huge_pmd(struct mmu_gather *tlb, struct vm_area_struct *vma,
 
 	spin_unlock(ptl);
 	if (is_present && folio)
-		tlb_remove_page_size(tlb, &folio->page, HPAGE_PMD_SIZE);
+		tlb_remove_page_size(tlb, folio_page(folio, 0), HPAGE_PMD_SIZE);
 	return true;
 }
 
@@ -2947,7 +2949,7 @@ int move_pages_huge_pmd(struct mm_struct *mm, pmd_t *dst_pmd, pmd_t *src_pmd, pm
 	}
 	if (src_folio) {
 		if (folio_maybe_dma_pinned(src_folio) ||
-		    !PageAnonExclusive(&src_folio->page)) {
+		    !PageAnonExclusive(folio_page(src_folio, 0))) {
 			err = -EBUSY;
 			goto unlock_ptls;
 		}
@@ -5186,12 +5188,13 @@ void remove_migration_pmd(struct page_vma_mapped_walk *pvmw, struct folio *folio
 		if (!softleaf_is_migration_read(entry))
 			rmap_flags |= RMAP_EXCLUSIVE;
 
-		folio_add_anon_rmap_pmd(folio, &folio->page, vma, haddr, rmap_flags);
+		folio_add_anon_rmap_pmd(folio, folio_page(folio, 0), vma,
+					haddr, rmap_flags);
 	} else {
-		folio_add_file_rmap_pmd(folio, &folio->page, vma);
+		folio_add_file_rmap_pmd(folio, folio_page(folio, 0), vma);
 	}
 	VM_WARN_ON_ONCE(pmd_write(pmde) && folio_test_anon(folio) &&
-			!PageAnonExclusive(&folio->page));
+			!PageAnonExclusive(folio_page(folio, 0)));
 	set_pmd_at(mm, haddr, pvmw->pmd, pmde);
 
 	/* No need to invalidate - it was non-present before */
