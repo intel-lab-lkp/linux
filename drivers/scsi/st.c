@@ -2955,9 +2955,11 @@ static int st_int_ioctl(struct scsi_tape *STp, unsigned int cmd_in, unsigned lon
 		direction = DMA_TO_DEVICE;
 
 		memset((STp->buffer)->b_data, 0, 12);
-		if (cmd_in == MTSETDRVBUFFER)
+		if (cmd_in == MTSETDRVBUFFER) {
 			(STp->buffer)->b_data[2] = (arg & 7) << 4;
-		else
+			STp->drv_buffer_changed = 1;	/* At least we tried ;-) */
+			STp->changed_drv_buffer = arg & 7;
+		} else
 			(STp->buffer)->b_data[2] =
 			    STp->drv_buffer << 4;
 		(STp->buffer)->b_data[3] = 8;	/* block descriptor length */
@@ -3603,16 +3605,19 @@ out:
 }
 
 /*
- * Re-apply a density and block size that were changed by the user before a
- * device reset (a negative value means "not changed").  A unit attention
- * still pending after the operation (e.g. new medium after a load) fails the
- * first MODE SELECT, so retry each once.  As in the other post-reset restore
- * path, errors are ignored and one setting failing does not prevent
- * restoring the other.
+ * Re-apply a drive buffering mode, density and block size that were changed
+ * by the user before a device reset (a negative value means "not changed").
+ * The buffering mode goes first: the other MODE SELECTs send the current
+ * STp->drv_buffer.  A unit attention still pending after the operation
+ * (e.g. new medium after a load) fails the first MODE SELECT, so retry each
+ * once.  As in the other post-reset restore path, errors are ignored and one
+ * setting failing does not prevent restoring the others.
  */
-static void st_restore_changed_settings(struct scsi_tape *STp, int density,
-					int blksize)
+static void st_restore_changed_settings(struct scsi_tape *STp, int drv_buffer,
+					int density, int blksize)
 {
+	if (drv_buffer >= 0 && st_int_ioctl(STp, MTSETDRVBUFFER, drv_buffer))
+		st_int_ioctl(STp, MTSETDRVBUFFER, drv_buffer);
 	if (density >= 0 && st_int_ioctl(STp, MTSETDENSITY, density))
 		st_int_ioctl(STp, MTSETDENSITY, density);
 	if (blksize >= 0 && st_int_ioctl(STp, MTSETBLK, blksize))
@@ -3627,7 +3632,7 @@ static long st_ioctl(struct file *file, unsigned int cmd_in, unsigned long arg)
 	int retval = 0;
 	unsigned int blk;
 	bool cmd_mtiocget;
-	int restore_density = -1, restore_blksize = -1;
+	int restore_drv_buffer = -1, restore_density = -1, restore_blksize = -1;
 	struct scsi_tape *STp = file->private_data;
 	struct st_modedef *STm;
 	struct st_partstat *STps;
@@ -3770,6 +3775,9 @@ static long st_ioctl(struct file *file, unsigned int cmd_in, unsigned long arg)
 					STp->partition = 0;
 					switch_partition(STp);
 				}
+				if (STp->drv_buffer_changed)
+					st_int_ioctl(STp, MTSETDRVBUFFER,
+						     STp->changed_drv_buffer);
 				if (STp->density_changed)
 					st_int_ioctl(STp, MTSETDENSITY, STp->changed_density);
 				if (STp->blksize_changed)
@@ -3781,6 +3789,8 @@ static long st_ioctl(struct file *file, unsigned int cmd_in, unsigned long arg)
 				 * new session, which clears the "changed" flags:
 				 * save the values and restore them afterwards.
 				 */
+				if (STp->drv_buffer_changed)
+					restore_drv_buffer = STp->changed_drv_buffer;
 				if (STp->density_changed)
 					restore_density = STp->changed_density;
 				if (STp->blksize_changed)
@@ -3865,7 +3875,8 @@ static long st_ioctl(struct file *file, unsigned int cmd_in, unsigned long arg)
 		if (mtc.mt_op == MTLOAD) {
 			retval = do_load_unload(STp, file, max(1, mtc.mt_count));
 			if (!retval)
-				st_restore_changed_settings(STp, restore_density,
+				st_restore_changed_settings(STp, restore_drv_buffer,
+							    restore_density,
 							    restore_blksize);
 			goto out;
 		}
@@ -3886,7 +3897,8 @@ static long st_ioctl(struct file *file, unsigned int cmd_in, unsigned long arg)
 		else
 			retval = st_int_ioctl(STp, mtc.mt_op, mtc.mt_count);
 		if (!retval && mtc.mt_op == MTRETEN && !STp->immediate &&
-		    (restore_density >= 0 || restore_blksize >= 0)) {
+		    (restore_drv_buffer >= 0 || restore_density >= 0 ||
+		     restore_blksize >= 0)) {
 			/*
 			 * Retension reloads the medium and the drive may
 			 * report a new medium.  Let check_tape() start the new
@@ -3895,7 +3907,8 @@ static long st_ioctl(struct file *file, unsigned int cmd_in, unsigned long arg)
 			 * overrides the restored settings.
 			 */
 			if (check_tape(STp, file) >= 0)
-				st_restore_changed_settings(STp, restore_density,
+				st_restore_changed_settings(STp, restore_drv_buffer,
+							    restore_density,
 							    restore_blksize);
 		}
 		goto out;
@@ -4503,7 +4516,7 @@ static int st_probe(struct scsi_device *SDp)
 	tpnt->modes[0].defined = 1;
 
 	tpnt->density_changed = tpnt->compression_changed =
-	    tpnt->blksize_changed = 0;
+	    tpnt->blksize_changed = tpnt->drv_buffer_changed = 0;
 	mutex_init(&tpnt->lock);
 
 	idr_preload(GFP_KERNEL);
