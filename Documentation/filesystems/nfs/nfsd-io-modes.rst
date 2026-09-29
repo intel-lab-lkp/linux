@@ -25,18 +25,31 @@ Based on the configured settings, NFSD's IO will either be:
 - cached using page cache (NFSD_IO_BUFFERED=0)
 - cached but removed from page cache on completion (NFSD_IO_DONTCACHE=1)
 - not cached stable_how=NFS_UNSTABLE (NFSD_IO_DIRECT=2)
+- not cached stable_how=NFS_DATA_SYNC (NFSD_IO_DIRECT_WRITE_DATA_SYNC=3)
+- not cached stable_how=NFS_FILE_SYNC (NFSD_IO_DIRECT_WRITE_FILE_SYNC=4)
 
-To set an NFSD IO mode, write a supported value (0 - 2) to the
+To set an NFSD IO mode, write a supported value (0 - 4) to the
 corresponding IO operation's debugfs interface, e.g.::
 
   echo 2 > /sys/kernel/debug/nfsd/io_cache_read
-  echo 2 > /sys/kernel/debug/nfsd/io_cache_write
+  echo 4 > /sys/kernel/debug/nfsd/io_cache_write
 
 To check which IO mode NFSD is using for READ or WRITE, simply read the
 corresponding IO operation's debugfs interface, e.g.::
 
   cat /sys/kernel/debug/nfsd/io_cache_read
   cat /sys/kernel/debug/nfsd/io_cache_write
+
+The two NFSD_IO_DIRECT_WRITE_*_SYNC modes raise the stable_how of every
+WRITE to at least NFS_DATA_SYNC or NFS_FILE_SYNC, persist the WRITE
+accordingly before replying, and return the raised value to the client;
+a client that asked for a higher stable_how is left alone. With
+NFSD_IO_DIRECT_WRITE_FILE_SYNC the client sends no COMMIT. Against
+NFSD_IO_DIRECT the durability work is the same, one fsync per WRITE
+instead of one per COMMIT; what NFSD_IO_DIRECT adds is the COMMIT RPCs
+themselves, tens of microseconds of server CPU each plus a client cost
+that grows with the range committed, which matters in proportion to how
+many of a client's WRITEs need a COMMIT.
 
 If you experiment with NFSD's IO modes on a recent kernel and have
 interesting results, please report them to linux-nfs@vger.kernel.org
