@@ -1380,6 +1380,36 @@ out:
 	mutex_unlock(&dpu_enc->enc_lock);
 }
 
+/*
+ * Stop the timing engines of the slave video interfaces of a split display
+ * (two interfaces on one CTL, e.g. bonded DSI) before the master is disabled.
+ * The master's cleanup resets the shared CTL; with a slave timing engine still
+ * running, the source pipes start fetching the slave's next frame and stall
+ * half-way through it. The stall survives until the MDSS core GDSC is
+ * power-collapsed, so when MDSS stays powered the next enable scans out
+ * nothing. The master itself is stopped by its own disable path, which counts
+ * the final vsync it waits for.
+ */
+static void dpu_encoder_stop_slave_timing(struct dpu_encoder_virt *dpu_enc)
+{
+	unsigned long lock_flags;
+	int i;
+
+	for (i = 0; i < dpu_enc->num_phys_encs; i++) {
+		struct dpu_encoder_phys *phys = dpu_enc->phys_encs[i];
+
+		if (phys->split_role != ENC_ROLE_SLAVE ||
+		    phys->intf_mode != INTF_MODE_VIDEO || !phys->hw_intf ||
+		    !phys->hw_intf->ops.enable_timing ||
+		    phys->enable_state == DPU_ENC_DISABLED)
+			continue;
+
+		spin_lock_irqsave(phys->enc_spinlock, lock_flags);
+		phys->hw_intf->ops.enable_timing(phys->hw_intf, 0);
+		spin_unlock_irqrestore(phys->enc_spinlock, lock_flags);
+	}
+}
+
 static void dpu_encoder_virt_atomic_disable(struct drm_encoder *drm_enc,
 					struct drm_atomic_commit *state)
 {
@@ -1411,6 +1441,9 @@ static void dpu_encoder_virt_atomic_disable(struct drm_encoder *drm_enc,
 	dpu_encoder_wait_for_tx_complete(drm_enc);
 
 	dpu_encoder_resource_control(drm_enc, DPU_ENC_RC_EVENT_PRE_STOP);
+
+	if (dpu_enc->num_phys_encs > 1)
+		dpu_encoder_stop_slave_timing(dpu_enc);
 
 	for (i = 0; i < dpu_enc->num_phys_encs; i++) {
 		struct dpu_encoder_phys *phys = dpu_enc->phys_encs[i];
