@@ -37,6 +37,8 @@ properties:
           - marvell,berlin4ct-soc-pinctrl
           - marvell,berlin4ct-system-pinctrl
           - syna,as370-soc-pinctrl
+          - syna,sl261x-soc-pinctrl
+          - syna,sl261x-system-pinctrl
 
   reg:
     maxItems: 1
@@ -44,8 +46,10 @@ properties:
 additionalProperties:
   description: Pin group configuration subnodes.
   type: object
-  $ref: /schemas/pinctrl/pinmux-node.yaml#
-  additionalProperties: false
+
+  allOf:
+    - $ref: /schemas/pinctrl/pinmux-node.yaml#
+    - $ref: /schemas/pinctrl/pincfg-node.yaml#
 
   properties:
     groups:
@@ -59,6 +63,8 @@ additionalProperties:
   required:
     - groups
     - function
+
+  unevaluatedProperties: false
 
 allOf:
   - if:
