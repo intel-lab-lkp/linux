@@ -8,8 +8,8 @@ load() { # returns true if there was a reaction
 	lines_before=$(dmesg | wc -l)
 	stress-ng --cpu 2 --sched deadline --sched-period 100000000 \
 		--sched-deadline 100000000 --sched-runtime 20000000 -t 5 &
-	stress-ng --cpu 2 --sched rr --sched-prio 50 --cyclic 1 \
-		--cyclic-policy rr --cyclic-prio 50 -t 5 &
+	stress-ng --cpu 2 --sched rr --sched-prio 1 --cyclic 1 \
+		--cyclic-policy rr --cyclic-prio 1 -t 5 &
 	wait
 	dmesg | tail -n +$((lines_before + 1)) | grep -q "rv: monitor [a-z]\+ does not allow event"
 }
