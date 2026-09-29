@@ -309,6 +309,14 @@ static void guest_msr_calls(bool trapped)
 	/* Invalid MSR, should always be handled by user space exit */
 	GUEST_ASSERT(rdmsr(0xdeadbeef) == 0xdeadbeef);
 	wrmsr(0xdeadbeef, 0x1234);
+
+	/*
+	 * Writing a non-canonical value to FS_BASE is rejected by KVM, but
+	 * FS_BASE writes are passed through to hardware, so force emulation
+	 * to route the write through KVM and get an INVAL exit.
+	 */
+	if (is_forced_emulation_enabled)
+		test_em_wrmsr(MSR_FS_BASE, NONCANONICAL);
 }
 
 static void guest_code_filter_deny(void)
@@ -627,6 +635,13 @@ static void handle_wrmsr(struct kvm_run *run)
 		TEST_ASSERT(run->msr.reason == KVM_MSR_EXIT_REASON_UNKNOWN,
 			    "deadbeef trap w/o inval fault");
 	}
+
+	if (run->msr.index == MSR_FS_BASE) {
+		TEST_ASSERT(run->msr.data == NONCANONICAL,
+			    "MSR_FS_BASE data is not NONCANONICAL");
+		TEST_ASSERT(run->msr.reason == KVM_MSR_EXIT_REASON_INVAL,
+			    "MSR_FS_BASE trap w/o inval fault");
+	}
 }
 
 KVM_ONE_VCPU_TEST(user_msr, msr_filter_deny, guest_code_filter_deny)
@@ -667,7 +682,9 @@ KVM_ONE_VCPU_TEST(user_msr, msr_filter_deny, guest_code_filter_deny)
 
 done:
 	TEST_ASSERT(msr_reads == 4, "Handled 4 rdmsr in user space");
-	TEST_ASSERT(msr_writes == 3, "Handled 3 wrmsr in user space");
+	TEST_ASSERT(msr_writes == (is_forced_emulation_enabled ? 5 : 3),
+		    "Handled %u wrmsr in user space, expected %u",
+		    msr_writes, is_forced_emulation_enabled ? 5 : 3);
 }
 
 KVM_ONE_VCPU_TEST(user_msr, msr_permission_bitmap, guest_code_permission_bitmap)
