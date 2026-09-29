@@ -44,6 +44,24 @@ given type. To target a specific node, "bynodeid" must be set to 1 and
 "nodeid" to the appropriate value derived from the CMN configuration
 (as defined in the "Node ID Mapping" section of the TRM).
 
+CPU affinity
+------------
+
+The driver also provides a "cpumask" sysfs attribute, which contains a
+single CPU ID, of the processor which will be used to handle all the CMN
+PMU events.
+
+The attribute is writable, and accepts a single CPU ID to move the PMU
+to that processor, for instance to keep counter reads, interrupt handling
+and event rotation away from CPUs reserved for latency sensitive work::
+
+  $# echo 5 > /sys/bus/event_source/devices/arm_cmn_0/cpumask
+
+This expresses a preference rather than a guarantee. In case of the
+chosen processor being offlined, or a processor local to the
+interconnect's NUMA node coming online while the chosen one is not, the
+events and interrupts are migrated and the attribute is updated.
+
 Watchpoints
 -----------
 
