@@ -10,6 +10,7 @@
 
 struct device;
 struct platform_device;
+struct usb_device;
 struct usb_hcd;
 
 struct xhci_plat_priv {
@@ -22,6 +23,7 @@ struct xhci_plat_priv {
 	int (*suspend_quirk)(struct usb_hcd *);
 	int (*resume_quirk)(struct usb_hcd *);
 	int (*post_resume_quirk)(struct usb_hcd *);
+	int (*update_device)(struct usb_hcd *hcd, struct usb_device *udev);
 };
 
 #define hcd_to_xhci_priv(h) ((struct xhci_plat_priv *)hcd_to_xhci(h)->priv)

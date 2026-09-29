@@ -1694,6 +1694,7 @@ struct xhci_driver_overrides {
 			    struct usb_tt *tt, gfp_t mem_flags);
 	int (*hub_control)(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 			   u16 wIndex, char *buf, u16 wLength);
+	int (*update_device)(struct usb_hcd *hcd, struct usb_device *udev);
 };
 
 #define	XHCI_CFC_DELAY		10
@@ -1981,15 +1982,18 @@ int xhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue, u16 wIndex,
 int xhci_hub_status_data(struct usb_hcd *hcd, char *buf);
 int xhci_find_raw_port_number(struct usb_hcd *hcd, int port1);
 struct xhci_hub *xhci_get_rhub(struct usb_hcd *hcd);
-enum usb_link_tunnel_mode xhci_port_is_tunneled(struct xhci_hcd *xhci,
-						struct xhci_port *port);
 void xhci_hc_died(struct xhci_hcd *xhci);
 
 #ifdef CONFIG_PM
+int xhci_update_device(struct usb_hcd *hcd, struct usb_device *udev);
 int xhci_bus_suspend(struct usb_hcd *hcd);
 int xhci_bus_resume(struct usb_hcd *hcd);
 unsigned long xhci_get_resuming_ports(struct usb_hcd *hcd);
 #else
+static inline int xhci_update_device(struct usb_hcd *hcd, struct usb_device *udev)
+{
+	return 0;
+}
 #define	xhci_bus_suspend	NULL
 #define	xhci_bus_resume		NULL
 #define	xhci_get_resuming_ports	NULL

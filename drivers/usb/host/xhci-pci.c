@@ -103,11 +103,13 @@ static int xhci_pci_setup(struct usb_hcd *hcd);
 static int xhci_pci_run(struct usb_hcd *hcd);
 static int xhci_pci_update_hub_device(struct usb_hcd *hcd, struct usb_device *hdev,
 				      struct usb_tt *tt, gfp_t mem_flags);
+static int xhci_pci_update_device(struct usb_hcd *hcd, struct usb_device *udev);
 
 static const struct xhci_driver_overrides xhci_pci_overrides __initconst = {
 	.reset = xhci_pci_setup,
 	.start = xhci_pci_run,
 	.update_hub_device = xhci_pci_update_hub_device,
+	.update_device = xhci_pci_update_device,
 };
 
 /*
@@ -604,6 +606,42 @@ static int xhci_pci_update_hub_device(struct usb_hcd *hcd, struct usb_device *hd
 		xhci_find_lpm_incapable_ports(hcd, hdev);
 
 	return xhci_update_hub_device(hcd, hdev, tt, mem_flags);
+}
+
+static void xhci_intel_port_is_tunneled(struct usb_hcd *hcd,
+					struct usb_device *udev)
+{
+	struct xhci_hcd	*xhci = hcd_to_xhci(hcd);
+	struct xhci_port *port;
+	void __iomem *base;
+	u32 offset;
+
+	if (xhci->portsc_tunnel_reporting || udev->parent->parent)
+		return;
+
+	port = xhci->usb3_rhub.ports[udev->portnum - 1];
+
+	base = &xhci->cap_regs->hc_capbase;
+	offset = xhci_find_next_ext_cap(base, 0, XHCI_EXT_CAPS_INTEL_SPR_SHADOW);
+
+	if (offset && offset <= XHCI_INTEL_SPR_ESS_PORT_OFFSET) {
+		offset = XHCI_INTEL_SPR_ESS_PORT_OFFSET + port->hcd_portnum * 0x20;
+
+		if (readl(base + offset) & XHCI_INTEL_SPR_TUNEN)
+			udev->tunnel_mode = USB_LINK_TUNNELED;
+		else
+			udev->tunnel_mode = USB_LINK_NATIVE;
+	}
+}
+
+static int xhci_pci_update_device(struct usb_hcd *hcd, struct usb_device *udev)
+{
+	struct pci_dev *pdev = to_pci_dev(hcd->self.controller);
+
+	if (pdev->vendor == PCI_VENDOR_ID_INTEL && hcd->speed >= HCD_USB3)
+		xhci_intel_port_is_tunneled(hcd, udev);
+
+	return xhci_update_device(hcd, udev);
 }
 
 /*

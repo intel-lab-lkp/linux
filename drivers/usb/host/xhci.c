@@ -4752,7 +4752,7 @@ static int xhci_set_usb2_hardware_lpm(struct usb_hcd *hcd,
 	return 0;
 }
 
-static int xhci_update_device(struct usb_hcd *hcd, struct usb_device *udev)
+int xhci_update_device(struct usb_hcd *hcd, struct usb_device *udev)
 {
 	struct xhci_hcd	*xhci = hcd_to_xhci(hcd);
 	struct xhci_port *port;
@@ -4760,9 +4760,14 @@ static int xhci_update_device(struct usb_hcd *hcd, struct usb_device *udev)
 
 	/* Check if USB3 device at root port is tunneled over USB4 */
 	if (hcd->speed >= HCD_USB3 && !udev->parent->parent) {
-		port = xhci->usb3_rhub.ports[udev->portnum - 1];
+		if (xhci->portsc_tunnel_reporting) {
+			port = xhci->usb3_rhub.ports[udev->portnum - 1];
+			if (xhci_portsc_readl(port) & PORT_TM)
+				udev->tunnel_mode = USB_LINK_TUNNELED;
+			else
+				udev->tunnel_mode = USB_LINK_NATIVE;
+		}
 
-		udev->tunnel_mode = xhci_port_is_tunneled(xhci, port);
 		if (udev->tunnel_mode == USB_LINK_UNKNOWN)
 			dev_dbg(&udev->dev, "link tunnel state unknown\n");
 		else if (udev->tunnel_mode == USB_LINK_TUNNELED)
@@ -4793,6 +4798,7 @@ static int xhci_update_device(struct usb_hcd *hcd, struct usb_device *udev)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(xhci_update_device);
 
 /*---------------------- USB 3.0 Link PM functions ------------------------*/
 
@@ -5238,11 +5244,6 @@ static int xhci_disable_usb3_lpm_timeout(struct usb_hcd *hcd,
 
 static int xhci_set_usb2_hardware_lpm(struct usb_hcd *hcd,
 				struct usb_device *udev, int enable)
-{
-	return 0;
-}
-
-static int xhci_update_device(struct usb_hcd *hcd, struct usb_device *udev)
 {
 	return 0;
 }
@@ -5695,6 +5696,8 @@ void xhci_init_driver(struct hc_driver *drv,
 			drv->update_hub_device = over->update_hub_device;
 		if (over->hub_control)
 			drv->hub_control = over->hub_control;
+		if (over->update_device)
+			drv->update_device = over->update_device;
 	}
 }
 EXPORT_SYMBOL_GPL(xhci_init_driver);

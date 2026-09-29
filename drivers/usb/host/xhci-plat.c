@@ -30,12 +30,30 @@ static struct hc_driver __read_mostly xhci_plat_hc_driver;
 
 static int xhci_plat_setup(struct usb_hcd *hcd);
 static int xhci_plat_start(struct usb_hcd *hcd);
+static int xhci_plat_update_device(struct usb_hcd *hcd, struct usb_device *udev);
 
 static const struct xhci_driver_overrides xhci_plat_overrides __initconst = {
 	.extra_priv_size = sizeof(struct xhci_plat_priv),
 	.reset = xhci_plat_setup,
 	.start = xhci_plat_start,
+	.update_device = xhci_plat_update_device,
 };
+
+static int xhci_plat_update_device(struct usb_hcd *hcd, struct usb_device *udev)
+{
+	struct xhci_hcd *xhci = hcd_to_xhci(hcd);
+	struct xhci_plat_priv *priv = hcd_to_xhci_priv(hcd);
+	int ret;
+
+	if (!xhci->portsc_tunnel_reporting && priv->update_device &&
+	    hcd->speed >= HCD_USB3 && !udev->parent->parent) {
+		ret = priv->update_device(hcd, udev);
+		if (ret)
+			return ret;
+	}
+
+	return xhci_update_device(hcd, udev);
+}
 
 static void xhci_priv_plat_start(struct usb_hcd *hcd)
 {
