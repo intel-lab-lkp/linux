@@ -311,12 +311,24 @@ static void mxc_isi_channel_set_panic_threshold(struct mxc_isi_pipe *pipe)
  * RAW samples from either the high or low bits, as both LSB and MSB
  * alignment can be selected in the gasket.
  *
- * On i.MX95, the CSI formatter provides MSB-aligned RAW data, so the ISI
- * must select RAW samples from the high bits of the Pixel Link bus.
+ * Starting with i.MX95, the CSI formatter provides MSB-aligned RAW data,
+ * so the ISI must select RAW samples from the high bits of the Pixel Link
+ * bus.
  */
 static bool isi_raw_in_msb(const struct mxc_isi_plat_data *pdata)
 {
-	return pdata->model == MXC_ISI_IMX95;
+	return pdata->model == MXC_ISI_IMX95 ||
+	       pdata->model == MXC_ISI_IMX952;
+}
+
+/*
+ * Starting with i.MX952, the ISI can output RAW10/12/14 formats with LSB
+ * alignment, matching the V4L2 requirement. Older platforms lack this
+ * capability and need the RAW16 workaround.
+ */
+static bool isi_raw_out_lsb(const struct mxc_isi_plat_data *pdata)
+{
+	return pdata->model == MXC_ISI_IMX952;
 }
 
 static void mxc_isi_channel_set_control(struct mxc_isi_pipe *pipe,
@@ -377,6 +389,13 @@ static void mxc_isi_channel_set_control(struct mxc_isi_pipe *pipe,
 	if (isi_raw_in_msb(pipe->isi->pdata))
 		val |= CHNL_CTRL_RAW_IN_MSB_ALIGN;
 
+	/*
+	 * Enable RAW10/12/14 output LSB alignment to match the
+	 * V4L2 requirement that RAW formats are LSB-aligned.
+	 */
+	if (isi_raw_out_lsb(pipe->isi->pdata))
+		val |= CHNL_CTRL_RAW_OUT_LSB_ALIGN;
+
 	mxc_isi_write(pipe, CHNL_CTRL, val);
 
 	mutex_unlock(&pipe->lock);
@@ -430,13 +449,23 @@ void mxc_isi_channel_set_output_format(struct mxc_isi_pipe *pipe,
 				       const struct mxc_isi_format_info *info,
 				       struct v4l2_pix_format_mplane *format)
 {
+	const struct mxc_isi_plat_data *pdata = pipe->isi->pdata;
 	u32 val;
 	u32 fmt;
 
 	/* set outbuf format */
 	dev_dbg(pipe->isi->dev, "output format %p4cc", &format->pixelformat);
 
-	fmt = isi_out_raw_shifted(info->isi_out_format)
+	/*
+	 * Before i.MX952, the ISI shifts the 10/12/14-bit formats left
+	 * by 6, 4 and 2 bits when using CHNL_IMG_CTRL_FORMAT_RAW10/12/14
+	 * respectively, to align the bits to the left and pad with zeros in
+	 * the LSBs. The corresponding V4L2 formats are however right-aligned,
+	 * we have to use CHNL_IMG_CTRL_FORMAT_RAW16 to avoid the left shift.
+	 * Starting with i.MX952, the ISI supports RAW10/12/14 LSB output
+	 * alignment, so skip the above workaround.
+	 */
+	fmt = !isi_raw_out_lsb(pdata) && isi_out_raw_shifted(info->isi_out_format)
 	    ? CHNL_IMG_CTRL_FORMAT_RAW16
 	    : info->isi_out_format;
 
