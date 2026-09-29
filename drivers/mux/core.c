@@ -545,6 +545,9 @@ static struct mux_chip *mux_chip_find_by_fwnode(struct fwnode_handle *fwnode)
  * @optional: Whether to return NULL and silence errors when mux doesn't exist.
  * @node: the device nodes, use dev's fwnode if it is NULL.
  *
+ * When a mux-control is found, it is the caller's responsibility to call
+ * mux_control_put() on it when it is no longer needed.
+ *
  * Return: Pointer to the mux-control on success, an ERR_PTR with a negative
  * errno on error, or NULL if optional is true and mux doesn't exist.
  */
@@ -597,9 +600,10 @@ static struct mux_control *mux_get(struct device *dev, const char *mux_name,
 	}
 
 	mux_chip = mux_chip_find_by_fwnode(args.fwnode);
-	fwnode_handle_put(args.fwnode);
-	if (!mux_chip)
-		return ERR_PTR(-EPROBE_DEFER);
+	if (!mux_chip) {
+		ret = -EPROBE_DEFER;
+		goto end;
+	}
 
 	controller = 0;
 	if (state) {
@@ -607,8 +611,8 @@ static struct mux_control *mux_get(struct device *dev, const char *mux_name,
 		    (args.nargs < 2 && mux_chip->controllers > 1)) {
 			dev_err(dev, "%pfw: wrong #mux-state-cells for %pfw\n",
 				fwnode, args.fwnode);
-			put_device(&mux_chip->dev);
-			return ERR_PTR(-EINVAL);
+			ret = -EINVAL;
+			goto end;
 		}
 
 		if (args.nargs == 2) {
@@ -623,8 +627,8 @@ static struct mux_control *mux_get(struct device *dev, const char *mux_name,
 		    (!args.nargs && mux_chip->controllers > 1)) {
 			dev_err(dev, "%pfw: wrong #mux-control-cells for %pfw\n",
 				fwnode, args.fwnode);
-			put_device(&mux_chip->dev);
-			return ERR_PTR(-EINVAL);
+			ret = -EINVAL;
+			goto end;
 		}
 
 		if (args.nargs)
@@ -634,10 +638,17 @@ static struct mux_control *mux_get(struct device *dev, const char *mux_name,
 	if (controller >= mux_chip->controllers) {
 		dev_err(dev, "%pfw: bad mux controller %u specified in %pfw\n",
 			fwnode, controller, args.fwnode);
-		put_device(&mux_chip->dev);
-		return ERR_PTR(-EINVAL);
+		ret = -EINVAL;
+		goto end;
 	}
 
+end:
+	fwnode_handle_put(args.fwnode);
+	if (ret < 0) {
+		if (mux_chip)
+			put_device(&mux_chip->dev);
+		return ERR_PTR(ret);
+	}
 	return &mux_chip->mux[controller];
 }
 
