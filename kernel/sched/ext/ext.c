@@ -1501,8 +1501,9 @@ static inline bool task_scx_migrating(struct task_struct *p)
 	/*
 	 * We only need to check sticky_cpu: it is set to the destination
 	 * CPU in move_remote_task_to_local_dsq() before deactivate_task()
-	 * and cleared when the task is enqueued on the destination, so it
-	 * is only non-negative during an internal SCX migration.
+	 * and cleared in enqueue_task_scx() on the destination before @p is
+	 * inserted into the local DSQ, so it is only non-negative while @p
+	 * is in transit between the two rqs.
 	 */
 	return p->scx.sticky_cpu >= 0;
 }
@@ -2189,10 +2190,15 @@ static void enqueue_task_scx(struct rq *rq, struct task_struct *p, int core_enq_
 	if (rq->scx.nr_running == 1)
 		dl_server_start(&rq->ext_server);
 
-	scx_do_enqueue_task(rq, p, enq_flags, sticky_cpu);
+	/*
+	 * An SCX-internal migration ends once @p arrives on the destination
+	 * rq. Clear sticky_cpu before enqueueing so that @p leaves the BPF
+	 * scheduler's custody when inserted into the destination local DSQ.
+	 * The local copy in @sticky_cpu is used for routing.
+	 */
+	p->scx.sticky_cpu = -1;
 
-	if (sticky_cpu >= 0)
-		p->scx.sticky_cpu = -1;
+	scx_do_enqueue_task(rq, p, enq_flags, sticky_cpu);
 out:
 	rq->scx.flags &= ~SCX_RQ_IN_WAKEUP;
 
