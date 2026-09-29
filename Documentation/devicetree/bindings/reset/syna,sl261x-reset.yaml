@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+# Copyright (C) 2026 Synaptics Incorporated
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/reset/syna,sl261x-reset.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Synaptics SL261X reset controller
+
+maintainers:
+  - Jisheng Zhang <jszhang@kernel.org>
+
+description: The reset controller node must be a sub-node of the chip
+  controller node on SL261X SoCs.
+
+properties:
+  compatible:
+    enum:
+      - syna,sl261x-soc-reset
+      - syna,sl261x-system-reset
+
+  "#reset-cells":
+    const: 1
+
+required:
+  - compatible
+  - "#reset-cells"
+
+additionalProperties: false
+
+examples:
+  - |
+    chip: chip-control@f7e10000 {
+        reg = <0xf7e10000 0x1000>;
+
+        chip_rst: reset {
+            compatible = "syna,sl261x-soc-reset";
+            #reset-cells = <1>;
+        };
+    };
