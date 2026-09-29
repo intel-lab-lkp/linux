@@ -302,6 +302,7 @@ struct max310x_one {
 	struct work_struct	md_work;
 	struct work_struct	rs_work;
 	struct regmap		*regmap;
+	unsigned int		one_char_duration_us;
 	unsigned int		baud;
 	bool			tx_break;	/* break_ctl() owns the transceiver */
 
@@ -1020,6 +1021,7 @@ static void max310x_set_termios(struct uart_port *port,
 				struct ktermios *termios,
 				const struct ktermios *old)
 {
+	unsigned int frame_bits = tty_get_frame_size(termios->c_cflag);
 	unsigned int lcr = 0, flow = 0;
 	int baud;
 
@@ -1132,10 +1134,13 @@ static void max310x_set_termios(struct uart_port *port,
 	uart_update_timeout(port, termios->c_cflag, baud);
 
 	/*
-	 * Cache the new baud rate and reprogram the RS485 RTS delays, whose
-	 * millisecond-to-bit-time conversion depends on it.
+	 * Cache the new baud rate and the time it takes to clock out one
+	 * character, then reprogram the RS485 RTS delays, whose
+	 * millisecond-to-bit-time conversion depends on the baud rate.
 	 */
 	to_max310x_port(port)->baud = baud;
+	to_max310x_port(port)->one_char_duration_us =
+		DIV_ROUND_UP(USEC_PER_SEC * frame_bits, baud);
 	max310x_set_rts_ctl_params(to_max310x_port(port));
 }
 
@@ -1231,6 +1236,20 @@ static int max310x_startup(struct uart_port *port)
 
 static void max310x_shutdown(struct uart_port *port)
 {
+	struct max310x_one *one = to_max310x_port(port);
+	unsigned int loops = port->fifosize + 1;
+
+	/*
+	 * The tty layer waits for tx_empty() before close(), but tx_empty()
+	 * only reflects the chip TX FIFO - the last character may still be in
+	 * the transmit shift register. Let the FIFO drain and the final
+	 * character clock out before the port is powered down, otherwise
+	 * close() truncates the last byte on the wire.
+	 */
+	while (!max310x_tx_empty(port) && loops-- > 0)
+		fsleep(one->one_char_duration_us);
+	fsleep(one->one_char_duration_us);
+
 	/* Disable all interrupts */
 	max310x_port_write(port, MAX310X_IRQEN_REG, 0);
 
