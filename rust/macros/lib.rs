@@ -557,6 +557,10 @@ pub fn CovariantForLt(input: TokenStream) -> TokenStream {
 /// - The macro uses the `into` custom attribute or `repr` attribute to generate [`From`]
 ///   implementations. `into` always takes precedence over `repr`.
 ///
+/// - In addition to `into`, the `convert` custom attribute is supported. The purpose of
+///   this attribute is to avoid repetition when deriving both [`Into`] and [`TryFrom`]
+///   for the same enum. See ["With `#[convert(...)]`"](#with-convert) for an example.
+///
 /// - Currently, the macro does not support `repr(C)` fieldless enums since the actual
 ///   representation of discriminants is defined by rustc internally, and documentation
 ///   around it is not yet settled. See [Rust issue #124403] and [Rust PR #147017]
@@ -568,7 +572,7 @@ pub fn CovariantForLt(input: TokenStream) -> TokenStream {
 /// [Rust issue #124403]: https://github.com/rust-lang/rust/issues/124403
 /// [Rust PR #147017]: https://github.com/rust-lang/rust/pull/147017
 ///
-/// # Supported types in `#[into(...)]`
+/// # Supported types in `#[into(...)]` and `#[convert(...)]`
 ///
 /// - [`bool`]
 /// - Primitive integer types (e.g., [`i8`], [`u8`])
@@ -650,6 +654,36 @@ pub fn CovariantForLt(input: TokenStream) -> TokenStream {
 /// assert_eq!(Bounded::<u8, 4>::new::<1>(), foo_b);
 /// ```
 ///
+/// ## With `#[convert(...)]`
+///
+/// The macro implements `From<Foo>` for each `T` specified in `#[into(...)]`,
+/// which always overrides `#[repr(...)]`. `#[convert(...)]` is useful when the same type
+/// needs to be specified in both `#[into(...)]` and `#[try_from(...)]`:
+///
+/// ```rust
+/// # use kernel::prelude::*;
+/// use kernel::{
+///     macros::Into,
+///     macros::TryFrom,
+///     num::Bounded, //
+/// };
+///
+/// #[derive(Debug, Default, Into, PartialEq, TryFrom)]
+/// #[convert(bool)]
+/// #[repr(u8)]
+/// enum Foo {
+///     #[default]
+///     A,
+///     B,
+/// }
+///
+/// assert_eq!(false, Foo::A.into());
+/// assert_eq!(true, Foo::B.into());
+///
+/// assert_eq!(Ok(Foo::A), Foo::try_from(false));
+/// assert_eq!(Ok(Foo::B), Foo::try_from(true));
+/// ```
+///
 /// ## Compile-time Overflow Assertion
 ///
 /// The following examples do not compile:
@@ -702,7 +736,7 @@ pub fn CovariantForLt(input: TokenStream) -> TokenStream {
 /// #[repr(C)]
 /// struct Foo(u8);
 /// ```
-#[proc_macro_derive(Into, attributes(into))]
+#[proc_macro_derive(Into, attributes(into, convert))]
 pub fn derive_into(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     convert::derive_into(input)
@@ -727,6 +761,11 @@ pub fn derive_into(input: TokenStream) -> TokenStream {
 /// - The macro uses the `try_from` custom attribute or `repr` attribute to generate
 ///   [`TryFrom`] implementations. `try_from` always takes precedence over `repr`.
 ///
+/// - In addition to `try_from`, the `convert` custom attribute is supported. The purpose
+///   of this attribute is to avoid repetition when deriving both [`Into`] and
+///   [`TryFrom`] for the same enum. See ["With `#[convert(...)]`"](#with-convert) for an
+///   example.
+///
 /// - Currently, the macro does not support `repr(C)` fieldless enums since the actual
 ///   representation of discriminants is defined by rustc internally, and documentation
 ///   around it is not yet settled. See [Rust issue #124403] and [Rust PR #147017]
@@ -739,7 +778,7 @@ pub fn derive_into(input: TokenStream) -> TokenStream {
 /// [Rust issue #124403]: https://github.com/rust-lang/rust/issues/124403
 /// [Rust PR #147017]: https://github.com/rust-lang/rust/pull/147017
 ///
-/// # Supported types in `#[try_from(...)]`
+/// # Supported types in `#[try_from(...)]` and `#[convert(...)]`
 ///
 /// - [`bool`]
 /// - Primitive integer types (e.g., [`i8`], [`u8`])
@@ -827,6 +866,37 @@ pub fn derive_into(input: TokenStream) -> TokenStream {
 /// assert_eq!(Ok(Foo::B), Foo::try_from(Bounded::<u8, 4>::new::<1>()));
 /// ```
 ///
+/// ## With `#[convert(...)]`
+///
+/// The macro implements `TryFrom<T>` for each `T` specified in `#[convert(...)]`,
+/// which always overrides `#[repr(...)]`. `#[convert(...)]` is useful when the same type
+/// needs to be specified in both `#[into(...)]` and `#[try_from(...)]`:
+///
+///
+/// ```rust
+/// # use kernel::prelude::*;
+/// use kernel::{
+///     macros::Into,
+///     macros::TryFrom,
+///     num::Bounded, //
+/// };
+///
+/// #[derive(Debug, Default, Into, PartialEq, TryFrom)]
+/// #[convert(bool)]
+/// #[repr(u8)]
+/// enum Foo {
+///     #[default]
+///     A,
+///     B,
+/// }
+///
+/// assert_eq!(Ok(Foo::A), Foo::try_from(false));
+/// assert_eq!(Ok(Foo::B), Foo::try_from(true));
+///
+/// assert_eq!(false, Foo::A.into());
+/// assert_eq!(true, Foo::B.into());
+/// ```
+///
 /// ## Compile-time Overflow Assertion
 ///
 /// The following examples do not compile:
@@ -879,7 +949,7 @@ pub fn derive_into(input: TokenStream) -> TokenStream {
 /// #[repr(C)]
 /// struct Foo(u8)
 /// ```
-#[proc_macro_derive(TryFrom, attributes(try_from))]
+#[proc_macro_derive(TryFrom, attributes(try_from, convert))]
 pub fn derive_try_from(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     convert::derive_try_from(input)

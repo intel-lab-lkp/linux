@@ -150,6 +150,10 @@ impl DeriveTarget {
             Self::TryFrom => "try_from",
         }
     }
+
+    fn get_common_helper_name(&self) -> &'static str {
+        "convert"
+    }
 }
 
 fn parse_attrs(
@@ -157,6 +161,7 @@ fn parse_attrs(
     attrs: &[Attribute],
 ) -> syn::Result<(Vec<Type>, bool, Option<Ident>)> {
     let helper = target.get_helper_name();
+    let common_helper = target.get_common_helper_name();
 
     let mut is_repr_c = false;
     let mut repr_ty = None;
@@ -175,7 +180,7 @@ fn parse_attrs(
                 // Delegate `repr` attribute validation to rustc.
                 Ok(())
             })?;
-        } else if attr.path().is_ident(helper) {
+        } else if attr.path().is_ident(helper) || attr.path().is_ident(common_helper) {
             let args = attr.parse_args_with(Punctuated::<Type, Token![,]>::parse_terminated)?;
             helper_tys.extend(args);
         }
