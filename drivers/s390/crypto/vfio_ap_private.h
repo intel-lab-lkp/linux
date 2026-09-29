@@ -128,28 +128,49 @@ struct ap_matrix_mdev {
 };
 
 /**
+ * struct vfio_ap_aqic_resources - Free the AQIC resources acquired when a guest
+ *				   enables interrupts for an AP queue.
+ *
+ * @iova: the guest DMA address of the notification indicator byte (NIB) page,
+ *	  pinned via @vdev at enable time.
+ * @isc:  the guest interruption sub-class registered with the GIB via @kvm at
+ *	  enable time.
+ * @vdev: the vfio_device whose IOMMU container owns the pin on @iova. Must be
+ *	  used for vfio_unpin_pages() to ensure the correct container is used,
+ *	  even if the queue is later re-assigned or the mdev is reopened.
+ * @kvm:  the KVM instance that owns the GISC registration for @isc. Must be
+ *	  used for kvm_s390_gisc_unregister() to ensure the correct guest's
+ *	  alert mask is updated, even if the queue is later re-assigned or the
+ *	  mdev is reopened with a different guest.
+ */
+struct vfio_ap_aqic_resources {
+	dma_addr_t			iova;
+#define VFIO_AP_ISC_INVALID	0xff
+	unsigned char			isc;
+	struct vfio_device		*vdev;
+	struct kvm			*kvm;
+};
+
+/**
  * struct vfio_ap_queue - contains the data associated with a queue bound to the
  *			  vfio_ap device driver
  * @matrix_mdev: the matrix mediated device
- * @saved_iova: the notification indicator byte (nib) address
- * @apqn: the APQN of the AP queue device
- * @saved_isc: the guest ISC registered with the GIB interface
- * @mdev_qnode: allows the vfio_ap_queue struct to be added to a hashtable
+ * @aqic_res:    the AQIC resources acquired when a guest enables AP interrupts
+ * @apqn:        the APQN of the AP queue device
+ * @mdev_qnode:  allows the vfio_ap_queue struct to be added to a hashtable
  * @reset_qnode: allows the vfio_ap_queue struct to be added to a list of queues
  *		 that need to be reset
  * @reset_status: the status from the last reset of the queue
- * @reset_work: work to wait for queue reset to complete
+ * @reset_work:  work to wait for queue reset to complete
  */
 struct vfio_ap_queue {
-	struct ap_matrix_mdev *matrix_mdev;
-	dma_addr_t saved_iova;
-	int	apqn;
-#define VFIO_AP_ISC_INVALID 0xff
-	unsigned char saved_isc;
-	struct hlist_node mdev_qnode;
-	struct list_head reset_qnode;
-	struct ap_queue_status reset_status;
-	struct work_struct reset_work;
+	struct ap_matrix_mdev		*matrix_mdev;
+	struct vfio_ap_aqic_resources	aqic_resources;
+	int				apqn;
+	struct hlist_node		mdev_qnode;
+	struct list_head		reset_qnode;
+	struct ap_queue_status		reset_status;
+	struct work_struct		reset_work;
 };
 
 int vfio_ap_mdev_register(void);
