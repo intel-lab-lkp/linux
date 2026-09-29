@@ -7632,6 +7632,14 @@ static void perf_sigtrap(struct perf_event *event)
 		return;
 
 	/*
+	 * exec() removed the event (remove_on_exec) after this signal was
+	 * queued. The new program has default signal handlers, so a SIGTRAP
+	 * would kill it.
+	 */
+	if (event->state == PERF_EVENT_STATE_EXIT)
+		return;
+
+	/*
 	 * We'd expect this to only occur if the irq_work is delayed and either
 	 * ctx->task or current has changed in the meantime. This can be the
 	 * case on architectures that do not implement arch_irq_work_raise().
