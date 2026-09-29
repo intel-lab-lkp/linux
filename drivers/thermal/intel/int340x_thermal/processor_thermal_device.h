@@ -116,6 +116,7 @@ int processor_thermal_mbox_interrupt_config(struct pci_dev *pdev, bool enable, i
 					    int time_window);
 int proc_thermal_add(struct device *dev, struct proc_thermal_device *priv);
 void proc_thermal_remove(struct proc_thermal_device *proc_priv);
+void proc_thermal_power_limits_attr_remove(struct device *dev);
 
 int proc_thermal_wt_hint_add(struct pci_dev *pdev, struct proc_thermal_device *proc_priv);
 void proc_thermal_wt_hint_remove(struct pci_dev *pdev);

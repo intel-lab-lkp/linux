@@ -278,17 +278,25 @@ EXPORT_SYMBOL_NS_GPL(proc_thermal_wt_hint_add, "INT340X_THERMAL");
 
 void proc_thermal_wt_hint_remove(struct pci_dev *pdev)
 {
-	mutex_lock(&wt_lock);
-	if (wt_enable)
-		processor_thermal_mbox_interrupt_config(pdev, false,
-							SOC_WT_PREDICTION_INT_ENABLE_BIT,
-							0);
-	mutex_unlock(&wt_lock);
-
+	/* Group removal waits for active stores, so remove it first. */
 	if (workload_hint_created)
 		sysfs_remove_group(&pdev->dev.kobj, &workload_hint_attribute_group);
 
 	workload_hint_created = false;
+
+	mutex_lock(&wt_lock);
+
+	/* Disable both bits: the slow prediction bit was never cleared before. */
+	processor_thermal_mbox_interrupt_config(pdev, false,
+						SOC_WT_PREDICTION_INT_ENABLE_BIT,
+						0);
+	processor_thermal_mbox_interrupt_config(pdev, false,
+						SOC_WT_SLOW_PREDICTION_INT_ENABLE_BIT,
+						0);
+	wt_enable = false;
+	wt_slow_enable = false;
+
+	mutex_unlock(&wt_lock);
 }
 EXPORT_SYMBOL_NS_GPL(proc_thermal_wt_hint_remove, "INT340X_THERMAL");
 

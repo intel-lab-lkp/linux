@@ -335,6 +335,19 @@ void proc_thermal_remove(struct proc_thermal_device *proc_priv)
 }
 EXPORT_SYMBOL_GPL(proc_thermal_remove);
 
+/**
+ * proc_thermal_power_limits_attr_remove() - remove the "power_limits" group
+ * @dev:	Device passed to proc_thermal_add().
+ *
+ * Remove the group before the power floor interrupt source is disabled:
+ * a concurrent store to power_floor_enable could re-enable it.
+ */
+void proc_thermal_power_limits_attr_remove(struct device *dev)
+{
+	sysfs_remove_group(&dev->kobj, &power_limit_attribute_group);
+}
+EXPORT_SYMBOL_GPL(proc_thermal_power_limits_attr_remove);
+
 static int tcc_offset_save = -1;
 
 int proc_thermal_suspend(struct device *dev)

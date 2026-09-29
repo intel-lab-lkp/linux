@@ -302,6 +302,12 @@ static int proc_thermal_setup_msi(struct pci_dev *pdev, struct proc_thermal_pci 
 	dev_info(&pdev->dev, "msi enabled:%d msix enabled:%d\n", pdev->msi_enabled,
 		 pdev->msix_enabled);
 
+	/*
+	 * Set MSI mode once the vectors are allocated, so a failure below
+	 * unwinds through the caller's masked teardown path.
+	 */
+	msi_irq = true;
+
 	for (i = 0; i < count; i++) {
 		irq =  pci_irq_vector(pdev, i);
 
@@ -309,19 +315,12 @@ static int proc_thermal_setup_msi(struct pci_dev *pdev, struct proc_thermal_pci 
 						proc_thermal_irq_thread_handler,
 						0, KBUILD_MODNAME, pci_info);
 		if (ret)
-			goto err_free_msi_vectors;
+			return ret;
 
 		proc_thermal_msi_map[i] = irq;
 	}
 
-	msi_irq = true;
-
 	return 0;
-
-err_free_msi_vectors:
-	proc_thermal_free_msi(pdev, pci_info);
-
-	return ret;
 }
 
 static int proc_thermal_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
@@ -383,8 +382,12 @@ static int proc_thermal_pci_probe(struct pci_dev *pdev, const struct pci_device_
 
 	if (use_msi) {
 		ret = proc_thermal_setup_msi(pdev, pci_info);
-		if (ret)
+		if (ret) {
+			/* Full teardown: at least one IRQ was requested. */
+			if (msi_irq)
+				goto err_free_vectors;
 			goto err_ret_tzone;
+		}
 	} else {
 		irq_flag = IRQF_SHARED;
 		irq = pdev->irq;
@@ -403,8 +406,24 @@ static int proc_thermal_pci_probe(struct pci_dev *pdev, const struct pci_device_
 	return 0;
 
 err_free_vectors:
+	proc_thermal_mmio_write(pci_info, PROC_THERMAL_MMIO_THRES_0, 0);
+	proc_thermal_mmio_write(pci_info, PROC_THERMAL_MMIO_INT_ENABLE_0, 0);
+	if (!pci_info->no_legacy)
+		proc_thermal_power_limits_attr_remove(&pdev->dev);
+	proc_thermal_mmio_remove(pdev, proc_priv);
 	if (msi_irq)
 		proc_thermal_free_msi(pdev, pci_info);
+	else
+		devm_free_irq(&pdev->dev, pdev->irq, pci_info);
+	/* Cancel after the IRQs are freed, or the handler may reschedule it. */
+	cancel_delayed_work_sync(&pci_info->work);
+	thermal_zone_device_unregister(pci_info->tzone);
+	proc_thermal_mmio_write(pci_info, PROC_THERMAL_MMIO_THRES_0, 0);
+	proc_thermal_mmio_write(pci_info, PROC_THERMAL_MMIO_INT_ENABLE_0, 0);
+	if (!pci_info->no_legacy)
+		proc_thermal_remove(proc_priv);
+
+	return ret;
 err_ret_tzone:
 	thermal_zone_device_unregister(pci_info->tzone);
 err_del_legacy:
@@ -420,16 +439,30 @@ static void proc_thermal_pci_remove(struct pci_dev *pdev)
 	struct proc_thermal_device *proc_priv = pci_get_drvdata(pdev);
 	struct proc_thermal_pci *pci_info = proc_priv->priv_data;
 
-	cancel_delayed_work_sync(&pci_info->work);
-
 	proc_thermal_mmio_write(pci_info, PROC_THERMAL_MMIO_THRES_0, 0);
 	proc_thermal_mmio_write(pci_info, PROC_THERMAL_MMIO_INT_ENABLE_0, 0);
 
+	/* The group must go first: a store could re-enable the source. */
+	if (!pci_info->no_legacy)
+		proc_thermal_power_limits_attr_remove(&pdev->dev);
+
+	/* Secondary sources must be off before the IRQs are freed. */
+	proc_thermal_mmio_remove(pdev, pci_info->proc_priv);
+
 	if (msi_irq)
 		proc_thermal_free_msi(pdev, pci_info);
+	else
+		devm_free_irq(&pdev->dev, pdev->irq, pci_info);
+
+	/* Cancel after the IRQs are freed, or the handler may reschedule it. */
+	cancel_delayed_work_sync(&pci_info->work);
 
 	thermal_zone_device_unregister(pci_info->tzone);
-	proc_thermal_mmio_remove(pdev, pci_info->proc_priv);
+
+	/* The work function and trip updates can re-enable the interrupt. */
+	proc_thermal_mmio_write(pci_info, PROC_THERMAL_MMIO_THRES_0, 0);
+	proc_thermal_mmio_write(pci_info, PROC_THERMAL_MMIO_INT_ENABLE_0, 0);
+
 	if (!pci_info->no_legacy)
 		proc_thermal_remove(proc_priv);
 }
