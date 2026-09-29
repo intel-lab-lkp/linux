@@ -761,6 +761,12 @@ static int vmw_setup_pci_resources(struct vmw_private *dev,
 		return -EINVAL;
 	}
 
+#if defined(CONFIG_64BIT)
+	dev->vram_mem = devm_memremap(dev->drm.dev,
+				      dev->vram_start,
+				      dev->vram_size,
+				      MEMREMAP_WB | MEMREMAP_DEC);
+#endif
 	/*
 	 * This is approximate size of the vram, the exact size will only
 	 * be known after we read SVGA_REG_VRAM_SIZE. The PCI resource

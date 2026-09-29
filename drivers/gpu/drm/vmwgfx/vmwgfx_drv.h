@@ -472,6 +472,7 @@ struct vmw_private {
 	resource_size_t max_primary_mem;
 	u32 __iomem *rmmio;
 	u32 *fifo_mem;
+	u32 *vram_mem;
 	resource_size_t fifo_mem_size;
 	uint32_t fb_max_width;
 	uint32_t fb_max_height;
