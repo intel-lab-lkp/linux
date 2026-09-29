@@ -893,7 +893,7 @@ mod derive_into_tests {
     ///
     /// #[derive(Into)]
     /// #[into(Bounded<u32, 32>)]
-    /// #[repr(u64)]
+    /// #[repr(i64)]
     /// enum Foo {
     ///     // `-1` cannot be represented with `Bounded<u32, 32>`.
     ///     A = -1,
@@ -1459,7 +1459,7 @@ mod derive_try_from_tests {
     ///
     /// #[derive(TryFrom)]
     /// #[try_from(Bounded<u32, 32>)]
-    /// #[repr(u64)]
+    /// #[repr(i64)]
     /// enum Foo {
     ///     // `-1` cannot be represented with `Bounded<u32, 32>`.
     ///     A = -1,

@@ -656,7 +656,7 @@ pub fn CovariantForLt(input: TokenStream) -> TokenStream {
 ///
 /// ## With `#[convert(...)]`
 ///
-/// The macro implements `From<Foo>` for each `T` specified in `#[into(...)]`,
+/// The macro implements `From<Foo>` for each `T` specified in `#[convert(...)]`,
 /// which always overrides `#[repr(...)]`. `#[convert(...)]` is useful when the same type
 /// needs to be specified in both `#[into(...)]` and `#[try_from(...)]`:
 ///
@@ -734,7 +734,10 @@ pub fn CovariantForLt(input: TokenStream) -> TokenStream {
 /// // `repr(C)` enums are not allowed.
 /// #[derive(Into)]
 /// #[repr(C)]
-/// struct Foo(u8);
+/// enum Foo {
+///     A,
+///     B,
+/// }
 /// ```
 #[proc_macro_derive(Into, attributes(into, convert))]
 pub fn derive_into(input: TokenStream) -> TokenStream {
@@ -947,7 +950,10 @@ pub fn derive_into(input: TokenStream) -> TokenStream {
 /// // `repr(C)` enums are not allowed.
 /// #[derive(TryFrom)]
 /// #[repr(C)]
-/// struct Foo(u8)
+/// enum Foo {
+///     A,
+///     B,
+/// }
 /// ```
 #[proc_macro_derive(TryFrom, attributes(try_from, convert))]
 pub fn derive_try_from(input: TokenStream) -> TokenStream {
