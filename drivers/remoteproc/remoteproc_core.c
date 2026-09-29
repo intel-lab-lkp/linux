@@ -1336,7 +1336,10 @@ static int rproc_start(struct rproc *rproc, const struct firmware *fw)
 	return 0;
 
 stop_rproc:
-	rproc->ops->stop(rproc);
+	if (rproc->ops->stop)
+		rproc->ops->stop(rproc);
+	else
+		dev_err(dev, "can't roll %s back: no stop()\n", rproc->name);
 unprepare_subdevices:
 	rproc_unprepare_subdevices(rproc);
 reset_table_ptr:
