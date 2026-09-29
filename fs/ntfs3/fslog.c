@@ -710,6 +710,13 @@ static bool check_log_rec(const struct LOG_REC_HDR *lr, u32 bytes, u32 tr,
 	if (le16_to_cpu(lr->undo_off) & 7)
 		return false;
 
+	/* The declared data window must fit inside the record itself. */
+	if (le16_to_cpu(lr->redo_off) + le16_to_cpu(lr->redo_len) > bytes)
+		return false;
+
+	if (le16_to_cpu(lr->undo_off) + le16_to_cpu(lr->undo_len) > bytes)
+		return false;
+
 	if (lr->target_attr)
 		goto check_lcns;
 
