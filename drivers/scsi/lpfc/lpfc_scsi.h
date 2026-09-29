@@ -42,6 +42,7 @@ struct lpfc_hba;
 /* per-port data that is allocated in the FC transport for us */
 struct lpfc_rport_data {
 	struct lpfc_nodelist *pnode;	/* Pointer to the node structure. */
+	u32 generation;		/* rport association generation */
 };
 
 struct lpfc_device_id {
