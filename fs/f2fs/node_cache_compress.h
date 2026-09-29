@@ -31,6 +31,7 @@ struct f2fs_nc_stats {
 	u64 candidates;
 	u64 attempts;
 	u64 converted;
+	u64 referenced_moved;
 	u64 candidate_refs;		/* Worker-held references right now. */
 	u64 transient_extra_bytes;	/* Temporary raw/compressed overlap. */
 	u64 allocation_failures;

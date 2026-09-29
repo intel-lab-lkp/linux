@@ -60,6 +60,17 @@ void f2fs_cache_update_tag(struct f2fs_cached_block *entry,
 	spin_unlock_irqrestore(&cache->tree_lock, flags);
 }
 
+bool f2fs_cache_clear_referenced_and_move(struct f2fs_cached_block_list *cache,
+					  struct list_head *head,
+					  struct f2fs_cached_block *entry)
+{
+	lockdep_assert_held(&cache->list_lock);
+	if (!f2fs_cache_test_and_clear_referenced(entry))
+		return false;
+	list_move_tail(&entry->list, head);
+	return true;
+}
+
 bool f2fs_mark_cache_dirty(struct f2fs_cached_block *entry)
 {
 	struct f2fs_cached_block_list *cache = entry->cache;
@@ -594,10 +605,8 @@ f2fs_shrink_cache_list(struct f2fs_cached_block_list *cache,
 		scanned++;
 
 		/* If accessed, give it a second chance to rotate to tail */
-		if (f2fs_cache_test_and_clear_referenced(entry)) {
-			list_move_tail(&entry->list, head);
+		if (f2fs_cache_clear_referenced_and_move(cache, head, entry))
 			continue;
-		}
 
 		if (f2fs_cache_test_dirty(entry) ||
 		    f2fs_cache_test_writeback(entry) ||

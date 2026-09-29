@@ -728,9 +728,9 @@ static int stat_show(struct seq_file *s, void *v)
 				nc.payload[0], nc.payload[1], nc.payload[2],
 				nc.slots[0], nc.slots[1], nc.slots[2]);
 			seq_printf(s,
-				   "NCWorker: cycles=%llu visited=%llu candidates=%llu attempts=%llu converted=%llu candidate_refs=%llu transient=%llu alloc_fail=%llu\n",
+				   "NCWorker: cycles=%llu visited=%llu candidates=%llu attempts=%llu converted=%llu referenced_moved=%llu candidate_refs=%llu transient=%llu alloc_fail=%llu\n",
 				nc.cycles, nc.visited, nc.candidates, nc.attempts,
-				nc.converted, nc.candidate_refs,
+				nc.converted, nc.referenced_moved, nc.candidate_refs,
 				nc.transient_extra_bytes, nc.allocation_failures);
 			seq_printf(s,
 				   "NCRestore: compressed_to_raw=%llu restored_hits=%llu restore_failures=%llu\n",

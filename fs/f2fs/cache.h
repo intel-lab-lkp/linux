@@ -232,6 +232,9 @@ void f2fs_cache_wait_writeback_cond(struct f2fs_cached_block *entry,
 void f2fs_cache_wait_writeback(struct f2fs_cached_block *entry);
 void f2fs_cache_update_tag(struct f2fs_cached_block *entry,
 		unsigned int clear_from, unsigned int set_to);
+bool f2fs_cache_clear_referenced_and_move(struct f2fs_cached_block_list *cache,
+					  struct list_head *head,
+					  struct f2fs_cached_block *entry);
 struct f2fs_cached_block *f2fs_grab_cache(struct f2fs_cached_block_list *cache,
 				unsigned long index, int flags);
 void f2fs_truncate_locked_cache(struct f2fs_cached_block *entry,

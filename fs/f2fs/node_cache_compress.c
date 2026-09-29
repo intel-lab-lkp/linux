@@ -147,6 +147,7 @@ struct f2fs_nc_ctx {
 	atomic64_t candidate_count;
 	atomic64_t attempts;
 	atomic64_t converted;
+	atomic64_t referenced_moved;
 	atomic64_t candidate_refs;
 	atomic64_t transient_extra_bytes;
 	atomic64_t allocation_failures;
@@ -574,7 +575,6 @@ static bool f2fs_nc_candidate(struct f2fs_cached_block *entry,
 		!f2fs_cache_test_dirty(entry) &&
 		!f2fs_cache_test_writeback(entry) &&
 		!f2fs_cache_test_locked(entry) &&
-		!f2fs_cache_test_referenced(entry) &&
 		!f2fs_cache_test_incompressible(entry) &&
 		atomic_read(&entry->refcount) == refs;
 }
@@ -601,6 +601,7 @@ f2fs_nc_compress(struct f2fs_cached_block *entry,
 	u32 crc;
 	int bucket;
 	int len;
+	bool referenced;
 
 	if (!cache || !IS_NODE_CACHE(cache) || !cfg ||
 	    f2fs_cache_test_compressed(entry))
@@ -654,9 +655,14 @@ f2fs_nc_compress(struct f2fs_cached_block *entry,
 
 	spin_lock(&cache->list_lock);
 	spin_lock_irqsave(&cache->tree_lock, flags);
+	referenced = f2fs_cache_test_referenced(entry);
+	/* A concurrent access wins; rotate the entry and discard this result. */
+	if (referenced && entry->cache == cache &&
+	    f2fs_cache_clear_referenced_and_move(cache, &cache->lru_list, entry))
+		atomic64_inc(&ctx->referenced_moved);
 	if (entry->cache != cache || entry->data != raw ||
 	    atomic_read(&entry->refcount) != 2 || f2fs_cp_error(sbi) ||
-	    f2fs_cache_test_referenced(entry) ||
+	    referenced ||
 	    !f2fs_cache_test_uptodate(entry) || f2fs_cache_test_dirty(entry) ||
 	    f2fs_cache_test_writeback(entry) ||
 	    f2fs_cache_test_incompressible(entry)) {
@@ -693,7 +699,7 @@ void f2fs_nc_run(struct f2fs_sb_info *sbi)
 	struct f2fs_nc_ctx *ctx = sbi->node_compress;
 	struct f2fs_cached_block_list *cache = NODE_CACHE(sbi);
 	struct f2fs_nc_config cfg;
-	struct f2fs_cached_block *entry;
+	struct f2fs_cached_block *entry, *next, *scan_tail;
 	unsigned long flags;
 	u64 now_ms;
 	unsigned long raw_population;
@@ -714,15 +720,26 @@ void f2fs_nc_run(struct f2fs_sb_info *sbi)
 		goto out;
 
 	spin_lock(&cache->list_lock);
-	list_for_each_entry(entry, &cache->lru_list, list) {
+	/* Do not revisit entries rotated to the tail during this pass. */
+	scan_tail = list_empty(&cache->lru_list) ? NULL :
+		list_last_entry(&cache->lru_list, struct f2fs_cached_block, list);
+	list_for_each_entry_safe(entry, next, &cache->lru_list, list) {
 		if (visited == goal || count == F2FS_NC_MAX_CANDIDATES)
 			break;
 		visited++;
-		if (!f2fs_nc_candidate(entry, cache, 1))
-			continue;
-		f2fs_cache_get(entry);
-		ctx->candidates[count++] = entry;
-		atomic64_inc(&ctx->candidate_refs);
+		if (f2fs_nc_candidate(entry, cache, 1)) {
+			if (f2fs_cache_clear_referenced_and_move(cache,
+								 &cache->lru_list,
+								 entry)) {
+				atomic64_inc(&ctx->referenced_moved);
+			} else {
+				f2fs_cache_get(entry);
+				ctx->candidates[count++] = entry;
+				atomic64_inc(&ctx->candidate_refs);
+			}
+		}
+		if (entry == scan_tail)
+			break;
 	}
 	spin_unlock(&cache->list_lock);
 	atomic64_add(visited, &ctx->visited);
@@ -890,6 +907,7 @@ void f2fs_nc_get_stats(struct f2fs_sb_info *sbi,
 	stats->candidates = atomic64_read(&ctx->candidate_count);
 	stats->attempts = atomic64_read(&ctx->attempts);
 	stats->converted = atomic64_read(&ctx->converted);
+	stats->referenced_moved = atomic64_read(&ctx->referenced_moved);
 	stats->candidate_refs = atomic64_read(&ctx->candidate_refs);
 	stats->transient_extra_bytes =
 		atomic64_read(&ctx->transient_extra_bytes);
