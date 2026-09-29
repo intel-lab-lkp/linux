@@ -59,16 +59,15 @@ bounded_enum! {
     }
 }
 
-bounded_enum! {
-    /// Revision subversion number of a falcon core, used in the
-    /// [`crate::regs::NV_PFALCON_FALCON_HWCFG1`] register.
-    #[derive(Debug, Copy, Clone)]
-    pub(crate) enum FalconCoreRevSubversion with From<Bounded<u32, 2>> {
-        Subversion0 = 0,
-        Subversion1 = 1,
-        Subversion2 = 2,
-        Subversion3 = 3,
-    }
+/// Revision subversion number of a falcon core, used in the
+/// [`crate::regs::NV_PFALCON_FALCON_HWCFG1`] register.
+#[derive(Debug, Copy, Clone, kernel::macros::From, kernel::macros::Into)]
+#[convert(Bounded<u32, 2>)]
+pub(crate) enum FalconCoreRevSubversion {
+    Subversion0 = 0,
+    Subversion1 = 1,
+    Subversion2 = 2,
+    Subversion3 = 3,
 }
 
 bounded_enum! {

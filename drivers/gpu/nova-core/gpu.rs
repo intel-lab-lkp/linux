@@ -14,7 +14,6 @@ use kernel::{
 };
 
 use crate::{
-    bounded_enum,
     driver::Bar0,
     falcon::{
         gsp::Gsp as GspFalcon,
@@ -155,17 +154,16 @@ impl fmt::Display for Chipset {
     }
 }
 
-bounded_enum! {
-    /// Enum representation of the GPU generation.
-    #[derive(fmt::Debug, Copy, Clone)]
-    pub(crate) enum Architecture with TryFrom<Bounded<u32, 6>> {
-        Turing = 0x16,
-        Ampere = 0x17,
-        Hopper = 0x18,
-        Ada = 0x19,
-        BlackwellGB10x = 0x1a,
-        BlackwellGB20x = 0x1b,
-    }
+/// Enum representation of the GPU generation.
+#[derive(fmt::Debug, Copy, Clone, kernel::macros::TryFrom, kernel::macros::Into)]
+#[convert(Bounded<u32, 6>)]
+pub(crate) enum Architecture {
+    Turing = 0x16,
+    Ampere = 0x17,
+    Hopper = 0x18,
+    Ada = 0x19,
+    BlackwellGB10x = 0x1a,
+    BlackwellGB20x = 0x1b,
 }
 
 #[derive(Clone, Copy)]
