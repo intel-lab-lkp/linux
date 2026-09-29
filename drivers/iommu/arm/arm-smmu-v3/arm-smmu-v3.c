@@ -1881,6 +1881,15 @@ void arm_smmu_make_cdtable_ste(struct arm_smmu_ste *target,
 {
 	struct arm_smmu_ctx_desc_cfg *cd_table = &master->cd_table;
 	struct arm_smmu_device *smmu = master->smmu;
+	u64 s1c, s1csh;
+
+	if (smmu->features & ARM_SMMU_FEAT_COHERENCY) {
+		s1c = STRTAB_STE_1_S1C_CACHE_WBRA;
+		s1csh = ARM_SMMU_SH_ISH;
+	} else {
+		s1c = STRTAB_STE_1_S1C_CACHE_NC;
+		s1csh = ARM_SMMU_SH_OSH;
+	}
 
 	memset(target, 0, sizeof(*target));
 	target->data[0] = cpu_to_le64(
@@ -1892,9 +1901,9 @@ void arm_smmu_make_cdtable_ste(struct arm_smmu_ste *target,
 
 	target->data[1] = cpu_to_le64(
 		FIELD_PREP(STRTAB_STE_1_S1DSS, s1dss) |
-		FIELD_PREP(STRTAB_STE_1_S1CIR, STRTAB_STE_1_S1C_CACHE_WBRA) |
-		FIELD_PREP(STRTAB_STE_1_S1COR, STRTAB_STE_1_S1C_CACHE_WBRA) |
-		FIELD_PREP(STRTAB_STE_1_S1CSH, ARM_SMMU_SH_ISH) |
+		FIELD_PREP(STRTAB_STE_1_S1CIR, s1c) |
+		FIELD_PREP(STRTAB_STE_1_S1COR, s1c) |
+		FIELD_PREP(STRTAB_STE_1_S1CSH, s1csh) |
 		((smmu->features & ARM_SMMU_FEAT_STALLS &&
 		  !master->stall_enabled) ?
 			 STRTAB_STE_1_S1STALLD :
@@ -4844,7 +4853,7 @@ static void arm_smmu_write_strtab(struct arm_smmu_device *smmu)
 static int arm_smmu_device_reset(struct arm_smmu_device *smmu)
 {
 	int ret;
-	u32 reg, enables;
+	u32 reg, enables, cache, sh;
 
 	/* Clear CR0 and sync (disables SMMU and queue processing) */
 	reg = readl_relaxed(smmu->base + ARM_SMMU_CR0);
@@ -4858,12 +4867,20 @@ static int arm_smmu_device_reset(struct arm_smmu_device *smmu)
 		return ret;
 
 	/* CR1 (table and queue memory attributes) */
-	reg = FIELD_PREP(CR1_TABLE_SH, ARM_SMMU_SH_ISH) |
-	      FIELD_PREP(CR1_TABLE_OC, CR1_CACHE_WB) |
-	      FIELD_PREP(CR1_TABLE_IC, CR1_CACHE_WB) |
-	      FIELD_PREP(CR1_QUEUE_SH, ARM_SMMU_SH_ISH) |
-	      FIELD_PREP(CR1_QUEUE_OC, CR1_CACHE_WB) |
-	      FIELD_PREP(CR1_QUEUE_IC, CR1_CACHE_WB);
+	if (smmu->features & ARM_SMMU_FEAT_COHERENCY) {
+		cache = CR1_CACHE_WB;
+		sh = ARM_SMMU_SH_ISH;
+	} else {
+		cache = CR1_CACHE_NC;
+		sh = ARM_SMMU_SH_OSH;
+	}
+
+	reg = FIELD_PREP(CR1_TABLE_SH, sh) |
+	      FIELD_PREP(CR1_TABLE_OC, cache) |
+	      FIELD_PREP(CR1_TABLE_IC, cache) |
+	      FIELD_PREP(CR1_QUEUE_SH, sh) |
+	      FIELD_PREP(CR1_QUEUE_OC, cache) |
+	      FIELD_PREP(CR1_QUEUE_IC, cache);
 	writel_relaxed(reg, smmu->base + ARM_SMMU_CR1);
 
 	/* CR2 (random crap) */
