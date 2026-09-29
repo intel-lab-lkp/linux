@@ -1865,6 +1865,11 @@ static int rtrs_rdma_conn_established(struct rtrs_clt_con *con,
 			return -ECONNRESET;
 		}
 
+		if (!queue_depth) {
+			rtrs_err(clt, "Invalid RTRS message: queue_depth is 0\n");
+			return -ECONNRESET;
+		}
+
 		if (!clt_path->rbufs) {
 			clt_path->rbufs = kzalloc_objs(*clt_path->rbufs,
 						       queue_depth);
