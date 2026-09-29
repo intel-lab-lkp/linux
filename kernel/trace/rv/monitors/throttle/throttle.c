@@ -283,3 +283,20 @@ module_exit(unregister_throttle);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Gabriele Monaco <gmonaco@redhat.com>");
 MODULE_DESCRIPTION("throttle: throttle dl entities when they use up their runtime.");
+
+#if IS_ENABLED(CONFIG_RV_MONITORS_KUNIT_TEST)
+#include <kunit/visibility.h>
+#include "throttle_kunit.h"
+
+const struct rv_throttle_ops rv_throttle_ops = {
+	.mon = RV_MON_OPS_INIT(),
+	.handle_dl_replenish = handle_dl_replenish,
+	.handle_dl_throttle = handle_dl_throttle,
+	.handle_sched_enqueue = handle_sched_enqueue,
+	.handle_sched_switch = handle_sched_switch,
+	.handle_sys_enter = handle_sys_enter,
+	.handle_newtask = handle_newtask,
+	.handle_dl_server_stop = handle_dl_server_stop,
+};
+EXPORT_SYMBOL_IF_KUNIT(rv_throttle_ops);
+#endif
