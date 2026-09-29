@@ -6195,7 +6195,7 @@ struct page *shmem_read_mapping_page_gfp(struct address_space *mapping,
 	struct page *page;
 
 	if (IS_ERR(folio))
-		return &folio->page;
+		return ERR_CAST(folio);
 
 	page = folio_file_page(folio, index);
 	if (PageHWPoison(page)) {

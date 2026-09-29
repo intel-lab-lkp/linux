@@ -59,13 +59,15 @@ static void verify_dma_pinned(unsigned int cmd, struct page **pages,
 			if (WARN(!folio_maybe_dma_pinned(folio),
 				 "pages[%lu] is NOT dma-pinned\n", i)) {
 
-				dump_page(&folio->page, "gup_test failure");
+				dump_page(folio_page(folio, 0),
+					  "gup_test failure");
 				break;
 			} else if (cmd == PIN_LONGTERM_BENCHMARK &&
 				WARN(!folio_is_longterm_pinnable(folio),
 				     "pages[%lu] is NOT pinnable but pinned\n",
 				     i)) {
-				dump_page(&folio->page, "gup_test failure");
+				dump_page(folio_page(folio, 0),
+					  "gup_test failure");
 				break;
 			}
 		}

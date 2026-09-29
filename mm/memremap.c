@@ -467,7 +467,7 @@ void free_zone_device_folio(struct folio *folio)
 		break;
 
 	case MEMORY_DEVICE_FS_DAX:
-		wake_up_var(&folio->page);
+		wake_up_var(folio_page(folio, 0));
 		break;
 
 	case MEMORY_DEVICE_PCI_P2PDMA:

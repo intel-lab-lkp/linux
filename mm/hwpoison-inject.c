@@ -131,7 +131,7 @@ static int hwpoison_inject(void *data, u64 val)
 	 * the targeted owner (or on a free page).
 	 * memory_failure() will redo the check reliably inside page lock.
 	 */
-	err = hwpoison_filter(&folio->page);
+	err = hwpoison_filter(folio_page(folio, 0));
 	if (err)
 		return 0;
 
