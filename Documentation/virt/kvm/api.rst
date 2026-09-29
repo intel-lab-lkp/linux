@@ -9056,6 +9056,34 @@ enabled, cmma can't be enabled anymore and pfmfi and the storage key
 interpretation are disabled. If cmma has already been enabled or the
 hpage_2g module parameter is not set to 1, -EINVAL is returned.
 
+7.48 KVM_CAP_ARM_HDBSS_BUFFER_SIZE
+-----------------------------------
+
+:Architectures: arm64
+:Target: VM
+:Parameters: args[0] is the per-vCPU HDBSS buffer size in bytes
+:Returns: 0 on success; -EINVAL if the size is invalid or vCPUs have already
+          been created; -EBUSY if the buffer size was already configured.
+
+This capability configures the per-vCPU HDBSS buffer size used for
+hardware-assisted dirty tracking during live migration.
+
+Userspace sets the size in bytes via KVM_ENABLE_CAP. KVM allocates
+per-vCPU HDBSS buffers of the requested size.
+
+KVM_CHECK_EXTENSION returns the maximum supported size (``SZ_2M``)
+when queried without a VM, or the configured per-VM size (default
+``PAGE_SIZE``) when queried with a VM.
+
+Constraints:
+
+- The size must be a power of two in [``PAGE_SIZE``, ``SZ_2M``].
+- Dirty-bitmap mode only: rejected with -EINVAL once the dirty ring
+  (``KVM_CAP_DIRTY_LOG_RING``) is enabled, and enabling the ring after
+  a size was set resets it to the default.
+- Must be set before any vCPU is created; a second setting is rejected
+  with -EBUSY.
+
 8. Other capabilities.
 ======================
 
