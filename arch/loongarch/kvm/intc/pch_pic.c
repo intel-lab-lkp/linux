@@ -71,10 +71,11 @@ void pch_pic_set_irq(struct loongarch_pch_pic *s, int irq, int level)
 int pch_msi_set_irq(struct kvm *kvm, struct kvm_kernel_irq_routing_entry *e, int level)
 {
 	u64 msg_addr = (((u64)e->msi.address_hi) << 32) | e->msi.address_lo;
+	struct loongarch_dmsintc *dmsintc = READ_ONCE(kvm->arch.dmsintc);
 
-	if (cpu_has_msgint && kvm->arch.dmsintc &&
-		msg_addr >= kvm->arch.dmsintc->msg_addr_base &&
-		msg_addr < (kvm->arch.dmsintc->msg_addr_base + kvm->arch.dmsintc->msg_addr_size)) {
+	if (cpu_has_msgint && dmsintc &&
+		msg_addr >= dmsintc->msg_addr_base &&
+		msg_addr < (dmsintc->msg_addr_base + dmsintc->msg_addr_size)) {
 		return dmsintc_set_irq(kvm, msg_addr, e->msi.data, level);
 	}
 

@@ -69,9 +69,13 @@ int dmsintc_set_irq(struct kvm *kvm, u64 addr, int data, int level)
 {
 	unsigned int irq, cpu;
 	struct kvm_vcpu *vcpu;
+	struct loongarch_dmsintc *s = READ_ONCE(kvm->arch.dmsintc);
+
+	if (!s)
+		return -EINVAL;
 
 	irq = (addr >> AVEC_IRQ_SHIFT) & AVEC_IRQ_MASK;
-	cpu = (addr >> AVEC_CPU_SHIFT) & kvm->arch.dmsintc->cpu_mask;
+	cpu = (addr >> AVEC_CPU_SHIFT) & s->cpu_mask;
 	if (cpu >= KVM_MAX_VCPUS)
 		return -EINVAL;
 	vcpu = kvm_get_vcpu_by_cpuid(kvm, cpu);
