@@ -2022,7 +2022,19 @@ static int kvm_s2_fault_compute_prot(const struct kvm_s2_fault_desc *s2fd,
 	if (s2vi->map_writable) {
 		*prot |= KVM_PGTABLE_PROT_W;
 
-		if (s2vi->device || !memslot_is_logging(s2fd->memslot) ||
+		/*
+		 * Check the live HD state of the MMU being installed
+		 * into, not the static capability: HD is off for the
+		 * whole VM as soon as any memslot logs, and under HD=0 a
+		 * writable-clean entry behaves as read-only, costing an
+		 * extra permission fault per page. Shadow MMUs never
+		 * carry HD, so nested installs are always writable-dirty.
+		 * A racing flip is benign: at worst one page takes one
+		 * extra fault.
+		 */
+		if (s2vi->device ||
+		    !(memslot_is_logging(s2fd->memslot) ||
+		      kvm_hw_dirty_enabled(s2fd->vcpu->arch.hw_mmu)) ||
 		    kvm_is_write_fault(s2fd->vcpu))
 			*prot |= KVM_PGTABLE_PROT_DIRTY;
 	}
@@ -2617,12 +2629,54 @@ out:
 	return err;
 }
 
+/*
+ * The VM's hardware dirty-management mode is a derived value, a pure
+ * function of the static capabilities and the number of logging
+ * memslots, so recomputing it on every event cannot lose an update
+ * and needs no locking against racing writers:
+ *
+ *   logging && HDBSS-capable  ->  HD|HA|HDBSS (hardware tracking)
+ *   logging, no HDBSS         ->  off (write-protect faults)
+ *   !logging && HAFDBS-cap.   ->  HD|HA (only written pages go dirty)
+ */
+void kvm_arch_update_hw_dirty_mode(struct kvm *kvm)
+{
+	unsigned long cur, target;
+	bool logging = atomic_read(&kvm->nr_memslots_dirty_logging) != 0;
+
+	if (logging && kvm_supports_hdbss(kvm))
+		target = VTCR_EL2_HD | VTCR_EL2_HA | VTCR_EL2_HDBSS;
+	else if (logging || !kvm_supports_hafdbs())
+		target = 0;
+	else
+		target = VTCR_EL2_HD | VTCR_EL2_HA;
+
+	cur = kvm->arch.mmu.vtcr & (VTCR_EL2_HD | VTCR_EL2_HA | VTCR_EL2_HDBSS);
+	if (cur == target)
+		return;
+
+	kvm->arch.mmu.vtcr = (kvm->arch.mmu.vtcr &
+			      ~(VTCR_EL2_HD | VTCR_EL2_HA | VTCR_EL2_HDBSS)) |
+			     target;
+
+	kvm_make_all_cpus_request(kvm, KVM_REQ_RELOAD_STAGE2);
+
+	/*
+	 * The request only reloads VTCR_EL2; cached translations keep
+	 * the old permissions until invalidated.
+	 */
+	kvm_flush_remote_tlbs(kvm);
+}
+
 void kvm_arch_commit_memory_region(struct kvm *kvm,
 				   struct kvm_memory_slot *old,
 				   const struct kvm_memory_slot *new,
 				   enum kvm_mr_change change)
 {
 	bool log_dirty_pages = new && new->flags & KVM_MEM_LOG_DIRTY_PAGES;
+
+	/* Derive the hardware dirty mode from the new logging state. */
+	kvm_arch_update_hw_dirty_mode(kvm);
 
 	/*
 	 * At this point memslot has been committed and there is an

@@ -390,6 +390,24 @@ static inline bool kvm_supports_cacheable_pfnmap(void)
 	       cpus_have_final_cap(ARM64_HAS_CACHE_DIC);
 }
 
+static inline bool kvm_supports_hafdbs(void)
+{
+	return IS_ENABLED(CONFIG_ARM64_HW_AFDBM) && has_vhe() &&
+		cpus_have_final_cap(ARM64_HW_DBM);
+}
+
+static inline bool kvm_supports_hdbss(struct kvm *kvm)
+{
+	return system_supports_hdbss() && !kvm_has_nv(kvm);
+}
+
+void kvm_arch_update_hw_dirty_mode(struct kvm *kvm);
+
+static inline bool kvm_hw_dirty_enabled(struct kvm_s2_mmu *mmu)
+{
+	return mmu->vtcr & VTCR_EL2_HD;
+}
+
 #ifdef CONFIG_PTDUMP_STAGE2_DEBUGFS
 void kvm_s2_ptdump_create_debugfs(struct kvm *kvm);
 void kvm_nested_s2_ptdump_create_debugfs(struct kvm_s2_mmu *mmu);

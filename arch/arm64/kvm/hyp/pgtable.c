@@ -1313,9 +1313,17 @@ static int stage2_wrprotect_walker(const struct kvm_pgtable_visit_ctx *ctx,
 		ctx->mm_ops->mark_page_dirty(kvm_pte_to_phys(ctx->old));
 
 	/*
-	 * We may race with the CPU trying to set the access flag here,
-	 * but worst-case the access flag update gets lost and will be
-	 * set on the next access instead.
+	 * The plain WRITE_ONCE races with hardware updates; both are
+	 * benign.
+	 *
+	 * AF: the update may be lost, and is set on the next access.
+	 *
+	 * Dirty state: we only rewrite entries whose old value had S2AP[1]
+	 * set, while hardware only promotes entries with S2AP[1] clear, so
+	 * the two never touch the same entry. The one overlap is DBM removal
+	 * on writable-clean blocks: a racing promotion is demoted back to
+	 * read-only, but the write is still recorded in the HDBSS buffer and
+	 * the folio was marked dirty at fault-in, so nothing is lost.
 	 */
 	if (kvm_pte_valid(ctx->old) && ctx->old != new)
 		WRITE_ONCE(*ctx->ptep, new);
