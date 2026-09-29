@@ -627,8 +627,6 @@ void cper_print_bits(const char *prefix, unsigned int bits,
 		     const char * const strs[], unsigned int strs_size);
 int cper_bits_to_str(char *buf, int buf_size, unsigned long bits,
 		     const char * const strs[], unsigned int strs_size);
-void cper_mem_err_pack(const struct cper_sec_mem_err *,
-		       struct cper_mem_err_compact *);
 bool cper_sec_is_platform_mem(const guid_t *sec_type);
 int cper_mem_err_parse(const guid_t *sec_type, const void *mem, size_t len,
 		       struct cper_mem_err_compact *cmem);

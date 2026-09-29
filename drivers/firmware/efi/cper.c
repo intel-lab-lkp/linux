@@ -392,8 +392,8 @@ static void cper_mem_err_old_pack(const struct cper_sec_mem_err_old *mem,
 	cmem->error_type = mem->error_type;
 }
 
-void cper_mem_err_pack(const struct cper_sec_mem_err *mem,
-		       struct cper_mem_err_compact *cmem)
+static void cper_mem_err_pack(const struct cper_sec_mem_err *mem,
+			      struct cper_mem_err_compact *cmem)
 {
 	memset(cmem, 0, sizeof(*cmem));
 	cmem->validation_bits = mem->validation_bits;
@@ -419,7 +419,6 @@ void cper_mem_err_pack(const struct cper_sec_mem_err *mem,
 	if (mem->validation_bits & CPER_MEM_VALID_CHIP_ID)
 		cmem->chip_id = mem->extended >> CPER_MEM_CHIP_ID_SHIFT;
 }
-EXPORT_SYMBOL_GPL(cper_mem_err_pack);
 
 static void cper_mem_err2_pack(const struct cper_sec_mem_err2 *mem,
 			       struct cper_mem_err_compact *cmem)
