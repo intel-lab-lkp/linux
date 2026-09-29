@@ -102,6 +102,21 @@ static inline bool has_quirk_extra_read_cycle(struct eeprom_93xx46_dev *edev)
 	return edev->pdata->quirks & EEPROM_93XX46_QUIRK_EXTRA_READ_CYCLE;
 }
 
+static void eeprom_93xx46_cmd_xfer(struct eeprom_93xx46_dev *edev,
+				   struct spi_transfer *t, u16 *cmd_addr,
+				   int bits)
+{
+	if (spi_is_bpw_supported(edev->spi, bits)) {
+		t->bits_per_word = bits;
+	} else {
+		cpu_to_be16s(cmd_addr);
+		t->bits_per_word = 8;
+	}
+
+	t->tx_buf = cmd_addr;
+	t->len = 2;
+}
+
 static int eeprom_93xx46_read(void *priv, unsigned int off,
 			      void *val, size_t count)
 {
@@ -148,9 +163,7 @@ static int eeprom_93xx46_read(void *priv, unsigned int off,
 			bits += 1;
 		}
 
-		t[0].tx_buf = (char *)&cmd_addr;
-		t[0].len = 2;
-		t[0].bits_per_word = bits;
+		eeprom_93xx46_cmd_xfer(edev, &t[0], &cmd_addr, bits);
 
 		t[1].rx_buf = buf;
 		t[1].len = count;
@@ -201,9 +214,7 @@ static int eeprom_93xx46_ew(struct eeprom_93xx46_dev *edev, int is_on)
 	dev_dbg(&edev->spi->dev, "ew %s cmd 0x%04x, %d bits\n",
 		str_enable_disable(is_on), cmd_addr, bits);
 
-	t.tx_buf = &cmd_addr;
-	t.len = 2;
-	t.bits_per_word = bits;
+	eeprom_93xx46_cmd_xfer(edev, &t, &cmd_addr, bits);
 
 	spi_message_init_with_transfers(&m, &t, 1);
 
@@ -251,9 +262,7 @@ eeprom_93xx46_write_word(struct eeprom_93xx46_dev *edev,
 
 	dev_dbg(&edev->spi->dev, "write cmd 0x%x\n", cmd_addr);
 
-	t[0].tx_buf = (char *)&cmd_addr;
-	t[0].len = 2;
-	t[0].bits_per_word = bits;
+	eeprom_93xx46_cmd_xfer(edev, &t[0], &cmd_addr, bits);
 
 	t[1].tx_buf = buf;
 	t[1].len = data_len;
@@ -334,9 +343,7 @@ static int eeprom_93xx46_eral(struct eeprom_93xx46_dev *edev)
 
 	dev_dbg(&edev->spi->dev, "eral cmd 0x%04x, %d bits\n", cmd_addr, bits);
 
-	t.tx_buf = &cmd_addr;
-	t.len = 2;
-	t.bits_per_word = bits;
+	eeprom_93xx46_cmd_xfer(edev, &t, &cmd_addr, bits);
 
 	spi_message_init_with_transfers(&m, &t, 1);
 
