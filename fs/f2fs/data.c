@@ -26,6 +26,7 @@
 #include "node.h"
 #include "segment.h"
 #include "iostat.h"
+#include "node_cache_compress.h"
 #include <trace/events/f2fs.h>
 
 #define NUM_PREALLOC_POST_READ_CTXS	128
@@ -393,8 +394,10 @@ static void f2fs_cache_read_end_io(struct bio *bio)
 				entry->index, NODE_TYPE_REGULAR, true))
 			bio->bi_status = BLK_STS_IOERR;
 
-		if (bio->bi_status == BLK_STS_OK)
+		if (bio->bi_status == BLK_STS_OK) {
+			f2fs_nc_content_changed(entry);
 			f2fs_cache_set_uptodate(entry);
+		}
 
 		dec_cache_count(sbi, io_type);
 

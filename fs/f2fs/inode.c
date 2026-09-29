@@ -168,7 +168,9 @@ static __u32 f2fs_inode_chksum(struct f2fs_sb_info *sbi, struct f2fs_cached_bloc
 	return chksum;
 }
 
-bool f2fs_inode_chksum_verify(struct f2fs_sb_info *sbi, struct f2fs_cached_block *entry)
+static bool __f2fs_inode_chksum_verify(struct f2fs_sb_info *sbi,
+				       struct f2fs_cached_block *entry,
+					bool report)
 {
 	struct f2fs_inode *ri;
 	__u32 provided, calculated;
@@ -187,13 +189,27 @@ bool f2fs_inode_chksum_verify(struct f2fs_sb_info *sbi, struct f2fs_cached_block
 	provided = le32_to_cpu(ri->i_inode_checksum);
 	calculated = f2fs_inode_chksum(sbi, entry);
 
-	if (provided != calculated)
+	if (provided != calculated && report)
 		f2fs_warn(sbi, "checksum invalid, nid = %lu, ino_of_node = %u, %x vs. %x",
 			  entry->index, ino_of_node(sbi, entry),
 			  provided, calculated);
 
 	return provided == calculated;
 }
+
+bool f2fs_inode_chksum_verify(struct f2fs_sb_info *sbi,
+			      struct f2fs_cached_block *entry)
+{
+	return __f2fs_inode_chksum_verify(sbi, entry, true);
+}
+
+#ifdef CONFIG_F2FS_FS_NODE_CACHE_COMPRESSION
+bool f2fs_inode_chksum_valid(struct f2fs_sb_info *sbi,
+			     struct f2fs_cached_block *entry)
+{
+	return __f2fs_inode_chksum_verify(sbi, entry, false);
+}
+#endif
 
 void f2fs_inode_chksum_set(struct f2fs_sb_info *sbi, struct f2fs_cached_block *entry)
 {

@@ -29,6 +29,10 @@ size_t f2fs_nc_entry_alloc_size(struct f2fs_cached_block_list *cache);
 void f2fs_nc_init(struct f2fs_sb_info *sbi);
 void f2fs_nc_destroy(struct f2fs_sb_info *sbi);
 void f2fs_nc_free_data(struct f2fs_cached_block *entry);
+int f2fs_nc_restore(struct f2fs_cached_block *entry);
+void f2fs_nc_validation_failed(struct f2fs_cached_block *entry);
+void f2fs_nc_validation_succeeded(struct f2fs_cached_block *entry);
+void f2fs_nc_content_changed(struct f2fs_cached_block *entry);
 struct list_head *f2fs_nc_queue_head(struct f2fs_cached_block_list *cache,
 				     unsigned int queue);
 unsigned int f2fs_nc_entry_queue(const struct f2fs_cached_block *entry);
@@ -53,6 +57,15 @@ static inline void f2fs_nc_free_data(struct f2fs_cached_block *entry)
 {
 	kfree(entry->data);
 }
+
+static inline int f2fs_nc_restore(struct f2fs_cached_block *entry)
+{
+	return 0;
+}
+
+static inline void f2fs_nc_validation_failed(struct f2fs_cached_block *entry) { }
+static inline void f2fs_nc_validation_succeeded(struct f2fs_cached_block *entry) { }
+static inline void f2fs_nc_content_changed(struct f2fs_cached_block *entry) { }
 
 static inline struct list_head *f2fs_nc_queue_head(struct f2fs_cached_block_list *cache,
 						   unsigned int queue)

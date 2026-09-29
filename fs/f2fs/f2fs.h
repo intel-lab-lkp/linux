@@ -4001,6 +4001,16 @@ int f2fs_pin_file_control(struct inode *inode, bool inc);
  */
 void f2fs_set_inode_flags(struct inode *inode);
 bool f2fs_inode_chksum_verify(struct f2fs_sb_info *sbi, struct f2fs_cached_block *entry);
+#ifdef CONFIG_F2FS_FS_NODE_CACHE_COMPRESSION
+bool f2fs_inode_chksum_valid(struct f2fs_sb_info *sbi,
+			     struct f2fs_cached_block *entry);
+#else
+static inline bool
+f2fs_inode_chksum_valid(struct f2fs_sb_info *sbi, struct f2fs_cached_block *entry)
+{
+	return true;
+}
+#endif
 void f2fs_inode_chksum_set(struct f2fs_sb_info *sbi, struct f2fs_cached_block *entry);
 struct inode *f2fs_iget(struct super_block *sb, unsigned long ino);
 struct inode *f2fs_iget_retry(struct super_block *sb, unsigned long ino);

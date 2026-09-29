@@ -66,6 +66,7 @@ enum f2fs_cached_state {
 	F2FS_BLOCK_INLINE_DATA,		/* indicate inline data */
 #ifdef CONFIG_F2FS_FS_NODE_CACHE_COMPRESSION
 	F2FS_BLOCK_COMPRESSED,
+	F2FS_BLOCK_RESTORED,
 #endif
 };
 
@@ -151,6 +152,25 @@ F2FS_CACHE_FLAG_TEST_AND_CLEAR_FUNC(referenced, REFERENCED);
 F2FS_CACHE_FLAG_TEST_FUNC(compressed, COMPRESSED);
 F2FS_CACHE_FLAG_SET_FUNC(compressed, COMPRESSED);
 F2FS_CACHE_FLAG_CLEAR_FUNC(compressed, COMPRESSED);
+F2FS_CACHE_FLAG_TEST_FUNC(restored, RESTORED);
+F2FS_CACHE_FLAG_SET_FUNC(restored, RESTORED);
+F2FS_CACHE_FLAG_CLEAR_FUNC(restored, RESTORED);
+#else
+static inline bool f2fs_cache_test_compressed(const struct f2fs_cached_block *entry)
+{
+	return false;
+}
+
+static inline void f2fs_cache_set_compressed(struct f2fs_cached_block *entry) { }
+static inline void f2fs_cache_clear_compressed(struct f2fs_cached_block *entry) { }
+
+static inline bool f2fs_cache_test_restored(const struct f2fs_cached_block *entry)
+{
+	return false;
+}
+
+static inline void f2fs_cache_set_restored(struct f2fs_cached_block *entry) { }
+static inline void f2fs_cache_clear_restored(struct f2fs_cached_block *entry) { }
 #endif
 
 static inline void *cache_address(const struct f2fs_cached_block *entry)

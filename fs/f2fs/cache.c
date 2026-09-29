@@ -64,6 +64,7 @@ bool f2fs_mark_cache_dirty(struct f2fs_cached_block *entry)
 {
 	struct f2fs_cached_block_list *cache = entry->cache;
 
+	f2fs_nc_content_changed(entry);
 	f2fs_cache_set_uptodate(entry);
 
 #ifdef CONFIG_F2FS_CHECK_FS
@@ -94,6 +95,8 @@ void f2fs_drop_cache_dirty(struct f2fs_cached_block *entry)
 				F2FS_DIRTY_META : F2FS_DIRTY_NODES;
 
 	f2fs_cache_clear_uptodate(entry);
+	if (!f2fs_cache_test_compressed(entry))
+		f2fs_nc_content_changed(entry);
 
 	if (!f2fs_cache_test_and_clear_dirty(entry))
 		return;
@@ -286,7 +289,16 @@ repeat:
 	entry = f2fs_insert_cache(cache, index, new);
 found:
 	if (lock) {
+		int ret;
+
 		f2fs_lock_cache(entry);
+		if (entry->cache == cache) {
+			ret = f2fs_nc_restore(entry);
+			if (ret) {
+				f2fs_put_cache(entry, true);
+				return ERR_PTR(ret);
+			}
+		}
 		/* has been truncated */
 		if (entry->cache != cache) {
 			f2fs_put_cache(entry, true);

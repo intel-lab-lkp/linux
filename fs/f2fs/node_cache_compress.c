@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/atomic.h>
 #include <linux/f2fs_fs.h>
+#include <linux/lz4.h>
 #include <linux/refcount.h>
 #include <linux/slab.h>
 
@@ -99,6 +100,10 @@ struct f2fs_nc_ctx {
 	atomic64_t shrink_scanned[F2FS_NC_NR_QUEUES];
 	atomic64_t shrink_freed[F2FS_NC_NR_QUEUES];
 	atomic64_t detached[F2FS_NC_NR_QUEUES];
+	/* Cumulative restore statistics since mount. */
+	atomic64_t compressed_to_raw;
+	atomic64_t restored_hits;
+	atomic64_t restore_failures;
 	/* Signed quota history carried between shrinker calls. */
 	s64 shrink_credit[F2FS_NC_NR_QUEUES];
 	/* Mount reference plus references held by compressed objects. */
@@ -278,6 +283,130 @@ void f2fs_nc_free_data(struct f2fs_cached_block *entry)
 	node->compressed_crc = 0;
 	f2fs_nc_store_free(ctx->store, object, alloc_size);
 	f2fs_nc_ctx_put(ctx);
+}
+
+static int
+f2fs_nc_publish_raw(struct f2fs_cached_block *entry,
+		    struct f2fs_node_cached_block *node,
+		    struct f2fs_nc_ctx *ctx, void *raw, bool restored)
+{
+	struct f2fs_cached_block_list *cache = entry->cache;
+	void *object = entry->data;
+	u32 len = node->compressed_len;
+	u32 alloc_size = node->compressed_alloc_size;
+	unsigned int queue = f2fs_nc_entry_queue(entry);
+
+	spin_lock(&cache->list_lock);
+	entry->data = raw;
+	f2fs_cache_clear_compressed(entry);
+	node->owner = NULL;
+	node->compressed_len = 0;
+	node->compressed_alloc_size = 0;
+	node->compressed_crc = 0;
+	if (restored) {
+		f2fs_cache_set_restored(entry);
+		f2fs_cache_set_uptodate(entry);
+	} else {
+		f2fs_cache_clear_restored(entry);
+		f2fs_cache_clear_uptodate(entry);
+	}
+	list_move_tail(&entry->list, &cache->lru_list);
+	f2fs_nc_account_del(ctx, queue, len, alloc_size);
+	f2fs_nc_account_add(ctx, F2FS_NC_RAW, 0, 0);
+	atomic64_inc(&ctx->compressed_to_raw);
+	spin_unlock(&cache->list_lock);
+
+	f2fs_nc_store_free(ctx->store, object, alloc_size);
+	f2fs_nc_ctx_put(ctx);
+	return 0;
+}
+
+static int
+f2fs_nc_restore_fallback(struct f2fs_cached_block *entry,
+			 struct f2fs_node_cached_block *node,
+			 struct f2fs_nc_ctx *ctx)
+{
+	void *raw;
+
+	raw = f2fs_kmalloc(ctx->sbi, ctx->sbi->blocksize, GFP_NOFS);
+	if (!raw)
+		return -ENOMEM;
+	atomic64_inc(&ctx->restore_failures);
+	return f2fs_nc_publish_raw(entry, node, ctx, raw, false);
+}
+
+int f2fs_nc_restore(struct f2fs_cached_block *entry)
+{
+	struct f2fs_node_cached_block *node;
+	struct f2fs_nc_ctx *ctx;
+	struct f2fs_sb_info *sbi;
+	void *raw;
+	int ret;
+
+	if (!entry || !entry->cache || !IS_NODE_CACHE(entry->cache) ||
+	    !f2fs_cache_test_compressed(entry))
+		return 0;
+	if (WARN_ON_ONCE(!f2fs_cache_test_locked(entry)))
+		return -EFSCORRUPTED;
+	if (WARN_ON_ONCE(f2fs_cache_test_dirty(entry) ||
+			 f2fs_cache_test_writeback(entry)))
+		return -EFSCORRUPTED;
+
+	node = f2fs_nc_node_entry(entry);
+	ctx = node->owner;
+	if (!ctx || ctx != entry->cache->sbi->node_compress || !entry->data)
+		return -EFSCORRUPTED;
+	sbi = ctx->sbi;
+	if (f2fs_nc_store_bucket_from_size(node->compressed_alloc_size) < 0)
+		return -EFSCORRUPTED;
+	if (!node->compressed_len ||
+	    node->compressed_len > node->compressed_alloc_size)
+		return f2fs_nc_restore_fallback(entry, node, ctx);
+
+	raw = f2fs_kmalloc(sbi, sbi->blocksize, GFP_NOFS);
+	if (!raw)
+		return -ENOMEM;
+	ret = LZ4_decompress_safe(entry->data, raw, node->compressed_len,
+				  sbi->blocksize);
+	if (ret != sbi->blocksize ||
+	    f2fs_crc32(raw, sbi->blocksize) != node->compressed_crc) {
+		atomic64_inc(&ctx->restore_failures);
+		return f2fs_nc_publish_raw(entry, node, ctx, raw, false);
+	}
+	return f2fs_nc_publish_raw(entry, node, ctx, raw, true);
+}
+
+void f2fs_nc_validation_failed(struct f2fs_cached_block *entry)
+{
+	struct f2fs_nc_ctx *ctx;
+
+	if (f2fs_cache_test_restored(entry) && entry->cache) {
+		ctx = entry->cache->sbi->node_compress;
+		if (ctx)
+			atomic64_inc(&ctx->restore_failures);
+	}
+	f2fs_cache_clear_restored(entry);
+	f2fs_cache_clear_uptodate(entry);
+}
+
+void f2fs_nc_validation_succeeded(struct f2fs_cached_block *entry)
+{
+	struct f2fs_nc_ctx *ctx;
+
+	if (f2fs_cache_test_restored(entry) && entry->cache) {
+		ctx = entry->cache->sbi->node_compress;
+		if (ctx)
+			atomic64_inc(&ctx->restored_hits);
+	}
+	f2fs_cache_clear_restored(entry);
+}
+
+void f2fs_nc_content_changed(struct f2fs_cached_block *entry)
+{
+	if (!entry || !entry->cache || !IS_NODE_CACHE(entry->cache))
+		return;
+	WARN_ON_ONCE(f2fs_cache_test_compressed(entry));
+	f2fs_cache_clear_restored(entry);
 }
 
 static void f2fs_nc_population_snapshot(struct f2fs_nc_ctx *ctx,

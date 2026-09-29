@@ -19,6 +19,7 @@
 #include "segment.h"
 #include "xattr.h"
 #include "iostat.h"
+#include "node_cache_compress.h"
 #include <trace/events/f2fs.h>
 
 #define on_f2fs_build_free_nids(nm_i) mutex_is_locked(&(nm_i)->build_lock)
@@ -1467,7 +1468,15 @@ static int read_node_cache(struct f2fs_cached_block *entry, blk_opf_t op_flags)
 	};
 	int err;
 
+	if (WARN_ON_ONCE(f2fs_cache_test_compressed(entry) || !entry->data))
+		return -EFSCORRUPTED;
+
 	if (f2fs_cache_test_uptodate(entry)) {
+		if (f2fs_cache_test_restored(entry) &&
+		    !f2fs_inode_chksum_valid(sbi, entry)) {
+			f2fs_nc_validation_failed(entry);
+			goto read_disk;
+		}
 		if (!f2fs_inode_chksum_verify(sbi, entry)) {
 			f2fs_cache_clear_uptodate(entry);
 			return -EFSBADCRC;
@@ -1475,6 +1484,7 @@ static int read_node_cache(struct f2fs_cached_block *entry, blk_opf_t op_flags)
 		return LOCKED_CACHE;
 	}
 
+read_disk:
 	err = f2fs_get_node_info(sbi, entry->index, &ni, false);
 	if (err)
 		return err;
@@ -1520,14 +1530,14 @@ void f2fs_ra_node_cache(struct f2fs_sb_info *sbi, nid_t nid)
 	f2fs_put_cache(entry, err ? true : false);
 }
 
-int f2fs_sanity_check_node_footer(struct f2fs_sb_info *sbi,
-					struct f2fs_cached_block *entry, pgoff_t nid,
-					enum node_type ntype, bool in_irq)
+static bool f2fs_node_footer_valid(struct f2fs_sb_info *sbi,
+				   struct f2fs_cached_block *entry, pgoff_t nid,
+				   enum node_type ntype)
 {
 	bool is_inode, is_xnode;
 
 	if (unlikely(nid != nid_of_node(sbi, entry)))
-		goto out_err;
+		return false;
 
 	is_inode = IS_INODE(sbi, entry);
 	is_xnode = f2fs_has_xattr_block(ofs_of_node(sbi, entry));
@@ -1535,27 +1545,46 @@ int f2fs_sanity_check_node_footer(struct f2fs_sb_info *sbi,
 	switch (ntype) {
 	case NODE_TYPE_REGULAR:
 		if (is_inode && is_xnode)
-			goto out_err;
+			return false;
 		break;
 	case NODE_TYPE_INODE:
 		if (!is_inode || is_xnode)
-			goto out_err;
+			return false;
 		break;
 	case NODE_TYPE_XATTR:
 		if (is_inode || !is_xnode)
-			goto out_err;
+			return false;
 		break;
 	case NODE_TYPE_NON_INODE:
 		if (is_inode)
-			goto out_err;
+			return false;
 		break;
 	case NODE_TYPE_NON_IXNODE:
 		if (is_inode || is_xnode)
-			goto out_err;
+			return false;
 		break;
 	default:
 		break;
 	}
+	return true;
+}
+
+static bool f2fs_restored_footer_valid(struct f2fs_sb_info *sbi,
+				       struct f2fs_cached_block *entry,
+				       pgoff_t nid, enum node_type ntype)
+{
+	if (f2fs_node_footer_valid(sbi, entry, nid, ntype))
+		return true;
+	f2fs_nc_validation_failed(entry);
+	return false;
+}
+
+int f2fs_sanity_check_node_footer(struct f2fs_sb_info *sbi,
+				  struct f2fs_cached_block *entry, pgoff_t nid,
+				  enum node_type ntype, bool in_irq)
+{
+	if (!f2fs_node_footer_valid(sbi, entry, nid, ntype))
+		goto out_err;
 	if (time_to_inject(sbi, FAULT_INCONSISTENT_FOOTER))
 		goto out_err;
 	return 0;
@@ -1588,6 +1617,7 @@ repeat:
 	if (IS_ERR(entry))
 		return entry;
 
+read_cache:
 	err = read_node_cache(entry, 0);
 	if (err < 0)
 		goto out_put_err;
@@ -1614,9 +1644,14 @@ repeat:
 		goto out_err;
 	}
 entry_hit:
+	if (f2fs_cache_test_restored(entry) &&
+	    !f2fs_restored_footer_valid(sbi, entry, nid, ntype))
+		goto read_cache;
 	err = f2fs_sanity_check_node_footer(sbi, entry, nid, ntype, false);
-	if (!err)
+	if (!err) {
+		f2fs_nc_validation_succeeded(entry);
 		return entry;
+	}
 out_err:
 	f2fs_drop_cache_dirty(entry);
 out_put_err:
