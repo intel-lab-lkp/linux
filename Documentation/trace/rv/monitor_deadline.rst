@@ -82,3 +82,77 @@ server can run from sleeping without being ready::
  +--------------+ <---------+                                        ^
         |                                                            |
         +------ dl_throttle;is_constr_dl == 1 || is_defer == 1 ------+
+
+Monitor throttle
+~~~~~~~~~~~~~~~~
+
+The throttle monitor ensures deadline entities are throttled when they use up
+their runtime. Deadline tasks can be only ``running``, ``preempted`` and
+``throttled``, the runtime is enforced only in ``running`` based on an internal
+clock and the runtime value in the deadline entity.
+On systems with CPU frequency scaling or turbo boost, deadline tasks can run
+longer than their runtime as this is scaled according to the frequency. In this
+scenario, the monitor allows to skip the runtime check with the module
+parameter ``throttle.skip_runtime_check``.
+
+Servers can be also in the ``armed`` state, which represents when the
+server is consuming bandwidth in background (e.g. idle or normal tasks are
+running without any boost). From this state the server can be throttled but it
+can also use more runtime than available. A server is considered ``running``
+when it's actively boosting a task, only there the runtime is enforced. The
+server is preempted if the running task is not in the server's runqueue (e.g. a
+FIFO task for the fair server).
+Events like ``dl_armed`` and ``sched_switch_in`` can occur sequentially for
+servers since they are related to the current task (e.g. a 2 fair tasks can be
+switched in sequentially, that corresponds to multiple ``dl_armed``).
+
+Any task or server in the ``throttled`` state must leave it shortly, e.g.
+become ``preempted``::
+
+                                     |
+                                     |
+      dl_replenish;reset(clk)        v
+              sched_switch_in   #=========================# sched_switch_in;
+               +--------------- H                         H   reset(clk)
+               |                H                         H <----------------+
+               +--------------> H         running         H                  |
+    dl_throttle;reset(clk)      H clk < runtime_left_ns() H                  |
+   +--------------------------- H                         H sched_switch_out |
+   |       +------------------> H                         H -------------+   |
+   | dl_replenish;reset(clk)    #=========================#              |   |
+   |       |                         |             ^                     |   |
+   v       |                  dl_defer_arm         |                     |   |
+ +-------------------------+         |             |                     |   |
+ |       throttled         |         |    sched_switch_in;reset(clk)     |   |
+ | clk < THROTTLED_TIME_NS |         v             |                     |   |
+ +-------------------------+        +----------------+                   |   |
+   |    |                           |                | sched_switch_out  |   |
+   |    |               +---------- |                | -------------+    |   |
+   |    |          dl_replenish     |     armed      |              |    |   |
+   |    |          dl_defer_arm     |                | <--------+   |    |   |
+   |    |               +---------> |                | dl_defer_arm |    |   |
+   |    |                           +----------------+          |   |    |   |
+   |    |                            |         ^                |   |    |   |
+   |    |                        dl_throttle  dl_replenish      |   |    |   |
+   |    |                            v         |                |   |    |   |
+   |    |     dl_defer_arm  +-------------------+               |   v    v   |
+   |    |       +---------- |                   |             +--------------+
+   |    |       |           |                   |             |              |
+   |    |       +---------> |  armed_throttled  |             |  preempted   |
+   |    |                   |                   |             |              |
+   |    +-----------------> |                   |             +--------------+
+   |          dl_defer_arm  +-------------------+   sched_switch_out ^   |  ^
+   |                            |              ^        dl_replenish |   |  |
+   |                  sched_switch_out    dl_defer_arm          +----+   |  |
+   |                            v              |                         |  |
+   |       sched_switch_out  +-----------------------+                   |  |
+   |         +-------------- |                       | dl_throttle;      |  |
+   |         |               |                       |  is_constr_dl==1  |  |
+   |         +-------------> |  preempted_throttled  | <-----------------+  |
+   |                         |                       |                      |
+   +-----------------------> |                       | -- dl_replenish -----+
+         sched_switch_out    +-----------------------+
+
+The value of ``runtime_left_ns()`` is directly read from the deadline entity
+and updated as the task runs. It is increased by 1 tick to account for the
+maximum delay to throttle (not valid if ``sched_feat(HRTICK_DL)`` is active).
