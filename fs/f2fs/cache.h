@@ -222,7 +222,11 @@ void f2fs_drop_cache_range(struct f2fs_cached_block_list *cache,
 	f2fs_drop_cache_range(NODE_CACHE(sbi), start, len, true)
 
 unsigned long f2fs_shrink_cache(struct f2fs_sb_info *sbi,
-				unsigned long nr_to_scan);
+					unsigned long nr_to_scan);
+unsigned long
+f2fs_shrink_cache_list(struct f2fs_cached_block_list *cache,
+		       struct list_head *head, unsigned long nr_entries,
+		       unsigned long nr_to_scan, unsigned long *nr_scanned);
 
 #define DEF_DIRTY_CACHE_TIMEOUT 5000
 #define MIN_DIRTY_CACHE_TIMEOUT 100

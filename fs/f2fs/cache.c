@@ -547,8 +547,10 @@ next:
 	goto next;
 }
 
-static unsigned long f2fs_do_shrink_cache(struct f2fs_cached_block_list *cache,
-						unsigned long nr_to_scan)
+unsigned long
+f2fs_shrink_cache_list(struct f2fs_cached_block_list *cache,
+		       struct list_head *head, unsigned long nr_entries,
+		       unsigned long nr_to_scan, unsigned long *nr_scanned)
 {
 	struct f2fs_cached_block *entry, *next;
 	LIST_HEAD(dispose_list);
@@ -558,15 +560,15 @@ static unsigned long f2fs_do_shrink_cache(struct f2fs_cached_block_list *cache,
 
 	/* Phase 1: Isolate candidate entries from LRU list into dispose_list */
 	spin_lock(&cache->list_lock);
-	list_for_each_entry_safe(entry, next, &cache->lru_list, list) {
-		if (scanned >= cache->num_entries)
+	nr_entries = min(nr_entries, cache->num_entries);
+	list_for_each_entry_safe(entry, next, head, list) {
+		if (scanned >= nr_entries || scanned >= nr_to_scan)
 			break;
-		if (scanned++ >= nr_to_scan)
-			break;
+		scanned++;
 
 		/* If accessed, give it a second chance to rotate to tail */
 		if (f2fs_cache_test_and_clear_referenced(entry)) {
-			list_move_tail(&entry->list, &cache->lru_list);
+			list_move_tail(&entry->list, head);
 			continue;
 		}
 
@@ -620,14 +622,24 @@ static unsigned long f2fs_do_shrink_cache(struct f2fs_cached_block_list *cache,
 			freed++;
 	}
 
-	/* Phase 3: Splice un-reclaimed entries back onto cache->lru_list */
+	/* Phase 3: Splice un-reclaimed entries back onto the scanned list */
 	if (!list_empty(&keep_list)) {
 		spin_lock(&cache->list_lock);
-		list_splice_tail(&keep_list, &cache->lru_list);
+		list_splice_tail(&keep_list, head);
 		spin_unlock(&cache->list_lock);
 	}
+	if (nr_scanned)
+		*nr_scanned = scanned;
 
 	return freed;
+}
+
+static unsigned long
+f2fs_do_shrink_cache(struct f2fs_cached_block_list *cache,
+		     unsigned long nr_to_scan)
+{
+	return f2fs_shrink_cache_list(cache, &cache->lru_list, ULONG_MAX,
+			nr_to_scan, NULL);
 }
 
 unsigned long f2fs_shrink_cache(struct f2fs_sb_info *sbi,
