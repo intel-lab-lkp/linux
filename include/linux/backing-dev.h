@@ -37,6 +37,7 @@ void bdi_unregister(struct backing_dev_info *bdi);
 struct backing_dev_info *bdi_alloc(int node_id);
 
 void wb_start_background_writeback(struct bdi_writeback *wb);
+void wb_start_writeback(struct bdi_writeback *wb, enum wb_reason reason);
 void wb_workfn(struct work_struct *work);
 
 void wb_wait_for_completion(struct wb_completion *done);

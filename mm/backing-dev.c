@@ -676,7 +676,7 @@ static int cgwb_create(struct backing_dev_info *bdi,
 	struct mem_cgroup *memcg;
 	struct cgroup_subsys_state *blkcg_css;
 	struct list_head *memcg_cgwb_list, *blkcg_cgwb_list;
-	struct bdi_writeback *wb, *old_wb;
+	struct bdi_writeback *wb, *old_wb, *kick_wb = NULL;
 	void __rcu **slot;
 	unsigned long flags;
 	int ret = 0;
@@ -748,6 +748,8 @@ static int cgwb_create(struct backing_dev_info *bdi,
 			old_wb = radix_tree_deref_slot_protected(slot, &cgwb_lock);
 			if (wb_dying(old_wb)) {
 				radix_tree_replace_slot(&bdi->cgwb_tree, slot, wb);
+				if (wb_tryget(old_wb))
+					kick_wb = old_wb;
 				ret = 0;
 			} else {
 				ret = -EEXIST;
@@ -763,6 +765,17 @@ static int cgwb_create(struct backing_dev_info *bdi,
 		}
 	}
 	spin_unlock_irqrestore(&cgwb_lock, flags);
+
+	/*
+	 * The replaced wb is out of foreign flushes' reach but may still have
+	 * dirty inodes.  Write it back so that they move over to @wb, see
+	 * wbc_attach_and_unlock_inode().
+	 */
+	if (kick_wb) {
+		wb_start_writeback(kick_wb, WB_REASON_FOREIGN_FLUSH);
+		wb_put(kick_wb);
+	}
+
 	if (ret) {
 		if (ret == -EEXIST)
 			ret = 0;

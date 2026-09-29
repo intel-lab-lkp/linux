@@ -131,10 +131,12 @@ static bool inode_io_list_move_locked(struct inode *inode,
 
 static void wb_wakeup(struct bdi_writeback *wb)
 {
-	spin_lock_irq(&wb->work_lock);
+	unsigned long flags;
+
+	spin_lock_irqsave(&wb->work_lock, flags);
 	if (test_bit(WB_registered, &wb->state))
 		mod_delayed_work(bdi_wq, &wb->dwork, 0);
-	spin_unlock_irq(&wb->work_lock);
+	spin_unlock_irqrestore(&wb->work_lock, flags);
 }
 
 /*
@@ -1334,7 +1336,7 @@ static unsigned long get_nr_dirty_pages(void)
 		get_nr_dirty_inodes();
 }
 
-static void wb_start_writeback(struct bdi_writeback *wb, enum wb_reason reason)
+void wb_start_writeback(struct bdi_writeback *wb, enum wb_reason reason)
 {
 	if (!wb_has_dirty_io(wb))
 		return;
