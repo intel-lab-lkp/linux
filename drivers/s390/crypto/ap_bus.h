@@ -132,6 +132,33 @@ struct ap_message;
  */
 #define AP_DRIVER_FLAG_DEFAULT 0x0001
 
+/**
+ * ap_queue_transition_state -	enumerates the new states to which a
+ *				queue can transition.
+ * @AP_QUEUE_CONFIG_ON:		from deconfigured to configured
+ * @AP_QUEUE_CONFIG_OFF:	from configured to deconfigured
+ * @AP_QUEUE_CHKSTOP_ON:	from not checkstopped to checkstopped
+ * @AP_QUEUE_CHKSTOP_OFF:	from checkstopped to not checkstopped
+ */
+enum ap_queue_transition_state {
+	AP_QUEUE_CONFIG_ON,
+	AP_QUEUE_CONFIG_OFF,
+	AP_QUEUE_CHKSTOP_ON,
+	AP_QUEUE_CHKSTOP_OFF,
+};
+
+/**
+ * struct ap_qstate_transition - used to notify a device driver that a
+ *				 queue state transition has occurred.
+ *
+ * @queue:	the queue device whose state transitioned
+ * @new_state:  identifies the new state to which the queue transitioned
+ */
+struct ap_qstate_transition {
+	struct ap_queue			*queue;
+	enum ap_queue_transition_state	new_state;
+};
+
 struct ap_driver {
 	struct device_driver driver;
 
@@ -154,6 +181,12 @@ struct ap_driver {
 	 */
 	void (*on_scan_complete)(struct ap_config_info *new_config_info,
 				 struct ap_config_info *old_config_info);
+
+	/*
+	 * Called during the ap bus scan when a queue state transition is
+	 * detected.
+	 */
+	void (*on_qstate_transition)(struct ap_qstate_transition *qstate_trans);
 
 	struct ap_device_id *ids;
 	unsigned int flags;

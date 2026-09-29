@@ -61,6 +61,7 @@ static struct ap_driver vfio_ap_drv = {
 	.in_use = vfio_ap_mdev_resource_in_use,
 	.on_config_changed = vfio_ap_on_cfg_changed,
 	.on_scan_complete = vfio_ap_on_scan_complete,
+	.on_qstate_transition = vfio_ap_on_qstate_transition,
 	.ids = ap_queue_ids,
 };
 

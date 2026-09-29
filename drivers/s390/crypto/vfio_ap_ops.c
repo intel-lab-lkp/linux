@@ -881,14 +881,14 @@ static bool _queue_passable(struct vfio_ap_queue *q)
 	if (!q)
 		return false;
 
-	switch (q->reset_status.response_code) {
-	case AP_RESPONSE_NORMAL:
-	case AP_RESPONSE_DECONFIGURED:
-	case AP_RESPONSE_CHECKSTOPPED:
-		return true;
-	default:
-		return false;
-	}
+	/*
+	 * A queue is only passable if zeroization was confirmed by
+	 * apq_reset_check() via TAPQ status bit verification. This is
+	 * indicated by reset_status.response_code == AP_RESPONSE_NORMAL (0).
+	 * This is to protect against leaking the internal state of the queue
+	 * to the guest.
+	 */
+	return q->reset_status.response_code == AP_RESPONSE_NORMAL;
 }
 
 /*
@@ -2855,6 +2855,8 @@ int vfio_ap_mdev_probe_queue(struct ap_device *apdev)
 
 	if (matrix_mdev) {
 		vfio_ap_mdev_link_queue(matrix_mdev, q);
+		vfio_ap_mdev_reset_queue(q);
+		flush_work(&q->reset_work);
 
 		/*
 		 * If we're in the process of handling the adding of adapters or
@@ -2944,8 +2946,8 @@ done:
 		vfio_ap_unlink_queue_fr_mdev(q);
 
 	dev_set_drvdata(&apdev->device, NULL);
-	kfree(q);
 	release_update_locks_for_mdev(matrix_mdev);
+	kfree(q);
 }
 
 /**
@@ -3350,4 +3352,99 @@ do_unlock:
 	}
 
 	mutex_unlock(&matrix_dev->guests_lock);
+}
+
+/**
+ * vfio_ap_on_qstate_transition:
+ *
+ * AP bus callback notifying the vfio_ap device driver that the state of a
+ * queue has transitioned.
+ *
+ * @qstate_trans: the object containing a reference to the queue device and the
+ *		  state to which it transitioned.
+ */
+void vfio_ap_on_qstate_transition(struct ap_qstate_transition *qstate_trans)
+{
+	DECLARE_BITMAP(apm_filtered, AP_DEVICES);
+	int apqn = qstate_trans->queue->qid;
+	struct ap_matrix_mdev *matrix_mdev;
+	struct vfio_ap_queue *q;
+	/*
+	 * Take all three locks in order and look up the queue under them.
+	 * This is the same pattern used by vfio_ap_mdev_probe_queue() and
+	 * avoids two races present if vfio_ap_find_queue() is called first:
+	 *
+	 * 1. vfio_ap_mdev_remove_queue() can kfree(q) between the find and
+	 *    the lock acquisition, producing a use-after-free on q->matrix_mdev.
+	 *
+	 * 2. q->matrix_mdev can change (assign/unassign under guests_lock +
+	 *    mdevs_lock) between the find and get_update_locks_for_mdev(),
+	 *    causing kvm->lock to be taken without being released, or released
+	 *    without having been taken.
+	 */
+	matrix_mdev = get_update_locks_by_apqn(apqn);
+	if (!matrix_mdev)
+		goto out_unlock;
+
+	q = vfio_ap_mdev_get_queue(matrix_mdev, apqn);
+	if (!q)
+		goto out_unlock;
+
+	switch (qstate_trans->new_state) {
+	case AP_QUEUE_CONFIG_ON:
+	case AP_QUEUE_CHKSTOP_OFF:
+		/*
+		 * The queue has returned to operational state. Reset it to a
+		 * known-clean state before re-admitting it to the guest's APCB.
+		 * A queue returning from deconfigured or checkstopped state may
+		 * have stale association state, undelivered replies, or a residual
+		 * NIB address register; ZAPQ returns it to a known-clean baseline.
+		 * The guest AP bus handles re-initialisation (including
+		 * re-enabling interrupts) after a queue reappears; the brief stall
+		 * on any pending guest AQIC is an expected consequence of the
+		 * hardware event, not a driver bug.
+		 *
+		 * matrix_mdev is guaranteed non-NULL here: get_update_locks_by_apqn()
+		 * returns NULL (and we branch to out_unlock) when the queue is not
+		 * assigned to any mdev, so the check is unnecessary.
+		 */
+		vfio_ap_mdev_reset_queue(q);
+		flush_work(&q->reset_work);
+
+		if (vfio_ap_mdev_filter_matrix(matrix_mdev, apm_filtered)) {
+			vfio_ap_mdev_update_guest_apcb(matrix_mdev);
+			reset_queues_for_apids(matrix_mdev, apm_filtered);
+		}
+		break;
+	case AP_QUEUE_CONFIG_OFF:
+	case AP_QUEUE_CHKSTOP_ON:
+		/*
+		 * The queue has become non-operational. Hot-unplug its adapter
+		 * from the guest's shadow APCB so the guest stops issuing
+		 * operations to a queue it can no longer reach. Since queues are
+		 * addressed via a card/domain matrix it is not possible to remove
+		 * a single queue; the whole adapter must be unplugged.
+		 *
+		 * The queue remains bound to the driver and stays in
+		 * matrix_dev->info; vfio_ap_mdev_filter_matrix() will
+		 * re-admit it automatically when the queue returns to an
+		 * operational state (CONFIG_ON or CHKSTOP_OFF).
+		 */
+		if (test_bit_inv(AP_QID_CARD(q->apqn),
+				 matrix_mdev->shadow_apcb.apm) &&
+		    test_bit_inv(AP_QID_QUEUE(q->apqn),
+				 matrix_mdev->shadow_apcb.aqm)) {
+			clear_bit_inv(AP_QID_CARD(q->apqn),
+				      matrix_mdev->shadow_apcb.apm);
+			vfio_ap_mdev_update_guest_apcb(matrix_mdev);
+			reset_queues_for_apid(matrix_mdev,
+					      AP_QID_CARD(q->apqn));
+		}
+		break;
+	default:
+		break;
+	}
+
+out_unlock:
+	release_update_locks_for_mdev(matrix_mdev);
 }
