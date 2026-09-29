@@ -1702,11 +1702,13 @@ static u8 *rtw_build_rsvd_page(struct rtw_dev *rtwdev, u32 *size)
 	list_for_each_entry(rsvd_pkt, &rtwdev->rsvd_page_list, build_list) {
 		rtw_rsvd_page_list_to_buf(rtwdev, page_size, page_margin,
 					  page, buf, rsvd_pkt);
-		if (page == 0)
+		if (page == 0) {
 			page += rtw_len_to_page(rsvd_pkt->skb->len +
 						tx_desc_sz, page_size);
-		else
-			page += rtw_len_to_page(rsvd_pkt->skb->len, page_size);
+			/* keep the beacon for rtw_download_beacon() */
+			continue;
+		}
+		page += rtw_len_to_page(rsvd_pkt->skb->len, page_size);
 
 		kfree_skb(rsvd_pkt->skb);
 		rsvd_pkt->skb = NULL;
@@ -1725,7 +1727,6 @@ release_skb:
 
 static int rtw_download_beacon(struct rtw_dev *rtwdev)
 {
-	struct ieee80211_hw *hw = rtwdev->hw;
 	struct rtw_rsvd_page *rsvd_pkt;
 	struct sk_buff *skb;
 	int ret = 0;
@@ -1744,25 +1745,25 @@ static int rtw_download_beacon(struct rtw_dev *rtwdev)
 		return -EINVAL;
 	}
 
-	skb = rtw_get_rsvd_page_skb(hw, rsvd_pkt);
+	/* the beacon kept by rtw_build_rsvd_page() */
+	skb = rsvd_pkt->skb;
 	if (!skb) {
 		rtw_err(rtwdev, "failed to get beacon skb\n");
-		return -ENOMEM;
+		return -ENOENT;
 	}
 
 	ret = rtw_download_drv_rsvd_page(rtwdev, skb->data, skb->len);
 	if (ret)
 		rtw_err(rtwdev, "failed to download drv rsvd page\n");
 
-	dev_kfree_skb(skb);
-
 	return ret;
 }
 
 int rtw_fw_download_rsvd_page(struct rtw_dev *rtwdev)
 {
-	u8 *buf;
+	struct rtw_rsvd_page *rsvd_pkt;
 	u32 size;
+	u8 *buf;
 	int ret;
 
 	buf = rtw_build_rsvd_page(rtwdev, &size);
@@ -1790,6 +1791,12 @@ int rtw_fw_download_rsvd_page(struct rtw_dev *rtwdev)
 
 free:
 	kfree(buf);
+
+	/* free the beacon kept by rtw_build_rsvd_page() */
+	rsvd_pkt = list_first_entry(&rtwdev->rsvd_page_list,
+				    struct rtw_rsvd_page, build_list);
+	kfree_skb(rsvd_pkt->skb);
+	rsvd_pkt->skb = NULL;
 
 	return ret;
 }
