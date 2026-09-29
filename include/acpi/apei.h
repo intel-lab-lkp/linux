@@ -51,7 +51,7 @@ ssize_t erst_read_record(u64 record_id, struct cper_record_header *record,
 int erst_clear(u64 record_id);
 
 int arch_apei_enable_cmcff(struct acpi_hest_header *hest_hdr, void *data);
-void arch_apei_report_mem_error(int sev, struct cper_sec_mem_err *mem_err);
+void arch_apei_report_mem_error(int sev, struct cper_mem_err_compact *mem_err);
 
 #endif
 #endif

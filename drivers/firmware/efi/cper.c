@@ -555,36 +555,41 @@ const char *cper_mem_err_unpack(struct trace_seq *p,
 	return ret;
 }
 
-static void cper_print_mem(const char *pfx, const struct cper_sec_mem_err *mem,
-	int len)
+static void cper_print_mem(const char *pfx, const guid_t *sec_type,
+			   const void *mem, int len)
 {
 	struct cper_mem_err_compact cmem;
 	char rcd_decode_str[CPER_REC_LEN];
 
 	/* Don't trust UEFI 2.1/2.2 structure with bad validation bits */
-	if (len == sizeof(struct cper_sec_mem_err_old) &&
-	    (mem->validation_bits & ~(CPER_MEM_VALID_RANK_NUMBER - 1))) {
+	if (guid_equal(sec_type, &CPER_SEC_PLATFORM_MEM) &&
+	    len == sizeof(struct cper_sec_mem_err_old) &&
+	    (((const struct cper_sec_mem_err_old *)mem)->validation_bits &
+	     ~(CPER_MEM_VALID_RANK_NUMBER - 1))) {
 		pr_err(FW_WARN "valid bits set for fields beyond structure\n");
 		return;
 	}
-	if (mem->validation_bits & CPER_MEM_VALID_ERROR_STATUS)
+
+	if (cper_mem_err_parse(sec_type, mem, len, &cmem))
+		return;
+
+	if (cmem.validation_bits & CPER_MEM_VALID_ERROR_STATUS)
 		printk("%s error_status: %s (0x%016llx)\n",
-		       pfx, cper_mem_err_status_str(mem->error_status),
-		       mem->error_status);
-	if (mem->validation_bits & CPER_MEM_VALID_PA)
+		       pfx, cper_mem_err_status_str(cmem.error_status),
+		       cmem.error_status);
+	if (cmem.validation_bits & CPER_MEM_VALID_PA)
 		printk("%s""physical_address: 0x%016llx\n",
-		       pfx, mem->physical_addr);
-	if (mem->validation_bits & CPER_MEM_VALID_PA_MASK)
+		       pfx, cmem.physical_addr);
+	if (cmem.validation_bits & CPER_MEM_VALID_PA_MASK)
 		printk("%s""physical_address_mask: 0x%016llx\n",
-		       pfx, mem->physical_addr_mask);
-	cper_mem_err_pack(mem, &cmem);
+		       pfx, cmem.physical_addr_mask);
 	if (cper_mem_err_location(&cmem, rcd_decode_str))
 		printk("%s%s\n", pfx, rcd_decode_str);
-	if (mem->validation_bits & CPER_MEM_VALID_ERROR_TYPE) {
-		u8 etype = mem->error_type;
-		printk("%s""error_type: %d, %s\n", pfx, etype,
-		       cper_mem_err_type_str(etype));
-	}
+	if (cmem.validation_bits & CPER_MEM_VALID_ERROR_TYPE)
+		printk("%s""error_type: %d, %s\n", pfx, cmem.error_type,
+		       cper_mem_err_type_str(cmem.error_type));
+	if (cmem.validation_bits & CPER_MEM_VALID_STATUS)
+		printk("%s""status: 0x%02x\n", pfx, cmem.status);
 	if (cper_dimm_err_location(&cmem, rcd_decode_str))
 		printk("%s%s\n", pfx, rcd_decode_str);
 }
@@ -784,13 +789,14 @@ cper_estatus_print_section(const char *pfx, struct acpi_hest_generic_data *gdata
 			cper_print_proc_generic(newpfx, proc_err);
 		else
 			goto err_section_too_small;
-	} else if (guid_equal(sec_type, &CPER_SEC_PLATFORM_MEM)) {
-		struct cper_sec_mem_err *mem_err = acpi_hest_get_payload(gdata);
-
+	} else if (cper_sec_is_platform_mem(sec_type)) {
 		printk("%s""section_type: memory error\n", newpfx);
-		if (gdata->error_data_length >=
-		    sizeof(struct cper_sec_mem_err_old))
-			cper_print_mem(newpfx, mem_err,
+		if ((guid_equal(sec_type, &CPER_SEC_PLATFORM_MEM) &&
+		     gdata->error_data_length >= sizeof(struct cper_sec_mem_err_old)) ||
+		    (guid_equal(sec_type, &CPER_SEC_PLATFORM_MEM2) &&
+		     gdata->error_data_length >= sizeof(struct cper_sec_mem_err2)))
+			cper_print_mem(newpfx, sec_type,
+				       acpi_hest_get_payload(gdata),
 				       gdata->error_data_length);
 		else
 			goto err_section_too_small;

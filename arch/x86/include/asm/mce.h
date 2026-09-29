@@ -330,9 +330,9 @@ extern void (*deferred_error_int_vector)(void);
  * Used by APEI to report memory error via /dev/mcelog
  */
 
-struct cper_sec_mem_err;
+struct cper_mem_err_compact;
 extern void apei_mce_report_mem_error(int corrected,
-				      struct cper_sec_mem_err *mem_err);
+				      struct cper_mem_err_compact *mem_err);
 
 /*
  * Enumerate new IP types and HWID values in AMD processors which support

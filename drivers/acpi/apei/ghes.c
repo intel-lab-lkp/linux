@@ -529,11 +529,11 @@ static bool ghes_do_memory_failure(u64 physical_addr, int flags)
 }
 
 static bool ghes_handle_memory_failure(struct acpi_hest_generic_data *gdata,
+				       struct cper_mem_err_compact *mem_err,
 				       int sev, bool sync)
 {
 	int flags = -1;
 	int sec_sev = ghes_severity(gdata->error_severity);
-	struct cper_sec_mem_err *mem_err = acpi_hest_get_payload(gdata);
 
 	if (!(mem_err->validation_bits & CPER_MEM_VALID_PA))
 		return false;
@@ -915,7 +915,7 @@ static void ghes_log_hwerr(int sev, guid_t *sec_type)
 		return;
 	}
 
-	if (guid_equal(sec_type, &CPER_SEC_PLATFORM_MEM)) {
+	if (cper_sec_is_platform_mem(sec_type)) {
 		hwerr_log_error_type(HWERR_RECOV_MEMORY);
 		return;
 	}
@@ -945,13 +945,19 @@ static void ghes_do_proc(struct ghes *ghes,
 			fru_text = gdata->fru_text;
 
 		ghes_log_hwerr(sev, sec_type);
-		if (guid_equal(sec_type, &CPER_SEC_PLATFORM_MEM)) {
-			struct cper_sec_mem_err *mem_err = acpi_hest_get_payload(gdata);
+		if (cper_sec_is_platform_mem(sec_type)) {
+			struct cper_mem_err_compact mem_err;
 
-			atomic_notifier_call_chain(&ghes_report_chain, sev, mem_err);
+			if (cper_mem_err_parse(sec_type, acpi_hest_get_payload(gdata),
+					       gdata->error_data_length, &mem_err)) {
+				pr_warn(FW_WARN "memory error section length is too small\n");
+				continue;
+			}
 
-			arch_apei_report_mem_error(sev, mem_err);
-			queued = ghes_handle_memory_failure(gdata, sev, sync);
+			atomic_notifier_call_chain(&ghes_report_chain, sev, &mem_err);
+
+			arch_apei_report_mem_error(sev, &mem_err);
+			queued = ghes_handle_memory_failure(gdata, &mem_err, sev, sync);
 		} else if (guid_equal(sec_type, &CPER_SEC_PCIE)) {
 			ghes_handle_aer(gdata);
 		} else if (guid_equal(sec_type, &CPER_SEC_PROC_ARM)) {

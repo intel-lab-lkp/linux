@@ -26,7 +26,7 @@
 
 #include "internal.h"
 
-void apei_mce_report_mem_error(int severity, struct cper_sec_mem_err *mem_err)
+void apei_mce_report_mem_error(int severity, struct cper_mem_err_compact *mem_err)
 {
 	struct mce_hw_err err;
 	struct mce *m;

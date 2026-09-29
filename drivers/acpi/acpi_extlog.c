@@ -181,7 +181,7 @@ extlog_cxl_cper_handle_prot_err(struct cxl_cper_sec_prot_err *prot_err,
 }
 
 static void
-extlog_mem_err_event(struct cper_sec_mem_err *mem, u32 err_seq,
+extlog_mem_err_event(struct cper_mem_err_compact *mem, u32 err_seq,
 		     const guid_t *fru_id, const char *fru_text, u8 sev)
 {
 #if defined(CONFIG_ACPI_EXTLOG) || defined(CONFIG_ACPI_EXTLOG_MODULE)
@@ -234,10 +234,11 @@ static int extlog_print(struct notifier_block *nb, unsigned long val,
 		else
 			fru_text = "";
 		sec_type = (guid_t *)gdata->section_type;
-		if (guid_equal(sec_type, &CPER_SEC_PLATFORM_MEM)) {
-			struct cper_sec_mem_err *mem = acpi_hest_get_payload(gdata);
+		if (cper_sec_is_platform_mem(sec_type)) {
+			struct cper_mem_err_compact mem;
 
-			if (gdata->error_data_length >= sizeof(*mem))
+			if (!cper_mem_err_parse(sec_type, acpi_hest_get_payload(gdata),
+						gdata->error_data_length, &mem))
 				extlog_mem_err_event(&mem, err_seq, fru_id,
 						     fru_text,
 						     (u8)gdata->error_severity);

@@ -242,7 +242,7 @@ static void ghes_scan_system(void)
 	system_scanned = true;
 }
 
-static int print_mem_error_other_detail(const struct cper_sec_mem_err *mem, char *msg,
+static int print_mem_error_other_detail(struct cper_mem_err_compact *mem, char *msg,
 					const char *location, unsigned int len)
 {
 	u32 n;
@@ -255,13 +255,15 @@ static int print_mem_error_other_detail(const struct cper_sec_mem_err *mem, char
 
 	n += scnprintf(msg + n, len - n, "APEI location: %s ", location);
 
-	if (!(mem->validation_bits & CPER_MEM_VALID_ERROR_STATUS))
-		goto out;
+	if (mem->validation_bits & CPER_MEM_VALID_ERROR_STATUS) {
+		n += scnprintf(msg + n, len - n, "status(0x%016llx): ", mem->error_status);
+		n += scnprintf(msg + n, len - n, "%s ",
+			       cper_mem_err_status_str(mem->error_status));
+	}
+	if (mem->validation_bits & CPER_MEM_VALID_STATUS)
+		n += scnprintf(msg + n, len - n, "section_status:0x%02x ",
+			       mem->status);
 
-	n += scnprintf(msg + n, len - n, "status(0x%016llx): ", mem->error_status);
-	n += scnprintf(msg + n, len - n, "%s ", cper_mem_err_status_str(mem->error_status));
-
-out:
 	msg[n] = '\0';
 
 	return n;
@@ -270,8 +272,7 @@ out:
 static int ghes_edac_report_mem_error(struct notifier_block *nb,
 				      unsigned long val, void *data)
 {
-	struct cper_sec_mem_err *mem_err = (struct cper_sec_mem_err *)data;
-	struct cper_mem_err_compact cmem;
+	struct cper_mem_err_compact *mem_err = data;
 	struct edac_raw_error_desc *e;
 	struct mem_ctl_info *mci;
 	unsigned long sev = val;
@@ -348,14 +349,13 @@ static int ghes_edac_report_mem_error(struct notifier_block *nb,
 
 	/* Memory error location, mapped on e->location */
 	p = e->location;
-	cper_mem_err_pack(mem_err, &cmem);
-	p += cper_mem_err_location(&cmem, p);
+	p += cper_mem_err_location(mem_err, p);
 
 	if (mem_err->validation_bits & CPER_MEM_VALID_MODULE_HANDLE) {
 		struct dimm_info *dimm;
 
-		p += cper_dimm_err_location(&cmem, p);
-		dimm = find_dimm_by_handle(mci, mem_err->mem_dev_handle);
+		p += cper_dimm_err_location(mem_err, p);
+		dimm = find_dimm_by_handle(mci, (u16)mem_err->mem_dev_handle);
 		if (dimm) {
 			e->top_layer = dimm->idx;
 			strscpy(e->label, dimm->label);

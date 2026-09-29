@@ -24,7 +24,7 @@
 
 #if defined(CONFIG_ACPI_EXTLOG) || defined(CONFIG_ACPI_EXTLOG_MODULE)
 TRACE_EVENT(extlog_mem_event,
-	TP_PROTO(struct cper_sec_mem_err *mem,
+	TP_PROTO(struct cper_mem_err_compact *mem,
 		 u32 err_seq,
 		 const guid_t *fru_id,
 		 const char *fru_text,
@@ -61,7 +61,7 @@ TRACE_EVENT(extlog_mem_event,
 			__entry->pa_mask_lsb = ~0;
 		__entry->fru_id = *fru_id;
 		__assign_str(fru_text);
-		cper_mem_err_pack(mem, &__entry->data);
+		__entry->data = *mem;
 	),
 
 	TP_printk("{%d} %s error: %s physical addr: %016llx (mask lsb: %x) %sFRU: %pUl %.20s",
