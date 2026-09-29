@@ -8,6 +8,8 @@
 #ifndef PUCAN_H
 #define PUCAN_H
 
+#include <linux/bitfield.h>
+
 /* uCAN commands opcodes list (low-order 10 bits) */
 #define PUCAN_CMD_NOP			0x000
 #define PUCAN_CMD_RESET_MODE		0x001
@@ -197,7 +199,18 @@ struct __packed pucan_rx_msg {
 #define PUCAN_ERMSG_FORM_ERROR		1
 #define PUCAN_ERMSG_STUFF_ERROR		2
 #define PUCAN_ERMSG_OTHER_ERROR		3
-#define PUCAN_ERMSG_ERR_CNT_DEC		4
+
+#define PUCAN_ERMSG_TYPE_MASK		GENMASK(6, 4)
+#define PUCAN_ERMSG_D_BIT		BIT(7)
+#define PUCAN_ERMSG_TYPE(e) \
+	FIELD_GET(PUCAN_ERMSG_TYPE_MASK, (e)->channel_type_d)
+
+#define PUCAN_ERMSG_RX(e) \
+	FIELD_GET(PUCAN_ERMSG_D_BIT, (e)->channel_type_d)
+
+#define PUCAN_ERMSG_CODE_MASK		GENMASK(6, 0)
+#define PUCAN_ERMSG_CODE(e) \
+	FIELD_GET(PUCAN_ERMSG_CODE_MASK, (e)->code_g)
 
 struct __packed pucan_error_msg {
 	__le16	size;
