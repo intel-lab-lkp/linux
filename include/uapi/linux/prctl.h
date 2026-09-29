@@ -70,6 +70,7 @@
 /* Get/set the capability bounding set (as per security/commoncap.c) */
 #define PR_CAPBSET_READ 23
 #define PR_CAPBSET_DROP 24
+#define PR_CAPBSET_DROP_MASK 82
 
 /* Get/set the process' ability to use the timestamp counter instruction */
 #define PR_GET_TSC 25

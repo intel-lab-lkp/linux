@@ -3,6 +3,7 @@
  */
 
 #include <linux/capability.h>
+#include <linux/cred.h>
 #include <linux/audit.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
@@ -19,6 +20,7 @@
 #include <linux/hugetlb.h>
 #include <linux/mount.h>
 #include <linux/sched.h>
+#include <linux/sched/signal.h>
 #include <linux/prctl.h>
 #include <linux/securebits.h>
 #include <linux/user_namespace.h>
@@ -29,6 +31,25 @@
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/capability.h>
+
+/**
+ * Effective bounding set of @cred in @task's thread group
+ * @task: task whose thread group's pending drop applies
+ * @cred: credentials to read the bounding set from
+ *
+ * A drop recorded by PR_CAPBSET_DROP_MASK is authoritative on the thread group
+ * and may not have been materialized into every thread's cred yet, so the
+ * effective bounding set is the cred's own set minus the group's pending drop.
+ */
+kernel_cap_t cap_bset_effective(const struct task_struct *task,
+				const struct cred *cred)
+{
+	kernel_cap_t pending = {
+		.val = atomic64_read(&task->signal->cap_bset_pending),
+	};
+
+	return cap_drop(cred->cap_bset, pending);
+}
 
 /*
  * If a non-root user executes a setuid-root binary in
@@ -284,8 +305,8 @@ int cap_capset(struct cred *new,
 
 	if (!cap_issubset(*inheritable,
 			  cap_combine(old->cap_inheritable,
-				      old->cap_bset)))
 		/* no new pI capabilities outside bounding set */
+				      cap_bset_effective(current, old))))
 		return -EPERM;
 
 	/* verify restrictions on target's new Permitted set */
@@ -849,7 +870,7 @@ static void handle_privileged_root(struct linux_binprm *bprm, bool has_fcap,
 	 */
 	if (__is_eff(root_uid, new) || __is_real(root_uid, new)) {
 		/* pP' = (cap_bset & ~0) | (pI & ~0) */
-		new->cap_permitted = cap_combine(old->cap_bset,
+		new->cap_permitted = cap_combine(new->cap_bset,
 						 old->cap_inheritable);
 	}
 	/*
@@ -924,6 +945,8 @@ int cap_bprm_creds_from_file(struct linux_binprm *bprm, const struct file *file)
 	bool effective = false, has_fcap = false, id_changed;
 	int ret;
 	kuid_t root_uid;
+
+	new->cap_bset = cap_bset_effective(current, new);
 
 	if (WARN_ON(!cap_ambient_invariant_ok(old)))
 		return -EPERM;
@@ -1283,6 +1306,63 @@ static int cap_prctl_drop(unsigned long cap)
 	return commit_creds(new);
 }
 
+static int cap_bset_drop_process(kernel_cap_t mask)
+{
+	kernel_cap_t pending;
+	struct cred *new;
+
+	new = prepare_creds();
+	if (!new)
+		return -ENOMEM;
+
+	/*
+	 * Record the drop before committing the caller's cred, so that a
+	 * thread created from now on is guaranteed to observe it.  Apply the
+	 * current union, not just this call's mask, to the caller's cred.
+	 */
+	spin_lock_irq(&current->sighand->siglock);
+	atomic64_or(mask.val, &current->signal->cap_bset_pending);
+	pending.val = atomic64_read(&current->signal->cap_bset_pending);
+	spin_unlock_irq(&current->sighand->siglock);
+
+	new->cap_bset = cap_drop(new->cap_bset, pending);
+	commit_creds(new);
+
+	return 0;
+}
+
+/*
+ * Propagate a pending process-wide bounding-set drop to @p, a task being
+ * created by the current thread.  Threads sharing the group read
+ * current->signal->cap_bset_pending directly; a forked child gets its own
+ * signal_struct and must carry the mask itself.  Called under
+ * current->sighand->siglock, which serializes it with cap_bset_drop_process().
+ */
+void cap_bset_drop_fork(struct task_struct *p)
+{
+	kernel_cap_t mask = {
+		.val = atomic64_read(&current->signal->cap_bset_pending),
+	};
+
+	if (cap_isclear(mask) || p->signal == current->signal)
+		return;
+
+	atomic64_or(mask.val, &p->signal->cap_bset_pending);
+}
+
+static int cap_prctl_drop_mask(unsigned long low, unsigned long high)
+{
+	kernel_cap_t mask = mk_kernel_cap((u32)low, (u32)high);
+
+	if (cap_isclear(mask))
+		return 0;
+
+	if (!ns_capable(current_user_ns(), CAP_SETPCAP))
+		return -EPERM;
+
+	return cap_bset_drop_process(mask);
+}
+
 /**
  * cap_task_prctl - Implement process control functions for this security module
  * @option: The process control function requested
@@ -1308,10 +1388,15 @@ int cap_task_prctl(int option, unsigned long arg2, unsigned long arg3,
 	case PR_CAPBSET_READ:
 		if (!cap_valid(arg2))
 			return -EINVAL;
-		return !!cap_raised(old->cap_bset, arg2);
+		return !!cap_raised(cap_bset_effective(current, old), arg2);
 
 	case PR_CAPBSET_DROP:
 		return cap_prctl_drop(arg2);
+
+	case PR_CAPBSET_DROP_MASK:
+		if (arg4 || arg5)
+			return -EINVAL;
+		return cap_prctl_drop_mask(arg2, arg3);
 
 	/*
 	 * The next four prctl's remain to assist with transitioning a

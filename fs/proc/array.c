@@ -63,6 +63,7 @@
 #include <linux/tty.h>
 #include <linux/string.h>
 #include <linux/mman.h>
+#include <linux/capability.h>
 #include <linux/sched/mm.h>
 #include <linux/sched/numa_balancing.h>
 #include <linux/sched/task_stack.h>
@@ -318,7 +319,7 @@ static inline void task_cap(struct seq_file *m, struct task_struct *p)
 	cap_inheritable	= cred->cap_inheritable;
 	cap_permitted	= cred->cap_permitted;
 	cap_effective	= cred->cap_effective;
-	cap_bset	= cred->cap_bset;
+	cap_bset	= cap_bset_effective(p, cred);
 	cap_ambient	= cred->cap_ambient;
 	rcu_read_unlock();
 

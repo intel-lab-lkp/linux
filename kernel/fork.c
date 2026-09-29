@@ -2503,6 +2503,7 @@ __latent_entropy struct task_struct *copy_process(
 	 * before holding sighand lock.
 	 */
 	copy_seccomp(p);
+	cap_bset_drop_fork(p);
 
 	if (clone_flags & CLONE_NNP)
 		task_set_no_new_privs(p);

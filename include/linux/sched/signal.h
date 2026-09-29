@@ -98,6 +98,14 @@ struct signal_struct {
 	int			quick_threads;
 	struct list_head	thread_head;
 
+	/*
+	 * Capabilities being removed from the bounding set of every thread in
+	 * this group by PR_CAPBSET_DROP_MASK.  Read on capability-transition
+	 * paths without sighand->siglock, hence atomic64 (a 64-bit value would
+	 * otherwise tear on 32-bit).
+	 */
+	atomic64_t		cap_bset_pending;
+
 	wait_queue_head_t	wait_chldexit;	/* for wait4() */
 
 	/* current thread group signal load-balancing target: */
