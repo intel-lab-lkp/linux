@@ -62,6 +62,7 @@ properties:
               - mscc,ocelot-spi
               - mscc,jaguar2-spi
               - sophgo,sg2042-spi
+              - syna,sl261x-spi
               - thead,th1520-spi
           - const: snps,dw-apb-ssi
       - description: Vendor controllers compatible with v1.01a
