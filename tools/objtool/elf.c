@@ -1239,6 +1239,9 @@ struct elf *elf_open_read(const char *name, int flags)
 		goto err;
 	}
 
+	if (opts.ftr_fixup)
+		elf_flagelf(elf->elf, ELF_C_SET, ELF_F_LAYOUT);
+
 	if (!gelf_getehdr(elf->elf, &elf->ehdr)) {
 		ERROR_ELF("gelf_getehdr");
 		goto err;
