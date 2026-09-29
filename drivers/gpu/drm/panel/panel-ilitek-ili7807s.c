@@ -38,6 +38,7 @@ static const struct regulator_bulk_data ili7807s_supplies[] = {
 	{ .supply = "vddi" },
 	{ .supply = "avdd" },
 	{ .supply = "avee" },
+	{ .supply = "wled" },
 };
 
 static inline struct ili7807s *to_ili7807s(struct drm_panel *panel)
