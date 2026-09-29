@@ -4338,6 +4338,9 @@ static bool find_free_extent_skip_block_group(struct btrfs_block_group *block_gr
 			ffe_ctl->total_free_space = max(ffe_ctl->total_free_space,
 							free_space);
 			skip = true;
+		} else if (!find_free_extent_check_size_class(ffe_ctl, block_group)) {
+			ffe_ctl->size_class_skipped = true;
+			skip = true;
 		}
 	}
 	if (!skip)
