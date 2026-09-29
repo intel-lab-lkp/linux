@@ -178,6 +178,15 @@ Misaligned WRITE:
     with how far concurrent writers drift apart, not with bytes
     written.
 
+    Whether those pages are dropped at all is a policy choice, selected
+    by /sys/kernel/debug/nfsd/direct_misaligned_dontcache (default Y).
+    Write N to issue the start and end segments, and the whole-WRITE
+    fallbacks, as ordinary cached buffered IO: nothing is claimed or
+    marked and the pages stay until reclaim, which suits a workload that
+    reads back or rewrites what it just wrote. The O_DIRECT middle
+    segment is unaffected. The knob is sampled once per WRITE, so a
+    change takes effect immediately.
+
     The O_DIRECT middle segment also carries the DONTCACHE flag. It has
     no effect while the IO really is O_DIRECT, but a filesystem may
     decide on its own to service the segment with buffered IO instead

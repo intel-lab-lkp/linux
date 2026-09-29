@@ -144,6 +144,24 @@ void nfsd_debugfs_exit(void)
  * Default 2.  Not yet tuned by benchmarking.
  */
 
+/*
+ * /sys/kernel/debug/nfsd/direct_misaligned_dontcache
+ *
+ * How a direct-mode WRITE issues the I/O that cannot be direct: the
+ * misaligned start and end of a split WRITE, and the whole WRITE when it
+ * is not split.
+ *
+ * Contents:
+ *   Y: DONTCACHE when the filesystem supports it, with the boundary page
+ *      of a split kept in the page cache only until both WRITEs sharing
+ *      it have written it
+ *   N: ordinary cached buffered IO, left in the page cache until
+ *      reclaim, for A/B comparison against the DONTCACHE path
+ *
+ * Sampled once per WRITE, so it takes effect immediately.  The direct
+ * middle segment is unaffected.
+ */
+
 void nfsd_debugfs_init(void)
 {
 	nfsd_top_dir = debugfs_create_dir("nfsd", NULL);
@@ -159,6 +177,9 @@ void nfsd_debugfs_init(void)
 
 	debugfs_create_u32("direct_misaligned_num_pages", 0644, nfsd_top_dir,
 			   &nfsd_direct_misaligned_num_pages);
+
+	debugfs_create_bool("direct_misaligned_dontcache", 0644, nfsd_top_dir,
+			    &nfsd_direct_misaligned_dontcache);
 #ifdef CONFIG_NFSD_V4
 	debugfs_create_bool("delegated_timestamps", 0644, nfsd_top_dir,
 			    &nfsd_delegts_enabled);
