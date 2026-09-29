@@ -388,6 +388,11 @@ static int walk_nested_s2_pgd(struct kvm_vcpu *vcpu, phys_addr_t ipa,
 		(ipa & GENMASK_ULL(addr_bottom - 1, 0));
 	out->output = paddr;
 	out->block_size = 1UL << ((3 - level) * stride + wi->pgshift);
+	/*
+	 * L1 descriptors keep the legacy encoding: S2AP[1] is the write
+	 * permission, and DBM is RES0 (the L1-visible HAFDBS is limited
+	 * to AF-only).
+	 */
 	out->readable = desc & KVM_PTE_LEAF_ATTR_LO_S2_S2AP_R;
 	out->writable = desc & KVM_PTE_LEAF_ATTR_LO_S2_S2AP_W;
 	out->level = level;
