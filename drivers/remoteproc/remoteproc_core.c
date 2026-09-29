@@ -1348,6 +1348,59 @@ reset_table_ptr:
 	return ret;
 }
 
+static int rproc_reset_rsc_table_on_detach(struct rproc *rproc);
+static int rproc_reset_rsc_table_on_stop(struct rproc *rproc);
+
+/*
+ * Undo an attach whose subdevice registration failed.  The remote
+ * processor was started by another entity and is not ours to power
+ * off, so roll back with detach() when available and fall back to
+ * stop() when there is no detach() or when it failed.  stop() is
+ * the only rollback that does not rely on the remote side.  A
+ * processor powered off through the fallback is marked RPROC_OFFLINE,
+ * so the next boot reloads firmware instead of attaching to a dead
+ * core; with neither handler there is nothing to roll back with and
+ * the processor is left running.
+ *
+ * The resource table resets are best-effort: when one fails, the
+ * unwind carries on with detach()/stop() anyway.  Unlike
+ * __rproc_detach() and rproc_stop(), which bail out before touching
+ * the processor when their reset fails, this is already an error
+ * path, and detaching the remote processor -- or, failing that,
+ * powering it off -- is the minimum it must still deliver.
+ */
+static void rproc_unwind_attach(struct rproc *rproc)
+{
+	struct device *dev = &rproc->dev;
+	int ret;
+
+	if (rproc->ops->detach) {
+		ret = rproc_reset_rsc_table_on_detach(rproc);
+		if (ret)
+			dev_err(dev, "can't reset rsc table on detach: %d\n",
+				ret);
+
+		ret = rproc->ops->detach(rproc);
+		if (!ret)
+			return;
+
+		dev_err(dev, "can't detach from rproc %s: %d\n",
+			rproc->name, ret);
+	}
+
+	if (rproc->ops->stop) {
+		ret = rproc_reset_rsc_table_on_stop(rproc);
+		if (ret)
+			dev_err(dev, "can't reset rsc table on stop: %d\n",
+				ret);
+
+		if (rproc->ops->stop(rproc))
+			dev_err(dev, "can't stop rproc %s\n", rproc->name);
+		else
+			rproc->state = RPROC_OFFLINE;
+	}
+}
+
 static int __rproc_attach(struct rproc *rproc)
 {
 	struct device *dev = &rproc->dev;
@@ -1373,7 +1426,7 @@ static int __rproc_attach(struct rproc *rproc)
 	if (ret) {
 		dev_err(dev, "failed to probe subdevices for %s: %d\n",
 			rproc->name, ret);
-		goto stop_rproc;
+		goto unwind_attach;
 	}
 
 	rproc->state = RPROC_ATTACHED;
@@ -1382,8 +1435,8 @@ static int __rproc_attach(struct rproc *rproc)
 
 	return 0;
 
-stop_rproc:
-	rproc->ops->stop(rproc);
+unwind_attach:
+	rproc_unwind_attach(rproc);
 unprepare_subdevices:
 	rproc_unprepare_subdevices(rproc);
 out:
@@ -1562,6 +1615,7 @@ static int rproc_reset_rsc_table_on_detach(struct rproc *rproc)
 	 * rproc_set_rsc_table().
 	 */
 	kfree(rproc->clean_table);
+	rproc->clean_table = NULL;
 
 	return 0;
 }
@@ -1597,6 +1651,7 @@ static int rproc_reset_rsc_table_on_stop(struct rproc *rproc)
 	 * won't be needed.  Allocated in rproc_set_rsc_table().
 	 */
 	kfree(rproc->clean_table);
+	rproc->clean_table = NULL;
 
 out:
 	/*
@@ -1675,6 +1730,10 @@ clean_up_resources:
 	/* release HW resources if needed */
 	rproc_unprepare_device(rproc);
 	kfree(rproc->clean_table);
+	rproc->clean_table = NULL;
+	kfree(rproc->cached_table);
+	rproc->cached_table = NULL;
+	rproc->table_ptr = NULL;
 disable_iommu:
 	rproc_disable_iommu(rproc);
 	return ret;
