@@ -425,11 +425,11 @@
 #define CHNL_IN_BUF_XTND_ADDR					0x00b8
 
 /*
- * The ISI shifts the 10-bit and 12-bit RAW formats left by 6 and 4 bits when
- * using CHNL_IMG_CTRL_FORMAT_RAW10 or CHNL_IMG_CTRL_FORMAT_RAW12 respectively,
- * to align the bits to the left and pad with zeros in the LSBs. The
- * corresponding V4L2 formats are however right-aligned, so
- * CHNL_IMG_CTRL_FORMAT_RAW16 must be used to avoid the left shift.
+ * The ISI shifts the 10/12/14-bit RAW formats left to MSB-align the output.
+ * On platforms where the Pixel Link provides LSB-aligned data, the RAW16
+ * passthrough must be used instead to preserve LSB alignment. On platforms
+ * where the Pixel Link provides MSB-aligned data (i.MX95), these formats
+ * cannot produce correct V4L2-compatible output and must be excluded.
  */
 static inline bool isi_out_raw_shifted(u32 format)
 {

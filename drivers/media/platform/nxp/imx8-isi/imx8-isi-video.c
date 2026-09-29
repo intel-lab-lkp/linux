@@ -458,13 +458,31 @@ static const struct mxc_isi_format_info mxc_isi_formats[] = {
 	}
 };
 
+/*
+ * On i.MX95, the Pixel Link provides MSB-aligned RAW data, so neither the
+ * RAW16 passthrough nor the native RAW10/12/14 output formats can produce
+ * correct V4L2-compatible LSB-aligned output. Exclude these formats.
+ */
+static bool
+mxc_isi_format_is_raw_unsupported(const struct mxc_isi_plat_data *pdata,
+				  const struct mxc_isi_format_info *fmt)
+{
+	return pdata && pdata->model == MXC_ISI_IMX95 &&
+	       isi_out_raw_shifted(fmt->isi_out_format);
+}
+
 const struct mxc_isi_format_info *
-mxc_isi_format_by_fourcc(u32 fourcc, enum mxc_isi_video_type type)
+mxc_isi_format_by_fourcc(const struct mxc_isi_plat_data *pdata, u32 fourcc,
+			 enum mxc_isi_video_type type)
 {
 	unsigned int i;
 
 	for (i = 0; i < ARRAY_SIZE(mxc_isi_formats); i++) {
 		const struct mxc_isi_format_info *fmt = &mxc_isi_formats[i];
+
+		/* Skip formats unsupported by the platform. */
+		if (mxc_isi_format_is_raw_unsupported(pdata, fmt))
+			continue;
 
 		if (fmt->fourcc == fourcc && fmt->type & type)
 			return fmt;
@@ -474,13 +492,18 @@ mxc_isi_format_by_fourcc(u32 fourcc, enum mxc_isi_video_type type)
 }
 
 const struct mxc_isi_format_info *
-mxc_isi_format_enum(const struct v4l2_fmtdesc *f, enum mxc_isi_video_type type)
+mxc_isi_format_enum(const struct mxc_isi_plat_data *pdata,
+		    const struct v4l2_fmtdesc *f, enum mxc_isi_video_type type)
 {
 	unsigned int index = f->index;
 	unsigned int i;
 
 	for (i = 0; i < ARRAY_SIZE(mxc_isi_formats); i++) {
 		const struct mxc_isi_format_info *fmt = &mxc_isi_formats[i];
+
+		/* Skip formats unsupported by the platform. */
+		if (mxc_isi_format_is_raw_unsupported(pdata, fmt))
+			continue;
 
 		if (f->mbus_code && fmt->mbus_code != f->mbus_code)
 			continue;
@@ -509,7 +532,7 @@ mxc_isi_format_try(struct mxc_isi_pipe *pipe, struct v4l2_pix_format_mplane *pix
 		  ? MXC_ISI_MAX_WIDTH_UNCHAINED
 		  : MXC_ISI_MAX_WIDTH_CHAINED;
 
-	fmt = mxc_isi_format_by_fourcc(pix->pixelformat, type);
+	fmt = mxc_isi_format_by_fourcc(pipe->isi->pdata, pix->pixelformat, type);
 	if (!fmt)
 		fmt = &mxc_isi_formats[0];
 
@@ -803,7 +826,8 @@ static int mxc_isi_video_validate_format(struct mxc_isi_video *video)
 
 	state = v4l2_subdev_lock_and_get_active_state(sd);
 
-	info = mxc_isi_format_by_fourcc(video->pix.pixelformat,
+	info = mxc_isi_format_by_fourcc(video->pipe->isi->pdata,
+					video->pix.pixelformat,
 					MXC_ISI_VIDEO_CAP);
 	format = v4l2_subdev_state_get_format(state, MXC_ISI_PIPE_PAD_SOURCE);
 
@@ -1222,9 +1246,10 @@ static int mxc_isi_video_querycap(struct file *file, void *priv,
 static int mxc_isi_video_enum_fmt(struct file *file, void *priv,
 				  struct v4l2_fmtdesc *f)
 {
+	struct mxc_isi_video *video = video_drvdata(file);
 	const struct mxc_isi_format_info *fmt;
 
-	fmt = mxc_isi_format_enum(f, MXC_ISI_VIDEO_CAP);
+	fmt = mxc_isi_format_enum(video->pipe->isi->pdata, f, MXC_ISI_VIDEO_CAP);
 	if (!fmt)
 		return -EINVAL;
 
@@ -1281,7 +1306,8 @@ static int mxc_isi_video_enum_framesizes(struct file *file, void *priv,
 	if (fsize->index)
 		return -EINVAL;
 
-	info = mxc_isi_format_by_fourcc(fsize->pixel_format, MXC_ISI_VIDEO_CAP);
+	info = mxc_isi_format_by_fourcc(video->pipe->isi->pdata,
+					fsize->pixel_format, MXC_ISI_VIDEO_CAP);
 	if (!info)
 		return -EINVAL;
 
