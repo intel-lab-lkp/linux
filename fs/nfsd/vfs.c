@@ -1262,6 +1262,8 @@ static int wait_for_concurrent_writes(struct file *file)
 struct nfsd_write_dio_seg {
 	struct iov_iter			iter;
 	int				flags;
+	bool				boundary;	/* prefix or suffix of a split */
+	bool				edges;		/* buffered fallback: partial end pages */
 };
 
 static unsigned long
@@ -1281,6 +1283,73 @@ nfsd_write_dio_seg_init(struct nfsd_write_dio_seg *segment,
 		iov_iter_advance(&segment->iter, start);
 	iov_iter_truncate(&segment->iter, len);
 	segment->flags = iocb->ki_flags;
+	segment->boundary = false;
+	segment->edges = false;
+}
+
+/**
+ * nfsd_write_dio_boundary_claim - claim the page a boundary segment shares
+ * @file: the file being written
+ * @pos: any byte offset within the page
+ *
+ * The page holding a misaligned prefix or suffix is shared by exactly two
+ * WRITEs, the one ending in it and the one starting in it, which may arrive
+ * in either order, from different clients, at the same time.  Put an empty
+ * folio there if there is not one already: it is inserted unmarked, so
+ * neither writer's DONTCACHE write marks it (a DONTCACHE write only marks a
+ * folio it allocated itself) and it never enters WB_DONTCACHE_DIRTY, which
+ * is what would otherwise arm the DONTCACHE writeback kick and have the
+ * flusher write the page back, and drop it, between the two WRITEs.
+ *
+ * The add is atomic, so of two concurrent partners exactly one gets the
+ * folio.  If it cannot be allocated the segment is an ordinary DONTCACHE
+ * write and the page is dropped after writeback as before.
+ *
+ * Return: true if this WRITE is the second of the two and must call
+ * nfsd_write_dio_boundary_complete() once its segment has been written.
+ */
+static bool
+nfsd_write_dio_boundary_claim(struct file *file, loff_t pos)
+{
+	struct address_space *mapping = file->f_mapping;
+	pgoff_t index = pos >> PAGE_SHIFT;
+	gfp_t gfp = mapping_gfp_mask(mapping);
+	struct folio *folio;
+	int err;
+
+	folio = filemap_alloc_folio(gfp, 0, NULL);
+	if (!folio)
+		return false;
+	err = filemap_add_folio(mapping, folio, index, gfp);
+	if (!err) {
+		/* First writer: the page is in place, waiting for the partner. */
+		folio_unlock(folio);
+		folio_put(folio);
+		return false;
+	}
+	folio_put(folio);
+	return err == -EEXIST;
+}
+
+/*
+ * The second writer's data is in the page: mark it so the next writeback
+ * that cleans it drops it.  This must follow the write, because a clean
+ * marked folio is dropped by whatever writeback completes next, and it uses
+ * folio_set_dropbehind() rather than an accounted setter, because counting a
+ * folio marked while dirty arms the DONTCACHE writeback kick and the page is
+ * then written back, and dropped, before its partner has written it.
+ */
+static void
+nfsd_write_dio_boundary_complete(struct file *file, loff_t pos)
+{
+	struct address_space *mapping = file->f_mapping;
+	struct folio *folio;
+
+	folio = __filemap_get_folio(mapping, pos >> PAGE_SHIFT, FGP_DONTCACHE, 0);
+	if (IS_ERR(folio))
+		return;
+	folio_set_dropbehind(folio);
+	folio_put(folio);
 }
 
 static unsigned int
@@ -1339,14 +1408,17 @@ nfsd_write_dio_iters_init(struct nfsd_file *nf, struct bio_vec *bvec,
 	}
 
 	/*
-	 * The prefix and suffix are buffered I/O by definition.  Mark them
-	 * uncached when possible so their folios are dropped once written
-	 * back rather than lingering in the page cache.
+	 * The prefix and suffix are buffered I/O by definition.  Each shares
+	 * its page with the neighbouring WRITE; see
+	 * nfsd_write_dio_boundary_claim(), which nfsd_direct_write() calls right
+	 * before issuing each of them, for how the page is held for the
+	 * partner and dropped once both have written it.
 	 */
 	if (prefix) {
 		nfsd_write_dio_seg_init(&segments[nsegs], bvec,
 					nvecs, total, 0, prefix, iocb);
-		segments[nsegs++].flags |= dontcache_flags;
+		segments[nsegs].flags |= dontcache_flags;
+		segments[nsegs++].boundary = !!dontcache_flags;
 	}
 
 	nfsd_write_dio_seg_init(&segments[nsegs], bvec, nvecs,
@@ -1377,16 +1449,23 @@ nfsd_write_dio_iters_init(struct nfsd_file *nf, struct bio_vec *bvec,
 	if (suffix) {
 		nfsd_write_dio_seg_init(&segments[nsegs], bvec, nvecs, total,
 					prefix + middle, suffix, iocb);
-		segments[nsegs++].flags |= dontcache_flags;
+		segments[nsegs].flags |= dontcache_flags;
+		segments[nsegs++].boundary = !!dontcache_flags;
 	}
 
 	return nsegs;
 
 no_dio:
-	/* No DIO possible - pack into a single uncached (if possible) segment. */
+	/*
+	 * No DIO possible - pack into a single buffered segment.  Where it
+	 * does not start or end on a page boundary, its first and last pages
+	 * are shared with the neighbouring WRITEs like a prefix or suffix and
+	 * are held the same way (nfsd_write_dio_boundary_claim()).
+	 */
 	nfsd_write_dio_seg_init(&segments[0], bvec, nvecs, total, 0,
 				total, iocb);
 	segments[0].flags |= dontcache_flags;
+	segments[0].edges = !!dontcache_flags;
 	return 1;
 }
 
@@ -1414,8 +1493,8 @@ nfsd_direct_write(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	struct nfsd_write_dio_seg segments[3];
 	int floor_iocb_flags = 0;
 	struct file *file = nf->nf_file;
-	loff_t start = kiocb->ki_pos;
-	bool sync, datasync;
+	loff_t start = kiocb->ki_pos, seg_pos, seg_last;
+	bool sync, datasync, complete_first, complete_last;
 	unsigned int nsegs, i;
 	ssize_t host_err;
 	size_t expected;
@@ -1452,9 +1531,45 @@ nfsd_direct_write(struct svc_rqst *rqstp, struct svc_fh *fhp,
 
 		expected = iov_iter_count(&segments[i].iter);
 
+		/*
+		 * Claim the boundary page immediately before writing it, not
+		 * when the WRITE is split. Nothing is held across the write:
+		 * the claim leaves the page in the page cache unmarked, and
+		 * claiming it earlier would give the partner WRITE the time a
+		 * direct middle takes to complete the page and have it
+		 * dropped before this segment writes it.
+		 */
+		seg_pos = kiocb->ki_pos;
+		seg_last = seg_pos + expected - 1;
+		complete_first = false;
+		complete_last = false;
+		if (segments[i].boundary) {
+			complete_first = nfsd_write_dio_boundary_claim(file,
+								       seg_pos);
+		} else if (segments[i].edges) {
+			/*
+			 * A whole-WRITE buffered segment shares its first page
+			 * with the previous WRITE if it does not start on a page
+			 * boundary, and its last page with the next one if it
+			 * does not end on one; a page it covers entirely is its
+			 * own.
+			 */
+			if (seg_pos & ~PAGE_MASK)
+				complete_first = nfsd_write_dio_boundary_claim(
+							file, seg_pos);
+			if (((seg_last + 1) & ~PAGE_MASK) &&
+			    (seg_last >> PAGE_SHIFT) != (seg_pos >> PAGE_SHIFT))
+				complete_last = nfsd_write_dio_boundary_claim(
+							file, seg_last);
+		}
+
 		host_err = vfs_iocb_iter_write(file, kiocb, &segments[i].iter);
 		if (host_err < 0)
 			return host_err;
+		if (complete_first)
+			nfsd_write_dio_boundary_complete(file, seg_pos);
+		if (complete_last)
+			nfsd_write_dio_boundary_complete(file, seg_last);
 		*cnt += host_err;
 		if (host_err < (ssize_t)expected)
 			break;	/* partial write */

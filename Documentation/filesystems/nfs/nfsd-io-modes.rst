@@ -185,6 +185,34 @@ Misaligned WRITE:
     misaligned segments use DONTCACHE buffered IO so that their pages
     are dropped from the page cache once written back.
 
+    A FILE_SYNC or DATA_SYNC WRITE (requested by the client, or imposed
+    as the floor by NFSD_IO_DIRECT_WRITE_FILE_SYNC and
+    NFSD_IO_DIRECT_WRITE_DATA_SYNC) is persisted once, after all of its
+    segments have been written, rather than after each segment.
+
+    The page holding a start or end segment is shared by exactly two
+    WRITEs, the one ending in it and the one starting in it, which may
+    arrive in either order, from different clients, and at the same
+    time. Both segments are issued as DONTCACHE buffered IO, so the page
+    would be dropped as soon as the first writer's data is written back,
+    leaving the second to read it back. Immediately before writing a
+    start or end segment NFSD therefore puts an empty page in the page
+    cache if there is not one already. That page is not marked "drop
+    behind" when it is created, so it does not count towards the
+    DONTCACHE writeback backlog and the writeback kick does not write it
+    back, and drop it, between the two WRITEs that share it.
+
+    Whichever WRITE finds the page already there is the second of the
+    two: it completes the page and marks it "drop behind" once its data
+    is in it, so whichever writeback cleans it afterwards (the WRITE's
+    own sync for FILE_SYNC or DATA_SYNC, the flusher or the client's
+    COMMIT for UNSTABLE) drops it. A WRITE that gets no direct middle at
+    all is issued as a single buffered DONTCACHE segment, and its first
+    and last pages are shared and handled the same way. The retained
+    page cache is the set of half-written boundary pages, which grows
+    with how far concurrent writers drift apart, not with bytes
+    written.
+
     The O_DIRECT middle segment also carries the DONTCACHE flag. It has
     no effect while the IO really is O_DIRECT, but a filesystem may
     decide on its own to service the segment with buffered IO instead
