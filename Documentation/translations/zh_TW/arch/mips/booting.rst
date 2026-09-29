@@ -4,10 +4,6 @@
 
 :Original: Documentation/arch/mips/booting.rst
 
-:翻譯:
-
- 司延騰 Yanteng Si <siyanteng@loongson.cn>
-
 .. _tw_booting:
 
 BMIPS設備樹引導

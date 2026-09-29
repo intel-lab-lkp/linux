@@ -3,7 +3,6 @@
 .. include:: ../../disclaimer-zh_TW.rst
 
 :Original: Documentation/arch/loongarch/irq-chip-model.rst
-:Translator: Huacai Chen <chenhuacai@loongson.cn>
 
 ==================================
 LoongArch的IRQ芯片模型（層級關係）
