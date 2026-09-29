@@ -279,18 +279,10 @@ class ha2k(dot2k):
     def __format_guard_rules(self, rules: list[str]) -> list[str]:
         """
         Merge guard constraints as a single C return statement.
-        If the rules include a stored env, also check its validity.
         Break lines in a best effort way that tries to keep readability.
         """
         if not rules:
             return []
-
-        invalid_checks = [f"ha_monitor_env_invalid(ha_mon, {env}{self.enum_suffix}) ||"
-                          for env in self.env_stored if any(env in rule for rule in rules)]
-        if invalid_checks and len(rules) > 1:
-            rules[0] = "(" + rules[0]
-            rules[-1] = rules[-1] + ")"
-        rules = invalid_checks + rules
 
         separator = "\n\t\t      " if sum(len(r) for r in rules) > 80 else " "
         return ["res = " + separator.join(rules) + ";"]

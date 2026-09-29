@@ -109,16 +109,13 @@ static inline bool ha_verify_guards(struct ha_monitor *ha_mon,
 		res = ha_get_env(ha_mon, env1_test_ha_kunit, time_ns) == 0ull;
 		ha_reset_env(ha_mon, clk_test_ha_kunit, time_ns);
 	} else if (curr_state == S2_test_ha_kunit && event == event1_test_ha_kunit)
-		res = ha_monitor_env_invalid(ha_mon, clk_test_ha_kunit) ||
-		      ha_get_env(ha_mon, clk_test_ha_kunit, time_ns) < foo_ns;
+		res = ha_get_env(ha_mon, clk_test_ha_kunit, time_ns) < foo_ns;
 	else if (curr_state == S3_test_ha_kunit && event == event0_test_ha_kunit)
-		res = ha_monitor_env_invalid(ha_mon, clk_test_ha_kunit) ||
-		      (ha_get_env(ha_mon, clk_test_ha_kunit, time_ns) < FOO_NS &&
-		      ha_get_env(ha_mon, env2_test_ha_kunit, time_ns) == 0ull);
+		res = ha_get_env(ha_mon, clk_test_ha_kunit, time_ns) < FOO_NS &&
+		      ha_get_env(ha_mon, env2_test_ha_kunit, time_ns) == 0ull;
 	else if (curr_state == S3_test_ha_kunit && event == event1_test_ha_kunit) {
-		res = ha_monitor_env_invalid(ha_mon, clk_test_ha_kunit) ||
-		      (ha_get_env(ha_mon, clk_test_ha_kunit, time_ns) < 5000ull &&
-		      ha_get_env(ha_mon, env1_test_ha_kunit, time_ns) == 1ull);
+		res = ha_get_env(ha_mon, clk_test_ha_kunit, time_ns) < 5000ull &&
+		      ha_get_env(ha_mon, env1_test_ha_kunit, time_ns) == 1ull;
 		ha_reset_env(ha_mon, clk_test_ha_kunit, time_ns);
 	}
 	return res;

@@ -211,14 +211,6 @@ static inline void ha_monitor_reset_env(struct da_monitor *da_mon)
 		ha_cancel_timer(ha_mon);
 }
 
-/*
- * ha_monitor_env_invalid - return true if env has not been initialised
- */
-static inline bool ha_monitor_env_invalid(struct ha_monitor *ha_mon, enum envs env)
-{
-	return READ_ONCE(ha_mon->env_store[env]) == ENV_INVALID_VALUE;
-}
-
 static inline void ha_get_env_string(struct seq_buf *s,
 				     struct ha_monitor *ha_mon, u64 time_ns)
 {
@@ -360,8 +352,6 @@ static inline u64 ha_invariant_passed_ns(struct ha_monitor *ha_mon, enum envs en
 {
 	if (env < 0 || env >= ENV_MAX_STORED)
 		return 0;
-	if (ha_monitor_env_invalid(ha_mon, env))
-		return 0;
 	return ha_get_env(ha_mon, env, time_ns);
 }
 
@@ -387,8 +377,6 @@ static inline bool ha_check_invariant_jiffy(struct ha_monitor *ha_mon, enum envs
 static inline u64 ha_invariant_passed_jiffy(struct ha_monitor *ha_mon, enum envs env, u64 time_ns)
 {
 	if (env < 0 || env >= ENV_MAX_STORED)
-		return 0;
-	if (ha_monitor_env_invalid(ha_mon, env))
 		return 0;
 	return ha_get_env(ha_mon, env, time_ns);
 }
