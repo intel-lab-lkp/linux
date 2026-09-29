@@ -33,8 +33,6 @@ static int collapse_order;
 static bool collapse_order_set;
 static int collapse_orders[NR_ORDERS];
 static int nr_collapse_orders;
-static int pagemap_fd = -1;
-static int kpageflags_fd = -1;
 
 #define PID_SMAPS "/proc/self/smaps"
 #define TEST_FILE "collapse_test_file"
@@ -1330,19 +1328,20 @@ static void mthp_push_target_order(void)
 	thp_push_settings(&settings);
 }
 
-static bool all_windows_at_order(void *p, size_t len)
+static bool all_windows_at_order(struct mem_ops *ops, void *p, size_t len)
 {
-	return is_range_backed_by_order(p, len, collapse_order,
-					pagemap_fd, kpageflags_fd);
+	size_t window = mthp_window_size();
+
+	return ops->check_huge(p, len, len / window, window);
 }
 
-static bool any_window_at_order(void *p, size_t len)
+static bool any_window_at_order(struct mem_ops *ops, void *p, size_t len)
 {
 	size_t window = mthp_window_size();
 	char *addr = p;
 
 	for (; len >= window; addr += window, len -= window) {
-		if (all_windows_at_order(addr, window))
+		if (ops->check_huge(addr, window, 1, window))
 			return true;
 	}
 	return false;
@@ -1358,7 +1357,7 @@ static void collapse_order_single_window(struct collapse_context *c,
 
 	p = ops->setup_area(1);
 	ops->fault(p, window, 2 * window);
-	if (any_window_at_order(p, hpage_pmd_size))
+	if (any_window_at_order(ops, p, hpage_pmd_size))
 		ksft_exit_fail_msg("Unexpected large folio after fault\n");
 
 	if (madvise(p, hpage_pmd_size, MADV_HUGEPAGE))
@@ -1366,9 +1365,9 @@ static void collapse_order_single_window(struct collapse_context *c,
 	ksft_print_msg("Collapse one fully populated window...");
 	if (!khugepaged_full_pass(MTHP_PASS_TIMEOUT_S))
 		fail("Timeout");
-	else if (all_windows_at_order(p + window, window) &&
-		 !any_window_at_order(p, window) &&
-		 !any_window_at_order(p + 2 * window,
+	else if (all_windows_at_order(ops, p + window, window) &&
+		 !any_window_at_order(ops, p, window) &&
+		 !any_window_at_order(ops, p + 2 * window,
 				      hpage_pmd_size - 2 * window))
 		success("OK");
 	else
@@ -1389,7 +1388,7 @@ static void collapse_order_partial_window(struct collapse_context *c,
 
 	p = ops->setup_area(1);
 	ops->fault(p, 0, page_size);
-	if (any_window_at_order(p, hpage_pmd_size))
+	if (any_window_at_order(ops, p, hpage_pmd_size))
 		ksft_exit_fail_msg("Unexpected large folio after fault\n");
 
 	if (madvise(p, hpage_pmd_size, MADV_HUGEPAGE))
@@ -1397,7 +1396,7 @@ static void collapse_order_partial_window(struct collapse_context *c,
 	ksft_print_msg("Collapse window with single PTE entry present...");
 	if (!khugepaged_full_pass(MTHP_PASS_TIMEOUT_S))
 		fail("Timeout");
-	else if (all_windows_at_order(p, mthp_window_size()))
+	else if (all_windows_at_order(ops, p, mthp_window_size()))
 		success("OK");
 	else
 		fail("Fail");
@@ -1422,7 +1421,7 @@ static void collapse_order_max_ptes_none(struct collapse_context *c,
 
 	p = ops->setup_area(1);
 	ops->fault(p, 0, 2 * window - page_size);
-	if (any_window_at_order(p, hpage_pmd_size))
+	if (any_window_at_order(ops, p, hpage_pmd_size))
 		ksft_exit_fail_msg("Unexpected large folio after fault\n");
 
 	if (madvise(p, hpage_pmd_size, MADV_HUGEPAGE))
@@ -1430,8 +1429,8 @@ static void collapse_order_max_ptes_none(struct collapse_context *c,
 	ksft_print_msg("Collapse full window, not the one missing a page...");
 	if (!khugepaged_full_pass(MTHP_PASS_TIMEOUT_S))
 		fail("Timeout");
-	else if (all_windows_at_order(p, window) &&
-		 !any_window_at_order(p + window, window))
+	else if (all_windows_at_order(ops, p, window) &&
+		 !any_window_at_order(ops, p + window, window))
 		success("OK");
 	else
 		fail("Fail");
@@ -1447,6 +1446,7 @@ static void collapse_order_mixed_sources(struct collapse_context *c,
 					 struct mem_ops *ops)
 {
 	int source_order = anon_order ? anon_order : MIN_MTHP_ORDER;
+	size_t source_size = page_size << source_order;
 	struct thp_settings settings;
 	void *p;
 
@@ -1470,8 +1470,8 @@ static void collapse_order_mixed_sources(struct collapse_context *c,
 	 * The allocator can fall back to smaller folios under fragmentation;
 	 * having nothing to collapse from is not a failure.
 	 */
-	if (!is_range_backed_by_order(p, hpage_pmd_size, source_order,
-				      pagemap_fd, kpageflags_fd)) {
+	if (!ops->check_huge(p, hpage_pmd_size, hpage_pmd_size / source_size,
+			     source_size)) {
 		ksft_print_msg("No order-%d sources to collapse...", source_order);
 		skip("Skip");
 		ops->cleanup_area(p, hpage_pmd_size);
@@ -1486,7 +1486,7 @@ static void collapse_order_mixed_sources(struct collapse_context *c,
 		       source_order);
 	if (!khugepaged_full_pass(MTHP_PASS_TIMEOUT_S))
 		fail("Timeout");
-	else if (all_windows_at_order(p, hpage_pmd_size))
+	else if (all_windows_at_order(ops, p, hpage_pmd_size))
 		success("OK");
 	else
 		fail("Fail");
@@ -1713,15 +1713,6 @@ int main(int argc, char **argv)
 			if (!nr_collapse_orders)
 				ksft_print_msg("mTHP cases skipped: no order above the source\n");
 		}
-	}
-
-	if (mthp_khugepaged_context) {
-		pagemap_fd = open("/proc/self/pagemap", O_RDONLY);
-		if (pagemap_fd < 0)
-			ksft_exit_fail_perror("open(/proc/self/pagemap)");
-		kpageflags_fd = open("/proc/kpageflags", O_RDONLY);
-		if (kpageflags_fd < 0)
-			ksft_exit_fail_perror("open(/proc/kpageflags)");
 	}
 
 	setbuf(stdout, NULL);

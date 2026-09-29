@@ -26,7 +26,6 @@
 #define PASS_TIMEOUT_S 30
 
 static int pagemap_fd;
-static int kpageflags_fd;
 static int trace_events_fd = -1;
 static unsigned long hpage_pmd_size;
 
@@ -116,8 +115,7 @@ static void one_step(int iteration)
 	if (!passed)
 		ksft_exit_fail_msg("khugepaged did not complete a full pass\n");
 
-	collapsed = is_range_backed_by_order(p, window, TARGET_ORDER,
-					     pagemap_fd, kpageflags_fd);
+	collapsed = check_huge_anon(p, window, 1, window);
 	attributed = count_attributed(pfns, nr_pages, TARGET_ORDER);
 
 	ksft_test_result(collapsed && attributed == 1,
@@ -146,9 +144,6 @@ int main(void)
 	pagemap_fd = open("/proc/self/pagemap", O_RDONLY);
 	if (pagemap_fd < 0)
 		ksft_exit_fail_perror("open(/proc/self/pagemap)");
-	kpageflags_fd = open("/proc/kpageflags", O_RDONLY);
-	if (kpageflags_fd < 0)
-		ksft_exit_skip("open(/proc/kpageflags) requires root\n");
 	trace_events_fd = tracing_events_open("huge_memory");
 	if (trace_events_fd < 0)
 		ksft_exit_skip("huge_memory events require tracefs and root\n");

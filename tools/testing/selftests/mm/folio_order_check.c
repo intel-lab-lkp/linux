@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Self-check for the vm_util folio-order helpers, is_backed_by_folio() and
- * is_range_backed_by_order(), which the khugepaged mTHP cases use to detect
- * collapse results.  For every anon THP order the kernel supports, fault
- * memory in with only that order enabled and require the helpers to report
- * exactly that order.
+ * Self-check for check_huge_anon(), which the khugepaged mTHP cases use to
+ * tell collapse results.  For every anon THP order the kernel supports,
+ * fault memory in with only that order enabled and require the check to
+ * report exactly that order: not the order below it, and not order 0.
  */
 #define _GNU_SOURCE
-#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/mman.h>
@@ -16,9 +14,6 @@
 #include "kselftest.h"
 #include "vm_util.h"
 #include <mm/hugepage_settings.h>
-
-static int pagemap_fd;
-static int kpageflags_fd;
 
 static char *alloc_aligned(size_t size)
 {
@@ -56,22 +51,20 @@ static void check_order(int order)
 	p = alloc_aligned(size);
 	*p = 1;
 
-	if (!is_range_backed_by_order(p, size, order, pagemap_fd, kpageflags_fd)) {
+	if (!check_huge_anon(p, size, 1, size)) {
 		ksft_print_msg("order %d not detected after fault\n", order);
 		ok = false;
 	}
 
 	/* A lower order must be rejected: the folio is larger */
-	if (order && is_range_backed_by_order(p, size, order - 1,
-					      pagemap_fd, kpageflags_fd)) {
+	if (order && check_huge_anon(p, size, 2, size / 2)) {
 		ksft_print_msg("order %d also reported as order %d\n",
 			       order, order - 1);
 		ok = false;
 	}
 
 	/* A large folio must not pass as order 0 */
-	if (order && is_range_backed_by_order(p, size, 0,
-					      pagemap_fd, kpageflags_fd)) {
+	if (order && check_huge_anon(p, size, 1 << order, psize())) {
 		ksft_print_msg("order %d also reported as order 0\n", order);
 		ok = false;
 	}
@@ -92,13 +85,6 @@ int main(void)
 
 	if (!thp_available())
 		ksft_exit_skip("Transparent Hugepages not available\n");
-
-	pagemap_fd = open("/proc/self/pagemap", O_RDONLY);
-	if (pagemap_fd < 0)
-		ksft_exit_fail_perror("open(/proc/self/pagemap)");
-	kpageflags_fd = open("/proc/kpageflags", O_RDONLY);
-	if (kpageflags_fd < 0)
-		ksft_exit_skip("open(/proc/kpageflags) requires root\n");
 
 	orders = thp_supported_orders();
 	if (!orders)
