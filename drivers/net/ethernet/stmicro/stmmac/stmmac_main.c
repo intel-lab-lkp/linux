@@ -886,6 +886,19 @@ static int stmmac_init_tstamp_counter(struct stmmac_priv *priv,
 }
 
 /**
+ * stmmac_rearm_timestamp_irq - re-arm the timestamp interrupt
+ * @priv: driver private structure
+ * Description: this re-arms the on-demand timestamp interrupt if an
+ * auxiliary snapshot channel was left enabled.
+ */
+static void stmmac_rearm_timestamp_irq(struct stmmac_priv *priv)
+{
+	if (priv->plat->flags & STMMAC_FLAG_EXT_SNAPSHOT_EN &&
+	    priv->ptp_clock)
+		stmmac_mac_timestamp_interrupt_cfg(priv, true);
+}
+
+/**
  * stmmac_init_timestamping - initialise timestamping
  * @priv: driver private structure
  * Description: this is to verify if the HW supports the PTPv1 or PTPv2.
@@ -8314,6 +8327,7 @@ int stmmac_resume(struct device *dev)
 	}
 
 	stmmac_init_timestamping(priv);
+	stmmac_rearm_timestamp_irq(priv);
 
 	stmmac_init_coalesce(priv);
 	phylink_rx_clk_stop_block(priv->phylink);
