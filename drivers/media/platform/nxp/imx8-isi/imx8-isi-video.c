@@ -482,12 +482,16 @@ mxc_isi_format_by_fourcc(u32 fourcc, enum mxc_isi_video_type type)
 }
 
 const struct mxc_isi_format_info *
-mxc_isi_format_enum(unsigned int index, enum mxc_isi_video_type type)
+mxc_isi_format_enum(const struct v4l2_fmtdesc *f, enum mxc_isi_video_type type)
 {
+	unsigned int index = f->index;
 	unsigned int i;
 
 	for (i = 0; i < ARRAY_SIZE(mxc_isi_formats); i++) {
 		const struct mxc_isi_format_info *fmt = &mxc_isi_formats[i];
+
+		if (f->mbus_code && fmt->mbus_code != f->mbus_code)
+			continue;
 
 		if (!(fmt->type & type))
 			continue;

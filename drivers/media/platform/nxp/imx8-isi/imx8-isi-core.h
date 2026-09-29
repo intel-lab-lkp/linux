@@ -322,7 +322,7 @@ mxc_isi_bus_format_by_index(unsigned int index, unsigned int pad);
 const struct mxc_isi_format_info *
 mxc_isi_format_by_fourcc(u32 fourcc, enum mxc_isi_video_type type);
 const struct mxc_isi_format_info *
-mxc_isi_format_enum(unsigned int index, enum mxc_isi_video_type type);
+mxc_isi_format_enum(const struct v4l2_fmtdesc *f, enum mxc_isi_video_type type);
 const struct mxc_isi_format_info *
 mxc_isi_format_try(struct mxc_isi_pipe *pipe, struct v4l2_pix_format_mplane *pix,
 		   enum mxc_isi_video_type type);

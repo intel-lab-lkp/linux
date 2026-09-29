@@ -492,7 +492,7 @@ static int mxc_isi_m2m_enum_fmt_vid(struct file *file, void *fh,
 		MXC_ISI_VIDEO_M2M_OUT : MXC_ISI_VIDEO_M2M_CAP;
 	const struct mxc_isi_format_info *info;
 
-	info = mxc_isi_format_enum(f->index, type);
+	info = mxc_isi_format_enum(f, type);
 	if (!info)
 		return -EINVAL;
 
