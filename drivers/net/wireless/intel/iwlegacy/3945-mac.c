@@ -3083,10 +3083,13 @@ il3945_store_tx_power(struct device *d, struct device_attribute *attr,
 	u32 val;
 
 	val = simple_strtoul(p, &p, 10);
-	if (p == buf)
+	if (p == buf) {
 		IL_INFO(": %s is not in decimal form.\n", buf);
-	else
+	} else {
+		mutex_lock(&il->mutex);
 		il3945_hw_reg_set_txpower(il, val);
+		mutex_unlock(&il->mutex);
+	}
 
 	return count;
 }
