@@ -1257,6 +1257,13 @@ struct scx_event_stats {
 	 * caps for its cid and the task entered the rescue path.
 	 */
 	s64		SCX_EV_SUB_RESCUE;
+
+	/*
+	 * The number of times an insert lacked the caps for its cid and was
+	 * diverted to the reject DSQ to be re-enqueued so that the BPF
+	 * scheduler can re-decide.
+	 */
+	s64		SCX_EV_SUB_REJECT;
 };
 
 #define SCX_EVENTS_LIST(SCX_EVENT)					\
@@ -1280,7 +1287,8 @@ struct scx_event_stats {
 	SCX_EVENT(SCX_EV_SUB_KICK_DENIED);				\
 	SCX_EVENT(SCX_EV_SUB_REENQ_DENIED);				\
 	SCX_EVENT(SCX_EV_SUB_CIDPERF_DENIED);				\
-	SCX_EVENT(SCX_EV_SUB_RESCUE)
+	SCX_EVENT(SCX_EV_SUB_RESCUE);					\
+	SCX_EVENT(SCX_EV_SUB_REJECT)
 
 struct scx_sched;
 

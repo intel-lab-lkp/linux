@@ -750,6 +750,8 @@ struct scx_dispatch_q *scx_resolve_local_dsq(struct scx_sched *sch, struct rq *r
 		return &rq->scx.rescue.dsq;
 	}
 
+	__scx_add_event(sch, SCX_EV_SUB_REJECT, 1);
+
 	p->scx.reenq_reason_caps = missing;
 	p->scx.reenq_reason_cid = cid;
 
