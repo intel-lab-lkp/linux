@@ -2,6 +2,8 @@
 
 .. include:: ../disclaimer-zh_TW.rst
 
+:Original: Documentation/admin-guide/clearing-warn-once.rst
+
 清除 WARN_ONCE
 --------------
 

@@ -2,6 +2,8 @@
 
 .. include:: ../disclaimer-zh_TW.rst
 
+:Original: Documentation/admin-guide/cpu-load.rst
+
 ========
 CPU 負載
 ========
