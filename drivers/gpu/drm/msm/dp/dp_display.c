@@ -519,6 +519,7 @@ static int msm_dp_hpd_unplug_handle(struct msm_dp_display_private *dp)
 			dp->msm_dp_display.connector_type,
 			dp->link->sink_count);
 
+	dp->panel->link_caps_valid = false;
 	if (!dp->plugged)
 		return 0;
 

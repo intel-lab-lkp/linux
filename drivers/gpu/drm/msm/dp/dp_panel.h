@@ -38,6 +38,7 @@ struct msm_dp_panel {
 	struct msm_dp_panel_psr psr_cap;
 	bool video_test;
 	bool vsc_sdp_supported;
+	bool link_caps_valid;
 	u32 hw_revision;
 
 	u32 max_bw_code;
