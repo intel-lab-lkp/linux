@@ -507,27 +507,27 @@ static int ti_sci_cmd_get_revision(struct ti_sci_info *info)
 {
 	struct ti_sci_handle *handle = &info->handle;
 	struct ti_sci_version_info *ver = &handle->version;
-	struct ti_sci_msg_resp_version *rev_info;
+	struct ti_sci_msg_resp_version *resp;
 	struct ti_sci_xfer *xfer;
 	int ret;
 
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_VERSION,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(struct ti_sci_msg_hdr),
-				   sizeof(*rev_info));
+				   sizeof(*resp));
 	if (IS_ERR(xfer))
 		return PTR_ERR(xfer);
-
-	rev_info = (struct ti_sci_msg_resp_version *)xfer->xfer_buf;
 
 	ret = ti_sci_do_xfer(info, xfer);
 	if (ret)
 		goto fail;
 
-	ver->abi_major = rev_info->abi_major;
-	ver->abi_minor = rev_info->abi_minor;
-	ver->firmware_revision = rev_info->firmware_revision;
-	strscpy(ver->firmware_description, rev_info->firmware_description,
+	resp = (struct ti_sci_msg_resp_version *)xfer->xfer_buf;
+
+	ver->abi_major = resp->abi_major;
+	ver->abi_minor = resp->abi_minor;
+	ver->firmware_revision = resp->firmware_revision;
+	strscpy(ver->firmware_description, resp->firmware_description,
 		sizeof(ver->firmware_description));
 
 fail:
