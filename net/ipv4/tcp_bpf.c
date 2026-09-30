@@ -671,7 +671,8 @@ static void tcp_bpf_check_v6_needs_rebuild(struct proto *ops)
 
 static int __init tcp_bpf_v4_build_proto(void)
 {
-	tcp_bpf_rebuild_protos(tcp_bpf_prots[TCP_BPF_IPV4], &tcp_prot);
+	if (IS_ENABLED(CONFIG_IPV4))
+		tcp_bpf_rebuild_protos(tcp_bpf_prots[TCP_BPF_IPV4], &tcp_prot);
 	return 0;
 }
 late_initcall(tcp_bpf_v4_build_proto);
