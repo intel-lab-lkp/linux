@@ -772,7 +772,7 @@ config PWM_TEGRA
 
 config PWM_TH1520
 	tristate "TH1520 PWM support"
-	depends on ARCH_THEAD || COMPILE_TEST
+	depends on ARCH_THEAD || (COMPILE_TEST && 64BIT)
 	depends on RUST
 	depends on HAS_IOMEM && COMMON_CLK
 	select RUST_PWM_ABSTRACTIONS
