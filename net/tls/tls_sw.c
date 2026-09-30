@@ -2019,6 +2019,7 @@ ssize_t tls_sw_splice_read(struct socket *sock,  loff_t *ppos,
 	if (err)
 		goto splice_read_end;
 
+retry:
 	if (!skb_queue_empty(&ctx->rx_list)) {
 		skb = __skb_dequeue(&ctx->rx_list);
 	} else {
@@ -2046,6 +2047,12 @@ ssize_t tls_sw_splice_read(struct socket *sock,  loff_t *ppos,
 	if (tlm->control != TLS_RECORD_TYPE_DATA) {
 		err = -EINVAL;
 		goto splice_requeue;
+	}
+
+	/* Empty application records must not be reported as EOF. */
+	if (!rxm->full_len) {
+		consume_skb(skb);
+		goto retry;
 	}
 
 	chunk = min_t(unsigned int, rxm->full_len, len);
