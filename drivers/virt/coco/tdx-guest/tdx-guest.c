@@ -209,7 +209,20 @@ static long tdx_get_report0(struct tdx_report_req __user *req)
 /* Size of the header metadata plus the largest possible raw Quote. */
 static size_t get_quote_buf_size(void)
 {
-	return TDX_DEFAULT_QUOTE_SIZE;
+	size_t buf_size;
+	u64 max_size;
+
+	/* Start with the default buffer size, which includes the header */
+	buf_size = TDX_DEFAULT_QUOTE_SIZE;
+
+	/*
+	 * Override the default when the TDX module reports a size. Add room
+	 * for the header metadata. The size is fixed during TD runtime.
+	 */
+	if (!tdx_get_max_quote_size(&max_size))
+		buf_size = struct_size_t(struct tdx_quote_buf, data, max_size);
+
+	return buf_size;
 }
 
 static void free_quote_buf(struct tdx_quote_buf *buf)

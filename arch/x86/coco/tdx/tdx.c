@@ -213,6 +213,7 @@ int tdx_get_max_quote_size(u64 *max_quote_size)
 
 	return 0;
 }
+EXPORT_SYMBOL_FOR_MODULES(tdx_get_max_quote_size, "tdx-guest");
 
 static void __noreturn tdx_panic(const char *msg)
 {
