@@ -13,6 +13,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/delay.h>
 #include <linux/io.h>
+#include <linux/sched/isolation.h>
 #include <linux/sys_soc.h>
 
 #include <linux/fsl/mc.h>
@@ -173,7 +174,7 @@ static int dpaa2_dpio_probe(struct fsl_mc_device *dpio_dev)
 	/* get the cpu to use for the affinity hint */
 	possible_next_cpu = cpumask_first(cpus_unused_mask);
 	if (possible_next_cpu >= nr_cpu_ids) {
-		dev_err(dev, "probe failed. Number of DPIOs exceeds NR_CPUS.\n");
+		dev_err(dev, "No unused managed_irq cpu left for dpio\n");
 		err = -ERANGE;
 		goto err_allocate_irqs;
 	}
@@ -317,9 +318,11 @@ static struct fsl_mc_driver dpaa2_dpio_driver = {
 
 static int dpio_driver_init(void)
 {
+	const struct cpumask *hk_mask = housekeeping_cpumask(HK_TYPE_MANAGED_IRQ);
+
 	if (!zalloc_cpumask_var(&cpus_unused_mask, GFP_KERNEL))
 		return -ENOMEM;
-	cpumask_copy(cpus_unused_mask, cpu_online_mask);
+	cpumask_and(cpus_unused_mask, cpu_online_mask, hk_mask);
 
 	return fsl_mc_driver_register(&dpaa2_dpio_driver);
 }
