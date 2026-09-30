@@ -233,22 +233,6 @@ config TH1520_AON_PROTOCOL
 	  the kernel through the Always-On protocol, using hardware mailbox as a medium.
 	  Say yes if you need such capabilities.
 
-config TI_SCI_PROTOCOL
-	tristate "TI System Control Interface (TISCI) Message Protocol"
-	depends on TI_MESSAGE_MANAGER
-	default ARCH_K3
-	help
-	  TI System Control Interface (TISCI) Message Protocol is used to manage
-	  compute systems such as ARM, DSP etc with the system controller in
-	  complex System on Chip(SoC) such as those found on certain keystone
-	  generation SoC from TI.
-
-	  System controller provides various facilities including power
-	  management function support.
-
-	  This protocol library is used by client drivers to use the features
-	  provided by the system controller.
-
 config TRUSTED_FOUNDATIONS
 	bool "Trusted Foundations secure monitor support"
 	depends on ARM && CPU_V7
@@ -309,6 +293,7 @@ source "drivers/firmware/qcom/Kconfig"
 source "drivers/firmware/samsung/Kconfig"
 source "drivers/firmware/smccc/Kconfig"
 source "drivers/firmware/tegra/Kconfig"
+source "drivers/firmware/ti/Kconfig"
 source "drivers/firmware/xilinx/Kconfig"
 source "drivers/firmware/arm_rmm/Kconfig"
 
