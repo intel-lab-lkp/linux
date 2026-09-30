@@ -12,6 +12,14 @@ use crate::{
 };
 
 impl Device {
+    /// Returns `true` if this device is a Physical Function (PF).
+    #[inline]
+    #[expect(dead_code)]
+    pub(crate) fn is_physfn(&self) -> bool {
+        // SAFETY: `self.as_raw` is a valid pointer to a `struct pci_dev`.
+        unsafe { (*self.as_raw()).is_physfn() != 0 }
+    }
+
     /// Returns `true` if this device is a Virtual Function (VF).
     #[inline]
     pub fn is_virtfn(&self) -> bool {
