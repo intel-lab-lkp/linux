@@ -578,6 +578,12 @@ strip: $(PROGRAMS) $(OUTPUT)perf
 	$(STRIP) $(STRIP_OPTS) $(PROGRAMS) $(OUTPUT)perf
 
 PERF_IN := $(OUTPUT)perf-in.o
+
+ifdef PYLINT
+# Build the Python extension before starting sub-makes that lint its users.
+$(PERF_IN) $(LIBPERF_TEST_IN): | $(LANG_BINDINGS)
+endif
+
 export NO_JEVENTS
 
 build := -f $(srctree)/tools/build/Makefile.build dir=. obj
