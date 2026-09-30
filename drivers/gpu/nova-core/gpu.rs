@@ -34,7 +34,7 @@ use crate::{
     fsp::Fsp,
     gsp::{
         self,
-        commands::GetGspStaticInfoReply,
+        commands::rpc::GetGspStaticInfoReply,
         Gsp,
         GspBootContext, //
     },

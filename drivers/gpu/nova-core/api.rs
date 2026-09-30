@@ -16,7 +16,7 @@ use kernel::{
 pub use crate::gpu::Spec;
 
 use crate::gpu::Gpu;
-use crate::gsp::commands::GetGspStaticInfoReply;
+use crate::gsp::commands::rpc::GetGspStaticInfoReply;
 
 /// API handle for the auxiliary bus child drivers to interact with nova-core.
 pub struct NovaCoreApi<'bound> {
