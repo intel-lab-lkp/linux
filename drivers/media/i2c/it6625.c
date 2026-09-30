@@ -554,7 +554,7 @@ static inline bool is_hdmi(struct it6625 *it6625)
 	int val;
 
 	val = it6625_read_byte(it6625, REG_RX_STATUS);
-	return (val < 0) ? false : (val & B_RX_HDMI);
+	return val < 0 ? false : val & B_RX_HDMI;
 }
 
 static inline bool hdmi_5v_power_present(struct it6625 *it6625)
@@ -562,7 +562,7 @@ static inline bool hdmi_5v_power_present(struct it6625 *it6625)
 	int val;
 
 	val = it6625_read_byte(it6625, REG_RX_STATUS);
-	return (val < 0) ? false : (val & B_RX_5V);
+	return val < 0 ? false : val & B_RX_5V;
 }
 
 static inline bool no_signal(struct it6625 *it6625)
@@ -570,7 +570,7 @@ static inline bool no_signal(struct it6625 *it6625)
 	int val;
 
 	val = it6625_read_byte(it6625, REG_RX_STATUS);
-	return (val < 0) ? true : !(val & B_RX_STABLE);
+	return val < 0 ? true : !(val & B_RX_STABLE);
 }
 
 static inline bool audio_present(struct it6625 *it6625)
@@ -578,7 +578,7 @@ static inline bool audio_present(struct it6625 *it6625)
 	int val;
 
 	val = it6625_read_byte(it6625, REG_RX_STATUS);
-	return (val < 0) ? false : (val & B_RX_AUD_ON);
+	return val < 0 ? false : val & B_RX_AUD_ON;
 }
 
 static int get_audio_sampling_rate(struct it6625 *it6625)
