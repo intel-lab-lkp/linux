@@ -112,6 +112,7 @@ struct ti_sci_info {
 	int users;
 };
 
+#define cl_to_ti_sci_info(c)	container_of(c, struct ti_sci_info, cl)
 #define handle_to_ti_sci_info(h) container_of(h, struct ti_sci_info, handle)
 
 /* Generic Messages */
@@ -907,6 +908,16 @@ struct ti_sci_msg_req_manage_irq {
 } __packed;
 
 /**
+ * struct ti_sci_irq - Description of allocated irqs
+ * @node: Link to hash table
+ * @desc: Description of the irq
+ */
+struct ti_sci_irq {
+	struct hlist_node node;
+	struct ti_sci_msg_req_manage_irq desc;
+};
+
+/**
  * struct ti_sci_msg_rm_ring_cfg_req - Configure a Navigator Subsystem ring
  *
  * Configures the non-real-time registers of a Navigator Subsystem ring.
@@ -1667,5 +1678,14 @@ int ti_sci_do_xfer(const struct ti_sci_handle *handle,
 void ti_sci_setup_device_ops(struct ti_sci_dev_ops *dops);
 void ti_sci_setup_clock_ops(struct ti_sci_clk_ops *cops);
 void ti_sci_setup_pm_ops(struct ti_sci_pm_ops *pmops);
+void ti_sci_setup_rm_core_ops(struct ti_sci_rm_core_ops *rm_core_ops);
+void ti_sci_setup_rm_irq_ops(struct ti_sci_rm_irq_ops *iops);
+void ti_sci_setup_rm_ringacc_ops(struct ti_sci_rm_ringacc_ops *rops);
+void ti_sci_setup_rm_psil_ops(struct ti_sci_rm_psil_ops *psilops);
+void ti_sci_setup_rm_udmap_ops(struct ti_sci_rm_udmap_ops *udmap_ops);
+int ti_sci_manage_irq(const struct ti_sci_handle *handle, u32 valid_params,
+		      u16 src_id, u16 src_index, u16 dst_id, u16 dst_host_irq,
+		      u16 ia_id, u16 vint, u16 global_event, u8 vint_status_bit,
+		      u8 s_host, u16 type);
 
 #endif /* __TI_SCI_H */
