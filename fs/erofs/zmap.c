@@ -558,35 +558,85 @@ static int z_erofs_map_blocks_ext(struct inode *inode,
 		lend = min(lstart, lend);
 		lstart -= 1 << vi->z_lclusterbits;
 	} else {
+		unsigned int step = 0;
+		u64 hint = READ_ONCE(vi->z_extent_hint);
+		erofs_off_t hint_lend = READ_ONCE(vi->z_extent_hint_lend);
+
 		lstart = lend;
-		for (l = 0, r = vi->z_extents; l < r; ) {
-			mid = l + (r - l) / 2;
+		for (l = 0, r = vi->z_extents; l < r; ++step) {
+			erofs_off_t blk_off;
+			u64 back, fwd, blk_first, blk_last;
+			u64 orig_mid, sub_mid, lo, hi;
+			struct z_erofs_extent *e;
+
+			if (step == 0 && hint_lend &&
+			    map->m_la == hint_lend &&
+			    hint + 1 < vi->z_extents) {
+				mid = hint + 1;
+			} else if (step == 0 && r - l > 4 && lend > map->m_la) {
+				u64 est = div64_u64(map->m_la * (r - l), lend);
+
+				if (est >= r)
+					est = r - 1;
+				mid = est;
+			} else {
+				mid = l + (r - l) / 2;
+			}
 			ext = erofs_read_metabuf(&map->buf, sb,
 						 pos + mid * recsz, in_mbox);
 			if (IS_ERR(ext))
 				return PTR_ERR(ext);
 
-			la = le32_to_cpu(ext->lstart_lo);
-			pa = le32_to_cpu(ext->pstart_lo) |
-				(u64)le32_to_cpu(ext->pstart_hi) << 32;
-			if (recsz > offsetof(struct z_erofs_extent, lstart_hi))
-				la |= (u64)le32_to_cpu(ext->lstart_hi) << 32;
+			/*
+			 * Multiple extent records reside in the same metadata
+			 * block (e.g., 256 records per 4 KiB page for
+			 * 16-byte extents, or 128 records for 32-byte extents).
+			 * Narrow [l, r) across all records already present in
+			 * the currently mapped metadata page to avoid repeated
+			 * erofs_read_metabuf() calls.
+			 */
+			blk_off = (pos + mid * recsz) & bmask;
+			back = min_t(u64, mid, blk_off / recsz);
+			fwd = (sb->s_blocksize - blk_off) / recsz;
+			blk_first = mid - back;
+			blk_last = min_t(u64, vi->z_extents - 1, mid + fwd - 1);
+			orig_mid = sub_mid = mid;
 
-			if (la > map->m_la) {
-				r = mid;
-				if (la > lend) {
-					DBG_BUGON(1);
-					return -EFSCORRUPTED;
+			while (l < r) {
+				e = (void *)ext +
+				    ((s64)sub_mid - (s64)orig_mid) * recsz;
+
+				la = le32_to_cpu(e->lstart_lo);
+				pa = le32_to_cpu(e->pstart_lo) |
+					(u64)le32_to_cpu(e->pstart_hi) << 32;
+				if (recsz > offsetof(struct z_erofs_extent, lstart_hi))
+					la |= (u64)le32_to_cpu(e->lstart_hi) << 32;
+
+				if (la > map->m_la) {
+					r = sub_mid;
+					if (la > lend) {
+						DBG_BUGON(1);
+						return -EFSCORRUPTED;
+					}
+					lend = la;
+				} else {
+					l = sub_mid + 1;
+					if (map->m_la == la)
+						r = min(l + 1, r);
+					lstart = la;
+					map->m_plen = le32_to_cpu(e->plen);
+					map->m_pa = pa;
 				}
-				lend = la;
-			} else {
-				l = mid + 1;
-				if (map->m_la == la)
-					r = min(l + 1, r);
-				lstart = la;
-				map->m_plen = le32_to_cpu(ext->plen);
-				map->m_pa = pa;
+				lo = max_t(u64, l, blk_first);
+				hi = min_t(u64, r - 1, blk_last);
+				if (lo > hi)
+					break;
+				sub_mid = lo + (hi - lo) / 2;
 			}
+		}
+		if (l > 0) {
+			WRITE_ONCE(vi->z_extent_hint, l - 1);
+			WRITE_ONCE(vi->z_extent_hint_lend, lend);
 		}
 		last = (l >= vi->z_extents);
 	}
@@ -665,6 +715,8 @@ static int z_erofs_fill_inode(struct inode *inode, struct erofs_map_blocks *map)
 	}
 	vi->z_advise = le16_to_cpu(h->h_advise);
 	vi->z_lclusterbits = sb->s_blocksize_bits + (h->h_clusterbits & 15);
+	vi->z_extent_hint = 0;
+	vi->z_extent_hint_lend = 0;
 	if (vi->datalayout == EROFS_INODE_COMPRESSED_FULL &&
 	    (vi->z_advise & Z_EROFS_ADVISE_EXTENTS)) {
 		vi->z_extents = le32_to_cpu(h->h_extents_lo) |
