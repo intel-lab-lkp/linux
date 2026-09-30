@@ -51,6 +51,8 @@ pub use self::io::{
     Extended,
     Normal, //
 };
+#[cfg(CONFIG_PCI_IOV)]
+pub use self::iov::VfRegistration;
 pub use self::irq::{
     IrqType,
     IrqTypes,
@@ -331,6 +333,9 @@ pub trait Driver {
     /// operations to gracefully tear down the device.
     ///
     /// Otherwise, release operations for driver resources should be performed in `Drop`.
+    ///
+    /// For a PF with enabled VFs, `VfRegistration` disables SR-IOV when it is dropped. This
+    /// callback must leave resources accessed by VF drivers available until then.
     fn unbind<'bound>(dev: &'bound Device<device::Core<'_>>, this: Pin<&Self::Data<'bound>>) {
         let _ = (dev, this);
     }
