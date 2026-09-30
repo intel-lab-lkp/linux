@@ -553,6 +553,17 @@ struct GspMessage<'a> {
     contents: (&'a [u8], &'a [u8]),
 }
 
+/// A RPC message ready to be processed from the message queue.
+///
+/// This is the type returned by [`CmdqInner::parse_rpc_message`].
+struct RpcMessage<'a> {
+    // Reference to the RPC header of the message.
+    header: &'a RpcMessageHeader,
+    // Slices to the contents of the message. The second slice is zero unless the message loops
+    // over the message queue.
+    contents: (&'a [u8], &'a [u8]),
+}
+
 /// GSP command queue.
 ///
 /// Provides the ability to send commands and receive messages from the GSP using a shared memory
@@ -794,7 +805,7 @@ impl CmdqInner<'_> {
     ///   message queue.
     ///
     /// Error codes returned by the message constructor are propagated as-is.
-    fn wait_for_msg(&self, timeout: Delta) -> Result<GspMessage<'_>> {
+    fn wait_for_msg(&self, timeout: Delta) -> Result<RpcMessage<'_>> {
         // Wait for a message to arrive from the GSP.
         let (slice_1, slice_2) = read_poll_timeout(
             || Ok(self.gsp_mem.driver_read_area()),
@@ -815,6 +826,24 @@ impl CmdqInner<'_> {
             dev_err!(&self.dev, "GSP receive: bad checksum\n");
             return Err(EIO);
         }
+
+        self.parse_rpc_message(GspMessage {
+            header,
+            contents: (slice_1, slice_2),
+        })
+    }
+
+    /// Validate the RPC layer of `element` and returns its RPC header and its contents trimmed down
+    /// to the RPC payload.
+    ///
+    /// # Errors
+    ///
+    /// - `EIO` if the element is shorter than the payload length advertised by the RPC header.
+    fn parse_rpc_message<'a>(&self, element: GspMessage<'a>) -> Result<RpcMessage<'a>> {
+        let GspMessage {
+            header,
+            contents: (slice_1, slice_2),
+        } = element;
 
         let rpc_header = header.rpc_header();
         let payload_length = rpc_header.length();
@@ -845,8 +874,8 @@ impl CmdqInner<'_> {
             )
         };
 
-        Ok(GspMessage {
-            header,
+        Ok(RpcMessage {
+            header: rpc_header,
             contents: (slice_1, slice_2),
         })
     }
@@ -873,7 +902,7 @@ impl CmdqInner<'_> {
         Error: From<M::InitError>,
     {
         let message = self.wait_for_msg(timeout)?;
-        let function = message.header.rpc_header().function().map_err(|_| EINVAL)?;
+        let function = message.header.function().map_err(|_| EINVAL)?;
 
         // Extract the message. Store the result as we want to advance the read pointer even in
         // case of failure.
