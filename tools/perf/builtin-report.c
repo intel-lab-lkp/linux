@@ -88,6 +88,7 @@ struct report {
 #endif
 	bool			use_stdio;
 	bool			progress;
+	bool			progress_set;
 	bool			show_full_info;
 	bool			show_threads;
 	bool			inverted_callchain;
@@ -1385,8 +1386,15 @@ int cmd_report(int argc, const char **argv)
 		    "Use the stdio interface"),
 	OPT_BOOLEAN(0, "weights", &symbol_conf.annotate_weight,
 			"Show or hide weight columns in annotation. Default show if non-zero."),
-	OPT_BOOLEAN(0, "progress", &report.progress,
-		    "Show progress while processing the perf.data file"),
+	/*
+	 * No --no-progress option to add: parse-options provides it as
+	 * the negation of this one, clearing report.progress, which is
+	 * also how it starts out.  progress_set is what tells the hook
+	 * below to stop the TUI and GTK browsers as well, they show
+	 * progress until asked not to.
+	 */
+	OPT_BOOLEAN_SET(0, "progress", &report.progress, &report.progress_set,
+			"Show progress while processing the perf.data file"),
 	OPT_BOOLEAN(0, "header", &report.header, "Show data header."),
 	OPT_BOOLEAN(0, "header-only", &report.header_only,
 		    "Show only data header."),
@@ -1796,9 +1804,13 @@ repeat:
 	/*
 	 * For the stdio case: print the percentage of the perf.data file
 	 * processed so far for each processing phase.  --quiet asks for no
-	 * messages at all, so it leaves the phases uncounted.
+	 * messages at all, so it leaves the phases uncounted, and
+	 * --no-progress, progress_set with progress cleared, turns off what
+	 * the TUI and GTK browsers show as well.
 	 */
-	if (report.progress && !quiet && use_browser == 0)
+	if (report.progress_set && !report.progress)
+		ui_progress__noop_init();
+	else if (report.progress && !quiet && use_browser == 0)
 		stdio_progress__init();
 
 	if (report.data_type && use_browser == 1) {
