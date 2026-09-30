@@ -73,6 +73,9 @@ strnlen_zbb:
 	/* If maxlen is 0, return 0. */
 	beqz	a1, 3f
 
+	/* Save original pointer for final length calculation. */
+	mv	t4, a0
+
 	/* Number of irrelevant bytes in the first word. */
 	andi	t2, a0, SZREG-1
 
@@ -82,15 +85,6 @@ strnlen_zbb:
 	li	t3, SZREG
 	sub	t3, t3, t2
 	slli	t2, t2, 3
-
-	/*
-	 * Aligned boundary.  Use the address of the last valid byte
-	 * (s + count - 1) to avoid loading a word past the count
-	 * boundary in the loop below.  count == 0 is handled above.
-	 */
-	add	t4, a0, a1
-	addi	t4, t4, -1
-	andi	t4, t4, -SZREG
 
 	/* Get the first word.  */
 	REG_L	t1, 0(t0)
@@ -125,15 +119,26 @@ strnlen_zbb:
 
 	bgtu	t3, a0, 2f
 
-	/* All remaining bytes are in the first word, no loop needed. */
-	bgeu	t0, t4, 2f
+	/*
+	 * Use a word counter to avoid calculating an end address,
+	 * which might overflow when count is close to SIZE_MAX.
+	 */
+	sub	t2, a1, t3
+	beqz	t2, 3f
 
-	/* Prepare for the word comparison loop. */
-	addi	t2, t0, SZREG
+	/* Calculate the word count: count = (remaining - 1) / SZREG + 1 */
+	addi	t2, t2, -1
+#if defined(CONFIG_64BIT)
+	srli	t1, t2, 3
+#else
+	srli	t1, t2, 2
+#endif
+	addi	t2, t1, 1
+
 	li	t3, -1
 
 	/*
-	 * Our critical loop is 4 instructions and processes data in
+	 * Our critical loop is 6 instructions and processes data in
 	 * 4 byte or 8 byte chunks.
 	 */
 	.p2align 3
@@ -141,23 +146,22 @@ strnlen_zbb:
 	REG_L	t1, SZREG(t0)
 	addi	t0, t0, SZREG
 	orc.b	t1, t1
-	bgeu	t0, t4, 4f
-	beq	t1, t3, 1b
+	bne	t1, t3, 4f
+	addi	t2, t2, -1
+	bnez	t2, 1b
+
+	/* Scanned all words without finding NUL, return maxlen. */
+	mv	a0, a1
+	ret
+
 4:
 	not	t1, t1
 	CZ	t1, t1
 	srli	t1, t1, 3
 
-	/* Get number of processed bytes. */
-	sub	t2, t0, t2
-
-	/* Add number of characters in the first word.  */
-	add	a0, a0, t2
-
-	/* Add number of characters in the last word.  */
+	/* Length = (current - original) + offset in final word. */
+	sub	a0, t0, t4
 	add	a0, a0, t1
-
-	/* Ensure the final result does not exceed maxlen. */
 	minu	a0, a0, a1
 2:
 	ret
