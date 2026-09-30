@@ -22,6 +22,7 @@ shopt -s lastpipe
 unset DEBUG_CLONE DIFF_CHECKSUM SKIP_CLEANUP VERBOSE XTRACE
 
 REPLACE=1
+MODULE_VERSION=
 SHORT_CIRCUIT=0
 JOBS="$(getconf _NPROCESSORS_ONLN)"
 shopt -o xtrace | grep -q 'on' && XTRACE=1
@@ -132,6 +133,7 @@ Options:
    -f, --show-first-changed	Show address of first changed instruction
    -j, --jobs=<jobs>		Build jobs to run simultaneously [default: $JOBS]
    -o, --output=<file.ko>	Output file [default: livepatch-<patch-name>.ko]
+       --module-version=<ver>	Set MODULE_VERSION metadata (letters, digits, . _ + : -)
        --no-replace		Disable livepatch atomic replace
    -v, --verbose		Pass V=1 to kernel/module builds
 
@@ -160,7 +162,7 @@ process_args() {
 	local patch
 
 	short="hfj:o:vdS:T"
-	long="help,show-first-changed,jobs:,output:,no-replace,verbose,debug,short-circuit:,keep-tmp"
+	long="help,show-first-changed,jobs:,output:,module-version:,no-replace,verbose,debug,short-circuit:,keep-tmp"
 
 	args=$(getopt --options "$short" --longoptions "$long" -- "$@") || {
 		echo; usage; exit
@@ -187,6 +189,12 @@ process_args() {
 				NAME="$(basename "$OUTFILE")"
 				NAME="${NAME%.ko}"
 				NAME="$(module_name_string "$NAME")"
+				shift 2
+				;;
+			--module-version)
+				[[ "$2" =~ ^[a-zA-Z0-9._+:-]+$ ]] || \
+					die "module version must contain only letters, digits, '.', '_', '+', ':' or '-'"
+				MODULE_VERSION="$2"
 				shift 2
 				;;
 			--no-replace)
@@ -826,6 +834,10 @@ build_patch_module() {
 	mkdir -p "$KMOD_DIR"
 
 	cp -f "$SCRIPT_DIR/init.c" "$KMOD_DIR"
+
+	if [[ -n "$MODULE_VERSION" ]]; then
+		printf '\nMODULE_VERSION("%s");\n' "$MODULE_VERSION" >> "$KMOD_DIR/init.c"
+	fi
 
 	echo "obj-m := $NAME.o" > "$makefile"
 	echo -n "$NAME-y := init.o" >> "$makefile"
