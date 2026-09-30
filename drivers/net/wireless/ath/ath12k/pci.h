@@ -129,6 +129,12 @@ struct ath12k_pci {
 	/* enum ath12k_pci_flags */
 	unsigned long flags;
 	u16 link_ctl;
+
+	/* Cached host MSI address for firmware configuration in VMs */
+	u32 msi_addr_hi;
+	u32 msi_addr_lo;
+	bool msi_addr_cached;
+
 	unsigned long irq_flags;
 	const struct ath12k_pci_ops *pci_ops;
 	u32 qmi_instance;

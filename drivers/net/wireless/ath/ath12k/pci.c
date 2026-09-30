@@ -8,6 +8,7 @@
 #include <linux/interrupt.h>
 #include <linux/msi.h>
 #include <linux/pci.h>
+#include <linux/qcom_vfio.h>
 #include <linux/time.h>
 #include <linux/vmalloc.h>
 
@@ -783,8 +784,11 @@ static int ath12k_pci_msi_alloc(struct ath12k_pci *ab_pci)
 {
 	struct ath12k_base *ab = ab_pci->ab;
 	const struct ath12k_msi_config *msi_config = ab_pci->msi_config;
+	u32 msi_addr_lo = 0, msi_addr_hi = 0;
 	struct msi_desc *msi_desc;
+	u16 msi_data = 0;
 	int num_vectors;
+	int msi_offset;
 	int ret;
 
 	num_vectors = pci_alloc_irq_vectors(ab_pci->pdev,
@@ -811,6 +815,39 @@ static int ath12k_pci_msi_alloc(struct ath12k_pci *ab_pci)
 	}
 
 	ath12k_info(ab, "MSI vectors: %d\n", num_vectors);
+
+	/*
+	 * Try to get host MSI address from VFIO cache.
+	 * When running on a VM, the ath12k firmware requires physical host
+	 * MSI addresses and cannot handle guest IOVA addresses.
+	 * qcom-vfio-pci writes host MSI values to extended config space with
+	 * a magic signature "QMSI" for discovery. Search for it.
+	 */
+	msi_offset = qcom_vfio_find_msi_cache(ab_pci->pdev);
+	if (msi_offset) {
+		pci_read_config_dword(ab_pci->pdev,
+				      msi_offset + QCOM_VFIO_MSI_ADDR_LO_OFFSET,
+				      &msi_addr_lo);
+		pci_read_config_dword(ab_pci->pdev,
+				      msi_offset + QCOM_VFIO_MSI_ADDR_HI_OFFSET,
+				      &msi_addr_hi);
+		pci_read_config_word(ab_pci->pdev,
+				     msi_offset + QCOM_VFIO_MSI_DATA_OFFSET,
+				     &msi_data);
+
+		if (msi_addr_lo && msi_addr_lo != 0xFFFFFFFF) {
+			ab_pci->msi_addr_hi = msi_addr_hi;
+			ab_pci->msi_addr_lo = msi_addr_lo;
+			ab_pci->msi_ep_base_data = msi_data;
+			ab_pci->msi_addr_cached = true;
+
+			ath12k_info(ab,
+				    "using host MSI from VFIO at offset 0x%x: addr_lo=0x%x addr_hi=0x%x data=%d\n",
+				    msi_offset, msi_addr_lo, msi_addr_hi, msi_data);
+			return 0;
+		}
+	}
+	ab_pci->msi_addr_cached = false;
 
 	ath12k_pci_msi_disable(ab_pci);
 
@@ -1082,6 +1119,12 @@ void ath12k_pci_get_msi_address(struct ath12k_base *ab, u32 *msi_addr_lo,
 {
 	struct ath12k_pci *ab_pci = ath12k_pci_priv(ab);
 	struct pci_dev *pci_dev = to_pci_dev(ab->dev);
+
+	if (ab_pci->msi_addr_cached) {
+		*msi_addr_hi = ab_pci->msi_addr_hi;
+		*msi_addr_lo = ab_pci->msi_addr_lo;
+		return;
+	}
 
 	pci_read_config_dword(pci_dev, pci_dev->msi_cap + PCI_MSI_ADDRESS_LO,
 			      msi_addr_lo);
