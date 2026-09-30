@@ -22,6 +22,10 @@
 #include "backend_deflate.h"
 #include "backend_842.h"
 
+#if IS_ENABLED(CONFIG_ZRAM_BACKEND_QPACE)
+#include "backend_qpace.h"
+#endif
+
 static const struct zcomp_ops *backends[] = {
 #if IS_ENABLED(CONFIG_ZRAM_BACKEND_LZO)
 	&backend_lzorle,
@@ -41,6 +45,9 @@ static const struct zcomp_ops *backends[] = {
 #endif
 #if IS_ENABLED(CONFIG_ZRAM_BACKEND_842)
 	&backend_842,
+#endif
+#if IS_ENABLED(CONFIG_ZRAM_BACKEND_QPACE)
+	&backend_qpace_lz4,
 #endif
 	NULL
 };
@@ -80,10 +87,10 @@ static const struct zcomp_ops *lookup_backend_ops(const char *comp)
 
 	while (backends[i]) {
 		if (sysfs_streq(comp, backends[i]->name))
-			break;
+			return backends[i];
 		i++;
 	}
-	return backends[i];
+	return NULL;
 }
 
 const char *zcomp_lookup_backend_name(const char *comp)
