@@ -20,7 +20,10 @@ use crate::{
         aref::AlwaysRefCounted,
         Mutex, //
     },
-    time::Jiffies,
+    time::{
+        Delta,
+        Jiffy, //
+    },
     types::{
         Opaque,
         ScopeGuard, //
@@ -481,22 +484,19 @@ impl Device<device::Bound> {
     /// [`kernel::error::code::ETIMEDOUT`] or [`kernel::error::code::ERESTARTSYS`] if interrupted
     /// before any bytes were written. [`kernel::error::code::EINVAL`] if `data.len() > i32::MAX`.
     #[inline]
-    pub fn write_all(&self, data: &[u8], timeout: Jiffies) -> Result<usize> {
+    pub fn write_all(&self, data: &[u8], timeout: Delta<Jiffy>) -> Result<usize> {
         if data.len() > i32::MAX as usize {
             return Err(EINVAL);
         }
+
+        let timeout = isize::max(timeout.as_jiffies(), 0);
 
         // SAFETY:
         // - `self.as_raw()` is guaranteed to be a pointer to a valid `serdev_device`.
         // - `data.as_ptr()` is guaranteed to be a valid array pointer with the size of
         //   `data.len()`.
         let ret = unsafe {
-            bindings::serdev_device_write(
-                self.as_raw(),
-                data.as_ptr(),
-                data.len(),
-                isize::try_from(timeout).unwrap_or_default(),
-            )
+            bindings::serdev_device_write(self.as_raw(), data.as_ptr(), data.len(), timeout)
         };
         // CAST: negative return values are guaranteed to be between `-MAX_ERRNO` and `-1`,
         // which always fit into a `i32`.
@@ -547,14 +547,11 @@ impl Device<device::Bound> {
     ///
     /// Use a timeout of 0 to wait indefinitely.
     #[inline]
-    pub fn wait_until_sent(&self, timeout: Jiffies) {
+    pub fn wait_until_sent(&self, timeout: Delta<Jiffy>) {
+        let timeout = isize::max(timeout.as_jiffies(), 0);
+
         // SAFETY: `self.as_raw()` is guaranteed to be a pointer to a valid `serdev_device`.
-        unsafe {
-            bindings::serdev_device_wait_until_sent(
-                self.as_raw(),
-                isize::try_from(timeout).unwrap_or_default(),
-            )
-        };
+        unsafe { bindings::serdev_device_wait_until_sent(self.as_raw(), timeout) };
     }
 }
 
