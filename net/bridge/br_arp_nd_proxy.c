@@ -56,7 +56,9 @@ br_is_neigh_suppress_enabled_vid(const struct net_bridge_port *p, u16 vid)
 
 	return br_is_neigh_suppress_enabled(p, v);
 }
+#endif /* CONFIG_INET */
 
+#if IS_ENABLED(CONFIG_IPV4)
 static void br_arp_send(struct net_bridge *br, struct net_bridge_port *p,
 			struct net_device *dev, __be32 dest_ip, __be32 src_ip,
 			const unsigned char *dest_hw,
