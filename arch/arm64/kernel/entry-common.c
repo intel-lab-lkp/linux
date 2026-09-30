@@ -6,7 +6,7 @@
  */
 
 #include <linux/context_tracking.h>
-#include <linux/irq-entry-common.h>
+#include <linux/entry-common.h>
 #include <linux/kasan.h>
 #include <linux/linkage.h>
 #include <linux/livepatch.h>
