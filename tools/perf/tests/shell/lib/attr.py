@@ -4,7 +4,8 @@ import configparser
 import os
 import sys
 import glob
-import optparse
+# Pylint before 3.3.5 still treats optparse as deprecated.
+import optparse  # pylint: disable=deprecated-module
 import platform
 import tempfile
 import logging
