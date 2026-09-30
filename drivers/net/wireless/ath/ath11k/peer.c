@@ -340,9 +340,10 @@ static int __ath11k_peer_delete(struct ath11k *ar, u32 vdev_id, const u8 *addr)
 		return ret;
 	}
 
-	ret = ath11k_wait_for_peer_delete_done(ar, vdev_id, addr);
-	if (ret)
-		return ret;
+	/* Ignore the return value: the peer is already freed, only its
+	 * ar->num_peers slot would otherwise leak on a delete timeout.
+	 */
+	ath11k_wait_for_peer_delete_done(ar, vdev_id, addr);
 
 	return 0;
 }
