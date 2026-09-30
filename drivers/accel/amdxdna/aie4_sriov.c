@@ -6,6 +6,7 @@
 #include <drm/amdxdna_accel.h>
 #include <drm/drm_print.h>
 #include <linux/pci.h>
+#include <linux/pm_runtime.h>
 
 #include "aie.h"
 #include "aie4_msg_priv.h"
@@ -118,6 +119,31 @@ static int aie4_link_vf(struct amdxdna_dev *xdna, struct pci_dev *pdev_vf)
 
 	XDNA_DBG(xdna, "Linked VF %s", pci_name(pdev_vf));
 	return 0;
+}
+
+static int aie4_check_vf_alive(struct amdxdna_dev *xdna, struct pci_dev *pdev_vf)
+{
+	struct device_driver *drv = READ_ONCE(pdev_vf->dev.driver);
+
+	if (drv && drv->owner != THIS_MODULE) {
+		XDNA_WARN(xdna, "VF:%s is in passthrough", pci_name(pdev_vf));
+		return -EBUSY;
+	}
+
+	if (!pm_runtime_suspended(&pdev_vf->dev)) {
+		XDNA_WARN(xdna, "VF:%s is busy", pci_name(pdev_vf));
+		return -EBUSY;
+	}
+	return 0;
+}
+
+int aie4_vfs_alive(struct amdxdna_dev *xdna)
+{
+	if (pci_vfs_assigned(to_pci_dev(xdna->ddev.dev))) {
+		XDNA_WARN(xdna, "VF devices are being used in VMs, cannot suspend");
+		return -EBUSY;
+	}
+	return aie4_for_each_vfs(xdna, aie4_check_vf_alive);
 }
 
 static int aie4_link_vfs(struct amdxdna_dev *xdna)

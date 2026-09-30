@@ -198,13 +198,21 @@ void aie4_free_notification(struct cert_comp *comp);
 int aie4_create_vfs(struct amdxdna_dev_hdl *ndev, int num_vfs);
 int aie4_sriov_configure(struct amdxdna_dev *xdna, int num_vfs);
 int aie4_sriov_stop(struct amdxdna_dev_hdl *ndev);
+int aie4_vfs_alive(struct amdxdna_dev *xdna);
 #else
 static inline int aie4_create_vfs(struct amdxdna_dev_hdl *ndev, int num_vfs)
 {
 	return 0;
 }
+
 #define aie4_sriov_configure NULL
+
 static inline int aie4_sriov_stop(struct amdxdna_dev_hdl *ndev)
+{
+	return 0;
+}
+
+static inline int aie4_vfs_alive(struct amdxdna_dev *xdna)
 {
 	return 0;
 }
