@@ -20,7 +20,8 @@ MODULE_LICENSE("GPL");
 
 /* Maximum transfer size to use. The windows driver reads by chunks of
  * 0x2000 bytes, so do the same. Note: reading more seems to work
- * too. */
+ * too.
+ */
 #define FPIX_MAX_TRANSFER 0x2000
 
 /* Structure to hold all of our device specific stuff */
@@ -33,7 +34,8 @@ struct usb_fpix {
 /* Delay after which claim the next frame. If the delay is too small,
  * the camera will return old frames. On the 4800Z, 20ms is bad, 25ms
  * will fail every 4 or 5 frames, but 30ms is perfect. On the A210,
- * 30ms is bad while 35ms is perfect. */
+ * 30ms is bad while 35ms is perfect.
+ */
 #define NEXT_FRAME_DELAY 35
 
 /* These cameras only support 320x200. */
@@ -112,7 +114,8 @@ again:
 					&len, FPIX_TIMEOUT);
 			if (ret < 0) {
 				/* Most of the time we get a timeout
-				 * error. Just restart. */
+				 * error. Just restart.
+				 */
 				goto again;
 			}
 #ifdef CONFIG_PM
@@ -130,7 +133,8 @@ again:
 				 * frame. Sometimes the jpeg is not complete,
 				 * but there's nothing we can do. We also end
 				 * here if the jpeg ends right at the end
-				 * of the frame. */
+				 * of the frame.
+				 */
 				gspca_frame_add(gspca_dev, LAST_PACKET,
 						data, len);
 				break;
@@ -146,7 +150,8 @@ again:
 
 		/* We must wait before trying reading the next
 		 * frame. If we don't, or if the delay is too short,
-		 * the camera will disconnect. */
+		 * the camera will disconnect.
+		 */
 		msleep(NEXT_FRAME_DELAY);
 	}
 
@@ -191,7 +196,8 @@ static int sd_start(struct gspca_dev *gspca_dev)
 	}
 
 	/* Read the result of the command. Ignore the result, for it
-	 * varies with the device. */
+	 * varies with the device.
+	 */
 	ret = usb_bulk_msg(gspca_dev->dev,
 			gspca_dev->urb[0]->pipe,
 			gspca_dev->urb[0]->transfer_buffer,
