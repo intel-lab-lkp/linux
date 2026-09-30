@@ -413,6 +413,13 @@ void *resctrl_arch_mon_ctx_alloc(struct rdt_resource *r,
 	} while (*ret == -ENOSPC && !signal_pending(current));
 	finish_wait(&resctrl_mon_ctx_waiters, &wait);
 
+	if (*ret < 0) {
+		int err = *ret;
+
+		kfree(ret);
+		return ERR_PTR(err);
+	}
+
 	return ret;
 }
 
