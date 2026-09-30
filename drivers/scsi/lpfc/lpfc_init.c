@@ -70,7 +70,7 @@ static enum cpuhp_state lpfc_cpuhp_state;
 static uint32_t lpfc_present_cpu;
 static bool lpfc_pldv_detect;
 
-static void __lpfc_cpuhp_remove(struct lpfc_hba *phba);
+static void __lpfc_cpuhp_remove(struct lpfc_hba *phba, bool shutdown);
 static void lpfc_cpuhp_remove(struct lpfc_hba *phba);
 static void lpfc_cpuhp_add(struct lpfc_hba *phba);
 static void lpfc_get_hba_model_desc(struct lpfc_hba *, uint8_t *, uint8_t *);
@@ -3936,7 +3936,7 @@ lpfc_offline(struct lpfc_hba *phba)
 	 * in hba_unset
 	 */
 	if (test_bit(FC_OFFLINE_MODE, &phba->pport->fc_flag))
-		__lpfc_cpuhp_remove(phba);
+		__lpfc_cpuhp_remove(phba, false);
 
 	if (phba->cfg_xri_rebalancing)
 		lpfc_destroy_multixri_pools(phba);
@@ -12745,7 +12745,7 @@ lpfc_cpuhp_get_eq(struct lpfc_hba *phba, unsigned int cpu,
 	return 0;
 }
 
-static void __lpfc_cpuhp_remove(struct lpfc_hba *phba)
+static void __lpfc_cpuhp_remove(struct lpfc_hba *phba, bool shutdown)
 {
 	if (phba->sli_rev != LPFC_SLI_REV4)
 		return;
@@ -12757,16 +12757,24 @@ static void __lpfc_cpuhp_remove(struct lpfc_hba *phba)
 	 * timer. Wait for the poll timer to retire.
 	 */
 	synchronize_rcu();
-	timer_delete_sync(&phba->cpuhp_poll_timer);
+	if (shutdown)
+		timer_shutdown_sync(&phba->cpuhp_poll_timer);
+	else
+		timer_delete_sync(&phba->cpuhp_poll_timer);
 }
 
 static void lpfc_cpuhp_remove(struct lpfc_hba *phba)
 {
-	if (phba->pport &&
-	    test_bit(FC_OFFLINE_MODE, &phba->pport->fc_flag))
+	if (phba->sli_rev != LPFC_SLI_REV4)
 		return;
 
-	__lpfc_cpuhp_remove(phba);
+	if (phba->pport &&
+	    test_bit(FC_OFFLINE_MODE, &phba->pport->fc_flag)) {
+		timer_shutdown_sync(&phba->cpuhp_poll_timer);
+		return;
+	}
+
+	__lpfc_cpuhp_remove(phba, true);
 }
 
 static void lpfc_cpuhp_add(struct lpfc_hba *phba)
