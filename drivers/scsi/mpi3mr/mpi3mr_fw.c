@@ -564,16 +564,18 @@ mpi3mr_get_reply_desc(struct op_reply_qinfo *op_reply_q, u32 reply_ci)
  * mpi3mr_process_op_reply_q - Operational reply queue handler
  * @mrioc: Adapter instance reference
  * @op_reply_q: Operational reply queue info
+ * @checked_empty: Optional, set to true if the queue was owned and had no
+ *		   reply ready, false otherwise
  *
  * Checks the specific operational reply queue and drains the
  * reply queue entries until the queue is empty and process the
  * individual reply descriptors.
  *
- * Return: 0 if queue is already processed,or number of reply
- *	    descriptors processed.
+ * Return: Number of reply descriptors processed, 0 if no reply was ready or
+ *	   another context is processing the queue.
  */
 int mpi3mr_process_op_reply_q(struct mpi3mr_ioc *mrioc,
-	struct op_reply_qinfo *op_reply_q)
+	struct op_reply_qinfo *op_reply_q, bool *checked_empty)
 {
 	struct op_req_qinfo *op_req_q;
 	u32 exp_phase;
@@ -582,6 +584,9 @@ int mpi3mr_process_op_reply_q(struct mpi3mr_ioc *mrioc,
 	u64 reply_dma = 0;
 	struct mpi3_default_reply_descriptor *reply_desc;
 	u16 req_q_idx = 0, reply_qidx, threshold_comps = 0;
+
+	if (checked_empty)
+		*checked_empty = false;
 
 	if (!op_reply_q)
 		return 0;
@@ -605,6 +610,8 @@ int mpi3mr_process_op_reply_q(struct mpi3mr_ioc *mrioc,
 		if ((le16_to_cpu(reply_desc->reply_flags) &
 		    MPI3_REPLY_DESCRIPT_FLAGS_PHASE_MASK) == exp_phase)
 			goto process_desc;
+		if (checked_empty)
+			*checked_empty = true;
 		atomic_dec(&op_reply_q->in_use);
 		return 0;
 	}
@@ -667,7 +674,7 @@ reply_ready:
 		 */
 		if ((num_op_reply > mrioc->max_host_ios) &&
 			(threaded_isr_poll == true)) {
-			op_reply_q->enable_irq_poll = true;
+			WRITE_ONCE(op_reply_q->enable_irq_poll, true);
 			break;
 		}
 #endif
@@ -712,7 +719,7 @@ int mpi3mr_blk_mq_poll(struct Scsi_Host *shost, unsigned int queue_num)
 		return 0;
 
 	num_entries = mpi3mr_process_op_reply_q(mrioc,
-			&mrioc->op_reply_qinfo[queue_num]);
+			&mrioc->op_reply_qinfo[queue_num], NULL);
 
 	return num_entries;
 }
@@ -739,7 +746,8 @@ static irqreturn_t mpi3mr_isr_primary(int irq, void *privdata)
 		num_admin_replies = mpi3mr_process_admin_reply_q(mrioc);
 	op_reply_q = READ_ONCE(intr_info->op_reply_q);
 	if (op_reply_q)
-		num_op_reply = mpi3mr_process_op_reply_q(mrioc, op_reply_q);
+		num_op_reply = mpi3mr_process_op_reply_q(mrioc, op_reply_q,
+							 NULL);
 
 	if (num_admin_replies || num_op_reply)
 		return IRQ_HANDLED;
@@ -769,7 +777,7 @@ static irqreturn_t mpi3mr_isr(int irq, void *privdata)
 	if ((threaded_isr_poll == false) || !op_reply_q)
 		return ret;
 
-	if (!op_reply_q->enable_irq_poll ||
+	if (!READ_ONCE(op_reply_q->enable_irq_poll) ||
 	    !atomic_read(&op_reply_q->pend_ios))
 		return ret;
 
@@ -783,8 +791,9 @@ static irqreturn_t mpi3mr_isr(int irq, void *privdata)
  * @irq: IRQ
  * @privdata: Interrupt info
  *
- * poll for pending I/O completions in a loop until pending I/Os
- * present or controller queue depth I/Os are processed.
+ * Poll for pending I/O completions until no I/Os are pending, a post-sleep
+ * check finds no reply ready while owning the queue, or controller queue
+ * depth I/Os are processed.
  *
  * Return: IRQ_NONE or IRQ_HANDLED
  */
@@ -795,6 +804,7 @@ static irqreturn_t mpi3mr_isr_poll(int irq, void *privdata)
 	struct op_reply_qinfo *op_reply_q;
 	u16 midx;
 	u32 num_op_reply = 0;
+	bool slept = false, idle = false, checked_empty;
 
 	if (!intr_info)
 		return IRQ_NONE;
@@ -819,17 +829,34 @@ static irqreturn_t mpi3mr_isr_poll(int irq, void *privdata)
 
 		if (!midx)
 			mpi3mr_process_admin_reply_q(mrioc);
-		num_op_reply +=
-		    mpi3mr_process_op_reply_q(mrioc, op_reply_q);
+		num_op_reply += mpi3mr_process_op_reply_q(mrioc, op_reply_q,
+							  &checked_empty);
+		/* Stop only on an empty check made while owning the queue */
+		if (slept && checked_empty) {
+			idle = true;
+			break;
+		}
 		if (!atomic_read(&op_reply_q->pend_ios))
 			break;
 
 		usleep_range(MPI3MR_IRQ_POLL_SLEEP, 10 * MPI3MR_IRQ_POLL_SLEEP);
+		slept = true;
 
 	} while (num_op_reply < mrioc->max_host_ios);
 
-	if (op_reply_q)
-		op_reply_q->enable_irq_poll = false;
+	if (op_reply_q) {
+		WRITE_ONCE(op_reply_q->enable_irq_poll, false);
+		if (idle) {
+			/*
+			 * Recheck after clearing, pairs with atomic_inc_return()
+			 * in mpi3mr_op_request_post().
+			 */
+			smp_mb();
+			if (atomic_read(&op_reply_q->pend_ios) >
+			    MPI3MR_IRQ_POLL_TRIGGER_IOCOUNT)
+				WRITE_ONCE(op_reply_q->enable_irq_poll, true);
+		}
+	}
 	enable_irq(intr_info->os_irq);
 
 	return IRQ_HANDLED;
@@ -2337,7 +2364,7 @@ static int mpi3mr_create_op_reply_q(struct mpi3mr_ioc *mrioc, u16 qidx)
 	op_reply_q->ephase = 1;
 	atomic_set(&op_reply_q->pend_ios, 0);
 	atomic_set(&op_reply_q->in_use, 0);
-	op_reply_q->enable_irq_poll = false;
+	WRITE_ONCE(op_reply_q->enable_irq_poll, false);
 	op_reply_q->qfull_watermark =
 		op_reply_q->num_replies - (MPI3MR_THRESHOLD_REPLY_COUNT * 2);
 
@@ -2688,7 +2715,7 @@ int mpi3mr_op_request_post(struct mpi3mr_ioc *mrioc,
 		midx = REPLY_QUEUE_IDX_TO_MSIX_IDX(
 		    reply_qidx, mrioc->op_reply_q_offset);
 		mpi3mr_process_op_reply_q(mrioc,
-		    READ_ONCE(mrioc->intr_info[midx].op_reply_q));
+		    READ_ONCE(mrioc->intr_info[midx].op_reply_q), NULL);
 
 		if (mpi3mr_check_req_qfull(op_req_q)) {
 
@@ -2740,7 +2767,8 @@ int mpi3mr_op_request_post(struct mpi3mr_ioc *mrioc,
 #ifndef CONFIG_PREEMPT_RT
 	if (atomic_inc_return(&mrioc->op_reply_qinfo[reply_qidx].pend_ios)
 	    > MPI3MR_IRQ_POLL_TRIGGER_IOCOUNT)
-		mrioc->op_reply_qinfo[reply_qidx].enable_irq_poll = true;
+		WRITE_ONCE(mrioc->op_reply_qinfo[reply_qidx].enable_irq_poll,
+			   true);
 #else
 	atomic_inc_return(&mrioc->op_reply_qinfo[reply_qidx].pend_ios);
 #endif
