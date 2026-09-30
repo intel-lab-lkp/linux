@@ -615,6 +615,7 @@ static struct ctl_table ipv4_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_doulongvec_minmax,
 	},
+#if IS_ENABLED(CONFIG_IPV4)
 	{
 		.procname	= "fib_sync_mem",
 		.data		= &sysctl_fib_sync_mem,
@@ -624,6 +625,7 @@ static struct ctl_table ipv4_table[] = {
 		.extra1		= &sysctl_fib_sync_mem_min,
 		.extra2		= &sysctl_fib_sync_mem_max,
 	},
+#endif
 };
 
 static const struct ctl_table ipv4_net_table[] = {

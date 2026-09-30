@@ -1421,7 +1421,7 @@ static bool nexthop_is_good_nh(const struct nexthop *nh)
 
 	switch (nhi->family) {
 	case AF_INET:
-		return ipv4_good_nh(&nhi->fib_nh);
+		return IS_ENABLED(CONFIG_IPV4) && ipv4_good_nh(&nhi->fib_nh);
 	case AF_INET6:
 		return IS_ENABLED(CONFIG_IPV6) && ipv6_good_nh(&nhi->fib6_nh);
 	}
@@ -4005,7 +4005,8 @@ static int nh_netdev_event(struct notifier_block *this,
 		break;
 	case NETDEV_CHANGEMTU:
 		info_ext = ptr;
-		nexthop_sync_mtu(dev, info_ext->ext.mtu);
+		if (IS_ENABLED(CONFIG_IPV4))
+			nexthop_sync_mtu(dev, info_ext->ext.mtu);
 		rt_cache_flush(dev_net(dev));
 		break;
 	}
