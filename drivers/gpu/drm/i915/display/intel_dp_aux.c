@@ -66,7 +66,7 @@ intel_dp_aux_wait_done(struct intel_dp *intel_dp)
 	int ret;
 
 	if (intel_parent_irq_enabled(display)) {
-#define C (((status = intel_de_read_notrace(display, ch_ctl)) & DP_AUX_CH_CTL_SEND_BUSY) == 0)
+#define C (((status = intel_de_read(display, ch_ctl)) & DP_AUX_CH_CTL_SEND_BUSY) == 0)
 		done = wait_event_timeout(display->gmbus.wait_queue, C,
 					  msecs_to_jiffies_timeout(timeout_ms));
 
@@ -324,7 +324,7 @@ intel_dp_aux_xfer(struct intel_dp *intel_dp,
 
 	/* Try to wait for any previous AUX channel activity */
 	for (try = 0; try < 3; try++) {
-		status = intel_de_read_notrace(display, ch_ctl);
+		status = intel_de_read(display, ch_ctl);
 		if ((status & DP_AUX_CH_CTL_SEND_BUSY) == 0)
 			break;
 		msleep(1);
