@@ -302,6 +302,11 @@ int __inet6_bind(struct sock *sk, struct sockaddr_unsized *uaddr, int addr_len,
 		struct net_device *dev = NULL;
 		int chk_addr_ret;
 
+		if (!IS_ENABLED(CONFIG_IPV4)) {
+			err = -EADDRNOTAVAIL;
+			goto out;
+		}
+
 		/* Binding to v4-mapped address on a v6-only socket
 		 * makes no sense
 		 */
