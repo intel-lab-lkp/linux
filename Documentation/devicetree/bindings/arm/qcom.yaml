@@ -1228,6 +1228,13 @@ properties:
 
       - items:
           - enum:
+              - samsung,galaxy-book4-edge-14
+              - samsung,galaxy-book4-edge-16
+          - const: samsung,galaxy-book4-edge
+          - const: qcom,x1e80100
+
+      - items:
+          - enum:
               - qcom,hamoa-iot-evk
           - const: qcom,hamoa-iot-som
           - const: qcom,x1e80100
