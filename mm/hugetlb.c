@@ -7065,7 +7065,15 @@ pte_t *huge_pmd_share(struct mm_struct *mm, struct vm_area_struct *vma,
 	pte_t *spte = NULL;
 	pte_t *pte;
 
-	i_mmap_lock_read(mapping);
+	/*
+	 * Some callers already hold i_mmap_rwsem for write, for example
+	 * move_hugetlb_page_tables(). PMD sharing is only an optimization, so
+	 * fall back to a private PMD table instead of blocking on the same
+	 * rwsem in read mode.
+	 */
+	if (!i_mmap_trylock_read(mapping))
+		goto alloc;
+
 	mapping_rmap_tree_foreach(svma, mapping, idx, idx) {
 		if (svma == vma)
 			continue;
@@ -7095,8 +7103,10 @@ pte_t *huge_pmd_share(struct mm_struct *mm, struct vm_area_struct *vma,
 	}
 	spin_unlock(&mm->page_table_lock);
 out:
-	pte = (pte_t *)pmd_alloc(mm, pud, addr);
 	i_mmap_unlock_read(mapping);
+
+alloc:
+	pte = (pte_t *)pmd_alloc(mm, pud, addr);
 	return pte;
 }
 
