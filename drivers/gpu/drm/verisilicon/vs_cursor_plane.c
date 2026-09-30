@@ -13,6 +13,7 @@
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_blend.h>
 #include <drm/drm_crtc.h>
+#include <drm/drm_fb_dma_helper.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_gem_atomic_helper.h>
@@ -23,6 +24,7 @@
 #include "vs_crtc.h"
 #include "vs_plane.h"
 #include "vs_dc.h"
+#include "vs_drm.h"
 #include "vs_hwdb.h"
 #include "vs_cursor_plane_regs.h"
 
@@ -135,6 +137,8 @@ static void vs_cursor_plane_atomic_disable(struct drm_plane *plane,
 static void vs_cursor_plane_atomic_update(struct drm_plane *plane,
 					   struct drm_atomic_commit *atomic_state)
 {
+	struct drm_plane_state *old_state = drm_atomic_get_old_plane_state(atomic_state,
+									   plane);
 	struct drm_plane_state *state = drm_atomic_get_new_plane_state(atomic_state,
 								       plane);
 	struct drm_framebuffer *fb = state->fb;
@@ -148,6 +152,8 @@ static void vs_cursor_plane_atomic_update(struct drm_plane *plane,
 		vs_cursor_plane_atomic_disable(plane, atomic_state);
 		return;
 	}
+
+	drm_fb_dma_sync_non_coherent(plane->dev, old_state, state);
 
 	vcrtc = drm_crtc_to_vs_crtc(crtc);
 	output = vcrtc->id;
@@ -269,6 +275,9 @@ struct drm_plane *vs_cursor_plane_init(struct drm_device *drm_dev,
 
 	drm_plane_helper_add(plane, &vs_cursor_plane_helper_funcs);
 	drm_plane_create_blend_mode_property(plane, BIT(DRM_MODE_BLEND_COVERAGE));
+
+	if (to_vs_drm_dev(drm_dev)->map_noncoherent)
+		drm_plane_enable_fb_damage_clips(plane);
 
 	return plane;
 }
