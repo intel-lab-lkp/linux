@@ -721,7 +721,6 @@ static int xfrm_replay_overflow_offload_esn(struct xfrm_state *x, struct sk_buff
 				xo->seq.hi = oseq_hi;
 			}
 			if (replay_esn->oseq_hi == 0) {
-				replay_esn->oseq--;
 				replay_esn->oseq_hi--;
 				xfrm_audit_state_replay_overflow(x, skb);
 				err = -EOVERFLOW;
