@@ -14,6 +14,16 @@
  */
 void ftrace_likely_update(struct ftrace_likely_data *f, int val,
 			  int expect, int is_constant);
+
+/*
+ * Branch profiler data is defined in compiler_types.h, before the atomic API
+ * is available. These counters are independent statistics and do not order
+ * accesses to other data.
+ */
+#define ftrace_branch_counter_inc(counter) \
+	__atomic_fetch_add(&(counter), 1, __ATOMIC_RELAXED)
+#define ftrace_branch_counter_read(counter) \
+	__atomic_load_n(&(counter), __ATOMIC_RELAXED)
 #if defined(CONFIG_TRACE_BRANCH_PROFILING) \
     && !defined(DISABLE_BRANCH_PROFILING) && !defined(__CHECKER__)
 #define likely_notrace(x)	__builtin_expect(!!(x), 1)
@@ -66,8 +76,8 @@ void ftrace_likely_update(struct ftrace_likely_data *f, int val,
 			.line = __LINE__,		\
 		};					\
 	(cond) ?					\
-		(__if_trace.miss_hit[1]++,1) :		\
-		(__if_trace.miss_hit[0]++,0);		\
+		(ftrace_branch_counter_inc(__if_trace.miss_hit[1]), 1) :\
+		(ftrace_branch_counter_inc(__if_trace.miss_hit[0]), 0);\
 })
 
 #endif /* CONFIG_PROFILE_ALL_BRANCHES */

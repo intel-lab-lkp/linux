@@ -73,7 +73,7 @@ probe_likely_condition(struct ftrace_likely_data *f, int val, int expect)
 
 	strscpy(entry->func, f->data.func);
 	strscpy(entry->file, p);
-	entry->constant = f->constant;
+	entry->constant = ftrace_branch_counter_read(f->constant);
 	entry->line = f->data.line;
 	entry->correct = val == expect;
 
@@ -202,7 +202,7 @@ void ftrace_likely_update(struct ftrace_likely_data *f, int val,
 
 	/* A constant is always correct */
 	if (is_constant) {
-		f->constant++;
+		ftrace_branch_counter_inc(f->constant);
 		val = expect;
 	}
 	/*
@@ -213,11 +213,10 @@ void ftrace_likely_update(struct ftrace_likely_data *f, int val,
 	 */
 	trace_likely_condition(f, val, expect);
 
-	/* FIXME: Make this atomic! */
 	if (val == expect)
-		f->data.correct++;
+		ftrace_branch_counter_inc(f->data.correct);
 	else
-		f->data.incorrect++;
+		ftrace_branch_counter_inc(f->data.incorrect);
 
 	user_access_restore(flags);
 }
@@ -239,13 +238,15 @@ static int annotated_branch_stat_headers(struct seq_file *m)
 
 static inline long get_incorrect_percent(const struct ftrace_branch_data *p)
 {
+	unsigned long correct = ftrace_branch_counter_read(p->correct);
+	unsigned long incorrect = ftrace_branch_counter_read(p->incorrect);
 	long percent;
 
-	if (p->correct) {
-		percent = p->incorrect * 100;
-		percent /= p->correct + p->incorrect;
+	if (correct) {
+		percent = incorrect * 100;
+		percent /= correct + incorrect;
 	} else
-		percent = p->incorrect ? 100 : -1;
+		percent = incorrect ? 100 : -1;
 
 	return percent;
 }
@@ -282,7 +283,8 @@ static void branch_stat_show(struct seq_file *m,
 static int branch_stat_show_normal(struct seq_file *m,
 				   struct ftrace_branch_data *p, const char *f)
 {
-	seq_printf(m, "%8lu %8lu ",  p->correct, p->incorrect);
+	seq_printf(m, "%8lu %8lu ", ftrace_branch_counter_read(p->correct),
+		   ftrace_branch_counter_read(p->incorrect));
 	branch_stat_show(m, p, f);
 	return 0;
 }
@@ -291,18 +293,21 @@ static int annotate_branch_stat_show(struct seq_file *m, void *v)
 {
 	struct ftrace_likely_data *p = v;
 	const char *f;
+	unsigned long constant;
 	int l;
 
 	f = branch_stat_process_file(&p->data);
+	constant = ftrace_branch_counter_read(p->constant);
 
-	if (!p->constant)
+	if (!constant)
 		return branch_stat_show_normal(m, &p->data, f);
 
-	l = snprintf(NULL, 0, "/%lu", p->constant);
+	l = snprintf(NULL, 0, "/%lu", constant);
 	l = l > 8 ? 0 : 8 - l;
 
 	seq_printf(m, "%8lu/%lu %*lu ",
-		   p->data.correct, p->constant, l, p->data.incorrect);
+		   ftrace_branch_counter_read(p->data.correct), constant, l,
+		   ftrace_branch_counter_read(p->data.incorrect));
 	branch_stat_show(m, &p->data, f);
 	return 0;
 }
@@ -329,6 +334,10 @@ static int annotated_branch_stat_cmp(const void *p1, const void *p2)
 {
 	const struct ftrace_branch_data *a = p1;
 	const struct ftrace_branch_data *b = p2;
+	unsigned long a_incorrect = ftrace_branch_counter_read(a->incorrect);
+	unsigned long b_incorrect = ftrace_branch_counter_read(b->incorrect);
+	unsigned long a_correct = ftrace_branch_counter_read(a->correct);
+	unsigned long b_correct = ftrace_branch_counter_read(b->correct);
 
 	long percent_a, percent_b;
 
@@ -340,9 +349,9 @@ static int annotated_branch_stat_cmp(const void *p1, const void *p2)
 	if (percent_a > percent_b)
 		return 1;
 
-	if (a->incorrect < b->incorrect)
+	if (a_incorrect < b_incorrect)
 		return -1;
-	if (a->incorrect > b->incorrect)
+	if (a_incorrect > b_incorrect)
 		return 1;
 
 	/*
@@ -350,9 +359,9 @@ static int annotated_branch_stat_cmp(const void *p1, const void *p2)
 	 * first, we continue that by showing best (correct)
 	 * cases last.
 	 */
-	if (a->correct > b->correct)
+	if (a_correct > b_correct)
 		return -1;
-	if (a->correct < b->correct)
+	if (a_correct < b_correct)
 		return 1;
 
 	return 0;
