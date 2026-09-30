@@ -1097,10 +1097,15 @@ void digital_tg_recv_sens_req(struct nfc_digital_dev *ddev, void *arg,
 		goto exit;
 	}
 
+	if (!resp->len) {
+		rc = -EINVAL;
+		goto exit;
+	}
+
 	sens_req = resp->data[0];
 
-	if (!resp->len || (sens_req != DIGITAL_CMD_SENS_REQ &&
-	    sens_req != DIGITAL_CMD_ALL_REQ)) {
+	if (sens_req != DIGITAL_CMD_SENS_REQ &&
+	    sens_req != DIGITAL_CMD_ALL_REQ) {
 		rc = -EINVAL;
 		goto exit;
 	}
