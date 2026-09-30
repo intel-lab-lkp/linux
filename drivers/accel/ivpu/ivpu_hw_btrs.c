@@ -24,9 +24,6 @@
 			   (REG_FLD(VPU_HW_BTRS_LNL_INTERRUPT_STAT, IMR1_ERR)) | \
 			   (REG_FLD(VPU_HW_BTRS_LNL_INTERRUPT_STAT, SURV_ERR)))
 
-#define BTRS_MTL_ALL_IRQ_MASK (BTRS_MTL_IRQ_MASK | (REG_FLD(VPU_HW_BTRS_MTL_INTERRUPT_STAT, \
-			       FREQ_CHANGE)))
-
 #define BTRS_IRQ_DISABLE_MASK ((u32)-1)
 
 #define BTRS_LNL_ALL_IRQ_MASK ((u32)-1)
@@ -58,18 +55,6 @@
 #define DCT_REQ                        0x2
 #define DCT_ENABLE                     0x1
 #define DCT_DISABLE                    0x0
-
-int ivpu_hw_btrs_irqs_clear_with_0_mtl(struct ivpu_device *vdev)
-{
-	REGB_WR32(VPU_HW_BTRS_MTL_INTERRUPT_STAT, BTRS_MTL_ALL_IRQ_MASK);
-	if (REGB_RD32(VPU_HW_BTRS_MTL_INTERRUPT_STAT) == BTRS_MTL_ALL_IRQ_MASK) {
-		/* Writing 1s does not clear the interrupt status register */
-		REGB_WR32(VPU_HW_BTRS_MTL_INTERRUPT_STAT, 0x0);
-		return true;
-	}
-
-	return false;
-}
 
 static void freq_ratios_init_mtl(struct ivpu_device *vdev)
 {
@@ -729,14 +714,7 @@ bool ivpu_hw_btrs_irq_handler_mtl(struct ivpu_device *vdev, int irq)
 	}
 
 	/* This must be done after interrupts are cleared at the source. */
-	if (IVPU_WA(interrupt_clear_with_0))
-		/*
-		 * Writing 1 triggers an interrupt, so we can't perform read update write.
-		 * Clear local interrupt status by writing 0 to all bits.
-		 */
-		REGB_WR32(VPU_HW_BTRS_MTL_INTERRUPT_STAT, 0x0);
-	else
-		REGB_WR32(VPU_HW_BTRS_MTL_INTERRUPT_STAT, status);
+	REGB_WR32(VPU_HW_BTRS_MTL_INTERRUPT_STAT, status);
 
 	if (schedule_recovery)
 		ivpu_pm_trigger_recovery(vdev, "Buttress IRQ");

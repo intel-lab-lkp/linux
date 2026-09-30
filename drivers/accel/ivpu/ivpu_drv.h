@@ -110,7 +110,6 @@
 struct ivpu_wa_table {
 	bool punit_disabled;
 	bool clear_runtime_mem;
-	bool interrupt_clear_with_0;
 	bool disable_clock_relinquish;
 	bool wp0_during_power_up;
 	bool disable_d0i2;

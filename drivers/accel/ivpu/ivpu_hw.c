@@ -67,9 +67,6 @@ static void wa_init(struct ivpu_device *vdev)
 	vdev->wa.punit_disabled = false;
 	vdev->wa.clear_runtime_mem = false;
 
-	if (ivpu_hw_btrs_gen(vdev) == IVPU_HW_BTRS_MTL)
-		vdev->wa.interrupt_clear_with_0 = ivpu_hw_btrs_irqs_clear_with_0_mtl(vdev);
-
 	if ((ivpu_device_id(vdev) == PCI_DEVICE_ID_LNL &&
 	     ivpu_revision(vdev) < IVPU_HW_IP_REV_LNL_B0) ||
 	    (ivpu_device_id(vdev) == PCI_DEVICE_ID_NVL &&
@@ -90,7 +87,6 @@ static void wa_init(struct ivpu_device *vdev)
 
 	IVPU_PRINT_WA(punit_disabled);
 	IVPU_PRINT_WA(clear_runtime_mem);
-	IVPU_PRINT_WA(interrupt_clear_with_0);
 	IVPU_PRINT_WA(disable_clock_relinquish);
 	IVPU_PRINT_WA(wp0_during_power_up);
 	IVPU_PRINT_WA(disable_d0i2);
