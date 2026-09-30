@@ -1173,6 +1173,7 @@ static int isofs_read_level3_size(struct inode *inode)
 	struct buffer_head *bh = NULL;
 	unsigned long block, offset, block_saved, offset_saved;
 	int i = 0;
+	int empty_blocks = 0;
 	int more_entries = 0;
 	struct iso_directory_record *tmpde = NULL;
 	struct iso_inode_info *ei = ISOFS_I(inode);
@@ -1201,6 +1202,17 @@ static int isofs_read_level3_size(struct inode *inode)
 		de_len = *(unsigned char *) de;
 
 		if (de_len == 0) {
+			/*
+			 * A zero length byte at the start of a block (offset == 0)
+			 * means the whole block is empty. Count that towards the
+			 * same 100 limit as file sections, or a chain of empty
+			 * blocks could be walked without bound.
+			 * Track empty_blocks separately from section count 'i'
+			 * so that 'if (i == 1)' correctly identifies the start of
+			 * the second section even if an empty block precedes it.
+			 */
+			if (offset == 0 && ++empty_blocks + i > 100)
+				goto out_toomany;
 			brelse(bh);
 			bh = NULL;
 			++block;
@@ -1243,7 +1255,7 @@ static int isofs_read_level3_size(struct inode *inode)
 		more_entries = de->flags[-high_sierra] & 0x80;
 
 		i++;
-		if (i > 100)
+		if (i + empty_blocks > 100)
 			goto out_toomany;
 	} while (more_entries);
 out:
@@ -1261,7 +1273,7 @@ out_noread:
 	return -EIO;
 
 out_toomany:
-	printk(KERN_INFO "%s: More than 100 file sections ?!?, aborting...\n"
+	printk(KERN_INFO "%s: More than 100 file sections/empty blocks ?!?, aborting...\n"
 		"isofs_read_level3_size: inode=%llu\n",
 		__func__, inode->i_ino);
 	goto out;
