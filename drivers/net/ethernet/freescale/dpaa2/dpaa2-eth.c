@@ -15,6 +15,7 @@
 #include <linux/bpf_trace.h>
 #include <linux/fsl/ptp_qoriq.h>
 #include <linux/ptp_classify.h>
+#include <linux/sched/isolation.h>
 #include <net/pkt_cls.h>
 #include <net/sock.h>
 #include <net/tso.h>
@@ -3173,6 +3174,7 @@ static int dpaa2_eth_setup_dpio(struct dpaa2_eth_priv *priv)
 	struct dpaa2_eth_channel *channel;
 	struct dpcon_notification_cfg dpcon_notif_cfg;
 	struct device *dev = priv->net_dev->dev.parent;
+	const struct cpumask *hk_mask = housekeeping_cpumask(HK_TYPE_MANAGED_IRQ);
 	int i, err;
 
 	/* We want the ability to spread ingress traffic (RX, TX conf) to as
@@ -3182,10 +3184,11 @@ static int dpaa2_eth_setup_dpio(struct dpaa2_eth_priv *priv)
 	 * Allocate one channel per core and register it to the core's
 	 * affine DPIO. If not enough channels are available for all cores
 	 * or if some cores don't have an affine DPIO, there will be no
-	 * ingress frame processing on those cores.
+	 * ingress frame processing on those cores. Isolated cores
+	 * (isolcpus=managed_irq) have no affine DPIO.
 	 */
 	cpumask_clear(&priv->dpio_cpumask);
-	for_each_online_cpu(i) {
+	for_each_cpu_and(i, cpu_online_mask, hk_mask) {
 		/* Try to allocate a channel */
 		channel = dpaa2_eth_alloc_channel(priv);
 		if (IS_ERR_OR_NULL(channel)) {
@@ -3244,6 +3247,9 @@ static int dpaa2_eth_setup_dpio(struct dpaa2_eth_priv *priv)
 		if (priv->num_channels == priv->dpni_attrs.num_queues)
 			break;
 	}
+
+	if (cpumask_empty(&priv->dpio_cpumask))
+		goto err_alloc_ch;
 
 	return 0;
 
