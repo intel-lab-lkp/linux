@@ -253,7 +253,7 @@ static int video_start_streaming(struct vb2_queue *q, unsigned int count)
 {
 	struct camss_video *video = vb2_get_drv_priv(q);
 	struct video_device *vdev = &video->vdev;
-	struct media_entity *entity;
+	struct media_entity *entity, *started_entity;
 	struct media_pad *pad;
 	struct v4l2_subdev *subdev;
 	int ret;
@@ -283,11 +283,30 @@ static int video_start_streaming(struct vb2_queue *q, unsigned int count)
 
 		ret = v4l2_subdev_call(subdev, video, s_stream, 1);
 		if (ret < 0 && ret != -ENOIOCTLCMD)
-			goto error;
+			goto stop_subdevs;
 	}
 
 	return 0;
 
+stop_subdevs:
+	/* Stop the subdevices started before the failing entity. */
+	started_entity = &vdev->entity;
+	while (1) {
+		pad = &started_entity->pads[0];
+		if (!(pad->flags & MEDIA_PAD_FL_SINK))
+			break;
+
+		pad = media_pad_remote_pad_first(pad);
+		if (!pad || !is_media_entity_v4l2_subdev(pad->entity))
+			break;
+
+		started_entity = pad->entity;
+		if (started_entity == entity)
+			break;
+
+		subdev = media_entity_to_v4l2_subdev(started_entity);
+		v4l2_subdev_call(subdev, video, s_stream, 0);
+	}
 error:
 	video_device_pipeline_stop(vdev);
 
