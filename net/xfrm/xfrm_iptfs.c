@@ -143,6 +143,7 @@ struct skb_wseq {
  * @drop_time_ns: timer intervan in nanoseconds.
  * @ra_newskb: new pkt being reassembled.
  * @ra_wantseq: expected next sequence for reassembly.
+ * @ra_drop_time: deadline for dropping @ra_newskb.
  * @ra_runt: last pkt bytes from very end of last skb.
  * @ra_runtlen: size of ra_runt.
  */
@@ -172,6 +173,7 @@ struct xfrm_iptfs_data {
 	/* Tunnel input reassembly */
 	struct sk_buff *ra_newskb; /* new pkt being reassembled */
 	u64 ra_wantseq;		   /* expected next sequence */
+	u64 ra_drop_time;	   /* reassembly drop deadline */
 	u8 ra_runt[6];		   /* last pkt bytes from last skb */
 	u8 ra_runtlen;		   /* count of ra_runt */
 };
@@ -703,15 +705,38 @@ static void iptfs_complete_inner_skb(struct xfrm_state *x, struct sk_buff *skb)
 	}
 }
 
+/* Arm the shared timer for the earliest reassembly or reorder deadline. */
+static void iptfs_reset_drop_timer(struct xfrm_iptfs_data *xtfs)
+{
+	u64 expires = 0;
+	u64 now;
+
+	assert_spin_locked(&xtfs->drop_lock);
+
+	if (xtfs->ra_newskb)
+		expires = xtfs->ra_drop_time;
+	if (xtfs->w_savedlen &&
+	    (!expires || xtfs->w_saved[0].drop_time < expires))
+		expires = xtfs->w_saved[0].drop_time;
+	if (!expires) {
+		hrtimer_try_to_cancel(&xtfs->drop_timer);
+		return;
+	}
+
+	now = ktime_get_raw_fast_ns();
+	hrtimer_start(&xtfs->drop_timer, expires > now ? expires - now : 0,
+		      IPTFS_HRTIMER_MODE);
+}
+
 static void __iptfs_reassem_done(struct xfrm_iptfs_data *xtfs, bool free)
 {
 	assert_spin_locked(&xtfs->drop_lock);
 
-	/* We don't care if it works locking takes care of things */
-	hrtimer_try_to_cancel(&xtfs->drop_timer);
 	if (free)
 		kfree_skb(xtfs->ra_newskb);
 	xtfs->ra_newskb = NULL;
+	xtfs->ra_drop_time = 0;
+	iptfs_reset_drop_timer(xtfs);
 }
 
 /**
@@ -845,6 +870,9 @@ static u32 iptfs_reassem_cont(struct xfrm_iptfs_data *xtfs, u64 seq,
 			goto abandon;
 		}
 		xtfs->ra_newskb = newskb;
+		xtfs->ra_drop_time = ktime_get_raw_fast_ns() +
+				     xtfs->drop_time_ns;
+		iptfs_reset_drop_timer(xtfs);
 
 		/* Copy the runt data into the buffer, but leave data
 		 * pointers the same as normal non-runt case. The extra `rrem`
@@ -1162,12 +1190,9 @@ static bool __input_process_payload(struct xfrm_state *x, u32 data,
 
 			xtfs->ra_newskb = skb;
 			xtfs->ra_wantseq = seq + 1;
-			if (!hrtimer_is_queued(&xtfs->drop_timer)) {
-				/* softirq blocked lest the timer fire and interrupt us */
-				hrtimer_start(&xtfs->drop_timer,
-					      xtfs->drop_time_ns,
-					      IPTFS_HRTIMER_MODE);
-			}
+			xtfs->ra_drop_time = ktime_get_raw_fast_ns() +
+					     xtfs->drop_time_ns;
+			iptfs_reset_drop_timer(xtfs);
 
 			spin_unlock(&xtfs->drop_lock);
 
@@ -1336,7 +1361,7 @@ static u32 __reorder_drop(struct xfrm_iptfs_data *xtfs, struct list_head *list)
 	u32 scount = 0;
 
 	if (xtfs->w_saved[0].drop_time > now)
-		goto set_timer;
+		return 0;
 
 	++xtfs->w_wantseq;
 
@@ -1363,13 +1388,6 @@ outerdone:
 		__vec_shift(xtfs, count);
 	}
 
-	if (xtfs->w_savedlen) {
-set_timer:
-		/* Drifting is OK */
-		hrtimer_start(&xtfs->drop_timer,
-			      xtfs->w_saved[0].drop_time - now,
-			      IPTFS_HRTIMER_MODE);
-	}
 	return scount;
 }
 
@@ -1423,10 +1441,7 @@ static void iptfs_set_window_drop_times(struct xfrm_iptfs_data *xtfs, int index)
 	while (index-- > 0 && !s[index].skb)
 		s[index].drop_time = drop_time;
 
-	/* If we walked all the way back, schedule the drop timer if needed */
-	if (index == -1 && !hrtimer_is_queued(&xtfs->drop_timer))
-		hrtimer_start(&xtfs->drop_timer, xtfs->drop_time_ns,
-			      IPTFS_HRTIMER_MODE);
+	iptfs_reset_drop_timer(xtfs);
 }
 
 static void __reorder_future_fits(struct xfrm_iptfs_data *xtfs,
@@ -1660,16 +1675,15 @@ static void iptfs_input_reorder(struct xfrm_iptfs_data *xtfs,
  * The drop timer is set when we start an in progress reassembly, and also when
  * we save a future packet in the window saved array.
  *
- * NOTE packets in the save window are always newer WRT drop times as
- * they get further in the future. i.e. for:
+ * Packets in the save window are always newer WRT drop times as they get
+ * further in the future. i.e. for:
  *
  *    if slots (S0, S1, ... Sn) and `Dn` is the drop time for slot `Sn`,
  *    then D(n-1) <= D(n).
  *
- * So, regardless of why the timer is firing we can always discard any inprogress
- * fragment; either it's the reassembly timer, or slot 0 is going to be
- * dropped as S0 must have the most recent drop time, and slot 0 holds the
- * continuation fragment of the in progress packet.
+ * Reassembly and slot 0 keep independent deadlines. The shared timer is armed
+ * for the earlier one, and this callback expires only the state whose deadline
+ * has passed before rearming for any state that remains.
  *
  * Returns HRTIMER_NORESTART.
  */
@@ -1679,6 +1693,7 @@ static enum hrtimer_restart iptfs_drop_timer(struct hrtimer *me)
 	struct list_head list;
 	struct xfrm_iptfs_data *xtfs;
 	struct xfrm_state *x;
+	u64 now;
 	u32 count;
 
 	xtfs = container_of(me, typeof(*xtfs), drop_timer);
@@ -1687,15 +1702,22 @@ static enum hrtimer_restart iptfs_drop_timer(struct hrtimer *me)
 	INIT_LIST_HEAD(&list);
 
 	spin_lock(&xtfs->drop_lock);
+	now = ktime_get_raw_fast_ns();
 
-	/* Drop any in progress packet */
-	skb = xtfs->ra_newskb;
-	xtfs->ra_newskb = NULL;
+	/* Drop an in-progress packet only after its own deadline. */
+	if (xtfs->ra_newskb && xtfs->ra_drop_time <= now) {
+		skb = xtfs->ra_newskb;
+		xtfs->ra_newskb = NULL;
+		xtfs->ra_drop_time = 0;
+	} else {
+		skb = NULL;
+	}
 
 	/* Now drop as many packets as we should from the reordering window
 	 * saved array
 	 */
 	count = xtfs->w_savedlen ? __reorder_drop(xtfs, &list) : 0;
+	iptfs_reset_drop_timer(xtfs);
 
 	spin_unlock(&xtfs->drop_lock);
 
@@ -2702,6 +2724,7 @@ static int iptfs_clone_state(struct xfrm_state *x, struct xfrm_state *orig)
 	xtfs->w_savedlen = 0;
 	xtfs->ra_newskb = NULL;
 	xtfs->ra_wantseq = 0;
+	xtfs->ra_drop_time = 0;
 	xtfs->ra_runtlen = 0;
 
 	__module_get(x->mode_cbs->owner);
