@@ -3209,6 +3209,7 @@ error_trans:
 error_free_zone:
 	btrfs_destroy_dev_zone_info(device);
 error_free_device:
+	synchronize_rcu();
 	btrfs_free_device(device);
 error:
 	btrfs_release_device_allow_freeze(bdev_file);
