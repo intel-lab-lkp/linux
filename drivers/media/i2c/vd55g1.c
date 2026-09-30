@@ -1178,7 +1178,7 @@ static int vd55g1_enable_streams(struct v4l2_subdev *sd,
 
 err_rpm_put:
 	pm_runtime_put(sensor->dev);
-	return -EINVAL;
+	return ret;
 }
 
 static int vd55g1_disable_streams(struct v4l2_subdev *sd,
