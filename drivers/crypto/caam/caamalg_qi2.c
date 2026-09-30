@@ -25,6 +25,7 @@
 #include <soc/fsl/dpaa2-fd.h>
 #include <crypto/xts.h>
 #include <linux/unaligned.h>
+#include <linux/sched/isolation.h>
 
 #define CAAM_CRA_PRIORITY	2000
 
@@ -4683,9 +4684,10 @@ static int __cold dpaa2_dpseci_dpio_setup(struct dpaa2_caam_priv *priv)
 	struct device *dev = priv->dev;
 	struct dpaa2_io_notification_ctx *nctx;
 	struct dpaa2_caam_priv_per_cpu *ppriv;
+	const struct cpumask *hk_mask = housekeeping_cpumask(HK_TYPE_MANAGED_IRQ);
 	int err, i = 0, cpu;
 
-	for_each_online_cpu(cpu) {
+	for_each_cpu_and(cpu, cpu_online_mask, hk_mask) {
 		ppriv = per_cpu_ptr(priv->ppriv, cpu);
 		ppriv->priv = priv;
 		nctx = &ppriv->nctx;
@@ -4725,14 +4727,14 @@ static int __cold dpaa2_dpseci_dpio_setup(struct dpaa2_caam_priv *priv)
 	return 0;
 
 err:
-	for_each_online_cpu(cpu) {
+	for_each_cpu_and(cpu, cpu_online_mask, hk_mask) {
 		ppriv = per_cpu_ptr(priv->ppriv, cpu);
 		if (!ppriv->nctx.cb)
 			break;
 		dpaa2_io_service_deregister(ppriv->dpio, &ppriv->nctx, dev);
 	}
 
-	for_each_online_cpu(cpu) {
+	for_each_cpu_and(cpu, cpu_online_mask, hk_mask) {
 		ppriv = per_cpu_ptr(priv->ppriv, cpu);
 		if (!ppriv->store)
 			break;
@@ -4745,9 +4747,10 @@ err:
 static void __cold dpaa2_dpseci_dpio_free(struct dpaa2_caam_priv *priv)
 {
 	struct dpaa2_caam_priv_per_cpu *ppriv;
+	const struct cpumask *hk_mask = housekeeping_cpumask(HK_TYPE_MANAGED_IRQ);
 	int i = 0, cpu;
 
-	for_each_online_cpu(cpu) {
+	for_each_cpu_and(cpu, cpu_online_mask, hk_mask) {
 		ppriv = per_cpu_ptr(priv->ppriv, cpu);
 		dpaa2_io_service_deregister(ppriv->dpio, &ppriv->nctx,
 					    priv->dev);
@@ -4764,10 +4767,11 @@ static int dpaa2_dpseci_bind(struct dpaa2_caam_priv *priv)
 	struct device *dev = priv->dev;
 	struct fsl_mc_device *ls_dev = to_fsl_mc_device(dev);
 	struct dpaa2_caam_priv_per_cpu *ppriv;
+	const struct cpumask *hk_mask = housekeeping_cpumask(HK_TYPE_MANAGED_IRQ);
 	int err = 0, i = 0, cpu;
 
 	/* Configure Rx queues */
-	for_each_online_cpu(cpu) {
+	for_each_cpu_and(cpu, cpu_online_mask, hk_mask) {
 		ppriv = per_cpu_ptr(priv->ppriv, cpu);
 
 		rx_queue_cfg.options = DPSECI_QUEUE_OPT_DEST |
@@ -5012,6 +5016,8 @@ static int __cold dpaa2_dpseci_setup(struct fsl_mc_device *ls_dev)
 	struct device *dev = &ls_dev->dev;
 	struct dpaa2_caam_priv *priv;
 	struct dpaa2_caam_priv_per_cpu *ppriv;
+	const struct cpumask *hk_mask = housekeeping_cpumask(HK_TYPE_MANAGED_IRQ);
+	unsigned int num_online_hk_cpus = cpumask_weight_and(cpu_online_mask, hk_mask);
 	int err, cpu;
 	u8 i;
 
@@ -5070,10 +5076,10 @@ static int __cold dpaa2_dpseci_setup(struct fsl_mc_device *ls_dev)
 
 	priv->num_pairs = min(priv->dpseci_attr.num_rx_queues,
 			      priv->dpseci_attr.num_tx_queues);
-	if (priv->num_pairs > num_online_cpus()) {
+	if (priv->num_pairs > num_online_hk_cpus) {
 		dev_warn(dev, "%d queues won't be used\n",
-			 priv->num_pairs - num_online_cpus());
-		priv->num_pairs = num_online_cpus();
+			 priv->num_pairs - num_online_hk_cpus);
+		priv->num_pairs = num_online_hk_cpus;
 	}
 
 	for (i = 0; i < priv->dpseci_attr.num_rx_queues; i++) {
@@ -5151,7 +5157,7 @@ static int dpaa2_dpseci_enable(struct dpaa2_caam_priv *priv)
 	struct dpaa2_caam_priv_per_cpu *ppriv;
 	int i;
 
-	for (i = 0; i < priv->num_pairs; i++) {
+	for_each_cpu(i, priv->clean_mask) {
 		ppriv = per_cpu_ptr(priv->ppriv, i);
 		napi_enable(&ppriv->napi);
 	}
@@ -5180,7 +5186,7 @@ static int __cold dpaa2_dpseci_disable(struct dpaa2_caam_priv *priv)
 
 	dev_dbg(dev, "disable: %s\n", str_false_true(enabled));
 
-	for (i = 0; i < priv->num_pairs; i++) {
+	for_each_cpu(i, priv->clean_mask) {
 		ppriv = per_cpu_ptr(priv->ppriv, i);
 		napi_disable(&ppriv->napi);
 		netif_napi_del(&ppriv->napi);
