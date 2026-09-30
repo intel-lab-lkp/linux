@@ -803,6 +803,89 @@ static void test_reset_preserves_id_regs(struct kvm_vcpu *vcpu)
 	ksft_test_result_pass("%s\n", __func__);
 }
 
+struct reg_ftr_val {
+	u64 reg;
+	u64 mask;
+	u64 val;
+};
+
+#define REG_FTR_VAL(r, f, v)					\
+	{ .reg = ARM64_SYS_REG(sys_reg_Op0(SYS_ ## r),		\
+			       sys_reg_Op1(SYS_ ## r),		\
+			       sys_reg_CRn(SYS_ ## r),		\
+			       sys_reg_CRm(SYS_ ## r),		\
+			       sys_reg_Op2(SYS_ ## r)),		\
+	  .mask = r ## _ ## f ## _MASK,				\
+	  .val = (r ## _ ## f ## _ ## v  << r ## _ ## f ## _SHIFT) }
+
+static const struct reg_ftr_val s1pie_no_tcr2[] = {
+	REG_FTR_VAL(ID_AA64MMFR3_EL1, TCRX, NI),
+	REG_FTR_VAL(ID_AA64MMFR3_EL1, S1PIE, IMP),
+	{ }
+};
+
+static const struct reg_ftr_val s1poe_no_tcr2[] = {
+	REG_FTR_VAL(ID_AA64MMFR3_EL1, TCRX, NI),
+	REG_FTR_VAL(ID_AA64MMFR3_EL1, S1POE, IMP),
+	{ }
+};
+
+struct ftr_config {
+	const char *name;
+	const struct reg_ftr_val *regs;
+};
+
+static const struct ftr_config invalid_configs[] = {
+	{ .name = "S1PIE without TCRX", .regs = s1pie_no_tcr2 },
+	{ .name = "S1POE without TCRX", .regs = s1poe_no_tcr2 },
+};
+
+static void test_invalid_config(const struct ftr_config *config)
+{
+	struct kvm_vcpu *vcpu;
+	struct kvm_vm *vm;
+	const struct reg_ftr_val *field;
+	u64 val;
+	int ret;
+
+	vm = vm_create(1);
+	vm_enable_cap(vm, KVM_CAP_ARM_WRITABLE_IMP_ID_REGS, 0);
+	vcpu = vm_vcpu_add(vm, 0, guest_code);
+	kvm_arch_vm_finalize_vcpus(vm);
+
+	/*
+	 * If we don't manage to set any of the fields assume the
+	 * system does not support the feature and skip the test.
+	 */
+	for (field = config->regs; field->reg; field++) {
+		val = vcpu_get_reg(vcpu, field->reg);
+		val &= ~field->mask;
+		val |= field->val;
+		__vcpu_set_reg(vcpu, field->reg, val);
+
+		if (vcpu_get_reg(vcpu, field->reg) != val) {
+			ksft_print_msg("Test setup not supported\n");
+			ksft_test_result_skip("refuse %s\n", config->name);
+			goto out;
+		}
+	}
+
+	ret = _vcpu_run(vcpu);
+	ksft_test_result(ret < 0 && errno == EINVAL, "refuse %s\n",
+			 config->name);
+out:
+	kvm_vm_free(vm);
+}
+
+static void test_invalid_configs(void)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(invalid_configs); i++) {
+		test_invalid_config(&invalid_configs[i]);
+	}
+}
+
 int main(void)
 {
 	struct kvm_vcpu *vcpu;
@@ -829,11 +912,15 @@ int main(void)
 	ksft_print_header();
 
 	test_cnt = 3 + MPAM_IDREG_TEST + MTE_IDREG_TEST;
+	test_cnt += ARRAY_SIZE(invalid_configs);
 	for (i = 0; i < ARRAY_SIZE(test_regs); i++)
 		for (j = 0; test_regs[i].ftr_bits[j].type != FTR_END; j++)
 			test_cnt++;
 
 	ksft_set_plan(test_cnt);
+
+	/* Do this first in case a break interferes with other tests */
+	test_invalid_configs();
 
 	test_vm_ftr_id_regs(vcpu, aarch64_only);
 	test_vcpu_ftr_id_regs(vcpu);
