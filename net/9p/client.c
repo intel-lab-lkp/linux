@@ -235,24 +235,18 @@ free_req:
 struct p9_req_t *p9_tag_lookup(struct p9_client *c, u16 tag)
 {
 	struct p9_req_t *req;
+	unsigned long flags;
 
-	rcu_read_lock();
-again:
+	/*
+	 * Pin the request while removal from this client's IDR is excluded.
+	 * Tag equality alone cannot distinguish a request recycled for another
+	 * client from the same SLAB_TYPESAFE_BY_RCU cache.
+	 */
+	spin_lock_irqsave(&c->lock, flags);
 	req = idr_find(&c->reqs, tag);
-	if (req) {
-		/* We have to be careful with the req found under rcu_read_lock
-		 * Thanks to SLAB_TYPESAFE_BY_RCU we can safely try to get the
-		 * ref again without corrupting other data, then check again
-		 * that the tag matches once we have the ref
-		 */
-		if (!p9_req_try_get(req))
-			goto again;
-		if (req->tc.tag != tag) {
-			p9_req_put(c, req);
-			goto again;
-		}
-	}
-	rcu_read_unlock();
+	if (req && !p9_req_try_get(req))
+		req = NULL;
+	spin_unlock_irqrestore(&c->lock, flags);
 
 	return req;
 }
