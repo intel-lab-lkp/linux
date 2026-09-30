@@ -27479,6 +27479,12 @@ L:	linux-sound@vger.kernel.org
 S:	Odd Fixes
 F:	sound/soc/codecs/tas571x*
 
+TI TDA54 PIN CONTROLLER
+M:	Yemike Abhilash Chandra <y-abhilashchandra@ti.com>
+L:	linux-gpio@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/pinctrl/ti,tda54-pinctrl.yaml
+
 TI TMAG5273 MAGNETOMETER DRIVER
 M:	Gerald Loacker <gerald.loacker@wolfvision.net>
 L:	linux-iio@vger.kernel.org

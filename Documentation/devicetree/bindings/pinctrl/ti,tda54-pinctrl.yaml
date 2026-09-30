@@ -1,0 +1,209 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/pinctrl/ti,tda54-pinctrl.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: TI TDA54 SoC pin controller
+
+maintainers:
+  - Yemike Abhilash Chandra <y-abhilashchandra@ti.com>
+
+description: |
+  Pinmux and pinconf controller in the TI TDA54 SoC. There are two instances,
+  one in the MAIN domain and one in the MCU domain.
+
+  The configuration of each pad is split across two registers:
+
+    PADCFGA  mux mode and functional pin configuration
+    PADCFGB  wakeup and retention configuration
+
+properties:
+  compatible:
+    const: ti,tda54-pinctrl
+
+  reg:
+    maxItems: 1
+    description:
+      The register space is divided into two proxy addressing regions, each
+      covering the same registers. This covers the entire register space,
+      including both proxy addressing regions.
+
+  ti,npins:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    minimum: 1
+    description:
+      Number of pins on this instance.
+
+  ti,proxy-id:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [0, 1]
+    default: 0
+    description:
+      Proxy 0 is the default access path and can write any register
+      that proxy 1 has not claimed. A register claimed through proxy 1
+      becomes read-only at proxy 0 and can only be written through proxy 1.
+      This selects the proxy region to use.
+
+allOf:
+  - $ref: pinctrl.yaml#
+
+required:
+  - compatible
+  - reg
+  - ti,npins
+
+patternProperties:
+  '-pins$':
+    type: object
+    allOf:
+      - $ref: pinmux-node.yaml#
+      - $ref: pincfg-node.yaml#
+
+    additionalProperties: false
+
+    description:
+      Pin configuration node describing one or more pads, their mux mode and
+      the configuration to apply.
+
+    properties:
+      pinmux:
+        description:
+          Values are constructed from pad number and mux mode, pad
+          number is left shifted by 8 bits, then ORed with mux mode
+
+      bias-disable: true
+      bias-pull-up: true
+      bias-pull-down: true
+      input-enable: true
+      input-disable: true
+      output-enable: true
+      output-disable: true
+      input-schmitt-enable: true
+      input-schmitt-disable: true
+
+      slew-rate:
+        description:
+          I/O slew rate. 0 = slew control disabled, 1 = mild, 2 = moderate,
+          3 = high.
+        enum: [0, 1, 2, 3]
+
+      ti,debounce-select:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        enum: [0, 1, 2, 3, 4, 5, 6]
+        description:
+          Selects which DBOUNCE_CFGn period register in the control module
+          drives the debounce filter for this pad. 0 disables debouncing,
+          1 to 6 select DBOUNCE_CFG1 to DBOUNCE_CFG6.
+
+      ti,virt-gpio-instance:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        enum: [0, 1, 2, 3, 4, 5, 6, 7]
+        description:
+          Selects which virtual GPIO instance controls this pad, allowing
+          protection between multiple virtual views of the GPIO control
+          registers. Has no effect unless the pad is muxed to GPIO mode
+          (muxmode 7).
+
+      ti,wakeup:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        enum: [0, 1, 2, 3]
+        description: |
+          Wakeup event configuration for this pad.
+          0 - wakeup disabled
+          1 - wakeup triggered by any change of the pin input value
+          2 - wakeup triggered by a low value on the pin
+          3 - wakeup triggered by a high value on the pin
+
+      ti,retention-bias:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        enum: [0, 1, 2]
+        description: |
+          Enables the internal I/O pullup/pulldown resistor when pin enters
+          TDA54 I/O retention mode, and configures the I/O pull resistor
+          direction.
+          0 - OFF mode pad pull resistor disable
+          1 - Select OFF mode pulldown resistor
+          2 - Select OFF mode pullup resistor
+
+      ti,retention-offmode:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        enum: [0, 1]
+        description: |
+          I/O behaviour when retention mode is active.
+          0 - I/O maintains its previous state
+          1 - I/O state is forced to the OFF mode value
+
+      ti,retention-output:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        enum: [0, 1, 2]
+        description: |
+          Output driver behaviour while the pad is in retention mode.
+          0 - output driver disabled
+          1 - output driver enabled, pad driven low
+          2 - output driver enabled, pad driven high
+
+      ti,retention-force:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        enum: [0, 1]
+        description: |
+          I/O retention controls.
+          0 - gated by the Device Manager logic
+          1 - forced active, overriding the Device Manager gating logic
+
+      ti,isolation-bypass:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        enum: [0, 1]
+        description: |
+          I/O isolation for this pad.
+          0 - isolation preserved
+          1 - isolation bypassed
+
+    required:
+      - pinmux
+
+additionalProperties: false
+
+examples:
+  - |
+    #define TDA54_PINMUX(pad, mux) (((pad) << 8) | ((mux) & 0xf))
+    #define TDA54_MUX_MODE0 0
+    #define TDA54_MUX_MODE7 7
+
+    pinctrl@5e200000 {
+        compatible = "ti,tda54-pinctrl";
+        reg = <0x5e200000 0x8000>;
+        ti,npins = <161>;
+        ti,proxy-id = <1>;
+
+        mcu-uart0-rx-pins {
+            pinmux = <TDA54_PINMUX(58, TDA54_MUX_MODE0)>,
+                     <TDA54_PINMUX(60, TDA54_MUX_MODE0)>;
+            input-enable;
+            bias-disable;
+        };
+
+        mcu-uart0-tx-pins {
+            pinmux = <TDA54_PINMUX(59, TDA54_MUX_MODE0)>,
+                     <TDA54_PINMUX(61, TDA54_MUX_MODE0)>;
+            output-enable;
+            bias-disable;
+        };
+
+        mcu-gpio0-button-pins {
+            pinmux = <TDA54_PINMUX(42, TDA54_MUX_MODE7)>;
+            input-enable;
+            bias-pull-up;
+            ti,debounce-select = <2>;
+            ti,virt-gpio-instance = <1>;
+            ti,wakeup = <2>;
+        };
+
+        mcu-i2c0-pins {
+            pinmux = <TDA54_PINMUX(0, TDA54_MUX_MODE0)>,
+                     <TDA54_PINMUX(1, TDA54_MUX_MODE0)>;
+            input-enable;
+            bias-pull-up;
+            ti,retention-bias = <2>;
+        };
+    };
