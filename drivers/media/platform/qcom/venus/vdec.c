@@ -1217,6 +1217,10 @@ put_power:
 	vdec_pm_put(inst, false);
 error:
 	venus_helper_buffers_done(inst, q->type, VB2_BUF_STATE_QUEUED);
+	if (q->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE)
+		inst->streamon_out = 0;
+	else
+		inst->streamon_cap = 0;
 	mutex_unlock(&inst->lock);
 	return ret;
 }
@@ -1297,15 +1301,14 @@ static void vdec_stop_streaming(struct vb2_queue *q)
 
 	inst->session_error = 0;
 
-	if (ret)
-		goto unlock;
-
 	if (q->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE)
 		inst->streamon_out = 0;
 	else
 		inst->streamon_cap = 0;
 
-unlock:
+	if (ret)
+		dev_err(inst->core->dev_dec, "dec: failed to stop streaming: %d\n", ret);
+
 	mutex_unlock(&inst->lock);
 }
 
