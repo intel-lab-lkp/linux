@@ -11,3 +11,29 @@
 	model = "Microsoft Surface Laptop 7 (13.8 inch)";
 	compatible = "microsoft,romulus13", "qcom,x1e80100";
 };
+
+&i2c8 {
+	clock-frequency = <400000>;
+
+	status = "okay";
+
+	touchscreen@34 {
+		compatible = "hid-over-i2c";
+		reg = <0x34>;
+		hid-descr-addr = <0x0000>;
+
+		interrupt-parent = <&tlmm>;
+		interrupts = <38 IRQ_TYPE_LEVEL_LOW>;
+
+		pinctrl-0 = <&touchscreen_int_default>;
+		pinctrl-names = "default";
+	};
+};
+
+&tlmm {
+	touchscreen_int_default: touchscreen-int-default-state {
+		pins = "gpio38";
+		function = "gpio";
+		bias-pull-up;
+	};
+};
