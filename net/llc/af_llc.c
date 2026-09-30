@@ -27,6 +27,7 @@
 #include <net/llc_sap.h>
 #include <net/llc_pdu.h>
 #include <net/llc_conn.h>
+#include <net/llc_c_st.h>
 #include <net/tcp_states.h>
 
 /* remember: uninitialized global data is zeroed because its in .bss */
@@ -194,6 +195,7 @@ static int llc_ui_create(struct net *net, struct socket *sock, int protocol,
  */
 static int llc_ui_release(struct socket *sock)
 {
+	struct llc_sap *sap = NULL;
 	struct sock *sk = sock->sk;
 	struct llc_sock *llc;
 
@@ -206,19 +208,27 @@ static int llc_ui_release(struct socket *sock)
 		llc->laddr.lsap, llc->daddr.lsap);
 	if (!llc_send_disc(sk))
 		llc_ui_wait_for_disc(sk, READ_ONCE(sk->sk_rcvtimeo));
+	WRITE_ONCE(llc->state, LLC_CONN_OUT_OF_SVC);
+	if (sk->sk_state == TCP_LISTEN)
+		sock_set_flag(sk, SOCK_DEAD);
 	if (!sock_flag(sk, SOCK_ZAPPED)) {
-		struct llc_sap *sap = llc->sap;
+		sap = llc->sap;
 
 		/* Hold this for release_sock(), so that llc_backlog_rcv()
 		 * could still use it.
 		 */
 		llc_sap_hold(sap);
 		llc_sap_remove_socket(llc->sap, sk);
+		llc_release_incoming_children(sk);
 		release_sock(sk);
-		llc_sap_put(sap);
 	} else {
+		llc_release_incoming_children(sk);
 		release_sock(sk);
 	}
+	/* Keep timer callbacks from using the SAP or device after they are put. */
+	llc_sk_stop_all_timers(sk, true);
+	if (sap)
+		llc_sap_put(sap);
 	netdev_put(llc->dev, &llc->dev_tracker);
 	sock_put(sk);
 	sock_orphan(sk);
@@ -489,6 +499,9 @@ static int llc_ui_connect(struct socket *sock, struct sockaddr_unsized *uaddr,
 		goto out;
 	if (unlikely(sk->sk_type != SOCK_STREAM))
 		goto out;
+	rc = -EINVAL;
+	if (unlikely(sk->sk_state == TCP_LISTEN))
+		goto out;
 	rc = -EALREADY;
 	if (unlikely(sock->state == SS_CONNECTING))
 		goto out;
@@ -718,10 +731,19 @@ static int llc_ui_accept(struct socket *sock, struct socket *newsock,
 		llc_sk(sk)->laddr.lsap);
 	skb = skb_dequeue(&sk->sk_receive_queue);
 	rc = -EINVAL;
-	if (!skb->sk)
+	if (!skb || !skb->sk || skb->sk == sk)
 		goto frees;
-	rc = 0;
 	newsk = skb->sk;
+	lock_sock_nested(newsk, SINGLE_DEPTH_NESTING);
+	if (!llc_accept_incoming_sock(newsk)) {
+		if (atomic_read(&llc_sk(newsk)->incoming_state) !=
+		    LLC_INCOMING_NONE)
+			llc_release_incoming_sock(newsk);
+		release_sock(newsk);
+		rc = -ECONNABORTED;
+		goto frees;
+	}
+	rc = 0;
 	/* attach connection to a new socket. */
 	llc_ui_sk_init(newsock, newsk);
 	sock_reset_flag(newsk, SOCK_ZAPPED);
@@ -734,11 +756,12 @@ static int llc_ui_accept(struct socket *sock, struct socket *newsock,
 
 	/* put original socket back into a clean listen state. */
 	sk->sk_state = TCP_LISTEN;
-	sk_acceptq_removed(sk);
 	dprintk("%s: ok success on %02X, client on %02X\n", __func__,
 		llc_sk(sk)->addr.sllc_sap, newllc->daddr.lsap);
+	release_sock(newsk);
 frees:
-	kfree_skb(skb);
+	if (skb)
+		kfree_skb(skb);
 out:
 	release_sock(sk);
 	return rc;

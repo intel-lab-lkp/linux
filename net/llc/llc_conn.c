@@ -32,6 +32,7 @@ static int llc_exec_conn_trans_actions(struct sock *sk,
 				       struct sk_buff *ev);
 static const struct llc_conn_state_trans *llc_qualify_conn_ev(struct sock *sk,
 							      struct sk_buff *skb);
+static void llc_incoming_sock_work(struct work_struct *work);
 
 /* Offset table on connection states transition diagram */
 static int llc_offset_table[NBR_CONN_STATES][NBR_CONN_EV];
@@ -69,6 +70,15 @@ int llc_conn_state_process(struct sock *sk, struct sk_buff *skb)
 		goto out_skb_put;
 	}
 
+	/*
+	 * An unaccepted child that leaves a data-accepting state cannot be
+	 * delivered by accept(). Release it before processing the indication.
+	 */
+	if (unlikely(atomic_read(&llc->incoming_state) ==
+		     LLC_INCOMING_QUEUED &&
+		     llc_data_accept_state(READ_ONCE(llc->state))))
+		llc_release_incoming_sock(skb->sk);
+
 	switch (ev->ind_prim) {
 	case LLC_DATA_PRIM:
 		skb_get(skb);
@@ -87,7 +97,18 @@ int llc_conn_state_process(struct sock *sk, struct sk_buff *skb)
 		 * Can't be sock_queue_rcv_skb, because we have to leave the
 		 * skb->sk pointing to the newly created struct sock in
 		 * llc_conn_handler. -acme
+		 *
+		 * A connection indication belongs on the listener. If sk and
+		 * skb->sk are the same socket, queueing it would later make
+		 * accept() lock that socket against itself.
 		 */
+		if (sk == skb->sk ||
+		    atomic_read(&llc_sk(skb->sk)->incoming_state) !=
+		    LLC_INCOMING_PENDING)
+			break;
+		sock_hold(skb->sk);
+		atomic_set(&llc_sk(skb->sk)->incoming_state,
+			   LLC_INCOMING_QUEUED);
 		skb_get(skb);
 		skb_queue_tail(&sk->sk_receive_queue, skb);
 		sk->sk_state_change(sk);
@@ -755,37 +776,257 @@ static struct sock *llc_create_incoming_sock(struct sock *sk,
 					     struct llc_addr *saddr,
 					     struct llc_addr *daddr)
 {
-	struct sock *newsk = llc_sk_alloc(sock_net(sk), sk->sk_family, GFP_ATOMIC,
-					  sk->sk_prot, 0);
-	struct llc_sock *newllc, *llc = llc_sk(sk);
+	struct llc_sock *llc = llc_sk(sk);
+	struct llc_sock *newllc;
+	struct sock *newsk;
 
+	newsk = llc_sk_alloc(sock_net(sk), sk->sk_family, GFP_ATOMIC,
+			     sk->sk_prot, 0);
 	if (!newsk)
-		goto out;
+		return NULL;
+
 	newllc = llc_sk(newsk);
 	memcpy(&newllc->laddr, daddr, sizeof(newllc->laddr));
 	memcpy(&newllc->daddr, saddr, sizeof(newllc->daddr));
 	newllc->dev = dev;
-	dev_hold(dev);
+	newllc->incoming_listener = sk;
+	atomic_set(&newllc->incoming_state, LLC_INCOMING_PENDING);
+	INIT_WORK(&newllc->incoming_work, llc_incoming_sock_work);
+	sock_hold(sk);
+	netdev_hold(dev, &newllc->dev_tracker, GFP_ATOMIC);
+	/* Lock the child before publishing it in the SAP hash. */
+	bh_lock_sock_nested(newsk);
 	llc_sap_add_socket(llc->sap, newsk);
-out:
+
 	return newsk;
+}
+
+static int llc_conn_rcv_listener(struct sock *sk, struct sk_buff *skb,
+			       struct llc_addr *saddr,
+			       struct llc_addr *daddr)
+{
+	struct sock *newsk;
+	int rc = 0;
+
+	local_bh_disable();
+	newsk = __llc_lookup_established(llc_sk(sk)->sap, saddr, daddr,
+					 dev_net(skb->dev));
+	if (newsk) {
+		sock_put(newsk);
+		goto drop;
+	}
+	if (sk_acceptq_is_full(sk))
+		goto drop;
+
+	newsk = llc_create_incoming_sock(sk, skb->dev, saddr, daddr);
+	if (!newsk)
+		goto drop;
+	sk_acceptq_added(sk);
+	if (!skb_set_owner_sk_safe(skb, newsk)) {
+		if (atomic_read(&llc_sk(newsk)->incoming_state) ==
+		    LLC_INCOMING_PENDING)
+			llc_release_incoming_sock(newsk);
+		bh_unlock_sock(newsk);
+		goto drop;
+	}
+
+	rc = llc_conn_rcv(sk, skb);
+	if (atomic_read(&llc_sk(newsk)->incoming_state) ==
+	    LLC_INCOMING_PENDING)
+		llc_release_incoming_sock(newsk);
+	bh_unlock_sock(newsk);
+	local_bh_enable();
+	return rc;
+
+drop:
+	kfree_skb(skb);
+	local_bh_enable();
+	return rc;
+}
+
+static void llc_incoming_sock_work(struct work_struct *work)
+{
+	struct net_device *dev;
+	struct sock *listener;
+	struct llc_sock *llc;
+	struct llc_sap *sap;
+	struct sock *sk;
+
+	llc = container_of(work, struct llc_sock, incoming_work);
+	sk = &llc->sk;
+	sap = llc->sap;
+	lock_sock(sk);
+	sock_orphan(sk);
+	release_sock(sk);
+	llc_sk_stop_all_timers(sk, true);
+	dev = llc->dev;
+	llc->dev = NULL;
+	listener = xchg(&llc->incoming_listener, NULL);
+	netdev_put(dev, &llc->dev_tracker);
+	llc_sk_free(sk);
+	llc_sap_put(sap);
+	if (listener) {
+		lock_sock(listener);
+		sk_acceptq_removed(listener);
+		release_sock(listener);
+		sock_put(listener);
+	}
+}
+
+static void llc_remove_incoming_skb(struct sock *sk)
+{
+	struct sk_buff *skb, *next;
+	struct sk_buff_head purge;
+	struct sock *listener;
+	unsigned long flags;
+
+	listener = READ_ONCE(llc_sk(sk)->incoming_listener);
+	if (!listener)
+		return;
+
+	__skb_queue_head_init(&purge);
+	spin_lock_irqsave(&listener->sk_receive_queue.lock, flags);
+	skb_queue_walk_safe(&listener->sk_receive_queue, skb, next) {
+		if (skb->sk != sk)
+			continue;
+		__skb_unlink(skb, &listener->sk_receive_queue);
+		__skb_queue_tail(&purge, skb);
+	}
+	spin_unlock_irqrestore(&listener->sk_receive_queue.lock, flags);
+	__skb_queue_purge(&purge);
+}
+
+void llc_release_incoming_sock(struct sock *sk)
+{
+	struct llc_sock *llc = llc_sk(sk);
+	int incoming_state;
+
+	incoming_state = atomic_xchg(&llc->incoming_state,
+				     LLC_INCOMING_NONE);
+	if (incoming_state == LLC_INCOMING_NONE)
+		return;
+
+	WRITE_ONCE(llc->state, LLC_CONN_OUT_OF_SVC);
+	if (incoming_state == LLC_INCOMING_QUEUED) {
+		llc_remove_incoming_skb(sk);
+		sock_put(sk);
+	}
+	llc_sap_hold(llc->sap);
+	llc_sap_remove_socket(llc->sap, sk);
+	schedule_work(&llc->incoming_work);
+}
+
+bool llc_accept_incoming_sock(struct sock *sk)
+{
+	struct llc_sock *llc = llc_sk(sk);
+	struct sock *listener;
+
+	if (unlikely(llc_data_accept_state(READ_ONCE(llc->state)))) {
+		llc_release_incoming_sock(sk);
+		return false;
+	}
+
+	if (atomic_cmpxchg(&llc->incoming_state, LLC_INCOMING_QUEUED,
+			   LLC_INCOMING_NONE) != LLC_INCOMING_QUEUED)
+		return false;
+
+	listener = xchg(&llc->incoming_listener, NULL);
+	if (listener) {
+		sk_acceptq_removed(listener);
+		sock_put(listener);
+	}
+	sock_put(sk);
+	return true;
+}
+
+void llc_release_incoming_children(struct sock *sk)
+{
+	struct sk_buff *skb;
+	struct sock *child;
+
+	local_bh_disable();
+	while ((skb = skb_dequeue(&sk->sk_receive_queue))) {
+		child = skb->sk;
+
+		if (child && child != sk) {
+			bh_lock_sock_nested(child);
+			if (atomic_read(&llc_sk(child)->incoming_state) !=
+			    LLC_INCOMING_NONE)
+				llc_release_incoming_sock(child);
+			bh_unlock_sock(child);
+		}
+		kfree_skb(skb);
+	}
+	local_bh_enable();
 }
 
 void llc_conn_handler(struct llc_sap *sap, struct sk_buff *skb)
 {
+	struct net_device *backlog_dev = NULL;
+	struct sock *newsk = NULL, *sk;
+	bool newsk_lookup_ref = false;
 	struct llc_addr saddr, daddr;
-	struct sock *sk;
+	bool listener_frame = false;
+	bool newsk_locked = false;
 
 	llc_pdu_decode_sa(skb, saddr.mac);
 	llc_pdu_decode_ssap(skb, &saddr.lsap);
 	llc_pdu_decode_da(skb, daddr.mac);
 	llc_pdu_decode_dsap(skb, &daddr.lsap);
 
+lookup:
 	sk = __llc_lookup(sap, &saddr, &daddr, dev_net(skb->dev));
 	if (!sk)
 		goto drop;
 
+	if (atomic_read(&llc_sk(sk)->incoming_state) ==
+	    LLC_INCOMING_PENDING) {
+		newsk = sk;
+		bh_lock_sock(newsk);
+		if (atomic_read(&llc_sk(newsk)->incoming_state) !=
+		    LLC_INCOMING_PENDING) {
+			bh_unlock_sock(newsk);
+			sock_put(newsk);
+			newsk = NULL;
+			goto lookup;
+		}
+		sk = llc_sk(newsk)->incoming_listener;
+		sock_hold(sk);
+		newsk_lookup_ref = true;
+		bh_unlock_sock(newsk);
+	}
+
 	bh_lock_sock(sk);
+	if (!newsk_lookup_ref &&
+	    unlikely(READ_ONCE(llc_sk(sk)->state) == LLC_CONN_OUT_OF_SVC))
+		goto drop_unlock;
+	if (unlikely(sk->sk_state == TCP_LISTEN &&
+		     sock_flag(sk, SOCK_DEAD) &&
+		     !newsk_lookup_ref))
+		goto drop_unlock;
+	if (newsk_lookup_ref) {
+		bh_lock_sock_nested(newsk);
+		newsk_locked = true;
+		if (atomic_read(&llc_sk(newsk)->incoming_state) !=
+		    LLC_INCOMING_PENDING)
+			goto retry_unlock;
+		if (unlikely(sk->sk_state != TCP_LISTEN ||
+			     sock_flag(sk, SOCK_DEAD))) {
+			llc_release_incoming_sock(newsk);
+			goto drop_unlock;
+		}
+	}
+	/* SAP unhash is RCU; a torn-down socket may still be looked up. */
+	if (newsk &&
+	    READ_ONCE(llc_sk(newsk)->state) == LLC_CONN_OUT_OF_SVC) {
+		llc_release_incoming_sock(newsk);
+		goto drop_unlock;
+	}
+	/* Keep a queued indication accounted until accept() or close. */
+	if (!newsk &&
+	    atomic_read(&llc_sk(sk)->incoming_state) == LLC_INCOMING_QUEUED &&
+	    READ_ONCE(llc_sk(sk)->state) == LLC_CONN_OUT_OF_SVC)
+		goto drop_unlock;
 	/*
 	 * This has to be done here and not at the upper layer ->accept
 	 * method because of the way the PROCOM state machine works:
@@ -795,11 +1036,22 @@ void llc_conn_handler(struct llc_sap *sap, struct sk_buff *skb)
 	 * in the newly created struct sock private area. -acme
 	 */
 	if (unlikely(sk->sk_state == TCP_LISTEN)) {
-		struct sock *newsk = llc_create_incoming_sock(sk, skb->dev,
-							      &saddr, &daddr);
-		if (!newsk)
+		if (!newsk) {
+			if (sock_owned_by_user(sk)) {
+				skb_orphan(skb);
+				llc_set_backlog_type(skb, LLC_LISTENER_FRAME);
+				listener_frame = true;
+				goto enqueue;
+			}
+			llc_conn_rcv_listener(sk, skb, &saddr, &daddr);
+			goto out;
+		}
+		if (!skb_set_owner_sk_safe(skb, newsk)) {
+			if (atomic_read(&llc_sk(newsk)->incoming_state) ==
+			    LLC_INCOMING_PENDING)
+				llc_release_incoming_sock(newsk);
 			goto drop_unlock;
-		skb_set_owner_r(skb, newsk);
+		}
 	} else {
 		/*
 		 * Can't be skb_set_owner_r, this will be done at the
@@ -813,18 +1065,45 @@ void llc_conn_handler(struct llc_sap *sap, struct sk_buff *skb)
 		skb->sk = sk;
 		skb->destructor = sock_efree;
 	}
-	if (!sock_owned_by_user(sk))
+enqueue:
+	if (!sock_owned_by_user(sk)) {
 		llc_conn_rcv(sk, skb);
-	else {
+		if (newsk &&
+		    atomic_read(&llc_sk(newsk)->incoming_state) ==
+		    LLC_INCOMING_PENDING)
+			llc_release_incoming_sock(newsk);
+	} else {
 		dprintk("%s: adding to backlog...\n", __func__);
-		llc_set_backlog_type(skb, LLC_PACKET);
-		if (sk_add_backlog(sk, skb, READ_ONCE(sk->sk_rcvbuf)))
+		if (!listener_frame)
+			llc_set_backlog_type(skb, LLC_PACKET);
+		backlog_dev = skb->dev;
+		netdev_hold(backlog_dev, NULL, GFP_ATOMIC);
+		if (sk_add_backlog(sk, skb, READ_ONCE(sk->sk_rcvbuf))) {
+			netdev_put(backlog_dev, NULL);
+			if (newsk &&
+			    atomic_read(&llc_sk(newsk)->incoming_state) ==
+			    LLC_INCOMING_PENDING)
+				llc_release_incoming_sock(newsk);
 			goto drop_unlock;
+		}
 	}
 out:
+	if (newsk_locked)
+		bh_unlock_sock(newsk);
 	bh_unlock_sock(sk);
 	sock_put(sk);
+	if (newsk_lookup_ref)
+		sock_put(newsk);
 	return;
+retry_unlock:
+	bh_unlock_sock(newsk);
+	newsk_locked = false;
+	bh_unlock_sock(sk);
+	sock_put(sk);
+	sock_put(newsk);
+	newsk = NULL;
+	newsk_lookup_ref = false;
+	goto lookup;
 drop:
 	kfree_skb(skb);
 	return;
@@ -850,29 +1129,89 @@ static atomic_t llc_sock_nr;
  */
 static int llc_backlog_rcv(struct sock *sk, struct sk_buff *skb)
 {
-	int rc = 0;
+	struct net_device *backlog_dev = NULL;
 	struct llc_sock *llc = llc_sk(sk);
+	struct sock *child = skb->sk;
+	struct llc_addr saddr, daddr;
+	struct llc_sock *childllc;
+	bool child_locked = false;
+	int incoming_state;
+	int rc = 0;
 
-	if (likely(llc_backlog_type(skb) == LLC_PACKET)) {
-		if (likely(llc->state > 1)) /* not closed */
-			rc = llc_conn_rcv(sk, skb);
-		else
-			goto out_kfree_skb;
+	if (llc_backlog_type(skb) == LLC_LISTENER_FRAME) {
+		backlog_dev = skb->dev;
+		if (unlikely(child || sk->sk_state != TCP_LISTEN ||
+			     sock_flag(sk, SOCK_DEAD)))
+			goto drop;
+		llc_pdu_decode_sa(skb, saddr.mac);
+		llc_pdu_decode_ssap(skb, &saddr.lsap);
+		llc_pdu_decode_da(skb, daddr.mac);
+		llc_pdu_decode_dsap(skb, &daddr.lsap);
+		rc = llc_conn_rcv_listener(sk, skb, &saddr, &daddr);
+		goto out;
+	} else if (likely(llc_backlog_type(skb) == LLC_PACKET)) {
+		backlog_dev = skb->dev;
+		if (child && child != sk) {
+			local_bh_disable();
+			bh_lock_sock_nested(child);
+			child_locked = true;
+		}
+		if (child && child != sk) {
+			childllc = llc_sk(child);
+			incoming_state = atomic_read(&childllc->incoming_state);
+
+			if (incoming_state == LLC_INCOMING_PENDING) {
+				if (sock_flag(sk, SOCK_DEAD) ||
+				    sk->sk_state != TCP_LISTEN ||
+				    READ_ONCE(childllc->state) == LLC_CONN_OUT_OF_SVC) {
+					llc_release_incoming_sock(child);
+					goto drop;
+				}
+				rc = llc_conn_rcv(sk, skb);
+				if (atomic_read(&childllc->incoming_state) ==
+				    LLC_INCOMING_PENDING)
+					llc_release_incoming_sock(child);
+			} else if (incoming_state == LLC_INCOMING_QUEUED) {
+				/* Keep the indication accounted until accept() or close. */
+				if (READ_ONCE(childllc->state) == LLC_CONN_OUT_OF_SVC)
+					goto drop;
+				rc = llc_conn_rcv(child, skb);
+			} else {
+				goto drop;
+			}
+		} else {
+			if (likely(llc->state > 1)) /* not closed */
+				rc = llc_conn_rcv(sk, skb);
+			else
+				goto drop;
+		}
 	} else if (llc_backlog_type(skb) == LLC_EVENT) {
 		/* timer expiration event */
-		if (likely(llc->state > 1))  /* not closed */
+		if (likely(llc->state > 1)) /* not closed */
 			rc = llc_conn_state_process(sk, skb);
 		else
-			goto out_kfree_skb;
+			goto drop;
 	} else {
 		printk(KERN_ERR "%s: invalid skb in backlog\n", __func__);
-		goto out_kfree_skb;
+		goto drop;
 	}
 out:
+	if (child_locked) {
+		bh_unlock_sock(child);
+		local_bh_enable();
+	}
+	if (backlog_dev)
+		netdev_put(backlog_dev, NULL);
 	return rc;
-out_kfree_skb:
+drop:
+	if (child_locked) {
+		bh_unlock_sock(child);
+		local_bh_enable();
+	}
 	kfree_skb(skb);
-	goto out;
+	if (backlog_dev)
+		netdev_put(backlog_dev, NULL);
+	return rc;
 }
 
 /**
@@ -905,6 +1244,8 @@ static void llc_sk_init(struct sock *sk)
 	llc->k  = 2;   /* tx win size, will adjust dynam */
 	llc->rw = 128; /* rx win size (opt and equal to
 			* tx_win of remote LLC) */
+	atomic_set(&llc->incoming_state, LLC_INCOMING_NONE);
+	llc->incoming_listener = NULL;
 	skb_queue_head_init(&llc->pdu_unack_q);
 	sk->sk_backlog_rcv = llc_backlog_rcv;
 }
@@ -967,7 +1308,7 @@ void llc_sk_free(struct sock *sk)
 {
 	struct llc_sock *llc = llc_sk(sk);
 
-	llc->state = LLC_CONN_OUT_OF_SVC;
+	WRITE_ONCE(llc->state, LLC_CONN_OUT_OF_SVC);
 	/* Stop all (possibly) running timers */
 	llc_sk_stop_all_timers(sk, true);
 #ifdef DEBUG_LLC_CONN_ALLOC
