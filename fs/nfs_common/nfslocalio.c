@@ -226,18 +226,31 @@ EXPORT_SYMBOL_GPL(nfs_localio_disable_client);
 void nfs_localio_invalidate_clients(struct list_head *nn_local_clients,
 				    spinlock_t *nn_local_clients_lock)
 {
-	LIST_HEAD(local_clients);
-	nfs_uuid_t *nfs_uuid, *tmp;
+	nfs_uuid_t *nfs_uuid;
 	struct nfs_client *clp;
 
-	spin_lock(nn_local_clients_lock);
-	list_splice_init(nn_local_clients, &local_clients);
-	spin_unlock(nn_local_clients_lock);
-	list_for_each_entry_safe(nfs_uuid, tmp, &local_clients, list) {
-		if (WARN_ON(nfs_uuid->list_lock != nn_local_clients_lock))
+	for (;;) {
+		spin_lock(nn_local_clients_lock);
+		nfs_uuid = list_first_entry_or_null(nn_local_clients,
+						    nfs_uuid_t, list);
+		if (!nfs_uuid) {
+			spin_unlock(nn_local_clients_lock);
 			break;
+		}
+		if (WARN_ON(nfs_uuid->list_lock != nn_local_clients_lock)) {
+			spin_unlock(nn_local_clients_lock);
+			break;
+		}
 		clp = container_of(nfs_uuid, struct nfs_client, cl_uuid);
+		if (!refcount_inc_not_zero(&clp->cl_count)) {
+			spin_unlock(nn_local_clients_lock);
+			cond_resched();
+			continue;
+		}
+		spin_unlock(nn_local_clients_lock);
+
 		nfs_localio_disable_client(clp);
+		nfs_put_client(clp);
 	}
 }
 EXPORT_SYMBOL_GPL(nfs_localio_invalidate_clients);

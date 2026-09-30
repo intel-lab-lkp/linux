@@ -84,6 +84,8 @@ struct nfs_file_localio {
 	void __rcu *nfs_uuid; /* opaque pointer to 'nfs_uuid_t' */
 };
 
+void nfs_put_client(struct nfs_client *clp);
+
 static inline void nfs_localio_file_init(struct nfs_file_localio *nfl)
 {
 #if IS_ENABLED(CONFIG_NFS_LOCALIO)
