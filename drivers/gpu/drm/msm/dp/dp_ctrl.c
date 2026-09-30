@@ -1856,17 +1856,22 @@ static int msm_dp_ctrl_enable_mainlink_clocks(struct msm_dp_ctrl_private *ctrl,
 	ctrl->phy_opts.dp.link_rate = ctrl->link->link_params.rate / 100;
 	ctrl->phy_opts.dp.ssc = drm_dp_max_downspread(dpcd);
 
-	phy_configure(phy, &ctrl->phy_opts);
+	ret = phy_configure(phy, &ctrl->phy_opts);
+	if (ret)
+		return ret;
 	if (!ctrl->phy_powered) {
 		ret = phy_power_on(phy);
-		if (!ret)
-			ctrl->phy_powered = true;
+		if (ret)
+			return ret;
+		ctrl->phy_powered = true;
 	}
 
 	dev_pm_opp_set_rate(ctrl->dev, ctrl->link->link_params.rate * 1000);
 	ret = msm_dp_ctrl_link_clk_enable(&ctrl->msm_dp_ctrl);
-	if (ret)
+	if (ret) {
 		DRM_ERROR("Unable to start link clocks. ret=%d\n", ret);
+		msm_dp_ctrl_phy_power_off(ctrl);
+	}
 
 	drm_dbg_dp(ctrl->drm_dev, "link rate=%d\n", ctrl->link->link_params.rate);
 
@@ -1980,7 +1985,7 @@ static void msm_dp_ctrl_phy_reset(struct msm_dp_ctrl_private *ctrl)
 	msm_dp_write_ahb(ctrl, REG_DP_PHY_CTRL, 0x0);
 }
 
-void msm_dp_ctrl_phy_init(struct msm_dp_ctrl *msm_dp_ctrl)
+int msm_dp_ctrl_phy_init(struct msm_dp_ctrl *msm_dp_ctrl)
 {
 	struct msm_dp_ctrl_private *ctrl;
 	struct phy *phy;
@@ -1989,7 +1994,7 @@ void msm_dp_ctrl_phy_init(struct msm_dp_ctrl *msm_dp_ctrl)
 	phy = ctrl->phy;
 
 	msm_dp_ctrl_phy_reset(ctrl);
-	phy_init(phy);
+	return phy_init(phy);
 }
 
 void msm_dp_ctrl_phy_exit(struct msm_dp_ctrl *msm_dp_ctrl)
@@ -2021,7 +2026,9 @@ static int msm_dp_ctrl_reinitialize_mainlink(struct msm_dp_ctrl_private *ctrl,
 	 */
 	msm_dp_ctrl_link_clk_disable(&ctrl->msm_dp_ctrl);
 
-	msm_dp_ctrl_phy_power_off(ctrl);
+	ret = msm_dp_ctrl_phy_power_off(ctrl);
+	if (ret)
+		return ret;
 	/* hw recommended delay before re-enabling clocks */
 	msleep(20);
 
@@ -2038,16 +2045,21 @@ static int msm_dp_ctrl_deinitialize_mainlink(struct msm_dp_ctrl_private *ctrl,
 					     struct msm_dp_panel *panel)
 {
 	struct phy *phy;
+	int ret;
 
 	phy = ctrl->phy;
 
-	msm_dp_ctrl_mainlink_disable(ctrl);
+	/* Reinitializing the link may already have disabled its clocks. */
+	if (ctrl->link_clks_on)
+		msm_dp_ctrl_mainlink_disable(ctrl);
 
 	msm_dp_ctrl_reset(&ctrl->msm_dp_ctrl, panel);
 
 	msm_dp_ctrl_link_clk_disable(&ctrl->msm_dp_ctrl);
 
-	msm_dp_ctrl_phy_power_off(ctrl);
+	ret = msm_dp_ctrl_phy_power_off(ctrl);
+	if (ret)
+		return ret;
 
 	/* aux channel down, reinit phy */
 	phy_exit(phy);
@@ -2583,8 +2595,11 @@ int msm_dp_ctrl_prepare_stream_on(struct msm_dp_ctrl *msm_dp_ctrl,
 		}
 	}
 
-	if (force_link_train || !msm_dp_ctrl_channel_eq_ok(ctrl))
-		msm_dp_ctrl_link_retrain(ctrl, panel);
+	if (force_link_train || !msm_dp_ctrl_channel_eq_ok(ctrl)) {
+		ret = msm_dp_ctrl_link_retrain(ctrl, panel);
+		if (ret)
+			return ret;
+	}
 
 	/* stop txing train pattern to end link training */
 	msm_dp_ctrl_clear_training_pattern(ctrl, panel, DP_PHY_DPRX);
@@ -2671,9 +2686,11 @@ void msm_dp_ctrl_off_link(struct msm_dp_ctrl *msm_dp_ctrl,
 
 	ctrl = container_of(msm_dp_ctrl, struct msm_dp_ctrl_private, msm_dp_ctrl);
 
-	msm_dp_panel_disable_vsc_sdp(panel);
-
-	msm_dp_ctrl_mainlink_disable(ctrl);
+	/* Link startup may have failed before enabling the link clocks. */
+	if (ctrl->link_clks_on) {
+		msm_dp_panel_disable_vsc_sdp(panel);
+		msm_dp_ctrl_mainlink_disable(ctrl);
+	}
 
 	msm_dp_ctrl_reset(&ctrl->msm_dp_ctrl, panel);
 
