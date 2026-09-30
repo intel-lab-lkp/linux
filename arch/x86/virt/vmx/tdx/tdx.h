@@ -91,6 +91,13 @@
 /* Class "TDX Module Handoff" */
 #define TDX_FIELD_MODULE_HV			0x8900000100000000ULL
 
+/*
+ * Bits 33:32 of a field ID hold the log2 of the metadata field size in
+ * bytes. See "Metadata Field Identifier" in the Intel TDX Module ABI
+ * Specification.
+ */
+#define TDX_FIELD_SIZE(field_id)	(1 << (((field_id) >> 32) & 0x3))
+
 /* TDX page types */
 #define	PT_NDA		0x0
 #define	PT_RSVD		0x1
