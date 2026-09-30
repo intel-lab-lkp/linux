@@ -258,6 +258,17 @@ done:
 	fput(in_file);
 noclose_input:
 	fput(out_file);
+	/*
+	 * The image data is still dirty in the ramdisk's block device page
+	 * cache and only reaches the ramdisk once the final __fput() of
+	 * out_file runs blkdev_put() -> blkdev_flush_mapping() ->
+	 * sync_blockdev().  That __fput() is deferred (delayed fput work,
+	 * or task_work that runs when init returns to user mode), while
+	 * mount_root() runs right after this and may read the ramdisk with
+	 * bios bypassing the page cache (e.g. squashfs).  Flush it now so
+	 * the ramdisk is up to date before it gets mounted.
+	 */
+	init_flush_fput();
 out:
 	kfree(buf);
 	init_unlink("/dev/ram");
