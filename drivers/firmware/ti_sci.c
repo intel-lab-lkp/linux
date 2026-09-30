@@ -315,6 +315,7 @@ static struct ti_sci_xfer *ti_sci_get_one_xfer(struct ti_sci_info *info,
 					       size_t rx_message_size)
 {
 	struct ti_sci_xfers_info *minfo = &info->minfo;
+	struct device *dev = info->dev;
 	struct ti_sci_xfer *xfer;
 	struct ti_sci_msg_hdr *hdr;
 	unsigned long flags;
@@ -326,8 +327,11 @@ static struct ti_sci_xfer *ti_sci_get_one_xfer(struct ti_sci_info *info,
 	/* Ensure we have sane transfer sizes */
 	if (rx_message_size > info->desc->max_msg_size ||
 	    tx_message_size > info->desc->max_msg_size ||
-	    rx_message_size < sizeof(*hdr) || tx_message_size < sizeof(*hdr))
+	    rx_message_size < sizeof(*hdr) || tx_message_size < sizeof(*hdr)) {
+		dev_err(dev, "TI-SCI message size out of range (caller: %pS)\n",
+			(void *)_RET_IP_);
 		return ERR_PTR(-ERANGE);
+	}
 
 	/*
 	 * Ensure we have only controlled number of pending messages.
@@ -336,8 +340,11 @@ static struct ti_sci_xfer *ti_sci_get_one_xfer(struct ti_sci_info *info,
 	 */
 	timeout = msecs_to_jiffies(info->desc->max_rx_timeout_ms) * 5;
 	ret = down_timeout(&minfo->sem_xfer_count, timeout);
-	if (ret < 0)
+	if (ret < 0) {
+		dev_err(dev, "TI-SCI timeout waiting for transfer semaphore (caller: %pS)\n",
+			(void *)_RET_IP_);
 		return ERR_PTR(ret);
+	}
 
 	/* Keep the locked section as small as possible */
 	spin_lock_irqsave(&minfo->xfer_lock, flags);
@@ -481,11 +488,8 @@ static int ti_sci_cmd_get_revision(struct ti_sci_info *info)
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(struct ti_sci_msg_hdr),
 				   sizeof(*rev_info));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "Message alloc failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
 
 	rev_info = (struct ti_sci_msg_resp_version *)xfer->xfer_buf;
 
@@ -549,11 +553,9 @@ static int ti_sci_set_device_state(const struct ti_sci_handle *handle,
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_SET_DEVICE_STATE,
 				   flags | TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(*req), sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "Message alloc failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
+
 	req = (struct ti_sci_msg_req_set_device_state *)xfer->xfer_buf;
 	req->id = id;
 	req->state = state;
@@ -610,11 +612,9 @@ static int ti_sci_get_device_state(const struct ti_sci_handle *handle,
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_GET_DEVICE_STATE,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(*req), sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "Message alloc failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
+
 	req = (struct ti_sci_msg_req_get_device_state *)xfer->xfer_buf;
 	req->id = id;
 
@@ -912,11 +912,9 @@ static int ti_sci_cmd_set_device_resets(const struct ti_sci_handle *handle,
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_SET_DEVICE_RESETS,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(*req), sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "Message alloc failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
+
 	req = (struct ti_sci_msg_req_set_device_resets *)xfer->xfer_buf;
 	req->id = id;
 	req->resets = reset_state;
@@ -987,11 +985,9 @@ static int ti_sci_set_clock_state(const struct ti_sci_handle *handle,
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_SET_CLOCK_STATE,
 				   flags | TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(*req), sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "Message alloc failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
+
 	req = (struct ti_sci_msg_req_set_clock_state *)xfer->xfer_buf;
 	req->dev_id = dev_id;
 	if (clk_id < 255) {
@@ -1055,11 +1051,9 @@ static int ti_sci_cmd_get_clock_state(const struct ti_sci_handle *handle,
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_GET_CLOCK_STATE,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(*req), sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "Message alloc failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
+
 	req = (struct ti_sci_msg_req_get_clock_state *)xfer->xfer_buf;
 	req->dev_id = dev_id;
 	if (clk_id < 255) {
@@ -1286,11 +1280,9 @@ static int ti_sci_cmd_clk_set_parent(const struct ti_sci_handle *handle,
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_SET_CLOCK_PARENT,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(*req), sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "Message alloc failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
+
 	req = (struct ti_sci_msg_req_set_clock_parent *)xfer->xfer_buf;
 	req->dev_id = dev_id;
 	if (clk_id < 255) {
@@ -1354,11 +1346,9 @@ static int ti_sci_cmd_clk_get_parent(const struct ti_sci_handle *handle,
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_GET_CLOCK_PARENT,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(*req), sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "Message alloc failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
+
 	req = (struct ti_sci_msg_req_get_clock_parent *)xfer->xfer_buf;
 	req->dev_id = dev_id;
 	if (clk_id < 255) {
@@ -1424,11 +1414,9 @@ static int ti_sci_cmd_clk_get_num_parents(const struct ti_sci_handle *handle,
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_GET_NUM_CLOCK_PARENTS,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(*req), sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "Message alloc failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
+
 	req = (struct ti_sci_msg_req_get_clock_num_parents *)xfer->xfer_buf;
 	req->dev_id = dev_id;
 	if (clk_id < 255) {
@@ -1503,11 +1491,9 @@ static int ti_sci_cmd_clk_get_match_freq(const struct ti_sci_handle *handle,
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_QUERY_CLOCK_FREQ,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(*req), sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "Message alloc failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
+
 	req = (struct ti_sci_msg_req_query_clock_freq *)xfer->xfer_buf;
 	req->dev_id = dev_id;
 	if (clk_id < 255) {
@@ -1579,11 +1565,9 @@ static int ti_sci_cmd_clk_set_freq(const struct ti_sci_handle *handle,
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_SET_CLOCK_FREQ,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(*req), sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "Message alloc failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
+
 	req = (struct ti_sci_msg_req_set_clock_freq *)xfer->xfer_buf;
 	req->dev_id = dev_id;
 	if (clk_id < 255) {
@@ -1644,11 +1628,9 @@ static int ti_sci_cmd_clk_get_freq(const struct ti_sci_handle *handle,
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_GET_CLOCK_FREQ,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(*req), sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "Message alloc failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
+
 	req = (struct ti_sci_msg_req_get_clock_freq *)xfer->xfer_buf;
 	req->dev_id = dev_id;
 	if (clk_id < 255) {
@@ -1711,11 +1693,8 @@ static int ti_sci_cmd_prepare_sleep(const struct ti_sci_handle *handle, u8 mode,
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_PREPARE_SLEEP,
 				   msg_flags,
 				   sizeof(*req), sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "Message alloc failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
 
 	req = (struct ti_sci_msg_req_prepare_sleep *)xfer->xfer_buf;
 	req->mode = mode;
@@ -1775,11 +1754,8 @@ static int ti_sci_msg_cmd_query_fw_caps(const struct ti_sci_handle *handle,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(struct ti_sci_msg_hdr),
 				   sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "Message alloc failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
 
 	ret = ti_sci_do_xfer(info, xfer);
 	if (ret) {
@@ -1832,11 +1808,9 @@ static int ti_sci_cmd_set_io_isolation(const struct ti_sci_handle *handle,
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_SET_IO_ISOLATION,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(*req), sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "Message alloc failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
+
 	req = (struct ti_sci_msg_req_set_io_isolation *)xfer->xfer_buf;
 	req->state = state;
 
@@ -1890,11 +1864,8 @@ static int ti_sci_msg_cmd_lpm_wake_reason(const struct ti_sci_handle *handle,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(struct ti_sci_msg_hdr),
 				   sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "Message alloc failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
 
 	ret = ti_sci_do_xfer(info, xfer);
 	if (ret) {
@@ -1954,11 +1925,9 @@ static int ti_sci_cmd_set_device_constraint(const struct ti_sci_handle *handle,
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_LPM_SET_DEVICE_CONSTRAINT,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(*req), sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "Message alloc failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
+
 	req = (struct ti_sci_msg_req_lpm_set_device_constraint *)xfer->xfer_buf;
 	req->id = id;
 	req->state = state;
@@ -2011,11 +1980,9 @@ static int ti_sci_cmd_set_latency_constraint(const struct ti_sci_handle *handle,
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_LPM_SET_LATENCY_CONSTRAINT,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(*req), sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "Message alloc failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
+
 	req = (struct ti_sci_msg_req_lpm_set_latency_constraint *)xfer->xfer_buf;
 	req->latency = latency;
 	req->state = state;
@@ -2056,11 +2023,9 @@ static int ti_sci_cmd_lpm_abort(struct device *dev)
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_LPM_ABORT,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(*req), sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "Message alloc failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
+
 	req = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
 
 	ret = ti_sci_do_xfer(info, xfer);
@@ -2100,11 +2065,9 @@ static int ti_sci_cmd_core_reboot(const struct ti_sci_handle *handle)
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_SYS_RESET,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(*req), sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "Message alloc failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
+
 	req = (struct ti_sci_msg_req_reboot *)xfer->xfer_buf;
 
 	ret = ti_sci_do_xfer(info, xfer);
@@ -2162,11 +2125,8 @@ static int ti_sci_get_resource_range(const struct ti_sci_handle *handle,
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_GET_RESOURCE_RANGE,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(*req), sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "Message alloc failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
 
 	req = (struct ti_sci_msg_req_get_resource_range *)xfer->xfer_buf;
 	req->secondary_host = s_host;
@@ -2283,11 +2243,9 @@ static int ti_sci_manage_irq(const struct ti_sci_handle *handle,
 
 	xfer = ti_sci_get_one_xfer(info, type, TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(*req), sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "Message alloc failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
+
 	req = (struct ti_sci_msg_req_manage_irq *)xfer->xfer_buf;
 	req->valid_params = valid_params;
 	req->src_id = src_id;
@@ -2607,11 +2565,9 @@ static int ti_sci_cmd_rm_ring_cfg(const struct ti_sci_handle *handle,
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_RM_RING_CFG,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(*req), sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "RM_RA:Message config failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
+
 	req = (struct ti_sci_msg_rm_ring_cfg_req *)xfer->xfer_buf;
 	req->valid_params = params->valid_params;
 	req->nav_id = params->nav_id;
@@ -2671,11 +2627,9 @@ static int ti_sci_cmd_rm_psil_pair(const struct ti_sci_handle *handle,
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_RM_PSIL_PAIR,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(*req), sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "RM_PSIL:Message reconfig failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
+
 	req = (struct ti_sci_msg_psil_pair *)xfer->xfer_buf;
 	req->nav_id = nav_id;
 	req->src_thread = src_thread;
@@ -2727,11 +2681,9 @@ static int ti_sci_cmd_rm_psil_unpair(const struct ti_sci_handle *handle,
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_RM_PSIL_UNPAIR,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(*req), sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "RM_PSIL:Message reconfig failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
+
 	req = (struct ti_sci_msg_psil_unpair *)xfer->xfer_buf;
 	req->nav_id = nav_id;
 	req->src_thread = src_thread;
@@ -2782,11 +2734,9 @@ static int ti_sci_cmd_rm_udmap_tx_ch_cfg(const struct ti_sci_handle *handle,
 	xfer = ti_sci_get_one_xfer(info, TISCI_MSG_RM_UDMAP_TX_CH_CFG,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(*req), sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "Message TX_CH_CFG alloc failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
+
 	req = (struct ti_sci_msg_rm_udmap_tx_ch_cfg_req *)xfer->xfer_buf;
 	req->valid_params = params->valid_params;
 	req->nav_id = params->nav_id;
@@ -2854,11 +2804,9 @@ static int ti_sci_cmd_rm_udmap_rx_ch_cfg(const struct ti_sci_handle *handle,
 	xfer = ti_sci_get_one_xfer(info, TISCI_MSG_RM_UDMAP_RX_CH_CFG,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(*req), sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "Message RX_CH_CFG alloc failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
+
 	req = (struct ti_sci_msg_rm_udmap_rx_ch_cfg_req *)xfer->xfer_buf;
 	req->valid_params = params->valid_params;
 	req->nav_id = params->nav_id;
@@ -2923,11 +2871,9 @@ static int ti_sci_cmd_rm_udmap_rx_flow_cfg(const struct ti_sci_handle *handle,
 	xfer = ti_sci_get_one_xfer(info, TISCI_MSG_RM_UDMAP_FLOW_CFG,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(*req), sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "RX_FL_CFG: Message alloc failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
+
 	req = (struct ti_sci_msg_rm_udmap_flow_cfg_req *)xfer->xfer_buf;
 	req->valid_params = params->valid_params;
 	req->nav_id = params->nav_id;
@@ -2995,11 +2941,9 @@ static int ti_sci_cmd_proc_request(const struct ti_sci_handle *handle,
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_PROC_REQUEST,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(*req), sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "Message alloc failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
+
 	req = (struct ti_sci_msg_req_proc_request *)xfer->xfer_buf;
 	req->processor_id = proc_id;
 
@@ -3047,11 +2991,9 @@ static int ti_sci_cmd_proc_release(const struct ti_sci_handle *handle,
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_PROC_RELEASE,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(*req), sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "Message alloc failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
+
 	req = (struct ti_sci_msg_req_proc_release *)xfer->xfer_buf;
 	req->processor_id = proc_id;
 
@@ -3102,11 +3044,9 @@ static int ti_sci_cmd_proc_handover(const struct ti_sci_handle *handle,
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_PROC_HANDOVER,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(*req), sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "Message alloc failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
+
 	req = (struct ti_sci_msg_req_proc_handover *)xfer->xfer_buf;
 	req->processor_id = proc_id;
 	req->host_id = host_id;
@@ -3161,11 +3101,9 @@ static int ti_sci_cmd_proc_set_config(const struct ti_sci_handle *handle,
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_SET_CONFIG,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(*req), sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "Message alloc failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
+
 	req = (struct ti_sci_msg_req_set_config *)xfer->xfer_buf;
 	req->processor_id = proc_id;
 	req->bootvector_low = bootvector & TI_SCI_ADDR_LOW_MASK;
@@ -3222,11 +3160,9 @@ static int ti_sci_cmd_proc_set_control(const struct ti_sci_handle *handle,
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_SET_CTRL,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(*req), sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "Message alloc failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
+
 	req = (struct ti_sci_msg_req_set_ctrl *)xfer->xfer_buf;
 	req->processor_id = proc_id;
 	req->control_flags_set = control_flags_set;
@@ -3281,11 +3217,9 @@ static int ti_sci_cmd_proc_get_status(const struct ti_sci_handle *handle,
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_GET_STATUS,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(*req), sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "Message alloc failed(%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
+
 	req = (struct ti_sci_msg_req_get_status *)xfer->xfer_buf;
 	req->processor_id = proc_id;
 
