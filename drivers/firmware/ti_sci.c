@@ -305,6 +305,7 @@ static void ti_sci_rx_callback(struct mbox_client *cl, void *m)
  * @tx_message_size: transmit message size
  * @rx_message: receive message storage location
  * @rx_message_size: receive message size
+ * @caller:	Address of the command function, used in error messages
  *
  * Helper function which is used by various command functions that are
  * exposed to clients of this driver for allocating a message traffic event.
@@ -318,7 +319,8 @@ static void ti_sci_rx_callback(struct mbox_client *cl, void *m)
 static struct ti_sci_xfer *ti_sci_get_one_xfer(struct ti_sci_info *info,
 					       u16 msg_type, u32 msg_flags,
 					       void *tx_message, size_t tx_message_size,
-					       void *rx_message, size_t rx_message_size)
+					       void *rx_message, size_t rx_message_size,
+					       void *caller)
 {
 	struct ti_sci_xfers_info *minfo = &info->minfo;
 	struct device *dev = info->dev;
@@ -335,7 +337,7 @@ static struct ti_sci_xfer *ti_sci_get_one_xfer(struct ti_sci_info *info,
 	    tx_message_size > info->desc->max_msg_size ||
 	    rx_message_size < sizeof(*hdr) || tx_message_size < sizeof(*hdr)) {
 		dev_err(dev, "TI-SCI message size out of range (caller: %pS)\n",
-			(void *)_RET_IP_);
+			caller);
 		return ERR_PTR(-ERANGE);
 	}
 
@@ -348,7 +350,7 @@ static struct ti_sci_xfer *ti_sci_get_one_xfer(struct ti_sci_info *info,
 	ret = down_timeout(&minfo->sem_xfer_count, timeout);
 	if (ret < 0) {
 		dev_err(dev, "TI-SCI timeout waiting for transfer semaphore (caller: %pS)\n",
-			(void *)_RET_IP_);
+			caller);
 		return ERR_PTR(ret);
 	}
 
@@ -434,23 +436,45 @@ static inline bool ti_sci_is_response_ack(void *r)
 /**
  * ti_sci_do_xfer() - Do one transfer
  * @info:	Pointer to SCI entity information
- * @xfer:	Transfer to initiate and wait for response
+ * @msg_type:	Message type
+ * @msg_flags:	Flag to set for the message
+ * @tx_message: transmit message storage location
+ * @tx_message_size: transmit message size
+ * @rx_message: receive message storage location
+ * @rx_message_size: receive message size
  *
  * Return: -ETIMEDOUT in case of no response, or
  *         -ENODEV in case of a NACK response, or
+ *         corresponding error if xfer allocation fails, or
  *         corresponding error if transmit fails, or
  *         return 0, if all goes well.
  */
 static inline int ti_sci_do_xfer(struct ti_sci_info *info,
-				 struct ti_sci_xfer *xfer)
+				 u16 msg_type, u32 msg_flags,
+				 void *tx_message, size_t tx_message_size,
+				 void *rx_message, size_t rx_message_size)
 {
-	struct ti_sci_msg_hdr *hdr = (struct ti_sci_msg_hdr *)xfer->tx_message.buf;
-	bool response_expected = !!(hdr->flags & (TI_SCI_FLAG_REQ_ACK_ON_PROCESSED |
-						  TI_SCI_FLAG_REQ_ACK_ON_RECEIVED));
+	struct ti_sci_xfer *xfer;
+	bool response_expected = !!(msg_flags & (TI_SCI_FLAG_REQ_ACK_ON_PROCESSED |
+						 TI_SCI_FLAG_REQ_ACK_ON_RECEIVED));
 	int ret;
 	int timeout;
 	struct device *dev = info->dev;
 	bool done_state = true;
+	void *caller;
+
+	/*
+	 * Address of the TI SCI command function, used in error messages.
+	 * This is only accurate if this function is not inlined, otherwise
+	 * the caller of the command function is reported instead.
+	 */
+	caller = (void *)_RET_IP_;
+
+	xfer = ti_sci_get_one_xfer(info, msg_type, msg_flags,
+				   tx_message, tx_message_size,
+				   rx_message, rx_message_size, caller);
+	if (IS_ERR(xfer))
+		return PTR_ERR(xfer);
 
 	memcpy(xfer->xfer_buf + sizeof(struct ti_sci_msg_hdr),
 	       xfer->tx_buf + sizeof(struct ti_sci_msg_hdr),
@@ -458,7 +482,7 @@ static inline int ti_sci_do_xfer(struct ti_sci_info *info,
 
 	ret = mbox_send_message(info->chan_tx, &xfer->tx_message);
 	if (ret < 0) {
-		dev_err(dev, "Mbox send fail %d (caller: %pS)\n", ret, (void *)_RET_IP_);
+		dev_err(dev, "Mbox send fail %d (caller: %pS)\n", ret, caller);
 		goto fail;
 	}
 
@@ -481,8 +505,7 @@ static inline int ti_sci_do_xfer(struct ti_sci_info *info,
 	}
 
 	if (ret == -ETIMEDOUT)
-		dev_err(dev, "Mbox timedout in resp(caller: %pS)\n",
-			(void *)_RET_IP_);
+		dev_err(dev, "Mbox timedout in resp(caller: %pS)\n", caller);
 
 	/*
 	 * NOTE: we might prefer not to need the mailbox ticker to manage the
@@ -499,7 +522,7 @@ static inline int ti_sci_do_xfer(struct ti_sci_info *info,
 	if (response_expected && ret == 0) {
 		if (!ti_sci_is_response_ack(xfer->xfer_buf)) {
 			dev_warn(dev, "Message response not acknowledged (caller: %pS)\n",
-				 (void *)_RET_IP_);
+				 caller);
 			ret = -ENODEV;
 		} else {
 			memcpy(xfer->rx_buf, xfer->xfer_buf, xfer->rx_len);
@@ -526,17 +549,12 @@ static int ti_sci_cmd_get_revision(struct ti_sci_info *info)
 	struct ti_sci_version_info *ver = &handle->version;
 	struct ti_sci_msg_hdr req;
 	struct ti_sci_msg_resp_version resp;
-	struct ti_sci_xfer *xfer;
 	int ret;
 
-	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_VERSION,
-				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
-
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TI_SCI_MSG_VERSION,
+			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret)
 		return ret;
 
@@ -564,7 +582,6 @@ static int ti_sci_set_device_state(const struct ti_sci_handle *handle,
 	struct ti_sci_info *info;
 	struct ti_sci_msg_req_set_device_state req;
 	struct ti_sci_msg_hdr resp;
-	struct ti_sci_xfer *xfer;
 	int ret = 0;
 
 	if (IS_ERR(handle))
@@ -574,17 +591,13 @@ static int ti_sci_set_device_state(const struct ti_sci_handle *handle,
 
 	info = handle_to_ti_sci_info(handle);
 
-	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_SET_DEVICE_STATE,
-				   flags | TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
-
 	req.id = id;
 	req.state = state;
 
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TI_SCI_MSG_SET_DEVICE_STATE,
+			     flags | TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret)
 		return ret;
 
@@ -609,7 +622,6 @@ static int ti_sci_get_device_state(const struct ti_sci_handle *handle,
 	struct ti_sci_info *info;
 	struct ti_sci_msg_req_get_device_state req;
 	struct ti_sci_msg_resp_get_device_state resp;
-	struct ti_sci_xfer *xfer;
 	int ret = 0;
 
 	if (IS_ERR(handle))
@@ -622,16 +634,12 @@ static int ti_sci_get_device_state(const struct ti_sci_handle *handle,
 
 	info = handle_to_ti_sci_info(handle);
 
-	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_GET_DEVICE_STATE,
-				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
-
 	req.id = id;
 
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TI_SCI_MSG_GET_DEVICE_STATE,
+			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret)
 		return ret;
 
@@ -900,7 +908,6 @@ static int ti_sci_cmd_set_device_resets(const struct ti_sci_handle *handle,
 	struct ti_sci_info *info;
 	struct ti_sci_msg_req_set_device_resets req;
 	struct ti_sci_msg_hdr resp;
-	struct ti_sci_xfer *xfer;
 	int ret = 0;
 
 	if (IS_ERR(handle))
@@ -910,17 +917,13 @@ static int ti_sci_cmd_set_device_resets(const struct ti_sci_handle *handle,
 
 	info = handle_to_ti_sci_info(handle);
 
-	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_SET_DEVICE_RESETS,
-				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
-
 	req.id = id;
 	req.resets = reset_state;
 
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TI_SCI_MSG_SET_DEVICE_RESETS,
+			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret)
 		return ret;
 
@@ -962,7 +965,6 @@ static int ti_sci_set_clock_state(const struct ti_sci_handle *handle,
 	struct ti_sci_info *info;
 	struct ti_sci_msg_req_set_clock_state req;
 	struct ti_sci_msg_hdr resp;
-	struct ti_sci_xfer *xfer;
 	int ret = 0;
 
 	if (IS_ERR(handle))
@@ -971,13 +973,6 @@ static int ti_sci_set_clock_state(const struct ti_sci_handle *handle,
 		return -EINVAL;
 
 	info = handle_to_ti_sci_info(handle);
-
-	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_SET_CLOCK_STATE,
-				   flags | TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
 
 	req.dev_id = dev_id;
 	if (clk_id < 255) {
@@ -988,7 +983,10 @@ static int ti_sci_set_clock_state(const struct ti_sci_handle *handle,
 	}
 	req.request_state = state;
 
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TI_SCI_MSG_SET_CLOCK_STATE,
+			     flags | TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret)
 		return ret;
 
@@ -1014,7 +1012,6 @@ static int ti_sci_cmd_get_clock_state(const struct ti_sci_handle *handle,
 	struct ti_sci_info *info;
 	struct ti_sci_msg_req_get_clock_state req;
 	struct ti_sci_msg_resp_get_clock_state resp;
-	struct ti_sci_xfer *xfer;
 	int ret = 0;
 
 	if (IS_ERR(handle))
@@ -1027,13 +1024,6 @@ static int ti_sci_cmd_get_clock_state(const struct ti_sci_handle *handle,
 
 	info = handle_to_ti_sci_info(handle);
 
-	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_GET_CLOCK_STATE,
-				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
-
 	req.dev_id = dev_id;
 	if (clk_id < 255) {
 		req.clk_id = clk_id;
@@ -1042,7 +1032,10 @@ static int ti_sci_cmd_get_clock_state(const struct ti_sci_handle *handle,
 		req.clk_id_32 = clk_id;
 	}
 
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TI_SCI_MSG_GET_CLOCK_STATE,
+			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret)
 		return ret;
 
@@ -1232,7 +1225,6 @@ static int ti_sci_cmd_clk_set_parent(const struct ti_sci_handle *handle,
 	struct ti_sci_info *info;
 	struct ti_sci_msg_req_set_clock_parent req;
 	struct ti_sci_msg_hdr resp;
-	struct ti_sci_xfer *xfer;
 	int ret = 0;
 
 	if (IS_ERR(handle))
@@ -1241,13 +1233,6 @@ static int ti_sci_cmd_clk_set_parent(const struct ti_sci_handle *handle,
 		return -EINVAL;
 
 	info = handle_to_ti_sci_info(handle);
-
-	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_SET_CLOCK_PARENT,
-				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
 
 	req.dev_id = dev_id;
 	if (clk_id < 255) {
@@ -1263,7 +1248,10 @@ static int ti_sci_cmd_clk_set_parent(const struct ti_sci_handle *handle,
 		req.parent_id_32 = parent_id;
 	}
 
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TI_SCI_MSG_SET_CLOCK_PARENT,
+			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret)
 		return ret;
 
@@ -1287,7 +1275,6 @@ static int ti_sci_cmd_clk_get_parent(const struct ti_sci_handle *handle,
 	struct ti_sci_info *info;
 	struct ti_sci_msg_req_get_clock_parent req;
 	struct ti_sci_msg_resp_get_clock_parent resp;
-	struct ti_sci_xfer *xfer;
 	int ret = 0;
 
 	if (IS_ERR(handle))
@@ -1297,13 +1284,6 @@ static int ti_sci_cmd_clk_get_parent(const struct ti_sci_handle *handle,
 
 	info = handle_to_ti_sci_info(handle);
 
-	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_GET_CLOCK_PARENT,
-				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
-
 	req.dev_id = dev_id;
 	if (clk_id < 255) {
 		req.clk_id = clk_id;
@@ -1312,7 +1292,10 @@ static int ti_sci_cmd_clk_get_parent(const struct ti_sci_handle *handle,
 		req.clk_id_32 = clk_id;
 	}
 
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TI_SCI_MSG_GET_CLOCK_PARENT,
+			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret)
 		return ret;
 
@@ -1342,7 +1325,6 @@ static int ti_sci_cmd_clk_get_num_parents(const struct ti_sci_handle *handle,
 	struct ti_sci_info *info;
 	struct ti_sci_msg_req_get_clock_num_parents req;
 	struct ti_sci_msg_resp_get_clock_num_parents resp;
-	struct ti_sci_xfer *xfer;
 	int ret = 0;
 
 	if (IS_ERR(handle))
@@ -1352,13 +1334,6 @@ static int ti_sci_cmd_clk_get_num_parents(const struct ti_sci_handle *handle,
 
 	info = handle_to_ti_sci_info(handle);
 
-	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_GET_NUM_CLOCK_PARENTS,
-				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
-
 	req.dev_id = dev_id;
 	if (clk_id < 255) {
 		req.clk_id = clk_id;
@@ -1367,7 +1342,10 @@ static int ti_sci_cmd_clk_get_num_parents(const struct ti_sci_handle *handle,
 		req.clk_id_32 = clk_id;
 	}
 
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TI_SCI_MSG_GET_NUM_CLOCK_PARENTS,
+			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret)
 		return ret;
 
@@ -1406,7 +1384,6 @@ static int ti_sci_cmd_clk_get_match_freq(const struct ti_sci_handle *handle,
 	struct ti_sci_info *info;
 	struct ti_sci_msg_req_query_clock_freq req;
 	struct ti_sci_msg_resp_query_clock_freq resp;
-	struct ti_sci_xfer *xfer;
 	int ret = 0;
 
 	if (IS_ERR(handle))
@@ -1415,13 +1392,6 @@ static int ti_sci_cmd_clk_get_match_freq(const struct ti_sci_handle *handle,
 		return -EINVAL;
 
 	info = handle_to_ti_sci_info(handle);
-
-	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_QUERY_CLOCK_FREQ,
-				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
 
 	req.dev_id = dev_id;
 	if (clk_id < 255) {
@@ -1434,7 +1404,10 @@ static int ti_sci_cmd_clk_get_match_freq(const struct ti_sci_handle *handle,
 	req.target_freq_hz = target_freq;
 	req.max_freq_hz = max_freq;
 
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TI_SCI_MSG_QUERY_CLOCK_FREQ,
+			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret)
 		return ret;
 
@@ -1468,7 +1441,6 @@ static int ti_sci_cmd_clk_set_freq(const struct ti_sci_handle *handle,
 	struct ti_sci_info *info;
 	struct ti_sci_msg_req_set_clock_freq req;
 	struct ti_sci_msg_hdr resp;
-	struct ti_sci_xfer *xfer;
 	int ret = 0;
 
 	if (IS_ERR(handle))
@@ -1477,13 +1449,6 @@ static int ti_sci_cmd_clk_set_freq(const struct ti_sci_handle *handle,
 		return -EINVAL;
 
 	info = handle_to_ti_sci_info(handle);
-
-	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_SET_CLOCK_FREQ,
-				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
 
 	req.dev_id = dev_id;
 	if (clk_id < 255) {
@@ -1496,7 +1461,10 @@ static int ti_sci_cmd_clk_set_freq(const struct ti_sci_handle *handle,
 	req.target_freq_hz = target_freq;
 	req.max_freq_hz = max_freq;
 
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TI_SCI_MSG_SET_CLOCK_FREQ,
+			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret)
 		return ret;
 
@@ -1520,7 +1488,6 @@ static int ti_sci_cmd_clk_get_freq(const struct ti_sci_handle *handle,
 	struct ti_sci_info *info;
 	struct ti_sci_msg_req_get_clock_freq req;
 	struct ti_sci_msg_resp_get_clock_freq resp;
-	struct ti_sci_xfer *xfer;
 	int ret = 0;
 
 	if (IS_ERR(handle))
@@ -1530,13 +1497,6 @@ static int ti_sci_cmd_clk_get_freq(const struct ti_sci_handle *handle,
 
 	info = handle_to_ti_sci_info(handle);
 
-	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_GET_CLOCK_FREQ,
-				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
-
 	req.dev_id = dev_id;
 	if (clk_id < 255) {
 		req.clk_id = clk_id;
@@ -1545,7 +1505,10 @@ static int ti_sci_cmd_clk_get_freq(const struct ti_sci_handle *handle,
 		req.clk_id_32 = clk_id;
 	}
 
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TI_SCI_MSG_GET_CLOCK_FREQ,
+			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret)
 		return ret;
 
@@ -1573,7 +1536,6 @@ static int ti_sci_cmd_prepare_sleep(const struct ti_sci_handle *handle, u8 mode,
 	struct ti_sci_info *info;
 	struct ti_sci_msg_req_prepare_sleep req;
 	struct ti_sci_msg_hdr resp;
-	struct ti_sci_xfer *xfer;
 	struct device *dev;
 	int ret = 0;
 
@@ -1585,19 +1547,15 @@ static int ti_sci_cmd_prepare_sleep(const struct ti_sci_handle *handle, u8 mode,
 	info = handle_to_ti_sci_info(handle);
 	dev = info->dev;
 
-	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_PREPARE_SLEEP,
-				   msg_flags,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
-
 	req.mode = mode;
 	req.ctx_lo = ctx_lo;
 	req.ctx_hi = ctx_hi;
 	req.debug_flags = debug_flags;
 
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TI_SCI_MSG_PREPARE_SLEEP,
+			     msg_flags,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret) {
 		dev_err(dev, "Failed to prepare sleep\n");
 		return ret;
@@ -1621,7 +1579,6 @@ static int ti_sci_msg_cmd_query_fw_caps(const struct ti_sci_handle *handle,
 					u64 *fw_caps)
 {
 	struct ti_sci_info *info;
-	struct ti_sci_xfer *xfer;
 	struct ti_sci_msg_hdr req;
 	struct ti_sci_msg_resp_query_fw_caps resp;
 	struct device *dev;
@@ -1635,14 +1592,10 @@ static int ti_sci_msg_cmd_query_fw_caps(const struct ti_sci_handle *handle,
 	info = handle_to_ti_sci_info(handle);
 	dev = info->dev;
 
-	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_QUERY_FW_CAPS,
-				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
-
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TI_SCI_MSG_QUERY_FW_CAPS,
+			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret) {
 		dev_err(dev, "Failed to get capabilities\n");
 		return ret;
@@ -1667,7 +1620,6 @@ static int ti_sci_cmd_set_io_isolation(const struct ti_sci_handle *handle,
 	struct ti_sci_info *info;
 	struct ti_sci_msg_req_set_io_isolation req;
 	struct ti_sci_msg_hdr resp;
-	struct ti_sci_xfer *xfer;
 	struct device *dev;
 	int ret = 0;
 
@@ -1679,16 +1631,12 @@ static int ti_sci_cmd_set_io_isolation(const struct ti_sci_handle *handle,
 	info = handle_to_ti_sci_info(handle);
 	dev = info->dev;
 
-	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_SET_IO_ISOLATION,
-				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
-
 	req.state = state;
 
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TI_SCI_MSG_SET_IO_ISOLATION,
+			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret) {
 		dev_err(dev, "Failed to set IO isolation\n");
 		return ret;
@@ -1711,7 +1659,6 @@ static int ti_sci_msg_cmd_lpm_wake_reason(const struct ti_sci_handle *handle,
 					  u32 *source, u64 *timestamp, u8 *pin, u8 *mode)
 {
 	struct ti_sci_info *info;
-	struct ti_sci_xfer *xfer;
 	struct ti_sci_msg_hdr req;
 	struct ti_sci_msg_resp_lpm_wake_reason resp;
 	struct device *dev;
@@ -1725,14 +1672,10 @@ static int ti_sci_msg_cmd_lpm_wake_reason(const struct ti_sci_handle *handle,
 	info = handle_to_ti_sci_info(handle);
 	dev = info->dev;
 
-	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_LPM_WAKE_REASON,
-				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
-
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TI_SCI_MSG_LPM_WAKE_REASON,
+			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret) {
 		dev_err(dev, "Failed to get wake reason\n");
 		return ret;
@@ -1764,7 +1707,6 @@ static int ti_sci_cmd_set_device_constraint(const struct ti_sci_handle *handle,
 	struct ti_sci_info *info;
 	struct ti_sci_msg_req_lpm_set_device_constraint req;
 	struct ti_sci_msg_hdr resp;
-	struct ti_sci_xfer *xfer;
 	struct device *dev;
 	int ret = 0;
 
@@ -1776,17 +1718,13 @@ static int ti_sci_cmd_set_device_constraint(const struct ti_sci_handle *handle,
 	info = handle_to_ti_sci_info(handle);
 	dev = info->dev;
 
-	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_LPM_SET_DEVICE_CONSTRAINT,
-				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
-
 	req.id = id;
 	req.state = state;
 
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TI_SCI_MSG_LPM_SET_DEVICE_CONSTRAINT,
+			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret) {
 		dev_err(dev, "Failed to set device constraint\n");
 		return ret;
@@ -1809,7 +1747,6 @@ static int ti_sci_cmd_set_latency_constraint(const struct ti_sci_handle *handle,
 	struct ti_sci_info *info;
 	struct ti_sci_msg_req_lpm_set_latency_constraint req;
 	struct ti_sci_msg_hdr resp;
-	struct ti_sci_xfer *xfer;
 	struct device *dev;
 	int ret = 0;
 
@@ -1821,17 +1758,13 @@ static int ti_sci_cmd_set_latency_constraint(const struct ti_sci_handle *handle,
 	info = handle_to_ti_sci_info(handle);
 	dev = info->dev;
 
-	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_LPM_SET_LATENCY_CONSTRAINT,
-				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
-
 	req.latency = latency;
 	req.state = state;
 
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TI_SCI_MSG_LPM_SET_LATENCY_CONSTRAINT,
+			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret) {
 		dev_err(dev, "Failed to set device constraint\n");
 		return ret;
@@ -1851,17 +1784,12 @@ static int ti_sci_cmd_lpm_abort(struct device *dev)
 	struct ti_sci_info *info = dev_get_drvdata(dev);
 	struct ti_sci_msg_hdr req;
 	struct ti_sci_msg_hdr resp;
-	struct ti_sci_xfer *xfer;
 	int ret = 0;
 
-	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_LPM_ABORT,
-				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
-
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TI_SCI_MSG_LPM_ABORT,
+			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret)
 		return ret;
 
@@ -1873,7 +1801,6 @@ static int ti_sci_cmd_core_reboot(const struct ti_sci_handle *handle)
 	struct ti_sci_info *info;
 	struct ti_sci_msg_req_reboot req;
 	struct ti_sci_msg_hdr resp;
-	struct ti_sci_xfer *xfer;
 	int ret = 0;
 
 	if (IS_ERR(handle))
@@ -1883,14 +1810,10 @@ static int ti_sci_cmd_core_reboot(const struct ti_sci_handle *handle)
 
 	info = handle_to_ti_sci_info(handle);
 
-	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_SYS_RESET,
-				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
-
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TI_SCI_MSG_SYS_RESET,
+			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret)
 		return ret;
 
@@ -1917,7 +1840,6 @@ static int ti_sci_get_resource_range(const struct ti_sci_handle *handle,
 {
 	struct ti_sci_msg_resp_get_resource_range resp;
 	struct ti_sci_msg_req_get_resource_range req;
-	struct ti_sci_xfer *xfer;
 	struct ti_sci_info *info;
 	int ret = 0;
 
@@ -1928,18 +1850,14 @@ static int ti_sci_get_resource_range(const struct ti_sci_handle *handle,
 
 	info = handle_to_ti_sci_info(handle);
 
-	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_GET_RESOURCE_RANGE,
-				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
-
 	req.secondary_host = s_host;
 	req.type = dev_id & MSG_RM_RESOURCE_TYPE_MASK;
 	req.subtype = subtype & MSG_RM_RESOURCE_SUBTYPE_MASK;
 
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TI_SCI_MSG_GET_RESOURCE_RANGE,
+			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret)
 		return ret;
 
@@ -2025,7 +1943,6 @@ static int ti_sci_manage_irq(const struct ti_sci_handle *handle,
 {
 	struct ti_sci_msg_req_manage_irq req;
 	struct ti_sci_msg_hdr resp;
-	struct ti_sci_xfer *xfer;
 	struct ti_sci_info *info;
 	int ret = 0;
 
@@ -2035,12 +1952,6 @@ static int ti_sci_manage_irq(const struct ti_sci_handle *handle,
 		return -EINVAL;
 
 	info = handle_to_ti_sci_info(handle);
-
-	xfer = ti_sci_get_one_xfer(info, type, TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
 
 	req.valid_params = valid_params;
 	req.src_id = src_id;
@@ -2053,7 +1964,9 @@ static int ti_sci_manage_irq(const struct ti_sci_handle *handle,
 	req.vint_status_bit = vint_status_bit;
 	req.secondary_host = s_host;
 
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, type, TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret)
 		return ret;
 
@@ -2337,7 +2250,6 @@ static int ti_sci_cmd_rm_ring_cfg(const struct ti_sci_handle *handle,
 {
 	struct ti_sci_msg_rm_ring_cfg_req req;
 	struct ti_sci_msg_hdr resp;
-	struct ti_sci_xfer *xfer;
 	struct ti_sci_info *info;
 	int ret = 0;
 
@@ -2345,13 +2257,6 @@ static int ti_sci_cmd_rm_ring_cfg(const struct ti_sci_handle *handle,
 		return -EINVAL;
 
 	info = handle_to_ti_sci_info(handle);
-
-	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_RM_RING_CFG,
-				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
 
 	req.valid_params = params->valid_params;
 	req.nav_id = params->nav_id;
@@ -2365,7 +2270,10 @@ static int ti_sci_cmd_rm_ring_cfg(const struct ti_sci_handle *handle,
 	req.virtid = params->virtid;
 	req.asel = params->asel;
 
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TI_SCI_MSG_RM_RING_CFG,
+			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret)
 		return ret;
 
@@ -2387,7 +2295,6 @@ static int ti_sci_cmd_rm_psil_pair(const struct ti_sci_handle *handle,
 {
 	struct ti_sci_msg_psil_pair req;
 	struct ti_sci_msg_hdr resp;
-	struct ti_sci_xfer *xfer;
 	struct ti_sci_info *info;
 	int ret = 0;
 
@@ -2398,18 +2305,14 @@ static int ti_sci_cmd_rm_psil_pair(const struct ti_sci_handle *handle,
 
 	info = handle_to_ti_sci_info(handle);
 
-	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_RM_PSIL_PAIR,
-				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
-
 	req.nav_id = nav_id;
 	req.src_thread = src_thread;
 	req.dst_thread = dst_thread;
 
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TI_SCI_MSG_RM_PSIL_PAIR,
+			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret)
 		return ret;
 
@@ -2431,7 +2334,6 @@ static int ti_sci_cmd_rm_psil_unpair(const struct ti_sci_handle *handle,
 {
 	struct ti_sci_msg_psil_unpair req;
 	struct ti_sci_msg_hdr resp;
-	struct ti_sci_xfer *xfer;
 	struct ti_sci_info *info;
 	int ret = 0;
 
@@ -2442,18 +2344,14 @@ static int ti_sci_cmd_rm_psil_unpair(const struct ti_sci_handle *handle,
 
 	info = handle_to_ti_sci_info(handle);
 
-	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_RM_PSIL_UNPAIR,
-				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
-
 	req.nav_id = nav_id;
 	req.src_thread = src_thread;
 	req.dst_thread = dst_thread;
 
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TI_SCI_MSG_RM_PSIL_UNPAIR,
+			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret)
 		return ret;
 
@@ -2476,7 +2374,6 @@ static int ti_sci_cmd_rm_udmap_tx_ch_cfg(const struct ti_sci_handle *handle,
 {
 	struct ti_sci_msg_rm_udmap_tx_ch_cfg_req req;
 	struct ti_sci_msg_hdr resp;
-	struct ti_sci_xfer *xfer;
 	struct ti_sci_info *info;
 	int ret = 0;
 
@@ -2484,13 +2381,6 @@ static int ti_sci_cmd_rm_udmap_tx_ch_cfg(const struct ti_sci_handle *handle,
 		return -EINVAL;
 
 	info = handle_to_ti_sci_info(handle);
-
-	xfer = ti_sci_get_one_xfer(info, TISCI_MSG_RM_UDMAP_TX_CH_CFG,
-				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
 
 	req.valid_params = params->valid_params;
 	req.nav_id = params->nav_id;
@@ -2513,7 +2403,10 @@ static int ti_sci_cmd_rm_udmap_tx_ch_cfg(const struct ti_sci_handle *handle,
 	req.tx_tdtype = params->tx_tdtype;
 	req.extended_ch_type = params->extended_ch_type;
 
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TISCI_MSG_RM_UDMAP_TX_CH_CFG,
+			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret)
 		return ret;
 
@@ -2536,7 +2429,6 @@ static int ti_sci_cmd_rm_udmap_rx_ch_cfg(const struct ti_sci_handle *handle,
 {
 	struct ti_sci_msg_rm_udmap_rx_ch_cfg_req req;
 	struct ti_sci_msg_hdr resp;
-	struct ti_sci_xfer *xfer;
 	struct ti_sci_info *info;
 	int ret = 0;
 
@@ -2544,13 +2436,6 @@ static int ti_sci_cmd_rm_udmap_rx_ch_cfg(const struct ti_sci_handle *handle,
 		return -EINVAL;
 
 	info = handle_to_ti_sci_info(handle);
-
-	xfer = ti_sci_get_one_xfer(info, TISCI_MSG_RM_UDMAP_RX_CH_CFG,
-				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
 
 	req.valid_params = params->valid_params;
 	req.nav_id = params->nav_id;
@@ -2570,7 +2455,10 @@ static int ti_sci_cmd_rm_udmap_rx_ch_cfg(const struct ti_sci_handle *handle,
 	req.rx_ignore_long = params->rx_ignore_long;
 	req.rx_burst_size = params->rx_burst_size;
 
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TISCI_MSG_RM_UDMAP_RX_CH_CFG,
+			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret)
 		return ret;
 
@@ -2593,7 +2481,6 @@ static int ti_sci_cmd_rm_udmap_rx_flow_cfg(const struct ti_sci_handle *handle,
 {
 	struct ti_sci_msg_rm_udmap_flow_cfg_req req;
 	struct ti_sci_msg_hdr resp;
-	struct ti_sci_xfer *xfer;
 	struct ti_sci_info *info;
 	int ret = 0;
 
@@ -2601,13 +2488,6 @@ static int ti_sci_cmd_rm_udmap_rx_flow_cfg(const struct ti_sci_handle *handle,
 		return -EINVAL;
 
 	info = handle_to_ti_sci_info(handle);
-
-	xfer = ti_sci_get_one_xfer(info, TISCI_MSG_RM_UDMAP_FLOW_CFG,
-				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
 
 	req.valid_params = params->valid_params;
 	req.nav_id = params->nav_id;
@@ -2632,7 +2512,10 @@ static int ti_sci_cmd_rm_udmap_rx_flow_cfg(const struct ti_sci_handle *handle,
 	req.rx_fdq3_qnum = params->rx_fdq3_qnum;
 	req.rx_ps_location = params->rx_ps_location;
 
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TISCI_MSG_RM_UDMAP_FLOW_CFG,
+			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret)
 		return ret;
 
@@ -2652,7 +2535,6 @@ static int ti_sci_cmd_proc_request(const struct ti_sci_handle *handle,
 	struct ti_sci_msg_req_proc_request req;
 	struct ti_sci_msg_hdr resp;
 	struct ti_sci_info *info;
-	struct ti_sci_xfer *xfer;
 	int ret = 0;
 
 	if (!handle)
@@ -2662,16 +2544,12 @@ static int ti_sci_cmd_proc_request(const struct ti_sci_handle *handle,
 
 	info = handle_to_ti_sci_info(handle);
 
-	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_PROC_REQUEST,
-				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
-
 	req.processor_id = proc_id;
 
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TI_SCI_MSG_PROC_REQUEST,
+			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret)
 		return ret;
 
@@ -2691,7 +2569,6 @@ static int ti_sci_cmd_proc_release(const struct ti_sci_handle *handle,
 	struct ti_sci_msg_req_proc_release req;
 	struct ti_sci_msg_hdr resp;
 	struct ti_sci_info *info;
-	struct ti_sci_xfer *xfer;
 	int ret = 0;
 
 	if (!handle)
@@ -2701,16 +2578,12 @@ static int ti_sci_cmd_proc_release(const struct ti_sci_handle *handle,
 
 	info = handle_to_ti_sci_info(handle);
 
-	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_PROC_RELEASE,
-				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
-
 	req.processor_id = proc_id;
 
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TI_SCI_MSG_PROC_RELEASE,
+			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret)
 		return ret;
 
@@ -2733,7 +2606,6 @@ static int ti_sci_cmd_proc_handover(const struct ti_sci_handle *handle,
 	struct ti_sci_msg_req_proc_handover req;
 	struct ti_sci_msg_hdr resp;
 	struct ti_sci_info *info;
-	struct ti_sci_xfer *xfer;
 	int ret = 0;
 
 	if (!handle)
@@ -2743,17 +2615,13 @@ static int ti_sci_cmd_proc_handover(const struct ti_sci_handle *handle,
 
 	info = handle_to_ti_sci_info(handle);
 
-	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_PROC_HANDOVER,
-				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
-
 	req.processor_id = proc_id;
 	req.host_id = host_id;
 
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TI_SCI_MSG_PROC_HANDOVER,
+			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret)
 		return ret;
 
@@ -2779,7 +2647,6 @@ static int ti_sci_cmd_proc_set_config(const struct ti_sci_handle *handle,
 	struct ti_sci_msg_req_set_config req;
 	struct ti_sci_msg_hdr resp;
 	struct ti_sci_info *info;
-	struct ti_sci_xfer *xfer;
 	int ret = 0;
 
 	if (!handle)
@@ -2789,13 +2656,6 @@ static int ti_sci_cmd_proc_set_config(const struct ti_sci_handle *handle,
 
 	info = handle_to_ti_sci_info(handle);
 
-	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_SET_CONFIG,
-				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
-
 	req.processor_id = proc_id;
 	req.bootvector_low = bootvector & TI_SCI_ADDR_LOW_MASK;
 	req.bootvector_high = (bootvector & TI_SCI_ADDR_HIGH_MASK) >>
@@ -2803,7 +2663,10 @@ static int ti_sci_cmd_proc_set_config(const struct ti_sci_handle *handle,
 	req.config_flags_set = config_flags_set;
 	req.config_flags_clear = config_flags_clear;
 
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TI_SCI_MSG_SET_CONFIG,
+			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret)
 		return ret;
 
@@ -2827,7 +2690,6 @@ static int ti_sci_cmd_proc_set_control(const struct ti_sci_handle *handle,
 	struct ti_sci_msg_req_set_ctrl req;
 	struct ti_sci_msg_hdr resp;
 	struct ti_sci_info *info;
-	struct ti_sci_xfer *xfer;
 	int ret = 0;
 
 	if (!handle)
@@ -2837,18 +2699,14 @@ static int ti_sci_cmd_proc_set_control(const struct ti_sci_handle *handle,
 
 	info = handle_to_ti_sci_info(handle);
 
-	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_SET_CTRL,
-				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
-
 	req.processor_id = proc_id;
 	req.control_flags_set = control_flags_set;
 	req.control_flags_clear = control_flags_clear;
 
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TI_SCI_MSG_SET_CTRL,
+			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret)
 		return ret;
 
@@ -2873,7 +2731,6 @@ static int ti_sci_cmd_proc_get_status(const struct ti_sci_handle *handle,
 	struct ti_sci_msg_resp_get_status resp;
 	struct ti_sci_msg_req_get_status req;
 	struct ti_sci_info *info;
-	struct ti_sci_xfer *xfer;
 	int ret = 0;
 
 	if (!handle)
@@ -2883,16 +2740,12 @@ static int ti_sci_cmd_proc_get_status(const struct ti_sci_handle *handle,
 
 	info = handle_to_ti_sci_info(handle);
 
-	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_GET_STATUS,
-				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   &req, sizeof(req),
-				   &resp, sizeof(resp));
-	if (IS_ERR(xfer))
-		return PTR_ERR(xfer);
-
 	req.processor_id = proc_id;
 
-	ret = ti_sci_do_xfer(info, xfer);
+	ret = ti_sci_do_xfer(info, TI_SCI_MSG_GET_STATUS,
+			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+			     &req, sizeof(req),
+			     &resp, sizeof(resp));
 	if (ret)
 		return ret;
 
