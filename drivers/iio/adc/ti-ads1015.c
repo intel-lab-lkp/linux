@@ -744,6 +744,7 @@ static int ads1015_enable_event_config(struct ads1015_data *data,
 static int ads1015_disable_event_config(struct ads1015_data *data,
 	const struct iio_chan_spec *chan, int comp_mode)
 {
+	struct regmap *map = data->regmap;
 	int ret;
 
 	if (!ads1015_event_channel_enabled(data))
@@ -756,7 +757,7 @@ static int ads1015_disable_event_config(struct ads1015_data *data,
 			comp_mode == ADS1015_CFG_COMP_MODE_WINDOW)
 		return 0;
 
-	ret = regmap_update_bits(data->regmap, ADS1015_CFG_REG,
+	ret = regmap_update_bits(map, ADS1015_CFG_REG,
 				ADS1015_CFG_COMP_QUE_MASK,
 				ADS1015_CFG_COMP_DISABLE <<
 					ADS1015_CFG_COMP_QUE_SHIFT);
@@ -921,19 +922,16 @@ static void ads1015_get_channels_config(struct i2c_client *client)
 	}
 }
 
-static int ads1015_set_conv_mode(struct ads1015_data *data, int mode)
-{
-	return regmap_update_bits(data->regmap, ADS1015_CFG_REG,
-				  ADS1015_CFG_MOD_MASK,
-				  mode << ADS1015_CFG_MOD_SHIFT);
-}
-
 static void ads1015_power_down(void *p)
 {
 	struct ads1015_data *data = p;
+	struct regmap *map = data->regmap;
 	int ret;
 
-	ret = ads1015_set_conv_mode(data, ADS1015_SINGLESHOT);
+	ret = regmap_update_bits(map, ADS1015_CFG_REG,
+				 ADS1015_CFG_MOD_MASK,
+				 ADS1015_SINGLESHOT << ADS1015_CFG_MOD_SHIFT);
+
 	if (ret)
 		dev_warn(regmap_get_device(data->regmap),
 			 "Failed to power down (%pe)\n", ERR_PTR(ret));
@@ -1036,7 +1034,9 @@ static int ads1015_probe(struct i2c_client *client)
 			return ret;
 	}
 
-	ret = ads1015_set_conv_mode(data, ADS1015_CONTINUOUS);
+	ret = regmap_update_bits(data->regmap, ADS1015_CFG_REG,
+				 ADS1015_CFG_MOD_MASK,
+				 ADS1015_CONTINUOUS << ADS1015_CFG_MOD_SHIFT);
 	if (ret)
 		return ret;
 
@@ -1059,17 +1059,23 @@ static int ads1015_runtime_suspend(struct device *dev)
 {
 	struct iio_dev *indio_dev = i2c_get_clientdata(to_i2c_client(dev));
 	struct ads1015_data *data = iio_priv(indio_dev);
+	struct regmap *map = data->regmap;
 
-	return ads1015_set_conv_mode(data, ADS1015_SINGLESHOT);
+	return regmap_update_bits(map, ADS1015_CFG_REG,
+				  ADS1015_CFG_MOD_MASK,
+				  ADS1015_SINGLESHOT << ADS1015_CFG_MOD_SHIFT);
 }
 
 static int ads1015_runtime_resume(struct device *dev)
 {
 	struct iio_dev *indio_dev = i2c_get_clientdata(to_i2c_client(dev));
 	struct ads1015_data *data = iio_priv(indio_dev);
+	struct regmap *map = data->regmap;
 	int ret;
 
-	ret = ads1015_set_conv_mode(data, ADS1015_CONTINUOUS);
+	ret = regmap_update_bits(map, ADS1015_CFG_REG,
+				 ADS1015_CFG_MOD_MASK,
+				 ADS1015_CONTINUOUS << ADS1015_CFG_MOD_SHIFT);
 	if (!ret)
 		data->conv_invalid = true;
 
