@@ -1429,6 +1429,14 @@ static inline bool get_kvm_amd_param_bool(const char *param)
 	return kvm_get_module_param_bool("kvm_amd", param);
 }
 
+static inline int get_common_kvm_vendor_param_bool(const char *param)
+{
+	if (host_cpu_is_intel)
+		return get_kvm_intel_param_bool(param);
+
+	return get_kvm_amd_param_bool(param);
+}
+
 static inline int get_kvm_intel_param_integer(const char *param)
 {
 	return kvm_get_module_param_integer("kvm_intel", param);
@@ -1439,6 +1447,14 @@ static inline int get_kvm_amd_param_integer(const char *param)
 	return kvm_get_module_param_integer("kvm_amd", param);
 }
 
+static inline int get_common_kvm_vendor_param_integer(const char *param)
+{
+	if (host_cpu_is_intel)
+		return get_kvm_intel_param_integer(param);
+
+	return get_kvm_amd_param_integer(param);
+}
+
 static inline bool kvm_is_pmu_enabled(void)
 {
 	return get_kvm_param_bool("enable_pmu");
@@ -1446,10 +1462,7 @@ static inline bool kvm_is_pmu_enabled(void)
 
 static inline bool kvm_is_mediated_pmu_enabled(void)
 {
-	if (host_cpu_is_intel)
-		return get_kvm_intel_param_bool("enable_mediated_pmu");
-
-	return get_kvm_amd_param_bool("enable_mediated_pmu");
+	return get_common_kvm_vendor_param_bool("enable_mediated_pmu");
 }
 
 static inline bool kvm_is_forced_emulation_enabled(void)
@@ -1470,6 +1483,16 @@ static inline bool kvm_is_ignore_msrs(void)
 static inline bool kvm_is_lbrv_enabled(void)
 {
 	return !!get_kvm_amd_param_integer("lbrv");
+}
+
+/*
+ * Do NOT use this to check for nVMX or nSVM support.  Querying kvm_cpu_has()
+ * for either of X86_FEATURE_{VMX,SVM} is the idiomatic way to check for nested
+ * virtualization support.  Use this *only* to validate KVM's own enumeration.
+ */
+static inline bool kvm_is_nested_virtualization_enabled(void)
+{
+	return get_common_kvm_vendor_param_integer("nested");
 }
 
 u64 *vm_get_pte(struct kvm_vm *vm, gva_t gva);
