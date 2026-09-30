@@ -9,6 +9,11 @@
 #ifndef __TISCI_PROTOCOL_H
 #define __TISCI_PROTOCOL_H
 
+#include <linux/device.h>
+#include <linux/err.h>
+#include <linux/types.h>
+#include <linux/spinlock.h>
+
 /**
  * struct ti_sci_version_info - version information structure
  * @abi_major:	Major ABI version. Change here implies risk of backward
