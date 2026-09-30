@@ -938,6 +938,7 @@ void __init pmac_pci_init(void)
 	/* pmac_check_ht_link(); */
 
 #else /* CONFIG_PPC64 */
+	of_node_put(ht);
 	init_p2pbridge();
 	init_second_ohare();
 	fixup_nec_usb2();

@@ -591,11 +591,13 @@ static void __init smp_core99_setup_i2c_hwsync(int ncpus)
 				pmac_tb_freeze = smp_core99_cypress_tb_freeze;
 				name = "Cypress";
 			}
+			of_node_put(cc);
 			break;
 		case 0xd4:
 			pmac_tb_freeze = smp_core99_pulsar_tb_freeze;
 			pmac_tb_pulsar_addr = 0xd4;
 			name = "Pulsar";
+			of_node_put(cc);
 			break;
 		}
 		if (pmac_tb_freeze != NULL) {

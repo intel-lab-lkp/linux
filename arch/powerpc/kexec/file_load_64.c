@@ -204,6 +204,7 @@ static int add_usable_mem_property(void *fdt, struct device_node *dn,
 	if (snprintf(path, NODE_PATH_LEN, "%pOF", dn) > (NODE_PATH_LEN - 1)) {
 		pr_err("Buffer (%d) too small for memory node: %pOF\n",
 		       NODE_PATH_LEN, dn);
+		of_node_put(dn);
 		return -EOVERFLOW;
 	}
 	kexec_dprintk("Memory node path: %s\n", path);
