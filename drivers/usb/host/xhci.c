@@ -3088,6 +3088,7 @@ int xhci_check_bandwidth(struct usb_hcd *hcd, struct usb_device *udev)
 	struct xhci_input_control_ctx *ctrl_ctx;
 	struct xhci_slot_ctx *slot_ctx;
 	struct xhci_command *command;
+	struct xhci_port *rhub_port;
 
 	ret = xhci_check_args(hcd, udev, NULL, 0, true, __func__);
 	if (ret <= 0)
@@ -3099,6 +3100,15 @@ int xhci_check_bandwidth(struct usb_hcd *hcd, struct usb_device *udev)
 
 	xhci_dbg(xhci, "%s called for udev %p\n", __func__, udev);
 	virt_dev = xhci->devs[udev->slot_id];
+	rhub_port = virt_dev->rhub_port;
+
+	/*
+	 * Skip configure endpoint if the roothub port is gone or its link
+	 * is inactive. Some hosts stop completing endpoint commands after
+	 * disconnect, wedging the command ring.
+	 */
+	if (rhub_port->link_inactive || !rhub_port->connected)
+		return -ENODEV;
 
 	command = xhci_alloc_command(xhci, true, GFP_KERNEL);
 	if (!command)
