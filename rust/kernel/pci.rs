@@ -87,12 +87,22 @@ unsafe impl<T: Driver> driver::RegistrationOps for Adapter<T> {
         name: &'static CStr,
         module: &'static ThisModule,
     ) -> Result {
+        #[cfg(CONFIG_PCI_IOV)]
+        build_assert!(
+            T::HAS_SRIOV_ENABLE == T::HAS_SRIOV_DISABLE,
+            "PCI drivers must implement both sriov_enable and sriov_disable"
+        );
+
         // SAFETY: It's safe to set the fields of `struct pci_driver` on initialization.
         unsafe {
             (*pdrv.get()).name = name.as_char_ptr();
             (*pdrv.get()).probe = Some(Self::probe_callback);
             (*pdrv.get()).remove = Some(Self::remove_callback);
             (*pdrv.get()).id_table = T::ID_TABLE.as_ptr();
+            #[cfg(CONFIG_PCI_IOV)]
+            if T::HAS_SRIOV_ENABLE {
+                (*pdrv.get()).sriov_configure = Some(Self::sriov_configure_callback);
+            }
         }
 
         // SAFETY: `pdrv` is guaranteed to be a valid `DriverType`.
@@ -343,6 +353,79 @@ pub trait Driver {
     /// callback must leave resources accessed by VF drivers available until then.
     fn unbind<'bound>(dev: &'bound Device<device::Core<'_>>, this: Pin<&Self::Data<'bound>>) {
         let _ = (dev, this);
+    }
+
+    /// Enables Single Root I/O Virtualization (SR-IOV) for a PF.
+    ///
+    /// Called when userspace writes a nonzero VF count to `sriov_numvfs`. The token carries the
+    /// requested count and permission to enable VFs on this PF. Return the guard obtained from
+    /// [`SriovEnable::enable()`] after completing setup; dropping it rolls back the enable.
+    ///
+    /// The PF must own a [`VfRegistration`] before enabling VFs. That registration disables
+    /// SR-IOV when the driver data is destroyed, while resources needed by VF drivers remain live.
+    /// Implement this callback and [`Self::sriov_disable()`] together, or implement neither.
+    ///
+    /// See [PCI Express I/O Virtualization].
+    ///
+    /// [PCI Express I/O Virtualization]: https://docs.kernel.org/PCI/pci-iov-howto.html
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use kernel::{device::Core, pci, prelude::*};
+    /// # struct Data;
+    /// fn sriov_enable<'callback>(
+    ///     _dev: &pci::Device<Core<'_>>,
+    ///     _this: Pin<&Data>,
+    ///     token: pci::SriovEnable<'callback>,
+    /// ) -> Result<pci::SriovEnabled<'callback>> {
+    ///     let num_vfs = token.num_vfs();
+    ///     let enabled = token.enable(num_vfs)?;
+    ///     // Complete any additional setup before returning the guard.
+    ///     Ok(enabled)
+    /// }
+    /// ```
+    #[cfg(CONFIG_PCI_IOV)]
+    fn sriov_enable<'bound, 'callback>(
+        dev: &'bound Device<device::Core<'_>>,
+        this: Pin<&Self::Data<'bound>>,
+        token: SriovEnable<'callback>,
+    ) -> Result<SriovEnabled<'callback>> {
+        let _ = (dev, this, token);
+        build_error!(crate::error::VTABLE_DEFAULT_ERROR)
+    }
+
+    /// Disables all VFs of a PF in response to a userspace request.
+    ///
+    /// Called when userspace writes zero to `sriov_numvfs`. Call [`SriovDisable::disable()`]
+    /// while resources used by VF drivers are still available. Returning an error before calling
+    /// it leaves the VFs enabled. Returning success requires that all VFs have been disabled.
+    ///
+    /// This callback is not invoked during PF unbind; [`VfRegistration`] owns that teardown.
+    /// Implement this callback and [`Self::sriov_enable()`] together, or implement neither.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use kernel::{device::Core, pci, prelude::*};
+    /// # struct Data;
+    /// fn sriov_disable(
+    ///     _dev: &pci::Device<Core<'_>>,
+    ///     _this: Pin<&Data>,
+    ///     token: pci::SriovDisable<'_>,
+    /// ) -> Result {
+    ///     token.disable();
+    ///     Ok(())
+    /// }
+    /// ```
+    #[cfg(CONFIG_PCI_IOV)]
+    fn sriov_disable<'bound>(
+        dev: &'bound Device<device::Core<'_>>,
+        this: Pin<&Self::Data<'bound>>,
+        token: SriovDisable<'_>,
+    ) -> Result {
+        let _ = (dev, this, token);
+        build_error!(crate::error::VTABLE_DEFAULT_ERROR)
     }
 }
 
