@@ -990,6 +990,32 @@ static bool pci_preserve_config(struct pci_host_bridge *host_bridge)
 	return false;
 }
 
+/*
+ * Return true if all memory windows of @bridge are non-prefetchable, and at
+ * least one of them extends above 4GB in PCI bus address space (see
+ * pci_bus_placement_flags()).
+ */
+static bool pci_host_np_only_with_high_window(struct pci_host_bridge *bridge)
+{
+	struct resource_entry *window;
+	bool high = false;
+
+	resource_list_for_each_entry(window, &bridge->windows) {
+		struct resource *res = window->res;
+
+		if (resource_type(res) != IORESOURCE_MEM)
+			continue;
+
+		if (res->flags & IORESOURCE_PREFETCH)
+			return false;
+
+		if (upper_32_bits(res->end - window->offset))
+			high = true;
+	}
+
+	return high;
+}
+
 static int pci_register_host_bridge(struct pci_host_bridge *bridge)
 {
 	struct device *parent = bridge->dev.parent;
@@ -1137,6 +1163,9 @@ static int pci_register_host_bridge(struct pci_host_bridge *bridge)
 		dev_info(&bus->dev, "root bus resource %pR%s\n", res, addr);
 	}
 
+	if (!pci_host_np_only_with_high_window(bridge))
+		bus->bus_flags |= PCI_BUS_FLAGS_NO_NP_BARS_IN_P_WINDOWS;
+
 	of_pci_make_host_bridge_node(bridge);
 
 	down_write(&pci_bus_sem);
@@ -1255,6 +1284,12 @@ static struct pci_bus *pci_alloc_child_bus(struct pci_bus *parent,
 		child->bus_flags |= PCI_BUS_FLAGS_NO_EXTCFG;
 		pci_info(child, "extended config space not accessible\n");
 	}
+
+	if (!pci_is_pcie(bridge) ||
+	    (pci_pcie_type(bridge) != PCI_EXP_TYPE_ROOT_PORT &&
+	     pci_pcie_type(bridge) != PCI_EXP_TYPE_UPSTREAM &&
+	     pci_pcie_type(bridge) != PCI_EXP_TYPE_DOWNSTREAM))
+		child->bus_flags |= PCI_BUS_FLAGS_NO_NP_BARS_IN_P_WINDOWS;
 
 	/* Set up default resource pointers and names */
 	for (i = 0; i < PCI_BRIDGE_RESOURCE_NUM; i++) {

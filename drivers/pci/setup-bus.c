@@ -184,7 +184,9 @@ static struct resource *find_bus_resource_of_type(struct pci_bus *bus,
  *
  * For memory resources, the selection is done as follows:
  *
- * Any non-prefetchable resource is put into the non-prefetchable window.
+ * Any non-prefetchable resource is put into the non-prefetchable window,
+ * except for 64-bit ones that may be placed like prefetchable resources on
+ * @bus (see pci_bus_placement_flags()).
  *
  * If there is no prefetchable MMIO window, put all memory resources into the
  * non-prefetchable window.
@@ -203,6 +205,7 @@ static struct resource *pbus_select_window_for_type(struct pci_bus *bus,
 	int iores_type = type & IORESOURCE_TYPE_BITS;	/* w/o 64bit & pref */
 	struct resource *mmio, *mmio_pref, *win;
 
+	type = pci_bus_placement_flags(bus, type);
 	type &= PCI_RES_TYPE_MASK;			/* with 64bit & pref */
 
 	if ((iores_type != IORESOURCE_IO) && (iores_type != IORESOURCE_MEM))
@@ -261,7 +264,9 @@ static struct resource *pbus_select_window_for_type(struct pci_bus *bus,
  *
  * For memory resources, the selection is done as follows:
  *
- * Any non-prefetchable resource is put into the non-prefetchable window.
+ * Any non-prefetchable resource is put into the non-prefetchable window,
+ * except for 64-bit ones that may be placed like prefetchable resources on
+ * @bus (see pci_bus_placement_flags()).
  *
  * If there is no prefetchable MMIO window, put all memory resources into the
  * non-prefetchable window.
@@ -520,8 +525,11 @@ static unsigned long pci_fail_res_type_mask(struct list_head *fail_head)
 	unsigned long mask = 0;
 
 	/* Check failed type */
-	list_for_each_entry(fail_res, fail_head, list)
-		mask |= fail_res->flags;
+	list_for_each_entry(fail_res, fail_head, list) {
+		struct pci_bus *bus = fail_res->dev->bus;
+
+		mask |= pci_bus_placement_flags(bus, fail_res->flags);
+	}
 
 	/*
 	 * One pref failed resource will set IORESOURCE_MEM, as we can
@@ -564,8 +572,11 @@ static bool pci_required_resource_failed(struct list_head *fail_head,
 
 	list_for_each_entry(fail_res, fail_head, list) {
 		int idx = pci_resource_num(fail_res->dev, fail_res->res);
+		unsigned long flags;
 
-		if (type && (fail_res->flags & PCI_RES_TYPE_MASK) != type)
+		flags = pci_bus_placement_flags(fail_res->dev->bus,
+						fail_res->flags);
+		if (type && (flags & PCI_RES_TYPE_MASK) != type)
 			continue;
 
 		if (!pci_resource_is_optional(fail_res->dev, idx))
@@ -2308,7 +2319,7 @@ EXPORT_SYMBOL_GPL(pci_assign_unassigned_bridge_resources);
 static int pbus_reassign_bridge_resources(struct pci_bus *bus, struct resource *res,
 					  struct list_head *saved)
 {
-	unsigned long type = res->flags;
+	unsigned long type = pci_bus_placement_flags(bus, res->flags);
 	struct pci_dev_resource *dev_res;
 	struct pci_dev *bridge = NULL;
 	LIST_HEAD(add_list);

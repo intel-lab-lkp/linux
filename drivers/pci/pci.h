@@ -576,6 +576,7 @@ static inline int pci_resource_num(const struct pci_dev *dev,
 	return resno;
 }
 
+unsigned long pci_bus_placement_flags(struct pci_bus *bus, unsigned long flags);
 int __pci_bus_alloc_resource(struct pci_bus *bus, struct resource *res,
 			     unsigned long flags, resource_size_t size,
 			     resource_size_t align, resource_size_t min,
