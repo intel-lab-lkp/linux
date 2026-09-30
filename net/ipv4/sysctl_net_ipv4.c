@@ -573,7 +573,7 @@ static struct ctl_table ipv4_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec
 	},
-#ifdef CONFIG_NETLABEL
+#ifdef CONFIG_CIPSO
 	{
 		.procname	= "cipso_cache_enable",
 		.data		= &cipso_v4_cache_enabled,
@@ -602,7 +602,7 @@ static struct ctl_table ipv4_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec,
 	},
-#endif /* CONFIG_NETLABEL */
+#endif /* CONFIG_CIPSO */
 	{
 		.procname	= "tcp_available_ulp",
 		.maxlen		= TCP_ULP_BUF_MAX,

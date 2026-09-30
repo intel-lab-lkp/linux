@@ -100,7 +100,7 @@ struct cipso_v4_std_map_tbl {
  * Sysctl Variables
  */
 
-#ifdef CONFIG_NETLABEL
+#ifdef CONFIG_CIPSO
 extern int cipso_v4_cache_enabled;
 extern int cipso_v4_cache_bucketsize;
 extern int cipso_v4_rbm_optfmt;
@@ -111,7 +111,7 @@ extern int cipso_v4_rbm_strictvalid;
  * DOI List Functions
  */
 
-#ifdef CONFIG_NETLABEL
+#ifdef CONFIG_CIPSO
 int cipso_v4_doi_add(struct cipso_v4_doi *doi_def,
 		     struct netlbl_audit *audit_info);
 void cipso_v4_doi_free(struct cipso_v4_doi *doi_def);
@@ -144,19 +144,23 @@ static inline struct cipso_v4_doi *cipso_v4_doi_getdef(u32 doi)
 	return NULL;
 }
 
+static inline void cipso_v4_doi_putdef(struct cipso_v4_doi *doi_def)
+{
+}
+
 static inline int cipso_v4_doi_walk(u32 *skip_cnt,
 		     int (*callback) (struct cipso_v4_doi *doi_def, void *arg),
 		     void *cb_arg)
 {
 	return 0;
 }
-#endif /* CONFIG_NETLABEL */
+#endif /* CONFIG_CIPSO */
 
 /*
  * Label Mapping Cache Functions
  */
 
-#ifdef CONFIG_NETLABEL
+#ifdef CONFIG_CIPSO
 void cipso_v4_cache_invalidate(void);
 int cipso_v4_cache_add(const unsigned char *cipso_ptr,
 		       const struct netlbl_lsm_secattr *secattr);
@@ -171,13 +175,13 @@ static inline int cipso_v4_cache_add(const unsigned char *cipso_ptr,
 {
 	return 0;
 }
-#endif /* CONFIG_NETLABEL */
+#endif /* CONFIG_CIPSO */
 
 /*
  * Protocol Handling Functions
  */
 
-#ifdef CONFIG_NETLABEL
+#ifdef CONFIG_CIPSO
 void cipso_v4_error(struct sk_buff *skb, int error, u32 gateway);
 int cipso_v4_getattr(const unsigned char *cipso,
 		     struct netlbl_lsm_secattr *secattr);
@@ -303,6 +307,6 @@ out:
 	return err_offset;
 
 }
-#endif /* CONFIG_NETLABEL */
+#endif /* CONFIG_CIPSO */
 
 #endif /* _CIPSO_IPV4_H */

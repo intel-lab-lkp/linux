@@ -147,6 +147,13 @@ enum {
 #define NLBL_CIPSOV4_A_MAX (__NLBL_CIPSOV4_A_MAX - 1)
 
 /* NetLabel protocol functions */
+#if IS_ENABLED(CONFIG_CIPSO)
 int netlbl_cipsov4_genl_init(void);
+#else
+static inline int netlbl_cipsov4_genl_init(void)
+{
+	return 0;
+}
+#endif
 
 #endif
