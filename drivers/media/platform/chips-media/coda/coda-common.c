@@ -2617,6 +2617,7 @@ static int coda_open(struct file *file)
 		ret = idx;
 		goto err_coda_max;
 	}
+	ctx->idx = idx;
 
 	name = kasprintf(GFP_KERNEL, "context%d", idx);
 	if (!name) {
@@ -2640,7 +2641,6 @@ static int coda_open(struct file *file)
 	v4l2_fh_init(&ctx->fh, video_devdata(file));
 	v4l2_fh_add(&ctx->fh, file);
 	ctx->dev = dev;
-	ctx->idx = idx;
 
 	coda_dbg(1, ctx, "open instance (%p)\n", ctx);
 
