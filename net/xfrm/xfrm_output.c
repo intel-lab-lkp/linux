@@ -672,6 +672,13 @@ static int xfrm_output_gso(struct net *net, struct sock *sk, struct sk_buff *skb
 	skb_list_walk_safe(segs, segs, nskb) {
 		int err;
 
+		/* Each segment reserves its own sequence number below. */
+		if (xfrm_offload(segs) && !secpath_set(segs)) {
+			XFRM_INC_STATS(net, LINUX_MIB_XFRMOUTERROR);
+			kfree_skb_list(segs);
+			return -ENOMEM;
+		}
+
 		skb_mark_not_on_list(segs);
 		err = xfrm_output2(net, sk, segs);
 
