@@ -26,6 +26,7 @@ enum {
 	HTE_TS_REQ,
 	HTE_TS_DISABLE,
 	HTE_TS_QUEUE_WK,
+	HTE_TS_RELEASING,
 };
 
 /**
@@ -189,6 +190,10 @@ int hte_ts_put(struct hte_ts_desc *desc)
 		ret = 0;
 		goto mod_put;
 	}
+
+	spin_lock_irqsave(&ei->slock, flag);
+	set_bit(HTE_TS_RELEASING, &ei->flags);
+	spin_unlock_irqrestore(&ei->slock, flag);
 
 	ret = gdev->chip->ops->release(gdev->chip, desc, ei->xlated_id);
 	if (ret) {
@@ -817,7 +822,8 @@ int hte_push_ts_ns(const struct hte_chip *chip, u32 xlated_id,
 	data->seq = ei->seq++;
 
 	if (!test_bit(HTE_TS_REGISTERED, &ei->flags) ||
-	    test_bit(HTE_TS_DISABLE, &ei->flags)) {
+	    test_bit(HTE_TS_DISABLE, &ei->flags) ||
+	    test_bit(HTE_TS_RELEASING, &ei->flags)) {
 		dev_dbg(chip->dev, "Unknown timestamp push\n");
 		atomic_inc(&ei->dropped_ts);
 		st = -EINVAL;
