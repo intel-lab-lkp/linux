@@ -5861,6 +5861,24 @@ out:
 }
 
 /*
+ * Some optimisations in fast paths would be broken by architecturally
+ * invalid feature combinations, reject those.
+ *
+ * This should share code with the host kernel cpufeature code, and
+ * make use of the MRS to generate dependencies.
+ */
+static bool kvm_validate_id_regs(struct kvm *kvm)
+{
+	if (kvm_has_s1pie(kvm) && !kvm_has_tcr2(kvm))
+		return false;
+
+	if (kvm_has_s1poe(kvm) && !kvm_has_tcr2(kvm))
+		return false;
+
+	return true;
+}
+
+/*
  * Perform last adjustments to the ID registers that are implied by the
  * configuration outside of the ID regs themselves, as well as any
  * initialisation that directly depend on these ID registers (such as
@@ -5927,6 +5945,9 @@ int kvm_finalize_sys_regs(struct kvm_vcpu *vcpu)
 		 */
 		kvm_vgic_finalize_idregs(kvm);
 	}
+
+	if (!kvm_validate_id_regs(vcpu->kvm))
+		return -EINVAL;
 
 	return 0;
 }
