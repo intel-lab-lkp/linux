@@ -117,7 +117,7 @@ static const struct regmap_bus *regmap_get_spi_bus(struct spi_device *spi,
 	struct regmap_bus *bus;
 
 	if (max_size != SIZE_MAX) {
-		bus = kmemdup(&regmap_spi, sizeof(*bus), GFP_KERNEL);
+		bus = devm_kmemdup(&spi->dev, &regmap_spi, sizeof(*bus), GFP_KERNEL);
 		if (!bus)
 			return ERR_PTR(-ENOMEM);
 
@@ -126,7 +126,6 @@ static const struct regmap_bus *regmap_get_spi_bus(struct spi_device *spi,
 		if (max_size + reg_reserve_size > max_msg_size)
 			max_size -= reg_reserve_size;
 
-		bus->free_on_exit = true;
 		bus->max_raw_read = max_size;
 		bus->max_raw_write = max_size;
 

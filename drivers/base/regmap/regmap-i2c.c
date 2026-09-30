@@ -403,10 +403,9 @@ static const struct regmap_bus *regmap_get_i2c_bus(struct i2c_client *i2c,
 				(config->reg_bits + config->pad_bits) / BITS_PER_BYTE;
 
 		if (max_read || max_write) {
-			ret_bus = kmemdup(bus, sizeof(*bus), GFP_KERNEL);
+			ret_bus = devm_kmemdup(&i2c->dev, bus, sizeof(*bus), GFP_KERNEL);
 			if (!ret_bus)
 				return ERR_PTR(-ENOMEM);
-			ret_bus->free_on_exit = true;
 			ret_bus->max_raw_read = max_read;
 			ret_bus->max_raw_write = max_write;
 			bus = ret_bus;
