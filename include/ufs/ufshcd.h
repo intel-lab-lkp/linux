@@ -213,9 +213,11 @@ struct ufs_query_req {
 /**
  * struct ufs_query_res - UPIU QUERY
  * @upiu_res: query response data
+ * @data_segment_length: response data segment length
  */
 struct ufs_query_res {
 	struct utp_upiu_query upiu_res;
+	u16 data_segment_length;
 };
 
 /**
