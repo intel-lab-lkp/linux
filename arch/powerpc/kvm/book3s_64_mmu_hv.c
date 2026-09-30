@@ -823,7 +823,9 @@ static void kvm_unmap_rmapp(struct kvm *kvm, struct kvm_memory_slot *memslot,
 		 */
 		i = *rmapp & KVMPPC_RMAP_INDEX;
 		hptep = (__be64 *) (kvm->arch.hpt.virt + (i << 4));
+		preempt_disable();
 		if (!try_lock_hpte(hptep, HPTE_V_HVLOCK)) {
+			preempt_enable();
 			/* unlock rmap before spinning on the HPTE lock */
 			unlock_rmap(rmapp);
 			while (be64_to_cpu(hptep[0]) & HPTE_V_HVLOCK)
@@ -834,6 +836,7 @@ static void kvm_unmap_rmapp(struct kvm *kvm, struct kvm_memory_slot *memslot,
 		kvmppc_unmap_hpte(kvm, i, memslot, rmapp, gfn);
 		unlock_rmap(rmapp);
 		__unlock_hpte(hptep, be64_to_cpu(hptep[0]));
+		preempt_enable();
 	}
 }
 
@@ -909,7 +912,9 @@ static bool kvm_age_rmapp(struct kvm *kvm, struct kvm_memory_slot *memslot,
 		if (!(be64_to_cpu(hptep[1]) & HPTE_R_R))
 			continue;
 
+		preempt_disable();
 		if (!try_lock_hpte(hptep, HPTE_V_HVLOCK)) {
+			preempt_enable();
 			/* unlock rmap before spinning on the HPTE lock */
 			unlock_rmap(rmapp);
 			while (be64_to_cpu(hptep[0]) & HPTE_V_HVLOCK)
@@ -928,6 +933,7 @@ static bool kvm_age_rmapp(struct kvm *kvm, struct kvm_memory_slot *memslot,
 			ret = true;
 		}
 		__unlock_hpte(hptep, be64_to_cpu(hptep[0]));
+		preempt_enable();
 	} while ((i = j) != head);
 
 	unlock_rmap(rmapp);
@@ -1043,7 +1049,9 @@ static int kvm_test_clear_dirty_npages(struct kvm *kvm, unsigned long *rmapp)
 		    (!hpte_is_writable(hptep1) || vcpus_running(kvm)))
 			continue;
 
+		preempt_disable();
 		if (!try_lock_hpte(hptep, HPTE_V_HVLOCK)) {
+			preempt_enable();
 			/* unlock rmap before spinning on the HPTE lock */
 			unlock_rmap(rmapp);
 			while (hptep[0] & cpu_to_be64(HPTE_V_HVLOCK))
@@ -1054,6 +1062,7 @@ static int kvm_test_clear_dirty_npages(struct kvm *kvm, unsigned long *rmapp)
 		/* Now check and modify the HPTE */
 		if (!(hptep[0] & cpu_to_be64(HPTE_V_VALID))) {
 			__unlock_hpte(hptep, be64_to_cpu(hptep[0]));
+			preempt_enable();
 			continue;
 		}
 
@@ -1077,6 +1086,7 @@ static int kvm_test_clear_dirty_npages(struct kvm *kvm, unsigned long *rmapp)
 		v &= ~HPTE_V_ABSENT;
 		v |= HPTE_V_VALID;
 		__unlock_hpte(hptep, v);
+		preempt_enable();
 	} while ((i = j) != head);
 
 	unlock_rmap(rmapp);
@@ -1219,6 +1229,7 @@ static unsigned long resize_hpt_rehash_hpte(struct kvm_resize_hpt *resize,
 	if (!(vpte & HPTE_V_VALID) && !(vpte & HPTE_V_ABSENT))
 		return 0; /* nothing to do */
 
+	preempt_disable();
 	while (!try_lock_hpte(hptep, HPTE_V_HVLOCK))
 		cpu_relax();
 
@@ -1346,6 +1357,7 @@ static unsigned long resize_hpt_rehash_hpte(struct kvm_resize_hpt *resize,
 
 out:
 	unlock_hpte(hptep, vpte);
+	preempt_enable();
 	return ret;
 }
 
