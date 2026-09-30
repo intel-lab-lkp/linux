@@ -106,6 +106,11 @@ pub(crate) fn kunit_tests(test_suite: Ident, mut module: ItemMod) -> Result<Toke
             .cloned()
             .collect();
 
+        let should_panic = f
+            .attrs
+            .iter()
+            .any(|attr| attr.path().is_ident("should_panic"));
+
         // Before the test, override usual `assert!` and `assert_eq!` macros with ones that call
         // KUnit instead.
         let test_str = test.to_string();
@@ -135,9 +140,21 @@ pub(crate) fn kunit_tests(test_suite: Ident, mut module: ItemMod) -> Result<Toke
             &CString::new(test_str.as_str()).expect("identifier cannot contain NUL"),
             test.span(),
         );
+        let assertion = if should_panic {
+            quote!(
+                let _ = #test();
+                (*_test).status = ::kernel::bindings::kunit_status_KUNIT_FAILURE;
+            )
+        } else {
+            quote!(
+                use ::kernel::kunit::is_test_result_ok;
+                assert!(is_test_result_ok(#test()));
+            )
+        };
         processed_items.push(parse_quote! {
             unsafe extern "C" fn #kunit_wrapper_fn_name(_test: *mut ::kernel::bindings::kunit) {
                 (*_test).status = ::kernel::bindings::kunit_status_KUNIT_SKIPPED;
+
 
                 // Append any `cfg` attributes the user might have written on their tests so we
                 // don't attempt to call them when they are `cfg`'d out. An extra `use` is used
@@ -145,15 +162,16 @@ pub(crate) fn kunit_tests(test_suite: Ident, mut module: ItemMod) -> Result<Toke
                 #(#cfg_attrs)*
                 {
                     (*_test).status = ::kernel::bindings::kunit_status_KUNIT_SUCCESS;
-                    use ::kernel::kunit::is_test_result_ok;
-                    assert!(is_test_result_ok(#test()));
+                    #assertion
                 }
             }
         });
 
-        test_cases.push(quote!(
-            ::kernel::kunit::kunit_case(#test_cstr, #kunit_wrapper_fn_name)
-        ));
+        test_cases.push(quote!({
+            let mut case = ::kernel::kunit::kunit_case(#test_cstr, #kunit_wrapper_fn_name);
+            case.attr.rust_should_panic = #should_panic;
+            case
+        }));
     }
 
     let num_tests_plus_1 = test_cases.len() + 1;

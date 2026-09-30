@@ -590,6 +590,11 @@ static void kunit_run_case_catch_errors(struct kunit_suite *suite,
 	context.test_case = test_case;
 	kunit_try_catch_run(try_catch, &context);
 
+	if (try_catch->try_result == -EINTR && test_case->attr.rust_should_panic) {
+		test->status = KUNIT_SUCCESS;
+		test_case->status = KUNIT_SUCCESS;
+	}
+
 	/* Now run the cleanup */
 	kunit_try_catch_init(try_catch,
 			     test,
