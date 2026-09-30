@@ -520,29 +520,6 @@ static void rtw88xxa_init_wmac_setting(struct rtw_dev *rtwdev)
 	rtw_write32(rtwdev, REG_MAR + 4, 0xffffffff);
 }
 
-static void rtw88xxa_init_adaptive_ctrl(struct rtw_dev *rtwdev)
-{
-	rtw_write32_mask(rtwdev, REG_RRSR, 0xfffff, 0xffff1);
-	rtw_write16(rtwdev, REG_RETRY_LIMIT, 0x3030);
-}
-
-static void rtw88xxa_init_edca(struct rtw_dev *rtwdev)
-{
-	rtw_write16(rtwdev, REG_SPEC_SIFS, 0x100a);
-	rtw_write16(rtwdev, REG_MAC_SPEC_SIFS, 0x100a);
-
-	rtw_write16(rtwdev, REG_SIFS, 0x100a);
-	rtw_write16(rtwdev, REG_SIFS + 2, 0x100a);
-
-	rtw_write32(rtwdev, REG_EDCA_BE_PARAM, 0x005EA42B);
-	rtw_write32(rtwdev, REG_EDCA_BK_PARAM, 0x0000A44F);
-	rtw_write32(rtwdev, REG_EDCA_VI_PARAM, 0x005EA324);
-	rtw_write32(rtwdev, REG_EDCA_VO_PARAM, 0x002FA226);
-
-	rtw_write8(rtwdev, REG_USTIME_TSF, 0x50);
-	rtw_write8(rtwdev, REG_USTIME_EDCA, 0x50);
-}
-
 static void rtw88xxau_tx_aggregation(struct rtw_dev *rtwdev)
 {
 	const struct rtw_chip_info *chip = rtwdev->chip;
@@ -1103,8 +1080,8 @@ int rtw88xxa_power_on(struct rtw_dev *rtwdev)
 	rtw_write32_mask(rtwdev, REG_CR, 0x30000, 0x2);
 
 	rtw88xxa_init_wmac_setting(rtwdev);
-	rtw88xxa_init_adaptive_ctrl(rtwdev);
-	rtw88xxa_init_edca(rtwdev);
+	rtw_mac_init_adaptive_ctrl(rtwdev);
+	rtw_mac_init_edca(rtwdev);
 
 	rtw_write8_set(rtwdev, REG_FWHW_TXQ_CTRL, BIT(7));
 	rtw_write8(rtwdev, REG_ACKTO, 0x80);
@@ -1946,44 +1923,6 @@ iqk:
 		do_iqk(rtwdev);
 }
 EXPORT_SYMBOL(rtw88xxa_phy_pwrtrack);
-
-void rtw88xxa_phy_cck_pd_set(struct rtw_dev *rtwdev, u8 new_lvl)
-{
-	static const u8 pd[CCK_PD_LV_MAX] = {0x40, 0x83, 0xcd, 0xdd, 0xed};
-	struct rtw_dm_info *dm_info = &rtwdev->dm_info;
-
-	/* Override rtw_phy_cck_pd_lv_link(). It implements something
-	 * like type 2/3/4. We need type 1 here.
-	 */
-	if (rtw_is_assoc(rtwdev)) {
-		if (dm_info->min_rssi > 60) {
-			new_lvl = CCK_PD_LV3;
-		} else if (dm_info->min_rssi > 35) {
-			new_lvl = CCK_PD_LV2;
-		} else if (dm_info->min_rssi > 20) {
-			if (dm_info->cck_fa_avg > 500)
-				new_lvl = CCK_PD_LV2;
-			else if (dm_info->cck_fa_avg < 250)
-				new_lvl = CCK_PD_LV1;
-			else
-				return;
-		} else {
-			new_lvl = CCK_PD_LV1;
-		}
-	}
-
-	rtw_dbg(rtwdev, RTW_DBG_PHY, "lv: (%d) -> (%d)\n",
-		dm_info->cck_pd_lv[RTW_CHANNEL_WIDTH_20][RF_PATH_A], new_lvl);
-
-	if (dm_info->cck_pd_lv[RTW_CHANNEL_WIDTH_20][RF_PATH_A] == new_lvl)
-		return;
-
-	dm_info->cck_fa_avg = CCK_FA_AVG_RESET;
-	dm_info->cck_pd_lv[RTW_CHANNEL_WIDTH_20][RF_PATH_A] = new_lvl;
-
-	rtw_write8(rtwdev, REG_CCK_PD_TH, pd[new_lvl]);
-}
-EXPORT_SYMBOL(rtw88xxa_phy_cck_pd_set);
 
 MODULE_AUTHOR("Realtek Corporation");
 MODULE_DESCRIPTION("Realtek 802.11ac wireless 8821a/8811a/8812a common code");

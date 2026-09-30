@@ -30,6 +30,8 @@
 
 void rtw_set_channel_mac(struct rtw_dev *rtwdev, u8 channel, u8 bw,
 			 u8 primary_ch_idx);
+void rtw_mac_init_adaptive_ctrl(struct rtw_dev *rtwdev);
+void rtw_mac_init_edca(struct rtw_dev *rtwdev);
 int rtw_pwr_seq_parser(struct rtw_dev *rtwdev,
 		       const struct rtw_pwr_seq_cmd * const *cmd_seq);
 int rtw_mac_power_on(struct rtw_dev *rtwdev);

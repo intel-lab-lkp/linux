@@ -1419,3 +1419,25 @@ int rtw_mac_postinit(struct rtw_dev *rtwdev)
 
 	return chip->ops->mac_postinit(rtwdev);
 }
+
+void rtw_mac_init_adaptive_ctrl(struct rtw_dev *rtwdev)
+{
+	rtw_write32_mask(rtwdev, REG_RRSR, 0xfffff, 0xffff1);
+	rtw_write16(rtwdev, REG_RETRY_LIMIT, 0x3030);
+}
+EXPORT_SYMBOL(rtw_mac_init_adaptive_ctrl);
+
+void rtw_mac_init_edca(struct rtw_dev *rtwdev)
+{
+	rtw_write16(rtwdev, REG_SPEC_SIFS, 0x100a);
+	rtw_write16(rtwdev, REG_MAC_SPEC_SIFS, 0x100a);
+
+	rtw_write16(rtwdev, REG_SIFS, 0x100a);
+	rtw_write16(rtwdev, REG_SIFS + 2, 0x100a);
+
+	rtw_write32(rtwdev, REG_EDCA_BE_PARAM, 0x005EA42B);
+	rtw_write32(rtwdev, REG_EDCA_BK_PARAM, 0x0000A44F);
+	rtw_write32(rtwdev, REG_EDCA_VI_PARAM, 0x005EA324);
+	rtw_write32(rtwdev, REG_EDCA_VO_PARAM, 0x002FA226);
+}
+EXPORT_SYMBOL(rtw_mac_init_edca);
