@@ -1776,31 +1776,52 @@ static void pci_restore_pcix_state(struct pci_dev *dev)
  * pci_save_state - save the PCI configuration space of a device before
  *		    suspending
  * @dev: PCI device that we're dealing with
+ *
+ * If the config space of @dev is not accessible, nothing is saved and the
+ * previous snapshot of the standard header is kept, as writing back the
+ * all-ones values read from such a device would corrupt it once it is
+ * accessible again.
+ *
+ * Return: 0 on success, -EIO if @dev is not accessible, or another
+ * negative errno if a capability could not be saved.
  */
 int pci_save_state(struct pci_dev *dev)
 {
-	int i;
+	u32 config[16];
+	int i, ret;
+
+	if (!pci_dev_config_accessible(dev, "save state"))
+		return -EIO;
+
 	/* XXX: 100% dword access ok here? */
 	for (i = 0; i < 16; i++) {
-		pci_read_config_dword(dev, i * 4, &dev->saved_config_space[i]);
-		pci_dbg(dev, "save config %#04x: %#010x\n",
-			i * 4, dev->saved_config_space[i]);
+		pci_read_config_dword(dev, i * 4, &config[i]);
+		pci_dbg(dev, "save config %#04x: %#010x\n", i * 4, config[i]);
 	}
+
+	ret = pci_save_pcie_state(dev);
+	if (!ret)
+		ret = pci_save_pcix_state(dev);
+	if (!ret) {
+		pci_save_dpc_state(dev);
+		pci_save_aer_state(dev);
+		pci_save_ptm_state(dev);
+		pci_save_tph_state(dev);
+		ret = pci_save_vc_state(dev);
+	}
+
+	/*
+	 * The device may have become inaccessible while it was being read.
+	 * Keep the previous header snapshot in that case.  The capabilities
+	 * are saved directly into their buffers, so they are not protected.
+	 */
+	if (!pci_dev_config_accessible(dev, "save state"))
+		return -EIO;
+
+	memcpy(dev->saved_config_space, config, sizeof(config));
 	dev->state_saved = true;
 
-	i = pci_save_pcie_state(dev);
-	if (i != 0)
-		return i;
-
-	i = pci_save_pcix_state(dev);
-	if (i != 0)
-		return i;
-
-	pci_save_dpc_state(dev);
-	pci_save_aer_state(dev);
-	pci_save_ptm_state(dev);
-	pci_save_tph_state(dev);
-	return pci_save_vc_state(dev);
+	return ret;
 }
 EXPORT_SYMBOL(pci_save_state);
 
