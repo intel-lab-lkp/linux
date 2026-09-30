@@ -811,6 +811,35 @@ static int ibmvfc_send_crq_init_complete(struct ibmvfc_host *vhost)
 	return ibmvfc_send_crq(vhost, 0xC002000000000000LL, 0);
 }
 
+static void ibmvfc_complete_event_work(struct work_struct *work)
+{
+	struct ibmvfc_event *evt = container_of(work, struct ibmvfc_event,
+						timer_work);
+	unsigned long flags;
+
+	timer_delete_sync(&evt->timer);
+	if (evt->done_needs_host_lock) {
+		spin_lock_irqsave(evt->vhost->host->host_lock, flags);
+		evt->done(evt);
+		spin_unlock_irqrestore(evt->vhost->host->host_lock, flags);
+	} else {
+		evt->done(evt);
+	}
+}
+
+static void ibmvfc_complete_event(struct ibmvfc_event *evt)
+{
+	/* The response path can run in hardirq context, so defer only when the
+	 * timer callback is already executing on another context.
+	 */
+	if (timer_delete_sync_try(&evt->timer) < 0) {
+		schedule_work(&evt->timer_work);
+		return;
+	}
+
+	evt->done(evt);
+}
+
 /**
  * ibmvfc_init_event_pool - Allocates and initializes the event pool for a host
  * @vhost:	ibmvfc host who owns the event pool
@@ -859,6 +888,7 @@ static int ibmvfc_init_event_pool(struct ibmvfc_host *vhost,
 		 */
 		atomic_set(&evt->active, -1);
 		atomic_set(&evt->free, 1);
+		INIT_WORK(&evt->timer_work, ibmvfc_complete_event_work);
 		evt->crq.valid = 0x80;
 		evt->crq.ioba = cpu_to_be64(pool->iu_token + (sizeof(*evt->xfer_iu) * i));
 		evt->xfer_iu = pool->iu_storage + i;
@@ -882,18 +912,31 @@ static void ibmvfc_free_event_pool(struct ibmvfc_host *vhost,
 				   struct ibmvfc_queue *queue)
 {
 	int i;
+	unsigned long flags;
 	struct ibmvfc_event_pool *pool = &queue->evt_pool;
 
 	ENTER;
+	if (!pool->size)
+		goto out;
+
+	for (i = 0; i < pool->size; ++i)
+		flush_work(&pool->events[i].timer_work);
+
+	spin_lock_irqsave(&queue->l_lock, flags);
 	for (i = 0; i < pool->size; ++i) {
 		list_del(&pool->events[i].queue_list);
 		BUG_ON(atomic_read(&pool->events[i].free) != 1);
+	}
+	spin_unlock_irqrestore(&queue->l_lock, flags);
+
+	for (i = 0; i < pool->size; ++i) {
 		if (pool->events[i].ext_list)
 			dma_pool_free(vhost->sg_pool,
 				      pool->events[i].ext_list,
 				      pool->events[i].ext_list_token);
 	}
 
+out:
 	kfree(pool->events);
 	dma_free_coherent(vhost->dev,
 			  pool->size * sizeof(*pool->iu_storage),
@@ -1134,7 +1177,7 @@ static void ibmvfc_complete_purge(struct list_head *purge_list)
 	list_for_each_entry_safe(evt, pos, purge_list, queue_list) {
 		list_del(&evt->queue_list);
 		ibmvfc_trc_end(evt);
-		evt->done(evt);
+		ibmvfc_complete_event(evt);
 	}
 }
 
@@ -1162,7 +1205,7 @@ static void ibmvfc_fail_request(struct ibmvfc_event *evt, int error_code)
 	else
 		evt->xfer_iu->mad_common.status = cpu_to_be16(IBMVFC_MAD_DRIVER_FAILED);
 
-	timer_delete(&evt->timer);
+	timer_delete_sync_try(&evt->timer);
 }
 
 /**
@@ -1669,6 +1712,7 @@ void ibmvfc_init_event(struct ibmvfc_event *evt,
 		evt->_done = done;
 		evt->done = ibmvfc_locked_done;
 	}
+	evt->done_needs_host_lock = false;
 	evt->hwq = 0;
 }
 
@@ -1824,7 +1868,6 @@ int ibmvfc_send_event(struct ibmvfc_event *evt,
 		atomic_set(&evt->active, 0);
 		list_del(&evt->queue_list);
 		spin_unlock_irqrestore(&evt->queue->l_lock, flags);
-		timer_delete(&evt->timer);
 
 		/* If send_crq returns H_CLOSED, return SCSI_MLQUEUE_HOST_BUSY.
 		 * Firmware will send a CRQ with a transport event (0xFF) to
@@ -1836,7 +1879,8 @@ int ibmvfc_send_event(struct ibmvfc_event *evt,
 				dev_warn(vhost->dev, "Send warning. Receive queue closed, will retry.\n");
 			if (evt->cmnd)
 				scsi_dma_unmap(evt->cmnd);
-			ibmvfc_free_event(evt);
+			evt->done = ibmvfc_free_event;
+			ibmvfc_complete_event(evt);
 			return SCSI_MLQUEUE_HOST_BUSY;
 		}
 
@@ -1849,9 +1893,10 @@ int ibmvfc_send_event(struct ibmvfc_event *evt,
 		} else {
 			evt->xfer_iu->mad_common.status = cpu_to_be16(IBMVFC_MAD_CRQ_ERROR);
 			evt->done = evt->_done;
+			evt->done_needs_host_lock = true;
 		}
 
-		evt->done(evt);
+		ibmvfc_complete_event(evt);
 	} else {
 		spin_unlock_irqrestore(&evt->queue->l_lock, flags);
 		ibmvfc_trc_start(evt);
@@ -3925,10 +3970,9 @@ static void ibmvfc_tasklet(void *data)
 	spin_unlock_irqrestore(vhost->host->host_lock, flags);
 
 	list_for_each_entry_safe(evt, temp, &evt_doneq, queue_list) {
-		timer_delete(&evt->timer);
 		list_del(&evt->queue_list);
 		ibmvfc_trc_end(evt);
-		evt->done(evt);
+		ibmvfc_complete_event(evt);
 	}
 }
 
@@ -4031,10 +4075,9 @@ static void ibmvfc_drain_sub_crq(struct ibmvfc_queue *scrq)
 	spin_unlock_irqrestore(scrq->q_lock, flags);
 
 	list_for_each_entry_safe(evt, temp, &evt_doneq, queue_list) {
-		timer_delete(&evt->timer);
 		list_del(&evt->queue_list);
 		ibmvfc_trc_end(evt);
-		evt->done(evt);
+		ibmvfc_complete_event(evt);
 	}
 }
 
