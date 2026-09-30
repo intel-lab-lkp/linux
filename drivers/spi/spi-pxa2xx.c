@@ -1520,31 +1520,33 @@ void pxa2xx_spi_remove(struct device *dev)
 
 	/* Disable the SSP at the peripheral and SOC level */
 	pxa_ssp_disable(ssp);
+
+	/* Release IRQ before gating the SOC clock */
+	free_irq(ssp->irq, drv_data);
+
+	/* Safe to disable the SSP clock now */
 	pxa2xx_spi_clk_disable(drv_data);
 
 	/* Release DMA */
 	if (drv_data->controller_info->enable_dma)
 		pxa2xx_spi_dma_release(drv_data);
-
-	/* Release IRQ */
-	free_irq(ssp->irq, drv_data);
 }
 EXPORT_SYMBOL_NS_GPL(pxa2xx_spi_remove, "SPI_PXA2xx");
 
 static int pxa2xx_spi_suspend(struct device *dev)
 {
 	struct driver_data *drv_data = dev_get_drvdata(dev);
-	struct ssp_device *ssp = drv_data->ssp;
 	int ret;
 
 	ret = spi_controller_suspend(drv_data->controller);
 	if (ret)
 		return ret;
 
-	pxa_ssp_disable(ssp);
-
-	if (!pm_runtime_suspended(dev))
-		pxa2xx_spi_clk_disable(drv_data);
+	ret = pm_runtime_force_suspend(dev);
+	if (ret) {
+		spi_controller_resume(drv_data->controller);
+		return ret;
+	}
 
 	return 0;
 }
@@ -1554,14 +1556,10 @@ static int pxa2xx_spi_resume(struct device *dev)
 	struct driver_data *drv_data = dev_get_drvdata(dev);
 	int ret;
 
-	/* Enable the SSP clock */
-	if (!pm_runtime_suspended(dev)) {
-		ret = pxa2xx_spi_clk_enable(drv_data);
-		if (ret)
-			return ret;
-	}
+	ret = pm_runtime_force_resume(dev);
+	if (ret)
+		return ret;
 
-	/* Start the queue running */
 	return spi_controller_resume(drv_data->controller);
 }
 
@@ -1569,7 +1567,16 @@ static int pxa2xx_spi_runtime_suspend(struct device *dev)
 {
 	struct driver_data *drv_data = dev_get_drvdata(dev);
 
-	pxa2xx_spi_clk_disable(drv_data);
+	mutex_lock(&drv_data->clk_lock);
+	if (drv_data->clk_enabled) {
+		pxa_ssp_disable(drv_data->ssp);
+		WRITE_ONCE(drv_data->clk_enabled, false);
+		mutex_unlock(&drv_data->clk_lock);
+		synchronize_irq(drv_data->ssp->irq);
+		clk_disable_unprepare(drv_data->ssp->clk);
+	} else {
+		mutex_unlock(&drv_data->clk_lock);
+	}
 	return 0;
 }
 
