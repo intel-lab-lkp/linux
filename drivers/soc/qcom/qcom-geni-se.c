@@ -1203,13 +1203,23 @@ int geni_se_resources_init(struct geni_se *se)
 				     "Failed to get optional core clk\n");
 
 	se->clk = devm_clk_get(se->dev, "se");
-	if (IS_ERR(se->clk) && !has_acpi_companion(se->dev))
-		return dev_err_probe(se->dev, PTR_ERR(se->clk),
-				     "Failed to get SE clk\n");
+	if (IS_ERR(se->clk)) {
+		if (!has_acpi_companion(se->dev))
+			return dev_err_probe(se->dev, PTR_ERR(se->clk),
+					     "Failed to get SE clk\n");
+		/*
+		 * ACPI firmware owns the SE clock and its rate. The clock API
+		 * treats NULL as a no-op, whereas an error pointer must not
+		 * reach clk_get_rate() or the OPP core.
+		 */
+		se->clk = NULL;
+	}
 
-	ret = devm_pm_opp_set_clkname(se->dev, "se");
-	if (ret)
-		return ret;
+	if (se->clk) {
+		ret = devm_pm_opp_set_clkname(se->dev, "se");
+		if (ret)
+			return ret;
+	}
 
 	ret = devm_pm_opp_of_add_table(se->dev);
 	if (ret && ret != -ENODEV)
