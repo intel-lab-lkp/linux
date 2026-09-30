@@ -730,10 +730,16 @@ static void iptfs_reset_drop_timer(struct xfrm_iptfs_data *xtfs)
 
 static void __iptfs_reassem_done(struct xfrm_iptfs_data *xtfs, bool free)
 {
+	struct sk_buff *skb = xtfs->ra_newskb;
+
 	assert_spin_locked(&xtfs->drop_lock);
 
-	if (free)
-		kfree_skb(xtfs->ra_newskb);
+	if (free && skb) {
+		struct net_device *dev = skb->dev;
+
+		kfree_skb(skb);
+		netdev_put(dev, NULL);
+	}
 	xtfs->ra_newskb = NULL;
 	xtfs->ra_drop_time = 0;
 	iptfs_reset_drop_timer(xtfs);
@@ -751,10 +757,15 @@ static void iptfs_reassem_abort(struct xfrm_iptfs_data *xtfs)
 /**
  * iptfs_reassem_done() - In-progress packet is complete, clear the state.
  * @xtfs: xtfs state
+ *
+ * Return: device with the reassembly reference still held.
  */
-static void iptfs_reassem_done(struct xfrm_iptfs_data *xtfs)
+static struct net_device *iptfs_reassem_done(struct xfrm_iptfs_data *xtfs)
 {
+	struct net_device *dev = xtfs->ra_newskb->dev;
+
 	__iptfs_reassem_done(xtfs, false);
+	return dev;
 }
 
 /**
@@ -766,6 +777,7 @@ static void iptfs_reassem_done(struct xfrm_iptfs_data *xtfs)
  * @data: offset into sequential packet data
  * @blkoff: packet blkoff value
  * @list: list of skbs to enqueue completed packet on
+ * @dev_to_put: device reference to release after processing @list
  *
  * Process an IPTFS payload that has a non-zero `blkoff` or when we are
  * expecting the continuation b/c we have a runt or in-progress packet.
@@ -774,7 +786,8 @@ static void iptfs_reassem_done(struct xfrm_iptfs_data *xtfs)
  */
 static u32 iptfs_reassem_cont(struct xfrm_iptfs_data *xtfs, u64 seq,
 			      struct skb_seq_state *st, struct sk_buff *skb,
-			      u32 data, u32 blkoff, struct list_head *list)
+			      u32 data, u32 blkoff, struct list_head *list,
+			      struct net_device **dev_to_put)
 {
 	struct iptfs_skb_frag_walk _fragwalk;
 	struct iptfs_skb_frag_walk *fragwalk = NULL;
@@ -870,6 +883,7 @@ static u32 iptfs_reassem_cont(struct xfrm_iptfs_data *xtfs, u64 seq,
 			goto abandon;
 		}
 		xtfs->ra_newskb = newskb;
+		netdev_hold(newskb->dev, NULL, GFP_ATOMIC);
 		xtfs->ra_drop_time = ktime_get_raw_fast_ns() +
 				     xtfs->drop_time_ns;
 		iptfs_reset_drop_timer(xtfs);
@@ -957,7 +971,7 @@ static u32 iptfs_reassem_cont(struct xfrm_iptfs_data *xtfs, u64 seq,
 		xtfs->ra_wantseq++;
 	} else {
 		/* We are done with packet reassembly! */
-		iptfs_reassem_done(xtfs);
+		*dev_to_put = iptfs_reassem_done(xtfs);
 		iptfs_complete_inner_skb(xtfs->x, newskb);
 		list_add_tail(&newskb->list, list);
 	}
@@ -1189,6 +1203,7 @@ static bool __input_process_payload(struct xfrm_state *x, u32 data,
 			spin_lock(&xtfs->drop_lock);
 
 			xtfs->ra_newskb = skb;
+			netdev_hold(skb->dev, NULL, GFP_ATOMIC);
 			xtfs->ra_wantseq = seq + 1;
 			xtfs->ra_drop_time = ktime_get_raw_fast_ns() +
 					     xtfs->drop_time_ns;
@@ -1250,6 +1265,7 @@ done:
  */
 static void iptfs_input_ordered(struct xfrm_state *x, struct sk_buff *skb)
 {
+	struct net_device *dev_to_put = NULL;
 	struct ip_iptfs_cc_hdr iptcch;
 	struct skb_seq_state skbseq;
 	struct list_head sublist; /* rename this it's just a list */
@@ -1311,7 +1327,8 @@ static void iptfs_input_ordered(struct xfrm_state *x, struct sk_buff *skb)
 		/* check again after lock */
 		if (blkoff || xtfs->ra_runtlen || xtfs->ra_newskb) {
 			data = iptfs_reassem_cont(xtfs, seq, &skbseq, skb, data,
-						  blkoff, &sublist);
+						  blkoff, &sublist,
+						  &dev_to_put);
 		}
 
 		spin_unlock(&xtfs->drop_lock);
@@ -1325,6 +1342,8 @@ done:
 		skb_abort_seq_read(&skbseq);
 		kfree_skb(skb);
 	}
+	if (dev_to_put)
+		netdev_put(dev_to_put, NULL);
 }
 
 /* ------------------------------- */
@@ -1490,6 +1509,7 @@ static void __reorder_future_fits(struct xfrm_iptfs_data *xtfs,
 	}
 
 	xtfs->w_saved[index].skb = inskb;
+	netdev_hold(inskb->dev, NULL, GFP_ATOMIC);
 	xtfs->w_savedlen = max(savedlen, index + 1);
 	iptfs_set_window_drop_times(xtfs, index);
 }
@@ -1625,6 +1645,7 @@ static void __reorder_future_shifts(struct xfrm_iptfs_data *xtfs,
 	/* We've shifted. plug the packet in at the end. */
 	xtfs->w_savedlen = nslots - 1;
 	xtfs->w_saved[xtfs->w_savedlen - 1].skb = inskb;
+	netdev_hold(inskb->dev, NULL, GFP_ATOMIC);
 	iptfs_set_window_drop_times(xtfs, xtfs->w_savedlen - 1);
 
 	/* if we don't have a slot0 then we must wait for it */
@@ -1638,7 +1659,8 @@ static void __reorder_future_shifts(struct xfrm_iptfs_data *xtfs,
 }
 
 /* Receive a new packet into the reorder window. Return a list of ordered
- * packets from the window.
+ * packets from the window. Packets on @list or in w_saved own a device
+ * reference; packets on @freelist do not.
  */
 static void iptfs_input_reorder(struct xfrm_iptfs_data *xtfs,
 				struct sk_buff *inskb, struct list_head *list,
@@ -1656,14 +1678,16 @@ static void iptfs_input_reorder(struct xfrm_iptfs_data *xtfs,
 	}
 	wantseq = xtfs->w_wantseq;
 
-	if (likely(inseq == wantseq))
+	if (likely(inseq == wantseq)) {
+		netdev_hold(inskb->dev, NULL, GFP_ATOMIC);
 		__reorder_this(xtfs, inskb, list);
-	else if (inseq < wantseq)
+	} else if (inseq < wantseq) {
 		__reorder_past(xtfs, inskb, freelist);
-	else if ((inseq - wantseq) < nslots)
+	} else if ((inseq - wantseq) < nslots) {
 		__reorder_future_fits(xtfs, inskb, freelist);
-	else
+	} else {
 		__reorder_future_shifts(xtfs, inskb, list);
+	}
 }
 
 /**
@@ -1721,13 +1745,20 @@ static enum hrtimer_restart iptfs_drop_timer(struct hrtimer *me)
 
 	spin_unlock(&xtfs->drop_lock);
 
-	if (skb)
+	if (skb) {
+		struct net_device *dev = skb->dev;
+
 		kfree_skb_reason(skb, SKB_DROP_REASON_FRAG_REASM_TIMEOUT);
+		netdev_put(dev, NULL);
+	}
 
 	if (count) {
 		list_for_each_entry_safe(skb, next, &list, list) {
+			struct net_device *dev = skb->dev;
+
 			skb_list_del_init(skb);
 			iptfs_input_ordered(x, skb);
+			netdev_put(dev, NULL);
 		}
 	}
 
@@ -1767,8 +1798,11 @@ static int iptfs_input(struct xfrm_state *x, struct sk_buff *skb)
 	spin_unlock(&xtfs->drop_lock);
 
 	list_for_each_entry_safe(skb, next, &list, list) {
+		struct net_device *dev = skb->dev;
+
 		skb_list_del_init(skb);
 		iptfs_input_ordered(x, skb);
+		netdev_put(dev, NULL);
 	}
 
 	list_for_each_entry_safe(skb, next, &freelist, list) {
@@ -2774,12 +2808,20 @@ static void iptfs_destroy_state(struct xfrm_state *x)
 
 	hrtimer_cancel(&xtfs->drop_timer);
 
-	if (xtfs->ra_newskb)
+	if (xtfs->ra_newskb) {
+		struct net_device *dev = xtfs->ra_newskb->dev;
+
 		kfree_skb(xtfs->ra_newskb);
+		netdev_put(dev, NULL);
+	}
 
 	for (s = xtfs->w_saved, se = s + xtfs->w_savedlen; s < se; s++) {
-		if (s->skb)
+		if (s->skb) {
+			struct net_device *dev = s->skb->dev;
+
 			kfree_skb(s->skb);
+			netdev_put(dev, NULL);
+		}
 	}
 
 	kfree_sensitive(xtfs->w_saved);
