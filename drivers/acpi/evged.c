@@ -43,6 +43,8 @@
 struct acpi_ged_device {
 	struct device *dev;
 	struct list_head event_list;
+	unsigned int gpio_index;
+	int error;
 };
 
 struct acpi_ged_event {
@@ -76,7 +78,7 @@ static acpi_status acpi_ged_request_interrupt(struct acpi_resource *ares,
 	struct device *dev = geddev->dev;
 	acpi_handle handle = ACPI_HANDLE(dev);
 	acpi_handle evt_handle;
-	struct resource r;
+	struct resource r = {};
 	struct acpi_resource_irq *p = &ares->data.irq;
 	struct acpi_resource_extended_irq *pext = &ares->data.extended_irq;
 	char ev_name[5];
@@ -84,6 +86,33 @@ static acpi_status acpi_ged_request_interrupt(struct acpi_resource *ares,
 
 	if (ares->type == ACPI_RESOURCE_TYPE_END_TAG)
 		return AE_OK;
+
+	if (ares->type == ACPI_RESOURCE_TYPE_GPIO) {
+		struct acpi_resource_gpio *agpio;
+		int ret;
+
+		/* GpioIo resources are not event sources. */
+		if (!acpi_gpio_get_irq_resource(ares, &agpio))
+			return AE_OK;
+
+		/* The GPIO core applies the GpioInt trigger and polarity. */
+		ret = acpi_dev_gpio_irq_get(ACPI_COMPANION(dev), geddev->gpio_index++);
+		if (ret < 0) {
+			geddev->error = ret;
+			return AE_ERROR;
+		}
+		irq = ret;
+		gsi = agpio->pin_table[0];
+		if (agpio->shareable == ACPI_SHARED)
+			r.flags |= IORESOURCE_IRQ_SHAREABLE;
+
+		/* As for GSIs above 255, GPIO-signaled events use _EVT. */
+		if (ACPI_FAILURE(acpi_get_handle(handle, "_EVT", &evt_handle))) {
+			dev_err(dev, "cannot locate _EVT method\n");
+			return AE_ERROR;
+		}
+		goto request;
+	}
 
 	if (!acpi_dev_resource_interrupt(ares, 0, &r)) {
 		dev_err(dev, "unable to parse IRQ resource\n");
@@ -115,6 +144,7 @@ static acpi_status acpi_ged_request_interrupt(struct acpi_resource *ares,
 		return AE_ERROR;
 	}
 
+request:
 	event = devm_kzalloc(dev, sizeof(*event), GFP_KERNEL);
 	if (!event)
 		return AE_ERROR;
@@ -138,6 +168,8 @@ static acpi_status acpi_ged_request_interrupt(struct acpi_resource *ares,
 	return AE_OK;
 }
 
+static void acpi_ged_free_events(struct acpi_ged_device *geddev);
+
 static int ged_probe(struct platform_device *pdev)
 {
 	struct acpi_ged_device *geddev;
@@ -152,6 +184,10 @@ static int ged_probe(struct platform_device *pdev)
 	acpi_ret = acpi_walk_resources(ACPI_HANDLE(&pdev->dev), "_CRS",
 				       acpi_ged_request_interrupt, geddev);
 	if (ACPI_FAILURE(acpi_ret)) {
+		acpi_ged_free_events(geddev);
+		if (geddev->error)
+			return dev_err_probe(&pdev->dev, geddev->error,
+					     "unable to get GPIO event IRQ\n");
 		dev_err(&pdev->dev, "unable to parse the _CRS record\n");
 		return -EINVAL;
 	}
@@ -160,9 +196,8 @@ static int ged_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static void ged_shutdown(struct platform_device *pdev)
+static void acpi_ged_free_events(struct acpi_ged_device *geddev)
 {
-	struct acpi_ged_device *geddev = platform_get_drvdata(pdev);
 	struct acpi_ged_event *event, *next;
 
 	list_for_each_entry_safe(event, next, &geddev->event_list, node) {
@@ -171,6 +206,11 @@ static void ged_shutdown(struct platform_device *pdev)
 		dev_dbg(geddev->dev, "GED releasing GSI %u @ IRQ %u\n",
 			 event->gsi, event->irq);
 	}
+}
+
+static void ged_shutdown(struct platform_device *pdev)
+{
+	acpi_ged_free_events(platform_get_drvdata(pdev));
 }
 
 static void ged_remove(struct platform_device *pdev)
