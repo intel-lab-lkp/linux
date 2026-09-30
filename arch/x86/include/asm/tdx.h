@@ -84,6 +84,8 @@ int tdx_mcall_extend_rtmr(u8 index, u8 *data);
 
 u64 tdx_hcall_get_quote(void *buf, size_t size);
 
+int tdx_get_max_quote_size(u64 *max_quote_size);
+
 void __init tdx_dump_attributes(u64 td_attr);
 void __init tdx_dump_td_ctls(u64 td_ctls);
 
