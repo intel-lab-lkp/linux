@@ -323,6 +323,11 @@ static int fimc_isp_subdev_s_power(struct v4l2_subdev *sd, int on)
 		set_bit(IS_ST_PWR_SUBIP_ON, &is->state);
 
 		ret = fimc_is_hw_initialize(is);
+		if (ret < 0) {
+			v4l2_err(sd, "hardware initialization failed\n");
+			pm_runtime_put(&is->pdev->dev);
+			return ret;
+		}
 	} else {
 		/* Close sensor */
 		if (!test_bit(IS_ST_PWR_ON, &is->state)) {
