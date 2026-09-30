@@ -28,6 +28,7 @@ endif # NF_TABLES_BRIDGE
 config NF_CONNTRACK_BRIDGE
 	tristate "IPv4/IPV6 bridge connection tracking support"
 	depends on NF_CONNTRACK
+	depends on IPV4 || !INET
 	default n
 	help
 	  Connection tracking keeps a record of what packets have passed
@@ -188,7 +189,7 @@ config BRIDGE_EBT_VLAN
 #
 config BRIDGE_EBT_ARPREPLY
 	tristate "ebt: arp reply target support"
-	depends on BRIDGE_NF_EBTABLES && INET
+	depends on BRIDGE_NF_EBTABLES && INET && IPV4
 	help
 	  This option adds the arp reply target, which allows
 	  automatically sending arp replies to arp requests.

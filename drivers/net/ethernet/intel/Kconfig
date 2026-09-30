@@ -195,6 +195,7 @@ config IXGBE_IPSEC
 	bool "IPSec XFRM cryptography-offload acceleration"
 	depends on IXGBE
 	depends on XFRM_OFFLOAD
+	depends on IPV4 || !INET
 	default y
 	select XFRM_ALGO
 	help
@@ -221,6 +222,7 @@ config IXGBEVF_IPSEC
 	bool "IPSec XFRM cryptography-offload acceleration"
 	depends on IXGBEVF
 	depends on XFRM_OFFLOAD
+	depends on IPV4 || !INET
 	default y
 	select XFRM_ALGO
 	help

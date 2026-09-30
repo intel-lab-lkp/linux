@@ -36,7 +36,7 @@ config BRIDGE
 config BRIDGE_IGMP_SNOOPING
 	bool "IGMP/MLD snooping"
 	depends on BRIDGE
-	depends on INET
+	depends on INET && IPV4
 	default y
 	help
 	  If you say Y here, then the Ethernet bridge will be able selectively

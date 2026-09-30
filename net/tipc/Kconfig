@@ -30,6 +30,7 @@ config TIPC_MEDIA_IB
 config TIPC_MEDIA_UDP
 	bool "IP/UDP media type support"
 	depends on TIPC
+	depends on IPV4
 	select NET_UDP_TUNNEL
 	default y
 	help
