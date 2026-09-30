@@ -372,20 +372,19 @@ static int __tcf_action_put(struct tc_action *p, bool bind)
 {
 	struct tcf_idrinfo *idrinfo = p->idrinfo;
 
-	if (refcount_dec_and_mutex_lock(&p->tcfa_refcnt, &idrinfo->lock)) {
-		if (bind)
-			atomic_dec(&p->tcfa_bindcnt);
-		idr_remove(&idrinfo->action_idr, p->tcfa_index);
-		mutex_unlock(&idrinfo->lock);
-
-		tcf_action_cleanup(p);
-		return 1;
-	}
-
+	mutex_lock(&idrinfo->lock);
 	if (bind)
 		atomic_dec(&p->tcfa_bindcnt);
+	if (!refcount_dec_and_test(&p->tcfa_refcnt)) {
+		mutex_unlock(&idrinfo->lock);
+		return 0;
+	}
 
-	return 0;
+	idr_remove(&idrinfo->action_idr, p->tcfa_index);
+	mutex_unlock(&idrinfo->lock);
+
+	tcf_action_cleanup(p);
+	return 1;
 }
 
 static int __tcf_idr_release(struct tc_action *p, bool bind, bool strict)
