@@ -2098,6 +2098,9 @@ static int arm_cmn_event_add(struct perf_event *event, int flags)
 	enum cmn_node_type type = CMN_EVENT_TYPE(event);
 	unsigned int input_sel, i = 0;
 
+	if (cmn->cpu != smp_processor_id())
+		return -ENOENT;
+
 	if (type == CMN_TYPE_DTC) {
 		while (cmn->dtc[i].cycles)
 			if (++i == cmn->num_dtcs)
@@ -2231,12 +2234,12 @@ static int arm_cmn_commit_txn(struct pmu *pmu)
 
 static void arm_cmn_migrate(struct arm_cmn *cmn, unsigned int cpu)
 {
-	unsigned int i;
+	unsigned int i, old = cmn->cpu;
 
-	perf_pmu_migrate_context(&cmn->pmu, cmn->cpu, cpu);
+	cmn->cpu = cpu;
+	perf_pmu_migrate_context(&cmn->pmu, old, cpu);
 	for (i = 0; i < cmn->num_dtcs; i++)
 		irq_set_affinity(cmn->dtc[i].irq, cpumask_of(cpu));
-	cmn->cpu = cpu;
 }
 
 static int arm_cmn_pmu_online_cpu(unsigned int cpu, struct hlist_node *cpuhp_node)
