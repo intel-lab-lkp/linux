@@ -1645,6 +1645,7 @@ static void mac80211_hwsim_write_tsf(struct mac80211_hwsim_data *data,
 
 struct hwsim_tx_cb {
 	int cookie;
+	u8 orig_addrs[sizeof_field(struct ieee80211_hdr, addrs)];
 	s8 link_id;
 };
 
@@ -1655,6 +1656,16 @@ static struct hwsim_tx_cb *hwsim_tx_cb(struct sk_buff *skb)
 	BUILD_BUG_ON(sizeof(struct hwsim_tx_cb) >
 		     sizeof(info->rate_driver_data));
 	return (void *)info->rate_driver_data;
+}
+
+static void hwsim_tx_addrs_restore(struct sk_buff *skb, const u8 *orig_addrs)
+{
+	struct ieee80211_hdr *hdr = (void *)skb->data;
+
+	if (is_zero_ether_addr(orig_addrs))
+		return;
+
+	memcpy(&hdr->addrs, orig_addrs, sizeof(hdr->addrs));
 }
 
 static int mac80211_hwsim_get_link_id(struct ieee80211_vif *vif,
@@ -1685,7 +1696,8 @@ static int mac80211_hwsim_get_link_id(struct ieee80211_vif *vif,
 static void mac80211_hwsim_tx_frame_nl(struct ieee80211_hw *hw,
 				       struct sk_buff *my_skb,
 				       int dst_portid,
-				       struct ieee80211_channel *channel)
+				       struct ieee80211_channel *channel,
+				       const u8 *orig_addrs)
 {
 	struct sk_buff *skb;
 	struct mac80211_hwsim_data *data = hw->priv;
@@ -1777,6 +1789,10 @@ static void mac80211_hwsim_tx_frame_nl(struct ieee80211_hw *hw,
 	cb = hwsim_tx_cb(my_skb);
 	cb->cookie = cookie;
 	cb->link_id = link_id;
+	if (orig_addrs)
+		memcpy(cb->orig_addrs, orig_addrs, sizeof(cb->orig_addrs));
+	else
+		memset(cb->orig_addrs, 0, sizeof(cb->orig_addrs));
 	if (nla_put_u64_64bit(skb, HWSIM_ATTR_COOKIE, cookie, HWSIM_ATTR_PAD))
 		goto nla_put_failure;
 
@@ -2152,6 +2168,7 @@ static void mac80211_hwsim_tx(struct ieee80211_hw *hw,
 {
 	struct mac80211_hwsim_data *data = hw->priv;
 	struct ieee80211_tx_info *txi = IEEE80211_SKB_CB(skb);
+	u8 orig_addrs[sizeof_field(struct ieee80211_hdr, addrs)] = {};
 	struct ieee80211_hdr *hdr = (void *)skb->data;
 	struct ieee80211_chanctx_conf *chanctx_conf;
 	struct ieee80211_channel *channel;
@@ -2239,6 +2256,8 @@ static void mac80211_hwsim_tx(struct ieee80211_hw *hw,
 		 * probe response).
 		 */
 		if (sta && sta->mlo && link_sta) {
+			memcpy(orig_addrs, &hdr->addrs, sizeof(orig_addrs));
+
 			/* address translation to link addresses on TX */
 			ether_addr_copy(hdr->addr1, link_sta->addr);
 			ether_addr_copy(hdr->addr2, bss_conf->addr);
@@ -2313,7 +2332,8 @@ static void mac80211_hwsim_tx(struct ieee80211_hw *hw,
 	_portid = READ_ONCE(data->wmediumd);
 
 	if (_portid || hwsim_virtio_enabled)
-		return mac80211_hwsim_tx_frame_nl(hw, skb, _portid, channel);
+		return mac80211_hwsim_tx_frame_nl(hw, skb, _portid, channel,
+						  orig_addrs);
 
 	/* NO wmediumd detected, perfect medium simulation */
 	data->tx_pkts++;
@@ -2323,6 +2343,7 @@ static void mac80211_hwsim_tx(struct ieee80211_hw *hw,
 	if (ack && skb->len >= 16)
 		mac80211_hwsim_monitor_ack(channel, hdr->addr2);
 
+	hwsim_tx_addrs_restore(skb, orig_addrs);
 	ieee80211_tx_info_clear_status(txi);
 
 	/* frame was transmitted at most favorable rate at first attempt */
@@ -2471,7 +2492,7 @@ void mac80211_hwsim_tx_frame(struct ieee80211_hw *hw,
 	}
 
 	if (_portid || hwsim_virtio_enabled)
-		return mac80211_hwsim_tx_frame_nl(hw, skb, _portid, chan);
+		return mac80211_hwsim_tx_frame_nl(hw, skb, _portid, chan, NULL);
 
 	data->tx_pkts++;
 	data->tx_bytes += skb->len;
@@ -6416,8 +6437,9 @@ static int hwsim_tx_info_frame_received_nl(struct sk_buff *skb_2,
 	u64 ret_skb_cookie;
 	struct sk_buff *skb, *tmp;
 	const u8 *src;
+	struct hwsim_tx_cb tx_cb;
 	unsigned int hwsim_flags;
-	int i, link_id;
+	int i;
 	unsigned long flags;
 	bool found = false;
 
@@ -6474,7 +6496,7 @@ static int hwsim_tx_info_frame_received_nl(struct sk_buff *skb_2,
 
 	/* now send back TX status */
 	txi = IEEE80211_SKB_CB(skb);
-	link_id = hwsim_tx_cb(skb)->link_id;
+	tx_cb = *hwsim_tx_cb(skb);
 
 	ieee80211_tx_info_clear_status(txi);
 
@@ -6486,9 +6508,9 @@ static int hwsim_tx_info_frame_received_nl(struct sk_buff *skb_2,
 	txi->status.ack_signal = nla_get_u32(info->attrs[HWSIM_ATTR_SIGNAL]);
 
 	hdr = (struct ieee80211_hdr *)skb->data;
-	if (link_id >= 0) {
+	if (tx_cb.link_id >= 0) {
 		txi->status.link_valid = 1;
-		txi->status.link_id = link_id;
+		txi->status.link_id = tx_cb.link_id;
 	}
 
 	if (!(hwsim_flags & HWSIM_TX_CTL_NO_ACK) &&
@@ -6502,6 +6524,7 @@ static int hwsim_tx_info_frame_received_nl(struct sk_buff *skb_2,
 	if (hwsim_flags & HWSIM_TX_CTL_NO_ACK)
 		txi->flags |= IEEE80211_TX_STAT_NOACK_TRANSMITTED;
 
+	hwsim_tx_addrs_restore(skb, tx_cb.orig_addrs);
 	ieee80211_tx_status_irqsafe(data2->hw, skb);
 	return 0;
 out:
