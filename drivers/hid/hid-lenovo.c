@@ -44,6 +44,7 @@
 #define TP_X12_RAW_HOTKEY_FN_F10	0x00000803
 #define TP_X12_RAW_HOTKEY_FN_F12	0x00000403
 #define TP_X12_RAW_HOTKEY_FN_SPACE	0x18001003
+#define TP_X12_RAW_HOTKEY_FN_F7		0x00000815
 
 struct lenovo_drvdata {
 	u8 led_report[3]; /* Must be first for proper alignment */
@@ -569,6 +570,34 @@ static int lenovo_send_cmd_cptkbd(struct hid_device *hdev,
 	return ret < 0 ? ret : 0; /* BT returns 0, USB returns sizeof(buf) */
 }
 
+/* X12/X13 folio Fn+F7 reporting mode: feature report 0xa4, [id, mode]. */
+#define TP_X12_FEATURE_HOTKEY_MODE	0xa4
+#define TP_X12_MODE_DEDICATED_HOTKEY	0x01
+
+/*
+ * Select how the X12/X13 detachable folio reports Fn+F7 (display switch):
+ * a dedicated vendor hotkey (report ID 0x15) instead of the default
+ * Super+P key chords.
+ */
+static int lenovo_send_hotkey_mode_tp10ubkbd(struct hid_device *hdev, u8 mode)
+{
+	unsigned char *buf;
+	int ret;
+
+	buf = kzalloc(2, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	buf[0] = TP_X12_FEATURE_HOTKEY_MODE;
+	buf[1] = mode;
+
+	ret = hid_hw_raw_request(hdev, TP_X12_FEATURE_HOTKEY_MODE, buf, 2,
+				 HID_FEATURE_REPORT, HID_REQ_SET_REPORT);
+
+	kfree(buf);
+	return ret < 0 ? ret : 0;
+}
+
 static void lenovo_features_set_cptkbd(struct hid_device *hdev)
 {
 	int ret;
@@ -751,6 +780,10 @@ static int lenovo_raw_event_TP_X12_tab(struct hid_device *hdev, u32 raw_data)
 		case TP_X12_RAW_HOTKEY_FN_F4:
 			report_key_event(input, LENOVO_KEY_MICMUTE);
 			return 1;
+		case TP_X12_RAW_HOTKEY_FN_F7:
+			/* Fn-F7: switch/extend external display */
+			report_key_event(input, KEY_SWITCHVIDEOMODE);
+			return 1;
 		/* Power-mode or Airplane mode will be called based on the device*/
 		case TP_X12_RAW_HOTKEY_FN_F8:
 			/*
@@ -806,11 +839,22 @@ static int lenovo_raw_event(struct hid_device *hdev,
 	 * Lenovo TP X12 Tab KBD's Fn+XX is HID raw data defined. Report ID is 0x03
 	 * e.g.: Raw data received for MIC mute is 0x00020003.
 	 */
-	if (unlikely((hdev->product == USB_DEVICE_ID_LENOVO_X12_TAB ||
-		      hdev->product == USB_DEVICE_ID_LENOVO_X12_TAB2 ||
-		      hdev->product == USB_DEVICE_ID_LENOVO_X13_TAB) &&
-		      size >= 4 && report->id == 0x03))
-		return lenovo_raw_event_TP_X12_tab(hdev, get_unaligned_le32(data));
+	if (unlikely(hdev->product == USB_DEVICE_ID_LENOVO_X12_TAB ||
+		     hdev->product == USB_DEVICE_ID_LENOVO_X12_TAB2 ||
+		     hdev->product == USB_DEVICE_ID_LENOVO_X13_TAB)) {
+		/* Existing 0x03 vendor hotkeys (8-byte). */
+		if (size >= 4 && report->id == 0x03)
+			return lenovo_raw_event_TP_X12_tab(hdev,
+				get_unaligned_le32(data));
+
+		/* Dedicated-mode display-switch (F7): 3-byte 0x15 report. */
+		if (report->id == 0x15 && size >= 3) {
+			u8 pad[4] = { data[0], data[1], data[2], 0 };
+
+			return lenovo_raw_event_TP_X12_tab(hdev,
+					get_unaligned_le32(pad));
+		}
+	}
 
 	return 0;
 }
@@ -1378,6 +1422,12 @@ static int lenovo_probe_tp10ubkbd(struct hid_device *hdev)
 
 	lenovo_led_set_tp10ubkbd(hdev, TP10UBKBD_FN_LOCK_LED, data->fn_lock);
 
+	if (hdev->product == USB_DEVICE_ID_LENOVO_X12_TAB ||
+	    hdev->product == USB_DEVICE_ID_LENOVO_X12_TAB2 ||
+	    hdev->product == USB_DEVICE_ID_LENOVO_X13_TAB)
+		lenovo_send_hotkey_mode_tp10ubkbd(hdev,
+						  TP_X12_MODE_DEDICATED_HOTKEY);
+
 	ret = sysfs_create_group(&hdev->dev.kobj, &lenovo_attr_group_tp10ubkbd);
 	if (ret)
 		return ret;
@@ -1451,6 +1501,13 @@ static int lenovo_reset_resume(struct hid_device *hdev)
 			lenovo_features_set_cptkbd(hdev);
 
 		break;
+	case USB_DEVICE_ID_LENOVO_X12_TAB:
+	case USB_DEVICE_ID_LENOVO_X12_TAB2:
+	case USB_DEVICE_ID_LENOVO_X13_TAB:
+		lenovo_send_hotkey_mode_tp10ubkbd(hdev,
+						  TP_X12_MODE_DEDICATED_HOTKEY);
+		break;
+
 	default:
 		break;
 	}
@@ -1538,9 +1595,13 @@ static int lenovo_input_configured(struct hid_device *hdev,
 						hi->input->propbit);
 			}
 			break;
+		case USB_DEVICE_ID_LENOVO_X12_TAB:
+			input_set_capability(hi->input, EV_KEY, KEY_SWITCHVIDEOMODE);
+			break;
 		case USB_DEVICE_ID_LENOVO_X12_TAB2:
 		case USB_DEVICE_ID_LENOVO_X13_TAB:
 			input_set_capability(hi->input, EV_KEY, KEY_PERFORMANCE);
+			input_set_capability(hi->input, EV_KEY, KEY_SWITCHVIDEOMODE);
 			break;
 	}
 
