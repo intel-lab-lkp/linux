@@ -10,6 +10,7 @@
 #include <linux/of.h>
 #include <linux/time.h>
 #include <linux/vmalloc.h>
+#include <linux/qcom_vfio.h>
 
 #include "pci.h"
 #include "core.h"
@@ -463,8 +464,11 @@ static int ath11k_pci_alloc_msi(struct ath11k_pci *ab_pci)
 	struct ath11k_base *ab = ab_pci->ab;
 	const struct ath11k_msi_config *msi_config = ab->pci.msi.config;
 	struct pci_dev *pci_dev = ab_pci->pdev;
+	u32 msi_addr_lo = 0, msi_addr_hi = 0;
 	struct msi_desc *msi_desc;
+	u16 msi_data = 0;
 	int num_vectors;
+	int msi_offset;
 	int ret;
 
 	num_vectors = pci_alloc_irq_vectors(pci_dev,
@@ -487,6 +491,35 @@ static int ath11k_pci_alloc_msi(struct ath11k_pci *ab_pci)
 		ath11k_dbg(ab, ATH11K_DBG_PCI, "request one msi vector\n");
 	}
 	ath11k_info(ab, "MSI vectors: %d\n", num_vectors);
+
+	/*
+	 * Try to get host MSI address from VFIO cache.
+	 * When running on a VM, the ath11k firmware requires physical host
+	 * MSI addresses and cannot handle guest IOVA addresses.
+	 * qcom-vfio-pci writes host MSI values to extended config space with
+	 * a magic signature "QMSI" for discovery. Search for it.
+	 */
+	msi_offset = qcom_vfio_find_msi_cache(pci_dev);
+	if (msi_offset) {
+		pci_read_config_dword(pci_dev,
+				      msi_offset + QCOM_VFIO_MSI_ADDR_LO_OFFSET,
+				      &msi_addr_lo);
+		pci_read_config_dword(pci_dev,
+				      msi_offset + QCOM_VFIO_MSI_ADDR_HI_OFFSET,
+				      &msi_addr_hi);
+		pci_read_config_word(pci_dev,
+				     msi_offset + QCOM_VFIO_MSI_DATA_OFFSET,
+				     &msi_data);
+
+		if (msi_addr_lo && msi_addr_lo != 0xFFFFFFFF) {
+			ab->pci.msi.addr_lo = msi_addr_lo;
+			ab->pci.msi.addr_hi = msi_addr_hi;
+			ab->pci.msi.ep_base_data = msi_data;
+			ath11k_info(ab, "VFIO MSI cache at offset 0x%x: addr_lo=0x%x addr_hi=0x%x data=%d\n",
+				    msi_offset, msi_addr_lo, msi_addr_hi, msi_data);
+			return 0;
+		}
+	}
 
 	ath11k_pci_msi_disable(ab_pci);
 
