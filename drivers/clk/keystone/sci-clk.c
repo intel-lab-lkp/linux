@@ -468,6 +468,13 @@ static int ti_sci_scan_clocks_from_fw(struct sci_clk_provider *provider)
 	int gap_size = 0;
 	struct device *dev = provider->dev;
 
+	/*
+	 * Clocks are discovered by probing the firmware with get_num_parents,
+	 * which is not available with every system firmware (e.g. ABI5.0 PDM).
+	 */
+	if (!provider->ops->get_num_parents)
+		return -EOPNOTSUPP;
+
 	while (1) {
 		ret = provider->ops->get_num_parents(provider->sci, dev_id,
 						     clk_id,
@@ -589,10 +596,18 @@ static int ti_sci_scan_clocks_from_dt(struct sci_clk_provider *provider)
 				sci_clk->dev_id = args.args[0];
 				sci_clk->clk_id = args.args[1];
 				sci_clk->provider = provider;
-				provider->ops->get_num_parents(provider->sci,
-							       sci_clk->dev_id,
-							       sci_clk->clk_id,
-							       (void *)&sci_clk->num_parents);
+				/*
+				 * Firmware without get_num_parents (e.g. ABI5.0
+				 * PDM) manages clock parents internally, so
+				 * treat the clock as having a single parent.
+				 */
+				if (provider->ops->get_num_parents)
+					provider->ops->get_num_parents(provider->sci,
+								       sci_clk->dev_id,
+								       sci_clk->clk_id,
+								       &sci_clk->num_parents);
+				else
+					sci_clk->num_parents = 1;
 				list_add_tail(&sci_clk->node, &clks);
 
 				num_clks++;
