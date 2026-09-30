@@ -7,6 +7,7 @@
  */
 #include <linux/clk-provider.h>
 #include <linux/device.h>
+#include <linux/dmi.h>
 #include <linux/err.h>
 #include <linux/module.h>
 #include <linux/pci.h>
@@ -40,6 +41,8 @@
 #define LPSS_PRIV_RESETS_IDMA			BIT(2)
 #define LPSS_PRIV_REG_COUNT			9
 
+#define PXA2XX_SPI_QUIRK_NO_AUTOSUSPEND		BIT(0)
+
 struct pxa_spi_info {
 	int (*setup)(struct pci_dev *pdev, struct pxa2xx_spi_controller *c);
 };
@@ -47,6 +50,7 @@ struct pxa_spi_info {
 struct pxa2xx_spi_pci_config {
 	struct pxa2xx_spi_controller pdata;
 	u32 lpss_priv_ctx[LPSS_PRIV_REG_COUNT];
+	u8 quirks;
 	bool is_lpt;
 };
 
@@ -106,8 +110,53 @@ static void lpss_dma_put_device(void *dma_dev)
 	pci_dev_put(dma_dev);
 }
 
+/*
+ * Apple MacBook8,1 (early 2015 12" MacBook):
+ *
+ * The LPSS SPI controller at 00:15.4 connects to the internal SPI keyboard
+ * and touchpad (applespi). When DMA mode is enabled, DMA transfers consistently
+ * time out (-110) because DMA completion interrupts are never delivered.
+ *
+ * Empirical hardware inspection and OS analysis show that:
+ * 1. Hardware/firmware configuration: EFI leaves companion LPSS DMA (00:15.0)
+ *    held in reset (LPSS_PRIV_RESETS == 0x0 / BAR0 + 0x204). Even after
+ *    deasserting the reset and overriding ACPI _PRT to assign shared IRQ 21,
+ *    the DMA interrupt counter remains strictly 0, confirming that DMA
+ *    completion interrupts are not delivered on this platform.
+ * 2. Operating system parity: Both macOS (AppleIntelLpssDmac channel count
+ *    is 0) and Windows 10 Boot Camp bypass DMA and handle keyboard/touchpad
+ *    transactions strictly in PIO mode via FIFO registers.
+ * 3. Layering: The SPI controller driver (00:15.4) cannot safely reconfigure
+ *    the private registers of the separate DMAC PCI function (00:15.0).
+ * 4. Runtime autosuspend: In PIO mode servicing 60-125 Hz input events, the
+ *    default 50 ms autosuspend delay introduces D3hot <-> D0 transition
+ *    latency spikes that drop key presses and cause erratic touchpad motion.
+ *
+ * Therefore, as a workaround, disable DMA channel allocation to force PIO mode
+ * and keep the device in D0 without enabling runtime autosuspend.
+ */
+static const struct dmi_system_id pxa2xx_spi_pci_dmi_table[] = {
+	{
+		.ident = "Apple MacBook8,1",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Apple Inc."),
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "MacBook8,1"),
+		},
+	},
+	{ }
+};
+
+static const struct dmi_system_id *pxa2xx_spi_pci_get_dmi_id(struct pci_dev *dev)
+{
+	if (dev->device == PCI_DEVICE_ID_INTEL_LPT1_1)
+		return dmi_first_match(pxa2xx_spi_pci_dmi_table);
+
+	return NULL;
+}
+
 static int lpss_spi_setup(struct pci_dev *dev, struct pxa2xx_spi_controller *c)
 {
+	const struct dmi_system_id *dmi_id;
 	struct pxa2xx_spi_pci_config *cfg = container_of(c, struct pxa2xx_spi_pci_config, pdata);
 	struct ssp_device *ssp = &c->ssp;
 	struct dw_dma_slave *tx, *rx;
@@ -164,6 +213,14 @@ static int lpss_spi_setup(struct pci_dev *dev, struct pxa2xx_spi_controller *c)
 	ret = pxa2xx_spi_pci_clk_register(dev, ssp, 50000000);
 	if (ret)
 		return ret;
+
+	dmi_id = pxa2xx_spi_pci_get_dmi_id(dev);
+	if (dmi_id) {
+		pci_info(dev, "%s detected: disabling DMA to force PIO mode\n", dmi_id->ident);
+		c->enable_dma = 0;
+		cfg->quirks |= PXA2XX_SPI_QUIRK_NO_AUTOSUSPEND;
+		return 0;
+	}
 
 	dma_dev = pci_get_slot(dev->bus, PCI_DEVFN(PCI_SLOT(dev->devfn), 0));
 	ret = devm_add_action_or_reset(&dev->dev, lpss_dma_put_device, dma_dev);
@@ -446,7 +503,9 @@ static int pxa2xx_spi_pci_probe(struct pci_dev *dev,
 	pm_runtime_set_autosuspend_delay(&dev->dev, 50);
 	pm_runtime_use_autosuspend(&dev->dev);
 	pm_runtime_put_autosuspend(&dev->dev);
-	pm_runtime_allow(&dev->dev);
+
+	if (!(cfg->quirks & PXA2XX_SPI_QUIRK_NO_AUTOSUSPEND))
+		pm_runtime_allow(&dev->dev);
 
 	return 0;
 }
