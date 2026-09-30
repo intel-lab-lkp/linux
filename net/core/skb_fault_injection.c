@@ -19,8 +19,8 @@ static bool should_fail_net_realloc_skb(struct sk_buff *skb)
 	struct net_device *net = skb->dev;
 
 	if (skb_realloc.filtered &&
-	    strncmp(net->name, skb_realloc.devname, IFNAMSIZ))
-		/* device name filter set, but names do not match */
+	    (!net || strncmp(net->name, skb_realloc.devname, IFNAMSIZ)))
+		/* device name filter set, but no device or names do not match */
 		return false;
 
 	if (!should_fail(&skb_realloc.attr, 1))
