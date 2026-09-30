@@ -1,2 +1,30 @@
 # SPDX-License-Identifier: GPL-2.0-only
-# dummy file, do not delete
+menu "openrisc Testing"
+
+menuconfig RUNTIME_KERNEL_TESTING_MENU
+    bool "openrisc kernel runtime testing"
+    default y
+    help
+      Enable openrisc kernel runtime testing. With this option, one can
+      build and run tests to verify the correctness of relevant components
+      in the kernel at runtime.
+
+if RUNTIME_KERNEL_TESTING_MENU
+
+config OR_KPROBES_KUNIT
+    tristate "KUnit test for kprobes on openrisc"
+    depends on KUNIT
+    depends on KPROBES
+    default KUNIT_ALL_TESTS
+    help
+      Enable testing of KProbes in OpenRISC for instructions that
+      require simulation. When further changes related to probes or
+      tracing are added to OpenRISC's port, these tests can help
+      verify that instruction simulation and processing of delay slots
+      continue to work as expected.
+
+      If unsure, say N
+
+endif # RUNTIME_KERNEL_TESTING_MENU
+
+endmenu # "openrisc Testing"
