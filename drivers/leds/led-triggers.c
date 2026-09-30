@@ -422,6 +422,31 @@ void led_trigger_event(struct led_trigger *trig,
 }
 EXPORT_SYMBOL_GPL(led_trigger_event);
 
+/**
+ * led_trigger_walk_leds - call a function for each LED using a trigger
+ * @trig: the trigger, may be NULL
+ * @fn: the function to call for each LED
+ * @data: pointer passed to @fn
+ *
+ * Walks the LEDs currently using @trig under rcu_read_lock() and calls @fn
+ * for each of them. This is for triggers which set a different brightness
+ * per LED, where led_trigger_event() is not enough. @fn must not sleep.
+ */
+void led_trigger_walk_leds(struct led_trigger *trig, led_trigger_walk_fn_t fn,
+			   void *data)
+{
+	struct led_classdev *led_cdev;
+
+	if (!trig)
+		return;
+
+	rcu_read_lock();
+	list_for_each_entry_rcu(led_cdev, &trig->led_cdevs, trig_list)
+		fn(led_cdev, data);
+	rcu_read_unlock();
+}
+EXPORT_SYMBOL_GPL(led_trigger_walk_leds);
+
 void led_mc_trigger_event(struct led_trigger *trig,
 			  unsigned int *intensity_value, unsigned int num_colors,
 			  enum led_brightness brightness)

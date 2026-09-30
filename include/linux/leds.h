@@ -476,6 +476,9 @@ static inline bool led_sysfs_is_disabled(struct led_classdev *led_cdev)
 #define DEFINE_LED_TRIGGER(x)		static struct led_trigger *x;
 #define DEFINE_LED_TRIGGER_GLOBAL(x)	struct led_trigger *x;
 
+/* Callback for led_trigger_walk_leds() */
+typedef void (*led_trigger_walk_fn_t)(struct led_classdev *led_cdev, void *data);
+
 #ifdef CONFIG_LEDS_TRIGGERS
 
 #define TRIG_NAME_MAX 50
@@ -521,6 +524,8 @@ void led_trigger_register_simple(const char *name,
 				struct led_trigger **trigger);
 void led_trigger_unregister_simple(struct led_trigger *trigger);
 void led_trigger_event(struct led_trigger *trigger,  enum led_brightness event);
+void led_trigger_walk_leds(struct led_trigger *trig, led_trigger_walk_fn_t fn,
+			   void *data);
 void led_mc_trigger_event(struct led_trigger *trig,
 			  unsigned int *intensity_value, unsigned int num_colors,
 			  enum led_brightness brightness);
@@ -566,6 +571,8 @@ static inline void led_trigger_register_simple(const char *name,
 static inline void led_trigger_unregister_simple(struct led_trigger *trigger) {}
 static inline void led_trigger_event(struct led_trigger *trigger,
 				enum led_brightness event) {}
+static inline void led_trigger_walk_leds(struct led_trigger *trig,
+					 led_trigger_walk_fn_t fn, void *data) {}
 static inline void led_mc_trigger_event(struct led_trigger *trig,
 				unsigned int *intensity_value, unsigned int num_colors,
 				enum led_brightness brightness) {}
