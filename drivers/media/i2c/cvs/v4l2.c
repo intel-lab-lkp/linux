@@ -64,7 +64,7 @@ static int csi_set_link_cfg(struct icvs *ctx, u64 link_freq)
 	size_t cmd_size = sizeof(cmd.cmd_id) + sizeof(cmd.param.conf);
 
 	guard(mutex)(&ctx->lock);
-	return cvs_send(ctx, &cmd, cmd_size);
+	return cvs_send(ctx, &cmd, cmd_size, ICVS_CMD_TIMEOUT);
 }
 
 /*

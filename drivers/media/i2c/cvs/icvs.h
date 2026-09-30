@@ -8,7 +8,9 @@
 
 #include <linux/bits.h>
 #include <linux/completion.h>
+#include <linux/jiffies.h>
 #include <linux/mutex.h>
+#include <linux/nvmem-provider.h>
 #include <linux/workqueue.h>
 #include <linux/types.h>
 #include <linux/wait.h>
@@ -37,6 +39,30 @@ struct i2c_client;
 
 /* Firmware response prefix (optional, for protocol revision 2.x or newer) */
 #define ICVS_PREFIX_VAL	0xCAFEB0BA
+
+/**
+ * struct icvs_nvm - NVM firmware staging and update state
+ * @buf: vmalloc'd buffer staging the incoming firmware image
+ * @buf_data_start: Pointer to payload start (past header)
+ * @active: Read-only NVMem device exposing active firmware version region
+ * @non_active: Write-only NVMem device accepting incoming firmware image
+ * @buf_total_size: Total bytes written into @buf by fwupd
+ * @buf_data_size: Payload byte count (total minus header)
+ * @auth_status: Last nvm_authenticate error (0 = success)
+ * @flushed: True after payload has been successfully streamed to device
+ * @wait_dl_clear: cvs_recv() keeps polling past BUSY until DOWNLOAD clears
+ */
+struct icvs_nvm {
+	u8 *buf;
+	u8 *buf_data_start;
+	struct nvmem_device *active;
+	struct nvmem_device *non_active;
+	unsigned int buf_total_size;
+	unsigned int buf_data_size;
+	unsigned int auth_status;
+	bool flushed;
+	bool wait_dl_clear;
+};
 
 /*
  * CSI bridge sub-device definitions
@@ -443,6 +469,7 @@ enum icvs_state {
  * @irq: Wake IRQ (full capability)
  * @hostwake_event: Waitqueue for wake events
  * @hostwake_event_arg: Wake event flag
+ * @nvm: NVMem firmware staging and update state
  */
 struct icvs {
 	struct i2c_client *i2c_client;
@@ -468,6 +495,7 @@ struct icvs {
 	int irq;
 	wait_queue_head_t hostwake_event;
 	bool hostwake_event_arg;
+	struct icvs_nvm nvm;
 };
 
 /**
@@ -484,8 +512,12 @@ static inline struct device *cvs_dev(struct icvs *ctx)
 	return ctx->i2c_client ? &ctx->i2c_client->dev : ctx->subdev.dev;
 }
 
+/* Command timeout (jiffies) determined experimentally */
+#define ICVS_CMD_TIMEOUT (5 * HZ)
+
 /* Cross-unit interfaces */
-int cvs_send(struct icvs *ctx, struct icvs_cmd *cmd, size_t len);
+int cvs_send(struct icvs *ctx, struct icvs_cmd *cmd, size_t len,
+	     unsigned long timeout);
 int cvs_set_link_owner(struct icvs *ctx, enum icvs_csi_link_owner owner);
 int cvs_csi_init(struct icvs *ctx, struct device *dev, struct i2c_client *i2c);
 void cvs_csi_remove(struct icvs *ctx);
