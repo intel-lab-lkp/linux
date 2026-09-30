@@ -12,6 +12,7 @@
 enum aie4_msg_opcode {
 	AIE4_MSG_OP_IDENTIFY                         = 0x10002,
 	AIE4_MSG_OP_SUSPEND                          = 0x10003,
+	AIE4_MSG_OP_SET_RUNTIME_CONFIG               = 0x10007,
 	AIE4_MSG_OP_QUERY_CERT_FIRMWARE_VERSION      = 0x1000F,
 
 	AIE4_MSG_OP_CREATE_VFS                       = 0x20001,
@@ -63,6 +64,41 @@ struct aie4_msg_suspend_req {
 
 struct aie4_msg_suspend_resp {
 	enum aie4_msg_status status;
+} __packed;
+
+/*
+ * Type selector for AIE4_MSG_OP_SET_RUNTIME_CONFIG. Values match the firmware
+ * ABI enum npu_msg_runtime_config_type; only the configs the driver programs
+ * are enumerated here.
+ */
+enum aie4_msg_runtime_config_type {
+	AIE4_RUNTIME_CONFIG_CTX_SWITCH_HYSTERESIS	= 0xD,
+	AIE4_MAX_RUNTIME_CONFIG
+};
+
+struct aie4_msg_set_runtime_cfg_req {
+	__u32 type;
+	__u8 data[4];
+} __packed;
+
+struct aie4_msg_set_runtime_cfg_resp {
+	enum aie4_msg_status status;
+} __packed;
+
+/* Maximum trailing per-type payload (struct npu_msg_runtime_config_*) in the
+ * firmware ABI; today the largest is npu_msg_runtime_config_event_trace_status
+ * at 12 bytes. Rounded up to leave headroom for future configs.
+ */
+#define AIE4_RUNTIME_CFG_MAX_DATA_SIZE 16
+
+/*
+ * Context switch hysteresis configuration.
+ *
+ * @timeout_us: Hysteresis time in microseconds for keeping a context loaded
+ *              in the AIE after it becomes idle, or 0 to disable hysteresis.
+ */
+struct aie4_msg_runtime_config_ctx_switch_hysteresis {
+	__u32 timeout_us;
 } __packed;
 
 struct aie4_msg_create_vfs_req {
