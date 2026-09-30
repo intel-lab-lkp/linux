@@ -721,7 +721,7 @@ static int pxa2xx_spi_clk_enable(struct driver_data *drv_data)
 	if (!drv_data->clk_enabled) {
 		ret = clk_prepare_enable(drv_data->ssp->clk);
 		if (!ret)
-			drv_data->clk_enabled = true;
+			WRITE_ONCE(drv_data->clk_enabled, true);
 	}
 	mutex_unlock(&drv_data->clk_lock);
 
@@ -732,7 +732,7 @@ static void pxa2xx_spi_clk_disable(struct driver_data *drv_data)
 {
 	mutex_lock(&drv_data->clk_lock);
 	if (drv_data->clk_enabled) {
-		drv_data->clk_enabled = false;
+		WRITE_ONCE(drv_data->clk_enabled, false);
 		clk_disable_unprepare(drv_data->ssp->clk);
 	}
 	mutex_unlock(&drv_data->clk_lock);
@@ -741,17 +741,25 @@ static void pxa2xx_spi_clk_disable(struct driver_data *drv_data)
 static irqreturn_t ssp_int(int irq, void *dev_id)
 {
 	struct driver_data *drv_data = dev_id;
+	struct device *dev = drv_data->ssp->dev;
 	u32 sccr1_reg;
 	u32 mask = drv_data->mask_sr;
 	u32 status;
+	irqreturn_t ret;
+	int active;
 
 	/*
-	 * The IRQ might be shared with other peripherals so we must first
-	 * check that are we RPM suspended or not. If we are we assume that
-	 * the IRQ was not for us (we shouldn't be RPM suspended when the
-	 * interrupt is enabled).
+	 * The IRQ might be shared with other peripherals or trigger during
+	 * power state transitions. Ensure the clock is active, and acquire
+	 * an active PM runtime reference while ssp_int() runs. If runtime
+	 * PM is enabled and the device is suspended (active == 0), return
+	 * IRQ_NONE immediately without touching MMIO registers.
 	 */
-	if (pm_runtime_suspended(drv_data->ssp->dev))
+	if (!READ_ONCE(drv_data->clk_enabled))
+		return IRQ_NONE;
+
+	active = pm_runtime_get_if_active(dev);
+	if (active == 0)
 		return IRQ_NONE;
 
 	/*
@@ -762,7 +770,7 @@ static irqreturn_t ssp_int(int irq, void *dev_id)
 	 */
 	status = pxa2xx_spi_read(drv_data, SSSR);
 	if (status == ~0)
-		return IRQ_NONE;
+		goto out_put;
 
 	sccr1_reg = pxa2xx_spi_read(drv_data, SSCR1);
 
@@ -775,18 +783,32 @@ static irqreturn_t ssp_int(int irq, void *dev_id)
 		mask &= ~SSSR_TINT;
 
 	if (!(status & mask))
-		return IRQ_NONE;
+		goto out_put;
 
 	pxa2xx_spi_write(drv_data, SSCR1, sccr1_reg & ~drv_data->int_cr1);
 	pxa2xx_spi_write(drv_data, SSCR1, sccr1_reg);
 
 	if (!drv_data->controller->cur_msg) {
 		handle_bad_msg(drv_data);
-		/* Never fail */
-		return IRQ_HANDLED;
+		ret = IRQ_HANDLED;
+		goto out;
 	}
 
-	return drv_data->transfer_handler(drv_data);
+	ret = drv_data->transfer_handler(drv_data);
+	goto out;
+
+out_put:
+	ret = IRQ_NONE;
+
+out:
+	if (active > 0) {
+		if (ret == IRQ_HANDLED)
+			pm_runtime_put_autosuspend(dev);
+		else
+			pm_runtime_put(dev);
+	}
+
+	return ret;
 }
 
 /*
@@ -1356,11 +1378,6 @@ int pxa2xx_spi_probe(struct device *dev, struct ssp_device *ssp,
 						| SSSR_ROR | SSSR_TUR;
 	}
 
-	ret = request_irq(ssp->irq, ssp_int, IRQF_SHARED, dev_name(dev),
-			drv_data);
-	if (ret < 0)
-		return dev_err_probe(dev, ret, "cannot get IRQ %d\n", ssp->irq);
-
 	/* Setup DMA if requested */
 	if (platform_info->enable_dma) {
 		ret = pxa2xx_spi_dma_setup(drv_data);
@@ -1380,7 +1397,7 @@ int pxa2xx_spi_probe(struct device *dev, struct ssp_device *ssp,
 	/* Enable SOC clock */
 	ret = pxa2xx_spi_clk_enable(drv_data);
 	if (ret)
-		goto out_error_dma_irq_alloc;
+		goto out_error_dma_alloc;
 
 	controller->max_speed_hz = clk_get_rate(ssp->clk);
 	/*
@@ -1464,22 +1481,31 @@ int pxa2xx_spi_probe(struct device *dev, struct ssp_device *ssp,
 		}
 	}
 
+	ret = request_irq(ssp->irq, ssp_int, IRQF_SHARED, dev_name(dev),
+			drv_data);
+	if (ret < 0) {
+		ret = dev_err_probe(dev, ret, "cannot get IRQ %d\n", ssp->irq);
+		goto out_error_clock_enabled;
+	}
+
 	/* Register with the SPI framework */
 	dev_set_drvdata(dev, drv_data);
 	ret = spi_register_controller(controller);
 	if (ret) {
 		dev_err_probe(dev, ret, "problem registering SPI controller\n");
-		goto out_error_clock_enabled;
+		goto out_error_irq_alloc;
 	}
 
 	return ret;
 
+out_error_irq_alloc:
+	free_irq(ssp->irq, drv_data);
+
 out_error_clock_enabled:
 	pxa2xx_spi_clk_disable(drv_data);
 
-out_error_dma_irq_alloc:
+out_error_dma_alloc:
 	pxa2xx_spi_dma_release(drv_data);
-	free_irq(ssp->irq, drv_data);
 
 	return ret;
 }
