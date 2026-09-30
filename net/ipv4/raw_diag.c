@@ -40,7 +40,8 @@ static bool raw_lookup(struct net *net, const struct sock *sk,
 	struct inet_diag_req_raw *r = (void *)req;
 
 	if (r->sdiag_family == AF_INET)
-		return raw_v4_match(net, sk, r->sdiag_raw_protocol,
+		return IS_ENABLED(CONFIG_IPV4) &&
+		       raw_v4_match(net, sk, r->sdiag_raw_protocol,
 				    r->id.idiag_dst[0],
 				    r->id.idiag_src[0],
 				    r->id.idiag_if, 0);
