@@ -498,3 +498,7 @@ x1p64100-microsoft-denali-el2-dtbs	:= x1p64100-microsoft-denali.dtb x1-el2.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= x1p64100-microsoft-denali.dtb x1p64100-microsoft-denali-el2.dtb
 x1p42100-microsoft-sp12in-el2-dtbs	:= x1p42100-microsoft-sp12in.dtb x1-el2.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= x1p42100-microsoft-sp12in.dtb x1p42100-microsoft-sp12in-el2.dtb
+x1e80100-samsung-galaxy-book4-edge-14-el2-dtbs	:= x1e80100-samsung-galaxy-book4-edge-14.dtb x1-el2.dtbo
+dtb-$(CONFIG_ARCH_QCOM)	+= x1e80100-samsung-galaxy-book4-edge-14.dtb x1e80100-samsung-galaxy-book4-edge-14-el2.dtb
+x1e84100-samsung-galaxy-book4-edge-16-el2-dtbs	:= x1e84100-samsung-galaxy-book4-edge-16.dtb x1-el2.dtbo
+dtb-$(CONFIG_ARCH_QCOM)	+= x1e84100-samsung-galaxy-book4-edge-16.dtb x1e84100-samsung-galaxy-book4-edge-16-el2.dtb
