@@ -22,8 +22,8 @@
 	};
 };
 
-&ethphy {
-	max-speed = <100>;
+&can1 {
+	status = "okay";
 };
 
 &fec {
@@ -47,6 +47,10 @@
 };
 
 &i2c_rtc {
+	status = "okay";
+};
+
+&pcie {
 	status = "okay";
 };
 
