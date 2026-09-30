@@ -98,6 +98,7 @@ struct rk_priv_data {
 	bool integrated_phy;
 	bool supports_rgmii;
 	bool supports_rmii;
+	bool suspend_powerdown;
 
 	struct clk_bulk_data *clks;
 	int num_clks;
@@ -1530,10 +1531,13 @@ static int rk_set_clk_tx_rate(void *bsp_priv_, struct clk *clk_tx_i,
 
 static int rk_gmac_suspend(struct device *dev, void *bsp_priv_)
 {
+	struct net_device *ndev = dev_get_drvdata(dev);
 	struct rk_priv_data *bsp_priv = bsp_priv_;
 
-	/* Keep the PHY up if we use Wake-on-Lan. */
-	if (!device_may_wakeup(dev))
+	/* Keep the MAC and PHY powered if either of them wakes the system. */
+	bsp_priv->suspend_powerdown = !device_may_wakeup(dev) &&
+		!(ndev->phydev && phy_may_wakeup(ndev->phydev));
+	if (bsp_priv->suspend_powerdown)
 		rk_gmac_powerdown(bsp_priv);
 
 	return 0;
@@ -1543,8 +1547,7 @@ static int rk_gmac_resume(struct device *dev, void *bsp_priv_)
 {
 	struct rk_priv_data *bsp_priv = bsp_priv_;
 
-	/* The PHY was up for Wake-on-Lan. */
-	if (!device_may_wakeup(dev))
+	if (bsp_priv->suspend_powerdown)
 		rk_gmac_powerup(bsp_priv);
 
 	return 0;
