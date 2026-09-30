@@ -1050,8 +1050,8 @@ static __init void tegra114_periph_clk_init(void __iomem *clk_base,
 				    &emc_lock);
 	clks[TEGRA114_CLK_MC] = clk;
 
-	clk = tegra_clk_register_periph_gate("mipi-cal", "clk_m", 0, clk_base,
-					     CLK_SET_RATE_PARENT, 56,
+	clk = tegra_clk_register_periph_gate("mipi-cal", "pll_p_out3", 0,
+					     clk_base, 0, 56,
 					     periph_clk_enb_refcnt);
 	clks[TEGRA114_CLK_MIPI_CAL] = clk;
 
