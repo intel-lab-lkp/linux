@@ -259,6 +259,16 @@ MPOL_WEIGHTED_INTERLEAVE
 	weight.  For example if nodes [0,1] are weighted [5,2], 5 pages
 	will be allocated on node0 for every 2 pages allocated on node1.
 
+	When MPOL_F_NUMA_BALANCING is specified, migrate-on-fault
+	placement is allowed within the policy nodemask.  This is an
+	opt-in behavior; without MPOL_F_NUMA_BALANCING,
+	MPOL_WEIGHTED_INTERLEAVE keeps its existing behavior and does
+	not participate in NUMA balancing.  The flag can be used by
+	memory tiering to promote hot pages that were initially
+	allocated on slower nodes.  The weights still affect new
+	allocations only and do not define a target resident ratio after
+	page migration.
+
 NUMA memory policy supports the following optional mode flags:
 
 MPOL_F_STATIC_NODES

@@ -1747,7 +1747,8 @@ static inline int sanitize_mpol_flags(int *mode, unsigned short *flags)
 	if ((*flags & MPOL_F_STATIC_NODES) && (*flags & MPOL_F_RELATIVE_NODES))
 		return -EINVAL;
 	if (*flags & MPOL_F_NUMA_BALANCING) {
-		if (*mode == MPOL_BIND || *mode == MPOL_PREFERRED_MANY)
+		if (*mode == MPOL_BIND || *mode == MPOL_PREFERRED_MANY ||
+		    *mode == MPOL_WEIGHTED_INTERLEAVE)
 			*flags |= (MPOL_F_MOF | MPOL_F_MORON);
 		else
 			return -EINVAL;
@@ -3041,6 +3042,11 @@ int mpol_misplaced(struct folio *folio, struct vm_fault *vmf,
 		break;
 
 	case MPOL_WEIGHTED_INTERLEAVE:
+		if (pol->flags & MPOL_F_MORON) {
+			if (node_isset(thisnid, pol->nodes))
+				break;
+			goto out;
+		}
 		polnid = weighted_interleave_nid(pol, ilx);
 		break;
 
