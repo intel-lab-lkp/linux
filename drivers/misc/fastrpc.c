@@ -2159,6 +2159,9 @@ static int fastrpc_req_mmap(struct fastrpc_user *fl, char __user *argp)
 
 	if (copy_to_user((void __user *)argp, &req, sizeof(req))) {
 		err = -EFAULT;
+		spin_lock(&fl->lock);
+		list_del(&buf->node);
+		spin_unlock(&fl->lock);
 		goto err_assign;
 	}
 
@@ -2168,7 +2171,11 @@ static int fastrpc_req_mmap(struct fastrpc_user *fl, char __user *argp)
 	return 0;
 
 err_assign:
-	fastrpc_req_munmap_impl(fl, buf);
+	if (fastrpc_req_munmap_impl(fl, buf)) {
+		spin_lock(&fl->lock);
+		list_add_tail(&buf->node, &fl->mmaps);
+		spin_unlock(&fl->lock);
+	}
 
 	return err;
 }
