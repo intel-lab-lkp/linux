@@ -95,8 +95,8 @@ int llc_conn_state_process(struct sock *sk, struct sk_buff *skb)
 	case LLC_CONN_PRIM:
 		/*
 		 * Can't be sock_queue_rcv_skb, because we have to leave the
-		 * skb->sk pointing to the newly created struct sock in
-		 * llc_conn_handler. -acme
+		 * skb->sk pointing to the child socket created in
+		 * llc_conn_rcv_sabme(). -acme
 		 *
 		 * A connection indication belongs on the listener. If sk and
 		 * skb->sk are the same socket, queueing it would later make
@@ -801,7 +801,64 @@ static struct sock *llc_create_incoming_sock(struct sock *sk,
 	return newsk;
 }
 
-static int llc_conn_rcv_listener(struct sock *sk, struct sk_buff *skb,
+/* The listener is locked and bottom halves are disabled. */
+static int llc_conn_rcv_existing_sabme(struct sock *listener,
+				       struct sock *newsk,
+				       struct sk_buff *skb)
+{
+	struct llc_sock *llc = llc_sk(newsk);
+	int incoming_state;
+	int rc = 0;
+
+	bh_lock_sock_nested(newsk);
+	if (sock_owned_by_user(newsk)) {
+		if (!skb_set_owner_sk_safe(skb, newsk))
+			goto drop_unlock;
+		netdev_hold(skb->dev, NULL, GFP_ATOMIC);
+		llc_set_backlog_type(skb, LLC_PACKET);
+		if (sk_add_backlog(newsk, skb, READ_ONCE(newsk->sk_rcvbuf))) {
+			netdev_put(skb->dev, NULL);
+			goto drop_unlock;
+		}
+		goto unlock;
+	}
+
+	incoming_state = atomic_read(&llc->incoming_state);
+	if (READ_ONCE(llc->state) == LLC_CONN_OUT_OF_SVC) {
+		if (incoming_state == LLC_INCOMING_PENDING)
+			llc_release_incoming_sock(newsk);
+		goto drop_unlock;
+	}
+	if ((incoming_state == LLC_INCOMING_PENDING ||
+	     incoming_state == LLC_INCOMING_QUEUED) &&
+	    READ_ONCE(llc->incoming_listener) != listener)
+		goto drop_unlock;
+	if (incoming_state != LLC_INCOMING_NONE &&
+	    incoming_state != LLC_INCOMING_PENDING &&
+	    incoming_state != LLC_INCOMING_QUEUED)
+		goto drop_unlock;
+	if (!skb_set_owner_sk_safe(skb, newsk)) {
+		if (incoming_state == LLC_INCOMING_PENDING)
+			llc_release_incoming_sock(newsk);
+		goto drop_unlock;
+	}
+
+	rc = llc_conn_rcv(incoming_state == LLC_INCOMING_PENDING ? listener :
+			  newsk, skb);
+	if (incoming_state == LLC_INCOMING_PENDING &&
+	    atomic_read(&llc->incoming_state) == LLC_INCOMING_PENDING)
+		llc_release_incoming_sock(newsk);
+	goto unlock;
+
+drop_unlock:
+	kfree_skb(skb);
+unlock:
+	bh_unlock_sock(newsk);
+	sock_put(newsk);
+	return rc;
+}
+
+static int llc_conn_rcv_sabme(struct sock *sk, struct sk_buff *skb,
 			       struct llc_addr *saddr,
 			       struct llc_addr *daddr)
 {
@@ -812,8 +869,9 @@ static int llc_conn_rcv_listener(struct sock *sk, struct sk_buff *skb,
 	newsk = __llc_lookup_established(llc_sk(sk)->sap, saddr, daddr,
 					 dev_net(skb->dev));
 	if (newsk) {
-		sock_put(newsk);
-		goto drop;
+		rc = llc_conn_rcv_existing_sabme(sk, newsk, skb);
+		local_bh_enable();
+		return rc;
 	}
 	if (sk_acceptq_is_full(sk))
 		goto drop;
@@ -960,13 +1018,37 @@ void llc_release_incoming_children(struct sock *sk)
 	local_bh_enable();
 }
 
+/*
+ * This mirrors the ADM-state DM actions, but a listener has no peer
+ * address in llc->daddr yet.
+ */
+static void llc_conn_send_dm_rsp(struct llc_sap *sap, struct sk_buff *skb,
+				 struct llc_addr *saddr, u8 f_bit)
+{
+	struct sk_buff *nskb;
+	int rc;
+
+	nskb = llc_alloc_frame(NULL, skb->dev, LLC_PDU_TYPE_U, 0);
+	if (!nskb)
+		return;
+
+	llc_pdu_header_init(nskb, LLC_PDU_TYPE_U, sap->laddr.lsap,
+			    saddr->lsap, LLC_PDU_RSP);
+	llc_pdu_init_as_dm_rsp(nskb, f_bit);
+	rc = llc_mac_hdr_init(nskb, skb->dev->dev_addr, saddr->mac);
+	if (unlikely(rc))
+		kfree_skb(nskb);
+	else
+		dev_queue_xmit(nskb);
+}
+
 void llc_conn_handler(struct llc_sap *sap, struct sk_buff *skb)
 {
 	struct net_device *backlog_dev = NULL;
 	struct sock *newsk = NULL, *sk;
 	bool newsk_lookup_ref = false;
 	struct llc_addr saddr, daddr;
-	bool listener_frame = false;
+	bool listener_sabme = false;
 	bool newsk_locked = false;
 
 	llc_pdu_decode_sa(skb, saddr.mac);
@@ -1033,17 +1115,29 @@ lookup:
 	 * it needs to set several state variables (see, for instance,
 	 * llc_adm_actions_2 in net/llc/llc_c_st.c) and send a packet to
 	 * the originator of the new connection, and this state has to be
-	 * in the newly created struct sock private area. -acme
+	 * in the private area of the child created by
+	 * llc_conn_rcv_sabme(). -acme
 	 */
 	if (unlikely(sk->sk_state == TCP_LISTEN)) {
 		if (!newsk) {
+			if (llc_conn_ev_rx_sabme_cmd_pbit_set_x(sk, skb)) {
+				if (!llc_conn_ev_rx_disc_cmd_pbit_set_x(sk, skb)) {
+					u8 f_bit;
+
+					llc_pdu_decode_pf_bit(skb, &f_bit);
+					llc_conn_send_dm_rsp(sap, skb, &saddr, f_bit);
+				} else if (!llc_conn_ev_rx_xxx_cmd_pbit_set_1(sk, skb)) {
+					llc_conn_send_dm_rsp(sap, skb, &saddr, 1);
+				}
+				goto drop_unlock;
+			}
 			if (sock_owned_by_user(sk)) {
 				skb_orphan(skb);
-				llc_set_backlog_type(skb, LLC_LISTENER_FRAME);
-				listener_frame = true;
+				llc_set_backlog_type(skb, LLC_LISTENER_SABME);
+				listener_sabme = true;
 				goto enqueue;
 			}
-			llc_conn_rcv_listener(sk, skb, &saddr, &daddr);
+			llc_conn_rcv_sabme(sk, skb, &saddr, &daddr);
 			goto out;
 		}
 		if (!skb_set_owner_sk_safe(skb, newsk)) {
@@ -1074,7 +1168,7 @@ enqueue:
 			llc_release_incoming_sock(newsk);
 	} else {
 		dprintk("%s: adding to backlog...\n", __func__);
-		if (!listener_frame)
+		if (!listener_sabme)
 			llc_set_backlog_type(skb, LLC_PACKET);
 		backlog_dev = skb->dev;
 		netdev_hold(backlog_dev, NULL, GFP_ATOMIC);
@@ -1138,7 +1232,7 @@ static int llc_backlog_rcv(struct sock *sk, struct sk_buff *skb)
 	int incoming_state;
 	int rc = 0;
 
-	if (llc_backlog_type(skb) == LLC_LISTENER_FRAME) {
+	if (llc_backlog_type(skb) == LLC_LISTENER_SABME) {
 		backlog_dev = skb->dev;
 		if (unlikely(child || sk->sk_state != TCP_LISTEN ||
 			     sock_flag(sk, SOCK_DEAD)))
@@ -1147,18 +1241,25 @@ static int llc_backlog_rcv(struct sock *sk, struct sk_buff *skb)
 		llc_pdu_decode_ssap(skb, &saddr.lsap);
 		llc_pdu_decode_da(skb, daddr.mac);
 		llc_pdu_decode_dsap(skb, &daddr.lsap);
-		rc = llc_conn_rcv_listener(sk, skb, &saddr, &daddr);
+		rc = llc_conn_rcv_sabme(sk, skb, &saddr, &daddr);
 		goto out;
 	} else if (likely(llc_backlog_type(skb) == LLC_PACKET)) {
 		backlog_dev = skb->dev;
-		if (child && child != sk) {
+		if (unlikely(!child))
+			goto drop;
+		if (child != sk) {
+			if (unlikely(child->sk_family != PF_LLC))
+				goto drop;
 			local_bh_disable();
 			bh_lock_sock_nested(child);
 			child_locked = true;
 		}
-		if (child && child != sk) {
+		if (child != sk) {
 			childllc = llc_sk(child);
 			incoming_state = atomic_read(&childllc->incoming_state);
+			if (incoming_state == LLC_INCOMING_NONE ||
+			    READ_ONCE(childllc->incoming_listener) != sk)
+				goto drop;
 
 			if (incoming_state == LLC_INCOMING_PENDING) {
 				if (sock_flag(sk, SOCK_DEAD) ||

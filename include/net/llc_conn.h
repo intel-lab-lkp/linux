@@ -13,7 +13,7 @@
 
 #define LLC_EVENT                1
 #define LLC_PACKET               2
-#define LLC_LISTENER_FRAME       3
+#define LLC_LISTENER_SABME       3
 
 #define LLC_INCOMING_NONE        0
 #define LLC_INCOMING_PENDING     1
