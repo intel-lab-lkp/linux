@@ -184,6 +184,7 @@ struct tipc_crypto_stats {
  * @key: the key states
  * @skey_mode: session key's mode
  * @skey: received session key
+ * @skey_in_use: received session key is owned by the RX worker
  * @wq: common workqueue on TX crypto
  * @work: delayed work sched for TX/RX
  * @key_distr: key distributing state
@@ -207,6 +208,7 @@ struct tipc_crypto {
 	u16 key_gen;
 	struct tipc_key key;
 	u8 skey_mode;
+	bool skey_in_use;
 	struct tipc_aead_key *skey;
 	struct workqueue_struct *wq;
 	struct delayed_work work;
@@ -1214,8 +1216,11 @@ void tipc_crypto_key_flush(struct tipc_crypto *c)
 		rx = c;
 		tx = tipc_net(rx->net)->crypto_tx;
 		if (cancel_delayed_work(&rx->work)) {
-			kfree_sensitive(rx->skey);
-			rx->skey = NULL;
+			/* A previous invocation may still be using the key. */
+			if (!rx->skey_in_use) {
+				kfree_sensitive(rx->skey);
+				rx->skey = NULL;
+			}
 			atomic_xchg(&rx->key_distr, 0);
 			tipc_node_put(rx->node);
 		}
@@ -2371,7 +2376,10 @@ static void tipc_crypto_work_rx(struct work_struct *work)
 	}
 
 	/* Case 2: Attach a pending received session key from peer if any */
+	spin_lock_bh(&rx->lock);
 	if (rx->skey) {
+		rx->skey_in_use = true;
+		spin_unlock_bh(&rx->lock);
 		rc = tipc_crypto_key_init(rx, rx->skey, rx->skey_mode, false);
 		if (unlikely(rc < 0))
 			pr_warn("%s: unable to attach received skey, err %d\n",
@@ -2381,14 +2389,18 @@ static void tipc_crypto_work_rx(struct work_struct *work)
 		case -ENOMEM:
 			/* Resched the key attaching */
 			resched = true;
+			spin_lock_bh(&rx->lock);
 			break;
 		default:
 			synchronize_rcu();
+			spin_lock_bh(&rx->lock);
 			kfree_sensitive(rx->skey);
 			rx->skey = NULL;
 			break;
 		}
+		rx->skey_in_use = false;
 	}
+	spin_unlock_bh(&rx->lock);
 
 	if (resched && queue_delayed_work(tx->wq, &rx->work, delay))
 		return;
