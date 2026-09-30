@@ -154,6 +154,12 @@ static inline void vfio_pci_core_debugfs_init(struct vfio_pci_core_device *vdev)
 }
 #endif /* CONFIG_VFIO_DEBUGFS */
 
+static unsigned int vfio_pci_vga_decode_all(struct pci_dev *pdev, bool single_vga)
+{
+	return VGA_RSRC_NORMAL_IO | VGA_RSRC_NORMAL_MEM |
+	       VGA_RSRC_LEGACY_IO | VGA_RSRC_LEGACY_MEM;
+}
+
 /*
  * Our VGA arbiter participation is limited since we don't know anything
  * about the device itself.  However, if the device is the only VGA device
@@ -162,16 +168,14 @@ static inline void vfio_pci_core_debugfs_init(struct vfio_pci_core_device *vdev)
  * has no way to get to it and routing can be disabled externally at the
  * bridge.
  */
-static unsigned int vfio_pci_set_decode(struct pci_dev *pdev, bool single_vga)
+static unsigned int vfio_pci_vga_decode_novga(struct pci_dev *pdev, bool single_vga)
 {
-	struct vfio_pci_core_device *vdev = dev_get_drvdata(&pdev->dev);
 	struct pci_dev *tmp = NULL;
 	unsigned char max_busnr;
 	unsigned int decodes;
 
-	if (single_vga || !vfio_vga_disabled(vdev) || pci_is_root_bus(pdev->bus))
-		return VGA_RSRC_NORMAL_IO | VGA_RSRC_NORMAL_MEM |
-		       VGA_RSRC_LEGACY_IO | VGA_RSRC_LEGACY_MEM;
+	if (single_vga || pci_is_root_bus(pdev->bus))
+		return vfio_pci_vga_decode_all(pdev, single_vga);
 
 	max_busnr = pci_bus_max_busnr(pdev->bus);
 	decodes = VGA_RSRC_NORMAL_IO | VGA_RSRC_NORMAL_MEM;
@@ -488,10 +492,8 @@ static int vfio_pci_core_pm_exit(struct vfio_pci_core_device *vdev, u32 flags,
 }
 
 #ifdef CONFIG_PM
-static int vfio_pci_core_runtime_suspend(struct device *dev)
+int vfio_pci_core_runtime_suspend(struct vfio_pci_core_device *vdev)
 {
-	struct vfio_pci_core_device *vdev = dev_get_drvdata(dev);
-
 	down_write(&vdev->memory_lock);
 	/*
 	 * The user can move the device into D3hot state before invoking
@@ -516,11 +518,10 @@ static int vfio_pci_core_runtime_suspend(struct device *dev)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(vfio_pci_core_runtime_suspend);
 
-static int vfio_pci_core_runtime_resume(struct device *dev)
+int vfio_pci_core_runtime_resume(struct vfio_pci_core_device *vdev)
 {
-	struct vfio_pci_core_device *vdev = dev_get_drvdata(dev);
-
 	/*
 	 * Resume with a pm_wake_eventfd_ctx signals the eventfd and exit
 	 * low power mode.
@@ -537,6 +538,7 @@ static int vfio_pci_core_runtime_resume(struct device *dev)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(vfio_pci_core_runtime_resume);
 #endif /* CONFIG_PM */
 
 /*
@@ -575,18 +577,6 @@ static void vfio_pci_core_map_bars(struct vfio_pci_core_device *vdev)
 		}
 	}
 }
-
-/*
- * The pci-driver core runtime PM routines always save the device state
- * before going into suspended state. If the device is going into low power
- * state with only with runtime PM ops, then no explicit handling is needed
- * for the devices which have NoSoftRst-.
- */
-static const struct dev_pm_ops vfio_pci_core_pm_ops = {
-	SET_RUNTIME_PM_OPS(vfio_pci_core_runtime_suspend,
-			   vfio_pci_core_runtime_resume,
-			   NULL)
-};
 
 int vfio_pci_core_enable(struct vfio_pci_core_device *vdev)
 {
@@ -2149,20 +2139,27 @@ static void vfio_pci_vf_uninit(struct vfio_pci_core_device *vdev)
 
 static int vfio_pci_vga_init(struct vfio_pci_core_device *vdev)
 {
+	unsigned int (*set_decode)(struct pci_dev *pdev, bool single_vga);
 	struct pci_dev *pdev = vdev->pdev;
 	int ret;
 
 	if (!vfio_pci_is_vga(pdev))
 		return 0;
 
+	/* VGA access is fixed for the lifetime of this registration. */
+	if (vfio_vga_disabled(vdev))
+		set_decode = vfio_pci_vga_decode_novga;
+	else
+		set_decode = vfio_pci_vga_decode_all;
+
 	ret = aperture_remove_conflicting_pci_devices(pdev, vdev->vdev.ops->name);
 	if (ret)
 		return ret;
 
-	ret = vga_client_register(pdev, vfio_pci_set_decode);
+	ret = vga_client_register(pdev, set_decode);
 	if (ret)
 		return ret;
-	vga_set_legacy_decoding(pdev, vfio_pci_set_decode(pdev, false));
+	vga_set_legacy_decoding(pdev, set_decode(pdev, false));
 	return 0;
 }
 
@@ -2220,10 +2217,6 @@ int vfio_pci_core_register_device(struct vfio_pci_core_device *vdev)
 	struct pci_dev *pdev = vdev->pdev;
 	struct device *dev = &pdev->dev;
 	int ret;
-
-	/* Drivers must set the vfio_pci_core_device to their drvdata */
-	if (WARN_ON(vdev != dev_get_drvdata(dev)))
-		return -EINVAL;
 
 	/* Drivers must set a name.  Required for sequestering SR-IOV VFs */
 	if (WARN_ON(!vdev->vdev.ops->name))
@@ -2292,7 +2285,6 @@ int vfio_pci_core_register_device(struct vfio_pci_core_device *vdev)
 	 */
 	vfio_pci_set_power_state(vdev, PCI_D0);
 
-	dev->driver->pm = &vfio_pci_core_pm_ops;
 	pm_runtime_allow(dev);
 	if (!vdev->disable_idle_d3)
 		pm_runtime_put(dev);
@@ -2333,10 +2325,9 @@ void vfio_pci_core_unregister_device(struct vfio_pci_core_device *vdev)
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_unregister_device);
 
-pci_ers_result_t vfio_pci_core_aer_err_detected(struct pci_dev *pdev,
+pci_ers_result_t vfio_pci_core_aer_err_detected(struct vfio_pci_core_device *vdev,
 						pci_channel_state_t state)
 {
-	struct vfio_pci_core_device *vdev = dev_get_drvdata(&pdev->dev);
 	struct vfio_pci_eventfd *eventfd;
 
 	rcu_read_lock();
@@ -2418,11 +2409,6 @@ out_unlock:
 	return ret;
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_sriov_configure);
-
-const struct pci_error_handlers vfio_pci_core_err_handlers = {
-	.error_detected = vfio_pci_core_aer_err_detected,
-};
-EXPORT_SYMBOL_GPL(vfio_pci_core_err_handlers);
 
 static bool vfio_dev_in_groups(struct vfio_device *vdev,
 			       struct vfio_pci_group_info *groups)
