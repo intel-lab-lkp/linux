@@ -257,7 +257,9 @@ __teql_resolve(struct sk_buff *skb, struct sk_buff *skb_res,
 	if (dst->dev != dev) {
 		struct neighbour *mn;
 
-		mn = __neigh_lookup_errno(n->tbl, n->primary_key, dev);
+		mn = neigh_lookup(n->tbl, n->primary_key, dev);
+		if (!mn)
+			mn = neigh_create(n->tbl, n->primary_key, dev);
 		neigh_release(n);
 		if (IS_ERR(mn))
 			return PTR_ERR(mn);
