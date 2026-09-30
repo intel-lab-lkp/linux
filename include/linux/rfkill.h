@@ -232,6 +232,13 @@ void rfkill_set_states(struct rfkill *rfkill, bool sw, bool hw);
 bool rfkill_blocked(struct rfkill *rfkill);
 
 /**
+ * rfkill_hard_blocked - Query hardware block state
+ *
+ * @rfkill: rfkill struct
+ */
+bool rfkill_hard_blocked(struct rfkill *rfkill);
+
+/**
  * rfkill_soft_blocked - Query soft rfkill block state
  *
  * @rfkill: rfkill struct to query
@@ -306,6 +313,11 @@ static inline void rfkill_set_states(struct rfkill *rfkill, bool sw, bool hw)
 }
 
 static inline bool rfkill_blocked(struct rfkill *rfkill)
+{
+	return false;
+}
+
+static inline bool rfkill_hard_blocked(struct rfkill *rfkill)
 {
 	return false;
 }

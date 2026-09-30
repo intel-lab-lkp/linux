@@ -979,6 +979,19 @@ bool rfkill_blocked(struct rfkill *rfkill)
 }
 EXPORT_SYMBOL(rfkill_blocked);
 
+bool rfkill_hard_blocked(struct rfkill *rfkill)
+{
+	unsigned long flags;
+	u32 state;
+
+	spin_lock_irqsave(&rfkill->lock, flags);
+	state = rfkill->state;
+	spin_unlock_irqrestore(&rfkill->lock, flags);
+
+	return !!(state & RFKILL_BLOCK_HW);
+}
+EXPORT_SYMBOL(rfkill_hard_blocked);
+
 bool rfkill_soft_blocked(struct rfkill *rfkill)
 {
 	unsigned long flags;
