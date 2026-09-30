@@ -431,8 +431,10 @@ static inline int ti_sci_do_xfer(struct ti_sci_info *info,
 	bool done_state = true;
 
 	ret = mbox_send_message(info->chan_tx, &xfer->tx_message);
-	if (ret < 0)
+	if (ret < 0) {
+		dev_err(dev, "Mbox send fail %d (caller: %pS)\n", ret, (void *)_RET_IP_);
 		return ret;
+	}
 
 	ret = 0;
 
@@ -477,7 +479,6 @@ static inline int ti_sci_do_xfer(struct ti_sci_info *info,
  */
 static int ti_sci_cmd_get_revision(struct ti_sci_info *info)
 {
-	struct device *dev = info->dev;
 	struct ti_sci_handle *handle = &info->handle;
 	struct ti_sci_version_info *ver = &handle->version;
 	struct ti_sci_msg_resp_version *rev_info;
@@ -494,10 +495,8 @@ static int ti_sci_cmd_get_revision(struct ti_sci_info *info)
 	rev_info = (struct ti_sci_msg_resp_version *)xfer->xfer_buf;
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "Mbox send fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	ver->abi_major = rev_info->abi_major;
 	ver->abi_minor = rev_info->abi_minor;
@@ -539,7 +538,6 @@ static int ti_sci_set_device_state(const struct ti_sci_handle *handle,
 	struct ti_sci_msg_req_set_device_state *req;
 	struct ti_sci_msg_hdr *resp;
 	struct ti_sci_xfer *xfer;
-	struct device *dev;
 	int ret = 0;
 
 	if (IS_ERR(handle))
@@ -548,7 +546,6 @@ static int ti_sci_set_device_state(const struct ti_sci_handle *handle,
 		return -EINVAL;
 
 	info = handle_to_ti_sci_info(handle);
-	dev = info->dev;
 
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_SET_DEVICE_STATE,
 				   flags | TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
@@ -561,10 +558,8 @@ static int ti_sci_set_device_state(const struct ti_sci_handle *handle,
 	req->state = state;
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "Mbox send fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
 
@@ -595,7 +590,6 @@ static int ti_sci_get_device_state(const struct ti_sci_handle *handle,
 	struct ti_sci_msg_req_get_device_state *req;
 	struct ti_sci_msg_resp_get_device_state *resp;
 	struct ti_sci_xfer *xfer;
-	struct device *dev;
 	int ret = 0;
 
 	if (IS_ERR(handle))
@@ -607,7 +601,6 @@ static int ti_sci_get_device_state(const struct ti_sci_handle *handle,
 		return -EINVAL;
 
 	info = handle_to_ti_sci_info(handle);
-	dev = info->dev;
 
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_GET_DEVICE_STATE,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
@@ -619,10 +612,8 @@ static int ti_sci_get_device_state(const struct ti_sci_handle *handle,
 	req->id = id;
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "Mbox send fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	resp = (struct ti_sci_msg_resp_get_device_state *)xfer->xfer_buf;
 	if (!ti_sci_is_response_ack(resp)) {
@@ -898,7 +889,6 @@ static int ti_sci_cmd_set_device_resets(const struct ti_sci_handle *handle,
 	struct ti_sci_msg_req_set_device_resets *req;
 	struct ti_sci_msg_hdr *resp;
 	struct ti_sci_xfer *xfer;
-	struct device *dev;
 	int ret = 0;
 
 	if (IS_ERR(handle))
@@ -907,7 +897,6 @@ static int ti_sci_cmd_set_device_resets(const struct ti_sci_handle *handle,
 		return -EINVAL;
 
 	info = handle_to_ti_sci_info(handle);
-	dev = info->dev;
 
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_SET_DEVICE_RESETS,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
@@ -920,10 +909,8 @@ static int ti_sci_cmd_set_device_resets(const struct ti_sci_handle *handle,
 	req->resets = reset_state;
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "Mbox send fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
 
@@ -971,7 +958,6 @@ static int ti_sci_set_clock_state(const struct ti_sci_handle *handle,
 	struct ti_sci_msg_req_set_clock_state *req;
 	struct ti_sci_msg_hdr *resp;
 	struct ti_sci_xfer *xfer;
-	struct device *dev;
 	int ret = 0;
 
 	if (IS_ERR(handle))
@@ -980,7 +966,6 @@ static int ti_sci_set_clock_state(const struct ti_sci_handle *handle,
 		return -EINVAL;
 
 	info = handle_to_ti_sci_info(handle);
-	dev = info->dev;
 
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_SET_CLOCK_STATE,
 				   flags | TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
@@ -999,10 +984,8 @@ static int ti_sci_set_clock_state(const struct ti_sci_handle *handle,
 	req->request_state = state;
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "Mbox send fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
 
@@ -1034,7 +1017,6 @@ static int ti_sci_cmd_get_clock_state(const struct ti_sci_handle *handle,
 	struct ti_sci_msg_req_get_clock_state *req;
 	struct ti_sci_msg_resp_get_clock_state *resp;
 	struct ti_sci_xfer *xfer;
-	struct device *dev;
 	int ret = 0;
 
 	if (IS_ERR(handle))
@@ -1046,7 +1028,6 @@ static int ti_sci_cmd_get_clock_state(const struct ti_sci_handle *handle,
 		return -EINVAL;
 
 	info = handle_to_ti_sci_info(handle);
-	dev = info->dev;
 
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_GET_CLOCK_STATE,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
@@ -1064,10 +1045,8 @@ static int ti_sci_cmd_get_clock_state(const struct ti_sci_handle *handle,
 	}
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "Mbox send fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	resp = (struct ti_sci_msg_resp_get_clock_state *)xfer->xfer_buf;
 
@@ -1266,7 +1245,6 @@ static int ti_sci_cmd_clk_set_parent(const struct ti_sci_handle *handle,
 	struct ti_sci_msg_req_set_clock_parent *req;
 	struct ti_sci_msg_hdr *resp;
 	struct ti_sci_xfer *xfer;
-	struct device *dev;
 	int ret = 0;
 
 	if (IS_ERR(handle))
@@ -1275,7 +1253,6 @@ static int ti_sci_cmd_clk_set_parent(const struct ti_sci_handle *handle,
 		return -EINVAL;
 
 	info = handle_to_ti_sci_info(handle);
-	dev = info->dev;
 
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_SET_CLOCK_PARENT,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
@@ -1299,10 +1276,8 @@ static int ti_sci_cmd_clk_set_parent(const struct ti_sci_handle *handle,
 	}
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "Mbox send fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
 
@@ -1332,7 +1307,6 @@ static int ti_sci_cmd_clk_get_parent(const struct ti_sci_handle *handle,
 	struct ti_sci_msg_req_get_clock_parent *req;
 	struct ti_sci_msg_resp_get_clock_parent *resp;
 	struct ti_sci_xfer *xfer;
-	struct device *dev;
 	int ret = 0;
 
 	if (IS_ERR(handle))
@@ -1341,7 +1315,6 @@ static int ti_sci_cmd_clk_get_parent(const struct ti_sci_handle *handle,
 		return -EINVAL;
 
 	info = handle_to_ti_sci_info(handle);
-	dev = info->dev;
 
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_GET_CLOCK_PARENT,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
@@ -1359,10 +1332,8 @@ static int ti_sci_cmd_clk_get_parent(const struct ti_sci_handle *handle,
 	}
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "Mbox send fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	resp = (struct ti_sci_msg_resp_get_clock_parent *)xfer->xfer_buf;
 
@@ -1400,7 +1371,6 @@ static int ti_sci_cmd_clk_get_num_parents(const struct ti_sci_handle *handle,
 	struct ti_sci_msg_req_get_clock_num_parents *req;
 	struct ti_sci_msg_resp_get_clock_num_parents *resp;
 	struct ti_sci_xfer *xfer;
-	struct device *dev;
 	int ret = 0;
 
 	if (IS_ERR(handle))
@@ -1409,7 +1379,6 @@ static int ti_sci_cmd_clk_get_num_parents(const struct ti_sci_handle *handle,
 		return -EINVAL;
 
 	info = handle_to_ti_sci_info(handle);
-	dev = info->dev;
 
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_GET_NUM_CLOCK_PARENTS,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
@@ -1427,10 +1396,8 @@ static int ti_sci_cmd_clk_get_num_parents(const struct ti_sci_handle *handle,
 	}
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "Mbox send fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	resp = (struct ti_sci_msg_resp_get_clock_num_parents *)xfer->xfer_buf;
 
@@ -1477,7 +1444,6 @@ static int ti_sci_cmd_clk_get_match_freq(const struct ti_sci_handle *handle,
 	struct ti_sci_msg_req_query_clock_freq *req;
 	struct ti_sci_msg_resp_query_clock_freq *resp;
 	struct ti_sci_xfer *xfer;
-	struct device *dev;
 	int ret = 0;
 
 	if (IS_ERR(handle))
@@ -1486,7 +1452,6 @@ static int ti_sci_cmd_clk_get_match_freq(const struct ti_sci_handle *handle,
 		return -EINVAL;
 
 	info = handle_to_ti_sci_info(handle);
-	dev = info->dev;
 
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_QUERY_CLOCK_FREQ,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
@@ -1507,10 +1472,8 @@ static int ti_sci_cmd_clk_get_match_freq(const struct ti_sci_handle *handle,
 	req->max_freq_hz = max_freq;
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "Mbox send fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	resp = (struct ti_sci_msg_resp_query_clock_freq *)xfer->xfer_buf;
 
@@ -1551,7 +1514,6 @@ static int ti_sci_cmd_clk_set_freq(const struct ti_sci_handle *handle,
 	struct ti_sci_msg_req_set_clock_freq *req;
 	struct ti_sci_msg_hdr *resp;
 	struct ti_sci_xfer *xfer;
-	struct device *dev;
 	int ret = 0;
 
 	if (IS_ERR(handle))
@@ -1560,7 +1522,6 @@ static int ti_sci_cmd_clk_set_freq(const struct ti_sci_handle *handle,
 		return -EINVAL;
 
 	info = handle_to_ti_sci_info(handle);
-	dev = info->dev;
 
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_SET_CLOCK_FREQ,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
@@ -1581,10 +1542,8 @@ static int ti_sci_cmd_clk_set_freq(const struct ti_sci_handle *handle,
 	req->max_freq_hz = max_freq;
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "Mbox send fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
 
@@ -1614,7 +1573,6 @@ static int ti_sci_cmd_clk_get_freq(const struct ti_sci_handle *handle,
 	struct ti_sci_msg_req_get_clock_freq *req;
 	struct ti_sci_msg_resp_get_clock_freq *resp;
 	struct ti_sci_xfer *xfer;
-	struct device *dev;
 	int ret = 0;
 
 	if (IS_ERR(handle))
@@ -1623,7 +1581,6 @@ static int ti_sci_cmd_clk_get_freq(const struct ti_sci_handle *handle,
 		return -EINVAL;
 
 	info = handle_to_ti_sci_info(handle);
-	dev = info->dev;
 
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_GET_CLOCK_FREQ,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
@@ -1641,10 +1598,8 @@ static int ti_sci_cmd_clk_get_freq(const struct ti_sci_handle *handle,
 	}
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "Mbox send fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	resp = (struct ti_sci_msg_resp_get_clock_freq *)xfer->xfer_buf;
 
@@ -1703,10 +1658,8 @@ static int ti_sci_cmd_prepare_sleep(const struct ti_sci_handle *handle, u8 mode,
 	req->debug_flags = debug_flags;
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "Mbox send fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	if (msg_flags == TI_SCI_FLAG_REQ_ACK_ON_PROCESSED) {
 		resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
@@ -1758,10 +1711,8 @@ static int ti_sci_msg_cmd_query_fw_caps(const struct ti_sci_handle *handle,
 		return PTR_ERR(xfer);
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "Mbox send fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	resp = (struct ti_sci_msg_resp_query_fw_caps *)xfer->xfer_buf;
 
@@ -1815,10 +1766,8 @@ static int ti_sci_cmd_set_io_isolation(const struct ti_sci_handle *handle,
 	req->state = state;
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "Mbox send fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
 
@@ -1868,10 +1817,8 @@ static int ti_sci_msg_cmd_lpm_wake_reason(const struct ti_sci_handle *handle,
 		return PTR_ERR(xfer);
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "Mbox send fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	resp = (struct ti_sci_msg_resp_lpm_wake_reason *)xfer->xfer_buf;
 
@@ -1933,10 +1880,8 @@ static int ti_sci_cmd_set_device_constraint(const struct ti_sci_handle *handle,
 	req->state = state;
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "Mbox send fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
 
@@ -1988,10 +1933,8 @@ static int ti_sci_cmd_set_latency_constraint(const struct ti_sci_handle *handle,
 	req->state = state;
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "Mbox send fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
 
@@ -2029,10 +1972,8 @@ static int ti_sci_cmd_lpm_abort(struct device *dev)
 	req = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "Mbox send fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
 
@@ -2051,7 +1992,6 @@ static int ti_sci_cmd_core_reboot(const struct ti_sci_handle *handle)
 	struct ti_sci_msg_req_reboot *req;
 	struct ti_sci_msg_hdr *resp;
 	struct ti_sci_xfer *xfer;
-	struct device *dev;
 	int ret = 0;
 
 	if (IS_ERR(handle))
@@ -2060,7 +2000,6 @@ static int ti_sci_cmd_core_reboot(const struct ti_sci_handle *handle)
 		return -EINVAL;
 
 	info = handle_to_ti_sci_info(handle);
-	dev = info->dev;
 
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_SYS_RESET,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
@@ -2071,10 +2010,8 @@ static int ti_sci_cmd_core_reboot(const struct ti_sci_handle *handle)
 	req = (struct ti_sci_msg_req_reboot *)xfer->xfer_buf;
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "Mbox send fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
 
@@ -2111,7 +2048,6 @@ static int ti_sci_get_resource_range(const struct ti_sci_handle *handle,
 	struct ti_sci_msg_req_get_resource_range *req;
 	struct ti_sci_xfer *xfer;
 	struct ti_sci_info *info;
-	struct device *dev;
 	int ret = 0;
 
 	if (IS_ERR(handle))
@@ -2120,7 +2056,6 @@ static int ti_sci_get_resource_range(const struct ti_sci_handle *handle,
 		return -EINVAL;
 
 	info = handle_to_ti_sci_info(handle);
-	dev = info->dev;
 
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_GET_RESOURCE_RANGE,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
@@ -2134,10 +2069,8 @@ static int ti_sci_get_resource_range(const struct ti_sci_handle *handle,
 	req->subtype = subtype & MSG_RM_RESOURCE_SUBTYPE_MASK;
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "Mbox send fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	resp = (struct ti_sci_msg_resp_get_resource_range *)xfer->xfer_buf;
 
@@ -2230,7 +2163,6 @@ static int ti_sci_manage_irq(const struct ti_sci_handle *handle,
 	struct ti_sci_msg_hdr *resp;
 	struct ti_sci_xfer *xfer;
 	struct ti_sci_info *info;
-	struct device *dev;
 	int ret = 0;
 
 	if (IS_ERR(handle))
@@ -2239,7 +2171,6 @@ static int ti_sci_manage_irq(const struct ti_sci_handle *handle,
 		return -EINVAL;
 
 	info = handle_to_ti_sci_info(handle);
-	dev = info->dev;
 
 	xfer = ti_sci_get_one_xfer(info, type, TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
 				   sizeof(*req), sizeof(*resp));
@@ -2259,10 +2190,8 @@ static int ti_sci_manage_irq(const struct ti_sci_handle *handle,
 	req->secondary_host = s_host;
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "Mbox send fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
 
@@ -2582,10 +2511,8 @@ static int ti_sci_cmd_rm_ring_cfg(const struct ti_sci_handle *handle,
 	req->asel = params->asel;
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "RM_RA:Mbox config send fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
 	ret = ti_sci_is_response_ack(resp) ? 0 : -EINVAL;
@@ -2613,7 +2540,6 @@ static int ti_sci_cmd_rm_psil_pair(const struct ti_sci_handle *handle,
 	struct ti_sci_msg_hdr *resp;
 	struct ti_sci_xfer *xfer;
 	struct ti_sci_info *info;
-	struct device *dev;
 	int ret = 0;
 
 	if (IS_ERR(handle))
@@ -2622,7 +2548,6 @@ static int ti_sci_cmd_rm_psil_pair(const struct ti_sci_handle *handle,
 		return -EINVAL;
 
 	info = handle_to_ti_sci_info(handle);
-	dev = info->dev;
 
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_RM_PSIL_PAIR,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
@@ -2636,10 +2561,8 @@ static int ti_sci_cmd_rm_psil_pair(const struct ti_sci_handle *handle,
 	req->dst_thread = dst_thread;
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "RM_PSIL:Mbox send fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
 	ret = ti_sci_is_response_ack(resp) ? 0 : -EINVAL;
@@ -2667,7 +2590,6 @@ static int ti_sci_cmd_rm_psil_unpair(const struct ti_sci_handle *handle,
 	struct ti_sci_msg_hdr *resp;
 	struct ti_sci_xfer *xfer;
 	struct ti_sci_info *info;
-	struct device *dev;
 	int ret = 0;
 
 	if (IS_ERR(handle))
@@ -2676,7 +2598,6 @@ static int ti_sci_cmd_rm_psil_unpair(const struct ti_sci_handle *handle,
 		return -EINVAL;
 
 	info = handle_to_ti_sci_info(handle);
-	dev = info->dev;
 
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_RM_PSIL_UNPAIR,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
@@ -2690,10 +2611,8 @@ static int ti_sci_cmd_rm_psil_unpair(const struct ti_sci_handle *handle,
 	req->dst_thread = dst_thread;
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "RM_PSIL:Mbox send fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
 	ret = ti_sci_is_response_ack(resp) ? 0 : -EINVAL;
@@ -2760,10 +2679,8 @@ static int ti_sci_cmd_rm_udmap_tx_ch_cfg(const struct ti_sci_handle *handle,
 	req->extended_ch_type = params->extended_ch_type;
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "Mbox send TX_CH_CFG fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
 	ret = ti_sci_is_response_ack(resp) ? 0 : -EINVAL;
@@ -2827,10 +2744,8 @@ static int ti_sci_cmd_rm_udmap_rx_ch_cfg(const struct ti_sci_handle *handle,
 	req->rx_burst_size = params->rx_burst_size;
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "Mbox send RX_CH_CFG fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
 	ret = ti_sci_is_response_ack(resp) ? 0 : -EINVAL;
@@ -2859,14 +2774,12 @@ static int ti_sci_cmd_rm_udmap_rx_flow_cfg(const struct ti_sci_handle *handle,
 	struct ti_sci_msg_hdr *resp;
 	struct ti_sci_xfer *xfer;
 	struct ti_sci_info *info;
-	struct device *dev;
 	int ret = 0;
 
 	if (IS_ERR_OR_NULL(handle))
 		return -EINVAL;
 
 	info = handle_to_ti_sci_info(handle);
-	dev = info->dev;
 
 	xfer = ti_sci_get_one_xfer(info, TISCI_MSG_RM_UDMAP_FLOW_CFG,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
@@ -2899,10 +2812,8 @@ static int ti_sci_cmd_rm_udmap_rx_flow_cfg(const struct ti_sci_handle *handle,
 	req->rx_ps_location = params->rx_ps_location;
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "RX_FL_CFG: Mbox send fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
 	ret = ti_sci_is_response_ack(resp) ? 0 : -EINVAL;
@@ -2927,7 +2838,6 @@ static int ti_sci_cmd_proc_request(const struct ti_sci_handle *handle,
 	struct ti_sci_msg_hdr *resp;
 	struct ti_sci_info *info;
 	struct ti_sci_xfer *xfer;
-	struct device *dev;
 	int ret = 0;
 
 	if (!handle)
@@ -2936,7 +2846,6 @@ static int ti_sci_cmd_proc_request(const struct ti_sci_handle *handle,
 		return PTR_ERR(handle);
 
 	info = handle_to_ti_sci_info(handle);
-	dev = info->dev;
 
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_PROC_REQUEST,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
@@ -2948,10 +2857,8 @@ static int ti_sci_cmd_proc_request(const struct ti_sci_handle *handle,
 	req->processor_id = proc_id;
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "Mbox send fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	resp = (struct ti_sci_msg_hdr *)xfer->tx_message.buf;
 
@@ -2977,7 +2884,6 @@ static int ti_sci_cmd_proc_release(const struct ti_sci_handle *handle,
 	struct ti_sci_msg_hdr *resp;
 	struct ti_sci_info *info;
 	struct ti_sci_xfer *xfer;
-	struct device *dev;
 	int ret = 0;
 
 	if (!handle)
@@ -2986,7 +2892,6 @@ static int ti_sci_cmd_proc_release(const struct ti_sci_handle *handle,
 		return PTR_ERR(handle);
 
 	info = handle_to_ti_sci_info(handle);
-	dev = info->dev;
 
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_PROC_RELEASE,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
@@ -2998,10 +2903,8 @@ static int ti_sci_cmd_proc_release(const struct ti_sci_handle *handle,
 	req->processor_id = proc_id;
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "Mbox send fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	resp = (struct ti_sci_msg_hdr *)xfer->tx_message.buf;
 
@@ -3030,7 +2933,6 @@ static int ti_sci_cmd_proc_handover(const struct ti_sci_handle *handle,
 	struct ti_sci_msg_hdr *resp;
 	struct ti_sci_info *info;
 	struct ti_sci_xfer *xfer;
-	struct device *dev;
 	int ret = 0;
 
 	if (!handle)
@@ -3039,7 +2941,6 @@ static int ti_sci_cmd_proc_handover(const struct ti_sci_handle *handle,
 		return PTR_ERR(handle);
 
 	info = handle_to_ti_sci_info(handle);
-	dev = info->dev;
 
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_PROC_HANDOVER,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
@@ -3052,10 +2953,8 @@ static int ti_sci_cmd_proc_handover(const struct ti_sci_handle *handle,
 	req->host_id = host_id;
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "Mbox send fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	resp = (struct ti_sci_msg_hdr *)xfer->tx_message.buf;
 
@@ -3087,7 +2986,6 @@ static int ti_sci_cmd_proc_set_config(const struct ti_sci_handle *handle,
 	struct ti_sci_msg_hdr *resp;
 	struct ti_sci_info *info;
 	struct ti_sci_xfer *xfer;
-	struct device *dev;
 	int ret = 0;
 
 	if (!handle)
@@ -3096,7 +2994,6 @@ static int ti_sci_cmd_proc_set_config(const struct ti_sci_handle *handle,
 		return PTR_ERR(handle);
 
 	info = handle_to_ti_sci_info(handle);
-	dev = info->dev;
 
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_SET_CONFIG,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
@@ -3113,10 +3010,8 @@ static int ti_sci_cmd_proc_set_config(const struct ti_sci_handle *handle,
 	req->config_flags_clear = config_flags_clear;
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "Mbox send fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	resp = (struct ti_sci_msg_hdr *)xfer->tx_message.buf;
 
@@ -3146,7 +3041,6 @@ static int ti_sci_cmd_proc_set_control(const struct ti_sci_handle *handle,
 	struct ti_sci_msg_hdr *resp;
 	struct ti_sci_info *info;
 	struct ti_sci_xfer *xfer;
-	struct device *dev;
 	int ret = 0;
 
 	if (!handle)
@@ -3155,7 +3049,6 @@ static int ti_sci_cmd_proc_set_control(const struct ti_sci_handle *handle,
 		return PTR_ERR(handle);
 
 	info = handle_to_ti_sci_info(handle);
-	dev = info->dev;
 
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_SET_CTRL,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
@@ -3169,10 +3062,8 @@ static int ti_sci_cmd_proc_set_control(const struct ti_sci_handle *handle,
 	req->control_flags_clear = control_flags_clear;
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "Mbox send fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	resp = (struct ti_sci_msg_hdr *)xfer->tx_message.buf;
 
@@ -3203,7 +3094,6 @@ static int ti_sci_cmd_proc_get_status(const struct ti_sci_handle *handle,
 	struct ti_sci_msg_req_get_status *req;
 	struct ti_sci_info *info;
 	struct ti_sci_xfer *xfer;
-	struct device *dev;
 	int ret = 0;
 
 	if (!handle)
@@ -3212,7 +3102,6 @@ static int ti_sci_cmd_proc_get_status(const struct ti_sci_handle *handle,
 		return PTR_ERR(handle);
 
 	info = handle_to_ti_sci_info(handle);
-	dev = info->dev;
 
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_GET_STATUS,
 				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
@@ -3224,10 +3113,8 @@ static int ti_sci_cmd_proc_get_status(const struct ti_sci_handle *handle,
 	req->processor_id = proc_id;
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "Mbox send fail %d\n", ret);
+	if (ret)
 		goto fail;
-	}
 
 	resp = (struct ti_sci_msg_resp_get_status *)xfer->tx_message.buf;
 
