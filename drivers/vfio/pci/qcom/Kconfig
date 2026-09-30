@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config QCOM_VFIO_PCI
+	tristate "VFIO support for Qualcomm PCI devices"
+	depends on PCI
+	select VFIO_PCI_CORE
+	help
+	  This provides VFIO support for Qualcomm PCI devices with device-specific
+	  quirks. Currently supports:
+	  - Qualcomm ath11k WiFi (Device ID 0x1103)
+	  - Qualcomm ath12k WiFi (Device ID 0x1107)
+
+	  These devices require special handling for MSI address/data passthrough
+	  when used with VFIO. The firmware expects physical host MSI addresses
+	  rather than guest IOVA addresses.
+
+	  The VM must have IOMMU interrupt remapping and caching mode enabled.
+	  For example, with libvirt/QEMU on Intel, add to the domain XML:
+	    <iommu model="intel">
+	      <driver intremap="on" caching_mode="on"/>
+	    </iommu>
+
+	  If you don't know what to do here, say N.
