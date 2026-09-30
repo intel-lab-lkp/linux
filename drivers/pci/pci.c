@@ -545,6 +545,60 @@ u16 pci_find_ext_capability(struct pci_dev *dev, int cap)
 EXPORT_SYMBOL_GPL(pci_find_ext_capability);
 
 /**
+ * pci_find_free_ext_cap_offset - Find free space in extended config
+ * @dev: PCI device to query
+ * @size: Minimum size needed (in bytes)
+ *
+ * Scans the extended capability chain to find a gap of at least @size bytes
+ * in the extended configuration space (0x100-0xFFF). This can be used by
+ * drivers that need to use unused extended config space for device-specific
+ * purposes (e.g., VFIO quirks for VM passthrough).
+ *
+ * Returns the offset to free space, or 0 if no suitable gap found.
+ */
+int pci_find_free_ext_cap_offset(struct pci_dev *dev, size_t size)
+{
+	int pos = PCI_CFG_SPACE_SIZE;
+	int last_cap_start = 0;
+	int free_offset;
+	u32 header;
+	int next;
+
+	if (!pci_is_pcie(dev))
+		return 0;
+
+	while (pos >= PCI_CFG_SPACE_SIZE) {
+		if (pci_read_config_dword(dev, pos, &header))
+			break;
+
+		if (header == 0 || header == 0xffffffff)
+			break;
+
+		last_cap_start = pos;
+		next = PCI_EXT_CAP_NEXT(header);
+		if (!next)
+			break;
+		pos = next;
+	}
+
+	/*
+	 * Use space after the last capability. We align to the next capability
+	 * boundary (typically 4-byte aligned). Start at a safe offset past the
+	 * last capability - capabilities vary in size, so use a conservative
+	 * offset. Most extended capabilities are <= 64 bytes.
+	 */
+	if (last_cap_start) {
+		free_offset = last_cap_start + 64;
+		free_offset = ALIGN(free_offset, 4);
+		if (PCI_CFG_SPACE_EXP_SIZE - free_offset >= size)
+			return free_offset;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(pci_find_free_ext_cap_offset);
+
+/**
  * pci_get_dsn - Read and return the 8-byte Device Serial Number
  * @dev: PCI device to query
  *
