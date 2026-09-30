@@ -133,17 +133,10 @@ enum {
 #define OMAP_I2C_SYSTEST_SDA_O		(1 << 0)	/* SDA line drive out */
 
 /* OCP_SYSSTATUS bit definitions */
-#define SYSS_RESETDONE_MASK		(1 << 0)
+#define OMAP_I2C_SYSS_RESETDONE		(1 << 0)
 
 /* OCP_SYSCONFIG bit definitions */
-#define SYSC_CLOCKACTIVITY_MASK		(0x3 << 8)
-#define SYSC_SIDLEMODE_MASK		(0x3 << 3)
-#define SYSC_ENAWAKEUP_MASK		(1 << 2)
-#define SYSC_SOFTRESET_MASK		(1 << 1)
-#define SYSC_AUTOIDLE_MASK		(1 << 0)
-
-#define SYSC_IDLEMODE_SMART		0x2
-#define SYSC_CLOCKACTIVITY_FCLK		0x2
+#define OMAP_I2C_SYSC_SOFTRESET		(1 << 1)
 
 /* Errata definitions */
 #define I2C_OMAP_ERRATA_I207		(1 << 0)
@@ -293,13 +286,13 @@ static int omap_i2c_reset(struct omap_i2c_dev *omap)
 			omap_i2c_read_reg(omap, OMAP_I2C_CON_REG) &
 				~(OMAP_I2C_CON_EN));
 
-		omap_i2c_write_reg(omap, OMAP_I2C_SYSC_REG, SYSC_SOFTRESET_MASK);
+		omap_i2c_write_reg(omap, OMAP_I2C_SYSC_REG, OMAP_I2C_SYSC_SOFTRESET);
 		/* For some reason we need to set the EN bit before the
 		 * reset done bit gets set. */
 		timeout = jiffies + OMAP_I2C_TIMEOUT;
 		omap_i2c_write_reg(omap, OMAP_I2C_CON_REG, OMAP_I2C_CON_EN);
 		while (!(omap_i2c_read_reg(omap, OMAP_I2C_SYSS_REG) &
-			 SYSS_RESETDONE_MASK)) {
+			 OMAP_I2C_SYSS_RESETDONE)) {
 			if (time_after(jiffies, timeout)) {
 				dev_warn(omap->dev, "timeout waiting "
 						"for controller reset\n");
