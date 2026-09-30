@@ -411,13 +411,27 @@ static void ti_sci_put_one_xfer(struct ti_sci_xfers_info *minfo,
 }
 
 /**
+ * ti_sci_is_response_ack() - Generic ACK/NACK message checkup
+ * @r:	pointer to response buffer
+ *
+ * Return: true if the response was an ACK, else returns false.
+ */
+static inline bool ti_sci_is_response_ack(void *r)
+{
+	struct ti_sci_msg_hdr *hdr = r;
+
+	return hdr->flags & TI_SCI_FLAG_RESP_GENERIC_ACK ? true : false;
+}
+
+/**
  * ti_sci_do_xfer() - Do one transfer
  * @info:	Pointer to SCI entity information
  * @xfer:	Transfer to initiate and wait for response
  *
- * Return: -ETIMEDOUT in case of no response, if transmit error,
- *	   return corresponding error, else if all goes well,
- *	   return 0.
+ * Return: -ETIMEDOUT in case of no response, or
+ *         -ENODEV in case of a NACK response, or
+ *         corresponding error if transmit fails, or
+ *         return 0, if all goes well.
  */
 static inline int ti_sci_do_xfer(struct ti_sci_info *info,
 				 struct ti_sci_xfer *xfer)
@@ -466,6 +480,18 @@ static inline int ti_sci_do_xfer(struct ti_sci_info *info,
 	 */
 	mbox_client_txdone(info->chan_tx, ret);
 
+	/*
+	 * If we expect a response and are not otherwise already in an error
+	 * state, then ensure that the response is an ACK
+	 */
+	if (response_expected && ret == 0) {
+		if (!ti_sci_is_response_ack(xfer->xfer_buf)) {
+			dev_warn(dev, "Message response not acknowledged (caller: %pS)\n",
+				 (void *)_RET_IP_);
+			ret = -ENODEV;
+		}
+	}
+
 	return ret;
 }
 
@@ -510,19 +536,6 @@ fail:
 }
 
 /**
- * ti_sci_is_response_ack() - Generic ACK/NACK message checkup
- * @r:	pointer to response buffer
- *
- * Return: true if the response was an ACK, else returns false.
- */
-static inline bool ti_sci_is_response_ack(void *r)
-{
-	struct ti_sci_msg_hdr *hdr = r;
-
-	return hdr->flags & TI_SCI_FLAG_RESP_GENERIC_ACK ? true : false;
-}
-
-/**
  * ti_sci_set_device_state() - Set device state helper
  * @handle:	pointer to TI SCI handle
  * @id:		Device identifier
@@ -560,10 +573,6 @@ static int ti_sci_set_device_state(const struct ti_sci_handle *handle,
 	ret = ti_sci_do_xfer(info, xfer);
 	if (ret)
 		goto fail;
-
-	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
-
-	ret = ti_sci_is_response_ack(resp) ? 0 : -ENODEV;
 
 fail:
 	ti_sci_put_one_xfer(&info->minfo, xfer);
@@ -616,10 +625,6 @@ static int ti_sci_get_device_state(const struct ti_sci_handle *handle,
 		goto fail;
 
 	resp = (struct ti_sci_msg_resp_get_device_state *)xfer->xfer_buf;
-	if (!ti_sci_is_response_ack(resp)) {
-		ret = -ENODEV;
-		goto fail;
-	}
 
 	if (clcnt)
 		*clcnt = resp->context_loss_count;
@@ -912,10 +917,6 @@ static int ti_sci_cmd_set_device_resets(const struct ti_sci_handle *handle,
 	if (ret)
 		goto fail;
 
-	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
-
-	ret = ti_sci_is_response_ack(resp) ? 0 : -ENODEV;
-
 fail:
 	ti_sci_put_one_xfer(&info->minfo, xfer);
 
@@ -987,10 +988,6 @@ static int ti_sci_set_clock_state(const struct ti_sci_handle *handle,
 	if (ret)
 		goto fail;
 
-	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
-
-	ret = ti_sci_is_response_ack(resp) ? 0 : -ENODEV;
-
 fail:
 	ti_sci_put_one_xfer(&info->minfo, xfer);
 
@@ -1049,11 +1046,6 @@ static int ti_sci_cmd_get_clock_state(const struct ti_sci_handle *handle,
 		goto fail;
 
 	resp = (struct ti_sci_msg_resp_get_clock_state *)xfer->xfer_buf;
-
-	if (!ti_sci_is_response_ack(resp)) {
-		ret = -ENODEV;
-		goto fail;
-	}
 
 	if (programmed_state)
 		*programmed_state = resp->programmed_state;
@@ -1279,10 +1271,6 @@ static int ti_sci_cmd_clk_set_parent(const struct ti_sci_handle *handle,
 	if (ret)
 		goto fail;
 
-	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
-
-	ret = ti_sci_is_response_ack(resp) ? 0 : -ENODEV;
-
 fail:
 	ti_sci_put_one_xfer(&info->minfo, xfer);
 
@@ -1337,14 +1325,10 @@ static int ti_sci_cmd_clk_get_parent(const struct ti_sci_handle *handle,
 
 	resp = (struct ti_sci_msg_resp_get_clock_parent *)xfer->xfer_buf;
 
-	if (!ti_sci_is_response_ack(resp)) {
-		ret = -ENODEV;
-	} else {
-		if (resp->parent_id < 255)
-			*parent_id = resp->parent_id;
-		else
-			*parent_id = resp->parent_id_32;
-	}
+	if (resp->parent_id < 255)
+		*parent_id = resp->parent_id;
+	else
+		*parent_id = resp->parent_id_32;
 
 fail:
 	ti_sci_put_one_xfer(&info->minfo, xfer);
@@ -1401,14 +1385,10 @@ static int ti_sci_cmd_clk_get_num_parents(const struct ti_sci_handle *handle,
 
 	resp = (struct ti_sci_msg_resp_get_clock_num_parents *)xfer->xfer_buf;
 
-	if (!ti_sci_is_response_ack(resp)) {
-		ret = -ENODEV;
-	} else {
-		if (resp->num_parents < 255)
-			*num_parents = resp->num_parents;
-		else
-			*num_parents = resp->num_parents_32;
-	}
+	if (resp->num_parents < 255)
+		*num_parents = resp->num_parents;
+	else
+		*num_parents = resp->num_parents_32;
 
 fail:
 	ti_sci_put_one_xfer(&info->minfo, xfer);
@@ -1477,10 +1457,7 @@ static int ti_sci_cmd_clk_get_match_freq(const struct ti_sci_handle *handle,
 
 	resp = (struct ti_sci_msg_resp_query_clock_freq *)xfer->xfer_buf;
 
-	if (!ti_sci_is_response_ack(resp))
-		ret = -ENODEV;
-	else
-		*match_freq = resp->freq_hz;
+	*match_freq = resp->freq_hz;
 
 fail:
 	ti_sci_put_one_xfer(&info->minfo, xfer);
@@ -1545,10 +1522,6 @@ static int ti_sci_cmd_clk_set_freq(const struct ti_sci_handle *handle,
 	if (ret)
 		goto fail;
 
-	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
-
-	ret = ti_sci_is_response_ack(resp) ? 0 : -ENODEV;
-
 fail:
 	ti_sci_put_one_xfer(&info->minfo, xfer);
 
@@ -1603,10 +1576,7 @@ static int ti_sci_cmd_clk_get_freq(const struct ti_sci_handle *handle,
 
 	resp = (struct ti_sci_msg_resp_get_clock_freq *)xfer->xfer_buf;
 
-	if (!ti_sci_is_response_ack(resp))
-		ret = -ENODEV;
-	else
-		*freq = resp->freq_hz;
+	*freq = resp->freq_hz;
 
 fail:
 	ti_sci_put_one_xfer(&info->minfo, xfer);
@@ -1658,15 +1628,9 @@ static int ti_sci_cmd_prepare_sleep(const struct ti_sci_handle *handle, u8 mode,
 	req->debug_flags = debug_flags;
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret)
+	if (ret) {
+		dev_err(dev, "Failed to prepare sleep\n");
 		goto fail;
-
-	if (msg_flags == TI_SCI_FLAG_REQ_ACK_ON_PROCESSED) {
-		resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
-		if (!ti_sci_is_response_ack(resp)) {
-			dev_err(dev, "Failed to prepare sleep\n");
-			ret = -ENODEV;
-		}
 	}
 
 fail:
@@ -1711,16 +1675,12 @@ static int ti_sci_msg_cmd_query_fw_caps(const struct ti_sci_handle *handle,
 		return PTR_ERR(xfer);
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret)
-		goto fail;
-
-	resp = (struct ti_sci_msg_resp_query_fw_caps *)xfer->xfer_buf;
-
-	if (!ti_sci_is_response_ack(resp)) {
+	if (ret) {
 		dev_err(dev, "Failed to get capabilities\n");
-		ret = -ENODEV;
 		goto fail;
 	}
+
+	resp = (struct ti_sci_msg_resp_query_fw_caps *)xfer->xfer_buf;
 
 	if (fw_caps)
 		*fw_caps = resp->fw_caps;
@@ -1766,14 +1726,9 @@ static int ti_sci_cmd_set_io_isolation(const struct ti_sci_handle *handle,
 	req->state = state;
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret)
-		goto fail;
-
-	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
-
-	if (!ti_sci_is_response_ack(resp)) {
+	if (ret) {
 		dev_err(dev, "Failed to set IO isolation\n");
-		ret = -ENODEV;
+		goto fail;
 	}
 
 fail:
@@ -1817,16 +1772,12 @@ static int ti_sci_msg_cmd_lpm_wake_reason(const struct ti_sci_handle *handle,
 		return PTR_ERR(xfer);
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret)
-		goto fail;
-
-	resp = (struct ti_sci_msg_resp_lpm_wake_reason *)xfer->xfer_buf;
-
-	if (!ti_sci_is_response_ack(resp)) {
+	if (ret) {
 		dev_err(dev, "Failed to get wake reason\n");
-		ret = -ENODEV;
 		goto fail;
 	}
+
+	resp = (struct ti_sci_msg_resp_lpm_wake_reason *)xfer->xfer_buf;
 
 	if (source)
 		*source = resp->wake_source;
@@ -1880,14 +1831,9 @@ static int ti_sci_cmd_set_device_constraint(const struct ti_sci_handle *handle,
 	req->state = state;
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret)
-		goto fail;
-
-	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
-
-	if (!ti_sci_is_response_ack(resp)) {
+	if (ret) {
 		dev_err(dev, "Failed to set device constraint\n");
-		ret = -ENODEV;
+		goto fail;
 	}
 
 fail:
@@ -1933,14 +1879,9 @@ static int ti_sci_cmd_set_latency_constraint(const struct ti_sci_handle *handle,
 	req->state = state;
 
 	ret = ti_sci_do_xfer(info, xfer);
-	if (ret)
-		goto fail;
-
-	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
-
-	if (!ti_sci_is_response_ack(resp)) {
+	if (ret) {
 		dev_err(dev, "Failed to set device constraint\n");
-		ret = -ENODEV;
+		goto fail;
 	}
 
 fail:
@@ -1975,11 +1916,6 @@ static int ti_sci_cmd_lpm_abort(struct device *dev)
 	if (ret)
 		goto fail;
 
-	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
-
-	if (!ti_sci_is_response_ack(resp))
-		ret = -ENODEV;
-
 fail:
 	ti_sci_put_one_xfer(&info->minfo, xfer);
 
@@ -2012,13 +1948,6 @@ static int ti_sci_cmd_core_reboot(const struct ti_sci_handle *handle)
 	ret = ti_sci_do_xfer(info, xfer);
 	if (ret)
 		goto fail;
-
-	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
-
-	if (!ti_sci_is_response_ack(resp))
-		ret = -ENODEV;
-	else
-		ret = 0;
 
 fail:
 	ti_sci_put_one_xfer(&info->minfo, xfer);
@@ -2074,9 +2003,7 @@ static int ti_sci_get_resource_range(const struct ti_sci_handle *handle,
 
 	resp = (struct ti_sci_msg_resp_get_resource_range *)xfer->xfer_buf;
 
-	if (!ti_sci_is_response_ack(resp)) {
-		ret = -ENODEV;
-	} else if (!resp->range_num && !resp->range_num_sec) {
+	if (!resp->range_num && !resp->range_num_sec) {
 		/* Neither of the two resource range is valid */
 		ret = -ENODEV;
 	} else {
@@ -2192,10 +2119,6 @@ static int ti_sci_manage_irq(const struct ti_sci_handle *handle,
 	ret = ti_sci_do_xfer(info, xfer);
 	if (ret)
 		goto fail;
-
-	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
-
-	ret = ti_sci_is_response_ack(resp) ? 0 : -ENODEV;
 
 fail:
 	ti_sci_put_one_xfer(&info->minfo, xfer);
@@ -2514,9 +2437,6 @@ static int ti_sci_cmd_rm_ring_cfg(const struct ti_sci_handle *handle,
 	if (ret)
 		goto fail;
 
-	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
-	ret = ti_sci_is_response_ack(resp) ? 0 : -EINVAL;
-
 fail:
 	ti_sci_put_one_xfer(&info->minfo, xfer);
 	dev_dbg(dev, "RM_RA:config ring %u ret:%d\n", params->index, ret);
@@ -2564,9 +2484,6 @@ static int ti_sci_cmd_rm_psil_pair(const struct ti_sci_handle *handle,
 	if (ret)
 		goto fail;
 
-	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
-	ret = ti_sci_is_response_ack(resp) ? 0 : -EINVAL;
-
 fail:
 	ti_sci_put_one_xfer(&info->minfo, xfer);
 
@@ -2613,9 +2530,6 @@ static int ti_sci_cmd_rm_psil_unpair(const struct ti_sci_handle *handle,
 	ret = ti_sci_do_xfer(info, xfer);
 	if (ret)
 		goto fail;
-
-	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
-	ret = ti_sci_is_response_ack(resp) ? 0 : -EINVAL;
 
 fail:
 	ti_sci_put_one_xfer(&info->minfo, xfer);
@@ -2682,9 +2596,6 @@ static int ti_sci_cmd_rm_udmap_tx_ch_cfg(const struct ti_sci_handle *handle,
 	if (ret)
 		goto fail;
 
-	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
-	ret = ti_sci_is_response_ack(resp) ? 0 : -EINVAL;
-
 fail:
 	ti_sci_put_one_xfer(&info->minfo, xfer);
 	dev_dbg(dev, "TX_CH_CFG: chn %u ret:%u\n", params->index, ret);
@@ -2746,9 +2657,6 @@ static int ti_sci_cmd_rm_udmap_rx_ch_cfg(const struct ti_sci_handle *handle,
 	ret = ti_sci_do_xfer(info, xfer);
 	if (ret)
 		goto fail;
-
-	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
-	ret = ti_sci_is_response_ack(resp) ? 0 : -EINVAL;
 
 fail:
 	ti_sci_put_one_xfer(&info->minfo, xfer);
@@ -2815,9 +2723,6 @@ static int ti_sci_cmd_rm_udmap_rx_flow_cfg(const struct ti_sci_handle *handle,
 	if (ret)
 		goto fail;
 
-	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
-	ret = ti_sci_is_response_ack(resp) ? 0 : -EINVAL;
-
 fail:
 	ti_sci_put_one_xfer(&info->minfo, xfer);
 	dev_dbg(info->dev, "RX_FL_CFG: %u ret:%d\n", params->flow_index, ret);
@@ -2860,10 +2765,6 @@ static int ti_sci_cmd_proc_request(const struct ti_sci_handle *handle,
 	if (ret)
 		goto fail;
 
-	resp = (struct ti_sci_msg_hdr *)xfer->tx_message.buf;
-
-	ret = ti_sci_is_response_ack(resp) ? 0 : -ENODEV;
-
 fail:
 	ti_sci_put_one_xfer(&info->minfo, xfer);
 
@@ -2905,10 +2806,6 @@ static int ti_sci_cmd_proc_release(const struct ti_sci_handle *handle,
 	ret = ti_sci_do_xfer(info, xfer);
 	if (ret)
 		goto fail;
-
-	resp = (struct ti_sci_msg_hdr *)xfer->tx_message.buf;
-
-	ret = ti_sci_is_response_ack(resp) ? 0 : -ENODEV;
 
 fail:
 	ti_sci_put_one_xfer(&info->minfo, xfer);
@@ -2955,10 +2852,6 @@ static int ti_sci_cmd_proc_handover(const struct ti_sci_handle *handle,
 	ret = ti_sci_do_xfer(info, xfer);
 	if (ret)
 		goto fail;
-
-	resp = (struct ti_sci_msg_hdr *)xfer->tx_message.buf;
-
-	ret = ti_sci_is_response_ack(resp) ? 0 : -ENODEV;
 
 fail:
 	ti_sci_put_one_xfer(&info->minfo, xfer);
@@ -3013,10 +2906,6 @@ static int ti_sci_cmd_proc_set_config(const struct ti_sci_handle *handle,
 	if (ret)
 		goto fail;
 
-	resp = (struct ti_sci_msg_hdr *)xfer->tx_message.buf;
-
-	ret = ti_sci_is_response_ack(resp) ? 0 : -ENODEV;
-
 fail:
 	ti_sci_put_one_xfer(&info->minfo, xfer);
 
@@ -3064,10 +2953,6 @@ static int ti_sci_cmd_proc_set_control(const struct ti_sci_handle *handle,
 	ret = ti_sci_do_xfer(info, xfer);
 	if (ret)
 		goto fail;
-
-	resp = (struct ti_sci_msg_hdr *)xfer->tx_message.buf;
-
-	ret = ti_sci_is_response_ack(resp) ? 0 : -ENODEV;
 
 fail:
 	ti_sci_put_one_xfer(&info->minfo, xfer);
@@ -3118,16 +3003,12 @@ static int ti_sci_cmd_proc_get_status(const struct ti_sci_handle *handle,
 
 	resp = (struct ti_sci_msg_resp_get_status *)xfer->tx_message.buf;
 
-	if (!ti_sci_is_response_ack(resp)) {
-		ret = -ENODEV;
-	} else {
-		*bv = (resp->bootvector_low & TI_SCI_ADDR_LOW_MASK) |
-		      (((u64)resp->bootvector_high << TI_SCI_ADDR_HIGH_SHIFT) &
-		       TI_SCI_ADDR_HIGH_MASK);
-		*cfg_flags = resp->config_flags;
-		*ctrl_flags = resp->control_flags;
-		*sts_flags = resp->status_flags;
-	}
+	*bv = (resp->bootvector_low & TI_SCI_ADDR_LOW_MASK) |
+	      (((u64)resp->bootvector_high << TI_SCI_ADDR_HIGH_SHIFT) &
+	       TI_SCI_ADDR_HIGH_MASK);
+	*cfg_flags = resp->config_flags;
+	*ctrl_flags = resp->control_flags;
+	*sts_flags = resp->status_flags;
 
 fail:
 	ti_sci_put_one_xfer(&info->minfo, xfer);
