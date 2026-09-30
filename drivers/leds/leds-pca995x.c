@@ -123,7 +123,7 @@ static int pca995x_probe(struct i2c_client *client)
 	const struct pca995x_chipdef *chipdef;
 	struct pca995x_chip *chip;
 	struct pca995x_led *led;
-	int i, j, reg, ret;
+	int i, reg, ret;
 
 	chipdef = device_get_match_data(&client->dev);
 
@@ -144,10 +144,12 @@ static int pca995x_probe(struct i2c_client *client)
 	device_for_each_child_node_scoped(dev, child) {
 		ret = fwnode_property_read_u32(child, "reg", &reg);
 		if (ret)
-			return ret;
+			goto err_put_nodes;
 
-		if (reg < 0 || reg >= chipdef->num_leds || led_fwnodes[reg])
-			return -EINVAL;
+		if (reg < 0 || reg >= chipdef->num_leds || led_fwnodes[reg]) {
+			ret = -EINVAL;
+			goto err_put_nodes;
+		}
 
 		led = &chip->leds[reg];
 		led_fwnodes[reg] = fwnode_handle_get(child);
@@ -169,12 +171,12 @@ static int pca995x_probe(struct i2c_client *client)
 						     &chip->leds[i].ldev,
 						     &init_data);
 		if (ret < 0) {
-			for (j = i; j < chipdef->num_leds; j++)
-				fwnode_handle_put(led_fwnodes[j]);
-			return dev_err_probe(dev, ret,
-					     "Could not register LED %s\n",
-					     chip->leds[i].ldev.name);
+			dev_err_probe(dev, ret, "Could not register LED %s\n",
+				      chip->leds[i].ldev.name);
+			goto err_put_nodes;
 		}
+
+		led_fwnodes[i] = NULL;
 	}
 
 	/* Disable LED all-call address and set normal mode */
@@ -184,6 +186,12 @@ static int pca995x_probe(struct i2c_client *client)
 
 	/* IREF Output current value for all LEDn outputs */
 	return regmap_write(chip->regmap, chipdef->irefall, PCA995X_IREFALL_HALF_CFG);
+
+err_put_nodes:
+	for (i = 0; i < chipdef->num_leds; i++)
+		fwnode_handle_put(led_fwnodes[i]);
+
+	return ret;
 }
 
 static const struct i2c_device_id pca995x_id[] = {
