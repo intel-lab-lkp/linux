@@ -21,6 +21,7 @@
 #include <asm/suspend.h>
 #include <asm/page.h>
 #include <asm/sections.h>
+#include <asm/tlbflush.h>
 #include <asm/uaccess.h>
 #include "reboot.h"
 
@@ -93,6 +94,17 @@ static void notrace arch_restore_image(void *unused)
 	if (IS_ENABLED(CONFIG_CPU_TTBR0_PAN))
 		uaccess_save_and_enable();
 	cpu_switch_mm(idmap_pgd, &init_mm);
+	local_flush_bp_all();
+
+#ifdef CONFIG_CPU_HAS_ASID
+	/*
+	 * The identity mapping has no clean ASID and may clash with entries
+	 * left behind by the previous page tables.  Without this flush,
+	 * copy_page() can translate through the stale read-only kernel
+	 * mappings instead of the writable aliases in the idmap.
+	 */
+	local_flush_tlb_all();
+#endif
 	for (pbe = restore_pblist; pbe; pbe = pbe->next)
 		copy_page(pbe->orig_address, pbe->address);
 
