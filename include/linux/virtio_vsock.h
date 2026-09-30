@@ -51,10 +51,13 @@ static inline void virtio_vsock_skb_put(struct sk_buff *skb, u32 len)
 {
 	DEBUG_NET_WARN_ON_ONCE(skb->len);
 
-	if (skb_is_nonlinear(skb))
-		skb->len = len;
-	else
+	if (skb_is_nonlinear(skb)) {
+		skb->len = skb->data_len;
+		if (WARN_ON_ONCE(pskb_trim(skb, len)))
+			return;
+	} else {
 		skb_put(skb, len);
+	}
 }
 
 static inline struct sk_buff *

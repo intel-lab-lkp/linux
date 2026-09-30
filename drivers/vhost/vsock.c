@@ -400,10 +400,6 @@ vhost_vsock_alloc_skb(struct vhost_virtqueue *vq,
 
 	payload_len = le32_to_cpu(hdr->len);
 
-	/* No payload */
-	if (!payload_len)
-		return skb;
-
 	/* The pkt is too big or the length in the header is invalid */
 	if (payload_len + sizeof(*hdr) > len) {
 		kfree_skb(skb);
@@ -411,6 +407,8 @@ vhost_vsock_alloc_skb(struct vhost_virtqueue *vq,
 	}
 
 	virtio_vsock_skb_put(skb, payload_len);
+	if (!payload_len)
+		return skb;
 
 	if (skb_copy_datagram_from_iter(skb, 0, &iov_iter, payload_len)) {
 		vq_err(vq, "Failed to copy %zu byte payload\n", payload_len);
