@@ -264,6 +264,7 @@ ovpn_add_peer() {
 						1 0 ${OVPN_ALG} 0 data64.key
 				done
 			}) &
+			OVPN_TCP_KEYS_PID=$!
 			sleep 5
 		else
 			peer_ns="ovpn_peer${1}"
@@ -279,6 +280,18 @@ ovpn_add_peer() {
 				${PEER_ID} ${TX_ID} 10.10.${1}.1 1 data64.key
 		fi
 	fi
+}
+
+# In TCP mode the server accepts the peers and installs their data keys from a
+# background subshell. "listen" only returns once every peer has connected, so
+# the key installation necessarily runs after ovpn_add_peer() has been called
+# for the last peer. Wait for that subshell to finish before generating any
+# traffic, otherwise the first packets may race the key installation and get
+# dropped for lack of a key.
+ovpn_wait_tcp_keys() {
+	[ -n "${OVPN_TCP_KEYS_PID:-}" ] || return 0
+
+	wait "${OVPN_TCP_KEYS_PID}"
 }
 
 ovpn_compare_ntfs() {
