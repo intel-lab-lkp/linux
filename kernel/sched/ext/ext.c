@@ -5075,6 +5075,7 @@ static void process_deferred_reenq_users(struct rq *rq)
 			dsq_pcpu = container_of(dru, struct scx_dsq_pcpu,
 						deferred_reenq_user);
 			dsq = dsq_pcpu->dsq;
+			refcount_inc(&dsq->deferred_reenq_refs);
 			reenq_flags = dru->flags;
 			WRITE_ONCE(dru->flags, 0);
 			list_del_init(&dru->node);
@@ -5086,10 +5087,14 @@ static void process_deferred_reenq_users(struct rq *rq)
 		/* destroy_dsq() may have raced and invalidated @dsq, nothing to reenq */
 		dsq_id = READ_ONCE(dsq->id);
 		if (unlikely(dsq_id == SCX_DSQ_INVALID))
-			continue;
+			goto put_dsq;
 
 		BUG_ON(dsq_id & SCX_DSQ_FLAG_BUILTIN);
 		reenq_user(rq, dsq, reenq_flags);
+
+put_dsq:
+		if (refcount_dec_and_test(&dsq->deferred_reenq_refs))
+			kfree(dsq);
 	}
 }
 
@@ -5583,6 +5588,7 @@ s32 scx_init_dsq(struct scx_dispatch_q *dsq, u64 dsq_id, struct scx_sched *sch)
 	if (dsq_id & SCX_DSQ_FLAG_BUILTIN)
 		return 0;
 
+	refcount_set(&dsq->deferred_reenq_refs, 1);
 	dsq->pcpu_user = alloc_percpu(struct scx_dsq_pcpu);
 	if (!dsq->pcpu_user)
 		return -ENOMEM;
@@ -5627,7 +5633,8 @@ static void free_dsq_rcufn(struct rcu_head *rcu)
 	struct scx_dispatch_q *dsq = container_of(rcu, struct scx_dispatch_q, rcu);
 
 	exit_dsq(dsq);
-	kfree(dsq);
+	if (refcount_dec_and_test(&dsq->deferred_reenq_refs))
+		kfree(dsq);
 }
 
 static void free_dsq_irq_workfn(struct irq_work *irq_work)
