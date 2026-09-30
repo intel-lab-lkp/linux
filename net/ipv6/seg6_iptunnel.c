@@ -18,6 +18,8 @@
 #include <net/ip6_fib.h>
 #include <net/route.h>
 #include <net/seg6.h>
+#include <net/dst_metadata.h>
+#include <net/xfrm.h>
 #include <linux/seg6.h>
 #include <linux/seg6_iptunnel.h>
 #include <net/addrconf.h>
@@ -58,6 +60,26 @@ struct seg6_lwt {
 static inline struct seg6_lwt *seg6_lwt_lwtunnel(struct lwtunnel_state *lwt)
 {
 	return (struct seg6_lwt *)lwt->data;
+}
+
+static struct lwtunnel_state *seg6_lwt_state(struct dst_entry *dst)
+{
+	dst = xfrm_dst_path(dst);
+	return dst->lwtstate;
+}
+
+static struct lwtunnel_state *seg6_lwt_state_get(struct sk_buff *skb)
+{
+	struct lwtunnel_state *lwtst;
+
+	if (!skb_valid_dst(skb))
+		return NULL;
+
+	lwtst = seg6_lwt_state(skb_dst(skb));
+	if (!lwtst || lwtst->type != LWTUNNEL_ENCAP_SEG6)
+		return NULL;
+
+	return lwtstate_get(lwtst);
 }
 
 static inline struct seg6_iptunnel_encap *
@@ -395,14 +417,12 @@ static int __seg6_do_srh_inline(struct sk_buff *skb, struct ipv6_sr_hdr *osrh,
 	return 0;
 }
 
-static int seg6_do_srh(struct sk_buff *skb, struct dst_entry *cache_dst)
+static int seg6_do_srh(struct sk_buff *skb, struct dst_entry *cache_dst,
+		       struct seg6_lwt *slwt)
 {
-	struct dst_entry *dst = skb_dst(skb);
 	struct seg6_iptunnel_encap *tinfo;
-	struct seg6_lwt *slwt;
 	int proto, err = 0;
 
-	slwt = seg6_lwt_lwtunnel(dst->lwtstate);
 	tinfo = slwt->tuninfo;
 
 	switch (tinfo->mode) {
@@ -557,18 +577,16 @@ static int seg6_input_finish(struct net *net, struct sock *sk,
 static int seg6_input_core(struct net *net, struct sock *sk,
 			   struct sk_buff *skb)
 {
-	struct dst_entry *orig_dst = skb_dst(skb);
 	struct dst_entry *dst = NULL;
 	struct lwtunnel_state *lwtst;
 	struct seg6_lwt *slwt;
 	int err;
 
-	/* We cannot dereference "orig_dst" once ip6_route_input() or
-	 * skb_dst_drop() is called. However, in order to detect a dst loop, we
-	 * need the address of its lwtstate. So, save the address of lwtstate
-	 * now and use it later as a comparison.
-	 */
-	lwtst = orig_dst->lwtstate;
+	lwtst = seg6_lwt_state_get(skb);
+	if (!lwtst) {
+		err = -EINVAL;
+		goto drop;
+	}
 
 	slwt = seg6_lwt_lwtunnel(lwtst);
 
@@ -576,7 +594,7 @@ static int seg6_input_core(struct net *net, struct sock *sk,
 	dst = dst_cache_get(&slwt->cache_input);
 	local_bh_enable();
 
-	err = seg6_do_srh(skb, dst);
+	err = seg6_do_srh(skb, dst, slwt);
 	if (unlikely(err)) {
 		dst_release(dst);
 		goto drop;
@@ -590,7 +608,7 @@ static int seg6_input_core(struct net *net, struct sock *sk,
 		}
 
 		/* cache only if we don't create a dst reference loop */
-		if (!dst->error && lwtst != dst->lwtstate) {
+		if (!dst->error && lwtst != seg6_lwt_state(dst)) {
 			local_bh_disable();
 			dst_cache_set_ip6(&slwt->cache_input, dst,
 					  &ipv6_hdr(skb)->saddr);
@@ -605,6 +623,7 @@ static int seg6_input_core(struct net *net, struct sock *sk,
 		skb_dst_set(skb, dst);
 	}
 
+	lwtstate_put(lwtst);
 	if (static_branch_unlikely(&nf_hooks_lwtunnel_enabled))
 		return NF_HOOK(NFPROTO_IPV6, NF_INET_LOCAL_OUT,
 			       dev_net(skb->dev), NULL, skb, NULL,
@@ -613,6 +632,7 @@ static int seg6_input_core(struct net *net, struct sock *sk,
 	return seg6_input_finish(dev_net(skb->dev), NULL, skb);
 drop:
 	kfree_skb(skb);
+	lwtstate_put(lwtst);
 	return err;
 }
 
@@ -667,18 +687,24 @@ static struct dst_entry *seg6_output_dst_lookup(struct net *net,
 static int seg6_output_core(struct net *net, struct sock *sk,
 			    struct sk_buff *skb)
 {
-	struct dst_entry *orig_dst = skb_dst(skb);
 	struct dst_entry *dst = NULL;
+	struct lwtunnel_state *lwtst;
 	struct seg6_lwt *slwt;
 	int err;
 
-	slwt = seg6_lwt_lwtunnel(orig_dst->lwtstate);
+	lwtst = seg6_lwt_state_get(skb);
+	if (!lwtst) {
+		err = -EINVAL;
+		goto drop;
+	}
+
+	slwt = seg6_lwt_lwtunnel(lwtst);
 
 	local_bh_disable();
 	dst = dst_cache_get(&slwt->cache_output);
 	local_bh_enable();
 
-	err = seg6_do_srh(skb, dst);
+	err = seg6_do_srh(skb, dst, slwt);
 	if (unlikely(err))
 		goto drop;
 
@@ -695,7 +721,7 @@ static int seg6_output_core(struct net *net, struct sock *sk,
 		}
 
 		/* cache only if we don't create a dst reference loop */
-		if (orig_dst->lwtstate != dst->lwtstate) {
+		if (lwtst != seg6_lwt_state(dst)) {
 			local_bh_disable();
 			dst_cache_set_ip6(&slwt->cache_output, dst, &fl6.saddr);
 			local_bh_enable();
@@ -708,6 +734,7 @@ static int seg6_output_core(struct net *net, struct sock *sk,
 
 	skb_dst_drop(skb);
 	skb_dst_set(skb, dst);
+	lwtstate_put(lwtst);
 
 	if (static_branch_unlikely(&nf_hooks_lwtunnel_enabled))
 		return NF_HOOK(NFPROTO_IPV6, NF_INET_LOCAL_OUT, net, sk, skb,
@@ -716,6 +743,7 @@ static int seg6_output_core(struct net *net, struct sock *sk,
 	return dst_output(net, sk, skb);
 drop:
 	dst_release(dst);
+	lwtstate_put(lwtst);
 	kfree_skb(skb);
 	return err;
 }
