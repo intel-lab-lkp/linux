@@ -148,6 +148,11 @@ static cpumask_var_t	subpartitions_cpus;	/* RWCS */
 static cpumask_var_t	isolated_cpus;		/* CSCB */
 
 /*
+ * Set if "cpuset_v2_mode" mount option is used
+ */
+static bool		cpuset_v2_mode;		/* Unprotected */
+
+/*
  * Set if housekeeping cpumasks are to be updated.
  */
 static bool		update_housekeeping;	/* RWCS */
@@ -439,8 +444,7 @@ static inline bool cpuset_v2(void)
  */
 static inline bool is_in_v2_mode(void)
 {
-	return cpuset_v2() ||
-	      (cpuset_cgrp_subsys.root->flags & CGRP_ROOT_CPUSET_V2_MODE);
+	return cpuset_v2() || READ_ONCE(cpuset_v2_mode);
 }
 
 /**
@@ -3722,6 +3726,8 @@ static void cpuset_bind(struct cgroup_subsys_state *root_css)
 	mutex_lock(&cpuset_mutex);
 	spin_lock_irq(&callback_lock);
 
+	WRITE_ONCE(cpuset_v2_mode,
+		   !!(cpuset_cgrp_subsys.root->flags & CGRP_ROOT_CPUSET_V2_MODE));
 	if (is_in_v2_mode()) {
 		cpumask_copy(top_cpuset.cpus_allowed, cpu_possible_mask);
 		cpumask_copy(top_cpuset.effective_xcpus, cpu_possible_mask);
