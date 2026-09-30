@@ -399,12 +399,14 @@ static int qnx6_fill_super(struct super_block *s, struct fs_context *fc)
 		sbi->sb_buf = bh1;
 		sbi->sb = (struct qnx6_super_block *)bh1->b_data;
 		brelse(bh2);
+		bh2 = NULL;
 		pr_info("superblock #1 active\n");
 	} else {
 		/* superblock #2 active */
 		sbi->sb_buf = bh2;
 		sbi->sb = (struct qnx6_super_block *)bh2->b_data;
 		brelse(bh1);
+		bh1 = NULL;
 		pr_info("superblock #2 active\n");
 	}
 mmi_success:
@@ -465,6 +467,10 @@ out2:
 out1:
 	iput(sbi->inodes);
 out:
+	if (sbi && sbi->sb_buf && !bh1 && !bh2) {
+		brelse(sbi->sb_buf);
+		sbi->sb_buf = NULL;
+	}
 	brelse(bh1);
 	brelse(bh2);
 outnobh:
