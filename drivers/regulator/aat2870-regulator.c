@@ -15,6 +15,15 @@
 #include <linux/regulator/driver.h>
 #include <linux/regulator/machine.h>
 #include <linux/mfd/aat2870.h>
+#include <linux/regulator/of_regulator.h>
+
+/* Device IDs */
+enum aat2870_regulator_id {
+	AAT2870_ID_LDOA,
+	AAT2870_ID_LDOB,
+	AAT2870_ID_LDOC,
+	AAT2870_ID_LDOD
+};
 
 struct aat2870_regulator {
 	struct aat2870_data *aat2870;
@@ -121,6 +130,13 @@ static struct aat2870_regulator aat2870_regulators[] = {
 	AAT2870_LDO(LDOD),
 };
 
+static struct of_regulator_match aat2870_regulator_matches[] = {
+	{ .name = "ldo-a" },
+	{ .name = "ldo-b" },
+	{ .name = "ldo-c" },
+	{ .name = "ldo-d" },
+};
+
 static struct aat2870_regulator *aat2870_get_regulator(int id)
 {
 	struct aat2870_regulator *ri = NULL;
@@ -136,12 +152,11 @@ static struct aat2870_regulator *aat2870_get_regulator(int id)
 		return NULL;
 
 	ri->enable_addr = AAT2870_LDO_EN;
-	ri->enable_shift = id - AAT2870_ID_LDOA;
+	ri->enable_shift = id;
 	ri->enable_mask = 0x1 << ri->enable_shift;
 
-	ri->voltage_addr = (id - AAT2870_ID_LDOA) / 2 ?
-			   AAT2870_LDO_CD : AAT2870_LDO_AB;
-	ri->voltage_shift = (id - AAT2870_ID_LDOA) % 2 ? 0 : 4;
+	ri->voltage_addr = id / 2 ? AAT2870_LDO_CD : AAT2870_LDO_AB;
+	ri->voltage_shift = id % 2 ? 0 : 4;
 	ri->voltage_mask = 0xF << ri->voltage_shift;
 
 	return ri;
@@ -152,33 +167,50 @@ static int aat2870_regulator_probe(struct platform_device *pdev)
 	struct aat2870_regulator *ri;
 	struct regulator_config config = { };
 	struct regulator_dev *rdev;
+	int ret;
 
-	ri = aat2870_get_regulator(pdev->id);
-	if (!ri) {
-		dev_err(&pdev->dev, "Invalid device ID, %d\n", pdev->id);
-		return -EINVAL;
+	ret = of_regulator_match(&pdev->dev, pdev->dev.of_node,
+				 aat2870_regulator_matches,
+				 ARRAY_SIZE(aat2870_regulator_matches));
+	if (ret < 0)
+		return dev_err_probe(&pdev->dev, ret,
+				     "Parsing of regulator node failed\n");
+
+	for (int idx = 0; idx < ARRAY_SIZE(aat2870_regulator_matches); idx++) {
+		if (!aat2870_regulator_matches[idx].of_node)
+			continue;
+
+		ri = aat2870_get_regulator(idx);
+		if (!ri)
+			return dev_err_probe(&pdev->dev, -EINVAL,
+					     "Invalid device ID, %d\n", idx);
+
+		ri->aat2870 = dev_get_drvdata(pdev->dev.parent);
+
+		config.dev = &pdev->dev;
+		config.driver_data = ri;
+
+		rdev = devm_regulator_register(&pdev->dev, &ri->desc, &config);
+		if (IS_ERR(rdev))
+			return dev_err_probe(&pdev->dev, PTR_ERR(rdev),
+					     "Failed to register regulator %s\n",
+					     ri->desc.name);
 	}
-	ri->aat2870 = dev_get_drvdata(pdev->dev.parent);
-
-	config.dev = &pdev->dev;
-	config.driver_data = ri;
-	config.init_data = dev_get_platdata(&pdev->dev);
-
-	rdev = devm_regulator_register(&pdev->dev, &ri->desc, &config);
-	if (IS_ERR(rdev)) {
-		dev_err(&pdev->dev, "Failed to register regulator %s\n",
-			ri->desc.name);
-		return PTR_ERR(rdev);
-	}
-	platform_set_drvdata(pdev, rdev);
 
 	return 0;
 }
+
+static const struct of_device_id aat2870_regulator_match_table[] = {
+	{ .compatible = "skyworks,aat2870-regulator" },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, aat2870_regulator_match_table);
 
 static struct platform_driver aat2870_regulator_driver = {
 	.driver = {
 		.name	= "aat2870-regulator",
 		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
+		.of_match_table = aat2870_regulator_match_table,
 	},
 	.probe	= aat2870_regulator_probe,
 };
