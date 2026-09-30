@@ -47,7 +47,6 @@ impl Device<device::Core<'_>> {
 impl Device<device::CoreInternal<'_>> {
     /// Enable the Single Root I/O Virtualization (SR-IOV) capability for this device,
     /// where `nr_virtfn` is number of Virtual Functions (VF) to enable.
-    #[expect(dead_code)]
     pub(crate) fn enable_sriov(&self, nr_virtfn: c_int) -> Result {
         // SAFETY:
         // `self.as_raw` returns a valid pointer to a `struct pci_dev`.
@@ -63,7 +62,6 @@ impl Device<device::CoreInternal<'_>> {
     }
 
     /// Disable the Single Root I/O Virtualization (SR-IOV) capability for this device.
-    #[expect(dead_code)]
     pub(crate) fn disable_sriov(&self) {
         // SAFETY:
         // `self.as_raw` returns a valid pointer to a `struct pci_dev`.
@@ -75,6 +73,96 @@ impl Device<device::CoreInternal<'_>> {
         // The CoreInternal device context inherits from the Bound device context,
         // which guarantees that the PF device is bound to a driver.
         unsafe { bindings::pci_disable_sriov(self.as_raw()) };
+    }
+}
+
+/// Permission to enable VFs during a driver's `sriov_enable()` callback.
+///
+/// The PCI adapter creates this token for the PF being configured. It cannot be cloned or sent
+/// to another thread, and its lifetime is restricted to the callback. Enabling VFs consumes it.
+///
+/// The callback lifetime cannot be extended:
+///
+/// ```ignore,compile_fail
+/// use kernel::pci::SriovEnable;
+///
+/// fn escape(token: SriovEnable<'_>) -> SriovEnable<'static> {
+///     token
+/// }
+/// ```
+pub struct SriovEnable<'callback> {
+    pdev: &'callback Device<device::CoreInternal<'callback>>,
+    num_vfs: u32,
+}
+
+impl<'callback> SriovEnable<'callback> {
+    /// Returns the number of VFs requested for this callback.
+    pub fn num_vfs(&self) -> u32 {
+        self.num_vfs
+    }
+
+    /// Enables between one and the requested number of VFs.
+    ///
+    /// VF drivers can probe before this method returns, so the PF resources they access must
+    /// already be initialized. The returned guard disables the VFs if subsequent setup fails.
+    /// Return it from `sriov_enable()` to leave the VFs enabled on callback success.
+    pub fn enable(self, num_vfs: u32) -> Result<SriovEnabled<'callback>> {
+        if num_vfs == 0 || num_vfs > self.num_vfs {
+            return Err(EINVAL);
+        }
+        let num_vfs = c_int::try_from(num_vfs).map_err(|_| EOVERFLOW)?;
+
+        // SAFETY: The PF's driver data and registration remain installed throughout this callback.
+        // The registration owns final VF teardown after the enable guard is disarmed.
+        if unsafe { (*self.pdev.as_raw()).vf_registration_data_rust }.is_null() {
+            return Err(ENODEV);
+        }
+
+        self.pdev.enable_sriov(num_vfs)?;
+        Ok(SriovEnabled {
+            pdev: Some(self.pdev),
+            num_vfs,
+        })
+    }
+}
+
+/// Enabled VFs awaiting successful completion of `sriov_enable()`.
+pub struct SriovEnabled<'callback> {
+    pdev: Option<&'callback Device<device::CoreInternal<'callback>>>,
+    num_vfs: c_int,
+}
+
+impl SriovEnabled<'_> {
+    #[expect(dead_code)]
+    fn disarm(mut self) -> c_int {
+        self.pdev = None;
+        self.num_vfs
+    }
+}
+
+impl Drop for SriovEnabled<'_> {
+    fn drop(&mut self) {
+        if let Some(pdev) = self.pdev.take() {
+            pdev.disable_sriov();
+        }
+    }
+}
+
+/// Permission to disable VFs during a driver's `sriov_disable()` callback.
+///
+/// The PCI adapter creates this token for the PF being configured. It cannot be cloned or sent
+/// to another thread, and its lifetime is restricted to the callback. Dropping the token does
+/// not disable VFs, allowing the callback to reject a disable request.
+pub struct SriovDisable<'callback> {
+    pdev: &'callback Device<device::CoreInternal<'callback>>,
+}
+
+impl SriovDisable<'_> {
+    /// Disables all VFs and waits for their drivers to unbind.
+    ///
+    /// The PF resources used by VF drivers must remain available until this method returns.
+    pub fn disable(self) {
+        self.pdev.disable_sriov();
     }
 }
 
