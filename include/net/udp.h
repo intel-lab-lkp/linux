@@ -436,9 +436,20 @@ int udp_lib_setsockopt(struct sock *sk, int level, int optname,
 		       int (*push_pending_frames)(struct sock *));
 struct sock *udp4_lib_lookup(const struct net *net, __be32 saddr, __be16 sport,
 			     __be32 daddr, __be16 dport, int dif);
+#if IS_ENABLED(CONFIG_IPV4)
 struct sock *__udp4_lib_lookup(const struct net *net, __be32 saddr,
 			       __be16 sport, __be32 daddr, __be16 dport,
 			       int dif, int sdif, struct sk_buff *skb);
+#else
+static inline struct sock *__udp4_lib_lookup(const struct net *net,
+					     __be32 saddr, __be16 sport,
+					     __be32 daddr, __be16 dport,
+					     int dif, int sdif,
+					     struct sk_buff *skb)
+{
+	return NULL;
+}
+#endif
 struct sock *udp4_lib_lookup_skb(const struct sk_buff *skb,
 				 __be16 sport, __be16 dport);
 struct sock *udp6_lib_lookup(const struct net *net,
