@@ -50,6 +50,7 @@ struct amdxdna_hwctx_priv {
 
 	struct cert_comp                *cert_comp;
 	u32                             hw_ctx_id;
+	bool                            has_reset;
 
 	/* Kernel-mode submission: driver fills the user HSA queue and rings
 	 * the doorbell.  umq_pkts/umq_indirect_pkts alias the user umq_bo;
@@ -165,8 +166,10 @@ enum aie4_hwctx_flags {
 int aie4_hwctx_init(struct amdxdna_hwctx *hwctx);
 void aie4_hwctx_fini(struct amdxdna_hwctx *hwctx);
 int aie4_cmd_wait(struct amdxdna_hwctx *hwctx, u64 seq, u32 timeout);
+int aie4_cmd_submit(struct amdxdna_hwctx *hwctx, struct amdxdna_sched_job *job, u64 *seq);
 int aie4_hwctx_create(struct amdxdna_hwctx *hwctx);
 void aie4_hwctx_destroy(struct amdxdna_hwctx *hwctx, enum aie4_hwctx_flags);
+int aie4_hwctx_wait_for_running(struct amdxdna_hwctx *hwctx);
 
 /* aie4_pci.c */
 int aie4_restore_power_mode(struct amdxdna_dev_hdl *ndev);
