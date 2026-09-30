@@ -143,6 +143,9 @@ u32 eth_get_headlen(const struct net_device *dev, const void *data, u32 len)
 }
 EXPORT_SYMBOL(eth_get_headlen);
 
+/* Define the out-of-line version, not the eth_type_trans_inline() wrapper. */
+#undef eth_type_trans
+
 /**
  * eth_type_trans - determine the packet's protocol ID.
  * @skb: received socket data
@@ -151,6 +154,11 @@ EXPORT_SYMBOL(eth_get_headlen);
  * The rule here is that we
  * assume 802.3 if the type field is short enough to be a length.
  * This is normal practice and works for any 'now in use' protocol.
+ *
+ * Most callers use the eth_type_trans_inline() fast path,
+ * which calls this function for less common frames.
+ *
+ * Return: the packet protocol ID, in network byte order.
  */
 __be16 eth_type_trans(struct sk_buff *skb, struct net_device *dev)
 {

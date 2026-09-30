@@ -645,6 +645,49 @@ static inline struct ethhdr *eth_skb_pull_mac(struct sk_buff *skb)
 	return eth;
 }
 
+static inline bool eth_dev_maybe_dsa(const struct net_device *dev)
+{
+#if IS_ENABLED(CONFIG_NET_DSA)
+	return !!dev->dsa_ptr;
+#else
+	return false;
+#endif
+}
+
+/**
+ * eth_type_trans_inline - determine the packet's protocol ID.
+ * @skb: received socket data
+ * @dev: receiving network device
+ *
+ * Inline fast path of eth_type_trans(), handling unicast frames
+ * sent to @dev address, with a real ethertype.
+ * Other frames are handled by the out-of-line eth_type_trans().
+ *
+ * Return: the packet protocol ID, in network byte order.
+ */
+static __always_inline __be16 eth_type_trans_inline(struct sk_buff *skb,
+						    struct net_device *dev)
+{
+	const struct ethhdr *eth = (const struct ethhdr *)skb->data;
+
+	if (likely(skb->len >= ETH_HLEN &&
+		   ether_addr_equal_64bits(eth->h_dest, dev->dev_addr) &&
+		   eth_proto_is_802_3(eth->h_proto) &&
+		   !eth_dev_maybe_dsa(dev))) {
+		skb->dev = dev;
+		skb_reset_mac_header(skb);
+		__skb_pull(skb, ETH_HLEN);
+		/* Like eth_skb_pkt_type(), leave skb->pkt_type unchanged. */
+		return eth->h_proto;
+	}
+	return (eth_type_trans)(skb, dev);
+}
+
+/* eth_type_trans() is called for every received packet by most drivers.
+ * Use (eth_type_trans)(skb, dev) to force a call to the out-of-line version.
+ */
+#define eth_type_trans(skb, dev) eth_type_trans_inline(skb, dev)
+
 /**
  * eth_skb_pad - Pad buffer to minimum number of octets for Ethernet frame
  * @skb: Buffer to pad

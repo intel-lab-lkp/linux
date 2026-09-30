@@ -1165,7 +1165,8 @@ int bpf_prog_test_run_skb(struct bpf_prog *prog, const union bpf_attr *kattr,
 			goto out;
 		}
 	}
-	skb->protocol = eth_type_trans(skb, dev);
+	/* Keep calling the out-of-line version, for fentry/fexit selftests. */
+	skb->protocol = (eth_type_trans)(skb, dev);
 	skb_reset_network_header(skb);
 
 	switch (skb->protocol) {
