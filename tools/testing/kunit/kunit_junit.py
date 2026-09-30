@@ -4,7 +4,6 @@
 #
 # Copyright (C) 2026, Google LLC and David Gow.
 
-from xml.sax.saxutils import quoteattr, XMLGenerator
 import xml.etree.ElementTree as ET
 from kunit_parser import Test, TestStatus
 from typing import Optional
