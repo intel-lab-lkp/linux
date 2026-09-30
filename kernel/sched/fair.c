@@ -4797,6 +4797,9 @@ static void reweight_eevdf(struct cfs_rq *cfs_rq, struct sched_entity *se,
 		se->deadline += avruntime;
 		se->rel_deadline = 0;
 		se->vruntime = avruntime - se->vlag;
+		/* Reweighting must not revive expired slice protection. */
+		if (curr && !rel_vprot)
+			se->vprot = se->vruntime;
 
 		if (!curr)
 			__enqueue_entity(cfs_rq, se);
