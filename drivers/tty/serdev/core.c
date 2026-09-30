@@ -142,6 +142,11 @@ void serdev_device_remove(struct serdev_device *serdev)
 	struct serdev_controller *ctrl = serdev->ctrl;
 
 	device_unregister(&serdev->dev);
+
+	/* Warn if driver did not close the serial device. */
+	if (ctrl->ops->close && WARN_ON(ctrl->ops->close(ctrl)))
+		pm_runtime_put(&ctrl->dev);
+
 	ctrl->serdev = NULL;
 }
 EXPORT_SYMBOL_GPL(serdev_device_remove);
@@ -181,9 +186,8 @@ void serdev_device_close(struct serdev_device *serdev)
 	if (!ctrl || !ctrl->ops->close)
 		return;
 
-	pm_runtime_put(&ctrl->dev);
-
-	ctrl->ops->close(ctrl);
+	if (ctrl->ops->close(ctrl))
+		pm_runtime_put(&ctrl->dev);
 }
 EXPORT_SYMBOL_GPL(serdev_device_close);
 

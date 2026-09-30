@@ -16,6 +16,7 @@ struct serport {
 	struct tty_driver *tty_drv;
 	int tty_idx;
 	unsigned long flags;
+	struct mutex lock; /* lock preventing modification of flags */
 };
 
 /*
@@ -28,6 +29,8 @@ static size_t ttyport_receive_buf(struct tty_port *port, const u8 *cp,
 	struct serdev_controller *ctrl = port->client_data;
 	struct serport *serport = serdev_controller_get_drvdata(ctrl);
 	size_t ret;
+
+	guard(mutex)(&serport->lock);
 
 	if (!test_bit(SERPORT_ACTIVE, &serport->flags))
 		return 0;
@@ -99,14 +102,23 @@ static int ttyport_open(struct serdev_controller *ctrl)
 	struct ktermios ktermios;
 	int ret;
 
+	mutex_lock(&serport->lock);
+
+	if (test_bit(SERPORT_ACTIVE, &serport->flags)) {
+		ret = -EALREADY;
+		goto err_flags_unlock;
+	}
+
 	tty = tty_init_dev(serport->tty_drv, serport->tty_idx);
-	if (IS_ERR(tty))
-		return PTR_ERR(tty);
+	if (IS_ERR(tty)) {
+		ret = PTR_ERR(tty);
+		goto err_flags_unlock;
+	}
 	serport->tty = tty;
 
 	if (!tty->ops->open || !tty->ops->close) {
 		ret = -ENODEV;
-		goto err_unlock;
+		goto err_tty_unlock;
 	}
 
 	ret = tty->ops->open(serport->tty, NULL);
@@ -130,23 +142,30 @@ static int ttyport_open(struct serdev_controller *ctrl)
 
 	set_bit(SERPORT_ACTIVE, &serport->flags);
 
+	mutex_unlock(&serport->lock);
+
 	return 0;
 
 err_close:
 	tty->ops->close(tty, NULL);
-err_unlock:
+err_tty_unlock:
 	tty_unlock(tty);
 	tty_release_struct(tty, serport->tty_idx);
+err_flags_unlock:
+	mutex_unlock(&serport->lock);
 
 	return ret;
 }
 
-static void ttyport_close(struct serdev_controller *ctrl)
+static bool ttyport_close(struct serdev_controller *ctrl)
 {
 	struct serport *serport = serdev_controller_get_drvdata(ctrl);
 	struct tty_struct *tty = serport->tty;
 
-	clear_bit(SERPORT_ACTIVE, &serport->flags);
+	guard(mutex)(&serport->lock);
+
+	if (!__test_and_clear_bit(SERPORT_ACTIVE, &serport->flags))
+		return false;
 
 	tty_lock(tty);
 	if (tty->ops->close)
@@ -154,6 +173,8 @@ static void ttyport_close(struct serdev_controller *ctrl)
 	tty_unlock(tty);
 
 	tty_release_struct(tty, serport->tty_idx);
+
+	return true;
 }
 
 static unsigned int ttyport_set_baudrate(struct serdev_controller *ctrl, unsigned int speed)
@@ -287,6 +308,8 @@ struct device *serdev_tty_port_register(struct tty_port *port,
 
 	port->client_ops = &client_ops;
 	port->client_data = ctrl;
+
+	mutex_init(&serport->lock);
 
 	ret = serdev_controller_add(ctrl);
 	if (ret)
