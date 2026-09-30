@@ -471,7 +471,9 @@ static void msm_dp_ctrl_config_misc1_misc0(struct msm_dp_ctrl_private *ctrl,
 
 	test_bits_depth = msm_dp_link_get_test_bits_depth(ctrl->link,
 							  msm_dp_panel->msm_dp_mode.bpp);
-	colorimetry_cfg = msm_dp_link_get_colorimetry_config(ctrl->link);
+	/* A video test request must not override the HDR quantization range. */
+	colorimetry_cfg = msm_dp_panel->hdr_enabled ? DP_MISC0_COLORIMERY_CFG_LEGACY_RGB :
+		msm_dp_link_get_colorimetry_config(ctrl->link);
 
 	misc_val = msm_dp_read_link(ctrl, REG_DP_MISC1_MISC0);
 
@@ -2635,7 +2637,9 @@ int msm_dp_ctrl_on_stream(struct msm_dp_ctrl *msm_dp_ctrl, struct msm_dp_panel *
 			clock /= 2;
 		ret = msm_dp_utils_select_bpp(panel->msm_dp_mode.bpp / 3, 10,
 					      clock, ctrl->link->link_params.rate,
-					      ctrl->link->link_params.num_lanes);
+					      ctrl->link->link_params.num_lanes,
+					      panel->hdr_enabled && panel->hdr_sdp.db[2] !=
+					      HDMI_EOTF_TRADITIONAL_GAMMA_SDR);
 		if (ret < 0)
 			return ret;
 		panel->msm_dp_mode.bpp = ret;
@@ -2721,6 +2725,7 @@ void msm_dp_ctrl_off_link(struct msm_dp_ctrl *msm_dp_ctrl,
 	/* Link startup may have failed before enabling the link clocks. */
 	if (ctrl->link_clks_on) {
 		msm_dp_panel_disable_vsc_sdp(panel);
+		msm_dp_panel_disable_hdr_sdp(panel);
 		msm_dp_ctrl_mainlink_disable(ctrl);
 	}
 

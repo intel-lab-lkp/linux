@@ -209,7 +209,8 @@ static int msm_edp_bridge_atomic_check(struct drm_bridge *drm_bridge,
 		return -ENODEV;
 
 	conn_state->self_refresh_aware = dp->psr_supported &&
-		conn_state->colorspace == DRM_MODE_COLORIMETRY_DEFAULT;
+		conn_state->colorspace == DRM_MODE_COLORIMETRY_DEFAULT &&
+		!conn_state->hdr_output_metadata;
 
 	if (!conn_state->crtc || !crtc_state)
 		return 0;
@@ -459,6 +460,7 @@ struct drm_connector *msm_dp_drm_connector_init(struct msm_dp *msm_dp_display,
 	if (ret)
 		return ERR_PTR(ret);
 	drm_connector_attach_colorspace_property(connector);
+	drm_connector_attach_hdr_output_metadata_property(connector);
 
 	ret = drm_connector_attach_max_bpc_property(connector, 6, 10);
 	if (ret)
