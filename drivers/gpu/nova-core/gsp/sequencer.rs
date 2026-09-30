@@ -344,7 +344,7 @@ impl<'a> GspSequencer<'a> {
         bootloader_app_version: u32,
     ) -> Result {
         let seq_info = loop {
-            match cmdq.receive_msg::<GspSequence>(Cmdq::RECEIVE_TIMEOUT) {
+            match cmdq.receive_rpc_msg::<GspSequence>(Cmdq::RECEIVE_TIMEOUT) {
                 Ok(seq_info) => break seq_info,
                 Err(ERANGE) => continue,
                 Err(e) => return Err(e),
