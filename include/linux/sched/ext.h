@@ -13,6 +13,7 @@
 
 #include <linux/llist.h>
 #include <linux/rhashtable-types.h>
+#include <linux/refcount.h>
 
 enum scx_public_consts {
 	SCX_OPS_NAME_LEN	= 128,
@@ -92,6 +93,8 @@ struct scx_dispatch_q {
 	struct llist_node	free_node;
 	struct scx_sched	*sched;
 	struct scx_dsq_pcpu __percpu *pcpu_user;
+	/* one base ref held until deferred reclamation, plus detached consumers */
+	refcount_t		deferred_reenq_refs;
 	struct rcu_head		rcu;
 };
 

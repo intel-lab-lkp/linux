@@ -5075,6 +5075,7 @@ static void process_deferred_reenq_users(struct rq *rq)
 			dsq_pcpu = container_of(dru, struct scx_dsq_pcpu,
 						deferred_reenq_user);
 			dsq = dsq_pcpu->dsq;
+			refcount_inc(&dsq->deferred_reenq_refs);
 			reenq_flags = dru->flags;
 			WRITE_ONCE(dru->flags, 0);
 			list_del_init(&dru->node);
@@ -5086,10 +5087,13 @@ static void process_deferred_reenq_users(struct rq *rq)
 		/* destroy_dsq() may have raced and invalidated @dsq, nothing to reenq */
 		dsq_id = READ_ONCE(dsq->id);
 		if (unlikely(dsq_id == SCX_DSQ_INVALID))
-			continue;
+			goto put_dsq;
 
 		BUG_ON(dsq_id & SCX_DSQ_FLAG_BUILTIN);
 		reenq_user(rq, dsq, reenq_flags);
+
+put_dsq:
+		refcount_dec(&dsq->deferred_reenq_refs);
 	}
 }
 
@@ -5583,6 +5587,7 @@ s32 scx_init_dsq(struct scx_dispatch_q *dsq, u64 dsq_id, struct scx_sched *sch)
 	if (dsq_id & SCX_DSQ_FLAG_BUILTIN)
 		return 0;
 
+	refcount_set(&dsq->deferred_reenq_refs, 1);
 	dsq->pcpu_user = alloc_percpu(struct scx_dsq_pcpu);
 	if (!dsq->pcpu_user)
 		return -ENOMEM;
@@ -5609,17 +5614,25 @@ static void exit_dsq(struct scx_dispatch_q *dsq)
 		struct scx_deferred_reenq_user *dru = &pcpu->deferred_reenq_user;
 		struct rq *rq = cpu_rq(cpu);
 
-		/*
-		 * There must have been a RCU grace period since the last
-		 * insertion and @dsq should be off the deferred list by now.
-		 */
-		if (WARN_ON_ONCE(!list_empty(&dru->node))) {
-			guard(raw_spinlock_irqsave)(&rq->scx.deferred_reenq_lock);
+		guard(raw_spinlock_irqsave)(&rq->scx.deferred_reenq_lock);
+
+		if (WARN_ON_ONCE(!list_empty(&dru->node)))
 			list_del_init(&dru->node);
-		}
 	}
 
 	free_percpu(dsq->pcpu_user);
+}
+
+static void free_dsq_finish_rcufn(struct rcu_head *rcu)
+{
+	struct scx_dispatch_q *dsq = container_of(rcu, struct scx_dispatch_q, rcu);
+
+	if (!refcount_dec_if_one(&dsq->deferred_reenq_refs)) {
+		call_rcu(&dsq->rcu, free_dsq_finish_rcufn);
+		return;
+	}
+
+	kfree(dsq);
 }
 
 static void free_dsq_rcufn(struct rcu_head *rcu)
@@ -5627,7 +5640,7 @@ static void free_dsq_rcufn(struct rcu_head *rcu)
 	struct scx_dispatch_q *dsq = container_of(rcu, struct scx_dispatch_q, rcu);
 
 	exit_dsq(dsq);
-	kfree(dsq);
+	free_dsq_finish_rcufn(rcu);
 }
 
 static void free_dsq_irq_workfn(struct irq_work *irq_work)
