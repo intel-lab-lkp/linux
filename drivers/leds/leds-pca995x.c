@@ -159,6 +159,16 @@ static int pca995x_probe(struct i2c_client *client)
 		led->ldev.max_brightness = 255;
 	}
 
+	/* Disable LED all-call address and set normal mode */
+	ret = regmap_write(chip->regmap, PCA995X_MODE1, PCA995X_MODE1_CFG);
+	if (ret)
+		goto err_put_nodes;
+
+	/* IREF Output current value for all LEDn outputs */
+	ret = regmap_write(chip->regmap, chipdef->irefall, PCA995X_IREFALL_HALF_CFG);
+	if (ret)
+		goto err_put_nodes;
+
 	for (i = 0; i < chipdef->num_leds; i++) {
 		struct led_init_data init_data = {};
 
@@ -179,13 +189,7 @@ static int pca995x_probe(struct i2c_client *client)
 		led_fwnodes[i] = NULL;
 	}
 
-	/* Disable LED all-call address and set normal mode */
-	ret = regmap_write(chip->regmap, PCA995X_MODE1, PCA995X_MODE1_CFG);
-	if (ret)
-		return ret;
-
-	/* IREF Output current value for all LEDn outputs */
-	return regmap_write(chip->regmap, chipdef->irefall, PCA995X_IREFALL_HALF_CFG);
+	return 0;
 
 err_put_nodes:
 	for (i = 0; i < chipdef->num_leds; i++)
