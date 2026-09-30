@@ -316,6 +316,7 @@ static int esp_xmit(struct xfrm_state *x, struct sk_buff *skb,  netdev_features_
 	}
 
 	seq = xo->seq.low;
+	esp.seqno = cpu_to_be64(seq + ((u64)xo->seq.hi << 32));
 
 	esph = esp.esph;
 	esph->spi = x->id.spi;
@@ -333,8 +334,6 @@ static int esp_xmit(struct xfrm_state *x, struct sk_buff *skb,  netdev_features_
 
 	if (xo->seq.low < seq)
 		xo->seq.hi++;
-
-	esp.seqno = cpu_to_be64(seq + ((u64)xo->seq.hi << 32));
 
 	if (hw_offload && encap_type == UDP_ENCAP_ESPINUDP) {
 		/* In the XFRM stack, the encapsulation protocol is set to iphdr->protocol by
