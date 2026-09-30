@@ -1166,13 +1166,12 @@ static inline void set_protect_slice(struct cfs_rq *cfs_rq, struct sched_entity 
 		slice = cfs_rq_min_slice(cfs_rq);
 
 	slice = min(slice, se->slice);
+	/* A preserved deadline can extend beyond the current slice. */
+	vprot = min_vruntime(vprot, se->vruntime + calc_delta_fair(slice, se));
 
 	/* If there are shorter slices than se's one */
-	if (slice != se->slice) {
-		vprot = min_vruntime(vprot, se->vruntime + calc_delta_fair(slice, se));
-		if (sched_feat(PREEMPT_SHORT))
-			vprot = min_vruntime(vprot, ineligible_vruntime(cfs_rq));
-	}
+	if (sched_feat(PREEMPT_SHORT) && slice != se->slice)
+		vprot = min_vruntime(vprot, ineligible_vruntime(cfs_rq));
 
 	se->vprot = vprot;
 }
