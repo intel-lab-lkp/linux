@@ -34,6 +34,7 @@
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_plane.h>
 #include <drm/drm_print.h>
+#include <drm/drm_property.h>
 #include <drm/drm_vblank.h>
 #include <drm/drm_writeback.h>
 
@@ -495,6 +496,10 @@ __drm_atomic_helper_connector_state_init(struct drm_connector_state *conn_state,
 					 struct drm_connector *connector)
 {
 	conn_state->connector = connector;
+	if (connector->max_bpc_property) {
+		conn_state->max_requested_bpc = connector->max_bpc_property->values[1];
+		conn_state->max_bpc = conn_state->max_requested_bpc;
+	}
 }
 EXPORT_SYMBOL(__drm_atomic_helper_connector_state_init);
 
