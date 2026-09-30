@@ -443,6 +443,13 @@ static const struct field_mapping version_mappings[] = {
 	TDX_SYSINFO_MAP_VERSION(TDX_FIELD_UPDATE_VERSION, update_version),
 };
 
+#define TDX_SYSINFO_MAP_FEATURES(_field_id, _member) \
+	TDX_SYSINFO_MAP(_field_id, struct tdx_sys_info_features, _member)
+
+static const struct field_mapping feature_mappings[] __initconst = {
+	TDX_SYSINFO_MAP_FEATURES(TDX_FIELD_TDX_FEATURES0, tdx_features0),
+};
+
 #include "tdx_global_metadata.c"
 
 static __init int check_features(struct tdx_sys_info *sysinfo)
