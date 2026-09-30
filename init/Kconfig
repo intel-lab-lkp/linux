@@ -936,7 +936,11 @@ config UCLAMP_BUCKETS_COUNT
 
 config SCHED_PROXY_EXEC
 	bool "Proxy Execution"
-	# Avoid some build failures w/ PREEMPT_RT until it can be fixed
+	# Fixing the build failures is not enough: under PREEMPT_RT a mutex
+	# is an rt_mutex whose PI path takes pi_lock under wait_lock and
+	# rq->lock under pi_lock, while find_proxy_task() takes
+	# mutex->wait_lock under rq->lock. The two orders close a cycle that
+	# only goes away once a mutex is no longer an rt_mutex.
 	depends on !PREEMPT_RT
 	# Need to investigate how to inform sched_ext of split contexts
 	depends on !SCHED_CLASS_EXT
