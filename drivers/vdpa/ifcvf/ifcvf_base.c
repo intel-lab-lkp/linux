@@ -8,6 +8,8 @@
  *
  */
 
+#include <linux/iopoll.h>
+
 #include "ifcvf_base.h"
 
 u16 ifcvf_set_vq_vector(struct ifcvf_hw *hw, u16 qid, int vector)
@@ -201,11 +203,27 @@ void ifcvf_set_status(struct ifcvf_hw *hw, u8 status)
 	vp_iowrite8(status, &hw->common_cfg->device_status);
 }
 
-void ifcvf_reset(struct ifcvf_hw *hw)
+static bool ifcvf_reset_done(struct ifcvf_hw *hw, u8 status)
 {
+	/* A surprise-removed device reads back all ones and never resets */
+	return !status || (status == 0xff && !pci_device_is_present(hw->pdev));
+}
+
+int ifcvf_reset(struct ifcvf_hw *hw)
+{
+	u8 status;
+	int ret;
+
 	ifcvf_set_status(hw, 0);
-	while (ifcvf_get_status(hw))
-		msleep(1);
+	ret = readx_poll_timeout(ifcvf_get_status, hw, status,
+				 ifcvf_reset_done(hw, status),
+				 1000, IFCVF_RESET_TIMEOUT_US);
+	if (ret) {
+		IFCVF_ERR(hw->pdev, "timed out waiting for device reset\n");
+		return ret;
+	}
+
+	return status ? -ENODEV : 0;
 }
 
 u64 ifcvf_get_hw_features(struct ifcvf_hw *hw)
