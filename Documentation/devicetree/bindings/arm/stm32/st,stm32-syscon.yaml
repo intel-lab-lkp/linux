@@ -39,6 +39,23 @@ properties:
   "#clock-cells":
     const: 0
 
+  "#address-cells":
+    const: 1
+
+  "#size-cells":
+    enum: [1, 2]
+
+  ranges: true
+
+patternProperties:
+  "^nvram@[0-9a-f]+$":
+    type: object
+    description:
+      TAMP backup registers exposed as an NVMEM provider. See
+      nvmem/st,stm32-tamp-nvram.yaml.
+    required:
+      - compatible
+
 required:
   - compatible
   - reg
@@ -61,6 +78,19 @@ allOf:
     then:
       required:
         - "#clock-cells"
+  - if:
+      not:
+        properties:
+          compatible:
+            contains:
+              const: st,stm32-tamp
+    then:
+      properties:
+        "#address-cells": false
+        "#size-cells": false
+        ranges: false
+      patternProperties:
+        "^nvram@[0-9a-f]+$": false
 
 additionalProperties: false
 
