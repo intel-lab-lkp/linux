@@ -403,6 +403,24 @@ struct hfs_btree *hfs_btree_open(struct super_block *sb, u32 id)
 	tree->inode->i_mapping->a_ops = &hfsplus_aops;
 	iput(tree->inode);
  free_tree:
+	/*
+	 * A B*tree node may already have been inserted into tree->node_hash
+	 * (e.g. an errored head node from hfs_bnode_find()).  Only
+	 * hfs_btree_close() frees hashed nodes, so a bare kfree(tree) here
+	 * leaks them.  Release them before freeing the tree.
+	 */
+	{
+		int i;
+		struct hfs_bnode *node;
+
+		for (i = 0; i < NODE_HASH_SIZE; i++) {
+			while ((node = tree->node_hash[i])) {
+				tree->node_hash[i] = node->next_hash;
+				hfs_bnode_free(node);
+				tree->node_hash_cnt--;
+			}
+		}
+	}
 	kfree(tree);
 	return NULL;
 }
