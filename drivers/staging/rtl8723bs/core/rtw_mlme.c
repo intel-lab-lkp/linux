@@ -931,7 +931,7 @@ void rtw_scan_abort(struct adapter *adapter)
 	start = jiffies;
 	pmlmeext->scan_abort = true;
 	while (check_fwstate(pmlmepriv, _FW_UNDER_SURVEY)
-	       && jiffies_to_msecs(start) <= 200) {
+	       && jiffies_to_msecs(jiffies - start) <= 200) {
 		if (adapter->driver_stopped || adapter->bSurpriseRemoved)
 			break;
 
