@@ -2230,6 +2230,9 @@ static int iwl_mld_set_key_add(struct iwl_mld *mld,
 	case WLAN_CIPHER_SUITE_CCMP:
 	case WLAN_CIPHER_SUITE_GCMP:
 	case WLAN_CIPHER_SUITE_GCMP_256:
+		if (fips_enabled && (key->flags & IEEE80211_KEY_FLAG_PAIRWISE))
+			key->flags |= IEEE80211_KEY_FLAG_SW_MGMT_TX;
+		break;
 	case WLAN_CIPHER_SUITE_AES_CMAC:
 	case WLAN_CIPHER_SUITE_BIP_GMAC_128:
 	case WLAN_CIPHER_SUITE_BIP_GMAC_256:

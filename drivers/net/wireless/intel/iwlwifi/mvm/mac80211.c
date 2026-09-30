@@ -4247,6 +4247,8 @@ static int __iwl_mvm_mac_set_key(struct ieee80211_hw *hw,
 	case WLAN_CIPHER_SUITE_GCMP_256:
 		if (!iwl_mvm_has_new_tx_api(mvm))
 			key->flags |= IEEE80211_KEY_FLAG_PUT_IV_SPACE;
+		if (fips_enabled && (key->flags & IEEE80211_KEY_FLAG_PAIRWISE))
+			key->flags |= IEEE80211_KEY_FLAG_SW_MGMT_TX;
 		break;
 	case WLAN_CIPHER_SUITE_AES_CMAC:
 	case WLAN_CIPHER_SUITE_BIP_GMAC_128:
