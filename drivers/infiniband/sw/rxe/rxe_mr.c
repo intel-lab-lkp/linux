@@ -436,6 +436,11 @@ int copy_data(
 		goto err2;
 	}
 
+	if (unlikely(dma->cur_sge >= dma->num_sge)) {
+		err = -EINVAL;
+		goto err2;
+	}
+
 	if (sge->length && (offset < sge->length)) {
 		mr = lookup_mr(pd, access, sge->lkey, RXE_LOOKUP_LOCAL);
 		if (!mr) {
