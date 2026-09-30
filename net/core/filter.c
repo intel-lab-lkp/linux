@@ -56,6 +56,7 @@
 #include <net/sock_reuseport.h>
 #include <net/busy_poll.h>
 #include <net/tcp.h>
+#include <net/tcp_ecn.h>
 #include <net/gre.h>
 #include <net/xfrm.h>
 #include <net/udp.h>
@@ -12610,6 +12611,66 @@ __bpf_kfunc int bpf_sock_ops_enable_tx_tstamp(struct bpf_sock_ops_kern *skops,
 }
 
 /**
+ * bpf_sock_ops_set_ecn_mode() - Set the per-socket TCP ECN negotiation mode.
+ * @skops: &bpf_sock_ops_kern context of the sockops program
+ * @mode: value in the range accepted by the tcp_ecn sysctl (0-5), or
+ *	TCP_ECN_MODE_UNSPEC to defer to the sysctl
+ *
+ * Overrides net.ipv4.tcp_ecn for this socket only. The mode is consulted
+ * during connection establishment, so the kfunc may only be called from
+ * BPF_SOCK_OPS_TCP_CONNECT_CB (before the SYN is built) or from
+ * BPF_SOCK_OPS_TCP_LISTEN_CB, in which case the mode is consulted for each
+ * incoming connection to decide ECN negotiation during the handshake.
+ *
+ * Return: 0 on success, -EOPNOTSUPP when called from any other sockops
+ *	callback, -EINVAL if @mode is out of range.
+ */
+__bpf_kfunc int bpf_sock_ops_set_ecn_mode(struct bpf_sock_ops_kern *skops,
+					  u32 mode)
+{
+	if (skops->op != BPF_SOCK_OPS_TCP_CONNECT_CB &&
+	    skops->op != BPF_SOCK_OPS_TCP_LISTEN_CB)
+		return -EOPNOTSUPP;
+
+	if (!skops->is_fullsock)
+		return -EOPNOTSUPP;
+
+	if (mode != TCP_ECN_MODE_UNSPEC && mode > TCP_ECN_IN_ACCECN_OUT_NOECN)
+		return -EINVAL;
+
+	WRITE_ONCE(tcp_sk(skops->sk)->ecn_mode, mode);
+	return 0;
+}
+
+/**
+ * bpf_sock_ops_set_accecn_option() - Set the per-socket AccECN option mode.
+ * @skops: &bpf_sock_ops_kern context of the sockops program
+ * @opt: value in the range accepted by the tcp_ecn_option sysctl (0-3), or
+ *	TCP_ACCECN_OPTION_UNSPEC to defer to the sysctl
+ *
+ * Overrides net.ipv4.tcp_ecn_option for this socket only. Unlike the ECN
+ * mode, the option setting is consulted for the whole lifetime of an AccECN
+ * connection, so it may be changed from any sockops callback that runs on a
+ * full socket, e.g. to stop sending the option once a middlebox is observed
+ * to drop segments carrying it.
+ *
+ * Return: 0 on success, -EOPNOTSUPP if @skops is not a full socket, -EINVAL
+ *	if @opt is out of range.
+ */
+__bpf_kfunc int bpf_sock_ops_set_accecn_option(struct bpf_sock_ops_kern *skops,
+					       u32 opt)
+{
+	if (!skops->is_fullsock)
+		return -EOPNOTSUPP;
+
+	if (opt != TCP_ACCECN_OPTION_UNSPEC && opt > TCP_ACCECN_OPTION_PERSIST)
+		return -EINVAL;
+
+	WRITE_ONCE(tcp_sk(skops->sk)->ecn_option, opt);
+	return 0;
+}
+
+/**
  * bpf_xdp_pull_data() - Pull in non-linear xdp data.
  * @x: &xdp_md associated with the XDP buffer
  * @len: length of data to be made directly accessible in the linear part
@@ -12822,6 +12883,8 @@ BTF_KFUNCS_END(bpf_kfunc_check_set_tcp_reqsk)
 
 BTF_KFUNCS_START(bpf_kfunc_check_set_sock_ops)
 BTF_ID_FLAGS(func, bpf_sock_ops_enable_tx_tstamp)
+BTF_ID_FLAGS(func, bpf_sock_ops_set_ecn_mode)
+BTF_ID_FLAGS(func, bpf_sock_ops_set_accecn_option)
 BTF_KFUNCS_END(bpf_kfunc_check_set_sock_ops)
 
 BTF_KFUNCS_START(bpf_kfunc_check_set_icmp_send)

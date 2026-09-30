@@ -412,6 +412,12 @@ struct tcp_sock {
 	u8	keepalive_probes; /* num of allowed keep alive probes	*/
 	u8	accecn_fail_mode:4,	/* AccECN failure handling */
 		saw_accecn_opt:2;	/* An AccECN option was seen */
+	u8	ecn_mode;	/* Per-socket ECN mode set via BPF
+				 * (TCP_ECN_MODE_UNSPEC = use sysctl)
+				 */
+	u8	ecn_option;	/* Per-socket AccECN option set via BPF
+				 * (TCP_ACCECN_OPTION_UNSPEC = use sysctl)
+				 */
 	u32	tcp_tx_delay;	/* delay (in usec) added to TX packets */
 
 /* RTT measurement */
