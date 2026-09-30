@@ -244,16 +244,6 @@ static struct sk_buff *sja1105_pvid_tag_control_pkt(struct dsa_port *dp,
 	__be16 xmit_tpid = htons(sja1105_xmit_tpid(dp));
 	struct vlan_ethhdr *hdr;
 
-	/* If VLAN tag is in hwaccel area, move it to the payload
-	 * to deal with both cases uniformly and to ensure that
-	 * the VLANs are added in the right order.
-	 */
-	if (unlikely(skb_vlan_tag_present(skb))) {
-		skb = __vlan_hwaccel_push_inside(skb);
-		if (!skb)
-			return NULL;
-	}
-
 	hdr = skb_vlan_eth_hdr(skb);
 
 	/* If skb is already VLAN-tagged, leave that VLAN ID in place */

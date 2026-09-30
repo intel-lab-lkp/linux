@@ -20,6 +20,7 @@
 #include <net/tc_act/tc_mirred.h>
 #include <linux/if_bridge.h>
 #include <linux/if_hsr.h>
+#include <linux/if_vlan.h>
 #include <net/dcbnl.h>
 #include <linux/netpoll.h>
 #include <linux/string.h>
@@ -934,6 +935,18 @@ static netdev_tx_t dsa_user_xmit(struct sk_buff *skb, struct net_device *dev)
 	 */
 	if (dev->needed_tailroom)
 		eth_skb_pad(skb);
+
+	/* If the conduit NIC has tx-vlan-offload enabled (or it is fixed:on and
+	 * cannot be turned off, e.g. imx-dwmac), it will insert the 802.1Q
+	 * header *after* whatever the tagger prepends, producing the wrong
+	 * on-wire ordering. Materialise any hwaccel VLAN tag into the payload
+	 * here, once, before handing the skb to the tagger.
+	 */
+	if (skb_vlan_tag_present(skb)) {
+		skb = __vlan_hwaccel_push_inside(skb);
+		if (!skb)
+			return NETDEV_TX_OK;
+	}
 
 	/* Transmit function may have to reallocate the original SKB,
 	 * in which case it must have freed it. Taggers will drop the
