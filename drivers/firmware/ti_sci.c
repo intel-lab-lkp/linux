@@ -43,18 +43,13 @@ static DEFINE_MUTEX(ti_sci_list_mutex);
 /**
  * struct ti_sci_xfer - Structure representing a message flow
  * @tx_message:	Transmit message
- * @tx_buf:	Pointer to the message to send
  * @rx_buf:	Pointer to store received message
  * @rx_len:	Receive message length
  * @xfer_buf:	Preallocated buffer to store receive message
- *		Since we work with request-ACK protocol, we can
- *		reuse the same buffer for the rx path as we
- *		use for the tx path.
  * @done:	completion event
  */
 struct ti_sci_xfer {
 	struct ti_msgmgr_message tx_message;
-	void *tx_buf;
 	void *rx_buf;
 	u8 rx_len;
 	u8 *xfer_buf;
@@ -372,16 +367,16 @@ static struct ti_sci_xfer *ti_sci_get_one_xfer(struct ti_sci_info *info,
 
 	xfer = &minfo->xfer_block[xfer_id];
 
-	hdr = (struct ti_sci_msg_hdr *)xfer->tx_message.buf;
 	xfer->tx_message.len = tx_message_size;
 	xfer->tx_message.chan_rx = info->chan_rx;
 	xfer->tx_message.timeout_rx_ms = info->desc->max_rx_timeout_ms;
-	xfer->tx_buf = tx_message;
+	xfer->tx_message.buf = tx_message;
 	xfer->rx_buf = rx_message;
 	xfer->rx_len = (u8)rx_message_size;
 
 	reinit_completion(&xfer->done);
 
+	hdr = (struct ti_sci_msg_hdr *)tx_message;
 	hdr->seq = xfer_id;
 	hdr->type = msg_type;
 	hdr->host = info->host_id;
@@ -486,10 +481,6 @@ static inline int ti_sci_do_xfer(const struct ti_sci_handle *handle,
 				   rx_message, rx_message_size, caller);
 	if (IS_ERR(xfer))
 		return PTR_ERR(xfer);
-
-	memcpy(xfer->xfer_buf + sizeof(struct ti_sci_msg_hdr),
-	       xfer->tx_buf + sizeof(struct ti_sci_msg_hdr),
-	       xfer->tx_message.len - sizeof(struct ti_sci_msg_hdr));
 
 	ret = mbox_send_message(info->chan_tx, &xfer->tx_message);
 	if (ret < 0) {
@@ -3396,7 +3387,6 @@ static int ti_sci_probe(struct platform_device *pdev)
 		if (!xfer->xfer_buf)
 			return -ENOMEM;
 
-		xfer->tx_message.buf = xfer->xfer_buf;
 		init_completion(&xfer->done);
 	}
 
