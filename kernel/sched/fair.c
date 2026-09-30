@@ -4431,7 +4431,7 @@ retry_pids:
 		 */
 		placement_scan = balancing;
 		if (placement_scan && vma->vm_file) {
-			if ((vma->vm_flags & (VM_READ | VM_WRITE)) == VM_READ)
+			if (vma_test(vma, VMA_READ_BIT) && !vma_test(vma, VMA_WRITE_BIT))
 				placement_scan = false;
 		}
 
