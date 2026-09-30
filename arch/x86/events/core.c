@@ -2261,7 +2261,7 @@ static int __init init_hw_perf_events(void)
 			goto out2;
 	} else {
 		struct x86_hybrid_pmu *hybrid_pmu;
-		int i, j;
+		int i;
 
 		for (i = 0; i < x86_pmu.num_hybrid_pmus; i++) {
 			hybrid_pmu = &x86_pmu.hybrid_pmu[i];
@@ -2273,15 +2273,13 @@ static int __init init_hw_perf_events(void)
 
 			err = perf_pmu_register(&hybrid_pmu->pmu, hybrid_pmu->name,
 						(hybrid_pmu->pmu_type == hybrid_big) ? PERF_TYPE_RAW : -1);
-			if (err)
-				break;
-		}
-
-		if (i < x86_pmu.num_hybrid_pmus) {
-			for (j = 0; j < i; j++)
-				perf_pmu_unregister(&x86_pmu.hybrid_pmu[j].pmu);
-			pr_warn("Failed to register hybrid PMUs\n");
-			goto out2;
+			if (err) {
+				while (i--)
+					perf_pmu_unregister(&x86_pmu.hybrid_pmu[i].pmu);
+				pr_warn("Failed to register hybrid PMU %s: %d\n",
+					hybrid_pmu->name, err);
+				goto out2;
+			}
 		}
 	}
 
