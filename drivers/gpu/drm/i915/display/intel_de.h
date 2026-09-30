@@ -158,6 +158,12 @@ intel_de_rmw_fw(struct intel_display *display, intel_reg_t reg, u32 clear, u32 s
 	return old;
 }
 
+static inline void
+intel_de_posting_read_fw(struct intel_display *display, intel_reg_t reg)
+{
+	intel_de_read_fw(display, reg);
+}
+
 static inline u32
 intel_de_read_notrace(struct intel_display *display, intel_reg_t reg)
 {
