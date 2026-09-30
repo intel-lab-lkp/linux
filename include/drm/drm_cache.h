@@ -34,6 +34,9 @@
 #define _DRM_CACHE_H_
 
 #include <linux/scatterlist.h>
+#if defined(CONFIG_RISCV)
+#include <linux/pgtable.h>
+#endif
 
 struct iosys_map;
 
@@ -75,6 +78,24 @@ static inline bool drm_arch_can_wc_memory(void)
 	 * memory regions.
 	 */
 	return false;
+#else
+	return true;
+#endif
+}
+
+static inline bool drm_arch_can_map_coherent(void)
+{
+#if defined(CONFIG_RISCV)
+	/*
+	 * Early ratified versions of RISC-V privileged architecture manual
+	 * lacks any standardized way to override the cacheability of the
+	 * main memory region, from which framebuffers are allocated.
+	 *
+	 * In this case pgprot_writecombine() would just be a noop and manual
+	 * cache maintenance is required.
+	 */
+	return pgprot_val(pgprot_writecombine(PAGE_KERNEL)) !=
+	       pgprot_val(PAGE_KERNEL);
 #else
 	return true;
 #endif
