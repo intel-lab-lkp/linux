@@ -164,18 +164,6 @@ intel_de_posting_read_fw(struct intel_display *display, intel_reg_t reg)
 	intel_de_read_fw(display, reg);
 }
 
-static inline u32
-intel_de_read_notrace(struct intel_display *display, intel_reg_t reg)
-{
-	return intel_uncore_read_notrace(__to_uncore(display), reg);
-}
-
-static inline void
-intel_de_write_notrace(struct intel_display *display, intel_reg_t reg, u32 val)
-{
-	intel_uncore_write_notrace(__to_uncore(display), reg, val);
-}
-
 static __always_inline void
 intel_de_write_dsb(struct intel_display *display, struct intel_dsb *dsb,
 		   intel_reg_t reg, u32 val)
