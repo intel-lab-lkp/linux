@@ -5,6 +5,7 @@
 #include <linux/acpi.h>
 #include <linux/bitfield.h>
 #include <linux/bitops.h>
+#include <linux/cpu.h>
 #include <linux/debugfs.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
@@ -12,6 +13,7 @@
 #include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/perf_event.h>
 #include <linux/platform_device.h>
@@ -403,6 +405,8 @@ struct arm_cmn_nodeid {
 	u8 port;
 	u8 dev;
 };
+
+static void arm_cmn_migrate(struct arm_cmn *cmn, unsigned int cpu);
 
 static int arm_cmn_xyidbits(const struct arm_cmn *cmn)
 {
@@ -1519,8 +1523,42 @@ static ssize_t arm_cmn_cpumask_show(struct device *dev,
 	return sysfs_emit(buf, "%*pbl\n", cpumask_pr_args(cpumask_of(cmn->cpu)));
 }
 
+static ssize_t arm_cmn_cpumask_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf, size_t count)
+{
+	static DEFINE_MUTEX(cpumask_mutex);
+
+	struct arm_cmn *cmn = to_cmn(dev_get_drvdata(dev));
+	unsigned int cpu;
+	int err;
+
+	err = kstrtouint(buf, 0, &cpu);
+	if (err)
+		return err;
+
+	if (cpu >= nr_cpu_ids)
+		return -EINVAL;
+
+	/* Serialises multiple writers against each other */
+	mutex_lock(&cpumask_mutex);
+	/* Blocks hotplug during write */
+	cpus_read_lock();
+
+	if (!cpu_online(cpu))
+		err = -EINVAL;
+	else if (cpu != cmn->cpu)
+		arm_cmn_migrate(cmn, cpu);
+
+	cpus_read_unlock();
+	mutex_unlock(&cpumask_mutex);
+
+	return err ?: count;
+}
+
 static struct device_attribute arm_cmn_cpumask_attr =
-		__ATTR(cpumask, 0444, arm_cmn_cpumask_show, NULL);
+		__ATTR(cpumask, 0644, arm_cmn_cpumask_show,
+		       arm_cmn_cpumask_store);
 
 static ssize_t arm_cmn_identifier_show(struct device *dev,
 				       struct device_attribute *attr, char *buf)
