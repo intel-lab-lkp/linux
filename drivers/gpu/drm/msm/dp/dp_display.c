@@ -676,6 +676,10 @@ static int msm_dp_display_set_mode(struct msm_dp *msm_dp_display,
 	else
 		bpp = state->bpp;
 
+	msm_dp_panel->sdp_needs_flush = msm_dp_panel->vsc_enabled || state->vsc_enabled;
+	msm_dp_panel->colorspace = state->colorspace;
+	msm_dp_panel->vsc_enabled = state->vsc_enabled;
+	msm_dp_panel->vsc_sdp = state->vsc_sdp;
 	msm_dp_panel_init_panel_info(msm_dp_panel, adjusted_mode, bpp ? bpp : 24);
 
 	/* populate wide_bus_support to different layers */
@@ -709,7 +713,17 @@ int msm_dp_display_atomic_check(struct msm_dp *msm_dp_display,
 		return bpp;
 
 	state->bpp = bpp;
-	return 0;
+	state->colorspace = conn_state->colorspace;
+	state->vsc_enabled = drm_mode_is_420_only(info, mode) ||
+			     state->colorspace != DRM_MODE_COLORIMETRY_DEFAULT;
+	if (!state->vsc_enabled)
+		return 0;
+
+	if (dp->panel->link_caps_valid && !dp->panel->vsc_sdp_supported)
+		return -EINVAL;
+
+	return msm_dp_utils_pack_vsc_sdp(&state->vsc_sdp, state->colorspace,
+					bpp / 3, drm_mode_is_420_only(info, mode));
 }
 
 static int msm_dp_display_prepare_link(struct msm_dp_display_private *dp)
@@ -733,6 +747,9 @@ static int msm_dp_display_prepare_link(struct msm_dp_display_private *dp)
 	}
 
 	dp->stream_pm_active = true;
+
+	if (dp->panel->vsc_enabled && !dp->panel->vsc_sdp_supported)
+		return -EINVAL;
 
 	if (dp->link->sink_count == 0)
 		return -ENOTCONN;
@@ -791,7 +808,7 @@ static int msm_dp_display_post_enable(struct msm_dp *msm_dp_display)
 	msm_dp_display_handle_plugged_change(msm_dp_display, true);
 
 	if (msm_dp_display->psr_supported)
-		msm_dp_ctrl_config_psr(dp->ctrl, dp->panel);
+		msm_dp_ctrl_config_psr(dp->ctrl, dp->panel, !dp->panel->vsc_enabled);
 
 	return 0;
 }
@@ -1461,7 +1478,10 @@ void __exit msm_dp_unregister(void)
 bool msm_dp_needs_periph_flush(const struct msm_dp *msm_dp_display,
 			       const struct drm_display_mode *mode)
 {
-	return drm_mode_is_420_only(&msm_dp_display->connector->display_info, mode);
+	struct msm_dp_display_private *dp = container_of(msm_dp_display,
+					struct msm_dp_display_private, msm_dp_display);
+
+	return dp->panel->sdp_needs_flush;
 }
 
 bool msm_dp_wide_bus_available(const struct msm_dp *msm_dp_display)
