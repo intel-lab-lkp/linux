@@ -8356,16 +8356,26 @@ int stmmac_resume(struct device *dev)
 {
 	struct net_device *ndev = dev_get_drvdata(dev);
 	struct stmmac_priv *priv = netdev_priv(ndev);
+	bool irq_off;
 	int ret;
+
+	/* Resume resets the MAC, leaving every core interrupt unmasked until
+	 * the mask is written again: a link change in that window would storm.
+	 */
+	irq_off = netif_running(ndev);
+	if (irq_off)
+		disable_irq(ndev->irq);
 
 	if (priv->plat->resume) {
 		ret = priv->plat->resume(dev, priv->plat->bsp_priv);
 		if (ret)
-			return ret;
+			goto out;
 	}
 
-	if (!netif_running(ndev))
-		return 0;
+	if (!netif_running(ndev)) {
+		ret = 0;
+		goto out;
+	}
 
 	/* Power Down bit, into the PM register, is cleared
 	 * automatically as soon as a magic packet or a Wake-up frame
@@ -8388,7 +8398,7 @@ int stmmac_resume(struct device *dev)
 	if (!(priv->plat->flags & STMMAC_FLAG_SERDES_UP_AFTER_PHY_LINKUP)) {
 		ret = stmmac_legacy_serdes_power_up(priv);
 		if (ret < 0)
-			return ret;
+			goto out;
 	}
 
 	rtnl_lock();
@@ -8442,7 +8452,8 @@ init_coalesce:
 
 	netif_device_attach(ndev);
 
-	return 0;
+	ret = 0;
+	goto out;
 
 error_stop_dma:
 	stmmac_stop_all_dma(priv);
@@ -8451,6 +8462,9 @@ error_unlock:
 	stmmac_legacy_serdes_power_down(priv);
 	mutex_unlock(&priv->lock);
 	rtnl_unlock();
+out:
+	if (irq_off)
+		enable_irq(ndev->irq);
 
 	return ret;
 }
