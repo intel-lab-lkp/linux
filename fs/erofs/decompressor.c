@@ -283,6 +283,21 @@ static const char *z_erofs_transform_plain(struct z_erofs_decompress_req *rq,
 		rq->outputsize -= cur;
 	}
 
+	if (rq->alg == Z_EROFS_COMPRESSION_SHIFTED && !rq->pageofs_in &&
+	    !rq->pageofs_out && nrpages_in == nrpages_out) {
+		bool same = true;
+
+		for (ni = 0; ni < nrpages_in; ++ni) {
+			if (!rq->in[ni] || rq->in[ni] != rq->out[ni]) {
+				same = false;
+				break;
+			}
+		}
+		if (same)
+			return NULL;
+		ni = 0;
+	}
+
 	for (; rq->outputsize; rq->pageofs_in = 0, cur += insz, ni++) {
 		insz = min(PAGE_SIZE - rq->pageofs_in, rq->outputsize);
 		rq->outputsize -= insz;
@@ -295,10 +310,11 @@ static const char *z_erofs_transform_plain(struct z_erofs_decompress_req *rq,
 			po = (rq->pageofs_out + cur + pi) & ~PAGE_MASK;
 			DBG_BUGON(no >= nrpages_out);
 			cnt = min(insz - pi, PAGE_SIZE - po);
-			if (rq->out[no] == rq->in[ni])
-				memmove(kin + po,
-					kin + rq->pageofs_in + pi, cnt);
-			else if (rq->out[no])
+			if (rq->out[no] == rq->in[ni]) {
+				if (po != rq->pageofs_in + pi)
+					memmove(kin + po,
+						kin + rq->pageofs_in + pi, cnt);
+			} else if (rq->out[no])
 				memcpy_to_page(rq->out[no], po,
 					       kin + rq->pageofs_in + pi, cnt);
 			pi += cnt;

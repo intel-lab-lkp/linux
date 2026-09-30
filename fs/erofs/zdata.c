@@ -698,9 +698,19 @@ static int z_erofs_attach_page(struct z_erofs_frontend *fe,
 	int ret;
 
 	if (exclusive) {
-		/* Inplace I/O is limited to one page for uncompressed data */
+		/*
+		 * Allow multi-page inplace I/O for page-aligned SHIFTED
+		 * pclusters so that uncompressed multi-block extents read
+		 * directly into the target page cache folios without allocating
+		 * intermediate shortlived pages or copying in
+		 * z_erofs_transform_plain().
+		 */
 		if (pcl->algorithmformat < Z_EROFS_COMPRESSION_MAX ||
-		    fe->icur <= 1) {
+		    fe->icur <= 1 ||
+		    (pcl->algorithmformat == Z_EROFS_COMPRESSION_SHIFTED &&
+		     !pcl->pageofs_in && !pcl->pageofs_out &&
+		     !(bvec->offset & ~PAGE_MASK) &&
+		     bvec->end == PAGE_SIZE)) {
 			/* Try to prioritize inplace I/O here */
 			spin_lock(&pcl->lockref.lock);
 			while (fe->icur > 0) {
