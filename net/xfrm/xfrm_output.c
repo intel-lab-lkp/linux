@@ -505,6 +505,9 @@ static int xfrm_output_one(struct sk_buff *skb, int err)
 	if (err <= 0 || x->xso.type == XFRM_DEV_OFFLOAD_PACKET)
 		goto resume;
 
+	if (xfrm_offload(skb))
+		skb->encapsulation = 1;
+
 	do {
 		err = xfrm_skb_check_space(skb);
 		if (err) {
@@ -812,10 +815,10 @@ int xfrm_output(struct sock *sk, struct sk_buff *skb)
 		xfrm_state_hold(x);
 
 		xfrm_get_inner_ipproto(skb, x);
-		skb->encapsulation = 1;
 
 		if (skb_is_gso(skb)) {
-			if (skb->inner_protocol && x->props.mode == XFRM_MODE_TUNNEL)
+			if ((skb_shinfo(skb)->gso_type & SKB_GSO_DODGY) ||
+			    (skb->inner_protocol && x->props.mode == XFRM_MODE_TUNNEL))
 				return xfrm_output_gso(net, sk, skb);
 
 			skb_shinfo(skb)->gso_type |= SKB_GSO_ESP;
