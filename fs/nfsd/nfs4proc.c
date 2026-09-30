@@ -1144,7 +1144,7 @@ nfsd4_read(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	/* check stateid */
 	status = nfs4_preprocess_stateid_op(rqstp, cstate, &cstate->current_fh,
 					&read->rd_stateid, RD_STATE,
-					&read->rd_nf, NULL);
+					&read->rd_nf, NULL, NULL);
 
 	read->rd_rqstp = rqstp;
 	read->rd_fhp = &cstate->current_fh;
@@ -1342,6 +1342,7 @@ nfsd4_setattr(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		.na_dpacl	= posix_acl_dup(setattr->sa_dpacl),
 	};
 	bool save_no_wcc, deleg_attrs;
+	struct nfs4_client *stid_clp = NULL;
 	struct nfs4_stid *st = NULL;
 	struct inode *inode;
 	__be32 status = nfs_ok;
@@ -1358,7 +1359,7 @@ nfsd4_setattr(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 
 		status = nfs4_preprocess_stateid_op(rqstp, cstate,
 				&cstate->current_fh, &setattr->sa_stateid,
-				flags, NULL, &st);
+				flags, NULL, &st, &stid_clp);
 		if (status)
 			goto out_err;
 	}
@@ -1375,8 +1376,11 @@ nfsd4_setattr(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 			}
 		}
 	}
-	if (st)
+	if (st) {
 		nfs4_put_stid(st);
+		if (stid_clp)
+			nfsd4_put_client(stid_clp);
+	}
 	if (status)
 		goto out_err;
 
@@ -1439,6 +1443,7 @@ nfsd4_write(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	struct nfsd4_write *write = &u->write;
 	stateid_t *stateid = &write->wr_stateid;
 	struct nfs4_stid *stid = NULL;
+	struct nfs4_client *stid_clp = NULL;
 	struct nfsd_file *nf = NULL;
 	__be32 status = nfs_ok;
 	unsigned long cnt;
@@ -1451,13 +1456,16 @@ nfsd4_write(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	trace_nfsd_write_start(rqstp, &cstate->current_fh,
 			       write->wr_offset, cnt);
 	status = nfs4_preprocess_stateid_op(rqstp, cstate, &cstate->current_fh,
-						stateid, WR_STATE, &nf, &stid);
+						stateid, WR_STATE, &nf, &stid,
+						&stid_clp);
 	if (status)
 		return status;
 
 	if (stid) {
 		nfsd4_file_mark_deleg_written(stid->sc_file);
 		nfs4_put_stid(stid);
+		if (stid_clp)
+			nfsd4_put_client(stid_clp);
 	}
 
 	write->wr_how_written = write->wr_stable_how;
@@ -1484,12 +1492,12 @@ nfsd4_verify_copy(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		return nfserr_nofilehandle;
 
 	status = nfs4_preprocess_stateid_op(rqstp, cstate, &cstate->save_fh,
-					    src_stateid, RD_STATE, src, NULL);
+					    src_stateid, RD_STATE, src, NULL, NULL);
 	if (status)
 		goto out;
 
 	status = nfs4_preprocess_stateid_op(rqstp, cstate, &cstate->current_fh,
-					    dst_stateid, WR_STATE, dst, NULL);
+					    dst_stateid, WR_STATE, dst, NULL, NULL);
 	if (status)
 		goto out_put_src;
 
@@ -1954,7 +1962,7 @@ nfsd4_setup_inter_ssc(struct svc_rqst *rqstp,
 	/* Verify the destination stateid and set dst struct file*/
 	status = nfs4_preprocess_stateid_op(rqstp, cstate, &cstate->current_fh,
 					    &copy->cp_dst_stateid,
-					    WR_STATE, &copy->nf_dst, NULL);
+					    WR_STATE, &copy->nf_dst, NULL, NULL);
 	if (status)
 		goto out;
 
@@ -2498,12 +2506,13 @@ nfsd4_copy_notify(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	struct nfsd4_copy_notify *cn = &u->copy_notify;
 	__be32 status;
 	struct nfsd_net *nn = net_generic(SVC_NET(rqstp), nfsd_net_id);
+	struct nfs4_client *stid_clp = NULL;
 	struct nfs4_stid *stid = NULL;
 	struct nfs4_cpntf_state *cps;
 
 	status = nfs4_preprocess_stateid_op(rqstp, cstate, &cstate->current_fh,
 					&cn->cpn_src_stateid, RD_STATE, NULL,
-					&stid);
+					&stid, &stid_clp);
 	if (status)
 		return status;
 	if (!stid)
@@ -2536,6 +2545,8 @@ nfsd4_copy_notify(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	nfs4_put_cpntf_state(nn, cps);
 out:
 	nfs4_put_stid(stid);
+	if (stid_clp)
+		nfsd4_put_client(stid_clp);
 	return status;
 }
 
@@ -2548,7 +2559,7 @@ nfsd4_fallocate(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 
 	status = nfs4_preprocess_stateid_op(rqstp, cstate, &cstate->current_fh,
 					    &fallocate->falloc_stateid,
-					    WR_STATE, &nf, NULL);
+					    WR_STATE, &nf, NULL, NULL);
 	if (status != nfs_ok)
 		return status;
 
@@ -2612,7 +2623,7 @@ nfsd4_seek(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 
 	status = nfs4_preprocess_stateid_op(rqstp, cstate, &cstate->current_fh,
 					    &seek->seek_stateid,
-					    RD_STATE, &nf, NULL);
+					    RD_STATE, &nf, NULL, NULL);
 	if (status)
 		return status;
 

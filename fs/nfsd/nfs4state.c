@@ -2806,6 +2806,15 @@ static void __free_client(struct kref *k)
 }
 
 /**
+ * nfsd4_get_client - acquire a reference on an nfs4_client
+ * @clp: the client to be acquired
+ */
+static void nfsd4_get_client(struct nfs4_client *clp)
+{
+	kref_get(&clp->cl_nfsdfs.cl_ref);
+}
+
+/**
  * nfsd4_put_client - release a reference on an nfs4_client
  * @clp: the client to be released
  *
@@ -8504,7 +8513,8 @@ unlock:
 }
 
 static __be32 find_cpntf_state(struct nfsd_net *nn, stateid_t *st,
-			       struct nfs4_stid **stid)
+			       struct nfs4_stid **stid,
+			       struct nfs4_client **stid_clp)
 {
 	__be32 status;
 	struct nfs4_cpntf_state *cps = NULL;
@@ -8524,10 +8534,13 @@ static __be32 find_cpntf_state(struct nfsd_net *nn, stateid_t *st,
 	*stid = find_stateid_by_type(found, &cps->cp_p_stateid,
 				     SC_TYPE_DELEG|SC_TYPE_OPEN|SC_TYPE_LOCK,
 				     0);
-	if (*stid)
+	if (*stid) {
+		nfsd4_get_client(found);
+		*stid_clp = found;
 		status = nfs_ok;
-	else
+	} else {
 		status = nfserr_bad_stateid;
+	}
 
 	put_client_renew(found);
 out:
@@ -8551,6 +8564,7 @@ void nfs4_put_cpntf_state(struct nfsd_net *nn, struct nfs4_cpntf_state *cps)
  * @flags: flags describing type of operation to be done
  * @nfp: optional nfsd_file return pointer (may be NULL)
  * @cstid: optional returned nfs4_stid pointer (may be NULL)
+ * @cstid_clp: client reference paired with @cstid (required with @cstid)
  *
  * Given info from the client, look up a nfs4_stid for the operation. On
  * success, it returns a reference to the nfs4_stid and/or the nfsd_file
@@ -8560,10 +8574,11 @@ __be32
 nfs4_preprocess_stateid_op(struct svc_rqst *rqstp,
 		struct nfsd4_compound_state *cstate, struct svc_fh *fhp,
 		stateid_t *stateid, int flags, struct nfsd_file **nfp,
-		struct nfs4_stid **cstid)
+		struct nfs4_stid **cstid, struct nfs4_client **cstid_clp)
 {
 	struct net *net = SVC_NET(rqstp);
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
+	struct nfs4_client *stid_clp = NULL;
 	struct nfs4_stid *s = NULL;
 	__be32 status;
 
@@ -8579,7 +8594,7 @@ nfs4_preprocess_stateid_op(struct svc_rqst *rqstp,
 				SC_TYPE_DELEG|SC_TYPE_OPEN|SC_TYPE_LOCK,
 				0, &s, nn);
 	if (status == nfserr_bad_stateid)
-		status = find_cpntf_state(nn, stateid, &s);
+		status = find_cpntf_state(nn, stateid, &s, &stid_clp);
 	if (status)
 		return status;
 	status = nfsd4_stid_check_stateid_generation(stateid, s,
@@ -8605,11 +8620,16 @@ done:
 		status = nfs4_check_file(rqstp, fhp, s, nfp, flags);
 out:
 	if (s) {
-		if (!status && cstid)
+		if (!status && cstid) {
 			*cstid = s;
-		else
+			*cstid_clp = stid_clp;
+			stid_clp = NULL;
+		} else {
 			nfs4_put_stid(s);
+		}
 	}
+	if (stid_clp)
+		nfsd4_put_client(stid_clp);
 	return status;
 }
 
