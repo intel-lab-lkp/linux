@@ -77,6 +77,9 @@ struct z_erofs_pcluster {
 	/* I: whether compressed data is in-lined or not */
 	bool from_meta;
 
+	/* I: whether pcluster is not registered in managed_pslots */
+	bool anon;
+
 	/* L: whether partial decompression or not */
 	bool partial;
 
@@ -775,6 +778,9 @@ static int z_erofs_register_pcluster(struct z_erofs_frontend *fe)
 	pcl->pageofs_in = pageofs_in;
 	pcl->pageofs_out = map->m_la & ~PAGE_MASK;
 	pcl->from_meta = map->m_flags & EROFS_MAP_META;
+	pcl->anon = pcl->from_meta ||
+		(READ_ONCE(sbi->opt.cache_strategy) <= EROFS_ZIP_CACHE_DISABLED &&
+		 !erofs_sb_has_dedupe(sbi));
 	fe->mode = Z_EROFS_PCLUSTER_FOLLOWED;
 
 	/*
@@ -784,7 +790,7 @@ static int z_erofs_register_pcluster(struct z_erofs_frontend *fe)
 	mutex_init(&pcl->lock);
 	DBG_BUGON(!mutex_trylock(&pcl->lock));
 
-	if (!pcl->from_meta) {
+	if (!pcl->anon) {
 		while (1) {
 			xa_lock(&sbi->managed_pslots);
 			pre = __xa_cmpxchg(&sbi->managed_pslots, pcl->pos,
@@ -819,6 +825,7 @@ static int z_erofs_pcluster_begin(struct z_erofs_frontend *fe)
 {
 	struct erofs_map_blocks *map = &fe->map;
 	struct super_block *sb = fe->inode->i_sb;
+	struct erofs_sb_info *sbi = EROFS_SB(sb);
 	struct z_erofs_pcluster *pcl = NULL;
 	void *ptr = NULL;
 	bool needretry;
@@ -840,10 +847,11 @@ static int z_erofs_pcluster_begin(struct z_erofs_frontend *fe)
 			return PTR_ERR(ptr);
 		}
 		ptr = map->buf.page;
-	} else {
+	} else if (READ_ONCE(sbi->opt.cache_strategy) > EROFS_ZIP_CACHE_DISABLED ||
+		   erofs_sb_has_dedupe(sbi)) {
 		do {
 			rcu_read_lock();
-			pcl = xa_load(&EROFS_SB(sb)->managed_pslots, map->m_pa);
+			pcl = xa_load(&sbi->managed_pslots, map->m_pa);
 			needretry = pcl && !z_erofs_get_pcluster(pcl);
 			rcu_read_unlock();
 		} while (needretry);
@@ -875,7 +883,8 @@ static int z_erofs_pcluster_begin(struct z_erofs_frontend *fe)
 				Z_EROFS_INLINE_BVECS, fe->pcl->vcnt);
 	if (!fe->pcl->from_meta) {
 		/* bind cache first when cached decompression is preferred */
-		z_erofs_bind_cache(fe);
+		if (!fe->pcl->anon)
+			z_erofs_bind_cache(fe);
 	} else {
 		folio_get(page_folio((struct page *)ptr));
 		WRITE_ONCE(fe->pcl->compressed_bvecs[0].page, ptr);
@@ -1383,7 +1392,7 @@ static int z_erofs_decompress_pcluster(struct z_erofs_backend *be, bool eio)
 	WRITE_ONCE(pcl->next, NULL);
 	mutex_unlock(&pcl->lock);
 
-	if (pcl->from_meta)
+	if (pcl->anon)
 		z_erofs_free_pcluster(pcl);
 	else
 		z_erofs_put_pcluster(sbi, pcl, try_free);
