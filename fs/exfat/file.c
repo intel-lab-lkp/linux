@@ -17,6 +17,7 @@
 #include <linux/fileattr.h>
 #include <linux/iomap.h>
 #include <linux/pagemap.h>
+#include <linux/rmap.h>
 
 #include "exfat_raw.h"
 #include "exfat_fs.h"
@@ -90,6 +91,20 @@ out:
 	 * page_mkwrite() is called and post-EOF area is zeroed.
 	 */
 	pagecache_isize_extended(inode, oldsize, inode->i_size);
+
+	if (i_blocksize(inode) >= PAGE_SIZE && (oldsize & (PAGE_SIZE - 1))) {
+		struct folio *folio;
+
+		folio = filemap_lock_folio(inode->i_mapping,
+				oldsize >> PAGE_SHIFT);
+		if (!IS_ERR(folio)) {
+			if (folio_mkclean(folio))
+				folio_mark_dirty(folio);
+
+			folio_unlock(folio);
+			folio_put(folio);
+		}
+	}
 
 	inode->i_blocks = round_up(size, sbi->cluster_size) >> 9;
 	mark_inode_dirty(inode);
