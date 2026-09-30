@@ -1267,6 +1267,16 @@ static unsigned long jbd2_journal_shrink_scan(struct shrinker *shrink,
 	count = percpu_counter_read_positive(&journal->j_checkpoint_jh_count);
 	trace_jbd2_shrink_scan_exit(journal, nr_to_scan, nr_shrunk, count);
 
+	/*
+	 * A checkpoint list full of busy buffers can keep reporting a
+	 * stale, positive freeable count after nothing more can be
+	 * reclaimed. Stop this reclaim pass once a call frees nothing,
+	 * instead of burning through do_shrink_slab()'s scan budget
+	 * retrying against buffers whose writeback won't finish any sooner.
+	 */
+	if (nr_shrunk == 0)
+		return SHRINK_STOP;
+
 	return nr_shrunk;
 }
 
