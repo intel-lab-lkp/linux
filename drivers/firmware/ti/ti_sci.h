@@ -13,7 +13,106 @@
 #define __TI_SCI_H
 
 #include <linux/compiler_types.h>
+#include <linux/completion.h>
+#include <linux/container_of.h>
+#include <linux/hashtable.h>
+#include <linux/mailbox_client.h>
+#include <linux/mutex.h>
+#include <linux/semaphore.h>
+#include <linux/soc/ti/ti-msgmgr.h>
+#include <linux/soc/ti/ti_sci_protocol.h>
+#include <linux/spinlock.h>
 #include <linux/types.h>
+
+/**
+ * struct ti_sci_xfer - Structure representing a message flow
+ * @tx_message:	Transmit message
+ * @rx_buf:	Pointer to store received message
+ * @rx_len:	Receive message length
+ * @done:	completion event
+ */
+struct ti_sci_xfer {
+	struct ti_msgmgr_message tx_message;
+	void *rx_buf;
+	u8 rx_len;
+	struct completion done;
+};
+
+/**
+ * struct ti_sci_xfers_info - Structure to manage transfer information
+ * @sem_xfer_count:	Counting Semaphore for managing max simultaneous
+ *			Messages.
+ * @xfer_block:		Preallocated Message array
+ * @xfer_alloc_table:	Bitmap table for allocated messages.
+ *			Index of this bitmap table is also used for message
+ *			sequence identifier.
+ * @xfer_lock:		Protection for message allocation
+ */
+struct ti_sci_xfers_info {
+	struct semaphore sem_xfer_count;
+	struct ti_sci_xfer *xfer_block;
+	unsigned long *xfer_alloc_table;
+	/* protect transfer allocation */
+	spinlock_t xfer_lock;
+};
+
+/**
+ * struct ti_sci_desc - Description of SoC integration
+ * @default_host_id:	Host identifier representing the compute entity
+ * @max_rx_timeout_ms:	Timeout for communication with SoC (in Milliseconds)
+ * @max_msgs: Maximum number of messages that can be pending
+ *		  simultaneously in the system
+ * @max_msg_size: Maximum size of data per message that can be handled.
+ */
+struct ti_sci_desc {
+	u8 default_host_id;
+	int max_rx_timeout_ms;
+	int max_msgs;
+	int max_msg_size;
+};
+
+/**
+ * struct ti_sci_info - Structure representing a TI SCI instance
+ * @dev:	Device pointer
+ * @desc:	SoC description for this instance
+ * @d:		Debugfs file entry
+ * @debug_region: Memory region where the debug message are available
+ * @debug_region_size: Debug region size
+ * @debug_buffer: Buffer allocated to copy debug messages.
+ * @handle:	Instance of TI SCI handle to send to clients.
+ * @cl:		Mailbox Client
+ * @chan_tx:	Transmit mailbox channel
+ * @chan_rx:	Receive mailbox channel
+ * @minfo:	Message info
+ * @node:	list head
+ * @irqs:	List of allocated irqs
+ * @irq_lock:	Protection for irq hash list
+ * @host_id:	Host ID
+ * @fw_caps:	FW/SoC low power capabilities
+ * @users:	Number of users of this instance
+ */
+struct ti_sci_info {
+	struct device *dev;
+	const struct ti_sci_desc *desc;
+	struct dentry *d;
+	void __iomem *debug_region;
+	char *debug_buffer;
+	size_t debug_region_size;
+	struct ti_sci_handle handle;
+	struct mbox_client cl;
+	struct mbox_chan *chan_tx;
+	struct mbox_chan *chan_rx;
+	struct ti_sci_xfers_info minfo;
+	struct list_head node;
+	DECLARE_HASHTABLE(irqs, 8);
+	struct mutex irq_lock;
+	u8 host_id;
+	u64 fw_caps;
+	/* protected by ti_sci_list_mutex */
+	int users;
+};
+
+#define handle_to_ti_sci_info(h) container_of(h, struct ti_sci_info, handle)
 
 /* Generic Messages */
 #define TI_SCI_MSG_ENABLE_WDT	0x0000
@@ -1567,5 +1666,6 @@ int ti_sci_do_xfer(const struct ti_sci_handle *handle,
 
 void ti_sci_setup_device_ops(struct ti_sci_dev_ops *dops);
 void ti_sci_setup_clock_ops(struct ti_sci_clk_ops *cops);
+void ti_sci_setup_pm_ops(struct ti_sci_pm_ops *pmops);
 
 #endif /* __TI_SCI_H */

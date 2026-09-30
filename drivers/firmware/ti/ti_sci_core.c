@@ -13,11 +13,9 @@
 #include <linux/cpu.h>
 #include <linux/debugfs.h>
 #include <linux/export.h>
-#include <linux/hashtable.h>
 #include <linux/io.h>
 #include <linux/iopoll.h>
 #include <linux/kernel.h>
-#include <linux/mailbox_client.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/of.h>
@@ -25,10 +23,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_qos.h>
 #include <linux/property.h>
-#include <linux/semaphore.h>
 #include <linux/slab.h>
-#include <linux/soc/ti/ti-msgmgr.h>
-#include <linux/soc/ti/ti_sci_protocol.h>
 #include <linux/suspend.h>
 #include <linux/sys_soc.h>
 #include <linux/reboot.h>
@@ -41,53 +36,6 @@ static LIST_HEAD(ti_sci_list);
 static DEFINE_MUTEX(ti_sci_list_mutex);
 
 /**
- * struct ti_sci_xfer - Structure representing a message flow
- * @tx_message:	Transmit message
- * @rx_buf:	Pointer to store received message
- * @rx_len:	Receive message length
- * @done:	completion event
- */
-struct ti_sci_xfer {
-	struct ti_msgmgr_message tx_message;
-	void *rx_buf;
-	u8 rx_len;
-	struct completion done;
-};
-
-/**
- * struct ti_sci_xfers_info - Structure to manage transfer information
- * @sem_xfer_count:	Counting Semaphore for managing max simultaneous
- *			Messages.
- * @xfer_block:		Preallocated Message array
- * @xfer_alloc_table:	Bitmap table for allocated messages.
- *			Index of this bitmap table is also used for message
- *			sequence identifier.
- * @xfer_lock:		Protection for message allocation
- */
-struct ti_sci_xfers_info {
-	struct semaphore sem_xfer_count;
-	struct ti_sci_xfer *xfer_block;
-	unsigned long *xfer_alloc_table;
-	/* protect transfer allocation */
-	spinlock_t xfer_lock;
-};
-
-/**
- * struct ti_sci_desc - Description of SoC integration
- * @default_host_id:	Host identifier representing the compute entity
- * @max_rx_timeout_ms:	Timeout for communication with SoC (in Milliseconds)
- * @max_msgs: Maximum number of messages that can be pending
- *		  simultaneously in the system
- * @max_msg_size: Maximum size of data per message that can be handled.
- */
-struct ti_sci_desc {
-	u8 default_host_id;
-	int max_rx_timeout_ms;
-	int max_msgs;
-	int max_msg_size;
-};
-
-/**
  * struct ti_sci_irq - Description of allocated irqs
  * @node: Link to hash table
  * @desc: Description of the irq
@@ -97,49 +45,7 @@ struct ti_sci_irq {
 	struct ti_sci_msg_req_manage_irq desc;
 };
 
-/**
- * struct ti_sci_info - Structure representing a TI SCI instance
- * @dev:	Device pointer
- * @desc:	SoC description for this instance
- * @d:		Debugfs file entry
- * @debug_region: Memory region where the debug message are available
- * @debug_region_size: Debug region size
- * @debug_buffer: Buffer allocated to copy debug messages.
- * @handle:	Instance of TI SCI handle to send to clients.
- * @cl:		Mailbox Client
- * @chan_tx:	Transmit mailbox channel
- * @chan_rx:	Receive mailbox channel
- * @minfo:	Message info
- * @node:	list head
- * @irqs:	List of allocated irqs
- * @irq_lock:	Protection for irq hash list
- * @host_id:	Host ID
- * @fw_caps:	FW/SoC low power capabilities
- * @users:	Number of users of this instance
- */
-struct ti_sci_info {
-	struct device *dev;
-	const struct ti_sci_desc *desc;
-	struct dentry *d;
-	void __iomem *debug_region;
-	char *debug_buffer;
-	size_t debug_region_size;
-	struct ti_sci_handle handle;
-	struct mbox_client cl;
-	struct mbox_chan *chan_tx;
-	struct mbox_chan *chan_rx;
-	struct ti_sci_xfers_info minfo;
-	struct list_head node;
-	DECLARE_HASHTABLE(irqs, 8);
-	struct mutex irq_lock;
-	u8 host_id;
-	u64 fw_caps;
-	/* protected by ti_sci_list_mutex */
-	int users;
-};
-
 #define cl_to_ti_sci_info(c)	container_of(c, struct ti_sci_info, cl)
-#define handle_to_ti_sci_info(h) container_of(h, struct ti_sci_info, handle)
 
 #ifdef CONFIG_DEBUG_FS
 
@@ -681,128 +587,6 @@ static int ti_sci_cmd_set_io_isolation(const struct ti_sci_handle *handle,
 			     &resp, sizeof(resp));
 	if (ret) {
 		dev_err(dev, "Failed to set IO isolation\n");
-		return ret;
-	}
-
-	return 0;
-}
-
-/**
- * ti_sci_msg_cmd_lpm_wake_reason() - Get the wakeup source from LPM
- * @handle:		Pointer to TI SCI handle
- * @source:		The wakeup source that woke the SoC from LPM
- * @timestamp:		Timestamp of the wakeup event
- * @pin:		The pin that has triggered wake up
- * @mode:		The last entered low power mode
- *
- * Return: 0 if all went well, else returns appropriate error value.
- */
-static int ti_sci_msg_cmd_lpm_wake_reason(const struct ti_sci_handle *handle,
-					  u32 *source, u64 *timestamp, u8 *pin, u8 *mode)
-{
-	struct ti_sci_msg_hdr req;
-	struct ti_sci_msg_resp_lpm_wake_reason resp;
-	struct device *dev;
-	int ret = 0;
-
-	if (IS_ERR(handle))
-		return PTR_ERR(handle);
-	if (!handle)
-		return -EINVAL;
-
-	dev = handle_to_ti_sci_info(handle)->dev;
-
-	ret = ti_sci_do_xfer(handle, TI_SCI_MSG_LPM_WAKE_REASON,
-			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-			     &req, sizeof(req),
-			     &resp, sizeof(resp));
-	if (ret) {
-		dev_err(dev, "Failed to get wake reason\n");
-		return ret;
-	}
-
-	if (source)
-		*source = resp.wake_source;
-	if (timestamp)
-		*timestamp = resp.wake_timestamp;
-	if (pin)
-		*pin = resp.wake_pin;
-	if (mode)
-		*mode = resp.mode;
-
-	return 0;
-}
-
-/**
- * ti_sci_cmd_set_device_constraint() - Set LPM constraint on behalf of a device
- * @handle:	pointer to TI SCI handle
- * @id:	Device identifier
- * @state:	The desired state of device constraint: set or clear
- *
- * Return: 0 if all went well, else returns appropriate error value.
- */
-static int ti_sci_cmd_set_device_constraint(const struct ti_sci_handle *handle,
-					    u32 id, u8 state)
-{
-	struct ti_sci_msg_req_lpm_set_device_constraint req;
-	struct ti_sci_msg_hdr resp;
-	struct device *dev;
-	int ret = 0;
-
-	if (IS_ERR(handle))
-		return PTR_ERR(handle);
-	if (!handle)
-		return -EINVAL;
-
-	dev = handle_to_ti_sci_info(handle)->dev;
-
-	req.id = id;
-	req.state = state;
-
-	ret = ti_sci_do_xfer(handle, TI_SCI_MSG_LPM_SET_DEVICE_CONSTRAINT,
-			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-			     &req, sizeof(req),
-			     &resp, sizeof(resp));
-	if (ret) {
-		dev_err(dev, "Failed to set device constraint\n");
-		return ret;
-	}
-
-	return 0;
-}
-
-/**
- * ti_sci_cmd_set_latency_constraint() - Set LPM resume latency constraint
- * @handle:	pointer to TI SCI handle
- * @latency:	maximum acceptable latency (in ms) to wake up from LPM
- * @state:	The desired state of latency constraint: set or clear
- *
- * Return: 0 if all went well, else returns appropriate error value.
- */
-static int ti_sci_cmd_set_latency_constraint(const struct ti_sci_handle *handle,
-					     u16 latency, u8 state)
-{
-	struct ti_sci_msg_req_lpm_set_latency_constraint req;
-	struct ti_sci_msg_hdr resp;
-	struct device *dev;
-	int ret = 0;
-
-	if (IS_ERR(handle))
-		return PTR_ERR(handle);
-	if (!handle)
-		return -EINVAL;
-
-	dev = handle_to_ti_sci_info(handle)->dev;
-
-	req.latency = latency;
-	req.state = state;
-
-	ret = ti_sci_do_xfer(handle, TI_SCI_MSG_LPM_SET_LATENCY_CONSTRAINT,
-			     TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-			     &req, sizeof(req),
-			     &resp, sizeof(resp));
-	if (ret) {
-		dev_err(dev, "Failed to set device constraint\n");
 		return ret;
 	}
 
@@ -1708,9 +1492,7 @@ static void ti_sci_setup_ops(struct ti_sci_info *info)
 
 	if (info->fw_caps & MSG_FLAG_CAPS_LPM_DM_MANAGED) {
 		pr_debug("detected DM managed LPM in fw_caps\n");
-		pmops->lpm_wake_reason = ti_sci_msg_cmd_lpm_wake_reason;
-		pmops->set_device_constraint = ti_sci_cmd_set_device_constraint;
-		pmops->set_latency_constraint = ti_sci_cmd_set_latency_constraint;
+		ti_sci_setup_pm_ops(pmops);
 	}
 
 	rm_core_ops->get_range = ti_sci_cmd_get_resource_range;
