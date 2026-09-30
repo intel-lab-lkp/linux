@@ -298,7 +298,7 @@ tcp_friendliness:
 	if (tcp_friendliness) {
 		u32 scale = beta_scale;
 
-		delta = (cwnd * scale) >> 3;
+		delta = max((cwnd * scale) >> 3, 1U);
 		while (ca->ack_cnt > delta) {		/* update tcp cwnd */
 			ca->ack_cnt -= delta;
 			ca->tcp_cwnd++;
@@ -503,6 +503,11 @@ static int __init cubictcp_register(void)
 	int ret;
 
 	BUILD_BUG_ON(sizeof(struct bictcp) > ICSK_CA_PRIV_SIZE);
+
+	if (beta < 0 || beta >= BICTCP_BETA_SCALE || bic_scale <= 0) {
+		pr_err("tcp_cubic: invalid beta %d or bic_scale %d\n", beta, bic_scale);
+		return -EINVAL;
+	}
 
 	/* Precompute a bunch of the scaling factors that are used per-packet
 	 * based on SRTT of 100ms
