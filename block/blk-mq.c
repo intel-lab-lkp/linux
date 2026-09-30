@@ -3200,8 +3200,16 @@ new_request:
 	}
 
 	hctx = rq->mq_hctx;
-	if ((rq->rq_flags & RQF_USE_SCHED) ||
-	    (hctx->dispatch_busy && (q->nr_hw_queues == 1 || !is_sync))) {
+	if (rq->rq_flags & RQF_USE_SCHED) {
+		/*
+		 * Run the queue from the submitting context, as flushing a plug
+		 * does. Punting every unplugged request to kblockd lets the
+		 * kworker preempt the submitter once per I/O.
+		 */
+		blk_mq_insert_request(rq, 0);
+		blk_mq_run_hw_queue(hctx, false);
+	} else if (hctx->dispatch_busy &&
+		   (q->nr_hw_queues == 1 || !is_sync)) {
 		blk_mq_insert_request(rq, 0);
 		blk_mq_run_hw_queue(hctx, true);
 	} else {
