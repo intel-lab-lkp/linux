@@ -3083,6 +3083,82 @@ static int pcie_bus_configure_set(struct pci_dev *dev, void *data)
 	return 0;
 }
 
+static int pcie_raise_mps(struct pci_dev *dev, void *data)
+{
+	int mps = *(int *)data;
+
+	/* MPS is of type 'RsvdP' for VFs */
+	if (!pci_is_pcie(dev) || dev->is_virtfn)
+		return 0;
+
+	if (pcie_get_mps(dev) < mps && pcie_set_mps(dev, mps))
+		pci_err(dev, "can't set Max Payload Size to %d\n", mps);
+
+	return 0;
+}
+
+/*
+ * With PCIE_BUS_DEFAULT, pci_configure_mps() only matches each device to its
+ * upstream bridge, so a hierarchy inherits whatever MPS firmware, or the
+ * hardware default of 128 bytes, left in its Root Port.  Once the hierarchy
+ * below a Root Port has been enumerated, raise it to the largest MPS that all
+ * of its devices support.
+ *
+ * Leave hierarchies with a hotplug bridge other than the Root Port alone: a
+ * device hot-added below it can't lower the MPS once the hierarchy is in use.
+ * pcie_find_smpss() returns the minimum MPS for such hierarchies, which never
+ * raises anything.  A hotplug slot directly below the Root Port is fine: it
+ * is evaluated when a device is hot-added there, and an empty slot is not
+ * raised, so a Switch hot-added into it doesn't inherit a raised MPS.  Also
+ * leave hierarchies alone once any of their devices may have a driver bound.
+ */
+static void pcie_bus_raise_default_mps(struct pci_bus *bus)
+{
+	struct pci_dev *rp = bus->self;
+	u8 smpss = rp->pcie_mpss;
+	int mps, old_mps;
+
+	if (pci_pcie_type(rp) != PCI_EXP_TYPE_ROOT_PORT ||
+	    list_empty(&bus->devices) || pci_bus_in_use(bus))
+		return;
+
+	pci_walk_bus(bus, pcie_find_smpss, &smpss);
+	mps = 128 << smpss;
+	old_mps = pcie_get_mps(rp);
+	if (mps <= old_mps)
+		return;
+
+	pcie_raise_mps(rp, &mps);
+	pci_walk_bus(bus, pcie_raise_mps, &mps);
+	pci_info(rp, "Max Payload Size of hierarchy set to %d (was %d)\n",
+		 mps, old_mps);
+}
+
+/*
+ * A rescan doesn't go through pcie_bus_configure_settings(), so give the Root
+ * Port hierarchies it may have populated the same chance to be raised: every
+ * hierarchy below a rescanned root bus, or the one @bus belongs to.
+ */
+static void pcie_rescan_raise_default_mps(struct pci_bus *bus)
+{
+	struct pci_bus *child;
+	struct pci_dev *rp;
+
+	if (pcie_bus_config != PCIE_BUS_DEFAULT)
+		return;
+
+	if (pci_is_root_bus(bus)) {
+		list_for_each_entry(child, &bus->children, node)
+			if (child->self && pci_is_pcie(child->self))
+				pcie_bus_raise_default_mps(child);
+		return;
+	}
+
+	rp = pcie_find_root_port(bus->self);
+	if (rp && rp->subordinate)
+		pcie_bus_raise_default_mps(rp->subordinate);
+}
+
 /*
  * pcie_bus_configure_settings() requires that pci_walk_bus work in a top-down,
  * parents then children fashion.  If this changes, then this code will not
@@ -3097,6 +3173,11 @@ void pcie_bus_configure_settings(struct pci_bus *bus)
 
 	if (!pci_is_pcie(bus->self))
 		return;
+
+	if (pcie_bus_config == PCIE_BUS_DEFAULT) {
+		pcie_bus_raise_default_mps(bus);
+		return;
+	}
 
 	/*
 	 * FIXME - Peer to peer DMA is possible, though the endpoint would need
@@ -3536,6 +3617,7 @@ unsigned int pci_rescan_bus_bridge_resize(struct pci_dev *bridge)
 	max = pci_scan_child_bus(bus);
 
 	pci_assign_unassigned_bridge_resources(bridge);
+	pcie_rescan_raise_default_mps(bus);
 
 	pci_bus_add_devices(bus);
 
@@ -3557,6 +3639,7 @@ unsigned int pci_rescan_bus(struct pci_bus *bus)
 
 	max = pci_scan_child_bus(bus);
 	pci_assign_unassigned_bus_resources(bus);
+	pcie_rescan_raise_default_mps(bus);
 	pci_bus_add_devices(bus);
 
 	return max;
