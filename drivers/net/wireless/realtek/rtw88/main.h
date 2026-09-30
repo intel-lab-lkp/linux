@@ -1251,6 +1251,7 @@ struct rtw_chip_info {
 
 	/* init values */
 	u8 sys_func_en;
+	u32 rcr;
 	const struct rtw_pwr_seq_cmd * const *pwr_on_seq;
 	const struct rtw_pwr_seq_cmd * const *pwr_off_seq;
 	const struct rtw_rqpn *rqpn_table;

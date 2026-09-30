@@ -2188,10 +2188,12 @@ int rtw_core_init(struct rtw_dev *rtwdev)
 
 	rtw_stats_init(rtwdev);
 
-	/* default rx filter setting */
-	rtwdev->hal.rcr = BIT_APP_FCS | BIT_APP_MIC | BIT_APP_ICV |
-			  BIT_PKTCTL_DLEN | BIT_HTC_LOC_CTRL | BIT_APP_PHYSTS |
-			  BIT_AB | BIT_AM | BIT_APM;
+	/* default rx filter setting, or the chip's own value if it has one */
+	rtwdev->hal.rcr = chip->rcr;
+	if (!chip->rcr)
+		rtwdev->hal.rcr = BIT_APP_FCS | BIT_APP_MIC | BIT_APP_ICV |
+				  BIT_PKTCTL_DLEN | BIT_HTC_LOC_CTRL |
+				  BIT_APP_PHYSTS | BIT_AB | BIT_AM | BIT_APM;
 
 	ret = rtw_load_firmware(rtwdev, RTW_NORMAL_FW);
 	if (ret) {
