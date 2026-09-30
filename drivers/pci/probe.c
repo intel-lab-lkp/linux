@@ -2200,9 +2200,49 @@ int pci_setup_device(struct pci_dev *dev)
 	return 0;
 }
 
+static int pcie_reduce_mps(struct pci_dev *dev, void *data)
+{
+	int mps = *(int *)data;
+	int ret;
+
+	/* MPS is of type 'RsvdP' for VFs */
+	if (!pci_is_pcie(dev) || dev->is_virtfn)
+		return 0;
+
+	if (pcie_get_mps(dev) > mps) {
+		ret = pcie_set_mps(dev, mps);
+		if (ret)
+			pci_warn(dev, "can't set Max Payload Size to %d; if necessary, use \"pci=pcie_bus_safe\" and report a bug\n",
+				 mps);
+	}
+
+	return 0;
+}
+
+static int pci_dev_check_in_use(struct pci_dev *dev, void *data)
+{
+	bool *in_use = data;
+
+	*in_use = pci_dev_is_added(dev) || !pci_dev_binding_disallowed(dev);
+	return *in_use;
+}
+
+/*
+ * Return true if any device on or below @bus has been added or made available
+ * for driver binding, i.e., may have a driver bound and DMA in flight.
+ */
+static bool pci_bus_in_use(struct pci_bus *bus)
+{
+	bool in_use = false;
+
+	pci_walk_bus(bus, pci_dev_check_in_use, &in_use);
+	return in_use;
+}
+
 static void pci_configure_mps(struct pci_dev *dev)
 {
 	struct pci_dev *bridge = pci_upstream_bridge(dev);
+	struct pci_dev *rp;
 	int mps, mpss, p_mps, rc;
 
 	if (!pci_is_pcie(dev))
@@ -2252,10 +2292,28 @@ static void pci_configure_mps(struct pci_dev *dev)
 		return;
 
 	mpss = 128 << dev->pcie_mpss;
-	if (mpss < p_mps && pci_pcie_type(bridge) == PCI_EXP_TYPE_ROOT_PORT) {
-		pcie_set_mps(bridge, mpss);
-		pci_info(dev, "Upstream bridge's Max Payload Size set to %d (was %d, max %d)\n",
-			 mpss, p_mps, 128 << bridge->pcie_mpss);
+	rp = pcie_find_root_port(bridge);
+	if (mpss < p_mps && rp && !pci_bus_in_use(rp->subordinate)) {
+		/*
+		 * dev cannot be programmed to the MPS already in use above
+		 * it, so reduce the hierarchy to what dev supports.  A Switch
+		 * does not split TLPs, so reducing only the upstream bridge
+		 * is not enough: every port up to the Root Port has to come
+		 * down as well, and so do the devices already programmed
+		 * below that Root Port, which would otherwise be left sending
+		 * TLPs too large for their egress port.
+		 *
+		 * Only do this while no device below the Root Port has been
+		 * added or made available for driver binding, e.g., during
+		 * the initial scan or when hot-adding into a slot directly
+		 * below the Root Port.  Such devices may have drivers bound
+		 * and DMA in flight, so their MPS can't be changed safely
+		 * (see pcie_find_smpss()).
+		 */
+		pcie_reduce_mps(rp, &mpss);
+		pci_walk_bus(rp->subordinate, pcie_reduce_mps, &mpss);
+		pci_info(dev, "Max Payload Size of %s hierarchy set to %d (was %d)\n",
+			 pci_name(rp), mpss, p_mps);
 		p_mps = pcie_get_mps(bridge);
 	}
 
