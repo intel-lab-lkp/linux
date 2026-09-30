@@ -281,11 +281,6 @@ static int sd_start(struct gspca_dev *gspca_dev)
 	reg_w(gspca_dev, 2);
 
 	data[0] = 0x3c;		/* address */
-/*	if (gspca_dev->width == 1280) */
-/*		data[1] = 200;	 * reg 60, pc-cam frame size
-				 *	(unit: 4KB) 800KB
-				 */
-/*	else */
 	data[1] = 50;		/* 50 reg 60, pc-cam frame size
 				 *	(unit: 4KB) 200KB
 				 */
