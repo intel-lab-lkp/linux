@@ -32,16 +32,22 @@ static void nci_core_reset_rsp_packet(struct nci_dev *ndev,
 
 	pr_debug("status 0x%x\n", rsp->status);
 
-	/* Handle NCI 1.x ver */
-	if (skb->len != 1) {
-		if (rsp->status == NCI_STATUS_OK) {
-			ndev->nci_ver = rsp->nci_ver;
-			pr_debug("nci_ver 0x%x, config_status 0x%x\n",
-				 rsp->nci_ver, rsp->config_status);
-		}
-
+	/* NCI 2.x reset response carries nci_ver and config_status;
+	 * a 1-byte response is the NCI 1.x status-only form.
+	 * Require at least 3 bytes before reading those fields.
+	 */
+	if (skb->len == 1) {
 		nci_req_complete(ndev, rsp->status);
+		return;
 	}
+
+	if (skb->len >= 3 && rsp->status == NCI_STATUS_OK) {
+		ndev->nci_ver = rsp->nci_ver;
+		pr_debug("nci_ver 0x%x, config_status 0x%x\n",
+			 rsp->nci_ver, rsp->config_status);
+	}
+
+	nci_req_complete(ndev, rsp->status);
 }
 
 static u8 nci_core_init_rsp_packet_v1(struct nci_dev *ndev,
