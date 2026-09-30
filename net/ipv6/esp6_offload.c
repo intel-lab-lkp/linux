@@ -379,6 +379,10 @@ static int esp6_xmit(struct xfrm_state *x, struct sk_buff *skb,  netdev_features
 		if (!xo)
 			return -EINVAL;
 
+		/* Keep the current sequence number in the private copy. */
+		xo->seq.low = seq;
+		xo->seq.hi = upper_32_bits(be64_to_cpu(esp.seqno));
+
 		xo->flags |= XFRM_XMIT;
 		return 0;
 	}
