@@ -10,8 +10,6 @@
 
 #ifndef __ASSEMBLER__
 
-#ifdef CONFIG_RISCV_ALTERNATIVE
-
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/types.h>
@@ -60,14 +58,6 @@ void thead_errata_patch_func(struct alt_entry *begin, struct alt_entry *end,
 
 void riscv_cpufeature_patch_func(struct alt_entry *begin, struct alt_entry *end,
 				 unsigned int stage);
-
-#else /* CONFIG_RISCV_ALTERNATIVE */
-
-static inline void apply_boot_alternatives(void) { }
-static inline void apply_early_boot_alternatives(void) { }
-static inline void apply_module_alternatives(void *start, size_t length) { }
-
-#endif /* CONFIG_RISCV_ALTERNATIVE */
 
 #endif
 #endif
