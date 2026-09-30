@@ -32,6 +32,7 @@
 
 #include <asm/bug.h>
 #include <asm/fpu.h>
+#include <asm/insn-def.h>
 #include <asm/io.h>
 #include <asm/processor.h>
 #include <asm/unwinder.h>
@@ -215,6 +216,32 @@ asmlinkage void do_trap(struct pt_regs *regs, unsigned long address)
 	if (user_mode(regs)) {
 		force_sig_fault(SIGTRAP, TRAP_BRKPT, (void __user *)regs->pc);
 	} else {
+		unsigned long trap, bcode;
+
+		if (get_kernel_nofault(trap, (unsigned long *)regs->pc) < 0)
+			return;
+
+		/*
+		 * Trap instruction was probably removed and no further processing
+		 * is required.
+		 */
+		if ((trap & OPENRISC_MASK_TRAP) != OPENRISC_INSN_TRAP)
+			return;
+
+		bcode = (trap & OPENRISC_MASK_BCODE);
+		switch (bcode) {
+		case BRK_KPROBE_BP:
+			if (kprobe_breakpoint_handler(regs))
+				return;
+			break;
+		case BRK_KPROBE_SSTEPBP:
+			if (kprobe_singlestep_handler(regs))
+				return;
+			break;
+		default:
+			break;
+		}
+
 		pr_emerg("KERNEL: Illegal trap exception 0x%.8lx\n", regs->pc);
 		die("Die:", regs, SIGILL);
 	}
@@ -252,12 +279,12 @@ static inline int in_delay_slot(struct pt_regs *regs)
 	insn = *((unsigned int *)regs->pc);
 	op = insn >> 26;
 	switch (op) {
-	case 0x00: /* l.j */
-	case 0x01: /* l.jal */
-	case 0x03: /* l.bnf */
-	case 0x04: /* l.bf */
-	case 0x11: /* l.jr */
-	case 0x12: /* l.jalr */
+	case OPENRISC_OPCODE_J: /* l.j */
+	case OPENRISC_OPCODE_JAL: /* l.jal */
+	case OPENRISC_OPCODE_BNF: /* l.bnf */
+	case OPENRISC_OPCODE_BF: /* l.bf */
+	case OPENRISC_OPCODE_JR: /* l.jr */
+	case OPENRISC_OPCODE_JALR: /* l.jalr */
 		return 1;
 	default:
 		return 0;
@@ -269,47 +296,9 @@ static inline int in_delay_slot(struct pt_regs *regs)
 
 static inline void adjust_pc(struct pt_regs *regs, unsigned long address)
 {
-	int displacement;
-	unsigned int rb, op, jmp;
-
 	if (unlikely(in_delay_slot(regs))) {
 		/* In delay slot, instruction at pc is a branch, simulate it */
-		jmp = *((unsigned int *)regs->pc);
-
-		displacement = sign_extend32(((jmp) & 0x3ffffff) << 2, 27);
-		rb = (jmp & 0x0000ffff) >> 11;
-		op = jmp >> 26;
-
-		switch (op) {
-		case 0x00: /* l.j */
-			regs->pc += displacement;
-			return;
-		case 0x01: /* l.jal */
-			regs->pc += displacement;
-			regs->gpr[9] = regs->pc + 8;
-			return;
-		case 0x03: /* l.bnf */
-			if (regs->sr & SPR_SR_F)
-				regs->pc += 8;
-			else
-				regs->pc += displacement;
-			return;
-		case 0x04: /* l.bf */
-			if (regs->sr & SPR_SR_F)
-				regs->pc += displacement;
-			else
-				regs->pc += 8;
-			return;
-		case 0x11: /* l.jr */
-			regs->pc = regs->gpr[rb];
-			return;
-		case 0x12: /* l.jalr */
-			regs->pc = regs->gpr[rb];
-			regs->gpr[9] = regs->pc + 8;
-			return;
-		default:
-			break;
-		}
+		simulate_branch(regs, *((unsigned int *)regs->pc));
 	} else {
 		regs->pc += 4;
 	}

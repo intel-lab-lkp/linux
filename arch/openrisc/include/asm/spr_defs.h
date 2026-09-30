@@ -179,6 +179,7 @@
 #define SPR_CPUCFGR_OF32S  0x00000080  /* ORFPX32 supported */
 #define SPR_CPUCFGR_OF64S  0x00000100  /* ORFPX64 supported */
 #define SPR_CPUCFGR_OV64S  0x00000200  /* ORVDX64 supported */
+#define SPR_CPUCFGR_ND     0x00000400  /* No delay slot */
 #define SPR_CPUCFGR_RES	   0xfffffc00  /* Reserved */
 
 /*

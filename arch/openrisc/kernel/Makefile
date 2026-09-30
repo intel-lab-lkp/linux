@@ -5,7 +5,7 @@
 
 always-$(KBUILD_BUILTIN)	:= vmlinux.lds
 
-obj-y	:= head.o setup.o or32_ksyms.o process.o dma.o \
+obj-y	:= head.o insn.o setup.o or32_ksyms.o process.o dma.o \
 	   traps.o time.o irq.o entry.o ptrace.o signal.o \
 	   sys_call_table.o unwinder.o cacheinfo.o
 

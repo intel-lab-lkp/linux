@@ -15,6 +15,7 @@
 #ifndef __ASM_OPENRISC_CPUINFO_H
 #define __ASM_OPENRISC_CPUINFO_H
 
+#include <linux/jump_label.h>
 #include <asm/spr.h>
 #include <asm/spr_defs.h>
 
@@ -33,6 +34,8 @@ struct cpuinfo_or1k {
 
 	u16 coreid;
 };
+
+DECLARE_STATIC_KEY_TRUE(delay_slot);
 
 extern struct cpuinfo_or1k cpuinfo_or1k[NR_CPUS];
 extern void setup_cpuinfo(void);

@@ -255,6 +255,10 @@ void __init setup_arch(char **cmdline_p)
 	/* paging_init() sets up the MMU and marks all pages as reserved */
 	paging_init();
 
+	/* determine if the processor supports delay slots */
+	if (mfspr(SPR_CPUCFGR) & SPR_CPUCFGR_ND)
+		static_branch_disable(&delay_slot);
+
 	*cmdline_p = boot_command_line;
 
 	printk(KERN_INFO "OpenRISC Linux -- http://openrisc.io\n");
