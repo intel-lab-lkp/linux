@@ -23,6 +23,7 @@
 
 #include "dp_reg.h"
 #include "dp_ctrl.h"
+#include "dp_utils.h"
 #include "dp_link.h"
 
 #define POLLING_SLEEP_US			1000
@@ -2619,6 +2620,20 @@ int msm_dp_ctrl_on_stream(struct msm_dp_ctrl *msm_dp_ctrl, struct msm_dp_panel *
 		return -EINVAL;
 
 	ctrl = container_of(msm_dp_ctrl, struct msm_dp_ctrl_private, msm_dp_ctrl);
+
+	/* Link training may have reduced the available bandwidth. */
+	if (!panel->video_test) {
+		u32 clock = panel->msm_dp_mode.drm_mode.clock;
+
+		if (panel->msm_dp_mode.out_fmt_is_yuv_420)
+			clock /= 2;
+		ret = msm_dp_utils_select_bpp(panel->msm_dp_mode.bpp / 3, 10,
+					      clock, ctrl->link->link_params.rate,
+					      ctrl->link->link_params.num_lanes);
+		if (ret < 0)
+			return ret;
+		panel->msm_dp_mode.bpp = ret;
+	}
 
 	pixel_rate_orig = panel->msm_dp_mode.drm_mode.clock;
 	pixel_rate = pixel_rate_orig;
