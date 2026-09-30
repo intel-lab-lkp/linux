@@ -1410,7 +1410,7 @@ static void atom_get_vbios_name(struct atom_context *ctx)
 
 no_name:
 	/* do not know where to find name */
-	strscpy(ctx->name, na, sizeof(ctx->name));
+	strscpy(ctx->name, na);
 }
 
 static void atom_get_vbios_date(struct atom_context *ctx)

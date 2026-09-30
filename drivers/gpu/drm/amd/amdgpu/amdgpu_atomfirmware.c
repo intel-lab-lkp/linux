@@ -327,7 +327,7 @@ static int amdgpu_atomfirmware_get_uma_carveout_info_v2_3(struct amdgpu_device *
 			uma_info->entries[i].memory_carved_mb = (uint32_t)opts[i].memoryCarvedGb << 10;
 
 		uma_info->entries[i].flags = opts[i].uma_carveout_option_flags.all8;
-		strscpy(uma_info->entries[i].name, opts[i].optionName, MAX_UMA_OPTION_NAME);
+		strscpy(uma_info->entries[i].name, opts[i].optionName);
 	}
 
 	return 0;

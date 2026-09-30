@@ -3591,7 +3591,7 @@ static int amdgpu_device_get_job_timeout_settings(struct amdgpu_device *adev)
 	 * remains intact for multi-GPU systems where this function is called
 	 * once per device.
 	 */
-	strscpy(buf, amdgpu_lockup_timeout, sizeof(buf));
+	strscpy(buf, amdgpu_lockup_timeout);
 
 	while ((timeout_setting = strsep(&input, ",")) &&
 	       strnlen(timeout_setting, AMDGPU_MAX_TIMEOUT_PARAM_LENGTH)) {
