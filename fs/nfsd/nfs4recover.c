@@ -113,10 +113,8 @@ __nfsd4_create_reclaim_record_grace(struct nfs4_client *clp,
 {
 	struct xdr_netobj name = { .len = strlen(dname), .data = dname };
 	struct xdr_netobj princhash = { .len = 0, .data = NULL };
-	struct nfs4_client_reclaim *crp;
 
-	crp = nfs4_client_to_reclaim(name, princhash, nn);
-	crp->cr_clp = clp;
+	nfs4_client_to_reclaim(name, princhash, clp, nn);
 }
 
 static void
@@ -404,7 +402,7 @@ load_recdir(struct dentry *parent, char *cname, struct nfsd_net *nn)
 		/* Keep trying; maybe the others are OK: */
 		return 0;
 	}
-	nfs4_client_to_reclaim(name, princhash, nn);
+	nfs4_client_to_reclaim(name, princhash, NULL, nn);
 	return 0;
 }
 
@@ -761,7 +759,7 @@ __cld_pipe_inprogress_downcall(const struct cld_msg_v2 __user *cmsg,
 			cn->cn_has_legacy = true;
 		}
 #endif
-		if (!nfs4_client_to_reclaim(name, princhash, nn))
+		if (!nfs4_client_to_reclaim(name, princhash, NULL, nn))
 			return -EFAULT;
 		return nn->client_tracking_ops->msglen;
 	}

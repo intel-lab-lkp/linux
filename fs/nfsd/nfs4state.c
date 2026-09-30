@@ -9577,7 +9577,7 @@ nfs4_has_reclaimed_state(struct xdr_netobj name, struct nfsd_net *nn)
  */
 struct nfs4_client_reclaim *
 nfs4_client_to_reclaim(struct xdr_netobj name, struct xdr_netobj princhash,
-		struct nfsd_net *nn)
+		struct nfs4_client *clp, struct nfsd_net *nn)
 {
 	unsigned int strhashval;
 	struct nfs4_client_reclaim *crp;
@@ -9606,6 +9606,8 @@ nfs4_client_to_reclaim(struct xdr_netobj name, struct xdr_netobj princhash,
 				crp = NULL;
 			}
 		}
+		if (crp && clp)
+			crp->cr_clp = clp;
 		up_write(&nn->reclaim_str_hashtbl_lock);
 		return crp;
 	}
@@ -9637,7 +9639,7 @@ nfs4_client_to_reclaim(struct xdr_netobj name, struct xdr_netobj princhash,
 		crp->cr_name.len = name.len;
 		crp->cr_princhash.data = princhash.data;
 		crp->cr_princhash.len = princhash.len;
-		crp->cr_clp = NULL;
+		crp->cr_clp = clp;
 		nn->reclaim_str_hashtbl_size++;
 	} else {
 		kfree(name.data);
