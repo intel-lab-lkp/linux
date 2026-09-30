@@ -466,6 +466,15 @@ static const struct field_mapping dpamt_mappings[] __initconst = {
 			     pamt_page_bitmap_entry_bits),
 };
 
+#define TDX_SYSINFO_MAP_TD_CTRL(_field_id, _member) \
+	TDX_SYSINFO_MAP(_field_id, struct tdx_sys_info_td_ctrl, _member)
+
+static const struct field_mapping td_ctrl_mappings[] __initconst = {
+	TDX_SYSINFO_MAP_TD_CTRL(TDX_FIELD_TDR_BASE_SIZE,	tdr_base_size),
+	TDX_SYSINFO_MAP_TD_CTRL(TDX_FIELD_TDCS_BASE_SIZE,	tdcs_base_size),
+	TDX_SYSINFO_MAP_TD_CTRL(TDX_FIELD_TDVPS_BASE_SIZE,	tdvps_base_size),
+};
+
 #include "tdx_global_metadata.c"
 
 static __init int check_features(struct tdx_sys_info *sysinfo)
