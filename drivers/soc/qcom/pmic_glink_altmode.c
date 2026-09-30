@@ -6,6 +6,7 @@
 #include <linux/auxiliary_bus.h>
 #include <linux/bitfield.h>
 #include <linux/cleanup.h>
+#include <linux/devm-helpers.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
@@ -137,6 +138,10 @@ struct pmic_glink_altmode {
 	struct pmic_glink_client *client;
 
 	struct work_struct enable_work;
+
+	/* Ports without a connector node with a notification to acknowledge */
+	struct work_struct ack_work;
+	unsigned long ack_pending;
 
 	struct pmic_glink_altmode_port ports[PMIC_GLINK_MAX_PORTS];
 };
@@ -393,6 +398,35 @@ static void pmic_glink_altmode_worker(struct work_struct *work)
 	pmic_glink_altmode_request(altmode, ALTMODE_PAN_ACK, alt_port->index);
 }
 
+/*
+ * The firmware expects every port notification to be acknowledged, also for
+ * ports that have no connector node and are otherwise ignored here; one left
+ * unacknowledged can keep it from reporting further connections. Acknowledge
+ * those from process context, as pmic_glink_altmode_request() sleeps.
+ */
+static void pmic_glink_altmode_ack_worker(struct work_struct *work)
+{
+	struct pmic_glink_altmode *altmode = container_of(work, struct pmic_glink_altmode,
+							  ack_work);
+	unsigned int port;
+
+	for (port = 0; port < BITS_PER_LONG; port++) {
+		if (test_and_clear_bit(port, &altmode->ack_pending))
+			pmic_glink_altmode_request(altmode, ALTMODE_PAN_ACK, port);
+	}
+}
+
+static void pmic_glink_altmode_ack_undefined(struct pmic_glink_altmode *altmode, u8 port)
+{
+	dev_dbg(altmode->dev, "notification on undefined port %d\n", port);
+
+	if (port >= BITS_PER_LONG)
+		return;
+
+	set_bit(port, &altmode->ack_pending);
+	schedule_work(&altmode->ack_work);
+}
+
 static enum typec_orientation pmic_glink_altmode_orientation(unsigned int orientation)
 {
 	if (orientation == 0)
@@ -441,7 +475,7 @@ static void pmic_glink_altmode_sc8180xp_notify(struct pmic_glink_altmode *altmod
 	svid = mux == 2 ? USB_TYPEC_DP_SID : 0;
 
 	if (port >= ARRAY_SIZE(altmode->ports) || !altmode->ports[port].altmode) {
-		dev_dbg(altmode->dev, "notification on undefined port %d\n", port);
+		pmic_glink_altmode_ack_undefined(altmode, port);
 		return;
 	}
 
@@ -480,7 +514,7 @@ static void pmic_glink_altmode_sc8280xp_notify(struct pmic_glink_altmode *altmod
 	orientation = notify->orientation;
 
 	if (port >= ARRAY_SIZE(altmode->ports) || !altmode->ports[port].altmode) {
-		dev_dbg(altmode->dev, "notification on undefined port %d\n", port);
+		pmic_glink_altmode_ack_undefined(altmode, port);
 		return;
 	}
 
@@ -592,6 +626,10 @@ static int pmic_glink_altmode_probe(struct auxiliary_device *adev,
 	INIT_WORK(&altmode->enable_work, pmic_glink_altmode_enable_worker);
 	init_completion(&altmode->pan_ack);
 	mutex_init(&altmode->lock);
+
+	ret = devm_work_autocancel(dev, &altmode->ack_work, pmic_glink_altmode_ack_worker);
+	if (ret)
+		return ret;
 
 	device_for_each_child_node(dev, fwnode) {
 		ret = fwnode_property_read_u32(fwnode, "reg", &port);
