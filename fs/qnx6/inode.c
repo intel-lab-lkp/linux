@@ -561,6 +561,14 @@ struct inode *qnx6_iget(struct super_block *sb, unsigned ino)
 				sizeof(raw_inode->di_block_ptr));
 	ei->di_filelevels = raw_inode->di_filelevels;
 
+	if (ei->di_filelevels > QNX6_PTR_MAX_LEVELS) {
+		pr_err("bad filelevels %u (max %u) on dev %s, inode %u\n",
+		       ei->di_filelevels, QNX6_PTR_MAX_LEVELS, sb->s_id, ino);
+		folio_release_kmap(folio, raw_inode);
+		iget_failed(inode);
+		return ERR_PTR(-EIO);
+	}
+
 	if (S_ISREG(inode->i_mode)) {
 		inode->i_fop = &generic_ro_fops;
 		inode->i_mapping->a_ops = &qnx6_aops;
