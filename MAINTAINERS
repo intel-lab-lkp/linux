@@ -27484,6 +27484,7 @@ M:	Yemike Abhilash Chandra <y-abhilashchandra@ti.com>
 L:	linux-gpio@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/pinctrl/ti,tda54-pinctrl.yaml
+F:	drivers/pinctrl/ti/pinctrl-tda54.c
 
 TI TMAG5273 MAGNETOMETER DRIVER
 M:	Gerald Loacker <gerald.loacker@wolfvision.net>
