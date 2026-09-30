@@ -44,6 +44,9 @@ int dev_ifconf(struct net *net, struct ifconf __user *uifc)
 	size_t size;
 	int len, total = 0, done;
 
+	if (!IS_ENABLED(CONFIG_IPV4))
+		return -EAFNOSUPPORT;
+
 	/* both the ifconf and the ifreq structures are slightly different */
 	if (in_compat_syscall()) {
 		struct compat_ifconf ifc32;
