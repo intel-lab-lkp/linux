@@ -163,6 +163,8 @@ void mii_ethtool_get_link_ksettings(struct mii_if_info *mii,
 	advertising = ADVERTISED_TP | ADVERTISED_MII;
 
 	bmcr = mii->mdio_read(dev, mii->phy_id, MII_BMCR);
+	/* BMSR_LSTATUS is latched low, dummy read to get the current state */
+	mii->mdio_read(dev, mii->phy_id, MII_BMSR);
 	bmsr = mii->mdio_read(dev, mii->phy_id, MII_BMSR);
 	if (mii->supports_gmii) {
 		ctrl1000 = mii->mdio_read(dev, mii->phy_id, MII_CTRL1000);
