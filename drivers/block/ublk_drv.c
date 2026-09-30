@@ -4440,6 +4440,14 @@ static bool ublk_validate_user_pid(struct ublk_device *ub, pid_t ublksrv_pid)
 static int ublk_wait_dev_ready_and_lock(struct ublk_device *ub)
 {
 	while (true) {
+		/*
+		 * A dying server can never make the device ready. On an io-wq
+		 * worker the SIGKILL may already have been consumed, so check
+		 * the group exit flag rather than signal_pending().
+		 */
+		if (READ_ONCE(current->signal->flags) & SIGNAL_GROUP_EXIT)
+			return -EINTR;
+
 		if (wait_var_event_interruptible(&ub->nr_queue_ready,
 						 ublk_dev_ready(ub)))
 			return -EINTR;
