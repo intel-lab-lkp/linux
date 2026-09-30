@@ -16,6 +16,7 @@
 
 #include <linux/export.h>
 
+#include <linux/kprobes.h>
 #include <linux/string.h>
 
 #ifdef CONFIG_OR1K_1200
@@ -122,4 +123,5 @@ void *memcpy(void *dest, __const void *src, __kernel_size_t n)
 }
 #endif
 
+NOKPROBE_SYMBOL(memcpy);
 EXPORT_SYMBOL(memcpy);

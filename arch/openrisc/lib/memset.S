@@ -9,6 +9,8 @@
  * Copyright (C) 2015 Olof Kindgren <olof.kindgren@gmail.com>
  */
 
+#include <asm/asm.h>
+
 	.global memset
 	.type	memset, @function
 memset:
@@ -92,3 +94,5 @@ memset:
 
 4:	l.jr		r9
 	 l.ori		r11, r3, 0
+
+_ASM_NOKPROBE(memset)

@@ -14,6 +14,7 @@
 #include <linux/mm.h>
 #include <linux/interrupt.h>
 #include <linux/extable.h>
+#include <linux/kprobes.h>
 #include <linux/sched/signal.h>
 #include <linux/perf_event.h>
 
@@ -54,6 +55,9 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long address,
 	unsigned int flags = FAULT_FLAG_DEFAULT;
 
 	tsk = current;
+
+	if (kprobe_page_fault(regs, vector))
+		return;
 
 	/*
 	 * We fault-in kernel-space virtual memory on-demand. The
@@ -351,3 +355,4 @@ vmalloc_fault:
 		return;
 	}
 }
+NOKPROBE_SYMBOL(do_page_fault)

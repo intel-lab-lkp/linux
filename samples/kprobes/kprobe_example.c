@@ -59,6 +59,10 @@ static int __kprobes handler_pre(struct kprobe *p, struct pt_regs *regs)
 	pr_info("<%s> p->addr = 0x%p, era = 0x%lx, estat = 0x%lx\n",
 		p->symbol_name, p->addr, regs->csr_era, regs->csr_estat);
 #endif
+#ifdef CONFIG_OPENRISC
+	pr_info("<%s> p->addr = 0x%p, pc = 0x%lx, status = 0x%lx\n",
+		p->symbol_name, p->addr, regs->pc, regs->sr);
+#endif
 
 	/* A dump_stack() here will give a stack backtrace */
 	return 0;
@@ -99,6 +103,10 @@ static void __kprobes handler_post(struct kprobe *p, struct pt_regs *regs,
 #ifdef CONFIG_LOONGARCH
 	pr_info("<%s> p->addr = 0x%p, estat = 0x%lx\n",
 		p->symbol_name, p->addr, regs->csr_estat);
+#endif
+#ifdef CONFIG_OPENRISC
+	pr_info("<%s> p->addr = 0x%p, status = 0x%lx\n",
+		p->symbol_name, p->addr, regs->sr);
 #endif
 }
 

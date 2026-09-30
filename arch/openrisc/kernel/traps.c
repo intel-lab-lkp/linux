@@ -30,10 +30,12 @@
 #include <linux/kallsyms.h>
 #include <linux/uaccess.h>
 
+#include <asm/break.h>
 #include <asm/bug.h>
 #include <asm/fpu.h>
 #include <asm/insn-def.h>
 #include <asm/io.h>
+#include <asm/kprobes.h>
 #include <asm/processor.h>
 #include <asm/unwinder.h>
 #include <asm/sections.h>
@@ -246,6 +248,7 @@ asmlinkage void do_trap(struct pt_regs *regs, unsigned long address)
 		die("Die:", regs, SIGILL);
 	}
 }
+NOKPROBE_SYMBOL(do_trap)
 
 asmlinkage void do_unaligned_access(struct pt_regs *regs, unsigned long address)
 {

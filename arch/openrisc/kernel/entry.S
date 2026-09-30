@@ -15,6 +15,7 @@
 #include <linux/linkage.h>
 #include <linux/pgtable.h>
 
+#include <asm/asm.h>
 #include <asm/processor.h>
 #include <asm/unistd.h>
 #include <asm/thread_info.h>
@@ -640,6 +641,7 @@ ENTRY(_sys_call_handler)
 	/* r30 is the only register we clobber in the fast path */
 	/* r30 already saved */
 /*	l.sw    PT_GPR30(r1),r30 */
+_ASM_NOKPROBE(_sys_call_handler)
 
 _syscall_check_trace_enter:
 	/* syscalls run with interrupts enabled */
@@ -652,12 +654,14 @@ _syscall_check_trace_enter:
 	l.sfne	r30,r0
 	l.bf	_syscall_trace_enter
 	 l.nop
+_ASM_NOKPROBE(_syscall_check_trace_enter)
 
 _syscall_check:
 	/* Ensure that the syscall number is reasonable */
 	l.sfgeui r11,__NR_syscalls
 	l.bf	_syscall_badsys
 	 l.nop
+_ASM_NOKPROBE(_syscall_check)
 
 _syscall_call:
 	l.movhi r29,hi(sys_call_table)
@@ -668,12 +672,14 @@ _syscall_call:
 
 	l.jalr  r29
 	 l.nop
+_ASM_NOKPROBE(_syscall_call)
 
 _syscall_return:
 	/* All syscalls return here... just pay attention to ret_from_fork
 	 * which does it in a round-about way.
 	 */
 	l.sw    PT_GPR11(r1),r11           // save return value
+_ASM_NOKPROBE(_syscall_return)
 
 #if 0
 _syscall_debug:
@@ -708,6 +714,7 @@ _syscall_check_trace_leave:
 	l.sfne	r30,r0
 	l.bf	_syscall_trace_leave
 	 l.nop
+_ASM_NOKPROBE(_syscall_check_trace_leave)
 
 /* This is where the exception-return code begins... interrupts need to be
  * disabled the rest of the way here because we can't afford to miss any
@@ -744,6 +751,7 @@ _syscall_check_work:
 	/* _work_pending needs to be called with interrupts disabled */
 	l.j	_work_pending
 	 l.nop
+_ASM_NOKPROBE(_syscall_check_work)
 
 _syscall_resume_userspace:
 //	ENABLE_INTERRUPTS(r29)
@@ -800,6 +808,7 @@ _syscall_resume_userspace:
 	l.mtspr r0,r13,SPR_EPCR_BASE
 	l.mtspr r0,r15,SPR_ESR_BASE
 	l.rfe
+_ASM_NOKPROBE(_syscall_resume_userspace)
 
 /* End of hot path!
  * Keep the below tracing and error handling out of the hot path...
@@ -829,6 +838,7 @@ _syscall_trace_enter:
 
 	l.j	_syscall_check
 	 l.lwz	r8,PT_GPR8(r1)
+_ASM_NOKPROBE(_syscall_trace_enter)
 
 _syscall_trace_leave:
 	l.jal	do_syscall_trace_leave
@@ -836,6 +846,7 @@ _syscall_trace_leave:
 
 	l.j	_syscall_check_work
 	 l.nop
+_ASM_NOKPROBE(_syscall_trace_leave)
 
 _syscall_badsys:
 	/* Here we effectively pretend to have executed an imaginary
@@ -845,6 +856,7 @@ _syscall_badsys:
 	 */
 	l.j	_syscall_return
 	 l.addi	r11,r0,-ENOSYS
+_ASM_NOKPROBE(_syscall_badsys)
 
 /******* END SYSCALL HANDLING *******/
 
@@ -870,6 +882,7 @@ EXCEPTION_ENTRY(_trap_handler)
 
 	l.j     _ret_from_exception
 	 l.nop
+_ASM_NOKPROBE(_trap_handler)
 
 /* ---[ 0xf00: Reserved exception ]-------------------------------------- */
 
@@ -1004,6 +1017,8 @@ ENTRY(_ret_from_exception)
 	 l.nop
 	l.j	_resume_userspace
 	 l.nop
+_ASM_NOKPROBE(_ret_from_exception)
+_ASM_NOKPROBE(_ret_from_intr)
 
 ENTRY(ret_from_fork)
 	l.jal	schedule_tail
@@ -1038,6 +1053,7 @@ ENTRY(ret_from_fork)
 
 	l.j	_syscall_return
 	 l.nop
+_ASM_NOKPROBE(ret_from_fork)
 
 /* ========================================================[ switch ] === */
 
