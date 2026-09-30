@@ -720,7 +720,7 @@ void cpu_enable_fpmr(const struct arm64_cpu_capabilities *__always_unused p)
 #ifdef CONFIG_ARM64_SVE
 static void sve_free(struct task_struct *task)
 {
-	kfree(task->thread.sve_state);
+	kfree_sensitive(task->thread.sve_state);
 	task->thread.sve_state = NULL;
 }
 
@@ -829,13 +829,13 @@ static int change_live_vector_length(struct task_struct *task,
 	 */
 	fpsimd_sync_from_effective_state(task);
 	task_set_vl(task, type, vl);
-	kfree(task->thread.sve_state);
+	kfree_sensitive(task->thread.sve_state);
 	task->thread.sve_state = sve_state;
 	fpsimd_sync_to_effective_state_zeropad(task);
 
 	if (type == ARM64_VEC_SME) {
 		task->thread.svcr &= ~SVCR_ZA_MASK;
-		kfree(task->thread.sme_state);
+		kfree_sensitive(task->thread.sme_state);
 		task->thread.sme_state = sme_state;
 	}
 
@@ -1178,7 +1178,7 @@ void sme_alloc(struct task_struct *task, bool flush)
 
 static void sme_free(struct task_struct *task)
 {
-	kfree(task->thread.sme_state);
+	kfree_sensitive(task->thread.sme_state);
 	task->thread.sme_state = NULL;
 }
 
@@ -1670,8 +1670,8 @@ void fpsimd_flush_thread(void)
 	current->thread.fp_type = FP_STATE_FPSIMD;
 
 	put_cpu_fpsimd_context();
-	kfree(sve_state);
-	kfree(sme_state);
+	kfree_sensitive(sve_state);
+	kfree_sensitive(sme_state);
 }
 
 /*

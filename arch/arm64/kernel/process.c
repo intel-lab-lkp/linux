@@ -344,6 +344,20 @@ void flush_thread(void)
 void arch_release_task_struct(struct task_struct *tsk)
 {
 	fpsimd_release_task(tsk);
+
+	/*
+	 * Wipe the register file copy and the pointer auth keys, they
+	 * can hold key material the dead task used.
+	 */
+	memzero_explicit(&tsk->thread.uw.fpsimd_state,
+			 sizeof(tsk->thread.uw.fpsimd_state));
+#ifdef CONFIG_ARM64_PTR_AUTH
+	memzero_explicit(&tsk->thread.keys_user, sizeof(tsk->thread.keys_user));
+#ifdef CONFIG_ARM64_PTR_AUTH_KERNEL
+	memzero_explicit(&tsk->thread.keys_kernel,
+			 sizeof(tsk->thread.keys_kernel));
+#endif
+#endif
 }
 
 int arch_dup_task_struct(struct task_struct *dst, struct task_struct *src)
@@ -397,7 +411,7 @@ static int copy_thread_za(struct task_struct *dst, struct task_struct *src)
 					sme_state_size(src),
 					GFP_KERNEL);
 	if (!dst->thread.sme_state) {
-		kfree(dst->thread.sve_state);
+		kfree_sensitive(dst->thread.sve_state);
 		dst->thread.sve_state = NULL;
 		return -ENOMEM;
 	}
