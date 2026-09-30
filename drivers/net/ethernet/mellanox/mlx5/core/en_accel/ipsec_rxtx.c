@@ -153,21 +153,11 @@ static void mlx5e_ipsec_set_swp(struct sk_buff *skb,
 void mlx5e_ipsec_set_iv_esn(struct sk_buff *skb, struct xfrm_state *x,
 			    struct xfrm_offload *xo)
 {
-	struct xfrm_replay_state_esn *replay_esn = x->replay_esn;
-	__u32 oseq = replay_esn->oseq;
 	int iv_offset;
 	__be64 seqno;
-	u32 seq_hi;
-
-	if (unlikely(skb_is_gso(skb) && oseq < MLX5E_IPSEC_ESN_SCOPE_MID &&
-		     MLX5E_IPSEC_ESN_SCOPE_MID < (oseq - skb_shinfo(skb)->gso_segs))) {
-		seq_hi = xo->seq.hi - 1;
-	} else {
-		seq_hi = xo->seq.hi;
-	}
 
 	/* Place the SN in the IV field */
-	seqno = cpu_to_be64(xo->seq.low + ((u64)seq_hi << 32));
+	seqno = cpu_to_be64(xo->seq.low + ((u64)xo->seq.hi << 32));
 	iv_offset = skb_transport_offset(skb) + sizeof(struct ip_esp_hdr);
 	skb_store_bits(skb, iv_offset, &seqno, 8);
 }
