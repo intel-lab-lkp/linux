@@ -1643,6 +1643,45 @@ static void mac80211_hwsim_write_tsf(struct mac80211_hwsim_data *data,
 	spin_unlock_bh(&data->tsf_offset_lock);
 }
 
+struct hwsim_tx_cb {
+	int cookie;
+	s8 link_id;
+};
+
+static struct hwsim_tx_cb *hwsim_tx_cb(struct sk_buff *skb)
+{
+	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
+
+	BUILD_BUG_ON(sizeof(struct hwsim_tx_cb) >
+		     sizeof(info->rate_driver_data));
+	return (void *)info->rate_driver_data;
+}
+
+static int mac80211_hwsim_get_link_id(struct ieee80211_vif *vif,
+				      struct ieee80211_hdr *hdr)
+{
+	int i, link_id = -1;
+
+	if (!vif || !ieee80211_vif_is_mld(vif))
+		return -1;
+
+	rcu_read_lock();
+	for (i = 0; i < IEEE80211_MLD_MAX_NUM_LINKS; i++) {
+		struct ieee80211_bss_conf *link_conf;
+
+		link_conf = rcu_dereference(vif->link_conf[i]);
+		if (!link_conf)
+			continue;
+		if (ether_addr_equal(link_conf->addr, hdr->addr2)) {
+			link_id = i;
+			break;
+		}
+	}
+	rcu_read_unlock();
+
+	return link_id;
+}
+
 static void mac80211_hwsim_tx_frame_nl(struct ieee80211_hw *hw,
 				       struct sk_buff *my_skb,
 				       int dst_portid,
@@ -1652,6 +1691,8 @@ static void mac80211_hwsim_tx_frame_nl(struct ieee80211_hw *hw,
 	struct mac80211_hwsim_data *data = hw->priv;
 	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *) my_skb->data;
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(my_skb);
+	struct hwsim_tx_cb *cb;
+	int link_id;
 	void *msg_head;
 	unsigned int hwsim_flags = 0;
 	int i;
@@ -1729,9 +1770,13 @@ static void mac80211_hwsim_tx_frame_nl(struct ieee80211_hw *hw,
 		    tx_attempts_flags))
 		goto nla_put_failure;
 
+	link_id = mac80211_hwsim_get_link_id(info->control.vif, hdr);
+
 	/* We create a cookie to identify this skb */
 	cookie = atomic_inc_return(&data->pending_cookie);
-	info->rate_driver_data[0] = (void *)cookie;
+	cb = hwsim_tx_cb(my_skb);
+	cb->cookie = cookie;
+	cb->link_id = link_id;
 	if (nla_put_u64_64bit(skb, HWSIM_ATTR_COOKIE, cookie, HWSIM_ATTR_PAD))
 		goto nla_put_failure;
 
@@ -6360,27 +6405,6 @@ static void hwsim_register_wmediumd(struct net *net, u32 portid)
 	spin_unlock_bh(&hwsim_radio_lock);
 }
 
-static int mac80211_hwsim_get_link_id(struct ieee80211_vif *vif,
-				      struct ieee80211_hdr *hdr)
-{
-	int i;
-
-	if (!vif || !ieee80211_vif_is_mld(vif))
-		return -1;
-
-	for (i = 0; i < IEEE80211_MLD_MAX_NUM_LINKS; i++) {
-		struct ieee80211_bss_conf *link_conf;
-
-		link_conf = rcu_dereference(vif->link_conf[i]);
-		if (!link_conf)
-			continue;
-		if (ether_addr_equal(link_conf->addr, hdr->addr2))
-			return i;
-	}
-
-	return -1;
-}
-
 static int hwsim_tx_info_frame_received_nl(struct sk_buff *skb_2,
 					   struct genl_info *info)
 {
@@ -6393,7 +6417,7 @@ static int hwsim_tx_info_frame_received_nl(struct sk_buff *skb_2,
 	struct sk_buff *skb, *tmp;
 	const u8 *src;
 	unsigned int hwsim_flags;
-	int i;
+	int i, link_id;
 	unsigned long flags;
 	bool found = false;
 
@@ -6426,8 +6450,7 @@ static int hwsim_tx_info_frame_received_nl(struct sk_buff *skb_2,
 	skb_queue_walk_safe(&data2->pending, skb, tmp) {
 		uintptr_t skb_cookie;
 
-		txi = IEEE80211_SKB_CB(skb);
-		skb_cookie = (uintptr_t)txi->rate_driver_data[0];
+		skb_cookie = (uintptr_t)hwsim_tx_cb(skb)->cookie;
 
 		if (skb_cookie == ret_skb_cookie) {
 			__skb_unlink(skb, &data2->pending);
@@ -6451,6 +6474,7 @@ static int hwsim_tx_info_frame_received_nl(struct sk_buff *skb_2,
 
 	/* now send back TX status */
 	txi = IEEE80211_SKB_CB(skb);
+	link_id = hwsim_tx_cb(skb)->link_id;
 
 	ieee80211_tx_info_clear_status(txi);
 
@@ -6462,10 +6486,9 @@ static int hwsim_tx_info_frame_received_nl(struct sk_buff *skb_2,
 	txi->status.ack_signal = nla_get_u32(info->attrs[HWSIM_ATTR_SIGNAL]);
 
 	hdr = (struct ieee80211_hdr *)skb->data;
-	i = mac80211_hwsim_get_link_id(txi->control.vif, hdr);
-	if (i >= 0) {
+	if (link_id >= 0) {
 		txi->status.link_valid = 1;
-		txi->status.link_id = i;
+		txi->status.link_id = link_id;
 	}
 
 	if (!(hwsim_flags & HWSIM_TX_CTL_NO_ACK) &&
