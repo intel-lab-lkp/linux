@@ -588,8 +588,11 @@ int mpi3mr_process_op_reply_q(struct mpi3mr_ioc *mrioc,
 
 	reply_qidx = op_reply_q->qid - 1;
 
-	if (!atomic_add_unless(&op_reply_q->in_use, 1, 1))
+	if (!atomic_add_unless(&op_reply_q->in_use, 1, 1)) {
+		/* The owner may have missed a reply, let the thread poll */
+		WRITE_ONCE(op_reply_q->enable_irq_poll, true);
 		return 0;
+	}
 
 	exp_phase = op_reply_q->ephase;
 	reply_ci = op_reply_q->ci;
