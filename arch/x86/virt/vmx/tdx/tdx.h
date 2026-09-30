@@ -52,6 +52,16 @@
 #define TDH_PHYMEM_PAMT_REMOVE		59
 #define TDH_SYS_DISABLE			69
 
+/*
+ * TDX global metadata field IDs.
+ *
+ * See "global_metadata.pdf" in Intel TDX Module ABI Definitions.
+ */
+/* Class "TDX Module Version" */
+#define TDX_FIELD_MINOR_VERSION			0x0800000100000003ULL
+#define TDX_FIELD_MAJOR_VERSION			0x0800000100000004ULL
+#define TDX_FIELD_UPDATE_VERSION		0x0800000100000005ULL
+
 /* TDX page types */
 #define	PT_NDA		0x0
 #define	PT_RSVD		0x1
