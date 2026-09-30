@@ -195,6 +195,15 @@ where
     }
 }
 
+/// Trait implemented by types that can be received as single command queue elements.
+///
+/// The command queue validates the element header before calling `read()` to interpret the
+/// contents.
+trait MessageElement: Sized {
+    /// Tries to read `Self` from `element`. `dev` is the queue's device, to be used for logging.
+    fn read(dev: &device::Device, element: GspMessage<'_>) -> Result<Self>;
+}
+
 /// Trait representing messages received from the GSP.
 ///
 /// This trait tells [`Cmdq::receive_msg`] how it can receive a given type of message.
@@ -216,6 +225,94 @@ pub(crate) trait MessageFromGsp: Sized {
         msg: &Self::Message,
         sbuffer: &mut SBufferIter<core::array::IntoIter<&[u8], 2>>,
     ) -> Result<Self, Self::InitError>;
+}
+
+/// Wrapper type for receiving a RPC message from a command queue element.
+///
+/// [`MessageElement`] cannot be directly implemented for all [`MessageFromGsp`] with a blanket
+/// implementation as it would conflict with other future message types.
+struct RpcMessageElement<M>(M);
+
+impl<M> RpcMessageElement<M>
+where
+    M: MessageFromGsp,
+{
+    /// Validate the RPC layer of `element` and returns its RPC header and its contents trimmed down
+    /// to the RPC payload.
+    ///
+    /// # Errors
+    ///
+    /// - `EIO` if the element is shorter than the payload length advertised by the RPC header.
+    fn parse_rpc_message<'a>(
+        dev: &device::Device,
+        element: GspMessage<'a>,
+    ) -> Result<RpcMessage<'a>> {
+        let GspMessage {
+            header,
+            contents: (slice_1, slice_2),
+        } = element;
+
+        let rpc_header = header.rpc_header();
+        let payload_length = rpc_header.length();
+
+        dev_dbg!(
+            dev,
+            "GSP RPC: receive: seq# {}, function={:?}, length=0x{:x}\n",
+            rpc_header.sequence(),
+            rpc_header.function(),
+            payload_length,
+        );
+
+        // Check that the element is large enough for the message.
+        if slice_1.len() + slice_2.len() < payload_length {
+            return Err(EIO);
+        }
+
+        // Cut the message slices down to the actual length of the message.
+        let (slice_1, slice_2) = if slice_1.len() > payload_length {
+            // PANIC: we checked above that `slice_1` is at least as long as `payload_length`.
+            (slice_1.split_at(payload_length).0, &slice_2[0..0])
+        } else {
+            (
+                slice_1,
+                // PANIC: we checked above that `slice_1.len() + slice_2.len()` is at least as
+                // large as `payload_length`.
+                slice_2.split_at(payload_length - slice_1.len()).0,
+            )
+        };
+
+        Ok(RpcMessage {
+            header: rpc_header,
+            contents: (slice_1, slice_2),
+        })
+    }
+}
+
+impl<M> MessageElement for RpcMessageElement<M>
+where
+    M: MessageFromGsp,
+    Error: From<M::InitError>,
+{
+    fn read(dev: &device::Device, element: GspMessage<'_>) -> Result<Self> {
+        let message = Self::parse_rpc_message(dev, element)?;
+        let function = message.header.function().map_err(|_| EINVAL)?;
+
+        if function != M::FUNCTION {
+            return Err(ERANGE);
+        }
+
+        let (cmd, contents_1) = M::Message::from_bytes_prefix(message.contents.0).ok_or(EIO)?;
+        let mut sbuffer = SBufferIter::new_reader([contents_1, message.contents.1]);
+
+        M::read(cmd, &mut sbuffer)
+            .map(Self)
+            .map_err(|e| e.into())
+            .inspect(|_| {
+                if !sbuffer.is_empty() {
+                    dev_warn!(dev, "GSP message {:?} has unprocessed data\n", function);
+                }
+            })
+    }
 }
 
 /// Number of GSP pages making the [`Msgq`].
@@ -544,7 +641,7 @@ struct GspCommand<'a> {
 
 /// A message ready to be processed from the message queue.
 ///
-/// This is the type returned by [`CmdqInner::wait_for_msg`].
+/// This is the type returned by [`CmdqInner::wait_for_element`].
 struct GspMessage<'a> {
     // Reference to the header of the message.
     header: &'a GspMsgElement,
@@ -662,8 +759,8 @@ impl<'cmdq> Cmdq<'cmdq> {
         inner.send_command(command)?;
 
         loop {
-            match inner.receive_msg::<M::Reply>(Self::RECEIVE_TIMEOUT) {
-                Ok(reply) => break Ok(reply),
+            match inner.consume_element::<RpcMessageElement<M::Reply>>(Self::RECEIVE_TIMEOUT) {
+                Ok(reply) => break Ok(reply.0),
                 Err(ERANGE) => continue,
                 Err(e) => break Err(e),
             }
@@ -689,13 +786,16 @@ impl<'cmdq> Cmdq<'cmdq> {
 
     /// Receive a message from the GSP.
     ///
-    /// See [`CmdqInner::receive_msg`] for details.
+    /// See [`CmdqInner::consume_element`] for details.
     pub(crate) fn receive_msg<M: MessageFromGsp>(&self, timeout: Delta) -> Result<M>
     where
         // This allows all error types, including `Infallible`, to be used for `M::InitError`.
         Error: From<M::InitError>,
     {
-        self.inner.lock().receive_msg(timeout)
+        self.inner
+            .lock()
+            .consume_element::<RpcMessageElement<M>>(timeout)
+            .map(|m| m.0)
     }
 }
 
@@ -787,7 +887,7 @@ impl CmdqInner<'_> {
         }
     }
 
-    /// Wait for a message to become available on the message queue.
+    /// Wait for the next element to become available on the message queue.
     ///
     /// This works purely at the transport layer and does not interpret or validate the message
     /// beyond the advertised length in its [`GspMsgElement`].
@@ -805,7 +905,7 @@ impl CmdqInner<'_> {
     ///   message queue.
     ///
     /// Error codes returned by the message constructor are propagated as-is.
-    fn wait_for_msg(&self, timeout: Delta) -> Result<RpcMessage<'_>> {
+    fn wait_for_element(&self, timeout: Delta) -> Result<GspMessage<'_>> {
         // Wait for a message to arrive from the GSP.
         let (slice_1, slice_2) = read_poll_timeout(
             || Ok(self.gsp_mem.driver_read_area()),
@@ -827,108 +927,27 @@ impl CmdqInner<'_> {
             return Err(EIO);
         }
 
-        self.parse_rpc_message(GspMessage {
+        Ok(GspMessage {
             header,
             contents: (slice_1, slice_2),
         })
     }
 
-    /// Validate the RPC layer of `element` and returns its RPC header and its contents trimmed down
-    /// to the RPC payload.
+    /// Wait for the next element on the message queue, pass it to [`MessageElement::read`], and
+    /// advances the read pointer past it.
+    ///
+    /// The read pointer advances regardless of whether [`MessageElement::read`] succeeds or not.
     ///
     /// # Errors
     ///
-    /// - `EIO` if the element is shorter than the payload length advertised by the RPC header.
-    fn parse_rpc_message<'a>(&self, element: GspMessage<'a>) -> Result<RpcMessage<'a>> {
-        let GspMessage {
-            header,
-            contents: (slice_1, slice_2),
-        } = element;
+    /// Errors from [`Self::wait_for_element`] and from [`MessageElement::read`] are propagated
+    /// as-is.
+    fn consume_element<M: MessageElement>(&mut self, timeout: Delta) -> Result<M> {
+        let message = self.wait_for_element(timeout)?;
+        let elem_count = u32::try_from(message.header.length().div_ceil(GSP_PAGE_SIZE))?;
+        let result = M::read(self.dev, message);
 
-        let rpc_header = header.rpc_header();
-        let payload_length = rpc_header.length();
-
-        dev_dbg!(
-            &self.dev,
-            "GSP RPC: receive: seq# {}, function={:?}, length=0x{:x}\n",
-            rpc_header.sequence(),
-            rpc_header.function(),
-            payload_length,
-        );
-
-        // Check that the driver read area is large enough for the message.
-        if slice_1.len() + slice_2.len() < payload_length {
-            return Err(EIO);
-        }
-
-        // Cut the message slices down to the actual length of the message.
-        let (slice_1, slice_2) = if slice_1.len() > payload_length {
-            // PANIC: we checked above that `slice_1` is at least as long as `payload_length`.
-            (slice_1.split_at(payload_length).0, &slice_2[0..0])
-        } else {
-            (
-                slice_1,
-                // PANIC: we checked above that `slice_1.len() + slice_2.len()` is at least as
-                // large as `payload_length`.
-                slice_2.split_at(payload_length - slice_1.len()).0,
-            )
-        };
-
-        Ok(RpcMessage {
-            header: rpc_header,
-            contents: (slice_1, slice_2),
-        })
-    }
-
-    /// Receive a message from the GSP.
-    ///
-    /// The expected message type is specified using the `M` generic parameter. If the pending
-    /// message has a different function code, `ERANGE` is returned and the message is consumed.
-    ///
-    /// The read pointer is always advanced past the message, regardless of whether it matched.
-    ///
-    /// # Errors
-    ///
-    /// - `ETIMEDOUT` if `timeout` has elapsed before any message becomes available.
-    /// - `EIO` if there was some inconsistency (e.g. message shorter than advertised) on the
-    ///   message queue.
-    /// - `EINVAL` if the function code of the message was not recognized.
-    /// - `ERANGE` if the message had a recognized but non-matching function code.
-    ///
-    /// Error codes returned by [`MessageFromGsp::read`] are propagated as-is.
-    fn receive_msg<M: MessageFromGsp>(&mut self, timeout: Delta) -> Result<M>
-    where
-        // This allows all error types, including `Infallible`, to be used for `M::InitError`.
-        Error: From<M::InitError>,
-    {
-        let message = self.wait_for_msg(timeout)?;
-        let function = message.header.function().map_err(|_| EINVAL)?;
-
-        // Extract the message. Store the result as we want to advance the read pointer even in
-        // case of failure.
-        let result = if function == M::FUNCTION {
-            let (cmd, contents_1) = M::Message::from_bytes_prefix(message.contents.0).ok_or(EIO)?;
-            let mut sbuffer = SBufferIter::new_reader([contents_1, message.contents.1]);
-
-            M::read(cmd, &mut sbuffer)
-                .map_err(|e| e.into())
-                .inspect(|_| {
-                    if !sbuffer.is_empty() {
-                        dev_warn!(
-                            &self.dev,
-                            "GSP message {:?} has unprocessed data\n",
-                            function
-                        );
-                    }
-                })
-        } else {
-            Err(ERANGE)
-        };
-
-        // Advance the read pointer past this message.
-        self.gsp_mem.advance_cpu_read_ptr(u32::try_from(
-            message.header.length().div_ceil(GSP_PAGE_SIZE),
-        )?);
+        self.gsp_mem.advance_cpu_read_ptr(elem_count);
 
         result
     }
