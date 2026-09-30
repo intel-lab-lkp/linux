@@ -541,8 +541,6 @@ static int hcd_pci_suspend_noirq(struct device *dev)
 	if (retval)
 		return retval;
 
-	pci_save_state(pci_dev);
-
 	/* If the root hub is dead rather than suspended, disallow remote
 	 * wakeup.  usb_hc_died() should ensure that both hosts are marked as
 	 * dying, so we only need to check the primary roothub.
@@ -550,6 +548,19 @@ static int hcd_pci_suspend_noirq(struct device *dev)
 	if (HCD_DEAD(hcd))
 		device_set_wakeup_enable(dev, 0);
 	dev_dbg(dev, "wakeup: %d\n", device_may_wakeup(dev));
+
+	/*
+	 * If the state could not be saved, most likely because the controller
+	 * is no longer accessible, putting it into a low-power state would
+	 * fail as well and leave it marked as D3cold, and the PCI core would
+	 * then warn that its state was not saved.  Leave it to the PCI core
+	 * instead, as for a driver without a suspend_noirq callback.
+	 */
+	retval = pci_save_state(pci_dev);
+	if (retval) {
+		dev_dbg(dev, "--> not suspending, state not saved\n");
+		return 0;
+	}
 
 	/* Possibly enable remote wakeup,
 	 * choose the appropriate low-power state, and go to that state.
