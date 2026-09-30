@@ -457,6 +457,13 @@ out:
 	return res;
 
 insert_extent:
+	/* The extents file can't have overflow extents of its own */
+	if (inode->i_ino == HFS_EXT_CNID) {
+		hfs_clear_vbm_bits(sb, start, len);
+		res = -ENOSPC;
+		goto out;
+	}
+
 	hfs_dbg("insert new extent\n");
 	res = hfs_ext_write_extent(inode);
 	if (res)
