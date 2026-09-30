@@ -1566,5 +1566,6 @@ int ti_sci_do_xfer(const struct ti_sci_handle *handle,
 		   void *rx_message, size_t rx_message_size);
 
 void ti_sci_setup_device_ops(struct ti_sci_dev_ops *dops);
+void ti_sci_setup_clock_ops(struct ti_sci_clk_ops *cops);
 
 #endif /* __TI_SCI_H */
