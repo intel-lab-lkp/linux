@@ -96,7 +96,7 @@ static RUST_BINDER_LAYOUT: rust_binder_layout = rust_binder_layout {
 };
 
 fn next_debug_id() -> usize {
-    static NEXT_DEBUG_ID: Atomic<usize> = Atomic::new(0);
+    static NEXT_DEBUG_ID: Atomic<usize> = Atomic::new(1);
 
     NEXT_DEBUG_ID.fetch_add(1, Relaxed)
 }
