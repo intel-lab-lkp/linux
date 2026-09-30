@@ -430,12 +430,6 @@ static int eip93_crypto_probe(struct platform_device *pdev)
 	if (eip93->irq < 0)
 		return eip93->irq;
 
-	ret = devm_request_threaded_irq(eip93->dev, eip93->irq, eip93_irq_handler,
-					NULL, IRQF_ONESHOT,
-					dev_name(eip93->dev), eip93);
-	if (ret)
-		return ret;
-
 	ret = eip93_desc_init(eip93);
 	if (ret)
 		return ret;
@@ -451,6 +445,12 @@ static int eip93_crypto_probe(struct platform_device *pdev)
 	algo_flags = readl(eip93->base + EIP93_REG_PE_OPTION_1);
 
 	eip93_initialize(eip93, algo_flags);
+
+	ret = devm_request_threaded_irq(eip93->dev, eip93->irq, eip93_irq_handler,
+					NULL, IRQF_ONESHOT,
+					dev_name(eip93->dev), eip93);
+	if (ret)
+		return ret;
 
 	/* Init finished, enable RDR interrupt */
 	eip93_irq_enable(eip93, EIP93_INT_RDR_THRESH);
