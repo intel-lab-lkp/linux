@@ -775,8 +775,8 @@ nlmsvc_notify_blocked(struct file_lock *fl)
 	list_for_each_entry(block, &nlm_blocked, b_list) {
 		if (nlm_compare_locks(&block->b_call->a_args.lock.fl, fl)) {
 			nlmsvc_insert_block_locked(block, 0);
-			spin_unlock(&nlm_blocked_lock);
 			svc_wake_up(block->b_daemon);
+			spin_unlock(&nlm_blocked_lock);
 			return;
 		}
 	}
@@ -1023,6 +1023,13 @@ nlmsvc_retry_blocked(struct svc_rqst *rqstp)
 			timeout = block->b_when - jiffies;
 			break;
 		}
+		/*
+		 * Pin the block before dropping nlm_blocked_lock: a
+		 * concurrent GRANT_RES, CANCEL or UNLOCK can unlink the
+		 * block and drop the last kref, freeing it while we are
+		 * still using it.
+		 */
+		kref_get(&block->b_count);
 		spin_unlock(&nlm_blocked_lock);
 
 		dprintk("nlmsvc_retry_blocked(%p, when=%ld)\n",
@@ -1033,6 +1040,7 @@ nlmsvc_retry_blocked(struct svc_rqst *rqstp)
 			retry_deferred_block(block);
 		} else
 			nlmsvc_grant_blocked(block);
+		nlmsvc_release_block(block);
 		spin_lock(&nlm_blocked_lock);
 	}
 	spin_unlock(&nlm_blocked_lock);
