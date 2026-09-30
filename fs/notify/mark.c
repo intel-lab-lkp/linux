@@ -1113,6 +1113,16 @@ void fsnotify_destroy_marks(fsnotify_connp_t *connp)
 	if (!conn)
 		return;
 	/*
+	 * Detach the connector from the object first. Once conn->lock is
+	 * dropped a mark could be added in front of the one we're at and the
+	 * walk would miss it. fsnotify_grab_connector() refuses a detached
+	 * connector so any mark added from now on gets a connector of its
+	 * own. This also stops pinning the inode until all mark references
+	 * get dropped. It would lead to strange results such as delaying
+	 * inode deletion or blocking unmount.
+	 */
+	objp = fsnotify_detach_connector_from_object(conn, &type);
+	/*
 	 * We have to be careful since we can race with e.g.
 	 * fsnotify_clear_marks_by_group() and once we drop the conn->lock, the
 	 * list can get modified. However we are holding mark reference and
@@ -1128,12 +1138,6 @@ void fsnotify_destroy_marks(fsnotify_connp_t *connp)
 		fsnotify_destroy_mark(mark, mark->group);
 		spin_lock(&conn->lock);
 	}
-	/*
-	 * Detach list from object now so that we don't pin inode until all
-	 * mark references get dropped. It would lead to strange results such
-	 * as delaying inode deletion or blocking unmount.
-	 */
-	objp = fsnotify_detach_connector_from_object(conn, &type);
 	spin_unlock(&conn->lock);
 	if (old_mark)
 		fsnotify_put_mark(old_mark);
