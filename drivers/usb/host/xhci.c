@@ -86,16 +86,20 @@ static bool td_on_ring(struct xhci_td *td, struct xhci_ring *ring)
 int xhci_handshake(void __iomem *ptr, u32 mask, u32 done, u64 timeout_us)
 {
 	u32	result;
-	int	ret;
+	ktime_t deadline = ktime_add_us(ktime_get(), timeout_us);
 
-	ret = readl_poll_timeout_atomic(ptr, result,
-					(result & mask) == done ||
-					result == U32_MAX,
-					1, timeout_us);
-	if (result == U32_MAX)		/* card removed */
-		return -ENODEV;
+	for (;;) {
+		result = readl(ptr);
+		if (result == U32_MAX)			/* card removed */
+			return -ENODEV;
+		if ((result & mask) == done)
+			return 0;
 
-	return ret;
+		if (ktime_compare(ktime_get(), deadline) > 0)
+			return -ETIMEDOUT;
+
+		udelay(1);
+	}
 }
 
 /*
