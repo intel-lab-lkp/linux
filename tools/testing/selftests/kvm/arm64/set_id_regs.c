@@ -154,6 +154,7 @@ static const struct reg_ftr_bits ftr_id_aa64pfr0_el1[] = {
 
 static const struct reg_ftr_bits ftr_id_aa64pfr1_el1[] = {
 	REG_FTR_BITS(FTR_LOWER_SAFE, ID_AA64PFR1_EL1, DF2, 0),
+	REG_FTR_BITS(FTR_LOWER_SAFE, ID_AA64PFR1_EL1, GCS, 0),
 	REG_FTR_BITS(FTR_LOWER_SAFE, ID_AA64PFR1_EL1, CSV2_frac, 0),
 	REG_FTR_BITS(FTR_LOWER_SAFE, ID_AA64PFR1_EL1, SSBS, ID_AA64PFR1_EL1_SSBS_NI),
 	REG_FTR_BITS(FTR_LOWER_SAFE, ID_AA64PFR1_EL1, BT, 0),
@@ -818,6 +819,12 @@ struct reg_ftr_val {
 	  .mask = r ## _ ## f ## _MASK,				\
 	  .val = (r ## _ ## f ## _ ## v  << r ## _ ## f ## _SHIFT) }
 
+static const struct reg_ftr_val gcs_no_s1pie[] = {
+	REG_FTR_VAL(ID_AA64PFR1_EL1, GCS, IMP),
+	REG_FTR_VAL(ID_AA64MMFR3_EL1, S1PIE, NI),
+	{ }
+};
+
 static const struct reg_ftr_val s1pie_no_tcr2[] = {
 	REG_FTR_VAL(ID_AA64MMFR3_EL1, TCRX, NI),
 	REG_FTR_VAL(ID_AA64MMFR3_EL1, S1PIE, IMP),
@@ -836,6 +843,7 @@ struct ftr_config {
 };
 
 static const struct ftr_config invalid_configs[] = {
+	{ .name = "GCS without S1PIE", .regs = gcs_no_s1pie },
 	{ .name = "S1PIE without TCRX", .regs = s1pie_no_tcr2 },
 	{ .name = "S1POE without TCRX", .regs = s1poe_no_tcr2 },
 };
