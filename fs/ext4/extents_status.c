@@ -1783,6 +1783,16 @@ static unsigned long ext4_es_scan(struct shrinker *shrink,
 
 	ret = percpu_counter_read_positive(&sbi->s_es_stats.es_stats_shk_cnt);
 	trace_ext4_es_shrink_scan_exit(sbi->s_sb, nr_shrunk, ret);
+
+	/*
+	 * es_stats_shk_cnt is a percpu counter, so it can stay positive
+	 * after sbi->s_es_list has nothing left to give. Stop this reclaim
+	 * pass once a call frees nothing, instead of burning through
+	 * do_shrink_slab()'s scan budget against a stale count.
+	 */
+	if (nr_shrunk == 0)
+		return SHRINK_STOP;
+
 	return nr_shrunk;
 }
 
