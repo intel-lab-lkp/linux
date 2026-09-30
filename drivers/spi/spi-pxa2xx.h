@@ -138,6 +138,10 @@ int pxa2xx_spi_probe(struct device *dev, struct ssp_device *ssp,
 		     struct pxa2xx_spi_controller *platform_info);
 void pxa2xx_spi_remove(struct device *dev);
 
+void lpss_ssp_setup(struct driver_data *drv_data);
+int pxa2xx_spi_runtime_suspend(struct device *dev);
+int pxa2xx_spi_runtime_resume(struct device *dev);
+
 extern const struct dev_pm_ops pxa2xx_spi_pm_ops;
 
 #endif /* SPI_PXA2XX_H */

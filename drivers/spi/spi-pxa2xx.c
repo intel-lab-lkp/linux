@@ -343,7 +343,7 @@ static bool __lpss_ssp_update_priv(struct driver_data *drv_data, unsigned int of
  * Perform LPSS SSP specific setup. This function must be called first if
  * one is going to use LPSS SSP private registers.
  */
-static void lpss_ssp_setup(struct driver_data *drv_data)
+void lpss_ssp_setup(struct driver_data *drv_data)
 {
 	const struct lpss_config *config;
 	u32 value;
@@ -365,6 +365,7 @@ static void lpss_ssp_setup(struct driver_data *drv_data)
 		}
 	}
 }
+EXPORT_SYMBOL_NS_GPL(lpss_ssp_setup, "SPI_PXA2xx");
 
 static void lpss_ssp_select_cs(struct spi_device *spi,
 			       const struct lpss_config *config)
@@ -1563,7 +1564,7 @@ static int pxa2xx_spi_resume(struct device *dev)
 	return spi_controller_resume(drv_data->controller);
 }
 
-static int pxa2xx_spi_runtime_suspend(struct device *dev)
+int pxa2xx_spi_runtime_suspend(struct device *dev)
 {
 	struct driver_data *drv_data = dev_get_drvdata(dev);
 
@@ -1579,13 +1580,15 @@ static int pxa2xx_spi_runtime_suspend(struct device *dev)
 	}
 	return 0;
 }
+EXPORT_SYMBOL_NS_GPL(pxa2xx_spi_runtime_suspend, "SPI_PXA2xx");
 
-static int pxa2xx_spi_runtime_resume(struct device *dev)
+int pxa2xx_spi_runtime_resume(struct device *dev)
 {
 	struct driver_data *drv_data = dev_get_drvdata(dev);
 
 	return pxa2xx_spi_clk_enable(drv_data);
 }
+EXPORT_SYMBOL_NS_GPL(pxa2xx_spi_runtime_resume, "SPI_PXA2xx");
 
 EXPORT_NS_GPL_DEV_PM_OPS(pxa2xx_spi_pm_ops, SPI_PXA2xx) = {
 	SYSTEM_SLEEP_PM_OPS(pxa2xx_spi_suspend, pxa2xx_spi_resume)
