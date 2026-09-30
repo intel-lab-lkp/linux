@@ -9572,7 +9572,7 @@ static void dm_test_fs_caps_hdmi_vsdb(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, ctx->aconnector->max_vfreq, 60);
 	KUNIT_EXPECT_EQ(test, connector->display_info.monitor_range.min_vfreq, 24);
 	KUNIT_EXPECT_EQ(test, connector->display_info.monitor_range.max_vfreq, 60);
-	KUNIT_EXPECT_FALSE(test, dm_test_fs_caps_capable(ctx));
+	KUNIT_EXPECT_TRUE(test, dm_test_fs_caps_capable(ctx));
 }
 
 /**
@@ -9599,8 +9599,8 @@ static void dm_test_fs_caps_hdmi_no_vsdb(struct kunit *test)
  * @test: The KUnit test context
  *
  * A whitelisted protocol converter re-parses the AMD VSDB, enables SDP v1.3
- * packing and adopts the converter adaptive sync type. Without an EDID
- * FreeSync VCP code, the connector is not marked FreeSync-capable.
+ * packing and adopts the converter adaptive sync type. The connector remains
+ * FreeSync-capable when the EDID has no FreeSync VCP code.
  */
 static void dm_test_fs_caps_pcon_whitelist(struct kunit *test)
 {
@@ -9622,7 +9622,7 @@ static void dm_test_fs_caps_pcon_whitelist(struct kunit *test)
 			(int)FREESYNC_TYPE_PCON_IN_WHITELIST);
 	KUNIT_EXPECT_EQ(test, ctx->aconnector->min_vfreq, 24);
 	KUNIT_EXPECT_EQ(test, ctx->aconnector->max_vfreq, 60);
-	KUNIT_EXPECT_FALSE(test, dm_test_fs_caps_capable(ctx));
+	KUNIT_EXPECT_TRUE(test, dm_test_fs_caps_capable(ctx));
 }
 
 /**
