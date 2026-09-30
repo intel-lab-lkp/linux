@@ -14,6 +14,7 @@
 #include "intel_context.h"
 
 struct drm_i915_gem_object;
+struct i915_gem_context;
 struct i915_gem_ww_ctx;
 struct intel_engine_cs;
 struct intel_ring;
@@ -35,6 +36,8 @@ void lrc_fini_wa_ctx(struct intel_engine_cs *engine);
 
 int lrc_alloc(struct intel_context *ce,
 	      struct intel_engine_cs *engine);
+void lrc_latch_wa_22013059131(struct intel_context *ce,
+			      struct i915_gem_context *ctx);
 void lrc_reset(struct intel_context *ce);
 void lrc_fini(struct intel_context *ce);
 void lrc_destroy(struct kref *kref);

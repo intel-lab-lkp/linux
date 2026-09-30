@@ -2172,6 +2172,30 @@ struct drm_i915_gem_context_param {
  * Note that this is a debug API not available on production kernel builds.
  */
 #define I915_CONTEXT_PARAM_CONTEXT_IMAGE	0xf
+
+/*
+ * I915_CONTEXT_PARAM_WA_22013059131:
+ *
+ * Default value 0 means the kernel sets LSC_CHICKEN_BIT_0 bit 15
+ * (FORCE_1_SUB_MESSAGE_PER_FRAGMENT) as part of Wa_22013059131.  Set to 1
+ * to inform the kernel that userspace is handling the SLM contention
+ * workaround itself (e.g. by limiting SLM size), so bit 15 programming is
+ * not needed.
+ *
+ * LSC_CHICKEN_BIT_0 is shared by the RCS and CCS engines, so this setting
+ * takes effect for every context of the calling DRM client (the whole file
+ * descriptor), not just the context the ioctl is issued on.  It is latched
+ * once, by whichever comes first: an explicit call to this parameter, or
+ * any context of the client being submitted for the first time.  A later
+ * request for the opposite value fails with -EINVAL.  Userspace that wants
+ * to opt out must therefore do so before submitting any work on this fd,
+ * including via the default context (id 0) created on open().
+ *
+ * Note: LSC_CHICKEN_BIT_0_UDW MAXREQS_PER_BANK (bits 39:37) is the
+ * other part of Wa_22013059131 and remains unconditionally programmed
+ * by the kernel regardless of this setting.  DG2-G11 only.
+ */
+#define I915_CONTEXT_PARAM_WA_22013059131	0x10
 /* Must be kept compact -- no holes and well documented */
 
 	/** @value: Context parameter value to be set or queried */

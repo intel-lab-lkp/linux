@@ -13,6 +13,7 @@
 #include "intel_context.h"
 #include "intel_engine.h"
 #include "intel_engine_pm.h"
+#include "intel_lrc.h"
 #include "intel_ring.h"
 
 static struct kmem_cache *slab_ce;
@@ -80,6 +81,7 @@ int intel_context_alloc_state(struct intel_context *ce)
 			if (ctx->client)
 				i915_drm_client_add_context_objects(ctx->client,
 								    ce);
+			lrc_latch_wa_22013059131(ce, ctx);
 			i915_gem_context_put(ctx);
 		}
 	}
