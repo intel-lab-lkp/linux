@@ -681,18 +681,15 @@ struct regmap *__regmap_init(struct device *dev,
 			     const char *lock_name)
 {
 	struct regmap *map;
-	int ret = -EINVAL;
 	enum regmap_endian reg_endian, val_endian;
-	int i, j;
+	int i, j, ret;
 
 	if (!config)
-		goto err;
+		return ERR_PTR(-EINVAL);
 
 	map = kzalloc_obj(*map);
-	if (map == NULL) {
-		ret = -ENOMEM;
-		goto err;
-	}
+	if (map == NULL)
+		return ERR_PTR(-ENOMEM);
 
 	ret = regmap_set_name(map, config);
 	if (ret)
@@ -1174,7 +1171,6 @@ err_name:
 	kfree_const(map->name);
 err_map:
 	kfree(map);
-err:
 	return ERR_PTR(ret);
 }
 EXPORT_SYMBOL_GPL(__regmap_init);
