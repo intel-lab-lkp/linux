@@ -109,6 +109,8 @@ static enum sr_loc_attr locate_direct_register(const struct kvm_vcpu *vcpu,
 	case PIR_EL1:
 	case PIRE0_EL1:
 	case POR_EL1:
+	case GCSCR_EL1:
+	case GCSPR_EL1:
 	case ESR_EL1:
 	case AFSR0_EL1:
 	case AFSR1_EL1:
@@ -135,6 +137,8 @@ static enum sr_loc_attr locate_direct_register(const struct kvm_vcpu *vcpu,
 	case DACR32_EL2:
 	case IFSR32_EL2:
 	case DBGVCR32_EL2:
+	case GCSCRE0_EL1:
+	case GCSPR_EL0:
 		/* These registers are always loaded, no matter what */
 		return SR_LOC_LOADED;
 
@@ -198,6 +202,8 @@ static void locate_register(const struct kvm_vcpu *vcpu, enum vcpu_sysreg reg,
 		MAPPED_EL2_SYSREG(PIR_EL2,     PIR_EL1,     NULL	     );
 		MAPPED_EL2_SYSREG(PIRE0_EL2,   PIRE0_EL1,   NULL	     );
 		MAPPED_EL2_SYSREG(POR_EL2,     POR_EL1,     NULL	     );
+		MAPPED_EL2_SYSREG(GCSCR_EL2,   GCSCR_EL1,   NULL             );
+		MAPPED_EL2_SYSREG(GCSPR_EL2,   GCSPR_EL1,   NULL             );
 		MAPPED_EL2_SYSREG(AMAIR_EL2,   AMAIR_EL1,   NULL	     );
 		MAPPED_EL2_SYSREG(ELR_EL2,     ELR_EL1,	    NULL	     );
 		MAPPED_EL2_SYSREG(SPSR_EL2,    SPSR_EL1,    NULL	     );
@@ -253,6 +259,10 @@ static u64 read_sr_from_cpu(enum vcpu_sysreg reg)
 	case TCR2_EL1:		val = read_sysreg_s(SYS_TCR2_EL12);	break;
 	case PIR_EL1:		val = read_sysreg_s(SYS_PIR_EL12);	break;
 	case PIRE0_EL1:		val = read_sysreg_s(SYS_PIRE0_EL12);	break;
+	case GCSPR_EL0:		val = read_sysreg_s(SYS_GCSPR_EL0);	break;
+	case GCSCRE0_EL1:	val = read_sysreg_s(SYS_GCSCRE0_EL1);	break;
+	case GCSCR_EL1:		val = read_sysreg_s(SYS_GCSCR_EL12);	break;
+	case GCSPR_EL1:		val = read_sysreg_s(SYS_GCSPR_EL12);	break;
 	case POR_EL1:		val = read_sysreg_s(SYS_POR_EL12);	break;
 	case ESR_EL1:		val = read_sysreg_s(SYS_ESR_EL12);	break;
 	case AFSR0_EL1:		val = read_sysreg_s(SYS_AFSR0_EL12);	break;
@@ -293,6 +303,10 @@ static void write_sr_to_cpu(enum vcpu_sysreg reg, u64 val)
 	case PIR_EL1:		write_sysreg_s(val, SYS_PIR_EL12);	break;
 	case PIRE0_EL1:		write_sysreg_s(val, SYS_PIRE0_EL12);	break;
 	case POR_EL1:		write_sysreg_s(val, SYS_POR_EL12);	break;
+	case GCSCRE0_EL1:	write_sysreg_s(val, SYS_GCSCRE0_EL1);	break;
+	case GCSPR_EL0:		write_sysreg_s(val, SYS_GCSPR_EL0);	break;
+	case GCSCR_EL1:		write_sysreg_s(val, SYS_GCSCR_EL12);	break;
+	case GCSPR_EL1:		write_sysreg_s(val, SYS_GCSPR_EL12);	break;
 	case ESR_EL1:		write_sysreg_s(val, SYS_ESR_EL12);	break;
 	case AFSR0_EL1:		write_sysreg_s(val, SYS_AFSR0_EL12);	break;
 	case AFSR1_EL1:		write_sysreg_s(val, SYS_AFSR1_EL12);	break;
@@ -3089,6 +3103,21 @@ static unsigned int cnthv_visibility(const struct kvm_vcpu *vcpu,
 	return REG_HIDDEN;
 }
 
+static unsigned int gcs_visibility(const struct kvm_vcpu *vcpu,
+				   const struct sys_reg_desc *r)
+{
+	if (kvm_has_gcs(vcpu->kvm))
+		return 0;
+
+	return REG_HIDDEN;
+}
+
+static unsigned int gcs_el2_visibility(const struct kvm_vcpu *vcpu,
+				       const struct sys_reg_desc *rd)
+{
+	return __el2_visibility(vcpu, rd, gcs_visibility);
+}
+
 static bool access_mdcr(struct kvm_vcpu *vcpu,
 			struct sys_reg_params *p,
 			const struct sys_reg_desc *r)
@@ -3493,6 +3522,13 @@ static const struct sys_reg_desc sys_reg_descs[] = {
 	PTRAUTH_KEY(APDB),
 	PTRAUTH_KEY(APGA),
 
+	{ SYS_DESC(SYS_GCSCR_EL1), NULL, reset_val, GCSCR_EL1, 0,
+	  .visibility = gcs_visibility },
+	{ SYS_DESC(SYS_GCSPR_EL1), NULL, reset_unknown, GCSPR_EL1,
+	  .visibility = gcs_visibility },
+	{ SYS_DESC(SYS_GCSCRE0_EL1), NULL, reset_val, GCSCRE0_EL1, 0,
+	  .visibility = gcs_visibility },
+
 	{ SYS_DESC(SYS_SPSR_EL1), access_spsr},
 	{ SYS_DESC(SYS_ELR_EL1), access_elr},
 
@@ -3618,6 +3654,8 @@ static const struct sys_reg_desc sys_reg_descs[] = {
 		    CTR_EL0_DminLine_MASK |
 		    CTR_EL0_L1Ip_MASK |
 		    CTR_EL0_IminLine_MASK),
+	{ SYS_DESC(SYS_GCSPR_EL0), NULL, reset_unknown, GCSPR_EL0,
+	  .visibility = gcs_visibility },
 	{ SYS_DESC(SYS_SVCR), undef_access, reset_val, SVCR, 0, .visibility = sme_visibility  },
 	{ SYS_DESC(SYS_FPMR), undef_access, reset_val, FPMR, 0, .visibility = fp8_visibility },
 
@@ -3861,6 +3899,10 @@ static const struct sys_reg_desc sys_reg_descs[] = {
 	EL2_REG_FILTERED(VNCR_EL2, bad_vncr_trap, reset_val, 0,
 			 vncr_el2_visibility),
 
+	EL2_REG_FILTERED(GCSCR_EL2, access_rw, reset_val, 0,
+			 gcs_el2_visibility),
+	EL2_REG_FILTERED(GCSPR_EL2, access_rw, reset_val, 0,
+			 gcs_el2_visibility),
 	{ SYS_DESC(SYS_DACR32_EL2), undef_access, reset_unknown, DACR32_EL2 },
 	EL2_REG_VNCR_FILT(HDFGRTR2_EL2, fgt2_visibility),
 	EL2_REG_VNCR_FILT(HDFGWTR2_EL2, fgt2_visibility),
@@ -5873,6 +5915,9 @@ static bool kvm_validate_id_regs(struct kvm *kvm)
 		return false;
 
 	if (kvm_has_s1poe(kvm) && !kvm_has_tcr2(kvm))
+		return false;
+
+	if (kvm_has_gcs(kvm) && !kvm_has_s1pie(kvm))
 		return false;
 
 	return true;

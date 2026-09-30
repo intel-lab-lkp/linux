@@ -59,6 +59,9 @@ static void __sysreg_save_vel2_state(struct kvm_vcpu *vcpu)
 			if (ctxt_has_s1pie(&vcpu->arch.ctxt)) {
 				__vcpu_assign_sys_reg(vcpu, PIRE0_EL2, read_sysreg_el1(SYS_PIRE0));
 				__vcpu_assign_sys_reg(vcpu, PIR_EL2, read_sysreg_el1(SYS_PIR));
+
+				if (ctxt_has_gcs(&vcpu->arch.ctxt))
+					__vcpu_assign_sys_reg(vcpu, GCSCR_EL2, read_sysreg_el1(SYS_GCSCR));
 			}
 
 			if (ctxt_has_s1poe(&vcpu->arch.ctxt))
@@ -86,6 +89,8 @@ static void __sysreg_save_vel2_state(struct kvm_vcpu *vcpu)
 	__vcpu_assign_sys_reg(vcpu, SP_EL2,	 read_sysreg(sp_el1));
 	__vcpu_assign_sys_reg(vcpu, ELR_EL2,	 read_sysreg_el1(SYS_ELR));
 	__vcpu_assign_sys_reg(vcpu, SPSR_EL2,	 read_sysreg_el1(SYS_SPSR));
+	if (ctxt_has_gcs(&vcpu->arch.ctxt))
+		__vcpu_assign_sys_reg(vcpu, GCSPR_EL2, read_sysreg_el1(SYS_GCSPR));
 
 	if (ctxt_has_sctlr2(&vcpu->arch.ctxt))
 		__vcpu_assign_sys_reg(vcpu, SCTLR2_EL2, read_sysreg_el1(SYS_SCTLR2));
@@ -138,6 +143,11 @@ static void __sysreg_restore_vel2_state(struct kvm_vcpu *vcpu)
 		if (ctxt_has_s1pie(&vcpu->arch.ctxt)) {
 			write_sysreg_el1(__vcpu_sys_reg(vcpu, PIR_EL2), SYS_PIR);
 			write_sysreg_el1(__vcpu_sys_reg(vcpu, PIRE0_EL2), SYS_PIRE0);
+
+			if (ctxt_has_gcs(&vcpu->arch.ctxt)) {
+				write_sysreg_el1(__vcpu_sys_reg(vcpu, GCSCR_EL2), SYS_GCSCR);
+				write_sysreg_el1(__vcpu_sys_reg(vcpu, GCSPR_EL2), SYS_GCSPR);
+			}
 		}
 
 		if (ctxt_has_s1poe(&vcpu->arch.ctxt))
