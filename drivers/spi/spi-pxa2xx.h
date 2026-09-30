@@ -66,6 +66,8 @@ struct driver_data {
 	void *rx;
 	void *rx_end;
 	u8 n_bytes;
+	bool clk_enabled;
+	struct mutex clk_lock;
 	int (*write)(struct driver_data *drv_data);
 	int (*read)(struct driver_data *drv_data);
 	irqreturn_t (*transfer_handler)(struct driver_data *drv_data);
