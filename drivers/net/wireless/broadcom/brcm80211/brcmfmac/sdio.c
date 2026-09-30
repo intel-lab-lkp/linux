@@ -516,6 +516,7 @@ struct brcmf_sdio {
 	bool dpc_running;
 
 	bool txoff;		/* Transmit flow-controlled */
+	bool txoff_pending;	/* Deferred transmit flow control */
 	struct brcmf_sdio_count sdcnt;
 	bool sr_enabled; /* SaveRestore enabled */
 	bool sleeping;
@@ -2796,8 +2797,53 @@ static bool brcmf_sdio_prec_enq(struct pktq *q, struct sk_buff *pkt, int prec)
 	return p != NULL;
 }
 
+/*
+ * The caller holds txq_lock with hard IRQs disabled. Avoid the skb queue
+ * lock, which may sleep on PREEMPT_RT.
+ */
+static bool brcmf_sdio_prec_enq_irqoff(struct pktq *q, struct sk_buff *pkt,
+				       int prec)
+{
+	struct sk_buff_head *list = &q->q[prec].skblist;
+
+	if (pktq_pfull(q, prec) || pktq_full(q))
+		return false;
+
+	__skb_queue_tail(list, pkt);
+	q->len++;
+	if (q->hi_prec < prec)
+		q->hi_prec = prec;
+
+	return true;
+}
+
+static bool brcmf_sdio_txq_lock(struct brcmf_sdio *bus, bool irq_off)
+		__cond_acquires(true, &bus->txq_lock)
+{
+	if (irq_off) {
+		if (IS_ENABLED(CONFIG_PREEMPT_RT) &&
+		    (in_hardirq() || in_nmi()))
+			return false;
+		return spin_trylock(&bus->txq_lock);
+	}
+
+	spin_lock_bh(&bus->txq_lock);
+	return true;
+}
+
+static void brcmf_sdio_txq_unlock(struct brcmf_sdio *bus, bool irq_off)
+		__releases(&bus->txq_lock)
+{
+	if (irq_off)
+		spin_unlock(&bus->txq_lock);
+	else
+		spin_unlock_bh(&bus->txq_lock);
+}
+
 static int brcmf_sdio_bus_txdata(struct device *dev, struct sk_buff *pkt)
 {
+	bool irq_off = irqs_disabled();
+	bool enqueued;
 	int ret = -EBADE;
 	uint prec;
 	struct brcmf_bus *bus_if = dev_get_drvdata(dev);
@@ -2826,22 +2872,39 @@ static int brcmf_sdio_bus_txdata(struct device *dev, struct sk_buff *pkt)
 	bus->sdcnt.fcqueued++;
 
 	/* Priority based enq */
-	spin_lock_bh(&bus->txq_lock);
+	if (!brcmf_sdio_txq_lock(bus, irq_off)) {
+		skb_pull(pkt, bus->tx_hdrlen);
+		return -EBUSY;
+	}
+
 	/* reset bus_flags in packet cb */
 	*(u16 *)(pkt->cb) = 0;
-	if (!brcmf_sdio_prec_enq(&bus->txq, pkt, prec)) {
+	if (irq_off)
+		enqueued = brcmf_sdio_prec_enq_irqoff(&bus->txq, pkt, prec);
+	else
+		enqueued = brcmf_sdio_prec_enq(&bus->txq, pkt, prec);
+
+	if (!enqueued) {
 		skb_pull(pkt, bus->tx_hdrlen);
-		brcmf_err("out of bus->txq !!!\n");
+		/* Avoid netconsole recursion. */
+		if (!irq_off)
+			brcmf_err("out of bus->txq !!!\n");
 		ret = -ENOSR;
 	} else {
 		ret = 0;
 	}
 
 	if (pktq_len(&bus->txq) >= TXHI) {
-		bus->txoff = true;
-		brcmf_proto_bcdc_txflowblock(dev, true);
+		if (irq_off) {
+			WRITE_ONCE(bus->txoff_pending, true);
+		} else {
+			WRITE_ONCE(bus->txoff_pending, false);
+			bus->txoff = true;
+			brcmf_proto_bcdc_txflowblock(dev, true);
+		}
 	}
-	spin_unlock_bh(&bus->txq_lock);
+
+	brcmf_sdio_txq_unlock(bus, irq_off);
 
 #ifdef DEBUG
 	if (pktq_plen(&bus->txq, prec) > qcount[prec])
@@ -3754,6 +3817,21 @@ static void brcmf_sdio_bus_watchdog(struct brcmf_sdio *bus)
 	}
 }
 
+static void brcmf_sdio_deferred_txflowblock(struct brcmf_sdio *bus)
+{
+	if (!READ_ONCE(bus->txoff_pending))
+		return;
+
+	spin_lock_bh(&bus->txq_lock);
+	WRITE_ONCE(bus->txoff_pending, false);
+	if (bus->sdiodev->state == BRCMF_SDIOD_DATA && !bus->txoff &&
+	    pktq_len(&bus->txq) >= TXHI) {
+		bus->txoff = true;
+		brcmf_proto_bcdc_txflowblock(bus->sdiodev->dev, true);
+	}
+	spin_unlock_bh(&bus->txq_lock);
+}
+
 static void brcmf_sdio_dataworker(struct work_struct *work)
 {
 	struct brcmf_sdio *bus = container_of(work, struct brcmf_sdio,
@@ -3763,6 +3841,7 @@ static void brcmf_sdio_dataworker(struct work_struct *work)
 	wmb();
 	while (READ_ONCE(bus->dpc_triggered)) {
 		bus->dpc_triggered = false;
+		brcmf_sdio_deferred_txflowblock(bus);
 		brcmf_sdio_dpc(bus);
 		bus->idlecount = 0;
 	}
