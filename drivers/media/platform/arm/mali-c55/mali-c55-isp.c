@@ -342,7 +342,6 @@ static int mali_c55_isp_enable_streams(struct v4l2_subdev *sd,
 
 	src_sd = media_entity_to_v4l2_subdev(isp->remote_src->entity);
 
-	isp->frame_sequence = 0;
 	ret = mali_c55_isp_start(mali_c55, state);
 	if (ret) {
 		dev_err(mali_c55->dev, "Failed to start ISP\n");
@@ -380,6 +379,7 @@ static int mali_c55_isp_disable_streams(struct v4l2_subdev *sd,
 	isp->remote_src = NULL;
 
 	mali_c55_isp_stop(mali_c55);
+	isp->frame_sequence = UINT_MAX;
 
 	return 0;
 }
@@ -584,6 +584,7 @@ int mali_c55_register_isp(struct mali_c55 *mali_c55)
 	int ret;
 
 	isp->mali_c55 = mali_c55;
+	isp->frame_sequence = UINT_MAX;
 
 	v4l2_subdev_init(sd, &mali_c55_isp_ops);
 	sd->flags |= V4L2_SUBDEV_FL_HAS_DEVNODE | V4L2_SUBDEV_FL_HAS_EVENTS;

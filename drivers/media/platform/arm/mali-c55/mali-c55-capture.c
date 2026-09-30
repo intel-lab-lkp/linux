@@ -413,6 +413,9 @@ void mali_c55_set_next_buffer(struct mali_c55_cap_dev *cap_dev)
 		return;
 	}
 
+	/* The buffer is written out during the frame following this one. */
+	buf->vb.sequence = cap_dev->mali_c55->isp.frame_sequence + 1;
+
 	pix_mp = &cap_dev->format.format;
 
 	mali_c55_cap_dev_update_bits(cap_dev, MALI_C55_REG_Y_WRITER_MODE,
@@ -457,7 +460,6 @@ void mali_c55_set_next_buffer(struct mali_c55_cap_dev *cap_dev)
 void mali_c55_set_plane_done(struct mali_c55_cap_dev *cap_dev,
 			     enum mali_c55_planes plane)
 {
-	struct mali_c55_isp *isp = &cap_dev->mali_c55->isp;
 	struct mali_c55_buffer *buf;
 
 	scoped_guard(spinlock, &cap_dev->buffers.processing_lock) {
@@ -476,7 +478,6 @@ void mali_c55_set_plane_done(struct mali_c55_cap_dev *cap_dev,
 
 	/* If the other plane is also done... */
 	buf->vb.vb2_buf.timestamp = ktime_get_boottime_ns();
-	buf->vb.sequence = isp->frame_sequence++;
 	vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_DONE);
 }
 

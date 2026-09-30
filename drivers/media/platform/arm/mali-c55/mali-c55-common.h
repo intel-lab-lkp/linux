@@ -76,6 +76,10 @@ struct mali_c55_isp {
 	struct media_pad *remote_src;
 	/* Mutex to guard vb2 start/stop streaming */
 	struct mutex capture_lock;
+	/*
+	 * Sequence of the frame being processed, incremented at SOF. Held at
+	 * UINT_MAX while stopped so the first frame gets sequence 0.
+	 */
 	unsigned int frame_sequence;
 };
 
