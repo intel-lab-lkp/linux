@@ -71,7 +71,7 @@
 # Set up veth interfaces and leave them up so xskxceiver can be launched in a debugger:
 #   sudo ./test_xsk.sh -d
 #
-# Run test suite in a specific mode only [skb,drv,zc]
+# Run test suite in a specific mode only [skb,drv]
 #   sudo ./test_xsk.sh -m MODE
 #
 # List available tests
@@ -84,6 +84,11 @@
 #   ./test_xsk.sh -h
 
 . xsk_prereqs.sh
+
+if [ ! -x "./${XSKOBJ}" ]; then
+	echo "xskxceiver was not built; skipping"
+	exit $ksft_skip
+fi
 
 while getopts "vdm:lt:h" flag
 do
@@ -151,6 +156,31 @@ if [[ $help -eq 1 ]]; then
         exit
 fi
 
+if [ -n "$MODE" ]; then
+	case "$MODE" in
+		skb|drv) MODES=("$MODE");;
+		*) echo "Unsupported veth mode: $MODE (expected skb or drv)" >&2
+		   exit 1;;
+	esac
+else
+	MODES=(skb drv)
+fi
+
+if [ -n "$TEST" ]; then
+	if [[ "$TEST" =~ ^[0-9]+$ ]]; then
+		CASES=("$TEST")
+	else
+		mapfile -t CASES < <(./${XSKOBJ} -l |
+			awk -F ': ' -v name="$TEST" '$2 == name {print $1}')
+	fi
+else
+	mapfile -t CASES < <(./${XSKOBJ} -l | awk -F ': ' '/^[0-9]+: / {print $1}')
+fi
+if [ ${#CASES[@]} -eq 0 ]; then
+	echo "Unknown AF_XDP test: $TEST" >&2
+	exit 1
+fi
+
 validate_root_exec
 validate_veth_support ${VETH0}
 validate_ip_utility
@@ -168,29 +198,38 @@ if [[ $verbose -eq 1 ]]; then
 	ARGS+="-v "
 fi
 
-if [ -n "$MODE" ]; then
-	ARGS+="-m ${MODE} "
-fi
-
-if [ -n "$TEST" ]; then
-	ARGS+="-t ${TEST} "
-fi
-
 retval=$?
 test_status $retval "${TEST_NAME}"
 
 ## START TESTS
 
 statusList=()
+nameList=()
 
-TEST_NAME="XSK_SELFTESTS_${VETH0}_SOFTIRQ"
+run_matrix()
+{
+	local mode case_id
+
+	for mode in "${MODES[@]}"; do
+		for case_id in "${CASES[@]}"; do
+			ARGS="${BASE_ARGS} -m ${mode} -t ${case_id}"
+			TEST_NAME="XSK_${mode}_${case_id}_${RUN_VARIANT}_${VETH0}"
+			exec_xskxceiver
+		done
+	done
+}
+
+BASE_ARGS="${ARGS}"
+
+RUN_VARIANT=SOFTIRQ
 
 if [[ $debug -eq 1 ]]; then
-    echo "-i" ${VETH0} "-i" ${VETH1}
+    ARGS="${BASE_ARGS} -m ${MODES[0]} -t ${CASES[0]}"
+    echo "./${XSKOBJ} -i ${VETH0} -i ${VETH1} ${ARGS}"
     exit
 fi
 
-exec_xskxceiver
+run_matrix
 
 cleanup_exit ${VETH0} ${VETH1}
 
@@ -198,28 +237,47 @@ if [[ $list -eq 1 ]]; then
     exit
 fi
 
-TEST_NAME="XSK_SELFTESTS_${VETH0}_BUSY_POLL"
+RUN_VARIANT=BUSY_POLL
 busy_poll=1
 
 setup_vethPairs
-exec_xskxceiver
+run_matrix
 
 ## END TESTS
 
 cleanup_exit ${VETH0} ${VETH1}
 
+passes=0
+skips=0
 failures=0
-echo -e "\nSummary:"
+failed_tests=()
 for i in "${!statusList[@]}"
 do
-	if [ ${statusList[$i]} -ne 0 ]; then
-	        test_status ${statusList[$i]} ${nameList[$i]}
-		failures=1
-	fi
+	case ${statusList[$i]} in
+		$ksft_pass)
+			passes=$((passes + 1))
+			;;
+		$ksft_skip)
+			skips=$((skips + 1))
+			;;
+		*)
+			failures=$((failures + 1))
+			failed_tests+=("${nameList[$i]}")
+			;;
+	esac
 done
 
-if [ $failures -eq 0 ]; then
-        echo "All tests successful!"
-else
+echo
+echo "Summary:"
+printf "  Tests:   %d\n" "${#statusList[@]}"
+printf "  Passed:  %d\n" "$passes"
+printf "  Skipped: %d\n" "$skips"
+printf "  Failed:  %d\n" "$failures"
+
+if [ $failures -ne 0 ]; then
+	echo "Failed tests:"
+	for TEST_NAME in "${failed_tests[@]}"; do
+		echo "  $TEST_NAME"
+	done
 	exit 1
 fi

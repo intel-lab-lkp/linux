@@ -71,11 +71,13 @@ validate_ip_utility()
 
 exec_xskxceiver()
 {
+	local run_args="${ARGS}"
+
         if [[ $busy_poll -eq 1 ]]; then
-	        ARGS+="-b "
+		run_args+=" -b"
 	fi
 
-	./${XSKOBJ} -i ${VETH0} -i ${VETH1} ${ARGS}
+	./${XSKOBJ} -i ${VETH0} -i ${VETH1} ${run_args}
 	retval=$?
 
 	if [[ $list -ne 1 ]]; then
