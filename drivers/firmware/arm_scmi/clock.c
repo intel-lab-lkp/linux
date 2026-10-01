@@ -8,6 +8,7 @@
 #include <linux/math64.h>
 #include <linux/module.h>
 #include <linux/limits.h>
+#include <linux/slab.h>
 #include <linux/sort.h>
 
 #include "protocols.h"
@@ -484,6 +485,13 @@ iter_clk_describe_update_state(struct scmi_iterator_state *st,
 	if (!st->max_resources) {
 		unsigned int tot_rates = st->num_returned + st->num_remaining;
 
+		/*
+		 * Unused/reserved clock IDs return 0 rates. kmalloc(0)
+		 * returns ZERO_SIZE_PTR and must not be dereferenced.
+		 */
+		if (!tot_rates)
+			return 0;
+
 		p->clkd->r.rates = devm_kcalloc(p->dev, tot_rates,
 						sizeof(*p->clkd->r.rates), GFP_KERNEL);
 		if (!p->clkd->r.rates)
@@ -504,6 +512,9 @@ iter_clk_describe_process_response(const struct scmi_protocol_handle *ph,
 {
 	struct scmi_clk_ipriv *p = priv;
 	const struct scmi_msg_resp_clock_describe_rates *r = response;
+
+	if (ZERO_OR_NULL_PTR(p->clkd->r.rates))
+		return -EPROTO;
 
 	p->clkd->r.rates[p->clkd->r.num_rates] = RATE_TO_U64(r->rate[st->loop_idx]);
 
@@ -621,6 +632,13 @@ scmi_clock_describe_rates_get(const struct scmi_protocol_handle *ph,
 
 	if (ret)
 		return ret;
+
+	/*
+	 * Some platforms expose reserved clock IDs with an empty
+	 * CLOCK_DESCRIBE_RATES reply. Do not dereference rates[].
+	 */
+	if (!clkd->r.num_rates || ZERO_OR_NULL_PTR(clkd->r.rates))
+		return 0;
 
 	clkd->info.min_rate = clkd->r.rates[RATE_MIN];
 	if (!clkd->r.rate_discrete) {
