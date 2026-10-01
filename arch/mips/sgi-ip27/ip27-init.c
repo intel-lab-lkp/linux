@@ -81,7 +81,7 @@ static void per_hub_init(nasid_t nasid)
 void per_cpu_init(void)
 {
 	int cpu = smp_processor_id();
-	nasid_t nasid = get_nasid();
+	nasid_t nasid = cputonasid(cpu);
 
 	clear_c0_status(ST0_IM);
 
