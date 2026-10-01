@@ -1,0 +1,18 @@
+// SPDX-License-Identifier: GPL-2.0-only OR MIT
+/*
+ * Copyright (c) Toradex
+ *
+ * Colibri iMX8X Cortex-M4 UART, reserved for firmware and not used by Linux
+ */
+
+/dts-v1/;
+/plugin/;
+
+/* Cortex-M4 UART */
+&cm40_lpuart {
+	status = "reserved";
+};
+
+&cm40_uart_lpcg {
+	status = "reserved";
+};
