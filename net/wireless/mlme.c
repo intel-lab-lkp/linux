@@ -749,6 +749,15 @@ int cfg80211_mlme_register_mgmt(struct wireless_dev *wdev, u32 snd_portid,
 		return -EINVAL;
 	}
 
+	/* NAN beacons are only reported while Instant Communication is used */
+	if (wdev->iftype == NL80211_IFTYPE_NAN &&
+	    (frame_type & IEEE80211_FCTL_STYPE) == IEEE80211_STYPE_BEACON &&
+	    !(wdev->wiphy->nan_capa.flags & WIPHY_NAN_FLAGS_INSTANT_COMM)) {
+		NL_SET_ERR_MSG(extack,
+			       "Instant Communication is not supported");
+		return -EOPNOTSUPP;
+	}
+
 	nreg = kzalloc(sizeof(*reg) + match_len, GFP_KERNEL);
 	if (!nreg)
 		return -ENOMEM;
