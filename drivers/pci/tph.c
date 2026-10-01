@@ -18,6 +18,9 @@
 static bool pci_tph_disabled;
 
 #ifdef CONFIG_ACPI
+#define TPH_ST_DSM_REV		7
+#define TPH_ST_DSM_FUNC_INDEX	0xF
+
 /*
  * The st_info struct defines the Steering Tag (ST) info returned by the
  * firmware PCI ACPI _DSM method (rev=0x7, func=0xF, "_DSM to Query Cache
@@ -54,7 +57,7 @@ union st_info {
 };
 
 static u16 tph_extract_tag(enum tph_mem_type mem_type, u8 req_type,
-			   union st_info *info)
+			   const union st_info *info)
 {
 	switch (req_type) {
 	case PCI_TPH_REQ_TPH_ONLY: /* 8-bit tag */
@@ -88,13 +91,12 @@ static u16 tph_extract_tag(enum tph_mem_type mem_type, u8 req_type,
 	return 0;
 }
 
-#define TPH_ST_DSM_FUNC_INDEX	0xF
 static acpi_status tph_invoke_dsm(acpi_handle handle, u32 cpu_uid,
 				  union st_info *st_out)
 {
 	union acpi_object arg3[3], in_obj, *out_obj;
 
-	if (!acpi_check_dsm(handle, &pci_acpi_dsm_guid, 7,
+	if (!acpi_check_dsm(handle, &pci_acpi_dsm_guid, TPH_ST_DSM_REV,
 			    BIT(TPH_ST_DSM_FUNC_INDEX)))
 		return AE_ERROR;
 
@@ -114,7 +116,7 @@ static acpi_status tph_invoke_dsm(acpi_handle handle, u32 cpu_uid,
 	in_obj.package.count = ARRAY_SIZE(arg3);
 	in_obj.package.elements = arg3;
 
-	out_obj = acpi_evaluate_dsm(handle, &pci_acpi_dsm_guid, 7,
+	out_obj = acpi_evaluate_dsm(handle, &pci_acpi_dsm_guid, TPH_ST_DSM_REV,
 				    TPH_ST_DSM_FUNC_INDEX, &in_obj);
 	if (!out_obj)
 		return AE_ERROR;
@@ -131,6 +133,43 @@ static acpi_status tph_invoke_dsm(acpi_handle handle, u32 cpu_uid,
 	ACPI_FREE(out_obj);
 
 	return AE_OK;
+}
+
+/*
+ * The ST _DSM is provided by the ACPI device of the Root Port's host bridge,
+ * so all Root Ports below the same host bridge share one ST mapping.
+ */
+static acpi_handle tph_dsm_handle(struct pci_dev *pdev)
+{
+	struct pci_dev *rp;
+
+	rp = pcie_find_root_port(pdev);
+	if (!rp || !rp->bus || !rp->bus->bridge)
+		return NULL;
+
+	return ACPI_HANDLE(rp->bus->bridge);
+}
+
+/* Query the firmware for the ST info of @cpu - Return 0 if OK, else -errno */
+static int tph_get_cpu_st_info(struct pci_dev *pdev, unsigned int cpu,
+			       union st_info *info)
+{
+	acpi_handle handle;
+	u32 cpu_uid;
+	int ret;
+
+	handle = tph_dsm_handle(pdev);
+	if (!handle)
+		return -ENODEV;
+
+	ret = acpi_get_cpu_uid(cpu, &cpu_uid);
+	if (ret)
+		return ret;
+
+	if (tph_invoke_dsm(handle, cpu_uid, info) != AE_OK)
+		return -EINVAL;
+
+	return 0;
 }
 #endif
 
@@ -249,26 +288,12 @@ int pcie_tph_get_cpu_st(struct pci_dev *pdev, enum tph_mem_type mem_type,
 			unsigned int cpu, u16 *tag)
 {
 #ifdef CONFIG_ACPI
-	struct pci_dev *rp;
-	acpi_handle rp_acpi_handle;
 	union st_info info;
-	u32 cpu_uid;
 	int ret;
 
-	ret = acpi_get_cpu_uid(cpu, &cpu_uid);
-	if (ret != 0)
+	ret = tph_get_cpu_st_info(pdev, cpu, &info);
+	if (ret)
 		return ret;
-
-	rp = pcie_find_root_port(pdev);
-	if (!rp || !rp->bus || !rp->bus->bridge)
-		return -ENODEV;
-
-	rp_acpi_handle = ACPI_HANDLE(rp->bus->bridge);
-
-	if (tph_invoke_dsm(rp_acpi_handle, cpu_uid, &info) != AE_OK) {
-		*tag = 0;
-		return -EINVAL;
-	}
 
 	*tag = tph_extract_tag(mem_type, pdev->tph_req_type, &info);
 
