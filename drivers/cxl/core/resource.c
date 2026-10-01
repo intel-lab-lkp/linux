@@ -11,6 +11,8 @@
 #include <linux/iommu.h>
 #include <linux/jiffies.h>
 #include <linux/kernel.h>
+#include <linux/list.h>
+#include <linux/memregion.h>
 #include <linux/pci.h>
 #include <linux/slab.h>
 
@@ -462,6 +464,205 @@ static const u32 cxl_reset_timeout_ms[] = {
 #define CXL_CACHE_WBI_TIMEOUT_US 100000
 #define CXL_CACHE_WBI_POLL_US 100
 
+struct cxl_hdm_range {
+	struct list_head list;
+	struct pci_dev *pdev;
+	struct range hpa_range;
+	u64 len;
+	struct resource *res;
+};
+
+struct cxl_hdm_range_context {
+	struct list_head ranges;
+};
+
+static void cxl_hdm_range_context_destroy(struct cxl_hdm_range_context *ctx)
+{
+	struct cxl_hdm_range *range, *next;
+
+	list_for_each_entry_safe(range, next, &ctx->ranges, list) {
+		list_del(&range->list);
+		if (range->res)
+			release_mem_region(range->hpa_range.start,
+					   resource_size(range->res));
+		kfree(range);
+	}
+}
+
+/*
+ * Bound the range twice: request_mem_region() takes resource_size_t while
+ * cpu_cache_invalidate_memregion() takes size_t, and the two differ on
+ * 32-bit builds with CONFIG_PHYS_ADDR_T_64BIT. range_len() can also reach
+ * RESOURCE_SIZE_MAX + 1 for a full-width range, and wraps to zero when
+ * resource_size_t is 64-bit, which the !len test catches.
+ */
+static int cxl_hdm_range_validate(struct pci_dev *pdev,
+				  const struct range *hpa_range)
+{
+	u64 len = range_len(hpa_range);
+
+	if (!len)
+		return -EINVAL;
+
+	if (hpa_range->end > RESOURCE_SIZE_MAX) {
+		pci_err(pdev,
+			"CXL reset range [%#llx-%#llx] exceeds resource address size\n",
+			hpa_range->start, hpa_range->end);
+		return -EOVERFLOW;
+	}
+
+	if (len > RESOURCE_SIZE_MAX) {
+		pci_err(pdev,
+			"CXL reset range [%#llx-%#llx] exceeds resource size\n",
+			hpa_range->start, hpa_range->end);
+		return -EOVERFLOW;
+	}
+
+	if (len > SIZE_MAX) {
+		pci_err(pdev,
+			"CXL reset range [%#llx-%#llx] exceeds cache flush size\n",
+			hpa_range->start, hpa_range->end);
+		return -EOVERFLOW;
+	}
+
+	return 0;
+}
+
+static int cxl_hdm_range_add(struct cxl_hdm_range_context *ctx,
+			     struct pci_dev *pdev, const struct range *hpa_range)
+{
+	struct cxl_hdm_range *range, *next, *new_range;
+	int rc;
+
+	rc = cxl_hdm_range_validate(pdev, hpa_range);
+	if (rc)
+		return rc;
+
+	list_for_each_entry(range, &ctx->ranges, list)
+		if (range_contains(&range->hpa_range, hpa_range))
+			return 0;
+
+	new_range = kzalloc_obj(*new_range);
+	if (!new_range)
+		return -ENOMEM;
+
+	new_range->pdev = pdev;
+	new_range->hpa_range = *hpa_range;
+	new_range->len = range_len(hpa_range);
+
+	list_for_each_entry_safe(range, next, &ctx->ranges, list) {
+		if (range_contains(hpa_range, &range->hpa_range)) {
+			list_del(&range->list);
+			kfree(range);
+		}
+	}
+	list_add_tail(&new_range->list, &ctx->ranges);
+
+	return 0;
+}
+
+static int cxl_hdm_ranges_collect(struct cxl_hdm_range_context *ctx,
+				  struct pci_dev *pdev)
+{
+	struct cxl_hdm_info *info;
+	int rc;
+
+	guard(rwsem_read)(&cxl_rwsem.dpa);
+	info = pdev->hdm;
+	if (!info) {
+		pci_err(pdev, "CXL HDM decoder state unavailable\n");
+		return -ENXIO;
+	}
+
+	for (int i = 0; i < info->decoder_count; i++) {
+		struct cxl_decoder_config *config = &info->settings[i].config;
+
+		/* A committed zero-size decoder maps no HPA. */
+		if (!(config->flags & CXL_DECODER_F_ENABLE) ||
+		    !range_len(&config->hpa_range))
+			continue;
+
+		if (config->flags & CXL_DECODER_F_NORMALIZED_ADDRESSING) {
+			pci_err(pdev,
+				"CXL reset does not support normalized address decoders\n");
+			return -EOPNOTSUPP;
+		}
+
+		rc = cxl_hdm_range_add(ctx, pdev, &config->hpa_range);
+		if (rc)
+			return rc;
+	}
+
+	return 0;
+}
+
+static int cxl_hdm_ranges_request(struct cxl_hdm_range_context *ctx)
+{
+	struct cxl_hdm_range *range;
+
+	lockdep_assert_held_write(&cxl_rwsem.region);
+
+	list_for_each_entry(range, &ctx->ranges, list) {
+		const struct range *hpa_range = &range->hpa_range;
+
+		range->res = request_mem_region(hpa_range->start, range->len,
+						"cxl_reset");
+		if (!range->res) {
+			pci_err(range->pdev,
+				"cannot reset while CXL memory range is busy [%#llx-%#llx]\n",
+				hpa_range->start, hpa_range->end);
+			return -EBUSY;
+		}
+	}
+
+	return 0;
+}
+
+static int cxl_hdm_ranges_invalidate(struct cxl_hdm_range_context *ctx)
+{
+	struct cxl_hdm_range *range;
+	int rc = 0;
+
+	lockdep_assert_held_write(&cxl_rwsem.region);
+
+	list_for_each_entry(range, &ctx->ranges, list) {
+		const struct range *hpa_range = &range->hpa_range;
+		int rc2;
+
+		rc2 = cpu_cache_invalidate_memregion(hpa_range->start, range->len);
+		if (rc2)
+			pci_err(range->pdev,
+				"failed to invalidate CPU cache [%#llx-%#llx]: %d\n",
+				hpa_range->start, hpa_range->end, rc2);
+		rc = rc ?: rc2;
+	}
+
+	return rc;
+}
+
+static int cxl_hdm_ranges_prepare(struct cxl_hdm_range_context *ctx,
+				  struct pci_dev *pdev)
+{
+	int rc;
+
+	lockdep_assert_held_write(&cxl_rwsem.region);
+
+	if (!cpu_cache_has_invalidate_memregion()) {
+		pci_err(pdev, "CPU cache invalidation unavailable\n");
+		return -ENXIO;
+	}
+
+	rc = cxl_hdm_ranges_collect(ctx, pdev);
+	if (rc)
+		return rc;
+
+	rc = cxl_hdm_ranges_request(ctx);
+	if (rc)
+		return rc;
+
+	return cxl_hdm_ranges_invalidate(ctx);
+}
+
 #define CXL_RESET_CTRL2_CMD_MASK \
 	(PCI_DVSEC_CXL_INIT_CACHE_WBI | PCI_DVSEC_CXL_INIT_CXL_RST)
 
@@ -612,7 +813,8 @@ static int cxl_clear_memory(struct pci_dev *pdev, int dvsec, bool initiate)
 					      PCI_DVSEC_CXL_RST_MEM_CLR_EN);
 }
 
-static int __cxl_reset_execute(struct pci_dev *pdev, int dvsec, u16 cap)
+static int __cxl_reset_execute(struct pci_dev *pdev, int dvsec, u16 cap,
+			      struct cxl_hdm_range_context *range_ctx)
 {
 	int rc, rc2;
 
@@ -637,31 +839,42 @@ static int __cxl_reset_execute(struct pci_dev *pdev, int dvsec, u16 cap)
 		pci_err(pdev, "failed to clear CXL Reset Memory Clear: %d\n", rc2);
 	rc = rc ?: rc2;
 
+	/* Evict lines fetched during reset before ending DMA exclusion. */
+	rc2 = cxl_hdm_ranges_invalidate(range_ctx);
+	rc = rc ?: rc2;
+
 	pci_dev_reset_iommu_done(pdev);
 	return rc;
 }
 
-static int cxl_reset_execute(struct pci_dev *pdev, int dvsec, u16 cap)
+static int cxl_reset_execute(struct pci_dev *pdev, int dvsec, u16 cap,
+			     struct cxl_hdm_range_context *range_ctx)
 {
 	u16 saved_ctrl2;
 	int rc, rc2;
 
 	rc = pci_read_config_word(pdev, dvsec + PCI_DVSEC_CXL_CTRL2, &saved_ctrl2);
 	if (rc)
-		return pcibios_err_to_errno(rc);
-	if (PCI_POSSIBLE_ERROR(saved_ctrl2))
-		return -ENODEV;
+		rc = pcibios_err_to_errno(rc);
+	else if (PCI_POSSIBLE_ERROR(saved_ctrl2))
+		rc = -ENODEV;
+	if (rc) {
+		cxl_hdm_range_context_destroy(range_ctx);
+		return rc;
+	}
 
 	rc = cxl_reset_disable_cache(pdev, dvsec, cap);
 	if (!rc)
-		rc = __cxl_reset_execute(pdev, dvsec, cap);
+		rc = __cxl_reset_execute(pdev, dvsec, cap, range_ctx);
 	/* Restore cache policy after any attempt to disable caching. */
 	rc2 = cxl_reset_restore_cache_policy(pdev, dvsec, saved_ctrl2);
+	cxl_hdm_range_context_destroy(range_ctx);
 	return rc ?: rc2;
 }
 
 int cxl_reset_function(struct pci_dev *pdev, bool probe)
 {
+	struct cxl_hdm_range_context range_ctx;
 	int dvsec, rc;
 	u16 cap, ctrl;
 
@@ -693,5 +906,26 @@ int cxl_reset_function(struct pci_dev *pdev, bool probe)
 	if (probe)
 		return 0;
 
-	return cxl_reset_execute(pdev, dvsec, cap);
+	/* The cache is owned by @pdev and does not require a bound CXL driver. */
+	scoped_guard(rwsem_read, &cxl_rwsem.dpa)
+		if (!pdev->hdm || !pdev->hdm->hdm_size)
+			return -ENOTTY;
+
+	if (!cpu_cache_has_invalidate_memregion())
+		return -ENOTTY;
+
+	INIT_LIST_HEAD(&range_ctx.ranges);
+
+	scoped_guard(rwsem_write, &cxl_rwsem.region) {
+		rc = cxl_hdm_ranges_prepare(&range_ctx, pdev);
+		if (rc) {
+			cxl_hdm_range_context_destroy(&range_ctx);
+			return rc;
+		}
+
+		/* cxl_reset_execute() releases the ranges on success and failure. */
+		rc = cxl_reset_execute(pdev, dvsec, cap, &range_ctx);
+	}
+
+	return rc;
 }
