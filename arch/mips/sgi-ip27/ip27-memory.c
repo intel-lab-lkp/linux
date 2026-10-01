@@ -31,8 +31,15 @@
 
 #include "ip27-common.h"
 
-#define SLOT_PFNSHIFT		(SLOT_SHIFT - PAGE_SHIFT)
 #define PFN_NASIDSHFT		(NASID_SHFT - PAGE_SHIFT)
+
+/* A Bedrock node's memory comes in 1GB banks. */
+#define BEDROCK_SLOT_SHIFT	30
+
+static unsigned int __init slot_shift(void)
+{
+	return system_is_ip35 ? BEDROCK_SLOT_SHIFT : SLOT_SHIFT;
+}
 
 struct node_data *__node_data[MAX_NUMNODES];
 EXPORT_SYMBOL(__node_data);
@@ -230,7 +237,8 @@ static void __init dump_topology(void)
 
 static unsigned long __init slot_getbasepfn(nasid_t nasid, int slot)
 {
-	return ((unsigned long)nasid << PFN_NASIDSHFT) | (slot << SLOT_PFNSHIFT);
+	return ((unsigned long)nasid << PFN_NASIDSHFT) |
+	       ((unsigned long)slot << (slot_shift() - PAGE_SHIFT));
 }
 
 static unsigned long __init slot_psize_compute(nasid_t nasid, int slot)
@@ -248,6 +256,12 @@ static unsigned long __init slot_psize_compute(nasid_t nasid, int slot)
 	banks = (klmembnk_t *) find_first_component(brd, KLSTRUCT_MEMBNK);
 	if (!banks)
 		return 0;
+
+	/* Bedrock bank entry N sizes the 1GB slot N, in megabytes. */
+	if (system_is_ip35) {
+		size = (unsigned long)banks->membnk_bnksz[slot];
+		return (size << 20) >> PAGE_SHIFT;
+	}
 
 	/* Size in _Megabytes_ */
 	size = (unsigned long)banks->membnk_bnksz[slot/4];
@@ -315,12 +329,13 @@ static void __init mlreset(void)
 static void __init szmem(void)
 {
 	unsigned long slot_psize, slot0sz = 0, nodebytes;	/* Hack to detect problem configs */
+	int slots = system_is_ip35 ? MD_MEM_BANKS : MAX_MEM_SLOTS;
 	int slot;
 	nasid_t node;
 
 	for_each_online_node(node) {
 		nodebytes = 0;
-		for (slot = 0; slot < MAX_MEM_SLOTS; slot++) {
+		for (slot = 0; slot < slots; slot++) {
 			slot_psize = slot_psize_compute(node, slot);
 			if (slot == 0)
 				slot0sz = slot_psize;
@@ -328,7 +343,7 @@ static void __init szmem(void)
 			 * We need to refine the hack when we have replicated
 			 * kernel text.
 			 */
-			nodebytes += (1LL << SLOT_SHIFT);
+			nodebytes += (1LL << slot_shift());
 
 			if (!slot_psize)
 				continue;
@@ -337,7 +352,7 @@ static void __init szmem(void)
 						(slot0sz << PAGE_SHIFT)) {
 				pr_info("Ignoring slot %d onwards on node %d\n",
 								slot, node);
-				slot = MAX_MEM_SLOTS;
+				slot = slots;
 				continue;
 			}
 			memblock_add_node(PFN_PHYS(slot_getbasepfn(node, slot)),
