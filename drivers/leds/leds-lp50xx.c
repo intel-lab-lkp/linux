@@ -458,7 +458,6 @@ static int lp50xx_probe_leds(struct fwnode_handle *child, struct lp50xx *priv,
 
 static int lp50xx_probe_dt(struct lp50xx *priv)
 {
-	struct fwnode_handle *led_node = NULL;
 	struct led_init_data init_data = {};
 	struct led_classdev *led_cdev;
 	struct mc_subled *mc_led_info;
@@ -505,12 +504,11 @@ static int lp50xx_probe_dt(struct lp50xx *priv)
 		if (!mc_led_info)
 			return -ENOMEM;
 
-		fwnode_for_each_child_node(child, led_node) {
+		fwnode_for_each_child_node_scoped(child, led_node) {
 			int multi_index;
 			ret = fwnode_property_read_u32(led_node, "color",
 						       &color_id);
 			if (ret) {
-				fwnode_handle_put(led_node);
 				dev_err(priv->dev, "Cannot read color\n");
 				return ret;
 			}
