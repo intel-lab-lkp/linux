@@ -132,6 +132,13 @@ Communication channel dependent::
   for netns - name of the "remote" namespace
   for ssh - name/address of the remote host
 
+Test specific variables
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Some tests read further variables from the same environment or
+``net.config``. ``hw/xsk.py`` and its ``XSK_*`` variables are described in
+``tools/testing/selftests/net/lib/xsk/README.rst``.
+
 Example
 =======
 
