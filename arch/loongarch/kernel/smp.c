@@ -15,6 +15,7 @@
 #include <linux/interrupt.h>
 #include <linux/irq_work.h>
 #include <linux/profile.h>
+#include <linux/sbm.h>
 #include <linux/seq_file.h>
 #include <linux/smp.h>
 #include <linux/threads.h>
@@ -72,6 +73,10 @@ static cpumask_t cpu_llc_shared_setup_map;
 
 /* representing cpus for which core maps can be computed */
 static cpumask_t cpu_core_setup_map;
+
+/* sbm setup data - only needed during init */
+static cpumask_t cpu_sbm_setup_map __initdata;
+static int __node_thread_count[NR_CPUS] __initdata;
 
 struct secondary_data cpuboot_data;
 static DEFINE_PER_CPU(int, cpu_state);
@@ -362,10 +367,16 @@ void __init loongson_smp_setup(void)
 	pr_info("Detected %i available CPU(s)\n", loongson_sysconf.nr_cpus);
 }
 
+int arch_sbm_cpu_instance_id(int cpu)
+{
+	return cpu_to_node(cpu);
+}
+
 void __init loongson_prepare_cpus(unsigned int max_cpus)
 {
 	int i = 0;
 	int threads_per_core = 0;
+	int num_sbm_instances, max_threads_per_instance = 1;
 
 	parse_acpi_topology();
 	cpu_data[0].global_id = cpu_logical_map(0);
@@ -388,6 +399,31 @@ void __init loongson_prepare_cpus(unsigned int max_cpus)
 
 	per_cpu(cpu_state, smp_processor_id()) = CPU_ONLINE;
 	cpu_smt_set_num_threads(threads_per_core, threads_per_core);
+
+	for_each_possible_cpu(i) {
+		bool found = false;
+		int j;
+
+		for_each_cpu(j, &cpu_sbm_setup_map) {
+			if (cpu_to_node(i) == cpu_to_node(j)) {
+				found = true;
+				break;
+			}
+		}
+
+		if (!found) {
+			cpumask_set_cpu(i, &cpu_sbm_setup_map);
+			__node_thread_count[i] = 1;
+			continue;
+		}
+
+		__node_thread_count[j] += 1;
+		max_threads_per_instance = max(max_threads_per_instance,
+					       __node_thread_count[j]);
+	}
+
+	num_sbm_instances = cpumask_weight(&cpu_sbm_setup_map);
+	sbm_set_topology(num_sbm_instances, max_threads_per_instance);
 }
 
 /*
