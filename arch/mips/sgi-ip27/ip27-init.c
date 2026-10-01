@@ -37,7 +37,11 @@
 
 #define CPU_NONE		(cpuid_t)-1
 
+/* A Bedrock hub has two PI register blocks; a Hub has one. */
+#define PIS_PER_HUB		2
+
 static DECLARE_BITMAP(hub_init_mask, MAX_NUMNODES);
+static DECLARE_BITMAP(pi_init_mask, MAX_NUMNODES * PIS_PER_HUB);
 nasid_t master_nasid = INVALID_NASID;
 bool system_is_ip35;
 
@@ -46,9 +50,15 @@ EXPORT_SYMBOL_GPL(sn_cpu_info);
 
 static void per_hub_init(nasid_t nasid)
 {
+	int cpu = smp_processor_id();
 	struct hub_data *hub = hub_data(nasid);
+	int subnode = cputosubnode(cpu);
 
-	cpumask_set_cpu(smp_processor_id(), &hub->h_cpus);
+	cpumask_set_cpu(cpu, &hub->h_cpus);
+
+	/* A second pass would zero the counter under a CPU already ticking. */
+	if (!test_and_set_bit(nasid * PIS_PER_HUB + subnode, pi_init_mask))
+		hub_rtc_init(nasid);
 
 	if (test_and_set_bit(nasid, hub_init_mask))
 		return;
@@ -57,8 +67,6 @@ static void per_hub_init(nasid_t nasid)
 	 */
 	REMOTE_HUB_S(nasid, IIO_ICTP, 0x800);
 	REMOTE_HUB_S(nasid, IIO_ICTO, 0xff);
-
-	hub_rtc_init(nasid);
 
 	if (nasid) {
 		/* copy exception handlers from first node to current node */

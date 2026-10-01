@@ -14,8 +14,9 @@
 
 #include "ip27-common.h"
 
-#define SEND_NMI(_nasid, _slice)	\
-	REMOTE_HUB_S((_nasid),  (PI_NMI_A + ((_slice) * PI_NMI_OFFSET)), 1)
+#define SEND_NMI(_nasid, _slice)					\
+	REMOTE_HUB_PI_S((_nasid), slicetosubnode(_slice),		\
+		(PI_NMI_A + (slicetoab(_slice) * PI_NMI_OFFSET)), 1)
 
 typedef unsigned long machreg_t;
 
@@ -44,12 +45,18 @@ void install_cpu_nmi_handler(int slice)
 static void nmi_cpu_eframe_save(nasid_t nasid, int slice)
 {
 	struct reg_struct *nr;
+	int kregs_offset, kregs_cpu_size;
 	int		i;
+
+	kregs_offset = system_is_ip35 ? IP35_NMI_KREGS_OFFSET :
+					  IP27_NMI_KREGS_OFFSET;
+	kregs_cpu_size = system_is_ip35 ? IP35_NMI_KREGS_CPU_SIZE :
+					    IP27_NMI_KREGS_CPU_SIZE;
 
 	/* Get the pointer to the current cpu's register set. */
 	nr = (struct reg_struct *)
-		(TO_UNCAC(TO_NODE(nasid, IP27_NMI_KREGS_OFFSET)) +
-		slice * IP27_NMI_KREGS_CPU_SIZE);
+		(TO_UNCAC(TO_NODE(nasid, kregs_offset)) +
+		slice * kregs_cpu_size);
 
 	pr_emerg("NMI nasid %d: slice %d\n", nasid, slice);
 
@@ -119,18 +126,19 @@ static void nmi_cpu_eframe_save(nasid_t nasid, int slice)
 
 static void nmi_dump_hub_irq(nasid_t nasid, int slice)
 {
+	int subnode = slicetosubnode(slice);
 	u64 mask0, mask1, pend0, pend1;
 
-	if (slice == 0) {				/* Slice A */
-		mask0 = REMOTE_HUB_L(nasid, PI_INT_MASK0_A);
-		mask1 = REMOTE_HUB_L(nasid, PI_INT_MASK1_A);
+	if (!slicetoab(slice)) {			/* Slice A */
+		mask0 = REMOTE_HUB_PI_L(nasid, subnode, PI_INT_MASK0_A);
+		mask1 = REMOTE_HUB_PI_L(nasid, subnode, PI_INT_MASK1_A);
 	} else {					/* Slice B */
-		mask0 = REMOTE_HUB_L(nasid, PI_INT_MASK0_B);
-		mask1 = REMOTE_HUB_L(nasid, PI_INT_MASK1_B);
+		mask0 = REMOTE_HUB_PI_L(nasid, subnode, PI_INT_MASK0_B);
+		mask1 = REMOTE_HUB_PI_L(nasid, subnode, PI_INT_MASK1_B);
 	}
 
-	pend0 = REMOTE_HUB_L(nasid, PI_INT_PEND0);
-	pend1 = REMOTE_HUB_L(nasid, PI_INT_PEND1);
+	pend0 = REMOTE_HUB_PI_L(nasid, subnode, PI_INT_PEND0);
+	pend1 = REMOTE_HUB_PI_L(nasid, subnode, PI_INT_PEND1);
 
 	pr_emerg("PI_INT_MASK0: %16llx PI_INT_MASK1: %16llx\n", mask0, mask1);
 	pr_emerg("PI_INT_PEND0: %16llx PI_INT_PEND1: %16llx\n", pend0, pend1);
@@ -227,5 +235,11 @@ static void nmi_dump(void)
 	 * Save the nmi cpu registers for all cpu in the eframe format.
 	 */
 	nmi_eframes_save();
-	LOCAL_HUB_S(NI_PORT_RESET, NPR_PORTRESET | NPR_LOCALRESET);
+	if (system_is_ip35) {
+		LOCAL_HUB_S(NI_RESET_ENABLE_IP35, NI_RESET_OK_IP35);
+		LOCAL_HUB_S(NI_PORT_RESET_IP35,
+			    NI_RESET_ACTION_IP35 | NI_RESET_LOCAL_IP35);
+	} else {
+		LOCAL_HUB_S(NI_PORT_RESET, NPR_PORTRESET | NPR_LOCALRESET);
+	}
 }

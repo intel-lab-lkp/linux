@@ -31,6 +31,7 @@ typedef struct kldir_ent_s {
 
 #ifdef CONFIG_SGI_IP27
 #include <asm/sn/sn0/kldir.h>
+#include <asm/sn/sn1/kldir.h>
 #endif
 
 #endif /* _ASM_SN_KLDIR_H */

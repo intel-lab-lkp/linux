@@ -26,4 +26,15 @@
 #define LRI_SYSTEM_SIZE_IP35(id)	(((id) >> 46) & 0x3)
 #define LRI_SYSTEM_SIZE_NMODE_IP35	2
 
+/*
+ * Network interface port reset: bit 0 sends a link reset, bit 2 resets
+ * the local Bedrock.  Bit 0 of the reset enable register lets a reset
+ * arriving over the link reset this Bedrock.
+ */
+#define NI_PORT_RESET_IP35	(HUBNIBASE_IP35 + 0x000008)
+#define NI_RESET_ACTION_IP35	0x01
+#define NI_RESET_LOCAL_IP35	0x04
+#define NI_RESET_ENABLE_IP35	(HUBNIBASE_IP35 + 0x000010)
+#define NI_RESET_OK_IP35	0x01
+
 #endif /* _ASM_SN_SN1_HUB_H */

@@ -122,13 +122,13 @@ static void ip27_send_ipi_single(int destid, unsigned int action)
 		panic("sendintr");
 	}
 
-	irq += cputoslice(destid);
+	irq += cputoab(destid);
 
 	/*
 	 * Set the interrupt bit associated with the CPU we want to
 	 * send the interrupt to.
 	 */
-	REMOTE_HUB_SEND_INTR(cpu_to_node(destid), irq);
+	REMOTE_HUB_PI_SEND_INTR(cpu_to_node(destid), cputosubnode(destid), irq);
 }
 
 static void ip27_send_ipi_mask(const struct cpumask *mask, unsigned int action)

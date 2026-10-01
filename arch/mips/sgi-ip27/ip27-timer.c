@@ -100,9 +100,13 @@ static void __init hub_rt_clock_event_global_init(void)
 				   "hub-rt", &hub_rt_clockevent));
 }
 
+/*
+ * Each PI of a Bedrock hub has its own RT counter, zeroed when that PI's
+ * first CPU comes up; the timebase is the boot CPU's.
+ */
 static u64 hub_rt_read(struct clocksource *cs)
 {
-	return REMOTE_HUB_L(cputonasid(0), PI_RT_COUNT);
+	return REMOTE_HUB_PI_L(cputonasid(0), cputosubnode(0), PI_RT_COUNT);
 }
 
 struct clocksource hub_rt_clocksource = {
@@ -115,7 +119,7 @@ struct clocksource hub_rt_clocksource = {
 
 static u64 notrace hub_rt_read_sched_clock(void)
 {
-	return REMOTE_HUB_L(cputonasid(0), PI_RT_COUNT);
+	return REMOTE_HUB_PI_L(cputonasid(0), cputosubnode(0), PI_RT_COUNT);
 }
 
 static void __init hub_rt_clocksource_init(void)

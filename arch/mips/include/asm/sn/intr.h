@@ -14,8 +14,8 @@
 
 #define LOCAL_HUB_SEND_INTR(level)				\
 	LOCAL_HUB_S(PI_INT_PEND_MOD, (0x100 | (level)))
-#define REMOTE_HUB_SEND_INTR(hub, level)			\
-	REMOTE_HUB_S((hub), PI_INT_PEND_MOD, (0x100 | (level)))
+#define REMOTE_HUB_PI_SEND_INTR(hub, sn, level)			\
+	REMOTE_HUB_PI_S((hub), (sn), PI_INT_PEND_MOD, (0x100 | (level)))
 
 /*
  * When clearing the interrupt, make sure this clear does make it
