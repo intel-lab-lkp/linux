@@ -49,6 +49,7 @@ struct m48t35_priv {
 	struct m48t35_rtc __iomem *reg;
 	size_t size;
 	unsigned long baseaddr;
+	unsigned int epoch;
 	spinlock_t lock;
 };
 
@@ -86,10 +87,7 @@ static int m48t35_read_time(struct device *dev, struct rtc_time *tm)
 	 * Account for differences between how the RTC uses the values
 	 * and how they are defined in a struct rtc_time;
 	 */
-	tm->tm_year += 70;
-	if (tm->tm_year <= 69)
-		tm->tm_year += 100;
-
+	tm->tm_year += priv->epoch - 1900;
 	tm->tm_mon--;
 	return 0;
 }
@@ -108,18 +106,10 @@ static int m48t35_set_time(struct device *dev, struct rtc_time *tm)
 	min = tm->tm_min;
 	sec = tm->tm_sec;
 
-	if (yrs < 1970)
+	if (yrs < priv->epoch || yrs >= priv->epoch + 100)
 		return -EINVAL;
 
-	yrs -= 1970;
-	if (yrs > 255)    /* They are unsigned */
-		return -EINVAL;
-
-	if (yrs > 169)
-		return -EINVAL;
-
-	if (yrs >= 100)
-		yrs -= 100;
+	yrs -= priv->epoch;
 
 	sec = bin2bcd(sec);
 	min = bin2bcd(min);
@@ -164,6 +154,7 @@ static int m48t35_probe(struct platform_device *pdev)
 				     pdev->name))
 		return -EBUSY;
 
+	priv->epoch = platform_get_device_id(pdev)->driver_data;
 	priv->baseaddr = res->start;
 	priv->reg = devm_ioremap(&pdev->dev, priv->baseaddr, priv->size);
 	if (!priv->reg)
@@ -178,11 +169,20 @@ static int m48t35_probe(struct platform_device *pdev)
 	return PTR_ERR_OR_ZERO(priv->rtc);
 }
 
+/* The year register on SGI IP35-family machines counts from 1968. */
+static const struct platform_device_id m48t35_id_table[] = {
+	{ "rtc-m48t35", 1970 },
+	{ "rtc-m48t35-ip35", 1968 },
+	{ }
+};
+MODULE_DEVICE_TABLE(platform, m48t35_id_table);
+
 static struct platform_driver m48t35_platform_driver = {
 	.driver		= {
 		.name	= "rtc-m48t35",
 	},
 	.probe		= m48t35_probe,
+	.id_table	= m48t35_id_table,
 };
 
 module_platform_driver(m48t35_platform_driver);
@@ -191,3 +191,4 @@ MODULE_AUTHOR("Thomas Bogendoerfer <tsbogend@alpha.franken.de>");
 MODULE_DESCRIPTION("M48T35 RTC driver");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("platform:rtc-m48t35");
+MODULE_ALIAS("platform:rtc-m48t35-ip35");
