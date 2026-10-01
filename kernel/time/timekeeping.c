@@ -2446,6 +2446,8 @@ static void timekeeping_adjust(struct timekeeper *tk, s64 offset)
 		/* Revert to the base mult rate. */
 		mult = tk->tkr_mono.mult - tk->ntp_err_mult;
 	} else {
+		u64 old_ntp_tick = tk->ntp_tick;
+
 		tk->ntp_tick = ntp_tl;
 		tk->skew_delta = skew;
 		/*
@@ -2455,6 +2457,21 @@ static void timekeeping_adjust(struct timekeeper *tk, s64 offset)
 		skew *= NTP_INTERVAL_FREQ;
 		mult = div64_u64((tk->ntp_tick + skew) >> tk->ntp_error_shift,
 				 tk->cycle_interval);
+
+		/*
+		 * Rate adjustments are conceptually applied mid-tick in order
+		 * to avoid accumulating large deltas in ntp_error which can
+		 * take days to drain. Offset the ntp_error that will be
+		 * introduced by timekeeping_apply_adjustment(), accordingly.
+		 */
+		if (tk->ntp_tick != old_ntp_tick) {
+			u64 old_dividend = (old_ntp_tick + skew) >> tk->ntp_error_shift;
+			s64 old_base_mult = div64_u64(old_dividend, tk->cycle_interval);
+			s64 mult_delta = (s64)mult - old_base_mult;
+
+			tk->ntp_error -= ((s64)offset * mult_delta)
+					 << tk->ntp_error_shift;
+		}
 	}
 
 	/*
