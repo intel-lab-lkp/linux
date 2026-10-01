@@ -33,6 +33,8 @@
 #include <linux/sched/mm.h>
 #include <linux/shmem_fs.h>
 #include <linux/hugetlb.h>
+#include <linux/irq_work.h>
+#include <linux/llist.h>
 #include <linux/pagemap.h>
 #include <linux/folio_batch.h>
 #include <linux/vm_event_item.h>
@@ -146,9 +148,12 @@ static void memcg_uncharge_kmem(struct mem_cgroup *memcg, unsigned int nr_pages)
 		memcg_uncharge(memcg, nr_pages);
 }
 
-static void obj_cgroup_release(struct percpu_ref *ref)
+static LLIST_HEAD(objcg_release_list);
+static void obj_cgroup_release_workfn(struct irq_work *work);
+static DEFINE_IRQ_WORK(objcg_release_work, obj_cgroup_release_workfn);
+
+static void obj_cgroup_release_one(struct obj_cgroup *objcg)
 {
-	struct obj_cgroup *objcg = container_of(ref, struct obj_cgroup, refcnt);
 	unsigned int nr_bytes;
 	unsigned int nr_pages;
 	unsigned long flags;
@@ -189,8 +194,26 @@ static void obj_cgroup_release(struct percpu_ref *ref)
 	list_del(&objcg->list);
 	spin_unlock_irqrestore(&objcg_lock, flags);
 
-	percpu_ref_exit(ref);
+	percpu_ref_exit(&objcg->refcnt);
 	kfree_rcu(objcg, rcu);
+}
+
+static void obj_cgroup_release_workfn(struct irq_work *work)
+{
+	struct llist_node *node;
+	struct obj_cgroup *objcg, *next;
+
+	node = llist_del_all(&objcg_release_list);
+	llist_for_each_entry_safe(objcg, next, node, release_node)
+		obj_cgroup_release_one(objcg);
+}
+
+static void obj_cgroup_release(struct percpu_ref *ref)
+{
+	struct obj_cgroup *objcg = container_of(ref, struct obj_cgroup, refcnt);
+
+	llist_add(&objcg->release_node, &objcg_release_list);
+	irq_work_queue(&objcg_release_work);
 }
 
 static struct obj_cgroup *obj_cgroup_alloc(void)

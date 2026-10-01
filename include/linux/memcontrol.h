@@ -186,6 +186,7 @@ struct obj_cgroup {
 	struct percpu_ref refcnt;
 	struct mem_cgroup *memcg;
 	atomic_t nr_charged_bytes;
+	struct llist_node release_node;
 	union {
 		struct list_head list; /* protected by objcg_lock */
 		struct rcu_head rcu;
