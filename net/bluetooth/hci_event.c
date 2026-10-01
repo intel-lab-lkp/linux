@@ -711,6 +711,7 @@ static u8 hci_cc_read_enc_key_size(struct hci_dev *hdev, void *data,
 	struct hci_conn *conn;
 	u16 handle;
 	u8 status = rp->status;
+	bool mgmt_connected;
 
 	bt_dev_dbg(hdev, "status 0x%2.2x", status);
 
@@ -723,6 +724,20 @@ static u8 hci_cc_read_enc_key_size(struct hci_dev *hdev, void *data,
 		status = 0xFF;
 		goto done;
 	}
+
+	/* Connections not yet reported to userspace as connected (i.e.
+	 * HCI_CONN_MGMT_CONNECTED not set) are not reported here:
+	 * mgmt_device_connected() will report the security level itself,
+	 * once the connection is actually announced, to avoid a premature
+	 * event for a connection userspace does not know about yet (and may
+	 * never learn about, if setup fails before reaching that point).
+	 * Note this cannot be inferred from conn->state == BT_CONFIG alone:
+	 * mgmt_device_connected() may already have fired while a connection
+	 * is still in BT_CONFIG state, e.g. while outgoing authentication is
+	 * pending for a fresh pairing. For connections already announced,
+	 * this function reports the change immediately below.
+	 */
+	mgmt_connected = test_bit(HCI_CONN_MGMT_CONNECTED, &conn->flags);
 
 	/* While unexpected, the read_enc_key_size command may fail. The most
 	 * secure approach is to then assume the key size is 0 to force a
@@ -755,6 +770,19 @@ static u8 hci_cc_read_enc_key_size(struct hci_dev *hdev, void *data,
 			status = HCI_ERROR_AUTH_FAILURE;
 			clear_bit(HCI_CONN_ENCRYPT, &conn->flags);
 			clear_bit(HCI_CONN_AES_CCM, &conn->flags);
+		} else {
+			/* Pre-apply hci_encrypt_cfm()'s own upgrade rules
+			 * here unconditionally on success, so its internal
+			 * change check below always finds nothing new: this
+			 * function remains the sole place deciding whether
+			 * and when to report the change, regardless of
+			 * whether the caller already touched conn->sec_level
+			 * (e.g. hci_encrypt_change_evt()) or not.
+			 */
+			if (conn->sec_level == BT_SECURITY_SDP)
+				conn->sec_level = BT_SECURITY_LOW;
+			if (conn->pending_sec_level > conn->sec_level)
+				conn->sec_level = conn->pending_sec_level;
 		}
 
 		/* Update the key encryption size with the connection one */
@@ -763,6 +791,13 @@ static u8 hci_cc_read_enc_key_size(struct hci_dev *hdev, void *data,
 	}
 
 	hci_encrypt_cfm(conn, status);
+
+	/* See mgmt_connected comment above: already-announced connections
+	 * are reported here; connections not yet announced to userspace are
+	 * deferred to mgmt_device_connected().
+	 */
+	if (mgmt_connected)
+		mgmt_security_level_changed(conn);
 
 done:
 	hci_dev_unlock(hdev);
@@ -2762,7 +2797,11 @@ static void hci_cs_disconnect(struct hci_dev *hdev, u8 status)
 	if (hdev->suspended)
 		conn->state = BT_CLOSED;
 
-	mgmt_conn = test_and_clear_bit(HCI_CONN_MGMT_CONNECTED, &conn->flags);
+	/* Only peek at the flag here: hci_conn_del() (via hci_conn_unlink())
+	 * still needs it set to know whether to report the security level
+	 * reset, so it is consumed there instead of here.
+	 */
+	mgmt_conn = test_bit(HCI_CONN_MGMT_CONNECTED, &conn->flags);
 
 	if (conn->type == ACL_LINK) {
 		if (test_and_clear_bit(HCI_CONN_FLUSH_KEY, &conn->flags))
@@ -3210,6 +3249,8 @@ static void hci_conn_complete_evt(struct hci_dev *hdev, void *data,
 	}
 
 	if (!status) {
+		bool encrypt_change = false;
+
 		status = hci_conn_set_handle(conn, __le16_to_cpu(ev->handle));
 		if (status)
 			goto done;
@@ -3232,8 +3273,10 @@ static void hci_conn_complete_evt(struct hci_dev *hdev, void *data,
 		if (test_bit(HCI_AUTH, &hdev->flags))
 			set_bit(HCI_CONN_AUTH, &conn->flags);
 
-		if (test_bit(HCI_ENCRYPT, &hdev->flags))
+		if (test_bit(HCI_ENCRYPT, &hdev->flags)) {
 			set_bit(HCI_CONN_ENCRYPT, &conn->flags);
+			encrypt_change = true;
+		}
 
 		/* "Link key request" completed ahead of "connect request" completes */
 		if (ev->encr_mode == 1 && !test_bit(HCI_CONN_ENCRYPT, &conn->flags) &&
@@ -3247,6 +3290,9 @@ static void hci_conn_complete_evt(struct hci_dev *hdev, void *data,
 				hci_encrypt_cfm(conn, ev->status);
 			}
 		}
+
+		if (encrypt_change)
+			mgmt_security_level_changed(conn);
 
 		/* Get remote features */
 		if (conn->type == ACL_LINK) {
@@ -3432,7 +3478,11 @@ static void hci_disconn_complete_evt(struct hci_dev *hdev, void *data,
 
 	conn->state = BT_CLOSED;
 
-	mgmt_connected = test_and_clear_bit(HCI_CONN_MGMT_CONNECTED, &conn->flags);
+	/* Only peek at the flag here: hci_conn_del() (via hci_conn_unlink())
+	 * still needs it set to know whether to report the security level
+	 * reset, so it is consumed there instead of here.
+	 */
+	mgmt_connected = test_bit(HCI_CONN_MGMT_CONNECTED, &conn->flags);
 
 	if (test_bit(HCI_CONN_AUTH_FAILURE, &conn->flags))
 		reason = MGMT_DEV_DISCONN_AUTH_FAILURE;
@@ -3514,9 +3564,14 @@ static void hci_auth_complete_evt(struct hci_dev *hdev, void *data,
 		goto unlock;
 
 	if (!ev->status) {
+		bool sec_level_changed =
+				conn->sec_level != conn->pending_sec_level;
+
 		clear_bit(HCI_CONN_AUTH_FAILURE, &conn->flags);
 		set_bit(HCI_CONN_AUTH, &conn->flags);
 		conn->sec_level = conn->pending_sec_level;
+		if (sec_level_changed)
+			mgmt_security_level_changed(conn);
 	} else {
 		if (ev->status == HCI_ERROR_PIN_OR_KEY_MISSING)
 			set_bit(HCI_CONN_AUTH_FAILURE, &conn->flags);
@@ -3632,9 +3687,20 @@ static void hci_encrypt_change_evt(struct hci_dev *hdev, void *data,
 			if ((conn->type == ACL_LINK && ev->encrypt == 0x02) ||
 			    conn->type == LE_LINK)
 				set_bit(HCI_CONN_AES_CCM, &conn->flags);
+
+			/* For ACL links the encryption key size is still
+			 * validated below via hci_read_enc_key_size(). Its
+			 * completion handler, hci_cc_read_enc_key_size(),
+			 * reports the final security level so userspace does
+			 * not see a transient "encrypted" state that a
+			 * key-size downgrade would immediately invalidate.
+			 */
+			if (conn->type != ACL_LINK)
+				mgmt_security_level_changed(conn);
 		} else {
 			clear_bit(HCI_CONN_ENCRYPT, &conn->flags);
 			clear_bit(HCI_CONN_AES_CCM, &conn->flags);
+			mgmt_security_level_changed(conn);
 		}
 	}
 
@@ -3667,8 +3733,14 @@ static void hci_encrypt_change_evt(struct hci_dev *hdev, void *data,
 
 	/* Try reading the encryption key size for encrypted ACL links */
 	if (!ev->status && ev->encrypt && conn->type == ACL_LINK) {
-		if (hci_read_enc_key_size(hdev, conn))
+		if (hci_read_enc_key_size(hdev, conn)) {
+			/* Could not even issue the key-size read: report the
+			 * security level now since hci_cc_read_enc_key_size()
+			 * will not run to do it.
+			 */
+			mgmt_security_level_changed(conn);
 			goto notify;
+		}
 
 		goto unlock;
 	}
@@ -5228,8 +5300,14 @@ static void hci_key_refresh_complete_evt(struct hci_dev *hdev, void *data,
 	if (conn->type != LE_LINK)
 		goto unlock;
 
-	if (!ev->status)
+	if (!ev->status) {
+		bool sec_level_changed =
+				conn->sec_level != conn->pending_sec_level;
+
 		conn->sec_level = conn->pending_sec_level;
+		if (sec_level_changed)
+			mgmt_security_level_changed(conn);
+	}
 
 	clear_bit(HCI_CONN_ENCRYPT_PEND, &conn->flags);
 
@@ -5858,9 +5936,16 @@ static void le_conn_complete_evt(struct hci_dev *hdev, u8 status,
 		goto unlock;
 	}
 
+	/* Unlike BR/EDR connections, conn->sec_level is not set at connection
+	 * request time for LE, so it is still at its zero-initialized value
+	 * (BT_SECURITY_SDP) here. Set it to BT_SECURITY_LOW before reporting
+	 * the connection so mgmt_device_connected() reports the correct
+	 * initial security level instead of a transient, never-really-in-use
+	 * SDP value.
+	 */
+	conn->sec_level = BT_SECURITY_LOW;
 	mgmt_device_connected(hdev, conn, NULL, 0);
 
-	conn->sec_level = BT_SECURITY_LOW;
 	conn->state = BT_CONFIG;
 
 	/* Store current advertising instance as connection advertising instance
@@ -7311,8 +7396,13 @@ static void hci_le_big_sync_lost_evt(struct hci_dev *hdev, void *data,
 						     BT_CONNECTED,
 						     HCI_ROLE_SLAVE))) {
 		if (!mgmt_conn) {
-			mgmt_conn = test_and_clear_bit(HCI_CONN_MGMT_CONNECTED,
-						       &bis->flags);
+			/* Only peek at the flag here: hci_conn_del() (via
+			 * hci_conn_unlink()) still needs it set to know
+			 * whether to report the security level reset, so
+			 * it is consumed there instead of here.
+			 */
+			mgmt_conn = test_bit(HCI_CONN_MGMT_CONNECTED,
+					     &bis->flags);
 			mgmt_device_disconnected(hdev, &bis->dst, bis->type,
 						 bis->dst_type, ev->reason,
 						 mgmt_conn);
