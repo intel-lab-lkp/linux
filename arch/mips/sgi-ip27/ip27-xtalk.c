@@ -31,13 +31,10 @@ enum xtalk_bridge_type {
 	XTALK_PIC_BUS1,
 };
 
-static void bridge_platform_create(nasid_t nasid, int widget, int masterwid,
-				   enum xtalk_bridge_type type)
+static struct platform_device *bridge_w1_create(nasid_t nasid, int widget)
 {
-	struct xtalk_bridge_platform_data *bd;
 	struct sgi_w1_platform_data *wd;
 	struct platform_device *pdev_wd;
-	struct platform_device *pdev_bd;
 	struct resource w1_res;
 	unsigned long offset;
 
@@ -46,7 +43,7 @@ static void bridge_platform_create(nasid_t nasid, int widget, int masterwid,
 	wd = kzalloc_obj(*wd);
 	if (!wd) {
 		pr_warn("xtalk:n%d/%x bridge create out of memory\n", nasid, widget);
-		return;
+		return NULL;
 	}
 
 	snprintf(wd->dev_id, sizeof(wd->dev_id), "bridge-%012lx",
@@ -77,6 +74,35 @@ static void bridge_platform_create(nasid_t nasid, int widget, int masterwid,
 	}
 	/* platform_device_add_data() duplicates the data */
 	kfree(wd);
+	return pdev_wd;
+
+err_put_pdev_wd:
+	platform_device_put(pdev_wd);
+err_kfree_wd:
+	kfree(wd);
+	return NULL;
+}
+
+static void bridge_platform_create(nasid_t nasid, int widget, int masterwid,
+				   enum xtalk_bridge_type type)
+{
+	struct xtalk_bridge_platform_data *bd;
+	struct platform_device *pdev_wd = NULL;
+	struct platform_device *pdev_bd;
+	unsigned long offset;
+
+	offset = NODE_OFFSET(nasid);
+
+	/*
+	 * An XBridge's b_nic register reads back a constant mcr on the
+	 * 1-wire bit-bang path, so a sgi_w1 master there enumerates only
+	 * phantom slave IDs. Only a classic Bridge gets one.
+	 */
+	if (type == XTALK_BRIDGE) {
+		pdev_wd = bridge_w1_create(nasid, widget);
+		if (!pdev_wd)
+			return;
+	}
 
 	bd = kzalloc_obj(*bd);
 	if (!bd) {
@@ -138,11 +164,6 @@ err_kfree_bd:
 	kfree(bd);
 err_unregister_pdev_wd:
 	platform_device_unregister(pdev_wd);
-	return;
-err_put_pdev_wd:
-	platform_device_put(pdev_wd);
-err_kfree_wd:
-	kfree(wd);
 	return;
 }
 
