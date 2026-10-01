@@ -102,6 +102,15 @@ static int nfsd3_iocb_flags(enum nfs3_stable_how how)
 	}
 }
 
+static enum nfs3_stable_how nfsd3_stable_how(int iocb_flags)
+{
+	if (iocb_flags & IOCB_SYNC)
+		return NFS_FILE_SYNC;
+	if (iocb_flags & IOCB_DSYNC)
+		return NFS_DATA_SYNC;
+	return NFS_UNSTABLE;
+}
+
 static __be32 nfsd3_map_status(__be32 status)
 {
 	switch (status) {
@@ -299,6 +308,7 @@ nfsd3_proc_write(struct svc_rqst *rqstp)
 	struct nfsd3_writeargs *argp = rqstp->rq_argp;
 	struct nfsd3_writeres *resp = rqstp->rq_resp;
 	unsigned long cnt = argp->len;
+	int iocb_flags;
 
 	dprintk("nfsd: WRITE(3)    %s %d bytes at %Lu%s\n",
 				SVCFH_fmt(&argp->fh),
@@ -312,11 +322,11 @@ nfsd3_proc_write(struct svc_rqst *rqstp)
 		return rpc_success;
 
 	fh_copy(&resp->fh, &argp->fh);
-	resp->committed = argp->stable;
+	iocb_flags = nfsd3_iocb_flags(argp->stable);
 	resp->status = nfsd_write(rqstp, &resp->fh, argp->offset,
-				  &argp->payload, &cnt,
-				  nfsd3_iocb_flags(resp->committed),
+				  &argp->payload, &cnt, &iocb_flags,
 				  resp->verf);
+	resp->committed = nfsd3_stable_how(iocb_flags);
 	resp->count = cnt;
 	resp->status = nfsd3_map_status(resp->status);
 	return rpc_success;

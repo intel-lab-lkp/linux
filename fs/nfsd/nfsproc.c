@@ -644,12 +644,13 @@ static __be32 nfsd_proc_write(struct svc_rqst *rqstp)
 	struct kstat *statp = &resp->stat;
 	unsigned long count = argp->xdrgen.data.len;
 	struct svc_fh *fhp = &argp->fh;
+	int iocb_flags = IOCB_DSYNC;
 
 	nfsd_fhandle_to_svc_fh(fhp, &argp->xdrgen.file);
 
 	resp->xdrgen.status = nfsd_write(rqstp, fhp, argp->xdrgen.offset,
 					 &argp->xdrgen.data, &count,
-					 IOCB_DSYNC, NULL);
+					 &iocb_flags, NULL);
 	if (resp->xdrgen.status == nfs_ok) {
 		resp->xdrgen.status = fh_getattr(fhp, statp);
 		if (resp->xdrgen.status == nfs_ok)
