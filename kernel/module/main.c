@@ -1355,7 +1355,8 @@ static int module_memory_alloc(struct module *mod, enum mod_mem_type type)
 	if (!ptr)
 		return -ENOMEM;
 
-	mod->mem[type].is_rox = execmem_is_rox(execmem_type);
+	if (IS_ENABLED(CONFIG_STRICT_MODULE_RWX))
+		mod->mem[type].is_rox = execmem_is_rox(execmem_type);
 
 	/*
 	 * The pointer to these blocks of memory are stored on the module
