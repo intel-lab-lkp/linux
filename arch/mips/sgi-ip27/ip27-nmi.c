@@ -4,6 +4,7 @@
 #include <linux/nodemask.h>
 #include <linux/spinlock.h>
 #include <linux/smp.h>
+#include <linux/topology.h>
 #include <linux/atomic.h>
 #include <asm/sn/types.h>
 #include <asm/sn/addrs.h>
@@ -12,12 +13,6 @@
 #include <asm/sn/agent.h>
 
 #include "ip27-common.h"
-
-#if 0
-#define NODE_NUM_CPUS(n)	CNODE_NUM_CPUS(n)
-#else
-#define NODE_NUM_CPUS(n)	CPUS_PER_NODE
-#endif
 
 #define SEND_NMI(_nasid, _slice)	\
 	REMOTE_HUB_S((_nasid),  (PI_NMI_A + ((_slice) * PI_NMI_OFFSET)), 1)
@@ -148,13 +143,18 @@ static void nmi_dump_hub_irq(nasid_t nasid, int slice)
  */
 static void nmi_node_eframe_save(nasid_t nasid)
 {
-	int slice;
+	int cpu;
 
 	if (nasid == INVALID_NASID)
 		return;
 
 	/* Save the registers into eframe for each cpu */
-	for (slice = 0; slice < NODE_NUM_CPUS(slice); slice++) {
+	for_each_possible_cpu(cpu) {
+		int slice = cputoslice(cpu);
+
+		if (cputonasid(cpu) != nasid)
+			continue;
+
 		nmi_cpu_eframe_save(nasid, slice);
 		nmi_dump_hub_irq(nasid, slice);
 	}
