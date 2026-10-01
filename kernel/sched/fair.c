@@ -51,8 +51,9 @@
 #include <linux/profile.h>
 #include <linux/psi.h>
 #include <linux/ratelimit.h>
-#include <linux/task_work.h>
 #include <linux/rbtree_augmented.h>
+#include <linux/sbm.h>
+#include <linux/task_work.h>
 
 #include <asm/switch_to.h>
 
@@ -8210,7 +8211,7 @@ static DEFINE_PER_CPU(cpumask_var_t, should_we_balance_tmpmask);
 #ifdef CONFIG_NO_HZ_COMMON
 
 static struct {
-	cpumask_var_t idle_cpus_mask;
+	struct sbm *sbm;
 	int has_blocked_load;		/* Idle CPUS has blocked load */
 	int needs_update;		/* Newly idle CPUs need their next_balance collated */
 	unsigned long next_balance;     /* in jiffy units */
@@ -14030,7 +14031,7 @@ static inline int on_null_domain(struct rq *rq)
  */
 static inline int find_new_ilb(void)
 {
-	struct cpumask *ilb_cpus;
+	struct cpumask *skip_cpus;
 	int ilb_cpu, fallback = -1;
 
 	lockdep_assert_irqs_disabled();
@@ -14039,18 +14040,22 @@ static inline int find_new_ilb(void)
 	 * Reuse the per-CPU select_rq_mask, which is protected from concurrent
 	 * use on this CPU by having interrupts disabled.
 	 */
-	ilb_cpus = this_cpu_cpumask_var_ptr(select_rq_mask);
-	cpumask_and(ilb_cpus, nohz.idle_cpus_mask,
-		    housekeeping_cpumask(HK_TYPE_KERNEL_NOISE));
+	skip_cpus = this_cpu_cpumask_var_ptr(select_rq_mask);
+	cpumask_clear(skip_cpus);
 
-	for_each_cpu(ilb_cpu, ilb_cpus) {
+	sbm_for_each_set_bit(nohz.sbm, idx) {
+		ilb_cpu = sbm_idx_to_cpu(idx);
+
+		if (cpumask_test_cpu(ilb_cpu, skip_cpus))
+			continue;
+
 		if (!idle_cpu(ilb_cpu)) {
 			/*
 			 * Once an idle fallback exists, a busy CPU proves that
 			 * this core cannot be fully idle. Skip its siblings.
 			 */
 			if (sched_smt_active() && fallback >= 0)
-				cpumask_andnot(ilb_cpus, ilb_cpus, cpu_smt_mask(ilb_cpu));
+				cpumask_or(skip_cpus, skip_cpus, cpu_smt_mask(ilb_cpu));
 			continue;
 		}
 
@@ -14069,8 +14074,7 @@ static inline int find_new_ilb(void)
 			 * The core is not idle, so there is no need to check
 			 * any of its other SMT siblings.
 			 */
-			cpumask_andnot(ilb_cpus, ilb_cpus,
-				       cpu_smt_mask(ilb_cpu));
+			cpumask_or(skip_cpus, skip_cpus, cpu_smt_mask(ilb_cpu));
 			continue;
 		}
 
@@ -14134,7 +14138,7 @@ static void nohz_balancer_kick(struct rq *rq)
 	unsigned long now = jiffies;
 	struct sched_domain_shared *sds;
 	struct sched_domain *sd;
-	int nr_busy, i, cpu = rq->cpu;
+	int nr_busy, cpu = rq->cpu;
 	unsigned int flags = 0;
 
 	if (unlikely(rq->idle_balance))
@@ -14162,11 +14166,7 @@ static void nohz_balancer_kick(struct rq *rq)
 	if (time_before(now, nohz.next_balance))
 		goto out;
 
-	/*
-	 * None are in tickless mode and hence no need for NOHZ idle load
-	 * balancing
-	 */
-	if (unlikely(cpumask_empty(nohz.idle_cpus_mask)))
+	if (unlikely(sbm_empty(nohz.sbm)))
 		return;
 
 	if (rq->nr_running >= 2) {
@@ -14183,24 +14183,6 @@ static void nohz_balancer_kick(struct rq *rq)
 		if (rq->cfs.h_nr_runnable >= 1 && check_cpu_capacity(rq, sd)) {
 			flags |= NOHZ_STATS_KICK | NOHZ_BALANCE_KICK;
 			goto out;
-		}
-	}
-
-	sd = rcu_dereference_all(per_cpu(sd_asym_packing, cpu));
-	if (sd) {
-		/*
-		 * When ASYM_PACKING; see if there's a more preferred CPU
-		 * currently idle; in which case, kick the ILB to move tasks
-		 * around.
-		 *
-		 * When balancing between cores, all the SMT siblings of the
-		 * preferred CPU must be idle.
-		 */
-		for_each_cpu_and(i, sched_domain_span(sd), nohz.idle_cpus_mask) {
-			if (sched_asym(sd, i, cpu)) {
-				flags |= NOHZ_STATS_KICK | NOHZ_BALANCE_KICK;
-				goto out;
-			}
 		}
 	}
 
@@ -14270,7 +14252,8 @@ void nohz_balance_exit_idle(struct rq *rq)
 		return;
 
 	rq->nohz_tick_stopped = 0;
-	cpumask_clear_cpu(rq->cpu, nohz.idle_cpus_mask);
+	if (cpumask_test_cpu(rq->cpu, housekeeping_cpumask(HK_TYPE_KERNEL_NOISE)))
+		sbm_cpu_clear(nohz.sbm, rq->cpu);
 
 	set_cpu_sd_state_busy(rq->cpu);
 }
@@ -14324,7 +14307,8 @@ void nohz_balance_enter_idle(int cpu)
 
 	rq->nohz_tick_stopped = 1;
 
-	cpumask_set_cpu(cpu, nohz.idle_cpus_mask);
+	if (cpumask_test_cpu(rq->cpu, housekeeping_cpumask(HK_TYPE_KERNEL_NOISE)))
+		sbm_cpu_set(nohz.sbm, rq->cpu);
 
 	/*
 	 * Ensures that if nohz_idle_balance() fails to observe our
@@ -14351,7 +14335,7 @@ static bool update_nohz_stats(struct rq *rq)
 	if (!rq->has_blocked_load)
 		return false;
 
-	if (!cpumask_test_cpu(cpu, nohz.idle_cpus_mask))
+	if (!sbm_cpu_test(nohz.sbm, cpu))
 		return false;
 
 	if (!time_after(jiffies, READ_ONCE(rq->last_blocked_load_update_tick)))
@@ -14377,6 +14361,7 @@ static void _nohz_idle_balance(struct rq *this_rq, unsigned int flags)
 	int this_cpu = this_rq->cpu;
 	int balance_cpu;
 	struct rq *rq;
+	int start;
 
 	WARN_ON_ONCE((flags & NOHZ_KICK_MASK) == NOHZ_BALANCE_KICK);
 
@@ -14405,7 +14390,10 @@ static void _nohz_idle_balance(struct rq *this_rq, unsigned int flags)
 	 * Start with the next CPU after this_cpu so we will end with this_cpu and let a
 	 * chance for other idle cpu to pull load.
 	 */
-	for_each_cpu_wrap(balance_cpu,  nohz.idle_cpus_mask, this_cpu+1) {
+	start = sbm_cpu_to_idx(cpumask_next_wrap(this_cpu, cpu_online_mask));
+	sbm_for_each_set_bit_wrap(nohz.sbm, idx, start) {
+		balance_cpu = sbm_idx_to_cpu(idx);
+
 		if (!idle_cpu(balance_cpu))
 			continue;
 
@@ -15648,7 +15636,7 @@ void show_numa_stats(struct task_struct *p, struct seq_file *m)
 __init void init_sched_fair_class_smp(void)
 {
 #ifdef CONFIG_NO_HZ_COMMON
-	zalloc_cpumask_var(&nohz.idle_cpus_mask, GFP_NOWAIT);
+	nohz.sbm = sbm_alloc();
 #endif
 }
 
