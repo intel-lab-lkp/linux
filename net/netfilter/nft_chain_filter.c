@@ -318,7 +318,7 @@ static const struct nft_chain_type nft_chain_filter_netdev = {
 	},
 };
 
-static void nft_netdev_event(unsigned long event, struct net_device *dev,
+static bool nft_netdev_event(unsigned long event, struct net_device *dev,
 			     struct nft_ctx *ctx)
 {
 	struct nft_base_chain *basechain = nft_base_chain(ctx->chain);
@@ -326,7 +326,7 @@ static void nft_netdev_event(unsigned long event, struct net_device *dev,
 	int n = 0;
 
 	if (event != NETDEV_UNREGISTER)
-		return;
+		return false;
 
 	list_for_each_entry(hook, &basechain->hook_list, list) {
 		if (hook->ops.dev == dev)
@@ -335,7 +335,7 @@ static void nft_netdev_event(unsigned long event, struct net_device *dev,
 		n++;
 	}
 	if (!found)
-		return;
+		return false;
 
 	if (n > 1) {
 		if (!(ctx->chain->table->flags & NFT_TABLE_F_DORMANT))
@@ -343,7 +343,7 @@ static void nft_netdev_event(unsigned long event, struct net_device *dev,
 
 		list_del_rcu(&found->list);
 		kfree_rcu(found, rcu);
-		return;
+		return false;
 	}
 
 	/* UNREGISTER events are also happening on netns exit.
@@ -353,6 +353,8 @@ static void nft_netdev_event(unsigned long event, struct net_device *dev,
 	 * so we cannot skip exiting net namespaces.
 	 */
 	__nft_release_basechain(ctx);
+
+	return true;
 }
 
 static int nf_tables_netdev_event(struct notifier_block *this,
@@ -380,6 +382,7 @@ static int nf_tables_netdev_event(struct notifier_block *this,
 
 		ctx.family = table->family;
 		ctx.table = table;
+restart:
 		list_for_each_entry_safe(chain, nr, &table->chains, list) {
 			if (!nft_is_base_chain(chain))
 				continue;
@@ -390,7 +393,8 @@ static int nf_tables_netdev_event(struct notifier_block *this,
 				continue;
 
 			ctx.chain = chain;
-			nft_netdev_event(event, dev, &ctx);
+			if (nft_netdev_event(event, dev, &ctx))
+				goto restart;
 		}
 	}
 	mutex_unlock(&nft_net->commit_mutex);
