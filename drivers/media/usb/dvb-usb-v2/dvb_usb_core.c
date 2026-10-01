@@ -760,6 +760,7 @@ static int dvb_usbv2_adapter_init(struct dvb_usb_device *d)
 		adap = &d->adapter[i];
 		adap->id = i;
 		adap->props = &d->props->adapter[i];
+		adap->active_fe = -1;
 
 		/* speed - when running at FULL speed we need a HW PID filter */
 		if (d->udev->speed == USB_SPEED_FULL &&
