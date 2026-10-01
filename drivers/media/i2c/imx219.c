@@ -1000,6 +1000,29 @@ static int imx219_init_state(struct v4l2_subdev *sd,
 	return imx219_set_pad_format(sd, state, &fmt);
 }
 
+/* Verify chip ID */
+static int imx219_identify_module(struct imx219 *imx219)
+{
+	struct i2c_client *client = v4l2_get_subdevdata(&imx219->sd);
+	int ret;
+	u64 val;
+
+	ret = cci_read(imx219->regmap, IMX219_REG_CHIP_ID, &val, NULL);
+	if (ret) {
+		dev_dbg(&client->dev, "failed to read chip id %x\n",
+			IMX219_CHIP_ID);
+		return ret;
+	}
+
+	if (val != IMX219_CHIP_ID) {
+		dev_dbg(&client->dev, "chip id mismatch: %x!=%llx\n",
+			IMX219_CHIP_ID, val);
+		return -EIO;
+	}
+
+	return 0;
+}
+
 static const struct v4l2_subdev_video_ops imx219_video_ops = {
 	.s_stream = v4l2_subdev_s_stream_helper,
 };
@@ -1055,6 +1078,14 @@ static int imx219_power_on(struct device *dev)
 	gpiod_set_value_cansleep(imx219->reset_gpio, 1);
 	usleep_range(IMX219_XCLR_MIN_DELAY_US,
 		     IMX219_XCLR_MIN_DELAY_US + IMX219_XCLR_DELAY_RANGE_US);
+
+	/*
+	 * If we can't identify the module here, it might be disconnected.
+	 * Consider power_on() complete and exit early in that case.
+	 */
+	ret = imx219_identify_module(imx219);
+	if (ret)
+		return 0;
 
 	/*
 	 * Sensor doesn't enter LP-11 state upon power up until and unless
@@ -1115,27 +1146,6 @@ static int imx219_get_regulators(struct imx219 *imx219)
 	return devm_regulator_bulk_get(&client->dev,
 				       IMX219_NUM_SUPPLIES,
 				       imx219->supplies);
-}
-
-/* Verify chip ID */
-static int imx219_identify_module(struct imx219 *imx219)
-{
-	struct i2c_client *client = v4l2_get_subdevdata(&imx219->sd);
-	int ret;
-	u64 val;
-
-	ret = cci_read(imx219->regmap, IMX219_REG_CHIP_ID, &val, NULL);
-	if (ret)
-		return dev_err_probe(&client->dev, ret,
-				     "failed to read chip id %x\n",
-				     IMX219_CHIP_ID);
-
-	if (val != IMX219_CHIP_ID)
-		return dev_err_probe(&client->dev, -EIO,
-				     "chip id mismatch: %x!=%llx\n",
-				     IMX219_CHIP_ID, val);
-
-	return 0;
 }
 
 static int imx219_check_hwcfg(struct device *dev, struct imx219 *imx219)
@@ -1252,21 +1262,9 @@ static int imx219_probe(struct i2c_client *client)
 		return dev_err_probe(dev, PTR_ERR(imx219->reset_gpio),
 				     "failed to get reset gpio\n");
 
-	/*
-	 * The sensor must be powered for imx219_identify_module()
-	 * to be able to read the CHIP_ID register
-	 */
-	ret = imx219_power_on(dev);
-	if (ret)
-		return ret;
-
-	ret = imx219_identify_module(imx219);
-	if (ret)
-		goto error_power_off;
-
 	ret = imx219_init_controls(imx219);
 	if (ret)
-		goto error_power_off;
+		return ret;
 
 	/* Initialize subdev */
 	imx219->sd.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
@@ -1288,7 +1286,7 @@ static int imx219_probe(struct i2c_client *client)
 		goto error_media_entity;
 	}
 
-	pm_runtime_set_active(dev);
+	pm_runtime_set_suspended(dev);
 	pm_runtime_enable(dev);
 
 	ret = v4l2_async_register_subdev_sensor(&imx219->sd);
@@ -1298,7 +1296,6 @@ static int imx219_probe(struct i2c_client *client)
 		goto error_subdev_cleanup;
 	}
 
-	pm_runtime_idle(dev);
 	pm_runtime_set_autosuspend_delay(dev, 1000);
 	pm_runtime_use_autosuspend(dev);
 
@@ -1314,9 +1311,6 @@ error_media_entity:
 
 error_handler_free:
 	imx219_free_controls(imx219);
-
-error_power_off:
-	imx219_power_off(dev);
 
 	return ret;
 }
