@@ -28,6 +28,7 @@
 #include <linux/root_dev.h>
 #include <linux/interrupt.h>
 #include <linux/cpu.h>
+#include <linux/sbm.h>
 #include <linux/initrd.h>
 #include <linux/module.h>
 #include <linux/start_kernel.h>
@@ -53,6 +54,7 @@
 #include <asm/cacheflush.h>
 #include <asm/dma.h>
 #include <asm/irq.h>
+#include <asm/cpudata.h>
 
 #ifdef CONFIG_IP_PNP
 #include <net/ipconfig.h>
@@ -619,6 +621,48 @@ static void __init alloc_irqstack_bootmem(void)
 	}
 }
 
+static struct cpumask cpu_sbm_setup_map __initdata;
+static int __node_thread_count[NR_CPUS] __initdata;
+
+int arch_sbm_cpu_instance_id(int cpu)
+{
+	/* Combine the node and cache identifier. */
+	return ((u32)cpu_to_node(cpu) << 16) |
+	       cpu_data(cpu).max_cache_id;
+}
+
+static void __init init_sbm_topology(void)
+{
+	int num_sbm_instances, max_threads_per_instance = 1;
+	int i;
+
+	for_each_possible_cpu(i) {
+		bool found = false;
+		int j;
+
+		for_each_cpu(j, &cpu_sbm_setup_map) {
+			if (cpu_to_node(i) == cpu_to_node(j) &&
+			    cpu_data(i).max_cache_id == cpu_data(j).max_cache_id) {
+				found = true;
+				break;
+			}
+		}
+
+		if (!found) {
+			cpumask_set_cpu(i, &cpu_sbm_setup_map);
+			__node_thread_count[i] = 1;
+			continue;
+		}
+
+		__node_thread_count[j] += 1;
+		max_threads_per_instance = max(max_threads_per_instance,
+					       __node_thread_count[j]);
+	}
+
+	num_sbm_instances = cpumask_weight(&cpu_sbm_setup_map);
+	sbm_set_topology(num_sbm_instances, max_threads_per_instance);
+}
+
 void __init setup_arch(char **cmdline_p)
 {
 	/* Initialize PROM console and command line. */
@@ -677,6 +721,7 @@ void __init setup_arch(char **cmdline_p)
 	 * allocate the IRQ stacks.
 	 */
 	alloc_irqstack_bootmem();
+	init_sbm_topology();
 }
 
 extern int stop_a_enabled;
