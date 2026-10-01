@@ -20,6 +20,7 @@
 #include <linux/cpumask.h>
 #include <linux/init.h>
 #include <linux/rcupdate.h>
+#include <linux/sbm.h>
 #include <linux/sched.h>
 #include <linux/units.h>
 
@@ -930,6 +931,114 @@ __weak int __init parse_acpi_topology(void)
 	return 0;
 }
 
+/*
+ * Note: arch_sbm_cpu_instance_id() is only used if init_sbm_topology()
+ * below succeeds at setting the sbm topology. Either the LLC
+ * information is valid or package_id is dependable.
+ */
+int arch_sbm_cpu_instance_id(int cpu)
+{
+	if (last_level_cache_is_valid(cpu)) {
+		struct cacheinfo *llc_info = get_cpu_cacheinfo_llc(cpu);
+
+		if (!llc_info)
+			goto out;
+
+		if (llc_info->attributes & CACHE_ID)
+			return llc_info->id;
+
+		/*
+		 * XXX: fw_token be truncated from cast
+		 * when the value is returned as an int.
+		 */
+		return (int)((long)llc_info->fw_token);
+	}
+out:
+	return cpu_topology[cpu].package_id;
+}
+
+static void __init init_sbm_topology(void)
+{
+	int num_sbm_instances = 0, max_threads_per_instance = -1;
+	bool has_cache = false, has_package = false;
+	cpumask_var_t unique_cpus;
+	struct xarray instances;
+	unsigned long cpu, *count;
+
+	/*
+	 * If the allocation fails, the sbm core will use
+	 * the default logic of splitting CPUs evenly in
+	 * BITS_PER_LONG chunk.
+	 */
+	if (!zalloc_cpumask_var(&unique_cpus, GFP_KERNEL))
+		return;
+
+	xa_init(&instances);
+
+	for_each_possible_cpu(cpu) {
+		bool found = false;
+		int unique_cpu;
+
+		for_each_cpu(unique_cpu, unique_cpus) {
+			/*
+			 * XXX: Assumes last_level_cache_is_valid() is uniformly true
+			 * across the entire system if it is true for one CPU.
+			 */
+			if (last_level_cache_is_valid(cpu)) {
+				has_cache = true;
+				if (last_level_cache_is_shared(cpu, unique_cpu)) {
+					found = true;
+					break;
+				}
+			} else {
+				/* Go by package_id if no LLC information is found. */
+				has_package = true;
+				if (cpu_topology[unique_cpu].package_id ==
+				    cpu_topology[cpu].package_id) {
+					found = true;
+					break;
+				}
+			}
+		}
+
+		/* XXX: CPUs should not suddenly switch IDs mid way. */
+		if (has_cache && has_package)
+			goto out;
+
+		if (!found) {
+			count = kzalloc_obj(*count);
+			if (!count)
+				goto out;
+
+			cpumask_set_cpu(cpu, unique_cpus);
+			*count += 1;
+
+			xa_store(&instances, cpu, count, GFP_KERNEL);
+			continue;
+		}
+
+		count = xa_load(&instances, unique_cpu);
+		if (!count)
+			goto out;
+
+		*count += 1;
+	}
+
+	xa_for_each(&instances, cpu, count) {
+		max_threads_per_instance = max_t(int, max_threads_per_instance, *count);
+		num_sbm_instances++;
+	}
+
+	sbm_set_topology(num_sbm_instances, max_threads_per_instance);
+out:
+	xa_for_each(&instances, cpu, count) {
+		xa_erase(&instances, cpu);
+		kfree(count);
+	}
+	xa_destroy(&instances);
+	free_cpumask_var(unique_cpus);
+}
+
 void __init init_cpu_topology(void)
 {
 	int cpu, ret;
@@ -954,8 +1063,19 @@ void __init init_cpu_topology(void)
 			continue;
 		else if (ret != -ENOENT)
 			pr_err("Early cacheinfo failed, ret = %d\n", ret);
-		return;
+		break;
 	}
+
+	/*
+	 * If fetch_cache_info() fails for first CPU,
+	 * init_cpu_sbm_topology() will use pacakge_id instead.
+	 *
+	 * Uniform cache topology is a necessary since implementation
+	 * assumes last_level_cache_is_valid() gives same result for
+	 * all possible CPUs
+	 */
+	if (!ret || (cpu == 0 && ret == -ENOENT))
+		init_sbm_topology();
 }
 
 void store_cpu_topology(unsigned int cpuid)
