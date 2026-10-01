@@ -142,6 +142,10 @@ extern struct cxl_rwsem cxl_rwsem;
 void cxl_commit_start(void __iomem *hdm, struct cxl_decoder_settings *settings);
 int cxld_await_commit(void __iomem *hdm, int id);
 
+int cxl_hdm_unpack_decoder(struct cxl_decoder_settings *settings, int id,
+			   u32 ctrl, u64 base, u64 size,
+			   u64 target_or_skip_reg_val);
+
 int cxl_memdev_init(void);
 void cxl_memdev_exit(void);
 void cxl_mbox_init(void);
