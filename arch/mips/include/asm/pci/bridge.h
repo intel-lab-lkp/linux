@@ -372,6 +372,12 @@ struct bridge_err_cmdword {
 
 #define BRIDGE_ATE_RAM		0x00010000	/* Internal Addr Xlat Ram */
 
+/* PIC Write Request RAM: three 256-entry, 64-bit arrays. */
+#define PIC_WR_REQ_BUFSIZE	256
+#define PIC_WR_REQ_LOWER	0x00018000
+#define PIC_WR_REQ_UPPER	0x00018800
+#define PIC_WR_REQ_PARITY	0x00019000
+
 #define BRIDGE_TYPE0_CFG_DEV0	0x00020000	/* Type 0 Cfg, Device 0 */
 #define BRIDGE_TYPE0_CFG_SLOT_OFF	0x00001000	/* Type 0 Cfg Slot Offset (1..7) */
 #define BRIDGE_TYPE0_CFG_FUNC_OFF	0x00000100	/* Type 0 Cfg Func Offset (1..7) */
@@ -389,6 +395,7 @@ struct bridge_err_cmdword {
 /* Byte offset macros for Bridge device IO spaces */
 
 #define BRIDGE_DEV_CNT		8	/* Up to 8 devices per bridge */
+#define PIC_NSLOTS		4	/* PIC: 4 devices per bus */
 #define BRIDGE_DEVIO0		0x00200000	/* Device IO 0 Addr */
 #define BRIDGE_DEVIO1		0x00400000	/* Device IO 1 Addr */
 #define BRIDGE_DEVIO2		0x00600000	/* Device IO 2 Addr */
@@ -457,6 +464,10 @@ struct bridge_err_cmdword {
 #define BRIDGE_CTRL_MAX_TRANS_MASK	(BRIDGE_CTRL_MAX_TRANS(0x1f))
 #define BRIDGE_CTRL_WIDGET_ID(n)	((n) << 0)
 #define BRIDGE_CTRL_WIDGET_ID_MASK	(BRIDGE_CTRL_WIDGET_ID(0xf))
+
+/* PIC-only widget control bits, upper 32 bits of the register. */
+#define PIC_CTRL_NO_SNOOP		(0x1ull << 62)
+#define PIC_CTRL_RELAX_ORDER		(0x1ull << 61)
 
 /* Bridge Response buffer Error Upper Register bit fields definition */
 #define BRIDGE_RESP_ERRUPPR_DEVNUM_SHFT (20)

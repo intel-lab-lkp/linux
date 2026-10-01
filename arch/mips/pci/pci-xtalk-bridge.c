@@ -146,12 +146,14 @@ static int pci_conf0_read_config(struct pci_bus *bus, unsigned int devfn,
 	struct bridge_controller *bc = BRIDGE_CONTROLLER(bus);
 	struct bridge_regs *bridge = bc->base;
 	int slot = PCI_SLOT(devfn);
+	/* PIC config-space device 0 is the PIC ASIC; devices start at 1. */
+	int cfgslot = bc->is_pic ? slot + 1 : slot;
 	int fn = PCI_FUNC(devfn);
 	void *addr;
 	u32 cf;
 	int res;
 
-	addr = &bridge->b_type0_cfg_dev[slot].f[fn].c[PCI_VENDOR_ID];
+	addr = &bridge->b_type0_cfg_dev[cfgslot].f[fn].c[PCI_VENDOR_ID];
 	if (get_dbe(cf, (u32 *)addr))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
@@ -160,12 +162,12 @@ static int pci_conf0_read_config(struct pci_bus *bus, unsigned int devfn,
 	 * generic PCI code a chance to look at it for real ...
 	 */
 	if (cf == (PCI_VENDOR_ID_SGI | (PCI_DEVICE_ID_SGI_IOC3 << 16))) {
-		addr = &bridge->b_type0_cfg_dev[slot].f[fn].l[where >> 2];
+		addr = &bridge->b_type0_cfg_dev[cfgslot].f[fn].l[where >> 2];
 		return ioc3_cfg_rd(addr, where, size, value,
 				   bc->ioc3_sid[slot]);
 	}
 
-	addr = &bridge->b_type0_cfg_dev[slot].f[fn].c[where ^ (4 - size)];
+	addr = &bridge->b_type0_cfg_dev[cfgslot].f[fn].c[where ^ (4 - size)];
 
 	if (size == 1)
 		res = get_dbe(*value, (u8 *)addr);
@@ -231,12 +233,14 @@ static int pci_conf0_write_config(struct pci_bus *bus, unsigned int devfn,
 	struct bridge_controller *bc = BRIDGE_CONTROLLER(bus);
 	struct bridge_regs *bridge = bc->base;
 	int slot = PCI_SLOT(devfn);
+	/* See the matching comment in pci_conf0_read_config(). */
+	int cfgslot = bc->is_pic ? slot + 1 : slot;
 	int fn = PCI_FUNC(devfn);
 	void *addr;
 	u32 cf;
 	int res;
 
-	addr = &bridge->b_type0_cfg_dev[slot].f[fn].c[PCI_VENDOR_ID];
+	addr = &bridge->b_type0_cfg_dev[cfgslot].f[fn].c[PCI_VENDOR_ID];
 	if (get_dbe(cf, (u32 *)addr))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
@@ -245,11 +249,11 @@ static int pci_conf0_write_config(struct pci_bus *bus, unsigned int devfn,
 	 * generic PCI code a chance to look at it for real ...
 	 */
 	if (cf == (PCI_VENDOR_ID_SGI | (PCI_DEVICE_ID_SGI_IOC3 << 16))) {
-		addr = &bridge->b_type0_cfg_dev[slot].f[fn].l[where >> 2];
+		addr = &bridge->b_type0_cfg_dev[cfgslot].f[fn].l[where >> 2];
 		return ioc3_cfg_wr(addr, where, size, value);
 	}
 
-	addr = &bridge->b_type0_cfg_dev[slot].f[fn].c[where ^ (4 - size)];
+	addr = &bridge->b_type0_cfg_dev[cfgslot].f[fn].c[where ^ (4 - size)];
 
 	if (size == 1)
 		res = put_dbe(value, (u8 *)addr);
@@ -324,6 +328,22 @@ struct bridge_irq_chip_data {
 	nasid_t nasid;
 };
 
+/* PIC takes the full 48-bit XIO address here, source in bits 55:48. */
+static void bridge_set_int_addr(struct bridge_controller *bc, int pin,
+				int bit, nasid_t nasid)
+{
+	if (bc->is_pic) {
+		void *addr = &bc->base->b_int_addr[pin];
+		u64 xio = bc->intr_addr & ((1ULL << 48) - 1);
+
+		__raw_writeq(((u64)bit << 48) | xio, addr);
+	} else {
+		bridge_write(bc, b_int_addr[pin].addr,
+			     (((bc->intr_addr >> 30) & 0x30000) |
+			      bit | (nasid << 8)));
+	}
+}
+
 static int bridge_set_affinity(struct irq_data *d, const struct cpumask *mask,
 			       bool force)
 {
@@ -337,9 +357,7 @@ static int bridge_set_affinity(struct irq_data *d, const struct cpumask *mask,
 	if (ret >= 0) {
 		cpu = cpumask_first_and(mask, cpu_online_mask);
 		data->nasid = cpu_to_node(cpu);
-		bridge_write(data->bc, b_int_addr[pin].addr,
-			     (((data->bc->intr_addr >> 30) & 0x30000) |
-			      bit | (data->nasid << 8)));
+		bridge_set_int_addr(data->bc, pin, bit, data->nasid);
 		bridge_read(data->bc, b_wid_tflush);
 	}
 	return ret;
@@ -403,9 +421,7 @@ static int bridge_domain_activate(struct irq_domain *domain,
 	int pin = irqd->hwirq;
 	u32 device;
 
-	bridge_write(bc, b_int_addr[pin].addr,
-		     (((bc->intr_addr >> 30) & 0x30000) |
-		      bit | (data->nasid << 8)));
+	bridge_set_int_addr(bc, pin, bit, data->nasid);
 	bridge_set(bc, b_int_enable, (1 << pin));
 	bridge_set(bc, b_int_enable, 0x7ffffe00); /* more stuff in int_enable */
 
@@ -711,6 +727,24 @@ static int bridge_probe(struct platform_device *pdev)
 	bridge_set(bc, b_wid_control, BRIDGE_CTRL_PAGE_SIZE);
 #endif
 
+	if (bc->is_pic) {
+		unsigned long ctrl = (unsigned long)&bc->base->b_wid_control;
+		void *ctrl64 = (void *)(ctrl & ~7UL);
+		int i;
+
+		/* Keep DMA snooped and ordered. */
+		__raw_writeq(__raw_readq(ctrl64) &
+			     ~(PIC_CTRL_NO_SNOOP | PIC_CTRL_RELAX_ORDER),
+			     ctrl64);
+
+		/* Clear so a stale entry can't trip a parity error. */
+		for (i = 0; i < PIC_WR_REQ_BUFSIZE * 8; i += 8) {
+			__raw_writeq(0, (u8 *)bc->base + PIC_WR_REQ_LOWER + i);
+			__raw_writeq(0, (u8 *)bc->base + PIC_WR_REQ_UPPER + i);
+			__raw_writeq(0, (u8 *)bc->base + PIC_WR_REQ_PARITY + i);
+		}
+	}
+
 	/*
 	 * Hmm...  IRIX sets additional bits in the address which
 	 * are documented as reserved in the bridge docs.
@@ -721,7 +755,8 @@ static int bridge_probe(struct platform_device *pdev)
 	bridge_write(bc, b_dir_map, (bd->masterwid << 20));	/* DMA */
 	bridge_write(bc, b_int_enable, 0);
 
-	for (slot = 0; slot < 8; slot++) {
+	for (slot = 0; slot < (bc->is_pic ? PIC_NSLOTS : BRIDGE_DEV_CNT);
+	     slot++) {
 		bridge_set(bc, b_device[slot].reg, BRIDGE_DEV_SWAP_DIR);
 		bc->pci_int[slot][0] = -1;
 		bc->pci_int[slot][1] = -1;
