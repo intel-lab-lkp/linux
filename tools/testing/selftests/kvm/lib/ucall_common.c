@@ -27,6 +27,7 @@ static struct ucall_header *ucall_pool;
 
 void ucall_init(struct kvm_vm *vm, gpa_t mmio_gpa)
 {
+	struct userspace_mem_region *region;
 	struct ucall_header *hdr;
 	struct ucall *uc;
 	gva_t gva;
@@ -36,6 +37,13 @@ void ucall_init(struct kvm_vm *vm, gpa_t mmio_gpa)
 				MEM_REGION_DATA);
 	hdr = (struct ucall_header *)addr_gva2hva(vm, gva);
 	memset(hdr, 0, sizeof(*hdr));
+
+	region = vm_get_mem_region(vm, MEM_REGION_DATA);
+	if (region->region.flags & KVM_MEM_GUEST_MEMFD) {
+		size_t aligned_sz = align_up(sizeof(*hdr), vm->page_size);
+
+		vm_mem_set_shared(vm, addr_gva2gpa(vm, gva), aligned_sz);
+	}
 
 	for (i = 0; i < KVM_MAX_VCPUS; ++i) {
 		uc = &hdr->ucalls[i];
