@@ -757,7 +757,7 @@ config SGI_IP22
 	  that runs on these, say Y here.
 
 config SGI_IP27
-	bool "SGI IP27 (Origin200/2000)"
+	bool "SGI IP27 (Origin200/2000) and IP35 (Fuel, Tezro)"
 	select ARCH_HAS_PHYS_TO_DMA
 	select ARCH_SPARSEMEM_ENABLE
 	select FW_ARC
@@ -782,9 +782,10 @@ config SGI_IP27
 	select MIPS_L1_CACHE_SHIFT_7
 	select NUMA
 	help
-	  This are the SGI Origin 200, Origin 2000 and Onyx 2 Graphics
-	  workstations.  To compile a Linux kernel that runs on these, say Y
-	  here.
+	  These are the SGI Origin 200, Origin 2000 and Onyx 2 Graphics
+	  workstations, and the IP35 machines built around the Bedrock hub
+	  ASIC, such as Fuel and Tezro.  To compile a Linux kernel that runs
+	  on these, say Y here.
 
 config SGI_IP28
 	bool "SGI IP28 (Indigo2 R10k)"
