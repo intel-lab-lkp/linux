@@ -252,6 +252,9 @@ typedef union	hubni_port_error_u {
 
 static inline int get_region_shift(void)
 {
+	if (system_is_ip35)
+		return LRI_SYSTEM_SIZE_IP35(LOCAL_HUB_L(NI_STATUS_REV_ID));
+
 	if (LOCAL_HUB_L(NI_STATUS_REV_ID) & NSRI_REGIONSIZE_MASK)
 		return NASID_TO_FINEREG_SHFT;
 

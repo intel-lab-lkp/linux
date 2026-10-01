@@ -121,7 +121,11 @@ void __init plat_mem_setup(void)
 	 * Try to catch kernel missconfigurations and give user an
 	 * indication what option to select.
 	 */
-	n_mode = LOCAL_HUB_L(NI_STATUS_REV_ID) & NSRI_MORENODES_MASK;
+	if (system_is_ip35)
+		n_mode = LRI_SYSTEM_SIZE_IP35(LOCAL_HUB_L(NI_STATUS_REV_ID)) ==
+			 LRI_SYSTEM_SIZE_NMODE_IP35;
+	else
+		n_mode = LOCAL_HUB_L(NI_STATUS_REV_ID) & NSRI_MORENODES_MASK;
 	printk("Machine is in %c mode.\n", n_mode ? 'N' : 'M');
 #ifdef CONFIG_SGI_SN_N_MODE
 	if (!n_mode)

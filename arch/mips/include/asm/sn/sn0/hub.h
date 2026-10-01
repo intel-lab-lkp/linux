@@ -31,6 +31,8 @@
 #include <asm/sn/sn0/hubni.h>
 //#include <asm/sn/sn0/hubcore.h>
 
+#include <asm/xtalk/xwidget.h>
+
 /* Translation of uncached attributes */
 #define UATTR_HSPEC	0
 #define UATTR_IO	1
@@ -39,13 +41,35 @@
 
 #ifdef __ASSEMBLER__
 /*
- * Returns the local nasid into res.
+ * Clears tmp on a Bedrock hub.  Nothing has read the hub's part number
+ * this early, so take it from the widget ID.
  */
-	.macro GET_NASID_ASM res
+	.macro GET_HUB_GEN_ASM tmp
+	dli	\tmp, LOCAL_HUB_ADDR(IIO_WID)
+	ld	\tmp, (\tmp)
+	dsrl	\tmp, WIDGET_PART_NUM_SHFT
+	andi	\tmp, (WIDGET_PART_NUM >> WIDGET_PART_NUM_SHFT)
+	xori	\tmp, WIDGET_BDRCK_PART_NUM
+	.endm
+
+/*
+ * Returns the local nasid into res, clobbering tmp.
+ */
+	.macro GET_NASID_ASM res, tmp
+	.set	push
+	.set	reorder
+	GET_HUB_GEN_ASM \tmp
 	dli	\res, LOCAL_HUB_ADDR(NI_STATUS_REV_ID)
 	ld	\res, (\res)
+	beqz	\tmp, 1f
 	and	\res, NSRI_NODEID_MASK
 	dsrl	\res, NSRI_NODEID_SHFT
+	b	2f
+1:
+	dsrl	\res, LRI_NODEID_SHFT_IP35
+	andi	\res, LRI_NODEID_MASK_IP35
+2:
+	.set	pop
 	.endm
 #else
 
@@ -54,8 +78,13 @@
  */
 static inline nasid_t get_nasid(void)
 {
-	return (nasid_t)((LOCAL_HUB_L(NI_STATUS_REV_ID) & NSRI_NODEID_MASK)
-			 >> NSRI_NODEID_SHFT);
+	u64 id = LOCAL_HUB_L(NI_STATUS_REV_ID);
+
+	if (system_is_ip35)
+		return (nasid_t)((id >> LRI_NODEID_SHFT_IP35) &
+				 LRI_NODEID_MASK_IP35);
+
+	return (nasid_t)((id & NSRI_NODEID_MASK) >> NSRI_NODEID_SHFT);
 }
 #endif
 

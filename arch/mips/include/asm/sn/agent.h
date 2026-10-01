@@ -15,8 +15,8 @@
 #include <asm/sn/arch.h>
 
 #if defined(CONFIG_SGI_IP27)
-#include <asm/sn/sn0/hub.h>
 #include <asm/sn/sn1/hub.h>
+#include <asm/sn/sn0/hub.h>
 #endif /* CONFIG_SGI_IP27 */
 
 /*

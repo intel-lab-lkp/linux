@@ -65,8 +65,10 @@
  * arch/mips/mach-xxx/kernel-entry-init.h when necessary.
  */
 	.macro	kernel_entry_setup
-	GET_NASID_ASM	t1
+#ifdef CONFIG_MAPPED_KERNEL
+	GET_NASID_ASM	t1, t0
 	move		t2, t1			# text and data are here
+#endif
 	MAPPED_KERNEL_SETUP_TLB
 	.endm
 
@@ -74,7 +76,8 @@
  * Do SMP slave processor setup necessary before we can safely execute C code.
  */
 	.macro	smp_slave_setup
-	GET_NASID_ASM	t1
+#ifdef CONFIG_MAPPED_KERNEL
+	GET_NASID_ASM	t1, t0
 	dli	t0, KLDIR_OFFSET + (KLI_KERN_VARS * KLDIR_ENT_SIZE) + \
 		    KLDIR_OFF_POINTER + CAC_BASE
 	dsll	t1, NASID_SHFT
@@ -82,6 +85,7 @@
 	ld	t0, 0(t0)			# t0 points to kern_vars struct
 	lh	t1, KV_RO_NASID_OFFSET(t0)
 	lh	t2, KV_RW_NASID_OFFSET(t0)
+#endif
 	MAPPED_KERNEL_SETUP_TLB
 
 	/*

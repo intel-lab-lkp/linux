@@ -122,7 +122,7 @@ struct widget_ident {
 };
 
 /* Known Xtalk Widgets */
-static const struct widget_ident __initconst widget_idents[] = {
+static const struct widget_ident widget_idents[] __initconst __maybe_unused = {
 	{
 		WIDGET_XBOW_MFGR_NUM,
 		WIDGET_XBOW_PART_NUM,
