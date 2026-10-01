@@ -14,6 +14,7 @@
 #include <linux/err.h>
 #include <linux/of.h>
 #include <linux/iova_bitmap.h>
+#include <linux/xarray.h>
 #include <uapi/linux/iommufd.h>
 
 #define IOMMU_READ	(1 << 0)
@@ -249,6 +250,8 @@ struct iommu_domain {
 			struct list_head next;
 		};
 	};
+
+	struct xarray reclaim_list;
 };
 
 static inline bool iommu_is_dma_domain(struct iommu_domain *domain)
