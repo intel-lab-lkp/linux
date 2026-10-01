@@ -30,6 +30,7 @@
 #include <linux/uaccess.h>
 #include <linux/perf_event.h>
 #include <linux/perf/arm_pmu.h>
+#include <linux/perf/arm_pmuv3.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/property.h>
@@ -1368,6 +1369,47 @@ static void etm4_fixup_wrong_ccitmin(struct etmv4_drvdata *drvdata)
 	}
 }
 
+/*
+ * CPUs whose Technical Reference Manuals document ETE external outputs 0-3 as
+ * the PMU common events TRCEXTOUT0-3.
+ */
+static const struct midr_range etm4_pmu_extout1_cpus[] = {
+	MIDR_ALL_VERSIONS(MIDR_CORTEX_A520),
+	MIDR_ALL_VERSIONS(MIDR_CORTEX_X925),
+	MIDR_ALL_VERSIONS(MIDR_NEOVERSE_N2),
+	MIDR_ALL_VERSIONS(MIDR_NEOVERSE_N3),
+	MIDR_ALL_VERSIONS(MIDR_NEOVERSE_V2),
+	MIDR_ALL_VERSIONS(MIDR_NEOVERSE_V3),
+	{},
+};
+
+/*
+ * Check whether a PMU event can count external output 1 of this trace unit,
+ * and whether the trace unit has event 1 to drive it, since event 0 is the
+ * trace unit trigger. The PMU only reports whether an event is implemented,
+ * not that the trace unit drives it, so also require a CPU whose manual
+ * documents the connection.
+ *
+ * Must run on the CPU that owns the trace unit.
+ */
+static bool etm4_pmu_has_extout1(struct etmv4_drvdata *drvdata)
+{
+	int pmuver = read_pmuver();
+
+	if (!is_midr_in_range_list(etm4_pmu_extout1_cpus))
+		return false;
+
+	/* PMCEID0_EL0[63:32] describe events 0x4000-0x401f from PMUv3p1 */
+	if (!pmuv3_implemented(pmuver) || pmuver < ID_AA64DFR0_EL1_PMUVer_V3P1)
+		return false;
+	if (!(read_pmceid0() & BIT_ULL(32 + ARMV8_PMUV3_PERFCTR_TRCEXTOUT1 -
+				       ARMV8_PMUV3_EXT_COMMON_EVENT_BASE)))
+		return false;
+
+	/* nr_event is TRCIDR0.NUMEVENT, the number of events minus one */
+	return drvdata->nr_event >= 1;
+}
+
 static void etm4_init_arch_data(void *info)
 {
 	u32 etmidr0;
@@ -1521,6 +1563,8 @@ static void etm4_init_arch_data(void *info)
 		drvdata->nr_seq_ctrls = ETM_MAX_SEQ_TRANSITIONS;
 	/* NUMCNTR, bits[30:28] number of counters available for tracing */
 	drvdata->nr_cntr = FIELD_GET(TRCIDR5_NUMCNTR_MASK, etmidr5);
+
+	drvdata->pmu_extout1 = etm4_pmu_has_extout1(drvdata);
 
 	coresight_clear_self_claim_tag_unlocked(csa);
 	etm4_cs_lock(drvdata, csa);

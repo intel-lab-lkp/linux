@@ -29,6 +29,8 @@
  */
 #define CS_CFG_MATCH_CLASS_SRC_ALL	0x0001	/* match any source */
 #define CS_CFG_MATCH_CLASS_SRC_ETM4	0x0002	/* match any ETMv4 device */
+/* ETM external output 1 is countable by the PMU as TRCEXTOUT1 */
+#define CS_CFG_MATCH_CAP_PMU_EXTOUT1	0x0004
 
 /* flags defining device instance matching - used in config match desc data. */
 #define CS_CFG_MATCH_INST_ANY		0x80000000 /* any instance of a class */

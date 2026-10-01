@@ -174,9 +174,14 @@ static int etm4_cfg_load_feature(struct coresight_device *csdev,
 
 int etm4_cscfg_register(struct coresight_device *csdev)
 {
+	struct etmv4_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
 	struct cscfg_csdev_feat_ops ops;
+	u32 match_flags = CS_CFG_ETM4_MATCH_FLAGS;
 
 	ops.load_feat = &etm4_cfg_load_feature;
 
-	return cscfg_register_csdev(csdev, CS_CFG_ETM4_MATCH_FLAGS, &ops);
+	if (drvdata->pmu_extout1)
+		match_flags |= CS_CFG_MATCH_CAP_PMU_EXTOUT1;
+
+	return cscfg_register_csdev(csdev, match_flags, &ops);
 }

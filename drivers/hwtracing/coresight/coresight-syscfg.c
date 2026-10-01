@@ -1116,6 +1116,13 @@ int cscfg_csdev_enable_active_config(struct coresight_device *csdev,
 
 		if (err)
 			cscfg_config_desc_put(config_desc);
+	} else {
+		/*
+		 * The configuration is active but was not loaded on this
+		 * device, for example because the device lacks a capability
+		 * its features require. Fail rather than trace without it.
+		 */
+		err = -EINVAL;
 	}
 
 	return err;

@@ -1024,6 +1024,8 @@ struct etmv4_save_state {
  * @skip_power_up: Indicates if an implementation can skip powering up
  *		   the trace unit.
  * @paused:	Indicates if the trace unit is paused.
+ * @pmu_extout1: The PMU counts external output 1 of this trace unit as
+ *		TRCEXTOUT1, and the trace unit has event 1 to drive it.
  * @arch_features: Bitmap of arch features of etmv4 devices.
  */
 struct etmv4_drvdata {
@@ -1076,6 +1078,7 @@ struct etmv4_drvdata {
 	bool				lpoverride : 1;
 	bool				skip_power_up : 1;
 	bool				paused : 1;
+	bool				pmu_extout1 : 1;
 	u64				trfcr;
 	struct etmv4_config		config;
 	struct etmv4_save_state		*save_state;
