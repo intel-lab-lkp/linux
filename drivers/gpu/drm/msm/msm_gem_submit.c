@@ -598,6 +598,12 @@ int msm_ioctl_gem_submit(struct drm_device *dev, void *data,
 		goto out_post_unlock;
 	}
 
+	/* The resident set of a VM_BIND context comes from its VM_BIND ops */
+	if (msm_context_is_vmbind(ctx) && args->nr_bos) {
+		ret = UERR(EINVAL, dev, "submit_bo table not allowed with VM_BIND");
+		goto out_post_unlock;
+	}
+
 	ring = gpu->rb[queue->ring_nr];
 
 	if (args->flags & MSM_SUBMIT_FENCE_FD_OUT) {
