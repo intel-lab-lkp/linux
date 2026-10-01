@@ -1404,9 +1404,18 @@ static bool suitable_migration_source(struct compact_control *cc,
 							struct page *page)
 {
 	int block_mt;
+	unsigned int order = compact_hpage_order();
+	bool costly = order > PAGE_ALLOC_COSTLY_ORDER;
 
 	if (pageblock_skip_persistent(page))
 		return false;
+
+	if (is_via_compact_memory(cc->order) && !costly) {
+		block_mt = get_pageblock_migratetype(page);
+		if (block_mt == MIGRATE_MOVABLE || is_migrate_cma(block_mt))
+			return true;
+		return false;
+	}
 
 	/*
 	 * Background compaction produces blocks for the zone at
