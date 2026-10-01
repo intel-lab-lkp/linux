@@ -7904,12 +7904,11 @@ static int set_bitmap_file(struct mddev *mddev, int fd)
  *  The minor and patch _version numbers are also kept incase the
  *  super_block handler wishes to interpret them.
  */
-int md_set_array_info(struct mddev *mddev, struct mdu_array_info_s *info)
+int md_set_array_info(struct mddev *mddev, struct mdu_array_info64 *info)
 {
 	if (info->raid_disks == 0) {
 		/* just setting version number for superblock loading */
-		if (info->major_version < 0 ||
-		    info->major_version >= ARRAY_SIZE(super_types) ||
+		if (info->major_version >= ARRAY_SIZE(super_types) ||
 		    super_types[info->major_version].name == NULL) {
 			/* maybe try to auto-load a module? */
 			pr_warn("md: superblock version %d not known\n",
@@ -8101,7 +8100,7 @@ static void put_cluster_ops(struct mddev *mddev)
  * Any differences that cannot be handled will cause an error.
  * Normally, only one change can be managed at a time.
  */
-static int update_array_info(struct mddev *mddev, mdu_array_info_t *info)
+static int update_array_info(struct mddev *mddev, struct mdu_array_info64 *info)
 {
 	int rv = 0;
 	int cnt = 0;
@@ -8315,9 +8314,33 @@ static void convert_to_disk_info64(struct mdu_disk_info64 *info64,
 	info64->state = info->state;
 }
 
+static void convert_to_array_info64(struct mdu_array_info64 *info64,
+				    mdu_array_info_t *info)
+{
+	info64->major_version = info->major_version;
+	info64->minor_version = info->minor_version;
+	info64->patch_version = info->patch_version;
+	info64->level = info->level;
+	info64->ctime = info->ctime;
+	info64->size = info->size;
+	info64->nr_disks = info->nr_disks;
+	info64->raid_disks = info->raid_disks;
+	info64->md_minor = info->md_minor;
+	info64->not_persistent = info->not_persistent;
+	info64->utime = info->utime;
+	info64->state = info->state;
+	info64->active_disks = info->active_disks;
+	info64->working_disks = info->working_disks;
+	info64->failed_disks = info->failed_disks;
+	info64->spare_disks = info->spare_disks;
+	info64->layout = info->layout;
+	info64->chunk_size = info->chunk_size;
+}
+
 static int __md_set_array_info(struct mddev *mddev, void __user *argp)
 {
 	mdu_array_info_t info;
+	struct mdu_array_info64 info64 = {0};
 	int err;
 
 	if (!argp)
@@ -8325,8 +8348,10 @@ static int __md_set_array_info(struct mddev *mddev, void __user *argp)
 	else if (copy_from_user(&info, argp, sizeof(info)))
 		return -EFAULT;
 
+	convert_to_array_info64(&info64, &info);
+
 	if (mddev->pers) {
-		err = update_array_info(mddev, &info);
+		err = update_array_info(mddev, &info64);
 		if (err)
 			pr_warn("md: couldn't update array info. %d\n", err);
 		return err;
@@ -8342,7 +8367,7 @@ static int __md_set_array_info(struct mddev *mddev, void __user *argp)
 		return -EBUSY;
 	}
 
-	err = md_set_array_info(mddev, &info);
+	err = md_set_array_info(mddev, &info64);
 	if (err)
 		pr_warn("md: couldn't set array info. %d\n", err);
 
