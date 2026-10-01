@@ -63,7 +63,7 @@ static int ip27_be_handler(struct pt_regs *regs, int is_fixup)
 {
 	unsigned long errst0, errst1;
 	int data = regs->cp0_cause & 4;
-	int cpu = LOCAL_HUB_L(PI_CPU_NUM);
+	int cpu = slicetoab(LOCAL_HUB_L(PI_CPU_NUM));
 
 	if (is_fixup)
 		return MIPS_BE_FIXUP;
@@ -84,7 +84,7 @@ static int ip27_be_handler(struct pt_regs *regs, int is_fixup)
 void __init ip27_be_init(void)
 {
 	/* XXX Initialize all the Hub & Bridge error handling here.  */
-	int cpu = LOCAL_HUB_L(PI_CPU_NUM);
+	int cpu = slicetoab(LOCAL_HUB_L(PI_CPU_NUM));
 	int cpuoff = cpu << 8;
 
 	mips_set_be_handler(ip27_be_handler);

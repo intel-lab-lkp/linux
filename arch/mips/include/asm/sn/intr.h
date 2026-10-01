@@ -29,13 +29,15 @@ do {								\
 	LOCAL_HUB_L(PI_INT_PEND0);				\
 } while (0);
 
-#define REMOTE_HUB_CLR_INTR(hub, level)				\
+/* An interrupt is pending in the PI block of the CPU it is routed to. */
+#define REMOTE_HUB_PI_CLR_INTR(hub, sn, level)			\
 do {								\
 	nasid_t	 __hub = (hub);					\
+	int __sn = (sn);					\
 								\
-	REMOTE_HUB_S(__hub, PI_INT_PEND_MOD, (level));		\
-	REMOTE_HUB_L(__hub, PI_INT_PEND0);			\
-} while (0);
+	REMOTE_HUB_PI_S(__hub, __sn, PI_INT_PEND_MOD, (level));	\
+	REMOTE_HUB_PI_L(__hub, __sn, PI_INT_PEND0);		\
+} while (0)
 
 /*
  * Hard-coded interrupt levels:

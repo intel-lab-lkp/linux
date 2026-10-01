@@ -30,7 +30,7 @@
 static int rt_next_event(unsigned long delta, struct clock_event_device *evt)
 {
 	unsigned int cpu = smp_processor_id();
-	int slice = cputoslice(cpu);
+	int slice = cputoab(cpu);
 	unsigned long cnt;
 
 	cnt = LOCAL_HUB_L(PI_RT_COUNT);
@@ -47,7 +47,7 @@ static irqreturn_t hub_rt_counter_handler(int irq, void *dev_id)
 {
 	unsigned int cpu = smp_processor_id();
 	struct clock_event_device *cd = &per_cpu(hub_rt_clockevent, cpu);
-	int slice = cputoslice(cpu);
+	int slice = cputoab(cpu);
 
 	/*
 	 * Ack

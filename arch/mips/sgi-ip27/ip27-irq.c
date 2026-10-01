@@ -72,7 +72,7 @@ static void disable_hub_irq(struct irq_data *d)
 static void setup_hub_mask(struct hub_irq_data *hd, const struct cpumask *mask)
 {
 	nasid_t nasid;
-	int cpu;
+	int cpu, sn;
 
 	cpu = cpumask_first_and(mask, cpu_online_mask);
 	if (cpu >= nr_cpu_ids)
@@ -80,12 +80,13 @@ static void setup_hub_mask(struct hub_irq_data *hd, const struct cpumask *mask)
 
 	nasid = cpu_to_node(cpu);
 	hd->cpu = cpu;
-	if (!cputoslice(cpu)) {
-		hd->irq_mask[0] = REMOTE_HUB_PTR(nasid, PI_INT_MASK0_A);
-		hd->irq_mask[1] = REMOTE_HUB_PTR(nasid, PI_INT_MASK1_A);
+	sn = cputosubnode(cpu);
+	if (!cputoab(cpu)) {
+		hd->irq_mask[0] = REMOTE_HUB_PI_PTR(nasid, sn, PI_INT_MASK0_A);
+		hd->irq_mask[1] = REMOTE_HUB_PI_PTR(nasid, sn, PI_INT_MASK1_A);
 	} else {
-		hd->irq_mask[0] = REMOTE_HUB_PTR(nasid, PI_INT_MASK0_B);
-		hd->irq_mask[1] = REMOTE_HUB_PTR(nasid, PI_INT_MASK1_B);
+		hd->irq_mask[0] = REMOTE_HUB_PI_PTR(nasid, sn, PI_INT_MASK0_B);
+		hd->irq_mask[1] = REMOTE_HUB_PI_PTR(nasid, sn, PI_INT_MASK1_B);
 	}
 }
 
@@ -147,7 +148,7 @@ static int hub_domain_alloc(struct irq_domain *domain, unsigned int virq,
 	info->nasid = cpu_to_node(hd->cpu);
 
 	/* Make sure it's not already pending when we connect it. */
-	REMOTE_HUB_CLR_INTR(info->nasid, swlevel);
+	REMOTE_HUB_PI_CLR_INTR(info->nasid, cputosubnode(hd->cpu), swlevel);
 
 	desc = irq_to_desc(virq);
 	desc->irq_common_data.node = info->nasid;
@@ -253,7 +254,7 @@ void install_ipi(void)
 {
 	int cpu = smp_processor_id();
 	unsigned long *mask = per_cpu(irq_enable_mask, cpu);
-	int slice = LOCAL_HUB_L(PI_CPU_NUM);
+	int slice = slicetoab(LOCAL_HUB_L(PI_CPU_NUM));
 	int resched, call;
 
 	resched = CPU_RESCHED_A_IRQ + slice;

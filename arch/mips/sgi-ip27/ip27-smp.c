@@ -94,15 +94,17 @@ void cpu_node_probe(void)
 
 static __init void intr_clear_all(nasid_t nasid)
 {
-	int i;
+	int i, sn, pis = system_is_ip35 ? 2 : 1;
 
-	REMOTE_HUB_S(nasid, PI_INT_MASK0_A, 0);
-	REMOTE_HUB_S(nasid, PI_INT_MASK0_B, 0);
-	REMOTE_HUB_S(nasid, PI_INT_MASK1_A, 0);
-	REMOTE_HUB_S(nasid, PI_INT_MASK1_B, 0);
+	for (sn = 0; sn < pis; sn++) {
+		REMOTE_HUB_PI_S(nasid, sn, PI_INT_MASK0_A, 0);
+		REMOTE_HUB_PI_S(nasid, sn, PI_INT_MASK0_B, 0);
+		REMOTE_HUB_PI_S(nasid, sn, PI_INT_MASK1_A, 0);
+		REMOTE_HUB_PI_S(nasid, sn, PI_INT_MASK1_B, 0);
 
-	for (i = 0; i < 128; i++)
-		REMOTE_HUB_CLR_INTR(nasid, i);
+		for (i = 0; i < 128; i++)
+			REMOTE_HUB_PI_CLR_INTR(nasid, sn, i);
+	}
 }
 
 static void ip27_send_ipi_single(int destid, unsigned int action)
