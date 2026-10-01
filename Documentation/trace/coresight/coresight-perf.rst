@@ -109,6 +109,25 @@ Example for triggering AUX pause and resume with PMU event::
         -e cycles/aux-action=pause,period=10000000/ \
         -e cycles/aux-action=resume,period=1050000/ -- sleep 1
 
+ETM-timed pause events
+~~~~~~~~~~~~~~~~~~~~~~
+
+The built-in ``pmu_pulse`` configuration pulses ETM external output 1 on every
+cycle of allowed trace, and a PMU event counting that output pauses trace after
+``N`` pulses, here 1000 cycles::
+
+  perf record -T \
+    -e cs_etm/pmu_pulse,aux-action=start-paused,timestamp/u \
+    -e armv8_pmuv3_0/cpu_cycles,aux-action=resume,period=1050031/u \
+    -e armv8_pmuv3_0/trcextout1,aux-action=pause,period=1000,call-graph=fp/u \
+    -- ./workload
+
+Each window is about ``N`` traced cycles plus the pause interrupt latency, so
+windows are never empty and a callchain on the pause event is taken where
+trace ends. The configuration only loads where the PMU counts ETM external
+output 1 (Cortex-A520, Cortex-X925, Neoverse N2, N3, V2 and V3); elsewhere a
+session selecting it fails to start.
+
 Perf test - Verify kernel and userspace perf CoreSight work
 -----------------------------------------------------------
 
