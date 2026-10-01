@@ -733,6 +733,43 @@ enum resctrl_kernel_mode {
 
 #define RESCTRL_NUM_KERNEL_MODES (RESCTRL_KMODE_LAST + 1)
 
+/**
+ * resctrl_arch_configure_kmode_global() - Program RESCTRL_GLOBAL_ENABLE_PER_CPU
+ *
+ * @cpu_mask:	CPUs whose kernel-mode association should be updated.
+ * @closid:	CLOSID that matches the RMID to program kernel mode. Depending
+ *		on the architecture, the counter may match traffic of both
+ *		@closid and @rmid, or @rmid only. Always provided; a valid
+ *		CLOSID is required even when @assign_ctrl is false.
+ * @assign_ctrl: true to assign @closid for kernel mode; false to inherit
+ *		association from the user-space task.
+ * @rmid:	RMID to program the kernel mode. Some architectures may use
+ *		CLOSID/RMID separately, others will consider them together.
+ *		Always provided; a valid RMID is required even when
+ *		@assign_mon is false.
+ * @assign_mon:	true to assign @rmid for kernel mode; false to inherit
+ *		monitoring association from the user-space task.
+ * @enable:	true to enable kernel mode association on CPUs in @cpu_mask;
+ *		false to disable kernel mode.
+ *
+ * This callback programs %RESCTRL_GLOBAL_ENABLE_PER_CPU. It is called in
+ * the following scenarios:
+ * - If the mode is active when user space changes the configuration, it is
+ *   first called to deactivate the mode on all CPUs where it is active.
+ * - When user space activates the mode, it is called with cpu_online_mask.
+ * - When user space adds a CPU to the active mode.
+ * - When user space removes a CPU from the active mode.
+ *
+ * Contract between fs and arch: resctrl fs always provides the same
+ * closid, assign_ctrl, rmid, and assign_mon when activating
+ * %RESCTRL_GLOBAL_ENABLE_PER_CPU, during CPU add/remove while the mode is
+ * active, and when deactivating the mode.
+ */
+void resctrl_arch_configure_kmode_global(const struct cpumask *cpu_mask,
+					 u32 closid, bool assign_ctrl,
+					 u32 rmid, bool assign_mon,
+					 bool enable);
+
 extern unsigned int resctrl_rmid_realloc_threshold;
 extern unsigned int resctrl_rmid_realloc_limit;
 

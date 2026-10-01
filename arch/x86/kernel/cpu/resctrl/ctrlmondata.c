@@ -131,3 +131,41 @@ int resctrl_arch_io_alloc_enable(struct rdt_resource *r, bool enable)
 
 	return 0;
 }
+
+static void resctrl_kmode_set_one_amd(void *arg)
+{
+	union msr_pqr_plza_assoc *plza = arg;
+
+	wrmsrq(MSR_IA32_PQR_PLZA_ASSOC, plza->full);
+}
+
+/*
+ * resctrl_arch_configure_kmode_global - Program Privilege Level Zero
+ *					 Association (PLZA).
+ * @cpu_mask:	CPUs whose PLZA MSR should be updated.
+ * @closid:	CLOSID programmed into MSR_IA32_PQR_PLZA_ASSOC. Always
+ *		written; required even when @assign_ctrl is false.
+ * @assign_ctrl: Whether PLZA should program the kernel-mode CLOSID.
+ * @rmid:	RMID programmed into MSR_IA32_PQR_PLZA_ASSOC. Always
+ *		written; required even when @assign_mon is false.
+ * @assign_mon:	Whether PLZA should program the kernel-mode RMID.
+ * @enable:	Whether PLZA should program the kernel-mode association.
+ *
+ * Program PLZA on @cpu_mask for %RESCTRL_GLOBAL_ENABLE_PER_CPU. See
+ * union msr_pqr_plza_assoc for the hardware field meanings.
+ */
+void resctrl_arch_configure_kmode_global(const struct cpumask *cpu_mask,
+					 u32 closid, bool assign_ctrl,
+					 u32 rmid, bool assign_mon,
+					 bool enable)
+{
+	union msr_pqr_plza_assoc plza = { 0 };
+
+	plza.split.rmid = rmid;
+	plza.split.rmid_en = assign_mon;
+	plza.split.closid = closid;
+	plza.split.closid_en = assign_ctrl;
+	plza.split.plza_en = enable;
+
+	on_each_cpu_mask(cpu_mask, resctrl_kmode_set_one_amd, &plza, 1);
+}
