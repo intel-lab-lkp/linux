@@ -21,4 +21,10 @@ extern struct cpumask __cpu_primary_thread_mask;
 #define cpu_primary_thread_mask ((const struct cpumask *)&__cpu_primary_thread_mask)
 #endif
 
+#ifdef CONFIG_NUMA
+extern void configure_sbm_topology(void);
+#else /* !CONFIG_NUMA */
+static void __maybe_unused configure_sbm_topology(void) { }
+#endif /* CONFIG_NUMA */
+
 #endif /* __ASM_TOPOLOGY_H */

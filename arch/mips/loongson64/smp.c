@@ -17,6 +17,7 @@
 #include <asm/smp.h>
 #include <asm/time.h>
 #include <asm/tlbflush.h>
+#include <asm/topology.h>
 #include <asm/cacheflush.h>
 #include <loongson.h>
 #include <loongson_regs.h>
@@ -492,6 +493,8 @@ static void __init loongson3_smp_setup(void)
 	ipi_mailbox_buf_init();
 	if (smp_group[0])
 		ipi_write_enable(0);
+
+	configure_sbm_topology();
 
 	cpu_set_core(&cpu_data[0],
 		     cpu_logical_map(0) % loongson_sysconf.cores_per_package);

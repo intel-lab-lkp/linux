@@ -15,6 +15,7 @@
 #include <asm/page.h>
 #include <asm/processor.h>
 #include <asm/ptrace.h>
+#include <asm/topology.h>
 #include <asm/sn/agent.h>
 #include <asm/sn/arch.h>
 #include <asm/sn/gda.h>
@@ -79,6 +80,8 @@ void cpu_node_probe(void)
 		node_set(nasid, node_possible_map);
 		highest = node_scan_cpus(nasid, highest);
 	}
+
+	configure_sbm_topology();
 
 	printk("Discovered %d cpus on %d nodes\n", highest + 1, num_online_nodes());
 }
