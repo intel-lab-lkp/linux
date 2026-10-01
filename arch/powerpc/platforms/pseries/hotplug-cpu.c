@@ -19,6 +19,7 @@
 #include <linux/kernel.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
+#include <linux/sbm.h>
 #include <linux/sched.h>	/* for idle_task_exit */
 #include <linux/sched/hotplug.h>
 #include <linux/cpu.h>
@@ -869,6 +870,15 @@ void __init pseries_cpu_hotplug_init(void)
 				"- disabling.\n");
 		return;
 	}
+
+	/*
+	 * find_cpu_id_range() only looks at online nodes.
+	 *
+	 * XXX: Is it possible for a CPU attached memory node to come
+	 * online after this point? May need num_possbile_nodes() then
+	 * unless there are platform nuances that can help optimize.
+	 */
+	sbm_set_topology(num_online_nodes(), num_possible_cpus());
 
 	smp_ops->cpu_offline_self = pseries_cpu_offline_self;
 	smp_ops->cpu_disable = pseries_cpu_disable;

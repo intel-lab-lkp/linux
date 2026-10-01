@@ -11,6 +11,7 @@
 #include <linux/export.h>
 #include <linux/panic_notifier.h>
 #include <linux/string.h>
+#include <linux/sbm.h>
 #include <linux/sched.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
@@ -602,6 +603,87 @@ static __init int add_pcspkr(void)
 device_initcall(add_pcspkr);
 #endif	/* CONFIG_PCSPKR_PLATFORM */
 
+int arch_sbm_cpu_instance_id(int cpu)
+{
+	/*
+	 * In case of pSeries processors, sbm masks are
+	 * grouped by nodes where the cpuhotplug
+	 * operations can remove and re-add same logical
+	 * CPUs on different nodes.
+	 *
+	 * See comment in pseries_cpu_hotplug_init().
+	 */
+	if (smp_ops->cpu_disable)
+		return cpu_to_node(cpu);
+
+	return cpu_to_coregroup_id(cpu);
+}
+
+static void __init setup_sbm_topology(void)
+{
+	int num_sbm_instances, max_threads_per_instance = 1;
+	struct cpumask *cpu_sbm_setup_map;
+	int i, *__node_thread_count;
+	int disabled_cpus = 0;
+
+	cpu_sbm_setup_map = memblock_alloc_or_panic(cpumask_size(), __alignof__(long));
+	__node_thread_count = memblock_alloc_or_panic(nr_cpu_ids * sizeof(int),
+						      __alignof__(int));
+
+	memset(__node_thread_count, 0, nr_cpu_ids * sizeof(int));
+	memset(cpu_sbm_setup_map, 0, cpumask_size());
+
+	for_each_possible_cpu(i) {
+		bool found = false;
+		int j;
+
+		if (!cpu_present(i)) {
+			disabled_cpus += 1;
+			continue;
+		}
+
+		for_each_cpu(j, cpu_sbm_setup_map) {
+			if (cpu_to_coregroup_id(i) == cpu_to_coregroup_id(j)) {
+				found = true;
+				break;
+			}
+		}
+
+		if (!found) {
+			cpumask_set_cpu(i, cpu_sbm_setup_map);
+			__node_thread_count[i] = 1;
+			continue;
+		}
+
+		__node_thread_count[j] += 1;
+		max_threads_per_instance = max(max_threads_per_instance,
+					       __node_thread_count[j]);
+	}
+
+	/*
+	 * If CPUs are disabled, they may pop up on any online node.
+	 *
+	 * XXX: Any implementation nuances that can help this?
+	 * pSeries says only online nodes can be extended.
+	 */
+	if (disabled_cpus) {
+		num_sbm_instances = num_sbm_instances + disabled_cpus;
+	} else {
+		num_sbm_instances = cpumask_weight(cpu_sbm_setup_map);
+	}
+
+	/*
+	 * If disabled threads exists, assume the maximum threads per
+	 * instance can extend by the number of disabled threads if they
+	 * are all added to the same node.
+	 */
+	sbm_set_topology(num_sbm_instances,
+			 max_threads_per_instance + disabled_cpus);
+
+	memblock_free(__node_thread_count, nr_cpu_ids * sizeof(int));
+	memblock_free(cpu_sbm_setup_map, cpumask_size());
+}
+
 static char ppc_hw_desc_buf[128] __initdata;
 
 struct seq_buf ppc_hw_desc __initdata = {
@@ -1005,6 +1087,12 @@ void __init setup_arch(char **cmdline_p)
 	initmem_init();
 
 	early_memtest(min_low_pfn << PAGE_SHIFT, max_low_pfn << PAGE_SHIFT);
+
+	/*
+	 * setup_arch() below can override topology for
+	 * pSeries platforms as a result of hotplug nuances.
+	 */
+	setup_sbm_topology();
 
 	if (ppc_md.setup_arch)
 		ppc_md.setup_arch();
