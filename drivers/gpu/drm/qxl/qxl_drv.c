@@ -82,9 +82,9 @@ qxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	int ret;
 
 	if (pdev->revision < 4) {
-		DRM_ERROR("qxl too old, doesn't support client_monitors_config,"
-			  " use xf86-video-qxl in user mode");
-		return -EINVAL; /* TODO: ENODEV ? */
+		dev_err(&pdev->dev,
+			"qxl too old, doesn't support client_monitors_config, use xf86-video-qxl in user mode\n");
+		return -ENODEV;
 	}
 
 	qdev = devm_drm_dev_alloc(&pdev->dev, &qxl_driver,
