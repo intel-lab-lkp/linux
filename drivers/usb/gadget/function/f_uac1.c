@@ -260,7 +260,7 @@ static struct uac_iso_endpoint_descriptor as_iso_in_desc = {
 
 static struct usb_descriptor_header *f_audio_desc[] = {
 	(struct usb_descriptor_header *)&ac_interface_desc,
-	(struct usb_descriptor_header *)&ac_header_desc,
+	(struct usb_descriptor_header *)ac_header_desc,
 
 	(struct usb_descriptor_header *)&usb_out_it_desc,
 	(struct usb_descriptor_header *)&io_out_ot_desc,
@@ -332,7 +332,7 @@ static struct usb_ss_ep_comp_descriptor ss_as_in_ep_desc_comp = {
 
 static struct usb_descriptor_header *f_audio_ss_desc[] = {
 	(struct usb_descriptor_header *)&ac_interface_desc,
-	(struct usb_descriptor_header *)&ac_header_desc,
+	(struct usb_descriptor_header *)ac_header_desc,
 
 	(struct usb_descriptor_header *)&usb_out_it_desc,
 	(struct usb_descriptor_header *)&io_out_ot_desc,
