@@ -112,6 +112,7 @@
 #define WIDGET_XBRDG_PART_NUM	0xd002
 #define WIDGET_NULL_PART_NUM	-1
 
+#ifndef __ASSEMBLER__
 /* For Xtalk Widget identification */
 struct widget_ident {
 	u32 mfgr;
@@ -195,6 +196,7 @@ static const struct widget_ident __initconst widget_idents[] = {
 		{NULL},
 	}
 };
+#endif /* !__ASSEMBLER__ */
 
 /*
  * according to the crosstalk spec, only 32-bits access to the widget
