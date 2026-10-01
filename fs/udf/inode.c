@@ -2266,22 +2266,35 @@ void udf_write_aext(struct inode *inode, struct extent_position *epos,
 
 /*
  * Returns 1 on success, -errno on error, 0 on hit EOF.
+ *
+ * eloc, elen and etype are only updated when the next allocation descriptor
+ * was found.  In particular, when a chain of indirect extents ends in an
+ * empty one, following the trailing CONTINUE descriptor and hitting EOF must
+ * not clobber them with the location and length of that CONTINUE: callers
+ * keep using the last real extent's values after a 0 return, e.g. to discard
+ * its preallocation.
  */
 int udf_next_aext(struct inode *inode, struct extent_position *epos,
 		  struct kernel_lb_addr *eloc, uint32_t *elen, int8_t *etype,
 		  int inc)
 {
+	struct kernel_lb_addr tloc;
+	uint32_t tlen;
+	int8_t ttype;
 	unsigned int indirections = 0;
 	int ret = 0;
 	udf_pblk_t block;
 
 	while (1) {
-		ret = udf_current_aext(inode, epos, eloc, elen,
-				       etype, inc);
+		ret = udf_current_aext(inode, epos, &tloc, &tlen, &ttype, inc);
 		if (ret <= 0)
 			return ret;
-		if (*etype != (EXT_NEXT_EXTENT_ALLOCDESCS >> 30))
+		if (ttype != (EXT_NEXT_EXTENT_ALLOCDESCS >> 30)) {
+			*eloc = tloc;
+			*elen = tlen;
+			*etype = ttype;
 			return ret;
+		}
 
 		if (++indirections > UDF_MAX_INDIR_EXTS) {
 			udf_err(inode->i_sb,
@@ -2290,7 +2303,7 @@ int udf_next_aext(struct inode *inode, struct extent_position *epos,
 			return -EFSCORRUPTED;
 		}
 
-		epos->block = *eloc;
+		epos->block = tloc;
 		epos->offset = sizeof(struct allocExtDesc);
 		brelse(epos->bh);
 		block = udf_get_lb_pblock(inode->i_sb, &epos->block, 0);
