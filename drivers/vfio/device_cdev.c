@@ -124,8 +124,8 @@ long vfio_df_ioctl_bind_iommufd(struct vfio_device_file *df,
 		return ret;
 
 	mutex_lock(&device->dev_set->lock);
-	/* one device cannot be bound twice */
-	if (df->access_granted) {
+	/* The cdev path only supports one bound/open device fd. */
+	if (df->access_granted || device->open_count) {
 		ret = -EINVAL;
 		goto out_unlock;
 	}
