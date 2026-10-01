@@ -226,6 +226,7 @@ void __kvm_flush_vm_context(void)
  * - a non-shareable TLBI is upgraded to being inner-shareable
  * - an outer-shareable TLBI is also mapped to inner-shareable
  * - an nXS TLBI is upgraded to XS
+ * - any TLBID domain is upgraded to broadcast-all
  */
 int __kvm_tlbi_s1e2(struct kvm_s2_mmu *mmu, u64 va, u64 sys_encoding)
 {
@@ -291,6 +292,7 @@ int __kvm_tlbi_s1e2(struct kvm_s2_mmu *mmu, u64 va, u64 sys_encoding)
 	case OP_TLBI_ASIDE1NXS:
 	case OP_TLBI_ASIDE1ISNXS:
 	case OP_TLBI_ASIDE1OSNXS:
+		va &= ~TLBI_TLBID_MASK;
 		__tlbi(aside1is, va);
 		break;
 	case OP_TLBI_VAAE1:

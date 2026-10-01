@@ -340,9 +340,12 @@ static inline void __deactivate_traps_mpam(void)
  *   the PTW is a thing. It really isn't.
  *
  * - EnIDCP128: We don't allow IMPDEF sysregs -- full stop.
+ *
+ * - VTLBID{OS}En: We decide which domain the guest's TLBIs are broadcast to.
  */
-#define NV_HCRX_GUEST_EXCLUDE	(HCRX_EL2_TMEA	    | HCRX_EL2_PTTWI | \
-				 HCRX_EL2_EnIDCP128)
+#define NV_HCRX_GUEST_EXCLUDE	(HCRX_EL2_TMEA	    | HCRX_EL2_PTTWI	| \
+				 HCRX_EL2_EnIDCP128 | HCRX_EL2_VTLBIDEn	| \
+				 HCRX_EL2_VTLBIDOSEn)
 
 static inline void __activate_traps_common(struct kvm_vcpu *vcpu)
 {

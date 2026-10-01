@@ -189,6 +189,72 @@
 	msr	vttbr_el2, xzr
 .endm
 
+#define VTLBID_ISH	0
+#define VTLBID_OSH	1
+
+.macro __init_vtlbid_regs sh
+	mrs_s	x0, SYS_TLBIDIDR_EL1
+
+	.if \sh == VTLBID_ISH
+	ubfx	x1, x0, #TLBIDIDR_EL1_NIS_SHIFT, #TLBIDIDR_EL1_NIS_WIDTH
+	ubfx	x2, x0, #TLBIDIDR_EL1_NVIS_SHIFT, #TLBIDIDR_EL1_NVIS_WIDTH
+	.else
+	ubfx	x1, x0, #TLBIDIDR_EL1_NOS_SHIFT, #TLBIDIDR_EL1_NOS_WIDTH
+	ubfx	x2, x0, #TLBIDIDR_EL1_NVOS_SHIFT, #TLBIDIDR_EL1_NVOS_WIDTH
+	.endif
+	cbz	x1, .Lskip_vtlbid_regs_\@
+
+	/* Map all virtual domains to the broadcast-all domain */
+	.if \sh == VTLBID_ISH
+	msr_s	SYS_VTLBID0_EL2, xzr
+	.else
+	msr_s	SYS_VTLBIDOS0_EL2, xzr
+	.endif
+
+	/*
+	 * VTLBID1_EL2 is implemented if either NIS <= 8 && NVIS >= 4,
+	 * or NIS > 8 && NVIS >= 3. Similarly for VTLBIDOS1_EL2.
+	 */
+	cmp	x1, #8
+	cset	x0, ls
+	add	x0, x0, #3
+	cmp	x2, x0
+	b.lo	.Lskip_vtlbid_regs_\@
+	.if \sh == VTLBID_ISH
+	msr_s	SYS_VTLBID1_EL2, xzr
+	.else
+	msr_s	SYS_VTLBIDOS1_EL2, xzr
+	.endif
+
+	/*
+	 * VTLBID{2,3}_EL2 are implemented if either NIS <= 8 && NVIS >= 5,
+	 * or NIS > 8 && NVIS >= 4. Similarly for VTLBIDOS{2,3}_EL2.
+	 */
+	add	x0, x0, #1
+	cmp	x2, x0
+	b.lo	.Lskip_vtlbid_regs_\@
+	.if \sh == VTLBID_ISH
+	msr_s	SYS_VTLBID2_EL2, xzr
+	msr_s	SYS_VTLBID3_EL2, xzr
+	.else
+	msr_s	SYS_VTLBIDOS2_EL2, xzr
+	msr_s	SYS_VTLBIDOS3_EL2, xzr
+	.endif
+.Lskip_vtlbid_regs_\@:
+.endm
+
+/* TLBID domain mapping */
+.macro __init_el2_vtlbid
+	mrs_s	x0, SYS_ID_AA64MMFR4_EL1
+	ubfx	x0, x0, #ID_AA64MMFR4_EL1_TLBID_SHIFT, #ID_AA64MMFR4_EL1_TLBID_WIDTH
+	cbz	x0, .Lskip_vtlbid_\@
+
+	__init_vtlbid_regs VTLBID_ISH
+	__init_vtlbid_regs VTLBID_OSH
+
+.Lskip_vtlbid_\@:
+.endm
+
 /* GICv3 system register access */
 .macro __init_el2_gicv3
 	mrs	x0, id_aa64pfr0_el1
@@ -469,6 +535,7 @@
 	__init_el2_brbe
 	__init_el2_lor
 	__init_el2_stage2
+	__init_el2_vtlbid
 	__init_el2_gicv3
 	__init_el2_gicv5
 	__init_el2_hstr

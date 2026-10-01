@@ -734,6 +734,11 @@ static inline void vcpu_set_hcrx(struct kvm_vcpu *vcpu)
 					vcpu->arch.hcrx_el2 |= HCRX_EL2_NVnTTLBOS;
 			}
 		}
+
+		if (cpus_have_final_cap(ARM64_HAS_TLBID))
+			vcpu->arch.hcrx_el2 |= (HCRX_EL2_VTLBIDEn |
+						HCRX_EL2_VTLBIDOSEn);
+
 	}
 }
 
