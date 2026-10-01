@@ -8849,6 +8849,8 @@ int sched_cpu_dying(unsigned int cpu)
 
 void __init sched_init_smp(void)
 {
+	init_sched_fair_class_smp();
+
 	sched_init_numa(NUMA_NO_NODE);
 
 	prandom_init_once(&sched_rnd_state);

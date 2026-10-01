@@ -15645,6 +15645,13 @@ void show_numa_stats(struct task_struct *p, struct seq_file *m)
 }
 #endif /* CONFIG_NUMA_BALANCING */
 
+__init void init_sched_fair_class_smp(void)
+{
+#ifdef CONFIG_NO_HZ_COMMON
+	zalloc_cpumask_var(&nohz.idle_cpus_mask, GFP_NOWAIT);
+#endif
+}
+
 __init void init_sched_fair_class(void)
 {
 	int i;
@@ -15666,6 +15673,5 @@ __init void init_sched_fair_class(void)
 #ifdef CONFIG_NO_HZ_COMMON
 	nohz.next_balance = jiffies;
 	nohz.next_blocked = jiffies;
-	zalloc_cpumask_var(&nohz.idle_cpus_mask, GFP_NOWAIT);
 #endif
 }
