@@ -630,7 +630,6 @@ static int dvb_usbv2_adapter_frontend_init(struct dvb_usb_adapter *adap)
 	dev_dbg(&d->udev->dev, "%s: adap=%d\n", __func__, adap->id);
 
 	memset(adap->fe, 0, sizeof(adap->fe));
-	adap->active_fe = -1;
 
 	if (d->props->frontend_attach) {
 		ret = d->props->frontend_attach(adap);
@@ -752,6 +751,7 @@ static int dvb_usbv2_adapter_init(struct dvb_usb_device *d)
 	for (i = 0; i < adapter_count; i++) {
 		adap = &d->adapter[i];
 		adap->id = i;
+		adap->active_fe = -1;
 		adap->props = &d->props->adapter[i];
 
 		/* speed - when running at FULL speed we need a HW PID filter */
