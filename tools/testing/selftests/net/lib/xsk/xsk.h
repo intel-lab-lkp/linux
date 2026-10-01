@@ -245,6 +245,8 @@ int xsk_set_mtu(int ifindex, int mtu);
 
 int get_hw_ring_size(char *ifname, struct ethtool_ringparam *ring_param);
 int set_hw_ring_size(char *ifname, struct ethtool_ringparam *ring_param);
+int xsk_get_mac(const char *ifname, u8 mac[ETH_ALEN]);
+int xsk_get_mtu(const char *ifname, int *mtu);
 
 #ifdef __cplusplus
 } /* extern "C" */
