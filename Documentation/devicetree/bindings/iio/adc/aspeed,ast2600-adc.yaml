@@ -67,12 +67,29 @@ properties:
     description:
       Inform the driver that last channel will be used to sensor battery.
 
+  syscon:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      Required on SoCs with more than one SCU instance (e.g. AST2700).
+
 required:
   - compatible
   - reg
   - clocks
   - resets
   - "#io-channel-cells"
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - aspeed,ast2700-adc0
+              - aspeed,ast2700-adc1
+    then:
+      required:
+        - syscon
 
 additionalProperties: false
 
@@ -94,5 +111,16 @@ examples:
         resets = <&syscon ASPEED_RESET_ADC>;
         #io-channel-cells = <1>;
         aspeed,int-vref-microvolt = <2500000>;
+    };
+  - |
+    #include <dt-bindings/clock/aspeed,ast2700-scu.h>
+    #include <dt-bindings/reset/aspeed,ast2700-scu.h>
+    adc0: adc@14c00000 {
+        compatible = "aspeed,ast2700-adc0";
+        reg = <0x14c00000 0x100>;
+        clocks = <&syscon1 SCU1_CLK_AHB>;
+        resets = <&syscon1 SCU1_RESET_ADC>;
+        syscon = <&syscon1>;
+        #io-channel-cells = <1>;
     };
 ...
