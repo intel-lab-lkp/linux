@@ -72,6 +72,16 @@ struct cxl_decoder {
 	void (*reset)(struct cxl_decoder *cxld);
 };
 
+/**
+ * struct cxl_decoder_settings - CXL HDM decoder programming snapshot
+ * @config: common decoder configuration
+ * @target_or_skip_reg_val: switch target list or endpoint skip register value
+ */
+struct cxl_decoder_settings {
+	struct cxl_decoder_config config;
+	u64 target_or_skip_reg_val;
+};
+
 /*
  * Using struct_group() allows for per register-block-type helper routines,
  * without requiring block-type agnostic code to include the prefix.
