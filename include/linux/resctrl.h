@@ -704,6 +704,35 @@ int resctrl_arch_io_alloc_enable(struct rdt_resource *r, bool enable);
  */
 bool resctrl_arch_get_io_alloc_enabled(struct rdt_resource *r);
 
+/**
+ * enum resctrl_kernel_mode - Kernel mode control and monitoring association.
+ *
+ * @RESCTRL_INHERIT_USER:
+ *     Kernel mode inherits both allocation and monitoring associations
+ *     from the user-space task. On x86, the kernel uses the same CLOSID and
+ *     RMID as the user-space task.
+ *
+ * @RESCTRL_GLOBAL_ENABLE_PER_CPU:
+ *     All kernel mode work uses the same allocation and/or monitoring
+ *     association via an assigned CTRL_MON or MON group. The mode can
+ *     be enabled/disabled per-CPU. When the mode is disabled on a CPU
+ *     then the kernel work on that CPU inherits the allocation and
+ *     monitoring association from the user-space task, effectively the
+ *     kernel mode becomes RESCTRL_INHERIT_USER on that CPU.
+ *
+ *     All online CPUs are included by default. A subset may be selected
+ *     through the resctrl group interface, and a CTRL_MON or MON group
+ *     may be assigned to this mode. On x86, CLOSID and RMID are configured
+ *     independently; either or both may differ from the user-space task.
+ */
+enum resctrl_kernel_mode {
+	RESCTRL_INHERIT_USER,
+	RESCTRL_GLOBAL_ENABLE_PER_CPU,
+	RESCTRL_KMODE_LAST = RESCTRL_GLOBAL_ENABLE_PER_CPU
+};
+
+#define RESCTRL_NUM_KERNEL_MODES (RESCTRL_KMODE_LAST + 1)
+
 extern unsigned int resctrl_rmid_realloc_threshold;
 extern unsigned int resctrl_rmid_realloc_limit;
 
