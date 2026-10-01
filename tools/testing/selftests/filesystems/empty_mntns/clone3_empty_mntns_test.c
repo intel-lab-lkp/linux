@@ -15,14 +15,13 @@
 
 #define _GNU_SOURCE
 #include <fcntl.h>
-#include <linux/mount.h>
-#include <linux/stat.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <linux/stat.h>
 
 #include "../utils.h"
 #include "../wrappers.h"
