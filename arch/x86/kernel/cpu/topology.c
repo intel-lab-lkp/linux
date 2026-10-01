@@ -23,6 +23,7 @@
  */
 #define pr_fmt(fmt) "CPU topo: " fmt
 #include <linux/cpu.h>
+#include <linux/sbm.h>
 
 #include <xen/xen.h>
 
@@ -449,13 +450,45 @@ static __init bool restrict_to_up(void)
 	return apic_is_disabled;
 }
 
+int arch_sbm_cpu_instance_id(int cpu)
+{
+	u32 sbm_shift = x86_topo_system.dom_shifts[TOPO_DIE_DOMAIN] - 1;
+	u32 apicid = cpuid_to_apicid[cpu];
+
+	if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD ||
+	    boot_cpu_data.x86_vendor == X86_VENDOR_HYGON)
+		sbm_shift = x86_topo_system.dom_shifts[TOPO_TILE_DOMAIN] - 1;
+
+	return (apicid >> sbm_shift);
+}
+
+static __init void init_sbm_topology(u32 max_apicid)
+{
+	u32 sbm_shift = x86_topo_system.dom_shifts[TOPO_DIE_DOMAIN] - 1;
+	int num_sbm_instances, max_threads_per_instance;
+
+	/*
+	 * On Intel systems, memory controllers are present at TOPO_DIE_DOMAIN.
+	 * On newer AMD and Hygon systems, LLC is at TOPO_TILE_DOMAIN so use
+	 * that instead.
+	 */
+	if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD ||
+	    boot_cpu_data.x86_vendor == X86_VENDOR_HYGON)
+		sbm_shift = x86_topo_system.dom_shifts[TOPO_TILE_DOMAIN] - 1;
+
+	num_sbm_instances = 1 + (max_apicid >> sbm_shift);
+	max_threads_per_instance = (1 << sbm_shift);
+
+	sbm_set_topology(num_sbm_instances, max_threads_per_instance);
+}
+
 void __init topology_init_possible_cpus(void)
 {
 	unsigned int assigned = topo_info.nr_assigned_cpus;
 	unsigned int disabled = topo_info.nr_disabled_cpus;
 	unsigned int cnta, cntb, cpu, allowed = 1;
 	unsigned int total = assigned + disabled;
-	u32 apicid, firstid;
+	u32 apicid, firstid, maxid;
 
 	/*
 	 * If there was no APIC registered, then fake one so that the
@@ -536,10 +569,13 @@ void __init topology_init_possible_cpus(void)
 		cpuid_to_apicid[topo_info.nr_assigned_cpus++] = apicid;
 	}
 
+	maxid = topo_info.boot_cpu_apic_id;
+
 	for (cpu = 0; cpu < allowed; cpu++) {
 		apicid = cpuid_to_apicid[cpu];
 
 		set_cpu_possible(cpu, true);
+		maxid = max(maxid, apicid);
 
 		if (apicid == BAD_APICID)
 			continue;
@@ -547,6 +583,8 @@ void __init topology_init_possible_cpus(void)
 		cpu_mark_primary_thread(cpu, apicid);
 		set_cpu_present(cpu, test_bit(apicid, phys_cpu_present_map));
 	}
+
+	init_sbm_topology(maxid);
 }
 
 /*
