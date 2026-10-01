@@ -764,6 +764,7 @@ config SGI_IP27
 	select FW_ARC64
 	select ARC_CMDLINE_ONLY
 	select BOOT_ELF64
+	select CRC_CCITT
 	select DEFAULT_SGI_PARTITION
 	select FORCE_PCI
 	select SYS_HAS_EARLY_PRINTK

@@ -4,8 +4,8 @@
 #
 
 obj-y	:= ip27-berr.o ip27-irq.o ip27-init.o ip27-klconfig.o \
-	   ip27-klnuma.o ip27-memory.o ip27-nmi.o ip27-reset.o ip27-timer.o \
-	   ip27-xtalk.o
+	   ip27-klnuma.o ip27-l1.o ip27-memory.o ip27-nmi.o ip27-reset.o \
+	   ip27-timer.o ip27-xtalk.o
 
 obj-$(CONFIG_EARLY_PRINTK)	+= ip27-console.o
 obj-$(CONFIG_SMP)		+= ip27-smp.o
