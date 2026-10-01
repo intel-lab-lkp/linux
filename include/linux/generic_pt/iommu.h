@@ -138,6 +138,20 @@ struct pt_iommu_ops {
 			      struct iommu_iotlb_gather *iotlb_gather);
 
 	/**
+	 * @sever_branch: Locklessly sever an empty page table branch
+	 * @iommu_table: Table to manipulate
+	 * @iova: IO virtual address associated with the branch
+	 * @expected_phys: Expected physical address of the child directory
+	 *
+	 * Context: Executed locklessly by a background Shrinker.
+	 * Uses cmpxchg to write 0x0 to the parent slot.
+	 *
+	 * Returns: true if successfully severed, false if aborted.
+	 */
+	bool (*sever_branch)(struct pt_iommu *iommu_table, dma_addr_t iova,
+			     phys_addr_t expected_phys);
+
+	/**
 	 * @set_dirty: Make the iova write dirty
 	 * @iommu_table: Table to manipulate
 	 * @iova: IO virtual address to start

@@ -1155,6 +1155,45 @@ static size_t NS(unmap_range)(struct pt_iommu *iommu_table, dma_addr_t iova,
 	return unmap.unmapped;
 }
 
+struct pt_sever_args {
+	phys_addr_t expected_phys;
+	bool success;
+};
+
+static int __sever_branch(struct pt_range *range, void *arg,
+			  unsigned int level, struct pt_table_p *table)
+{
+	struct pt_state pts = pt_init(range, level, table);
+	struct pt_sever_args *sever = arg;
+
+	switch (pt_load_single_entry(&pts)) {
+	case PT_ENTRY_TABLE:
+		if (virt_to_phys(pt_table_ptr(&pts)) == sever->expected_phys) {
+			sever->success = pt_table_install64(&pts, 0x0);
+			return 1; /* Stop walking */
+		}
+		return pt_descend(&pts, arg, __sever_branch);
+	default:
+		break;
+	}
+	return 0;
+}
+
+static bool NS(sever_branch)(struct pt_iommu *iommu_table, dma_addr_t iova,
+			     phys_addr_t expected_phys)
+{
+	struct pt_range range;
+	struct pt_sever_args sever = { .expected_phys = expected_phys, .success = false };
+	int ret;
+
+	ret = make_range(common_from_iommu(iommu_table), &range, iova, 1);
+	if (ret)
+		return false;
+
+	pt_walk_range(&range, __sever_branch, &sever);
+	return sever.success;
+}
+
 static void NS(get_info)(struct pt_iommu *iommu_table,
 			 struct pt_iommu_info *info)
 {
@@ -1208,6 +1247,7 @@ static void NS(deinit)(struct pt_iommu *iommu_table)
 static const struct pt_iommu_ops NS(ops) = {
 	.map_range = NS(map_range),
 	.unmap_range = NS(unmap_range),
+	.sever_branch = NS(sever_branch),
 #if IS_ENABLED(CONFIG_IOMMUFD_DRIVER) && defined(pt_entry_is_write_dirty) && \
 	IS_ENABLED(CONFIG_IOMMUFD_TEST) && defined(pt_entry_make_write_dirty)
 	.set_dirty = NS(set_dirty),
