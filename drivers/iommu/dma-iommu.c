@@ -836,7 +836,22 @@ static void __iommu_dma_unmap(struct device *dev, dma_addr_t dma_addr,
 	iotlb_gather.queued = READ_ONCE(cookie->fq_domain);
 
 	unmapped = iommu_unmap_fast(domain, dma_addr, size, &iotlb_gather);
-	WARN_ON(unmapped != size);
+	if (WARN_ON(unmapped != size)) {
+		if (unmapped) {
+			/*
+			 * If we changed the page table, we must sync IOTLB.
+			 * Freeing the IOVA could corrupt the allocator,
+			 *   so leak it instead.
+			 */
+			if (iotlb_gather.queued) {
+				iommu_flush_iotlb_all(domain);
+				iommu_put_pages_list(&iotlb_gather.freelist);
+			} else {
+				iommu_iotlb_sync(domain, &iotlb_gather);
+			}
+		}
+		return;
+	}
 
 	if (!iotlb_gather.queued)
 		iommu_iotlb_sync(domain, &iotlb_gather);
