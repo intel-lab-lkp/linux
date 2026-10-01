@@ -5150,6 +5150,9 @@ static const struct hid_device_id hidpp_devices[] = {
 	{ /* Logitech G502 Lightspeed Wireless Gaming Mouse */
 	  LDJ_DEVICE(0x407f),
 	  .driver_data = HIDPP_QUIRK_RESET_HI_RES_SCROLL },
+	{ /* Signature M650 over Bolt */
+	  LDJ_DEVICE(HIDPP_PRODUCT_SIGNATURE_M650),
+	  .driver_data = HIDPP_QUIRK_HIDPP_REPROG_CONTROLS_BTNS },
 
 	{ LDJ_DEVICE(HID_ANY_ID) },
 
