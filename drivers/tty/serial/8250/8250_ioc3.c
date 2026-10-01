@@ -11,6 +11,7 @@
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/io.h>
+#include <linux/platform_data/sgi-ioc3-serial.h>
 #include <linux/platform_device.h>
 
 #include "8250.h"
@@ -33,6 +34,7 @@ static void ioc3_serial_out(struct uart_port *p, unsigned int offset, u32 value)
 
 static int serial8250_ioc3_probe(struct platform_device *pdev)
 {
+	const struct ioc3_serial8250_platform_data *pdata;
 	struct ioc3_8250_data *data;
 	struct uart_8250_port up;
 	struct resource *r;
@@ -56,9 +58,10 @@ static int serial8250_ioc3_probe(struct platform_device *pdev)
 		irq = 0; /* no interrupt -> use polling */
 
 	/* Register serial ports with 8250.c */
+	pdata = dev_get_platdata(&pdev->dev);
 	memset(&up, 0, sizeof(struct uart_8250_port));
 	up.port.iotype = UPIO_MEM;
-	up.port.uartclk = IOC3_UARTCLK;
+	up.port.uartclk = pdata ? pdata->uartclk : IOC3_UARTCLK;
 	up.port.type = PORT_16550A;
 	up.port.irq = irq;
 	up.port.flags = (UPF_BOOT_AUTOCONF | UPF_SHARE_IRQ);
