@@ -22,6 +22,21 @@
 #define CACHE_CACHABLE_COW	(5 << 9)
 
 	/*
+	 * A Bedrock hub puts the nasid one bit higher in an address than a
+	 * Hub does.  Returns the shift in \shft, clobbering \tmp.
+	 */
+	.macro	GET_NASID_SHFT shft, tmp
+	.set	push
+	.set	reorder
+	GET_HUB_GEN_ASM \tmp
+	li	\shft, SN1_NASID_SHFT
+	beqz	\tmp, 1f
+	li	\shft, SN0_NASID_SHFT
+1:
+	.set	pop
+	.endm
+
+	/*
 	 * inputs are the text nasid in t1, data nasid in t2.
 	 */
 	.macro MAPPED_KERNEL_SETUP_TLB
@@ -33,9 +48,10 @@
 	 */
 	dli	t0, 0xffffffffc0000000
 	dmtc0	t0, CP0_ENTRYHI
+	GET_NASID_SHFT	t3, t0
 	li	t0, 0x1c000		# Offset of text into node memory
-	dsll	t1, NASID_SHFT		# Shift text nasid into place
-	dsll	t2, NASID_SHFT		# Same for data nasid
+	dsllv	t1, t1, t3		# Shift text nasid into place
+	dsllv	t2, t2, t3		# Same for data nasid
 	or	t1, t1, t0		# Physical load address of kernel text
 	or	t2, t2, t0		# Physical load address of kernel data
 	dsrl	t1, 12			# 4K pfn
@@ -78,9 +94,10 @@
 	.macro	smp_slave_setup
 #ifdef CONFIG_MAPPED_KERNEL
 	GET_NASID_ASM	t1, t0
+	GET_NASID_SHFT	t3, t0
 	dli	t0, KLDIR_OFFSET + (KLI_KERN_VARS * KLDIR_ENT_SIZE) + \
 		    KLDIR_OFF_POINTER + CAC_BASE
-	dsll	t1, NASID_SHFT
+	dsllv	t1, t1, t3
 	or	t0, t0, t1
 	ld	t0, 0(t0)			# t0 points to kern_vars struct
 	lh	t1, KV_RO_NASID_OFFSET(t0)
