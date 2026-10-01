@@ -1462,6 +1462,7 @@ static int hub_configure(struct usb_hub *hub,
 	unsigned int pipe;
 	int maxp, ret, i;
 	char *message = "out of memory";
+	char msg_buf[32] = {};
 	unsigned unit_load;
 	unsigned full_load;
 	unsigned maxchild;
@@ -1738,8 +1739,8 @@ static int hub_configure(struct usb_hub *hub,
 	for (i = 0; i < maxchild; i++) {
 		ret = usb_hub_create_port_device(hub, i + 1);
 		if (ret < 0) {
-			dev_err(hub->intfdev,
-				"couldn't create port%d device.\n", i + 1);
+			snprintf(msg_buf, sizeof(msg_buf), "couldn't create port%d device", i + 1);
+			message = msg_buf;
 			break;
 		}
 	}
