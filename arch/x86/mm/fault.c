@@ -955,7 +955,13 @@ do_sigbus(struct pt_regs *regs, unsigned long error_code, unsigned long address,
 
 static int spurious_kernel_fault_check(unsigned long error_code, pte_t *pte)
 {
-	if ((error_code & X86_PF_WRITE) && !pte_write(*pte))
+	/*
+	 * Only normal stores get here: the caller's exact error code match
+	 * filters out shadow stack accesses, and a normal store requires
+	 * _PAGE_RW. Do not use pte_write(), which also reports
+	 * Write=0,Dirty=1 as writable.
+	 */
+	if ((error_code & X86_PF_WRITE) && !(pte_flags(*pte) & _PAGE_RW))
 		return 0;
 
 	if ((error_code & X86_PF_INSTR) && !pte_exec(*pte))
