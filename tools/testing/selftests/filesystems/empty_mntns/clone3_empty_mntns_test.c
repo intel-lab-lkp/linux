@@ -868,7 +868,7 @@ TEST(unknown_flags_rejected)
 
 	if (pid == 0) {
 		struct __clone_args args = {
-			.flags		= 0x800000000ULL,
+			.flags		= (1ULL << 63),
 			.exit_signal	= SIGCHLD,
 		};
 		pid_t ret;
