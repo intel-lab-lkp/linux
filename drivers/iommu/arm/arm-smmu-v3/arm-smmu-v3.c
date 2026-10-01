@@ -2037,15 +2037,14 @@ static int arm_smmu_streams_cmp_key(const void *lhs, const struct rb_node *rhs)
 	return 0;
 }
 
-static int arm_smmu_streams_cmp_node(struct rb_node *lhs,
-				     const struct rb_node *rhs)
+static int arm_smmu_streams_cmp_node(struct rb_node *lhs, const struct rb_node *rhs)
 {
 	return arm_smmu_streams_cmp_key(
 		&rb_entry(lhs, struct arm_smmu_stream, node)->id, rhs);
 }
 
-static struct arm_smmu_master *
-arm_smmu_find_master(struct arm_smmu_device *smmu, u32 sid)
+static struct arm_smmu_stream *
+arm_smmu_find_stream(struct arm_smmu_device *smmu, u32 sid)
 {
 	struct rb_node *node;
 
@@ -2054,7 +2053,20 @@ arm_smmu_find_master(struct arm_smmu_device *smmu, u32 sid)
 	node = rb_find(&sid, &smmu->streams, arm_smmu_streams_cmp_key);
 	if (!node)
 		return NULL;
-	return rb_entry(node, struct arm_smmu_stream, node)->master;
+	return rb_entry(node, struct arm_smmu_stream, node);
+}
+
+static struct arm_smmu_master *
+arm_smmu_find_master(struct arm_smmu_device *smmu, u32 sid)
+{
+	struct arm_smmu_stream *stream;
+
+	stream = arm_smmu_find_stream(smmu, sid);
+	if (!stream)
+		return NULL;
+	if (!list_empty(&stream->shared_masters))
+		return NULL;
+	return stream->master;
 }
 
 /* IRQ and event handlers */
@@ -4116,6 +4128,7 @@ static int arm_smmu_insert_master(struct arm_smmu_device *smmu,
 		new_stream->id = fwspec->ids[i];
 		new_stream->master = master;
 	}
+	INIT_LIST_HEAD(&master->shared_masters_elm);
 
 	/* Put the ids into order for sorted to_merge/to_unref arrays */
 	sort(master->streams, master->num_streams,
@@ -4128,6 +4141,8 @@ static int arm_smmu_insert_master(struct arm_smmu_device *smmu,
 		struct rb_node *existing;
 		u32 sid = new_stream->id;
 
+		INIT_LIST_HEAD(&new_stream->shared_masters);
+
 		ret = arm_smmu_init_sid_strtab(smmu, sid);
 		if (ret)
 			break;
@@ -4136,23 +4151,33 @@ static int arm_smmu_insert_master(struct arm_smmu_device *smmu,
 		existing = rb_find_add(&new_stream->node, &smmu->streams,
 				       arm_smmu_streams_cmp_node);
 		if (existing) {
-			struct arm_smmu_master *existing_master =
-				rb_entry(existing, struct arm_smmu_stream, node)
-					->master;
+			struct arm_smmu_stream *existing_stream =
+				rb_entry(existing, struct arm_smmu_stream, node);
 
 			/* Bridged PCI devices may end up with duplicated IDs */
-			if (existing_master == master)
+			if (existing_stream->master == master)
 				continue;
 
-			dev_warn(master->dev,
-				 "Aliasing StreamID 0x%x (from %s) unsupported, expect DMA to be broken\n",
-				 sid, dev_name(existing_master->dev));
-			ret = -ENODEV;
-			break;
+			if (master->num_streams != 1 ||
+			    existing_stream->master->num_streams != 1) {
+				dev_warn(master->dev,
+					 "Shared StreamID 0x%x not supported for multi-SID masters\n",
+					 sid);
+				ret = -ENODEV;
+				break;
+			}
+
+			if (list_empty(&existing_stream->shared_masters))
+				list_add_tail(&existing_stream->master->shared_masters_elm,
+					      &existing_stream->shared_masters);
+			list_add_tail(&master->shared_masters_elm,
+				      &existing_stream->shared_masters);
+			continue;
 		}
 	}
 
 	if (ret) {
+		list_del_init(&master->shared_masters_elm);
 		for (i--; i >= 0; i--) {
 			if (i > 0 && master->streams[i - 1].id == master->streams[i].id)
 				continue;
@@ -4170,16 +4195,47 @@ static void arm_smmu_remove_master(struct arm_smmu_master *master)
 {
 	int i;
 	struct arm_smmu_device *smmu = master->smmu;
-	struct iommu_fwspec *fwspec = dev_iommu_fwspec_get(master->dev);
 
 	if (!smmu || !master->streams)
 		return;
 
 	mutex_lock(&smmu->streams_mutex);
-	for (i = 0; i < fwspec->num_ids; i++) {
-		if (i > 0 && master->streams[i - 1].id == master->streams[i].id)
-			continue;
-		rb_erase(&master->streams[i].node, &smmu->streams);
+	if (!list_empty(&master->shared_masters_elm)) {
+		struct arm_smmu_stream *stream;
+
+		list_del_init(&master->shared_masters_elm);
+		stream = arm_smmu_find_stream(smmu, master->streams[0].id);
+		if (stream && stream->master == master) {
+			struct arm_smmu_master *next;
+			struct arm_smmu_stream *next_stream;
+
+			next = list_first_entry(&stream->shared_masters,
+					struct arm_smmu_master,
+					shared_masters_elm);
+			next_stream = &next->streams[0];
+			next_stream->ste_installed = stream->ste_installed;
+			INIT_LIST_HEAD(&next_stream->shared_masters);
+			list_splice_init(&stream->shared_masters,
+					 &next_stream->shared_masters);
+			rb_replace_node(&stream->node, &next_stream->node,
+					&smmu->streams);
+			stream = next_stream;
+		}
+
+		if (stream && list_is_singular(&stream->shared_masters)) {
+			struct arm_smmu_master *last;
+
+			last = list_first_entry(&stream->shared_masters,
+						struct arm_smmu_master,
+						shared_masters_elm);
+			list_del_init(&last->shared_masters_elm);
+		}
+	} else {
+		for (i = 0; i < master->num_streams; i++) {
+			if (i > 0 && master->streams[i - 1].id == master->streams[i].id)
+				continue;
+			rb_erase(&master->streams[i].node, &smmu->streams);
+		}
 	}
 	mutex_unlock(&smmu->streams_mutex);
 
