@@ -11,6 +11,7 @@
 #include <linux/bug.h>
 #include <linux/file.h>
 #include <linux/fs.h>
+#include <linux/seq_file.h>
 #include <linux/iommufd.h>
 #include <linux/miscdevice.h>
 #include <linux/module.h>
@@ -633,12 +634,49 @@ err_refcount:
 	return rc;
 }
 
+#ifdef CONFIG_PROC_FS
+static void iommufd_fops_show_fdinfo(struct seq_file *m, struct file *filep)
+{
+	struct iommufd_ctx *ictx = filep->private_data;
+	struct iommufd_object *obj;
+	unsigned long nr_pages = 0;
+	bool supported = true;
+	unsigned long index;
+
+	xa_lock(&ictx->objects);
+	xa_for_each(&ictx->objects, index, obj) {
+		struct iommufd_hw_pagetable *hwpt;
+
+		/* Nested stage-1 page tables are owned by the guest */
+		if (obj->type != IOMMUFD_OBJ_HWPT_PAGING)
+			continue;
+
+		hwpt = container_of(obj, struct iommufd_hw_pagetable, obj);
+		if (!hwpt->domain)
+			continue;
+		/* Only generic_pt page tables account their pages */
+		if (!hwpt->domain->is_iommupt) {
+			supported = false;
+			break;
+		}
+		nr_pages += atomic_long_read(&hwpt->domain->nr_pages);
+	}
+	xa_unlock(&ictx->objects);
+
+	if (supported)
+		seq_printf(m, "iommu-nr-pages:\t%lu\n", nr_pages);
+}
+#endif
+
 static const struct file_operations iommufd_fops = {
 	.owner = THIS_MODULE,
 	.open = iommufd_fops_open,
 	.release = iommufd_fops_release,
 	.unlocked_ioctl = iommufd_fops_ioctl,
 	.mmap = iommufd_fops_mmap,
+#ifdef CONFIG_PROC_FS
+	.show_fdinfo = iommufd_fops_show_fdinfo,
+#endif
 };
 
 /**

@@ -2217,6 +2217,23 @@ IOMMU backend is set, or when any attached domain does not account its IO page
 table memory. Currently only domains using the generic_pt page table library
 account their IO page table memory.
 
+IOMMUFD files
+~~~~~~~~~~~~~
+
+::
+
+	pos:	0
+	flags:	02000002
+	mnt_id:	17
+	ino:	1104
+	iommu-nr-pages:	11
+
+where 'iommu-nr-pages' is the number of pages of memory used by the IO page
+tables of all paging HW pagetables owned by the iommufd context. Nested HW
+pagetables are not included since their page tables are owned by userspace.
+The field is omitted when any paging HW pagetable does not account its IO page
+table memory.
+
 3.9	/proc/<pid>/map_files - Information about memory mapped files
 ---------------------------------------------------------------------
 This directory contains symbolic links which represent memory mapped files
