@@ -388,8 +388,8 @@ static int usb_stor_intr_transfer(struct us_data *us, void *buf,
  * machinery to terminate the wait.
  */
 int usb_stor_bulk_transfer_buf_timeout(struct us_data *us, unsigned int pipe,
-		void *buf, unsigned int length, unsigned int *act_len,
-		int timeout)
+				       void *buf, unsigned int length,
+				       unsigned int *act_len, int timeout)
 {
 	int result;
 
@@ -412,10 +412,11 @@ EXPORT_SYMBOL_GPL(usb_stor_bulk_transfer_buf_timeout);
  * Same as usb_stor_bulk_transfer_buf_timeout() with an unbounded wait.
  */
 int usb_stor_bulk_transfer_buf(struct us_data *us, unsigned int pipe,
-		void *buf, unsigned int length, unsigned int *act_len)
+			       void *buf, unsigned int length,
+			       unsigned int *act_len)
 {
 	return usb_stor_bulk_transfer_buf_timeout(us, pipe, buf, length,
-			act_len, 0);
+						  act_len, 0);
 }
 EXPORT_SYMBOL_GPL(usb_stor_bulk_transfer_buf);
 

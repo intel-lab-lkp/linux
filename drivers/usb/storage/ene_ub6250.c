@@ -494,7 +494,7 @@ static void ene_ub6250_info_destructor(void *extra)
 	kfree(info->bbuf);
 }
 
-static int ene_send_scsi_cmd_timeout(struct us_data *us, u8 fDir, void *buf,
+static int ene_send_scsi_cmd_timeout(struct us_data *us, u8 fdir, void *buf,
 				     int use_sg, int timeout)
 {
 	struct bulk_cb_wrap *bcb = (struct bulk_cb_wrap *) us->iobuf;
@@ -508,17 +508,17 @@ static int ene_send_scsi_cmd_timeout(struct us_data *us, u8 fDir, void *buf,
 	/* usb_stor_dbg(us, "transport --- ene_send_scsi_cmd\n"); */
 	/* send cmd to out endpoint */
 	result = usb_stor_bulk_transfer_buf_timeout(us, us->send_bulk_pipe,
-					    bcb, US_BULK_CB_WRAP_LEN, NULL,
-					    timeout);
+						    bcb, US_BULK_CB_WRAP_LEN,
+						    NULL, timeout);
 	if (result != USB_STOR_XFER_GOOD) {
 		usb_stor_dbg(us, "send cmd to out endpoint fail ---\n");
 		return USB_STOR_TRANSPORT_ERROR;
 	}
 
 	if (buf) {
-		unsigned int pipe = fDir;
+		unsigned int pipe = fdir;
 
-		if (fDir  == FDIR_READ)
+		if (fdir == FDIR_READ)
 			pipe = us->recv_bulk_pipe;
 		else
 			pipe = us->send_bulk_pipe;
@@ -528,8 +528,8 @@ static int ene_send_scsi_cmd_timeout(struct us_data *us, u8 fDir, void *buf,
 			result = usb_stor_bulk_srb(us, pipe, us->srb);
 		} else if (timeout) {
 			result = usb_stor_bulk_transfer_buf_timeout(us, pipe,
-					buf, transfer_length, &partial,
-					timeout);
+								    buf, transfer_length, &partial,
+								    timeout);
 		} else {
 			result = usb_stor_bulk_transfer_sg(us, pipe, buf,
 						transfer_length, 0, &partial);
@@ -542,24 +542,24 @@ static int ene_send_scsi_cmd_timeout(struct us_data *us, u8 fDir, void *buf,
 
 	/* Get CSW for device status */
 	result = usb_stor_bulk_transfer_buf_timeout(us, us->recv_bulk_pipe,
-					    bcs, US_BULK_CS_WRAP_LEN, &cswlen,
-					    timeout);
+						    bcs, US_BULK_CS_WRAP_LEN,
+						    &cswlen, timeout);
 
 	if (result == USB_STOR_XFER_SHORT && cswlen == 0) {
 		usb_stor_dbg(us, "Received 0-length CSW; retrying...\n");
 		result = usb_stor_bulk_transfer_buf_timeout(us,
-					    us->recv_bulk_pipe, bcs,
-					    US_BULK_CS_WRAP_LEN, &cswlen,
-					    timeout);
+							    us->recv_bulk_pipe, bcs,
+							    US_BULK_CS_WRAP_LEN, &cswlen,
+							    timeout);
 	}
 
 	if (result == USB_STOR_XFER_STALLED) {
 		/* get the status again */
 		usb_stor_dbg(us, "Attempting to get CSW (2nd try)...\n");
 		result = usb_stor_bulk_transfer_buf_timeout(us,
-						us->recv_bulk_pipe, bcs,
-						US_BULK_CS_WRAP_LEN, NULL,
-						timeout);
+							    us->recv_bulk_pipe, bcs,
+							    US_BULK_CS_WRAP_LEN, NULL,
+							    timeout);
 	}
 
 	if (result != USB_STOR_XFER_GOOD)
@@ -589,9 +589,9 @@ static int ene_send_scsi_cmd_timeout(struct us_data *us, u8 fDir, void *buf,
  * Unbounded variant for command-path callers: the command's abort
  * machinery terminates usb_stor_msg_common()'s wait if the device dies.
  */
-static int ene_send_scsi_cmd(struct us_data *us, u8 fDir, void *buf, int use_sg)
+static int ene_send_scsi_cmd(struct us_data *us, u8 fdir, void *buf, int use_sg)
 {
-	return ene_send_scsi_cmd_timeout(us, fDir, buf, use_sg, 0);
+	return ene_send_scsi_cmd_timeout(us, fdir, buf, use_sg, 0);
 }
 
 static int do_scsi_request_sense(struct us_data *us, struct scsi_cmnd *srb)
