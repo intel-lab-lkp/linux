@@ -21,6 +21,7 @@
 
 #define XBOW_WIDGET_PART_NUM	0x0
 #define XXBOW_WIDGET_PART_NUM	0xd000	/* Xbow in Xbridge */
+#define PXBOW_WIDGET_PART_NUM	0xd100	/* PXbow */
 #define BASE_XBOW_PORT		8     /* Lowest external port */
 
 enum xtalk_bridge_type {
@@ -241,6 +242,7 @@ static void xtalk_probe_node(nasid_t nasid)
 		break;
 	case XBOW_WIDGET_PART_NUM:
 	case XXBOW_WIDGET_PART_NUM:
+	case PXBOW_WIDGET_PART_NUM:
 		pr_info("xtalk:n%d/0 xbow widget\n", nasid);
 		xbow_probe(nasid);
 		break;

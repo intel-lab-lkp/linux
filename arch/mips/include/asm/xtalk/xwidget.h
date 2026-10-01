@@ -109,6 +109,7 @@
 #define WIDGET_BDRCK_PART_NUM	0xc110
 #define WIDGET_TPU_PART_NUM	0xc202
 #define WIDGET_XXBOW_PART_NUM	0xd000
+#define WIDGET_PXBOW_PART_NUM	0xd100
 #define WIDGET_XBRDG_PART_NUM	0xd002
 #define WIDGET_NULL_PART_NUM	-1
 
@@ -182,6 +183,12 @@ static const struct widget_ident widget_idents[] __initconst __maybe_unused = {
 		WIDGET_XXBOW_PART_NUM,
 		"xxbow",
 		{NULL, "1.0", "2.0", NULL},
+	},
+	{
+		WIDGET_XXBOW_MFGR_NUM,
+		WIDGET_PXBOW_PART_NUM,
+		"pxbow",
+		{NULL, "1.0", NULL},
 	},
 	{
 		WIDGET_XBRDG_MFGR_NUM,
