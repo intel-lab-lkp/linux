@@ -9,6 +9,13 @@
 
 #include <linux/types.h>
 
+/*
+ * Which L1 EEPROM component id carries which board is undocumented and
+ * differs from machine to machine, so a caller walks the whole range.
+ */
+#define L1_BOARD_COMPONENT_MAX	8
+
 int l1_exec_command(const char *cmd);
+int l1_read_board_partnum(unsigned int component, char *buf, size_t len);
 
 #endif /* __ASM_SN_L1_H */

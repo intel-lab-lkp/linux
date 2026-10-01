@@ -18,7 +18,9 @@
 #include <asm/pci/bridge.h>
 #include <asm/paccess.h>
 #include <asm/sn/irq_alloc.h>
+#include <asm/sn/addrs.h>
 #include <asm/sn/ioc3.h>
+#include <asm/sn/l1.h>
 
 #define CRC16_INIT	0
 #define CRC16_VALID	0xb001
@@ -583,6 +585,29 @@ static const struct {
 	BRIDGE_BOARD_SETUP("030-1707-", bridge_setup_ip34_fuel_sysboard),
 };
 
+/*
+ * The L1 answers one board information area per EEPROM component id, and
+ * which id carries which board is undocumented. Ask for each in turn and take
+ * the first answer the table above knows.
+ */
+static int bridge_l1_partnum(char *partnum, size_t len)
+{
+	unsigned int component;
+	int i;
+
+	for (component = 0; component < L1_BOARD_COMPONENT_MAX; component++) {
+		if (l1_read_board_partnum(component, partnum, len))
+			continue;
+
+		for (i = 0; i < ARRAY_SIZE(bridge_ioc3_devid); i++)
+			if (!strncmp(partnum, bridge_ioc3_devid[i].match,
+				     strlen(bridge_ioc3_devid[i].match)))
+				return 0;
+	}
+
+	return -ENODEV;
+}
+
 static void bridge_setup_board(struct bridge_controller *bc, char *partnum)
 {
 	int i;
@@ -657,8 +682,16 @@ static int bridge_probe(struct platform_device *pdev)
 	int err;
 
 	/* get part number from one wire prom */
-	if (bridge_get_partnum(virt_to_phys((void *)bd->bridge_addr), partnum))
-		return -EPROBE_DEFER; /* not available yet */
+	if (bridge_get_partnum(virt_to_phys((void *)bd->bridge_addr),
+			       partnum)) {
+		/* Only a classic Bridge waits for its 1-wire PROM. */
+		if (!bd->is_xbridge && !bd->is_pic)
+			return -EPROBE_DEFER; /* not available yet */
+
+		if (!IS_ENABLED(CONFIG_SGI_IP27) || !system_is_ip35 ||
+		    bridge_l1_partnum(partnum, sizeof(partnum)))
+			partnum[0] = '\0';
+	}
 
 	parent = irq_get_default_domain();
 	if (!parent)

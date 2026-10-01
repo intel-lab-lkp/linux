@@ -650,6 +650,89 @@ static int l1_get_brick_ethernet_address(nasid_t nasid, u8 *enaddr)
 	return is_valid_ether_addr(enaddr) ? 0 : -EINVAL;
 }
 
+/*
+ * The L1 stores SGI assembly numbers with underscores where the printed
+ * form has dashes: "030_1707_003" for "030-1707-003".
+ */
+static int l1_get_board_partnum(nasid_t nasid, unsigned int component,
+				char *buf, size_t len)
+{
+	size_t iapos, ialen, fieldlen, i;
+	u8 *ia;
+	int rc;
+
+	rc = l1_read_board_ia(nasid, L1_TYPE_L1, component, &ia, &ialen);
+	if (rc)
+		return rc;
+
+	if (ia[1] < 2 || ia[1] * 8UL > ialen)
+		return -EINVAL;
+
+	/* skip the fixed part, then mfg, product, serial */
+	iapos = 6;
+	iapos = ia_skip(ia, iapos, ialen);
+	iapos = ia_skip(ia, iapos, ialen);
+	iapos = ia_skip(ia, iapos, ialen);
+
+	if (iapos >= ialen || (ia[iapos] >> IA_TYPE_SHIFT) != IA_TYPE_ASCII)
+		return -EINVAL;
+
+	fieldlen = ia[iapos] & IA_LENGTH_MASK;
+	if (fieldlen == 0 || iapos + 1 + fieldlen > ialen || fieldlen >= len)
+		return -EINVAL;
+
+	iapos++;
+	for (i = 0; i < fieldlen; i++)
+		buf[i] = ia[iapos + i] == '_' ? '-' : ia[iapos + i];
+	buf[fieldlen] = '\0';
+
+	return 0;
+}
+
+/*
+ * Part numbers cannot change at runtime, so failures are cached along
+ * with successes and each component is queried once.
+ */
+#define L1_PARTNUM_SIZE		24
+static char l1_partnum[L1_BOARD_COMPONENT_MAX][L1_PARTNUM_SIZE];
+static int l1_partnum_rc[L1_BOARD_COMPONENT_MAX];
+static bool l1_partnum_cached[L1_BOARD_COMPONENT_MAX];
+
+int l1_read_board_partnum(unsigned int component, char *buf, size_t len)
+{
+	unsigned long flags;
+
+	if (component >= L1_BOARD_COMPONENT_MAX)
+		return -EINVAL;
+
+	spin_lock_irqsave(&l1_lock, flags);
+
+	if (!l1_partnum_cached[component]) {
+		l1_partnum_rc[component] =
+			l1_get_board_partnum(get_nasid(), component,
+					     l1_partnum[component],
+					     sizeof(l1_partnum[component]));
+		l1_partnum_cached[component] = true;
+
+		if (l1_partnum_rc[component])
+			pr_debug("l1: component %u: no part number (%d)\n",
+				 component, l1_partnum_rc[component]);
+		else
+			pr_debug("l1: component %u: part number %s\n",
+				 component, l1_partnum[component]);
+	}
+
+	spin_unlock_irqrestore(&l1_lock, flags);
+
+	if (l1_partnum_rc[component])
+		return l1_partnum_rc[component];
+
+	if (strscpy(buf, l1_partnum[component], len) < 0)
+		return -E2BIG;
+
+	return 0;
+}
+
 static u8 ip27_l1_mac_addr[ETH_ALEN];
 static bool ip27_l1_mac_addr_valid;
 static bool ip27_l1_mac_addr_tried;
