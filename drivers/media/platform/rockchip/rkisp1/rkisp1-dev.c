@@ -307,7 +307,7 @@ static int rkisp1_subdev_notifier_register(struct rkisp1_device *rkisp1)
  * Power
  */
 
-static int __maybe_unused rkisp1_runtime_suspend(struct device *dev)
+static int rkisp1_runtime_suspend(struct device *dev)
 {
 	struct rkisp1_device *rkisp1 = dev_get_drvdata(dev);
 
@@ -333,7 +333,7 @@ static int __maybe_unused rkisp1_runtime_suspend(struct device *dev)
 	return pinctrl_pm_select_sleep_state(dev);
 }
 
-static int __maybe_unused rkisp1_runtime_resume(struct device *dev)
+static int rkisp1_runtime_resume(struct device *dev)
 {
 	struct rkisp1_device *rkisp1 = dev_get_drvdata(dev);
 	int ret;
@@ -353,9 +353,8 @@ static int __maybe_unused rkisp1_runtime_resume(struct device *dev)
 }
 
 static const struct dev_pm_ops rkisp1_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend,
-				pm_runtime_force_resume)
-	SET_RUNTIME_PM_OPS(rkisp1_runtime_suspend, rkisp1_runtime_resume, NULL)
+	SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend, pm_runtime_force_resume)
+	RUNTIME_PM_OPS(rkisp1_runtime_suspend, rkisp1_runtime_resume, NULL)
 };
 
 /* ----------------------------------------------------------------------------
@@ -817,7 +816,7 @@ static struct platform_driver rkisp1_drv = {
 	.driver = {
 		.name = RKISP1_DRIVER_NAME,
 		.of_match_table = of_match_ptr(rkisp1_of_match),
-		.pm = &rkisp1_pm_ops,
+		.pm = pm_ptr(&rkisp1_pm_ops),
 	},
 	.probe = rkisp1_probe,
 	.remove = rkisp1_remove,
