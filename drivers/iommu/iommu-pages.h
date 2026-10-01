@@ -25,7 +25,13 @@ struct ioptdesc {
 		u8 incoherent;
 		pgoff_t __index;
 	};
-	void *_private;
+	/*
+	 * Alias iommu_domain with page->private for IOPT memory accounting.
+	 */
+	union {
+		void *_private;
+		struct iommu_domain *domain;
+	};
 
 	unsigned int __page_type;
 	atomic_t __page_refcount;
