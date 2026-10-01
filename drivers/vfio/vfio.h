@@ -226,6 +226,8 @@ struct vfio_iommu_driver_ops {
 				  void *data, size_t count, bool write);
 	struct iommu_domain *(*group_iommu_domain)(void *iommu_data,
 						   struct iommu_group *group);
+	/* Returns IO page table pages used, or -EOPNOTSUPP if not accounted */
+	long		(*get_nr_pages)(void *iommu_data);
 };
 
 struct vfio_iommu_driver {

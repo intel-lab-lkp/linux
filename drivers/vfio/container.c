@@ -7,6 +7,7 @@
 #include <linux/file.h>
 #include <linux/slab.h>
 #include <linux/fs.h>
+#include <linux/seq_file.h>
 #include <linux/capability.h>
 #include <linux/iommu.h>
 #include <linux/miscdevice.h>
@@ -384,12 +385,32 @@ static int vfio_fops_release(struct inode *inode, struct file *filep)
 	return 0;
 }
 
+#ifdef CONFIG_PROC_FS
+static void vfio_fops_show_fdinfo(struct seq_file *m, struct file *filep)
+{
+	struct vfio_container *container = filep->private_data;
+	long nr_pages = -EOPNOTSUPP;
+
+	down_read(&container->group_lock);
+	if (container->iommu_driver && container->iommu_driver->ops->get_nr_pages)
+		nr_pages = container->iommu_driver->ops->get_nr_pages(container->iommu_data);
+	up_read(&container->group_lock);
+
+	/* Only report a count that covers every domain in the container */
+	if (nr_pages >= 0)
+		seq_printf(m, "iommu-nr-pages:\t%ld\n", nr_pages);
+}
+#endif
+
 static const struct file_operations vfio_fops = {
 	.owner		= THIS_MODULE,
 	.open		= vfio_fops_open,
 	.release	= vfio_fops_release,
 	.unlocked_ioctl	= vfio_fops_unl_ioctl,
 	.compat_ioctl	= compat_ptr_ioctl,
+#ifdef CONFIG_PROC_FS
+	.show_fdinfo	= vfio_fops_show_fdinfo,
+#endif
 };
 
 struct vfio_container *vfio_container_from_file(struct file *file)

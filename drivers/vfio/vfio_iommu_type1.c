@@ -3249,6 +3249,26 @@ vfio_iommu_type1_group_iommu_domain(void *iommu_data,
 	return domain;
 }
 
+static long vfio_iommu_type1_get_nr_pages(void *iommu_data)
+{
+	struct vfio_iommu *iommu = iommu_data;
+	struct vfio_domain *d;
+	long total = 0;
+
+	mutex_lock(&iommu->lock);
+	list_for_each_entry(d, &iommu->domain_list, next) {
+		/* Only generic_pt page tables account their pages */
+		if (!d->domain->is_iommupt) {
+			total = -EOPNOTSUPP;
+			break;
+		}
+		total += atomic_long_read(&d->domain->nr_pages);
+	}
+	mutex_unlock(&iommu->lock);
+
+	return total;
+}
+
 static const struct vfio_iommu_driver_ops vfio_iommu_driver_ops_type1 = {
 	.name			= "vfio-iommu-type1",
 	.owner			= THIS_MODULE,
@@ -3263,6 +3283,7 @@ static const struct vfio_iommu_driver_ops vfio_iommu_driver_ops_type1 = {
 	.unregister_device	= vfio_iommu_type1_unregister_device,
 	.dma_rw			= vfio_iommu_type1_dma_rw,
 	.group_iommu_domain	= vfio_iommu_type1_group_iommu_domain,
+	.get_nr_pages		= vfio_iommu_type1_get_nr_pages,
 };
 
 static int __init vfio_iommu_type1_init(void)

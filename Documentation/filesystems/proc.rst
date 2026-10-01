@@ -2200,6 +2200,23 @@ VFIO Device files
 where 'vfio-device-syspath' is the sysfs path corresponding to the VFIO device
 file.
 
+VFIO Container files
+~~~~~~~~~~~~~~~~~~~~
+
+::
+
+	pos:	0
+	flags:	02000002
+	mnt_id:	17
+	ino:	1103
+	iommu-nr-pages:	11
+
+where 'iommu-nr-pages' is the number of pages of memory used by the IO page
+tables of all IOMMU domains attached to the container. It is omitted when no
+IOMMU backend is set, or when any attached domain does not account its IO page
+table memory. Currently only domains using the generic_pt page table library
+account their IO page table memory.
+
 3.9	/proc/<pid>/map_files - Information about memory mapped files
 ---------------------------------------------------------------------
 This directory contains symbolic links which represent memory mapped files
