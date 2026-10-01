@@ -324,6 +324,13 @@ static int set_device_name(struct led_netdev_data *trigger_data,
 	return 0;
 }
 
+static void unset_device_name(struct led_netdev_data *trigger_data)
+{
+	dev_put(trigger_data->net_dev);
+	trigger_data->net_dev = NULL;
+	trigger_data->device_name[0] = 0;
+}
+
 static ssize_t device_name_store(struct device *dev,
 				 struct device_attribute *attr, const char *buf,
 				 size_t size)
@@ -776,8 +783,10 @@ static int netdev_trig_activate(struct led_classdev *led_cdev)
 	led_set_trigger_data(led_cdev, trigger_data);
 
 	rc = register_netdevice_notifier(&trigger_data->notifier);
-	if (rc)
+	if (rc) {
+		unset_device_name(trigger_data);
 		kfree(trigger_data);
+	}
 
 	return rc;
 }
@@ -790,7 +799,7 @@ static void netdev_trig_deactivate(struct led_classdev *led_cdev)
 
 	cancel_delayed_work_sync(&trigger_data->work);
 
-	dev_put(trigger_data->net_dev);
+	unset_device_name(trigger_data);
 
 	kfree(trigger_data);
 }
