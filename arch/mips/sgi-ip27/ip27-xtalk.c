@@ -159,8 +159,19 @@ static int xbow_probe(nasid_t nasid)
 	 * need to probe xbow
 	 */
 	brd = find_lboard((lboard_t *)KL_CONFIG_INFO(nasid), KLTYPE_MIDPLANE8);
-	if (!brd)
-		return -ENODEV;
+	if (!brd) {
+		/*
+		 * An IP35-family chassis records its crossbar as
+		 * KLTYPE_PBRICK_XBOW instead.
+		 */
+		brd = find_lboard((lboard_t *)KL_CONFIG_INFO(nasid),
+				  KLTYPE_PBRICK_XBOW);
+		if (!brd) {
+			pr_warn("xtalk:n%d no midplane/xbow board found\n",
+				nasid);
+			return -ENODEV;
+		}
+	}
 
 	xbow_p = (klxbow_t *)find_component(brd, NULL, KLSTRUCT_XBOW);
 	if (!xbow_p)
