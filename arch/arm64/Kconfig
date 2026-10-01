@@ -2329,9 +2329,16 @@ config ARM64_LSUI
 
 endmenu # "ARMv9.6 architectural feature"
 
+config AS_HAS_TLBID
+	def_bool $(as-instr,.arch_extension tlbid)
+	# https://github.com/llvm/llvm-project/pull/178913
+	depends on AS_IS_GNU || (AS_IS_LLVM && AS_VERSION >= 230000)
+	help
+	  Supported by LLVM 23+ and binutils 2.46+.
+
 config ARM64_TLBID
 	def_bool y
-	depends on ACPI
+	depends on ACPI && AS_HAS_TLBID
 	select ACPI_TLBI
 
 config ARM64_SVE

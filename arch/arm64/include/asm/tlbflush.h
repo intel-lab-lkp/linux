@@ -41,9 +41,24 @@
 
 #define __tlbi(op, ...)		__TLBI_N(op, ##__VA_ARGS__, 1, 0)
 
+#define __tlbip(op, arg) do {		\
+	register u64 low asm ("x0") = (u64)arg;					\
+	register u64 high asm ("x1") = (u64)(arg >> 64);			\
+										\
+	asm (ARM64_ASM_PREAMBLE ".arch_extension tlbid\n"			\
+	     "tlbip " #op ", %0, %1\n"						\
+	  : : "r" (low), "r" (high));						\
+} while (0)
+
 #define __tlbi_user(op, arg) do {						\
 	if (arm64_kernel_unmapped_at_el0())					\
 		__tlbi(op, (arg) | USER_ASID_FLAG);				\
+} while (0)
+
+#define __tlbip_user(op, arg) do {						\
+	if (arm64_kernel_unmapped_at_el0()) {					\
+		__tlbip(op, (arg) | (u128)USER_ASID_FLAG);			\
+	}									\
 } while (0)
 
 #define TLBI_TLBID_MASK		GENMASK_ULL(15, 0)
@@ -132,49 +147,75 @@ static inline void sme_dvmsync_batch(void)
 
 #define TLBI_TTL_UNKNOWN	INT_MAX
 
-typedef void (*tlbi_op)(u64 arg);
+typedef void (*tlbi_op)(bool tlbip, u128 arg);
 
-static __always_inline void vae1is(u64 arg)
+static __always_inline void vae1is(bool tlbip, u128 arg)
 {
-	__tlbi(vae1is, arg);
-	__tlbi_user(vae1is, arg);
+	if (tlbip) {
+		__tlbip(vae1is, arg);
+		__tlbip_user(vae1is, arg);
+	} else {
+		__tlbi(vae1is, (u64)arg);
+		__tlbi_user(vae1is, (u64)arg);
+	}
 }
 
-static __always_inline void vae2is(u64 arg)
+static __always_inline void vae2is(bool tlbip, u128 arg)
 {
-	__tlbi(vae2is, arg);
+	if (tlbip)
+		__tlbip(vae2is, arg);
+	else
+		__tlbi(vae2is, (u64)arg);
 }
 
-static __always_inline void vale1(u64 arg)
+static __always_inline void vale1(bool tlbip, u128 arg)
 {
-	__tlbi(vale1, arg);
-	__tlbi_user(vale1, arg);
+	compiletime_assert(!tlbip, "Unsupported TLBIP operand");
+
+	__tlbi(vale1, (u64)arg);
+	__tlbi_user(vale1, (u64)arg);
 }
 
-static __always_inline void vale1is(u64 arg)
+static __always_inline void vale1is(bool tlbip, u128 arg)
 {
-	__tlbi(vale1is, arg);
-	__tlbi_user(vale1is, arg);
+	if (tlbip) {
+		__tlbip(vale1is, arg);
+		__tlbip_user(vale1is, arg);
+	} else {
+		__tlbi(vale1is, (u64)arg);
+		__tlbi_user(vale1is, (u64)arg);
+	}
 }
 
-static __always_inline void vale2is(u64 arg)
+static __always_inline void vale2is(bool tlbip, u128 arg)
 {
-	__tlbi(vale2is, arg);
+	if (tlbip)
+		__tlbip(vale2is, arg);
+	else
+		__tlbi(vale2is, (u64)arg);
 }
 
-static __always_inline void vaale1is(u64 arg)
+static __always_inline void vaale1is(bool tlbip, u128 arg)
 {
-	__tlbi(vaale1is, arg);
+	if (tlbip)
+		__tlbip(vaale1is, arg);
+	else
+		__tlbi(vaale1is, (u64)arg);
 }
 
-static __always_inline void ipas2e1(u64 arg)
+static __always_inline void ipas2e1(bool tlbip, u128 arg)
 {
-	__tlbi(ipas2e1, arg);
+	compiletime_assert(!tlbip, "Unsupported TLBIP operand");
+
+	__tlbi(ipas2e1, (u64)arg);
 }
 
-static __always_inline void ipas2e1is(u64 arg)
+static __always_inline void ipas2e1is(bool tlbip, u128 arg)
 {
-	__tlbi(ipas2e1is, arg);
+	if (tlbip)
+		__tlbi(ipas2e1is, arg);
+	else
+		__tlbi(ipas2e1is, (u64)arg);
 }
 
 static __always_inline void __tlbi_level_asid(tlbi_op op, u64 addr, u32 level,
@@ -188,7 +229,7 @@ static __always_inline void __tlbi_level_asid(tlbi_op op, u64 addr, u32 level,
 		FIELD_MODIFY(TLBI_TTL_MASK, &arg, ttl);
 	}
 
-	op(arg);
+	op(false, arg);
 }
 
 static inline void __tlbi_level(tlbi_op op, u64 addr, u32 level)
@@ -445,32 +486,50 @@ static inline void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch)
  *    operations can only span an even number of pages. We save this for last to
  *    ensure 64KB start alignment is maintained for the LPA2 case.
  */
-static __always_inline void rvae1is(u64 arg)
+static __always_inline void rvae1is(bool tlbip, u128 arg)
 {
-	__tlbi(rvae1is, arg);
-	__tlbi_user(rvae1is, arg);
+	if (tlbip) {
+		__tlbip(rvae1is, arg);
+		__tlbip_user(rvae1is, arg);
+	} else {
+		__tlbi(rvae1is, (u64)arg);
+		__tlbi_user(rvae1is, (u64)arg);
+	}
 }
 
-static __always_inline void rvale1(u64 arg)
+static __always_inline void rvale1(bool tlbip, u128 arg)
 {
-	__tlbi(rvale1, arg);
-	__tlbi_user(rvale1, arg);
+	compiletime_assert(!tlbip, "Unsupported TLBIP operand");
+
+	__tlbi(rvale1, (u64)arg);
+	__tlbi_user(rvale1, (u64)arg);
 }
 
-static __always_inline void rvale1is(u64 arg)
+static __always_inline void rvale1is(bool tlbip, u128 arg)
 {
-	__tlbi(rvale1is, arg);
-	__tlbi_user(rvale1is, arg);
+	if (tlbip) {
+		__tlbip(rvale1is, arg);
+		__tlbip_user(rvale1is, arg);
+	} else {
+		__tlbi(rvale1is, (u64)arg);
+		__tlbi_user(rvale1is, (u64)arg);
+	}
 }
 
-static __always_inline void rvaale1is(u64 arg)
+static __always_inline void rvaale1is(bool tlbip, u128 arg)
 {
-	__tlbi(rvaale1is, arg);
+	if (tlbip)
+		__tlbip(rvaale1is, arg);
+	else
+		__tlbi(rvaale1is, (u64)arg);
 }
 
-static __always_inline void ripas2e1is(u64 arg)
+static __always_inline void ripas2e1is(bool tlbip, u128 arg)
 {
-	__tlbi(ripas2e1is, arg);
+	if (tlbip)
+		__tlbip(ripas2e1is, arg);
+	else
+		__tlbi(ripas2e1is, (u64)arg);
 }
 
 static __always_inline void __tlbi_range(tlbi_op op, u64 addr,
@@ -486,7 +545,7 @@ static __always_inline void __tlbi_range(tlbi_op op, u64 addr,
 	arg |= FIELD_PREP(TLBIR_TG_MASK, get_trans_granule());
 	arg |= FIELD_PREP(TLBIR_ASID_MASK, asid);
 
-	op(arg);
+	op(false, arg);
 }
 
 static __always_inline void __flush_tlb_range_op(tlbi_op lop, tlbi_op rop,
