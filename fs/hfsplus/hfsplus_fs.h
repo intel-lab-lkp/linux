@@ -36,6 +36,20 @@ enum hfsplus_btree_mutex_classes {
 	ATTR_BTREE_MUTEX,
 };
 
+/*
+ * extents_lock nested subclasses. Special inodes (allocation, attributes,
+ * catalog) use the same lock class as regular files but their extents_lock is
+ * taken while a regular file extents_lock is already held -- e.g. the
+ * allocation file is read from hfsplus_block_free() during truncate. Give them
+ * distinct subclasses so lockdep does not report a false recursive locking.
+ */
+enum hfsplus_extents_mutex_classes {
+	HFSPLUS_EXTENTS_LOCK_NORMAL,
+	HFSPLUS_EXTENTS_LOCK_ALLOC,
+	HFSPLUS_EXTENTS_LOCK_ATTR,
+	HFSPLUS_EXTENTS_LOCK_CATALOG,
+};
+
 /* An HFS+ BTree held in memory */
 struct hfs_btree {
 	struct super_block *sb;
@@ -570,6 +584,20 @@ hfsplus_btree_lock_class(struct hfs_btree *tree)
 		BUG();
 	}
 	return class;
+}
+
+static inline unsigned int hfsplus_extents_lock_class(struct inode *inode)
+{
+	switch (inode->i_ino) {
+	case HFSPLUS_ALLOC_CNID:
+		return HFSPLUS_EXTENTS_LOCK_ALLOC;
+	case HFSPLUS_ATTR_CNID:
+		return HFSPLUS_EXTENTS_LOCK_ATTR;
+	case HFSPLUS_CAT_CNID:
+		return HFSPLUS_EXTENTS_LOCK_CATALOG;
+	default:
+		return HFSPLUS_EXTENTS_LOCK_NORMAL;
+	}
 }
 
 static inline
