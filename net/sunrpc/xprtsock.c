@@ -2969,15 +2969,17 @@ static void xs_tcp_print_stats(struct rpc_xprt *xprt, struct seq_file *seq)
 static int bc_malloc(struct rpc_task *task)
 {
 	struct rpc_rqst *rqst = task->tk_rqstp;
-	size_t size = rqst->rq_callsize;
+	size_t capacity = PAGE_SIZE - sizeof(struct rpc_buffer);
 	struct page *page;
 	struct rpc_buffer *buf;
 
-	if (size > PAGE_SIZE - sizeof(struct rpc_buffer)) {
+	if (rqst->rq_callsize > capacity) {
 		WARN_ONCE(1, "xprtsock: large bc buffer request (size %zu)\n",
-			  size);
+			  rqst->rq_callsize);
 		return -EINVAL;
 	}
+	if (rqst->rq_rcvsize > capacity - rqst->rq_callsize)
+		return -EINVAL;
 
 	page = alloc_page(GFP_KERNEL | __GFP_NORETRY | __GFP_NOWARN);
 	if (!page)
