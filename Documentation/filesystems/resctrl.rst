@@ -576,6 +576,34 @@ conveyed in the error returns from file operations. E.g.
 	  [inherit_user]
 	  global_enable_per_cpu:ctrl=assign;mon=assign;group=//
 
+	Writes use the same line format as read, without square brackets and
+	with a trailing newline.
+
+	inherit_user is written without any parameters.
+
+	For global_enable_per_cpu, the parameters are optional. An omitted
+	ctrl=, mon=, or group= keeps the value currently shown. Parameters
+	may appear in any order. Empty values are rejected.
+
+	Selecting a new mode, parameter, or group replaces the active
+	association. A new global_enable_per_cpu association sets that
+	group's kmode_cpus to every online CPU. Errors are reported in
+	"info/last_cmd_status".
+	Example::
+
+	  # mkdir ctrl1
+	  # echo "global_enable_per_cpu:ctrl=assign;mon=assign;group=ctrl1//" \
+	         > info/kernel_mode
+
+	  # cat info/kernel_mode
+	  inherit_user
+	  [global_enable_per_cpu:ctrl=assign;mon=assign;group=ctrl1//]
+
+	  # echo "inherit_user" > info/kernel_mode
+	  # cat info/kernel_mode
+	  [inherit_user]
+	  global_enable_per_cpu:ctrl=assign;mon=assign;group=//
+
 Resource alloc and monitor groups
 =================================
 
