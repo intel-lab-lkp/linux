@@ -462,6 +462,8 @@ ssize_t resctrl_mbm_assign_mode_write(struct kernfs_open_file *of, char *buf,
 void resctrl_bmec_files_show(struct rdt_resource *r, struct kernfs_node *l3_mon_kn,
 			     bool show);
 
+bool rdtgroup_has_kmode_global(struct rdtgroup *rdtgrp);
+
 int resctrl_num_mbm_cntrs_show(struct kernfs_open_file *of, struct seq_file *s, void *v);
 
 int resctrl_available_mbm_cntrs_show(struct kernfs_open_file *of, struct seq_file *s,
