@@ -28,6 +28,7 @@ nxpwifi-y += sta_tx.o
 nxpwifi-y += sta_rx.o
 nxpwifi-y += uap_txrx.o
 nxpwifi-y += cfg80211.o
+nxpwifi-y += vendor.o
 nxpwifi-y += ethtool.o
 nxpwifi-y += 11h.o
 nxpwifi-$(CONFIG_DEBUG_FS) += debugfs.o

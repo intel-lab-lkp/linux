@@ -1435,4 +1435,5 @@ void nxpwifi_dev_debugfs_remove(struct nxpwifi_private *priv);
 int nxpwifi_reinit_sw(struct nxpwifi_adapter *adapter);
 void nxpwifi_shutdown_sw(struct nxpwifi_adapter *adapter);
 bool nxpwifi_is_valid_region_code(enum nxpwifi_region_code code);
+void *nxpwifi_cfg80211_get_adapter(struct wiphy *wiphy);
 #endif /* !_NXPWIFI_MAIN_H_ */
