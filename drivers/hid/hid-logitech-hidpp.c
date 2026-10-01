@@ -23,6 +23,8 @@
 #include <linux/workqueue.h>
 #include <linux/atomic.h>
 #include <linux/fixp-arith.h>
+#include <linux/limits.h>
+#include <linux/math64.h>
 #include <linux/unaligned.h>
 #include "usbhid/usbhid.h"
 #include "hid-ids.h"
@@ -98,6 +100,7 @@ MODULE_PARM_DESC(disable_tap_to_click,
 #define HIDPP_CAPABILITY_HIDPP20_HI_RES_SCROLL	BIT(8)
 #define HIDPP_CAPABILITY_HIDPP10_FAST_SCROLL	BIT(9)
 #define HIDPP_CAPABILITY_ADC_MEASUREMENT	BIT(10)
+#define HIDPP_CAPABILITY_HIDPP20_THUMBWHEEL	BIT(11)
 
 #define lg_map_key_clear(c)  hid_map_usage_clear(hi, usage, bit, max, EV_KEY, (c))
 
@@ -165,15 +168,21 @@ struct hidpp_battery {
 /**
  * struct hidpp_scroll_counter - Utility class for processing high-resolution
  *                             scroll events.
- * @wheel_multiplier: the scalar multiplier to be applied to each wheel event
+ * @scale_numerator: numerator of normal scroll steps per device count
+ * @scale_denominator: denominator of normal scroll steps per device count
  * @remainder: counts the number of high-resolution units moved since the last
  *             low-resolution event (REL_WHEEL or REL_HWHEEL) was sent. Should
  *             only be used by class methods.
  * @direction: direction of last movement (1 or -1)
  * @last_time: last event time, used to reset remainder after inactivity
+ *
+ * One device count represents scale_numerator / scale_denominator normal
+ * scroll steps: 1 / wheel_multiplier for a vertical wheel, or native_res /
+ * diverted_res for a diverted thumbwheel.
  */
 struct hidpp_scroll_counter {
-	int wheel_multiplier;
+	u16 scale_numerator;
+	u16 scale_denominator;
 	int remainder;
 	int direction;
 	unsigned long long last_time;
@@ -206,6 +215,7 @@ struct hidpp_device {
 
 	struct hidpp_battery battery;
 	struct hidpp_scroll_counter vertical_wheel_counter;
+	struct hidpp_scroll_counter thumbwheel_counter;
 
 	u8 wireless_feature_index;
 	u8 reprog_controls_feature_index;
@@ -215,6 +225,8 @@ struct hidpp_device {
 	u8 hires_wheel_feature_index;
 	bool hires_wheel_has_invert;
 	bool hires_wheel_invert;
+	u8 thumbwheel_feature_index;
+	bool thumbwheel_positive_right;
 
 	bool connected_once;
 };
@@ -544,28 +556,42 @@ static void hidpp_update_usb_wireless_status(struct hidpp_device *hidpp)
 
 /**
  * hidpp_scroll_counter_handle_scroll() - Send high- and low-resolution scroll
- *                                        events given a high-resolution wheel
- *                                        movement.
+ *                                        events given a wheel movement.
  * @input_dev: Pointer to the input device
- * @counter: a hid_scroll_counter struct describing the wheel.
- * @hi_res_value: the movement of the wheel, in the mouse's high-resolution
- *                units.
+ * @counter: a hidpp_scroll_counter struct describing the wheel.
+ * @value: the movement of the wheel, in the device's reporting units.
+ * @hi_res_code: high-resolution event code for this wheel axis.
+ * @low_res_code: low-resolution event code for this wheel axis.
  *
- * Given a high-resolution movement, this function converts the movement into
+ * Given a wheel movement, this function converts the movement into
  * fractions of 120 and emits high-resolution scroll events for the input
- * device. It also uses the multiplier from &struct hid_scroll_counter to
- * emit low-resolution scroll events when appropriate for
- * backwards-compatibility with userspace input libraries.
+ * device. It also uses the counter to emit low-resolution scroll events
+ * when appropriate for backwards-compatibility with userspace input
+ * libraries.
+ *
+ * Return: true if a nonzero scroll event was reported
  */
-static void hidpp_scroll_counter_handle_scroll(struct input_dev *input_dev,
+static bool hidpp_scroll_counter_handle_scroll(struct input_dev *input_dev,
 					       struct hidpp_scroll_counter *counter,
-					       int hi_res_value)
+					       int value,
+					       unsigned int hi_res_code,
+					       unsigned int low_res_code)
 {
+	s64 scaled;
+	int hi_res_value;
 	int low_res_value, remainder, direction;
 	unsigned long long now, previous;
 
-	hi_res_value = hi_res_value * 120/counter->wheel_multiplier;
-	input_report_rel(input_dev, REL_WHEEL_HI_RES, hi_res_value);
+	if (!counter->scale_denominator)
+		return false;
+
+	scaled = div_s64((s64)value * 120 * counter->scale_numerator,
+			 counter->scale_denominator);
+	if (!scaled || scaled > INT_MAX - 120 || scaled < INT_MIN + 120)
+		return false;
+	hi_res_value = scaled;
+
+	input_report_rel(input_dev, hi_res_code, hi_res_value);
 
 	remainder = counter->remainder;
 	direction = hi_res_value > 0 ? 1 : -1;
@@ -599,10 +625,11 @@ static void hidpp_scroll_counter_handle_scroll(struct input_dev *input_dev,
 		low_res_value = remainder / 120;
 		if (low_res_value == 0)
 			low_res_value = (hi_res_value > 0 ? 1 : -1);
-		input_report_rel(input_dev, REL_WHEEL, low_res_value);
+		input_report_rel(input_dev, low_res_code, low_res_value);
 		remainder -= low_res_value * 120;
 	}
 	counter->remainder = remainder;
+	return true;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -2105,6 +2132,47 @@ static int hidpp_hrw_set_wheel_mode(struct hidpp_device *hidpp, bool invert,
 }
 
 /* -------------------------------------------------------------------------- */
+/* 0x2150: Thumbwheel                                                         */
+/* -------------------------------------------------------------------------- */
+
+#define HIDPP_PAGE_THUMBWHEEL			0x2150
+#define CMD_THUMBWHEEL_GET_INFO			0x00
+#define CMD_THUMBWHEEL_SET_REPORTING		0x20
+#define EVENT_THUMBWHEEL			0x00
+
+static int hidpp_thumbwheel_get_info(struct hidpp_device *hidpp,
+				    u16 *native_res, u16 *diverted_res,
+				    bool *positive_right)
+{
+	struct hidpp_report response;
+	int ret;
+
+	ret = hidpp_send_fap_command_sync(hidpp,
+					  hidpp->thumbwheel_feature_index,
+					  CMD_THUMBWHEEL_GET_INFO,
+					  NULL, 0, &response);
+	if (ret)
+		return ret;
+
+	*native_res = get_unaligned_be16(&response.fap.params[0]);
+	*diverted_res = get_unaligned_be16(&response.fap.params[2]);
+	*positive_right = response.fap.params[4] & BIT(0);
+	return 0;
+}
+
+static int hidpp_thumbwheel_set_reporting(struct hidpp_device *hidpp,
+					 bool diverted)
+{
+	struct hidpp_report response;
+	u8 params[2] = { diverted, 0 }; /* No inversion. */
+
+	return hidpp_send_fap_command_sync(hidpp,
+					   hidpp->thumbwheel_feature_index,
+					   CMD_THUMBWHEEL_SET_REPORTING,
+					   params, sizeof(params), &response);
+}
+
+/* -------------------------------------------------------------------------- */
 /* 0x4301: Solar Keyboard                                                     */
 /* -------------------------------------------------------------------------- */
 
@@ -3323,7 +3391,8 @@ static int m560_raw_event(struct hid_device *hdev, u8 *data, int size)
 		v = sign_extend32(data[6], 7);
 		if (v != 0)
 			hidpp_scroll_counter_handle_scroll(hidpp->input,
-					&hidpp->vertical_wheel_counter, v);
+					&hidpp->vertical_wheel_counter, v,
+					REL_WHEEL_HI_RES, REL_WHEEL);
 
 		input_sync(hidpp->input);
 	}
@@ -3931,7 +4000,8 @@ static void hidpp_hrw_update_wheel_mode(struct hidpp_device *hidpp,
 	bool invert, bool high_resolution)
 {
 	hidpp->hires_wheel_invert = invert;
-	hidpp->vertical_wheel_counter.wheel_multiplier =
+	hidpp->vertical_wheel_counter.scale_numerator = 1;
+	hidpp->vertical_wheel_counter.scale_denominator =
 		(high_resolution && hidpp->hires_wheel_multiplier > 0) ?
 		hidpp->hires_wheel_multiplier : 1;
 }
@@ -3986,10 +4056,12 @@ static int hi_res_scroll_enable(struct hidpp_device *hidpp)
 	}
 
 	hidpp->hires_wheel_multiplier = multiplier;
-	hidpp->vertical_wheel_counter.wheel_multiplier = multiplier;
 	if (hidpp->capabilities & HIDPP_CAPABILITY_HIDPP20_HI_RES_WHEEL) {
 		hidpp->hires_wheel_has_invert = has_invert;
 		hidpp_hrw_update_wheel_mode(hidpp, false, true);
+	} else {
+		hidpp->vertical_wheel_counter.scale_numerator = 1;
+		hidpp->vertical_wheel_counter.scale_denominator = multiplier;
 	}
 	hid_dbg(hidpp->hid_dev, "wheel multiplier = %d\n", multiplier);
 	return 0;
@@ -4033,6 +4105,49 @@ static int hidpp_initialize_hires_scroll(struct hidpp_device *hidpp)
 	return 0;
 }
 
+static void thumbwheel_scroll_enable(struct hidpp_device *hidpp)
+{
+	bool divert;
+	int ret;
+
+	memset(&hidpp->thumbwheel_counter, 0,
+	       sizeof(hidpp->thumbwheel_counter));
+	ret = hidpp_thumbwheel_get_info(hidpp,
+			&hidpp->thumbwheel_counter.scale_numerator,
+			&hidpp->thumbwheel_counter.scale_denominator,
+			&hidpp->thumbwheel_positive_right);
+
+	/* Non-Bolt devices should default to native HID. Don't enable HID++ */
+	if (!hidpp_is_bolt_child(hidpp->hid_dev))
+		return;
+
+	/* Divert only when both resolutions are available; otherwise request
+	 * native HID reporting.
+	 */
+	divert = !ret && hidpp->thumbwheel_counter.scale_numerator &&
+		 hidpp->thumbwheel_counter.scale_denominator;
+	ret = hidpp_thumbwheel_set_reporting(hidpp, divert);
+	if (ret)
+		hid_dbg(hidpp->hid_dev,
+			"Could not set thumbwheel reporting mode: %d\n", ret);
+}
+
+static void hidpp_initialize_thumbwheel_scroll(struct hidpp_device *hidpp)
+{
+	int ret;
+
+	hidpp->capabilities &= ~HIDPP_CAPABILITY_HIDPP20_THUMBWHEEL;
+	hidpp->thumbwheel_feature_index = 0xff;
+	if (hidpp->protocol_major < 2)
+		return;
+
+	ret = hidpp_root_get_feature(hidpp, HIDPP_PAGE_THUMBWHEEL,
+				     &hidpp->thumbwheel_feature_index);
+	if (ret)
+		return;
+	hidpp->capabilities |= HIDPP_CAPABILITY_HIDPP20_THUMBWHEEL;
+}
+
 /*
  * The low nibble of data[3] is the software ID: 0 for wheel
  * notifications, nonzero and echoed from the request for replies.
@@ -4074,7 +4189,7 @@ static int hidpp20_hires_wheel_raw_event(struct hidpp_device *hidpp,
 		/* The event flag describes whether the event is high resolution
 		 * or not.
 		 */
-		hidpp->vertical_wheel_counter.wheel_multiplier =
+		hidpp->vertical_wheel_counter.scale_denominator =
 			(data[4] & HIRES_WHEEL_EVENT_HIGH_RESOLUTION) ?
 			hidpp->hires_wheel_multiplier : 1;
 
@@ -4088,13 +4203,55 @@ static int hidpp20_hires_wheel_raw_event(struct hidpp_device *hidpp,
 		if (hidpp->hires_wheel_has_invert && hidpp->hires_wheel_invert)
 			delta = -delta;
 
-		hidpp_scroll_counter_handle_scroll(hidpp->input,
-			&hidpp->vertical_wheel_counter, delta);
-		input_sync(hidpp->input);
+		if (hidpp_scroll_counter_handle_scroll(hidpp->input,
+			&hidpp->vertical_wheel_counter, delta,
+			REL_WHEEL_HI_RES, REL_WHEEL))
+			input_sync(hidpp->input);
 		return 1;
 	}
 
 	return 0;
+}
+
+static int hidpp20_thumbwheel_raw_event(struct hidpp_device *hidpp,
+					       u8 *data, int size)
+{
+	int delta;
+
+	if (hidpp->thumbwheel_feature_index == 0xff)
+		return 0;
+
+	if (size < 6)
+		return 0;
+
+	if (data[0] != REPORT_ID_HIDPP_LONG ||
+	    data[2] != hidpp->thumbwheel_feature_index)
+		return 0;
+
+	if (data[3] != EVENT_THUMBWHEEL)
+		return 0;
+
+	if (!hidpp->input || !hidpp->thumbwheel_counter.scale_numerator ||
+	    !hidpp->thumbwheel_counter.scale_denominator)
+		return 1;
+
+	/* The specification calls this scroll delta "rotation". The event also
+	 * carries rotation_status, touch, proximity and single_tap data which
+	 * may be exposed in the future.
+	 */
+	delta = (s16)get_unaligned_be16(&data[4]);
+	if (!delta)
+		return 1;
+
+	/* Linux reports left as negative and right as positive. */
+	if (!hidpp->thumbwheel_positive_right)
+		delta = -delta;
+
+	if (hidpp_scroll_counter_handle_scroll(hidpp->input,
+			&hidpp->thumbwheel_counter, delta,
+			REL_HWHEEL_HI_RES, REL_HWHEEL))
+		input_sync(hidpp->input);
+	return 1;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -4323,6 +4480,12 @@ static int hidpp_raw_hidpp_event(struct hidpp_device *hidpp, u8 *data,
 			return ret;
 	}
 
+	if (hidpp->capabilities & HIDPP_CAPABILITY_HIDPP20_THUMBWHEEL) {
+		ret = hidpp20_thumbwheel_raw_event(hidpp, data, size);
+		if (ret != 0)
+			return ret;
+	}
+
 	return 0;
 }
 
@@ -4396,10 +4559,11 @@ static int hidpp_event(struct hid_device *hdev, struct hid_field *field,
 	 */
 	if (!(hidpp->capabilities & HIDPP_CAPABILITY_HI_RES_SCROLL)
 	    || value == 0 || hidpp->input == NULL
-	    || counter->wheel_multiplier == 0)
+	    || counter->scale_denominator == 0)
 		return 0;
 
-	hidpp_scroll_counter_handle_scroll(hidpp->input, counter, value);
+	hidpp_scroll_counter_handle_scroll(hidpp->input, counter, value,
+					   REL_WHEEL_HI_RES, REL_WHEEL);
 	return 1;
 }
 
@@ -4664,6 +4828,7 @@ static void hidpp_connect_event(struct work_struct *work)
 	hidpp_initialize_battery(hidpp);
 	if (!hid_is_usb(hidpp->hid_dev))
 		hidpp_initialize_hires_scroll(hidpp);
+	hidpp_initialize_thumbwheel_scroll(hidpp);
 
 	/* forward current battery state */
 	if (hidpp->capabilities & HIDPP_CAPABILITY_HIDPP10_BATTERY) {
@@ -4687,6 +4852,8 @@ static void hidpp_connect_event(struct work_struct *work)
 
 	if (hidpp->capabilities & HIDPP_CAPABILITY_HI_RES_SCROLL)
 		hi_res_scroll_enable(hidpp);
+	if (hidpp->capabilities & HIDPP_CAPABILITY_HIDPP20_THUMBWHEEL)
+		thumbwheel_scroll_enable(hidpp);
 
 	if (!(hidpp->quirks & HIDPP_QUIRK_DELAYED_INIT) || hidpp->delayed_input)
 		/* if the input nodes are already created, we can stop now */
