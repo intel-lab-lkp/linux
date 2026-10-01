@@ -7141,6 +7141,14 @@ void follow_pfnmap_end(struct follow_pfnmap_args *args)
 EXPORT_SYMBOL_GPL(follow_pfnmap_end);
 
 #ifdef CONFIG_HAVE_IOREMAP_PROT
+/* A write fault on a private pfnmap replaces the pfn with an anon page. */
+static bool pfnmap_pfn_is_cowed(struct vm_area_struct *vma, unsigned long addr,
+				unsigned long pfn)
+{
+	return (vma->vm_flags & VM_PFNMAP) && vma_is_cow_mapping(vma) &&
+	       pfn != linear_page_index(vma, addr);
+}
+
 /**
  * generic_access_phys - generic implementation for iomem mmap access
  * @vma: the vma to access
@@ -7173,6 +7181,9 @@ retry:
 	follow_pfnmap_end(&args);
 
 	if ((write & FOLL_WRITE) && !writable)
+		return -EINVAL;
+
+	if (pfnmap_pfn_is_cowed(vma, addr, phys_addr >> PAGE_SHIFT))
 		return -EINVAL;
 
 	maddr = ioremap_prot(phys_addr, PAGE_ALIGN(len + offset), prot);
