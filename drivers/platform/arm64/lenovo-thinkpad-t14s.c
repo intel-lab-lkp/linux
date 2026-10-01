@@ -18,8 +18,10 @@
 #include <linux/leds.h>
 #include <linux/lockdep.h>
 #include <linux/module.h>
+#include <linux/platform_profile.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
+#include <linux/thermal.h>
 #include <linux/pm.h>
 
 #define T14S_EC_CMD_ECRD	0x02
@@ -93,9 +95,16 @@ struct t14s_ec_led_classdev {
 	struct t14s_ec *ec;
 };
 
+struct t14s_ec_thermal_profile {
+	struct thermal_zone_device *tzd;
+	struct thermal_trip *keyboard_alert;
+	enum platform_profile_option current_profile;
+};
+
 struct t14s_ec {
 	struct regmap *regmap;
 	struct device *dev;
+	struct t14s_ec_thermal_profile profile;
 	struct t14s_ec_led_classdev led_pwr_btn;
 	struct t14s_ec_led_classdev led_chrg_orange;
 	struct t14s_ec_led_classdev led_chrg_white;
@@ -472,6 +481,99 @@ static int t14s_input_probe(struct t14s_ec *ec)
 	return input_register_device(ec->inputdev);
 }
 
+static int t14s_platform_profile_temp(enum platform_profile_option profile)
+{
+	/*
+	 * These thresholds match the temperatures used by the
+	 * platform firmware for the corresponding operating profiles.
+	 */
+	switch (profile) {
+	case PLATFORM_PROFILE_LOW_POWER:
+		return 49850;
+	case PLATFORM_PROFILE_BALANCED:
+		return 57850;
+	case PLATFORM_PROFILE_PERFORMANCE:
+		return 59850;
+	default:
+		return THERMAL_TEMP_INVALID;
+	}
+}
+
+static int t14s_platform_profile_set(struct t14s_ec_thermal_profile *tp,
+				     enum platform_profile_option profile)
+{
+	int temp;
+
+	if (!tp->tzd)
+		return -ENODEV;
+
+	if (tp->current_profile == profile)
+		return 0;
+
+	temp = t14s_platform_profile_temp(profile);
+	if (temp == THERMAL_TEMP_INVALID)
+		return -EINVAL;
+
+	thermal_zone_set_trip_temp(tp->tzd, tp->keyboard_alert, temp);
+	thermal_zone_device_update(tp->tzd, THERMAL_TRIP_CHANGED);
+
+	tp->current_profile = profile;
+
+	return 0;
+}
+
+static int t14s_profile_find_keyboard_alert(struct thermal_trip *tt, void *data)
+{
+	struct device_node *np;
+	struct t14s_ec_thermal_profile *tp = data;
+
+	if (tt->type != THERMAL_TRIP_PASSIVE)
+		return 0;
+
+	np = tt->priv;
+
+	if (!np)
+		return -EINVAL;
+
+	if (!of_node_name_eq(np, "keyboard-ec-alert"))
+		return 0;
+
+	tp->keyboard_alert = tt;
+
+	return 1;
+}
+
+static int t14s_profile_probe(struct t14s_ec_thermal_profile *tp)
+{
+	struct thermal_zone_device *tzd;
+	int ret;
+
+	tzd = thermal_zone_get_zone_by_name("keyboard-thermal");
+	if (IS_ERR(tzd)) {
+		ret = PTR_ERR(tzd);
+
+		if (ret == -ENODEV)
+			return -EPROBE_DEFER;
+
+		return ret;
+	}
+
+	tp->tzd = tzd;
+
+	ret = thermal_zone_for_each_trip(tzd, t14s_profile_find_keyboard_alert, tp);
+	if (ret < 0)
+		return ret;
+
+	if (!tp->keyboard_alert)
+		return -ENODEV;
+
+	ret = t14s_platform_profile_set(tp, PLATFORM_PROFILE_BALANCED);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
 static irqreturn_t t14s_ec_irq_handler(int irq, void *data)
 {
 	struct t14s_ec *ec = data;
@@ -534,12 +636,15 @@ static irqreturn_t t14s_ec_irq_handler(int irq, void *data)
 		break;
 	case T14S_EC_EVT_KEY_FN_L:
 		dev_dbg(ec->dev, "FN + L - low performance mode\n");
+		t14s_platform_profile_set(&ec->profile, PLATFORM_PROFILE_LOW_POWER);
 		break;
 	case T14S_EC_EVT_KEY_FN_M:
 		dev_dbg(ec->dev, "FN + M - medium performance mode\n");
+		t14s_platform_profile_set(&ec->profile, PLATFORM_PROFILE_BALANCED);
 		break;
 	case T14S_EC_EVT_KEY_FN_H:
 		dev_dbg(ec->dev, "FN + H - high performance mode\n");
+		t14s_platform_profile_set(&ec->profile, PLATFORM_PROFILE_PERFORMANCE);
 		break;
 	case T14S_EC_EVT_KEY_FN_T:
 		dev_dbg(ec->dev, "FN + T - toggle intelligent cooling mode\n");
@@ -587,6 +692,10 @@ static int t14s_ec_probe(struct i2c_client *client)
 		return ret;
 
 	ret = t14s_input_probe(ec);
+	if (ret < 0)
+		return ret;
+
+	ret = t14s_profile_probe(&ec->profile);
 	if (ret < 0)
 		return ret;
 
