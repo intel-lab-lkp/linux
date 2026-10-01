@@ -121,6 +121,11 @@ Misaligned READ:
     verified to have proper offset/len (logical_block_size) and
     dma_alignment checking.
 
+    A READ smaller than dio_read_offset_align is not expanded: it would
+    read one or two whole alignment units to return fewer bytes than
+    one. It is issued as DONTCACHE buffered IO instead (normal buffered
+    IO if the filesystem lacks FOP_DONTCACHE).
+
 Misaligned WRITE:
     If NFSD_IO_DIRECT is used, split any misaligned WRITE into a start,
     middle and end as needed. The large middle segment is DIO-aligned
