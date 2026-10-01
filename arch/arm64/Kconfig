@@ -2329,6 +2329,11 @@ config ARM64_LSUI
 
 endmenu # "ARMv9.6 architectural feature"
 
+config ARM64_TLBID
+	def_bool y
+	depends on ACPI
+	select ACPI_TLBI
+
 config ARM64_SVE
 	bool "ARM Scalable Vector Extension support"
 	default y

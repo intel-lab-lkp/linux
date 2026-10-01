@@ -10,6 +10,7 @@
 #define _ASM_ACPI_H
 
 #include <linux/cpuidle.h>
+#include <linux/cpumask.h>
 #include <linux/efi.h>
 #include <linux/memblock.h>
 #include <linux/psci.h>
@@ -170,6 +171,14 @@ static inline int arm64_acpi_numa_init(void) { return -ENOSYS; }
 static inline int acpi_numa_get_nid(unsigned int cpu) { return NUMA_NO_NODE; }
 static inline void acpi_map_cpus_to_nodes(void) { }
 #endif /* CONFIG_ACPI_NUMA */
+
+#ifdef CONFIG_ARM64_TLBID
+#define MAX_TLBI_DOMAINS	(1UL << 16)
+struct tlbi_domain {
+	u16 id;
+	cpumask_var_t cpus;
+};
+#endif
 
 #define ACPI_TABLE_UPGRADE_MAX_PHYS MEMBLOCK_ALLOC_ACCESSIBLE
 

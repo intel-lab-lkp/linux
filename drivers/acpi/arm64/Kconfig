@@ -24,3 +24,6 @@ config ACPI_APMT
 
 config ACPI_MPAM
 	bool
+
+config ACPI_TLBI
+	bool
