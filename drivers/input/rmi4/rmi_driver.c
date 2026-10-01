@@ -361,7 +361,14 @@ static void rmi_driver_set_input_name(struct rmi_device *rmi_dev,
 	const char *device_name = rmi_f01_get_product_ID(data->f01_container);
 	char *name;
 
-	name = devm_kasprintf(&rmi_dev->dev, GFP_KERNEL,
+	/*
+	 * Allocate the name string on the input device's parent rather than
+	 * rmi_dev->dev so that when the input device is supplied by a
+	 * transport driver (such as hid-rmi), the name string is not freed
+	 * when rmi_dev is torn down before the transport unregisters its
+	 * input device.
+	 */
+	name = devm_kasprintf(input->dev.parent, GFP_KERNEL,
 			      "Synaptics %s", device_name);
 	if (!name)
 		return;
