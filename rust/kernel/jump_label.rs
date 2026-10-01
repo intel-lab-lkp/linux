@@ -16,12 +16,15 @@
 ///
 /// # Safety
 ///
-/// The macro must be used with a real static key defined by C.
+/// The static variable must contain an initialized `static_key_false` at the specified field.
+/// Its storage must remain valid while the key is registered with the jump label code. Updates
+/// to the key must use the C static-key APIs.
 #[macro_export]
 macro_rules! static_branch_unlikely {
-    ($key:path, $keytyp:ty, $field:ident) => {{
+    ($key:path, $keytyp:ty, $($field:ident).+) => {{
         let _key: *const $keytyp = ::core::ptr::addr_of!($key);
-        let _key: *const $crate::bindings::static_key_false = ::core::ptr::addr_of!((*_key).$field);
+        let _key: *const $crate::bindings::static_key_false =
+            ::core::ptr::addr_of!((*_key)$(.$field)+);
         let _key: *const $crate::bindings::static_key = _key.cast();
 
         #[cfg(not(CONFIG_JUMP_LABEL))]
@@ -30,7 +33,7 @@ macro_rules! static_branch_unlikely {
         }
 
         #[cfg(CONFIG_JUMP_LABEL)]
-        $crate::jump_label::arch_static_branch! { $key, $keytyp, $field, false }
+        $crate::jump_label::arch_static_branch! { $key, $keytyp, $($field).+, false }
     }};
 }
 pub use static_branch_unlikely;
@@ -47,14 +50,14 @@ const _: &str = include!(concat!(
 #[cfg(not(testlib))]
 #[cfg(CONFIG_JUMP_LABEL)]
 macro_rules! arch_static_branch {
-    ($key:path, $keytyp:ty, $field:ident, $branch:expr) => {'my_label: {
+    ($key:path, $keytyp:ty, $($field:ident).+, $branch:expr) => {'my_label: {
         $crate::asm!(
             include!(concat!(env!("OBJTREE"), "/rust/kernel/generated_arch_static_branch_asm.rs"));
             l_yes = label {
                 break 'my_label true;
             },
             symb = sym $key,
-            off = const ::core::mem::offset_of!($keytyp, $field),
+            off = const ::core::mem::offset_of!($keytyp, $($field).+),
             branch = const $crate::jump_label::bool_to_int($branch),
         );
 
@@ -67,7 +70,7 @@ macro_rules! arch_static_branch {
 #[cfg(testlib)]
 #[cfg(CONFIG_JUMP_LABEL)]
 macro_rules! arch_static_branch {
-    ($key:path, $keytyp:ty, $field:ident, $branch:expr) => {
+    ($key:path, $keytyp:ty, $($field:ident).+, $branch:expr) => {
         // The asm falls through until patched, which never happens on the host.
         false
     };
