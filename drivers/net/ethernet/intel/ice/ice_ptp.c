@@ -2815,6 +2815,9 @@ s8 ice_ptp_request_ts(struct ice_ptp_tx *tx, struct sk_buff *skb)
 
 void ice_ptp_process_ts(struct ice_pf *pf)
 {
+	if (pf->ptp.state != ICE_PTP_READY)
+		return;
+
 	switch (pf->ptp.tx_interrupt_mode) {
 	case ICE_PTP_TX_INTERRUPT_NONE:
 		/* This device has the clock owner handle timestamps for it */
