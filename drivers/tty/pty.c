@@ -46,12 +46,29 @@ static DEFINE_MUTEX(devpts_mutex);
 
 static void pty_close(struct tty_struct *tty, struct file *filp)
 {
+	struct tty_file_private *priv = filp->private_data;
+	struct tty_file_private *other;
+	bool another_open = false;
+
 	if (tty->driver->subtype == PTY_TYPE_MASTER)
 		WARN_ON(tty->count > 1);
 	else {
-		if (tty_io_error(tty))
+		/* tty_release() also calls close after an unsuccessful open. */
+		if (!priv->pty_opened)
 			return;
-		if (tty->count > 2)
+		/* tty->count includes opens that have not succeeded yet. */
+		spin_lock(&tty->files_lock);
+		priv->pty_opened = false;
+		list_for_each_entry(other, &tty->tty_files, list) {
+			if (other->pty_opened) {
+				another_open = true;
+				break;
+			}
+		}
+		spin_unlock(&tty->files_lock);
+		if (another_open)
+			return;
+		if (tty_io_error(tty))
 			return;
 	}
 	set_bit(TTY_IO_ERROR, &tty->flags);
@@ -220,14 +237,23 @@ static int pty_open(struct tty_struct *tty, struct file *filp)
 
 	if (test_bit(TTY_OTHER_CLOSED, &tty->flags))
 		goto out;
+	/* A rejected open must not disrupt already-open slave descriptors. */
 	if (test_bit(TTY_PTY_LOCK, &tty->link->flags))
-		goto out;
+		return -EIO;
 	if (tty->driver->subtype == PTY_TYPE_SLAVE && tty->link->count != 1)
 		goto out;
 
 	clear_bit(TTY_IO_ERROR, &tty->flags);
 	clear_bit(TTY_OTHER_CLOSED, &tty->link->flags);
 	set_bit(TTY_THROTTLED, &tty->flags);
+	/* Record a successful open before another slave can close. */
+	if (tty->driver->subtype == PTY_TYPE_SLAVE) {
+		struct tty_file_private *priv = filp->private_data;
+
+		spin_lock(&tty->files_lock);
+		priv->pty_opened = true;
+		spin_unlock(&tty->files_lock);
+	}
 	return 0;
 
 out:
