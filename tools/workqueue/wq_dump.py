@@ -24,7 +24,7 @@ Worker Pools
 Lists all worker pools indexed by their ID. For each pool:
 
   ref       number of pool_workqueue's associated with this pool
-  nice      nice value of the worker threads in the pool
+  prio      priority of the worker threads in the pool
   idle      number of idle workers
   workers   number of all workers
   cpu       CPU the pool is associated with (per-cpu pool)
@@ -122,6 +122,8 @@ POOL_BH                 = prog['POOL_BH']
 WQ_NAME_LEN             = prog['WQ_NAME_LEN'].value_()
 cpumask_str_len         = len(cpumask_str(wq_unbound_cpumask))
 
+rt_prio = prog.constant('RT_PRIORITY', filename='kernel/workqueue.c')
+
 print('Affinity Scopes')
 print('===============')
 
@@ -163,7 +165,10 @@ for pi, pool in idr_for_each(worker_pool_idr):
 
 for pi, pool in idr_for_each(worker_pool_idr):
     pool = drgn.Object(prog, 'struct worker_pool', address=pool)
-    print(f'pool[{pi:0{max_pool_id_len}}] flags=0x{pool.flags.value_():02x} ref={pool.refcnt.value_():{max_ref_len}} nice={pool.attrs.nice.value_():3} ', end='')
+    prio = pool.attrs.prio.value_()
+    if prio == rt_prio:
+        prio = 'rt'
+    print(f'pool[{pi:0{max_pool_id_len}}] flags=0x{pool.flags.value_():02x} ref={pool.refcnt.value_():{max_ref_len}} prio={prio:3} ', end='')
     print(f'idle/workers={pool.nr_idle.value_():3}/{pool.nr_workers.value_():3} ', end='')
     if pool.cpu >= 0:
         print(f'cpu={pool.cpu.value_():3}', end='')
