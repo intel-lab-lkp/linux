@@ -2320,6 +2320,12 @@ static void resctrl_kmode_init(void)
 	resctrl_kmode.mon = KMODE_ASSIGN;
 }
 
+void resctrl_set_kmode_support(enum resctrl_kernel_mode kmode)
+{
+	if (kmode < RESCTRL_NUM_KERNEL_MODES)
+		__set_bit(kmode, resctrl_kmode.kmode_sup);
+}
+
 void resctrl_file_fflags_init(const char *config, unsigned long fflags)
 {
 	struct rftype *rft;

@@ -734,6 +734,21 @@ enum resctrl_kernel_mode {
 #define RESCTRL_NUM_KERNEL_MODES (RESCTRL_KMODE_LAST + 1)
 
 /**
+ * resctrl_set_kmode_support() - Register a supported kernel mode
+ * @kmode:	Kernel mode supported by the architecture.
+ *
+ * RESCTRL_INHERIT_USER is registered by resctrl_kmode_init() and does
+ * not need to be registered again.
+ *
+ * Architectures use this interface during resctrl initialization to
+ * advertise supported kernel modes. Registration of a mode indicates
+ * architectural support only. The final decision to expose and enable
+ * a mode is made by resctrl based on system capabilities and
+ * configuration.
+ */
+void resctrl_set_kmode_support(enum resctrl_kernel_mode kmode);
+
+/**
  * resctrl_arch_configure_kmode_global() - Program RESCTRL_GLOBAL_ENABLE_PER_CPU
  *
  * @cpu_mask:	CPUs whose kernel-mode association should be updated.
