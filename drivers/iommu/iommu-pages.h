@@ -55,6 +55,8 @@ static inline struct ioptdesc *virt_to_ioptdesc(void *virt)
 	return folio_ioptdesc(virt_to_folio(virt));
 }
 
+void *iommu_alloc_pages_node_sz_attributed(struct iommu_domain *domain, int nid,
+					   gfp_t gfp, size_t size);
 void *iommu_alloc_pages_node_sz(int nid, gfp_t gfp, size_t size);
 void iommu_free_pages(void *virt);
 void iommu_put_pages_list(struct iommu_pages_list *list);
@@ -105,6 +107,21 @@ static inline bool iommu_pages_list_empty(struct iommu_pages_list *list)
 static inline void *iommu_alloc_pages_sz(gfp_t gfp, size_t size)
 {
 	return iommu_alloc_pages_node_sz(NUMA_NO_NODE, gfp, size);
+}
+
+/**
+ * iommu_alloc_pages_sz_attributed - Allocate a zeroed page of a given size from
+ *                                   specific NUMA node for a specific domain
+ * @domain: iommu domain
+ * @gfp: buddy allocator flags
+ * @size: Memory size to allocate, this is rounded up to a power of 2
+ *
+ * Returns the virtual address of the allocated page.
+ */
+static inline void *iommu_alloc_pages_sz_attributed(struct iommu_domain *domain,
+						    gfp_t gfp, size_t size)
+{
+	return iommu_alloc_pages_node_sz_attributed(domain, NUMA_NO_NODE, gfp, size);
 }
 
 int iommu_pages_start_incoherent(void *virt, struct device *dma_dev);

@@ -29,8 +29,10 @@ static inline size_t ioptdesc_mem_size(struct ioptdesc *desc)
 }
 
 /**
- * iommu_alloc_pages_node_sz - Allocate a zeroed page of a given size from
- *                             specific NUMA node
+ * iommu_alloc_pages_node_sz_attributed - Allocate a zeroed page of a given size
+ *                                        from specific NUMA node for a specific
+ *                                        iommu domain
+ * @domain: IOMMU domain to which the page will belong
  * @nid: memory NUMA node id
  * @gfp: buddy allocator flags
  * @size: Memory size to allocate, rounded up to a power of 2
@@ -40,7 +42,8 @@ static inline size_t ioptdesc_mem_size(struct ioptdesc *desc)
  * returned allocation is round_up_pow_two(size) big, and is physically aligned
  * to its size.
  */
-void *iommu_alloc_pages_node_sz(int nid, gfp_t gfp, size_t size)
+void *iommu_alloc_pages_node_sz_attributed(struct iommu_domain *domain, int nid,
+					   gfp_t gfp, size_t size)
 {
 	struct ioptdesc *iopt;
 	unsigned long pgcnt;
@@ -83,7 +86,29 @@ void *iommu_alloc_pages_node_sz(int nid, gfp_t gfp, size_t size)
 	mod_node_page_state(folio_pgdat(folio), NR_IOMMU_PAGES, pgcnt);
 	lruvec_stat_mod_folio(folio, NR_SECONDARY_PAGETABLE, pgcnt);
 
+	iopt->domain = domain;
+	if (domain)
+		atomic_long_add(pgcnt, &domain->nr_pages);
+
 	return folio_address(folio);
+}
+EXPORT_SYMBOL_GPL(iommu_alloc_pages_node_sz_attributed);
+
+/**
+ * iommu_alloc_pages_node_sz - Allocate a zeroed page of a given size from
+ *                             specific NUMA node
+ * @nid: memory NUMA node id
+ * @gfp: buddy allocator flags
+ * @size: Memory size to allocate, rounded up to a power of 2
+ *
+ * Returns the virtual address of the allocated page. The page must be freed
+ * either by calling iommu_free_pages() or via iommu_put_pages_list(). The
+ * returned allocation is round_up_pow_two(size) big, and is physically aligned
+ * to its size.
+ */
+void *iommu_alloc_pages_node_sz(int nid, gfp_t gfp, size_t size)
+{
+	return iommu_alloc_pages_node_sz_attributed(NULL, nid, gfp, size);
 }
 EXPORT_SYMBOL_GPL(iommu_alloc_pages_node_sz);
 
@@ -91,9 +116,13 @@ static void __iommu_free_desc(struct ioptdesc *iopt)
 {
 	struct folio *folio = ioptdesc_folio(iopt);
 	const unsigned long pgcnt = folio_nr_pages(folio);
+	struct iommu_domain *domain = iopt->domain;
 
 	if (IOMMU_PAGES_USE_DMA_API)
 		WARN_ON_ONCE(iopt->incoherent);
+
+	if (domain)
+		atomic_long_sub(pgcnt, &domain->nr_pages);
 
 	mod_node_page_state(folio_pgdat(folio), NR_IOMMU_PAGES, -pgcnt);
 	lruvec_stat_mod_folio(folio, NR_SECONDARY_PAGETABLE, -pgcnt);
