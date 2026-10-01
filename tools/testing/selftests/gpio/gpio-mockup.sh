@@ -310,6 +310,16 @@ insmod_test()
 	remove_module || fail "failed to remove module with error $?"
 }
 
+# Load the module with the given ranges and check that it is rejected.
+insmod_fail_test()
+{
+	local ranges=$1
+
+	if modprobe -q $module "gpio_mockup_ranges=$ranges"; then
+		fail "insert $module with ranges <$ranges> did not fail"
+	fi
+}
+
 while getopts ":frvt:" opt; do
 	case $opt in
 	f)
@@ -378,7 +388,7 @@ if [ "$full_test" ]; then
 fi
 echo "2.  Module load error tests"
 echo "2.1 no lines defined"
-insmod_test "0,0"
+insmod_fail_test "0,0"
 if [ "$full_test" ]; then
 	echo "2.2 ignore range overlap"
 	insmod_test "0,32,0,1" 32
