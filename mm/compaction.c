@@ -82,6 +82,15 @@ static inline bool is_via_compact_memory(int order) { return false; }
 #define COMPACTION_HPAGE_ORDER	(PMD_SHIFT - PAGE_SHIFT)
 #endif
 
+static inline bool mthp_always_enabled(void)
+{
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+	return !!READ_ONCE(huge_anon_orders_always);
+#else
+	return false;
+#endif
+}
+
 static inline int compact_hpage_order(void)
 {
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
@@ -839,6 +848,12 @@ static bool skip_isolation_on_order(int order, int target_order)
 	 */
 	if (!is_via_compact_memory(target_order) && order >= target_order)
 		return true;
+
+	/* We are compacting for multi-size THP allocation */
+	if (is_via_compact_memory(target_order) && order >= compact_hpage_order() &&
+	    mthp_always_enabled())
+		return true;
+
 	/*
 	 * We limit memory compaction to pageblocks and won't try
 	 * creating free blocks of memory that are larger than that.
