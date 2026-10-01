@@ -168,6 +168,18 @@ static void cst816x_reset(struct cst816x_priv *priv)
 	msleep(100);
 }
 
+static void cst816x_release_keys(struct cst816x_priv *priv)
+{
+	unsigned int i;
+
+	for (i = 0; i < priv->keycodemax; i++) {
+		if (!test_bit(priv->keycode[i], priv->input->key))
+			continue;
+
+		input_report_key(priv->input, priv->keycode[i], 0);
+	}
+}
+
 static irqreturn_t cst816x_irq_cb(int irq, void *cookie)
 {
 	struct cst816x_priv *priv = cookie;
@@ -181,8 +193,9 @@ static irqreturn_t cst816x_irq_cb(int irq, void *cookie)
 
 	if (tch.gest)
 		input_report_key(priv->input,
-				 priv->keycode[cst816x_gest_idx(tch.gest)],
-				 tch.active);
+				 priv->keycode[cst816x_gest_idx(tch.gest)], 1);
+	else
+		cst816x_release_keys(priv);
 
 	input_report_key(priv->input, BTN_TOUCH, tch.active);
 
