@@ -1636,8 +1636,13 @@ static int io_vec_fill_kern_bvec(int ddir, struct iov_iter *iter,
 		struct bio_vec bv;
 
 		bvec_iter_advance(src_bvec, &bi, offset);
-		for_each_mp_bvec(bv, src_bvec, bi, bi)
+		while (bi.bi_size) {
+			if (bi.bi_idx >= imu->nr_bvecs)
+				return -EFAULT;
+			bv = mp_bvec_iter_bvec(src_bvec, bi);
 			res_bvec[res_idx++] = bv;
+			bvec_iter_advance_single(src_bvec, &bi, bv.bv_len);
+		}
 		total_len += iov_len;
 	}
 	iov_iter_bvec(iter, ddir, res_bvec, res_idx, total_len);
