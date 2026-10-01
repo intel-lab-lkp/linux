@@ -966,25 +966,25 @@
 		 */
 		mux0-pins {
 			pins =
-			    /* "gpio39", CS1A_N this is not good to mux */
-			    "gpio40", /* CS2A_N */
-			    "gpio134"; /* CS0_N testpoint TP29 */
+				/* "gpio39", CS1A_N this is not good to mux */
+				"gpio40", /* CS2A_N */
+				"gpio134"; /* CS0_N testpoint TP29 */
 			function = "ebi2cs";
 		};
 
 		mux1-pins {
 			pins =
-			    /* EBI2_ADDR_7 downto EBI2_ADDR_0 address bus */
-			    "gpio123", "gpio124", "gpio125", "gpio126",
-			    "gpio127", "gpio128", "gpio129", "gpio130",
-			    /* EBI2_DATA_15 downto EBI2_DATA_0 data bus */
-			    "gpio135", "gpio136", "gpio137", "gpio138",
-			    "gpio139", "gpio140", "gpio141", "gpio142",
-			    "gpio143", "gpio144", "gpio145", "gpio146",
-			    "gpio147", "gpio148", "gpio149", "gpio150",
-			    "gpio151", /* EBI2_OE_N */
-			    "gpio153", /* EBI2_ADV */
-			    "gpio157"; /* EBI2_WE_N */
+				/* EBI2_ADDR_7 downto EBI2_ADDR_0 address bus */
+				"gpio123", "gpio124", "gpio125", "gpio126",
+				"gpio127", "gpio128", "gpio129", "gpio130",
+				/* EBI2_DATA_15 downto EBI2_DATA_0 data bus */
+				"gpio135", "gpio136", "gpio137", "gpio138",
+				"gpio139", "gpio140", "gpio141", "gpio142",
+				"gpio143", "gpio144", "gpio145", "gpio146",
+				"gpio147", "gpio148", "gpio149", "gpio150",
+				"gpio151", /* EBI2_OE_N */
+				"gpio153", /* EBI2_ADV */
+				"gpio157"; /* EBI2_WE_N */
 			function = "ebi2";
 		};
 	};
