@@ -76,6 +76,9 @@ static void rdtgroup_destroy_root(void);
 
 struct dentry *debugfs_resctrl;
 
+/* Kernel mode for this system. */
+static struct resctrl_kmode_cfg resctrl_kmode;
+
 /*
  * Memory bandwidth monitoring event to use for the default CTRL_MON group
  * and each new CTRL_MON group created by the user.  Only relevant when
@@ -2295,6 +2298,26 @@ static void io_alloc_init(void)
 		resctrl_file_fflags_init("io_alloc_cbm",
 					 RFTYPE_CTRL_INFO | RFTYPE_RES_CACHE);
 	}
+}
+
+/*
+ * Set RESCTRL_INHERIT_USER as the default when the platform supports
+ * allocation or monitoring. Otherwise leave kernel mode unsupported.
+ */
+static void resctrl_kmode_init(void)
+{
+	if (!resctrl_arch_alloc_capable() && !resctrl_arch_mon_capable())
+		return;
+
+	resctrl_kmode.kmode_cur = RESCTRL_INHERIT_USER;
+	__set_bit(RESCTRL_INHERIT_USER, resctrl_kmode.kmode_sup);
+
+	/*
+	 * Defaults used when RESCTRL_GLOBAL_ENABLE_PER_CPU mode is
+	 * activated without new values.
+	 */
+	resctrl_kmode.ctrl = KMODE_ASSIGN;
+	resctrl_kmode.mon = KMODE_ASSIGN;
 }
 
 void resctrl_file_fflags_init(const char *config, unsigned long fflags)
@@ -4815,6 +4838,8 @@ int resctrl_init(void)
 	ret = resctrl_l3_mon_resource_init();
 	if (ret)
 		return ret;
+
+	resctrl_kmode_init();
 
 	ret = sysfs_create_mount_point(fs_kobj, "resctrl");
 	if (ret) {
