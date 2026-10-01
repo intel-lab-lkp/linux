@@ -1481,13 +1481,13 @@ static const struct edac_device_prv_data a10_qspiecc_data = {
 #ifdef CONFIG_EDAC_ALTERA_SDMMC
 
 static const struct edac_device_prv_data a10_sdmmceccb_data;
-static int altr_portb_setup(struct altr_edac_device_dev *device)
+static int altr_portb_setup(struct altr_edac_device_dev *device,
+			    struct device_node *np)
 {
 	struct edac_device_ctl_info *dci;
 	struct altr_edac_device_dev *altdev;
 	char *ecc_name = "sdmmcb-ecc";
 	int edac_idx, rc;
-	struct device_node *np;
 	const struct edac_device_prv_data *prv = &a10_sdmmceccb_data;
 	bool is_s10 = device->edac->is_s10;
 
@@ -1495,18 +1495,11 @@ static int altr_portb_setup(struct altr_edac_device_dev *device)
 	if (rc)
 		return rc;
 
-	np = of_find_compatible_node(NULL, NULL, "altr,socfpga-sdmmc-ecc");
-	if (!np) {
-		edac_printk(KERN_WARNING, EDAC_DEVICE, "SDMMC node not found\n");
-		return -ENODEV;
-	}
-
 	/* Create the PortB EDAC device */
 	edac_idx = edac_device_alloc_index();
 	dci = edac_device_alloc_ctl_info(sizeof(*altdev), ecc_name, 1,
 					 ecc_name, 1, 0, edac_idx);
 	if (!dci) {
-		of_node_put(np);
 		edac_printk(KERN_ERR, EDAC_DEVICE,
 			    "%s: Unable to allocate PortB EDAC device\n",
 			    ecc_name);
@@ -1518,9 +1511,8 @@ static int altr_portb_setup(struct altr_edac_device_dev *device)
 	*altdev = *device;
 
 	if (!devres_open_group(device->edac->dev, altr_portb_setup, GFP_KERNEL)) {
-		edac_device_free_ctl_info(dci);
-		of_node_put(np);
-		return -ENOMEM;
+		rc = -ENOMEM;
+		goto err_free_dci;
 	}
 
 	/* Update PortB specific values */
@@ -1534,26 +1526,22 @@ static int altr_portb_setup(struct altr_edac_device_dev *device)
 	dci->dev_name = ecc_name;
 
 	/*
-	 * Update the PortB IRQs - A10 has 4, S10 has 2, Index accordingly
+	 * Arria10 lists four interrupts (PortA SBE/DBE, PortB SBE/DBE),
+	 * Stratix10 lists two (PortA, PortB).
 	 */
-
-	/* Using compatibles to determine the IRQ Index */
-	if (is_s10)
-		altdev->sb_irq = irq_of_parse_and_map(np, 1);
-	else
-		altdev->sb_irq = irq_of_parse_and_map(np, 2);
+	altdev->sb_irq = irq_of_parse_and_map(np, is_s10 ? 1 : 2);
 
 	if (!altdev->sb_irq) {
 		edac_printk(KERN_ERR, EDAC_DEVICE, "Error PortB SBIRQ alloc\n");
 		rc = -ENODEV;
-		goto err_release_group_1;
+		goto err_release_group;
 	}
 	rc = devm_request_irq(device->edac->dev, altdev->sb_irq,
 			      prv->ecc_irq_handler, IRQF_TRIGGER_HIGH,
 			      ecc_name, altdev);
 	if (rc) {
 		edac_printk(KERN_ERR, EDAC_DEVICE, "PortB SBERR IRQ error\n");
-		goto err_release_group_1;
+		goto err_release_group;
 	}
 
 	if (is_s10) {
@@ -1561,21 +1549,21 @@ static int altr_portb_setup(struct altr_edac_device_dev *device)
 		rc = of_property_read_u32_index(np, "interrupts", 1, &altdev->db_irq);
 		if (rc) {
 			edac_printk(KERN_ERR, EDAC_DEVICE, "Error PortB DBIRQ alloc\n");
-			goto err_release_group_1;
+			goto err_release_group;
 		}
 	} else {
 		altdev->db_irq = irq_of_parse_and_map(np, 3);
 		if (!altdev->db_irq) {
 			edac_printk(KERN_ERR, EDAC_DEVICE, "Error PortB DBIRQ alloc\n");
 			rc = -ENODEV;
-			goto err_release_group_1;
+			goto err_release_group;
 		}
 		rc = devm_request_irq(device->edac->dev, altdev->db_irq,
 				      prv->ecc_irq_handler, IRQF_TRIGGER_HIGH,
 				      ecc_name, altdev);
 		if (rc) {
 			edac_printk(KERN_ERR, EDAC_DEVICE, "PortB DBERR IRQ error\n");
-			goto err_release_group_1;
+			goto err_release_group;
 		}
 	}
 
@@ -1584,9 +1572,8 @@ static int altr_portb_setup(struct altr_edac_device_dev *device)
 		edac_printk(KERN_ERR, EDAC_DEVICE,
 			    "edac_device_add_device portB failed\n");
 		rc = -ENOMEM;
-		goto err_release_group_1;
+		goto err_release_group;
 	}
-	of_node_put(np);
 
 	altr_create_edacdev_dbgfs(dci, prv);
 
@@ -1596,15 +1583,15 @@ static int altr_portb_setup(struct altr_edac_device_dev *device)
 
 	return 0;
 
-err_release_group_1:
+err_release_group:
 	/*
 	 * Release the devres group first so the managed IRQs are
 	 * unregistered before dci (which contains the IRQ handler's
 	 * data via dci->pvt_info) is freed, avoiding a use-after-free.
 	 */
 	devres_release_group(device->edac->dev, altr_portb_setup);
+err_free_dci:
 	edac_device_free_ctl_info(dci);
-	of_node_put(np);
 	edac_printk(KERN_ERR, EDAC_DEVICE,
 		    "%s:Error setting up EDAC device: %d\n", ecc_name, rc);
 	return rc;
@@ -1632,7 +1619,7 @@ static int socfpga_init_sdmmc_ecc(struct altr_edac_device_dev *device)
 		goto exit;
 
 	/* Setup portB */
-	rc = altr_portb_setup(device);
+	rc = altr_portb_setup(device, child);
 
 exit:
 	of_node_put(child);
