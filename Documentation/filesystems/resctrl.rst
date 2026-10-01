@@ -528,6 +528,54 @@ conveyed in the error returns from file operations. E.g.
 	# cat info/last_cmd_status
 	mask f7 has non-consecutive 1-bits
 
+"kernel_mode":
+	In the top level of the "info" directory, "kernel_mode" lists the
+	kernel modes supported by the system, one per line, with the active
+	mode enclosed in square brackets. A kernel mode determines the
+	allocation and monitoring associations when a task switches from
+	user mode to kernel mode.
+
+	Possible kernel modes are:
+
+	"inherit_user":
+		Kernel mode work uses the allocation and monitoring associations
+		of the user-space task on whose behalf it runs.
+
+	"global_enable_per_cpu":
+		Kernel mode work uses the allocation and/or monitoring
+		association of a backing CTRL_MON or MON group. The mode can
+		be activated or deactivated per CPU. The line contains group=
+		and whichever of ctrl= and mon= the platform supports::
+
+		  global_enable_per_cpu:ctrl=<assign|inherit>;mon=<assign|inherit>;group=<CTRL_MON>/<MON>/
+
+		"ctrl":
+			"assign" if kernel mode work uses the allocation
+			association of the resource group named by "group",
+			"inherit" if it uses the allocation association of
+			the user-space task. Present only on systems that
+			support allocation.
+		"mon":
+			"assign" if kernel mode work uses the monitoring
+			association of the resource group named by "group",
+			"inherit" if it uses the monitoring association of
+			the user-space task. Present only on systems that
+			support monitoring.
+		"group":
+			Path of the resource group, relative to the resctrl
+			mount point. A CTRL_MON group is shown as <CTRL_MON>//,
+			a MON group as <CTRL_MON>/<MON>/.
+
+		When the mode is not active, the parameters are the defaults
+		used if it is activated without new values.
+
+	Example of a system that supports allocation and monitoring, with
+	default mode inherit_user::
+
+	  # cat info/kernel_mode
+	  [inherit_user]
+	  global_enable_per_cpu:ctrl=assign;mon=assign;group=//
+
 Resource alloc and monitor groups
 =================================
 

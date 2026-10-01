@@ -993,6 +993,99 @@ static int rdt_last_cmd_status_show(struct kernfs_open_file *of,
 	return 0;
 }
 
+/* Names used in info/kernel_mode; indexed by enum resctrl_kernel_mode */
+static const char * const resctrl_kmode_str[] = {
+	[RESCTRL_INHERIT_USER]		= "inherit_user",
+	[RESCTRL_GLOBAL_ENABLE_PER_CPU]	= "global_enable_per_cpu"
+};
+
+static_assert(ARRAY_SIZE(resctrl_kmode_str) == RESCTRL_NUM_KERNEL_MODES);
+
+static const char *resctrl_kmode_state_str(enum kmode_state state)
+{
+	return state == KMODE_ASSIGN ? "assign" : "inherit";
+}
+
+static void resctrl_kmode_group_path(struct rdtgroup *rdtgrp,
+				     const char **ctrl, const char **mon)
+{
+	*ctrl = "";
+	*mon = "";
+
+	if (rdtgrp->type == RDTMON_GROUP) {
+		*ctrl = rdt_kn_name(rdtgrp->mon.parent->kn);
+		*mon = rdt_kn_name(rdtgrp->kn);
+	} else {
+		*ctrl = rdt_kn_name(rdtgrp->kn);
+	}
+}
+
+/**
+ * resctrl_kernel_mode_show() - Display supported and active kernel modes
+ * @of:		kernfs open file
+ * @seq:	output seq_file
+ * @v:		unused
+ *
+ * Lists one line per mode and brackets the active mode. inherit_user
+ * has no parameters. global_enable_per_cpu prints ctrl= only when
+ * allocation is supported and mon= only when monitoring is supported,
+ * then group=.
+ *
+ * Return: 0 on success, or -ENOENT on error.
+ */
+static int resctrl_kernel_mode_show(struct kernfs_open_file *of,
+				    struct seq_file *seq, void *v)
+{
+	const char *ctrl_grp, *mon_grp;
+	enum resctrl_kernel_mode mode;
+	bool active;
+	char sep;
+
+	if (!info_kn_lock(of->kn))
+		return -ENOENT;
+
+	for (mode = 0; mode < RESCTRL_NUM_KERNEL_MODES; mode++) {
+		if (!test_bit(mode, resctrl_kmode.kmode_sup))
+			continue;
+
+		active = resctrl_kmode.kmode_cur == mode;
+
+		seq_printf(seq, active ? "[%s" : "%s", resctrl_kmode_str[mode]);
+
+		if (mode == RESCTRL_GLOBAL_ENABLE_PER_CPU) {
+			ctrl_grp = "";
+			mon_grp = "";
+			if (active) {
+				if (resctrl_kmode.rdtgrp)
+					resctrl_kmode_group_path(resctrl_kmode.rdtgrp,
+								 &ctrl_grp, &mon_grp);
+				else
+					pr_warn("%s active without a resource group\n",
+						resctrl_kmode_str[mode]);
+			}
+
+			sep = ':';
+			if (resctrl_arch_alloc_capable()) {
+				seq_printf(seq, "%cctrl=%s", sep,
+					   resctrl_kmode_state_str(resctrl_kmode.ctrl));
+				sep = ';';
+			}
+			if (resctrl_arch_mon_capable()) {
+				seq_printf(seq, "%cmon=%s", sep,
+					   resctrl_kmode_state_str(resctrl_kmode.mon));
+				sep = ';';
+			}
+			seq_printf(seq, "%cgroup=%s/%s/", sep, ctrl_grp, mon_grp);
+		}
+
+		seq_puts(seq, active ? "]\n" : "\n");
+	}
+
+	info_kn_unlock(of->kn);
+
+	return 0;
+}
+
 void *rdt_kn_parent_priv(struct kernfs_node *kn)
 {
 	/*
@@ -1976,6 +2069,13 @@ static struct rftype res_common_files[] = {
 		.mode		= 0444,
 		.kf_ops		= &rdtgroup_kf_single_ops,
 		.seq_show	= rdt_last_cmd_status_show,
+		.fflags		= RFTYPE_TOP_INFO,
+	},
+	{
+		.name		= "kernel_mode",
+		.mode		= 0444,
+		.kf_ops		= &rdtgroup_kf_single_ops,
+		.seq_show	= resctrl_kernel_mode_show,
 		.fflags		= RFTYPE_TOP_INFO,
 	},
 	{
