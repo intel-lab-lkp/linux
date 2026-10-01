@@ -178,6 +178,7 @@ struct tlbi_domain {
 	u16 id;
 	cpumask_var_t cpus;
 };
+int arm64_tlbid_init(struct tlbi_domain *domains, int count);
 #endif
 
 #define ACPI_TABLE_UPGRADE_MAX_PHYS MEMBLOCK_ALLOC_ACCESSIBLE

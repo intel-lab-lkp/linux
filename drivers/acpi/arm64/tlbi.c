@@ -185,4 +185,12 @@ void __init acpi_tlbi_init(void)
 			pr_err("Failed to parse ACPI table\n");
 		return;
 	}
+
+	ret = arm64_tlbid_init(domains, domain_count);
+	if (ret)
+		pr_err("Failed to initialize domains\n");
+
+	for (int i = 0; i < domain_count; i++)
+		free_cpumask_var(domains[i].cpus);
+	kfree(domains);
 }
