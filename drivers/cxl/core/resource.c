@@ -115,16 +115,21 @@ int cxl_hdm_unpack_decoder(struct cxl_decoder_settings *settings, int id,
 	int interleave_ways;
 	unsigned long flags = 0;
 	struct range hpa_range;
+	u64 end;
 	int rc;
 
 	if (!committed)
 		size = 0;
 	if (base == U64_MAX || size == U64_MAX)
 		return -ENXIO;
+	if (size && check_add_overflow(base, size - 1, &end))
+		return -ENXIO;
+	if (!size)
+		end = base - 1;
 
 	hpa_range = (struct range) {
 		.start = base,
-		.end = base + size - 1,
+		.end = end,
 	};
 
 	if (committed) {
