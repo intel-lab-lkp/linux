@@ -651,17 +651,18 @@ static int live_emit_pte_full_ring(void *arg)
 	len = emit_pte(rq, &it, obj->pat_index, false, 0, CHUNK_SZ);
 	if (!len) {
 		err = -EINVAL;
-		goto out_rq;
+		goto out_timer;
 	}
 	if (len < 0) {
 		err = len;
-		goto out_rq;
+		goto out_timer;
 	}
 
-out_rq:
-	i915_request_add(rq); /* GEM_BUG_ON(rq->reserved_space > ring->space)? */
+out_timer:
 	timer_delete_sync(&st.timer);
 	timer_destroy_on_stack(&st.timer);
+out_rq:
+	i915_request_add(rq); /* GEM_BUG_ON(rq->reserved_space > ring->space)? */
 out_unpin:
 	intel_context_unpin(ce);
 out_put:
