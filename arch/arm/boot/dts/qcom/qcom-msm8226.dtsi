@@ -1483,12 +1483,12 @@
 	timer {
 		compatible = "arm,armv7-timer";
 		interrupts = <GIC_PPI 2
-				(GIC_CPU_MASK_RAW(15) | IRQ_TYPE_LEVEL_LOW)>,
+			      (GIC_CPU_MASK_RAW(15) | IRQ_TYPE_LEVEL_LOW)>,
 			     <GIC_PPI 3
-				(GIC_CPU_MASK_RAW(15) | IRQ_TYPE_LEVEL_LOW)>,
+			      (GIC_CPU_MASK_RAW(15) | IRQ_TYPE_LEVEL_LOW)>,
 			     <GIC_PPI 4
-				(GIC_CPU_MASK_RAW(15) | IRQ_TYPE_LEVEL_LOW)>,
+			      (GIC_CPU_MASK_RAW(15) | IRQ_TYPE_LEVEL_LOW)>,
 			     <GIC_PPI 1
-				(GIC_CPU_MASK_RAW(15) | IRQ_TYPE_LEVEL_LOW)>;
+			      (GIC_CPU_MASK_RAW(15) | IRQ_TYPE_LEVEL_LOW)>;
 	};
 };
