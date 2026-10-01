@@ -278,8 +278,9 @@
 
 	cpu-pmu {
 		compatible = "qcom,krait-pmu";
-		interrupts = <GIC_PPI 10 (GIC_CPU_MASK_SIMPLE(2) |
-					  IRQ_TYPE_LEVEL_HIGH)>;
+		interrupts = <
+			GIC_PPI 10 (GIC_CPU_MASK_SIMPLE(2) | IRQ_TYPE_LEVEL_HIGH)
+		>;
 	};
 
 	reserved-memory {
