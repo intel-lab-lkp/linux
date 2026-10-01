@@ -31,6 +31,7 @@
 #include <asm/thread_info.h>
 #include <asm/sn/launch.h>
 #include <asm/sn/mapped_kernel.h>
+#include <asm/xtalk/xwidget.h>
 
 #include "ip27-common.h"
 
@@ -38,6 +39,7 @@
 
 static DECLARE_BITMAP(hub_init_mask, MAX_NUMNODES);
 nasid_t master_nasid = INVALID_NASID;
+bool system_is_ip35;
 
 struct cpuinfo_ip27 sn_cpu_info[NR_CPUS];
 EXPORT_SYMBOL_GPL(sn_cpu_info);
@@ -139,8 +141,15 @@ const char *get_system_type(void)
 	return "SGI Origin";
 }
 
+static inline bool hub_is_bedrock(void)
+{
+	return XWIDGET_PART_NUM(LOCAL_HUB_L(IIO_WID)) == WIDGET_BDRCK_PART_NUM;
+}
+
 void __init prom_init(void)
 {
+	system_is_ip35 = hub_is_bedrock();
+
 	prom_init_cmdline(fw_arg0, (LONG *)fw_arg1);
 	prom_meminit();
 }

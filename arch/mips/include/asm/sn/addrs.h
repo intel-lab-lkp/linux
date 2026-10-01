@@ -35,6 +35,12 @@
 
 #endif /* __ASSEMBLER__ */
 
+#ifndef __ASSEMBLER__
+
+extern bool system_is_ip35;
+
+#endif /* __ASSEMBLER__ */
+
 
 #define NASID_GET_META(_n)	((_n) >> NASID_LOCAL_BITS)
 #ifdef CONFIG_SGI_IP27
