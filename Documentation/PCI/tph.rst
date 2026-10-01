@@ -125,6 +125,38 @@ been changed. Here is a sample code for IRQ affinity notifier:
              return;
     }
 
+Inspect the firmware ST mapping
+-------------------------------
+
+When firmware provides the ST _DSM, the CPU to ST mapping it returns is
+exposed read-only under debugfs, in the directory of each Root Port::
+
+  /sys/kernel/debug/pci/<domain:bus:device.function>/tph_cpu_st
+
+Each file holds one line per online CPU::
+
+  # cat /sys/kernel/debug/pci/0000:00:01.1/tph_cpu_st
+  cpu  vm_st  vm_xst vm_ph_ignore pm_st  pm_xst pm_ph_ignore
+  0    0x03   0x0103 0            -      -      0
+  1    0x03   0x0103 0            -      -      0
+
+``vm_*`` and ``pm_*`` refer to volatile and persistent memory, ``*_st`` and
+``*_xst`` are the 8-bit and 16-bit (extended) Steering Tags, and
+``*_ph_ignore`` reports whether the Processing Hint is ignored by the
+platform. Steering Tags that firmware marks as invalid, and CPUs whose
+query fails, are shown as ``-``.
+
+The _DSM is evaluated on the ACPI device of the host bridge above the Root
+Port, so all Root Ports below the same host bridge report the same mapping.
+The file is per Root Port because that is the granularity drivers see: the
+mapping that applies to a device is the one in the directory of the Root
+Port the device sits below.
+
+Tags are queried on read rather than cached, so the output always matches
+what pcie_tph_get_cpu_st() would return at that moment.  The list of CPUs
+is a snapshot; CPUs that come or go while the file is being read may be
+missing from the output.
+
 Disable TPH system-wide
 -----------------------
 

@@ -6,11 +6,14 @@
  *     Eric Van Tassell <Eric.VanTassell@amd.com>
  *     Wei Huang <wei.huang2@amd.com>
  */
+#include <linux/cpu.h>
+#include <linux/debugfs.h>
 #include <linux/pci.h>
 #include <linux/pci-acpi.h>
 #include <linux/msi.h>
 #include <linux/bitfield.h>
 #include <linux/pci-tph.h>
+#include <linux/seq_file.h>
 
 #include "pci.h"
 
@@ -172,6 +175,133 @@ static int tph_get_cpu_st_info(struct pci_dev *pdev, unsigned int cpu,
 	return 0;
 }
 #endif
+
+#if defined(CONFIG_ACPI) && defined(CONFIG_DEBUG_FS)
+/* Longest Steering Tag string is "0xffff" */
+#define TPH_ST_STR_SIZE		7
+
+static bool tph_dsm_supported(struct pci_dev *pdev)
+{
+	acpi_handle handle = tph_dsm_handle(pdev);
+
+	if (!handle)
+		return false;
+
+	return acpi_check_dsm(handle, &pci_acpi_dsm_guid, TPH_ST_DSM_REV,
+			      BIT(TPH_ST_DSM_FUNC_INDEX));
+}
+
+static const char *tph_st_str(char *buf, bool valid, u16 st, int digits)
+{
+	if (!valid)
+		return "-";
+
+	snprintf(buf, TPH_ST_STR_SIZE, "0x%0*x", digits, st);
+
+	return buf;
+}
+
+/*
+ * Position 0 is the header, position N > 0 is the first online CPU with an
+ * id >= N - 1.  Encoding the CPU id in the position, instead of an index
+ * into the online mask, keeps the remaining output stable if a CPU goes
+ * offline between two read() calls.
+ *
+ * The iterator itself is the CPU id biased by 2, because 0 is the end of
+ * the sequence and 1 is SEQ_START_TOKEN.
+ */
+static void *tph_cpu_st_pos(loff_t *pos)
+{
+	unsigned int cpu;
+
+	if (!*pos)
+		return SEQ_START_TOKEN;
+
+	if (*pos > nr_cpu_ids)
+		return NULL;
+
+	cpu = cpumask_next((int)*pos - 2, cpu_online_mask);
+	if (cpu >= nr_cpu_ids)
+		return NULL;
+
+	*pos = cpu + 1;
+
+	return (void *)(unsigned long)(cpu + 2);
+}
+
+static void *tph_cpu_st_start(struct seq_file *s, loff_t *pos)
+{
+	return tph_cpu_st_pos(pos);
+}
+
+static void *tph_cpu_st_next(struct seq_file *s, void *v, loff_t *pos)
+{
+	++*pos;
+
+	return tph_cpu_st_pos(pos);
+}
+
+static void tph_cpu_st_stop(struct seq_file *s, void *v)
+{
+}
+
+static int tph_cpu_st_show(struct seq_file *s, void *v)
+{
+	char vm_st[TPH_ST_STR_SIZE], vm_xst[TPH_ST_STR_SIZE];
+	char pm_st[TPH_ST_STR_SIZE], pm_xst[TPH_ST_STR_SIZE];
+	struct pci_dev *pdev = s->private;
+	union st_info info;
+	unsigned int cpu;
+
+	if (v == SEQ_START_TOKEN) {
+		seq_printf(s, "%-4s %-6s %-6s %-12s %-6s %-6s %s\n",
+			   "cpu", "vm_st", "vm_xst", "vm_ph_ignore",
+			   "pm_st", "pm_xst", "pm_ph_ignore");
+		return 0;
+	}
+
+	cpu = (unsigned long)v - 2;
+
+	if (tph_get_cpu_st_info(pdev, cpu, &info)) {
+		seq_printf(s, "%-4u %-6s %-6s %-12s %-6s %-6s %s\n", cpu,
+			   "-", "-", "-", "-", "-", "-");
+		return 0;
+	}
+
+	seq_printf(s, "%-4u %-6s %-6s %-12u %-6s %-6s %u\n", cpu,
+		   tph_st_str(vm_st, info.vm_st_valid, info.vm_st, 2),
+		   tph_st_str(vm_xst, info.vm_xst_valid, info.vm_xst, 4),
+		   (unsigned int)info.vm_ph_ignore,
+		   tph_st_str(pm_st, info.pm_st_valid, info.pm_st, 2),
+		   tph_st_str(pm_xst, info.pm_xst_valid, info.pm_xst, 4),
+		   (unsigned int)info.pm_ph_ignore);
+
+	return 0;
+}
+
+static const struct seq_operations tph_cpu_st_sops = {
+	.start	= tph_cpu_st_start,
+	.next	= tph_cpu_st_next,
+	.stop	= tph_cpu_st_stop,
+	.show	= tph_cpu_st_show,
+};
+DEFINE_SEQ_ATTRIBUTE(tph_cpu_st);
+
+static void tph_debugfs_add_cpu_st(struct pci_dev *pdev)
+{
+	if (!pci_is_pcie(pdev) ||
+	    pci_pcie_type(pdev) != PCI_EXP_TYPE_ROOT_PORT)
+		return;
+
+	if (!tph_dsm_supported(pdev))
+		return;
+
+	debugfs_create_file("tph_cpu_st", 0444, pci_dev_debugfs_dir(pdev),
+			    pdev, &tph_cpu_st_fops);
+}
+#else
+static void tph_debugfs_add_cpu_st(struct pci_dev *pdev) { }
+#endif /* CONFIG_ACPI && CONFIG_DEBUG_FS */
 
 /* Update the TPH Requester Enable field of TPH Control Register */
 static void set_ctrl_reg_req_en(struct pci_dev *pdev, u8 req_type)
@@ -537,6 +667,12 @@ void pci_tph_init(struct pci_dev *pdev)
 {
 	int num_entries;
 	u32 save_size;
+
+	/*
+	 * A Root Port has no ST table of its own, but it is where the
+	 * firmware ST mapping of its host bridge is exposed.
+	 */
+	tph_debugfs_add_cpu_st(pdev);
 
 	pdev->tph_cap = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_TPH);
 	if (!pdev->tph_cap)
