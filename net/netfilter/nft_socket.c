@@ -111,15 +111,17 @@ static void nft_socket_eval(const struct nft_expr *expr,
 			    const struct nft_pktinfo *pkt)
 {
 	const struct nft_socket *priv = nft_expr_priv(expr);
-	struct sk_buff *skb = pkt->skb;
-	struct sock *sk = skb->sk;
 	u32 *dest = &regs->data[priv->dreg];
+	struct sk_buff *skb = pkt->skb;
+	bool refcounted = false;
+	struct sock *sk;
 
-	if (sk && !net_eq(nft_net(pkt), sock_net(sk)))
-		sk = NULL;
-
-	if (!sk)
+	sk = nf_skb_sk(skb, nft_net(pkt));
+	if (!sk) {
 		sk = nft_socket_do_lookup(pkt);
+		if (sk)
+			refcounted = true;
+	}
 
 	if (!sk) {
 		regs->verdict.code = NFT_BREAK;
@@ -159,7 +161,7 @@ static void nft_socket_eval(const struct nft_expr *expr,
 	}
 
 out_put_sk:
-	if (sk != skb->sk)
+	if (refcounted)
 		sock_gen_put(sk);
 }
 
