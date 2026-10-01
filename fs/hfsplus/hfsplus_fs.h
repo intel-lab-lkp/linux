@@ -36,6 +36,15 @@ enum hfsplus_btree_mutex_classes {
 	ATTR_BTREE_MUTEX,
 };
 
+/* lockdep subclasses for extents_lock: special inodes nest under regular files */
+enum hfsplus_extents_mutex_classes {
+	HFSPLUS_EXTENTS_LOCK_REGULAR_FILE,
+	HFSPLUS_EXTENTS_LOCK_CATALOG,
+	HFSPLUS_EXTENTS_LOCK_ALLOC,
+	HFSPLUS_EXTENTS_LOCK_ATTR,
+	HFSPLUS_EXTENTS_LOCK_OTHER,
+};
+
 /* An HFS+ BTree held in memory */
 struct hfs_btree {
 	struct super_block *sb;
@@ -570,6 +579,23 @@ hfsplus_btree_lock_class(struct hfs_btree *tree)
 		BUG();
 	}
 	return class;
+}
+
+static inline unsigned int hfsplus_extents_lock_class(struct inode *inode)
+{
+	if (inode->i_ino >= HFSPLUS_FIRSTUSER_CNID)
+		return HFSPLUS_EXTENTS_LOCK_REGULAR_FILE;
+
+	switch (inode->i_ino) {
+	case HFSPLUS_CAT_CNID:
+		return HFSPLUS_EXTENTS_LOCK_CATALOG;
+	case HFSPLUS_ALLOC_CNID:
+		return HFSPLUS_EXTENTS_LOCK_ALLOC;
+	case HFSPLUS_ATTR_CNID:
+		return HFSPLUS_EXTENTS_LOCK_ATTR;
+	default:
+		return HFSPLUS_EXTENTS_LOCK_OTHER;
+	}
 }
 
 static inline
