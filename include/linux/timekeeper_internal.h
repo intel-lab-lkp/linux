@@ -97,6 +97,8 @@ struct tk_read_base {
  * @ntp_error_shift:		Shift conversion between clock shifted nano seconds and
  *				ntp shifted nano seconds.
  * @ntp_err_mult:		Multiplication factor for scaled math conversion
+ * @err_drain:			Extra mult bias repaying ntp_error beyond the
+ *				dither's reach; sized at second boundaries
  * @cs_tick_adj:		Per-second adjustment handed to NTP via ntp_clear()
  *				accounting for the difference between the nominal
  *				NTP interval and the real time taken by the
@@ -186,7 +188,8 @@ struct timekeeper {
 	u64			ntp_tick;
 	s64			ntp_error;
 	u32			ntp_error_shift;
-	u32			ntp_err_mult;
+	s32			ntp_err_mult;
+	s32			err_drain;
 	s64			cs_tick_adj;
 	u32			skip_second_overflow;
 	s64			skew_delta;

@@ -325,6 +325,15 @@ static inline void clocksource_disable_inline_read(void) { }
 static inline void clocksource_enable_inline_read(void) { }
 #endif
 
+/*
+ * The proportional ntp_error drain engages when the error exceeds
+ * TK_NTP_ERR_THRESH seconds' worth of the ±1 dither's delivery (so
+ * noise the dither handles alone never wakes the CPU), and then
+ * repays over ~TK_NTP_ERR_HORIZON seconds.
+ */
+#define TK_NTP_ERR_THRESH	60
+#define TK_NTP_ERR_HORIZON	10
+
 /**
  * tk_setup_internals - Set up internals to use clocksource clock.
  *
@@ -422,6 +431,7 @@ static void tk_setup_internals(struct timekeeper *tk, struct clocksource *clock)
 	tk->tkr_mono.mult = clock->mult;
 	tk->tkr_raw.mult = clock->mult;
 	tk->ntp_err_mult = 0;
+	tk->err_drain = 0;
 	tk->skip_second_overflow = 0;
 	tk->skew_delta = 0;
 
@@ -830,6 +840,7 @@ static void timekeeping_update_from_shadow(struct tk_data *tkd, unsigned int act
 
 	if (action & TK_CLEAR_NTP) {
 		tk->ntp_error = 0;
+		tk->err_drain = 0;
 		ntp_clear(tk->id, tk->cs_tick_adj);
 	}
 
@@ -1979,11 +1990,11 @@ u64 timekeeping_max_deferment(void)
 
 		/*
 		 * Skew introduced for phase offset is intended to be
-		 * recalculated each second. Ensure a tickless kernel
-		 * wakes up for that and does not overshoot, while skew
-		 * is being applied.
+		 * recalculated each second, as is the proportional
+		 * ntp_error drain. Ensure a tickless kernel wakes up
+		 * for that and does not overshoot.
 		 */
-		if (abs(tk->skew_delta) > 1) {
+		if (abs(tk->skew_delta) > 1 || (u32)tk->ntp_err_mult > 1) {
 			u64 nsec_in_sec = tk->tkr_mono.xtime_nsec >>
 					  tk->tkr_mono.shift;
 			u64 remaining = NSEC_PER_SEC - min_t(u64, nsec_in_sec,
@@ -2253,6 +2264,7 @@ void timekeeping_resume(void)
 	tks->tkr_raw.cycle_last  = cycle_now;
 
 	tks->ntp_error = 0;
+	tks->err_drain = 0;
 	timekeeping_suspended = 0;
 	timekeeping_update_from_shadow(&tk_core, TK_CLOCK_WAS_SET);
 	raw_spin_unlock_irqrestore(&tk_core.lock, flags);
@@ -2495,7 +2507,16 @@ static void timekeeping_adjust(struct timekeeper *tk, s64 offset)
 	 * tick division, the clock will slow down. Otherwise it will stay
 	 * ahead until the tick length changes to a non-divisible value.
 	 */
-	tk->ntp_err_mult = tk->ntp_error > 0 ? 1 : 0;
+	/* Drop the ntp_error drain the moment it overshoots */
+	if (tk->err_drain &&
+	    (((s64)tk->err_drain ^ tk->ntp_error) < 0 || !tk->ntp_error))
+		tk->err_drain = 0;
+
+	if (tk->err_drain)
+		tk->ntp_err_mult = tk->err_drain;
+	else
+		tk->ntp_err_mult = tk->ntp_error > 0 ? 1 : 0;
+
 	mult += tk->ntp_err_mult;
 
 	timekeeping_apply_adjustment(tk, offset, mult - tk->tkr_mono.mult);
@@ -2538,6 +2559,7 @@ static inline unsigned int accumulate_nsecs_to_secs(struct timekeeper *tk)
 {
 	u64 nsecps = (u64)NSEC_PER_SEC << tk->tkr_mono.shift;
 	unsigned int clock_set = 0;
+	bool crossed = false;
 
 	while (tk->tkr_mono.xtime_nsec >= nsecps) {
 		int leap;
@@ -2569,6 +2591,29 @@ static inline unsigned int accumulate_nsecs_to_secs(struct timekeeper *tk)
 			__timekeeping_set_tai_offset(tk, tk->tai_offset - leap);
 
 			clock_set = TK_CLOCK_WAS_SET;
+		}
+
+		crossed = true;
+	}
+
+	/*
+	 * Core timekeeper only; aux timekeepers are not covered by the
+	 * timekeeping_max_deferment() wakeup which re-sizes the drain
+	 * each second before it can overshoot.
+	 */
+	if (crossed && tk->id == TIMEKEEPER_CORE) {
+		/* Re-size the proportional ntp_error drain for this second */
+		s64 lsb_sec = ((s64)tk->cycle_interval <<
+			       tk->ntp_error_shift) * NTP_INTERVAL_FREQ;
+
+		tk->err_drain = 0;
+		if (abs(tk->ntp_error) > lsb_sec * TK_NTP_ERR_THRESH) {
+			s32 headroom = tk->tkr_mono.clock->maxadj / 4;
+
+			tk->err_drain = clamp_t(s64,
+						div64_s64(tk->ntp_error,
+							  lsb_sec * TK_NTP_ERR_HORIZON),
+						-headroom, headroom);
 		}
 	}
 	return clock_set;
