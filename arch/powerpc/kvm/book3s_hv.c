@@ -1386,9 +1386,11 @@ int kvmppc_pseries_do_hcall(struct kvm_vcpu *vcpu)
 			ret = kvmhv_copy_tofrom_guest_nested(vcpu);
 		break;
 	case H_PAGE_INIT:
+		kvm_vcpu_srcu_read_lock(vcpu);
 		ret = kvmppc_h_page_init(vcpu, kvmppc_get_gpr(vcpu, 4),
 					 kvmppc_get_gpr(vcpu, 5),
 					 kvmppc_get_gpr(vcpu, 6));
+		kvm_vcpu_srcu_read_unlock(vcpu);
 		break;
 	case H_SVM_PAGE_IN:
 		ret = H_UNSUPPORTED;
