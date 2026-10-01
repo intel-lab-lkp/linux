@@ -524,6 +524,9 @@ static void __cpuinfo_store_cpu(struct cpuinfo_arm64 *info)
 		info->reg_smidr = read_cpuid(SMIDR_EL1) & ~SMIDR_EL1_SMPS;
 	}
 
+	if (id_aa64mmfr4_tlbid(info->reg_id_aa64mmfr4))
+		info->reg_tlbididr = read_cpuid(TLBIDIDR_EL1);
+
 	cpuinfo_detect_icache_policy(info);
 }
 

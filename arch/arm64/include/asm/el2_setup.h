@@ -438,9 +438,16 @@
 	orr	x0, x0, #HDFGRTR2_EL2_nPMSDSFR_EL1
 
 .Lskip_spefds_\@:
+	mov	x1, xzr
+	mrs_s	x2, SYS_ID_AA64MMFR4_EL1
+	ubfx	x2, x2, #ID_AA64MMFR4_EL1_TLBID_SHIFT, #ID_AA64MMFR4_EL1_TLBID_WIDTH
+	cbz	x2, .Lskip_tlbid_\@
+	orr	x1, x1, #HFGRTR2_EL2_nTLBIDIDR_EL1
+
+.Lskip_tlbid_\@:
 	msr_s   SYS_HDFGRTR2_EL2, x0
 	msr_s   SYS_HDFGWTR2_EL2, x0
-	msr_s   SYS_HFGRTR2_EL2, xzr
+	msr_s   SYS_HFGRTR2_EL2, x1
 	msr_s   SYS_HFGWTR2_EL2, xzr
 	msr_s   SYS_HFGITR2_EL2, xzr
 .Lskip_fgt2_\@:

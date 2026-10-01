@@ -521,6 +521,7 @@ static const struct arm64_ftr_bits ftr_id_aa64mmfr3[] = {
 };
 
 static const struct arm64_ftr_bits ftr_id_aa64mmfr4[] = {
+	ARM64_FTR_BITS(FTR_HIDDEN, FTR_STRICT, FTR_LOWER_SAFE, ID_AA64MMFR4_EL1_TLBID_SHIFT, 4, 0),
 	S_ARM64_FTR_BITS(FTR_HIDDEN, FTR_STRICT, FTR_LOWER_SAFE, ID_AA64MMFR4_EL1_E2H0_SHIFT, 4, 0),
 	ARM64_FTR_BITS(FTR_HIDDEN, FTR_STRICT, FTR_LOWER_SAFE, ID_AA64MMFR4_EL1_NV_frac_SHIFT, 4, 0),
 	ARM64_FTR_END,
@@ -740,6 +741,14 @@ static const struct arm64_ftr_bits ftr_mpamidr[] = {
 	ARM64_FTR_END,
 };
 
+static const struct arm64_ftr_bits ftr_tlbididr[] = {
+	ARM64_FTR_BITS(FTR_HIDDEN, FTR_STRICT, FTR_EXACT, TLBIDIDR_EL1_NVOS_SHIFT, TLBIDIDR_EL1_NVOS_WIDTH, 0),
+	ARM64_FTR_BITS(FTR_HIDDEN, FTR_STRICT, FTR_EXACT, TLBIDIDR_EL1_NOS_SHIFT, TLBIDIDR_EL1_NOS_WIDTH, 0),
+	ARM64_FTR_BITS(FTR_HIDDEN, FTR_STRICT, FTR_EXACT, TLBIDIDR_EL1_NVIS_SHIFT, TLBIDIDR_EL1_NVIS_WIDTH, 0),
+	ARM64_FTR_BITS(FTR_HIDDEN, FTR_STRICT, FTR_EXACT, TLBIDIDR_EL1_NIS_SHIFT, TLBIDIDR_EL1_NIS_WIDTH, 0),
+	ARM64_FTR_END,
+};
+
 /*
  * Common ftr bits for a 32bit register with all hidden, strict
  * attributes, with 4bit feature fields and a default safe value of
@@ -864,6 +873,7 @@ static const struct __ftr_reg_entry {
 
 	/* Op1 = 0, CRn = 10, CRm = 4 */
 	ARM64_FTR_REG(SYS_MPAMIDR_EL1, ftr_mpamidr),
+	ARM64_FTR_REG(SYS_TLBIDIDR_EL1, ftr_tlbididr),
 
 	/* Op1 = 1, CRn = 0, CRm = 0 */
 	ARM64_FTR_REG(SYS_GMID_EL1, ftr_gmid),
@@ -1259,6 +1269,9 @@ void __init init_cpu_features(struct cpuinfo_arm64 *info)
 
 	if (gmid_el1_accessible(info))
 		init_cpu_ftr_reg(SYS_GMID_EL1, info->reg_gmid);
+
+	if (id_aa64mmfr4_tlbid(info->reg_id_aa64mmfr4))
+		init_cpu_ftr_reg(SYS_TLBIDIDR_EL1, info->reg_tlbididr);
 }
 
 static void update_cpu_ftr_reg(struct arm64_ftr_reg *reg, u64 new)
@@ -1522,6 +1535,11 @@ void update_cpu_features(int cpu,
 	if (gmid_el1_accessible(info))
 		taint |= check_update_ftr_reg(SYS_GMID_EL1, cpu,
 					      info->reg_gmid, boot->reg_gmid);
+
+	if (id_aa64mmfr4_tlbid(info->reg_id_aa64mmfr4)) {
+		taint |= check_update_ftr_reg(SYS_TLBIDIDR_EL1, cpu,
+					info->reg_tlbididr, boot->reg_tlbididr);
+	}
 
 	/*
 	 * If we don't have AArch32 at all then skip the checks entirely
@@ -3234,6 +3252,13 @@ static const struct arm64_cpu_capabilities arm64_features[] = {
 		ARM64_CPUID_FIELDS(ID_AA64ISAR3_EL1, LSUI, IMP)
 	},
 #endif
+	{
+		.desc = "TLBI domains (TLBID)",
+		.capability = ARM64_HAS_TLBID,
+		.type = ARM64_CPUCAP_SYSTEM_FEATURE,
+		.matches = has_cpuid_feature,
+		ARM64_CPUID_FIELDS(ID_AA64MMFR4_EL1, TLBID, IMP)
+	},
 	{},
 };
 
