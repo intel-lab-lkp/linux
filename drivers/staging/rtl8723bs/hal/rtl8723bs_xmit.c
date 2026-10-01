@@ -118,10 +118,10 @@ free_xmitbuf:
  *_SUCCESS	ok
  *_FAIL		something error
  */
-s32 rtl8723bs_xmit_buf_handler(struct adapter *padapter)
+bool rtl8723bs_xmit_buf_handler(struct adapter *padapter)
 {
 	struct xmit_priv *pxmitpriv = &padapter->xmitpriv;
-	u8 queue_empty, queue_pending;
+	u8 queue_empty;
 	s32 ret;
 
 	if (wait_for_completion_interruptible(&pxmitpriv->xmit_comp)) {
@@ -134,9 +134,7 @@ s32 rtl8723bs_xmit_buf_handler(struct adapter *padapter)
 	if (ret)
 		return _FAIL;
 
-	queue_pending = check_pending_xmitbuf(pxmitpriv);
-
-	if (!queue_pending)
+	if (!check_pending_xmitbuf(pxmitpriv))
 		return _SUCCESS;
 
 	ret = rtw_register_tx_alive(padapter);
