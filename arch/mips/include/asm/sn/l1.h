@@ -17,5 +17,6 @@
 
 int l1_exec_command(const char *cmd);
 int l1_read_board_partnum(unsigned int component, char *buf, size_t len);
+int l1_read_brick_type(void);
 
 #endif /* __ASM_SN_L1_H */

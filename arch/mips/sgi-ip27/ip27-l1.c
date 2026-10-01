@@ -79,6 +79,7 @@
 #define L1_REQ_EXEC_CMD		0x0000	/* interpret plaintext command */
 
 /* L1_TASK_GENERAL requests */
+#define L1_REQ_BRICK_ID		0x0003	/* rack, slot and brick type */
 #define L1_REQ_EEPROM		0x0006	/* access eeprom */
 
 /* L1_REQ_EEPROM additional argument values (non C-brick component) */
@@ -731,6 +732,50 @@ int l1_read_board_partnum(unsigned int component, char *buf, size_t len)
 		return -E2BIG;
 
 	return 0;
+}
+
+/*
+ * The L1 answers two integers; the low byte of the second is the
+ * one-character brick-type code of its chassis.
+ */
+static int l1_get_brick_type(void)
+{
+	u32 address = L1_ADDRESS(L1_TYPE_L1,
+				 L1_ADDRESS_LOCAL | L1_TASK_GENERAL);
+	u8 pkt[64];		/* command and response packet buffer */
+	u8 *args;
+	size_t arglen;
+	u32 rack_slot, brick_type;
+	int rc;
+
+	rc = l1_transact(get_nasid(), pkt, sizeof(pkt), address,
+			 L1_REQ_BRICK_ID, &args, &arglen, 0);
+	if (rc < 0)
+		return rc;
+	if (rc != 2)
+		return -EIO;
+
+	rc = l1_packet_get_int(&args, &arglen, &rack_slot);
+	if (rc)
+		return rc;
+
+	rc = l1_packet_get_int(&args, &arglen, &brick_type);
+	if (rc)
+		return rc;
+
+	return brick_type & 0xff;
+}
+
+int l1_read_brick_type(void)
+{
+	unsigned long flags;
+	int rc;
+
+	spin_lock_irqsave(&l1_lock, flags);
+	rc = l1_get_brick_type();
+	spin_unlock_irqrestore(&l1_lock, flags);
+
+	return rc;
 }
 
 static u8 ip27_l1_mac_addr[ETH_ALEN];

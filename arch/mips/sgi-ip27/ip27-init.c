@@ -13,12 +13,15 @@
 #include <linux/mm.h>
 #include <linux/export.h>
 #include <linux/cpumask.h>
+#include <linux/ctype.h>
 #include <asm/bootinfo.h>
 #include <asm/cpu.h>
 #include <asm/io.h>
+#include <asm/prom.h>
 #include <asm/sgialib.h>
 #include <asm/time.h>
 #include <asm/sn/agent.h>
+#include <asm/sn/l1.h>
 #include <asm/sn/types.h>
 #include <asm/sn/klconfig.h>
 #include <asm/sn/ioc3.h>
@@ -98,6 +101,69 @@ void per_cpu_init(void)
 	enable_percpu_irq(IP27_HUB_PEND1_IRQ, IRQ_TYPE_NONE);
 }
 
+/*
+ * The boot brick's L1 type character names the machine family. What makes
+ * an Origin an Onyx is attached graphics, so a graphics-class board in the
+ * KLCONFIG picks between the two names; gfx_model is NULL for a family
+ * that has only one.
+ */
+static const struct {
+	char brick_type;
+	const char *model;
+	const char *gfx_model;
+} ip27_models[] = {
+	{ '4', "SGI Origin 300", "SGI Onyx 300" },
+	{ '7', "SGI Origin 350", "SGI Onyx 350" },
+	{ '8', "SGI Onyx 350", NULL },		/* graphics blade */
+	{ '9', "SGI Tezro", NULL },		/* deskside */
+	{ 'A', "SGI Fuel", NULL },
+	{ 'C', "SGI Origin 3000", "SGI Onyx 3000" },
+	{ 'Q', "SGI Tezro Rackmount", NULL },
+};
+
+static bool __init ip27_has_graphics(void)
+{
+	nasid_t nasid;
+
+	for_each_online_node(nasid)
+		if (find_lboard_class((lboard_t *)KL_CONFIG_INFO(nasid),
+				      KLCLASS_GFX))
+			return true;
+
+	return false;
+}
+
+static void __init ip27_set_machine_name(void)
+{
+	int brick_type, i;
+	bool gfx;
+
+	if (!system_is_ip35)
+		return;
+
+	brick_type = l1_read_brick_type();
+	if (brick_type < 0)
+		return;
+
+	gfx = ip27_has_graphics();
+
+	for (i = 0; i < ARRAY_SIZE(ip27_models); i++) {
+		if (ip27_models[i].brick_type != brick_type)
+			continue;
+
+		if (gfx && ip27_models[i].gfx_model)
+			mips_set_machine_name(ip27_models[i].gfx_model);
+		else
+			mips_set_machine_name(ip27_models[i].model);
+		return;
+	}
+
+	mips_set_machine_name(get_system_type());
+	pr_info("Unlisted L1 brick type 0x%02x '%c', %s a graphics board\n",
+		brick_type, isprint(brick_type) ? brick_type : '?',
+		gfx ? "with" : "without");
+}
+
 void __init plat_mem_setup(void)
 {
 	u64 p, e, n_mode;
@@ -147,6 +213,8 @@ void __init plat_mem_setup(void)
 	ioport_resource.start = 0;
 	ioport_resource.end = ~0UL;
 	set_io_port_base(IO_BASE);
+
+	ip27_set_machine_name();
 }
 
 const char *get_system_type(void)
