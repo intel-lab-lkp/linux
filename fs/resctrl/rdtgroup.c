@@ -1167,6 +1167,36 @@ static void resctrl_kmode_global_offline_cpu(unsigned int cpu)
 	resctrl_configure_kmode_global(cpumask_of(cpu), rdtgrp, false);
 }
 
+/*
+ * Disable the association on @rdtgrp's kmode_cpu_mask, clear the mask, and
+ * hide the group's kmode_cpus files.
+ */
+static void rdtgroup_kmode_global_deactivate(struct rdtgroup *rdtgrp)
+{
+	resctrl_configure_kmode_global(&rdtgrp->kmode_cpu_mask, rdtgrp, false);
+	cpumask_clear(&rdtgrp->kmode_cpu_mask);
+}
+
+/*
+ * rdtgroup_kmode_global_detach() - Detach @rdtgrp from the global per-CPU mode
+ * @rdtgrp: Resctrl group being removed or torn down.
+ *
+ * If @rdtgrp backs the active association, disable it, clear kernel mode
+ * state, and restore RESCTRL_INHERIT_USER.
+ */
+static void rdtgroup_kmode_global_detach(struct rdtgroup *rdtgrp)
+{
+	if (resctrl_kmode.rdtgrp != rdtgrp)
+		return;
+
+	rdtgroup_kmode_global_deactivate(rdtgrp);
+
+	resctrl_kmode.rdtgrp = NULL;
+	resctrl_kmode.kmode_cur = RESCTRL_INHERIT_USER;
+	resctrl_kmode.ctrl = KMODE_ASSIGN;
+	resctrl_kmode.mon = KMODE_ASSIGN;
+}
+
 void *rdt_kn_parent_priv(struct kernfs_node *kn)
 {
 	/*
@@ -3230,6 +3260,7 @@ static void free_all_child_rdtgrp(struct rdtgroup *rdtgrp)
 
 	head = &rdtgrp->mon.crdtgrp_list;
 	list_for_each_entry_safe(sentry, stmp, head, mon.crdtgrp_list) {
+		rdtgroup_kmode_global_detach(sentry);
 		rdtgroup_unassign_cntrs(sentry);
 		free_rmid(sentry->closid, sentry->mon.rmid);
 		list_del(&sentry->mon.crdtgrp_list);
@@ -3267,6 +3298,7 @@ static void rmdir_all_sub(void)
 		cpumask_or(&rdtgroup_default.cpu_mask,
 			   &rdtgroup_default.cpu_mask, &rdtgrp->cpu_mask);
 
+		rdtgroup_kmode_global_detach(rdtgrp);
 		rdtgroup_unassign_cntrs(rdtgrp);
 
 		if (rdtgrp->mode == RDT_MODE_PSEUDO_LOCKSETUP ||
@@ -3362,6 +3394,7 @@ static void resctrl_fs_teardown(void)
 		return;
 
 	rmdir_all_sub();
+	rdtgroup_kmode_global_detach(&rdtgroup_default);
 	rdtgroup_unassign_cntrs(&rdtgroup_default);
 	mon_put_kn_priv();
 	rdt_pseudo_lock_release();
@@ -4397,6 +4430,8 @@ static int rdtgroup_rmdir_mon(struct rdtgroup *rdtgrp, cpumask_var_t tmpmask)
 	u32 closid, rmid;
 	int cpu;
 
+	rdtgroup_kmode_global_detach(rdtgrp);
+
 	/* Give any tasks back to the parent group */
 	rdt_move_group_tasks(rdtgrp, prdtgrp, tmpmask);
 
@@ -4444,8 +4479,17 @@ static int rdtgroup_ctrl_remove(struct rdtgroup *rdtgrp)
 
 static int rdtgroup_rmdir_ctrl(struct rdtgroup *rdtgrp, cpumask_var_t tmpmask)
 {
+	struct rdtgroup *sentry;
 	u32 closid, rmid;
 	int cpu;
+
+	/*
+	 * A monitor group uses its parent's CLOSID. Detach a child that
+	 * backs the association before that CLOSID is freed.
+	 */
+	list_for_each_entry(sentry, &rdtgrp->mon.crdtgrp_list, mon.crdtgrp_list)
+		rdtgroup_kmode_global_detach(sentry);
+	rdtgroup_kmode_global_detach(rdtgrp);
 
 	/* Give any tasks back to the default group */
 	rdt_move_group_tasks(rdtgrp, &rdtgroup_default, tmpmask);
