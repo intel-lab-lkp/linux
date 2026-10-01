@@ -311,8 +311,7 @@ acpi_numa_processor_affinity_init(struct acpi_srat_cpu_affinity *pa)
 		bad_srat();
 		return;
 	}
-	if ((pa->flags & ACPI_SRAT_CPU_ENABLED) == 0)
-		return;
+
 	pxm = pa->proximity_domain_lo;
 	if (acpi_srat_revision >= 2) {
 		pxm |= (pa->proximity_domain_hi[0] << 8);
@@ -332,9 +331,12 @@ acpi_numa_processor_affinity_init(struct acpi_srat_cpu_affinity *pa)
 		return;
 	}
 
-	early_numa_add_cpu(pa->apic_id, node);
-
 	set_cpuid_to_node(pa->apic_id, node);
+
+	if ((pa->flags & ACPI_SRAT_CPU_ENABLED) == 0)
+		return;
+
+	early_numa_add_cpu(pa->apic_id, node);
 	node_set(node, numa_nodes_parsed);
 	pr_info("SRAT: PXM %u -> CPU 0x%02x -> Node %u\n", pxm, pa->apic_id, node);
 }
@@ -350,8 +352,7 @@ acpi_numa_x2apic_affinity_init(struct acpi_srat_x2apic_cpu_affinity *pa)
 		bad_srat();
 		return;
 	}
-	if ((pa->flags & ACPI_SRAT_CPU_ENABLED) == 0)
-		return;
+
 	pxm = pa->proximity_domain;
 	node = acpi_map_pxm_to_node(pxm);
 	if (node < 0) {
@@ -366,9 +367,12 @@ acpi_numa_x2apic_affinity_init(struct acpi_srat_x2apic_cpu_affinity *pa)
 		return;
 	}
 
-	early_numa_add_cpu(pa->apic_id, node);
-
 	set_cpuid_to_node(pa->apic_id, node);
+
+	if ((pa->flags & ACPI_SRAT_CPU_ENABLED) == 0)
+		return;
+
+	early_numa_add_cpu(pa->apic_id, node);
 	node_set(node, numa_nodes_parsed);
 	pr_info("SRAT: PXM %u -> CPU 0x%02x -> Node %u\n", pxm, pa->apic_id, node);
 }
