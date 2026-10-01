@@ -104,6 +104,7 @@ def generate_crates(
         edition = edition if edition is not None else "2021"
         crate_env = {
             "RUST_MODFILE": "This is only for rust-analyzer",
+            "RUST_MODNAME": display_name.replace("-", "_"),
             **crates_envs.get(display_name, {}),
         }
         return {

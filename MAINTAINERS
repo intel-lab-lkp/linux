@@ -9262,6 +9262,8 @@ S:	Maintained
 F:	include/linux/dynamic_debug.h
 F:	lib/dynamic_debug.c
 F:	lib/test_dynamic_debug.c
+F:	rust/helpers/dynamic_debug.c
+F:	rust/kernel/print/dynamic_debug.rs
 
 DYNAMIC INTERRUPT MODERATION
 M:	Tal Gilboa <talgi@nvidia.com>

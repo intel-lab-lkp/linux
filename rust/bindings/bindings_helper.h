@@ -54,6 +54,7 @@
 #include <linux/device/faux.h>
 #include <linux/dma-direction.h>
 #include <linux/dma-mapping.h>
+#include <linux/dynamic_debug.h>
 #include <linux/dma-resv.h>
 #include <linux/errname.h>
 #include <linux/ethtool.h>

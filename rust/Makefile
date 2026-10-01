@@ -173,6 +173,7 @@ quiet_cmd_rustdoc = RUSTDOC $(if $(rustdoc_host),H, ) $<
       cmd_rustdoc = \
 	$(rustc_target_envs) \
 	OBJTREE=$(abspath $(objtree)) \
+	RUST_MODNAME=$(call name-fix-token,$(subst rustdoc-,,$@)) \
 	$(RUSTDOC) $(filter-out $(skip_flags) --remap-path-scope=%,$(if $(rustdoc_host),$(rust_common_flags),$(rust_flags))) \
 		$(rustc_target_flags) -L$(objtree)/$(obj)$(if $(rustdoc_host),/host) \
 		-Zunstable-options --generate-link-to-definition \
@@ -388,6 +389,7 @@ quiet_cmd_rustdoc_test_kernel = RUSTDOC TK $<
 	mkdir -p $(objtree)/$(obj)/test/doctests/kernel; \
 	$(rustc_target_envs) \
 	OBJTREE=$(abspath $(objtree)) \
+	RUST_MODNAME=kernel \
 	$(RUSTDOC) --test $(filter-out --remap-path-scope=%,$(rust_flags)) \
 		-L$(objtree)/$(obj) --extern ffi --extern pin_init \
 		--extern kernel --extern build_error --extern macros \
@@ -647,6 +649,7 @@ quiet_cmd_rustc_library = $(if $(skip_clippy),RUSTC,$(RUSTC_OR_CLIPPY_QUIET)) L 
       cmd_rustc_library = \
 	$(rustc_target_envs) \
 	OBJTREE=$(abspath $(objtree)) \
+	RUST_MODNAME=$(call name-fix-token,$(modname)) \
 	$(if $(skip_clippy),$(RUSTC),$(RUSTC_OR_CLIPPY)) \
 		$(filter-out $(skip_flags),$(rust_flags)) $(rustc_target_flags) \
 		--emit=dep-info=$(depfile) --emit=$(if $(link_helper),llvm-bc=$(patsubst %.o,%.bc,$@),obj=$@) \

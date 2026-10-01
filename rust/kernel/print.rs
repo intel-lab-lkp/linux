@@ -18,6 +18,10 @@ use crate::{
     },
 };
 
+#[cfg(CONFIG_DYNAMIC_DEBUG_CORE)]
+#[doc(hidden)]
+pub mod dynamic_debug;
+
 // Called from `vsprintf` with format specifier `%pA`.
 #[expect(clippy::missing_safety_doc)]
 #[export]
@@ -376,13 +380,24 @@ macro_rules! pr_info (
 ///
 /// Use this level for debug messages.
 ///
-/// Equivalent to the kernel's [`pr_debug`] macro, except that it doesn't support dynamic debug
-/// yet.
+/// Equivalent to the kernel's [`pr_debug`] macro.
+///
+/// Supports [dynamic debug] when `CONFIG_DYNAMIC_DEBUG` is enabled, or when
+/// `CONFIG_DYNAMIC_DEBUG_CORE` is enabled and the crate is built with
+/// `--cfg DYNAMIC_DEBUG_MODULE`. Messages can then be enabled and disabled at runtime,
+/// starting disabled. Rust's `debug_assertions` setting does not affect debug logging.
+/// Without dynamic debug for the crate, messages stay disabled. Disabled messages do not
+/// evaluate their formatting arguments, but the arguments are still checked at compile time.
+///
+/// Dynamic debug callsites can be selected by module, file, line, or format. Their function name
+/// is recorded as `<unknown>`, so selecting a Rust function by its name is not supported.
+/// The module selector uses Kbuild's module name, independently of the crate's log prefix.
 ///
 /// Mimics the interface of [`std::print!`]. See [`core::fmt`] and
 /// [`std::format!`] for information about the formatting syntax.
 ///
 /// [`pr_debug`]: https://docs.kernel.org/core-api/printk-basics.html#c.pr_debug
+/// [dynamic debug]: https://docs.kernel.org/admin-guide/dynamic-debug-howto.html
 /// [`std::print!`]: https://doc.rust-lang.org/std/macro.print.html
 /// [`std::format!`]: https://doc.rust-lang.org/std/macro.format.html
 ///
@@ -393,12 +408,38 @@ macro_rules! pr_info (
 /// ```
 #[macro_export]
 #[doc(alias = "print")]
+#[expect(clippy::crate_in_macro_def)]
 macro_rules! pr_debug (
-    ($($arg:tt)*) => (
-        if cfg!(debug_assertions) {
-            $crate::print_macro!($crate::print::format_strings::DEBUG, false, $($arg)*)
+    ($($arg:tt)*) => ({
+        #[cfg(any(CONFIG_DYNAMIC_DEBUG, all(CONFIG_DYNAMIC_DEBUG_CORE, DYNAMIC_DEBUG_MODULE)))]
+        {
+            $crate::dynamic_debug!(__descriptor, ($($arg)*), {
+                match (
+                    const {
+                        match $crate::str::CStr::from_bytes_with_nul(crate::__LOG_PREFIX) {
+                            Ok(prefix) => prefix,
+                            Err(_) => panic!("the module log prefix must be a C string"),
+                        }
+                    },
+                    $crate::prelude::fmt!($($arg)*),
+                ) {
+                    // SAFETY: `dynamic_debug!` supplies a live, initialized static descriptor.
+                    // Its mutable fields are accessed only by the C dynamic debug code.
+                    (prefix, args) => unsafe {
+                        $crate::print::dynamic_debug::Descriptor::print(__descriptor, prefix, args)
+                    },
+                }
+            });
         }
-    )
+
+        #[cfg(not(any(CONFIG_DYNAMIC_DEBUG, all(CONFIG_DYNAMIC_DEBUG_CORE, DYNAMIC_DEBUG_MODULE))))]
+        {
+            // Keep checking arguments even when dynamic debug is unavailable.
+            if false {
+                $crate::print_macro!($crate::print::format_strings::DEBUG, false, $($arg)*)
+            }
+        }
+    })
 );
 
 /// Continues a previous log message in the same line.

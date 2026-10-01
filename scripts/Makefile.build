@@ -325,6 +325,7 @@ rust_allowed_features := arbitrary_self_types,asm_goto,generic_arg_infer,used_wi
 # modules case.
 rust_common_cmd = \
 	OBJTREE=$(abspath $(objtree)) \
+	RUST_MODNAME=$(call name-fix-token,$(modname)) \
 	RUST_MODFILE=$(modfile) $(RUSTC_OR_CLIPPY) $(rust_flags) \
 	-Zallow-features=$(rust_allowed_features) \
 	-Zcrate-attr=no_std \
