@@ -621,6 +621,13 @@ static int __map_range_leaf(struct pt_range *range, void *arg,
 			PT_WARN_ON(compute_best_pgsize(&pts, oa) !=
 				   leaf_pgsize_lg2);
 		}
+
+		/* If refcount = 0, shrinker killed the page, retry map */
+		if (!atomic_inc_not_zero(&virt_to_ioptdesc(pts.table)->__page_refcount)) {
+			ret = -EAGAIN;
+			break;
+		}
+
 		pt_install_leaf_entry(&pts, oa, leaf_pgsize_lg2, &map->attrs);
 
 		oa += log2_to_int(leaf_pgsize_lg2);
@@ -754,6 +761,11 @@ static __always_inline int __do_map_single_page(struct pt_range *range,
 	if (pts.level == 0) {
 		if (pts.type != PT_ENTRY_EMPTY)
 			return -EADDRINUSE;
+
+		/* If refcount = 0, shrinker killed the page, retry map */
+		if (!atomic_inc_not_zero(&virt_to_ioptdesc(pts.table)->__page_refcount))
+			return -EAGAIN;
+
 		pt_install_leaf_entry(&pts, map->oa, PAGE_SHIFT,
 				      &map->attrs);
 		/* No flush, not used when incoherent */
@@ -1087,6 +1099,20 @@ start_oa:
 			 */
 			num_contig_lg2 = pt_entry_num_contig_lg2(&pts);
 			pt_clear_entries(&pts, num_contig_lg2);
+
+			/* Drop refcount and add to reclaim_list for the last ref */
+			/*
+			 * DMA API unmaps can run in IRQ context and the reclaim_list
+			 * lock is not IRQ safe, so only queue for non-DMA domains.
+			 */
+			if (atomic_dec_return(&virt_to_ioptdesc(pts.table)->__page_refcount) == 1 &&
+			    !iommu_is_dma_domain(&iommu_from_common(range->common)->domain)) {
+				struct pt_iommu *iommu = iommu_from_common(range->common);
+
+				xa_store(&iommu->domain.reclaim_list, range->va,
+					 virt_to_ioptdesc(pts.table), GFP_ATOMIC);
+			}
+
 			gather_add_leaf(&unmap->pending, &pts);
 			num_oas += log2_to_int(num_contig_lg2);
 			if (pts.index < flush_start_index)
