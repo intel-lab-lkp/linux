@@ -183,6 +183,8 @@ static int loongson_gpio_irq_set_type(struct irq_data *data, unsigned int type)
 	u8 pol = 0, edge = 0, dual = 0;
 
 	if ((type & IRQ_TYPE_SENSE_MASK) == IRQ_TYPE_EDGE_BOTH) {
+		if (!lgpio->chip_data->intdual_offset)
+			return -EINVAL;
 		edge = 1;
 		dual = 1;
 		irq_set_handler_locked(data, handle_edge_irq);
@@ -210,7 +212,8 @@ static int loongson_gpio_irq_set_type(struct irq_data *data, unsigned int type)
 
 	writeb(pol, lgpio->reg_base + lgpio->chip_data->intpol_offset + hwirq);
 	writeb(edge, lgpio->reg_base + lgpio->chip_data->intedge_offset + hwirq);
-	writeb(dual, lgpio->reg_base + lgpio->chip_data->intdual_offset + hwirq);
+	if (lgpio->chip_data->intdual_offset)
+		writeb(dual, lgpio->reg_base + lgpio->chip_data->intdual_offset + hwirq);
 
 	return 0;
 }
@@ -260,7 +263,7 @@ static int loongson_gpio_init_irqchip(struct platform_device *pdev,
 	chip->irq.parent_handler_data = lgpio;
 	gpio_irq_chip_set_chip(&chip->irq, data->girqchip);
 
-	chip->irq.num_parents = data->intr_num;
+	chip->irq.num_parents = 0;
 	chip->irq.parents = devm_kcalloc(&pdev->dev, data->intr_num,
 					 sizeof(*chip->irq.parents), GFP_KERNEL);
 	if (!chip->irq.parents)
@@ -269,16 +272,23 @@ static int loongson_gpio_init_irqchip(struct platform_device *pdev,
 	for (i = 0; i < data->intr_num; i++) {
 		int ret;
 
-		ret = platform_get_irq(pdev, i);
+		ret = platform_get_irq_optional(pdev, i);
+		if (ret == -ENXIO)
+			continue;
 		if (ret < 0)
 			return dev_err_probe(&pdev->dev, ret,
 					     "failed to get IRQ %d\n", i);
-		chip->irq.parents[i] = ret;
+		chip->irq.parents[chip->irq.num_parents++] = ret;
 	}
 
 	for (i = 0; i < data->intr_num; i++) {
 		writeb(0x0, lgpio->reg_base + data->inten_offset + i);
 		writeb(0x1, lgpio->reg_base + data->intclr_offset + i);
+	}
+
+	if (chip->irq.num_parents == 0) {
+		dev_warn(&pdev->dev, "no parent IRQs have been found, GPIO IRQs will not be available\n");
+		gpio_irq_chip_set_chip(&chip->irq, NULL);
 	}
 
 	return 0;
@@ -413,6 +423,13 @@ static const struct loongson_gpio_chip_data loongson_gpio_ls2k2000_data1 = {
 	.in_offset = 0xa00,
 	.out_offset = 0x900,
 	.inten_offset = 0xb00,
+	.intpol_offset = 0xc00,
+	.intedge_offset = 0xd00,
+	.intclr_offset = 0xe00,
+	.intsts_offset = 0xf00,
+	.intr_num = 8,
+	.irq_handler = loongson_gpio_ls2k0300_irq_handler,
+	.girqchip = &loongson_gpio_ls2k0300_irqchip,
 };
 
 static const struct loongson_gpio_chip_data loongson_gpio_ls2k2000_data2 = {
@@ -449,6 +466,13 @@ static const struct loongson_gpio_chip_data loongson_gpio_ls7a2000_data0 = {
 	.in_offset = 0xa00,
 	.out_offset = 0x900,
 	.inten_offset = 0xb00,
+	.intpol_offset = 0xc00,
+	.intedge_offset = 0xd00,
+	.intclr_offset = 0xe00,
+	.intsts_offset = 0xf00,
+	.intr_num = 5,
+	.irq_handler = loongson_gpio_ls2k0300_irq_handler,
+	.girqchip = &loongson_gpio_ls2k0300_irqchip,
 };
 
 /* LS7A2000 ACPI GPIO */
