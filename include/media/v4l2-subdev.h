@@ -550,10 +550,13 @@ struct v4l2_subdev_vbi_ops {
  * @g_skip_frames: number of frames to skip at stream start. This is needed for
  *		   buggy sensors that generate faulty frames when they are
  *		   turned on.
+ * @detect: query whether the sensor is physically connected and reachable
  */
 struct v4l2_subdev_sensor_ops {
 	int (*g_skip_top_lines)(struct v4l2_subdev *sd, u32 *lines);
 	int (*g_skip_frames)(struct v4l2_subdev *sd, u32 *frames);
+	int (*detect)(struct v4l2_subdev *sd,
+		      struct v4l2_subdev_connected_status *status);
 };
 
 /**

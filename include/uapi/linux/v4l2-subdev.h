@@ -268,6 +268,17 @@ struct v4l2_subdev_client_capability {
 	__u64 capabilities;
 };
 
+enum v4l2_subdev_connected_status_whence {
+	V4L2_SUBDEV_STATUS_CONNECTED = 1,
+	V4L2_SUBDEV_STATUS_DISCONNECTED = 2,
+	V4L2_SUBDEV_STATUS_UNKNOWN = 3,
+};
+
+struct v4l2_subdev_connected_status {
+	__u32 status;
+	__u32 reserved[7];
+};
+
 /* Backwards compatibility define --- to be removed */
 #define v4l2_subdev_edid v4l2_edid
 
@@ -287,6 +298,7 @@ struct v4l2_subdev_client_capability {
 #define VIDIOC_SUBDEV_S_ROUTING			_IOWR('V', 39, struct v4l2_subdev_routing)
 #define VIDIOC_SUBDEV_G_CLIENT_CAP		_IOR('V',  101, struct v4l2_subdev_client_capability)
 #define VIDIOC_SUBDEV_S_CLIENT_CAP		_IOWR('V',  102, struct v4l2_subdev_client_capability)
+#define VIDIOC_SUBDEV_G_CONNECTION_STATUS	_IOR('V',  103, struct v4l2_subdev_connected_status)
 
 /* The following ioctls are identical to the ioctls in videodev2.h */
 #define VIDIOC_SUBDEV_G_STD			_IOR('V', 23, v4l2_std_id)

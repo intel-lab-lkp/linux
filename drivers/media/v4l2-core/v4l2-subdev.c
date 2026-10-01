@@ -1142,6 +1142,14 @@ static long subdev_do_ioctl(struct file *file, unsigned int cmd, void *arg,
 		return 0;
 	}
 
+	case VIDIOC_SUBDEV_G_CONNECTION_STATUS: {
+		struct v4l2_subdev_connected_status *status = arg;
+
+		memset(status->reserved, 0, sizeof(status->reserved));
+
+		return v4l2_subdev_call(sd, sensor, detect, status);
+	}
+
 	default:
 		return v4l2_subdev_call(sd, core, ioctl, cmd, arg);
 	}
