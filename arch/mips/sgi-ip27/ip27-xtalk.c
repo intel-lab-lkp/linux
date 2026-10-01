@@ -7,6 +7,7 @@
  * Generic XTALK initialization code
  */
 
+#include <linux/err.h>
 #include <linux/kernel.h>
 #include <linux/smp.h>
 #include <linux/platform_device.h>
@@ -23,6 +24,9 @@
 #define XXBOW_WIDGET_PART_NUM	0xd000	/* Xbow in Xbridge */
 #define PXBOW_WIDGET_PART_NUM	0xd100	/* PXbow */
 #define BASE_XBOW_PORT		8     /* Lowest external port */
+
+/* Odyssey's register aperture, as sized by the sgi-odyssey driver. */
+#define ODYSSEY_REG_SIZE		0x00410000
 
 enum xtalk_bridge_type {
 	XTALK_BRIDGE,
@@ -167,6 +171,27 @@ err_unregister_pdev_wd:
 	return;
 }
 
+static void odyssey_platform_create(nasid_t nasid, int widget)
+{
+	struct platform_device *pdev;
+	struct resource res;
+
+	memset(&res, 0, sizeof(res));
+	res.name = "sgi-odyssey";
+	res.start = NODE_OFFSET(nasid) + (widget << SWIN_SIZE_BITS);
+	res.end = res.start + ODYSSEY_REG_SIZE - 1;
+	res.flags = IORESOURCE_MEM;
+
+	pr_info("xtalk:n%d/%x odyssey widget: reg=[%pa-%pa]\n",
+		nasid, widget, &res.start, &res.end);
+
+	pdev = platform_device_register_simple("sgi-odyssey",
+					       PLATFORM_DEVID_AUTO, &res, 1);
+	if (IS_ERR(pdev))
+		pr_warn("xtalk:n%d/%x odyssey platform device registration failed: %ld\n",
+			nasid, widget, PTR_ERR(pdev));
+}
+
 static int probe_one_port(nasid_t nasid, int widget, int masterwid)
 {
 	widgetreg_t		widget_id;
@@ -189,6 +214,9 @@ static int probe_one_port(nasid_t nasid, int widget, int masterwid)
 				       XTALK_PIC_BUS0);
 		bridge_platform_create(nasid, widget, masterwid,
 				       XTALK_PIC_BUS1);
+		break;
+	case WIDGET_ODYS_PART_NUM:
+		odyssey_platform_create(nasid, widget);
 		break;
 	default:
 		pr_info("xtalk:n%d/%d unknown widget (0x%x)\n",
