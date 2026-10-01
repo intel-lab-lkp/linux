@@ -66,16 +66,26 @@ void __release_mid(struct TCP_Server_Info *server, struct mid_q_entry *midEntry)
 
 	if (smb_cmd < NUMBER_OF_SMB2_COMMANDS) {
 		if (atomic_read(&server->num_cmds[smb_cmd]) == 0) {
-			server->slowest_cmd[smb_cmd] = roundtrip_time;
-			server->fastest_cmd[smb_cmd] = roundtrip_time;
+			/* First completion for this command: initialize min/max. */
+			WRITE_ONCE(server->slowest_cmd[smb_cmd], roundtrip_time);
+			WRITE_ONCE(server->fastest_cmd[smb_cmd], roundtrip_time);
 		} else {
-			if (server->slowest_cmd[smb_cmd] < roundtrip_time)
-				server->slowest_cmd[smb_cmd] = roundtrip_time;
-			else if (server->fastest_cmd[smb_cmd] > roundtrip_time)
-				server->fastest_cmd[smb_cmd] = roundtrip_time;
+			u32 old;
+
+			old = READ_ONCE(server->slowest_cmd[smb_cmd]);
+			while (old < roundtrip_time &&
+			       !try_cmpxchg_relaxed(&server->slowest_cmd[smb_cmd],
+			       &old, roundtrip_time))
+				;
+
+			old = READ_ONCE(server->fastest_cmd[smb_cmd]);
+			while (old > roundtrip_time &&
+			       !try_cmpxchg_relaxed(&server->fastest_cmd[smb_cmd],
+			       &old, roundtrip_time))
+				;
 		}
 		cifs_stats_inc(&server->num_cmds[smb_cmd]);
-		server->time_per_cmd[smb_cmd] += roundtrip_time;
+		atomic64_add(roundtrip_time, &server->time_per_cmd[smb_cmd]);
 	}
 	/*
 	 * commands taking longer than one second (default) can be indications

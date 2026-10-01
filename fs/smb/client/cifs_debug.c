@@ -752,9 +752,9 @@ static ssize_t cifs_stats_proc_write(struct file *file,
 			for (i = 0; i < NUMBER_OF_SMB2_COMMANDS; i++) {
 				atomic_set(&server->num_cmds[i], 0);
 				atomic_set(&server->smb2slowcmd[i], 0);
-				server->time_per_cmd[i] = 0;
-				server->slowest_cmd[i] = 0;
-				server->fastest_cmd[i] = 0;
+				atomic64_set(&server->time_per_cmd[i], 0);
+				WRITE_ONCE(server->slowest_cmd[i], 0);
+				WRITE_ONCE(server->fastest_cmd[i], 0);
 			}
 #endif /* CONFIG_CIFS_STATS2 */
 			list_for_each_entry(ses, &server->smb_ses_list, smb_ses_list) {
@@ -826,9 +826,9 @@ static int cifs_stats_proc_show(struct seq_file *m, void *v)
 		for (j = 0; j < NUMBER_OF_SMB2_COMMANDS; j++)
 			seq_printf(m, "  %d\t\t%d\t%llu\t\t%u\t%u\n", j,
 				atomic_read(&server->num_cmds[j]),
-				server->time_per_cmd[j],
-				server->fastest_cmd[j],
-				server->slowest_cmd[j]);
+				(unsigned long long)atomic64_read(&server->time_per_cmd[j]),
+				READ_ONCE(server->fastest_cmd[j]),
+				READ_ONCE(server->slowest_cmd[j]));
 		for (j = 0; j < NUMBER_OF_SMB2_COMMANDS; j++)
 			if (atomic_read(&server->smb2slowcmd[j])) {
 				spin_lock(&server->srv_lock);
