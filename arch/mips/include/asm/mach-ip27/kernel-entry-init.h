@@ -49,7 +49,7 @@
 	dli	t0, 0xffffffffc0000000
 	dmtc0	t0, CP0_ENTRYHI
 	GET_NASID_SHFT	t3, t0
-	li	t0, 0x1c000		# Offset of text into node memory
+	li	t0, 0x40000		# Offset of text into node memory
 	dsllv	t1, t1, t3		# Shift text nasid into place
 	dsllv	t2, t2, t3		# Same for data nasid
 	or	t1, t1, t0		# Physical load address of kernel text
