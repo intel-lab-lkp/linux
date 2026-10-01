@@ -1184,6 +1184,27 @@ bind_validate_region(struct nouveau_job *job)
 	return 0;
 }
 
+/*
+ * Lock the VM's common dma-resv together with the one of @obj, as needed to
+ * drop what may be the last reference of a &drm_gpuvm_bo.
+ */
+static void
+nouveau_uvmm_lock_vm_and_obj(struct nouveau_uvmm *uvmm, struct drm_exec *exec,
+			     struct drm_gem_object *obj)
+{
+	int ret;
+
+	drm_exec_init(exec, DRM_EXEC_IGNORE_DUPLICATES, 2);
+	drm_exec_until_all_locked(exec) {
+		ret = drm_exec_lock_obj(exec, drm_gpuvm_resv_obj(&uvmm->base));
+		if (!ret)
+			ret = drm_exec_lock_obj(exec, obj);
+		drm_exec_retry_on_contention(exec);
+		if (drm_WARN_ON(uvmm->base.drm, ret))
+			break;
+	}
+}
+
 static void
 bind_link_gpuvas(struct bind_job_op *bop)
 {
@@ -1221,11 +1242,23 @@ bind_lock_validate(struct nouveau_job *job, struct drm_exec *exec,
 		   unsigned int num_fences)
 {
 	struct nouveau_uvmm_bind_job *bind_job = to_uvmm_bind_job(job);
+	struct nouveau_uvmm *uvmm = nouveau_cli_uvmm(job->cli);
 	struct bind_job_op *op;
 	int ret;
 
+	/* The VM's dma-resv protects its extobj and evicted lists, and must be
+	 * held by bind_link_gpuvas() in case it drops the last reference of a
+	 * &drm_gpuvm_bo.
+	 */
+	ret = drm_gpuvm_prepare_vm(&uvmm->base, exec, num_fences);
+	if (ret)
+		return ret;
+
 	list_for_each_op(op, &bind_job->ops) {
 		struct drm_gpuva_op *va_op;
+
+		if (op->op == OP_MAP)
+			drm_gpuvm_bo_extobj_add(op->vm_bo);
 
 		if (!op->ops)
 			continue;
@@ -1279,8 +1312,6 @@ nouveau_uvmm_bind_job_submit(struct nouveau_job *job,
 			dma_resv_unlock(obj->resv);
 			if (IS_ERR(op->vm_bo))
 				return PTR_ERR(op->vm_bo);
-
-			drm_gpuvm_bo_extobj_add(op->vm_bo);
 		}
 
 		ret = bind_validate_op(job, op);
@@ -1594,9 +1625,11 @@ nouveau_uvmm_bind_job_cleanup(struct nouveau_job *job)
 			drm_gpuva_ops_free(&uvmm->base, op->ops);
 
 		if (!IS_ERR_OR_NULL(op->vm_bo)) {
-			dma_resv_lock(obj->resv, NULL);
+			struct drm_exec exec;
+
+			nouveau_uvmm_lock_vm_and_obj(uvmm, &exec, obj);
 			drm_gpuvm_bo_put(op->vm_bo);
-			dma_resv_unlock(obj->resv);
+			drm_exec_fini(&exec);
 		}
 
 		if (obj)
@@ -1932,7 +1965,8 @@ nouveau_uvmm_ioctl_vm_init(struct drm_device *dev,
 	mt_init_flags(&uvmm->region_mt, MT_FLAGS_LOCK_EXTERN);
 	mt_set_external_lock(&uvmm->region_mt, &uvmm->mutex);
 
-	drm_gpuvm_init(&uvmm->base, cli->name, 0, drm, r_obj,
+	drm_gpuvm_init(&uvmm->base, cli->name, DRM_GPUVM_RESV_PROTECTED,
+		       drm, r_obj,
 		       NOUVEAU_VA_SPACE_START,
 		       NOUVEAU_VA_SPACE_END,
 		       init->kernel_managed_addr,
@@ -1969,6 +2003,7 @@ nouveau_uvmm_fini(struct nouveau_uvmm *uvmm)
 	struct nouveau_uvma_region *reg;
 	struct nouveau_cli *cli = uvmm->vmm.cli;
 	struct drm_gpuva *va, *next;
+	struct drm_exec exec;
 
 	nouveau_uvmm_lock(uvmm);
 	drm_gpuvm_for_each_va_safe(va, next, &uvmm->base) {
@@ -1980,9 +2015,9 @@ nouveau_uvmm_fini(struct nouveau_uvmm *uvmm)
 
 		drm_gpuva_remove(va);
 
-		dma_resv_lock(obj->resv, NULL);
+		nouveau_uvmm_lock_vm_and_obj(uvmm, &exec, obj);
 		drm_gpuva_unlink(va);
-		dma_resv_unlock(obj->resv);
+		drm_exec_fini(&exec);
 
 		nouveau_uvma_unmap(uvma);
 		nouveau_uvma_vmm_put(uvma);
