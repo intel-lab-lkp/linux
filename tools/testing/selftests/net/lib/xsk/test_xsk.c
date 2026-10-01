@@ -369,6 +369,9 @@ static struct pkt *pkt_stream_get_next_rx_pkt(struct pkt_stream *pkt_stream, u32
 
 void pkt_stream_delete(struct pkt_stream *pkt_stream)
 {
+	if (!pkt_stream)
+		return;
+
 	free(pkt_stream->pkts);
 	free(pkt_stream);
 }
@@ -2329,6 +2332,13 @@ static int detect_ifobj_caps(struct ifobject *ifobj)
 		} else {
 			ifobj->caps.xdp_zc_max_segs = 0;
 		}
+	}
+
+	if (!get_hw_ring_size(ifobj->ifname, &ifobj->ring)) {
+		ifobj_set_cap(ifobj, XSK_CAP_HW_RING);
+		ifobj->caps.tx_max_pending = ifobj->ring.tx_max_pending;
+		ifobj->set_ring.default_tx = ifobj->ring.tx_pending;
+		ifobj->set_ring.default_rx = ifobj->ring.rx_pending;
 	}
 
 	return 0;
