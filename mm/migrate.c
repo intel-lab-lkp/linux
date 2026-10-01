@@ -2451,44 +2451,83 @@ out:
 	return err;
 }
 
+static int folio_stat(struct folio *folio)
+{
+	if (is_zero_folio(folio) || is_huge_zero_folio(folio))
+		return -EFAULT;
+	if (folio_is_zone_device(folio))
+		return -ENOENT;
+	return folio_nid(folio);
+}
+
+/* Look up a PTE in a locked page table the way folio_walk_start() does. */
+static int pte_stat(struct vm_area_struct *vma, unsigned long addr,
+		    pte_t *ptep)
+{
+	pte_t pte = ptep_get(ptep);
+	struct page *page;
+
+	if (!pte_present(pte))
+		return -ENOENT;
+	page = vm_normal_page(vma, addr, pte);
+	if (page)
+		return folio_stat(page_folio(page));
+	if (is_zero_pfn(pte_pfn(pte)))
+		return -EFAULT;
+	return -ENOENT;
+}
+
 /*
  * Determine the nodes of an array of pages and store it in an array of status.
  */
 static void do_pages_stat_array(struct mm_struct *mm, unsigned long nr_pages,
 				const void __user **pages, int *status)
 {
-	unsigned long i;
+	struct vm_area_struct *vma = NULL;
+	unsigned long i = 0;
 
 	mmap_read_lock(mm);
 
-	for (i = 0; i < nr_pages; i++) {
-		unsigned long addr = (unsigned long)(*pages);
-		struct vm_area_struct *vma;
+	while (i < nr_pages) {
+		unsigned long addr = (unsigned long)pages[i];
+		unsigned long next, end;
 		struct folio_walk fw;
 		struct folio *folio;
-		int err = -EFAULT;
+		pte_t *ptep;
 
-		vma = vma_lookup(mm, addr);
-		if (!vma)
-			goto set_status;
+		if (!vma || addr < vma->vm_start || addr >= vma->vm_end)
+			vma = vma_lookup(mm, addr);
+		if (!vma) {
+			status[i++] = -EFAULT;
+			continue;
+		}
 
 		folio = folio_walk_start(&fw, vma, addr, FW_ZEROPAGE);
-		if (folio) {
-			if (is_zero_folio(folio) || is_huge_zero_folio(folio))
-				err = -EFAULT;
-			else if (folio_is_zone_device(folio))
-				err = -ENOENT;
-			else
-				err = folio_nid(folio);
-			folio_walk_end(&fw, vma);
-		} else {
-			err = -ENOENT;
+		if (!folio) {
+			status[i++] = -ENOENT;
+			continue;
 		}
-set_status:
-		*status = err;
+		status[i++] = folio_stat(folio);
 
-		pages++;
-		status++;
+		/*
+		 * Callers usually pass consecutive pages. Answer those that
+		 * fall under the entry or page table we already hold locked
+		 * instead of walking the page tables again for each of them.
+		 */
+		end = pmd_addr_end(addr, vma->vm_end);
+		ptep = fw.ptep;
+		for (next = addr + PAGE_SIZE; i < nr_pages && next < end;
+		     next += PAGE_SIZE, i++) {
+			if ((unsigned long)pages[i] != next)
+				break;
+			if (fw.level == FW_LEVEL_PMD)
+				status[i] = status[i - 1];
+			else if (fw.level == FW_LEVEL_PTE)
+				status[i] = pte_stat(vma, next, ++ptep);
+			else
+				break;
+		}
+		folio_walk_end(&fw, vma);
 	}
 
 	mmap_read_unlock(mm);
