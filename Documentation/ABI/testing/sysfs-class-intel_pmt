@@ -66,6 +66,20 @@ Description:
 		can be determined from an XML file of specified GUID for the
 		parent device.
 
+What:		/sys/class/intel_pmt/crashlog<x>
+Date:		October 2026
+KernelVersion:	7.4
+Contact:	David Box <david.e.box@linux.intel.com>
+Description:
+		When a crashlog device is probed with a completed crashlog
+		already present, or a manual trigger completes, the driver emits
+		a KOBJ_CHANGE uevent for that crashlog<x> device.
+
+		The following uevent environment variables are added:
+
+		INTEL_PMT_CRASHLOG_EVENT=PRESENT
+		INTEL_PMT_CRASHLOG_COMPLETE=1
+
 What:		/sys/class/intel_pmt/crashlog<x>/crashlog
 Date:		October 2020
 KernelVersion:	5.10

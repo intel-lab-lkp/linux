@@ -12,12 +12,14 @@
 #include <linux/cleanup.h>
 #include <linux/intel_vsec.h>
 #include <linux/kernel.h>
+#include <linux/kobject.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/pci.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <linux/overflow.h>
+#include <linux/workqueue.h>
 
 #include "class.h"
 
@@ -113,12 +115,18 @@ struct crashlog_entry {
 	struct intel_pmt_entry		entry;
 	struct mutex			control_mutex;
 	const struct crashlog_info	*info;
+	struct work_struct		uevent_work;
+	struct delayed_work		uevent_poll_work;
+	u8				uevent_poll_tries;
 };
 
 struct pmt_crashlog_priv {
 	int			num_entries;
 	struct crashlog_entry	entry[];
 };
+
+#define PMT_CRASHLOG_UEVENT_POLL_MS		100
+#define PMT_CRASHLOG_UEVENT_POLL_MAX_TRIES	50
 
 /*
  * I/O
@@ -225,6 +233,47 @@ static bool pmt_crashlog_rearm(struct crashlog_entry *crashlog)
 static void pmt_crashlog_set_rearm(struct crashlog_entry *crashlog)
 {
 	pmt_crashlog_rmw(crashlog, crashlog->info->control.rearm, true);
+}
+
+static void pmt_crashlog_uevent_fn(struct work_struct *work)
+{
+	struct crashlog_entry *crashlog =
+		container_of(work, struct crashlog_entry, uevent_work);
+	char *envp[] = {
+		"INTEL_PMT_CRASHLOG_EVENT=PRESENT",
+		"INTEL_PMT_CRASHLOG_COMPLETE=1",
+		NULL,
+	};
+
+	if (crashlog->entry.kobj)
+		kobject_uevent_env(crashlog->entry.kobj, KOBJ_CHANGE, envp);
+}
+
+static void pmt_crashlog_uevent_poll_fn(struct work_struct *work)
+{
+	struct crashlog_entry *crashlog =
+		container_of(to_delayed_work(work), struct crashlog_entry,
+			     uevent_poll_work);
+	guard(mutex)(&crashlog->control_mutex);
+
+	/* A newer trigger_store() re-armed us; that cycle owns the notification */
+	if (delayed_work_pending(&crashlog->uevent_poll_work))
+		return;
+
+	if (pmt_crashlog_complete(crashlog)) {
+		schedule_work(&crashlog->uevent_work);
+		return;
+	}
+
+	if (++crashlog->uevent_poll_tries < PMT_CRASHLOG_UEVENT_POLL_MAX_TRIES)
+		schedule_delayed_work(&crashlog->uevent_poll_work,
+				      msecs_to_jiffies(PMT_CRASHLOG_UEVENT_POLL_MS));
+}
+
+static void pmt_crashlog_notify_pending(struct crashlog_entry *crashlog)
+{
+	if (pmt_crashlog_complete(crashlog))
+		schedule_work(&crashlog->uevent_work);
 }
 
 /*
@@ -423,7 +472,19 @@ trigger_store(struct device *dev, struct device_attribute *attr,
 	if (pmt_crashlog_complete(crashlog))
 		return -EEXIST;
 
+	/*
+	 * Only now are we actually starting a fresh crash: any stale poll
+	 * cycle left over from a prior trigger can be dropped safely, since
+	 * pmt_crashlog_complete() above proved it carried no unresolved
+	 * completion. Non-sync: uevent_poll_fn() takes this same mutex, so
+	 * cancel_delayed_work_sync() here could deadlock against it.
+	 */
+	cancel_delayed_work(&crashlog->uevent_poll_work);
+
 	pmt_crashlog_set_execute(crashlog);
+	crashlog->uevent_poll_tries = 0;
+	schedule_delayed_work(&crashlog->uevent_poll_work,
+			      msecs_to_jiffies(PMT_CRASHLOG_UEVENT_POLL_MS));
 
 	return count;
 }
@@ -551,6 +612,9 @@ static void pmt_crashlog_remove(struct auxiliary_device *auxdev)
 	for (i = 0; i < priv->num_entries; i++) {
 		struct crashlog_entry *crashlog = &priv->entry[i];
 
+		/* Disable, not cancel: a racing trigger_store() must not re-arm */
+		disable_delayed_work_sync(&crashlog->uevent_poll_work);
+		disable_work_sync(&crashlog->uevent_work);
 		intel_pmt_dev_destroy(&crashlog->entry, &pmt_crashlog_ns);
 		mutex_destroy(&crashlog->control_mutex);
 	}
@@ -572,15 +636,29 @@ static int pmt_crashlog_probe(struct auxiliary_device *auxdev,
 	auxiliary_set_drvdata(auxdev, priv);
 
 	for (i = 0; i < intel_vsec_dev->num_resources; i++) {
-		struct intel_pmt_entry *entry = &priv->entry[priv->num_entries].entry;
+		struct crashlog_entry *crashlog = &priv->entry[priv->num_entries];
+		struct intel_pmt_entry *entry = &crashlog->entry;
+
+		/* init before dev_create() exposes trigger sysfs to userspace */
+		INIT_WORK(&crashlog->uevent_work, pmt_crashlog_uevent_fn);
+		INIT_DELAYED_WORK(&crashlog->uevent_poll_work,
+				  pmt_crashlog_uevent_poll_fn);
+		crashlog->uevent_poll_tries = 0;
 
 		ret = intel_pmt_dev_create(entry, &pmt_crashlog_ns, intel_vsec_dev, i);
-		if (ret < 0)
+		if (ret < 0) {
+			cancel_delayed_work_sync(&crashlog->uevent_poll_work);
+			cancel_work_sync(&crashlog->uevent_work);
 			goto abort_probe;
-		if (ret)
+		}
+		if (ret) {
+			cancel_delayed_work_sync(&crashlog->uevent_poll_work);
+			cancel_work_sync(&crashlog->uevent_work);
 			continue;
+		}
 
 		priv->num_entries++;
+		pmt_crashlog_notify_pending(crashlog);
 	}
 
 	return 0;
