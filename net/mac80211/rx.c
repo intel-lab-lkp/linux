@@ -4536,7 +4536,10 @@ static bool ieee80211_accept_frame(struct ieee80211_rx_data *rx)
 	struct ieee80211_hdr *hdr = (void *)skb->data;
 	struct ieee80211_rx_status *status = IEEE80211_SKB_RXCB(skb);
 	u8 *bssid = ieee80211_get_bssid(hdr, skb->len, sdata->vif.type);
+	bool nan_beacon = ieee80211_is_nan_beacon((struct ieee80211_mgmt *)hdr,
+						  skb->len);
 	bool multicast;
+
 	static const u8 nan_network_id[ETH_ALEN] __aligned(2) = {
 		0x51, 0x6F, 0x9A, 0x01, 0x00, 0x00
 	};
@@ -4545,6 +4548,9 @@ static bool ieee80211_accept_frame(struct ieee80211_rx_data *rx)
 		return sdata->vif.type == NL80211_IFTYPE_STATION && bssid;
 
 	multicast = is_multicast_ether_addr(hdr->addr1);
+	/* Only a NAN interface may handle NAN beacons */
+	if (nan_beacon && sdata->vif.type != NL80211_IFTYPE_NAN)
+		return false;
 
 	switch (sdata->vif.type) {
 	case NL80211_IFTYPE_STATION:
@@ -4681,7 +4687,8 @@ static bool ieee80211_accept_frame(struct ieee80211_rx_data *rx)
 		 * Accept only frames that are addressed to the NAN cluster
 		 * (based on the Cluster ID). From these frames, accept only
 		 *  - public action frames,
-		 *  - authentication frames to the local address, and
+		 *  - authentication frames to the local address,
+		 *  - NAN beacons, when Instant Communication is enabled, and
 		 *  - robust management frames except disassoc.
 		 */
 		if (!ether_addr_equal(sdata->u.nan.conf.cluster_id, hdr->addr3))
@@ -4691,6 +4698,8 @@ static bool ieee80211_accept_frame(struct ieee80211_rx_data *rx)
 		if (ieee80211_is_auth(hdr->frame_control) &&
 		    ether_addr_equal(sdata->vif.addr, hdr->addr1))
 			return true;
+		if (nan_beacon)
+			return sdata->u.nan.conf.instant_comm;
 		if (!ieee80211_is_disassoc(hdr->frame_control) &&
 		    ieee80211_is_robust_mgmt_frame(skb))
 			return true;
