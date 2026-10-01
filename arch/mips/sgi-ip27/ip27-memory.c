@@ -17,6 +17,7 @@
 #include <linux/mmzone.h>
 #include <linux/export.h>
 #include <linux/nodemask.h>
+#include <linux/sizes.h>
 #include <linux/swap.h>
 #include <linux/pfn.h>
 #include <linux/highmem.h>
@@ -35,6 +36,9 @@
 
 /* A Bedrock node's memory comes in 1GB banks. */
 #define BEDROCK_SLOT_SHIFT	30
+
+/* Reserved at the bottom of node 0, which starts at physical 0. */
+#define BEDROCK_RSVD_SIZE	SZ_64M
 
 static unsigned int __init slot_shift(void)
 {
@@ -370,6 +374,10 @@ static void __init node_mem_init(nasid_t node)
 
 	get_pfn_range_for_nid(node, &start_pfn, &end_pfn);
 
+	/* Keep the node data above the reserved area. */
+	if (system_is_ip35 && node == 0)
+		slot_freepfn = max(slot_freepfn, PFN_UP(BEDROCK_RSVD_SIZE));
+
 	/*
 	 * Allocate the node data structures on the node first.
 	 */
@@ -410,6 +418,10 @@ void __init prom_meminit(void)
 
 	mlreset();
 	szmem();
+
+	if (system_is_ip35)
+		memblock_reserve(0, BEDROCK_RSVD_SIZE);
+
 	max_low_pfn = PHYS_PFN(memblock_end_of_DRAM());
 
 	for (node = 0; node < MAX_NUMNODES; node++) {
