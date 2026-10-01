@@ -50,6 +50,7 @@ TEST_PROGS = \
 	userns_devmem.py \
 	uso.py \
 	xdp_metadata.py \
+	xsk.py \
 	xsk_reconfig.py \
 	#
 
