@@ -594,6 +594,82 @@ ktime_t ntp_get_next_leap(unsigned int tkid)
 }
 
 /*
+ * ntp_update_skew_delta - Recompute the per-tick skew rate for the
+ * current second from the pending time_offset / time_adjust phase.
+ *
+ * The rate is in the same units as time_offset: (ns << NTP_SCALE_SHIFT)
+ * / HZ. If the result is so low that the skew imparted would round to
+ * zero, pass the bare minimum +-1 to ensure that it *does* actually
+ * drain completely to zero. It won't overshoot because
+ * logarithmic_accumulation() only drains what it can from time_offset
+ * or time_adjust, and the rest ends up in ntp_error which drives the
+ * selection of 'mult' immediately each tick.
+ *
+ * Called from second_overflow() at each second boundary (@settle =
+ * true), and directly by the writers of time_offset / time_adjust so a
+ * change takes effect at the next timekeeping advance rather than
+ * persisting a stale rate until the end of the second. @settle gates
+ * ntp_transfer_offset_adjust(): settling the opposing overlap is paced
+ * at one chunk per second by design and is the only mutation here, so
+ * with @settle false the call is a pure recompute, safe at any rate.
+ *
+ * The timekeeper lock is held on all paths, serializing ntp_data.
+ */
+static void ntp_update_skew_delta(struct ntp_data *ntpdata, bool settle)
+{
+	if (ntpdata->time_offset || ntpdata->time_adjust ||
+	    ntpdata->time_adjust_frac) {
+		s64 off_chunk = ntp_offset_chunk(ntpdata, ntpdata->time_offset);
+		s64 adj_chunk = 0, net;
+
+		/*
+		 * Once the exponential chunk rounds to zero, deliver the last
+		 * remaining offset this second so it converges to zero instead
+		 * of stalling just above it.
+		 */
+		if (!off_chunk)
+			off_chunk = ntpdata->time_offset;
+
+		if (ntpdata->time_adjust || ntpdata->time_adjust_frac) {
+			s64 adj;
+
+			if (ntpdata->time_adjust >= MAX_TICKADJ)
+				adj = MAX_TICKADJ * ONE_US_NS;
+			else if (ntpdata->time_adjust <= -MAX_TICKADJ)
+				adj = -MAX_TICKADJ * ONE_US_NS;
+			else
+				adj = ntpdata->time_adjust * ONE_US_NS +
+					ntpdata->time_adjust_frac;
+
+			adj_chunk = div_s64(adj, NTP_INTERVAL_FREQ);
+			if (!adj_chunk)
+				adj_chunk = signof(ntpdata->time_adjust_frac);
+		}
+
+		/*
+		 * If the two slews oppose, only their net would drive the
+		 * per-tick drain, so the cancelling part would never drain from
+		 * either tracker and an exact cancellation would stall both.
+		 * Settle that overlap directly between them (no clock motion).
+		 */
+		if (settle && off_chunk && adj_chunk &&
+		    signof(off_chunk) != signof(adj_chunk)) {
+			s64 conflict = min(abs(off_chunk), abs(adj_chunk));
+
+			ntp_transfer_offset_adjust(ntpdata, signof(off_chunk) * conflict);
+		}
+
+		/* Net is what the clock delivers; reduce to per-tick, then floor. */
+		net = off_chunk + adj_chunk;
+		ntpdata->skew_delta = div_s64(net, NTP_INTERVAL_FREQ);
+		if (!ntpdata->skew_delta && net)
+			ntpdata->skew_delta = signof(net);
+	} else {
+		ntpdata->skew_delta = 0;
+	}
+}
+
+/*
  * This routine handles the overflow of the microsecond field
  *
  * The tricky bits of code to handle the accurate clock support
@@ -669,65 +745,8 @@ int second_overflow(unsigned int tkid, time64_t secs)
 	/* Check PPS signal */
 	pps_dec_valid(ntpdata);
 
-	/*
-	 * Set the per-tick skew rate for the next second. This is in
-	 * the same units as time_offset: (ns << NTP_SCALE_SHIFT) / HZ.
-	 * If the result is so low that the skew imparted would round
-	 * to zero, pass the bare minimum ±1 to ensure that it *does*
-	 * actually drain completely to zero. It won't overshoot because
-	 * logarithmic_accumulation() only drains what it can from
-	 * time_offset or time_adjust, and the rest ends up in ntp_error
-	 * which drives the selection of 'mult' immediately each tick.
-	 */
-	if (ntpdata->time_offset || ntpdata->time_adjust ||
-	    ntpdata->time_adjust_frac) {
-		s64 off_chunk = ntp_offset_chunk(ntpdata, ntpdata->time_offset);
-		s64 adj_chunk = 0, net;
-
-		/*
-		 * Once the exponential chunk rounds to zero, deliver the last
-		 * remaining offset this second so it converges to zero instead
-		 * of stalling just above it.
-		 */
-		if (!off_chunk)
-			off_chunk = ntpdata->time_offset;
-
-		if (ntpdata->time_adjust || ntpdata->time_adjust_frac) {
-			s64 adj;
-
-			if (ntpdata->time_adjust >= MAX_TICKADJ)
-				adj = MAX_TICKADJ * ONE_US_NS;
-			else if (ntpdata->time_adjust <= -MAX_TICKADJ)
-				adj = -MAX_TICKADJ * ONE_US_NS;
-			else
-				adj = ntpdata->time_adjust * ONE_US_NS +
-					ntpdata->time_adjust_frac;
-
-			adj_chunk = div_s64(adj, NTP_INTERVAL_FREQ);
-			if (!adj_chunk)
-				adj_chunk = signof(ntpdata->time_adjust_frac);
-		}
-
-		/*
-		 * If the two slews oppose, only their net would drive the
-		 * per-tick drain, so the cancelling part would never drain from
-		 * either tracker and an exact cancellation would stall both.
-		 * Settle that overlap directly between them (no clock motion).
-		 */
-		if (off_chunk && adj_chunk && signof(off_chunk) != signof(adj_chunk)) {
-			s64 conflict = min(abs(off_chunk), abs(adj_chunk));
-
-			ntp_transfer_offset_adjust(ntpdata, signof(off_chunk) * conflict);
-		}
-
-		/* Net is what the clock delivers; reduce to per-tick, then floor. */
-		net = off_chunk + adj_chunk;
-		ntpdata->skew_delta = div_s64(net, NTP_INTERVAL_FREQ);
-		if (!ntpdata->skew_delta && net)
-			ntpdata->skew_delta = signof(net);
-	} else {
-		ntpdata->skew_delta = 0;
-	}
+	/* Set the per-tick skew rate for the next second */
+	ntp_update_skew_delta(ntpdata, true);
 
 	return leap;
 }
@@ -1003,6 +1022,10 @@ static inline void process_adjtimex_modes(struct ntp_data *ntpdata, const struct
 
 	if (txc->modes & (ADJ_TICK|ADJ_FREQUENCY|ADJ_OFFSET))
 		ntp_update_frequency(ntpdata);
+
+	/* A changed phase target invalidates the current skew rate */
+	if (txc->modes & (ADJ_OFFSET | ADJ_TIMECONST | ADJ_STATUS))
+		ntp_update_skew_delta(ntpdata, false);
 }
 
 /*
@@ -1023,6 +1046,7 @@ int ntp_adjtimex(unsigned int tkid, struct __kernel_timex *txc, const struct tim
 			ntpdata->time_adjust = txc->offset;
 			ntpdata->time_adjust_frac = 0;
 			ntp_update_frequency(ntpdata);
+			ntp_update_skew_delta(ntpdata, false);
 
 			audit_ntp_set_old(ad, AUDIT_NTP_ADJUST,	save_adjust);
 			audit_ntp_set_new(ad, AUDIT_NTP_ADJUST,	ntpdata->time_adjust);
@@ -1264,6 +1288,8 @@ static void hardpps_update_phase(struct ntp_data *ntpdata, long error)
 		/* Cancel running adjtime() */
 		ntpdata->time_adjust = 0;
 		ntpdata->time_adjust_frac = 0;
+		/* The previous correction's skew rate is stale; recompute */
+		ntp_update_skew_delta(ntpdata, false);
 	}
 	/* Update jitter */
 	ntpdata->pps_jitter += (jitter - ntpdata->pps_jitter) >> PPS_INTMIN;
