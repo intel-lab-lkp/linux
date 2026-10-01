@@ -12,6 +12,8 @@
 #ifndef _ASM_PCI_BRIDGE_H
 #define _ASM_PCI_BRIDGE_H
 
+#include <linux/build_bug.h>
+#include <linux/stddef.h>
 #include <linux/types.h>
 #include <linux/pci.h>
 #include <asm/xtalk/xwidget.h>		/* generic widget header */
@@ -38,6 +40,9 @@
 #define BRIDGE_SSRAM_128K	0x00020000	/* 128kB */
 #define BRIDGE_SSRAM_64K	0x00010000	/* 64kB */
 #define BRIDGE_SSRAM_0K		0x00000000	/* 0kB */
+
+/* PIC replicates its register block twice within one widget's 16MB window. */
+#define PIC_BUS1_OFFSET		0x800000
 
 /* ========================================================================
  *    Bridge address map
@@ -265,6 +270,15 @@ struct bridge_regs {
 };
 
 /*
+ * Pin b_device[]/b_rrb_map[]'s low-half placement: bridge_readl() and
+ * bridge_writel() rely on it.
+ */
+static_assert(offsetof(struct bridge_regs, b_device[0].reg) == 0x204);
+static_assert(offsetof(struct bridge_regs, b_device[1].reg) == 0x20c);
+static_assert(offsetof(struct bridge_regs, b_rrb_map[0].reg) == 0x284);
+static_assert(offsetof(struct bridge_regs, b_rrb_map[1].reg) == 0x28c);
+
+/*
  * Field formats for Error Command Word and Auxiliary Error Command Word
  * of bridge.
  */
@@ -394,6 +408,7 @@ struct bridge_err_cmdword {
 /* Widget part number of bridge */
 #define BRIDGE_WIDGET_PART_NUM		0xc002
 #define XBRIDGE_WIDGET_PART_NUM		0xd002
+#define PIC_WIDGET_PART_NUM		0xd102
 
 /* Manufacturer of bridge */
 #define BRIDGE_WIDGET_MFGR_NUM		0x036
@@ -817,11 +832,54 @@ struct bridge_controller {
 #define BRIDGE_CONTROLLER(bus) \
 	((struct bridge_controller *)((bus)->sysdata))
 
-#define bridge_read(bc, reg)		__raw_readl(&bc->base->reg)
-#define bridge_write(bc, reg, val)	__raw_writel(val, &bc->base->reg)
-#define bridge_set(bc, reg, val)	\
-	__raw_writel(__raw_readl(&bc->base->reg) | (val), &bc->base->reg)
-#define bridge_clr(bc, reg, val)	\
-	__raw_writel(__raw_readl(&bc->base->reg) & ~(val), &bc->base->reg)
+/*
+ * PIC does not accept a 32-bit write to half of a 64-bit register, so
+ * widen each access to the 8-byte-aligned double word and extract or
+ * insert the 32-bit value at its byte position. The pointer is
+ * volatile-qualified because widget_cfg_t is, and b_widget sits in
+ * every bridge_regs.
+ */
+static inline u32 bridge_readl(struct bridge_controller *bc, volatile u32 *reg)
+{
+	void *dw;
+	unsigned int shift;
+
+	if (likely(!bc->is_pic))
+		return __raw_readl(reg);
+
+	dw = (void *)((unsigned long)reg & ~7UL);
+	shift = ((unsigned long)reg & 4) ? 0 : 32;
+
+	return __raw_readq(dw) >> shift;
+}
+
+static inline void bridge_writel(struct bridge_controller *bc,
+				 volatile u32 *reg, u32 val)
+{
+	void *dw;
+	unsigned int shift;
+	u64 tmp;
+
+	if (likely(!bc->is_pic)) {
+		__raw_writel(val, reg);
+		return;
+	}
+
+	dw = (void *)((unsigned long)reg & ~7UL);
+	shift = ((unsigned long)reg & 4) ? 0 : 32;
+
+	tmp = __raw_readq(dw);
+	tmp = (tmp & ~(0xffffffffULL << shift)) | ((u64)val << shift);
+	__raw_writeq(tmp, dw);
+}
+
+#define bridge_read(bc, reg)		bridge_readl(bc, &bc->base->reg)
+#define bridge_write(bc, reg, val)	bridge_writel(bc, &bc->base->reg, val)
+#define bridge_set(bc, reg, val)				\
+	bridge_writel(bc, &bc->base->reg,			\
+		      bridge_readl(bc, &bc->base->reg) | (val))
+#define bridge_clr(bc, reg, val)				\
+	bridge_writel(bc, &bc->base->reg,			\
+		      bridge_readl(bc, &bc->base->reg) & ~(val))
 
 #endif /* _ASM_PCI_BRIDGE_H */

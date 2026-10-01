@@ -27,6 +27,8 @@
 enum xtalk_bridge_type {
 	XTALK_BRIDGE,
 	XTALK_XBRIDGE,
+	XTALK_PIC_BUS0,
+	XTALK_PIC_BUS1,
 };
 
 static void bridge_platform_create(nasid_t nasid, int widget, int masterwid,
@@ -88,21 +90,32 @@ static void bridge_platform_create(nasid_t nasid, int widget, int masterwid,
 	}
 
 
-	bd->bridge_addr = RAW_NODE_SWIN_BASE(nasid, widget);
+	bd->bridge_addr = RAW_NODE_SWIN_BASE(nasid, widget) +
+			  (type == XTALK_PIC_BUS1 ? PIC_BUS1_OFFSET : 0);
 	bd->intr_addr	= BIT_ULL(47) + 0x01800000 + PI_INT_PEND_MOD;
 	bd->nasid	= nasid;
 	bd->masterwid	= masterwid;
 	bd->is_xbridge	= type == XTALK_XBRIDGE;
+	bd->is_pic	= type == XTALK_PIC_BUS0 || type == XTALK_PIC_BUS1;
 
+	/* Split a PIC's window at bus 1 or its resource request fails. */
 	bd->mem.name	= "Bridge PCI MEM";
-	bd->mem.start	= offset + (widget << SWIN_SIZE_BITS) + BRIDGE_DEVIO0;
-	bd->mem.end	= offset + (widget << SWIN_SIZE_BITS) + SWIN_SIZE - 1;
+	bd->mem.start	= offset + (widget << SWIN_SIZE_BITS) +
+			  (type == XTALK_PIC_BUS1 ? PIC_BUS1_OFFSET : 0) +
+			  BRIDGE_DEVIO0;
+	bd->mem.end	= offset + (widget << SWIN_SIZE_BITS) +
+			  (type == XTALK_PIC_BUS0 ? PIC_BUS1_OFFSET :
+						    SWIN_SIZE) - 1;
 	bd->mem.flags	= IORESOURCE_MEM;
 	bd->mem_offset	= offset;
 
 	bd->io.name	= "Bridge PCI IO";
-	bd->io.start	= offset + (widget << SWIN_SIZE_BITS) + BRIDGE_DEVIO0;
-	bd->io.end	= offset + (widget << SWIN_SIZE_BITS) + SWIN_SIZE - 1;
+	bd->io.start	= offset + (widget << SWIN_SIZE_BITS) +
+			  (type == XTALK_PIC_BUS1 ? PIC_BUS1_OFFSET : 0) +
+			  BRIDGE_DEVIO0;
+	bd->io.end	= offset + (widget << SWIN_SIZE_BITS) +
+			  (type == XTALK_PIC_BUS0 ? PIC_BUS1_OFFSET :
+						    SWIN_SIZE) - 1;
 	bd->io.flags	= IORESOURCE_IO;
 	bd->io_offset	= offset;
 
@@ -148,6 +161,13 @@ static int probe_one_port(nasid_t nasid, int widget, int masterwid)
 		break;
 	case XBRIDGE_WIDGET_PART_NUM:
 		bridge_platform_create(nasid, widget, masterwid, XTALK_XBRIDGE);
+		break;
+	case PIC_WIDGET_PART_NUM:
+		/* PIC always has both buses in silicon: probe each. */
+		bridge_platform_create(nasid, widget, masterwid,
+				       XTALK_PIC_BUS0);
+		bridge_platform_create(nasid, widget, masterwid,
+				       XTALK_PIC_BUS1);
 		break;
 	default:
 		pr_info("xtalk:n%d/%d unknown widget (0x%x)\n",
