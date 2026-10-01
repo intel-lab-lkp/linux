@@ -47,6 +47,13 @@ static int node_scan_cpus(nasid_t nasid, int highest)
 				set_cpu_possible(cpuid, true);
 				cputonasid(cpus_found) = nasid;
 				cputoslice(cpus_found) = acpu->cpu_info.physid;
+				/*
+				 * Each PI slice is a separate physical CPU
+				 * package; these processors have no on-die
+				 * multiprocessing, so core is 0.
+				 */
+				cpu_data[cpus_found].package =
+					(nasid << 2) | acpu->cpu_info.physid;
 				sn_cpu_info[cpus_found].p_speed =
 							acpu->cpu_speed;
 				cpus_found++;
@@ -85,6 +92,7 @@ void cpu_node_probe(void)
 		if (cputonasid(i) == master_nasid &&
 		    cputoslice(i) == LOCAL_HUB_L(PI_CPU_NUM)) {
 			swap(sn_cpu_info[0], sn_cpu_info[i]);
+			swap(cpu_data[0].package, cpu_data[i].package);
 			break;
 		}
 	}
