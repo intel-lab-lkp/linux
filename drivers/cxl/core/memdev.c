@@ -802,6 +802,98 @@ err:
 	return ERR_PTR(rc);
 }
 
+static int match_memdev_by_parent_device(struct device *dev, const void *data)
+{
+	const struct device *pf_dev = data;
+	struct cxl_memdev *cxlmd;
+
+	if (!is_cxl_memdev(dev))
+		return 0;
+
+	cxlmd = to_cxl_memdev(dev);
+	return (cxlmd->cxlds->dev == pf_dev);
+}
+
+static int __cxl_get_range_and_link(struct device *pf0, struct device *pfx,
+				    struct range *range)
+{
+	struct device *mem_dev __free(put_device) =
+		bus_find_device(&cxl_bus_type, NULL, pf0,
+				match_memdev_by_parent_device);
+	struct cxl_attach_region *attach;
+	struct cxl_memdev *cxlmd;
+
+	if (!mem_dev)
+		return -ENODEV;
+
+	cxlmd = to_cxl_memdev(mem_dev);
+	attach = container_of(cxlmd->attach, struct cxl_attach_region, attach);
+
+	/*
+	 * The cxlmd object does exist and it can be found in the cxl bus after
+	 * creation but before attach probe setting the proper HPA range. If so,
+	 * the caller will need to try later.
+	 */
+	if (attach->hpa_range.end == CXL_RESOURCE_NONE)
+		return -EPROBE_DEFER;
+
+	/*
+	 * Create the device link between the region and the consumer device.
+	 * AUTOREMOVE_CONSUMER means the link implicitly to be removed if the
+	 * consumer unbinds first with no consequences for the supplier.
+	 */
+	if (!device_link_add(pfx, &attach->cxlr->dev,
+			     DL_FLAG_AUTOREMOVE_CONSUMER)) {
+		dev_err(pfx, "device link creation failed\n");
+		return -ENODEV;
+	}
+
+	range->start = attach->hpa_range.start;
+	range->end = attach->hpa_range.end;
+
+	return 0;
+}
+
+/**
+ * cxl_get_range_and_link - register a device link with the region PF0 memdev
+ * is attached to. The region release will imply the link consumer to be unbound
+ * from its driver first. Return the cxl region range to work with related to
+ * PF0 memdev initialization.
+ *
+ * @pf0: device to use for finding target memdev and supplier for the link
+ * @pfx: device to link to PF0's memdev region, the link consumer.
+ * @range: to be set with the PF0's memdev attach region range.
+ *
+ * Return: 0 or error.
+ */
+int cxl_get_range_and_link(struct device *pf0, struct device *pfx,
+			   struct range *range)
+{
+	int rc;
+
+	if (!pf0 || !pfx)
+		return -EINVAL;
+
+	/*
+	 * PF0 cxl memdev once created and region attached can only be removed
+	 * when PF0 unbinds from its driver which implies to obtain the device
+	 * lock before the unwinding starts. If this call from other PF races
+	 * with such unbinding:
+	 *
+	 * 1) if this next lock is obtained first, the device link is
+	 *    created and the later unwinding will trigger consumer (PF
+	 *    calling here) unbinding first.
+	 *
+	 *  2) if it is the unbinding the one getting the lock first, the
+	 *    memdev will not be there aymore.
+	 */
+	device_lock(pf0);
+	rc = __cxl_get_range_and_link(pf0, pfx, range);
+	device_unlock(pf0);
+	return rc;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_get_range_and_link, "CXL");
+
 static long __cxl_memdev_ioctl(struct cxl_memdev *cxlmd, unsigned int cmd,
 			       unsigned long arg)
 {
