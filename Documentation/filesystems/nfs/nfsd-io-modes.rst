@@ -152,6 +152,9 @@ Misaligned WRITE:
     - the WRITE payload is not aligned in memory to the block device's
       dma_alignment, so the middle cannot be O_DIRECT either.
 
+    A FILE_SYNC or DATA_SYNC WRITE is persisted once after all of its
+    segments are written, not once per segment.
+
     Writing N to /sys/kernel/debug/nfsd/direct_misaligned_dontcache
     (default Y) issues the start and end segments, and a WRITE that is
     not split, as normal buffered IO instead of DONTCACHE, which suits a
