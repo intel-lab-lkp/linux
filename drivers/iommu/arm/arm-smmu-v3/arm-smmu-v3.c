@@ -4153,8 +4153,11 @@ static int arm_smmu_insert_master(struct arm_smmu_device *smmu,
 	}
 
 	if (ret) {
-		for (i--; i >= 0; i--)
+		for (i--; i >= 0; i--) {
+			if (i > 0 && master->streams[i - 1].id == master->streams[i].id)
+				continue;
 			rb_erase(&master->streams[i].node, &smmu->streams);
+		}
 		kfree(master->streams);
 		kfree(master->build_invs);
 	}
@@ -4173,8 +4176,11 @@ static void arm_smmu_remove_master(struct arm_smmu_master *master)
 		return;
 
 	mutex_lock(&smmu->streams_mutex);
-	for (i = 0; i < fwspec->num_ids; i++)
+	for (i = 0; i < fwspec->num_ids; i++) {
+		if (i > 0 && master->streams[i - 1].id == master->streams[i].id)
+			continue;
 		rb_erase(&master->streams[i].node, &smmu->streams);
+	}
 	mutex_unlock(&smmu->streams_mutex);
 
 	kfree(master->streams);
