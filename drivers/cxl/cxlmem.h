@@ -104,6 +104,7 @@ struct cxl_memdev_attach {
 /**
  * struct cxl_attach_region - coordinate mapping a region at memdev registration
  * @attach: common core attachment descriptor
+ * @cxlr: cxl region the memdev is attached to.
  * @hpa_range: physical address range of the region
  *
  * For the common simple case of a CXL device with private (non-general purpose
@@ -112,6 +113,7 @@ struct cxl_memdev_attach {
  */
 struct cxl_attach_region {
 	struct cxl_memdev_attach attach;
+	struct cxl_region *cxlr;
 	struct range hpa_range;
 };
 
