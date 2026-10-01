@@ -981,7 +981,11 @@
 		RUNTIME_CONST(ptr, __bfilp_cache)			\
 		RUNTIME_CONST(shift, __futex_shift)			\
 		RUNTIME_CONST(mask,  __futex_mask)			\
-		RUNTIME_CONST(ptr,   __futex_queues)
+		RUNTIME_CONST(ptr,   __futex_queues)			\
+		RUNTIME_CONST(shift, __sbm_shift)			\
+		RUNTIME_CONST(mask,  __sbm_mask)			\
+		RUNTIME_CONST(ptr,   __sbm_cpu_to_idx)			\
+		RUNTIME_CONST(ptr,   __sbm_idx_to_cpu)
 
 /* Alignment must be consistent with (kunit_suite *) in include/kunit/test.h */
 #define KUNIT_TABLE()							\

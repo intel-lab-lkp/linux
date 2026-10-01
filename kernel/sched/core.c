@@ -61,6 +61,7 @@
 #include <linux/rcuwait_api.h>
 #include <linux/rseq.h>
 #include <linux/sched/wake_q.h>
+#include <linux/sbm.h>
 #include <linux/scs.h>
 #include <linux/slab.h>
 #include <linux/syscalls.h>
@@ -8636,6 +8637,14 @@ int sched_cpu_activate(unsigned int cpu)
 	 */
 	balance_push_set(cpu, false);
 
+	alloc_sbm_index(cpu);
+
+	/*
+	 * Make sure sbm mappings are visible
+	 * before CPU is toggled active.
+	 */
+	smp_mb();
+
 	/*
 	 * When going up, increment the number of cores with SMT present.
 	 */
@@ -8687,6 +8696,14 @@ int sched_cpu_deactivate(unsigned int cpu)
 		nohz_balance_exit_idle(rq);
 
 	set_cpu_active(cpu, false);
+
+	/*
+	 * Make sure CPU is inactive before
+	 * sbm indices are reclaimed.
+	 */
+	smp_mb();
+
+	free_sbm_index(cpu);
 
 	/*
 	 * From this point forward, this CPU will refuse to run any task that

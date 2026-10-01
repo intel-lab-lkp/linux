@@ -72,6 +72,7 @@
 #include <linux/pid_namespace.h>
 #include <linux/device/driver.h>
 #include <linux/kthread.h>
+#include <linux/sbm.h>
 #include <linux/sched.h>
 #include <linux/sched/init.h>
 #include <linux/signal.h>
@@ -1651,6 +1652,11 @@ static noinline void __init kernel_init_freeable(void)
 	cad_pid = get_pid(task_pid(current));
 
 	smp_prepare_cpus(setup_max_cpus);
+
+	sbm_init();
+
+	/* Finish initializing boot CPU since it is already active. */
+	alloc_sbm_index(smp_processor_id());
 
 	workqueue_init();
 
