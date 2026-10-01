@@ -12,6 +12,7 @@
 #define __ASM_XTENSA_HW_BREAKPOINT_H
 
 #ifdef CONFIG_HAVE_HW_BREAKPOINT
+#define ARCH_NEED_PERF_HW_NOTIF
 
 #include <linux/kdebug.h>
 #include <linux/types.h>
