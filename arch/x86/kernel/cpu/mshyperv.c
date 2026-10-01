@@ -148,7 +148,6 @@ EXPORT_SYMBOL_GPL(hv_set_msr);
 static void (*mshv_handler)(void);
 static void (*vmbus_handler)(void);
 static void (*hv_stimer0_handler)(void);
-static void (*hv_kexec_handler)(void);
 static void (*hv_crash_handler)(struct pt_regs *regs);
 
 DEFINE_IDTENTRY_SYSVEC(sysvec_hyperv_callback)
@@ -215,16 +214,6 @@ void hv_remove_stimer0_handler(void)
 	hv_stimer0_handler = NULL;
 }
 
-void hv_setup_kexec_handler(void (*handler)(void))
-{
-	hv_kexec_handler = handler;
-}
-
-void hv_remove_kexec_handler(void)
-{
-	hv_kexec_handler = NULL;
-}
-
 void hv_setup_crash_handler(void (*handler)(struct pt_regs *regs))
 {
 	hv_crash_handler = handler;
@@ -238,12 +227,8 @@ void hv_remove_crash_handler(void)
 #ifdef CONFIG_KEXEC_CORE
 static void hv_machine_shutdown(void)
 {
-	if (kexec_in_progress) {
+	if (kexec_in_progress)
 		hv_stimer_global_cleanup();
-
-		if (hv_kexec_handler)
-			hv_kexec_handler();
-	}
 
 	/*
 	 * Call hv_cpu_die() on all the CPUs, otherwise later the hypervisor
