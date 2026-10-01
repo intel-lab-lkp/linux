@@ -15,6 +15,7 @@
 #define RPMPD_VDDMX		3
 #define RPMPD_VDDMX_AO		4
 #define RPMPD_VDDMX_VFL		5
+#define RPMPD_VDDMD		5
 #define RPMPD_SSCCX		6
 #define RPMPD_SSCCX_VFL		7
 #define RPMPD_SSCMX		8
