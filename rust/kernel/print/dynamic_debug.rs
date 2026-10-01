@@ -8,6 +8,10 @@
 //! discovers them at boot or module load and removes them before the module is freed.
 
 use crate::{
+    device::{
+        Device,
+        DeviceContext, //
+    },
     fmt,
     prelude::*,
     str::as_char_ptr_in_const_context, //
@@ -86,6 +90,29 @@ impl Descriptor {
             bindings::ddebug_print(
                 &raw mut (*descriptor).inner,
                 prefix.as_char_ptr(),
+                core::ptr::from_ref(&args).cast(),
+            )
+        };
+    }
+
+    /// Prints arguments with device information and the dynamic debug prefixes.
+    ///
+    /// # Safety
+    ///
+    /// `descriptor` must point to an initialized descriptor valid for this call, whose string
+    /// pointers refer to valid NUL-terminated C strings. Concurrent access must follow the C
+    /// dynamic debug and jump label synchronization rules, without conflicting Rust accesses.
+    pub unsafe fn dev_print<Ctx: DeviceContext>(
+        descriptor: *mut Self,
+        dev: &Device<Ctx>,
+        args: fmt::Arguments<'_>,
+    ) {
+        // SAFETY: The descriptor is valid by the caller's guarantee and `dev` is alive for this
+        // call. The helper consumes the `%pA` arguments synchronously without retaining them.
+        unsafe {
+            bindings::ddebug_dev_print(
+                &raw mut (*descriptor).inner,
+                dev.as_raw(),
                 core::ptr::from_ref(&args).cast(),
             )
         };

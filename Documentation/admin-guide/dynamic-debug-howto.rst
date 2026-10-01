@@ -390,3 +390,44 @@ just a shortcut for ``print_hex_dump(KERN_DEBUG)``.
 For ``print_hex_dump_debug()``/``print_hex_dump_bytes()``, format string is
 its ``prefix_str`` argument, if it is constant string; or ``hexdump``
 in case ``prefix_str`` is built dynamically.
+
+Rust printing macros
+====================
+
+Rust ``pr_debug!`` and ``dev_dbg!`` use the same control file and boot or
+module parameters as their C counterparts. With ``CONFIG_DYNAMIC_DEBUG=y``,
+their callsites are initially disabled and can be enabled at runtime or
+through boot and module parameters. Rust's ``debug_assertions`` setting
+does not affect debug logging.
+
+With only ``CONFIG_DYNAMIC_DEBUG_CORE=y``, select the Rust crates to include
+in the catalogue using their Kbuild Rust flags, for example::
+
+  RUSTFLAGS_my_driver.o += --cfg DYNAMIC_DEBUG_MODULE
+
+Without dynamic debug for a crate, its ``pr_debug!`` and ``dev_dbg!`` calls
+stay disabled. Disabled calls do not evaluate their formatting arguments
+or device expressions, but their arguments are still checked at compile
+time. Keep required work and error handling outside those expressions.
+
+Rust callsites support the ``module``, ``file``, ``line`` and ``format``
+selectors. The module is the name supplied by Kbuild, including for callsites
+in nested Rust modules. Hyphens in this name become underscores, just as for C
+callsites. This name is independent of the prefix printed by ``pr_debug!``,
+which continues to use the name declared in ``module!``. The format is the
+original Rust format string, with ``{}`` placeholders, rather than the C
+``%pA`` formatting bridge.
+An embedded NUL ends the catalogue's copy of the format string; Rust
+formatting still uses the full string.
+
+Automatic Rust function names are not provided. The function field contains
+``<unknown>``, which is also what the ``f`` prefix flag displays. Use the
+other selectors to select Rust callsites; ``func`` cannot distinguish Rust
+functions. Rust callsites use the default, unclassified debug class.
+
+For example, to control a module named ``my_driver`` at load time or while
+it is running::
+
+  modprobe my_driver dyndbg=+p
+  echo 'module my_driver -p' > /proc/dynamic_debug/control
+  echo 'module my_driver +p' > /proc/dynamic_debug/control

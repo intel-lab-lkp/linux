@@ -22,4 +22,12 @@ __rust_helper void rust_helper_ddebug_print(struct _ddebug *descriptor,
 		dump_stack();
 }
 
+__rust_helper void rust_helper_ddebug_dev_print(struct _ddebug *descriptor,
+						const struct device *dev,
+						const void *args)
+{
+	__dynamic_dev_dbg(descriptor, dev, "%pA", args);
+	if (descriptor->flags & _DPRINTK_FLAGS_INCL_STACK)
+		dump_stack();
+}
 #endif

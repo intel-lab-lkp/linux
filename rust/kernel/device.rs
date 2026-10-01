@@ -370,14 +370,13 @@ impl<Ctx: DeviceContext> Device<Ctx> {
 
     /// Prints a debug-level message (level 7) prefixed with device information.
     ///
-    /// More details are available from [`dev_dbg`].
+    /// This method prints unconditionally. Use [`dev_dbg!`] for dynamic debug callsites and lazy
+    /// evaluation of the device and formatting arguments.
     ///
-    /// [`dev_dbg`]: crate::dev_dbg
+    /// [`dev_dbg!`]: crate::dev_dbg
     pub fn pr_dbg(&self, args: fmt::Arguments<'_>) {
-        if cfg!(debug_assertions) {
-            // SAFETY: `klevel` is null-terminated, uses one of the kernel constants.
-            unsafe { self.printk(bindings::KERN_DEBUG, args) };
-        }
+        // SAFETY: `KERN_DEBUG` is a null-terminated kernel log-level constant.
+        unsafe { self.printk(bindings::KERN_DEBUG, args) };
     }
 
     /// Prints the provided message to the console.
@@ -929,13 +928,19 @@ macro_rules! dev_info {
 ///
 /// This level should be used for debug messages.
 ///
-/// Equivalent to the kernel's `dev_dbg` macro, except that it doesn't support dynamic debug yet.
+/// Equivalent to the kernel's `dev_dbg` macro.
+///
+/// Supports [dynamic debug] with the same configuration and callsite selection as [`pr_debug!`].
+/// The function name is recorded as `<unknown>`. When a message is disabled, neither the device
+/// expression nor the formatting arguments are evaluated.
 ///
 /// Mimics the interface of [`std::print!`]. More information about the syntax is available from
 /// [`core::fmt`] and [`std::format!`].
 ///
 /// [`std::print!`]: https://doc.rust-lang.org/std/macro.print.html
 /// [`std::format!`]: https://doc.rust-lang.org/std/macro.format.html
+/// [dynamic debug]: https://docs.kernel.org/admin-guide/dynamic-debug-howto.html
+/// [`pr_debug!`]: crate::pr_debug!
 ///
 /// # Examples
 ///
@@ -948,5 +953,26 @@ macro_rules! dev_info {
 /// ```
 #[macro_export]
 macro_rules! dev_dbg {
-    ($($f:tt)*) => { $crate::dev_printk!(pr_dbg, $($f)*) }
+    ($dev:expr, $($f:tt)*) => {{
+        #[cfg(any(CONFIG_DYNAMIC_DEBUG, all(CONFIG_DYNAMIC_DEBUG_CORE, DYNAMIC_DEBUG_MODULE)))]
+        {
+            $crate::dynamic_debug!(__descriptor, ($($f)*), {
+                match ($dev.as_ref(), $crate::prelude::fmt!($($f)*)) {
+                    // SAFETY: `dynamic_debug!` supplies a live, initialized static descriptor.
+                    // Its mutable fields are accessed only by the C dynamic debug code.
+                    (dev, args) => unsafe {
+                        $crate::print::dynamic_debug::Descriptor::dev_print(__descriptor, dev, args)
+                    },
+                }
+            });
+        }
+
+        #[cfg(not(any(CONFIG_DYNAMIC_DEBUG, all(CONFIG_DYNAMIC_DEBUG_CORE, DYNAMIC_DEBUG_MODULE))))]
+        {
+            // Keep checking arguments even when dynamic debug is unavailable.
+            if false {
+                $crate::dev_printk!(pr_dbg, $dev, $($f)*);
+            }
+        }
+    }};
 }
