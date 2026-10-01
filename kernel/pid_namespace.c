@@ -23,6 +23,7 @@
 #include <linux/sched/task.h>
 #include <linux/sched/signal.h>
 #include <linux/idr.h>
+#include <linux/freezer.h>
 #include <linux/nstree.h>
 #include <uapi/linux/wait.h>
 #include "pid_sysctl.h"
@@ -243,6 +244,11 @@ void zap_pid_ns_processes(struct pid_namespace *pid_ns)
 	do {
 		clear_thread_flag(TIF_SIGPENDING);
 		rc = kernel_wait4(-1, NULL, __WALL, NULL);
+		/*
+		 * The freezer's fake signal ends the wait with -ERESTARTSYS;
+		 * freeze here, or one stuck pid namespace blocks suspend.
+		 */
+		try_to_freeze();
 	} while (rc != -ECHILD);
 
 	/*
@@ -269,7 +275,13 @@ void zap_pid_ns_processes(struct pid_namespace *pid_ns)
 	 * free_pid() will awaken this task.
 	 */
 	for (;;) {
-		set_current_state(TASK_INTERRUPTIBLE);
+		/*
+		 * TASK_IDLE: no hung task warning or load for a wait that can
+		 * last as long as a tracer keeps a zombie, and a pending signal
+		 * (e.g. the freezer's fake one) can't turn it into a busy loop.
+		 * TASK_FREEZABLE: let the freezer freeze us while we wait.
+		 */
+		set_current_state(TASK_IDLE | TASK_FREEZABLE);
 		if (pid_ns->pid_allocated == init_pids)
 			break;
 		schedule();
