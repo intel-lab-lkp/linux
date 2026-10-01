@@ -482,6 +482,20 @@ static bool max_tcpci_attempt_vconn_swap_discovery(struct tcpci *tcpci, struct t
 	return true;
 }
 
+/*
+ * This callback is used by the TCPM to determine the current limit to set when
+ * Rp-def is advertised on the CC pins. The actual current limit comes from
+ * other subsystems such as the USB gadget/host stack (USB 2.0/USB 3.2) and
+ * BC1.2. As a workaround, report the USB 2.0 current limit of 500 mA to enable
+ * charging when the device is connected to a non-PD source advertising Rp-def.
+ * This can be removed once a mechanism for the USB core to communicate the
+ * current limit to this driver is implemented.
+ */
+static int max_tcpci_get_current_limit(struct tcpci *tcpci, struct tcpci_data *tdata)
+{
+	return 500;
+}
+
 static void max_tcpci_unregister_tcpci_port(void *tcpci)
 {
 	tcpci_unregister_port(tcpci);
@@ -523,6 +537,7 @@ static int max_tcpci_probe(struct i2c_client *client)
 	chip->data.check_contaminant = max_tcpci_check_contaminant;
 	chip->data.cable_comm_capable = true;
 	chip->data.attempt_vconn_swap_discovery = max_tcpci_attempt_vconn_swap_discovery;
+	chip->data.get_current_limit = max_tcpci_get_current_limit;
 
 	max_tcpci_init_regs(chip);
 	chip->tcpci = tcpci_register_port(chip->dev, &chip->data);
