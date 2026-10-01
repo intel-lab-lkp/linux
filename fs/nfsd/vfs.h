@@ -229,4 +229,18 @@ __be32		nfsd_permission(struct svc_cred *cred, struct svc_export *exp,
 
 void		nfsd_filp_close(struct file *fp);
 
+/*
+ * The path nfsd_write_dio_iters_init() took for a direct-mode WRITE.
+ * NFSD_WRITE_DIO_DONTCACHE is ORed in when its buffered segments carry
+ * IOCB_DONTCACHE.
+ */
+enum nfsd_write_dio_disposition {
+	NFSD_WRITE_DIO_DIRECT,
+	NFSD_WRITE_DIO_MEM_MISALIGNED,
+	NFSD_WRITE_DIO_NO_ALIGN,
+	NFSD_WRITE_DIO_TOO_SMALL,
+	NFSD_WRITE_DIO_NO_MIDDLE,
+	NFSD_WRITE_DIO_DONTCACHE = 0x80,
+};
+
 #endif /* LINUX_NFSD_VFS_H */
