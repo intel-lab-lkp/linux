@@ -111,7 +111,8 @@ void __init plat_mem_setup(void)
 	 * hub_rtc init and cpu clock intr enabled for later calibrate_delay.
 	 */
 	nid = get_nasid();
-	printk("IP27: Running on node %d.\n", nid);
+	pr_info("%s: Running on node %d.\n",
+		system_is_ip35 ? "IP35" : "IP27", nid);
 
 	p = LOCAL_HUB_L(PI_CPU_PRESENT_A) & 1;
 	e = LOCAL_HUB_L(PI_CPU_ENABLE_A) & 1;
@@ -150,7 +151,7 @@ void __init plat_mem_setup(void)
 
 const char *get_system_type(void)
 {
-	return "SGI Origin";
+	return system_is_ip35 ? "SGI IP35" : "SGI Origin";
 }
 
 static inline bool hub_is_bedrock(void)
