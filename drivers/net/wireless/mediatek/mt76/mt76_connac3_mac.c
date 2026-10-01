@@ -210,6 +210,17 @@ void mt76_connac3_mac_decode_eht_radiotap(struct sk_buff *skb, __le32 *rxv,
 		      "Should push tlv at the top of mac hdr"))
 		return;
 
+	/* The TLVs are pushed in front of the frame, into its headroom. The
+	 * skb is built over the rx buffer with nothing reserved, on USB and
+	 * PCIe alike, so that headroom is only the RX descriptor just pulled:
+	 * 48 bytes with the P-RXV and no C-RXV, less than the 64 the EHT and
+	 * U-SIG TLVs take, and skb_push() past skb->head is a kernel BUG.
+	 * Leave the EHT fields out then.
+	 */
+	if (skb_headroom(skb) < 2 * sizeof(struct ieee80211_radiotap_tlv) +
+				sizeof(*eht) + sizeof(u32) + sizeof(*usig))
+		return;
+
 	eht = mt76_connac3_mac_radiotap_push_tlv(skb, IEEE80211_RADIOTAP_EHT,
 						 sizeof(*eht) + sizeof(u32));
 	usig = mt76_connac3_mac_radiotap_push_tlv(skb, IEEE80211_RADIOTAP_EHT_USIG,
