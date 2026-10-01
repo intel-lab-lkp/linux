@@ -2359,6 +2359,18 @@ static int __init ns_init_module(void)
 		targetsize = nanddev_target_size(&chip->base);
 		chip->chip_shift = ffs(nsmtd->erasesize) + overridesize - 1;
 		chip->pagemask = (targetsize >> chip->page_shift) - 1;
+
+		/*
+		 * NAND_ROW_ADDR_3 was set by nand_scan_ident() from the
+		 * geometry decoded out of the ID bytes, which the size
+		 * override has just made stale. Re-evaluate it against
+		 * the new geometry, otherwise the core emits one more (or
+		 * one less) row address byte than the simulator expects.
+		 */
+		if (chip->chip_shift - chip->page_shift > 16)
+			chip->options |= NAND_ROW_ADDR_3;
+		else
+			chip->options &= ~NAND_ROW_ADDR_3;
 	}
 
 	ret = ns_setup_wear_reporting(nsmtd);
