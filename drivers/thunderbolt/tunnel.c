@@ -1139,8 +1139,18 @@ static void tb_dp_dprx_stop(struct tb_tunnel *tunnel)
 	if (tunnel->dprx_started) {
 		tunnel->dprx_started = false;
 		tunnel->dprx_canceled = true;
-		if (cancel_delayed_work(&tunnel->dprx_work))
+		if (cancel_delayed_work(&tunnel->dprx_work)) {
+			/*
+			 * The DPRX work was canceled before it ran to
+			 * completion, so the callback (tb_dp_tunnel_active)
+			 * never got a chance to release the domain reference
+			 * passed in callback_data. Release it here to keep the
+			 * reference balanced.
+			 */
+			if (tunnel->callback_data)
+				tb_domain_put(tunnel->callback_data);
 			tb_tunnel_put(tunnel);
+		}
 	}
 }
 
