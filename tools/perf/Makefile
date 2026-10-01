@@ -93,6 +93,13 @@ ifeq ($(has_clean),1)
 $(rest): clean
   endif # rest
 endif # has_clean
+
+ifneq ($(filter all,$(MAKECMDGOALS)),)
+  install_goals := $(filter install%,$(MAKECMDGOALS))
+  ifneq ($(install_goals),)
+$(install_goals): all
+  endif
+endif
 endif # MAKECMDGOALS
 
 #
@@ -130,4 +137,4 @@ check-headers:
 	$(print_msg)
 	$(make)
 
-.PHONY: tags TAGS FORCE Makefile build-test build-test-tarball check-headers
+.PHONY: all clean tags TAGS FORCE Makefile build-test build-test-tarball check-headers
