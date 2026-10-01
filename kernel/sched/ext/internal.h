@@ -1829,6 +1829,13 @@ enum scx_enq_flags {
 	/*
 	 * The task is blocked on a mutex and is being kept runnable as a proxy
 	 * donor. Only passed to ops.enqueue() when %SCX_OPS_ENQ_BLOCKED is set.
+	 *
+	 * Blocking on the mutex does not enqueue the task by itself. A donor put
+	 * with slice left stays at the head of the local DSQ, except when an
+	 * IMMED donor is preempted or cannot run on the CPU. It is passed to
+	 * ops.enqueue() when its slice runs out, another SCX task preempts it,
+	 * an IMMED placement cannot be kept, or proxy execution moves it to the
+	 * CPU of the mutex owner.
 	 */
 	SCX_ENQ_BLOCKED		= 1LLU << 42,
 

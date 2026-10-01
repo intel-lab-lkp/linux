@@ -3340,6 +3340,20 @@ static void set_next_task_scx(struct rq *rq, struct task_struct *p, enum snt_e t
 	bool first = type == SNT_PICK;
 	bool can_stop_tick;
 
+	/*
+	 * A blocked donor picked by sched_ext still needs proxy resolution;
+	 * find_proxy_task() may put it to idle while looking for its mutex
+	 * owner. That put is bookkeeping, not an IMMED preemption, so mark the
+	 * pick so put_prev_task_scx() can distinguish the two.
+	 *
+	 * With proxy execution, a blocked mutex waiter can stay on the runqueue
+	 * as a donor and be picked again (SNT_REPICK). Core scheduling's
+	 * forced-idle pick selects idle instead, so it must not mark a proxy put.
+	 */
+	rq->scx.flags &= ~SCX_RQ_PROXY_PICK_PENDING;
+	if (sched_proxy_exec() && p->is_blocked && (type == SNT_PICK || type == SNT_REPICK))
+		rq->scx.flags |= SCX_RQ_PROXY_PICK_PENDING;
+
 	if (type == SNT_REPICK)
 		return;
 
@@ -3419,6 +3433,7 @@ void scx_proxy_donor_start(struct rq *rq)
 	struct task_struct *donor = rq->donor;
 
 	lockdep_assert_rq_held(rq);
+	rq->scx.flags &= ~SCX_RQ_PROXY_PICK_PENDING;
 
 	if (donor->sched_class == &ext_sched_class && (donor->scx.flags & SCX_TASK_QUEUED))
 		scx_start_task_running(rq, donor);
@@ -3479,7 +3494,11 @@ static void put_prev_task_scx(struct rq *rq, struct task_struct *p,
 			      struct task_struct *next)
 {
 	struct scx_sched *sch = scx_task_sched(p);
+	bool proxy_put = p->is_blocked && next == rq->idle &&
+			 (rq->scx.flags & SCX_RQ_PROXY_PICK_PENDING);
 	bool rescue_keep = false;
+
+	rq->scx.flags &= ~SCX_RQ_PROXY_PICK_PENDING;
 
 	/* see kick_sync_wait_bal_cb() */
 	smp_store_release(&rq->scx.kick_sync, rq->scx.kick_sync + 1);
@@ -3512,23 +3531,13 @@ static void put_prev_task_scx(struct rq *rq, struct task_struct *p,
 	if (p->scx.flags & SCX_TASK_QUEUED) {
 		set_task_runnable(rq, p);
 
-		/* Delegate retained donor admission to its owning BPF scheduler. */
-		if (p->is_blocked) {
-			/*
-			 * If the donor is the same and only the mutex owner
-			 * changes, avoid triggering another ops.enqueue(): the
-			 * BPF scheduler has already admitted the donor, so it
-			 * can continue running.
-			 */
-			if (next == p)
-				goto switch_class;
-
-			if (WARN_ON_ONCE(!sch))
-				goto switch_class;
-			WARN_ON_ONCE(!(sch->ops.flags & SCX_OPS_ENQ_BLOCKED));
-			scx_do_enqueue_task(rq, p, 0, -1);
+		/*
+		 * If the donor is the same and only the mutex owner changes,
+		 * avoid triggering another ops.enqueue(): the BPF scheduler has
+		 * already admitted the donor, so it can continue running.
+		 */
+		if (p->is_blocked && next == p)
 			goto switch_class;
-		}
 
 		/*
 		 * If @p has slice left and is being put, @p is getting
@@ -3537,12 +3546,17 @@ static void put_prev_task_scx(struct rq *rq, struct task_struct *p,
 		 * DSQ unless it was an IMMED task. IMMED tasks should not
 		 * linger on a busy CPU, reenqueue them to the BPF scheduler.
 		 *
+		 * proxy_resched_idle() also puts a blocked donor while resolving its
+		 * mutex owner. That put is bookkeeping, not a preemption, so retain
+		 * the donor locally even if it is IMMED. The deferred local check
+		 * returns it to BPF if this CPU becomes unavailable.
+		 *
 		 * An open rescue must keep @p on the local DSQ even if the
 		 * scheduler zeroed the slice in ops.stopping() above.
 		 */
 		if ((p->scx.slice || unlikely(p == scx_rescuee(rq))) &&
 		    !scx_bypassing(sch, cpu_of(rq))) {
-			if (p->scx.flags & SCX_TASK_IMMED) {
+			if ((p->scx.flags & SCX_TASK_IMMED) && !proxy_put) {
 				p->scx.flags |= SCX_TASK_REENQ_PREEMPTED;
 				scx_do_enqueue_task(rq, p, SCX_ENQ_REENQ, -1);
 			} else {
@@ -3559,11 +3573,22 @@ static void put_prev_task_scx(struct rq *rq, struct task_struct *p,
 						enq_flags |= SCX_ENQ_HEAD;
 				} else {
 					enq_flags |= SCX_ENQ_HEAD;
+					if (proxy_put && (p->scx.flags & SCX_TASK_IMMED))
+						enq_flags |= SCX_ENQ_IMMED;
 				}
 
 				scx_dispatch_enqueue(sch, rq, &rq->scx.local_dsq, p, 0, 0,
 						     enq_flags);
 			}
+			goto switch_class;
+		}
+
+		/* Delegate retained donor admission to its owning BPF scheduler. */
+		if (p->is_blocked) {
+			if (WARN_ON_ONCE(!sch))
+				goto switch_class;
+			WARN_ON_ONCE(!(sch->ops.flags & SCX_OPS_ENQ_BLOCKED));
+			scx_do_enqueue_task(rq, p, 0, -1);
 			goto switch_class;
 		}
 
@@ -3747,6 +3772,9 @@ do_pick_task_scx(struct rq *rq, struct rq_flags *rf, bool force_scx)
 	struct task_struct *prev = rq->donor;
 	enum scx_dsp_verdict verdict;
 	struct task_struct *p;
+
+	/* A retry can abandon a provisional blocked-donor pick. */
+	rq->scx.flags &= ~SCX_RQ_PROXY_PICK_PENDING;
 
 	/* see kick_sync_wait_bal_cb() */
 	smp_store_release(&rq->scx.kick_sync, rq->scx.kick_sync + 1);
