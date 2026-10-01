@@ -341,7 +341,6 @@ int main(int argc, char **argv)
 	u32 i, j, failed_tests = 0, nb_tests;
 	int modes = TEST_MODE_SKB + 1;
 	struct test_spec test;
-	bool shared_netdev;
 	int ret;
 
 	/* Use libbpf 1.0 API mode */
@@ -387,10 +386,6 @@ int main(int argc, char **argv)
 		ksft_print_msg("Error: test %u does not exist.\n", opt_run_test);
 		ksft_exit_xfail();
 	}
-
-	shared_netdev = (ifobj_tx->ifindex == ifobj_rx->ifindex);
-	ifobj_tx->shared_umem = shared_netdev;
-	ifobj_rx->shared_umem = shared_netdev;
 
 	if (!validate_interface(ifobj_tx) || !validate_interface(ifobj_rx))
 		print_usage(argv);
