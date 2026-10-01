@@ -131,12 +131,7 @@ struct ddebug_class_param {
 	const struct ddebug_class_map *map;
 };
 
-/*
- * pr_debug() and friends are globally enabled or modules have selectively
- * enabled them.
- */
-#if defined(CONFIG_DYNAMIC_DEBUG) || \
-	(defined(CONFIG_DYNAMIC_DEBUG_CORE) && defined(DYNAMIC_DEBUG_MODULE))
+#ifdef CONFIG_DYNAMIC_DEBUG_CORE
 
 extern __printf(2, 3)
 void __dynamic_pr_debug(struct _ddebug *descriptor, const char *fmt, ...);
@@ -160,6 +155,15 @@ extern __printf(3, 4)
 void __dynamic_ibdev_dbg(struct _ddebug *descriptor,
 			 const struct ib_device *ibdev,
 			 const char *fmt, ...);
+
+#endif /* CONFIG_DYNAMIC_DEBUG_CORE */
+
+/*
+ * pr_debug() and friends are globally enabled or modules have selectively
+ * enabled them.
+ */
+#if defined(CONFIG_DYNAMIC_DEBUG) || \
+	(defined(CONFIG_DYNAMIC_DEBUG_CORE) && defined(DYNAMIC_DEBUG_MODULE))
 
 #define __dynamic_dump_stack(desc)				\
 {								\
