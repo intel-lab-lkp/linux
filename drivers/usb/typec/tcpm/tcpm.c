@@ -1268,7 +1268,7 @@ static int tcpm_set_vconn(struct tcpm_port *port, bool enable)
 static u32 tcpm_get_current_limit(struct tcpm_port *port)
 {
 	enum typec_cc_status cc;
-	u32 limit;
+	u32 limit = 0;
 
 	cc = port->polarity ? port->cc2 : port->cc1;
 	switch (cc) {
@@ -1279,11 +1279,10 @@ static u32 tcpm_get_current_limit(struct tcpm_port *port)
 		limit = 3000;
 		break;
 	case TYPEC_CC_RP_DEF:
-	default:
 		if (port->tcpc->get_current_limit)
 			limit = port->tcpc->get_current_limit(port->tcpc);
-		else
-			limit = 0;
+		break;
+	default:
 		break;
 	}
 
