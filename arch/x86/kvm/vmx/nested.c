@@ -5134,8 +5134,13 @@ void __nested_vmx_vmexit(struct kvm_vcpu *vcpu, u32 vm_exit_reason,
 		 * Otherwise, this flush will dirty guest memory at a
 		 * point it is already assumed by user-space to be
 		 * immutable.
+		 *
+		 * TODO: Drop the explicit check on being able to access guest
+		 *       memory once KVM no longer abuses the nested VM-Exit
+		 *       flow when destroying a vCPU.
 		 */
-		nested_flush_cached_shadow_vmcs12(vcpu, vmcs12);
+		if (__kvm_can_do_uaccess(vcpu->kvm))
+			nested_flush_cached_shadow_vmcs12(vcpu, vmcs12);
 	} else {
 		/*
 		 * The only expected VM-instruction error is "VM entry with

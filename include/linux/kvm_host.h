@@ -1350,10 +1350,14 @@ int kvm_write_guest_offset_cached(struct kvm *kvm, struct gfn_to_hva_cache *ghc,
 int kvm_gfn_to_hva_cache_init(struct kvm *kvm, struct gfn_to_hva_cache *ghc,
 			      gpa_t gpa, unsigned long len);
 
+static __always_inline __must_check bool __kvm_can_do_uaccess(struct kvm *kvm)
+{
+	return current->mm == kvm->mm && refcount_read(&kvm->users_count);
+}
+
 static __always_inline __must_check bool kvm_can_do_uaccess(struct kvm *kvm)
 {
-	return !WARN_ON_ONCE(current->mm != kvm->mm ||
-			     !refcount_read(&kvm->users_count));
+	return !WARN_ON_ONCE(!__kvm_can_do_uaccess(kvm));
 }
 
 #define BUILD_KVM_COPY_USER_WRAPPER(fn, to_user, from_user)				\
