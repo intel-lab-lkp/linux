@@ -586,6 +586,10 @@ static int snd_card_do_free(struct snd_card *card)
 	bool managed = card->managed;
 
 	card->releasing = true;
+
+	/* for case without explicit disconnect call (e.g. via devres) */
+	snd_card_disconnect(card);
+
 #if IS_ENABLED(CONFIG_SND_MIXER_OSS)
 	if (snd_mixer_oss_notify_callback)
 		snd_mixer_oss_notify_callback(card, SND_MIXER_OSS_NOTIFY_FREE);
