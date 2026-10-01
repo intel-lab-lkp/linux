@@ -26,7 +26,7 @@ else
 $(warning excluding xskxceiver, bpftool not found)
 endif
 
-TEST_INCLUDES := $(wildcard py/*.py sh/*.sh)
+TEST_INCLUDES := $(wildcard py/*.py sh/*.sh) xsk/test_xsk_case_defs.h
 
 include ../../lib.mk
 
