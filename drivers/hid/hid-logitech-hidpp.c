@@ -101,6 +101,7 @@ MODULE_PARM_DESC(disable_tap_to_click,
 #define HIDPP_CAPABILITY_HIDPP10_FAST_SCROLL	BIT(9)
 #define HIDPP_CAPABILITY_ADC_MEASUREMENT	BIT(10)
 #define HIDPP_CAPABILITY_HIDPP20_THUMBWHEEL	BIT(11)
+#define HIDPP_CAPABILITY_HIDPP20_RATCHET_WHEEL	BIT(12)
 
 #define lg_map_key_clear(c)  hid_map_usage_clear(hi, usage, bit, max, EV_KEY, (c))
 
@@ -225,6 +226,9 @@ struct hidpp_device {
 	u8 hires_wheel_feature_index;
 	bool hires_wheel_has_invert;
 	bool hires_wheel_invert;
+
+	u8 ratchet_wheel_feature_index;
+
 	u8 thumbwheel_feature_index;
 	bool thumbwheel_positive_right;
 
@@ -2129,6 +2133,27 @@ static int hidpp_hrw_set_wheel_mode(struct hidpp_device *hidpp, bool invert,
 	return hidpp_send_fap_command_sync(hidpp, feature_index,
 					   CMD_HIRES_WHEEL_SET_WHEEL_MODE,
 					   params, sizeof(params), &response);
+}
+
+/* -------------------------------------------------------------------------- */
+/* 0x2130: Ratchet Wheel                                                      */
+/* -------------------------------------------------------------------------- */
+
+#define HIDPP_PAGE_RATCHET_WHEEL		0x2130
+#define CMD_RATCHET_WHEEL_SET_WHEEL_MODE	0x10
+#define EVENT_RATCHET_WHEEL_MOVEMENT		0x00
+#define RATCHET_WHEEL_MODE_USE_HIDPP		BIT(0)
+
+static int hidpp_ratchet_wheel_set_mode(struct hidpp_device *hidpp,
+					bool use_hidpp)
+{
+	struct hidpp_report response;
+	u8 mode = use_hidpp ? RATCHET_WHEEL_MODE_USE_HIDPP : 0;
+
+	return hidpp_send_fap_command_sync(hidpp,
+					   hidpp->ratchet_wheel_feature_index,
+					   CMD_RATCHET_WHEEL_SET_WHEEL_MODE,
+					   &mode, sizeof(mode), &response);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -4105,6 +4130,35 @@ static int hidpp_initialize_hires_scroll(struct hidpp_device *hidpp)
 	return 0;
 }
 
+static void ratchet_wheel_scroll_enable(struct hidpp_device *hidpp)
+{
+	int ret;
+
+	if (!hidpp_is_bolt_child(hidpp->hid_dev))
+		return;
+
+	ret = hidpp_ratchet_wheel_set_mode(hidpp, true);
+	if (ret)
+		hid_dbg(hidpp->hid_dev,
+			"Could not divert ratchet wheel reports: %d\n", ret);
+}
+
+static void hidpp_initialize_ratchet_wheel(struct hidpp_device *hidpp)
+{
+	int ret;
+
+	hidpp->capabilities &= ~HIDPP_CAPABILITY_HIDPP20_RATCHET_WHEEL;
+	hidpp->ratchet_wheel_feature_index = 0xff;
+	if (hidpp->protocol_major < 2)
+		return;
+
+	ret = hidpp_root_get_feature(hidpp, HIDPP_PAGE_RATCHET_WHEEL,
+				     &hidpp->ratchet_wheel_feature_index);
+	if (ret)
+		return;
+	hidpp->capabilities |= HIDPP_CAPABILITY_HIDPP20_RATCHET_WHEEL;
+}
+
 static void thumbwheel_scroll_enable(struct hidpp_device *hidpp)
 {
 	bool divert;
@@ -4211,6 +4265,44 @@ static int hidpp20_hires_wheel_raw_event(struct hidpp_device *hidpp,
 	}
 
 	return 0;
+}
+
+static int hidpp20_ratchet_wheel_raw_event(struct hidpp_device *hidpp,
+					   u8 *data, int size)
+{
+	int delta_v, delta_h;
+
+	if (hidpp->ratchet_wheel_feature_index == 0xff)
+		return 0;
+
+	if (size < 6)
+		return 0;
+
+	if (data[0] != REPORT_ID_HIDPP_LONG ||
+	    data[2] != hidpp->ratchet_wheel_feature_index)
+		return 0;
+
+	if (data[3] != EVENT_RATCHET_WHEEL_MOVEMENT)
+		return 0;
+
+	if (!hidpp->input)
+		return 1;
+
+	delta_v = (s8)data[4];
+	delta_h = (s8)data[5];
+	if (delta_v) {
+		input_report_rel(hidpp->input, REL_WHEEL_HI_RES, delta_v * 120);
+		input_report_rel(hidpp->input, REL_WHEEL, delta_v);
+	}
+	if (delta_h) {
+		input_report_rel(hidpp->input, REL_HWHEEL_HI_RES,
+				 delta_h * 120);
+		input_report_rel(hidpp->input, REL_HWHEEL, delta_h);
+	}
+	if (delta_v || delta_h)
+		input_sync(hidpp->input);
+
+	return 1;
 }
 
 static int hidpp20_thumbwheel_raw_event(struct hidpp_device *hidpp,
@@ -4476,6 +4568,12 @@ static int hidpp_raw_hidpp_event(struct hidpp_device *hidpp, u8 *data,
 
 	if (hidpp->capabilities & HIDPP_CAPABILITY_HIDPP20_HI_RES_WHEEL) {
 		ret = hidpp20_hires_wheel_raw_event(hidpp, data, size);
+		if (ret != 0)
+			return ret;
+	}
+
+	if (hidpp->capabilities & HIDPP_CAPABILITY_HIDPP20_RATCHET_WHEEL) {
+		ret = hidpp20_ratchet_wheel_raw_event(hidpp, data, size);
 		if (ret != 0)
 			return ret;
 	}
@@ -4828,6 +4926,7 @@ static void hidpp_connect_event(struct work_struct *work)
 	hidpp_initialize_battery(hidpp);
 	if (!hid_is_usb(hidpp->hid_dev))
 		hidpp_initialize_hires_scroll(hidpp);
+	hidpp_initialize_ratchet_wheel(hidpp);
 	hidpp_initialize_thumbwheel_scroll(hidpp);
 
 	/* forward current battery state */
@@ -4852,6 +4951,8 @@ static void hidpp_connect_event(struct work_struct *work)
 
 	if (hidpp->capabilities & HIDPP_CAPABILITY_HI_RES_SCROLL)
 		hi_res_scroll_enable(hidpp);
+	if (hidpp->capabilities & HIDPP_CAPABILITY_HIDPP20_RATCHET_WHEEL)
+		ratchet_wheel_scroll_enable(hidpp);
 	if (hidpp->capabilities & HIDPP_CAPABILITY_HIDPP20_THUMBWHEEL)
 		thumbwheel_scroll_enable(hidpp);
 
