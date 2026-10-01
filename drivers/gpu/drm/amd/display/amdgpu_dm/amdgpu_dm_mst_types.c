@@ -29,6 +29,7 @@
 #include <drm/display/drm_dp_mst_helper.h>
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
+#include <drm/drm_atomic_uapi.h>
 #include <drm/drm_fixed.h>
 #include <drm/drm_edid.h>
 #include "dm_services.h"
@@ -227,6 +228,7 @@ amdgpu_dm_mst_connector_early_unregister(struct drm_connector *connector)
 	struct amdgpu_dm_connector *root = aconnector->mst_root;
 	struct dc_link *dc_link = aconnector->dc_link;
 	struct dc_sink *dc_sink = aconnector->dc_sink;
+	struct drm_crtc *crtc = connector->state ? connector->state->crtc : NULL;
 
 	drm_dp_mst_connector_early_unregister(connector, port);
 
@@ -250,6 +252,57 @@ amdgpu_dm_mst_connector_early_unregister(struct drm_connector *connector)
 
 	aconnector->mst_status = MST_STATUS_DEFAULT;
 	drm_modeset_unlock(&root->mst_mgr.base.lock);
+
+	/*
+	 * The connector is being removed from the MST topology. If a CRTC is
+	 * still driving it, force a modeset that disables the CRTC so that the
+	 * MST encoder is released and the DC stream dropped. Otherwise, on a
+	 * subsequent re-plug the stale CRTC/encoder assignment triggers an
+	 * encoder conflict in drm_atomic_helper_check_modeset() and the display
+	 * stays dark.
+	 */
+	if (crtc) {
+		struct drm_atomic_commit *state;
+		struct drm_connector_state *conn_state;
+		struct drm_crtc_state *crtc_state;
+		struct drm_modeset_acquire_ctx ctx;
+		int ret;
+
+		drm_modeset_acquire_init(&ctx, 0);
+retry:
+		state = drm_atomic_commit_alloc(connector->dev);
+		if (!state)
+			goto out;
+		state->acquire_ctx = &ctx;
+
+		crtc_state = drm_atomic_get_crtc_state(state, crtc);
+		ret = PTR_ERR_OR_ZERO(crtc_state);
+		if (!ret)
+			crtc_state->active = false;
+		if (!ret)
+			ret = drm_atomic_set_mode_prop_for_crtc(crtc_state, NULL);
+		if (!ret) {
+			conn_state = drm_atomic_get_connector_state(state, connector);
+			ret = PTR_ERR_OR_ZERO(conn_state);
+		}
+		if (!ret)
+			ret = drm_atomic_set_crtc_for_connector(conn_state, NULL);
+		if (!ret)
+			ret = drm_atomic_commit(state);
+
+		drm_atomic_commit_put(state);
+		if (ret == -EDEADLK) {
+			drm_modeset_backoff(&ctx);
+			goto retry;
+		}
+		if (ret)
+			drm_err(connector->dev,
+				"DM_MST: failed to disable CRTC for removed connector %s (%d)\n",
+				connector->name, ret);
+out:
+		drm_modeset_drop_locks(&ctx);
+		drm_modeset_acquire_fini(&ctx);
+	}
 }
 
 static const struct drm_connector_funcs dm_dp_mst_connector_funcs = {
