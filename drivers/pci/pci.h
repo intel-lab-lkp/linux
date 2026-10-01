@@ -1064,6 +1064,18 @@ static inline int pci_resource_num_to_vf_bar(int resno)
 }
 #endif /* CONFIG_PCI_IOV */
 
+#ifdef CONFIG_DEBUG_FS
+struct dentry *pci_dev_debugfs_dir(struct pci_dev *dev);
+void pci_dev_debugfs_remove(struct pci_dev *dev);
+#else
+static inline struct dentry *pci_dev_debugfs_dir(struct pci_dev *dev)
+{
+	return ERR_PTR(-ENODEV);
+}
+
+static inline void pci_dev_debugfs_remove(struct pci_dev *dev) { }
+#endif
+
 #ifdef CONFIG_PCIE_TPH
 void pci_restore_tph_state(struct pci_dev *dev);
 void pci_save_tph_state(struct pci_dev *dev);

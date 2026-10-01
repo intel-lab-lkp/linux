@@ -581,6 +581,9 @@ struct pci_dev {
 #ifdef CONFIG_PCI_TSM
 	struct pci_tsm *tsm;		/* TSM operation state */
 #endif
+#ifdef CONFIG_DEBUG_FS
+	struct dentry	*debugfs;	/* debugfs directory, if any */
+#endif
 	u16		acs_cap;	/* ACS Capability offset */
 	u16		acs_capabilities; /* ACS Capabilities */
 	u8		supported_speeds; /* Supported Link Speeds Vector */
