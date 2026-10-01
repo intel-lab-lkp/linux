@@ -155,6 +155,17 @@ Misaligned WRITE:
     A FILE_SYNC or DATA_SYNC WRITE is persisted once after all of its
     segments are written, not once per segment.
 
+    The page holding a start or end segment is shared with the
+    neighbouring WRITE, which may arrive before, after or at the same
+    time, from any client. So that the second WRITE to such a page does
+    not have to read it back from disk, NFSD puts an empty page there
+    immediately before writing a start or end segment, if there is not
+    one already, without marking it DONTCACHE. The WRITE that finds the
+    page already there marks it DONTCACHE once it has written it, and
+    the next writeback drops it. The first and last pages of a WRITE
+    that is not split are handled the same way. None of this applies
+    when direct_misaligned_dontcache is N.
+
     Writing N to /sys/kernel/debug/nfsd/direct_misaligned_dontcache
     (default Y) issues the start and end segments, and a WRITE that is
     not split, as normal buffered IO instead of DONTCACHE, which suits a

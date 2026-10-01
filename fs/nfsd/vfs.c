@@ -1272,6 +1272,8 @@ static int wait_for_concurrent_writes(struct file *file)
 struct nfsd_write_dio_seg {
 	struct iov_iter			iter;
 	int				flags;
+	bool				boundary;	/* prefix or suffix */
+	bool				edges;		/* unsplit WRITE */
 };
 
 static unsigned long
@@ -1291,6 +1293,54 @@ nfsd_write_dio_seg_init(struct nfsd_write_dio_seg *segment,
 		iov_iter_advance(&segment->iter, start);
 	iov_iter_truncate(&segment->iter, len);
 	segment->flags = iocb->ki_flags;
+	segment->boundary = false;
+	segment->edges = false;
+}
+
+/*
+ * The page holding a misaligned start or end of a WRITE is shared with the
+ * neighbouring WRITE.  Put an unmarked folio there if there is none: a
+ * DONTCACHE write marks only a folio it allocates, so neither WRITE marks
+ * this one and no writeback drops it before the other WRITE has written it.
+ *
+ * Return: true if a folio was already there.  This WRITE is then the
+ * second of the two and calls nfsd_write_dio_boundary_complete() after
+ * writing the page.
+ */
+static bool
+nfsd_write_dio_boundary_claim(struct file *file, loff_t pos)
+{
+	struct address_space *mapping = file->f_mapping;
+	gfp_t gfp = mapping_gfp_mask(mapping);
+	struct folio *folio;
+	int err;
+
+	folio = filemap_alloc_folio(gfp, 0, NULL);
+	if (!folio)
+		return false;
+	err = filemap_add_folio(mapping, folio, pos >> PAGE_SHIFT, gfp);
+	if (!err)
+		folio_unlock(folio);
+	folio_put(folio);
+	return err == -EEXIST;
+}
+
+/*
+ * Both WRITEs have written the page: mark it so the writeback that cleans
+ * it drops it.  folio_set_dropbehind() does not count the folio in
+ * WB_DONTCACHE_DIRTY.
+ */
+static void
+nfsd_write_dio_boundary_complete(struct file *file, loff_t pos)
+{
+	struct folio *folio;
+
+	folio = __filemap_get_folio(file->f_mapping, pos >> PAGE_SHIFT,
+				    FGP_DONTCACHE, 0);
+	if (IS_ERR(folio))
+		return;
+	folio_set_dropbehind(folio);
+	folio_put(folio);
 }
 
 static unsigned int
@@ -1338,7 +1388,8 @@ nfsd_write_dio_iters_init(struct nfsd_file *nf, struct bio_vec *bvec,
 	if (prefix) {
 		nfsd_write_dio_seg_init(&segments[nsegs], bvec,
 					nvecs, total, 0, prefix, iocb);
-		segments[nsegs++].flags |= buffered_flags;
+		segments[nsegs].flags |= buffered_flags;
+		segments[nsegs++].boundary = !!buffered_flags;
 	}
 
 	nfsd_write_dio_seg_init(&segments[nsegs], bvec, nvecs,
@@ -1359,7 +1410,8 @@ nfsd_write_dio_iters_init(struct nfsd_file *nf, struct bio_vec *bvec,
 	if (suffix) {
 		nfsd_write_dio_seg_init(&segments[nsegs], bvec, nvecs, total,
 					prefix + middle, suffix, iocb);
-		segments[nsegs++].flags |= buffered_flags;
+		segments[nsegs].flags |= buffered_flags;
+		segments[nsegs++].boundary = !!buffered_flags;
 	}
 
 	return nsegs;
@@ -1373,6 +1425,7 @@ no_dio:
 	nfsd_write_dio_seg_init(&segments[0], bvec, nvecs, total, 0,
 				total, iocb);
 	segments[0].flags |= buffered_flags;
+	segments[0].edges = !!buffered_flags;
 	return 1;
 }
 
@@ -1383,8 +1436,8 @@ nfsd_direct_write(struct svc_rqst *rqstp, struct svc_fh *fhp,
 {
 	struct nfsd_write_dio_seg segments[3];
 	struct file *file = nf->nf_file;
-	loff_t start = kiocb->ki_pos;
-	bool sync, datasync;
+	loff_t start = kiocb->ki_pos, seg_pos, seg_last;
+	bool sync, datasync, complete_first, complete_last;
 	unsigned int nsegs, i;
 	ssize_t host_err;
 	size_t expected;
@@ -1408,9 +1461,35 @@ nfsd_direct_write(struct svc_rqst *rqstp, struct svc_fh *fhp,
 
 		expected = iov_iter_count(&segments[i].iter);
 
+		/*
+		 * Claim just before the write: an earlier claim gives the
+		 * partner WRITE time to complete the page and drop it first.
+		 */
+		seg_pos = kiocb->ki_pos;
+		seg_last = seg_pos + expected - 1;
+		complete_first = false;
+		complete_last = false;
+		if (segments[i].boundary) {
+			complete_first = nfsd_write_dio_boundary_claim(file,
+								       seg_pos);
+		} else if (segments[i].edges) {
+			/* A page the segment covers entirely is not shared. */
+			if (seg_pos & ~PAGE_MASK)
+				complete_first = nfsd_write_dio_boundary_claim(
+							file, seg_pos);
+			if (((seg_last + 1) & ~PAGE_MASK) &&
+			    (seg_last >> PAGE_SHIFT) != (seg_pos >> PAGE_SHIFT))
+				complete_last = nfsd_write_dio_boundary_claim(
+							file, seg_last);
+		}
+
 		host_err = vfs_iocb_iter_write(file, kiocb, &segments[i].iter);
 		if (host_err < 0)
 			return host_err;
+		if (complete_first)
+			nfsd_write_dio_boundary_complete(file, seg_pos);
+		if (complete_last)
+			nfsd_write_dio_boundary_complete(file, seg_last);
 		*cnt += host_err;
 		if (host_err < (ssize_t)expected)
 			break;	/* partial write */
