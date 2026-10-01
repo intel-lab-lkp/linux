@@ -74,7 +74,8 @@ impl<'a> GspFirmware<'a> {
         pin_init::pin_init_scope(move || {
             let firmware = request_tlv(dev, chipset, "gsp")?;
             let tlv = Tlv::new(firmware.data())?;
-            dev_dbg!(dev, "loaded gsp firmware v{}\n", tlv.get_string(b"VERS")?);
+            let version = tlv.get_string(b"VERS")?;
+            dev_dbg!(dev, "loaded gsp firmware v{}\n", version);
 
             let size = usize::from_safe_cast(tlv.get_u32(b"SIZE")?);
             let mut fw_vvec = VVec::zeroed(size, GFP_KERNEL).map_err(|_| ENOMEM)?;

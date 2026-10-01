@@ -50,7 +50,8 @@ impl<'a> FspFirmware<'a> {
     pub(crate) fn new(dev: &'a device::Device<device::Bound>, chipset: Chipset) -> Result<Self> {
         let fw = request_tlv(dev, chipset, "fmc")?;
         let tlv = Tlv::new(fw.data())?;
-        dev_dbg!(dev, "loaded fsp firmware v{}\n", tlv.get_string(b"VERS")?);
+        let version = tlv.get_string(b"VERS")?;
+        dev_dbg!(dev, "loaded fsp firmware v{}\n", version);
 
         let fmc_image_data = tlv.get_bytes(b"BLOB")?;
         let fmc_image = Coherent::from_slice(dev, fmc_image_data, GFP_KERNEL)?;

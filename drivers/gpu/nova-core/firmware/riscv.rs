@@ -30,11 +30,8 @@ impl<'a> RiscvFirmware<'a> {
     /// Parses the RISC-V firmware image contained in `fw`.
     pub(crate) fn new(dev: &'a device::Device<device::Bound>, fw: &Firmware) -> Result<Self> {
         let tlv = Tlv::new(fw.data())?;
-        dev_dbg!(
-            dev,
-            "loaded gsp bootloader firmware v{}\n",
-            tlv.get_string(b"VERS")?
-        );
+        let version = tlv.get_string(b"VERS")?;
+        dev_dbg!(dev, "loaded gsp bootloader firmware v{}\n", version);
 
         let code_offset = tlv.get_u32(b"CDOF")?;
         let data_offset = tlv.get_u32(b"DAOF")?;

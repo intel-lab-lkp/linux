@@ -93,12 +93,8 @@ impl BooterFirmware {
         };
         let fw = request_tlv(dev, chipset, fw_name)?;
         let tlv = Tlv::new(fw.data())?;
-        dev_dbg!(
-            dev,
-            "loaded {} firmware v{}\n",
-            fw_name,
-            tlv.get_string(b"VERS")?
-        );
+        let version = tlv.get_string(b"VERS")?;
+        dev_dbg!(dev, "loaded {} firmware v{}\n", fw_name, version);
 
         let os_data_offset = tlv.get_u32(b"DAOF")?;
         let os_data_size = tlv.get_u32(b"DASZ")?;

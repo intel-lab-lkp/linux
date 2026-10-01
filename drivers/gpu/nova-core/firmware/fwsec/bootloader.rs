@@ -125,11 +125,8 @@ impl<'a> FwsecFirmwareWithBl<'a> {
     ) -> Result<Self> {
         let fw = request_tlv(dev, chipset, "gen_bootloader")?;
         let tlv = Tlv::new(fw.data())?;
-        dev_dbg!(
-            dev,
-            "loaded generic bootloader firmware v{}\n",
-            tlv.get_string(b"VERS")?
-        );
+        let version = tlv.get_string(b"VERS")?;
+        dev_dbg!(dev, "loaded generic bootloader firmware v{}\n", version);
 
         let ucode = {
             let blob = tlv.get_bytes(b"BLOB")?;
