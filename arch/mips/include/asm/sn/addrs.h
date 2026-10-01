@@ -268,6 +268,27 @@
 #endif /* !__ASSEMBLER__ */
 
 /*
+ * Some hub generations split each hub's PI registers across two subnode
+ * blocks HUBPI_OFFSET apart; REMOTE_HUB_ADDR() always targets subnode 0.
+ */
+#define HUBPI_OFFSET		0x00200000
+
+#define REMOTE_HUB_PI_ADDR(_n, _sn, _x) \
+	(REMOTE_HUB_ADDR((_n), (_x)) + ((_sn) ? HUBPI_OFFSET : 0))
+
+#ifndef __ASSEMBLER__
+
+#define REMOTE_HUB_PI_PTR(_n, _sn, _x)	\
+	((u64 *)REMOTE_HUB_PI_ADDR((_n), (_sn), (_x)))
+
+#define REMOTE_HUB_PI_L(_n, _sn, _r)		\
+	__raw_readq(REMOTE_HUB_PI_PTR((_n), (_sn), (_r)))
+#define REMOTE_HUB_PI_S(_n, _sn, _r, _d)	\
+	__raw_writeq((_d), REMOTE_HUB_PI_PTR((_n), (_sn), (_r)))
+
+#endif /* !__ASSEMBLER__ */
+
+/*
  * Software structure locations -- permanently fixed
  *    See diagram in kldir.h
  */
