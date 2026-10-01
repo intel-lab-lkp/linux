@@ -28,6 +28,7 @@
 #include <media/v4l2-device.h>
 #include <media/v4l2-fwnode.h>
 #include <media/v4l2-mediabus.h>
+#include <media/v4l2-subdev.h>
 
 /* Chip ID */
 #define IMX219_REG_CHIP_ID		CCI_REG16(0x0000)
@@ -1023,6 +1024,35 @@ static int imx219_identify_module(struct imx219 *imx219)
 	return 0;
 }
 
+static int imx219_detect(struct v4l2_subdev *sd,
+			 struct v4l2_subdev_connected_status *status)
+{
+	struct imx219 *imx219 = to_imx219(sd);
+	struct i2c_client *client = v4l2_get_subdevdata(&imx219->sd);
+	struct device *dev = &client->dev;
+	int ret;
+
+	/*
+	 * The sensor must be powered for imx219_identify_module()
+	 * to be able to read the CHIP_ID register
+	 */
+	ret = pm_runtime_resume_and_get(dev);
+	if (ret) {
+		status->status = V4L2_SUBDEV_STATUS_UNKNOWN;
+		return ret;
+	}
+
+	ret = imx219_identify_module(imx219);
+	if (ret)
+		status->status = V4L2_SUBDEV_STATUS_DISCONNECTED;
+	else
+		status->status = V4L2_SUBDEV_STATUS_CONNECTED;
+
+	pm_runtime_put_autosuspend(dev);
+
+	return 0;
+}
+
 static const struct v4l2_subdev_video_ops imx219_video_ops = {
 	.s_stream = v4l2_subdev_s_stream_helper,
 };
@@ -1037,9 +1067,14 @@ static const struct v4l2_subdev_pad_ops imx219_pad_ops = {
 	.disable_streams = imx219_disable_streams,
 };
 
+static const struct v4l2_subdev_sensor_ops imx219_sensor_ops = {
+	.detect = imx219_detect,
+};
+
 static const struct v4l2_subdev_ops imx219_subdev_ops = {
 	.video = &imx219_video_ops,
 	.pad = &imx219_pad_ops,
+	.sensor = &imx219_sensor_ops,
 };
 
 static const struct v4l2_subdev_internal_ops imx219_internal_ops = {
