@@ -62,14 +62,45 @@ static void braille_write(u16 *buf)
 {
 	static u16 lastwrite[WIDTH];
 	unsigned char data[1 + 1 + 2*WIDTH + 2 + 1], csum = 0, *c;
+	struct nbcon_write_context wctxt = { };
+	unsigned long flags;
+	bool locked;
 	u16 out;
 	int i;
 
 	if (!braille_co)
 		return;
 
+	/*
+	 * Braille console is not registered in console_list. Instead, it
+	 * is integrated with VT and shows what appears on the graphical
+	 * console under console_lock(). From this POV it is a legacy
+	 * console. But is calls serial console driver which might be
+	 * converted to the NBCON API. It is similar to
+	 * nbcon_legacy_emit_next_record() except that we should try
+	 * harder to get the lock. Othewise, the Braille device won't show
+	 * everything what is displayed on the terminal.
+	 *
+	 * In short, simulate the original locking using NBCON API.
+	 */
+	if (braille_co->flags & CON_NBCON) {
+		if (panic_on_this_cpu()) {
+			local_irq_save(flags);
+			locked = nbcon_braille_try_acquire(braille_co, &wctxt);
+			/* NBCON API strictly requires the ownership. */
+			if (!locked) {
+				local_irq_restore(flags);
+				return;
+			}
+		} else {
+			braille_co->device_lock(braille_co, &flags);
+			while (!nbcon_braille_try_acquire(braille_co, &wctxt))
+				cpu_relax();
+		}
+	}
+
 	if (!memcmp(lastwrite, buf, WIDTH * sizeof(*buf)))
-		return;
+		goto unlock_nbcon;
 	memcpy(lastwrite, buf, WIDTH * sizeof(*buf));
 
 #define SOH 1
@@ -102,7 +133,27 @@ static void braille_write(u16 *buf)
 	*c++ = csum;
 	*c++ = ETX;
 
-	braille_co->write(braille_co, data, c - data);
+	if (braille_co->flags & CON_NBCON) {
+		nbcon_write_context_set_buf(&wctxt, (char *)data, c - data);
+		if (panic_on_this_cpu())
+			braille_co->write_atomic(braille_co, &wctxt);
+		else
+			braille_co->write_thread(braille_co, &wctxt);
+	} else {
+		braille_co->write(braille_co, data, c - data);
+	}
+
+unlock_nbcon:
+	if (braille_co->flags & CON_NBCON) {
+		if (panic_on_this_cpu()) {
+			if (locked)
+				nbcon_braille_release(&wctxt);
+			local_irq_restore(flags);
+		} else {
+			nbcon_braille_release(&wctxt);
+			braille_co->device_unlock(braille_co, flags);
+		}
+	}
 }
 
 /* Follow the VC cursor*/
@@ -353,13 +404,22 @@ int braille_register_console(struct console *console, int index,
 	if (!console_options)
 		/* Only support VisioBraille for now */
 		console_options = "57600o8";
+
 	if (braille_co)
 		return -ENODEV;
+
+	if (console->flags & CON_NBCON &&
+	    (!console->write_atomic || console->flags & CON_NBCON_ATOMIC_UNSAFE)) {
+		pr_err("Braille console requires a safe braille_co->write_atomic callback\n");
+		return -EINVAL;
+	}
+
 	if (console->setup) {
 		ret = console->setup(console, console_options);
 		if (ret != 0)
 			return ret;
 	}
+
 	console->flags |= CON_ENABLED;
 	console->index = index;
 	braille_co = console;
