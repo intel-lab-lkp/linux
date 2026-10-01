@@ -20,6 +20,7 @@
 #include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/cpu.h>
+#include <linux/sbm.h>
 #include <linux/smp.h>
 #include <linux/mm.h>
 #include <linux/nodemask.h>
@@ -561,6 +562,55 @@ static int __init detect_polarization(union topology_entry *tle)
 	return tl_core->pp != POLARIZATION_HRZ;
 }
 
+int arch_sbm_cpu_instance_id(int cpu)
+{
+	struct mask_info *info = &socket_info;
+
+	/*
+	 * sbm core should not call this if sbm_set_topology() was
+	 * skipped below due to lack of topology information.
+	 */
+	if (WARN_ON_ONCE(topology_mode != TOPOLOGY_MODE_HW))
+		return -1;
+
+	while (info) {
+		if (cpumask_test_cpu(cpu, &info->mask))
+			return info->id;
+		info = info->next;
+	}
+
+	pr_warn_once("socket mapping for CPU%d not found! Mapping to ID 0", cpu);
+	return 0;
+}
+
+static void __configure_sbm_topology(void)
+{
+	int num_sbm_instances = 0, max_threads_per_instance = -1;
+	struct mask_info *info = &socket_info;
+
+	/*
+	 * Consider single package if topology
+	 * information is unavailable.
+	 *
+	 * sbm core will handle the initialization.
+	 */
+	if (topology_mode != TOPOLOGY_MODE_HW)
+		return;
+
+	while (info) {
+		num_sbm_instances += 1;
+		max_threads_per_instance = max_t(int,
+						 cpumask_weight(&info->mask),
+						 max_threads_per_instance);
+		info = info->next;
+	}
+
+	if (WARN_ON_ONCE(!num_sbm_instances || max_threads_per_instance < 1))
+		return;
+
+	sbm_set_topology(num_sbm_instances, max_threads_per_instance);
+}
+
 void __init topology_init_early(void)
 {
 	struct sysinfo_15_1_x *info;
@@ -588,6 +638,8 @@ out:
 	cpumask_set_cpu(0, &cpu_setup_mask);
 	__arch_update_cpu_topology();
 	__arch_update_dedicated_flag(NULL);
+
+	__configure_sbm_topology();
 }
 
 static inline int topology_get_mode(int enabled)
