@@ -66,7 +66,7 @@ int hfsplus_submit_bio(struct super_block *sb, sector_t sector,
 static int hfsplus_read_mdb(void *bufptr, struct hfsplus_wd *wd)
 {
 	u32 extent;
-	u16 attrib;
+	u16 attrib, nmalblks;
 	__be16 sig;
 
 	sig = *(__be16 *)(bufptr + HFSP_WRAPOFF_EMBEDSIG);
@@ -87,10 +87,24 @@ static int hfsplus_read_mdb(void *bufptr, struct hfsplus_wd *wd)
 		return 0;
 	wd->ablk_start =
 		be16_to_cpu(*(__be16 *)(bufptr + HFSP_WRAPOFF_ABLKSTART));
+	nmalblks = be16_to_cpu(*(__be16 *)(bufptr + HFSP_WRAPOFF_NMALBLKS));
 
 	extent = get_unaligned_be32(bufptr + HFSP_WRAPOFF_EMBEDEXT);
 	wd->embed_start = (extent >> 16) & 0xFFFF;
 	wd->embed_count = extent & 0xFFFF;
+
+	/*
+	 * The boot blocks, MDB and volume bitmap of an HFS volume are not
+	 * part of any allocation block, and the embedded volume occupies
+	 * allocation blocks of the wrapper (TN1150).  So the embedded
+	 * volume starts after the wrapper's MDB and ends inside the
+	 * wrapper.
+	 */
+	if (wd->ablk_start <= HFS_MDB_BLK)
+		return 0;
+	if (!wd->embed_count ||
+	    wd->embed_start + wd->embed_count > nmalblks)
+		return 0;
 
 	return 1;
 }

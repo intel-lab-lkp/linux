@@ -67,6 +67,22 @@ struct old_pmap {
 	}	pdEntry[42];
 } __packed;
 
+/*
+ * Check a partition map entry before following it.  The partition must
+ * be non-empty, start inside the device and start at or after @first:
+ * after the driver descriptor map in block 0 for an old-style map, and
+ * after the whole of a new-style map, whose size the first entry's
+ * pmMapBlkCnt gives (TN1189).  Every hop then moves forward, past the
+ * map entries just read, so hfsplus_read_wrapper() cannot loop and
+ * reads each block of a map at most once.
+ */
+static bool hfs_part_valid(struct super_block *sb, sector_t base,
+			   u64 first, u32 start, u32 size)
+{
+	return start >= first && size &&
+	       base + start < bdev_nr_sectors(sb->s_bdev);
+}
+
 static int hfs_parse_old_pmap(struct super_block *sb, struct old_pmap *pm,
 		sector_t *part_start, sector_t *part_size)
 {
@@ -76,7 +92,9 @@ static int hfs_parse_old_pmap(struct super_block *sb, struct old_pmap *pm,
 	for (i = 0; i < 42; i++) {
 		struct old_pmap_entry *p = &pm->pdEntry[i];
 
-		if (p->pdStart && p->pdSize &&
+		if (hfs_part_valid(sb, *part_start, HFS_DD_BLK + 1,
+				   be32_to_cpu(p->pdStart),
+				   be32_to_cpu(p->pdSize)) &&
 		    p->pdFSID == cpu_to_be32(0x54465331)/*"TFS1"*/ &&
 		    (sbi->part < 0 || sbi->part == i)) {
 			*part_start += be32_to_cpu(p->pdStart);
@@ -99,6 +117,10 @@ static int hfs_parse_new_pmap(struct super_block *sb, void *buf,
 
 	do {
 		if (!memcmp(pm->pmPartType, "Apple_HFS", 9) &&
+		    hfs_part_valid(sb, *part_start,
+				   HFS_PMAP_BLK + (u64)size,
+				   be32_to_cpu(pm->pmPyPartStart),
+				   be32_to_cpu(pm->pmPartBlkCnt)) &&
 		    (sbi->part < 0 || sbi->part == i)) {
 			*part_start += be32_to_cpu(pm->pmPyPartStart);
 			*part_size = be32_to_cpu(pm->pmPartBlkCnt);
