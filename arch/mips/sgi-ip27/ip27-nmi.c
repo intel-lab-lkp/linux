@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
+#include <linux/console.h>
 #include <linux/kernel.h>
 #include <linux/mmzone.h>
 #include <linux/nodemask.h>
@@ -182,6 +183,12 @@ static void nmi_dump(void)
 	 * Only allow 1 cpu to proceed
 	 */
 	arch_spin_lock(&nmi_lock);
+
+	/*
+	 * No CPU leaves the NMI handler before the hub reset below, so an
+	 * nbcon console's printer thread would never print the dump.
+	 */
+	nbcon_cpu_emergency_enter();
 
 #ifdef REAL_NMI_SIGNAL
 	/*
