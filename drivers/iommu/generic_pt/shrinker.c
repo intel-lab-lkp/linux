@@ -43,11 +43,7 @@ static unsigned long generic_pt_shrinker_count(struct shrinker *shrink,
 
 	mutex_lock(&generic_pt_domains_list_lock);
 	list_for_each_entry(iommu, &generic_pt_domains_list, shrinker_list) {
-		struct iommu_domain *domain = &iommu->domain;
-
-		/* TODO: Return real nr_pages here! */
-		if (!xa_empty(&domain->reclaim_list))
-			count += 1;
+		count += atomic_long_read(&iommu->nr_reclaimable);
 	}
 	mutex_unlock(&generic_pt_domains_list_lock);
 
@@ -78,15 +74,18 @@ static unsigned long generic_pt_shrinker_scan(struct shrinker *shrink,
 				if (iommu->ops->sever_branch(iommu, iova, virt_to_phys(virt))) {
 					/* Successfully severed, queue for freeing */
 					xa_erase(&domain->reclaim_list, iova);
+					atomic_long_dec(&iommu->nr_reclaimable);
 					iommu_pages_list_add(&free_list, virt);
 					freed_count++;
 				} else {
 					/* We raced with map, abort pruning */
 					xa_erase(&domain->reclaim_list, iova);
+					atomic_long_dec(&iommu->nr_reclaimable);
 				}
 			} else {
 				/* Not empty anymore, remove from list */
 				xa_erase(&domain->reclaim_list, iova);
+				atomic_long_dec(&iommu->nr_reclaimable);
 			}
 		}
 

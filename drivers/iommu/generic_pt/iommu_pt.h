@@ -1115,6 +1115,7 @@ start_oa:
 
 				xa_store(&iommu->domain.reclaim_list, range->va,
 					 virt_to_ioptdesc(pts.table), GFP_ATOMIC);
+				atomic_long_inc(&iommu->nr_reclaimable);
 			}
 
 			gather_add_leaf(&unmap->pending, &pts);

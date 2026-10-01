@@ -69,6 +69,11 @@ struct pt_iommu {
 	 * @shrinker_list: Node for the generic_pt global shrinker list
 	 */
 	struct list_head shrinker_list;
+
+	/**
+	 * @nr_reclaimable: Count of empty directories waiting in reclaim_list
+	 */
+	atomic_long_t nr_reclaimable;
 };
 
 extern struct srcu_struct generic_pt_srcu;
