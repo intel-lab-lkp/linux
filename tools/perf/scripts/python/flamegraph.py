@@ -28,6 +28,8 @@ import sys
 from typing import Dict, Optional, Union
 import urllib.request
 
+from perf_trace_context import perf_input_name, perf_script_context
+
 MINIMAL_HTML = """<head>
   <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/d3-flame-graph@4.1.3/dist/d3-flamegraph.css">
 </head>
@@ -122,20 +124,14 @@ class FlameGraphCLI:
         node.value += 1
 
     def get_report_header(self) -> str:
-        if self.args.input == "-":
+        if self.input_file_name == "-":
             # when this script is invoked with "perf script flamegraph",
             # no perf.data is created and we cannot read the header of it
             return ""
 
         try:
-            # if the file name other than perf.data is given,
-            # we read the header of that file
-            if self.args.input:
-                output = subprocess.check_output(["perf", "report", "--header-only",
-                                                  "-i", self.args.input])
-            else:
-                output = subprocess.check_output(["perf", "report", "--header-only"])
-
+            output = subprocess.check_output(["perf", "report", "--header-only",
+                                              "-i", self.input_file_name])
             result = output.decode("utf-8")
             if self.args.event_name:
                 result += "\nFocused event: " + self.args.event_name
@@ -143,6 +139,9 @@ class FlameGraphCLI:
         except Exception as err:  # pylint: disable=broad-except
             print(f"Error reading report header: {err}", file=sys.stderr)
             return ""
+
+    def trace_begin(self) -> None:
+        self.input_file_name = perf_input_name(perf_script_context) or "-"
 
     def trace_end(self) -> None:
         stacks_json = json.dumps(self.stack, default=lambda x: x.to_json())
@@ -167,7 +166,7 @@ js-d3-flame-graph or libjs-d3-flame-graph, specify an existing flame
 graph template (--template PATH) or use another output format (--format
 FORMAT).""",
                               file=sys.stderr)
-                        if self.args.input == "-":
+                        if self.input_file_name == "-":
                             print(
 """Not attempting to download Flame Graph template as script command line
 input is disabled due to using live mode. If you want to download the
@@ -248,8 +247,6 @@ if __name__ == "__main__":
                         default="blue-green",
                         help="flame graph color scheme",
                         choices=["blue-green", "orange"])
-    parser.add_argument("-i", "--input",
-                        help=argparse.SUPPRESS)
     parser.add_argument("--allow-download",
                         default=False,
                         action="store_true",
@@ -265,3 +262,4 @@ if __name__ == "__main__":
 
     process_event = cli.process_event
     trace_end = cli.trace_end
+    trace_begin = cli.trace_begin
