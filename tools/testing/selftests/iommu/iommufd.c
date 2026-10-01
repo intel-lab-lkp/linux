@@ -3613,4 +3613,52 @@ TEST_F(iommufd_device_pasid, pasid_attach)
 	test_cmd_mock_domain_replace(self->stdev_id, self->ioas_id);
 }
 
+TEST_F(iommufd_ioas, iommufd_nr_pages)
+{
+	char path[256];
+	char line[128];
+	FILE *f;
+	long nr_pages_initial = -1;
+	long nr_pages_mapped = -1;
+	long nr_pages_final = -1;
+
+	if (!self->stdev_id)
+		SKIP(return, "Needs a device attached for HWPT");
+
+	snprintf(path, sizeof(path), "/proc/self/fdinfo/%d", self->fd);
+	f = fopen(path, "r");
+	ASSERT_NE(NULL, f);
+	while (fgets(line, sizeof(line), f)) {
+		if (sscanf(line, "iommu-nr-pages:\t%ld", &nr_pages_initial) == 1)
+			break;
+	}
+	fclose(f);
+	ASSERT_GE(nr_pages_initial, 0);
+
+	/* Map a page at start and one far away */
+	test_ioctl_ioas_map_fixed(buffer, PAGE_SIZE, self->base_iova);
+	test_ioctl_ioas_map_fixed(buffer, PAGE_SIZE, self->base_iova + (1UL << 30));
+
+	f = fopen(path, "r");
+	ASSERT_NE(NULL, f);
+	while (fgets(line, sizeof(line), f)) {
+		if (sscanf(line, "iommu-nr-pages:\t%ld", &nr_pages_mapped) == 1)
+			break;
+	}
+	fclose(f);
+	ASSERT_GT(nr_pages_mapped, nr_pages_initial);
+
+	test_ioctl_ioas_unmap(self->base_iova, PAGE_SIZE);
+	test_ioctl_ioas_unmap(self->base_iova + (1UL << 30), PAGE_SIZE);
+
+	f = fopen(path, "r");
+	ASSERT_NE(NULL, f);
+	while (fgets(line, sizeof(line), f)) {
+		if (sscanf(line, "iommu-nr-pages:\t%ld", &nr_pages_final) == 1)
+			break;
+	}
+	fclose(f);
+	ASSERT_EQ(nr_pages_final, nr_pages_mapped);
+}
+
 TEST_HARNESS_MAIN
