@@ -1977,6 +1977,21 @@ u64 timekeeping_max_deferment(void)
 
 		ret = tk->tkr_mono.clock->max_idle_ns;
 
+		/*
+		 * Skew introduced for phase offset is intended to be
+		 * recalculated each second. Ensure a tickless kernel
+		 * wakes up for that and does not overshoot, while skew
+		 * is being applied.
+		 */
+		if (abs(tk->skew_delta) > 1) {
+			u64 nsec_in_sec = tk->tkr_mono.xtime_nsec >>
+					  tk->tkr_mono.shift;
+			u64 remaining = NSEC_PER_SEC - min_t(u64, nsec_in_sec,
+							     NSEC_PER_SEC);
+
+			ret = min_t(u64, ret, max_t(u64, remaining, TICK_NSEC));
+		}
+
 	} while (read_seqcount_retry(&tk_core.seq, seq));
 
 	return ret;
@@ -3047,8 +3062,16 @@ static int __do_adjtimex(struct tk_data *tkd, struct __kernel_timex *txc,
 		tk_update_leap_state_all(tkd);
 	}
 
-	/* Update the multiplier immediately if frequency was set directly */
-	if (txc->modes & (ADJ_FREQUENCY | ADJ_TICK))
+	/*
+	 * Update the multiplier immediately if the frequency was set
+	 * directly, or refresh the cached skew_delta if a phase
+	 * adjustment started a slew, so that it bounds idle sleep.
+	 * ADJ_OFFSET_READONLY excludes the unprivileged read-only
+	 * adjtime() form, which starts no slew.
+	 */
+	if ((txc->modes & (ADJ_FREQUENCY | ADJ_TICK)) ||
+	    ((txc->modes & ADJ_OFFSET) &&
+	     !(txc->modes & ADJ_OFFSET_READONLY)))
 		result->clock_set |= __timekeeping_advance(tkd, TK_ADV_FREQ);
 
 	return ret;
