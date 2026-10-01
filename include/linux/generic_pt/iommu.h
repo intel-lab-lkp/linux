@@ -64,7 +64,17 @@ struct pt_iommu {
 	 * page table which must have dma ops that perform cache flushing.
 	 */
 	struct device *iommu_device;
+
+	/**
+	 * @shrinker_list: Node for the generic_pt global shrinker list
+	 */
+	struct list_head shrinker_list;
 };
+
+extern struct srcu_struct generic_pt_srcu;
+
+void generic_pt_shrinker_add(struct pt_iommu *iommu);
+void generic_pt_shrinker_remove(struct pt_iommu *iommu);
 
 static inline struct pt_iommu *iommupt_from_domain(struct iommu_domain *domain)
 {

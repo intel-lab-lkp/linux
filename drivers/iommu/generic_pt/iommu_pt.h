@@ -916,7 +916,7 @@ static int check_map_range(struct pt_iommu *iommu_table, struct pt_range *range,
 static int do_map(struct pt_range *range, struct pt_common *common,
 		  bool single_page, struct pt_iommu_map_args *map)
 {
-	int ret;
+	int ret, idx;
 
 	/*
 	 * The __map_single_page() fast path does not support DMA_INCOHERENT
@@ -924,17 +924,21 @@ static int do_map(struct pt_range *range, struct pt_common *common,
 	 */
 	if (single_page && !pt_feature(common, PT_FEAT_DMA_INCOHERENT)) {
 
+		idx = srcu_read_lock(&generic_pt_srcu);
 		ret = pt_walk_range(range, __map_single_page, map);
+		srcu_read_unlock(&generic_pt_srcu, idx);
 		if (ret != -EAGAIN)
 			return ret;
 		/* EAGAIN falls through to the full path */
 	}
 
 	do {
+		idx = srcu_read_lock(&generic_pt_srcu);
 		if (map->leaf_level == range->top_level)
 			ret = pt_walk_range(range, __map_range_leaf, map);
 		else
 			ret = pt_walk_range(range, __map_range, map);
+		srcu_read_unlock(&generic_pt_srcu, idx);
 	} while (ret == -EAGAIN);
 	return ret;
 }
@@ -1142,13 +1146,15 @@ static size_t NS(unmap_range)(struct pt_iommu *iommu_table, dma_addr_t iova,
 			unmap.pending.free_list),
 	};
 	struct pt_range range;
-	int ret;
+	int ret, idx;
 
 	ret = make_range(common_from_iommu(iommu_table), &range, iova, len);
 	if (ret)
 		return 0;
 
+	idx = srcu_read_lock(&generic_pt_srcu);
 	pt_walk_range(&range, __unmap_range, &unmap);
+	srcu_read_unlock(&generic_pt_srcu, idx);
 
 	gather_range_pending(&unmap.pending, iommu_table, iova, unmap.unmapped);
 
@@ -1170,7 +1176,8 @@ static int __sever_branch(struct pt_range *range, void *arg,
 	case PT_ENTRY_TABLE:
 		if (virt_to_phys(pt_table_ptr(&pts)) == sever->expected_phys) {
 			sever->success = pt_table_install64(&pts, 0x0);
-			return 1; /* Stop walking */
+			/* Stop walking */
+			return 1;
 		}
 		return pt_descend(&pts, arg, __sever_branch);
 	default:
@@ -1230,6 +1237,8 @@ static void NS(deinit)(struct pt_iommu *iommu_table)
 		.pending.free_list = IOMMU_PAGES_LIST_INIT(
 			collect.pending.free_list),
 	};
+
+	generic_pt_shrinker_remove(iommu_table);
 
 	iommu_pages_list_add(&collect.pending.free_list, range.top_table);
 	pt_walk_range(&range, __collect_tables, &collect);
@@ -1407,6 +1416,7 @@ int pt_iommu_init(struct pt_iommu_table *fmt_table,
 
 	/* Must be last, see pt_iommu_deinit() */
 	iommu_table->ops = &NS(ops);
+	generic_pt_shrinker_add(iommu_table);
 	return 0;
 }
 EXPORT_SYMBOL_NS_GPL(pt_iommu_init, "GENERIC_PT_IOMMU");
