@@ -9,6 +9,8 @@
  * a patch contributed by Holger Schemel (aeglos@valinor.owl.de).
  */
 
+#include <linux/blkdev.h>
+
 #include "hfs_fs.h"
 
 /*
@@ -50,6 +52,22 @@ struct old_pmap {
 } __packed;
 
 /*
+ * Check a partition map entry before following it.  The partition must
+ * be non-empty, start inside the device and start at or after @first:
+ * after the driver descriptor map in block 0 for an old-style map, and
+ * after the whole of a new-style map, whose size the first entry's
+ * pmMapBlkCnt gives (TN1189).  Every hop then moves forward, past the
+ * map entries just read, so hfs_mdb_get() cannot loop and reads each
+ * block of a map at most once.
+ */
+static bool hfs_part_valid(struct super_block *sb, sector_t base,
+			   u64 first, u32 start, u32 size)
+{
+	return start >= first && size &&
+	       base + start < bdev_nr_sectors(sb->s_bdev);
+}
+
+/*
  * hfs_part_find()
  *
  * Parse the partition map looking for the
@@ -77,12 +95,15 @@ int hfs_part_find(struct super_block *sb,
 		p = pm->pdEntry;
 		size = 42;
 		for (i = 0; i < size; p++, i++) {
-			if (p->pdStart && p->pdSize &&
+			if (hfs_part_valid(sb, *part_start, HFS_DD_BLK + 1,
+					   be32_to_cpu(p->pdStart),
+					   be32_to_cpu(p->pdSize)) &&
 			    p->pdFSID == cpu_to_be32(0x54465331)/*"TFS1"*/ &&
 			    (HFS_SB(sb)->part < 0 || HFS_SB(sb)->part == i)) {
 				*part_start += be32_to_cpu(p->pdStart);
 				*part_size = be32_to_cpu(p->pdSize);
 				res = 0;
+				break;
 			}
 		}
 		break;
@@ -95,6 +116,10 @@ int hfs_part_find(struct super_block *sb,
 		size = be32_to_cpu(pm->pmMapBlkCnt);
 		for (i = 0; i < size;) {
 			if (!memcmp(pm->pmPartType,"Apple_HFS", 9) &&
+			    hfs_part_valid(sb, *part_start,
+					   HFS_PMAP_BLK + (u64)size,
+					   be32_to_cpu(pm->pmPyPartStart),
+					   be32_to_cpu(pm->pmPartBlkCnt)) &&
 			    (HFS_SB(sb)->part < 0 || HFS_SB(sb)->part == i)) {
 				*part_start += be32_to_cpu(pm->pmPyPartStart);
 				*part_size = be32_to_cpu(pm->pmPartBlkCnt);
