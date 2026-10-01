@@ -85,6 +85,18 @@
  * the corresponding VM_BIND jobs they depend on - attached to them.
  */
 
+/*
+ * Called once per pass of drm_gpuvm_exec_lock(), validating whatever that pass
+ * locked. The early pass validates the evicted BOs before the resident ones
+ * are locked, so that a BO shared with another client, e.g. a compositor, is
+ * not held locked while this job's evicted BOs are moved back in.
+ */
+static int
+nouveau_exec_job_validate(struct drm_gpuvm_exec *vme)
+{
+	return drm_gpuvm_exec_validate(vme);
+}
+
 static int
 nouveau_exec_job_submit(struct nouveau_job *job,
 			struct drm_gpuvm_exec *vme)
@@ -99,21 +111,14 @@ nouveau_exec_job_submit(struct nouveau_job *job,
 	if (ret)
 		return ret;
 
+	vme->two_pass = true;
+	vme->extra.fn = nouveau_exec_job_validate;
+
 	nouveau_uvmm_lock(uvmm);
 	ret = drm_gpuvm_exec_lock(vme);
-	if (ret) {
-		nouveau_uvmm_unlock(uvmm);
-		return ret;
-	}
 	nouveau_uvmm_unlock(uvmm);
 
-	ret = drm_gpuvm_exec_validate(vme);
-	if (ret) {
-		drm_gpuvm_exec_unlock(vme);
-		return ret;
-	}
-
-	return 0;
+	return ret;
 }
 
 static void
