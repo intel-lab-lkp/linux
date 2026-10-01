@@ -151,6 +151,18 @@ void nfsd_debugfs_init(void)
 	 */
 	debugfs_create_u32("direct_misaligned_num_pages", 0644, nfsd_top_dir,
 			   &nfsd_direct_misaligned_num_pages);
+
+	/*
+	 * /sys/kernel/debug/nfsd/direct_misaligned_dontcache
+	 *
+	 *   Y: the parts of a direct-mode WRITE that are not O_DIRECT use
+	 *      DONTCACHE buffered IO when the file system supports it
+	 *   N: those parts use normal buffered IO
+	 *
+	 * The default value of this setting is Y.
+	 */
+	debugfs_create_bool("direct_misaligned_dontcache", 0644, nfsd_top_dir,
+			    &nfsd_direct_misaligned_dontcache);
 #ifdef CONFIG_NFSD_V4
 	debugfs_create_bool("delegated_timestamps", 0644, nfsd_top_dir,
 			    &nfsd_delegts_enabled);

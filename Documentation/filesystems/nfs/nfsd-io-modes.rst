@@ -126,11 +126,13 @@ Misaligned WRITE:
     middle and end as needed. The large middle segment is DIO-aligned
     and the start and/or end are misaligned. Buffered IO is used for the
     misaligned segments and O_DIRECT is used for the middle DIO-aligned
-    segment. If the filesystem supports FOP_DONTCACHE, every segment is
-    marked DONTCACHE. The flag has no effect on the O_DIRECT segment
-    unless the filesystem services it with buffered IO instead, as XFS
-    does when it cannot invalidate page cache that overlaps the segment.
-    The iomap_dio_invalidate_fail trace event reports such a fallback.
+    segment. If the filesystem supports FOP_DONTCACHE, the O_DIRECT
+    segment is marked DONTCACHE, and so are the misaligned segments
+    unless direct_misaligned_dontcache is N (below). The flag has no
+    effect on the O_DIRECT segment unless the filesystem services it
+    with buffered IO instead, as XFS does when it cannot invalidate page
+    cache that overlaps the segment. The iomap_dio_invalidate_fail trace
+    event reports such a fallback.
 
     If NFSD does not split a misaligned WRITE, it issues the whole WRITE
     as a single DONTCACHE buffered IO (normal buffered IO if the
@@ -144,6 +146,12 @@ Misaligned WRITE:
       pages (default 2);
     - the WRITE payload is not aligned in memory to the block device's
       dma_alignment, so the middle cannot be O_DIRECT either.
+
+    Writing N to /sys/kernel/debug/nfsd/direct_misaligned_dontcache
+    (default Y) issues the start and end segments, and a WRITE that is
+    not split, as normal buffered IO instead of DONTCACHE, which suits a
+    workload that reads back or rewrites what it just wrote. The O_DIRECT
+    middle segment keeps its DONTCACHE flag either way.
 
 Tracing:
     The nfsd_read_direct trace event shows how NFSD expands any
