@@ -205,6 +205,11 @@ struct tcpci;
  *		swap following Discover Identity on SOP' occurs.
  *		Return true when the TCPM is allowed to request a Vconn swap
  *		after Discovery Identity on SOP.
+ * @get_current_limit:
+ *		Optional; Called when the port is a sink and CC=Rp-def to obtain
+ *		the current limit. Chip level drivers can implement their own
+ *		detection and return the limit in mA, or 0 when it cannot be
+ *		determined.
  * @set_orientation:
  *		Optional; Enable setting the connector orientation
  *		CONFIG_STANDARD_OUTPUT (0x18) bit0.
@@ -228,6 +233,7 @@ struct tcpci_data {
 					     bool capable);
 	void (*check_contaminant)(struct tcpci *tcpci, struct tcpci_data *data);
 	bool (*attempt_vconn_swap_discovery)(struct tcpci *tcpci, struct tcpci_data *data);
+	int (*get_current_limit)(struct tcpci *tcpci, struct tcpci_data *data);
 };
 
 struct tcpci *tcpci_register_port(struct device *dev, struct tcpci_data *data);

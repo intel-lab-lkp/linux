@@ -250,6 +250,19 @@ static int tcpci_get_cc(struct tcpc_dev *tcpc,
 	return 0;
 }
 
+static int tcpci_get_current_limit(struct tcpc_dev *tcpc)
+{
+	struct tcpci *tcpci = tcpc_to_tcpci(tcpc);
+	int ret;
+
+	if (!tcpci->data->get_current_limit)
+		return 0;
+
+	ret = tcpci->data->get_current_limit(tcpci, tcpci->data);
+
+	return ret < 0 ? 0 : ret;
+}
+
 static int tcpci_set_polarity(struct tcpc_dev *tcpc,
 			      enum typec_cc_polarity polarity)
 {
@@ -861,6 +874,7 @@ struct tcpci *tcpci_register_port(struct device *dev, struct tcpci_data *data)
 	tcpci->tcpc.set_cc = tcpci_set_cc;
 	tcpci->tcpc.apply_rc = tcpci_apply_rc;
 	tcpci->tcpc.get_cc = tcpci_get_cc;
+	tcpci->tcpc.get_current_limit = tcpci_get_current_limit;
 	tcpci->tcpc.set_polarity = tcpci_set_polarity;
 	tcpci->tcpc.set_vconn = tcpci_set_vconn;
 	tcpci->tcpc.start_toggling = tcpci_start_toggling;
