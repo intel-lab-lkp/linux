@@ -213,6 +213,8 @@ struct hidpp_device {
 
 	int hires_wheel_multiplier;
 	u8 hires_wheel_feature_index;
+	bool hires_wheel_has_invert;
+	bool hires_wheel_invert;
 
 	bool connected_once;
 };
@@ -988,7 +990,8 @@ static int hidpp_root_get_protocol_version(struct hidpp_device *hidpp)
 	}
 
 	/* the device might not be connected */
-	if (ret == HIDPP_ERROR_RESOURCE_ERROR ||
+	if (ret == HIDPP_ERROR_CONNECT_FAIL ||
+	    ret == HIDPP_ERROR_RESOURCE_ERROR ||
 	    ret == HIDPP_ERROR_UNKNOWN_DEVICE)
 		return -EIO;
 
@@ -2044,9 +2047,15 @@ static int hidpp_hrs_set_highres_scrolling_mode(struct hidpp_device *hidpp,
 
 #define CMD_HIRES_WHEEL_GET_WHEEL_CAPABILITY	0x00
 #define CMD_HIRES_WHEEL_SET_WHEEL_MODE		0x20
+#define EVENT_HIRES_WHEEL_MOVEMENT		0x00
+#define HIRES_WHEEL_CAPABILITY_HAS_INVERT	BIT(3)
+#define HIRES_WHEEL_MODE_USE_HIDPP		BIT(0)
+#define HIRES_WHEEL_MODE_HIGH_RESOLUTION	BIT(1)
+#define HIRES_WHEEL_MODE_INVERT			BIT(2)
+#define HIRES_WHEEL_EVENT_HIGH_RESOLUTION	BIT(4)
 
 static int hidpp_hrw_get_wheel_capability(struct hidpp_device *hidpp,
-	u8 *multiplier)
+	u8 *multiplier, bool *has_invert)
 {
 	u8 feature_index;
 	int ret;
@@ -2064,6 +2073,8 @@ static int hidpp_hrw_get_wheel_capability(struct hidpp_device *hidpp,
 		goto return_default;
 
 	*multiplier = response.fap.params[0];
+	*has_invert = response.fap.params[1] &
+		HIRES_WHEEL_CAPABILITY_HAS_INVERT;
 	return 0;
 return_default:
 	hid_warn(hidpp->hid_dev,
@@ -2084,9 +2095,9 @@ static int hidpp_hrw_set_wheel_mode(struct hidpp_device *hidpp, bool invert,
 	if (ret)
 		return ret;
 
-	params[0] = (invert          ? BIT(2) : 0) |
-		    (high_resolution ? BIT(1) : 0) |
-		    (use_hidpp       ? BIT(0) : 0);
+	params[0] = (invert          ? HIRES_WHEEL_MODE_INVERT : 0) |
+		    (high_resolution ? HIRES_WHEEL_MODE_HIGH_RESOLUTION : 0) |
+		    (use_hidpp       ? HIRES_WHEEL_MODE_USE_HIDPP : 0);
 
 	return hidpp_send_fap_command_sync(hidpp, feature_index,
 					   CMD_HIRES_WHEEL_SET_WHEEL_MODE,
@@ -3903,15 +3914,58 @@ static int hidpp10_consumer_keys_raw_event(struct hidpp_device *hidpp,
 /* High-resolution scroll wheels                                              */
 /* -------------------------------------------------------------------------- */
 
+static bool hidpp_is_bolt_child(struct hid_device *hdev)
+{
+	struct device *parent = hdev->dev.parent;
+	struct hid_device *receiver_hdev;
+
+	if (hdev->group != HID_GROUP_LOGITECH_DJ_DEVICE || !parent)
+		return false;
+
+	receiver_hdev = to_hid_device(parent);
+	return receiver_hdev->vendor == USB_VENDOR_ID_LOGITECH &&
+	       receiver_hdev->product == USB_DEVICE_ID_LOGITECH_BOLT_RECEIVER;
+}
+
+static void hidpp_hrw_update_wheel_mode(struct hidpp_device *hidpp,
+	bool invert, bool high_resolution)
+{
+	hidpp->hires_wheel_invert = invert;
+	hidpp->vertical_wheel_counter.wheel_multiplier =
+		(high_resolution && hidpp->hires_wheel_multiplier > 0) ?
+		hidpp->hires_wheel_multiplier : 1;
+}
+
 static int hi_res_scroll_enable(struct hidpp_device *hidpp)
 {
-	int ret;
+	int ret, fallback_ret;
 	u8 multiplier = 1;
+	bool has_invert = false;
 
 	if (hidpp->capabilities & HIDPP_CAPABILITY_HIDPP20_HI_RES_WHEEL) {
-		ret = hidpp_hrw_set_wheel_mode(hidpp, false, true, false);
-		if (ret == 0)
-			ret = hidpp_hrw_get_wheel_capability(hidpp, &multiplier);
+		/* Check capabilities before setting mode, to guard against
+		 * enabling high res and then failing to read multiplier.
+		 */
+		ret = hidpp_hrw_get_wheel_capability(hidpp, &multiplier,
+						     &has_invert);
+		if (ret) {
+			/* Avoid diverting wheel reports without a known
+			 * multiplier.
+			 */
+			fallback_ret = hidpp_hrw_set_wheel_mode(hidpp, false,
+							 false, false);
+			if (fallback_ret)
+				hid_dbg(hidpp->hid_dev,
+					"Could not restore native wheel reporting: %d\n",
+					fallback_ret);
+			hidpp->hires_wheel_multiplier = 1;
+			hidpp->hires_wheel_has_invert = false;
+			hidpp_hrw_update_wheel_mode(hidpp, false, false);
+			return ret;
+		}
+		ret = hidpp_hrw_set_wheel_mode(hidpp, false, true,
+					      hidpp_is_bolt_child(
+					       hidpp->hid_dev));
 	} else if (hidpp->capabilities & HIDPP_CAPABILITY_HIDPP20_HI_RES_SCROLL) {
 		ret = hidpp_hrs_set_highres_scrolling_mode(hidpp, true,
 							   &multiplier);
@@ -3933,6 +3987,10 @@ static int hi_res_scroll_enable(struct hidpp_device *hidpp)
 
 	hidpp->hires_wheel_multiplier = multiplier;
 	hidpp->vertical_wheel_counter.wheel_multiplier = multiplier;
+	if (hidpp->capabilities & HIDPP_CAPABILITY_HIDPP20_HI_RES_WHEEL) {
+		hidpp->hires_wheel_has_invert = has_invert;
+		hidpp_hrw_update_wheel_mode(hidpp, false, true);
+	}
 	hid_dbg(hidpp->hid_dev, "wheel multiplier = %d\n", multiplier);
 	return 0;
 }
@@ -3975,6 +4033,10 @@ static int hidpp_initialize_hires_scroll(struct hidpp_device *hidpp)
 	return 0;
 }
 
+/*
+ * The low nibble of data[3] is the software ID: 0 for wheel
+ * notifications, nonzero and echoed from the request for replies.
+ */
 static int hidpp20_hires_wheel_raw_event(struct hidpp_device *hidpp,
 						u8 *data, int size)
 {
@@ -3988,12 +4050,47 @@ static int hidpp20_hires_wheel_raw_event(struct hidpp_device *hidpp,
 	    data[2] != hidpp->hires_wheel_feature_index)
 		return 0;
 
+	/* This checks only the function nibble, not software ID, so in theory
+	 * an event with ID 0x20 would also apply here, but there is none in
+	 * the 0x2121 specification.
+	 */
 	if ((data[3] & 0xf0) == CMD_HIRES_WHEEL_SET_WHEEL_MODE) {
 		u8 mode = data[4];
-		bool hires = (mode & 0x02) != 0;
-		int new_multiplier = (hires && hidpp->hires_wheel_multiplier > 0)
-			? hidpp->hires_wheel_multiplier : 1;
-		hidpp->vertical_wheel_counter.wheel_multiplier = new_multiplier;
+
+		hidpp_hrw_update_wheel_mode(hidpp,
+			mode & HIRES_WHEEL_MODE_INVERT,
+			mode & HIRES_WHEEL_MODE_HIGH_RESOLUTION);
+		return 1;
+	}
+
+	/* Match wheelMovement (function 0, software ID 0). */
+	if (data[3] == EVENT_HIRES_WHEEL_MOVEMENT) {
+		int delta;
+
+		if (size < 7 || !hidpp->input ||
+		    hidpp->hires_wheel_multiplier <= 0)
+			return 1;
+
+		/* The event flag describes whether the event is high resolution
+		 * or not.
+		 */
+		hidpp->vertical_wheel_counter.wheel_multiplier =
+			(data[4] & HIRES_WHEEL_EVENT_HIGH_RESOLUTION) ?
+			hidpp->hires_wheel_multiplier : 1;
+
+		delta = (s16)get_unaligned_be16(&data[5]);
+		if (!delta)
+			return 1;
+
+		/* HID++ 2.0 does not invert scroll regardless of setting,
+		 * hence do so in driver
+		 */
+		if (hidpp->hires_wheel_has_invert && hidpp->hires_wheel_invert)
+			delta = -delta;
+
+		hidpp_scroll_counter_handle_scroll(hidpp->input,
+			&hidpp->vertical_wheel_counter, delta);
+		input_sync(hidpp->input);
 		return 1;
 	}
 
@@ -4295,7 +4392,7 @@ static int hidpp_event(struct hid_device *hdev, struct hid_field *field,
 	/* A scroll event may occur before the multiplier has been retrieved or
 	 * the input device set, or high-res scroll enabling may fail. In such
 	 * cases we must return early (falling back to default behaviour) to
-	 * avoid a crash in hidpp_scroll_counter_handle_scroll.
+	 * avoid consuming an event that we cannot scale.
 	 */
 	if (!(hidpp->capabilities & HIDPP_CAPABILITY_HI_RES_SCROLL)
 	    || value == 0 || hidpp->input == NULL
@@ -4404,8 +4501,37 @@ static int hidpp_initialize_battery(struct hidpp_device *hidpp)
 	return ret;
 }
 
+static int hidpp_bolt_init(struct hidpp_device *hidpp)
+{
+	struct hid_device *hdev = hidpp->hid_dev;
+	char *name;
+	int ret;
+
+	ret = hidpp_serial_init(hidpp);
+	if (ret)
+		return ret;
+
+	name = hidpp_get_device_name(hidpp);
+	if (!name)
+		return -EIO;
+
+	snprintf(hdev->name, sizeof(hdev->name), "%s", name);
+	dbg_hid("HID++ Bolt: Got name: %s\n", name);
+
+	kfree(name);
+	return 0;
+}
+
+static int hidpp_receiver_init(struct hidpp_device *hidpp)
+{
+	if (hidpp_is_bolt_child(hidpp->hid_dev))
+		return hidpp_bolt_init(hidpp);
+
+	return hidpp_unifying_init(hidpp);
+}
+
 /* Get name + serial for USB and Bluetooth HID++ devices */
-static void hidpp_non_unifying_init(struct hidpp_device *hidpp)
+static void hidpp_non_receiver_init(struct hidpp_device *hidpp)
 {
 	struct hid_device *hdev = hidpp->hid_dev;
 	char *name;
@@ -4757,9 +4883,9 @@ static int hidpp_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 	/* Get name + serial, store in hdev->name + hdev->uniq */
 	if (id->group == HID_GROUP_LOGITECH_DJ_DEVICE)
-		hidpp_unifying_init(hidpp);
+		hidpp_receiver_init(hidpp);
 	else
-		hidpp_non_unifying_init(hidpp);
+		hidpp_non_receiver_init(hidpp);
 
 	if (hidpp->quirks & HIDPP_QUIRK_DELAYED_INIT)
 		connect_mask &= ~HID_CONNECT_HIDINPUT;
