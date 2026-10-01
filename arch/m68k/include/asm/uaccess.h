@@ -31,11 +31,12 @@
 #define __put_user_asm(inst, res, x, ptr, bwl, reg, err) \
 asm volatile ("\n"					\
 	"1:	"inst"."#bwl"	%2,%1\n"		\
-	"2:\n"						\
+	"2:	nop\n"					\
+	"3:\n"						\
 	"	.section .fixup,\"ax\"\n"		\
 	"	.even\n"				\
 	"10:	moveq.l	%3,%0\n"			\
-	"	jra 2b\n"				\
+	"	jra 3b\n"				\
 	"	.previous\n"				\
 	"\n"						\
 	"	.section __ex_table,\"a\"\n"		\
@@ -53,11 +54,12 @@ do {								\
 	asm volatile ("\n"					\
 		"1:	"inst".l %2,(%1)+\n"			\
 		"2:	"inst".l %R2,(%1)\n"			\
-		"3:\n"						\
+		"3:	nop\n"					\
+		"4:\n"						\
 		"	.section .fixup,\"ax\"\n"		\
 		"	.even\n"				\
 		"10:	movel %3,%0\n"				\
-		"	jra 3b\n"				\
+		"	jra 4b\n"				\
 		"	.previous\n"				\
 		"\n"						\
 		"	.section __ex_table,\"a\"\n"		\
