@@ -3403,6 +3403,8 @@ nxpwifi_cfg80211_authenticate(struct wiphy *wiphy,
 		pkt_len -= 4;
 
 	mgmt = kzalloc(pkt_len, GFP_KERNEL);
+	if (!mgmt)
+		return -ENOMEM;
 
 	skb = dev_alloc_skb(NXPWIFI_MIN_DATA_HEADER_LEN +
 			    NXPWIFI_MGMT_FRAME_HEADER_SIZE +
@@ -3410,6 +3412,7 @@ nxpwifi_cfg80211_authenticate(struct wiphy *wiphy,
 	if (!skb) {
 		nxpwifi_dbg(adapter, ERROR,
 			    "allocate skb failed for management frame\n");
+		kfree(mgmt);
 		return -ENOMEM;
 	}
 
