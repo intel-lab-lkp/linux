@@ -903,6 +903,9 @@ int cxl_reset_function(struct pci_dev *pdev, bool probe)
 	    !(ctrl & PCI_DVSEC_CXL_MEM_ENABLE))
 		return -ENOTTY;
 
+	if (pdev->multifunction || pci_num_vf(pdev))
+		return -ENOTTY;
+
 	if (probe)
 		return 0;
 
