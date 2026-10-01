@@ -840,7 +840,7 @@ struct device_link *device_link_add(struct device *consumer,
 	 * SYNC_STATE_ONLY link, we don't check for reverse dependencies
 	 * because it only affects sync_state() callbacks.
 	 */
-	if (!device_pm_initialized(supplier)
+	if ((!device_pm_not_required(supplier) && !device_pm_initialized(supplier))
 	    || (!(flags & DL_FLAG_SYNC_STATE_ONLY) &&
 		  device_is_dependent(consumer, supplier))) {
 		link = NULL;
