@@ -1,0 +1,17 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Enable ethernet support on Milk-V Duo (CV1800B).
+ *
+ * Copyright (c) 2026, Hiago De Franco <hfranco@baylibre.com>
+ */
+
+/dts-v1/;
+/plugin/;
+
+&gmac0 {
+	status = "okay";
+};
+
+&mdio {
+	status = "okay";
+};
