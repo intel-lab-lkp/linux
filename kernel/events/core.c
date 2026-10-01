@@ -12241,6 +12241,33 @@ fail_clear_files:
 	return ret;
 }
 
+#ifdef CONFIG_EVENT_TRACING
+static bool perf_event_filter_has_function(const char *filter_str)
+{
+	char quote = 0;
+
+	for (; *filter_str; filter_str++) {
+		if (quote) {
+			if (*filter_str == quote)
+				quote = 0;
+			continue;
+		}
+
+		switch (*filter_str) {
+		case '\'':
+		case '"':
+			quote = *filter_str;
+			break;
+		default:
+			if (str_has_prefix(filter_str, ".function"))
+				return true;
+		}
+	}
+
+	return false;
+}
+#endif
+
 static int perf_event_set_filter(struct perf_event *event, void __user *arg)
 {
 	int ret = -EINVAL;
@@ -12253,6 +12280,14 @@ static int perf_event_set_filter(struct perf_event *event, void __user *arg)
 #ifdef CONFIG_EVENT_TRACING
 	if (perf_event_is_tracing(event)) {
 		struct perf_event_context *ctx = event->ctx;
+
+		ret = perf_allow_tracepoint();
+		if (ret && (!(event->attach_state & PERF_ATTACH_TASK) ||
+			    !(event->tp_event->flags & TRACE_EVENT_FL_CAP_ANY) ||
+			    perf_event_filter_has_function(filter_str))) {
+			kfree(filter_str);
+			return ret;
+		}
 
 		/*
 		 * Beware, here be dragons!!
