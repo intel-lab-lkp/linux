@@ -92,6 +92,9 @@ struct LOCKABLE mutex {
 	pthread_mutex_t lock;
 };
 
+/* Statically initialized mutex, for the file scope ones. */
+#define DEFINE_MUTEX(name) struct mutex name = { .lock = PTHREAD_MUTEX_INITIALIZER }
+
 /* A wrapper around the condition variable implementation. */
 struct cond {
 	pthread_cond_t cond;
