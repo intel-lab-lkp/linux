@@ -105,11 +105,9 @@ config DRM_CLIENT_SPLASH_BACKGROUND_COLOR
 	help
 	  The default splash background color, in RGB888 format.
 
-	  The background color comes from the same place as the image. A
-	  device tree image can carry its own, and the drm_client_lib.splash_color
-	  kernel command line parameter sets it for a BMP loaded as firmware,
-	  or for the whole screen when there is no image. This color is used
-	  otherwise, and always with the BGRT image, which carries none.
+	  The drm_client_lib.splash_color kernel command line parameter, when
+	  given, is used whatever the image. Otherwise a device tree image can
+	  carry its own color, and this one is used for everything else.
 
 config DRM_CLIENT_SPLASH_SRC_DT
 	bool "Device tree as splash source"
@@ -123,8 +121,9 @@ config DRM_CLIENT_SPLASH_SRC_DT
 	  show a different logo on each board or product, chosen by the
 	  device tree it boots with.
 
-	  When present, the device tree image is preferred over the other
-	  sources.
+	  When present, the device tree image is preferred over the BGRT and
+	  over the default BMP loaded as firmware. A BMP named on the kernel
+	  command line is preferred over it.
 
 config DRM_CLIENT_SPLASH_SRC_BGRT
 	bool "EFI BGRT as splash source"
@@ -150,9 +149,10 @@ config DRM_CLIENT_SPLASH_SRC_BMP
 
 	  The image will be loaded using the firmware loading facility the
 	  kernel provides; it shall use 24 bits per pixel and shall not be
-	  compressed. The name of the file can be set through the
-	  drm_client_lib.splash_bmp command line parameter, with the default
-	  being 'drm_splash.bmp'.
+	  compressed. A file named through the drm_client_lib.splash_bmp
+	  command line parameter is preferred over any other image source;
+	  otherwise 'drm_splash.bmp' is used when neither the device tree nor
+	  the BGRT provides an image.
 
 config DRM_CLIENT_SPLASH_BMP_SUPPORT
 	bool
