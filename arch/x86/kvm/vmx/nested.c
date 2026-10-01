@@ -5091,8 +5091,13 @@ void __nested_vmx_vmexit(struct kvm_vcpu *vcpu, u32 vm_exit_reason,
 		 * Enlightened VMCS after migration and we still need to
 		 * do that when something is forcing L2->L1 exit prior to
 		 * the first L2 run.
+		 *
+		 * TODO: Drop the explicit check on being able to access guest
+		 *       memory once KVM no longer abuses the nested VM-Exit
+		 *       flow when destroying a vCPU.
 		 */
-		(void)nested_get_evmcs_page(vcpu);
+		if (__kvm_can_do_uaccess(vcpu->kvm))
+			(void)nested_get_evmcs_page(vcpu);
 #endif
 	}
 
