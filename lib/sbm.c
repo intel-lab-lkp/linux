@@ -12,6 +12,7 @@
 
 static int sbm_max_threads_per_instance __ro_after_init = -1;
 static int sbm_num_instance __ro_after_init = -1;
+static int sbm_max_populated_index;
 
 int __sbm_shift __ro_after_init;
 int __sbm_mask __ro_after_init;
@@ -35,6 +36,11 @@ static __always_inline int *_sbm_idx_to_cpu(void)
 	return runtime_const_ptr(__sbm_idx_to_cpu);
 }
 
+static int sbm_max_index(void)
+{
+	return READ_ONCE(sbm_max_populated_index);
+}
+
 int sbm_cpu_to_idx(int cpu)
 {
 	return _sbm_cpu_to_idx()[cpu];
@@ -43,6 +49,44 @@ int sbm_cpu_to_idx(int cpu)
 int sbm_idx_to_cpu(int idx)
 {
 	return _sbm_idx_to_cpu()[idx];
+}
+
+struct sbm *sbm_alloc(void)
+{
+	return kzalloc_objs(struct sbm, sbm_max_threads_per_instance * sbm_num_instance);
+}
+
+bool sbm_empty(struct sbm *sbm)
+{
+	int i;
+
+	for (i = 0; i <= sbm_max_index(); ++i) {
+		if (sbm[i].bitmap)
+			return false;
+	}
+
+	return true;
+}
+
+int sbm_find_next_bit(struct sbm *sbm, int start)
+{
+	u32 nr = runtime_const_shift_right_32(start, __sbm_shift);
+	u32 bit = runtime_const_mask_32(start, __sbm_mask);
+	unsigned long tmp = 0, mask = (~0UL) << bit;
+
+	for (; nr <= sbm_max_index(); nr++) {
+		tmp = sbm[nr].bitmap & mask;
+		if (tmp)
+			break;
+		/*
+		 * Consider full bitmask from
+		 * second iteration.
+		 */
+		mask = ~0UL;
+	}
+	if (!tmp)
+		return -1;
+	return (nr << __sbm_shift) | __ffs(tmp);
 }
 
 /*
@@ -105,6 +149,8 @@ int alloc_sbm_index(int cpu)
 	_sbm_idx_to_cpu()[idx] = cpu;
 	_sbm_cpu_to_idx()[cpu] = idx;
 
+	WRITE_ONCE(sbm_max_populated_index, max(sbm_max_populated_index, i));
+
 	return 0;
 }
 
@@ -127,6 +173,15 @@ void free_sbm_index(int cpu)
 	if (find_first_bit(&__sbm_idx_metadata[leaf].allocated_mask, BITS_PER_LONG) ==
 	    BITS_PER_LONG)
 		__sbm_idx_metadata[leaf].instance_id = -1;
+
+	if (leaf == sbm_max_populated_index) {
+		for (idx = leaf - 1; idx > -1; idx--) {
+			if (__sbm_idx_metadata[idx].instance_id != -1)
+				break;
+		}
+
+		WRITE_ONCE(sbm_max_populated_index, max(idx, 0));
+	}
 }
 
 void __init sbm_set_topology(int num_instances, int max_threads_per_instance)
