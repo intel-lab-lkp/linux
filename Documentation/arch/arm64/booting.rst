@@ -568,6 +568,16 @@ Before jumping into the kernel, the following conditions must be met:
 
     - HCRX_EL2.EnASR (bit 2) must be initialised to 0b1.
 
+  For CPUs with TLBI domains (FEAT_TLBID):
+
+  - If EL3 is present and the kernel is entered at EL2:
+
+    - SCR_EL3.VTLBIDEn (bit 56) must be initialised to 0b1.
+
+  - If EL2 is present and the kernel is entered at EL1:
+
+    - HFGRTR2_EL2.nTLBIDIDR_EL1 (bit 30) must be initialised to 0b1.
+
 The requirements described above for CPU mode, caches, MMUs, architected
 timers, coherency and system registers apply to all CPUs.  All CPUs must
 enter the kernel in the same exception level.  Where the values documented
