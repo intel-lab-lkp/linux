@@ -469,6 +469,9 @@ tcp_ecn - INTEGER
 	that both peers support is chosen by the ECN negotiation (Accurate ECN,
 	ECN, or no ECN).
 
+	Note that a per-socket mode set by a BPF sockops program via the
+	bpf_sock_ops_set_ecn_mode() kfunc has higher precedence.
+
 	The highest negotiated variant for incoming connection requests
 	and the highest variant requested by outgoing connection
 	attempts:
@@ -491,6 +494,9 @@ tcp_ecn_option - INTEGER
 	successfully negotiated during handshake. Send logic inhibits
 	sending AccECN options regardless of this setting when no AccECN
 	option has been seen for the reverse direction.
+
+	Note that a per-socket value set by a BPF sockops program via the
+	bpf_sock_ops_set_accecn_option() kfunc has higher precedence.
 
 	Possible values are:
 

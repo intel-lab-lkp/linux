@@ -114,6 +114,8 @@ u8:2                          accecn_opt_demand       read_mostly         read_w
 u8:2                          prev_ecnfield                               read_write
 u64                           accecn_opt_tstamp       read_write
 u8:4                          accecn_fail_mode
+u8                            ecn_mode
+u8                            ecn_option
 u32                           lost                                        read_mostly         tcp_ack
 u32                           app_limited             read_write          read_mostly         tcp_rate_check_app_limited,tcp_rate_skb_sent(tx);tcp_rate_gen(rx)
 u64                           first_tx_mstamp         read_write                              tcp_rate_skb_sent
