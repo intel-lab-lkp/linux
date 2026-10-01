@@ -688,7 +688,7 @@ static void pwr_island_delay_set(struct ivpu_device *vdev)
 		post2 = 0;
 		status = high ? 46 : 3;
 		break;
-	default:
+	case IVPU_HW_IP_60XX:
 		post = high ? 198 : 17;
 		post1 = 0;
 		post2 = high ? 198 : 17;
@@ -801,10 +801,15 @@ static void ivpu_hw_ip_tbu_mmu_enable_40xx(struct ivpu_device *vdev)
 
 void ivpu_hw_ip_tbu_mmu_enable(struct ivpu_device *vdev)
 {
-	if (ivpu_hw_ip_gen(vdev) == IVPU_HW_IP_37XX)
+	switch (ivpu_hw_ip_gen(vdev)) {
+	case IVPU_HW_IP_37XX:
 		return ivpu_hw_ip_tbu_mmu_enable_37xx(vdev);
-	else
+
+	case IVPU_HW_IP_40XX:
+	case IVPU_HW_IP_50XX:
+	case IVPU_HW_IP_60XX:
 		return ivpu_hw_ip_tbu_mmu_enable_40xx(vdev);
+	}
 }
 
 static inline u64 get_entry_point_addr(struct ivpu_device *vdev)
@@ -940,8 +945,9 @@ int ivpu_hw_ip_soc_cpu_boot(struct ivpu_device *vdev)
 		ret = soc_cpu_boot_40xx(vdev);
 		break;
 
-	default:
+	case IVPU_HW_IP_60XX:
 		ret = soc_cpu_boot_60xx(vdev);
+		break;
 	}
 
 	if (ret)

@@ -31,16 +31,8 @@
 #define PCI_DEVICE_ID_WCL	0xfd3e
 #define PCI_DEVICE_ID_NVL	0xd71d
 
-#define IVPU_HW_IP_37XX 37
-#define IVPU_HW_IP_40XX 40
-#define IVPU_HW_IP_50XX 50
-#define IVPU_HW_IP_60XX 60
-
 #define IVPU_HW_IP_REV_LNL_B0 4
 #define IVPU_HW_IP_REV_NVL_A0 0
-
-#define IVPU_HW_BTRS_MTL 1
-#define IVPU_HW_BTRS_LNL 2
 
 #define IVPU_GLOBAL_CONTEXT_MMU_SSID   0
 /* SSID 1 is used by the VPU to represent reserved context */
@@ -107,6 +99,18 @@
 		ivpu_dbg(vdev, MISC, "Using WA: " #wa_name "\n");	\
 } while (0)
 
+enum vpu_hw_ip {
+	IVPU_HW_IP_37XX = 37,
+	IVPU_HW_IP_40XX = 40,
+	IVPU_HW_IP_50XX = 50,
+	IVPU_HW_IP_60XX = 60,
+};
+
+enum vpu_hw_btrs {
+	IVPU_HW_BTRS_MTL = 1,
+	IVPU_HW_BTRS_LNL = 2,
+};
+
 struct ivpu_wa_table {
 	bool punit_disabled;
 	bool clear_runtime_mem;
@@ -136,8 +140,8 @@ struct ivpu_device {
 	struct drm_device drm;
 	void __iomem *regb;
 	void __iomem *regv;
-	u32 hw_ip_gen;
-	u32 btrs_gen;
+	enum vpu_hw_ip hw_ip_gen;
+	enum vpu_hw_btrs btrs_gen;
 	u32 platform;
 	u32 irq;
 
@@ -259,12 +263,12 @@ static inline u16 ivpu_device_id(struct ivpu_device *vdev)
 	return to_pci_dev(vdev->drm.dev)->device;
 }
 
-static inline int ivpu_hw_ip_gen(struct ivpu_device *vdev)
+static inline enum vpu_hw_ip ivpu_hw_ip_gen(struct ivpu_device *vdev)
 {
 	return vdev->hw_ip_gen;
 }
 
-static inline int ivpu_hw_btrs_gen(struct ivpu_device *vdev)
+static inline enum vpu_hw_btrs ivpu_hw_btrs_gen(struct ivpu_device *vdev)
 {
 	return vdev->btrs_gen;
 }
