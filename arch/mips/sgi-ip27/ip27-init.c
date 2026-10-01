@@ -6,6 +6,7 @@
  * Copyright (C) 2000 - 2001 by Kanoj Sarcar (kanoj@sgi.com)
  * Copyright (C) 2000 - 2001 by Silicon Graphics, Inc.
  */
+#include <linux/console.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/sched.h>
@@ -164,6 +165,26 @@ static void __init ip27_set_machine_name(void)
 		gfx ? "with" : "without");
 }
 
+/*
+ * Prefer ttyS0 at the baud rate the IP35 PROM recorded for its console
+ * UART in the KLCONFIG header.
+ */
+static void __init ip27_setup_console(void)
+{
+	static char options[8];
+	console_t *cons;
+
+	if (!system_is_ip35 || strstr(arcs_cmdline, "console="))
+		return;
+
+	cons = KL_CONFIG_CH_CONS_INFO(master_nasid);
+	if (!cons->uart_base)
+		return;
+
+	snprintf(options, sizeof(options), "%d", cons->baud);
+	add_preferred_console("ttyS", 0, options);
+}
+
 void __init plat_mem_setup(void)
 {
 	u64 p, e, n_mode;
@@ -215,6 +236,7 @@ void __init plat_mem_setup(void)
 	set_io_port_base(IO_BASE);
 
 	ip27_set_machine_name();
+	ip27_setup_console();
 }
 
 const char *get_system_type(void)
