@@ -80,6 +80,15 @@ void cpu_node_probe(void)
 		highest = node_scan_cpus(nasid, highest);
 	}
 
+	/* The boot CPU must be CPU 0 wherever the board list puts it. */
+	for (i = 1; system_is_ip35 && i <= highest; i++) {
+		if (cputonasid(i) == master_nasid &&
+		    cputoslice(i) == LOCAL_HUB_L(PI_CPU_NUM)) {
+			swap(sn_cpu_info[0], sn_cpu_info[i]);
+			break;
+		}
+	}
+
 	printk("Discovered %d cpus on %d nodes\n", highest + 1, num_online_nodes());
 }
 
