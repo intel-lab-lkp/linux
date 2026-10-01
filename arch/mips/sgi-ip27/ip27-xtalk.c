@@ -23,7 +23,13 @@
 #define XXBOW_WIDGET_PART_NUM	0xd000	/* Xbow in Xbridge */
 #define BASE_XBOW_PORT		8     /* Lowest external port */
 
-static void bridge_platform_create(nasid_t nasid, int widget, int masterwid)
+enum xtalk_bridge_type {
+	XTALK_BRIDGE,
+	XTALK_XBRIDGE,
+};
+
+static void bridge_platform_create(nasid_t nasid, int widget, int masterwid,
+				   enum xtalk_bridge_type type)
 {
 	struct xtalk_bridge_platform_data *bd;
 	struct sgi_w1_platform_data *wd;
@@ -85,6 +91,7 @@ static void bridge_platform_create(nasid_t nasid, int widget, int masterwid)
 	bd->intr_addr	= BIT_ULL(47) + 0x01800000 + PI_INT_PEND_MOD;
 	bd->nasid	= nasid;
 	bd->masterwid	= masterwid;
+	bd->is_xbridge	= type == XTALK_XBRIDGE;
 
 	bd->mem.name	= "Bridge PCI MEM";
 	bd->mem.start	= offset + (widget << SWIN_SIZE_BITS) + BRIDGE_DEVIO0;
@@ -136,8 +143,10 @@ static int probe_one_port(nasid_t nasid, int widget, int masterwid)
 
 	switch (partnum) {
 	case BRIDGE_WIDGET_PART_NUM:
+		bridge_platform_create(nasid, widget, masterwid, XTALK_BRIDGE);
+		break;
 	case XBRIDGE_WIDGET_PART_NUM:
-		bridge_platform_create(nasid, widget, masterwid);
+		bridge_platform_create(nasid, widget, masterwid, XTALK_XBRIDGE);
 		break;
 	default:
 		pr_info("xtalk:n%d/%d unknown widget (0x%x)\n",
@@ -228,7 +237,7 @@ static void xtalk_probe_node(nasid_t nasid)
 
 	switch (partnum) {
 	case BRIDGE_WIDGET_PART_NUM:
-		bridge_platform_create(nasid, 0x8, 0xa);
+		bridge_platform_create(nasid, 0x8, 0xa, XTALK_BRIDGE);
 		break;
 	case XBOW_WIDGET_PART_NUM:
 	case XXBOW_WIDGET_PART_NUM:

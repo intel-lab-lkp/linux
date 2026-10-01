@@ -17,6 +17,8 @@ struct xtalk_bridge_platform_data {
 	unsigned long io_offset;
 	nasid_t	nasid;
 	int	masterwid;
+	bool	is_xbridge;
+	bool	is_pic;
 };
 
 #endif /* PLATFORM_DATA_XTALK_BRIDGE_H */

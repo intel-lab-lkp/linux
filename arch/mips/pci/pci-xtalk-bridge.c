@@ -31,12 +31,36 @@ dma_addr_t phys_to_dma(struct device *dev, phys_addr_t paddr)
 	struct pci_dev *pdev = to_pci_dev(dev);
 	struct bridge_controller *bc = BRIDGE_CONTROLLER(pdev->bus);
 
+	/*
+	 * XBridge and PIC move no data for this direct-mapped address; use
+	 * the 2GB 32-bit window instead. An address above the window is not
+	 * clamped here: pcibios_bus_add_device() caps bus_dma_limit at the
+	 * window's top, so such a buffer is bounced through SWIOTLB.
+	 */
+	if (bc->is_xbridge || bc->is_pic)
+		return BRIDGE_DMA_DIRECT_BASE + paddr;
+
 	return bc->baddr + paddr;
 }
 
 phys_addr_t dma_to_phys(struct device *dev, dma_addr_t dma_addr)
 {
+	struct pci_dev *pdev = to_pci_dev(dev);
+	struct bridge_controller *bc = BRIDGE_CONTROLLER(pdev->bus);
+
+	if (bc->is_xbridge || bc->is_pic)
+		return dma_addr - BRIDGE_DMA_DIRECT_BASE;
+
 	return dma_addr & ~(0xffUL << 56);
+}
+
+/* Bounce a widened DMA mask's out-of-window addresses through SWIOTLB. */
+void pcibios_bus_add_device(struct pci_dev *pdev)
+{
+	struct bridge_controller *bc = BRIDGE_CONTROLLER(pdev->bus);
+
+	if (bc->is_xbridge || bc->is_pic)
+		pdev->dev.bus_dma_limit = 0xffffffff;
 }
 
 /*
@@ -663,6 +687,8 @@ static int bridge_probe(struct platform_device *pdev)
 	bc->baddr = (u64)bd->masterwid << 60 | PCI64_ATTR_BAR;
 	bc->base = (struct bridge_regs *)bd->bridge_addr;
 	bc->intr_addr = bd->intr_addr;
+	bc->is_xbridge = bd->is_xbridge;
+	bc->is_pic = bd->is_pic;
 
 	/*
 	 * Clear all pending interrupts.

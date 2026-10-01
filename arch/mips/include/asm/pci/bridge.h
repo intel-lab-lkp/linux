@@ -810,6 +810,8 @@ struct bridge_controller {
 	unsigned int		int_mapping[8][2];
 	u32			ioc3_sid[8];
 	nasid_t			nasid;
+	bool			is_xbridge;
+	bool			is_pic;
 };
 
 #define BRIDGE_CONTROLLER(bus) \

@@ -19,8 +19,10 @@
 #include <linux/nodemask.h>
 #include <linux/sizes.h>
 #include <linux/swap.h>
+#include <linux/swiotlb.h>
 #include <linux/pfn.h>
 #include <linux/highmem.h>
+#include <asm/bootinfo.h>
 #include <asm/page.h>
 #include <asm/pgalloc.h>
 #include <asm/sections.h>
@@ -436,4 +438,18 @@ void __init prom_meminit(void)
 void __init arch_zone_limits_init(unsigned long *max_zone_pfns)
 {
 	max_zone_pfns[ZONE_NORMAL] = max_low_pfn;
+}
+
+/*
+ * XBridge and PIC are driven through their 2GB 32-bit DMA window, so
+ * cap the bounce pool there; which widgets exist isn't known this early,
+ * so reserve it whenever node memory reaches past the window.
+ */
+void __init plat_swiotlb_setup(void)
+{
+	phys_addr_t old_limit = memblock_get_current_limit();
+
+	memblock_set_current_limit(min_t(phys_addr_t, old_limit, SZ_2G));
+	swiotlb_init(max_low_pfn > PFN_DOWN(SZ_2G), SWIOTLB_VERBOSE);
+	memblock_set_current_limit(old_limit);
 }
