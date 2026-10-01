@@ -20,7 +20,6 @@
 
 #if defined(CONFIG_SGI_IP27)
 #include <asm/sn/sn0/addrs.h>
-#elif defined(CONFIG_SGI_IP35)
 #include <asm/sn/sn1/addrs.h>
 #endif
 
@@ -38,6 +37,17 @@
 #ifndef __ASSEMBLER__
 
 extern bool system_is_ip35;
+
+#define NASID_SHFT		(system_is_ip35 ? SN1_NASID_SHFT :	\
+				 SN0_NASID_SHFT)
+#define NODE_SIZE_BITS		(system_is_ip35 ? SN1_NODE_SIZE_BITS :	\
+				 SN0_NODE_SIZE_BITS)
+
+#else /* __ASSEMBLER__ */
+
+/* The entry paths run before prom_init() reads the hub's part number. */
+#define NASID_SHFT		SN0_NASID_SHFT
+#define NODE_SIZE_BITS		SN0_NODE_SIZE_BITS
 
 #endif /* __ASSEMBLER__ */
 

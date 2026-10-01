@@ -50,12 +50,12 @@
 
 #ifdef CONFIG_SGI_SN_N_MODE
 
-#define NODE_SIZE_BITS		31
+#define SN0_NODE_SIZE_BITS	31
 #define BWIN_SIZE_BITS		28
 
 #define NASID_BITS		9
 #define NASID_BITMASK		(0x1ffLL)
-#define NASID_SHFT		31
+#define SN0_NASID_SHFT		31
 #define NASID_META_BITS		5
 #define NASID_LOCAL_BITS	4
 
@@ -64,12 +64,12 @@
 
 #else /* !defined(CONFIG_SGI_SN_N_MODE), assume that M-mode is desired */
 
-#define NODE_SIZE_BITS		32
+#define SN0_NODE_SIZE_BITS	32
 #define BWIN_SIZE_BITS		29
 
 #define NASID_BITMASK		(0xffLL)
 #define NASID_BITS		8
-#define NASID_SHFT		32
+#define SN0_NASID_SHFT		32
 #define NASID_META_BITS		4
 #define NASID_LOCAL_BITS	4
 
