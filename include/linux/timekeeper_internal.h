@@ -99,6 +99,10 @@ struct tk_read_base {
  * @ntp_err_mult:		Multiplication factor for scaled math conversion
  * @err_drain:			Extra mult bias repaying ntp_error beyond the
  *				dither's reach; sized at second boundaries
+ * @ntp_err_frac:		Fractional part of the per-cycle NTP-ideal mult that the
+ *				integer @mult truncates, as a fraction of 2^32 in
+ *				clock-shifted nanoseconds per cycle. Describes the
+ *				working point of the +-1 mult dither.
  * @cs_tick_adj:		Per-second adjustment handed to NTP via ntp_clear()
  *				accounting for the difference between the nominal
  *				NTP interval and the real time taken by the
@@ -190,6 +194,7 @@ struct timekeeper {
 	u32			ntp_error_shift;
 	s32			ntp_err_mult;
 	s32			err_drain;
+	u64			ntp_err_frac;
 	s64			cs_tick_adj;
 	u32			skip_second_overflow;
 	s64			skew_delta;
