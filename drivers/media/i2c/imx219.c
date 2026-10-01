@@ -20,6 +20,7 @@
 #include <linux/i2c.h>
 #include <linux/minmax.h>
 #include <linux/module.h>
+#include <linux/workqueue.h>
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
 
@@ -374,6 +375,9 @@ struct imx219 {
 
 	/* Two or Four lanes */
 	u8 lanes;
+
+	struct delayed_work detect_work;
+	enum v4l2_subdev_connected_status_whence detect_status;
 };
 
 static inline struct imx219 *to_imx219(struct v4l2_subdev *_sd)
@@ -1252,6 +1256,35 @@ error_out:
 	return ret;
 }
 
+#define IMX219_DETECT_INTERVAL_MS 2000
+static void imx219_detect_work(struct work_struct *work)
+{
+	struct imx219 *imx219 = container_of(work, struct imx219,
+					     detect_work.work);
+	struct v4l2_subdev_connected_status status = {};
+
+	/*
+	 * All async notifiers should have been run before
+	 * we can use sd.devnode
+	 */
+	if (!imx219->sd.devnode)
+		goto reschedule_detect_work;
+
+	imx219_detect(&imx219->sd, &status);
+
+	if (status.status != imx219->detect_status) {
+		struct device *dev = &imx219->sd.devnode->dev;
+		char *envp[] = { "HOTPLUG=1", NULL };
+
+		imx219->detect_status = status.status;
+		kobject_uevent_env(&dev->kobj, KOBJ_CHANGE, envp);
+	}
+
+reschedule_detect_work:
+	schedule_delayed_work(&imx219->detect_work,
+			      msecs_to_jiffies(IMX219_DETECT_INTERVAL_MS));
+}
+
 static int imx219_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
@@ -1334,6 +1367,11 @@ static int imx219_probe(struct i2c_client *client)
 	pm_runtime_set_autosuspend_delay(dev, 1000);
 	pm_runtime_use_autosuspend(dev);
 
+	imx219->detect_status = V4L2_SUBDEV_STATUS_UNKNOWN;
+	INIT_DELAYED_WORK(&imx219->detect_work, imx219_detect_work);
+	schedule_delayed_work(&imx219->detect_work,
+			      msecs_to_jiffies(IMX219_DETECT_INTERVAL_MS));
+
 	return 0;
 
 error_subdev_cleanup:
@@ -1354,6 +1392,8 @@ static void imx219_remove(struct i2c_client *client)
 {
 	struct v4l2_subdev *sd = i2c_get_clientdata(client);
 	struct imx219 *imx219 = to_imx219(sd);
+
+	cancel_delayed_work_sync(&imx219->detect_work);
 
 	v4l2_async_unregister_subdev(sd);
 	v4l2_subdev_cleanup(sd);
