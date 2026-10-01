@@ -20,6 +20,7 @@
 #include "../../../util/map.h"
 #include "../../../util/maps.h"
 #include "../../../util/auxtrace.h"
+#include "../../../util/data.h"
 #include "../../../util/session.h"
 #include "../../../util/srcline.h"
 #include "../../../util/srccode.h"
@@ -181,6 +182,19 @@ static PyObject *__perf_config_get(PyObject *obj, PyObject *args)
 	return Py_BuildValue("s", perf_config_get(config_name));
 }
 
+static PyObject *perf_input_name(PyObject *obj, PyObject *args)
+{
+	struct scripting_context *c = get_scripting_context(args);
+
+	if (!c)
+		return NULL;
+
+	if (!c->session || !c->session->data || !c->session->data->path)
+		Py_RETURN_NONE;
+
+	return PyUnicode_DecodeFSDefault(c->session->data->path);
+}
+
 static PyMethodDef ContextMethods[] = {
 #ifdef HAVE_LIBTRACEEVENT
 	{ "common_pc", perf_trace_context_common_pc, METH_VARARGS,
@@ -199,6 +213,8 @@ static PyMethodDef ContextMethods[] = {
 	{ "perf_sample_srccode", perf_sample_srccode,
 	  METH_VARARGS,	"Get source file name, line number and line."},
 	{ "perf_config_get", __perf_config_get, METH_VARARGS, "Get perf config entry"},
+	{ "perf_input_name",	perf_input_name,
+	  METH_VARARGS,	"Get the input file name, or None for a pipe"},
 	{ NULL, NULL, 0, NULL}
 };
 
