@@ -25,6 +25,7 @@ typedef struct {
 	void		*vdso;
 	unsigned long	flags;
 	u8		pkey_allocation_map;
+	atomic64_t	*tlbid_domains;
 } mm_context_t;
 
 /*
@@ -105,6 +106,16 @@ static inline void kpti_install_ng_mappings(void) {}
 #endif
 
 extern bool page_alloc_available;
+
+#ifdef CONFIG_ARM64_TLBID
+int init_tlbid_context(struct mm_struct *mm);
+void destroy_tlbid_context(struct mm_struct *mm);
+void update_tlbid_domains(struct mm_struct *mm, unsigned int cpu);
+#else
+static inline int init_tlbid_context(struct mm_struct *mm) { return 0; }
+static inline void destroy_tlbid_context(struct mm_struct *mm) {}
+static inline void update_tlbid_domains(struct mm_struct *mm, unsigned int cpu) {}
+#endif
 
 #endif	/* !__ASSEMBLER__ */
 #endif

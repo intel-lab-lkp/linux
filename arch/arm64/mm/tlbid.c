@@ -7,17 +7,69 @@
  */
 
 #include <linux/acpi.h>
+#include <linux/atomic.h>
 #include <linux/bitops.h>
 #include <linux/bitmap.h>
+#include <linux/efi.h>
 #include <linux/jump_label.h>
+#include <linux/mm_types.h>
 #include <linux/slab.h>
 #include <linux/sort.h>
+
+#include <asm/mmu.h>
 
 DEFINE_STATIC_KEY_FALSE(tlbid_enabled);
 
 static u16 *domain_ids;
 static unsigned long **cpu_domains;
 static int domain_count;
+
+void update_tlbid_domains(struct mm_struct *mm, unsigned int cpu)
+{
+	if (!system_supports_tlbid())
+		return;
+
+	for (int i = 0; i < BITS_TO_U64(domain_count); i++)
+		atomic64_and(cpu_domains[cpu][i], &mm->context.tlbid_domains[i]);
+}
+
+int init_tlbid_context(struct mm_struct *mm)
+{
+	bool is_efi = mm_is_efi(mm);
+	atomic64_t *domains;
+	int ndomains, nwords;
+
+	/* TLBI domain support not yet known at EFI init time */
+	if (!system_supports_tlbid() && !is_efi)
+		return 0;
+
+	ndomains = is_efi ? MAX_TLBI_DOMAINS : domain_count;
+	nwords = BITS_TO_U64(ndomains);
+	domains = kcalloc(nwords, sizeof(*domains), GFP_KERNEL);
+	if (!domains)
+		return -ENOMEM;
+
+	if (is_efi) {
+		/*
+		 * Use a safe domain since updates to domains would be lost if
+		 * efi_mm were installed before TLBID is enabled.
+		 */
+		atomic64_set(domains, 1);
+	} else {
+		for (int i = 0; i < nwords; i++)
+			atomic64_set(&domains[i], -1);
+	}
+
+	mm->context.tlbid_domains = domains;
+
+	return 0;
+}
+
+void destroy_tlbid_context(struct mm_struct *mm)
+{
+	if (system_supports_tlbid())
+		kfree(mm->context.tlbid_domains);
+}
 
 static int __init init_cpu_domain_bitmaps(struct tlbi_domain *domains)
 {

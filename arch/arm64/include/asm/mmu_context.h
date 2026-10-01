@@ -21,6 +21,7 @@
 #include <asm/cpufeature.h>
 #include <asm/daifflags.h>
 #include <asm/gcs.h>
+#include <asm/mmu.h>
 #include <asm/proc-fns.h>
 #include <asm/cputype.h>
 #include <asm/sysreg.h>
@@ -172,7 +173,13 @@ init_new_context(struct task_struct *tsk, struct mm_struct *mm)
 	/* pkey 0 is the default, so always reserve it. */
 	mm->context.pkey_allocation_map = BIT(0);
 
-	return 0;
+	return init_tlbid_context(mm);
+}
+
+#define destroy_context(mm) destroy_context(mm)
+static inline void destroy_context(struct mm_struct *mm)
+{
+	destroy_tlbid_context(mm);
 }
 
 static inline void arch_dup_pkeys(struct mm_struct *oldmm,

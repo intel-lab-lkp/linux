@@ -13,6 +13,7 @@
 #include <linux/mm.h>
 
 #include <asm/cpufeature.h>
+#include <asm/mmu.h>
 #include <asm/mmu_context.h>
 #include <asm/smp.h>
 #include <asm/tlbflush.h>
@@ -215,7 +216,7 @@ set_asid:
 void check_and_switch_context(struct mm_struct *mm)
 {
 	unsigned long flags;
-	unsigned int cpu;
+	unsigned int cpu = smp_processor_id();
 	u64 asid, old_active_asid;
 
 	if (system_supports_cnp())
@@ -251,7 +252,6 @@ void check_and_switch_context(struct mm_struct *mm)
 		atomic64_set(&mm->context.id, asid);
 	}
 
-	cpu = smp_processor_id();
 	if (cpumask_test_and_clear_cpu(cpu, &tlb_flush_pending))
 		local_flush_tlb_all();
 
@@ -261,6 +261,8 @@ void check_and_switch_context(struct mm_struct *mm)
 switch_mm_fastpath:
 
 	arm64_apply_bp_hardening();
+
+	update_tlbid_domains(mm, cpu);
 
 	/*
 	 * Defer TTBR0_EL1 setting for user threads to uaccess_enable() when
