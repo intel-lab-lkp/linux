@@ -1450,18 +1450,39 @@ out:
 	return nsegs;
 }
 
+/* Raise this WRITE to at least @floor_iocb_flags, and report that. */
+static void
+nfsd_write_raise_stability(int floor_iocb_flags, struct kiocb *kiocb,
+			   int *iocb_flags)
+{
+	if ((*iocb_flags & floor_iocb_flags) == floor_iocb_flags)
+		return;
+
+	*iocb_flags |= floor_iocb_flags;
+	kiocb->ki_flags |= floor_iocb_flags;
+}
+
 static noinline_for_stack int
 nfsd_direct_write(struct svc_rqst *rqstp, struct svc_fh *fhp,
-		  struct nfsd_file *nf, unsigned int nvecs,
+		  struct nfsd_file *nf, int *iocb_flags, unsigned int nvecs,
 		  unsigned long *cnt, struct kiocb *kiocb)
 {
 	struct nfsd_write_dio_seg segments[3];
+	int floor_iocb_flags = 0;
 	struct file *file = nf->nf_file;
 	loff_t start = kiocb->ki_pos, seg_pos, seg_last;
 	bool sync, datasync, complete_first, complete_last;
 	unsigned int nsegs, i;
 	ssize_t host_err;
 	size_t expected;
+
+	if (nfsd_io_cache_write == NFSD_IO_DIRECT_WRITE_FILE_SYNC)
+		floor_iocb_flags = IOCB_DSYNC | IOCB_SYNC;
+	else if (nfsd_io_cache_write == NFSD_IO_DIRECT_WRITE_DATA_SYNC)
+		floor_iocb_flags = IOCB_DSYNC;
+	if (floor_iocb_flags)
+		nfsd_write_raise_stability(floor_iocb_flags, kiocb,
+					   iocb_flags);
 
 	/* Persist a synchronous WRITE once, after all of its segments. */
 	sync = kiocb->ki_flags & IOCB_DSYNC;
@@ -1538,7 +1559,8 @@ nfsd_direct_write(struct svc_rqst *rqstp, struct svc_fh *fhp,
  * @payload: xdr_buf containing the write payload
  * @cnt: IN: number of bytes to write, OUT: number of bytes actually written
  * @iocb_flags: IN: VFS IOCB_* flags expressing the requested write
- *             stability; OUT: the stability to report to the client
+ *             stability; OUT: the stability to report to the client,
+ *             which may be raised
  * @verf: NFS WRITE verifier
  *
  * Upon return, caller must invoke fh_put on @fhp.
@@ -1606,8 +1628,10 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp,
 
 	switch (nfsd_io_cache_write) {
 	case NFSD_IO_DIRECT:
-		host_err = nfsd_direct_write(rqstp, fhp, nf, nvecs,
-					     cnt, &kiocb);
+	case NFSD_IO_DIRECT_WRITE_DATA_SYNC:
+	case NFSD_IO_DIRECT_WRITE_FILE_SYNC:
+		host_err = nfsd_direct_write(rqstp, fhp, nf, iocb_flags,
+					     nvecs, cnt, &kiocb);
 		break;
 	case NFSD_IO_DONTCACHE:
 		if (file->f_op->fop_flags & FOP_DONTCACHE)
@@ -1725,7 +1749,8 @@ __be32 nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
  * @payload: xdr_buf containing the write payload
  * @cnt: IN: number of bytes to write, OUT: number of bytes actually written
  * @iocb_flags: IN: VFS IOCB_* flags expressing the requested write
- *             stability; OUT: the stability to report to the client
+ *             stability; OUT: the stability to report to the client,
+ *             which may be raised
  * @verf: NFS WRITE verifier
  *
  * Upon return, caller must invoke fh_put on @fhp.
