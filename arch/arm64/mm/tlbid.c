@@ -10,6 +10,7 @@
 #include <linux/atomic.h>
 #include <linux/bitops.h>
 #include <linux/bitmap.h>
+#include <linux/bug.h>
 #include <linux/efi.h>
 #include <linux/jump_label.h>
 #include <linux/mm_types.h>
@@ -24,6 +25,33 @@ static u16 *domain_ids;
 static unsigned long **cpu_domains;
 static int domain_count;
 
+u16 get_tlbid_domain(struct mm_struct *mm)
+{
+	unsigned long mask = BITMAP_LAST_WORD_MASK(domain_count);
+	int idx = (domain_count - 1) / 64;
+	unsigned long domain_idx;
+	unsigned long domains;
+
+	if (!system_supports_tlbid())
+		return 0;
+
+	/* Open-coded find_last_bit() that uses atomic reads */
+	do {
+		domains = atomic64_read(&mm->context.tlbid_domains[idx]);
+		domains &= mask;
+		if (domains) {
+			domain_idx = idx * 64 + __fls(domains);
+			break;
+		}
+		mask = ~0UL;
+	} while (idx--);
+
+	if (WARN_ON(idx < 0))
+		return 0;
+
+	return domain_ids[domain_idx];
+}
+
 void update_tlbid_domains(struct mm_struct *mm, unsigned int cpu)
 {
 	if (!system_supports_tlbid())
@@ -31,6 +59,14 @@ void update_tlbid_domains(struct mm_struct *mm, unsigned int cpu)
 
 	for (int i = 0; i < BITS_TO_U64(domain_count); i++)
 		atomic64_and(cpu_domains[cpu][i], &mm->context.tlbid_domains[i]);
+
+	/*
+	 * Pairs with the DSB before reading tlbid_domains in the TLBI paths.
+	 * Either a concurrent PTE update is visible to this CPU before it uses
+	 * the mm, or the PTE updater observes the reduced domain bitmap and
+	 * includes this CPU in its TLBI.
+	 */
+	dsb(ishst);
 }
 
 int init_tlbid_context(struct mm_struct *mm)

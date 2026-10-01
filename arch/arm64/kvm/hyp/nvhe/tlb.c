@@ -187,7 +187,7 @@ void __kvm_tlb_flush_vmid_ipa_nsh(struct kvm_s2_mmu *mmu,
 	 * Instead, we invalidate Stage-2 for this IPA, and the
 	 * whole of Stage-1. Weep...
 	 */
-	__tlbi_level(ipas2e1, ipa, level);
+	__tlbi_level_local(ipas2e1, ipa, level);
 
 	/*
 	 * We have to ensure completion of the invalidation at Stage-2,

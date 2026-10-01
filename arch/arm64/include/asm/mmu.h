@@ -111,10 +111,12 @@ extern bool page_alloc_available;
 int init_tlbid_context(struct mm_struct *mm);
 void destroy_tlbid_context(struct mm_struct *mm);
 void update_tlbid_domains(struct mm_struct *mm, unsigned int cpu);
+u16 get_tlbid_domain(struct mm_struct *mm);
 #else
 static inline int init_tlbid_context(struct mm_struct *mm) { return 0; }
 static inline void destroy_tlbid_context(struct mm_struct *mm) {}
 static inline void update_tlbid_domains(struct mm_struct *mm, unsigned int cpu) {}
+static inline u16 get_tlbid_domain(struct mm_struct *mm) { return 0; }
 #endif
 
 #endif	/* !__ASSEMBLER__ */

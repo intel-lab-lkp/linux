@@ -61,7 +61,9 @@
 	}									\
 } while (0)
 
+#define TLBI_ASID_MASK		GENMASK_ULL(63, 48)
 #define TLBI_TLBID_MASK		GENMASK_ULL(15, 0)
+#define TLBIP_ADDR_MASK		GENMASK_U128(107, 64)
 
 /* This macro creates a properly formatted VA operand for the TLBI */
 #define __TLBI_VADDR(addr, asid)				\
@@ -144,6 +146,7 @@ static inline void sme_dvmsync_batch(void)
  * in asm/stage2_pgtable.h.
  */
 #define TLBI_TTL_MASK		GENMASK_ULL(47, 44)
+#define TLBIP_TTL64		BIT(32)
 
 #define TLBI_TTL_UNKNOWN	INT_MAX
 
@@ -219,22 +222,38 @@ static __always_inline void ipas2e1is(bool tlbip, u128 arg)
 }
 
 static __always_inline void __tlbi_level_asid(tlbi_op op, u64 addr, u32 level,
-					      u16 asid)
+					      u16 asid, bool local, int domain)
 {
-	u64 arg = __TLBI_VADDR(addr, asid);
+	bool tlbip = system_supports_tlbid() && !local;
+	u128 arg = 0;
+
+	if (tlbip) {
+		arg |= (((u128)addr >> 12) << 64) & TLBIP_ADDR_MASK;
+		arg |= FIELD_PREP(TLBI_ASID_MASK, asid);
+		arg |= domain;
+	} else {
+		arg |= __TLBI_VADDR(addr, asid);
+	}
 
 	if (alternative_has_cap_unlikely(ARM64_HAS_ARMv8_4_TTL) && level <= 3) {
 		u64 ttl = level | (get_trans_granule() << 2);
+		arg |= FIELD_PREP(TLBI_TTL_MASK, ttl);
 
-		FIELD_MODIFY(TLBI_TTL_MASK, &arg, ttl);
+		if (tlbip)
+			arg |= TLBIP_TTL64;
 	}
 
-	op(false, arg);
+	op(tlbip, arg);
 }
 
 static inline void __tlbi_level(tlbi_op op, u64 addr, u32 level)
 {
-	__tlbi_level_asid(op, addr, level, 0);
+	__tlbi_level_asid(op, addr, level, 0, false, 0);
+}
+
+static inline void __tlbi_level_local(tlbi_op op, u64 addr, u32 level)
+{
+	__tlbi_level_asid(op, addr, level, 0, true, -1);
 }
 
 /*
@@ -418,12 +437,13 @@ static inline void flush_tlb_all(void)
 
 static inline void flush_tlb_mm(struct mm_struct *mm)
 {
-	unsigned long asid;
+	unsigned long arg;
 
 	dsb(ishst);
-	asid = __TLBI_VADDR(0, ASID(mm));
-	__tlbi(aside1is, asid);
-	__tlbi_user(aside1is, asid);
+	arg = __TLBI_VADDR(0, ASID(mm));
+	arg |= get_tlbid_domain(mm);
+	__tlbi(aside1is, arg);
+	__tlbi_user(aside1is, arg);
 	__tlbi_sync_s1ish(mm);
 	mmu_notifier_arch_invalidate_secondary_tlbs(mm, 0, -1UL);
 }
@@ -534,24 +554,38 @@ static __always_inline void ripas2e1is(bool tlbip, u128 arg)
 
 static __always_inline void __tlbi_range(tlbi_op op, u64 addr,
 					 u16 asid, int scale, int num,
-					 u32 level, bool lpa2)
+					 u32 level, bool lpa2, bool local,
+					 int domain)
 {
-	u64 arg = 0;
+	bool tlbip = system_supports_tlbid() && !local;
+	u128 arg = 0;
 
-	arg |= FIELD_PREP(TLBIR_BADDR_MASK, addr >> (lpa2 ? 16 : PAGE_SHIFT));
-	arg |= FIELD_PREP(TLBIR_TTL_MASK, level > 3 ? 0 : level);
+	if (tlbip) {
+		arg |= (((u128)addr >> 12) << 64) & TLBIP_ADDR_MASK;
+		arg |= domain;
+	} else {
+		arg |= FIELD_PREP(TLBIR_BADDR_MASK, addr >> (lpa2 ? 16 : PAGE_SHIFT));
+	}
+
+	if (level <= 3) {
+		arg |= FIELD_PREP(TLBIR_TTL_MASK, level);
+		if (tlbip)
+			arg |= TLBIP_TTL64;
+	}
+
 	arg |= FIELD_PREP(TLBIR_NUM_MASK, num);
 	arg |= FIELD_PREP(TLBIR_SCALE_MASK, scale);
 	arg |= FIELD_PREP(TLBIR_TG_MASK, get_trans_granule());
 	arg |= FIELD_PREP(TLBIR_ASID_MASK, asid);
 
-	op(false, arg);
+	op(tlbip, arg);
 }
 
 static __always_inline void __flush_tlb_range_op(tlbi_op lop, tlbi_op rop,
 						 u64 start, size_t pages,
 						 u64 stride, u16 asid,
-						 u32 level, bool lpa2)
+						 u32 level, bool lpa2,
+						 bool local, int domain)
 {
 	u64 addr = start, end = start + pages * PAGE_SIZE;
 	int scale = 3;
@@ -569,23 +603,24 @@ static __always_inline void __flush_tlb_range_op(tlbi_op lop, tlbi_op rop,
 
 		num = __TLBI_RANGE_NUM(pages, scale);
 		if (num >= 0) {
-			__tlbi_range(rop, addr, asid, scale, num, level, lpa2);
+			__tlbi_range(rop, addr, asid, scale, num, level, lpa2,
+				     local, domain);
 			addr += __TLBI_RANGE_PAGES(num, scale) << PAGE_SHIFT;
 		}
 
 		scale--;
 		continue;
 invalidate_one:
-		__tlbi_level_asid(lop, addr, level, asid);
+		__tlbi_level_asid(lop, addr, level, asid, local, domain);
 		addr += stride;
 	}
 }
 
-#define __flush_s1_tlb_range_op(op, start, pages, stride, asid, tlb_level) \
-	__flush_tlb_range_op(op, r##op, start, pages, stride, asid, tlb_level, lpa2_is_enabled())
+#define __flush_s1_tlb_range_op(op, start, pages, stride, asid, tlb_level, local, domain) \
+	__flush_tlb_range_op(op, r##op, start, pages, stride, asid, tlb_level, lpa2_is_enabled(), local, domain)
 
 #define __flush_s2_tlb_range_op(op, start, pages, stride, tlb_level) \
-	__flush_tlb_range_op(op, r##op, start, pages, stride, 0, tlb_level, kvm_lpa2_is_enabled())
+	__flush_tlb_range_op(op, r##op, start, pages, stride, 0, tlb_level, kvm_lpa2_is_enabled(), false, 0)
 
 static inline bool __flush_tlb_range_limit_excess(unsigned long pages,
 						  unsigned long stride)
@@ -626,6 +661,7 @@ static __always_inline void __do_flush_tlb_range(struct vm_area_struct *vma,
 {
 	struct mm_struct *mm = vma->vm_mm;
 	unsigned long asid, pages;
+	int domain;
 
 	pages = (end - start) >> PAGE_SHIFT;
 
@@ -634,21 +670,23 @@ static __always_inline void __do_flush_tlb_range(struct vm_area_struct *vma,
 		return;
 	}
 
-	if (!(flags & TLBF_NOBROADCAST))
+	if (!(flags & TLBF_NOBROADCAST)) {
 		dsb(ishst);
-	else
+		domain = get_tlbid_domain(mm);
+	} else {
 		dsb(nshst);
+	}
 
 	asid = ASID(mm);
 
 	switch (flags & (TLBF_NOWALKCACHE | TLBF_NOBROADCAST)) {
 	case TLBF_NONE:
 		__flush_s1_tlb_range_op(vae1is, start, pages, stride,
-					asid, tlb_level);
+					asid, tlb_level, false, domain);
 		break;
 	case TLBF_NOWALKCACHE:
 		__flush_s1_tlb_range_op(vale1is, start, pages, stride,
-					asid, tlb_level);
+					asid, tlb_level, false, domain);
 		break;
 	case TLBF_NOBROADCAST:
 		/* Combination unused */
@@ -656,7 +694,7 @@ static __always_inline void __do_flush_tlb_range(struct vm_area_struct *vma,
 		break;
 	case TLBF_NOWALKCACHE | TLBF_NOBROADCAST:
 		__flush_s1_tlb_range_op(vale1, start, pages, stride,
-					asid, tlb_level);
+					asid, tlb_level, true, -1);
 		break;
 	}
 
@@ -725,7 +763,7 @@ static inline void flush_tlb_kernel_range(unsigned long start, unsigned long end
 
 	dsb(ishst);
 	__flush_s1_tlb_range_op(vaale1is, start, pages, stride, 0,
-				TLBI_TTL_UNKNOWN);
+				TLBI_TTL_UNKNOWN, false, 0);
 	__tlbi_sync_s1ish_kernel();
 	isb();
 }
