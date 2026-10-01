@@ -27,7 +27,7 @@
 #define PCI_DEVICE_ID_MTL	0x7d1d
 #define PCI_DEVICE_ID_ARL	0xad1d
 #define PCI_DEVICE_ID_LNL	0x643e
-#define PCI_DEVICE_ID_PTL_P	0xb03e
+#define PCI_DEVICE_ID_PTL	0xb03e
 #define PCI_DEVICE_ID_WCL	0xfd3e
 #define PCI_DEVICE_ID_NVL	0xd71d
 
@@ -136,6 +136,8 @@ struct ivpu_device {
 	struct drm_device drm;
 	void __iomem *regb;
 	void __iomem *regv;
+	u32 hw_ip_gen;
+	u32 btrs_gen;
 	u32 platform;
 	u32 irq;
 
@@ -247,6 +249,11 @@ static inline u8 ivpu_revision(struct ivpu_device *vdev)
 	return to_pci_dev(vdev->drm.dev)->revision;
 }
 
+static inline u16 ivpu_vendor_id(struct ivpu_device *vdev)
+{
+	return to_pci_dev(vdev->drm.dev)->vendor;
+}
+
 static inline u16 ivpu_device_id(struct ivpu_device *vdev)
 {
 	return to_pci_dev(vdev->drm.dev)->device;
@@ -254,40 +261,12 @@ static inline u16 ivpu_device_id(struct ivpu_device *vdev)
 
 static inline int ivpu_hw_ip_gen(struct ivpu_device *vdev)
 {
-	switch (ivpu_device_id(vdev)) {
-	case PCI_DEVICE_ID_MTL:
-	case PCI_DEVICE_ID_ARL:
-		return IVPU_HW_IP_37XX;
-	case PCI_DEVICE_ID_LNL:
-		return IVPU_HW_IP_40XX;
-	case PCI_DEVICE_ID_PTL_P:
-	case PCI_DEVICE_ID_WCL:
-		return IVPU_HW_IP_50XX;
-	case PCI_DEVICE_ID_NVL:
-		return IVPU_HW_IP_60XX;
-	default:
-		dump_stack();
-		ivpu_err(vdev, "Unknown NPU IP generation\n");
-		return 0;
-	}
+	return vdev->hw_ip_gen;
 }
 
 static inline int ivpu_hw_btrs_gen(struct ivpu_device *vdev)
 {
-	switch (ivpu_device_id(vdev)) {
-	case PCI_DEVICE_ID_MTL:
-	case PCI_DEVICE_ID_ARL:
-		return IVPU_HW_BTRS_MTL;
-	case PCI_DEVICE_ID_LNL:
-	case PCI_DEVICE_ID_PTL_P:
-	case PCI_DEVICE_ID_WCL:
-	case PCI_DEVICE_ID_NVL:
-		return IVPU_HW_BTRS_LNL;
-	default:
-		dump_stack();
-		ivpu_err(vdev, "Unknown buttress generation\n");
-		return 0;
-	}
+	return vdev->btrs_gen;
 }
 
 static inline struct ivpu_device *to_ivpu_device(struct drm_device *dev)

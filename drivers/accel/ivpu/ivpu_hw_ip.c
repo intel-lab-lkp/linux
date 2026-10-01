@@ -678,29 +678,21 @@ static void pwr_island_delay_set(struct ivpu_device *vdev)
 	bool high = vdev->hw->pll.profiling_freq == PLL_PROFILING_FREQ_HIGH;
 	u32 post, post1, post2, status;
 
-	if (ivpu_hw_ip_gen(vdev) < IVPU_HW_IP_50XX)
+	switch (ivpu_hw_ip_gen(vdev)) {
+	case IVPU_HW_IP_37XX:
+	case IVPU_HW_IP_40XX:
 		return;
-
-	switch (ivpu_device_id(vdev)) {
-	case PCI_DEVICE_ID_WCL:
-	case PCI_DEVICE_ID_PTL_P:
+	case IVPU_HW_IP_50XX:
 		post = high ? 18 : 0;
 		post1 = 0;
 		post2 = 0;
 		status = high ? 46 : 3;
 		break;
-
-	case PCI_DEVICE_ID_NVL:
+	default:
 		post = high ? 198 : 17;
 		post1 = 0;
 		post2 = high ? 198 : 17;
 		status = 0;
-		break;
-
-	default:
-		dump_stack();
-		ivpu_err(vdev, "Unknown device ID\n");
-		return;
 	}
 
 	pwr_island_delay_set_50xx(vdev, post, post1, post2, status);
