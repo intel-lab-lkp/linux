@@ -207,6 +207,9 @@ struct cxl_register_map {
 #ifdef CONFIG_CXL_RESET
 void pci_cxl_hdm_cache_init(struct pci_dev *pdev);
 void pci_cxl_hdm_cache_release(struct pci_dev *pdev);
+int cxl_snapshot_hdm(struct pci_dev *pdev, struct cxl_hdm_info **snapshot);
+int cxl_restore_state_after_pci_reset(struct pci_dev *pdev,
+				      struct cxl_hdm_info *snapshot);
 int cxl_reset_function(struct pci_dev *pdev, bool probe);
 #else
 static inline void pci_cxl_hdm_cache_init(struct pci_dev *pdev)
@@ -215,6 +218,20 @@ static inline void pci_cxl_hdm_cache_init(struct pci_dev *pdev)
 
 static inline void pci_cxl_hdm_cache_release(struct pci_dev *pdev)
 {
+}
+
+static inline int cxl_snapshot_hdm(struct pci_dev *pdev,
+				   struct cxl_hdm_info **snapshot)
+{
+	*snapshot = NULL;
+	return -ENXIO;
+}
+
+static inline int
+cxl_restore_state_after_pci_reset(struct pci_dev *pdev,
+				  struct cxl_hdm_info *snapshot)
+{
+	return 0;
 }
 
 static inline int cxl_reset_function(struct pci_dev *pdev, bool probe)

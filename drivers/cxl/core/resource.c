@@ -625,12 +625,12 @@ static int cxl_restore_hdm_decoder(struct pci_dev *pdev, void __iomem *hdm,
 	return 0;
 }
 
-static int cxl_snapshot_hdm(struct pci_dev *pdev,
-			    struct cxl_hdm_info **snapshot)
+int cxl_snapshot_hdm(struct pci_dev *pdev, struct cxl_hdm_info **snapshot)
 {
 	struct cxl_hdm_info *info;
 	size_t size;
 
+	device_lock_assert(&pdev->dev);
 	guard(rwsem_read)(&cxl_rwsem.dpa);
 	info = pdev->hdm;
 	if (!info)
@@ -796,6 +796,25 @@ static int cxl_reset_save_restored_state(struct pci_dev *pdev, u16 command)
 	}
 
 	return rc;
+}
+
+int cxl_restore_state_after_pci_reset(struct pci_dev *pdev,
+				      struct cxl_hdm_info *snapshot)
+{
+	u16 command;
+	int rc;
+
+	device_lock_assert(&pdev->dev);
+	guard(rwsem_write)(&cxl_rwsem.region);
+
+	cxl_restore_pci_state_for_hdm_restore(pdev, &command);
+	rc = cxl_restore_state(pdev, snapshot);
+	if (rc) {
+		cxl_reset_save_disabled_state(pdev);
+		return rc;
+	}
+
+	return cxl_reset_save_restored_state(pdev, command);
 }
 
 /*
