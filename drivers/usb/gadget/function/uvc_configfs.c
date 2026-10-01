@@ -3634,10 +3634,7 @@ static const struct uvcg_config_group_type uvcg_streaming_grp_type = {
 
 static void uvc_func_item_release(struct config_item *item)
 {
-	struct f_uvc_opts *opts = to_f_uvc_opts(item);
-
 	uvcg_config_remove_children(to_config_group(item));
-	usb_put_function_instance(&opts->func_inst);
 }
 
 static int uvc_func_allow_link(struct config_item *src, struct config_item *tgt)

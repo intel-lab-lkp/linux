@@ -908,6 +908,7 @@ static void uvc_free_inst(struct usb_function_instance *f)
 {
 	struct f_uvc_opts *opts = fi_to_f_uvc_opts(f);
 
+	config_group_put(&opts->func_inst.group);
 	mutex_destroy(&opts->lock);
 	kfree(opts);
 }
