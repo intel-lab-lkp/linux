@@ -3,6 +3,7 @@
 #define _NF_SOCK_H_
 
 #include <net/sock.h>
+#include <net/inet_sock.h>
 
 struct sock *nf_sk_lookup_slow_v4(struct net *net, const struct sk_buff *skb,
 				  const struct net_device *indev);
@@ -27,6 +28,20 @@ static inline struct sock *nf_skb_sk(const struct sk_buff *skb, const struct net
 
 	if (sk && net_eq(net, sock_net(sk)) && sk_is_inet(sk))
 		return sk;
+
+	return NULL;
+}
+
+/**
+ * nf_sk_to_full_sk - Careful access to a full socket
+ * @sk: pointer to a socket
+ *
+ * %sk_to_full_sk for use when sk might not be an inet socket.
+ */
+static inline struct sock *nf_sk_to_full_sk(struct sock *sk)
+{
+	if (sk && sk_is_inet(sk))
+		return sk_to_full_sk(sk);
 
 	return NULL;
 }

@@ -17,14 +17,15 @@
 #include <net/ip6_route.h>
 #include <net/xfrm.h>
 #include <net/netfilter/nf_queue.h>
+#include <net/netfilter/nf_socket.h>
 #include <net/netfilter/nf_conntrack_bridge.h>
 #include <net/netfilter/ipv6/nf_defrag_ipv6.h>
 #include "../bridge/br_private.h"
 
 int ip6_route_me_harder(struct net *net, struct sock *sk_partial, struct sk_buff *skb)
 {
+	struct sock *sk = nf_sk_to_full_sk(sk_partial);
 	const struct ipv6hdr *iph = ipv6_hdr(skb);
-	struct sock *sk = sk_to_full_sk(sk_partial);
 	struct net_device *dev = skb_dst_dev(skb);
 	struct flow_keys flkeys;
 	unsigned int hh_len;
