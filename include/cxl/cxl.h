@@ -6,6 +6,7 @@
 #define __CXL_CXL_H__
 
 #include <linux/device.h>
+#include <linux/errno.h>
 #include <linux/node.h>
 #include <linux/ioport.h>
 #include <linux/range.h>
@@ -206,6 +207,7 @@ struct cxl_register_map {
 #ifdef CONFIG_CXL_RESET
 void pci_cxl_hdm_cache_init(struct pci_dev *pdev);
 void pci_cxl_hdm_cache_release(struct pci_dev *pdev);
+int cxl_reset_function(struct pci_dev *pdev, bool probe);
 #else
 static inline void pci_cxl_hdm_cache_init(struct pci_dev *pdev)
 {
@@ -213,6 +215,11 @@ static inline void pci_cxl_hdm_cache_init(struct pci_dev *pdev)
 
 static inline void pci_cxl_hdm_cache_release(struct pci_dev *pdev)
 {
+}
+
+static inline int cxl_reset_function(struct pci_dev *pdev, bool probe)
+{
+	return -ENOTTY;
 }
 #endif
 
