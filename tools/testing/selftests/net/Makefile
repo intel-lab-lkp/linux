@@ -9,6 +9,7 @@ CFLAGS += -I../
 TEST_PROGS := \
 	altnames.sh \
 	amt.sh \
+	amt_gso.sh \
 	arp_ndisc_evict_nocarrier.sh \
 	arp_ndisc_untracked_subnets.sh \
 	bareudp.sh \
@@ -143,6 +144,7 @@ TEST_PROGS_EXTENDED := \
 # end of TEST_PROGS_EXTENDED
 
 TEST_GEN_FILES := \
+	amt_gso \
 	bind_bhash \
 	cmsg_sender \
 	fin_ack_lat \
