@@ -12,7 +12,10 @@ maintainers:
 properties:
   compatible:
     oneOf:
-      - const: awinic,aw86927
+      - items:
+          - enum:
+              - awinic,aw8695
+              - awinic,aw86927
       - items:
           - enum:
               - awinic,aw86938
