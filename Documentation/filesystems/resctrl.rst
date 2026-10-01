@@ -1887,6 +1887,108 @@ View the llc occupancy snapshot::
   11234000
 
 
+Examples on working with kernel_mode
+====================================
+The kernel-mode interface spans three files:
+
+- ``info/kernel_mode`` - select the global mode and associated group
+- ``kmode_cpus`` / ``kmode_cpus_list`` - view or adjust the CPU scope of the
+  active association (visible only on the associated group)
+
+The walkthrough below covers a typical workflow on a platform with PLZA
+(Privilege Level Zero Association) support:
+
+1. Discover supported modes.
+2. Associate ``global_enable_per_cpu`` with a control group.
+3. Narrow the CPU scope through ``kmode_cpus_list``.
+4. Move the association to a monitor group.
+5. Return to ``inherit_user``.
+
+a. Discover supported kernel modes
+::
+
+  # mount -t resctrl resctrl /sys/fs/resctrl/
+
+  # cat /sys/fs/resctrl/info/kernel_mode
+  [inherit_user]
+  global_enable_per_cpu:ctrl=assign;mon=assign;group=//
+
+``inherit_user`` is the active mode. Kernel work inherits the resource
+allocation and monitoring of the current user-space task. The second line
+shows ``global_enable_per_cpu`` is available; square brackets mark
+the active entry when read back after later steps.
+
+b. Associate kernel mode allocation with a control group
+::
+
+  # mkdir /sys/fs/resctrl/ctrl1
+  # echo "global_enable_per_cpu:ctrl=assign;mon=inherit;group=ctrl1//" > \
+        /sys/fs/resctrl/info/kernel_mode
+
+  # cat /sys/fs/resctrl/info/kernel_mode
+  inherit_user
+  [global_enable_per_cpu:ctrl=assign;mon=inherit;group=ctrl1//]
+
+``ctrl=assign`` uses ctrl1's allocation association. ``mon=inherit`` uses
+the monitoring association of the user-space task. The group path uses
+``<CTRL_MON group>/<MON group>/`` syntax; a control group alone is written
+as ``ctrl1//``.
+
+When the mode is active:
+
+- ``ctrl1/kmode_cpus`` and ``ctrl1/kmode_cpus_list`` become visible.
+- All currently online CPUs are associated initially.
+- CPUs that come online later are added to the association automatically.
+
+c. Narrow the association to CPUs 0-3
+::
+
+  # echo 0-3 > /sys/fs/resctrl/ctrl1/kmode_cpus_list
+  # cat /sys/fs/resctrl/ctrl1/kmode_cpus
+  f
+  # cat /sys/fs/resctrl/ctrl1/kmode_cpus_list
+  0-3
+
+The write replaces the association's CPU mask:
+
+- The association is enabled on CPUs added to the mask.
+- The association is disabled on CPUs removed from the mask.
+- Offline CPUs in the mask are rejected.
+- An empty mask disables the association on all currently online CPUs, but
+  later hotplug CPUs are still associated automatically.
+
+d. Move the association to a monitor group
+::
+
+  # mkdir /sys/fs/resctrl/ctrl1/mon_groups/mon1
+  # echo "global_enable_per_cpu:ctrl=assign;mon=assign;group=ctrl1/mon1/" > \
+        /sys/fs/resctrl/info/kernel_mode
+
+  # cat /sys/fs/resctrl/info/kernel_mode
+  inherit_user
+  [global_enable_per_cpu:ctrl=assign;mon=assign;group=ctrl1/mon1/]
+
+Kernel mode work uses ctrl1's allocation association (``ctrl=assign``) and
+mon1's monitoring association (``mon=assign``). A monitor group requires
+``mon=assign``; ``mon=inherit`` does not use that group's RMID and is
+rejected. Changing the associated group through ``info/kernel_mode``:
+
+- Resets the CPU scope to all currently online CPUs.
+- Hides ``kmode_cpus`` and ``kmode_cpus_list`` on the previous group.
+- Shows them under ``ctrl1/mon_groups/mon1/``.
+
+e. Return to inherit_user
+::
+
+  # echo "inherit_user" > /sys/fs/resctrl/info/kernel_mode
+  # cat /sys/fs/resctrl/info/kernel_mode
+  [inherit_user]
+  global_enable_per_cpu:ctrl=assign;mon=assign;group=//
+
+Writing ``inherit_user`` clears the active kernel-mode association and
+hides ``kmode_cpus`` and ``kmode_cpus_list`` because no group is
+associated with kernel mode.
+
 Examples on working with mbm_assign_mode
 ========================================
 
