@@ -89,7 +89,7 @@
 		idle-states {
 			cpu_spc: cpu-spc {
 				compatible = "qcom,idle-state-spc",
-						"arm,idle-state";
+					     "arm,idle-state";
 				entry-latency-us = <400>;
 				exit-latency-us = <900>;
 				min-residency-us = <3000>;
@@ -1036,15 +1036,15 @@
 			interrupts = <GIC_SPI 80 IRQ_TYPE_LEVEL_HIGH>;
 			interrupt-names = "kgsl_3d0_irq";
 			clock-names =
-			    "core",
-			    "iface",
-			    "mem",
-			    "mem_iface";
+				"core",
+				"iface",
+				"mem",
+				"mem_iface";
 			clocks =
-			    <&mmcc GFX3D_CLK>,
-			    <&mmcc GFX3D_AHB_CLK>,
-			    <&mmcc GFX3D_AXI_CLK>,
-			    <&mmcc MMSS_IMEM_AHB_CLK>;
+				<&mmcc GFX3D_CLK>,
+				<&mmcc GFX3D_AHB_CLK>,
+				<&mmcc GFX3D_AXI_CLK>,
+				<&mmcc MMSS_IMEM_AHB_CLK>;
 
 			iommus = <&gfx3d 0
 				  &gfx3d 1
@@ -1141,24 +1141,24 @@
 			reg-names = "dsi_ctrl";
 
 			clocks = <&mmcc DSI_M_AHB_CLK>,
-				<&mmcc DSI_S_AHB_CLK>,
-				<&mmcc AMP_AHB_CLK>,
-				<&mmcc DSI_CLK>,
-				<&mmcc DSI1_BYTE_CLK>,
-				<&mmcc DSI_PIXEL_CLK>,
-				<&mmcc DSI1_ESC_CLK>;
+				 <&mmcc DSI_S_AHB_CLK>,
+				 <&mmcc AMP_AHB_CLK>,
+				 <&mmcc DSI_CLK>,
+				 <&mmcc DSI1_BYTE_CLK>,
+				 <&mmcc DSI_PIXEL_CLK>,
+				 <&mmcc DSI1_ESC_CLK>;
 			clock-names = "iface", "bus", "core_mmss",
-					"src", "byte", "pixel",
-					"core";
+				      "src", "byte", "pixel",
+				      "core";
 
 			assigned-clocks = <&mmcc DSI1_BYTE_SRC>,
-					<&mmcc DSI1_ESC_SRC>,
-					<&mmcc DSI_SRC>,
-					<&mmcc DSI_PIXEL_SRC>;
+					  <&mmcc DSI1_ESC_SRC>,
+					  <&mmcc DSI_SRC>,
+					  <&mmcc DSI_PIXEL_SRC>;
 			assigned-clock-parents = <&dsi0_phy 0>,
-						<&dsi0_phy 0>,
-						<&dsi0_phy 1>,
-						<&dsi0_phy 1>;
+						 <&dsi0_phy 0>,
+						 <&dsi0_phy 1>,
+						 <&dsi0_phy 1>;
 			syscon-sfpb = <&mmss_sfpb>;
 			phys = <&dsi0_phy>;
 			status = "disabled";
@@ -1187,8 +1187,8 @@
 			#phy-cells = <0>;
 
 			reg = <0x04700200 0x100>,
-				<0x04700300 0x200>,
-				<0x04700500 0x5c>;
+			      <0x04700300 0x200>,
+			      <0x04700500 0x5c>;
 			reg-names = "dsi_pll", "dsi_phy", "dsi_phy_regulator";
 			clock-names = "iface", "ref";
 			clocks = <&mmcc DSI_M_AHB_CLK>,
@@ -1274,15 +1274,15 @@
 			compatible = "qcom,apq8064-iommu";
 			#iommu-cells = <1>;
 			clock-names =
-			    "smmu_pclk",
-			    "iommu_clk";
+				"smmu_pclk",
+				"iommu_clk";
 			clocks =
-			    <&mmcc SMMU_AHB_CLK>,
-			    <&mmcc MDP_AXI_CLK>;
+				<&mmcc SMMU_AHB_CLK>,
+				<&mmcc MDP_AXI_CLK>;
 			reg = <0x07500000 0x100000>;
 			interrupts =
-			    <GIC_SPI 63 IRQ_TYPE_LEVEL_HIGH>,
-			    <GIC_SPI 64 IRQ_TYPE_LEVEL_HIGH>;
+				<GIC_SPI 63 IRQ_TYPE_LEVEL_HIGH>,
+				<GIC_SPI 64 IRQ_TYPE_LEVEL_HIGH>;
 			qcom,ncb = <2>;
 		};
 
@@ -1290,15 +1290,15 @@
 			compatible = "qcom,apq8064-iommu";
 			#iommu-cells = <1>;
 			clock-names =
-			    "smmu_pclk",
-			    "iommu_clk";
+				"smmu_pclk",
+				"iommu_clk";
 			clocks =
-			    <&mmcc SMMU_AHB_CLK>,
-			    <&mmcc MDP_AXI_CLK>;
+				<&mmcc SMMU_AHB_CLK>,
+				<&mmcc MDP_AXI_CLK>;
 			reg = <0x07600000 0x100000>;
 			interrupts =
-			    <GIC_SPI 61 IRQ_TYPE_LEVEL_HIGH>,
-			    <GIC_SPI 62 IRQ_TYPE_LEVEL_HIGH>;
+				<GIC_SPI 61 IRQ_TYPE_LEVEL_HIGH>,
+				<GIC_SPI 62 IRQ_TYPE_LEVEL_HIGH>;
 			qcom,ncb = <2>;
 		};
 
@@ -1306,15 +1306,15 @@
 			compatible = "qcom,apq8064-iommu";
 			#iommu-cells = <1>;
 			clock-names =
-			    "smmu_pclk",
-			    "iommu_clk";
+				"smmu_pclk",
+				"iommu_clk";
 			clocks =
-			    <&mmcc SMMU_AHB_CLK>,
-			    <&mmcc GFX3D_AXI_CLK>;
+				<&mmcc SMMU_AHB_CLK>,
+				<&mmcc GFX3D_AXI_CLK>;
 			reg = <0x07c00000 0x100000>;
 			interrupts =
-			    <GIC_SPI 69 IRQ_TYPE_LEVEL_HIGH>,
-			    <GIC_SPI 70 IRQ_TYPE_LEVEL_HIGH>;
+				<GIC_SPI 69 IRQ_TYPE_LEVEL_HIGH>,
+				<GIC_SPI 70 IRQ_TYPE_LEVEL_HIGH>;
 			qcom,ncb = <3>;
 		};
 
@@ -1322,15 +1322,15 @@
 			compatible = "qcom,apq8064-iommu";
 			#iommu-cells = <1>;
 			clock-names =
-			    "smmu_pclk",
-			    "iommu_clk";
+				"smmu_pclk",
+				"iommu_clk";
 			clocks =
-			    <&mmcc SMMU_AHB_CLK>,
-			    <&mmcc GFX3D_AXI_CLK>;
+				<&mmcc SMMU_AHB_CLK>,
+				<&mmcc GFX3D_AXI_CLK>;
 			reg = <0x07d00000 0x100000>;
 			interrupts =
-			    <GIC_SPI 210 IRQ_TYPE_LEVEL_HIGH>,
-			    <GIC_SPI 211 IRQ_TYPE_LEVEL_HIGH>;
+				<GIC_SPI 210 IRQ_TYPE_LEVEL_HIGH>,
+				<GIC_SPI 211 IRQ_TYPE_LEVEL_HIGH>;
 			qcom,ncb = <3>;
 		};
 
