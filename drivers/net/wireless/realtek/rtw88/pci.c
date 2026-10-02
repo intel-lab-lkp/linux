@@ -473,6 +473,13 @@ static void rtw_pci_reset_buf_desc(struct rtw_dev *rtwdev)
 				BIT_CLR_H2CQ_HOST_IDX | BIT_CLR_H2CQ_HW_IDX);
 }
 
+static void rtw_pci_tx_stall_reset(struct rtw_pci_tx_ring *ring)
+{
+	ring->last_rp = U32_MAX;
+	ring->stall_rounds = 0;
+	ring->stall_warned = false;
+}
+
 static void rtw_pci_wake_stopped_queues(struct rtw_dev *rtwdev,
 					struct rtw_pci_tx_ring *ring)
 {
@@ -502,6 +509,8 @@ static void rtw_pci_reset_trx_ring(struct rtw_dev *rtwdev)
 	 */
 	for (queue = 0; queue < RTK_MAX_TX_QUEUE_NUM; queue++) {
 		ring = &rtwpci->tx_rings[queue];
+
+		rtw_pci_tx_stall_reset(ring);
 
 		if (!ring->queue_stopped)
 			continue;
@@ -817,6 +826,79 @@ static void rtw_pci_tx_kick_off_queue(struct rtw_dev *rtwdev,
 		rtw_pci_deep_ps_leave(rtwdev);
 	rtw_write16(rtwdev, bd_idx, ring->r.wp & TRX_BD_IDX_MASK);
 	spin_unlock_bh(&rtwpci->irq_lock);
+}
+
+/*
+ * A TX ring with descriptors in flight advances its read index within
+ * milliseconds. When the hardware stops consuming them the ring just goes
+ * quiet: the link stays associated, RX keeps working, and nothing says that
+ * TX has died until the ring fills and the queue is stopped. Report it once
+ * per episode, where an episode ends as soon as the read index moves again.
+ *
+ * Only the four AC rings are checked. BCN has no index register, and MGMT,
+ * HI0 and H2C are drained on events of their own - HI0 in particular is the
+ * after-DTIM group queue in AP mode and may legitimately sit still for a
+ * whole DTIM interval.
+ */
+#define RTW_PCI_TX_STALL_ROUNDS		3
+
+static void rtw_pci_tx_stall_check(struct rtw_dev *rtwdev)
+{
+	struct rtw_pci *rtwpci = (struct rtw_pci *)rtwdev->priv;
+	struct rtw_pci_tx_ring *ring;
+	u32 bd_idx, cur_rp, wp;
+	bool paused;
+	u8 queue;
+
+	paused = rtw_read8(rtwdev, REG_TXPAUSE);
+
+	for (queue = RTW_TX_QUEUE_BK; queue <= RTW_TX_QUEUE_VO; queue++) {
+		ring = &rtwpci->tx_rings[queue];
+
+		/* a paused ring is not advancing on purpose, and samples
+		 * taken before the pause say nothing about the ones after
+		 */
+		if (paused) {
+			rtw_pci_tx_stall_reset(ring);
+			continue;
+		}
+
+		spin_lock_bh(&rtwpci->irq_lock);
+		bd_idx = rtw_read32(rtwdev, rtw_pci_tx_queue_idx_addr[queue]);
+		cur_rp = (bd_idx >> 16) & TRX_BD_IDX_MASK;
+		wp = ring->r.wp;
+		spin_unlock_bh(&rtwpci->irq_lock);
+
+		/* nothing in flight, so there is no observation to carry
+		 * into the next round
+		 */
+		if (cur_rp == wp) {
+			rtw_pci_tx_stall_reset(ring);
+			continue;
+		}
+
+		/* the ring is draining. last_rp is U32_MAX until the first
+		 * sample with descriptors in flight, and no index can equal
+		 * that, so that sample lands here and only records.
+		 */
+		if (cur_rp != ring->last_rp) {
+			ring->last_rp = cur_rp;
+			ring->stall_rounds = 0;
+			ring->stall_warned = false;
+			continue;
+		}
+
+		if (ring->stall_warned)
+			continue;
+
+		if (++ring->stall_rounds >= RTW_PCI_TX_STALL_ROUNDS) {
+			ring->stall_warned = true;
+			rtw_warn(rtwdev,
+				 "tx ring %u: read index unchanged at 0x%03x for %u watchdog rounds, write index 0x%03x, %d descriptors free\n",
+				 queue, cur_rp, ring->stall_rounds, wp,
+				 avail_desc(wp, cur_rp, ring->r.len));
+		}
+	}
 }
 
 static void rtw_pci_tx_kick_off(struct rtw_dev *rtwdev)
@@ -1637,6 +1719,7 @@ static const struct rtw_hci_ops rtw_pci_ops = {
 	.tx_write = rtw_pci_tx_write,
 	.tx_kick_off = rtw_pci_tx_kick_off,
 	.flush_queues = rtw_pci_flush_queues,
+	.tx_stall_check = rtw_pci_tx_stall_check,
 	.setup = rtw_pci_setup,
 	.start = rtw_pci_start,
 	.stop = rtw_pci_stop,

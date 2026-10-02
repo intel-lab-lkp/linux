@@ -273,6 +273,8 @@ static void rtw_watch_dog_work(struct work_struct *work)
 
 	/* make sure BB/RF is working for dynamic mech */
 	rtw_leave_lps(rtwdev);
+
+	rtw_hci_tx_stall_check(rtwdev);
 	rtw_coex_wl_status_check(rtwdev);
 	rtw_coex_query_bt_hid_list(rtwdev);
 	rtw_coex_active_query_bt_info(rtwdev);
