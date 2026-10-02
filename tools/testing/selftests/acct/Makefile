@@ -2,6 +2,7 @@
 TEST_GEN_PROGS := acct_syscall
 TEST_GEN_PROGS += taskstats_fill_stats_tgid
 TEST_GEN_PROGS += cgroupstats
+TEST_GEN_PROGS += taskstats_netns_listener
 
 NETLINK_HELPER_PROGS := cgroupstats taskstats_fill_stats_tgid
 
