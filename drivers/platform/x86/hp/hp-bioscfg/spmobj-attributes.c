@@ -118,6 +118,9 @@ static ssize_t update_spm_state(void)
 	if (ret < 0)
 		return ret;
 
+	if (data.state >= ARRAY_SIZE(spm_mechanism_types))
+		return -EIO;
+
 	bioscfg_drv.spm_data.mechanism = data.state;
 	if (bioscfg_drv.spm_data.mechanism)
 		bioscfg_drv.spm_data.is_enabled = 1;
@@ -152,6 +155,9 @@ static ssize_t status_show(struct kobject *kobj, struct kobj_attribute
 	ret = statusbin(kobj, attr, &data);
 	if (ret < 0)
 		return ret;
+
+	if (data.state >= ARRAY_SIZE(spm_state_types))
+		return -EIO;
 
 	/*
 	 * 'status' is a read-only file that returns ASCII text in
