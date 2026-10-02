@@ -949,11 +949,24 @@ static const struct pinconf_ops amd_pinconf_ops = {
 static void amd_gpio_irq_init(struct amd_gpio *gpio_dev)
 {
 	const struct pinctrl_desc *desc = gpio_dev->pctrl->desc;
+	acpi_handle handle = ACPI_HANDLE(&gpio_dev->pdev->dev);
 	unsigned long flags;
 	u32 pin_reg, mask;
 	int i;
 
 	mask = BIT(WAKE_CNTRL_OFF_S0I3) | BIT(WAKE_CNTRL_OFF_S3);
+
+	/*
+	 * _AEI indicates that the platform uses OS-managed ACPI GPIO events.
+	 * Without it, preserve S4 wake bits for firmware-programmed sources
+	 * such as PCIe PME that bypass the GPIO IRQ wake API.
+	 */
+	if (handle) {
+#ifdef CONFIG_ACPI
+		if (acpi_has_method(handle, "_AEI"))
+			mask |= BIT(WAKE_CNTRL_OFF_S4);
+#endif
+	}
 
 	for (i = 0; i < desc->npins; i++) {
 		int pin = desc->pins[i].number;
