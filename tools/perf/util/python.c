@@ -100,7 +100,7 @@ struct pyrf_event {
 	struct addr_location al;
 	/** @al_resolved: True when machine__resolve been called. */
 	bool al_resolved;
-	/** @callchain: Resolved callchain, eagerly computed if requested. */
+	/** @callchain: Resolved callchain, lazily computed. */
 	PyObject *callchain;
 	/** @brstack: Resolved branch stack, eagerly computed if requested. */
 	PyObject *brstack;
@@ -727,28 +727,19 @@ get_tracepoint_field(struct pyrf_event *pevent, PyObject *attr_name)
 
 static int pyrf_sample_event__resolve_al(struct pyrf_event *pevent)
 {
-	struct evsel *evsel = pevent->sample->evsel ?: pevent->evsel;
-	struct evlist *evlist = evsel ? evsel->evlist : NULL;
-	struct perf_session *session = evlist ? evlist__session(evlist) : NULL;
-	struct machine *machine;
-
 	if (pevent->al_resolved)
 		return 0;
 
-	if (!session)
+	/*
+	 * Use pevent->machine, which pyrf_event__new() initializes while the
+	 * session callback is active and pyrf_event__copy() clears after
+	 * resolving pevent->al if a reference is retained beyond the callback.
+	 */
+	if (!pevent->machine)
 		return -1;
 
-	/*
-	 * Use pevent->machine, which pyrf_event__new() initializes either from
-	 * the machine resolved by perf_session (machines__find_for_cpumode(),
-	 * preserving DEFAULT_GUEST_KERNEL_ID == 0 for default guests) or via
-	 * sample.machine_pid when pyrf_event__new() is called with a NULL
-	 * machine.
-	 */
-	machine = pevent->machine ? pevent->machine : &session->machines.host;
-
 	addr_location__init(&pevent->al);
-	if (machine__resolve(machine, &pevent->al, pevent->sample) < 0) {
+	if (machine__resolve(pevent->machine, &pevent->al, pevent->sample) < 0) {
 		addr_location__exit(&pevent->al);
 		return -1;
 	}
@@ -924,23 +915,15 @@ static PyObject *pyrf_sample_event__srccode(PyObject *self, PyObject *args)
 static PyObject *pyrf_sample_event__insn(PyObject *self, PyObject *args __maybe_unused)
 {
 	struct pyrf_event *pevent = (void *)self;
-	struct thread *thread;
-	struct machine *machine;
 
-	if (pyrf_sample_event__resolve_al(pevent) < 0)
-		Py_RETURN_NONE;
+	if (pevent->sample->ip && !pevent->sample->insn_len) {
+		if (pyrf_sample_event__resolve_al(pevent) < 0 ||
+		    !pevent->al.thread || !pevent->machine)
+			Py_RETURN_NONE;
 
-	thread = pevent->al.thread;
-
-	if (!thread || !thread__maps(thread))
-		Py_RETURN_NONE;
-
-	machine = maps__machine(thread__maps(thread));
-	if (!machine)
-		Py_RETURN_NONE;
-
-	if (pevent->sample->ip && !pevent->sample->insn_len)
-		perf_sample__fetch_insn(pevent->sample, thread, machine);
+		perf_sample__fetch_insn(pevent->sample, pevent->al.thread,
+					pevent->machine);
+	}
 
 	if (!pevent->sample->insn_len)
 		Py_RETURN_NONE;
@@ -1097,9 +1080,52 @@ static PyTypeObject pyrf_callchain__type = {
 	.tp_as_sequence	= &pyrf_callchain__sequence_methods,
 };
 
+static int pyrf_sample_event__resolve_callchain(struct pyrf_event *pevent)
+{
+	struct callchain_cursor *cursor;
+	struct pyrf_callchain *pchain;
+	struct callchain_cursor_node *node;
+
+	if (pevent->callchain || !pevent->sample->callchain || !pevent->machine)
+		return 0;
+
+	if (pyrf_sample_event__resolve_al(pevent) < 0)
+		return 0;
+
+	cursor = get_tls_callchain_cursor();
+	if (thread__resolve_callchain(pevent->al.thread, cursor, pevent->sample,
+				      NULL, NULL, PERF_MAX_STACK_DEPTH) != 0)
+		return 0;
+
+	callchain_cursor_commit(cursor);
+	pchain = PyObject_New(struct pyrf_callchain, &pyrf_callchain__type);
+	if (!pchain)
+		return -ENOMEM;
+
+	pchain->nr_frames = cursor->nr;
+	pchain->frames = calloc(pchain->nr_frames, sizeof(*pchain->frames));
+	if (!pchain->frames) {
+		Py_DECREF(pchain);
+		PyErr_NoMemory();
+		return -ENOMEM;
+	}
+	for (u64 i = 0; i < pchain->nr_frames; i++) {
+		node = callchain_cursor_current(cursor);
+		pchain->frames[i].ip = node->ip;
+		pchain->frames[i].map = map__get(node->ms.map);
+		pchain->frames[i].sym = node->ms.sym;
+		callchain_cursor_advance(cursor);
+	}
+	pevent->callchain = (PyObject *)pchain;
+	return 0;
+}
+
 static PyObject *pyrf_sample_event__get_callchain(PyObject *self, void *closure __maybe_unused)
 {
 	struct pyrf_event *pevent = (void *)self;
+
+	if (pyrf_sample_event__resolve_callchain(pevent) < 0)
+		return NULL;
 
 	if (!pevent->callchain)
 		Py_RETURN_NONE;
@@ -1646,13 +1672,31 @@ static int pyrf_event__copy(struct pyrf_event *pevent)
 	size_t copy_size = orig_event->header.size;
 	int err = -EINVAL;
 
+	/*
+	 * If a session callback retained a reference to pevent, resolve its
+	 * address location and callchain now while pevent->machine is still
+	 * live and thread->maps reflects the point in time of the sample.
+	 */
+	if (pevent->machine && pevent->evsel) {
+		pyrf_sample_event__resolve_al(pevent);
+		if (pyrf_sample_event__resolve_callchain(pevent) < 0) {
+			pevent->machine = NULL;
+			if (!pevent->event_copy) {
+				pevent->event = &zero_event;
+				pevent->sample = &pevent->sample_storage;
+			}
+			return -ENOMEM;
+		}
+	}
+	pevent->machine = NULL;
+
 	if (pevent->event_copy)
 		return 0;
 
 	/*
 	 * Clear borrowed pointers immediately so that even if copying fails,
-	 * pevent does not retain dangling pointers to the caller's stack or
-	 * ring buffer.
+	 * pevent does not retain dangling pointers to the caller's stack,
+	 * ring buffer, or session.
 	 */
 	pevent->event = &zero_event;
 	pevent->sample = &pevent->sample_storage;
@@ -1759,7 +1803,7 @@ static PyObject *pyrf_event__new(const union perf_event *event, struct evsel *ev
 	perf_sample__init(&pevent->sample_storage, /*all=*/true);
 	pevent->sample = sample_arg ?: &pevent->sample_storage;
 	pevent->evsel = evsel ? evsel__get(evsel) : NULL;
-	pevent->machine = machine;
+	pevent->machine = NULL;
 	pevent->callchain = NULL;
 	pevent->brstack = NULL;
 	pevent->al_resolved = false;
@@ -1777,11 +1821,8 @@ static PyObject *pyrf_event__new(const union perf_event *event, struct evsel *ev
 		return NULL;
 	}
 
-	if (!evsel) {
-		if (!pevent->machine && session)
-			pevent->machine = &session->machines.host;
+	if (!evsel)
 		return (PyObject *)pevent;
-	}
 
 	sample = pevent->sample;
 	if (session && session->evlist && perf_guest && sample->id) {
@@ -1802,49 +1843,6 @@ static PyObject *pyrf_event__new(const union perf_event *event, struct evsel *ev
 	pevent->machine = machine;
 	if (machine && machine->pid > 0 && !sample->machine_pid)
 		sample->machine_pid = machine->pid;
-	if (machine && sample->callchain) {
-		struct addr_location al;
-		struct callchain_cursor *cursor;
-		u64 i;
-		struct pyrf_callchain *pchain;
-
-		addr_location__init(&al);
-		if (machine__resolve(machine, &al, sample) >= 0) {
-			cursor = get_tls_callchain_cursor();
-			if (thread__resolve_callchain(al.thread, cursor, sample,
-						      NULL, NULL, PERF_MAX_STACK_DEPTH) == 0) {
-				callchain_cursor_commit(cursor);
-
-				pchain = PyObject_New(struct pyrf_callchain, &pyrf_callchain__type);
-				if (!pchain) {
-					addr_location__exit(&al);
-					Py_DECREF(pevent);
-					return NULL;
-				}
-				pchain->nr_frames = cursor->nr;
-				pchain->frames = calloc(pchain->nr_frames,
-							sizeof(*pchain->frames));
-				if (!pchain->frames) {
-					Py_DECREF(pchain);
-					addr_location__exit(&al);
-					Py_DECREF(pevent);
-					return PyErr_NoMemory();
-				}
-				struct callchain_cursor_node *node;
-
-				for (i = 0; i < pchain->nr_frames; i++) {
-					node = callchain_cursor_current(cursor);
-					pchain->frames[i].ip = node->ip;
-					pchain->frames[i].map =
-						map__get(node->ms.map);
-					pchain->frames[i].sym = node->ms.sym;
-					callchain_cursor_advance(cursor);
-				}
-				pevent->callchain = (PyObject *)pchain;
-			}
-			addr_location__exit(&al);
-		}
-	}
 	if (sample->branch_stack) {
 		struct branch_stack *bs = sample->branch_stack;
 		struct branch_entry *entries = perf_sample__branch_entries(sample);
