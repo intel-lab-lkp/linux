@@ -119,7 +119,8 @@ static void del_sa_roce_rule(struct list_head *macsec_devices_list,
 	struct mlx5_macsec_device *macsec_device;
 
 	macsec_device = get_macsec_device(data->macdev, macsec_devices_list);
-	WARN_ON(!macsec_device);
+	if (WARN_ON(!macsec_device))
+		return;
 
 	mlx5_macsec_del_roce_sa_rules(data->fs_id, data->macsec_fs,
 				      &macsec_device->tx_rules_list,
