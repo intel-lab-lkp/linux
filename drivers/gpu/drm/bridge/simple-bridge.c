@@ -158,11 +158,23 @@ static void simple_bridge_disable(struct drm_bridge *bridge,
 		regulator_disable(sbridge->vdd);
 }
 
+static int simple_bridge_atomic_check(struct drm_bridge *bridge,
+				      struct drm_bridge_state *bridge_state,
+				      struct drm_crtc_state *crtc_state,
+				      struct drm_connector_state *conn_state)
+{
+	if (bridge->timings)
+		bridge_state->input_bus_cfg.flags = bridge->timings->input_bus_flags;
+
+	return 0;
+}
+
 static const struct drm_bridge_funcs simple_bridge_bridge_funcs = {
 	.atomic_create_state = drm_atomic_helper_bridge_create_state,
 	.atomic_destroy_state = drm_atomic_helper_bridge_destroy_state,
 	.atomic_duplicate_state = drm_atomic_helper_bridge_duplicate_state,
 	.attach		= simple_bridge_attach,
+	.atomic_check = simple_bridge_atomic_check,
 	.atomic_enable = simple_bridge_enable,
 	.atomic_disable = simple_bridge_disable,
 };
