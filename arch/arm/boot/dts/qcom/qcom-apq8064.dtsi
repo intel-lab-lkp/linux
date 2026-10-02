@@ -281,9 +281,6 @@
 	replicator {
 		compatible = "arm,coresight-static-replicator";
 
-		clocks = <&rpmcc RPM_QDSS_CLK>;
-		clock-names = "apb_pclk";
-
 		in-ports {
 			port {
 				replicator_in: endpoint {
