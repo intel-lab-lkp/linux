@@ -1312,6 +1312,25 @@ config FUJITSU_ERRATUM_010001
 
 	  If unsure, say Y.
 
+config FUJITSU_ERRATUM_030001
+	bool "FUJITSU-MONAKA erratum E#030001: Range TLBI may fail to invalidate some entries"
+	depends on PAGE_SIZE_64KB
+	default y
+	help
+	  This option adds a workaround for FUJITSU-MONAKA erratum E#030001.
+	  On affected FUJITSU-MONAKA CPUs, range-based TLBI operation
+	  targeting a VA or IPA may fail to invalidate some TLB entries
+	  for 512MB mappings. The affected instructions are RVA[L]E{1,2,3}*,
+	  RVAA[L]E1*, and RIPAS2[L]E1*.
+
+	  Work around the erratum by issuing additional non-range TLBI
+	  instructions corresponding to the affected VA or IPA range-based
+	  TLBI operations.
+
+	  The erratum only affects the FUJITSU-MONAKA on 64k pagesize.
+
+	  If unsure, say Y.
+
 config HISILICON_ERRATUM_161600802
 	bool "Hip07 161600802: Erroneous redistributor VLPI base"
 	default y

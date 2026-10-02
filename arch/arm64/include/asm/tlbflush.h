@@ -487,6 +487,37 @@ static __always_inline void __tlbi_range(tlbi_op op, u64 addr,
 	op(arg);
 }
 
+#ifdef CONFIG_FUJITSU_ERRATUM_030001
+static inline void fujitsu_erratum_wa(tlbi_op lop, u64 start, u64 end, u16 asid)
+{
+	u64 addr;
+
+	if (!alternative_has_cap_unlikely(ARM64_WORKAROUND_FUJITSU_030001))
+		return;
+
+	/*
+	 * The erratum fails to invalidate TLBI entries in the range when
+	 * addr[34:29] == all 1 && addr[28:0] == all 0 for 512M hugepage.
+	 * However, since it cannot be determined reliably if the target
+	 * entry is hugepage or not here, always assume hugepage is used.
+	 * The workaround is to issue extra non-range TLBI ops corresponding
+	 * to the affected VA or IPA range-based ops in the range.
+	 */
+	addr = (start & GENMASK_ULL(63, 35)) | GENMASK_ULL(34, 29);
+	while (addr < end) {
+		__tlbi_level_asid(lop, addr, TLBI_TTL_UNKNOWN, asid);
+		if (addr + BIT_ULL(35) < addr)
+			/* overflow */
+			break;
+		addr += BIT_ULL(35);
+	}
+}
+#else
+static inline void fujitsu_erratum_wa(tlbi_op lop, u64 start, u64 end, u16 asid)
+{
+}
+#endif /* CONFIG_FUJITSU_ERRATUM_030001 */
+
 static __always_inline void __flush_tlb_range_op(tlbi_op lop, tlbi_op rop,
 						 u64 start, size_t pages,
 						 u64 stride, u16 asid,
@@ -518,6 +549,8 @@ invalidate_one:
 		__tlbi_level_asid(lop, addr, level, asid);
 		addr += stride;
 	}
+
+	fujitsu_erratum_wa(lop, start, end, asid);
 }
 
 #define __flush_s1_tlb_range_op(op, start, pages, stride, asid, tlb_level) \
