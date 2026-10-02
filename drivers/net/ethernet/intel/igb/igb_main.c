@@ -754,13 +754,13 @@ static void igb_write_ivar(struct e1000_hw *hw, int msix_vector,
 	array_wr32(E1000_IVAR0, index, ivar);
 }
 
-#define IGB_N0_QUEUE -1
+#define IGB_NO_QUEUE -1
 static void igb_assign_vector(struct igb_q_vector *q_vector, int msix_vector)
 {
 	struct igb_adapter *adapter = q_vector->adapter;
 	struct e1000_hw *hw = &adapter->hw;
-	int rx_queue = IGB_N0_QUEUE;
-	int tx_queue = IGB_N0_QUEUE;
+	int rx_queue = IGB_NO_QUEUE;
+	int tx_queue = IGB_NO_QUEUE;
 	u32 msixbm = 0;
 
 	if (q_vector->rx.ring)
@@ -775,9 +775,9 @@ static void igb_assign_vector(struct igb_q_vector *q_vector, int msix_vector)
 		 * or more queues to a vector, we write the appropriate bits
 		 * into the MSIXBM register for that vector.
 		 */
-		if (rx_queue > IGB_N0_QUEUE)
+		if (rx_queue > IGB_NO_QUEUE)
 			msixbm = E1000_EICR_RX_QUEUE0 << rx_queue;
-		if (tx_queue > IGB_N0_QUEUE)
+		if (tx_queue > IGB_NO_QUEUE)
 			msixbm |= E1000_EICR_TX_QUEUE0 << tx_queue;
 		if (!(adapter->flags & IGB_FLAG_HAS_MSIX) && msix_vector == 0)
 			msixbm |= E1000_EIMS_OTHER;
@@ -790,11 +790,11 @@ static void igb_assign_vector(struct igb_q_vector *q_vector, int msix_vector)
 		 * lower 3 bits as the row index, and the 4th bit as the
 		 * column offset.
 		 */
-		if (rx_queue > IGB_N0_QUEUE)
+		if (rx_queue > IGB_NO_QUEUE)
 			igb_write_ivar(hw, msix_vector,
 				       rx_queue & 0x7,
 				       (rx_queue & 0x8) << 1);
-		if (tx_queue > IGB_N0_QUEUE)
+		if (tx_queue > IGB_NO_QUEUE)
 			igb_write_ivar(hw, msix_vector,
 				       tx_queue & 0x7,
 				       ((tx_queue & 0x8) << 1) + 8);
@@ -811,11 +811,11 @@ static void igb_assign_vector(struct igb_q_vector *q_vector, int msix_vector)
 		 * bit 0 as the column offset, and the remaining bits as the
 		 * row index.
 		 */
-		if (rx_queue > IGB_N0_QUEUE)
+		if (rx_queue > IGB_NO_QUEUE)
 			igb_write_ivar(hw, msix_vector,
 				       rx_queue >> 1,
 				       (rx_queue & 0x1) << 4);
-		if (tx_queue > IGB_N0_QUEUE)
+		if (tx_queue > IGB_NO_QUEUE)
 			igb_write_ivar(hw, msix_vector,
 				       tx_queue >> 1,
 				       ((tx_queue & 0x1) << 4) + 8);
