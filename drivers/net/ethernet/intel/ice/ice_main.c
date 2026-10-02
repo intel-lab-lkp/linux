@@ -7583,13 +7583,13 @@ int ice_vsi_open(struct ice_vsi *vsi)
 
 	err = ice_vsi_cfg_lan(vsi);
 	if (err)
-		goto err_setup_rx;
+		goto err_stop_tx;
 
 	snprintf(int_name, sizeof(int_name) - 1, "%s-%s",
 		 dev_driver_string(ice_pf_to_dev(pf)), vsi->netdev->name);
 	err = ice_vsi_req_irq_msix(vsi, int_name);
 	if (err)
-		goto err_setup_rx;
+		goto err_stop_tx;
 
 	if (bitmap_empty(pf->txtime_txqs, pf->max_pf_txqs))
 		ice_vsi_cfg_netdev_tc(vsi, vsi->tc_cfg.ena_tc);
@@ -7615,8 +7615,14 @@ int ice_vsi_open(struct ice_vsi *vsi)
 
 err_up_complete:
 	ice_down(vsi);
+	ice_vsi_free_irq(vsi);
+	goto err_setup_rx;
 err_set_qs:
 	ice_vsi_free_irq(vsi);
+err_stop_tx:
+	ice_vsi_stop_lan_tx_rings(vsi, ICE_NO_RESET, 0);
+	if (vsi->xdp_rings)
+		ice_vsi_stop_xdp_tx_rings(vsi);
 err_setup_rx:
 	ice_vsi_free_rx_rings(vsi);
 err_setup_tx:
