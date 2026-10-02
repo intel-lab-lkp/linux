@@ -521,12 +521,20 @@ static void lowcomms_write_space(struct sock *sk)
 
 	sk_clear_nospace(sk);
 
-	spin_lock_bh(&con->writequeue_lock);
-	if (test_and_clear_bit(CF_APP_LIMITED, &con->flags))
-		con->sock->sk->sk_write_pending--;
-
-	lowcomms_queue_swork(con);
-	spin_unlock_bh(&con->writequeue_lock);
+	if (test_and_clear_bit(CF_APP_LIMITED, &con->flags)) {
+		/* signal to send again by clearing
+		 * CF_SEND_PENDING and queue swork.
+		 */
+		spin_lock_bh(&con->writequeue_lock);
+		clear_bit(CF_SEND_PENDING, &con->flags);
+		lowcomms_queue_swork(con);
+		spin_unlock_bh(&con->writequeue_lock);
+	} else {
+		/* CF_APP_LIMITED is cleared, so send_to_sock() will
+		 * simply reschedule work without hitting the
+		 * CF_APP_LIMITED path.
+		 */
+	}
 }
 
 static void lowcomms_state_change(struct sock *sk)
@@ -621,6 +629,23 @@ static void lowcomms_error_report(struct sock *sk)
 				   sk->sk_family, sk->sk_err,
 				   READ_ONCE(sk->sk_err_soft));
 		break;
+	}
+
+	/* if waiting on sk_write_space() and an sk_err occurs, the callback
+	 * won't fire. Clear CF_SEND_PENDING and if CF_APP_LIMITED was set
+	 * so resend tasks can re-queue swork, triggering a sendmsg() failure
+	 * to initiate reconnection.
+	 */
+	if (test_and_clear_bit(CF_APP_LIMITED, &con->flags)) {
+		spin_lock_bh(&con->writequeue_lock);
+		clear_bit(CF_SEND_PENDING, &con->flags);
+		/* dlm_midcomms_unack_msg_resend() does not always
+		 * trigger lowcomms_queue_swork() as it tries to
+		 * avoid to put pending messages into the lowcomms
+		 * sending buffer. Force it here again.
+		 */
+		lowcomms_queue_swork(con);
+		spin_unlock_bh(&con->writequeue_lock);
 	}
 
 	dlm_midcomms_unack_msg_resend(con->nodeid);
@@ -1391,18 +1416,19 @@ static int send_to_sock(struct connection *con)
 		spin_lock_bh(&con->writequeue_lock);
 		if (test_bit(SOCK_NOSPACE, &con->sock->flags) &&
 		    !test_and_set_bit(CF_APP_LIMITED, &con->flags)) {
-			con->sock->sk->sk_write_pending++;
-
-			clear_bit(CF_SEND_PENDING, &con->flags);
 			spin_unlock_bh(&con->writequeue_lock);
 			release_sock(con->sock->sk);
 
-			/* wait for write_space() event */
+			/* wait for sk_write_space() event */
 			return DLM_IO_END;
 		}
 		spin_unlock_bh(&con->writequeue_lock);
 		release_sock(con->sock->sk);
 
+		/* the sk_write_space() came in between sock_sendmsg()
+		 * and check on SOCK_NOSPACE and the socket became
+		 * writeable again so just resched swork.
+		 */
 		return DLM_IO_RESCHED;
 	} else if (ret < 0) {
 		return ret;
