@@ -661,17 +661,73 @@ static int pcan_usb_fd_decode_error(struct pcan_usb_fd_if *usb_if,
 	struct pucan_error_msg *er = (struct pucan_error_msg *)rx_msg;
 	struct pcan_usb_fd_device *pdev;
 	struct peak_usb_device *dev;
+	struct can_frame *cf;
+	struct sk_buff *skb;
+	u8 can_err_tx = 0;
 
 	if (pucan_ermsg_get_channel(er) >= ARRAY_SIZE(usb_if->dev))
 		return -EINVAL;
 
+	/* Guard against bogus channel 1 reports from single-channel adapters.
+	 * Treat the entire URB as invalid in that case.
+	 */
 	dev = usb_if->dev[pucan_ermsg_get_channel(er)];
+	if (!dev)
+		return -EINVAL;
+
 	pdev = container_of(dev, struct pcan_usb_fd_device, dev);
 
 	/* keep a trace of tx and rx error counters for later use */
 	pdev->bec.txerr = er->tx_err_cnt;
 	pdev->bec.rxerr = er->rx_err_cnt;
 
+	/* ignore non-CAN error notifications */
+	if (PUCAN_ERMSG_TYPE(er) > PUCAN_ERMSG_OTHER_ERROR)
+		return 0;
+
+	/* update other errors counters */
+	dev->can.can_stats.bus_error++;
+
+	if (PUCAN_ERMSG_RX(er)) {
+		dev->netdev->stats.rx_errors++;
+	} else {
+		dev->netdev->stats.tx_errors++;
+		can_err_tx = CAN_ERR_PROT_TX;
+	}
+
+	/* if berr-reporting is off, stop here */
+	if (!(dev->can.ctrlmode & CAN_CTRLMODE_BERR_REPORTING))
+		return 0;
+
+	/* otherwise, build the CAN_ERR_xxx frame */
+	skb = alloc_can_err_skb(dev->netdev, &cf);
+	if (!skb)
+		return -ENOMEM;
+
+	cf->can_id |= CAN_ERR_CNT | CAN_ERR_PROT | CAN_ERR_BUSERROR;
+	cf->data[2] |= can_err_tx;
+
+	switch (PUCAN_ERMSG_TYPE(er)) {
+	case PUCAN_ERMSG_BIT_ERROR:
+		cf->data[2] |= CAN_ERR_PROT_BIT;
+		break;
+	case PUCAN_ERMSG_FORM_ERROR:
+		cf->data[2] |= CAN_ERR_PROT_FORM;
+		break;
+	case PUCAN_ERMSG_STUFF_ERROR:
+		cf->data[2] |= CAN_ERR_PROT_STUFF;
+		break;
+	default:
+		break;
+	}
+
+	cf->data[3] = PUCAN_ERMSG_CODE(er);
+
+	cf->data[6] = pdev->bec.txerr;
+	cf->data[7] = pdev->bec.rxerr;
+
+	peak_usb_netif_rx_64(skb, le32_to_cpu(er->ts_low),
+			     le32_to_cpu(er->ts_high));
 	return 0;
 }
 
@@ -899,6 +955,7 @@ static int pcan_usb_fd_start(struct peak_usb_device *dev)
 {
 	struct pcan_usb_fd_device *pdev =
 			container_of(dev, struct pcan_usb_fd_device, dev);
+	u16 usb_opts = 0;
 	int err;
 
 	/* set filter mode: all acceptance */
@@ -912,11 +969,16 @@ static int pcan_usb_fd_start(struct peak_usb_device *dev)
 		peak_usb_init_time_ref(&pdev->usb_if->time_ref,
 				       &pcan_usb_pro_fd);
 
-		/* enable USB calibration messages */
-		err = pcan_usb_fd_set_options(dev, 1,
-					      PUCAN_OPTION_ERROR,
-					      PCAN_UFD_FLTEXT_CALIBRATION);
+		/* enable USB calibration messages (needed only once for the
+		 * entire interface)
+		 */
+		usb_opts |= PCAN_UFD_FLTEXT_CALIBRATION;
 	}
+
+	/* set channel device options: always asks for bus error notifications
+	 * to get (at least) rxerr/txerr, as well as any USB-specific option.
+	 */
+	err = pcan_usb_fd_set_options(dev, 1, PUCAN_OPTION_ERROR, usb_opts);
 
 	pdev->usb_if->dev_opened_count++;
 
@@ -955,12 +1017,15 @@ static int pcan_usb_fd_stop(struct peak_usb_device *dev)
 {
 	struct pcan_usb_fd_device *pdev =
 			container_of(dev, struct pcan_usb_fd_device, dev);
+	u16 usb_opts = 0;
 
 	/* turn off special msgs for that interface if no other dev opened */
 	if (pdev->usb_if->dev_opened_count == 1)
-		pcan_usb_fd_set_options(dev, 0,
-					PUCAN_OPTION_ERROR,
-					PCAN_UFD_FLTEXT_CALIBRATION);
+		usb_opts |= PCAN_UFD_FLTEXT_CALIBRATION;
+
+	/* turn off bus error option, as well as any USB-specific options */
+	pcan_usb_fd_set_options(dev, 0, PUCAN_OPTION_ERROR, usb_opts);
+
 	pdev->usb_if->dev_opened_count--;
 
 	return 0;
@@ -1201,6 +1266,7 @@ const struct peak_usb_adapter pcan_usb_fd = {
 	.ctrlmode_supported = CAN_CTRLMODE_LISTENONLY |
 			      CAN_CTRLMODE_3_SAMPLES |
 			      CAN_CTRLMODE_ONE_SHOT |
+			      CAN_CTRLMODE_BERR_REPORTING |
 			      CAN_CTRLMODE_FD |
 			      CAN_CTRLMODE_CC_LEN8_DLC,
 	.clock = {
@@ -1279,6 +1345,7 @@ const struct peak_usb_adapter pcan_usb_chip = {
 	.ctrlmode_supported = CAN_CTRLMODE_LISTENONLY |
 			      CAN_CTRLMODE_3_SAMPLES |
 			      CAN_CTRLMODE_ONE_SHOT |
+			      CAN_CTRLMODE_BERR_REPORTING |
 			      CAN_CTRLMODE_FD |
 			      CAN_CTRLMODE_CC_LEN8_DLC,
 	.clock = {
@@ -1357,6 +1424,7 @@ const struct peak_usb_adapter pcan_usb_pro_fd = {
 	.ctrlmode_supported = CAN_CTRLMODE_LISTENONLY |
 			      CAN_CTRLMODE_3_SAMPLES |
 			      CAN_CTRLMODE_ONE_SHOT |
+			      CAN_CTRLMODE_BERR_REPORTING |
 			      CAN_CTRLMODE_FD |
 			      CAN_CTRLMODE_CC_LEN8_DLC,
 	.clock = {
@@ -1435,6 +1503,7 @@ const struct peak_usb_adapter pcan_usb_x6 = {
 	.ctrlmode_supported = CAN_CTRLMODE_LISTENONLY |
 			      CAN_CTRLMODE_3_SAMPLES |
 			      CAN_CTRLMODE_ONE_SHOT |
+			      CAN_CTRLMODE_BERR_REPORTING |
 			      CAN_CTRLMODE_FD |
 			      CAN_CTRLMODE_CC_LEN8_DLC,
 	.clock = {
