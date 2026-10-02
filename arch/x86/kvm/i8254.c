@@ -793,6 +793,7 @@ fail_register_speaker:
 fail_register_pit:
 	mutex_unlock(&kvm->slots_lock);
 	kvm_pit_set_reinject(pit, false);
+	hrtimer_cancel(&pit->pit_state.timer);
 	kthread_destroy_worker(pit->worker);
 fail_kthread:
 	kfree(pit);
