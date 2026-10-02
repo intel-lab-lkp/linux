@@ -93,7 +93,7 @@ static int store_password_instance(struct kobject *kobj, const char *buf,
 	char *buf_cp;
 	int id, ret = 0;
 
-	buf_cp = kstrdup(buf, GFP_KERNEL);
+	buf_cp = kmemdup_nul(buf, count, GFP_KERNEL);
 	if (!buf_cp)
 		return -ENOMEM;
 

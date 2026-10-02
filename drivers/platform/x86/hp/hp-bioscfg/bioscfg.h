@@ -326,7 +326,7 @@ enum hp_wmi_data_elements {
 		int i;							\
 		int ret = -EIO;						\
 									\
-		attr_value = kstrdup(buf, GFP_KERNEL);			\
+		attr_value = kmemdup_nul(buf, count, GFP_KERNEL);	\
 		if (!attr_value)					\
 			return -ENOMEM;					\
 									\
