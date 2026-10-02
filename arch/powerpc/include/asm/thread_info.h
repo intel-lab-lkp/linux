@@ -52,8 +52,9 @@
  * low level task data.
  */
 struct thread_info {
-	int		preempt_count;		/* 0 => preemptable,
-						   <0 => BUG */
+#ifndef CONFIG_PPC64
+	int		preempt_count;
+#endif
 #ifdef CONFIG_SMP
 	unsigned int	cpu;
 #endif
@@ -74,12 +75,19 @@ struct thread_info {
 	unsigned long	flags ____cacheline_aligned_in_smp;
 };
 
+#ifdef CONFIG_PPC64
+#define INIT_THREAD_INFO_PREEMPT_COUNT
+#else
+#define INIT_THREAD_INFO_PREEMPT_COUNT \
+	.preempt_count = INIT_PREEMPT_COUNT,
+#endif
+
 /*
  * macros/functions for gaining access to the thread information structure
  */
 #define INIT_THREAD_INFO(tsk)			\
 {						\
-	.preempt_count = INIT_PREEMPT_COUNT,	\
+	INIT_THREAD_INFO_PREEMPT_COUNT		\
 	.flags =	0,			\
 }
 

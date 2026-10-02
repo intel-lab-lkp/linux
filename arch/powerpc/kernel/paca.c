@@ -200,6 +200,7 @@ void __init initialise_paca(struct paca_struct *new_paca, int cpu)
 	new_paca->hw_cpu_id = 0xffff;
 	new_paca->kexec_state = KEXEC_STATE_NONE;
 	new_paca->__current = &init_task;
+	new_paca->preempt_count = PREEMPT_DISABLED;
 	new_paca->data_offset = 0xfeeeeeeeeeeeeeeeULL;
 #ifdef CONFIG_PPC_64S_HASH_MMU
 	new_paca->slb_shadow_ptr = NULL;
