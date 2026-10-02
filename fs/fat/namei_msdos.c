@@ -441,6 +441,8 @@ static int do_msdos_rename(struct inode *old_dir, unsigned char *old_name,
 	struct fat_slot_info old_sinfo, sinfo;
 	struct timespec64 ts;
 	loff_t new_i_pos;
+	bool dotdot_in_old_bh, new_in_old_bh;
+	bool new_bh_failed = false;
 	int err, old_attrs, is_dir, update_dotdot, corrupt = 0;
 
 	old_sinfo.bh = sinfo.bh = dotdot_bh = NULL;
@@ -532,14 +534,20 @@ static int do_msdos_rename(struct inode *old_dir, unsigned char *old_name,
 				      &MSDOS_I(old_inode)->i_metadata_bhs);
 		if (IS_DIRSYNC(new_dir)) {
 			err = sync_dirty_buffer(dotdot_bh);
-			if (err)
-				goto error_dotdot;
+			if (err) {
+				corrupt = err;
+				new_bh_failed = sinfo.bh == dotdot_bh;
+				goto error_inode;
+			}
 		}
 		drop_nlink(old_dir);
 		if (!new_inode)
 			inc_nlink(new_dir);
 	}
 
+	/* Remember aliases before fat_remove_entries() releases the buffer. */
+	dotdot_in_old_bh = dotdot_bh == old_sinfo.bh;
+	new_in_old_bh = sinfo.bh == old_sinfo.bh;
 	err = fat_remove_entries(old_dir, &old_sinfo);	/* and releases bh */
 	old_sinfo.bh = NULL;
 	if (err)
@@ -564,12 +572,22 @@ out:
 error_dotdot:
 	/* data cluster is shared, serious corruption */
 	corrupt = 1;
+	if (dotdot_in_old_bh || new_in_old_bh) {
+		/* Give up rollback on the buffer whose write failed. */
+		corrupt = err;
+		new_bh_failed = new_in_old_bh;
+	}
 
-	if (update_dotdot) {
+	if (update_dotdot && !dotdot_in_old_bh) {
+		int dotdot_err;
+
 		fat_set_start(dotdot_de, MSDOS_I(old_dir)->i_logstart);
 		mmb_mark_buffer_dirty(dotdot_bh,
 				      &MSDOS_I(old_inode)->i_metadata_bhs);
-		corrupt |= sync_dirty_buffer(dotdot_bh);
+		dotdot_err = sync_dirty_buffer(dotdot_bh);
+		corrupt |= dotdot_err;
+		if (dotdot_err && sinfo.bh == dotdot_bh)
+			new_bh_failed = true;
 	}
 error_inode:
 	fat_detach(old_inode);
@@ -581,7 +599,7 @@ error_inode:
 			mark_inode_dirty(new_inode);
 			corrupt |= sync_inode_metadata(new_inode, 1);
 		}
-	} else {
+	} else if (!new_bh_failed) {
 		/*
 		 * If new entry was not sharing the data cluster, it
 		 * shouldn't be serious corruption.

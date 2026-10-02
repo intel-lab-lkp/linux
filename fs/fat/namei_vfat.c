@@ -938,6 +938,8 @@ static int vfat_rename(struct inode *old_dir, struct dentry *old_dentry,
 	struct fat_slot_info old_sinfo, sinfo;
 	struct timespec64 ts;
 	loff_t new_i_pos;
+	bool dotdot_in_old_bh, new_in_old_bh;
+	bool new_bh_failed = false;
 	int err, is_dir, corrupt = 0;
 	struct super_block *sb = old_dir->i_sb;
 
@@ -983,13 +985,19 @@ static int vfat_rename(struct inode *old_dir, struct dentry *old_dentry,
 	if (dotdot_de) {
 		err = vfat_update_dotdot_de(new_dir, old_inode, dotdot_bh,
 					    dotdot_de);
-		if (err)
-			goto error_dotdot;
+		if (err) {
+			corrupt = err;
+			new_bh_failed = sinfo.bh == dotdot_bh;
+			goto error_inode;
+		}
 		drop_nlink(old_dir);
 		if (!new_inode)
  			inc_nlink(new_dir);
 	}
 
+	/* Remember aliases before fat_remove_entries() releases the buffer. */
+	dotdot_in_old_bh = dotdot_bh == old_sinfo.bh;
+	new_in_old_bh = sinfo.bh == old_sinfo.bh;
 	err = fat_remove_entries(old_dir, &old_sinfo);	/* and releases bh */
 	old_sinfo.bh = NULL;
 	if (err)
@@ -1012,10 +1020,19 @@ out:
 error_dotdot:
 	/* data cluster is shared, serious corruption */
 	corrupt = 1;
+	if (dotdot_in_old_bh || new_in_old_bh) {
+		/* Give up rollback on the buffer whose write failed. */
+		corrupt = err;
+		new_bh_failed = new_in_old_bh;
+	}
 
-	if (dotdot_de) {
-		corrupt |= vfat_update_dotdot_de(old_dir, old_inode, dotdot_bh,
-						 dotdot_de);
+	if (dotdot_de && !dotdot_in_old_bh) {
+		int dotdot_err = vfat_update_dotdot_de(old_dir, old_inode,
+						       dotdot_bh, dotdot_de);
+
+		corrupt |= dotdot_err;
+		if (dotdot_err && sinfo.bh == dotdot_bh)
+			new_bh_failed = true;
 	}
 error_inode:
 	fat_detach(old_inode);
@@ -1026,7 +1043,7 @@ error_inode:
 			mark_inode_dirty(new_inode);
 			corrupt |= sync_inode_metadata(new_inode, 1);
 		}
-	} else {
+	} else if (!new_bh_failed) {
 		/*
 		 * If new entry was not sharing the data cluster, it
 		 * shouldn't be serious corruption.
@@ -1105,14 +1122,18 @@ static int vfat_rename_exchange(struct inode *old_dir, struct dentry *old_dentry
 	if (old_dotdot_de) {
 		err = vfat_update_dotdot_de(new_dir, old_inode, old_dotdot_bh,
 					    old_dotdot_de);
-		if (err)
-			goto error_old_dotdot;
+		if (err) {
+			corrupt = err;
+			goto error_exchange;
+		}
 	}
 	if (new_dotdot_de) {
 		err = vfat_update_dotdot_de(old_dir, new_inode, new_dotdot_bh,
 					    new_dotdot_de);
-		if (err)
-			goto error_new_dotdot;
+		if (err) {
+			corrupt = err;
+			goto error_old_dotdot;
+		}
 	}
 
 	/* if cross directory and only one is a directory, adjust nlink */
@@ -1135,14 +1156,9 @@ out:
 
 	return err;
 
-error_new_dotdot:
-	if (new_dotdot_de) {
-		corrupt |= vfat_update_dotdot_de(new_dir, new_inode,
-						 new_dotdot_bh, new_dotdot_de);
-	}
-
 error_old_dotdot:
-	if (old_dotdot_de) {
+	/* Both entries may share the buffer whose write failed. */
+	if (old_dotdot_de && old_dotdot_bh != new_dotdot_bh) {
 		corrupt |= vfat_update_dotdot_de(old_dir, old_inode,
 						 old_dotdot_bh, old_dotdot_de);
 	}
