@@ -3840,6 +3840,9 @@ static void task_tick_scx(struct rq *rq, struct task_struct *curr, int queued)
 
 	if (!curr->scx.slice)
 		resched_curr(rq);
+
+	if (!queued && static_branch_unlikely(&sched_numa_balancing))
+		task_tick_numa(rq, curr);
 }
 
 #ifdef CONFIG_EXT_GROUP_SCHED

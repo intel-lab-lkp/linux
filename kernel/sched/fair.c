@@ -3642,6 +3642,14 @@ static void numa_migrate_preferred(struct task_struct *p)
 	if (task_node(p) == p->numa_preferred_nid)
 		return;
 
+	/*
+	 * CPU selection for SCX tasks belongs to the BPF scheduler, which can
+	 * act on p->numa_preferred_nid itself. The statistics used below only
+	 * describe fair tasks anyway.
+	 */
+	if (task_on_scx(p))
+		return;
+
 	/* Otherwise, try migrate to a CPU on the preferred node */
 	task_numa_migrate(p);
 }
@@ -4630,7 +4638,7 @@ void init_numa_balancing(u64 clone_flags, struct task_struct *p)
 /*
  * Drive the periodic memory faults..
  */
-static void task_tick_numa(struct rq *rq, struct task_struct *curr)
+void task_tick_numa(struct rq *rq, struct task_struct *curr)
 {
 	struct callback_head *work = &curr->numa_work;
 	u64 period, now;
@@ -4695,10 +4703,6 @@ static void update_scan_period(struct task_struct *p, int new_cpu)
 }
 
 #else /* !CONFIG_NUMA_BALANCING: */
-
-static void task_tick_numa(struct rq *rq, struct task_struct *curr)
-{
-}
 
 static inline void account_numa_enqueue(struct rq *rq, struct task_struct *p)
 {
