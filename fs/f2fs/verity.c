@@ -45,18 +45,21 @@ static int pagecache_read(struct inode *inode, void *buf, size_t count,
 			  loff_t pos)
 {
 	while (count) {
-		size_t n = min_t(size_t, count,
-				 PAGE_SIZE - offset_in_page(pos));
-		struct page *page;
+		struct folio *folio;
+		size_t n;
 
-		page = read_mapping_page(inode->i_mapping, pos >> PAGE_SHIFT,
-					 NULL);
-		if (IS_ERR(page))
-			return PTR_ERR(page);
+		folio = read_mapping_folio(inode->i_mapping, pos >> PAGE_SHIFT,
+					NULL);
 
-		memcpy_from_page(buf, page, offset_in_page(pos), n);
+		if (IS_ERR(folio))
+			return PTR_ERR(folio);
 
-		put_page(page);
+		n = min_t(size_t, count,
+				 folio_size(folio) - offset_in_folio(folio, pos));
+
+		memcpy_from_folio(buf, folio, offset_in_folio(folio, pos), n);
+
+		folio_put(folio);
 
 		buf += n;
 		pos += n;
