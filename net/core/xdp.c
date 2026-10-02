@@ -709,7 +709,7 @@ static noinline bool xdp_copy_frags_from_zc(struct sk_buff *skb,
 		}
 
 		memcpy(page_address(page) + offset, skb_frag_address(frag),
-		       LARGEST_ALIGN(len));
+		       len);
 		__skb_fill_page_desc_noacc(sinfo, i, page, offset, len);
 
 		tsize += truesize;
@@ -738,15 +738,21 @@ static noinline bool xdp_copy_frags_from_zc(struct sk_buff *skb,
  */
 struct sk_buff *xdp_build_skb_from_zc(struct xdp_buff *xdp)
 {
+	u32 headroom = xdp->data_meta - xdp->data_hard_start;
 	const struct xdp_rxq_info *rxq = xdp->rxq;
 	u32 len = xdp->data_end - xdp->data_meta;
-	u32 truesize = xdp->frame_sz;
 	struct sk_buff *skb = NULL;
 	struct page_pool *pp;
+	u32 truesize;
 	int metalen;
 	void *data;
 
 	if (!IS_ENABLED(CONFIG_PAGE_POOL))
+		return NULL;
+
+	/* The XSK frame size leaves no room for skb_shared_info. */
+	truesize = SKB_HEAD_ALIGN(headroom + len);
+	if (unlikely(truesize > PAGE_SIZE))
 		return NULL;
 
 	local_lock_nested_bh(&system_page_pool.bh_lock);
@@ -762,9 +768,9 @@ struct sk_buff *xdp_build_skb_from_zc(struct xdp_buff *xdp)
 	}
 
 	skb_mark_for_recycle(skb);
-	skb_reserve(skb, xdp->data_meta - xdp->data_hard_start);
+	skb_reserve(skb, headroom);
 
-	memcpy(__skb_put(skb, len), xdp->data_meta, LARGEST_ALIGN(len));
+	memcpy(__skb_put(skb, len), xdp->data_meta, len);
 
 	metalen = xdp->data - xdp->data_meta;
 	if (metalen > 0) {
