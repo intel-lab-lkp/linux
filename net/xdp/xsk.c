@@ -50,10 +50,15 @@ static struct kmem_cache *xsk_tx_generic_cache;
 
 void xsk_set_rx_need_wakeup(struct xsk_buff_pool *pool)
 {
+	struct xsk_queue *fq = READ_ONCE(pool->fq);
+
+	if (!fq)
+		return;
+
 	if (pool->cached_need_wakeup & XDP_WAKEUP_RX)
 		return;
 
-	pool->fq->ring->flags |= XDP_RING_NEED_WAKEUP;
+	fq->ring->flags |= XDP_RING_NEED_WAKEUP;
 	pool->cached_need_wakeup |= XDP_WAKEUP_RX;
 }
 EXPORT_SYMBOL(xsk_set_rx_need_wakeup);
@@ -77,10 +82,15 @@ EXPORT_SYMBOL(xsk_set_tx_need_wakeup);
 
 void xsk_clear_rx_need_wakeup(struct xsk_buff_pool *pool)
 {
+	struct xsk_queue *fq = READ_ONCE(pool->fq);
+
+	if (!fq)
+		return;
+
 	if (!(pool->cached_need_wakeup & XDP_WAKEUP_RX))
 		return;
 
-	pool->fq->ring->flags &= ~XDP_RING_NEED_WAKEUP;
+	fq->ring->flags &= ~XDP_RING_NEED_WAKEUP;
 	pool->cached_need_wakeup &= ~XDP_WAKEUP_RX;
 }
 EXPORT_SYMBOL(xsk_clear_rx_need_wakeup);
