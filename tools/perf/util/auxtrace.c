@@ -2978,6 +2978,13 @@ int auxtrace__flush_events(struct perf_session *session, const struct perf_tool 
 	if (!session->auxtrace)
 		return 0;
 
+	/*
+	 * Processing was stopped early, e.g. by SIGINT, so don't decode and
+	 * deliver the remaining trace data which can be slow.
+	 */
+	if (session_done())
+		return 0;
+
 	return session->auxtrace->flush_events(session, tool);
 }
 

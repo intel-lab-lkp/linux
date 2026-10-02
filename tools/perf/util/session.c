@@ -2018,6 +2018,14 @@ static int session__flush_deferred_samples(struct perf_session *session,
 		struct perf_sample sample;
 		struct evsel *new_evsel;
 
+		if (session_done()) {
+			/* Processing was stopped early, discard the sample. */
+			list_del(&de->list);
+			free(de->event);
+			free(de);
+			continue;
+		}
+
 		perf_sample__init(&sample, /*all=*/false);
 		ret = evlist__parse_sample(evlist, de->event, &sample);
 		if (ret < 0) {
