@@ -12,9 +12,17 @@
 #include <linux/mutex.h>
 #include <linux/spinlock.h>
 #include <linux/mm.h>
+#include <net/netmem.h>
 #include <net/sock.h>
 
 #define XDP_UMEM_SG_FLAG BIT(3)
+
+/* Bound both one maximum-SG packet and single-buffer release batching. */
+#if MAX_SKB_FRAGS < 31
+#define XSK_PP_RELEASE_BATCH 32
+#else
+#define XSK_PP_RELEASE_BATCH (MAX_SKB_FRAGS + 1)
+#endif
 
 struct net_device;
 struct xsk_queue;
@@ -61,6 +69,8 @@ struct xdp_sock {
 		XSK_BOUND,
 		XSK_UNBOUND,
 	} state;
+	u32 pp_release_cnt;
+	netmem_ref pp_release[XSK_PP_RELEASE_BATCH];
 
 	struct xsk_queue *tx ____cacheline_aligned_in_smp;
 	struct list_head tx_list;

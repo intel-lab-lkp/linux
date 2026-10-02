@@ -30,6 +30,7 @@
 #include <net/busy_poll.h>
 #include <net/netdev_lock.h>
 #include <net/netdev_rx_queue.h>
+#include <net/page_pool/memory_provider.h>
 #include <net/xdp.h>
 
 #include "../core/dev.h"
@@ -267,6 +268,157 @@ err:
 	return err;
 }
 
+static bool xsk_pp_can_xfer(struct xsk_buff_pool *pool, netmem_ref *netmems,
+			    u32 count)
+{
+	u32 i;
+
+	if (WARN_ON_ONCE(!count || count > MAX_SKB_FRAGS + 1))
+		return false;
+
+	for (i = 0; i < count; i++)
+		if (!xp_netmem_is_from_pool(netmems[i], pool))
+			return false;
+
+	return true;
+}
+
+static void xsk_pp_release_to_user_bulk(netmem_ref *netmems, u32 count)
+{
+	struct page_pool *pp, *next;
+	u32 first = 0, i;
+
+	if (WARN_ON_ONCE(!count || count > XSK_PP_RELEASE_BATCH))
+		return;
+
+	/* One poll of one queue fills the batch, so it normally shares a
+	 * page pool. Split it where a queue replacement changed the pool.
+	 */
+	pp = netmem_get_pp(netmems[0]);
+	for (i = 1; i < count; i++) {
+		next = netmem_get_pp(netmems[i]);
+		if (next == pp)
+			continue;
+
+		net_mp_release_page_pool_bulk(pp, netmems + first, i - first);
+		pp = next;
+		first = i;
+	}
+	net_mp_release_page_pool_bulk(pp, netmems + first, count - first);
+}
+
+static void xsk_pp_flush(struct xdp_sock *xs)
+{
+	u32 count = xs->pp_release_cnt;
+
+	if (!count)
+		return;
+
+	/* Provider descriptors are the tail of the unpublished RX entries. */
+	xsk_pp_release_to_user_bulk(xs->pp_release, count);
+	xs->pp_release_cnt = 0;
+}
+
+static void xsk_pp_release(struct xdp_sock *xs, netmem_ref netmem)
+{
+	xs->pp_release[xs->pp_release_cnt++] = netmem;
+}
+
+static void xsk_rcv_pp_zc_desc(struct xdp_sock *xs, netmem_ref netmem,
+			       void *data, u32 len, u32 flags)
+{
+	__xskq_prod_reserve_desc(xs->rx, data - xs->pool->addrs, len, flags);
+	xsk_pp_release(xs, netmem);
+}
+
+static __always_inline int xsk_rcv_pp_zc_one(struct xdp_sock *xs,
+					     struct xdp_buff *xdp, u32 len)
+{
+	netmem_ref netmem = xdp_buff_get_netmem(xdp);
+
+	if (xskq_prod_nb_free(xs->rx, 1) < 1) {
+		xs->rx_queue_full++;
+		return -ENOBUFS;
+	}
+	if (unlikely(xs->pp_release_cnt == XSK_PP_RELEASE_BATCH)) {
+		xsk_pp_flush(xs);
+		xskq_prod_submit(xs->rx);
+	}
+
+	__xskq_prod_reserve_desc(xs->rx, xdp->data - xs->pool->addrs, len, 0);
+	xsk_pp_release(xs, netmem);
+	return 0;
+}
+
+static noinline int xsk_rcv_pp_zc_sg(struct xdp_sock *xs,
+				     struct xdp_buff *xdp, u32 nr_frags)
+{
+	netmem_ref netmems[MAX_SKB_FRAGS + 1];
+	struct skb_shared_info *sinfo;
+	u32 num_desc;
+	u32 flags;
+	u32 len;
+	u32 i;
+
+	BUILD_BUG_ON(MAX_SKB_FRAGS + 1 > XSK_PP_RELEASE_BATCH);
+
+	if (xs->pp_release_cnt) {
+		xsk_pp_flush(xs);
+		xskq_prod_submit(xs->rx);
+	}
+
+	sinfo = xdp_get_shared_info_from_buff(xdp);
+	num_desc = nr_frags + 1;
+	netmems[0] = xdp_buff_get_netmem(xdp);
+	for (i = 0; i < nr_frags; i++)
+		netmems[i + 1] = skb_frag_netmem(&sinfo->frags[i]);
+
+	if (xskq_prod_nb_free(xs->rx, num_desc) < num_desc) {
+		xs->rx_queue_full++;
+		return -ENOBUFS;
+	}
+	if (!xsk_pp_can_xfer(xs->pool, netmems, num_desc))
+		return -EXDEV;
+
+	len = xdp->data_end - xdp->data;
+	flags = XDP_PKT_CONTD;
+	xsk_rcv_pp_zc_desc(xs, netmems[0], xdp->data, len, flags);
+
+	for (i = 0; i < nr_frags; i++) {
+		const skb_frag_t *frag = &sinfo->frags[i];
+		void *data = xdp_frag_address(frag);
+
+		if (i == nr_frags - 1)
+			flags = 0;
+
+		xsk_rcv_pp_zc_desc(xs, netmems[i + 1], data,
+				   skb_frag_size(frag),
+				   flags);
+	}
+	xsk_pp_flush(xs);
+	xskq_prod_submit(xs->rx);
+
+	return 0;
+}
+
+static int xsk_rcv_pp_zc(struct xdp_sock *xs, struct xdp_buff *xdp, u32 len)
+{
+	u32 nr_frags;
+
+	if (likely(!xdp_buff_has_frags(xdp)))
+		return xsk_rcv_pp_zc_one(xs, xdp, len);
+	if (unlikely(!xs->sg)) {
+		xs->rx_dropped++;
+		return -ENOSPC;
+	}
+
+	nr_frags = READ_ONCE(xdp_get_shared_info_from_buff(xdp)->nr_frags);
+	if (unlikely(!nr_frags || nr_frags > MAX_SKB_FRAGS))
+		return -EINVAL;
+
+	return xsk_rcv_pp_zc_sg(xs, xdp, nr_frags);
+}
+
 static void *xsk_copy_xdp_start(struct xdp_buff *from)
 {
 	if (unlikely(xdp_data_meta_unsupported(from)))
@@ -289,7 +441,7 @@ static u32 xsk_copy_xdp(void *to, void **from, u32 to_len,
 			return copied;
 
 		if (*from_len == copy_len) {
-			*from = skb_frag_address(*frag);
+			*from = xdp_frag_address(*frag);
 			*from_len = skb_frag_size((*frag)++);
 		} else {
 			*from += copy_len;
@@ -461,12 +613,18 @@ static int xsk_rcv_check(struct xdp_sock *xs, struct xdp_buff *xdp, u32 len)
 	return 0;
 }
 
-static void xsk_flush(struct xdp_sock *xs)
+static void __xsk_flush(struct xdp_sock *xs)
 {
+	xsk_pp_flush(xs);
 	xskq_prod_submit(xs->rx);
 	/* Provider pools publish FILL consumption under the provider lock. */
 	if (!READ_ONCE(xs->pool->pp))
 		__xskq_cons_release(xs->pool->fq);
+}
+
+static void xsk_flush(struct xdp_sock *xs)
+{
+	__xsk_flush(xs);
 	sock_def_readable(&xs->sk);
 }
 
@@ -485,8 +643,9 @@ int xsk_generic_rcv(struct xdp_sock *xs, struct xdp_buff *xdp)
 		return -EOPNOTSUPP;
 	}
 	err = __xsk_rcv(xs, xdp, len);
-	xsk_flush(xs);
+	__xsk_flush(xs);
 	spin_unlock_bh(&xs->pool->rx_lock);
+	sock_def_readable(&xs->sk);
 
 	return err;
 }
@@ -520,8 +679,30 @@ static int xsk_rcv(struct xdp_sock *xs, struct xdp_buff *xdp)
 		return err;
 
 	if (xdp->rxq->mem.type == MEM_TYPE_XSK_BUFF_POOL) {
+		if (unlikely(xs->pp_release_cnt)) {
+			xsk_pp_flush(xs);
+			xskq_prod_submit(xs->rx);
+		}
 		len = xdp->data_end - xdp->data;
 		return xsk_rcv_zc(xs, xdp, len);
+	}
+	if (xdp->rxq->mem.type == MEM_TYPE_PAGE_POOL &&
+	    xdp_buff_has_netmem(xdp) &&
+	    xp_netmem_is_from_pool(xdp_buff_get_netmem(xdp), xs->pool)) {
+		err = xsk_rcv_pp_zc(xs, xdp, len);
+		if (err != -EXDEV)
+			return err;
+
+		/* The redirect originates from this pool's registered RXQ, so
+		 * the copy fallback produces into the socket RX ring from the
+		 * same poll context as zero-copy delivery.
+		 */
+		xsk_pp_flush(xs);
+		xskq_prod_submit(xs->rx);
+		err = xsk_rcv_copy(xs, xdp, len);
+		if (!err)
+			xdp_return_buff(xdp);
+		return err;
 	}
 
 	/* The socket RX ring has a single producer, the queue's poll context.
@@ -532,6 +713,10 @@ static int xsk_rcv(struct xdp_sock *xs, struct xdp_buff *xdp)
 		     !xdp_rxq_info_is_reg(xdp->rxq)))
 		return -EINVAL;
 
+	if (unlikely(xs->pp_release_cnt)) {
+		xsk_pp_flush(xs);
+		xskq_prod_submit(xs->rx);
+	}
 	err = xsk_rcv_copy(xs, xdp, len);
 	if (!err)
 		xdp_return_buff(xdp);
