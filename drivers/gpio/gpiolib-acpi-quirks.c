@@ -345,6 +345,22 @@ static const struct dmi_system_id gpiolib_acpi_quirks[] __initconst = {
 	},
 	{
 		/*
+		 * GPIO 11 is the power enable of the internal USB camera.
+		 * The firmware drives it high but also lists it in _AEI with
+		 * an empty handler. Requesting it as an input turns the camera
+		 * off, so it never enumerates.
+		 * Found in BIOS V1.14
+		 */
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Acer"),
+			DMI_MATCH(DMI_PRODUCT_FAMILY, "Acer Nitro V 16S AI"),
+		},
+		.driver_data = &(struct acpi_gpiolib_dmi_quirk) {
+			.ignore_interrupt = "AMDI0030:00@11",
+		},
+	},
+	{
+		/*
 		 * Wakeup only works when keyboard backlight is turned off
 		 * https://gitlab.freedesktop.org/drm/amd/-/issues/4169
 		 */
