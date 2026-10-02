@@ -150,7 +150,8 @@ int hfsplus_ext_write_extent(struct inode *inode)
 {
 	int res;
 
-	mutex_lock(&HFSPLUS_I(inode)->extents_lock);
+	mutex_lock_nested(&HFSPLUS_I(inode)->extents_lock,
+			  hfsplus_lock_class(inode->i_ino));
 	res = hfsplus_ext_write_extent_locked(inode);
 	mutex_unlock(&HFSPLUS_I(inode)->extents_lock);
 
@@ -261,7 +262,8 @@ int hfsplus_get_block(struct inode *inode, sector_t iblock,
 	if (inode->i_ino == HFSPLUS_EXT_CNID)
 		return -EIO;
 
-	mutex_lock(&hip->extents_lock);
+	mutex_lock_nested(&hip->extents_lock,
+			  hfsplus_lock_class(inode->i_ino));
 
 	/*
 	 * hfsplus_ext_read_extent will write out a cached extent into
@@ -430,7 +432,7 @@ int hfsplus_free_fork(struct super_block *sb, u32 cnid,
 				     total_blocks);
 		total_blocks = start;
 		mutex_lock_nested(&fd.tree->tree_lock,
-			hfsplus_btree_lock_class(fd.tree));
+			hfsplus_lock_class(fd.tree->cnid));
 	} while (total_blocks > blocks);
 	hfs_find_exit(&fd);
 
@@ -454,7 +456,8 @@ int hfsplus_file_extend(struct inode *inode, bool zeroout)
 		return -ENOSPC;
 	}
 
-	mutex_lock(&hip->extents_lock);
+	mutex_lock_nested(&hip->extents_lock,
+			  hfsplus_lock_class(inode->i_ino));
 	if (hip->alloc_blocks == hip->first_blocks)
 		goal = hfsplus_ext_lastblock(hip->first_extents);
 	else {
@@ -576,7 +579,8 @@ void hfsplus_file_truncate(struct inode *inode)
 	blk_cnt = (inode->i_size + HFSPLUS_SB(sb)->alloc_blksz - 1) >>
 			HFSPLUS_SB(sb)->alloc_blksz_shift;
 
-	mutex_lock(&hip->extents_lock);
+	mutex_lock_nested(&hip->extents_lock,
+			  hfsplus_lock_class(inode->i_ino));
 
 	alloc_cnt = hip->alloc_blocks;
 	if (blk_cnt == alloc_cnt)
@@ -597,7 +601,7 @@ void hfsplus_file_truncate(struct inode *inode)
 			hfsplus_dump_extent(hip->first_extents);
 			hip->first_blocks = blk_cnt;
 			mutex_lock_nested(&fd.tree->tree_lock,
-				hfsplus_btree_lock_class(fd.tree));
+				hfsplus_lock_class(fd.tree->cnid));
 			break;
 		}
 		res = __hfsplus_ext_cache_extent(&fd, inode, alloc_cnt);
@@ -612,7 +616,7 @@ void hfsplus_file_truncate(struct inode *inode)
 				     alloc_cnt - start, alloc_cnt - blk_cnt);
 		hfsplus_dump_extent(hip->cached_extents);
 		mutex_lock_nested(&fd.tree->tree_lock,
-				hfsplus_btree_lock_class(fd.tree));
+				hfsplus_lock_class(fd.tree->cnid));
 		if (blk_cnt > start) {
 			hip->extent_state |= HFSPLUS_EXT_DIRTY;
 			break;

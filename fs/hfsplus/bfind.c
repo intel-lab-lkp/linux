@@ -27,7 +27,7 @@ int hfs_find_init(struct hfs_btree *tree, struct hfs_find_data *fd)
 	hfs_dbg("cnid %d, caller %ps\n",
 		tree->cnid, __builtin_return_address(0));
 	mutex_lock_nested(&tree->tree_lock,
-			hfsplus_btree_lock_class(tree));
+			hfsplus_lock_class(tree->cnid));
 	return 0;
 }
 

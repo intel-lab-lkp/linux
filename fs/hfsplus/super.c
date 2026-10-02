@@ -152,7 +152,7 @@ static int hfsplus_system_write_inode(struct inode *inode)
 	hfsplus_inode_write_fork(inode, fork);
 	if (tree) {
 		mutex_lock_nested(&tree->tree_lock,
-				  hfsplus_btree_lock_class(tree));
+				  hfsplus_lock_class(tree->cnid));
 		int err = hfs_btree_write(tree);
 		mutex_unlock(&tree->tree_lock);
 

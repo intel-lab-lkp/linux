@@ -29,11 +29,19 @@ typedef int (*btree_keycmp)(const hfsplus_btree_key *,
 
 #define NODE_HASH_SIZE	256
 
-/* B-tree mutex nested subclasses */
-enum hfsplus_btree_mutex_classes {
-	CATALOG_BTREE_MUTEX,
-	EXTENTS_BTREE_MUTEX,
-	ATTR_BTREE_MUTEX,
+/*
+ * Nested-locking subclasses shared by the B-tree tree_lock and the inode
+ * extents_lock.  Both are keyed by CNID (tree->cnid or inode->i_ino), so one
+ * mapping serves both.  The allocation file gets its own subclass because a
+ * regular file's extents_lock is held across block alloc/free, which takes the
+ * allocation file's extents_lock in turn; every other inode uses the default.
+ */
+enum hfsplus_mutex_classes {
+	HFSPLUS_CATALOG_MUTEX,
+	HFSPLUS_EXTENTS_MUTEX,
+	HFSPLUS_ATTR_MUTEX,
+	HFSPLUS_ALLOC_MUTEX,
+	HFSPLUS_DEFAULT_MUTEX,
 };
 
 /* An HFS+ BTree held in memory */
@@ -551,25 +559,20 @@ static inline __be32 __hfsp_ut2mt(time64_t ut)
 	return cpu_to_be32(lower_32_bits(ut) + HFSPLUS_UTC_OFFSET);
 }
 
-static inline enum hfsplus_btree_mutex_classes
-hfsplus_btree_lock_class(struct hfs_btree *tree)
+static inline unsigned int hfsplus_lock_class(u32 cnid)
 {
-	enum hfsplus_btree_mutex_classes class;
-
-	switch (tree->cnid) {
+	switch (cnid) {
 	case HFSPLUS_CAT_CNID:
-		class = CATALOG_BTREE_MUTEX;
-		break;
+		return HFSPLUS_CATALOG_MUTEX;
 	case HFSPLUS_EXT_CNID:
-		class = EXTENTS_BTREE_MUTEX;
-		break;
+		return HFSPLUS_EXTENTS_MUTEX;
 	case HFSPLUS_ATTR_CNID:
-		class = ATTR_BTREE_MUTEX;
-		break;
+		return HFSPLUS_ATTR_MUTEX;
+	case HFSPLUS_ALLOC_CNID:
+		return HFSPLUS_ALLOC_MUTEX;
 	default:
-		BUG();
+		return HFSPLUS_DEFAULT_MUTEX;
 	}
-	return class;
 }
 
 static inline
