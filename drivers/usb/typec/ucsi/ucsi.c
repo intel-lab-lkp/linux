@@ -862,6 +862,7 @@ static int ucsi_read_pdos(struct ucsi_connector *con,
 			  u32 *pdos, int offset, int num_pdos)
 {
 	struct ucsi *ucsi = con->ucsi;
+	int len = num_pdos * sizeof(u32);
 	u64 command;
 	int ret;
 
@@ -875,10 +876,16 @@ static int ucsi_read_pdos(struct ucsi_connector *con,
 	command |= UCSI_GET_PDOS_PDO_OFFSET(offset);
 	command |= UCSI_GET_PDOS_NUM_PDOS(num_pdos - 1);
 	command |= is_source(role) ? UCSI_GET_PDOS_SRC_PDOS : 0;
-	ret = ucsi_send_command(ucsi, command, pdos + offset,
-				num_pdos * sizeof(u32));
+	ret = ucsi_send_command(ucsi, command, pdos + offset, len);
 	if (ret < 0 && ret != -ETIMEDOUT)
 		dev_err(ucsi->dev, "UCSI_GET_PDOS failed (%d)\n", ret);
+
+	if (ret > len) {
+		dev_err(ucsi->dev,
+			"PPM returned %d bytes of PDOs, but only %d were requested\n",
+			ret, len);
+		return -EPROTO;
+	}
 
 	return ret;
 }
