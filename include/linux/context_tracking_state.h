@@ -138,6 +138,28 @@ static __always_inline bool context_tracking_enabled(void)
 	return static_branch_unlikely(&context_tracking_key);
 }
 
+/*
+ * context_tracking_key goes live via code patching, which other CPUs only
+ * observe some time after ct_cpu_track_user() calls static_branch_inc().
+ * A CPU whose kernel<->user transition lands in that window would see
+ * context_tracking_enabled() as still false and silently skip recording
+ * it, leaving context_tracking.state stale.  ct_cpu_track_user() sets
+ * context_tracking_activating on every CPU with an IPI strictly before
+ * calling static_branch_inc(), and clears it again with another IPI only
+ * after static_branch_inc() returns (so only once every CPU is
+ * guaranteed to already observe the branch as enabled).  Checking it
+ * here closes that window: every transition in between is recorded via
+ * the normal __ct_user_enter()/__ct_user_exit() path instead of being
+ * silently dropped.
+ */
+DECLARE_PER_CPU(bool, context_tracking_activating);
+
+static __always_inline bool context_tracking_enabled_or_activating(void)
+{
+	return context_tracking_enabled() ||
+	       unlikely(__this_cpu_read(context_tracking_activating));
+}
+
 static __always_inline bool context_tracking_enabled_cpu(int cpu)
 {
 	return context_tracking_enabled() && per_cpu(context_tracking.active, cpu);
@@ -159,7 +181,7 @@ static __always_inline int ct_state(void)
 {
 	int ret;
 
-	if (!context_tracking_enabled())
+	if (!context_tracking_enabled_or_activating())
 		return CT_STATE_DISABLED;
 
 	preempt_disable();
@@ -171,6 +193,7 @@ static __always_inline int ct_state(void)
 
 #else
 static __always_inline bool context_tracking_enabled(void) { return false; }
+static __always_inline bool context_tracking_enabled_or_activating(void) { return false; }
 static __always_inline bool context_tracking_enabled_cpu(int cpu) { return false; }
 static __always_inline bool context_tracking_enabled_this_cpu(void) { return false; }
 #endif /* CONFIG_CONTEXT_TRACKING_USER */

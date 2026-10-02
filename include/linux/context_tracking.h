@@ -12,6 +12,8 @@
 
 #ifdef CONFIG_CONTEXT_TRACKING_USER
 extern void ct_cpu_track_user(int cpu);
+extern void ct_cpu_untrack_user(int cpu);
+extern void __init ct_cpu_track_user_init(int cpu);
 
 /* Called with interrupts disabled.  */
 extern void __ct_user_enter(enum ctx_state state);
@@ -25,26 +27,26 @@ extern void user_exit_callable(void);
 
 static inline void user_enter(void)
 {
-	if (context_tracking_enabled())
+	if (context_tracking_enabled_or_activating())
 		ct_user_enter(CT_STATE_USER);
 
 }
 static inline void user_exit(void)
 {
-	if (context_tracking_enabled())
+	if (context_tracking_enabled_or_activating())
 		ct_user_exit(CT_STATE_USER);
 }
 
 /* Called with interrupts disabled.  */
 static __always_inline void user_enter_irqoff(void)
 {
-	if (context_tracking_enabled())
+	if (context_tracking_enabled_or_activating())
 		__ct_user_enter(CT_STATE_USER);
 
 }
 static __always_inline void user_exit_irqoff(void)
 {
-	if (context_tracking_enabled())
+	if (context_tracking_enabled_or_activating())
 		__ct_user_exit(CT_STATE_USER);
 }
 
@@ -74,7 +76,7 @@ static inline void exception_exit(enum ctx_state prev_ctx)
 
 static __always_inline bool context_tracking_guest_enter(void)
 {
-	if (context_tracking_enabled())
+	if (context_tracking_enabled_or_activating())
 		__ct_user_enter(CT_STATE_GUEST);
 
 	return context_tracking_enabled_this_cpu();
@@ -82,13 +84,13 @@ static __always_inline bool context_tracking_guest_enter(void)
 
 static __always_inline bool context_tracking_guest_exit(void)
 {
-	if (context_tracking_enabled())
+	if (context_tracking_enabled_or_activating())
 		__ct_user_exit(CT_STATE_GUEST);
 
 	return context_tracking_enabled_this_cpu();
 }
 
-#define CT_WARN_ON(cond) WARN_ON(context_tracking_enabled() && (cond))
+#define CT_WARN_ON(cond) WARN_ON(context_tracking_enabled_or_activating() && (cond))
 
 #else
 static inline void user_enter(void) { }

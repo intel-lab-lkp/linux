@@ -23,6 +23,9 @@
 #include <linux/hardirq.h>
 #include <linux/export.h>
 #include <linux/kprobes.h>
+#include <linux/smp.h>
+#include <linux/ptrace.h>
+#include <asm/irq_regs.h>
 #include <trace/events/rcu.h>
 
 
@@ -411,8 +414,11 @@ static __always_inline void ct_kernel_enter(bool user, int offset) { }
 #define CREATE_TRACE_POINTS
 #include <trace/events/context_tracking.h>
 
-DEFINE_STATIC_KEY_FALSE_RO(context_tracking_key);
+DEFINE_STATIC_KEY_FALSE(context_tracking_key);
 EXPORT_SYMBOL_GPL(context_tracking_key);
+
+DEFINE_PER_CPU(bool, context_tracking_activating);
+EXPORT_SYMBOL_GPL(context_tracking_activating);
 
 static noinstr bool context_tracking_recursion_enter(void)
 {
@@ -674,14 +680,93 @@ void user_exit_callable(void)
 }
 NOKPROBE_SYMBOL(user_exit_callable);
 
-void __init ct_cpu_track_user(int cpu)
+/*
+ * context_tracking_key is a single systemwide static branch, not a per-CPU
+ * gate: once live, __ct_user_enter()/__ct_user_exit() run unconditionally
+ * on every CPU (so that a task migrating between a tracked and an
+ * untracked CPU always sees consistent state), regardless of that CPU's
+ * own context_tracking.active.  Going live happens through code patching,
+ * though, and other CPUs only observe the patched code some time after
+ * static_branch_inc() is called on this one.  A CPU whose kernel<->user
+ * transition lands in that window would see context_tracking_enabled()
+ * as still false and silently skip recording it, leaving
+ * context_tracking.state stuck at whatever it was, so the first traced
+ * kernel entry on that CPU afterwards would wrongly trip
+ * CT_WARN_ON(__ct_state() != CT_STATE_USER).  Reordering the two calls
+ * below cannot close this: whichever runs last still has its own
+ * propagation delay to every other CPU.
+ *
+ * context_tracking_enabled_or_activating() closes the window instead:
+ * every user_enter_irqoff()/user_exit_irqoff()/CT_WARN_ON() site treats
+ * a CPU as tracking once context_tracking_activating is set on it, with
+ * no code-patching delay of its own, since it is a plain per-CPU bool
+ * set directly by the interrupting IPI handler rather than inferred
+ * from a jump label.  Set it on every CPU before static_branch_inc(),
+ * and only clear it once static_branch_inc() has returned, so there is
+ * no gap during which a CPU observes neither signal: every transition
+ * in between is recorded through the normal path instead of being
+ * silently dropped.  Also directly bootstrap CT_STATE_USER for a CPU
+ * caught sitting in user mode (via its interrupted pt_regs), rather
+ * than leaving it to self-correct on its own next transition.
+ */
+static void ct_activate_set_pending_ipi(void *unused)
+{
+	struct pt_regs *regs = get_irq_regs();
+
+	__this_cpu_write(context_tracking_activating, true);
+	if (regs && user_mode(regs))
+		__ct_user_enter(CT_STATE_USER);
+}
+
+static void ct_activate_clear_pending_ipi(void *unused)
+{
+	__this_cpu_write(context_tracking_activating, false);
+}
+
+/**
+ * ct_cpu_track_user - enable context tracking for a CPU
+ * @cpu: target CPU (must be offline when called at runtime)
+ *
+ * Marks @cpu as actively tracking user/kernel transitions and increments
+ * the context_tracking_key refcount.  Safe to call at runtime provided
+ * the CPU is offline so no context-tracking readers are active on it.
+ */
+void ct_cpu_track_user(int cpu)
+{
+	if (!per_cpu(context_tracking.active, cpu)) {
+		bool first_activation = !context_tracking_enabled();
+
+		per_cpu(context_tracking.active, cpu) = true;
+		if (first_activation)
+			on_each_cpu(ct_activate_set_pending_ipi, NULL, 1);
+		static_branch_inc(&context_tracking_key);
+		if (first_activation)
+			on_each_cpu(ct_activate_clear_pending_ipi, NULL, 1);
+	}
+}
+EXPORT_SYMBOL_GPL(ct_cpu_track_user);
+
+/**
+ * ct_cpu_untrack_user - disable context tracking for a CPU
+ * @cpu: target CPU (must be offline when called)
+ *
+ * Reverses ct_cpu_track_user().  The CPU must be offline so that no
+ * context-tracking readers are active on it.
+ */
+void ct_cpu_untrack_user(int cpu)
+{
+	if (per_cpu(context_tracking.active, cpu)) {
+		per_cpu(context_tracking.active, cpu) = false;
+		static_branch_dec(&context_tracking_key);
+	}
+}
+EXPORT_SYMBOL_GPL(ct_cpu_untrack_user);
+
+void __init ct_cpu_track_user_init(int cpu)
 {
 	static __initdata bool initialized = false;
 
-	if (!per_cpu(context_tracking.active, cpu)) {
-		per_cpu(context_tracking.active, cpu) = true;
-		static_branch_inc(&context_tracking_key);
-	}
+	ct_cpu_track_user(cpu);
 
 	if (initialized)
 		return;
