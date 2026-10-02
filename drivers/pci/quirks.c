@@ -6288,6 +6288,41 @@ DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x1536, rom_bar_overlap_defect);
 DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x1537, rom_bar_overlap_defect);
 DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x1538, rom_bar_overlap_defect);
 
+/*
+ * TODO: Remove when/if root cause is found.
+ *
+ * Genoa appears to have a 64kB iomem black hole starting at 0x9c000000
+ * address for which all reads return ~0 blocking an overlapping BAR from
+ * working.
+ *
+ * Work around the problem by reserving the space prior to making any iomem
+ * allocations that could overlap with the black hole.
+ */
+static struct resource black_hole_res = DEFINE_RES_MEM_NAMED(0x9c000000, SZ_64K,
+							     "reserved");
+
+static void genoa_iomem_black_hole(struct pci_dev *dev)
+{
+	struct resource *r;
+
+	pci_bus_for_each_resource(dev->bus, r) {
+		if (!r || !r->flags || !resource_assigned(r))
+			continue;
+
+		if (!__resource_contains_unbound(r, &black_hole_res))
+			continue;
+
+		if (resource_assigned(&black_hole_res))
+			pci_dbg(dev, "iomem black hole workaround already applied\n");
+		else if (!insert_resource(r, &black_hole_res))
+			pci_info(dev, "iomem black hole workaround enabled\n");
+		else
+			pci_dbg(dev, "iomem black hole workaround add failed\n");
+		return;
+	}
+}
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_AMD, 0x14ab, genoa_iomem_black_hole);
+
 #ifdef CONFIG_PCIEASPM
 /*
  * Several Intel DG2 graphics devices advertise that they can only tolerate
