@@ -497,7 +497,6 @@ static int usb_unbind_interface(struct device *dev)
 	} else {
 		intf->needs_altsetting0 = 1;
 	}
-	usb_set_intfdata(intf, NULL);
 
 	intf->condition = USB_INTERFACE_UNBOUND;
 	intf->needs_remote_wakeup = 0;
@@ -644,6 +643,7 @@ void usb_driver_release_interface(struct usb_driver *driver,
 	} else {
 		device_lock(dev);
 		usb_unbind_interface(dev);
+		dev_set_drvdata(dev, NULL);
 		dev->driver = NULL;
 		device_unlock(dev);
 	}
