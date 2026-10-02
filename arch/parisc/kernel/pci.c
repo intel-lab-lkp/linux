@@ -19,20 +19,12 @@
 #include <asm/io.h>
 #include <asm/superio.h>
 
-#define DEBUG_RESOURCES 0
 #define DEBUG_CONFIG 0
 
 #if DEBUG_CONFIG
 # define DBGC(x...)	printk(KERN_DEBUG x)
 #else
 # define DBGC(x...)
-#endif
-
-
-#if DEBUG_RESOURCES
-#define DBG_RES(x...)	printk(KERN_DEBUG x)
-#else
-#define DBG_RES(x...)
 #endif
 
 struct pci_port_ops *pci_port __ro_after_init;
@@ -204,10 +196,9 @@ resource_size_t pcibios_align_resource(void *data, const struct resource *res,
 	struct pci_dev *dev = data;
 	resource_size_t align, start = res->start;
 
-	DBG_RES("pcibios_align_resource(%s, (%p) [%lx,%lx]/%x, 0x%lx, 0x%lx)\n",
-		pci_name(((struct pci_dev *) data)),
-		res->parent, res->start, res->end,
-		(int) res->flags, size, alignment);
+	pci_dbg(dev, "%pR: pcibios_align_resource(%lx, 0x%llx, 0x%llx), parent %pR\n",
+		res, res->flags, (unsigned long long)size,
+		(unsigned long long)alignment, res->parent);
 
 	/* If it's not IO, then it's gotta be MEM */
 	align = (res->flags & IORESOURCE_IO) ? PCIBIOS_MIN_IO : PCIBIOS_MIN_MEM;
