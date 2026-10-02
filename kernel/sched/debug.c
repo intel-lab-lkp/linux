@@ -170,46 +170,6 @@ static const struct file_operations sched_feat_fops = {
 	.release	= single_release,
 };
 
-static ssize_t sched_scaling_write(struct file *filp, const char __user *ubuf,
-				   size_t cnt, loff_t *ppos)
-{
-	unsigned int scaling;
-	int ret;
-
-	ret = kstrtouint_from_user(ubuf, cnt, 10, &scaling);
-	if (ret)
-		return ret;
-
-	if (scaling >= SCHED_TUNABLESCALING_END)
-		return -EINVAL;
-
-	sysctl_sched_tunable_scaling = scaling;
-	if (sched_update_scaling())
-		return -EINVAL;
-
-	*ppos += cnt;
-	return cnt;
-}
-
-static int sched_scaling_show(struct seq_file *m, void *v)
-{
-	seq_printf(m, "%d\n", sysctl_sched_tunable_scaling);
-	return 0;
-}
-
-static int sched_scaling_open(struct inode *inode, struct file *filp)
-{
-	return single_open(filp, sched_scaling_show, NULL);
-}
-
-static const struct file_operations sched_scaling_fops = {
-	.open		= sched_scaling_open,
-	.write		= sched_scaling_write,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= single_release,
-};
-
 #ifdef CONFIG_SCHED_CACHE
 static ssize_t
 sched_cache_enable_write(struct file *filp, const char __user *ubuf,
@@ -720,7 +680,6 @@ static __init int sched_init_debug(void)
 	debugfs_create_u32("latency_warn_ms", 0644, debugfs_sched, &sysctl_resched_latency_warn_ms);
 	debugfs_create_u32("latency_warn_once", 0644, debugfs_sched, &sysctl_resched_latency_warn_once);
 
-	debugfs_create_file("tunable_scaling", 0644, debugfs_sched, NULL, &sched_scaling_fops);
 	debugfs_create_u32("migration_cost_ns", 0644, debugfs_sched, &sysctl_sched_migration_cost);
 	debugfs_create_u32("nr_migrate", 0644, debugfs_sched, &sysctl_sched_nr_migrate);
 
@@ -1232,12 +1191,6 @@ do {									\
 	SEQ_printf(m, "\n");
 }
 
-static const char *sched_tunable_scaling_names[] = {
-	"none",
-	"logarithmic",
-	"linear"
-};
-
 static void sched_debug_header(struct seq_file *m)
 {
 	u64 ktime, sched_clk, cpu_clk;
@@ -1280,11 +1233,6 @@ static void sched_debug_header(struct seq_file *m)
 #undef PN
 #undef P
 
-	SEQ_printf(m, "  .%-40s: %d (%s)\n",
-		"sysctl_sched_tunable_scaling",
-		sysctl_sched_tunable_scaling,
-		sched_tunable_scaling_names[sysctl_sched_tunable_scaling]);
-	SEQ_printf(m, "\n");
 }
 
 static int sched_debug_show(struct seq_file *m, void *v)

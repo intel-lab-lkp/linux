@@ -63,19 +63,6 @@
 #include "autogroup.h"
 
 /*
- * The initial- and re-scaling of tunables is configurable
- *
- * Options are:
- *
- *   SCHED_TUNABLESCALING_NONE - unscaled, always *1
- *   SCHED_TUNABLESCALING_LOG - scaled logarithmically, *1+ilog(ncpus)
- *   SCHED_TUNABLESCALING_LINEAR - scaled linear, *ncpus
- *
- * (default SCHED_TUNABLESCALING_LOG = *(1+ilog(ncpus))
- */
-unsigned int sysctl_sched_tunable_scaling = SCHED_TUNABLESCALING_LOG;
-
-/*
  * Default base time slice (request size r_i) for SCHED_NORMAL/SCHED_BATCH:
  *
  * Under EEVDF this is the request size used to compute the virtual
@@ -199,20 +186,7 @@ static inline void update_load_set(struct load_weight *lw, unsigned long w)
 static unsigned int get_update_sysctl_factor(void)
 {
 	unsigned int cpus = min_t(unsigned int, num_online_cpus(), 8);
-	unsigned int factor;
-
-	switch (sysctl_sched_tunable_scaling) {
-	case SCHED_TUNABLESCALING_NONE:
-		factor = 1;
-		break;
-	case SCHED_TUNABLESCALING_LINEAR:
-		factor = cpus;
-		break;
-	case SCHED_TUNABLESCALING_LOG:
-	default:
-		factor = 1 + ilog2(cpus);
-		break;
-	}
+	unsigned int factor = 1 + ilog2(cpus);
 
 	return factor;
 }

@@ -3203,8 +3203,6 @@ extern unsigned int sysctl_sched_base_slice;
 extern int sysctl_resched_latency_warn_ms;
 extern int sysctl_resched_latency_warn_once;
 
-extern unsigned int sysctl_sched_tunable_scaling;
-
 extern unsigned int sysctl_numa_balancing_scan_delay;
 extern unsigned int sysctl_numa_balancing_scan_period_min;
 extern unsigned int sysctl_numa_balancing_scan_period_max;
