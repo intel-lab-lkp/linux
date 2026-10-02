@@ -478,6 +478,8 @@ config TOUCHSCREEN_HYNITRON_CSTXXX
 config TOUCHSCREEN_HYNITRON_CST816X
 	tristate "Hynitron CST816x touchscreen"
 	depends on I2C
+	# We call into panel code, so if DRM=m, this can't be 'y'
+	depends on DRM || !DRM
 	help
 	  Say Y here if you have a touchscreen using a Hynitron
 	  CST816x series touchscreen controller.

@@ -18,6 +18,8 @@
 #include <linux/spinlock.h>
 #include <linux/timer.h>
 
+#include <drm/drm_panel.h>
+
 #define CST816X_RD_REG		0x01
 #define CST816X_NUM_KEYS	5
 #define CST816X_GEST_HOLD_MS	40
@@ -39,6 +41,7 @@ struct cst816x_priv {
 	/* lock keeps the timeout out of the middle of a report */
 	spinlock_t lock;
 	struct touchscreen_properties prop;
+	struct drm_panel_follower follower;
 };
 
 static int cst816x_parse_keycodes(struct device *dev, struct cst816x_priv *priv)
@@ -256,6 +259,44 @@ static void cst816x_timer_stop(void *data)
 	timer_delete_sync(&priv->release_timer);
 }
 
+static int cst816x_panel_prepared(struct drm_panel_follower *follower)
+{
+	struct cst816x_priv *priv = container_of(follower, struct cst816x_priv,
+						 follower);
+
+	if (priv->reset)
+		cst816x_reset(priv);
+
+	enable_irq(priv->client->irq);
+
+	return 0;
+}
+
+static int cst816x_panel_unpreparing(struct drm_panel_follower *follower)
+{
+	struct cst816x_priv *priv = container_of(follower, struct cst816x_priv,
+						 follower);
+	unsigned long flags;
+
+	disable_irq(priv->client->irq);
+	timer_delete_sync(&priv->release_timer);
+
+	spin_lock_irqsave(&priv->lock, flags);
+
+	cst816x_release_keys(priv);
+	input_report_key(priv->input, BTN_TOUCH, 0);
+	input_sync(priv->input);
+
+	spin_unlock_irqrestore(&priv->lock, flags);
+
+	return 0;
+}
+
+static const struct drm_panel_follower_funcs cst816x_panel_follower_funcs = {
+	.panel_prepared = cst816x_panel_prepared,
+	.panel_unpreparing = cst816x_panel_unpreparing,
+};
+
 static int cst816x_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
@@ -275,9 +316,6 @@ static int cst816x_probe(struct i2c_client *client)
 		return dev_err_probe(dev, PTR_ERR(priv->reset),
 				     "gpio reset request failed\n");
 
-	if (priv->reset)
-		cst816x_reset(priv);
-
 	error = cst816x_parse_keycodes(dev, priv);
 	if (error)
 		dev_warn(dev, "no gestures found in dt\n");
@@ -290,11 +328,23 @@ static int cst816x_probe(struct i2c_client *client)
 	if (error)
 		return error;
 
-	error = devm_request_threaded_irq(dev, client->irq,
-					  NULL, cst816x_irq_cb, IRQF_ONESHOT,
+	error = devm_request_threaded_irq(dev, client->irq, NULL,
+					  cst816x_irq_cb,
+					  IRQF_ONESHOT | IRQF_NO_AUTOEN,
 					  dev_driver_string(dev), priv);
 	if (error)
 		return dev_err_probe(dev, error, "irq request failed\n");
+
+	if (drm_is_panel_follower(dev)) {
+		priv->follower.funcs = &cst816x_panel_follower_funcs;
+
+		return devm_drm_panel_add_follower(dev, &priv->follower);
+	}
+
+	if (priv->reset)
+		cst816x_reset(priv);
+
+	enable_irq(client->irq);
 
 	return 0;
 }
