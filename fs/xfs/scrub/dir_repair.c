@@ -1511,16 +1511,7 @@ xrep_dir_swap_prep(
 	 * exchange.
 	 */
 	if (ip_local) {
-		struct xfs_ifork	*ifp;
-
-		ifp = xfs_ifork_ptr(sc->ip, XFS_DATA_FORK);
-		xfs_idestroy_fork(ifp);
-		ifp->if_format = XFS_DINODE_FMT_EXTENTS;
-		ifp->if_nextents = 0;
-		ifp->if_bytes = 0;
-		ifp->if_data = NULL;
-		ifp->if_height = 0;
-
+		xrep_reset_fork_to_extents(sc, XFS_DATA_FORK);
 		xfs_trans_log_inode(sc->tp, sc->ip,
 				XFS_ILOG_CORE | XFS_ILOG_DDATA);
 	}
