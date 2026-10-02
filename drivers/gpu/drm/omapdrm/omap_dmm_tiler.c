@@ -87,7 +87,7 @@ static int dmm_dma_copy(struct dmm *dmm, dma_addr_t src, dma_addr_t dst)
 		return -EIO;
 	}
 
-	cookie = tx->tx_submit(tx);
+	cookie = dmaengine_submit(tx);
 	if (dma_submit_error(cookie)) {
 		dev_err(dmm->dev, "Failed to do DMA tx_submit\n");
 		return -EIO;

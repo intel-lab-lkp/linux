@@ -628,16 +628,14 @@ dsi_dma_workaround_write(struct vc4_dsi *dsi, u32 offset, u32 val)
 
 	*dsi->reg_dma_mem = val;
 
-	tx = chan->device->device_prep_dma_memcpy(chan,
-						  dsi->reg_paddr + offset,
-						  dsi->reg_dma_paddr,
-						  4, 0);
+	tx = dmaengine_prep_dma_memcpy(chan, dsi->reg_paddr + offset,
+				       dsi->reg_dma_paddr, 4, 0);
 	if (!tx) {
 		drm_err(drm, "Failed to set up DMA register write\n");
 		return;
 	}
 
-	cookie = tx->tx_submit(tx);
+	cookie = dmaengine_submit(tx);
 	ret = dma_submit_error(cookie);
 	if (ret) {
 		drm_err(drm, "Failed to submit DMA: %d\n", ret);
