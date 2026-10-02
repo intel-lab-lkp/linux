@@ -52,6 +52,7 @@
 #define I2C_HID_QUIRK_NO_SLEEP_ON_SUSPEND	BIT(5)
 #define I2C_HID_QUIRK_DELAY_WAKEUP_AFTER_RESUME BIT(6)
 #define I2C_HID_QUIRK_RE_POWER_ON		BIT(7)
+#define I2C_HID_QUIRK_INIT_OUTPUT_REPORTS	BIT(8)
 
 /* Command opcodes */
 #define I2C_HID_OPCODE_RESET			0x01
@@ -155,6 +156,12 @@ static const struct i2c_hid_quirks {
 		 I2C_HID_QUIRK_DELAY_WAKEUP_AFTER_RESUME },
 	{ I2C_VENDOR_ID_BLTP, I2C_PRODUCT_ID_BLTP7853,
 		I2C_HID_QUIRK_NO_IRQ_AFTER_RESET },
+	/*
+	 * The Acer Swift SFA14-I31 keyboard sends no input until the host
+	 * has written an output (LED) report at least once
+	 */
+	{ I2C_VENDOR_ID_ACER_KBD, I2C_PRODUCT_ID_ACER_SFA14_KBD,
+		I2C_HID_QUIRK_INIT_OUTPUT_REPORTS },
 	{ 0, 0 }
 };
 
@@ -1079,6 +1086,32 @@ static int __i2c_hid_core_probe(struct i2c_hid *ihid)
 	return 0;
 }
 
+/*
+ * The input core only writes LED state when it changes (and on resume), so
+ * a device that waits for an output report never gets one at boot. Send
+ * every output report once with its initial field values.
+ */
+static void i2c_hid_send_initial_output_reports(struct hid_device *hid)
+{
+	struct hid_report_enum *report_enum = &hid->report_enum[HID_OUTPUT_REPORT];
+	struct hid_report *report;
+	u8 *buf;
+	int ret;
+
+	list_for_each_entry(report, &report_enum->report_list, list) {
+		buf = hid_alloc_report_buf(report, GFP_KERNEL);
+		if (!buf)
+			return;
+
+		hid_output_report(report, buf);
+		ret = i2c_hid_output_report(hid, buf, hid_report_len(report));
+		if (ret < 0)
+			hid_warn(hid, "failed to send initial output report %u: %d\n",
+				 report->id, ret);
+		kfree(buf);
+	}
+}
+
 static int i2c_hid_core_register_hid(struct i2c_hid *ihid)
 {
 	struct i2c_client *client = ihid->client;
@@ -1098,6 +1131,9 @@ static int i2c_hid_core_register_hid(struct i2c_hid *ihid)
 	/* At least some QTEC devices need this after initialization */
 	if (ihid->quirks & I2C_HID_QUIRK_RE_POWER_ON)
 		ret = i2c_hid_set_power(ihid, I2C_HID_PWR_ON);
+
+	if (ihid->quirks & I2C_HID_QUIRK_INIT_OUTPUT_REPORTS)
+		i2c_hid_send_initial_output_reports(hid);
 
 	return ret;
 }
