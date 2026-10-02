@@ -420,11 +420,17 @@ xdp_update_skb_frags_info(struct sk_buff *skb, u8 nr_frags,
 	skb->unreadable |= !!(xdp_flags & XDP_FLAGS_FRAGS_UNREADABLE);
 }
 
+/* Page and readable provider fragments alike resolve through their netmem. */
+static inline void *xdp_frag_address(const skb_frag_t *frag)
+{
+	return netmem_address(skb_frag_netmem(frag)) + skb_frag_off(frag);
+}
+
 /* Avoids inlining WARN macro in fast-path */
 void xdp_warn(const char *msg, const char *func, const int line);
 #define XDP_WARN(msg) xdp_warn(msg, __func__, __LINE__)
 
-struct sk_buff *xdp_build_skb_from_buff(const struct xdp_buff *xdp);
+struct sk_buff *xdp_build_skb_from_buff(struct xdp_buff *xdp);
 struct sk_buff *xdp_build_skb_from_zc(struct xdp_buff *xdp);
 struct xdp_frame *xdp_convert_zc_to_xdp_frame(struct xdp_buff *xdp);
 struct sk_buff *__xdp_build_skb_from_frame(struct xdp_frame *xdpf,

@@ -4221,7 +4221,7 @@ void bpf_xdp_copy_buf(struct xdp_buff *xdp, unsigned long off,
 			break;
 
 		ptr_off += ptr_len;
-		ptr_buf = skb_frag_address(next_frag);
+		ptr_buf = xdp_frag_address(next_frag);
 		ptr_len = skb_frag_size(next_frag);
 		next_frag++;
 	}
@@ -4249,7 +4249,7 @@ void *bpf_xdp_pointer(struct xdp_buff *xdp, u32 offset, u32 len)
 		u32 frag_size = skb_frag_size(&sinfo->frags[i]);
 
 		if  (offset < frag_size) {
-			addr = skb_frag_address(&sinfo->frags[i]);
+			addr = xdp_frag_address(&sinfo->frags[i]);
 			size = frag_size;
 			break;
 		}
@@ -4339,7 +4339,7 @@ static int bpf_xdp_frags_increase_tail(struct xdp_buff *xdp, int offset)
 	if (unlikely(offset > tailroom))
 		return -EINVAL;
 
-	memset(skb_frag_address(frag) + skb_frag_size(frag), 0, offset);
+	memset(xdp_frag_address(frag) + skb_frag_size(frag), 0, offset);
 	skb_frag_size_add(frag, offset);
 	sinfo->xdp_frags_size += offset;
 	if (rxq->mem.type == MEM_TYPE_XSK_BUFF_POOL)
@@ -4684,12 +4684,28 @@ int xdp_do_redirect(struct net_device *dev, struct xdp_buff *xdp,
 {
 	struct bpf_redirect_info *ri = bpf_net_ctx_get_ri();
 	enum bpf_map_type map_type = ri->map_type;
+	struct xdp_frame *xdpf;
+	int err;
 
 	if (map_type == BPF_MAP_TYPE_XSKMAP)
 		return __xdp_do_redirect_xsk(ri, dev, xdp, xdp_prog);
 
-	return __xdp_do_redirect_frame(ri, dev, xdp_convert_buff_to_frame(xdp),
-				       xdp_prog);
+	if (!xdp_buff_has_netmem(xdp))
+		return __xdp_do_redirect_frame(ri, dev,
+					       xdp_convert_buff_to_frame(xdp),
+					       xdp_prog);
+
+	/* Return provider buffers only after the target accepts the copy. */
+	xdpf = xdp_copy_zc_to_xdp_frame(xdp);
+	err = __xdp_do_redirect_frame(ri, dev, xdpf, xdp_prog);
+	if (err) {
+		if (xdpf)
+			xdp_return_frame_rx_napi(xdpf);
+		return err;
+	}
+
+	xdp_release_zc_buff(xdp);
+	return 0;
 }
 EXPORT_SYMBOL_GPL(xdp_do_redirect);
 
@@ -12677,7 +12693,7 @@ __bpf_kfunc int bpf_xdp_pull_data(struct xdp_md *x, u32 len)
 		skb_frag_t *frag = &sinfo->frags[i];
 		u32 shrink = min_t(u32, delta, skb_frag_size(frag));
 
-		memcpy(xdp->data_end, skb_frag_address(frag), shrink);
+		memcpy(xdp->data_end, xdp_frag_address(frag), shrink);
 
 		xdp->data_end += shrink;
 		sinfo->xdp_frags_size -= shrink;
