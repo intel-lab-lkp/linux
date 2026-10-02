@@ -61,7 +61,7 @@ void amdgpu_dm_wb_kunit_set_ops(const struct amdgpu_dm_wb_kunit_ops *ops)
 {
 	amdgpu_dm_wb_ops = ops ? ops : &amdgpu_dm_wb_default_ops;
 }
-EXPORT_IF_KUNIT(amdgpu_dm_wb_kunit_set_ops);
+EXPORT_SYMBOL_IF_KUNIT(amdgpu_dm_wb_kunit_set_ops);
 
 #define wb_bo_reserve			amdgpu_dm_wb_ops->reserve
 #define wb_dma_resv_reserve_fences	amdgpu_dm_wb_ops->reserve_fences
@@ -87,7 +87,7 @@ EXPORT_IF_KUNIT(amdgpu_dm_wb_kunit_set_ops);
 
 #endif
 
-STATIC_IFN_KUNIT int amdgpu_dm_wb_encoder_atomic_check(struct drm_encoder *encoder,
+VISIBLE_IF_KUNIT int amdgpu_dm_wb_encoder_atomic_check(struct drm_encoder *encoder,
 					struct drm_crtc_state *crtc_state,
 					struct drm_connector_state *conn_state)
 {
@@ -121,17 +121,17 @@ STATIC_IFN_KUNIT int amdgpu_dm_wb_encoder_atomic_check(struct drm_encoder *encod
 
 	return 0;
 }
-EXPORT_IF_KUNIT(amdgpu_dm_wb_encoder_atomic_check);
+EXPORT_SYMBOL_IF_KUNIT(amdgpu_dm_wb_encoder_atomic_check);
 
 
-STATIC_IFN_KUNIT int amdgpu_dm_wb_connector_get_modes(struct drm_connector *connector)
+VISIBLE_IF_KUNIT int amdgpu_dm_wb_connector_get_modes(struct drm_connector *connector)
 {
 	/* Maximum resolution supported by DWB */
 	return drm_add_modes_noedid(connector, 3840, 2160);
 }
-EXPORT_IF_KUNIT(amdgpu_dm_wb_connector_get_modes);
+EXPORT_SYMBOL_IF_KUNIT(amdgpu_dm_wb_connector_get_modes);
 
-STATIC_IFN_KUNIT int amdgpu_dm_wb_prepare_job(struct drm_writeback_connector *wb_connector,
+VISIBLE_IF_KUNIT int amdgpu_dm_wb_prepare_job(struct drm_writeback_connector *wb_connector,
 			       struct drm_writeback_job *job)
 {
 	struct amdgpu_framebuffer *afb;
@@ -194,9 +194,9 @@ error_unlock:
 	wb_bo_unreserve(rbo);
 	return r;
 }
-EXPORT_IF_KUNIT(amdgpu_dm_wb_prepare_job);
+EXPORT_SYMBOL_IF_KUNIT(amdgpu_dm_wb_prepare_job);
 
-STATIC_IFN_KUNIT void amdgpu_dm_wb_cleanup_job(struct drm_writeback_connector *connector,
+VISIBLE_IF_KUNIT void amdgpu_dm_wb_cleanup_job(struct drm_writeback_connector *connector,
 				struct drm_writeback_job *job)
 {
 	struct amdgpu_bo *rbo;
@@ -216,7 +216,7 @@ STATIC_IFN_KUNIT void amdgpu_dm_wb_cleanup_job(struct drm_writeback_connector *c
 	wb_bo_unreserve(rbo);
 	wb_bo_unref(&rbo);
 }
-EXPORT_IF_KUNIT(amdgpu_dm_wb_cleanup_job);
+EXPORT_SYMBOL_IF_KUNIT(amdgpu_dm_wb_cleanup_job);
 
 static const struct drm_encoder_helper_funcs amdgpu_dm_wb_encoder_helper_funcs = {
 	.atomic_check = amdgpu_dm_wb_encoder_atomic_check,
@@ -266,4 +266,4 @@ int amdgpu_dm_wb_connector_init(struct amdgpu_display_manager *dm,
 
 	return 0;
 }
-EXPORT_IF_KUNIT(amdgpu_dm_wb_connector_init);
+EXPORT_SYMBOL_IF_KUNIT(amdgpu_dm_wb_connector_init);

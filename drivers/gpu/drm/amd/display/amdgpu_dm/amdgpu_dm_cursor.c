@@ -41,7 +41,7 @@
 #include "amdgpu_dm_cursor.h"
 #include "dm_helpers.h"
 
-STATIC_IFN_KUNIT int dm_check_cursor_fb(struct amdgpu_crtc *new_acrtc,
+VISIBLE_IF_KUNIT int dm_check_cursor_fb(struct amdgpu_crtc *new_acrtc,
 				       struct drm_plane_state *new_plane_state,
 				       struct drm_framebuffer *fb)
 {
@@ -105,7 +105,7 @@ STATIC_IFN_KUNIT int dm_check_cursor_fb(struct amdgpu_crtc *new_acrtc,
 
 	return 0;
 }
-EXPORT_IF_KUNIT(dm_check_cursor_fb);
+EXPORT_SYMBOL_IF_KUNIT(dm_check_cursor_fb);
 
 /*
  * Helper function for checking the cursor in native mode
@@ -139,7 +139,7 @@ int amdgpu_dm_check_native_cursor_state(struct drm_crtc *new_plane_crtc,
 
 	return 0;
 }
-EXPORT_IF_KUNIT(amdgpu_dm_check_native_cursor_state);
+EXPORT_SYMBOL_IF_KUNIT(amdgpu_dm_check_native_cursor_state);
 
 bool amdgpu_dm_should_update_native_cursor(struct drm_atomic_commit *state,
 					   struct drm_crtc *old_plane_crtc,
@@ -169,9 +169,9 @@ bool amdgpu_dm_should_update_native_cursor(struct drm_atomic_commit *state,
 
 	return dm_new_crtc_state->cursor_mode == DM_CURSOR_NATIVE_MODE;
 }
-EXPORT_IF_KUNIT(amdgpu_dm_should_update_native_cursor);
+EXPORT_SYMBOL_IF_KUNIT(amdgpu_dm_should_update_native_cursor);
 
-STATIC_IFN_KUNIT void dm_get_oriented_plane_size(struct drm_plane_state *plane_state,
+VISIBLE_IF_KUNIT void dm_get_oriented_plane_size(struct drm_plane_state *plane_state,
 					 int *src_w, int *src_h)
 {
 	switch (plane_state->rotation & DRM_MODE_ROTATE_MASK) {
@@ -188,9 +188,9 @@ STATIC_IFN_KUNIT void dm_get_oriented_plane_size(struct drm_plane_state *plane_s
 		break;
 	}
 }
-EXPORT_IF_KUNIT(dm_get_oriented_plane_size);
+EXPORT_SYMBOL_IF_KUNIT(dm_get_oriented_plane_size);
 
-STATIC_IFN_KUNIT void
+VISIBLE_IF_KUNIT void
 dm_get_plane_scale(struct drm_plane_state *plane_state,
 		   int *out_plane_scale_w, int *out_plane_scale_h)
 {
@@ -200,7 +200,7 @@ dm_get_plane_scale(struct drm_plane_state *plane_state,
 	*out_plane_scale_w = plane_src_w ? plane_state->crtc_w * 1000 / plane_src_w : 0;
 	*out_plane_scale_h = plane_src_h ? plane_state->crtc_h * 1000 / plane_src_h : 0;
 }
-EXPORT_IF_KUNIT(dm_get_plane_scale);
+EXPORT_SYMBOL_IF_KUNIT(dm_get_plane_scale);
 
 /**
  * DOC: Cursor Modes - Native vs Overlay
@@ -231,7 +231,7 @@ EXPORT_IF_KUNIT(dm_get_plane_scale);
  *
  * Return: true if the pipeline modifies pixels, false otherwise.
  */
-STATIC_IFN_KUNIT bool dm_plane_color_pipeline_active(struct drm_atomic_commit *state,
+VISIBLE_IF_KUNIT bool dm_plane_color_pipeline_active(struct drm_atomic_commit *state,
 						     struct drm_plane *plane,
 						     bool use_old)
 {
@@ -249,7 +249,7 @@ STATIC_IFN_KUNIT bool dm_plane_color_pipeline_active(struct drm_atomic_commit *s
 	}
 	return false;
 }
-EXPORT_IF_KUNIT(dm_plane_color_pipeline_active);
+EXPORT_SYMBOL_IF_KUNIT(dm_plane_color_pipeline_active);
 
 /**
  * amdgpu_dm_crtc_get_cursor_mode() - Determine the required cursor mode on crtc
@@ -456,4 +456,4 @@ int amdgpu_dm_crtc_get_cursor_mode(struct amdgpu_device *adev,
 
 	return 0;
 }
-EXPORT_IF_KUNIT(amdgpu_dm_crtc_get_cursor_mode);
+EXPORT_SYMBOL_IF_KUNIT(amdgpu_dm_crtc_get_cursor_mode);

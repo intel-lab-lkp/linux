@@ -38,7 +38,8 @@
  */
 #define PSP_SRM_VERSION_MAX 0xFFFF
 
-STATIC_IFN_KUNIT bool lp_write_i2c(void *handle, uint32_t address, const uint8_t *data, uint32_t size)
+VISIBLE_IF_KUNIT
+bool lp_write_i2c(void *handle, uint32_t address, const uint8_t *data, uint32_t size)
 {
 	struct dc_link *link = handle;
 	struct i2c_payload i2c_payloads[] = {{true, address, size, (void *)data} };
@@ -47,9 +48,10 @@ STATIC_IFN_KUNIT bool lp_write_i2c(void *handle, uint32_t address, const uint8_t
 
 	return dm_helpers_submit_i2c(link->ctx, link, &cmd);
 }
-EXPORT_IF_KUNIT(lp_write_i2c);
+EXPORT_SYMBOL_IF_KUNIT(lp_write_i2c);
 
-STATIC_IFN_KUNIT bool lp_read_i2c(void *handle, uint32_t address, uint8_t offset, uint8_t *data, uint32_t size)
+VISIBLE_IF_KUNIT
+bool lp_read_i2c(void *handle, uint32_t address, uint8_t offset, uint8_t *data, uint32_t size)
 {
 	struct dc_link *link = handle;
 
@@ -60,25 +62,26 @@ STATIC_IFN_KUNIT bool lp_read_i2c(void *handle, uint32_t address, uint8_t offset
 
 	return dm_helpers_submit_i2c(link->ctx, link, &cmd);
 }
-EXPORT_IF_KUNIT(lp_read_i2c);
+EXPORT_SYMBOL_IF_KUNIT(lp_read_i2c);
 
-STATIC_IFN_KUNIT bool lp_write_dpcd(void *handle, uint32_t address, const uint8_t *data, uint32_t size)
+VISIBLE_IF_KUNIT
+bool lp_write_dpcd(void *handle, uint32_t address, const uint8_t *data, uint32_t size)
 {
 	struct dc_link *link = handle;
 
 	return dm_helpers_dp_write_dpcd(link->ctx, link, address, data, size);
 }
-EXPORT_IF_KUNIT(lp_write_dpcd);
+EXPORT_SYMBOL_IF_KUNIT(lp_write_dpcd);
 
-STATIC_IFN_KUNIT bool lp_read_dpcd(void *handle, uint32_t address, uint8_t *data, uint32_t size)
+VISIBLE_IF_KUNIT bool lp_read_dpcd(void *handle, uint32_t address, uint8_t *data, uint32_t size)
 {
 	struct dc_link *link = handle;
 
 	return dm_helpers_dp_read_dpcd(link->ctx, link, address, data, size);
 }
-EXPORT_IF_KUNIT(lp_read_dpcd);
+EXPORT_SYMBOL_IF_KUNIT(lp_read_dpcd);
 
-STATIC_IFN_KUNIT bool lp_atomic_write_poll_read_i2c(
+VISIBLE_IF_KUNIT bool lp_atomic_write_poll_read_i2c(
 						void *handle,
 						const struct mod_hdcp_atomic_op_i2c *write,
 						const struct mod_hdcp_atomic_op_i2c *poll,
@@ -91,9 +94,9 @@ STATIC_IFN_KUNIT bool lp_atomic_write_poll_read_i2c(
 
 	return dm_atomic_write_poll_read_i2c(link, write, poll, read, poll_timeout_us, poll_mask_msb);
 }
-EXPORT_IF_KUNIT(lp_atomic_write_poll_read_i2c);
+EXPORT_SYMBOL_IF_KUNIT(lp_atomic_write_poll_read_i2c);
 
-STATIC_IFN_KUNIT bool lp_atomic_write_poll_read_aux(
+VISIBLE_IF_KUNIT bool lp_atomic_write_poll_read_aux(
 						void *handle,
 						const struct mod_hdcp_atomic_op_aux *write,
 						const struct mod_hdcp_atomic_op_aux *poll,
@@ -106,9 +109,9 @@ STATIC_IFN_KUNIT bool lp_atomic_write_poll_read_aux(
 
 	return dm_atomic_write_poll_read_aux(link, write, poll, read, poll_timeout_us, poll_mask_msb);
 }
-EXPORT_IF_KUNIT(lp_atomic_write_poll_read_aux);
+EXPORT_SYMBOL_IF_KUNIT(lp_atomic_write_poll_read_aux);
 
-STATIC_IFN_KUNIT
+VISIBLE_IF_KUNIT
 uint8_t *psp_get_srm(struct psp_context *psp, uint32_t *srm_version, uint32_t *srm_size)
 {
 	struct ta_hdcp_shared_memory *hdcp_cmd;
@@ -132,9 +135,9 @@ uint8_t *psp_get_srm(struct psp_context *psp, uint32_t *srm_version, uint32_t *s
 
 	return hdcp_cmd->out_msg.hdcp_get_srm.srm_buf;
 }
-EXPORT_IF_KUNIT(psp_get_srm);
+EXPORT_SYMBOL_IF_KUNIT(psp_get_srm);
 
-STATIC_IFN_KUNIT
+VISIBLE_IF_KUNIT
 int psp_set_srm(struct psp_context *psp,
 		       u8 *srm, uint32_t srm_size, uint32_t *srm_version)
 {
@@ -162,9 +165,9 @@ int psp_set_srm(struct psp_context *psp,
 	*srm_version = hdcp_cmd->out_msg.hdcp_set_srm.srm_version;
 	return 0;
 }
-EXPORT_IF_KUNIT(psp_set_srm);
+EXPORT_SYMBOL_IF_KUNIT(psp_set_srm);
 
-STATIC_IFN_KUNIT
+VISIBLE_IF_KUNIT
 void process_output(struct hdcp_workqueue *hdcp_work)
 {
 	struct mod_hdcp_output output = hdcp_work->output;
@@ -185,9 +188,9 @@ void process_output(struct hdcp_workqueue *hdcp_work)
 
 	schedule_delayed_work(&hdcp_work->property_validate_dwork, msecs_to_jiffies(0));
 }
-EXPORT_IF_KUNIT(process_output);
+EXPORT_SYMBOL_IF_KUNIT(process_output);
 
-STATIC_IFN_KUNIT
+VISIBLE_IF_KUNIT
 bool hdcp_get_content_protection_from_status(
 	unsigned int hdcp_content_type,
 	enum mod_hdcp_encryption_status encryption_status,
@@ -212,9 +215,9 @@ bool hdcp_get_content_protection_from_status(
 
 	return false;
 }
-EXPORT_IF_KUNIT(hdcp_get_content_protection_from_status);
+EXPORT_SYMBOL_IF_KUNIT(hdcp_get_content_protection_from_status);
 
-STATIC_IFN_KUNIT
+VISIBLE_IF_KUNIT
 void hdcp_get_link_display_adjustments(
 	bool enable_encryption,
 	u8 content_type,
@@ -249,9 +252,9 @@ void hdcp_get_link_display_adjustments(
 	link_adjust->hdcp2.use_sw_locality_fallback =
 		hdcp_lc_enable_sw_fallback;
 }
-EXPORT_IF_KUNIT(hdcp_get_link_display_adjustments);
+EXPORT_SYMBOL_IF_KUNIT(hdcp_get_link_display_adjustments);
 
-STATIC_IFN_KUNIT
+VISIBLE_IF_KUNIT
 void link_lock(struct hdcp_workqueue *work, bool lock)
 {
 	int i = 0;
@@ -263,9 +266,9 @@ void link_lock(struct hdcp_workqueue *work, bool lock)
 			mutex_unlock(&work[i].mutex);
 	}
 }
-EXPORT_IF_KUNIT(link_lock);
+EXPORT_SYMBOL_IF_KUNIT(link_lock);
 
-STATIC_IFN_KUNIT
+VISIBLE_IF_KUNIT
 void hdcp_update_display_encryption_control(struct hdcp_workqueue *hdcp_work,
 					    struct hdcp_workqueue *hdcp_w,
 					    unsigned int conn_index,
@@ -287,7 +290,7 @@ void hdcp_update_display_encryption_control(struct hdcp_workqueue *hdcp_work,
 		cancel_delayed_work(&hdcp_w->property_validate_dwork);
 	}
 }
-EXPORT_IF_KUNIT(hdcp_update_display_encryption_control);
+EXPORT_SYMBOL_IF_KUNIT(hdcp_update_display_encryption_control);
 
 void hdcp_update_display(struct hdcp_workqueue *hdcp_work,
 			 unsigned int link_index,
@@ -319,9 +322,9 @@ void hdcp_update_display(struct hdcp_workqueue *hdcp_work,
 
 	process_output(hdcp_w);
 }
-EXPORT_IF_KUNIT(hdcp_update_display);
+EXPORT_SYMBOL_IF_KUNIT(hdcp_update_display);
 
-STATIC_IFN_KUNIT
+VISIBLE_IF_KUNIT
 void hdcp_remove_display(struct hdcp_workqueue *hdcp_work,
 				unsigned int link_index,
 			 struct amdgpu_dm_connector *aconnector)
@@ -352,7 +355,7 @@ void hdcp_remove_display(struct hdcp_workqueue *hdcp_work,
 	}
 	process_output(hdcp_w);
 }
-EXPORT_IF_KUNIT(hdcp_remove_display);
+EXPORT_SYMBOL_IF_KUNIT(hdcp_remove_display);
 
 void hdcp_reset_display(struct hdcp_workqueue *hdcp_work, unsigned int link_index)
 {
@@ -376,7 +379,7 @@ void hdcp_reset_display(struct hdcp_workqueue *hdcp_work, unsigned int link_inde
 
 	process_output(hdcp_w);
 }
-EXPORT_IF_KUNIT(hdcp_reset_display);
+EXPORT_SYMBOL_IF_KUNIT(hdcp_reset_display);
 
 void hdcp_handle_cpirq(struct hdcp_workqueue *hdcp_work, unsigned int link_index)
 {
@@ -384,9 +387,9 @@ void hdcp_handle_cpirq(struct hdcp_workqueue *hdcp_work, unsigned int link_index
 
 	schedule_work(&hdcp_w->cpirq_work);
 }
-EXPORT_IF_KUNIT(hdcp_handle_cpirq);
+EXPORT_SYMBOL_IF_KUNIT(hdcp_handle_cpirq);
 
-STATIC_IFN_KUNIT
+VISIBLE_IF_KUNIT
 void event_callback(struct work_struct *work)
 {
 	struct hdcp_workqueue *hdcp_work;
@@ -403,9 +406,9 @@ void event_callback(struct work_struct *work)
 
 	process_output(hdcp_work);
 }
-EXPORT_IF_KUNIT(event_callback);
+EXPORT_SYMBOL_IF_KUNIT(event_callback);
 
-STATIC_IFN_KUNIT
+VISIBLE_IF_KUNIT
 void event_property_update(struct work_struct *work)
 {
 	struct hdcp_workqueue *hdcp_work = container_of(work, struct hdcp_workqueue,
@@ -465,9 +468,9 @@ void event_property_update(struct work_struct *work)
 		drm_modeset_unlock(&dev->mode_config.connection_mutex);
 	}
 }
-EXPORT_IF_KUNIT(event_property_update);
+EXPORT_SYMBOL_IF_KUNIT(event_property_update);
 
-STATIC_IFN_KUNIT
+VISIBLE_IF_KUNIT
 void event_property_validate(struct work_struct *work)
 {
 	struct hdcp_workqueue *hdcp_work =
@@ -517,9 +520,9 @@ void event_property_validate(struct work_struct *work)
 		}
 	}
 }
-EXPORT_IF_KUNIT(event_property_validate);
+EXPORT_SYMBOL_IF_KUNIT(event_property_validate);
 
-STATIC_IFN_KUNIT
+VISIBLE_IF_KUNIT
 void event_watchdog_timer(struct work_struct *work)
 {
 	struct hdcp_workqueue *hdcp_work;
@@ -538,9 +541,9 @@ void event_watchdog_timer(struct work_struct *work)
 
 	process_output(hdcp_work);
 }
-EXPORT_IF_KUNIT(event_watchdog_timer);
+EXPORT_SYMBOL_IF_KUNIT(event_watchdog_timer);
 
-STATIC_IFN_KUNIT
+VISIBLE_IF_KUNIT
 void event_cpirq(struct work_struct *work)
 {
 	struct hdcp_workqueue *hdcp_work;
@@ -553,7 +556,7 @@ void event_cpirq(struct work_struct *work)
 
 	process_output(hdcp_work);
 }
-EXPORT_IF_KUNIT(event_cpirq);
+EXPORT_SYMBOL_IF_KUNIT(event_cpirq);
 
 void hdcp_destroy(struct kobject *kobj, struct hdcp_workqueue *hdcp_work)
 {
@@ -570,9 +573,9 @@ void hdcp_destroy(struct kobject *kobj, struct hdcp_workqueue *hdcp_work)
 	kfree(hdcp_work->srm_temp);
 	kfree(hdcp_work);
 }
-EXPORT_IF_KUNIT(hdcp_destroy);
+EXPORT_SYMBOL_IF_KUNIT(hdcp_destroy);
 
-STATIC_IFN_KUNIT
+VISIBLE_IF_KUNIT
 bool enable_assr(void *handle, struct dc_link *link)
 {
 	struct hdcp_workqueue *hdcp_work = handle;
@@ -606,9 +609,9 @@ bool enable_assr(void *handle, struct dc_link *link)
 
 	return true;
 }
-EXPORT_IF_KUNIT(enable_assr);
+EXPORT_SYMBOL_IF_KUNIT(enable_assr);
 
-STATIC_IFN_KUNIT
+VISIBLE_IF_KUNIT
 void update_config(void *handle, struct cp_psp_stream_config *config)
 {
 	struct hdcp_workqueue *hdcp_work = handle;
@@ -695,7 +698,7 @@ void update_config(void *handle, struct cp_psp_stream_config *config)
 	hdcp_w->aconnector[conn_index] = aconnector;
 	process_output(hdcp_w);
 }
-EXPORT_IF_KUNIT(update_config);
+EXPORT_SYMBOL_IF_KUNIT(update_config);
 
 /**
  * DOC: Add sysfs interface for set/get srm
@@ -745,7 +748,7 @@ EXPORT_IF_KUNIT(update_config);
  *	-if we try to "1. SET" a newer version and PSP rejects it. That means the format is
  *	incorrect/corrupted and we should correct our SRM by getting it from PSP
  */
-STATIC_IFN_KUNIT ssize_t srm_data_write(struct file *filp, struct kobject *kobj,
+VISIBLE_IF_KUNIT ssize_t srm_data_write(struct file *filp, struct kobject *kobj,
 			      const struct bin_attribute *bin_attr, char *buffer,
 			      loff_t pos, size_t count)
 {
@@ -768,9 +771,9 @@ STATIC_IFN_KUNIT ssize_t srm_data_write(struct file *filp, struct kobject *kobj,
 
 	return count;
 }
-EXPORT_IF_KUNIT(srm_data_write);
+EXPORT_SYMBOL_IF_KUNIT(srm_data_write);
 
-STATIC_IFN_KUNIT ssize_t srm_data_read(struct file *filp, struct kobject *kobj,
+VISIBLE_IF_KUNIT ssize_t srm_data_read(struct file *filp, struct kobject *kobj,
 			     const struct bin_attribute *bin_attr, char *buffer,
 			     loff_t pos, size_t count)
 {
@@ -806,7 +809,7 @@ ret:
 	link_lock(work, false);
 	return ret;
 }
-EXPORT_IF_KUNIT(srm_data_read);
+EXPORT_SYMBOL_IF_KUNIT(srm_data_read);
 
 /* From the hdcp spec (5.Renewability) SRM needs to be stored in a non-volatile memory.
  *
@@ -923,5 +926,5 @@ fail_alloc_context:
 
 	return NULL;
 }
-EXPORT_IF_KUNIT(hdcp_create_workqueue);
+EXPORT_SYMBOL_IF_KUNIT(hdcp_create_workqueue);
 
