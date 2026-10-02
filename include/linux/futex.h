@@ -156,6 +156,10 @@ static inline void futex_set_vdso_cs_range(struct futex_mm_data *fd, unsigned in
 static inline void futex_fixup_robust_unlock(struct pt_regs *regs) { }
 #endif /* !CONFIG_FUTEX_ROBUST_UNLOCK */
 
+#ifdef CONFIG_FUTEX
 void futex_mm_init(struct mm_struct *mm);
+#else
+static inline void futex_mm_init(struct mm_struct *mm) { }
+#endif /* !CONFIG_FUTEX */
 
 #endif /* _LINUX_FUTEX_H */
