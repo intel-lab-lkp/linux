@@ -172,6 +172,7 @@ struct pp_memory_provider_params {
 	void *mp_priv;
 	const struct memory_provider_ops *mp_ops;
 	u32 rx_page_size;
+	u32 rx_headroom;
 };
 
 struct page_pool {

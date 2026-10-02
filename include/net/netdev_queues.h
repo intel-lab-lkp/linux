@@ -45,12 +45,16 @@ struct netdev_config {
 /**
  * struct netdev_queue_config - rendered configuration for an RX queue
  * @rx_page_size:	Size of one RX page-pool allocation.
+ * @rx_headroom:	Headroom before packet data in the first buffer,
+ *			including XDP_PACKET_HEADROOM. Zero selects the
+ *			driver default.
  * @rx_ring_size:	Configured size of the regular RX ring.
  * @rx_mini_ring_size:	Configured size of the RX mini ring.
  * @rx_jumbo_ring_size:	Configured size of the RX jumbo ring.
  */
 struct netdev_queue_config {
 	u32	rx_page_size;
+	u32	rx_headroom;
 	u32	rx_ring_size;
 	u32	rx_mini_ring_size;
 	u32	rx_jumbo_ring_size;
@@ -156,6 +160,8 @@ void netdev_stat_queue_sum(struct net_device *netdev,
 enum {
 	/* The queue checks and honours the page size qcfg parameter */
 	QCFG_RX_PAGE_SIZE	= 0x1,
+	/* The queue checks and honours the headroom qcfg parameter */
+	QCFG_RX_HEADROOM	= 0x2,
 };
 
 /**

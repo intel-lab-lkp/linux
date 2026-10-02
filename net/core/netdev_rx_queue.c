@@ -248,6 +248,10 @@ static int __netif_mp_open_rxq(struct net_device *dev, unsigned int rxq_idx,
 		NL_SET_ERR_MSG(extack, "device does not support: rx_page_size");
 		return -EOPNOTSUPP;
 	}
+	if (p->rx_headroom && !(qops->supported_params & QCFG_RX_HEADROOM)) {
+		NL_SET_ERR_MSG(extack, "device does not support: rx_headroom");
+		return -EOPNOTSUPP;
+	}
 
 	rxq = __netif_get_rx_queue(dev, rxq_idx);
 	if (rxq->mp_params.mp_ops) {
