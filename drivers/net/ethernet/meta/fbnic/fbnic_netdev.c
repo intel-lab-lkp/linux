@@ -666,6 +666,31 @@ static int fbnic_bpf(struct net_device *netdev, struct netdev_bpf *bpf)
 	}
 }
 
+static int fbnic_xsk_wakeup(struct net_device *netdev, u32 queue_id,
+			    u32 __always_unused flags)
+{
+	struct fbnic_net *fbn = netdev_priv(netdev);
+	struct xsk_buff_pool *pool;
+	struct napi_struct *napi;
+
+	if (queue_id >= fbn->num_rx_queues)
+		return -EINVAL;
+	if (!netif_running(netdev))
+		return -ENETDOWN;
+	pool = xsk_get_pool_from_rxq(netdev, queue_id);
+	if (!pool)
+		return -EINVAL;
+
+	napi = __netif_get_rx_queue(netdev, queue_id)->napi;
+	if (WARN_ON_ONCE(!napi))
+		return -EINVAL;
+
+	if (!napi_if_scheduled_mark_missed(napi))
+		napi_schedule(napi);
+
+	return 0;
+}
+
 static const struct net_device_ops fbnic_netdev_ops = {
 	.ndo_open		= fbnic_open,
 	.ndo_stop		= fbnic_stop,
@@ -677,6 +702,7 @@ static const struct net_device_ops fbnic_netdev_ops = {
 	.ndo_set_rx_mode_async	= fbnic_set_rx_mode,
 	.ndo_get_stats64	= fbnic_get_stats64,
 	.ndo_bpf		= fbnic_bpf,
+	.ndo_xsk_wakeup		= fbnic_xsk_wakeup,
 	.ndo_hwtstamp_get	= fbnic_hwtstamp_get,
 	.ndo_hwtstamp_set	= fbnic_hwtstamp_set,
 };
@@ -935,6 +961,10 @@ struct net_device *fbnic_netdev_alloc(struct fbnic_dev *fbd)
 	netdev->xdp_features = NETDEV_XDP_ACT_BASIC |
 			       NETDEV_XDP_ACT_REDIRECT |
 			       NETDEV_XDP_ACT_RX_SG;
+	if (PAGE_SIZE == FBNIC_BD_PAGE_SIZE) {
+		netdev->xdp_features |= NETDEV_XDP_ACT_XSK_ZEROCOPY;
+		netdev->xdp_zc_max_segs = FBNIC_MAX_RX_DATA_DESC;
+	}
 
 	netdev->min_mtu = IPV6_MIN_MTU;
 	netdev->max_mtu = FBNIC_MAX_JUMBO_FRAME_SIZE - ETH_HLEN;
