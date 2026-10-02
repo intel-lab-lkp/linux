@@ -18433,11 +18433,13 @@ F:	drivers/net/phy/motorcomm.c
 
 MOTORCOMM YT921X ETHERNET SWITCH DRIVER
 M:	David Yang <mmyangfl@gmail.com>
+M:	Kyle Switch <kyle.switch@motor-comm.com>
 L:	netdev@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/net/dsa/motorcomm,yt921x.yaml
 F:	drivers/net/dsa/motorcomm/
 F:	net/dsa/tag_yt921x.c
+F:	net/dsa/tag_yt922x.c
 
 MOXA SMARTIO/INDUSTIO/INTELLIO SERIAL CARD
 M:	Jiri Slaby <jirislaby@kernel.org>
