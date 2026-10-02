@@ -67,6 +67,7 @@ struct xsk_buff_pool {
 	 * even when they are identical.
 	 */
 	dma_addr_t *dma_pages;
+	struct xsk_dma_map *dma_map;
 	struct xdp_buff_xsk *heads;
 	struct xdp_desc *tx_descs;
 	u64 chunk_mask;

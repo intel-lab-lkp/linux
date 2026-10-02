@@ -373,7 +373,7 @@ static struct xsk_dma_map *xp_create_dma_map(struct device *dev, struct net_devi
 	}
 
 	dma_map->netdev = netdev;
-	dma_map->dev = dev;
+	dma_map->dev = get_device(dev);
 	dma_map->dma_pages_cnt = nr_pages;
 	refcount_set(&dma_map->users, 1);
 	list_add(&dma_map->list, &umem->xsk_dma_list);
@@ -384,6 +384,7 @@ static void xp_destroy_dma_map(struct xsk_dma_map *dma_map)
 {
 	list_del(&dma_map->list);
 	kvfree(dma_map->dma_pages);
+	put_device(dma_map->dev);
 	kfree(dma_map);
 }
 
@@ -407,12 +408,11 @@ static void __xp_dma_unmap(struct xsk_dma_map *dma_map, unsigned long attrs)
 
 void xp_dma_unmap(struct xsk_buff_pool *pool, unsigned long attrs)
 {
-	struct xsk_dma_map *dma_map;
+	struct xsk_dma_map *dma_map = pool->dma_map;
 
 	if (!pool->dma_pages)
 		return;
 
-	dma_map = xp_find_dma_map(pool);
 	if (!dma_map) {
 		WARN(1, "Could not find dma_map for device");
 		return;
@@ -424,6 +424,7 @@ void xp_dma_unmap(struct xsk_buff_pool *pool, unsigned long attrs)
 	kvfree(pool->dma_pages);
 	pool->dma_pages = NULL;
 	pool->dma_pages_cnt = 0;
+	pool->dma_map = NULL;
 	pool->dev = NULL;
 }
 EXPORT_SYMBOL(xp_dma_unmap);
@@ -460,6 +461,7 @@ static int xp_init_dma_info(struct xsk_buff_pool *pool, struct xsk_dma_map *dma_
 		return -ENOMEM;
 
 	pool->dev = dma_map->dev;
+	pool->dma_map = dma_map;
 	pool->dma_pages_cnt = dma_map->dma_pages_cnt;
 	memcpy(pool->dma_pages, dma_map->dma_pages,
 	       pool->dma_pages_cnt * sizeof(*pool->dma_pages));
