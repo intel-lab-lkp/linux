@@ -371,7 +371,7 @@ outerr:
  * mirror should result in a LAYOUTRETURN. @fail_return is how we distinguish
  * between the two cases.
  *
- * Returns a pointer to a connected DS object on success or NULL on failure.
+ * Returns a pointer to a connected DS object on success or an ERR_PTR value on failure.
  */
 struct nfs4_pnfs_ds *
 nfs4_ff_layout_prepare_ds(struct pnfs_layout_segment *lseg,
