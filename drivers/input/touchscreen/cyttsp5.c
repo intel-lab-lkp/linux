@@ -88,6 +88,7 @@
 #define CY_HID_OUTPUT_GET_SYSINFO_TIMEOUT_MS	3000
 #define CY_HID_GET_HID_DESCRIPTOR_TIMEOUT_MS	4000
 #define CY_HID_SET_POWER_TIMEOUT		500
+#define CY_HID_RESET_SENTINEL_TIMEOUT_MS	1000
 
 /* maximum number of concurrent tracks */
 #define TOUCH_REPORT_SIZE			10
@@ -760,6 +761,30 @@ static int cyttsp5_deassert_int(struct cyttsp5 *ts)
 	return -EINVAL;
 }
 
+/*
+ * After a reset the device asserts the interrupt line with a zero-length
+ * report (reset sentinel) once it is ready to communicate. Consume it so
+ * that it does not complete the next command.
+ */
+static int cyttsp5_wait_reset_sentinel(struct cyttsp5 *ts)
+{
+	unsigned long timeout = msecs_to_jiffies(CY_HID_RESET_SENTINEL_TIMEOUT_MS);
+	int rc;
+
+	rc = wait_for_completion_interruptible_timeout(&ts->cmd_done, timeout);
+	if (rc <= 0) {
+		dev_err(ts->dev, "Reset sentinel timed out\n");
+		return -ETIMEDOUT;
+	}
+
+	if (get_unaligned_le16(&ts->response_buf[0]) != 0) {
+		dev_err(ts->dev, "Unexpected report instead of reset sentinel\n");
+		return -EPROTO;
+	}
+
+	return 0;
+}
+
 static int cyttsp5_fill_all_touch(struct cyttsp5 *ts)
 {
 	struct cyttsp5_sysinfo *si = &ts->sysinfo;
@@ -785,12 +810,6 @@ static int cyttsp5_fill_all_touch(struct cyttsp5 *ts)
 static int cyttsp5_startup(struct cyttsp5 *ts)
 {
 	int error;
-
-	error = cyttsp5_deassert_int(ts);
-	if (error) {
-		dev_err(ts->dev, "Error on deassert int r=%d\n", error);
-		return -ENODEV;
-	}
 
 	/*
 	 * Launch the application as the device starts in bootloader mode
@@ -888,18 +907,39 @@ static int cyttsp5_probe(struct device *dev, struct regmap *regmap, int irq,
 		return error;
 	}
 
-	fsleep(10); /* Ensure long-enough reset pulse (minimum 10us). */
-
-	gpiod_set_value_cansleep(ts->reset_gpio, 0);
-
-	/* Need a delay to have device up */
-	msleep(20);
-
 	error = devm_request_threaded_irq(dev, irq, NULL, cyttsp5_handle_irq,
 					  IRQF_ONESHOT, name, ts);
 	if (error) {
 		dev_err(dev, "unable to request IRQ\n");
 		return error;
+	}
+
+	fsleep(10); /* Ensure long-enough reset pulse (minimum 10us). */
+
+	gpiod_set_value_cansleep(ts->reset_gpio, 0);
+
+	if (ts->reset_gpio) {
+		error = cyttsp5_wait_reset_sentinel(ts);
+		if (error)
+			return error;
+	} else {
+		/*
+		 * Without a reset line, the device may be powering up or
+		 * already running. Give it time to come up, then make sure a
+		 * reset sentinel does not complete the first command: read it
+		 * if it came before the IRQ was requested, otherwise drop the
+		 * completion set by the interrupt handler.
+		 */
+		msleep(20);
+
+		error = cyttsp5_deassert_int(ts);
+		if (error) {
+			dev_err(ts->dev, "Error on deassert int r=%d\n", error);
+			return error;
+		}
+
+		synchronize_irq(irq);
+		try_wait_for_completion(&ts->cmd_done);
 	}
 
 	error = cyttsp5_startup(ts);
