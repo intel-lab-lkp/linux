@@ -412,6 +412,109 @@ found:
 	return 1;
 }
 
+/*
+ * "pci=hpreserve=<reservation>@<pci_dev>[; ...]", set in pci_setup() and
+ * copied in pci_realloc_setup_params().
+ */
+static const char *hotplug_reserve_param;
+
+static bool pci_hotplug_reserve_key(const char *p, size_t len, const char *key)
+{
+	return strlen(key) == len && !strncmp(p, key, len);
+}
+
+/*
+ * Parse one "<key>=<value>[:<key>=<value>]*@" reservation into @res.
+ * Returns a pointer to the device specification following the '@', or
+ * NULL if the reservation cannot be parsed.
+ */
+static const char *pci_parse_hotplug_reserve(const char *p,
+					     struct pci_hotplug_reserve *res)
+{
+	unsigned long long val;
+	size_t len;
+	char *end;
+
+	memset(res, 0, sizeof(*res));
+
+	for (;;) {
+		len = strcspn(p, "=:@;");
+		if (p[len] != '=')
+			return NULL;
+
+		val = memparse(p + len + 1, &end);
+		if (end == p + len + 1)
+			return NULL;
+
+		if (pci_hotplug_reserve_key(p, len, "mmio"))
+			res->mmio_size = val;
+		else if (pci_hotplug_reserve_key(p, len, "mmioalign"))
+			res->mmio_align = val;
+		else if (pci_hotplug_reserve_key(p, len, "mmiopref"))
+			res->mmio_pref_size = val;
+		else if (pci_hotplug_reserve_key(p, len, "mmioprefalign"))
+			res->mmio_pref_align = val;
+		else
+			return NULL;
+
+		p = end + 1;
+		if (*end == '@')
+			break;
+		if (*end != ':')
+			return NULL;
+	}
+
+	if ((res->mmio_align && !is_power_of_2(res->mmio_align)) ||
+	    (res->mmio_pref_align && !is_power_of_2(res->mmio_pref_align)))
+		return NULL;
+
+	return p;
+}
+
+/**
+ * pci_get_hotplug_reserve - get the resources reserved for a hotplug bridge
+ * @bridge: the bridge
+ * @res: filled in with the reservation for @bridge
+ *
+ * Look up @bridge in the "pci=hpreserve=" kernel parameter.  Only hotplug
+ * bridges are considered.
+ *
+ * Return: true if a reservation was requested for @bridge.
+ */
+bool pci_get_hotplug_reserve(struct pci_dev *bridge,
+			     struct pci_hotplug_reserve *res)
+{
+	const char *p = hotplug_reserve_param;
+	int ret;
+
+	if (!p || !bridge->is_hotplug_bridge)
+		return false;
+
+	while (*p) {
+		p = pci_parse_hotplug_reserve(p, res);
+		if (!p) {
+			pr_err_once("PCI: Can't parse hpreserve parameter\n");
+			return false;
+		}
+
+		ret = pci_dev_str_match(bridge, p, &p);
+		if (ret == 1)
+			return true;
+		if (ret < 0) {
+			pr_err_once("PCI: Can't parse hpreserve parameter\n");
+			return false;
+		}
+
+		if (*p != ';' && *p != ',') {
+			/* End of param or invalid format */
+			break;
+		}
+		p++;
+	}
+
+	return false;
+}
+
 static u8 __pci_find_next_cap(struct pci_bus *bus, unsigned int devfn,
 			      u8 pos, int cap)
 {
@@ -6840,6 +6943,8 @@ static int __init pci_setup(char *str)
 					simple_strtoul(str + 10, &str, 0);
 				if (pci_hotplug_bus_size > 0xff)
 					pci_hotplug_bus_size = DEFAULT_HOTPLUG_BUS_SIZE;
+			} else if (!strncmp(str, "hpreserve=", 10)) {
+				hotplug_reserve_param = str + 10;
 			} else if (!strncmp(str, "pcie_bus_tune_off", 17)) {
 				pcie_bus_config = PCIE_BUS_TUNE_OFF;
 			} else if (!strncmp(str, "pcie_bus_safe", 13)) {
@@ -6879,6 +6984,7 @@ static int __init pci_realloc_setup_params(void)
 					   GFP_KERNEL);
 	disable_acs_redir_param = kstrdup(disable_acs_redir_param, GFP_KERNEL);
 	config_acs_param = kstrdup(config_acs_param, GFP_KERNEL);
+	hotplug_reserve_param = kstrdup(hotplug_reserve_param, GFP_KERNEL);
 
 	return 0;
 }

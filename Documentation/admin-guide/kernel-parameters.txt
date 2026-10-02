@@ -5232,6 +5232,40 @@ Kernel parameters
 		hpbussize=nn	The minimum amount of additional bus numbers
 				reserved for buses below a hotplug bridge.
 				Default is 1.
+		hpreserve=
+				Format:
+				<reservation>@<pci_dev>[; ...]
+				where <reservation> is one or more of
+				<key>=<value> separated by colons.
+				Reserve resources for the hotplug bridges
+				specified (in the format described above)
+				for devices that are not present yet, e.g.
+				a switch that is expected behind the bridge
+				but whose link comes up only after the
+				bridge windows have been sized.  Unlike
+				hpmmiosize and hpmmioprefsize, which add
+				optional space that is dropped if it does
+				not fit, the reservation is required space:
+				the bridge window is sized to include it,
+				like the resources of devices already
+				present below the bridge.
+				Only hotplug bridges are affected.
+				Keys:
+				  mmio=nn[KMG]	Minimum size of the
+					non-prefetchable memory window.
+				  mmioalign=nn[KMG]  Minimum alignment of
+					the non-prefetchable memory window.
+				  mmiopref=nn[KMG]  Minimum size of the
+					prefetchable memory window.
+				  mmioprefalign=nn[KMG]  Minimum alignment
+					of the prefetchable memory window.
+				Alignments must be powers of two.  For
+				example,
+				  pci=hpreserve=mmiopref=1032M:mmioprefalign=1G@0000:80:01.1/00.0/03.0
+				reserves a 1 GiB-aligned 1032 MiB
+				prefetchable window below the downstream
+				port at devfn 03.0 of the switch behind root
+				port 0000:80:01.1.
 		realloc=	Enable/disable reallocating PCI bridge resources
 				if allocations done by BIOS are too small to
 				accommodate resources required by all child

@@ -410,6 +410,25 @@ extern unsigned long pci_hotplug_mmio_size;
 extern unsigned long pci_hotplug_mmio_pref_size;
 extern unsigned long pci_hotplug_bus_size;
 
+/**
+ * struct pci_hotplug_reserve - resources reserved for a hotplug bridge
+ * @mmio_size: minimum size of the non-prefetchable memory window
+ * @mmio_align: minimum alignment of the non-prefetchable memory window
+ * @mmio_pref_size: minimum size of the prefetchable memory window
+ * @mmio_pref_align: minimum alignment of the prefetchable memory window
+ *
+ * Requested with "pci=hpreserve=".  A value of zero means no reservation.
+ */
+struct pci_hotplug_reserve {
+	resource_size_t mmio_size;
+	resource_size_t mmio_align;
+	resource_size_t mmio_pref_size;
+	resource_size_t mmio_pref_align;
+};
+
+bool pci_get_hotplug_reserve(struct pci_dev *bridge,
+			     struct pci_hotplug_reserve *res);
+
 static inline bool pci_is_cardbus_bridge(struct pci_dev *dev)
 {
 	return dev->hdr_type == PCI_HEADER_TYPE_CARDBUS;

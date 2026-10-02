@@ -1258,6 +1258,38 @@ static bool pbus_size_mem_optional(struct pci_dev *dev, int resno,
 	return true;
 }
 
+/*
+ * Apply a "pci=hpreserve=" reservation to the memory window @b_res of the
+ * bridge leading to @bus.  Unlike the hpmmiosize/hpmmioprefsize space, the
+ * reservation is sized as required space, so it is in place before the
+ * devices that need it appear behind the bridge.
+ */
+static void pbus_size_mem_reserve(struct pci_bus *bus, struct resource *b_res,
+				  resource_size_t *size,
+				  resource_size_t *min_align)
+{
+	bool pref = b_res->flags & IORESOURCE_PREFETCH;
+	struct pci_hotplug_reserve res;
+	resource_size_t rsize, ralign;
+
+	if (!bus->self || !pci_get_hotplug_reserve(bus->self, &res))
+		return;
+
+	rsize = pref ? res.mmio_pref_size : res.mmio_size;
+	ralign = pref ? res.mmio_pref_align : res.mmio_align;
+	if (rsize <= *size && ralign <= *min_align)
+		return;
+
+	*size = max(*size, rsize);
+	if (!*size)
+		return;
+	*min_align = max(*min_align, ralign);
+
+	pci_info(bus->self, "bridge window to %pR: reserving %s size %#llx align %#llx\n",
+		 &bus->busn_res, pref ? "prefetchable" : "non-prefetchable",
+		 (unsigned long long)*size, (unsigned long long)*min_align);
+}
+
 /**
  * pbus_size_mem() - Size the memory window of a given bus
  *
@@ -1349,6 +1381,7 @@ static void pbus_size_mem(struct pci_bus *bus, struct resource *b_res,
 	win_align = pci_min_window_alignment(bus, b_res->flags);
 	min_align = calculate_head_align(aligns, max_order);
 	min_align = max(min_align, win_align);
+	pbus_size_mem_reserve(bus, b_res, &size, &min_align);
 	size0 = calculate_memsize(size, realloc_head ? 0 : add_size,
 				  0, win_align);
 
