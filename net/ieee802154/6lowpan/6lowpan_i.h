@@ -30,6 +30,11 @@ struct lowpan_frag_queue {
 	struct inet_frag_queue	q;
 };
 
+/* lowpan_header_create() pushes the destination address (an EUI-64, as in
+ * sockaddr_ll.sll_addr) in front of the IPv6 header, lowpan_xmit() pulls it.
+ */
+#define LOWPAN_PSEUDO_HDR_LEN	EUI64_ADDR_LEN
+
 int lowpan_frag_rcv(struct sk_buff *skb, const u8 frag_type);
 void lowpan_net_frag_exit(void);
 int lowpan_net_frag_init(void);

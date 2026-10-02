@@ -109,8 +109,8 @@ static const struct net_device_ops lowpan_netdev_ops = {
 static void lowpan_setup(struct net_device *ldev)
 {
 	memset(ldev->broadcast, 0xff, IEEE802154_ADDR_LEN);
-	/* We need an ipv6hdr as minimum len when calling xmit */
-	ldev->hard_header_len	= sizeof(struct ipv6hdr);
+	/* lowpan_header_create() pushes the destination address */
+	ldev->hard_header_len	= LOWPAN_PSEUDO_HDR_LEN;
 	ldev->flags		= IFF_BROADCAST | IFF_MULTICAST;
 	ldev->priv_flags	|= IFF_NO_QUEUE;
 
