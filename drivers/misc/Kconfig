@@ -571,9 +571,10 @@ config MCHP_LAN966X_PCI
 config TC9564_PCI
 	tristate "Toshiba TC9564 PCI function support"
 	depends on OF
+	depends on OF_IRQ
 	depends on PCI
+	depends on PCI_QUIRKS
 	select PCI_DYNAMIC_OF_NODES
-	select PCI_QUIRKS
 	default m
 	help
 	  This enables support for two PCI functions implemented by the
