@@ -54,9 +54,6 @@ struct bb_register_def {
 
 };
 
-u8 PHY_GetTxPowerByRateBase(struct adapter *Adapter, u8 RfPath,
-			    enum rate_section RateSection);
-
 u8 PHY_GetRateSectionIndexOfTxPowerByRate(struct adapter *padapter, u32	RegAddr,
 					  u32 BitMask);
 
