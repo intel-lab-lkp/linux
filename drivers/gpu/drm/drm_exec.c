@@ -70,19 +70,26 @@ static void drm_exec_unlock_all(struct drm_exec *exec)
  *
  * Initialize the object and make sure that we can track locked objects.
  *
- * If nr is non-zero then it is used as the initial objects table size.
- * In either case, the table will grow (be re-allocated) on demand.
+ * The first %DRM_EXEC_INLINE_OBJECTS locked objects are tracked within @exec
+ * itself, so locking no more than that never allocates memory. If nr is larger
+ * than that, it is used as the initial size of an allocated objects table
+ * instead. In either case, the table will grow (be re-allocated) on demand.
  */
 void drm_exec_init(struct drm_exec *exec, u32 flags, unsigned nr)
 {
-	if (!nr)
-		nr = PAGE_SIZE / sizeof(void *);
+	exec->objects = NULL;
+	if (nr > DRM_EXEC_INLINE_OBJECTS)
+		exec->objects = kvmalloc_objs(*exec->objects, nr);
+
+	/* If allocation here fails, just delay that till it is needed */
+	if (exec->objects) {
+		exec->max_objects = nr;
+	} else {
+		exec->objects = exec->inline_objects;
+		exec->max_objects = DRM_EXEC_INLINE_OBJECTS;
+	}
 
 	exec->flags = flags;
-	exec->objects = kvmalloc_objs(*exec->objects, nr);
-
-	/* If allocation here fails, just delay that till the first use */
-	exec->max_objects = exec->objects ? nr : 0;
 	exec->num_objects = 0;
 	exec->contended = DRM_EXEC_DUMMY;
 	exec->prelocked = NULL;
@@ -99,7 +106,8 @@ EXPORT_SYMBOL(drm_exec_init);
 void drm_exec_fini(struct drm_exec *exec)
 {
 	drm_exec_unlock_all(exec);
-	kvfree(exec->objects);
+	if (exec->objects != exec->inline_objects)
+		kvfree(exec->objects);
 	if (exec->contended != DRM_EXEC_DUMMY) {
 		drm_gem_object_put(exec->contended);
 		ww_acquire_fini(&exec->ticket);
@@ -140,9 +148,16 @@ static int drm_exec_obj_locked(struct drm_exec *exec,
 {
 	if (unlikely(exec->num_objects == exec->max_objects)) {
 		size_t size = exec->max_objects * sizeof(void *);
-		void *tmp;
+		struct drm_gem_object **tmp;
 
-		tmp = kvrealloc(exec->objects, size + PAGE_SIZE, GFP_KERNEL);
+		if (exec->objects == exec->inline_objects) {
+			tmp = kvmalloc(size + PAGE_SIZE, GFP_KERNEL);
+			if (tmp)
+				memcpy(tmp, exec->objects, size);
+		} else {
+			tmp = kvrealloc(exec->objects, size + PAGE_SIZE,
+					GFP_KERNEL);
+		}
 		if (!tmp)
 			return -ENOMEM;
 

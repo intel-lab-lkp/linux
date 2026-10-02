@@ -15,6 +15,12 @@
  */
 #define DRM_EXEC_DUMMY ((void *)~0)
 
+/*
+ * Number of locked objects tracked inside &struct drm_exec itself. Locking at
+ * most this many objects never allocates memory for tracking them.
+ */
+#define DRM_EXEC_INLINE_OBJECTS	8
+
 struct drm_gem_object;
 
 /**
@@ -42,7 +48,8 @@ struct drm_exec {
 	unsigned int		max_objects;
 
 	/**
-	 * @objects: array of the locked objects
+	 * @objects: array of the locked objects, either @inline_objects or
+	 * allocated once more objects need tracking than it can hold
 	 */
 	struct drm_gem_object	**objects;
 
@@ -55,6 +62,15 @@ struct drm_exec {
 	 * @prelocked: already locked GEM object due to contention
 	 */
 	struct drm_gem_object *prelocked;
+
+	/**
+	 * @inline_objects: storage for the first %DRM_EXEC_INLINE_OBJECTS
+	 * locked objects, so that locking only a few objects does not need to
+	 * allocate memory, and therefore cannot fail with -ENOMEM. As @objects
+	 * may point here, a &struct drm_exec must not be moved or copied after
+	 * drm_exec_init().
+	 */
+	struct drm_gem_object	*inline_objects[DRM_EXEC_INLINE_OBJECTS];
 };
 
 /**
