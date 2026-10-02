@@ -9,6 +9,7 @@
 #include "builtin.h"
 
 #include "util/aslr.h"
+#include "util/inject_bid_offset.h"
 #include "util/color.h"
 #include "util/dso.h"
 #include "util/vdso.h"
@@ -46,6 +47,7 @@
 #include <errno.h>
 #include <signal.h>
 #include <inttypes.h>
+#include <stdlib.h>
 
 struct guest_event {
 	struct perf_sample		sample;
@@ -112,6 +114,7 @@ enum build_id_rewrite_style {
 	BID_RWS__INJECT_HEADER_ALL,
 	BID_RWS__MMAP2_BUILDID_ALL,
 	BID_RWS__MMAP2_BUILDID_LAZY,
+	BID_RWS__SAMPLE_BUILDID,
 };
 
 struct perf_inject {
@@ -243,12 +246,18 @@ static int perf_event__repipe_attr(const struct perf_tool *tool,
 	if (ret)
 		return ret;
 
-	if (inject->aslr) {
+	if (inject->aslr || inject->build_id_style == BID_RWS__SAMPLE_BUILDID) {
 		aslr_event = malloc(event->header.size);
 		if (!aslr_event)
 			return -ENOMEM;
 		memcpy(aslr_event, event, event->header.size);
-		aslr_tool__strip_attr_event(aslr_event, *pevlist);
+		if (inject->aslr)
+			aslr_tool__strip_attr_event(aslr_event, *pevlist);
+		if (inject->build_id_style == BID_RWS__SAMPLE_BUILDID) {
+			ret = perf_event__rewrite_attr_for_build_id_offset(&aslr_event->attr.attr);
+			if (ret)
+				goto out;
+		}
 		event = aslr_event;
 	}
 
@@ -2571,7 +2580,8 @@ static int __cmd_inject(struct perf_inject *inject)
 		};
 
 		if (inject->build_id_style == BID_RWS__INJECT_HEADER_LAZY ||
-		    inject->build_id_style == BID_RWS__INJECT_HEADER_ALL)
+		    inject->build_id_style == BID_RWS__INJECT_HEADER_ALL ||
+		    inject->build_id_style == BID_RWS__SAMPLE_BUILDID)
 			perf_header__set_feat(&session->header, HEADER_BUILD_ID);
 		/*
 		 * Keep all buildids when there is unprocessed AUX data because
@@ -2626,6 +2636,17 @@ static int __cmd_inject(struct perf_inject *inject)
 
 		if (inject->aslr)
 			aslr_tool__strip_evlist(inject->session->tool, session->evlist);
+		if (inject->build_id_style == BID_RWS__SAMPLE_BUILDID) {
+			struct evsel *evsel;
+
+			evlist__for_each_entry(session->evlist, evsel) {
+				struct perf_event_attr *attr = &evsel->core.attr;
+
+				ret = perf_event__rewrite_attr_for_build_id_offset(attr);
+				if (ret)
+					return ret;
+			}
+		}
 
 		session->header.data_offset = output_data_offset;
 		session->header.data_size = inject->bytes_written;
@@ -2684,6 +2705,7 @@ int cmd_inject(int argc, const char **argv)
 	bool build_id_all = false;
 	bool mmap2_build_ids = false;
 	bool mmap2_build_id_all = false;
+	bool build_id_sample = false;
 
 	struct option options[] = {
 		OPT_BOOLEAN('b', "build-ids", &build_ids,
@@ -2692,8 +2714,11 @@ int cmd_inject(int argc, const char **argv)
 			    "Inject build-ids of all DSOs into the output stream"),
 		OPT_BOOLEAN('B', "mmap2-buildids", &mmap2_build_ids,
 			    "Drop unused mmap events, make others mmap2 with build IDs"),
+
 		OPT_BOOLEAN(0, "mmap2-buildid-all", &mmap2_build_id_all,
 			    "Rewrite all mmap events as mmap2 events with build IDs"),
+		OPT_BOOLEAN('S', "sample-buildids", &build_id_sample,
+			    "Drop all mmap events and rewrite samples to use build ID + offset"),
 		OPT_STRING(0, "known-build-ids", &known_build_ids,
 			   "buildid path [,buildid path...]",
 			   "build-ids to use for given paths"),
@@ -2766,8 +2791,8 @@ int cmd_inject(int argc, const char **argv)
 	if (argc)
 		usage_with_options(inject_usage, options);
 
-	if (inject.aslr && inject.convert_callchain) {
-		pr_err("Error: --aslr and --convert-callchain are mutually exclusive features.\n");
+	if ((inject.aslr + inject.convert_callchain + build_id_sample) > 1) {
+		pr_err("Error: --aslr, --convert-callchain and --sample-buildids are mutually exclusive features.\n");
 		return -EINVAL;
 	}
 
@@ -2812,14 +2837,18 @@ int cmd_inject(int argc, const char **argv)
 		inject.build_id_style = BID_RWS__MMAP2_BUILDID_ALL;
 	if (build_ids)
 		inject.build_id_style = BID_RWS__INJECT_HEADER_LAZY;
+
 	if (build_id_all)
 		inject.build_id_style = BID_RWS__INJECT_HEADER_ALL;
+	if (build_id_sample)
+		inject.build_id_style = BID_RWS__SAMPLE_BUILDID;
 
 	data.path = inject.input_name;
 
 	ordered_events = inject.jit_mode || inject.sched_stat ||
 		inject.build_id_style == BID_RWS__INJECT_HEADER_LAZY ||
-		inject.build_id_style == BID_RWS__MMAP2_BUILDID_LAZY;
+		inject.build_id_style == BID_RWS__MMAP2_BUILDID_LAZY ||
+		inject.build_id_style == BID_RWS__SAMPLE_BUILDID;
 	perf_tool__init(&inject.tool, ordered_events);
 	inject.tool.sample		= perf_event__repipe_sample;
 	inject.tool.read		= perf_event__repipe_sample;
@@ -2870,6 +2899,12 @@ int cmd_inject(int argc, const char **argv)
 			ret = -ENOMEM;
 			goto out_close_output;
 		}
+	} else if (inject.build_id_style == BID_RWS__SAMPLE_BUILDID) {
+		tool = inject_bid_offset_tool__new(&inject.tool);
+		if (!tool) {
+			ret = -ENOMEM;
+			goto out_close_output;
+		}
 	}
 	inject.session = __perf_session__new(&data, tool,
 					     /*trace_event_repipe=*/inject.output.is_pipe,
@@ -2877,8 +2912,11 @@ int cmd_inject(int argc, const char **argv)
 
 	if (IS_ERR(inject.session)) {
 		ret = PTR_ERR(inject.session);
+
 		if (inject.aslr)
 			aslr_tool__delete(tool);
+		if (inject.build_id_style == BID_RWS__SAMPLE_BUILDID)
+			inject_bid_offset_tool__delete(tool);
 		goto out_close_output;
 	}
 
@@ -2918,8 +2956,19 @@ int cmd_inject(int argc, const char **argv)
 		 * the input.
 		 */
 		if (!data.is_pipe) {
+			struct evsel *evsel;
+
 			if (inject.aslr)
 				aslr_tool__strip_evlist(tool, inject.session->evlist);
+			if (inject.build_id_style == BID_RWS__SAMPLE_BUILDID) {
+				evlist__for_each_entry(inject.session->evlist, evsel) {
+					struct perf_event_attr *attr = &evsel->core.attr;
+
+					ret = perf_event__rewrite_attr_for_build_id_offset(attr);
+					if (ret)
+						goto out_delete;
+				}
+			}
 
 			ret = perf_event__synthesize_for_pipe(&inject.tool,
 							      inject.session,
@@ -2928,6 +2977,10 @@ int cmd_inject(int argc, const char **argv)
 
 			if (inject.aslr)
 				aslr_tool__restore_evlist(tool, inject.session->evlist);
+			if (inject.build_id_style == BID_RWS__SAMPLE_BUILDID) {
+				evlist__for_each_entry(inject.session->evlist, evsel)
+					perf_event__rewrite_attr_for_sample_ip(&evsel->core.attr);
+			}
 
 			if (ret < 0)
 				goto out_delete;
@@ -2935,7 +2988,8 @@ int cmd_inject(int argc, const char **argv)
 	}
 
 	if (inject.build_id_style == BID_RWS__INJECT_HEADER_LAZY ||
-	    inject.build_id_style == BID_RWS__MMAP2_BUILDID_LAZY) {
+	    inject.build_id_style == BID_RWS__MMAP2_BUILDID_LAZY ||
+	    inject.build_id_style == BID_RWS__SAMPLE_BUILDID) {
 		/*
 		 * to make sure the mmap records are ordered correctly
 		 * and so that the correct especially due to jitted code
@@ -3002,6 +3056,8 @@ out_delete:
 	perf_session__delete(inject.session);
 	if (inject.aslr)
 		aslr_tool__delete(tool);
+	if (inject.build_id_style == BID_RWS__SAMPLE_BUILDID)
+		inject_bid_offset_tool__delete(tool);
 out_close_output:
 	if (!inject.in_place_update)
 		perf_data__close(&inject.output);
