@@ -1217,12 +1217,34 @@ int __must_check pcibios_enable_device(struct pci_dev *, int mask);
 /* Architecture-specific versions may override this (weak) */
 char *pcibios_setup(char *str);
 
-/* Used only when drivers/pci/setup.c is used */
+/* Resource assignment request handling */
+/**
+ * struct pci_resreq_data - Data passed to pcibios_align_resource()
+ * @dev: PCI device
+ * @user_align: User provided alignment override (pci=resource_alignment param)
+ */
+struct pci_resreq_data {
+	struct pci_dev *dev;
+	resource_size_t user_align;
+};
+
+resource_size_t pci_specified_resource_alignment(struct pci_dev *dev,
+						 bool *resize);
+static inline void pci_init_pci_resreq_data(struct pci_resreq_data *rr,
+					    struct pci_dev *dev)
+{
+	bool user_aligned;
+
+	memset(rr, 0, sizeof(*rr));
+	rr->dev = dev;
+	rr->user_align = pci_specified_resource_alignment(dev, &user_aligned);
+}
+
 resource_size_t pcibios_align_resource(void *data, const struct resource *res,
 				       const struct resource *empty_res,
 				       resource_size_t size,
 				       resource_size_t align);
-resource_size_t pci_align_resource(struct pci_dev *dev,
+resource_size_t pci_align_resource(struct pci_resreq_data *rr,
 				   const struct resource *res,
 				   const struct resource *empty_res,
 				   resource_size_t size,
