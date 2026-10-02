@@ -179,8 +179,15 @@ static inline void r8a66597_read_fifo(struct r8a66597 *r8a66597,
 			       len & 0x03);
 		}
 	} else {
-		len = (len + 1) / 2;
-		ioread16_rep(fifoaddr, buf, len);
+		count = len / 2;
+		ioread16_rep(fifoaddr, buf, count);
+
+		if (len & 0x00000001) {
+			u16 tmp;
+
+			ioread16_rep(fifoaddr, &tmp, 1);
+			memcpy((unsigned char *)buf + count * 2, &tmp, 1);
+		}
 	}
 }
 
