@@ -1233,7 +1233,7 @@ u32 nvme_command_effects(struct nvme_ctrl *ctrl, struct nvme_ns *ns, u8 opcode)
 	u32 effects = 0;
 
 	if (ns) {
-		effects = le32_to_cpu(ns->head->effects->iocs[opcode]);
+		effects = le32_to_cpu(ns->effects->iocs[opcode]);
 		if (effects & ~(NVME_CMD_EFFECTS_CSUPP | NVME_CMD_EFFECTS_LBCC))
 			dev_warn_once(ctrl->device,
 				"IO command:%02x has unusual effects:%08x\n",
@@ -4041,13 +4041,6 @@ static struct nvme_ns_head *nvme_alloc_ns_head(struct nvme_ns *ns,
 	kref_init(&head->ref);
 	ns->head = head;
 
-	if (head->ids.csi) {
-		ret = nvme_get_effects_log(ctrl, head->ids.csi, &head->effects);
-		if (ret)
-			goto out_cleanup_srcu;
-	} else
-		head->effects = ctrl->effects;
-
 	if (ctrl->ctratt & NVME_CTRL_ATTR_FDPS) {
 		ret = nvme_query_fdp_info(ns, info);
 		if (ret < 0)
@@ -4149,6 +4142,18 @@ static int nvme_init_ns_head(struct nvme_ns *ns, struct nvme_ns_info *info)
 	}
 
 	mutex_lock(&ctrl->subsys->lock);
+	/*
+	 * The effects log belongs to this controller, not to the shared head,
+	 * which may outlive the controller that created it.
+	 */
+	if (info->ids.csi) {
+		ret = nvme_get_effects_log(ctrl, info->ids.csi, &ns->effects);
+		if (ret)
+			goto out_unlock;
+	} else {
+		ns->effects = ctrl->effects;
+	}
+
 	head = nvme_find_ns_head(ctrl, info->nsid);
 	if (!head) {
 		ret = nvme_subsys_check_duplicate_ids(ctrl->subsys, &info->ids);
