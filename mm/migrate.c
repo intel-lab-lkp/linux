@@ -2451,44 +2451,180 @@ out:
 	return err;
 }
 
+struct pages_stat_walk {
+	unsigned long start;
+	int *status;
+};
+
+static void pages_stat_set(struct pages_stat_walk *psw, unsigned long addr,
+			   unsigned long end, int stat)
+{
+	int *status = psw->status + ((addr - psw->start) >> PAGE_SHIFT);
+
+	/* end wraps to 0 for the last page of the address space */
+	for (; addr != end; addr += PAGE_SIZE)
+		*status++ = stat;
+}
+
+static int folio_stat(struct folio *folio)
+{
+	if (is_zero_folio(folio) || is_huge_zero_folio(folio))
+		return -EFAULT;
+	if (folio_is_zone_device(folio))
+		return -ENOENT;
+	return folio_nid(folio);
+}
+
+/* Report pages the same way folio_walk_start() with FW_ZEROPAGE finds them. */
+static int pages_stat_pud_entry(pud_t *pudp, unsigned long addr,
+				unsigned long end, struct mm_walk *walk)
+{
+	struct page *page;
+	spinlock_t *ptl;
+	pud_t pud;
+	int stat;
+
+	if (!IS_ENABLED(CONFIG_PGTABLE_HAS_HUGE_LEAVES))
+		return 0;
+	pud = pudp_get(pudp);
+	if (pud_present(pud) && !pud_leaf(pud))
+		return 0;
+
+	ptl = pud_lock(walk->mm, pudp);
+	pud = pudp_get(pudp);
+	if (pud_present(pud) && !pud_leaf(pud)) {
+		spin_unlock(ptl);
+		return 0;
+	}
+	stat = -ENOENT;
+	if (pud_present(pud)) {
+		page = vm_normal_page_pud(walk->vma, addr, pud);
+		if (page)
+			stat = folio_stat(page_folio(page));
+	}
+	pages_stat_set(walk->private, addr, end, stat);
+	spin_unlock(ptl);
+	walk->action = ACTION_CONTINUE;
+	return 0;
+}
+
+static int pages_stat_pmd_entry(pmd_t *pmdp, unsigned long addr,
+				unsigned long end, struct mm_walk *walk)
+{
+	struct vm_area_struct *vma = walk->vma;
+	struct page *page;
+	spinlock_t *ptl;
+	pte_t *ptep;
+	pmd_t pmd;
+	int stat;
+
+	pmd = pmdp_get_lockless(pmdp);
+	if (IS_ENABLED(CONFIG_PGTABLE_HAS_HUGE_LEAVES) &&
+	    (!pmd_present(pmd) || pmd_leaf(pmd))) {
+		ptl = pmd_lock(walk->mm, pmdp);
+		pmd = pmdp_get(pmdp);
+		if (pmd_present(pmd) && !pmd_leaf(pmd)) {
+			spin_unlock(ptl);
+			goto pte_table;
+		}
+		stat = -ENOENT;
+		if (pmd_present(pmd)) {
+			page = vm_normal_page_pmd(vma, addr, pmd);
+			if (page)
+				stat = folio_stat(page_folio(page));
+			else if (is_huge_zero_pmd(pmd))
+				stat = -EFAULT;
+		}
+		pages_stat_set(walk->private, addr, end, stat);
+		spin_unlock(ptl);
+		return 0;
+	}
+
+pte_table:
+	ptep = pte_offset_map_lock(walk->mm, pmdp, addr, &ptl);
+	if (!ptep) {
+		walk->action = ACTION_AGAIN;
+		return 0;
+	}
+	for (; addr < end; addr += PAGE_SIZE, ptep++) {
+		pte_t pte = ptep_get(ptep);
+
+		stat = -ENOENT;
+		if (pte_present(pte)) {
+			page = vm_normal_page(vma, addr, pte);
+			if (page)
+				stat = folio_stat(page_folio(page));
+			else if (is_zero_pfn(pte_pfn(pte)))
+				stat = -EFAULT;
+		}
+		pages_stat_set(walk->private, addr, addr + PAGE_SIZE, stat);
+	}
+	pte_unmap_unlock(ptep - 1, ptl);
+	return 0;
+}
+
+static int pages_stat_hugetlb_entry(pte_t *ptep, unsigned long hmask,
+				    unsigned long addr, unsigned long end,
+				    struct mm_walk *walk)
+{
+#ifdef CONFIG_HUGETLB_PAGE
+	spinlock_t *ptl;
+	pte_t pte;
+	int stat = -ENOENT;
+
+	ptl = huge_pte_lock(hstate_vma(walk->vma), walk->mm, ptep);
+	pte = huge_ptep_get(walk->mm, addr, ptep);
+	if (pte_present(pte))
+		stat = folio_stat(pfn_folio(pte_pfn(pte)));
+	pages_stat_set(walk->private, addr, end, stat);
+	spin_unlock(ptl);
+#endif
+	return 0;
+}
+
+static int pages_stat_pte_hole(unsigned long addr, unsigned long end,
+			       int depth, struct mm_walk *walk)
+{
+	/* No VMA at all is -EFAULT, a VMA without the page is -ENOENT */
+	pages_stat_set(walk->private, addr, end, walk->vma ? -ENOENT : -EFAULT);
+	return 0;
+}
+
+static const struct mm_walk_ops pages_stat_walk_ops = {
+	.pud_entry	= pages_stat_pud_entry,
+	.pmd_entry	= pages_stat_pmd_entry,
+	.hugetlb_entry	= pages_stat_hugetlb_entry,
+	.pte_hole	= pages_stat_pte_hole,
+	.walk_lock	= PGWALK_RDLOCK,
+};
+
 /*
  * Determine the nodes of an array of pages and store it in an array of status.
  */
 static void do_pages_stat_array(struct mm_struct *mm, unsigned long nr_pages,
 				const void __user **pages, int *status)
 {
-	unsigned long i;
+	unsigned long i, n;
 
 	mmap_read_lock(mm);
 
-	for (i = 0; i < nr_pages; i++) {
-		unsigned long addr = (unsigned long)(*pages);
-		struct vm_area_struct *vma;
-		struct folio_walk fw;
-		struct folio *folio;
-		int err = -EFAULT;
+	for (i = 0; i < nr_pages; i += n) {
+		unsigned long addr = (unsigned long)pages[i] & PAGE_MASK;
+		struct pages_stat_walk psw = {
+			.start = addr,
+			.status = status + i,
+		};
 
-		vma = vma_lookup(mm, addr);
-		if (!vma)
-			goto set_status;
+		/* Walk runs of consecutive pages in one go */
+		for (n = 1; i + n < nr_pages; n++) {
+			unsigned long next = (unsigned long)pages[i + n] & PAGE_MASK;
 
-		folio = folio_walk_start(&fw, vma, addr, FW_ZEROPAGE);
-		if (folio) {
-			if (is_zero_folio(folio) || is_huge_zero_folio(folio))
-				err = -EFAULT;
-			else if (folio_is_zone_device(folio))
-				err = -ENOENT;
-			else
-				err = folio_nid(folio);
-			folio_walk_end(&fw, vma);
-		} else {
-			err = -ENOENT;
+			if (next != addr + n * PAGE_SIZE || next < addr)
+				break;
 		}
-set_status:
-		*status = err;
-
-		pages++;
-		status++;
+		if (walk_page_range(mm, addr, addr + n * PAGE_SIZE,
+				    &pages_stat_walk_ops, &psw))
+			pages_stat_set(&psw, addr, addr + n * PAGE_SIZE, -EFAULT);
 	}
 
 	mmap_read_unlock(mm);
