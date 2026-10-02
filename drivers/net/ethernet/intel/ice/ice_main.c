@@ -5465,6 +5465,8 @@ static void ice_remove(struct pci_dev *pdev)
 	if (!ice_is_safe_mode(pf))
 		ice_remove_arfs(pf);
 
+	ice_setup_mc_magic_wake(pf);
+
 	devl_lock(priv_to_devlink(pf));
 	ice_dealloc_all_dynamic_ports(pf);
 	ice_deinit_devlink(pf);
@@ -5475,7 +5477,6 @@ static void ice_remove(struct pci_dev *pdev)
 	ice_deinit(pf);
 	ice_vsi_release_all(pf);
 
-	ice_setup_mc_magic_wake(pf);
 	ice_set_wake(pf);
 
 	ice_adapter_put(pdev);
