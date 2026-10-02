@@ -518,6 +518,19 @@ xdna_mailbox_start_channel(struct mailbox_channel *mb_chann,
 		return -EINVAL;
 	}
 
+	/*
+	 * The ring start address and size are supplied by firmware and are
+	 * used as an offset into the mapped ring buffer region. Check that
+	 * the ring described lies entirely inside it.
+	 */
+	if (x2i->rb_start_addr >= mb_chann->mb->res.ringbuf_size ||
+	    x2i->rb_size > mb_chann->mb->res.ringbuf_size - x2i->rb_start_addr ||
+	    i2x->rb_start_addr >= mb_chann->mb->res.ringbuf_size ||
+	    i2x->rb_size > mb_chann->mb->res.ringbuf_size - i2x->rb_start_addr) {
+		pr_err("Ring buf does not fit in the mapped region\n");
+		return -EINVAL;
+	}
+
 	mb_chann->msix_irq = mb_irq;
 	mb_chann->iohub_int_addr = iohub_int_addr;
 	memcpy(&mb_chann->res[CHAN_RES_X2I], x2i, sizeof(*x2i));
