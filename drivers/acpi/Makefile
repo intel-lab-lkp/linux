@@ -35,6 +35,7 @@ acpi-$(CONFIG_ACPI_SYSTEM_POWER_STATES_SUPPORT) += sleep.o
 acpi-y				+= device_sysfs.o device_pm.o
 acpi-$(CONFIG_ACPI_SLEEP)	+= proc.o
 
+acpi-$(CONFIG_ACPI_S2IDLE)	+= s2idle.o
 
 #
 # ACPI Bus and Device Drivers

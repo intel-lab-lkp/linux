@@ -113,6 +113,11 @@ config ACPI_SLEEP
 	depends on ACPI_SYSTEM_POWER_STATES_SUPPORT
 	default y
 
+config ACPI_S2IDLE
+	bool
+	depends on SUSPEND
+	default y
+
 config ACPI_REV_OVERRIDE_POSSIBLE
 	bool "Allow supported ACPI revision to be overridden"
 	depends on X86
