@@ -493,6 +493,36 @@ static int noinline __leaf_switch_none(int path, bool fill)
 	return 0;
 }
 
+static noinline int __leaf_goto_none(bool fill)
+{
+	goto bypass;
+	/*
+	 * This declaration is jumped over by the goto above, so it is
+	 * never reached. Compilers that initialize only at the point of
+	 * declaration leave this variable untouched.
+	 */
+	uint64_t var[10];
+
+bypass:
+	target_start = &var;
+	target_size = sizeof(var);
+	if (fill) {
+		fill_start = &var;
+		fill_size = sizeof(var);
+
+		memset(fill_start, (forced_mask | 0x55) & FILL_BYTE, fill_size);
+	}
+	memcpy(check_buf, target_start, target_size);
+
+	return 0;
+}
+
+static noinline int leaf_goto_none(unsigned long sp, bool fill,
+					  uint64_t *arg)
+{
+	return __leaf_goto_none(fill);
+}
+
 static noinline int leaf_switch_1_none(unsigned long sp, bool fill,
 					      uint64_t *arg)
 {
@@ -506,13 +536,23 @@ static noinline int leaf_switch_2_none(unsigned long sp, bool fill,
 }
 
 /*
- * These are expected to fail for most configurations because neither
- * GCC nor Clang have a way to perform initialization of variables in
- * non-code areas (i.e. in a switch statement before the first "case").
- * https://llvm.org/pr44916
+ * A declaration whose definition point is jumped over, either by a switch
+ * dispatch reaching a "case" label below it or by a goto, used to be left
+ * uninitialized: the initialization is emitted where the variable is
+ * declared, and that point is never reached.
+ *
+ * Clang 24 and later emit the initialization on the jumps that bypass the
+ * declaration instead. GCC still initializes only at the declaration, and
+ * says so with -Wtrivial-auto-var-init.
  */
-DEFINE_TEST_DRIVER(switch_1_none, uint64_t, SCALAR, ALWAYS_FAIL);
-DEFINE_TEST_DRIVER(switch_2_none, uint64_t, SCALAR, ALWAYS_FAIL);
+#if defined(CONFIG_CC_IS_CLANG) && CONFIG_CLANG_VERSION >= 240000
+# define BYPASS_PASS	WANT_SUCCESS
+#else
+# define BYPASS_PASS	XFAIL
+#endif
+DEFINE_TEST_DRIVER(switch_1_none, uint64_t, SCALAR, BYPASS_PASS);
+DEFINE_TEST_DRIVER(switch_2_none, uint64_t, SCALAR, BYPASS_PASS);
+DEFINE_TEST_DRIVER(goto_none, uint64_t, SCALAR, BYPASS_PASS);
 
 #define KUNIT_test_scalars(init)			\
 		KUNIT_CASE(test_u8_ ## init),		\
@@ -568,6 +608,7 @@ static struct kunit_case stackinit_test_cases[] = {
 	KUNIT_test_scalars(none),
 	KUNIT_CASE(test_switch_1_none),
 	KUNIT_CASE(test_switch_2_none),
+	KUNIT_CASE(test_goto_none),
 	/* STRUCTLEAK_BYREF should cover from here down. */
 	KUNIT_test_structs(none),
 	/* STRUCTLEAK will only cover this. */
