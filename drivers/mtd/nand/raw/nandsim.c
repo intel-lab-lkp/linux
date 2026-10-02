@@ -686,7 +686,7 @@ static int __init ns_init(struct mtd_info *mtd)
 			ns->geom.secaddrbytes = 3;
 		}
 	} else {
-		if (ns->geom.totsz <= (128 << 20)) {
+		if (ns->geom.pgnum <= (1 << 16)) {
 			ns->geom.pgaddrbytes  = 4;
 			ns->geom.secaddrbytes = 2;
 		} else {
@@ -2359,6 +2359,11 @@ static int __init ns_init_module(void)
 		targetsize = nanddev_target_size(&chip->base);
 		chip->chip_shift = ffs(nsmtd->erasesize) + overridesize - 1;
 		chip->pagemask = (targetsize >> chip->page_shift) - 1;
+
+		if (chip->chip_shift - chip->page_shift > 16)
+			chip->options |= NAND_ROW_ADDR_3;
+		else
+			chip->options &= ~NAND_ROW_ADDR_3;
 	}
 
 	ret = ns_setup_wear_reporting(nsmtd);
