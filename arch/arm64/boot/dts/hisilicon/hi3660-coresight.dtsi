@@ -306,8 +306,6 @@
 		/* An invisible combo funnel between clusters and top funnel */
 		funnel {
 			compatible = "arm,coresight-static-funnel";
-			clocks = <&crg_ctrl HI3660_PCLK>;
-			clock-names = "apb_pclk";
 
 			out-ports {
 				port {
@@ -397,8 +395,6 @@
 
 		replicator {
 			compatible = "arm,coresight-static-replicator";
-			clocks = <&crg_ctrl HI3660_PCLK>;
-			clock-names = "apb_pclk";
 
 			in-ports {
 				port {

@@ -62,8 +62,6 @@
 
 		replicator {
 			compatible = "arm,coresight-static-replicator";
-			clocks = <&acpu_sctrl HI6220_ACPU_SFT_AT_S>;
-			clock-names = "apb_pclk";
 
 			in-ports {
 				port {
