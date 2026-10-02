@@ -2421,6 +2421,7 @@ int i915_gem_context_create_ioctl(struct drm_device *dev, void *data,
 		ctx = i915_gem_create_context(i915, ext_data.pc);
 		if (IS_ERR(ctx)) {
 			ret = PTR_ERR(ctx);
+			xa_release(&ext_data.fpriv->context_xa, id);
 			goto err_pc;
 		}
 
