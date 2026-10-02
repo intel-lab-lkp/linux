@@ -38,6 +38,14 @@
 #define OV08X40_REG_CHIP_ID		0x300a
 #define OV08X40_CHIP_ID			0x560858
 
+/*
+ * Full readable pixel array, as programmed by the X window (0x3800-0x3801,
+ * 0x3804-0x3805) and Y window high byte (0x3802, 0x3806) registers in
+ * ov08x40_global_regs.
+ */
+#define OV08X40_NATIVE_WIDTH		3872U
+#define OV08X40_NATIVE_HEIGHT		2432U
+
 /* V_TIMING internal */
 #define OV08X40_REG_VTS			0x380e
 #define OV08X40_VTS_30FPS		0x09c4	/* the VTS need to be half in normal mode */
@@ -151,6 +159,9 @@ struct ov08x40_mode {
 	/* Exposure calculation */
 	u16 exposure_margin;
 	u16 exposure_shift;
+
+	/* Analogue crop rectangle, in native pixel array coordinates */
+	struct v4l2_rect crop;
 };
 
 static const struct ov08x40_reg ov08x40_global_regs[] = {
@@ -1232,6 +1243,12 @@ static const struct ov08x40_mode supported_modes[] = {
 			.num_of_regs = ARRAY_SIZE(mode_3856x2416_regs),
 			.regs = mode_3856x2416_regs,
 		},
+		.crop = {
+			.left = 0,
+			.top = 0,
+			.width = 3872,
+			.height = 2432,
+		},
 		.link_freq_index = OV08X40_LINK_FREQ_400MHZ_INDEX,
 		.exposure_shift = 1,
 		.exposure_margin = OV08X40_EXPOSURE_MAX_MARGIN,
@@ -1246,6 +1263,12 @@ static const struct ov08x40_mode supported_modes[] = {
 		.reg_list = {
 			.num_of_regs = ARRAY_SIZE(mode_3856x2176_regs_800mbps),
 			.regs = mode_3856x2176_regs_800mbps,
+		},
+		.crop = {
+			.left = 0,
+			.top = 112,
+			.width = 3872,
+			.height = 2208,
 		},
 		.link_freq_index = OV08X40_LINK_FREQ_400MHZ_INDEX,
 		.exposure_shift = 1,
@@ -1263,6 +1286,12 @@ static const struct ov08x40_mode supported_modes[] = {
 			.num_of_regs = ARRAY_SIZE(mode_1928x1208_regs),
 			.regs = mode_1928x1208_regs,
 		},
+		.crop = {
+			.left = 0,
+			.top = 0,
+			.width = 3872,
+			.height = 2432,
+		},
 		.link_freq_index = OV08X40_LINK_FREQ_400MHZ_INDEX,
 		.exposure_shift = 0,
 		.exposure_margin = OV08X40_EXPOSURE_BIN_MAX_MARGIN,
@@ -1278,6 +1307,12 @@ static const struct ov08x40_mode supported_modes[] = {
 			.num_of_regs = ARRAY_SIZE(mode_3856x2176_regs_1500mbps),
 			.regs = mode_3856x2176_regs_1500mbps,
 		},
+		.crop = {
+			.left = 0,
+			.top = 112,
+			.width = 3872,
+			.height = 2208,
+		},
 		.link_freq_index = OV08X40_LINK_FREQ_749MHZ_INDEX,
 		.exposure_shift = 1,
 		.exposure_margin = OV08X40_EXPOSURE_MAX_MARGIN,
@@ -1292,6 +1327,12 @@ static const struct ov08x40_mode supported_modes[] = {
 		.reg_list = {
 			.num_of_regs = ARRAY_SIZE(mode_1928x1088_regs_1500mbps),
 			.regs = mode_1928x1088_regs_1500mbps,
+		},
+		.crop = {
+			.left = 0,
+			.top = 120,
+			.width = 3872,
+			.height = 2192,
 		},
 		.link_freq_index = OV08X40_LINK_FREQ_749MHZ_INDEX,
 		.exposure_shift = 0,
@@ -2056,10 +2097,54 @@ static const struct v4l2_subdev_video_ops ov08x40_video_ops = {
 	.s_stream = ov08x40_set_stream,
 };
 
+static int ov08x40_get_selection(struct v4l2_subdev *sd,
+				 const struct v4l2_subdev_client_info *ci,
+				 struct v4l2_subdev_state *sd_state,
+				 struct v4l2_subdev_selection *sel)
+{
+	struct ov08x40 *ov08x = to_ov08x40(sd);
+	const struct v4l2_mbus_framefmt *framefmt;
+	const struct ov08x40_mode *mode;
+
+	switch (sel->target) {
+	case V4L2_SEL_TGT_CROP:
+		mutex_lock(&ov08x->mutex);
+		if (sel->which == V4L2_SUBDEV_FORMAT_TRY) {
+			framefmt = v4l2_subdev_state_get_format(sd_state,
+								sel->pad);
+			mode = v4l2_find_nearest_size_conditional(supported_modes,
+								  ARRAY_SIZE(supported_modes),
+								  width, height,
+								  framefmt->width,
+								  framefmt->height,
+								  filter_by_mipi_lanes,
+								  ov08x);
+		} else {
+			mode = ov08x->cur_mode;
+		}
+		sel->r = mode->crop;
+		mutex_unlock(&ov08x->mutex);
+		return 0;
+	case V4L2_SEL_TGT_NATIVE_SIZE:
+	case V4L2_SEL_TGT_CROP_BOUNDS:
+		sel->r.left = 0;
+		sel->r.top = 0;
+		sel->r.width = OV08X40_NATIVE_WIDTH;
+		sel->r.height = OV08X40_NATIVE_HEIGHT;
+		return 0;
+	case V4L2_SEL_TGT_CROP_DEFAULT:
+		sel->r = supported_modes[0].crop;
+		return 0;
+	}
+
+	return -EINVAL;
+}
+
 static const struct v4l2_subdev_pad_ops ov08x40_pad_ops = {
 	.enum_mbus_code = ov08x40_enum_mbus_code,
 	.get_fmt = ov08x40_get_pad_format,
 	.set_fmt = ov08x40_set_pad_format,
+	.get_selection = ov08x40_get_selection,
 	.enum_frame_size = ov08x40_enum_frame_size,
 };
 
