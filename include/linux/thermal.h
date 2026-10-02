@@ -86,6 +86,34 @@ struct thermal_trip {
 #define THERMAL_TRIP_PRIV_TO_INT(_val_)	(uintptr_t)(_val_)
 #define THERMAL_INT_TO_TRIP_PRIV(_val_)	(void *)(uintptr_t)(_val_)
 
+/*
+ * Maximum number of hardware-version words per call to
+ * thermal_zone_set_supported_hw_bin(). Matches the maxItems: 4 constraint
+ * on the thermal-hw-bin device tree binding.
+ */
+#define THERMAL_HW_BIN_MAX_LEVELS	4
+
+/**
+ * struct thermal_hw_bin_info - platform-specific hardware binning description
+ * @supported_hw_bin: array of bitfields identifying the running hardware version
+ * @supported_hw_bin_count: number of valid entries in @supported_hw_bin
+ *
+ * Filled by platform code that decodes SoC revision / fuse information.
+ * Shared with the thermal OF parser to filter trip points and select
+ * per-bin temperatures via the thermal-hw-bin / temperature-bin DT properties.
+ *
+ * @supported_hw_bin doubles as the publish/consume gate for this struct: it is
+ * stored with smp_store_release() by thermal_zone_set_supported_hw_bin() and
+ * read with smp_load_acquire() by thermal_zone_get_hw_bin_info(), so a reader
+ * that observes a non-NULL pointer also sees a consistent
+ * @supported_hw_bin_count and array. Publishing is one-shot at probe; there is
+ * no lock for concurrent writers.
+ */
+struct thermal_hw_bin_info {
+	const u32	*supported_hw_bin;
+	unsigned int	 supported_hw_bin_count;
+};
+
 struct cooling_spec {
 	unsigned long upper;	/* Highest cooling state  */
 	unsigned long lower;	/* Lowest cooling state  */
@@ -216,6 +244,12 @@ devm_thermal_of_child_cooling_device_register(struct device *dev,
 					      struct device_node *np,
 					      const char *type, void *devdata,
 					      const struct thermal_cooling_device_ops *ops);
+
+struct thermal_zone_device *
+devm_thermal_of_zone_register_with_bin(struct device *dev, int id, void *data,
+				       const struct thermal_zone_device_ops *ops,
+				       const struct thermal_hw_bin_info *hw_bin_info);
+
 #else
 
 static inline
@@ -254,6 +288,49 @@ devm_thermal_of_child_cooling_device_register(struct device *dev,
 {
 	return ERR_PTR(-ENODEV);
 }
+
+static inline struct thermal_zone_device *
+devm_thermal_of_zone_register_with_bin(struct device *dev, int id, void *data,
+				       const struct thermal_zone_device_ops *ops,
+				       const struct thermal_hw_bin_info *hw_bin_info)
+{
+	return ERR_PTR(-EOPNOTSUPP);
+}
+
+#endif
+
+#ifdef CONFIG_THERMAL_BIN
+int thermal_zone_set_supported_hw_bin(struct thermal_zone_device *tz,
+				      const u32 *vers, unsigned int count);
+int devm_thermal_zone_set_supported_hw_bin(struct device *dev,
+					   struct thermal_zone_device *tz,
+					   const u32 *vers, unsigned int count);
+const struct thermal_hw_bin_info *
+thermal_zone_get_hw_bin_info(const struct thermal_zone_device *tz);
+
+#else
+
+static inline int
+thermal_zone_set_supported_hw_bin(struct thermal_zone_device *tz,
+				  const u32 *vers, unsigned int count)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int
+devm_thermal_zone_set_supported_hw_bin(struct device *dev,
+				       struct thermal_zone_device *tz,
+				       const u32 *vers, unsigned int count)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline const struct thermal_hw_bin_info *
+thermal_zone_get_hw_bin_info(const struct thermal_zone_device *tz)
+{
+	return NULL;
+}
+
 #endif
 
 int for_each_thermal_trip(struct thermal_zone_device *tz,

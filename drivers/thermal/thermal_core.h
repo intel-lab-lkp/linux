@@ -114,6 +114,8 @@ struct thermal_governor {
  * @state: 	current state of the thermal zone
  * @debugfs:	this thermal zone device's thermal zone debug info
  * @user_thresholds: list of userspace thresholds for temp. limit notifications
+ * @hw_bin_info:	hardware binning info for trip filtering (set by platform driver,
+ *		only present when CONFIG_THERMAL_BIN is enabled)
  * @trips:	array of struct thermal_trip objects
  */
 struct thermal_zone_device {
@@ -152,6 +154,9 @@ struct thermal_zone_device {
 	struct thermal_debugfs *debugfs;
 #endif
 	struct list_head user_thresholds;
+#ifdef CONFIG_THERMAL_BIN
+	struct thermal_hw_bin_info hw_bin_info;
+#endif
 	struct thermal_trip_desc trips[] __counted_by(num_trips);
 };
 

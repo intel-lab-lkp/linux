@@ -16,6 +16,7 @@ thermal_sys-$(CONFIG_THERMAL_DEBUGFS)	+= thermal_debugfs.o
 # interface to/from other layers providing sensors
 thermal_sys-$(CONFIG_THERMAL_HWMON)		+= thermal_hwmon.o
 thermal_sys-$(CONFIG_THERMAL_OF)		+= thermal_of.o
+thermal_sys-$(CONFIG_THERMAL_BIN)		+= thermal_bin.o
 
 # governors
 CFLAGS_gov_power_allocator.o			:= -I$(src)
