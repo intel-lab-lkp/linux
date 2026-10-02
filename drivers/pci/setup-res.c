@@ -17,6 +17,9 @@
 #include <linux/bug.h>
 #include <linux/kernel.h>
 #include <linux/export.h>
+#include <linux/limits.h>
+#include <linux/log2.h>
+#include <linux/minmax.h>
 #include <linux/pci.h>
 #include <linux/errno.h>
 #include <linux/ioport.h>
@@ -262,16 +265,89 @@ resource_size_t pci_resource_alignment(const struct pci_dev *dev,
 	return resource_alignment(res);
 }
 
+static resource_size_t pci_max_natural_size(const struct resource *res,
+					    resource_size_t *max_align)
+{
+	resource_size_t size = resource_size(res);
+	resource_size_t powof2, natural_start;
+
+	*max_align = 1;
+	if (!size)
+		return 0;
+
+	powof2 = rounddown_pow_of_two(size);
+	natural_start = ALIGN(res->start, powof2);
+	/* end = ~0 first overflows, then -1 brings it back */
+	if (natural_start >= ALIGN_DOWN(res->end + 1, powof2) - 1) {
+		powof2 = max(powof2 / 2, 1U);
+		natural_start = ALIGN(res->start, powof2);
+	}
+
+	if (natural_start) {
+		*max_align <<= __ffs(natural_start);
+	} else {
+		/*
+		 * Zero address has infinite alignment, return the largest
+		 * representable number even if it's not a power of two.
+		 */
+		*max_align = RESOURCE_SIZE_MAX;
+	}
+
+	return powof2;
+}
+
 static resource_size_t pci_resreq_remainder(resource_size_t size,
 					    resource_size_t align)
 {
 	return size - ALIGN_DOWN(size, align);
 }
 
+/**
+ * pci_align_resource - Places resource into empty space range
+ * @rr: PCI resource request data
+ * @res: Candidate range calculated by caller (not among @dev's resources!)
+ * @empty_res: Full free space range
+ * @size: Required size for the resource
+ * @align: Required alignment (see below for details)
+ *
+ * Places resource inside @empty_res honoring @size and @align.
+ *
+ * Returns: start address for the resource.
+ */
 /*
- * For mem bridge windows, try to relocate tail remainder space to space
- * before res->start if there's enough free space there. This enables
- * tighter packing for resources.
+ * Following candidate logic only applies to mem resources currently. For
+ * composite resources not divisable by @align, @align does not apply to
+ * non-aligning remainder part giving some leeway for its placement. There
+ * are 4 candidate positions:
+ *
+ *           W0WWW0WWW0WWW
+ * 1.         AAAAr
+ * 2.        rAAAA
+ * 3.             AAAAr
+ * 4.                rAAAA
+ *
+ * W = bridge window
+ * 0 = bridge window offset matching align
+ * A = aligning part of size (size rounded down by align)
+ * r = non-aligning remainder
+ *
+ * Cases 1 & 3 and 2 & 4 may degenerate to the same candidate.
+ *
+ * Select resource placement based on the remaining free space. Pick the
+ * candidate with which the remaining free space has (in decreasing order of
+ * priority):
+ *
+ *   1. the largest naturally aligning power-of-two-sized address range within,
+ *   2. the largest continous free space,
+ *   3. the largest alignment of the start address for the naturally aligning
+ *      free space range (from check 1).
+ *
+ * Cases 1 & 2 check only right edge free space and 3 & 4 the left edge.
+ *
+ * When user has requested specific alignmnet, only candidates 1 & 3 can
+ * qualify. TODO: If the resulting alignment with the remainder at the
+ * left edge is enough to satisfy user's request, all candidates could be
+ * allowed.
  */
 resource_size_t pci_align_resource(struct pci_resreq_data *rr,
 				   const struct resource *res,
@@ -280,38 +356,84 @@ resource_size_t pci_align_resource(struct pci_resreq_data *rr,
 				   resource_size_t align)
 {
 	struct pci_dev *dev = rr->dev;
-	resource_size_t remainder, start_addr;
+	unsigned long type = res->flags & PCI_RES_TYPE_MASK;
+	resource_size_t best_natural_size = 0, best_size = 0, best_maxalign = 0;
+	resource_size_t aligning, remainder;
+	struct resource candidate[4];
+	unsigned int i;
+	int best = -1;
 
 	if (!(res->flags & IORESOURCE_MEM))
 		return res->start;
 
-	if (rr->user_align)
-		return res->start;
-
 	remainder = pci_resreq_remainder(size, align);
-	if (!remainder)
+	aligning = size - remainder;
+
+	candidate[0] = DEFINE_RES(ALIGN(empty_res->start, align), size, type);
+	candidate[1] = DEFINE_RES(ALIGN(empty_res->start, align) - remainder,
+				  size, type);
+	candidate[2] = DEFINE_RES(ALIGN_DOWN(empty_res->end + 1 - remainder, align) -
+				  aligning, size, type);
+	candidate[3] = DEFINE_RES(ALIGN_DOWN(empty_res->end + 1, align) - size,
+				  size, type);
+
+	for (i = 0; i < ARRAY_SIZE(candidate); i++) {
+		struct resource remaining;
+		resource_size_t natural_size, size, maxalign;
+
+		if ((candidate[i].start > candidate[i].end) ||
+		    !__resource_contains_unbound(empty_res, &candidate[i])) {
+			pci_dbg(dev, "%pR: candidate %u not within free space %pR\n",
+				&candidate[i], i, empty_res);
+			continue;
+		}
+
+		if (rr->user_align && (i == 1 || i == 3)) {
+			pci_dbg(dev, "%pR: candidate %u skipped due to resource_alignment=%llx\n",
+				&candidate[i], i,
+				(unsigned long long)rr->user_align);
+			continue;
+		}
+
+		remaining.flags = type;
+		if (i <= 1) {
+			remaining.start = candidate[i].end + 1;
+			remaining.end = empty_res->end;
+		} else {
+			remaining.start = empty_res->start;
+			remaining.end = candidate[i].start - 1;
+		}
+
+		natural_size = pci_max_natural_size(&remaining, &maxalign);
+		size = resource_size(&remaining);
+		pci_dbg(dev, "%pR: candidate %u free space naturalsize=%llx size=%llx maxalign=%llx\n",
+			&candidate[i], i,
+			(unsigned long long)natural_size,
+			(unsigned long long)size,
+			(unsigned long long)maxalign);
+		if ((best < 0) ||
+		    (natural_size > best_natural_size) ||
+		    (natural_size == best_natural_size && size > best_size) ||
+		    (natural_size == best_natural_size && size == best_size &&
+		     maxalign > best_maxalign)) {
+			best = i;
+			best_natural_size = natural_size;
+			best_size = size;
+			best_maxalign = maxalign;
+		}
+	}
+
+	/* None fits? Return some address and let the caller deal with it. */
+	if (best == -1)
 		return res->start;
 
-	/*
-	 * Size constraints forced an early start move in
-	 * pci_check_and_align_resource()?
-	 */
-	if (!IS_ALIGNED(res->start, align))
-		return res->start;
+	pci_dbg(dev, "%pR: candidate %u selected (free space %pR), size: %llx + %llx, align: %llx\n",
+		&candidate[best], best, empty_res,
+		(unsigned long long)aligning,
+		(unsigned long long)remainder,
+		(unsigned long long)align);
 
-	/* Don't mess with size that doesn't align with window size granularity */
-	if (!IS_ALIGNED(remainder, pci_min_window_alignment(dev->bus, res->flags)))
-		return res->start;
-	/* Try to place remainder that doesn't fill align before */
-	if (res->start < remainder)
-		return res->start;
-	start_addr = res->start - remainder;
-	if (empty_res->start > start_addr)
-		return res->start;
-
-	pci_dbg(dev, "%pR: moving candidate start address below align to %llx\n",
-		res, (unsigned long long)start_addr);
-	return start_addr;
+	return candidate[best].start;
 }
 
 /*

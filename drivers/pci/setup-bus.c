@@ -31,10 +31,6 @@
 #include <linux/acpi.h>
 #include "pci.h"
 
-#define PCI_RES_TYPE_MASK \
-	(IORESOURCE_IO | IORESOURCE_MEM | IORESOURCE_PREFETCH |\
-	 IORESOURCE_MEM_64)
-
 unsigned int pci_flags;
 EXPORT_SYMBOL_GPL(pci_flags);
 
