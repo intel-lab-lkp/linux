@@ -1721,6 +1721,29 @@ void dso__set_sorted_by_name(struct dso *dso)
 	RC_CHK_ACCESS(dso)->sorted_by_name = true;
 }
 
+struct dso_ondemand *dso_ondemand__new(void)
+{
+	struct dso_ondemand *od = zalloc(sizeof(*od));
+
+	if (od)
+		mutex_init(&od->read_lock);
+	return od;
+}
+
+void dso_ondemand__free(struct dso_ondemand *od)
+{
+	if (!od)
+		return;
+	mutex_destroy(&od->read_lock);
+	free(od->sorted);
+	free(od->outer);
+	if (od->data_dso) {
+		dso__data_close(od->data_dso);
+		dso__put(od->data_dso);
+	}
+	free(od);
+}
+
 struct dso *dso__new_id(const char *name, const struct dso_id *id)
 {
 	RC_STRUCT(dso) *dso = zalloc(sizeof(*dso) + strlen(name) + 1);
@@ -1803,6 +1826,7 @@ void dso__delete(struct dso *dso)
 
 	dso__data_close(dso);
 	auxtrace_cache__free(RC_CHK_ACCESS(dso)->auxtrace_cache);
+	dso_ondemand__free(RC_CHK_ACCESS(dso)->ondemand);
 	dso_cache__free(dso);
 	zfree(&RC_CHK_ACCESS(dso)->data.path);
 	dso__free_a2l(dso);

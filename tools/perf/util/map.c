@@ -382,10 +382,15 @@ int map__load(struct map *map)
 
 struct symbol *map__find_symbol(struct map *map, u64 addr)
 {
+	struct dso *dso;
+
 	if (map__load(map) < 0)
 		return NULL;
 
-	return dso__find_symbol(map__dso(map), addr);
+	dso = map__dso(map);
+	if (symbol_conf.lazy_load_symbols)
+		return dso__find_symbol_ondemand(dso, addr);
+	return dso__find_symbol(dso, addr);
 }
 
 struct symbol *map__find_symbol_by_name_idx(struct map *map, const char *name, size_t *idx)
