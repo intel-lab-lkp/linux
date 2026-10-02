@@ -1,0 +1,53 @@
+// SPDX-License-Identifier: (GPL-2.0-or-later OR MIT)
+/*
+ * Copyright 2018-2026 TQ-Systems GmbH <linux@ew.tq-group.com>,
+ * D-82229 Seefeld, Germany.
+ * Author: Markus Niebel
+ * Author: Alexander Stein
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+
+&backlight {
+	pwms = <&pwm2 0 20000 0>;
+	brightness-levels = <0 2 4 8 16 32 64 128 255>;
+	default-brightness-level = <8>;
+	status = "okay";
+};
+
+&display {
+	compatible = "cdtech,s070swv29hg-dc44";
+	power-supply = <&reg_mba6ul_3v3>;
+	status = "okay";
+};
+
+&i2c4 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	touchscreen@38 {
+		compatible = "edt,edt-ft5406";
+		reg = <0x38>;
+		interrupt-parent = <&expander_in0>;
+		interrupts = <3 IRQ_TYPE_EDGE_FALLING>;
+		wake-gpios = <&expander_out0 1 GPIO_ACTIVE_HIGH>;
+		/* reset-gpios is controlled by stk reset */
+		gain = <20>;
+		touchscreen-size-x = <800>;
+		touchscreen-size-y = <480>;
+		iovcc-supply = <&reg_mba6ul_3v3>;
+		vcc-supply = <&reg_mba6ul_3v3>;
+	};
+};
+
+&lcdif {
+	status = "okay";
+};
+
+&lcdif_out {
+	bus-width = <24>;
+};
