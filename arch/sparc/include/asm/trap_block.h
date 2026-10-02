@@ -67,6 +67,7 @@ struct cpuid_patch_entry {
 	unsigned int	cheetah_jbus[4];
 	unsigned int	starfire[4];
 	unsigned int	sun4v[4];
+	unsigned int	vii[4];
 };
 extern struct cpuid_patch_entry __cpuid_patch, __cpuid_patch_end;
 
@@ -146,6 +147,11 @@ extern struct sun4v_2insn_patch_entry __sun_m7_2insn_patch,
 	ldxa		[REG] ASI_SCRATCHPAD, REG;	\
 	nop;						\
 	nop;						\
+	/* SPARC64 VII: Jupiter ITID is bits 9:0. */ \
+	ldxa		[%g0] ASI_UPA_CONFIG, REG; \
+	and		REG, 0x3ff, REG; \
+	nop; \
+	nop; \
 	.previous;
 
 #ifdef CONFIG_SMP

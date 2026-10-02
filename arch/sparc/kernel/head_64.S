@@ -485,6 +485,8 @@ EXPORT_SYMBOL(sun4v_chip_type)
 
 80:
 	BRANCH_IF_SUN4V(g1, jump_to_sun4u_init)
+	/* Preserve Fujitsu firmware cache/MMU control, not Spitfire LSU. */
+	BRANCH_IF_SPARC64_VII(g1,g7,jump_to_sun4u_init)
 	BRANCH_IF_CHEETAH_BASE(g1,g7,cheetah_boot)
 	BRANCH_IF_CHEETAH_PLUS_OR_FOLLOWON(g1,g7,cheetah_plus_boot)
 	ba,pt	%xcc, spitfire_boot
@@ -574,6 +576,7 @@ sun4v_init:
 	ba,a,pt		%xcc, niagara_tlb_fixup
 
 sun4u_continue:
+	BRANCH_IF_SPARC64_VII(g1,g7,sparc64_vii_tlb_fixup)
 	BRANCH_IF_ANY_CHEETAH(g1, g7, cheetah_tlb_fixup)
 
 	ba,a,pt	%xcc, spitfire_tlb_fixup
@@ -690,6 +693,20 @@ cheetah_tlb_fixup:
 	call	cheetah_patch_cachetlbops
 	 nop
 
+	ba,a,pt	%xcc, tlb_fixup_done
+
+sparc64_vii_tlb_fixup:
+	mov	4, %g2
+	sethi	%hi(tlb_type), %g1
+	stw	%g2, [%g1 + %lo(tlb_type)]
+	call	generic_patch_copyops
+	 nop
+	call	generic_patch_bzero
+	 nop
+	call	generic_patch_pageops
+	 nop
+	call	sparc64_vii_patch_cachetlbops
+	 nop
 	ba,a,pt	%xcc, tlb_fixup_done
 
 spitfire_tlb_fixup:
@@ -841,6 +858,7 @@ setup_trap_table:
 	sllx	%o2, 32, %o2
 	wr	%o2, 0, %tick_cmpr
 
+	BRANCH_IF_SPARC64_VII(o2, o3, 1f)
 	BRANCH_IF_ANY_CHEETAH(o2, o3, 1f)
 
 	ba,a,pt	%xcc, 2f

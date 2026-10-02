@@ -249,5 +249,7 @@ extern unsigned long ivector_table_pa;
 void init_irqwork_curcpu(void);
 void sun4v_register_mondo_queues(int this_cpu);
 
+void sparc64_vii_ecc_error(struct pt_regs *regs);
+
 #endif /* CONFIG_SPARC32 */
 #endif /* _ENTRY_H */

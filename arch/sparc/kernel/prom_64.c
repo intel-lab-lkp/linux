@@ -564,6 +564,12 @@ static void *fill_in_one_cpu(struct device_node *dp, int cpuid, int arg)
 
 		cpu_data(cpuid).core_id = portid + 1;
 		cpu_data(cpuid).proc_id = portid;
+		if (tlb_type == sparc64_vii &&
+		    of_property_match_string(of_root, "model", "IKKAKU") >= 0) {
+			/* IKKAKU: two adjacent ITIDs per physical core. */
+			cpu_data(cpuid).core_id = (cpuid >> 1) + 1;
+			cpu_data(cpuid).proc_id = 0;
+		}
 	} else {
 		cpu_data(cpuid).dcache_size =
 			of_getintprop_default(dp, "dcache-size", 16 * 1024);

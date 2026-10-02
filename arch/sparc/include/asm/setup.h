@@ -49,6 +49,11 @@ unsigned long safe_compute_effective_address(struct pt_regs *, unsigned int);
 #ifdef CONFIG_SPARC64
 void __init start_early_boot(void);
 
+extern unsigned int sparc64_ttable_tl0[], sparc64_ttable_tl1[];
+void sparc64_vii_fatal_trap(void);
+void sparc64_vii_ecc_trap(void);
+void sparc64_vii_ecc_trap_tl1(void);
+
 /* unaligned_64.c */
 int handle_ldf_stq(u32 insn, struct pt_regs *regs);
 void handle_ld_nf(u32 insn, struct pt_regs *regs);
