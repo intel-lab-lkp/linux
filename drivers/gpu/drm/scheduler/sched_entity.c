@@ -102,7 +102,12 @@ ktime_t drm_sched_entity_stats_job_add_gpu_time(struct drm_sched_job *job)
  * @guilty: atomic_t set to 1 when a job on this queue
  *          is found to be guilty causing a timeout
  *
- * Note that the &sched_list must have at least one element to schedule the entity.
+ * Note that the &sched_list must have at least one element to schedule the
+ * entity.
+ *
+ * The individual drm_gpu_scheduler pointers have borrow semantics, ie.
+ * they must remain valid during entities lifetime, while the containing
+ * array can be freed after this call returns.
  *
  * For changing @priority later on at runtime see
  * drm_sched_entity_set_priority(). For changing the set of schedulers
@@ -119,15 +124,10 @@ int drm_sched_entity_init(struct drm_sched_entity *entity,
 			  unsigned int num_sched_list,
 			  atomic_t *guilty)
 {
-	unsigned int i;
+	int ret;
 
-	if (!entity || !sched_list || !num_sched_list)
+	if (!entity)
 		return -EINVAL;
-
-	for (i = 0; i < num_sched_list; i++) {
-		if (!sched_list[i] || !sched_list[i]->sched_rq)
-			return -EINVAL;
-	}
 
 	memset(entity, 0, sizeof(struct drm_sched_entity));
 
@@ -138,8 +138,6 @@ int drm_sched_entity_init(struct drm_sched_entity *entity,
 	INIT_LIST_HEAD(&entity->list);
 	entity->guilty = guilty;
 	entity->last_user = current->group_leader;
-	entity->num_sched_list = num_sched_list;
-	entity->sched_list = num_sched_list > 1 ? sched_list : NULL;
 	RB_CLEAR_NODE(&entity->rb_tree_node);
 
 	if (priority >= sched_list[0]->num_user_rqs) {
@@ -159,10 +157,17 @@ int drm_sched_entity_init(struct drm_sched_entity *entity,
 	entity->priority = priority;
 	entity->rq_priority = drm_sched_policy == DRM_SCHED_POLICY_FAIR ?
 			      DRM_SCHED_PRIORITY_KERNEL : priority;
-	entity->rq = sched_list[0]->sched_rq[entity->rq_priority];
 
 	spin_lock_init(&entity->lock);
 	spsc_queue_init(&entity->job_queue);
+
+	ret = drm_sched_entity_modify_sched(entity, sched_list, num_sched_list);
+	if (ret) {
+		drm_sched_entity_stats_put(entity->stats);
+		return ret;
+	}
+
+	drm_sched_entity_select_rq(entity);
 
 	atomic_set(&entity->fence_seq, 0);
 	entity->fence_context = dma_fence_context_alloc(2);
@@ -178,21 +183,53 @@ EXPORT_SYMBOL(drm_sched_entity_init);
  *		 existing entity->sched_list
  * @num_sched_list: number of drm sched in sched_list
  *
+ * The individual drm_gpu_scheduler pointers have borrow semantics, ie.
+ * they must remain valid during entities lifetime, while the containing
+ * array can be freed after this call returns.
+ *
  * Note that this must be called under the same common lock for @entity as
  * drm_sched_job_arm() and drm_sched_entity_push_job(), or the driver needs to
  * guarantee through some other means that this is never called while new jobs
  * can be pushed to @entity.
+ *
+ * Returns zero on success and a negative error code on failure.
  */
-void drm_sched_entity_modify_sched(struct drm_sched_entity *entity,
-				    struct drm_gpu_scheduler **sched_list,
-				    unsigned int num_sched_list)
+int drm_sched_entity_modify_sched(struct drm_sched_entity *entity,
+				  struct drm_gpu_scheduler **sched_list,
+				  unsigned int num_sched_list)
 {
-	WARN_ON(!num_sched_list || !sched_list);
+	struct drm_gpu_scheduler **newscheds, **oldscheds;
+	unsigned int i;
+
+	if (!sched_list || !num_sched_list)
+		return -EINVAL;
+
+	for (i = 0; i < num_sched_list; i++) {
+		if (!sched_list[i] || !sched_list[i]->sched_rq)
+			return -EINVAL;
+	}
+
+	if (num_sched_list > 1) {
+		newscheds = kmemdup_array(sched_list, num_sched_list,
+					  sizeof(*sched_list), GFP_KERNEL);
+		if (!newscheds)
+			return -ENOMEM;
+	}
 
 	spin_lock(&entity->lock);
-	entity->sched_list = sched_list;
+	if (num_sched_list == 1) {
+		entity->sched = sched_list[0];
+		oldscheds = NULL;
+	} else {
+		oldscheds = entity->sched_list;
+		entity->sched_list = newscheds;
+	}
 	entity->num_sched_list = num_sched_list;
 	spin_unlock(&entity->lock);
+
+	kfree(oldscheds);
+
+	return 0;
 }
 EXPORT_SYMBOL(drm_sched_entity_modify_sched);
 
@@ -413,6 +450,9 @@ void drm_sched_entity_fini(struct drm_sched_entity *entity)
 
 	dma_fence_put(entity->last_scheduled);
 	drm_sched_entity_stats_put(entity->stats);
+
+	if (entity->num_sched_list > 1)
+		kfree(entity->sched_list);
 }
 EXPORT_SYMBOL(drm_sched_entity_fini);
 
@@ -577,10 +617,6 @@ void drm_sched_entity_select_rq(struct drm_sched_entity *entity)
 	struct drm_gpu_scheduler *sched;
 	struct drm_sched_rq *rq;
 
-	/* single possible engine and already selected */
-	if (!entity->sched_list)
-		return;
-
 	/* queue non-empty, stay on the same engine */
 	if (spsc_queue_count(&entity->job_queue))
 		return;
@@ -597,15 +633,16 @@ void drm_sched_entity_select_rq(struct drm_sched_entity *entity)
 	if (fence && !dma_fence_is_signaled(fence))
 		goto out;
 
-	sched = drm_sched_pick_best(entity->sched_list, entity->num_sched_list);
+	if (entity->num_sched_list == 1)
+		sched = entity->sched;
+	else
+		sched = drm_sched_pick_best(entity->sched_list,
+					    entity->num_sched_list);
 	rq = sched ? sched->sched_rq[entity->rq_priority] : NULL;
 	if (rq != entity->rq) {
 		drm_sched_rq_remove_entity(entity->rq, entity);
 		entity->rq = rq;
 	}
-
-	if (entity->num_sched_list == 1)
-		entity->sched_list = NULL;
 
 out:
 	spin_unlock(&entity->lock);

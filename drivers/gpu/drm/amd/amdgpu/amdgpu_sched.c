@@ -51,11 +51,14 @@ static int amdgpu_sched_process_priority_override(struct amdgpu_device *adev,
 
 	mgr = &fpriv->ctx_mgr;
 	xa_lock(&mgr->ctx_handles);
-	xa_for_each(&mgr->ctx_handles, id, ctx)
-		amdgpu_ctx_priority_override(ctx, priority);
+	xa_for_each(&mgr->ctx_handles, id, ctx) {
+		r = amdgpu_ctx_priority_override(ctx, priority);
+		if (r)
+			break;
+	}
 	xa_unlock(&mgr->ctx_handles);
 
-	return 0;
+	return r;
 }
 
 static int amdgpu_sched_context_priority_override(struct amdgpu_device *adev,
@@ -80,9 +83,9 @@ static int amdgpu_sched_context_priority_override(struct amdgpu_device *adev,
 	if (!ctx)
 		return -EINVAL;
 
-	amdgpu_ctx_priority_override(ctx, priority);
+	r = amdgpu_ctx_priority_override(ctx, priority);
 	amdgpu_ctx_put(ctx);
-	return 0;
+	return r;
 }
 
 int amdgpu_sched_ioctl(struct drm_device *dev, void *data,
