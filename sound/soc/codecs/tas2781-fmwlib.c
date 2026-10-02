@@ -648,7 +648,7 @@ static int fw_parse_configuration_data_kernel(
 		 */
 		if (strnstr(config->name, "calib", 64)) {
 			tas_fmw->calibration_config_id = i;
-			dev_dbg(tas_priv->dev, "%s: calib cofig = %d\n",
+			dev_dbg(tas_priv->dev, "%s: calib config = %d\n",
 				__func__, tas_fmw->calibration_config_id);
 		}
 		/*skip extra 16 bytes*/
@@ -1438,7 +1438,7 @@ static int fw_parse_configuration_data(
 		 */
 		if (strnstr(config->name, "calib", 64)) {
 			tas_fmw->calibration_config_id = i;
-			dev_dbg(tas_priv->dev, "%s: calib cofig id = %d\n",
+			dev_dbg(tas_priv->dev, "%s: calib config id = %d\n",
 				__func__, tas_fmw->calibration_config_id);
 		}
 
