@@ -133,6 +133,13 @@ static noinstr u64 arch_counter_get_cntvct(void)
 u64 (*arch_timer_read_counter)(void) __ro_after_init = arch_counter_get_cntvct;
 EXPORT_SYMBOL_GPL(arch_timer_read_counter);
 
+#ifdef CONFIG_ARM64
+#include <asm/clock_inlined.h>
+
+/* Selects CNTPCT in arch_inlined_clocksource_read() */
+DEFINE_STATIC_KEY_FALSE(arch_timer_inline_read_pct);
+#endif
+
 static u64 arch_counter_read(struct clocksource *cs)
 {
 	return arch_timer_read_counter();
@@ -917,6 +924,15 @@ static void __init arch_counter_register(void)
 		} else {
 			rd = arch_counter_get_cntvct;
 			scr = arch_counter_get_cntvct;
+			/*
+			 * A plain sysreg read with no erratum workaround
+			 * matches arch_inlined_clocksource_read(); allow the
+			 * core timekeeping code to bypass the indirect call.
+			 */
+#ifdef CONFIG_ARM64
+			clocksource_counter.flags |=
+				CLOCK_SOURCE_CAN_INLINE_READ;
+#endif
 		}
 	} else {
 		if (arch_timer_counter_has_wa()) {
@@ -925,6 +941,11 @@ static void __init arch_counter_register(void)
 		} else {
 			rd = arch_counter_get_cntpct;
 			scr = arch_counter_get_cntpct;
+#ifdef CONFIG_ARM64
+			static_branch_enable(&arch_timer_inline_read_pct);
+			clocksource_counter.flags |=
+				CLOCK_SOURCE_CAN_INLINE_READ;
+#endif
 		}
 	}
 
