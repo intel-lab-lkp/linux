@@ -186,6 +186,7 @@ int tty_alloc_file(struct file *file)
 	priv = kmalloc_obj(*priv);
 	if (!priv)
 		return -ENOMEM;
+	priv->pty_opened = false;
 
 	file->private_data = priv;
 
