@@ -726,11 +726,9 @@ void page_pool_set_pp_info(struct page_pool *pool, netmem_ref netmem)
 	netmem_set_pp(netmem, pool);
 	netmem_or_pp_magic(netmem, PP_SIGNATURE);
 
-	/* Ensuring all pages have been split into one fragment initially:
-	 * page_pool_set_pp_info() is only called once for every page when it
-	 * is allocated from the page allocator and page_pool_fragment_page()
-	 * is dirtying the same cache line as the page->pp_magic above, so
-	 * the overhead is negligible.
+	/* Ensure all netmem starts with one fragment. The refcount and
+	 * page-pool state initialized above share a cache line, so the overhead
+	 * is negligible when an object is first associated with the pool.
 	 */
 	page_pool_fragment_netmem(netmem, 1);
 	if (pool->has_init_callback)
@@ -1070,6 +1068,9 @@ netmem_ref page_pool_alloc_frag_netmem(struct page_pool *pool,
 	unsigned int max_size = PAGE_SIZE << pool->p.order;
 	netmem_ref netmem = pool->frag_page;
 
+	if (static_branch_unlikely(&page_pool_mem_providers) &&
+	    WARN_ON_ONCE(!page_pool_supports_frag(pool)))
+		return 0;
 	if (WARN_ON(size > max_size))
 		return 0;
 
@@ -1340,17 +1341,60 @@ bool net_mp_niov_set_dma_addr(struct net_iov *niov, dma_addr_t addr)
 	return page_pool_set_dma_addr_netmem(net_iov_to_netmem(niov), addr);
 }
 
-/* Associate a niov with a page pool. Should follow with a matching
- * net_mp_niov_clear_page_pool()
+/* Associate a batch of niovs with a page pool. Each needs a matching
+ * net_mp_niov_clear_page_pool() or net_mp_release_page_pool_bulk().
  */
-void net_mp_niov_set_page_pool(struct page_pool *pool, struct net_iov *niov)
+void net_mp_netmem_set_page_pool_bulk(struct page_pool *pool,
+				      netmem_ref *netmems, u32 count)
 {
-	netmem_ref netmem = net_iov_to_netmem(niov);
+	bool trace = trace_page_pool_state_hold_enabled();
+	netmem_ref netmem;
+	u32 i;
 
-	page_pool_set_pp_info(pool, netmem);
+	for (i = 0; i < count; i++) {
+		netmem = netmems[i];
+		page_pool_set_pp_info(pool, netmem);
+		if (!trace)
+			continue;
 
-	pool->pages_state_hold_cnt++;
-	trace_page_pool_state_hold(pool, netmem, pool->pages_state_hold_cnt);
+		pool->pages_state_hold_cnt++;
+		trace_page_pool_state_hold(pool, netmem,
+					   pool->pages_state_hold_cnt);
+	}
+	if (!trace)
+		pool->pages_state_hold_cnt += count;
+}
+
+/* Release page_pool ownership of netmems which a provider hands out of the
+ * page pool, for example to userspace. All netmems in the batch must belong
+ * to @pool. The pool may be freed once the last release is accounted.
+ */
+void net_mp_release_page_pool_bulk(struct page_pool *pool,
+				   netmem_ref *netmems, u32 count)
+{
+	bool trace = trace_page_pool_state_release_enabled();
+	atomic_t *release_cnt;
+	netmem_ref netmem;
+	int released;
+	u32 i;
+
+	if (WARN_ON_ONCE(!pool || !count))
+		return;
+
+	release_cnt = &pool->pages_state_release_cnt;
+
+	for (i = 0; i < count; i++) {
+		netmem = netmems[i];
+		DEBUG_NET_WARN_ON_ONCE(netmem_get_pp(netmem) != pool);
+		page_pool_clear_pp_info(netmem);
+		if (!trace)
+			continue;
+
+		released = atomic_inc_return_relaxed(release_cnt);
+		trace_page_pool_state_release(pool, netmem, released);
+	}
+	if (!trace)
+		atomic_add(count, release_cnt);
 }
 
 /* Disassociate a niov from a page pool. Should only be used in the

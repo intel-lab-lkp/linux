@@ -54,6 +54,7 @@
 
 #include <linux/dma-mapping.h>
 
+#include <net/page_pool/memory_provider.h>
 #include <net/page_pool/types.h>
 #include <net/net_debug.h>
 #include <net/netmem.h>
@@ -428,6 +429,26 @@ static inline dma_addr_t page_pool_get_dma_addr_netmem(netmem_ref netmem)
 }
 
 /**
+ * page_pool_refill_done - finish a provider-backed RX ring refill
+ * @pool: page pool used by the RX ring
+ * @full: all RX rings sharing this page pool were refilled
+ *
+ * Return: true if the caller may stop retrying the refill.
+ */
+static inline bool page_pool_refill_done(struct page_pool *pool, bool full)
+{
+	if (unlikely(pool->mp_ops && pool->mp_ops->refill_done))
+		return pool->mp_ops->refill_done(pool, full);
+
+	return true;
+}
+
+static inline bool page_pool_supports_frag(const struct page_pool *pool)
+{
+	return !pool->mp_ops || pool->mp_ops->caps & MP_CAP_FRAG;
+}
+
+/**
  * page_pool_get_dma_addr() - Retrieve the stored DMA address.
  * @page:	page allocated from a page pool
  *
@@ -481,6 +502,45 @@ page_pool_dma_sync_netmem_for_cpu(const struct page_pool *pool,
 				     offset, dma_sync_size);
 }
 
+/**
+ * page_pool_dma_sync_netmem_for_device - sync netmem before giving it to HW
+ * @pool: page pool the netmem belongs to
+ * @netmem: netmem to sync
+ * @offset: offset from the pool's DMA sync start
+ * @dma_sync_size: size of the memory area to sync
+ *
+ * Use when a driver reposts a netmem directly instead of returning it through
+ * page_pool_put_netmem().
+ */
+static inline void
+page_pool_dma_sync_netmem_for_device(const struct page_pool *pool,
+				     const netmem_ref netmem, u32 offset,
+				     u32 dma_sync_size)
+{
+#if defined(CONFIG_HAS_DMA) && defined(CONFIG_DMA_NEED_SYNC)
+	dma_addr_t dma_addr;
+
+	if (!pool->dma_sync || !dma_dev_need_sync(pool->p.dev))
+		return;
+
+	rcu_read_lock();
+	/* Recheck under RCU to synchronize with page_pool_scrub(). */
+	if (pool->dma_sync) {
+		if (WARN_ON_ONCE(offset > pool->p.max_len))
+			goto out;
+
+		dma_addr = page_pool_get_dma_addr_netmem(netmem);
+		dma_sync_size = min(dma_sync_size, pool->p.max_len - offset);
+		dma_sync_single_range_for_device(pool->p.dev, dma_addr,
+						 offset + pool->p.offset,
+						 dma_sync_size,
+						 pool->p.dma_dir);
+	}
+out:
+	rcu_read_unlock();
+#endif
+}
+
 static inline void page_pool_get(struct page_pool *pool)
 {
 	refcount_inc(&pool->user_cnt);
@@ -511,7 +571,7 @@ static inline void page_pool_nid_changed(struct page_pool *pool, int new_nid)
  */
 static inline bool page_pool_is_unreadable(struct page_pool *pool)
 {
-	return !!pool->mp_ops;
+	return pool->mp_ops && !(pool->mp_ops->caps & MP_CAP_READABLE);
 }
 
 #endif /* _NET_PAGE_POOL_HELPERS_H */

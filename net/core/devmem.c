@@ -459,7 +459,7 @@ netmem_ref mp_dmabuf_devmem_alloc_netmems(struct page_pool *pool, gfp_t gfp)
 {
 	struct net_devmem_dmabuf_binding *binding = pool->mp_priv;
 	netmem_ref *netmems = pool->alloc.cache;
-	unsigned int allocated, i;
+	unsigned int allocated;
 
 	if (WARN_ON_ONCE(pool->alloc.count))
 		return 0;
@@ -469,9 +469,7 @@ netmem_ref mp_dmabuf_devmem_alloc_netmems(struct page_pool *pool, gfp_t gfp)
 	if (unlikely(!allocated))
 		return 0;
 
-	for (i = 0; i < allocated; i++)
-		net_mp_niov_set_page_pool(pool,
-					  netmem_to_net_iov(netmems[i]));
+	net_mp_netmem_set_page_pool_bulk(pool, netmems, allocated);
 
 	/* Return the last one, the rest stay in the page_pool cache. */
 	allocated--;
@@ -540,4 +538,5 @@ static const struct memory_provider_ops dmabuf_devmem_ops = {
 	.release_netmem		= mp_dmabuf_devmem_release_page,
 	.nl_fill		= mp_dmabuf_devmem_nl_fill,
 	.uninstall		= mp_dmabuf_devmem_uninstall,
+	.caps			= MP_CAP_FRAG,
 };

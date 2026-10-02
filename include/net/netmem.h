@@ -105,6 +105,12 @@ struct net_iov_area {
 
 	/* Offset into the dma-buf where this chunk starts.  */
 	unsigned long base_virtual;
+
+	/* CPU address of the first net_iov's memory, or NULL when the CPU
+	 * cannot read the area. Each net_iov covers 1 << @niov_shift bytes.
+	 */
+	void *vaddr;
+	u8 niov_shift;
 };
 
 static inline struct net_iov_area *net_iov_owner(const struct net_iov *niov)
@@ -115,6 +121,23 @@ static inline struct net_iov_area *net_iov_owner(const struct net_iov *niov)
 static inline unsigned int net_iov_idx(const struct net_iov *niov)
 {
 	return niov - net_iov_owner(niov)->niovs;
+}
+
+static inline bool net_iov_is_readable(const struct net_iov *niov)
+{
+	return net_iov_owner(niov)->vaddr;
+}
+
+static inline void *net_iov_address(const struct net_iov *niov)
+{
+	const struct net_iov_area *area = net_iov_owner(niov);
+	unsigned long off;
+
+	if (!area->vaddr)
+		return NULL;
+
+	off = (unsigned long)net_iov_idx(niov) << area->niov_shift;
+	return area->vaddr + off;
 }
 
 /* Initialize a niov: stamp the owning area, the memory provider type.
@@ -335,10 +358,16 @@ static inline void *__netmem_address(netmem_ref netmem)
 	return page_address(__netmem_to_page(netmem));
 }
 
+/**
+ * netmem_address - get pointer to the memory backing @netmem
+ * @netmem: netmem reference to get the pointer for
+ *
+ * Return: pointer to the memory, or NULL if the CPU cannot read @netmem.
+ */
 static inline void *netmem_address(netmem_ref netmem)
 {
 	if (netmem_is_net_iov(netmem))
-		return NULL;
+		return net_iov_address(netmem_to_net_iov(netmem));
 
 	return __netmem_address(netmem);
 }
