@@ -1747,6 +1747,11 @@ void ath11k_dp_htt_htc_t2h_msg_handler(struct ath11k_base *ab,
 	case HTT_T2H_MSG_TYPE_BKPRESSURE_EVENT_IND:
 		ath11k_htt_backpressure_event_handler(ab, skb);
 		break;
+	case HTT_T2H_MSG_TYPE_PPDU_ID_FMT_IND:
+		/* The bit layout of the firmware's PPDU IDs; ath11k only compares them. */
+		ath11k_dbg_dump(ab, ATH11K_DBG_DP_HTT, NULL, "htt ppdu id format: ",
+				skb->data, skb->len);
+		break;
 	default:
 		ath11k_warn(ab, "htt event %d not handled\n", type);
 		break;
