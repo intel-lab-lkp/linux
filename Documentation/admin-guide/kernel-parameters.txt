@@ -5251,6 +5251,14 @@ Kernel parameters
 				present below the bridge.
 				Only hotplug bridges are affected.
 				Keys:
+				  bus=nn	Number of bus numbers for the
+					buses below the bridge, counted like
+					hpbussize.  When the kernel distributes
+					spare bus numbers between the hotplug
+					bridges on a bus, e.g. when a switch is
+					hot-added, the reserved bridge gets its
+					reservation first and the others share
+					what is left.
 				  mmio=nn[KMG]	Minimum size of the
 					non-prefetchable memory window.
 				  mmioalign=nn[KMG]  Minimum alignment of
@@ -5261,11 +5269,11 @@ Kernel parameters
 					of the prefetchable memory window.
 				Alignments must be powers of two.  For
 				example,
-				  pci=hpreserve=mmiopref=1032M:mmioprefalign=1G@0000:80:01.1/00.0/03.0
-				reserves a 1 GiB-aligned 1032 MiB
-				prefetchable window below the downstream
-				port at devfn 03.0 of the switch behind root
-				port 0000:80:01.1.
+				  pci=hpreserve=bus=11:mmiopref=1032M:mmioprefalign=1G@0000:80:01.1/00.0/03.0
+				reserves 11 bus numbers and a 1 GiB-aligned
+				1032 MiB prefetchable window below the
+				downstream port at devfn 03.0 of the switch
+				behind root port 0000:80:01.1.
 		realloc=	Enable/disable reallocating PCI bridge resources
 				if allocations done by BIOS are too small to
 				accommodate resources required by all child

@@ -3081,10 +3081,22 @@ void __weak pcibios_fixup_bus(struct pci_bus *bus)
  * equally between hotplug-capable bridges to allow future extension of the
  * hierarchy.
  */
+static unsigned int pci_hotplug_reserved_buses(struct pci_dev *bridge)
+{
+	struct pci_hotplug_reserve res;
+
+	if (!pci_get_hotplug_reserve(bridge, &res))
+		return 0;
+
+	return res.buses;
+}
+
 static unsigned int pci_scan_child_bus_extend(struct pci_bus *bus,
 					      unsigned int available_buses)
 {
 	unsigned int used_buses, normal_bridges = 0, hotplug_bridges = 0;
+	unsigned int reserved_bridges = 0, reserved_buses = 0;
+	unsigned int hotplug_share = 0;
 	unsigned int start = bus->busn_res.start;
 	unsigned int devnr, cmax, max = start;
 	struct pci_dev *dev;
@@ -3115,11 +3127,27 @@ static unsigned int pci_scan_child_bus_extend(struct pci_bus *bus,
 	 * buses between hotplug bridges.
 	 */
 	for_each_pci_bridge(dev, bus) {
-		if (dev->is_hotplug_bridge)
+		if (dev->is_hotplug_bridge) {
+			unsigned int reserved = pci_hotplug_reserved_buses(dev);
+
 			hotplug_bridges++;
-		else
+			if (reserved) {
+				reserved_bridges++;
+				reserved_buses += reserved;
+			}
+		} else {
 			normal_bridges++;
+		}
 	}
+
+	/*
+	 * Hotplug bridges with a "pci=hpreserve=" bus reservation get the
+	 * number of buses they asked for; the others share what is left.
+	 */
+	if (hotplug_bridges > reserved_bridges &&
+	    available_buses > reserved_buses)
+		hotplug_share = (available_buses - reserved_buses) /
+				(hotplug_bridges - reserved_bridges);
 
 	/*
 	 * Scan bridges that are already configured. We don't touch them
@@ -3152,12 +3180,34 @@ static unsigned int pci_scan_child_bus_extend(struct pci_bus *bus,
 			 */
 			buses = available_buses;
 		} else if (dev->is_hotplug_bridge) {
+			unsigned int reserved = pci_hotplug_reserved_buses(dev);
+
 			/*
 			 * Distribute the extra buses between hotplug
 			 * bridges if any.
 			 */
-			buses = available_buses / hotplug_bridges;
-			buses = min(buses, available_buses - used_buses + 1);
+			if (!reserved) {
+				buses = hotplug_share;
+				buses = min(buses, available_buses - used_buses + 1);
+			} else {
+				/* used_buses already includes this bridge's bus */
+				buses = available_buses + 1 > used_buses ?
+					available_buses + 1 - used_buses : 0;
+				buses = min(buses, reserved);
+			}
+
+			/* Bridges configured in the first pass keep their buses */
+			if (reserved && !dev->subordinate) {
+				/* The secondary bus is allocated even for 0 */
+				unsigned int granted = max(buses, 1U);
+
+				if (granted < reserved)
+					pci_warn(dev, "only %u of %u reserved bus numbers available\n",
+						 granted, reserved);
+				else
+					pci_info(dev, "reserving %u bus numbers\n",
+						 granted);
+			}
 		}
 
 		cmax = max;

@@ -412,6 +412,8 @@ extern unsigned long pci_hotplug_bus_size;
 
 /**
  * struct pci_hotplug_reserve - resources reserved for a hotplug bridge
+ * @buses: bus numbers for the hierarchy below the bridge, including its
+ *	   secondary bus
  * @mmio_size: minimum size of the non-prefetchable memory window
  * @mmio_align: minimum alignment of the non-prefetchable memory window
  * @mmio_pref_size: minimum size of the prefetchable memory window
@@ -420,6 +422,7 @@ extern unsigned long pci_hotplug_bus_size;
  * Requested with "pci=hpreserve=".  A value of zero means no reservation.
  */
 struct pci_hotplug_reserve {
+	unsigned int buses;
 	resource_size_t mmio_size;
 	resource_size_t mmio_align;
 	resource_size_t mmio_pref_size;

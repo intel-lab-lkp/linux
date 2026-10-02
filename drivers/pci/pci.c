@@ -454,6 +454,8 @@ static const char *pci_parse_hotplug_reserve(const char *p,
 			res->mmio_pref_size = val;
 		else if (pci_hotplug_reserve_key(p, len, "mmioprefalign"))
 			res->mmio_pref_align = val;
+		else if (pci_hotplug_reserve_key(p, len, "bus") && val <= 0xff)
+			res->buses = val;
 		else
 			return NULL;
 
