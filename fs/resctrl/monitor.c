@@ -1246,8 +1246,7 @@ static int rdtgroup_assign_cntr_event(struct rdt_l3_mon_domain *d, struct rdtgro
 }
 
 /*
- * rdtgroup_assign_cntrs() - Assign counters to MBM events. Called when
- *			     a new group is created.
+ * rdtgroup_assign_cntrs() - Assign counters to MBM events.
  *
  * Each group can accommodate two counters per domain: one for the total
  * event and one for the local event. Assignments may fail due to the limited
@@ -1270,6 +1269,22 @@ void rdtgroup_assign_cntrs(struct rdtgroup *rdtgrp)
 	if (resctrl_is_mon_event_enabled(QOS_L3_MBM_LOCAL_EVENT_ID))
 		rdtgroup_assign_cntr_event(NULL, rdtgrp,
 					   &mon_event_all[QOS_L3_MBM_LOCAL_EVENT_ID]);
+}
+
+/*
+ * resctrl_assign_cntrs_allrdtgrp() - Assign counters to the MBM events of
+ *				      every existing group.
+ */
+static void resctrl_assign_cntrs_allrdtgrp(void)
+{
+	struct rdtgroup *prgrp, *crgrp;
+
+	list_for_each_entry(prgrp, &rdt_all_groups, rdtgroup_list) {
+		rdtgroup_assign_cntrs(prgrp);
+
+		list_for_each_entry(crgrp, &prgrp->mon.crdtgrp_list, mon.crdtgrp_list)
+			rdtgroup_assign_cntrs(crgrp);
+	}
 }
 
 /*
@@ -1539,15 +1554,25 @@ ssize_t resctrl_mbm_assign_mode_write(struct kernfs_open_file *of, char *buf,
 									   (READS_TO_LOCAL_MEM |
 									    READS_TO_LOCAL_S_MEM |
 									    NON_TEMP_WRITE_TO_LOCAL_MEM);
-		/* Enable auto assignment when switching to "mbm_event" mode */
-		if (enable)
-			r->mon.mbm_assign_on_mkdir = true;
 		/*
 		 * Reset all the non-achitectural RMID state and assignable counters.
 		 */
 		list_for_each_entry(d, &r->mon_domains, hdr.list) {
 			mbm_cntr_free_all(r, d);
 			resctrl_reset_rmid_all(r, d);
+		}
+
+		/*
+		 * Counters were freed above, so both new groups (via mkdir) and
+		 * the groups that already exist need assignments. Groups created
+		 * while in "default" mode have no counter assigned, including the
+		 * default group created when resctrl is mounted. Assign counters
+		 * to them so that enabling the mode leaves the same assignments
+		 * that mkdir would have made.
+		 */
+		if (enable) {
+			r->mon.mbm_assign_on_mkdir = true;
+			resctrl_assign_cntrs_allrdtgrp();
 		}
 	}
 
