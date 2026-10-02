@@ -141,6 +141,10 @@ static vm_fault_t f2fs_vm_page_mkwrite(struct vm_fault *vmf)
 		return VM_FAULT_SIGBUS;
 	}
 
+	/* mmap stores bypass the COW inode and would break atomicity */
+	if (f2fs_is_atomic_file(inode))
+		return VM_FAULT_SIGBUS;
+
 	if (is_inode_flag_set(inode, FI_COMPRESS_RELEASED)) {
 		err = -EIO;
 		goto out;
