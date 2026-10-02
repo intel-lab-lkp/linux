@@ -30,6 +30,12 @@ properties:
   power-domains:
     maxItems: 1
 
+  clocks:
+    maxItems: 1
+
+  clock-names:
+    const: atclk
+
   label:
     description:
       Description of a coresight device.
