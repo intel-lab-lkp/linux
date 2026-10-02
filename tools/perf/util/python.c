@@ -52,6 +52,7 @@
 #include "srccode.h"
 #include "srcline.h"
 #include "strbuf.h"
+#include "strlist.h"
 #include "symbol.h"
 #include "stat.h"
 #include "header.h"
@@ -4104,16 +4105,38 @@ static void pyrf_thread__delete(struct pyrf_thread *pthread)
 static PyObject *pyrf_thread__comm(PyObject *obj)
 {
 	struct pyrf_thread *pthread = (void *)obj;
-	const char *str;
+	struct thread *thread = pthread->thread;
+	bool has_comm = false;
+	char *str = NULL;
+	PyObject *ret;
 
-	CHECK_INITIALIZED(pthread->thread, "perf.thread");
+	CHECK_INITIALIZED(thread, "perf.thread");
 
-	str = thread__comm_str(pthread->thread);
+	/*
+	 * Copy the comm string under comm_lock so a concurrent PERF_RECORD_COMM
+	 * in perf_session__process_events() (which runs with the GIL released)
+	 * cannot free the old comm_str via comm__override() while it is being
+	 * read, and drop comm_lock before calling into the Python allocator.
+	 */
+	down_read(thread__comm_lock(thread));
+	if (!list_empty(thread__comm_list(thread))) {
+		const struct comm *comm;
 
-	if (!str)
+		comm = list_first_entry(thread__comm_list(thread), struct comm, list);
+		if (comm && comm__str(comm)) {
+			has_comm = true;
+			str = strdup(comm__str(comm));
+		}
+	}
+	up_read(thread__comm_lock(thread));
+
+	if (!has_comm)
 		Py_RETURN_NONE;
-
-	return PyUnicode_FromString(str);
+	if (!str)
+		return PyErr_NoMemory();
+	ret = PyUnicode_FromString(str);
+	free(str);
+	return ret;
 }
 
 static PyMethodDef pyrf_thread__methods[] = {
@@ -4211,6 +4234,8 @@ struct pyrf_session {
 	 * that event processing stops, see pyrf_session__callback_raised().
 	 */
 	bool callback_raised;
+	unsigned int callback_depth;
+	unsigned long callback_thread;
 	char *vmlinux_name;
 	char *kallsyms_name;
 	char *symfs;
@@ -4579,11 +4604,10 @@ static bool pyrf_session__exception_pending(void)
 	return PyErr_Occurred() != NULL;
 }
 
-static int pyrf_session__call_return_process(struct call_return *cr,
-					     u64 *parent_db_id,
-					     void *data)
+static int __pyrf_session__call_return_process(struct call_return *cr,
+					       u64 *parent_db_id,
+					       struct pyrf_session *psession)
 {
-	struct pyrf_session *psession = data;
 	PyObject *pyevent, *ret;
 
 	if (!psession->call_return || pyrf_session__exception_pending())
@@ -4608,6 +4632,38 @@ static int pyrf_session__call_return_process(struct call_return *cr,
 		return pyrf_session__callback_raised(psession);
 	Py_DECREF(ret);
 	return 0;
+}
+
+static PyGILState_STATE pyrf_session__callback_enter(struct pyrf_session *psession)
+{
+	PyGILState_STATE gstate = PyGILState_Ensure();
+
+	psession->callback_thread = PyThread_get_thread_ident();
+	psession->callback_depth++;
+	return gstate;
+}
+
+static void pyrf_session__callback_leave(struct pyrf_session *psession,
+					 PyGILState_STATE gstate)
+{
+	psession->callback_depth--;
+	PyGILState_Release(gstate);
+}
+
+/*
+ * Call returns may be processed during a sample callback, or when thread
+ * stacks are flushed, so acquire the GIL, see pyrf_session_tool__sample().
+ */
+static int pyrf_session__call_return_process(struct call_return *cr,
+					     u64 *parent_db_id,
+					     void *data)
+{
+	struct pyrf_session *psession = data;
+	PyGILState_STATE gstate = pyrf_session__callback_enter(psession);
+	int ret = __pyrf_session__call_return_process(cr, parent_db_id, psession);
+
+	pyrf_session__callback_leave(psession, gstate);
+	return ret;
 }
 
 static int pyrf_session__call_event(struct pyrf_session *psession, PyObject *callback,
@@ -4645,10 +4701,10 @@ static int pyrf_session__call_event(struct pyrf_session *psession, PyObject *cal
 	return 0;
 }
 
-static int pyrf_session_tool__sample(const struct perf_tool *tool,
-				     union perf_event *event,
-				     struct perf_sample *sample,
-				     struct machine *machine)
+static int __pyrf_session_tool__sample(const struct perf_tool *tool,
+				       union perf_event *event,
+				       struct perf_sample *sample,
+				       struct machine *machine)
 {
 	struct pyrf_session *psession = container_of(tool, struct pyrf_session, tool);
 	u64 sample_db_id = ++psession->sample_last_db_id;
@@ -4706,10 +4762,10 @@ static int pyrf_session_tool__sample(const struct perf_tool *tool,
 	return 0;
 }
 
-static int pyrf_session_tool__context_switch(const struct perf_tool *tool,
-					     union perf_event *event,
-					     struct perf_sample *sample,
-					     struct machine *machine)
+static int __pyrf_session_tool__context_switch(const struct perf_tool *tool,
+					       union perf_event *event,
+					       struct perf_sample *sample,
+					       struct machine *machine)
 {
 	struct pyrf_session *psession = container_of(tool, struct pyrf_session, tool);
 	PyObject *pyevent;
@@ -4736,9 +4792,9 @@ static int pyrf_session_tool__context_switch(const struct perf_tool *tool,
 					/*extra_arg=*/NULL, /*has_extra_arg=*/false);
 }
 
-static int pyrf_session_tool__stat(const struct perf_tool *tool,
-				   struct perf_session *session,
-				   union perf_event *event)
+static int __pyrf_session_tool__stat(const struct perf_tool *tool,
+				     struct perf_session *session,
+				     union perf_event *event)
 {
 	struct pyrf_session *psession = container_of(tool, struct pyrf_session, tool);
 	struct evsel *evsel = evlist__id2evsel(session->evlist, event->stat.id);
@@ -4757,9 +4813,9 @@ static int pyrf_session_tool__stat(const struct perf_tool *tool,
 					name, /*has_extra_arg=*/true);
 }
 
-static int pyrf_session_tool__stat_round(const struct perf_tool *tool,
-					 struct perf_session *session __maybe_unused,
-					 union perf_event *event)
+static int __pyrf_session_tool__stat_round(const struct perf_tool *tool,
+					   struct perf_session *session __maybe_unused,
+					   union perf_event *event)
 {
 	struct pyrf_session *psession = container_of(tool, struct pyrf_session, tool);
 	PyObject *pyevent;
@@ -4776,6 +4832,84 @@ static int pyrf_session_tool__stat_round(const struct perf_tool *tool,
 					/*extra_arg=*/NULL, /*has_extra_arg=*/true);
 }
 
+/*
+ * The session currently inside perf_session__new() or
+ * perf_session__process_events() with the GIL released. Because symbol_conf
+ * and session_done are process-globals and perf_session is not thread-safe,
+ * only one session may be active at a time. Modified with the GIL held.
+ */
+static struct pyrf_session *pyrf_session__active;
+
+static bool pyrf_session__check_not_busy(struct pyrf_session *psession)
+{
+	if (pyrf_session__active == psession &&
+	    (!psession->callback_depth ||
+	     psession->callback_thread != PyThread_get_thread_ident())) {
+		PyErr_SetString(PyExc_RuntimeError,
+				"perf.session is busy processing events in another thread");
+		return false;
+	}
+	return true;
+}
+
+/*
+ * The GIL is released while events are processed, see
+ * pyrf_session__find_thread_events(), so that other python threads can run,
+ * such as a UI thread while a session reads from a pipe that may block. The
+ * tool callbacks that use python acquire the GIL, PyGILState_Ensure() is
+ * reentrant so nested callbacks, like call returns during a sample, work.
+ */
+
+static int pyrf_session_tool__sample(const struct perf_tool *tool,
+				     union perf_event *event,
+				     struct perf_sample *sample,
+				     struct machine *machine)
+{
+	struct pyrf_session *psession = container_of(tool, struct pyrf_session, tool);
+	PyGILState_STATE gstate = pyrf_session__callback_enter(psession);
+	int ret = __pyrf_session_tool__sample(tool, event, sample, machine);
+
+	pyrf_session__callback_leave(psession, gstate);
+	return ret;
+}
+
+static int pyrf_session_tool__context_switch(const struct perf_tool *tool,
+					     union perf_event *event,
+					     struct perf_sample *sample,
+					     struct machine *machine)
+{
+	struct pyrf_session *psession = container_of(tool, struct pyrf_session, tool);
+	PyGILState_STATE gstate = pyrf_session__callback_enter(psession);
+	int ret = __pyrf_session_tool__context_switch(tool, event, sample, machine);
+
+	pyrf_session__callback_leave(psession, gstate);
+	return ret;
+}
+
+static int pyrf_session_tool__stat(const struct perf_tool *tool,
+				   struct perf_session *session,
+				   union perf_event *event)
+{
+	struct pyrf_session *psession = container_of(tool, struct pyrf_session, tool);
+	PyGILState_STATE gstate = pyrf_session__callback_enter(psession);
+	int ret = __pyrf_session_tool__stat(tool, session, event);
+
+	pyrf_session__callback_leave(psession, gstate);
+	return ret;
+}
+
+static int pyrf_session_tool__stat_round(const struct perf_tool *tool,
+					 struct perf_session *session,
+					 union perf_event *event)
+{
+	struct pyrf_session *psession = container_of(tool, struct pyrf_session, tool);
+	PyGILState_STATE gstate = pyrf_session__callback_enter(psession);
+	int ret = __pyrf_session_tool__stat_round(tool, session, event);
+
+	pyrf_session__callback_leave(psession, gstate);
+	return ret;
+}
+
 static PyObject *pyrf_session__find_thread(struct pyrf_session *psession, PyObject *args)
 {
 	struct machine *machine;
@@ -4784,6 +4918,8 @@ static PyObject *pyrf_session__find_thread(struct pyrf_session *psession, PyObje
 	int pid, tid = -1;
 
 	CHECK_INITIALIZED(psession->session, "session");
+	if (!pyrf_session__check_not_busy(psession))
+		return NULL;
 
 	if (!PyArg_ParseTuple(args, "i|i", &pid, &tid))
 		return NULL;
@@ -4854,6 +4990,8 @@ static PyObject *pyrf_session__new(PyTypeObject *type, PyObject *args, PyObject 
 	psession->call_return_last_db_id = 0;
 	psession->sample_last_db_id = 0;
 	psession->callback_raised = false;
+	psession->callback_depth = 0;
+	psession->callback_thread = 0;
 	psession->vmlinux_name = NULL;
 	psession->kallsyms_name = NULL;
 	psession->symfs = NULL;
@@ -4936,7 +5074,6 @@ static PyObject *pyrf_session__new(PyTypeObject *type, PyObject *args, PyObject 
 			PyErr_NoMemory();
 			goto err_out;
 		}
-		symbol_conf.vmlinux_name = psession->vmlinux_name;
 	}
 
 	if (!kallsyms_str)
@@ -4947,7 +5084,6 @@ static PyObject *pyrf_session__new(PyTypeObject *type, PyObject *args, PyObject 
 			PyErr_NoMemory();
 			goto err_out;
 		}
-		symbol_conf.kallsyms_name = psession->kallsyms_name;
 	}
 
 	if (!symfs_str)
@@ -4958,16 +5094,7 @@ static PyObject *pyrf_session__new(PyTypeObject *type, PyObject *args, PyObject 
 			PyErr_NoMemory();
 			goto err_out;
 		}
-		symbol_conf.symfs = psession->symfs;
 	}
-
-	session = perf_session__new(&pdata->data, &psession->tool);
-	if (IS_ERR(session)) {
-		PyErr_Format(PyExc_IOError, "failed to create session: %ld", PTR_ERR(session));
-		goto err_out;
-	}
-	psession->session = session;
-	psession->session->itrace_synth_opts = &psession->itrace_opts;
 
 	if (!itrace_str)
 		itrace_str = getenv("PERF_ITRACE");
@@ -4975,18 +5102,43 @@ static PyObject *pyrf_session__new(PyTypeObject *type, PyObject *args, PyObject 
 		memset(&psession->itrace_opts, 0, sizeof(psession->itrace_opts));
 		if (itrace_do_parse_synth_opts(&psession->itrace_opts, itrace_str, 0) < 0) {
 			PyErr_SetString(PyExc_ValueError, "Failed to parse itrace options");
-			Py_DECREF(psession);
-			return NULL;
+			goto err_out;
 		}
 	}
 
+	if (pyrf_session__active) {
+		PyErr_SetString(PyExc_RuntimeError,
+				"Another perf.session is currently active");
+		goto err_out;
+	}
+
+	symbol_conf.vmlinux_name = psession->vmlinux_name;
+	symbol_conf.kallsyms_name = psession->kallsyms_name;
+	symbol_conf.symfs = psession->symfs ?: "";
 	symbol_conf.use_callchain = true;
 	symbol_conf.show_kernel_path = true;
 	symbol_conf.inline_name = false;
+
+	/* Reading the header of a pipe may block, let other python threads run. */
+	pyrf_session__active = psession;
+	Py_BEGIN_ALLOW_THREADS
+	session = perf_session__new(&pdata->data, &psession->tool);
+	Py_END_ALLOW_THREADS
+	pyrf_session__active = NULL;
+	if (!psession->kallsyms_name && symbol_conf.kallsyms_name)
+		psession->kallsyms_name = (char *)symbol_conf.kallsyms_name;
+	if (IS_ERR(session)) {
+		PyErr_Format(PyExc_IOError, "failed to create session: %ld", PTR_ERR(session));
+		goto err_out;
+	}
+	psession->session = session;
+	psession->session->itrace_synth_opts = &psession->itrace_opts;
 	if (symbol__init(perf_session__env(session)) < 0) {
 		PyErr_SetString(PyExc_OSError, "perf: symbol__init failed");
 		goto err_out;
 	}
+	if (psession->symfs && !symbol_conf.symfs[0])
+		zfree(&psession->symfs);
 
 	return (PyObject *)psession;
 err_out:
@@ -4997,14 +5149,16 @@ err_out:
 static void pyrf_session__delete(struct pyrf_session *psession)
 {
 	perf_session__delete(psession->session);
-	if (symbol_conf.vmlinux_name == psession->vmlinux_name)
-		symbol_conf.vmlinux_name = NULL;
+	if (!pyrf_session__active) {
+		if (symbol_conf.vmlinux_name == psession->vmlinux_name)
+			symbol_conf.vmlinux_name = NULL;
+		if (symbol_conf.kallsyms_name == psession->kallsyms_name)
+			symbol_conf.kallsyms_name = NULL;
+		if (symbol_conf.symfs == psession->symfs)
+			symbol_conf.symfs = "";
+	}
 	free(psession->vmlinux_name);
-	if (symbol_conf.kallsyms_name == psession->kallsyms_name)
-		symbol_conf.kallsyms_name = NULL;
 	free(psession->kallsyms_name);
-	if (symbol_conf.symfs == psession->symfs)
-		symbol_conf.symfs = "";
 	free(psession->symfs);
 	free(psession->itrace_opts.vm_tm_corr_args);
 	free(psession->itrace_opts.cpu_bitmap);
@@ -5025,9 +5179,23 @@ static PyObject *pyrf_session__find_thread_events(struct pyrf_session *psession)
 	int err;
 
 	CHECK_INITIALIZED(psession->session, "session");
+	if (pyrf_session__active) {
+		PyErr_SetString(PyExc_RuntimeError,
+				"Another perf.session is currently active");
+		return NULL;
+	}
+
+	symbol_conf.vmlinux_name = psession->vmlinux_name;
+	symbol_conf.kallsyms_name = psession->kallsyms_name;
+	symbol_conf.symfs = psession->symfs ?: "";
 
 	psession->callback_raised = false;
+	/* Callbacks that use python acquire the GIL, see pyrf_session_tool__sample(). */
+	pyrf_session__active = psession;
+	Py_BEGIN_ALLOW_THREADS
 	err = perf_session__process_events(psession->session);
+	Py_END_ALLOW_THREADS
+	pyrf_session__active = NULL;
 	if (psession->callback_raised) {
 		/*
 		 * Clear the early stop requested by this session's callback, in
@@ -5089,6 +5257,8 @@ static PyObject *pyrf_session__getattro(struct pyrf_session *psession, PyObject 
 		PyErr_SetString(PyExc_ValueError, "session not initialized");
 		return NULL;
 	}
+	if (!pyrf_session__check_not_busy(psession))
+		return NULL;
 	if (!strcmp(name_str, "e_machine"))
 		return PyLong_FromLong(perf_session__e_machine(psession->session,
 							       /*e_flags=*/NULL));
@@ -5139,6 +5309,8 @@ static int pyrf_session__setattro(struct pyrf_session *psession, PyObject *attr_
 		PyErr_SetString(PyExc_ValueError, "session not initialized");
 		return -1;
 	}
+	if (!pyrf_session__check_not_busy(psession))
+		return -1;
 	return PyObject_GenericSetAttr((PyObject *) psession, attr_name, value);
 }
 
