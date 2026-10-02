@@ -297,23 +297,32 @@ drm_sched_rq_add_entity(struct drm_sched_entity *entity, ktime_t ts)
  * @entity: scheduler entity
  *
  * Removes a scheduler entity from the run queue.
+ *
+ * Return: DRM scheduler selected to handle this entity or NULL if entity has
+ * already been removed.
  */
-void drm_sched_rq_remove_entity(struct drm_sched_rq *rq,
-				struct drm_sched_entity *entity)
+struct drm_gpu_scheduler *
+drm_sched_rq_remove_entity(struct drm_sched_rq *rq,
+			   struct drm_sched_entity *entity)
 {
+	struct drm_gpu_scheduler *sched;
+
 	lockdep_assert_held(&entity->lock);
 
 	if (list_empty(&entity->list))
-		return;
+		return NULL;
 
 	spin_lock(&rq->lock);
 
-	atomic_dec(rq->sched->score);
+	sched = rq->sched;
+	atomic_dec(sched->score);
 	list_del_init(&entity->list);
 
 	drm_sched_rq_remove_fifo_locked(entity, rq);
 
 	spin_unlock(&rq->lock);
+
+	return sched;
 }
 
 static ktime_t
@@ -407,8 +416,6 @@ drm_sched_rq_select_entity(struct drm_gpu_scheduler *sched,
 				spin_unlock(&rq->lock);
 				return ERR_PTR(-ENOSPC);
 			}
-
-			reinit_completion(&entity->entity_idle);
 			break;
 		}
 	}

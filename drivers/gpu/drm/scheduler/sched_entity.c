@@ -161,11 +161,6 @@ int drm_sched_entity_init(struct drm_sched_entity *entity,
 			      DRM_SCHED_PRIORITY_KERNEL : priority;
 	entity->rq = sched_list[0]->sched_rq[entity->rq_priority];
 
-	init_completion(&entity->entity_idle);
-
-	/* We start in an idle state. */
-	complete_all(&entity->entity_idle);
-
 	spin_lock_init(&entity->lock);
 	spsc_queue_init(&entity->job_queue);
 
@@ -304,16 +299,23 @@ static void drm_sched_entity_kill_jobs_cb(struct dma_fence *f,
  */
 void drm_sched_entity_kill(struct drm_sched_entity *entity)
 {
+	struct drm_gpu_scheduler *sched;
 	struct drm_sched_job *job;
 	struct dma_fence *prev;
 
 	spin_lock(&entity->lock);
 	entity->stopped = true;
-	drm_sched_rq_remove_entity(entity->rq, entity);
+	sched = drm_sched_rq_remove_entity(entity->rq, entity);
 	spin_unlock(&entity->lock);
 
-	/* Make sure this entity is not used by the scheduler at the moment */
-	wait_for_completion(&entity->entity_idle);
+	/*
+	 * Make sure this entity is not used by the scheduler at the moment.
+	 *
+	 * Scheduler is guaranteed to be stable after the entity was stopped and
+	 * removed from the run-queue.
+	 */
+	if (sched)
+		drm_sched_flush_run_work(sched);
 
 	spin_lock(&entity->lock);
 	prev = dma_fence_get(entity->last_scheduled);
