@@ -345,10 +345,10 @@ struct ice_vsi {
 	u64 tx_linearize;
 	DECLARE_BITMAP(state, ICE_VSI_STATE_NBITS);
 	unsigned int current_netdev_flags;
-	u32 tx_restart;
-	u32 tx_busy;
-	u32 rx_buf_failed;
-	u32 rx_page_failed;
+	u64 tx_restart;
+	u64 tx_busy;
+	u64 rx_buf_failed;
+	u64 rx_page_failed;
 	u16 num_q_vectors;
 	/* tell if only dynamic irq allocation is allowed */
 	bool irq_dyn_alloc;
