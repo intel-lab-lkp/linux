@@ -25117,8 +25117,8 @@ SIPHASH PRF ROUTINES
 M:	Jason A. Donenfeld <Jason@zx2c4.com>
 S:	Maintained
 F:	include/linux/siphash.h
-F:	lib/siphash.c
-F:	lib/tests/siphash_kunit.c
+F:	lib/crypto/siphash.c
+F:	lib/crypto/tests/siphash_kunit.c
 
 SIS 190 ETHERNET DRIVER
 M:	Francois Romieu <romieu@fr.zoreil.com>

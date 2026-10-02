@@ -12,6 +12,8 @@ ppc64-perlasm-flavour-y := linux-ppc64
 ppc64-perlasm-flavour-$(CONFIG_PPC64_ELF_ABI_V2) := linux-ppc64-elfv2
 ppc64-perlasm-flavour-$(CONFIG_CPU_LITTLE_ENDIAN) := linux-ppc64le
 
+obj-y += siphash.o
+
 obj-$(CONFIG_KUNIT)				+= tests/
 
 obj-$(CONFIG_CRYPTO_HASH_INFO)			+= hash_info.o

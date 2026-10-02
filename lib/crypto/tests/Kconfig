@@ -151,6 +151,17 @@ config CRYPTO_LIB_SHA3_KUNIT_TEST
 	  including SHA3-224, SHA3-256, SHA3-384, SHA3-512, SHAKE128 and
 	  SHAKE256.
 
+config CRYPTO_LIB_SIPHASH_KUNIT_TEST
+	tristate "KUnit tests for SipHash" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  Enable this option to test the kernel's siphash (<linux/siphash.h>)
+	  hash functions on boot (or module load).
+
+	  This is intended to help people writing architecture-specific
+	  optimized versions.  If unsure, say N.
+
 config CRYPTO_LIB_SM3_KUNIT_TEST
 	tristate "KUnit tests for SM3" if !KUNIT_ALL_TESTS
 	depends on KUNIT && CRYPTO_LIB_SM3
