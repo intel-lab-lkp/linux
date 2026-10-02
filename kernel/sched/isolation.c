@@ -39,6 +39,20 @@ bool housekeeping_enabled(enum hk_type type)
 EXPORT_SYMBOL_GPL(housekeeping_enabled);
 
 /*
+ * housekeeping_disable_type - Fully disable a housekeeping type at boot
+ * @type: Housekeeping type to disable
+ *
+ * Used by the rare boot fallback where a type's setup must be undone
+ * because a required arch capability turned out to be missing.  Clears
+ * the type's flag bit so housekeeping_enabled() and housekeeping_cpumask()
+ * fall back to "not configured" for it.
+ */
+void __init housekeeping_disable_type(enum hk_type type)
+{
+	WRITE_ONCE(housekeeping.flags, housekeeping.flags & ~BIT(type));
+}
+
+/*
  * Types that can change at runtime via cpuset isolated partitions.
  * Boot-only types (DOMAIN_BOOT) are always safe to read without lockdep.
  */
@@ -299,10 +313,15 @@ int housekeeping_update_types(unsigned long type_mask,
 			 * was never allocated at boot since nohz_full= was
 			 * absent.  Allocate it now before CPUs cycle through
 			 * hotplug and sched_tick_stop() dereferences
-			 * tick_work_cpu.
+			 * tick_work_cpu.  Likewise, tick_nohz_init() never
+			 * ran this path's cpuhp registration, so the CPU
+			 * currently holding tick_do_timer_cpu duty has no
+			 * hotplug protection yet; install it now.
 			 */
-			if (type == HK_TYPE_KERNEL_NOISE)
+			if (type == HK_TYPE_KERNEL_NOISE) {
 				WARN_ON_ONCE(sched_tick_offload_init());
+				WARN_ON_ONCE(tick_nohz_full_hotplug_init());
+			}
 		}
 		rcu_assign_pointer(housekeeping.cpumasks[type], trials[type]);
 		trials[type] = NULL;
@@ -489,9 +508,6 @@ static int __init housekeeping_setup(char *str, unsigned long flags)
 		for_each_set_bit(type, &iter_flags, HK_TYPE_MAX)
 			housekeeping_setup_type(type, housekeeping_staging);
 	}
-
-	if ((flags & HK_FLAG_KERNEL_NOISE) && !(housekeeping.flags & HK_FLAG_KERNEL_NOISE))
-		tick_nohz_full_setup(non_housekeeping_mask);
 
 	housekeeping.flags |= flags;
 	err = 1;

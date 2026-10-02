@@ -64,6 +64,7 @@ extern int housekeeping_update(struct cpumask *isol_mask);
 extern int housekeeping_update_types(unsigned long type_mask,
 				     struct cpumask *isol_mask);
 extern void __init housekeeping_init(void);
+extern void __init housekeeping_disable_type(enum hk_type type);
 
 #else
 
@@ -99,6 +100,7 @@ static inline int housekeeping_update(struct cpumask *isol_mask) { return 0; }
 static inline int housekeeping_update_types(unsigned long type_mask,
 					    struct cpumask *isol_mask) { return 0; }
 static inline void housekeeping_init(void) { }
+static inline void housekeeping_disable_type(enum hk_type type) { }
 #endif /* CONFIG_CPU_ISOLATION */
 
 static inline bool housekeeping_cpu(int cpu, enum hk_type type)

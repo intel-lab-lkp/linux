@@ -22,6 +22,7 @@
 #include <linux/sched/stat.h>
 #include <linux/sched/nohz.h>
 #include <linux/sched/loadavg.h>
+#include <linux/sched/isolation.h>
 #include <linux/module.h>
 #include <linux/irq_work.h>
 #include <linux/posix-timers.h>
@@ -224,6 +225,20 @@ static bool tick_limited_update_jiffies64(struct tick_sched *ts, ktime_t now)
 
 #define MAX_STALLED_JIFFIES 5
 
+#ifdef CONFIG_NO_HZ_FULL
+/*
+ * True when HK_TYPE_KERNEL_NOISE is enabled and currently isolates at
+ * least one CPU. DHM can leave the type permanently enabled with an
+ * empty mask after a full runtime de-isolation; treat that state like
+ * ordinary NO_HZ_IDLE rather than full dynticks.
+ */
+static bool tick_nohz_full_live(void)
+{
+	return housekeeping_enabled(HK_TYPE_KERNEL_NOISE) &&
+	       !cpumask_full(housekeeping_cpumask(HK_TYPE_KERNEL_NOISE));
+}
+#endif
+
 static void tick_sched_do_timer(struct tick_sched *ts, ktime_t now)
 {
 	int tick_cpu, cpu = smp_processor_id();
@@ -235,14 +250,14 @@ static void tick_sched_do_timer(struct tick_sched *ts, ktime_t now)
 	 * this duty, then the jiffies update is still serialized by
 	 * 'jiffies_lock'.
 	 *
-	 * If nohz_full is enabled, this should not happen because the
-	 * 'tick_do_timer_cpu' CPU never relinquishes.
+	 * If a full-dynticks CPU is currently isolated, this should not
+	 * happen because the 'tick_do_timer_cpu' CPU never relinquishes.
 	 */
 	tick_cpu = READ_ONCE(tick_do_timer_cpu);
 
 	if (IS_ENABLED(CONFIG_NO_HZ_COMMON) && unlikely(tick_cpu == TICK_DO_TIMER_NONE)) {
 #ifdef CONFIG_NO_HZ_FULL
-		WARN_ON_ONCE(tick_nohz_full_running);
+		WARN_ON_ONCE(tick_nohz_full_live());
 #endif
 		WRITE_ONCE(tick_do_timer_cpu, cpu);
 		tick_cpu = cpu;
@@ -332,10 +347,35 @@ static enum hrtimer_restart tick_nohz_handler(struct hrtimer *timer)
 }
 
 #ifdef CONFIG_NO_HZ_FULL
-cpumask_var_t tick_nohz_full_mask;
-EXPORT_SYMBOL_GPL(tick_nohz_full_mask);
-bool tick_nohz_full_running;
-EXPORT_SYMBOL_GPL(tick_nohz_full_running);
+bool tick_nohz_full_enabled(void)
+{
+	if (!context_tracking_enabled())
+		return false;
+
+	return housekeeping_enabled(HK_TYPE_KERNEL_NOISE);
+}
+EXPORT_SYMBOL_GPL(tick_nohz_full_enabled);
+
+/*
+ * Check if a CPU is part of the nohz_full subset. Arrange for evaluating
+ * the cpu expression (typically smp_processor_id()) _after_ the static
+ * key.
+ */
+bool tick_nohz_full_cpu(int cpu)
+{
+	bool ret;
+
+	if (!tick_nohz_full_enabled())
+		return false;
+
+	rcu_read_lock();
+	ret = !cpumask_test_cpu(cpu, housekeeping_cpumask_rcu(HK_TYPE_KERNEL_NOISE));
+	rcu_read_unlock();
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(tick_nohz_full_cpu);
+
 static atomic_t tick_dep_mask;
 
 static bool check_tick_dependency(atomic_t *dep)
@@ -488,12 +528,15 @@ static void tick_nohz_full_kick_all(void)
 {
 	int cpu;
 
-	if (!tick_nohz_full_running)
+	if (!housekeeping_enabled(HK_TYPE_KERNEL_NOISE))
 		return;
 
 	preempt_disable();
-	for_each_cpu_and(cpu, tick_nohz_full_mask, cpu_online_mask)
+	rcu_read_lock();
+	for_each_cpu_andnot(cpu, cpu_online_mask,
+			    housekeeping_cpumask_rcu(HK_TYPE_KERNEL_NOISE))
 		tick_nohz_full_kick_cpu(cpu);
+	rcu_read_unlock();
 	preempt_enable();
 }
 
@@ -619,13 +662,31 @@ void __tick_nohz_task_switch(void)
 	}
 }
 
-/* Get the boot-time nohz CPU list from the kernel parameters. */
-void __init tick_nohz_full_setup(cpumask_var_t cpumask)
+/*
+ * tick_nohz_cpu_isolate - Add a CPU to the full-dynticks set at runtime.
+ * @cpu: the CPU to isolate; must be offline.
+ *
+ * The caller has already excluded @cpu from the HK_TYPE_KERNEL_NOISE
+ * housekeeping mask via housekeeping_update_types(), which is what
+ * tick_nohz_full_cpu() consults.  Activate per-CPU context tracking so
+ * that kernel/user transitions suppress the scheduler tick.
+ */
+int tick_nohz_cpu_isolate(int cpu)
 {
-	alloc_bootmem_cpumask_var(&tick_nohz_full_mask);
-	cpumask_copy(tick_nohz_full_mask, cpumask);
-	tick_nohz_full_running = true;
+	ct_cpu_track_user(cpu);
+	return 0;
 }
+EXPORT_SYMBOL_GPL(tick_nohz_cpu_isolate);
+
+/*
+ * tick_nohz_cpu_deisolate - Remove a CPU from the full-dynticks set.
+ * @cpu: the CPU to de-isolate; must be offline.
+ */
+void tick_nohz_cpu_deisolate(int cpu)
+{
+	ct_cpu_untrack_user(cpu);
+}
+EXPORT_SYMBOL_GPL(tick_nohz_cpu_deisolate);
 
 bool tick_nohz_cpu_hotpluggable(unsigned int cpu)
 {
@@ -633,8 +694,18 @@ bool tick_nohz_cpu_hotpluggable(unsigned int cpu)
 	 * The 'tick_do_timer_cpu' CPU handles housekeeping duty (unbound
 	 * timers, workqueues, timekeeping, ...) on behalf of full dynticks
 	 * CPUs. It must remain online when nohz full is enabled.
+	 *
+	 * Deliberately check the permanently-sticky HK_TYPE_KERNEL_NOISE
+	 * flag here, not tick_nohz_full_live()'s mask-aware variant: DHM
+	 * isolates one CPU at a time and only publishes the updated mask
+	 * (housekeeping_update_types()) after remove_cpu() succeeds, so
+	 * the live mask still looks empty at the exact moment a brand
+	 * new isolation's remove_cpu() call reaches this check. Gating
+	 * on the mask here would leave the duty holder unprotected for
+	 * every single-CPU isolation, not just the very first one.
 	 */
-	if (tick_nohz_full_running && READ_ONCE(tick_do_timer_cpu) == cpu)
+	if (housekeeping_enabled(HK_TYPE_KERNEL_NOISE) &&
+	    READ_ONCE(tick_do_timer_cpu) == cpu)
 		return false;
 	return true;
 }
@@ -644,11 +715,34 @@ static int tick_nohz_cpu_down(unsigned int cpu)
 	return tick_nohz_cpu_hotpluggable(cpu) ? 0 : -EBUSY;
 }
 
+/*
+ * tick_nohz_full_hotplug_init - Install tick_do_timer_cpu hotplug protection.
+ *
+ * Boot-time nohz_full=/isolcpus=nohz reaches this via tick_nohz_init().
+ * DHM's runtime first-enable path (no nohz_full= at boot) calls this
+ * directly instead, since tick_nohz_init() has already run and returned
+ * early by the time housekeeping_update_types() first sets
+ * HK_TYPE_KERNEL_NOISE. Without it, the CPU holding tick_do_timer_cpu
+ * duty has no hotplug protection and can be pulled down by
+ * remove_cpu(), dropping timekeeping duty with no notice.
+ */
+int tick_nohz_full_hotplug_init(void)
+{
+	int ret;
+
+	ret = cpuhp_setup_state_nocalls(CPUHP_AP_ONLINE_DYN,
+					 "kernel/nohz:predown", NULL,
+					 tick_nohz_cpu_down);
+	return ret < 0 ? ret : 0;
+}
+EXPORT_SYMBOL_GPL(tick_nohz_full_hotplug_init);
+
 void __init tick_nohz_init(void)
 {
+	cpumask_var_t full_mask;
 	int cpu, ret;
 
-	if (!tick_nohz_full_running)
+	if (!housekeeping_enabled(HK_TYPE_KERNEL_NOISE))
 		return;
 
 	/*
@@ -658,8 +752,7 @@ void __init tick_nohz_init(void)
 	 */
 	if (!arch_irq_work_has_interrupt()) {
 		pr_warn("NO_HZ: Can't run full dynticks because arch doesn't support IRQ work self-IPIs\n");
-		cpumask_clear(tick_nohz_full_mask);
-		tick_nohz_full_running = false;
+		housekeeping_disable_type(HK_TYPE_KERNEL_NOISE);
 		return;
 	}
 
@@ -667,22 +760,35 @@ void __init tick_nohz_init(void)
 			!IS_ENABLED(CONFIG_PM_SLEEP_SMP_NONZERO_CPU)) {
 		cpu = smp_processor_id();
 
-		if (cpumask_test_cpu(cpu, tick_nohz_full_mask)) {
+		if (!cpumask_test_cpu(cpu, housekeeping_cpumask(HK_TYPE_KERNEL_NOISE))) {
+			cpumask_var_t isolated;
+
 			pr_warn("NO_HZ: Clearing %d from nohz_full range "
 				"for timekeeping\n", cpu);
-			cpumask_clear_cpu(cpu, tick_nohz_full_mask);
+			if (alloc_cpumask_var(&isolated, GFP_KERNEL)) {
+				cpumask_andnot(isolated, cpu_possible_mask,
+					       housekeeping_cpumask(HK_TYPE_KERNEL_NOISE));
+				cpumask_clear_cpu(cpu, isolated);
+				WARN_ON_ONCE(housekeeping_update_types(BIT(HK_TYPE_KERNEL_NOISE),
+								       isolated));
+				free_cpumask_var(isolated);
+			}
 		}
 	}
 
-	for_each_cpu(cpu, tick_nohz_full_mask)
+	if (!alloc_cpumask_var(&full_mask, GFP_KERNEL))
+		return;
+	cpumask_andnot(full_mask, cpu_possible_mask,
+		       housekeeping_cpumask(HK_TYPE_KERNEL_NOISE));
+
+	for_each_cpu(cpu, full_mask)
 		ct_cpu_track_user_init(cpu);
 
-	ret = cpuhp_setup_state_nocalls(CPUHP_AP_ONLINE_DYN,
-					"kernel/nohz:predown", NULL,
-					tick_nohz_cpu_down);
+	ret = tick_nohz_full_hotplug_init();
 	WARN_ON(ret < 0);
 	pr_info("NO_HZ: Full dynticks CPUs: %*pbl.\n",
-		cpumask_pr_args(tick_nohz_full_mask));
+		cpumask_pr_args(full_mask));
+	free_cpumask_var(full_mask);
 }
 #endif /* #ifdef CONFIG_NO_HZ_FULL */
 

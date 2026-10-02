@@ -328,10 +328,24 @@ static ssize_t nohz_full_show(struct device *dev,
 				    struct device_attribute *attr,
 				    char *buf)
 {
-	if (cpumask_available(tick_nohz_full_mask))
-		return sysfs_emit(buf, "%*pbl\n",
-				  cpumask_pr_args(tick_nohz_full_mask));
-	return sysfs_emit(buf, "\n");
+	cpumask_var_t full_mask;
+	ssize_t len;
+
+	if (!housekeeping_enabled(HK_TYPE_KERNEL_NOISE))
+		return sysfs_emit(buf, "\n");
+
+	if (!alloc_cpumask_var(&full_mask, GFP_KERNEL))
+		return sysfs_emit(buf, "\n");
+
+	/* Full-dynticks CPUs are the complement of the housekeeping set. */
+	rcu_read_lock();
+	cpumask_andnot(full_mask, cpu_possible_mask,
+		       housekeeping_cpumask_rcu(HK_TYPE_KERNEL_NOISE));
+	rcu_read_unlock();
+
+	len = sysfs_emit(buf, "%*pbl\n", cpumask_pr_args(full_mask));
+	free_cpumask_var(full_mask);
+	return len;
 }
 static DEVICE_ATTR_RO(nohz_full);
 #endif

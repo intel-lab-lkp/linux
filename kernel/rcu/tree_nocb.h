@@ -1368,11 +1368,17 @@ void __init rcu_init_nohz(void)
 	int cpu;
 	struct rcu_data *rdp;
 	const struct cpumask *cpumask = NULL;
+	cpumask_var_t nohz_full_mask;
+	bool have_nohz_full_mask = false;
 
-#if defined(CONFIG_NO_HZ_FULL)
-	if (tick_nohz_full_running && !cpumask_empty(tick_nohz_full_mask))
-		cpumask = tick_nohz_full_mask;
-#endif
+	if (housekeeping_enabled(HK_TYPE_KERNEL_NOISE) &&
+	    alloc_cpumask_var(&nohz_full_mask, GFP_KERNEL)) {
+		have_nohz_full_mask = true;
+		cpumask_andnot(nohz_full_mask, cpu_possible_mask,
+			       housekeeping_cpumask(HK_TYPE_KERNEL_NOISE));
+		if (!cpumask_empty(nohz_full_mask))
+			cpumask = nohz_full_mask;
+	}
 
 	if (IS_ENABLED(CONFIG_RCU_NOCB_CPU_DEFAULT_ALL) &&
 	    !rcu_state.nocb_is_setup && !cpumask)
@@ -1382,7 +1388,7 @@ void __init rcu_init_nohz(void)
 		if (!cpumask_available(rcu_nocb_mask)) {
 			if (!zalloc_cpumask_var(&rcu_nocb_mask, GFP_KERNEL)) {
 				pr_info("rcu_nocb_mask allocation failed, callback offloading disabled.\n");
-				return;
+				goto out_free;
 			}
 		}
 
@@ -1391,7 +1397,7 @@ void __init rcu_init_nohz(void)
 	}
 
 	if (!rcu_state.nocb_is_setup)
-		return;
+		goto out_free;
 
 	rcu_nocb_register_lazy_shrinker();
 
@@ -1415,6 +1421,10 @@ void __init rcu_init_nohz(void)
 		rcu_segcblist_set_flags(&rdp->cblist, SEGCBLIST_OFFLOADED);
 	}
 	rcu_organize_nocb_kthreads();
+
+out_free:
+	if (have_nohz_full_mask)
+		free_cpumask_var(nohz_full_mask);
 }
 
 static DEFINE_MUTEX(rcu_nocb_lazy_mutex);

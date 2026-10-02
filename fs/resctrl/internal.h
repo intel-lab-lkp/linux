@@ -6,6 +6,7 @@
 #include <linux/kernfs.h>
 #include <linux/fs_context.h>
 #include <linux/tick.h>
+#include <linux/sched/isolation.h>
 
 #define CQM_LIMBOCHECK_INTERVAL	1000
 
@@ -28,7 +29,10 @@ cpumask_any_housekeeping(const struct cpumask *mask, int exclude_cpu)
 
 	/* Try to find a CPU that isn't nohz_full to use in preference */
 	if (tick_nohz_full_enabled()) {
-		cpu = cpumask_any_andnot_but(mask, tick_nohz_full_mask, exclude_cpu);
+		rcu_read_lock();
+		cpu = cpumask_any_and_but(mask, housekeeping_cpumask_rcu(HK_TYPE_KERNEL_NOISE),
+					  exclude_cpu);
+		rcu_read_unlock();
 		if (cpu < nr_cpu_ids)
 			return cpu;
 	}
