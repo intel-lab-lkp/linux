@@ -851,7 +851,10 @@ static PyObject *pyrf_sample_event__srccode(PyObject *self, PyObject *args)
 
 	if (addr != pevent->sample.ip) {
 		addr_location__init(&al);
-		thread__find_symbol_fb(pevent->al.thread, pevent->sample.cpumode, addr, &al);
+		thread__find_symbol_fb(pevent->al.thread,
+			       &(struct perf_sample){
+				       .cpumode = pevent->sample.cpumode,
+				       .ip = addr}, &al);
 	} else {
 		addr_location__init(&al);
 		al.thread = thread__get(pevent->al.thread);
@@ -1242,8 +1245,12 @@ static int pyrf_sample_event__resolve_addr_al(struct pyrf_event *pevent,
 	if (pyrf_sample_event__resolve_al(pevent) < 0 || !pevent->al.thread)
 		return -1;
 
-	thread__find_symbol_fb(pevent->al.thread, pevent->sample.cpumode,
-			       pevent->sample.addr, addr_al);
+	thread__find_symbol_fb(pevent->al.thread,
+			       &(struct perf_sample){
+				       .cpumode = pevent->sample.cpumode,
+				       .ip = pevent->sample.addr,
+			       },
+			       addr_al);
 	return 0;
 }
 
@@ -4363,6 +4370,7 @@ static PyObject *pyrf_call_path__to_callchain(const struct call_path *cp,
 					      struct thread *thread)
 {
 	struct pyrf_callchain *pchain;
+	struct perf_sample sample = {};
 	const struct call_path *pos;
 	u64 nr_frames = 0;
 
@@ -4395,7 +4403,9 @@ static PyObject *pyrf_call_path__to_callchain(const struct call_path *cp,
 						    : PERF_RECORD_MISC_USER;
 
 			addr_location__init(&al);
-			thread__find_map(thread, cpumode, pos->ip, &al);
+			sample.cpumode = cpumode;
+			sample.ip = pos->ip;
+			thread__find_map(thread, &sample, &al);
 			frame->map = map__get(al.map);
 			if (frame->map)
 				frame->sym = pos->sym;

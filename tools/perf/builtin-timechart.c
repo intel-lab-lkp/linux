@@ -512,6 +512,7 @@ static char *cat_backtrace(struct perf_sample *sample,
 	size_t p_len;
 	u8 cpumode = PERF_RECORD_MISC_USER;
 	struct ip_callchain *chain = sample->callchain;
+	struct perf_sample ip_sample = {};
 	FILE *f = open_memstream(&p, &p_len);
 	bool corrupted = false;
 
@@ -560,7 +561,9 @@ static char *cat_backtrace(struct perf_sample *sample,
 
 		addr_location__init(&tal);
 		tal.filtered = 0;
-		if (thread__find_symbol(al.thread, cpumode, ip, &tal))
+		ip_sample.cpumode = cpumode;
+		ip_sample.ip = ip;
+		if (thread__find_symbol(al.thread, &ip_sample, &tal))
 			fprintf(f, "..... %016" PRIx64 " %s\n", ip, tal.sym->name);
 		else
 			fprintf(f, "..... %016" PRIx64 "\n", ip);

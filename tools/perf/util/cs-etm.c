@@ -1152,7 +1152,9 @@ static u32 __cs_etm__mem_access(struct cs_etm_queue *etmq,
 
 	cpumode = cs_etm__cpu_mode(etmq, address, el);
 
-	if (!thread__find_map(thread, cpumode, address, &al))
+	if (!thread__find_map(thread,
+			      &(struct perf_sample){.cpumode = cpumode,
+						    .ip = address}, &al))
 		goto out;
 
 	dso = map__dso(al.map);

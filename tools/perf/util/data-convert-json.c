@@ -235,7 +235,9 @@ static int process_sample_event(const struct perf_tool *tool,
 				fputc(',', out);
 
 			addr_location__init(&tal);
-			ok = thread__find_symbol(al.thread, cpumode, ip, &tal);
+			ok = thread__find_symbol(al.thread,
+						 &(struct perf_sample){.cpumode = cpumode,
+								       .ip = ip}, &tal);
 			output_sample_callchain_entry(tool, ip, ok ? &tal : NULL);
 			addr_location__exit(&tal);
 		}

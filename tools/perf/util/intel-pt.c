@@ -752,6 +752,7 @@ static int intel_pt_walk_next_insn(struct intel_pt_insn *intel_pt_insn,
 {
 	struct intel_pt_queue *ptq = data;
 	struct machine *machine = ptq->pt->machine;
+	struct perf_sample sample = {};
 	struct thread *thread;
 	struct addr_location al;
 	unsigned char buf[INTEL_PT_INSN_BUF_SZ];
@@ -809,10 +810,13 @@ static int intel_pt_walk_next_insn(struct intel_pt_insn *intel_pt_insn,
 		}
 	}
 
+	sample.cpumode = cpumode;
+
 	while (1) {
 		struct dso *dso;
 
-		if (!thread__find_map(thread, cpumode, *ip, &al) || !map__dso(al.map)) {
+		sample.ip = *ip;
+		if (!thread__find_map(thread, &sample, &al) || !map__dso(al.map)) {
 			if (al.map)
 				intel_pt_log("ERROR: thread has no dso for %#" PRIx64 "\n", *ip);
 			else
@@ -1007,7 +1011,9 @@ static int __intel_pt_pgd_ip(uint64_t ip, void *data)
 		return -EINVAL;
 
 	addr_location__init(&al);
-	if (!thread__find_map(thread, cpumode, ip, &al) || !map__dso(al.map))
+	if (!thread__find_map(thread,
+			      &(struct perf_sample){.cpumode = cpumode,
+						    .ip = ip}, &al) || !map__dso(al.map))
 		return -EINVAL;
 
 	offset = map__map_ip(al.map, ip);
@@ -3656,7 +3662,9 @@ static int intel_pt_find_map(struct thread *thread, u8 cpumode, u64 addr,
 			     struct addr_location *al)
 {
 	if (!al->map || addr < map__start(al->map) || addr >= map__end(al->map)) {
-		if (!thread__find_map(thread, cpumode, addr, al))
+		if (!thread__find_map(thread,
+				      &(struct perf_sample){.cpumode = cpumode,
+							    .ip = addr}, al))
 			return -1;
 	}
 

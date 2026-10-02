@@ -691,7 +691,7 @@ int perf_event__process(const struct perf_tool *tool __maybe_unused,
 	return machine__process_event(machine, event, sample);
 }
 
-struct map *thread__find_map(struct thread *thread, u8 cpumode, u64 addr,
+struct map *thread__find_map(struct thread *thread, struct perf_sample *sample,
 			     struct addr_location *al)
 {
 	struct maps *maps = thread__maps(thread);
@@ -702,34 +702,34 @@ struct map *thread__find_map(struct thread *thread, u8 cpumode, u64 addr,
 	thread__zput(al->thread);
 	al->thread = thread__get(thread);
 
-	al->addr = addr;
-	al->cpumode = cpumode;
+	al->addr = sample->ip;
+	al->cpumode = sample->cpumode;
 	al->filtered = 0;
 
 	if (machine == NULL)
 		return NULL;
 
-	if (cpumode == PERF_RECORD_MISC_KERNEL && perf_host) {
+	if (sample->cpumode == PERF_RECORD_MISC_KERNEL && perf_host) {
 		al->level = 'k';
 		maps = machine__kernel_maps(machine);
 		load_map = !symbol_conf.lazy_load_kernel_maps;
-	} else if (cpumode == PERF_RECORD_MISC_USER && perf_host) {
+	} else if (sample->cpumode == PERF_RECORD_MISC_USER && perf_host) {
 		al->level = '.';
-	} else if (cpumode == PERF_RECORD_MISC_GUEST_KERNEL && perf_guest) {
+	} else if (sample->cpumode == PERF_RECORD_MISC_GUEST_KERNEL && perf_guest) {
 		al->level = 'g';
 		maps = machine__kernel_maps(machine);
 		load_map = !symbol_conf.lazy_load_kernel_maps;
-	} else if (cpumode == PERF_RECORD_MISC_GUEST_USER && perf_guest) {
+	} else if (sample->cpumode == PERF_RECORD_MISC_GUEST_USER && perf_guest) {
 		al->level = 'u';
 	} else {
 		al->level = 'H';
 
-		if ((cpumode == PERF_RECORD_MISC_GUEST_USER ||
-			cpumode == PERF_RECORD_MISC_GUEST_KERNEL) &&
+		if ((sample->cpumode == PERF_RECORD_MISC_GUEST_USER ||
+			sample->cpumode == PERF_RECORD_MISC_GUEST_KERNEL) &&
 			!perf_guest)
 			al->filtered |= (1 << HIST_FILTER__GUEST);
-		if ((cpumode == PERF_RECORD_MISC_USER ||
-			cpumode == PERF_RECORD_MISC_KERNEL) &&
+		if ((sample->cpumode == PERF_RECORD_MISC_USER ||
+			sample->cpumode == PERF_RECORD_MISC_KERNEL) &&
 			!perf_host)
 			al->filtered |= (1 << HIST_FILTER__HOST);
 
@@ -754,33 +754,34 @@ struct map *thread__find_map(struct thread *thread, u8 cpumode, u64 addr,
  * because it applies only to the sample 'ip' and not necessary to 'addr' or
  * branch stack addresses. If possible, use a fallback to deal with those cases.
  */
-struct map *thread__find_map_fb(struct thread *thread, u8 cpumode, u64 addr,
+struct map *thread__find_map_fb(struct thread *thread, struct perf_sample *sample,
 				struct addr_location *al)
 {
-	struct map *map = thread__find_map(thread, cpumode, addr, al);
+	struct map *map = thread__find_map(thread, sample, al);
 	struct machine *machine = maps__machine(thread__maps(thread));
-	u8 addr_cpumode = machine__addr_cpumode(machine, cpumode, addr);
+	u8 addr_cpumode = machine__addr_cpumode(machine, sample->cpumode, sample->ip);
 
-	if (map || addr_cpumode == cpumode)
+	if (map || addr_cpumode == sample->cpumode)
 		return map;
 
-	return thread__find_map(thread, addr_cpumode, addr, al);
+	sample->cpumode = addr_cpumode;
+	return thread__find_map(thread, sample, al);
 }
 
-struct symbol *thread__find_symbol(struct thread *thread, u8 cpumode,
-				   u64 addr, struct addr_location *al)
+struct symbol *thread__find_symbol(struct thread *thread, struct perf_sample *sample,
+				   struct addr_location *al)
 {
 	al->sym = NULL;
-	if (thread__find_map(thread, cpumode, addr, al))
+	if (thread__find_map(thread, sample, al))
 		al->sym = map__find_symbol(al->map, al->addr);
 	return al->sym;
 }
 
-struct symbol *thread__find_symbol_fb(struct thread *thread, u8 cpumode,
-				      u64 addr, struct addr_location *al)
+struct symbol *thread__find_symbol_fb(struct thread *thread, struct perf_sample *sample,
+				      struct addr_location *al)
 {
 	al->sym = NULL;
-	if (thread__find_map_fb(thread, cpumode, addr, al))
+	if (thread__find_map_fb(thread, sample, al))
 		al->sym = map__find_symbol(al->map, al->addr);
 	return al->sym;
 }
@@ -816,7 +817,7 @@ int machine__resolve(struct machine *machine, struct addr_location *al,
 		return -1;
 
 	dump_printf(" ... thread: %s:%d\n", thread__comm_str(thread), thread__tid(thread));
-	thread__find_map(thread, sample->cpumode, sample->ip, al);
+	thread__find_map(thread, sample, al);
 	dso = al->map ? map__dso(al->map) : NULL;
 	dump_printf(" ...... dso: %s\n",
 		dso
@@ -934,7 +935,9 @@ bool sample_addr_correlates_sym(struct perf_event_attr *attr)
 void thread__resolve(struct thread *thread, struct addr_location *al,
 		     struct perf_sample *sample)
 {
-	thread__find_map_fb(thread, sample->cpumode, sample->addr, al);
+	thread__find_map_fb(thread,
+			    &(struct perf_sample){.cpumode = sample->cpumode,
+						  .ip = sample->addr}, al);
 
 	al->cpu = sample->cpu;
 	al->sym = NULL;

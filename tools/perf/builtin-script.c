@@ -1063,6 +1063,7 @@ static int perf_sample__fprintf_brstack(struct perf_sample *sample,
 {
 	struct branch_stack *br = sample->branch_stack;
 	struct branch_entry *entries = perf_sample__branch_entries(sample);
+	struct perf_sample br_sample = {};
 	u64 i, from, to;
 	int printed = 0;
 
@@ -1079,8 +1080,12 @@ static int perf_sample__fprintf_brstack(struct perf_sample *sample,
 
 			addr_location__init(&alf);
 			addr_location__init(&alt);
-			thread__find_map_fb(thread, sample->cpumode, from, &alf);
-			thread__find_map_fb(thread, sample->cpumode, to, &alt);
+			br_sample.cpumode = sample->cpumode;
+			br_sample.ip = from;
+			thread__find_map_fb(thread, &br_sample, &alf);
+			br_sample.cpumode = sample->cpumode;
+			br_sample.ip = to;
+			thread__find_map_fb(thread, &br_sample, &alt);
 
 			printed += map__fprintf_dsoname_dsoff(alf.map, PRINT_FIELD(DSOFF), alf.addr, fp);
 			printed += fprintf(fp, "/0x%"PRIx64, to);
@@ -1102,6 +1107,7 @@ static int perf_sample__fprintf_brstacksym(struct perf_sample *sample,
 {
 	struct branch_stack *br = sample->branch_stack;
 	struct branch_entry *entries = perf_sample__branch_entries(sample);
+	struct perf_sample br_sample = {};
 	u64 i, from, to;
 	int printed = 0;
 
@@ -1116,8 +1122,12 @@ static int perf_sample__fprintf_brstacksym(struct perf_sample *sample,
 		from = entries[i].from;
 		to   = entries[i].to;
 
-		thread__find_symbol_fb(thread, sample->cpumode, from, &alf);
-		thread__find_symbol_fb(thread, sample->cpumode, to, &alt);
+		br_sample.cpumode = sample->cpumode;
+		br_sample.ip = from;
+		thread__find_symbol_fb(thread, &br_sample, &alf);
+		br_sample.cpumode = sample->cpumode;
+		br_sample.ip = to;
+		thread__find_symbol_fb(thread, &br_sample, &alt);
 
 		printed += symbol__fprintf_symname_offs(alf.sym, &alf, fp);
 		if (PRINT_FIELD(DSO))
@@ -1140,6 +1150,7 @@ static int perf_sample__fprintf_brstackoff(struct perf_sample *sample,
 {
 	struct branch_stack *br = sample->branch_stack;
 	struct branch_entry *entries = perf_sample__branch_entries(sample);
+	struct perf_sample br_sample = {};
 	u64 i, from, to;
 	int printed = 0;
 
@@ -1154,11 +1165,15 @@ static int perf_sample__fprintf_brstackoff(struct perf_sample *sample,
 		from = entries[i].from;
 		to   = entries[i].to;
 
-		if (thread__find_map_fb(thread, sample->cpumode, from, &alf) &&
+		br_sample.cpumode = sample->cpumode;
+		br_sample.ip = from;
+		if (thread__find_map_fb(thread, &br_sample, &alf) &&
 		    !dso__adjust_symbols(map__dso(alf.map)))
 			from = map__dso_map_ip(alf.map, from);
 
-		if (thread__find_map_fb(thread, sample->cpumode, to, &alt) &&
+		br_sample.cpumode = sample->cpumode;
+		br_sample.ip = to;
+		if (thread__find_map_fb(thread, &br_sample, &alt) &&
 		    !dso__adjust_symbols(map__dso(alt.map)))
 			to = map__dso_map_ip(alt.map, to);
 
@@ -1216,7 +1231,10 @@ static int grab_bb(u8 *buffer, u64 start, u64 end,
 	}
 
 	addr_location__init(&al);
-	if (!thread__find_map(thread, *cpumode, start, &al) || (dso = map__dso(al.map)) == NULL) {
+	if (!thread__find_map(thread,
+			      &(struct perf_sample){.cpumode = *cpumode,
+						    .ip = start}, &al) ||
+	    (dso = map__dso(al.map)) == NULL) {
 		pr_debug("\tcannot resolve %" PRIx64 "-%" PRIx64 "\n", start, end);
 		goto out;
 	}
@@ -1291,7 +1309,7 @@ static int print_srccode(struct thread *thread, u8 cpumode, uint64_t addr)
 	int ret = 0;
 
 	addr_location__init(&al);
-	thread__find_map(thread, cpumode, addr, &al);
+	thread__find_map(thread, &(struct perf_sample){.cpumode = cpumode, .ip = addr}, &al);
 	if (!al.map)
 		goto out;
 	ret = map__fprintf_srccode(al.map, al.addr, stdout,
@@ -1346,7 +1364,9 @@ static int ip__fprintf_jump(uint64_t ip, struct branch_entry *en,
 		struct addr_location al;
 
 		addr_location__init(&al);
-		thread__find_map(thread, x->cpumode, ip, &al);
+		thread__find_map(thread,
+			 &(struct perf_sample){.cpumode = x->cpumode,
+					       .ip = ip}, &al);
 		printed += map__fprintf_srcline(al.map, al.addr, " srcline: ", fp);
 		printed += fprintf(fp, "\t");
 		addr_location__exit(&al);
@@ -1406,7 +1426,7 @@ static int ip__fprintf_sym(uint64_t addr, struct thread *thread,
 	int off, printed = 0, ret = 0;
 
 	addr_location__init(&al);
-	thread__find_map(thread, cpumode, addr, &al);
+	thread__find_map(thread, &(struct perf_sample){.cpumode = cpumode, .ip = addr}, &al);
 
 	if ((*lastsym) && al.addr >= (*lastsym)->start && al.addr < (*lastsym)->end)
 		goto out;

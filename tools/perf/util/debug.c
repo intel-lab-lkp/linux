@@ -339,7 +339,9 @@ void __dump_stack(FILE *file, void **stackdump, size_t stackdump_size)
 		bool printed = false;
 
 		addr_location__init(&al);
-		if (thread && thread__find_map(thread, PERF_RECORD_MISC_USER, addr, &al)) {
+		if (thread && thread__find_map(thread,
+				       &(struct perf_sample){.cpumode = PERF_RECORD_MISC_USER,
+							     .ip = addr}, &al)) {
 			al.sym = map__find_symbol(al.map, al.addr);
 			if (al.sym) {
 				fprintf(file, "    #%zd %p in %s ", i, stackdump[i], al.sym->name);

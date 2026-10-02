@@ -225,7 +225,9 @@ int arch_skip_callchain_idx(struct thread *thread, struct ip_callchain *chain)
 	addr_location__init(&al);
 	ip = chain->ips[1];
 
-	thread__find_symbol(thread, PERF_RECORD_MISC_USER, ip, &al);
+	thread__find_symbol(thread,
+			    &(struct perf_sample){.cpumode = PERF_RECORD_MISC_USER, .ip = ip},
+			    &al);
 
 	if (al.map)
 		dso = map__dso(al.map);

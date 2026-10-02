@@ -848,8 +848,9 @@ bool get_global_var_info(struct data_loc_info *dloc, u64 addr,
 	mem_addr = addr + map__reloc(dloc->ms->map);
 
 	addr_location__init(&al);
-	sym = thread__find_symbol_fb(dloc->thread, dloc->cpumode,
-				     mem_addr, &al);
+	sym = thread__find_symbol_fb(dloc->thread,
+				     &(struct perf_sample){.cpumode = dloc->cpumode,
+							   .ip = mem_addr}, &al);
 	if (sym) {
 		*var_name = sym->name;
 		/* Calculate type offset from the start of variable */

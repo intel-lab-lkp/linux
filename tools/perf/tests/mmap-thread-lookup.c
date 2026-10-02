@@ -195,8 +195,10 @@ static int mmap_events(synth_cb synth)
 
 		pr_debug("looking for map %p\n", td->map);
 
-		thread__find_map(thread, PERF_RECORD_MISC_USER,
-				 (unsigned long) (td->map + 1), &al);
+		thread__find_map(thread, &(struct perf_sample){
+					.cpumode = PERF_RECORD_MISC_USER,
+					.ip = (unsigned long) (td->map + 1),
+				 }, &al);
 
 		thread__put(thread);
 
@@ -208,7 +210,10 @@ static int mmap_events(synth_cb synth)
 		}
 
 		pr_debug("map %p, addr %" PRIx64 "\n", al.map, map__start(al.map));
+
 		addr_location__exit(&al);
+		if (err)
+			break;
 	}
 
 	machine__delete(machine);

@@ -3708,7 +3708,7 @@ static int trace__pgfault(struct trace *trace,
 	if (trace->summary_only)
 		goto out;
 
-	thread__find_symbol(thread, sample->cpumode, sample->ip, &al);
+	thread__find_symbol(thread, sample, &al);
 
 	trace__fprintf_entry_head(trace, thread, 0, true, sample->time,
 				  sample->cpu, trace->output);
@@ -3721,10 +3721,14 @@ static int trace__pgfault(struct trace *trace,
 
 	fprintf(trace->output, "] => ");
 
-	thread__find_symbol(thread, sample->cpumode, sample->addr, &al);
+	thread__find_symbol(thread,
+			    &(struct perf_sample){.cpumode = sample->cpumode,
+						  .ip = sample->addr}, &al);
 
 	if (!al.map) {
-		thread__find_symbol(thread, sample->cpumode, sample->addr, &al);
+		thread__find_symbol(thread,
+			    &(struct perf_sample){.cpumode = sample->cpumode,
+						  .ip = sample->addr}, &al);
 
 		if (al.map)
 			map_type = 'x';

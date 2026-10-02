@@ -82,7 +82,9 @@ static int __report_module(struct addr_location *al, u64 ip,
 	 * Some callers will use al->sym, so we can't just use the
 	 * cheaper thread__find_map() here.
 	 */
-	thread__find_symbol(ui->thread, PERF_RECORD_MISC_USER, ip, al);
+	thread__find_symbol(ui->thread,
+			    &(struct perf_sample){.cpumode = PERF_RECORD_MISC_USER, .ip = ip},
+			    al);
 
 	if (al->map)
 		dso = map__dso(al->map);
@@ -208,13 +210,14 @@ static bool get_thread(Dwfl *dwfl __maybe_unused, pid_t tid, void *arg,
 static int access_dso_mem(struct unwind_info *ui, Dwarf_Addr addr,
 			  Dwarf_Word *data, size_t len)
 {
+	struct perf_sample sample = { .cpumode = PERF_RECORD_MISC_USER, .ip = addr };
 	struct addr_location al;
 	union u64_swap u;
 	ssize_t size;
 	struct dso *dso;
 
 	addr_location__init(&al);
-	if (!thread__find_map(ui->thread, PERF_RECORD_MISC_USER, addr, &al)) {
+	if (!thread__find_map(ui->thread, &sample, &al)) {
 		pr_debug("unwind: no map for %lx\n", (unsigned long)addr);
 		goto out_fail;
 	}

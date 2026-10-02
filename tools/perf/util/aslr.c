@@ -155,7 +155,9 @@ static u64 aslr_tool__remap_address(struct aslr_tool *aslr,
 		return 0; /* No thread. */
 
 	addr_location__init(&al);
-	if (!thread__find_map(aslr_thread, cpumode, addr, &al)) {
+	if (!thread__find_map(aslr_thread,
+			      &(struct perf_sample){.cpumode = cpumode, .ip = addr},
+			      &al)) {
 		/*
 		 * If lookup fails with specified cpumode, try fallback to the other space
 		 * to be robust against bad cpumode in samples.
@@ -169,7 +171,9 @@ static u64 aslr_tool__remap_address(struct aslr_tool *aslr,
 		else if (cpumode == PERF_RECORD_MISC_GUEST_USER)
 			effective_cpumode = PERF_RECORD_MISC_GUEST_KERNEL;
 
-		if (!thread__find_map(aslr_thread, effective_cpumode, addr, &al)) {
+		if (!thread__find_map(aslr_thread,
+				      &(struct perf_sample){.cpumode = effective_cpumode,
+							    .ip = addr}, &al)) {
 			addr_location__exit(&al);
 			return 0; /* No mmap. */
 		}
@@ -286,7 +290,9 @@ static u64 aslr_tool__findnew_mapping(struct aslr_tool *aslr,
 	remap_key.pid = (cpumode == PERF_RECORD_MISC_KERNEL ||
 			 cpumode == PERF_RECORD_MISC_GUEST_KERNEL) ?
 			kernel_pid : thread__pid(aslr_thread);
-	if (thread__find_map(aslr_thread, cpumode, start, &al)) {
+	if (thread__find_map(aslr_thread,
+			     &(struct perf_sample){.cpumode = cpumode, .ip = start},
+			     &al)) {
 		struct dso *dso = map__dso(al.map);
 		const char *dso_name = dso ? dso__long_name(dso) : NULL;
 
@@ -343,7 +349,9 @@ static u64 aslr_tool__findnew_mapping(struct aslr_tool *aslr,
 		remap_addr = top->remapped_max;
 
 		addr_location__init(&prev_al);
-		if (thread__find_map(aslr_thread, cpumode, start - 1, &prev_al)) {
+		if (thread__find_map(aslr_thread,
+				     &(struct perf_sample){.cpumode = cpumode,
+							   .ip = start - 1}, &prev_al)) {
 			if (map__end(prev_al.map) == start)
 				is_contiguous = true;
 		}

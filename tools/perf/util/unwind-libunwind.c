@@ -370,7 +370,9 @@ static struct map *find_map(uint64_t ip, struct unwind_info *ui)
 	struct map *ret;
 
 	addr_location__init(&al);
-	thread__find_map(ui->thread, PERF_RECORD_MISC_USER, ip, &al);
+	thread__find_map(ui->thread,
+			 &(struct perf_sample){.cpumode = PERF_RECORD_MISC_USER, .ip = ip},
+			 &al);
 	ret = map__get(al.map);
 	addr_location__exit(&al);
 	return ret;
@@ -626,7 +628,9 @@ static int entry(uint64_t ip, struct thread *thread, unwind_entry_cb_t cb, void 
 	int ret;
 
 	addr_location__init(&al);
-	e.ms.sym = thread__find_symbol(thread, PERF_RECORD_MISC_USER, ip, &al);
+	e.ms.sym = thread__find_symbol(thread,
+				       &(struct perf_sample){.cpumode = PERF_RECORD_MISC_USER,
+							     .ip = ip}, &al);
 	e.ip     = ip;
 	e.ms.map = al.map;
 	e.ms.thread = thread__get(al.thread);

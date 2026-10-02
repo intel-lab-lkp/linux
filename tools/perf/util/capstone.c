@@ -252,7 +252,9 @@ static size_t print_insn_x86(struct thread *thread, u8 cpumode, struct cs_insn *
 
 		addr_location__init(&al);
 		if (op->type == X86_OP_IMM &&
-		    thread__find_symbol(thread, cpumode, op->imm, &al)) {
+		    thread__find_symbol(thread,
+					&(struct perf_sample){.cpumode = cpumode,
+							      .ip = op->imm}, &al)) {
 			printed += fprintf(fp, "%s ", insn[0].mnemonic);
 			printed += symbol__fprintf_symname_offs(al.sym, &al, fp);
 			if (print_opts & PRINT_INSN_IMM_HEX)

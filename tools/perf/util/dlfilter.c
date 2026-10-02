@@ -177,7 +177,9 @@ static __s32 dlfilter__resolve_address(void *ctx, __u64 address, struct perf_dlf
 		return -1;
 
 	addr_location__init(&al);
-	thread__find_symbol_fb(thread, d->sample->cpumode, address, &al);
+	thread__find_symbol_fb(thread,
+			       &(struct perf_sample){.cpumode = d->sample->cpumode,
+						     .ip = address}, &al);
 
 	al_to_d_al(&al, &d_al);
 
@@ -314,7 +316,9 @@ static __s32 dlfilter__object_code(void *ctx, __u64 ip, void *buf, __u32 len)
 
 	addr_location__init(&a);
 
-	thread__find_map_fb(al->thread, d->sample->cpumode, ip, &a);
+	thread__find_map_fb(al->thread,
+			    &(struct perf_sample){.cpumode = d->sample->cpumode,
+						  .ip = ip}, &a);
 	ret = a.map ? code_read(ip, a.map, d->machine, buf, len) : -1;
 
 	addr_location__exit(&a);

@@ -2064,6 +2064,7 @@ static void ip__resolve_ams(struct thread *thread,
 			    struct addr_map_symbol *ams,
 			    u64 ip)
 {
+	static __thread struct perf_sample sample;
 	struct addr_location al;
 
 	addr_location__init(&al);
@@ -2074,7 +2075,8 @@ static void ip__resolve_ams(struct thread *thread,
 	 * Thus, we have to try consecutively until we find a match
 	 * or else, the symbol is unknown
 	 */
-	thread__find_cpumode_addr_location(thread, ip, /*symbols=*/true, &al);
+	sample.ip = ip;
+	thread__find_cpumode_addr_location(thread, &sample, /*symbols=*/true, &al);
 
 	ams->addr = ip;
 	ams->al_addr = al.addr;
@@ -2091,11 +2093,14 @@ static void ip__resolve_data(struct thread *thread,
 			     u8 m, struct addr_map_symbol *ams,
 			     u64 addr, u64 phys_addr, u64 daddr_page_size)
 {
+	static __thread struct perf_sample sample;
 	struct addr_location al;
 
 	addr_location__init(&al);
 
-	thread__find_symbol(thread, m, addr, &al);
+	sample.cpumode = m;
+	sample.ip = addr;
+	thread__find_symbol(thread, &sample, &al);
 
 	ams->addr = addr;
 	ams->al_addr = al.addr;
@@ -2218,6 +2223,7 @@ static int add_callchain_ip(struct thread *thread,
 			    u64 branch_from,
 			    bool symbols)
 {
+	static __thread struct perf_sample sample;
 	struct map_symbol ms = {};
 	struct addr_location al;
 	int nr_loop_iter = 0, err = 0;
@@ -2228,8 +2234,9 @@ static int add_callchain_ip(struct thread *thread,
 	al.filtered = 0;
 	al.sym = NULL;
 	al.srcline = NULL;
+	sample.ip = ip;
 	if (!cpumode) {
-		thread__find_cpumode_addr_location(thread, ip, symbols, &al);
+		thread__find_cpumode_addr_location(thread, &sample, symbols, &al);
 	} else {
 		if (ip >= PERF_CONTEXT_MAX) {
 			switch (ip) {
@@ -2256,10 +2263,11 @@ static int add_callchain_ip(struct thread *thread,
 			}
 			goto out;
 		}
+		sample.cpumode = *cpumode;
 		if (symbols)
-			thread__find_symbol(thread, *cpumode, ip, &al);
+			thread__find_symbol(thread, &sample, &al);
 		else
-			thread__find_map(thread, *cpumode, ip, &al);
+			thread__find_map(thread, &sample, &al);
 	}
 
 	if (al.sym != NULL) {

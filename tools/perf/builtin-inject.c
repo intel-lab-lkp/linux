@@ -1167,7 +1167,7 @@ static int perf_event__inject_buildid(const struct perf_tool *tool, union perf_e
 		goto repipe;
 	}
 
-	if (thread__find_map(thread, sample->cpumode, sample->ip, &al)) {
+	if (thread__find_map(thread, sample, &al)) {
 		mark_dso_hit(inject, tool, sample, machine, args.mmap_evsel, al.map,
 			     /*sample_in_dso=*/true);
 	}

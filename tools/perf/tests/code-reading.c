@@ -394,7 +394,9 @@ static int read_object_code(u64 addr, size_t len, u8 cpumode,
 	pr_debug("Reading object code for memory address: %#"PRIx64"\n", addr);
 
 	addr_location__init(&al);
-	if (!thread__find_map(thread, cpumode, addr, &al) || !map__dso(al.map)) {
+	if (!thread__find_map(thread,
+			      &(struct perf_sample){.cpumode = cpumode,
+						    .ip = addr}, &al) || !map__dso(al.map)) {
 		if (cpumode == PERF_RECORD_MISC_HYPERVISOR) {
 			pr_debug("Hypervisor address can not be resolved - skipping\n");
 			goto out;

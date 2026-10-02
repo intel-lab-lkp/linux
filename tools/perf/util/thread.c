@@ -413,7 +413,7 @@ int thread__fork(struct thread *thread, struct thread *parent, u64 timestamp, bo
 	return thread__clone_maps(thread, parent, do_maps_clone);
 }
 
-void thread__find_cpumode_addr_location(struct thread *thread, u64 addr,
+void thread__find_cpumode_addr_location(struct thread *thread, struct perf_sample *sample,
 					bool symbols, struct addr_location *al)
 {
 	size_t i;
@@ -425,10 +425,11 @@ void thread__find_cpumode_addr_location(struct thread *thread, u64 addr,
 	};
 
 	for (i = 0; i < ARRAY_SIZE(cpumodes); i++) {
+		sample->cpumode = cpumodes[i];
 		if (symbols)
-			thread__find_symbol(thread, cpumodes[i], addr, al);
+			thread__find_symbol(thread, sample, al);
 		else
-			thread__find_map(thread, cpumodes[i], addr, al);
+			thread__find_map(thread, sample, al);
 
 		if (al->map)
 			break;
@@ -579,6 +580,7 @@ int thread__memcpy(struct thread *thread, struct machine *machine,
 		   void *buf, u64 ip, int len, bool *is64bit)
 {
 	u8 cpumode = PERF_RECORD_MISC_USER;
+	struct perf_sample sample = { .ip = ip };
 	struct addr_location al;
 	struct dso *dso;
 	long offset;
@@ -587,7 +589,8 @@ int thread__memcpy(struct thread *thread, struct machine *machine,
 		cpumode = PERF_RECORD_MISC_KERNEL;
 
 	addr_location__init(&al);
-	if (!thread__find_map(thread, cpumode, ip, &al)) {
+	sample.cpumode = cpumode;
+	if (!thread__find_map(thread, &sample, &al)) {
 		addr_location__exit(&al);
 		return -1;
 	}
