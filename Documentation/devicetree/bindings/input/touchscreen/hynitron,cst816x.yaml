@@ -36,12 +36,27 @@ properties:
       - description: Slide right gesture
       - description: Long press gesture
 
+  panel: true
+
+  touchscreen-min-x: true
+  touchscreen-min-y: true
+  touchscreen-size-x: true
+  touchscreen-size-y: true
+  touchscreen-fuzz-x: true
+  touchscreen-fuzz-y: true
+  touchscreen-inverted-x: true
+  touchscreen-inverted-y: true
+  touchscreen-swapped-x-y: true
+
 required:
   - compatible
   - reg
   - interrupts
 
 additionalProperties: false
+
+allOf:
+  - $ref: touchscreen.yaml#
 
 examples:
   - |
@@ -59,6 +74,7 @@ examples:
             reset-gpios = <&gpio 17 GPIO_ACTIVE_LOW>;
             linux,keycodes = <KEY_UP>, <KEY_DOWN>, <KEY_LEFT>, <KEY_RIGHT>,
                              <BTN_TOOL_TRIPLETAP>;
+            touchscreen-swapped-x-y;
         };
     };
 
