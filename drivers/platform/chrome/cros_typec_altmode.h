@@ -11,6 +11,15 @@ struct typec_altmode;
 struct typec_altmode_desc;
 struct typec_displayport_data;
 
+#if IS_ENABLED(CONFIG_CROS_EC_TYPEC_ALTMODES)
+void cros_typec_altmode_cancel(struct typec_altmode *alt);
+void cros_typec_altmodes_set_enabled(struct cros_typec_port *port, bool enabled);
+#else
+static inline void cros_typec_altmode_cancel(struct typec_altmode *alt) {}
+static inline void
+cros_typec_altmodes_set_enabled(struct cros_typec_port *port, bool enabled) {}
+#endif
+
 #if IS_ENABLED(CONFIG_TYPEC_DP_ALTMODE)
 struct typec_altmode *
 cros_typec_register_displayport(struct cros_typec_port *port,

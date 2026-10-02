@@ -37,6 +37,52 @@ struct cros_typec_dp_data {
 	bool pending_status_update;
 };
 
+void cros_typec_altmode_cancel(struct typec_altmode *alt)
+{
+	struct cros_typec_altmode_data *adata;
+
+	if (!alt)
+		return;
+
+	adata = typec_altmode_get_drvdata(alt);
+	if (adata)
+		cancel_work_sync(&adata->work);
+}
+
+void cros_typec_altmodes_set_enabled(struct cros_typec_port *port, bool enabled)
+{
+	struct cros_typec_altmode_data *adata;
+	struct cros_typec_dp_data *dp_data;
+	int i;
+
+	for (i = 0; i < CROS_EC_ALTMODE_MAX; i++) {
+		if (!port->port_altmode[i])
+			continue;
+
+		adata = typec_altmode_get_drvdata(port->port_altmode[i]);
+		if (!adata)
+			continue;
+
+		if (!enabled) {
+			disable_work_sync(&adata->work);
+			continue;
+		}
+
+		mutex_lock(&adata->lock);
+		adata->header = 0;
+		adata->vdo_data = NULL;
+		adata->vdo_size = 0;
+		if (adata->sid == USB_TYPEC_DP_SID) {
+			dp_data = container_of(adata, struct cros_typec_dp_data, adata);
+			dp_data->configured = false;
+			dp_data->pending_status_update = false;
+		}
+		mutex_unlock(&adata->lock);
+
+		enable_work(&adata->work);
+	}
+}
+
 static void cros_typec_altmode_work(struct work_struct *work)
 {
 	struct cros_typec_altmode_data *data =

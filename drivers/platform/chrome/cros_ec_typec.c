@@ -284,11 +284,19 @@ static void cros_typec_unregister_altmodes(struct cros_typec_data *typec, int po
 	struct list_head *head;
 
 	head = is_partner ? &port->partner_mode_list : &port->plug_mode_list;
+	/* Partner drivers can queue port work until their removal completes. */
+	if (is_partner)
+		cros_typec_altmodes_set_enabled(port, false);
+
 	list_for_each_entry_safe(node, tmp, head, list) {
 		list_del(&node->list);
 		typec_unregister_altmode(node->amode);
 		devm_kfree(typec->dev, node);
 	}
+
+	/* Port altmodes are reused when a partner reconnects. */
+	if (is_partner)
+		cros_typec_altmodes_set_enabled(port, true);
 }
 
 /*
@@ -368,8 +376,10 @@ static void cros_typec_unregister_port_altmodes(struct cros_typec_port *port)
 {
 	int i;
 
-	for (i = 0; i < CROS_EC_ALTMODE_MAX; i++)
+	for (i = 0; i < CROS_EC_ALTMODE_MAX; i++) {
+		cros_typec_altmode_cancel(port->port_altmode[i]);
 		typec_unregister_altmode(port->port_altmode[i]);
+	}
 }
 
 static void cros_unregister_ports(struct cros_typec_data *typec)
@@ -911,21 +921,20 @@ static int cros_typec_register_altmodes(struct cros_typec_data *typec, int port_
 			desc.mode = j + 1;
 			desc.vdo = sop_disc->svids[i].mode_vdo[j];
 
+			node = devm_kzalloc(typec->dev, sizeof(*node), GFP_KERNEL);
+			if (!node) {
+				ret = -ENOMEM;
+				goto err_cleanup;
+			}
+
 			if (is_partner)
 				amode = typec_partner_register_altmode(port->partner, &desc);
 			else
 				amode = typec_plug_register_altmode(port->plug, &desc);
 
 			if (IS_ERR(amode)) {
+				devm_kfree(typec->dev, node);
 				ret = PTR_ERR(amode);
-				goto err_cleanup;
-			}
-
-			/* If no memory is available we should unregister and exit. */
-			node = devm_kzalloc(typec->dev, sizeof(*node), GFP_KERNEL);
-			if (!node) {
-				ret = -ENOMEM;
-				typec_unregister_altmode(amode);
 				goto err_cleanup;
 			}
 
