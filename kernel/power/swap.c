@@ -1204,6 +1204,7 @@ static int load_compressed_image(struct swap_map_handle *handle,
 	int ret = 0;
 	int eof = 0;
 	struct hib_bio_batch hb;
+	int err2;
 	ktime_t start;
 	ktime_t stop;
 	unsigned nr_pages;
@@ -1482,11 +1483,14 @@ static int load_compressed_image(struct swap_map_handle *handle,
 	}
 
 out_finish:
+	err2 = hib_wait_io(&hb);
 	if (crc->run_threads) {
 		wait_event(crc->done, atomic_read_acquire(&crc->stop));
 		atomic_set(&crc->stop, 0);
 	}
 	stop = ktime_get();
+	if (!ret)
+		ret = err2;
 	if (!ret) {
 		pr_info("Image loading done\n");
 		ret = snapshot_write_finalize(snapshot);
