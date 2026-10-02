@@ -266,7 +266,7 @@ static int setup_ring(struct xenbus_device *dev, struct tpm_private *priv)
 
 	rv = bind_evtchn_to_irqhandler(priv->evtchn, tpmif_interrupt, 0,
 				       "tpmif", priv);
-	if (rv <= 0) {
+	if (rv < 0) {
 		xenbus_dev_fatal(dev, rv, "allocating TPM irq");
 		return rv;
 	}
