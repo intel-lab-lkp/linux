@@ -473,9 +473,41 @@ static void rtw_pci_reset_buf_desc(struct rtw_dev *rtwdev)
 				BIT_CLR_H2CQ_HOST_IDX | BIT_CLR_H2CQ_HW_IDX);
 }
 
+static void rtw_pci_wake_stopped_queues(struct rtw_dev *rtwdev,
+					struct rtw_pci_tx_ring *ring)
+{
+	unsigned long q;
+
+	for_each_set_bit(q, &ring->stopped_queues, rtwdev->hw->queues)
+		ieee80211_wake_queue(rtwdev->hw, q);
+
+	ring->stopped_queues = 0;
+	ring->queue_stopped = false;
+}
+
 static void rtw_pci_reset_trx_ring(struct rtw_dev *rtwdev)
 {
+	struct rtw_pci *rtwpci = (struct rtw_pci *)rtwdev->priv;
+	struct rtw_pci_tx_ring *ring;
+	enum rtw_tx_queue_type queue;
+
 	rtw_pci_reset_buf_desc(rtwdev);
+
+	/*
+	 * The rings are empty again, so nothing is left whose completion
+	 * could reach the wake in rtw_pci_tx_isr(). Release the queues this
+	 * path stopped - the stop reasons it set are cleared nowhere else,
+	 * and over an empty ring no completion will ever arrive to clear
+	 * them.
+	 */
+	for (queue = 0; queue < RTK_MAX_TX_QUEUE_NUM; queue++) {
+		ring = &rtwpci->tx_rings[queue];
+
+		if (!ring->queue_stopped)
+			continue;
+
+		rtw_pci_wake_stopped_queues(rtwdev, ring);
+	}
 }
 
 static void rtw_pci_enable_interrupt(struct rtw_dev *rtwdev,
@@ -930,7 +962,10 @@ static int rtw_pci_tx_write(struct rtw_dev *rtwdev,
 	ring = &rtwpci->tx_rings[queue];
 	spin_lock_bh(&rtwpci->irq_lock);
 	if (avail_desc(ring->r.wp, ring->r.rp, ring->r.len) < 2) {
-		ieee80211_stop_queue(rtwdev->hw, skb_get_queue_mapping(skb));
+		u16 q_map = skb_get_queue_mapping(skb);
+
+		ieee80211_stop_queue(rtwdev->hw, q_map);
+		set_bit(q_map, &ring->stopped_queues);
 		ring->queue_stopped = true;
 	}
 	spin_unlock_bh(&rtwpci->irq_lock);
@@ -949,7 +984,6 @@ static void rtw_pci_tx_isr(struct rtw_dev *rtwdev, struct rtw_pci *rtwpci,
 	u32 count;
 	u32 bd_idx_addr;
 	u32 bd_idx, cur_rp, rp_idx;
-	u16 q_map;
 
 	ring = &rtwpci->tx_rings[hw_queue];
 
@@ -981,11 +1015,8 @@ static void rtw_pci_tx_isr(struct rtw_dev *rtwdev, struct rtw_pci *rtwpci,
 		}
 
 		if (ring->queue_stopped &&
-		    avail_desc(ring->r.wp, rp_idx, ring->r.len) > 4) {
-			q_map = skb_get_queue_mapping(skb);
-			ieee80211_wake_queue(hw, q_map);
-			ring->queue_stopped = false;
-		}
+		    avail_desc(ring->r.wp, rp_idx, ring->r.len) > 4)
+			rtw_pci_wake_stopped_queues(rtwdev, ring);
 
 		if (++rp_idx >= ring->r.len)
 			rp_idx = 0;

@@ -188,6 +188,7 @@ struct rtw_pci_tx_ring {
 	struct rtw_pci_ring r;
 	struct sk_buff_head queue;
 	bool queue_stopped;
+	unsigned long stopped_queues;
 };
 
 struct rtw_pci_rx_buffer_desc {
