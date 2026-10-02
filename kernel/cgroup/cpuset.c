@@ -20,6 +20,8 @@
  */
 #include "cpuset-internal.h"
 
+#include <linux/cpu.h>
+#include <linux/cpuhplock.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
@@ -33,7 +35,9 @@
 #include <linux/sched/task.h>
 #include <linux/security.h>
 #include <linux/oom.h>
+#include <linux/nmi.h>
 #include <linux/sched/isolation.h>
+#include <linux/tick.h>
 #include <linux/wait.h>
 #include <linux/workqueue.h>
 #include <linux/task_work.h>
@@ -164,6 +168,14 @@ static cpumask_var_t	isolated_hk_cpus;	/* T */
  */
 static DEFINE_SPINLOCK(dhm_cycling_lock);
 static cpumask_var_t	dhm_cycling_cpus;
+
+/*
+ * Snapshot of the isolated CPUs from the previous housekeeping update.
+ * Used to compute the delta (newly isolated / newly de-isolated) so that
+ * only the changed CPUs are cycled rather than the full isolation set.
+ * Protected by cpuset_top_mutex.
+ */
+static cpumask_var_t	dhm_prev_isolated;
 
 /*
  * A flag to force sched domain rebuild at the end of an operation.
@@ -1424,6 +1436,108 @@ static bool prstate_housekeeping_conflict(int prstate, struct cpumask *new_cpus)
 }
 
 /*
+ * dhm_cycle_isolated_cpus - Apply kernel-noise isolation via hotplug cycling
+ *
+ * For each CPU newly entering isolation: cycle it offline, configure tick
+ * suppression and RCU callback offloading while it is offline, then bring
+ * it back online.  The managed-IRQ state is handled automatically by the
+ * existing irq_migrate_all_off_this_cpu() dying callback and the
+ * irq_affinity_online_cpu() online callback which both consult the
+ * already-updated HK_TYPE_MANAGED_IRQ mask.
+ *
+ * For each CPU leaving isolation: cycle it offline, de-offload RCU and
+ * restore the tick, then bring it back online.
+ *
+ * Called with cpuset_top_mutex held and no other cpuset or hotplug locks
+ * held: cpuset_top_mutex is the outermost lock, so remove_cpu()/add_cpu()
+ * may freely take cpus_write_lock() underneath it.
+ */
+static void dhm_cycle_isolated_cpus(const struct cpumask *new_isolated)
+{
+	static const unsigned long noise_types =
+		BIT(HK_TYPE_KERNEL_NOISE) | BIT(HK_TYPE_MANAGED_IRQ);
+	cpumask_var_t newly_isolated, newly_deisolated, cur_isolated;
+	int cpu;
+
+	if (!alloc_cpumask_var(&newly_isolated, GFP_KERNEL) ||
+	    !alloc_cpumask_var(&newly_deisolated, GFP_KERNEL) ||
+	    !alloc_cpumask_var(&cur_isolated, GFP_KERNEL)) {
+		free_cpumask_var(newly_isolated);
+		free_cpumask_var(newly_deisolated);
+		return;
+	}
+
+	cpumask_andnot(newly_isolated, new_isolated, dhm_prev_isolated);
+	cpumask_andnot(newly_deisolated, dhm_prev_isolated, new_isolated);
+	/* cur_isolated tracks the mask actually published so far. */
+	cpumask_copy(cur_isolated, dhm_prev_isolated);
+	cpumask_copy(dhm_prev_isolated, new_isolated);
+
+	if (cpumask_empty(newly_isolated) && cpumask_empty(newly_deisolated))
+		goto out_free;
+
+	/* Mark cycling CPUs so cpuset_hotplug_update_tasks skips invalidation */
+	spin_lock(&dhm_cycling_lock);
+	cpumask_or(dhm_cycling_cpus, newly_isolated, newly_deisolated);
+	spin_unlock(&dhm_cycling_lock);
+
+	/*
+	 * Publish each CPU's kernel-noise/managed-IRQ housekeeping state
+	 * strictly between its own remove_cpu() succeeding and add_cpu()
+	 * bringing it back, never as a batch before the whole cycle.
+	 * housekeeping_update_types() then always describes exactly which
+	 * CPUs are actually ticking and running RCU callbacks normally at
+	 * that instant, including the current tick_do_timer_cpu holder,
+	 * which tick_nohz_cpu_hotpluggable() must see as still a
+	 * housekeeping CPU for as long as it is still online and un-cycled.
+	 */
+	for_each_cpu(cpu, newly_isolated) {
+		if (!cpu_is_hotpluggable(cpu)) {
+			pr_warn_once("cpuset: CPU%d cannot be isolated (hotplug disabled)\n",
+				     cpu);
+			cpumask_clear_cpu(cpu, dhm_prev_isolated);
+			continue;
+		}
+		if (remove_cpu(cpu)) {
+			pr_warn_once("cpuset: failed to offline CPU%d for isolation\n",
+				     cpu);
+			cpumask_clear_cpu(cpu, dhm_prev_isolated);
+			continue;
+		}
+		cpumask_set_cpu(cpu, cur_isolated);
+		WARN_ON_ONCE(housekeeping_update_types(noise_types, cur_isolated));
+		WARN_ON_ONCE(tick_nohz_cpu_isolate(cpu));
+		WARN_ON_ONCE(rcu_nocb_cpu_isolate(cpu));
+		WARN_ON_ONCE(add_cpu(cpu));
+	}
+
+	for_each_cpu(cpu, newly_deisolated) {
+		if (remove_cpu(cpu)) {
+			pr_warn_once("cpuset: failed to offline CPU%d for de-isolation\n",
+				     cpu);
+			cpumask_set_cpu(cpu, dhm_prev_isolated);
+			continue;
+		}
+		cpumask_clear_cpu(cpu, cur_isolated);
+		WARN_ON_ONCE(housekeeping_update_types(noise_types, cur_isolated));
+		WARN_ON_ONCE(rcu_nocb_cpu_deoffload(cpu));
+		tick_nohz_cpu_deisolate(cpu);
+		WARN_ON_ONCE(add_cpu(cpu));
+	}
+
+	spin_lock(&dhm_cycling_lock);
+	cpumask_clear(dhm_cycling_cpus);
+	spin_unlock(&dhm_cycling_lock);
+
+	lockup_detector_hk_update();
+
+out_free:
+	free_cpumask_var(newly_isolated);
+	free_cpumask_var(newly_deisolated);
+	free_cpumask_var(cur_isolated);
+}
+
+/*
  * cpuset_update_sd_hk_unlock - Rebuild sched domains, update HK & unlock
  *
  * Update housekeeping cpumasks and rebuild sched domains if necessary and
@@ -1439,8 +1553,6 @@ static void cpuset_update_sd_hk_unlock(void)
 		rebuild_sched_domains_locked();
 
 	if (update_housekeeping) {
-		static const unsigned long noise_types =
-			BIT(HK_TYPE_KERNEL_NOISE) | BIT(HK_TYPE_MANAGED_IRQ);
 		int ret;
 
 		update_housekeeping = false;
@@ -1450,9 +1562,16 @@ static void cpuset_update_sd_hk_unlock(void)
 		cpus_read_unlock();
 
 		/*
-		 * housekeeping_update() is now called without holding
-		 * cpus_read_lock and cpuset_mutex. Only cpuset_top_mutex
-		 * is still being held for mutual exclusion.
+		 * housekeeping_update() and housekeeping_update_types() are
+		 * now called without holding cpus_read_lock and cpuset_mutex.
+		 * cpuset_top_mutex stays held all the way through
+		 * dhm_cycle_isolated_cpus() below: per the locking convention
+		 * at the top of this file it is the outermost lock, so it may
+		 * legally nest around the cpus_write_lock() that remove_cpu()/
+		 * add_cpu() take. Holding it here is also what makes
+		 * dhm_prev_isolated's "protected by cpuset_top_mutex" comment
+		 * true, and keeps a second isolated-partition update from
+		 * entering this function while a cycle is still in flight.
 		 */
 
 		/*
@@ -1464,18 +1583,23 @@ static void cpuset_update_sd_hk_unlock(void)
 		WARN_ON_ONCE(ret);
 
 		/*
-		 * Only touch the kernel-noise housekeeping masks
-		 * (HK_TYPE_KERNEL_NOISE and HK_TYPE_MANAGED_IRQ) once the
-		 * sched domain update above actually succeeded: HK_TYPE_
-		 * KERNEL_NOISE must stay a subset of HK_TYPE_DOMAIN, so a CPU
-		 * can never end up tick-suppressed while still scheduled as
-		 * part of the normal (non-isolated) sched domain.  The tick,
-		 * RCU and managed-interrupt state is reconfigured as the
-		 * affected CPUs are cycled through the CPU hotplug machinery.
+		 * Only cycle CPUs through hotplug, applying the kernel-noise
+		 * types along the way, when the sched domain update above
+		 * actually succeeded.  HK_TYPE_KERNEL_NOISE must stay a
+		 * subset of HK_TYPE_DOMAIN, so a CPU can never end up
+		 * tick-suppressed while still scheduled as part of the
+		 * normal (non-isolated) sched domain.  The tick, RCU and
+		 * managed-interrupt state is reconfigured as the affected
+		 * CPUs are cycled through the CPU hotplug machinery;
+		 * dhm_cycle_isolated_cpus() publishes HK_TYPE_KERNEL_NOISE
+		 * and HK_TYPE_MANAGED_IRQ itself, one CPU at a time, strictly
+		 * between that CPU's own remove_cpu() and add_cpu(), so a
+		 * CPU that cpu_is_hotpluggable() rejects (e.g. the current
+		 * tick_do_timer_cpu) is simply never published as isolated.
 		 */
 		if (!ret)
-			WARN_ON_ONCE(housekeeping_update_types(noise_types,
-							       isolated_hk_cpus));
+			dhm_cycle_isolated_cpus(isolated_hk_cpus);
+
 		mutex_unlock(&cpuset_top_mutex);
 	} else {
 		cpuset_full_unlock();
@@ -3915,6 +4039,7 @@ int __init cpuset_init(void)
 	BUG_ON(!zalloc_cpumask_var(&isolated_cpus, GFP_KERNEL));
 	BUG_ON(!zalloc_cpumask_var(&isolated_hk_cpus, GFP_KERNEL));
 	BUG_ON(!zalloc_cpumask_var(&dhm_cycling_cpus, GFP_KERNEL));
+	BUG_ON(!zalloc_cpumask_var(&dhm_prev_isolated, GFP_KERNEL));
 
 	cpumask_setall(top_cpuset.cpus_allowed);
 	nodes_setall(top_cpuset.mems_allowed);
