@@ -1165,6 +1165,76 @@ static inline resource_size_t calculate_mem_align(resource_size_t *aligns,
 }
 
 /*
+ * Bridge window gap size calculator.
+ *
+ * Calculates gap (empty space) necessary because of non-aligning composite
+ * resources (VF BARs, bridge windows).
+ *
+ * Rules:
+ *
+ * 1) Gaps are only necessary if there is more than one non-aligning
+ *    composite resource within a single bridge window.
+ *
+ * 2) If there are only two remainder parts that amount to less than win_align
+ *    together, the required gap is the difference of win_align and the sum of
+ *    remainder sizes.
+ *
+ * 3) On other cases, round each remainder part to win_align to get the gap
+ *    size. Sometimes, tighter packing might be possible but due to how
+ *    sizing and assignment are made in different phases, it is not always
+ *    possible to predict where each resource is assigned. Thus, the sizing
+ *    has to play safe even if it may overestimate in some cases.
+ */
+static resource_size_t calculate_win_gap_size(struct pci_bus *bus,
+					      struct resource *b_res,
+					      resource_size_t win_align,
+					      bool optional)
+{
+	resource_size_t safe_gap = 0, remainders = 0;
+	unsigned int nonaligning = 0;
+	struct pci_dev *dev;
+
+	list_for_each_entry(dev, &bus->devices, bus_list) {
+		struct resource *r;
+		int i;
+
+		pci_dev_for_each_resource(dev, r, i) {
+			resource_size_t r_size, remainder, aligning;
+
+			if (!pdev_resources_assignable(dev) ||
+			    !pdev_resource_should_fit(dev, r))
+				continue;
+			if (b_res != pbus_select_window(bus, r))
+				continue;
+
+			if (!optional && pci_resource_is_optional(dev, i))
+				continue;
+
+			r_size = resource_size(r);
+			if (r_size <= win_align)
+				continue;
+
+			aligning = ALIGN_DOWN(r_size, win_align);
+			remainder = r_size - aligning;
+			if (!remainder)
+				continue;
+
+			nonaligning++;
+			remainders += remainder;
+			safe_gap += win_align - remainder;
+		}
+	}
+
+	if (nonaligning == 2 && (remainders <= win_align))
+		return win_align - remainders;
+
+	if (nonaligning >= 2)
+		return safe_gap;
+
+	return 0;
+}
+
+/*
  * Calculate bridge window head alignment that leaves no gaps in between
  * resources.
  */
@@ -1281,6 +1351,7 @@ static void pbus_size_mem(struct pci_bus *bus, struct resource *b_res,
 	int order, max_order;
 	resource_size_t children_add_size = 0;
 	resource_size_t add_align = 0;
+	resource_size_t gap_size;
 
 	if (!b_res)
 		return;
@@ -1345,7 +1416,8 @@ static void pbus_size_mem(struct pci_bus *bus, struct resource *b_res,
 	win_align = pci_min_window_alignment(bus, b_res->flags);
 	min_align = calculate_head_align(aligns, max_order);
 	min_align = max(min_align, win_align);
-	size0 = calculate_memsize(size, realloc_head ? 0 : add_size,
+	gap_size = calculate_win_gap_size(bus, b_res, min_align, false);
+	size0 = calculate_memsize(size + gap_size, realloc_head ? 0 : add_size,
 				  0, win_align);
 
 	if (size0) {
@@ -1355,8 +1427,9 @@ static void pbus_size_mem(struct pci_bus *bus, struct resource *b_res,
 
 	if (realloc_head && (add_size > 0 || children_add_size > 0)) {
 		add_align = max(min_align, add_align);
-		size1 = calculate_memsize(size, add_size, children_add_size,
-					  win_align);
+		gap_size = calculate_win_gap_size(bus, b_res, add_align, true);
+		size1 = calculate_memsize(size + gap_size, add_size,
+					  children_add_size, win_align);
 	}
 
 	if (!size0 && !size1) {
