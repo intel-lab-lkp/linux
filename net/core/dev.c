@@ -98,6 +98,7 @@
 #include <linux/bpf.h>
 #include <linux/bpf_trace.h>
 #include <net/net_namespace.h>
+#include <net/netns/hash.h>
 #include <net/sock.h>
 #include <net/busy_poll.h>
 #include <linux/rtnetlink.h>
@@ -193,7 +194,10 @@ static inline void dev_base_seq_inc(struct net *net)
 
 static inline struct hlist_head *dev_name_hash(struct net *net, const char *name)
 {
-	unsigned int hash = full_name_hash(net, name, strnlen(name, IFNAMSIZ));
+	unsigned long salt = net_hash_mix(net);
+	unsigned int hash;
+
+	hash = full_name_hash((void *)salt, name, strnlen(name, IFNAMSIZ));
 
 	return &net->dev_name_head[hash_32(hash, NETDEV_HASHBITS)];
 }
