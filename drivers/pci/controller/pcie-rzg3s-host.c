@@ -331,6 +331,7 @@ struct rzg3s_pcie_port {
  * @max_link_speed: maximum supported link speed
  * @controller_id: PCIe controller identifier, used for System Controller access
  * @link_rescan: The PCIe link rescan state
+ * @started: The PCIe controller state (started or not)
  * @num_lanes: The number of lanes
  */
 struct rzg3s_pcie_host {
@@ -351,6 +352,7 @@ struct rzg3s_pcie_host {
 	int max_link_speed;
 	enum rzg3s_pcie_controller_id controller_id;
 	bool link_rescan;
+	bool started;
 	u8 num_lanes;
 };
 
@@ -1115,6 +1117,11 @@ static void rzg3s_pcie_link_event(struct rzg3s_pcie_host *host)
 
 		dev_info(host->dev, "PCIe link down, removing devices\n");
 
+		for_each_pci_bridge(dev, bridge->bus) {
+			if (pci_pcie_type(dev) == PCI_EXP_TYPE_ROOT_PORT)
+				pci_host_handle_link_down(dev);
+		}
+
 		pci_lock_rescan_remove();
 		list_for_each_entry_safe_reverse(dev, tmp, &bus->devices,
 						 bus_list)
@@ -1869,6 +1876,9 @@ static int rzg3s_pcie_host_stop(struct rzg3s_pcie_host *host)
 	struct rzg3s_sysc *sysc = host->sysc;
 	int ret;
 
+	if (!host->started)
+		return 0;
+
 	clk_disable_unprepare(port->refclk);
 
 	/* SoC-specific de-initialization */
@@ -1890,6 +1900,8 @@ static int rzg3s_pcie_host_stop(struct rzg3s_pcie_host *host)
 	if (ret)
 		goto power_resets_restore;
 
+	host->started = false;
+
 	return 0;
 
 	/* Restore the previous state if any error happens */
@@ -1905,11 +1917,14 @@ refclk_restore:
 	return ret;
 }
 
-static int rzg3s_pcie_host_start(struct rzg3s_pcie_host *host)
+static int rzg3s_pcie_host_start(struct rzg3s_pcie_host *host, bool set_started)
 {
 	const struct rzg3s_pcie_soc_data *data = host->data;
 	struct rzg3s_sysc *sysc = host->sysc;
 	int ret;
+
+	if (host->started)
+		return 0;
 
 	ret = rzg3s_sysc_config_func(sysc, RZG3S_SYSC_FUNC_ID_MODE, 1);
 	if (ret)
@@ -1943,6 +1958,9 @@ static int rzg3s_pcie_host_start(struct rzg3s_pcie_host *host)
 	if (ret)
 		goto assert_power_resets;
 
+	if (set_started)
+		host->started = true;
+
 	return 0;
 
 	/*
@@ -1953,6 +1971,64 @@ assert_power_resets:
 	reset_control_bulk_assert(data->num_power_resets, host->power_resets);
 assert_rst_rsm_b:
 	rzg3s_sysc_config_func(sysc, RZG3S_SYSC_FUNC_ID_RST_RSM_B, 0);
+	return ret;
+}
+
+static int rzg3s_pcie_host_reset_root_port(struct pci_host_bridge *bridge,
+					   struct pci_dev *pdev)
+{
+	struct rzg3s_pcie_host *host = pci_host_bridge_priv(bridge);
+	unsigned long flags;
+	u32 irqs;
+	int ret;
+
+	/* Mask link up/down interrupts. */
+	writel(0, host->axi + RZG3S_PCI_PEIE0);
+
+	/* Mask INTx and MSI interrupts. */
+	raw_spin_lock_irqsave(&host->hw_lock, flags);
+	irqs = readl(host->axi + RZG3S_PCI_PINTRCVIE);
+	writel(0, host->axi + RZG3S_PCI_PINTRCVIE);
+	raw_spin_unlock_irqrestore(&host->hw_lock, flags);
+
+	/*
+	 * Make sure the next operations are not disturbed by any pending
+	 * IRQs.
+	 */
+	if (IS_ENABLED(CONFIG_PCI_MSI))
+		synchronize_irq(host->msi.irq);
+	for (unsigned int i = 0; i < PCI_NUM_INTX; i++)
+		synchronize_irq(host->intx_irqs[i]);
+
+	ret = rzg3s_pcie_host_stop(host);
+	if (ret) {
+		dev_err(host->dev, "Failed to stop the host!\n");
+		goto unmask_irqs;
+	}
+
+	ret = rzg3s_pcie_host_start(host, false);
+	if (ret) {
+		dev_err(host->dev, "Failed to start the host!\n");
+
+		/*
+		 * Don't unmask IRQs. We are in a bad state here and we
+		 * can recover only through a suspend/resume cycle. Just
+		 * return and preserve the stop state.
+		 */
+		return ret;
+	}
+
+unmask_irqs:
+	/* Unmask INTx and MSI interrupts. */
+	raw_spin_lock_irqsave(&host->hw_lock, flags);
+	writel_relaxed(irqs, host->axi + RZG3S_PCI_PINTRCVIE);
+	raw_spin_unlock_irqrestore(&host->hw_lock, flags);
+
+	/* Unmask link up/down interrupts. */
+	writel_relaxed(RZG3S_PCI_PEIE0_DL_UPDOWN, host->axi + RZG3S_PCI_PEIE0);
+
+	host->started = true;
+
 	return ret;
 }
 
@@ -2036,6 +2112,7 @@ static int rzg3s_pcie_pm_notifier(struct notifier_block *nb,
 	case PM_SUSPEND_PREPARE:
 		/* Disable link up/down interrupts. */
 		disable_irq(host->event_irq);
+		writel_relaxed(0, host->axi + RZG3S_PCI_PEIE0);
 		break;
 
 	case PM_POST_SUSPEND:
@@ -2143,6 +2220,7 @@ static int rzg3s_pcie_probe(struct platform_device *pdev)
 	if (ret)
 		goto power_resets_assert;
 
+	host->started = true;
 	host->pm_nb.notifier_call = rzg3s_pcie_pm_notifier;
 	ret = register_pm_notifier(&host->pm_nb);
 	if (ret)
@@ -2151,6 +2229,7 @@ static int rzg3s_pcie_probe(struct platform_device *pdev)
 	bridge->sysdata = host;
 	bridge->ops = &rzg3s_pcie_root_ops;
 	bridge->child_ops = &rzg3s_pcie_child_ops;
+	bridge->reset_root_port = rzg3s_pcie_host_reset_root_port;
 	ret = pci_host_probe(bridge);
 	if (ret)
 		goto pm_notifier_unregister;
@@ -2201,7 +2280,7 @@ static int rzg3s_pcie_resume_noirq(struct device *dev)
 {
 	struct rzg3s_pcie_host *host = dev_get_drvdata(dev);
 
-	return rzg3s_pcie_host_start(host);
+	return rzg3s_pcie_host_start(host, true);
 }
 
 static const struct dev_pm_ops rzg3s_pcie_pm_ops = {
