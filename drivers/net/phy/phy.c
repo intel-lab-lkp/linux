@@ -1507,6 +1507,8 @@ EXPORT_SYMBOL(phy_request_interrupt);
 void phy_free_interrupt(struct phy_device *phydev)
 {
 	phy_disable_interrupts(phydev);
+	/* A freed interrupt has nothing left to rerun on resume. */
+	phydev->irq_rerun = 0;
 	free_irq(phydev->irq, phydev);
 }
 EXPORT_SYMBOL(phy_free_interrupt);
