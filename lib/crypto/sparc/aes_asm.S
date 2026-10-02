@@ -2,6 +2,7 @@
 #include <linux/linkage.h>
 #include <asm/opcodes.h>
 #include <asm/visasm.h>
+#include <asm/asi.h>
 
 #define ENCRYPT_TWO_ROUNDS(KEY_BASE, I0, I1, T0, T1) \
 	AES_EROUND01(KEY_BASE +  0, I0, I1, T0) \
@@ -1541,3 +1542,342 @@ ENTRY(aes_sparc64_ctr_crypt_256)
 	retl
 	 stx		%g7, [%o4 + 0x08]
 ENDPROC(aes_sparc64_ctr_crypt_256)
+
+#if IS_ENABLED(CONFIG_CRYPTO_LIB_AES_XTS)
+	/* XTS.  The tweak is kept in %l0/%l1 as little-endian words, so that
+	 * multiplying it by x is a 128-bit shift.  XTS_TWEAK_BE stores it to
+	 * a stack slot little-endian and reloads it big-endian, the byte order
+	 * of the data.  The slot is cleared before returning.
+	 *
+	 * A register window is needed because %g4-%g6 belong to the kernel.
+	 * %l6 points at the slot and %l7 holds 8: an access with an immediate
+	 * ASI cannot also take an immediate offset.
+	 */
+
+#define XTS_DOUBLE							\
+	srax		%l1, 63, %l2;					\
+	and		%l2, 0x87, %l2;					\
+	addcc		%l0, %l0, %l0;					\
+	ADDXC_L1_L1_L1						\
+	xor		%l0, %l2, %l0;
+
+#define XTS_TWEAK_BE(A, B)						\
+	stxa		%l0, [%l6] ASI_PL;				\
+	stxa		%l1, [%l6 + %l7] ASI_PL;			\
+	ldx		[%l6 + 0x00], A;				\
+	ldx		[%l6 + 0x08], B;
+
+	.align		32
+ENTRY(aes_sparc64_xts_encrypt_128)
+	/* %i0=key, %i1=input, %i2=output, %i3=len, %i4=tweak */
+	save		%sp, -192, %sp
+	mov		8, %l7
+	add		%sp, 2047 + 176, %l6
+	ldxa		[%i4] ASI_PL, %l0
+	ldxa		[%i4 + %l7] ASI_PL, %l1
+	ldx		[%i0 + 0x00], %g1
+	subcc		%i3, 0x10, %i3
+	be,pn		%xcc, 10f
+	 ldx		[%i0 + 0x08], %g2
+1:	XTS_TWEAK_BE(%g3, %g7)
+	XTS_DOUBLE
+	XTS_TWEAK_BE(%l4, %l5)
+	XTS_DOUBLE
+	ldx		[%i1 + 0x00], %o5
+	xor		%o5, %g3, %o5
+	xor		%o5, %g1, %o5
+	MOVXTOD_O5_F0
+	ldx		[%i1 + 0x08], %o5
+	xor		%o5, %g7, %o5
+	xor		%o5, %g2, %o5
+	MOVXTOD_O5_F2
+	ldx		[%i1 + 0x10], %o5
+	xor		%o5, %l4, %o5
+	xor		%o5, %g1, %o5
+	MOVXTOD_O5_F4
+	ldx		[%i1 + 0x18], %o5
+	xor		%o5, %l5, %o5
+	xor		%o5, %g2, %o5
+	MOVXTOD_O5_F6
+	ENCRYPT_128_2(8, 0, 2, 4, 6, 56, 58, 60, 62)
+	MOVXTOD_G3_F60
+	MOVXTOD_G7_F62
+	MOVXTOD_L4_F56
+	MOVXTOD_L5_F58
+	fxor		%f0, %f60, %f0
+	fxor		%f2, %f62, %f2
+	fxor		%f4, %f56, %f4
+	fxor		%f6, %f58, %f6
+	std		%f0, [%i2 + 0x00]
+	std		%f2, [%i2 + 0x08]
+	std		%f4, [%i2 + 0x10]
+	std		%f6, [%i2 + 0x18]
+	subcc		%i3, 0x20, %i3
+	add		%i1, 0x20, %i1
+	brgz		%i3, 1b
+	 add		%i2, 0x20, %i2
+	brlz,pt		%i3, 11f
+	 nop
+10:	XTS_TWEAK_BE(%g3, %g7)
+	XTS_DOUBLE
+	ldx		[%i1 + 0x00], %o5
+	xor		%o5, %g3, %o5
+	xor		%o5, %g1, %o5
+	MOVXTOD_O5_F0
+	ldx		[%i1 + 0x08], %o5
+	xor		%o5, %g7, %o5
+	xor		%o5, %g2, %o5
+	MOVXTOD_O5_F2
+	ENCRYPT_128(8, 0, 2, 4, 6)
+	MOVXTOD_G3_F4
+	MOVXTOD_G7_F6
+	fxor		%f0, %f4, %f0
+	fxor		%f2, %f6, %f2
+	std		%f0, [%i2 + 0x00]
+	std		%f2, [%i2 + 0x08]
+11:	stxa		%l0, [%i4] ASI_PL
+	stxa		%l1, [%i4 + %l7] ASI_PL
+	stx		%g0, [%l6 + 0x00]
+	stx		%g0, [%l6 + 0x08]
+	ret
+	 restore
+ENDPROC(aes_sparc64_xts_encrypt_128)
+
+	.align		32
+ENTRY(aes_sparc64_xts_encrypt_256)
+	/* %i0=key, %i1=input, %i2=output, %i3=len, %i4=tweak */
+	save		%sp, -192, %sp
+	mov		%i0, %o0
+	mov		8, %l7
+	add		%sp, 2047 + 176, %l6
+	ldxa		[%i4] ASI_PL, %l0
+	ldxa		[%i4 + %l7] ASI_PL, %l1
+	ldx		[%i0 + 0x00], %g1
+	subcc		%i3, 0x10, %i3
+	be,pn		%xcc, 10f
+	 ldx		[%i0 + 0x08], %g2
+1:	XTS_TWEAK_BE(%g3, %g7)
+	XTS_DOUBLE
+	XTS_TWEAK_BE(%l4, %l5)
+	XTS_DOUBLE
+	ldx		[%i1 + 0x00], %o5
+	xor		%o5, %g3, %o5
+	xor		%o5, %g1, %o5
+	MOVXTOD_O5_F0
+	ldx		[%i1 + 0x08], %o5
+	xor		%o5, %g7, %o5
+	xor		%o5, %g2, %o5
+	MOVXTOD_O5_F2
+	ldx		[%i1 + 0x10], %o5
+	xor		%o5, %l4, %o5
+	xor		%o5, %g1, %o5
+	MOVXTOD_O5_F4
+	ldx		[%i1 + 0x18], %o5
+	xor		%o5, %l5, %o5
+	xor		%o5, %g2, %o5
+	MOVXTOD_O5_F6
+	ENCRYPT_256_2(8, 0, 2, 4, 6)
+	MOVXTOD_G3_F60
+	MOVXTOD_G7_F62
+	MOVXTOD_L4_F56
+	MOVXTOD_L5_F58
+	fxor		%f0, %f60, %f0
+	fxor		%f2, %f62, %f2
+	fxor		%f4, %f56, %f4
+	fxor		%f6, %f58, %f6
+	std		%f0, [%i2 + 0x00]
+	std		%f2, [%i2 + 0x08]
+	std		%f4, [%i2 + 0x10]
+	std		%f6, [%i2 + 0x18]
+	subcc		%i3, 0x20, %i3
+	add		%i1, 0x20, %i1
+	brgz		%i3, 1b
+	 add		%i2, 0x20, %i2
+	brlz,pt		%i3, 11f
+	 nop
+10:	ldd		[%o0 + 0xd0], %f56
+	ldd		[%o0 + 0xd8], %f58
+	ldd		[%o0 + 0xe0], %f60
+	ldd		[%o0 + 0xe8], %f62
+	XTS_TWEAK_BE(%g3, %g7)
+	XTS_DOUBLE
+	ldx		[%i1 + 0x00], %o5
+	xor		%o5, %g3, %o5
+	xor		%o5, %g1, %o5
+	MOVXTOD_O5_F0
+	ldx		[%i1 + 0x08], %o5
+	xor		%o5, %g7, %o5
+	xor		%o5, %g2, %o5
+	MOVXTOD_O5_F2
+	ENCRYPT_256(8, 0, 2, 4, 6)
+	MOVXTOD_G3_F4
+	MOVXTOD_G7_F6
+	fxor		%f0, %f4, %f0
+	fxor		%f2, %f6, %f2
+	std		%f0, [%i2 + 0x00]
+	std		%f2, [%i2 + 0x08]
+11:	stxa		%l0, [%i4] ASI_PL
+	stxa		%l1, [%i4 + %l7] ASI_PL
+	stx		%g0, [%l6 + 0x00]
+	stx		%g0, [%l6 + 0x08]
+	ret
+	 restore
+ENDPROC(aes_sparc64_xts_encrypt_256)
+
+	.align		32
+ENTRY(aes_sparc64_xts_decrypt_128)
+	/* %i0=&key[key_len], %i1=input, %i2=output, %i3=len, %i4=tweak */
+	save		%sp, -192, %sp
+	mov		8, %l7
+	add		%sp, 2047 + 176, %l6
+	ldxa		[%i4] ASI_PL, %l0
+	ldxa		[%i4 + %l7] ASI_PL, %l1
+	ldx		[%i0 - 0x10], %g1
+	subcc		%i3, 0x10, %i3
+	be,pn		%xcc, 10f
+	 ldx		[%i0 - 0x08], %g2
+1:	XTS_TWEAK_BE(%g3, %g7)
+	XTS_DOUBLE
+	XTS_TWEAK_BE(%l4, %l5)
+	XTS_DOUBLE
+	ldx		[%i1 + 0x00], %o5
+	xor		%o5, %g3, %o5
+	xor		%o5, %g1, %o5
+	MOVXTOD_O5_F0
+	ldx		[%i1 + 0x08], %o5
+	xor		%o5, %g7, %o5
+	xor		%o5, %g2, %o5
+	MOVXTOD_O5_F2
+	ldx		[%i1 + 0x10], %o5
+	xor		%o5, %l4, %o5
+	xor		%o5, %g1, %o5
+	MOVXTOD_O5_F4
+	ldx		[%i1 + 0x18], %o5
+	xor		%o5, %l5, %o5
+	xor		%o5, %g2, %o5
+	MOVXTOD_O5_F6
+	DECRYPT_128_2(8, 0, 2, 4, 6, 56, 58, 60, 62)
+	MOVXTOD_G3_F60
+	MOVXTOD_G7_F62
+	MOVXTOD_L4_F56
+	MOVXTOD_L5_F58
+	fxor		%f0, %f60, %f0
+	fxor		%f2, %f62, %f2
+	fxor		%f4, %f56, %f4
+	fxor		%f6, %f58, %f6
+	std		%f0, [%i2 + 0x00]
+	std		%f2, [%i2 + 0x08]
+	std		%f4, [%i2 + 0x10]
+	std		%f6, [%i2 + 0x18]
+	subcc		%i3, 0x20, %i3
+	add		%i1, 0x20, %i1
+	brgz		%i3, 1b
+	 add		%i2, 0x20, %i2
+	brlz,pt		%i3, 11f
+	 nop
+10:	XTS_TWEAK_BE(%g3, %g7)
+	XTS_DOUBLE
+	ldx		[%i1 + 0x00], %o5
+	xor		%o5, %g3, %o5
+	xor		%o5, %g1, %o5
+	MOVXTOD_O5_F0
+	ldx		[%i1 + 0x08], %o5
+	xor		%o5, %g7, %o5
+	xor		%o5, %g2, %o5
+	MOVXTOD_O5_F2
+	DECRYPT_128(8, 0, 2, 4, 6)
+	MOVXTOD_G3_F4
+	MOVXTOD_G7_F6
+	fxor		%f0, %f4, %f0
+	fxor		%f2, %f6, %f2
+	std		%f0, [%i2 + 0x00]
+	std		%f2, [%i2 + 0x08]
+11:	stxa		%l0, [%i4] ASI_PL
+	stxa		%l1, [%i4 + %l7] ASI_PL
+	stx		%g0, [%l6 + 0x00]
+	stx		%g0, [%l6 + 0x08]
+	ret
+	 restore
+ENDPROC(aes_sparc64_xts_decrypt_128)
+
+	.align		32
+ENTRY(aes_sparc64_xts_decrypt_256)
+	/* %i0=&key[key_len], %i1=input, %i2=output, %i3=len, %i4=tweak */
+	save		%sp, -192, %sp
+	sub		%i0, 0xf0, %o0
+	mov		8, %l7
+	add		%sp, 2047 + 176, %l6
+	ldxa		[%i4] ASI_PL, %l0
+	ldxa		[%i4 + %l7] ASI_PL, %l1
+	ldx		[%i0 - 0x10], %g1
+	subcc		%i3, 0x10, %i3
+	be,pn		%xcc, 10f
+	 ldx		[%i0 - 0x08], %g2
+1:	XTS_TWEAK_BE(%g3, %g7)
+	XTS_DOUBLE
+	XTS_TWEAK_BE(%l4, %l5)
+	XTS_DOUBLE
+	ldx		[%i1 + 0x00], %o5
+	xor		%o5, %g3, %o5
+	xor		%o5, %g1, %o5
+	MOVXTOD_O5_F0
+	ldx		[%i1 + 0x08], %o5
+	xor		%o5, %g7, %o5
+	xor		%o5, %g2, %o5
+	MOVXTOD_O5_F2
+	ldx		[%i1 + 0x10], %o5
+	xor		%o5, %l4, %o5
+	xor		%o5, %g1, %o5
+	MOVXTOD_O5_F4
+	ldx		[%i1 + 0x18], %o5
+	xor		%o5, %l5, %o5
+	xor		%o5, %g2, %o5
+	MOVXTOD_O5_F6
+	DECRYPT_256_2(8, 0, 2, 4, 6)
+	MOVXTOD_G3_F60
+	MOVXTOD_G7_F62
+	MOVXTOD_L4_F56
+	MOVXTOD_L5_F58
+	fxor		%f0, %f60, %f0
+	fxor		%f2, %f62, %f2
+	fxor		%f4, %f56, %f4
+	fxor		%f6, %f58, %f6
+	std		%f0, [%i2 + 0x00]
+	std		%f2, [%i2 + 0x08]
+	std		%f4, [%i2 + 0x10]
+	std		%f6, [%i2 + 0x18]
+	subcc		%i3, 0x20, %i3
+	add		%i1, 0x20, %i1
+	brgz		%i3, 1b
+	 add		%i2, 0x20, %i2
+	brlz,pt		%i3, 11f
+	 nop
+10:	ldd		[%o0 + 0x18], %f56
+	ldd		[%o0 + 0x10], %f58
+	ldd		[%o0 + 0x08], %f60
+	ldd		[%o0 + 0x00], %f62
+	XTS_TWEAK_BE(%g3, %g7)
+	XTS_DOUBLE
+	ldx		[%i1 + 0x00], %o5
+	xor		%o5, %g3, %o5
+	xor		%o5, %g1, %o5
+	MOVXTOD_O5_F0
+	ldx		[%i1 + 0x08], %o5
+	xor		%o5, %g7, %o5
+	xor		%o5, %g2, %o5
+	MOVXTOD_O5_F2
+	DECRYPT_256(8, 0, 2, 4, 6)
+	MOVXTOD_G3_F4
+	MOVXTOD_G7_F6
+	fxor		%f0, %f4, %f0
+	fxor		%f2, %f6, %f2
+	std		%f0, [%i2 + 0x00]
+	std		%f2, [%i2 + 0x08]
+11:	stxa		%l0, [%i4] ASI_PL
+	stxa		%l1, [%i4 + %l7] ASI_PL
+	stx		%g0, [%l6 + 0x00]
+	stx		%g0, [%l6 + 0x08]
+	ret
+	 restore
+ENDPROC(aes_sparc64_xts_decrypt_256)
+#endif /* CONFIG_CRYPTO_LIB_AES_XTS */
