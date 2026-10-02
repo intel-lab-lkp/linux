@@ -310,7 +310,7 @@ static int mpc512x_lpbfifo_kick(void)
 	out_be32(&lpbfifo.regs->pkt_size, bits);
 
 	/* 5. Finally kick DMA off */
-	cookie = dma_tx->tx_submit(dma_tx);
+	cookie = dmaengine_submit(dma_tx);
 	if (dma_submit_error(cookie)) {
 		ret = -ENOSPC;
 		goto err_dma_submit;
