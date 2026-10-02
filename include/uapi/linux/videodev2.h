@@ -750,6 +750,9 @@ struct v4l2_pix_format {
 #define V4L2_PIX_FMT_RAW_CSI2_10 v4l2_fourcc('R', 'A', 'C', 'A')
 #define V4L2_PIX_FMT_RAW_CSI2_12 v4l2_fourcc('R', 'A', 'C', 'C')
 #define V4L2_PIX_FMT_RAW_CSI2_14 v4l2_fourcc('R', 'A', 'C', 'E')
+#define V4L2_PIX_FMT_RAW_10 v4l2_fourcc('R', 'A', 'W', 'A')
+#define V4L2_PIX_FMT_RAW_12 v4l2_fourcc('R', 'A', 'W', 'C')
+#define V4L2_PIX_FMT_RAW_14 v4l2_fourcc('R', 'A', 'W', 'E')
 
 /* HSV formats */
 #define V4L2_PIX_FMT_HSV24 v4l2_fourcc('H', 'S', 'V', '3')

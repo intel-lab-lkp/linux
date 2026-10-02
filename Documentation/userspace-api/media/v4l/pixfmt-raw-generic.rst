@@ -1,8 +1,8 @@
 .. SPDX-License-Identifier: GPL-2.0 OR GFDL-1.1-no-invariants-or-later
 
-************************************************************************************************************************************
-V4L2_PIX_FMT_RAW_8 ('RAW8'), V4L2_PIX_FMT_RAW_CSI2_10 ('RACA'), V4L2_PIX_FMT_RAW_CSI2_12 ('RACC'), V4L2_PIX_FMT_RAW_CSI2_14 ('RACE')
-************************************************************************************************************************************
+******************************************************************************************************************************************************************************************************************************
+V4L2_PIX_FMT_RAW_8 ('RAW8'), V4L2_PIX_FMT_RAW_CSI2_10 ('RACA'), V4L2_PIX_FMT_RAW_CSI2_12 ('RACC'), V4L2_PIX_FMT_RAW_CSI2_14 ('RACE'), V4L2_PIX_FMT_RAW_10 ('RAWA'), V4L2_PIX_FMT_RAW_12 ('RAWC'), V4L2_PIX_FMT_RAW_14 ('RAWE')
+******************************************************************************************************************************************************************************************************************************
 
 
 Generic line-based raw image data formats
@@ -175,3 +175,120 @@ Each cell is one byte. "P" denotes a pixel.
         P\ :sub:`11 bits 5--2` (bits 3--0)
       - P\ :sub:`31 bits 5--0` (bits 7--2),
         P\ :sub:`21 bits 5--4` (bits 1--0)
+
+.. _v4l2-pix-fmt-raw-10:
+
+V4L2_PIX_FMT_RAW_10
+-------------------
+
+V4L2_PIX_FMT_RAW_10 contains 10-bit image data, with each two consecutive
+bytes forming a pixel value. This format is typically used by CSI-2 receivers
+with a source that transmits MEDIA_BUS_FMT_RAW_10 and the CSI-2 receiver writes
+the received data to memory unpacked.
+
+**Byte Order Of V4L2_PIX_FMT_RAW_10.**
+Each cell is one byte. "P" denotes a pixel.
+
+.. tabularcolumns:: |p{2.4cm}|p{1.2cm}|p{1.2cm}|p{1.2cm}|p{1.2cm}|p{1.2cm}|p{1.2cm}|p{1.2cm}|p{1.2cm}|
+
+.. flat-table:: Sample 4x2 Image Frame
+    :header-rows:  0
+    :stub-columns: 0
+    :widths: 12 8 8 8 8 8 8 8 8
+
+    * - start + 0:
+      - P\ :sub:`00 bits 7--0`
+      - P\ :sub:`00 bits 9--8` (bits 1--0)
+      - P\ :sub:`10 bits 7--0`
+      - P\ :sub:`10 bits 9--8` (bits 1--0)
+      - P\ :sub:`20 bits 7--0`
+      - P\ :sub:`20 bits 9--8` (bits 1--0)
+      - P\ :sub:`30 bits 7--0`
+      - P\ :sub:`30 bits 9--8` (bits 1--0)
+    * - start + 8:
+      - P\ :sub:`01 bits 7--0`
+      - P\ :sub:`01 bits 9--8` (bits 1--0)
+      - P\ :sub:`11 bits 7--0`
+      - P\ :sub:`11 bits 9--8` (bits 1--0)
+      - P\ :sub:`21 bits 7--0`
+      - P\ :sub:`21 bits 9--8` (bits 1--0)
+      - P\ :sub:`31 bits 7--0`
+      - P\ :sub:`31 bits 9--8` (bits 1--0)
+
+.. _v4l2-pix-fmt-raw-12:
+
+V4L2_PIX_FMT_RAW_12
+-------------------
+
+V4L2_PIX_FMT_RAW_12 contains 12-bit image data, with each two consecutive
+bytes forming a pixel value. This format is typically used by CSI-2 receivers
+with a source that transmits MEDIA_BUS_FMT_RAW_12 and the CSI-2 receiver writes
+the received data to memory unpacked.
+
+**Byte Order Of V4L2_PIX_FMT_RAW_12.**
+Each cell is one byte. "P" denotes a pixel.
+
+.. tabularcolumns:: |p{2.4cm}|p{1.2cm}|p{1.2cm}|p{1.2cm}|p{1.2cm}|p{1.2cm}|p{1.2cm}|p{1.2cm}|p{1.2cm}|
+
+.. flat-table:: Sample 4x2 Image Frame
+    :header-rows:  0
+    :stub-columns: 0
+    :widths: 12 8 8 8 8 8 8 8 8
+
+    * - start + 0:
+      - P\ :sub:`00 bits 7--0`
+      - P\ :sub:`00 bits 11--8` (bits 3--0)
+      - P\ :sub:`10 bits 7--0`
+      - P\ :sub:`10 bits 11--8` (bits 3--0)
+      - P\ :sub:`20 bits 7--0`
+      - P\ :sub:`20 bits 11--8` (bits 3--0)
+      - P\ :sub:`30 bits 7--0`
+      - P\ :sub:`30 bits 11--8` (bits 3--0)
+    * - start + 8:
+      - P\ :sub:`01 bits 7--0`
+      - P\ :sub:`01 bits 11--8` (bits 3--0)
+      - P\ :sub:`11 bits 7--0`
+      - P\ :sub:`11 bits 11--8` (bits 3--0)
+      - P\ :sub:`21 bits 7--0`
+      - P\ :sub:`21 bits 11--8` (bits 3--0)
+      - P\ :sub:`31 bits 7--0`
+      - P\ :sub:`31 bits 11--8` (bits 3--0)
+
+.. _v4l2-pix-fmt-raw-14:
+
+V4L2_PIX_FMT_RAW_14
+-------------------
+
+V4L2_PIX_FMT_RAW_14 contains 14-bit image data, with each two consecutive
+bytes forming a pixel value. This format is typically used by CSI-2 receivers
+with a source that transmits MEDIA_BUS_FMT_RAW_14 and the CSI-2 receiver writes
+the received data to memory unpacked.
+
+**Byte Order Of V4L2_PIX_FMT_RAW_14.**
+Each cell is one byte. "P" denotes a pixel.
+
+.. tabularcolumns:: |p{2.4cm}|p{1.2cm}|p{1.2cm}|p{1.2cm}|p{1.2cm}|p{1.2cm}|p{1.2cm}|p{1.2cm}|p{1.2cm}|
+
+.. flat-table:: Sample 4x2 Image Frame
+    :header-rows:  0
+    :stub-columns: 0
+    :widths: 12 8 8 8 8 8 8 8 8
+
+    * - start + 0:
+      - P\ :sub:`00 bits 7--0`
+      - P\ :sub:`00 bits 13--8` (bits 5--0)
+      - P\ :sub:`10 bits 7--0`
+      - P\ :sub:`10 bits 13--8` (bits 5--0)
+      - P\ :sub:`20 bits 7--0`
+      - P\ :sub:`20 bits 13--8` (bits 5--0)
+      - P\ :sub:`30 bits 7--0`
+      - P\ :sub:`30 bits 13--8` (bits 5--0)
+    * - start + 8:
+      - P\ :sub:`01 bits 7--0`
+      - P\ :sub:`01 bits 13--8` (bits 5--0)
+      - P\ :sub:`11 bits 7--0`
+      - P\ :sub:`11 bits 13--8` (bits 5--0)
+      - P\ :sub:`21 bits 7--0`
+      - P\ :sub:`21 bits 13--8` (bits 5--0)
+      - P\ :sub:`31 bits 7--0`
+      - P\ :sub:`31 bits 13--8` (bits 5--0)
