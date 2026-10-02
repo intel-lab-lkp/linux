@@ -261,7 +261,7 @@ int xp_assign_dev(struct xsk_buff_pool *pool,
 	 */
 	frame_size = __xsk_pool_get_rx_frame_size(pool) -
 		     xsk_pool_get_tailroom(mbuf);
-	frame_size = ALIGN_DOWN(frame_size, 128);
+	frame_size = ALIGN_DOWN(frame_size, XSK_RX_FRAME_SIZE_ALIGN);
 
 	if (needed > frame_size * segs) {
 		err = -EINVAL;

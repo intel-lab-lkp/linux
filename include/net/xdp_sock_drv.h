@@ -6,6 +6,7 @@
 #ifndef _LINUX_XDP_SOCK_DRV_H
 #define _LINUX_XDP_SOCK_DRV_H
 
+#include <net/netdev_rx_queue.h>
 #include <net/xdp_sock.h>
 #include <net/xsk_buff_pool.h>
 
@@ -13,6 +14,7 @@ struct netlink_ext_ack;
 
 #define XDP_UMEM_MIN_CHUNK_SHIFT 11
 #define XDP_UMEM_MIN_CHUNK_SIZE (1 << XDP_UMEM_MIN_CHUNK_SHIFT)
+#define XSK_RX_FRAME_SIZE_ALIGN	128
 
 #define NETDEV_XDP_ACT_XSK	(NETDEV_XDP_ACT_BASIC |		\
 				 NETDEV_XDP_ACT_REDIRECT |	\
@@ -34,11 +36,32 @@ int xsk_pool_setup_page_pool(struct net_device *dev, struct xsk_buff_pool *pool,
 			     u16 queue_id, struct netlink_ext_ack *extack);
 struct xsk_buff_pool *xsk_get_pool_from_qid(struct net_device *dev,
 					    u16 queue_id);
+
+/* Return the XSK pool only while it is the installed RX memory provider. */
+static inline struct xsk_buff_pool *
+xsk_get_pool_from_rxq(struct net_device *dev, u16 queue_id)
+{
+	struct netdev_rx_queue *rxq;
+	struct xsk_buff_pool *pool;
+
+	if (queue_id >= dev->real_num_rx_queues)
+		return NULL;
+
+	rxq = __netif_get_rx_queue(dev, queue_id);
+	pool = rxq->pool;
+	return pool == rxq->mp_params.mp_priv ? pool : NULL;
+}
+
 void xsk_set_rx_need_wakeup(struct xsk_buff_pool *pool);
 void xsk_set_tx_need_wakeup(struct xsk_buff_pool *pool);
 void xsk_clear_rx_need_wakeup(struct xsk_buff_pool *pool);
 void xsk_clear_tx_need_wakeup(struct xsk_buff_pool *pool);
 bool xsk_uses_need_wakeup(struct xsk_buff_pool *pool);
+
+static inline bool xsk_pool_uses_sg(struct xsk_buff_pool *pool)
+{
+	return pool->umem->flags & XDP_UMEM_SG_FLAG;
+}
 
 static inline u32 xsk_pool_get_headroom(struct xsk_buff_pool *pool)
 {
@@ -73,7 +96,7 @@ static inline u32 xsk_pool_get_rx_frame_size(struct xsk_buff_pool *pool)
 	mbuf = pool->dev && (umem->flags & XDP_UMEM_SG_FLAG);
 	frame_size -= xsk_pool_get_tailroom(mbuf);
 
-	return ALIGN_DOWN(frame_size, 128);
+	return ALIGN_DOWN(frame_size, XSK_RX_FRAME_SIZE_ALIGN);
 }
 
 static inline u32 xsk_pool_get_rx_frag_step(struct xsk_buff_pool *pool)
@@ -388,6 +411,12 @@ xsk_get_pool_from_qid(struct net_device *dev, u16 queue_id)
 	return NULL;
 }
 
+static inline struct xsk_buff_pool *
+xsk_get_pool_from_rxq(struct net_device *dev, u16 queue_id)
+{
+	return NULL;
+}
+
 static inline void xsk_set_rx_need_wakeup(struct xsk_buff_pool *pool)
 {
 }
@@ -409,12 +438,27 @@ static inline bool xsk_uses_need_wakeup(struct xsk_buff_pool *pool)
 	return false;
 }
 
+static inline bool xsk_pool_uses_sg(struct xsk_buff_pool *pool)
+{
+	return false;
+}
+
 static inline u32 xsk_pool_get_headroom(struct xsk_buff_pool *pool)
 {
 	return 0;
 }
 
+static inline u32 xsk_pool_get_tailroom(bool mbuf)
+{
+	return 0;
+}
+
 static inline u32 xsk_pool_get_chunk_size(struct xsk_buff_pool *pool)
+{
+	return 0;
+}
+
+static inline u32 __xsk_pool_get_rx_frame_size(struct xsk_buff_pool *pool)
 {
 	return 0;
 }
