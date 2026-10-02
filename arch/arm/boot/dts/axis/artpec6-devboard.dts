@@ -55,6 +55,7 @@
 		compatible = "snps,dwmac-mdio";
 		#address-cells = <0x1>;
 		#size-cells = <0x0>;
+
 		phy1: phy@0 {
 			device_type = "ethernet-phy";
 			compatible = "ethernet-phy-ieee802.3-c22";
