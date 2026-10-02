@@ -211,7 +211,7 @@ static int hist_buf_dma(struct ispstat *hist)
 
 	tx->callback = hist_dma_cb;
 	tx->callback_param = hist;
-	cookie = tx->tx_submit(tx);
+	cookie = dmaengine_submit(tx);
 	if (dma_submit_error(cookie)) {
 		dev_dbg(hist->isp->dev, "hist: DMA submission failed\n");
 		goto error;
