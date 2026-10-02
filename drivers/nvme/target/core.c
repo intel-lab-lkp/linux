@@ -626,11 +626,11 @@ int nvmet_ns_enable(struct nvmet_ns *ns)
 	if (ret)
 		goto out_pr_exit;
 
-	nvmet_ns_changed(subsys, ns->nsid);
 	ns->enabled = true;
 	xa_set_mark(&subsys->namespaces, ns->nsid, NVMET_NS_ENABLED);
 	nvmet_debugfs_ns_setup(ns);
 	set_bit(NVMET_NS_IO_LIVE, &ns->flags);
+	nvmet_ns_changed(subsys, ns->nsid);
 	ret = 0;
 out_unlock:
 	mutex_unlock(&subsys->lock);
