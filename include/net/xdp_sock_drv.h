@@ -9,6 +9,8 @@
 #include <net/xdp_sock.h>
 #include <net/xsk_buff_pool.h>
 
+struct netlink_ext_ack;
+
 #define XDP_UMEM_MIN_CHUNK_SHIFT 11
 #define XDP_UMEM_MIN_CHUNK_SIZE (1 << XDP_UMEM_MIN_CHUNK_SHIFT)
 
@@ -28,6 +30,8 @@ void xsk_tx_completed(struct xsk_buff_pool *pool, u32 nb_entries);
 bool xsk_tx_peek_desc(struct xsk_buff_pool *pool, struct xdp_desc *desc);
 u32 xsk_tx_peek_release_desc_batch(struct xsk_buff_pool *pool, u32 max);
 void xsk_tx_release(struct xsk_buff_pool *pool);
+int xsk_pool_setup_page_pool(struct net_device *dev, struct xsk_buff_pool *pool,
+			     u16 queue_id, struct netlink_ext_ack *extack);
 struct xsk_buff_pool *xsk_get_pool_from_qid(struct net_device *dev,
 					    u16 queue_id);
 void xsk_set_rx_need_wakeup(struct xsk_buff_pool *pool);
@@ -368,6 +372,14 @@ static inline u32 xsk_tx_peek_release_desc_batch(struct xsk_buff_pool *pool, u32
 
 static inline void xsk_tx_release(struct xsk_buff_pool *pool)
 {
+}
+
+static inline int xsk_pool_setup_page_pool(struct net_device *dev,
+					   struct xsk_buff_pool *pool,
+					   u16 queue_id,
+					   struct netlink_ext_ack *extack)
+{
+	return -EOPNOTSUPP;
 }
 
 static inline struct xsk_buff_pool *

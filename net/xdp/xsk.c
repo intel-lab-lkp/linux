@@ -464,7 +464,9 @@ static int xsk_rcv_check(struct xdp_sock *xs, struct xdp_buff *xdp, u32 len)
 static void xsk_flush(struct xdp_sock *xs)
 {
 	xskq_prod_submit(xs->rx);
-	__xskq_cons_release(xs->pool->fq);
+	/* Provider pools publish FILL consumption under the provider lock. */
+	if (!READ_ONCE(xs->pool->pp))
+		__xskq_cons_release(xs->pool->fq);
 	sock_def_readable(&xs->sk);
 }
 
@@ -474,13 +476,37 @@ int xsk_generic_rcv(struct xdp_sock *xs, struct xdp_buff *xdp)
 	int err;
 
 	err = xsk_rcv_check(xs, xdp, len);
-	if (!err) {
-		spin_lock_bh(&xs->pool->rx_lock);
-		err = __xsk_rcv(xs, xdp, len);
-		xsk_flush(xs);
+	if (err)
+		return err;
+	spin_lock_bh(&xs->pool->rx_lock);
+	if (unlikely(READ_ONCE(xs->pool->pp))) {
+		xs->rx_dropped++;
 		spin_unlock_bh(&xs->pool->rx_lock);
+		return -EOPNOTSUPP;
 	}
+	err = __xsk_rcv(xs, xdp, len);
+	xsk_flush(xs);
+	spin_unlock_bh(&xs->pool->rx_lock);
 
+	return err;
+}
+
+/* Copy into the socket's UMEM. A provider-backed pool shares its FILL ring
+ * with provider allocation, which can run for another page pool of the queue
+ * while the queue is replaced.
+ */
+static int xsk_rcv_copy(struct xdp_sock *xs, struct xdp_buff *xdp, u32 len)
+{
+	struct xsk_pp *provider = READ_ONCE(xs->pool->pp);
+	int err;
+
+	if (likely(!provider))
+		return __xsk_rcv(xs, xdp, len);
+
+	spin_lock_bh(&provider->lock);
+	err = __xsk_rcv(xs, xdp, len);
+	__xskq_cons_release(xs->pool->fq);
+	spin_unlock_bh(&provider->lock);
 	return err;
 }
 
@@ -498,7 +524,15 @@ static int xsk_rcv(struct xdp_sock *xs, struct xdp_buff *xdp)
 		return xsk_rcv_zc(xs, xdp, len);
 	}
 
-	err = __xsk_rcv(xs, xdp, len);
+	/* The socket RX ring has a single producer, the queue's poll context.
+	 * Reject synthetic RX queues before their remote context produces
+	 * into a provider-backed socket.
+	 */
+	if (unlikely(READ_ONCE(xs->pool->pp) &&
+		     !xdp_rxq_info_is_reg(xdp->rxq)))
+		return -EINVAL;
+
+	err = xsk_rcv_copy(xs, xdp, len);
 	if (!err)
 		xdp_return_buff(xdp);
 	return err;
@@ -2149,8 +2183,8 @@ static int xsk_notifier(struct notifier_block *this,
 
 				xsk_unbind_dev(xs);
 
-				/* Clear device references. */
-				xp_clear_dev(xs->pool);
+				/* Unregister cannot hold a device reference. */
+				xp_clear_dev(xs->pool, XSK_POOL_CLEAR_FORCE);
 			}
 			mutex_unlock(&xs->mutex);
 		}

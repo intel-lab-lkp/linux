@@ -1397,8 +1397,8 @@ void net_mp_release_page_pool_bulk(struct page_pool *pool,
 		atomic_add(count, release_cnt);
 }
 
-/* Disassociate a niov from a page pool. Should only be used in the
- * ->release_netmem() path.
+/* Disassociate a niov from a page pool. Memory providers may do this either
+ * from ->release_netmem() or from ->destroy() after all objects were released.
  */
 void net_mp_niov_clear_page_pool(struct net_iov *niov)
 {
