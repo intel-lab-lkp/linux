@@ -1605,9 +1605,7 @@ static u8 hci_cc_le_set_adv_enable(struct hci_dev *hdev, void *data,
 
 		conn = hci_lookup_le_connect(hdev);
 		if (conn)
-			queue_delayed_work(hdev->workqueue,
-					   &conn->le_conn_timeout,
-					   conn->conn_timeout);
+			hci_conn_queue_le_timeout(conn);
 	} else {
 		hci_dev_clear_flag(hdev, HCI_LE_ADV);
 	}
@@ -1653,9 +1651,7 @@ static u8 hci_cc_le_set_ext_adv_enable(struct hci_dev *hdev, void *data,
 
 		conn = hci_lookup_le_connect(hdev);
 		if (conn)
-			queue_delayed_work(hdev->workqueue,
-					   &conn->le_conn_timeout,
-					   conn->conn_timeout);
+			hci_conn_queue_le_timeout(conn);
 	} else {
 		if (cp->num_of_sets) {
 			if (adv)
@@ -5815,7 +5811,7 @@ static void le_conn_complete_evt(struct hci_dev *hdev, u8 status,
 			}
 		}
 	} else {
-		cancel_delayed_work(&conn->le_conn_timeout);
+		hci_conn_cancel_le_timeout(conn);
 	}
 
 	/* The HCI_LE_Connection_Complete event is only sent once per connection.
