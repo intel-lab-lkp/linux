@@ -480,7 +480,10 @@ static void nvmet_bdev_zmgmt_send_work(struct work_struct *w)
 	struct block_device *bdev = req->ns->bdev;
 	sector_t zone_sectors = bdev_zone_sectors(bdev);
 	u16 status = NVME_SC_SUCCESS;
+	bool associated;
 	int ret;
+
+	associated = nvmet_blkcg_begin(req->ns);
 
 	if (op == REQ_OP_LAST) {
 		req->error_loc = offsetof(struct nvme_zone_mgmt_send_cmd, zsa);
@@ -511,6 +514,7 @@ static void nvmet_bdev_zmgmt_send_work(struct work_struct *w)
 		status = blkdev_zone_mgmt_errno_to_nvme_status(ret);
 
 out:
+	nvmet_blkcg_end(associated);
 	nvmet_req_complete(req, status);
 }
 
@@ -542,6 +546,7 @@ void nvmet_bdev_execute_zone_append(struct nvmet_req *req)
 	struct scatterlist *sg;
 	u32 data_len = nvmet_rw_data_len(req);
 	struct bio *bio;
+	bool associated;
 	int sg_cnt;
 
 	/* Request is completed on len mismatch in nvmet_check_transfer_len() */
@@ -572,6 +577,7 @@ void nvmet_bdev_execute_zone_append(struct nvmet_req *req)
 		goto out;
 	}
 
+	associated = nvmet_blkcg_begin(req->ns);
 	if (nvmet_use_inline_bvec(req)) {
 		bio = &req->z.inline_bio;
 		bio_init(bio, req->ns->bdev, req->inline_bvec,
@@ -579,6 +585,7 @@ void nvmet_bdev_execute_zone_append(struct nvmet_req *req)
 	} else {
 		bio = bio_alloc(req->ns->bdev, req->sg_cnt, opf, GFP_KERNEL);
 	}
+	nvmet_blkcg_end(associated);
 
 	bio->bi_end_io = nvmet_bdev_zone_append_bio_done;
 	bio->bi_iter.bi_sector = sect;
