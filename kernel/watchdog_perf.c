@@ -301,7 +301,7 @@ void __init hardlockup_config_perf_event(const char *str)
 	} else {
 		unsigned int len = comma - str;
 
-		if (len > sizeof(buf))
+		if (!len || len > sizeof(buf))
 			return;
 
 		strscpy(buf, str, len);
