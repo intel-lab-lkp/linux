@@ -1201,8 +1201,8 @@ static void svc_clean_up_xprts(struct svc_serv *serv, struct net *net)
 			}
 		}
 
-		if (q)
-			lwq_enqueue_batch(q, &pool->sp_xprts);
+		if (q && lwq_enqueue_batch(q, &pool->sp_xprts))
+			svc_pool_wake_idle_thread(pool);
 	}
 }
 
