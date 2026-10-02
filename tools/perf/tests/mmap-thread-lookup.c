@@ -7,6 +7,7 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include "debug.h"
 #include "env.h"
 #include "event.h"
@@ -17,7 +18,10 @@
 #include "symbol.h"
 #include "util/synthetic-events.h"
 #include "thread.h"
+#include "dso.h"
+#include "build-id.h"
 #include <internal/lib.h> // page_size
+#include <internal/rc_check.h>
 
 #define THREADS 4
 
@@ -200,17 +204,51 @@ static int mmap_events(synth_cb synth)
 					.ip = (unsigned long) (td->map + 1),
 				 }, &al);
 
-		thread__put(thread);
-
 		if (!al.map) {
 			pr_debug("failed, couldn't find map\n");
 			err = -1;
+			thread__put(thread);
 			addr_location__exit(&al);
 			break;
 		}
 
 		pr_debug("map %p, addr %" PRIx64 "\n", al.map, map__start(al.map));
 
+		/* Verify lookup by build ID and offset */
+		{
+			struct dso *dso = dso__get(map__dso(al.map));
+
+			if (dso) {
+				const struct build_id *bid = dso__bid(dso);
+
+				if (bid && bid->size > 0) {
+					struct addr_location al2;
+					struct perf_build_id pbid = { .size = bid->size };
+					u64 offset = map__dso_map_ip(al.map,
+								     (unsigned long)(td->map + 1));
+
+					memcpy(pbid.data, bid->data, bid->size);
+					addr_location__init(&al2);
+					thread__find_map(thread, &(struct perf_sample){
+								.cpumode = PERF_RECORD_MISC_USER,
+								.ip = 0,
+								.bid = {
+									.bid = &pbid,
+									.offset = offset,
+								},
+							 }, &al2);
+
+					if (!RC_CHK_EQUAL(al2.map, al.map)) {
+						pr_debug("failed, couldn't find map by build id and offset\n");
+						err = -1;
+					}
+					addr_location__exit(&al2);
+				}
+				dso__put(dso);
+			}
+		}
+
+		thread__put(thread);
 		addr_location__exit(&al);
 		if (err)
 			break;

@@ -218,6 +218,27 @@ static bool samples_same(struct perf_sample *s1,
 		}
 	}
 
+	if (type & PERF_SAMPLE_BUILD_ID_OFFSET) {
+		if (!s1->bid.bid || !s2->bid.bid ||
+		    memcmp(s1->bid.bid, s2->bid.bid, sizeof(*s1->bid.bid))) {
+			pr_debug("Samples differ at 'bid.bid'\n");
+			return false;
+		}
+		COMP(bid.offset);
+	}
+
+	if (type & PERF_SAMPLE_CALLCHAIN_BUILD_ID_OFFSET) {
+		const size_t entry_sz = sizeof(struct perf_sample_build_id_offset);
+
+		COMP(callchain_bids_nr);
+		if (!s1->callchain_bids || !s2->callchain_bids ||
+		    memcmp(s1->callchain_bids, s2->callchain_bids,
+			   s1->callchain_bids_nr * entry_sz)) {
+			pr_debug("Samples differ at 'callchain_bids'\n");
+			return false;
+		}
+	}
+
 	return true;
 }
 
@@ -247,6 +268,45 @@ static int do_test(u64 sample_type, u64 sample_regs, u64 read_format)
 	const u32 raw_data[] = {0x12345678, 0x0a0b0c0d, 0x11020304, 0x05060708, 0 };
 	const u64 data[] = {0x2211443366558877ULL, 0, 0xaabbccddeeff4321ULL};
 	const u64 aux_data[] = {0xa55a, 0, 0xeeddee, 0x0282028202820282};
+	const struct perf_build_id bid = {
+		.size = 20,
+		.data = {
+			'0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+			'0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+		}
+	};
+	const struct perf_sample_build_id_offset callchain_bids[] = {
+		{
+			.bid = {
+				.size = 20,
+				.data = {
+					'9', '8', '7', '6', '5', '4', '3', '2', '1', '0',
+					'9', '8', '7', '6', '5', '4', '3', '2', '1', '0',
+				}
+			},
+			.offset = 201,
+		},
+		{
+			.bid = {
+				.size = 20,
+				.data = {
+					'a', 'b', 'c', 'd', 'e', 'f', 'a', 'b', 'c', 'd',
+					'e', 'f', 'a', 'b', 'c', 'd', 'e', 'f', 'a', 'b',
+				}
+			},
+			.offset = 202,
+		},
+		{
+			.bid = {
+				.size = 20,
+				.data = {
+					'f', 'e', 'd', 'c', 'b', 'a', 'f', 'e', 'd', 'c',
+					'b', 'a', 'f', 'e', 'd', 'c', 'b', 'a', 'f', 'e',
+				}
+			},
+			.offset = 203,
+		},
+	};
 	struct regs_dump user_regs = {
 		.abi	= PERF_SAMPLE_REGS_ABI_64,
 		.mask	= sample_regs,
@@ -295,6 +355,12 @@ static int do_test(u64 sample_type, u64 sample_regs, u64 read_format)
 			.size	= sizeof(aux_data),
 			.data	= (void *)aux_data,
 		},
+		.bid		= {
+			.bid = (struct perf_build_id *)&bid,
+			.offset = 119,
+		},
+		.callchain_bids_nr = ARRAY_SIZE(callchain_bids),
+		.callchain_bids = (struct perf_sample_build_id_offset *)callchain_bids,
 	};
 	struct sample_read_value values[] = {{1, 5, 0}, {9, 3, 0}, {2, 7, 0}, {6, 4, 1},};
 	struct sample_read_value packed_values[ARRAY_SIZE(values)];
@@ -547,7 +613,7 @@ static int test__sample_parsing(struct test_suite *test __maybe_unused, int subt
 	 * were added.  Please actually update the test rather than just change
 	 * the condition below.
 	 */
-	if (PERF_SAMPLE_MAX > PERF_SAMPLE_WEIGHT_STRUCT << 1) {
+	if (PERF_SAMPLE_WEIGHT_STRUCT << 3 < PERF_SAMPLE_MAX) {
 		pr_debug("sample format has changed, some new PERF_SAMPLE_ bit was introduced - test needs updating\n");
 		return -1;
 	}
