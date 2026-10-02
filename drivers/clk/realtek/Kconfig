@@ -26,4 +26,7 @@ config RTK_CLK_COMMON
 	  infrastructure to spawn reset controllers via the auxiliary bus
 	  where required.
 
+config RTK_CLK_PLL_MMC
+	bool
+
 endif
