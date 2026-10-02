@@ -306,7 +306,7 @@ void c67x00_ll_set_husb_eot(struct c67x00_device *dev, u16 value)
 static inline void c67x00_ll_husb_sie_init(struct c67x00_sie *sie)
 {
 	struct c67x00_device *dev = sie->dev;
-	struct c67x00_lcp_int_data data;
+	struct c67x00_lcp_int_data data = {};
 	int rc;
 
 	rc = c67x00_comm_exec_int(dev, HUSB_SIE_INIT_INT(sie->sie_num), &data);
