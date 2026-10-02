@@ -1860,10 +1860,8 @@ dx_move_dirents(struct inode *dir, char *from, char *to,
 
 		/* wipe dir_entry excluding the rec_len field */
 		de->inode = 0;
-		memset(&de->name_len, 0, ext4_rec_len_from_disk(de->rec_len,
-								blocksize) -
-					 offsetof(struct ext4_dir_entry_2,
-								name_len));
+		memset(&de->name_len, 0, rec_len -
+		       offsetof(struct ext4_dir_entry_2, name_len));
 
 		map++;
 		to += rec_len;
