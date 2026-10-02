@@ -1549,6 +1549,43 @@ bool evsel__is_offcpu_event(struct evsel *evsel)
 	       evsel->core.attr.sample_type & PERF_SAMPLE_RAW;
 }
 
+static bool evlist__has_callchain_config(struct evlist *evlist,
+					 const struct callchain_param *callchain)
+{
+	struct evsel *pos;
+
+	if (callchain && callchain->enabled)
+		return true;
+	if (!evlist)
+		return false;
+
+	evlist__for_each_entry(evlist, pos) {
+		struct evsel_config_term *term;
+		const char *callgraph_buf = NULL;
+		u32 dump_size = 0;
+		int max_stack = 0;
+
+		if (evsel__has_callchain(pos))
+			return true;
+
+		list_for_each_entry(term, &pos->config_terms, list) {
+			if (term->type == EVSEL__CONFIG_TERM_CALLGRAPH)
+				callgraph_buf = term->val.str;
+			else if (term->type == EVSEL__CONFIG_TERM_STACK_USER)
+				dump_size = term->val.stack_user;
+			else if (term->type == EVSEL__CONFIG_TERM_MAX_STACK)
+				max_stack = term->val.max_stack;
+		}
+		if (callgraph_buf) {
+			if (strcmp(callgraph_buf, "no") != 0)
+				return true;
+		} else if (dump_size > 0 || max_stack > 0) {
+			return true;
+		}
+	}
+	return false;
+}
+
 /*
  * The enable_on_exec/disabled value strategy:
  *
@@ -1745,7 +1782,7 @@ void evsel__config(struct evsel *evsel, const struct record_opts *opts,
 	attr->mmap2    = track && !perf_missing_features.mmap2;
 	attr->comm     = track;
 	attr->build_id = track && opts->build_id;
-	attr->defer_output = track && callchain && callchain->defer;
+	attr->defer_output = track && ((callchain && callchain->defer) || opts->buildid_offset);
 
 	/*
 	 * ksymbol is tracked separately with text poke because it needs to be
@@ -1830,6 +1867,22 @@ void evsel__config(struct evsel *evsel, const struct record_opts *opts,
 	 * it overloads any global configuration.
 	 */
 	evsel__apply_config_terms(evsel, opts, track);
+
+	if (opts->buildid_offset && !evsel__is_offcpu_event(evsel)) {
+		if ((evsel->core.attr.sample_type & PERF_SAMPLE_IP) || track) {
+			evsel__reset_sample_bit(evsel, IP);
+			evsel__set_sample_bit(evsel, BUILD_ID_OFFSET);
+			if (!attr->exclude_user)
+				attr->defer_callchain = 1;
+		}
+		if ((evsel->core.attr.sample_type & PERF_SAMPLE_CALLCHAIN) ||
+		    (track && evlist__has_callchain_config(evsel->evlist, callchain))) {
+			evsel__reset_sample_bit(evsel, CALLCHAIN);
+			evsel__set_sample_bit(evsel, CALLCHAIN_BUILD_ID_OFFSET);
+			if (!attr->exclude_callchain_user)
+				attr->defer_callchain = 1;
+		}
+	}
 
 	evsel->ignore_missing_thread = opts->ignore_missing_thread;
 
