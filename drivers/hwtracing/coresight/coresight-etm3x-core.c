@@ -518,7 +518,7 @@ static int etm_enable_sysfs(struct coresight_device *csdev, struct coresight_pat
 	arg.path = path;
 
 	scoped_guard(spinlock, &drvdata->spinlock) {
-		drvdata->curr_config = drvdata->config;
+		drvdata->curr_config = drvdata->sysfs_config;
 	}
 
 	ret = smp_call_function_single(drvdata->cpu,
@@ -627,7 +627,7 @@ static void etm_disable_sysfs(struct coresight_device *csdev)
 {
 	struct etm_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
 	const struct etm_caps *caps = &drvdata->caps;
-	struct etm_config *config = &drvdata->config;
+	struct etm_config *sysfs_config = &drvdata->sysfs_config;
 	const struct etm_config *curr_config = &drvdata->curr_config;
 	int i;
 
@@ -643,9 +643,9 @@ static void etm_disable_sysfs(struct coresight_device *csdev)
 	 * after the sysfs-session has been disabled.
 	 */
 	for (i = 0; i < caps->nr_cntr; i++)
-		config->cntr_val[i] = curr_config->cntr_val[i];
+		sysfs_config->cntr_val[i] = curr_config->cntr_val[i];
 
-	config->seq_curr_state = curr_config->seq_curr_state;
+	sysfs_config->seq_curr_state = curr_config->seq_curr_state;
 
 	/*
 	 * we only release trace IDs when resetting sysfs.
@@ -844,7 +844,7 @@ static int etm_probe(struct amba_device *adev, const struct amba_id *id)
 	if (etm_arch_supported(drvdata->arch) == false)
 		return -EINVAL;
 
-	etm_set_default(&drvdata->config);
+	etm_set_default(&drvdata->sysfs_config);
 
 	pdata = coresight_get_platform_data(dev);
 	if (IS_ERR(pdata))
