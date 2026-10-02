@@ -28,6 +28,13 @@ static int nullfs_nolock(struct file *file, int cmd, struct file_lock *fl)
 	return -ENOLCK;
 }
 
+/* and no leases or delegations */
+static int nullfs_nolease(struct file *file, int arg, struct file_lease **flp,
+			  void **priv)
+{
+	return -EINVAL;
+}
+
 /* what libfs gives an empty directory, plus the refusal of file locks */
 static const struct file_operations nullfs_dir_operations = {
 	.llseek		= nullfs_dir_llseek,
@@ -36,6 +43,7 @@ static const struct file_operations nullfs_dir_operations = {
 	.fsync		= noop_fsync,
 	.lock		= nullfs_nolock,
 	.flock		= nullfs_nolock,
+	.setlease	= nullfs_nolease,
 };
 
 static int nullfs_fs_fill_super(struct super_block *s, struct fs_context *fc)
