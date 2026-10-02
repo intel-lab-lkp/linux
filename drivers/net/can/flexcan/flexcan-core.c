@@ -828,7 +828,8 @@ static netdev_tx_t flexcan_start_xmit(struct sk_buff *skb, struct net_device *de
 	return NETDEV_TX_OK;
 }
 
-static void flexcan_irq_bus_err(struct net_device *dev, u32 reg_esr)
+static void flexcan_irq_bus_err(struct net_device *dev,
+				struct can_rx_offload *offload, u32 reg_esr)
 {
 	struct flexcan_priv *priv = netdev_priv(dev);
 	struct flexcan_regs __iomem *regs = priv->regs;
@@ -885,12 +886,13 @@ static void flexcan_irq_bus_err(struct net_device *dev, u32 reg_esr)
 	if (tx_errors)
 		dev->stats.tx_errors++;
 
-	err = can_rx_offload_queue_timestamp(&priv->offload, skb, timestamp);
+	err = can_rx_offload_queue_timestamp(offload, skb, timestamp);
 	if (err)
 		dev->stats.rx_fifo_errors++;
 }
 
-static void flexcan_irq_state(struct net_device *dev, u32 reg_esr)
+static void flexcan_irq_state(struct net_device *dev,
+			      struct can_rx_offload *offload, u32 reg_esr)
 {
 	struct flexcan_priv *priv = netdev_priv(dev);
 	struct flexcan_regs __iomem *regs = priv->regs;
@@ -932,7 +934,7 @@ static void flexcan_irq_state(struct net_device *dev, u32 reg_esr)
 	if (unlikely(new_state == CAN_STATE_BUS_OFF))
 		can_bus_off(dev);
 
-	err = can_rx_offload_queue_timestamp(&priv->offload, skb, timestamp);
+	err = can_rx_offload_queue_timestamp(offload, skb, timestamp);
 	if (err)
 		dev->stats.rx_fifo_errors++;
 }
@@ -967,16 +969,12 @@ static inline u64 flexcan_read_reg_iflag_tx(struct flexcan_priv *priv)
 	return flexcan_read64_mask(priv, &priv->regs->iflag1, priv->tx_mask);
 }
 
-static inline struct flexcan_priv *rx_offload_to_priv(struct can_rx_offload *offload)
-{
-	return container_of(offload, struct flexcan_priv, offload);
-}
-
 static struct sk_buff *flexcan_mailbox_read(struct can_rx_offload *offload,
 					    unsigned int n, u32 *timestamp,
 					    bool drop)
 {
-	struct flexcan_priv *priv = rx_offload_to_priv(offload);
+	/* offload may be any of the sources, see can_rx_offload_add_source() */
+	struct flexcan_priv *priv = netdev_priv(offload->dev);
 	struct flexcan_regs __iomem *regs = priv->regs;
 	struct flexcan_mb __iomem *mb;
 	struct sk_buff *skb;
@@ -1070,11 +1068,34 @@ static struct sk_buff *flexcan_mailbox_read(struct can_rx_offload *offload,
 	return skb;
 }
 
+/* The same handler is requested on every IRQ line, the line it is called
+ * for selects the rx-offload source to queue into.
+ */
+static struct can_rx_offload *
+flexcan_get_offload(struct flexcan_priv *priv, int irq)
+{
+	const u32 quirks = priv->devtype_data.quirks;
+
+	if (quirks & FLEXCAN_QUIRK_SECONDARY_MB_IRQ &&
+	    irq == priv->irq_secondary_mb)
+		return &priv->offload_secondary_mb;
+
+	if (quirks & FLEXCAN_QUIRK_NR_IRQ_3) {
+		if (irq == priv->irq_boff)
+			return &priv->offload_boff;
+		if (irq == priv->irq_err)
+			return &priv->offload_err;
+	}
+
+	return &priv->offload;
+}
+
 static irqreturn_t flexcan_irq(int irq, void *dev_id)
 {
 	struct net_device *dev = dev_id;
 	struct net_device_stats *stats = &dev->stats;
 	struct flexcan_priv *priv = netdev_priv(dev);
+	struct can_rx_offload *offload = flexcan_get_offload(priv, irq);
 	struct flexcan_regs __iomem *regs = priv->regs;
 	irqreturn_t handled = IRQ_NONE;
 	u64 reg_iflag_tx;
@@ -1088,7 +1109,7 @@ static irqreturn_t flexcan_irq(int irq, void *dev_id)
 
 		while ((reg_iflag_rx = flexcan_read_reg_iflag_rx(priv))) {
 			handled = IRQ_HANDLED;
-			ret = can_rx_offload_irq_offload_timestamp(&priv->offload,
+			ret = can_rx_offload_irq_offload_timestamp(offload,
 								   reg_iflag_rx);
 			if (!ret)
 				break;
@@ -1099,7 +1120,7 @@ static irqreturn_t flexcan_irq(int irq, void *dev_id)
 		reg_iflag1 = priv->read(&regs->iflag1);
 		if (reg_iflag1 & FLEXCAN_IFLAG_RX_FIFO_AVAILABLE) {
 			handled = IRQ_HANDLED;
-			can_rx_offload_irq_offload_fifo(&priv->offload);
+			can_rx_offload_irq_offload_fifo(offload);
 		}
 
 		/* FIFO overflow interrupt */
@@ -1120,7 +1141,7 @@ static irqreturn_t flexcan_irq(int irq, void *dev_id)
 
 		handled = IRQ_HANDLED;
 		stats->tx_bytes +=
-			can_rx_offload_get_echo_skb_queue_timestamp(&priv->offload, 0,
+			can_rx_offload_get_echo_skb_queue_timestamp(offload, 0,
 								    reg_ctrl << 16, NULL);
 		stats->tx_packets++;
 
@@ -1143,12 +1164,12 @@ static irqreturn_t flexcan_irq(int irq, void *dev_id)
 	if ((reg_esr & FLEXCAN_ESR_ERR_STATE) ||
 	    (priv->devtype_data.quirks & (FLEXCAN_QUIRK_BROKEN_WERR_STATE |
 					   FLEXCAN_QUIRK_BROKEN_PERR_STATE)))
-		flexcan_irq_state(dev, reg_esr);
+		flexcan_irq_state(dev, offload, reg_esr);
 
 	/* bus error IRQ - handle if bus error reporting is activated */
 	if ((reg_esr & FLEXCAN_ESR_ERR_BUS) &&
 	    (priv->can.ctrlmode & CAN_CTRLMODE_BERR_REPORTING))
-		flexcan_irq_bus_err(dev, reg_esr);
+		flexcan_irq_bus_err(dev, offload, reg_esr);
 
 	/* availability of error interrupt among state transitions in case
 	 * bus error reporting is de-activated and
@@ -1189,7 +1210,7 @@ static irqreturn_t flexcan_irq(int irq, void *dev_id)
 	}
 
 	if (handled)
-		can_rx_offload_irq_finish(&priv->offload);
+		can_rx_offload_irq_finish(offload);
 
 	return handled;
 }
@@ -1381,6 +1402,15 @@ static void flexcan_ram_init(struct net_device *dev)
 	priv->write(reg_ctrl2, &regs->ctrl2);
 }
 
+static int flexcan_rx_offload_add_source(struct flexcan_priv *priv,
+					 struct can_rx_offload *source)
+{
+	source->mb_first = priv->offload.mb_first;
+	source->mb_last = priv->offload.mb_last;
+
+	return can_rx_offload_add_source(&priv->offload, source);
+}
+
 static int flexcan_rx_offload_setup(struct net_device *dev)
 {
 	struct flexcan_priv *priv = netdev_priv(dev);
@@ -1422,6 +1452,30 @@ static int flexcan_rx_offload_setup(struct net_device *dev)
 		err = can_rx_offload_add_fifo(dev, &priv->offload,
 					      FLEXCAN_NAPI_WEIGHT);
 	}
+	if (err)
+		return err;
+
+	if (priv->devtype_data.quirks & FLEXCAN_QUIRK_SECONDARY_MB_IRQ) {
+		err = flexcan_rx_offload_add_source(priv,
+						    &priv->offload_secondary_mb);
+		if (err)
+			goto out_can_rx_offload_del;
+	}
+
+	if (priv->devtype_data.quirks & FLEXCAN_QUIRK_NR_IRQ_3) {
+		err = flexcan_rx_offload_add_source(priv, &priv->offload_boff);
+		if (err)
+			goto out_can_rx_offload_del;
+
+		err = flexcan_rx_offload_add_source(priv, &priv->offload_err);
+		if (err)
+			goto out_can_rx_offload_del;
+	}
+
+	return 0;
+
+out_can_rx_offload_del:
+	can_rx_offload_del(&priv->offload);
 
 	return err;
 }
