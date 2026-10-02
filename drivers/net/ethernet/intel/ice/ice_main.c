@@ -7892,8 +7892,11 @@ static void ice_rebuild(struct ice_pf *pf, enum ice_reset_req reset_type)
 		ice_rebuild_arfs(pf);
 	}
 
-	if (vsi && vsi->netdev)
+	if (vsi && vsi->netdev) {
 		netif_device_attach(vsi->netdev);
+		if (reset_type != ICE_RESET_PFR)
+			udp_tunnel_nic_reset_ntf(vsi->netdev);
+	}
 
 	ice_update_pf_netdev_link(pf);
 
