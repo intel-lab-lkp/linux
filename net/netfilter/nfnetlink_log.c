@@ -600,9 +600,7 @@ __build_packet_message(struct nfnl_log_net *log,
 			if (nla_put(inst->skb, NFULA_HWADDR, sizeof(phw), &phw))
 				goto nla_put_failure;
 		}
-	}
 
-	if (indev && skb_mac_header_was_set(skb)) {
 		if (nla_put_be16(inst->skb, NFULA_HWTYPE, htons(skb->dev->type)) ||
 		    nla_put_be16(inst->skb, NFULA_HWLEN,
 				 htons(skb->dev->hard_header_len)))
