@@ -16,8 +16,12 @@
 #include <asm/processor.h>
 #include <asm/errata_list.h>
 
-#define __arch_xchg_masked(sc_sfx, swap_sfx, prepend, sc_append,		\
-			   swap_append, r, p, n)				\
+#define RISCV_SELECT_OLD(old, ...)	old
+
+#define __arch_xchg_masked(lr_alt, sc_alt, swap_alt,			\
+			   lr_sfx, sc_sfx, swap_sfx,			\
+			   z_lr_sfx, z_sc_sfx, z_swap_sfx,		\
+			   prepend, sc_append, swap_append, r, p, n)	\
 ({										\
 	if (IS_ENABLED(CONFIG_RISCV_ISA_ZABHA) &&				\
 	    riscv_has_extension_unlikely(RISCV_ISA_EXT_ZABHA)) {		\
@@ -25,7 +29,8 @@
 			prepend							\
 			"	.option push\n"					\
 			"	.option arch, +zabha\n"				\
-			"	amoswap" swap_sfx " %0, %z2, %1\n"		\
+			swap_alt("	amoswap" swap_sfx " %0, %z2, %1\n",\
+				 "	amoswap" z_swap_sfx " %0, %z2, %1\n") \
 			"	.option pop\n"					\
 			swap_append						\
 			: "=&r" (r), "+A" (*(p))				\
@@ -43,10 +48,13 @@
 		__asm__ __volatile__ (						\
 		       prepend							\
 		       PREFETCHW_ASM(%5)					\
-		       "0:	lr.w %0, %2\n"					\
+		       "0:\n"						\
+		       lr_alt("	lr.w" lr_sfx " %0, %2\n",		\
+			      "	lr.w" z_lr_sfx " %0, %2\n")		\
 		       "	and  %1, %0, %z4\n"				\
 		       "	or   %1, %1, %z3\n"				\
-		       "	sc.w" sc_sfx " %1, %1, %2\n"			\
+		       sc_alt("	sc.w" sc_sfx " %1, %1, %2\n",		\
+			      "	sc.w" z_sc_sfx " %1, %1, %2\n")	\
 		       "	bnez %1, 0b\n"					\
 		       sc_append						\
 		       : "=&r" (__retx), "=&r" (__rc), "+A" (*(__ptr32b))	\
@@ -57,19 +65,23 @@
 	}									\
 })
 
-#define __arch_xchg(sfx, prepend, append, r, p, n)			\
+#define __arch_xchg(swap_alt, swap_sfx, z_swap_sfx,			\
+		    prepend, append, r, p, n)				\
 ({									\
 	__asm__ __volatile__ (						\
 		prepend							\
-		"	amoswap" sfx " %0, %2, %1\n"			\
+		swap_alt("	amoswap" swap_sfx " %0, %2, %1\n",	\
+			 "	amoswap" z_swap_sfx " %0, %2, %1\n")	\
 		append							\
 		: "=r" (r), "+A" (*(p))					\
 		: "r" (n)						\
 		: "memory");						\
 })
 
-#define _arch_xchg(ptr, new, sc_sfx, swap_sfx, prepend,			\
-		   sc_append, swap_append)				\
+#define _arch_xchg(ptr, new, lr_alt, sc_alt, swap_alt,			\
+		   lr_sfx, sc_sfx, swap_sfx,				\
+		   z_lr_sfx, z_sc_sfx, z_swap_sfx,			\
+		   prepend, sc_append, swap_append)			\
 ({									\
 	__typeof__(ptr) __ptr = (ptr);					\
 	__typeof__(*(__ptr)) __new = (new);				\
@@ -77,22 +89,26 @@
 									\
 	switch (sizeof(*__ptr)) {					\
 	case 1:								\
-		__arch_xchg_masked(sc_sfx, ".b" swap_sfx,		\
+		__arch_xchg_masked(lr_alt, sc_alt, swap_alt,		\
+				   lr_sfx, sc_sfx, ".b" swap_sfx,	\
+				   z_lr_sfx, z_sc_sfx, ".b" z_swap_sfx,\
 				   prepend, sc_append, swap_append,	\
 				   __ret, __ptr, __new);		\
 		break;							\
 	case 2:								\
-		__arch_xchg_masked(sc_sfx, ".h" swap_sfx,		\
+		__arch_xchg_masked(lr_alt, sc_alt, swap_alt,		\
+				   lr_sfx, sc_sfx, ".h" swap_sfx,	\
+				   z_lr_sfx, z_sc_sfx, ".h" z_swap_sfx,\
 				   prepend, sc_append, swap_append,	\
 				   __ret, __ptr, __new);		\
 		break;							\
 	case 4:								\
-		__arch_xchg(".w" swap_sfx, prepend, swap_append,	\
-			      __ret, __ptr, __new);			\
+		__arch_xchg(swap_alt, ".w" swap_sfx, ".w" z_swap_sfx,\
+			      prepend, swap_append, __ret, __ptr, __new);\
 		break;							\
 	case 8:								\
-		__arch_xchg(".d" swap_sfx, prepend, swap_append,	\
-			      __ret, __ptr, __new);			\
+		__arch_xchg(swap_alt, ".d" swap_sfx, ".d" z_swap_sfx,\
+			      prepend, swap_append, __ret, __ptr, __new);\
 		break;							\
 	default:							\
 		BUILD_BUG();						\
@@ -101,22 +117,36 @@
 })
 
 #define arch_xchg_relaxed(ptr, x)					\
-	_arch_xchg(ptr, x, "", "", "", "", "")
+	_arch_xchg(ptr, x,						\
+		   RISCV_SELECT_OLD, RISCV_SELECT_OLD, RISCV_SELECT_OLD,\
+		   "", "", "", "", "", "", "", "", "")
 
 #define arch_xchg_acquire(ptr, x)					\
-	_arch_xchg(ptr, x, "", "", "",					\
+	_arch_xchg(ptr, x,						\
+		   RISCV_ZALASR_SMP_ALTERNATIVE, RISCV_SELECT_OLD,	\
+		   RISCV_ZALASR_SMP_ALTERNATIVE,			\
+		   "", "", "", ".aq", "", ".aq", "",		\
 		   RISCV_ZALASR_SMP_ALTERNATIVE(			\
-			RISCV_ACQUIRE_BARRIER, RISCV_FULL_BARRIER),	\
+			RISCV_ACQUIRE_BARRIER, __nops(1)),		\
 		   RISCV_ZALASR_SMP_ALTERNATIVE(			\
-			RISCV_ACQUIRE_BARRIER, RISCV_FULL_BARRIER))
+			RISCV_ACQUIRE_BARRIER, __nops(1)))
 
 #define arch_xchg_release(ptr, x)					\
-	_arch_xchg(ptr, x, "", "",					\
+	_arch_xchg(ptr, x,						\
+		   RISCV_SELECT_OLD, RISCV_ZALASR_SMP_ALTERNATIVE,	\
+		   RISCV_ZALASR_SMP_ALTERNATIVE,			\
+		   "", "", "", "", ".rl", ".rl",			\
 		   RISCV_ZALASR_SMP_ALTERNATIVE(			\
-			RISCV_RELEASE_BARRIER, RISCV_FULL_BARRIER), "", "")
+			RISCV_RELEASE_BARRIER, __nops(1)), "", "")
 
 #define arch_xchg(ptr, x)						\
-	_arch_xchg(ptr, x, ".rl", ".aqrl", "", RISCV_FULL_BARRIER, "")
+	_arch_xchg(ptr, x,						\
+		   RISCV_ZALASR_SMP_ALTERNATIVE,			\
+		   RISCV_ZALASR_SMP_ALTERNATIVE,			\
+		   RISCV_SELECT_OLD,					\
+		   "", ".rl", ".aqrl", ".aq", ".aqrl", ".aqrl", "",\
+		   RISCV_ZALASR_SMP_ALTERNATIVE(			\
+			RISCV_FULL_BARRIER, __nops(1)), "")
 
 #define xchg32(ptr, x)							\
 ({									\
@@ -135,10 +165,11 @@
  * store NEW in MEM.  Return the initial value in MEM.  Success is
  * indicated by comparing RETURN with OLD.
  */
-#define __arch_cmpxchg_masked(sc_sfx, cas_sfx,					\
+#define __arch_cmpxchg_masked(lr_alt, sc_alt, cas_alt,				\
+			      lr_sfx, sc_sfx, cas_sfx,				\
+			      z_lr_sfx, z_sc_sfx, z_cas_sfx,			\
 			      sc_prepend, sc_append,				\
-			      cas_prepend, cas_append,				\
-			      r, p, o, n)					\
+			      cas_prepend, cas_append, r, p, o, n)		\
 ({										\
 	if (IS_ENABLED(CONFIG_RISCV_ISA_ZABHA) &&				\
 	    IS_ENABLED(CONFIG_RISCV_ISA_ZACAS) &&				\
@@ -151,7 +182,8 @@
 			cas_prepend							\
 			"	.option push\n"					\
 			"	.option arch, +zacas, +zabha\n"				\
-			"	amocas" cas_sfx " %0, %z2, %1\n"		\
+			cas_alt("	amocas" cas_sfx " %0, %z2, %1\n",	\
+				"	amocas" z_cas_sfx " %0, %z2, %1\n")	\
 			"	.option pop\n"					\
 			cas_append							\
 			: "+&r" (r), "+A" (*(p))				\
@@ -169,12 +201,15 @@
 										\
 		__asm__ __volatile__ (						\
 			sc_prepend							\
-			"0:	lr.w %0, %2\n"					\
+			"0:\n"							\
+			lr_alt("	lr.w" lr_sfx " %0, %2\n",			\
+			       "	lr.w" z_lr_sfx " %0, %2\n")		\
 			"	and  %1, %0, %z5\n"				\
 			"	bne  %1, %z3, 1f\n"				\
 			"	and  %1, %0, %z6\n"				\
 			"	or   %1, %1, %z4\n"				\
-			"	sc.w" sc_sfx " %1, %1, %2\n"			\
+			sc_alt("	sc.w" sc_sfx " %1, %1, %2\n",		\
+			       "	sc.w" z_sc_sfx " %1, %1, %2\n")	\
 			"	bnez %1, 0b\n"					\
 			sc_append							\
 			"1:\n"							\
@@ -187,10 +222,11 @@
 	}									\
 })
 
-#define __arch_cmpxchg(lr_sfx, sc_sfx, cas_sfx,				\
+#define __arch_cmpxchg(lr_alt, sc_alt, cas_alt,				\
+		       lr_sfx, sc_sfx, cas_sfx,				\
+		       z_lr_sfx, z_sc_sfx, z_cas_sfx,			\
 		       sc_prepend, sc_append,				\
-		       cas_prepend, cas_append,				\
-		       r, p, co, o, n)					\
+		       cas_prepend, cas_append, r, p, co, o, n)		\
 ({									\
 	if (IS_ENABLED(CONFIG_RISCV_ISA_ZACAS) &&			\
 	    IS_ENABLED(CONFIG_TOOLCHAIN_HAS_ZACAS) &&			\
@@ -201,7 +237,8 @@
 			cas_prepend					\
 			"	.option push\n"				\
 			"	.option arch, +zacas\n"			\
-			"	amocas" cas_sfx " %0, %z2, %1\n"	\
+			cas_alt("	amocas" cas_sfx " %0, %z2, %1\n",\
+				"	amocas" z_cas_sfx " %0, %z2, %1\n") \
 			"	.option pop\n"				\
 			cas_append					\
 			: "+&r" (r), "+A" (*(p))			\
@@ -212,9 +249,12 @@
 									\
 		__asm__ __volatile__ (					\
 			sc_prepend					\
-			"0:	lr" lr_sfx " %0, %2\n"			\
+			"0:\n"						\
+			lr_alt("	lr" lr_sfx " %0, %2\n",		\
+			       "	lr" z_lr_sfx " %0, %2\n")		\
 			"	bne  %0, %z3, 1f\n"			\
-			"	sc" sc_sfx " %1, %z4, %2\n"		\
+			sc_alt("	sc" sc_sfx " %1, %z4, %2\n",	\
+			       "	sc" z_sc_sfx " %1, %z4, %2\n")	\
 			"	bnez %1, 0b\n"				\
 			sc_append					\
 			"1:\n"						\
@@ -224,9 +264,10 @@
 	}								\
 })
 
-#define _arch_cmpxchg(ptr, old, new, sc_sfx, cas_sfx,			\
-		      sc_prepend, sc_append,				\
-		      cas_prepend, cas_append)				\
+#define _arch_cmpxchg(ptr, old, new, lr_alt, sc_alt, cas_alt,		\
+		      lr_sfx, sc_sfx, cas_sfx,				\
+		      z_lr_sfx, z_sc_sfx, z_cas_sfx,			\
+		      sc_prepend, sc_append, cas_prepend, cas_append)	\
 ({									\
 	__typeof__(ptr) __ptr = (ptr);					\
 	__typeof__(*(__ptr)) __old = (old);				\
@@ -235,25 +276,35 @@
 									\
 	switch (sizeof(*__ptr)) {					\
 	case 1:								\
-		__arch_cmpxchg_masked(sc_sfx, ".b" cas_sfx,		\
+		__arch_cmpxchg_masked(lr_alt, sc_alt, cas_alt,		\
+				      lr_sfx, sc_sfx, ".b" cas_sfx,	\
+				      z_lr_sfx, z_sc_sfx, ".b" z_cas_sfx,\
 				      sc_prepend, sc_append,		\
 				      cas_prepend, cas_append,		\
 				      __ret, __ptr, __old, __new);	\
 		break;							\
 	case 2:								\
-		__arch_cmpxchg_masked(sc_sfx, ".h" cas_sfx,		\
+		__arch_cmpxchg_masked(lr_alt, sc_alt, cas_alt,		\
+				      lr_sfx, sc_sfx, ".h" cas_sfx,	\
+				      z_lr_sfx, z_sc_sfx, ".h" z_cas_sfx,\
 				      sc_prepend, sc_append,		\
 				      cas_prepend, cas_append,		\
 				      __ret, __ptr, __old, __new);	\
 		break;							\
 	case 4:								\
-		__arch_cmpxchg(".w", ".w" sc_sfx, ".w" cas_sfx,		\
+		__arch_cmpxchg(lr_alt, sc_alt, cas_alt,			\
+			       ".w" lr_sfx, ".w" sc_sfx, ".w" cas_sfx,\
+			       ".w" z_lr_sfx, ".w" z_sc_sfx,		\
+			       ".w" z_cas_sfx,				\
 			       sc_prepend, sc_append,			\
 			       cas_prepend, cas_append,			\
 			       __ret, __ptr, (long)(int)(long), __old, __new);	\
 		break;							\
 	case 8:								\
-		__arch_cmpxchg(".d", ".d" sc_sfx, ".d" cas_sfx,		\
+		__arch_cmpxchg(lr_alt, sc_alt, cas_alt,			\
+			       ".d" lr_sfx, ".d" sc_sfx, ".d" cas_sfx,\
+			       ".d" z_lr_sfx, ".d" z_sc_sfx,		\
+			       ".d" z_cas_sfx,				\
 			       sc_prepend, sc_append,			\
 			       cas_prepend, cas_append,			\
 			       __ret, __ptr, /**/, __old, __new);	\
@@ -264,48 +315,39 @@
 	(__typeof__(*(__ptr)))__ret;					\
 })
 
-/*
- * These macros are here to improve the readability of the arch_cmpxchg_XXX()
- * macros.
- */
-#define SC_SFX(x)	x
-#define CAS_SFX(x)	x
-#define SC_PREPEND(x)	x
-#define SC_APPEND(x)	x
-#define CAS_PREPEND(x)	x
-#define CAS_APPEND(x)	x
-
 #define arch_cmpxchg_relaxed(ptr, o, n)					\
 	_arch_cmpxchg((ptr), (o), (n),					\
-		      SC_SFX(""), CAS_SFX(""),				\
-		      SC_PREPEND(""), SC_APPEND(""),			\
-		      CAS_PREPEND(""), CAS_APPEND(""))
+		      RISCV_SELECT_OLD, RISCV_SELECT_OLD, RISCV_SELECT_OLD,\
+		      "", "", "", "", "", "", "", "", "", "")
 
 #define arch_cmpxchg_acquire(ptr, o, n)					\
 	_arch_cmpxchg((ptr), (o), (n),					\
-		      SC_SFX(""), CAS_SFX(""),				\
-		      SC_PREPEND(""), SC_APPEND(			\
-			RISCV_ZALASR_SMP_ALTERNATIVE(			\
-				RISCV_ACQUIRE_BARRIER, RISCV_FULL_BARRIER)), \
-		      CAS_PREPEND(""), CAS_APPEND(			\
-			RISCV_ZALASR_SMP_ALTERNATIVE(			\
-				RISCV_ACQUIRE_BARRIER, RISCV_FULL_BARRIER)))
+		      RISCV_ZALASR_SMP_ALTERNATIVE, RISCV_SELECT_OLD,	\
+		      RISCV_ZALASR_SMP_ALTERNATIVE,			\
+		      "", "", "", ".aq", "", ".aq", "",		\
+		      RISCV_ZALASR_SMP_ALTERNATIVE(			\
+			RISCV_ACQUIRE_BARRIER, __nops(1)), "",		\
+		      RISCV_ZALASR_SMP_ALTERNATIVE(			\
+			RISCV_ACQUIRE_BARRIER, __nops(1)))
 
 #define arch_cmpxchg_release(ptr, o, n)					\
 	_arch_cmpxchg((ptr), (o), (n),					\
-		      SC_SFX(""), CAS_SFX(""),				\
-		      SC_PREPEND(RISCV_ZALASR_SMP_ALTERNATIVE(		\
-			RISCV_RELEASE_BARRIER, RISCV_FULL_BARRIER)),	\
-		      SC_APPEND(""),					\
-		      CAS_PREPEND(RISCV_ZALASR_SMP_ALTERNATIVE(	\
-			RISCV_RELEASE_BARRIER, RISCV_FULL_BARRIER)),	\
-		      CAS_APPEND(""))
+		      RISCV_SELECT_OLD, RISCV_ZALASR_SMP_ALTERNATIVE,	\
+		      RISCV_ZALASR_SMP_ALTERNATIVE,			\
+		      "", "", "", "", ".rl", ".rl",			\
+		      RISCV_ZALASR_SMP_ALTERNATIVE(			\
+			RISCV_RELEASE_BARRIER, __nops(1)), "",		\
+		      RISCV_ZALASR_SMP_ALTERNATIVE(			\
+			RISCV_RELEASE_BARRIER, __nops(1)), "")
 
 #define arch_cmpxchg(ptr, o, n)						\
 	_arch_cmpxchg((ptr), (o), (n),					\
-		      SC_SFX(".rl"), CAS_SFX(".aqrl"),			\
-		      SC_PREPEND(""), SC_APPEND(RISCV_FULL_BARRIER),	\
-		      CAS_PREPEND(""), CAS_APPEND(""))
+		      RISCV_ZALASR_SMP_ALTERNATIVE,			\
+		      RISCV_ZALASR_SMP_ALTERNATIVE,			\
+		      RISCV_SELECT_OLD,					\
+		      "", ".rl", ".aqrl", ".aq", ".aqrl", ".aqrl", "",\
+		      RISCV_ZALASR_SMP_ALTERNATIVE(			\
+			RISCV_FULL_BARRIER, __nops(1)), "", "")
 
 #define arch_cmpxchg_local(ptr, o, n)					\
 	arch_cmpxchg_relaxed((ptr), (o), (n))
