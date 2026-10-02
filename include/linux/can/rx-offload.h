@@ -15,8 +15,16 @@
 struct can_rx_offload_queue {
 	struct sk_buff_head skb_queue;
 	struct napi_struct napi;
+
+	struct list_head sources;
+	unsigned int source_cnt;
+	bool sort;
 };
 
+/* One struct can_rx_offload per source of RX skbs, e.g. per IRQ line.
+ * Sources added with can_rx_offload_add_source() share the queue of the
+ * primary source.
+ */
 struct can_rx_offload {
 	struct net_device *dev;
 
@@ -32,9 +40,12 @@ struct can_rx_offload {
 
 	bool inc;
 
-	/* Points to own_queue. */
+	/* Points to own_queue of the primary source. own_queue is unused
+	 * in the other sources.
+	 */
 	struct can_rx_offload_queue *queue;
 	struct can_rx_offload_queue own_queue;
+	struct list_head node;
 };
 
 int can_rx_offload_add_timestamp(struct net_device *dev,
@@ -45,6 +56,8 @@ int can_rx_offload_add_fifo(struct net_device *dev,
 int can_rx_offload_add_manual(struct net_device *dev,
 			      struct can_rx_offload *offload,
 			      unsigned int weight);
+int can_rx_offload_add_source(struct can_rx_offload *primary,
+			      struct can_rx_offload *source);
 int can_rx_offload_irq_offload_timestamp(struct can_rx_offload *offload,
 					 u64 reg);
 int can_rx_offload_irq_offload_fifo(struct can_rx_offload *offload);
