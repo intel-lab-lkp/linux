@@ -304,28 +304,60 @@ shmem_truncate(struct drm_i915_gem_object *obj)
 	return 0;
 }
 
+/* Start writing a locked folio to swap.  It is unlocked on return. */
+static void shmem_writeback_folio(struct folio *folio)
+{
+	int ret;
+
+	folio_set_reclaim(folio);
+	ret = shmem_write_folio(folio);
+	if (!folio_test_writeback(folio))
+		folio_clear_reclaim(folio);
+
+	/* shmem_write_folio() unlocks the folio unless it returns this. */
+	if (ret == AOP_WRITEPAGE_ACTIVATE)
+		folio_unlock(folio);
+}
+
 void __shmem_writeback(size_t size, struct address_space *mapping)
 {
-	struct writeback_control wbc = {
-		.sync_mode = WB_SYNC_NONE,
-		.nr_to_write = SWAP_CLUSTER_MAX,
-		.range_start = 0,
-		.range_end = LLONG_MAX,
-	};
-	struct folio *folio = NULL;
-	int error = 0;
+	pgoff_t nr_pages = size >> PAGE_SHIFT;
+	pgoff_t index = 0;
 
 	/*
+	 * shmem marks folios dirty with noop_dirty_folio(), which does not
+	 * set PAGECACHE_TAG_DIRTY, so writeback_iter() would find none of
+	 * them.  Look up each folio of the object by index and test its
+	 * dirty flag.
+	 *
 	 * Leave mmapings intact (GTT will have been revoked on unbinding,
 	 * leaving only CPU mmapings around) and add those folios to the LRU
 	 * instead of invoking writeback so they are aged and paged out
 	 * as normal.
 	 */
-	while ((folio = writeback_iter(mapping, &wbc, folio, &error))) {
-		if (folio_mapped(folio))
-			folio_redirty_for_writepage(&wbc, folio);
+	while (index < nr_pages) {
+		struct folio *folio;
+
+		/*
+		 * Skip folios that are absent or locked: this runs from the
+		 * shrinker and the OOM notifier, so do not wait for a lock.
+		 */
+		folio = __filemap_get_folio(mapping, index,
+					    FGP_LOCK | FGP_NOWAIT, 0);
+		if (IS_ERR(folio)) {
+			index++;
+			continue;
+		}
+
+		index = folio->index;
+		if (!folio_mapped(folio) && folio_clear_dirty_for_io(folio))
+			shmem_writeback_folio(folio);
 		else
-			error = shmem_write_folio(folio);
+			folio_unlock(folio);
+
+		/* Writing may have split the folio, so read its size only now. */
+		index += folio_nr_pages(folio);
+		folio_put(folio);
 	}
 }
 
