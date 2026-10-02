@@ -2587,8 +2587,12 @@ static int ice_vsi_req_irq_msix(struct ice_vsi *vsi, char *basename)
 
 free_q_irqs:
 	while (vector--) {
-		irq_num = vsi->q_vectors[vector]->irq.virq;
-		devm_free_irq(dev, irq_num, &vsi->q_vectors[vector]);
+		struct ice_q_vector *q_vector = vsi->q_vectors[vector];
+
+		if (!q_vector->tx.tx_ring && !q_vector->rx.rx_ring)
+			continue;
+
+		devm_free_irq(dev, q_vector->irq.virq, q_vector);
 	}
 	return err;
 }
