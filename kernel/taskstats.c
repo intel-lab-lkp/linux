@@ -45,9 +45,15 @@ static const struct nla_policy cgroupstats_cmd_get_policy[] = {
 	[CGROUPSTATS_CMD_ATTR_FD] = { .type = NLA_U32 },
 };
 
+struct taskstats_sock_priv {
+	struct net *net;
+	u32 portid;
+};
+
 struct listener {
 	struct list_head list;
-	pid_t pid;
+	struct taskstats_sock_priv *owner;
+	unsigned int cpu;
 	char valid;
 };
 
@@ -128,9 +134,10 @@ static void send_cpu_listeners(struct sk_buff *skb,
 			if (!skb_next)
 				break;
 		}
-		rc = genlmsg_unicast(&init_net, skb_cur, s->pid);
+		rc = genlmsg_unicast(s->owner->net, skb_cur,
+				     s->owner->portid);
 		if (rc == -ECONNREFUSED) {
-			s->valid = 0;
+			WRITE_ONCE(s->valid, 0);
 			delcount++;
 		}
 		skb_cur = skb_next;
@@ -146,7 +153,7 @@ static void send_cpu_listeners(struct sk_buff *skb,
 	/* Delete invalidated entries */
 	down_write(&listeners->sem);
 	list_for_each_entry_safe(s, tmp, &listeners->list, list) {
-		if (!s->valid) {
+		if (!READ_ONCE(s->valid)) {
 			list_del(&s->list);
 			kfree(s);
 		}
@@ -296,63 +303,77 @@ ret:
 	return;
 }
 
-static int add_del_listener(pid_t pid, const struct cpumask *mask, int isadd)
+static int add_listener(struct taskstats_sock_priv *owner,
+			const struct cpumask *mask)
 {
+	LIST_HEAD(new_listeners);
 	struct listener_list *listeners;
 	struct listener *s, *tmp, *s2;
 	unsigned int cpu;
-	int ret = 0;
 
-	if (!cpumask_subset(mask, cpu_possible_mask))
-		return -EINVAL;
-
-	if (current_user_ns() != &init_user_ns)
-		return -EINVAL;
-
-	if (task_active_pid_ns(current) != &init_pid_ns)
-		return -EINVAL;
-
-	if (isadd == REGISTER) {
-		for_each_cpu(cpu, mask) {
-			s = kmalloc_node(sizeof(struct listener),
-					GFP_KERNEL, cpu_to_node(cpu));
-			if (!s) {
-				ret = -ENOMEM;
-				goto cleanup;
-			}
-			s->pid = pid;
-			s->valid = 1;
-
-			listeners = &per_cpu(listener_array, cpu);
-			down_write(&listeners->sem);
-			list_for_each_entry(s2, &listeners->list, list) {
-				if (s2->pid == pid && s2->valid)
-					goto exists;
-			}
-			list_add(&s->list, &listeners->list);
-			s = NULL;
-exists:
-			up_write(&listeners->sem);
-			kfree(s); /* nop if NULL */
-		}
-		return 0;
+	for_each_cpu(cpu, mask) {
+		s = kmalloc_node(sizeof(*s), GFP_KERNEL, cpu_to_node(cpu));
+		if (!s)
+			goto free_new;
+		s->owner = owner;
+		s->cpu = cpu;
+		s->valid = 1;
+		list_add_tail(&s->list, &new_listeners);
 	}
 
-	/* Deregister or cleanup */
-cleanup:
+	list_for_each_entry_safe(s, tmp, &new_listeners, list) {
+		bool exists = false;
+
+		list_del(&s->list);
+		listeners = &per_cpu(listener_array, s->cpu);
+		down_write(&listeners->sem);
+		list_for_each_entry(s2, &listeners->list, list) {
+			if (s2->owner == owner && READ_ONCE(s2->valid)) {
+				exists = true;
+				break;
+			}
+		}
+		if (!exists)
+			list_add(&s->list, &listeners->list);
+		up_write(&listeners->sem);
+		if (exists)
+			kfree(s);
+	}
+	return 0;
+
+free_new:
+	list_for_each_entry_safe(s, tmp, &new_listeners, list) {
+		list_del(&s->list);
+		kfree(s);
+	}
+	return -ENOMEM;
+}
+
+static void remove_listener(struct taskstats_sock_priv *owner,
+			    const struct cpumask *mask)
+{
+	struct listener_list *listeners;
+	struct listener *s, *tmp;
+	unsigned int cpu;
+
 	for_each_cpu(cpu, mask) {
 		listeners = &per_cpu(listener_array, cpu);
 		down_write(&listeners->sem);
 		list_for_each_entry_safe(s, tmp, &listeners->list, list) {
-			if (s->pid == pid) {
+			if (s->owner == owner) {
 				list_del(&s->list);
 				kfree(s);
-				break;
 			}
 		}
 		up_write(&listeners->sem);
 	}
-	return ret;
+}
+
+static void taskstats_sock_priv_destroy(void *data)
+{
+	struct taskstats_sock_priv *owner = data;
+
+	remove_listener(owner, cpu_possible_mask);
 }
 
 static int parse(struct nlattr *na, struct cpumask *mask)
@@ -448,10 +469,12 @@ static int cgroupstats_user_cmd(struct sk_buff *skb, struct genl_info *info)
 	return send_reply(rep_skb, info);
 }
 
-static int cmd_attr_cpumask(struct genl_info *info, int attr,
+static int cmd_attr_cpumask(struct sk_buff *skb, struct genl_info *info,
+			    int attr,
 			    enum actions action)
 {
 	cpumask_var_t mask __free(free_cpumask_var) = CPUMASK_VAR_NULL;
+	struct taskstats_sock_priv *owner;
 	int rc;
 
 	if (!alloc_cpumask_var(&mask, GFP_KERNEL))
@@ -459,7 +482,29 @@ static int cmd_attr_cpumask(struct genl_info *info, int attr,
 	rc = parse(info->attrs[attr], mask);
 	if (rc < 0)
 		return rc;
-	return add_del_listener(info->snd_portid, mask, action);
+	if (!cpumask_subset(mask, cpu_possible_mask))
+		return -EINVAL;
+	if (current_user_ns() != &init_user_ns)
+		return -EINVAL;
+	if (task_active_pid_ns(current) != &init_pid_ns)
+		return -EINVAL;
+
+	owner = genl_sk_priv_get(&family, NETLINK_CB(skb).sk);
+	if (IS_ERR(owner))
+		return PTR_ERR(owner);
+	if (!owner->net) {
+		owner->net = genl_info_net(info);
+		owner->portid = info->snd_portid;
+	} else if (WARN_ON_ONCE(!net_eq(owner->net, genl_info_net(info)) ||
+				owner->portid != info->snd_portid)) {
+		return -EINVAL;
+	}
+
+	if (action == REGISTER)
+		return add_listener(owner, mask);
+
+	remove_listener(owner, mask);
+	return 0;
 }
 
 static size_t taskstats_packet_size(void)
@@ -534,11 +579,11 @@ err:
 static int taskstats_user_cmd(struct sk_buff *skb, struct genl_info *info)
 {
 	if (info->attrs[TASKSTATS_CMD_ATTR_REGISTER_CPUMASK])
-		return cmd_attr_cpumask(info,
+		return cmd_attr_cpumask(skb, info,
 					TASKSTATS_CMD_ATTR_REGISTER_CPUMASK,
 					REGISTER);
 	else if (info->attrs[TASKSTATS_CMD_ATTR_DEREGISTER_CPUMASK])
-		return cmd_attr_cpumask(info,
+		return cmd_attr_cpumask(skb, info,
 					TASKSTATS_CMD_ATTR_DEREGISTER_CPUMASK,
 					DEREGISTER);
 	else if (info->attrs[TASKSTATS_CMD_ATTR_PID])
@@ -671,6 +716,8 @@ static struct genl_family family __ro_after_init = {
 	.n_ops		= ARRAY_SIZE(taskstats_ops),
 	.resv_start_op	= CGROUPSTATS_CMD_GET + 1,
 	.netnsok	= true,
+	.sock_priv_size	= sizeof(struct taskstats_sock_priv),
+	.sock_priv_destroy = taskstats_sock_priv_destroy,
 };
 
 /* Needed early in initialization */
