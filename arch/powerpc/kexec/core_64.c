@@ -352,7 +352,7 @@ void default_machine_kexec(struct kimage *image)
 	 * XXX: the task struct will likely be invalid once we do the copy!
 	 */
 	current_thread_info()->flags = 0;
-	WRITE_ONCE(local_paca->preempt_count, HARDIRQ_OFFSET);
+	WRITE_ONCE(local_paca->preempt.count, HARDIRQ_OFFSET);
 
 	/* We need a static PACA, too; copy this CPU's PACA over and switch to
 	 * it. Also poison per_cpu_offset and NULL lppaca to catch anyone using

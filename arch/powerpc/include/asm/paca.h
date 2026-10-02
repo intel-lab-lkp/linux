@@ -164,7 +164,18 @@ struct paca_struct {
 	u64 saved_r1;			/* r1 save for RTAS calls or PM or EE=0 */
 	u64 saved_msr;			/* MSR saved here by enter_rtas */
 	u64 exit_save_r1;		/* Syscall/interrupt R1 save */
-	int preempt_count;
+	union {
+		u64		preempt_count;
+		struct {
+#ifdef __BIG_ENDIAN__
+			u32	need_resched;
+			u32	count;
+#else
+			u32	count;
+			u32	need_resched;
+#endif
+		} preempt;
+	};
 #ifdef CONFIG_PPC_BOOK3E_64
 	u16 trap_save;			/* Used when bad stack is encountered */
 #endif

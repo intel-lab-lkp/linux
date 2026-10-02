@@ -8,19 +8,20 @@
 #define __ASM_POWERPC_PREEMPT_H
 
 #ifdef CONFIG_PPC64
-#include <linux/thread_info.h>
 #include <asm/paca.h>
 
-#define PREEMPT_ENABLED	(0)
+#define PREEMPT_NEED_RESCHED	BIT(32)
+#define PREEMPT_ENABLED	(PREEMPT_NEED_RESCHED)
 
 static __always_inline int preempt_count(void)
 {
-	return READ_ONCE(local_paca->preempt_count);
+	return READ_ONCE(local_paca->preempt.count);
 }
 
-static __always_inline void preempt_count_set(int pc)
+static __always_inline void preempt_count_set(u64 pc)
 {
-	WRITE_ONCE(local_paca->preempt_count, pc);
+	/* Preserve existing value of PREEMPT_NEED_RESCHED */
+	WRITE_ONCE(local_paca->preempt.count, pc);
 }
 
 #define init_task_preempt_count(p) do { } while (0)
@@ -28,64 +29,73 @@ static __always_inline void preempt_count_set(int pc)
 
 static inline void set_preempt_need_resched(void)
 {
+	WRITE_ONCE(local_paca->preempt.need_resched, 0);
 }
 
 static inline void clear_preempt_need_resched(void)
 {
+	WRITE_ONCE(local_paca->preempt.need_resched, 1);
 }
 
 static inline bool test_preempt_need_resched(void)
 {
-	return false;
+	return !READ_ONCE(local_paca->preempt.need_resched);
 }
 
 static __always_inline void __preempt_count_add(int val)
 {
-	int pc = READ_ONCE(local_paca->preempt_count);
+	u32 pc = READ_ONCE(local_paca->preempt.count);
 
 	pc += val;
-	WRITE_ONCE(local_paca->preempt_count, pc);
+	WRITE_ONCE(local_paca->preempt.count, pc);
 }
 
 static __always_inline void __preempt_count_sub(int val)
 {
-	int pc = READ_ONCE(local_paca->preempt_count);
+	u32 pc = READ_ONCE(local_paca->preempt.count);
 
 	pc -= val;
-	WRITE_ONCE(local_paca->preempt_count, pc);
+	WRITE_ONCE(local_paca->preempt.count, pc);
 }
 
 static inline int __preempt_count_add_return(int val)
 {
-	int pc = READ_ONCE(local_paca->preempt_count);
+	u32 pc = READ_ONCE(local_paca->preempt.count);
 
 	pc += val;
-	WRITE_ONCE(local_paca->preempt_count, pc);
+	WRITE_ONCE(local_paca->preempt.count, pc);
 	return pc;
 }
 
 static inline int __preempt_count_sub_return(int val)
 {
-	int pc = READ_ONCE(local_paca->preempt_count);
+	u32 pc = READ_ONCE(local_paca->preempt.count);
 
 	pc -= val;
-	WRITE_ONCE(local_paca->preempt_count, pc);
+	WRITE_ONCE(local_paca->preempt.count, pc);
 	return pc;
 }
 
 static inline bool __preempt_count_dec_and_test(void)
 {
-	int pc = READ_ONCE(local_paca->preempt_count);
+	u64 pc = READ_ONCE(local_paca->preempt_count);
 
-	WRITE_ONCE(local_paca->preempt_count, --pc);
-	return !pc && tif_need_resched();
+	/* Update only the count field, leaving need_resched unchanged */
+	WRITE_ONCE(local_paca->preempt.count, --pc);
+	/*
+	 * If we wrote back all zeroes, then we're preemptible and in
+	 * need of a reschedule. Otherwise, we need to reload the
+	 * preempt_count in case the need_resched flag was cleared by an
+	 * interrupt occurring between the non-atomic READ_ONCE/WRITE_ONCE
+	 * pair.
+	 */
+	return !pc || !READ_ONCE(local_paca->preempt_count);
 }
 
 static inline bool should_resched(int preempt_offset)
 {
-	int pc = READ_ONCE(local_paca->preempt_count);
-
-	return unlikely(pc == preempt_offset && tif_need_resched());
+	u64 pc = READ_ONCE(local_paca->preempt_count);
+	return unlikely(pc == preempt_offset);
 }
 
 #ifdef CONFIG_PREEMPTION
