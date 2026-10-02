@@ -1186,6 +1186,38 @@ static int perf_event__header_feature_swap(union perf_event *event,
 	return 0;
 }
 
+static int perf_event__callchain_deferred_swap(union perf_event *event,
+					       bool sample_id_all)
+{
+	u64 nr, max_nr;
+
+	if (!(event->header.misc & PERF_RECORD_MISC_MMAP_BUILD_ID))
+		return perf_event__all64_swap(event, sample_id_all);
+
+	if (event->header.size < sizeof(event->callchain_deferred))
+		return -1;
+
+	event->callchain_deferred.cookie = bswap_64(event->callchain_deferred.cookie);
+	event->callchain_deferred.nr = bswap_64(event->callchain_deferred.nr);
+
+	nr = event->callchain_deferred.nr;
+	max_nr = (event->header.size - sizeof(event->callchain_deferred)) /
+		 sizeof(event->callchain_deferred.bids[0]);
+	if (nr > max_nr)
+		return -1;
+
+	for (u64 i = 0; i < nr; i++) {
+		struct perf_sample_build_id_offset *bid =
+			&event->callchain_deferred.bids[i];
+
+		bid->offset = bswap_64(bid->offset);
+	}
+
+	if (sample_id_all)
+		swap_sample_id_all(event, &event->callchain_deferred.bids[nr]);
+	return 0;
+}
+
 typedef int (*perf_event__swap_op)(union perf_event *event,
 				   bool sample_id_all);
 
@@ -1211,7 +1243,7 @@ static perf_event__swap_op perf_event__swap_ops[] = {
 	[PERF_RECORD_BPF_EVENT]		  = perf_event__bpf_event_swap,
 	[PERF_RECORD_TEXT_POKE]		  = perf_event__text_poke_swap,
 	[PERF_RECORD_AUX_OUTPUT_HW_ID]	  = perf_event__all64_swap,
-	[PERF_RECORD_CALLCHAIN_DEFERRED]  = perf_event__all64_swap,
+	[PERF_RECORD_CALLCHAIN_DEFERRED]  = perf_event__callchain_deferred_swap,
 	[PERF_RECORD_HEADER_ATTR]	  = perf_event__hdr_attr_swap,
 	[PERF_RECORD_HEADER_EVENT_TYPE]	  = perf_event__event_type_swap,
 	[PERF_RECORD_HEADER_TRACING_DATA] = perf_event__tracing_data_swap,

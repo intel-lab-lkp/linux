@@ -3,10 +3,23 @@
 #define __LIBPERF_EVENT_H
 
 #include <linux/perf_event.h>
+#include <linux/stddef.h>
 #include <linux/types.h>
 #include <linux/limits.h>
 #include <linux/bpf.h>
 #include <sys/types.h> /* pid_t */
+
+#ifndef __DECLARE_FLEX_ARRAY
+#ifdef __cplusplus
+#define __DECLARE_FLEX_ARRAY(T, member)	T member[0]
+#else
+#define __DECLARE_FLEX_ARRAY(TYPE, NAME)	\
+	struct { \
+		struct { } __empty_ ## NAME; \
+		TYPE NAME[]; \
+	}
+#endif
+#endif
 
 /*
  * Verify the full field fits within the event, not just its start offset.
@@ -162,6 +175,21 @@ struct perf_record_switch {
 	__u32			 next_prev_tid;
 };
 
+struct perf_sample_build_id_offset {
+	union {
+		struct perf_build_id	bid;
+		struct {
+			__u64		zero;
+			__u64		context;
+			__u64		cookie;
+		};
+	};
+	union {
+		__u64			offset;
+		__u64			ip;
+	};
+};
+
 struct perf_record_callchain_deferred {
 	struct perf_event_header header;
 	/*
@@ -171,7 +199,10 @@ struct perf_record_callchain_deferred {
 	 */
 	__u64			 cookie;
 	__u64			 nr;
-	__u64			 ips[];
+	union {
+		__DECLARE_FLEX_ARRAY(__u64, ips);
+		__DECLARE_FLEX_ARRAY(struct perf_sample_build_id_offset, bids);
+	};
 };
 
 struct perf_record_header_attr {
