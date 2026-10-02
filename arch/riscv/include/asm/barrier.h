@@ -142,6 +142,29 @@ do {									\
 	}								\
 	(typeof(*ptr))VAL;						\
 })
+#define __smp_cond_load_wait(ptr, val)	__cmpwait_relaxed(ptr, val)
+#else
+#define __smp_cond_load_wait(...)	cpu_relax()
+#endif
+
+#ifdef CONFIG_SMP
+#define smp_cond_load_acquire(ptr, cond_expr) ({			\
+	__auto_type __zalasr_ptr = (ptr);				\
+	__unqual_scalar_typeof(*__zalasr_ptr) VAL;			\
+	if (riscv_has_extension_unlikely(RISCV_ISA_EXT_ZALASR)) {	\
+		for (;;) {						\
+			/* The satisfying load provides acquire ordering. */ \
+			VAL = smp_load_acquire(__zalasr_ptr);		\
+			if (cond_expr)					\
+				break;					\
+			__smp_cond_load_wait(__zalasr_ptr, VAL);		\
+		}							\
+	} else {							\
+		VAL = smp_cond_load_relaxed(__zalasr_ptr, cond_expr);	\
+		smp_acquire__after_ctrl_dep();				\
+	}								\
+	(typeof(*__zalasr_ptr))VAL;					\
+})
 #endif
 
 #include <asm-generic/barrier.h>
