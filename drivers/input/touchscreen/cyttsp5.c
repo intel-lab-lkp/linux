@@ -221,6 +221,12 @@ static int cyttsp5_read(struct cyttsp5 *ts, u8 *buf, u32 max)
 	u32 size;
 	u8 temp[2];
 
+	/*
+	 * Buffer may contain previous data. Make sure to indicate that
+	 * packet has zero length in case size is 0 or 2, or if we exit early.
+	 */
+	memset(buf, 0, 2);
+
 	/* Read the frame to retrieve the size */
 	error = regmap_bulk_read(ts->regmap, HID_INPUT_REG, temp, sizeof(temp));
 	if (error)
@@ -705,7 +711,11 @@ static irqreturn_t cyttsp5_handle_irq(int irq, void *handle)
 
 	size = get_unaligned_le16(&ts->input_buf[0]);
 	if (size == 0) {
-		/* reset */
+		/*
+		 * Interrupt is asserted after bootloader or application is
+		 * started to indicate device is ready for communication
+		 * (reset sentinel packet).
+		 */
 		report_id = 0;
 		size = 2;
 	} else {
