@@ -80,6 +80,8 @@ static DEFINE_STATIC_KEY_FALSE(gic_nvidia_t241_erratum);
 
 static DEFINE_STATIC_KEY_FALSE(gic_arm64_2941627_erratum);
 
+static DEFINE_STATIC_KEY_FALSE(gic_fujitsu_030003_erratum);
+
 static struct gic_chip_data gic_data __read_mostly;
 static DEFINE_STATIC_KEY_TRUE(supports_deactivate_key);
 
@@ -238,6 +240,9 @@ static DEFINE_PER_CPU(bool, has_rss);
 #define gic_data_rdist()		(this_cpu_ptr(gic_data.rdists.rdist))
 #define gic_data_rdist_rd_base()	(gic_data_rdist()->rd_base)
 #define gic_data_rdist_sgi_base()	(gic_data_rdist_rd_base() + SZ_64K)
+#define gic_data_rdist_cpu(cpu)		(per_cpu_ptr(gic_data.rdists.rdist, cpu))
+#define gic_data_rdist_rd_base_cpu(cpu)	(gic_data_rdist_cpu(cpu)->rd_base)
+#define gic_data_rdist_sgi_base_cpu(cpu)	(gic_data_rdist_rd_base_cpu(cpu) + SZ_64K)
 
 /* Our default, arbitrary priority value. Linux only uses one anyway. */
 #define DEFAULT_PMR_VALUE	0xf0
@@ -1373,6 +1378,13 @@ static void gic_send_sgi(u64 cluster_id, u16 tlist, unsigned int irq)
 	gic_write_sgi1r(val);
 }
 
+static void gic_send_sgi_via_rdist(int cpu, unsigned int irq)
+{
+	void __iomem *base = gic_data_rdist_sgi_base_cpu(cpu);
+
+	writel_relaxed(BIT(irq), base + GICR_ISPENDR0);
+}
+
 static void gic_ipi_send_mask(struct irq_data *d, const struct cpumask *mask)
 {
 	int cpu;
@@ -1385,6 +1397,22 @@ static void gic_ipi_send_mask(struct irq_data *d, const struct cpumask *mask)
 	 * other CPUs before issuing the IPI.
 	 */
 	dsb(ishst);
+
+	if (static_branch_unlikely(&gic_fujitsu_030003_erratum)) {
+		/*
+		 * The affinity topology of affected systems has Aff0 == 0 for
+		 * every PE; PEs are distinguished by higher affinity levels.
+		 * ICC_SGI1R_EL1 therefore targets only one PE per write, so
+		 * using GICR_ISPENDR0 does not increase the number of writes
+		 * required to send an SGI to multiple PEs.
+		 */
+		for_each_cpu(cpu, mask)
+			gic_send_sgi_via_rdist(cpu, d->hwirq);
+
+		/* Force the above writes to GICR_ISPENDR0 to be executed */
+		dsb(st);
+		return;
+	}
 
 	for_each_cpu(cpu, mask) {
 		u64 cluster_id = MPIDR_TO_SGI_CLUSTER_ID(gic_cpu_to_affinity(cpu));
@@ -1871,6 +1899,20 @@ static bool gic_enable_quirk_rk3399(void *data)
 	return false;
 }
 
+#define SMCCC_SOC_ID_FUJITSU_MONAKA	0x00040003
+
+static bool gic_enable_quirk_fujitsu_030003(void *data)
+{
+	s32 soc_id = arm_smccc_get_soc_id_version();
+
+	/* Check JEP106 code for FUJITSU-MONAKA chip (0004:0003) */
+	if (soc_id != SMCCC_SOC_ID_FUJITSU_MONAKA)
+		return false;
+
+	static_branch_enable(&gic_fujitsu_030003_erratum);
+	return true;
+}
+
 static bool rd_set_non_coherent(void *data)
 {
 	struct gic_chip_data *d = data;
@@ -1950,6 +1992,12 @@ static const struct gic_quirk gic_quirks[] = {
 		.iidr	= 0x0000043b,
 		.mask	= 0xff000fff,
 		.init	= gic_enable_quirk_rk3399,
+	},
+	{
+		.desc	= "GICv3: Fujitsu erratum 030003",
+		.iidr	= 0x0403043b,
+		.mask	= 0xffffffff,
+		.init	= gic_enable_quirk_fujitsu_030003,
 	},
 	{
 	}
