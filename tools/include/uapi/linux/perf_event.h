@@ -1100,6 +1100,18 @@ enum perf_event_type {
 	PERF_RECORD_SAMPLE			= 9,
 
 	/*
+	 * Build IDs may be present in a number of events. They have a
+	 * consistent encoding of:
+	 *
+	 * struct perf_build_id {
+	 *	u8		size;
+	 *	u8		__reserved_1;
+	 *	u16		__reserved_2;
+	 *	u8		data[20];
+	 * };
+	 */
+
+	/*
 	 * The MMAP2 records are an augmented version of MMAP, they add
 	 * maj, min, ino numbers to be used to uniquely identify each mapping
 	 *
@@ -1117,12 +1129,7 @@ enum perf_event_type {
 	 *			u64		ino;
 	 *			u64		ino_generation;
 	 *		};
-	 *		struct {
-	 *			u8		build_id_size;
-	 *			u8		__reserved_1;
-	 *			u16		__reserved_2;
-	 *			u8		build_id[20];
-	 *		};
+	 *		struct perf_build_id	build_id;
 	 *	};
 	 *	u32				prot, flags;
 	 *	char				filename[];

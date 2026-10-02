@@ -26,6 +26,15 @@ struct perf_record_mmap {
 	char			 filename[PATH_MAX];
 };
 
+#define PERF_BUILD_ID_SIZE 20
+
+struct perf_build_id {
+	__u8	 size;
+	__u8	 __reserved_1;
+	__u16	 __reserved_2;
+	__u8	 data[PERF_BUILD_ID_SIZE];
+};
+
 struct perf_record_mmap2 {
 	struct perf_event_header header;
 	__u32			 pid, tid;
@@ -39,12 +48,7 @@ struct perf_record_mmap2 {
 			__u64	 ino;
 			__u64	 ino_generation;
 		};
-		struct {
-			__u8	 build_id_size;
-			__u8	 __reserved_1;
-			__u16	 __reserved_2;
-			__u8	 build_id[20];
-		};
+		struct perf_build_id build_id;
 	};
 	__u32			 prot;
 	__u32			 flags;
@@ -321,7 +325,7 @@ struct perf_record_header_build_id {
 	union {
 		__u8		 build_id[24];
 		struct {
-			__u8	 data[20];
+			__u8	 data[PERF_BUILD_ID_SIZE];
 			__u8	 size;
 			__u8	 reserved1__;
 			__u16	 reserved2__;

@@ -250,12 +250,12 @@ static PyObject *pyrf_mmap2_event__get_build_id(PyObject *self, void *closure __
 	if (!(pevent->event.header.misc & PERF_RECORD_MISC_MMAP_BUILD_ID))
 		Py_RETURN_NONE;
 
-	int size = pevent->event.mmap2.build_id_size;
+	size_t size = pevent->event.mmap2.build_id.size;
 
-	if (size > 20)
-		size = 20;
+	if (size > sizeof(pevent->event.mmap2.build_id.data))
+		size = sizeof(pevent->event.mmap2.build_id.data);
 
-	return PyBytes_FromStringAndSize((const char *)pevent->event.mmap2.build_id, size);
+	return PyBytes_FromStringAndSize((const char *)pevent->event.mmap2.build_id.data, size);
 }
 
 static PyGetSetDef pyrf_mmap2_event__getset[] = {
