@@ -9,8 +9,8 @@
 //! At the moment, some builtins are required that should not be. For instance,
 //! [`core`] has 128-bit integers functionality which we should not be compiling
 //! in. We will work with upstream [`core`] to provide feature flags to disable
-//! the parts we do not need. For the moment, we define them to [`panic!`] at
-//! runtime for simplicity to catch mistakes, instead of performing surgery
+//! the parts we do not need. For the moment, we define them to print an error
+//! and call `BUG()` at runtime to catch mistakes, instead of performing surgery
 //! on `core.o`.
 //!
 //! In any case, all these symbols are weakened to ensure we do not override
@@ -25,13 +25,46 @@
 #![no_builtins]
 #![no_std]
 
+unsafe extern "C" {
+    #[cfg(CONFIG_PRINTK)]
+    fn _printk(fmt: *const u8, ...) -> core::ffi::c_int;
+    fn rust_helper_BUG() -> !;
+}
+
+// In a `#![compiler_builtins]` crate, code cannot link to functions in other
+// crates. `rustc` rejects such calls, except that it silently turns the ones
+// that do not return (e.g. `panic!`) into a trap.
+#[cold]
+#[inline(never)]
+#[cfg_attr(not(CONFIG_PRINTK), allow(unused_variables))]
+fn intrinsic_called(name: &str, reason: &str) -> ! {
+    #[cfg(CONFIG_PRINTK)]
+    // SAFETY: The format string is NUL-terminated. Each `%.*s` takes a
+    // `c_int` length and a pointer. `name.as_ptr()` is valid for reads of
+    // `name.len()` bytes, and so is `reason.as_ptr()` for `reason.len()`
+    // bytes.
+    unsafe {
+        _printk(
+            // "\x010" is `KERN_EMERG`.
+            c"\x010%.*s called: %.*s\n".to_bytes_with_nul().as_ptr(),
+            name.len() as core::ffi::c_int,
+            name.as_ptr(),
+            reason.len() as core::ffi::c_int,
+            reason.as_ptr(),
+        )
+    };
+
+    // SAFETY: FFI call.
+    unsafe { rust_helper_BUG() }
+}
+
 macro_rules! define_panicking_intrinsics(
     ($reason: tt, { $($ident: ident, )* }) => {
         $(
             #[doc(hidden)]
             #[export_name = concat!("__rust", stringify!($ident))]
             pub extern "C" fn $ident() {
-                panic!($reason);
+                intrinsic_called(stringify!($ident), $reason)
             }
         )*
     }
