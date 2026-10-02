@@ -4766,6 +4766,7 @@ void force_schedstat_enabled(void)
 static int __init setup_schedstats(char *str)
 {
 	int ret = 0;
+
 	if (!str)
 		goto out;
 
@@ -7662,7 +7663,7 @@ asmlinkage __visible void __sched preempt_schedule_irq(void)
 	exception_exit(prev_state);
 }
 
-int default_wake_function(wait_queue_entry_t *curr, unsigned mode, int wake_flags,
+int default_wake_function(wait_queue_entry_t *curr, unsigned int mode, int wake_flags,
 			  void *key)
 {
 	WARN_ON_ONCE(wake_flags & ~(WF_SYNC|WF_CURRENT_CPU));
@@ -7998,6 +7999,7 @@ static int __init setup_preempt_mode(char *str)
 {
 	int mode = sched_dynamic_mode(str);
 	if (mode < 0) {
+
 		pr_warn("Dynamic Preempt: unsupported mode: %s\n", str);
 		return 0;
 	}
