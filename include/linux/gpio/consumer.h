@@ -667,7 +667,7 @@ struct acpi_gpio_params {
 
 struct acpi_gpio_mapping {
 	const char *name;
-	const struct acpi_gpio_params *data;
+	const struct acpi_gpio_params *data __counted_by_ptr(size);
 	unsigned int size;
 
 /* Ignore IoRestriction field */

@@ -7,6 +7,14 @@
  * Copyright 2011 Intel Corporation; author Matt Fleming
  */
 
+/*
+ * The EFI stub doesn't execute in the context of the kernel, only in the
+ * context of boot firmware, which isn't the time or place to crash the kernel.
+ * Therefore, disable the __counted_by__ attribute.
+ */
+#undef __counted_by
+#undef __counted_by_ptr
+
 #include <linux/efi.h>
 #include <asm/efi.h>
 
