@@ -171,7 +171,31 @@ void __init housekeeping_init(void)
 	if (!housekeeping.flags)
 		return;
 
+	/*
+	 * housekeeping_cpumask() only dereferences the real per-type masks
+	 * once housekeeping_overridden is live; before that it always
+	 * returns cpu_possible_mask regardless of housekeeping.flags, which
+	 * would make the subset check below vacuously pass for every type.
+	 * Enable it first so the check actually sees the parsed masks.
+	 */
 	static_branch_enable(&housekeeping_overridden);
+
+	/*
+	 * A nohz_full CPU must always run on an isolated sched domain:
+	 * reject nohz_full=/isolcpus=nohz unless isolcpus=domain covers
+	 * at least the same CPUs.  Checked here, after all __setup()
+	 * cmdline parsing has run, so the outcome does not depend on
+	 * which of the two parameters came first on the command line.
+	 */
+	if ((housekeeping.flags & HK_FLAG_KERNEL_NOISE) &&
+	    !cpumask_subset(housekeeping_cpumask(HK_TYPE_DOMAIN),
+			    housekeeping_cpumask(HK_TYPE_KERNEL_NOISE))) {
+		pr_warn("Housekeeping: nohz_full=/isolcpus=nohz must be a subset "
+			"of isolcpus=domain, disabling nohz_full\n");
+		housekeeping.flags &= ~HK_FLAG_KERNEL_NOISE;
+		if (!housekeeping.flags)
+			return;
+	}
 
 	if (housekeeping.flags & HK_FLAG_KERNEL_NOISE)
 		sched_tick_offload_init();

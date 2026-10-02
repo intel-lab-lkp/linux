@@ -2810,6 +2810,11 @@ Kernel parameters
 			  so to protect individual CPUs the 'cpumask' file has to
 			  be configured manually after bootup.
 
+			  When 'domain' is configured through a separate
+			  isolcpus= or nohz_full= invocation, every 'nohz'
+			  CPU must also be a 'domain' CPU; a combination that
+			  violates this is rejected at boot with a warning.
+
 			domain
 			  Isolate from the general SMP balancing and scheduling
 			  algorithms. Note that performing domain isolation this way
@@ -4563,6 +4568,13 @@ Kernel parameters
 
 			Note that this argument takes precedence over
 			the CONFIG_RCU_NOCB_CPU_DEFAULT_ALL option.
+
+			When isolcpus=domain is also given, every CPU in
+			this list (or in isolcpus=nohz) must also be in
+			the isolcpus=domain list: a tick-suppressed CPU
+			must always be excluded from the normal scheduler
+			domain.  A combination that violates this is
+			rejected at boot with a warning.
 
 	noinitrd	[Deprecated,RAM] Tells the kernel not to load any configured
 			initial RAM disk. Currently this parameter applies to
