@@ -385,6 +385,11 @@ fbnic_set_ringparam(struct net_device *netdev, struct ethtool_ringparam *ring,
 		return -EINVAL;
 	}
 
+	err = fbnic_xsk_validate(fbn, fbn->xdp_prog, netdev->mtu,
+				 kernel_ring->hds_thresh, extack);
+	if (err)
+		return err;
+
 	if (!netif_running(netdev)) {
 		fbnic_set_rings(fbn, ring, kernel_ring);
 		return 0;

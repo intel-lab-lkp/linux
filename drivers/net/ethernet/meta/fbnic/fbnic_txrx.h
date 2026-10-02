@@ -15,6 +15,7 @@
 #include "fbnic_csr.h"
 
 struct fbnic_net;
+struct xsk_buff_pool;
 
 /* Guarantee we have space needed for storing the buffer
  * To store the buffer we need:
@@ -77,12 +78,14 @@ struct fbnic_net;
 	(4096 - FBNIC_RX_HROOM - FBNIC_RX_TROOM - FBNIC_RX_PAD)
 #define FBNIC_HDS_THRESH_DEFAULT \
 	(1536 - FBNIC_RX_PAD)
+#define FBNIC_XSK_HDS_THRESH		3072
 #define FBNIC_HDR_BYTES_MIN		256
 
 struct fbnic_pkt_buff {
 	struct xdp_buff buff;
 	ktime_t hwtstamp;
 	bool add_frag_failed;
+	struct skb_shared_info sinfo;
 };
 
 struct fbnic_queue_stats {
@@ -162,6 +165,9 @@ struct fbnic_ring {
 struct fbnic_q_triad {
 	struct fbnic_ring sub0, sub1, cmpl;
 	struct xdp_rxq_info xdp_rxq;
+	struct xsk_buff_pool *xsk_pool;
+	u16 rx_hroom;
+	u16 rx_frame_off;
 };
 
 struct fbnic_napi_vector {

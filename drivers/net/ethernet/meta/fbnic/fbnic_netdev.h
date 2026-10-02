@@ -116,4 +116,8 @@ int fbnic_phylink_init(struct net_device *netdev);
 void fbnic_phylink_pmd_training_complete_notify(struct net_device *netdev);
 bool fbnic_check_split_frames(struct bpf_prog *prog,
 			      unsigned int mtu, u32 hds_threshold);
+int fbnic_xsk_validate(struct fbnic_net *fbn, struct bpf_prog *prog,
+		       unsigned int mtu, u32 hds_thresh,
+		       struct netlink_ext_ack *extack);
+u32 fbnic_xsk_hds_thresh(u32 headroom, u32 hds_thresh);
 #endif /* _FBNIC_NETDEV_H_ */

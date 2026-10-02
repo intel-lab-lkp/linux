@@ -5,6 +5,8 @@
 #include <linux/ipv6.h>
 #include <linux/types.h>
 #include <net/netdev_queues.h>
+#include <net/netdev_rx_queue.h>
+#include <net/xdp_sock_drv.h>
 
 #include "fbnic.h"
 #include "fbnic_netdev.h"
@@ -276,6 +278,8 @@ static int fbnic_set_mac(struct net_device *netdev, void *p)
 static int fbnic_change_mtu(struct net_device *dev, int new_mtu)
 {
 	struct fbnic_net *fbn = netdev_priv(dev);
+	struct netlink_ext_ack extack = {};
+	int err;
 
 	if (fbnic_check_split_frames(fbn->xdp_prog, new_mtu, fbn->hds_thresh)) {
 		dev_err(&dev->dev,
@@ -283,6 +287,15 @@ static int fbnic_change_mtu(struct net_device *dev, int new_mtu)
 			new_mtu, fbn->hds_thresh);
 
 		return -EINVAL;
+	}
+
+	err = fbnic_xsk_validate(fbn, fbn->xdp_prog, new_mtu,
+				 fbn->hds_thresh, &extack);
+	if (err) {
+		if (extack._msg)
+			netdev_err(dev, "%s\n", extack._msg);
+
+		return err;
 	}
 
 	WRITE_ONCE(dev->mtu, new_mtu);
@@ -534,26 +547,123 @@ bool fbnic_check_split_frames(struct bpf_prog *prog, unsigned int mtu,
 	return mtu + ETH_HLEN > hds_thresh;
 }
 
+u32 fbnic_xsk_hds_thresh(u32 headroom, u32 hds_thresh)
+{
+	u32 max_hds;
+
+	/* Reserve more than half a device page for each header so the device
+	 * retires the provider frame after one descriptor.
+	 */
+	static_assert(2 * FBNIC_XSK_HDS_THRESH > FBNIC_BD_PAGE_SIZE);
+
+	max_hds = FBNIC_BD_PAGE_SIZE - headroom - FBNIC_RX_TROOM -
+		  FBNIC_RX_PAD;
+
+	return min(max_t(u32, hds_thresh, FBNIC_XSK_HDS_THRESH), max_hds);
+}
+
+static int fbnic_xsk_validate_frames(struct xsk_buff_pool *pool,
+				     struct bpf_prog *prog,
+				     unsigned int mtu, u32 hds_thresh,
+				     struct netlink_ext_ack *extack)
+{
+	u32 xsk_hds_thresh;
+
+	xsk_hds_thresh = fbnic_xsk_hds_thresh(xsk_pool_get_headroom(pool),
+					      hds_thresh);
+
+	if (mtu + ETH_HLEN <= xsk_hds_thresh)
+		return 0;
+
+	if (!xsk_pool_uses_sg(pool)) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "AF_XDP zero-copy socket requires XDP_USE_SG");
+		return -EOPNOTSUPP;
+	}
+
+	if (fbnic_check_split_frames(prog, mtu, xsk_hds_thresh)) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "AF_XDP zero-copy socket requires XDP frags");
+		return -EOPNOTSUPP;
+	}
+
+	return 0;
+}
+
+int fbnic_xsk_validate(struct fbnic_net *fbn, struct bpf_prog *prog,
+		       unsigned int mtu, u32 hds_thresh,
+		       struct netlink_ext_ack *extack)
+{
+	struct net_device *netdev = fbn->netdev;
+	struct xsk_buff_pool *pool;
+	unsigned int qid;
+	int err;
+
+	for (qid = 0; qid < fbn->num_rx_queues; qid++) {
+		pool = xsk_get_pool_from_rxq(netdev, qid);
+		if (!pool)
+			continue;
+
+		err = fbnic_xsk_validate_frames(pool, prog, mtu, hds_thresh,
+						extack);
+		if (err)
+			return err;
+	}
+
+	return 0;
+}
+
+static int fbnic_xsk_setup_pool(struct net_device *netdev,
+				struct xsk_buff_pool *pool, u16 queue_id,
+				struct netlink_ext_ack *extack)
+{
+	struct fbnic_net *fbn = netdev_priv(netdev);
+	int err;
+
+	if (queue_id >= fbn->num_rx_queues)
+		return -EINVAL;
+
+	if (!pool)
+		return xsk_pool_setup_page_pool(netdev, NULL, queue_id, extack);
+
+	err = fbnic_xsk_validate_frames(pool, fbn->xdp_prog, netdev->mtu,
+					fbn->hds_thresh, extack);
+	if (err)
+		return err;
+
+	return xsk_pool_setup_page_pool(netdev, pool, queue_id, extack);
+}
+
 static int fbnic_bpf(struct net_device *netdev, struct netdev_bpf *bpf)
 {
 	struct bpf_prog *prog = bpf->prog, *prev_prog;
 	struct fbnic_net *fbn = netdev_priv(netdev);
+	int err;
 
-	if (bpf->command != XDP_SETUP_PROG)
+	switch (bpf->command) {
+	case XDP_SETUP_PROG:
+		if (fbnic_check_split_frames(prog, netdev->mtu,
+					     fbn->hds_thresh)) {
+			NL_SET_ERR_MSG_MOD(bpf->extack,
+					   "MTU too high, or HDS threshold is too low for single buffer XDP");
+			return -EOPNOTSUPP;
+		}
+
+		err = fbnic_xsk_validate(fbn, prog, netdev->mtu,
+					 fbn->hds_thresh, bpf->extack);
+		if (err)
+			return err;
+
+		prev_prog = xchg(&fbn->xdp_prog, prog);
+		if (prev_prog)
+			bpf_prog_put(prev_prog);
+		return 0;
+	case XDP_SETUP_XSK_POOL:
+		return fbnic_xsk_setup_pool(netdev, bpf->xsk.pool,
+					    bpf->xsk.queue_id, bpf->extack);
+	default:
 		return -EINVAL;
-
-	if (fbnic_check_split_frames(prog, netdev->mtu,
-				     fbn->hds_thresh)) {
-		NL_SET_ERR_MSG_MOD(bpf->extack,
-				   "MTU too high, or HDS threshold is too low for single buffer XDP");
-		return -EOPNOTSUPP;
 	}
-
-	prev_prog = xchg(&fbn->xdp_prog, prog);
-	if (prev_prog)
-		bpf_prog_put(prev_prog);
-
-	return 0;
 }
 
 static const struct net_device_ops fbnic_netdev_ops = {
@@ -822,7 +932,9 @@ struct net_device *fbnic_netdev_alloc(struct fbnic_dev *fbd)
 	netdev->hw_enc_features |= netdev->features;
 	netdev->features |= NETIF_F_NTUPLE;
 
-	netdev->xdp_features = NETDEV_XDP_ACT_BASIC | NETDEV_XDP_ACT_RX_SG;
+	netdev->xdp_features = NETDEV_XDP_ACT_BASIC |
+			       NETDEV_XDP_ACT_REDIRECT |
+			       NETDEV_XDP_ACT_RX_SG;
 
 	netdev->min_mtu = IPV6_MIN_MTU;
 	netdev->max_mtu = FBNIC_MAX_JUMBO_FRAME_SIZE - ETH_HLEN;
