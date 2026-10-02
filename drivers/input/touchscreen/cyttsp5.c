@@ -70,6 +70,10 @@
 #define HID_BL_OUTPUT_REPORT_ID			0x40
 #define HID_RESPONSE_REPORT_ID			0xF0
 
+/* Report ID found in the HID descriptor, identifies the running mode */
+#define HID_DESCRIPTOR_BOOTLOADER_REPORT_ID	0xFF
+#define HID_DESCRIPTOR_APPLICATION_REPORT_ID	0xF7
+
 #define HID_OUTPUT_RESPONSE_REPORT_OFFSET	2
 #define HID_OUTPUT_RESPONSE_CMD_OFFSET		4
 #define HID_OUTPUT_RESPONSE_CMD_MASK		GENMASK(6, 0)
@@ -807,24 +811,74 @@ static int cyttsp5_fill_all_touch(struct cyttsp5 *ts)
 	return 0;
 }
 
-static int cyttsp5_startup(struct cyttsp5 *ts)
+/*
+ * Returns the report ID advertised by the HID descriptor, which tells
+ * whether the bootloader or the application is running, or a negative
+ * error code.
+ */
+static int cyttsp5_get_mode(struct cyttsp5 *ts)
 {
+	const char *mode_str;
+	int mode;
 	int error;
 
-	/*
-	 * Launch the application as the device starts in bootloader mode
-	 * because of a power-on-reset
-	 */
-	error = cyttsp5_hid_output_bl_launch_app(ts);
-	if (error < 0) {
-		dev_err(ts->dev, "Error on launch app r=%d\n", error);
+	error = cyttsp5_get_hid_descriptor(ts, &ts->hid_desc);
+	if (error < 0)
 		return error;
+
+	mode = ts->hid_desc.packet_id;
+
+	switch (mode) {
+	case HID_DESCRIPTOR_BOOTLOADER_REPORT_ID:
+		mode_str = "bootloader";
+		break;
+	case HID_DESCRIPTOR_APPLICATION_REPORT_ID:
+		mode_str = "application";
+		break;
+	default:
+		dev_err(ts->dev, "Unknown mode, report ID 0x%02x\n", mode);
+		return -ENODEV;
 	}
 
-	error = cyttsp5_get_hid_descriptor(ts, &ts->hid_desc);
-	if (error < 0) {
-		dev_err(ts->dev, "Error on getting HID descriptor r=%d\n", error);
-		return error;
+	dev_dbg(ts->dev, "Device is in %s mode\n", mode_str);
+
+	return mode;
+}
+
+static int cyttsp5_startup(struct cyttsp5 *ts)
+{
+	int mode;
+	int error;
+
+	mode = cyttsp5_get_mode(ts);
+	if (mode < 0) {
+		dev_err(ts->dev, "Error on getting mode r=%d\n", mode);
+		return mode;
+	}
+
+	/*
+	 * The device starts in bootloader mode after a reset; the
+	 * application then has to be launched explicitly and the HID
+	 * descriptor read again, as it describes the running mode. Skip
+	 * this step when the application is already running.
+	 */
+	if (mode == HID_DESCRIPTOR_BOOTLOADER_REPORT_ID) {
+		error = cyttsp5_hid_output_bl_launch_app(ts);
+		if (error < 0) {
+			dev_err(ts->dev, "Error on launch app r=%d\n", error);
+			return error;
+		}
+
+		mode = cyttsp5_get_mode(ts);
+		if (mode < 0) {
+			dev_err(ts->dev, "Error on getting mode r=%d\n", mode);
+			return mode;
+		}
+
+		if (mode != HID_DESCRIPTOR_APPLICATION_REPORT_ID) {
+			dev_err(ts->dev, "Application not running after launch\n");
+			return -ENODEV;
+		}
 	}
 
 	error = cyttsp5_fill_all_touch(ts);
