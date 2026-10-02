@@ -1886,9 +1886,14 @@ int die_get_cfa(Dwarf *dwarf, u64 pc, int *preg, int *poffset)
 	Dwarf_Op *ops = NULL;
 	size_t nops;
 
-	cfi = dwarf_getcfi(dwarf);
-	if (cfi == NULL)
-		return -1;
+	/* try to get .eh_frame section */
+	cfi = dwarf_getcfi_elf(dwarf_getelf(dwarf));
+	if (cfi == NULL) {
+		/* and then try .debug_frame section */
+		cfi = dwarf_getcfi(dwarf);
+		if (cfi == NULL)
+			return -1;
+	}
 
 	if (!dwarf_cfi_addrframe(cfi, pc, &frame) &&
 	    !dwarf_frame_cfa(frame, &ops, &nops) &&
