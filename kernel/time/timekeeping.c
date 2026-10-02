@@ -304,6 +304,30 @@ static __always_inline u64 tk_clock_read(const struct tk_read_base *tkr)
 	return clock->read(clock);
 }
 
+static inline u64 tk_clock_read_snapshot(const struct tk_read_base *tkr,
+					 struct clocksource_hw_snapshot *chs)
+{
+	struct clocksource *clock = READ_ONCE(tkr->clock);
+	u64 count;
+
+	if (static_branch_likely(&clocksource_read_inlined)) {
+		count = arch_inlined_clocksource_read(clock);
+	} else if (unlikely(clock->read_snapshot)) {
+		*chs = (struct clocksource_hw_snapshot){ };
+		return clock->read_snapshot(clock, chs);
+	} else {
+		count = clock->read(clock);
+	}
+
+	/*
+	 * Unless it's *used* by ->read_snapshot(), this can be cleared
+	 * *after* the clocksource is read, allowing the clocksource to
+	 * be sampled sooner.
+	 */
+	*chs = (struct clocksource_hw_snapshot){ };
+	return count;
+}
+
 static inline void clocksource_disable_inline_read(void)
 {
 	static_branch_disable(&clocksource_read_inlined);
@@ -319,6 +343,22 @@ static __always_inline u64 tk_clock_read(const struct tk_read_base *tkr)
 	struct clocksource *clock = READ_ONCE(tkr->clock);
 
 	return clock->read(clock);
+}
+
+static inline u64 tk_clock_read_snapshot(const struct tk_read_base *tkr,
+					 struct clocksource_hw_snapshot *chs)
+{
+	struct clocksource *clock = READ_ONCE(tkr->clock);
+	u64 count;
+
+	if (unlikely(clock->read_snapshot)) {
+		*chs = (struct clocksource_hw_snapshot){ };
+		return clock->read_snapshot(clock, chs);
+	}
+
+	count = clock->read(clock);
+	*chs = (struct clocksource_hw_snapshot){ };
+	return count;
 }
 
 static inline void clocksource_disable_inline_read(void) { }
@@ -1219,18 +1259,6 @@ noinstr time64_t __ktime_get_real_seconds(void)
 	return READ_ONCE(tk->xtime_sec);
 }
 
-static inline u64 tk_clock_read_snapshot(const struct tk_read_base *tkr,
-					 struct clocksource_hw_snapshot *chs)
-{
-	struct clocksource *clock = READ_ONCE(tkr->clock);
-
-	if (unlikely(clock->read_snapshot))
-		return clock->read_snapshot(clock, chs);
-
-	return clock->read(clock);
-}
-
-
 /**
  * ktime_get_snapshot_id -  Simultaneously snapshot a given clock ID with
  *			    the corresponding monotonic raw and the underlying
@@ -1263,36 +1291,41 @@ void ktime_get_snapshot_id(clockid_t clock_id, struct system_time_snapshot *syst
 	if (WARN_ON_ONCE(timekeeping_suspended))
 		return;
 
-	switch (clock_id) {
-	case CLOCK_REALTIME:
-		tkd = &tk_core;
-		offs = &tk_core.timekeeper.offs_real;
-		break;
-	/* Map RAW to MONOTONIC so the loop below is trivial */
-	case CLOCK_MONOTONIC_RAW:
-	case CLOCK_MONOTONIC:
-		tkd = &tk_core;
-		offs = &offs_zero;
-		break;
-	case CLOCK_BOOTTIME:
-		tkd = &tk_core;
-		offs = &tk_core.timekeeper.offs_boot;
-		break;
-	case CLOCK_AUX ... CLOCK_AUX_LAST:
-		tkd = aux_get_tk_data(clock_id);
-		if (!tkd)
+	/*
+	 * Bias the dispatch for CLOCK_REALTIME: it is the overwhelmingly
+	 * common caller (PPS, PTP cross-timestamps) and the most
+	 * latency-critical -- everything ahead of the counter read
+	 * displaces those callers' timestamps from their triggering event.
+	 */
+	tkd = &tk_core;
+	offs = &tk_core.timekeeper.offs_real;
+
+	if (unlikely(clock_id != CLOCK_REALTIME)) {
+		switch (clock_id) {
+		/* Map RAW to MONOTONIC so the loop below is trivial */
+		case CLOCK_MONOTONIC_RAW:
+		case CLOCK_MONOTONIC:
+			offs = &offs_zero;
+			break;
+		case CLOCK_BOOTTIME:
+			offs = &tk_core.timekeeper.offs_boot;
+			break;
+		case CLOCK_AUX ... CLOCK_AUX_LAST:
+			tkd = aux_get_tk_data(clock_id);
+			if (!tkd)
+				return;
+			offs = &tkd->timekeeper.offs_aux;
+			break;
+		default:
+			WARN_ON_ONCE(1);
 			return;
-		offs = &tkd->timekeeper.offs_aux;
-		break;
-	default:
-		WARN_ON_ONCE(1);
-		return;
+		}
 	}
 
 	tk = &tkd->timekeeper;
 
 	do {
-		struct clocksource_hw_snapshot chs = { };
+		struct clocksource_hw_snapshot chs;
 
 		seq = read_seqcount_begin(&tkd->seq);
 
@@ -1911,8 +1944,11 @@ int timekeeping_notify(struct clocksource *clock)
 	 * If the clocksource has been selected and supports inlined reads
 	 * enable the branch.
 	 */
-	if (tk->tkr_mono.clock == clock && clock->flags & CLOCK_SOURCE_CAN_INLINE_READ)
+	if (tk->tkr_mono.clock == clock && clock->flags & CLOCK_SOURCE_CAN_INLINE_READ) {
+		/* The inlined read cannot provide a hardware snapshot */
+		WARN_ON_ONCE(clock->read_snapshot);
 		clocksource_enable_inline_read();
+	}
 
 	tick_clock_notify();
 	return tk->tkr_mono.clock == clock ? 0 : -1;
