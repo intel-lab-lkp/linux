@@ -12,6 +12,11 @@
 #include <linux/netdevice.h>
 #include <linux/can.h>
 
+struct can_rx_offload_queue {
+	struct sk_buff_head skb_queue;
+	struct napi_struct napi;
+};
+
 struct can_rx_offload {
 	struct net_device *dev;
 
@@ -19,16 +24,17 @@ struct can_rx_offload {
 					unsigned int mb, u32 *timestamp,
 					bool drop);
 
-	struct sk_buff_head skb_queue;
 	struct sk_buff_head skb_irq_queue;
 	u32 skb_queue_len_max;
 
 	unsigned int mb_first;
 	unsigned int mb_last;
 
-	struct napi_struct napi;
-
 	bool inc;
+
+	/* Points to own_queue. */
+	struct can_rx_offload_queue *queue;
+	struct can_rx_offload_queue own_queue;
 };
 
 int can_rx_offload_add_timestamp(struct net_device *dev,
@@ -59,7 +65,7 @@ void can_rx_offload_enable(struct can_rx_offload *offload);
 
 static inline void can_rx_offload_disable(struct can_rx_offload *offload)
 {
-	napi_disable(&offload->napi);
+	napi_disable(&offload->queue->napi);
 }
 
 #endif /* !_CAN_RX_OFFLOAD_H */

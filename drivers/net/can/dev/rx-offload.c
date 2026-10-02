@@ -41,16 +41,15 @@ can_rx_offload_inc(struct can_rx_offload *offload, unsigned int *val)
 
 static int can_rx_offload_napi_poll(struct napi_struct *napi, int quota)
 {
-	struct can_rx_offload *offload = container_of(napi,
-						      struct can_rx_offload,
-						      napi);
-	struct net_device *dev = offload->dev;
-	struct net_device_stats *stats = &dev->stats;
+	struct can_rx_offload_queue *queue = container_of(napi,
+							  struct can_rx_offload_queue,
+							  napi);
+	struct net_device_stats *stats = &napi->dev->stats;
 	struct sk_buff *skb;
 	int work_done = 0;
 
 	while ((work_done < quota) &&
-	       (skb = skb_dequeue(&offload->skb_queue))) {
+	       (skb = skb_dequeue(&queue->skb_queue))) {
 		struct can_frame *cf = (struct can_frame *)skb->data;
 
 		work_done++;
@@ -66,8 +65,8 @@ static int can_rx_offload_napi_poll(struct napi_struct *napi, int quota)
 		napi_complete_done(napi, work_done);
 
 		/* Check if there was another interrupt */
-		if (!skb_queue_empty(&offload->skb_queue))
-			napi_schedule(&offload->napi);
+		if (!skb_queue_empty(&queue->skb_queue))
+			napi_schedule(&queue->napi);
 	}
 
 	return work_done;
@@ -125,7 +124,7 @@ static int can_rx_offload_compare(struct sk_buff *a, struct sk_buff *b)
  * from the device and return the mailbox's content as a struct
  * sk_buff.
  *
- * If the struct can_rx_offload::skb_queue exceeds the maximal queue
+ * If the struct can_rx_offload_queue::skb_queue exceeds the maximal queue
  * length (struct can_rx_offload::skb_queue_len_max) or no skb can be
  * allocated, the mailbox contents is discarded by reading it into an
  * overflow buffer. This way the mailbox is marked as free by the
@@ -146,7 +145,7 @@ can_rx_offload_offload_one(struct can_rx_offload *offload, unsigned int n)
 	u32 timestamp;
 
 	/* If queue is full drop frame */
-	if (unlikely(skb_queue_len(&offload->skb_queue) >
+	if (unlikely(skb_queue_len(&offload->queue->skb_queue) >
 		     offload->skb_queue_len_max))
 		drop = true;
 
@@ -224,7 +223,7 @@ int can_rx_offload_queue_timestamp(struct can_rx_offload *offload,
 {
 	struct can_rx_offload_cb *cb;
 
-	if (skb_queue_len(&offload->skb_queue) >
+	if (skb_queue_len(&offload->queue->skb_queue) >
 	    offload->skb_queue_len_max) {
 		dev_kfree_skb_any(skb);
 		return -ENOBUFS;
@@ -268,7 +267,7 @@ EXPORT_SYMBOL_GPL(can_rx_offload_get_echo_skb_queue_timestamp);
 int can_rx_offload_queue_tail(struct can_rx_offload *offload,
 			      struct sk_buff *skb)
 {
-	if (skb_queue_len(&offload->skb_queue) >
+	if (skb_queue_len(&offload->queue->skb_queue) >
 	    offload->skb_queue_len_max) {
 		dev_kfree_skb_any(skb);
 		return -ENOBUFS;
@@ -307,44 +306,46 @@ EXPORT_SYMBOL_GPL(can_rx_offload_get_echo_skb_queue_tail);
 
 void can_rx_offload_irq_finish(struct can_rx_offload *offload)
 {
+	struct can_rx_offload_queue *queue = offload->queue;
 	unsigned long flags;
 	int queue_len;
 
 	if (skb_queue_empty_lockless(&offload->skb_irq_queue))
 		return;
 
-	spin_lock_irqsave(&offload->skb_queue.lock, flags);
-	skb_queue_splice_tail_init(&offload->skb_irq_queue, &offload->skb_queue);
-	spin_unlock_irqrestore(&offload->skb_queue.lock, flags);
+	spin_lock_irqsave(&queue->skb_queue.lock, flags);
+	skb_queue_splice_tail_init(&offload->skb_irq_queue, &queue->skb_queue);
+	spin_unlock_irqrestore(&queue->skb_queue.lock, flags);
 
-	queue_len = skb_queue_len(&offload->skb_queue);
+	queue_len = skb_queue_len(&queue->skb_queue);
 	if (queue_len > offload->skb_queue_len_max / 8)
 		netdev_dbg(offload->dev, "%s: queue_len=%d\n",
 			   __func__, queue_len);
 
-	napi_schedule(&offload->napi);
+	napi_schedule(&queue->napi);
 }
 EXPORT_SYMBOL_GPL(can_rx_offload_irq_finish);
 
 void can_rx_offload_threaded_irq_finish(struct can_rx_offload *offload)
 {
+	struct can_rx_offload_queue *queue = offload->queue;
 	unsigned long flags;
 	int queue_len;
 
 	if (skb_queue_empty_lockless(&offload->skb_irq_queue))
 		return;
 
-	spin_lock_irqsave(&offload->skb_queue.lock, flags);
-	skb_queue_splice_tail_init(&offload->skb_irq_queue, &offload->skb_queue);
-	spin_unlock_irqrestore(&offload->skb_queue.lock, flags);
+	spin_lock_irqsave(&queue->skb_queue.lock, flags);
+	skb_queue_splice_tail_init(&offload->skb_irq_queue, &queue->skb_queue);
+	spin_unlock_irqrestore(&queue->skb_queue.lock, flags);
 
-	queue_len = skb_queue_len(&offload->skb_queue);
+	queue_len = skb_queue_len(&queue->skb_queue);
 	if (queue_len > offload->skb_queue_len_max / 8)
 		netdev_dbg(offload->dev, "%s: queue_len=%d\n",
 			   __func__, queue_len);
 
 	local_bh_disable();
-	napi_schedule(&offload->napi);
+	napi_schedule(&queue->napi);
 	local_bh_enable();
 }
 EXPORT_SYMBOL_GPL(can_rx_offload_threaded_irq_finish);
@@ -353,15 +354,18 @@ static int can_rx_offload_init_queue(struct net_device *dev,
 				     struct can_rx_offload *offload,
 				     unsigned int weight)
 {
+	struct can_rx_offload_queue *queue = &offload->own_queue;
+
 	offload->dev = dev;
+	offload->queue = queue;
 
 	/* Limit queue len to 4x the weight (rounded to next power of two) */
 	offload->skb_queue_len_max = 2 << fls(weight);
 	offload->skb_queue_len_max *= 4;
-	skb_queue_head_init(&offload->skb_queue);
+	skb_queue_head_init(&queue->skb_queue);
 	__skb_queue_head_init(&offload->skb_irq_queue);
 
-	netif_napi_add_weight(dev, &offload->napi, can_rx_offload_napi_poll,
+	netif_napi_add_weight(dev, &queue->napi, can_rx_offload_napi_poll,
 			      weight);
 
 	dev_dbg(dev->dev.parent, "%s: skb_queue_len_max=%d\n",
@@ -414,14 +418,14 @@ EXPORT_SYMBOL_GPL(can_rx_offload_add_manual);
 
 void can_rx_offload_enable(struct can_rx_offload *offload)
 {
-	napi_enable(&offload->napi);
+	napi_enable(&offload->queue->napi);
 }
 EXPORT_SYMBOL_GPL(can_rx_offload_enable);
 
 void can_rx_offload_del(struct can_rx_offload *offload)
 {
-	netif_napi_del(&offload->napi);
-	skb_queue_purge(&offload->skb_queue);
+	netif_napi_del(&offload->queue->napi);
+	skb_queue_purge(&offload->queue->skb_queue);
 	__skb_queue_purge(&offload->skb_irq_queue);
 }
 EXPORT_SYMBOL_GPL(can_rx_offload_del);
