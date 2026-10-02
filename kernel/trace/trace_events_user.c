@@ -210,6 +210,7 @@ static int user_event_parse(struct user_event_group *group, char *name,
 
 static struct user_event_mm *user_event_mm_get(struct user_event_mm *mm);
 static struct user_event_mm *user_event_mm_get_all(struct user_event *user);
+static void user_event_mm_destroy(struct user_event_mm *mm);
 static void user_event_mm_put(struct user_event_mm *mm);
 static int destroy_user_event(struct user_event *user);
 static bool user_fields_match(struct user_event *user, int argc,
@@ -754,33 +755,78 @@ static struct user_event_mm *user_event_mm_alloc(struct task_struct *t)
 	return user_mm;
 }
 
+static struct user_event_mm *
+user_event_mm_find_locked(struct mm_struct *mm)
+{
+	struct user_event_mm *user_mm;
+
+	lockdep_assert_held(&user_event_mms_lock);
+
+	list_for_each_entry(user_mm, &user_event_mms, mms_link)
+		if (user_mm->mm == mm)
+			return user_mm;
+
+	return NULL;
+}
+
 static void user_event_mm_attach(struct user_event_mm *user_mm, struct task_struct *t)
 {
 	unsigned long flags;
 
 	spin_lock_irqsave(&user_event_mms_lock, flags);
 	list_add_rcu(&user_mm->mms_link, &user_event_mms);
-	spin_unlock_irqrestore(&user_event_mms_lock, flags);
-
 	t->user_event_mm = user_mm;
+	spin_unlock_irqrestore(&user_event_mms_lock, flags);
 }
 
 static struct user_event_mm *current_user_event_mm(void)
 {
+	struct user_event_mm *new_mm;
 	struct user_event_mm *user_mm = current->user_event_mm;
+	unsigned long flags;
 
 	if (user_mm)
-		goto inc;
+		return user_event_mm_get(user_mm);
 
-	user_mm = user_event_mm_alloc(current);
+	spin_lock_irqsave(&user_event_mms_lock, flags);
 
-	if (!user_mm)
-		goto error;
+	user_mm = user_event_mm_find_locked(current->mm);
 
-	user_event_mm_attach(user_mm, current);
-inc:
-	refcount_inc(&user_mm->refcnt);
-error:
+	if (user_mm) {
+		refcount_inc(&user_mm->tasks);
+		current->user_event_mm = user_mm;
+		user_event_mm_get(user_mm);
+	}
+
+	spin_unlock_irqrestore(&user_event_mms_lock, flags);
+
+	if (user_mm)
+		return user_mm;
+
+	new_mm = user_event_mm_alloc(current);
+
+	spin_lock_irqsave(&user_event_mms_lock, flags);
+
+	user_mm = user_event_mm_find_locked(current->mm);
+
+	if (user_mm) {
+		refcount_inc(&user_mm->tasks);
+	} else if (new_mm) {
+		user_mm = new_mm;
+		list_add_rcu(&user_mm->mms_link, &user_event_mms);
+	} else {
+		spin_unlock_irqrestore(&user_event_mms_lock, flags);
+		return NULL;
+	}
+
+	current->user_event_mm = user_mm;
+	user_event_mm_get(user_mm);
+
+	spin_unlock_irqrestore(&user_event_mms_lock, flags);
+
+	if (new_mm && new_mm != user_mm)
+		user_event_mm_destroy(new_mm);
+
 	return user_mm;
 }
 
@@ -817,14 +863,18 @@ void user_event_mm_remove(struct task_struct *t)
 	might_sleep();
 
 	mm = t->user_event_mm;
+
+	spin_lock_irqsave(&user_event_mms_lock, flags);
+
 	t->user_event_mm = NULL;
 
-	/* Clone will increment the tasks, only remove if last clone */
-	if (!refcount_dec_and_test(&mm->tasks))
+	/* Clones and attached tasks increment this count. */
+	if (!refcount_dec_and_test(&mm->tasks)) {
+		spin_unlock_irqrestore(&user_event_mms_lock, flags);
 		return;
+	}
 
-	/* Remove the mm from the list, so it can no longer be enabled */
-	spin_lock_irqsave(&user_event_mms_lock, flags);
+	/* Prevent new tasks from attaching after the last-task transition. */
 	list_del_rcu(&mm->mms_link);
 	spin_unlock_irqrestore(&user_event_mms_lock, flags);
 
