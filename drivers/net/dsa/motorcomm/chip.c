@@ -101,19 +101,19 @@ static const struct yt921x_mib_desc yt921x_mib_descs[] = {
 static const struct yt921x_info yt921x_infos[] = {
 	{
 		"YT9215SC", YT9215_MAJOR, 1, 0,
-		GENMASK(4, 0),
+		GENMASK_U16(4, 0),
 		BIT(9),
 		BIT(8) | BIT(9),
 	},
 	{
 		"YT9215S", YT9215_MAJOR, 2, 0,
-		GENMASK(4, 0),
+		GENMASK_U16(4, 0),
 		BIT(9),
 		BIT(8),
 	},
 	{
 		"YT9215RB", YT9215_MAJOR, 3, 0,
-		GENMASK(4, 0),
+		GENMASK_U16(4, 0),
 		BIT(8) | BIT(9),
 		0,
 	},
@@ -131,13 +131,13 @@ static const struct yt921x_info yt921x_infos[] = {
 	},
 	{
 		"YT9218N", YT9218_MAJOR, 0, 0,
-		GENMASK(7, 0),
+		GENMASK_U16(7, 0),
 		0,
 		0,
 	},
 	{
 		"YT9218MB", YT9218_MAJOR, 1, 0,
-		GENMASK(7, 0),
+		GENMASK_U16(7, 0),
 		BIT(8) | BIT(9),
 		BIT(8) | BIT(9),
 	},
@@ -4061,7 +4061,7 @@ static int yt921x_chip_setup_dsa(struct yt921x_priv *priv)
 	if (res)
 		return res;
 
-	ctrl = GENMASK(10, 0);
+	ctrl = GENMASK_U32(10, 0);
 	res = yt921x_reg_write(priv, YT921X_FILTER_UNK_UCAST, ctrl);
 	if (res)
 		return res;
