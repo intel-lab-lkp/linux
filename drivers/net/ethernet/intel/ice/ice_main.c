@@ -7581,6 +7581,9 @@ int ice_vsi_open(struct ice_vsi *vsi)
 	if (err)
 		goto err_setup_rx;
 
+	if (bitmap_empty(pf->txtime_txqs, pf->max_pf_txqs))
+		ice_vsi_cfg_netdev_tc(vsi, vsi->tc_cfg.ena_tc);
+
 	err = ice_vsi_cfg_lan(vsi);
 	if (err)
 		goto err_stop_tx;
@@ -7590,9 +7593,6 @@ int ice_vsi_open(struct ice_vsi *vsi)
 	err = ice_vsi_req_irq_msix(vsi, int_name);
 	if (err)
 		goto err_stop_tx;
-
-	if (bitmap_empty(pf->txtime_txqs, pf->max_pf_txqs))
-		ice_vsi_cfg_netdev_tc(vsi, vsi->tc_cfg.ena_tc);
 
 	if (vsi->type == ICE_VSI_PF || vsi->type == ICE_VSI_SF) {
 		/* Notify the stack of the actual queue counts. */
