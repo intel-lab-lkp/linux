@@ -4120,6 +4120,11 @@ struct pyrf_session {
 	 */
 	u64 call_return_last_db_id;
 	u64 sample_last_db_id;
+	/**
+	 * @callback_raised: A python callback raised an exception and requested
+	 * that event processing stops, see pyrf_session__callback_raised().
+	 */
+	bool callback_raised;
 	char *vmlinux_name;
 	char *kallsyms_name;
 	char *symfs;
@@ -4439,6 +4444,55 @@ static PyObject *pyrf_call_return__new(struct call_return *cr)
 	return (PyObject *)pevent;
 }
 
+/*
+ * Number of times a python callback has requested that event processing
+ * stops, see pyrf_session__callback_raised().
+ */
+static unsigned int pyrf_session__stop_requests;
+
+/*
+ * A python callback raised an exception.
+ *
+ * Returning an error to the session code would cause reader__read_event() to
+ * print a "processing failed for event of type: ..." error to stderr. This is
+ * noise, and in the case of a TUI corrupts the display, when a callback raises
+ * to deliberately stop processing (e.g. cancelling a background load) and the
+ * error message is redundant with the python exception that is raised anyway.
+ *
+ * Instead request that event processing stops by setting session_done and
+ * return success. The exception remains pending (PyErr_Occurred()) and
+ * pyrf_session__find_thread_events() returns NULL so python raises it.
+ *
+ * Note, session_done is a process-global rather than per-session. Were
+ * multiple sessions processing events concurrently in different python
+ * threads then an exception in one would stop all of them. Only the session
+ * whose callback raised clears session_done, and the other sessions detect
+ * the stop request, using pyrf_session__stop_requests, and raise an error
+ * rather than silently dropping events.
+ */
+static int pyrf_session__callback_raised(struct pyrf_session *psession)
+{
+	psession->callback_raised = true;
+	pyrf_session__stop_requests++;
+	session_done = 1;
+	return 0;
+}
+
+/*
+ * session_done stops the reader loops, the ordered_events and deferred sample
+ * flushes, and auxtrace__flush_events(), but some callbacks may still happen
+ * after a callback has raised. For example, a single sample may generate
+ * multiple call_return callbacks, and perf_session__flush_thread_stacks()
+ * delivers call returns for the remaining stack entries (skipping it would
+ * only defer those callbacks until the threads are deleted). Calling into
+ * python with an exception pending is an error, and the events would be
+ * discarded anyway, so callbacks check this and skip calling python.
+ */
+static bool pyrf_session__exception_pending(void)
+{
+	return PyErr_Occurred() != NULL;
+}
+
 static int pyrf_session__call_return_process(struct call_return *cr,
 					     u64 *parent_db_id,
 					     void *data)
@@ -4446,7 +4500,7 @@ static int pyrf_session__call_return_process(struct call_return *cr,
 	struct pyrf_session *psession = data;
 	PyObject *pyevent, *ret;
 
-	if (!psession->call_return)
+	if (!psession->call_return || pyrf_session__exception_pending())
 		return 0;
 
 	if (!cr->db_id)
@@ -4463,12 +4517,10 @@ static int pyrf_session__call_return_process(struct call_return *cr,
 		return -1;
 
 	ret = PyObject_CallFunctionObjArgs(psession->call_return, pyevent, NULL);
-	if (!ret) {
-		Py_DECREF(pyevent);
-		return -1;
-	}
-	Py_DECREF(ret);
 	Py_DECREF(pyevent);
+	if (!ret)
+		return pyrf_session__callback_raised(psession);
+	Py_DECREF(ret);
 	return 0;
 }
 
@@ -4479,6 +4531,9 @@ static int pyrf_session_tool__sample(const struct perf_tool *tool,
 {
 	struct pyrf_session *psession = container_of(tool, struct pyrf_session, tool);
 	u64 sample_db_id = ++psession->sample_last_db_id;
+
+	if (pyrf_session__exception_pending())
+		return 0;
 
 	if (psession->crp) {
 		struct addr_location al, addr_al;
@@ -4510,6 +4565,10 @@ static int pyrf_session_tool__sample(const struct perf_tool *tool,
 
 		addr_location__exit(&addr_al);
 		addr_location__exit(&al);
+
+		/* A call_return callback may have raised. */
+		if (pyrf_session__exception_pending())
+			return 0;
 	}
 
 	if (psession->sample) {
@@ -4524,7 +4583,7 @@ static int pyrf_session_tool__sample(const struct perf_tool *tool,
 		ret = PyObject_CallFunction(psession->sample, "O", pyevent);
 		Py_DECREF(pyevent);
 		if (!ret)
-			return -1;
+			return pyrf_session__callback_raised(psession);
 		Py_DECREF(ret);
 	}
 	return 0;
@@ -4536,9 +4595,19 @@ static int pyrf_session_tool__context_switch(const struct perf_tool *tool,
 					     struct machine *machine)
 {
 	struct pyrf_session *psession = container_of(tool, struct pyrf_session, tool);
-	PyObject *pyevent = pyrf_event__new(event, sample->evsel, psession->session, machine, NULL);
+	PyObject *pyevent;
 	PyObject *ret;
 
+	if (pyrf_session__exception_pending()) {
+		/*
+		 * Skip calling python, but keep the machine's thread state
+		 * consistent as perf_event__process_switch() would have been
+		 * called had no python callback been registered.
+		 */
+		return perf_event__process_switch(tool, event, sample, machine);
+	}
+
+	pyevent = pyrf_event__new(event, sample->evsel, psession->session, machine, NULL);
 	if (perf_event__process_switch(tool, event, sample, machine) < 0) {
 		Py_XDECREF(pyevent);
 		return -1;
@@ -4548,12 +4617,10 @@ static int pyrf_session_tool__context_switch(const struct perf_tool *tool,
 		return -ENOMEM;
 
 	ret = PyObject_CallFunction(psession->context_switch, "O", pyevent);
-	if (!ret) {
-		Py_DECREF(pyevent);
-		return -1;
-	}
-	Py_DECREF(ret);
 	Py_DECREF(pyevent);
+	if (!ret)
+		return pyrf_session__callback_raised(psession);
+	Py_DECREF(ret);
 	return 0;
 }
 
@@ -4563,21 +4630,23 @@ static int pyrf_session_tool__stat(const struct perf_tool *tool,
 {
 	struct pyrf_session *psession = container_of(tool, struct pyrf_session, tool);
 	struct evsel *evsel = evlist__id2evsel(session->evlist, event->stat.id);
-	PyObject *pyevent = pyrf_event__new(event, /*evsel=*/NULL, psession->session,
-					    /*machine=*/NULL, NULL);
 	const char *name = evsel ? evsel__name(evsel) : "unknown";
+	PyObject *pyevent;
 	PyObject *ret;
 
+	if (pyrf_session__exception_pending())
+		return 0;
+
+	pyevent = pyrf_event__new(event, /*evsel=*/NULL, psession->session,
+				  /*machine=*/NULL, NULL);
 	if (pyevent == NULL)
 		return -ENOMEM;
 
 	ret = PyObject_CallFunction(psession->stat, "Oz", pyevent, name);
-	if (!ret) {
-		Py_DECREF(pyevent);
-		return -1;
-	}
-	Py_DECREF(ret);
 	Py_DECREF(pyevent);
+	if (!ret)
+		return pyrf_session__callback_raised(psession);
+	Py_DECREF(ret);
 	return 0;
 }
 
@@ -4586,20 +4655,22 @@ static int pyrf_session_tool__stat_round(const struct perf_tool *tool,
 					 union perf_event *event)
 {
 	struct pyrf_session *psession = container_of(tool, struct pyrf_session, tool);
-	PyObject *pyevent = pyrf_event__new(event, /*evsel=*/NULL, psession->session,
-					    /*machine=*/NULL, NULL);
+	PyObject *pyevent;
 	PyObject *ret;
 
+	if (pyrf_session__exception_pending())
+		return 0;
+
+	pyevent = pyrf_event__new(event, /*evsel=*/NULL, psession->session,
+				  /*machine=*/NULL, NULL);
 	if (pyevent == NULL)
 		return -ENOMEM;
 
 	ret = PyObject_CallFunction(psession->stat, "Oz", pyevent, NULL);
-	if (!ret) {
-		Py_DECREF(pyevent);
-		return -1;
-	}
-	Py_DECREF(ret);
 	Py_DECREF(pyevent);
+	if (!ret)
+		return pyrf_session__callback_raised(psession);
+	Py_DECREF(ret);
 	return 0;
 }
 
@@ -4680,6 +4751,7 @@ static PyObject *pyrf_session__new(PyTypeObject *type, PyObject *args, PyObject 
 	psession->crp = NULL;
 	psession->call_return_last_db_id = 0;
 	psession->sample_last_db_id = 0;
+	psession->callback_raised = false;
 	psession->vmlinux_name = NULL;
 	psession->kallsyms_name = NULL;
 	psession->symfs = NULL;
@@ -4847,11 +4919,34 @@ static void pyrf_session__delete(struct pyrf_session *psession)
 
 static PyObject *pyrf_session__find_thread_events(struct pyrf_session *psession)
 {
+	unsigned int stop_requests = pyrf_session__stop_requests;
 	int err;
 
 	CHECK_INITIALIZED(psession->session, "session");
 
+	psession->callback_raised = false;
 	err = perf_session__process_events(psession->session);
+	if (psession->callback_raised) {
+		/*
+		 * Clear the early stop requested by this session's callback, in
+		 * pyrf_session__callback_raised(), so that later sessions process
+		 * all their events. That function is the only writer of
+		 * session_done in the python module, so resetting it here after
+		 * processing is sufficient and there is no need to also reset it
+		 * before processing.
+		 */
+		session_done = 0;
+	} else if (stop_requests != pyrf_session__stop_requests && !PyErr_Occurred()) {
+		/*
+		 * A callback of a session being processed concurrently, in
+		 * another thread, raised and set session_done which may have
+		 * stopped processing this session's events early. Raise an error
+		 * rather than silently dropping events.
+		 */
+		PyErr_SetString(PyExc_RuntimeError,
+				"Processing events may have stopped early as a callback of a concurrently processed session raised an exception");
+		return NULL;
+	}
 
 	if (PyErr_Occurred())
 		return NULL;
