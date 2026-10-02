@@ -2012,6 +2012,9 @@ void ieee80211_clear_fast_rx(struct sta_info *sta);
 
 bool ieee80211_is_our_addr(struct ieee80211_sub_if_data *sdata,
 			   const u8 *addr, int *out_link_id);
+bool __ieee80211_rx_valid_freq(struct wiphy *wiphy,
+			       struct ieee80211_rx_status *status,
+			       const struct cfg80211_chan_def *chandef);
 
 /* AP code */
 void ieee80211_ap_rx_queued_frame(struct ieee80211_sub_if_data *sdata,

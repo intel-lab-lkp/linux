@@ -5324,11 +5324,41 @@ drop:
 	dev_kfree_skb(skb);
 }
 
-static bool ieee80211_rx_valid_freq(int freq, struct ieee80211_link_data *link)
+bool __ieee80211_rx_valid_freq(struct wiphy *wiphy,
+			       struct ieee80211_rx_status *status,
+			       const struct cfg80211_chan_def *chandef)
+{
+	u32 pri_khz = ieee80211_channel_to_khz(chandef->chan);
+	u32 rx_khz = ieee80211_rx_status_to_khz(status);
+	struct ieee80211_channel *sibling;
+
+	if (rx_khz == pri_khz)
+		return true;
+
+	/* Any non-S1G case from here is not a valid freq */
+	if (!cfg80211_chandef_is_s1g(chandef))
+		return false;
+
+	if (!chandef->s1g_primary_2mhz)
+		return false;
+
+	/*
+	 * Find the sibling 1MHz channel of the 2MHz primary to calculate
+	 * the 2MHz primary center frequency.
+	 */
+	sibling = cfg80211_s1g_get_primary_sibling(wiphy, chandef);
+	if (!sibling)
+		return false;
+
+	return rx_khz == (pri_khz + ieee80211_channel_to_khz(sibling)) / 2;
+}
+
+static bool ieee80211_rx_valid_freq(struct ieee80211_rx_status *status,
+				    struct ieee80211_link_data *link)
 {
 	struct ieee80211_chanctx_conf *conf;
 
-	if (!freq || link->sdata->vif.type == NL80211_IFTYPE_NAN ||
+	if (!status->freq || link->sdata->vif.type == NL80211_IFTYPE_NAN ||
 	    link->sdata->vif.type == NL80211_IFTYPE_NAN_DATA)
 		return true;
 
@@ -5336,7 +5366,8 @@ static bool ieee80211_rx_valid_freq(int freq, struct ieee80211_link_data *link)
 	if (!conf || !conf->def.chan)
 		return false;
 
-	return freq == conf->def.chan->center_freq;
+	return __ieee80211_rx_valid_freq(link->sdata->local->hw.wiphy, status,
+					 &conf->def);
 }
 
 /*
@@ -5436,7 +5467,7 @@ static void __ieee80211_rx_handle_packet(struct ieee80211_hw *hw,
 				continue;
 
 			link = &sta->sdata->deflink;
-			if (!ieee80211_rx_valid_freq(status->freq, link))
+			if (!ieee80211_rx_valid_freq(status, link))
 				continue;
 
 			if (rx_data_pending) {
@@ -5460,7 +5491,7 @@ static void __ieee80211_rx_handle_packet(struct ieee80211_hw *hw,
 			sdata =	sta->sdata;
 			link = rcu_dereference(sdata->link[link_sta->link_id]);
 
-			if (!ieee80211_rx_valid_freq(status->freq, link))
+			if (!ieee80211_rx_valid_freq(status, link))
 				continue;
 
 			if (rx_data_pending) {
@@ -5530,7 +5561,7 @@ static void __ieee80211_rx_handle_packet(struct ieee80211_hw *hw,
 		 * RX using the station.
 		 */
 		if (link_sta && link &&
-		    ieee80211_rx_valid_freq(status->freq, link)) {
+		    ieee80211_rx_valid_freq(status, link)) {
 			if (rx_data_pending) {
 				ieee80211_prepare_and_rx_handle(&rx, skb, false);
 				rx_data_pending = false;
