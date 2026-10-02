@@ -31,17 +31,10 @@ properties:
     maxItems: 1
 
   clocks:
-    minItems: 1
-    maxItems: 3
+    maxItems: 1
 
   clock-names:
-    oneOf:
-      - items:
-          - enum: [apb_pclk, atclk]
-      - items: # Zynq-700
-          - const: apb_pclk
-          - const: dbg_trc
-          - const: dbg_apb
+    const: atclk
 
   label:
     description:
