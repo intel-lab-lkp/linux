@@ -68,6 +68,7 @@ DECLARE_STATIC_KEY_FALSE(page_pool_mem_providers);
 enum net_iov_type {
 	NET_IOV_DMABUF,
 	NET_IOV_IOURING,
+	NET_IOV_XSK,
 };
 
 /* A memory descriptor representing abstract networking I/O vectors,

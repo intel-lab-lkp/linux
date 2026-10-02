@@ -11,6 +11,7 @@
 #include <linux/netdevice.h>
 #include <linux/skbuff.h> /* skb_shared_info */
 
+#include <net/netmem.h>
 #include <net/page_pool/types.h>
 
 /**
@@ -81,6 +82,8 @@ enum xdp_buff_flags {
 	 * XDP program is not attached.
 	 */
 	XDP_FLAGS_FRAGS_UNREADABLE	= BIT(2),
+	/* The txq/netmem union contains a receive netmem reference. */
+	XDP_FLAGS_HAS_NETMEM		= BIT(3),
 };
 
 struct xdp_buff {
@@ -89,7 +92,12 @@ struct xdp_buff {
 	void *data_meta;
 	void *data_hard_start;
 	struct xdp_rxq_info *rxq;
-	struct xdp_txq_info *txq;
+	union {
+		/* Valid for DEVMAP egress programs. */
+		struct xdp_txq_info *txq;
+		/* Valid for receive buffers backed by non-page netmem. */
+		netmem_ref netmem;
+	};
 
 	union {
 		struct {
@@ -104,6 +112,8 @@ struct xdp_buff {
 		u64 frame_sz_flags_init;
 #endif
 	};
+	/* Kernel-owned fragment metadata for non-page netmem. */
+	struct skb_shared_info *sinfo;
 };
 
 static __always_inline void xdp_reinit_buff(struct xdp_buff *xdp)
@@ -138,7 +148,7 @@ static __always_inline void xdp_buff_set_frag_unreadable(struct xdp_buff *xdp)
 
 static __always_inline u32 xdp_buff_get_skb_flags(const struct xdp_buff *xdp)
 {
-	return xdp->flags;
+	return xdp->flags & ~XDP_FLAGS_HAS_NETMEM;
 }
 
 static __always_inline void xdp_buff_clear_frag_pfmemalloc(struct xdp_buff *xdp)
@@ -150,6 +160,10 @@ static __always_inline void
 xdp_init_buff(struct xdp_buff *xdp, u32 frame_sz, struct xdp_rxq_info *rxq)
 {
 	xdp->rxq = rxq;
+	/* Do not initialize the txq/netmem union here. DEVMAP generic XDP
+	 * sets txq before this helper is called; receive drivers set netmem
+	 * explicitly.
+	 */
 
 #ifdef __LITTLE_ENDIAN
 	/*
@@ -176,6 +190,33 @@ xdp_prepare_buff(struct xdp_buff *xdp, unsigned char *hard_start,
 	xdp->data_meta = meta_valid ? data : data + 1;
 }
 
+static __always_inline bool xdp_buff_has_netmem(const struct xdp_buff *xdp)
+{
+	return !!(xdp->flags & XDP_FLAGS_HAS_NETMEM);
+}
+
+static __always_inline netmem_ref
+xdp_buff_get_netmem(const struct xdp_buff *xdp)
+{
+	if (xdp_buff_has_netmem(xdp))
+		return xdp->netmem;
+
+	return virt_to_netmem(xdp->data);
+}
+
+static __always_inline void
+xdp_init_buff_from_netmem(struct xdp_buff *xdp, u32 frame_sz,
+			  struct xdp_rxq_info *rxq, netmem_ref netmem,
+			  struct skb_shared_info *sinfo)
+{
+	xdp_init_buff(xdp, frame_sz, rxq);
+	if (netmem_is_net_iov(netmem)) {
+		xdp->netmem = netmem;
+		xdp->flags |= XDP_FLAGS_HAS_NETMEM;
+		xdp->sinfo = sinfo;
+	}
+}
+
 /* Reserve memory area at end-of data area.
  *
  * This macro reserves tailroom in the XDP buffer by limiting the
@@ -189,6 +230,9 @@ xdp_prepare_buff(struct xdp_buff *xdp, unsigned char *hard_start,
 static inline struct skb_shared_info *
 xdp_get_shared_info_from_buff(const struct xdp_buff *xdp)
 {
+	if (xdp_buff_has_netmem(xdp))
+		return xdp->sinfo;
+
 	return (struct skb_shared_info *)xdp_data_hard_end(xdp);
 }
 
@@ -290,7 +334,8 @@ static inline bool xdp_buff_add_frag(struct xdp_buff *xdp, netmem_ref netmem,
 
 	if (unlikely(netmem_is_pfmemalloc(netmem)))
 		xdp_buff_set_frag_pfmemalloc(xdp);
-	if (unlikely(netmem_is_net_iov(netmem)))
+	if (unlikely(netmem_is_net_iov(netmem) &&
+		     !net_iov_is_readable(netmem_to_net_iov(netmem))))
 		xdp_buff_set_frag_unreadable(xdp);
 
 	return true;
@@ -425,7 +470,7 @@ int xdp_update_frame_from_buff(const struct xdp_buff *xdp,
 	xdp_frame->headroom = headroom - sizeof(*xdp_frame);
 	xdp_frame->metasize = metasize;
 	xdp_frame->frame_sz = xdp->frame_sz;
-	xdp_frame->flags = xdp->flags;
+	xdp_frame->flags = xdp_buff_get_skb_flags(xdp);
 
 	return 0;
 }
@@ -436,7 +481,8 @@ struct xdp_frame *xdp_convert_buff_to_frame(struct xdp_buff *xdp)
 {
 	struct xdp_frame *xdp_frame;
 
-	if (xdp->rxq->mem.type == MEM_TYPE_XSK_BUFF_POOL)
+	if (xdp->rxq->mem.type == MEM_TYPE_XSK_BUFF_POOL ||
+	    xdp_buff_has_netmem(xdp))
 		return xdp_convert_zc_to_xdp_frame(xdp);
 
 	/* Store info in top of packet */
