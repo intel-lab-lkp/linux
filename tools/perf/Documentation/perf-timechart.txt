@@ -47,6 +47,9 @@ TIMECHART OPTIONS
 -T::
 --tasks-only::
         Don't output processor state transitions
+-I::
+--io-only::
+        In '--live' or '--tui' mode, only record or show I/O activity
 -p::
 --process::
         Select the processes to display, by name or PID
@@ -59,8 +62,21 @@ TIMECHART OPTIONS
 	linkperf:perf-script[1]). The script requires the perf python module
 	and the python 'textual' library. The CPU, task, I/O and summary views
 	can be zoomed ('+'/'-'), panned (shift+arrows) and the state of the
-	selected row at the cursor is described. The -i, -P, -T and -p options
-	are passed to the script, other output options are ignored.
+	selected row at the cursor is described. The -i, -P, -T, -I and -p
+	options are passed to the script, other output options are ignored.
+--live::
+	Record scheduler and power events, or I/O events with '-I', with
+	linkperf:perf-record[1] and display them as they happen in the
+	terminal timechart, implying --tui. Only the most recent '--window'
+	seconds of events are kept and shown. Pressing space pauses and
+	resumes recording; zooming or panning stops the view following the
+	latest events until '0' is pressed. If a command is given after '--'
+	then only that workload is recorded and recording stops when it exits,
+	otherwise the whole system is recorded until the UI is quit. If '-o'
+	is given the recorded perf data is also saved to that file.
+--window=<seconds>::
+	In '--live' mode, the number of seconds of recent events kept in
+	memory and shown in the timeline (default: 10).
 --symfs=<directory[,layout]>::
         Look for files with symbols relative to this directory. The optional
         layout can be 'hierarchy' (default, matches full path) or 'flat'

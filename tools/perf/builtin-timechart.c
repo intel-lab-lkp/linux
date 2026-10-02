@@ -10,7 +10,9 @@
 
 #include <errno.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "builtin.h"
 #include "util/color.h"
@@ -70,6 +72,9 @@ struct timechart {
 				topology;
 	bool			force;
 	bool			use_tui;
+	/* Live --tui mode settings */
+	bool			live;
+	const char		*live_window;
 	/* IO related settings */
 	bool			io_only,
 				skip_eagain;
@@ -1761,16 +1766,25 @@ out_delete:
 /*
  * Launch the interactive textual based python script via 'perf script' that
  * finds the script, sets up the python environment and passes the global
- * input_name (set by -i) to the script as '-i <input_name>'.
+ * input_name (set by -i) to the script as '-i <input_name>'. In live mode the
+ * script runs 'perf record', so pass this perf's path, the optional data output
+ * file and the workload given in argc/argv.
  */
-static int timechart__tui(struct timechart *tchart)
+static int timechart__tui(struct timechart *tchart, const char *live_output,
+			  int argc, const char **argv)
 {
 	struct process_filter *filt;
 	const char **script_argv;
-	int script_argc = 0, nr_args = 5, ret;
+	int script_argc = 0, nr_args = 6, ret, i;
+	char perf_exe[PATH_MAX];
+	ssize_t len;
 
 	for (filt = process_filter; filt; filt = filt->next)
 		nr_args += 2;
+	if (tchart->live_window)
+		nr_args += 2;
+	if (tchart->live)
+		nr_args += 6 + argc;
 
 	script_argv = calloc(nr_args + 1, sizeof(*script_argv));
 	if (!script_argv)
@@ -1783,9 +1797,33 @@ static int timechart__tui(struct timechart *tchart)
 		script_argv[script_argc++] = "-P";
 	if (tchart->tasks_only)
 		script_argv[script_argc++] = "-T";
+	if (tchart->io_only)
+		script_argv[script_argc++] = "-I";
 	for (filt = process_filter; filt; filt = filt->next) {
 		script_argv[script_argc++] = "-p";
 		script_argv[script_argc++] = filt->name;
+	}
+	if (tchart->live_window) {
+		script_argv[script_argc++] = "--window";
+		script_argv[script_argc++] = tchart->live_window;
+	}
+	if (tchart->live) {
+		script_argv[script_argc++] = "--live";
+		if (live_output) {
+			script_argv[script_argc++] = "-o";
+			script_argv[script_argc++] = live_output;
+		}
+		len = readlink("/proc/self/exe", perf_exe, sizeof(perf_exe) - 1);
+		if (len > 0) {
+			perf_exe[len] = '\0';
+			script_argv[script_argc++] = "--perf";
+			script_argv[script_argc++] = perf_exe;
+		}
+		if (argc) {
+			script_argv[script_argc++] = "--";
+			for (i = 0; i < argc; i++)
+				script_argv[script_argc++] = argv[i];
+		}
 	}
 
 	ret = cmd_script(script_argc, script_argv);
@@ -2084,11 +2122,13 @@ int cmd_timechart(int argc, const char **argv)
 		.min_time = NSEC_PER_MSEC,
 		.merge_dist = 1000,
 	};
-	const char *output_name = "output.svg";
+	const char *default_output_name = "output.svg";
+	const char *output_name = default_output_name;
 	const char *output_record_data = "perf.data";
 	const struct option timechart_common_options[] = {
 	OPT_BOOLEAN('P', "power-only", &tchart.power_only, "output power data only"),
 	OPT_BOOLEAN('T', "tasks-only", &tchart.tasks_only, "output processes data only"),
+	OPT_BOOLEAN('I', "io-only", &tchart.io_only, "record only IO data"),
 	OPT_END()
 	};
 	const struct option timechart_options[] = {
@@ -2118,6 +2158,10 @@ int cmd_timechart(int argc, const char **argv)
 	OPT_BOOLEAN('f', "force", &tchart.force, "don't complain, do it"),
 	OPT_BOOLEAN(0, "tui", &tchart.use_tui,
 		    "interactive terminal timechart using the ttimechart python script"),
+	OPT_BOOLEAN(0, "live", &tchart.live,
+		    "record and show events as they happen, implies --tui"),
+	OPT_STRING(0, "window", &tchart.live_window, "seconds",
+		   "seconds of recent events kept and shown in live mode, default 10"),
 	OPT_PARENT(timechart_common_options),
 	};
 	const char * const timechart_subcommands[] = { "record", NULL };
@@ -2126,8 +2170,6 @@ int cmd_timechart(int argc, const char **argv)
 		NULL
 	};
 	const struct option timechart_record_options[] = {
-	OPT_BOOLEAN('I', "io-only", &tchart.io_only,
-		    "record only IO data"),
 	OPT_BOOLEAN('g', "callchain", &tchart.with_backtrace, "record callchain"),
 	OPT_STRING('o', "output", &output_record_data, "file", "output data file name"),
 	OPT_PARENT(timechart_common_options),
@@ -2165,8 +2207,13 @@ int cmd_timechart(int argc, const char **argv)
 		ret = -1;
 		goto out;
 	}
+	if (tchart.io_only && (tchart.power_only || tchart.tasks_only)) {
+		pr_err("-I cannot be used with -P or -T.\n");
+		ret = -1;
+		goto out;
+	}
 
-	if (argc && strlen(argv[0]) > 2 && strstarts("record", argv[0])) {
+	if (!tchart.live && argc && strlen(argv[0]) > 2 && strstarts("record", argv[0])) {
 		argc = parse_options(argc, argv, timechart_record_options,
 				     timechart_record_usage,
 				     PARSE_OPT_STOP_AT_NON_OPTION);
@@ -2176,17 +2223,30 @@ int cmd_timechart(int argc, const char **argv)
 			ret = -1;
 			goto out;
 		}
+		if (tchart.io_only && (tchart.power_only || tchart.tasks_only)) {
+			pr_err("-I cannot be used with -P or -T.\n");
+			ret = -1;
+			goto out;
+		}
 
 		if (tchart.io_only)
 			ret = timechart__io_record(argc, argv, output_record_data);
 		else
 			ret = timechart__record(&tchart, argc, argv, output_record_data);
 		goto out;
-	} else if (argc)
+	} else if (argc && !tchart.live)
 		usage_with_options(timechart_usage, timechart_options);
 
-	if (tchart.use_tui) {
-		ret = timechart__tui(&tchart);
+	if (tchart.use_tui || tchart.live) {
+		/* In live mode -o names the file to save the recorded data to. */
+		ret = timechart__tui(&tchart,
+				     output_name != default_output_name ? output_name : NULL,
+				     argc, argv);
+		goto out;
+	}
+	if (tchart.live_window) {
+		pr_err("--window requires --live.\n");
+		ret = -1;
 		goto out;
 	}
 
