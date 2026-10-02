@@ -1034,6 +1034,21 @@ int io_read(struct io_kiocb *req, unsigned int issue_flags)
 	if (ret >= 0)
 		return kiocb_done(req, ret, &sel, issue_flags);
 
+	/*
+	 * -EIOCBQUEUED leaves the kiocb in flight on the selected user
+	 * address. Commit the ring buffer here. Completion reports the
+	 * id with a NULL list. Error returns still recycle below.
+	 */
+	if (ret == IOU_ISSUE_SKIP_COMPLETE) {
+		if ((req->flags & REQ_F_BUFFERS_COMMIT) && sel.buf_list) {
+			struct io_rw *rw = io_kiocb_to_cmd(req, struct io_rw);
+
+			if (!io_kbuf_commit(req, sel.buf_list, rw->len, 1))
+				req->flags |= REQ_F_BUF_MORE;
+		}
+		return io_fixup_restart_res(ret);
+	}
+
 	if (req->flags & REQ_F_BUFFERS_COMMIT)
 		io_kbuf_recycle(req, sel.buf_list, issue_flags);
 
