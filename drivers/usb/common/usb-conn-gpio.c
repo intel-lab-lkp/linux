@@ -29,7 +29,7 @@ static DEFINE_IDA(usb_conn_ida);
 #define USB_GPIO_DEB_US		((USB_GPIO_DEB_MS) * 1000)	/* us */
 
 #define USB_CONN_IRQF	\
-	(IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING | IRQF_ONESHOT)
+	(IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING | IRQF_ONESHOT | IRQF_NO_AUTOEN)
 
 struct usb_conn_info {
 	struct device *dev;
@@ -262,7 +262,7 @@ static int usb_conn_probe(struct platform_device *pdev)
 		if (info->vbus_irq < 0) {
 			dev_err(dev, "failed to get VBUS IRQ\n");
 			ret = info->vbus_irq;
-			goto put_role_sw;
+			goto free_id_irq;
 		}
 
 		ret = devm_request_threaded_irq(dev, info->vbus_irq, NULL,
@@ -270,19 +270,30 @@ static int usb_conn_probe(struct platform_device *pdev)
 						pdev->name, info);
 		if (ret < 0) {
 			dev_err(dev, "failed to request VBUS IRQ\n");
-			goto put_role_sw;
+			goto free_id_irq;
 		}
 	}
 
 	platform_set_drvdata(pdev, info);
 	device_set_wakeup_capable(&pdev->dev, true);
 
-	/* Perform initial detection */
 	info->initial_detection = true;
+
+	/* Enable the IRQs only after all the setup has succeeded. */
+	if (info->id_gpiod)
+		enable_irq(info->id_irq);
+	if (info->vbus_gpiod)
+		enable_irq(info->vbus_irq);
+
+	/* Perform initial detection */
 	usb_conn_queue_dwork(info, 0);
 
 	return 0;
 
+free_id_irq:
+	if (info->id_gpiod)
+		devm_free_irq(dev, info->id_irq, info);
+	cancel_delayed_work_sync(&info->dw_det);
 put_role_sw:
 	usb_role_switch_put(info->role_sw);
 	return ret;
@@ -291,6 +302,11 @@ put_role_sw:
 static void usb_conn_remove(struct platform_device *pdev)
 {
 	struct usb_conn_info *info = platform_get_drvdata(pdev);
+
+	if (info->id_gpiod)
+		devm_free_irq(&pdev->dev, info->id_irq, info);
+	if (info->vbus_gpiod)
+		devm_free_irq(&pdev->dev, info->vbus_irq, info);
 
 	cancel_delayed_work_sync(&info->dw_det);
 
