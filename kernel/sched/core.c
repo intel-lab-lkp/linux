@@ -8852,7 +8852,6 @@ void __init sched_init_smp(void)
 	if (set_cpus_allowed_ptr(current, housekeeping_cpumask(HK_TYPE_DOMAIN)) < 0)
 		BUG();
 	current->flags &= ~PF_NO_SETAFFINITY;
-	sched_init_granularity();
 
 	init_sched_rt_class();
 	init_sched_dl_class();

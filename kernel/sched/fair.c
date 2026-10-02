@@ -68,10 +68,10 @@
  * Under EEVDF this is the request size used to compute the virtual
  * deadline; see update_deadline().
  *
- * (default: 0.70 msec * (1 + ilog(ncpus)), units: nanoseconds)
+ * (default: 2 msec)
  */
-unsigned int sysctl_sched_base_slice			= 700000ULL;
-static unsigned int normalized_sysctl_sched_base_slice	= 700000ULL;
+unsigned int sysctl_sched_base_slice			= 2000000ULL;
+static unsigned int normalized_sysctl_sched_base_slice	= 2000000ULL;
 
 __read_mostly unsigned int sysctl_sched_migration_cost	= 500000UL;
 
@@ -172,38 +172,6 @@ static inline void update_load_set(struct load_weight *lw, unsigned long w)
 {
 	lw->weight = w;
 	lw->inv_weight = 0;
-}
-
-/*
- * Increase the granularity value when there are more CPUs,
- * because with more CPUs the 'effective latency' as visible
- * to users decreases. But the relationship is not linear,
- * so pick a second-best guess by going with the log2 of the
- * number of CPUs.
- *
- * This idea comes from the SD scheduler of Con Kolivas:
- */
-static unsigned int get_update_sysctl_factor(void)
-{
-	unsigned int cpus = min_t(unsigned int, num_online_cpus(), 8);
-	unsigned int factor = 1 + ilog2(cpus);
-
-	return factor;
-}
-
-static void update_sysctl(void)
-{
-	unsigned int factor = get_update_sysctl_factor();
-
-#define SET_SYSCTL(name) \
-	(sysctl_##name = (factor) * normalized_sysctl_##name)
-	SET_SYSCTL(sched_base_slice);
-#undef SET_SYSCTL
-}
-
-void __init sched_init_granularity(void)
-{
-	update_sysctl();
 }
 
 #ifndef CONFIG_64BIT
@@ -1235,17 +1203,6 @@ struct sched_entity *__pick_last_entity(struct cfs_rq *cfs_rq)
 /**************************************************************
  * Scheduling class statistics methods:
  */
-int sched_update_scaling(void)
-{
-	unsigned int factor = get_update_sysctl_factor();
-
-#define WRT_SYSCTL(name) \
-	(normalized_sysctl_##name = sysctl_##name / (factor))
-	WRT_SYSCTL(sched_base_slice);
-#undef WRT_SYSCTL
-
-	return 0;
-}
 
 static void clear_buddies(struct cfs_rq *cfs_rq, struct sched_entity *se);
 
@@ -14771,15 +14728,11 @@ void sched_balance_trigger(struct rq *rq)
 
 static void rq_online_fair(struct rq *rq)
 {
-	update_sysctl();
-
 	update_runtime_enabled(rq);
 }
 
 static void rq_offline_fair(struct rq *rq)
 {
-	update_sysctl();
-
 	/* Ensure any throttled groups are reachable by pick_next_task */
 	unthrottle_offline_cfs_rqs(rq);
 

@@ -2304,8 +2304,6 @@ extern int group_balance_cpu(struct sched_group *sg);
 extern void update_sched_domain_debugfs(void);
 extern void dirty_sched_domain_sysctl(int cpu);
 
-extern int sched_update_scaling(void);
-
 static inline const struct cpumask *task_user_cpus(struct task_struct *p)
 {
 	if (!p->user_cpus_ptr)
@@ -3018,7 +3016,6 @@ extern void schedule_idle(void);
 asmlinkage void schedule_user(void);
 
 extern void sysrq_sched_debug_show(void);
-extern void sched_init_granularity(void);
 extern void update_max_interval(void);
 
 extern void init_sched_dl_class(void);
