@@ -105,10 +105,15 @@
 
 #define arch_xchg_acquire(ptr, x)					\
 	_arch_xchg(ptr, x, "", "", "",					\
-		   RISCV_ACQUIRE_BARRIER, RISCV_ACQUIRE_BARRIER)
+		   RISCV_ZALASR_SMP_ALTERNATIVE(			\
+			RISCV_ACQUIRE_BARRIER, RISCV_FULL_BARRIER),	\
+		   RISCV_ZALASR_SMP_ALTERNATIVE(			\
+			RISCV_ACQUIRE_BARRIER, RISCV_FULL_BARRIER))
 
 #define arch_xchg_release(ptr, x)					\
-	_arch_xchg(ptr, x, "", "", RISCV_RELEASE_BARRIER, "", "")
+	_arch_xchg(ptr, x, "", "",					\
+		   RISCV_ZALASR_SMP_ALTERNATIVE(			\
+			RISCV_RELEASE_BARRIER, RISCV_FULL_BARRIER), "", "")
 
 #define arch_xchg(ptr, x)						\
 	_arch_xchg(ptr, x, ".rl", ".aqrl", "", RISCV_FULL_BARRIER, "")
@@ -279,14 +284,22 @@
 #define arch_cmpxchg_acquire(ptr, o, n)					\
 	_arch_cmpxchg((ptr), (o), (n),					\
 		      SC_SFX(""), CAS_SFX(""),				\
-		      SC_PREPEND(""), SC_APPEND(RISCV_ACQUIRE_BARRIER),	\
-		      CAS_PREPEND(""), CAS_APPEND(RISCV_ACQUIRE_BARRIER))
+		      SC_PREPEND(""), SC_APPEND(			\
+			RISCV_ZALASR_SMP_ALTERNATIVE(			\
+				RISCV_ACQUIRE_BARRIER, RISCV_FULL_BARRIER)), \
+		      CAS_PREPEND(""), CAS_APPEND(			\
+			RISCV_ZALASR_SMP_ALTERNATIVE(			\
+				RISCV_ACQUIRE_BARRIER, RISCV_FULL_BARRIER)))
 
 #define arch_cmpxchg_release(ptr, o, n)					\
 	_arch_cmpxchg((ptr), (o), (n),					\
 		      SC_SFX(""), CAS_SFX(""),				\
-		      SC_PREPEND(RISCV_RELEASE_BARRIER), SC_APPEND(""),	\
-		      CAS_PREPEND(RISCV_RELEASE_BARRIER), CAS_APPEND(""))
+		      SC_PREPEND(RISCV_ZALASR_SMP_ALTERNATIVE(		\
+			RISCV_RELEASE_BARRIER, RISCV_FULL_BARRIER)),	\
+		      SC_APPEND(""),					\
+		      CAS_PREPEND(RISCV_ZALASR_SMP_ALTERNATIVE(	\
+			RISCV_RELEASE_BARRIER, RISCV_FULL_BARRIER)),	\
+		      CAS_APPEND(""))
 
 #define arch_cmpxchg(ptr, o, n)						\
 	_arch_cmpxchg((ptr), (o), (n),					\

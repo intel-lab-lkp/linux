@@ -54,7 +54,9 @@
 #define __smp_store_release(p, v)					\
 do {									\
 	compiletime_assert_atomic_type(*p);				\
-	RISCV_FENCE(rw, w);						\
+	__asm__ __volatile__(RISCV_ZALASR_ALTERNATIVE(			\
+		RISCV_FENCE_ASM(rw, w), RISCV_FENCE_ASM(rw, rw))	\
+		::: "memory");						\
 	WRITE_ONCE(*p, v);						\
 } while (0)
 
@@ -62,7 +64,9 @@ do {									\
 ({									\
 	typeof(*p) ___p1 = READ_ONCE(*p);				\
 	compiletime_assert_atomic_type(*p);				\
-	RISCV_FENCE(r, rw);						\
+	__asm__ __volatile__(RISCV_ZALASR_ALTERNATIVE(			\
+		RISCV_FENCE_ASM(r, rw), RISCV_FENCE_ASM(rw, rw))	\
+		::: "memory");						\
 	___p1;								\
 })
 

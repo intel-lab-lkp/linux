@@ -19,10 +19,14 @@
 #include <asm/cmpxchg.h>
 
 #define __atomic_acquire_fence()					\
-	__asm__ __volatile__(RISCV_ACQUIRE_BARRIER "" ::: "memory")
+	__asm__ __volatile__(RISCV_ZALASR_SMP_ALTERNATIVE(		\
+		RISCV_ACQUIRE_BARRIER, RISCV_FULL_BARRIER)		\
+		::: "memory")
 
 #define __atomic_release_fence()					\
-	__asm__ __volatile__(RISCV_RELEASE_BARRIER "" ::: "memory");
+	__asm__ __volatile__(RISCV_ZALASR_SMP_ALTERNATIVE(		\
+		RISCV_RELEASE_BARRIER, RISCV_FULL_BARRIER)		\
+		::: "memory");
 
 static __always_inline int arch_atomic_read(const atomic_t *v)
 {
