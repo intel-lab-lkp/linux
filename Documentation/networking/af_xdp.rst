@@ -346,6 +346,71 @@ Note that a UMEM can be shared between sockets on the same queue id
 and device, as well as between queues on the same device and between
 devices at the same time.
 
+Page-pool backed zero-copy
+--------------------------
+
+Drivers which use the queue management API can obtain UMEM frames through a
+page-pool memory provider. This is selected by the driver when zero-copy mode
+is requested and does not require a new userspace flag. The FILL ring remains
+the source of receive buffers and all normal AF_XDP ownership rules apply.
+Once installed, the driver remains an ordinary page-pool consumer: allocation,
+DMA synchronization, recycling, release, and refill use the normal page-pool
+interfaces, while provider callbacks hide the UMEM-specific operations.
+
+The initial provider requires 4 KiB base pages and aligned 4 KiB chunks.
+Unaligned chunks are rejected. Configured UMEM headroom is supported. The
+provider requests it through the queue configuration, and the driver includes
+it in the receive DMA offset; with multi-buffer packets it applies to the first
+descriptor as described below.
+
+Like the normal XSK buffer allocator, provider-backed page-pool allocation and
+recycling run in the receive queue's NAPI context. A queue restart prepares
+its replacement before it stops the current queue, so two page pools can use
+one provider for a short time. A provider lock serializes FILL-ring
+consumption and the provider's buffer stack. It is taken once per page-pool
+refill of up to 64 buffers, not per packet. Generic XDP cannot redirect to a
+provider-backed socket; its copy-mode receive path retains the existing XSK
+receive lock.
+
+UMEM frames retain the direct XSK ownership model. The provider does not add a
+per-frame reference count, generation, ownership bitmap, or quarantine state.
+A frame moves between the FILL ring, the owning NAPI context, and userspace;
+userspace must not publish a frame which it does not own. Page-pool teardown
+accounting protects the lifetime of the pool, not ownership of an individual
+UMEM frame.
+
+Provider-backed buffers do not leave that context as kernel-owned memory.
+``XDP_PASS`` copies the packet to kernel-backed skb storage before returning
+the UMEM buffers. Redirects other than a compatible XSKMAP target likewise
+copy to kernel memory. A compatible XSKMAP transfer publishes the UMEM
+descriptors directly to userspace; returning them through the FILL ring makes
+them available to the same queue context again.
+
+For multi-buffer packets, fragment descriptors are assembled in transient
+kernel-owned storage belonging to the RX queue. They are never stored in the
+user-writable UMEM, and are consumed before the NAPI context starts the next
+packet.
+
+The copy on ``XDP_PASS`` is intentional: an skb may outlive the receive NAPI
+poll, whereas a provider frame must be returned by the context which allocated
+it. Applications which expect most packets to pass to the network stack should
+therefore account for this copy when choosing page-pool backed zero-copy.
+
+Drivers may impose additional layout and queue requirements. The initial fbnic
+support accepts configured UMEM headroom from 0 through 256 bytes in 128-byte
+increments (up to 512 bytes including ``XDP_PACKET_HEADROOM``).
+Packets larger than its selected header-data-split threshold require an
+``XDP_USE_SG`` socket and an XDP program with fragment support. Their
+continuation descriptors start at offsets chosen by the device.
+When these restrictions are not met, a bind forced with ``XDP_ZEROCOPY``
+fails with an error; automatic mode may fall back to copy mode.
+
+On a running device, installing or removing the provider restarts the
+selected hardware queue.
+Applications should populate the FILL ring before binding when possible. If
+the ring is empty, the kernel schedules the queue once after installation;
+the usual ``XDP_USE_NEED_WAKEUP`` rules apply after that.
+
 XDP_USE_NEED_WAKEUP bind flag
 -----------------------------
 
