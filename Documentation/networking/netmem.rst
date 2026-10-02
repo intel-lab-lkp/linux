@@ -48,8 +48,11 @@ Driver RX Requirements
    - PP_FLAG_DMA_SYNC_DEV: netmem dma addr is not necessarily dma-syncable
      by the driver. The driver must delegate the dma syncing to the page_pool,
      which knows when dma-syncing is (or is not) appropriate.
-   - PP_FLAG_ALLOW_UNREADABLE_NETMEM. The driver must specify this flag iff
-     tcp-data-split is enabled.
+   - PP_FLAG_ALLOW_UNREADABLE_NETMEM. This opts the page pool into the memory
+     provider configured on its RX queue. For a provider without
+     MP_CAP_READABLE, the driver must specify it only for a payload pool
+     with tcp-data-split enabled. A readable provider may also back a
+     regular or header pool.
 
 5. The driver must not assume the netmem is readable and/or backed by pages.
    The netmem returned by the page_pool may be unreadable, in which case

@@ -82,8 +82,12 @@ __netif_get_rx_queue_lease(struct net_device **dev, unsigned int *rxq_idx,
 /* See also page_pool_is_unreadable() */
 bool netif_rxq_has_unreadable_mp(struct net_device *dev, unsigned int rxq_idx)
 {
-	if (rxq_idx < dev->real_num_rx_queues)
-		return __netif_get_rx_queue(dev, rxq_idx)->mp_params.mp_ops;
+	const struct memory_provider_ops *ops;
+
+	if (rxq_idx < dev->real_num_rx_queues) {
+		ops = __netif_get_rx_queue(dev, rxq_idx)->mp_params.mp_ops;
+		return ops && !(ops->caps & MP_CAP_READABLE);
+	}
 	return false;
 }
 EXPORT_SYMBOL(netif_rxq_has_unreadable_mp);
@@ -93,6 +97,32 @@ bool netif_rxq_has_mp(struct net_device *dev, unsigned int rxq_idx)
 	if (rxq_idx < dev->real_num_rx_queues)
 		return __netif_get_rx_queue(dev, rxq_idx)->mp_params.mp_priv;
 	return false;
+}
+
+/* Return true if an installed memory provider lacks @cap. */
+bool netif_mp_lacks_cap(struct net_device *dev, u32 cap)
+{
+	const struct memory_provider_ops *ops;
+	int i;
+
+	netdev_assert_locked_ops_compat(dev);
+
+	for (i = dev->real_num_rx_queues - 1; i >= 0; i--) {
+		ops = dev->_rx[i].mp_params.mp_ops;
+		if (ops && (ops->caps & cap) != cap)
+			return true;
+	}
+
+	return false;
+}
+
+/* Provider memory may become available while the queue is replaced,
+ * without a device event to report it.
+ */
+static void netdev_rx_queue_kick(struct netdev_rx_queue *rxq)
+{
+	if (rxq->mp_params.mp_ops && rxq->napi)
+		napi_schedule(rxq->napi);
 }
 
 static int netdev_rx_queue_reconfig(struct net_device *dev,
@@ -142,6 +172,8 @@ static int netdev_rx_queue_reconfig(struct net_device *dev,
 	}
 
 	qops->ndo_queue_mem_free(dev, old_mem);
+	if (netif_running(dev))
+		netdev_rx_queue_kick(rxq);
 
 	kvfree(old_mem);
 	kvfree(new_mem);
@@ -165,6 +197,11 @@ err_start_queue:
 
 err_free_new_queue_mem:
 	qops->ndo_queue_mem_free(dev, new_mem);
+	/* Freeing the replacement can hand provider memory back to the old
+	 * queue, which still runs unless the rollback failed.
+	 */
+	if (err != -ENETDOWN && netif_running(dev))
+		netdev_rx_queue_kick(rxq);
 
 err_free_old_mem:
 	kvfree(old_mem);
@@ -189,6 +226,7 @@ static int __netif_mp_open_rxq(struct net_device *dev, unsigned int rxq_idx,
 			       struct netlink_ext_ack *extack)
 {
 	const struct netdev_queue_mgmt_ops *qops = dev->queue_mgmt_ops;
+	u32 caps = p->mp_ops->caps;
 	struct netdev_queue_config qcfg[2];
 	struct netdev_rx_queue *rxq;
 	int ret;
@@ -196,15 +234,13 @@ static int __netif_mp_open_rxq(struct net_device *dev, unsigned int rxq_idx,
 	if (!qops)
 		return -EOPNOTSUPP;
 
-	if (dev->cfg->hds_config != ETHTOOL_TCP_DATA_SPLIT_ENABLED) {
-		NL_SET_ERR_MSG(extack, "tcp-data-split is disabled");
+	if ((dev->cfg->hds_config != ETHTOOL_TCP_DATA_SPLIT_ENABLED ||
+	     dev->cfg->hds_thresh) && !(caps & MP_CAP_READABLE)) {
+		NL_SET_ERR_MSG(extack,
+			       "memory provider does not support current tcp-data-split configuration");
 		return -EINVAL;
 	}
-	if (dev->cfg->hds_thresh) {
-		NL_SET_ERR_MSG(extack, "hds-thresh is not zero");
-		return -EINVAL;
-	}
-	if (dev_xdp_prog_count(dev)) {
+	if (dev_xdp_prog_count(dev) && !(caps & MP_CAP_READABLE)) {
 		NL_SET_ERR_MSG(extack, "unable to custom memory provider to device with XDP program attached");
 		return -EEXIST;
 	}
@@ -219,7 +255,8 @@ static int __netif_mp_open_rxq(struct net_device *dev, unsigned int rxq_idx,
 		return -EEXIST;
 	}
 #ifdef CONFIG_XDP_SOCKETS
-	if (rxq->pool) {
+	/* An AF_XDP pool owns the queue unless it is this provider. */
+	if (rxq->pool && rxq->pool != p->mp_priv) {
 		NL_SET_ERR_MSG(extack, "designated queue already in use by AF_XDP");
 		return -EBUSY;
 	}
