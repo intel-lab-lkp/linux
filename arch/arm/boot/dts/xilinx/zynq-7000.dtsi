@@ -68,8 +68,6 @@
 
 	replicator {
 		compatible = "arm,coresight-static-replicator";
-		clocks = <&clkc 27>, <&clkc 46>, <&clkc 47>;
-		clock-names = "apb_pclk", "dbg_trc", "dbg_apb";
 
 		out-ports {
 			#address-cells = <1>;
@@ -464,8 +462,8 @@
 		etb@f8801000 {
 			compatible = "arm,coresight-etb10", "arm,primecell";
 			reg = <0xf8801000 0x1000>;
-			clocks = <&clkc 27>, <&clkc 46>, <&clkc 47>;
-			clock-names = "apb_pclk", "dbg_trc", "dbg_apb";
+			clocks = <&clkc 27>;
+			clock-names = "apb_pclk";
 			in-ports {
 				port {
 					etb_in_port: endpoint {
@@ -478,8 +476,8 @@
 		tpiu@f8803000 {
 			compatible = "arm,coresight-tpiu", "arm,primecell";
 			reg = <0xf8803000 0x1000>;
-			clocks = <&clkc 27>, <&clkc 46>, <&clkc 47>;
-			clock-names = "apb_pclk", "dbg_trc", "dbg_apb";
+			clocks = <&clkc 27>;
+			clock-names = "apb_pclk";
 			in-ports {
 				port {
 					tpiu_in_port: endpoint {
@@ -490,10 +488,10 @@
 		};
 
 		funnel@f8804000 {
-			compatible = "arm,coresight-static-funnel", "arm,primecell";
+			compatible = "arm,coresight-dynamic-funnel", "arm,primecell";
 			reg = <0xf8804000 0x1000>;
-			clocks = <&clkc 27>, <&clkc 46>, <&clkc 47>;
-			clock-names = "apb_pclk", "dbg_trc", "dbg_apb";
+			clocks = <&clkc 27>;
+			clock-names = "apb_pclk";
 
 			/* funnel output ports */
 			out-ports {
@@ -536,8 +534,8 @@
 		ptm@f889c000 {
 			compatible = "arm,coresight-etm3x", "arm,primecell";
 			reg = <0xf889c000 0x1000>;
-			clocks = <&clkc 27>, <&clkc 46>, <&clkc 47>;
-			clock-names = "apb_pclk", "dbg_trc", "dbg_apb";
+			clocks = <&clkc 27>;
+			clock-names = "apb_pclk";
 			cpu = <&cpu0>;
 			out-ports {
 				port {
@@ -551,8 +549,8 @@
 		ptm@f889d000 {
 			compatible = "arm,coresight-etm3x", "arm,primecell";
 			reg = <0xf889d000 0x1000>;
-			clocks = <&clkc 27>, <&clkc 46>, <&clkc 47>;
-			clock-names = "apb_pclk", "dbg_trc", "dbg_apb";
+			clocks = <&clkc 27>;
+			clock-names = "apb_pclk";
 			cpu = <&cpu1>;
 			out-ports {
 				port {
