@@ -13,6 +13,8 @@
  *	     Resource sorting
  */
 
+#include <linux/align.h>
+#include <linux/bug.h>
 #include <linux/kernel.h>
 #include <linux/export.h>
 #include <linux/pci.h>
@@ -260,6 +262,12 @@ resource_size_t pci_resource_alignment(const struct pci_dev *dev,
 	return resource_alignment(res);
 }
 
+static resource_size_t pci_resreq_remainder(resource_size_t size,
+					    resource_size_t align)
+{
+	return size - ALIGN_DOWN(size, align);
+}
+
 /*
  * For mem bridge windows, try to relocate tail remainder space to space
  * before res->start if there's enough free space there. This enables
@@ -280,10 +288,17 @@ resource_size_t pci_align_resource(struct pci_resreq_data *rr,
 	if (rr->user_align)
 		return res->start;
 
-	if (IS_ALIGNED(size, align))
+	remainder = pci_resreq_remainder(size, align);
+	if (!remainder)
 		return res->start;
 
-	remainder = size - ALIGN_DOWN(size, align);
+	/*
+	 * Size constraints forced an early start move in
+	 * pci_check_and_align_resource()?
+	 */
+	if (!IS_ALIGNED(res->start, align))
+		return res->start;
+
 	/* Don't mess with size that doesn't align with window size granularity */
 	if (!IS_ALIGNED(remainder, pci_min_window_alignment(dev->bus, res->flags)))
 		return res->start;
@@ -315,6 +330,33 @@ resource_size_t __weak pcibios_align_resource(void *data,
 	return pci_align_resource(rr, res, empty_res, size, align);
 }
 
+static resource_size_t pci_resreq_check(void *data,
+					const struct resource *res,
+					const struct resource *empty_res,
+					resource_size_t size,
+					resource_size_t min_align)
+{
+	struct pci_resreq_data *rr = data;
+	resource_size_t align = rr->real_align;
+	resource_size_t remainder, start;
+	struct resource tmp = *res;
+
+	if (res->flags & IORESOURCE_MEM && !IS_ALIGNED(res->start, align)) {
+		resource_set_range(&tmp, ALIGN(res->start, align), size);
+		if (!__resource_contains_unbound(empty_res, &tmp)) {
+			remainder = pci_resreq_remainder(size, align);
+			resource_set_range(&tmp, tmp.start - remainder, size);
+			if (!__resource_contains_unbound(empty_res, &tmp))
+				return tmp.start;	/* caller skips range */
+		}
+	}
+
+	start = pcibios_align_resource(rr, &tmp, empty_res, size, align);
+	WARN_ON_ONCE(!IS_ALIGNED(start, min_align));
+
+	return start;
+}
+
 static int __pci_assign_resource(struct pci_bus *bus, struct pci_dev *dev,
 		int resno, resource_size_t size, resource_size_t align)
 {
@@ -324,8 +366,16 @@ static int __pci_assign_resource(struct pci_bus *bus, struct pci_dev *dev,
 	int ret;
 
 	pci_init_pci_resreq_data(&rr, dev);
+	rr.real_align = align;
 
 	min = (res->flags & IORESOURCE_IO) ? PCIBIOS_MIN_IO : PCIBIOS_MIN_MEM;
+
+	if (!rr.user_align &&
+	    (res->flags & IORESOURCE_MEM) && pci_resreq_remainder(size, align)) {
+		align = 1U;
+		if (pci_resource_is_bridge_win(resno))
+			align = pci_min_window_alignment(bus, res->flags);
+	}
 
 	/*
 	 * First, try exact prefetching match.  Even if a 64-bit
@@ -336,7 +386,7 @@ static int __pci_assign_resource(struct pci_bus *bus, struct pci_dev *dev,
 	 */
 	ret = pci_bus_alloc_resource(bus, res, size, align, min,
 				     IORESOURCE_PREFETCH | IORESOURCE_MEM_64,
-				     pcibios_align_resource, &rr);
+				     pci_resreq_check, &rr);
 	if (ret == 0)
 		return 0;
 
@@ -348,7 +398,7 @@ static int __pci_assign_resource(struct pci_bus *bus, struct pci_dev *dev,
 	     (IORESOURCE_PREFETCH | IORESOURCE_MEM_64)) {
 		ret = pci_bus_alloc_resource(bus, res, size, align, min,
 					     IORESOURCE_PREFETCH,
-					     pcibios_align_resource, &rr);
+					     pci_resreq_check, &rr);
 		if (ret == 0)
 			return 0;
 	}
@@ -361,7 +411,7 @@ static int __pci_assign_resource(struct pci_bus *bus, struct pci_dev *dev,
 	 */
 	if (res->flags & (IORESOURCE_PREFETCH | IORESOURCE_MEM_64))
 		ret = pci_bus_alloc_resource(bus, res, size, align, min, 0,
-					     pcibios_align_resource, &rr);
+					     pci_resreq_check, &rr);
 
 	return ret;
 }
