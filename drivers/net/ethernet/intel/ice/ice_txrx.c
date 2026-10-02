@@ -969,7 +969,6 @@ static int ice_clean_rx_irq(struct ice_rx_ring *rx_ring, int budget)
 		struct sk_buff *skb;
 		unsigned int size;
 		u16 stat_err_bits;
-		u16 vlan_tci;
 		bool rxe;
 
 		/* get the Rx desc from Rx ring based on 'next_to_clean' */
@@ -1050,8 +1049,6 @@ construct_skb:
 			continue;
 		}
 
-		vlan_tci = ice_get_vlan_tci(rx_desc);
-
 		/* probably a little skewed due to removing CRC */
 		total_rx_bytes += skb->len;
 
@@ -1060,7 +1057,7 @@ construct_skb:
 
 		ice_trace(clean_rx_irq_indicate, rx_ring, rx_desc, skb);
 		/* send completed skb up the stack */
-		ice_receive_skb(rx_ring, skb, vlan_tci);
+		napi_gro_receive(&rx_ring->q_vector->napi, skb);
 
 		/* update budget accounting */
 		total_rx_pkts++;
