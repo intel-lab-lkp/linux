@@ -1734,6 +1734,7 @@ int vmbus_channel_set_cpu(struct vmbus_channel *channel, u32 target_cpu)
 {
 	u32 origin_cpu;
 	int ret = 0;
+	bool on_housekeeping_cpu;
 
 	lockdep_assert_cpus_held();
 	lockdep_assert_held(&vmbus_connection.channel_mutex);
@@ -1745,7 +1746,17 @@ int vmbus_channel_set_cpu(struct vmbus_channel *channel, u32 target_cpu)
 	if (target_cpu >= nr_cpumask_bits)
 		return -EINVAL;
 
-	if (!cpumask_test_cpu(target_cpu, housekeeping_cpumask(HK_TYPE_MANAGED_IRQ)))
+	/*
+	 * Snapshot the HK_TYPE_MANAGED_IRQ test under RCU read lock:
+	 * housekeeping_update_types() frees the old cpumask after
+	 * synchronize_rcu(), so the pointer must not be dereferenced
+	 * outside an RCU read-side critical section.
+	 */
+	rcu_read_lock();
+	on_housekeeping_cpu = cpumask_test_cpu(target_cpu,
+						housekeeping_cpumask_rcu(HK_TYPE_MANAGED_IRQ));
+	rcu_read_unlock();
+	if (!on_housekeeping_cpu)
 		return -EINVAL;
 
 	if (!cpu_online(target_cpu))

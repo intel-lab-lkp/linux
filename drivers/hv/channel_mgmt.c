@@ -750,26 +750,43 @@ static void init_vp_index(struct vmbus_channel *channel)
 {
 	bool perf_chn = hv_is_perf_channel(channel);
 	u32 i, ncpu = num_online_cpus();
-	cpumask_var_t available_mask;
+	cpumask_var_t available_mask, hk_snap;
 	struct cpumask *allocated_mask;
-	const struct cpumask *hk_mask = housekeeping_cpumask(HK_TYPE_MANAGED_IRQ);
 	u32 target_cpu;
 	int numa_node;
 
-	if (!perf_chn ||
-	    !alloc_cpumask_var(&available_mask, GFP_KERNEL) ||
-	    cpumask_empty(hk_mask)) {
-		/*
-		 * If the channel is not a performance critical
-		 * channel, bind it to VMBUS_CONNECT_CPU.
-		 * In case alloc_cpumask_var() fails, bind it to
-		 * VMBUS_CONNECT_CPU.
-		 * If all the cpus are isolated, bind it to
-		 * VMBUS_CONNECT_CPU.
-		 */
+	if (!perf_chn) {
 		channel->target_cpu = VMBUS_CONNECT_CPU;
-		if (perf_chn)
-			hv_set_allocated_cpu(VMBUS_CONNECT_CPU);
+		return;
+	}
+
+	if (!alloc_cpumask_var(&available_mask, GFP_KERNEL)) {
+		channel->target_cpu = VMBUS_CONNECT_CPU;
+		hv_set_allocated_cpu(VMBUS_CONNECT_CPU);
+		return;
+	}
+
+	/*
+	 * Snapshot HK_TYPE_MANAGED_IRQ cpumask under RCU read lock.
+	 * housekeeping_update_types() frees the old cpumask after
+	 * synchronize_rcu(), so we must not hold the pointer beyond an
+	 * RCU read-side critical section.
+	 */
+	if (!alloc_cpumask_var(&hk_snap, GFP_KERNEL)) {
+		free_cpumask_var(available_mask);
+		channel->target_cpu = VMBUS_CONNECT_CPU;
+		hv_set_allocated_cpu(VMBUS_CONNECT_CPU);
+		return;
+	}
+	rcu_read_lock();
+	cpumask_copy(hk_snap, housekeeping_cpumask_rcu(HK_TYPE_MANAGED_IRQ));
+	rcu_read_unlock();
+
+	if (cpumask_empty(hk_snap)) {
+		free_cpumask_var(hk_snap);
+		free_cpumask_var(available_mask);
+		channel->target_cpu = VMBUS_CONNECT_CPU;
+		hv_set_allocated_cpu(VMBUS_CONNECT_CPU);
 		return;
 	}
 
@@ -788,7 +805,7 @@ static void init_vp_index(struct vmbus_channel *channel)
 
 retry:
 		cpumask_xor(available_mask, allocated_mask, cpumask_of_node(numa_node));
-		cpumask_and(available_mask, available_mask, hk_mask);
+		cpumask_and(available_mask, available_mask, hk_snap);
 
 		if (cpumask_empty(available_mask)) {
 			/*
@@ -809,6 +826,7 @@ retry:
 
 	channel->target_cpu = target_cpu;
 
+	free_cpumask_var(hk_snap);
 	free_cpumask_var(available_mask);
 }
 

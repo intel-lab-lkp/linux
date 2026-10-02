@@ -1631,7 +1631,14 @@ int tmigr_isolated_exclude_cpumask(struct cpumask *exclude_cpumask)
 	 * There cannot be overlap with the newly available ones.
 	 */
 	cpumask_and(cpumask, exclude_cpumask, tmigr_available_cpumask);
-	cpumask_and(cpumask, cpumask, housekeeping_cpumask(HK_TYPE_KERNEL_NOISE));
+	/*
+	 * HK_TYPE_KERNEL_NOISE is runtime-mutable: housekeeping_update_types()
+	 * frees the old cpumask after synchronize_rcu(), so dereference it
+	 * only under rcu_read_lock().
+	 */
+	rcu_read_lock();
+	cpumask_and(cpumask, cpumask, housekeeping_cpumask_rcu(HK_TYPE_KERNEL_NOISE));
+	rcu_read_unlock();
 	/*
 	 * Handle this here and not in the cpuset code because exclude_cpumask
 	 * might include also the tick CPU if included in isolcpus.

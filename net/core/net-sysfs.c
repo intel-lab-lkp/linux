@@ -1017,7 +1017,15 @@ int rps_cpumask_housekeeping(struct cpumask *mask)
 {
 	if (!cpumask_empty(mask)) {
 		cpumask_and(mask, mask, housekeeping_cpumask(HK_TYPE_DOMAIN_BOOT));
-		cpumask_and(mask, mask, housekeeping_cpumask(HK_TYPE_WQ));
+		/*
+		 * HK_TYPE_WQ aliases HK_TYPE_KERNEL_NOISE, which is
+		 * runtime-mutable: housekeeping_update_types() frees the old
+		 * cpumask after synchronize_rcu(), so dereference it only
+		 * under rcu_read_lock().
+		 */
+		rcu_read_lock();
+		cpumask_and(mask, mask, housekeeping_cpumask_rcu(HK_TYPE_WQ));
+		rcu_read_unlock();
 		if (cpumask_empty(mask))
 			return -EINVAL;
 	}
