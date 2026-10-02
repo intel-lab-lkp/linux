@@ -10,6 +10,7 @@ obj-$(CONFIG_CPU_SUBTYPE_SH7770)	+= setup-sh7770.o
 obj-$(CONFIG_CPU_SUBTYPE_SH7780)	+= setup-sh7780.o
 obj-$(CONFIG_CPU_SUBTYPE_SH7785)	+= setup-sh7785.o
 obj-$(CONFIG_CPU_SUBTYPE_SH7786)	+= setup-sh7786.o intc-shx3.o
+obj-$(CONFIG_CPU_SUBTYPE_SH7305)	+= intc-sh7305.o
 obj-$(CONFIG_CPU_SUBTYPE_SH7343)	+= setup-sh7343.o
 obj-$(CONFIG_CPU_SUBTYPE_SH7722)	+= setup-sh7722.o serial-sh7722.o
 obj-$(CONFIG_CPU_SUBTYPE_SH7723)	+= setup-sh7723.o
