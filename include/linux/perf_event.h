@@ -1347,6 +1347,7 @@ struct perf_sample_data {
 	u64				data_page_size;
 	u64				code_page_size;
 	u64				aux_size;
+	u64				callchain_bid_nr;
 } ____cacheline_aligned;
 
 /* default value for data source */

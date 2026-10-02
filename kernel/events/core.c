@@ -460,6 +460,8 @@ static atomic_t nr_bpf_events __read_mostly;
 static atomic_t nr_cgroup_events __read_mostly;
 static atomic_t nr_text_poke_events __read_mostly;
 static atomic_t nr_build_id_events __read_mostly;
+static atomic_t nr_build_id_offset_events __read_mostly;
+static atomic_t nr_callchain_build_id_offset_events __read_mostly;
 
 static LIST_HEAD(pmus);
 static DEFINE_MUTEX(pmus_lock);
@@ -2048,6 +2050,14 @@ static int __perf_event_read_size(u64 read_format, int nr_siblings)
 	return size + nr * entry;
 }
 
+struct perf_sample_build_id_offset {
+	u8	size;
+	u8	res1;
+	u16	res2;
+	u8	build_id[BUILD_ID_SIZE_MAX];
+	u64	offset;
+};
+
 static void __perf_event_header_size(struct perf_event *event, u64 sample_type)
 {
 	struct perf_sample_data *data;
@@ -2085,6 +2095,9 @@ static void __perf_event_header_size(struct perf_event *event, u64 sample_type)
 
 	if (sample_type & PERF_SAMPLE_CODE_PAGE_SIZE)
 		size += sizeof(data->code_page_size);
+
+	if (sample_type & PERF_SAMPLE_BUILD_ID_OFFSET)
+		size += sizeof(struct perf_sample_build_id_offset);
 
 	event->header_size = size;
 }
@@ -5341,7 +5354,7 @@ static bool is_sb_event(struct perf_event *event)
 	    attr->comm || attr->comm_exec ||
 	    attr->task || attr->ksymbol ||
 	    attr->context_switch || attr->text_poke ||
-	    attr->bpf_event)
+	    attr->bpf_event || attr->defer_output)
 		return true;
 
 	return false;
@@ -5619,6 +5632,10 @@ static void unaccount_event(struct perf_event *event)
 		atomic_dec(&nr_mmap_events);
 	if (event->attr.build_id)
 		atomic_dec(&nr_build_id_events);
+	if (event->attr.sample_type & PERF_SAMPLE_BUILD_ID_OFFSET)
+		atomic_dec(&nr_build_id_offset_events);
+	if (event->attr.sample_type & PERF_SAMPLE_CALLCHAIN_BUILD_ID_OFFSET)
+		atomic_dec(&nr_callchain_build_id_offset_events);
 	if (event->attr.comm)
 		atomic_dec(&nr_comm_events);
 	if (event->attr.namespaces)
@@ -8276,6 +8293,155 @@ static void perf_output_read(struct perf_output_handle *handle,
 		perf_output_read_one(handle, event, enabled, running);
 }
 
+static struct unwind_work perf_unwind_work;
+
+struct perf_bpf_build_id_buf {
+	local_t active;
+	struct bpf_stack_build_id bids[PERF_MAX_STACK_DEPTH + 1];
+};
+
+static DEFINE_PER_CPU(struct perf_bpf_build_id_buf, perf_bpf_build_id_buf);
+
+static void perf_bpf_to_sample_bid_offset(struct bpf_stack_build_id *bpf_bid)
+{
+	struct perf_sample_build_id_offset *bid = (void *)bpf_bid;
+	u8 size = 0;
+
+	static_assert(sizeof(*bid) == sizeof(*bpf_bid));
+	static_assert(offsetof(struct perf_sample_build_id_offset, build_id) ==
+		      offsetof(struct bpf_stack_build_id, build_id));
+	static_assert(offsetof(struct perf_sample_build_id_offset, offset) ==
+		      offsetof(struct bpf_stack_build_id, offset));
+
+	if (bpf_bid->status == BPF_STACK_BUILD_ID_VALID)
+		size = BUILD_ID_SIZE_MAX;
+	else
+		memset(bid->build_id, 0, sizeof(bid->build_id));
+
+	bid->size = size;
+	bid->res1 = 0;
+	bid->res2 = 0;
+}
+
+static void perf_output_sample_build_id(struct perf_output_handle *handle,
+					struct perf_event_header *header,
+					struct perf_sample_data *data,
+					struct perf_event *event)
+{
+	u64 sample_type = data->type;
+	bool sample_bid = sample_type & PERF_SAMPLE_BUILD_ID_OFFSET;
+	bool callchain_bid = sample_type & PERF_SAMPLE_CALLCHAIN_BUILD_ID_OFFSET;
+	bool crosstask = event->ctx->task && event->ctx->task != current;
+	bool has_user_ctx = is_user_task(current) && current->mm && !crosstask;
+	bool is_user = (header->misc & PERF_RECORD_MISC_CPUMODE_MASK) ==
+		       PERF_RECORD_MISC_USER;
+	u64 defer_cookie = 0;
+	u64 callchain_nr = callchain_bid ? data->callchain_bid_nr : 0;
+	u64 user_start = callchain_nr;
+	u32 resolve_ip_nr = 0, resolve_cc_nr = 0, total_resolve_nr;
+	struct perf_bpf_build_id_buf *buf = NULL;
+
+	if (sample_bid) {
+		bool defer_user = IS_ENABLED(CONFIG_UNWIND_USER) &&
+				  is_user && has_user_ctx &&
+				  event->attr.defer_callchain &&
+				  !(sample_type & PERF_SAMPLE_CALLCHAIN);
+
+		if (defer_user &&
+		    unwind_deferred_request(&perf_unwind_work, &defer_cookie) < 0)
+			defer_cookie = 0;
+
+		if (!defer_cookie && is_user && has_user_ctx)
+			resolve_ip_nr = 1;
+	}
+
+	if (callchain_bid && has_user_ctx) {
+		for (u64 i = 0; i < callchain_nr; i++) {
+			if (data->callchain->ip[i] == PERF_CONTEXT_USER) {
+				user_start = i + 1;
+				break;
+			}
+		}
+		if (user_start < callchain_nr) {
+			resolve_cc_nr = min_t(u64, callchain_nr - user_start,
+					      PERF_MAX_STACK_DEPTH);
+		}
+	}
+
+	total_resolve_nr = resolve_ip_nr + resolve_cc_nr;
+	if (total_resolve_nr) {
+		buf = get_cpu_ptr(&perf_bpf_build_id_buf);
+		if (local_cmpxchg(&buf->active, 0, 1) == 0) {
+			if (resolve_ip_nr)
+				buf->bids[0].ip = data->ip;
+			for (u32 i = 0; i < resolve_cc_nr; i++) {
+				buf->bids[resolve_ip_nr + i].ip =
+					data->callchain->ip[user_start + i];
+			}
+			stack_map_get_build_id_offset(buf->bids,
+						      total_resolve_nr,
+						      true, false);
+			for (u32 i = 0; i < total_resolve_nr; i++)
+				perf_bpf_to_sample_bid_offset(&buf->bids[i]);
+		} else {
+			put_cpu_ptr(&perf_bpf_build_id_buf);
+			buf = NULL;
+		}
+	}
+
+	if (sample_bid) {
+		if (defer_cookie) {
+			u64 deferred_bid[4] = {
+				0,
+				PERF_CONTEXT_USER_DEFERRED,
+				defer_cookie,
+				data->ip,
+			};
+
+			perf_output_put(handle, deferred_bid);
+		} else if (buf && resolve_ip_nr) {
+			perf_output_copy(handle, &buf->bids[0],
+					 sizeof(buf->bids[0]));
+		} else {
+			struct perf_sample_build_id_offset bid_offset = {
+				.offset = data->ip,
+			};
+
+			perf_output_put(handle, bid_offset);
+		}
+	}
+
+	if (callchain_bid) {
+		u64 unres_prefix = buf ? user_start : callchain_nr;
+		u64 resolved_end = unres_prefix + (buf ? resolve_cc_nr : 0);
+
+		perf_output_put(handle, callchain_nr);
+		for (u64 i = 0; i < unres_prefix; i++) {
+			struct perf_sample_build_id_offset bid_offset = {
+				.offset = data->callchain->ip[i],
+			};
+
+			perf_output_put(handle, bid_offset);
+		}
+		if (buf && resolve_cc_nr) {
+			perf_output_copy(handle, &buf->bids[resolve_ip_nr],
+					 resolve_cc_nr * sizeof(buf->bids[0]));
+		}
+		for (u64 i = resolved_end; i < callchain_nr; i++) {
+			struct perf_sample_build_id_offset bid_offset = {
+				.offset = data->callchain->ip[i],
+			};
+
+			perf_output_put(handle, bid_offset);
+		}
+	}
+
+	if (buf) {
+		local_set(&buf->active, 0);
+		put_cpu_ptr(&perf_bpf_build_id_buf);
+	}
+}
+
 void perf_output_sample(struct perf_output_handle *handle,
 			struct perf_event_header *header,
 			struct perf_sample_data *data,
@@ -8455,6 +8621,10 @@ void perf_output_sample(struct perf_output_handle *handle,
 			perf_aux_sample_output(event, handle, data);
 	}
 
+	if (sample_type &
+	    (PERF_SAMPLE_BUILD_ID_OFFSET | PERF_SAMPLE_CALLCHAIN_BUILD_ID_OFFSET))
+		perf_output_sample_build_id(handle, header, data, event);
+
 	if (!event->attr.watermark) {
 		int wakeup_events = event->attr.wakeup_events;
 
@@ -8598,8 +8768,6 @@ static u64 perf_get_page_size(unsigned long addr)
 
 static struct perf_callchain_entry __empty_callchain = { .nr = 0, };
 
-static struct unwind_work perf_unwind_work;
-
 struct perf_callchain_entry *
 perf_callchain(struct perf_event *event, struct pt_regs *regs)
 {
@@ -8663,13 +8831,21 @@ void perf_prepare_sample(struct perf_sample_data *data,
 
 	__perf_event_header__init_id(data, event, filtered_sample_type);
 
-	if (filtered_sample_type & PERF_SAMPLE_IP) {
+	if (filtered_sample_type & (PERF_SAMPLE_IP | PERF_SAMPLE_BUILD_ID_OFFSET)) {
 		data->ip = perf_instruction_pointer(event, regs);
 		data->sample_flags |= PERF_SAMPLE_IP;
 	}
 
 	if (filtered_sample_type & PERF_SAMPLE_CALLCHAIN)
 		perf_sample_save_callchain(data, event, regs);
+
+	if (filtered_sample_type & PERF_SAMPLE_CALLCHAIN_BUILD_ID_OFFSET) {
+		if (!(data->sample_flags & PERF_SAMPLE_CALLCHAIN))
+			data->callchain = perf_callchain(event, regs);
+
+		data->dyn_size += sizeof(u64);
+	}
+
 
 	if (filtered_sample_type & PERF_SAMPLE_RAW) {
 		data->raw = NULL;
@@ -8819,6 +8995,20 @@ void perf_prepare_sample(struct perf_sample_data *data,
 		WARN_ON_ONCE(size + header_size > U16_MAX);
 		data->dyn_size += size + sizeof(u64); /* size above */
 		data->sample_flags |= PERF_SAMPLE_AUX;
+	}
+
+	if (filtered_sample_type & PERF_SAMPLE_CALLCHAIN_BUILD_ID_OFFSET) {
+		u32 header_size = perf_sample_data_size(data, event);
+		u64 max_nr = 0, nr;
+
+		if (header_size < U16_MAX) {
+			max_nr = (U16_MAX - header_size) /
+				 sizeof(struct perf_sample_build_id_offset);
+		}
+		nr = min_t(u64, data->callchain->nr, max_nr);
+		data->callchain_bid_nr = nr;
+		data->dyn_size += nr * sizeof(struct perf_sample_build_id_offset);
+		data->sample_flags |= PERF_SAMPLE_CALLCHAIN_BUILD_ID_OFFSET;
 	}
 }
 
@@ -10414,6 +10604,8 @@ void perf_event_bpf_event(struct bpf_prog *prog,
 
 struct perf_callchain_deferred_event {
 	struct unwind_stacktrace *trace;
+	struct perf_sample_build_id_offset *bids;
+	u16 nr_bids;
 	struct {
 		struct perf_event_header	header;
 		u64				cookie;
@@ -10422,17 +10614,83 @@ struct perf_callchain_deferred_event {
 	} event;
 };
 
+static struct perf_sample_build_id_offset *
+perf_resolve_build_id_offsets(struct unwind_stacktrace *trace, u16 *nr_bids_out)
+{
+	struct perf_sample_build_id_offset *bids;
+	struct bpf_stack_build_id *bpf_bids;
+	u16 nr = trace->nr;
+
+	*nr_bids_out = 0;
+	if (!nr || !current->mm)
+		return NULL;
+
+	if (!atomic_read(&nr_callchain_build_id_offset_events)) {
+		if (!atomic_read(&nr_build_id_offset_events))
+			return NULL;
+		nr = 1;
+	}
+
+	bids = kcalloc(nr, sizeof(*bids), GFP_KERNEL);
+	if (!bids)
+		return NULL;
+
+	bpf_bids = (struct bpf_stack_build_id *)bids;
+	for (u16 i = 0; i < nr; i++)
+		bpf_bids[i].ip = trace->entries[i];
+
+	stack_map_get_build_id_offset(bpf_bids, nr, true, true);
+
+	for (u16 i = 0; i < nr; i++)
+		perf_bpf_to_sample_bid_offset(&bpf_bids[i]);
+
+	*nr_bids_out = nr;
+	return bids;
+}
+
 static void perf_callchain_deferred_output(struct perf_event *event, void *data)
 {
 	struct perf_callchain_deferred_event *deferred_event = data;
 	struct perf_output_handle handle;
 	struct perf_sample_data sample;
-	int ret, size = deferred_event->event.header.size;
+	u64 nr = deferred_event->trace->nr;
+	size_t elem_size;
+	bool use_bid;
+	u16 header_size, orig_misc, id_size;
+	int ret;
 
 	if (!event->attr.defer_output)
 		return;
 
+	if (event->attr.sample_type & PERF_SAMPLE_CALLCHAIN_BUILD_ID_OFFSET) {
+		use_bid = deferred_event->bids != NULL;
+		if (use_bid)
+			nr = min_t(u64, nr, deferred_event->nr_bids);
+	} else if ((event->attr.sample_type & PERF_SAMPLE_BUILD_ID_OFFSET) &&
+		   !(event->attr.sample_type & PERF_SAMPLE_CALLCHAIN)) {
+		nr = min_t(u64, nr, 1);
+		use_bid = deferred_event->bids != NULL;
+		if (use_bid)
+			nr = min_t(u64, nr, deferred_event->nr_bids);
+	} else {
+		use_bid = false;
+	}
+
+	elem_size = use_bid ? sizeof(struct perf_sample_build_id_offset) :
+			      sizeof(u64);
+	id_size = event->attr.sample_id_all ? event->id_header_size : 0;
+	nr = min_t(u64, nr,
+		   (U16_MAX - sizeof(deferred_event->event) - id_size) / elem_size);
+
+	orig_misc = deferred_event->event.header.misc;
+	if (use_bid)
+		deferred_event->event.header.misc |= PERF_RECORD_MISC_MMAP_BUILD_ID;
+	header_size = sizeof(deferred_event->event) + (nr * elem_size);
+	deferred_event->event.header.size = header_size;
+	deferred_event->event.nr = nr;
+
 	/* XXX do we really need sample_id_all for this ??? */
+	perf_sample_data_init(&sample, 0, 0);
 	perf_event_header__init_id(&deferred_event->event.header, &sample, event);
 
 	ret = perf_output_begin(&handle, &sample, event,
@@ -10441,22 +10699,33 @@ static void perf_callchain_deferred_output(struct perf_event *event, void *data)
 		goto out;
 
 	perf_output_put(&handle, deferred_event->event);
-	for (int i = 0; i < deferred_event->trace->nr; i++) {
-		u64 entry = deferred_event->trace->entries[i];
-		perf_output_put(&handle, entry);
+	if (use_bid) {
+		for (u64 i = 0; i < nr; i++)
+			perf_output_put(&handle, deferred_event->bids[i]);
+	} else {
+		for (u64 i = 0; i < nr; i++) {
+			u64 entry = deferred_event->trace->entries[i];
+
+			perf_output_put(&handle, entry);
+		}
 	}
 	perf_event__output_id_sample(event, &handle, &sample);
 
 	perf_output_end(&handle);
 out:
-	deferred_event->event.header.size = size;
+	deferred_event->event.header.misc = orig_misc;
 }
 
 static void perf_unwind_deferred_callback(struct unwind_work *work,
 					 struct unwind_stacktrace *trace, u64 cookie)
 {
+	u16 nr_bids = 0;
+	struct perf_sample_build_id_offset *bids =
+		perf_resolve_build_id_offsets(trace, &nr_bids);
 	struct perf_callchain_deferred_event deferred_event = {
 		.trace = trace,
+		.bids = bids,
+		.nr_bids = nr_bids,
 		.event = {
 			.header = {
 				.type = PERF_RECORD_CALLCHAIN_DEFERRED,
@@ -10470,6 +10739,7 @@ static void perf_unwind_deferred_callback(struct unwind_work *work,
 	};
 
 	perf_iterate_sb(perf_callchain_deferred_output, &deferred_event, NULL);
+	kfree(bids);
 }
 
 struct perf_text_poke_event {
@@ -13314,6 +13584,10 @@ static void account_event(struct perf_event *event)
 		atomic_inc(&nr_mmap_events);
 	if (event->attr.build_id)
 		atomic_inc(&nr_build_id_events);
+	if (event->attr.sample_type & PERF_SAMPLE_BUILD_ID_OFFSET)
+		atomic_inc(&nr_build_id_offset_events);
+	if (event->attr.sample_type & PERF_SAMPLE_CALLCHAIN_BUILD_ID_OFFSET)
+		atomic_inc(&nr_callchain_build_id_offset_events);
 	if (event->attr.comm)
 		atomic_inc(&nr_comm_events);
 	if (event->attr.namespaces)
@@ -13582,7 +13856,8 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 	}
 
 	if (!event->parent) {
-		if (event->attr.sample_type & PERF_SAMPLE_CALLCHAIN) {
+		if (event->attr.sample_type &
+		    (PERF_SAMPLE_CALLCHAIN | PERF_SAMPLE_CALLCHAIN_BUILD_ID_OFFSET)) {
 			err = get_callchain_buffers(attr->sample_max_stack);
 			if (err)
 				return ERR_PTR(err);
@@ -13943,7 +14218,8 @@ SYSCALL_DEFINE5(perf_event_open,
 		return err;
 
 	if (!attr.exclude_kernel ||
-	    ((attr.sample_type & PERF_SAMPLE_CALLCHAIN) &&
+	    ((attr.sample_type &
+	      (PERF_SAMPLE_CALLCHAIN | PERF_SAMPLE_CALLCHAIN_BUILD_ID_OFFSET)) &&
 	     !attr.exclude_callchain_kernel)) {
 		err = perf_allow_kernel();
 		if (err)
