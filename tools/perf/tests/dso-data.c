@@ -393,11 +393,53 @@ static int test__dso_data_reopen(struct test_suite *test __maybe_unused, int sub
 	return 0;
 }
 
+static int test__dso_data_path(struct test_suite *test __maybe_unused, int subtest __maybe_unused)
+{
+	u8 expect[10] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+	char *file = test_file(TEST_FILE_SIZE);
+	struct dso *dso;
+	long nr, nr_end;
+	u8 buf[10];
+
+	TEST_ASSERT_VAL("No test file", file);
+	nr = open_files_cnt();
+
+	/*
+	 * The DSO name does not exist and the DSO is not in a dsos
+	 * collection; reads must come from the configured path.
+	 */
+	dso = dso__new("/nonexistent/perf-test-dso-data-path");
+	TEST_ASSERT_VAL("Failed to create dso", dso);
+	dso__set_binary_type(dso, DSO_BINARY_TYPE__SYSTEM_PATH_DSO);
+	TEST_ASSERT_VAL("Failed to set path", !dso__data_set_path(dso, file));
+
+	TEST_ASSERT_VAL("Wrong size",
+			dso__data_read_offset(dso, NULL, 10, buf, 10) == 10);
+	TEST_ASSERT_VAL("Wrong data", !memcmp(buf, expect, 10));
+
+	/* An uncached offset after close must reopen the configured path. */
+	dso__data_close(dso);
+	memset(buf, 0, sizeof(buf));
+	TEST_ASSERT_VAL("Wrong size after reopen",
+			dso__data_read_offset(dso, NULL, DSO__DATA_CACHE_SIZE * 2 + 10,
+					      buf, 10) == 10);
+	TEST_ASSERT_VAL("Wrong data after reopen",
+			buf[0] == (DSO__DATA_CACHE_SIZE * 2 + 10) % 10);
+
+	dso__data_close(dso);
+	dso__put(dso);
+	unlink(file);
+
+	nr_end = open_files_cnt();
+	TEST_ASSERT_VAL("failed leaking files", nr == nr_end);
+	return 0;
+}
 
 static struct test_case tests__dso_data[] = {
 	TEST_CASE("read", dso_data),
 	TEST_CASE("cache", dso_data_cache),
 	TEST_CASE("reopen", dso_data_reopen),
+	TEST_CASE("explicit path", dso_data_path),
 	{	.name = NULL, }
 };
 
