@@ -702,7 +702,6 @@ struct map *thread__find_map(struct thread *thread, struct perf_sample *sample,
 	thread__zput(al->thread);
 	al->thread = thread__get(thread);
 
-	al->addr = sample->ip;
 	al->cpumode = sample->cpumode;
 	al->filtered = 0;
 
@@ -735,15 +734,31 @@ struct map *thread__find_map(struct thread *thread, struct perf_sample *sample,
 
 		return NULL;
 	}
-	al->map = maps__find(maps, al->addr);
-	if (al->map != NULL) {
-		/*
-		 * Kernel maps might be changed when loading symbols so loading
-		 * must be done prior to using kernel maps.
-		 */
-		if (load_map)
-			map__load(al->map);
-		al->addr = map__map_ip(al->map, al->addr);
+
+	if (sample->bid.bid && sample->bid.bid->size > 0) {
+		struct build_id bid;
+
+		build_id__init(&bid, sample->bid.bid->data, sample->bid.bid->size);
+		al->addr = sample->bid.offset;
+		al->map = maps__find_by_build_id(maps, &bid);
+		if (al->map != NULL) {
+			if (load_map)
+				map__load(al->map);
+			/* al->addr is already a file offset */
+		}
+	} else {
+		/* When bid.bid->size == 0, bid.ip holds the fallback virtual address. */
+		al->addr = sample->bid.bid ? sample->bid.ip : sample->ip;
+		al->map = maps__find(maps, al->addr);
+		if (al->map != NULL) {
+			/*
+			 * Kernel maps might be changed when loading symbols so loading
+			 * must be done prior to using kernel maps.
+			 */
+			if (load_map)
+				map__load(al->map);
+			al->addr = map__map_ip(al->map, al->addr);
+		}
 	}
 
 	return al->map;

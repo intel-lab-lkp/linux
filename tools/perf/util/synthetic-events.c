@@ -1711,6 +1711,13 @@ size_t perf_event__sample_event_size(const struct perf_sample *sample, u64 type,
 		result += sample->aux_sample.size;
 	}
 
+	if (type & PERF_SAMPLE_BUILD_ID_OFFSET)
+		result += sizeof(struct perf_build_id) + sizeof(u64);
+
+	if (type & PERF_SAMPLE_CALLCHAIN_BUILD_ID_OFFSET)
+		result += sizeof(u64) + sample->callchain_bids_nr *
+			  (sizeof(struct perf_build_id) + sizeof(u64));
+
 	return result;
 }
 
@@ -1965,6 +1972,27 @@ int perf_event__synthesize_sample(union perf_event *event, u64 type, u64 read_fo
 		*array++ = sz;
 		memcpy(array, sample->aux_sample.data, sz);
 		array = (void *)array + sz;
+	}
+
+	if (type & PERF_SAMPLE_BUILD_ID_OFFSET) {
+		if (sample->bid.bid) {
+			memcpy(array, sample->bid.bid, sizeof(struct perf_build_id));
+			array += sizeof(struct perf_build_id) / sizeof(u64);
+			*array++ = sample->bid.offset;
+		} else {
+			memset(array, 0, sizeof(struct perf_build_id));
+			array += sizeof(struct perf_build_id) / sizeof(u64);
+			*array++ = sample->ip;
+		}
+	}
+
+	if (type & PERF_SAMPLE_CALLCHAIN_BUILD_ID_OFFSET) {
+		*array++ = sample->callchain_bids_nr;
+		if (sample->callchain_bids && sample->callchain_bids_nr) {
+			sz = sample->callchain_bids_nr * sizeof(*sample->callchain_bids);
+			memcpy(array, sample->callchain_bids, sz);
+			array += sz / sizeof(u64);
+		}
 	}
 
 	return 0;

@@ -2,8 +2,11 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <linux/zalloc.h>
+#include "build-id.h"
 #include "debug.h"
 #include "dso.h"
+#include "dsos.h"
+#include "machine.h"
 #include "map.h"
 #include "maps.h"
 #include "rwsem.h"
@@ -1249,6 +1252,62 @@ static int map__strcmp_name(const void *name, const void *b)
 	const struct dso *dso = map__dso(*(const struct map **)b);
 
 	return strcmp(name, dso__short_name(dso));
+}
+
+struct map *maps__find_by_build_id(struct maps *maps, struct build_id *bid)
+{
+	struct map *result = NULL;
+
+	down_read(maps__lock(maps));
+	for (unsigned int i = 0, n = maps__nr_maps(maps); i < n; i++) {
+		struct map *map = maps__maps_by_address(maps)[i];
+
+		if (dso__build_id_equal(map__dso(map), bid)) {
+			result = map__get(map);
+			break;
+		}
+	}
+	up_read(maps__lock(maps));
+
+	if (!result && maps__machine(maps)) {
+		struct machine *machine = maps__machine(maps);
+		struct dso *dso = dsos__find_by_build_id(&machine->dsos, bid);
+
+		if (!dso) {
+			char sbuild_id[SBUILD_ID_SIZE];
+			char *origname;
+
+			build_id__snprintf(bid, sbuild_id, sizeof(sbuild_id));
+			origname = build_id_cache__origname(sbuild_id);
+			if (origname) {
+				struct dso_id id = { .build_id = *bid };
+
+				dso = dsos__findnew_id(&machine->dsos, origname, &id);
+				free(origname);
+			}
+		}
+		if (dso) {
+			down_write(maps__lock(maps));
+			for (unsigned int i = 0, n = maps__nr_maps(maps); i < n; i++) {
+				struct map *map = maps__maps_by_address(maps)[i];
+
+				if (dso__build_id_equal(map__dso(map), bid)) {
+					result = map__get(map);
+					break;
+				}
+			}
+			if (!result) {
+				result = map__new2(0, dso);
+				if (result && __maps__insert(maps, result)) {
+					map__put(result);
+					result = NULL;
+				}
+			}
+			up_write(maps__lock(maps));
+			dso__put(dso);
+		}
+	}
+	return result;
 }
 
 struct map *maps__find_by_name(struct maps *maps, const char *name)

@@ -569,7 +569,8 @@ static inline bool evsel__has_callchain(const struct evsel *evsel)
 	 * For reporting purposes, an evsel sample can have a recorded callchain
 	 * or a callchain synthesized from AUX area data.
 	 */
-	return evsel->core.attr.sample_type & PERF_SAMPLE_CALLCHAIN ||
+	return evsel->core.attr.sample_type & (PERF_SAMPLE_CALLCHAIN |
+				       PERF_SAMPLE_CALLCHAIN_BUILD_ID_OFFSET) ||
 	       evsel->synth_sample_type & PERF_SAMPLE_CALLCHAIN;
 }
 

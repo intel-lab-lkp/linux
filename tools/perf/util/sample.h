@@ -7,7 +7,9 @@
 
 struct evsel;
 struct machine;
+struct perf_sample_build_id_offset;
 struct thread;
+struct perf_build_id;
 
 /* number of register is bound by the number of bits in regs_dump::mask (64) */
 #define PERF_SAMPLE_REGS_CACHE_SIZE (8 * sizeof(u64))
@@ -163,6 +165,22 @@ struct perf_sample {
 	u64 code_page_size;
 	/** @cgroup: The sample event PERF_SAMPLE_CGROUP value. */
 	u64 cgroup;
+	/** @bid: The sample event PERF_SAMPLE_BUILD_ID_OFFSET value. */
+	struct {
+		struct perf_build_id *bid;
+		union {
+			u64 offset;
+			u64 ip;
+		};
+		u64 deferred_storage[3];
+	} bid;
+	/**
+	 * @callchain_bids: Build IDs for the callchain when
+	 * PERF_SAMPLE_CALLCHAIN_BUILD_ID_OFFSET is set.
+	 */
+	struct perf_sample_build_id_offset *callchain_bids;
+	/** @callchain_bids_nr: Number of entries in callchain_bids. */
+	u32 callchain_bids_nr;
 	/** @file_offset: Byte offset of this event in the perf.data file. */
 	u64 file_offset;
 	/** @flags: Extra flag data from auxiliary events like intel-pt. */
@@ -206,10 +224,20 @@ struct perf_sample {
 	 */
 	bool deferred_callchain;
 	/**
+	 * @deferred_bid: When processing PERF_SAMPLE_BUILD_ID_OFFSET a deferred
+	 *                user marker was encountered.
+	 */
+	bool deferred_bid;
+	/**
 	 * @merged_callchain: A synthesized merged callchain that is allocated
 	 *                    and needs freeing.
 	 */
 	bool merged_callchain;
+	/**
+	 * @merged_callchain_bids: A synthesized merged callchain_bids that is
+	 *                         allocated and needs freeing.
+	 */
+	bool merged_callchain_bids;
 	/**
 	 * @deferred_cookie: Identifier of the deferred callchain in the later
 	 *                   PERF_RECORD_CALLCHAIN_DEFERRED event.

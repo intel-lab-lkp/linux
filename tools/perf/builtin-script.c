@@ -498,7 +498,8 @@ static int evsel__check_attr(struct evsel *evsel, struct perf_session *session)
 		return -EINVAL;
 
 	if (PRINT_FIELD(IP)) {
-		if (evsel__check_stype(evsel, PERF_SAMPLE_IP, "IP", PERF_OUTPUT_IP))
+		if (evsel__check_stype(evsel, PERF_SAMPLE_IP | PERF_SAMPLE_BUILD_ID_OFFSET,
+			       "IP", PERF_OUTPUT_IP))
 			return -EINVAL;
 	}
 
@@ -515,7 +516,8 @@ static int evsel__check_attr(struct evsel *evsel, struct perf_session *session)
 		return -EINVAL;
 
 	if (PRINT_FIELD(SYM) &&
-	    !(evsel->core.attr.sample_type & (PERF_SAMPLE_IP|PERF_SAMPLE_ADDR))) {
+	    !(evsel->core.attr.sample_type & (PERF_SAMPLE_IP | PERF_SAMPLE_ADDR |
+					      PERF_SAMPLE_BUILD_ID_OFFSET))) {
 		pr_err("Display of symbols requested but neither sample IP nor "
 			   "sample address\navailable. Hence, no addresses to convert "
 		       "to symbols.\n");
@@ -527,7 +529,8 @@ static int evsel__check_attr(struct evsel *evsel, struct perf_session *session)
 		return -EINVAL;
 	}
 	if (PRINT_FIELD(DSO) &&
-	    !(evsel->core.attr.sample_type & (PERF_SAMPLE_IP|PERF_SAMPLE_ADDR))) {
+	    !(evsel->core.attr.sample_type & (PERF_SAMPLE_IP | PERF_SAMPLE_ADDR |
+					      PERF_SAMPLE_BUILD_ID_OFFSET))) {
 		pr_err("Display of DSO requested but no address to convert.\n");
 		return -EINVAL;
 	}
@@ -1788,7 +1791,7 @@ static int perf_sample__fprintf_bts(struct perf_sample *sample,
 		unsigned int print_opts = output[type].print_ip_opts;
 		struct callchain_cursor *cursor = NULL;
 
-		if (symbol_conf.use_callchain && sample->callchain) {
+		if (symbol_conf.use_callchain && (sample->callchain || sample->callchain_bids)) {
 			cursor = get_tls_callchain_cursor();
 			if (thread__resolve_callchain(al->thread, cursor,
 						      sample, NULL, NULL,
@@ -2753,7 +2756,7 @@ static void process_event(struct perf_script *script,
 		if (script->stitch_lbr)
 			thread__set_lbr_stitch_enable(al->thread, true);
 
-		if (symbol_conf.use_callchain && sample->callchain) {
+		if (symbol_conf.use_callchain && (sample->callchain || sample->callchain_bids)) {
 			cursor = get_tls_callchain_cursor();
 			if (thread__resolve_callchain(al->thread, cursor,
 						      sample, NULL, NULL,
@@ -3000,7 +3003,7 @@ static int process_deferred_sample_event(const struct perf_tool *tool,
 	if (PRINT_FIELD(IP)) {
 		struct callchain_cursor *cursor = NULL;
 
-		if (symbol_conf.use_callchain && sample->callchain) {
+		if (symbol_conf.use_callchain && (sample->callchain || sample->callchain_bids)) {
 			cursor = get_tls_callchain_cursor();
 			if (thread__resolve_callchain(al.thread, cursor,
 						      sample, NULL, NULL,
@@ -3082,6 +3085,7 @@ static int process_attr(const struct perf_tool *tool, union perf_event *event,
 	/* Enable fields for callchain entries */
 	if (symbol_conf.use_callchain &&
 	    (sample_type & PERF_SAMPLE_CALLCHAIN ||
+	     sample_type & PERF_SAMPLE_CALLCHAIN_BUILD_ID_OFFSET ||
 	     sample_type & PERF_SAMPLE_BRANCH_STACK ||
 	     (sample_type & PERF_SAMPLE_REGS_USER &&
 	      sample_type & PERF_SAMPLE_STACK_USER))) {

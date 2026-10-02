@@ -3423,6 +3423,21 @@ out_efault:
 	return -EFAULT;
 }
 
+/*
+ * Before __evsel__parse_sample() is called on a cross-endian perf.data file,
+ * perf_event__all64_swap() has already byte-swapped the entire PERF_RECORD_SAMPLE
+ * payload in 64-bit chunks. That leaves 64-bit fields (like offset, ip, cookie)
+ * in host endianness, but scrambles the 24-byte struct perf_build_id (which
+ * contains a 16-bit reserved field, a 1-byte size, and a 20-byte byte array).
+ * Undo the 64-bit chunk swap on struct perf_build_id and byte-swap its 16-bit
+ * field.
+ */
+static void perf_build_id__undo_bswap_64(struct perf_build_id *bid)
+{
+	mem_bswap_64(bid, sizeof(*bid));
+	bid->__reserved_2 = bswap_16(bid->__reserved_2);
+}
+
 int __evsel__parse_sample(struct evsel *evsel, union perf_event *event,
 			  struct perf_sample *data, bool needs_swap)
 {
@@ -3450,11 +3465,23 @@ int __evsel__parse_sample(struct evsel *evsel, union perf_event *event,
 	data->vcpu = -1;
 
 	if (event->header.type == PERF_RECORD_CALLCHAIN_DEFERRED) {
-		const u64 max_callchain_nr = UINT64_MAX / sizeof(u64);
+		if (event->header.misc & PERF_RECORD_MISC_MMAP_BUILD_ID) {
+			const size_t entry_sz = sizeof(struct perf_sample_build_id_offset);
+			const u64 max_nr = UINT64_MAX / entry_sz;
+			u64 nr = event->callchain_deferred.nr;
 
-		data->callchain = (struct ip_callchain *)&event->callchain_deferred.nr;
-		if (data->callchain->nr > max_callchain_nr)
-			goto out_efault;
+			if (nr > max_nr)
+				goto out_efault;
+			OVERFLOW_CHECK(event->callchain_deferred.bids, nr * entry_sz, max_size);
+			data->callchain_bids = event->callchain_deferred.bids;
+			data->callchain_bids_nr = nr;
+		} else {
+			const u64 max_callchain_nr = UINT64_MAX / sizeof(u64);
+
+			data->callchain = (struct ip_callchain *)&event->callchain_deferred.nr;
+			if (data->callchain->nr > max_callchain_nr)
+				goto out_efault;
+		}
 
 		data->deferred_cookie = event->callchain_deferred.cookie;
 
@@ -3883,6 +3910,85 @@ int __evsel__parse_sample(struct evsel *evsel, union perf_event *event,
 		data->aux_sample.size = sz;
 		data->aux_sample.data = (char *)array;
 		array = (void *)array + sz;
+	}
+
+	if (type & PERF_SAMPLE_BUILD_ID_OFFSET) {
+		const struct perf_sample_build_id_offset *entry =
+			(const struct perf_sample_build_id_offset *)array;
+
+		OVERFLOW_CHECK(array, sizeof(*entry), max_size);
+		if (evsel->core.attr.defer_callchain && entry->zero == 0 &&
+		    entry->context == PERF_CONTEXT_USER_DEFERRED) {
+			data->deferred_bid = true;
+			data->deferred_callchain = true;
+			data->deferred_cookie = entry->cookie;
+			data->bid.bid = (struct perf_build_id *)&entry->bid;
+			data->bid.offset = entry->ip;
+		} else {
+			if (swapped) {
+				struct perf_build_id *bid =
+					(void *)data->bid.deferred_storage;
+
+				/*
+				 * perf_event__all64_swap() already swapped the
+				 * sample in 64-bit chunks, so entry->offset is
+				 * already in host endianness; undo the 64-bit
+				 * swap on the build ID bytes.
+				 */
+				memcpy(bid, &entry->bid, sizeof(*bid));
+				perf_build_id__undo_bswap_64(bid);
+				data->bid.bid = bid;
+			} else {
+				data->bid.bid = (struct perf_build_id *)&entry->bid;
+			}
+			data->bid.offset = entry->offset;
+		}
+		if (!(type & PERF_SAMPLE_IP))
+			data->ip = data->bid.offset;
+		array += sizeof(*entry) / sizeof(u64);
+	} else {
+		data->bid.bid = NULL;
+		data->bid.offset = 0;
+	}
+
+	if (type & PERF_SAMPLE_CALLCHAIN_BUILD_ID_OFFSET) {
+		const size_t entry_sz = sizeof(struct perf_sample_build_id_offset);
+		const u64 max_callchain_nr = UINT64_MAX / entry_sz;
+
+		OVERFLOW_CHECK_u64(array);
+		sz = *array++;
+		if (sz > max_callchain_nr)
+			goto out_efault;
+
+		OVERFLOW_CHECK(array, sz * entry_sz, max_size);
+		if (evsel->core.attr.defer_callchain && sz >= 2 &&
+		    array[(sz - 2) * 4 + 3] == PERF_CONTEXT_USER_DEFERRED) {
+			data->deferred_cookie = array[(sz - 1) * 4 + 3];
+			data->deferred_callchain = true;
+		}
+		if (swapped && sz > 0) {
+			struct perf_sample_build_id_offset *bids = calloc(sz, entry_sz);
+
+			if (!bids)
+				goto out_efault;
+			/*
+			 * perf_event__all64_swap() already swapped each 64-bit
+			 * word (including bids[i].offset); undo the 64-bit swap
+			 * on each build ID.
+			 */
+			memcpy(bids, array, sz * entry_sz);
+			for (u64 i = 0; i < sz; i++)
+				perf_build_id__undo_bswap_64(&bids[i].bid);
+			data->callchain_bids = bids;
+			data->merged_callchain_bids = true;
+		} else {
+			data->callchain_bids = (struct perf_sample_build_id_offset *)array;
+		}
+		data->callchain_bids_nr = sz;
+		array += sz * entry_sz / sizeof(u64);
+	} else {
+		data->callchain_bids = NULL;
+		data->callchain_bids_nr = 0;
 	}
 
 	if (evsel__is_offcpu_event(evsel)) {

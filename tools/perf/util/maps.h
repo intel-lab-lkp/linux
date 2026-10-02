@@ -11,6 +11,7 @@ struct ref_reloc_sym;
 struct machine;
 struct map;
 struct maps;
+struct build_id;
 
 #define KMAP_NAME_LEN 256
 
@@ -76,6 +77,7 @@ int maps__find_ams(struct maps *maps, struct addr_map_symbol *ams);
 int maps__fixup_overlap_and_insert(struct maps *maps, struct map *new);
 
 struct map *maps__find_by_name(struct maps *maps, const char *name);
+struct map *maps__find_by_build_id(struct maps *maps, struct build_id *bid);
 
 struct map *maps__find_next_entry(struct maps *maps, struct map *map);
 

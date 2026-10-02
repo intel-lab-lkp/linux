@@ -131,7 +131,7 @@ int sample__fprintf_callchain(struct perf_sample *sample, int left_alignment,
 	if (cursor == NULL)
 		return fprintf(fp, "<not enough memory for the callchain cursor>%s", print_oneline ? "" : "\n");
 
-	if (sample->callchain) {
+	if (sample->callchain || sample->callchain_bids) {
 		callchain_cursor_commit(cursor);
 
 		while (1) {
@@ -232,8 +232,11 @@ int sample__fprintf_sym(struct perf_sample *sample, struct addr_location *al,
 	} else {
 		printed += fprintf(fp, "%-*.*s", left_alignment, left_alignment, " ");
 
-		if (print_ip)
-			printed += fprintf(fp, "%16" PRIx64, sample->ip);
+		if (print_ip) {
+			u64 ip = sample->bid.bid ? sample->bid.offset : sample->ip;
+
+			printed += fprintf(fp, "%16" PRIx64, ip);
+		}
 
 		if (print_sym) {
 			printed += fprintf(fp, " ");

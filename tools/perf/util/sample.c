@@ -24,11 +24,15 @@ void perf_sample__init(struct perf_sample *sample, bool all)
 	if (all) {
 		memset(sample, 0, sizeof(*sample));
 	} else {
+		sample->ip = 0;
 		sample->evsel = NULL;
 		sample->user_regs = NULL;
 		sample->intr_regs = NULL;
 		sample->merged_callchain = false;
 		sample->callchain = NULL;
+		sample->merged_callchain_bids = false;
+		sample->callchain_bids = NULL;
+		sample->callchain_bids_nr = 0;
 	}
 }
 
@@ -41,6 +45,11 @@ void perf_sample__exit(struct perf_sample *sample)
 	if (sample->merged_callchain) {
 		zfree(&sample->callchain);
 		sample->merged_callchain = false;
+	}
+	if (sample->merged_callchain_bids) {
+		zfree(&sample->callchain_bids);
+		sample->callchain_bids_nr = 0;
+		sample->merged_callchain_bids = false;
 	}
 }
 

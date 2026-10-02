@@ -2221,7 +2221,9 @@ static int add_callchain_ip(struct thread *thread,
 			    struct branch_flags *flags,
 			    struct iterations *iter,
 			    u64 branch_from,
-			    bool symbols)
+			    bool symbols,
+			      struct perf_build_id *bid,
+			      u64 offset)
 {
 	static __thread struct perf_sample sample;
 	struct map_symbol ms = {};
@@ -2235,6 +2237,8 @@ static int add_callchain_ip(struct thread *thread,
 	al.sym = NULL;
 	al.srcline = NULL;
 	sample.ip = ip;
+	sample.bid.bid = bid;
+	sample.bid.offset = offset;
 	if (!cpumode) {
 		thread__find_cpumode_addr_location(thread, &sample, symbols, &al);
 	} else {
@@ -2294,6 +2298,9 @@ static int add_callchain_ip(struct thread *thread,
 	ms.thread = thread__get(al.thread);
 	ms.map = map__get(al.map);
 	ms.sym = al.sym;
+
+	if (bid && bid->size > 0 && al.map)
+		ip = map__unmap_ip(al.map, al.addr);
 
 	if (append_inlines(cursor, &ms, ip, branch, flags, nr_loop_iter,
 			   iter_cycles, branch_from) == 0)
@@ -2410,10 +2417,17 @@ static int lbr_callchain_add_kernel_ip(struct thread *thread,
 
 	if (callee) {
 		for (i = 0; i < end + 1; i++) {
+			struct perf_build_id *bid = NULL;
+			u64 offset = 0;
+
+			if (sample->callchain_bids && i < (int)sample->callchain_bids_nr) {
+				bid = &sample->callchain_bids[i].bid;
+				offset = sample->callchain_bids[i].offset;
+			}
 			err = add_callchain_ip(thread, cursor, parent,
 					       root_al, &cpumode, chain->ips[i],
 					       false, NULL, NULL, branch_from,
-					       symbols);
+					       symbols, bid, offset);
 			if (err)
 				return err;
 		}
@@ -2421,10 +2435,17 @@ static int lbr_callchain_add_kernel_ip(struct thread *thread,
 	}
 
 	for (i = end; i >= 0; i--) {
+		struct perf_build_id *bid = NULL;
+		u64 offset = 0;
+
+		if (sample->callchain_bids && i < (int)sample->callchain_bids_nr) {
+			bid = &sample->callchain_bids[i].bid;
+			offset = sample->callchain_bids[i].offset;
+		}
 		err = add_callchain_ip(thread, cursor, parent,
 				       root_al, &cpumode, chain->ips[i],
 				       false, NULL, NULL, branch_from,
-				       symbols);
+				       symbols, bid, offset);
 		if (err)
 			return err;
 	}
@@ -2507,7 +2528,7 @@ static int lbr_callchain_add_lbr_ip(struct thread *thread,
 		err = add_callchain_ip(thread, cursor, parent,
 				       root_al, &cpumode, ip,
 				       true, flags, NULL,
-				       *branch_from, symbols);
+				       *branch_from, symbols, /*bid=*/NULL, /*offset=*/0);
 		if (err)
 			return err;
 
@@ -2532,7 +2553,7 @@ static int lbr_callchain_add_lbr_ip(struct thread *thread,
 			err = add_callchain_ip(thread, cursor, parent,
 					       root_al, &cpumode, ip,
 					       true, flags, NULL,
-					       *branch_from, symbols);
+					       *branch_from, symbols, /*bid=*/NULL, /*offset=*/0);
 			if (err)
 				return err;
 			save_lbr_cursor_node(thread, cursor, i);
@@ -2547,7 +2568,7 @@ static int lbr_callchain_add_lbr_ip(struct thread *thread,
 		err = add_callchain_ip(thread, cursor, parent,
 				       root_al, &cpumode, ip,
 				       true, flags, NULL,
-				       *branch_from, symbols);
+				       *branch_from, symbols, /*bid=*/NULL, /*offset=*/0);
 		if (err)
 			return err;
 		save_lbr_cursor_node(thread, cursor, i);
@@ -2567,7 +2588,7 @@ static int lbr_callchain_add_lbr_ip(struct thread *thread,
 		err = add_callchain_ip(thread, cursor, parent,
 				root_al, &cpumode, ip,
 				true, flags, NULL,
-				*branch_from, symbols);
+				*branch_from, symbols, /*bid=*/NULL, /*offset=*/0);
 		if (err)
 			return err;
 	}
@@ -2740,12 +2761,16 @@ static int resolve_lbr_callchain_sample(struct thread *thread,
 {
 	bool callee = (callchain_param.order == ORDER_CALLEE);
 	struct ip_callchain *chain = sample->callchain;
-	int chain_nr = min(max_stack, (int)chain->nr), i;
+	int chain_nr, i;
 	struct lbr_stitch *lbr_stitch;
 	bool stitched_lbr = false;
 	u64 branch_from = 0;
 	int err;
 
+	if (!chain)
+		return 0;
+
+	chain_nr = min(max_stack, (int)chain->nr);
 	for (i = 0; i < chain_nr; i++) {
 		if (chain->ips[i] == PERF_CONTEXT_USER)
 			break;
@@ -2831,7 +2856,8 @@ static int find_prev_cpumode(struct ip_callchain *chain, struct thread *thread,
 		if (ip >= PERF_CONTEXT_MAX) {
 			err = add_callchain_ip(thread, cursor, parent,
 					       root_al, cpumode, ip,
-					       false, NULL, NULL, 0, symbols);
+					       false, NULL, NULL, 0, symbols,
+					       /*bid=*/NULL, /*offset=*/0);
 			break;
 		}
 	}
@@ -2859,12 +2885,24 @@ static int thread__resolve_callchain_sample(struct thread *thread,
 	struct branch_stack *branch = sample->branch_stack;
 	struct branch_entry *entries = perf_sample__branch_entries(sample);
 	struct ip_callchain *chain = sample->callchain;
+	struct ip_callchain *alloc_chain = NULL;
 	int chain_nr = 0;
 	u8 cpumode = PERF_RECORD_MISC_USER;
 	int i, j, err, nr_entries, usr_idx;
 	int skip_idx = -1;
 	int first_call = 0;
 	u64 leaf_frame_caller;
+
+	if (!chain && sample->callchain_bids_nr > 0) {
+		alloc_chain = malloc(sizeof(*chain) + sample->callchain_bids_nr * sizeof(u64));
+		if (!alloc_chain)
+			return -ENOMEM;
+		alloc_chain->nr = sample->callchain_bids_nr;
+		for (i = 0; i < (int)sample->callchain_bids_nr; i++)
+			alloc_chain->ips[i] = sample->callchain_bids[i].offset;
+		chain = alloc_chain;
+		sample->callchain = alloc_chain;
+	}
 
 	if (chain)
 		chain_nr = chain->nr;
@@ -2876,8 +2914,10 @@ static int thread__resolve_callchain_sample(struct thread *thread,
 						   root_al, max_stack,
 						   !env ? 0 : env->max_branches,
 						   symbols);
-		if (err)
-			return (err < 0) ? err : 0;
+		if (err) {
+			err = (err < 0) ? err : 0;
+			goto out;
+		}
 	}
 
 	/*
@@ -2940,22 +2980,26 @@ static int thread__resolve_callchain_sample(struct thread *thread,
 					       root_al,
 					       NULL, be[i].to,
 					       true, &be[i].flags,
-					       NULL, be[i].from, symbols);
+					       NULL, be[i].from, symbols,
+					       /*bid=*/NULL, /*offset=*/0);
 
 			if (!err) {
 				err = add_callchain_ip(thread, cursor, parent, root_al,
 						       NULL, be[i].from,
 						       true, &be[i].flags,
-						       &iter[i], 0, symbols);
+						       &iter[i], 0, symbols,
+						       /*bid=*/NULL, /*offset=*/0);
 			}
 			if (err == -EINVAL)
 				break;
 			if (err)
-				return err;
+				goto out;
 		}
 
-		if (chain_nr == 0)
-			return 0;
+		if (chain_nr == 0) {
+			err = 0;
+			goto out;
+		}
 
 		chain_nr -= nr;
 	}
@@ -2964,12 +3008,16 @@ check_calls:
 	if (chain && callchain_param.order != ORDER_CALLEE) {
 		err = find_prev_cpumode(chain, thread, cursor, parent, root_al,
 					&cpumode, chain->nr - first_call, symbols);
-		if (err)
-			return (err < 0) ? err : 0;
+		if (err) {
+			err = (err < 0) ? err : 0;
+			goto out;
+		}
 	}
 	for (i = first_call, nr_entries = 0;
 	     i < chain_nr && nr_entries < max_stack; i++) {
 		u64 ip;
+		struct perf_build_id *bid = NULL;
+		u64 offset = 0;
 
 		if (callchain_param.order == ORDER_CALLEE)
 			j = i;
@@ -2981,13 +3029,19 @@ check_calls:
 			continue;
 #endif
 		ip = chain->ips[j];
+		if (sample->callchain_bids && j < (int)sample->callchain_bids_nr) {
+			bid = &sample->callchain_bids[j].bid;
+			offset = sample->callchain_bids[j].offset;
+		}
 		if (ip < PERF_CONTEXT_MAX)
                        ++nr_entries;
 		else if (callchain_param.order != ORDER_CALLEE) {
 			err = find_prev_cpumode(chain, thread, cursor, parent,
 						root_al, &cpumode, j, symbols);
-			if (err)
-				return (err < 0) ? err : 0;
+			if (err) {
+				err = (err < 0) ? err : 0;
+				goto out;
+			}
 			continue;
 		}
 
@@ -3013,21 +3067,32 @@ check_calls:
 
 				err = add_callchain_ip(thread, cursor, parent,
 						root_al, &cpumode, leaf_frame_caller,
-						false, NULL, NULL, 0, symbols);
-				if (err)
-					return (err < 0) ? err : 0;
+						false, NULL, NULL, 0, symbols,
+						/*bid=*/NULL, /*offset=*/0);
+				if (err) {
+					err = (err < 0) ? err : 0;
+					goto out;
+				}
 			}
 		}
 
 		err = add_callchain_ip(thread, cursor, parent,
 				       root_al, &cpumode, ip,
-				       false, NULL, NULL, 0, symbols);
+				       false, NULL, NULL, 0, symbols, bid, offset);
 
-		if (err)
-			return (err < 0) ? err : 0;
+		if (err) {
+			err = (err < 0) ? err : 0;
+			goto out;
+		}
 	}
 
-	return 0;
+	err = 0;
+out:
+	if (alloc_chain) {
+		sample->callchain = NULL;
+		free(alloc_chain);
+	}
+	return err;
 }
 
 static int unwind_entry(struct unwind_entry *entry, void *arg)

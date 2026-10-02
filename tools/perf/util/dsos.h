@@ -8,6 +8,7 @@
 #include <linux/rbtree.h>
 #include "rwsem.h"
 
+struct build_id;
 struct dso;
 struct dso_id;
 struct kmod_path;
@@ -31,6 +32,7 @@ void dsos__exit(struct dsos *dsos);
 int __dsos__add(struct dsos *dsos, struct dso *dso);
 int dsos__add(struct dsos *dsos, struct dso *dso);
 struct dso *dsos__find(struct dsos *dsos, const char *name, bool cmp_short);
+struct dso *dsos__find_by_build_id(struct dsos *dsos, const struct build_id *bid);
 
 struct dso *dsos__findnew_id(struct dsos *dsos, const char *name, const struct dso_id *id);
  

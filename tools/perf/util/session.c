@@ -21,6 +21,7 @@
 
 #include "map_symbol.h"
 #include "branch.h"
+#include "build-id.h"
 #include "debug.h"
 #include "dwarf-regs.h"
 #include "env.h"
@@ -1326,15 +1327,17 @@ static void callchain__lbr_callstack_printf(struct perf_sample *sample)
 	struct ip_callchain *callchain = sample->callchain;
 	struct branch_stack *lbr_stack = sample->branch_stack;
 	struct branch_entry *entries = perf_sample__branch_entries(sample);
-	u64 kernel_callchain_nr = callchain->nr;
+	u64 kernel_callchain_nr = callchain ? callchain->nr : sample->callchain_bids_nr;
 	unsigned int i;
 
 	for (i = 0; i < kernel_callchain_nr; i++) {
-		if (callchain->ips[i] == PERF_CONTEXT_USER)
+		u64 ip = callchain ? callchain->ips[i] : sample->callchain_bids[i].offset;
+
+		if (ip == PERF_CONTEXT_USER)
 			break;
 	}
 
-	if ((i != kernel_callchain_nr) && lbr_stack->nr) {
+	if ((i != kernel_callchain_nr) && lbr_stack && lbr_stack->nr) {
 		u64 total_nr;
 		/*
 		 * LBR callstack can only get user call chain,
@@ -1357,9 +1360,11 @@ static void callchain__lbr_callstack_printf(struct perf_sample *sample)
 
 		printf("... LBR call chain: nr:%" PRIu64 "\n", total_nr);
 
-		for (i = 0; i < kernel_callchain_nr; i++)
-			printf("..... %2d: %016" PRIx64 "\n",
-			       i, callchain->ips[i]);
+		for (i = 0; i < kernel_callchain_nr; i++) {
+			u64 ip = callchain ? callchain->ips[i] : sample->callchain_bids[i].offset;
+
+			printf("..... %2d: %016" PRIx64 "\n", i, ip);
+		}
 
 		printf("..... %2d: %016" PRIx64 "\n",
 		       (int)(kernel_callchain_nr), entries[0].to);
@@ -1400,12 +1405,24 @@ static void callchain__printf(struct evsel *evsel,
 	if (evsel__has_branch_callstack(evsel))
 		callchain__lbr_callstack_printf(sample);
 
-	printf("... FP chain: nr:%" PRIu64 "\n", callchain->nr);
+	if (callchain) {
+		printf("... FP chain: nr:%" PRIu64 "\n", callchain->nr);
 
-	for (i = 0; i < callchain->nr; i++)
-		printf("..... %2d: %016" PRIx64 "%s\n",
-		       i, callchain->ips[i],
-		       callchain_context_str(callchain->ips[i]));
+		for (i = 0; i < callchain->nr; i++)
+			printf("..... %2d: %016" PRIx64 "%s\n",
+			       i, callchain->ips[i],
+			       callchain_context_str(callchain->ips[i]));
+	} else if (sample->callchain_bids) {
+		printf("... FP chain (build ID + offset): nr:%u\n",
+		       sample->callchain_bids_nr);
+
+		for (i = 0; i < sample->callchain_bids_nr; i++) {
+			u64 offset = sample->callchain_bids[i].offset;
+
+			printf("..... %2d: %016" PRIx64 "%s\n",
+			       i, offset, callchain_context_str(offset));
+		}
+	}
 
 	if (sample->deferred_callchain)
 		printf("...... (deferred)\n");
@@ -1730,6 +1747,17 @@ static void dump_sample(struct machine *machine, union perf_event *event,
 	       event->header.misc, sample->pid, sample->tid, sample->ip,
 	       sample->period, sample->addr);
 
+	if (sample_type & PERF_SAMPLE_BUILD_ID_OFFSET) {
+		struct build_id bid;
+		char sbuild_id[SBUILD_ID_SIZE] = "";
+
+		if (sample->bid.bid) {
+			build_id__init(&bid, sample->bid.bid->data, sample->bid.bid->size);
+			build_id__snprintf(&bid, sbuild_id, sizeof(sbuild_id));
+		}
+		printf("... build_id: %s offset: %#" PRIx64 "\n", sbuild_id, sample->bid.offset);
+	}
+
 	if (evsel__has_callchain(evsel))
 		callchain__printf(evsel, sample);
 
@@ -1783,7 +1811,7 @@ static void dump_deferred_callchain(union perf_event *event, struct perf_sample 
 	printf("(IP, 0x%x): %d/%d: %#" PRIx64 "\n",
 	       event->header.misc, sample->pid, sample->tid, sample->deferred_cookie);
 
-	if (evsel__has_callchain(evsel))
+	if (evsel__has_callchain(evsel) || sample->callchain_bids)
 		callchain__printf(evsel, sample);
 }
 

@@ -1173,7 +1173,8 @@ int sample__resolve_callchain(struct perf_sample *sample,
 			      struct addr_location *al,
 			      int max_stack)
 {
-	if (sample->callchain == NULL && !symbol_conf.show_branchflag_count)
+	if (sample->callchain == NULL && sample->callchain_bids == NULL &&
+	    !symbol_conf.show_branchflag_count)
 		return 0;
 
 	if (symbol_conf.use_callchain || symbol_conf.cumulate_callchain ||
@@ -1186,7 +1187,8 @@ int sample__resolve_callchain(struct perf_sample *sample,
 
 int hist_entry__append_callchain(struct hist_entry *he, struct perf_sample *sample)
 {
-	if ((!symbol_conf.use_callchain || sample->callchain == NULL) &&
+	if ((!symbol_conf.use_callchain ||
+	     (sample->callchain == NULL && sample->callchain_bids == NULL)) &&
 		!symbol_conf.show_branchflag_count)
 		return 0;
 	return callchain_append(he->callchain, get_tls_callchain_cursor(), sample->period);
@@ -1912,32 +1914,75 @@ int sample__for_each_callchain_node(struct thread *thread,
 int sample__merge_deferred_callchain(struct perf_sample *sample_orig,
 				     struct perf_sample *sample_callchain)
 {
-	u64 nr_orig = sample_orig->callchain->nr - 1;
-	u64 nr_deferred = sample_callchain->callchain->nr;
-	struct ip_callchain *callchain;
+	if (sample_orig->deferred_bid && sample_callchain->callchain_bids_nr > 0) {
+		const struct perf_sample_build_id_offset *entry =
+			&sample_callchain->callchain_bids[0];
 
-	if (sample_orig->merged_callchain) {
-		/* Already merged. */
-		return -EINVAL;
+		memcpy(sample_orig->bid.deferred_storage, &entry->bid,
+		       sizeof(struct perf_build_id));
+		sample_orig->bid.bid =
+			(struct perf_build_id *)sample_orig->bid.deferred_storage;
+		sample_orig->bid.offset = entry->offset;
+		if (!sample_orig->evsel ||
+		    !(sample_orig->evsel->core.attr.sample_type & PERF_SAMPLE_IP))
+			sample_orig->ip = entry->offset;
+		sample_orig->deferred_bid = false;
 	}
 
-	if (sample_orig->callchain->nr < 2) {
-		sample_orig->deferred_callchain = false;
-		return -EINVAL;
+	if (sample_orig->callchain_bids_nr >= 2 &&
+	    sample_callchain->callchain_bids_nr > 0) {
+		u64 nr_orig = sample_orig->callchain_bids_nr - 1;
+		u64 nr_deferred = sample_callchain->callchain_bids_nr;
+
+		if (sample_orig->callchain_bids[nr_orig - 1].offset ==
+		    PERF_CONTEXT_USER_DEFERRED) {
+			struct perf_sample_build_id_offset *bids =
+				calloc(nr_orig + nr_deferred, sizeof(*bids));
+
+			if (bids == NULL)
+				return -ENOMEM;
+
+			memcpy(bids, sample_orig->callchain_bids,
+			       nr_orig * sizeof(*bids));
+			memcpy(&bids[nr_orig], sample_callchain->callchain_bids,
+			       nr_deferred * sizeof(*bids));
+			if (sample_orig->merged_callchain_bids)
+				free(sample_orig->callchain_bids);
+			sample_orig->callchain_bids = bids;
+			sample_orig->callchain_bids_nr = nr_orig + nr_deferred;
+			sample_orig->merged_callchain_bids = true;
+		}
 	}
 
-	callchain = calloc(1 + nr_orig + nr_deferred, sizeof(u64));
-	if (callchain == NULL)
-		return -ENOMEM;
+	if (sample_orig->callchain && sample_callchain->callchain) {
+		u64 nr_orig = sample_orig->callchain->nr - 1;
+		u64 nr_deferred = sample_callchain->callchain->nr;
+		struct ip_callchain *callchain;
 
-	callchain->nr = nr_orig + nr_deferred;
-	/* copy original including PERF_CONTEXT_USER_DEFERRED (but the cookie) */
-	memcpy(callchain->ips, sample_orig->callchain->ips, nr_orig * sizeof(u64));
-	/* copy deferred user callchains */
-	memcpy(&callchain->ips[nr_orig], sample_callchain->callchain->ips,
-	       nr_deferred * sizeof(u64));
+		if (sample_orig->merged_callchain) {
+			/* Already merged. */
+			return -EINVAL;
+		}
 
-	sample_orig->merged_callchain = true;
-	sample_orig->callchain = callchain;
+		if (sample_orig->callchain->nr < 2) {
+			sample_orig->deferred_callchain = false;
+			return -EINVAL;
+		}
+
+		callchain = calloc(1 + nr_orig + nr_deferred, sizeof(u64));
+		if (callchain == NULL)
+			return -ENOMEM;
+
+		callchain->nr = nr_orig + nr_deferred;
+		/* copy original including PERF_CONTEXT_USER_DEFERRED (but the cookie) */
+		memcpy(callchain->ips, sample_orig->callchain->ips, nr_orig * sizeof(u64));
+		/* copy deferred user callchains */
+		memcpy(&callchain->ips[nr_orig], sample_callchain->callchain->ips,
+		       nr_deferred * sizeof(u64));
+
+		sample_orig->merged_callchain = true;
+		sample_orig->callchain = callchain;
+	}
+
 	return 0;
 }

@@ -294,6 +294,33 @@ struct dso *dsos__find(struct dsos *dsos, const char *name, bool cmp_short)
 	return res;
 }
 
+struct dsos__find_build_id_cb_args {
+	const struct build_id *bid;
+	struct dso *res;
+};
+
+static int dsos__find_build_id_cb(struct dso *dso, void *data)
+{
+	struct dsos__find_build_id_cb_args *args = data;
+
+	if (dso__build_id_equal(dso, args->bid)) {
+		args->res = dso__get(dso);
+		return 1;
+	}
+	return 0;
+}
+
+struct dso *dsos__find_by_build_id(struct dsos *dsos, const struct build_id *bid)
+{
+	struct dsos__find_build_id_cb_args args = {
+		.bid = bid,
+		.res = NULL,
+	};
+
+	dsos__for_each_dso(dsos, dsos__find_build_id_cb, &args);
+	return args.res;
+}
+
 static void dso__set_basename(struct dso *dso)
 {
 	bool allocated = false;

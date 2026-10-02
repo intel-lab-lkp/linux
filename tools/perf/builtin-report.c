@@ -382,7 +382,8 @@ static int report__setup_sample_type(struct report *rep)
 	    session->itrace_synth_opts->add_last_branch)
 		sample_type |= PERF_SAMPLE_BRANCH_STACK;
 
-	if (!is_pipe && !(sample_type & PERF_SAMPLE_CALLCHAIN)) {
+	if (!is_pipe && !(sample_type & (PERF_SAMPLE_CALLCHAIN |
+					 PERF_SAMPLE_CALLCHAIN_BUILD_ID_OFFSET))) {
 		if (perf_hpp_list.parent) {
 			ui__error("Selected --sort parent, but no "
 				    "callchain data. Did you call "
@@ -408,7 +409,8 @@ static int report__setup_sample_type(struct report *rep)
 
 	if (symbol_conf.cumulate_callchain) {
 		/* Silently ignore if callchain is missing */
-		if (!(sample_type & PERF_SAMPLE_CALLCHAIN)) {
+		if (!(sample_type & (PERF_SAMPLE_CALLCHAIN |
+				     PERF_SAMPLE_CALLCHAIN_BUILD_ID_OFFSET))) {
 			symbol_conf.cumulate_callchain = false;
 			perf_hpp__cancel_cumulate(session->evlist);
 		}
