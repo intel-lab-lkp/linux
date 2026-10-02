@@ -1344,12 +1344,30 @@ lazy_rcu_shrink_scan(struct shrinker *shrink, struct shrink_control *sc)
 }
 #endif // #ifdef CONFIG_RCU_LAZY
 
+#ifdef CONFIG_RCU_LAZY
+static void rcu_nocb_register_lazy_shrinker(void)
+{
+	struct shrinker *lazy_rcu_shrinker = shrinker_alloc(0, "rcu-lazy");
+
+	if (!lazy_rcu_shrinker) {
+		pr_err("Failed to allocate lazy_rcu shrinker!\n");
+		return;
+	}
+
+	lazy_rcu_shrinker->count_objects = lazy_rcu_shrink_count;
+	lazy_rcu_shrinker->scan_objects = lazy_rcu_shrink_scan;
+
+	shrinker_register(lazy_rcu_shrinker);
+}
+#else
+static void rcu_nocb_register_lazy_shrinker(void) { }
+#endif // #ifdef CONFIG_RCU_LAZY
+
 void __init rcu_init_nohz(void)
 {
 	int cpu;
 	struct rcu_data *rdp;
 	const struct cpumask *cpumask = NULL;
-	struct shrinker * __maybe_unused lazy_rcu_shrinker;
 
 #if defined(CONFIG_NO_HZ_FULL)
 	if (tick_nohz_full_running && !cpumask_empty(tick_nohz_full_mask))
@@ -1375,17 +1393,7 @@ void __init rcu_init_nohz(void)
 	if (!rcu_state.nocb_is_setup)
 		return;
 
-#ifdef CONFIG_RCU_LAZY
-	lazy_rcu_shrinker = shrinker_alloc(0, "rcu-lazy");
-	if (!lazy_rcu_shrinker) {
-		pr_err("Failed to allocate lazy_rcu shrinker!\n");
-	} else {
-		lazy_rcu_shrinker->count_objects = lazy_rcu_shrink_count;
-		lazy_rcu_shrinker->scan_objects = lazy_rcu_shrink_scan;
-
-		shrinker_register(lazy_rcu_shrinker);
-	}
-#endif // #ifdef CONFIG_RCU_LAZY
+	rcu_nocb_register_lazy_shrinker();
 
 	if (!cpumask_subset(rcu_nocb_mask, cpu_possible_mask)) {
 		pr_info("\tNote: kernel parameter 'rcu_nocbs=', 'nohz_full', or 'isolcpus=' contains nonexistent CPUs.\n");
@@ -1408,6 +1416,53 @@ void __init rcu_init_nohz(void)
 	}
 	rcu_organize_nocb_kthreads();
 }
+
+static DEFINE_MUTEX(rcu_nocb_lazy_mutex);
+
+/*
+ * Lazily initialize nocb infrastructure on the first call. Allocates
+ * rcu_nocb_mask and sets nocb_gp_rdp for every possible CPU so that
+ * rcu_nocb_cpu_isolate() can offload callbacks without rcu_nocbs= at boot.
+ */
+static noinline int rcu_nocb_lazy_init(void)
+{
+	if (rcu_state.nocb_is_setup)
+		return 0;
+
+	mutex_lock(&rcu_nocb_lazy_mutex);
+	if (!rcu_state.nocb_is_setup) {
+		if (!zalloc_cpumask_var(&rcu_nocb_mask, GFP_KERNEL)) {
+			mutex_unlock(&rcu_nocb_lazy_mutex);
+			return -ENOMEM;
+		}
+		rcu_organize_nocb_kthreads();
+		/*
+		 * Boot-time rcu_init_nohz() only registers the lazy-callback
+		 * shrinker when nocb_is_setup was already true at boot; this
+		 * is the first time it is set, so register it here instead.
+		 */
+		rcu_nocb_register_lazy_shrinker();
+		rcu_state.nocb_is_setup = true;
+	}
+	mutex_unlock(&rcu_nocb_lazy_mutex);
+	return 0;
+}
+
+/*
+ * Offload RCU callbacks for a CPU entering a kernel-noise isolated partition.
+ * @cpu must be offline. Lazily initializes nocb infrastructure on first use.
+ */
+int rcu_nocb_cpu_isolate(int cpu)
+{
+	int ret;
+
+	ret = rcu_nocb_lazy_init();
+	if (ret)
+		return ret;
+	rcu_spawn_cpu_nocb_kthread(cpu);
+	return rcu_nocb_cpu_offload(cpu);
+}
+EXPORT_SYMBOL_GPL(rcu_nocb_cpu_isolate);
 
 /* Initialize per-rcu_data variables for no-CBs CPUs. */
 static void __init rcu_boot_init_nocb_percpu_data(struct rcu_data *rdp)
@@ -1501,7 +1556,7 @@ module_param(rcu_nocb_gp_stride, int, 0444);
 /*
  * Initialize GP-CB relationships for all no-CBs CPU.
  */
-static void __init rcu_organize_nocb_kthreads(void)
+static void rcu_organize_nocb_kthreads(void)
 {
 	int cpu;
 	bool firsttime = true;
