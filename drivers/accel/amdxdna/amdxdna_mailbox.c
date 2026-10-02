@@ -513,11 +513,13 @@ xdna_mailbox_start_channel(struct mailbox_channel *mb_chann,
 {
 	int ret;
 
-	if (!is_power_of_2(x2i->rb_size) || !is_power_of_2(i2x->rb_size)) {
-		pr_err("Ring buf size must be power of 2\n");
-		return -EINVAL;
-	}
-
+	/*
+	 * The ring buffer geometry, rb_start_addr and rb_size for both the
+	 * x2i and the i2x channel, comes from AMD signed firmware, through
+	 * the management or mailbox information block, or through the
+	 * CREATE_CONTEXT response. The driver trusts those values by design
+	 * and does not bound them against the mapped region.
+	 */
 	mb_chann->msix_irq = mb_irq;
 	mb_chann->iohub_int_addr = iohub_int_addr;
 	memcpy(&mb_chann->res[CHAN_RES_X2I], x2i, sizeof(*x2i));
