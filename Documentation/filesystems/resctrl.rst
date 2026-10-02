@@ -355,8 +355,8 @@ with the following files:
 	::
 
 	  # cat /sys/fs/resctrl/info/L3_MON/mbm_assign_mode
-	  [mbm_event]
-	  default
+	  [default]
+	  mbm_event
 
 	"mbm_event":
 
@@ -364,6 +364,9 @@ with the following files:
 	pair and monitor the bandwidth usage as long as it is assigned. The hardware
 	continues to track the assigned counter until it is explicitly unassigned by
 	the user. Each event within a resctrl group can be assigned independently.
+	mbm_event mode uses one counter per event of one RMID. A monitoring group
+	can use two counters, one for mbm_total_bytes and one for mbm_local_bytes.
+	For example, 32 counters can monitor 16 groups.
 
 	In this mode, a monitoring event can only accumulate data while it is backed
 	by a hardware counter. Use "mbm_L3_assignments" found in each CTRL_MON and MON
@@ -377,20 +380,37 @@ with the following files:
 	"mbm_L3_assignments" after switching to "mbm_event" mode for counter
 	assignment states of all monitoring groups.
 
-	The mode is beneficial for AMD platforms that support more CTRL_MON
-	and MON groups than available hardware counters. By default, this
-	feature is enabled on AMD platforms with the ABMC (Assignable Bandwidth
-	Monitoring Counters) capability, ensuring counters remain assigned even
-	when the corresponding RMID is not actively used by any processor.
+	It is intended for deployments that need to manage counter assignment on
+	platforms where the number of monitoring groups exceeds the available
+	hardware counters. Hardware counters are scarce, so mbm_event mode suits
+	workflows that monitor a subset of groups at a time and rotate assignments
+	as needed. The mode is beneficial for AMD platforms that support more
+	CTRL_MON and MON groups than available hardware counters. The mbm_event
+	mode ensures counters remain assigned even when the corresponding RMID is
+	not actively monitored.
 
 	"default":
 
 	In default mode, resctrl assumes there is a hardware counter for each
-	event within every CTRL_MON and MON group. On AMD platforms, it is
-	recommended to use the mbm_event mode, if supported, to prevent reset of MBM
-	events between reads resulting from hardware re-allocating counters. This can
-	result in misleading values or display "Unavailable" if no counter is assigned
-	to the event.
+	event within every CTRL_MON and MON group. This mode is enabled by default.
+
+	On AMD platforms that support more CTRL_MON and MON groups than hardware
+	counters, hardware dynamically shares a smaller pool of counters among
+	RMIDs. One counter from this pool is used per monitoring group and counts
+	every MBM event of that group's RMID. The size of the pool is not
+	enumerated to software (unlike "num_mbm_cntrs"), and "num_rmids" may be
+	much larger. For example, 64 counters in this pool monitor 64 groups.
+	Newer hardware may provide a larger pool.
+
+	While the number of monitoring groups does not exceed that pool, a counter
+	stays attached to each RMID and readings remain accurate. Creating more
+	groups than the pool can cause hardware to re-allocate those counters
+	between successive reads of an event. Bandwidth values may then be
+	misleading, or a read may return "Unavailable" if no counter is allocated
+	to the RMID. There is no user-visible indication when this begins.
+	Users who need stable readings beyond that pool should switch to mbm_event
+	mode, if supported, and assign counters to the groups of interest
+	(rotating assignments as needed).
 
 	* To enable "mbm_event" counter assignment mode:
 	  ::
@@ -1786,10 +1806,8 @@ View the llc occupancy snapshot::
 Examples on working with mbm_assign_mode
 ========================================
 
-a. Check if MBM counter assignment mode is supported.
+a. Check if MBM counter assignment mode is supported and enabled.
 ::
-
-  # mount -t resctrl resctrl /sys/fs/resctrl/
 
   # cat /sys/fs/resctrl/info/L3_MON/mbm_assign_mode
   [mbm_event]
