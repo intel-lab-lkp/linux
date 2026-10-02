@@ -299,10 +299,22 @@ const char *arch__normalize_symbol_name(const char *name);
 #define SYMBOL_A 0
 #define SYMBOL_B 1
 
+/* Attributes used to choose between symbols that share a start address. */
+struct symbol_candidate {
+	u64		size;
+	const char	*name;
+	u8		type;
+	u8		binding;
+};
+
+int symbol__choose_best(const struct symbol_candidate *a,
+			const struct symbol_candidate *b);
+
 int arch__compare_symbol_names(const char *namea, const char *nameb);
 int arch__compare_symbol_names_n(const char *namea, const char *nameb,
 				 unsigned int n);
-int arch__choose_best_symbol(struct symbol *syma, struct symbol *symb);
+int arch__choose_best_symbol(const struct symbol_candidate *a,
+			     const struct symbol_candidate *b);
 
 enum symbol_tag_include {
 	SYMBOL_TAG_INCLUDE__NONE = 0,

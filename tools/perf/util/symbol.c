@@ -145,8 +145,8 @@ int __weak arch__compare_symbol_names_n(const char *namea, const char *nameb,
 	return strncmp(namea, nameb, n);
 }
 
-int __weak arch__choose_best_symbol(struct symbol *syma,
-				    struct symbol *symb __maybe_unused)
+int __weak arch__choose_best_symbol(const struct symbol_candidate *syma,
+				    const struct symbol_candidate *symb __maybe_unused)
 {
 	/* Avoid "SyS" kernel syscall aliases */
 	if (strlen(syma->name) >= 3 && !strncmp(syma->name, "SyS", 3))
@@ -157,38 +157,39 @@ int __weak arch__choose_best_symbol(struct symbol *syma,
 	return SYMBOL_A;
 }
 
-static int choose_best_symbol(struct symbol *syma, struct symbol *symb)
+int symbol__choose_best(const struct symbol_candidate *syma,
+			const struct symbol_candidate *symb)
 {
 	s64 a;
 	s64 b;
 	size_t na, nb;
 
 	/* Prefer a symbol with non zero length */
-	a = syma->end - syma->start;
-	b = symb->end - symb->start;
+	a = syma->size;
+	b = symb->size;
 	if ((b == 0) && (a > 0))
 		return SYMBOL_A;
 	else if ((a == 0) && (b > 0))
 		return SYMBOL_B;
 
-	if (symbol__type(syma) != symbol__type(symb)) {
-		if (symbol__type(syma) == STT_NOTYPE)
+	if (syma->type != symb->type) {
+		if (syma->type == STT_NOTYPE)
 			return SYMBOL_B;
-		if (symbol__type(symb) == STT_NOTYPE)
+		if (symb->type == STT_NOTYPE)
 			return SYMBOL_A;
 	}
 
 	/* Prefer a non weak symbol over a weak one */
-	a = symbol__binding(syma) == STB_WEAK;
-	b = symbol__binding(symb) == STB_WEAK;
+	a = syma->binding == STB_WEAK;
+	b = symb->binding == STB_WEAK;
 	if (b && !a)
 		return SYMBOL_A;
 	if (a && !b)
 		return SYMBOL_B;
 
 	/* Prefer a global symbol over a non global one */
-	a = symbol__binding(syma) == STB_GLOBAL;
-	b = symbol__binding(symb) == STB_GLOBAL;
+	a = syma->binding == STB_GLOBAL;
+	b = symb->binding == STB_GLOBAL;
 	if (a && !b)
 		return SYMBOL_A;
 	if (b && !a)
@@ -211,6 +212,24 @@ static int choose_best_symbol(struct symbol *syma, struct symbol *symb)
 		return SYMBOL_B;
 
 	return arch__choose_best_symbol(syma, symb);
+}
+
+static int choose_best_symbol(struct symbol *syma, struct symbol *symb)
+{
+	struct symbol_candidate a = {
+		.size = syma->end - syma->start,
+		.name = syma->name,
+		.type = symbol__type(syma),
+		.binding = symbol__binding(syma),
+	};
+	struct symbol_candidate b = {
+		.size = symb->end - symb->start,
+		.name = symb->name,
+		.type = symbol__type(symb),
+		.binding = symbol__binding(symb),
+	};
+
+	return symbol__choose_best(&a, &b);
 }
 
 void symbols__fixup_duplicate(struct rb_root_cached *symbols)
