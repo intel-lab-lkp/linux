@@ -2656,10 +2656,20 @@ static int do_pages_stat(struct mm_struct *mm, unsigned long nr_pages,
 			 const void __user * __user *pages,
 			 int __user *status)
 {
-#define DO_PAGES_STAT_CHUNK_NR 16UL
-	const void __user *chunk_pages[DO_PAGES_STAT_CHUNK_NR];
-	int chunk_status[DO_PAGES_STAT_CHUNK_NR];
+#define DO_PAGES_STAT_CHUNK_NR 512UL
+	const void __user **chunk_pages;
 	unsigned long chunk_offset = 0;
+	int *chunk_status;
+
+	chunk_pages = kmalloc_array(DO_PAGES_STAT_CHUNK_NR,
+				    sizeof(*chunk_pages), GFP_KERNEL);
+	chunk_status = kmalloc_array(DO_PAGES_STAT_CHUNK_NR,
+				     sizeof(*chunk_status), GFP_KERNEL);
+	if (!chunk_pages || !chunk_status) {
+		kfree(chunk_pages);
+		kfree(chunk_status);
+		return -ENOMEM;
+	}
 
 	while (nr_pages) {
 		unsigned long chunk_nr = min(nr_pages, DO_PAGES_STAT_CHUNK_NR);
@@ -2683,6 +2693,8 @@ static int do_pages_stat(struct mm_struct *mm, unsigned long nr_pages,
 		chunk_offset += chunk_nr;
 		nr_pages -= chunk_nr;
 	}
+	kfree(chunk_pages);
+	kfree(chunk_status);
 	return nr_pages ? -EFAULT : 0;
 }
 
