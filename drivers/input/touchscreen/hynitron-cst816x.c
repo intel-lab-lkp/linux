@@ -39,27 +39,39 @@ static int cst816x_parse_keycodes(struct device *dev, struct cst816x_priv *priv)
 {
 	int count;
 	int error;
+	int i;
 
-	if (device_property_present(dev, "linux,keycodes")) {
-		count = device_property_count_u32(dev, "linux,keycodes");
-		if (count < 0) {
-			error = count;
-			dev_err(dev, "failed to count keys: %d\n", error);
-			return error;
-		} else if (count > ARRAY_SIZE(priv->keycode)) {
-			dev_err(dev, "too many keys defined: %d\n", count);
-			return -EINVAL;
-		}
-		priv->keycodemax = count;
+	if (!device_property_present(dev, "linux,keycodes"))
+		return 0;
 
-		error = device_property_read_u32_array(dev, "linux,keycodes",
-						       priv->keycode,
-						       priv->keycodemax);
-		if (error) {
-			dev_err(dev, "failed to read keycodes: %d\n", error);
-			return error;
-		}
+	count = device_property_count_u32(dev, "linux,keycodes");
+	if (count < 0) {
+		error = count;
+		dev_err(dev, "failed to count keys: %d\n", error);
+		return error;
 	}
+
+	if (count > ARRAY_SIZE(priv->keycode)) {
+		dev_err(dev, "too many keys defined: %d\n", count);
+		return -EINVAL;
+	}
+
+	error = device_property_read_u32_array(dev, "linux,keycodes",
+					       priv->keycode, count);
+	if (error) {
+		dev_err(dev, "failed to read keycodes: %d\n", error);
+		return error;
+	}
+
+	for (i = 0; i < count; i++) {
+		if (priv->keycode[i] <= KEY_MAX)
+			continue;
+
+		dev_err(dev, "keycode %u out of range\n", priv->keycode[i]);
+		return -EINVAL;
+	}
+
+	priv->keycodemax = count;
 
 	return 0;
 }
@@ -168,6 +180,18 @@ static void cst816x_reset(struct cst816x_priv *priv)
 	msleep(100);
 }
 
+static void cst816x_release_keys(struct cst816x_priv *priv)
+{
+	unsigned int i;
+
+	for (i = 0; i < priv->keycodemax; i++) {
+		if (!test_bit(priv->keycode[i], priv->input->key))
+			continue;
+
+		input_report_key(priv->input, priv->keycode[i], 0);
+	}
+}
+
 static irqreturn_t cst816x_irq_cb(int irq, void *cookie)
 {
 	struct cst816x_priv *priv = cookie;
@@ -181,8 +205,9 @@ static irqreturn_t cst816x_irq_cb(int irq, void *cookie)
 
 	if (tch.gest)
 		input_report_key(priv->input,
-				 priv->keycode[cst816x_gest_idx(tch.gest)],
-				 tch.active);
+				 priv->keycode[cst816x_gest_idx(tch.gest)], 1);
+	else
+		cst816x_release_keys(priv);
 
 	input_report_key(priv->input, BTN_TOUCH, tch.active);
 
