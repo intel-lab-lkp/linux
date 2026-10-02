@@ -115,6 +115,7 @@
 #define PCAN_USB_REC_BUSEVT		5
 
 /* CAN bus events notifications selection mask */
+#define PCAN_USB_ERR_ECC		0x01	/* ask for BERR */
 #define PCAN_USB_ERR_RXERR		0x02	/* ask for rxerr counter */
 #define PCAN_USB_ERR_TXERR		0x04	/* ask for txerr counter */
 
@@ -122,11 +123,20 @@
  * In other words, its interest is to know which side among rx and tx is
  * responsible of the change of the bus state.
  */
-#define PCAN_USB_BERR_MASK	(PCAN_USB_ERR_RXERR | PCAN_USB_ERR_TXERR)
+#define PCAN_USB_BERR_MASK	(PCAN_USB_ERR_ECC | \
+				 PCAN_USB_ERR_RXERR | PCAN_USB_ERR_TXERR)
 
-/* identify bus event packets with rx/tx error counters */
-#define PCAN_USB_ERR_CNT_DEC		0x00	/* counters are decreasing */
-#define PCAN_USB_ERR_CNT_INC		0x80	/* counters are increasing */
+/* SJA1000 ECC register */
+#define PCAN_SJA1000_ECC_SEG		0x1f
+#define PCAN_SJA1000_ECC_DIR		0x20
+#define PCAN_SJA1000_ECC_ERR		6
+#define PCAN_SJA1000_ECC_BIT		0x00
+#define PCAN_SJA1000_ECC_FORM		0x40
+#define PCAN_SJA1000_ECC_STUFF		0x80
+#define PCAN_SJA1000_ECC_MASK		0xc0
+
+/* SJA1000 Bus Error Interrupt */
+#define PCAN_SJA1000_IRQ_BEI		0x80
 
 /* private to PCAN-USB adapter */
 struct pcan_usb {
@@ -550,23 +560,95 @@ static int pcan_usb_decode_error(struct pcan_usb_msg_context *mc, u8 n,
 /* decode bus event usb packet: first byte contains rxerr while 2nd one contains
  * txerr.
  */
-static int pcan_usb_handle_bus_evt(struct pcan_usb_msg_context *mc, u8 ir)
+static int pcan_usb_handle_bus_evt(struct pcan_usb_msg_context *mc, u8 ir,
+				   u8 status_len)
 {
 	struct pcan_usb *pdev = mc->pdev;
+	u8 rec_len = status_len & PCAN_USB_STATUSLEN_DLC;
 
-	/* according to the content of the packet */
-	switch (ir) {
-	case PCAN_USB_ERR_CNT_DEC:
-	case PCAN_USB_ERR_CNT_INC:
+	/* Check for potential out-of-bound accesses
+	 * ("end" is a misnomer; it is not a pointer to the last valid byte,
+	 * but rather to the one following it)
+	 */
+	if (!rec_len || (mc->ptr + rec_len) > mc->end)
+		return -EINVAL;
 
-		/* save rx/tx error counters from in the device context */
+	/* 1st byte is ECC (if BEI), 2nd one is rxerr, 3rd one is txerr:
+	 * save rx/tx error counters from record data bytes first, so that
+	 * device error counters are always up-to-date.
+	 */
+	if (rec_len > 1) {
 		pdev->bec.rxerr = mc->ptr[1];
-		pdev->bec.txerr = mc->ptr[2];
-		break;
+		if (rec_len > 2)
+			pdev->bec.txerr = mc->ptr[2];
+	}
 
-	default:
-		/* reserved */
-		break;
+	/* Then process bus error interrupt (if any) */
+	if (ir & PCAN_SJA1000_IRQ_BEI) {
+		u8 ecc = mc->ptr[0];
+
+		/* create a "bus-error frame" skb if any bit is set in ECC */
+		if (ecc) {
+			struct net_device_stats *stats = &mc->netdev->stats;
+			struct sk_buff *skb;
+			struct can_frame *cf;
+			u8 can_err_tx = 0;
+
+			pdev->dev.can.can_stats.bus_error++;
+
+			/* Error occurred during reception? */
+			if (ecc & PCAN_SJA1000_ECC_DIR) {
+				stats->rx_errors++;
+			} else {
+				stats->tx_errors++;
+				can_err_tx = CAN_ERR_PROT_TX;
+			}
+
+			/* if berr-reporting is off, stop here */
+			if (!(pdev->dev.can.ctrlmode &
+						CAN_CTRLMODE_BERR_REPORTING))
+				return 0;
+
+			/* allocate an skb to store the error frame */
+			skb = alloc_can_err_skb(mc->netdev, &cf);
+			if (!skb)
+				return -ENOMEM;
+
+			cf->can_id |= CAN_ERR_CNT | CAN_ERR_PROT |
+				      CAN_ERR_BUSERROR;
+			cf->data[2] |= can_err_tx;
+
+			/* set error type according to 1st data byte (ECC) */
+			switch (ecc & PCAN_SJA1000_ECC_MASK) {
+			case PCAN_SJA1000_ECC_BIT:
+				cf->data[2] |= CAN_ERR_PROT_BIT;
+				break;
+			case PCAN_SJA1000_ECC_FORM:
+				cf->data[2] |= CAN_ERR_PROT_FORM;
+				break;
+			case PCAN_SJA1000_ECC_STUFF:
+				cf->data[2] |= CAN_ERR_PROT_STUFF;
+				break;
+			default:
+				break;
+			}
+
+			/* set error location */
+			cf->data[3] = ecc & PCAN_SJA1000_ECC_SEG;
+
+			cf->data[6] = pdev->bec.txerr;
+			cf->data[7] = pdev->bec.rxerr;
+
+			if (status_len & PCAN_USB_STATUSLEN_TIMESTAMP) {
+				struct skb_shared_hwtstamps *hwts =
+					skb_hwtstamps(skb);
+
+				peak_usb_get_ts_time(&mc->pdev->time_ref,
+						     mc->ts16, &hwts->hwtstamp);
+			}
+
+			netif_rx(skb);
+		}
 	}
 
 	return 0;
@@ -627,7 +709,7 @@ static int pcan_usb_decode_status(struct pcan_usb_msg_context *mc,
 
 	case PCAN_USB_REC_BUSEVT:
 		/* bus event notifications (get rxerr/txerr) */
-		err = pcan_usb_handle_bus_evt(mc, n);
+		err = pcan_usb_handle_bus_evt(mc, n, status_len);
 		if (err)
 			return err;
 		break;
@@ -1018,6 +1100,7 @@ const struct peak_usb_adapter pcan_usb = {
 	.ctrl_count = 1,
 	.ctrlmode_supported = CAN_CTRLMODE_LISTENONLY |
 			      CAN_CTRLMODE_3_SAMPLES |
+			      CAN_CTRLMODE_BERR_REPORTING |
 			      CAN_CTRLMODE_CC_LEN8_DLC,
 	.clock = {
 		.freq = PCAN_USB_CRYSTAL_HZ / 2,
