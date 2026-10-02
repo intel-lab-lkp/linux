@@ -3256,26 +3256,34 @@ static int qgroup_auto_inherit(struct btrfs_fs_info *fs_info,
 	struct btrfs_qgroup_inherit *res;
 	size_t struct_sz;
 	u64 *qgids;
+	int ret = 0;
 
 	if (*inherit)
 		return -EEXIST;
 
+	spin_lock(&fs_info->qgroup_lock);
 	inode_qg = find_qgroup_rb(fs_info, inode_rootid);
-	if (!inode_qg)
-		return -ENOENT;
+	if (!inode_qg) {
+		ret = -ENOENT;
+		goto out;
+	}
 
 	num_qgroups = list_count_nodes(&inode_qg->groups);
 
 	if (!num_qgroups)
-		return 0;
+		goto out;
 
 	struct_sz = struct_size(res, qgroups, num_qgroups);
-	if (struct_sz == SIZE_MAX)
-		return -ERANGE;
+	if (struct_sz == SIZE_MAX) {
+		ret = -ERANGE;
+		goto out;
+	}
 
 	res = kzalloc(struct_sz, GFP_NOFS);
-	if (!res)
-		return -ENOMEM;
+	if (!res) {
+		ret = -ENOMEM;
+		goto out;
+	}
 	res->num_qgroups = num_qgroups;
 	qgids = res->qgroups;
 
@@ -3283,7 +3291,10 @@ static int qgroup_auto_inherit(struct btrfs_fs_info *fs_info,
 		qgids[i++] = qg_list->group->qgroupid;
 
 	*inherit = res;
-	return 0;
+out:
+	spin_unlock(&fs_info->qgroup_lock);
+
+	return ret;
 }
 
 /*
