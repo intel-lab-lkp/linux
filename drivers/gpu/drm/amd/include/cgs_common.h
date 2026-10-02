@@ -81,7 +81,7 @@ struct cgs_firmware_info {
 typedef unsigned long cgs_handle_t;
 
 /**
- * cgs_read_register() - Read an MMIO register
+ * typedef cgs_read_register_t - Read an MMIO register
  * @cgs_device:	opaque device handle
  * @offset:	register offset
  *
@@ -90,7 +90,7 @@ typedef unsigned long cgs_handle_t;
 typedef uint32_t (*cgs_read_register_t)(struct cgs_device *cgs_device, unsigned offset);
 
 /**
- * cgs_write_register() - Write an MMIO register
+ * typedef cgs_write_register_t - Write an MMIO register
  * @cgs_device:	opaque device handle
  * @offset:	register offset
  * @value:	register value
@@ -99,9 +99,10 @@ typedef void (*cgs_write_register_t)(struct cgs_device *cgs_device, unsigned off
 				     uint32_t value);
 
 /**
- * cgs_read_ind_register() - Read an indirect register
+ * typedef cgs_read_ind_register_t - Read an indirect register
  * @cgs_device:	opaque device handle
- * @offset:	register offset
+ * @space:	indirect register space
+ * @index:	register index
  *
  * Return:  register value
  */
@@ -109,9 +110,10 @@ typedef uint32_t (*cgs_read_ind_register_t)(struct cgs_device *cgs_device, enum 
 					    unsigned index);
 
 /**
- * cgs_write_ind_register() - Write an indirect register
+ * typedef cgs_write_ind_register_t - Write an indirect register
  * @cgs_device:	opaque device handle
- * @offset:	register offset
+ * @space:	indirect register space
+ * @index:	register index
  * @value:	register value
  */
 typedef void (*cgs_write_ind_register_t)(struct cgs_device *cgs_device, enum cgs_ind_reg space,
