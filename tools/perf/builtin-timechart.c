@@ -10,6 +10,7 @@
 
 #include <errno.h>
 #include <inttypes.h>
+#include <stdlib.h>
 
 #include "builtin.h"
 #include "util/color.h"
@@ -68,6 +69,7 @@ struct timechart {
 				with_backtrace,
 				topology;
 	bool			force;
+	bool			use_tui;
 	/* IO related settings */
 	bool			io_only,
 				skip_eagain;
@@ -1756,6 +1758,41 @@ out_delete:
 	return ret;
 }
 
+/*
+ * Launch the interactive textual based python script via 'perf script' that
+ * finds the script, sets up the python environment and passes the global
+ * input_name (set by -i) to the script as '-i <input_name>'.
+ */
+static int timechart__tui(struct timechart *tchart)
+{
+	struct process_filter *filt;
+	const char **script_argv;
+	int script_argc = 0, nr_args = 5, ret;
+
+	for (filt = process_filter; filt; filt = filt->next)
+		nr_args += 2;
+
+	script_argv = calloc(nr_args + 1, sizeof(*script_argv));
+	if (!script_argv)
+		return -ENOMEM;
+
+	script_argv[script_argc++] = "script";
+	script_argv[script_argc++] = "ttimechart";
+	script_argv[script_argc++] = "--";
+	if (tchart->power_only)
+		script_argv[script_argc++] = "-P";
+	if (tchart->tasks_only)
+		script_argv[script_argc++] = "-T";
+	for (filt = process_filter; filt; filt = filt->next) {
+		script_argv[script_argc++] = "-p";
+		script_argv[script_argc++] = filt->name;
+	}
+
+	ret = cmd_script(script_argc, script_argv);
+	free(script_argv);
+	return ret;
+}
+
 static int timechart__io_record(int argc, const char **argv, const char *output_data)
 {
 	unsigned int rec_argc, i;
@@ -2079,6 +2116,8 @@ int cmd_timechart(int argc, const char **argv)
 		     "merge events that are merge-dist us apart",
 		     parse_time),
 	OPT_BOOLEAN('f', "force", &tchart.force, "don't complain, do it"),
+	OPT_BOOLEAN(0, "tui", &tchart.use_tui,
+		    "interactive terminal timechart using the ttimechart python script"),
 	OPT_PARENT(timechart_common_options),
 	};
 	const char * const timechart_subcommands[] = { "record", NULL };
@@ -2145,6 +2184,11 @@ int cmd_timechart(int argc, const char **argv)
 		goto out;
 	} else if (argc)
 		usage_with_options(timechart_usage, timechart_options);
+
+	if (tchart.use_tui) {
+		ret = timechart__tui(&tchart);
+		goto out;
+	}
 
 	setup_pager();
 
