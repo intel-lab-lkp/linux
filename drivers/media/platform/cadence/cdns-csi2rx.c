@@ -993,7 +993,7 @@ static int csi2rx_probe(struct platform_device *pdev)
 
 	ret = v4l2_subdev_init_finalize(&csi2rx->subdev);
 	if (ret)
-		goto err_cleanup;
+		goto err_free_irq;
 
 	pm_runtime_enable(csi2rx->dev);
 	ret = v4l2_async_register_subdev(&csi2rx->subdev);
@@ -1011,6 +1011,9 @@ static int csi2rx_probe(struct platform_device *pdev)
 err_free_state:
 	v4l2_subdev_cleanup(&csi2rx->subdev);
 	pm_runtime_disable(csi2rx->dev);
+err_free_irq:
+	if (csi2rx->error_irq >= 0)
+		devm_free_irq(csi2rx->dev, csi2rx->error_irq, csi2rx);
 err_cleanup:
 	v4l2_async_nf_unregister(&csi2rx->notifier);
 	v4l2_async_nf_cleanup(&csi2rx->notifier);
@@ -1030,6 +1033,8 @@ static void csi2rx_remove(struct platform_device *pdev)
 	v4l2_subdev_cleanup(&csi2rx->subdev);
 	media_entity_cleanup(&csi2rx->subdev.entity);
 	pm_runtime_disable(csi2rx->dev);
+	if (csi2rx->error_irq >= 0)
+		devm_free_irq(csi2rx->dev, csi2rx->error_irq, csi2rx);
 	kfree(csi2rx);
 }
 
